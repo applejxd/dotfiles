@@ -5,3 +5,4 @@
 	name = applejxd
 [core]
 	editor = vim
+	excludesfile = /Users/masashi/.gitignore_global
