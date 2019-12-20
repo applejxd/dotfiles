@@ -1,0 +1,247 @@
+% tcdeadline.sty
+% NB: This file is encoded in ISO-2022-JP.
+%     (文字コードは ISO-2022-JP)
+
+%% package declaration
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{tcdeadline}[2014/01/18 v0.2]
+
+%% preparation
+\def\tcdd@pkgname{tcdeadline}
+\def\tcdd@error{\PackageError\tcdd@pkgname}
+\providecommand\bxDebug[1]{}
+
+%% switches
+\newif\iftcdd@ok
+
+%% code guards
+\edef\tcdd@restore@codes{%
+  \catcode45=\the\catcode45%
+  \catcode46=\the\catcode46%
+  \catcode47=\the\catcode47%
+  \catcode58=\the\catcode58%
+  \catcode60=\the\catcode60%
+  \catcode62=\the\catcode62%
+  \catcode63=\the\catcode63%
+  \catcode94=\the\catcode94%
+  \catcode96=\the\catcode96%
+\relax}
+\catcode45=12 % <->
+\catcode46=12 % <.>
+\catcode47=12 % </>
+\catcode58=12 % <:>
+\catcode60=12 % <<>
+\catcode62=12 % <>>
+\catcode63=12 % <?>
+\catcode94=7 % <^>
+\catcode96=12 % <`>
+\AtEndOfPackage{%
+  \tcdd@restore@codes
+  \let\tcdd@restore@codes\relax
+}
+
+%--------------------------------------- option handling
+
+%% \tcdd@deadline@dt
+\let\tcdd@deadline@dt\relax
+
+%% options
+\DeclareOption*{%
+  \edef\tcdd@deadline@dt{\CurrentOption}%
+}
+\ProcessOptions\relax
+
+%--------------------------------------- date calculation
+
+%% variables
+\let\tcdd@days\relax
+\let\tcdd@hours\relax
+\let\tcdd@mins\relax
+\let\tcdd@mmins\relax
+
+\begingroup
+
+%% \tcdd@calc@serial{<yr>}{<mo>}{<dy>}{<hr>}{<mn>}\CS
+\def\tcdd@calc@serial#1#2#3#4#5#6{%
+  \@tempcnta=#1\relax \@tempcntb=#2\relax
+  \ifnum\@tempcntb<3
+    \advance\@tempcntb12 \advance\@tempcnta-1
+  \fi
+  \mathchardef\@tempyear\@tempcnta
+  \chardef\@tempmonth\@tempcntb
+  \multiply\@tempcnta1461
+  \divide\@tempcnta4 \@tempcntb\@tempyear
+  \divide\@tempcntb100 \advance\@tempcnta-\@tempcntb
+  \divide\@tempcntb4 \advance\@tempcnta\@tempcntb
+  \@tempcntb\@tempmonth \advance\@tempcntb-2
+  \multiply\@tempcntb520 \divide\@tempcntb17
+  \advance\@tempcnta\@tempcntb \advance\@tempcnta#3\relax
+  \advance\@tempcnta-678912
+\bxDebug{MJD=\the\@tempcnta}%
+  \multiply\@tempcnta24 \advance\@tempcnta#4\relax
+  \multiply\@tempcnta60 \advance\@tempcnta#5\relax
+  \edef#6{\the\@tempcnta}%
+\bxDebug{Serial=\the\@tempcnta}%
+}
+
+%% \tcdd@parse@dt\CS
+\lccode`\*=`\@ \lowercase{%
+\def\tcdd@parse@dt#1{%
+  \tcdd@oktrue \let\tcdd@d\@empty \let\tcdd@t\@empty
+  \expandafter\tcdd@parse@dt@a\meaning#1**\relax
+  \expandafter\tcdd@parse@dt@b\tcdd@d///\relax
+  \expandafter\tcdd@parse@dt@c\tcdd@t::\relax
+  \tcdd@parse@dt@d
+}
+\def\tcdd@parse@dt@a#1>#2*#3*#4\relax{
+  \ifcat_#3_ \tcdd@okfalse
+  \else \def\tcdd@d{#2}\def\tcdd@t{#3}%
+  \fi
+}
+}%\lowercase
+\def\tcdd@parse@dt@b#1/#2/#3/#4\relax{
+  \ifcat_#3_ \tcdd@okfalse
+  \else \def\tcdd@v{#1}\def\tcdd@w{#2}\def\tcdd@x{#3}%
+  \fi
+}
+\def\tcdd@parse@dt@c#1:#2:#3\relax{
+  \ifcat_#2_ \tcdd@okfalse
+  \else \def\tcdd@y{#1}\def\tcdd@z{#2}%
+  \fi
+}
+\def\tcdd@parse@dt@d{%
+  \let\do\tcdd@num@check
+  \do\tcdd@v\do\tcdd@w\do\tcdd@x\do\tcdd@y\do\tcdd@z
+  \iftcdd@ok
+    \tcdd@calc@serial\year\month\day\z@\time\tcdd@a
+    \tcdd@calc@serial\tcdd@v\tcdd@w\tcdd@x\tcdd@y\tcdd@z\tcdd@b
+    \@tempcnta\tcdd@b\relax \advance\@tempcnta-\tcdd@a\relax
+    \ifnum\@tempcnta<\z@ \@tempcnta\z@ \fi
+    \xdef\tcdd@mmins{\the\@tempcnta}%
+    \tcdd@divide{60}\xdef\tcdd@mins{\the\@tempcntb}%
+    \tcdd@divide{24}\xdef\tcdd@hours{\the\@tempcntb}%
+    \xdef\tcdd@days{\the\@tempcnta}%
+\bxDebug{\tcdd@days/\tcdd@hours:\tcdd@mins(\tcdd@mmins)}%
+  \fi
+}
+\def\tcdd@divide#1{%
+  \@tempcntb\@tempcnta \divide\@tempcnta#1\relax
+  \multiply\@tempcnta#1\relax \advance\@tempcntb-\@tempcnta
+  \divide\@tempcnta#1\relax
+}
+\def\tcdd@num@check#1{%
+  \ifx#1\@undefined \tcdd@okfalse\fi
+  \ifx#1\@empty \tcdd@okfalse\fi
+  \iftcdd@ok
+    \afterassignment\tcdd@num@check@a\@tempcnta0#1\relax
+  \fi
+}
+\def\tcdd@num@check@a#1\relax{%
+  \ifcat_#1_\else \tcdd@okfalse \fi
+}
+
+\ifx\tcdd@deadline@dt\relax
+  \tcdd@okfalse
+  \def\tcdd@cause{is not specfied}
+\else
+  \tcdd@parse@dt\tcdd@deadline@dt
+  \def\tcdd@cause{is invalid: \tcdd@deadline@dt}
+\fi
+\iftcdd@ok\else
+  \tcdd@error{Deadline time \tcdd@cause}%
+   {Package loading is aborted.\MessageBreak\@ehc}
+\fi
+
+\endgroup
+% Exits if error has occurred.
+\ifx\tcdd@mmins\relax \expandafter\endinput\fi\relax
+
+%--------------------------------------- \today
+
+%%<*> \originaltoday
+\let\originaltoday\today
+
+%% \tcdd@remaining
+\def\tcdd@remaining{%
+  \ifnum\tcdd@days=\z@
+    \tcdd@red{\bfseries あと%
+      \ifnum\tcdd@hours>\z@ \tcdd@hours 時間\fi
+      \tcdd@mins 分}%
+  \else\ifnum\tcdd@days<7
+    {\bfseries あと\tcdd@days 日\tcdd@hours 時間}%
+  \else
+    {あと\tcdd@days 日\tcdd@hours 時間}%
+  \fi\fi
+}
+
+%% Redefines \today
+\ifnum\tcdd@mmins>\z@
+  \let\today\tcdd@remaining
+\fi
+
+%% \tcdd@red{<text>}
+\def\tcdd@red{%
+  \ifx\textcolor\@undefined \expandafter\@gobble
+  \else \expandafter\@firstofone
+  \fi {\textcolor{red}}%
+}
+
+%--------------------------------------- some 進捗 things
+
+%%<*> \shinchokudoudesuka
+\newcommand\shinchokudoudesuka{%
+  \tcdd@ask@progr
+\bxDebug{\iftcdd@ok yes\else no\fi}%
+  \iftcdd@ok\else
+    \tcdd@no@progr{進捗ダメです}%
+  \fi
+}
+
+%%<*> \進捗どうですか
+\def\進捗どうですか{%
+  \shinchokudoudesuka
+}
+
+%% \tcdd@splash
+\begingroup
+\def\tcdd@rep#1#2#3{%
+  \let\tcdd@r\@empty \count@=#2\relax
+  \@whilenum{\count@>\z@}\do
+  {\advance\count@\m@ne\edef\tcdd@r{\tcdd@r#3}}%
+  \let#1\tcdd@r}
+\catcode`:=\active \def:{\space\space}
+\tcdd@rep\tcdd@a{60}{=}\tcdd@rep\tcdd@b{60}{-}
+\tcdd@rep\tcdd@c{60}{.}\tcdd@rep\tcdd@s{16}{\space}
+\xdef\tcdd@splash{\tcdd@a^^J\tcdd@a^^J\tcdd@b^^J\tcdd@c
+^^J^^J\tcdd@s 進:捗:ど:う:で:す:か^^J^^J%
+\tcdd@c^^J\tcdd@b^^J\tcdd@a^^J\tcdd@a}
+\endgroup
+
+%% \tcdd@ask@progr
+\def\tcdd@ask@progr{%
+  \count@\@ne
+  \typeout{\tcdd@splash}%
+  \@whilenum{\count@>\z@}\do{%
+    \message{[Y=あります/N=ダメです]?\space}%
+    \read\m@ne to\tcdd@answer
+    \expandafter\tcdd@ask@progr@a\meaning\tcdd@answer.\relax
+  }%
+}
+\def\tcdd@ask@progr@a#1>#2#3\relax{%
+  \uppercase{\tcdd@ask@progr@b#2}%
+}
+\def\tcdd@ask@progr@b#1{%
+  \if#1Y\tcdd@oktrue \count@\z@ \fi
+  \if#1N\tcdd@okfalse \count@\z@ \fi
+}
+
+%% \tcdd@no@progr
+\def\tcdd@no@progr#1{%
+  \ifx\author\@undefined\else \author{#1}\fi
+  \gdef\@author{#1}%
+  \gdef\author##1##{\@gobble}%
+}
+
+%--------------------------------------- all done
+\endinput
+%% EOF
