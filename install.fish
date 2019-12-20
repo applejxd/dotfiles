@@ -6,6 +6,9 @@ if [ $status -ne 0 ]
     sudo sh -c "echo '/usr/local/bin/fish\n' >> /etc/shells"
 end
 
+# install fisher
+curl https://git.io/fisher --create-dirs -sLo ~/.config/fish/functions/fisher.fish
+
 # fzf : fuzzy finder
 fisher add jethrokuan/fzf
 # The command z
