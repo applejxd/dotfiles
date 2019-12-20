@@ -8,6 +8,18 @@ pip3 install matplotlib scipy sympy ipython[all]
 grep -q /usr/local/bin/zsh /etc/shells
 if [ $? -ne 0 ]; then
     sudo sh -c "echo '/usr/local/bin/zsh\n' >> /etc/shells"
+    chsh -s /usr/local/bin/zsh
+fi
+
+# iTerm2 Shell integration
+if [ ! -e ~/.iterm2_shell_integration.zsh ]; then
+    curl -L https://iterm2.com/shell_integration/install_shell_integration.sh | bash
+fi
+
+# LaTeX
+if !(type "platex" > /dev/null 2>&1); then
+    sudo tlmgr update --self --all
+    sudo tlmgr paper a4
 fi
 
 # Programming Font Ricty
@@ -26,7 +38,3 @@ if [ ! -e ~/.emacs.d ]; then
     git clone https://github.com/syl20bnr/spacemacs ~/.emacs.d
     npm install --global tern
 fi
-
-# LaTeX
-sudo tlmgr update --self --all
-sudo tlmgr paper a4

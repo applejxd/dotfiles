@@ -1,15 +1,10 @@
-#!/bin/sh
+#!/usr/local/bin/fish
 
-# The Friendly Interactive SHell (fish)
-if !(type "fish" > /dev/null 2>&1); then
-    # Install fish
-    brew install fish
+# fish install
+grep -q /usr/local/bin/fish /etc/shells
+if [ $status -ne 0 ]
     sudo sh -c "echo '/usr/local/bin/fish\n' >> /etc/shells"
-    # Install fisher
-    rm ~/.config/fish/functions/fisher.fish
-    curl -Lo ~/.config/fish/functions/fisher.fish --create-dirs git.io/fisher
-    # chsh -s /usr/local/bin/fish
-fi
+end
 
 # fzf : fuzzy finder
 fisher add jethrokuan/fzf

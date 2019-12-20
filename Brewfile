@@ -24,8 +24,9 @@ brew "opencv"
 # zsh Configuration #
 #-------------------#
 
-# Update zsh from default
+# install zsh (+ fish)
 brew "zsh"
+brew "fish"
 
 # Package manager 'zplug'
 brew "zplug"
