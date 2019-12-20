@@ -1,5 +1,5 @@
 ###################
-# Command Rhapper #
+# Command Wrapper #
 ###################
 
 # The default options of "less" command
@@ -28,6 +28,11 @@ if type "colordiff" >/dev/null 2>&1; then
 else
     alias diff="diff -u"
 fi
+
+# # brew -> brew-wrap  by Homebrew-file
+# if [ -f $(brew --prefix)/etc/brew-wrap ]; then
+#     source $(brew --prefix)/etc/brew-wrap
+# fi
 
 alias jnethack="cocot -t UTF-8 -p EUC-JP jnethack"
 
