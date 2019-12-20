@@ -1,0 +1,115 @@
+%--------------------------------------------------------------------------------
+%   スタイルファイル設定
+%--------------------------------------------------------------------------------
+
+\NeedsTeXFormat{LaTeX2e}    % TeX(Not LaTeX)でエラー
+\ProvidesPackage{mymacro}   % 重複styファイル警告
+
+\RequirePackage[l2tabu, orthodox]{nag}	% 古いパッケージ・コマンドで警告
+\usepackage[all, warning]{onlyamsmath}	% amsmath 以外の数式で警告
+
+%--------------------------------------------------------------------------------
+%   一般設定
+%--------------------------------------------------------------------------------
+
+%レイアウト関連
+\usepackage[dvipdfmx]{graphicx}	% 画像挿入
+\usepackage{wrapfig}						% 画像回りこみ
+\usepackage{subcaption}      		% 子レベルのcaption
+
+\usepackage{booktabs}	% 表組みの整形
+\usepackage{ascmac}   % 囲み枠その1
+\usepackage{framed}   % 囲み枠その2
+\usepackage{comment}  % 一括コメント化
+\usepackage{authblk}  % 所属
+\usepackage{otf}			% 旧字体対応
+
+%リンク関連
+\usepackage[dvipdfmx]{hyperref} %ハイパーリンク作成
+\usepackage{pxjahyper}          %しおり作成
+\usepackage{url}                %URL貼り付け
+
+%数学関連
+\usepackage{amsmath}    %数式環境拡張
+\usepackage{amsfonts}   %特殊フォント
+\usepackage{amssymb}    %特殊記号
+
+%物理関連
+\usepackage{physics}
+\usepackage{feynmp}     %Feynman Diagram
+\usepackage{ytableau}   %Young図
+\usepackage{siunitx}		%単位
+
+%--------------------------------------------------------------------------------
+%   数学定理環境
+%--------------------------------------------------------------------------------
+
+\usepackage{amsthm}
+
+%表示形式を定義
+\newtheoremstyle{mystyle}{}{}{\normalfont}{}{\bfseries}{}{\newline}{}
+\theoremstyle{mystyle}
+
+%環境定義
+\newtheorem{dfn}{定義}
+\newtheorem{axm}{公理}
+\newtheorem{thm}{定理}
+\newtheorem{formula}{公式}
+\newtheorem{prop}{命題}
+\newtheorem*{rem}{Remark}
+
+%証明環境
+\renewcommand{\proofname}{$\blacksquare${\bfseries 証明}}
+\renewcommand{\qedsymbol}{$\blacksquare$}
+
+%物理定理環境
+\newtheorem{law}{法則}
+\newtheorem{fact}{事実}
+
+%--------------------------------------------------------------------------------
+%   ユーザー定義マクロ
+%--------------------------------------------------------------------------------
+
+\usepackage{xparse} %マクロ拡張
+
+% 汎用マクロ
+\newcommand{\equref}[1]{式~(\ref{#1})}
+\newcommand{\tabref}[1]{表~\ref{#1}}
+\newcommand{\figref}[1]{図~\ref{#1}}
+\newcommand{\cc}{ {\mathcal{c.c.}} }
+\newcommand{\hc}{ {\mathcal{h.c.}} }
+\newcommand{\PI}{ {\overset{\text{P.I.}}{\longrightarrow}\,} }
+\newcommand{\FT}{ {\overset{\text{F.T.}}{\longrightarrow}\,} }
+\newcommand{\dx}{ {\dot{x}} }
+\newcommand{\ddx}{ {\ddot{x}} }
+
+% ベクトル関連
+\newcommand{\ve}[1]{ {\mbox{\boldmath $#1$}} }
+\newcommand{\Div}{\mathrm{div}\,}
+\newcommand{\Grad}{\mathrm{grad}\,}
+\newcommand{\Rot}{\mathrm{rot}\,}
+
+% 場の理論用マクロ
+\newcommand{\dL}{ {\mathcal{L}} }
+\newcommand{\dH}{ {\mathcal{H}} }
+%% Feynmannスラッシュ
+\newcommand{\feys}[1]{ {\not \! #1} }
+\newcommand{\feysd}[1]{ {\not \!\! #1} }
+
+% EM用マクロ
+\newcommand{\vE}{ {\vec{E}} }
+\newcommand{\vD}{ {\vec{D}} }
+\newcommand{\vB}{ {\vec{B}} }
+\newcommand{\vH}{ {\vec{H}} }
+
+% QM用マクロ
+\newcommand{\hx}{ {\hat{x}} }
+\newcommand{\hp}{ {\hat{p}} }
+
+% SUSY用マクロ
+\newcommand{\alphad}{ {\dot{\alpha}} }
+\newcommand{\betad}{ {\dot{\beta}} }
+\newcommand{\gammad}{ {\dot{\gamma}} }
+\newcommand{\deltad}{ {\dot{\delta}} }
+\newcommand{\sigmab}{ {\bar{\sigma}} }
+\newcommand{\hQ}{ {\hat{Q}} }
