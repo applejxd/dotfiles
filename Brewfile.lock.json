@@ -822,7 +822,10 @@
         "revision": "6acb20ada5c4b7d1325a5b1b5dfd974160a4c595"
       },
       "homebrew/cask": {
-        "revision": "78347d943f4885e88916f7079fc5045a56c3bfe1"
+        "revision": "e0bc50fd5bf876754941ea9fa341a7c0ed5de47f"
+      },
+      "homebrew/cask-fonts": {
+        "revision": "1407d48a88309eb141dd1900d81398e18ed95ee8"
       }
     },
     "mas": {
@@ -843,10 +846,10 @@
         "version": "4.0_232"
       },
       "visual-studio-code": {
-        "version": "1.40.2"
+        "version": "1.41.1"
       },
       "pycharm": {
-        "version": "2019.2.5,192.7142.56"
+        "version": "2019.3.1,193.5662.61"
       },
       "emacs": {
         "version": "26.3"
@@ -858,7 +861,7 @@
         "version": "latest"
       },
       "google-chrome": {
-        "version": "78.0.3904.108"
+        "version": "79.0.3945.88"
       },
       "google-japanese-ime": {
         "version": "latest"
@@ -897,16 +900,16 @@
         "version": "1.92"
       },
       "alfred": {
-        "version": "4.0.6_1124"
+        "version": "4.0.7_1131"
       },
       "hyperswitch": {
-        "version": "0.2.589-dev"
+        "version": "0.2.590-dev"
       },
       "karabiner-elements": {
         "version": "12.8.0"
       },
       "osxfuse": {
-        "version": "3.10.3"
+        "version": "3.10.4"
       },
       "iterm2": {
         "version": "3.3.7"
@@ -915,13 +918,13 @@
         "version": "2.0.0"
       },
       "evernote": {
-        "version": "7.13_458080"
+        "version": "7.14_458244"
       },
       "bitwarden": {
         "version": "1.16.6"
       },
       "skype": {
-        "version": "8.54.0.91"
+        "version": "8.55.0.141"
       },
       "spotify": {
         "version": "latest"
@@ -930,7 +933,7 @@
         "version": "55093"
       },
       "cyberduck": {
-        "version": "7.2.1.31913"
+        "version": "7.2.2.32045"
       },
       "omnidisksweeper": {
         "version": "1.12"
@@ -939,10 +942,10 @@
         "version": "1.19.4"
       },
       "mathpix-snipping-tool": {
-        "version": "2.1.0.106"
+        "version": "2.2.0.137"
       },
       "dash": {
-        "version": "4.6.7"
+        "version": "5.0.3"
       },
       "xmind": {
         "version": "3.7.9.201912052356,8-update9"
@@ -969,7 +972,7 @@
       "mojave": {
         "HOMEBREW_VERSION": "2.2.1",
         "HOMEBREW_PREFIX": "/usr/local",
-        "Homebrew/homebrew-core": "25f2bbf1d01bdcaa04878e7e45042d3fdbb9ef18",
+        "Homebrew/homebrew-core": "f9732163032c31756b63924f2f7fdfaab6dc8ddb",
         "CLT": "10.3.0.0.1.1562985497",
         "Xcode": "10.2.1",
         "macOS": "10.14.6"

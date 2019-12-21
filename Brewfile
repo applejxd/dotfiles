@@ -40,10 +40,6 @@ brew "fzf"
 brew "ghq"
 brew "tmux"
 
-# Ricty with Powerline
-tap "sanemat/font"
-brew "sanemat/font/ricty", args: ["with-powerline"]
-
 #------------#
 # Shell Apps #
 #------------#
@@ -62,9 +58,6 @@ brew "bat"
 brew "colordiff"
 brew "ripgrep"
 brew "lsd"
-
-# Remote directory mounting
-brew "sshfs"
 
 #---------#
 # Science #
@@ -98,10 +91,6 @@ brew "screenfetch"
 tap "leopard-gecko/game"
 brew "jrogue"
 
-# rogue-like game 'jnethack'
-brew "jnethack"
-brew "cocot"
-
 #################
 # Mac App Store #
 #################
@@ -131,8 +120,10 @@ cask "visual-studio-code"
 cask "pycharm"
 cask "emacs"
 
-# X11 Window for jNetHack
+# rogue-like game 'jnethack'
 cask "xquartz"
+brew "jnethack"
+brew "cocot"
 
 #--------------#
 # Fundamentals #
@@ -166,10 +157,16 @@ cask "qlvideo"
 cask "alfred"
 cask "hyperswitch"
 cask "karabiner-elements"
+
+# Remote directory mounting
 cask "osxfuse"
+brew "sshfs"
 
 # The shell emulator iTerm2
 cask "iterm2"
+
+# Fonts
+tap "homebrew/cask-fonts"
 cask "font-hack-nerd-font"
 
 #----------#
