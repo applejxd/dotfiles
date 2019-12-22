@@ -9,4 +9,4 @@ set main-view = id date author:email-user commit-title:graph=yes,refs=yes
 
 # pull & push
 bind branch U ?git pull %(remote)
-bind branch P ?git push -u %(remote) %(repo:head)
+bind status P ?git push -u %(remote) %(repo:head)
