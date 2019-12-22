@@ -8,7 +8,7 @@
 
 # VCS
 brew "git"
-brew "git-flow"
+brew "git-flow-avh"
 brew "tig"
 
 # Python

@@ -11,6 +11,11 @@ if [ $? -ne 0 ]; then
     chsh -s /usr/local/bin/zsh
 fi
 
+# fzf install
+if !(type "fzf" > /dev/null 2>&1); then
+    $(brew --prefix)/opt/fzf/install
+fi
+
 # iTerm2 Shell integration
 if [ ! -e ~/.iterm2_shell_integration.zsh ]; then
     curl -L https://iterm2.com/shell_integration/install_shell_integration.sh | bash
