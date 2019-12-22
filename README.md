@@ -7,5 +7,5 @@
 - $ homesick clone applejxd/dotfiles
 - $ homesick link dotfiles
 
-### Install applications (by homebrew-bundle)
+### Install applications (by homebrew-bundle & mackup)
 - $ sh install.sh

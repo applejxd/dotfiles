@@ -1,0 +1,12 @@
+# cf. http://bit.ly/34Lkxh5
+
+# commit ID in the left of main-view
+set main-view = id date author:email-user commit-title:graph=yes,refs=yes
+
+################
+# key-bindings #
+################
+
+# pull & push
+bind branch U ?git pull %(remote)
+bind branch P ?git push -u %(remote) %(repo:head)
