@@ -1,7 +1,6 @@
 #!/bin/sh
 
-sh homebrew.sh
+sh installer/homebrew.sh
 brew bundle
-sh osx.sh
-./install.fish
+sh installer/osx.sh
 homesick link dotfiles
