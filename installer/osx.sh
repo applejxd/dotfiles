@@ -12,7 +12,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # fzf install
-if !(type "fzf" > /dev/null 2>&1); then
+if [ ! -e ~/.fzf.zsh ]; then
     $(brew --prefix)/opt/fzf/install
 fi
 

@@ -8,7 +8,4 @@
 - $ homesick link dotfiles
 
 ### Install applications (by homebrew-bundle)
-- $ cd ~/.homesick/repos/dotfiles
-- $ sh homebrew.sh
-- $ brew bundle
-- $ sh osx.sh
+- $ sh install.sh
