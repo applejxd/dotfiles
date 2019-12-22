@@ -7,6 +7,14 @@ set main-view = id date author:email-user commit-title:graph=yes,refs=yes
 # key-bindings #
 ################
 
-# pull & push
-bind branch U ?git pull %(remote)
-bind status P ?git push -u %(remote) %(repo:head)
+# fetch
+bind generic F ?git fetch %(remote)
+
+# pull
+bind generic U ?git pull %(remote)
+
+# push
+bind generic P ?git push -u %(remote) %(repo:head)
+
+# reset commit
+bind generic ^ ?git reset --soft HEAD^
