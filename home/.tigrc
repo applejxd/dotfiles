@@ -14,7 +14,7 @@ bind generic F ?git fetch %(remote)
 bind generic U ?git pull %(remote)
 
 # push
-bind generic P ?git push -u %(remote) %(repo:head)
+bind status P ?git push -u %(remote) %(repo:head)
 
 # reset commit
 bind generic ^ ?git reset --soft HEAD^
