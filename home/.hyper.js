@@ -1,4 +1,5 @@
 // Future versions of Hyper may add additional config options,
+
 // which will not automatically be merged into this file.
 // See https://hyper.is#cfg for all currently supported options.
 
@@ -9,7 +10,7 @@ module.exports = {
     updateChannel: 'stable',
 
     // default font size in pixels for all tabs
-    fontSize: 16,
+    fontSize: 14,
 
     // font family with optional fallbacks
     fontFamily: '"Hack Nerd Font", Menlo, "DejaVu Sans Mono", Consolas, "Lucida Console", monospace',
@@ -205,11 +206,11 @@ module.exports = {
     'hyper-search',         // ウィンドウ内検索
     'hyper-pane',           // ペイン操作
     // テーマ
-    // 'hyper-iceberg',     // iceberg テーマ
-    'hyper-pokemon',        // ポケモンテーマ
+    'hyper-iceberg',     // iceberg テーマ
+    // 'hyper-pokemon',        // ポケモンテーマ
     // ジョークプラグイン
-    'hyperpower',           // アニメーション
-    'gitrocket',            // git push でロケット
+    // 'hyperpower',           // アニメーション
+    // 'gitrocket',            // git push でロケット
   ],
 
   // in development, you can create a directory under
