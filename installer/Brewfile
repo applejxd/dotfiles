@@ -24,21 +24,21 @@ brew "opencv"
 # zsh Configuration #
 #-------------------#
 
-# install zsh (+ fish)
+# install shell
+brew "bash"
 brew "zsh"
 brew "fish"
 
 # Package manager 'zplug'
 brew "zplug"
 
-# fish-like auto-suggestions → zplug
-# brew "zsh-autosuggestions"
-
 # shell plugins
-brew "z"
 brew "fzf"
 brew "ghq"
 brew "tmux"
+
+# for bash
+brew "z"
 
 #------------#
 # Shell Apps #
@@ -201,6 +201,8 @@ cask "drawio"
 # Emulation
 # cask "virtualbox"
 # cask "virtualbox-extension-pack"
+brew "docker"
+cask "docker"
 
 #-----------#
 # Platforms #

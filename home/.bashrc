@@ -20,6 +20,10 @@ powerline-daemon -q
 . $(brew --prefix)/etc/profile.d/z.sh
 alias j='z'
 
+# bash completion
+[[ -r "/usr/local/etc/profile.d/bash_completion.sh" ]] &&
+. "/usr/local/etc/profile.d/bash_completion.sh"
+
 # fzf
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
 
