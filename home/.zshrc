@@ -20,7 +20,7 @@ autoload -U compinit
 compinit
 
 # cd 補完
-# cf. https://qiita.com/yaotti/items/157ff0a46736ec793a91
+# cf. http://bit.ly/2ZtPPrN
 setopt auto_cd
 cdpath=(.. ~)
 function chpwd() {
@@ -31,14 +31,15 @@ function chpwd() {
 setopt auto_pushd
 setopt pushd_ignore_dups
 
-# for iTerm2
-test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
+# iTerm2 shell integration
+test -e "${HOME}/.iterm2_shell_integration.zsh" &&
+source "${HOME}/.iterm2_shell_integration.zsh"
 
 ###############
 # zsh history #
 ###############
 
-# cf. https://yk5656.hatenadiary.org/entry/20160203/1461325853
+# cf. http://bit.ly/2EXlQ1S
 
 export HISTFILE=$HOME/.zsh_history
 
@@ -59,18 +60,6 @@ setopt hist_ignore_space
 # zsh plugins #
 ###############
 
-# 'z' command
-. /usr/local/etc/profile.d/z.sh
-alias j="z"
-
-# # powerline
-# powerline-daemon -q
-# . /usr/local/lib/python3.7/site-packages/powerline/bindings/zsh/powerline.zsh
-
-#########
-# zplug #
-#########
-
 # zplug settings
 export ZPLUG_HOME=/usr/local/opt/zplug
 source $ZPLUG_HOME/init.zsh
@@ -82,16 +71,22 @@ zplug "zsh-users/zsh-completions"
 # syntax-highlighting to command-line (compinit 以降)
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 
-# git, oh-my-zsh plugin
-zplug "plugins/git", from:oh-my-zsh
-
+# 'z' command
+zplug "rupa/z", use:z.sh
 # enhance 'cd' command
 zplug "b4b4r07/enhancd", use:init.sh
 export ENHANCD_COMMAND=ecd
 
 # docker
 zplug 'felixr/docker-zsh-completion'
-zplug 'mnowotnik/docker-fzf-completion', use:docker-fzf.zsh 
+zplug 'mnowotnik/docker-fzf-completion', use:docker-fzf.zsh
+
+# git
+zplug "plugins/git", from:oh-my-zsh
+
+################
+# Powerlevel9k #
+################
 
 # zsh theme 'powerlevel9k'
 zplug "bhilburn/powerlevel9k", use:powerlevel9k.zsh-theme
@@ -112,18 +107,6 @@ POWERLEVEL9K_MULTILINE_LAST_PROMPT_PREFIX="%F{blue}\u2570\uf460%F{white} "
 POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(os_icon dir vcs)
 POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(command_execution_time status time ram)
 
-# Install plugins if there are plugins that have not been installed
-if ! zplug check --verbose; then
-    printf "Install? [y/N]: "
-    if read -q; then
-        echo
-        zplug install
-    fi
-fi
-
-# Then, source plugins and add commands to $PATH
-zplug load --verbose
-
 #######
 # fzf #
 #######
@@ -131,6 +114,9 @@ zplug load --verbose
 # cf. 解説: https://wonderwall.hatenablog.com/entry/2017/10/06/063000
 # cf. オプション設定: https://qiita.com/kompiro/items/a09c0b44e7c741724c80
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# ** -> ,
+export FZF_COMPLETION_TRIGGER=","
 
 COMMON_FZF=$HOME/.config/shell/fzf.sh
 
@@ -166,3 +152,19 @@ function ghq-fzf() {
 
 zle -N ghq-fzf
 bindkey "^g" ghq-fzf
+
+###################
+# zplug installer #
+###################
+
+# Install plugins if there are plugins that have not been installed
+if ! zplug check --verbose; then
+    printf "Install? [y/N]: "
+    if read -q; then
+        echo
+        zplug install
+    fi
+fi
+
+# Then, source plugins and add commands to $PATH
+zplug load --verbose
