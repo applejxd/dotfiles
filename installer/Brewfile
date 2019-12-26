@@ -31,8 +31,8 @@ brew "fish"
 # Package manager 'zplug'
 brew "zplug"
 
-# fish-like auto-suggestions
-brew "zsh-autosuggestions"
+# fish-like auto-suggestions → zplug
+# brew "zsh-autosuggestions"
 
 # shell plugins
 brew "z"

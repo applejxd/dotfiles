@@ -2,7 +2,7 @@
 # common config #
 #################
 
-COMMON_RC=$HOME/.config/shell/shellrc
+COMMON_RC=$HOME/.config/shell/shellrc.sh
 
 if [ -e $COMMON_RC ]; then
     source $COMMON_RC
@@ -59,10 +59,7 @@ setopt hist_ignore_space
 # zsh plugins #
 ###############
 
-# fish-like auto completion
-source /usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-
-# z
+'z' command
 . /usr/local/etc/profile.d/z.sh
 alias j="z"
 
@@ -78,18 +75,26 @@ alias j="z"
 export ZPLUG_HOME=/usr/local/opt/zplug
 source $ZPLUG_HOME/init.zsh
 
-# syntax-highlighting to command-line
-zplug "zsh-users/zsh-syntax-highlighting", defer:2
+# fish-like auto completion
+zplug "zsh-users/zsh-autosuggestions"
 # completion for non-defalut commands
 zplug "zsh-users/zsh-completions"
-# oh-my-zsh plugin
+# syntax-highlighting to command-line (compinit 以降)
+zplug "zsh-users/zsh-syntax-highlighting", defer:2
+
+# git, oh-my-zsh plugin
 zplug "plugins/git", from:oh-my-zsh
+
 # enhance 'cd' command
 zplug "b4b4r07/enhancd", use:init.sh
 export ENHANCD_COMMAND=ecd
 
+# docker
+zplug 'felixr/docker-zsh-completion'
+
 # zsh theme 'powerlevel9k'
 zplug "bhilburn/powerlevel9k", use:powerlevel9k.zsh-theme
+
 # Apply Nerd-Font
 POWERLEVEL9K_MODE='nerdfont-complete'
 

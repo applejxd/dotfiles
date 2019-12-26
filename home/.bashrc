@@ -2,7 +2,7 @@
 # common config #
 #################
 
-COMMON_RC=$HOME/.config/shell/shellrc
+COMMON_RC=$HOME/.config/shell/shellrc.sh
 
 if [ -e $COMMON_RC ]; then
     source $COMMON_RC

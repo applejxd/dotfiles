@@ -5,3 +5,7 @@
 	name = applejxd
 [core]
 	editor = vim
+	;; distinguish between uppercase and lowercase
+	ignorecase = false
+	;; to display Japanese files
+	quotepath = false

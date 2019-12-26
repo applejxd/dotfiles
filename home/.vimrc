@@ -1,7 +1,7 @@
 " unable BG color for transparet BG
-autocmd ColorScheme * highlight Normal ctermbg=None
-autocmd ColorScheme * highlight LineNr ctermbg=None
-autocmd ColorScheme * highlight EndOfBuffer ctermbg=None
+" autocmd ColorScheme * highlight Normal ctermbg=None
+" autocmd ColorScheme * highlight LineNr ctermbg=None
+" autocmd ColorScheme * highlight EndOfBuffer ctermbg=None
 
 " iceberg theme
 colorscheme iceberg
