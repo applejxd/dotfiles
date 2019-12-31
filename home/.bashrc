@@ -2,33 +2,57 @@
 # common config #
 #################
 
-COMMON_RC=$HOME/.config/shell/shellrc.sh
-
-if [ -e $COMMON_RC ]; then
-    source $COMMON_RC
+if [ -f $HOME/.config/shell/shellrc.sh ]; then
+    source $HOME/.config/shell/shellrc.sh
 fi
 
-###############
+###########
+# options #
+###########
+
+# for latest bash
+# cf. http://bit.ly/2Sts1CU
+# cf. http://bit.ly/2MvLSgX
+
+# no cd
+shopt -s autocd
+# fuzzy cd
+shopt -s cdspell
+# dotfiles match
+shopt -s dotglob
+# regexp enable
+shopt -s extglob
+# '**'' recursive match
+shopt -s globstar
+# not to distinguish between uppercase and lowercase
+shopt -s nocaseglob
+
+################
 # Bash plugins #
-###############
+################
 
 # powerline
-powerline-daemon -q
-. /usr/local/lib/python3.7/site-packages/powerline/bindings/bash/powerline.sh
+if type "powerline-daemon" >/dev/null 2>&1; then
+    powerline-daemon -q
+    POWERLINE_PATH=/usr/local/lib/python3.7/site-packages/powerline/bindings/bash/powerline.sh
+    if [ -f $POWERLINE_PATH ]; then
+        source $POWERLINE_PATH
+    fi
+fi
 
 # z: smart completion of the path
-. $(brew --prefix)/etc/profile.d/z.sh
-alias j='z'
+[[ -f /usr/local/etc/profile.d/z.sh ]] &&
+source /usr/local/etc/profile.d/z.sh
 
 # bash completion
-[[ -r "/usr/local/etc/profile.d/bash_completion.sh" ]] &&
-. "/usr/local/etc/profile.d/bash_completion.sh"
+[[ -f "/usr/local/etc/profile.d/bash_completion.sh" ]] &&
+source "/usr/local/etc/profile.d/bash_completion.sh"
 
 # fzf
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
-
-COMMON_FZF=$HOME/.config/shell/fzf.sh
-
-if [ -e $COMMON_RC ]; then
-    source $COMMON_FZF
+if [ -f ~/.fzf.bash ]; then
+    source ~/.fzf.bash
+    # common settings of fzf
+    if [ -f $HOME/.config/shell/fzf.sh ]; then
+        source $HOME/.config/shell/fzf.sh
+    fi
 fi
