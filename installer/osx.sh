@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Python
 pip3 install --upgrade setuptools
