@@ -4,7 +4,9 @@
 
 # 探索コマンド
 # cf. https://qiita.com/kamykn/items/aa9920f07487559c0c7e
-export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
+if type "rg" >/dev/null 2>&1; then
+    export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
+fi
 # デフォルト設定. 下に表示, 境界線表示, 高さ指定.
 export FZF_DEFAULT_OPTS='--layout=reverse --border --height 60%'
 # オプション設定. bat でプレビュー, 色付き, ファイル名付き, グリッドあり
