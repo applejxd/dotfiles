@@ -43,9 +43,6 @@ alias jnethack="cocot -t UTF-8 -p EUC-JP jnethack"
 # Restart Terminal
 alias relogin="exec $SHELL -l"
 
-alias f="open -a Finder ./"
-alias search="find . -type f -print0 | xargs -0 grep -n"
-
 alias up="cd .."
 alias upp="cd ../.."
 alias uppp="cd ../../.."
@@ -56,28 +53,28 @@ alias lla="ls -la"
 alias lal="ls -al"
 alias lt="ls --tree"
 
-alias web="cd /Applications/MAMP/htdocs/"
+alias search="find . -type f -print0 | xargs -0 grep -n"
+
+# for Mac OS X
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    alias f="open -a Finder ./"
+    alias web="cd /Applications/MAMP/htdocs/"
+fi
 
 # Download mp3 or mp4 from websites
-alias audio-dl="youtube-dl --ignore-errors --output '~/Downloads/%(title)s.%(ext)s' --extract-audio --audio-format mp3 --embed-thumbnail"
-alias video-dl="youtube-dl --ignore-errors --output '~/Downloads/%(title)s.%(ext)s' --recode-video mp4  --add-metadata"
+if type "youtube-dl" >/dev/null 2>&1; then
+    alias audio-dl="youtube-dl --ignore-errors \
+                    --output '~/Downloads/%(title)s.%(ext)s' \
+                    --extract-audio --audio-format mp3 \
+                    --embed-thumbnail"
+    alias video-dl="youtube-dl --ignore-errors \
+                    --output '~/Downloads/%(title)s.%(ext)s' \
+                    --recode-video mp4  --add-metadata"
+fi
 
 ######################
 # original functions #
 ######################
-
-# From Finder To Terminal
-# cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
-# cf. https://vivafan.com/2013/03/csh-no-function/
-function cdf() {
-    target=$(osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)')
-    if [ "$target" != "" ]; then
-        cd "$target"
-        pwd
-    else
-        echo 'No Finder window found' >&2
-    fi
-}
 
 # Search and Move to The Directory
 # cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
@@ -106,21 +103,38 @@ function sha1() {
     echo -n "$1" | openssl sha1 | sed "s/^.* //"
 }
 
-# for iTerm badge function
-# http://bit.ly/2LTeYXt
-function badge() {
-    printf "\e]1337;SetBadgeFormat=%s\a" \
-        $(echo -n "$1" | base64)
-}
+# From Finder To Terminal
+# cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
+# cf. https://vivafan.com/2013/03/csh-no-function/
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    function cdf() {
+        target=$(osascript -e 'tell application "Finder" to \
+                if (count of Finder windows) > 0 then \
+                get POSIX path of (target of front Finder window as text)')
+        if [ "$target" != "" ]; then
+            cd "$target"
+            pwd
+        else
+            echo 'No Finder window found' >&2
+        fi
+    }
+fi
 
 # for iTerm badge function
 # http://bit.ly/2LTeYXt
-function ssh_local() {
-    local ssh_config=~/.ssh/config
-    local server=$(cat $ssh_config | grep "Host " | sed "s/Host //g" | fzf)
-    if [ -z "$server" ]; then
-        return
-    fi
-    badge $server
-    ssh $server
-}
+if [ -e ~/.iterm2_shell_integration.zsh ]; then
+    function badge() {
+        printf "\e]1337;SetBadgeFormat=%s\a" \
+            $(echo -n "$1" | base64)
+    }
+
+    function ssh_local() {
+        local ssh_config=~/.ssh/config
+        local server=$(cat $ssh_config | grep "Host " | sed "s/Host //g" | fzf)
+        if [ -z "$server" ]; then
+            return
+        fi
+        badge $server
+        ssh $server
+    }
+fi
