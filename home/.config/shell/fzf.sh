@@ -2,19 +2,23 @@
 # options #
 ###########
 
-# 探索コマンド
+# search command
 # cf. https://qiita.com/kamykn/items/aa9920f07487559c0c7e
 if type "rg" >/dev/null 2>&1; then
     export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
 fi
-# デフォルト設定. 下に表示, 境界線表示, 高さ指定.
+# show below, show border, set hight
 export FZF_DEFAULT_OPTS='--layout=reverse --border --height 60%'
-# オプション設定. bat でプレビュー, 色付き, ファイル名付き, グリッドあり
-export FZF_CTRL_T_OPTS='--preview "bat  --color=always --style=header,grid --line-range :100 {}"'
+# preview by bat, with color, with file name header, with grid
+if type "bat" >/dev/null 2>&1; then
+    export FZF_CTRL_T_OPTS='--preview "bat  --color=always --style=header,grid --line-range :100 {}"'
+fi
 
-# オプション設定. tree でプレビュー, 色付き, 日本語対応
-# 最後のオプション cf. http://bit.ly/35TBnvE
-export FZF_ALT_C_OPTS='--preview "tree -C -N {} | head -200" --select-1 --exit-0'
+# preview by tree, with color (enable Japanese)
+# cf. http://bit.ly/35TBnvE
+if type "tree" >/dev/null 2>&1; then
+    export FZF_ALT_C_OPTS='--preview "tree -C -N {} | head -200" --select-1 --exit-0'
+fi
 
 ###########
 # git-fzf #
