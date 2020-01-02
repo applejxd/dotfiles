@@ -88,6 +88,7 @@ zplug "plugins/git", from:oh-my-zsh
 # Powerlevel9k #
 ################
 
+# for Linux
 export TERM="xterm-256color"
 
 # zsh theme 'powerlevel9k'

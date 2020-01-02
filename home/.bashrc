@@ -31,6 +31,10 @@ shopt -s nocaseglob
 # Bash plugins #
 ################
 
+# iTerm2 shell integration
+test -e "${HOME}/.iterm2_shell_integration.bash" &&
+source "${HOME}/.iterm2_shell_integration.bash" || true
+
 # powerline
 if type "powerline-daemon" >/dev/null 2>&1; then
     powerline-daemon -q
