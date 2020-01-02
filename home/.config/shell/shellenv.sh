@@ -2,8 +2,9 @@
 # Environment #
 ###############
 
-# for Japanese man command
-export LANG=ja_JP.UTF-8
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    export LANG=ja_JP.UTF-8
+fi
 
 # Defaul editor = vim
 export EDITOR=vim
