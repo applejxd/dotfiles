@@ -19,7 +19,7 @@ bindkey -e
 autoload -U compinit
 compinit
 
-# cd 補完
+# cd completion
 # cf. http://bit.ly/2ZtPPrN
 setopt auto_cd
 cdpath=(.. ~)
@@ -27,12 +27,12 @@ function chpwd() {
     ls
 }
 
-# 自動 pushd & 履歴は残さない
+# auto pushd & no history
 setopt auto_pushd
 setopt pushd_ignore_dups
 
 # iTerm2 shell integration
-test -e "${HOME}/.iterm2_shell_integration.zsh" &&
+[[ -f "${HOME}/.iterm2_shell_integration.zsh" ]] &&
 source "${HOME}/.iterm2_shell_integration.zsh"
 
 ###############
@@ -60,15 +60,15 @@ setopt hist_ignore_space
 # zsh plugins #
 ###############
 
-# zplug settings
-export ZPLUG_HOME=/usr/local/opt/zplug
+# enable zplug
+export ZPLUG_HOME=$(brew --prefix)/opt/zplug
 source $ZPLUG_HOME/init.zsh
 
 # fish-like auto completion
 zplug "zsh-users/zsh-autosuggestions"
 # completion for non-defalut commands
 zplug "zsh-users/zsh-completions"
-# syntax-highlighting to command-line (compinit 以降)
+# syntax-highlighting to command-line (after compinit)
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 
 # 'z' command
@@ -111,8 +111,8 @@ POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(command_execution_time status time ram)
 # fzf #
 #######
 
-# cf. 解説: https://wonderwall.hatenablog.com/entry/2017/10/06/063000
-# cf. オプション設定: https://qiita.com/kompiro/items/a09c0b44e7c741724c80
+# cf. http://bit.ly/2QHO6uS
+# cf. (for options) http://bit.ly/2Qi9NTu
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # ** -> ,
@@ -125,7 +125,7 @@ if [ -e $COMMON_RC ]; then
 fi
 
 # z-fzf
-# cf. https://github.com/junegunn/fzf/wiki/examples#z
+# cf. http://bit.ly/2sEPZAJ
 function z-fzf() {
     local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
     if [[ -n "$selected_dir" ]]; then
@@ -140,7 +140,7 @@ zle -N z-fzf
 bindkey "^x^f" z-fzf
 
 # ghq-fzf
-# cf. https://blog.tsub.me/post/move-from-peco-to-fzf/
+# cf. http://bit.ly/2MMEb6e
 function ghq-fzf() {
     local selected_dir=$(ghq list | fzf --query="$LBUFFER")
     if [[ -n "$selected_dir" ]]; then
