@@ -16,7 +16,7 @@ fi
 bindkey -e
 
 # zsh completion
-autoload -U compinit
+autoload -Uz compinit &&
 compinit
 
 # cd completion
@@ -60,9 +60,14 @@ setopt hist_ignore_space
 # zsh plugins #
 ###############
 
+# Check if zplug is installed
+if [[ ! -d ~/.zplug ]]; then
+    git clone https://github.com/zplug/zplug ~/.zplug
+    source ~/.zplug/init.zsh && zplug update --self
+fi
+
 # enable zplug
-export ZPLUG_HOME=$(brew --prefix)/opt/zplug
-source $ZPLUG_HOME/init.zsh
+source ~/.zplug/init.zsh
 
 # fish-like auto completion
 zplug "zsh-users/zsh-autosuggestions"
@@ -73,6 +78,8 @@ zplug "zsh-users/zsh-syntax-highlighting", defer:2
 
 # 'z' command
 zplug "rupa/z", use:z.sh
+# 'ghq' command
+zplug "motemen/ghq", as:command, from:gh-r
 # enhance 'cd' command
 zplug "b4b4r07/enhancd", use:init.sh
 export ENHANCD_COMMAND=ecd
@@ -116,7 +123,11 @@ POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(command_execution_time status time ram)
 
 # cf. http://bit.ly/2QHO6uS
 # cf. (for options) http://bit.ly/2Qi9NTu
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+#[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+zplug "junegunn/fzf-bin", from:gh-r, as:command, rename-to:fzf
+zplug "junegunn/fzf", as:command, use:bin/fzf-tmux
+zplug "junegunn/fzf", use:shell/key-bindings.zsh
+zplug "junegunn/fzf", use:shell/completion.zsh
 
 # ** -> ,
 export FZF_COMPLETION_TRIGGER=","

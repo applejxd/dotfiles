@@ -19,12 +19,12 @@ brew "fish"
 brew "zplug"
 
 # shell plugins
-brew "fzf"
-brew "ghq"
 brew "tmux"
 
 # for bash
 brew "z"
+brew "fzf"
+brew "ghq"
 
 #------------#
 # Shell Apps #
