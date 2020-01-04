@@ -66,7 +66,7 @@ if [[ ! -d ~/.zplug ]]; then
     source ~/.zplug/init.zsh && zplug update --self
 fi
 
-# enable zplug
+# Essential
 source ~/.zplug/init.zsh
 
 # fish-like auto completion
@@ -79,7 +79,7 @@ zplug "zsh-users/zsh-syntax-highlighting", defer:2
 # 'z' command
 zplug "rupa/z", use:z.sh
 # 'ghq' command
-zplug "motemen/ghq", as:command, from:gh-r
+zplug "motemen/ghq", as:command, from:gh-r, rename-to:ghq
 # enhance 'cd' command
 zplug "b4b4r07/enhancd", use:init.sh
 export ENHANCD_COMMAND=ecd
@@ -98,8 +98,6 @@ zplug "plugins/git", from:oh-my-zsh
 # for Linux
 export TERM="xterm-256color"
 
-# zsh theme 'powerlevel9k'
-zplug "bhilburn/powerlevel9k", use:powerlevel9k.zsh-theme
 
 # Apply Nerd-Font
 POWERLEVEL9K_MODE='nerdfont-complete'
@@ -117,6 +115,9 @@ POWERLEVEL9K_MULTILINE_LAST_PROMPT_PREFIX="%F{blue}\u2570\uf460%F{white} "
 POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(os_icon dir vcs)
 POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(command_execution_time status time ram)
 
+# enable zsh theme 'powerlevel9k'
+zplug "bhilburn/powerlevel9k", use:powerlevel9k.zsh-theme
+
 #######
 # fzf #
 #######
@@ -124,6 +125,8 @@ POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(command_execution_time status time ram)
 # cf. http://bit.ly/2QHO6uS
 # cf. (for options) http://bit.ly/2Qi9NTu
 #[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# fzf
 zplug "junegunn/fzf-bin", from:gh-r, as:command, rename-to:fzf
 zplug "junegunn/fzf", as:command, use:bin/fzf-tmux
 zplug "junegunn/fzf", use:shell/key-bindings.zsh
@@ -167,16 +170,18 @@ function ghq-fzf() {
 zle -N ghq-fzf
 bindkey "^g" ghq-fzf
 
+
 ###################
 # zplug installer #
 ###################
 
-# Install plugins if there are plugins that have not been installed
+# Install packages that have not been installed yet
 if ! zplug check --verbose; then
     printf "Install? [y/N]: "
     if read -q; then
+        echo; zplug install
+    else
         echo
-        zplug install
     fi
 fi
 
