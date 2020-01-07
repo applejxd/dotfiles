@@ -1,13 +1,3 @@
-#################
-# common config #
-#################
-
-COMMON_RC=$HOME/.config/shell/shellrc.sh
-
-if [ -e $COMMON_RC ]; then
-    source $COMMON_RC
-fi
-
 ##############
 # zsh proper #
 ##############
@@ -98,7 +88,6 @@ zplug "plugins/git", from:oh-my-zsh
 # for Linux
 export TERM="xterm-256color"
 
-
 # Apply Nerd-Font
 POWERLEVEL9K_MODE='nerdfont-complete'
 
@@ -170,7 +159,6 @@ function ghq-fzf() {
 zle -N ghq-fzf
 bindkey "^g" ghq-fzf
 
-
 ###################
 # zplug installer #
 ###################
@@ -187,3 +175,13 @@ fi
 
 # Then, source plugins and add commands to $PATH
 zplug load --verbose
+
+#################
+# common config #
+#################
+
+COMMON_RC=$HOME/.config/shell/shellrc.sh
+
+if [ -e $COMMON_RC ]; then
+    source $COMMON_RC
+fi
