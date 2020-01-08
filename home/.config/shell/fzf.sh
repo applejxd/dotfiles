@@ -20,6 +20,23 @@ if type "tree" >/dev/null 2>&1; then
     export FZF_ALT_C_OPTS='--preview "tree -C -N {} | head -200" --select-1 --exit-0'
 fi
 
+#############
+# functions #
+#############
+
+# fg-fzf
+alias fgg='_fgg'
+function _fgg() {
+    wc=$(jobs | wc -l | tr -d ' ')
+    if [ $wc -ne 0 ]; then
+        job=$(jobs | awk -F "suspended" "{print $1 $2}"|sed -e "s/\-//g" -e "s/\+//g" -e "s/\[//g" -e "s/\]//g" | grep -v pwd | fzf | awk "{print $1}")
+        wc_grep=$(echo $job | grep -v grep | grep 'suspended')
+        if [ "$wc_grep" != "" ]; then
+            fg %$job
+        fi
+    fi
+}
+
 ###########
 # git-fzf #
 ###########

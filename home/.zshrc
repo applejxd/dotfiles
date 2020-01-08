@@ -6,8 +6,7 @@
 bindkey -e
 
 # zsh completion
-autoload -Uz compinit &&
-compinit
+autoload -Uz compinit && compinit
 
 # cd completion
 # cf. http://bit.ly/2ZtPPrN
@@ -24,6 +23,19 @@ setopt pushd_ignore_dups
 # iTerm2 shell integration
 [[ -f "${HOME}/.iterm2_shell_integration.zsh" ]] &&
 source "${HOME}/.iterm2_shell_integration.zsh"
+
+# fg -> C-z
+function fancy-ctrl-z () {
+  if [[ $#BUFFER -eq 0 ]]; then
+    BUFFER="fg"
+    zle accept-line
+  else
+    zle push-input
+    zle clear-screen
+  fi
+}
+zle -N fancy-ctrl-z
+bindkey '^Z' fancy-ctrl-z
 
 ###############
 # zsh history #
@@ -66,10 +78,6 @@ zplug "zsh-users/zsh-completions"
 # syntax-highlighting to command-line (after compinit)
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 
-# 'z' command
-zplug "rupa/z", use:z.sh
-# 'ghq' command
-zplug "motemen/ghq", as:command, from:gh-r, rename-to:ghq
 # enhance 'cd' command
 zplug "b4b4r07/enhancd", use:init.sh
 export ENHANCD_COMMAND=ecd
@@ -116,7 +124,7 @@ zplug "bhilburn/powerlevel9k", use:powerlevel9k.zsh-theme
 #[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # fzf
-zplug "junegunn/fzf-bin", from:gh-r, as:command, rename-to:fzf
+zplug "junegunn/fzf-bin", as:command, from:gh-r, rename-to:fzf
 zplug "junegunn/fzf", as:command, use:bin/fzf-tmux
 zplug "junegunn/fzf", use:shell/key-bindings.zsh
 zplug "junegunn/fzf", use:shell/completion.zsh
@@ -124,14 +132,15 @@ zplug "junegunn/fzf", use:shell/completion.zsh
 # ** -> ,
 export FZF_COMPLETION_TRIGGER=","
 
+# common setting
 COMMON_FZF=$HOME/.config/shell/fzf.sh
-
-if [ -e $COMMON_RC ]; then
+if [ -e $COMMON_FZF ]; then
     source $COMMON_FZF
 fi
 
-# z-fzf
+# z-fzf, emacs-like key-bindings
 # cf. http://bit.ly/2sEPZAJ
+zplug "rupa/z", use:z.sh
 function z-fzf() {
     local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
     if [[ -n "$selected_dir" ]]; then
@@ -140,13 +149,12 @@ function z-fzf() {
     fi
     zle reset-prompt
 }
-
-# Emacs-like binding C-x C-f
 zle -N z-fzf
 bindkey "^x^f" z-fzf
 
 # ghq-fzf
 # cf. http://bit.ly/2MMEb6e
+zplug "motemen/ghq", as:command, from:gh-r, rename-to:ghq
 function ghq-fzf() {
     local selected_dir=$(ghq list | fzf --query="$LBUFFER")
     if [[ -n "$selected_dir" ]]; then
@@ -155,7 +163,6 @@ function ghq-fzf() {
     fi
     zle reset-prompt
 }
-
 zle -N ghq-fzf
 bindkey "^g" ghq-fzf
 
