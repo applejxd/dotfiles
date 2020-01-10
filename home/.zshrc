@@ -13,7 +13,11 @@ autoload -Uz compinit && compinit
 setopt auto_cd
 cdpath=(.. ~)
 function chpwd() {
-    ls
+    if type "lsd" >/dev/null 2>&1; then
+        lsd
+    else
+        ls
+    fi
 }
 
 # auto pushd & no history
