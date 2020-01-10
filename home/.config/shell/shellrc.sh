@@ -1,3 +1,13 @@
+#############
+# homeshick #
+#############
+
+HOMESHICK_PATH=$HOME/.homesick/repos/homeshick
+if [[ ! -d $HOMESHICK_PATH ]]; then
+    git clone https://github.com/andsens/homeshick.git $HOMESHICK_PATH
+fi
+source $HOMESHICK_PATH/homeshick.sh
+
 ###################
 # Command Wrapper #
 ###################
@@ -57,7 +67,6 @@ alias search="find . -type f -print0 | xargs -0 grep -n"
 
 # for Mac OS X
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    alias f="open -a Finder ./"
     alias web="cd /Applications/MAMP/htdocs/"
 fi
 
@@ -103,14 +112,13 @@ function sha1() {
     echo -n "$1" | openssl sha1 | sed "s/^.* //"
 }
 
-# From Finder To Terminal
+# Finder functions for OS X
 # cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
 # cf. https://vivafan.com/2013/03/csh-no-function/
 if [[ "$OSTYPE" == "darwin"* ]]; then
+    alias f="open -a Finder ./"
     function cdf() {
-        target=$(osascript -e 'tell application "Finder" to \
-                if (count of Finder windows) > 0 then \
-                get POSIX path of (target of front Finder window as text)')
+        target=$(osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)')
         if [ "$target" != "" ]; then
             cd "$target"
             pwd
