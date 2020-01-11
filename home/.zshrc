@@ -82,6 +82,9 @@ zplug "zsh-users/zsh-completions"
 # syntax-highlighting to command-line (after compinit)
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 
+# git
+zplug "plugins/git", from:oh-my-zsh
+
 # enhance 'cd' command
 zplug "b4b4r07/enhancd", use:init.sh
 export ENHANCD_COMMAND=ecd
@@ -89,9 +92,6 @@ export ENHANCD_COMMAND=ecd
 # docker
 zplug 'felixr/docker-zsh-completion'
 zplug 'mnowotnik/docker-fzf-completion', use:docker-fzf.zsh
-
-# git
-zplug "plugins/git", from:oh-my-zsh
 
 ################
 # Powerlevel9k #
