@@ -4,7 +4,7 @@
 
 # Homebrew for linux
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
-    eval $(/usr/local/bin/brew shellenv)
+    eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
 fi
 
 ###################
