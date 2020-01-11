@@ -5,8 +5,8 @@
 ### Deploy
 - $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/deploy.sh)"
 
-### Install applications (by homebrew-bundle & mackup)
-- $ sh install.sh
+### Initialization
+- $ homesick rc dotfiles
 
 ## How to uninstall
 - $ homesick unlink dotfiles
