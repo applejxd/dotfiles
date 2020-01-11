@@ -4,20 +4,19 @@
 sudo add-apt-repository ppa:kelleyk/emacs
 
 # refresh
-sudo apt update
-yes | sudo apt upgrade
+sudo apt update && sudo apt upgrade
 
 # basics
-yes | sudo apt install chromium-browser manpages-ja colordiff emacs26
+sudo apt install -y chromium-browser manpages-ja colordiff emacs26
 
 # Git
-yes | sudo apt install git tig
+sudo apt install -y git tig
 
 # LaTeX
-yes | sudo apt install texlive texlive-lang-japanese
+sudo apt install -y texlive texlive-lang-japanese
 
 # Calc
-yes | sudo apt install cadabra
+sudo apt install -y cadabra
 
 # Emacs keybind
 gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
