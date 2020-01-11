@@ -1,12 +1,11 @@
-#############
-# homeshick #
-#############
+###########
+# Install #
+###########
 
-HOMESHICK_PATH=$HOME/.homesick/repos/homeshick
-if [[ ! -d $HOMESHICK_PATH ]]; then
-    git clone https://github.com/andsens/homeshick.git $HOMESHICK_PATH
+# Homebrew for linux
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    eval $(/usr/local/bin/brew shellenv)
 fi
-source $HOMESHICK_PATH/homeshick.sh
 
 ###################
 # Command Wrapper #

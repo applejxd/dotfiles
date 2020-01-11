@@ -6,7 +6,10 @@ fi
 
 brew bundle --file=installer/brew_essence.rb
 
+# cf. http://bit.ly/37WjcWG
 if [[ "$OSTYPE" == "darwin"* ]]; then
     brew bundle --file=installer/brew_osx.rb
     bash installer/osx.sh
+elif [[ -e /etc/lsb-release ]]; then
+    bash installer/ubuntu.sh
 fi
