@@ -9,6 +9,9 @@ export PATH=/usr/local/texlive/2019/bin/x86_64-darwin:$PATH
 # for wxMaxima
 export PATH=/Applications/wxMaxima.app/bin:$PATH
 
+# for openssl
+export PATH=/usr/local/opt/openssl@1.1/bin:$PATH
+
 #################
 # Specific root #
 #################
