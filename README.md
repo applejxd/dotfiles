@@ -2,6 +2,9 @@
 
 ## How to install
 
+### Deploy
+- $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/deploy.sh)"
+
 ### Install dotfiles (by homesick)
 - $ sudo gem install homesick
 - $ homesick clone applejxd/dotfiles
