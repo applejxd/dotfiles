@@ -66,14 +66,15 @@ setopt hist_ignore_space
 # zsh plugins #
 ###############
 
-# Check if zplug is installed
-if [[ ! -d ~/.zplug ]]; then
-    git clone https://github.com/zplug/zplug ~/.zplug
-    source ~/.zplug/init.zsh && zplug update --self
-fi
+# # Check if zplug is installed
+# if [[ ! -d ~/.zplug ]]; then
+#     git clone https://github.com/zplug/zplug ~/.zplug
+#     source ~/.zplug/init.zsh && zplug update --self
+# fi
+# # Essential
+# source ~/.zplug/init.zsh
 
-# Essential
-source ~/.zplug/init.zsh
+source $(brew --prefix)/opt/zplug/init.zsh
 
 # fish-like auto completion
 zplug "zsh-users/zsh-autosuggestions"
