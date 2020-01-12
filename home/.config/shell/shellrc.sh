@@ -1,6 +1,6 @@
-###########
-# Install #
-###########
+############
+# Homebrew #
+############
 
 # Homebrew for linux
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
@@ -17,7 +17,6 @@ export LESS="-iMR -gSW -z-4 -x4"
 
 # for security
 alias ssh-keygen="ssh-keygen -t ed25519"
-alias openssl="openssl passwd -6 -salt 'SALTsalt'"
 
 # with number: -v
 alias dirs="dirs -v"
@@ -106,11 +105,11 @@ function cleanup() {
     find . -type d -maxdepth 2 -empty -exec rmdir -v {} \; 2>/dev/null
 }
 
-# Return sha1-type hash from a given argument
 # cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
 function sha1() {
     echo -n "$1" | openssl sha1 | sed "s/^.* //"
 }
+alias sha2="openssl passwd -6 -salt 'SALTsalt'"
 
 # Finder functions for OS X
 # cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
