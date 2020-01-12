@@ -66,15 +66,16 @@ setopt hist_ignore_space
 # zsh plugins #
 ###############
 
-# # Check if zplug is installed
-# if [[ ! -d ~/.zplug ]]; then
-#     git clone https://github.com/zplug/zplug ~/.zplug
-#     source ~/.zplug/init.zsh && zplug update --self
-# fi
-# # Essential
-# source ~/.zplug/init.zsh
+# Check if zplug is installed
+if [[ ! -d ~/.zplug ]]; then
+    git clone https://github.com/zplug/zplug ~/.zplug
+    source ~/.zplug/init.zsh && zplug update --self
+fi
+# Essential
+source ~/.zplug/init.zsh
 
-source $(brew --prefix)/opt/zplug/init.zsh
+# # by Homebrew
+# source $(brew --prefix)/opt/zplug/init.zsh
 
 # fish-like auto completion
 zplug "zsh-users/zsh-autosuggestions"
@@ -124,9 +125,9 @@ zplug "bhilburn/powerlevel9k", use:powerlevel9k.zsh-theme
 # fzf #
 #######
 
-# cf. http://bit.ly/2QHO6uS
-# cf. (for options) http://bit.ly/2Qi9NTu
-#[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+# # cf. http://bit.ly/2QHO6uS
+# # cf. (for options) http://bit.ly/2Qi9NTu
+# [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # fzf
 zplug "junegunn/fzf-bin", as:command, from:gh-r, rename-to:fzf
