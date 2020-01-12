@@ -74,7 +74,7 @@ fi
 # Essential
 source ~/.zplug/init.zsh
 
-# # by Homebrew
+# # init by Homebrew
 # source $(brew --prefix)/opt/zplug/init.zsh
 
 # fish-like auto completion
@@ -125,11 +125,13 @@ zplug "bhilburn/powerlevel9k", use:powerlevel9k.zsh-theme
 # fzf #
 #######
 
-# # cf. http://bit.ly/2QHO6uS
-# # cf. (for options) http://bit.ly/2Qi9NTu
+# cf. http://bit.ly/2QHO6uS
+# cf. (for options) http://bit.ly/2Qi9NTu
+
+# # init by Homebrew
 # [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
-# fzf
+# init by zplug
 zplug "junegunn/fzf-bin", as:command, from:gh-r, rename-to:fzf
 zplug "junegunn/fzf", as:command, use:bin/fzf-tmux
 zplug "junegunn/fzf", use:shell/key-bindings.zsh
