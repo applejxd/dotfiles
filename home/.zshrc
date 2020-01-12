@@ -1,3 +1,13 @@
+#################
+# common config #
+#################
+
+COMMON_RC=$HOME/.config/shell/shellrc.sh
+
+if [ -e $COMMON_RC ]; then
+    source $COMMON_RC
+fi
+
 ##############
 # zsh proper #
 ##############
@@ -190,13 +200,3 @@ fi
 
 # Then, source plugins and add commands to $PATH
 zplug load --verbose
-
-#################
-# common config #
-#################
-
-COMMON_RC=$HOME/.config/shell/shellrc.sh
-
-if [ -e $COMMON_RC ]; then
-    source $COMMON_RC
-fi

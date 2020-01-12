@@ -24,6 +24,11 @@ alias dirs="dirs -v"
 # "ls" cloning
 if type "lsd" >/dev/null 2>&1; then
     alias ls="lsd"
+else
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        alias ls="ls -G"
+    elif [[ "$OSTYPE" == "linux-gnu" ]]; then
+        alias ls="ls --color=auto"
 fi
 
 # "cat" cloning
