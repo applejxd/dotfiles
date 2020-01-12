@@ -15,8 +15,9 @@ fi
 # cf. https://qiita.com/delphinus/items/b04752bb5b64e6cc4ea9
 export LESS="-iMR -gSW -z-4 -x4"
 
-# Reccomended SSH key generation
+# for security
 alias ssh-keygen="ssh-keygen -t ed25519"
+alias openssl="openssl passwd -6 -salt 'SALTsalt'"
 
 # with number: -v
 alias dirs="dirs -v"
