@@ -29,6 +29,7 @@ else
         alias ls="ls -G"
     elif [[ "$OSTYPE" == "linux-gnu" ]]; then
         alias ls="ls --color=auto"
+    fi
 fi
 
 # "cat" cloning
