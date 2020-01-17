@@ -125,7 +125,7 @@ POWERLEVEL9K_MULTILINE_LAST_PROMPT_PREFIX="%F{blue}\u2570\uf460%F{white} "
 # POWERLEVEL9K_PROMPT_ADD_NEWLINE=true
 
 # Segment contents
-POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(os_icon dir vcs)
+POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(os_icon dir vcs background_jobs)
 POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(command_execution_time status time ram)
 
 # enable zsh theme 'powerlevel9k'
