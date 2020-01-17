@@ -3,6 +3,7 @@
 #-----#
 
 brew "git"
+brew "hub"
 brew "git-flow-avh"
 brew "tig"
 
@@ -34,7 +35,7 @@ brew "ghq"
 brew "bat"
 brew "colordiff"
 brew "ripgrep"
-brew "lsd"
+# brew "lsd"
 
 # basic command line tools
 brew "vim"
