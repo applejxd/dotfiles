@@ -21,6 +21,9 @@ alias ssh-keygen="ssh-keygen -t ed25519"
 # with number: -v
 alias dirs="dirs -v"
 
+# adding git syntax sugar
+eval "$(hub alias -s)"
+
 # "ls" cloning
 if type "lsd" >/dev/null 2>&1; then
     alias ls="lsd"
@@ -92,7 +95,7 @@ fi
 
 # Search and Move to The Directory
 # cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
-# cf. http://rksz.hateblo.jp/entry/2012/10/27/201939
+# cf. http://rksz.hateblo.jp/entry/2014/10/27/201939
 function jj() {
     if [ $1 ]; then
         JUMPDIR=$(find . -type d -maxdepth 1 | grep $1 | tail -1)
