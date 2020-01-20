@@ -25,11 +25,12 @@ fi
 #############
 
 # fg-fzf
+# cf. http://bit.ly/39OMtEr
 alias fgg='_fgg'
 function _fgg() {
     wc=$(jobs | wc -l | tr -d ' ')
     if [ $wc -ne 0 ]; then
-        job=$(jobs | awk -F "suspended" "{print $1 $2}"|sed -e "s/\-//g" -e "s/\+//g" -e "s/\[//g" -e "s/\]//g" | grep -v pwd | fzf | awk "{print $1}")
+        job=$(jobs | awk -F "suspended" "{print $1 $2}" | sed -e "s/\-//g" -e "s/\+//g" -e "s/\[//g" -e "s/\]//g" | grep -v pwd | fzf | awk "{print $1}")
         wc_grep=$(echo $job | grep -v grep | grep 'suspended')
         if [ "$wc_grep" != "" ]; then
             fg %$job
@@ -37,17 +38,26 @@ function _fgg() {
     fi
 }
 
-###########
-# git-fzf #
-###########
+# v - open files in ~/.viminfo
+v() {
+    local files
+    files=$(grep '^>' ~/.viminfo | cut -c3- |
+        while read line; do
+            [ -f "${line/\~/$HOME}" ] && echo "$line"
+        done | fzf-tmux -d -m -q "$*" -1) && vim ${files//\~/$HOME}
+}
+
+#######
+# git #
+#######
 
 # fbr - checkout git branch
 # cf. http://bit.ly/34zmzkt
 function fbr() {
     local branches branch
     branches=$(git branch -vv) &&
-    branch=$(echo "$branches" | fzf +m) &&
-    git checkout $(echo "$branch" | awk '{print $1}' | sed "s/.* //")
+        branch=$(echo "$branches" | fzf +m) &&
+        git checkout $(echo "$branch" | awk '{print $1}' | sed "s/.* //")
 }
 
 # fbrm - checkout git branch (including remote branches)
@@ -55,8 +65,8 @@ function fbr() {
 function fbrm() {
     local branches branch
     branches=$(git branch --all | grep -v HEAD) &&
-    branch=$(echo "$branches" | fzf-tmux -d $(( 2 + $(wc -l <<< "$branches") )) +m) &&
-    git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
+        branch=$(echo "$branches" | fzf-tmux -d $((2 + $(wc -l <<<"$branches"))) +m) &&
+        git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
 }
 
 # fshow - git commit browser
@@ -82,7 +92,7 @@ function cdworktree() {
         return
     fi
 
-    local selectedWorkTreeDir=`git worktree list | fzf | awk '{print $1}'`
+    local selectedWorkTreeDir=$(git worktree list | fzf | awk '{print $1}')
 
     if [ "$selectedWorkTreeDir" = "" ]; then
         # Ctrl-C.
@@ -97,12 +107,13 @@ function cdworktree() {
 fadd() {
     local out q n addfiles
     while out=$(
-            git status --short |
-                awk '{if (substr($0,2,1) !~ / /) print $2}' |
-                fzf-tmux --multi --exit-0 --expect=ctrl-d); do
-        q=$(head -1 <<< "$out")
-        n=$[$(wc -l <<< "$out") - 1]
-        addfiles=(`echo $(tail "-$n" <<< "$out")`)
+        git status --short |
+            awk '{if (substr($0,2,1) !~ / /) print $2}' |
+            fzf-tmux --multi --exit-0 --expect=ctrl-d
+    ); do
+        q=$(head -1 <<<"$out")
+        n=$(($(wc -l <<<"$out") - 1))
+        addfiles=($(echo $(tail "-$n" <<<"$out")))
         [[ -z "$addfiles" ]] && continue
         if [ "$q" = ctrl-d ]; then
             git diff --color=always $addfiles | less -R
@@ -112,31 +123,72 @@ fadd() {
     done
 }
 
-##############
-# docker-fzf #
-##############
+##########
+# docker #
+##########
 
 # Select a docker container to start and attach to
 function da() {
-  local cid
-  cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
+    local cid
+    cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
 
-  [ -n "$cid" ] && docker start "$cid" && docker attach "$cid"
+    [ -n "$cid" ] && docker start "$cid" && docker attach "$cid"
 }
 
 # Select a running docker container to stop
 function ds() {
-  local cid
-  cid=$(docker ps | sed 1d | fzf -q "$1" | awk '{print $1}')
+    local cid
+    cid=$(docker ps | sed 1d | fzf -q "$1" | awk '{print $1}')
 
-  [ -n "$cid" ] && docker stop "$cid"
+    [ -n "$cid" ] && docker stop "$cid"
 }
 
 # Select a docker container to remove
 function drm() {
-  local cid
-  cid=$(docker ps -a | sed 1d | fzf -q "$1" | awk '{print $1}')
+    local cid
+    cid=$(docker ps -a | sed 1d | fzf -q "$1" | awk '{print $1}')
 
-  [ -n "$cid" ] && docker rm "$cid"
+    [ -n "$cid" ] && docker rm "$cid"
 }
 
+############
+# Homebrew #
+############
+
+# Install or open the webpage for the selected application
+# using brew cask search as input source
+# and display a info quickview window for the currently marked application
+install() {
+    local token
+    token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
+
+    if [ "x$token" != "x" ]; then
+        echo "(I)nstall or open the (h)omepage of $token"
+        read input
+        if [ $input = "i" ] || [ $input = "I" ]; then
+            brew cask install $token
+        fi
+        if [ $input = "h" ] || [ $input = "H" ]; then
+            brew cask home $token
+        fi
+    fi
+}
+
+# Uninstall or open the webpage for the selected application
+# using brew list as input source (all brew cask installed applications)
+# and display a info quickview window for the currently marked application
+uninstall() {
+    local token
+    token=$(brew cask list | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
+
+    if [ "x$token" != "x" ]; then
+        echo "(U)ninstall or open the (h)omepage of $token"
+        read input
+        if [ $input = "u" ] || [ $input = "U" ]; then
+            brew cask uninstall $token
+        fi
+        if [ $input = "h" ] || [ $token = "h" ]; then
+            brew cask home $token
+        fi
+    fi
+}
