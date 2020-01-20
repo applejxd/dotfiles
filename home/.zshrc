@@ -91,6 +91,8 @@ source ~/.zplug/init.zsh
 zplug "zsh-users/zsh-autosuggestions"
 # completion for non-defalut commands
 zplug "zsh-users/zsh-completions"
+# Fish like interactive tab completion for cd in zsh
+zplug "changyuheng/zsh-interactive-cd", use:zsh-interactive-cd.plugin.zsh, defer:2
 # syntax-highlighting to command-line (after compinit)
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 
