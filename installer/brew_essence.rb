@@ -35,6 +35,7 @@ brew "ghq"
 brew "bat"
 brew "colordiff"
 brew "ripgrep"
+brew "atool"
 # brew "lsd"
 
 # basic command line tools

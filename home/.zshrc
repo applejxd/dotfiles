@@ -72,6 +72,38 @@ setopt hist_save_no_dups
 setopt hist_reduce_blanks
 setopt hist_ignore_space
 
+################
+# suffix alias #
+################
+
+# texts
+alias -s {txt,dat,plt}='cat'
+
+# images
+if type "imgcat" >/dev/null 2>&1; then
+  alias -s {jpg,jpeg,png,bmp,gif}='imgcat'
+fi
+
+# scripts
+alias -s py='python'
+alias -s rb='ruby'
+alias -s php='php -f'
+alias -s hs='runhaskell'
+
+# unarchive
+if type "aunpack" >/dev/null 2>&1; then
+  alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
+fi
+
+# compile
+# cf. http://bit.ly/2tCOvHP
+function runcpp () {
+    g++ -O2 $1
+    shift
+    ./a.out $@
+}
+alias -s {c,cpp}='runcpp'
+
 ###############
 # zsh plugins #
 ###############
