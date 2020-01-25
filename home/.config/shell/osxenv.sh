@@ -10,7 +10,7 @@ export PATH=/usr/local/texlive/2019/bin/x86_64-darwin:$PATH
 export PATH=/Applications/wxMaxima.app/bin:$PATH
 
 # for openssl
-export PATH=/usr/local/opt/openssl@1.1/bin:$PATH
+export PATH="/usr/local/opt/openssl@1.1/bin:$PATH"
 
 #################
 # Specific root #
@@ -21,6 +21,11 @@ export MAXIMA_USERDIR=/Applications/wxMaxima.app/.maxima
 
 # for YaTeX
 export BIBINPUTS=~/Dropbox/bib:$BIBINPUTS
+
+# for openssl
+export LDFLAGS="-L/usr/local/opt/openssl@1.1/lib"
+export CPPFLAGS="-I/usr/local/opt/openssl@1.1/include"
+export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig"
 
 # Initialization for FDK command line tools.Fri Jul 29 10:12:14 2016
 ## for Adobe Font Development Kit for OpenType
