@@ -38,3 +38,4 @@ export GHQ_ROOT=~/src
 # for YaTeX
 export TEXINPUTS=~/.emacs.d/private/yatex:$TEXINPUTS
 export BSTINPUTS=~/.emacs.d/private/yatex:$BSTINPUTS
+
