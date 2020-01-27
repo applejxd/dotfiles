@@ -36,17 +36,17 @@ setopt pushd_ignore_dups
 
 # iTerm2 shell integration
 [[ -f "${HOME}/.iterm2_shell_integration.zsh" ]] &&
-source "${HOME}/.iterm2_shell_integration.zsh"
+    source "${HOME}/.iterm2_shell_integration.zsh"
 
 # fg -> C-z
-function fancy-ctrl-z () {
-  if [[ $#BUFFER -eq 0 ]]; then
-    BUFFER="fg"
-    zle accept-line
-  else
-    zle push-input
-    zle clear-screen
-  fi
+function fancy-ctrl-z() {
+    if [[ $#BUFFER -eq 0 ]]; then
+        BUFFER="fg"
+        zle accept-line
+    else
+        zle push-input
+        zle clear-screen
+    fi
 }
 zle -N fancy-ctrl-z
 bindkey '^Z' fancy-ctrl-z
@@ -80,11 +80,12 @@ setopt hist_ignore_space
 alias -s {txt,dat,plt}='cat'
 
 # images
-if type "imgcat" >/dev/null 2>&1; then
-  alias -s {jpg,jpeg,png,bmp,gif}='imgcat'
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    alias -s {jpg,jpeg,png,bmp,gif}='open -a Preview'
 fi
 
 # scripts
+alias -s sh='bash'
 alias -s py='python'
 alias -s rb='ruby'
 alias -s php='php -f'
@@ -92,12 +93,12 @@ alias -s hs='runhaskell'
 
 # unarchive
 if type "aunpack" >/dev/null 2>&1; then
-  alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
+    alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
 fi
 
 # compile
 # cf. http://bit.ly/2tCOvHP
-function runcpp () {
+function runcpp() {
     g++ -O2 $1
     shift
     ./a.out $@
@@ -226,7 +227,8 @@ bindkey "^g" ghq-fzf
 if ! zplug check --verbose; then
     printf "Install? [y/N]: "
     if read -q; then
-        echo; zplug install
+        echo
+        zplug install
     else
         echo
     fi
