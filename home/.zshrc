@@ -130,7 +130,7 @@ alias -s {c,cpp}='runcpp'
 
 # Check if zplug is installed
 if [[ ! -d ~/.zplug ]]; then
-    curl -sL --proto-redir -all,https https://raw.githubusercontent.com/zplug/installer/master/installer.zsh | zsh
+    git clone https://github.com/zplug/zplug ~/.zplug
     source ~/.zplug/init.zsh && zplug update --self
 fi
 # Essential
