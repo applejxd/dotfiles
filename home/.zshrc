@@ -130,8 +130,7 @@ alias -s {c,cpp}='runcpp'
 
 # Check if zplug is installed
 if [[ ! -d ~/.zplug ]]; then
-    git clone https://github.com/zplug/zplug ~/.zplug
-    source ~/.zplug/init.zsh && zplug update --self
+    curl -sL --proto-redir -all,https https://raw.githubusercontent.com/zplug/installer/master/installer.zsh | zsh
 fi
 # Essential
 source ~/.zplug/init.zsh
@@ -246,10 +245,7 @@ bindkey "^g" ghq-fzf
 if ! zplug check --verbose; then
     printf "Install? [y/N]: "
     if read -q; then
-        echo
-        zplug install
-    else
-        echo
+        echo; zplug install
     fi
 fi
 
