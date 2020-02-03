@@ -8,8 +8,9 @@ brew bundle --file=installer/brew_essence.rb
 
 # cf. http://bit.ly/37WjcWG
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    brew bundle --file=installer/brew_osx.rb
-    bash installer/osx.sh
+    brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/brew_essence.rb) 2>/dev/null
+    brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/brew_osx.rb) 2>/dev/null
+    bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/osx.sh)"
 elif [[ -e /etc/lsb-release ]]; then
-    bash installer/ubuntu.sh
+    bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/ubuntu.sh)"
 fi
