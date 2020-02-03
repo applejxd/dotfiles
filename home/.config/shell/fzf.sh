@@ -47,6 +47,27 @@ v() {
         done | fzf-tmux -d -m -q "$*" -1) && vim ${files//\~/$HOME}
 }
 
+# cf. http://bit.ly/37GNSLZ
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    unmount() {
+        DEVICE=$(diskutil list | grep '/dev' | cut -d ' ' -f 1 | fzf --preview 'diskutil info {}')
+
+        # Sanity check the device
+        diskutil info $DEVICE | grep "Device Location" | grep -q External || {
+            echo "Chosen disk is an internal disk, so cannot unmount" >&2
+            exit 1
+        }
+
+        diskutil info $DEVICE | grep "Virtual" | grep -q No || {
+            echo "Chosen disk is virtual, so cannot unmount" >&2
+            exit 1
+        }
+
+        echo "Unmounting $DEVICE"
+        diskutil unmountDisk $DEVICE
+    }
+fi
+
 #######
 # git #
 #######
@@ -65,7 +86,8 @@ function fbr() {
 function fbrm() {
     local branches branch
     branches=$(git branch --all | grep -v HEAD) &&
-        branch=$(echo "$branches" | fzf-tmux -d $((2 + $(wc -l <<<"$branches"))) +m) &&
+        branch=$(echo "$branches" |
+            fzf-tmux -d $((2 + $(wc -l <<<"$branches"))) +m) &&
         git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
 }
 
