@@ -33,7 +33,7 @@ brew "ghq"
 
 # defaults
 brew "curl"
-brew "awk"
+brew "gawk"
 
 # command cloning
 brew "bat"
