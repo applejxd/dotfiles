@@ -6,6 +6,9 @@
 - Bash
 - cURL
 - Git
+
+### Dependencies
+- Homebrew (on Linux)
 - Ruby
 
 ### Deploy
