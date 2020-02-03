@@ -4,7 +4,9 @@
 
 ### Requirements
 - Bash
-- RubyGems
+- cURL
+- Git
+- Ruby
 
 ### Deploy
 - $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/deploy.sh)"
