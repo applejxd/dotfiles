@@ -17,7 +17,7 @@ brew "zsh"
 brew "fish"
 
 # Package manager 'zplug'
-brew "zplug"
+# brew "zplug"
 
 # shell plugins
 brew "tmux"
@@ -27,9 +27,13 @@ brew "z"
 brew "fzf"
 brew "ghq"
 
-#------------#
-# Shell Apps #
-#------------#
+#----------------#
+# Shell Commands #
+#----------------#
+
+# defaults
+brew "curl"
+brew "awk"
 
 # command cloning
 brew "bat"
