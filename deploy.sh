@@ -1,7 +1,7 @@
 #!/bin/sh
 
 if !(type "brew" > /dev/null 2>&1); then
-    bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/homebrew.sh)"
+    source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/homebrew.sh)
 fi
 
 if !(type "gem" > /dev/null 2>&1); then
