@@ -7,10 +7,7 @@ sudo add-apt-repository ppa:kelleyk/emacs
 sudo apt update && sudo apt upgrade
 
 # basics
-sudo apt install -y chromium-browser manpages-ja colordiff emacs26
-
-# Git
-sudo apt install -y git tig
+sudo apt install -y chromium-browser manpages-ja emacs26
 
 # LaTeX
 sudo apt install -y texlive texlive-lang-japanese
