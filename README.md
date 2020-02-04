@@ -4,7 +4,7 @@
 
 ### Requirements
 - for Ubuntu
--- $ sudo apt-get install build-essential curl file git
+ - $ sudo apt install -y build-essential curl file git
 
 ### Dependencies
 - Homebrew (on Linux)
