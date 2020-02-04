@@ -1,19 +1,20 @@
 # dotfiles
 
-## How to install
-
-### Requirements
+## Requirements
 - for Ubuntu
  - $ sudo apt install -y build-essential curl file git
 
-### Dependencies
+## Dependencies
 - Homebrew (on Linux)
 - Ruby
 
-### Deploy
+## How to Install 
+- $ bash -c "$(curl -L "https://raw.githubusercontent.com/applejxd/dotfiles/master/install.sh)"
+
+### for Deploy
 - $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/deploy.sh)"
 
-### Initialization
+### for Initialization
 - $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/init.sh)"
 
 ## How to uninstall
