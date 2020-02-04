@@ -3,9 +3,8 @@
 ## How to install
 
 ### Requirements
-- Bash
-- cURL
-- Git
+- for Ubuntu
+-- $ sudo apt-get install build-essential curl file git
 
 ### Dependencies
 - Homebrew (on Linux)
