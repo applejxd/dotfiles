@@ -9,7 +9,9 @@ brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles
 # cf. http://bit.ly/37WjcWG
 if [[ "$OSTYPE" == "darwin"* ]]; then
     brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/brew_osx.rb) 2>/dev/null
-    bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/osx.sh)"
+    source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/osx.sh)
 elif [[ -e /etc/lsb-release ]]; then
-    bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/ubuntu.sh)"
+    source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/ubuntu.sh)
 fi
+
+source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/shells.sh)
