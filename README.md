@@ -10,6 +10,7 @@
 
 ## How to Install 
 - $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/install.sh)"
+- After execute above command, please restart your terminal.
 
 ### for Deploy
 - $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/deploy.sh)"
