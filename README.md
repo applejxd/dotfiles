@@ -9,7 +9,7 @@
 - Ruby
 
 ## How to Install 
-- $ bash -c "$(curl -L "https://raw.githubusercontent.com/applejxd/dotfiles/master/install.sh)"
+- $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/install.sh)"
 
 ### for Deploy
 - $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/deploy.sh)"
