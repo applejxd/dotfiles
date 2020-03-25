@@ -226,17 +226,19 @@ bindkey "^x^f" z-fzf
 
 # ghq-fzf
 # cf. http://bit.ly/2MMEb6e
-zplug "motemen/ghq", as:command, from:gh-r, rename-to:ghq
-function ghq-fzf() {
-    local selected_dir=$(ghq list | fzf --query="$LBUFFER")
-    if [[ -n "$selected_dir" ]]; then
-        BUFFER="cd $(ghq root)/${selected_dir}"
-        zle accept-line
-    fi
-    zle reset-prompt
-}
-zle -N ghq-fzf
-bindkey "^g" ghq-fzf
+# zplug "motemen/ghq", as:command, from:gh-r, rename-to:ghq
+if type "ghq" >/dev/null 2>&1; then
+    function ghq-fzf() {
+        local selected_dir=$(ghq list | fzf --query="$LBUFFER")
+        if [[ -n "$selected_dir" ]]; then
+            BUFFER="cd $(ghq root)/${selected_dir}"
+            zle accept-line
+        fi
+        zle reset-prompt
+    }
+    zle -N ghq-fzf
+    bindkey "^g" ghq-fzf
+fi
 
 ###################
 # zplug installer #
