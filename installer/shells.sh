@@ -2,21 +2,21 @@
 # install shells from Homebrew
 
 # bash install
-grep -q /usr/local/bin/bash /etc/shells
+grep -q $(which bash) /etc/shells
 if [ $? -ne 0 ]; then
-    sudo sh -c "echo '/usr/local/bin/bash\n' >> /etc/shells"
+    sudo sh -c "echo $(which bash) >> /etc/shells"
 fi
 
 # zsh install
-grep -q /usr/local/bin/zsh /etc/shells
+grep -q $(which zsh) /etc/shells
 if [ $? -ne 0 ]; then
-    sudo sh -c "echo '/usr/local/bin/zsh\n' >> /etc/shells"
+    sudo sh -c "echo $(which zsh) >> /etc/shells"
     # change the default shell
     chsh -s /usr/local/bin/zsh
 fi
 
 # fish install
-grep -q /usr/local/bin/fish /etc/shells
+grep -q $(which fish) /etc/shells
 if [ $? -ne 0 ]; then
-    sudo sh -c "echo '/usr/local/bin/fish\n' >> /etc/shells"
+    sudo sh -c "echo $(which fish) >> /etc/shells"
 fi
