@@ -7,7 +7,7 @@ sudo add-apt-repository ppa:kelleyk/emacs
 sudo apt update && sudo apt upgrade
 
 # basics
-sudo apt install -y chromium-browser manpages-ja emacs26
+sudo apt install -y chromium-browser manpages-ja emacs26 xsel
 
 # LaTeX
 sudo apt install -y texlive texlive-lang-japanese
