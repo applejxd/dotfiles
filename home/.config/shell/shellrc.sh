@@ -47,15 +47,6 @@ else
     alias diff="diff -u"
 fi
 
-# pbcopy & pbpaste in WSL & Linux
-if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ]; then
-    alias pbcopy='clip.exe'
-    alias pbpaste='powershell.exe Get-Clipboard' 
-elif [[ "$OSTYPE" == "linux-gnu" ]]; then
-    alias pbcopy='xsel --clipboard --input'
-    alias pbpaste='xsel --clipboard --output'
-fi
-
 # # brew -> brew-wrap  by Homebrew-file
 # if [ -f $(brew --prefix)/etc/brew-wrap ]; then
 #     source $(brew --prefix)/etc/brew-wrap
@@ -80,18 +71,20 @@ alias lla="ls -la"
 alias lal="ls -al"
 alias lt="ls --tree"
 
+# pbcopy & pbpaste
+if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ]; then
+    alias pbcopy='clip.exe'
+    alias pbpaste='powershell.exe Get-Clipboard' 
+elif [[ "$OSTYPE" == "linux-gnu" ]]; then
+    alias pbcopy='xsel --clipboard --input'
+    alias pbpaste='xsel --clipboard --output'
+fi
 # count the number of characters
 alias wcc="pbpaste | wc -m"
-
 # clear format
 alias fcr="pbpaste | pbcopy"
 
 alias search="find . -type f -print0 | xargs -0 grep -n"
-
-# for Mac OS X
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    alias web="cd /Applications/MAMP/htdocs/"
-fi
 
 # Download mp3 or mp4 from websites
 if type "youtube-dl" >/dev/null 2>&1; then
@@ -102,6 +95,11 @@ if type "youtube-dl" >/dev/null 2>&1; then
     alias video-dl="youtube-dl --ignore-errors \
                     --output '~/Downloads/%(title)s.%(ext)s' \
                     --recode-video mp4  --add-metadata"
+fi
+
+# for Mac OS X
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    alias web="cd /Applications/MAMP/htdocs/"
 fi
 
 ######################
