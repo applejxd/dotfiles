@@ -35,7 +35,7 @@ zinit ice wait'!0'
 zinit light zsh-users/zsh-syntax-highlighting
 
 # git
-# zplug "plugins/git", from:oh-my-zsh
+zinit snippet OMZ::lib/git.zsh
 
 # enhance 'cd' command
 zinit ice pick"init.sh"
@@ -43,36 +43,17 @@ zinit light b4b4r07/enhancd
 export ENHANCD_COMMAND=ecd
 
 # docker
-# zplug 'felixr/docker-zsh-completion'
-# zplug 'mnowotnik/docker-fzf-completion', use:docker-fzf.zsh
+zinit light felixr/docker-zsh-completion
 
-################
-# Powerlevel9k #
-################
+zinit ice pick"docker-fzf.zsh"
+zinit light mnowotnik/docker-fzf-completion
 
-# for Linux
-export TERM="xterm-256color"
+########
+# pure #
+########
 
-# Apply Nerd-Font
-POWERLEVEL9K_MODE='nerdfont-complete'
-
-# Double-Lined Prompt
-POWERLEVEL9K_PROMPT_ON_NEWLINE=true
-POWERLEVEL9K_RPROMPT_ON_NEWLINE=true
-# Turned Arrow
-POWERLEVEL9K_MULTILINE_FIRST_PROMPT_PREFIX="%F{blue}\u256D\u2500%F{white}"
-POWERLEVEL9K_MULTILINE_LAST_PROMPT_PREFIX="%F{blue}\u2570\uf460%F{white} "
-# # Adding Newline Before Each Prompt
-# POWERLEVEL9K_PROMPT_ADD_NEWLINE=true
-
-# Segment contents
-POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(os_icon dir vcs background_jobs)
-POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(command_execution_time status time ram)
-
-# enable zsh theme 'powerlevel9k'
-# zplug "bhilburn/powerlevel9k", use:powerlevel9k.zsh-theme
-zinit ice pick"powerlevel9k.zsh-theme"
-zinit light bhilburn/powerlevel9k
+zinit ice compile'(pure|async).zsh' pick'async.zsh' src'pure.zsh'
+zinit light sindresorhus/pure
 
 #######
 # fzf #
