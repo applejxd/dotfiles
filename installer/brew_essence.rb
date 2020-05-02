@@ -16,9 +16,6 @@ brew "bash"
 brew "zsh"
 brew "fish"
 
-# Package manager 'zplug'
-# brew "zplug"
-
 # shell plugins
 brew "tmux"
 
@@ -53,9 +50,8 @@ brew "nkf"
 # Developments #
 #--------------#
 
-# Python
-brew "python3"
-brew "python@2"
+# Python: Use 'python3' and 'pip3' command
+brew "python"
 brew "pipenv"
 
 # C++
