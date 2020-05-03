@@ -1,9 +1,5 @@
 #!/bin/sh
 
-if [[ -e /etc/lsb-release ]]; then
-    sudo apt install -y build-essential curl file git
-fi
-
 if !(type "brew" > /dev/null 2>&1); then
     source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/homebrew.sh)
 fi
