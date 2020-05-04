@@ -4,6 +4,8 @@
 if [[ "$OSTYPE" == "darwin"* ]]; then
     xcode-select --install
 elif [[ -e /etc/lsb-release ]]; then
+    sudo apt update -y
+    sudo apt upgrade -y
     sudo apt install -y build-essential curl file git
 fi
 
