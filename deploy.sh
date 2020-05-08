@@ -7,8 +7,8 @@ fi
 if !(type "gem" > /dev/null 2>&1); then
     brew install rbenv ruby-build
     # add PATH and Initialize
-    echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bash_profile
-    echo 'if which rbenv > /dev/null; then eval "$(rbenv init -)"; fi' >> ~/.bash_profile
+    export PATH="$HOME/.rbenv/bin:$PATH"
+    eval "$(rbenv init -)"
     # install default version
     rbenv install 2.5.0
     rbenv rehash
