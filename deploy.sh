@@ -5,7 +5,14 @@ if !(type "brew" > /dev/null 2>&1); then
 fi
 
 if !(type "gem" > /dev/null 2>&1); then
-    brew install ruby
+    brew install rbenv ruby-build
+    # add PATH and Initialize
+    echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bash_profile
+    echo 'if which rbenv > /dev/null; then eval "$(rbenv init -)"; fi' >> ~/.bash_profile
+    # install default version
+    rbenv install 2.5.0
+    rbenv rehash
+    rbenv global 2.5.0
 fi
 
 if !(type "homesick" >/dev/null 2>&1); then
