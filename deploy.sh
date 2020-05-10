@@ -4,7 +4,12 @@ if !(type "brew" > /dev/null 2>&1); then
     source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/homebrew.sh)
 fi
 
-# cf. http://tinyurl.com/yd8kcbq6
+# for ruby-build in Ubuntu (cf. http://tinyurl.com/j6g67up)
+if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
+    sudo apt install -y autoconf bison build-essential libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev libffi-dev libgdbm6 libgdbm-dev libdb-dev
+fi
+
+# install rbenv (cf. http://tinyurl.com/yd8kcbq6)
 if !(type "gem" > /dev/null 2>&1); then
     brew install rbenv
     eval "$(rbenv init -)"
