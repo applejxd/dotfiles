@@ -26,7 +26,9 @@ alias ssh-keygen="ssh-keygen -t ed25519"
 alias dirs="dirs -v"
 
 # adding git syntax sugar
-eval "$(hub alias -s)"
+if type "hub" >/dev/null 2>&1; then
+    eval "$(hub alias -s)"
+fi
 
 # "ls" cloning
 if type "lsd" >/dev/null 2>&1; then
