@@ -8,8 +8,6 @@ elif [[ -e /etc/lsb-release ]]; then
     sudo apt upgrade -y
     # for Homebrew (cf. http://tinyurl.com/y5yh2vm3)
     sudo apt install -y build-essential curl file git
-    # for ruby-build (cf. http://tinyurl.com/j6g67up)
-    sudo apt install -y autoconf bison build-essential libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev libffi-dev libgdbm6 libgdbm-dev libdb-dev
 fi
 
 # Install Homebrew for Mac OS X or Linux
