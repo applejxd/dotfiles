@@ -4,12 +4,11 @@
 
 # Homebrew for linux
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
-    # eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
-    eval \$($(brew --prefix)/bin/brew shellenv)
+    eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
 fi
 
-# for rbenv
-eval "$(rbenv init -)"
+# anyenv for rbenv, nodenv, phpenv
+eval "$(anyenv init -)"
 
 ###################
 # Command Wrapper #
