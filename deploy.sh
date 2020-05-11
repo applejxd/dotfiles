@@ -14,9 +14,9 @@ if !(type "gem" > /dev/null 2>&1); then
     # install anyenv
     brew install anyenv
     anyenv install rbenv
+    anyenv install --init
     eval "$(anyenv init -)"
     echo 'eval "$(anyenv init -)"' >> ~/.bashrc
-    anyenv install --init
     
     # install rbenv
     anyenv install rbenv
