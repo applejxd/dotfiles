@@ -15,6 +15,7 @@ if !(type "gem" > /dev/null 2>&1); then
     anyenv install rbenv
     eval "$(anyenv init -)"
     echo 'eval "$(anyenv init -)"' >> ~/.bashrc
+    anyenv install --init
     # install default version
     rbenv install 2.5.0
     rbenv rehash
