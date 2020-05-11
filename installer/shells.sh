@@ -12,7 +12,7 @@ grep -q $(which zsh) /etc/shells
 if [ $? -ne 0 ]; then
     sudo sh -c "echo $(which zsh) >> /etc/shells"
     # change the default shell
-    chsh -s /usr/local/bin/zsh
+    chsh -s $(which zsh)
 fi
 
 # fish install
