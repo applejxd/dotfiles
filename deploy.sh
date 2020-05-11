@@ -11,12 +11,15 @@ fi
 
 # install rbenv (cf. http://tinyurl.com/yd8kcbq6)
 if !(type "gem" > /dev/null 2>&1); then
+    # install anyenv
     brew install anyenv
     anyenv install rbenv
     eval "$(anyenv init -)"
     echo 'eval "$(anyenv init -)"' >> ~/.bashrc
     anyenv install --init
-    # install default version
+    
+    # install rbenv
+    anyenv install rbenv
     rbenv install 2.5.0
     rbenv rehash
     rbenv global 2.5.0
