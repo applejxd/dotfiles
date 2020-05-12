@@ -48,12 +48,39 @@ zinit light felixr/docker-zsh-completion
 zinit ice pick"docker-fzf.zsh"
 zinit light mnowotnik/docker-fzf-completion
 
+################
+# Powerlevel9k #
+################
+
+# for Linux
+export TERM="xterm-256color"
+
+# Apply Nerd-Font
+POWERLEVEL9K_MODE='nerdfont-complete'
+
+# Double-Lined Prompt
+POWERLEVEL9K_PROMPT_ON_NEWLINE=true
+POWERLEVEL9K_RPROMPT_ON_NEWLINE=true
+# Turned Arrow
+POWERLEVEL9K_MULTILINE_FIRST_PROMPT_PREFIX="%F{blue}\u256D\u2500%F{white}"
+POWERLEVEL9K_MULTILINE_LAST_PROMPT_PREFIX="%F{blue}\u2570\uf460%F{white} "
+# # Adding Newline Before Each Prompt
+# POWERLEVEL9K_PROMPT_ADD_NEWLINE=true
+
+# Segment contents
+POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(os_icon dir vcs background_jobs)
+POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(command_execution_time status time ram)
+
+# powerlevel9k
+zinit ice pick"powerlevel9k.zsh-theme"
+zinit light bhilburn/powerlevel9k
+
 ########
 # pure #
 ########
 
-zinit ice compile'(pure|async).zsh' pick'async.zsh' src'pure.zsh'
-zinit light sindresorhus/pure
+# zinit ice compile'(pure|async).zsh' pick'async.zsh' src'pure.zsh'
+# zinit light sindresorhus/pure
 
 #######
 # fzf #
