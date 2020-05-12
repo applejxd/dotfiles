@@ -13,16 +13,15 @@ fi
 if !(type "gem" > /dev/null 2>&1); then
     # install anyenv
     brew install anyenv
-    eval "$(anyenv init -)"
     echo 'eval "$(anyenv init -)"' >> ~/.bashrc
     anyenv install --init
-    exec $SHELL -l
     
     # install rbenv
     anyenv install rbenv
-    rbenv install 2.5.0
+    eval "$(anyenv init -)"
+    rbenv install 2.7.0
     rbenv rehash
-    rbenv global 2.5.0
+    rbenv global 2.7.0
 fi
 
 if !(type "homesick" >/dev/null 2>&1); then
