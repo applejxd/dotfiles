@@ -118,7 +118,7 @@ fi
 # cf. http://bit.ly/2tCOvHP
 function runcpp() {
     fname=$(echo $1 | awk -F. '{print $1}')
-    g++ $1 -o $fname
+    gcc $1 -o $fname
     shift
     ./$fname $@
 }
