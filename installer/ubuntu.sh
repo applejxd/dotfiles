@@ -11,7 +11,8 @@ sudo apt -y upgrade
 sudo apt install -y manpages-ja emacs26 xsel
 
 # LaTeX
-sudo apt install -y texlive texlive-lang-japanese
+# sudo apt install -y texlive texlive-lang-japanese texlive-xetex texlive-science
+sudo apt install -y texlive-full
 
 # Calc
 sudo apt install -y cadabra
