@@ -13,8 +13,12 @@ brew "tig"
 
 # install shell
 brew "bash"
-brew "zsh"
 brew "fish"
+
+# the zsh cannot use pure theme on Linux
+if OS.mac?
+    brew "zsh"
+end
 
 # shell plugins
 brew "tmux"
@@ -45,6 +49,10 @@ brew "wget"
 brew "tree"
 brew "ispell"
 brew "nkf"
+
+if OS.mac?
+    brew "m-cli"
+end
 
 #--------------#
 # Developments #
