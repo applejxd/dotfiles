@@ -177,6 +177,6 @@ if type "fzf" >/dev/null 2>&1;then
             zle reset-prompt
         }
         zle -N ghq-fzf
-        bindkey "^g" ghq-fzf
+        bindkey "^x^g" ghq-fzf
     fi
 fi
