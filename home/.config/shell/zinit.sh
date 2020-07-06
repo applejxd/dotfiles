@@ -98,3 +98,8 @@ zinit load junegunn/fzf
 
 zinit ice pick"z.sh"
 zinit light rupa/z
+
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    zinit ice from"gh-r" as"program" pick"ghq_*/ghq"
+    zinit load x-motemen/ghq  
+fi
