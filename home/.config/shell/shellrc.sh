@@ -89,6 +89,12 @@ alias wcc="pbpaste | wc -m"
 # clear format
 alias fcr="pbpaste | pbcopy"
 
+if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    alias open="explorer.exe"
+elif [[ -e /etc/lsb-release ]]; then
+    alias open="xdg-open"
+fi
+
 alias search="find . -type f -print0 | xargs -0 grep -n"
 
 # Download mp3 or mp4 from websites
