@@ -10,6 +10,17 @@ fi
 # anyenv for rbenv, nodenv, phpenv
 eval "$(anyenv init -)"
 
+# iceberg theme for vim
+if type "ghq" >/dev/null 2>&1; then
+    if [[ ! -e  $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
+        ghq get https://github.com/cocopon/iceberg.vim.git
+        if [[ ! -e .vim/colors ]]; then
+            mkdir -p .vim/colors
+        fi
+        ln -s $GHQ_ROOT/github.com/cocopon/iceberg.vim/colors/iceberg.vim $HOME/.vim/colors/iceberg.vim
+    fi
+fi
+
 ###################
 # Command Wrapper #
 ###################
