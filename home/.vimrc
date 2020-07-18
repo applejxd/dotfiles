@@ -3,6 +3,8 @@
 " autocmd ColorScheme * highlight LineNr ctermbg=None
 " autocmd ColorScheme * highlight EndOfBuffer ctermbg=None
 
+" for dark iceberg theme
+set background=dark
 " iceberg theme
 colorscheme iceberg
 
