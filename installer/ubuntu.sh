@@ -10,6 +10,9 @@ sudo apt -y upgrade
 # basics
 sudo apt install -y manpages-ja emacs26 xsel
 
+# Developing
+sudo apt install -y zsh
+
 # LaTeX
 # sudo apt install -y texlive texlive-lang-japanese texlive-xetex texlive-science
 sudo apt install -y texlive-full
