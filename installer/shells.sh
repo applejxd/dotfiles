@@ -14,10 +14,10 @@ if [ $? -ne 0 ]; then
 fi
 
 # fish install
-grep -q $(which fish) /etc/shells
-if [ $? -ne 0 ]; then
-    sudo sh -c "echo $(which fish) >> /etc/shells"
-fi
+# grep -q $(which fish) /etc/shells
+# if [ $? -ne 0 ]; then
+#     sudo sh -c "echo $(which fish) >> /etc/shells"
+# fi
 
 # change the default shell
 if [[ "$OSTYPE" == "linux-gnu" ]]; then

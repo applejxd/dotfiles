@@ -5,7 +5,7 @@ sudo apt -y update
 sudo apt -y upgrade
 
 # basics
-sudo apt install -y manpages-ja
+sudo apt install -y manpages-ja unzip
 
 # clipboard
 sudo apt install -y xsel
