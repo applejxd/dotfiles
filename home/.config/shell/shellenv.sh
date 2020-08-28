@@ -21,6 +21,8 @@ fi
 # PATH #
 ########
 
+# for anyenv
+export PATH=~/.anyenv/bin:$PATH
 # for YaTeX
 export PATH=~/.emacs.d/private/yatex:$PATH
 # for Haskell package Cabal
