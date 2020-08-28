@@ -1,3 +1,5 @@
+SHELL_CONF=$HOME/.config/shell
+
 ##################
 # Plugin Manager #
 ##################
@@ -13,8 +15,6 @@ fi
 #################
 # common config #
 #################
-
-SHELL_CONF=$HOME/.config/shell
 
 if [ -e $COMMON_RC ]; then
     source $SHELL_CONF/shellrc.sh
