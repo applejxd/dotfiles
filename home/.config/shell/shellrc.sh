@@ -2,10 +2,10 @@
 # Initialization #
 ##################
 
-# Homebrew for linux
-if [[ "$OSTYPE" == "linux-gnu" ]]; then
-    eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
-fi
+# # Homebrew for linux
+# if [[ "$OSTYPE" == "linux-gnu" ]]; then
+#     eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
+# fi
 
 # anyenv for rbenv, nodenv, phpenv
 eval "$(anyenv init -)"
@@ -14,8 +14,8 @@ eval "$(anyenv init -)"
 if type "ghq" >/dev/null 2>&1; then
     if [[ ! -e  $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
         ghq get https://github.com/cocopon/iceberg.vim.git
-        if [[ ! -e .vim/colors ]]; then
-            mkdir -p .vim/colors
+        if [[ ! -e $HOME/.vim/colors ]]; then
+            mkdir -p $HOME/.vim/colors
         fi
         ln -s $GHQ_ROOT/github.com/cocopon/iceberg.vim/colors/iceberg.vim $HOME/.vim/colors/iceberg.vim
     fi
