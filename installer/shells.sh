@@ -8,16 +8,20 @@ if [ $? -ne 0 ]; then
 fi
 
 # zsh install
-grep -q $(which zsh) /etc/shells
-if [ $? -ne 0 ]; then
-    sudo sh -c "echo $(which zsh) >> /etc/shells"
+if type "zsh" > /dev/null 2>&1; then
+    grep -q $(which zsh) /etc/shells
+    if [ $? -ne 0 ]; then
+        sudo sh -c "echo $(which zsh) >> /etc/shells"
+    fi
 fi
 
 # fish install
-# grep -q $(which fish) /etc/shells
-# if [ $? -ne 0 ]; then
-#     sudo sh -c "echo $(which fish) >> /etc/shells"
-# fi
+if type "fish" > /dev/null 2>&1; then
+    grep -q $(which fish) /etc/shells
+    if [ $? -ne 0 ]; then
+        sudo sh -c "echo $(which fish) >> /etc/shells"
+    fi
+fi
 
 # change the default shell
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
