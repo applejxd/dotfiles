@@ -18,7 +18,7 @@ if !(type "gem" > /dev/null 2>&1); then
         git clone https://github.com/anyenv/anyenv ~/.anyenv
         ~/.anyenv/bin/anyenv init
         export PATH="$HOME/.anyenv/bin:$PATH"
-        anyenv install --init
+        yes | anyenv install --init
     fi
     
     if [[ "$OSTYPE" == "darwin"* ]]; then
