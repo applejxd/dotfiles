@@ -5,7 +5,7 @@ sudo apt -y update
 sudo apt -y upgrade
 
 # basics
-sudo apt install -y manpages-ja unzip zsh
+sudo apt install -y manpages-ja unzip zsh cmake
 
 # clipboard
 sudo apt install -y xsel
