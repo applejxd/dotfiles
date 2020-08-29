@@ -40,4 +40,4 @@ if !(type "homesick" >/dev/null 2>&1); then
 fi
 
 homesick clone applejxd/dotfiles
-homesick link dotfiles
+yes Y | homesick link dotfiles
