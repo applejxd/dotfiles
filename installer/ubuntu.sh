@@ -5,16 +5,13 @@ sudo apt -y update
 sudo apt -y upgrade
 
 # basics
-sudo apt install -y manpages-ja unzip
+sudo apt install -y manpages-ja unzip zsh
 
 # clipboard
 sudo apt install -y xsel
 
-# Developing
-sudo apt install -y zsh
-
-# LaTeX
-sudo apt install -y texlive-full
+# Developments
+sudo apt install -y texlive-full libopencv-dev
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL
