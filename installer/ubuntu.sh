@@ -5,7 +5,7 @@ sudo apt -y update
 sudo apt -y upgrade
 
 # basics
-sudo apt install -y manpages-ja unzip zsh cmake tig git-flow
+sudo apt install -y manpages-ja unzip zsh cmake tree
 
 # clipboard
 sudo apt install -y xsel
