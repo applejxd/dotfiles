@@ -89,17 +89,27 @@ zinit light sindresorhus/pure
 # cf. http://bit.ly/2QHO6uS
 # cf. (for options) http://bit.ly/2Qi9NTu
 
-# init by zplug
+zinit ice pick"z.sh"
+zinit light rupa/z
+
 zinit ice from"gh-r" as"program"
 zinit load junegunn/fzf-bin
 
 zinit ice multisrc'shell/(key-bindings|completion).zsh'
 zinit load junegunn/fzf
 
-zinit ice pick"z.sh"
-zinit light rupa/z
+zinit ice from"gh-r" as"program" pick"bat-*/bat"
+zinit load sharkdp/bat
 
-if [[ "$OSTYPE" == "linux-gnu" ]]; then
-    zinit ice from"gh-r" as"program" pick"ghq_*/ghq"
-    zinit load x-motemen/ghq  
-fi
+zinit ice from"gh-r" as"program" pick"ripgrep-*/rg"
+zinit load BurntSushi/ripgrep
+
+zinit ice from"gh-r" as"program" pick"ghq_*/ghq"
+zinit load x-motemen/ghq  
+
+zinit ice as"program" make"install prefix=$ZPFX"
+zinit load jonas/tig
+
+zinit ice as"program" make"install prefix=$ZPFX"
+zinit load nvie/gitflow
+
