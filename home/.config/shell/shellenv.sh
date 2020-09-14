@@ -17,6 +17,11 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     source $HOME/.config/shell/osxenv.sh
 fi
 
+if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    # for VcXsrv
+    export DISPLAY=:0.0
+fi
+
 ########
 # PATH #
 ########
