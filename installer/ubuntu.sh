@@ -5,17 +5,15 @@ sudo apt -y update
 sudo apt -y upgrade
 
 # basics
-sudo apt install -y manpages-ja unzip
+sudo apt install -y manpages-ja unzip zsh cmake tree
 
 # clipboard
 sudo apt install -y xsel
 
-# Developing
 sudo apt install -y zsh
 
-sudo apt install -y python3-pip
-
-# LaTeX
+# Developments
+sudo apt install -y python3-pip libopencv-dev
 sudo apt install -y texlive-full
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
