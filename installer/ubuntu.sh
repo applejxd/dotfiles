@@ -13,6 +13,8 @@ sudo apt install -y xsel
 # Developing
 sudo apt install -y zsh
 
+sudo apt install -y python3-pip
+
 # LaTeX
 sudo apt install -y texlive-full
 
