@@ -5,7 +5,7 @@
 brew "git"
 brew "hub"
 brew "git-flow-avh"
-brew "tig"
+# brew "tig"
 
 #-------------------#
 # zsh Configuration #
@@ -24,9 +24,9 @@ end
 brew "tmux"
 
 # for bash
-brew "z"
-brew "fzf"
-brew "ghq"
+# brew "z"
+# brew "fzf"
+# brew "ghq"
 
 #----------------#
 # Shell Commands #
@@ -37,9 +37,9 @@ brew "curl"
 brew "gawk"
 
 # command cloning
-brew "bat"
+# brew "bat"
 brew "colordiff"
-brew "ripgrep"
+# brew "ripgrep"
 brew "atool"
 # brew "lsd"
 
