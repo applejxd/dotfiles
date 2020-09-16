@@ -1,6 +1,10 @@
 #!/bin/sh
 # install shells
 
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    sudo apt install -y zsh
+fi
+
 # bash install
 grep -q $(which bash) /etc/shells
 if [ $? -ne 0 ]; then
@@ -24,9 +28,4 @@ if type "fish" > /dev/null 2>&1; then
 fi
 
 # change the default shell
-if [[ "$OSTYPE" == "linux-gnu" ]]; then
-    sudo apt install -y zsh
-    chsh -s /usr/bin/zsh
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-    chsh -s $(which zsh)    
-fi
+chsh -s $(which zsh)
