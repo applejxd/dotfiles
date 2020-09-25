@@ -5,16 +5,17 @@ sudo apt -y update
 sudo apt -y upgrade
 
 # basics
-sudo apt install -y manpages-ja unzip zsh cmake tree
+sudo apt install -y manpages-ja unzip zsh tree
 
 # clipboard
 sudo apt install -y xsel
 
-sudo apt install -y zsh
-
 # Developments
-sudo apt install -y python3-pip libopencv-dev
+sudo apt install -y python3-pip 
 sudo apt install -y texlive-full
+
+# C++
+sudo apt install -y cmake clang-format cpplint libeigen3-dev libopencv-dev
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL

@@ -130,11 +130,11 @@ fi
 # cf. http://bit.ly/2tCOvHP
 function runcpp() {
     fname=$(echo $1 | awk -F. '{print $1}')
-    gcc $1 -o $fname
+    g++ -O2 -Wall -Wextra $1 -o $fname
     shift
     ./$fname $@
 }
-alias -s {c,cpp}='runcpp'
+alias -s {c,cc,cpp}='runcpp'
 
 #######
 # fzf #
