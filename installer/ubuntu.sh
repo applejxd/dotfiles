@@ -15,7 +15,11 @@ sudo apt install -y python3-pip
 sudo apt install -y texlive-full
 
 # C++
-sudo apt install -y cmake clang-format cpplint libeigen3-dev libopencv-dev
+sudo apt install -y cmake gdb clang-format cpplint libeigen3-dev libopencv-dev doxygen
+
+# Python
+pip3 install sphinx
+pip3 install sphinx_rtd_theme
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL
