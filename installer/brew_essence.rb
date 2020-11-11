@@ -3,7 +3,6 @@
 #-----#
 
 brew "git"
-brew "hub"
 brew "git-flow-avh"
 # brew "tig"
 
@@ -12,11 +11,10 @@ brew "git-flow-avh"
 #-------------------#
 
 # install shell
-brew "bash"
-brew "fish"
-
-# the zsh cannot use pure theme on Linux
 if OS.mac?
+    brew "bash"
+    brew "fish"
+    # the zsh cannot use pure theme on Linux
     brew "zsh"
 end
 
