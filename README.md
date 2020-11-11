@@ -18,8 +18,8 @@ The scripts install as following:
 3. Install Homesick by Ruby
 4. Link dotfiles by Homesick
 5. Install packages from manager
-  - for Ubuntu: via apt
-  - for Mac: via Homebrew
+    - for Ubuntu: via apt
+    - for Mac: via Homebrew
 6. Install zsh and make it default shell
 
 ## How to uninstall
