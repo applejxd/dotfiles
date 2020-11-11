@@ -1,3 +1,19 @@
+
+#--------------#
+# Developments #
+#--------------#
+
+brew "make"
+
+# Python: Use 'python3' and 'pip3' command
+brew "python"
+brew "pipenv"
+
+# C++
+brew "clang-format"
+brew "boost"
+brew "opencv"
+
 #---------#
 # Science #
 #---------#
