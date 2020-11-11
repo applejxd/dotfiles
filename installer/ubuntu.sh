@@ -10,16 +10,16 @@ sudo apt install -y manpages-ja unzip zsh tree
 # clipboard
 sudo apt install -y xsel
 
-# Developments
-sudo apt install -y python3-pip 
-sudo apt install -y texlive-full
-
 # C++
 sudo apt install -y cmake gdb clang-format cpplint libeigen3-dev libopencv-dev doxygen
 
 # Python
+sudo apt install -y python3-pip 
 pip3 install sphinx
 pip3 install sphinx_rtd_theme
+
+# TeX
+sudo apt install -y texlive-full
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL
