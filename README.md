@@ -14,13 +14,14 @@
 
 The scripts install as following:
 1. Install development tools depend on OS
-2. Install Ruby by anyenv
-3. Install Homesick by Ruby
-4. Link dotfiles by Homesick
-5. Install packages from manager
+2. (for Mac OS X: Install Homebrew)
+3. Install Ruby by anyenv
+4. Install Homesick by Ruby
+5. Link dotfiles by Homesick
+6. Install packages from manager
     - for Ubuntu: via apt
-    - for Mac: via Homebrew
-6. Install zsh and make it default shell
+    - for Mac OS X: via Homebrew
+7. Install zsh and make it default shell
 
 ## How to uninstall
 - $ homesick unlink dotfiles
