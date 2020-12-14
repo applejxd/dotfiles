@@ -1,18 +1,35 @@
-# dotfiles
+# dotfiles (& Boxstarter for Windows)
+
+Deploy settings and initialize the environment for
+- Mac OS X,
+- Ubuntu (on WSL),
+- Windows.
 
 ## How to Install 
-- $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/install.sh)"
-- After execute above command, please restart your terminal.
+For Mac OS X and Ubuntu:
+```bash
+$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/install.sh)"
+```
+After execute above command, please restart your terminal.
+
+For Windows:
+```cmd
+> @powershell -NoProfile -ExecutionPolicy unrestricted -Command "iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/install.ps1'))"
+```
 
 ### for Deploy
-- $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/deploy.sh)"
+```bash
+$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/deploy.sh)"
+```
 
 ### for Initialization
-- $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/init.sh)"
+```bash
+$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/init.sh)"
+```
 
-## What does this install?
+## What does it install?
 
-The scripts install as following:
+For Mac OS X/Ubuntu, the scripts install as following:
 1. Install development tools depend on OS
 2. (for Mac OS X: Install Homebrew)
 3. Install anyenv
@@ -25,4 +42,6 @@ The scripts install as following:
 8. Install zsh and make it default shell
 
 ## How to uninstall
-- $ homesick unlink dotfiles
+```bash
+$ homesick unlink dotfiles
+```
