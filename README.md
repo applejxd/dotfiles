@@ -3,7 +3,6 @@
 Deploy settings and initialize the environment for
 - Mac OS X,
 - Ubuntu (on WSL),
-- Windows.
 
 ## How to Install 
 For Mac OS X and Ubuntu:
@@ -11,11 +10,6 @@ For Mac OS X and Ubuntu:
 $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/install.sh)"
 ```
 After execute above command, please restart your terminal.
-
-For Windows:
-```cmd
-> @powershell -NoProfile -ExecutionPolicy unrestricted -Command "iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/install.ps1'))"
-```
 
 ### for Deploy
 ```bash
