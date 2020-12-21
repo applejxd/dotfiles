@@ -1,4 +1,4 @@
-# dotfiles (& Boxstarter for Windows)
+# dotfiles
 
 Deploy settings and initialize the environment for
 - Mac OS X,
