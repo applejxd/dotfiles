@@ -1,17 +1,5 @@
 SHELL_CONF=$HOME/.config/shell
 
-##################
-# Plugin Manager #
-##################
-
-# if [ -e $SHELL_CONF/zplug.sh ]; then
-#     source $SHELL_CONF/zplug.sh
-# fi
-
-if [ -e $SHELL_CONF/zinit.sh ]; then
-    source $SHELL_CONF/zinit.sh
-fi
-
 #################
 # common config #
 #################
