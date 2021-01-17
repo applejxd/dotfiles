@@ -1,10 +1,14 @@
 #!/bin/bash
 
+# read password
+printf "password: "
+read password
+
 # for ruby-build in Ubuntu (cf. http://tinyurl.com/j6g67up)
 if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
-    sudo apt update
-    sudo apt upgrade -y
-    sudo apt install -y autoconf bison build-essential libssl-dev libyaml-dev libreadline-dev zlib1g-dev libncurses5-dev libffi-dev libgdbm5 libgdbm-dev libdb-dev
+    echo "$password" | sudo -S apt update
+    echo "$password" | sudo -S apt upgrade -y
+    echo "$password" | sudo -S apt install -y autoconf bison build-essential libssl-dev libyaml-dev libreadline-dev zlib1g-dev libncurses5-dev libffi-dev libgdbm5 libgdbm-dev libdb-dev
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
