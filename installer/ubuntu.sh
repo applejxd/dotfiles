@@ -36,6 +36,8 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
         echo "$password" | sudo -S rm /etc/wsl.conf
         echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/wsl.conf /etc/wsl.conf
     fi
+    # for JetBrains IDEs
+    echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/jetbrains.sh)
 else
     echo "$password" | sudo -S apt install -y chromium-browser  
 fi

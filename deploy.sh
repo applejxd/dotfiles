@@ -47,7 +47,9 @@ if !(type "homesick" >/dev/null 2>&1); then
     gem install homesick
 fi
 
-homesick clone applejxd/dotfiles
-# for ghq
-ln -s ~/.homesick/repos/dotfiles ~/src/
-yes Y | homesick link dotfiles
+if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
+    homesick clone applejxd/dotfiles
+    # for ghq
+    ln -s ~/.homesick/repos/dotfiles ~/src/
+    yes Y | homesick link dotfiles
+fi

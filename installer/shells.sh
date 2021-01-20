@@ -35,5 +35,7 @@ if type "fish" > /dev/null 2>&1; then
     fi
 fi
 
-# change the default shell
-echo "$password" | sudo chsh -s $(which zsh)
+if [[ $SHELL != $(which zsh) ]]; then
+    # change the default shell
+    echo "$password" | sudo chsh -s $(which zsh)
+fi
