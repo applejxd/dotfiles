@@ -1,8 +1,12 @@
 #!/bin/bash
 
-# read password
-printf "password: "
-read password
+if [ $# -eq 0 ]; then
+    # save password
+    printf "password: "
+    read password
+else
+    password=$1
+fi
 
 # for ruby-build in Ubuntu (cf. http://tinyurl.com/j6g67up)
 if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then

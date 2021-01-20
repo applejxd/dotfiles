@@ -1,8 +1,12 @@
 #!/bin/sh
 
-# save password
-printf "password: "
-read password
+if [ $# -eq 0 ]; then
+    # save password
+    printf "password: "
+    read password
+else
+    password=$1
+fi
 
 # refresh
 echo "$password" | sudo -S apt -y update
@@ -28,7 +32,10 @@ echo "$password" | sudo -S apt install -y texlive-full
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL
     echo "$password" | sudo -S apt install -y xfce4-terminal xfce4
-    echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/wsl.conf /etc/wsl.conf
+    if [ ! -L /etc/wsl.conf ]; then
+        echo "$password" | sudo -S rm /etc/wsl.conf
+        echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/wsl.conf /etc/wsl.conf
+    fi
 else
     echo "$password" | sudo -S apt install -y chromium-browser  
 fi

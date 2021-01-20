@@ -1,5 +1,13 @@
 #!/bin/sh
 
+if [ $# -eq 0 ]; then
+    # save password
+    printf "password: "
+    read password
+else
+    password=$1
+fi
+
 # for Ubuntu (cf. http://bit.ly/37WjcWG)
 if [[ -e /etc/lsb-release ]]; then
     source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/ubuntu.sh)
