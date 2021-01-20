@@ -9,7 +9,7 @@ echo "$password" | sudo -S apt -y update
 echo "$password" | sudo -S apt -y upgrade
 
 # basics
-echo "$password" | sudo -S apt install -y manpages-ja unzip zsh tree
+echo "$password" | sudo -S apt install -y manpages-ja unzip zsh tree tig
 
 # clipboard
 echo "$password" | sudo -S apt install -y xsel
