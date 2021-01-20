@@ -19,7 +19,7 @@ fi
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # for VcXsrv
-    export DISPLAY=:0.0
+    export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
 fi
 
 ########
