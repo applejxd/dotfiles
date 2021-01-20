@@ -107,6 +107,7 @@ zinit load BurntSushi/ripgrep
 zinit ice from"gh-r" as"program" pick"ghq_*/ghq"
 zinit load x-motemen/ghq  
 
+# cannot be installed?
 zinit ice as"program" make"install prefix=$ZPFX"
 zinit load jonas/tig
 
