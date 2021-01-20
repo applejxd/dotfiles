@@ -1,9 +1,13 @@
 #!/bin/sh
 # install shells
 
-# read password
-printf "password: "
-read password
+if [ $# -eq 0 ]; then
+    # save password
+    printf "password: "
+    read password
+else
+    password=$1
+fi
 
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
     echo "$password" | sudo -S apt install -y zsh
