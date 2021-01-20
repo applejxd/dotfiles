@@ -28,6 +28,7 @@ echo "$password" | sudo -S apt install -y texlive-full
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL
     echo "$password" | sudo -S apt install -y xfce4-terminal xfce4
+    echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/wsl.conf /etc/wsl.conf
 else
     echo "$password" | sudo -S apt install -y chromium-browser  
 fi
