@@ -44,4 +44,6 @@ if !(type "homesick" >/dev/null 2>&1); then
 fi
 
 homesick clone applejxd/dotfiles
+# for ghq
+ln -s ~/.homesick/repos/dotfiles ~/src/
 yes Y | homesick link dotfiles
