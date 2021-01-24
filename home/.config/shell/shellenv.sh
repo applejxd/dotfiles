@@ -19,7 +19,13 @@ fi
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # for VcXsrv
-    export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+    if [[ -e /etc/resolve.conf ]]; then
+        # for WSL2
+        export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+    else
+        # for WSL1
+        export DISPLAY=:0.0
+    fi
 fi
 
 ########
