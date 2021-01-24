@@ -9,14 +9,15 @@ else
     password=$1
 fi
 
-if [[ "$OSTYPE" == "linux-gnu" ]]; then
-    echo "$password" | sudo -S apt install -y zsh
-fi
-
 # bash install
 grep -q $(which bash) /etc/shells
 if [ $? -ne 0 ]; then
     echo "$password" | sudo -S sh -c "echo $(which bash) >> /etc/shells"
+fi
+
+# zsh install or update
+if !(type "zsh" > /dev/null 2>&1) && [[ "$OSTYPE" == "linux-gnu" ]]; then
+ echo "$password" | sudo -S apt install -y zsh
 fi
 
 # zsh install
@@ -37,5 +38,5 @@ fi
 
 if [[ $SHELL != $(which zsh) ]]; then
     # change the default shell
-    echo "$password" | sudo chsh -s $(which zsh)
+    echo "$password" | sudo -S chsh -s $(which zsh)
 fi

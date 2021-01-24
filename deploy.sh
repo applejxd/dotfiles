@@ -49,7 +49,7 @@ fi
 
 if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
     homesick clone applejxd/dotfiles
+    yes Y | homesick link dotfiles
     # for ghq
     ln -s ~/.homesick/repos/dotfiles ~/src/
-    yes Y | homesick link dotfiles
 fi
