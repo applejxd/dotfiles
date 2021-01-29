@@ -23,6 +23,7 @@ echo "$password" | sudo -S apt install -y cmake gdb clang-format cpplint libeige
 
 # Python
 echo "$password" | sudo -S apt install -y python3-pip 
+pip3 install pipenv
 pip3 install sphinx
 pip3 install sphinx_rtd_theme
 
