@@ -1,8 +1,10 @@
-[ght]
-	root = /Users/masashi/src
+[init]
+    defaultBranch = main
 [user]
-	email = break.r.evo@gmail.com
 	name = applejxd
+	email = 9639592+applejxd@users.noreply.github.com
+[ghq]
+    root = ~/src
 [core]
 	editor = vim
 	;; distinguish between uppercase and lowercase
