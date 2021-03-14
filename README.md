@@ -1,24 +1,24 @@
 # dotfiles
 
 Deploy settings and initialize the environment for
-- Mac OS X,
-- Ubuntu (on WSL),
+- Mac OS X
+- Ubuntu (on WSL)
 
 ## How to Install 
 For Mac OS X and Ubuntu:
 ```bash
-$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/install.sh)"
+$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/install.sh)"
 ```
 After execute above command, please restart your terminal.
 
 ### for Deploy
 ```bash
-$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/deploy.sh)"
+$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
 ```
 
 ### for Initialization
 ```bash
-$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/init.sh)"
+$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)"
 ```
 
 ## What does it install?
