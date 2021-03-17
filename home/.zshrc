@@ -117,7 +117,7 @@ fi
 # compile
 # cf. http://bit.ly/2tCOvHP
 function runcpp() {
-    fname=$(echo $1 | awk -F. '{print $1}')
+    fname=$(echo $1 | awk -F/ '{print $NF}' | awk -F. '{print $1}')
     g++ -O2 -Wall -Wextra $1 -o $fname
     shift
     ./$fname $@
