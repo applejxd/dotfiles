@@ -1,36 +1,24 @@
 #!/bin/sh
 
 if [ $# -eq 0 ]; then
-    # save password
+    # Save Password
     read -sp "Password: " password
 else
     password=$1
 fi
 
-# refresh
+# Refresh
 echo "$password" | sudo -S apt -y update
 echo "$password" | sudo -S apt -y upgrade
 
-# basics
+# Basics
 echo "$password" | sudo -S apt install -y manpages-ja unzip zsh tree tig
 
-# clipboard
+# Clipboard
 echo "$password" | sudo -S apt install -y xsel
 
-# C++
-echo "$password" | sudo -S apt install -y cmake gdb 
-echo "$password" | sudo -S apt install -y clang-format cpplint doxygen
-echo "$password" | sudo -S apt install -y libboost-dev libeigen3-dev libceres-dev
-echo "$password" | sudo -S apt install -y libboost-dev libopencv-dev libpcl-dev
-
-# Python
-echo "$password" | sudo -S apt install -y python3-pip 
-pip3 install pipenv
-pip3 install sphinx
-pip3 install sphinx_rtd_theme
-
-# TeX
-echo "$password" | sudo -S apt install -y texlive-full
+# Build Tools
+echo "$password" | sudo -S apt install -y cmake gcc clang gdb build-essential
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL
