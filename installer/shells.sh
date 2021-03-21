@@ -3,8 +3,7 @@
 
 if [ $# -eq 0 ]; then
     # save password
-    printf "password: "
-    read password
+    read -sp "Password: " password
 else
     password=$1
 fi
