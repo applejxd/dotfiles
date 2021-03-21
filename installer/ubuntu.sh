@@ -29,7 +29,7 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     fi
     
     # for JetBrains IDEs
-    echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/jetbrains.sh)
+    echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/jetbrains.sh)
 else
     echo "$password" | sudo -S apt install -y chromium-browser  
 fi
