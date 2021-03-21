@@ -20,7 +20,8 @@ echo "$password" | sudo -S apt install -y xsel
 # C++
 echo "$password" | sudo -S apt install -y cmake gdb 
 echo "$password" | sudo -S apt install -y clang-format cpplint doxygen
-echo "$password" | sudo -S apt install -y libboost-dev libeigen3-dev libopencv-dev libceres-dev
+echo "$password" | sudo -S apt install -y libboost-dev libeigen3-dev libceres-dev
+echo "$password" | sudo -S apt install -y libboost-dev libopencv-dev libpcl-dev
 
 # Python
 echo "$password" | sudo -S apt install -y python3-pip 
