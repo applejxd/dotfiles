@@ -50,5 +50,8 @@ if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
     homesick clone applejxd/dotfiles
     yes Y | homesick link dotfiles
     # for ghq
+    if [[ ! -e ~/src ]]; then
+        mkdir ~/src
+    fi
     ln -s ~/.homesick/repos/dotfiles ~/src/
 fi
