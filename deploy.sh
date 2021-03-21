@@ -15,7 +15,7 @@ if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
-    source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/master/installer/homebrew.sh)
+    source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh)
 fi
 
 # install rbenv (cf. http://tinyurl.com/yd8kcbq6)
