@@ -41,5 +41,5 @@ fi
 
 if [[ $SHELL != $(which zsh) ]]; then
     # change the default shell
-    echo "$password" | sudo -S chsh -s $(which zsh)
+    echo "$password" | chsh -s $(which zsh)
 fi
