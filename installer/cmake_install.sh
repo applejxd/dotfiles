@@ -18,7 +18,7 @@ function cmake_install() {
     cd ~/install/$2/build
     cmake ..
     make
-    # echo "$password" | sudo -S make install
+    echo "$password" | sudo -S make install
   fi
 }
 
