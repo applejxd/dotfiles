@@ -14,10 +14,15 @@ if [ ! -L /etc/wsl.conf ]; then
 fi
 
 if !(id jetbrains >/dev/null 2>&1); then
+    # Add user 'jetbrains'
     echo "$password" | sudo -S useradd -s /bin/bash -m jetbrains
+    # Change Password
     echo $password | sudo -S sh -c "echo \"jetbrains:$password\" | chpasswd"
+    # Add sudo group
     echo $password | sudo -S gpasswd -a jetbrains sudo
-    echo "export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0" > /home/jetbrains/shellenv.sh
+    # Initilization for CLion via WSL
     echo "$password" | sudo -S -u jetbrains wget -P /home/jetbrains https://raw.githubusercontent.com/JetBrains/clion-wsl/master/ubuntu_setup_env.sh && bash /home/jetbrains/ubuntu_setup_env.sh
+    # Define Environment Variables
+    # echo "export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0" > /home/jetbrains/shellenv.sh
     echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/home/.config/shell/shellenv.sh /home/jetbrains/shellenv.sh
 fi
