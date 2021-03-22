@@ -5,25 +5,22 @@ Deploy settings and initialize the environment for
 - Ubuntu (on WSL)
 
 ## How to Install 
-For Mac OS X and Ubuntu:
-```bash
+```shell
+# Deployment
+$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
+# Initialization
+$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)"
+```
+or
+```shell
+# Deployment + Initialization
 $ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/install.sh)"
 ```
 After execute above command, please restart your terminal.
 
-### for Deploy
-```bash
-$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
-```
-
-### for Initialization
-```bash
-$ bash -c "$(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)"
-```
-
 ## What does it install?
 
-For Mac OS X/Ubuntu, the scripts install as following:
+The scripts install configurations as following:
 1. Install development tools depend on OS
 2. (for Mac OS X: Install Homebrew)
 3. Install anyenv
