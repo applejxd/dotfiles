@@ -14,6 +14,10 @@ if [ $? -ne 0 ]; then
     echo "$password" | sudo -S sh -c "echo $(which bash) >> /etc/shells"
 fi
 
+#######
+# Zsh #
+#######
+
 # zsh install or update
 if !(type "zsh" > /dev/null 2>&1) && [[ "$OSTYPE" == "linux-gnu" ]]; then
  echo "$password" | sudo -S apt install -y zsh
@@ -27,15 +31,15 @@ if type "zsh" > /dev/null 2>&1; then
     fi
 fi
 
-# fish install
-if type "fish" > /dev/null 2>&1; then
-    grep -q $(which fish) /etc/shells
-    if [ $? -ne 0 ]; then
-        echo "$password" | sudo -S sh -c "echo $(which fish) >> /etc/shells"
-    fi
-fi
-
 if [[ $SHELL != $(which zsh) ]]; then
     # change the default shell
     echo "$password" | sudo -S chsh -s $(which zsh)
 fi
+
+# # fish install
+# if type "fish" > /dev/null 2>&1; then
+#     grep -q $(which fish) /etc/shells
+#     if [ $? -ne 0 ]; then
+#         echo "$password" | sudo -S sh -c "echo $(which fish) >> /etc/shells"
+#     fi
+# fi
