@@ -19,4 +19,5 @@ if !(id jetbrains >/dev/null 2>&1); then
     echo $password | sudo -S gpasswd -a jetbrains sudo
     echo "export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0" > /home/jetbrains/shellenv.sh
     echo "$password" | sudo -S -u jetbrains wget -P /home/jetbrains https://raw.githubusercontent.com/JetBrains/clion-wsl/master/ubuntu_setup_env.sh && bash /home/jetbrains/ubuntu_setup_env.sh
+    echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/home/.config/shell/shellenv.sh/home/jetbrains/shellenv.sh
 fi
