@@ -31,7 +31,7 @@ echo "$password" | sudo -S apt install -y libboost-dev libeigen3-dev libceres-de
 # OpenCV (Computer Vision), Point Cloud Library
 echo "$password" | sudo -S apt install -y libopencv-dev libpcl-dev
 # Google Tests
-echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/cmake_install.sh)
+echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/manual_install.sh)
 
 #######
 # TeX #
