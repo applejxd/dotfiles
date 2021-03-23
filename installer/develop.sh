@@ -20,18 +20,18 @@ echo "$password" | sudo -S apt install -y libopencv-dev libpcl-dev
 # Google Tests
 echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/cmake_install.sh)
 
-##########
-# Python #
-##########
+# ##########
+# # Python #
+# ##########
 
-echo "$password" | sudo -S apt install -y python3-pip 
-pip3 install pipenv
-# Sphinx (Document Generator)
-pip3 install sphinx
-pip3 install sphinx_rtd_theme
+# echo "$password" | sudo -S apt install -y python3-pip 
+# pip3 install pipenv
+# # Sphinx (Document Generator)
+# pip3 install sphinx
+# pip3 install sphinx_rtd_theme
 
 #######
 # TeX #
 #######
 
-echo "$password" | sudo -S apt install -y texlive-full
+# echo "$password" | sudo -S apt install -y texlive-full
