@@ -30,6 +30,8 @@ function cmake_uninstall() {
 
 cmake_install https://github.com/google/googletest.git googletest
 
+# matplotlib-cpp
 if [ ! -e /usr/include/matplotlibcpp.h ]; then
   echo "$password" | sudo -S wget https://raw.githubusercontent.com/lava/matplotlib-cpp/master/matplotlibcpp.h -P /usr/include
+  # echo "$password" | sudo -S rm /usr/include/matplotlibcpp.h
 fi
