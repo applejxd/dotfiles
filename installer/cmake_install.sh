@@ -22,4 +22,14 @@ function cmake_install() {
   fi
 }
 
+function cmake_uninstall() {
+  if [ -e ~/install/$2/build ]; then
+    echo "$password" | sudo -S sh -c "xargs rm -rf < install_manifest.txt"
+  fi
+}
+
 cmake_install https://github.com/google/googletest.git googletest
+
+if [ ! -e /usr/include/matplotlibcpp.h ]; then
+  echo "$password" | sudo -S wget https://raw.githubusercontent.com/lava/matplotlib-cpp/master/matplotlibcpp.h -P /usr/include
+fi

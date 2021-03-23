@@ -7,6 +7,19 @@ else
     password=$1
 fi
 
+# ##########
+# # Python #
+# ##########
+
+# for matplotlib-cpp
+echo "$password" | sudo -S apt install -y python3-numpy python3-matplotlib
+
+# echo "$password" | sudo -S apt install -y python3-pip
+# pip3 install pipenv
+# Sphinx (Document Generator)
+# pip3 install sphinx
+# pip3 install sphinx_rtd_theme
+
 #######
 # C++ #
 #######
@@ -18,17 +31,7 @@ echo "$password" | sudo -S apt install -y libboost-dev libeigen3-dev libceres-de
 # OpenCV (Computer Vision), Point Cloud Library
 echo "$password" | sudo -S apt install -y libopencv-dev libpcl-dev
 # Google Tests
-echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/cmake_install.sh)
-
-# ##########
-# # Python #
-# ##########
-
-# echo "$password" | sudo -S apt install -y python3-pip 
-# pip3 install pipenv
-# # Sphinx (Document Generator)
-# pip3 install sphinx
-# pip3 install sphinx_rtd_theme
+echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/cmake_install.sh)
 
 #######
 # TeX #
