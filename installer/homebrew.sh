@@ -16,7 +16,7 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # for brew doctor
-    sudo chown -R $(whoami) /usr/local/share/man/man5
+    # sudo chown -R $(whoami) /usr/local/share/man/man5
 elif [[ "$OSTYPE" == "linux-gnu" ]]; then
     # for Homebrew (cf. http://tinyurl.com/y5yh2vm3)
     test -d ~/.linuxbrew && eval $(~/.linuxbrew/bin/brew shellenv)
