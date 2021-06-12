@@ -46,7 +46,7 @@ if !(type "gem" > /dev/null 2>&1); then
 fi
 
 if !(type "homesick" >/dev/null 2>&1); then
-    gem install homesick
+    echo "$password" | sudo -S gem install homesick
 fi
 
 if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
