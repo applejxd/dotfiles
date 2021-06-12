@@ -17,6 +17,8 @@ fi
 if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
     # The altanative of process substitution for bash 3.2 that is installed to Mac OS X
     source /dev/stdin <<<"$( curl -sS https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
+    # enable brew command
+    eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
 
 # install rbenv (cf. http://tinyurl.com/yd8kcbq6)
