@@ -12,6 +12,7 @@ fi
 
 # Install Homebrew for Mac OS X or Linux
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/opt/homebrew/bin/brew shellenv)"
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # for brew doctor
