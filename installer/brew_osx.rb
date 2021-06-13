@@ -96,7 +96,7 @@ cask "cyberduck"
 cask "omnidisksweeper"
 
 # Research Tools
-cask "mendeley-desktop"
+cask "mendeley"
 cask "mathpix-snipping-tool"
 
 # Reference
