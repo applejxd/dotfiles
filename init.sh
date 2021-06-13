@@ -15,8 +15,12 @@ fi
 # for Mac OS X
 if [[ "$OSTYPE" == "darwin"* ]]; then
     if !(type "brew" > /dev/null 2>&1); then
-        source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh)
+        source /dev/stdin <<<"$( curl -sS https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
+        # enable brew command
+        # eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
+    # update bash for process substitution
+    brew install bash
     brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_essence.rb) 2>/dev/null
     brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_osx.rb) 2>/dev/null
     source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx.sh)
