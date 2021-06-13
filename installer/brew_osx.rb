@@ -25,7 +25,8 @@ cask "sourcetree"
 
 # Editor and IDE
 cask "visual-studio-code"
-cask "pycharm"
+# cask "pycharm"
+cask "jetbrains-toolbox"
 cask "emacs"
 
 # rogue-like game 'jnethack'
