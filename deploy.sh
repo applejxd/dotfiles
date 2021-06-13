@@ -21,7 +21,7 @@ if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
     eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
 
-# install rbenv (cf. http://tinyurl.com/yd8kcbq6)
+# install anyenv (cf. http://tinyurl.com/yd8kcbq6)
 if !(type "anyenv" > /dev/null 2>&1); then
     # install anyenv
     if [[ -e /etc/lsb-release ]]; then
@@ -36,8 +36,9 @@ if !(type "anyenv" > /dev/null 2>&1); then
         echo 'eval "$(anyenv init -)"' >> ~/.bashrc
         anyenv install --init
     fi
-    
-    # install rbenv
+fi
+
+if !(type "rbenv" >/dev/null 2>&1); then
     anyenv install rbenv
     eval "$(anyenv init -)"
     rbenv install 2.7.0
