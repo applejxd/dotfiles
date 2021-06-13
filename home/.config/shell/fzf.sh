@@ -2,11 +2,14 @@
 # options #
 ###########
 
+export FZF_CTRL_R_OPTS='--sort --exact'
+
 # search command
 # cf. https://qiita.com/kamykn/items/aa9920f07487559c0c7e
 if type "rg" >/dev/null 2>&1; then
     export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
 fi
+
 # show below, show border, set hight
 export FZF_DEFAULT_OPTS='--layout=reverse --border --height 60%'
 # preview by bat, with color, with file name header, with grid
