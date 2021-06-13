@@ -22,7 +22,7 @@ if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
 fi
 
 # install rbenv (cf. http://tinyurl.com/yd8kcbq6)
-if !(type "gem" > /dev/null 2>&1); then
+if !(type "anyenv" > /dev/null 2>&1); then
     # install anyenv
     if [[ -e /etc/lsb-release ]]; then
         git clone https://github.com/anyenv/anyenv ~/.anyenv
