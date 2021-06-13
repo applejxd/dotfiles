@@ -7,9 +7,12 @@ else
     password=$1
 fi
 
-anyenv install pyenv
-pyenv install anaconda3-2019.10
-pyenv global anaconda3-2019.10
+if !(type "pyenv" >/dev/null 2>&1); then
+    anyenv install pyenv
+    eval "$(pyenv init -)"
+    pyenv install anaconda3-2019.10
+    pyenv global anaconda3-2019.10
+fi
 
 # for Ubuntu (cf. http://bit.ly/37WjcWG)
 if [[ -e /etc/lsb-release ]]; then
