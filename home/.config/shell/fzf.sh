@@ -11,7 +11,7 @@ fi
 export FZF_DEFAULT_OPTS='--layout=reverse --border --height 60%'
 # preview by bat, with color, with file name header, with grid
 if type "bat" >/dev/null 2>&1; then
-    export FZF_CTRL_T_OPTS='--preview "bat  --color=always --style=header,grid --line-range :100 {}"'
+    export FZF_CTRL_T_OPTS='--preview "bat --color=always --style=header,grid --line-range :100 {}"'
 fi
 
 # preview by tree, with color (enable Japanese)
