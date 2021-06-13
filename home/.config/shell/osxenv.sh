@@ -10,7 +10,7 @@ export PATH=/usr/local/texlive/2019/bin/x86_64-darwin:$PATH
 export PATH=/Applications/wxMaxima.app/bin:$PATH
 
 # for openssl
-export PATH="/usr/local/opt/openssl@1.1/bin:$PATH"
+export PATH="/opt/homebrew/opt/openssl@1.1/bin:$PATH"
 
 #################
 # Specific root #
@@ -23,8 +23,8 @@ export MAXIMA_USERDIR=/Applications/wxMaxima.app/.maxima
 export BIBINPUTS=~/Dropbox/bib:$BIBINPUTS
 
 # for openssl
-export LDFLAGS="-L/usr/local/opt/openssl@1.1/lib"
-export CPPFLAGS="-I/usr/local/opt/openssl@1.1/include"
+export LDFLAGS="-L/opt/homebrew/opt/openssl@1.1/lib"
+export CPPFLAGS="-I/opt/homebrew/opt/openssl@1.1/include"
 export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig"
 
 # Initialization for FDK command line tools.Fri Jul 29 10:12:14 2016
