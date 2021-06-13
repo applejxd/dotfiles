@@ -86,6 +86,7 @@ cask "font-hack-nerd-font"
 cask "evernote"
 cask "bitwarden"
 brew "bitwarden-cli"
+cask "discord"
 cask "skype"
 
 # media
