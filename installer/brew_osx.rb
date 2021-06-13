@@ -4,6 +4,7 @@
 
 brew "mas"
 
+# App Store login is required
 mas "Magnet", id: 441258766
 mas "The Unarchiver", id: 425424353
 
