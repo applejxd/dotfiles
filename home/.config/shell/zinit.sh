@@ -92,11 +92,13 @@ zinit light sindresorhus/pure
 zinit ice pick"z.sh"
 zinit light rupa/z
 
-zinit ice from"gh-r" as"program"
-zinit load junegunn/fzf-bin
+# zinit ice from"gh-r" as"program"
+# zinit load junegunn/fzf-bin
 
-zinit ice multisrc'shell/(key-bindings|completion).zsh'
-zinit load junegunn/fzf
+# zinit ice multisrc'shell/(key-bindings|completion).zsh'
+# zinit load junegunn/fzf
+
+zinit pack for fzf
 
 zinit ice from"gh-r" as"program" pick"bat-*/bat"
 zinit load sharkdp/bat
