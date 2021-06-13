@@ -6,6 +6,9 @@
 # if [[ "$OSTYPE" == "linux-gnu" ]]; then
 #     eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
 # fi
+if [[ "OSTYPE" == "darwin"* ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
 
 # anyenv for rbenv, nodenv, phpenv
 eval "$(anyenv init -)"
