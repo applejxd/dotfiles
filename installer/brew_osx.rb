@@ -7,6 +7,7 @@ brew "mas"
 # App Store login is required
 mas "Magnet", id: 441258766
 mas "The Unarchiver", id: 425424353
+mas "GoodNotes 5", id: 1444383602
 
 #########
 # Casks #
