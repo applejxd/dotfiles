@@ -10,8 +10,8 @@ fi
 if !(type "pyenv" >/dev/null 2>&1); then
     anyenv install pyenv
     eval "$(pyenv init -)"
-    pyenv install anaconda3-2019.10
-    pyenv global anaconda3-2019.10
+    pyenv install anaconda3-5.3.1
+    pyenv global anaconda3-5.3.1
 fi
 
 # for Ubuntu (cf. http://bit.ly/37WjcWG)
