@@ -7,6 +7,10 @@ else
     password=$1
 fi
 
+anyenv install pyenv
+pyenv install anaconda3-2019.10
+pyenv global anaconda3-2019.10
+
 # for Ubuntu (cf. http://bit.ly/37WjcWG)
 if [[ -e /etc/lsb-release ]]; then
     echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu.sh)
