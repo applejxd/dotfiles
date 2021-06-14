@@ -7,12 +7,7 @@ else
     password=$1
 fi
 
-if !(type "pyenv" >/dev/null 2>&1); then
-    anyenv install pyenv
-    eval "$(pyenv init -)"
-    pyenv install anaconda3-5.3.1
-    pyenv global anaconda3-5.3.1
-fi
+bash -c "$(curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh)"
 
 # for Ubuntu (cf. http://bit.ly/37WjcWG)
 if [[ -e /etc/lsb-release ]]; then
