@@ -4,11 +4,11 @@
 
 brew "make"
 
-# Python: Use 'python3' and 'pip3' command
-brew "python"
-brew "pipenv"
+# Python
+brew "miniforge"
 
 # C++
+brew "cmake"
 brew "clang-format"
 brew "boost"
 brew "opencv"
@@ -21,13 +21,12 @@ brew "opencv"
 tap "kpeeters/repo"
 brew "cadabra2"
 
-# WxMaxima
-brew "gnuplot"
+# brew "gnuplot"
 brew "maxima"
 brew "wxmaxima"
 
 # Octave
-brew "octave"
+# brew "octave"
 
 #----------------#
 # Entertainments #
