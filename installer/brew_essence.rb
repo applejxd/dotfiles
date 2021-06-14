@@ -4,7 +4,7 @@
 
 brew "git"
 brew "git-flow-avh"
-# brew "tig"
+brew "tig"
 
 #-------------------#
 # zsh Configuration #
