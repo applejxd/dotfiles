@@ -4,9 +4,6 @@
 
 brew "make"
 
-# Python
-brew "miniforge"
-
 # C++
 brew "cmake"
 brew "clang-format"

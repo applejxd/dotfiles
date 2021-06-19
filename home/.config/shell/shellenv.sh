@@ -9,9 +9,11 @@ fi
 # Defaul editor = vim
 export EDITOR=vim
 
-export PYENV_ROOT="$HOME/.anyenv/envs/pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init --path)"
+if [[ -e $HOME/.anyenv/envs/pyenv ]]; then
+    export PYENV_ROOT="$HOME/.anyenv/envs/pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init --path)"
+fi
 
 ###################
 # OS dependencies #

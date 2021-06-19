@@ -169,3 +169,19 @@ if type "fzf" >/dev/null 2>&1;then
     fi
 fi
 
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/Users/masashi/.anyenv/envs/pyenv/versions/miniforge3-4.10/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/Users/masashi/.anyenv/envs/pyenv/versions/miniforge3-4.10/etc/profile.d/conda.sh" ]; then
+        . "/Users/masashi/.anyenv/envs/pyenv/versions/miniforge3-4.10/etc/profile.d/conda.sh"
+    else
+        export PATH="/Users/masashi/.anyenv/envs/pyenv/versions/miniforge3-4.10/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+

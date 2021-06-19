@@ -6,12 +6,30 @@
 # if [[ "$OSTYPE" == "linux-gnu" ]]; then
 #     eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
 # fi
+
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+    arch=$(uname -m)
+
+    brew_path=""
+    if [[ $arch == arm64 ]]; then
+        echo "Current Architecture: $arch"
+        brew_path="/opt/homebrew/bin/brew"
+    elif [[ $arch == x86_64 ]]; then
+        echo "Current Architecture: $arch"
+        brew_path="/usr/local/bin/brew"
+    fi
+
+    if [[ -e $brew_path ]]; then
+        eval "$($brew_path shellenv)"
+    fi
 fi
 
 # anyenv for rbenv, nodenv, phpenv
 eval "$(anyenv init -)"
+
+if [[ -e $HOME/.anyenv/envs/pyenv ]]; then
+    eval "$(pyenv init -)"
+fi
 
 # iceberg theme for vim
 if type "ghq" >/dev/null 2>&1; then
