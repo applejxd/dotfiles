@@ -29,8 +29,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     fi
     # update bash for process substitution
     brew install bash
-    brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_essence.rb) 2>/dev/null
-    brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_osx.rb) 2>/dev/null
+    brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_shell.rb) 2>/dev/null
+    brew bundle --file=<(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_mas_cask.rb) 2>/dev/null
     source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx.sh)
 fi
 
