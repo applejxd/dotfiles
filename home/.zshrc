@@ -168,3 +168,4 @@ if type "fzf" >/dev/null 2>&1;then
         bindkey "^x^g" ghq-fzf
     fi
 fi
+

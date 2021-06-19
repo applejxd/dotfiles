@@ -7,6 +7,14 @@ else
     password=$1
 fi
 
+# Python install
+anyenv install pyenv
+export PYENV_ROOT="$HOME/.anyenv/envs/pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+pyenv install miniforge3-4.10
+pyenv global miniforge3-4.10
+
 # for Ubuntu (cf. http://bit.ly/37WjcWG)
 if [[ -e /etc/lsb-release ]]; then
     echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu.sh)
