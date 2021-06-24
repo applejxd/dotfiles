@@ -117,8 +117,7 @@ cask "drawio"
 # Emulation
 # cask "virtualbox"
 # cask "virtualbox-extension-pack"
-brew "docker"
-cask "docker" unless is_m1?
+cask "docker"
 
 #-----------#
 # Platforms #
