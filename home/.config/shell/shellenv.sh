@@ -2,18 +2,8 @@
 # Environment #
 ###############
 
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    export LANG=ja_JP.UTF-8
-fi
-
 # Defaul editor = vim
 export EDITOR=vim
-
-if [[ -e $HOME/.anyenv/envs/pyenv ]]; then
-    export PYENV_ROOT="$HOME/.anyenv/envs/pyenv"
-    export PATH="$PYENV_ROOT/bin:$PATH"
-    eval "$(pyenv init --path)"
-fi
 
 ###################
 # OS dependencies #
@@ -21,9 +11,15 @@ fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     source $HOME/.config/shell/osxenv.sh
-fi
 
-if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    if [[ $(uname -m) == arm64 ]]; then
+        export ANYENV_ROOT=~/.anyenv_arm64
+    elif [[ $(uname -m) == x86_64 ]]; then
+        export ANYENV_ROOT=~/.anyenv_x64
+    fi
+
+    export PATH=$ANYENV_ROOT/bin:$PATH
+elif [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # for VcXsrv
     if [[ -e /etc/resolv.conf ]]; then
         # for WSL2
@@ -38,8 +34,12 @@ fi
 # PATH #
 ########
 
-# for anyenv
-export PATH=~/.anyenv/bin:$PATH
+if [[ -e $HOME/.anyenv/envs/pyenv ]]; then
+    export PYENV_ROOT="$HOME/.anyenv/envs/pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init --path)"
+fi
+
 # for pipenv (for Ubuntu)
 export PATH=~/.local/bin:$PATH
 # for YaTeX
