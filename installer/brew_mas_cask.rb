@@ -75,7 +75,7 @@ cask "karabiner-elements"
 
 # Remote directory mounting
 cask "osxfuse"
-brew "sshfs"
+brew "sshfs" unless is_m1?
 
 # The shell emulator iTerm2
 cask "iterm2"
