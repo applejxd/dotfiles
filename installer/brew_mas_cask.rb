@@ -73,9 +73,11 @@ cask "alfred"
 cask "hyperswitch"
 cask "karabiner-elements"
 
-# Remote directory mounting
+# Drive format support
 cask "osxfuse"
-brew "sshfs" unless is_m1?
+
+# Remote directory mounting
+# brew "sshfs" unless is_m1?
 
 # The shell emulator iTerm2
 cask "iterm2"
