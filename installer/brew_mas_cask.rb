@@ -1,3 +1,8 @@
+# cf. https://bit.ly/3vSN4Ps
+def is_m1?
+  !RUBY_PLATFORM.index("arm64e").nil?
+end
+
 #################
 # Mac App Store #
 #################
@@ -113,7 +118,7 @@ cask "drawio"
 # cask "virtualbox"
 # cask "virtualbox-extension-pack"
 brew "docker"
-cask "docker"
+cask "docker" unless is_m1?
 
 #-----------#
 # Platforms #
