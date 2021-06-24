@@ -61,6 +61,12 @@ if !(type "homesick" >/dev/null 2>&1); then
     echo "$password" | sudo -S gem install homesick
 fi
 
+# spacemacs install
+if [ ! -e ~/.emacs.d ]; then
+    git clone https://github.com/syl20bnr/spacemacs ~/.emacs.d
+    # npm install --global tern
+fi
+
 if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
     homesick clone applejxd/dotfiles
     yes Y | homesick link dotfiles
