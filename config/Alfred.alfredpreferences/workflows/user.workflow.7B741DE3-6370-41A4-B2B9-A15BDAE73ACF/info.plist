@@ -3855,6 +3855,12 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>49</integer>
+				<key>hotmod</key>
+				<integer>524288</integer>
+				<key>hotstring</key>
+				<string>Space</string>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -3882,6 +3888,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -4029,6 +4039,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -4208,6 +4222,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -4289,6 +4307,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -4498,6 +4520,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -4589,6 +4615,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -4697,6 +4727,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -4787,6 +4821,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -4814,6 +4852,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -4941,6 +4983,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -5021,6 +5067,10 @@
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -5091,6 +5141,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -5277,6 +5331,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -5383,6 +5441,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -5421,6 +5483,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -5592,6 +5658,10 @@ php -f ./src/action.php -- "$query" "{query}" ""
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -5764,6 +5834,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -5802,6 +5876,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -5906,6 +5984,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -6076,6 +6158,10 @@ php -f ./src/action.php -- "$query" "{query}" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -6182,6 +6268,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -6288,6 +6378,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -6394,6 +6488,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -6774,6 +6872,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -6888,6 +6990,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -6960,6 +7066,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -7066,6 +7176,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -7172,6 +7286,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -7352,6 +7470,10 @@ php -f ./src/action.php -- "$query" "{query}" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -7458,6 +7580,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -7748,6 +7874,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -7854,6 +7984,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -7961,6 +8095,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -8065,6 +8203,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -8170,6 +8312,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -8274,6 +8420,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -8378,6 +8528,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -8482,6 +8636,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -8586,6 +8744,10 @@ php -f ./src/action.php -- "$query" "ARTIST_OR_PLAYLIST_PRIVACY" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -8727,6 +8889,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -8937,6 +9103,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -10145,6 +10315,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -10335,6 +10509,10 @@ do shell script deviceselectedXML</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -10488,6 +10666,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -10594,6 +10776,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -10653,6 +10839,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -10858,8 +11048,6 @@ php -f ./src/action.php -- "$query" "{query}" ""</string>
 			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>config</key>
-			<dict/>
 			<key>type</key>
 			<string>alfred.workflow.utility.junction</string>
 			<key>uid</key>
@@ -11037,6 +11225,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -11143,6 +11335,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -11249,6 +11445,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -11355,6 +11555,10 @@ php -f ./src/action.php -- "$query" "TRACK" ""</string>
 				<false/>
 				<key>focusedappvariablename</key>
 				<string></string>
+				<key>hotkey</key>
+				<integer>0</integer>
+				<key>hotmod</key>
+				<integer>0</integer>
 				<key>leftcursor</key>
 				<false/>
 				<key>modsmode</key>
@@ -13872,11 +14076,11 @@ Example: https://open.spotify.com/track/6hxgHNJjadmCHAJPXw6AYL</string>
 		<key>__automatic_refresh_library_interval</key>
 		<string>0</string>
 		<key>__country_code</key>
-		<string></string>
+		<string>JP</string>
 		<key>__debug</key>
 		<string>0</string>
 		<key>__display_name</key>
-		<string></string>
+		<string>Yamazaki Masashi</string>
 		<key>__fuzzy_search</key>
 		<string>0</string>
 		<key>__is_alfred_playlist_active</key>
@@ -13888,7 +14092,7 @@ Example: https://open.spotify.com/track/6hxgHNJjadmCHAJPXw6AYL</string>
 		<key>__is_public_playlists</key>
 		<string>0</string>
 		<key>__last_check_update_time</key>
-		<string>0</string>
+		<string>1624370388</string>
 		<key>__max_results</key>
 		<string>50</string>
 		<key>__mopidy_port</key>
@@ -13898,15 +14102,15 @@ Example: https://open.spotify.com/track/6hxgHNJjadmCHAJPXw6AYL</string>
 		<key>__now_playing_notifications</key>
 		<string>1</string>
 		<key>__oauth_access_token</key>
-		<string></string>
+		<string>BQD7qprZ-7WY1MHB_GGRXh9p0WQtuR5uWykokBOC4lfrPyWaxdJj2yR8U5C3kH0h4hh2Z5BhNXOu3cbQIB47TCm0eBGnQAJpeNA215eH7-1pgtKGhFPpr4HOSv_QUQS1oIFPTIFgJpAw6HNE35Tx5YrZYgUDVYYq-jTBiihyNXw97OCMdlHJJ08ahE3ym8YB-UbAAq4GWDKxWYP3_mMYnxDbfM-SbgnYLbqNtp5NbEYPcmxOcPpAbu6s1HLw2resvsvj9nHm2FeBN_Ohajtu-vd-j4q5xZwzeyYRuacpFz8e</string>
 		<key>__oauth_client_id</key>
-		<string></string>
+		<string>bcbe6e2bff284dd1bb50f5b5bcccedfb</string>
 		<key>__oauth_client_secret</key>
-		<string></string>
+		<string>f6d71b41e9994637b741bda5fd4e4643</string>
 		<key>__oauth_redirect_uri</key>
 		<string>http://localhost:15298/callback.php</string>
 		<key>__oauth_refresh_token</key>
-		<string></string>
+		<string>AQCGaOFBQnqz5QRf70eGCQwmbjQ-605qf7yG4zfqHIy3jGE96-8S54K8W3OsoS3FvVR6u6BJGi4wcQc6MDl7iaoNu53dvKfZe8ECqq6HlgC9iSLtY4cvqZBr-PFbp8iwGvE</string>
 		<key>__output_application</key>
 		<string>APPLESCRIPT</string>
 		<key>__podcasts_enabled</key>
@@ -13932,11 +14136,11 @@ Example: https://open.spotify.com/track/6hxgHNJjadmCHAJPXw6AYL</string>
 		<key>__use_growl</key>
 		<string>0</string>
 		<key>__userid</key>
-		<string></string>
+		<string>21lmkcrjljsgnwqoqpumejbsi</string>
 		<key>__volume_percent</key>
 		<string>20</string>
 		<key>__workflow_version</key>
-		<string></string>
+		<string>10.15</string>
 		<key>add_all_tracks_from_album_when_adding_to_yourmusic</key>
 		<string>0</string>
 		<key>add_created_radio_playlist_to_library</key>
