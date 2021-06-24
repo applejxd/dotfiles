@@ -7,6 +7,10 @@ else
     password=$1
 fi
 
+################
+# Requirements #
+################
+
 # for ruby-build in Ubuntu (cf. http://tinyurl.com/j6g67up)
 if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
     echo "$password" | sudo -S apt update
@@ -24,18 +28,21 @@ fi
 # install anyenv (cf. http://tinyurl.com/yd8kcbq6)
 if !(type "anyenv" > /dev/null 2>&1); then
     # install anyenv
+    dir_name=anyenv
     if [[ -e /etc/lsb-release ]]; then
-        git clone https://github.com/anyenv/anyenv ~/.anyenv
-        ~/.anyenv/bin/anyenv init
-        export PATH="$HOME/.anyenv/bin:$PATH"
-        yes | anyenv install --init
+        dir_name=anyenv
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        if [[ $(uname -m) == arm64 ]]; then
+            dir_name=anyenv_arm64
+        elif [[ $(uname -m) == x86_64 ]]; then
+            dir_name=anyenv_x64
+        fi
     fi
-    
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install anyenv
-        echo 'eval "$(anyenv init -)"' >> ~/.bashrc
-        anyenv install --init
-    fi
+
+    git clone https://github.com/anyenv/anyenv ~/.$dir_name
+    ~/.$dir_name/bin/anyenv init
+    export PATH="$HOME/.$dir_name/bin:$PATH"
+    yes | anyenv install --init
 fi
 
 if !(type "rbenv" >/dev/null 2>&1); then
@@ -45,6 +52,10 @@ if !(type "rbenv" >/dev/null 2>&1); then
     rbenv rehash
     rbenv global 2.7.0
 fi
+
+################
+# Link configs #
+################
 
 if !(type "homesick" >/dev/null 2>&1); then
     echo "$password" | sudo -S gem install homesick
