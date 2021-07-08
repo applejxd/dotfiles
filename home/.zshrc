@@ -8,15 +8,29 @@ if [ -e $COMMON_RC ]; then
     source $SHELL_CONF/shellrc.sh
 fi
 
-##############
-# zsh proper #
-##############
-
 # Emacs mode
 bindkey -e
 
 # zsh completion
 autoload -Uz compinit && compinit
+
+###################
+# OS dependencies #
+###################
+
+function switch-arch() {
+    if  [[ "$(uname -m)" == arm64 ]]; then
+        arch=x86_64
+    elif [[ "$(uname -m)" == x86_64 ]]; then
+        arch=arm64e
+    fi
+    exec arch -arch $arch /bin/zsh
+}
+zle -N switch-arch
+
+##############
+# zsh proper #
+##############
 
 # cd completion
 # cf. http://bit.ly/2ZtPPrN
@@ -150,7 +164,7 @@ if type "fzf" >/dev/null 2>&1;then
             zle reset-prompt
         }
         zle -N z-fzf
-        bindkey "^x^f" z-fzf
+        bindkey "^X^F" z-fzf
     fi
 
     # ghq-fzf
@@ -165,21 +179,21 @@ if type "fzf" >/dev/null 2>&1;then
             zle reset-prompt
         }
         zle -N ghq-fzf
-        bindkey "^x^g" ghq-fzf
+        bindkey "^X^G" ghq-fzf
     fi
 fi
 
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/Users/masashi/.anyenv/envs/pyenv/versions/miniforge3-4.10/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+__conda_setup="$('/Users/masashi/.anyenv_x64/envs/pyenv/versions/miniforge3-4.10/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
 if [ $? -eq 0 ]; then
     eval "$__conda_setup"
 else
-    if [ -f "/Users/masashi/.anyenv/envs/pyenv/versions/miniforge3-4.10/etc/profile.d/conda.sh" ]; then
-        . "/Users/masashi/.anyenv/envs/pyenv/versions/miniforge3-4.10/etc/profile.d/conda.sh"
+    if [ -f "/Users/masashi/.anyenv_x64/envs/pyenv/versions/miniforge3-4.10/etc/profile.d/conda.sh" ]; then
+        . "/Users/masashi/.anyenv_x64/envs/pyenv/versions/miniforge3-4.10/etc/profile.d/conda.sh"
     else
-        export PATH="/Users/masashi/.anyenv/envs/pyenv/versions/miniforge3-4.10/bin:$PATH"
+        export PATH="/Users/masashi/.anyenv_x64/envs/pyenv/versions/miniforge3-4.10/bin:$PATH"
     fi
 fi
 unset __conda_setup

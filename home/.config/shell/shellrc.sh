@@ -1,6 +1,6 @@
-##################
-# Initialization #
-##################
+###################
+# OS dependencies #
+###################
 
 # # Homebrew for linux
 # if [[ "$OSTYPE" == "linux-gnu" ]]; then
@@ -22,7 +22,14 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     if [[ -e $brew_path ]]; then
         eval "$($brew_path shellenv)"
     fi
+
+    alias x64='exec arch -x86_64 /bin/zsh'
+	alias a64='exec arch -arm64e /bin/zsh'
 fi
+
+##################
+# Initialization #
+##################
 
 # anyenv for rbenv, nodenv, phpenv
 eval "$(anyenv init -)"
