@@ -17,10 +17,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     elif [[ $(uname -m) == x86_64 ]]; then
         export ANYENV_ROOT=~/.anyenv_x64
     fi
-
-    export PATH=$ANYENV_ROOT/bin:$PATH
 elif [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-    export PATH=~/.anyenv/bin:$PATH
+    export ANYENV_ROOT=~/.anyenv
     # To prevent OpenGL error
     export LIBGL_ALWAYS_INDIRECT=1
 
@@ -34,12 +32,14 @@ elif [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     fi
 fi
 
+export PATH=$ANYENV_ROOT/bin:$PATH
+
 ########
 # PATH #
 ########
 
-if [[ -e $HOME/.anyenv/envs/pyenv ]]; then
-    export PYENV_ROOT="$HOME/.anyenv/envs/pyenv"
+if [[ -e $ANYENV_ROOT/envs/pyenv ]]; then
+    export PYENV_ROOT="$ANYENV_ROOT/envs/pyenv"
     export PATH="$PYENV_ROOT/bin:$PATH"
     eval "$(pyenv init --path)"
 fi

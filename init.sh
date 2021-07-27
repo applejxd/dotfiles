@@ -80,7 +80,7 @@ fi
 if !(type "pyenv" >/dev/null 2>&1); then
     # Python install
     anyenv install pyenv
-    export PYENV_ROOT="$HOME/.$anyenv_dir/envs/pyenv"
+    export PYENV_ROOT="$ANYENV_ROOT/envs/pyenv"
     export PATH="$PYENV_ROOT/bin:$PATH"
     eval "$(pyenv init -)"
     pyenv install miniforge3-4.10
