@@ -20,6 +20,10 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 
     export PATH=$ANYENV_ROOT/bin:$PATH
 elif [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    export PATH=~/.anyenv/bin:$PATH
+    # To prevent OpenGL error
+    export LIBGL_ALWAYS_INDIRECT=1
+
     # for VcXsrv
     if [[ -e /etc/resolv.conf ]]; then
         # for WSL2
@@ -28,9 +32,6 @@ elif [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
         # for WSL1
         export DISPLAY=:0.0
     fi
-
-    # To prevent OpenGL error
-    export LIBGL_ALWAYS_INDIRECT=1
 fi
 
 ########
