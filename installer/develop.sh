@@ -26,12 +26,14 @@ echo "$password" | sudo -S apt install -y python3-numpy python3-matplotlib
 
 # Formatter, Linter, Document Generator
 echo "$password" | sudo -S apt install -y clang-format cpplint doxygen
+# Google OSS
+echo "$password" | sudo -S apt install -y libgoogle-glog-dev libgflags-dev libgtest-dev
 # Boost, Eigen3 (Linear Algebra), Ceres (Optimization)
 echo "$password" | sudo -S apt install -y libboost-dev libeigen3-dev libceres-dev
 # OpenCV (Computer Vision), Point Cloud Library
 echo "$password" | sudo -S apt install -y libopencv-dev libpcl-dev
-# Google Tests
-echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/manual_install.sh)
+
+# echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/manual_install.sh)
 
 #######
 # TeX #

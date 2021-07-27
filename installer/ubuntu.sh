@@ -18,7 +18,7 @@ echo "$password" | sudo -S apt install -y manpages-ja unzip zsh tree tig
 echo "$password" | sudo -S apt install -y xsel
 
 # Build Tools
-echo "$password" | sudo -S apt install -y cmake gcc clang gdb build-essential
+echo "$password" | sudo -S apt install -y cmake cmake-curses-gui gcc clang gdb build-essential
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL
