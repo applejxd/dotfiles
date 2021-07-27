@@ -28,6 +28,9 @@ elif [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
         # for WSL1
         export DISPLAY=:0.0
     fi
+
+    # To prevent OpenGL error
+    export LIBGL_ALWAYS_INDIRECT=1
 fi
 
 ########
