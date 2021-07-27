@@ -13,6 +13,7 @@ fi
 
 # for ruby-build in Ubuntu (cf. http://tinyurl.com/j6g67up)
 if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
+    # To prevent stopping at interactive mode
     export DEBIAN_FRONTEND=noninteractive
     echo "$password" | sudo -S -E apt update
     echo "$password" | sudo -S -E apt upgrade -y
