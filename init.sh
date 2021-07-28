@@ -83,8 +83,8 @@ if !(type "pyenv" >/dev/null 2>&1); then
     export PYENV_ROOT="$ANYENV_ROOT/envs/pyenv"
     export PATH="$PYENV_ROOT/bin:$PATH"
     eval "$(pyenv init -)"
-    pyenv install miniforge3-4.10
-    pyenv global miniforge3-4.10
+    pyenv install miniforge3
+    pyenv global miniforge3
 fi
 
 echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh)
