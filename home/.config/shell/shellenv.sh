@@ -11,28 +11,12 @@ export EDITOR=vim
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     source $HOME/.config/shell/osxenv.sh
-
-    if [[ $(uname -m) == arm64 ]]; then
-        export ANYENV_ROOT=~/.anyenv_arm64
-    elif [[ $(uname -m) == x86_64 ]]; then
-        export ANYENV_ROOT=~/.anyenv_x64
-    fi
 else
     export ANYENV_ROOT=~/.anyenv
 
     # for WSL
     if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-        # To prevent OpenGL error
-        export LIBGL_ALWAYS_INDIRECT=1
-
-        # for VcXsrv
-        if [[ -e /etc/resolv.conf ]]; then
-            # for WSL2
-            export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
-        else
-            # for WSL1
-            export DISPLAY=:0.0
-        fi
+        source $HOME/.config/shell/wsl.sh
     fi
 fi
 
