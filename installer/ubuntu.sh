@@ -17,8 +17,11 @@ echo "$password" | sudo -S apt install -y manpages-ja unzip zsh tree tig
 # Clipboard
 echo "$password" | sudo -S apt install -y xsel
 
-# Build Tools
+# C/C++ Build Tools
 echo "$password" | sudo -S apt install -y cmake cmake-curses-gui gcc clang gdb build-essential
+
+# Java
+echo "$password" | sudo -S apt install -y default-jre default-jdk
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL
