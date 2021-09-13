@@ -16,7 +16,7 @@ else
 
     # for WSL
     if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-        source $HOME/.config/shell/wsl.sh
+        source $HOME/.config/shell/wslenv.sh
     fi
 fi
 
