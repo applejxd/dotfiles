@@ -9,3 +9,5 @@ else
     # for WSL1
     export DISPLAY=:0.0
 fi
+
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
