@@ -9,6 +9,3 @@ else
     # for WSL1
     export DISPLAY=:0.0
 fi
-
-# for JDK (Adoptium)
-export PATH=~/bin/open-jdk:$PATH
