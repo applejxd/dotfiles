@@ -10,6 +10,11 @@ else
     export DISPLAY=:0.0
 fi
 
+# Windows System
+export PATH=/mnt/c/Windows:$PATH
+export PATH=/mnt/c/Windows/System32:$PATH
+export PATH=/mnt/c/Windows/System32/WindowsPowerShell/v1.0
+
 # Java
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH

@@ -117,8 +117,8 @@ alias lt="ls --tree"
 
 # pbcopy & pbpaste
 if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ]; then
-    alias pbcopy='/mnt/c/Windows/System32/sclip.exe'
-    alias pbpaste='/mnt/c/Windows/System32/WindowsPowershell/v1.0/sspowershell.exe Get-Clipboard' 
+    alias pbcopy='clip.exe'
+    alias pbpaste='powershell.exe Get-Clipboard' 
 elif [[ "$OSTYPE" == "linux-gnu" ]]; then
     alias pbcopy='xsel --clipboard --input'
     alias pbpaste='xsel --clipboard --output'
@@ -129,7 +129,7 @@ alias wcc="pbpaste | wc -m"
 alias fcr="pbpaste | pbcopy"
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-    alias open="/mnt/c/Windows/explorer.exe"
+    alias open="explorer.exe"
 elif [[ -e /etc/lsb-release ]]; then
     alias open="xdg-open"
 fi
