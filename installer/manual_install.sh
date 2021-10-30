@@ -13,10 +13,10 @@ fi
 
 function cmake_install() {
   INSTALL_PATH=`echo $1 | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g'`
-  if [ ! -e $INSTALL_PATH/build ]; then
+  if [ ! -e ~/src/$INSTALL_PATH/build ]; then
     ghq get $1
-    mkdir ~/$INSTALL_PATH/build
-    cd ~/$INSTALL_PATH/build
+    mkdir ~/src/$INSTALL_PATH/build
+    cd ~/src/$INSTALL_PATH/build
     cmake ..
     make
     echo "$password" | sudo -S make install
@@ -24,7 +24,9 @@ function cmake_install() {
 }
 
 function cmake_uninstall() {
-  if [ -e ~/install/$2/build ]; then
+  INSTALL_PATH=`echo $1 | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g'`
+  if [ ! -e ~/src/$INSTALL_PATH/build ]; then
+  cd ~/src/$INSTALL_PATH/build
     echo "$password" | sudo -S sh -c "xargs rm -rf < install_manifest.txt"
   fi
 }
