@@ -12,10 +12,11 @@ if [ ! -e ~/install ]; then
 fi
 
 function cmake_install() {
-  if [ ! -e ~/install/$2/build ]; then
-    git clone $1 ~/install/$2
-    mkdir ~/install/$2/build
-    cd ~/install/$2/build
+  INSTALL_PATH=`echo $1 | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g'`
+  if [ ! -e $INSTALL_PATH/build ]; then
+    ghq get $1
+    mkdir ~/$INSTALL_PATH/build
+    cd ~/$INSTALL_PATH/build
     cmake ..
     make
     echo "$password" | sudo -S make install
@@ -28,7 +29,8 @@ function cmake_uninstall() {
   fi
 }
 
-cmake_install https://github.com/google/googletest.git googletest
+cmake_install https://github.com/google/googletest.git
+# cmake_install https://github.com/google/glog.git
 
 # matplotlib-cpp
 if [ ! -e /usr/include/matplotlibcpp.h ]; then
