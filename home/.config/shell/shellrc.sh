@@ -60,6 +60,9 @@ export LESS="-iMR -gSW -z-4 -x4"
 # for security
 alias ssh-keygen="ssh-keygen -t ed25519"
 
+# X11 forwarding
+alias ssh="ssh -X"
+
 # with number: -v
 alias dirs="dirs -v"
 
