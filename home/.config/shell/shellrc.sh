@@ -54,11 +54,8 @@ fi
 ###################
 
 # The default options of "less" command
-# cf. https://qiita.com/delphinus/items/b04752bb5b64e6cc4ea9
+# cf. https://tinyurl.com/y8q7xwl9
 export LESS="-iMR -gSW -z-4 -x4"
-
-# for security
-alias ssh-keygen="ssh-keygen -t ed25519"
 
 # X11 forwarding
 alias ssh="ssh -X"
@@ -117,6 +114,9 @@ alias la="ls -a"
 alias lla="ls -la"
 alias lal="ls -al"
 alias lt="ls --tree"
+
+# for security
+alias ssh-keygen="ssh-keygen -t ed25519 -P \"\""
 
 # pbcopy & pbpaste
 if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ]; then
