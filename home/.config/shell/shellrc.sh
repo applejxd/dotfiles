@@ -116,7 +116,7 @@ alias lal="ls -al"
 alias lt="ls --tree"
 
 # for security
-alias ssh-keygen="ssh-keygen -t ed25519 -P \"\""
+alias gen-key="ssh-keygen -t ed25519 -P \"\""
 
 # pbcopy & pbpaste
 if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ]; then
