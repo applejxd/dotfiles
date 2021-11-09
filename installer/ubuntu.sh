@@ -26,6 +26,12 @@ echo "$password" | sudo -S apt install -y default-jre default-jdk
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # GUI in WSL
     echo "$password" | sudo -S apt install -y xfce4-terminal xfce4
+    
+    # for SSH server
+    echo "$password" | sudo -S apt purge openssh-server
+    echo "$password" | sudo -S apt install openssh-server
+    
+    # Replace WSL config
     if [ ! -L /etc/wsl.conf ]; then
         echo "$password" | sudo -S rm /etc/wsl.conf
         echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/wsl.conf /etc/wsl.conf
