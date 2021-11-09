@@ -30,6 +30,10 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # for SSH server
     echo "$password" | sudo -S apt purge openssh-server
     echo "$password" | sudo -S apt install openssh-server
+    if [ ! -L /etc/ssh/sshd_config ]; then
+        echo "$password" | sudo -S rm /etc/ssh/sshd_config
+        echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/sshd_config /etc/ssh/sshd_config
+    fi
     
     # Replace WSL config
     if [ ! -L /etc/wsl.conf ]; then
