@@ -51,7 +51,8 @@ cask "google-japanese-ime"
 
 # Online storages
 cask "dropbox"
-cask "google-backup-and-sync"
+# cask "google-backup-and-sync"
+cask "google-drive"
 
 #------------------#
 # System Asistants #
