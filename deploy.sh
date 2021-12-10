@@ -7,9 +7,9 @@ else
     password=$1
 fi
 
-################
-# Requirements #
-################
+#########################
+# Requirements (Global) #
+#########################
 
 # for ruby-build in Ubuntu (cf. http://tinyurl.com/j6g67up)
 if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
@@ -24,6 +24,10 @@ if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
     # enable brew command
     # eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
+
+########################
+# Requirements (Local) #
+########################
 
 # install anyenv (cf. http://tinyurl.com/yd8kcbq6)
 if !(type "anyenv" > /dev/null 2>&1); then
@@ -58,7 +62,7 @@ fi
 ################
 
 if !(type "homesick" >/dev/null 2>&1); then
-    echo "$password" | sudo -S gem install homesick
+    gem install homesick
 fi
 
 # spacemacs install
