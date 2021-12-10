@@ -32,7 +32,7 @@ fi
 ##################
 
 # anyenv for rbenv, nodenv, phpenv
-eval "$(anyenv init -)"
+eval "$(anyenv init - zsh)"
 
 if [[ -e $HOME/.anyenv/envs/pyenv ]]; then
     eval "$(pyenv init -)"
