@@ -220,3 +220,55 @@ if [ -e ~/.iterm2_shell_integration.zsh ]; then
         ssh $server
     }
 fi
+
+
+##################
+# zsh registered #
+##################
+
+# fg -> C-z
+function fancy-ctrl-z() {
+    if [[ $#BUFFER -eq 0 ]]; then
+        BUFFER="fg"
+        zle accept-line
+    else
+        zle push-input
+        zle clear-screen
+    fi
+}
+
+function switch-arch() {
+    if  [[ "$(uname -m)" == arm64 ]]; then
+        arch=x86_64
+    elif [[ "$(uname -m)" == x86_64 ]]; then
+        arch=arm64e
+    fi
+    exec arch -arch $arch /bin/zsh
+}
+
+# unarchive
+# cf. http://bit.ly/2tCOvHP
+function extract() {
+    case $1 in
+    *.tar.gz | *.tgz) tar xzvf $1 ;;
+    *.tar.xz) tar Jxvf $1 ;;
+    *.zip) unzip $1 ;;
+    *.lzh) lha e $1 ;;
+    *.tar.bz2 | *.tbz) tar xjvf $1 ;;
+    *.tar.Z) tar zxvf $1 ;;
+    *.gz) gzip -d $1 ;;
+    *.bz2) bzip2 -dc $1 ;;
+    *.Z) uncompress $1 ;;
+    *.tar) tar xvf $1 ;;
+    *.arj) unarj $1 ;;
+    esac
+}
+
+# compile
+# cf. http://bit.ly/2tCOvHP
+function runcpp() {
+    fname=$(echo $1 | awk -F/ '{print $NF}' | awk -F. '{print $1}')
+    g++ -O2 -Wall -Wextra $1 -o $fname
+    shift
+    ./$fname $@
+}

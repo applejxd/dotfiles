@@ -18,14 +18,6 @@ autoload -Uz compinit && compinit
 # OS dependencies #
 ###################
 
-function switch-arch() {
-    if  [[ "$(uname -m)" == arm64 ]]; then
-        arch=x86_64
-    elif [[ "$(uname -m)" == x86_64 ]]; then
-        arch=arm64e
-    fi
-    exec arch -arch $arch /bin/zsh
-}
 zle -N switch-arch
 
 ##############
@@ -53,15 +45,6 @@ setopt pushd_ignore_dups
     source "${HOME}/.iterm2_shell_integration.zsh"
 
 # fg -> C-z
-function fancy-ctrl-z() {
-    if [[ $#BUFFER -eq 0 ]]; then
-        BUFFER="fg"
-        zle accept-line
-    else
-        zle push-input
-        zle clear-screen
-    fi
-}
 zle -N fancy-ctrl-z
 bindkey '^Z' fancy-ctrl-z
 
@@ -110,32 +93,11 @@ alias -s hs='runhaskell'
 if type "aunpack" >/dev/null 2>&1; then
     alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
 else
-    function extract() {
-        case $1 in
-        *.tar.gz | *.tgz) tar xzvf $1 ;;
-        *.tar.xz) tar Jxvf $1 ;;
-        *.zip) unzip $1 ;;
-        *.lzh) lha e $1 ;;
-        *.tar.bz2 | *.tbz) tar xjvf $1 ;;
-        *.tar.Z) tar zxvf $1 ;;
-        *.gz) gzip -d $1 ;;
-        *.bz2) bzip2 -dc $1 ;;
-        *.Z) uncompress $1 ;;
-        *.tar) tar xvf $1 ;;
-        *.arj) unarj $1 ;;
-        esac
-    }
-    alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=extract
+     alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=extract
 fi
 
 # compile
 # cf. http://bit.ly/2tCOvHP
-function runcpp() {
-    fname=$(echo $1 | awk -F/ '{print $NF}' | awk -F. '{print $1}')
-    g++ -O2 -Wall -Wextra $1 -o $fname
-    shift
-    ./$fname $@
-}
 alias -s {c,cc,cpp}='runcpp'
 
 #######
@@ -143,41 +105,18 @@ alias -s {c,cc,cpp}='runcpp'
 #######
 
 if type "fzf" >/dev/null 2>&1;then
-    # ** -> ,
-    export FZF_COMPLETION_TRIGGER=","
-
     # common setting
     COMMON_FZF=$HOME/.config/shell/fzf.sh
     if [ -e $COMMON_FZF ]; then
         source $COMMON_FZF
     fi
 
-    # z-fzf, emacs-like key-bindings
-    # cf. http://bit.ly/2sEPZAJ
     if type "z" >/dev/null 2>&1; then
-        function z-fzf() {
-            local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
-            if [[ -n "$selected_dir" ]]; then
-                BUFFER="cd ${selected_dir}"
-                zle accept-line
-            fi
-            zle reset-prompt
-        }
         zle -N z-fzf
         bindkey "^X^F" z-fzf
     fi
 
-    # ghq-fzf
-    # cf. http://bit.ly/2MMEb6e
     if type "ghq" >/dev/null 2>&1; then
-        function ghq-fzf() {
-            local selected_dir=$(ghq list | fzf --query="$LBUFFER")
-            if [[ -n "$selected_dir" ]]; then
-                BUFFER="cd $(ghq root)/${selected_dir}"
-                zle accept-line
-            fi
-            zle reset-prompt
-        }
         zle -N ghq-fzf
         bindkey "^X^G" ghq-fzf
     fi

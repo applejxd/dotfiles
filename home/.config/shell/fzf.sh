@@ -2,6 +2,9 @@
 # options #
 ###########
 
+# default is **
+# export FZF_COMPLETION_TRIGGER=','
+
 export FZF_CTRL_R_OPTS='--sort --exact'
 
 # search command
@@ -70,6 +73,28 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         diskutil unmountDisk $DEVICE
     }
 fi
+
+# z-fzf, emacs-like key-bindings
+# cf. http://bit.ly/2sEPZAJ
+function z-fzf() {
+    local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
+    if [[ -n "$selected_dir" ]]; then
+        BUFFER="cd ${selected_dir}"
+        zle accept-line
+    fi
+    zle reset-prompt
+}
+
+# ghq-fzf
+# cf. http://bit.ly/2MMEb6e
+function ghq-fzf() {
+    local selected_dir=$(ghq list | fzf --query="$LBUFFER")
+    if [[ -n "$selected_dir" ]]; then
+        BUFFER="cd $(ghq root)/${selected_dir}"
+        zle accept-line
+    fi
+    zle reset-prompt
+}
 
 #######
 # git #
@@ -187,6 +212,13 @@ function drm() {
 
 function drmi() {
   docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
+}
+
+function dmkf() {
+    local cid
+    cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
+
+    [ -n "$cid" ] && docker container commit "$cid" tmp && dfimage.bash tmp > Dockerfile && docker rmi tmp
 }
 
 ############

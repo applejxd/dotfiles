@@ -97,10 +97,13 @@ zinit load BurntSushi/ripgrep
 zinit light felixr/docker-zsh-completion
 
 zinit ice pick"docker-fzf.zsh"
-zinit light mnowotnik/docker-fzf-completion
+zinit load mnowotnik/docker-fzf-completion
 
 zinit ice pick'docker-fzf'
-zinit load MartinRamm/fzf-docker
+zinit load MartinRamm/fzf-docker 
+
+zinit ice as"program" pick"dfimage.bash"
+zinit load RyodoTanaka/.bash_extend
 
 ############
 # Commands #
