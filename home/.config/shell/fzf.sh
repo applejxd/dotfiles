@@ -18,7 +18,7 @@ if type "bat" >/dev/null 2>&1; then
 fi
 
 # preview by tree, with color (enable Japanese)
-# cf. http://bit.ly/35TBnvE
+# cf. https://wonderwall.hatenablog.com/entry/2017/10/06/063000#--select-1---exit-0
 if type "tree" >/dev/null 2>&1; then
     export FZF_ALT_C_OPTS='--preview "tree -C -N {} | head -200" --select-1 --exit-0'
 fi
@@ -152,28 +152,41 @@ fadd() {
 # docker #
 ##########
 
+function drun() {
+    local name
+    name=$(docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $1 ":" $2 }')
+
+    [ -n "$name" ] && sudo docker run -it $name
+}
+
+alias dls="docker ps -a"
+
 # Select a docker container to start and attach to
 function da() {
     local cid
-    cid=$(sudo docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
+    cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
 
-    [ -n "$cid" ] && sudo docker start "$cid" && sudo docker attach "$cid"
+    [ -n "$cid" ] && docker start "$cid" && docker attach "$cid"
 }
 
 # Select a running docker container to stop
 function ds() {
     local cid
-    cid=$(sudo docker ps | sed 1d | fzf -q "$1" | awk '{print $1}')
+    cid=$(docker ps | sed 1d | fzf -q "$1" | awk '{print $1}')
 
-    [ -n "$cid" ] && sudo docker stop "$cid"
+    [ -n "$cid" ] && docker stop "$cid"
 }
 
 # Select a docker container to remove
 function drm() {
     local cid
-    cid=$(sudo docker ps -a | sed 1d | fzf -q "$1" | awk '{print $1}')
+    cid=$(docker ps -a | sed 1d | fzf -q "$1" | awk '{print $1}')
 
-    [ -n "$cid" ] && sudo docker rm "$cid"
+    [ -n "$cid" ] && docker rm "$cid"
+}
+
+function drmi() {
+  docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
 }
 
 ############

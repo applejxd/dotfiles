@@ -37,17 +37,6 @@ zinit light zsh-users/zsh-syntax-highlighting
 # git
 zinit snippet OMZ::lib/git.zsh
 
-# enhance 'cd' command
-zinit ice pick"init.sh"
-zinit light b4b4r07/enhancd
-export ENHANCD_COMMAND=ecd
-
-# docker
-zinit light felixr/docker-zsh-completion
-
-zinit ice pick"docker-fzf.zsh"
-zinit light mnowotnik/docker-fzf-completion
-
 ################
 # Powerlevel9k #
 ################
@@ -86,11 +75,8 @@ zinit light sindresorhus/pure
 # fzf #
 #######
 
-# cf. http://bit.ly/2QHO6uS
-# cf. (for options) http://bit.ly/2Qi9NTu
-
-zinit ice pick"z.sh"
-zinit light rupa/z
+# cf. https://wonderwall.hatenablog.com/entry/2017/10/06/063000
+# cf. (for options) https://qiita.com/kompiro/items/a09c0b44e7c741724c80
 
 zinit ice from"gh-r" as"program"
 zinit load junegunn/fzf-bin
@@ -104,6 +90,30 @@ zinit load sharkdp/bat
 zinit ice from"gh-r" as"program" pick"ripgrep-*/rg"
 zinit load BurntSushi/ripgrep
 
+##########
+# docker #
+##########
+
+zinit light felixr/docker-zsh-completion
+
+zinit ice pick"docker-fzf.zsh"
+zinit light mnowotnik/docker-fzf-completion
+
+zinit ice pick'docker-fzf'
+zinit load MartinRamm/fzf-docker
+
+############
+# Commands #
+############
+
+zinit ice pick"z.sh"
+zinit light rupa/z
+
+# enhance 'cd' command
+zinit ice pick"init.sh"
+zinit light b4b4r07/enhancd
+export ENHANCD_COMMAND=ecd
+
 zinit ice from"gh-r" as"program" pick"ghq_*/ghq"
 zinit load x-motemen/ghq  
 
@@ -113,4 +123,3 @@ zinit load jonas/tig
 
 zinit ice as"program" make"install prefix=$ZPFX"
 zinit load nvie/gitflow
-
