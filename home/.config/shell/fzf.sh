@@ -214,6 +214,7 @@ function drmi() {
   docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
 }
 
+# cf. https://qiita.com/RyodoTanaka/items/c7e4889a1b9383291799
 function dmkf() {
     local cid
     cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
