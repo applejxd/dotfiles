@@ -1,11 +1,5 @@
 export LANG=ja_JP.UTF-8
 
-if [[ $(uname -m) == arm64 ]]; then
-    export ANYENV_ROOT=~/.anyenv_arm64
-elif [[ $(uname -m) == x86_64 ]]; then
-    export ANYENV_ROOT=~/.anyenv_x64
-fi
-
 ########
 # PATH #
 ########

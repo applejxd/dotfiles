@@ -5,22 +5,33 @@
 # Defaul editor = vim
 export EDITOR=vim
 
+# User settings
+if [[ -f $HOME/.config/shell/usrenv.sh ]]; then
+    $HOME/.config/shell/usrenv.sh
+fi
+
 ###################
 # OS dependencies #
 ###################
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     source $HOME/.config/shell/osxenv.sh
+    
+    if [[ $(uname -m) == arm64 ]]; then
+        export ANYENV_ROOT=~/.anyenv_arm64
+    elif [[ $(uname -m) == x86_64 ]]; then
+        export ANYENV_ROOT=~/.anyenv_x64
+    fi
 else
     export ANYENV_ROOT=~/.anyenv
-
-    # for WSL
-    if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-        source $HOME/.config/shell/wslenv.sh
-    fi
 fi
 
 export PATH=$ANYENV_ROOT/bin:$PATH
+
+# for WSL
+if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    source $HOME/.config/shell/wslenv.sh
+fi
 
 ########
 # PATH #
