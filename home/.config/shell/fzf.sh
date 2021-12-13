@@ -216,7 +216,7 @@ if type "brew" >/dev/null 2>&1; then
     # Install or open the webpage for the selected application
     # using brew cask search as input source
     # and display a info quickview window for the currently marked application
-    install() {
+    install() {p AC
         local token
         token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
 
