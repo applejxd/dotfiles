@@ -17,6 +17,9 @@ echo "$password" | sudo -S apt install -y manpages-ja unzip zsh tree tig
 # Clipboard
 echo "$password" | sudo -S apt install -y xsel
 
+# docker
+echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/docker.sh)
+
 # Java
 # echo "$password" | sudo -S apt install -y default-jre default-jdk
 
@@ -34,7 +37,7 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
         echo "$password" | sudo -S rm /etc/ssh/sshd_config
         echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/sshd_config /etc/ssh/sshd_config
     fi
-    
+
     # WSL config
     if [ ! -L /etc/wsl.conf ]; then
         echo "$password" | sudo -S rm /etc/wsl.conf
