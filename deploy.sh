@@ -11,7 +11,7 @@ fi
 # Requirements (Global) #
 #########################
 
-# for ruby-build in Ubuntu (cf. http://tinyurl.com/j6g67up)
+# for ruby-build in Ubuntu (cf. https://github.com/rbenv/ruby-build/wiki)
 if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
     echo "$password" | sudo -S apt update
     echo "$password" | sudo -S apt upgrade -y
@@ -29,7 +29,7 @@ fi
 # Requirements (Local) #
 ########################
 
-# install anyenv (cf. http://tinyurl.com/yd8kcbq6)
+# install anyenv (cf. https://github.com/rbenv/rbenv#homebrew-on-macoshttps://github.com/rbenv/rbenv#homebrew-on-macos)
 if !(type "anyenv" > /dev/null 2>&1); then
     # install anyenv
     dir_name=anyenv
@@ -80,3 +80,5 @@ if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
     fi
     ln -s ~/.homesick/repos/dotfiles ~/src/
 fi
+
+echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh)

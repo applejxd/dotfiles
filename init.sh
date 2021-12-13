@@ -72,5 +72,3 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
 
     source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx.sh)
 fi
-
-echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh)
