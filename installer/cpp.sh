@@ -1,3 +1,5 @@
+#!/bin/sh
+
 if [ $# -eq 0 ]; then
     # Save Password
     read -sp "Password: " password
