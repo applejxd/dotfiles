@@ -7,7 +7,7 @@ export EDITOR=vim
 
 # User settings
 if [[ -f $HOME/.config/shell/usrenv.sh ]]; then
-    $HOME/.config/shell/usrenv.sh
+    source $HOME/.config/shell/usrenv.sh
 fi
 
 ###################
