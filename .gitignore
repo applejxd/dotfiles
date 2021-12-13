@@ -1,4 +1,4 @@
 .DS_Store
 
-# User settings
-~/.config/shell/usrenv.sh
+home/.gitconfig
+home/.config/shell/usrenv.sh
