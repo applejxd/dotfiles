@@ -202,6 +202,10 @@ if type "docker" >/dev/null 2>&1; then
 
         [ -n "$cid" ] && docker container commit "$cid" tmp && dfimage.bash tmp > Dockerfile && docker rmi tmp
     }
+    
+    function dbuild() {
+        docker build -t tmp -f $1 .
+    }
 fi
 
 ############
