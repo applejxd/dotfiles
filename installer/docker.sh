@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# cf. https://zenn.dev/sprout2000/articles/95b125e3359694
+
 if [ $# -eq 0 ]; then
     # Save Password
     read -sp "Password: " password
@@ -7,7 +9,6 @@ else
     password=$1
 fi
 
-# cf. https://zenn.dev/sprout2000/articles/95b125e3359694
 echo "$password" | sudo -S apt update
 echo "$password" | sudo -S apt -y upgrade
 echo "$password" | sudo -S apt -y install curl apt-transport-https
