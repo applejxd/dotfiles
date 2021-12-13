@@ -1,0 +1,17 @@
+[init]
+	defaultBranch = main
+[core]
+	editor = vim
+	;; distinguish between uppercase and lowercase
+	ignorecase = false
+	;; to display Japanese files
+	quotepath = false
+[ghq]
+	root = ~/src
+[gitflow "branch"]
+	master = main
+
+;; need to be changed for each environments
+[user]
+	name = applejxd
+	email = 9639592+applejxd@users.noreply.github.com

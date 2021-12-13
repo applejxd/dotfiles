@@ -74,192 +74,176 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     }
 fi
 
-# z-fzf, emacs-like key-bindings
-# cf. http://bit.ly/2sEPZAJ
-function z-fzf() {
-    local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
-    if [[ -n "$selected_dir" ]]; then
-        BUFFER="cd ${selected_dir}"
-        zle accept-line
-    fi
-    zle reset-prompt
-}
-
-# ghq-fzf
-# cf. http://bit.ly/2MMEb6e
-function ghq-fzf() {
-    local selected_dir=$(ghq list | fzf --query="$LBUFFER")
-    if [[ -n "$selected_dir" ]]; then
-        BUFFER="cd $(ghq root)/${selected_dir}"
-        zle accept-line
-    fi
-    zle reset-prompt
-}
-
 #######
 # git #
 #######
 
-# fbr - checkout git branch
-# cf. http://bit.ly/34zmzkt
-function fbr() {
-    local branches branch
-    branches=$(git branch -vv) &&
-        branch=$(echo "$branches" | fzf +m) &&
-        git checkout $(echo "$branch" | awk '{print $1}' | sed "s/.* //")
-}
+if type "git" >/dev/null 2>&1; then
+    # fbr - checkout git branch
+    # cf. http://bit.ly/34zmzkt
+    function fbr() {
+        local branches branch
+        branches=$(git branch -vv) &&
+            branch=$(echo "$branches" | fzf +m) &&
+            git checkout $(echo "$branch" | awk '{print $1}' | sed "s/.* //")
+    }
 
-# fbrm - checkout git branch (including remote branches)
-# cf. http://bit.ly/34zmzkt
-function fbrm() {
-    local branches branch
-    branches=$(git branch --all | grep -v HEAD) &&
-        branch=$(echo "$branches" |
-            fzf-tmux -d $((2 + $(wc -l <<<"$branches"))) +m) &&
-        git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
-}
+    # fbrm - checkout git branch (including remote branches)
+    # cf. http://bit.ly/34zmzkt
+    function fbrm() {
+        local branches branch
+        branches=$(git branch --all | grep -v HEAD) &&
+            branch=$(echo "$branches" |
+                fzf-tmux -d $((2 + $(wc -l <<<"$branches"))) +m) &&
+            git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
+    }
 
-# fshow - git commit browser
-# cf. http://bit.ly/34zmzkt
-function fshow() {
-    git log --graph --color=always \
-        --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
-        fzf --ansi --no-sort --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
-            --bind "ctrl-m:execute:
-                (grep -o '[a-f0-9]\{7\}' | head -1 |
-                xargs -I % sh -c 'git show --color=always % | less -R') << 'FZF-EOF'
-                {}
-                FZF-EOF"
-}
+    # fshow - git commit browser
+    # cf. http://bit.ly/34zmzkt
+    function fshow() {
+        git log --graph --color=always \
+            --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
+            fzf --ansi --no-sort --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
+                --bind "ctrl-m:execute:
+                    (grep -o '[a-f0-9]\{7\}' | head -1 |
+                    xargs -I % sh -c 'git show --color=always % | less -R') << 'FZF-EOF'
+                    {}
+                    FZF-EOF"
+    }
 
-# worktree移動
-# cf. http://bit.ly/34zmzkt
-function cdworktree() {
-    # カレントディレクトリがGitリポジトリ上かどうか
-    git rev-parse &>/dev/null
-    if [ $? -ne 0 ]; then
-        echo fatal: Not a git repository.
-        return
-    fi
-
-    local selectedWorkTreeDir=$(git worktree list | fzf | awk '{print $1}')
-
-    if [ "$selectedWorkTreeDir" = "" ]; then
-        # Ctrl-C.
-        return
-    fi
-
-    cd ${selectedWorkTreeDir}
-}
-
-# interactive 'diff' and 'add'
-# cf. http://bit.ly/34GCFZK
-fadd() {
-    local out q n addfiles
-    while out=$(
-        git status --short |
-            awk '{if (substr($0,2,1) !~ / /) print $2}' |
-            fzf-tmux --multi --exit-0 --expect=ctrl-d
-    ); do
-        q=$(head -1 <<<"$out")
-        n=$(($(wc -l <<<"$out") - 1))
-        addfiles=($(echo $(tail "-$n" <<<"$out")))
-        [[ -z "$addfiles" ]] && continue
-        if [ "$q" = ctrl-d ]; then
-            git diff --color=always $addfiles | less -R
-        else
-            git add $addfiles
+    # worktree移動
+    # cf. http://bit.ly/34zmzkt
+    function cdworktree() {
+        # カレントディレクトリがGitリポジトリ上かどうか
+        git rev-parse &>/dev/null
+        if [ $? -ne 0 ]; then
+            echo fatal: Not a git repository.
+            return
         fi
-    done
-}
+
+        local selectedWorkTreeDir=$(git worktree list | fzf | awk '{print $1}')
+
+        if [ "$selectedWorkTreeDir" = "" ]; then
+            # Ctrl-C.
+            return
+        fi
+
+        cd ${selectedWorkTreeDir}
+    }
+
+    # interactive 'diff' and 'add'
+    # cf. http://bit.ly/34GCFZK
+    fadd() {
+        local out q n addfiles
+        while out=$(
+            git status --short |
+                awk '{if (substr($0,2,1) !~ / /) print $2}' |
+                fzf-tmux --multi --exit-0 --expect=ctrl-d
+        ); do
+            q=$(head -1 <<<"$out")
+            n=$(($(wc -l <<<"$out") - 1))
+            addfiles=($(echo $(tail "-$n" <<<"$out")))
+            [[ -z "$addfiles" ]] && continue
+            if [ "$q" = ctrl-d ]; then
+                git diff --color=always $addfiles | less -R
+            else
+                git add $addfiles
+            fi
+        done
+    }
+fi
 
 ##########
 # docker #
 ##########
 
-function drun() {
-    local name
-    name=$(docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $1 ":" $2 }')
+if type "docker" >/dev/null 2>&1; then
+    function drun() {
+        local name
+        name=$(docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $1 ":" $2 }')
 
-    [ -n "$name" ] && sudo docker run -it $name
-}
+        [ -n "$name" ] && sudo docker run -it $name
+    }
 
-alias dls="docker ps -a"
+    alias dls="docker ps -a"
 
-# Select a docker container to start and attach to
-function da() {
-    local cid
-    cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
+    # Select a docker container to start and attach to
+    function da() {
+        local cid
+        cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
 
-    [ -n "$cid" ] && docker start "$cid" && docker attach "$cid"
-}
+        [ -n "$cid" ] && docker start "$cid" && docker attach "$cid"
+    }
 
-# Select a running docker container to stop
-function ds() {
-    local cid
-    cid=$(docker ps | sed 1d | fzf -q "$1" | awk '{print $1}')
+    # Select a running docker container to stop
+    function ds() {
+        local cid
+        cid=$(docker ps | sed 1d | fzf -q "$1" | awk '{print $1}')
 
-    [ -n "$cid" ] && docker stop "$cid"
-}
+        [ -n "$cid" ] && docker stop "$cid"
+    }
 
-# Select a docker container to remove
-function drm() {
-    local cid
-    cid=$(docker ps -a | sed 1d | fzf -q "$1" | awk '{print $1}')
+    # Select a docker container to remove
+    function drm() {
+        local cid
+        cid=$(docker ps -a | sed 1d | fzf -q "$1" | awk '{print $1}')
 
-    [ -n "$cid" ] && docker rm "$cid"
-}
+        [ -n "$cid" ] && docker rm "$cid"
+    }
 
-function drmi() {
-  docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
-}
+    function drmi() {
+      docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
+    }
 
-# cf. https://qiita.com/RyodoTanaka/items/c7e4889a1b9383291799
-function dmkf() {
-    local cid
-    cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
+    # cf. https://qiita.com/RyodoTanaka/items/c7e4889a1b9383291799
+    function dmkf() {
+        local cid
+        cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
 
-    [ -n "$cid" ] && docker container commit "$cid" tmp && dfimage.bash tmp > Dockerfile && docker rmi tmp
-}
+        [ -n "$cid" ] && docker container commit "$cid" tmp && dfimage.bash tmp > Dockerfile && docker rmi tmp
+    }
+fi
 
 ############
 # Homebrew #
 ############
 
-# Install or open the webpage for the selected application
-# using brew cask search as input source
-# and display a info quickview window for the currently marked application
-install() {
-    local token
-    token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
+if type "brew" >/dev/null 2>&1; then
+    # Install or open the webpage for the selected application
+    # using brew cask search as input source
+    # and display a info quickview window for the currently marked application
+    install() {
+        local token
+        token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
 
-    if [ "x$token" != "x" ]; then
-        echo "(I)nstall or open the (h)omepage of $token"
-        read input
-        if [ $input = "i" ] || [ $input = "I" ]; then
-            brew cask install $token
+        if [ "x$token" != "x" ]; then
+            echo "(I)nstall or open the (h)omepage of $token"
+            read input
+            if [ $input = "i" ] || [ $input = "I" ]; then
+                brew cask install $token
+            fi
+            if [ $input = "h" ] || [ $input = "H" ]; then
+                brew cask home $token
+            fi
         fi
-        if [ $input = "h" ] || [ $input = "H" ]; then
-            brew cask home $token
-        fi
-    fi
-}
+    }
 
-# Uninstall or open the webpage for the selected application
-# using brew list as input source (all brew cask installed applications)
-# and display a info quickview window for the currently marked application
-uninstall() {
-    local token
-    token=$(brew cask list | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
+    # Uninstall or open the webpage for the selected application
+    # using brew list as input source (all brew cask installed applications)
+    # and display a info quickview window for the currently marked application
+    uninstall() {
+        local token
+        token=$(brew cask list | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
 
-    if [ "x$token" != "x" ]; then
-        echo "(U)ninstall or open the (h)omepage of $token"
-        read input
-        if [ $input = "u" ] || [ $input = "U" ]; then
-            brew cask uninstall $token
+        if [ "x$token" != "x" ]; then
+            echo "(U)ninstall or open the (h)omepage of $token"
+            read input
+            if [ $input = "u" ] || [ $input = "U" ]; then
+                brew cask uninstall $token
+            fi
+            if [ $input = "h" ] || [ $token = "h" ]; then
+                brew cask home $token
+            fi
         fi
-        if [ $input = "h" ] || [ $token = "h" ]; then
-            brew cask home $token
-        fi
-    fi
-}
+    }
+fi
