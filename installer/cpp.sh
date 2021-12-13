@@ -5,7 +5,6 @@ else
     password=$1
 fi
 
-
 function cmake_install() {
   INSTALL_PATH=`echo $1 | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g'`
   if [ ! -e ~/src/$INSTALL_PATH/build ]; then
