@@ -28,7 +28,7 @@ fi
 
 # zsh install or update
 if !(type "zsh" > /dev/null 2>&1) && [[ "$OSTYPE" == "linux-gnu" ]]; then
-    echo "$password" | sudo -S apt install -y zsh
+    echo "$password" | sudo -S apt-get install -y zsh
 fi
 
 # zsh install

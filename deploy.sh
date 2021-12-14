@@ -13,9 +13,9 @@ fi
 
 # for ruby-build in Ubuntu (cf. https://github.com/rbenv/ruby-build/wiki)
 if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
-    echo "$password" | sudo -S apt update
-    echo "$password" | sudo -S apt upgrade -y
-    echo "$password" | sudo -S apt install -y autoconf bison build-essential libssl-dev libyaml-dev libreadline-dev zlib1g-dev libncurses5-dev libffi-dev libgdbm5 libgdbm-dev libdb-dev
+    echo "$password" | sudo -S apt-get update
+    echo "$password" | sudo -S apt-get upgrade -y
+    echo "$password" | sudo -S apt-get install -y autoconf bison build-essential libssl-dev libyaml-dev libreadline-dev zlib1g-dev libncurses5-dev libffi-dev libgdbm5 libgdbm-dev libdb-dev
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then

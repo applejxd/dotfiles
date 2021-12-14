@@ -4,10 +4,10 @@
 if [[ "$OSTYPE" == "darwin"* ]]; then
     xcode-select --install
 elif [[ -e /etc/lsb-release ]]; then
-    sudo apt update -y
-    sudo apt upgrade -y
+    sudo apt-get update -y
+    sudo apt-get upgrade -y
     # for Homebrew (cf. http://tinyurl.com/y5yh2vm3)
-    sudo apt install -y build-essential curl file git
+    sudo apt-get install -y build-essential curl file git
 fi
 
 # Install Homebrew for Mac OS X or Linux
