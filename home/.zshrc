@@ -112,7 +112,6 @@ if type "fzf" >/dev/null 2>&1;then
         source $COMMON_FZF
     fi
 
-
     # z-fzf, emacs-like key-bindings
     # cf. http://bit.ly/2sEPZAJ
     if type "z" >/dev/null 2>&1; then
