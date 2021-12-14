@@ -28,7 +28,7 @@ The scripts install configurations as following:
 5. Install Homesick by Ruby
 6. Link dotfiles by Homesick
 7. Install packages from manager
-    - for Ubuntu: via apt
+    - for Ubuntu: via apt-get
     - for Mac OS X: via Homebrew
 8. Install zsh and make it default shell
 
