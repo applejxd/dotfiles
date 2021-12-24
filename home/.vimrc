@@ -10,6 +10,9 @@ colorscheme iceberg
 
 " syntax highlight
 syntax on 
+" for Dockerfile extension
+autocmd BufNewFile,BufRead *.dockerfile set filetype=dockerfile
+
 " line number
 set number
 " auto-indent
@@ -19,3 +22,4 @@ set autoindent
 set showmatch
 " matching focus time
 set matchtime=1
+

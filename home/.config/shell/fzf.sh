@@ -158,6 +158,8 @@ fi
 ##########
 
 if type "docker" >/dev/null 2>&1; then
+    alias dim="docker images"
+
     function drun() {
         local name
         name=$(docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $1 ":" $2 }')
