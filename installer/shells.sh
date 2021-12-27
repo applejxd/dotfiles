@@ -26,6 +26,11 @@ fi
 # zsh #
 #######
 
+# for ghq
+if !(type "unzip" > /dev/null 2>&1); then
+    echo "$password" | sudo -S apt-get install unzip
+fi
+
 # zsh install or update
 if !(type "zsh" > /dev/null 2>&1) && [[ "$OSTYPE" == "linux-gnu" ]]; then
     echo "$password" | sudo -S apt-get install -y zsh
