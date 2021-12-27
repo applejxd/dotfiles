@@ -47,6 +47,6 @@ fi
 if [[ "$OSTYPE" != "darwin"* ]]; then
     if [[ $SHELL != $(which zsh) ]]; then
         # change the default shell
-        echo "$password" | chsh -s $(which zsh)
+        # echo "$password" | chsh -s $(which zsh)
     fi
 fi
