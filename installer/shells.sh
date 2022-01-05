@@ -36,7 +36,7 @@ if !(type "zsh" > /dev/null 2>&1) && [[ "$OSTYPE" == "linux-gnu" ]]; then
     echo "$password" | sudo -S apt-get install -y zsh
 fi
 
-# zsh install
+# register zsh
 if type "zsh" > /dev/null 2>&1; then
     grep -q $(which zsh) /etc/shells
     if [ $? -ne 0 ]; then
@@ -45,8 +45,8 @@ if type "zsh" > /dev/null 2>&1; then
 fi
 
 if [[ "$OSTYPE" != "darwin"* ]]; then
-    if [[ $SHELL != $(which zsh) ]]; then
-        # change the default shell
-        # echo "$password" | chsh -s $(which zsh)
-    fi
+    # if [[ $SHELL != $(which zsh) ]]; then
+    #     change the default shell
+    #     echo "$password" | chsh -s $(which zsh)
+    # fi
 fi
