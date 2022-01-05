@@ -206,7 +206,12 @@ if type "docker" >/dev/null 2>&1; then
     }
     
     function dbuild() {
-        docker build -t tmp -f $1 .
+    	local file_name
+	file_name=$(echo $1 | sed 's/.[^.]*$//')
+
+	local date_tag
+	date_tag=$(date "+%y%m%d")
+        docker build -t local/$file_name:$date_tag -f $1 .
     }
 fi
 

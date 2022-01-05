@@ -14,7 +14,7 @@ function cmake_install() {
     mkdir ~/src/$INSTALL_PATH/build
     cd ~/src/$INSTALL_PATH/build
     cmake ..
-    make
+    make -j4
     echo "$password" | sudo -S make install
   fi
 }
@@ -26,8 +26,16 @@ echo "$password" | sudo -S apt-get install -y cmake cmake-curses-gui gcc clang g
 echo "$password" | sudo -S apt-get install -y clang-format cpplint doxygen
 
 # Google OSS
-echo "$password" | sudo -S apt-get install -y libgoogle-glog-dev libgflags-dev
+echo "$password" | sudo -S apt-get install -y  libgflags-dev
 cmake_install https://github.com/google/googletest.git
+
+wget -P ~/src https://github.com/google/glog/archive/refs/tags/v0.5.0.zip
+unzip ~/src/v0.5.0.zip
+mkdir ~/src/glog-0.5.0/build
+cd ~/src/glog-0.5.0/build
+cmake ..
+make -j4
+echo "$password" | sudo -S make install
 
 # Boost, Eigen3 (Linear Algebra), Ceres (Optimization)
 echo "$password" | sudo -S apt-get install -y libboost-dev libeigen3-dev libceres-dev
