@@ -44,9 +44,9 @@ if type "zsh" > /dev/null 2>&1; then
     fi
 fi
 
-if [[ "$OSTYPE" != "darwin"* ]]; then
+# if [[ "$OSTYPE" != "darwin"* ]]; then
     # if [[ $SHELL != $(which zsh) ]]; then
     #     change the default shell
     #     echo "$password" | chsh -s $(which zsh)
     # fi
-fi
+# fi
