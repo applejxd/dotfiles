@@ -210,7 +210,7 @@ if type "docker" >/dev/null 2>&1; then
 	file_name=$(echo $1 | sed 's/.[^.]*$//')
 
 	local date_tag
-	date_tag=$(date "+%y%m%d")
+	date_tag=$(date "+%y.%m.%d")
         docker build -t local/$file_name:$date_tag -f $1 .
     }
 fi
