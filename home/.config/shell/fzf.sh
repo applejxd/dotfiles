@@ -132,17 +132,14 @@ if type "git" >/dev/null 2>&1; then
     }
 
     # interactive 'diff' and 'add'
-    # cf. http://bit.ly/34GCFZK
-    fadd() {
+    # cf. https://qiita.com/reviry/items/e798da034955c2af84c5
+    function fadd() {
         local out q n addfiles
-        while out=$(
-            git status --short |
-                awk '{if (substr($0,2,1) !~ / /) print $2}' |
-                fzf-tmux --multi --exit-0 --expect=ctrl-d
-        ); do
-            q=$(head -1 <<<"$out")
-            n=$(($(wc -l <<<"$out") - 1))
-            addfiles=($(echo $(tail "-$n" <<<"$out")))
+        while out=$(git status --short | awk '{if (substr($0,2,1) !~ / /) print $2}' | fzf --multi --exit-0 --expect=ctrl-d)
+        do
+            q=$(head -1 <<< "$out")
+            n=$[$(wc -l <<< "$out") - 1]
+            addfiles=(`echo $(tail "-$n" <<< "$out")`)
             [[ -z "$addfiles" ]] && continue
             if [ "$q" = ctrl-d ]; then
                 git diff --color=always $addfiles | less -R
