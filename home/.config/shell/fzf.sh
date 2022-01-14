@@ -161,7 +161,7 @@ if type "docker" >/dev/null 2>&1; then
         local name
         name=$(docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $1 ":" $2 }')
 
-        [ -n "$name" ] && sudo docker run -it $name
+        [ -n "$name" ] && sudo docker run -e DISPLAY=$DISPLAY -it $name /bin/bash
     }
 
     alias dls="docker ps -a"
