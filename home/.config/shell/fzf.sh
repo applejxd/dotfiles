@@ -161,7 +161,8 @@ if type "docker" >/dev/null 2>&1; then
         local name
         name=$(docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $1 ":" $2 }')
 
-        [ -n "$name" ] && sudo docker run -e DISPLAY=$DISPLAY -it $name /bin/bash
+        # it: interactive & tty (stdio)
+        [ -n "$name" ] && sudo docker run -e DISPLAY=$DISPLAY -it "$@" $name
     }
 
     alias dls="docker ps -a"
@@ -194,6 +195,7 @@ if type "docker" >/dev/null 2>&1; then
       docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
     }
 
+    # Produce Dockerfile from image
     # cf. https://qiita.com/RyodoTanaka/items/c7e4889a1b9383291799
     function dmkf() {
         local cid
@@ -204,10 +206,10 @@ if type "docker" >/dev/null 2>&1; then
     
     function dbuild() {
     	local file_name
-	file_name=$(echo $1 | sed 's/.[^.]*$//')
+	    file_name=$(echo $1 | sed 's/.[^.]*$//')
 
-	local date_tag
-	date_tag=$(date "+%y.%m.%d")
+	    local date_tag
+	    date_tag=$(date "+%y.%m.%d")
         docker build -t local/$file_name:$date_tag -f $1 .
     }
 fi
