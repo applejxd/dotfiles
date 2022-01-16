@@ -159,13 +159,21 @@ if type "docker" >/dev/null 2>&1; then
 
     function drun() {
         local name
-        name=$(docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $1 ":" $2 }')
+        name=$(docker images | sed 1d | fzf --no-sort -m --tac | awk '{ print $1 ":" $2 }')
 
-        # it: interactive & tty (stdio)
-        [ -n "$name" ] && sudo docker run -e DISPLAY=$DISPLAY -it "$@" $name
+        # it (interactive & tty): stdio
+        # d (detached): background running
+        [ -n "$name" ] && docker run -itd -e DISPLAY=$DISPLAY "$@" "$name"
     }
 
     alias dls="docker ps -a"
+
+    function dsh() {
+        local cid
+        cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
+
+        [ -n "$cid" ] && docker exec -it "$cid" /bin/bash
+    }
 
     # Select a docker container to start and attach to
     function da() {
