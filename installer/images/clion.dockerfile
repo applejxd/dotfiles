@@ -11,8 +11,6 @@
 # ssh credentials (test user):
 #   user@password 
 
-# cf. https://github.com/JetBrains/clion-remote
-
 FROM ubuntu:20.04
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && apt-get -y install tzdata
@@ -36,16 +34,13 @@ RUN apt-get update \
       python \
   && apt-get clean
 
-# User added
-RUN apt-get install -y sudo git \
-  libboost-dev libeigen3-dev \
-  libceres-dev libopencv-dev libpcl-dev
-
 RUN ( \
     echo 'LogLevel DEBUG2'; \
     echo 'PermitRootLogin yes'; \
     echo 'PasswordAuthentication yes'; \
     echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
+    echo 'Port 2222'; \
+    echo 'X11Forwarding yes'; \
   ) > /etc/ssh/sshd_config_test_clion \
   && mkdir /run/sshd
 
@@ -53,10 +48,5 @@ RUN useradd -m user \
   && yes password | passwd user
 
 RUN usermod -s /bin/bash user
-
-# User added
-USER user
-RUN git clone https://github.com/microsoft/vcpkg
-RUN .\vcpkg\bootstrap-vcpkg.bat
 
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
