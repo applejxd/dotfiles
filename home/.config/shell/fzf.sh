@@ -220,6 +220,11 @@ if type "docker" >/dev/null 2>&1; then
 	    date_tag=$(date "+%y.%m.%d")
         docker build -t local/$file_name:$date_tag -f $1 .
     }
+    
+    function dcom() {
+    	$file_name=file_name=$(echo $1 | sed 's/.[^.]*$//')
+    	docker-compose up -f $file_name -d
+    }
 fi
 
 ############
