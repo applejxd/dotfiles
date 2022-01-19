@@ -34,7 +34,7 @@ RUN apt-get update \
       python \
   && apt-get clean
 
-RUN apt-get install -y x11-apps
+RUN apt-get install -y sudo git vim x11-apps
 
 RUN ( \
     echo 'LogLevel DEBUG2'; \
