@@ -39,16 +39,31 @@ RUN apt-get install -y sudo git vim x11-apps
 RUN ( \
     echo 'LogLevel DEBUG2'; \
     echo 'PermitRootLogin yes'; \
-    echo 'PasswordAuthentication yes'; \
+    echo 'PasswordAuthentication no'; \
+    echo 'RSAAuthentication yes'; \
+    echo 'PubkeyAuthentication yes'; \
+    echo 'AuthorizedKeysFile .ssh/authorized_keys'; \
     echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
-    echo 'Port 2222'; \
+    echo 'Port 22'; \
     echo 'X11Forwarding yes'; \
   ) > /etc/ssh/sshd_config_test_clion \
   && mkdir /run/sshd
+
+# cf. https://qiita.com/YumaInaura/items/7509061e4b27e03ea538
+# SSH login fix. Otherwise user is kicked off after login
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+# Dockerfile と同ディレクトリの公開鍵をコピー
+COPY docker.pub /root/authorized_keys
 
 RUN useradd -m user \
   && yes password | passwd user
 
 RUN usermod -s /bin/bash user
 
-CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
+# 公開鍵を使えるようにする (パーミッション変更など)
+CMD mkdir ~/.ssh && \
+    mv ~/authorized_keys ~/.ssh/authorized_keys && \
+    chmod 0600 ~/.ssh/authorized_keys &&  \
+    # 最後に ssh を起動
+    /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config_test_clion
