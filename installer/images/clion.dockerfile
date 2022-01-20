@@ -34,7 +34,12 @@ RUN apt-get update \
       python \
   && apt-get clean
 
-RUN apt-get install -y sudo git vim x11-apps
+# for vcpkg
+RUN apt-get install -y curl zip unzip pkg-config
+
+#######
+# SSH #
+#######
 
 RUN ( \
     echo 'LogLevel DEBUG2'; \
@@ -55,6 +60,12 @@ RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so
 
 # Dockerfile と同ディレクトリの公開鍵をコピー
 COPY docker.pub /root/authorized_keys
+
+############
+# add user #
+############
+
+RUN apt-get install -y sudo git vim x11-apps
 
 RUN useradd -m user \
   && yes password | passwd user

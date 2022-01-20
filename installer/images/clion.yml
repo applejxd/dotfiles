@@ -2,4 +2,12 @@ version: '3'
 
 services:
   clion:
-    image: local/clion
+    image: local/clion:test
+    build:
+      context: .
+      dockerfile: ./clion.dockerfile
+    volumes:
+      - $HOME/.Xauthority:/root/.Xauthority:rw \
+    debian
+    environment:
+      - DISPLAY
