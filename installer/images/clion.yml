@@ -6,8 +6,9 @@ services:
     build:
       context: .
       dockerfile: ./clion.dockerfile
-    volumes:
-      - $HOME/.Xauthority:/root/.Xauthority:rw \
-    debian
     environment:
       - DISPLAY
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw"
+#       - $HOME/.Xauthority:/root/.Xauthority:rw
+    user: "${id -u}:${id -g}"
