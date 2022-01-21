@@ -81,4 +81,21 @@ if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
     ln -s ~/.homesick/repos/dotfiles ~/src/
 fi
 
+#################
+# Write configs #
+#################
+
+if type "git" >/dev/null 2>&1; then
+    git config --global init.defaultBranch "main"
+
+    git config --global core.editor "vim"
+    # distinguish between uppercase and lowercase
+    git config --global core.ignorecase "false"
+    # to display Japanese files
+    git config --global core.quotepath "false"
+
+    git config --global ghq.root "~/src"
+    git config --global gitflow.branch.master "main"
+fi
+
 echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh)

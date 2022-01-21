@@ -13,6 +13,8 @@
 
 FROM ubuntu:20.04
 
+WORKDIR /root
+
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && apt-get -y install tzdata
 
 RUN apt-get update \
@@ -67,14 +69,9 @@ COPY docker.pub /root/authorized_keys
 
 RUN apt-get install -y sudo git vim x11-apps
 
-RUN useradd -m user \
-  && yes password | passwd user
-
-RUN usermod -s /bin/bash user
+# 手元の公開鍵をコピー
+COPY docker.pub /root/.ssh/authorized_keys
+RUN chmod 0600 /root/.ssh/authorized_keys
 
 # 公開鍵を使えるようにする (パーミッション変更など)
-CMD mkdir ~/.ssh && \
-    mv ~/authorized_keys ~/.ssh/authorized_keys && \
-    chmod 0600 ~/.ssh/authorized_keys &&  \
-    # 最後に ssh を起動
-    /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config_test_clion
+CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
