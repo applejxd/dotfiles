@@ -214,16 +214,18 @@ if type "docker" >/dev/null 2>&1; then
     
     function dbuild() {
     	local file_name
-	    file_name=$(echo $1 | sed 's/.[^.]*$//')
-
+        file_name=$(ls *.dockerfile | fzf)
+         
 	    local date_tag
 	    date_tag=$(date "+%y.%m.%d")
-        docker build -t local/$file_name:$date_tag -f $1 .
+        docker build -t local/$file_name:$date_tag -f $file_name .
     }
     
     function dcom() {
-    	$file_name=file_name=$(echo $1 | sed 's/.[^.]*$//')
-    	docker-compose up -f $file_name -d
+        local file_name
+        file_name=$(ls *.yml | fzf)
+
+    	docker-compose -f $file_name up -d
     }
 fi
 
@@ -235,7 +237,7 @@ if type "brew" >/dev/null 2>&1; then
     # Install or open the webpage for the selected application
     # using brew cask search as input source
     # and display a info quickview window for the currently marked application
-    install() {p AC
+    install() {
         local token
         token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
 
