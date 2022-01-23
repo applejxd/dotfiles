@@ -2,3 +2,4 @@
 
 home/.gitconfig
 home/.config/shell/usrenv.sh
+*.pub

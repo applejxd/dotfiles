@@ -7,14 +7,17 @@ services:
       context: .
       dockerfile: ./clion.dockerfile
     # user: "${id -u}:${id -g}"
+
     #######
     # SSH #
     #######
-    ports:
-      - "127.0.0.1:22000:22"
+#    ports:
+#      - "127.0.0.1:22000:2222"
+
     #######
     # GUI #
     #######
+    network_mode: "host"
     environment:
       - DISPLAY
     # volumes:

@@ -51,7 +51,7 @@ RUN ( \
     echo 'PubkeyAuthentication yes'; \
     echo 'AuthorizedKeysFile .ssh/authorized_keys'; \
     echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
-    echo 'Port 22'; \
+    echo 'Port 2222'; \
     echo 'X11Forwarding yes'; \
   ) > /etc/ssh/sshd_config_test_clion \
   && mkdir /run/sshd
