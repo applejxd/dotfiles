@@ -17,6 +17,12 @@ echo "$password" | sudo -S apt-get install -y manpages-ja unzip zsh tree tig
 # Clipboard
 echo "$password" | sudo -S apt-get install -y xsel
 
+# GUI
+echo "$password" | sudo -S apt-get install -y xfce4-terminal xfce
+
+# RDP
+echo "$password" | sudo -S apt-get install -y xrdp
+
 # docker
 echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/docker.sh)
 
@@ -27,8 +33,6 @@ echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dot
 # echo "$password" | sudo -S apt-get install -y texlive-full
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-    # GUI in WSL
-    echo "$password" | sudo -S apt-get install -y xfce4-terminal xfce4
     
     # SSH settings
     echo "$password" | sudo -S apt-get purge openssh-server
