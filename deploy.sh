@@ -73,6 +73,7 @@ fi
 
 if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
     homesick clone applejxd/dotfiles
+    mv ~/.bashrc ~/.bashrc_old
     homesick link dotfiles
     # for ghq
     if [[ ! -e ~/src ]]; then
