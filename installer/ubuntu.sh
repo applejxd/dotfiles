@@ -35,9 +35,9 @@ echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dot
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # systemctl
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
-    chmod +x install.sh
-    sudo ./install.sh install
-    /opt/distrod/bin/distrod enable --start-on-windows-boot
+    echo "$password" | sudo -S chmod +x install.sh
+    echo "$password" | sudo -S ./install.sh install
+    echo "$password" | sudo -S /opt/distrod/bin/distrod enable --start-on-windows-boot
     rm ./install.sh
     
     # SSH settings
