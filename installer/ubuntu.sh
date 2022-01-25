@@ -33,6 +33,12 @@ echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dot
 # echo "$password" | sudo -S apt-get install -y texlive-full
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    # systemctl
+    curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
+    chmod +x install.sh
+    sudo ./install.sh install
+    /opt/distrod/bin/distrod enable --start-on-windows-boot
+    rm ./install.sh
     
     # SSH settings
     echo "$password" | sudo -S apt-get purge openssh-server
