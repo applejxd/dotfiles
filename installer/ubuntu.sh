@@ -18,7 +18,7 @@ echo "$password" | sudo -S apt-get install -y manpages-ja unzip zsh tree tig
 echo "$password" | sudo -S apt-get install -y xsel
 
 # GUI
-echo "$password" | sudo -S apt-get install -y xfce4-terminal xfce
+echo "$password" | sudo -S apt-get install -y xfce4-terminal
 
 # RDP
 echo "$password" | sudo -S apt-get install -y xrdp
