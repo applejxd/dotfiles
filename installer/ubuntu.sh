@@ -64,6 +64,7 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     if [ $? != 0 ]; then
         echo "$password" | sudo -S tee -a /etc/xrdp/startwm.sh <<< "startxfce4"
     fi
+    # cf. https://god-support.blogspot.com/2019/11/ubuntu1804-xrdp-authentication-is.html
     echo "$password" | sudo -S tee /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf <<EOF >/dev/null
     polkit.addRule(function(action, subject) {
     if ((action.id == "org.freedesktop.color-manager.create-device" ||
