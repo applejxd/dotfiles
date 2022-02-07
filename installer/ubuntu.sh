@@ -64,6 +64,19 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     if [ $? != 0 ]; then
         echo "$password" | sudo -S tee -a /etc/xrdp/startwm.sh <<< "startxfce4"
     fi
+    echo "$password" | sudo -S tee /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf <<EOF >/dev/null
+    polkit.addRule(function(action, subject) {
+    if ((action.id == "org.freedesktop.color-manager.create-device" ||
+    action.id == "org.freedesktop.color-manager.create-profile" ||
+    action.id == "org.freedesktop.color-manager.delete-device" ||
+    action.id == "org.freedesktop.color-manager.delete-profile" ||
+    action.id == "org.freedesktop.color-manager.modify-device" ||
+    action.id == "org.freedesktop.color-manager.modify-profile") &&
+    subject.isInGroup("{users}")) {
+    return polkit.Result.YES;
+    }
+    });
+    EOF
 
     # WSL config
     if [ ! -L /etc/wsl.conf ]; then
