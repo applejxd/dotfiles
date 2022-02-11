@@ -234,7 +234,7 @@ fi
 ###############
 
 if type "singularity" >/dev/null 2>&1; then
-    function sifbuild() {
+    function sbuild() {
         local file_name
         file_name=$(ls *.def | fzf)
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
@@ -242,8 +242,15 @@ if type "singularity" >/dev/null 2>&1; then
          
         sudo -E singularity build ${file_name}.sif ${file_name}.def
     }
+
+    function sshell() {
+        local file_name
+        file_name=$(ls *.sif | fzf)
+                 
+        singularity shell ${file_name}
+    }
     
-    function boxbuild() {
+    function bbuild() {
         local file_name
         file_name=$(ls *.def | fzf)
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
@@ -252,10 +259,35 @@ if type "singularity" >/dev/null 2>&1; then
         sudo -E singularity build --sandbox ${file_name}-box ${file_name}.def
     }
     
-    function boxrun() {
+    function brun() {
         local name
-        name=$(ls -d */ | fzf)
+        name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
         sudo singularity run --writable $name
+    }
+
+    alias sls="singularity instance list"
+
+    function sstart() {
+        local file_name
+        file_name=$(ls *.sif | fzf)
+        # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
+        file_name=${file_name%.*}
+         
+        singularity instance start --nv ${file_name}.sif ${file_name}
+    }
+
+    function sishell() {
+        local instnace_name
+        instance_name=$(singularity instance list | sed -e '1d' | awk '{print $1}' | fzf)
+         
+        singularity shell instance://${instance_name}
+    }
+
+    function sstop() {
+        local instnace_name
+        instance_name=$(singularity instance list | sed -e '1d' | awk '{print $1}' | fzf)
+         
+        singularity instance stop ${instance_name}
     }
 fi
 
@@ -267,7 +299,7 @@ if type "brew" >/dev/null 2>&1; then
     # Install or open the webpage for the selected application
     # using brew cask search as input source
     # and display a info quickview window for the currently marked application
-    install() {
+    function install() {
         local token
         token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
 
@@ -286,7 +318,7 @@ if type "brew" >/dev/null 2>&1; then
     # Uninstall or open the webpage for the selected application
     # using brew list as input source (all brew cask installed applications)
     # and display a info quickview window for the currently marked application
-    uninstall() {
+    function uninstall() {
         local token
         token=$(brew cask list | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
 
