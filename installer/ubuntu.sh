@@ -30,6 +30,20 @@ echo "$password" | sudo -S apt-get install -y xubuntu-desktop
 # docker
 echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/docker.sh)
 
+# Go
+echo $password | sudo -S add-apt-repository ppa:longsleep/golang-backports
+echo $password | sudo -S apt-get update
+echo $password | sudo -S apt-get install golang
+
+# Singularity
+export VERSION=3.9.5 && \
+    wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz && \
+    tar -xzf singularity-ce-${VERSION}.tar.gz && \
+    cd singularity-ce-${VERSION}
+./mconfig && \
+    make -C builddir && \
+    sudo make -C builddir install
+
 # Java
 # echo "$password" | sudo -S apt-get install -y default-jre default-jdk
 
