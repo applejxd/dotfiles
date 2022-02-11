@@ -249,6 +249,13 @@ if type "singularity" >/dev/null 2>&1; then
                  
         singularity shell ${file_name}
     }
+
+    function sexe() {
+        local file_name
+        file_name=$(ls *.sif | fzf)
+                 
+        singularity exec --nv ${file_name} "$@"
+    }
     
     function bbuild() {
         local file_name
