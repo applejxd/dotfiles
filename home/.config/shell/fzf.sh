@@ -229,6 +229,36 @@ if type "docker" >/dev/null 2>&1; then
     }
 fi
 
+###############
+# Singularity #
+###############
+
+if type "singularity" >/dev/null 2>&1; then
+    function sifbuild() {
+        local file_name
+        file_name=$(ls *.def | fzf)
+        # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
+        file_name=${file_name%.*}
+         
+        sudo -E singularity build ${file_name}.sif ${file_name}.def
+    }
+    
+    function boxbuild() {
+        local file_name
+        file_name=$(ls *.def | fzf)
+        # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
+        file_name=${file_name%.*}
+         
+        sudo -E singularity build --sandbox ${file_name}-box ${file_name}.def
+    }
+    
+    function boxrun() {
+        local name
+        name=$(ls -d */ | fzf)
+        sudo singularity run --writable $name
+    }
+fi
+
 ############
 # Homebrew #
 ############
