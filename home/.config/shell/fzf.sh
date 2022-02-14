@@ -218,14 +218,14 @@ if type "docker" >/dev/null 2>&1; then
          
 	    local date_tag
 	    date_tag=$(date "+%y.%m.%d")
-        [ -n "$file_name"] && docker build -t local/$file_name:$date_tag -f $file_name .
+        [ -n "$file_name" ] && docker build -t local/$file_name:$date_tag -f $file_name .
     }
     
     function dcom() {
         local file_name
         file_name=$(ls *.yml | fzf)
 
-    	    [ -n "$file_name"] && docker-compose -f $file_name up -d
+    	    [ -n "$file_name" ] && docker-compose -f $file_name up -d
     }
 fi
 
