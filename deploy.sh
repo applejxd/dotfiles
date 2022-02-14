@@ -100,8 +100,6 @@ if type "git" >/dev/null 2>&1; then
     
     # for ssh push
     git config --global url."git@github.com:".PushInsteadOf https://github.com/
-    # for fast pull
-    git config --global url."git://github.com/".InsteadOf https://github.com/
 fi
 
 echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh)
