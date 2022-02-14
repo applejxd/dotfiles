@@ -214,7 +214,7 @@ if type "docker" >/dev/null 2>&1; then
     
     function dbuild() {
     	local file_name
-        file_name=$(ls *.dockerfile | fzf)
+        file_name=$(ls *.dockerfile 2>/dev/null | fzf)
          
 	    local date_tag
 	    date_tag=$(date "+%y.%m.%d")
@@ -223,7 +223,7 @@ if type "docker" >/dev/null 2>&1; then
     
     function dcom() {
         local file_name
-        file_name=$(ls *.yml | fzf)
+        file_name=$(ls *.yml 2>/dev/null | fzf)
 
     	    [ -n "$file_name" ] && docker-compose -f $file_name up -d
     }
