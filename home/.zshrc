@@ -36,6 +36,9 @@ function chpwd() {
     fi
 }
 
+# for glob expression
+setopt +o nomatch
+
 # auto pushd & no history
 setopt auto_pushd
 setopt pushd_ignore_dups
