@@ -97,6 +97,11 @@ if type "git" >/dev/null 2>&1; then
 
     git config --global ghq.root "~/src"
     git config --global gitflow.branch.master "main"
+    
+    # for ssh push
+    git config --glibal url."git@github.com:".PushInsteadOf https://github.com/
+    # for fast pull
+    git config --glibal url."git://github.com".InsteadOf https://github.com/
 fi
 
 echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh)
