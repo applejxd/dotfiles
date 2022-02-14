@@ -240,21 +240,7 @@ if type "singularity" >/dev/null 2>&1; then
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
          
-        sudo -E singularity build ${file_name}.sif ${file_name}.def
-    }
-
-    function sshell() {
-        local file_name
-        file_name=$(ls *.sif | fzf)
-                 
-        singularity shell ${file_name}
-    }
-
-    function sexe() {
-        local file_name
-        file_name=$(ls *.sif | fzf)
-                 
-        singularity exec --nv ${file_name} "$@"
+        [ -n "$file_name" ] && sudo -E singularity build ${file_name}.sif ${file_name}.def
     }
     
     function bbuild() {
@@ -263,13 +249,39 @@ if type "singularity" >/dev/null 2>&1; then
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
          
-        sudo -E singularity build --sandbox ${file_name}-box ${file_name}.def
+        [ -n "$file_name" ] && sudo -E singularity build --sandbox ${file_name}-box ${file_name}.def
+    }
+    
+    function box2sif() {
+        local box_name
+        box_name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
+        [ -n "$box_name" ] && singularity build ${box_name}.sif ${box_name}
+    }
+
+    function sshell() {
+        local file_name
+        file_name=$(ls *.sif | fzf)
+                 
+        [ -n "$file_name" ] && singularity shell --nv ${file_name}
+    }
+
+    function sexe() {
+        local file_name
+        file_name=$(ls *.sif | fzf)
+                 
+        [ -n "$file_name" ] && singularity exec --nv ${file_name} "$@"
+    }
+    
+    function bshell() {
+        local box_name
+        box_name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
+        [ -n "$box_name" ] && sudo singularity shell --nv --writable $name
     }
     
     function brun() {
-        local name
-        name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
-        sudo singularity run --writable $name
+        local box_name
+        box_name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
+        [ -n "$box_name" ] && sudo singularity run --nv --writable $name
     }
 
     alias sls="singularity instance list"
@@ -280,21 +292,21 @@ if type "singularity" >/dev/null 2>&1; then
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
          
-        singularity instance start --nv ${file_name}.sif ${file_name}
+        [ -n "$file_name" ] && singularity instance start --nv ${file_name}.sif ${file_name}
     }
 
     function sishell() {
         local instnace_name
         instance_name=$(singularity instance list | sed -e '1d' | awk '{print $1}' | fzf)
          
-        singularity shell instance://${instance_name}
+        [ -n "$instance_name" ] && singularity shell instance://${instance_name}
     }
 
     function sstop() {
         local instnace_name
         instance_name=$(singularity instance list | sed -e '1d' | awk '{print $1}' | fzf)
          
-        singularity instance stop ${instance_name}
+        [ -n "$instance_name" ] && singularity instance stop ${instance_name}
     }
 fi
 
