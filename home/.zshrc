@@ -37,6 +37,7 @@ function chpwd() {
 }
 
 # for glob expression
+# cf. https://qiita.com/nisaji/items/f9eede2164a74bc08db7
 setopt +o nomatch
 
 # auto pushd & no history
