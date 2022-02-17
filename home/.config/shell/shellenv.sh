@@ -43,12 +43,17 @@ if [[ -e $ANYENV_ROOT/envs/pyenv ]]; then
     eval "$(pyenv init --path)"
 fi
 
+# for Go lang
+export GOPATH=$HOME/.go
+export PATH=$PATH:$GOPATH/bin
+
+# for Haskell package Cabal
+export PATH=~/.cabal/bin:$PATH
+
 # for pipenv (for Ubuntu)
 export PATH=~/.local/bin:$PATH
 # for YaTeX
 export PATH=~/.emacs.d/private/yatex:$PATH
-# for Haskell package Cabal
-export PATH=~/.cabal/bin:$PATH
 # for original binaries
 export PATH=~/bin:$PATH
 

@@ -35,6 +35,9 @@ echo $password | sudo -S add-apt-repository ppa:longsleep/golang-backports
 echo $password | sudo -S apt-get update
 echo $password | sudo -S apt-get install golang
 
+# ghq
+go install github.com/x-motemen/ghq@latest
+
 # Singularity
 export VERSION=3.9.5 && \
     wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz && \
