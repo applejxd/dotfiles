@@ -20,7 +20,7 @@ fi
 
 if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
     # The altanative of process substitution for bash 3.2 that is installed to Mac OS X
-    source /dev/stdin <<<"$( curl -sS https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
+    source /dev/stdin <<<"$( curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
     # enable brew command
     # eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
@@ -105,4 +105,4 @@ if type "git" >/dev/null 2>&1; then
     git config --global url."git@github.com:".PushInsteadOf https://github.com/
 fi
 
-echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh)
+echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh)

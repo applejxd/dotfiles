@@ -34,6 +34,7 @@ echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dot
 echo $password | sudo -S add-apt-repository ppa:longsleep/golang-backports
 echo $password | sudo -S apt-get update
 echo $password | sudo -S apt-get install golang
+go install github.com/x-motemen/ghq@latest
 
 # ghq
 go install github.com/x-motemen/ghq@latest

@@ -7,5 +7,5 @@ else
     password=$1
 fi
 
-echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)
-echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)
+echo $password | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)
+echo $password | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)
