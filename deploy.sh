@@ -17,7 +17,7 @@ if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
     apt-get update
     apt-get upgrade -y
     apt-get install -y git curl build-essential libssl-dev zlib1g-dev
-    EOF
+EOF
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
