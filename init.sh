@@ -15,9 +15,9 @@ fi
 if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
     # To prevent stopping at interactive mode (needs -E option for sudo)
     export DEBIAN_FRONTEND=noninteractive
-    echo "$password" | sudo -S -E apt-get update
-    echo "$password" | sudo -S -E apt-get upgrade -y
-    echo "$password" | sudo -S -E apt-get install -y autoconf bison build-essential libssl-dev libyaml-dev libreadline-dev zlib1g-dev libncurses5-dev libffi-dev libgdbm5 libgdbm-dev libdb-dev
+    echo "$password" | sudo -S bash -c "\
+        apt-get update && apt-get upgrade -y && \
+        apt-get install -y autoconf bison build-essential libssl-dev libyaml-dev libreadline-dev zlib1g-dev libncurses5-dev libffi-dev libgdbm5 libgdbm-dev libdb-dev"
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
@@ -52,7 +52,6 @@ fi
 # for Ubuntu (cf. http://bit.ly/37WjcWG)
 if [[ -e /etc/lsb-release ]]; then
     echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu.sh)
-
 elif [[ "$OSTYPE" == "darwin"* ]]; then
     if !(type "brew" > /dev/null 2>&1); then
         source /dev/stdin <<<"$( curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
