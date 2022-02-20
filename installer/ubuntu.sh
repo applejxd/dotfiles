@@ -8,8 +8,17 @@ else
 fi
 
 # Refresh
-echo "$password" | sudo -S apt-get -y update
-echo "$password" | sudo -S apt-get -y upgrade
+echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
+
+if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    # systemctl
+    curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
+    echo "$password" | sudo -S bash -c "\
+        chmod +x install.sh && \
+        ./install.sh install && \
+        /opt/distrod/bin/distrod enable --start-on-windows-boot"
+    rm ./install.sh
+fi
 
 # Basics
 echo "$password" | sudo -S apt-get install -y manpages-ja unzip zsh tree tig
@@ -56,14 +65,6 @@ export VERSION=3.9.5 && \
 # echo "$password" | sudo -S apt-get install -y texlive-full
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-    # systemctl
-    curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
-    echo "$password" | sudo -S bash -c "\
-        chmod +x install.sh && \
-        ./install.sh install && \
-        /opt/distrod/bin/distrod enable --start-on-windows-boot"
-    rm ./install.sh
-    
     # SSH settings
     echo "$password" | sudo -S apt-get purge openssh-server
     echo "$password" | sudo -S apt-get install openssh-server
