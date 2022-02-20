@@ -47,9 +47,9 @@ export VERSION=3.9.5 && \
     wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz && \
     tar -xzf singularity-ce-${VERSION}.tar.gz && \
     cd singularity-ce-${VERSION}
-./mconfig && \
-    make -C builddir && \
-    sudo make -C builddir install
+./mconfig && make -C builddir
+echo "$password" | sudo -S make -C builddir install
+rm -rf singularity-ce-*
 
 # Java
 # echo "$password" | sudo -S apt-get install -y default-jre default-jdk
