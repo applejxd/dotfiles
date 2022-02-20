@@ -14,6 +14,7 @@ fi
 # for Ubuntu (cf. http://bit.ly/37WjcWG)
 if [[ -e /etc/lsb-release ]]; then
     echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu.sh)
+    
 elif [[ "$OSTYPE" == "darwin"* ]]; then
     if !(type "brew" > /dev/null 2>&1); then
         source /dev/stdin <<<"$( curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
