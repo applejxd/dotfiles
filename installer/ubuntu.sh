@@ -88,19 +88,7 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
         echo "$password" | sudo -S tee -a /etc/xrdp/startwm.sh <<< "startxfce4"
     fi
     # cf. https://god-support.blogspot.com/2019/11/ubuntu1804-xrdp-authentication-is.html
-    echo "$password" | sudo -S tee /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf <<EOF >/dev/null
-    polkit.addRule(function(action, subject) {
-    if ((action.id == "org.freedesktop.color-manager.create-device" ||
-    action.id == "org.freedesktop.color-manager.create-profile" ||
-    action.id == "org.freedesktop.color-manager.delete-device" ||
-    action.id == "org.freedesktop.color-manager.delete-profile" ||
-    action.id == "org.freedesktop.color-manager.modify-device" ||
-    action.id == "org.freedesktop.color-manager.modify-profile") &&
-    subject.isInGroup("{users}")) {
-    return polkit.Result.YES;
-    }
-    });
-    EOF
+    echo "$password" | sudo -S curl -fsSL /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf https://github.com/applejxd/dotfiles/raw/main/config/02-allow-colord.conf
 
     # WSL config
     if [ ! -L /etc/wsl.conf ]; then
