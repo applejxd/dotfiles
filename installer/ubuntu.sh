@@ -29,10 +29,6 @@ echo "$password" | sudo -S apt-get install -y xsel
 # Filer
 echo "$password" | sudo -S apt-get install -y xdg-utils
 
-# GUI
-# echo "$password" | sudo -S apt-get install -y ubuntu-desktop
-echo "$password" | sudo -S apt-get install -y xubuntu-desktop
-
 # docker
 echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/docker.sh)
 
@@ -84,6 +80,10 @@ fi
 #######
 # GUI #
 #######
+
+# GUI
+# echo "$password" | sudo -S apt-get install -y ubuntu-desktop
+echo "$password" | sudo -S apt-get install -y xubuntu-desktop
 
 # RDP
 echo "$password" | sudo -S apt-get install -y xfce4 xrdp
