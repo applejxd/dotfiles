@@ -31,9 +31,10 @@ echo "$password" | sudo -S apt-get install -y xubuntu-desktop
 echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/docker.sh)
 
 # Go
-echo $password | sudo -S add-apt-repository ppa:longsleep/golang-backports
-echo $password | sudo -S apt-get update
-echo $password | sudo -S apt-get install golang
+echo $password | sudo -S bash -c "\
+    add-apt-repository ppa:longsleep/golang-backports && \
+    apt-get update && \
+    apt-get install golang"
 go install github.com/x-motemen/ghq@latest
 
 # ghq
@@ -57,9 +58,10 @@ export VERSION=3.9.5 && \
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # systemctl
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
-    echo "$password" | sudo -S chmod +x install.sh
-    echo "$password" | sudo -S ./install.sh install
-    echo "$password" | sudo -S /opt/distrod/bin/distrod enable --start-on-windows-boot
+    echo "$password" | sudo -S bash -c "\
+        chmod +x install.sh && \
+        ./install.sh install && \
+        /opt/distrod/bin/distrod enable --start-on-windows-boot"
     rm ./install.sh
     
     # SSH settings
@@ -70,11 +72,13 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
         echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/sshd_config /etc/ssh/sshd_config
     fi
 
-    # RDP settings (cf. https://qiita.com/atomyah/items/887a5185ec9a8206c7c4#ubuntu%E3%81%ABxrdp%E3%82%92%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB)
-    echo "$password" | sudo -S apt-get -y install xfce4 xrdp
-    echo "$password" | sudo -S sed -i 's/3389/3390/g' /etc/xrdp/xrdp.ini
-    echo "$password" | sudo -S sed -i 's/max_bpp=32/#max_bpp=32\nmax_bpp=128/g' /etc/xrdp/xrdp.ini
-    echo "$password" | sudo -S sed -i 's/xserverbpp=24/#xserverbpp=24\nxserverbpp=128/g' /etc/xrdp/xrdp.ini
+    # RDP settings
+    # cf. https://qiita.com/atomyah/items/887a5185ec9a8206c7c4#ubuntu%E3%81%ABxrdp%E3%82%92%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB
+    echo "$password" | sudo -S bash -c "\
+        apt-get -y install xfce4 xrdp && \
+        sed -i 's/3389/3390/g' /etc/xrdp/xrdp.ini && \
+        sed -i 's/max_bpp=32/#max_bpp=32\nmax_bpp=128/g' /etc/xrdp/xrdp.ini && \
+        sed -i 's/xserverbpp=24/#xserverbpp=24\nxserverbpp=128/g' /etc/xrdp/xrdp.ini"
     echo xfce4-session > ~/.xsession
     echo "$password" | sudo -S sed -i 's|^\(test\s-x\s/etc/X11/Xsession.*\)|# \1|' /etc/xrdp/startwm.sh
     echo "$password" | sudo -S sed -i 's|^\(exec\s/bin/sh.*\)|# \1|' /etc/xrdp/startwm.sh
