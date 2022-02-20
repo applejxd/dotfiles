@@ -88,7 +88,7 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
         echo "$password" | sudo -S tee -a /etc/xrdp/startwm.sh <<< "startxfce4"
     fi
     # cf. https://god-support.blogspot.com/2019/11/ubuntu1804-xrdp-authentication-is.html
-    echo "$password" | sudo -S curl -fsSL /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf https://github.com/applejxd/dotfiles/raw/main/config/02-allow-colord.conf
+    echo "$password" | sudo -S curl -fsSLo /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf https://github.com/applejxd/dotfiles/raw/main/config/02-allow-colord.conf
 
     # WSL config
     if [ ! -L /etc/wsl.conf ]; then
