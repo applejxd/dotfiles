@@ -26,10 +26,10 @@ if !(type "docker" > /dev/null 2>&1); then
     echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose
     
     
-    if [[ ! -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
         # Rootful docker
-        echo "$password" | sudo -S service docker start
         echo "$password" | sudo -S gpasswd -a $(whoami) docker
+        echo "$password" | sudo -S service docker start
     else
         # Rootless docker    
         # cf. https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
