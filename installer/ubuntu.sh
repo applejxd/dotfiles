@@ -43,13 +43,15 @@ go install github.com/x-motemen/ghq@latest
 go install github.com/x-motemen/ghq@latest
 
 # Singularity
-export VERSION=3.9.5 && \
-    wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz && \
-    tar -xzf singularity-ce-${VERSION}.tar.gz && \
-    cd singularity-ce-${VERSION}
-./mconfig && make -C builddir
-echo "$password" | sudo -S make -C builddir install
-rm -rf singularity-ce-*
+if !(type "singularity" > /dev/null 2>&1); then
+    export VERSION=3.9.5 && \
+        wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz && \
+        tar -xzf singularity-ce-${VERSION}.tar.gz && \
+        cd singularity-ce-${VERSION}
+    ./mconfig && make -C builddir
+    echo "$password" | sudo -S make -C builddir install
+    rm -rf singularity-ce-*
+fi
 
 # Java
 # echo "$password" | sudo -S apt-get install -y default-jre default-jdk
