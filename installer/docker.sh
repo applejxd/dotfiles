@@ -24,8 +24,7 @@ if !(type "docker" > /dev/null 2>&1); then
     
     echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose
-    
-    
+        
     if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
         # Rootful docker
         echo "$password" | sudo -S gpasswd -a $(whoami) docker
@@ -34,7 +33,6 @@ if !(type "docker" > /dev/null 2>&1); then
         # Rootless docker    
         # cf. https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
         echo "$password" | sudo -S apt-get install -y uidmap dbus-user-session
-        
         dockerd-rootless-setuptool.sh install
     fi
 fi
