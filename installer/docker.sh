@@ -9,10 +9,6 @@ fi
 
 echo "$password" | sudo -S apt-get update
 
-##################
-# Rootful Docker #
-##################
-
 if !(type "docker" > /dev/null 2>&1); then
     # cf. https://docs.docker.com/engine/install/ubuntu/
     # cf. https://zenn.dev/sprout2000/articles/95b125e3359694
