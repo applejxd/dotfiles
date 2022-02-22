@@ -15,7 +15,7 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1)
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
     chmod +x install.sh
     echo "$password" | sudo -S ./install.sh install
-    /opt/distrod/bin/distrod enable --start-on-windows-boot
+    echo "$password" | sudo -S /opt/distrod/bin/distrod enable --start-on-windows-boot
     rm ./install.sh
 fi
 
