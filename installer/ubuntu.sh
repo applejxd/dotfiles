@@ -13,10 +13,9 @@ echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1); then
     # systemctl
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
-    echo "$password" | sudo -S bash -c "\
-        chmod +x install.sh && \
-        ./install.sh install && \
-        /opt/distrod/bin/distrod enable --start-on-windows-boot"
+    chmod +x install.sh
+    echo "$password" | sudo -S ./install.sh install
+    /opt/distrod/bin/distrod enable --start-on-windows-boot
     rm ./install.sh
 fi
 
