@@ -44,7 +44,7 @@ fi
 # Distrod #
 ###########
 
-chsh -s $(which zsh)
+echo $password | sudo -S chsh -s $(which zsh) $USER
 
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1); then
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
@@ -54,7 +54,7 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1)
     rm ./install.sh
 fi
 
-chsh -s $(which bash)
+echo $password | sudo -S chsh -s $(which bash) $USER
 
 ########################
 # Change default shell #
