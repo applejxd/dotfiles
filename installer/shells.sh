@@ -53,3 +53,5 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1)
     echo "$password" | sudo -S /opt/distrod/bin/distrod enable --start-on-windows-boot
     rm ./install.sh
 fi
+
+echo "$password" | sudo -S chsh -s /opt/distrod/alias/bin/bash $USER
