@@ -12,8 +12,8 @@ fi
 # Install #
 ###########
 
-# zsh install or update
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get install -y zsh fish
 fi
 
@@ -40,13 +40,18 @@ if type "zsh" > /dev/null 2>&1; then
     fi
 fi
 
-############
-# Register #
-############
+###########
+# Distrod #
+###########
 
-# if [[ "$OSTYPE" != "darwin"* ]]; then
-    # if [[ $SHELL != $(which zsh) ]]; then
-    #     change the default shell
-    #     echo "$password" | chsh -s $(which zsh)
-    # fi
-# fi
+if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1); then
+    curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
+    chmod +x install.sh
+    echo "$password" | sudo -S ./install.sh install
+    echo "$password" | sudo -S /opt/distrod/bin/distrod enable --start-on-windows-boot
+    rm ./install.sh
+fi
+
+if [[ "$OSTYPE" != "darwin"* ]]; then
+    echo "$password" | chsh -s $(which zsh)
+fi
