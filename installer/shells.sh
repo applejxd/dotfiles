@@ -44,8 +44,6 @@ fi
 # Distrod #
 ###########
 
-echo $password | sudo -S chsh -s $(which zsh) $USER
-
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1); then
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
     chmod +x install.sh
@@ -53,8 +51,6 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1)
     echo "$password" | sudo -S /opt/distrod/bin/distrod enable --start-on-windows-boot
     rm ./install.sh
 fi
-
-echo $password | sudo -S chsh -s $(which bash) $USER
 
 ########################
 # Change default shell #
