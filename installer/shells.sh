@@ -9,15 +9,13 @@ else
 fi
 
 # bash install
-grep -q $(which bash) /etc/shells
-if [ $? -ne 0 ]; then
+if !(grep -q $(which bash) /etc/shells); then
     echo "$password" | sudo -S sh -c "echo $(which bash) >> /etc/shells"
 fi
 
 # # fish install
 # if type "fish" > /dev/null 2>&1; then
-#     grep -q $(which fish) /etc/shells
-#     if [ $? -ne 0 ]; then
+#     if !(grep -q $(which fish) /etc/shells); then
 #         echo "$password" | sudo -S sh -c "echo $(which fish) >> /etc/shells"
 #     fi
 # fi
