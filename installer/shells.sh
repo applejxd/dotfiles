@@ -9,13 +9,13 @@ else
 fi
 
 # bash install
-if !(grep -q $(which bash) /etc/shells); then
+if ! grep -q $(which bash) /etc/shells; then
     echo "$password" | sudo -S sh -c "echo $(which bash) >> /etc/shells"
 fi
 
 # # fish install
 # if type "fish" > /dev/null 2>&1; then
-#     if !(grep -q $(which fish) /etc/shells); then
+#     if ! grep -q $(which fish) /etc/shells; then
 #         echo "$password" | sudo -S sh -c "echo $(which fish) >> /etc/shells"
 #     fi
 # fi
@@ -25,19 +25,18 @@ fi
 #######
 
 # for ghq
-if !(type "unzip" > /dev/null 2>&1); then
+if ! type "unzip" > /dev/null 2>&1; then
     echo "$password" | sudo -S apt-get install unzip
 fi
 
 # zsh install or update
-if !(type "zsh" > /dev/null 2>&1) && [[ "$OSTYPE" == "linux-gnu" ]]; then
+if (! type "zsh" > /dev/null 2>&1) && [[ "$OSTYPE" == "linux-gnu" ]]; then
     echo "$password" | sudo -S apt-get install -y zsh
 fi
 
 # register zsh
 if type "zsh" > /dev/null 2>&1; then
-    grep -q $(which zsh) /etc/shells
-    if [ $? -ne 0 ]; then
+    if ! grep -q $(which zsh) /etc/shells; then
         echo "$password" | sudo -S sh -c "echo $(which zsh) >> /etc/shells"
     fi
 fi
