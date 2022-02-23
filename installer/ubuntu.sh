@@ -10,15 +10,6 @@ fi
 # Refresh
 echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
 
-if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1); then
-    # systemctl
-    curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
-    chmod +x install.sh
-    echo "$password" | sudo -S ./install.sh install
-    echo "$password" | sudo -S /opt/distrod/bin/distrod enable --start-on-windows-boot
-    rm ./install.sh
-fi
-
 # Basics
 echo "$password" | sudo -S apt-get install -y manpages-ja unzip zsh tree tig
 
