@@ -44,6 +44,8 @@ fi
 # Distrod #
 ###########
 
+echo "$password" | sudo -S chsh -s $(which zsh) $USER
+
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1); then
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
     chmod +x install.sh
