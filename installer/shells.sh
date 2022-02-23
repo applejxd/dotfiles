@@ -56,6 +56,10 @@ fi
 
 echo "$password" | sudo -S chsh -s $(which bash)
 
+########################
+# Change default shell #
+########################
+
 if [[ "$OSTYPE" != "darwin"* ]]; then
     echo "$password" | sudo -S chsh -s $(which zsh)
 fi
