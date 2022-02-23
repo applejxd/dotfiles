@@ -71,8 +71,8 @@ fi
 #######
 
 echo "$password" | sudo -S bash -c "\
-    apt-get purge openssh-server && \
-    apt-get install openssh-server"
+    apt-get purge -y openssh-server && \
+    apt-get install -y openssh-server"
 if [ ! -L /etc/ssh/sshd_config ]; then
     if [ ! -f /etc/ssh/sshd_config ]; then
         echo "$password" | sudo -S rm /etc/ssh/sshd_config
