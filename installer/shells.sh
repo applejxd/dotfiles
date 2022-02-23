@@ -44,6 +44,8 @@ fi
 # Distrod #
 ###########
 
+echo "$password" | sudo -S chsh -s $(which zsh)
+
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1); then
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
     chmod +x install.sh
@@ -52,6 +54,8 @@ if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1)
     rm ./install.sh
 fi
 
+echo "$password" | sudo -S chsh -s $(which bash)
+
 if [[ "$OSTYPE" != "darwin"* ]]; then
-    echo "$password" | chsh -s $(which zsh)
+    echo "$password" | sudo -S chsh -s $(which zsh)
 fi
