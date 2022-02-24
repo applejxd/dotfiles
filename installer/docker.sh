@@ -10,6 +10,10 @@ fi
 echo "$password" | sudo -S apt-get update
 
 if !(type "docker" > /dev/null 2>&1); then
+    ##########
+    # Docker #
+    ##########
+    
     # cf. https://docs.docker.com/engine/install/ubuntu/
     # cf. https://zenn.dev/sprout2000/articles/95b125e3359694
     
@@ -24,8 +28,24 @@ if !(type "docker" > /dev/null 2>&1); then
     
     echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose
-        
+           
     if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+        #################
+        # Nvidia Docker #
+        #################
+        
+        # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch05-running-containers
+        
+        distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+        echo "$password" | sudo -S apt-key add - <<< $(curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey)
+        echo "$password" | sudo -S tee /etc/apt/sources.list.d/nvidia-docker.list <<< $(curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list)
+        echo "$password" | sudo -S apt-get update
+        echo "$password" | sudo -S apt-get install -y nvidia-docker2
+        
+        ###########
+        # Dockerd #
+        ###########
+        
         # Rootful docker
         echo "$password" | sudo -S gpasswd -a $(whoami) docker
         # echo "$password" | sudo -S service docker start
