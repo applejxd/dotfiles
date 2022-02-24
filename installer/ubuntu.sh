@@ -52,7 +52,9 @@ fi
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     # WSL config
     if [ ! -L /etc/wsl.conf ]; then
-        echo "$password" | sudo -S rm /etc/wsl.conf
+        if [ -f /etc/wsl.conf ]; then
+            echo "$password" | sudo -S mv /etc/wsl.conf /etc/wsl.conf.bk
+        fi
         echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/wsl.conf /etc/wsl.conf
     fi
 fi
@@ -65,8 +67,8 @@ echo "$password" | sudo -S bash -c "\
     apt-get purge -y openssh-server && \
     apt-get install -y openssh-server"
 if [ ! -L /etc/ssh/sshd_config ]; then
-    if [ ! -f /etc/ssh/sshd_config ]; then
-        echo "$password" | sudo -S rm /etc/ssh/sshd_config
+    if [ -f /etc/ssh/sshd_config ]; then
+        echo "$password" | sudo -S mv /etc/ssh/sshd_config /etc/ssh/sshd_config.bk
     fi
     echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/sshd_config /etc/ssh/sshd_config
 fi
