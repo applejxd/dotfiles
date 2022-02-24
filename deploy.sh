@@ -52,9 +52,9 @@ fi
 if !(type "rbenv" >/dev/null 2>&1); then
     anyenv install rbenv
     eval "$(anyenv init -)"
-    rbenv install 2.7.0
+    rbenv install 2.7.5
     rbenv rehash
-    rbenv global 2.7.0
+    rbenv global 2.7.5
 fi
 
 ################
