@@ -42,18 +42,21 @@ if !(type "docker" > /dev/null 2>&1); then
         echo "$password" | sudo -S apt-get update
         echo "$password" | sudo -S apt-get install -y nvidia-docker2
         
-        ###########
-        # Dockerd #
-        ###########
+        ###################
+        # Rootful Dockerd #
+        ###################
         
-        # Rootful docker
         echo "$password" | sudo -S gpasswd -a $(whoami) docker
         # echo "$password" | sudo -S service docker start
         echo "$password" | sudo -S systemctl enable docker.service
         echo "$password" | sudo -S systemctl start docker.service
     else
-        # Rootless docker    
+        ####################
+        # Rootless Dockerd #
+        ####################
+        
         # cf. https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
+        
         echo "$password" | sudo -S apt-get install -y uidmap dbus-user-session
         dockerd-rootless-setuptool.sh install
         echo "$password" | sudo -S systemctl --user enable docker.service
