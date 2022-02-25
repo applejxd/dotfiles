@@ -24,9 +24,9 @@ echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dot
 
 # Go
 echo $password | sudo -S bash -c "\
-    add-apt-repository ppa:longsleep/golang-backports && \
+    add-apt-repository -y ppa:longsleep/golang-backports && \
     apt-get update && \
-    apt-get install golang"
+    apt-get install -y golang"
 go install github.com/x-motemen/ghq@latest
 
 # ghq
