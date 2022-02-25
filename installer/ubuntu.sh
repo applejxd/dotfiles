@@ -40,7 +40,7 @@ if !(type "singularity" > /dev/null 2>&1); then
         cd singularity-ce-${VERSION}
     ./mconfig && make -C builddir
     echo "$password" | sudo -S make -C builddir install
-    rm -rf singularity-ce-*
+    cd .. && rm -rf singularity-ce-*
 fi
 
 # Java
