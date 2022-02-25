@@ -163,7 +163,8 @@ if type "docker" >/dev/null 2>&1; then
 
         # it (interactive & tty): stdio
         # d (detached): background running
-        [ -n "$name" ] && docker run -itd -e DISPLAY=$DISPLAY "$@" "$name"
+	# rm: remove container that stops
+        [ -n "$name" ] && docker run -itd --rm --gpus all -e DISPLAY=$DISPLAY "$@" "$name"
     }
 
     alias dls="docker ps -a"
