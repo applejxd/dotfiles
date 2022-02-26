@@ -162,9 +162,8 @@ if type "docker" >/dev/null 2>&1; then
         name=$(docker images | sed 1d | fzf --no-sort -m --tac | awk '{ print $1 ":" $2 }')
 
         # it (interactive & tty): stdio
-        # d (detached): background running
 	# rm: remove container that stops
-        [ -n "$name" ] && docker run -itd --rm --gpus all -e DISPLAY=$DISPLAY "$@" "$name"
+        [ -n "$name" ] && docker run -it --rm --gpus all -e DISPLAY=$DISPLAY "$@" "$name"
     }
 
     alias dls="docker ps -a"
