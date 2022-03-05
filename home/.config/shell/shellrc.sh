@@ -42,10 +42,12 @@ fi
 if type "ghq" >/dev/null 2>&1; then
     if [[ ! -e  $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
         ghq get https://github.com/cocopon/iceberg.vim.git
-        if [[ ! -e $HOME/.vim/colors ]]; then
+    fi
+    if [[ ! -e $HOME/.vim/colors ]]; then
             mkdir -p $HOME/.vim/colors
-        fi
-        ln -s $GHQ_ROOT/github.com/cocopon/iceberg.vim/colors/iceberg.vim $HOME/.vim/colors/iceberg.vim
+    fi
+    if [[ ! - $HOME/.vim/colors/iceberg.vim ]]; then
+    	ln -s $GHQ_ROOT/github.com/cocopon/iceberg.vim/colors/iceberg.vim $HOME/.vim/colors/iceberg.vim
     fi
 fi
 
