@@ -20,7 +20,7 @@ fi
 
 if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
     # The altanative of process substitution for bash 3.2 that is installed to Mac OS X
-    source /dev/stdin <<<"$( curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
+    echo $password | source /dev/stdin <<<"$( curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
 fi
 
 ########################
