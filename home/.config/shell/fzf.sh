@@ -74,6 +74,12 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     }
 fi
 
+function fsh() {
+    local shell
+    shell=$(cat /etc/shells | sed -e "1d" | fzf -q "$1")
+    $shell
+}
+
 #######
 # git #
 #######
