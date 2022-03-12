@@ -32,5 +32,5 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
         brew bundle --file=<(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_mas_cask.rb) 2>/dev/null
     fi
 
-    source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx.sh)
+    echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx.sh)
 fi

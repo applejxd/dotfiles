@@ -8,9 +8,11 @@ else
 fi
 
 # Requirements
-if [[ "$OSTYPE" == "darwin"* ]]; then
+if [[ "$OSTYPE" == "darwin"* ]] && (! xcode-select -v > /dev/null 2>&1); then
     xcode-select --install
-elif [[ -e /etc/lsb-release ]]; then
+    echo "Rerun this script after the complete of xcode command line tools installation."
+    exit 0
+elif [[ -e /etc/lsb-release ]]; then-
     echo "$password" | sudo -S apt-get update -y
     echo "$password" | sudo -S apt-get upgrade -y
     # for Homebrew

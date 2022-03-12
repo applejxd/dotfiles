@@ -1,5 +1,13 @@
 #!/bin/bash
 
+if [ $# -eq 0 ]; then
+    # save password
+    read -sp "Password: " password
+else
+    password=$1
+fi
+
+
 # fzf install
 if [ ! -e ~/.fzf.zsh ]; then
     $(brew --prefix)/opt/fzf/install
