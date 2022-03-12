@@ -4,7 +4,7 @@ if [ $# -eq 0 ]; then
     # Save Password
     read -sp "Password: " password
 else
-    password=$1
+    password="$1"
 fi
 
 echo "$password" | sudo -S apt-get update
@@ -37,8 +37,8 @@ if !(type "docker" > /dev/null 2>&1); then
         # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch05-running-containers
         
         distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-        echo "$password" | sudo -S apt-key add - <<< $(curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey)
-        echo "$password" | sudo -S tee /etc/apt/sources.list.d/nvidia-docker.list <<< $(curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list)
+        { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey; } | sudo -S apt-key add -
+        { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list; } | sudo -S tee /etc/apt/sources.list.d/nvidia-docker.list
         echo "$password" | sudo -S apt-get update
         echo "$password" | sudo -S apt-get install -y nvidia-docker2
         
