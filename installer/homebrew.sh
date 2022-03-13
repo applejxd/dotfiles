@@ -22,7 +22,7 @@ tmp_file=$(mktemp)
 curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > tmp_file
 
 expect -c "
-set timeout 5
+set timeout -1
 spawn env LANG=C /bin/bash tmp_file
 expect \"Password:\"
 send \"${password}\n\"
