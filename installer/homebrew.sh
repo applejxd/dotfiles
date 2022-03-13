@@ -20,10 +20,9 @@ fi
 # Install Homebrew for Mac OS X or Linux
 expect -c "
 set timeout 5
-spawn env LANG=C /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"
+spawn env LANG=C /bin/bash <(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)
 expect \"Password:\"
 send \"${password}\n\"
-
 interact
 "
 
