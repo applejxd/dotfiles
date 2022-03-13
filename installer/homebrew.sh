@@ -18,18 +18,25 @@ if [[ -e /etc/lsb-release ]]; then-
 fi
 
 # Install Homebrew for Mac OS X or Linux
+tmp_file=$(mktemp)
+curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > tmp_file
+
 expect -c "
 set timeout 5
-spawn env LANG=C /bin/bash <(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)
+spawn env LANG=C /bin/bash tmpfile
 expect \"Password:\"
 send \"${password}\n\"
-interact
+expect \"Press RETURN\"
+send \"\n\"
+expect \"$\"
+exit 0
 "
+
+[[ -f "$tmp_file "]] && rm -f "$tmp_file"
 
 # Enable Homebrew
 if [[ "$OSTYPE" == "darwin"* ]]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
-
 elif [[ "$OSTYPE" == "linux-gnu" ]]; then
     # cf. https://docs.brew.sh/Homebrew-on-Linux
     test -d ~/.linuxbrew && eval $(~/.linuxbrew/bin/brew shellenv)
