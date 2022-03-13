@@ -26,7 +26,7 @@ set timeout -1
 spawn env LANG=C /bin/bash tmp_file
 expect \"Password:\"
 send \"${password}\n\"
-expect \"Press RETURN\"
+expect \"Press\"
 send \"\n\"
 expect \"$\"
 exit 0
