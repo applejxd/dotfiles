@@ -23,7 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > 
 
 expect -c "
 set timeout 5
-spawn env LANG=C /bin/bash tmpfile
+spawn env LANG=C /bin/bash tmp_file
 expect \"Password:\"
 send \"${password}\n\"
 expect \"Press RETURN\"
