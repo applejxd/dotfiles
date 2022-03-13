@@ -7,6 +7,8 @@ else
     password=$1
 fi
 
+# for x86_64 architecture
+yes A | softwareupdate --install-rosetta
 
 # fzf install
 if [ ! -e ~/.fzf.zsh ]; then

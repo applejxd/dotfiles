@@ -8,11 +8,8 @@ else
 fi
 
 # Requirements
-if [[ "$OSTYPE" == "darwin"* ]] && (! xcode-select -v > /dev/null 2>&1); then
-    xcode-select --install
-    echo "Rerun this script after the complete of xcode command line tools installation."
-    exit 0
-elif [[ -e /etc/lsb-release ]]; then-
+# (For Mac OS X, command line tools for xcode are automatically installed by the following script.)
+if [[ -e /etc/lsb-release ]]; then-
     echo "$password" | sudo -S apt-get update -y
     echo "$password" | sudo -S apt-get upgrade -y
     # for Homebrew
