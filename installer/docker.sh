@@ -35,10 +35,12 @@ if !(type "docker" > /dev/null 2>&1); then
         #################
         
         # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch05-running-containers
+        # cf. https://unix.stackexchange.com/questions/391796/pipe-password-to-sudo-and-other-data-to-sudoed-command
         
         distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-        { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey; } | sudo -S apt-key add -
-        { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list; } | sudo -S tee /etc/apt/sources.list.d/nvidia-docker.list
+        { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey; } | sudo -k -S apt-key add -
+        { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list; } \
+        | sudo -k -S tee /etc/apt/sources.list.d/nvidia-docker.list &>/dev/null
         echo "$password" | sudo -S apt-get update
         echo "$password" | sudo -S apt-get install -y nvidia-docker2
         

@@ -27,8 +27,9 @@ if  (! dpkg -l cuda-drivers > /dev/null 2>&1); then
     https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/7fa2af80.pub
 
     # Step 4: Setup the CUDA network repository
+    # cf. https://unix.stackexchange.com/questions/391796/pipe-password-to-sudo-and-other-data-to-sudoed-command
     { echo "$password"; echo "deb http://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64 /"; } \
-    | sudo -S tee /etc/apt/sources.list.d/cuda.list
+    | sudo -k -S tee /etc/apt/sources.list.d/cuda.list &>/dev/null
 
     # Step 5: Update and installation
     echo "$password" | sudo -S apt update
