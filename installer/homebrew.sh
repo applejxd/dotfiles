@@ -9,7 +9,7 @@ fi
 
 # Requirements
 # (For Mac OS X, command line tools for xcode are automatically installed by the following script.)
-if [[ -e /etc/lsb-release ]]; then-
+if [[ -e /etc/lsb-release ]]; then
     echo "$password" | sudo -S apt-get update -y
     echo "$password" | sudo -S apt-get upgrade -y
     # for Homebrew
