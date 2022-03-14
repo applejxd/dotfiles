@@ -19,10 +19,12 @@ fi
 
 # Prepare installation script
 tmp_file=$(mktemp)
+# cf. https://tm.root-n.com/programming:shell_script:command:trap
 trap 'rm -f "$temp_file"' EXIT HUP INT QUIT TERM
 curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > tmp_file
 
 # Install Homebrew for Mac OS X or Linux
+# cf. https://qiita.com/ine1127/items/cd6bc91174635016db9b
 expect -c "
 set timeout -1
 spawn env LANG=C /bin/bash tmp_file
