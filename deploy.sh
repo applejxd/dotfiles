@@ -22,7 +22,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     if (! git --version > /dev/null 2>&1); then
         xcode-select --install
         echo "Rerun this script after completion to install the command line tools."
-        return 1
+        exit 1
     fi
     if (! type "brew" > /dev/null 2>&1); then
         # The altanative of process substitution for bash 3.2 that is installed to Mac OS X
