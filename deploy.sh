@@ -18,7 +18,7 @@ if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
         apt-get install -y git curl build-essential libssl-dev zlib1g-dev"
 fi
 
-if [[ "$OSTYPE" == "darwin"* ]] 
+if [[ "$OSTYPE" == "darwin"* ]]; then
     if (! git --version > /dev/null 2>&1); then
         xcode-select --install
         echo "Rerun this script after completion to install the command line tools."
