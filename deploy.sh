@@ -18,9 +18,16 @@ if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
         apt-get install -y git curl build-essential libssl-dev zlib1g-dev"
 fi
 
-if [[ "$OSTYPE" == "darwin"* ]] && !(type "brew" > /dev/null 2>&1); then
-    # The altanative of process substitution for bash 3.2 that is installed to Mac OS X
-    echo $password | source /dev/stdin <<<"$( curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
+if [[ "$OSTYPE" == "darwin"* ]] 
+    if (! git --version > /dev/null 2>&1); then
+        xcode-select --install
+        echo "Rerun this script after completion to install the command line tools."
+        return 1
+    fi
+    if (! type "brew" > /dev/null 2>&1); then
+        # The altanative of process substitution for bash 3.2 that is installed to Mac OS X
+        echo $password | source /dev/stdin <<<"$( curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh )"
+    fi
 fi
 
 ########################
