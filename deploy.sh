@@ -12,7 +12,7 @@ fi
 #########################
 
 # for ruby-build in Ubuntu (cf. https://github.com/rbenv/ruby-build/wiki)
-if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
+if [[ -e /etc/lsb-release ]] && (! type "ruby-build" > /dev/null 2>&1); then
     echo "$password" | sudo -S bash -c "\
         apt-get update && apt-get upgrade -y && \
         apt-get install -y git curl build-essential libssl-dev zlib1g-dev"
@@ -47,13 +47,16 @@ fi
 ~/.$dir_name/bin/anyenv init
 export PATH="$HOME/.$dir_name/bin:$PATH"
 
-if !(type "anyenv" > /dev/null 2>&1); then
+if (! type "anyenv" > /dev/null 2>&1); then
     yes | anyenv install --init
 fi
 
-if !(type "rbenv" >/dev/null 2>&1); then
+if [[ ! -e ~/.$dir_name/envs/rbenv ]]; then
     anyenv install rbenv
     eval "$(anyenv init -)"
+fi
+
+if (! type "rbenv" >/dev/null 2>&1); then
     rbenv install 2.7.5
     rbenv rehash
     rbenv global 2.7.5
@@ -63,12 +66,12 @@ fi
 # Link configs #
 ################
 
-if !(type "homesick" >/dev/null 2>&1); then
+if (! type "homesick" >/dev/null 2>&1); then
     gem install homesick
 fi
 
 # spacemacs install
-if [ ! -e ~/.emacs.d ]; then
+if [[ ! -e ~/.emacs.d ]]; then
     git clone https://github.com/syl20bnr/spacemacs ~/.emacs.d
 fi
 
@@ -92,7 +95,7 @@ fi
 # Write configs #
 #################
 
-if type "git" >/dev/null 2>&1; then
+if (type "git" >/dev/null 2>&1); then
     git config --global init.defaultBranch "main"
 
     git config --global core.editor "vim"
