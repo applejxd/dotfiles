@@ -28,23 +28,26 @@ fi
 # Requirements (Local) #
 ########################
 
-# install anyenv (cf. https://github.com/rbenv/rbenv#homebrew-on-macoshttps://github.com/rbenv/rbenv#homebrew-on-macos)
-if !(type "anyenv" > /dev/null 2>&1); then
-    # install anyenv
-    dir_name=anyenv
-    if [[ -e /etc/lsb-release ]]; then
-        dir_name=anyenv
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        if [[ $(uname -m) == arm64 ]]; then
-            dir_name=anyenv_arm64
-        elif [[ $(uname -m) == x86_64 ]]; then
-            dir_name=anyenv_x64
-        fi
-    fi
+# install anyenv 
+# cf. https://github.com/rbenv/rbenv#homebrew-on-macoshttps://github.com/rbenv/rbenv#homebrew-on-macos
 
+dir_name=anyenv
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if [[ $(uname -m) == arm64 ]]; then
+        dir_name=anyenv_arm64
+    elif [[ $(uname -m) == x86_64 ]]; then
+        dir_name=anyenv_x64
+    fi
+fi
+
+if [[ ! -e ~/.$dir_name ]]; then
     git clone https://github.com/anyenv/anyenv ~/.$dir_name
-    ~/.$dir_name/bin/anyenv init
-    export PATH="$HOME/.$dir_name/bin:$PATH"
+fi
+
+~/.$dir_name/bin/anyenv init
+export PATH="$HOME/.$dir_name/bin:$PATH"
+
+if !(type "anyenv" > /dev/null 2>&1); then
     yes | anyenv install --init
 fi
 
