@@ -19,10 +19,9 @@ if [[ -e /etc/lsb-release ]] && !(type "ruby-build" > /dev/null 2>&1); then
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]] && (! git --version > /dev/null 2>&1); then
-        xcode-select --install
-        echo "Rerun this script after completion to install the command line tools."
-        exit 1
-    fi
+    xcode-select --install
+    echo "Rerun this script after completion to install the command line tools."
+    exit 1
 fi
 
 ########################
