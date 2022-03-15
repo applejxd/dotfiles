@@ -36,8 +36,6 @@ expect \"$\"
 exit 0
 "
 
-[[ -n "${tmp_file} "]] && rm -f "$tmp_file"
-
 # Enable Homebrew
 if [[ "$OSTYPE" == "darwin"* ]]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
