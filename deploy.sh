@@ -44,8 +44,9 @@ if [[ ! -e ~/.$dir_name ]]; then
     git clone https://github.com/anyenv/anyenv ~/.$dir_name
 fi
 
-~/.$dir_name/bin/anyenv init
 export PATH="$HOME/.$dir_name/bin:$PATH"
+~/.$dir_name/bin/anyenv init
+eval "$(anyenv init -)"
 
 if (! type "anyenv" > /dev/null 2>&1); then
     yes | anyenv install --init
