@@ -57,7 +57,7 @@ if [[ ! -e ~/.$dir_name/envs/rbenv ]]; then
     eval "$(anyenv init -)"
 fi
 
-if [[ $(which "ruby") == "~/.$dir_name/envs/"* ]]; then
+if [[ $(which "ruby") == "$HOME/.$dir_name/envs/"* ]]; then
     rbenv install 2.7.5
     rbenv rehash
     rbenv global 2.7.5
