@@ -70,7 +70,6 @@ fi
 # spacemacs install
 if [ ! -e ~/.emacs.d ]; then
     git clone https://github.com/syl20bnr/spacemacs ~/.emacs.d
-    # npm install --global tern
 fi
 
 if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
@@ -83,7 +82,9 @@ if [[ ! -e ~/.homesick/repos/dotfiles ]]; then
 fi
 
 if [[ ! -L ~/.bashrc ]]; then
-    mv ~/.bashrc ~/.bashrc_old
+    if [[ -f ~/.bashrc ]]; then
+        mv ~/.bashrc ~/.bashrc_old
+    fi
     homesick link dotfiles
 fi
 
