@@ -36,9 +36,19 @@ expect \"$\"
 exit 0
 "
 
-# Enable Homebrew
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+    brew_path=""
+    if [[ $arch == arm64 ]]; then
+        echo "Current Architecture: $arch"
+        brew_path="/opt/homebrew/bin/brew"
+    elif [[ $arch == x86_64 ]]; then
+        echo "Current Architecture: $arch"
+        brew_path="/usr/local/bin/brew"
+    fi
+
+    if [[ -e $brew_path ]]; then
+        eval "$($brew_path shellenv)"
+    fi
 elif [[ "$OSTYPE" == "linux-gnu" ]]; then
     # cf. https://docs.brew.sh/Homebrew-on-Linux
     test -d ~/.linuxbrew && eval $(~/.linuxbrew/bin/brew shellenv)
