@@ -18,10 +18,21 @@ if [[ -e /etc/lsb-release ]] && (! type "ruby-build" > /dev/null 2>&1); then
         apt-get install -y git curl build-essential libssl-dev zlib1g-dev"
 fi
 
-if [[ "$OSTYPE" == "darwin"* ]] && (! git --version > /dev/null 2>&1); then
-    xcode-select --install
-    echo "Rerun this script after completion to install the command line tools."
-    exit 1
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if (! git --version > /dev/null 2>&1); then
+        xcode-select --install
+        echo "Rerun this script after completion to install the command line tools."
+        exit 1
+    fi
+
+    if (! type "brew" > /dev/null 2>&1); then
+        # Mac OS X use bash 3.2, and process substitution is unable
+        brew_script=$(mktemp)
+        # cf. https://tm.root-n.com/programming:shell_script:command:trap
+        trap 'rm -f "$brew_script"' EXIT HUP INT QUIT TERM
+        curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh > brew_script
+        echo "$password" | source brew_script
+    fi
 fi
 
 ########################
