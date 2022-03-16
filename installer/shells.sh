@@ -17,9 +17,8 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
     echo "$password" | sudo -S apt-get install -y zsh fish
 fi
 
-if  [[ "$OSTYPE" == "darwin"* ]] && (! type "brew" > /dev/null 2>&1); then
-    # The altanative of process substitution for bash 3.2 that is installed to Mac OS X
-    echo "$password" | source /dev/stdin <<<"$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh)"
+if  [[ "$OSTYPE" == "darwin"* ]]; then
+    brew install zsh fish
 fi
 
 ############
