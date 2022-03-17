@@ -123,4 +123,9 @@ if (type "git" >/dev/null 2>&1); then
     git config --global url."git@github.com:".PushInsteadOf https://github.com/
 fi
 
-echo "$password" | source /dev/stdin <<<"$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh)"
+# Mac OS X use bash 3.2, and process substitution is unable
+shell_config=$(mktemp)
+# cf. https://tm.root-n.com/programming:shell_script:command:trap
+trap 'rm -f "$shell_config"' EXIT HUP INT QUIT TERM
+curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh > shell_config
+echo "$password" | source shell_config
