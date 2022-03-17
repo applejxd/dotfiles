@@ -18,7 +18,13 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
 fi
 
 if  [[ "$OSTYPE" == "darwin"* ]]; then
-    brew install zsh fish
+    # Mac OS X use bash 3.2, and process substitution is unable
+    shell_bundle=$(mktemp)
+    # cf. https://tm.root-n.com/programming:shell_script:command:trap
+    trap 'rm -f "$shell_bundle"' EXIT HUP INT QUIT TERM
+    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_shell.rb > shell_bundle
+    # shell environments
+    brew bundle --file=shell_bundle 2>/dev/null
 fi
 
 ############
