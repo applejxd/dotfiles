@@ -22,8 +22,8 @@ fi
 
 # LaTeX
 if !(type "platex" > /dev/null 2>&1) && (type tlmgr > /dev/null 2>&1); then
-    sudo tlmgr update --self --all
-    sudo tlmgr paper a4
+    echo "$password" | sudo -S tlmgr update --self --all
+    echo "$password" | sudo -S tlmgr paper a4
 fi
 
 # # Programming Font Ricty
