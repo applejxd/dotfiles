@@ -1,34 +1,33 @@
-#-----#
-# VCS #
-#-----#
-
-brew "git"
-brew "git-flow-avh"
-brew "tig"
-
-#-------------------#
-# zsh Configuration #
-#-------------------#
+################
+# Renew shells #
+################
 
 # install shell
 if OS.mac?
     brew "bash"
     brew "fish"
-    # the zsh cannot use pure theme on Linux
-    brew "zsh"
+    # the zsh cannot the use pure theme on Linux
+    # brew "zsh"
 end
+
+#######
+# VCS #
+#######
+
+brew "git"
+brew "git-flow-avh"
+brew "tig"
 
 # shell plugins
 brew "tmux"
 
-# for bash
-# brew "z"
-# brew "fzf"
-# brew "ghq"
+brew "z"
+brew "fzf"
+brew "ghq"
 
-#----------------#
+##################
 # Shell Commands #
-#----------------#
+##################
 
 # defaults
 brew "curl"
