@@ -49,5 +49,4 @@ if [[ ! -e $brew_path ]]; then
     "
 fi
 
-
 eval "$($brew_path shellenv)"
