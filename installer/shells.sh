@@ -24,6 +24,7 @@ if  [[ "$OSTYPE" == "darwin"* ]]; then
     trap 'rm -f "$shell_bundle"' EXIT HUP INT QUIT TERM
     curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_shell.rb > shell_bundle
     # shell environments
+    brew update
     brew bundle --file=shell_bundle 2>/dev/null
 fi
 
