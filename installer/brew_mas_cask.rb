@@ -1,4 +1,4 @@
-# cf. https://bit.ly/3vSN4Ps
+# cf. https://zenn.dev/mactkg/articles/71d09e350315f9
 def is_m1?
   !RUBY_PLATFORM.index("arm64e").nil?
 end
@@ -27,18 +27,27 @@ tap "homebrew/cask"
 
 # GUI Apps
 cask "cakebrew"
-cask "sourcetree"
+# cask "sourcetree"
 
 # Editor and IDE
 cask "visual-studio-code"
-# cask "pycharm"
 cask "jetbrains-toolbox"
 cask "emacs"
 
-# rogue-like game 'jnethack'
-cask "xquartz"
-brew "jnethack"
-brew "cocot"
+# The shell emulator iTerm2
+cask "iterm2"
+
+# Fonts
+tap "homebrew/cask-fonts"
+cask "font-hack-nerd-font"
+
+# Emulation
+cask "docker"
+# cask "virtualbox"
+# cask "virtualbox-extension-pack"
+
+# Reference
+cask "dash"
 
 #--------------#
 # Fundamentals #
@@ -50,9 +59,9 @@ cask "google-chrome"
 cask "google-japanese-ime"
 
 # Online storages
-cask "dropbox"
+# cask "dropbox"
 # cask "google-backup-and-sync"
-cask "google-drive"
+# cask "google-drive"
 
 #------------------#
 # System Asistants #
@@ -80,23 +89,16 @@ cask "osxfuse"
 # Remote directory mounting
 # brew "sshfs" unless is_m1?
 
-# The shell emulator iTerm2
-cask "iterm2"
-
-# Fonts
-tap "homebrew/cask-fonts"
-cask "font-hack-nerd-font"
-
 #----------#
 # Mac Apps #
 #----------#
 
 # utilities
-cask "evernote"
 cask "bitwarden"
 brew "bitwarden-cli"
 cask "discord"
-cask "skype"
+# cask "skype"
+# cask "evernote"
 
 # media
 cask "spotify"
@@ -106,28 +108,29 @@ cask "kindle"
 cask "cyberduck"
 cask "omnidisksweeper"
 
-# Research Tools
-cask "mendeley"
-cask "mathpix-snipping-tool"
-
-# Reference
-cask "dash"
-
 # graph
-cask "xmind"
-cask "drawio"
+# cask "xmind"
+# cask "drawio"
 
-# Emulation
-# cask "virtualbox"
-# cask "virtualbox-extension-pack"
-cask "docker"
+# Research Tools
+# cask "mendeley"
+# cask "mathpix-snipping-tool"
 
 #-----------#
 # Platforms #
 #-----------#
 
-cask "mamp"
-cask "julia"
-cask "r"
-cask "mactex"
+# cask "mactex"
+# cask "mamp"
+# cask "julia"
+# cask "r"
 # cask "sage"
+
+#--------#
+# Others #
+#------=-#
+
+# rogue-like game 'jnethack'
+cask "xquartz"
+brew "jnethack"
+brew "cocot"
