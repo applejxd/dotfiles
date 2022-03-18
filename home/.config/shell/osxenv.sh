@@ -5,7 +5,7 @@ export LANG=ja_JP.UTF-8
 ########
 
 # The default
-export PATH=/usr/local/bin:/usr/local/sbin:/sw/bin:$PATH
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:${PATH}}
 # for TeX Live 2019
 export PATH=/usr/local/texlive/2019/bin/x86_64-darwin:$PATH
 # for wxMaxima
