@@ -26,7 +26,7 @@ else
     export ANYENV_ROOT=~/.anyenv
 fi
 
-export PATH=$ANYENV_ROOT/bin:$PATH
+export PATH=$ANYENV_ROOT/bin${PATH:+:${PATH}}
 
 # for WSL
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
@@ -67,4 +67,3 @@ export GHQ_ROOT=~/src
 # for YaTeX
 export TEXINPUTS=~/.emacs.d/private/yatex:$TEXINPUTS
 export BSTINPUTS=~/.emacs.d/private/yatex:$BSTINPUTS
-
