@@ -42,13 +42,14 @@ fi
 # install anyenv 
 # cf. https://github.com/rbenv/rbenv#homebrew-on-macoshttps://github.com/rbenv/rbenv#homebrew-on-macos
 
-dir_name=anyenv
 if [[ "$OSTYPE" == "darwin"* ]]; then
     if [[ $(uname -m) == arm64 ]]; then
         dir_name=anyenv_arm64
     elif [[ $(uname -m) == x86_64 ]]; then
         dir_name=anyenv_x64
     fi
+else
+    dir_name=anyenv
 fi
 
 if [[ ! -e ~/.$dir_name ]]; then
