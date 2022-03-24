@@ -58,7 +58,6 @@ fi
 
 export PATH="$HOME/.$dir_name/bin:$PATH"
 ~/.$dir_name/bin/anyenv init
-eval "$(anyenv init -)"
 
 if (! type "anyenv" > /dev/null 2>&1); then
     yes | anyenv install --init
@@ -66,7 +65,7 @@ fi
 
 if [[ ! -e ~/.$dir_name/envs/rbenv ]]; then
     anyenv install rbenv
-    eval "$(anyenv init -)"
+    ~/.$dir_name/bin/anyenv init
 fi
 
 if [[ $(which "ruby") != "$HOME/.$dir_name/envs/"* ]]; then
