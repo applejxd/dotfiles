@@ -10,10 +10,8 @@ fi
 brew_path=""
 if [[ "$OSTYPE" == "darwin"* ]]; then
     if [[ $(uname -m) == arm64 ]]; then
-        echo "Current Architecture: $arch"
         brew_path="/opt/homebrew/bin/brew"
     elif [[ $(uname -m) == x86_64 ]]; then
-        echo "Current Architecture: $arch"
         brew_path="/usr/local/bin/brew"
     fi
 fi
