@@ -44,20 +44,23 @@ fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     if [[ $(uname -m) == arm64 ]]; then
-        dir_name=anyenv_arm64
+        export ANYENV_ROOT=$HOME/.anyenv_arm64
+        export ANYENV_DEFINITION_ROOT=$HOME/.config/anyenv_arm64/anyenv-install
     elif [[ $(uname -m) == x86_64 ]]; then
-        dir_name=anyenv_x64
+        export ANYENV_ROOT=$HOME/.anyenv_x64
+        export ANYENV_DEFINITION_ROOT=$HOME/.config/anyenv_x64/anyenv-install
     fi
 else
-    dir_name=anyenv
+    export ANYENV_ROOT=$HOME/.anyenv
 fi
 
 if [[ ! -e ~/.$dir_name ]]; then
-    git clone https://github.com/anyenv/anyenv ~/.$dir_name
+    git clone https://github.com/anyenv/anyenv $ANYENV_ROOT
 fi
 
 export PATH="$HOME/.$dir_name/bin:$PATH"
-~/.$dir_name/bin/anyenv init
+$ANYENV_ROOT/bin/anyenv init
+eval "$(anyenv init -)"
 
 if (! type "anyenv" > /dev/null 2>&1); then
     yes | anyenv install --init
@@ -65,7 +68,7 @@ fi
 
 if [[ ! -e ~/.$dir_name/envs/rbenv ]]; then
     anyenv install rbenv
-    ~/.$dir_name/bin/anyenv init
+    $ANYENV_ROOT/bin/anyenv init
 fi
 
 if [[ $(which "ruby") != "$HOME/.$dir_name/envs/"* ]]; then
