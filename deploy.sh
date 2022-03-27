@@ -60,11 +60,8 @@ fi
 
 export PATH="$ANYENV_ROOT/bin:$PATH"
 $ANYENV_ROOT/bin/anyenv init
-eval "$(anyenv init -)"
-
-if (! type "anyenv" > /dev/null 2>&1); then
-    yes | anyenv install --init
-fi
+# eval "$(anyenv init -)"
+yes | anyenv install --init
 
 if [[ ! -e $ANYENV_ROOT/envs/rbenv ]]; then
     anyenv install rbenv
