@@ -62,3 +62,6 @@ defaults write com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag -bool t
 # 「Dock」->「画面上の位置」->「右」
 defaults write com.apple.dock orientation -string left
 killall Dock
+
+# 「ファイアウォールをオンにする」
+echo "$password" | sudo -S defaults write /Library/Preferences/com.apple.alf globalstate -int 1
