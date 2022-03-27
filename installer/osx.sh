@@ -61,8 +61,11 @@ defaults write com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag -bool t
 
 # 「メニューバーに Bluetooth を表示」
 defaults write com.apple.controlcenter "NSStatusItem Visible Bluetooth" -bool true
+defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Bluetooth -int 18
+
 # 「メニューバーにサウンドを表示」
 defaults write com.apple.controlcenter "NSStatusItem Visible Sound" -bool true
+defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Sound -int 18
 
 # 「Dock」->「画面上の位置」->「右」
 defaults write com.apple.dock orientation -string left
