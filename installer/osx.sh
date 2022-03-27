@@ -59,6 +59,9 @@ defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking -bool
 defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadThreeFingerDrag -bool true
 defaults write com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag -bool true
 
+# 「メニューバーに Bluetooth を表示」
+defaults write com.apple.controlcenter "NSStatusItem Visible Bluetooth" -bool true
+
 # 「Dock」->「画面上の位置」->「右」
 defaults write com.apple.dock orientation -string left
 killall Dock
