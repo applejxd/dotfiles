@@ -72,7 +72,8 @@ defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Sound 
 killall SystemUIServer
 
 # 「新規 Finder ウィンドウでホームを表示」
-defaults write com.apple.finder NewWindowTargetPath -string "file://${HOME}"
+# cf. https://gist.github.com/ChristopherA/98628f8cd00c94f11ee6035d53b0d3c6
+defaults write com.apple.finder NewWindowTarget -string "PfHm"
 
 killall Finder
 
