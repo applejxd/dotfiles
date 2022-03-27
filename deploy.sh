@@ -66,12 +66,12 @@ if (! type "anyenv" > /dev/null 2>&1); then
     yes | anyenv install --init
 fi
 
-if [[ ! -e ~/.$dir_name/envs/rbenv ]]; then
+if [[ ! -e $ANYENV_ROOT/envs/rbenv ]]; then
     anyenv install rbenv
     $ANYENV_ROOT/bin/anyenv init
 fi
 
-if [[ $(which "ruby") != "$HOME/.$dir_name/envs/"* ]]; then
+if [[ $(which "ruby") != "$ANYENV_ROOT/envs/"* ]]; then
     rbenv install 2.7.5
     rbenv rehash
     rbenv global 2.7.5
