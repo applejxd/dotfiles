@@ -71,6 +71,11 @@ defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Sound 
 
 killall SystemUIServer
 
+# 「新規 Finder ウィンドウでホームを表示」
+defaults write com.apple.finder NewWindowTargetPath -string "file://${HOME}"
+
+killall Finder
+
 # 「"Siri に頼む"を無効にする」
 defaults write com.apple.assistant.support.plist "Assistant Enabled" -bool false
 # 「メニューバーに Siri を非表示」
