@@ -61,3 +61,4 @@ defaults write com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag -bool t
 
 # 「Dock」->「画面上の位置」->「右」
 defaults write com.apple.dock orientation -string left
+killall Dock
