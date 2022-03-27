@@ -81,7 +81,7 @@ defaults write com.apple.dock orientation -string left
 killall Dock
 
 # 「Mac を自動的に最新の状態に保つ」
-defaults write com.apple.SoftwareUpdate ScheduleFrequency -int 0
+# defaults write com.apple.SoftwareUpdate ScheduleFrequency -int 1
 
 # 「ファイアウォールをオンにする」
 echo "$password" | sudo -S defaults write /Library/Preferences/com.apple.alf globalstate -int 1
