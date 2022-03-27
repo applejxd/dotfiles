@@ -36,3 +36,17 @@ fi
 # if !(type "powerline-daemon" > /dev/null 2>&1); then
 #     pip3 install powerline-status
 # fi
+
+############
+# defaults #
+############
+
+# Check categories
+#defaults domain
+
+# Check changes
+#defaults read > backup.conf
+#diff -u backup.conf <(defaults read)
+
+defaults write com.apple.AppleMultitouchTrackpad Clicking -bool true
+defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking -bool true
