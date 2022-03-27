@@ -54,11 +54,11 @@ else
     export ANYENV_ROOT=$HOME/.anyenv
 fi
 
-if [[ ! -e ~/.$dir_name ]]; then
+if [[ ! -e $ANYENV_ROOT ]]; then
     git clone https://github.com/anyenv/anyenv $ANYENV_ROOT
 fi
 
-export PATH="$HOME/.$dir_name/bin:$PATH"
+export PATH="$ANYENV_ROOT/bin:$PATH"
 $ANYENV_ROOT/bin/anyenv init
 eval "$(anyenv init -)"
 
