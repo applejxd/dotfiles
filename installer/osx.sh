@@ -48,6 +48,9 @@ fi
 # defaults read > backup.conf
 # diff -u backup.conf <(defaults read)
 
+# 設定値の型の確認
+# defaults read-type com.apple.AppleMultitouchTrackpad Clicking
+
 # 「タップでクリック」
 defaults write com.apple.AppleMultitouchTrackpad Clicking -bool true
 defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking -bool true
@@ -55,3 +58,6 @@ defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking -bool
 # 「3本指のトラック」
 defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadThreeFingerDrag -bool true
 defaults write com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag -bool true
+
+# 「Dock」->「画面上の位置」->「右」
+defaults write com.apple.dock orientation -string left
