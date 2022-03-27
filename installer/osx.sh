@@ -41,6 +41,8 @@ fi
 # defaults #
 ############
 
+# cf. https://github.com/ulwlu/dotfiles/blob/master/system/macos.sh
+
 # 設定項目一覧
 # defaults domain
 
@@ -75,6 +77,9 @@ defaults write com.apple.Siri StatusMenuVisible -bool false
 # 「Dock」->「画面上の位置」->「右」
 defaults write com.apple.dock orientation -string left
 killall Dock
+
+# 「Mac を自動的に最新の状態に保つ」
+defaults write com.apple.SoftwareUpdate ScheduleFrequency -int 0
 
 # 「ファイアウォールをオンにする」
 echo "$password" | sudo -S defaults write /Library/Preferences/com.apple.alf globalstate -int 1
