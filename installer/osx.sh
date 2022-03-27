@@ -41,12 +41,17 @@ fi
 # defaults #
 ############
 
-# Check categories
-#defaults domain
+# 設定項目一覧
+# defaults domain
 
-# Check changes
-#defaults read > backup.conf
-#diff -u backup.conf <(defaults read)
+# 設定値変更の確認
+# defaults read > backup.conf
+# diff -u backup.conf <(defaults read)
 
+# 「タップでクリック」
 defaults write com.apple.AppleMultitouchTrackpad Clicking -bool true
 defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking -bool true
+
+# 「3本指のトラック」
+defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadThreeFingerDrag -bool true
+defaults write com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag -bool true
