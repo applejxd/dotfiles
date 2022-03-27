@@ -67,6 +67,11 @@ defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Blueto
 defaults write com.apple.controlcenter "NSStatusItem Visible Sound" -bool true
 defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Sound -int 18
 
+# 「"Siri に頼む"を無効にする」
+defaults write com.apple.assistant.support.plist "Assistant Enabled" -bool false
+# 「メニューバーに Siri を非表示」
+defaults write com.apple.Siri StatusMenuVisible -bool false
+
 # 「Dock」->「画面上の位置」->「右」
 defaults write com.apple.dock orientation -string left
 killall Dock
