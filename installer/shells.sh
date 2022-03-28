@@ -19,12 +19,10 @@ fi
 
 if  [[ "$OSTYPE" == "darwin"* ]]; then
     brew_path=""
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        if [[ $(uname -m) == arm64 ]]; then
-            brew_path="/opt/homebrew/bin/brew"
-        elif [[ $(uname -m) == x86_64 ]]; then
-            brew_path="/usr/local/bin/brew"
-        fi
+    if [[ $(uname -m) == arm64 ]]; then
+        brew_path="/opt/homebrew/bin/brew"
+    elif [[ $(uname -m) == x86_64 ]]; then
+        brew_path="/usr/local/bin/brew"
     fi
     eval "$($brew_path shellenv)"
     
