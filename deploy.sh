@@ -65,7 +65,8 @@ yes | anyenv install --init
 
 if [[ ! -e $ANYENV_ROOT/envs/rbenv ]]; then
     anyenv install rbenv
-    $ANYENV_ROOT/bin/anyenv init
+    # refresh anyenv
+    eval "$(anyenv init -)"
 fi
 
 if (! type "ruby" > /dev/null 2>&1) || [[ $(which "ruby") != "$ANYENV_ROOT/envs/"* ]]; then
