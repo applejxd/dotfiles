@@ -58,7 +58,7 @@ if [[ ! -e $ANYENV_ROOT ]]; then
     git clone https://github.com/anyenv/anyenv $ANYENV_ROOT
 fi
 
-export PATH="$ANYENV_ROOT/bin:$PATH"
+export PATH=$ANYENV_ROOT/bin:$PATH
 $ANYENV_ROOT/bin/anyenv init
 eval "$(anyenv init -)"
 yes | anyenv install --init
