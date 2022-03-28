@@ -49,7 +49,7 @@ if !(type "docker" > /dev/null 2>&1); then
         # Rootful Dockerd #
         ###################
         
-        echo "$password" | sudo -S gpasswd -a $(whoami) docker
+        echo "$password" | sudo -S gpasswd -a $USER docker
         # echo "$password" | sudo -S service docker start
         echo "$password" | sudo -S systemctl enable docker.service
         echo "$password" | sudo -S systemctl start docker.service
