@@ -68,7 +68,7 @@ if [[ ! -e $ANYENV_ROOT/envs/rbenv ]]; then
     $ANYENV_ROOT/bin/anyenv init
 fi
 
-if [[ $(which "ruby") != "$ANYENV_ROOT/envs/"* ]]; then
+if　(! type "ruby" > /dev/null 2>&1) || [[ $(which "ruby") != "$ANYENV_ROOT/envs/"* ]]; then
     rbenv install 2.7.5
     rbenv rehash
     rbenv global 2.7.5
