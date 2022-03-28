@@ -59,13 +59,14 @@ if [[ ! -e $ANYENV_ROOT ]]; then
 fi
 
 export PATH=$ANYENV_ROOT/bin:$PATH
-$ANYENV_ROOT/bin/anyenv init
+# Refresh anyenv
 eval "$(anyenv init -)"
+# Make anyenv manifest directory
 yes | anyenv install --init
 
 if [[ ! -e $ANYENV_ROOT/envs/rbenv ]]; then
     anyenv install rbenv
-    # refresh anyenv
+    # Refresh anyenv
     eval "$(anyenv init -)"
 fi
 
