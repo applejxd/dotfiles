@@ -18,6 +18,16 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
 fi
 
 if  [[ "$OSTYPE" == "darwin"* ]]; then
+    brew_path=""
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if [[ $(uname -m) == arm64 ]]; then
+            brew_path="/opt/homebrew/bin/brew"
+        elif [[ $(uname -m) == x86_64 ]]; then
+            brew_path="/usr/local/bin/brew"
+        fi
+    fi
+    eval "$($brew_path shellenv)"
+    
     # Mac OS X use bash 3.2, and process substitution is unable
     shell_bundle=$(mktemp)
     # cf. https://tm.root-n.com/programming:shell_script:command:trap
