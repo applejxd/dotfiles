@@ -54,7 +54,7 @@ cask "dash"
 #--------------#
 
 # Basic softwares
-cask "avast-security"
+#cask "avast-security"
 cask "google-chrome"
 cask "google-japanese-ime"
 
