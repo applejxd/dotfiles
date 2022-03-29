@@ -10,6 +10,38 @@ fi
 # for x86_64 architecture
 yes A | softwareupdate --install-rosetta
 
+#################
+# Load Homebrew #
+#################
+
+brew_path=""
+if [[ $(uname -m) == arm64 ]]; then
+    brew_path="/opt/homebrew/bin/brew"
+elif [[ $(uname -m) == x86_64 ]]; then
+    brew_path="/usr/local/bin/brew"
+fi
+eval "$($brew_path shellenv)"
+brew update
+
+###############
+# Brew bundle #
+###############
+
+# Mac OS X use bash 3.2, and process substitution is unable
+brew_bundle=$(mktemp)
+# cf. https://tm.root-n.com/programming:shell_script:command:trap
+trap 'rm -f "$brew_bundle"' EXIT HUP INT QUIT TERM
+
+if [[ $(uname -m) == arm64 ]]; then
+    # GUI apps
+    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_mas_cask.rb > brew_bundle
+    brew bundle --file=brew_bundle
+fi
+
+##########
+# Others #
+##########
+
 # fzf install
 if [ ! -e ~/.fzf.zsh ]; then
     $(brew --prefix)/opt/fzf/install
@@ -26,68 +58,13 @@ if !(type "platex" > /dev/null 2>&1) && (type tlmgr > /dev/null 2>&1); then
     echo "$password" | sudo -S tlmgr paper a4
 fi
 
-# # Programming Font Ricty
-# if [ ! -e ~/Library/fonts/Ricty\ Discord\ Regular\ for\ Powerline.ttf ]; then
-#     cp -f /usr/local/opt/ricty/share/fonts/Ricty*.ttf ~/Library/Fonts/
-#     fc-cache -vf
-# fi
+# Programming Font Ricty
+if [ ! -e ~/Library/fonts/Ricty\ Discord\ Regular\ for\ Powerline.ttf ]; then
+    cp -f /usr/local/opt/ricty/share/fonts/Ricty*.ttf ~/Library/Fonts/
+    fc-cache -vf
+fi
 
 # # powerline, which needs powerline-font
-# if !(type "powerline-daemon" > /dev/null 2>&1); then
-#     pip3 install powerline-status
-# fi
-
-############
-# defaults #
-############
-
-# cf. https://github.com/ulwlu/dotfiles/blob/master/system/macos.sh
-
-# 設定項目一覧
-# defaults domain
-
-# 設定値変更の確認
-# defaults read > backup.conf
-# diff -u backup.conf <(defaults read)
-
-# 設定値の型の確認
-# defaults read-type com.apple.AppleMultitouchTrackpad Clicking
-
-# 「タップでクリック」
-defaults write com.apple.AppleMultitouchTrackpad Clicking -bool true
-defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking -bool true
-
-# 「3本指のトラック」
-defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad TrackpadThreeFingerDrag -bool true
-defaults write com.apple.AppleMultitouchTrackpad TrackpadThreeFingerDrag -bool true
-
-# 「メニューバーに Bluetooth を表示」
-defaults write com.apple.controlcenter "NSStatusItem Visible Bluetooth" -bool true
-defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Bluetooth -int 18
-
-# 「メニューバーにサウンドを表示」
-defaults write com.apple.controlcenter "NSStatusItem Visible Sound" -bool true
-defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Sound -int 18
-
-killall SystemUIServer
-
-# 「新規 Finder ウィンドウでホームを表示」
-# cf. https://gist.github.com/ChristopherA/98628f8cd00c94f11ee6035d53b0d3c6
-defaults write com.apple.finder NewWindowTarget -string "PfHm"
-
-killall Finder
-
-# 「"Siri に頼む"を無効にする」
-defaults write com.apple.assistant.support.plist "Assistant Enabled" -bool false
-# 「メニューバーに Siri を非表示」
-defaults write com.apple.Siri StatusMenuVisible -bool false
-
-# 「Dock」->「画面上の位置」->「右」
-defaults write com.apple.dock orientation -string left
-killall Dock
-
-# 「Mac を自動的に最新の状態に保つ」
-# defaults write com.apple.SoftwareUpdate ScheduleFrequency -int 1
-
-# 「ファイアウォールをオンにする」
-echo "$password" | sudo -S defaults write /Library/Preferences/com.apple.alf globalstate -int 1
+if !(type "powerline-daemon" > /dev/null 2>&1); then
+    pip3 install powerline-status
+fi
