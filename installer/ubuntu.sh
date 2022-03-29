@@ -49,7 +49,7 @@ fi
 # LaTeX
 # echo "$password" | sudo -S apt-get install -y texlive-full
 
-if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+if [[ "$(uname -r)" == *microsoft* ]]; then
     # WSL config
     if [ ! -L /etc/wsl.conf ]; then
         if [ -f /etc/wsl.conf ]; then
