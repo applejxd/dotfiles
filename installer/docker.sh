@@ -30,7 +30,7 @@ if !(type "docker" > /dev/null 2>&1); then
     echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose
            
-    if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    if [[ "$(uname -r)" == *microsoft* ]]; then
         #################
         # Nvidia Docker #
         #################
@@ -66,4 +66,3 @@ if !(type "docker" > /dev/null 2>&1); then
         echo "$password" | sudo -S systemctl --user start docker.service
     fi
 fi
-
