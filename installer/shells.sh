@@ -63,7 +63,7 @@ fi
 # Distrod #
 ###########
 
-if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] && (! systemctl >/dev/null 2>&1); then
+if [[ "$(uname -r)" == *microsoft* ]] && (! systemctl >/dev/null 2>&1); then
     echo "$password" | sudo -S chsh -s $(which zsh) $USER
 
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
