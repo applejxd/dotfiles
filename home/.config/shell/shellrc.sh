@@ -121,7 +121,7 @@ alias lt="ls --tree"
 alias gen-key="ssh-keygen -t ed25519 -P \"\""
 
 # pbcopy & pbpaste
-if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ]; then
+if [[ "$(uname -r)" == *microsoft* ]]; then
     alias pbcopy='clip.exe'
     alias pbpaste='powershell.exe Get-Clipboard' 
 elif [[ "$OSTYPE" == "linux-gnu" ]]; then
@@ -133,7 +133,7 @@ alias wcc="pbpaste | wc -m"
 # clear format
 alias fcr="pbpaste | pbcopy"
 
-if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+if [[ "$(uname -r)" == *microsoft* ]]; then
     alias open="explorer.exe"
 elif [[ -e /etc/lsb-release ]]; then
     alias open="xdg-open"
