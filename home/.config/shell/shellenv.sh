@@ -29,7 +29,7 @@ fi
 export PATH=$ANYENV_ROOT/bin${PATH:+:${PATH}}
 
 # for WSL
-if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+if [[ "$(uname -r)" == *microsoft* ]]; then
     source $HOME/.config/shell/wslenv.sh
 fi
 
