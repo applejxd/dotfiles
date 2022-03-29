@@ -78,11 +78,12 @@ fi
 #######
 
 # GUI
-# echo "$password" | sudo -S apt-get install -y ubuntu-desktop
-echo "$password" | sudo -S apt-get install -y xubuntu-desktop
+#echo "$password" | sudo -S apt-get install -y ubuntu-desktop
+#echo "$password" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4
+# Xfce + applications 
+echo "$password" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get install -y xubuntu-desktop
 
 # RDP
-echo "$password" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4
 echo "$password" | sudo -S apt-get install xrdp
 
 # RDP settings
