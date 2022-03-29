@@ -36,6 +36,8 @@ if  (! dpkg -l cuda-drivers > /dev/null 2>&1); then
 fi
 
 if [[ ! -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    # Do not install any Linux display driver in WSL
+    # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch02-getting-started
     echo "$password" | sudo -S apt install -y cuda-drivers
 fi
 
