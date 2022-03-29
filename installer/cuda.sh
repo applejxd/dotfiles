@@ -37,6 +37,7 @@ fi
 
 if [[ ! -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     echo "$password" | sudo -S apt install -y cuda-drivers
+fi
 
 echo "$password" | sudo -S apt install cuda-toolkit-11-6
 export PATH=/usr/local/cuda-11.6/bin${PATH:+:${PATH}}
