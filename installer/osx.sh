@@ -7,6 +7,11 @@ else
     password=$1
 fi
 
+# Mac OS X use bash 3.2, and process substitution is unable
+tmp_file=$(mktemp)
+# cf. https://tm.root-n.com/programming:shell_script:command:trap
+trap 'rm -f "$tmp_file"' EXIT HUP INT QUIT TERM
+
 # for x86_64 architecture
 yes A | softwareupdate --install-rosetta
 
@@ -27,20 +32,19 @@ brew update
 # Brew bundle #
 ###############
 
-# Mac OS X use bash 3.2, and process substitution is unable
-brew_bundle=$(mktemp)
-# cf. https://tm.root-n.com/programming:shell_script:command:trap
-trap 'rm -f "$brew_bundle"' EXIT HUP INT QUIT TERM
-
 if [[ $(uname -m) == arm64 ]]; then
     # GUI apps
-    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_mas_cask.rb > brew_bundle
-    brew bundle --file=brew_bundle
+    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_mas_cask.rb > tmp_file
+    brew bundle --file=tmp_file
 fi
 
 ##########
 # Others #
 ##########
+
+# System configurations
+curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx_defaults > tmp_file
+echo "$password" | source tmp_file
 
 # fzf install
 if [ ! -e ~/.fzf.zsh ]; then
@@ -64,7 +68,7 @@ if [ ! -e ~/Library/fonts/Ricty\ Discord\ Regular\ for\ Powerline.ttf ]; then
     fc-cache -vf
 fi
 
-# # powerline, which needs powerline-font
+# powerline, which needs powerline-font
 if !(type "powerline-daemon" > /dev/null 2>&1); then
     pip3 install powerline-status
 fi
