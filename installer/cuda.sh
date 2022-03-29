@@ -51,7 +51,7 @@ export PATH=/usr/local/cuda-11.6/bin${PATH:+:${PATH}}
 # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch05-running-containers
 # cf. https://unix.stackexchange.com/questions/391796/pipe-password-to-sudo-and-other-data-to-sudoed-command
         
-if !(type "docker" > /dev/null 2>&1)&& [[ "$(uname -r)" == *microsoft* ]]; then
+if !(type "docker" > /dev/null 2>&1) && [[ "$(uname -r)" == *microsoft* ]]; then
         distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
         { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey; } | sudo -k -S apt-key add -
         { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list; } \
