@@ -15,7 +15,7 @@ distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
 
 if [[ "$(uname -r)" != *microsoft* ]]; then
     # Step 1: The kernel headers and dev packages
-    echo "$password" | sudo -S apt-get install linux-headers-$(uname -r)
+    echo "$password" | sudo -S apt-get -y install linux-headers-$(uname -r)
     # Step 2: Use the CUDA network repository
     wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-$distribution.pin
     echo "$password" | sudo -S mv cuda-$distribution.pin /etc/apt/preferences.d/cuda-repository-pin-600
@@ -38,8 +38,8 @@ fi
 if [[ "$(uname -r)" != *microsoft* ]]; then
     # Do not install any Linux display driver in WSL
     # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch02-getting-started
-    echo "$password" | sudo -S apt install -y cuda-drivers
+    echo "$password" | sudo -S apt-get install -y cuda-drivers
 fi
 
-echo "$password" | sudo -S apt install cuda-toolkit-11-6
+echo "$password" | sudo -S apt-get -y install cuda-toolkit-11-6
 export PATH=/usr/local/cuda-11.6/bin${PATH:+:${PATH}}
