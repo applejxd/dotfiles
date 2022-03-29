@@ -13,7 +13,7 @@ fi
 
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
 
-if [[ ! -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+if [[ "$(uname -r)" != *microsoft* ]]; then
     # Step 1: The kernel headers and dev packages
     echo "$password" | sudo -S apt-get install linux-headers-$(uname -r)
     # Step 2: Use the CUDA network repository
@@ -35,7 +35,7 @@ if  (! dpkg -l cuda-drivers > /dev/null 2>&1); then
     echo "$password" | sudo -S apt update
 fi
 
-if [[ ! -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+if [[ "$(uname -r)" != *microsoft* ]]; then
     # Do not install any Linux display driver in WSL
     # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch02-getting-started
     echo "$password" | sudo -S apt install -y cuda-drivers
