@@ -82,7 +82,8 @@ fi
 echo "$password" | sudo -S apt-get install -y xubuntu-desktop
 
 # RDP
-echo "$password" | sudo -S apt-get install -y xfce4 xrdp
+echo "$password" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4
+echo "$password" | sudo -S apt-get install xrdp
 
 # RDP settings
 # cf. https://qiita.com/atomyah/items/887a5185ec9a8206c7c4#ubuntu%E3%81%ABxrdp%E3%82%92%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB
