@@ -4,7 +4,7 @@ if [ $# -eq 0 ]; then
     # save password
     read -sp "Password: " password
 else
-    password=$1
+    password="$1"
 fi
 
 #########################
@@ -30,8 +30,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         brew_script=$(mktemp)
         # cf. https://tm.root-n.com/programming:shell_script:command:trap
         trap 'rm -f "$brew_script"' EXIT HUP INT QUIT TERM
-        curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh > brew_script
-        echo "$password" | source brew_script
+        curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh > "$brew_script"
+        echo "$password" | source "$brew_script"
     fi
 fi
 
@@ -55,7 +55,7 @@ else
 fi
 
 if [[ ! -e $ANYENV_ROOT ]]; then
-    git clone https://github.com/anyenv/anyenv $ANYENV_ROOT
+    git clone https://github.com/anyenv/anyenv "$ANYENV_ROOT"
 fi
 
 export PATH=$ANYENV_ROOT/bin:$PATH
