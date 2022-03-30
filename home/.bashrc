@@ -56,8 +56,8 @@ source "/usr/local/etc/profile.d/bash_completion.sh"
 if [ -f ~/.fzf.bash ]; then
     source ~/.fzf.bash
     # common settings of fzf
-    if [ -f "$HOME"/.config/shell/fzf.sh ]; then
-        source "$HOME"/.config/shell/fzf.sh
+    if [ -f $HOME/.config/shell/fzf.sh ]; then
+        source $HOME/.config/shell/fzf.sh
     fi
 fi
 
