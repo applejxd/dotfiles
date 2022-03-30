@@ -27,6 +27,7 @@ echo $password | sudo -S bash -c "\
     add-apt-repository -y ppa:longsleep/golang-backports && \
     apt-get update && \
     apt-get install -y golang"
+export GOPATH=$HOME/.go
 go install github.com/x-motemen/ghq@latest
 
 # ghq
