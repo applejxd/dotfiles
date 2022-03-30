@@ -106,7 +106,7 @@ fi
 # to fix Authentication error
 # cf. https://god-support.blogspot.com/2019/11/ubuntu1804-xrdp-authentication-is.html
 if [ ! -L /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
-        if [ ! -f /etc/ssh/sshd_config ]; then
+    if [ ! -f /etc/ssh/sshd_config ]; then
         echo "$password" | sudo -S rm /etc/ssh/sshd_config
     fi
     echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/02-allow-colord.conf /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf
