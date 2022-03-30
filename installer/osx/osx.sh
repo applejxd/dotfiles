@@ -34,7 +34,7 @@ brew update
 
 if [[ $(uname -m) == arm64 ]]; then
     # GUI apps
-    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/brew_mas_cask.rb > tmp_file
+    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/brew_mas_cask.rb > tmp_file
     brew bundle --file=tmp_file
     
     # Password required GUI apps
@@ -47,7 +47,7 @@ fi
 ##########
 
 # System configurations
-curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx_defaults > tmp_file
+curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx_defaults > tmp_file
 echo "$password" | source tmp_file
 
 # fzf install

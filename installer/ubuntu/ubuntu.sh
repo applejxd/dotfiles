@@ -20,7 +20,7 @@ echo "$password" | sudo -S apt-get install -y xsel
 echo "$password" | sudo -S apt-get install -y xdg-utils
 
 # docker
-echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/docker.sh)
+echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
 
 # Go
 echo $password | sudo -S bash -c "\
@@ -111,5 +111,3 @@ if [ ! -L /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
     fi
     echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/02-allow-colord.conf /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf
 fi
-   
-echo "$password" | sudo -S apt-get install -y chromium-browser  
