@@ -28,7 +28,6 @@ echo $password | sudo -S bash -c "\
     apt-get update && \
     apt-get install -y golang"
 export GOPATH=$HOME/.go
-go install github.com/x-motemen/ghq@latest
 
 # ghq
 go install github.com/x-motemen/ghq@latest
