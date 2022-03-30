@@ -121,7 +121,7 @@ alias lt="ls --tree"
 alias gen-key="ssh-keygen -t ed25519 -P \"\""
 
 # pbcopy & pbpaste
-if [[ "$(uname -r)" == *microsoft* ]]; then
+if [[ "$(uname -r)" == *(M|m)icrosoft* ]]; then
     alias pbcopy='clip.exe'
     alias pbpaste='powershell.exe Get-Clipboard' 
 elif [[ "$OSTYPE" == "linux-gnu" ]]; then
