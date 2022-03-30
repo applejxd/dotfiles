@@ -64,6 +64,7 @@ fi
 ###########
 
 if [[ "$(uname -r)" == *(M|m)icrosoft* ]] && (! systemctl >/dev/null 2>&1); then
+    # To install distrod for zsh
     echo "$password" | sudo -S chsh -s $(which zsh) $USER
 
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
