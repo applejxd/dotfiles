@@ -49,7 +49,7 @@ fi
 # LaTeX
 # echo "$password" | sudo -S apt-get install -y texlive-full
 
-if [[ "$(uname -r)" == *(M|m)icrosoft* ]]; then
+if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
     # WSL config
     if [ ! -L /etc/wsl.conf ]; then
         if [ -f /etc/wsl.conf ]; then
