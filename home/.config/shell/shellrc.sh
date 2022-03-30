@@ -44,10 +44,10 @@ if type "ghq" >/dev/null 2>&1; then
         ghq get https://github.com/cocopon/iceberg.vim.git
     fi
     if [[ ! -e $HOME/.vim/colors ]]; then
-            mkdir -p $HOME/.vim/colors
+            mkdir -p "$HOME"/.vim/colors
     fi
     if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
-    	ln -s $GHQ_ROOT/github.com/cocopon/iceberg.vim/colors/iceberg.vim $HOME/.vim/colors/iceberg.vim
+    	ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
     fi
 fi
 
@@ -165,10 +165,10 @@ fi
 # cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
 # cf. http://rksz.hateblo.jp/entry/2014/10/27/201939
 function jj() {
-    if [ $1 ]; then
-        JUMPDIR=$(find . -type d -maxdepth 1 | grep $1 | tail -1)
+    if [[ "$1" ]]; then
+        JUMPDIR=$(find . -type d -maxdepth 1 | grep "$1" | tail -1)
         if [[ -d $JUMPDIR && -n $JUMPDIR ]]; then
-            cd $JUMPDIR
+            cd "$JUMPDIR" || exit
         else
             echo "directory not found"
         fi
@@ -196,7 +196,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     function cdf() {
         target=$(osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)')
         if [ "$target" != "" ]; then
-            cd "$target"
+            cd "$target" || exit
             pwd
         else
             echo 'No Finder window found' >&2
@@ -209,17 +209,18 @@ fi
 if [ -e ~/.iterm2_shell_integration.zsh ]; then
     function badge() {
         printf "\e]1337;SetBadgeFormat=%s\a" \
-            $(echo -n "$1" | base64)
+            "$(echo -n "$1" | base64)"
     }
 
     function ssh_local() {
         local ssh_config=~/.ssh/config
-        local server=$(cat $ssh_config | grep "Host " | sed "s/Host //g" | fzf)
+        local server
+        server=$(cat $ssh_config | grep "Host " | sed "s/Host //g" | fzf)
         if [ -z "$server" ]; then
             return
         fi
-        badge $server
-        ssh $server
+        badge "$server"
+        ssh "$server"
     }
 fi
 
@@ -252,25 +253,25 @@ function switch-arch() {
 # cf. http://bit.ly/2tCOvHP
 function extract() {
     case $1 in
-    *.tar.gz | *.tgz) tar xzvf $1 ;;
-    *.tar.xz) tar Jxvf $1 ;;
-    *.zip) unzip $1 ;;
-    *.lzh) lha e $1 ;;
-    *.tar.bz2 | *.tbz) tar xjvf $1 ;;
-    *.tar.Z) tar zxvf $1 ;;
-    *.gz) gzip -d $1 ;;
-    *.bz2) bzip2 -dc $1 ;;
-    *.Z) uncompress $1 ;;
-    *.tar) tar xvf $1 ;;
-    *.arj) unarj $1 ;;
+    *.tar.gz | *.tgz) tar xzvf "$1" ;;
+    *.tar.xz) tar Jxvf "$1" ;;
+    *.zip) unzip "$1" ;;
+    *.lzh) lha e "$1" ;;
+    *.tar.bz2 | *.tbz) tar xjvf "$1" ;;
+    *.tar.Z) tar zxvf "$1" ;;
+    *.gz) gzip -d "$1" ;;
+    *.bz2) bzip2 -dc "$1" ;;
+    *.Z) uncompress "$1" ;;
+    *.tar) tar xvf "$1" ;;
+    *.arj) unarj "$1" ;;
     esac
 }
 
 # compile
 # cf. http://bit.ly/2tCOvHP
 function runcpp() {
-    fname=$(echo $1 | awk -F/ '{print $NF}' | awk -F. '{print $1}')
-    g++ -O2 -Wall -Wextra $1 -o $fname
+    fname=$(echo "$1" | awk -F/ '{print $NF}' | awk -F. '{print $1}')
+    g++ -O2 -Wall -Wextra "$1" -o "$fname"
     shift
-    ./$fname $@
+    ./"$fname" "$@"
 }

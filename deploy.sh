@@ -118,7 +118,7 @@ if (type "git" >/dev/null 2>&1); then
     # to display Japanese files
     git config --global core.quotepath "false"
 
-    git config --global ghq.root "~/src"
+    git config --global ghq.root "$HOME/src"
     git config --global gitflow.branch.master "main"
     
     # for ssh push

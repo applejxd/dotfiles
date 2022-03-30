@@ -52,7 +52,7 @@ echo "$password" | source tmp_file
 
 # fzf install
 if [ ! -e ~/.fzf.zsh ]; then
-    $(brew --prefix)/opt/fzf/install
+    "$(brew --prefix)"/opt/fzf/install
 fi
 
 # iTerm2 Shell integration
@@ -61,7 +61,7 @@ if [ ! -e ~/.iterm2_shell_integration.zsh ]; then
 fi
 
 # LaTeX
-if !(type "platex" > /dev/null 2>&1) && (type tlmgr > /dev/null 2>&1); then
+if ! (type "platex" > /dev/null 2>&1) && (type tlmgr > /dev/null 2>&1); then
     echo "$password" | sudo -S tlmgr update --self --all
     echo "$password" | sudo -S tlmgr paper a4
 fi
@@ -73,6 +73,6 @@ if [ ! -e ~/Library/fonts/Ricty\ Discord\ Regular\ for\ Powerline.ttf ]; then
 fi
 
 # powerline, which needs powerline-font
-if !(type "powerline-daemon" > /dev/null 2>&1); then
+if ! (type "powerline-daemon" > /dev/null 2>&1); then
     pip3 install powerline-status
 fi

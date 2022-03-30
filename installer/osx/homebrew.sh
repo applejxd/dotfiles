@@ -2,7 +2,7 @@
 
 if [ $# -eq 0 ]; then
     # save password
-    read -sp "Password: " password
+    read -rsp "Password: " password
 else
     password=$1
 fi
@@ -30,7 +30,7 @@ if [[ ! -e $brew_path ]]; then
     # Prepare installation script
     tmp_file=$(mktemp)
     # cf. https://tm.root-n.com/programming:shell_script:command:trap
-    trap 'rm -f "$temp_file"' EXIT HUP INT QUIT TERM
+    trap 'rm -f "$tmp_file"' EXIT HUP INT QUIT TERM
     curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > tmp_file
 
     # Install Homebrew for Mac OS X or Linux

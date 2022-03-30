@@ -20,6 +20,6 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     # cf. https://tm.root-n.com/programming:shell_script:command:trap
     trap 'rm -f "$brew_bundle"' EXIT HUP INT QUIT TERM
     
-    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx.sh > brew_bundle
-    echo "$password" | source brew_bundle
+    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx.sh > "$brew_bundle"
+    echo "$password" | source "$brew_bundle"
 fi

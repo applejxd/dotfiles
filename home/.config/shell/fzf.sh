@@ -35,11 +35,11 @@ fi
 alias fgg='_fgg'
 function _fgg() {
     wc=$(jobs | wc -l | tr -d ' ')
-    if [ $wc -ne 0 ]; then
+    if [ "$wc" -ne 0 ]; then
         job=$(jobs | awk -F "suspended" "{print $1 $2}" | sed -e "s/\-//g" -e "s/\+//g" -e "s/\[//g" -e "s/\]//g" | grep -v pwd | fzf | awk "{print $1}")
-        wc_grep=$(echo $job | grep -v grep | grep 'suspended')
+        wc_grep=$(echo "$job" | grep -v grep | grep 'suspended')
         if [ "$wc_grep" != "" ]; then
-            fg %$job
+            fg %"$job"
         fi
     fi
 }
@@ -59,18 +59,18 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         DEVICE=$(diskutil list | grep '/dev' | cut -d ' ' -f 1 | fzf --preview 'diskutil info {}')
 
         # Sanity check the device
-        diskutil info $DEVICE | grep "Device Location" | grep -q External || {
+        diskutil info "$DEVICE" | grep "Device Location" | grep -q External || {
             echo "Chosen disk is an internal disk, so cannot unmount" >&2
             exit 1
         }
 
-        diskutil info $DEVICE | grep "Virtual" | grep -q No || {
+        diskutil info "$DEVICE" | grep "Virtual" | grep -q No || {
             echo "Chosen disk is virtual, so cannot unmount" >&2
             exit 1
         }
 
         echo "Unmounting $DEVICE"
-        diskutil unmountDisk $DEVICE
+        diskutil unmountDisk "$DEVICE"
     }
 fi
 
@@ -91,7 +91,7 @@ if type "git" >/dev/null 2>&1; then
         local branches branch
         branches=$(git branch -vv) &&
             branch=$(echo "$branches" | fzf +m) &&
-            git checkout $(echo "$branch" | awk '{print $1}' | sed "s/.* //")
+            git checkout "$(echo "$branch" | awk '{print $1}' | sed "s/.* //")"
     }
 
     # fbrm - checkout git branch (including remote branches)
@@ -101,7 +101,7 @@ if type "git" >/dev/null 2>&1; then
         branches=$(git branch --all | grep -v HEAD) &&
             branch=$(echo "$branches" |
                 fzf-tmux -d $((2 + $(wc -l <<<"$branches"))) +m) &&
-            git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
+            git checkout "$(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")"
     }
 
     # fshow - git commit browser
@@ -121,20 +121,20 @@ if type "git" >/dev/null 2>&1; then
     # cf. http://bit.ly/34zmzkt
     function cdworktree() {
         # カレントディレクトリがGitリポジトリ上かどうか
-        git rev-parse &>/dev/null
-        if [ $? -ne 0 ]; then
+        if ! (git rev-parse &>/dev/null); then
             echo fatal: Not a git repository.
             return
         fi
 
-        local selectedWorkTreeDir=$(git worktree list | fzf | awk '{print $1}')
+        local selectedWorkTreeDir
+        selectedWorkTreeDir=$(git worktree list | fzf | awk '{print $1}')
 
-        if [ "$selectedWorkTreeDir" = "" ]; then
+        if [[ "$selectedWorkTreeDir" = "" ]]; then
             # Ctrl-C.
             return
         fi
 
-        cd ${selectedWorkTreeDir}
+        cd "$selectedWorkTreeDir" || exit
     }
 
     # interactive 'diff' and 'add'
@@ -144,13 +144,13 @@ if type "git" >/dev/null 2>&1; then
         while out=$(git status --short | awk '{if (substr($0,2,1) !~ / /) print $2}' | fzf --multi --exit-0 --expect=ctrl-d)
         do
             q=$(head -1 <<< "$out")
-            n=$[$(wc -l <<< "$out") - 1]
-            addfiles=(`echo $(tail "-$n" <<< "$out")`)
+            n=$(($(wc -l <<< "$out") - 1))
+            addfiles=($(echo $(tail "-$n" <<< "$out")))
             [[ -z "$addfiles" ]] && continue
             if [ "$q" = ctrl-d ]; then
-                git diff --color=always $addfiles | less -R
+                git diff --color=always "$addfiles" | less -R
             else
-                git add $addfiles
+                git add "$addfiles"
             fi
         done
     }
@@ -169,7 +169,7 @@ if type "docker" >/dev/null 2>&1; then
 
         # it (interactive & tty): stdio
 	# rm: remove container that stops
-        [ -n "$name" ] && docker run -it --rm --gpus all -e DISPLAY=$DISPLAY "$@" "$name"
+        [ -n "$name" ] && docker run -it --rm --gpus all -e DISPLAY="$DISPLAY" "$@" "$name"
     }
 
     alias dls="docker ps -a"
@@ -224,14 +224,14 @@ if type "docker" >/dev/null 2>&1; then
          
 	    local date_tag
 	    date_tag=$(date "+%y.%m.%d")
-        [ -n "$file_name" ] && docker build -t local/$file_name:$date_tag -f $file_name .
+        [ -n "$file_name" ] && docker build -t local/"$file_name":"$date_tag" -f "$file_name" .
     }
     
     function dcom() {
         local file_name
         file_name=$(ls *.yml 2>/dev/null | fzf)
 
-    	    [ -n "$file_name" ] && docker-compose -f $file_name up -d
+    	    [ -n "$file_name" ] && docker-compose -f "$file_name" up -d
     }
 fi
 
@@ -246,7 +246,7 @@ if type "singularity" >/dev/null 2>&1; then
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
          
-        [ -n "$file_name" ] && sudo -E singularity build ${file_name}.sif ${file_name}.def
+        [ -n "$file_name" ] && sudo -E singularity build "$file_name".sif "$file_name".def
     }
     
     function bbuild() {
@@ -255,39 +255,39 @@ if type "singularity" >/dev/null 2>&1; then
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
          
-        [ -n "$file_name" ] && sudo -E singularity build --sandbox ${file_name}-box ${file_name}.def
+        [ -n "$file_name" ] && sudo -E singularity build --sandbox "$file_name"-box "$file_name".def
     }
     
     function box2sif() {
         local box_name
         box_name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
-        [ -n "$box_name" ] && singularity build ${box_name}.sif ${box_name}
+        [ -n "$box_name" ] && singularity build "$box_name".sif "$box_name"
     }
 
     function sshell() {
         local file_name
         file_name=$(ls *.sif | fzf)
                  
-        [ -n "$file_name" ] && singularity shell --nv ${file_name}
+        [ -n "$file_name" ] && singularity shell --nv "$file_name"
     }
 
     function sexe() {
         local file_name
         file_name=$(ls *.sif | fzf)
                  
-        [ -n "$file_name" ] && singularity exec --nv ${file_name} "$@"
+        [ -n "$file_name" ] && singularity exec --nv "$file_name" "$@"
     }
     
     function bshell() {
         local box_name
         box_name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
-        [ -n "$box_name" ] && sudo singularity shell --nv --writable $name
+        [ -n "$box_name" ] && sudo singularity shell --nv --writable "$name"
     }
     
     function brun() {
         local box_name
         box_name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
-        [ -n "$box_name" ] && sudo singularity run --nv --writable $name
+        [ -n "$box_name" ] && sudo singularity run --nv --writable "$name"
     }
 
     alias sls="singularity instance list"
@@ -298,21 +298,21 @@ if type "singularity" >/dev/null 2>&1; then
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
          
-        [ -n "$file_name" ] && singularity instance start --nv ${file_name}.sif ${file_name}
+        [ -n "$file_name" ] && singularity instance start --nv "$file_name".sif "$file_name"
     }
 
     function sishell() {
         local instnace_name
         instance_name=$(singularity instance list | sed -e '1d' | awk '{print $1}' | fzf)
          
-        [ -n "$instance_name" ] && singularity shell instance://${instance_name}
+        [ -n "$instance_name" ] && singularity shell instance://"$instance_name"
     }
 
     function sstop() {
-        local instnace_name
+        local instance_name
         instance_name=$(singularity instance list | sed -e '1d' | awk '{print $1}' | fzf)
          
-        [ -n "$instance_name" ] && singularity instance stop ${instance_name}
+        [ -n "$instance_name" ] && singularity instance stop "$instance_name"
     }
 fi
 
@@ -330,12 +330,12 @@ if type "brew" >/dev/null 2>&1; then
 
         if [ "x$token" != "x" ]; then
             echo "(I)nstall or open the (h)omepage of $token"
-            read input
-            if [ $input = "i" ] || [ $input = "I" ]; then
-                brew cask install $token
+            read -r input
+            if [ "$input" = "i" ] || [ "$input" = "I" ]; then
+                brew cask install "$token"
             fi
-            if [ $input = "h" ] || [ $input = "H" ]; then
-                brew cask home $token
+            if [ "$input" = "h" ] || [ "$input" = "H" ]; then
+                brew cask home "$token"
             fi
         fi
     }
@@ -349,12 +349,12 @@ if type "brew" >/dev/null 2>&1; then
 
         if [ "x$token" != "x" ]; then
             echo "(U)ninstall or open the (h)omepage of $token"
-            read input
-            if [ $input = "u" ] || [ $input = "U" ]; then
-                brew cask uninstall $token
+            read -r input
+            if [ "$input" = "u" ] || [ "$input" = "U" ]; then
+                brew cask uninstall "$token"
             fi
-            if [ $input = "h" ] || [ $token = "h" ]; then
-                brew cask home $token
+            if [ "$input" = "h" ] || [ "$token" = "h" ]; then
+                brew cask home "$token"
             fi
         fi
     }

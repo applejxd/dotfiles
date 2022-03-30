@@ -2,7 +2,7 @@
 
 if [ $# -eq 0 ]; then
     # Save Password
-    read -sp "Password: " password
+    read -rsp "Password: " password
 else
     password=$1
 fi
@@ -20,10 +20,10 @@ echo "$password" | sudo -S apt-get install -y xsel
 echo "$password" | sudo -S apt-get install -y xdg-utils
 
 # docker
-echo $password | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
+echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
 
 # Go
-echo $password | sudo -S bash -c "\
+echo "$password" | sudo -S bash -c "\
     add-apt-repository -y ppa:longsleep/golang-backports && \
     apt-get update && \
     apt-get install -y golang"
@@ -33,15 +33,18 @@ export GOPATH=$HOME/.go
 go install github.com/x-motemen/ghq@latest
 
 # Singularity
-if !(type "singularity" > /dev/null 2>&1); then
+if ! (type "singularity" > /dev/null 2>&1); then
     export VERSION=3.9.5 && \
         wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz && \
         tar -xzf singularity-ce-${VERSION}.tar.gz && \
-        cd singularity-ce-${VERSION}
+        cd singularity-ce-${VERSION} || exit
     ./mconfig && make -C builddir
     echo "$password" | sudo -S make -C builddir install
     cd .. && rm -rf singularity-ce-*
 fi
+
+# Linter
+echo "$password" | sudo -S apt-get install -y shellcheck
 
 # Java
 # echo "$password" | sudo -S apt-get install -y default-jre default-jdk
@@ -100,7 +103,7 @@ echo xfce4-session > ~/.xsession
 echo "$password" | sudo -S sed -i 's|^\(test\s-x\s/etc/X11/Xsession.*\)|# \1|' /etc/xrdp/startwm.sh
 echo "$password" | sudo -S sed -i 's|^\(exec\s/bin/sh.*\)|# \1|' /etc/xrdp/startwm.sh
 if (! grep "startxfce4" /etc/xrdp/startwm.sh >/dev/null 2>&1); then
-    echo "$password" | sudo -S tee -a /etc/xrdp/startwm.sh <<< "startxfce4"
+    { echo "$password"; echo "startxfce4"; } | sudo -S -k tee -a /etc/xrdp/startwm.sh
 fi
 
 # to fix Authentication error

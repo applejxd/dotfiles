@@ -2,17 +2,17 @@
 
 if [ $# -eq 0 ]; then
     # Save Password
-    read -sp "Password: " password
+    read -rsp "Password: " password
 else
     password=$1
 fi
 
 function cmake_install() {
-  INSTALL_PATH=`echo $1 | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g'`
-  if [ ! -e ~/src/$INSTALL_PATH/build ]; then
-    ghq get $1
-    mkdir ~/src/$INSTALL_PATH/build
-    cd ~/src/$INSTALL_PATH/build
+  INSTALL_PATH=$(echo "$1" | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g')
+  if [ ! -e ~/src/"$INSTALL_PATH"/build ]; then
+    ghq get "$1"
+    mkdir ~/src/"$INSTALL_PATH"/build
+    cd ~/src/"$INSTALL_PATH"/build || exit
     cmake ..
     make -j4
     echo "$password" | sudo -S make install
@@ -32,7 +32,7 @@ cmake_install https://github.com/google/googletest.git
 wget -P ~/src https://github.com/google/glog/archive/refs/tags/v0.5.0.zip
 unzip ~/src/v0.5.0.zip
 mkdir ~/src/glog-0.5.0/build
-cd ~/src/glog-0.5.0/build
+cd ~/src/glog-0.5.0/build || exit
 cmake ..
 make -j4
 echo "$password" | sudo -S make install
@@ -51,9 +51,9 @@ if [ ! -e /usr/include/matplotlibcpp.h ]; then
 fi
 
 function cmake_uninstall() {
-  INSTALL_PATH=`echo $1 | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g'`
-  if [ ! -e ~/src/$INSTALL_PATH/build ]; then
-  cd ~/src/$INSTALL_PATH/build
+  INSTALL_PATH=$(echo "$1" | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g')
+  if [ ! -e ~/src/"$INSTALL_PATH"/build ]; then
+  cd ~/src/"$INSTALL_PATH"/build || exit
     echo "$password" | sudo -S sh -c "xargs rm -rf < install_manifest.txt"
   fi
 }

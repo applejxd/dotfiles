@@ -29,8 +29,8 @@ fi
 export PATH=$ANYENV_ROOT/bin${PATH:+:${PATH}}
 
 # for WSL
-if [[ "$(uname -r)" == *(M|m)icrosoft* ]]; then
-    source $HOME/.config/shell/wslenv.sh
+if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
+    source "$HOME"/.config/shell/wslenv.sh
 fi
 
 ########

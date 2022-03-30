@@ -41,20 +41,20 @@ fi
 ############
 
 # register bash
-if ! grep -q $(which bash) /etc/shells; then
+if ! grep -q "$(which bash)" /etc/shells; then
     echo "$password" | sudo -S sh -c "echo $(which bash) >> /etc/shells"
 fi
 
 # register fish
 if type "fish" > /dev/null 2>&1; then
-    if ! grep -q $(which fish) /etc/shells; then
+    if ! grep -q "$(which fish)" /etc/shells; then
         echo "$password" | sudo -S sh -c "echo $(which fish) >> /etc/shells"
     fi
 fi
 
 # register zsh
 if type "zsh" > /dev/null 2>&1; then
-    if ! grep -q $(which zsh) /etc/shells; then
+    if ! grep -q "$(which zsh)" /etc/shells; then
         echo "$password" | sudo -S sh -c "echo $(which zsh) >> /etc/shells"
     fi
 fi
@@ -65,7 +65,7 @@ fi
 
 if [[ "$(uname -r)" =~ (M|m)icrosoft ]] && (! systemctl >/dev/null 2>&1); then
     # To install distrod for zsh
-    echo "$password" | sudo -S chsh -s $(which zsh) $USER
+    echo "$password" | sudo -S chsh -s "$(which zsh)" "$USER"
 
     curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
     chmod +x install.sh

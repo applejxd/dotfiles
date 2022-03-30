@@ -2,8 +2,8 @@
 # common config #
 #################
 
-if [ -f $HOME/.config/shell/shellrc.sh ]; then
-    source $HOME/.config/shell/shellrc.sh
+if [ -f "$HOME"/.config/shell/shellrc.sh ]; then
+    source "$HOME"/.config/shell/shellrc.sh
 fi
 
 ###########
@@ -40,7 +40,7 @@ if type "powerline-daemon" >/dev/null 2>&1; then
     powerline-daemon -q
     POWERLINE_PATH=/usr/local/lib/python3.7/site-packages/powerline/bindings/bash/powerline.sh
     if [ -f $POWERLINE_PATH ]; then
-        source $POWERLINE_PATH
+        source "$POWERLINE_PATH"
     fi
 fi
 
@@ -56,8 +56,8 @@ source "/usr/local/etc/profile.d/bash_completion.sh"
 if [ -f ~/.fzf.bash ]; then
     source ~/.fzf.bash
     # common settings of fzf
-    if [ -f $HOME/.config/shell/fzf.sh ]; then
-        source $HOME/.config/shell/fzf.sh
+    if [ -f "$HOME"/.config/shell/fzf.sh ]; then
+        source "$HOME"/.config/shell/fzf.sh
     fi
 fi
 

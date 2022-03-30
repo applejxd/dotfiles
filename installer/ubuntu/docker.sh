@@ -2,14 +2,14 @@
 
 if [ $# -eq 0 ]; then
     # Save Password
-    read -sp "Password: " password
+    read -rsp "Password: " password
 else
     password="$1"
 fi
 
 echo "$password" | sudo -S apt-get update
 
-if !(type "docker" > /dev/null 2>&1); then
+if ! (type "docker" > /dev/null 2>&1); then
     ##########
     # Docker #
     ##########
