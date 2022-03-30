@@ -63,7 +63,7 @@ fi
 # Distrod #
 ###########
 
-if [[ "$(uname -r)" == *(M|m)icrosoft* ]] && (! systemctl >/dev/null 2>&1); then
+if [[ "$(uname -r)" =~ (M|m)icrosoft ]] && (! systemctl >/dev/null 2>&1); then
     # To install distrod for zsh
     echo "$password" | sudo -S chsh -s $(which zsh) $USER
 
