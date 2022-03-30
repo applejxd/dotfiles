@@ -8,20 +8,31 @@
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     if [[ $(uname -m) == arm64 ]]; then
-        export ANYENV_ROOT=~/.anyenv_arm64
+        export ANYENV_ROOT=$HOME/.anyenv_arm64
+        export ANYENV_DEFINITION_ROOT=$HOME/.config/anyenv_arm64/anyenv-install
     elif [[ $(uname -m) == x86_64 ]]; then
-        export ANYENV_ROOT=~/.anyenv_x64
+        export ANYENV_ROOT=$HOME/.anyenv_x64
+        export ANYENV_DEFINITION_ROOT=$HOME/.config/anyenv_x64/anyenv-install
     fi
 else
-    export ANYENV_ROOT=~/.anyenv
+    export ANYENV_ROOT=$HOME/.anyenv
 fi
 export PATH=$ANYENV_ROOT/bin:$PATH
 
-if !(type "anyenv" > /dev/null 2>&1); then
-    # install anyenv
+if [[ ! -e $ANYENV_ROOT ]]; then
     git clone https://github.com/anyenv/anyenv $ANYENV_ROOT
-    anyenv init
-    yes | anyenv install --init
+fi
+
+export PATH=$ANYENV_ROOT/bin:$PATH
+# Refresh anyenv
+eval "$(anyenv init -)"
+# Make anyenv manifest directory
+yes | anyenv install --init
+
+if [[ ! -e $ANYENV_ROOT/envs/rbenv ]]; then
+    anyenv install rbenv
+    # Refresh anyenv
+    eval "$(anyenv init -)"
 fi
 
 #########
