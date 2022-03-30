@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 if [ $# -eq 0 ]; then
     # Save Password
@@ -30,7 +30,7 @@ if !(type "docker" > /dev/null 2>&1); then
     echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose
            
-    if [[ "$(uname -r)" == *microsoft* ]]; then     
+    if [[ "$(uname -r)" =~ microsoft ]]; then     
         ###################
         # Rootful Dockerd #
         ###################

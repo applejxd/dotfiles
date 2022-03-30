@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # use local environment only (not use sudo) 
 

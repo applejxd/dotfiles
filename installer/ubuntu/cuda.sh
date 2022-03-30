@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 if [ $# -eq 0 ]; then
     # Save Password
@@ -13,7 +13,7 @@ fi
 
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
 
-if [[ "$(uname -r)" != *microsoft* ]]; then
+if [[ ! "$(uname -r)" =~ (M|m)icrosoft ]]; then
     # Step 1: The kernel headers and dev packages
     echo "$password" | sudo -S apt-get -y install linux-headers-$(uname -r)
     # Step 2: Use the CUDA network repository
@@ -35,7 +35,7 @@ if  (! dpkg -l cuda-drivers > /dev/null 2>&1); then
     echo "$password" | sudo -S apt update
 fi
 
-if [[ "$(uname -r)" != *microsoft* ]]; then
+if [[ ! "$(uname -r)" =~ (M|m)icrosoft ]]; then
     # Do not install any Linux display driver in WSL
     # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch02-getting-started
     echo "$password" | sudo -S apt-get install -y cuda-drivers
@@ -51,7 +51,7 @@ export PATH=/usr/local/cuda-11.6/bin${PATH:+:${PATH}}
 # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch05-running-containers
 # cf. https://unix.stackexchange.com/questions/391796/pipe-password-to-sudo-and-other-data-to-sudoed-command
         
-if !(type "docker" > /dev/null 2>&1) && [[ "$(uname -r)" == *microsoft* ]]; then
+if !(type "docker" > /dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
         distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
         { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey; } | sudo -k -S apt-key add -
         { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list; } \

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # install shells
 
 if [ $# -eq 0 ]; then
@@ -17,7 +17,7 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
     echo "$password" | sudo -S apt-get install -y zsh fish
 fi
 
-if  [[ "$OSTYPE" == "darwin"* ]]; then
+if  [[ "$OSTYPE" =~ darwin ]]; then
     brew_path=""
     if [[ $(uname -m) == arm64 ]]; then
         brew_path="/opt/homebrew/bin/brew"
@@ -75,5 +75,5 @@ if [[ "$(uname -r)" =~ (M|m)icrosoft ]] && (! systemctl >/dev/null 2>&1); then
     
     # Use bash for CLion toolchain
     # Use distrod for systemctl
-    echo "$password" | sudo -S chsh -s /opt/distrod/alias/bin/bash $USER
+    echo "$password" | sudo -S chsh -s /opt/distrod/alias/bin/bash "$USER"
 fi
