@@ -2,7 +2,7 @@
 export LIBGL_ALWAYS_INDIRECT=1
 
 # for VcXsrv
-if [[ -d /run/WSL ]]; then
+if [[ "$(uname -r)" == *WSL2 ]]; then
     # for WSL2
     export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
 else

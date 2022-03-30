@@ -133,7 +133,7 @@ alias wcc="pbpaste | wc -m"
 # clear format
 alias fcr="pbpaste | pbcopy"
 
-if [[ "$(uname -r)" == *microsoft* ]]; then
+if [[ "$(uname -r)" == *(M|m)icrosoft* ]]; then
     alias open="explorer.exe"
 elif [[ -e /etc/lsb-release ]]; then
     alias open="xdg-open"
