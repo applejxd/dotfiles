@@ -72,5 +72,7 @@ if [[ "$(uname -r)" == *(M|m)icrosoft* ]] && (! systemctl >/dev/null 2>&1); then
     echo "$password" | sudo -S /opt/distrod/bin/distrod enable --start-on-windows-boot
     rm ./install.sh
     
+    # Use bash for CLion toolchain
+    # Use distrod for systemctl
     echo "$password" | sudo -S chsh -s /opt/distrod/alias/bin/bash $USER
 fi
