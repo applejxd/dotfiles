@@ -52,6 +52,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     fi
 else
     export ANYENV_ROOT=$HOME/.anyenv
+    export ANYENV_DEFINITION_ROOT=$HOME/.config/anyenv/anyenv-install
 fi
 
 if [[ ! -e $ANYENV_ROOT ]]; then
