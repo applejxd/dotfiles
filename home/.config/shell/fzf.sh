@@ -76,7 +76,7 @@ fi
 
 function fsh() {
     local shell
-    shell=$(cat /etc/shells | sed -e "1d" | fzf -q "$1")
+    shell=$(sed -e "1d" < /etc/shells | fzf -q "$1")
     $shell
 }
 
@@ -141,6 +141,7 @@ if type "git" >/dev/null 2>&1; then
     # cf. https://qiita.com/reviry/items/e798da034955c2af84c5
     function fadd() {
         local out q n addfiles
+        # "out" is true except when cancel fzf selection
         while out=$(git status --short | awk '{if (substr($0,2,1) !~ / /) print $2}' | fzf --multi --exit-0 --expect=ctrl-d)
         do
             q=$(head -1 <<< "$out")
@@ -220,7 +221,7 @@ if type "docker" >/dev/null 2>&1; then
     
     function dbuild() {
     	local file_name
-        file_name=$(ls *.dockerfile 2>/dev/null | fzf)
+        file_name=$(find ./*.dockerfile | fzf)
          
 	    local date_tag
 	    date_tag=$(date "+%y.%m.%d")
@@ -229,7 +230,7 @@ if type "docker" >/dev/null 2>&1; then
     
     function dcom() {
         local file_name
-        file_name=$(ls *.yml 2>/dev/null | fzf)
+        file_name=$(find ./*.yml | fzf)
 
     	    [ -n "$file_name" ] && docker-compose -f "$file_name" up -d
     }
@@ -242,7 +243,7 @@ fi
 if type "singularity" >/dev/null 2>&1; then
     function sbuild() {
         local file_name
-        file_name=$(ls *.def | fzf)
+        file_name=$(find ./*.def | fzf)
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
          
@@ -251,7 +252,7 @@ if type "singularity" >/dev/null 2>&1; then
     
     function bbuild() {
         local file_name
-        file_name=$(ls *.def | fzf)
+        file_name=$(find ./*.def | fzf)
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
          
