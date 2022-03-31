@@ -260,7 +260,7 @@ if type "singularity" >/dev/null 2>&1; then
     
     function box2sif() {
         local box_name
-        box_name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
+        box_name=$(find . -maxdepth 1 -type d | fzf)
         [ -n "$box_name" ] && singularity build "$box_name".sif "$box_name"
     }
 
@@ -280,13 +280,13 @@ if type "singularity" >/dev/null 2>&1; then
     
     function bshell() {
         local box_name
-        box_name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
+        box_name=$(find . -maxdepth 1 -type d | fzf)
         [ -n "$box_name" ] && sudo singularity shell --nv --writable "$name"
     }
     
     function brun() {
         local box_name
-        box_name=$(ls -l | grep ^d | awk '{print $9}' | fzf)
+        box_name=$(find . -maxdepth 1 -type d | fzf)
         [ -n "$box_name" ] && sudo singularity run --nv --writable "$name"
     }
 
