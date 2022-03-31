@@ -47,10 +47,10 @@ function _fgg() {
 # v - open files in ~/.viminfo
 v() {
     local files
-    files=$(grep '^>' ~/.viminfo | cut -c3- |
-        while read line; do
+    files=$(grep '^>' ~/.viminfo | cut -c3- | 
+        while read -r line; do
             [ -f "${line/\~/$HOME}" ] && echo "$line"
-        done | fzf -d -m -q "$*" -1) && vim ${files//\~/$HOME}
+        done | fzf -d -m -q "$*" -1) && vim "${files//\~/$HOME}"
 }
 
 # cf. http://bit.ly/37GNSLZ
@@ -140,18 +140,24 @@ if type "git" >/dev/null 2>&1; then
     # interactive 'diff' and 'add'
     # cf. https://qiita.com/reviry/items/e798da034955c2af84c5
     function fadd() {
-        local out q n addfiles
+        local out input_key select_num selected_files
         # "out" is true except when cancel fzf selection
-        while out=$(git status --short | awk '{if (substr($0,2,1) !~ / /) print $2}' | fzf --multi --exit-0 --expect=ctrl-d)
+        # --exit-0: Exit if lenght of the list is 0
+        while out=$(git status --short | awk '{if (substr($0,2,1) !~ / /) print $2}' | fzf --exit-0 --expect=ctrl-d)
         do
-            q=$(head -1 <<< "$out")
-            n=$(($(wc -l <<< "$out") - 1))
-            addfiles=($(echo $(tail "-$n" <<< "$out")))
-            [[ -z "$addfiles" ]] && continue
-            if [ "$q" = ctrl-d ]; then
-                git diff --color=always "$addfiles" | less -R
+            # Use "fzf --expect=KEY" function (cf. https://www.mankier.com/1/fzf#Options-Scripting)
+            input_key=$(echo "$out" | head -1)
+            # Arithmetric Expansion
+            select_num=$(( $(echo "$out" | wc -l) - 1))
+            selected_files=$(echo "$out" | tail "-$select_num")
+            [[ -z "$selected_files" ]] && continue
+
+            if [ "$input_key" == ctrl-d ]; then
+                # Show diff
+                git diff --color=always "$selected_files" | less -R
             else
-                git add "$addfiles"
+                # When input ENTER
+                git add "$selected_files"
             fi
         done
     }

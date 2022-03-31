@@ -233,9 +233,12 @@ fi
 function fancy-ctrl-z() {
     if [[ $#BUFFER -eq 0 ]]; then
         BUFFER="fg"
+        # Finish editing the buffer
         zle accept-line
     else
+        # Push onto the buffer stack & Return to prompt
         zle push-input
+        # Clear the screen
         zle clear-screen
     fi
 }
