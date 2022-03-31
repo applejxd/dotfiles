@@ -266,14 +266,14 @@ if type "singularity" >/dev/null 2>&1; then
 
     function sshell() {
         local file_name
-        file_name=$(ls *.sif | fzf)
+        file_name=$(find ./*.sif | fzf)
                  
         [ -n "$file_name" ] && singularity shell --nv "$file_name"
     }
 
     function sexe() {
         local file_name
-        file_name=$(ls *.sif | fzf)
+        file_name=$(find ./*.sif | fzf)
                  
         [ -n "$file_name" ] && singularity exec --nv "$file_name" "$@"
     }
@@ -294,7 +294,7 @@ if type "singularity" >/dev/null 2>&1; then
 
     function sstart() {
         local file_name
-        file_name=$(ls *.sif | fzf)
+        file_name=$(find ./*.sif | fzf)
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
          
@@ -302,7 +302,7 @@ if type "singularity" >/dev/null 2>&1; then
     }
 
     function sishell() {
-        local instnace_name
+        local instance_name
         instance_name=$(singularity instance list | sed -e '1d' | awk '{print $1}' | fzf)
          
         [ -n "$instance_name" ] && singularity shell instance://"$instance_name"
