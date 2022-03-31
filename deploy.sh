@@ -122,7 +122,7 @@ if (type "git" >/dev/null 2>&1); then
     git config --global gitflow.branch.master "main"
     
     # for ssh push
-    git config --global url."github.com:".pushInsteadOf https://github.com/
+    git config --global url."github:".pushInsteadOf https://github.com/
 fi
 
 # Mac OS X use bash 3.2, and process substitution is unable
