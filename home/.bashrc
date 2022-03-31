@@ -53,10 +53,10 @@ source /usr/local/etc/profile.d/z.sh
 source "/usr/local/etc/profile.d/bash_completion.sh"
 
 # fzf
-if [ -f ~/.fzf.bash ]; then
-    source ~/.fzf.bash
+if [ -f "$HOME"/.fzf.bash ]; then
+    source "$HOME"/.fzf.bash
     # common settings of fzf
-    if [ -f $HOME/.config/shell/fzf.sh ]; then
+    if [ -f "$HOME"/.config/shell/fzf.sh ]; then
         source $HOME/.config/shell/fzf.sh
     fi
 fi

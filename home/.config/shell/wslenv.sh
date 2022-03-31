@@ -11,16 +11,20 @@ else
 fi
 
 # Windows System
-export PATH=/mnt/c/Windows:$PATH            # for explorer.exe
+export PATH=/mnt/c/Windows${PATH:+:${PATH}} # for explorer.exe
 export PATH=/mnt/c/Windows/System32:$PATH   # for clip.exe
 
 # Powershell
 export PATH=/mnt/c/Windows/System32/WindowsPowerShell/v1.0:$PATH
 
 # VSCode
-export PATH=/mnt/c/Progra~1/"Microsoft VS Code"/bin:$PATH
+if [[ -e /mnt/c/Progra~1/"Microsoft VS Code" ]]; then
+    export PATH=/mnt/c/Progra~1/"Microsoft VS Code"/bin:$PATH
+fi
 
 # Java
-export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
-export CLASSPATH=.:/usr/lib/jvm/java-11-openjdk-amd64/lib
+if [[ -e /usr/lib/jvm/java-11-openjdk-amd64 ]]; then
+    export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+    export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+    export CLASSPATH=.:/usr/lib/jvm/java-11-openjdk-amd64/lib
+fi

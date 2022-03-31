@@ -7,26 +7,37 @@ export EDITOR=vim
 
 # User settings
 if [[ -f $HOME/.config/shell/usrenv.sh ]]; then
-    source $HOME/.config/shell/usrenv.sh
+    source "$HOME"/.config/shell/usrenv.sh
+fi
+
+##########
+# anyenv #
+##########
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if [[ $(uname -m) == arm64 ]]; then
+        export ANYENV_ROOT="$HOME"/.anyenv_arm64
+        export ANYENV_DEFINITION_ROOT="$HOME"/.config/anyenv_arm64/anyenv-install
+    elif [[ $(uname -m) == x86_64 ]]; then
+        export ANYENV_ROOT="$HOME"/.anyenv_x64
+        export ANYENV_DEFINITION_ROOT="$HOME"/.config/anyenv_x64/anyenv-install
+    fi
+else
+    export ANYENV_ROOT="$HOME"/.anyenv
+    export ANYENV_DEFINITION_ROOT="$HOME"/.config/anyenv/anyenv-install
+fi
+
+export PATH=$ANYENV_ROOT/bin${PATH:+:${PATH}}
+
+if [[ -e $ANYENV_ROOT/envs/pyenv ]]; then
+    export PYENV_ROOT="$ANYENV_ROOT"/envs/pyenv
+    export PATH="$PYENV_ROOT"/bin:$PATH
+    eval "$(pyenv init --path)"
 fi
 
 ###################
 # OS dependencies #
 ###################
-
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    source $HOME/.config/shell/osxenv.sh
-    
-    if [[ $(uname -m) == arm64 ]]; then
-        export ANYENV_ROOT=~/.anyenv_arm64
-    elif [[ $(uname -m) == x86_64 ]]; then
-        export ANYENV_ROOT=~/.anyenv_x64
-    fi
-else
-    export ANYENV_ROOT=~/.anyenv
-fi
-
-export PATH=$ANYENV_ROOT/bin${PATH:+:${PATH}}
 
 # for WSL
 if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
@@ -37,25 +48,34 @@ fi
 # PATH #
 ########
 
-if [[ -e $ANYENV_ROOT/envs/pyenv ]]; then
-    export PYENV_ROOT="$ANYENV_ROOT/envs/pyenv"
-    export PATH="$PYENV_ROOT/bin:$PATH"
-    eval "$(pyenv init --path)"
+# for original binaries
+export PATH="$HOME"/bin:$PATH
+
+# cuda (nvcc)
+if [[ -e /usr/local/cuda-11.6 ]]; then
+    export PATH=/usr/local/cuda-11.6/bin${PATH:+:${PATH}}
 fi
 
 # for Go lang
-export GOPATH=$HOME/.go
-export PATH=$PATH:$GOPATH/bin
+if [[ -e "$HOME"/.go ]]; then
+    export GOPATH="$HOME"/.go
+    export PATH=$PATH:"$GOPATH"/bin
+fi
 
 # for Haskell package Cabal
-export PATH=~/.cabal/bin:$PATH
+if [[ -e "$HOME"/.cabal ]]; then
+    export PATH=~/.cabal/bin:$PATH
+fi
 
-# for pipenv (for Ubuntu)
-export PATH=~/.local/bin:$PATH
 # for YaTeX
-export PATH=~/.emacs.d/private/yatex:$PATH
-# for original binaries
-export PATH=~/bin:$PATH
+if [[ -e "$HOME"/.emacs.d/private/yatex ]]; then
+    export PATH="$HOME"/.emacs.d/private/yatex:$PATH
+    export TEXINPUTS="$HOME"/.emacs.d/private/yatex${TEXINPUTS:+:${TEXINPUTS}}
+    export BSTINPUTS="$HOME"/.emacs.d/private/yatex${BSTINPUTS:+:${BSTINPUTS}}
+fi
+
+# # for pipenv (for Ubuntu)
+# export PATH=~/.local/bin:$PATH
 
 #################
 # Specific root #
@@ -63,7 +83,3 @@ export PATH=~/bin:$PATH
 
 # ghq root
 export GHQ_ROOT=~/src
-
-# for YaTeX
-export TEXINPUTS=~/.emacs.d/private/yatex:$TEXINPUTS
-export BSTINPUTS=~/.emacs.d/private/yatex:$BSTINPUTS
