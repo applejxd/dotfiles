@@ -9,11 +9,11 @@ fi
 
 echo "$password" | sudo -S apt-get update
 
+##########
+# Docker #
+##########
+
 if ! (type "docker" > /dev/null 2>&1); then
-    ##########
-    # Docker #
-    ##########
-    
     # cf. https://docs.docker.com/engine/install/ubuntu/
     # cf. https://zenn.dev/sprout2000/articles/95b125e3359694
     
@@ -29,26 +29,30 @@ if ! (type "docker" > /dev/null 2>&1); then
     
     echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose
-           
-    if [[ "$(uname -r)" =~ microsoft ]]; then     
-        ###################
-        # Rootful Dockerd #
-        ###################
+fi
+
+###########
+# Dockerd #
+###########
+
+if [[ "$(uname -r)" =~ microsoft ]]; then     
+    ###################
+    # Rootful Dockerd #
+    ###################
         
-        echo "$password" | sudo -S gpasswd -a $USER docker
-        # echo "$password" | sudo -S service docker start
-        echo "$password" | sudo -S systemctl enable docker.service
-        echo "$password" | sudo -S systemctl start docker.service
-    else
-        ####################
-        # Rootless Dockerd #
-        ####################
+    echo "$password" | sudo -S gpasswd -a $USER docker
+    # echo "$password" | sudo -S service docker start
+    echo "$password" | sudo -S systemctl enable docker.service
+    echo "$password" | sudo -S systemctl start docker.service
+else
+    ####################
+    # Rootless Dockerd #
+    ####################
         
-        # cf. https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
+    # cf. https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
         
-        echo "$password" | sudo -S apt-get install -y uidmap dbus-user-session
-        dockerd-rootless-setuptool.sh install
-        echo "$password" | sudo -S systemctl --user enable docker.service
-        echo "$password" | sudo -S systemctl --user start docker.service
-    fi
+    echo "$password" | sudo -S apt-get install -y uidmap dbus-user-session
+    dockerd-rootless-setuptool.sh install
+    echo "$password" | sudo -S systemctl --user enable docker.service
+    echo "$password" | sudo -S systemctl --user start docker.service
 fi
