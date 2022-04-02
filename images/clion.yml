@@ -6,21 +6,20 @@ services:
     build:
       context: .
       dockerfile: ./clion.dockerfile
-    # user: "${id -u}:${id -g}"
 
     #######
     # SSH #
     #######
-#    ports:
-#      - "127.0.0.1:22000:2222"
+    ports:
+     - "127.0.0.1:50023:2222"
 
     #######
     # GUI #
     #######
-    network_mode: "host"
+    # network_mode: "host"
     environment:
       - DISPLAY
-    # volumes:
+    volumes:
       # - /tmp/.X11-unix:/tmp/.X11-unix:rw"
-      # - $HOME/.Xauthority:/root/.Xauthority:rw
+      - $HOME/.Xauthority:/root/.Xauthority:rw
     

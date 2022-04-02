@@ -1,43 +1,78 @@
-# CLion remote docker environment (How to build docker container, run and stop it)
-#
-# Build and run:
-#   docker build -t clion/remote-cpp-env:0.5 -f Dockerfile.remote-cpp-env .
-#   docker run -d --cap-add sys_ptrace -p127.0.0.1:2222:22 --name clion_remote_env clion/remote-cpp-env:0.5
-#   ssh-keygen -f "$HOME/.ssh/known_hosts" -R "[localhost]:2222"
-#
-# stop:
-#   docker stop clion_remote_env
-# 
-# ssh credentials (test user):
-#   user@password 
-
 FROM ubuntu:20.04
 
 WORKDIR /root
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && apt-get -y install tzdata
 
-RUN apt-get update \
-  && apt-get install -y ssh \
-      build-essential \
+# Install CMake 3.23 for manual library installation
+RUN apt-get install -y git build-essential libssl-dev
+RUN git clone https://gitlab.kitware.com/cmake/cmake.git -b v3.23.0
+RUN mkdir /root/cmake/build
+WORKDIR /root/cmake/build
+RUN ../bootstrap && make -j$(nproc) && make install
+WORKDIR /root
+
+RUN apt-get install -y ssh \
       gcc \
       g++ \
       gdb \
       clang \
       make \
       ninja-build \
-      cmake \
       autoconf \
       automake \
       locales-all \
       dos2unix \
       rsync \
       tar \
-      python \
-  && apt-get clean
+      python
 
 # for vcpkg
-RUN apt-get install -y curl zip unzip pkg-config
+# RUN apt-get install -y curl zip unzip pkg-config
+
+#######################
+# Manual installation #
+#######################
+
+# glog
+RUN git clone https://github.com/google/glog.git -b v0.5.0
+RUN mkdir /root/glog/build
+WORKDIR /root/glog/build
+RUN cmake .. && make -j$(nproc) && make install
+WORKDIR /root
+
+# gflags    
+RUN git clone https://github.com/gflags/gflags.git -b v2.2.2
+RUN mkdir /root/gflags/build
+WORKDIR /root/gflags/build
+RUN cmake .. && make -j$(nproc) && make install
+WORKDIR /root
+
+RUN apt-get install -y libgtest-dev
+
+# Eigen & ceres
+RUN apt-get install -y libeigen3-dev
+RUN git clone https://github.com/ceres-solver/ceres-solver.git -b 2.1.0
+RUN mkdir /root/ceres-solver/build
+WORKDIR /root/ceres-solver/build
+RUN cmake .. && make -j$(nproc) && make install
+WORKDIR /root
+
+# g2o
+RUN git clone https://github.com/RainerKuemmerle/g2o.git
+RUN mkdir /root/g2o/build
+WORKDIR /root/g2o/build
+RUN cmake .. && make -j$(nproc) && make install
+WORKDIR /root
+
+# Sophus
+RUN git clone https://github.com/strasdat/Sophus.git
+RUN mkdir /root/Sophus/build
+WORKDIR /root/Sophus/build
+RUN cmake .. && make -j$(nproc) && make install
+WORKDIR /root
+
+RUN apt-get install -y libopencv-dev
 
 #######
 # SSH #
@@ -53,25 +88,18 @@ RUN ( \
     echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
     echo 'Port 2222'; \
     echo 'X11Forwarding yes'; \
-  ) > /etc/ssh/sshd_config_test_clion \
+  ) > /etc/ssh/sshd_config_user \
   && mkdir /run/sshd
 
-# cf. https://qiita.com/YumaInaura/items/7509061e4b27e03ea538
 # SSH login fix. Otherwise user is kicked off after login
+# cf. https://qiita.com/YumaInaura/items/7509061e4b27e03ea538
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
-
-# Dockerfile と同ディレクトリの公開鍵をコピー
-COPY docker.pub /root/authorized_keys
-
-############
-# add user #
-############
-
-RUN apt-get install -y sudo git vim x11-apps
 
 # 手元の公開鍵をコピー
 COPY docker.pub /root/.ssh/authorized_keys
+# 公開鍵を使えるようにする (パーミッション変更など)
 RUN chmod 0600 /root/.ssh/authorized_keys
 
-# 公開鍵を使えるようにする (パーミッション変更など)
-CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
+RUN apt-get clean
+
+CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_user"]
