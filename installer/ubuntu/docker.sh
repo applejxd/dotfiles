@@ -28,7 +28,12 @@ if ! (type "docker" > /dev/null 2>&1); then
     | sudo -k -S tee /etc/apt/sources.list.d/docker.list &>/dev/null
     
     echo "$password" | sudo -S apt-get update
-    echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose
+    echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io
+    
+    # Install docker-compose v2.4.0 for gpus option
+    echo "$password" | sudo -S curl -L "https://github.com/docker/compose/releases/download/v2.4.0/docker-compose-$(uname -s)-$(uname -m)" \
+    -o /usr/local/bin/docker-compose
+    echo "$password" | sudo -S chmod +x /usr/local/bin/docker-compose
 fi
 
 ###########
