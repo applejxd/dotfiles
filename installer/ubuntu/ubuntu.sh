@@ -23,7 +23,7 @@ echo "$password" | sudo -S apt-get install -y xdg-utils
 echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
 
 # CUDA
-if ! (type "nvidia-smi" > /dev/null 2>&1); then
+if (type "nvidia-smi" > /dev/null 2>&1); then
     echo "$password" | source <(curl -L https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/cuda.sh)
 fi
 
