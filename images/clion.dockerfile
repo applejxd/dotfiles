@@ -4,9 +4,10 @@ WORKDIR /root
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && apt-get -y install tzdata
 
-# Install CMake 3.23 for manual library installation
+# Install CMake 3.21.6 for manual library installation
+# CLion supports CMake 2.8.11~3.21.x
 RUN apt-get install -y git build-essential libssl-dev
-RUN git clone https://gitlab.kitware.com/cmake/cmake.git -b v3.23.0
+RUN git clone https://gitlab.kitware.com/cmake/cmake.git -b v3.21.6
 RUN mkdir /root/cmake/build
 WORKDIR /root/cmake/build
 RUN ../bootstrap && make -j$(nproc) && make install
