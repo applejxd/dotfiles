@@ -64,4 +64,5 @@ if (type "docker" > /dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
         | sudo -k -S tee /etc/apt/sources.list.d/nvidia-docker.list &>/dev/null
         echo "$password" | sudo -S apt-get update
         echo "$password" | sudo -S apt-get install -y nvidia-docker2
+        echo "$password" | sudo -S systemctl restart docker
 fi
