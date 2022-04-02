@@ -73,7 +73,7 @@ WORKDIR /root/Sophus/build
 RUN cmake .. && make -j$(nproc) && make install
 WORKDIR /root
 
-RUN apt-get install -y libopencv-dev
+RUN apt-get install -y libboost-dev libopencv-dev
 
 #######
 # SSH #
