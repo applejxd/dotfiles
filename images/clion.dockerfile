@@ -65,6 +65,7 @@ RUN cmake .. && make -j$(nproc) && make install
 WORKDIR /root
 
 # g2o
+RUN apt-get install -y libsuitesparse-dev qtdeclarative5-dev qt5-qmake libqglviewer-dev-qt5
 RUN git clone https://github.com/RainerKuemmerle/g2o.git
 RUN mkdir /root/g2o/build
 WORKDIR /root/g2o/build
