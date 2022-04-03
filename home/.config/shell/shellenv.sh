@@ -39,6 +39,10 @@ fi
 # OS dependencies #
 ###################
 
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    source "$HOME"/.config/shell/osxenv.sh
+fi
+
 # for WSL
 if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
     source "$HOME"/.config/shell/wslenv.sh
