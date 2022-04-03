@@ -61,6 +61,7 @@ cask "quicklookase"
 # Editor and IDE
 cask "visual-studio-code"
 cask "jetbrains-toolbox"
+cask "microsoft-remote-desktop"
 
 # Fonts
 tap "homebrew/cask-fonts"
