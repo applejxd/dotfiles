@@ -49,7 +49,12 @@ WORKDIR /root/gflags/build
 RUN cmake .. && make -j$(nproc) && make install
 WORKDIR /root
 
-RUN apt-get install -y libgtest-dev
+# gtest
+RUN git clone https://github.com/google/googletest.git -b release-1.11.0
+RUN mkdir /root/googletest/build
+WORKDIR /root/googletest/build
+RUN cmake .. && make -j$(nproc) && make install
+WORKDIR /root
 
 # Eigen & ceres
 RUN apt-get install -y libeigen3-dev
