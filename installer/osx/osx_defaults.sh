@@ -7,6 +7,9 @@ else
     password=$1
 fi
 
+# 起動時の音をミュート
+echo "$password" | sudo -S nvram StartupMute=%01
+
 ############
 # defaults #
 ############
