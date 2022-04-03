@@ -43,6 +43,7 @@ if [[ $(uname -m) == arm64 ]]; then
     echo "$password" | brew install google-japanese-ime
     echo "$password" | brew install karabiner-elements
     echo "$password" | brew install xquartz
+    echo "$password" | brew install qlvideo
 fi
 
 ##########
