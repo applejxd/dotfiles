@@ -57,7 +57,7 @@ RUN cmake .. && make -j$(nproc) && make install
 WORKDIR /root
 
 # Eigen & ceres
-RUN apt-get install -y libeigen3-dev
+RUN apt-get install -y libeigen3-dev libatlas-base-dev libsuitesparse-dev
 RUN git clone https://github.com/ceres-solver/ceres-solver.git -b 2.1.0
 RUN mkdir /root/ceres-solver/build
 WORKDIR /root/ceres-solver/build
