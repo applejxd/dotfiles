@@ -52,7 +52,7 @@ cask "webpquicklook"
 cask "suspicious-package"
 cask "quicklookase"
 # Needs Rosetta2
-cask "qlvideo"
+#cask "qlvideo"
 
 #--------------#
 # Developments #
