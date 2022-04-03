@@ -2,9 +2,9 @@
 
 if [ $# -eq 0 ]; then
     # save password
-    read -sp "Password: " password
+    read -rsp "Password: " password
 else
-    password=$1
+    password="$1"
 fi
 
 # Mac OS X use bash 3.2, and process substitution is unable
@@ -34,8 +34,8 @@ brew update
 
 if [[ $(uname -m) == arm64 ]]; then
     # GUI apps
-    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/brew_mas_cask.rb > tmp_file
-    brew bundle --file=tmp_file
+    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/brew_mas_cask.rb > "$tmp_file"
+    brew bundle --file="$tmp_file"
     
     # Password required GUI apps
     echo "$password" | brew install avast-security
@@ -47,8 +47,8 @@ fi
 ##########
 
 # System configurations
-curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx_defaults > tmp_file
-echo "$password" | source tmp_file
+curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx_defaults > "$tmp_file"
+echo "$password" | source "$tmp_file"
 
 # fzf install
 if [ ! -e ~/.fzf.zsh ]; then
