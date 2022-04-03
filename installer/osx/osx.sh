@@ -51,7 +51,7 @@ fi
 ##########
 
 # System configurations
-curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx_defaults > "$tmp_file"
+curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx_defaults.sh > "$tmp_file"
 echo "$password" | source "$tmp_file"
 
 # iTerm2 Shell integration
