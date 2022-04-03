@@ -32,7 +32,7 @@ cask "cakebrew"
 # Basic softwares
 #cask "avast-security"
 cask "google-chrome"
-cask "google-japanese-ime"
+#cask "google-japanese-ime"
 cask "bitwarden"
 brew "bitwarden-cli"
 
@@ -51,6 +51,7 @@ cask "qlimagesize"
 cask "webpquicklook"
 cask "suspicious-package"
 cask "quicklookase"
+# Needs Rosetta2
 cask "qlvideo"
 
 #--------------#
