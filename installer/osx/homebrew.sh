@@ -37,7 +37,7 @@ if [[ ! -e $brew_path ]]; then
     # cf. https://qiita.com/ine1127/items/cd6bc91174635016db9b
     expect -c "
     set timeout -1
-    spawn env LANG=C /bin/bash tmp_file
+    spawn env LANG=C /bin/bash $tmp_file
     expect \"Password:\"
     send \"${password}\n\"
     expect \"Press\"
