@@ -39,7 +39,6 @@ if [[ $(uname -m) == arm64 ]]; then
     
     # Password required GUI apps
     echo "$password" | brew install avast-security
-    echo "$password" | brew install 
 fi
 
 ##########
@@ -50,29 +49,7 @@ fi
 curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx_defaults > "$tmp_file"
 echo "$password" | source "$tmp_file"
 
-# fzf install
-if [ ! -e ~/.fzf.zsh ]; then
-    "$(brew --prefix)"/opt/fzf/install
-fi
-
 # iTerm2 Shell integration
 if [ ! -e ~/.iterm2_shell_integration.zsh ]; then
     curl -L https://iterm2.com/shell_integration/install_shell_integration.sh | bash
-fi
-
-# LaTeX
-if ! (type "platex" > /dev/null 2>&1) && (type tlmgr > /dev/null 2>&1); then
-    echo "$password" | sudo -S tlmgr update --self --all
-    echo "$password" | sudo -S tlmgr paper a4
-fi
-
-# Programming Font Ricty
-if [ ! -e ~/Library/fonts/Ricty\ Discord\ Regular\ for\ Powerline.ttf ]; then
-    cp -f /usr/local/opt/ricty/share/fonts/Ricty*.ttf ~/Library/Fonts/
-    fc-cache -vf
-fi
-
-# powerline, which needs powerline-font
-if ! (type "powerline-daemon" > /dev/null 2>&1); then
-    pip3 install powerline-status
 fi
