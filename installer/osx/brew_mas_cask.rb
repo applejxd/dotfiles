@@ -67,7 +67,7 @@ tap "homebrew/cask-fonts"
 cask "font-hack-nerd-font"
 
 # Environments
-cask "xquartz"
+#cask "xquartz"
 cask "docker"
 
 # Reference
