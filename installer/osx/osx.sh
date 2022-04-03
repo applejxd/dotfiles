@@ -42,6 +42,7 @@ if [[ $(uname -m) == arm64 ]]; then
     # Needs Rosetta2
     echo "$password" | brew install google-japanese-ime
     echo "$password" | brew install karabiner-elements
+    echo "$password" | brew install xquartz
 fi
 
 ##########
