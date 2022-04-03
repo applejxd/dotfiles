@@ -39,6 +39,9 @@ if [[ $(uname -m) == arm64 ]]; then
     
     # Password required GUI apps
     echo "$password" | brew install avast-security
+    # Needs Rosetta2
+    echo "$password" | brew install google-japanese-ime
+    echo "$password" | brew install karabiner-elements
 fi
 
 ##########
