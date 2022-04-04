@@ -82,6 +82,17 @@ WORKDIR /root
 RUN apt-get install -y libboost-dev libopencv-dev
 
 #######
+# gdb #
+#######
+
+# for OpenCV Mat debugger
+RUN apt-get install -y python3-pip
+RUN pip install numpy
+# Place gdb scripts
+COPY gdbinit.sh /root/.gdbinit
+COPY gdb/ /root/gdb/
+
+#######
 # SSH #
 #######
 
