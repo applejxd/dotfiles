@@ -6,6 +6,7 @@ services:
     build:
       context: .
       dockerfile: ./clion.dockerfile
+    restart: always
 
     #######
     # SSH #
