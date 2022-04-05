@@ -87,7 +87,7 @@ RUN apt-get install -y libboost-dev libopencv-dev
 
 # for OpenCV Mat debugger
 RUN apt-get install -y python3-pip
-RUN pip install numpy
+RUN pip3 install numpy
 # Place gdb scripts
 COPY gdbinit.sh /root/.gdbinit
 COPY gdb/ /root/gdb/
