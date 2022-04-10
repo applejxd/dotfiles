@@ -81,3 +81,8 @@ if (type "anyenv" >/dev/null 2>&1) && (type "pyenv" >/dev/null 2>&1) && [[ $(pye
     unset __conda_setup
     # <<< conda initialize <<<
 fi
+
+# Default shell is bash
+# Use zsh
+exec zsh
+
