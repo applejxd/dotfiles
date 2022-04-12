@@ -83,7 +83,7 @@ WORKDIR /root
 RUN apt-get install -y python3-matplotlib python3-numpy python3-dev
 RUN wget https://github.com/lava/matplotlib-cpp/raw/master/matplotlibcpp.h -P /usr/local/include
 
-RUN apt-get install -y libboost-dev libopencv-dev
+RUN apt-get install -y libboost-dev libopencv-dev libpcl-dev
 
 #######
 # gdb #
