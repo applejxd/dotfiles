@@ -3,8 +3,23 @@ FROM nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
 
 WORKDIR /root
 
+################
+# Localization #
+################
+
 RUN apt-get update && apt-get upgrade -y
 RUN DEBIAN_FRONTEND="noninteractive" apt-get install -y tzdata
+ENV TZ=Asia/Tokyo
+
+RUN apt-get install -y locales fonts-takao && locale-gen ja_JP.UTF-8
+ENV LANG=ja_JP.UTF-8
+ENV LANGUAGE=ja_JP:ja
+ENV LC_ALL=ja_JP.UTF-8
+RUN localedef -f UTF-8 -i ja_JP ja_JP.utf8
+
+#####################
+# Development tools #
+#####################
 
 # Install CMake 3.21.6 for g2o
 # CLion supports CMake 2.8.11~3.21.x
@@ -29,9 +44,6 @@ RUN apt-get install -y ssh \
       rsync \
       tar \
       python
-
-# for vcpkg
-# RUN apt-get install -y curl zip unzip pkg-config
 
 #######################
 # Manual installation #
