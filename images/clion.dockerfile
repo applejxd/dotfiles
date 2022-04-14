@@ -98,6 +98,14 @@ WORKDIR /root/pcl/build
 RUN cmake .. && make -j$(nproc) && make install
 WORKDIR /root
 
+# PROJ
+RUN apt-get install -y sqlite3 libsqlite3-dev
+RUN git clone https://github.com/OSGeo/PROJ.git -b 9.0.0
+RUN mkdir /root/PROJ/build
+WORKDIR /root/PROJ/build
+RUN cmake .. && make -j$(nproc) && make install
+WORKDIR /root
+
 #######
 # gdb #
 #######
