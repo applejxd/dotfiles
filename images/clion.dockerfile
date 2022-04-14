@@ -1,10 +1,12 @@
-FROM ubuntu:20.04
+# FROM ubuntu:20.04
+FROM nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
 
 WORKDIR /root
 
-RUN DEBIAN_FRONTEND="noninteractive" apt-get update && apt-get -y install tzdata
+RUN apt-get update && apt-get upgrade -y
+RUN DEBIAN_FRONTEND="noninteractive" apt-get install -y tzdata
 
-# Install CMake 3.21.6 for manual library installation
+# Install CMake 3.21.6 for g2o
 # CLion supports CMake 2.8.11~3.21.x
 RUN apt-get install -y git build-essential libssl-dev
 RUN git clone https://gitlab.kitware.com/cmake/cmake.git -b v3.21.6
@@ -35,6 +37,9 @@ RUN apt-get install -y ssh \
 # Manual installation #
 #######################
 
+# libboost-dev is not enough for PCL
+RUN apt-get install -y libboost-all-dev libeigen3-dev 
+
 # glog
 RUN git clone https://github.com/google/glog.git -b v0.5.0
 RUN mkdir /root/glog/build
@@ -56,8 +61,8 @@ WORKDIR /root/googletest/build
 RUN cmake .. && make -j$(nproc) && make install
 WORKDIR /root
 
-# Eigen & ceres
-RUN apt-get install -y libeigen3-dev libatlas-base-dev libsuitesparse-dev
+# ceres-solver
+RUN apt-get install -y libatlas-base-dev libsuitesparse-dev
 RUN git clone https://github.com/ceres-solver/ceres-solver.git -b 2.1.0
 RUN mkdir /root/ceres-solver/build
 WORKDIR /root/ceres-solver/build
@@ -83,7 +88,15 @@ WORKDIR /root
 RUN apt-get install -y python3-matplotlib python3-numpy python3-dev
 RUN wget https://github.com/lava/matplotlib-cpp/raw/master/matplotlibcpp.h -P /usr/local/include
 
-RUN apt-get install -y libboost-dev libopencv-dev libpcl-dev
+RUN apt-get install -y libopencv-dev
+
+# PCL
+RUN apt-get install -y libusb-1.0-0-dev libflann-dev libvtk7-dev libpcap-dev
+RUN git clone https://github.com/PointCloudLibrary/pcl.git -b pcl-1.12.1
+RUN mkdir /root/pcl/build
+WORKDIR /root/pcl/build
+RUN cmake .. && make -j$(nproc) && make install
+WORKDIR /root
 
 #######
 # gdb #

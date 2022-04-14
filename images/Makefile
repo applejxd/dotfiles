@@ -1,3 +1,5 @@
+show:
+	cat Makefile
 ########
 # HTTP #
 ########

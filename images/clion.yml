@@ -21,6 +21,9 @@ services:
     environment:
       - DISPLAY
     volumes:
-      # - /tmp/.X11-unix:/tmp/.X11-unix:rw"
-      - $HOME/.Xauthority:/root/.Xauthority:rw
-    
+      - type: bind
+        source: $HOME/.Xauthority
+        target: /root/.Xauthority:rw
+      - type: bind
+        source: /tmp/.X11-unix
+        target: /tmp/.X11-unix
