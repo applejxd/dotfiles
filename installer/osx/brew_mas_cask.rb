@@ -82,6 +82,8 @@ cask "dash"
 cask "spotify"
 cask "kindle"
 cask "discord"
+# for Alfred Spotify Mini Player
+brew "php"
 
 # file manager
 cask "cyberduck"
