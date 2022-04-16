@@ -9,3 +9,13 @@ fi
 
 echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)
 echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)
+
+##########
+# Common #
+##########
+
+#code --list-extensions
+code --install-extension harg.iceberg
+code --install-extension eamodio.gitlens
+code --install-extension mhutchie.git-graph
+code --install-extension foxundermoon.shell-format
