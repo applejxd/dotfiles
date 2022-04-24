@@ -12,6 +12,7 @@ tf:
 # http://localhost:58889
 rapids:
 	docker run -d --rm --gpus all -p 58889:8888 -p 8787:8787 -p 8786:8786 \
+	-v $HOME:/\
     rapidsai/rapidsai-core:22.02-cuda11.5-runtime-ubuntu20.04-py3.9
 
 # http://localhost:58890
@@ -22,7 +23,7 @@ ros:
 #############
 # CUDA Test #
 #############
-                                                                                                                                                                                                      
+
 cuda_test:
 	docker run --rm --gpus all \
 	nvcr.io/nvidia/k8s/cuda-sample:nbody nbody -gpu -benchmark
