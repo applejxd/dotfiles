@@ -1,13 +1,16 @@
 # To prevent OpenGL error
 export LIBGL_ALWAYS_INDIRECT=1
 
-# for VcXsrv
-if [[ "$(uname -r)" == *WSL2 ]]; then
-    # for WSL2
-    export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
-else
-    # for WSL1
-    export DISPLAY=:0.0
+# use default value if DISPLAY is set (e.g. SSH X11Forwarding)
+if [[ -z "$DISPLAY" ]]; then
+    # for VcXsrv
+    if [[ "$(uname -r)" == *WSL2 ]]; then
+        # for WSL2
+        export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+    else
+        # for WSL1
+        export DISPLAY=:0.0
+    fi
 fi
 
 # Windows System

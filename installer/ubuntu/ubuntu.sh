@@ -65,6 +65,12 @@ if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
         fi
         echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/wsl.conf /etc/wsl.conf
     fi
+    if [ ! -L /opt/distrod/conf/tcp4_ports ]; then
+        echo "$password" | sudo -S rm /opt/distrod/conf/tcp4_ports
+        echo "$password" | sudo -S ln -s "$HOME"/.homesick/repos/dotfiles/config/tcp4_ports /opt/distrod/conf/tcp4_ports
+    fi
+    # Be careful about anti-virus softwares (will be detect portproxy.exe as virus)
+    echo "$password" | sudo -S systemctl enable --now portproxy.service
 fi
 
 #######
