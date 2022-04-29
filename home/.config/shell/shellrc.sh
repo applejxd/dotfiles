@@ -31,11 +31,13 @@ fi
 # Initialization #
 ##################
 
-# anyenv for rbenv, nodenv, phpenv
-eval "$(anyenv init - zsh)"
+if type "anyenv" >/dev/null 2>&1; then
+    # anyenv for rbenv, nodenv, phpenv
+    eval "$(anyenv init - zsh)"
 
-if [[ -e $HOME/.anyenv/envs/pyenv ]]; then
-    eval "$(pyenv init -)"
+    if type "pyenv" >/dev/null 2>&1; then
+        eval "$(pyenv init -)"
+    fi
 fi
 
 # iceberg theme for vim
