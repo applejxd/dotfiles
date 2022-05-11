@@ -1,0 +1,29 @@
+version: '3'
+
+services:
+  clion:
+    image: local/clion:ssh
+    build:
+      context: .
+      dockerfile: ./clion.dockerfile
+    restart: always
+
+    #######
+    # SSH #
+    #######
+    ports:
+     - "50023:2222"
+
+    #######
+    # GUI #
+    #######
+    # network_mode: "host"
+    # environment:
+    #   - DISPLAY
+    # volumes:
+    #   # - type: bind
+    #   #   source: $HOME/.Xauthority
+    #   #   target: /root/.Xauthority
+    #   - type: bind
+    #     source: /tmp/.X11-unix
+    #     target: /tmp/.X11-unix
