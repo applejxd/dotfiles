@@ -18,12 +18,12 @@ services:
     # GUI #
     #######
     # network_mode: "host"
-    environment:
-      - DISPLAY
-    volumes:
-      - type: bind
-        source: $HOME/.Xauthority
-        target: /root/.Xauthority:rw
-      - type: bind
-        source: /tmp/.X11-unix
-        target: /tmp/.X11-unix
+    # environment:
+    #   - DISPLAY
+    # volumes:
+    #   # - type: bind
+    #   #   source: $HOME/.Xauthority
+    #   #   target: /root/.Xauthority
+    #   - type: bind
+    #     source: /tmp/.X11-unix
+    #     target: /tmp/.X11-unix

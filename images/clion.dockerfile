@@ -3,9 +3,9 @@ FROM nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
 
 WORKDIR /root
 
-################
+#--------------#
 # Localization #
-################
+#--------------#
 
 RUN apt-get update && apt-get upgrade -y
 RUN DEBIAN_FRONTEND="noninteractive" apt-get install -y tzdata
@@ -17,9 +17,9 @@ ENV LANGUAGE=ja_JP:ja
 ENV LC_ALL=ja_JP.UTF-8
 RUN localedef -f UTF-8 -i ja_JP ja_JP.utf8
 
-#####################
-# Development tools #
-#####################
+#-----------#
+# Dev Tools #
+#-----------#
 
 # Install CMake 3.21.6 for g2o
 # CLion supports CMake 2.8.11~3.21.x
@@ -45,9 +45,9 @@ RUN apt-get install -y ssh \
       tar \
       python
 
-#######################
-# Manual installation #
-#######################
+#---------------#
+# Source Builds #
+#---------------#
 
 # libboost-dev is not enough for PCL
 RUN apt-get install -y libboost-all-dev libeigen3-dev 
@@ -118,9 +118,9 @@ WORKDIR /root/PROJ/build
 RUN cmake .. && make -j$(nproc) && make install
 WORKDIR /root
 
-#######
-# gdb #
-#######
+#--------------#
+# gdb printers #
+#--------------#
 
 # for OpenCV Mat debugger
 RUN apt-get install -y python3-pip
@@ -129,9 +129,9 @@ RUN pip3 install numpy
 COPY gdbinit.sh /root/.gdbinit
 COPY gdb/ /root/gdb/
 
-#######
+#-----#
 # SSH #
-#######
+#-----#
 
 RUN ( \
     echo 'LogLevel DEBUG2'; \
@@ -143,6 +143,9 @@ RUN ( \
     echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
     echo 'Port 2222'; \
     echo 'X11Forwarding yes'; \
+    # Need to use X11 Forwarding via direct SSH
+    # cf. https://blog.n-z.jp/blog/2018-07-27-sshd-in-docker.html
+    echo 'AddressFamily inet'; \
   ) > /etc/ssh/sshd_config_user \
   && mkdir /run/sshd
 
@@ -155,6 +158,17 @@ COPY docker.pub /root/.ssh/authorized_keys
 # 公開鍵を使えるようにする (パーミッション変更など)
 RUN chmod 0600 /root/.ssh/authorized_keys
 
-RUN apt-get clean
+# RUN apt-get install -y xauth
+#RUN echo "if [[ -z \"\$DISPLAY\" ]]; then export DISPLAY=localhost:0.0; fi" >> ~/.bashrc
 
+#-----------------#
+# Post processing #
+#-----------------#
+
+# for X11 forwarding debugging
+RUN apt-get install -y x11-apps
+
+RUN apt-get clean && apt-get autoremove
+
+EXPOSE 2222
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_user"]
