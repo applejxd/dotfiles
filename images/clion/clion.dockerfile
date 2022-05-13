@@ -158,10 +158,10 @@ COPY docker.pub /root/.ssh/authorized_keys
 # 公開鍵を使えるようにする (パーミッション変更など)
 RUN chmod 0600 /root/.ssh/authorized_keys
 
-#.bash_profileを作成し、.bashrcを読み込む（シェルスクリプト）
-RUN echo "if [ -f ~/.bashrc ]; then  . ~/.bashrc;  fi" >>~/.bash_profile
-# 環境変数の書き込み（PATHへ/usr/local/spark/binの追加)
-RUN echo "PATH=${PATH}:/usr/local/spark/bin" >> ~/.bashrc
+# .bashrc を読み込み
+RUN echo "if [ -f ~/.bashrc ]; then . ~/.bashrc; fi" >>~/.bash_profile
+# 環境変数の書き込み
+RUN echo "PATH=${PATH}" >> ~/.bashrc
 
 #-----------------#
 # Post processing #

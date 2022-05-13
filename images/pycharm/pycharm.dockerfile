@@ -1,6 +1,5 @@
 # FROM ubuntu:20.04
-FROM nvcr.io/nvidia/tensorflow:22.04-tf2-py3
-
+FROM nvcr.io/nvidia/pytorch:22.04-py3
 WORKDIR /root
 
 #--------------#
@@ -27,7 +26,8 @@ RUN cocnda update --all
 RUN conda install pip
 RUN pip install --upgrade pip
 
-RUN conda install pytorch torchvision cudatoolkit=10.1 -c pytorch
+RUN pip install --upgrade tensorflow
+#RUN conda install pytorch torchvision cudatoolkit=10.1 -c pytorch
 
 #-----#
 # SSH #
@@ -58,10 +58,10 @@ COPY docker.pub /root/.ssh/authorized_keys
 # 公開鍵を使えるようにする (パーミッション変更など)
 RUN chmod 0600 /root/.ssh/authorized_keys
 
-#.bash_profileを作成し、.bashrcを読み込む（シェルスクリプト）
-RUN echo "if [ -f ~/.bashrc ]; then  . ~/.bashrc;  fi" >>~/.bash_profile
-# 環境変数の書き込み（PATHへ/usr/local/spark/binの追加)
-RUN echo "PATH=${PATH}:/usr/local/spark/bin" >> ~/.bashrc
+# .bashrc を読み込み
+RUN echo "if [ -f ~/.bashrc ]; then . ~/.bashrc; fi" >>~/.bash_profile
+# 環境変数の書き込み
+RUN echo "PATH=${PATH}" >> ~/.bashrc
 
 #-----------------#
 # Post processing #
