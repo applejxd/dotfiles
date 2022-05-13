@@ -30,7 +30,7 @@ WORKDIR /root/cmake/build
 RUN ../bootstrap && make -j$(nproc) && make install
 WORKDIR /root
 
-RUN apt-get install -y ssh \
+RUN apt-get install -y \
       gcc \
       g++ \
       gdb \
@@ -132,6 +132,8 @@ COPY gdb/ /root/gdb/
 #-----#
 # SSH #
 #-----#
+
+RUN apt-get install -y ssh
 
 RUN ( \
     echo 'LogLevel DEBUG2'; \

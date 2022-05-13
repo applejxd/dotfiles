@@ -21,7 +21,7 @@ RUN localedef -f UTF-8 -i ja_JP ja_JP.utf8
 #----------#
 
 RUN conda update conda
-RUN cocnda update --all
+RUN conda update --all
 
 RUN conda install pip
 RUN pip install --upgrade pip
@@ -32,6 +32,8 @@ RUN pip install --upgrade tensorflow
 #-----#
 # SSH #
 #-----#
+
+RUN apt-get install -y ssh
 
 RUN ( \
     echo 'LogLevel DEBUG2'; \
