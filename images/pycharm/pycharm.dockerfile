@@ -21,6 +21,8 @@ RUN localedef -f UTF-8 -i ja_JP ja_JP.utf8
 # pyenv #
 #-------#
 
+# cf. https://gist.github.com/mistymagich/fa9f0f4f05e0865e191e
+
 RUN apt-get install -y git curl
 RUN git clone https://github.com/anyenv/anyenv /root/.anyenv
 
