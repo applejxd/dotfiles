@@ -51,11 +51,14 @@ RUN conda update -y --all
 RUN conda install pip
 RUN pip install --upgrade pip
 
+# cf. https://rapids.ai/start.html
+RUN conda install -c rapidsai -c nvidia -c conda-forge rapids=22.04 python=3.9 cudatoolkit=11.3 dask-sql
+# cf. https://pytorch.org/get-started/locally/
+RUN conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+RUN pip install --upgrade tensorflow
+
 RUN conda install -y numpy pandas dask scipy scikit-learn matplotlib
 RUN conda install -y lightgbm hyperopt
-
-RUN conda install -y pytorch torchvision cudatoolkit=10.1 -c pytorch
-RUN pip install --upgrade tensorflow
 
 #-----#
 # SSH #
