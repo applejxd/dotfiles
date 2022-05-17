@@ -1,12 +1,13 @@
-# FROM ubuntu:20.04
-FROM nvcr.io/nvidia/pytorch:22.04-py3
+# RAPIDS is compatible with cuda<=11.5
+FROM nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04
+
 WORKDIR /root
+RUN apt-get update && apt-get upgrade -y
 
 #--------------#
 # Localization #
 #--------------#
 
-RUN apt-get update && apt-get upgrade -y
 RUN DEBIAN_FRONTEND="noninteractive" apt-get install -y tzdata
 ENV TZ=Asia/Tokyo
 
@@ -16,25 +17,49 @@ ENV LANGUAGE=ja_JP:ja
 ENV LC_ALL=ja_JP.UTF-8
 RUN localedef -f UTF-8 -i ja_JP ja_JP.utf8
 
+#-------#
+# pyenv #
+#-------#
+
+RUN apt-get install -y git curl
+RUN git clone https://github.com/anyenv/anyenv /root/.anyenv
+
+ENV HOME /root
+ENV ANYENV_HOME $HOME/.anyenv
+ENV ANYENV_ENV  $ANYENV_HOME/envs
+ENV PATH $ANYENV_HOME/bin:$PATH
+
+RUN yes | anyenv install --init
+
+RUN anyenv install pyenv
+ENV PATH $ANYENV_ENV/pyenv/bin:$ANYENV_ENV/pyenv/shims:$PATH
+ENV PYENV_ROOT $ANYENV_ENV/pyenv
+
+RUN pyenv install miniforge3
+RUN pyenv global miniforge3
+
 #----------#
 # Anaconda #
 #----------#
 
-RUN conda update conda
-RUN conda update --all
+# channels は conda-forge のみ
+RUN conda update -y conda
+RUN conda update -y --all
 
 RUN conda install pip
 RUN pip install --upgrade pip
 
+RUN conda install -y numpy pandas dask scipy scikit-learn matplotlib
+RUN conda install -y lightgbm hyperopt
+
+RUN conda install -y pytorch torchvision cudatoolkit=10.1 -c pytorch
 RUN pip install --upgrade tensorflow
-#RUN conda install pytorch torchvision cudatoolkit=10.1 -c pytorch
 
 #-----#
 # SSH #
 #-----#
 
 RUN apt-get install -y ssh
-
 RUN ( \
     echo 'LogLevel DEBUG2'; \
     echo 'PermitRootLogin yes'; \
@@ -69,10 +94,6 @@ RUN echo "PATH=${PATH}" >> ~/.bashrc
 # Post processing #
 #-----------------#
 
-# for X11 forwarding debugging
-RUN apt-get install -y x11-apps
-
 RUN apt-get clean && apt-get autoremove
 
-EXPOSE 2222
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_user"]
