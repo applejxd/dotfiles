@@ -48,13 +48,16 @@ RUN pyenv global miniforge3
 RUN conda update -y conda
 RUN conda update -y --all
 
-RUN conda install pip
-RUN pip install --upgrade pip
-
 # cf. https://rapids.ai/start.html
-RUN conda install -c rapidsai -c nvidia -c conda-forge rapids=22.04 python=3.9 cudatoolkit=11.3 dask-sql
+RUN conda create -n pycharm -c rapidsai -c nvidia -c pytorch -c conda-forge \
+python=3.9 cudatoolkit=11.3 rapids=22.04 dask-sql pytorch torchvision torchaudio
+RUN conda init bash
+RUN echo "conda activate pycharm" >> /root/.bashrc
+RUN source /root/.bashrc
+
 # cf. https://pytorch.org/get-started/locally/
-RUN conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+RUN conda install -y pip
+RUN pip install --upgrade pip
 RUN pip install --upgrade tensorflow
 
 RUN conda install -y numpy pandas dask scipy scikit-learn matplotlib
