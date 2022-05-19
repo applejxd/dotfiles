@@ -8,9 +8,14 @@ services:
       dockerfile: ./pycharm.dockerfile
     restart: always
 
-    #######
-    # SSH #
-    #######
+    # for GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+    # SSH
     ports:
      - "50024:2222"
 

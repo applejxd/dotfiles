@@ -67,6 +67,8 @@ RUN pip install --upgrade tensorflow
 RUN conda install -y numpy pandas dask scipy scikit-learn matplotlib
 RUN conda install -y lightgbm hyperopt
 
+RUN conda init bash
+
 #-----#
 # SSH #
 #-----#
