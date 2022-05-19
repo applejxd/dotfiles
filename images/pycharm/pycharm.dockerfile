@@ -51,9 +51,13 @@ RUN conda update -y --all
 # cf. https://rapids.ai/start.html
 RUN conda create -n pycharm -c rapidsai -c nvidia -c pytorch -c conda-forge \
 python=3.9 cudatoolkit=11.3 rapids=22.04 dask-sql pytorch torchvision torchaudio
-RUN conda init bash
+
+# Activate environment
+ENV CONDA_DEFAULT_ENV pycharm
+
+# Switch default environment
 RUN echo "conda activate pycharm" >> /root/.bashrc
-RUN source /root/.bashrc
+ENV PATH /opt/conda/envs/pycharm/bin:$PATH
 
 # cf. https://pytorch.org/get-started/locally/
 RUN conda install -y pip
