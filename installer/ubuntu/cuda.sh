@@ -15,7 +15,11 @@ fi
 # cf. https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html#ubuntu-lts
 # cf. https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#package-manager-metas
 
-if [[ ! -e /usr/local/cuda-11.6 ]];then
+# Use CUDA Toolkit 11.3 for PyTorch and RAPIDS
+# cf. https://pytorch.org/get-started/locally/
+# cf. https://rapids.ai/start.html#get-rapids
+
+if [[ ! -e /usr/local/cuda-11.3 ]];then
     distribution=$(. /etc/os-release; echo "$ID""$VERSION_ID" | sed -e 's/\.//g')
 
     if [[ ! "$(uname -r)" =~ (M|m)icrosoft ]]; then
@@ -46,8 +50,8 @@ if [[ ! -e /usr/local/cuda-11.6 ]];then
         echo "$password" | sudo -S apt-get install -y cuda-drivers
     fi
 
-    echo "$password" | sudo -S apt-get -y install cuda-toolkit-11-6
-    export PATH=/usr/local/cuda-11.6/bin${PATH:+:${PATH}}
+    echo "$password" | sudo -S apt-get -y install cuda-toolkit-11-3
+    export PATH=/usr/local/cuda-11.3/bin${PATH:+:${PATH}}
 fi 
 
 #################
