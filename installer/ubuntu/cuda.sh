@@ -12,7 +12,7 @@ fi
 ########
 
 # Control Driver and CUDA Toolkit separatelly
-# cf. https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html#ubuntu-lts
+# cf. https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#wsl-installation
 # cf. https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#package-manager-metas
 
 # Use CUDA Toolkit 11.3 for PyTorch and RAPIDS
@@ -20,27 +20,20 @@ fi
 # cf. https://rapids.ai/start.html#get-rapids
 
 if [[ ! -e /usr/local/cuda-11.3 ]];then
-    distribution=$(. /etc/os-release; echo "$ID""$VERSION_ID" | sed -e 's/\.//g')
-
-    if [[ ! "$(uname -r)" =~ (M|m)icrosoft ]]; then
-        # Step 1: The kernel headers and dev packages
+    if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
+        distribution="wsl-ubuntu"
+    else
+        distribution=$(. /etc/os-release; echo "$ID""$VERSION_ID" | sed -e 's/\.//g')
+        # The kernel headers and dev packages (Does not need to be performed for WSL)
         echo "$password" | sudo -S apt-get -y install linux-headers-"$(uname -r)"
-        # Step 2: Use the CUDA network repository
-        wget https://developer.download.nvidia.com/compute/cuda/repos/"$distribution"/x86_64/cuda-"$distribution".pin
-        echo "$password" | sudo -S mv cuda-"$distribution".pin /etc/apt/preferences.d/cuda-repository-pin-600
     fi
 
     if  (! dpkg -l cuda-drivers > /dev/null 2>&1); then
-        # Step 3: The CUDA network repository public GPG key
-        echo "$password" | sudo -S apt-key adv --fetch-keys \
-        https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/7fa2af80.pub
+        # Install the new cuda-keyring package
+        tmp_file=$(mktemp)
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/$distro/x86_64/cuda-keyring_1.0-1_all.deb > "$tmp_file"
+        sudo dpkg -i "$tmp_file"
 
-        # Step 4: Setup the CUDA network repository
-        # cf. https://unix.stackexchange.com/questions/391796/pipe-password-to-sudo-and-other-data-to-sudoed-command
-        { echo "$password"; echo "deb http://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64 /"; } \
-        | sudo -k -S tee /etc/apt/sources.list.d/cuda.list &>/dev/null
-
-        # Step 5: Update and installation
         echo "$password" | sudo -S apt update
     fi
 
