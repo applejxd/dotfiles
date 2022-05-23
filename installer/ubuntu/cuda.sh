@@ -31,7 +31,7 @@ if [[ ! -e /usr/local/cuda-11.3 ]];then
     if  (! dpkg -l cuda-drivers > /dev/null 2>&1); then
         # Install the new cuda-keyring package
         tmp_file=$(mktemp)
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/$distro/x86_64/cuda-keyring_1.0-1_all.deb > "$tmp_file"
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb > "$tmp_file"
         sudo dpkg -i "$tmp_file"
 
         echo "$password" | sudo -S apt update
