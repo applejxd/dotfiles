@@ -56,8 +56,8 @@ fi
         
 if (type "docker" > /dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
         distribution=$(. /etc/os-release; echo "$ID""$VERSION_ID")
-        { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey; } | sudo -k -S apt-key add -
-        { echo "$password"; curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list; } \
+        { echo "$password"; curl -fsSL https://nvidia.github.io/nvidia-docker/gpgkey; } | sudo -k -S apt-key add -
+        { echo "$password"; curl -fsSL https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list; } \
         | sudo -k -S tee /etc/apt/sources.list.d/nvidia-docker.list &>/dev/null
         echo "$password" | sudo -S apt-get update
         echo "$password" | sudo -S apt-get install -y nvidia-docker2
