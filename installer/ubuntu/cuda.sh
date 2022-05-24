@@ -56,9 +56,14 @@ fi
         
 if (type "docker" > /dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
         distribution=$(. /etc/os-release; echo "$ID""$VERSION_ID")
-        { echo "$password"; curl -fsSL https://nvidia.github.io/nvidia-docker/gpgkey; } | sudo -k -S apt-key add -
-        { echo "$password"; curl -fsSL https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list; } \
-        | sudo -k -S tee /etc/apt/sources.list.d/nvidia-docker.list &>/dev/null
+        { echo "$password"; curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey} \
+        | sudo -k -S gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+        
+        tmp_file=$(mktemp)
+        curl -s -L https://nvidia.github.io/libnvidia-container/experimental/$distribution/libnvidia-container.list | \
+        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' > "$tmp_file"
+        { echo "$password"; cat "$tmp_file"; } | sudo -k -S tee /etc/apt/sources.list.d/nvidia-container-toolkit.list &>/dev/null
+        
         echo "$password" | sudo -S apt-get update
         echo "$password" | sudo -S apt-get install -y nvidia-docker2
         echo "$password" | sudo -S systemctl restart docker
