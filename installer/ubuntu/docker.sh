@@ -31,7 +31,7 @@ if ! (type "docker" > /dev/null 2>&1); then
     echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io
     
     # Install docker-compose v2.4.0 for gpus option
-    echo "$password" | sudo -S curl -L "https://github.com/docker/compose/releases/download/v2.4.0/docker-compose-$(uname -s)-$(uname -m)" \
+    echo "$password" | sudo -S -E curl -L "https://github.com/docker/compose/releases/download/v2.4.0/docker-compose-$(uname -s)-$(uname -m)" \
     -o /usr/local/bin/docker-compose
     echo "$password" | sudo -S chmod +x /usr/local/bin/docker-compose
 fi
