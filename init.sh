@@ -2,7 +2,7 @@
 
 if [ $# -eq 0 ]; then
     # save password
-    read -sp "Password: " password
+    read -rsp "Password: " password
 else
     password=$1
 fi

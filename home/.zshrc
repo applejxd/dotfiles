@@ -147,9 +147,13 @@ if type "fzf" >/dev/null 2>&1;then
     fi
 fi
 
-############
-# Anaconda #
-############
+###############
+# Activations #
+###############
+
+if [[ -e /opt/ros/noetic/setup.zsh ]]; then
+    source /opt/ros/noetic/setup.zsh
+fi
 
 if (type "anyenv" >/dev/null 2>&1) && (type "pyenv" >/dev/null 2>&1) && [[ $(pyenv version) == *miniforge3* ]]; then
     # >>> conda initialize >>>
