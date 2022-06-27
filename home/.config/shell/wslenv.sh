@@ -20,7 +20,7 @@ export PATH=/mnt/c/Windows/System32:$PATH   # for clip.exe
 # Powershell
 export PATH=/mnt/c/Windows/System32/WindowsPowerShell/v1.0:$PATH
 
-# VSCode
+# VSCode (for system installation)
 if [[ -e /mnt/c/Progra~1/"Microsoft VS Code" ]]; then
     export PATH=/mnt/c/Progra~1/"Microsoft VS Code"/bin:$PATH
 fi
