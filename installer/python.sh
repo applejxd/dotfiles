@@ -1,6 +1,15 @@
 #!/bin/bash
 
-# use local environment only (not use sudo) 
+if [ $# -eq 0 ]; then
+    # save password
+    read -rsp "Password: " password
+else
+    password="$1"
+fi
+
+# Refresh
+echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
+echo "$password" | sudo -S apt-get install git curl
 
 ##########
 # anyenv #
