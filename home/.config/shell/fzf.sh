@@ -247,7 +247,7 @@ if type "docker" >/dev/null 2>&1; then
     
     function dbuild() {
     	local file_name
-        file_name=$(find ./*.dockerfile | fzf)
+        file_name=$(find ./*.dockerfile | sed "s|\.\/|| | fzf)
          
 	    local date_tag
 	    date_tag=$(date "+%y.%m.%d")
