@@ -173,7 +173,7 @@ if type "conda" >/dev/null 2>&1; then
     function cact() {
         local conda_env
         conda_env=$(conda env list | tail -n +3 | fzf --no-sort | awk '{print $1}')
-        conda 
+        conda activate "$conda_env" 
     }
 
     function crm() {
