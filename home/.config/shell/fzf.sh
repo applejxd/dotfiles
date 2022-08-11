@@ -163,6 +163,26 @@ if type "git" >/dev/null 2>&1; then
     }
 fi
 
+############
+# Anaconda #
+############
+
+if type "conda" >/dev/null 2>&1; then
+    alias cls="conda env list"
+
+    function cact() {
+        local conda_env
+        conda_env=$(conda env list | tail -n +3 | fzf --no-sort | awk '{print $1}')
+        conda 
+    }
+
+    function crm() {
+        local conda_env
+        conda_env=$(conda env list | tail -n +3 | fzf --no-sort | awk '{print $1}')
+        conda env remove -n "$conda_env"
+    }
+fi
+
 ##########
 # docker #
 ##########
