@@ -37,7 +37,8 @@ RUN pip install --upgrade pip
 RUN pip install numpy pandas \
     matplotlib japanize-matplotlib \
     scipy dask numba \
-    opencv-python open3d laspy[lazrs,laszip] \
-    pycaret[full]
+    opencv-python laspy[lazrs,laszip] \
+    open3d torch tensorboard protobuf~=3.20 \
+    pycaret[full] 
 
 RUN apt-get clean && apt-get autoremove
