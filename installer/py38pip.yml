@@ -1,0 +1,25 @@
+# run: conda env create --file py38pip.yml
+name: py38pip
+channels:
+  - conda-forge
+dependencies:
+  # for pycaret
+  - python==3.8
+  # for Open3D
+  - pip>=20.3
+  - pip:
+    - numpy
+    # for pycaret
+    - numba<0.55
+    - dask
+    # for pycaret
+    - scipy<=1.5.4
+    - opencv-python
+    - pycaret[full]==2.3.10
+    - pyclustering
+    - laspy[lazrs,laszip]
+    - open3d==0.15.1
+    - torch
+    - tensorboard
+    # for tensorboard
+    - protobuf~=3.20
