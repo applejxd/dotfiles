@@ -172,13 +172,13 @@ if type "conda" >/dev/null 2>&1; then
 
     function cact() {
         local conda_env
-        conda_env=$(conda env list | tail -n +3 | fzf --no-sort | awk '{print $1}')
+        conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
         conda activate "$conda_env" 
     }
 
     function crm() {
         local conda_env
-        conda_env=$(conda env list | tail -n +3 | fzf --no-sort | awk '{print $1}')
+        conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
         conda env remove -n "$conda_env"
     }
 fi

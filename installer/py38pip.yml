@@ -8,6 +8,8 @@ dependencies:
   # for Open3D
   - pip>=20.3
   - pip:
+    - open3d==0.15.2
+    - pycaret[full]==2.3.10
     - numpy
     # for pycaret
     - numba<0.55
@@ -15,10 +17,8 @@ dependencies:
     # for pycaret
     - scipy<=1.5.4
     - opencv-python
-    - pycaret[full]==2.3.10
     - pyclustering
     - laspy[lazrs,laszip]
-    - open3d==0.15.1
     - torch
     - tensorboard
     # for tensorboard
