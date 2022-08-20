@@ -168,7 +168,7 @@ fi
 ############
 
 if type "conda" >/dev/null 2>&1; then
-    alias cls="conda env list"
+    alias clist="conda env list"
 
     function cact() {
         local conda_env
