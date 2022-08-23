@@ -106,5 +106,13 @@ anyenv install pyenv
 eval "$(anyenv init -)"
 
 pyenv install 3.8.13
-pyenv rehash
-pyenv global 3.8.13
+pyenv global
+pyenv local 3.8.13
+
+# Pangolin
+echo "$password" | sudo -S apt-get install -y libglew-dev libpython2.7-dev
+sed -i "s/install_dirs/install_dir/g" "$HOME/src/install/g2opy/setup.py"
+
+# g2opy
+echo "$password" | sudo -S apt-get install -y libsuitesparse-dev qtdeclarative5-dev libqglviewer-dev-qt5
+sed -i "38i py_modules=[]," "$HOME/src/install/g2opy/setup.py"
