@@ -98,21 +98,36 @@ echo "$password" | sudo -S apt-get install -y \
     libbz2-dev libreadline-dev libsqlite3-dev libopencv-dev tk-dev git
 git clone https://github.com/anyenv/anyenv "$HOME"/.anyenv
 export PATH="$HOME/.anyenv/bin:$PATH"
-eval "$(anyenv init -)"
 yes | anyenv install --init
-echo "export PATH=\"$HOME/.anyenv/bin:$PATH\"" >> ~/.bashrc
+
+# activation
+echo "export PATH=\"\$HOME/.anyenv/bin:\$PATH\"" >> ~/.bashrc
+echo "eval \"\$(anyenv init -)\"" >> ~/.bashrc
 
 anyenv install pyenv
 eval "$(anyenv init -)"
 
 pyenv install 3.8.13
-pyenv global
-pyenv local 3.8.13
+pyenv global 3.8.13
+
+python3 -m venv slam
+source "$HOME"/slam/bin/activate
 
 # Pangolin
 echo "$password" | sudo -S apt-get install -y libglew-dev libpython2.7-dev
-sed -i "s/install_dirs/install_dir/g" "$HOME/src/install/g2opy/setup.py"
+# Bug fixed PR version
+git clone https://github.com/bravech/pangolin "$HOME"/src/install/pangolin
+mkdir "$HOME"/src/install/pangolin/build; cd "$_" || exit
+cmake .. && make -j"$(nproc)"
+sed -i "s/install_dirs/install_dir/g" "$HOME/src/install/panglin/setup.py"
+cd "$HOME" || exit
 
 # g2opy
 echo "$password" | sudo -S apt-get install -y libsuitesparse-dev qtdeclarative5-dev libqglviewer-dev-qt5
-sed -i "38i py_modules=[]," "$HOME/src/install/g2opy/setup.py"
+# Bug fixed PR version
+git clone https://github.com/codegrafix/g2opy.git "$HOME"/src/install/g2opy
+mkdir "$HOME"/src/install/g2opy/build; cd "$_" || exit
+cmake .. && make -j"$(nproc)"
+cd "$HOME"/src/install/g2opy || exit
+python setup.py install
+cd "$HOME" || exit
