@@ -15,11 +15,14 @@ fi
 # cf. https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#wsl-installation
 # cf. https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#package-manager-metas
 
+# Use CUDA Toolkit 11.2 for PyTorch and Tensorflow
 # Use CUDA Toolkit 11.3 for PyTorch and RAPIDS
 # cf. https://pytorch.org/get-started/locally/
 # cf. https://rapids.ai/start.html#get-rapids
-
-if [[ ! -e /usr/local/cuda-11.3 ]];then
+cuda_major_version=11
+cuda_minor_version=2
+cudnn_version=8.1.0
+if [[ ! -e /usr/local/"$cuda_major_version"."$cuda_minor_version" ]];then
     if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
         distribution="wsl-ubuntu"
     else
@@ -31,7 +34,7 @@ if [[ ! -e /usr/local/cuda-11.3 ]];then
     if  (! dpkg -l cuda-drivers > /dev/null 2>&1); then
         # Install the new cuda-keyring package
         tmp_file=$(mktemp)
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb > "$tmp_file"
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/"$distribution"/x86_64/cuda-keyring_1.0-1_all.deb > "$tmp_file"
         sudo dpkg -i "$tmp_file"
 
         echo "$password" | sudo -S apt update
@@ -43,8 +46,18 @@ if [[ ! -e /usr/local/cuda-11.3 ]];then
         echo "$password" | sudo -S apt-get install -y cuda-drivers
     fi
 
-    echo "$password" | sudo -S apt-get -y install cuda-toolkit-11-3
-    export PATH=/usr/local/cuda-11.3/bin${PATH:+:${PATH}}
+    # CUDA
+    echo "$password" | sudo -S apt-get -y install cuda-toolkit-"$cuda_major_version"-"$cuda_minor_version"
+    export PATH=/usr/local/cuda-"$cuda_major_version"."$cuda_minor_version"/bin${PATH:+:${PATH}}
+
+    # cuDNN
+    echo "$password" | sudo -S -E curl -L https://developer.download.nvidia.com/compute/cuda/repos/"${distribution}"/x86_64/cuda-"${distribution}".pin \
+    -o /etc/apt/preferences.d/cuda-repository-pin-600
+    echo "$password" | sudo -S apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/"${distribution}"/x86_64/3bf863cc.pub
+    echo "$password" | sudo -S add-apt-repository 'deb https://developer.download.nvidia.com/compute/cuda/repos/"${distribution}"/x86_64/ /'
+    echo "$password" | sudo -S apt-get update
+    echo "$password" | sudo -S apt-get install libcudnn8="${cudnn_version}".*-1+"$cuda_major_version"."$cuda_minor_version"
+    echo "$password" | sudo -S apt-get install libcudnn8-dev="${cudnn_version}".*-1+"$cuda_major_version"."$cuda_minor_version"
 fi 
 
 #################
