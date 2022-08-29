@@ -168,15 +168,15 @@ fi
 ############
 
 if type "conda" >/dev/null 2>&1; then
-    alias clist="conda env list"
+    alias condals="conda env list"
 
-    function cact() {
+    function condarun() {
         local conda_env
         conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
         conda activate "$conda_env" 
     }
 
-    function crm() {
+    function condarm() {
         local conda_env
         conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
         conda env remove -n "$conda_env"
