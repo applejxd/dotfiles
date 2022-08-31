@@ -1,4 +1,4 @@
-# run: pip install -r requiremnts.txt
+# run: pip install -r py38pip.txt
 # doc https://pip.pypa.io/en/stable/reference/requirements-file-format/
 # env: Python 3.8 + CUDA 11.2 + cuDNN 8.1
 
@@ -11,7 +11,8 @@ scipy<=1.5.4
 numba<0.55
 matplotlib
 
-opencv-python
+# for JetBrains IDE syntax highlighting
+opencv-python==4.5.5.62
 open3d==0.15.2
 laspy[lazrs,laszip]
 trimesh

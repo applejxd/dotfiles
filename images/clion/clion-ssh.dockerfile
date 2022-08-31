@@ -110,7 +110,6 @@ WORKDIR /root/pcl/build
 RUN cmake .. && make -j$(nproc) && make install
 WORKDIR /root
 
-# pybind11
 RUN git clone https://github.com/pybind/pybind11.git
 RUN mkdir /root/pybind11/build
 WORKDIR /root/pybind11/build
@@ -135,3 +134,51 @@ RUN pip3 install numpy
 # Place gdb scripts
 COPY gdbinit.sh /root/.gdbinit
 COPY gdb/ /root/gdb/
+
+#-----#
+# SSH #
+#-----#
+
+RUN apt-get install -y ssh
+
+RUN ( \
+    echo 'LogLevel DEBUG2'; \
+    echo 'PermitRootLogin yes'; \
+    echo 'PasswordAuthentication no'; \
+    echo 'RSAAuthentication yes'; \
+    echo 'PubkeyAuthentication yes'; \
+    echo 'AuthorizedKeysFile .ssh/authorized_keys'; \
+    echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
+    echo 'Port 2222'; \
+    echo 'X11Forwarding yes'; \
+    # Need to use X11 Forwarding via direct SSH
+    # cf. https://blog.n-z.jp/blog/2018-07-27-sshd-in-docker.html
+    echo 'AddressFamily inet'; \
+  ) > /etc/ssh/sshd_config_user \
+  && mkdir /run/sshd
+
+# SSH login fix. Otherwise user is kicked off after login
+# cf. https://qiita.com/YumaInaura/items/7509061e4b27e03ea538
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+# 手元の公開鍵をコピー
+COPY docker.pub /root/.ssh/authorized_keys
+# 公開鍵を使えるようにする (パーミッション変更など)
+RUN chmod 0600 /root/.ssh/authorized_keys
+
+# .bashrc を読み込み
+RUN echo "if [ -f ~/.bashrc ]; then . ~/.bashrc; fi" >>~/.bash_profile
+# 環境変数の書き込み
+RUN echo "PATH=${PATH}" >> ~/.bashrc
+
+#-----------------#
+# Post processing #
+#-----------------#
+
+# for X11 forwarding debugging
+RUN apt-get install -y x11-apps
+
+RUN apt-get clean && apt-get autoremove
+
+EXPOSE 2222
+CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_user"]
