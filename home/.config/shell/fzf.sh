@@ -60,6 +60,7 @@ function fshell() {
 }
 
 function fssh() {
+    # cf. https://www.jamesridgway.co.uk/list-ssh-hosts-from-your-ssh-config/
     name=$(grep -P "^Host ([^*]+)$" "$HOME"/.ssh/config | sed 's/Host //' | fzf)
     ssh "$name"
 }
