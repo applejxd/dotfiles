@@ -1,0 +1,8 @@
+version: '3'
+
+services:
+  slam:
+    image: local/slam:ubuntu20.04
+    build:
+      context: .
+      dockerfile: ./slam.dockerfile

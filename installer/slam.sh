@@ -120,6 +120,8 @@ git clone https://github.com/bravech/pangolin "$HOME"/src/install/pangolin
 mkdir "$HOME"/src/install/pangolin/build; cd "$_" || exit
 cmake .. && make -j"$(nproc)"
 sed -i "s/install_dirs/install_dir/g" "$HOME/src/install/panglin/setup.py"
+cd "$HOME"/src/install/pangolin || exit
+python setup.py install
 cd "$HOME" || exit
 
 # g2opy

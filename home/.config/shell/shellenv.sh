@@ -81,6 +81,19 @@ fi
 # # for pipenv (for Ubuntu)
 # export PATH=~/.local/bin:$PATH
 
+#############
+# Japansese #
+#############
+
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
+export DefaultIMModule=fcitx
+if [ $SHLVL = 1 ] ; then
+  (fcitx-autostart > /dev/null 2>&1 &)
+  xset -r 49  > /dev/null 2>&1
+fi
+
 #################
 # Specific root #
 #################

@@ -53,6 +53,17 @@ v() {
         done | fzf -d -m -q "$*" -1) && vim "${files//\~/$HOME}"
 }
 
+function fshell() {
+    local shell
+    shell=$(sed -e "1d" < /etc/shells | fzf -q "$1")
+    $shell
+}
+
+function fssh() {
+    name=$(grep -P "^Host ([^*]+)$" "$HOME"/.ssh/config | sed 's/Host //' | fzf)
+    ssh "$name"
+}
+
 # cf. http://bit.ly/37GNSLZ
 if [[ "$OSTYPE" == "darwin"* ]]; then
     unmount() {
@@ -73,12 +84,6 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         diskutil unmountDisk "$DEVICE"
     }
 fi
-
-function fsh() {
-    local shell
-    shell=$(sed -e "1d" < /etc/shells | fzf -q "$1")
-    $shell
-}
 
 #######
 # git #
