@@ -56,13 +56,13 @@ v() {
 function fshell() {
     local shell
     shell=$(sed -e "1d" < /etc/shells | fzf -q "$1")
-    $shell
+    [ -n "$shell" ] && "$shell"
 }
 
 function fssh() {
     # cf. https://www.jamesridgway.co.uk/list-ssh-hosts-from-your-ssh-config/
     name=$(grep -P "^Host ([^*]+)$" "$HOME"/.ssh/config | sed 's/Host //' | fzf)
-    ssh "$name"
+    [ -n "$name" ] && ssh "$name"
 }
 
 # cf. http://bit.ly/37GNSLZ
@@ -179,13 +179,13 @@ if type "conda" >/dev/null 2>&1; then
     function condarun() {
         local conda_env
         conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
-        conda activate "$conda_env" 
+        [ -n "$conda_env" ] && conda activate "$conda_env" 
     }
 
     function condarm() {
         local conda_env
         conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
-        conda env remove -n "$conda_env"
+        [ -n "$conda_env" ] && conda env remove -n "$conda_env"
     }
 fi
 
@@ -264,7 +264,7 @@ if type "docker" >/dev/null 2>&1; then
         local file_name
         file_name=$(find ./*.yml | fzf)
 
-    	    [ -n "$file_name" ] && docker-compose -f "$file_name" up -d
+    	[ -n "$file_name" ] && docker-compose -f "$file_name" up -d
     }
 fi
 
