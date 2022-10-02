@@ -1,5 +1,5 @@
 # cuda<=11.5 for RAPIDS, cuda <=11.3 for PyTorch
-FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
 
 WORKDIR /root
 RUN apt-get update && apt-get upgrade -y

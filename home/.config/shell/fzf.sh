@@ -195,6 +195,8 @@ fi
 
 if type "docker" >/dev/null 2>&1; then
     alias dim="docker images"
+    alias dls="docker ps -a"
+    alias dclean="docker container prune"
 
     function drun() {
         local name
@@ -204,8 +206,6 @@ if type "docker" >/dev/null 2>&1; then
 	# rm: remove container that stops
         [ -n "$name" ] && docker run -it --rm --gpus all -e DISPLAY="$DISPLAY" "$@" "$name"
     }
-
-    alias dls="docker ps -a"
 
     function dsh() {
         local cid
