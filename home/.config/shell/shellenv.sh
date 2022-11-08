@@ -1,14 +1,5 @@
-###############
-# Environment #
-###############
-
 # Defaul editor = vim
 export EDITOR=vim
-
-# User settings
-if [[ -f $HOME/.config/shell/usrenv.sh ]]; then
-    source "$HOME"/.config/shell/usrenv.sh
-fi
 
 ##########
 # anyenv #
@@ -100,3 +91,11 @@ fi
 
 # ghq root
 export GHQ_ROOT=~/src
+
+#################
+# User settings #
+#################
+
+if [[ -f $HOME/.config/shell/usrenv.sh ]]; then
+    source "$HOME"/.config/shell/usrenv.sh
+fi
