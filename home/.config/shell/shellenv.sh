@@ -96,6 +96,6 @@ export GHQ_ROOT=~/src
 # User settings #
 #################
 
-if [[ -f $HOME/.config/shell/usrenv.sh ]]; then
+if [[ -f "$HOME"/.config/shell/usrenv.sh ]]; then
     source "$HOME"/.config/shell/usrenv.sh
 fi
