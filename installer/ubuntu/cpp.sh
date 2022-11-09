@@ -23,7 +23,7 @@ function cmake_install() {
 echo "$password" | sudo -S apt-get install -y cmake cmake-curses-gui gcc clang gdb build-essential
 
 # Formatter, Linter, Document Generator
-echo "$password" | sudo -S apt-get install -y clang-format cpplint doxygen
+echo "$password" | sudo -S apt-get install -y clang-format cpplint doxygen graphviz
 
 # Google OSS
 echo "$password" | sudo -S apt-get install -y  libgflags-dev

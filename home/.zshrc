@@ -151,6 +151,10 @@ fi
 # Activations #
 ###############
 
+if [[ -e /usr/local/Modules/init ]]; then
+    source /usr/local/Modules/init
+fi
+
 if [[ -e /opt/ros/noetic/setup.zsh ]]; then
     source /opt/ros/noetic/setup.zsh
 fi

@@ -22,6 +22,14 @@ echo "$password" | sudo -S apt-get install -y xdg-utils
 # docker
 echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
 
+# Environment Modules
+echo "$password" | sudo -S apt-get install -y tcl8.6-dev
+git clone https://github.com/cea-hpc/modules.git "$HOME"/src/install/modules -b v5.2.0
+cd "$HOME"/src/install/modules || exit
+./configure && make -j"$(nproc)"
+echo "$password" | sudo -S make install
+cd "$HOME" || exit
+
 # CUDA
 if (type "nvidia-smi" > /dev/null 2>&1); then
     echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/cuda.sh)
