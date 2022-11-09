@@ -1,0 +1,21 @@
+#%Module1.0
+##
+##      cuda module
+##
+
+set ver         11.2
+set modroot     /usr/local/cuda-11.2
+
+proc ModulesHelp { } {
+        puts stderr "Sets up the paths you need to use cuda $ver."
+}
+
+prepend-path   PATH            $modroot/bin
+prepend-path   CUDA_PATH       $modroot
+prepend-path   LD_LIBRARY_PATH $modroot/lib
+prepend-path   LD_LIBRARY_PATH $modroot/lib64
+prepend-path   C_INCLUDE_PATH  $modroot/include
+prepend-path   LIBRARY_PATH    $modroot/lib64
+prepend-path   MANPATH         $modroot/doc/man/
+prepend-path   CUDA_TOP        $modroot
+prepend-path   CUDA_HOME       $modroot

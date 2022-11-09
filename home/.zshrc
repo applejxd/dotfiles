@@ -152,7 +152,7 @@ fi
 ###############
 
 if [[ -e /usr/local/Modules/init ]]; then
-    source /usr/local/Modules/init
+    source /usr/local/Modules/init/zsh
 fi
 
 if [[ -e /opt/ros/noetic/setup.zsh ]]; then

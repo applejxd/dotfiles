@@ -58,6 +58,10 @@ if [[ ! -e /usr/local/"$cuda_major_version"."$cuda_minor_version" ]];then
     echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get install libcudnn8="${cudnn_version}".*-1+"$cuda_major_version"."$cuda_minor_version"
     echo "$password" | sudo -S apt-get install libcudnn8-dev="${cudnn_version}".*-1+"$cuda_major_version"."$cuda_minor_version"
+
+    # Modulefile
+    echo "$password" | sudo -S mkdir -p /usr/local/Modules/modulefiles/cuda
+    echo "$password" | sudo -S ln -s "$HOME"/src/dotfiles/config/cuda-11.2.module /usr/local/Modules/modulefiles/cuda/11.2
 fi 
 
 #################

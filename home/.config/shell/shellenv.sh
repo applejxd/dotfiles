@@ -46,10 +46,10 @@ fi
 # for original binaries
 export PATH="$HOME"/bin:$PATH
 
-# cuda (nvcc)
-if [[ -e /usr/local/cuda-11.2 ]]; then
-    export PATH=/usr/local/cuda-11.2/bin${PATH:+:${PATH}}
-fi
+# # cuda (nvcc)
+# if [[ -e /usr/local/cuda-11.2 ]]; then
+#     export PATH=/usr/local/cuda-11.2/bin${PATH:+:${PATH}}
+# fi
 
 # for Go lang
 if [[ -e "$HOME"/.go ]]; then
