@@ -1,5 +1,4 @@
 FROM ubuntu:20.04
-# FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04
 
 ENV HOME /root
 WORKDIR "$HOME"
@@ -50,6 +49,7 @@ RUN mkdir "$HOME/glog/build"
 WORKDIR "$HOME/glog/build"
 RUN cmake .. && make -j"$(nproc)" && make install
 WORKDIR "$HOME"
+RUN rm -rf "$HOME/glog"
 
 # gflags    
 RUN git clone https://github.com/gflags/gflags.git -b v2.2.2
@@ -57,6 +57,7 @@ RUN mkdir "$HOME/gflags/build"
 WORKDIR "$HOME/gflags/build"
 RUN cmake .. && make -j"$(nproc)" && make install
 WORKDIR "$HOME"
+RUN rm -rf "$HOME/gflags"
 
 # gtest
 RUN git clone https://github.com/google/googletest.git -b release-1.11.0
@@ -64,6 +65,7 @@ RUN mkdir "$HOME/googletest/build"
 WORKDIR "$HOME/googletest/build"
 RUN cmake .. && make -j"$(nproc)" && make install
 WORKDIR "$HOME"
+RUN rm -rf "$HOME/googletest"
 
 # ceres-solver
 RUN apt-get install -y libatlas-base-dev libsuitesparse-dev
@@ -72,6 +74,7 @@ RUN mkdir "$HOME/ceres-solver/build"
 WORKDIR "$HOME/ceres-solver/build"
 RUN cmake .. && make -j"$(nproc)" && make install
 WORKDIR "$HOME"
+RUN rm -rf "$HOME/ceres-solver"
 
 # g2o
 RUN apt-get install -y libsuitesparse-dev qtdeclarative5-dev qt5-qmake libqglviewer-dev-qt5
@@ -80,6 +83,7 @@ RUN mkdir "$HOME/g2o/build"
 WORKDIR "$HOME/g2o/build"
 RUN cmake .. && make -j"$(nproc)" && make install
 WORKDIR "$HOME"
+RUN rm -rf "$HOME/g2o"
 
 # Sophus
 RUN git clone https://github.com/strasdat/Sophus.git
@@ -87,6 +91,7 @@ RUN mkdir "$HOME/Sophus/build"
 WORKDIR "$HOME/Sophus/build"
 RUN cmake .. && make -j"$(nproc)" && make install
 WORKDIR $HOME
+RUN rm -rf "$HOME/Sophus"
 
 # matplotlib-cpp
 RUN apt-get install -y python3-matplotlib python3-numpy python3-dev wget
@@ -101,6 +106,7 @@ RUN mkdir "$HOME/pcl/build"
 WORKDIR "$HOME/pcl/build"
 RUN cmake .. && make -j"$(nproc)" && make install
 WORKDIR "$HOME"
+RUN rm -rf "$HOME/pcl"
 
 # pybind11
 RUN git clone https://github.com/pybind/pybind11.git
@@ -108,14 +114,7 @@ RUN mkdir "$HOME/pybind11/build"
 WORKDIR "$HOME/pybind11/build"
 RUN cmake .. && make -j"$(nproc)" && make install
 WORKDIR "$HOME"
-
-# PROJ
-RUN apt-get install -y sqlite3 libsqlite3-dev
-RUN git clone https://github.com/OSGeo/PROJ.git -b 9.0.0
-RUN mkdir "$HOME/PROJ/build"
-WORKDIR "$HOME/PROJ/build"
-RUN cmake .. && make -j"$(nproc)" && make install
-WORKDIR "$HOME"
+RUN rm -rf "$HOME/pybind11"
 
 #--------------#
 # gdb printers #

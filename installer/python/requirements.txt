@@ -14,7 +14,7 @@ matplotlib
 # for JetBrains IDE syntax highlighting
 # cf. https://github.com/opencv/opencv/issues/20997#issuecomment-1176523621
 opencv-python==4.5.5.62
-open3d==0.15.2
+open3d==0.15.*
 laspy[lazrs,laszip]
 trimesh
 
