@@ -5,4 +5,4 @@ services:
     image: local/slam:ubuntu20.04
     build:
       context: .
-      dockerfile: ./slam.dockerfile
+      dockerfile: ./Dockerfile

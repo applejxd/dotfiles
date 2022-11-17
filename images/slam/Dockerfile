@@ -1,4 +1,5 @@
-FROM ubuntu:20.04
+# cf. https://hub.docker.com/r/nvidia/cuda/tags?page=1&name=11.2.2-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
 
 ENV HOME /root
 WORKDIR "$HOME"
@@ -182,3 +183,5 @@ WORKDIR "$HOME"
 
 COPY requirements.txt "$HOME"
 RUN pip install -r requirements.txt
+
+RUN apt-get clean && apt-get autoremove

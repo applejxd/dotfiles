@@ -1,12 +1,15 @@
 version: '3'
 
 services:
-  pycharm:
-    image: local/pycharm:ssh
+  my_python:
+    image: local/my_python:miniforge3
     build:
       context: .
-      dockerfile: ./pycharm.dockerfile
+      dockerfile: ./Dockerfile
+    # needed for miniforge images
+    tty: true
     restart: always
+
 
     # for GPU
     deploy:
@@ -14,10 +17,6 @@ services:
         reservations:
           devices:
             - capabilities: [gpu]
-
-    # SSH
-    ports:
-     - "50024:2222"
 
     #######
     # GUI #
