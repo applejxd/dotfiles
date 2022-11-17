@@ -10,7 +10,6 @@ services:
     tty: true
     restart: always
 
-
     # for GPU
     deploy:
       resources:
