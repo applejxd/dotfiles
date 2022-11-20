@@ -1,8 +1,9 @@
 # How to use
-# 1. $ sphinx-apidoc -e -f -o ./sphinx .
+# 1. $ sphinx-quickstart sphinx
 # 2. replace conf.py with this file
 # 3. modify Project information section of this file
-# 4. $ sphinx-build -a ./sphinx ./docs
+# 4. $ sphinx-apidoc -e -f -o ./sphinx .
+# 5. $ sphinx-build -a ./sphinx ./docs
 
 # Configuration file for the Sphinx documentation builder.
 #
