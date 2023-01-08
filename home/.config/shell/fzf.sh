@@ -203,8 +203,11 @@ if type "docker" >/dev/null 2>&1; then
         name=$(docker images | sed 1d | fzf --no-sort -m --tac | awk '{ print $1 ":" $2 }')
 
         # it (interactive & tty): stdio
-	# rm: remove container that stops
-        [ -n "$name" ] && docker run -it --rm --gpus all -e DISPLAY="$DISPLAY" "$@" "$name"
+	    # rm: remove container that stops
+        [ -n "$name" ] && \
+        docker run -it --rm --gpus all \
+        -e DISPLAY="$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix -v /mnt/wslg:/mnt/wslg \
+        "$@" "$name"
     }
 
     function dsh() {
