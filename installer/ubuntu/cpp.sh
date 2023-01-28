@@ -10,18 +10,6 @@ fi
 echo "$password" | sudo -S apt-get update
 echo "$password" | sudo -S apt-get -y upgrade
 
-function cmake_install() {
-  INSTALL_PATH=$(echo "$1" | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g')
-  if [ ! -e ~/src/"$INSTALL_PATH"/build ]; then
-    ghq get "$1"
-    mkdir ~/src/"$INSTALL_PATH"/build
-    cd ~/src/"$INSTALL_PATH"/build || exit
-    cmake ..
-    make -j"$(nproc)"
-    echo "$password" | sudo -S make install
-  fi
-}
-
 #-------#
 # cmake #
 #-------#
@@ -29,18 +17,17 @@ function cmake_install() {
 # older version
 # echo "$password" | sudo -S apt-get install -y cmake
 
+# Install CMake 3.21.6 (for g2o and CLion supports CMake 2.8.11~3.21.x)
+
 # libncurses5-dev for ccmake
 # cf. https://stackoverflow.com/questions/28110169/update-ccmake-on-ubuntu-when-building-from-source
 echo "$password" | sudo -S apt-get install -y git build-essential libssl-dev libncurses5-dev
 mkdir -p "$HOME"/src/install
-# Install CMake 3.21.6 (for g2o)
-# CLion supports CMake 2.8.11~3.21.x
 git clone https://gitlab.kitware.com/cmake/cmake.git -b v3.21.6 "$HOME"/src/install/cmake
 mkdir "$HOME"/src/install/cmake/build; cd "$_" || exit
 ../bootstrap && make -j"$(nproc)"
 echo "$password" | sudo -S make install
 cd "$HOME" || exit
-
 
 #-------#
 # Basic #
@@ -59,10 +46,14 @@ echo "$password" | sudo -S apt-get install -y clang-format cpplint doxygen graph
 # gflags
 echo "$password" | sudo -S apt-get install -y  libgflags-dev
 
-# gtest
-cmake_install https://github.com/google/googletest.git
+# gtest 1.13.0
+mkdir -p "$HOME"/src/install
+git clone https://github.com/google/googletest.git -b v1.13.0 "$HOME"/src/install/gtest
+mkdir "$HOME"/src/install/gtest/build; cd "$_" || exit
+cmake .. && make -j"$(nproc)"
+echo "$password" | sudo -S make install
 
-# glog
+# glog 0.5.0
 mkdir -p "$HOME"/src/install
 git clone https://github.com/google/glog.git -b v0.5.0 "$HOME"/src/install/glog
 mkdir "$HOME"/src/install/glog/build; cd "$_" || exit
@@ -85,11 +76,3 @@ if [ ! -e /usr/include/matplotlibcpp.h ]; then
   echo "$password" | sudo -S wget https://raw.githubusercontent.com/lava/matplotlib-cpp/master/matplotlibcpp.h -P /usr/include
   # echo "$password" | sudo -S rm /usr/include/matplotlibcpp.h
 fi
-
-function cmake_uninstall() {
-  INSTALL_PATH=$(echo "$1" | sed -e 's/^https\:\/\/\(.*\)\.git$/\1/g')
-  if [ ! -e ~/src/"$INSTALL_PATH"/build ]; then
-  cd ~/src/"$INSTALL_PATH"/build || exit
-    echo "$password" | sudo -S sh -c "xargs rm -rf < install_manifest.txt"
-  fi
-}
