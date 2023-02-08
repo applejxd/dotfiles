@@ -20,23 +20,19 @@ fi
 #------------#
 
 # coreutils
-PATH=/usr/local/opt/coreutils/libexec/gnubin:$PATH
-MANPATH=/usr/local/opt/coreutils/libexec/gnuman:$MANPATH
+PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH"
 # ed
-PATH=/usr/local/opt/ed/libexec/gnubin:$PATH
-MANPATH=/usr/local/opt/ed/libexec/gnuman:$MANPATH
+PATH="/opt/homebrew/opt/ed/libexec/gnubin:$PATH"
 # findutils
-PATH=/usr/local/opt/findutils/libexec/gnubin:$PATH
-MANPATH=/usr/local/opt/findutils/libexec/gnuman:$MANPATH
-# sed
-PATH=/usr/local/opt/gnu-sed/libexec/gnubin:$PATH
-MANPATH=/usr/local/opt/gnu-sed/libexec/gnuman:$MANPATH
-# tar
-PATH=/usr/local/opt/gnu-tar/libexec/gnubin:$PATH
-MANPATH=/usr/local/opt/gnu-tar/libexec/gnuman:$MANPATH
+PATH="/opt/homebrew/opt/findutils/libexec/gnubin:$PATH"
+# gawk
+PATH="/opt/homebrew/opt/gawk/libexec/gnubin:$PATH"
+# gnu-sed
+PATH="/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH"
+# gnu-tar
+PATH="/opt/homebrew/opt/gnu-tar/libexec/gnubin:$PATH"
 # grep
-PATH=/usr/local/opt/grep/libexec/gnubin:$PATH
-MANPATH=/usr/local/opt/grep/libexec/gnuman:$MANPATH
+PATH="/opt/homebrew/opt/grep/libexec/gnubin:$PATH"
 
 #---------------#
 # Specific root #
