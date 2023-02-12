@@ -23,3 +23,7 @@ set showmatch
 " matching focus time
 set matchtime=1
 
+" indent: 4 spaces -> 2 spaces
+set tabstop=2
+set shiftwidth=2
+

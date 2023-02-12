@@ -1,8 +1,8 @@
 export LANG=ja_JP.UTF-8
 
-########
+#------#
 # PATH #
-########
+#------#
 
 # The default
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:${PATH}}
@@ -15,9 +15,28 @@ if [[ -e "/opt/homebrew/opt/openssl@1.1" ]]; then
   export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig"
 fi
 
-#################
+#------------#
+# BSD -> GNU # 
+#------------#
+
+# coreutils
+PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH"
+# ed
+PATH="/opt/homebrew/opt/ed/libexec/gnubin:$PATH"
+# findutils
+PATH="/opt/homebrew/opt/findutils/libexec/gnubin:$PATH"
+# gawk
+PATH="/opt/homebrew/opt/gawk/libexec/gnubin:$PATH"
+# gnu-sed
+PATH="/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH"
+# gnu-tar
+PATH="/opt/homebrew/opt/gnu-tar/libexec/gnubin:$PATH"
+# grep
+PATH="/opt/homebrew/opt/grep/libexec/gnubin:$PATH"
+
+#---------------#
 # Specific root #
-#################
+#---------------#
 
 # for Maxima
 if [[ -e /Applications/wxMaxima.app/ ]]; then

@@ -1,8 +1,10 @@
-################
-# Renew shells #
-################
+# brew bundle --file ./brew_shell.rb
 
-# install shell
+#--------#
+# shells #
+#--------#
+
+# update shell
 if OS.mac?
     brew "bash"
     brew "fish"
@@ -10,9 +12,9 @@ if OS.mac?
     # brew "zsh"
 end
 
-#######
+#-----#
 # VCS #
-#######
+#-----#
 
 brew "git"
 brew "git-flow-avh"
@@ -25,13 +27,23 @@ brew "z"
 brew "fzf"
 brew "ghq"
 
-##################
+#----------------#
 # Shell Commands #
-##################
+#----------------#
+
+# BSD -> GNU
+# cf. https://qiita.com/eumesy/items/3bb39fc783c8d4863c5f
+brew "coreutils"
+brew "diffutils"
+brew "findutils"
+brew "gawk"
+brew "gnu-sed"
+brew "gnu-tar"
 
 # defaults
 brew "curl"
-brew "gawk"
+brew "grep"
+brew "gzip"
 
 # command cloning
 # brew "bat"
