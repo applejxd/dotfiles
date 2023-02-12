@@ -39,6 +39,13 @@ if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
     source "$HOME"/.config/shell/wslenv.sh
 fi
 
+# for Ubuntu
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    if [[ -e "$HOME"/.local/share/JetBrains/Toolbox/scripts ]]; then
+        export PATH="$HOME"/.local/share/JetBrains/Toolbox/scripts:$PATH
+    fi
+fi
+
 ########
 # PATH #
 ########
