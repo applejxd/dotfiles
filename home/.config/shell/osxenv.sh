@@ -4,7 +4,7 @@ export LANG=ja_JP.UTF-8
 # PATH #
 #------#
 
-# The default
+# The default (lowest priority, first declaration)
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:${PATH}}
 
 # for openssl

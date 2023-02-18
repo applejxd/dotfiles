@@ -60,10 +60,13 @@ if [ ! -e ~/.iterm2_shell_integration.zsh ]; then
 fi
 
 # For AtCoder (bits/stdc++.h)
-if [[ ! -e /usr/local/include/bits/stdc++.h ]]; then
-    echo "$password" | sudo -S mkdir -p /usr/local/include/bits
-    echo "$password" | sudo -S curl "https://raw.githubusercontent.com/gcc-mirror/gcc/master/libstdc%2B%2B-v3/include/precompiled/stdc%2B%2B.h" \
-      -o /usr/local/include/bits/stdc++.h
+if [[ $(which gcc) != "/opt/homebrew/bin/gcc" ]]; then
+    brew install gcc
+    gcc_path=$(ls /opt/homebrew/bin/gcc-[0-9]*)
+    gpp_path=$(ls /opt/homebrew/bin/g++-[0-9]*)
+
+    ln -fs "$gcc_path" /opt/homebrew/bin/gcc  
+    ln -fs "$gpp_path" /opt/homebrew/bin/g++
 fi
 
 # For AtCoder (ac-library)

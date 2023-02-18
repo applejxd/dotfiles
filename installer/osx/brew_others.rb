@@ -5,6 +5,7 @@
 brew "make"
 
 # C++
+brew "gcc"
 brew "cmake"
 brew "clang-format"
 brew "boost"
