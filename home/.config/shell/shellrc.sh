@@ -272,11 +272,12 @@ function extract() {
     esac
 }
 
-# compile
-# cf. http://bit.ly/2tCOvHP
+# compile with atcoder compile options
+# cf. https://qiita.com/matsu_chara/items/8372616f52934c657214
+# cf. https://atcoder.jp/contests/APG4b/rules?lang=ja
 function runcpp() {
     fname=$(echo "$1" | awk -F/ '{print $NF}' | awk -F. '{print $1}')
-    g++ -O2 -Wall -Wextra "$1" -o "$fname"
+    g++ -std=gnu++17 -Wall -Wextra -O2 "$1" -o "$fname"
     shift
     ./"$fname" "$@"
 }

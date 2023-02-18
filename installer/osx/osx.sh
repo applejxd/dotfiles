@@ -58,3 +58,17 @@ echo "$password" | source "$tmp_file"
 if [ ! -e ~/.iterm2_shell_integration.zsh ]; then
     curl -L https://iterm2.com/shell_integration/install_shell_integration.sh | bash
 fi
+
+# For AtCoder (bits/libc++.h)
+if [[ ! -e /usr/local/include/bits/libc++.h ]]; then
+    echo "$password" | sudo -S mkdir -p /usr/local/include/bits
+    echo "$password" | sudo -S curl "https://raw.githubusercontent.com/gcc-mirror/gcc/master/libstdc%2B%2B-v3/include/precompiled/stdc%2B%2B.h" \
+      -o /usr/local/include/bits/libc++.h
+fi
+
+# For AtCoder (ac-library)
+if [[ ! -e /usr/local/include/ac-library ]]; then
+    git clone https://github.com/atcoder/ac-library.git
+    echo "$password" | sudo -S cp -r ./ac-library/atcoder /usr/local/include
+    rm -rf ./ac-library
+fi
