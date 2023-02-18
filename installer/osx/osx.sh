@@ -59,11 +59,11 @@ if [ ! -e ~/.iterm2_shell_integration.zsh ]; then
     curl -L https://iterm2.com/shell_integration/install_shell_integration.sh | bash
 fi
 
-# For AtCoder (bits/libc++.h)
-if [[ ! -e /usr/local/include/bits/libc++.h ]]; then
+# For AtCoder (bits/stdc++.h)
+if [[ ! -e /usr/local/include/bits/stdc++.h ]]; then
     echo "$password" | sudo -S mkdir -p /usr/local/include/bits
     echo "$password" | sudo -S curl "https://raw.githubusercontent.com/gcc-mirror/gcc/master/libstdc%2B%2B-v3/include/precompiled/stdc%2B%2B.h" \
-      -o /usr/local/include/bits/libc++.h
+      -o /usr/local/include/bits/stdc++.h
 fi
 
 # For AtCoder (ac-library)
