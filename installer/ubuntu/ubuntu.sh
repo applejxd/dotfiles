@@ -31,7 +31,7 @@ echo "$password" | sudo -S make install
 cd "$HOME" || exit
 
 # CUDA
-if (type "nvidia-smi" > /dev/null 2>&1); then
+if (type "nvidia-smi" >/dev/null 2>&1); then
     echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/cuda.sh)
 fi
 
@@ -46,10 +46,10 @@ export GOPATH=$HOME/.go
 go install github.com/x-motemen/ghq@latest
 
 # Singularity
-if ! (type "singularity" > /dev/null 2>&1); then
-    export VERSION=3.9.5 && \
-        wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz && \
-        tar -xzf singularity-ce-${VERSION}.tar.gz && \
+if ! (type "singularity" >/dev/null 2>&1); then
+    export VERSION=3.9.5 &&
+        wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz &&
+        tar -xzf singularity-ce-${VERSION}.tar.gz &&
         cd singularity-ce-${VERSION} || exit
     ./mconfig && make -C builddir
     echo "$password" | sudo -S make -C builddir install
@@ -81,6 +81,13 @@ if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
     echo "$password" | sudo -S systemctl enable --now portproxy.service
 fi
 
+# For AtCoder (ac-library)
+if [[ ! -e /usr/local/include/ac-library ]]; then
+    git clone https://github.com/atcoder/ac-library.git
+    echo "$password" | sudo -S cp -r ./ac-library/atcoder /usr/local/include
+    rm -rf ./ac-library
+fi
+
 #######
 # SSH #
 #######
@@ -102,7 +109,7 @@ fi
 # GUI
 #echo "$password" | sudo -S apt-get install -y ubuntu-desktop
 #echo "$password" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4
-# Xfce + applications 
+# Xfce + applications
 echo "$password" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get install -y xubuntu-desktop
 
 # RDP
@@ -116,13 +123,16 @@ echo "$password" | sudo -S bash -c "\
     sed -i 's/3389/53389/g' /etc/xrdp/xrdp.ini && \
     sed -i 's/max_bpp=32/#max_bpp=32\nmax_bpp=128/g' /etc/xrdp/xrdp.ini && \
     sed -i 's/xserverbpp=24/#xserverbpp=24\nxserverbpp=128/g' /etc/xrdp/xrdp.ini"
-echo xfce4-session > ~/.xsession
+echo xfce4-session >~/.xsession
 
 # startwm.sh configuration
 echo "$password" | sudo -S sed -i 's|^\(test\s-x\s/etc/X11/Xsession.*\)|# \1|' /etc/xrdp/startwm.sh
 echo "$password" | sudo -S sed -i 's|^\(exec\s/bin/sh.*\)|# \1|' /etc/xrdp/startwm.sh
 if (! grep "startxfce4" /etc/xrdp/startwm.sh >/dev/null 2>&1); then
-    { echo "$password"; echo "startxfce4"; } | sudo -S -k tee -a /etc/xrdp/startwm.sh
+    {
+        echo "$password"
+        echo "startxfce4"
+    } | sudo -S -k tee -a /etc/xrdp/startwm.sh
 fi
 
 # to fix Authentication error
@@ -130,8 +140,8 @@ fi
 if [ ! -L /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
     if [ -f /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
         echo "$password" | sudo -S mv \
-        /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf \
-        /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf.bk
+            /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf \
+            /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf.bk
     fi
     echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/02-allow-colord.conf /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf
 fi
