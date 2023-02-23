@@ -2,6 +2,9 @@
 # cf. http://karur4n.hatenablog.com/entry/2016/01/18/100000
 setopt no_global_rcs
 
+# VSCode の Terminal で Emacs キーバインドを使うため
+source /etc/zsh/zshrc
+
 ##################
 # Plugin Manager #
 ##################
