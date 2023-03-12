@@ -47,7 +47,7 @@ function _fgg() {
 # v - open files in ~/.viminfo
 v() {
     local files
-    files=$(grep '^>' ~/.viminfo | cut -c3- | 
+    files=$(grep '^>' ~/.viminfo | cut -c3- |
         while read -r line; do
             [ -f "${line/\~/$HOME}" ] && echo "$line"
         done | fzf -d -m -q "$*" -1) && vim "${files//\~/$HOME}"
@@ -55,7 +55,7 @@ v() {
 
 function fshell() {
     local shell
-    shell=$(sed -e "1d" < /etc/shells | fzf -q "$1")
+    shell=$(sed -e "1d" </etc/shells | fzf -q "$1")
     [ -n "$shell" ] && "$shell"
 }
 
@@ -149,12 +149,11 @@ if type "git" >/dev/null 2>&1; then
         local out input_key select_num selected_files
         # "out" is true except when cancel fzf selection
         # --exit-0: Exit if lenght of the list is 0
-        while out=$(git status --short | awk '{if (substr($0,2,1) !~ / /) print $2}' | fzf --exit-0 --expect=ctrl-d)
-        do
+        while out=$(git status --short | awk '{if (substr($0,2,1) !~ / /) print $2}' | fzf --exit-0 --expect=ctrl-d); do
             # Use "fzf --expect=KEY" function (cf. https://www.mankier.com/1/fzf#Options-Scripting)
             input_key=$(echo "$out" | head -1)
             # Arithmetric Expansion
-            select_num=$(( $(echo "$out" | wc -l) - 1))
+            select_num=$(($(echo "$out" | wc -l) - 1))
             selected_files=$(echo "$out" | tail "-$select_num")
             [[ -z "$selected_files" ]] && continue
 
@@ -179,7 +178,7 @@ if type "conda" >/dev/null 2>&1; then
     function condarun() {
         local conda_env
         conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
-        [ -n "$conda_env" ] && conda activate "$conda_env" 
+        [ -n "$conda_env" ] && conda activate "$conda_env"
     }
 
     function condarm() {
@@ -199,15 +198,27 @@ if type "docker" >/dev/null 2>&1; then
     alias dclean="docker container prune"
 
     function drun() {
+        local docker_command
+        docker_command="docker run -it --rm -e DISPLAY=\"$DISPLAY\" -v /tmp/.X11-unix:/tmp/.X11-unix"
+
+        if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+            docker_command="$docker_command -v /mnt/wslg:/mnt/wslg"
+        fi
+        if type "nvidia-smi" >/dev/null 2>&1; then
+            docker_command="$docker_command --gpus all"
+        fi
+
         local name
         name=$(docker images | sed 1d | fzf --no-sort -m --tac | awk '{ print $1 ":" $2 }')
 
         # it (interactive & tty): stdio
-	    # rm: remove container that stops
-        [ -n "$name" ] && \
-        docker run -it --rm --gpus all \
-        -e DISPLAY="$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix -v /mnt/wslg:/mnt/wslg \
-        "$@" "$name"
+        # rm: remove container that stops
+        if [[ -n "$name" ]]; then
+            docker_command="${docker_command} $@ $name"
+            # for debugging
+            # echo "$docker_command"
+            eval "$docker_command"
+        fi
     }
 
     function dsh() {
@@ -242,7 +253,7 @@ if type "docker" >/dev/null 2>&1; then
     }
 
     function drmi() {
-      docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
+        docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
     }
 
     # Produce Dockerfile from image
@@ -251,23 +262,23 @@ if type "docker" >/dev/null 2>&1; then
         local cid
         cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
 
-        [ -n "$cid" ] && docker container commit "$cid" tmp && dfimage.bash tmp > Dockerfile && docker rmi tmp
+        [ -n "$cid" ] && docker container commit "$cid" tmp && dfimage.bash tmp >Dockerfile && docker rmi tmp
     }
-    
+
     function dbuild() {
-    	local file_name
-        file_name=$(find ./*.dockerfile | fzf | sed "s|\.\/\(.*\)\.dockerfile|\1|") 
-         
-	    local date_tag
-	    date_tag=$(date "+%y.%m.%d")
+        local file_name
+        file_name=$(find ./*.dockerfile | fzf | sed "s|\.\/\(.*\)\.dockerfile|\1|")
+
+        local date_tag
+        date_tag=$(date "+%y.%m.%d")
         [ -n "$file_name" ] && docker build -t local/"$file_name":"$date_tag" -f ./"$file_name".dockerfile .
     }
-    
+
     function dcom() {
         local file_name
         file_name=$(find ./*.yml | fzf)
 
-    	[ -n "$file_name" ] && docker-compose -f "$file_name" up -d
+        [ -n "$file_name" ] && docker-compose -f "$file_name" up -d
     }
 fi
 
@@ -281,19 +292,19 @@ if type "singularity" >/dev/null 2>&1; then
         file_name=$(find ./*.def | fzf)
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
-         
+
         [ -n "$file_name" ] && sudo -E singularity build "$file_name".sif "$file_name".def
     }
-    
+
     function bbuild() {
         local file_name
         file_name=$(find ./*.def | fzf)
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
-         
+
         [ -n "$file_name" ] && sudo -E singularity build --sandbox "$file_name"-box "$file_name".def
     }
-    
+
     function box2sif() {
         local box_name
         box_name=$(find . -maxdepth 1 -type d | fzf)
@@ -303,23 +314,23 @@ if type "singularity" >/dev/null 2>&1; then
     function sshell() {
         local file_name
         file_name=$(find ./*.sif | fzf)
-                 
+
         [ -n "$file_name" ] && singularity shell --nv "$file_name"
     }
 
     function sexe() {
         local file_name
         file_name=$(find ./*.sif | fzf)
-                 
+
         [ -n "$file_name" ] && singularity exec --nv "$file_name" "$@"
     }
-    
+
     function bshell() {
         local box_name
         box_name=$(find . -maxdepth 1 -type d | fzf)
         [ -n "$box_name" ] && sudo singularity shell --nv --writable "$name"
     }
-    
+
     function brun() {
         local box_name
         box_name=$(find . -maxdepth 1 -type d | fzf)
@@ -333,21 +344,21 @@ if type "singularity" >/dev/null 2>&1; then
         file_name=$(find ./*.sif | fzf)
         # https://qiita.com/mriho/items/b30b3a33e8d2e25e94a8
         file_name=${file_name%.*}
-         
+
         [ -n "$file_name" ] && singularity instance start --nv "$file_name".sif "$file_name"
     }
 
     function sishell() {
         local instance_name
         instance_name=$(singularity instance list | sed -e '1d' | awk '{print $1}' | fzf)
-         
+
         [ -n "$instance_name" ] && singularity shell instance://"$instance_name"
     }
 
     function sstop() {
         local instance_name
         instance_name=$(singularity instance list | sed -e '1d' | awk '{print $1}' | fzf)
-         
+
         [ -n "$instance_name" ] && singularity instance stop "$instance_name"
     }
 fi
