@@ -1,3 +1,6 @@
+#!/bin/bash
+#.bash_profile>.bashrc
+
 #################
 # common config #
 #################
@@ -33,7 +36,7 @@ shopt -s nocaseglob
 
 # iTerm2 shell integration
 test -e "${HOME}/.iterm2_shell_integration.bash" &&
-source "${HOME}/.iterm2_shell_integration.bash" || true
+    source "${HOME}/.iterm2_shell_integration.bash" || true
 
 # powerline
 if type "powerline-daemon" >/dev/null 2>&1; then
@@ -46,11 +49,11 @@ fi
 
 # z: smart completion of the path
 [[ -f /usr/local/etc/profile.d/z.sh ]] &&
-source /usr/local/etc/profile.d/z.sh
+    source /usr/local/etc/profile.d/z.sh
 
 # bash completion
 [[ -f "/usr/local/etc/profile.d/bash_completion.sh" ]] &&
-source "/usr/local/etc/profile.d/bash_completion.sh"
+    source "/usr/local/etc/profile.d/bash_completion.sh"
 
 # fzf
 if [ -f "$HOME"/.fzf.bash ]; then
@@ -68,7 +71,7 @@ fi
 if (type "anyenv" >/dev/null 2>&1) && (type "pyenv" >/dev/null 2>&1) && [[ $(pyenv version) == *miniforge3* ]]; then
     # >>> conda initialize >>>
     # !! Contents within this block are managed by 'conda init' !!
-    __conda_setup="$('$ANYENV_ROOT/envs/pyenv/versions/miniforge3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+    __conda_setup="$('$ANYENV_ROOT/envs/pyenv/versions/miniforge3/bin/conda' 'shell.bash' 'hook' 2>/dev/null)"
     if [ $? -eq 0 ]; then
         eval "$__conda_setup"
     else

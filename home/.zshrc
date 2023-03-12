@@ -1,3 +1,5 @@
+# .zshenv>.zprofile>.zshrc>.zlogin
+
 SHELL_CONF=$HOME/.config/shell
 
 #################
@@ -97,7 +99,7 @@ alias -s hs='runhaskell'
 if type "aunpack" >/dev/null 2>&1; then
     alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
 else
-     alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=extract
+    alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=extract
 fi
 
 # compile
@@ -109,7 +111,7 @@ alias -s {c,cc,cpp}='runcpp'
 # fzf #
 #######
 
-if type "fzf" >/dev/null 2>&1;then
+if type "fzf" >/dev/null 2>&1; then
     # common setting
     COMMON_FZF=$HOME/.config/shell/fzf.sh
     if [ -e $COMMON_FZF ]; then
@@ -162,7 +164,7 @@ fi
 if (type "anyenv" >/dev/null 2>&1) && (type "pyenv" >/dev/null 2>&1) && [[ $(pyenv version) == *miniforge3* ]]; then
     # >>> conda initialize >>>
     # !! Contents within this block are managed by 'conda init' !!
-    __conda_setup="$('$ANYENV_ROOT/envs/pyenv/versions/miniforge3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+    __conda_setup="$('$ANYENV_ROOT/envs/pyenv/versions/miniforge3/bin/conda' 'shell.zsh' 'hook' 2>/dev/null)"
     if [ $? -eq 0 ]; then
         eval "$__conda_setup"
     else

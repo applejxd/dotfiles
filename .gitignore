@@ -1,5 +1,5 @@
 .DS_Store
 
 home/.gitconfig
-home/.config/shell/usrenv.sh
+home/.config/shell/usrenv.*
 *.pub
