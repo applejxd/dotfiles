@@ -11,6 +11,9 @@ brew "clang-format"
 brew "boost"
 brew "opencv"
 
+# Docker
+brew "hadolint"
+
 #---------#
 # Science #
 #---------#

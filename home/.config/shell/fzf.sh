@@ -267,11 +267,13 @@ if type "docker" >/dev/null 2>&1; then
 
     function dbuild() {
         local file_name
-        file_name=$(find ./*.dockerfile | fzf | sed "s|\.\/\(.*\)\.dockerfile|\1|")
+        file_name=$(find . -type f | grep -E "./*.(D|d)ockerfile" | fzf)
+        local img_name
+        img_name=$(echo $file_name | sed "s|./||" | awk -F'[.]' '{print $1}' | tr [:upper:] [:lower:])
 
         local date_tag
         date_tag=$(date "+%y.%m.%d")
-        [ -n "$file_name" ] && docker build -t local/"$file_name":"$date_tag" -f ./"$file_name".dockerfile .
+        [ -n "$file_name" ] && docker build -t local/"$img_name":"$date_tag" -f "$file_name" .
     }
 
     function dcom() {
