@@ -56,6 +56,25 @@ if ! (type "singularity" >/dev/null 2>&1); then
     cd .. && rm -rf singularity-ce-*
 fi
 
+# asdf
+if [[ ! -e "$HOME"/.asdf/ruby ]]; then
+    asdf plugin add python
+    # asdf list all python
+    asdf install python miniforge3-latest
+fi
+if [[ ! -e "$HOME"/.asdf/nodejs ]]; then
+    asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.gi
+fi
+if [[ ! -e "$HOME"/.asdf/ruby ]]; then
+    echo "$password" | sudo -S apt-get install -y \
+        autoconf bison build-essential \
+        libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev \
+        libffi-dev libgdbm6 libgdbm-dev libdb-dev
+    asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git
+    # asdf list all ruby
+    asdf install ruby 2.7.8
+fi
+
 # Linter
 echo "$password" | sudo -S apt-get install -y shellcheck
 

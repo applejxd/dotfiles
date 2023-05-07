@@ -1,8 +1,8 @@
-##################
+#----------------#
 # Initialization #
-##################
+#----------------#
 
-### Added by Zinit's installer
+# Added by Zinit's installer
 if [[ ! -f $HOME/.zinit/bin/zinit.zsh ]]; then
     print -P "%F{33}▓▒░ %F{220}Installing DHARMA Initiative Plugin Manager (zdharma/zinit)…%f"
     command mkdir -p "$HOME/.zinit" && command chmod g-rwX "$HOME/.zinit"
@@ -14,11 +14,14 @@ fi
 source "$HOME/.zinit/bin/zinit.zsh"
 autoload -Uz _zinit
 (( ${+_comps} )) && _comps[zinit]=_zinit
-### End of Zinit's installer chunk
+# End of Zinit's installer chunk
 
-###########
+#---------#
 # Plugins #
-###########
+#---------#
+
+# asdf
+zinit light asdf-vm/asdf
 
 # fish-like auto completion
 zinit light zsh-users/zsh-autosuggestions
@@ -64,16 +67,16 @@ zinit snippet OMZ::lib/git.zsh
 # zinit ice pick"powerlevel9k.zsh-theme"
 # zinit light bhilburn/powerlevel9k
 
-########
+#------#
 # pure #
-########
+#------#
 
 zinit ice compile'(pure|async).zsh' pick'async.zsh' src'pure.zsh'
 zinit light sindresorhus/pure
 
-#######
+#-----#
 # fzf #
-#######
+#-----#
 
 # cf. https://wonderwall.hatenablog.com/entry/2017/10/06/063000
 # cf. (for options) https://qiita.com/kompiro/items/a09c0b44e7c741724c80
@@ -90,9 +93,9 @@ zinit load sharkdp/bat
 zinit ice from"gh-r" as"program" pick"ripgrep-*/rg"
 zinit load BurntSushi/ripgrep
 
-##########
+#--------#
 # docker #
-##########
+#--------#
 
 zinit light felixr/docker-zsh-completion
 
@@ -105,9 +108,9 @@ zinit load MartinRamm/fzf-docker
 zinit ice as"program" pick"dfimage.bash"
 zinit load RyodoTanaka/.bash_extend
 
-############
+#----------#
 # Commands #
-############
+#----------#
 
 zinit ice pick"z.sh"
 zinit light rupa/z

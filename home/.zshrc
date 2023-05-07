@@ -153,6 +153,11 @@ fi
 # Activations #
 ###############
 
+if [[ -e "$HOME"/.zinit/plugins/asdf-vm---asdf ]]; then
+    fpath=(${ASDF_DIR}/completions $fpath)
+    autoload -Uz compinit && compinit
+fi
+
 if [[ -e /usr/local/Modules/init ]]; then
     source /usr/local/Modules/init/zsh
 fi
@@ -161,19 +166,19 @@ if [[ -e /opt/ros/noetic/setup.zsh ]]; then
     source /opt/ros/noetic/setup.zsh
 fi
 
-if (type "anyenv" >/dev/null 2>&1) && (type "pyenv" >/dev/null 2>&1) && [[ $(pyenv version) == *miniforge3* ]]; then
-    # >>> conda initialize >>>
-    # !! Contents within this block are managed by 'conda init' !!
-    __conda_setup="$('$ANYENV_ROOT/envs/pyenv/versions/miniforge3/bin/conda' 'shell.zsh' 'hook' 2>/dev/null)"
-    if [ $? -eq 0 ]; then
-        eval "$__conda_setup"
-    else
-        if [ -f "$ANYENV_ROOT/envs/pyenv/versions/miniforge3/etc/profile.d/conda.sh" ]; then
-            . "$ANYENV_ROOT/envs/pyenv/versions/miniforge3/etc/profile.d/conda.sh"
-        else
-            export PATH="$ANYENV_ROOT/envs/pyenv/versions/miniforge3/bin:$PATH"
-        fi
-    fi
-    unset __conda_setup
-    # <<< conda initialize <<<
-fi
+# if (type "" >/dev/null 2>&1) && (type "pyenv" >/dev/null 2>&1) && [[ $(pyenv version) == *miniforge3* ]]; then
+#     # >>> conda initialize >>>
+#     # !! Contents within this block are managed by 'conda init' !!
+#     __conda_setup="$('$ANYENV_ROOT/envs/pyenv/versions/miniforge3/bin/conda' 'shell.zsh' 'hook' 2>/dev/null)"
+#     if [ $? -eq 0 ]; then
+#         eval "$__conda_setup"
+#     else
+#         if [ -f "$ANYENV_ROOT/envs/pyenv/versions/miniforge3/etc/profile.d/conda.sh" ]; then
+#             . "$ANYENV_ROOT/envs/pyenv/versions/miniforge3/etc/profile.d/conda.sh"
+#         else
+#             export PATH="$ANYENV_ROOT/envs/pyenv/versions/miniforge3/bin:$PATH"
+#         fi
+#     fi
+#     unset __conda_setup
+#     # <<< conda initialize <<<
+# fi

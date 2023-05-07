@@ -1,0 +1,33 @@
+version: '3'
+
+services:
+  ros_noetic_vnc:
+    image: local/ros:noetic
+    build:
+      context: .
+      shm_size: '512m'
+      # Read variables from .env
+      # cf. https://docs.docker.jp/compose/environment-variables.html
+      #   args:
+      #     - UID=${UID}
+      #     - GID=${GID}
+      #     - USERNAME=${USERNAME}
+      #     - GROUPNAME=${GROUPNAME}
+      # user: "${UID}:${GID}"
+    tty: true
+    restart: always
+
+    ports:
+      # for VNC
+      - "127.0.0.1:6080:80"
+      # for ROS master
+      - "127.0.0.1:11312:11311"
+    # cf. http://wiki.ros.org/docker/Tutorials/GUI#login_as_yourself
+    # environment:
+    #   - DISPLAY=$DISPLAY
+    # volumes:
+    #   - /etc/group:/etc/group:ro
+    #   - /etc/passwd:/etc/passwd:ro
+    #   - /etc/shadow:/etc/shadow:ro
+    #   - /etc/sudoers.d:/etc/sudoers.d:ro
+    #   - /tmp/.X11-unix:/tmp/.X11-unix:rw
