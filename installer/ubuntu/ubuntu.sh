@@ -50,7 +50,7 @@ if [[ ! -e "$HOME"/.asdf/ruby ]]; then
     asdf install ruby 2.7.8
     asdf global ruby 2.7.8
 fi
-if [[ ! -e "$HOME"/.asdf/ruby ]]; then
+if [[ ! -e "$HOME"/.asdf/python ]]; then
     asdf plugin add python
     # asdf list all python
     asdf install python miniforge3-latest
