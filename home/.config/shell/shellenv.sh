@@ -1,31 +1,6 @@
 # Defaul editor = vim
 export EDITOR=vim
 
-##########
-# anyenv #
-##########
-
-# if [[ "$OSTYPE" == "darwin"* ]]; then
-#     if [[ $(uname -m) == arm64 ]]; then
-#         export ANYENV_ROOT="$HOME"/.anyenv_arm64
-#         export ANYENV_DEFINITION_ROOT="$HOME"/.config/anyenv_arm64/anyenv-install
-#     elif [[ $(uname -m) == x86_64 ]]; then
-#         export ANYENV_ROOT="$HOME"/.anyenv_x64
-#         export ANYENV_DEFINITION_ROOT="$HOME"/.config/anyenv_x64/anyenv-install
-#     fi
-# else
-#     export ANYENV_ROOT="$HOME"/.anyenv
-#     export ANYENV_DEFINITION_ROOT="$HOME"/.config/anyenv/anyenv-install
-# fi
-
-# export PATH=$ANYENV_ROOT/bin${PATH:+:${PATH}}
-
-# if [[ -e $ANYENV_ROOT/envs/pyenv ]]; then
-#     export PYENV_ROOT="$ANYENV_ROOT"/envs/pyenv
-#     export PATH="$PYENV_ROOT"/bin:$PATH
-#     eval "$(pyenv init --path)"
-# fi
-
 ###################
 # OS dependencies #
 ###################

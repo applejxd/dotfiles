@@ -24,32 +24,23 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     fi
 
     alias x64='exec arch -x86_64 /bin/zsh'
-	alias a64='exec arch -arm64e /bin/zsh'
+    alias a64='exec arch -arm64e /bin/zsh'
 fi
 
 ##################
 # Initialization #
 ##################
 
-if type "anyenv" >/dev/null 2>&1; then
-    # anyenv for rbenv, nodenv, phpenv
-    eval "$(anyenv init - zsh)"
-
-    if type "pyenv" >/dev/null 2>&1; then
-        eval "$(pyenv init -)"
-    fi
-fi
-
 # iceberg theme for vim
 if type "ghq" >/dev/null 2>&1; then
-    if [[ ! -e  $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
+    if [[ ! -e $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
         ghq get https://github.com/cocopon/iceberg.vim.git
     fi
     if [[ ! -e $HOME/.vim/colors ]]; then
-            mkdir -p "$HOME"/.vim/colors
+        mkdir -p "$HOME"/.vim/colors
     fi
     if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
-    	ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
+        ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
     fi
 fi
 
@@ -125,7 +116,7 @@ alias gen-key="ssh-keygen -t ed25519 -P \"\""
 # pbcopy & pbpaste
 if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
     alias pbcopy='clip.exe'
-    alias pbpaste='powershell.exe Get-Clipboard' 
+    alias pbpaste='powershell.exe Get-Clipboard'
 elif [[ "$OSTYPE" == "linux-gnu" ]]; then
     alias pbcopy='xsel --clipboard --input'
     alias pbpaste='xsel --clipboard --output'
@@ -226,7 +217,6 @@ if [ -e ~/.iterm2_shell_integration.zsh ]; then
     }
 fi
 
-
 ##################
 # zsh registered #
 ##################
@@ -246,7 +236,7 @@ function fancy-ctrl-z() {
 }
 
 function switch-arch() {
-    if  [[ "$(uname -m)" == arm64 ]]; then
+    if [[ "$(uname -m)" == arm64 ]]; then
         arch=x86_64
     elif [[ "$(uname -m)" == x86_64 ]]; then
         arch=arm64e

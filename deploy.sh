@@ -77,6 +77,16 @@ fi
 #     rbenv global 2.7.5
 # fi
 
+if [[ ! -e ~/.asdf ]]; then
+    git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.11.3
+fi
+source "$HOME/.asdf/asdf.sh"
+
+if (! type "ruby" >/dev/null 2>&1); then
+    asdf install ruby 2.7.8
+    asdf global ruby 2.7.8
+fi
+
 ################
 # Link configs #
 ################A
