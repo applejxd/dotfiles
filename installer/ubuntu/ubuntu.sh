@@ -35,6 +35,31 @@ if (type "nvidia-smi" >/dev/null 2>&1); then
     echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/cuda.sh)
 fi
 
+# asdf
+if [[ ! -e ~/.asdf ]]; then
+    git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.11.3
+fi
+source "$HOME/.asdf/asdf.sh"
+if [[ ! -e "$HOME"/.asdf/ruby ]]; then
+    echo "$password" | sudo -S apt-get install -y \
+        autoconf bison build-essential \
+        libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev \
+        libffi-dev libgdbm6 libgdbm-dev libdb-dev
+    asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git
+    # asdf list all ruby
+    asdf install ruby 2.7.8
+    asdf global ruby 2.7.8
+fi
+if [[ ! -e "$HOME"/.asdf/ruby ]]; then
+    asdf plugin add python
+    # asdf list all python
+    asdf install python miniforge3-latest
+    asdf global python miniforge3-latest
+fi
+if [[ ! -e "$HOME"/.asdf/nodejs ]]; then
+    asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
+fi
+
 # Go
 echo "$password" | sudo -S bash -c "\
     add-apt-repository -y ppa:longsleep/golang-backports && \
@@ -54,27 +79,6 @@ if ! (type "singularity" >/dev/null 2>&1); then
     ./mconfig && make -C builddir
     echo "$password" | sudo -S make -C builddir install
     cd .. && rm -rf singularity-ce-*
-fi
-
-# asdf
-if [[ ! -e "$HOME"/.asdf/ruby ]]; then
-    echo "$password" | sudo -S apt-get install -y \
-        autoconf bison build-essential \
-        libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev \
-        libffi-dev libgdbm6 libgdbm-dev libdb-dev
-    asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git
-    # asdf list all ruby
-    asdf install ruby 2.7.8
-    asdf global ruby 2.7.8
-fi
-if [[ ! -e "$HOME"/.asdf/ruby ]]; then
-    asdf plugin add python
-    # asdf list all python
-    asdf install python miniforge3-latest
-    asdf global python miniforge3-latest
-fi
-if [[ ! -e "$HOME"/.asdf/nodejs ]]; then
-    asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
 fi
 
 # Linter
