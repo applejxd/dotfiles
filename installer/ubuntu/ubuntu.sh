@@ -20,6 +20,7 @@ echo "$password" | sudo -S apt-get install -y xsel
 echo "$password" | sudo -S apt-get install -y xdg-utils
 
 # docker
+# shellcheck source=/dev/null
 echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
 
 # Environment Modules
@@ -32,6 +33,7 @@ cd "$HOME" || exit
 
 # CUDA
 if (type "nvidia-smi" >/dev/null 2>&1); then
+    # shellcheck source=/dev/null
     echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/cuda.sh)
 fi
 
@@ -39,6 +41,7 @@ fi
 if [[ ! -e ~/.asdf ]]; then
     git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.11.3
 fi
+# shellcheck source=/dev/null
 source "$HOME/.asdf/asdf.sh"
 if [[ ! -e "$HOME"/.asdf/ruby ]]; then
     echo "$password" | sudo -S apt-get install -y \
@@ -73,7 +76,7 @@ go install github.com/x-motemen/ghq@latest
 # Singularity
 if ! (type "singularity" >/dev/null 2>&1); then
     export VERSION=3.9.5 &&
-        wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz &&
+        wget https://github.com/sylabs/singularity/releases/download/v"$VERSION"/singularity-ce-"$VERSION".tar.gz &&
         tar -xzf singularity-ce-${VERSION}.tar.gz &&
         cd singularity-ce-${VERSION} || exit
     ./mconfig && make -C builddir
@@ -83,6 +86,8 @@ fi
 
 # Linter
 echo "$password" | sudo -S apt-get install -y shellcheck
+echo "$password" | sudo -S wget https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 -O /usr/local/bin
+echo "$password" | sudo -S chmod 777 /usr/loca/bin/hadolint
 
 # Java
 # echo "$password" | sudo -S apt-get install -y default-jre default-jdk
@@ -113,9 +118,9 @@ if [[ ! -e /usr/local/include/ac-library ]]; then
     rm -rf ./ac-library
 fi
 
-#######
+#-----#
 # SSH #
-#######
+#-----#
 
 echo "$password" | sudo -S bash -c "\
     apt-get purge -y openssh-server && \
@@ -127,9 +132,9 @@ if [ ! -L /etc/ssh/sshd_config ]; then
     echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/sshd_config /etc/ssh/sshd_config
 fi
 
-#######
+#-----#
 # GUI #
-#######
+#-----#
 
 # GUI
 #echo "$password" | sudo -S apt-get install -y ubuntu-desktop

@@ -1,16 +1,19 @@
+#!/bin/bash
 # Defaul editor = vim
 export EDITOR=vim
 
-###################
+#-----------------#
 # OS dependencies #
-###################
+#-----------------#
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
+    # shellcheck source=/dev/null
     source "$HOME"/.config/shell/osxenv.sh
 fi
 
 # for WSL
 if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
+    # shellcheck source=/dev/null
     source "$HOME"/.config/shell/wslenv.sh
 fi
 
@@ -21,9 +24,9 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
     fi
 fi
 
-########
+#------#
 # PATH #
-########
+#------#
 
 # for original binaries
 export PATH="$HOME"/bin:$PATH
@@ -54,30 +57,31 @@ fi
 # # for pipenv (for Ubuntu)
 # export PATH=~/.local/bin:$PATH
 
-#############
+#-----------#
 # Japansese #
-#############
+#-----------#
 
 export GTK_IM_MODULE=fcitx
 export QT_IM_MODULE=fcitx
 export XMODIFIERS=@im=fcitx
 export DefaultIMModule=fcitx
-if [ $SHLVL = 1 ]; then
+if [[ $SHLVL = 1 ]]; then
     (fcitx-autostart >/dev/null 2>&1 &)
     xset -r 49 >/dev/null 2>&1
 fi
 
-#################
+#---------------#
 # Specific root #
-#################
+#---------------#
 
 # ghq root
 export GHQ_ROOT=~/src
 
-#################
+#---------------#
 # User settings #
-#################
+#---------------#
 
 if [[ -f "$HOME"/.config/shell/usrenv.sh ]]; then
+    # shellcheck source=/dev/null
     source "$HOME"/.config/shell/usrenv.sh
 fi

@@ -1,17 +1,18 @@
 #!/bin/bash
 #.bash_profile>.bashrc
 
-#################
+#---------------#
 # common config #
-#################
+#---------------#
 
 if [ -f "$HOME"/.config/shell/shellrc.sh ]; then
+    # shellcheck source=/dev/null
     source "$HOME"/.config/shell/shellrc.sh
 fi
 
-###########
+#---------#
 # options #
-###########
+#---------#
 
 # for latest bash
 # cf. http://bit.ly/2Sts1CU
@@ -30,41 +31,49 @@ shopt -s globstar
 # not to distinguish between uppercase and lowercase
 shopt -s nocaseglob
 
-################
+#--------------#
 # Bash plugins #
-################
+#--------------#
 
 # iTerm2 shell integration
-test -e "${HOME}/.iterm2_shell_integration.bash" &&
-    source "${HOME}/.iterm2_shell_integration.bash" || true
+if [[ -e "${HOME}/.iterm2_shell_integration.bash" ]]; then
+    # shellcheck source=/dev/null
+    source "${HOME}/.iterm2_shell_integration.bash"
+fi
 
 # powerline
 if type "powerline-daemon" >/dev/null 2>&1; then
     powerline-daemon -q
-    POWERLINE_PATH=/usr/local/lib/python3.7/site-packages/powerline/bindings/bash/powerline.sh
-    if [ -f $POWERLINE_PATH ]; then
-        source "$POWERLINE_PATH"
+    if [ -f "/usr/local/lib/python3.7/site-packages/powerline/bindings/bash/powerline.sh" ]; then
+        # shellcheck source=/dev/null
+        source "/usr/local/lib/python3.7/site-packages/powerline/bindings/bash/powerline.sh"
     fi
 fi
 
 # z: smart completion of the path
+# shellcheck source=/dev/null
 [[ -f /usr/local/etc/profile.d/z.sh ]] &&
     source /usr/local/etc/profile.d/z.sh
 
 # bash completion
+# shellcheck source=/dev/null
 [[ -f "/usr/local/etc/profile.d/bash_completion.sh" ]] &&
     source "/usr/local/etc/profile.d/bash_completion.sh"
 
 # fzf
 if [ -f "$HOME"/.fzf.bash ]; then
+    # shellcheck source=/dev/null
     source "$HOME"/.fzf.bash
     # common settings of fzf
     if [ -f "$HOME"/.config/shell/fzf.sh ]; then
-        source $HOME/.config/shell/fzf.sh
+        # shellcheck source=/dev/null
+        source "$HOME"/.config/shell/fzf.sh
     fi
 fi
 
 if [[ -e "$HOME/.asdf" ]]; then
+    # shellcheck source=/dev/null
     source "$HOME/.asdf/asdf.sh"
+    # shellcheck source=/dev/null
     source "$HOME/.asdf/completions/asdf.bash"
 fi

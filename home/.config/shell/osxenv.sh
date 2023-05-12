@@ -1,3 +1,5 @@
+#!/bin/bash
+
 export LANG=ja_JP.UTF-8
 
 #------#
@@ -16,7 +18,7 @@ if [[ -e "/opt/homebrew/opt/openssl@1.1" ]]; then
 fi
 
 #------------#
-# BSD -> GNU # 
+# BSD -> GNU #
 #------------#
 
 # coreutils

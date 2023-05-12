@@ -1,10 +1,10 @@
 #!/bin/bash
 
 if [ $# -eq 0 ]; then
-    # Save Password
-    read -rsp "Password: " password
+  # Save Password
+  read -rsp "Password: " password
 else
-    password=$1
+  password=$1
 fi
 
 echo "$password" | sudo -S apt-get update
@@ -24,7 +24,8 @@ echo "$password" | sudo -S apt-get -y upgrade
 echo "$password" | sudo -S apt-get install -y git build-essential libssl-dev libncurses5-dev
 mkdir -p "$HOME"/src/install
 git clone https://gitlab.kitware.com/cmake/cmake.git -b v3.21.6 "$HOME"/src/install/cmake
-mkdir "$HOME"/src/install/cmake/build; cd "$_" || exit
+mkdir "$HOME"/src/install/cmake/build
+cd "$_" || exit
 ../bootstrap && make -j"$(nproc)"
 echo "$password" | sudo -S make install
 cd "$HOME" || exit
@@ -44,19 +45,21 @@ echo "$password" | sudo -S apt-get install -y clang-format cpplint doxygen graph
 #--------#
 
 # gflags
-echo "$password" | sudo -S apt-get install -y  libgflags-dev
+echo "$password" | sudo -S apt-get install -y libgflags-dev
 
 # gtest 1.13.0
 mkdir -p "$HOME"/src/install
 git clone https://github.com/google/googletest.git -b v1.13.0 "$HOME"/src/install/gtest
-mkdir "$HOME"/src/install/gtest/build; cd "$_" || exit
+mkdir "$HOME"/src/install/gtest/build
+cd "$_" || exit
 cmake .. && make -j"$(nproc)"
 echo "$password" | sudo -S make install
 
 # glog 0.5.0
 mkdir -p "$HOME"/src/install
 git clone https://github.com/google/glog.git -b v0.5.0 "$HOME"/src/install/glog
-mkdir "$HOME"/src/install/glog/build; cd "$_" || exit
+mkdir "$HOME"/src/install/glog/build
+cd "$_" || exit
 cmake .. && make -j"$(nproc)"
 echo "$password" | sudo -S make install
 

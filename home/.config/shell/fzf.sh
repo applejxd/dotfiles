@@ -1,6 +1,8 @@
-###########
+#!/bin/bash
+
+#---------#
 # options #
-###########
+#---------#
 
 # default is **
 # export FZF_COMPLETION_TRIGGER=','
@@ -26,9 +28,9 @@ if type "tree" >/dev/null 2>&1; then
     export FZF_ALT_C_OPTS='--preview "tree -C -N {} | head -200" --select-1 --exit-0'
 fi
 
-#############
+#-----------#
 # functions #
-#############
+#-----------#
 
 # fg-fzf
 # cf. http://bit.ly/39OMtEr
@@ -86,9 +88,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     }
 fi
 
-#######
+#-----#
 # git #
-#######
+#-----#
 
 if type "git" >/dev/null 2>&1; then
     # fbr - checkout git branch
@@ -168,9 +170,9 @@ if type "git" >/dev/null 2>&1; then
     }
 fi
 
-############
+#----------#
 # Anaconda #
-############
+#----------#
 
 if type "conda" >/dev/null 2>&1; then
     alias condals="conda env list"
@@ -188,9 +190,9 @@ if type "conda" >/dev/null 2>&1; then
     }
 fi
 
-##########
+#--------#
 # docker #
-##########
+#--------#
 
 if type "docker" >/dev/null 2>&1; then
     alias dim="docker images"
@@ -214,7 +216,7 @@ if type "docker" >/dev/null 2>&1; then
         # it (interactive & tty): stdio
         # rm: remove container that stops
         if [[ -n "$name" ]]; then
-            docker_command="${docker_command} $@ $name"
+            docker_command="${docker_command} $* $name"
             # for debugging
             # echo "$docker_command"
             eval "$docker_command"
@@ -269,7 +271,7 @@ if type "docker" >/dev/null 2>&1; then
         local file_name
         file_name=$(find . -type f | grep -E "./*.(D|d)ockerfile" | fzf)
         local img_name
-        img_name=$(echo $file_name | sed "s|./||" | awk -F'[.]' '{print $1}' | tr [:upper:] [:lower:])
+        img_name=$(echo "$file_name" | sed "s|./||" | awk -F'[.]' '{print $1}' | tr '[:upper:]' '[:lower:]')
 
         local date_tag
         date_tag=$(date "+%y.%m.%d")
@@ -284,9 +286,9 @@ if type "docker" >/dev/null 2>&1; then
     }
 fi
 
-###############
+#-------------#
 # Singularity #
-###############
+#-------------#
 
 if type "singularity" >/dev/null 2>&1; then
     function sbuild() {
@@ -365,9 +367,9 @@ if type "singularity" >/dev/null 2>&1; then
     }
 fi
 
-############
+#----------#
 # Homebrew #
-############
+#----------#
 
 if type "brew" >/dev/null 2>&1; then
     # Install or open the webpage for the selected application

@@ -1,3 +1,4 @@
+#!/bin/zsh
 # .zshenv>.zprofile>.zshrc>.zlogin
 
 # Unable path_helper from /etc/profile

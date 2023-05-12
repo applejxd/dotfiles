@@ -7,12 +7,14 @@ else
     password=$1
 fi
 
+# shellcheck source=/dev/null
 echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)
+# shellcheck source=/dev/null
 echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)
 
-##########
+#--------#
 # Common #
-##########
+#--------#
 
 #code --list-extensions
 code --install-extension harg.iceberg

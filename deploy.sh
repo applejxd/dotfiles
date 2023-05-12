@@ -7,9 +7,9 @@ else
     password="$1"
 fi
 
-#########################
+#-----------------------#
 # Requirements (Global) #
-#########################
+#-----------------------#
 
 # for ruby-build in Ubuntu (cf. https://github.com/rbenv/ruby-build/wiki)
 if [[ -e /etc/lsb-release ]] && (! type "ruby-build" >/dev/null 2>&1); then
@@ -31,13 +31,14 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         # cf. https://tm.root-n.com/programming:shell_script:command:trap
         trap 'rm -f "$brew_script"' EXIT HUP INT QUIT TERM
         curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh >"$brew_script"
+        # shellcheck source=/dev/null
         echo "$password" | source "$brew_script"
     fi
 fi
 
-########################
+#----------------------#
 # Requirements (Local) #
-########################
+#----------------------#
 
 # # install anyenv
 # # cf. https://github.com/rbenv/rbenv#homebrew-on-macoshttps://github.com/rbenv/rbenv#homebrew-on-macos
@@ -80,6 +81,7 @@ fi
 if [[ ! -e ~/.asdf ]]; then
     git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.11.3
 fi
+# shellcheck source=/dev/null
 source "$HOME/.asdf/asdf.sh"
 
 if (! type "ruby" >/dev/null 2>&1); then
@@ -87,9 +89,9 @@ if (! type "ruby" >/dev/null 2>&1); then
     asdf global ruby 2.7.8
 fi
 
-################
+#--------------#
 # Link configs #
-################A
+#--------------#
 
 if (! type "homesick" >/dev/null 2>&1); then
     gem install homesick
@@ -116,9 +118,9 @@ if [[ ! -L ~/.bashrc ]]; then
     homesick link dotfiles
 fi
 
-#################
+#---------------#
 # Write configs #
-#################
+#---------------#
 
 if (type "git" >/dev/null 2>&1); then
     git config --global init.defaultBranch "main"
@@ -141,4 +143,5 @@ shell_config=$(mktemp)
 # cf. https://tm.root-n.com/programming:shell_script:command:trap
 trap 'rm -f "$shell_config"' EXIT HUP INT QUIT TERM
 curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh >"$shell_config"
+# shellcheck source=/dev/null
 echo "$password" | source "$shell_config"

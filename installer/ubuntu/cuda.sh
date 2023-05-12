@@ -7,9 +7,9 @@ else
     password=$1
 fi
 
-########
+#------#
 # CUDA #
-########
+#------#
 
 # Control Driver and CUDA Toolkit separatelly
 # cf. https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#wsl-installation
@@ -22,19 +22,22 @@ fi
 cuda_major_version=11
 cuda_minor_version=2
 cudnn_version=8.1.0
-if [[ ! -e /usr/local/"$cuda_major_version"."$cuda_minor_version" ]];then
+if [[ ! -e /usr/local/"$cuda_major_version"."$cuda_minor_version" ]]; then
     if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
         distribution="wsl-ubuntu"
     else
-        distribution=$(. /etc/os-release; echo "$ID""$VERSION_ID" | sed -e 's/\.//g')
+        distribution=$(
+            . /etc/os-release
+            echo "$ID""$VERSION_ID" | sed -e 's/\.//g'
+        )
         # The kernel headers and dev packages (Does not need to be performed for WSL)
         echo "$password" | sudo -S apt-get -y install linux-headers-"$(uname -r)"
     fi
 
-    if  (! dpkg -l cuda-drivers > /dev/null 2>&1); then
+    if (! dpkg -l cuda-drivers >/dev/null 2>&1); then
         # Install the new cuda-keyring package
         tmp_file=$(mktemp)
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/"$distribution"/x86_64/cuda-keyring_1.0-1_all.deb > "$tmp_file"
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/"$distribution"/x86_64/cuda-keyring_1.0-1_all.deb >"$tmp_file"
         sudo dpkg -i "$tmp_file"
 
         echo "$password" | sudo -S apt update
@@ -52,7 +55,7 @@ if [[ ! -e /usr/local/"$cuda_major_version"."$cuda_minor_version" ]];then
 
     # cuDNN
     echo "$password" | sudo -S -E curl -L https://developer.download.nvidia.com/compute/cuda/repos/"${distribution}"/x86_64/cuda-"${distribution}".pin \
-    -o /etc/apt/preferences.d/cuda-repository-pin-600
+        -o /etc/apt/preferences.d/cuda-repository-pin-600
     echo "$password" | sudo -S apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/"${distribution}"/x86_64/3bf863cc.pub
     echo "$password" | sudo -S add-apt-repository 'deb https://developer.download.nvidia.com/compute/cuda/repos/"${distribution}"/x86_64/ /'
     echo "$password" | sudo -S apt-get update
@@ -66,32 +69,41 @@ if [[ ! -e /usr/local/"$cuda_major_version"."$cuda_minor_version" ]];then
     module_init_file="/usr/local/Modules/etc/initrc"
     if [[ $(grep "^.*\[is-saved default\].*" $module_init_file) =~ ^#.* ]]; then
         line_num=$(grep -n "^.*\[is-saved default\].*" $module_init_file | awk -F ':' '{print $1}')
-        echo "$password" | sudo -S sed -i -e "$line_num,$((line_num+4)) s/#//g" $module_init_file
+        echo "$password" | sudo -S sed -i -e "$line_num,$((line_num + 4)) s/#//g" $module_init_file
     fi
     # append initial loading
     if [[ ! $(grep "^\s*module load.*" $module_init_file) =~ ^.*cuda/$cuda_major_version\.$cuda_minor_version.* ]]; then
         echo "$password" | sudo -S sed -i -e "s/\(^\s*module load.*\)/\1 cuda\/$cuda_major_version\.$cuda_minor_version/g" $module_init_file
     fi
-fi 
+fi
 
-#################
+#---------------#
 # Nvidia Docker #
-#################
-      
+#---------------#
+
 # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch05-running-containers
 # cf. https://unix.stackexchange.com/questions/391796/pipe-password-to-sudo-and-other-data-to-sudoed-command
-        
-if (type "docker" > /dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
-        distribution=$(. /etc/os-release; echo "$ID""$VERSION_ID")
-        { echo "$password"; curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey; } \
-        | sudo -k -S gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-        
-        tmp_file=$(mktemp)
-        curl -s -L https://nvidia.github.io/libnvidia-container/experimental/$distribution/libnvidia-container.list | \
-        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' > "$tmp_file"
-        { echo "$password"; cat "$tmp_file"; } | sudo -k -S tee /etc/apt/sources.list.d/nvidia-container-toolkit.list &>/dev/null
-        
-        echo "$password" | sudo -S apt-get update
-        echo "$password" | sudo -S apt-get install -y nvidia-docker2
-        echo "$password" | sudo -S systemctl restart docker
+
+if (type "docker" >/dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
+    distribution=$(
+        . /etc/os-release
+        echo "$ID""$VERSION_ID"
+    )
+    {
+        echo "$password"
+        curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
+    } |
+        sudo -k -S gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+    tmp_file=$(mktemp)
+    curl -s -L https://nvidia.github.io/libnvidia-container/experimental/"$distribution"/libnvidia-container.list |
+        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' >"$tmp_file"
+    {
+        echo "$password"
+        cat "$tmp_file"
+    } | sudo -k -S tee /etc/apt/sources.list.d/nvidia-container-toolkit.list &>/dev/null
+
+    echo "$password" | sudo -S apt-get update
+    echo "$password" | sudo -S apt-get install -y nvidia-docker2
+    echo "$password" | sudo -S systemctl restart docker
 fi

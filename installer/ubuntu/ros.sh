@@ -33,15 +33,17 @@ if [[ ! -e /opt/ros/"$ros_ver"/setup.bash ]]; then
     echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get install -y ros-"$ros_ver"-desktop-full
 
+    # shellcheck source=/dev/null
     source /opt/ros/"$ros_ver"/setup.bash
 
     echo "$password" | sudo -S apt-get install -y python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential
     echo "$password" | sudo -S rosdep init
     rosdep update
 else
+    # shellcheck source=/dev/null
     source /opt/ros/"$ros_ver"/setup.bash
 fi
- 
+
 #--------------#
 # catkin tools #
 #--------------#

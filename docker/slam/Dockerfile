@@ -1,5 +1,5 @@
 # cf. https://hub.docker.com/r/nvidia/cuda/tags?page=1&name=11.2.2-cudnn8-devel-ubuntu20.04
-FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS cpp-base
 
 ENV HOME /root
 WORKDIR "$HOME"
@@ -40,6 +40,8 @@ RUN apt-get install -y \
 #---------------#
 # Source Builds #
 #---------------#
+
+FROM cpp-base AS cpp-builder
 
 # libboost-dev is not enough for PCL
 RUN apt-get install -y libboost-all-dev libeigen3-dev 
@@ -117,46 +119,11 @@ RUN cmake .. && make -j"$(nproc)" && make install
 WORKDIR "$HOME"
 RUN rm -rf "$HOME/pybind11"
 
-#--------------#
-# gdb printers #
-#--------------#
-
-# for OpenCV Mat debugger
-RUN apt-get install -y python3-pip
-RUN pip3 install numpy
-# Place gdb scripts
-COPY gdbinit.sh "$HOME/.gdbinit"
-COPY gdb/ "$HOME/gdb/"
-
-#----------------#
-# anyenv + pyenv #
-#----------------#
-
-# cf. https://gist.github.com/mistymagich/fa9f0f4f05e0865e191e
-
-RUN apt-get install -y \
-      build-essential libffi-dev libssl-dev zlib1g-dev liblzma-dev \
-      libbz2-dev libreadline-dev libsqlite3-dev libopencv-dev tk-dev git
-
-ENV ANYENV_HOME "$HOME/.anyenv"
-ENV ANYENV_ENV  "$ANYENV_HOME/envs"
-RUN git clone https://github.com/anyenv/anyenv.git "$ANYENV_HOME"
-ENV PATH "$ANYENV_HOME/bin:$PATH"
-RUN mkdir -p "$ANYENV_ENV"
-
-RUN eval "$(anyenv init -)"
-RUN yes | anyenv install --init
-
-RUN anyenv install pyenv
-ENV PATH "$ANYENV_ENV/pyenv/bin:$ANYENV_ENV/pyenv/shims:$PATH"
-ENV PYENV_ROOT "$ANYENV_ENV/pyenv"
-
-RUN pyenv install 3.8.13
-RUN pyenv global 3.8.13
-
 #-------------#
 # Python libs #
 #-------------#
+
+FROM cpp-base AS pip-installer
 
 # Pangolin
 RUN apt-get install -y libglew-dev libpython2.7-dev libeigen3-dev
@@ -183,5 +150,18 @@ WORKDIR "$HOME"
 
 COPY requirements.txt "$HOME"
 RUN pip install -r requirements.txt
+
+#--------------#
+# gdb printers #
+#--------------#
+
+FROM cpp-base AS cpp-runner
+
+# for OpenCV Mat debugger
+RUN apt-get install -y python3-pip
+RUN pip3 install numpy
+# Place gdb scripts
+COPY gdbinit.sh "$HOME/.gdbinit"
+COPY gdb/ "$HOME/gdb/"
 
 RUN apt-get clean && apt-get autoremove
