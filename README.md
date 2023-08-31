@@ -8,7 +8,7 @@ Deploy settings and initialize the environment for
 ## How to Install
 
 ```shell
-# Deployment
+# Deployment (Includes Boxstarter & AntiVirus Software Install!)
 $ bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
 # Initialization
 $ bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)"
