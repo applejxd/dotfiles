@@ -4,46 +4,27 @@
 # OS dependencies #
 #-----------------#
 
-# # Homebrew for linux
-# if [[ "$OSTYPE" == "linux-gnu" ]]; then
-#     eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
-# fi
-
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    arch=$(uname -m)
-
-    brew_path=""
-    if [[ $arch == arm64 ]]; then
-        echo "Current Architecture: $arch"
-        brew_path="/opt/homebrew/bin/brew"
-    elif [[ $arch == x86_64 ]]; then
-        echo "Current Architecture: $arch"
-        brew_path="/usr/local/bin/brew"
-    fi
-
-    if [[ -e $brew_path ]]; then
-        eval "$($brew_path shellenv)"
-    fi
-
-    alias x64='exec arch -x86_64 /bin/zsh'
-    alias a64='exec arch -arm64e /bin/zsh'
+if [[ -e /etc/lsb-release ]]; then
+    alias open="xdg-open"
 fi
 
-#----------------#
-# Initialization #
-#----------------#
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    alias ls="ls --color=auto"
 
-# iceberg theme for vim
-if type "ghq" >/dev/null 2>&1; then
-    if [[ ! -e $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
-        ghq get https://github.com/cocopon/iceberg.vim.git
-    fi
-    if [[ ! -e $HOME/.vim/colors ]]; then
-        mkdir -p "$HOME"/.vim/colors
-    fi
-    if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
-        ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
-    fi
+    alias pbcopy='xsel --clipboard --input'
+    alias pbpaste='xsel --clipboard --output'
+fi
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # shellcheck source=/dev/null
+    source "$HOME"/.config/shell/osxrc.sh
+fi
+
+if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
+    alias pbcopy='clip.exe'
+    alias pbpaste='powershell.exe Get-Clipboard'
+
+    alias open="explorer.exe"
 fi
 
 #-----------------#
@@ -51,7 +32,6 @@ fi
 #-----------------#
 
 # The default options of "less" command
-# cf. https://tinyurl.com/y8q7xwl9
 export LESS="-iMR -gSW -z-4 -x4"
 
 # X11 forwarding
@@ -68,12 +48,6 @@ fi
 # "ls" cloning
 if type "lsd" >/dev/null 2>&1; then
     alias ls="lsd"
-else
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        alias ls="ls -G"
-    elif [[ "$OSTYPE" == "linux-gnu" ]]; then
-        alias ls="ls --color=auto"
-    fi
 fi
 
 # "cat" cloning
@@ -87,13 +61,6 @@ if type "colordiff" >/dev/null 2>&1; then
 else
     alias diff="diff -u"
 fi
-
-# # brew -> brew-wrap  by Homebrew-file
-# if [ -f $(brew --prefix)/etc/brew-wrap ]; then
-#     source $(brew --prefix)/etc/brew-wrap
-# fi
-
-alias jnethack="cocot -t UTF-8 -p EUC-JP jnethack"
 
 #----------------#
 # original alias #
@@ -115,42 +82,12 @@ alias lt="ls --tree"
 # for security
 alias gen-key="ssh-keygen -t ed25519 -P \"\""
 
-# pbcopy & pbpaste
-if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
-    alias pbcopy='clip.exe'
-    alias pbpaste='powershell.exe Get-Clipboard'
-elif [[ "$OSTYPE" == "linux-gnu" ]]; then
-    alias pbcopy='xsel --clipboard --input'
-    alias pbpaste='xsel --clipboard --output'
-fi
 # count the number of characters
 alias wcc="pbpaste | wc -m"
 # clear format
 alias fcr="pbpaste | pbcopy"
 
-if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
-    alias open="explorer.exe"
-elif [[ -e /etc/lsb-release ]]; then
-    alias open="xdg-open"
-fi
-
 alias search="find . -type f -print0 | xargs -0 grep -n"
-
-# Download mp3 or mp4 from websites
-if type "youtube-dl" >/dev/null 2>&1; then
-    alias audio-dl="youtube-dl --ignore-errors \
-                    --output '~/Downloads/%(title)s.%(ext)s' \
-                    --extract-audio --audio-format mp3 \
-                    --embed-thumbnail"
-    alias video-dl="youtube-dl --ignore-errors \
-                    --output '~/Downloads/%(title)s.%(ext)s' \
-                    --recode-video mp4  --add-metadata"
-fi
-
-# for Mac OS X
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    alias web="cd /Applications/MAMP/htdocs/"
-fi
 
 #--------------------#
 # original functions #
@@ -183,54 +120,9 @@ function sha1() {
 }
 alias sha2="openssl passwd -6 -salt 'SALTsalt'"
 
-# Finder functions for OS X
-# cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
-# cf. https://vivafan.com/2013/03/csh-no-function/
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    alias f="open -a Finder ./"
-    function cdf() {
-        target=$(osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)')
-        if [ "$target" != "" ]; then
-            cd "$target" || exit
-            pwd
-        else
-            echo 'No Finder window found' >&2
-        fi
-    }
-fi
-
-# for iTerm badge function
-# http://bit.ly/2LTeYXt
-if [[ -e ~/.iterm2_shell_integration.zsh ]]; then
-    function badge() {
-        printf "\e]1337;SetBadgeFormat=%s\a" \
-            "$(echo -n "$1" | base64)"
-    }
-
-    function ssh_local() {
-        local ssh_config=~/.ssh/config
-        local server
-        server=$(cat $ssh_config | grep "Host " | sed "s/Host //g" | fzf)
-        if [ -z "$server" ]; then
-            return
-        fi
-        badge "$server"
-        ssh "$server"
-    }
-fi
-
-##################
+#----------------#
 # zsh registered #
-##################
-
-function switch-arch() {
-    if [[ "$(uname -m)" == arm64 ]]; then
-        arch=x86_64
-    elif [[ "$(uname -m)" == x86_64 ]]; then
-        arch=arm64e
-    fi
-    exec arch -arch "$arch" /bin/zsh
-}
+#----------------#
 
 # unarchive
 # cf. http://bit.ly/2tCOvHP
@@ -259,3 +151,20 @@ function runcpp() {
     shift
     ./"$fname" "$@"
 }
+
+#----------------#
+# Initialization #
+#----------------#
+
+# iceberg theme for vim
+if type "ghq" >/dev/null 2>&1; then
+    if [[ ! -e $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
+        ghq get https://github.com/cocopon/iceberg.vim.git
+    fi
+    if [[ ! -e $HOME/.vim/colors ]]; then
+        mkdir -p "$HOME"/.vim/colors
+    fi
+    if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
+        ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
+    fi
+fi

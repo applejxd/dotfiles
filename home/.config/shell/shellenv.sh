@@ -1,5 +1,5 @@
 #!/bin/bash
-# Defaul editor = vim
+# Defaul editor
 export EDITOR=vim
 
 #-----------------#
@@ -24,17 +24,19 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
     fi
 fi
 
+#---------------#
+# Specific root #
+#---------------#
+
+# ghq root
+export GHQ_ROOT=~/src
+
 #------#
 # PATH #
 #------#
 
 # for original binaries
 export PATH="$HOME"/bin:$PATH
-
-# # cuda (nvcc)
-# if [[ -e /usr/local/cuda-11.2 ]]; then
-#     export PATH=/usr/local/cuda-11.2/bin${PATH:+:${PATH}}
-# fi
 
 # for Go lang
 if [[ -e "$HOME"/.go ]]; then
@@ -54,9 +56,6 @@ if [[ -e "$HOME"/.emacs.d/private/yatex ]]; then
     export BSTINPUTS="$HOME"/.emacs.d/private/yatex${BSTINPUTS:+:${BSTINPUTS}}
 fi
 
-# # for pipenv (for Ubuntu)
-# export PATH=~/.local/bin:$PATH
-
 #-----------#
 # Japansese #
 #-----------#
@@ -69,13 +68,6 @@ if [[ $SHLVL = 1 ]]; then
     (fcitx-autostart >/dev/null 2>&1 &)
     xset -r 49 >/dev/null 2>&1
 fi
-
-#---------------#
-# Specific root #
-#---------------#
-
-# ghq root
-export GHQ_ROOT=~/src
 
 #---------------#
 # User settings #
