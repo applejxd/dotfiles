@@ -1,5 +1,11 @@
 #!/bin/bash
 
+if ! type "fzf" >/dev/null 2>&1 && [ ! -e "$HOME"/.fzf ]; then
+    git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME"/.fzf
+    # shellcheck source=/dev/null
+    source "$HOME"/.fzf/install
+fi
+
 #---------#
 # options #
 #---------#

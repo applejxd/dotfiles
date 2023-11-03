@@ -50,10 +50,10 @@ if [ -f "$HOME"/.fzf.bash ]; then
     # shellcheck source=/dev/null
     source "$HOME"/.fzf.bash
     # common settings of fzf
-    if [ -f "$HOME"/.config/shell/fzf.sh ]; then
-        # shellcheck source=/dev/null
-        source "$HOME"/.config/shell/fzf.sh
-    fi
+fi
+if type "fzf" >/dev/null 2>&1 && [ -f "$HOME"/.config/shell/fzf.sh ]; then
+    # shellcheck source=/dev/null
+    source "$HOME"/.config/shell/fzf.sh
 fi
 
 if [[ -e "$HOME/.asdf" ]]; then
