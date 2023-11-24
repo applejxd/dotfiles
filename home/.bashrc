@@ -56,7 +56,7 @@ if type "fzf" >/dev/null 2>&1 && [ -f "$HOME"/.config/shell/fzf.sh ]; then
     source "$HOME"/.config/shell/fzf.sh
 fi
 
-if [[ -e "$HOME/.asdf" ]]; then
+if [[ -e "$HOME/.asdf/asdf.sh" ]]; then
     # shellcheck source=/dev/null
     source "$HOME/.asdf/asdf.sh"
     # shellcheck source=/dev/null
@@ -89,7 +89,7 @@ export BASH_IT="$HOME/.bash_it"
 # Lock and Load a custom theme file.
 # Leave empty to disable theming.
 # location /.bash_it/themes/
-export BASH_IT_THEME='Pure'
+export BASH_IT_THEME='pure'
 
 # Some themes can show whether `sudo` has a current token or not.
 # Set `$THEME_CHECK_SUDO` to `true` to check every prompt:
