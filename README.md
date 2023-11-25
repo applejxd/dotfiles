@@ -8,6 +8,8 @@ Deploy settings and initialize the environment for
 ## How to Install
 
 ```shell
+# for Docker container
+sudo apt install curl git
 # Deployment (Includes Boxstarter & AntiVirus Software Install!)
 $ bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
 # Initialization
