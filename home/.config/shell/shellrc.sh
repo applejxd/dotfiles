@@ -168,3 +168,21 @@ if type "ghq" >/dev/null 2>&1; then
         ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
     fi
 fi
+
+#---------#
+# Install #
+#---------#
+
+# fzf
+if ! type "fzf" >/dev/null 2>&1 && [ ! -e "$HOME"/.fzf ]; then
+    git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME"/.fzf
+    "$HOME"/.fzf/install --bin --key-bindings --completion --no-update-rc
+fi
+
+# z
+if ! type "z" >/dev/null 2>&1 && [ ! -e "$HOME"/.z ]; then
+    git clone https://github.com/rupa/z.git "$HOME"/.z
+fi
+export _Z_DATA="$HOME"/.z/.z
+# shellcheck source=/dev/null
+source "$HOME"/.z/z.sh

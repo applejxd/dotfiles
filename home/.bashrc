@@ -46,6 +46,8 @@ shopt -s nocaseglob
     source "/usr/local/etc/profile.d/bash_completion.sh"
 
 # fzf
+# shellcheck source=/dev/null
+[ -f "$HOME"/.fzf.bash ] && source "$HOME"/.fzf.bash
 if [ -f "$HOME"/.fzf.bash ]; then
     # shellcheck source=/dev/null
     source "$HOME"/.fzf.bash

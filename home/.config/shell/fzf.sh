@@ -1,11 +1,5 @@
 #!/bin/bash
 
-if ! type "fzf" >/dev/null 2>&1 && [ ! -e "$HOME"/.fzf ]; then
-    git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME"/.fzf
-    # shellcheck source=/dev/null
-    source "$HOME"/.fzf/install
-fi
-
 #---------#
 # options #
 #---------#
@@ -18,7 +12,9 @@ export FZF_CTRL_R_OPTS='--sort --exact'
 # search command
 # cf. https://qiita.com/kamykn/items/aa9920f07487559c0c7e
 if type "rg" >/dev/null 2>&1; then
-    export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
+    export FZF_DEFAULT_COMMAND=(rg --files --hidden --follow --glob "!.git/*")
+else
+    unset FZF_DEFAULT_COMMAND
 fi
 
 # show below, show border, set hight
@@ -26,12 +22,16 @@ export FZF_DEFAULT_OPTS='--layout=reverse --border --height 60%'
 # preview by bat, with color, with file name header, with grid
 if type "bat" >/dev/null 2>&1; then
     export FZF_CTRL_T_OPTS='--preview "bat --color=always --style=header,grid --line-range :100 {}"'
+else
+    unset FZF_CTRL_T_OPTS
 fi
 
 # preview by tree, with color (enable Japanese)
 # cf. https://wonderwall.hatenablog.com/entry/2017/10/06/063000#--select-1---exit-0
 if type "tree" >/dev/null 2>&1; then
     export FZF_ALT_C_OPTS='--preview "tree -C -N {} | head -200" --select-1 --exit-0'
+else
+    unset FZF_ALT_C_OPTS
 fi
 
 #-----------#

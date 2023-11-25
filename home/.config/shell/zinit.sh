@@ -50,25 +50,6 @@ zinit snippet OMZ::lib/git.zsh
 zinit ice compile'(pure|async).zsh' pick'async.zsh' src'pure.zsh'
 zinit light sindresorhus/pure
 
-#-----#
-# fzf #
-#-----#
-
-# cf. https://wonderwall.hatenablog.com/entry/2017/10/06/063000
-# cf. (for options) https://qiita.com/kompiro/items/a09c0b44e7c741724c80
-
-zinit ice from"gh-r" as"program"
-zinit load junegunn/fzf-bin
-
-zinit ice multisrc'shell/(key-bindings|completion).zsh'
-zinit load junegunn/fzf
-
-zinit ice from"gh-r" as"program" pick"bat-*/bat"
-zinit load sharkdp/bat
-
-zinit ice from"gh-r" as"program" pick"ripgrep-*/rg"
-zinit load BurntSushi/ripgrep
-
 #--------#
 # docker #
 #--------#
@@ -84,24 +65,43 @@ zinit load MartinRamm/fzf-docker
 zinit ice as"program" pick"dfimage.bash"
 zinit load RyodoTanaka/.bash_extend
 
+#-----#
+# fzf #
+#-----#
+
+# cf. https://wonderwall.hatenablog.com/entry/2017/10/06/063000
+# cf. (for options) https://qiita.com/kompiro/items/a09c0b44e7c741724c80
+
+# zinit ice from"gh-r" as"program"
+# zinit load junegunn/fzf-bin
+
+# zinit ice multisrc'shell/(key-bindings|completion).zsh'
+# zinit load junegunn/fzf
+
+# zinit ice from"gh-r" as"program" pick"bat-*/bat"
+# zinit load sharkdp/bat
+
+# zinit ice from"gh-r" as"program" pick"ripgrep-*/rg"
+# zinit load BurntSushi/ripgrep
+
 #----------#
 # Commands #
 #----------#
 
-zinit ice pick"z.sh"
-zinit light rupa/z
+# zinit ice pick"z.sh"
+# zinit light rupa/z
 
-# enhance 'cd' command
-zinit ice pick"init.sh"
-zinit light b4b4r07/enhancd
-export ENHANCD_COMMAND=ecd
+# # enhance 'cd' command
+# zinit ice pick"init.sh"
+# zinit light b4b4r07/enhancd
+# export ENHANCD_COMMAND=ecd
 
-zinit ice from"gh-r" as"program" pick"ghq_*/ghq"
-zinit load x-motemen/ghq  
+# zinit ice from"gh-r" as"program" pick"ghq_*/ghq"
+# zinit load x-motemen/ghq  
 
-# cannot be installed?
-zinit ice as"program" make"install prefix=$ZPFX"
-zinit load jonas/tig
+# # cannot be installed?
+# zinit ice as"program" make"install prefix=$ZPFX"
+# zinit load jonas/tig
 
-zinit ice as"program" make"install prefix=$ZPFX"
-zinit load nvie/gitflow
+# zinit ice as"program" make"install prefix=$ZPFX"
+# zinit load nvie/gitflow

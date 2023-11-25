@@ -126,45 +126,45 @@ function fancy-ctrl-z() {
 # fzf #
 #######
 
-if type "fzf" >/dev/null 2>&1; then
-    # common setting
-    COMMON_FZF=$HOME/.config/shell/fzf.sh
-    if [ -e $COMMON_FZF ]; then
-        source $COMMON_FZF
-    fi
+[ -f "$HOME"/.fzf.zsh ] && source "$HOME"/.fzf.zsh
 
-    # z-fzf, emacs-like key-bindings
-    # cf. http://bit.ly/2sEPZAJ
-    if type "z" >/dev/null 2>&1; then
-        function z-fzf() {
-            local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
-            if [[ -n "$selected_dir" ]]; then
-                BUFFER="cd ${selected_dir}"
-                zle accept-line
-            fi
-            zle reset-prompt
-        }
-        zle -N z-fzf
-        bindkey "^X^F" z-fzf
-    fi
-
-    # ghq-fzf
-    # cf. http://bit.ly/2MMEb6e
-    if type "ghq" >/dev/null 2>&1; then
-        function ghq-fzf() {
-            local selected_dir=$(ghq list | fzf --query="$LBUFFER")
-            if [[ -n "$selected_dir" ]]; then
-                BUFFER="cd $(ghq root)/${selected_dir}"
-                zle accept-line
-            fi
-            zle reset-prompt
-        }
-        zle -N ghq-fzf
-        bindkey "^X^G" ghq-fzf
-    fi
+# common setting
+COMMON_FZF=$HOME/.config/shell/fzf.sh
+if [ -e $COMMON_FZF ]; then
+    source $COMMON_FZF
 fi
 
-###############
+# z-fzf, emacs-like key-bindings
+# cf. http://bit.ly/2sEPZAJ
+if type "z" >/dev/null 2>&1; then
+    function z-fzf() {
+        local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
+        if [[ -n "$selected_dir" ]]; then
+            BUFFER="cd ${selected_dir}"
+            zle accept-line
+        fi
+        zle reset-prompt
+    }
+    zle -N z
+    bindkey "^X^F" z-fzf
+fi
+
+# ghq-fzf
+# cf. http://bit.ly/2MMEb6e
+if type "ghq" >/dev/null 2>&1; then
+    function ghq-fzf() {
+        local selected_dir=$(ghq list | fzf --query="$LBUFFER")
+        if [[ -n "$selected_dir" ]]; then
+            BUFFER="cd $(ghq root)/${selected_dir}"
+            zle accept-line
+        fi
+        zle reset-prompt
+    }
+    zle -N ghq-fzf
+    bindkey "^X^G" ghq-fzf
+fi
+
+##############
 # Activations #
 ###############
 
