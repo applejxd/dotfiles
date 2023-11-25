@@ -183,6 +183,7 @@ fi
 if ! type "z" >/dev/null 2>&1 && [ ! -e "$HOME"/.z ]; then
     git clone https://github.com/rupa/z.git "$HOME"/.z
 fi
+
 export _Z_DATA="$HOME"/.z/.z
 # shellcheck source=/dev/null
 source "$HOME"/.z/z.sh

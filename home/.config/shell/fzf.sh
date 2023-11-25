@@ -34,6 +34,30 @@ else
     unset FZF_ALT_C_OPTS
 fi
 
+#---------#
+# wrapper #
+#---------#
+
+if type "z" >/dev/null 2>&1; then
+    function xf() {
+        local selected_dir
+        selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
+        if [[ -n "$selected_dir" ]]; then
+            cd "${selected_dir}" || return
+        fi
+    }
+fi
+
+if type "ghq" >/dev/null 2>&1; then
+    function xg() {
+        local selected_dir
+        selected_dir=$(ghq list | fzf)
+        if [[ -n "$selected_dir" ]]; then
+            cd "$(ghq root)"/"${selected_dir}" || return
+        fi
+    }
+fi
+
 #-----------#
 # functions #
 #-----------#

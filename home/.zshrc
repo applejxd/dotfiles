@@ -3,9 +3,9 @@
 
 SHELL_CONF=$HOME/.config/shell
 
-#################
-# common config #
-#################
+#--------#
+# common #
+#--------#
 
 if [ -e $COMMON_RC ]; then
     source $SHELL_CONF/shellrc.sh
@@ -17,15 +17,15 @@ bindkey -e
 # zsh completion
 autoload -Uz compinit && compinit
 
-###################
+#-----------------#
 # OS dependencies #
-###################
+#-----------------#
 
 zle -N switch-arch
 
-##############
+#------------#
 # zsh proper #
-##############
+#------------#
 
 # cd completion
 # cf. http://bit.ly/2ZtPPrN
@@ -55,9 +55,9 @@ setopt pushd_ignore_dups
 zle -N fancy-ctrl-z
 bindkey '^Z' fancy-ctrl-z
 
-###############
+#-------------#
 # zsh history #
-###############
+#-------------#
 
 # cf. http://bit.ly/2EXlQ1S
 
@@ -76,9 +76,9 @@ setopt hist_save_no_dups
 setopt hist_reduce_blanks
 setopt hist_ignore_space
 
-################
+#--------------#
 # suffix alias #
-################
+#--------------#
 
 # texts
 alias -s {txt,dat,plt}='cat'
@@ -122,9 +122,9 @@ function fancy-ctrl-z() {
     fi
 }
 
-#######
+#-----#
 # fzf #
-#######
+#-----#
 
 [ -f "$HOME"/.fzf.zsh ] && source "$HOME"/.fzf.zsh
 
@@ -164,9 +164,9 @@ if type "ghq" >/dev/null 2>&1; then
     bindkey "^X^G" ghq-fzf
 fi
 
-##############
+#-------------#
 # Activations #
-###############
+#-------------#
 
 if [[ -e "$HOME"/.zinit/plugins/asdf-vm---asdf ]]; then
     fpath=(${ASDF_DIR}/completions $fpath)
