@@ -145,7 +145,7 @@ if type "z" >/dev/null 2>&1; then
         fi
         zle reset-prompt
     }
-    zle -N z
+    zle -N z-fzf
     bindkey "^X^F" z-fzf
 fi
 
