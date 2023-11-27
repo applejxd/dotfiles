@@ -13,7 +13,7 @@ sudo apt install curl
 # Deployment (Includes Boxstarter & AntiVirus Software Install!)
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
 # Initialization
-$ bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)"
 ```
 
 or
