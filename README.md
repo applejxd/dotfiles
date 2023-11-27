@@ -9,7 +9,7 @@ Deploy settings and initialize the environment for
 
 ```shell
 # Dependencies
-sudo apt install curl git
+sudo apt install curl
 # Deployment (Includes Boxstarter & AntiVirus Software Install!)
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
 # Initialization

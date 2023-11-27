@@ -1,21 +1,29 @@
 #!/bin/bash
 
-if [ $# -eq 0 ]; then
-    # save password
-    read -rsp "Password: " password
-else
-    password="$1"
+is_root=$([[ $(id -u) -ne 0 ]])
+password=""
+if ! $is_root; then
+    if [ $# -eq 0 ]; then
+        # save password
+        read -rsp "Password: " password
+    else
+        password="$1"
+    fi
 fi
-
 #-----------------------#
 # Requirements (Global) #
 #-----------------------#
 
 # for ruby-build in Ubuntu (cf. https://github.com/rbenv/ruby-build/wiki)
 if [[ -e /etc/lsb-release ]] && (! type "ruby-build" >/dev/null 2>&1); then
-    echo "$password" | sudo -S bash -c "\
-        apt-get update && apt-get upgrade -y && \
-        apt-get install -y git curl build-essential libssl-dev zlib1g-dev"
+    cmd="apt-get update && \
+         apt-get upgrade -y && \
+         apt-get install -y git curl build-essential libssl-dev zlib1g-dev"
+    if ! $is_root; then
+        echo "$password" | sudo -S bash -c "$cmd"
+    else
+        eval "$cmd"
+    fi
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -139,10 +147,13 @@ if (type "git" >/dev/null 2>&1); then
     git config --global url."github:".pushInsteadOf https://github.com/
 fi
 
-# Mac OS X use bash 3.2, and process substitution is unable
-shell_config=$(mktemp)
-# cf. https://tm.root-n.com/programming:shell_script:command:trap
-trap 'rm -f "$shell_config"' EXIT HUP INT QUIT TERM
-curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh >"$shell_config"
-# shellcheck source=/dev/null
-echo "$password" | source "$shell_config"
+read -r -n1 -p "configure default shells? (y/N): " yn
+if [[ $yn = [yY] ]]; then
+    # Mac OS X use bash 3.2, and process substitution is unable
+    shell_config=$(mktemp)
+    # cf. https://tm.root-n.com/programming:shell_script:command:trap
+    trap 'rm -f "$shell_config"' EXIT HUP INT QUIT TERM
+    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh >"$shell_config"
+    # shellcheck source=/dev/null
+    echo "$password" | source "$shell_config"
+fi
