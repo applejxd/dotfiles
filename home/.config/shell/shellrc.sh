@@ -176,7 +176,7 @@ fi
 # fzf
 if ! type "fzf" >/dev/null 2>&1 && [ ! -e "$HOME"/.fzf ]; then
     git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME"/.fzf
-    "$HOME"/.fzf/install --bin --key-bindings --completion --no-update-rc
+    "$HOME"/.fzf/install --key-bindings --completion --no-update-rc
 fi
 
 # z

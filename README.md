@@ -9,7 +9,10 @@ Deploy settings and initialize the environment for
 
 ```shell
 # Dependencies
-sudo apt update && sudo apt upgrade -y && sudo apt install -y curl
+sudo apt install -y curl
+# for Docker images
+apt update && apt install -y locales && locale-gen en_US.UTF-8
+
 # Deployment (Includes Boxstarter & AntiVirus Software Install!)
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
 # Initialization
