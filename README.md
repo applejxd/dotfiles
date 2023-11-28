@@ -2,14 +2,14 @@
 
 Deploy settings and initialize the environment for
 
-- Mac OS X
 - Ubuntu (on WSL)
+- Mac OS X
 
 ## How to Install
 
 ```shell
 # Dependencies
-sudo apt install curl
+sudo apt update && sudo apt install -y curl
 # Deployment (Includes Boxstarter & AntiVirus Software Install!)
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
 # Initialization

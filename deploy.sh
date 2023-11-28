@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 if [[ $(id -u) -ne 0 ]]; then
     if [ $# -eq 0 ]; then
         # save password
@@ -92,11 +91,9 @@ fi
 # shellcheck source=/dev/null
 source "$HOME/.asdf/asdf.sh"
 
-if (! type "ruby" >/dev/null 2>&1); then
-    asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git
-    asdf install ruby 2.7.8
-    asdf global ruby 2.7.8
-fi
+asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git
+asdf install ruby 2.7.8
+asdf global ruby 2.7.8
 
 #--------------#
 # Link configs #
