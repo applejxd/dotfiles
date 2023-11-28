@@ -10,6 +10,7 @@ if ! $is_root; then
         password="$1"
     fi
 fi
+
 #-----------------------#
 # Requirements (Global) #
 #-----------------------#
