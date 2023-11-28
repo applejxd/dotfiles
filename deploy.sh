@@ -1,8 +1,7 @@
 #!/bin/bash
 
-[[ $(id -u) -eq 0 ]]
-is_root=$?
-if ! "$is_root"; then
+
+if [[ $(id -u) -ne 0 ]]; then
     if [ $# -eq 0 ]; then
         # save password
         read -rsp "Password: " password
