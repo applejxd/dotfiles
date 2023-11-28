@@ -2,7 +2,6 @@
 
 [[ $(id -u) -eq 0 ]]
 is_root=$?
-password=""
 if ! $is_root; then
     if [ $# -eq 0 ]; then
         # save password
