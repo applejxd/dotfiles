@@ -1,6 +1,6 @@
 #!/bin/bash
 
-is_root=$([[ $(id -u) -ne 0 ]])
+is_root=$([[ $(id -u) -eq 0 ]])
 password=""
 if ! $is_root; then
     if [ $# -eq 0 ]; then
