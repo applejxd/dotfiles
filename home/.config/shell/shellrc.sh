@@ -187,3 +187,15 @@ fi
 export _Z_DATA="$HOME"/.z/.z
 # shellcheck source=/dev/null
 source "$HOME"/.z/z.sh
+
+if ! type "asdf" >/dev/null 2>&1; then
+    git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.13.1
+fi
+# shellcheck source=/dev/null
+source "$HOME/.asdf/asdf.sh"
+
+if ! type "ghq" >/dev/null 2>&1; then
+    asdf plugin add ghq
+    asdf install ghq latest
+    asdf global ghq latest
+fi

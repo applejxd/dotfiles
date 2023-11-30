@@ -58,9 +58,7 @@ if type "fzf" >/dev/null 2>&1 && [ -f "$HOME"/.config/shell/fzf.sh ]; then
     source "$HOME"/.config/shell/fzf.sh
 fi
 
-if [[ -e "$HOME/.asdf/asdf.sh" ]]; then
-    # shellcheck source=/dev/null
-    source "$HOME/.asdf/asdf.sh"
+if [[ -e "$HOME/.asdf" ]]; then
     # shellcheck source=/dev/null
     source "$HOME/.asdf/completions/asdf.bash"
 fi

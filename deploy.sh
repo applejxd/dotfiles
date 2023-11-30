@@ -85,7 +85,7 @@ fi
 #     rbenv global 2.7.5
 # fi
 
-if [[ ! -e ~/.asdf ]]; then
+if [[ ! -e "$HOME"/.asdf ]]; then
     git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.11.3
 fi
 # shellcheck source=/dev/null

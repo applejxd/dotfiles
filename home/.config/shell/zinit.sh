@@ -23,8 +23,8 @@ autoload -Uz _zinit
 # Plugins #
 #---------#
 
-# asdf
-zinit light asdf-vm/asdf
+# # asdf
+# zinit light asdf-vm/asdf
 
 # fish-like auto completion
 zinit light zsh-users/zsh-autosuggestions
