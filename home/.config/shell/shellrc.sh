@@ -27,6 +27,61 @@ if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
     alias open="explorer.exe"
 fi
 
+#---------#
+# Install #
+#---------#
+
+# fzf
+if ! type "fzf" >/dev/null 2>&1 && [ ! -e "$HOME"/.fzf ]; then
+    git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME"/.fzf
+    "$HOME"/.fzf/install --key-bindings --completion --no-update-rc
+fi
+
+# z
+if ! type "z" >/dev/null 2>&1 && [ ! -e "$HOME"/.z ]; then
+    git clone https://github.com/rupa/z.git "$HOME"/.z
+fi
+export _Z_DATA="$HOME"/.z/.z
+# shellcheck source=/dev/null
+source "$HOME"/.z/z.sh
+
+if [[ ! -e "$HOME"/.asdf ]]; then
+    git clone https://github.com/asdf-vm/asdf.git "$HOME"/.asdf --branch v0.13.1
+fi
+# shellcheck source=/dev/null
+source "$HOME/.asdf/asdf.sh"
+
+if ! type "ghq" >/dev/null 2>&1; then
+    asdf plugin add ghq
+    asdf install ghq latest
+    asdf global ghq latest
+fi
+
+if ! type "rg" >/dev/null 2>&1; then
+    asdf plugin add ripgrep
+    asdf install ripgrep latest
+    asdf global ripgrep latest
+fi
+
+if ! type "bat" >/dev/null 2>&1; then
+    asdf plugin add bat
+    asdf install bat latest
+    asdf global bat latest
+fi
+
+# iceberg theme for vim
+if type "ghq" >/dev/null 2>&1; then
+    if [[ ! -e $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
+        ghq get https://github.com/cocopon/iceberg.vim.git
+    fi
+    if [[ ! -e $HOME/.vim/colors ]]; then
+        mkdir -p "$HOME"/.vim/colors
+    fi
+    if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
+        ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
+    fi
+fi
+
 #-----------------#
 # Command Wrapper #
 #-----------------#
@@ -151,47 +206,3 @@ function runcpp() {
     shift
     ./"$fname" "$@"
 }
-
-#---------#
-# Install #
-#---------#
-
-# fzf
-if ! type "fzf" >/dev/null 2>&1 && [ ! -e "$HOME"/.fzf ]; then
-    git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME"/.fzf
-    "$HOME"/.fzf/install --key-bindings --completion --no-update-rc
-fi
-
-# z
-if ! type "z" >/dev/null 2>&1 && [ ! -e "$HOME"/.z ]; then
-    git clone https://github.com/rupa/z.git "$HOME"/.z
-fi
-
-export _Z_DATA="$HOME"/.z/.z
-# shellcheck source=/dev/null
-source "$HOME"/.z/z.sh
-
-if [[ ! -e "$HOME"/.asdf ]]; then
-    git clone https://github.com/asdf-vm/asdf.git "$HOME"/.asdf --branch v0.13.1
-fi
-# shellcheck source=/dev/null
-source "$HOME/.asdf/asdf.sh"
-
-if ! type "ghq" >/dev/null 2>&1; then
-    asdf plugin add ghq
-    asdf install ghq latest
-    asdf global ghq latest
-fi
-
-# iceberg theme for vim
-if type "ghq" >/dev/null 2>&1; then
-    if [[ ! -e $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
-        ghq get https://github.com/cocopon/iceberg.vim.git
-    fi
-    if [[ ! -e $HOME/.vim/colors ]]; then
-        mkdir -p "$HOME"/.vim/colors
-    fi
-    if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
-        ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
-    fi
-fi
