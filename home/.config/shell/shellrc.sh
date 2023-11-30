@@ -152,23 +152,6 @@ function runcpp() {
     ./"$fname" "$@"
 }
 
-#----------------#
-# Initialization #
-#----------------#
-
-# iceberg theme for vim
-if type "ghq" >/dev/null 2>&1; then
-    if [[ ! -e $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
-        ghq get https://github.com/cocopon/iceberg.vim.git
-    fi
-    if [[ ! -e $HOME/.vim/colors ]]; then
-        mkdir -p "$HOME"/.vim/colors
-    fi
-    if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
-        ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
-    fi
-fi
-
 #---------#
 # Install #
 #---------#
@@ -188,8 +171,8 @@ export _Z_DATA="$HOME"/.z/.z
 # shellcheck source=/dev/null
 source "$HOME"/.z/z.sh
 
-if ! type "asdf" >/dev/null 2>&1; then
-    git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.13.1
+if [[ ! -e "$HOME"/.asdf ]]; then
+    git clone https://github.com/asdf-vm/asdf.git "$HOME"/.asdf --branch v0.13.1
 fi
 # shellcheck source=/dev/null
 source "$HOME/.asdf/asdf.sh"
@@ -198,4 +181,17 @@ if ! type "ghq" >/dev/null 2>&1; then
     asdf plugin add ghq
     asdf install ghq latest
     asdf global ghq latest
+fi
+
+# iceberg theme for vim
+if type "ghq" >/dev/null 2>&1; then
+    if [[ ! -e $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
+        ghq get https://github.com/cocopon/iceberg.vim.git
+    fi
+    if [[ ! -e $HOME/.vim/colors ]]; then
+        mkdir -p "$HOME"/.vim/colors
+    fi
+    if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
+        ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
+    fi
 fi
