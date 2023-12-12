@@ -142,6 +142,9 @@ if (type "git" >/dev/null 2>&1); then
 
     # for ssh push
     git config --global url."github:".pushInsteadOf https://github.com/
+    
+    # save credentials (for AzureDevOps)
+    git config --global credential.helper store
 fi
 
 read -r -n1 -p "configure default shells? (y/N): " yn
