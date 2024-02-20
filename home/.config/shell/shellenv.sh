@@ -73,6 +73,9 @@ fi
 # User settings #
 #---------------#
 
+# for Open3D visualizer
+export LIBGL_ALWAYS_INDIRECT=0
+
 if [[ -f "$HOME"/.config/shell/usrenv.sh ]]; then
     # shellcheck source=/dev/null
     source "$HOME"/.config/shell/usrenv.sh
