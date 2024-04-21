@@ -19,11 +19,11 @@ fi
 
 # for Ubuntu
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    # for x11 forwarding of chromium
+    # from https://qiita.com/kairi003/items/003c4a615317049e5b85
+    export XAUTHORITY="$HOME"/.Xauthority
     if [[ -e "$HOME"/.local/share/JetBrains/Toolbox/scripts ]]; then
         export PATH="$HOME"/.local/share/JetBrains/Toolbox/scripts:$PATH
-        # for x11 forwarding of chromium
-        # from https://qiita.com/kairi003/items/003c4a615317049e5b85
-        export XAUTHORITY="$HOME"/.Xauthority
     fi
 fi
 
