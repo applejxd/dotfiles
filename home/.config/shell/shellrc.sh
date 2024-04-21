@@ -57,11 +57,12 @@ if ! type "ghq" >/dev/null 2>&1; then
     asdf global ghq latest
 fi
 
-if ! type "rg" >/dev/null 2>&1; then
-    asdf plugin add ripgrep
-    asdf install ripgrep latest
-    asdf global ripgrep latest
-fi
+# TODO: issue on Raspi
+# if ! type "rg" >/dev/null 2>&1; then
+#     asdf plugin add ripgrep
+#     asdf install ripgrep latest
+#     asdf global ripgrep latest
+# fi
 
 if ! type "bat" >/dev/null 2>&1; then
     asdf plugin add bat
