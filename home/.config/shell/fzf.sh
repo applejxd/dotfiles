@@ -231,15 +231,21 @@ if type "docker" >/dev/null 2>&1; then
 
     function drun() {
         local docker_command
-        docker_command="docker run -it --rm -e DISPLAY=\"$DISPLAY\" -v /tmp/.X11-unix:/tmp/.X11-unix"
-
+        # GUI 利用
         if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+            # WSL の場合
             docker_command="$docker_command -v /mnt/wslg:/mnt/wslg"
+        else
+            # それ以外
+            docker_command="docker run -it --rm -e DISPLAY=\"$DISPLAY\" -v /tmp/.X11-unix:/tmp/.X11-unix"
         fi
+
+        # GPU があれば使用
         if type "nvidia-smi" >/dev/null 2>&1; then
             docker_command="$docker_command --gpus all"
         fi
 
+        # fzf でファイル名選択
         local name
         name=$(docker images | sed 1d | fzf --no-sort -m --tac | awk '{ print $1 ":" $2 }')
 
@@ -298,13 +304,16 @@ if type "docker" >/dev/null 2>&1; then
     }
 
     function dbuild() {
+        # Dockerfile を選択
         local file_name
         file_name=$(find . -type f | grep -E "./*.(D|d)ockerfile" | fzf)
+        # イメージ名を取得（"./"を削除・拡張子なしファイル名を取得・小文字化）
         local img_name
         img_name=$(echo "$file_name" | sed "s|./||" | awk -F'[.]' '{print $1}' | tr '[:upper:]' '[:lower:]')
-
+        # タグに使う日付文字を取得
         local date_tag
-        date_tag=$(date "+%y.%m.%d")
+        date_tag=$(date "+%y%m%d")
+
         [ -n "$file_name" ] && docker build -t local/"$img_name":"$date_tag" -f "$file_name" .
     }
 
