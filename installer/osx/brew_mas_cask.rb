@@ -1,3 +1,5 @@
+# brew bundle --file ./brew_mas_cask.rb
+
 # Fucntion to check whether current architechture is arm64 or not
 # cf. https://zenn.dev/mactkg/articles/71d09e350315f9
 def is_m1?

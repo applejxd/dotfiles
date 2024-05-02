@@ -15,9 +15,9 @@ trap 'rm -f "$tmp_file"' EXIT HUP INT QUIT TERM
 # for x86_64 architecture
 yes A | softwareupdate --install-rosetta
 
-#################
+#---------------#
 # Load Homebrew #
-#################
+#---------------#
 
 brew_path=""
 if [[ $(uname -m) == arm64 ]]; then
@@ -28,15 +28,15 @@ fi
 eval "$($brew_path shellenv)"
 brew update
 
-###############
+#-------------#
 # Brew bundle #
-###############
+#-------------#
 
 if [[ $(uname -m) == arm64 ]]; then
     # GUI apps
-    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/brew_mas_cask.rb > "$tmp_file"
+    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/brew_mas_cask.rb >"$tmp_file"
     brew bundle --file="$tmp_file"
-    
+
     # Password required GUI apps
     echo "$password" | brew install avast-security
     # Needs Rosetta2
@@ -46,12 +46,13 @@ if [[ $(uname -m) == arm64 ]]; then
     echo "$password" | brew install qlvideo
 fi
 
-##########
+#--------#
 # Others #
-##########
+#--------#
 
 # System configurations
-curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx_defaults.sh > "$tmp_file"
+curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/osx_defaults.sh >"$tmp_file"
+# shellcheck source=/dev/null
 echo "$password" | source "$tmp_file"
 
 # iTerm2 Shell integration
@@ -65,7 +66,7 @@ if [[ $(which gcc) != "/opt/homebrew/bin/gcc" ]]; then
     gcc_path=$(ls /opt/homebrew/bin/gcc-[0-9]*)
     gpp_path=$(ls /opt/homebrew/bin/g++-[0-9]*)
 
-    ln -fs "$gcc_path" /opt/homebrew/bin/gcc  
+    ln -fs "$gcc_path" /opt/homebrew/bin/gcc
     ln -fs "$gpp_path" /opt/homebrew/bin/g++
 fi
 
@@ -74,4 +75,11 @@ if [[ ! -e /usr/local/include/ac-library ]]; then
     git clone https://github.com/atcoder/ac-library.git
     echo "$password" | sudo -S cp -r ./ac-library/atcoder /usr/local/include
     rm -rf ./ac-library
+fi
+
+# For LaTeX
+if [[ ! -e /usr/local/texlive ]]; then
+    brew install mactex
+    eval "$(/usr/libexec/path_helper)"
+    echo "$password" | sudo -S tlmgr update --self --all
 fi

@@ -10,9 +10,9 @@ fi
 # 起動時の音をミュート
 echo "$password" | sudo -S nvram StartupMute=%01
 
-############
+#----------#
 # defaults #
-############
+#----------#
 
 # cf. https://github.com/ulwlu/dotfiles/blob/master/system/macos.sh
 

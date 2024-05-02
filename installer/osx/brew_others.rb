@@ -1,3 +1,5 @@
+# brew bundle --file ./brew_others.rb
+
 #--------------#
 # Developments #
 #--------------#

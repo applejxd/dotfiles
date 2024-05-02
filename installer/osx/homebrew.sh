@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Install Homebrew
+
 if [ $# -eq 0 ]; then
     # save password
     read -rsp "Password: " password
@@ -16,7 +18,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     fi
 fi
 
-if [[ ! -e $brew_path ]]; then
+if [[ ! -e "$brew_path" ]]; then
     # Requirements
     # (For Mac OS X, command line tools for xcode are automatically installed by the following script.)
     if [[ -e /etc/lsb-release ]]; then
@@ -31,7 +33,7 @@ if [[ ! -e $brew_path ]]; then
     tmp_file=$(mktemp)
     # cf. https://tm.root-n.com/programming:shell_script:command:trap
     trap 'rm -f "$tmp_file"' EXIT HUP INT QUIT TERM
-    curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > "$tmp_file"
+    curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh >"$tmp_file"
 
     # Install Homebrew for Mac OS X or Linux
     # cf. https://qiita.com/ine1127/items/cd6bc91174635016db9b
