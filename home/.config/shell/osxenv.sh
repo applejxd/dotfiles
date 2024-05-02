@@ -7,14 +7,20 @@ export LANG=ja_JP.UTF-8
 #------#
 
 # The default (lowest priority, first declaration)
-export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:${PATH}}
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:${PATH}}"
 
 # for openssl
 if [[ -e "/opt/homebrew/opt/openssl@1.1" ]]; then
-  export PATH="/opt/homebrew/opt/openssl@1.1/bin":$PATH
+  export PATH="/opt/homebrew/opt/openssl@1.1/bin:${PATH}"
   export LDFLAGS="-L/opt/homebrew/opt/openssl@1.1/lib"
   export CPPFLAGS="-I/opt/homebrew/opt/openssl@1.1/include"
   export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig"
+fi
+
+# MacTeX
+if [[ -e "/usr/local/texlive" ]]; then
+  prefix=$(find /usr/local/texlive -maxdepth 1 -type d | sed -n 2p)
+  export PATH="${prefix}/bin/universal-darwin:${PATH}"
 fi
 
 #------------#

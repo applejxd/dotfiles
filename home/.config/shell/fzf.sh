@@ -230,19 +230,21 @@ if type "docker" >/dev/null 2>&1; then
     alias dclean="docker container prune"
 
     function drun() {
-        local docker_command
+        local cmd
+        cmd="docker run -it --rm"
+
         # GUI 利用
         if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
             # WSL の場合
-            docker_command="$docker_command -v /mnt/wslg:/mnt/wslg"
+            cmd="${cmd} -v /mnt/wslg:/mnt/wslg"
         else
             # それ以外
-            docker_command="docker run -it --rm -e DISPLAY=\"$DISPLAY\" -v /tmp/.X11-unix:/tmp/.X11-unix"
+            cmd="${cmd} -e DISPLAY=\"$DISPLAY\" -v /tmp/.X11-unix:/tmp/.X11-unix"
         fi
 
         # GPU があれば使用
         if type "nvidia-smi" >/dev/null 2>&1; then
-            docker_command="$docker_command --gpus all"
+            cmd="${cmd} --gpus all"
         fi
 
         # fzf でファイル名選択
@@ -252,10 +254,14 @@ if type "docker" >/dev/null 2>&1; then
         # it (interactive & tty): stdio
         # rm: remove container that stops
         if [[ -n "$name" ]]; then
-            docker_command="${docker_command} $* $name"
+            # 追加で指定した引数を使用
+            cmd="${cmd} $* $name"
+
             # for debugging
-            # echo "$docker_command"
-            eval "$docker_command"
+            # echo "${cmd}"
+
+            # 実行
+            eval "${cmd}"
         fi
     }
 
@@ -304,17 +310,26 @@ if type "docker" >/dev/null 2>&1; then
     }
 
     function dbuild() {
+        local cmd
+        cmd="docker build"
+
         # Dockerfile を選択
         local file_name
         file_name=$(find . -type f | grep -E "./*.(D|d)ockerfile" | fzf)
+        cmd="$cmd -f ${file_name}"
+
         # イメージ名を取得（"./"を削除・拡張子なしファイル名を取得・小文字化）
         local img_name
         img_name=$(echo "$file_name" | sed "s|./||" | awk -F'[.]' '{print $1}' | tr '[:upper:]' '[:lower:]')
         # タグに使う日付文字を取得
         local date_tag
         date_tag=$(date "+%y%m%d")
+        cmd="$cmd -t local/${img_name}:${date_tag}"
 
-        [ -n "$file_name" ] && docker build -t local/"$img_name":"$date_tag" -f "$file_name" .
+        if [[ -n "$file_name" ]]; then
+            cmd="$cmd $* ."
+            eval "${cmd}"
+        fi
     }
 
     function dcom() {
