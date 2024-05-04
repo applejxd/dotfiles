@@ -78,8 +78,10 @@ if [[ ! -e /usr/local/include/ac-library ]]; then
 fi
 
 # For LaTeX
+# cf. https://texwiki.texjp.org/?TeX%20Live%2FMac
 if [[ ! -e /usr/local/texlive ]]; then
     brew install mactex
     eval "$(/usr/libexec/path_helper)"
     echo "$password" | sudo -S tlmgr update --self --all
+    echo "$password" | sudo -S tlmgr paper a4
 fi
