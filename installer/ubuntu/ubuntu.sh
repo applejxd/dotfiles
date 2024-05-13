@@ -14,8 +14,8 @@ echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
 gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
 echo "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
 
+# Basics
 echo "$password" | sudo -S apt-get install -y \
-    # Basics
     manpages-ja unzip zsh tree tig
     # Clipboard
     xsel
@@ -23,7 +23,9 @@ echo "$password" | sudo -S apt-get install -y \
     xdg-utils
 
 # Security
-sudo apt install clamav clamav-daemon
+echo "$password" | sudo -S apt install clamav clamav-daemon
+echo "$password" | sudo -S systemctl start clamav-daemon.service
+echo "$password" | sudo -S systemctl start clamav-freshclam.service
 
 # docker
 # shellcheck source=/dev/null
