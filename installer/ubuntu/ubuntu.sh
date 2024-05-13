@@ -27,7 +27,7 @@ echo "$password" | sudo -S apt install clamav clamav-daemon
 echo "$password" | sudo -S systemctl start clamav-daemon.service
 echo "$password" | sudo -S systemctl start clamav-freshclam.service
 
-# docker
+# Docker
 # shellcheck source=/dev/null
 echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
 
