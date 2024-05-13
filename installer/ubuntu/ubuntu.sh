@@ -31,6 +31,20 @@ echo "$password" | sudo -S apt install clamav clamav-daemon
 echo "$password" | sudo -S systemctl start clamav-daemon.service
 echo "$password" | sudo -S systemctl start clamav-freshclam.service
 
+# VSCode
+# cf. https://code.visualstudio.com/docs/setup/linux
+if ! (type "code" >/dev/null 2>&1); then
+    echo "$password" | sudo -S  apt-get install -y wget gpg
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
+    echo "$password" | sudo -S  install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+    echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
+    rm -f packages.microsoft.gpg
+
+    echo "$password" | sudo -S apt-get install -y apt-transport-https
+    echo "$password" | sudo -S apt update
+    echo "$password" | sudo -S apt install -y code
+fi
+
 # Docker
 # shellcheck source=/dev/null
 echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
