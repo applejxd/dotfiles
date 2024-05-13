@@ -20,9 +20,9 @@ rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュ
 
 # Basics
 echo "$password" | sudo -S apt-get install -y \
-    manpages-ja unzip zsh tree tig
+    vim git unzip tree tig manpages-ja \
     # Clipboard
-    xsel
+    xsel \
     # Filer
     xdg-utils
 
