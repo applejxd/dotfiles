@@ -14,6 +14,10 @@ echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
 gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
 echo "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
 
+# Known folders
+LANG=C xdg-user-dirs-update --force
+rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュメント ミュージック ピクチャ ビデオ
+
 # Basics
 echo "$password" | sudo -S apt-get install -y \
     manpages-ja unzip zsh tree tig
