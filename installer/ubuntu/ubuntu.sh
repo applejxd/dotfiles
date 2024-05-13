@@ -1,4 +1,4 @@
-#!/bin/bash
+##!/bin/bash
 
 if [ $# -eq 0 ]; then
     # Save Password
@@ -10,14 +10,20 @@ fi
 # Refresh
 echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
 
-# Basics
-echo "$password" | sudo -S apt-get install -y manpages-ja unzip zsh tree tig
+# Keybinding
+gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
+echo "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
 
-# Clipboard
-echo "$password" | sudo -S apt-get install -y xsel
+echo "$password" | sudo -S apt-get install -y \
+    # Basics
+    manpages-ja unzip zsh tree tig
+    # Clipboard
+    xsel
+    # Filer
+    xdg-utils
 
-# Filer
-echo "$password" | sudo -S apt-get install -y xdg-utils
+# Security
+sudo apt install clamav clamav-daemon
 
 # docker
 # shellcheck source=/dev/null
