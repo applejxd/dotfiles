@@ -53,7 +53,8 @@ fi
 echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
 
 # Environment Modules
-echo "$password" | sudo -S apt-get install -y tcl8.6-dev
+# https://modules.readthedocs.io/en/latest/INSTALL.html
+echo "$password" | sudo -S apt-get install -y automake autoconf autopoint tcl-dev tk-dev
 git clone https://github.com/cea-hpc/modules.git "$HOME"/src/install/modules -b v5.2.0
 cd "$HOME"/src/install/modules || exit
 ./configure && make -j"$(nproc)"
@@ -165,7 +166,7 @@ fi
 # GUI #
 #-----#
 
-# GUI
+# Desktop environments
 #echo "$password" | sudo -S apt-get install -y ubuntu-desktop
 #echo "$password" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4
 # Xfce + applications
@@ -175,7 +176,26 @@ echo "$password" | sudo -S DEBIAN_FRONTEND=noninteractive apt-get install -y xub
 echo "$password" | sudo -S apt-get install -y xrdp
 
 # RDP settings
-# cf. https://qiita.com/atomyah/items/887a5185ec9a8206c7c4#ubuntu%E3%81%ABxrdp%E3%82%92%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB
+# https://qiita.com/atomyah/items/887a5185ec9a8206c7c4#ubuntu%E3%81%ABxrdp%E3%82%92%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB
+
+# enable side bar
+# https://askubuntu.com/questions/1233088/xrdp-desktop-looks-different-when-connecting-remotely
+cat <<EOF > ~/.xsessionrc
+export GNOME_SHELL_SESSION_MODE=ubuntu
+export XDG_CURRENT_DESKTOP=ubuntu:GNOME
+export XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu:/etc/xdg
+EOF
+
+# to fix Authentication error
+# cf. https://god-support.blogspot.com/2019/11/ubuntu1804-xrdp-authentication-is.html
+if [ ! -L /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
+    if [ -f /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
+        echo "$password" | sudo -S mv \
+            /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf \
+            /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf.bk
+    fi
+    echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/02-allow-colord.conf /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf
+fi
 
 # xrdp.ini configuration
 echo "$password" | sudo -S bash -c "\
@@ -192,17 +212,6 @@ if (! grep "startxfce4" /etc/xrdp/startwm.sh >/dev/null 2>&1); then
         echo "$password"
         echo "startxfce4"
     } | sudo -S -k tee -a /etc/xrdp/startwm.sh
-fi
-
-# to fix Authentication error
-# cf. https://god-support.blogspot.com/2019/11/ubuntu1804-xrdp-authentication-is.html
-if [ ! -L /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
-    if [ -f /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
-        echo "$password" | sudo -S mv \
-            /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf \
-            /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf.bk
-    fi
-    echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/02-allow-colord.conf /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf
 fi
 
 echo "$password" | sudo -S systemctl enable xrdp
