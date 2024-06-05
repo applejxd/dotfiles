@@ -37,7 +37,7 @@ if [[ ! -e /usr/local/"$cuda_major_version"."$cuda_minor_version" ]]; then
     if (! dpkg -l cuda-drivers >/dev/null 2>&1); then
         # Install the new cuda-keyring package
         tmp_file=$(mktemp)
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/"$distribution"/x86_64/cuda-keyring_1.0-1_all.deb >"$tmp_file"
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/"$distribution"/x86_64/cuda-keyring_1.1-1_all.deb >"$tmp_file"
         sudo dpkg -i "$tmp_file"
 
         echo "$password" | sudo -S apt update
@@ -81,14 +81,24 @@ fi
 # Nvidia Docker #
 #---------------#
 
-# cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch05-running-containers
-# cf. https://unix.stackexchange.com/questions/391796/pipe-password-to-sudo-and-other-data-to-sudoed-command
+# Documentation (nvidia-container-toolkit): 
+# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+
+# nvidia-docker2 is not recommended: 
+# https://medium.com/nvidiajapan/nvidia-docker-%E3%81%A3%E3%81%A6%E4%BB%8A%E3%81%A9%E3%81%86%E3%81%AA%E3%81%A3%E3%81%A6%E3%82%8B%E3%81%AE-20-09-%E7%89%88-558fae883f44
+
+# WSL support:
+# https://docs.nvidia.com/cuda/wsl-user-guide/index.html
+
+# sudo with pipe:
+# https://unix.stackexchange.com/questions/391796/pipe-password-to-sudo-and-other-data-to-sudoed-command
 
 if (type "docker" >/dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
     distribution=$(
         . /etc/os-release
         echo "$ID""$VERSION_ID"
     )
+    
     {
         echo "$password"
         curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
@@ -96,14 +106,15 @@ if (type "docker" >/dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
         sudo -k -S gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
 
     tmp_file=$(mktemp)
-    curl -s -L https://nvidia.github.io/libnvidia-container/experimental/"$distribution"/libnvidia-container.list |
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list |
         sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' >"$tmp_file"
+        
     {
         echo "$password"
         cat "$tmp_file"
     } | sudo -k -S tee /etc/apt/sources.list.d/nvidia-container-toolkit.list &>/dev/null
 
     echo "$password" | sudo -S apt-get update
-    echo "$password" | sudo -S apt-get install -y nvidia-docker2
+    echo "$password" | sudo -S apt-get install -y nvidia-container-tookit
     echo "$password" | sudo -S systemctl restart docker
 fi
