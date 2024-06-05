@@ -56,9 +56,15 @@ else
     #------------------#
     # Rootless Dockerd #
     #------------------#
+    
+    # https://docs.docker.com/engine/security/rootless/
+    # https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
 
-    # cf. https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
+    # stops rootful docker
+    echo "$password" | sudo -S systemctl disable --now docker.service docker.socket
+    echo "$password" | sudo -S rm /var/run/docker.sock
 
+    # enable rootless docker
     echo "$password" | sudo -S apt-get install -y uidmap dbus-user-session
     dockerd-rootless-setuptool.sh install
     echo "$password" | sudo -S systemctl --user enable docker.service
