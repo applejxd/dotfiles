@@ -12,6 +12,9 @@ echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
 
 # Keybinding
 gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
+# disable emoji shortcut
+gsettings set org.freedesktop.ibus.panel.emoji hotkey "[]"
+# use caps lock as ctrl
 echo "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
 
 # Known folders
