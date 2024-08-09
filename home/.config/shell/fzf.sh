@@ -53,8 +53,19 @@ if type "ghq" >/dev/null 2>&1; then
         local selected_dir
         selected_dir=$(ghq list | fzf)
         if [[ -n "$selected_dir" ]]; then
-            cd "$(ghq root)"/"${selected_dir}" || return
+            cd "$(ghq root)/${selected_dir}" || return
         fi
+    }
+fi
+
+if type "ghq" >/dev/null 2>&1; then
+    function mise-select() {
+        if [[ -z "$1" ]]; then
+            return 1
+        fi
+        local select_ver
+        select_ver=$(mise ls-remote "$1" | sort -rV | fzf)
+        mise use "$1@${select_ver}"
     }
 fi
 
