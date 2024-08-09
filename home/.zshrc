@@ -176,6 +176,7 @@ if [[ -e /usr/local/Modules/init ]]; then
     source /usr/local/Modules/init/zsh
 fi
 
-if [[ -e /opt/ros/noetic/setup.zsh ]]; then
-    source /opt/ros/noetic/setup.zsh
+if [[ -e /opt/ros ]]; then
+    ros_dir=$(find /opt/ros -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    source "${ros_dir}/setup.zsh"
 fi

@@ -31,12 +31,6 @@ fi
 # Install #
 #---------#
 
-# fzf
-if ! type "fzf" >/dev/null 2>&1 && [ ! -e "$HOME"/.fzf ]; then
-    git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME"/.fzf
-    "$HOME"/.fzf/install --key-bindings --completion --no-update-rc
-fi
-
 # z
 if ! type "z" >/dev/null 2>&1 && [ ! -e "$HOME"/.z ]; then
     git clone --depth 1 https://github.com/rupa/z.git "$HOME"/.z
@@ -52,16 +46,24 @@ fi
 eval "$(~/.local/bin/mise activate)"
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 
-if ! type "bat" >/dev/null 2>&1; then
-    mise use --global -y bat
-fi
-
-if (! type "rg" >/dev/null 2>&1) && [[ "$(uname -m)" == "x86_64" ]]; then
-    mise use --global -y ripgrep
+if ! type "fzf" >/dev/null 2>&1; then
+    mise use --global -y fzf@0.53.0
 fi
 
 if ! type "ghq" >/dev/null 2>&1; then
     mise use --global -y ghq
+fi
+
+if ! type "bat" >/dev/null 2>&1; then
+    mise use --global -y bat
+fi
+
+if ! type "eza" >/dev/null 2>&1; then
+    mise use --global -y eza
+fi
+
+if (! type "rg" >/dev/null 2>&1) && [[ "$(uname -m)" == "x86_64" ]]; then
+    mise use --global -y ripgrep
 fi
 
 # iceberg theme for vim
@@ -90,19 +92,21 @@ alias ssh="ssh -X"
 # with number: -v
 alias dirs="dirs -v"
 
-# adding git syntax sugar
-if type "hub" >/dev/null 2>&1; then
-    eval "$(hub alias -s)"
-fi
-
-# "ls" cloning
-if type "lsd" >/dev/null 2>&1; then
-    alias ls="lsd"
-fi
-
 # "cat" cloning
 if type "bat" >/dev/null 2>&1; then
     alias cat="bat"
+fi
+
+# "cat" cloning
+if type "eza" >/dev/null 2>&1; then
+    alias ls="eza --git"
+    alias lt='eza -T -L 3 -a -I "node_modules|.git|.cache|.venv"'
+    alias ltl='eza -T -L 3 -a -I "node_modules|.git|.cache|.venv" -l'
+fi
+
+# adding git syntax sugar
+if type "hub" >/dev/null 2>&1; then
+    eval "$(hub alias -s)"
 fi
 
 # "diff" cloning & unified format: -u

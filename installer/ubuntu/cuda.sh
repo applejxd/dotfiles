@@ -81,10 +81,10 @@ fi
 # Nvidia Docker #
 #---------------#
 
-# Documentation (nvidia-container-toolkit): 
+# Documentation (nvidia-container-toolkit):
 # https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 
-# nvidia-docker2 is not recommended: 
+# nvidia-docker2 is not recommended:
 # https://medium.com/nvidiajapan/nvidia-docker-%E3%81%A3%E3%81%A6%E4%BB%8A%E3%81%A9%E3%81%86%E3%81%AA%E3%81%A3%E3%81%A6%E3%82%8B%E3%81%AE-20-09-%E7%89%88-558fae883f44
 
 # WSL support:
@@ -94,21 +94,21 @@ fi
 # https://unix.stackexchange.com/questions/391796/pipe-password-to-sudo-and-other-data-to-sudoed-command
 
 if (type "docker" >/dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
+    # shellcheck source=/dev/null
     distribution=$(
         . /etc/os-release
         echo "$ID""$VERSION_ID"
     )
-    
+
     {
         echo "$password"
         curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
-    } |
-        sudo -k -S gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    } | sudo -k -S gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
 
     tmp_file=$(mktemp)
     curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list |
         sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' >"$tmp_file"
-        
+
     {
         echo "$password"
         cat "$tmp_file"
