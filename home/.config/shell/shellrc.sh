@@ -49,18 +49,19 @@ source "$HOME"/.z/z.sh
 if [[ ! -e "$HOME/.local/bin/mise" ]]; then
     curl https://mise.run | sh
 fi
+eval "$(~/.local/bin/mise activate)"
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 
 if ! type "bat" >/dev/null 2>&1; then
-    ~/.local/bin/mise use --global -y bat
+    mise use --global -y bat
 fi
 
 if (! type "rg" >/dev/null 2>&1) && [[ "$(uname -m)" == "x86_64" ]]; then
-    ~/.local/bin/mise use --global -y ripgrep
+    mise use --global -y ripgrep
 fi
 
 if ! type "ghq" >/dev/null 2>&1; then
-    ~/.local/bin/mise use --global -y ghq
+    mise use --global -y ghq
 fi
 
 # iceberg theme for vim

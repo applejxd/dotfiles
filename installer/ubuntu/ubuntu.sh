@@ -10,6 +10,10 @@ fi
 # Refresh
 echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
 
+#--------#
+# config #
+#--------#
+
 # Keybinding
 gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
 # disable emoji shortcut
@@ -23,27 +27,54 @@ rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュ
 
 # Basics
 echo "$password" | sudo -S apt-get install -y \
-    vim git unzip tree tig manpages-ja \
-    # Clipboard
-    xsel \
-    # Filer
-    xdg-utils
+    vim git unzip tree tig manpages-ja xsel xdg-utils
 
 # Security
 echo "$password" | sudo -S apt install clamav clamav-daemon
 echo "$password" | sudo -S systemctl start clamav-daemon.service
 echo "$password" | sudo -S systemctl start clamav-freshclam.service
 
+#------#
+# mise #
+#------#
+
+if [[ ! -e "$HOME/.local/bin/mise" ]]; then
+    curl https://mise.run | sh
+fi
+eval "$(~/.local/bin/mise activate)"
+export PATH="$HOME/.local/share/mise/shims:$PATH"
+
+if ! type ruby >/dev/null 2>&1; then
+    echo "$password" | sudo -S apt-get install -y \
+        autoconf bison build-essential \
+        libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev \
+        libffi-dev libgdbm6 libgdbm-dev libdb-dev
+fi
+
+# for homesick
+mise use --global -y ruby@2.7.8
+mise use --global -y python@3.11
+# https://qiita.com/arubaito/items/1fee363154b34663deea
+mise use --global -y java@temurin
+
+mise use --global -y ghq
+mise use --global -y shellcheck
+mise use --global -y hadolint
+
+#-------#
+# tools #
+#-------#
+
 # VSCode
 # cf. https://code.visualstudio.com/docs/setup/linux
 if ! (type "code" >/dev/null 2>&1); then
-    echo "$password" | sudo -S  apt-get install -y wget gpg
-    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
-    echo "$password" | sudo -S  install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+    echo "$password" | sudo -S apt-get install -y wget gpg
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor >packages.microsoft.gpg
+    echo "$password" | sudo -S install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
     {
         echo "$password"
         echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main"
-    } | sudo -k -S tee /etc/apt/sources.list.d/vscode.list > /dev/null
+    } | sudo -k -S tee /etc/apt/sources.list.d/vscode.list >/dev/null
     rm -f packages.microsoft.gpg
 
     echo "$password" | sudo -S apt-get install -y apt-transport-https
@@ -70,42 +101,6 @@ if (type "nvidia-smi" >/dev/null 2>&1); then
     echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/cuda.sh)
 fi
 
-# asdf
-if [[ ! -e ~/.asdf ]]; then
-    git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.11.3
-fi
-# shellcheck source=/dev/null
-source "$HOME/.asdf/asdf.sh"
-if [[ ! -e "$HOME"/.asdf/ruby ]]; then
-    echo "$password" | sudo -S apt-get install -y \
-        autoconf bison build-essential \
-        libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev \
-        libffi-dev libgdbm6 libgdbm-dev libdb-dev
-    asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git
-    # asdf list all ruby
-    asdf install ruby 2.7.8
-    asdf global ruby 2.7.8
-fi
-if [[ ! -e "$HOME"/.asdf/python ]]; then
-    asdf plugin add python
-    # asdf list all python
-    asdf install python miniforge3-latest
-    asdf global python miniforge3-latest
-fi
-if [[ ! -e "$HOME"/.asdf/nodejs ]]; then
-    asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
-fi
-
-# Go
-echo "$password" | sudo -S bash -c "\
-    add-apt-repository -y ppa:longsleep/golang-backports && \
-    apt-get update && \
-    apt-get install -y golang"
-export GOPATH=$HOME/.go
-
-# ghq
-go install github.com/x-motemen/ghq@latest
-
 # Singularity
 if ! (type "singularity" >/dev/null 2>&1); then
     export VERSION=3.9.5 &&
@@ -116,14 +111,6 @@ if ! (type "singularity" >/dev/null 2>&1); then
     echo "$password" | sudo -S make -C builddir install
     cd .. && rm -rf singularity-ce-*
 fi
-
-# Linter
-echo "$password" | sudo -S apt-get install -y shellcheck
-echo "$password" | sudo -S wget https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 -O /usr/local/bin
-echo "$password" | sudo -S chmod 777 /usr/loca/bin/hadolint
-
-# Java
-# echo "$password" | sudo -S apt-get install -y default-jre default-jdk
 
 # LaTeX
 # echo "$password" | sudo -S apt-get install -y texlive-full
@@ -183,7 +170,7 @@ echo "$password" | sudo -S apt-get install -y xrdp
 
 # enable side bar
 # https://askubuntu.com/questions/1233088/xrdp-desktop-looks-different-when-connecting-remotely
-cat <<EOF > ~/.xsessionrc
+cat <<EOF >~/.xsessionrc
 export GNOME_SHELL_SESSION_MODE=ubuntu
 export XDG_CURRENT_DESKTOP=ubuntu:GNOME
 export XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu:/etc/xdg

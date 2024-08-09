@@ -99,22 +99,17 @@ echo "$password" | sudo -S make install
 cd "$HOME" || exit
 
 #------#
-# asdf #
+# mise #
 #------#
 
-# asdf
-if [[ ! -e ~/.asdf ]]; then
-    git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.11.3
+# mise
+if [[ ! -e "$HOME/.local/bin/mise" ]]; then
+    curl https://mise.run | sh
 fi
-# shellcheck source=/dev/null
-source "$HOME/.asdf/asdf.sh"
-if [[ ! -e "$HOME"/.asdf/python ]]; then
-    asdf plugin add python
-    # asdf list all python
-    asdf install python 3.8.13
-    asdf global python 3.8.13
-fi
+eval "$(~/.local/bin/mise activate)"
+export PATH="$HOME/.local/share/mise/shims:$PATH"
 
+mise use --global -y python@3.8
 python3 -m venv slam
 # shellcheck source=/dev/null
 source "$HOME"/slam/bin/activate
