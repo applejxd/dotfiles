@@ -53,14 +53,15 @@ if [ -f "$HOME"/.fzf.bash ]; then
     source "$HOME"/.fzf.bash
     # common settings of fzf
 fi
+
 if type "fzf" >/dev/null 2>&1 && [ -f "$HOME"/.config/shell/fzf.sh ]; then
     # shellcheck source=/dev/null
     source "$HOME"/.config/shell/fzf.sh
 fi
 
-if [[ -e "$HOME/.asdf" ]]; then
-    # shellcheck source=/dev/null
-    source "$HOME/.asdf/completions/asdf.bash"
+# mise
+if [[ -e "$HOME/.local/bin/mise" ]]; then
+    eval "$(~/.local/bin/mise activate zsh)"
 fi
 
 # iTerm2 shell integration

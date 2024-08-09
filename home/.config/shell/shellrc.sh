@@ -39,35 +39,28 @@ fi
 
 # z
 if ! type "z" >/dev/null 2>&1 && [ ! -e "$HOME"/.z ]; then
-    git clone https://github.com/rupa/z.git "$HOME"/.z
+    git clone --depth 1 https://github.com/rupa/z.git "$HOME"/.z
 fi
 export _Z_DATA="$HOME"/.z/.z
 # shellcheck source=/dev/null
 source "$HOME"/.z/z.sh
 
-if [[ ! -e "$HOME"/.asdf ]]; then
-    git clone https://github.com/asdf-vm/asdf.git "$HOME"/.asdf --branch v0.13.1
+# mise
+if [[ ! -e "$HOME/.local/bin/mise" ]]; then
+    curl https://mise.run | sh
 fi
-# shellcheck source=/dev/null
-source "$HOME/.asdf/asdf.sh"
-
-if ! type "ghq" >/dev/null 2>&1; then
-    asdf plugin add ghq
-    asdf install ghq latest
-    asdf global ghq latest
-fi
-
-# TODO: issue on Raspi
-# if ! type "rg" >/dev/null 2>&1; then
-#     asdf plugin add ripgrep
-#     asdf install ripgrep latest
-#     asdf global ripgrep latest
-# fi
+export PATH="$HOME/.local/share/mise/shims:$PATH"
 
 if ! type "bat" >/dev/null 2>&1; then
-    asdf plugin add bat
-    asdf install bat latest
-    asdf global bat latest
+    ~/.local/bin/mise use --global -y bat
+fi
+
+if (! type "rg" >/dev/null 2>&1) && [[ "$(uname -m)" == "x86_64" ]]; then
+    ~/.local/bin/mise use --global -y ripgrep
+fi
+
+if ! type "ghq" >/dev/null 2>&1; then
+    ~/.local/bin/mise use --global -y ghq
 fi
 
 # iceberg theme for vim

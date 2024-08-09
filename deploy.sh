@@ -17,7 +17,7 @@ fi
 if [[ -e /etc/lsb-release ]] && (! type "ruby-build" >/dev/null 2>&1); then
     cmd="apt-get update && \
          apt-get upgrade -y && \
-         apt-get install -y git curl build-essential libssl-dev zlib1g-dev"
+         apt-get install -y git curl unzip build-essential libssl-dev zlib1g-dev"
     if [[ $(id -u) -ne 0 ]]; then
         echo "$password" | sudo -S bash -c "$cmd"
     else
@@ -142,7 +142,7 @@ if (type "git" >/dev/null 2>&1); then
 
     # for ssh push
     git config --global url."github:".pushInsteadOf https://github.com/
-    
+
     # save credentials (for AzureDevOps)
     git config --global credential.helper store
 fi

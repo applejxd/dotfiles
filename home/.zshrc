@@ -168,9 +168,8 @@ fi
 # Activations #
 #-------------#
 
-if [[ -e "$HOME"/.asdf ]]; then
-    fpath=(${ASDF_DIR}/completions $fpath)
-    autoload -Uz compinit && compinit
+if [[ -e "$HOME/.local/bin/mise" ]]; then
+    eval "$(~/.local/bin/mise activate zsh)"
 fi
 
 if [[ -e /usr/local/Modules/init ]]; then
