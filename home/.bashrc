@@ -61,7 +61,7 @@ fi
 
 # mise
 if [[ -e "$HOME/.local/bin/mise" ]]; then
-    eval "$(~/.local/bin/mise activate zsh)"
+    eval "$(~/.local/bin/mise activate bash)"
 fi
 
 # iTerm2 shell integration

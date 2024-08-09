@@ -11,7 +11,7 @@ fi
 # OS dependencies #
 #-----------------#
 
-# for Ubuntu (cf. http://bit.ly/37WjcWG)
+# for Ubuntu (see https://eng-entrance.com/linux-os-version)
 if [[ -e /etc/lsb-release ]]; then
     # shellcheck source=/dev/null
     echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/ubuntu.sh)
@@ -25,3 +25,13 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     # shellcheck source=/dev/null
     echo "$password" | source "$brew_bundle"
 fi
+
+#--------#
+# Common #
+#--------#
+
+#code --list-extensions
+code --install-extension harg.iceberg
+code --install-extension eamodio.gitlens
+code --install-extension mhutchie.git-graph
+code --install-extension foxundermoon.shell-format
