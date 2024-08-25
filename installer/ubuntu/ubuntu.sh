@@ -49,11 +49,21 @@ if ! type ruby >/dev/null 2>&1; then
         autoconf bison build-essential \
         libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev \
         libffi-dev libgdbm6 libgdbm-dev libdb-dev
+    # for homesick
+    mise use --global -y ruby@2.7.8
 fi
 
-# for homesick
-mise use --global -y ruby@2.7.8
-mise use --global -y python@3.11
+if ! type python >/dev/null 2>&1; then
+    # see https://www.python.jp/install/ubuntu/index.html
+    echo "$password" | sudo -S apt-get install -y \
+        build-essential libbz2-dev libdb-dev \
+        libreadline-dev libffi-dev libgdbm-dev liblzma-dev \
+        libncursesw5-dev libsqlite3-dev libssl-dev \
+        zlib1g-dev uuid-dev tk-dev
+    mise use --global -y python@3.11
+fi
+
+
 # https://qiita.com/arubaito/items/1fee363154b34663deea
 mise use --global -y java@temurin
 
