@@ -1,4 +1,5 @@
 [tools]
+# for homesick
 ruby = "2.7.8"
 fzf = "0.53.0"
 ghq = "latest"
