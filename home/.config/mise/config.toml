@@ -10,3 +10,13 @@ ripgrep = "latest"
 [settings]
 # see https://www.python.jp/install/ubuntu/index.html
 python_compile = true
+
+# # see https://mise.jdx.dev/environments.html
+# [env]
+# _.path = [
+#     # adds an absolute path
+#     "~/.local/share/bin",
+#     # adds a path relative to the .mise.toml, not PWD
+#     "./node_modules/.bin",
+# ]
+# LD_LIBRARY_PATH = "/some/path:{{env.LD_LIBRARY_PATH}}"
