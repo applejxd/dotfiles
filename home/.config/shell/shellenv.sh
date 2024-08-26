@@ -41,6 +41,12 @@ export GHQ_ROOT=~/src
 # for original binaries
 export PATH="$HOME"/bin:$PATH
 
+# for CUDA
+if [[ -e "/usr/local/cuda" ]]; then
+    export PATH="/usr/local/cuda/bin:$PATH"
+    export LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
+fi
+
 # for Go lang
 if [[ -e "$HOME"/.go ]]; then
     export GOPATH="$HOME"/.go
