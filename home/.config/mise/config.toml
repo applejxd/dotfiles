@@ -1,0 +1,10 @@
+[tools]
+ruby = "2.7.8"
+fzf = "0.53.0"
+ghq = "latest"
+bat = "latest"
+eza = "latest"
+ripgrep = "latest"
+
+[settings]
+python_compile = true

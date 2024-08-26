@@ -43,7 +43,7 @@ source "$HOME"/.z/z.sh
 if [[ ! -e "$HOME/.local/bin/mise" ]]; then
     curl https://mise.run | sh
 fi
-eval "$(~/.local/bin/mise activate)"
+# eval "$(~/.local/bin/mise activate)"
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 
 if ! type "fzf" >/dev/null 2>&1; then
