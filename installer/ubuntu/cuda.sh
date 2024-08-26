@@ -98,7 +98,7 @@ if (type "docker" >/dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
         echo "$ID""$VERSION_ID"
     )
 
-    {
+    { 
         echo "$password"
         curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
     } | sudo -k -S gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
@@ -114,5 +114,6 @@ if (type "docker" >/dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; then
 
     echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get install -y nvidia-container-tookit
+    # check by `docker run --gpus all --rm nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 nvidia-smi`
     echo "$password" | sudo -S systemctl restart docker
 fi
