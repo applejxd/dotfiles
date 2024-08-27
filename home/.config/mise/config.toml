@@ -1,6 +1,10 @@
+# see below for documentation
+# https://mise.jdx.dev/configuration.html
+
 [tools]
 # for homesick
 ruby = "2.7.8"
+# for bug
 fzf = "0.53.0"
 ghq = "latest"
 bat = "latest"

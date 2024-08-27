@@ -47,23 +47,23 @@ fi
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 
 if ! type "fzf" >/dev/null 2>&1; then
-    mise use --global -y fzf@0.53.0
+    ~/.local/bin/mise use --global -y fzf@0.53.0
 fi
 
 if ! type "ghq" >/dev/null 2>&1; then
-    mise use --global -y ghq
+    ~/.local/bin/mise use --global -y ghq
 fi
 
 if ! type "bat" >/dev/null 2>&1; then
-    mise use --global -y bat
+    ~/.local/bin/mise use --global -y bat
 fi
 
 if ! type "eza" >/dev/null 2>&1; then
-    mise use --global -y eza
+    ~/.local/bin/mise use --global -y eza
 fi
 
 if (! type "rg" >/dev/null 2>&1) && [[ "$(uname -m)" == "x86_64" ]]; then
-    mise use --global -y ripgrep
+    ~/.local/bin/mise use --global -y ripgrep
 fi
 
 # iceberg theme for vim
