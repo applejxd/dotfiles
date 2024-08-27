@@ -14,6 +14,9 @@ echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
 # config #
 #--------#
 
+# locale 対策
+echo "$password" | sudo -S locale-gen en_US.UTF-8
+
 # Keybinding
 gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
 # disable emoji shortcut
