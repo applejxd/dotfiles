@@ -42,8 +42,8 @@ if [[ ! -e /opt/ros/"${ROS_DISTRO}"/setup.bash ]]; then
     } | sudo -k -S tee /etc/apt/sources.list.d/ros2.list >/dev/null
 
     echo "$password" | sudo -S apt-get update
-    echo "$password" | sudo -S apt-get upgrade
-    echo "$password" | sudo -S apt install ros-"${ROS_DISTRO}"-desktop python3-argcomplete
+    echo "$password" | sudo -S apt-get -y upgrade
+    echo "$password" | sudo -S apt install -y ros-"${ROS_DISTRO}"-desktop python3-argcomplete
 
     # shellcheck source=/dev/null
     source /opt/ros/"${ROS_DISTRO}"/setup.sh
