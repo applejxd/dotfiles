@@ -99,7 +99,7 @@ fi
 
 # "cat" cloning
 if type "eza" >/dev/null 2>&1; then
-    alias ls="eza --git"
+    alias ls="eza"
     alias lt='eza -T -L 3 -a -I "node_modules|.git|.cache|.venv"'
     alias ltl='eza -T -L 3 -a -I "node_modules|.git|.cache|.venv" -l'
 fi
