@@ -31,9 +31,14 @@ shopt -s globstar
 # not to distinguish between uppercase and lowercase
 shopt -s nocaseglob
 
-#--------------#
-# Bash plugins #
-#--------------#
+#-------------#
+# activations #
+#-------------#
+
+# mise
+if [[ -e "$HOME/.local/bin/mise" ]]; then
+    eval "$(~/.local/bin/mise activate bash)"
+fi
 
 # z: smart completion of the path
 # shellcheck source=/dev/null
@@ -53,14 +58,17 @@ if [ -f "$HOME"/.fzf.bash ]; then
     source "$HOME"/.fzf.bash
     # common settings of fzf
 fi
+
 if type "fzf" >/dev/null 2>&1 && [ -f "$HOME"/.config/shell/fzf.sh ]; then
     # shellcheck source=/dev/null
     source "$HOME"/.config/shell/fzf.sh
 fi
 
-if [[ -e "$HOME/.asdf" ]]; then
+# ROS2
+if [[ -e /opt/ros ]]; then
+    ros_dir=$(find /opt/ros -mindepth 1 -maxdepth 1 -type d | head -n 1)
     # shellcheck source=/dev/null
-    source "$HOME/.asdf/completions/asdf.bash"
+    source "${ros_dir}/setup.bash"
 fi
 
 # iTerm2 shell integration

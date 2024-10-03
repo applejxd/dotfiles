@@ -34,8 +34,8 @@ The scripts install configurations as following:
 
 1. Install development tools depend on OS
 2. (for Mac OS X: Install Homebrew)
-3. Install asdf
-4. Install Ruby by asdf
+3. Install mise
+4. Install Ruby by mise
 5. Install Homesick by Ruby
 6. Link dotfiles by Homesick
 7. Install packages from manager

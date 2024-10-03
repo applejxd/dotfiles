@@ -58,22 +58,3 @@ if type "zsh" >/dev/null 2>&1; then
         echo "$password" | sudo -S sh -c "echo $(which zsh) >> /etc/shells"
     fi
 fi
-
-###########
-# Distrod #
-###########
-
-if [[ "$(uname -r)" =~ (M|m)icrosoft ]] && (! systemctl >/dev/null 2>&1); then
-    # To install distrod for zsh
-    echo "$password" | sudo -S chsh -s "$(which zsh)" "$USER"
-
-    curl -L -O "https://raw.githubusercontent.com/nullpo-head/wsl-distrod/main/install.sh"
-    chmod +x install.sh
-    echo "$password" | sudo -S ./install.sh install
-    echo "$password" | sudo -S /opt/distrod/bin/distrod enable --start-on-windows-boot
-    rm ./install.sh
-
-    # Use bash for CLion toolchain
-    # Use distrod for systemctl
-    echo "$password" | sudo -S chsh -s /opt/distrod/alias/bin/bash "$USER"
-fi

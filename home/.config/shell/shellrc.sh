@@ -35,43 +35,39 @@ fi
 # Install #
 #---------#
 
-# fzf
-if ! type "fzf" >/dev/null 2>&1 && [ ! -e "$HOME"/.fzf ]; then
-    git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME"/.fzf
-    "$HOME"/.fzf/install --key-bindings --completion --no-update-rc
-fi
-
 # z
 if ! type "z" >/dev/null 2>&1 && [ ! -e "$HOME"/.z ]; then
-    git clone https://github.com/rupa/z.git "$HOME"/.z
+    git clone --depth 1 https://github.com/rupa/z.git "$HOME"/.z
 fi
 export _Z_DATA="$HOME"/.z/.z
 # shellcheck source=/dev/null
 source "$HOME"/.z/z.sh
 
-if [[ ! -e "$HOME"/.asdf ]]; then
-    git clone https://github.com/asdf-vm/asdf.git "$HOME"/.asdf --branch v0.13.1
+# mise
+if [[ ! -e "$HOME/.local/bin/mise" ]]; then
+    curl https://mise.run | sh
 fi
-# shellcheck source=/dev/null
-source "$HOME/.asdf/asdf.sh"
+# eval "$(~/.local/bin/mise activate)"
+export PATH="$HOME/.local/share/mise/shims:$PATH"
+
+if ! type "fzf" >/dev/null 2>&1; then
+    ~/.local/bin/mise use --global -y fzf@0.53.0
+fi
 
 if ! type "ghq" >/dev/null 2>&1; then
-    asdf plugin add ghq
-    asdf install ghq latest
-    asdf global ghq latest
+    ~/.local/bin/mise use --global -y ghq
 fi
 
-# TODO: issue on Raspi
-# if ! type "rg" >/dev/null 2>&1; then
-#     asdf plugin add ripgrep
-#     asdf install ripgrep latest
-#     asdf global ripgrep latest
-# fi
-
 if ! type "bat" >/dev/null 2>&1; then
-    asdf plugin add bat
-    asdf install bat latest
-    asdf global bat latest
+    ~/.local/bin/mise use --global -y bat
+fi
+
+if ! type "eza" >/dev/null 2>&1; then
+    ~/.local/bin/mise use --global -y eza
+fi
+
+if (! type "rg" >/dev/null 2>&1) && [[ "$(uname -m)" == "x86_64" ]]; then
+    ~/.local/bin/mise use --global -y ripgrep
 fi
 
 # iceberg theme for vim
@@ -100,19 +96,21 @@ alias ssh="ssh -X"
 # with number: -v
 alias dirs="dirs -v"
 
-# adding git syntax sugar
-if type "hub" >/dev/null 2>&1; then
-    eval "$(hub alias -s)"
-fi
-
-# "ls" cloning
-if type "lsd" >/dev/null 2>&1; then
-    alias ls="lsd"
-fi
-
 # "cat" cloning
 if type "bat" >/dev/null 2>&1; then
     alias cat="bat"
+fi
+
+# "cat" cloning
+if type "eza" >/dev/null 2>&1; then
+    alias ls="eza"
+    alias lt='eza -T -L 3 -a -I "node_modules|.git|.cache|.venv"'
+    alias ltl='eza -T -L 3 -a -I "node_modules|.git|.cache|.venv" -l'
+fi
+
+# adding git syntax sugar
+if type "hub" >/dev/null 2>&1; then
+    eval "$(hub alias -s)"
 fi
 
 # "diff" cloning & unified format: -u

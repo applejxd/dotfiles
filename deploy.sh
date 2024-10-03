@@ -17,7 +17,7 @@ fi
 if [[ -e /etc/lsb-release ]] && (! type "ruby-build" >/dev/null 2>&1); then
     cmd="apt-get update && \
          apt-get upgrade -y && \
-         apt-get install -y git curl build-essential libssl-dev zlib1g-dev"
+         apt-get install -y git curl unzip build-essential libssl-dev zlib1g-dev"
     if [[ $(id -u) -ne 0 ]]; then
         echo "$password" | sudo -S bash -c "$cmd"
     else
@@ -47,53 +47,13 @@ fi
 # Requirements (Local) #
 #----------------------#
 
-# # install anyenv
-# # cf. https://github.com/rbenv/rbenv#homebrew-on-macoshttps://github.com/rbenv/rbenv#homebrew-on-macos
-
-# if [[ "$OSTYPE" == "darwin"* ]]; then
-#     if [[ $(uname -m) == arm64 ]]; then
-#         export ANYENV_ROOT=$HOME/.anyenv_arm64
-#         export ANYENV_DEFINITION_ROOT=$HOME/.config/anyenv_arm64/anyenv-install
-#     elif [[ $(uname -m) == x86_64 ]]; then
-#         export ANYENV_ROOT=$HOME/.anyenv_x64
-#         export ANYENV_DEFINITION_ROOT=$HOME/.config/anyenv_x64/anyenv-install
-#     fi
-# else
-#     export ANYENV_ROOT=$HOME/.anyenv
-#     export ANYENV_DEFINITION_ROOT=$HOME/.config/anyenv/anyenv-install
-# fi
-
-# if [[ ! -e $ANYENV_ROOT ]]; then
-#     git clone https://github.com/anyenv/anyenv "$ANYENV_ROOT"
-# fi
-
-# export PATH=$ANYENV_ROOT/bin:$PATH
-# # Refresh anyenv
-# eval "$(anyenv init -)"
-# # Make anyenv manifest directory
-# yes | anyenv install --init
-
-# if [[ ! -e $ANYENV_ROOT/envs/rbenv ]]; then
-#     anyenv install rbenv
-#     # Refresh anyenv
-#     eval "$(anyenv init -)"
-# fi
-
-# if (! type "ruby" > /dev/null 2>&1) || [[ $(which "ruby") != "$ANYENV_ROOT/envs/"* ]]; then
-#     rbenv install 2.7.5
-#     rbenv rehash
-#     rbenv global 2.7.5
-# fi
-
-if [[ ! -e "$HOME"/.asdf ]]; then
-    git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.11.3
+# mise
+if [[ ! -e "$HOME/.local/bin/mise" ]]; then
+    curl https://mise.run | sh
 fi
-# shellcheck source=/dev/null
-source "$HOME/.asdf/asdf.sh"
-
-asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git
-asdf install ruby 2.7.8
-asdf global ruby 2.7.8
+eval "$(~/.local/bin/mise activate)"
+export PATH="$HOME/.local/share/mise/shims:$PATH"
+mise use --global -y ruby@2.7.8
 
 #--------------#
 # Link configs #
@@ -142,7 +102,7 @@ if (type "git" >/dev/null 2>&1); then
 
     # for ssh push
     git config --global url."github:".pushInsteadOf https://github.com/
-    
+
     # save credentials (for AzureDevOps)
     git config --global credential.helper store
 fi
