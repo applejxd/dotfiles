@@ -12,7 +12,9 @@ echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
 
 # Keybinding
 gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
+
 echo "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
+echo "$password" | sudo -S systemctl restart console-setup
 
 # Known folders
 LANG=C xdg-user-dirs-update --force

@@ -4,10 +4,12 @@
 # OS dependencies #
 #-----------------#
 
+# Ubuntu
 if [[ -e /etc/lsb-release ]]; then
     alias open="xdg-open"
 fi
 
+# Linux
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
     alias ls="ls --color=auto"
 
@@ -15,11 +17,13 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
     alias pbpaste='xsel --clipboard --output'
 fi
 
+# Mac OS X
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # shellcheck source=/dev/null
     source "$HOME"/.config/shell/osxrc.sh
 fi
 
+# WSL
 if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
     alias pbcopy='clip.exe'
     alias pbpaste='powershell.exe Get-Clipboard'
