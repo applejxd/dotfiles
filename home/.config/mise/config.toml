@@ -3,7 +3,7 @@
 
 [tools]
 # for homesick
-ruby = "2.7.8"
+ruby = "latest"
 # for bug
 fzf = "0.53.0"
 ghq = "latest"

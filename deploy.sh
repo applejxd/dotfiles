@@ -53,7 +53,8 @@ if [[ ! -e "$HOME/.local/bin/mise" ]]; then
 fi
 eval "$(~/.local/bin/mise activate)"
 export PATH="$HOME/.local/share/mise/shims:$PATH"
-mise use --global -y ruby@2.7.8
+# larger number of cores cause stability issue
+MAKE_OPTS=-j2 mise use --global -y ruby@latest
 
 #--------------#
 # Link configs #
