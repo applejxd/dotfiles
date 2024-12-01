@@ -1,7 +1,0 @@
-contest_directory = "/workspace/contest/{contest_id}/{problem_id}"
-problem_directory = "."
-
-[templates]
-"main.cpp" = "custom_main.cpp"
-"naive.cpp" = "custom_main.cpp"
-"generate.cpp" = "custom_generate.cpp"
