@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# for GPU drivers
+export LD_LIBRARY_PATH=/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+
 # To prevent OpenGL error
 export LIBGL_ALWAYS_INDIRECT=1
 
