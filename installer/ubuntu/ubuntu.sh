@@ -49,22 +49,22 @@ eval "$(~/.local/bin/mise activate)"
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 
 if ! type ruby >/dev/null 2>&1; then
+    # see https://github.com/rbenv/ruby-build/wiki#ubuntudebianmint
     echo "$password" | sudo -S apt-get install -y \
-        autoconf bison build-essential \
-        libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev \
-        libffi-dev libgdbm6 libgdbm-dev libdb-dev
+        autoconf patch build-essential rustc libssl-dev libyaml-dev libreadline6-dev \
+        zlib1g-dev libgmp-dev libncurses5-dev libffi-dev libgdbm6 libgdbm-dev libdb-dev \
+        uuid-dev
     # for homesick
     mise use --global -y ruby@2.7.8
 fi
 
 if ! type python >/dev/null 2>&1; then
-    # see https://www.python.jp/install/ubuntu/index.html
+    # see https://github.com/pyenv/pyenv/wiki#suggested-build-environment
     echo "$password" | sudo -S apt-get install -y \
-        build-essential libbz2-dev libdb-dev \
-        libreadline-dev libffi-dev libgdbm-dev liblzma-dev \
-        libncursesw5-dev libsqlite3-dev libssl-dev \
-        zlib1g-dev uuid-dev tk-dev
-    mise use --global -y python@3.11
+        build-essential libssl-dev zlib1g-dev \
+        libbz2-dev libreadline-dev libsqlite3-dev curl git \
+        libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+    mise use --global -y python@latest
 fi
 
 # https://qiita.com/arubaito/items/1fee363154b34663deea

@@ -13,11 +13,11 @@ fi
 # Requirements (Global) #
 #-----------------------#
 
-# for ruby-build in Ubuntu (cf. https://github.com/rbenv/ruby-build/wiki)
+# for ruby-build in Ubuntu (see https://github.com/rbenv/ruby-build/wiki#ubuntudebianmint)
 if [[ -e /etc/lsb-release ]] && (! type "ruby-build" >/dev/null 2>&1); then
     cmd="apt-get update && \
          apt-get upgrade -y && \
-         apt-get install -y git curl unzip build-essential libssl-dev zlib1g-dev"
+         apt-get install -y autoconf patch build-essential rustc libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libgmp-dev libncurses5-dev libffi-dev libgdbm6 libgdbm-dev libdb-dev uuid-dev"
     if [[ $(id -u) -ne 0 ]]; then
         echo "$password" | sudo -S bash -c "$cmd"
     else
