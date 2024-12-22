@@ -12,6 +12,7 @@ eza = "latest"
 ripgrep = "latest"
 hadolint = "latest"
 node = "latest"
+python = "latest"
 
 [settings]
 # for Tkinter (prebuild binaries doesn't contain GUI modules)
