@@ -2,6 +2,9 @@
 # Defaul editor
 export EDITOR=vim
 
+export LC_ALL=ja_JP.UTF-8
+export LANG=ja_JP.UTF-8
+
 #-----------------#
 # OS dependencies #
 #-----------------#
