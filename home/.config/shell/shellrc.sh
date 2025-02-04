@@ -29,7 +29,7 @@ if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
     alias pbpaste='powershell.exe Get-Clipboard'
 
     function open() {
-        if [ $# != 1 ]; then
+        if [ "$#" != 1 ]; then
             explorer.exe .
         else
             if [ -e $1 ]; then
