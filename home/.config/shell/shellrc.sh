@@ -28,7 +28,18 @@ if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
     alias pbcopy='clip.exe'
     alias pbpaste='powershell.exe Get-Clipboard'
 
-    alias open="explorer.exe"
+    function open() {
+        if [ $# != 1 ]; then
+            explorer.exe .
+        else
+            if [ -e $1 ]; then
+                explorer.exe $(wslpath -w $1) 2> /dev/null
+            else
+                echo "open: $1 : No such file or directory" 
+            fi
+        fi
+    }
+    alias open=open
 fi
 
 #---------#
