@@ -40,6 +40,10 @@ if [[ -e "$HOME/.local/bin/mise" ]]; then
     eval "$(~/.local/bin/mise activate bash)"
 fi
 
+# for Cline
+# see https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Shell-Integration-Unavailable#still-having-trouble
+[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path bash)"
+
 # z: smart completion of the path
 # shellcheck source=/dev/null
 [[ -f /usr/local/etc/profile.d/z.sh ]] &&
@@ -168,18 +172,3 @@ export SCM_CHECK=true
 # Load Bash It
 # shellcheck source=/dev/null
 source "$BASH_IT"/bash_it.sh
-
-#-------#
-# Theme #
-#-------#
-
-# # see https://qiita.com/lemtosh469/items/81919186611ac68b11c8
-# if [ $UID -eq 0 ]; then
-#     PS1="\[\033[31m\]\u@\h\[\033[00m\]:\[\033[01m\]\w\[\033[00m\]\\$ "
-# else
-#     PS1="\[\033[36m\]\u@\h\[\033[00m\]:\[\033[01m\]\w\[\033[00m\]\\$ "
-# fi
-
-# for Cline
-# see https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Shell-Integration-Unavailable#still-having-trouble
-[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
