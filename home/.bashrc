@@ -1,5 +1,5 @@
-#!/bin/bash
-#.bash_profile>.bashrc
+# #!/bin/bash
+# #.bash_profile>.bashrc
 
 #---------------#
 # common config #
@@ -15,8 +15,8 @@ fi
 #---------#
 
 # for latest bash
-# see http://bit.ly/2Sts1CU
-# see http://bit.ly/2MvLSgX
+# see https://ozuma.hatenablog.jp/entry/20141219/1418915137
+# see https://geek-techiela.blogspot.com/2014/07/shoptbash.html
 
 # no cd
 shopt -s autocd

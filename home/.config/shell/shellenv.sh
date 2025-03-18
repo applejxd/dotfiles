@@ -69,6 +69,14 @@ if [[ -e "${HOME}/.cabal" ]]; then
     export PATH="${HOME}/.cabal/bin:${PATH}"
 fi
 
+# # for TeX Live (manual)
+# # see https://www.texjp.org/install/linux.html
+# max_folder=$(find "/usr/local/texlive" -mindepth 1 -maxdepth 1 -type d | \
+#     awk -F'/' '{print $NF}' | sort -V | tail -n 1)
+# if [ -n "$max_folder" ]; then
+#     export PATH="/usr/local/texlive/${max_folder}/bin/x86_64-linux:${PATH}"
+# fi
+
 #---------------#
 # User settings #
 #---------------#
