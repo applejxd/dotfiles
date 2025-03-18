@@ -61,13 +61,6 @@ if [[ -e "${HOME}"/.cabal ]]; then
     export PATH=~/.cabal/bin:${PATH}
 fi
 
-# for YaTeX
-if [[ -e "${HOME}"/.emacs.d/private/yatex ]]; then
-    export PATH="${HOME}"/.emacs.d/private/yatex:"${PATH}"
-    export TEXINPUTS="${HOME}"/.emacs.d/private/yatex${TEXINPUTS:+:${TEXINPUTS}}
-    export BSTINPUTS="${HOME}"/.emacs.d/private/yatex${BSTINPUTS:+:${BSTINPUTS}}
-fi
-
 #-----------#
 # Japansese #
 #-----------#
