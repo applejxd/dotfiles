@@ -15,8 +15,8 @@ fi
 #---------#
 
 # for latest bash
-# cf. http://bit.ly/2Sts1CU
-# cf. http://bit.ly/2MvLSgX
+# see http://bit.ly/2Sts1CU
+# see http://bit.ly/2MvLSgX
 
 # no cd
 shopt -s autocd
@@ -173,7 +173,7 @@ source "$BASH_IT"/bash_it.sh
 # Theme #
 #-------#
 
-# # cf. https://qiita.com/lemtosh469/items/81919186611ac68b11c8
+# # see https://qiita.com/lemtosh469/items/81919186611ac68b11c8
 # if [ $UID -eq 0 ]; then
 #     PS1="\[\033[31m\]\u@\h\[\033[00m\]:\[\033[01m\]\w\[\033[00m\]\\$ "
 # else

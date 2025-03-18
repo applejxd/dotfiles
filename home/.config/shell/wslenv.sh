@@ -1,14 +1,27 @@
 #!/bin/bash
 
+#--------#
+# system #
+#--------#
+
 # Windows System
-export PATH=/mnt/c/Windows${PATH:+:${PATH}} # for explorer.exe
-export PATH=/mnt/c/Windows/System32:$PATH   # for clip.exe
+export PATH="/mnt/c/Windows${PATH:+:${PATH}}" # for explorer.exe
+export PATH="/mnt/c/Windows/System32:$PATH"   # for clip.exe
 
 # Powershell
-export PATH=/mnt/c/Windows/System32/WindowsPowerShell/v1.0:$PATH
+export PATH="/mnt/c/Windows/System32/WindowsPowerShell/v1.0:$PATH"
+
+# VSCode (for system installation)
+if [[ -e "/mnt/c/Progra~1/Microsoft VS Code" ]]; then
+    export PATH="/mnt/c/Progra~1/Microsoft VS Code/bin:$PATH"
+fi
 
 # for GPU drivers
-export LD_LIBRARY_PATH=/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+export LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+
+#-----#
+# GUI #
+#-----#
 
 # To prevent OpenGL error
 export LIBGL_ALWAYS_INDIRECT=1
@@ -26,10 +39,24 @@ if [[ -z "$DISPLAY" ]]; then
     export DISPLAY
 fi
 
-# VSCode (for system installation)
-if [[ -e /mnt/c/Progra~1/"Microsoft VS Code" ]]; then
-    export PATH=/mnt/c/Progra~1/"Microsoft VS Code"/bin:$PATH
+#-----------#
+# Japansese #
+#-----------#
+
+# see https://astherier.com/blog/2020/08/install-fcitx-mozc-on-wsl2-ubuntu2004/#
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
+export DefaultIMModule=fcitx
+
+if [[ "$SHLVL" = 1 ]]; then
+    (fcitx-autostart >/dev/null 2>&1 &)
+    xset -r 49 >/dev/null 2>&1
 fi
+
+#-----#
+# dev #
+#-----#
 
 # Java
 if [[ -e /usr/lib/jvm/java-11-openjdk-amd64 ]]; then

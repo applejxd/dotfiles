@@ -145,7 +145,7 @@ module.exports = {
     // Use Alt key as Meta key
     modifierKeys: { altIsMeta: true },
 
-    // cf. http://bit.ly/2PCAErV
+    // see http://bit.ly/2PCAErV
     overlay: {
       // ホットキー
       hotkeys: ['Control+;'],
@@ -180,7 +180,7 @@ module.exports = {
     hyperline: {
       plugins: ["ip", "memory", "cpu", "network", "spotify"]
     },
-    // cf. http://bit.ly/36gHABI
+    // see http://bit.ly/36gHABI
     pokemon: 'Snorlax',
     poketab: 'true'
   },
@@ -218,7 +218,7 @@ module.exports = {
   // to load it and avoid it being `npm install`ed
   localPlugins: [],
 
-  // cf. http://bit.ly/38t4mbn
+  // see http://bit.ly/38t4mbn
   keymaps: {
     // Example
     // 'window:devtools': 'cmd+alt+o',

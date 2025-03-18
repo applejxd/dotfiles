@@ -79,7 +79,7 @@ mise use --global -y hadolint
 #-------#
 
 # VSCode
-# cf. https://code.visualstudio.com/docs/setup/linux
+# see https://code.visualstudio.com/docs/setup/linux
 if ! (type "code" >/dev/null 2>&1); then
     echo "$password" | sudo -S apt-get install -y wget gpg
     wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor >packages.microsoft.gpg

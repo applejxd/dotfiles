@@ -43,7 +43,7 @@ if [[ ! -e /usr/local/"$cuda_major_version"."$cuda_minor_version" ]]; then
 
     if [[ ! "$(uname -r)" =~ (M|m)icrosoft ]]; then
         # Do not install any Linux display driver in WSL
-        # cf. https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch02-getting-started
+        # see https://docs.nvidia.com/cuda/wsl-user-guide/index.html#ch02-getting-started
         echo "$password" | sudo -S apt-get install -y cuda-drivers
     fi
 

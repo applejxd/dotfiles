@@ -20,7 +20,7 @@ echo "$password" | sudo -S apt-get -y upgrade
 # Install CMake 3.21.6 (for g2o and CLion supports CMake 2.8.11~3.21.x)
 
 # libncurses5-dev for ccmake
-# cf. https://stackoverflow.com/questions/28110169/update-ccmake-on-ubuntu-when-building-from-source
+# see https://stackoverflow.com/questions/28110169/update-ccmake-on-ubuntu-when-building-from-source
 echo "$password" | sudo -S apt-get install -y git build-essential libssl-dev libncurses5-dev
 mkdir -p "$HOME"/src/install
 git clone https://gitlab.kitware.com/cmake/cmake.git -b v3.21.6 "$HOME"/src/install/cmake

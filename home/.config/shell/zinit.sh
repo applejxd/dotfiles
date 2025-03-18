@@ -66,8 +66,8 @@ zinit load RyodoTanaka/.bash_extend
 # fzf #
 #-----#
 
-# cf. https://wonderwall.hatenablog.com/entry/2017/10/06/063000
-# cf. (for options) https://qiita.com/kompiro/items/a09c0b44e7c741724c80
+# see https://wonderwall.hatenablog.com/entry/2017/10/06/063000
+# see (for options) https://qiita.com/kompiro/items/a09c0b44e7c741724c80
 
 # zinit ice from"gh-r" as"program"
 # zinit load junegunn/fzf-bin

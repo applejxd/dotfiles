@@ -14,8 +14,8 @@ echo "$password" | sudo -S apt-get update
 #--------#
 
 if ! (type "docker" >/dev/null 2>&1); then
-    # cf. https://docs.docker.com/engine/install/ubuntu/
-    # cf. https://zenn.dev/sprout2000/articles/95b125e3359694
+    # see https://docs.docker.com/engine/install/ubuntu/
+    # see https://zenn.dev/sprout2000/articles/95b125e3359694
 
     # Official Onliner script
     # echo "$password" | sudo -S bash -c "$(curl -fsSL https://get.docker.com)"

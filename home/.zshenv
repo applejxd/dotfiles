@@ -2,7 +2,7 @@
 # .zshenv>.zprofile>.zshrc>.zlogin
 
 # Unable path_helper from /etc/profile
-# cf. http://karur4n.hatenablog.com/entry/2016/01/18/100000
+# see http://karur4n.hatenablog.com/entry/2016/01/18/100000
 setopt no_global_rcs
 
 if [[ -e /etc/zsh/zshrc ]]; then

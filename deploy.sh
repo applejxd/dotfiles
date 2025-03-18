@@ -35,7 +35,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     if (! type "brew" >/dev/null 2>&1); then
         # Mac OS X use bash 3.2, and process substitution is unable
         brew_script=$(mktemp)
-        # cf. https://tm.root-n.com/programming:shell_script:command:trap
+        # see https://tm.root-n.com/programming:shell_script:command:trap
         trap 'rm -f "$brew_script"' EXIT HUP INT QUIT TERM
         curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/homebrew.sh >"$brew_script"
         # shellcheck source=/dev/null
@@ -112,7 +112,7 @@ read -r -n1 -p "configure default shells? (y/N): " yn
 if [[ $yn = [yY] ]]; then
     # Mac OS X use bash 3.2, and process substitution is unable
     shell_config=$(mktemp)
-    # cf. https://tm.root-n.com/programming:shell_script:command:trap
+    # see https://tm.root-n.com/programming:shell_script:command:trap
     trap 'rm -f "$shell_config"' EXIT HUP INT QUIT TERM
     curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/shells.sh >"$shell_config"
     # shellcheck source=/dev/null

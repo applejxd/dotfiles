@@ -9,7 +9,7 @@ fi
 
 # Mac OS X use bash 3.2, and process substitution is unable
 tmp_file=$(mktemp)
-# cf. https://tm.root-n.com/programming:shell_script:command:trap
+# see https://tm.root-n.com/programming:shell_script:command:trap
 trap 'rm -f "$tmp_file"' EXIT HUP INT QUIT TERM
 
 # for x86_64 architecture
@@ -78,7 +78,7 @@ if [[ ! -e /usr/local/include/ac-library ]]; then
 fi
 
 # For LaTeX
-# cf. https://texwiki.texjp.org/?TeX%20Live%2FMac
+# see https://texwiki.texjp.org/?TeX%20Live%2FMac
 if [[ ! -e /usr/local/texlive ]]; then
     brew install mactex
     eval "$(/usr/libexec/path_helper)"

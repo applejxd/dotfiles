@@ -37,8 +37,8 @@ function switch-arch() {
 alias ls="ls -G"
 
 # Finder functions for OS X
-# cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
-# cf. https://vivafan.com/2013/03/csh-no-function/
+# see http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
+# see https://vivafan.com/2013/03/csh-no-function/
 
 # Open current directory in Finder
 alias f="open -a Finder ./"

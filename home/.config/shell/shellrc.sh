@@ -163,8 +163,8 @@ alias search="find . -type f -print0 | xargs -0 grep -n"
 #--------------------#
 
 # Search and Move to The Directory
-# cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
-# cf. http://rksz.hateblo.jp/entry/2014/10/27/201939
+# see http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
+# see http://rksz.hateblo.jp/entry/2014/10/27/201939
 function jj() {
     if [[ "$1" ]]; then
         JUMPDIR=$(find . -type d -maxdepth 1 | grep "$1" | tail -1)
@@ -177,13 +177,13 @@ function jj() {
 }
 
 # Remove empty directries up to 2 levels
-# cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
+# see http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
 function cleanup() {
     find . -type d -maxdepth 2 -empty -exec rmdir -v {} \; 2>/dev/null
     find . -type d -maxdepth 2 -empty -exec rmdir -v {} \; 2>/dev/null
 }
 
-# cf. http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
+# see http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
 function sha1() {
     echo -n "$1" | openssl sha1 | sed "s/^.* //"
 }
@@ -194,7 +194,7 @@ alias sha2="openssl passwd -6 -salt 'SALTsalt'"
 #----------------#
 
 # unarchive
-# cf. http://bit.ly/2tCOvHP
+# see http://bit.ly/2tCOvHP
 function extract() {
     case $1 in
     *.tar.gz | *.tgz) tar xzvf "$1" ;;
@@ -212,8 +212,8 @@ function extract() {
 }
 
 # compile with atcoder compile options
-# cf. https://qiita.com/matsu_chara/items/8372616f52934c657214
-# cf. https://atcoder.jp/contests/APG4b/rules?lang=ja
+# see https://qiita.com/matsu_chara/items/8372616f52934c657214
+# see https://atcoder.jp/contests/APG4b/rules?lang=ja
 function runcpp() {
     fname=$(echo "$1" | awk -F/ '{print $NF}' | awk -F. '{print $1}')
     g++ -std=gnu++17 -Wall -Wextra -O2 "$1" -o "$fname"

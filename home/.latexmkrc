@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 
-# cf. https://texwiki.texjp.org/?Latexmk
-# cf. https://qiita.com/popunbom/items/7d02fc75ad23b735d28c
+# see https://texwiki.texjp.org/?Latexmk
+# see https://qiita.com/popunbom/items/7d02fc75ad23b735d28c
 
 # OS によって実行ファイル名が異なるので、OSを判断する
 # Windows の場合

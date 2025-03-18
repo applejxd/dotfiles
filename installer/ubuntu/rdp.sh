@@ -35,7 +35,7 @@ export XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu:/etc/xdg
 EOF
 
 # to fix Authentication error
-# cf. https://god-support.blogspot.com/2019/11/ubuntu1804-xrdp-authentication-is.html
+# see https://god-support.blogspot.com/2019/11/ubuntu1804-xrdp-authentication-is.html
 if [ ! -L /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
     if [ -f /etc/polkit-1/localauthority.conf.d/02-allow-colord.conf ]; then
         echo "$password" | sudo -S mv \

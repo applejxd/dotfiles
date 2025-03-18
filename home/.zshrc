@@ -28,7 +28,7 @@ zle -N switch-arch
 #------------#
 
 # cd completion
-# cf. http://bit.ly/2ZtPPrN
+# see http://bit.ly/2ZtPPrN
 setopt auto_cd
 cdpath=(.. ~)
 function chpwd() {
@@ -40,7 +40,7 @@ function chpwd() {
 }
 
 # for glob expression
-# cf. https://qiita.com/nisaji/items/f9eede2164a74bc08db7
+# see https://qiita.com/nisaji/items/f9eede2164a74bc08db7
 setopt +o nomatch
 
 # auto pushd & no history
@@ -59,7 +59,7 @@ bindkey '^Z' fancy-ctrl-z
 # zsh history #
 #-------------#
 
-# cf. http://bit.ly/2EXlQ1S
+# see http://bit.ly/2EXlQ1S
 
 export HISTFILE=$HOME/.zsh_history
 
@@ -96,7 +96,7 @@ alias -s php='php -f'
 alias -s hs='runhaskell'
 
 # unarchive
-# cf. http://bit.ly/2tCOvHP
+# see http://bit.ly/2tCOvHP
 if type "aunpack" >/dev/null 2>&1; then
     alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
 else
@@ -104,7 +104,7 @@ else
 fi
 
 # compile
-# cf. http://bit.ly/2tCOvHP
+# see http://bit.ly/2tCOvHP
 
 alias -s {c,cc,cpp}='runcpp'
 
@@ -135,7 +135,7 @@ if [ -e $COMMON_FZF ]; then
 fi
 
 # z-fzf, emacs-like key-bindings
-# cf. http://bit.ly/2sEPZAJ
+# see http://bit.ly/2sEPZAJ
 if type "z" >/dev/null 2>&1; then
     function z-fzf() {
         local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
@@ -150,7 +150,7 @@ if type "z" >/dev/null 2>&1; then
 fi
 
 # ghq-fzf
-# cf. http://bit.ly/2MMEb6e
+# see http://bit.ly/2MMEb6e
 if type "ghq" >/dev/null 2>&1; then
     function ghq-fzf() {
         local selected_dir=$(ghq list | fzf --query="$LBUFFER")

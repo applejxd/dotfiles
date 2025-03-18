@@ -32,7 +32,7 @@ brew "ghq"
 #----------------#
 
 # BSD -> GNU
-# cf. https://qiita.com/eumesy/items/3bb39fc783c8d4863c5f
+# see https://qiita.com/eumesy/items/3bb39fc783c8d4863c5f
 brew "coreutils"
 brew "diffutils"
 brew "findutils"

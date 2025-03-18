@@ -10,7 +10,7 @@
 export FZF_CTRL_R_OPTS='--sort --exact'
 
 # search command
-# cf. https://qiita.com/kamykn/items/aa9920f07487559c0c7e
+# see https://qiita.com/kamykn/items/aa9920f07487559c0c7e
 if type "rg" >/dev/null 2>&1; then
     export FZF_DEFAULT_COMMAND=(rg --files --hidden --follow --glob "!.git/*")
 else
@@ -27,7 +27,7 @@ else
 fi
 
 # preview by tree, with color (enable Japanese)
-# cf. https://wonderwall.hatenablog.com/entry/2017/10/06/063000#--select-1---exit-0
+# see https://wonderwall.hatenablog.com/entry/2017/10/06/063000#--select-1---exit-0
 if type "tree" >/dev/null 2>&1; then
     export FZF_ALT_C_OPTS='--preview "tree -C -N {} | head -200" --select-1 --exit-0'
 else
@@ -74,7 +74,7 @@ fi
 #-----------#
 
 # fg-fzf
-# cf. http://bit.ly/39OMtEr
+# see http://bit.ly/39OMtEr
 alias fgg='_fgg'
 function _fgg() {
     wc=$(jobs | wc -l | tr -d ' ')
@@ -103,12 +103,12 @@ function fshell() {
 }
 
 function fssh() {
-    # cf. https://www.jamesridgway.co.uk/list-ssh-hosts-from-your-ssh-config/
+    # see https://www.jamesridgway.co.uk/list-ssh-hosts-from-your-ssh-config/
     name=$(grep -P "^Host ([^*]+)$" "$HOME"/.ssh/config | sed 's/Host //' | fzf)
     [ -n "$name" ] && ssh "$name"
 }
 
-# cf. http://bit.ly/37GNSLZ
+# see http://bit.ly/37GNSLZ
 if [[ "$OSTYPE" == "darwin"* ]]; then
     unmount() {
         DEVICE=$(diskutil list | grep '/dev' | cut -d ' ' -f 1 | fzf --preview 'diskutil info {}')
@@ -135,7 +135,7 @@ fi
 
 if type "git" >/dev/null 2>&1; then
     # fbr - checkout git branch
-    # cf. http://bit.ly/34zmzkt
+    # see http://bit.ly/34zmzkt
     function fbr() {
         local branches branch
         branches=$(git branch -vv) &&
@@ -144,7 +144,7 @@ if type "git" >/dev/null 2>&1; then
     }
 
     # fbrm - checkout git branch (including remote branches)
-    # cf. http://bit.ly/34zmzkt
+    # see http://bit.ly/34zmzkt
     function fbrm() {
         local branches branch
         branches=$(git branch --all | grep -v HEAD) &&
@@ -154,7 +154,7 @@ if type "git" >/dev/null 2>&1; then
     }
 
     # fshow - git commit browser
-    # cf. http://bit.ly/34zmzkt
+    # see http://bit.ly/34zmzkt
     function fshow() {
         git log --graph --color=always \
             --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
@@ -167,7 +167,7 @@ if type "git" >/dev/null 2>&1; then
     }
 
     # worktree移動
-    # cf. http://bit.ly/34zmzkt
+    # see http://bit.ly/34zmzkt
     function cdworktree() {
         # カレントディレクトリがGitリポジトリ上かどうか
         if ! (git rev-parse &>/dev/null); then
@@ -187,13 +187,13 @@ if type "git" >/dev/null 2>&1; then
     }
 
     # interactive 'diff' and 'add'
-    # cf. https://qiita.com/reviry/items/e798da034955c2af84c5
+    # see https://qiita.com/reviry/items/e798da034955c2af84c5
     function fadd() {
         local out input_key select_num selected_files
         # "out" is true except when cancel fzf selection
         # --exit-0: Exit if lenght of the list is 0
         while out=$(git status --short | awk '{if (substr($0,2,1) !~ / /) print $2}' | fzf --exit-0 --expect=ctrl-d); do
-            # Use "fzf --expect=KEY" function (cf. https://www.mankier.com/1/fzf#Options-Scripting)
+            # Use "fzf --expect=KEY" function (see https://www.mankier.com/1/fzf#Options-Scripting)
             input_key=$(echo "$out" | head -1)
             # Arithmetric Expansion
             select_num=$(($(echo "$out" | wc -l) - 1))
@@ -312,7 +312,7 @@ if type "docker" >/dev/null 2>&1; then
     }
 
     # Produce Dockerfile from image
-    # cf. https://qiita.com/RyodoTanaka/items/c7e4889a1b9383291799
+    # see https://qiita.com/RyodoTanaka/items/c7e4889a1b9383291799
     function dmkf() {
         local cid
         cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')

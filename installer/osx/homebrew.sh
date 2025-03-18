@@ -25,18 +25,18 @@ if [[ ! -e "$brew_path" ]]; then
         echo "$password" | sudo -S apt-get update -y
         echo "$password" | sudo -S apt-get upgrade -y
         # for Homebrew
-        # cf. https://docs.brew.sh/Homebrew-on-Linux
+        # see https://docs.brew.sh/Homebrew-on-Linux
         echo "$password" | sudo -S apt-get install -y build-essential curl file git
     fi
 
     # Prepare installation script
     tmp_file=$(mktemp)
-    # cf. https://tm.root-n.com/programming:shell_script:command:trap
+    # see https://tm.root-n.com/programming:shell_script:command:trap
     trap 'rm -f "$tmp_file"' EXIT HUP INT QUIT TERM
     curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh >"$tmp_file"
 
     # Install Homebrew for Mac OS X or Linux
-    # cf. https://qiita.com/ine1127/items/cd6bc91174635016db9b
+    # see https://qiita.com/ine1127/items/cd6bc91174635016db9b
     expect -c "
     set timeout -1
     spawn env LANG=C /bin/bash $tmp_file

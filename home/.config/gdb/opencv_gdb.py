@@ -1,6 +1,6 @@
 """
-cf. https://github.com/opencv/opencv/blob/4.x/samples/gdb/mat_pretty_printer.py
-cf. https://docs.opencv.org/4.5.5/d6/d25/tutorial_linux_gdb_pretty_printer.html
+see https://github.com/opencv/opencv/blob/4.x/samples/gdb/mat_pretty_printer.py
+see https://docs.opencv.org/4.5.5/d6/d25/tutorial_linux_gdb_pretty_printer.html
 """
 import gdb
 import numpy as np

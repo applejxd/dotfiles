@@ -1,7 +1,7 @@
 # brew bundle --file ./brew_mas_cask.rb
 
 # Fucntion to check whether current architechture is arm64 or not
-# cf. https://zenn.dev/mactkg/articles/71d09e350315f9
+# see https://zenn.dev/mactkg/articles/71d09e350315f9
 def is_m1?
   !RUBY_PLATFORM.index("arm64e").nil?
 end
