@@ -180,3 +180,7 @@ if [[ -e /opt/ros ]]; then
     ros_dir=$(find /opt/ros -mindepth 1 -maxdepth 1 -type d | head -n 1)
     source "${ros_dir}/setup.zsh"
 fi
+
+# for Cline
+# see https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Shell-Integration-Unavailable#still-having-trouble
+[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
