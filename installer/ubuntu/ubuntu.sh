@@ -19,9 +19,9 @@ echo "$password" | sudo -S locale-gen en_US.UTF-8
 
 # Keybinding
 gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
-# di# disable emoji shortcut
+# disable emoji shortcut
 gsettings set org.freedesktop.ibus.panel.emoji hotkey "[]"
-# use caps lock as ctrl
+# use Caps Lock as ctrl
  "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
 echo "$password" | sudo -S systemctl restart console-setup
 
@@ -48,6 +48,7 @@ fi
 eval "$(~/.local/bin/mise activate)"
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 
+# Ruby
 if ! type ruby >/dev/null 2>&1; then
     # see https://github.com/rbenv/ruby-build/wiki#ubuntudebianmint
     echo "$password" | sudo -S apt-get install -y \
@@ -58,6 +59,7 @@ if ! type ruby >/dev/null 2>&1; then
     mise use --global -y ruby@2.7.8
 fi
 
+# Python
 if ! type python >/dev/null 2>&1; then
     # see https://github.com/pyenv/pyenv/wiki#suggested-build-environment
     echo "$password" | sudo -S apt-get install -y \
@@ -67,7 +69,7 @@ if ! type python >/dev/null 2>&1; then
     mise use --global -y python@latest
 fi
 
-# https://qiita.com/arubaito/items/1fee363154b34663deea
+# see https://qiita.com/arubaito/items/1fee363154b34663deea
 mise use --global -y java@temurin
 
 mise use --global -y ghq
@@ -95,9 +97,18 @@ if ! (type "code" >/dev/null 2>&1); then
     echo "$password" | sudo -S apt install -y code
 fi
 
-# # Docker
-# # shellcheck source=/dev/null
-# echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/docker.sh)
+# WSL config
+if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
+    if [ ! -L /etc/wsl.conf ]; then
+        if [ -f /etc/wsl.conf ]; then
+            echo "$password" | sudo -S mv /etc/wsl.conf /etc/wsl.conf.bk
+        fi
+        echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/wsl.conf /etc/wsl.conf
+    fi
+fi
+
+# LaTeX
+# echo "$password" | sudo -S apt-get install -y texlive-full
 
 # # Environment Modules
 # # https://modules.readthedocs.io/en/latest/INSTALL.html
@@ -107,12 +118,6 @@ fi
 # ./configure && make -j"$(nproc)"
 # echo "$password" | sudo -S make install
 # cd "$HOME" || exit
-
-# # CUDA
-# if (type "nvidia-smi" >/dev/null 2>&1); then
-#     # shellcheck source=/dev/null
-#     echo "$password" | source <(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/cuda.sh)
-# fi
 
 # # Singularity
 # if ! (type "singularity" >/dev/null 2>&1); then
@@ -124,26 +129,6 @@ fi
 #     echo "$password" | sudo -S make -C builddir install
 #     cd .. && rm -rf singularity-ce-*
 # fi
-
-# LaTeX
-# echo "$password" | sudo -S apt-get install -y texlive-full
-
-if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
-    # WSL config
-    if [ ! -L /etc/wsl.conf ]; then
-        if [ -f /etc/wsl.conf ]; then
-            echo "$password" | sudo -S mv /etc/wsl.conf /etc/wsl.conf.bk
-        fi
-        echo "$password" | sudo -S ln -s ~/.homesick/repos/dotfiles/config/wsl.conf /etc/wsl.conf
-    fi
-
-    # if [ ! -L /opt/distrod/conf/tcp4_ports ]; then
-    #     echo "$password" | sudo -S rm /opt/distrod/conf/tcp4_ports
-    #     echo "$password" | sudo -S ln -s "$HOME"/.homesick/repos/dotfiles/config/tcp4_ports /opt/distrod/conf/tcp4_ports
-    # fi
-    # # Be careful about anti-virus softwares (will be detect portproxy.exe as virus)
-    # echo "$password" | sudo -S systemctl enable --now portproxy.service
-fi
 
 # # For AtCoder (ac-library)
 # if [[ ! -e /usr/local/include/ac-library ]]; then
