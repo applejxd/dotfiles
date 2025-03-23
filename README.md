@@ -17,6 +17,11 @@ apt update && apt install -y locales curl && locale-gen en_US.UTF-8
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/deploy.sh)"
 # Initialization
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/init.sh)"
+
+# Optional
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/personal.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/ssh.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/ubuntu/rdp.sh)"
 ```
 
 or
