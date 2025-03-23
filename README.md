@@ -9,7 +9,7 @@ Deploy settings and initialize the environment for
 
 ```shell
 # Dependencies
-sudo apt update && sudo apt install -y curl unzip && sudo locale-gen ja_JP.UTF-8
+sudo apt update && sudo apt install -y curl && sudo locale-gen ja_JP.UTF-8
 # for Docker images
 apt update && apt install -y locales curl && locale-gen en_US.UTF-8
 
