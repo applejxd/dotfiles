@@ -34,7 +34,7 @@ echo "$password" | sudo -S apt-get install -y \
     vim git unzip tree tig manpages-ja xsel xdg-utils
 
 # Security
-echo "$password" | sudo -S apt install clamav clamav-daemon
+echo "$password" | sudo -S apt-get -y install clamav clamav-daemon
 echo "$password" | sudo -S systemctl start clamav-daemon.service
 echo "$password" | sudo -S systemctl start clamav-freshclam.service
 
