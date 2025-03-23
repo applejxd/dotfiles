@@ -14,7 +14,7 @@ fi
 
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
     echo "$password" | sudo -S apt-get update
-    echo "$password" | sudo -S apt-get install -y zsh fish
+    echo "$password" | sudo -S apt-get install -y zsh fish unzip
 fi
 
 if [[ "$OSTYPE" =~ darwin ]]; then
