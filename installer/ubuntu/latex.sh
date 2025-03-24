@@ -10,7 +10,7 @@ fi
 wget https://ftp.jaist.ac.jp/pub/CTAN/systems/texlive/Images/texlive.iso -P /tmp
 
 # mount iso
-mkdir "${HOME}/instalal-tl"
+mkdir "${HOME}/install-tl"
 echo "$password" | sudo -S mount -o loop /tmp/texlive.iso "${HOME}/instalal-tl"
 
 # install
