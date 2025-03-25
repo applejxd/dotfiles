@@ -13,29 +13,29 @@ echo "$password" | sudo -S apt-get update
 # Docker #
 #--------#
 
-if ! (type "docker" >/dev/null 2>&1); then
-    # see https://docs.docker.com/engine/install/ubuntu/
-    # see https://zenn.dev/sprout2000/articles/95b125e3359694
-
+# not needed for WSL2 by Docker Desktop WSL integration
+# see https://docs.docker.jp/desktop/windows/wsl.html#wsl-2-docker
+if ! command -v docker >/dev/null 2>&1 && ! [[ "$(uname -r)" =~ microsoft ]]; then
     # Official Onliner script
-    # echo "$password" | sudo -S bash -c "$(curl -fsSL https://get.docker.com)"
+    # see https://docs.docker.com/engine/install/ubuntu/#install-using-the-convenience-script
+    echo "$password" | sudo -S bash -c "$(curl -fsSL https://get.docker.com)"
 
-    echo "$password" | sudo -S apt-get -y install ca-certificates curl gnupg lsb-release
-    # register GPG key of Docker official
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    # add stable repository
-    {
-        echo "$password"
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-    } | sudo -k -S tee /etc/apt/sources.list.d/docker.list &>/dev/null
+    # echo "$password" | sudo -S apt-get -y install ca-certificates curl gnupg lsb-release
+    # # register GPG key of Docker official
+    # curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    # # add stable repository
+    # {
+    #     echo "$password"
+    #     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+    # } | sudo -k -S tee /etc/apt/sources.list.d/docker.list &>/dev/null
 
-    echo "$password" | sudo -S apt-get update
-    echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io
+    # echo "$password" | sudo -S apt-get update
+    # echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io
 
-    # Install docker-compose v2.4.0 for gpus option
-    echo "$password" | sudo -S -E curl -L "https://github.com/docker/compose/releases/download/v2.4.0/docker-compose-$(uname -s)-$(uname -m)" \
-        -o /usr/local/bin/docker-compose
-    echo "$password" | sudo -S chmod +x /usr/local/bin/docker-compose
+    # # Install docker-compose v2.4.0 for gpus option
+    # echo "$password" | sudo -S -E curl -L "https://github.com/docker/compose/releases/download/v2.4.0/docker-compose-$(uname -s)-$(uname -m)" \
+    #     -o /usr/local/bin/docker-compose
+    # echo "$password" | sudo -S chmod +x /usr/local/bin/docker-compose
 fi
 
 #---------#

@@ -226,3 +226,6 @@ pyrightconfig.json
 home/.gitconfig
 home/.config/shell/usrenv.*
 *.pub
+
+/docs/*
+!/docs/adr/template.md
