@@ -77,7 +77,7 @@ end
 
 # "cat" cloning
 if test (which bat)
-    alias cat="bat"
+    alias cat="bat -p"
 end
 
 # "grep" cloning
