@@ -109,7 +109,7 @@ alias dirs="dirs -v"
 
 # "cat" cloning
 if type "bat" >/dev/null 2>&1; then
-    alias cat="bat"
+    alias cat="bat -p"
 fi
 
 # "cat" cloning
