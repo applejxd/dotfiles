@@ -1,0 +1,18 @@
+#!/bin/bash
+set -eu
+
+# Check if VS Code is available
+if ! command -v code >/dev/null 2>&1; then
+    echo "VS Code is not installed or not in PATH. Skipping extension installation."
+    exit 0
+fi
+
+echo "Installing VS Code extensions..."
+
+# Install extensions from init.sh
+code --install-extension harg.iceberg
+code --install-extension eamodio.gitlens
+code --install-extension mhutchie.git-graph
+code --install-extension foxundermoon.shell-format
+
+echo "VS Code extensions installed successfully."

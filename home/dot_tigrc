@@ -1,0 +1,31 @@
+# see http://bit.ly/34Lkxh5
+
+# commit ID in the left of main-view
+set main-view = id date author:email-user commit-title:graph=yes,refs=yes
+
+# enable mouse manipulations
+set mouse = true
+
+################
+# key-bindings #
+################
+
+# fetch
+bind generic F ?git fetch %(remote)
+
+# pull
+bind generic U ?git pull %(remote)
+
+# push
+bind status P ?git push -u %(remote) %(repo:head)
+
+# reset commit
+bind generic ^ ?git reset --soft HEAD^
+
+# H で reset --hard
+bind main    H      ?git reset --hard %(commit)
+bind diff    H      ?git reset --hard %(commit)
+bind refs    H      ?git reset --hard %(branch)
+
+# H で reset --hard HEAD (status-view)
+bind status  H      ?git reset --hard HEAD

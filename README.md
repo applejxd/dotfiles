@@ -1,0 +1,195 @@
+# Dotfiles
+
+chezmoi を使用した個人用 dotfiles 管理リポジトリです。Ubuntu と macOS に対応しています。
+
+## 特徴
+
+- **クロスプラットフォーム対応**: Ubuntu と macOS で動作
+- **自動セットアップ**: OS固有の依存関係を自動インストール
+- **テンプレート機能**: OS や環境に応じた設定ファイルの生成
+- **段階的実行**: 依存関係を考慮したスクリプト実行順序
+
+## クイックスタート
+
+### 1. chezmoi のインストール
+
+#### Ubuntu
+
+```bash
+sudo snap install chezmoi --classic
+```
+
+#### macOS
+
+```bash
+brew install chezmoi
+```
+
+### 2. dotfiles の初期化と適用
+
+```bash
+# リポジトリから初期化（初回のみ）
+chezmoi init applejxd
+
+# 設定ファイルを適用
+chezmoi apply
+```
+
+初回実行時にパスワードの入力を求められる場合があります（オプション）。
+
+### 3. 手動での更新
+
+```bash
+# リポジトリから最新版を取得
+chezmoi update
+
+# または段階的に
+chezmoi pull    # リポジトリから更新を取得
+chezmoi diff    # 変更内容を確認
+chezmoi apply   # 変更を適用
+```
+
+## ディレクトリ構造
+
+```txt
+.
+├── .chezmoi.toml.tmpl          # chezmoi 設定ファイル（パスワード管理）
+├── .chezmoiroot                # ルートディレクトリ指定
+├── config/                     # アプリケーション設定ファイル
+├── home/                       # ホームディレクトリ配下のファイル
+│   ├── .chezmoiscripts/        # 自動実行スクリプト
+│   └── dot_config/             # ~/.config/ 配下の設定ファイル
+├── installer/                  # OS固有のインストールスクリプト
+│   ├── osx/                    # macOS用スクリプト
+│   └── ubuntu/                 # Ubuntu用スクリプト
+└── init.sh                     # 従来の初期化スクリプト（参考用）
+```
+
+## 自動実行スクリプト
+
+chezmoi apply 実行時に以下の順序でスクリプトが自動実行されます：
+
+1. **`run_once_010_os_setup.sh.tmpl`** - OS固有の基本セットアップ
+   - Ubuntu: 基本パッケージ、mise、Python/Ruby環境、VS Code等
+   - macOS: Homebrew、GUI アプリ、開発環境等
+
+2. **`run_once_020_mise.sh`** - mise（開発ツール管理）のインストール
+
+3. **`run_onchange_030_git_globals.sh`** - Git グローバル設定のアップデート
+
+4. **`run_once_800_vscode_extensions.sh.tmpl`** - VS Code 拡張機能のインストール
+   - Iceberg テーマ
+   - GitLens
+   - Git Graph
+   - Shell Format
+
+5. **`run_once_900_shell.sh`** - デフォルトシェルを zsh に変更
+
+6. **`run_onchange_after_fetch_spacemacs.tmpl`** - Spacemacs設定の取得と更新
+
+## 対応環境
+
+### Ubuntu
+
+- Ubuntu 18.04 LTS 以降
+- 必要な権限: sudo
+
+### macOS
+
+- macOS 10.15 (Catalina) 以降
+- Homebrew が自動インストールされます
+
+## カスタマイズ
+
+### パスワード管理
+
+パスワードは以下の方法で設定できます：
+
+1. **環境変数**: `export SUDO_PASSWORD="your_password"`
+2. **対話的入力**: 初回実行時にプロンプトで入力
+3. **スキップ**: Enter キーでスキップ（手動入力が必要な場合あり）
+
+### 設定ファイルの編集
+
+```bash
+# 設定ファイルを編集
+chezmoi edit ~/.bashrc
+
+# 変更を確認
+chezmoi diff
+
+# 変更を適用
+chezmoi apply
+```
+
+### スクリプトの無効化
+
+特定のスクリプトを実行したくない場合：
+
+```bash
+# ファイル名を変更して無効化
+chezmoi edit home/.chezmoiscripts/run_once_800_vscode_extensions.sh.tmpl
+# ファイル名から .tmpl を削除するか、ファイルを削除
+```
+
+## トラブルシューティング
+
+### よくある問題
+
+#### 1. パスワード認証エラー
+
+```bash
+# 環境変数でパスワードを設定
+export SUDO_PASSWORD="your_password"
+chezmoi apply
+```
+
+#### 2. スクリプト実行権限エラー
+
+```bash
+# chezmoi の状態を確認
+chezmoi status
+
+# 強制的に再実行
+chezmoi state delete-bucket --bucket=scriptState
+chezmoi apply
+```
+
+#### 3. VS Code が見つからない
+
+VS Code がインストールされていない場合、拡張機能のインストールはスキップされます。先に VS Code をインストールしてから再実行してください。
+
+#### 4. ネットワークエラー
+
+インストールスクリプトはローカルファイルを参照するため、ネットワーク接続は主に外部パッケージのダウンロード時のみ必要です。
+
+### ログの確認
+
+```bash
+# 詳細ログで実行
+chezmoi apply --verbose
+
+# 実行状態の確認
+chezmoi status
+```
+
+## 開発者向け
+
+### テンプレート変数
+
+利用可能な chezmoi テンプレート変数：
+
+- `{{ .chezmoi.os }}` - OS名 (linux/darwin)
+- `{{ .chezmoi.homeDir }}` - ホームディレクトリパス
+- `{{ .chezmoi.sourceDir }}` - ソースディレクトリパス
+- `{{ .sudo_password }}` - sudo パスワード
+
+### 新しいスクリプトの追加
+
+1. `home/.chezmoiscripts/` にスクリプトを追加
+2. 実行順序を考慮してファイル名の番号を設定
+3. 必要に応じて `.tmpl` 拡張子を付けてテンプレート機能を使用
+
+## ライセンス
+
+MIT License

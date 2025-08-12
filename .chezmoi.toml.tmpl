@@ -1,0 +1,9 @@
+{{- $sudo_password := "" }}
+{{- if not (env "SUDO_PASSWORD") }}
+{{-   $sudo_password = promptString "sudo password (optional, press Enter to skip)" }}
+{{- else }}
+{{-   $sudo_password = env "SUDO_PASSWORD" }}
+{{- end }}
+
+[data]
+    sudo_password = "{{ $sudo_password }}"

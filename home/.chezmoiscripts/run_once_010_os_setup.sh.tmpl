@@ -1,0 +1,34 @@
+#!/bin/bash
+set -eu
+
+{{- if eq .chezmoi.os "linux" }}
+# Ubuntu setup
+if [[ -e /etc/lsb-release ]]; then
+    echo "Setting up Ubuntu dependencies..."
+    ubuntu_script="{{ .chezmoi.workingTree }}/installer/ubuntu/ubuntu.sh"
+    if [[ -f "$ubuntu_script" ]]; then
+        {{- if and (hasKey . "sudo_password") .sudo_password }}
+        bash "$ubuntu_script" "{{ .sudo_password }}"
+        {{- else }}
+        bash "$ubuntu_script"
+        {{- end }}
+    else
+        echo "Ubuntu installer script not found at $ubuntu_script"
+        exit 1
+    fi
+fi
+{{- else if eq .chezmoi.os "darwin" }}
+# macOS setup
+echo "Setting up macOS dependencies..."
+osx_script="{{ .chezmoi.workingTree }}/installer/osx/osx.sh"
+if [[ -f "$osx_script" ]]; then
+    {{- if and (hasKey . "sudo_password") .sudo_password }}
+    bash "$osx_script" "{{ .sudo_password }}"
+    {{- else }}
+    bash "$osx_script"
+    {{- end }}
+else
+    echo "macOS installer script not found at $osx_script"
+    exit 1
+fi
+{{- end }}

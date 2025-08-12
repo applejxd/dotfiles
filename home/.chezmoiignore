@@ -1,0 +1,21 @@
+# machine-specific
+dot_config/fish/fish_variables
+
+# （将来追加する場合の雛形例）
+# dot_config/nvim/plugged/**
+# dot_config/nvim/autoload/**
+# 履歴ファイル（不要）
+.zsh_history
+.bash_history
+.python_history
+
+# キャッシュ・一時
+.cache/
+.config/google-chrome/
+.config/chromium/
+
+# SSH鍵や秘密情報（別管理推奨）
+.ssh/
+
+# その他マシン固有
+.local/

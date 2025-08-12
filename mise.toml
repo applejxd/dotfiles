@@ -1,0 +1,5 @@
+[tools]
+gitleaks = "8.28.0"
+go = "latest"
+python = "latest"
+uv = "latest"
