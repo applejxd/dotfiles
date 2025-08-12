@@ -1,0 +1,17 @@
+[init]
+	defaultBranch = main
+[core]
+	editor = vim
+	ignorecase = false
+	quotepath = false
+[ghq]
+	root = ~/src
+[gitflow "branch"]
+	master = main
+[url "github:"]
+	pushInsteadOf = https://github.com/
+[credential]
+	helper = store
+[user]
+	name = {{ (bitwarden "item" "gitconfig").login.username }}
+	email = {{ (bitwardenFields "item" "gitconfig").email.value }}
