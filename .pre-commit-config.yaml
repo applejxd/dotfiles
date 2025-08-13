@@ -1,0 +1,35 @@
+repos:
+- repo: https://github.com/gitleaks/gitleaks
+  rev: v8.28.0
+  hooks:
+    - id: gitleaks
+
+- repo: local
+  hooks:
+    - id: shellcheck-local
+      name: ShellCheck via uv
+      entry: uv run shellcheck
+      language: system
+      files: \.(sh|bash)$
+      args: [--severity=warning]
+
+- repo: local
+  hooks:
+    - id: yamllint-local
+      name: YAML Lint via uv
+      entry: uv run yamllint
+      language: system
+      files: \.(yaml|yml)$
+      args: [--strict]
+
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v5.0.0
+  hooks:
+    - id: check-yaml
+      name: Check YAML syntax
+    - id: check-toml
+      name: Check TOML syntax
+    - id: end-of-file-fixer
+      name: Fix end of files
+    - id: trailing-whitespace
+      name: Trim trailing whitespace

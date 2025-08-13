@@ -6,4 +6,6 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "pre-commit>=4.3.0",
+    "shellcheck-py>=0.10.0.1",
+    "yamllint>=1.35.1",
 ]

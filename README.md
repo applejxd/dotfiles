@@ -186,6 +186,59 @@ bw sync && export BW_SESSION="$(bw unlock --raw)" && chezmoi apply
 - ageキーペアの適切な保管（秘密鍵は暗号化ストレージに保存推奨）
 - 定期的なパスワード・キーのローテーション
 
+## 開発環境のセットアップ
+
+### pre-commitの設定（新規環境）
+
+このリポジトリを新しい環境でクローンした後、以下の手順でpre-commit環境を構築できます。
+
+#### 1. miseによるツールのインストール
+
+```bash
+# miseがインストール済みの場合
+mise install
+
+# miseが未インストールの場合（chezmoi適用で自動インストール）
+chezmoi apply
+```
+
+#### 2. Python環境の構築
+
+```bash
+# uvとPythonがmiseで管理されているため自動で利用可能
+uv sync                    # 依存関係のインストール
+uv run pre-commit install  # pre-commitフックの設定
+```
+
+#### 3. 手動実行とテスト
+
+```bash
+# 全ファイルに対してpre-commitチェック実行
+uv run pre-commit run --all-files
+
+# 個別ツールの実行例
+mise exec gitleaks -- detect --source .
+uv run shellcheck installer/**/*.sh
+```
+
+#### 4. 継続的な使用
+
+```bash
+# 通常のgit操作でpre-commitが自動実行
+git add .
+git commit -m "commit message"  # pre-commitが自動実行される
+
+# 手動でのチェック
+uv run pre-commit run --all-files
+```
+
+#### 環境管理のメリット
+
+- **統一された環境管理**: mise → uv → pre-commitの一貫したツールチェーン
+- **新規環境での簡単セットアップ**: `mise install && uv sync && uv run pre-commit install`
+- **バージョン固定**: mise.tomlとuv.lockによる再現可能な環境
+- **段階的導入**: 既存環境に影響せず新規環境から適用可能
+
 ## カスタマイズ
 
 ### パスワード管理

@@ -1,123 +1,84 @@
 # Chezmoi Dotfiles Project Rules
 
-## ファイル構成ルール
+## 必須ルール
 
-### スクリプト命名規則
-- `run_once_XXX_name.sh(.tmpl)` - 一度だけ実行（インストール系）
-- `run_after_XXX_name.sh(.tmpl)` - 他のスクリプト後に実行
-- `run_onchange_XXX_name.sh(.tmpl)` - ファイル変更時に実行（設定系）
-- 番号は実行順序を表す（010, 020, 030...）
+### スクリプト命名・実行順序
+- `run_once_XXX_name.sh(.tmpl)` - 一度だけ実行
+- `run_onchange_XXX_name.sh(.tmpl)` - ファイル変更時実行
+- 番号順序: 010_os_setup → 020_mise → 030_git → 800_vscode → 900_shell
 
-### 実行順序の重要性
-現在の順序を維持すること：
-1. 010_os_setup - OS基本セットアップ（最優先）
-2. 020_mise - 開発ツール管理
-3. 030_git_globals - Git設定
-4. 800_vscode_extensions - アプリケーション設定
-5. 900_shell - シェル変更（最後）
-
-### テンプレートファイル (.tmpl)
-- OS判定やパスワード管理が必要な場合のみ使用
-- 不要な場合は通常の .sh ファイルとする
-- テンプレート変数は必ず検証すること
-
-## 実装上の注意点
-
-### chezmoi テンプレート構文
-```go
-{{- if eq .chezmoi.os "linux" }}    # Linux判定
-{{- else if eq .chezmoi.os "darwin" }}  # macOS判定
-{{- if and (hasKey . "sudo_password") .sudo_password }}  # パスワード存在確認（安全）
-{{ .chezmoi.sourceDir }}            # ソースディレクトリ参照
-```
-
-### テンプレート変数の安全な参照
-- `hasKey` 関数で変数の存在を確認してからアクセス
-- `{{- if and (hasKey . "variable_name") .variable_name }}` パターンを使用
-- 未定義変数へのアクセスエラーを防止
-
-### パスワード管理
-- `.chezmoi.toml.tmpl` でパスワードを一元管理
-- 環境変数 `SUDO_PASSWORD` を優先
-- 対話的入力はオプション扱い
-- 空パスワードでもスクリプトが動作するよう実装
-
-### ローカルファイル参照
-- `{{ .chezmoi.workingTree }}/installer/` を使用（.chezmoiroot設定時）
-- `{{ .chezmoi.sourceDir }}/installer/` は .chezmoiroot の影響を受ける
-- 外部URLではなくローカルファイルを参照
-- ファイル存在確認を必ず行う
-- 相対パスではなく絶対パス使用
-
-### .chezmoiroot の影響
-- `.chezmoiroot` が `home` の場合、`{{ .chezmoi.sourceDir }}` は `home/` 配下を指す
-- プロジェクトルートのファイルには `{{ .chezmoi.workingTree }}` を使用
-- installer/ ディレクトリはプロジェクトルートにあるため workingTree を使用
+### テンプレート使用
+- OS判定・パスワード管理時のみ .tmpl 使用
+- `hasKey` で変数存在確認: `{{- if and (hasKey . "var") .var }}`
+- パス参照: `{{ .chezmoi.workingTree }}/installer/`
 
 ### エラーハンドリング
 - `set -eu` を全スクリプトで使用
-- 重要でないコマンドは `|| true` で継続
 - ファイル存在確認後に実行
-- 明確なエラーメッセージを出力
+- 重要でないコマンドは `|| true`
 
-## セキュリティ考慮事項
+### パスワード管理
+- 環境変数 `SUDO_PASSWORD` を優先
+- 空パスワードでも動作するよう実装
+- ログに出力しない
 
-### パスワード取り扱い
-- パスワードをログに出力しない
-- 環境変数での管理を推奨
-- 空パスワードでの動作を保証
+## 開発環境
 
-### スクリプト実行権限
-- 必要最小限の権限で実行
-- sudo が必要な処理を明確に分離
-- 権限エラー時の適切な処理
+### ツールチェーン
+- **mise**: ツールバージョン管理
+- **uv**: Pythonパッケージ管理  
+- **pre-commit**: コード品質チェック
 
-## 開発・メンテナンス
+### セットアップ
+```bash
+mise install && uv sync && uv run pre-commit install
+```
 
-### 新規スクリプト追加時
-1. 実行順序を考慮した番号付け
-2. 既存スクリプトとの依存関係確認
-3. OS固有処理の場合は .tmpl 使用
-4. エラーハンドリングの実装
-5. README.md の更新
-
-### テスト・検証
-- Ubuntu と macOS での動作確認
-- パスワードあり/なしでの動作確認
-- ネットワーク接続なしでの動作確認
-- 部分実行での動作確認
-
-### ファイル編集時の注意
-- chezmoi edit コマンドを使用
-- 直接ファイル編集は避ける
-- 変更後は chezmoi diff で確認
-- テンプレート構文の検証
+### コード品質チェック
+```bash
+uv run pre-commit run --all-files
+mise exec shellcheck -- installer/**/*.sh
+mise exec gitleaks -- detect --source .
+```
 
 ## 禁止事項
-
-### やってはいけないこと
-- 外部URLへの直接依存（installer/ 内ファイルを使用）
 - パスワードのハードコーディング
-- 実行順序を無視した番号付け
+- 外部URLへの直接依存
 - エラーハンドリングなしのスクリプト
-- OS判定なしでのOS固有処理
+- 実行順序を無視した番号付け
+- 長時間実行スクリプト
+- 対話的入力必須スクリプト
 
-### 避けるべきパターン
-- 長時間実行されるスクリプト（タイムアウト考慮）
-- 対話的入力が必須のスクリプト
-- 他のスクリプトの実行結果に強く依存する処理
-- 冪等性のないスクリプト
+## クイックリファレンス
 
-## トラブルシューティング
+### 開発作業
+```bash
+# 新規環境セットアップ
+mise install && uv sync && uv run pre-commit install
+
+# ファイル編集
+chezmoi edit <ファイル>
+chezmoi diff
+chezmoi apply
+
+# 品質チェック
+uv run pre-commit run --all-files
+```
+
+### デバッグ
+- `chezmoi apply --verbose` - 詳細ログ
+- `chezmoi status` - 状態確認
+- `chezmoi diff` - 変更確認
+- `chezmoi execute-template` - テンプレートテスト
 
 ### よくある問題
-1. テンプレート構文エラー → chezmoi execute-template でテスト
-2. スクリプト実行順序の問題 → 番号の見直し
-3. パスワード認証エラー → 環境変数設定の確認
-4. ファイル参照エラー → パスの確認
+- テンプレート構文エラー → execute-template でテスト
+- パスワード認証エラー → SUDO_PASSWORD 環境変数設定
+- ファイル参照エラー → パス確認
+- スクリプト実行順序問題 → 番号見直し
 
-### デバッグ方法
-- `chezmoi apply --verbose` で詳細ログ
-- `chezmoi status` で状態確認
-- `chezmoi diff` で変更内容確認
-- 個別スクリプトの手動実行でテスト
+### テンプレート構文例
+```go
+{{- if eq .chezmoi.os "linux" }}    # Linux判定
+{{- else if eq .chezmoi.os "darwin" }}  # macOS判定
+{{- if and (hasKey . "sudo_password") .sudo_password }}  # 安全な変数参照
