@@ -1,6 +1,6 @@
 [tools]
 gitleaks = "8.28.0"
 go = "latest"
-python = "latest"
-uv = "latest"
-shellcheck = "latest"
+python = "3.13.6"
+uv = "0.8.8"
+shellcheck = "0.11.0"
