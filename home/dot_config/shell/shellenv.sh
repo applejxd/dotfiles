@@ -33,7 +33,7 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
     # for x11 forwarding of chromium
     # from https://qiita.com/kairi003/items/003c4a615317049e5b85
     export XAUTHORITY="${HOME}/.Xauthority"
-    
+
     if [[ -e "${HOME}/.local/share/JetBrains/Toolbox/scripts" ]]; then
         export PATH="${HOME}/.local/share/JetBrains/Toolbox/scripts:${PATH}"
     fi
@@ -76,7 +76,7 @@ if [[ -e "${HOME}/.cabal" ]]; then
 fi
 
 # for TeX Live (local)
-if [ -n "${HOME}/.texlive" ]; then
+if [ -d "${HOME}/.texlive" ]; then
     export PATH="${HOME}/.texlive/main/bin/x86_64-linux:${PATH}"
     export MANPATH="${HOME}/.texlive/main/texmf-dist/doc/man${MANPATH:+:${MANPATH}}"
     export INFOPATH="${HOME}/.texlive/main/texmf-dist/doc/info${INFOPATH:+:${INFOPATH}}"

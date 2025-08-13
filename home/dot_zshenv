@@ -21,8 +21,8 @@ fi
 # fi
 
 SHELL_CONF=$HOME/.config/shell
-if [ -e $SHELL_CONF/zinit.sh ]; then
-    source $SHELL_CONF/zinit.sh
+if [ -e $SHELL_CONF/zinit.zsh ]; then
+    source $SHELL_CONF/zinit.zsh
 fi
 
 #-----------------------#

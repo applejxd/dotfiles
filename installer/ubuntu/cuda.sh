@@ -71,7 +71,7 @@ if (command -v "docker" >/dev/null 2>&1) && [[ "$(uname -r)" =~ microsoft ]]; th
         echo "$ID""$VERSION_ID"
     )
 
-    { 
+    {
         echo "$password"
         curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
     } | sudo -k -S gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg

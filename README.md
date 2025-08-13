@@ -112,7 +112,7 @@ chezmoi apply 実行時に以下の順序でスクリプトが自動実行され
    ```bash
    # Ubuntu
    sudo snap install bw
-   
+
    # macOS
    brew install bitwarden-cli
    ```
@@ -120,10 +120,10 @@ chezmoi apply 実行時に以下の順序でスクリプトが自動実行され
 2. **Bitwardenアイテムの作成**
    ```bash
    bw login
-   
+
    # 最新データを同期
    bw sync
-   
+
    # Login itemを作成（名前: gitconfig）
    # Username: [GitHubユーザー名]
    # Custom Fields:
@@ -134,13 +134,13 @@ chezmoi apply 実行時に以下の順序でスクリプトが自動実行され
    ```bash
    # Bitwardenにログイン
    bw login
-   
+
    # データを同期（重要！）
    bw sync
-   
+
    # セッション開始
    export BW_SESSION="$(bw unlock --raw)"
-   
+
    # 設定ファイル適用
    chezmoi apply
    ```
@@ -167,7 +167,7 @@ bw sync && export BW_SESSION="$(bw unlock --raw)" && chezmoi apply
    ```bash
    # 手動復号化
    age --decrypt -i ~/.config/age/key.txt home/encrypted_dot_claude.json.age > ~/.claude.json
-   
+
    # またはchezmoiが自動的に復号化（ageキーが設定済みの場合）
    chezmoi apply
    ```
@@ -176,7 +176,7 @@ bw sync && export BW_SESSION="$(bw unlock --raw)" && chezmoi apply
    ```bash
    # 公開鍵で暗号化
    age --encrypt -R ~/.config/age/public_key.txt input.json > encrypted_file.age
-   
+
    # chezmoiに追加
    chezmoi add --encrypt encrypted_file
    ```

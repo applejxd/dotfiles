@@ -55,7 +55,7 @@ else
     #------------------#
     # Rootless Dockerd #
     #------------------#
-    
+
     # https://docs.docker.com/engine/security/rootless/
     # https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
 

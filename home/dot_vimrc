@@ -12,7 +12,7 @@ set background=dark
 colorscheme iceberg
 
 " syntax highlight
-syntax on 
+syntax on
 " for Dockerfile extension
 autocmd BufNewFile,BufRead *.dockerfile set filetype=dockerfile
 

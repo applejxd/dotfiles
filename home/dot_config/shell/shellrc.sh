@@ -33,9 +33,9 @@ if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
             explorer.exe .
         else
             if [ -e $1 ]; then
-                explorer.exe $(wslpath -w $1) 2> /dev/null
+                explorer.exe "$(wslpath -w "$1")" 2> /dev/null
             else
-                echo "open: $1 : No such file or directory" 
+                echo "open: $1 : No such file or directory"
             fi
         fi
     }

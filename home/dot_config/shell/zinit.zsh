@@ -57,7 +57,7 @@ zinit ice pick"docker-fzf.zsh"
 zinit load mnowotnik/docker-fzf-completion
 
 zinit ice pick'docker-fzf'
-zinit load MartinRamm/fzf-docker 
+zinit load MartinRamm/fzf-docker
 
 zinit ice as"program" pick"dfimage.bash"
 zinit load RyodoTanaka/.bash_extend
@@ -94,7 +94,7 @@ zinit load RyodoTanaka/.bash_extend
 # export ENHANCD_COMMAND=ecd
 
 # zinit ice from"gh-r" as"program" pick"ghq_*/ghq"
-# zinit load x-motemen/ghq  
+# zinit load x-motemen/ghq
 
 # # cannot be installed?
 # zinit ice as"program" make"install prefix=$ZPFX"
