@@ -77,15 +77,15 @@ if ! type python >/dev/null 2>&1; then
         build-essential libssl-dev zlib1g-dev \
         libbz2-dev libreadline-dev libsqlite3-dev curl git \
         libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
-    mise use --global -y python@latest
+    mise install python@latest
 fi
 
 # see https://qiita.com/arubaito/items/1fee363154b34663deea
-mise use --global -y java@temurin
+mise install java@temurin
 
-mise use --global -y ghq
-mise use --global -y shellcheck
-mise use --global -y hadolint
+mise install ghq
+mise install shellcheck
+mise install hadolint
 
 #-------#
 # tools #
@@ -95,13 +95,9 @@ mise use --global -y hadolint
 # see https://code.visualstudio.com/docs/setup/linux
 if ! (type "code" >/dev/null 2>&1); then
     echo "$password" | sudo -S apt-get install -y wget gpg
-    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor >packages.microsoft.gpg
-    echo "$password" | sudo -S install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
-    {
-        echo "$password"
-        echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main"
-    } | sudo -k -S tee /etc/apt/sources.list.d/vscode.list >/dev/null
-    rm -f packages.microsoft.gpg
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/microsoft.gpg
+    echo "$password" | sudo -S install -D -o root -g root -m 644 /tmp/microsoft.gpg /usr/share/keyrings/microsoft.gpg
+    rm -f /tmp/microsoft.gpg
 
     echo "$password" | sudo -S apt-get install -y apt-transport-https
     echo "$password" | sudo -S apt update
@@ -109,16 +105,14 @@ if ! (type "code" >/dev/null 2>&1); then
 fi
 
 # WSL config
-{{- if eq .chezmoi.os "linux" }}
-{{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
-if [ ! -L /etc/wsl.conf ]; then
-    if [ -f /etc/wsl.conf ]; then
-        echo "$password" | sudo -S mv /etc/wsl.conf /etc/wsl.conf.bk
+if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
+    if [ ! -L /etc/wsl.conf ]; then
+        if [ -f /etc/wsl.conf ]; then
+            echo "$password" | sudo -S mv /etc/wsl.conf /etc/wsl.conf.bk
+        fi
+        echo "$password" | sudo -S ln -s ~/config/wsl.conf /etc/wsl.conf
     fi
-    echo "$password" | sudo -S ln -s {{ .chezmoi.workingTree }}/config/wsl.conf /etc/wsl.conf
 fi
-{{-   end }}
-{{- end }}
 
 # LaTeX
 # echo "$password" | sudo -S apt-get install -y texlive-full
