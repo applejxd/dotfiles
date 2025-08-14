@@ -1,9 +1,5 @@
-{{- $sudo_password := "" }}
-{{- if not (env "SUDO_PASSWORD") }}
-{{-   $sudo_password = promptString "sudo password (optional, press Enter to skip)" }}
-{{- else }}
-{{-   $sudo_password = env "SUDO_PASSWORD" }}
-{{- end }}
+# see https://www.chezmoi.io/user-guide/setup/#create-a-config-file-on-a-new-machine-automatically
+# test cmd: `chezmoi execute-template --init < ~/.local/share/chezmoi/.chezmoi.toml.tmpl`
 
 {{- $http_proxy := env "http_proxy" }}
 {{- $https_proxy := env "https_proxy" }}
@@ -12,8 +8,29 @@
 {{-   $no_proxy = env "no_proxy" }}
 {{- end }}
 
+# see https://www.chezmoi.io/reference/templates/bitwarden-functions/#automatic-bitwarden-cli-unlock
+bitwarden.unlock = "auto"
+# see https://www.chezmoi.io/user-guide/encryption/age/
+encryption = "age"
+
+# see https://www.chezmoi.io/user-guide/tools/editor/
+[edit]
+    command = "code"
+    args = ["--wait"]
+
+# see https://www.chezmoi.io/user-guide/tools/merge/#use-vscode-as-the-merge-tool
+[merge]
+command = "bash"
+args = [
+    "-c",
+    "cp {{ "{{ .Target }}" }} {{ "{{ .Target }}" }}.base && code --new-window --wait --merge {{ "{{ .Destination }}" }} {{ "{{ .Target }}" }} {{ "{{ .Target }}" }}.base {{ "{{ .Source }}" }}",
+]
+
+[age]
+    identity = "~/.ssh/chezmoi"
+		symmetric = true
+
 [data]
-    sudo_password = "{{ $sudo_password }}"
 {{- if $http_proxy }}
     http_proxy = "{{ $http_proxy }}"
 {{- end }}

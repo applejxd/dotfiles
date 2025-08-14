@@ -1,11 +1,30 @@
 #!/bin/bash
 
-if [ $# -eq 0 ]; then
-    # save password
-    read -rsp "Password: " password
-else
-    password="$1"
+set -eu
+
+# Common function to get sudo password securely
+get_sudo_password() {
+    if [[ -n "${SUDO_PASSWORD:-}" ]]; then
+        echo "Using SUDO_PASSWORD from environment for automation" >&2
+        echo "$SUDO_PASSWORD"
+    else
+        echo "This script requires sudo privileges for system setup." >&2
+        read -s -p "Enter sudo password: " password
+        echo >&2  # newline
+        echo "$password"
+    fi
+}
+
+# Get password securely
+password=$(get_sudo_password)
+
+# Validate password by testing sudo access
+if ! echo "$password" | sudo -S true 2>/dev/null; then
+    echo "ERROR: Invalid sudo password" >&2
+    exit 1
 fi
+
+echo "Starting macOS system setup..." >&2
 
 # Mac OS X use bash 3.2, and process substitution is unable
 tmp_file=$(mktemp)

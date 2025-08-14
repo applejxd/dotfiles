@@ -1,11 +1,30 @@
 #!/bin/bash
 
-if [ $# -eq 0 ]; then
-    # Save Password
-    read -rsp "Password: " password
-else
-    password=$1
+set -eu
+
+# Common function to get sudo password securely
+get_sudo_password() {
+    if [[ -n "${SUDO_PASSWORD:-}" ]]; then
+        echo "Using SUDO_PASSWORD from environment for automation" >&2
+        echo "$SUDO_PASSWORD"
+    else
+        echo "This script requires sudo privileges for system setup." >&2
+        read -s -p "Enter sudo password: " password
+        echo >&2  # 改行
+        echo "$password"
+    fi
+}
+
+# Get password securely
+password=$(get_sudo_password)
+
+# Validate password by testing sudo access
+if ! echo "$password" | sudo -S true 2>/dev/null; then
+    echo "ERROR: Invalid sudo password" >&2
+    exit 1
 fi
+
+echo "Starting Ubuntu system setup..." >&2
 
 # Refresh
 echo "$password" | sudo -S apt-get -y update && apt-get -y upgrade
@@ -22,7 +41,7 @@ gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
 # disable emoji shortcut
 gsettings set org.freedesktop.ibus.panel.emoji hotkey "[]"
 # use Caps Lock as ctrl
- "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
+echo "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
 echo "$password" | sudo -S systemctl restart console-setup
 
 # Known folders
