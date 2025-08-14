@@ -12,8 +12,8 @@
 	pushInsteadOf = https://github.com/
 [credential]
 	helper = store
-{{ if eq .chezmoi.username "applejxd" }}
+{{- if eq .chezmoi.username "applejxd" }}
 [user]
 	name = {{ (bitwarden "item" "gitconfig").login.username }}
 	email = {{ (bitwardenFields "item" "gitconfig").email.value }}
-{{ end }}
+{{- end }}

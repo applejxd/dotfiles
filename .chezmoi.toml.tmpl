@@ -5,5 +5,19 @@
 {{-   $sudo_password = env "SUDO_PASSWORD" }}
 {{- end }}
 
+{{- $http_proxy := env "http_proxy" }}
+{{- $https_proxy := env "https_proxy" }}
+{{- $no_proxy := "localhost,127.0.0.1,::1,.local" }}
+{{- if env "no_proxy" }}
+{{-   $no_proxy = env "no_proxy" }}
+{{- end }}
+
 [data]
     sudo_password = "{{ $sudo_password }}"
+{{- if $http_proxy }}
+    http_proxy = "{{ $http_proxy }}"
+{{- end }}
+{{- if $https_proxy }}
+    https_proxy = "{{ $https_proxy }}"
+{{- end }}
+    no_proxy = "{{ $no_proxy }}"

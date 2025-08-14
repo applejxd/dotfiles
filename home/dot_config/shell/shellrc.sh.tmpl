@@ -4,8 +4,8 @@
 # OS dependencies #
 #-----------------#
 
-{{ if eq .chezmoi.os "linux" }}
-{{   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
+{{- if eq .chezmoi.os "linux" }}
+{{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
 # WSL
 alias pbcopy='clip.exe'
 alias pbpaste='powershell.exe Get-Clipboard'
@@ -22,19 +22,19 @@ function open() {
     fi
 }
 alias open=open
-{{   else }}
+{{-   else }}
 alias pbcopy='xsel --clipboard --input'
 alias pbpaste='xsel --clipboard --output'
 alias open="xdg-open"
-{{   end }}
+{{-   end }}
 alias ls="ls --color=auto"
-{{ end }}
+{{- end }}
 
-{{ if eq .chezmoi.os "darwin" }}
+{{- if eq .chezmoi.os "darwin" }}
 # macOS
 # shellcheck source=/dev/null
 source "${HOME}/.config/shell/osxrc.sh"
-{{ end }}
+{{- end }}
 
 #---------#
 # Install #
@@ -71,11 +71,11 @@ if ! type "eza" >/dev/null 2>&1; then
     ~/.local/bin/mise use --global -y eza
 fi
 
-{{ if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") }}
+{{- if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") }}
 if ! type "rg" >/dev/null 2>&1; then
     ~/.local/bin/mise use --global -y ripgrep
 fi
-{{ end }}
+{{- end }}
 
 # iceberg theme for vim
 if type "ghq" >/dev/null 2>&1; then
@@ -97,10 +97,10 @@ fi
 # The default options of "less" command
 export LESS="-iMR -gSW -z-4 -x4"
 
-{{ if eq .chezmoi.os "linux" }}
+{{- if eq .chezmoi.os "linux" }}
 # X11 forwarding
 alias ssh="ssh -X"
-{{ end }}
+{{- end }}
 
 # with number: -v
 alias dirs="dirs -v"
