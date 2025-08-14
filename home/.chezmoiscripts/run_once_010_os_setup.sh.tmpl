@@ -14,7 +14,7 @@ if [[ -e /etc/lsb-release ]]; then
 fi
 {{- else if eq .chezmoi.os "darwin" }}
 # macOS setup
-osx_script="{{ .chezmoi.workingTree }}/installer/osx/osx.sh"
+osx_script="{{ .chezmoi.workingTree }}/installer/osx/osx.sh.tmpl"
 if [[ -f "$osx_script" ]]; then
     bash "$osx_script"
 else

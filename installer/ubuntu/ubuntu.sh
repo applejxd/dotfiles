@@ -9,7 +9,7 @@ get_sudo_password() {
         echo "$SUDO_PASSWORD"
     else
         echo "This script requires sudo privileges for system setup." >&2
-        read -s -p "Enter sudo password: " password
+        read -rs -p "Enter sudo password: " password
         echo >&2  # 改行
         echo "$password"
     fi
