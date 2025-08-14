@@ -4,62 +4,56 @@
 # OS dependencies #
 #-----------------#
 
-# Ubuntu
-if [[ -e /etc/lsb-release ]]; then
-    alias open="xdg-open"
-fi
-
-# Linux
-if [[ "$OSTYPE" == "linux-gnu" ]]; then
-    alias ls="ls --color=auto"
-
-    alias pbcopy='xsel --clipboard --input'
-    alias pbpaste='xsel --clipboard --output'
-fi
-
-# Mac OS X
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # shellcheck source=/dev/null
-    source "$HOME"/.config/shell/osxrc.sh
-fi
-
+{{ if eq .chezmoi.os "linux" }}
+{{   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
 # WSL
-if [[ "$(uname -r)" =~ (M|m)icrosoft ]]; then
-    alias pbcopy='clip.exe'
-    alias pbpaste='powershell.exe Get-Clipboard'
+alias pbcopy='clip.exe'
+alias pbpaste='powershell.exe Get-Clipboard'
 
-    function open() {
-        if [ "$#" != 1 ]; then
-            explorer.exe .
+function open() {
+    if [ "$#" != 1 ]; then
+        explorer.exe .
+    else
+        if [ -e $1 ]; then
+            explorer.exe "$(wslpath -w "$1")" 2> /dev/null
         else
-            if [ -e $1 ]; then
-                explorer.exe "$(wslpath -w "$1")" 2> /dev/null
-            else
-                echo "open: $1 : No such file or directory"
-            fi
+            echo "open: $1 : No such file or directory"
         fi
-    }
-    alias open=open
-fi
+    fi
+}
+alias open=open
+{{   else }}
+alias pbcopy='xsel --clipboard --input'
+alias pbpaste='xsel --clipboard --output'
+alias open="xdg-open"
+{{   end }}
+alias ls="ls --color=auto"
+{{ end }}
+
+{{ if eq .chezmoi.os "darwin" }}
+# macOS
+# shellcheck source=/dev/null
+source "${HOME}/.config/shell/osxrc.sh"
+{{ end }}
 
 #---------#
 # Install #
 #---------#
 
 # z
-if ! type "z" >/dev/null 2>&1 && [ ! -e "$HOME"/.z ]; then
-    git clone --depth 1 https://github.com/rupa/z.git "$HOME"/.z
+if ! type "z" >/dev/null 2>&1 && [ ! -e "${HOME}/.z" ]; then
+    git clone --depth 1 https://github.com/rupa/z.git "${HOME}/.z"
 fi
-export _Z_DATA="$HOME"/.z/.z
+export _Z_DATA="${HOME}/.z/.z"
 # shellcheck source=/dev/null
-source "$HOME"/.z/z.sh
+source "${HOME}/.z/z.sh"
 
 # mise
-if [[ ! -e "$HOME/.local/bin/mise" ]]; then
+if [[ ! -e "${HOME}/.local/bin/mise" ]]; then
     curl https://mise.run | sh
 fi
 # eval "$(~/.local/bin/mise activate)"
-export PATH="$HOME/.local/share/mise/shims:$PATH"
+export PATH="${HOME}/.local/share/mise/shims:$PATH"
 
 if ! type "fzf" >/dev/null 2>&1; then
     ~/.local/bin/mise use --global -y fzf@0.53.0
@@ -77,9 +71,11 @@ if ! type "eza" >/dev/null 2>&1; then
     ~/.local/bin/mise use --global -y eza
 fi
 
-if (! type "rg" >/dev/null 2>&1) && [[ "$(uname -m)" == "x86_64" ]]; then
+{{ if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") }}
+if ! type "rg" >/dev/null 2>&1; then
     ~/.local/bin/mise use --global -y ripgrep
 fi
+{{ end }}
 
 # iceberg theme for vim
 if type "ghq" >/dev/null 2>&1; then
@@ -87,10 +83,10 @@ if type "ghq" >/dev/null 2>&1; then
         ghq get https://github.com/cocopon/iceberg.vim.git
     fi
     if [[ ! -e $HOME/.vim/colors ]]; then
-        mkdir -p "$HOME"/.vim/colors
+        mkdir -p "${HOME}/.vim/colors"
     fi
     if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
-        ln -s "$GHQ_ROOT"/github.com/cocopon/iceberg.vim/colors/iceberg.vim "$HOME"/.vim/colors/iceberg.vim
+        ln -s "${GHQ_ROOT}/github.com/cocopon/iceberg.vim/colors/iceberg.vim" "${HOME}/.vim/colors/iceberg.vim"
     fi
 fi
 
@@ -101,8 +97,10 @@ fi
 # The default options of "less" command
 export LESS="-iMR -gSW -z-4 -x4"
 
+{{ if eq .chezmoi.os "linux" }}
 # X11 forwarding
 alias ssh="ssh -X"
+{{ end }}
 
 # with number: -v
 alias dirs="dirs -v"
