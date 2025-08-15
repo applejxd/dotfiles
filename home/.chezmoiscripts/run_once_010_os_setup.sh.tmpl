@@ -1,3 +1,5 @@
+# run again: `chezmoi state delete-bucket --bucket=scriptState`
+# see https://www.chezmoi.io/user-guide/use-scripts-to-perform-actions/#clear-the-state-of-all-run_onchange_-and-run_once_-scripts
 #!/bin/bash
 set -eu
 
@@ -6,7 +8,7 @@ set -eu
 if [[ -e /etc/lsb-release ]]; then
     ubuntu_script="{{ .chezmoi.workingTree }}/installer/ubuntu/ubuntu.sh"
     if [[ -f "$ubuntu_script" ]]; then
-        bash "$ubuntu_script"
+        bash -i "$ubuntu_script"
     else
         echo "Ubuntu installer script not found at $ubuntu_script"
         exit 1
@@ -16,7 +18,7 @@ fi
 # macOS setup
 osx_script="{{ .chezmoi.workingTree }}/installer/osx/osx.sh.tmpl"
 if [[ -f "$osx_script" ]]; then
-    bash "$osx_script"
+    bash -i "$osx_script"
 else
     echo "macOS installer script not found at $osx_script"
     exit 1
