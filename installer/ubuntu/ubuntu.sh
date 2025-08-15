@@ -72,7 +72,7 @@ if [[ ! -e "${HOME}/.local/bin/mise" ]]; then
     curl https://mise.run | sh
 fi
 # Temporary activation for current script session
-eval "$(~/.local/bin/mise activate)"
+eval "$(mise activate --shims)"
 
 echo "Installing mise packages..." >&2
 

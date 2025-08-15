@@ -1,7 +1,8 @@
+#!/bin/bash
 # run again: `chezmoi state delete-bucket --bucket=scriptState`
 # see https://www.chezmoi.io/user-guide/use-scripts-to-perform-actions/#clear-the-state-of-all-run_onchange_-and-run_once_-scripts
-#!/bin/bash
-set -eu
+
+set -euo pipefail
 
 {{- if eq .chezmoi.os "linux" }}
 # Ubuntu setup
