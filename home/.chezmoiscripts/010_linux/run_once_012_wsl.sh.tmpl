@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -euo pipefail
+
+{{ template "get_sudo_password.sh.tmpl" . }}
+
+echo "Setting up WSL configuration..." >&2
+
+# WSL config
+if [ ! -f /etc/wsl.conf ]; then
+    # Write WSL config directly with heredoc
+    sudo tee /etc/wsl.conf > /dev/null << 'EOF'
+[automount]
+options = "metadata"
+enabled = true
+
+[interop]
+appendWindowsPath = false
+
+[boot]
+systemd=true
+
+[user]
+default={{ .chezmoi.username }}
+EOF
+    
+    echo "✓ WSL configuration applied successfully. Restart WSL to take effect." >&2
+else
+    echo "✓ WSL configuration already exists, skipping." >&2
+fi

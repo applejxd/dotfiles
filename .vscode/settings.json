@@ -1,6 +1,6 @@
 {
     "files.associations": {
-        "*.tmpl": "go"
+        "*.sh.tmpl": "shellscript"
     },
     "python-envs.pythonProjects": []
 }

@@ -1,0 +1,45 @@
+#!/bin/bash
+
+set -euo pipefail
+
+{{ template "get_sudo_password.sh.tmpl" . }}
+
+# Refresh
+echo "Starting Ubuntu system setup..." >&2
+echo "$password" | sudo -S apt-get -y update && sudo -S apt-get -y upgrade
+
+#--------#
+# config #
+#--------#
+
+# locale 対策
+echo "Setting locale to en_US.UTF-8..." >&2
+echo "$password" | sudo -S locale-gen en_US.UTF-8
+
+# Keybinding
+echo "Setting keybindings..." >&2
+gsettings set org.gnome.desktop.interface gtk-key-theme Emacs
+# disable emoji shortcut
+if gsettings list-schemas | grep -q '^org.freedesktop.ibus.panel.emoji$'; then
+    gsettings set org.freedesktop.ibus.panel.emoji hotkey "[]"
+fi
+
+# use Caps Lock as ctrl
+echo "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
+echo "$password" | sudo -S systemctl restart console-setup
+
+# Known folders
+echo "Setting up known folders..." >&2
+LANG=C xdg-user-dirs-update --force
+rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュメント ミュージック ピクチャ ビデオ
+
+# Basics
+echo "Installing basic packages..." >&2
+echo "$password" | sudo -S apt-get install -y \
+    vim git unzip tree tig manpages-ja xsel xdg-utils
+
+# Security
+echo "Installing security tools..." >&2
+echo "$password" | sudo -S apt-get -y install clamav clamav-daemon
+echo "$password" | sudo -S systemctl start clamav-daemon.service
+echo "$password" | sudo -S systemctl start clamav-freshclam.service

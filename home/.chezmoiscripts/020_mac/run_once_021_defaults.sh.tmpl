@@ -1,11 +1,8 @@
 #!/bin/bash
 
-if [ $# -eq 0 ]; then
-    # save password
-    read -rsp "Password: " password
-else
-    password=$1
-fi
+set -euo pipefail
+
+{{ template "get_sudo_password.sh.tmpl" . }}
 
 # 起動時の音をミュート
 echo "$password" | sudo -S nvram StartupMute=%01

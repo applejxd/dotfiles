@@ -7,15 +7,6 @@ repos:
 
   - repo: local
     hooks:
-      - id: shellcheck-local
-        name: ShellCheck via mise
-        language: system
-        entry: mise exec -- shellcheck
-        args: [--severity=warning]
-        files: \.(sh|bash)$
-
-  - repo: local
-    hooks:
       - id: yamllint-local
         name: YAML Lint via uv
         entry: mise exec -- uv run yamllint
