@@ -19,3 +19,7 @@ config/wsl.conf
 .config/chezmoi/key.txt.tmpl
 encrypted_dot_claude.json
 {{- end }}
+
+{{- if not (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
+encrypted_dot_claude.json
+{{- end }}
