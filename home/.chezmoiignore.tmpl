@@ -14,3 +14,8 @@ config/wsl.conf
 .config/shell/osxenv.sh
 .config/shell/osxrc.sh
 {{- end }}
+
+{{- if ne .chezmoi.username "applejxd" }}
+.config/chezmoi/key.txt.tmpl
+encrypted_dot_claude.json
+{{- end }}
