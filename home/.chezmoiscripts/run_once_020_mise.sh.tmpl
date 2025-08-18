@@ -9,7 +9,7 @@ if [[ ! -e "${HOME}/.local/bin/mise" ]]; then
     curl https://mise.run | sh
 fi
 # Temporary activation for current script session
-eval "$(mise activate --shims)"
+eval "$("${HOME}/.local/bin/mise" activate --shims)"
 
 echo "Installing mise packages..." >&2
 
@@ -27,6 +27,7 @@ if ! type python >/dev/null 2>&1; then
     
     echo "Installing Python via mise..." >&2
     mise install python@latest
+    mise install uv@latest
 fi
 
 # Development tools via mise
@@ -37,6 +38,5 @@ echo "Installing Java (Temurin)..." >&2
 mise install java@temurin
 
 echo "Installing development tools..." >&2
-mise install ghq@latest
 mise install shellcheck@latest
 mise install hadolint@latest

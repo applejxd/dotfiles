@@ -38,8 +38,10 @@ echo "Installing basic packages..." >&2
 echo "$password" | sudo -S apt-get install -y \
     vim git unzip tree tig manpages-ja xsel xdg-utils
 
+{{- if ne .chezmoi.username "applejxd" }}
 # Security
 echo "Installing security tools..." >&2
 echo "$password" | sudo -S apt-get -y install clamav clamav-daemon
 echo "$password" | sudo -S systemctl start clamav-daemon.service
 echo "$password" | sudo -S systemctl start clamav-freshclam.service
+{{- end }}

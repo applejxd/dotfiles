@@ -16,8 +16,9 @@ config/wsl.conf
 {{- end }}
 
 {{- if ne .chezmoi.username "applejxd" }}
-.config/chezmoi/key.txt.tmpl
+.config/chezmoi/key.txt
 .claude.json
+.chezmoiscripts/fetch_spacemacs.sh
 {{- end }}
 
 {{- if not (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
