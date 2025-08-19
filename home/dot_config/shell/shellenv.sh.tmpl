@@ -1,14 +1,25 @@
 #!/bin/bash
 
 # Default editor
-export EDITOR=vim
+if command -v nvim >/dev/null 2>&1; then
+  alias vi='nvim'
+  alias vim='nvim'
+  export EDITOR=nvim
+elif command -v vim >/dev/null 2>&1; then
+  alias vi='vim'
+  export EDITOR=vim
+else
+  alias vi='vi'
+  export EDITOR=vi
+fi
+export VISUAL="$EDITOR"
 
 # for Open3D visualizer
 export LIBGL_ALWAYS_INDIRECT=0
 
-#-----------#
+#----------#
 # Japanese #
-#-----------#
+#----------#
 
 export LC_ALL=ja_JP.UTF-8
 export LANG=ja_JP.UTF-8
