@@ -1,13 +1,15 @@
-# ~/.tmuxp/proj.yaml
+# see https://tmuxp.git-pull.com/configuration/examples.html
 session_name: proj
 windows:
   - window_name: dev
-    start_directory: .          # 現在のフォルダで開始
-    layout: main-horizontal     # 上が大、下が横並び
+    layout: main-horizontal # 上が大、下が横並び
     options:
-      main-pane-height: 30      # 上ペインの高さ（行数）。好みで調整
+      main-pane-height: 30  # 上ペインの高さ（行数）。好みで調整
+    focus: true
     panes:
-      - nvim                    # 上（大）: Vim
-      - bash                    # 左下: シェル
-      - uv run pytest -q || true  # 右下: pytest（失敗しても起動は続行）
-
+      - shell_command:
+          - nvim .
+        focus: true
+      - zsh     
+      - zsh
+    start_directory: "${PWD}"  # 現在のフォルダで開始
