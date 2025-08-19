@@ -36,7 +36,8 @@ rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュ
 # Basics
 echo "Installing basic packages..." >&2
 echo "$password" | sudo -S apt-get install -y \
-    vim git unzip tree tig manpages-ja xsel xdg-utils
+    vim neovim git unzip tree tig \
+    tmux python3-tmuxp manpages-ja xsel xdg-utils
 
 {{- if eq .chezmoi.username "applejxd" }}
 # Security
