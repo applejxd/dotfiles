@@ -13,6 +13,8 @@ eval "$("${HOME}/.local/bin/mise" activate --shims)"
 
 echo "Installing mise packages..." >&2
 
+mise install chezmoi@latest
+
 # Python
 if ! type python >/dev/null 2>&1; then
     echo "Installing Python build dependencies..." >&2
@@ -24,7 +26,7 @@ if ! type python >/dev/null 2>&1; then
         build-essential libssl-dev zlib1g-dev \
         libbz2-dev libreadline-dev libsqlite3-dev curl git \
         libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
-    
+
     echo "Installing Python via mise..." >&2
     mise install python@latest
     mise install uv@latest
@@ -36,4 +38,6 @@ echo "Installing development tools via mise..." >&2
 echo "Installing development tools..." >&2
 mise install shellcheck@latest
 mise install hadolint@latest
-mise install chezmoi@latest
+
+mise install yazi@latest  # needs Cica (Nerd) font
+mise install lazygit@latest
