@@ -24,7 +24,7 @@ export LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 #-----#
 
 # To prevent OpenGL error
-export LIBGL_ALWAYS_INDIRECT=1
+export LIBGL_ALWAYS_INDIRECT=0
 
 # use default value if DISPLAY is set (e.g. SSH X11Forwarding)
 if [[ -z "$DISPLAY" ]]; then
