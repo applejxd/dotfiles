@@ -8,8 +8,8 @@ repos:
   - repo: local
     hooks:
       - id: yamllint-local
-        name: YAML Lint via uv
-        entry: mise exec -- uv run yamllint
+        name: YAML Lint via uvx
+        entry: mise exec -- uvx yamllint
         language: system
         files: \.(yaml|yml)$
         args: [--strict]
