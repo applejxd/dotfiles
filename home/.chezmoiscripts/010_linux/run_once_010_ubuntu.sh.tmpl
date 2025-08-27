@@ -39,6 +39,8 @@ echo "$password" | sudo -S apt-get install -y \
     vim neovim git unzip tree tig \
     tmux python3-tmuxp manpages-ja xsel xdg-utils
 
+echo "$password" | sudo -S snap install -y yazi --classic  # needs Cica (Nerd) font
+
 {{- if eq .chezmoi.username "applejxd" }}
 # Security
 echo "Installing security tools..." >&2
