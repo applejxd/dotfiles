@@ -45,6 +45,7 @@ echo "$password" | sudo -S snap install yazi --classic  # needs Cica (Nerd) font
 # Security
 echo "Installing security tools..." >&2
 echo "$password" | sudo -S apt-get -y install clamav clamav-daemon
+echo "$password" | sudo -S systemctl stop clamav-freshclam
 echo "$password" | sudo -S freshclam
 echo "$password" | sudo -S systemctl start clamav-daemon.service
 echo "$password" | sudo -S systemctl start clamav-freshclam.service
