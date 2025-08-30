@@ -1,71 +1,54 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-if [ $# -eq 0 ]; then
-    # Save Password
-    read -rsp "Password: " password
-else
-    password="$1"
+#=== WSL + Docker Desktop の場合は何もしない ==========================#
+DD_SOCK="/mnt/wsl/docker-desktop/run/guest-services/docker.sock"
+if [[ "$(uname -r)" =~ microsoft ]] && [[ -S "$DD_SOCK" ]]; then
+  echo "WSL上で Docker Desktop を検出しました。次を設定してください:"
+  echo "  export DOCKER_HOST=unix://$DD_SOCK"
+  exit 0
 fi
 
-echo "$password" | sudo -S apt-get update
+#=== sudo 認証キャッシュ =================================================#
+sudo -v
+sudo apt-get update -y -qq
 
-#--------#
-# Docker #
-#--------#
-
-# not needed for WSL2 by Docker Desktop WSL integration
-# see https://docs.docker.jp/desktop/windows/wsl.html#wsl-2-docker
-if ! command -v docker >/dev/null 2>&1 && ! [[ "$(uname -r)" =~ microsoft ]]; then
-    # Official Onliner script
-    # see https://docs.docker.com/engine/install/ubuntu/#install-using-the-convenience-script
-    echo "$password" | sudo -S bash -c "$(curl -fsSL https://get.docker.com)"
-
-    # echo "$password" | sudo -S apt-get -y install ca-certificates curl gnupg lsb-release
-    # # register GPG key of Docker official
-    # curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    # # add stable repository
-    # {
-    #     echo "$password"
-    #     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-    # } | sudo -k -S tee /etc/apt/sources.list.d/docker.list &>/dev/null
-
-    # echo "$password" | sudo -S apt-get update
-    # echo "$password" | sudo -S apt-get install -y docker-ce docker-ce-cli containerd.io
-
-    # # Install docker-compose v2.4.0 for gpus option
-    # echo "$password" | sudo -S -E curl -L "https://github.com/docker/compose/releases/download/v2.4.0/docker-compose-$(uname -s)-$(uname -m)" \
-    #     -o /usr/local/bin/docker-compose
-    # echo "$password" | sudo -S chmod +x /usr/local/bin/docker-compose
+#=== Docker が未インストールなら導入 ====================================#
+if ! command -v docker >/dev/null 2>&1; then
+  curl -fsSL https://get.docker.com | sudo -E sh
 fi
 
-#---------#
-# Dockerd #
-#---------#
+#=== まず rootless を試す ==============================================#
+if pidof systemd >/dev/null 2>&1; then
+  # rootless に必要なパッケージ
+  sudo apt-get install -y -qq uidmap dbus-user-session slirp4netns fuse-overlayfs
+  # rootful サービスがあれば停止
+  sudo systemctl disable --now docker.service docker.socket >/dev/null 2>&1 || true
 
-if [[ "$(uname -r)" =~ microsoft ]]; then
-    #-----------------#
-    # Rootful Dockerd #
-    #-----------------#
-
-    echo "$password" | sudo -S gpasswd -a "$USER" docker
-    # echo "$password" | sudo -S service docker start
-    echo "$password" | sudo -S systemctl enable docker.service
-    echo "$password" | sudo -S systemctl start docker.service
-else
-    #------------------#
-    # Rootless Dockerd #
-    #------------------#
-
-    # https://docs.docker.com/engine/security/rootless/
-    # https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
-
-    # stops rootful docker
-    echo "$password" | sudo -S systemctl disable --now docker.service docker.socket
-    echo "$password" | sudo -S rm /var/run/docker.sock
-
-    # enable rootless docker
-    echo "$password" | sudo -S apt-get install -y uidmap dbus-user-session
+  if command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1; then
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    mkdir -p "$XDG_RUNTIME_DIR"
     dockerd-rootless-setuptool.sh install
-    echo "$password" | sudo -S systemctl --user enable docker.service
-    echo "$password" | sudo -S systemctl --user start docker.service
+    systemctl --user enable --now docker.service
+    sudo loginctl enable-linger "$USER" >/dev/null 2>&1 || true
+
+    echo "[完了] Rootless Docker を有効化しました。"
+    echo "シェルに次を追記してください:"
+    echo "  export DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock"
+    exit 0
+  fi
+fi
+
+#=== rootless が使えない場合は rootful にフォールバック ================#
+if getent group docker >/dev/null 2>&1 && ! id -nG "$USER" | grep -qw docker; then
+  sudo gpasswd -a "$USER" docker
+  echo "[info] ユーザーを docker グループに追加しました。再ログインか newgrp docker が必要です。"
+fi
+
+if pidof systemd >/dev/null 2>&1; then
+  sudo systemctl enable --now docker.service
+  echo "[完了] Rootful Docker サービスを有効化しました。"
+else
+  echo "[警告] systemd が無い環境です。必要な時に次を実行してください:"
+  echo "       sudo dockerd -H unix:///var/run/docker.sock"
 fi
