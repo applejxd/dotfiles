@@ -31,14 +31,14 @@ export LANG=ja_JP.UTF-8
 {{- if eq .chezmoi.os "darwin" }}
 # macOS
 # shellcheck source=/dev/null
-source "${HOME}/.config/shell/osxenv.sh"
+. "${HOME}/.config/shell/osxenv.sh"
 {{- end }}
 
 {{- if eq .chezmoi.os "linux" }}
 {{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
 # WSL
 # shellcheck source=/dev/null
-source "${HOME}/.config/shell/wslenv.sh"
+. "${HOME}/.config/shell/wslenv.sh"
 {{-   end }}
 # for x11 forwarding of chromium
 # from https://qiita.com/kairi003/items/003c4a615317049e5b85
@@ -58,13 +58,16 @@ export GHQ_ROOT="${HOME}/src"
 
 {{- if eq .chezmoi.os "linux" }}
 # for snap
-if [[ -d "/snap/bin" ]]; then
-    export PATH="/snap/bin:${PATH}"
-fi
+[[ -d "/snap/bin" ]] && export PATH="/snap/bin:${PATH}"
 {{- end }}
 
 # for original binaries
 export PATH="${HOME}/bin:${PATH}"
+
+# Node.js
+export NVM_DIR="$HOME/.nvm"
+[[ -s "$NVM_DIR/nvm.sh" ]] && . "$NVM_DIR/nvm.sh"
+[[ -s "$NVM_DIR/bash_completion" ]] && . "$NVM_DIR/bash_completion"  
 
 # for CUDA
 if [[ -e "/usr/local/cuda" ]]; then
@@ -79,9 +82,7 @@ if [[ -e "${HOME}/.go" ]]; then
 fi
 
 # for Haskell package Cabal
-if [[ -e "${HOME}/.cabal" ]]; then
-    export PATH="${HOME}/.cabal/bin:${PATH}"
-fi
+[[ -e "${HOME}/.cabal" ]] && export PATH="${HOME}/.cabal/bin:${PATH}"
 
 {{- if eq .chezmoi.os "linux" }}
 # for TeX Live (local)
@@ -98,5 +99,5 @@ fi
 
 if [[ -f "${HOME}/.config/shell/usrenv.sh" ]]; then
     # shellcheck source=/dev/null
-    source "${HOME}/.config/shell/usrenv.sh"
+    . "${HOME}/.config/shell/usrenv.sh"
 fi
