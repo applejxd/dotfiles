@@ -2,6 +2,7 @@
 set -euo pipefail
 
 #=== WSL + Docker Desktop の場合は何もしない ==========================#
+# 参考: https://docs.docker.jp/desktop/windows/wsl.html#wsl-2-docker
 DD_SOCK="/mnt/wsl/docker-desktop/run/guest-services/docker.sock"
 if [[ "$(uname -r)" =~ microsoft ]] && [[ -S "$DD_SOCK" ]]; then
   echo "WSL上で Docker Desktop を検出しました。次を設定してください:"
@@ -14,15 +15,16 @@ sudo -v
 sudo apt-get update -y -qq
 
 #=== Docker が未インストールなら導入 ====================================#
+# 参考: https://docs.docker.com/engine/install/ubuntu/#install-using-the-convenience-script
 if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sudo -E sh
 fi
 
 #=== まず rootless を試す ==============================================#
+# 参考: https://docs.docker.com/engine/security/rootless/
+#       https://matsuand.github.io/docs.docker.jp.onthefly/engine/security/rootless/
 if pidof systemd >/dev/null 2>&1; then
-  # rootless に必要なパッケージ
   sudo apt-get install -y -qq uidmap dbus-user-session slirp4netns fuse-overlayfs
-  # rootful サービスがあれば停止
   sudo systemctl disable --now docker.service docker.socket >/dev/null 2>&1 || true
 
   if command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1; then

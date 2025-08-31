@@ -9,6 +9,7 @@ if uname -r | grep -qi microsoft || [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; 
 fi
 
 #--- Update & install ---#
+# see: https://qiita.com/atomyah/items/887a5185ec9a8206c7c4#ubuntu%E3%81%ABxrdp%E3%82%92%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB
 sudo apt-get -y update
 sudo apt-get install -y --no-install-recommends xfce4 xorgxrdp xrdp
 
@@ -16,6 +17,7 @@ sudo adduser xrdp ssl-cert || true
 sudo usermod -aG xrdp "$USER"
 
 #--- colord polkit rule ---#
+# see: https://god-support.blogspot.com/2019/11/ubuntu1804-xrdp-authentication-is.html
 sudo tee /etc/polkit-1/rules.d/02-allow-colord.rules >/dev/null <<'RULE'
 polkit.addRule(function(action, subject) {
   if ((action.id == "org.freedesktop.color-manager.create-device" ||
@@ -31,6 +33,7 @@ polkit.addRule(function(action, subject) {
 RULE
 
 #--- Xfce セッション固定 ---#
+# see: https://askubuntu.com/questions/1233088/xrdp-desktop-looks-different-when-connecting-remotely
 sudo sed -i 's|^\(test -x /etc/X11/Xsession.*\)|# \1|' /etc/xrdp/startwm.sh
 sudo sed -i 's|^\(exec /bin/sh /etc/X11/Xsession.*\)|# \1|' /etc/xrdp/startwm.sh
 grep -q 'exec /usr/bin/startxfce4' /etc/xrdp/startwm.sh || \
