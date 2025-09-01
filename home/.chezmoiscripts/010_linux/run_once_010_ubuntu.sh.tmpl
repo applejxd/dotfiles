@@ -2,19 +2,20 @@
 
 set -euo pipefail
 
-{{ template "get_sudo_password.sh.tmpl" . }}
+sudo -v
 
 # Refresh
 echo "Starting Ubuntu system setup..." >&2
-echo "$password" | sudo -S apt-get -y update && sudo -S apt-get -y upgrade
+sudo apt-get -y update && sudo apt-get -y upgrade
 
 #--------#
 # config #
 #--------#
 
-# locale 対策
-echo "Setting locale to en_US.UTF-8..." >&2
-echo "$password" | sudo -S locale-gen en_US.UTF-8
+# 日本語対応
+echo "Setting Japanese environments..." >&2
+apt-get install language-pack-ja fcitx5-mozc
+update-locale LANG=ja_JP.UTF-8
 
 # Keybinding
 echo "Setting keybindings..." >&2
