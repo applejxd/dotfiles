@@ -43,6 +43,11 @@ export LANG=ja_JP.UTF-8
 # for x11 forwarding of chromium
 # from https://qiita.com/kairi003/items/003c4a615317049e5b85
 export XAUTHORITY="${HOME}/.Xauthority"
+
+# see https://qiita.com/takedon0909/items/2d5e14b77fce9bbcb3c9
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
 {{- end }}
 
 #---------------#
