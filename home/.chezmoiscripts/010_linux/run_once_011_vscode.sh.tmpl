@@ -16,7 +16,7 @@ if ! (type "code" >/dev/null 2>&1); then
     sudo install -D -o root -g root -m 644 /tmp/microsoft.gpg /usr/share/keyrings/microsoft.gpg
     rm -f /tmp/microsoft.gpg
 
-    sudo tee /etc/apt/sources.list.d/vscode.sources <<-EOF
+    sudo tee /etc/apt/sources.list.d/vscode.sources > /dev/null <<EOF
 Types: deb
 URIs: https://packages.microsoft.com/repos/code
 Suites: stable
