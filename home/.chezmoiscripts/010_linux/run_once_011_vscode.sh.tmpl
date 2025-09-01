@@ -7,20 +7,18 @@ set -euo pipefail
 if ! (type "code" >/dev/null 2>&1); then
     echo "Installing Visual Studio Code..." >&2
 
-    {{ template "get_sudo_password.sh.tmpl" . }}
-    
+    sudo -v
     # Validate password by testing sudo access
     if ! echo "$password" | sudo -S true 2>/dev/null; then
         echo "ERROR: Invalid sudo password" >&2
         exit 1
     fi
 
-    echo "$password" | sudo -S apt-get install -y wget gpg
+    sudo apt-get install -y wget gpg
     wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/microsoft.gpg
-    echo "$password" | sudo -S install -D -o root -g root -m 644 /tmp/microsoft.gpg /usr/share/keyrings/microsoft.gpg
+    sudo install -D -o root -g root -m 644 /tmp/microsoft.gpg /usr/share/keyrings/microsoft.gpg
     rm -f /tmp/microsoft.gpg
 
-    echo "$password" | sudo -S apt-get install -y apt-transport-https
-    echo "$password" | sudo -S apt update
-    echo "$password" | sudo -S apt install -y code
+    sudo -S apt-get install -y apt-transport-https
+    sudo -S apt update && sudo apt-get install -y code
 fi
