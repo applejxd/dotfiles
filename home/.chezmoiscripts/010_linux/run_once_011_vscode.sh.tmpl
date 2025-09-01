@@ -8,11 +8,6 @@ if ! (type "code" >/dev/null 2>&1); then
     echo "Installing Visual Studio Code..." >&2
 
     sudo -v
-    # Validate password by testing sudo access
-    if ! echo "$password" | sudo -S true 2>/dev/null; then
-        echo "ERROR: Invalid sudo password" >&2
-        exit 1
-    fi
 
     sudo apt-get install -y wget gpg
     wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/microsoft.gpg
