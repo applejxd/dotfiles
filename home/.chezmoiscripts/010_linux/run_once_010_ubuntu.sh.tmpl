@@ -14,8 +14,8 @@ sudo apt-get -y update && sudo apt-get -y upgrade
 
 # 日本語対応
 echo "Setting Japanese environments..." >&2
-apt-get install language-pack-ja fcitx5-mozc
-update-locale LANG=ja_JP.UTF-8
+sudo apt-get install language-pack-ja fcitx5-mozc
+sudo update-locale LANG=ja_JP.UTF-8
 
 # Keybinding
 echo "Setting keybindings..." >&2
