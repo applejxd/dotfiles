@@ -26,8 +26,8 @@ if gsettings list-schemas | grep -q '^org.freedesktop.ibus.panel.emoji$'; then
 fi
 
 # use Caps Lock as ctrl
-echo "$password" | sudo -S sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
-echo "$password" | sudo -S systemctl restart console-setup
+sudo sed -i "s|XKBOPTIONS.*|XKBOPTIONS=\"ctrl:nocaps\"|" /etc/default/keyboard
+sudo systemctl restart console-setup
 
 # Known folders
 echo "Setting up known folders..." >&2
@@ -36,18 +36,18 @@ rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュ
 
 # Basics
 echo "Installing basic packages..." >&2
-echo "$password" | sudo -S apt-get install -y \
+sudo apt-get install -y \
     vim neovim git unzip tree tig \
     tmux python3-tmuxp manpages-ja xsel xdg-utils
 
-echo "$password" | sudo -S snap install yazi --classic  # needs Cica (Nerd) font
+sudo snap install yazi --classic  # needs Cica (Nerd) font
 
 {{- if eq .chezmoi.username "applejxd" }}
 # Security
 echo "Installing security tools..." >&2
-echo "$password" | sudo -S apt-get -y install clamav clamav-daemon
-echo "$password" | sudo -S systemctl stop clamav-freshclam
-echo "$password" | sudo -S freshclam
-echo "$password" | sudo -S systemctl start clamav-daemon.service
-echo "$password" | sudo -S systemctl start clamav-freshclam.service
+sudo apt-get -y install clamav clamav-daemon
+sudo systemctl stop clamav-freshclam
+sudo freshclam
+sudo systemctl start clamav-daemon.service
+sudo systemctl start clamav-freshclam.service
 {{- end }}
