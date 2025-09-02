@@ -38,7 +38,8 @@ zinit ice wait'!0'
 zinit light zsh-users/zsh-syntax-highlighting
 
 # git
-zinit snippet OMZ::lib/git.zsh
+zinit ice pick"lib/git.zsh"
+zinit light ohmyzsh/ohmyzsh
 
 #------#
 # pure #
