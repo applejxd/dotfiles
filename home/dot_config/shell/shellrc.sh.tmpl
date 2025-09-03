@@ -26,6 +26,7 @@ alias open=open
 alias pbcopy='xsel --clipboard --input'
 alias pbpaste='xsel --clipboard --output'
 alias open="xdg-open"
+# TODO: verify
 if [[ $XDG_SESSION_TYPE != tty ]]; then
     xmodmap ~/.Xmodmap
 fi
@@ -81,17 +82,13 @@ fi
 {{- end }}
 
 # iceberg theme for vim
-if type "ghq" >/dev/null 2>&1; then
-    if [[ ! -e $GHQ_ROOT/github.com/cocopon/iceberg.vim ]]; then
-        ghq get https://github.com/cocopon/iceberg.vim.git
-    fi
-    if [[ ! -e $HOME/.vim/colors ]]; then
-        mkdir -p "${HOME}/.vim/colors"
-    fi
-    if [[ ! -L $HOME/.vim/colors/iceberg.vim ]]; then
-        ln -s "${GHQ_ROOT}/github.com/cocopon/iceberg.vim/colors/iceberg.vim" "${HOME}/.vim/colors/iceberg.vim"
-    fi
-fi
+if [[ ! -f "${HOME}/.vim/colors/iceberg.vim" ]]; then
+    temp_dir="${HOME}/.vim/.tmp_iceberg"
+    mkdir -p "${HOME}/.vim/colors" &&
+    git clone --depth 1 --quiet https://github.com/cocopon/iceberg.vim.git "$temp_dir" 2>/dev/null &&
+    cp "$temp_dir/colors/iceberg.vim" "${HOME}/.vim/colors/iceberg.vim" 2>/dev/null
+    rm -rf "$temp_dir" 2>/dev/null || true
+fi 2>/dev/null || true
 
 #-----------------#
 # Command Wrapper #
