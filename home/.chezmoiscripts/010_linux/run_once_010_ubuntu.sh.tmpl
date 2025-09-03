@@ -6,7 +6,7 @@ sudo -v
 
 # Refresh
 echo "Starting Ubuntu system setup..." >&2
-sudo apt-get -y update && sudo apt-get -y upgrade
+sudo apt-get update && sudo apt-get upgrade -y
 
 #--------#
 # config #
@@ -14,7 +14,7 @@ sudo apt-get -y update && sudo apt-get -y upgrade
 
 # 日本語対応
 echo "Setting Japanese environments..." >&2
-sudo apt-get install language-pack-ja
+sudo apt-get install -y language-pack-ja fcitx5-mozc
 sudo update-locale LANG=ja_JP.UTF-8
 
 # Keybinding
