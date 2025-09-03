@@ -10,19 +10,47 @@ fi
 
 echo "Installing VS Code extensions..."
 
-# Install extensions from init.sh
+# for themes and icons
 code --install-extension anan.jetbrains-darcula-theme
 code --install-extension pkief.material-icon-theme
 
+# for general improvements
+code --install-extension usernamehw.errorlens
+code --install-extension aaron-bond.better-comments
+code --install-extension formulahendry.code-runner
+
+# for git
 code --install-extension eamodio.gitlens
 code --install-extension mhutchie.git-graph
 
+# for markdown
 code --install-extension yzhang.markdown-all-in-one
+code --install-extension DavidAnson.vscode-markdownlint
 
+# for shell script
 code --install-extension foxundermoon.shell-format
 code --install-extension timonwong.shellcheck
+code --install-extension jeff-hykin.better-shellscript-syntax
 
+# for python
 code --install-extension ms-python.python
+code --install-extension njpwerner.autodocstring
 code --install-extension 076923.python-image-preview
+
+# for C/C++
+code --install-extension ms-vscode.cpptools
+code --install-extension xaver.clang-format
+code --install-extension notskm.clang-tidy
+code --install-extension twxs.cmake
+code --install-extension ms-vscode.cmake-tools
+
+# for other formats
+code --install-extension codezombiech.gitignore
+code --install-extension tamasfe.even-better-toml
+code --install-extension exiasr.hadolint
+code --install-extension ms-vscode.makefile-tools
+code --install-extension James-Yu.latex-workshop
+code --install-extension mikestead.dotenv
+code --install-extension hediet.vscode-drawio
 
 echo "VS Code extensions installed successfully."
