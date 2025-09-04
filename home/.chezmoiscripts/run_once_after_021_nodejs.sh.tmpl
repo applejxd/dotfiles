@@ -3,9 +3,12 @@
 set -euo pipefail
 
 echo "Node.js と nvm をインストール/更新します..."
-
+ 
+ 
+{{- if eq .chezmoi.os "linux" }}
 # 依存
 command -v curl >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y curl ca-certificates; }
+{{- end }}
 
 # nvm 導入（未導入時のみ）
 export NVM_DIR="$HOME/.nvm"
