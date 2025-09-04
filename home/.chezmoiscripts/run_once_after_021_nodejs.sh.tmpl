@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+
+echo "Node.js と nvm をインストール/更新します..."
 
 # 依存
 command -v curl >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y curl ca-certificates; }
@@ -31,3 +34,5 @@ npm install -g @anthropic-ai/claude-code
 npm install -g @google/gemini-cli
 npm install -g @openai/codex
 {{- end }}
+
+echo "✅ 完了：Node.js と nvm をインストール/更新しました"

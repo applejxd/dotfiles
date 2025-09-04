@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-echo "Setting up mise..." >&2
+echo "mise をインストール/更新します..."
 
 # Install mise if not present
 if [[ ! -e "${HOME}/.local/bin/mise" ]]; then
@@ -11,7 +11,9 @@ fi
 # Temporary activation for current script session
 eval "$("${HOME}/.local/bin/mise" activate --shims)"
 
-echo "Installing mise packages..." >&2
+echo "mise をインストール/更新しました"
+
+echo "開発ツールをインストール/更新します..."
 
 mise install chezmoi@latest
 
@@ -32,12 +34,10 @@ if ! type python >/dev/null 2>&1; then
     mise install uv@latest
 fi
 
-# Development tools via mise
-echo "Installing development tools via mise..." >&2
-
-echo "Installing development tools..." >&2
-mise install shellcheck@0.11.0
-mise install hadolint@2.13.1
+mise install shellcheck@latest
+mise install hadolint@latest
 
 mise install lazygit@v0.53.0
 mise install ghq@v1.8.0
+
+echo "✅ 完了：開発ツールをインストール/更新しました"

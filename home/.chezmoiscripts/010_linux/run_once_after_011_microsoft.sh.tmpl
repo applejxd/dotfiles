@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+
+echo "Microsoft 製品をインストール/更新します..."
+
 export DEBIAN_FRONTEND=noninteractive
 
 ARCH="$(dpkg --print-architecture)"
@@ -36,4 +40,4 @@ fi
 if (( changed )); then sudo apt-get -yq update; changed=0; fi
 command -v microsoft-edge >/dev/null 2>&1 || sudo apt-get -yq install microsoft-edge-stable
 
-echo "Done."
+echo "✅ 完了：Microsoft 製品をインストール/更新しました"

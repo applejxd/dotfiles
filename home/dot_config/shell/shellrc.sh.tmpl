@@ -26,10 +26,6 @@ alias open=open
 alias pbcopy='xsel --clipboard --input'
 alias pbpaste='xsel --clipboard --output'
 alias open="xdg-open"
-# TODO: verify
-if [[ $XDG_SESSION_TYPE != tty ]]; then
-    xmodmap ~/.Xmodmap
-fi
 {{-   end }}
 alias ls="ls --color=auto"
 {{- end }}
