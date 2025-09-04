@@ -1,11 +1,15 @@
 {{- if ne .chezmoi.os "linux" }}
 .chezmoiscripts/010_linux/*
 
-{{-   if not (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
+{{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
+.chezmoiscripts/vscode_extensions.sh
+.chezmoiscripts/010_linux/011_microsoft.sh
+{{-   else }}
 .config/shell/wslenv.sh
-.chezmoiscripts/010_linux/run_once_012_wsl.sh.tmpl
+.chezmoiscripts/010_linux/012_wsl.sh
 config/wsl.conf
 {{-   end }}
+
 {{- end }}
 
 {{- if ne .chezmoi.os "darwin" }}

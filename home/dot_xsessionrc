@@ -1,0 +1,10 @@
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS="@im=fcitx"
+
+setxkbmap -layout jp -model jp106
+
+if [[ -f ~/.Xmodmap ]]; then
+  xmodmap ~/.Xmodmap
+fi
+   
