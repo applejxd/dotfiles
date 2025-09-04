@@ -8,7 +8,7 @@ sudo -v
 
 # IME & XKB ツール
 sudo apt-get update -y
-sudo apt-get install -y fcitx5 fcitx5-mozc fcitx5-config-qt xkb-data xkbcomp
+sudo apt-get install -y fcitx5-mozc
 
 # fcitx5 を既定 IM に（失敗時は .xinputrc）
 im-config -n fcitx5 || echo 'run_im fcitx5' > "$HOME/.xinputrc"
