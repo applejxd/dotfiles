@@ -1,10 +1,15 @@
+# ~/.xsessionrc
 export GTK_IM_MODULE=fcitx
 export QT_IM_MODULE=fcitx
 export XMODIFIERS="@im=fcitx"
 
-setxkbmap -layout jp -model jp106
+if ! pgrep -u "$USER" fcitx5 >/dev/null 2>&1; then
+  fcitx5 &
+fi
+
+# 少し遅らせると上書き回避できる
+(sleep 2 && setxkbmap -layout jp -model jp106) &
 
 if [[ -f ~/.Xmodmap ]]; then
-  xmodmap ~/.Xmodmap
+  (sleep 4 && xmodmap ~/.Xmodmap) &
 fi
-   
