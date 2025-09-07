@@ -25,8 +25,9 @@ config/wsl.conf
 # only for personal use
 .chezmoiscripts/021_nodejs.sh
 .chezmoiscripts/fetch_spacemacs.sh
-.config/chezmoi/key.txt
 .claude.json
+
+.config/chezmoi/key.txt
 {{- end }}
 
 {{- if not (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}

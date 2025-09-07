@@ -46,13 +46,6 @@
       "command": "npx",
       "env": {},
       "type": "stdio"
-    },
-    "yt-dlp": {
-      "args": [
-        "-y",
-        "@kevinwatt/yt-dlp-mcp"
-      ],
-      "command": "npx"
     }
   },
   "selectedAuthType": "oauth-personal"

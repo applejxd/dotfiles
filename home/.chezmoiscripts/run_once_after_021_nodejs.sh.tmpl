@@ -38,14 +38,14 @@ npm install -g @google/gemini-cli
 npm install -g @openai/codex
 
 # MCP サーバ
-claude mcp add sequential-thinking -s user -- npx -y @modelcontextprotocol/server-sequential-thinking
-claude mcp add -s user --transport sse deepwiki https://mcp.deepwiki.com/sse
-claude mcp add context7 -s user -- npx -y @upstash/context7-mcp@latest
-claude mcp add playwright -s user -- npx @playwright/mcp@latest
-claude mcp add fetch -s user -- uvx mcp-server-fetch
-# claude mcp add arxiv-mcp-server -s user -- uvx arxiv-mcp-server
-# claude mcp add youtube -s user -- npx @anaisbetts/mcp-youtube
-# claude mcp add yt-dlp -s user -- npx -y @kevinwatt/yt-dlp-mcp
+claude mcp add sequential-thinking -s user -- npx -y @modelcontextprotocol/server-sequential-thinking || true
+claude mcp add -s user --transport sse deepwiki https://mcp.deepwiki.com/sse || true
+claude mcp add context7 -s user -- npx -y @upstash/context7-mcp@latest || true
+claude mcp add playwright -s user -- npx @playwright/mcp@latest || true
+claude mcp add fetch -s user -- uvx mcp-server-fetch || true
+# claude mcp add arxiv-mcp-server -s user -- uvx arxiv-mcp-server || true
+# claude mcp add youtube -s user -- npx @anaisbetts/mcp-youtube || true
+# claude mcp add yt-dlp -s user -- npx -y @kevinwatt/yt-dlp-mcp || true
 {{- end }}
 
 echo "✅ 完了：Node.js と nvm をインストール/更新しました"
