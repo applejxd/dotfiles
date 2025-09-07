@@ -2,8 +2,9 @@
 .chezmoiscripts/010_linux/*
 
 {{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
-.chezmoiscripts/vscode_extensions.sh
+# not for WSL
 .chezmoiscripts/010_linux/011_microsoft.sh
+.chezmoiscripts/vscode_extensions.sh
 {{-   else }}
 .config/shell/wslenv.sh
 .chezmoiscripts/010_linux/012_wsl.sh
@@ -13,6 +14,7 @@ config/wsl.conf
 {{- end }}
 
 {{- if ne .chezmoi.os "darwin" }}
+# only for Mac OS X
 .chezmoiscripts/020_mac/*
 
 .config/shell/osxenv.sh
@@ -20,6 +22,7 @@ config/wsl.conf
 {{- end }}
 
 {{- if ne .chezmoi.username "applejxd" }}
+# only for personal use
 .chezmoiscripts/021_nodejs.sh
 .chezmoiscripts/fetch_spacemacs.sh
 .config/chezmoi/key.txt
