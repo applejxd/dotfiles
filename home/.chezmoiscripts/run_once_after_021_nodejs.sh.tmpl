@@ -3,8 +3,7 @@
 set -euo pipefail
 
 echo "Node.js と nvm をインストール/更新します..."
- 
- 
+
 {{- if eq .chezmoi.os "linux" }}
 # 依存
 command -v curl >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y curl ca-certificates; }
@@ -14,28 +13,22 @@ command -v curl >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get inst
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] || curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 
-# nvm を読み込み→LTS導入/更新→LTSを有効化（PATH反映）
+# nvm を読み込み
 set +u
 . "$NVM_DIR/nvm.sh"
 set -u
-if [ "$(nvm current 2>/dev/null || true)" != "none" ]; then
-  nvm install --lts --reinstall-packages-from=current >/dev/null
-else
-  nvm install --lts >/dev/null
-fi
+
+# Node.js LTS 導入（未導入時のみ）
+command -v node >/dev/null 2>&1 || nvm install --lts >/dev/null
+
 nvm alias default 'lts/*' >/dev/null
 nvm use --silent default
 
-# 確認
-echo "Node.js: $(node -v)"
-echo "npm: $(npm -v)"
-echo "nvm current: $(nvm current)"
-
 {{- if eq .chezmoi.username "applejxd" }}
 # AI ツール
-npm install -g @anthropic-ai/claude-code
-npm install -g @google/gemini-cli
-npm install -g @openai/codex
+for pkg in @anthropic-ai/claude-code @google/gemini-cli @openai/codex; do
+  npm list -g "$pkg" >/dev/null 2>&1 || npm install -g "$pkg"
+done
 
 # MCP サーバ
 claude mcp add sequential-thinking -s user -- npx -y @modelcontextprotocol/server-sequential-thinking || true
@@ -43,9 +36,6 @@ claude mcp add -s user --transport sse deepwiki https://mcp.deepwiki.com/sse || 
 claude mcp add context7 -s user -- npx -y @upstash/context7-mcp@latest || true
 claude mcp add playwright -s user -- npx @playwright/mcp@latest || true
 claude mcp add fetch -s user -- uvx mcp-server-fetch || true
-# claude mcp add arxiv-mcp-server -s user -- uvx arxiv-mcp-server || true
-# claude mcp add youtube -s user -- npx @anaisbetts/mcp-youtube || true
-# claude mcp add yt-dlp -s user -- npx -y @kevinwatt/yt-dlp-mcp || true
 {{- end }}
 
 echo "✅ 完了：Node.js と nvm をインストール/更新しました"

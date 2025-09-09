@@ -30,10 +30,9 @@ config/wsl.conf
 .config/chezmoi/key.txt
 {{- end }}
 
-{{- if not (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
+#{{- if not (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
 # needs key.txt to decrypt (need to run apply twice)
-.claude.json
-{{- end }}
+#{{- end }}
 
 {{- if (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
 .config/chezmoi/key.txt
