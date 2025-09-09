@@ -34,3 +34,11 @@ config/wsl.conf
 # needs key.txt to decrypt (need to run apply twice)
 .claude.json
 {{- end }}
+
+{{- if (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
+.config/chezmoi/key.txt
+{{- end }}
+
+{{- if (stat (joinPath .chezmoi.homeDir ".gitconfig")) }}
+.gitconfig
+{{- end }}
