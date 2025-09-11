@@ -4,6 +4,9 @@
 	editor = vim
 	ignorecase = false
 	quotepath = false
+{{- if ne .chezmoi.os "linux" }}
+	autocrlf = input
+{{- end }}	
 [ghq]
 	root = ~/src
 [gitflow "branch"]
