@@ -14,8 +14,9 @@ log_result() {
     local step="$1"
     local status="$2"
     local details="${3:-}"
-    TEST_RESULTS+=("$step: $status $details")
-    if [ "$status" = "FAILED" ]; then
+    local timestamp=$(date '+%H:%M:%S')
+    TEST_RESULTS+=("[$timestamp] $step: $status $details")
+    if [ "$status" = "FAILED" ] || [ "$status" = "TIMEOUT" ]; then
         TEST_STATUS="FAILED"
     fi
 }
@@ -39,19 +40,58 @@ show_summary() {
 }
 
 echo "== Environment =="
-echo "User=$(whoami)"
-echo "HOME=$HOME"
-echo "Repo=/repo  APPLY=$APPLY"
-echo "CHEZMOI_ARGS=${CHEZMOI_ARGS}"
+echo "🗂️  User=$(whoami)"
+echo "🏠 HOME=$HOME"
+echo "📦 Repo=/repo  APPLY=$APPLY"
+echo "⚙️  CHEZMOI_ARGS=${CHEZMOI_ARGS}"
+echo "⏱️  Started at: $(date)"
 
 # HOMEディレクトリのセットアップ
 sudo chown -R "$(whoami):$(id -gn)" "$HOME"
 mkdir -p "$HOME/.config/chezmoi" "$HOME/.local/share"
 
-# chezmoi設定ファイル作成（sourceDirを/repoに設定）
-cat > "$HOME/.config/chezmoi/chezmoi.toml" << 'EOF'
+# 方針A: テンプレートベースの初期化を試行
+echo "🔧 Setting up chezmoi configuration..."
+
+# 既存の設定を削除
+rm -f "$HOME/.config/chezmoi/chezmoi.toml"
+
+# テンプレートが存在するかチェック
+if [ -f "/repo/home/.chezmoi.toml.tmpl" ]; then
+    echo "📝 Found config template, using template-based initialization"
+    # テンプレートを使って設定ファイル生成を試行
+    template_content=$(chezmoi execute-template --init --source=/repo < /repo/home/.chezmoi.toml.tmpl 2>/dev/null || echo "")
+
+    if [ -n "$template_content" ]; then
+        echo "$template_content" > "$HOME/.config/chezmoi/chezmoi.toml"
+        echo "✅ Template-based config generated"
+    else
+        echo "⚠️ Template generation failed, using fallback config"
+        cat > "$HOME/.config/chezmoi/chezmoi.toml" << 'EOF'
+# Fallback configuration for Docker test environment
+sourceDir = "/repo"
+
+[edit]
+    command = "vim"
+
+[data]
+    # Docker test environment
+EOF
+    fi
+else
+    echo "📄 No template found, using simple config"
+    cat > "$HOME/.config/chezmoi/chezmoi.toml" << 'EOF'
 sourceDir = "/repo"
 EOF
+fi
+
+# sourceDirを必ず設定（テンプレートに含まれていない場合のため）
+if ! grep -q "sourceDir" "$HOME/.config/chezmoi/chezmoi.toml"; then
+    echo 'sourceDir = "/repo"' >> "$HOME/.config/chezmoi/chezmoi.toml"
+fi
+
+echo "📁 Final chezmoi config:"
+cat "$HOME/.config/chezmoi/chezmoi.toml"
 
 chezmoi --version
 git --version || true
@@ -65,21 +105,44 @@ else
 fi
 
 echo
-echo "== chezmoi init (no explicit source needed) =="
-if chezmoi init; then
+echo "== chezmoi init (using pre-configured source) =="
+# 設定ファイルでsourceDirを設定済みなので、引数不要
+if chezmoi init --force; then
     log_result "init" "SUCCESS"
+    echo "✅ Chezmoi initialized successfully"
 else
     log_result "init" "FAILED"
+    echo "❌ Chezmoi initialization failed"
     show_summary
 fi
 
 echo
 echo "== chezmoi diff (dry-run) =="
+echo "Checking which files will be modified..."
 # diff は差分があると exit code 1, エラーは exit code > 1
 set +e
-chezmoi diff ${CHEZMOI_ARGS}
+diff_output=$(chezmoi diff ${CHEZMOI_ARGS} 2>/dev/null)
 diff_exit_code=$?
 set -e
+
+# ファイル数をカウントして表示
+if [ -n "$diff_output" ]; then
+    file_count=$(echo "$diff_output" | grep -c "^diff --git" 2>/dev/null || echo 0)
+    echo "📊 Found differences in $file_count files"
+    if [ "$file_count" -gt 0 ]; then
+        echo "First few files to be modified:"
+        echo "$diff_output" | grep "^diff --git" | head -5 | sed 's/^diff --git a\//  - /' | sed 's/ b\/.*//' 2>/dev/null || echo "  (unable to parse filenames)"
+        if [ "$file_count" -gt 5 ]; then
+            echo "  ... and $((file_count - 5)) more files"
+        fi
+    else
+        echo "No files found to modify"
+    fi
+    echo
+else
+    echo "No differences found"
+    echo
+fi
 
 case $diff_exit_code in
     0)
@@ -96,11 +159,26 @@ esac
 if [ "${APPLY}" = "1" ]; then
   echo
   echo "== chezmoi apply (keep-going, verbose) =="
+  echo "Note: This may take several minutes due to package installations..."
+  echo "Progress will be shown in real-time below:"
+  echo "----------------------------------------"
+
   # 重い処理や外部取得が走る場合はここで発火
-  if chezmoi apply --keep-going -v ${CHEZMOI_ARGS}; then
+  # プログレス表示のため、リアルタイムでアウトプットを表示
+  if timeout 900 chezmoi apply --keep-going -v ${CHEZMOI_ARGS}; then
+      echo "----------------------------------------"
+      echo "✅ Apply completed successfully!"
       log_result "apply" "SUCCESS"
   else
-      log_result "apply" "FAILED" "(apply command failed)"
+      exit_code=$?
+      echo "----------------------------------------"
+      if [ $exit_code -eq 124 ]; then
+          echo "⏰ Apply timed out after 15 minutes"
+          log_result "apply" "TIMEOUT" "(apply timed out after 15 minutes)"
+      else
+          echo "❌ Apply failed with exit code: $exit_code"
+          log_result "apply" "FAILED" "(apply command failed with exit code: $exit_code)"
+      fi
   fi
 
   echo
