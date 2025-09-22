@@ -20,8 +20,16 @@ RUN curl -fsLS get.chezmoi.io | sh
 ARG USER_NAME=tester
 ARG USER_UID=1001
 ARG USER_GID=1001
-RUN groupadd -g ${USER_GID} ${USER_NAME} && \
-    useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash ${USER_NAME} && \
+RUN if ! getent group ${USER_GID} >/dev/null; then \
+        groupadd -g ${USER_GID} ${USER_NAME}; \
+    else \
+        groupadd ${USER_NAME}; \
+    fi && \
+    if ! getent passwd ${USER_UID} >/dev/null; then \
+        useradd -m -u ${USER_UID} -g ${USER_NAME} -s /bin/bash ${USER_NAME}; \
+    else \
+        useradd -m -g ${USER_NAME} -s /bin/bash ${USER_NAME}; \
+    fi && \
     echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/90-${USER_NAME} && \
     chmod 0440 /etc/sudoers.d/90-${USER_NAME}
 

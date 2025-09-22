@@ -43,6 +43,16 @@ echo "User=$(whoami)"
 echo "HOME=$HOME"
 echo "Repo=/repo  APPLY=$APPLY"
 echo "CHEZMOI_ARGS=${CHEZMOI_ARGS}"
+
+# HOMEディレクトリのセットアップ
+sudo chown -R "$(whoami):$(id -gn)" "$HOME"
+mkdir -p "$HOME/.config/chezmoi" "$HOME/.local/share"
+
+# chezmoi設定ファイル作成（sourceDirを/repoに設定）
+cat > "$HOME/.config/chezmoi/chezmoi.toml" << 'EOF'
+sourceDir = "/repo"
+EOF
+
 chezmoi --version
 git --version || true
 
@@ -55,8 +65,8 @@ else
 fi
 
 echo
-echo "== chezmoi init (source=/repo) =="
-if chezmoi init --source=/repo; then
+echo "== chezmoi init (no explicit source needed) =="
+if chezmoi init; then
     log_result "init" "SUCCESS"
 else
     log_result "init" "FAILED"
@@ -67,7 +77,7 @@ echo
 echo "== chezmoi diff (dry-run) =="
 # diff は差分があると exit code 1, エラーは exit code > 1
 set +e
-chezmoi diff "${CHEZMOI_ARGS}"
+chezmoi diff ${CHEZMOI_ARGS}
 diff_exit_code=$?
 set -e
 
@@ -87,7 +97,7 @@ if [ "${APPLY}" = "1" ]; then
   echo
   echo "== chezmoi apply (keep-going, verbose) =="
   # 重い処理や外部取得が走る場合はここで発火
-  if chezmoi apply --keep-going -v "${CHEZMOI_ARGS}"; then
+  if chezmoi apply --keep-going -v ${CHEZMOI_ARGS}; then
       log_result "apply" "SUCCESS"
   else
       log_result "apply" "FAILED" "(apply command failed)"
