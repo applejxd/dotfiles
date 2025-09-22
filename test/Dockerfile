@@ -8,16 +8,18 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      ca-certificates curl git sudo fish zsh locales tzdata bash \
-      chezmoi && \
+      ca-certificates curl git sudo fish zsh locales tzdata bash && \
     sed -i 's/# ja_JP.UTF-8/ja_JP.UTF-8/' /etc/locale.gen && \
     sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && \
     locale-gen && \
     rm -rf /var/lib/apt/lists/*
 
+# chezmoi の個別インストール
+RUN curl -fsLS get.chezmoi.io | sh
+
 ARG USER_NAME=tester
-ARG USER_UID=1000
-ARG USER_GID=1000
+ARG USER_UID=1001
+ARG USER_GID=1001
 RUN groupadd -g ${USER_GID} ${USER_NAME} && \
     useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash ${USER_NAME} && \
     echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/90-${USER_NAME} && \

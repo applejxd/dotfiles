@@ -74,12 +74,24 @@ CHEZMOI_ARGS="--include files=.bashrc" ./test.sh
 
 ## 5. 実行の流れ（内部で行っていること）
 
-`run_chezmoi` スクリプト（コンテナ内 `/usr/local/bin/run_chezmoi`）は以下を順に実行します。
+`run_chezmoi` スクリプト（コンテナ内 `/usr/local/bin/run_chezmoi`）は以下を順に実行し、各ステップの成功/失敗を記録します。
 
-1. `chezmoi doctor`
-2. `chezmoi init --source=/repo`（ホストのリポジトリを読み取り専用でマウント）
-3. `chezmoi diff [${CHEZMOI_ARGS}]`（非 0 終了でもログ優先で継続）
-4. `APPLY=1` のとき `chezmoi apply --keep-going -v [${CHEZMOI_ARGS}]` → 再度 `doctor`
+1. **環境情報表示** - ユーザー、HOME、chezmoi/gitバージョン
+2. **`chezmoi doctor`** - 環境診断（警告は非致命的として処理）
+3. **`chezmoi init --source=/repo`** - ホストリポジトリを読み取り専用でマウントして初期化
+4. **`chezmoi diff [${CHEZMOI_ARGS}]`** - 差分確認
+   - Exit code 0: 差分なし（成功）
+   - Exit code 1: 差分あり（正常、成功として扱う）
+   - Exit code > 1: 実際のエラー（失敗）
+5. **`APPLY=1` のとき `chezmoi apply --keep-going -v [${CHEZMOI_ARGS}]`** - 設定適用 → 再度 `doctor`
+6. **実行サマリー表示** - 各ステップの結果と最終的な成功/失敗判定
+
+### 改善された機能
+
+- **事前チェック**: Docker/Docker Compose の動作確認、compose.yaml の存在確認
+- **エラーハンドリング**: `|| true` の多用を避け、適切なエラー判定を実装
+- **実行結果追跡**: 各ステップの成功/失敗を記録し、最終サマリーで表示
+- **変数の安全性**: `CHEZMOI_ARGS` を引用符で囲み、スペースを含む引数に対応
 
 > `$HOME` は `tmpfs` マウントで毎回クリーンです（`compose.yaml` 既定）。
 
