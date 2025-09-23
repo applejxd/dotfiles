@@ -1,11 +1,13 @@
 {{- if ne .chezmoi.os "linux" }}
+# Linux のみで導入
 .chezmoiscripts/010_linux/*
 
 {{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
-# not for WSL
+# WSL で除外
 .chezmoiscripts/010_linux/011_microsoft.sh
 .chezmoiscripts/vscode_extensions.sh
 {{-   else }}
+# WSL のみで導入
 .config/shell/wslenv.sh
 .chezmoiscripts/010_linux/012_wsl.sh
 config/wsl.conf
@@ -14,7 +16,7 @@ config/wsl.conf
 {{- end }}
 
 {{- if ne .chezmoi.os "darwin" }}
-# only for Mac OS X
+# Mac OS X のみで導入
 .chezmoiscripts/020_mac/*
 
 .config/shell/osxenv.sh
@@ -22,7 +24,7 @@ config/wsl.conf
 {{- end }}
 
 {{- if ne .chezmoi.username "applejxd" }}
-# only for personal use
+# 個人 PC のみで導入
 .chezmoiscripts/021_nodejs.sh
 .chezmoiscripts/fetch_spacemacs.sh
 .claude.json
@@ -33,6 +35,8 @@ config/wsl.conf
 #{{- if not (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
 # needs key.txt to decrypt (need to run apply twice)
 #{{- end }}
+
+# 以下は一度のみコピー・復号
 
 {{- if (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
 .config/chezmoi/key.txt
