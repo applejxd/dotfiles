@@ -1,3 +1,20 @@
+{{ if .chezmoi.os "windows" }}
+# Unix 系 OS のみで導入
+.config/shell/*
+.config/shell/gdb/*
+.config/fish/*
+.tmuxp/*
+.bash_profile
+.bashrc
+.gdbinit
+.profile
+.tmux.conf
+.Xmodmap
+.xsessionrc
+.zshenv
+.zshrc
+{{- end }}
+
 {{- if ne .chezmoi.os "linux" }}
 # Linux のみで導入
 .chezmoiscripts/010_linux/*
@@ -21,6 +38,7 @@ config/wsl.conf
 
 .config/shell/osxenv.sh
 .config/shell/osxrc.sh
+.mackup.cfg
 {{- end }}
 
 {{- if ne .chezmoi.username "applejxd" }}
