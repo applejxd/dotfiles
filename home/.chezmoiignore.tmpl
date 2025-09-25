@@ -23,6 +23,8 @@
 # Linux のみで導入
 .chezmoiscripts/100_linux/*
 
+{{-   else }}
+
 {{-     if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
 # WSL で除外
 .chezmoiscripts/100_linux/110_native/*
