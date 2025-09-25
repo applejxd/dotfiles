@@ -1,6 +1,7 @@
 {{ if .chezmoi.os "windows" }}
 # Unix 系 OS のみで導入
 .chezmoiscripts/000_unix/*
+
 .config/shell/*
 .config/shell/gdb/*
 .config/fish/*
@@ -16,20 +17,20 @@
 .zshrc
 {{- else }}
 # Windows のみで導入
-.chezmoiscripts/030_windows/*
+.chezmoiscripts/300_windows/*
 {{- end }}
 
 {{- if ne .chezmoi.os "linux" }}
 # Linux のみで導入
-.chezmoiscripts/010_linux/*
+.chezmoiscripts/100_linux/*
 
 {{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
 # WSL で除外
-.chezmoiscripts/010_linux/011_microsoft.sh
-.chezmoiscripts/vscode_extensions.sh
+.chezmoiscripts/100_linux/110_native/*
 {{-   else }}
 # WSL のみで導入
-.chezmoiscripts/010_linux/012_wsl.sh
+.chezmoiscripts/100_linux/190_wsl.sh
+
 .config/shell/wslenv.sh
 {{-   end }}
 
@@ -37,7 +38,7 @@
 
 {{- if ne .chezmoi.os "darwin" }}
 # Mac OS X のみで導入
-.chezmoiscripts/020_mac/*
+.chezmoiscripts/200_mac/*
 
 .config/shell/osxenv.sh
 .config/shell/osxrc.sh
@@ -46,10 +47,6 @@
 
 {{- if ne .chezmoi.username "applejxd" }}
 # 個人 PC のみで導入
-.chezmoiscripts/021_nodejs.sh
-.chezmoiscripts/fetch_spacemacs.sh
-.claude.json
-
 .config/chezmoi/key.txt
 {{- end }}
 
