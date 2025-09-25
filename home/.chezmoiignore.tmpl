@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" }}   
 # Unix のみ
-.chezmoiscripts/000_unix/**
+.chezmoiscripts/000_unix/*
 .config/shell/*
 .config/shell/gdb/*
 .config/fish/*
@@ -37,7 +37,7 @@
 {{-   end }}
 {{- else }}
 # Linux のみで導入
-.chezmoiscripts/100_linux/*
+.chezmoiscripts/100_linux/**
 {{- end }}
 
 {{- if ne .chezmoi.username "applejxd" }}
