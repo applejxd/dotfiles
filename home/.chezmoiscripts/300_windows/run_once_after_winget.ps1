@@ -58,5 +58,3 @@ winst WinSCP.WinSCP
 # MCP
 winst OpenJS.NodeJS
 winst stral-sh.uv
-
-refreshenv
