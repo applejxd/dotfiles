@@ -1,5 +1,6 @@
 {{ if .chezmoi.os "windows" }}
 # Unix 系 OS のみで導入
+.chezmoiscripts/000_unix/*
 .config/shell/*
 .config/shell/gdb/*
 .config/fish/*
@@ -13,6 +14,9 @@
 .xsessionrc
 .zshenv
 .zshrc
+{{- else }}
+# Windows のみで導入
+.chezmoiscripts/030_windows/*
 {{- end }}
 
 {{- if ne .chezmoi.os "linux" }}
