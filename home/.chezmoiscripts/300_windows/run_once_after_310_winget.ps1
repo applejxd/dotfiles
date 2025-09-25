@@ -34,9 +34,25 @@ Install-Module -Name posh-git -Scope CurrentUser -Force
 # ------ #
 
 Function winst {
-  $cmd = "winget install --source winget --silent --accept-package-agreements --accept-source-agreements $args"
-  Invoke-Expression $cmd
+    param(
+        [Parameter(Mandatory=$true, ValueFromRemainingArguments=$true)]
+        [string[]]$args
+    )
+
+    # 最初の引数を PackageId とみなす
+    $packageId = $args[0]
+
+    # インストール確認
+    if (-not (winget list --id $packageId | Select-String $packageId)) {
+        Write-Host "Installing $packageId..."
+        $cmd = "winget install --source winget --silent --accept-package-agreements --accept-source-agreements $($args -join ' ')"
+        Invoke-Expression $cmd
+    }
+    else {
+        Write-Host "$packageId is already installed."
+    }
 }
+
 
 # tools
 winst Microsoft.PowerShell
