@@ -39,13 +39,11 @@ Function winst {
         [string[]]$args
     )
 
-    # 最初の引数を PackageId とみなす
     $packageId = $args[0]
 
-    # インストール確認
-    if (-not (winget list --id $packageId | Select-String $packageId)) {
+    if (-not (winget list --id $packageId --exact)) {
         Write-Host "Installing $packageId..."
-        $cmd = "winget install --source winget --silent --accept-package-agreements --accept-source-agreements $($args -join ' ')"
+        $cmd = "winget install --id $packageId --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements $($args[1..($args.Count-1)] -join ' ')"
         Invoke-Expression $cmd
     }
     else {
