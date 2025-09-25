@@ -1,4 +1,7 @@
-{{ if eq .chezmoi.os "windows" }}
+{{ if ne .chezmoi.os "windows" }}
+# Windows のみで導入
+.chezmoiscripts/300_windows/*
+{{- else }}
 # Unix 系 OS のみで導入
 .chezmoiscripts/000_unix/*
 
@@ -15,34 +18,32 @@
 .xsessionrc
 .zshenv
 .zshrc
-{{- else }}
-# Windows のみで導入
-.chezmoiscripts/300_windows/*
-{{- end }}
 
-{{- if ne .chezmoi.os "linux" }}
+{{-   if ne .chezmoi.os "linux" }}
 # Linux のみで導入
 .chezmoiscripts/100_linux/*
 
-{{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
+{{-     if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
 # WSL で除外
 .chezmoiscripts/100_linux/110_native/*
-{{-   else }}
+{{-     else }}
 # WSL のみで導入
 .chezmoiscripts/100_linux/190_wsl.sh
 
 .config/shell/wslenv.sh
+{{-     end }}
+
 {{-   end }}
 
-{{- end }}
-
-{{- if ne .chezmoi.os "darwin" }}
+{{-   if ne .chezmoi.os "darwin" }}
 # Mac OS X のみで導入
 .chezmoiscripts/200_mac/*
 
 .config/shell/osxenv.sh
 .config/shell/osxrc.sh
 .mackup.cfg
+{{-   end }}
+
 {{- end }}
 
 {{- if ne .chezmoi.username "applejxd" }}
