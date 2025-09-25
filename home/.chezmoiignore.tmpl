@@ -1,4 +1,5 @@
 {{ if eq .chezmoi.os "windows" }}   
+# Unix のみ
 .chezmoiscripts/000_unix/*
 .config/shell/*
 .config/shell/gdb/*
@@ -18,8 +19,8 @@
 .chezmoiscripts/300_windows/*
 {{- end }}
 
-# Mac OS X のみで導入
 {{- if ne .chezmoi.os "darwin" }}
+# Mac OS X のみ
 .chezmoiscripts/200_mac/*
 .config/shell/osxenv.sh
 .config/shell/osxrc.sh
@@ -43,10 +44,6 @@
 # 個人 PC のみで導入
 .config/chezmoi/key.txt
 {{- end }}
-
-#{{- if not (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
-# needs key.txt to decrypt (need to run apply twice)
-#{{- end }}
 
 # 以下は一度のみコピー・復号
 
