@@ -95,3 +95,16 @@ winst WinSCP.WinSCP
 # MCP
 winst OpenJS.NodeJS
 winst stral-sh.uv
+
+{{- if ne .chezmoi.username "applejxd" }}
+winst Bitwarden.Bitwarden
+winst Apple.iCloud
+winst Apple.iTunes
+winst Dropbox.Dropbox
+
+winst Spotify.Spotify
+winst Valve.Steam
+winst Amazon.Kindle
+winst Discord.Discord
+winst Wacom.WacomTabletDriver
+{{- end }}
