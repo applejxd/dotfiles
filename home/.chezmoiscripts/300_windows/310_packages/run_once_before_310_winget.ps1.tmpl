@@ -91,6 +91,8 @@ winst SourceFoundry.HackFonts
 winst Microsoft.PowerToys
 winst Ditto.Ditto
 winst WinSCP.WinSCP
+winst QL-Win.QuickLook
+winst Craftware.Keyhac
 
 # MCP
 winst OpenJS.NodeJS
@@ -108,3 +110,20 @@ winst Amazon.Kindle
 winst Discord.Discord
 winst Wacom.WacomTabletDriver
 {{- end }}
+
+#---------#
+# Startup #
+#---------#
+
+$wsh = New-Object -ComObject WScript.Shell
+
+$path = $wsh.SpecialFolders("Startup") + "\QuickLook.lnk"
+if (-not (Test-Path $path)) {
+    $shortcut = $wsh.CreateShortcut($path)
+  
+    $shortcut.WorkingDirectory = $env:LOCALAPPDATA + "\Programs\QuickLook\QuickLook.exe"
+    $shortcut.TargetPath = $env:LOCALAPPDATA + "\Programs\QuickLook\QuickLook.exe"
+    $shortcut.IconLocation = $env:LOCALAPPDATA + "\Programs\QuickLook\QuickLook.exe"
+  
+    $shortcut.Save()
+}
