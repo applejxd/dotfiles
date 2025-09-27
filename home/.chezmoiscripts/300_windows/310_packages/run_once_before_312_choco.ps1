@@ -5,14 +5,38 @@
     Install keypirinha via chocolatey
 #>
 
+# Self-elevate the script if required
+# see https://www.chezmoi.io/user-guide/machines/windows/#run-a-powershell-script-as-admin-on-windows
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()  # Get current user identity
+$principal = [Security.Principal.WindowsPrincipal] $identity  # Create a principal object
+$adminRole = [Security.Principal.WindowsBuiltInRole] 'Administrator' # Define the admin role
+$isElevated = $principal.IsInRole($adminRole) # Check if the user has the admin role
+if (-not $isElevated) {
+  $buildNumber = [int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber)
+  if ($buildNumber -ge 6000) {  # Windows Vista / Windows Server 2008 or later
+    $scriptPath = $MyInvocation.MyCommand.Path
+    $baseArguments = @('-File', $scriptPath)
+    $allArguments = $baseArguments + $MyInvocation.UnboundArguments
+
+    Start-Process -Wait -FilePath PowerShell.exe -Verb Runas -ArgumentList $allArguments
+    Exit
+  }
+}
+
 # Install chocolatey
 if (-not (Get-Command choco -ea SilentlyContinue)) {
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
     Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 }
 
-choco install chocolateygui
-choco install Keypirinha
+function cinst {
+  param([Parameter(Mandatory=$true,ValueFromRemainingArguments=$true)][string[]]$args)
+  $id=$args[0]; $rest=if($args.Count -gt 1){$args[1..($args.Count-1)]}else{@()}
+  choco upgrade $id -y --install-if-not-installed --no-progress @rest
+}
+
+cinst chocolateygui
+cinst Keypirinha
 
 # ---------- #
 # Extensions #
