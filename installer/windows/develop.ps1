@@ -45,6 +45,7 @@ Function winst {
 # Tools #
 #-------#
 
+# X11 forwarding
 winst marha.VcXsrv
 
 # Docker
