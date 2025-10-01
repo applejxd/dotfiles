@@ -5,7 +5,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.chezmoi.io)",
       "WebFetch(domain:gist.github.com)",
-      "Bash(chezmoi state:*)"
+      "Bash(chezmoi state:*)",
+      "Bash(pwsh:*)"
     ],
     "defaultMode": "acceptEdits"
   }
