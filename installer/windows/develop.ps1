@@ -3,34 +3,49 @@
     Install development tools
 #>
 
-Function winst {
-    $cmd = "winget install --silent --accept-package-agreements --accept-source-agreements $args"
-    Invoke-Expression $cmd
+# Self-elevate the script if required
+# see https://www.chezmoi.io/user-guide/machines/windows/#run-a-powershell-script-as-admin-on-windows
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()  # Get current user identity
+$principal = [Security.Principal.WindowsPrincipal] $identity  # Create a principal object
+$adminRole = [Security.Principal.WindowsBuiltInRole] 'Administrator' # Define the admin role
+$isElevated = $principal.IsInRole($adminRole) # Check if the user has the admin role
+if (-not $isElevated) {
+  $buildNumber = [int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber)
+  if ($buildNumber -ge 6000) {  # Windows Vista / Windows Server 2008 or later
+    $scriptPath = $MyInvocation.MyCommand.Path
+    $baseArguments = @('-File', $scriptPath)
+    $allArguments = $baseArguments + $MyInvocation.UnboundArguments
+
+    Start-Process -Wait -FilePath PowerShell.exe -Verb Runas -ArgumentList $allArguments
+    Exit
+  }
 }
 
+Function winst {
+  param(
+    [Parameter(Mandatory,Position=0)][string]$PackageId,
+    [Parameter(ValueFromRemainingArguments=$true)][string[]]$AdditionalArgs
+  )
+  if (-not (Get-Command winget -EA SilentlyContinue)) { throw "winget (App Installer) not found" }
 
-#-----#
-# Git #
-#-----#
+  $json = winget list --id $PackageId --exact --output json 2>$null
+  $installed = $json -and ($json.Trim() -ne '[]')
 
-winst Git.Git
-refreshenv
-
-git config --global init.defaultBranch main
-git config --global core.editor vim
-git config --global core.ignorecase false
-git config --global core.quotepath false
-git config --global ghq.root ~/src
-git config --global gitflow.branch.master main
-# for ssh push
-git config --global url."https://github.com/".insteadOf git@github.com:
-git config --global url."https://".insteadOf git://
+  if (-not $installed) {
+    Write-Host "Installing $PackageId..."
+    & winget @('install','--id',$PackageId,'--exact','--silent','--disable-interactivity',
+               '--accept-package-agreements','--accept-source-agreements') $AdditionalArgs
+    if ($LASTEXITCODE -ne 0) { throw "winget install failed: $LASTEXITCODE" }
+  } else {
+    Write-Host "$PackageId is already installed."
+  }
+}
 
 #-------#
 # Tools #
 #-------#
 
-winst Nvidia.GeForceExperience
+winst marha.VcXsrv
 
 # Docker
 winst hadolint.hadolint
@@ -46,4 +61,6 @@ winst Python.Python.3.10
 winst Python.Python.3.11
 winst Python.Python.3.12
 
-winst OpenJS.NodeJS
+# GPU
+winst Nvidia.GeForceNow
+winst Nvidia.CUDA
