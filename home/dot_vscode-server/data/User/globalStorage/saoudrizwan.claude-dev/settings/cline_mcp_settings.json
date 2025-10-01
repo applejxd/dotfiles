@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "deepwiki": {
+      "autoApprove": [],
+      "disabled": false,
+      "url": "https://mcp.deepwiki.com/sse"
+    },
+    "sequential-thinking": {
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "command": "npx"
+    },
+    "serena": {
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant"
+      ],
+      "command": "uvx"
+    }
+  }
+}
