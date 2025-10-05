@@ -1,12 +1,7 @@
 ---
 name: commit
-description: "Create a Conventional Commits message from staged changes and commit"
-allowed-tools:
-  - Bash(git status:*)
-  - Bash(git diff --cached:*)
-  - Bash(git branch --show-current)
-  - Bash(git log:*)
-  - Bash(git commit:*)
+description: "Commits in Conventional Commits manner from staged changes and commit"
+allowed-tools: Bash(git status:*), Bash(git diff --cached:*), Bash(git branch --show-current), Bash(git log:*), Bash(git commit:*)
 ---
 
 # Commits in Conventional Commits manner
