@@ -56,19 +56,7 @@ You are a precise commit message generator. Use **only the staged changes** to p
 
 9) **Output format (exactly two parts, no extra text):**
    - First, print the full commit message (no markdown).
-   - Second, print a single execution line that commits it with two `-m` flags:
-
-     ```bash
-     !`git commit -m "<first line>" -m "<body and footers as-is>" --no-verify`
-     ```
-
-     If there is **no body/footer**, print:
-
-     ```bash
-     !`git commit -m "<first line>" --no-verify`
-     ```
-
-     Escape any double quotes in the message.
+   - Second, print a single execution line that commits it
 
 ### Examples
 
