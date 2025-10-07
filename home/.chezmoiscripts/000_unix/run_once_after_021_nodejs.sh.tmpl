@@ -6,7 +6,7 @@ echo "Node.js と nvm をインストール/更新します..."
 
 {{- if eq .chezmoi.os "linux" }}
 # 依存
-command -v curl >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y curl ca-certificates; }
+command -v curl >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y curl ca-certificates jq; }
 {{- end }}
 
 # nvm 導入（未導入時のみ）
@@ -36,6 +36,13 @@ claude mcp add -s user --transport sse deepwiki https://mcp.deepwiki.com/sse || 
 claude mcp add context7 -s user -- npx -y @upstash/context7-mcp@latest || true
 claude mcp add playwright -s user -- npx @playwright/mcp@latest || true
 claude mcp add fetch -s user -- uvx mcp-server-fetch || true
+
+# co-authored-by 無効化
+# tmp="$(mktemp)"
+# jq '.includeCoAuthoredBy = false' ~/.claude/settings.json 2>/dev/null > "$tmp" \
+#   || echo '{"includeCoAuthoredBy": false}' > "$tmp"
+# mv "$tmp" ~/.claude/settings.json
+
 {{- end }}
 
 echo "✅ 完了：Node.js と nvm をインストール/更新しました"
