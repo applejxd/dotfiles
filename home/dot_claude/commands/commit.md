@@ -1,9 +1,9 @@
 ---
-allowed-tools: Bash(git add:*), Bash(git status:*), Bash(git commit:*)
-description: Create a git commit
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*)
+description: Generate a git commit message
 ---
 
-# Create a git commit
+# Generate a git commit message
 
 ## Context
 
@@ -14,5 +14,18 @@ description: Create a git commit
 
 ## Your task
 
-Based on the above changes, create a single git commit.
+Based on the above changes, **draft a commit message only**.
 Follow the Conventional Commits format.
+
+**DO NOT**:
+
+- Execute `git commit`
+- Execute `git add`
+- Add "Co-Authored-By: Claude" or any co-author tags
+- Add links to Claude Code
+
+**DO**:
+
+- Show the proposed commit message
+- Explain the changes briefly
+- Let the user manually commit when ready
