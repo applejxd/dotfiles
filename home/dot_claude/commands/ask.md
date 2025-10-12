@@ -1,8 +1,7 @@
 ---
-name: answer
-description: "Answer a user-provided question without running tools or making edits."
-argument-hint: "[question]"
 allowed-tools: []
+argument-hint: "[question]"
+description: "Answer a user-provided question without running tools or making edits."
 ---
 
 # Answer a Question

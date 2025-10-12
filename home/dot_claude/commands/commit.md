@@ -1,9 +1,9 @@
 ---
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*)
-description: Generate a git commit message
+description: Auto-generate commit message (commit manually)
 ---
 
-# Generate a git commit message
+# Auto-generate commit message (commit manually)
 
 ## Context
 
@@ -16,6 +16,8 @@ description: Generate a git commit message
 
 Based on the above changes, **draft a commit message only**.
 Follow the Conventional Commits format.
+
+## Policy
 
 **DO NOT**:
 
