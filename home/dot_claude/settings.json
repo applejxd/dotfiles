@@ -1,3 +1,60 @@
 {
-    "includeCoAuthoredBy": false
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "allow": [
+      "Read(README.md)",
+      "Read(pyproject.toml)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(uv pip list:*)",
+      "mcp__sequential-thinking__sequentialthinking"
+    ],
+    "ask": [
+      "Bash(uv add:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Read(.env.*)",
+      "Write(.env.*)"
+    ],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(rm:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(git reset:*)",
+      "Bash(git rebase:*)",
+      "Bash(git config:*)",
+      "Read(**/.ssh/*)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Read(**/*token*)",
+      "Read(**/*key*)",
+      "Read(**/*secret*)",
+      "Read(**/*credential*)",
+      "Read(**/*password*)",
+      "Read(.env)",
+      "Write(.env)",
+      "Write(**/secrets/**)",
+      "Write(**/*secret*)",
+      "Write(**/*credential*)",
+      "Write(**/.ssh/*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(nc:*)",
+      "Bash(telnet:*)",
+      "Bash(ssh:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm remove:*)",
+      "Bash(psql:*)",
+      "Bash(mysql:*)",
+      "Bash(mongod:*)",
+      "Bash(redis-cli:*)",
+      "Bash(pip:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker rmi:*)",
+      "Bash(docker exec:*)",
+      "mcp__supabase__execute_sql"
+    ]
+  }
 }
