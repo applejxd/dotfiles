@@ -1,0 +1,16 @@
+session_name: IDE like layout
+shell_command_before:
+  - 'eval "$(mise activate zsh)"'
+start_directory: "${PWD}"
+windows:
+  - window_name: editor
+    layout: even-vertical
+    panes:
+      - yazi
+      - zsh
+
+  - window_name: git
+    panes:
+      - shell_command:
+          - lazygit
+

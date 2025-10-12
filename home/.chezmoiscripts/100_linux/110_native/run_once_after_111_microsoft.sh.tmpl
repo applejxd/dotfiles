@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+echo "Microsoft 製品をインストール/更新します..."
+
+export DEBIAN_FRONTEND=noninteractive
+
+ARCH="$(dpkg --print-architecture)"
+KEYRING="/usr/share/keyrings/microsoft.gpg"
+VSCODE_LIST="/etc/apt/sources.list.d/vscode.list"
+EDGE_LIST="/etc/apt/sources.list.d/microsoft-edge.list"
+VSCODE_LINE="deb [arch=${ARCH} signed-by=${KEYRING}] https://packages.microsoft.com/repos/code stable main"
+EDGE_LINE="deb [arch=${ARCH} signed-by=${KEYRING}] https://packages.microsoft.com/repos/edge stable main"
+
+sudo -v
+sudo apt-get -yq install --no-install-recommends ca-certificates apt-transport-https wget gpg
+
+#---[ 1) Microsoft GPGキー ]---
+changed=0
+if [[ ! -s "$KEYRING" ]]; then
+  wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee "$KEYRING" >/dev/null
+  sudo chmod 0644 "$KEYRING"
+  changed=1
+fi
+
+#---[ 2) VS Code: repo & command ]---
+if [[ ! -e "$VSCODE_LIST" ]] || ! grep -Fqx "$VSCODE_LINE" "$VSCODE_LIST" 2>/dev/null; then
+  echo "$VSCODE_LINE" | sudo tee "$VSCODE_LIST" >/dev/null
+  changed=1
+fi
+if (( changed )); then sudo apt-get -yq update; changed=0; fi
+command -v code >/dev/null 2>&1 || sudo apt-get -yq install code
+
+#---[ 3) Edge: repo & command ]---
+if [[ ! -e "$EDGE_LIST" ]] || ! grep -Fqx "$EDGE_LINE" "$EDGE_LIST" 2>/dev/null; then
+  echo "$EDGE_LINE" | sudo tee "$EDGE_LIST" >/dev/null
+  changed=1
+fi
+if (( changed )); then sudo apt-get -yq update; changed=0; fi
+command -v microsoft-edge >/dev/null 2>&1 || sudo apt-get -yq install microsoft-edge-stable
+
+echo "✅ 完了：Microsoft 製品をインストール/更新しました"

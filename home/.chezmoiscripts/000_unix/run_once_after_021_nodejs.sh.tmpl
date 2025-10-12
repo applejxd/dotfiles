@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+echo "Node.js と nvm をインストール/更新します..."
+
+{{- if eq .chezmoi.os "linux" }}
+# 依存
+command -v curl >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y curl ca-certificates jq; }
+{{- end }}
+
+# nvm 導入（未導入時のみ）
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] || curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+
+# nvm を読み込み
+set +u
+. "$NVM_DIR/nvm.sh"
+set -u
+
+# Node.js LTS 導入（未導入時のみ）
+command -v node >/dev/null 2>&1 || nvm install --lts >/dev/null
+
+nvm alias default 'lts/*' >/dev/null
+nvm use --silent default
+
+{{- if eq .chezmoi.username "applejxd" }}
+# AI ツール
+for pkg in @anthropic-ai/claude-code @google/gemini-cli @openai/codex; do
+  npm list -g "$pkg" >/dev/null 2>&1 || npm install -g "$pkg"
+done
+
+# MCP サーバ
+claude mcp add sequential-thinking -s user -- npx -y @modelcontextprotocol/server-sequential-thinking || true
+claude mcp add -s user --transport sse deepwiki https://mcp.deepwiki.com/sse || true
+claude mcp add context7 -s user -- npx -y @upstash/context7-mcp@latest || true
+claude mcp add playwright -s user -- npx @playwright/mcp@latest || true
+claude mcp add fetch -s user -- uvx mcp-server-fetch || true
+
+# co-authored-by 無効化
+# tmp="$(mktemp)"
+# jq '.includeCoAuthoredBy = false' ~/.claude/settings.json 2>/dev/null > "$tmp" \
+#   || echo '{"includeCoAuthoredBy": false}' > "$tmp"
+# mv "$tmp" ~/.claude/settings.json
+
+{{- end }}
+
+echo "✅ 完了：Node.js と nvm をインストール/更新しました"

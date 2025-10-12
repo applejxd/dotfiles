@@ -1,0 +1,110 @@
+#!/bin/bash
+
+# Default editor
+if command -v nvim >/dev/null 2>&1; then
+  alias vi='nvim'
+  alias vim='nvim'
+  export EDITOR=nvim
+elif command -v vim >/dev/null 2>&1; then
+  alias vi='vim'
+  export EDITOR=vim
+else
+  alias vi='vi'
+  export EDITOR=vi
+fi
+export VISUAL="$EDITOR"
+
+# for Open3D visualizer
+export LIBGL_ALWAYS_INDIRECT=0
+
+#----------#
+# Japanese #
+#----------#
+
+export LC_ALL=ja_JP.UTF-8
+export LANG=ja_JP.UTF-8
+
+#-----------------#
+# OS dependencies #
+#-----------------#
+
+{{- if eq .chezmoi.os "darwin" }}
+# macOS
+# shellcheck source=/dev/null
+. "${HOME}/.config/shell/osxenv.sh"
+{{- end }}
+
+{{- if eq .chezmoi.os "linux" }}
+{{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
+# WSL
+# shellcheck source=/dev/null
+. "${HOME}/.config/shell/wslenv.sh"
+{{-   end }}
+
+# for x11 forwarding of chromium
+# from https://qiita.com/kairi003/items/003c4a615317049e5b85
+export XAUTHORITY="${HOME}/.Xauthority"
+
+# for IME
+export XMODIFIERS=@im=fcitx
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+
+{{- end }}
+
+#---------------#
+# Specific root #
+#---------------#
+
+# ghq root
+export GHQ_ROOT="${HOME}/src"
+
+#------#
+# PATH #
+#------#
+
+{{- if eq .chezmoi.os "linux" }}
+# for snap
+[[ -d "/snap/bin" ]] && export PATH="/snap/bin:${PATH}"
+{{- end }}
+
+# for original binaries
+export PATH="${HOME}/bin:${PATH}"
+
+# Node.js
+export NVM_DIR="$HOME/.nvm"
+[[ -s "$NVM_DIR/nvm.sh" ]] && . "$NVM_DIR/nvm.sh"
+[[ -s "$NVM_DIR/bash_completion" ]] && . "$NVM_DIR/bash_completion"  
+
+# for CUDA
+if [[ -e "/usr/local/cuda" ]]; then
+    export PATH="/usr/local/cuda/bin:${PATH}"
+    export LD_LIBRARY_PATH="/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
+
+# for Go lang
+if [[ -e "${HOME}/.go" ]]; then
+    export GOPATH="${HOME}/.go"
+    export PATH="${PATH}:${GOPATH}/bin"
+fi
+
+# for Haskell package Cabal
+[[ -e "${HOME}/.cabal" ]] && export PATH="${HOME}/.cabal/bin:${PATH}"
+
+{{- if eq .chezmoi.os "linux" }}
+# for TeX Live (local)
+if [ -d "${HOME}/.texlive" ]; then
+    export PATH="${HOME}/.texlive/main/bin/x86_64-linux:${PATH}"
+    export MANPATH="${HOME}/.texlive/main/texmf-dist/doc/man${MANPATH:+:${MANPATH}}"
+    export INFOPATH="${HOME}/.texlive/main/texmf-dist/doc/info${INFOPATH:+:${INFOPATH}}"
+fi
+{{- end }}
+
+#---------------#
+# User settings #
+#---------------#
+
+if [[ -f "${HOME}/.config/shell/usrenv.sh" ]]; then
+    # shellcheck source=/dev/null
+    . "${HOME}/.config/shell/usrenv.sh"
+fi

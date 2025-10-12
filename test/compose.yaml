@@ -1,0 +1,24 @@
+services:
+  chezmoi:
+    build:
+      context: .
+      # UID/GID をホストに合わせたい場合は以下を有効化
+      args:
+        USER_UID: ${USER_UID:-1000}
+        USER_GID: ${USER_GID:-1000}
+    working_dir: /home/tester
+    environment:
+      TZ: Asia/Tokyo
+      LANG: ja_JP.UTF-8
+      LC_ALL: ja_JP.UTF-8
+      HOME: /home/tester
+      APPLY: ${APPLY:-0}                 # 0=dry-run, 1=apply
+      CHEZMOI_ARGS: ${CHEZMOI_ARGS:-}    # 追加引数
+    volumes:
+      - ../:/repo:ro
+      - type: tmpfs
+        target: /home/tester
+        tmpfs:
+          size: 100m
+    # ここを短く：ファイル化したスクリプトを実行
+    command: ["/bin/bash", "-c", "run_chezmoi"]

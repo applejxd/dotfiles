@@ -1,0 +1,5 @@
+[tools]
+gitleaks = "8.28.0"
+go = "latest"
+uv = "latest"
+shellcheck = "0.11.0"

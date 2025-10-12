@@ -1,0 +1,4 @@
+keycode 121 = Eisu_toggle NoSymbol Eisu_toggle
+keycode 122 = Hiragana NoSymbol Hiragana
+keycode 131 = Eisu_toggle NoSymbol Eisu_toggle
+keycode 130 = Hiragana NoSymbol Hiragana

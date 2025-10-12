@@ -1,0 +1,77 @@
+# .clinerules for Python Library
+
+## Documentation Requirements
+
+- The `README.md` should include an overview of the library, installation steps, and usage examples  
+- API references should be auto-generated using tools like Sphinx  
+- All changes should be recorded in `CHANGELOG.md` and documented for version updates  
+
+## Architecture Decision Record (ADR)
+
+- Important decisions such as adding dependencies, major API changes, and design pattern adoptions should be recorded in `/docs/adr`  
+- Each ADR should follow the `/docs/adr/template.md` format, documenting background, reasons, and alternatives  
+
+## Code Style and Patterns
+
+- Code must comply with **PEP8**, using **flake8** for static analysis.
+- Common utilities and shared logic should be organized into dedicated modules following the DRY principle.
+- Type hints should be used to improve readability and maintainability.
+- Modules and packages should be structured with reusability and scalability in mind.
+- Use `pathlib` for handling path strings.
+
+## Naming Conventions
+
+- Private member variables and methods should start with an underscore.
+- Class names should use CamelCase (PascalCase).
+- Function names should use snake_case.
+- Constants should use UPPER_SNAKE_CASE.
+- Module names should use lower_snake_case.
+- Package names should use lower_snake_case.
+- Test file names should be prefixed with `test_`  
+  _Example: `test_module.py`_
+- Test class names should be prefixed with `Test`  
+  _Example: `TestMyClass`_
+- Test method names should be prefixed with `test_`  
+  _Example: `test_addition`_
+
+## Comments and Docstrings
+
+- Each module, class, and function must have a docstring in **sphinx-notypes style**  
+  *Docstrings should be written in a noun phrase (not ending with a verb)*  
+- Code comments should also follow the noun phrase style  
+- Example format:  
+
+  ```python
+  def add(a: int, b: int) -> int:
+      """
+      Add two numbers.
+
+      :param a: The first number.
+      :param b: The second number.
+      :return: The sum of the two numbers.
+      """
+      return a + b
+  ```
+
+## Test Guidelines
+
+- Unit tests for all features should be implemented using **pytest**  
+- External dependencies should be mocked using **pytest-mock** to ensure test independence  
+- Test coverage should be measured using **pytest-cov**  
+  *Tests should be added or improved to increase coverage*  
+- Automated tests should run in the CI/CD pipeline to ensure quality during pull requests  
+
+## Release and Versioning
+
+- Follow **Semantic Versioning (SemVer)** to manage major, minor, and patch versions  
+- Update `CHANGELOG.md` to inform users about version changes  
+
+## Deployment and Packaging
+
+- Use **pyproject.toml** to define package dependencies and entry points  
+- Automate the build and test process before distribution  
+
+## Environment Setup
+
+- Use **venv** for environment management  
+- Create the virtual environment as `.venv` in the project root directory  

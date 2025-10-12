@@ -1,0 +1,142 @@
+<#
+  .SYNOPSIS
+    Install packages by winget and NuGet
+  .DESCRIPTION
+    Install keypirinha via chocolatey
+#>
+
+# Self-elevate the script if required
+# see https://www.chezmoi.io/user-guide/machines/windows/#run-a-powershell-script-as-admin-on-windows
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()  # Get current user identity
+$principal = [Security.Principal.WindowsPrincipal] $identity  # Create a principal object
+$adminRole = [Security.Principal.WindowsBuiltInRole] 'Administrator' # Define the admin role
+$isElevated = $principal.IsInRole($adminRole) # Check if the user has the admin role
+if (-not $isElevated) {
+  $buildNumber = [int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber)
+  if ($buildNumber -ge 6000) {  # Windows Vista / Windows Server 2008 or later
+    $scriptPath = $MyInvocation.MyCommand.Path
+    $baseArguments = @('-File', $scriptPath)
+    $allArguments = $baseArguments + $MyInvocation.UnboundArguments
+
+    Start-Process -Wait -FilePath PowerShell.exe -Verb Runas -ArgumentList $allArguments
+    Exit
+  }
+}
+
+# ----- #
+# NuGet #
+# ----- #
+
+# Windows PowerShell 5.x の場合のみ NuGet プロバイダーを導入・PowerShell 7 では失敗するためスキップ
+if ( ($PSVersionTable.PSEdition -eq 'Desktop') -or ($PSVersionTable.PSVersion.Major -lt 6) ) {
+  # WinPS5.x は古い暗号プロトコルを使っており、そのままだと失敗することが多い
+  # TLS1.2 を強制して NuGet Provider の取得を成功させる
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  # NuGet プロバイダーを導入（パッケージ管理に必要）
+  Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser
+}
+# PSGallery を「信頼済みリポジトリ」に設定
+# これにより Install-Module 実行時にプロンプトが出なくなる
+Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+# PowerShellGet 自体を最新版に更新
+# PS7 でも WinPS5 でも共通してモジュール導入の安定性が増す
+Install-Module -Name PowerShellGet -Scope CurrentUser -Force
+
+# fzf wrapper（fzf 本体は scoop/choco 等で別途インストール必須）
+Install-Module -Name PSFzf -Scope CurrentUser -Force
+
+# z コマンド相当のディレクトリジャンプ機能
+Install-Module -Name ZLocation -Scope CurrentUser -Force
+
+# git プロンプト連携（ブランチやステータスを表示）
+Install-Module -Name posh-git -Scope CurrentUser -Force
+
+# ------ #
+# winget #
+# ------ #
+
+Function winst {
+  param(
+    [Parameter(Mandatory,Position=0)][string]$PackageId,
+    [Parameter(ValueFromRemainingArguments=$true)][string[]]$AdditionalArgs
+  )
+  if (-not (Get-Command winget -EA SilentlyContinue)) { throw "winget (App Installer) not found" }
+
+  $json = winget list --id $PackageId --exact --output json 2>$null
+  $installed = $json -and ($json.Trim() -ne '[]')
+
+  if (-not $installed) {
+    Write-Host "Installing $PackageId..."
+    & winget @('install','--id',$PackageId,'--exact','--silent','--disable-interactivity',
+               '--accept-package-agreements','--accept-source-agreements') $AdditionalArgs
+    if ($LASTEXITCODE -ne 0) { throw "winget install failed: $LASTEXITCODE" }
+  } else {
+    Write-Host "$PackageId is already installed."
+  }
+}
+
+# tools
+winst Microsoft.PowerShell
+winst Google.Chrome
+winst Google.JapaneseIME
+winst 7zip.7zip
+winst junegunn.fzf
+winst Obsidian.Obsidian
+
+# terminal
+winst JanDeDobbeleer.OhMyPosh
+winst SourceFoundry.HackFonts
+
+# utilities
+winst Microsoft.PowerToys
+winst Ditto.Ditto
+winst WinSCP.WinSCP
+winst QL-Win.QuickLook
+winst Craftware.Keyhac
+
+# MCP
+winst Git.Git
+winst OpenJS.NodeJS
+winst stral-sh.uv
+
+{{- if ne .chezmoi.username "applejxd" }}
+winst Bitwarden.Bitwarden
+winst Apple.iCloud
+winst Apple.iTunes
+winst Dropbox.Dropbox
+
+winst Spotify.Spotify
+winst Valve.Steam
+winst Amazon.Kindle
+winst Discord.Discord
+winst Wacom.WacomTabletDriver
+{{- end }}
+
+# #---------#
+# # Startup #
+# #---------#
+
+# $wsh = New-Object -ComObject WScript.Shell
+
+# $path = $wsh.SpecialFolders("Startup") + "\QuickLook.lnk"
+# if (-not (Test-Path $path)) {
+#     $shortcut = $wsh.CreateShortcut($path)
+  
+#     $shortcut.WorkingDirectory = $env:LOCALAPPDATA + "\Programs\QuickLook\QuickLook.exe"
+#     $shortcut.TargetPath = $env:LOCALAPPDATA + "\Programs\QuickLook\QuickLook.exe"
+#     $shortcut.IconLocation = $env:LOCALAPPDATA + "\Programs\QuickLook\QuickLook.exe"
+  
+#     $shortcut.Save()
+# }
+
+# $path = $wsh.SpecialFolders("Startup") + "\keyhac.lnk"
+# if (-not (Test-Path $path)) {
+#   $shortcut = $wsh.CreateShortcut($path)
+  
+#   $shortcut.WorkingDirectory = "C:\Progra~1\keyhac"
+#   $shortcut.TargetPath = "C:\Progra~1\keyhac\keyhac.exe"
+#   $shortcut.IconLocation = "C:\Progra~1\keyhac\keyhac.exe"
+
+#   $shortcut.Save()
+# }
+

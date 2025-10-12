@@ -1,0 +1,62 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Check if VS Code is available
+if ! command -v code >/dev/null 2>&1; then
+    echo "VS Code is not installed or not in PATH. Skipping extension installation."
+    exit 0
+fi
+
+echo "VS Code 拡張機能をインストールします..."
+
+# ネットの状況次第でインストールの確度が変わるので失敗しても続行する
+
+# for themes and icons
+code --install-extension anan.jetbrains-darcula-theme || true
+code --install-extension pkief.material-icon-theme || true
+
+# for general improvements
+code --install-extension usernamehw.errorlens || true
+code --install-extension aaron-bond.better-comments || true
+code --install-extension formulahendry.code-runner || true
+
+# for git
+code --install-extension eamodio.gitlens || true
+code --install-extension mhutchie.git-graph || true
+
+# for AI agents
+code --install-extension Anthropic.claude-code || true
+code --install-extension openai.chatgpt || true
+code --install-extension saoudrizwan.claude-dev || true
+code --install-extension RooVeterinaryInc.roo-cline || true
+
+# for markdown
+code --install-extension yzhang.markdown-all-in-one || true
+code --install-extension DavidAnson.vscode-markdownlint || true
+
+# for shell script
+code --install-extension foxundermoon.shell-format || true
+code --install-extension timonwong.shellcheck || true
+
+# for python
+code --install-extension ms-python.python || true
+code --install-extension njpwerner.autodocstring || true
+code --install-extension 076923.python-image-preview || true
+
+# for C/C++
+code --install-extension ms-vscode.cpptools || true
+code --install-extension xaver.clang-format || true
+code --install-extension twxs.cmake || true
+code --install-extension ms-vscode.cmake-tools || true
+
+# for other formats
+code --install-extension codezombiech.gitignore || true
+code --install-extension tamasfe.even-better-toml || true
+code --install-extension exiasr.hadolint || true
+code --install-extension ms-vscode.makefile-tools || true
+code --install-extension James-Yu.latex-workshop || true
+code --install-extension mikestead.dotenv || true
+code --install-extension hediet.vscode-drawio || true
+
+echo "✅ 完了：VS Code 拡張機能をインストールしました"

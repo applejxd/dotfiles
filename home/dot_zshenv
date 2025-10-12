@@ -1,0 +1,44 @@
+#!/bin/zsh
+# .zshenv>.zprofile>.zshrc>.zlogin
+
+# Unable path_helper from /etc/profile
+# see http://karur4n.hatenablog.com/entry/2016/01/18/100000
+setopt no_global_rcs
+
+if [[ -e /etc/zsh/zshrc ]]; then
+    # VSCode の Terminal で Emacs キーバインドを使うため
+    source /etc/zsh/zshrc
+fi
+
+#----------------#
+# Plugin Manager #
+#----------------#
+
+# for importing aliaces to commands by package manager
+
+# if [ -e $SHELL_CONF/zplug.sh ]; then
+#     source $SHELL_CONF/zplug.sh
+# fi
+
+SHELL_CONF=$HOME/.config/shell
+if [ -e $SHELL_CONF/zinit.zsh ]; then
+    source $SHELL_CONF/zinit.zsh
+fi
+
+#-----------------------#
+# Environment variables #
+#-----------------------#
+
+COMMON_ENV=$HOME/.config/shell/shellenv.sh
+if [ -e $COMMON_ENV ]; then
+    source $COMMON_ENV
+fi
+
+#--------------#
+# User Defined #
+#--------------#
+
+USER_ENV=$HOME/.config/shell/userenv.zsh
+if [ -e $USER_ENV ]; then
+    source $USER_ENV
+fi

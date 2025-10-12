@@ -1,0 +1,244 @@
+"=== 表示/配色 ================================================================
+
+" 端末が真の24bit色対応なら有効化（vim8以降/GUI/多くの端末で有効）
+if has('termguicolors') | set termguicolors | endif
+
+" ダーク背景前提のテーマ
+set background=dark
+colorscheme iceberg
+
+" シンタックス強調（ほぼ必須）
+syntax on
+
+" 行番号：絶対 + 相対（移動＆可読性）
+set number
+set relativenumber
+
+" 現在行の視認性を上げる
+set cursorline
+
+" 対応括弧の一時ハイライト
+set showmatch
+set matchtime=1
+
+" サインカラム常時表示（LSP/grep 等で行ズレ防止）
+set signcolumn=yes
+
+" ステータスライン常時
+set laststatus=2
+
+" タブ・トレイル可視化（リント前の粗検出）
+set list
+set listchars=tab:»·,trail:·,extends:»,precedes:«,nbsp:␣
+
+" 必要なら透明背景（配色切替時に毎回適用するなら下のautocmdを有効化）
+" autocmd ColorScheme * highlight Normal ctermbg=None | highlight LineNr ctermbg=None | highlight EndOfBuffer ctermbg=None
+
+"=== 入力/UI 操作 ============================================================
+
+" 挿入モードで jj → ESC（無音）
+inoremap <silent> jj <Esc>
+
+" leader キー（スペース）
+let mapleader=" "
+
+" よく使う操作（保存/終了/ハイライト解除/行揃え）
+nnoremap <Leader>w :write<CR>
+nnoremap <Leader>q :quit<CR>
+nnoremap <Leader>x :xit<CR>
+nnoremap <Leader>h :nohlsearch<CR>
+nnoremap <Leader>= <C-w>=
+
+" Y を Vimの直感に合わせて行末までヤンク
+nnoremap Y y$
+
+" クリップボード連携（OS対応時のみ）
+if has('clipboard') | set clipboard=unnamedplus | endif
+
+" 分割の既定：右/下に開く。分割間の移動ショートカット
+set splitright
+set splitbelow
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+
+"=== 検索体験 ================================================================
+
+" インクリメンタル検索 + ハイライト
+set incsearch
+set hlsearch
+
+" 大文字を含むときのみ大小区別（smartcase）
+set ignorecase
+set smartcase
+
+"=== インデント/整形（スペース統一・改行時もタブ化しない）===============
+
+" グローバル既定：2スペース＆タブ→スペース変換
+set expandtab
+set shiftwidth=2
+set softtabstop=2
+set tabstop=2
+
+" 自動インデント：構文を少しだけ見る smartindent を併用（重い filetype indent より軽量）
+set autoindent
+set smartindent
+
+" 折り返しルール（日本語環境で過剰折り返しを抑制）
+set textwidth=0
+set formatoptions=jcroql
+set formatoptions+=mM
+
+" 保存前に行末スペースを削除（検索履歴を汚さず静かに）
+augroup TrimTrailingSpaces
+  autocmd!
+  autocmd BufWritePre * silent! keeppatterns %s/\s\+$//e
+augroup END
+
+" POSIX/ツール互換のため最終行末に改行を付加
+set fixendofline
+
+"=== ファイル/エンコード/永続化 ==============================================
+
+" エンコードと改行コードの優先度（UTF-8最優先）
+set encoding=utf-8
+set fileencodings=utf-8,ucs-bom,euc-jp,cp932,latin1
+set fileformats=unix,dos,mac
+
+" undo をディスクに永続化（やり直し強化）
+set undofile
+if has('persistent_undo')
+  if isdirectory($HOME . '/.vim/undo') == 0 | call mkdir($HOME.'/.vim/undo', 'p') | endif
+  set undodir=~/.vim/undo
+endif
+
+" 一時ファイルの隔離（カレント汚染を避ける）
+if isdirectory($HOME . '/.vim/tmp') == 0 | call mkdir($HOME.'/.vim/tmp', 'p') | endif
+set directory=~/.vim/tmp//
+set backupdir=~/.vim/tmp//
+set nobackup
+set nowritebackup
+set noswapfile
+
+"=== コマンドライン/補完/実用 ===============================================
+
+" コマンドライン補完の見栄え/挙動
+set wildmenu
+set wildmode=longest:full,full
+
+" 不要ファイルを補完候補から除外（体感速度UP）
+set wildignore+=*.o,*.obj,*.class,*.pyc,*.pyo,*.so,*.dll,*.dylib,*.zip,*.tar,*.gz,*.7z
+
+" 補完メニューの挙動（選択必須にしない）
+set completeopt=menuone,noselect
+set shortmess+=c
+
+" コマンド表示（下部に軽くフィードバック）
+set showcmd
+
+" 行頭/行末で左右移動を回り込み
+set whichwrap+=<,>,h,l
+
+"=== 高速化/体感改善 ========================================================
+
+" CursorHold/更新イベントを軽量化（LSP/診断の点滅抑制にも効く）
+set updatetime=300
+
+" 再描画を必要時のみ（マクロ/置換で速く）
+set lazyredraw
+
+" 大きめファイルでも固まらないように（syntax/highlight の上限）
+set redrawtime=5000
+
+" バッファを裏で保持（未保存でも他ファイルへ移動可）
+set hidden
+
+" GUI/ターミナル全般の応答性
+set ttimeout
+set timeoutlen=500 ttimeoutlen=10
+
+" マウススクロール有効（端末/GUIで共通）
+set mouse=a
+
+" スクロール時の余白
+set scrolloff=3
+set sidescrolloff=5
+
+" Visual Block で空白領域も選択可能（列編集◎）
+set virtualedit=block
+
+" ripgrep があれば grep を置換（超高速検索）
+if executable('rg')
+  set grepprg=rg\ --vimgrep\ --hidden
+  set grepformat=%f:%l:%c:%m
+endif
+
+"=== ファイルタイプ/言語別（最小プリセット） ================================
+
+" filetype 検出は自動（必要十分／重い indent スクリプトは使わない方針）
+filetype plugin on
+
+augroup LanguageTweaks
+  autocmd!
+  " Dockerfile（拡張子が .dockerfile のケースを明示対応）
+  autocmd BufNewFile,BufRead *.dockerfile set filetype=dockerfile
+
+  " Markdown：2スペース・スペルチェック（英語 + CJK）・記法を崩さない
+  autocmd FileType markdown setlocal shiftwidth=2 softtabstop=2 tabstop=2 expandtab
+  autocmd FileType markdown setlocal spell spelllang=en,cjk
+  autocmd FileType markdown setlocal conceallevel=2
+  autocmd FileType markdown setlocal formatoptions+=n
+
+  " Python：PEP8 的に4スペース。88列ガイド（black基準）
+  autocmd FileType python   setlocal shiftwidth=4 softtabstop=4 tabstop=4 expandtab
+  autocmd FileType python   setlocal colorcolumn=88
+
+  " C/C++：4スペース。基本的な cindent 調整
+  autocmd FileType c,cpp    setlocal shiftwidth=4 softtabstop=4 tabstop=4 expandtab
+  autocmd FileType c,cpp    setlocal cindent cinoptions+=:0,l1,g0,(0,w1
+
+  " JSON/YAML：2スペース（一般慣行）
+  autocmd FileType json,yaml setlocal shiftwidth=2 softtabstop=2 tabstop=2 expandtab
+
+  " Web 系（HTML/CSS/JS/TS）：2スペース
+  autocmd FileType html,css,javascript,typescript setlocal shiftwidth=2 softtabstop=2 tabstop=2 expandtab
+
+  " Vimscript 自身：2スペース
+  autocmd FileType vim      setlocal shiftwidth=2 softtabstop=2 tabstop=2 expandtab
+
+  " ROS/設定ファイル系：タブ混入を予防（幅は上で各ft毎に指定）
+  autocmd FileType xml,cmake,meson,sh,zsh,toml,ini setlocal expandtab
+augroup END
+
+"=== 折りたたみ（軽量） =====================================================
+
+" syntax ベースは美しいが重い。既定は無効、必要な時だけ手動で za。
+set foldmethod=manual
+set foldlevelstart=99
+nnoremap <Space> za
+
+"=== netrw（組み込みファイラ） ==============================================
+
+let g:netrw_banner=0          " バナー非表示
+let g:netrw_keepdir=0
+let g:netrw_winsize=25
+let g:netrw_bufsettings="noma nomod nu rnu nowrap ro nobl"
+
+"=== 安全性/セキュリティ =====================================================
+
+" モードライン経由の設定注入を防止（外部由来ファイルを多く扱うなら推奨）
+set nomodeline
+set secure
+
+"=== ステータスライン（軽量・情報過多にしない） ============================
+
+set statusline=%f%m%r%h%w\ [%{&ff}:%{&fileencoding}]\ [%Y]\ [%{&expandtab?'spaces':'tabs'}:%{&shiftwidth}]\ %=%l:%c\ %p%%
+" 例：
+"   path/to/file [unix:utf-8] [python] [spaces:4]             123:45  67%
+"==============================================================================
+
+" 参考：色幅ガイド
+" * 全体で常にカラムガイドを出したい場合は以下を有効化（負荷は微小）
+"   set colorcolumn=80
+" * 言語別に適切な列でガイドしたい場合は FileType 側（上の autocmd）で設定

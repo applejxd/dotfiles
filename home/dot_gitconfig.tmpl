@@ -1,0 +1,22 @@
+[init]
+	defaultBranch = main
+[core]
+	editor = vim
+	ignorecase = false
+	quotepath = false
+{{- if ne .chezmoi.os "linux" }}
+	autocrlf = input
+{{- end }}	
+[ghq]
+	root = ~/src
+[gitflow "branch"]
+	master = main
+[url "github:"]
+	pushInsteadOf = https://github.com/
+[credential]
+	helper = store
+{{- if eq .chezmoi.username "applejxd" }}
+[user]
+	name = {{ (bitwarden "item" "gitconfig").login.username }}
+	email = {{ (bitwardenFields "item" "gitconfig").email.value }}
+{{- end }}

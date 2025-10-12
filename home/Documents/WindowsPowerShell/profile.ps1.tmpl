@@ -1,0 +1,56 @@
+# エンコーディングを US-ASCII から変更
+# see https://dattesar.com/powershell-utf8/
+$PSDefaultParameterValues['*:Encoding'] = 'utf8'
+
+# see https://secon.dev/entry/2020/08/17/070735/
+
+# テーマ
+# OneDrive の MyDocuments 同期は非推奨（パスが変更されるため）
+# see https://ohmyposh.dev/docs/installation/customize
+# see https://github.com/JanDeDobbeleer/oh-my-posh/discussions/2089#discussioncomment-2569096
+$env:Path += ";$env:LocalAppData\Programs\oh-my-posh\bin"
+# if ($PSVersionTable.PSEdition -eq "Core") {
+  # PowerShell Coreまたは7以降
+oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\pure.omp.json" | Invoke-Expression
+# }
+
+# キーバインド
+Set-PSReadLineOption -EditMode Emacs
+Set-PSReadLineOption -BellStyle None
+# 標準だと Ctrl+d は DeleteCharOrExit のため、うっかり端末が終了することを防ぐ
+Set-PSReadLineKeyHandler -Chord 'Ctrl+d' -Function DeleteChar
+
+# Chocolatey profile
+$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+if (Test-Path($ChocolateyProfile)) {
+  Import-Module "$ChocolateyProfile"
+}
+
+#-------#
+# alias #
+#-------#
+
+Set-Alias open explorer.exe
+Set-Alias pbcopy clip.exe
+Set-Alias pbpaste Get-Clipboard
+function relogin { powershell $Profile.CurrentUserAllHosts }
+
+. "{{ .chezmoi.homeDir }}/Documents/commands/wsl.ps1"
+. "{{ .chezmoi.homeDir }}/Documents/commands/docker.ps1"
+. "{{ .chezmoi.homeDir }}/Documents/commands/pwgen.ps1"
+
+#-----#
+# fzf #
+#-----#
+
+# see https://github.com/junegunn/fzf/wiki/Windows
+
+$env:FZF_DEFAULT_OPTS = "--reverse --border"
+
+# C-t と C-r のラッパー
+if ($PSVersionTable.PSEdition -eq "Core") {
+  # PowerShell Coreまたは7以降
+  Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r' 
+}
+
+. "{{ .chezmoi.homeDir }}/Documents/commands/fzf.ps1"

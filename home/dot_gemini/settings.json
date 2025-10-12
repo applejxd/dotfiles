@@ -1,0 +1,52 @@
+{
+  "mcpServers": {
+    "arxiv-mcp-server": {
+      "args": [
+        "arxiv-mcp-server"
+      ],
+      "command": "uvx",
+      "env": {},
+      "type": "stdio"
+    },
+    "context7": {
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "command": "npx"
+    },
+    "deepwiki": {
+      "url": "https://mcp.deepwiki.com/sse"
+    },
+    "fetch": {
+      "args": [
+        "mcp-server-fetch"
+      ],
+      "command": "uvx",
+      "env": {},
+      "type": "stdio"
+    },
+    "playwright": {
+      "args": [
+        "@playwright/mcp@latest"
+      ],
+      "command": "npx"
+    },
+    "sequential-thinking": {
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "command": "npx"
+    },
+    "youtube": {
+      "args": [
+        "@anaisbetts/mcp-youtube"
+      ],
+      "command": "npx",
+      "env": {},
+      "type": "stdio"
+    }
+  },
+  "selectedAuthType": "oauth-personal"
+}

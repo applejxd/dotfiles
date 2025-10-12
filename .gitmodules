@@ -1,0 +1,3 @@
+[submodule "home/AppData/Roaming/Keyhac/extension/fakeymacs"]
+	path = home/AppData/Roaming/Keyhac/extension/fakeymacs
+	url = https://github.com/smzht/fakeymacs.git

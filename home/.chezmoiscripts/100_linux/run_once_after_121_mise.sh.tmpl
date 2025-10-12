@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+echo "mise をインストール/更新します..."
+
+# Install mise if not present
+if [[ ! -e "${HOME}/.local/bin/mise" ]]; then
+    curl https://mise.run | sh
+fi
+# Temporary activation for current script session
+eval "$("${HOME}/.local/bin/mise" activate --shims)"
+
+echo "mise をインストール/更新しました"
+
+echo "開発ツールをインストール/更新します..."
+
+mise install chezmoi@latest
+
+# Python
+if ! type python >/dev/null 2>&1; then
+    echo "Installing Python build dependencies..." >&2
+
+    {{ template "get_sudo_password.sh.tmpl" . }}
+
+    # see https://github.com/pyenv/pyenv/wiki#suggested-build-environment
+    echo "$password" | sudo -S apt-get install -y \
+        build-essential libssl-dev zlib1g-dev \
+        libbz2-dev libreadline-dev libsqlite3-dev curl git \
+        libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+
+    echo "Installing Python via mise..." >&2
+    mise install python@latest
+    mise install uv@latest
+fi
+
+mise install shellcheck@latest
+mise install hadolint@latest
+
+mise install lazygit@v0.53.0
+mise install ghq@v1.8.0
+
+echo "✅ 完了：開発ツールをインストール/更新しました"

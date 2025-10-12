@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -euo pipefail
+
+sudo -v
+
+# Refresh
+echo "Ubuntu パッケージを更新します..."
+sudo apt-get update && sudo apt-get upgrade -y
+echo "✅ 完了：Ubuntu パッケージを更新しました"
+
+#--------#
+# config #
+#--------#
+
+# Known folders
+echo "既知のフォルダを整理します..."
+LANG=C xdg-user-dirs-update --force
+rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュメント ミュージック ピクチャ ビデオ
+echo "✅ 完了：既知のフォルダを整理しました"
+
+# Basics
+echo "基本的なツールをインストール/更新します..."
+sudo apt-get install -y \
+    wget curl vim neovim git unzip tree tig \
+    tmux python3-tmuxp manpages-ja xsel xdg-utils
+sudo snap install yazi --classic  # needs Cica (Nerd) font
+echo "✅ 完了：基本的なツールをインストール/更新しました"
+
+{{- if eq .chezmoi.os "linux" }}
+{{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
+echo "ユーティリティツールをインストール/更新します..."
+sudo apt-get install -y imagemagick ffmpeg
+echo "✅ 完了：ユーティリティツールをインストール/更新しました"
+{{-   end }}
+{{- end }}
+
+{{- if eq .chezmoi.username "applejxd" }}
+echo "ClamAV をインストール/更新します..."
+
+echo "Installing security tools..." >&2
+sudo apt-get -y install clamav clamav-daemon
+sudo systemctl stop clamav-freshclam
+sudo freshclam
+sudo systemctl start clamav-daemon.service
+sudo systemctl start clamav-freshclam.service
+
+echo "✅ 完了：ClamAV をインストール/更新しました"
+{{- end }}

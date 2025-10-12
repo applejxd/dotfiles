@@ -1,0 +1,73 @@
+# see https://www.chezmoi.io/reference/special-files/chezmoiignore/
+{{ if eq .chezmoi.os "windows" }}   
+# Unix のみ
+.chezmoiscripts/000_unix/
+.chezmoiscripts/000_unix/**
+.config/shell/
+.config/shell/**
+.config/gdb/
+.config/gdb/**
+.config/fish/
+.config/fish/**
+.tmuxp/
+.tmuxp/**
+.bash_profile
+.bashrc
+.gdbinit
+.profile
+.tmux.conf
+.Xmodmap
+.xsessionrc
+.zshenv
+.zshrc
+{{- else }}
+# windows のみで導入
+.chezmoiscripts/300_windows/
+.chezmoiscripts/300_windows/**
+.wslconfig
+AppData/
+AppData/**
+Documents/
+Documents/**
+{{- end }}
+
+{{- if ne .chezmoi.os "darwin" }}
+# Mac OS X のみ
+.chezmoiscripts/200_mac/
+.chezmoiscripts/200_mac/**
+.config/shell/osxenv.sh
+.config/shell/osxrc.sh
+.mackup.cfg
+{{- end }}
+
+{{- if eq .chezmoi.os "linux" }}
+{{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
+.chezmoiscripts/100_linux/110_native/
+.chezmoiscripts/100_linux/110_native/**
+{{-   else }}
+# WSL のみで導入
+.chezmoiscripts/100_linux/190_wsl.sh
+.config/shell/wslenv.sh
+{{-   end }}
+{{- else }}
+# Linux のみで導入
+.chezmoiscripts/100_linux/
+.chezmoiscripts/100_linux/**
+{{- end }}
+
+{{- if ne .chezmoi.username "applejxd" }}
+# 個人 PC のみで導入
+.config/chezmoi/key.txt
+.vscode-server/
+.vscode-server/**
+{{- end }}
+
+# 以下は一度のみコピー・復号
+
+{{- if (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
+.config/chezmoi/key.txt
+{{- end }}
+
+{{- if (stat (joinPath .chezmoi.homeDir ".gitconfig")) }}
+.gitconfig
+{{- end }}

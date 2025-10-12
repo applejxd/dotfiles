@@ -1,0 +1,44 @@
+# see https://www.chezmoi.io/user-guide/setup/#create-a-config-file-on-a-new-machine-automatically
+# test cmd: `chezmoi execute-template --init < ~/.local/share/chezmoi/.chezmoi.toml.tmpl`
+
+{{- $http_proxy := env "http_proxy" }}
+{{- $https_proxy := env "https_proxy" }}
+{{- $no_proxy := "localhost,127.0.0.1,::1,.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16" }}
+{{- if env "no_proxy" }}
+{{-   $no_proxy = env "no_proxy" }}
+{{- end }}
+
+# see https://www.chezmoi.io/reference/templates/bitwarden-functions/#automatic-bitwarden-cli-unlock
+bitwarden.unlock = "auto"
+# see https://www.chezmoi.io/user-guide/encryption/age/
+encryption = "age"
+
+# see https://www.chezmoi.io/user-guide/tools/editor/
+[edit]
+{{- if lookPath "code" }}
+    command = "code"
+    args = ["--wait"]
+{{- else }}
+    command = "vim"
+{{- end }}
+
+# see https://www.chezmoi.io/user-guide/tools/merge/#use-vscode-as-the-merge-tool
+[merge]
+command = "bash"
+args = [
+    "-c",
+    "cp {{ "{{ .Target }}" }} {{ "{{ .Target }}" }}.base && code --new-window --wait --merge {{ "{{ .Destination }}" }} {{ "{{ .Target }}" }} {{ "{{ .Target }}" }}.base {{ "{{ .Source }}" }}",
+]
+
+[age]
+    identity = "~/.config/chezmoi/key.txt"
+    symmetric = true
+
+[data]
+{{- if $http_proxy }}
+    http_proxy = "{{ $http_proxy }}"
+{{- end }}
+{{- if $https_proxy }}
+    https_proxy = "{{ $https_proxy }}"
+{{- end }}
+    no_proxy = "{{ $no_proxy }}"
