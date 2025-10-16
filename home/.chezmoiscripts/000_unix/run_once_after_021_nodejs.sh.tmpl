@@ -24,9 +24,11 @@ command -v node >/dev/null 2>&1 || nvm install --lts >/dev/null
 nvm alias default 'lts/*' >/dev/null
 nvm use --silent default
 
-{{- if eq .chezmoi.username "applejxd" }}
 # AI ツール
-for pkg in @anthropic-ai/claude-code @google/gemini-cli @openai/codex; do
+npm list -g @anthropic-ai/claude-code >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code 
+
+{{- if eq .chezmoi.username "applejxd" }}
+for pkg in @google/gemini-cli @openai/codex; do
   npm list -g "$pkg" >/dev/null 2>&1 || npm install -g "$pkg"
 done
 
