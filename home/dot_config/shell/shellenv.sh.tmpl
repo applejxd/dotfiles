@@ -52,12 +52,18 @@ export QT_IM_MODULE=fcitx
 
 {{- end }}
 
-#---------------#
-# Specific root #
-#---------------#
+#------#
+# Tool #
+#------#
 
 # ghq root
 export GHQ_ROOT="${HOME}/src"
+
+{{- if ne .chezmoi.username "applejxd" }}
+# see https://docs.claude.com/ja/docs/claude-code/amazon-bedrock
+export CLAUDE_CODE_USE_BEDROCK=1
+export AWS_REGION=us-east-1
+{{- end }}
 
 #------#
 # PATH #
