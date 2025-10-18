@@ -55,17 +55,11 @@ fi
     source "/usr/local/etc/profile.d/bash_completion.sh"
 
 # fzf
-# shellcheck source=/dev/null
-[ -f "$HOME"/.fzf.bash ] && source "$HOME"/.fzf.bash
-if [ -f "$HOME"/.fzf.bash ]; then
+if type "fzf" >/dev/null 2>&1; then
     # shellcheck source=/dev/null
-    source "$HOME"/.fzf.bash
+    eval "$(fzf --bash)"
     # common settings of fzf
-fi
-
-if type "fzf" >/dev/null 2>&1 && [ -f "$HOME"/.config/shell/fzf.sh ]; then
-    # shellcheck source=/dev/null
-    source "$HOME"/.config/shell/fzf.sh
+    [ -f "$HOME"/.config/shell/fzf.sh ] && source "$HOME"/.config/shell/fzf.sh
 fi
 
 # ROS2
