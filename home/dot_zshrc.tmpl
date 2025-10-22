@@ -126,12 +126,11 @@ function fancy-ctrl-z() {
 # fzf #
 #-----#
 
-[ -f "${HOME}/.fzf.zsh" ] && source "${HOME}/.fzf.zsh"
-
-# common setting
-COMMON_FZF="${HOME}/.config/shell/fzf.sh"
-if [ -e $COMMON_FZF ]; then
-    source $COMMON_FZF
+if type "fzf" >/dev/null 2>&1; then
+    eval "$(fzf --zsh)"
+    # common setting
+    COMMON_FZF="${HOME}/.config/shell/fzf.sh"
+    [ -e $COMMON_FZF ] && source $COMMON_FZF
 fi
 
 # z-fzf, emacs-like key-bindings

@@ -1,33 +1,46 @@
 ---
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*)
-description: Auto-generate commit message (commit manually)
+allowed-tools:
+  - Bash(git status:*)
+  - Bash(git diff:*)
+  - Bash(git log:*)
+  - Bash(git branch:*)
+description: 必要十分・非誇張のコミットメッセージを自動生成（コミットは手動）
 ---
 
-# Auto-generate commit message (commit manually)
+# コミットメッセージを自動生成（手動コミット）
 
-## Context
+## コンテキスト
 
-- Current git status: !`git status`
-- Current git diff (staged and unstaged changes): !`git diff HEAD`
-- Current branch: !`git branch --show-current`
-- Recent commits: !`git log --oneline -10`
+- git status: !`git status`
+- 差分（ステージ済み＋未ステージ）: !`git diff HEAD`
+- 現在のブランチ: !`git branch --show-current`
+- 直近コミット: !`git log --oneline -10`
 
-## Your task
+## タスク
 
-Based on the above changes, **draft a commit message only**.
-Follow the Conventional Commits format.
+上記を基に **Conventional Commits** 形式で、**コミットメッセージのみ**を下書きしてください。
 
-## Policy
+## スタイル規範（ミニマム）
 
-**DO NOT**:
+- **出力言語**: 既定は **英語**。ユーザーが明示的に日本語指定時のみ **日本語**で出力
+- **必要十分・非誇張**: 事実のみ（何を・なぜ・影響）。誇張・曖昧語を避ける
+- 件名は命令形・**72文字以内**・文末ピリオドなし
+- **定量主張の条件**:
+  - 数値（例: "+30% speedup"）を記載する場合は、**測定済みであること**  
+  - 可能なら測定条件（環境・ベンチ名・サンプル数）を本文に**1行で簡潔に記載**
+  - **未測定の見込み・推定（例: "~30% expected"）は禁止**。不確実な場合は数値を記載しない
 
-- Execute `git commit`
-- Execute `git add`
-- Add "Co-Authored-By: Claude" or any co-author tags
-- Add links to Claude Code
+## 出力フォーマット
 
-**DO**:
+```
+<type>(<scope>): <subject>
 
-- Show the proposed commit message
-- Explain the changes briefly
-- Let the user manually commit when ready
+- Motivation: <why>
+- Change: <what>
+- Impact: <effect>  # 数値を書くのは測定済みのときのみ
+```
+
+## ポリシー
+
+**禁止**: `git commit` / `git add` の実行、共同著者タグ追加、Claudeリンク追加、**未測定の数値主張（例: "30%向上が見込める"）**  
+**要求**: 提案コミット文の提示と簡潔な説明のみ。コミットはユーザーが手動で実施
