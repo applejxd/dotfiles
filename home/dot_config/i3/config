@@ -1,2 +1,15 @@
-bindsym Mod1+space exec rofi -show drun
-bindsym $mod+d exec rofi -show drun
+# ==== Rofi ====
+set $rofitheme /usr/share/rofi/themes/Arc-Dark.rasi
+
+# アプリランチャー（drun）
+bindsym Mod1+space exec --no-startup-id rofi -theme $rofitheme -show drun
+
+# アプリ＋コマンド(combi)
+bindsym $mod+d exec --no-startup-id rofi -theme $rofitheme -show combi
+
+# ファイル検索
+bindsym $mod+Shift+d exec --no-startup-id rofi -theme $rofitheme -show filebrowser
+
+# ==== 外観調整 ====
+client.focused          #4c7899 #285577 #ffffff #2e9ef4 #285577
+client.unfocused        #333333 #222222 #888888 #292d2e #222222
