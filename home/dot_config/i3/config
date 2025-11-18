@@ -1,0 +1,2 @@
+bindsym Mod1+space exec rofi -show drun
+bindsym $mod+d exec rofi -show drun
