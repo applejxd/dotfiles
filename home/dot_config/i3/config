@@ -202,4 +202,5 @@
 # # ファイル検索
 # bindsym $mod+Shift+d exec --no-startup-id rofi -theme $rofitheme -show filebrowser
 
-bindsym $mod+d exec --no-startup-id rofi -show drun
+bindsym Mod1+space exec rofi -show drun
+bindsym $mod+d exec rofi -show drun   # 予備
