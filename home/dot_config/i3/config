@@ -193,7 +193,7 @@
 # }
 
 # ==== Rofi ====
-# set $rofitheme /usr/share/rofi/themes/Arc-Dark.rasi
+set $rofitheme /usr/share/rofi/themes/Arc-Dark.rasi
 
 # アプリランチャー（drun）
 bindsym Mod1+space exec --no-startup-id rofi -theme $rofitheme -show drun
