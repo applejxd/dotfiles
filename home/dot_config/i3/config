@@ -35,7 +35,7 @@ exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
 exec --no-startup-id nm-applet
 
 # polybar を起動
-exec_always --no-startup-id polybar main
+# exec_always --no-startup-id polybar main
 
 # Use pactl to adjust volume in PulseAudio.
 set $refresh_i3status killall -SIGUSR1 i3status
@@ -193,7 +193,7 @@ bar {
 }
 
 # ==== Rofi ====
-set $rofitheme /usr/share/rofi/themes/Arc-Dark.rasi
+# set $rofitheme /usr/share/rofi/themes/Arc-Dark.rasi
 
 # アプリランチャー（drun）
 bindsym Mod1+space exec --no-startup-id rofi -theme $rofitheme -show drun
