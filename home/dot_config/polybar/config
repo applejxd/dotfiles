@@ -31,37 +31,37 @@ label-unfocused = %name%
 label-visible = %name%
 label-urgent = %name%
 
-[module/pulseaudio]
-type = internal/pulseaudio
-use-ui-max = true
-interval = 2
+; [module/pulseaudio]
+; type = internal/pulseaudio
+; use-ui-max = true
+; interval = 2
 
-format-volume = "  %percentage%%"
-label-muted = " mute"
+; format-volume = "  %percentage%%"
+; label-muted = " mute"
 
-[module/deadd]
-type = custom/text
-content = ""
-content-margin = 4
-content-underline = ${colors.primary}
-click-left = kill -s USR1 $(pidof deadd-notification-center)
+; [module/deadd]
+; type = custom/text
+; content = ""
+; content-margin = 4
+; content-underline = ${colors.primary}
+; click-left = kill -s USR1 $(pidof deadd-notification-center)
 
-[module/powermenu]
-type = custom/menu
+; [module/powermenu]
+; type = custom/menu
 
-expand-right = true
-format = <label-toggle>
-label-toggle = ""
-label-toggle-foreground = ${colors.primary}
+; expand-right = true
+; format = <label-toggle>
+; label-toggle = ""
+; label-toggle-foreground = ${colors.primary}
 
-menu-0-0 = Logout
-menu-0-0-exec = i3-msg exit
+; menu-0-0 = Logout
+; menu-0-0-exec = i3-msg exit
 
-menu-0-1 = Reboot
-menu-0-1-exec = systemctl reboot
+; menu-0-1 = Reboot
+; menu-0-1-exec = systemctl reboot
 
-menu-0-2 = Poweroff
-menu-0-2-exec = systemctl poweroff
+; menu-0-2 = Poweroff
+; menu-0-2-exec = systemctl poweroff
 
 [module/clock]
 type = internal/date
