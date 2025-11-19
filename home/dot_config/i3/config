@@ -192,12 +192,14 @@
 #         status_command i3status
 # }
 
-# ==== Rofi ====
-set $rofitheme /usr/share/rofi/themes/Arc-Dark.rasi
+# # ==== Rofi ====
+# set $rofitheme /usr/share/rofi/themes/Arc-Dark.rasi
 
-# アプリランチャー（drun）
-bindsym Mod1+space exec --no-startup-id rofi -theme $rofitheme -show drun
-# アプリ＋コマンド(combi)
-bindsym $mod+d exec --no-startup-id rofi -theme $rofitheme -show combi
-# ファイル検索
-bindsym $mod+Shift+d exec --no-startup-id rofi -theme $rofitheme -show filebrowser
+# # アプリランチャー（drun）
+# bindsym Mod1+space exec --no-startup-id rofi -theme $rofitheme -show drun
+# # アプリ＋コマンド(combi)
+# bindsym $mod+d exec --no-startup-id rofi -theme $rofitheme -show combi
+# # ファイル検索
+# bindsym $mod+Shift+d exec --no-startup-id rofi -theme $rofitheme -show filebrowser
+
+bindsym $mod+d exec --no-startup-id rofi -show drun
