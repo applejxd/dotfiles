@@ -13,7 +13,7 @@ alert      = #bf616a
 [bar/main]
 monitor = ${env:MONITOR:}
 width = 100%
-height = 30
+height = 38
 background = ${colors.background}
 foreground = ${colors.foreground}
 line-size = 3
@@ -23,10 +23,10 @@ border-size = 0
 module-margin = 2
 separator = |
 separator-foreground = ${colors.muted}
-font-0 = "Ubuntu Mono:size=11;2"
-font-1 = "Font Awesome 6 Free:style=Solid:pixelsize=12;2"
-font-2 = "Font Awesome 6 Brands:style=Regular:pixelsize=12;2"
-modules-left = launcher workspaces
+font-0 = "Ubuntu Mono:size=13;3"
+font-1 = "Font Awesome 6 Free:style=Solid:pixelsize=14;3"
+font-2 = "Font Awesome 6 Brands:style=Regular:pixelsize=14;3"
+modules-left = launcher terminal browser workspaces
 modules-center = windowtitle
 modules-right = pulseaudio cpu memory clock session
 cursor-click = pointer
@@ -109,3 +109,16 @@ content = ""
 content-padding = 2
 content-foreground = ${colors.alert}
 click-left = i3-nagbar -t warning -m 'Exit i3?' -B 'Logout' 'i3-msg exit' -B 'Reboot' 'systemctl reboot' -B 'Poweroff' 'systemctl poweroff'
+[module/terminal]
+type = custom/text
+content = ""
+content-padding = 2
+content-foreground = ${colors.primary}
+click-left = i3-sensible-terminal
+
+[module/browser]
+type = custom/text
+content = ""
+content-padding = 2
+content-foreground = ${colors.primary}
+click-left = firefox
