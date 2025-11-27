@@ -39,8 +39,7 @@ bindsym $mod+Shift+Return exec --no-startup-id $browser
 bindsym $mod+e exec --no-startup-id $filemanager
 bindsym $mod+Shift+q kill
 
-# Rofi ランチャー（$mod+space は IME/レイアウト切替と競合するため解除し、$mod+d に変更）
-unbindsym $mod+space
+# Rofi ランチャー
 bindsym $mod+d exec --no-startup-id $launcher
 bindsym $mod+p exec --no-startup-id $runner
 bindsym $mod+Tab exec --no-startup-id $window_switcher
