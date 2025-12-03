@@ -10,10 +10,9 @@ set $terminal i3-sensible-terminal
 set $browser firefox
 set $filemanager thunar
 set $locker i3lock -c 000000
-set $rofi_theme /usr/share/rofi/themes/Arc-Dark.rasi
 set $launcher rofi -show drun
-set $runner rofi -theme $rofi_theme -show run -display-run "Command"
-set $window_switcher rofi -theme $rofi_theme -show window
+set $runner rofi -theme /usr/share/rofi/themes/Arc-Dark.rasi -show run -display-run "Command"
+set $window_switcher rofi -theme /usr/share/rofi/themes/Arc-Dark.rasi -show window
 
 font pango:monospace 10
 
