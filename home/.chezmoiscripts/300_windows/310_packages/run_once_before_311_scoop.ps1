@@ -13,7 +13,7 @@ if (!(Get-Command scoop -ea SilentlyContinue)) {
 
 # Linux commands (gow = Gnu on Windows)
 # see https://github.com/bmatzelle/gow/wiki/executables_list
-scoop install sudo gow
+scoop install sudo gow jq
 
 # build tools
 scoop install mingw-winlibs
