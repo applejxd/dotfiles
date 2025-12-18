@@ -1,22 +1,38 @@
 [init]
 	defaultBranch = main
+[credential]
+	helper = cache
+
 [core]
 	editor = vim
-	ignorecase = false
 	quotepath = false
-{{- if ne .chezmoi.os "linux" }}
+	# set case-sensitivity according to OS
+	# (Windows filesystems are usually case-insensitive)
+{{- if eq .chezmoi.os "windows" }}
+	ignorecase = true
+	autocrlf = true
+{{- else }}
+	ignorecase = false
 	autocrlf = input
-{{- end }}	
+{{- end }}
+
 [ghq]
-	root = ~/src
+	root = {{ .chezmoi.home }}/src
 [gitflow "branch"]
 	master = main
 [url "github:"]
 	pushInsteadOf = https://github.com/
-[credential]
-	helper = store
+
+# for overwriting by local config
+[include]
+	path = {{ .chezmoi.home }}/.config/git/config
+
 {{- if eq .chezmoi.username "applejxd" }}
+{{- with (bitwarden "item" "gitconfig") }}
 [user]
-	name = {{ (bitwarden "item" "gitconfig").login.username }}
-	email = {{ (bitwardenFields "item" "gitconfig").email.value }}
+	name = {{ .login.username }}
+	{{- with (bitwardenFields "item" "gitconfig") }}
+	email = {{ .email.value }}
+	{{- end }}
+{{- end }}
 {{- end }}
