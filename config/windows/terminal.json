@@ -3,8 +3,8 @@
         "defaults": {
             "colorScheme": "Iceberg",
             "font": {
-                "face": "Hack",
-                "size": 10
+                "face": "Cica",
+                "size": 12
             },
             "opacity": 100,
             "useAcrylic": true
