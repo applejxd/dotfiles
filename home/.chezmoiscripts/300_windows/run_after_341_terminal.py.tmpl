@@ -53,10 +53,11 @@ def overwrite_settings(
     """
     target_json_str = json.dumps(target_dict, ensure_ascii=False, indent=2)
     
+    print("New settings.json for Windows Terminal:")
+    print(target_json_str)
+    
     do_write = True
     if verbose:
-        print("Merged settings:")
-        print(target_json_str)
         answer = input(f"Write merged settings to {target_path}? (y/n): ")
         do_write = answer.lower() == "y"
 
@@ -64,7 +65,7 @@ def overwrite_settings(
         target_path.parent.mkdir(parents=True, exist_ok=True)
         with target_path.open("w", encoding="utf-8") as f:
             f.write(target_json_str)
-        print(f"Wrote {target_path}")
+        print(f"Wrote merged settings to {target_path}.")
     else:
         print("Aborted.")
         
