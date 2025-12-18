@@ -1,0 +1,102 @@
+import json
+from pathlib import Path
+from typing import Dict, List
+
+
+def get_schemes_by_name(schemes: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+    """
+    Convert to schemes with name as key.
+
+    :param schemes: List of scheme dicts with "name" key.
+    :return: Dict mapping scheme names to scheme dicts.
+    """
+    out = {}
+    for scheme in schemes:
+        name = scheme["name"]
+        out[name] = scheme
+    return out
+
+
+def merge_schemes(source: Dict, target: Dict) -> Dict:
+    """
+    Merge terminal schemes from source into target.
+
+    :param source: Source terminal settings dict.
+    :param target: Target terminal settings dict.
+    :return: Merged terminal settings dict.
+    """
+    source_scheme_dict = get_schemes_by_name(source["schemes"])
+    target_scheme_dict = get_schemes_by_name(target.get("schemes", []))
+
+    merged_schemes = target_scheme_dict.copy()
+    merged_schemes.update(source_scheme_dict)
+
+    # convert back to list
+    schemes = list(merged_schemes.values())
+
+    # update target dict
+    merged_dict = target.copy()
+    merged_dict["schemes"] = schemes
+    return merged_dict
+
+
+def overwrite_settings(
+    target_path: Path, target_dict: Dict, verbose: bool = False
+) -> bool:
+    """
+    Overwrite target settings file with target_dict.
+
+    :param target_path: Path to target settings file.
+    :param target_dict: Settings dict to write.
+    :param verbose: Whether to print merged settings and ask for confirmation.
+    :return: True if written, False if aborted.
+    """
+    target_json_str = json.dumps(target_dict, ensure_ascii=False, indent=2)
+    
+    do_write = True
+    if verbose:
+        print("Merged settings:")
+        print(target_json_str)
+        answer = input(f"Write merged settings to {target_path}? (y/n): ")
+        do_write = answer.lower() == "y"
+
+    if do_write:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with target_path.open("w", encoding="utf-8") as f:
+            f.write(target_json_str)
+        print(f"Wrote {target_path}")
+    else:
+        print("Aborted.")
+        
+    return do_write
+
+
+def main():
+    # always exists
+    source_path = (
+        Path("{{ .chezmoi.sourceDir }}").parent / "config" / "windows" / "terminal.json"
+    )
+    with open(source_path, "r", encoding="utf-8") as f:
+        source_dict = json.load(f)
+
+    # may not exist
+    target_path = Path(
+        "C:\\Users\\applejxd\\AppData\\Local\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json"
+    )
+    if target_path.exists():
+        with open(target_path, "r", encoding="utf-8") as f:
+            target_dict = json.load(f)
+    else:
+        target_dict = {}
+
+    # merge schemes
+    target_dict = merge_schemes(source_dict, target_dict)
+    # overwrite defaults profile
+    if "profiles" not in target_dict:
+        target_dict["profiles"] = {}
+    target_dict["profiles"]["defaults"] = source_dict["profiles"]["defaults"]
+
+    overwrite_settings(target_path, target_dict, verbose=True)
+
+
+main()

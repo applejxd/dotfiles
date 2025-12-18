@@ -1,5 +1,6 @@
+# generates ~/.config/chezmoi/chezmoi.toml
+# you can test this by `chezmoi execute-template --init < ~/.local/share/chezmoi/.chezmoi.toml.tmpl`
 # see https://www.chezmoi.io/user-guide/setup/#create-a-config-file-on-a-new-machine-automatically
-# test cmd: `chezmoi execute-template --init < ~/.local/share/chezmoi/.chezmoi.toml.tmpl`
 
 {{- $http_proxy := env "http_proxy" }}
 {{- $https_proxy := env "https_proxy" }}
@@ -33,6 +34,12 @@ args = [
 [age]
     identity = "~/.config/chezmoi/key.txt"
     symmetric = true
+
+{{ if eq .chezmoi.os "windows" }}
+# see https://www.chezmoi.io/reference/configuration-file/interpreters/
+[interpreters.py]
+    command = 'C:\WINDOWS\py.EXE'
+{{- end }}
 
 [data]
 {{- if $http_proxy }}
