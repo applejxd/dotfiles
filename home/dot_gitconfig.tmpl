@@ -17,7 +17,7 @@
 {{- end }}
 
 [ghq]
-	root = {{ .chezmoi.home }}/src
+	root = {{ .chezmoi.destDir }}/src
 [gitflow "branch"]
 	master = main
 [url "github:"]
@@ -25,7 +25,7 @@
 
 # for overwriting by local config
 [include]
-	path = {{ .chezmoi.home }}/.config/git/config
+	path = {{ .chezmoi.destDir }}/.config/git/config
 
 {{- if eq .chezmoi.username "applejxd" }}
 {{- with (bitwarden "item" "gitconfig") }}
