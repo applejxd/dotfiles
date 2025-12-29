@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Dict, List
 
@@ -52,12 +53,12 @@ def overwrite_settings(
     :return: True if written, False if aborted.
     """
     target_json_str = json.dumps(target_dict, ensure_ascii=False, indent=2)
-    
+
     print("=" * 40)
     print("New settings.json for Windows Terminal:")
     print(target_json_str)
     print("=" * 40)
-    
+
     do_write = True
     if verbose:
         answer = input(f"Write merged settings to {target_path}? (y/n): ")
@@ -70,7 +71,7 @@ def overwrite_settings(
         print(f"Wrote merged settings to {target_path}.")
     else:
         print("Aborted.")
-        
+
     return do_write
 
 
@@ -83,12 +84,19 @@ def main():
         source_dict = json.load(f)
 
     # may not exist
-    target_path = Path(
-        "C:\\Users\\applejxd\\AppData\\Local\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json"
+    target_path = (
+        Path.home()
+        / "AppData"
+        / "Local"
+        / "Packages"
+        / "Microsoft.WindowsTerminal_8wekyb3d8bbwe"
+        / "LocalState"
+        / "settings.json"
     )
     if not target_path.parent.exists():
+        print(f"Creating directory {target_path.parent}")
         target_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     if target_path.exists():
         with open(target_path, "r", encoding="utf-8") as f:
             target_dict = json.load(f)
