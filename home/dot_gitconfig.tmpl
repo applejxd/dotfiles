@@ -1,7 +1,13 @@
 [init]
 	defaultBranch = main
 [credential]
-	helper = cache
+{{- if eq .chezmoi.os "windows" }}
+	helper = wincred
+{{- else if eq .chezmoi.os "darwin" }}
+	helper = osxkeychain
+{{- else }}
+	helper = store
+{{- end }}
 
 [core]
 	editor = vim
