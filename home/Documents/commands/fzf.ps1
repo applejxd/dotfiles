@@ -31,7 +31,7 @@ if (Get-Command z -ea SilentlyContinue) {
   Set-PSReadLineKeyHandler -Chord 'Ctrl+x,Ctrl+f' -ScriptBlock { xf }
 }
 
-function fssh {
+function sshf {
   $destination = Get-Content "$HOME\.ssh\config" | Select-String "^Host ([^*]+)$" | ForEach-Object { $_ -replace "Host ", "" } | fzf
   if (!([string]::IsNullOrEmpty($destination))) { 
     ssh "$destination"

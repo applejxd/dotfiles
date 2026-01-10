@@ -73,6 +73,21 @@ fi
 # functions #
 #-----------#
 
+# v - open files in ~/.viminfo
+v() {
+    local files
+    files=$(grep '^>' ~/.viminfo | cut -c3- |
+        while read -r line; do
+            [ -f "${line/\~/$HOME}" ] && echo "$line"
+        done | fzf -d -m -q "$*" -1) && vim "${files//\~/$HOME}"
+}
+
+function sshf() {
+    # see https://www.jamesridgway.co.uk/list-ssh-hosts-from-your-ssh-config/
+    name=$(grep -P "^Host ([^*]+)$" "$HOME"/.ssh/config | sed 's/Host //' | fzf)
+    [ -n "$name" ] && ssh "$name"
+}
+
 # fg-fzf
 # see http://bit.ly/39OMtEr
 alias fgg='_fgg'
@@ -87,25 +102,10 @@ function _fgg() {
     fi
 }
 
-# v - open files in ~/.viminfo
-v() {
-    local files
-    files=$(grep '^>' ~/.viminfo | cut -c3- |
-        while read -r line; do
-            [ -f "${line/\~/$HOME}" ] && echo "$line"
-        done | fzf -d -m -q "$*" -1) && vim "${files//\~/$HOME}"
-}
-
-function fshell() {
+function shellf() {
     local shell
     shell=$(sed -e "1d" </etc/shells | fzf -q "$1")
     [ -n "$shell" ] && "$shell"
-}
-
-function fssh() {
-    # see https://www.jamesridgway.co.uk/list-ssh-hosts-from-your-ssh-config/
-    name=$(grep -P "^Host ([^*]+)$" "$HOME"/.ssh/config | sed 's/Host //' | fzf)
-    [ -n "$name" ] && ssh "$name"
 }
 
 # see http://bit.ly/37GNSLZ
@@ -444,7 +444,7 @@ if type "brew" >/dev/null 2>&1; then
         local token
         token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
 
-        if [ "x$token" != "x" ]; then
+        if [ -n "$token" ]; then
             echo "(I)nstall or open the (h)omepage of $token"
             read -r input
             if [ "$input" = "i" ] || [ "$input" = "I" ]; then
@@ -463,7 +463,7 @@ if type "brew" >/dev/null 2>&1; then
         local token
         token=$(brew cask list | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
 
-        if [ "x$token" != "x" ]; then
+        if [ -n "$token" ]; then
             echo "(U)ninstall or open the (h)omepage of $token"
             read -r input
             if [ "$input" = "u" ] || [ "$input" = "U" ]; then
