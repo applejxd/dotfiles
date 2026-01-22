@@ -37,6 +37,12 @@ zinit light changyuheng/zsh-interactive-cd
 zinit ice wait'!0'
 zinit light zsh-users/zsh-syntax-highlighting
 
+if type "fzf" >/dev/null 2>&1 && type "deno" >/dev/null 2>&1; then
+    # fuzzy completion (needs fzf and deno)
+    zinit ice lucid depth"1" blockf
+    zinit light yuki-yano/zeno.zsh
+fi
+
 # git
 zinit ice pick"lib/git.zsh"
 zinit light ohmyzsh/ohmyzsh

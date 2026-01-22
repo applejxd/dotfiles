@@ -1,0 +1,34 @@
+# see below for documentation
+# https://mise.jdx.dev/configuration.html
+
+[tools]
+fzf = "0.53.0"  # to prevent bug
+ghq = "latest"
+bat = "latest"
+eza = "latest"
+ripgrep = "latest"
+hadolint = "latest"
+python = "latest"
+uv = "latest"
+yt-dlp = "latest"
+chezmoi = "latest"
+go = "latest"
+shellcheck = "latest"
+yazi = "latest"
+lazygit = "latest"
+deno = "latest"
+
+[settings]
+# for Tkinter (prebuild binaries doesn't contain GUI modules)
+# see https://www.python.jp/install/ubuntu/index.html
+python_compile = true
+# for task runner
+experimental = true
+
+[env]
+
+# # see https://mise.jdx.dev/environments.html
+# [env]
+# _.path = ["/usr/local/cuda-11.8/bin"]
+# # see https://keats.github.io/tera/docs/#default
+# LD_LIBRARY_PATH = "/usr/local/cuda-11.8/lib64:{{env.LD_LIBRARY_PATH | default(value='')}}"
