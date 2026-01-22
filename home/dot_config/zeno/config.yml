@@ -1,0 +1,4 @@
+snippets:
+  - name: git status
+    keyword: gs
+    snippet: git status --short --branch

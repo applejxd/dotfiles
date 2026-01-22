@@ -55,6 +55,16 @@ setopt pushd_ignore_dups
 zle -N fancy-ctrl-z
 bindkey '^Z' fancy-ctrl-z
 
+#----------------#
+# Plugin Manager #
+#----------------#
+
+# mise のロード内容を参照するため
+SHELL_CONF=$HOME/.config/shell
+if [ -e $SHELL_CONF/zinit.zsh ]; then
+    source $SHELL_CONF/zinit.zsh
+fi
+
 #-------------#
 # zsh history #
 #-------------#
