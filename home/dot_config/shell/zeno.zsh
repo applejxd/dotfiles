@@ -25,7 +25,8 @@ if [[ -n $ZENO_LOADED ]]; then
 
     bindkey '^m' zeno-auto-snippet-and-accept-line
 
-    bindkey '^i' zeno-completion
+    # TODO: check conflict with fzf.zsh 
+    # bindkey '^i' zeno-completion
 
     bindkey '^xx' zeno-insert-snippet           # open snippet picker (fzf) and insert at cursor
 
