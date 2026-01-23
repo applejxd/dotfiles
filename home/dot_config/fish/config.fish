@@ -42,7 +42,7 @@ end
 # Search and Move to The Directory
 # http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
 # http://rksz.hateblo.jp/entry/2012/10/27/201939
-function jj
+function jcd
     if $argv[1]
         set -l JUMPDIR (find . -type d -maxdepth 1 | grep $argv[1] | tail -1)
         if test -d "$JUMPDIR" &&  test -n "$JUMPDIR"

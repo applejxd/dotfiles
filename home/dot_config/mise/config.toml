@@ -17,6 +17,7 @@ shellcheck = "latest"
 yazi = "latest"
 lazygit = "latest"
 deno = "latest"
+jj ="latest"
 
 [settings]
 # for Tkinter (prebuild binaries doesn't contain GUI modules)

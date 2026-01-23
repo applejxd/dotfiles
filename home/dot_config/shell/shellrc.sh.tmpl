@@ -162,7 +162,7 @@ alias utl="uvx tmuxp load"
 # Search and Move to The Directory
 # see http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
 # see http://rksz.hateblo.jp/entry/2014/10/27/201939
-function jj() {
+function jcd() {
     if [[ "$1" ]]; then
         JUMPDIR=$(find . -type d -maxdepth 1 | grep "$1" | tail -1)
         if [[ -d $JUMPDIR && -n $JUMPDIR ]]; then
