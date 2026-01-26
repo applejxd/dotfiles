@@ -33,9 +33,11 @@ zinit light zsh-users/zsh-completions
 zinit ice pick"zsh-interactive-cd.plugin.zsh" wait'!0'
 zinit light changyuheng/zsh-interactive-cd
 
-# syntax-highlighting to command-line (after compinit)
-zinit ice wait'!0'
-zinit light zsh-users/zsh-syntax-highlighting
+# # syntax-highlighting to command-line (after compinit)
+# zinit ice wait'!0'
+# zinit light zsh-users/zsh-syntax-highlighting
+# see https://github.com/yuki-yano/zeno.zsh?tab=readme-ov-file#faq
+zinit light zdharma-continuum/fast-syntax-highlighting
 
 if type "fzf" >/dev/null 2>&1 && type "deno" >/dev/null 2>&1; then
     # fuzzy completion (needs fzf and deno)

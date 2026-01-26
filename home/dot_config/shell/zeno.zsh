@@ -43,7 +43,8 @@ if [[ -n $ZENO_LOADED ]]; then
     bindkey '^r' zeno-history-selection         # classic history widget
     # bindkey '^r' zeno-smart-history-selection # smart history widget
 
+    # XXX: To prevent infinite recursion by ^i
     # fallback if completion not matched
     # (default: fzf-completion if exists; otherwise expand-or-complete)
-    # export ZENO_COMPLETION_FALLBACK=expand-or-complete
+    export ZENO_COMPLETION_FALLBACK=expand-or-complete
 fi
