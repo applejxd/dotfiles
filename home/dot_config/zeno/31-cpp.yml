@@ -7,11 +7,10 @@ snippets:
     keyword: cbu
     snippet: cmake --build build --parallel
 
-completions:
-  - name: CMake build type
-    patterns:
-      - "^cmake( .*)? -DCMAKE_BUILD_TYPE=$"
-    sourceCommand: |
-      printf "%s\n" Debug Release RelWithDebInfo MinSizeRel
-    options:
-      --prompt: "'CMAKE_BUILD_TYPE> '"
+# completions:
+#   - name: CMake build type
+#     patterns:
+#       - "^cmake.*-DCMAKE_BUILD_TYPE=$"
+#     sourceCommand: "echo 'Debug Release RelWithDebInfo MinSizeRel\n'"
+#     options:
+#       --prompt: "'CMAKE_BUILD_TYPE> '"

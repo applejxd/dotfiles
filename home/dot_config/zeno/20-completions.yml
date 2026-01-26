@@ -32,3 +32,10 @@ completions:
       --preview: "cd {} && ls -a | sed '/^[.]*$/d'"
     callback: "cut -z -c 3-"
     callbackZero: true # null termination is used in `callback` I/O
+
+  # - name: ssh host
+  #   patterns:
+  #     - "^ssh( .*)? $"
+  #   sourceCommand: "cat ~/.ssh/config | grep '^Host ' | awk '{print $2}'"
+  #   options:
+  #     --prompt: "'SSH Host> '"

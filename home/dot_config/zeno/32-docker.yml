@@ -1,0 +1,27 @@
+snippets:
+  - name: docker list containers
+    keyword: dls
+    snippet: docker ps --all
+  
+  - name: docker list images
+    keyword: dim
+    snippet: docker images
+  
+  - name: docker clean containers
+    keyword: dclean
+    snippet: docker container prune
+  
+  - name: docker exec into container
+    keyword: dexec
+    snippet: docker exec -it {{container_id}} /bin/bash
+
+# completions:
+#   - name: docker container
+#     patterns:
+#       - "^docker exec -it ( .*)? $"
+#     sourceCommand: "docker ps --format '{{.ID}}\t{{.Names}}'"
+#     options:
+#       --multi: true
+#       --prompt: "'Docker Container> '"
+#       --preview: "docker inspect {} | jq '.[] | {ID: .Id, Name: .Name, Image: .Config.Image, State: .State}'"
+#     callback: "awk '{print $1}'"
