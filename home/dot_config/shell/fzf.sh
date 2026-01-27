@@ -236,9 +236,9 @@ fi
 #--------#
 
 if type "docker" >/dev/null 2>&1; then
-    # alias dim="docker images"
-    # alias dls="docker ps -a"
-    # alias dclean="docker container prune"
+    alias dim="docker images"
+    alias dls="docker ps -a"
+    alias dclean="docker container prune"
 
     function drun() {
         local cmd
