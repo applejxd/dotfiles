@@ -1,0 +1,16 @@
+snippets:
+  - name: cmake configure
+    keyword: ccfg
+    snippet: cmake -S . -B build -DCMAKE_BUILD_TYPE={{type}}
+
+  - name: cmake build
+    keyword: cbu
+    snippet: cmake --build build --parallel
+
+# completions:
+#   - name: CMake build type
+#     patterns:
+#       - "^cmake.*-DCMAKE_BUILD_TYPE=$"
+#     sourceCommand: "echo 'Debug Release RelWithDebInfo MinSizeRel\n'"
+#     options:
+#       --prompt: "'CMAKE_BUILD_TYPE> '"
