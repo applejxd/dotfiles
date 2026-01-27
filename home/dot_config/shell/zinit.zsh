@@ -44,10 +44,6 @@ zinit light Aloxaf/fzf-tab
 # other plugins #
 #---------------#
 
-# Fish like interactive tab completion for cd in zsh
-zinit ice pick"zsh-interactive-cd.plugin.zsh" wait'!0'
-zinit light changyuheng/zsh-interactive-cd
-
 # git
 zinit ice pick"lib/git.zsh"
 zinit light ohmyzsh/ohmyzsh
