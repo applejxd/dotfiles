@@ -14,9 +14,6 @@ fi
 # Emacs mode
 bindkey -e
 
-# zsh completion
-autoload -Uz compinit && compinit
-
 #-----------------#
 # OS dependencies #
 #-----------------#
@@ -59,7 +56,8 @@ bindkey '^Z' fancy-ctrl-z
 # Plugin Manager #
 #----------------#
 
-# mise のロード内容を参照するため
+# after mise loaded
+# compinit is in here
 SHELL_CONF=$HOME/.config/shell
 if [ -e $SHELL_CONF/zinit.zsh ]; then
     source $SHELL_CONF/zinit.zsh
