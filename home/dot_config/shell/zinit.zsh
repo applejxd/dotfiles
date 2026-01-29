@@ -23,22 +23,43 @@ autoload -Uz _zinit
 # completion #
 #------------#
 
+# based on https://zenn.dev/i9wa4/articles/2026-01-01-zsh-startup-optimization-zinit
+
 # strict in loading order
 # see https://github.com/Aloxaf/fzf-tab?tab=readme-ov-file#install
 
-# completion for non-defalut commands
+# # completion for non-defalut commands
+zinit ice wait'0a' lucid
 zinit light zsh-users/zsh-completions
 
-# zsh completion
-autoload -Uz compinit && compinit
+# compinit (lazy loading via zinit turbo mode)
+zinit ice wait'0b' lucid \
+  atload'
+    autoload -Uz compinit
+    compinit
+  '
+zinit light zdharma-continuum/null
+
+# mise (lazy loading via zinit turbo mode)
+zinit ice wait'0c' lucid \
+  atload'eval "$(${HOME}/.local/bin/mise activate zsh --quiet)"'
+zinit light zdharma-continuum/null
 
 # fish-like auto completion
+zinit ice wait'0d' lucid
 zinit light zsh-users/zsh-autosuggestions
 # syntax-highlighting to command-line (after compinit)
+zinit ice wait'0d' lucid
 zinit light zdharma-continuum/fast-syntax-highlighting
 
-# completion with fzf 
-zinit light Aloxaf/fzf-tab
+# zeno.zsh (lazy loading via zinit turbo mode)
+zinit ice wait'0e' lucid depth"1" blockf \
+  atload'source "$HOME/.config/shell/zeno.zsh"'
+zinit light yuki-yano/zeno.zsh
+
+# # completion with fzf 
+# zinit ice wait'0f' lucid
+# zinit light Aloxaf/fzf-tab
 
 #---------------#
 # other plugins #

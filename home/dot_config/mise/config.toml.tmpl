@@ -6,7 +6,6 @@ fzf = "0.53.0"  # to prevent bug
 ghq = "latest"
 bat = "latest"
 eza = "latest"
-ripgrep = "latest"
 hadolint = "latest"
 python = "latest"
 uv = "latest"
@@ -18,6 +17,10 @@ yazi = "latest"
 lazygit = "latest"
 deno = "latest"
 jj ="latest"
+
+{{- if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") }}
+ripgrep = "latest"
+{{- end }}
 
 [settings]
 # for Tkinter (prebuild binaries doesn't contain GUI modules)

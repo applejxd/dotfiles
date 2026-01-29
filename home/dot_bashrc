@@ -1,14 +1,5 @@
-# #!/bin/bash
+#!/bin/bash
 # #.bash_profile>.bashrc
-
-#---------------#
-# common config #
-#---------------#
-
-if [ -f "$HOME"/.config/shell/shellrc.sh ]; then
-    # shellcheck source=/dev/null
-    source "$HOME"/.config/shell/shellrc.sh
-fi
 
 #---------#
 # options #
@@ -166,3 +157,12 @@ export SCM_CHECK=true
 # Load Bash It
 # shellcheck source=/dev/null
 source "$BASH_IT"/bash_it.sh
+
+#---------------#
+# common config #
+#---------------#
+
+if [ -f "$HOME"/.config/shell/shellrc.sh ]; then
+    # shellcheck source=/dev/null
+    source "$HOME"/.config/shell/shellrc.sh
+fi
