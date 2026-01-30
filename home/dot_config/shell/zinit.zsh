@@ -28,34 +28,17 @@ autoload -Uz _zinit
 # strict in loading order
 # see https://github.com/Aloxaf/fzf-tab?tab=readme-ov-file#install
 
-# # completion for non-defalut commands
-zinit ice wait'0a' lucid
-zinit light zsh-users/zsh-completions
-
-# compinit (lazy loading via zinit turbo mode)
-zinit ice wait'0b' lucid \
-  atload'
-    autoload -Uz compinit
-    compinit
-  '
-zinit light zdharma-continuum/null
-
-# mise (lazy loading via zinit turbo mode)
-zinit ice wait'0c' lucid \
-  atload'eval "$(${HOME}/.local/bin/mise activate zsh --quiet)"'
-zinit light zdharma-continuum/null
+# completion for non-defalut commands
+# zinit light zsh-users/zsh-completions
 
 # fish-like auto completion
-zinit ice wait'0d' lucid
-zinit light zsh-users/zsh-autosuggestions
+# zinit light zsh-users/zsh-autosuggestions
 # syntax-highlighting to command-line (after compinit)
-zinit ice wait'0d' lucid
-zinit light zdharma-continuum/fast-syntax-highlighting
+# zinit light zdharma-continuum/fast-syntax-highlighting
 
-# zeno.zsh (lazy loading via zinit turbo mode)
-zinit ice wait'0e' lucid depth"1" blockf \
-  atload'source "$HOME/.config/shell/zeno.zsh"'
+zinit ice lucid depth"1" blockf
 zinit light yuki-yano/zeno.zsh
+source "$HOME/.config/shell/zeno.zsh"
 
 # # completion with fzf 
 # zinit ice wait'0f' lucid

@@ -15,7 +15,7 @@ export ZENO_HOME=~/.config/zeno
 # export ZENO_DISABLE_SOCK=1
 
 # if disable builtin completion
-# export ZENO_DISABLE_BUILTIN_COMPLETION=1
+export ZENO_DISABLE_BUILTIN_COMPLETION=1
 
 # default (keep this to avoid compatibility issues)
 export ZENO_GIT_CAT="cat"
