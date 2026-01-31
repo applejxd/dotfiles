@@ -1,0 +1,18 @@
+snippets:
+  - name: cmake configure
+    keyword: "cmakec,"
+    snippet: cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE={{build_type}}
+  - name: cmake build
+    keyword: "cmakeb,"
+    snippet: cmake --build build -j
+  - name: cmake clean
+    keyword: "cmakecl,"
+    snippet: cmake --build build --target clean
+
+completions:
+  - name: cmake build type
+    patterns:
+      - "^cmake*-DCMAKE_BUILD_TYPE=$"
+    sourceCommand: "echo -e 'Debug\nRelease\nRelWithDebInfo\nMinSizeRel'"
+    options:
+      --prompt: "'Build Type> '"
