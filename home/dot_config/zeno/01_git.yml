@@ -1,11 +1,21 @@
 snippets:
-  - name: open git worktree in vscode
-    keyword: "gcode,"
-    snippet: gwq exec {{worktree}} -- code .
+  - name: list git branches
+    keyword: "gbls,"
+    snippet: git branch --list
 
+  - name: list github local repositories
+    keyword: "ghls,"
+    snippet: "ghq list"
+
+  - name: list git worktree branches
+    keyword: "gwls,"
+    snippet: gwq list
   - name: add git worktree branches
     keyword: "gwa,"
     snippet: gwq add {{worktree}}
+  - name: open git worktree in vscode
+    keyword: "gcode,"
+    snippet: gwq exec {{worktree}} -- code .
 
 completions:
   - name: add git worktree branches
