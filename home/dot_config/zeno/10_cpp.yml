@@ -1,11 +1,11 @@
 snippets:
-  - name: cmake configure
+  - name: "[cmakec] cmake configure"
     keyword: "cmakec,"
     snippet: cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE={{build_type}}
-  - name: cmake build
+  - name: "[cmakeb] cmake build"
     keyword: "cmakeb,"
     snippet: cmake --build build -j
-  - name: cmake clean
+  - name: "[cmakecl] cmake clean"
     keyword: "cmakecl,"
     snippet: cmake --build build --target clean
 
