@@ -1,0 +1,15 @@
+session_name: monitor
+shell_command_before:
+  - 'eval "$(mise activate zsh)"'
+start_directory: "${PWD}"
+windows:
+  - window_name: system
+    layout: tiled
+    panes:
+      - shell_command:
+          - htop
+      - shell_command:
+          - watch -n 2 df -h
+      - shell_command:
+          - watch -n 2 free -h
+      - zsh

@@ -1,0 +1,93 @@
+snippets:
+  # tmuxp - session management
+  - name: "[tload] tmuxp load session"
+    keyword: "tload,"
+    snippet: uvx tmuxp load {{session}}
+
+  - name: "[tls] tmuxp list sessions"
+    keyword: "tls,"
+    snippet: uvx tmuxp ls
+
+  - name: "[tfreeze] tmuxp freeze session"
+    keyword: "tfreeze,"
+    snippet: uvx tmuxp freeze {{session}}
+
+  - name: "[tdebug] tmuxp debug-info"
+    keyword: "tdebug,"
+    snippet: uvx tmuxp debug-info
+
+  # tmux - session management
+  - name: "[tn] tmux new session"
+    keyword: "tn,"
+    snippet: tmux new-session -s {{session_name}}
+
+  - name: "[ta] tmux attach session"
+    keyword: "ta,"
+    snippet: tmux attach-session -t {{session}}
+
+  - name: "[tks] tmux kill session"
+    keyword: "tks,"
+    snippet: tmux kill-session -t {{session}}
+
+  - name: "[tkw] tmux kill window"
+    keyword: "tkw,"
+    snippet: tmux kill-window -t {{window}}
+
+  - name: "[tsls] tmux list sessions"
+    keyword: "tsls,"
+    snippet: tmux list-sessions
+
+  - name: "[twls] tmux list windows"
+    keyword: "twls,"
+    snippet: tmux list-windows
+
+  - name: "[tpls] tmux list panes"
+    keyword: "tpls,"
+    snippet: tmux list-panes
+
+completions:
+  # tmuxp load completion from ~/.tmuxp directory
+  # Finds .yaml, .yml, and .json files and strips the extension
+  - name: tmuxp load session
+    patterns:
+      - "^uvx tmuxp load $"
+    # Find session files (yaml/yml/json) and remove file extensions
+    sourceCommand: "find ~/.tmuxp -maxdepth 1 -type f \\( -name '*.yaml' -o -name '*.yml' -o -name '*.json' \\) -exec basename {} \\; 2>/dev/null | sed 's/\\.\\(yaml\\|yml\\|json\\)$//'"
+    options:
+      --prompt: "'tmuxp Session> '"
+      # Preview shows the actual session file content by checking each extension
+      --preview: "[ -f ~/.tmuxp/{}.yaml ] && cat ~/.tmuxp/{}.yaml || [ -f ~/.tmuxp/{}.yml ] && cat ~/.tmuxp/{}.yml || [ -f ~/.tmuxp/{}.json ] && cat ~/.tmuxp/{}.json"
+
+  # tmuxp freeze completion for active sessions
+  - name: tmuxp freeze session
+    patterns:
+      - "^uvx tmuxp freeze $"
+    sourceCommand: "tmux list-sessions -F '#{session_name}' 2>/dev/null"
+    options:
+      --prompt: "'tmux Session> '"
+
+  # tmux attach completion
+  - name: tmux attach session
+    patterns:
+      - "^tmux attach(-session)? -t $"
+    sourceCommand: "tmux list-sessions -F '#{session_name}' 2>/dev/null"
+    options:
+      --prompt: "'tmux Session> '"
+
+  # tmux kill session completion
+  - name: tmux kill session
+    patterns:
+      - "^tmux kill-session -t $"
+    sourceCommand: "tmux list-sessions -F '#{session_name}' 2>/dev/null"
+    options:
+      --multi: true
+      --prompt: "'tmux Session> '"
+
+  # tmux kill window completion
+  - name: tmux kill window
+    patterns:
+      - "^tmux kill-window -t $"
+    sourceCommand: "tmux list-windows -F '#{window_name}' 2>/dev/null"
+    options:
+      --multi: true
+      --prompt: "'tmux Window> '"
