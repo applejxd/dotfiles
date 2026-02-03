@@ -1,15 +1,15 @@
 snippets:
   # snippet and keyword abbrev
-  - name: git status
+  - name: "[gs] git status"
     keyword: "gs,"
     snippet: git status --short --branch
 
   # snippet with placeholder
-  - name: git commit message
+  - name: "[gcim] git commit message"
     keyword: "gcim,"
     snippet: git commit -m '{{commit_message}}'
 
-  - name: "null"
+  - name: "[null] null"
     keyword: "null,"
     snippet: ">/dev/null 2>&1"
     # auto expand condition
@@ -19,7 +19,7 @@ snippets:
       lbuffer: '.+\s'
       # rbuffer: ''
 
-  - name: branch
+  - name: "[b] branch"
     keyword: "b,"
     snippet: git symbolic-ref --short HEAD
     context:

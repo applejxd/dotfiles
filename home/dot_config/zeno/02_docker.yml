@@ -1,113 +1,113 @@
 snippets:
   # Docker container management
-  - name: docker ps
+  - name: "[dps] docker ps"
     keyword: "dps,"
     snippet: docker ps
 
-  - name: docker ps all
+  - name: "[dpsa] docker ps all"
     keyword: "dpsa,"
     snippet: docker ps -a
 
-  - name: docker images
+  - name: "[di] docker images"
     keyword: "di,"
     snippet: docker images
 
-  - name: docker stop container
+  - name: "[dst] docker stop container"
     keyword: "dst,"
     snippet: docker stop {{container}}
 
-  - name: docker remove container
+  - name: "[drm] docker remove container"
     keyword: "drm,"
     snippet: docker rm {{container}}
 
-  - name: docker remove image
+  - name: "[drmi] docker remove image"
     keyword: "drmi,"
     snippet: docker rmi {{image}}
 
-  - name: docker exec interactive
+  - name: "[dex] docker exec interactive"
     keyword: "dex,"
     snippet: docker exec -it {{container}} {{command}}
 
-  - name: docker exec bash
+  - name: "[dexb] docker exec bash"
     keyword: "dexb,"
     snippet: docker exec -it {{container}} /bin/bash
 
-  - name: docker logs
+  - name: "[dl] docker logs"
     keyword: "dl,"
     snippet: docker logs {{container}}
 
-  - name: docker logs follow
+  - name: "[dlf] docker logs follow"
     keyword: "dlf,"
     snippet: docker logs -f {{container}}
 
-  - name: docker inspect
+  - name: "[dins] docker inspect"
     keyword: "dins,"
     snippet: docker inspect {{container}}
 
   # Docker build and run
-  - name: docker build
+  - name: "[db] docker build"
     keyword: "db,"
     snippet: docker build -t {{image_name}} .
 
-  - name: docker run interactive
+  - name: "[drun] docker run interactive"
     keyword: "drun,"
     snippet: docker run -it {{image}} {{command}}
 
-  - name: docker run detached
+  - name: "[drund] docker run detached"
     keyword: "drund,"
     snippet: docker run -d {{image}}
 
-  - name: docker run with port
+  - name: "[drunp] docker run with port"
     keyword: "drunp,"
     snippet: docker run -p {{host_port}}:{{container_port}} {{image}}
 
-  - name: docker run with volume
+  - name: "[drunv] docker run with volume"
     keyword: "drunv,"
     snippet: docker run -v {{host_path}}:{{container_path}} {{image}}
 
   # Docker Compose
-  - name: docker compose up
+  - name: "[dcu] docker compose up"
     keyword: "dcu,"
     snippet: docker compose up
 
-  - name: docker compose up detached
+  - name: "[dcud] docker compose up detached"
     keyword: "dcud,"
     snippet: docker compose up -d
 
-  - name: docker compose down
+  - name: "[dcd] docker compose down"
     keyword: "dcd,"
     snippet: docker compose down
 
-  - name: docker compose logs
+  - name: "[dcl] docker compose logs"
     keyword: "dcl,"
     snippet: docker compose logs {{service}}
 
-  - name: docker compose logs follow
+  - name: "[dclf] docker compose logs follow"
     keyword: "dclf,"
     snippet: docker compose logs -f {{service}}
 
-  - name: docker compose exec
+  - name: "[dcex] docker compose exec"
     keyword: "dcex,"
     snippet: docker compose exec {{service}} {{command}}
 
-  - name: docker compose restart
+  - name: "[dcr] docker compose restart"
     keyword: "dcr,"
     snippet: docker compose restart {{service}}
 
-  - name: docker compose build
+  - name: "[dcb] docker compose build"
     keyword: "dcb,"
     snippet: docker compose build
 
   # Docker system management
-  - name: docker system prune
+  - name: "[dprune] docker system prune"
     keyword: "dprune,"
     snippet: docker system prune -f
 
-  - name: docker volume prune
+  - name: "[dvprune] docker volume prune"
     keyword: "dvprune,"
     snippet: docker volume prune -f
 
-  - name: docker network prune
+  - name: "[dnprune] docker network prune"
     keyword: "dnprune,"
     snippet: docker network prune -f
 
