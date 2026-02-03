@@ -47,12 +47,15 @@ snippets:
 
 completions:
   # tmuxp load completion from ~/.tmuxp directory
+  # Finds .yaml, .yml, and .json files and strips the extension
   - name: tmuxp load session
     patterns:
       - "^uvx tmuxp load $"
+    # Find session files (yaml/yml/json) and remove file extensions
     sourceCommand: "find ~/.tmuxp -maxdepth 1 -type f \\( -name '*.yaml' -o -name '*.yml' -o -name '*.json' \\) -exec basename {} \\; 2>/dev/null | sed 's/\\.\\(yaml\\|yml\\|json\\)$//'"
     options:
       --prompt: "'tmuxp Session> '"
+      # Preview shows the actual session file content by checking each extension
       --preview: "[ -f ~/.tmuxp/{}.yaml ] && cat ~/.tmuxp/{}.yaml || [ -f ~/.tmuxp/{}.yml ] && cat ~/.tmuxp/{}.yml || [ -f ~/.tmuxp/{}.json ] && cat ~/.tmuxp/{}.json"
 
   # tmuxp freeze completion for active sessions
