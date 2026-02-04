@@ -1,0 +1,30 @@
+# see below for documentation
+# https://mise.jdx.dev/configuration.html
+
+[tools]
+fzf = "0.53.0"  # to prevent bug
+ghq = "latest"
+bat = "latest"
+eza = "latest"
+hadolint = "latest"
+python = "latest"
+uv = "latest"
+yt-dlp = "latest"
+chezmoi = "latest"
+go = "latest"
+shellcheck = "latest"
+yazi = "latest"
+lazygit = "latest"
+deno = "latest"
+jj ="latest"
+
+{{- if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") }}
+ripgrep = "latest"
+{{- end }}
+
+[settings]
+# for Tkinter (prebuild binaries doesn't contain GUI modules)
+# see https://www.python.jp/install/ubuntu/index.html
+python_compile = true
+# for task runner
+experimental = true

@@ -38,7 +38,7 @@ fi
 # wrapper #
 #---------#
 
-if type "z" >/dev/null 2>&1; then
+if type "_z" >/dev/null 2>&1; then
     function xf() {
         local selected_dir
         selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')

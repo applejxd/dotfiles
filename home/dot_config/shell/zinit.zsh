@@ -19,23 +19,34 @@ autoload -Uz _zinit
 (( ${+_comps} )) && _comps[zinit]=_zinit
 # End of Zinit's installer chunk
 
-#---------#
-# Plugins #
-#---------#
+#------------#
+# completion #
+#------------#
 
-# fish-like auto completion
-zinit light zsh-users/zsh-autosuggestions
+# based on https://zenn.dev/i9wa4/articles/2026-01-01-zsh-startup-optimization-zinit
+
+# strict in loading order
+# see https://github.com/Aloxaf/fzf-tab?tab=readme-ov-file#install
 
 # completion for non-defalut commands
-zinit light zsh-users/zsh-completions
+# zinit light zsh-users/zsh-completions
 
-# Fish like interactive tab completion for cd in zsh
-zinit ice pick"zsh-interactive-cd.plugin.zsh" wait'!0'
-zinit light changyuheng/zsh-interactive-cd
-
+# fish-like auto completion
+# zinit light zsh-users/zsh-autosuggestions
 # syntax-highlighting to command-line (after compinit)
-zinit ice wait'!0'
-zinit light zsh-users/zsh-syntax-highlighting
+# zinit light zdharma-continuum/fast-syntax-highlighting
+
+zinit ice lucid depth"1" blockf
+zinit light yuki-yano/zeno.zsh
+source "$HOME/.config/shell/zeno.zsh"
+
+# # completion with fzf 
+# zinit ice wait'0f' lucid
+# zinit light Aloxaf/fzf-tab
+
+#---------------#
+# other plugins #
+#---------------#
 
 # git
 zinit ice pick"lib/git.zsh"

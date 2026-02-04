@@ -1,0 +1,27 @@
+snippets:
+  - name: "[gbls] list git branches"
+    keyword: "gbls,"
+    snippet: git branch --list
+
+  - name: "[ghls] list github local repositories"
+    keyword: "ghls,"
+    snippet: "ghq list"
+
+  - name: "[gwls] list git worktree branches"
+    keyword: "gwls,"
+    snippet: gwq list
+  - name: "[gwa] add git worktree branches"
+    keyword: "gwa,"
+    snippet: gwq add {{worktree}}
+  - name: "[gcode] open git worktree in vscode"
+    keyword: "gcode,"
+    snippet: gwq exec {{worktree}} -- code .
+
+completions:
+  - name: add git worktree branches
+    patterns:
+      - "^gwq add $"
+    sourceCommand: "git for-each-ref --format='%(refname:short)' refs/heads/ | sed '/^$/d'"
+    options:
+      --prompt: "'Git Worktree> '"
+  

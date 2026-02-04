@@ -1,0 +1,225 @@
+snippets:
+  # ROS2 basic commands
+  - name: "[r2run] ros2 run"
+    keyword: "r2run,"
+    snippet: ros2 run {{package}} {{executable}}
+
+  - name: "[r2launch] ros2 launch"
+    keyword: "r2launch,"
+    snippet: ros2 launch {{package}} {{launch_file}}
+
+  - name: "[r2nls] ros2 node list"
+    keyword: "r2nls,"
+    snippet: ros2 node list
+
+  - name: "[r2ninfo] ros2 node info"
+    keyword: "r2ninfo,"
+    snippet: ros2 node info {{node}}
+
+  - name: "[r2tls] ros2 topic list"
+    keyword: "r2tls,"
+    snippet: ros2 topic list
+
+  - name: "[r2techo] ros2 topic echo"
+    keyword: "r2techo,"
+    snippet: ros2 topic echo {{topic}}
+
+  - name: "[r2tinfo] ros2 topic info"
+    keyword: "r2tinfo,"
+    snippet: ros2 topic info {{topic}}
+
+  - name: "[r2tpub] ros2 topic pub"
+    keyword: "r2tpub,"
+    snippet: ros2 topic pub {{topic}} {{msg_type}} {{data}}
+
+  - name: "[r2thz] ros2 topic hz"
+    keyword: "r2thz,"
+    snippet: ros2 topic hz {{topic}}
+
+  - name: "[r2sls] ros2 service list"
+    keyword: "r2sls,"
+    snippet: ros2 service list
+
+  - name: "[r2scall] ros2 service call"
+    keyword: "r2scall,"
+    snippet: ros2 service call {{service}} {{srv_type}} {{data}}
+
+  - name: "[r2stype] ros2 service type"
+    keyword: "r2stype,"
+    snippet: ros2 service type {{service}}
+
+  - name: "[r2pls] ros2 param list"
+    keyword: "r2pls,"
+    snippet: ros2 param list
+
+  - name: "[r2pget] ros2 param get"
+    keyword: "r2pget,"
+    snippet: ros2 param get {{node}} {{parameter}}
+
+  - name: "[r2pset] ros2 param set"
+    keyword: "r2pset,"
+    snippet: ros2 param set {{node}} {{parameter}} {{value}}
+
+  - name: "[r2brec] ros2 bag record"
+    keyword: "r2brec,"
+    snippet: ros2 bag record {{topics}}
+
+  - name: "[r2breca] ros2 bag record all"
+    keyword: "r2breca,"
+    snippet: ros2 bag record -a
+
+  - name: "[r2bplay] ros2 bag play"
+    keyword: "r2bplay,"
+    snippet: ros2 bag play {{bag_file}}
+
+  - name: "[r2binfo] ros2 bag info"
+    keyword: "r2binfo,"
+    snippet: ros2 bag info {{bag_file}}
+
+  - name: "[r2ishow] ros2 interface show"
+    keyword: "r2ishow,"
+    snippet: ros2 interface show {{interface}}
+
+  - name: "[r2ils] ros2 interface list"
+    keyword: "r2ils,"
+    snippet: ros2 interface list
+
+  - name: "[r2pkgls] ros2 pkg list"
+    keyword: "r2pkgls,"
+    snippet: ros2 pkg list
+
+  - name: "[r2pkgexec] ros2 pkg executables"
+    keyword: "r2pkgexec,"
+    snippet: ros2 pkg executables {{package}}
+
+  - name: "[r2pkgpre] ros2 pkg prefix"
+    keyword: "r2pkgpre,"
+    snippet: ros2 pkg prefix {{package}}
+
+  # ROS2 workspace commands
+  - name: "[colb] colcon build"
+    keyword: "colb,"
+    snippet: colcon build --symlink-install
+
+  - name: "[colbp] colcon build package"
+    keyword: "colbp,"
+    snippet: colcon build --packages-select {{package}}
+
+  - name: "[colbu] colcon build up to"
+    keyword: "colbu,"
+    snippet: colcon build --packages-up-to {{package}}
+
+  - name: "[colt] colcon test"
+    keyword: "colt,"
+    snippet: colcon test
+
+  - name: "[coltp] colcon test package"
+    keyword: "coltp,"
+    snippet: colcon test --packages-select {{package}}
+
+  - name: "[srcros] source ros2 setup"
+    keyword: "srcros,"
+    snippet: source /opt/ros/{{ros_distro}}/setup.zsh
+
+  - name: "[srcws] source workspace setup"
+    keyword: "srcws,"
+    snippet: source install/setup.zsh
+
+completions:
+  # ROS2 node completions
+  - name: ros2 node info
+    patterns:
+      - "^ros2 node info $"
+    sourceCommand: "ros2 node list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Node> '"
+
+  # ROS2 topic completions
+  - name: ros2 topic echo
+    patterns:
+      - "^ros2 topic echo $"
+    sourceCommand: "ros2 topic list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Topic> '"
+
+  - name: ros2 topic info
+    patterns:
+      - "^ros2 topic info $"
+    sourceCommand: "ros2 topic list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Topic> '"
+
+  - name: ros2 topic hz
+    patterns:
+      - "^ros2 topic hz $"
+    sourceCommand: "ros2 topic list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Topic> '"
+
+  # ROS2 service completions
+  - name: ros2 service call
+    patterns:
+      - "^ros2 service call $"
+    sourceCommand: "ros2 service list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Service> '"
+
+  - name: ros2 service type
+    patterns:
+      - "^ros2 service type $"
+    sourceCommand: "ros2 service list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Service> '"
+
+  # ROS2 package completions
+  - name: ros2 pkg executables
+    patterns:
+      - "^ros2 pkg executables $"
+    sourceCommand: "ros2 pkg list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Package> '"
+
+  - name: ros2 pkg prefix
+    patterns:
+      - "^ros2 pkg prefix $"
+    sourceCommand: "ros2 pkg list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Package> '"
+
+  - name: ros2 run package
+    patterns:
+      - "^ros2 run $"
+    sourceCommand: "ros2 pkg list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Package> '"
+
+  - name: ros2 launch package
+    patterns:
+      - "^ros2 launch $"
+    sourceCommand: "ros2 pkg list 2>/dev/null"
+    options:
+      --prompt: "'ROS2 Package> '"
+
+  # Colcon completions
+  - name: colcon build package select
+    patterns:
+      - "^colcon build --packages-select $"
+    sourceCommand: "colcon list -n 2>/dev/null"
+    options:
+      --multi: true
+      --prompt: "'Colcon Package> '"
+
+  - name: colcon build package up to
+    patterns:
+      - "^colcon build --packages-up-to $"
+    sourceCommand: "colcon list -n 2>/dev/null"
+    options:
+      --prompt: "'Colcon Package> '"
+
+  - name: colcon test package select
+    patterns:
+      - "^colcon test --packages-select $"
+    sourceCommand: "colcon list -n 2>/dev/null"
+    options:
+      --multi: true
+      --prompt: "'Colcon Package> '"

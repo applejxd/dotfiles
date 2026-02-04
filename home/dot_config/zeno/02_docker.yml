@@ -1,0 +1,181 @@
+snippets:
+  # Docker container management
+  - name: "[dps] docker ps"
+    keyword: "dps,"
+    snippet: docker ps
+
+  - name: "[dpsa] docker ps all"
+    keyword: "dpsa,"
+    snippet: docker ps -a
+
+  - name: "[di] docker images"
+    keyword: "di,"
+    snippet: docker images
+
+  - name: "[dst] docker stop container"
+    keyword: "dst,"
+    snippet: docker stop {{container}}
+
+  - name: "[drm] docker remove container"
+    keyword: "drm,"
+    snippet: docker rm {{container}}
+
+  - name: "[drmi] docker remove image"
+    keyword: "drmi,"
+    snippet: docker rmi {{image}}
+
+  - name: "[dex] docker exec interactive"
+    keyword: "dex,"
+    snippet: docker exec -it {{container}} {{command}}
+
+  - name: "[dexb] docker exec bash"
+    keyword: "dexb,"
+    snippet: docker exec -it {{container}} /bin/bash
+
+  - name: "[dl] docker logs"
+    keyword: "dl,"
+    snippet: docker logs {{container}}
+
+  - name: "[dlf] docker logs follow"
+    keyword: "dlf,"
+    snippet: docker logs -f {{container}}
+
+  - name: "[dins] docker inspect"
+    keyword: "dins,"
+    snippet: docker inspect {{container}}
+
+  # Docker build and run
+  - name: "[db] docker build"
+    keyword: "db,"
+    snippet: docker build -t {{image_name}} .
+
+  - name: "[drun] docker run interactive"
+    keyword: "drun,"
+    snippet: docker run -it {{image}} {{command}}
+
+  - name: "[drund] docker run detached"
+    keyword: "drund,"
+    snippet: docker run -d {{image}}
+
+  - name: "[drunp] docker run with port"
+    keyword: "drunp,"
+    snippet: docker run -p {{host_port}}:{{container_port}} {{image}}
+
+  - name: "[drunv] docker run with volume"
+    keyword: "drunv,"
+    snippet: docker run -v {{host_path}}:{{container_path}} {{image}}
+
+  # Docker Compose
+  - name: "[dcu] docker compose up"
+    keyword: "dcu,"
+    snippet: docker compose up
+
+  - name: "[dcud] docker compose up detached"
+    keyword: "dcud,"
+    snippet: docker compose up -d
+
+  - name: "[dcd] docker compose down"
+    keyword: "dcd,"
+    snippet: docker compose down
+
+  - name: "[dcl] docker compose logs"
+    keyword: "dcl,"
+    snippet: docker compose logs {{service}}
+
+  - name: "[dclf] docker compose logs follow"
+    keyword: "dclf,"
+    snippet: docker compose logs -f {{service}}
+
+  - name: "[dcex] docker compose exec"
+    keyword: "dcex,"
+    snippet: docker compose exec {{service}} {{command}}
+
+  - name: "[dcr] docker compose restart"
+    keyword: "dcr,"
+    snippet: docker compose restart {{service}}
+
+  - name: "[dcb] docker compose build"
+    keyword: "dcb,"
+    snippet: docker compose build
+
+  # Docker system management
+  - name: "[dprune] docker system prune"
+    keyword: "dprune,"
+    snippet: docker system prune -f
+
+  - name: "[dvprune] docker volume prune"
+    keyword: "dvprune,"
+    snippet: docker volume prune -f
+
+  - name: "[dnprune] docker network prune"
+    keyword: "dnprune,"
+    snippet: docker network prune -f
+
+completions:
+  # Docker container completions
+  - name: docker stop container
+    patterns:
+      - "^docker stop $"
+    sourceCommand: "docker ps --format '{{.Names}}'"
+    options:
+      --multi: true
+      --prompt: "'Docker Container> '"
+
+  - name: docker exec container
+    patterns:
+      - "^docker exec( .*)? $"
+    excludePatterns:
+      - "^docker exec( .*)? -.* $"
+    sourceCommand: "docker ps --format '{{.Names}}'"
+    options:
+      --prompt: "'Docker Container> '"
+
+  - name: docker logs container
+    patterns:
+      - "^docker logs( .*)? $"
+    excludePatterns:
+      - "^docker logs( .*)? -.* $"
+    sourceCommand: "docker ps -a --format '{{.Names}}'"
+    options:
+      --prompt: "'Docker Container> '"
+
+  - name: docker remove container
+    patterns:
+      - "^docker rm $"
+    sourceCommand: "docker ps -a --format '{{.Names}}'"
+    options:
+      --multi: true
+      --prompt: "'Docker Container> '"
+
+  - name: docker inspect
+    patterns:
+      - "^docker inspect $"
+    sourceCommand: "docker ps -a --format '{{.Names}}'"
+    options:
+      --prompt: "'Docker Container/Image> '"
+
+  # Docker image completions
+  - name: docker run image
+    patterns:
+      - "^docker run( .*)? $"
+    excludePatterns:
+      - "^docker run( .*)? -.* $"
+    sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
+    options:
+      --prompt: "'Docker Image> '"
+
+  - name: docker remove image
+    patterns:
+      - "^docker rmi $"
+    sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
+    options:
+      --multi: true
+      --prompt: "'Docker Image> '"
+
+  # Docker Compose completions
+  - name: docker compose service
+    patterns:
+      - "^docker compose (exec|logs|restart|stop|start) $"
+    sourceCommand: "docker compose ps --services 2>/dev/null || docker compose config --services 2>/dev/null"
+    options:
+      --prompt: "'Docker Compose Service> '"

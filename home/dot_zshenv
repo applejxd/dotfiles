@@ -10,21 +10,6 @@ if [[ -e /etc/zsh/zshrc ]]; then
     source /etc/zsh/zshrc
 fi
 
-#----------------#
-# Plugin Manager #
-#----------------#
-
-# for importing aliaces to commands by package manager
-
-# if [ -e $SHELL_CONF/zplug.sh ]; then
-#     source $SHELL_CONF/zplug.sh
-# fi
-
-SHELL_CONF=$HOME/.config/shell
-if [ -e $SHELL_CONF/zinit.zsh ]; then
-    source $SHELL_CONF/zinit.zsh
-fi
-
 #-----------------------#
 # Environment variables #
 #-----------------------#

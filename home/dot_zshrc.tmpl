@@ -1,21 +1,127 @@
 #!/bin/zsh
 # .zshenv>.zprofile>.zshrc>.zlogin
 
-SHELL_CONF=$HOME/.config/shell
+# Emacs mode
+bindkey -e
+
+if [[ -e "${HOME}/.local/bin/mise" ]]; then
+    eval "$(~/.local/bin/mise activate zsh)"
+fi
 
 #--------#
 # common #
 #--------#
 
+SHELL_CONF=$HOME/.config/shell
 if [ -e $COMMON_RC ]; then
+    # loads z.sh
     source $SHELL_CONF/shellrc.sh
 fi
 
-# Emacs mode
-bindkey -e
+#-------------#
+# Activations #
+#-------------#
 
-# zsh completion
-autoload -Uz compinit && compinit
+# activate all initially to prevent unexpected uninitialized caes
+
+if type "fzf" >/dev/null 2>&1; then
+    eval "$(fzf --zsh)"
+    # common setting
+    COMMON_FZF="${HOME}/.config/shell/fzf.sh"
+    [ -e $COMMON_FZF ] && source $COMMON_FZF
+fi
+
+if [[ -e /usr/local/Modules/init ]]; then
+    source /usr/local/Modules/init/zsh
+fi
+
+if [[ -e /opt/ros ]]; then
+    ros_dir=$(find /opt/ros -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    source "${ros_dir}/setup.zsh"
+fi
+
+# iTerm2 shell integration
+[[ -f "${HOME}/.iterm2_shell_integration.zsh" ]] &&
+    source "${HOME}/.iterm2_shell_integration.zsh"
+
+# for Cline
+# see https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Shell-Integration-Unavailable#still-having-trouble
+[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
+
+#----------------#
+# Plugin manager #
+#----------------#
+
+# Added by Zinit's installer
+if [[ ! -f $HOME/.zinit/bin/zinit.zsh ]]; then
+    print -P "%F{33}▓▒░ %F{220}Installing DHARMA Initiative Plugin Manager (zdharma/zinit)…%f"
+    command mkdir -p "$HOME/.zinit" && command chmod g-rwX "$HOME/.zinit"
+    command git clone https://github.com/zdharma-continuum/zinit "$HOME/.zinit/bin" && \
+        print -P "%F{33}▓▒░ %F{34}Installation successful.%f%b" || \
+        print -P "%F{160}▓▒░ The clone has failed.%f%b"
+fi
+
+# shellcheck source=/dev/null
+source "$HOME/.zinit/bin/zinit.zsh"
+autoload -Uz _zinit
+(( ${+_comps} )) && _comps[zinit]=_zinit
+# End of Zinit's installer chunk
+
+#------------#
+# completion #
+#------------#
+
+# strict in loading order
+# see https://github.com/Aloxaf/fzf-tab?tab=readme-ov-file#install
+
+# completion for non-defalut commands
+zinit light zsh-users/zsh-completions
+
+autoload -Uz compinit
+compinit
+
+# fish-like auto completion
+zinit light zsh-users/zsh-autosuggestions
+# syntax-highlighting to command-line (after compinit)
+zinit light zdharma-continuum/fast-syntax-highlighting
+
+zinit ice lucid depth"1" blockf
+zinit light yuki-yano/zeno.zsh
+source "$HOME/.config/shell/zeno.zsh"
+
+# completion with fzf 
+zinit ice wait'0f' lucid
+zinit light Aloxaf/fzf-tab
+
+#---------------#
+# other plugins #
+#---------------#
+
+# git
+zinit ice pick"lib/git.zsh"
+zinit light ohmyzsh/ohmyzsh
+
+#------#
+# pure #
+#------#
+
+zinit ice compile'(pure|async).zsh' pick'async.zsh' src'pure.zsh'
+zinit light sindresorhus/pure
+
+#--------#
+# docker #
+#--------#
+
+zinit light felixr/docker-zsh-completion
+
+zinit ice pick"docker-fzf.zsh"
+zinit load mnowotnik/docker-fzf-completion
+
+zinit ice pick'docker-fzf'
+zinit load MartinRamm/fzf-docker
+
+zinit ice as"program" pick"dfimage.bash"
+zinit load RyodoTanaka/.bash_extend
 
 #-----------------#
 # OS dependencies #
@@ -46,10 +152,6 @@ setopt +o nomatch
 # auto pushd & no history
 setopt auto_pushd
 setopt pushd_ignore_dups
-
-# iTerm2 shell integration
-[[ -f "${HOME}/.iterm2_shell_integration.zsh" ]] &&
-    source "${HOME}/.iterm2_shell_integration.zsh"
 
 # fg -> C-z
 zle -N fancy-ctrl-z
@@ -126,16 +228,9 @@ function fancy-ctrl-z() {
 # fzf #
 #-----#
 
-if type "fzf" >/dev/null 2>&1; then
-    eval "$(fzf --zsh)"
-    # common setting
-    COMMON_FZF="${HOME}/.config/shell/fzf.sh"
-    [ -e $COMMON_FZF ] && source $COMMON_FZF
-fi
-
 # z-fzf, emacs-like key-bindings
 # see http://bit.ly/2sEPZAJ
-if type "z" >/dev/null 2>&1; then
+if type "_z" >/dev/null 2>&1; then
     function z-fzf() {
         local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
         if [[ -n "$selected_dir" ]]; then
@@ -162,24 +257,3 @@ if type "ghq" >/dev/null 2>&1; then
     zle -N ghq-fzf
     bindkey "^X^G" ghq-fzf
 fi
-
-#-------------#
-# Activations #
-#-------------#
-
-if [[ -e "${HOME}/.local/bin/mise" ]]; then
-    eval "$(~/.local/bin/mise activate zsh)"
-fi
-
-if [[ -e /usr/local/Modules/init ]]; then
-    source /usr/local/Modules/init/zsh
-fi
-
-if [[ -e /opt/ros ]]; then
-    ros_dir=$(find /opt/ros -mindepth 1 -maxdepth 1 -type d | head -n 1)
-    source "${ros_dir}/setup.zsh"
-fi
-
-# for Cline
-# see https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Shell-Integration-Unavailable#still-having-trouble
-[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
