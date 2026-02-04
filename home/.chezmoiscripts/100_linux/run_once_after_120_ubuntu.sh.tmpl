@@ -25,10 +25,12 @@ sudo apt-get install -y \
     wget curl vim neovim git unzip tree tig \
     tmux python3-tmuxp manpages-ja xsel xdg-utils \
     i3 rofi polybar lxappearance
-sudo snap install yazi --classic  # needs Cica (Nerd) font
 # use gtk instead of gnome for GUI in i3wm
 # see https://www.simple-web-system.work/entry/2023/09/02/012031
 systemctl --user mask xdg-desktop-portal-gnome
+mise install
+# monitoring resource usage
+cargo install --features nvidia --git https://github.com/bvaisvil/zenith.git
 echo "✅ 完了：基本的なツールをインストール/更新しました"
 
 {{- if eq .chezmoi.os "linux" }}
