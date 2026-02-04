@@ -1,12 +1,13 @@
-session_name: IDE like layout
+session_name: IDE
 shell_command_before:
   - 'eval "$(mise activate zsh)"'
 start_directory: "${PWD}"
 windows:
   - window_name: editor
-    layout: even-vertical
+    layout: main-vertical
     panes:
       - yazi
+      - copilot --banner
       - zsh
 
   - window_name: git
