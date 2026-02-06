@@ -26,8 +26,13 @@ sudo apt-get install -y \
     tmux python3-tmuxp manpages-ja xsel xdg-utils \
     i3 rofi polybar lxappearance
 mise install
+
 # monitoring resource usage
-cargo install --features nvidia --git https://github.com/bvaisvil/zenith.git
+if [[ ! -d "$HOME/.cargo/bin/zenith" ]]; then
+    cargo install --features nvidia --git https://github.com/bvaisvil/zenith.git
+    source $HOME/.cargo/env
+fi
+
 echo "✅ 完了：基本的なツールをインストール/更新しました"
 
 # use gtk instead of gnome for GUI in i3wm
