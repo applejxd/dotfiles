@@ -7,9 +7,8 @@ sudo -v
 echo "WSL の設定を行います..."
 
 # WSL config
-if [ ! -f /etc/wsl.conf ]; then
-    # Write WSL config directly with heredoc
-    sudo tee /etc/wsl.conf > /dev/null << 'EOF'
+# Write WSL config directly with heredoc
+sudo tee /etc/wsl.conf > /dev/null << 'EOF'
 [automount]
 options = "metadata"
 enabled = true
@@ -24,10 +23,5 @@ systemd=true
 [user]
 default={{ .chezmoi.username }}
 EOF
-    
-    echo "✓ WSL configuration applied successfully. Restart WSL to take effect." >&2
-else
-    echo "✓ WSL configuration already exists, skipping." >&2
-fi
 
 echo "✅ 完了：WSL の設定を行いました"
