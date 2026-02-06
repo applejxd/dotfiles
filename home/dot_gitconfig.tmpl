@@ -22,6 +22,10 @@
 	autocrlf = input
 {{- end }}
 
+[pull]
+	# merge
+    rebase = false
+
 [ghq]
 	root = {{ .chezmoi.destDir }}/src
 [gitflow "branch"]

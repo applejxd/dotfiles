@@ -25,11 +25,19 @@ sudo apt-get install -y \
     wget curl vim neovim git unzip tree tig \
     tmux python3-tmuxp manpages-ja xsel xdg-utils \
     i3 rofi polybar lxappearance
-sudo snap install yazi --classic  # needs Cica (Nerd) font
+mise install
+
+# monitoring resource usage
+if [[ ! -d "$HOME/.cargo/bin/zenith" ]]; then
+    cargo install --features nvidia --git https://github.com/bvaisvil/zenith.git
+    source $HOME/.cargo/env
+fi
+
+echo "✅ 完了：基本的なツールをインストール/更新しました"
+
 # use gtk instead of gnome for GUI in i3wm
 # see https://www.simple-web-system.work/entry/2023/09/02/012031
-systemctl --user mask xdg-desktop-portal-gnome
-echo "✅ 完了：基本的なツールをインストール/更新しました"
+echo "インストール後に 'systemctl --user mask xdg-desktop-portal-gnome' を実行してください"
 
 {{- if eq .chezmoi.os "linux" }}
 {{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
