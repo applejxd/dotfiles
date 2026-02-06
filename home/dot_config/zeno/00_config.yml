@@ -26,6 +26,10 @@ snippets:
       lbuffer: '^git\s+checkout\s+'
     evaluate: true # eval snippet
 
+  - name: "[pswd,] pwgen"
+    keyword: "pswd,"
+    snippet: "pwgen -s -y -c -n 16"
+
 completions:
   # simple sourceCommand, no callback
   - name: kill signal
