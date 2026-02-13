@@ -32,6 +32,7 @@ if pidof systemd >/dev/null 2>&1; then
     mkdir -p "$XDG_RUNTIME_DIR"
     dockerd-rootless-setuptool.sh install
     systemctl --user enable --now docker.service
+    # ブート時自動起動
     sudo loginctl enable-linger "$USER" >/dev/null 2>&1 || true
 
     echo "[完了] Rootless Docker を有効化しました。"
