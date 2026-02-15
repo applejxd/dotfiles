@@ -1,0 +1,4 @@
+model_reasoning_effort = "medium"
+hide_agent_reasoning = false
+personality = "pragmatic"
+web_search = "live"

@@ -1,0 +1,82 @@
+import tomllib
+from pathlib import Path
+from typing import Dict
+
+# should be installed by run_once_after_122_ubuntu.sh
+import tomlkit
+
+
+def merge_dicts(source: Dict, target: Dict) -> Dict:
+    """
+    Merge source dict into target dict. Source dict has higher priority.
+
+    :param source: Source dict.
+    :param target: Target dict.
+    :return: Merged dict.
+    """
+    for key, value in source.items():
+        if isinstance(value, dict) and key in target and isinstance(target[key], dict):
+            target[key] = merge_dicts(value, target[key])
+        else:
+            target[key] = value
+    return target
+
+def overwrite_settings(
+    target_path: Path, target_dict: Dict, verbose: bool = False
+) -> bool:
+    """
+    Overwrite target settings file with target_dict.
+
+    :param target_path: Path to target settings file.
+    :param target_dict: Settings dict to write.
+    :param verbose: Whether to print merged settings and ask for confirmation.
+    :return: True if written, False if aborted.
+    """
+    # target_json_str = json.dumps(target_dict, ensure_ascii=False, indent=2)
+    target_json_str = tomlkit.dumps(target_dict)
+
+    print("=" * 40)
+    print("New settings.json for Windows Terminal:")
+    print(target_json_str)
+    print("=" * 40)
+
+    do_write = True
+    if verbose:
+        answer = input(f"Write merged settings to {target_path}? (y/n): ")
+        do_write = answer.lower() == "y"
+
+    if do_write:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with target_path.open("w", encoding="utf-8") as f:
+            f.write(target_json_str)
+        print(f"Wrote merged settings to {target_path}.")
+    else:
+        print("Aborted.")
+
+    return do_write
+
+
+def main():
+    root_path = Path("{{ .chezmoi.sourceDir }}").parent
+    source_path = root_path / "config" / "unix" / "codex.toml"
+
+    with open(source_path, "rb") as f:
+        source_dict = tomllib.load(f)
+
+    # may not exist
+    target_path = Path("~/.codex/config.toml").expanduser()
+    if not target_path.parent.exists():
+        print(f"Creating directory {target_path.parent}")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if target_path.exists():
+        with open(target_path, "rb") as f:
+            target_dict = tomllib.load(f)
+    else:
+        target_dict = {}
+
+    target_dict = merge_dicts(source_dict, target_dict)
+    overwrite_settings(target_path, target_dict, verbose=False)
+
+if __name__ == "__main__":
+    main()
