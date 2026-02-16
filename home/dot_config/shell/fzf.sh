@@ -58,6 +58,24 @@ if type "ghq" >/dev/null 2>&1; then
     }
 fi
 
+if type "gwq" >/dev/null 2>&1; then
+    function xgw() {
+        local selected_dir
+        selected_dir=$(gwq list | fzf)
+        if [[ -n "$selected_dir" ]]; then
+            cd "$(gwq get "$selected_dir")" || return
+        fi
+    }
+
+    function gwcode() {
+        local selected_dir
+        selected_dir=$(gwq list | fzf)
+        if [[ -n "$selected_dir" ]]; then
+            gwq exec "$selected_dir" -- code .
+        fi
+    }
+fi
+
 if type "ghq" >/dev/null 2>&1; then
     function mise-select() {
         if [[ -z "$1" ]]; then

@@ -13,6 +13,12 @@ snippets:
   - name: "[gwa] add git worktree branches"
     keyword: "gwa,"
     snippet: gwq add {{worktree}}
+  - name: "[gwrm] remove git worktree branches"
+    keyword: "gwrm,"
+    snippet: gwq remove {{worktree}}
+  - name: "[gwcd] change directory to git worktree"
+    keyword: "gwcd,"
+    snippet: cd $(gwq get {{worktree}})
   - name: "[gcode] open git worktree in vscode"
     keyword: "gcode,"
     snippet: gwq exec {{worktree}} -- code .
@@ -24,4 +30,21 @@ completions:
     sourceCommand: "git for-each-ref --format='%(refname:short)' refs/heads/ | sed '/^$/d'"
     options:
       --prompt: "'Git Worktree> '"
-  
+  - name: remove git worktree branches
+    patterns:
+      - "^gwq remove $"
+    sourceCommand: "gwq list --json | jq -r '.[].branch'"
+    options:
+      --prompt: "'Git Worktree> '"
+  - name: change directory to git worktree
+    patterns:
+      - "^cd \\$\\(gwq get $"
+    sourceCommand: "gwq list --json | jq -r '.[].branch'"
+    options:
+      --prompt: "'Git Worktree> '"
+  - name: execute commands in git worktree
+    patterns:
+      - "^gwq exec $"
+    sourceCommand: "gwq list --json | jq -r '.[].branch'"
+    options:
+      --prompt: "'Git Worktree> '"
