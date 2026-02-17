@@ -12,9 +12,13 @@ snippets:
     keyword: "di,"
     snippet: docker images
 
-  - name: "[dst] docker stop container"
-    keyword: "dst,"
+  - name: "[dsp] docker stop container"
+    keyword: "dsp,"
     snippet: docker stop {{container}}
+  
+  - name: "[dst] docker start container"
+    keyword: "dst,"
+    snippet: docker start {{container}}
 
   - name: "[drm] docker remove container"
     keyword: "drm,"
