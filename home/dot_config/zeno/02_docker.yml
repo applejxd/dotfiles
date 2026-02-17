@@ -142,7 +142,7 @@ completions:
   - name: docker remove container
     patterns:
       - "^docker rm $"
-    sourceCommand: "docker ps -a --format '{{.Names}}'"
+    sourceCommand: "docker ps -a --format '{{.Names}}\t{{.Image}}'"
     options:
       --multi: true
       --prompt: "'Docker Container> '"
