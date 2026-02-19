@@ -1,4 +1,4 @@
-import tomllib
+import sys
 from pathlib import Path
 from typing import Dict
 
@@ -32,11 +32,10 @@ def overwrite_settings(
     :param verbose: Whether to print merged settings and ask for confirmation.
     :return: True if written, False if aborted.
     """
-    # target_json_str = json.dumps(target_dict, ensure_ascii=False, indent=2)
     target_json_str = tomlkit.dumps(target_dict)
 
     print("=" * 40)
-    print("New settings.json for Windows Terminal:")
+    print("Merged settings:")
     print(target_json_str)
     print("=" * 40)
 
@@ -60,23 +59,36 @@ def main():
     root_path = Path("{{ .chezmoi.sourceDir }}").parent
     source_path = root_path / "config" / "unix" / "codex.toml"
 
-    with open(source_path, "rb") as f:
-        source_dict = tomllib.load(f)
+    # Load source config
+    if not source_path.exists():
+        print(f"Error: Source file not found: {source_path}", file=sys.stderr)
+        sys.exit(1)
 
-    # may not exist
+    try:
+        with source_path.open("rb") as f:
+            source_dict = tomlkit.load(f)
+    except Exception as e:
+        print(f"Error reading source file {source_path}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Load existing target config if it exists
     target_path = Path("~/.codex/config.toml").expanduser()
-    if not target_path.parent.exists():
-        print(f"Creating directory {target_path.parent}")
-        target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_dict = {}
 
     if target_path.exists():
-        with open(target_path, "rb") as f:
-            target_dict = tomllib.load(f)
-    else:
-        target_dict = {}
+        try:
+            with target_path.open("rb") as f:
+                target_dict = tomlkit.load(f)
+        except Exception as e:
+            print(f"Warning: Failed to read existing config {target_path}: {e}")
+            print("Proceeding with empty target config...")
 
+    # Merge and write
     target_dict = merge_dicts(source_dict, target_dict)
-    overwrite_settings(target_path, target_dict, verbose=False)
+    try:
+        overwrite_settings(target_path, target_dict, verbose=False)
+    except Exception as e:
+        print(f"Error writing config to {target_path}: {e}", file=sys.stderr)
+        sys.exit(1)
 
-if __name__ == "__main__":
-    main()
+main()

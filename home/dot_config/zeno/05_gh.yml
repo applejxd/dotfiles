@@ -1,0 +1,79 @@
+snippets:
+  - name: "[ghpr] gh pr view"
+    keyword: "ghpr,"
+    snippet: gh pr view
+
+  - name: "[ghprc] gh pr create"
+    keyword: "ghprc,"
+    snippet: gh pr create
+
+  - name: "[ghprl] gh pr list"
+    keyword: "ghprl,"
+    snippet: gh pr list
+
+  - name: "[ghis] gh issue view"
+    keyword: "ghis,"
+    snippet: gh issue view
+
+  - name: "[ghisc] gh issue create"
+    keyword: "ghisc,"
+    snippet: gh issue create
+
+  - name: "[ghisl] gh issue list"
+    keyword: "ghisl,"
+    snippet: gh issue list
+
+  - name: "[ghrc] gh repo clone"
+    keyword: "ghrc,"
+    snippet: gh repo clone {{repository}}
+
+  - name: "[ghrv] gh repo view"
+    keyword: "ghrv,"
+    snippet: gh repo view
+
+  - name: "[ghb] gh browse"
+    keyword: "ghb,"
+    snippet: gh browse
+
+  - name: "[ghst] gh status"
+    keyword: "ghst,"
+    snippet: gh status
+
+completions:
+  - name: gh pr checkout
+    patterns:
+      - "^gh pr checkout $"
+    sourceCommand: >-
+      gh pr list --json number,title |
+      jq -r '.[] | "\(.number)\t\(.title)"'
+    options:
+      --prompt: "'Pull Request> '"
+    callback: "awk '{print $1}'"
+
+  - name: gh pr view
+    patterns:
+      - "^gh pr view $"
+    sourceCommand: >-
+      gh pr list --json number,title |
+      jq -r '.[] | "\(.number)\t\(.title)"'
+    options:
+      --prompt: "'Pull Request> '"
+    callback: "awk '{print $1}'"
+
+  - name: gh issue view
+    patterns:
+      - "^gh issue view $"
+    sourceCommand: >-
+      gh issue list --json number,title |
+      jq -r '.[] | "\(.number)\t\(.title)"'
+    options:
+      --prompt: "'Issue> '"
+    callback: "awk '{print $1}'"
+
+  - name: gh repo clone
+    patterns:
+      - "^gh repo clone $"
+    sourceCommand: >-
+      gh repo list --json nameWithOwner | jq -r '.[].nameWithOwner'
+    options:
+      --prompt: "'Repository> '"

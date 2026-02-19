@@ -9,6 +9,15 @@
 	helper = store
 {{- end }}
 
+# gh auth setup-git configuration for GitHub CLI
+[credential "https://github.com"]
+	helper =
+	helper = !gh auth git-credential
+
+[credential "https://gist.github.com"]
+	helper =
+	helper = !gh auth git-credential
+
 [core]
 	editor = vim
 	quotepath = false
