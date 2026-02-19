@@ -19,6 +19,9 @@ fi
 # for GPU drivers
 export LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
+# Browser
+export BROWSER="pwsh.exe /c start"
+
 #-----#
 # GUI #
 #-----#
