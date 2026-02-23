@@ -20,7 +20,7 @@ fi
 export LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
 # Browser
-export BROWSER="pwsh.exe /c start"
+export BROWSER="wslview"
 
 #-----#
 # GUI #
