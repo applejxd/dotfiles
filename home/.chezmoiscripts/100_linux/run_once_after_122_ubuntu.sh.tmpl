@@ -27,10 +27,10 @@ sudo apt-get install -y \
     i3 rofi polybar lxappearance
 
 # monitoring resource usage
-if [[ ! -d "$HOME/.cargo/bin/zenith" ]]; then
-    cargo install --features nvidia --git https://github.com/bvaisvil/zenith.git
-    source $HOME/.cargo/env
-fi
+#if [[ ! -d "$HOME/.cargo/bin/zenith" ]]; then
+#    cargo install --features nvidia --git https://github.com/bvaisvil/zenith.git
+#    source $HOME/.cargo/env
+#fi
 
 # install GitHub CLI
 if ! command -v gh &> /dev/null; then

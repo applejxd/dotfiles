@@ -8,9 +8,6 @@ ghq = "latest"
 bat = "latest"
 eza = "latest"
 jj ="latest"
-{{- if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") }}
-ripgrep = "latest"
-{{- end }}
 
 # TUI
 yazi = "latest"
@@ -22,12 +19,18 @@ hadolint = "latest"
 python = "latest"
 uv = "latest"
 rust = "latest"
-cargo = "latest"
 go = "latest"
 deno = "latest"
+"cargo:https://github.com/bvaisvil/zenith.git" = { version = "branch:master", features = "nvidia" }
 
 # others
 chezmoi = "latest"
+
+{{- if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") }}
+ripgrep = "latest"
+cargo = "latest"
+{{- end }}
+
 {{- if eq .chezmoi.username "applejxd" }}
 yt-dlp = "latest"
 {{- end }}
