@@ -23,12 +23,13 @@ go = "latest"
 deno = "latest"
 # see https://mise.jdx.dev/dev-tools/backends/cargo.html
 "cargo:https://github.com/bvaisvil/zenith.git" = { version = "branch:master", features = "nvidia" }
+# no latest cargo in arm64
+"cargo:ripgrep" = "14.1.1"
 
 # others
 chezmoi = "latest"
 
 {{- if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") }}
-ripgrep = "latest"
 cargo = "latest"
 {{- end }}
 
