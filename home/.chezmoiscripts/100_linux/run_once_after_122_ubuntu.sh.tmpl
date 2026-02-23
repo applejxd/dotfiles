@@ -26,12 +26,6 @@ sudo apt-get install -y \
     tmux python3-tmuxp python3-tomlkit manpages-ja xsel xdg-utils \
     i3 rofi polybar lxappearance
 
-# monitoring resource usage
-#if [[ ! -d "$HOME/.cargo/bin/zenith" ]]; then
-#    cargo install --features nvidia --git https://github.com/bvaisvil/zenith.git
-#    source $HOME/.cargo/env
-#fi
-
 # install GitHub CLI
 if ! command -v gh &> /dev/null; then
     (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
