@@ -1,0 +1,107 @@
+# see https://developers.openai.com/codex/rules/
+# This is the Starlark syntax
+
+# Allow read-only docker inspection commands.
+prefix_rule(
+    pattern = ["docker", "ps"],
+    decision = "allow",
+    justification = "Listing containers is safe",
+    match = [
+        "docker ps",
+        "docker ps -a",
+        "docker ps --filter status=running",
+    ],
+)
+
+prefix_rule(
+    pattern = ["docker", "images"],
+    decision = "allow",
+    justification = "Listing images is safe",
+    match = [
+        "docker images",
+        "docker images --filter dangling=true",
+    ],
+)
+
+prefix_rule(
+    pattern = ["docker", "logs"],
+    decision = "allow",
+    justification = "Reading container logs is safe",
+    match = [
+        "docker logs my-container",
+        "docker logs --tail 100 my-container",
+    ],
+)
+
+prefix_rule(
+    pattern = ["docker", "inspect"],
+    decision = "allow",
+    justification = "Inspecting container/image metadata is safe",
+    match = [
+        "docker inspect my-container",
+        "docker inspect --format '{{.State.Status}}' my-container",
+    ],
+)
+
+# Prompt before running or executing in containers.
+prefix_rule(
+    pattern = ["docker", "run"],
+    decision = "prompt",
+    justification = "Running containers may start long-lived processes or expose ports",
+    match = [
+        "docker run --rm alpine sh",
+        "docker run -d -p 8080:80 nginx",
+    ],
+)
+
+prefix_rule(
+    pattern = ["docker", "exec"],
+    decision = "prompt",
+    justification = "Executing commands in a running container can modify its state",
+    match = [
+        "docker exec -it my-container bash",
+        "docker exec my-container ls /app",
+    ],
+)
+
+prefix_rule(
+    pattern = ["docker", "build"],
+    decision = "prompt",
+    justification = "Building images consumes resources and may run arbitrary Dockerfile commands",
+    match = [
+        "docker build -t my-image .",
+        "docker build --no-cache -t my-image:latest .",
+    ],
+)
+
+# Prompt before removing containers or images.
+prefix_rule(
+    pattern = ["docker", "rm"],
+    decision = "prompt",
+    justification = "Removing containers is irreversible",
+    match = [
+        "docker rm my-container",
+        "docker rm -f my-container",
+    ],
+)
+
+prefix_rule(
+    pattern = ["docker", "rmi"],
+    decision = "prompt",
+    justification = "Removing images is irreversible",
+    match = [
+        "docker rmi my-image",
+        "docker rmi -f my-image:latest",
+    ],
+)
+
+# Deny bulk cleanup commands.
+prefix_rule(
+    pattern = ["docker", "system", "prune"],
+    decision = "deny",
+    justification = "Pruning the entire Docker system removes all unused data and is highly destructive",
+    match = [
+        "docker system prune",
+        "docker system prune -af",
+    ],
+)
