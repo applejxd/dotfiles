@@ -1,1 +1,46 @@
 # rules for grep, sed, awk, ...
+# see https://developers.openai.com/codex/rules/
+# This is the Starlark syntax
+
+# Allow read-only search commands.
+prefix_rule(
+    pattern = ["grep"],
+    decision = "allow",
+    justification = "grep only reads files and prints matches; it does not modify anything",
+    match = [
+        "grep -r 'TODO' src/",
+        "grep -n 'def main' main.py",
+        "grep --include='*.py' -rl 'import os' .",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rg"],
+    decision = "allow",
+    justification = "ripgrep only reads files; it does not modify anything",
+    match = [
+        "rg 'TODO' src/",
+        "rg -n 'def main' main.py",
+    ],
+)
+
+prefix_rule(
+    pattern = ["awk"],
+    decision = "allow",
+    justification = "awk in its typical usage reads stdin/files and prints; it does not modify files in place",
+    match = [
+        "awk '{print $1}' access.log",
+        "awk -F: '{print $1}' /etc/passwd",
+    ],
+)
+
+# Prompt before in-place sed edits that modify files.
+prefix_rule(
+    pattern = ["sed"],
+    decision = "prompt",
+    justification = "sed with -i modifies files in place; even without -i it can be part of a pipeline that overwrites files",
+    match = [
+        "sed -i 's/foo/bar/g' config.txt",
+        "sed 's/old/new/' file.txt",
+    ],
+)
