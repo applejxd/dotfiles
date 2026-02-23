@@ -8,31 +8,33 @@ ghq = "latest"
 bat = "latest"
 eza = "latest"
 jj ="latest"
+ripgrep = "latest"
 
 # TUI
-yazi = "latest"
 lazygit = "latest"
+yazi = "latest"
 
 # dev
 shellcheck = "latest"
 hadolint = "latest"
 python = "latest"
 uv = "latest"
+deno = "latest"
+
+# backends
 rust = "latest"
 go = "latest"
-deno = "latest"
 
 # others
 chezmoi = "latest"
 
+# see https://mise.jdx.dev/dev-tools/backends/go.html
+"go:github.com/d-kuro/gwq/cmd/gwq" = "latest"
+
 # see https://mise.jdx.dev/dev-tools/backends/cargo.html
 {{- if eq .chezmoi.arch "amd64" }}
-ripgrep = "latest"
-cargo = "latest"
 "cargo:https://github.com/bvaisvil/zenith.git" = { version = "branch:master", features = "nvidia" }
 {{- else if eq .chezmoi.arch "arm64" }}
-# no latest cargo in arm64
-"cargo:ripgrep" = "14.1.1"
 "cargo:https://github.com/bvaisvil/zenith.git" = { version = "branch:master"}
 {{- end }}
 

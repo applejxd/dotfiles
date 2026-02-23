@@ -28,9 +28,7 @@ if ! type python >/dev/null 2>&1; then
         libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
 fi
 
+mise self-update
 mise install
-
-# mise dependent packages
-go install github.com/d-kuro/gwq/cmd/gwq@latest
 
 echo "✅ 完了：開発ツールをインストール/更新しました"
