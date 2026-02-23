@@ -2,9 +2,11 @@ import sys
 from pathlib import Path
 from typing import Dict
 
-# should be installed by run_once_after_122_ubuntu.sh
-import tomlkit
-
+try:
+    # should be installed by run_once_after_122_ubuntu.sh
+    import tomlkit
+except Exception:
+    raise ImportError("tomlkit is not installed.")
 
 def merge_dicts(source: Dict, target: Dict) -> Dict:
     """
