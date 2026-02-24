@@ -8,28 +8,34 @@ ghq = "latest"
 bat = "latest"
 eza = "latest"
 jj ="latest"
+ripgrep = "latest"
 
 # TUI
+lazygit = "v0.59.0" # to use correct tag
 yazi = "latest"
-lazygit = "latest"
 
 # dev
 shellcheck = "latest"
 hadolint = "latest"
 python = "latest"
 uv = "latest"
+deno = "latest"
+
+# backends (keep the latest for building tools)
 rust = "latest"
 go = "latest"
-deno = "latest"
-# see https://mise.jdx.dev/dev-tools/backends/cargo.html
-"cargo:https://github.com/bvaisvil/zenith.git" = { version = "branch:master", features = "nvidia" }
 
 # others
 chezmoi = "latest"
 
-{{- if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") }}
-ripgrep = "latest"
-cargo = "latest"
+# see https://mise.jdx.dev/dev-tools/backends/go.html
+"go:github.com/d-kuro/gwq/cmd/gwq" = "latest"
+
+# see https://mise.jdx.dev/dev-tools/backends/cargo.html
+{{- if eq .chezmoi.arch "amd64" }}
+"cargo:https://github.com/bvaisvil/zenith.git" = { version = "branch:master", features = "nvidia" }
+{{- else if eq .chezmoi.arch "arm64" }}
+"cargo:https://github.com/bvaisvil/zenith.git" = { version = "branch:master"}
 {{- end }}
 
 {{- if eq .chezmoi.username "applejxd" }}
