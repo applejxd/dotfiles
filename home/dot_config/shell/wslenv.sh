@@ -11,9 +11,17 @@ export PATH="/mnt/c/Windows/System32:$PATH"   # for clip.exe
 # Powershell
 export PATH="/mnt/c/Windows/System32/WindowsPowerShell/v1.0:$PATH"
 
-# VSCode (for system installation)
-if [[ -e "/mnt/c/Progra~1/Microsoft VS Code" ]]; then
+# VSCode (for system installation, fallback to user installation)
+if [[ -d "/mnt/c/Progra~1/Microsoft VS Code" ]]; then
     export PATH="/mnt/c/Progra~1/Microsoft VS Code/bin:$PATH"
+else
+    for _vscode_path in /mnt/c/Users/*/AppData/Local/Programs/"Microsoft VS Code"; do
+        if [[ -d "$_vscode_path" ]]; then
+            export PATH="$_vscode_path/bin:$PATH"
+            break
+        fi
+    done
+    unset _vscode_path
 fi
 
 # for GPU drivers
