@@ -15,13 +15,12 @@ export PATH="/mnt/c/Windows/System32/WindowsPowerShell/v1.0:$PATH"
 if [[ -d "/mnt/c/Progra~1/Microsoft VS Code" ]]; then
     export PATH="/mnt/c/Progra~1/Microsoft VS Code/bin:$PATH"
 else
-    for _vscode_path in /mnt/c/Users/*/AppData/Local/Programs/"Microsoft VS Code"; do
-        if [[ -d "$_vscode_path" ]]; then
-            export PATH="$_vscode_path/bin:$PATH"
-            break
-        fi
-    done
-    unset _vscode_path
+    _win_user=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
+    _vscode_path="/mnt/c/Users/${_win_user}/AppData/Local/Programs/Microsoft VS Code"
+    if [[ -n "$_win_user" ]] && [[ -d "$_vscode_path" ]]; then
+        export PATH="$_vscode_path/bin:$PATH"
+    fi
+    unset _win_user _vscode_path
 fi
 
 # for GPU drivers
