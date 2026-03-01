@@ -233,141 +233,141 @@ fi
 # Anaconda #
 #----------#
 
-if type "conda" >/dev/null 2>&1; then
-    alias condals="conda env list"
+# if type "conda" >/dev/null 2>&1; then
+#     alias condals="conda env list"
 
-    function condarun() {
-        local conda_env
-        conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
-        [ -n "$conda_env" ] && conda activate "$conda_env"
-    }
+#     function condarun() {
+#         local conda_env
+#         conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
+#         [ -n "$conda_env" ] && conda activate "$conda_env"
+#     }
 
-    function condarm() {
-        local conda_env
-        conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
-        [ -n "$conda_env" ] && conda env remove -n "$conda_env"
-    }
-fi
+#     function condarm() {
+#         local conda_env
+#         conda_env=$(conda env list | tail -n +3 | head -n -1 | fzf --no-sort | awk '{print $1}')
+#         [ -n "$conda_env" ] && conda env remove -n "$conda_env"
+#     }
+# fi
 
 #--------#
 # docker #
 #--------#
 
-if type "docker" >/dev/null 2>&1; then
-    alias dim="docker images"
-    alias dls="docker ps -a"
-    alias dclean="docker container prune"
+# if type "docker" >/dev/null 2>&1; then
+#     alias dim="docker images"
+#     alias dls="docker ps -a"
+#     alias dclean="docker container prune"
 
-    function drun() {
-        local cmd
-        cmd="docker run -it --rm"
+#     function drun() {
+#         local cmd
+#         cmd="docker run -it --rm"
 
-        # GUI 利用
-        if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-            # WSL の場合
-            cmd="${cmd} -v /mnt/wslg:/mnt/wslg"
-        else
-            # それ以外
-            cmd="${cmd} -e DISPLAY=\"$DISPLAY\" -v /tmp/.X11-unix:/tmp/.X11-unix"
-        fi
+#         # GUI 利用
+#         if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+#             # WSL の場合
+#             cmd="${cmd} -v /mnt/wslg:/mnt/wslg"
+#         else
+#             # それ以外
+#             cmd="${cmd} -e DISPLAY=\"$DISPLAY\" -v /tmp/.X11-unix:/tmp/.X11-unix"
+#         fi
 
-        # GPU があれば使用
-        if type "nvidia-smi" >/dev/null 2>&1; then
-            cmd="${cmd} --gpus all"
-        fi
+#         # GPU があれば使用
+#         if type "nvidia-smi" >/dev/null 2>&1; then
+#             cmd="${cmd} --gpus all"
+#         fi
 
-        # fzf でファイル名選択
-        local name
-        name=$(docker images | sed 1d | fzf --no-sort -m --tac | awk '{ print $1 ":" $2 }')
+#         # fzf でファイル名選択
+#         local name
+#         name=$(docker images | sed 1d | fzf --no-sort -m --tac | awk '{ print $1 ":" $2 }')
 
-        # it (interactive & tty): stdio
-        # rm: remove container that stops
-        if [[ -n "$name" ]]; then
-            # 追加で指定した引数を使用
-            cmd="${cmd} $* $name"
+#         # it (interactive & tty): stdio
+#         # rm: remove container that stops
+#         if [[ -n "$name" ]]; then
+#             # 追加で指定した引数を使用
+#             cmd="${cmd} $* $name"
 
-            # for debugging
-            # echo "${cmd}"
+#             # for debugging
+#             # echo "${cmd}"
 
-            # 実行
-            eval "${cmd}"
-        fi
-    }
+#             # 実行
+#             eval "${cmd}"
+#         fi
+#     }
 
-    function dsh() {
-        local cid
-        cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
+#     function dsh() {
+#         local cid
+#         cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
 
-        [ -n "$cid" ] && docker exec -it "$cid" /bin/bash
-    }
+#         [ -n "$cid" ] && docker exec -it "$cid" /bin/bash
+#     }
 
-    # Select a docker container to start and attach to
-    function da() {
-        local cid
-        cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
+#     # Select a docker container to start and attach to
+#     function da() {
+#         local cid
+#         cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
 
-        [ -n "$cid" ] && docker start "$cid" && docker attach "$cid"
-    }
+#         [ -n "$cid" ] && docker start "$cid" && docker attach "$cid"
+#     }
 
-    # Select a running docker container to stop
-    function ds() {
-        local cid
-        cid=$(docker ps | sed 1d | fzf -q "$1" | awk '{print $1}')
+#     # Select a running docker container to stop
+#     function ds() {
+#         local cid
+#         cid=$(docker ps | sed 1d | fzf -q "$1" | awk '{print $1}')
 
-        [ -n "$cid" ] && docker stop "$cid"
-    }
+#         [ -n "$cid" ] && docker stop "$cid"
+#     }
 
-    # Select a docker container to remove
-    function drm() {
-        local cid
-        cid=$(docker ps -a | sed 1d | fzf -q "$1" | awk '{print $1}')
+#     # Select a docker container to remove
+#     function drm() {
+#         local cid
+#         cid=$(docker ps -a | sed 1d | fzf -q "$1" | awk '{print $1}')
 
-        [ -n "$cid" ] && docker rm "$cid"
-    }
+#         [ -n "$cid" ] && docker rm "$cid"
+#     }
 
-    function drmi() {
-        docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
-    }
+#     function drmi() {
+#         docker images | sed 1d | fzf -q "$1" --no-sort -m --tac | awk '{ print $3 }' | xargs -r docker rmi
+#     }
 
-    # Produce Dockerfile from image
-    # see https://qiita.com/RyodoTanaka/items/c7e4889a1b9383291799
-    function dmkf() {
-        local cid
-        cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
+#     # Produce Dockerfile from image
+#     # see https://qiita.com/RyodoTanaka/items/c7e4889a1b9383291799
+#     function dmkf() {
+#         local cid
+#         cid=$(docker ps -a | sed 1d | fzf -1 -q "$1" | awk '{print $1}')
 
-        [ -n "$cid" ] && docker container commit "$cid" tmp && dfimage.bash tmp >Dockerfile && docker rmi tmp
-    }
+#         [ -n "$cid" ] && docker container commit "$cid" tmp && dfimage.bash tmp >Dockerfile && docker rmi tmp
+#     }
 
-    function dbuild() {
-        local cmd
-        cmd="docker build"
+#     function dbuild() {
+#         local cmd
+#         cmd="docker build"
 
-        # Dockerfile を選択
-        local file_name
-        file_name=$(find . -type f | grep -E "./*.(D|d)ockerfile" | fzf)
-        cmd="$cmd -f ${file_name}"
+#         # Dockerfile を選択
+#         local file_name
+#         file_name=$(find . -type f | grep -E "./*.(D|d)ockerfile" | fzf)
+#         cmd="$cmd -f ${file_name}"
 
-        # イメージ名を取得（"./"を削除・拡張子なしファイル名を取得・小文字化）
-        local img_name
-        img_name=$(echo "$file_name" | sed "s|./||" | awk -F'[.]' '{print $1}' | tr '[:upper:]' '[:lower:]')
-        # タグに使う日付文字を取得
-        local date_tag
-        date_tag=$(date "+%y%m%d")
-        cmd="$cmd -t local/${img_name}:${date_tag}"
+#         # イメージ名を取得（"./"を削除・拡張子なしファイル名を取得・小文字化）
+#         local img_name
+#         img_name=$(echo "$file_name" | sed "s|./||" | awk -F'[.]' '{print $1}' | tr '[:upper:]' '[:lower:]')
+#         # タグに使う日付文字を取得
+#         local date_tag
+#         date_tag=$(date "+%y%m%d")
+#         cmd="$cmd -t local/${img_name}:${date_tag}"
 
-        if [[ -n "$file_name" ]]; then
-            cmd="$cmd $* ."
-            eval "${cmd}"
-        fi
-    }
+#         if [[ -n "$file_name" ]]; then
+#             cmd="$cmd $* ."
+#             eval "${cmd}"
+#         fi
+#     }
 
-    function dcom() {
-        local file_name
-        file_name=$(find ./*.yml | fzf)
+#     function dcom() {
+#         local file_name
+#         file_name=$(find ./*.yml | fzf)
 
-        [ -n "$file_name" ] && docker-compose -f "$file_name" up -d
-    }
-fi
+#         [ -n "$file_name" ] && docker-compose -f "$file_name" up -d
+#     }
+# fi
 
 #-------------#
 # Singularity #
