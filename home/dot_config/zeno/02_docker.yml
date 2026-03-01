@@ -4,12 +4,12 @@ snippets:
     keyword: "dps,"
     snippet: docker ps
 
-  - name: "[dpsa] docker ps all"
-    keyword: "dpsa,"
+  - name: "[dls] docker ps all"
+    keyword: "dls,"
     snippet: docker ps -a
 
-  - name: "[di] docker images"
-    keyword: "di,"
+  - name: "[dim] docker images"
+    keyword: "dim,"
     snippet: docker images
 
   - name: "[dsp] docker stop container"
