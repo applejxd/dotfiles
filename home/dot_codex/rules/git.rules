@@ -64,10 +64,6 @@ prefix_rule(
         "git push origin main",
         "git push --set-upstream origin feature",
     ],
-    not_match = [
-        # Force push is handled by a separate deny rule.
-        "git push --force origin main",
-    ],
 )
 
 # Deny force push to prevent overwriting remote history.
