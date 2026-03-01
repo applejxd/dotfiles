@@ -120,7 +120,7 @@ completions:
   - name: docker stop container
     patterns:
       - "^docker stop $"
-    sourceCommand: "docker ps --format '{{.Names}}'"
+    sourceCommand: "docker ps --filter 'status=running' --format '{{.Names}}'"
     options:
       --multi: true
       --prompt: "'Docker Container> '"
@@ -128,7 +128,7 @@ completions:
   - name: docker start container
     patterns:
       - "^docker start $"
-    sourceCommand: "docker ps -a --format '{{.Names}}'"
+    sourceCommand: "docker ps --filter 'status=exited' --format '{{.Names}}'"
     options:
       --multi: true
       --prompt: "'Docker Container> '"
@@ -138,7 +138,7 @@ completions:
       - "^docker exec( .*)? $"
     excludePatterns:
       - "^docker exec( .*)? -.* $"
-    sourceCommand: "docker ps --format '{{.Names}}'"
+    sourceCommand: "docker ps --filter 'status=running' --format '{{.Names}}'"
     options:
       --prompt: "'Docker Container> '"
 
@@ -147,14 +147,14 @@ completions:
       - "^docker logs( .*)? $"
     excludePatterns:
       - "^docker logs( .*)? -.* $"
-    sourceCommand: "docker ps -a --format '{{.Names}}'"
+    sourceCommand: "docker ps -a --filter 'status=running' --format '{{.Names}}'"
     options:
       --prompt: "'Docker Container> '"
 
   - name: docker remove container
     patterns:
       - "^docker rm $"
-    sourceCommand: "docker ps -a --format '{{.Names}}'"
+    sourceCommand: "docker ps -a --filter 'status=exited' --format '{{.Names}}'"
     options:
       --multi: true
       --prompt: "'Docker Container> '"
@@ -162,7 +162,7 @@ completions:
   - name: docker inspect
     patterns:
       - "^docker inspect $"
-    sourceCommand: "docker ps -a --format '{{.Names}}'"
+    sourceCommand: "docker ps -a --filter 'status=running' --format '{{.Names}}'"
     options:
       --prompt: "'Docker Container/Image> '"
 
@@ -179,7 +179,7 @@ completions:
   - name: docker remove image
     patterns:
       - "^docker rmi $"
-    sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
+    sourceCommand: "docker images --filter 'dangling=true' --format '{{.Repository}}:{{.Tag}}'"
     options:
       --multi: true
       --prompt: "'Docker Image> '"
