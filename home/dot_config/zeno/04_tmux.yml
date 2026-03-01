@@ -56,7 +56,7 @@ completions:
     options:
       --prompt: "'tmuxp Session> '"
       # Preview shows the actual session file content by checking each extension
-      --preview: "[ -f ~/.tmuxp/{}.yaml ] && cat ~/.tmuxp/{}.yaml || [ -f ~/.tmuxp/{}.yml ] && cat ~/.tmuxp/{}.yml || [ -f ~/.tmuxp/{}.json ] && cat ~/.tmuxp/{}.json"
+      --preview: "if [ -f ~/.tmuxp/{}.yaml ]; then cat ~/.tmuxp/{}.yaml; elif [ -f ~/.tmuxp/{}.yml ]; then cat ~/.tmuxp/{}.yml; elif [ -f ~/.tmuxp/{}.json ]; then cat ~/.tmuxp/{}.json; fi"
 
   # tmuxp freeze completion for active sessions
   - name: tmuxp freeze session
