@@ -39,7 +39,7 @@ if [[ -n $ZENO_LOADED ]]; then
   bindkey ' '  zeno-auto-snippet
 
   # fallback if snippet not matched (default: self-insert)
-  # export ZENO_AUTO_SNIPPET_FALLBACK=self-insert
+  export ZENO_AUTO_SNIPPET_FALLBACK=self-insert
 
   # if you use zsh's incremental search
   # bindkey -M isearch ' ' self-insert
@@ -65,5 +65,5 @@ if [[ -n $ZENO_LOADED ]]; then
 
   # fallback if completion not matched
   # (default: fzf-completion if exists; otherwise expand-or-complete)
-  # export ZENO_COMPLETION_FALLBACK=expand-or-complete
+  export ZENO_COMPLETION_FALLBACK=expand-or-complete
 fi
