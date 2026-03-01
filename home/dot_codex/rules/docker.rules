@@ -98,7 +98,7 @@ prefix_rule(
 # Deny bulk cleanup commands.
 prefix_rule(
     pattern = ["docker", "system", "prune"],
-    decision = "deny",
+    decision = "forbidden",
     justification = "Pruning the entire Docker system removes all unused data and is highly destructive",
     match = [
         "docker system prune",

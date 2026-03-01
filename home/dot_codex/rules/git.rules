@@ -73,7 +73,7 @@ prefix_rule(
 # Deny force push to prevent overwriting remote history.
 prefix_rule(
     pattern = ["git", "push", "--force"],
-    decision = "deny",
+    decision = "forbidden",
     justification = "Force push can irreversibly overwrite remote history",
     match = [
         "git push --force origin main",
