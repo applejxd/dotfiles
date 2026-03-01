@@ -38,7 +38,7 @@ tray-padding = 6
 [module/launcher]
 type = custom/text
 content = ""
-; content-padding = 2
+content-padding = 2
 content-foreground = ${colors.background}
 content-background = ${colors.primary}
 click-left = rofi -theme /usr/share/rofi/themes/Arc-Dark.rasi -show drun -show-icons -display-drun "Apps"
