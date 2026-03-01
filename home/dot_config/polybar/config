@@ -78,21 +78,21 @@ type = internal/pulseaudio
 use-ui-max = true
 interval = 2
 format-volume = <label-volume>
-label-volume = "  %percentage%%"
-label-muted = "  mute"
+label-volume = " %percentage%%"
+label-muted = "🔇 mute"
 label-muted-foreground = ${colors.muted}
 
 [module/cpu]
 type = internal/cpu
 interval = 2
 format = <label>
-label = "  %percentage%%"
+label = " %percentage%%"
 
 [module/memory]
 type = internal/memory
 interval = 5
 format = <label>
-label = "  %percentage_used%%"
+label = "📈 %percentage_used%%"
 
 [module/clock]
 type = internal/date
@@ -100,7 +100,7 @@ interval = 5
 date = %Y-%m-%d
 time = %H:%M
 format = <label>
-label = "  %date% %time%"
+label = " %date% %time%"
 
 [module/session]
 type = custom/text
