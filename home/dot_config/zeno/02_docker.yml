@@ -125,6 +125,14 @@ completions:
       --multi: true
       --prompt: "'Docker Container> '"
 
+  - name: docker start container
+    patterns:
+      - "^docker start $"
+    sourceCommand: "docker ps -a --format '{{.Names}}'"
+    options:
+      --multi: true
+      --prompt: "'Docker Container> '"
+
   - name: docker exec container
     patterns:
       - "^docker exec( .*)? $"
