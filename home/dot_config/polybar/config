@@ -23,9 +23,8 @@ border-size = 0
 module-margin = 2
 separator = |
 separator-foreground = ${colors.muted}
-font-0 = "Ubuntu Mono:size=13;3"
-font-1 = "Font Awesome 6 Free:style=Solid:pixelsize=14;3"
-font-2 = "Font Awesome 6 Brands:style=Regular:pixelsize=14;3"
+font-0 = "Cica:size=13;3"
+font-1 = "Cica:style=Bold:size=13;3"
 modules-left = launcher terminal browser workspaces
 modules-center = windowtitle
 modules-right = pulseaudio cpu memory clock session

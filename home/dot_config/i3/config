@@ -14,7 +14,7 @@ set $launcher rofi -show drun
 set $runner rofi -theme /usr/share/rofi/themes/Arc-Dark.rasi -show run -display-run "Command"
 set $window_switcher rofi -theme /usr/share/rofi/themes/Arc-Dark.rasi -show window
 
-font pango:monospace 10
+font pango:Cica 10
 
 floating_modifier $mod
 tiling_drag modifier titlebar
