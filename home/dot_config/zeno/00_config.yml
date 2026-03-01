@@ -58,7 +58,6 @@ completions:
     sourceCommand: "cat ~/.ssh/config | grep '^Host ' | awk '{print $2}'"
     options:
       --prompt: "'SSH Host> '"
-    callback: "awk '{print $2}'"
 
   # # Use null (\0) termination Input / Output
   # - name: chdir
