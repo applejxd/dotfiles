@@ -18,20 +18,22 @@ export ZENO_HOME=~/.config/zeno
 export ZENO_DISABLE_BUILTIN_COMPLETION=1
 
 # default (keep this to avoid compatibility issues)
-if command -v bat >/dev/null 2>&1; then
-  # git file preview with color    
-  export ZENO_GIT_CAT="bat --color=always"
-else
-  export ZENO_GIT_CAT="cat"
-fi
+export ZENO_GIT_CAT="cat"
+# if command -v bat >/dev/null 2>&1; then
+#   # git file preview with color    
+#   export ZENO_GIT_CAT="bat --color=always"
+# else
+#   export ZENO_GIT_CAT="cat"
+# fi
 
 # default (keep this to avoid compatibility issues)
-if command -v eza >/dev/null 2>&1; then
-  # git folder preview with color
-  export ZENO_GIT_TREE="eza --tree"
-else
-  export ZENO_GIT_TREE="tree"
-fi
+export ZENO_GIT_TREE="tree"
+# if command -v eza >/dev/null 2>&1; then
+#   # git folder preview with color
+#   export ZENO_GIT_TREE="eza --tree"
+# else
+#   export ZENO_GIT_TREE="tree"
+# fi
 
 if [[ -n $ZENO_LOADED ]]; then
   bindkey ' '  zeno-auto-snippet
