@@ -20,14 +20,24 @@ sudo snap install chezmoi --classic
 brew install chezmoi
 ```
 
+Bitwarden CLI も必要なら
+
+```bash
+sudo smap install bw --classic
+bw login
+```
+
+
 ### 初期化と適用
 
 ```bash
 # リポジトリから初期化
 chezmoi init applejxd
 
-# 設定ファイルを適用
+# 設定ファイルを適用 (依存関係インストールあり)
 chezmoi apply
+# 設定ファイルを適用（依存関係インストールなし）
+chezmoi apply --exclude=scripts
 ```
 
 ### 更新
@@ -50,16 +60,6 @@ chezmoi edit ~/.bashrc
 
 # 確認
 chezmoi diff
-
-# 適用
-chezmoi apply
-```
-
-### Bitwarden連携（オプション）
-
-```bash
-# Bitwardenセッション開始
-bw sync && export BW_SESSION="$(bw unlock --raw)"
 
 # 適用
 chezmoi apply

@@ -22,14 +22,25 @@ echo "✅ 完了：既知のフォルダを整理しました"
 # Basics
 echo "基本的なツールをインストール/更新します..."
 sudo apt-get install -y \
-    wget curl vim neovim git unzip tree tig \
-    tmux python3-tmuxp python3-tomlkit manpages-ja xsel xdg-utils \
+    wget curl git unzip tree tig \
+    python3-tomlkit manpages-ja xsel xdg-utils \
     i3 rofi polybar lxappearance
 
-# monitoring resource usage
-if [[ ! -d "$HOME/.cargo/bin/zenith" ]]; then
-    cargo install --features nvidia --git https://github.com/bvaisvil/zenith.git
-    source $HOME/.cargo/env
+# Build tools
+sudo apt install -y \
+    make cmake gcc g++ clang libclang-dev pkg-config build-essential
+
+# install GitHub CLI
+if ! command -v gh &> /dev/null; then
+    (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
+        && sudo mkdir -p -m 755 /etc/apt/keyrings \
+        && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+        && sudo mkdir -p -m 755 /etc/apt/sources.list.d \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
 fi
 
 # use gtk instead of gnome for GUI in i3wm

@@ -1,4 +1,25 @@
+# see https://developers.openai.com/codex/config-basic
+
+# コマンド実行を承認するかどうかをプロンプトで確認すべきタイミング
+# - untrusted: 「信頼済み」でないコマンド（危険操作など）は実行前に都度承認を求める
+# - on-request: モデル（Codex）が判断して承認を要求する場合
+# - on-failure: コマンドが失敗した場合のみ承認にエスカレート
+# - never: いかなる場合も承認を求めず、すべての操作を自動で実行
+approval_policy = "untrusted"
+
+# 最も安全（必要時のみ緩める）
+sandbox_mode = "read-only"
+# fWeb から最新情報を取得
+web_search = "live" 
 model_reasoning_effort = "medium"
-hide_agent_reasoning = false
+# pragmatic: 目的達成のために必要なだけの推論を行う
 personality = "pragmatic"
-web_search = "live" # do not use cached results
+
+# see https://developers.openai.com/codex/config-advanced#shell-environment-policy
+[shell_environment_policy]
+inherit = "core"
+include_only = ["PATH","HOME","USER"]
+exclude = ["AWS_*","AZURE_*","*TOKEN*","*SECRET*","*KEY*"]
+
+[analytics]
+enabled = false

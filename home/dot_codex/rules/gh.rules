@@ -1,0 +1,146 @@
+# see https://developers.openai.com/codex/rules/
+# This is the Starlark syntax
+
+# Prompt before running commands with the prefix `gh pr view` outside the sandbox.
+prefix_rule(
+    # The prefix to match.
+    pattern = ["gh", "pr", "view"],
+
+    # The action to take when Codex requests to run a matching command.
+    decision = "prompt",
+
+    # Optional rationale for why this rule exists.
+    justification = "Viewing PRs is allowed with approval",
+
+    # `match` and `not_match` are optional "inline unit tests" where you can
+    # provide examples of commands that should (or should not) match this rule.
+    match = [
+        "gh pr view 7888",
+        "gh pr view --repo openai/codex",
+        "gh pr view 7888 --json title,body,comments",
+    ],
+    not_match = [
+        # Does not match because the `pattern` must be an exact prefix.
+        "gh pr --repo openai/codex view 7888",
+    ],
+)
+
+# Allow read-only gh commands.
+prefix_rule(
+    pattern = ["gh", "pr", "list"],
+    decision = "allow",
+    justification = "Listing PRs is read-only",
+    match = [
+        "gh pr list",
+        "gh pr list --state open",
+        "gh pr list --author @me",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "issue", "list"],
+    decision = "allow",
+    justification = "Listing issues is read-only",
+    match = [
+        "gh issue list",
+        "gh issue list --state open",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "issue", "view"],
+    decision = "allow",
+    justification = "Viewing an issue is read-only",
+    match = [
+        "gh issue view 42",
+        "gh issue view 42 --json title,body",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "repo", "view"],
+    decision = "allow",
+    justification = "Viewing repository metadata is read-only",
+    match = [
+        "gh repo view",
+        "gh repo view owner/repo",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "run", "list"],
+    decision = "allow",
+    justification = "Listing workflow runs is read-only",
+    match = [
+        "gh run list",
+        "gh run list --workflow ci.yml",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "run", "view"],
+    decision = "allow",
+    justification = "Viewing a workflow run is read-only",
+    match = [
+        "gh run view 12345",
+        "gh run view --log 12345",
+    ],
+)
+
+# Prompt before creating or modifying PRs/issues.
+prefix_rule(
+    pattern = ["gh", "pr", "create"],
+    decision = "prompt",
+    justification = "Creating a PR publishes changes to the remote repository",
+    match = [
+        "gh pr create --title 'Fix bug' --body 'Details'",
+        "gh pr create --draft",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "prompt",
+    justification = "Merging a PR modifies the target branch",
+    match = [
+        "gh pr merge 42",
+        "gh pr merge --squash 42",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "checkout"],
+    decision = "prompt",
+    justification = "Checking out a PR changes the local working tree",
+    match = [
+        "gh pr checkout 42",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "issue", "create"],
+    decision = "prompt",
+    justification = "Creating an issue modifies the remote repository",
+    match = [
+        "gh issue create --title 'Bug report' --body 'Steps to reproduce'",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "issue", "close"],
+    decision = "prompt",
+    justification = "Closing an issue modifies its state in the remote repository",
+    match = [
+        "gh issue close 42",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "repo", "clone"],
+    decision = "prompt",
+    justification = "Cloning a repository writes files to the local filesystem",
+    match = [
+        "gh repo clone owner/repo",
+        "gh repo clone owner/repo ./local-dir",
+    ],
+)

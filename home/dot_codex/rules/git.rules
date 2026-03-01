@@ -1,0 +1,114 @@
+# see https://developers.openai.com/codex/rules/
+# This is the Starlark syntax
+
+# Allow read-only git inspection commands.
+prefix_rule(
+    pattern = ["git", "log"],
+    decision = "allow",
+    justification = "Reading git history is safe",
+    match = [
+        "git log",
+        "git log --oneline -10",
+        "git log --graph --all",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "status"],
+    decision = "allow",
+    justification = "Checking working tree status is safe",
+    match = [
+        "git status",
+        "git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "diff"],
+    decision = "allow",
+    justification = "Viewing diffs is safe",
+    match = [
+        "git diff",
+        "git diff HEAD",
+        "git diff main..feature",
+    ],
+)
+
+# Prompt before staging or committing changes.
+prefix_rule(
+    pattern = ["git", "add"],
+    decision = "prompt",
+    justification = "Staging files modifies the index",
+    match = [
+        "git add .",
+        "git add src/main.py",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "prompt",
+    justification = "Committing changes modifies repository history",
+    match = [
+        "git commit -m 'fix: typo'",
+        "git commit --amend",
+    ],
+)
+
+# Prompt before pushing to remote.
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Pushing affects the remote repository",
+    match = [
+        "git push origin main",
+        "git push --set-upstream origin feature",
+    ],
+    not_match = [
+        # Force push is handled by a separate deny rule.
+        "git push --force origin main",
+    ],
+)
+
+# Deny force push to prevent overwriting remote history.
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "deny",
+    justification = "Force push can irreversibly overwrite remote history",
+    match = [
+        "git push --force origin main",
+        "git push --force-with-lease origin feature",
+    ],
+)
+
+# Prompt before resetting — potentially destructive.
+prefix_rule(
+    pattern = ["git", "reset"],
+    decision = "prompt",
+    justification = "git reset can discard commits or staged changes",
+    match = [
+        "git reset HEAD~1",
+        "git reset --hard HEAD",
+    ],
+)
+
+# Prompt before cleaning untracked files — potentially destructive.
+prefix_rule(
+    pattern = ["git", "clean"],
+    decision = "prompt",
+    justification = "git clean permanently removes untracked files",
+    match = [
+        "git clean -fd",
+        "git clean -fdx",
+    ],
+)
+
+# Prompt before deleting branches.
+prefix_rule(
+    pattern = ["git", "branch", "-D"],
+    decision = "prompt",
+    justification = "Deleting a branch is irreversible without a remote backup",
+    match = [
+        "git branch -D old-feature",
+    ],
+)

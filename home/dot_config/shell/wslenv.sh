@@ -11,16 +11,23 @@ export PATH="/mnt/c/Windows/System32:$PATH"   # for clip.exe
 # Powershell
 export PATH="/mnt/c/Windows/System32/WindowsPowerShell/v1.0:$PATH"
 
-# VSCode (for system installation)
-if [[ -e "/mnt/c/Progra~1/Microsoft VS Code" ]]; then
+# VSCode (for system installation, fallback to user installation)
+if [[ -d "/mnt/c/Progra~1/Microsoft VS Code" ]]; then
     export PATH="/mnt/c/Progra~1/Microsoft VS Code/bin:$PATH"
+else
+    _win_user=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
+    _vscode_path="/mnt/c/Users/${_win_user}/AppData/Local/Programs/Microsoft VS Code"
+    if [[ -n "$_win_user" ]] && [[ -d "$_vscode_path" ]]; then
+        export PATH="$_vscode_path/bin:$PATH"
+    fi
+    unset _win_user _vscode_path
 fi
 
 # for GPU drivers
 export LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
 # Browser
-export BROWSER="pwsh.exe /c start"
+export BROWSER="wslview"
 
 #-----#
 # GUI #

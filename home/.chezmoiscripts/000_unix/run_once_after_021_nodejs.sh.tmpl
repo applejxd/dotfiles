@@ -21,6 +21,7 @@ set -u
 # Node.js LTS 導入（未導入時のみ）
 command -v node >/dev/null 2>&1 || nvm install --lts >/dev/null
 
+nvm install --lts
 nvm alias default 'lts/*' >/dev/null
 nvm use --silent default
 

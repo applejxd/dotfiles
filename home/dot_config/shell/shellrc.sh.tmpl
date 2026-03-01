@@ -64,11 +64,6 @@ fi 2>/dev/null || true
 # The default options of "less" command
 export LESS="-iMR -gSW -z-4 -x4"
 
-{{- if eq .chezmoi.os "linux" }}
-# X11 forwarding
-alias ssh="ssh -X"
-{{- end }}
-
 # with number: -v
 alias dirs="dirs -v"
 
