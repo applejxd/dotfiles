@@ -14,18 +14,18 @@ export ZENO_HOME=~/.config/zeno
 # if disable it
 # export ZENO_DISABLE_SOCK=1
 
-# if disable builtin completion
-# export ZENO_DISABLE_BUILTIN_COMPLETION=1
+# disable builtin completion
+export ZENO_DISABLE_BUILTIN_COMPLETION=1
 
 # default (keep this to avoid compatibility issues)
-export ZENO_GIT_CAT="cat"
+# export ZENO_GIT_CAT="cat"
 # git file preview with color
-# export ZENO_GIT_CAT="bat --color=always"
+export ZENO_GIT_CAT="bat --color=always"
 
 # default (keep this to avoid compatibility issues)
-export ZENO_GIT_TREE="tree"
+# export ZENO_GIT_TREE="tree"
 # git folder preview with color
-# export ZENO_GIT_TREE="eza --tree"
+export ZENO_GIT_TREE="eza --tree"
 
 if [[ -n $ZENO_LOADED ]]; then
   bindkey ' '  zeno-auto-snippet
