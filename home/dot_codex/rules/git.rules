@@ -73,6 +73,14 @@ prefix_rule(
     justification = "Force push can irreversibly overwrite remote history",
     match = [
         "git push --force origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force-with-lease"],
+    decision = "forbidden",
+    justification = "Force push with lease can overwrite remote history",
+    match = [
         "git push --force-with-lease origin feature",
     ],
 )
