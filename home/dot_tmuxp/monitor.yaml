@@ -4,12 +4,11 @@ shell_command_before:
 start_directory: "${PWD}"
 windows:
   - window_name: system
-    layout: tiled
     panes:
-      - shell_command:
-          - htop
-      - shell_command:
-          - watch -n 2 df -h
-      - shell_command:
-          - watch -n 2 free -h
+      - zenith
+      - ctop
       - zsh
+
+  - window_name: btop
+    panes:
+      - btop
