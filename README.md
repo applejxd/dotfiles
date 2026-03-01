@@ -1,10 +1,10 @@
 # Dotfiles
 
-chezmoi を使用した個人用 dotfiles 管理リポジトリです。Ubuntu と macOS に対応しています。
+chezmoi を使用した個人用 dotfiles 管理リポジトリ。Windows/Ubuntu/WSL/macOS に対応。
 
 ## 特徴
 
-- **クロスプラットフォーム対応**: Ubuntu と macOS で動作
+- **クロスプラットフォーム対応**: Windows/Ubuntu/WSL/macOS で動作
 - **自動セットアップ**: OS固有の依存関係を自動インストール
 - **セキュアな設定管理**: Bitwarden連携とage暗号化による機密情報保護
 
