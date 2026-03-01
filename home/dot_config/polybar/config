@@ -47,14 +47,14 @@ click-right = rofi -theme /usr/share/rofi/themes/Arc-Dark.rasi -show run -displa
 [module/terminal]
 type = custom/text
 content = ">_"
-; content-padding = 2
+content-padding = 1
 content-foreground = ${colors.primary}
 click-left = i3-sensible-terminal
 
 [module/browser]
 type = custom/text
 content = "🔎"
-; content-padding = 2
+content-padding = 1
 content-foreground = ${colors.primary}
 click-left = firefox
 
