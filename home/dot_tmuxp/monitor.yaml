@@ -3,11 +3,14 @@ shell_command_before:
   - 'eval "$(mise activate zsh)"'
 start_directory: "${PWD}"
 windows:
+  - window_name: main
+    panes:
+      - zsh
+
   - window_name: system
     panes:
       - zenith
       - ctop
-      - zsh
 
   - window_name: btop
     panes:
