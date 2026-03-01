@@ -18,28 +18,28 @@ export ZENO_HOME=~/.config/zeno
 export ZENO_DISABLE_BUILTIN_COMPLETION=1
 
 # default (keep this to avoid compatibility issues)
-export ZENO_GIT_CAT="cat"
-# if command -v bat >/dev/null 2>&1; then
-#   # git file preview with color    
-#   export ZENO_GIT_CAT="bat --color=always"
-# else
-#   export ZENO_GIT_CAT="cat"
-# fi
+# export ZENO_GIT_CAT="cat"
+if command -v bat >/dev/null 2>&1; then
+  # git file preview with color    
+  export ZENO_GIT_CAT="bat --color=always"
+else
+  export ZENO_GIT_CAT="cat"
+fi
 
 # default (keep this to avoid compatibility issues)
-export ZENO_GIT_TREE="tree"
-# if command -v eza >/dev/null 2>&1; then
-#   # git folder preview with color
-#   export ZENO_GIT_TREE="eza --tree"
-# else
-#   export ZENO_GIT_TREE="tree"
-# fi
+# export ZENO_GIT_TREE="tree"
+if command -v eza >/dev/null 2>&1; then
+  # git folder preview with color
+  export ZENO_GIT_TREE="eza --tree"
+else
+  export ZENO_GIT_TREE="tree"
+fi
 
 if [[ -n $ZENO_LOADED ]]; then
   bindkey ' '  zeno-auto-snippet
 
   # fallback if snippet not matched (default: self-insert)
-  export ZENO_AUTO_SNIPPET_FALLBACK=self-insert
+  # export ZENO_AUTO_SNIPPET_FALLBACK=self-insert
 
   # if you use zsh's incremental search
   # bindkey -M isearch ' ' self-insert
@@ -65,5 +65,5 @@ if [[ -n $ZENO_LOADED ]]; then
 
   # fallback if completion not matched
   # (default: fzf-completion if exists; otherwise expand-or-complete)
-  export ZENO_COMPLETION_FALLBACK=expand-or-complete
+  # export ZENO_COMPLETION_FALLBACK=expand-or-complete
 fi
