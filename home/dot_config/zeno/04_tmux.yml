@@ -2,19 +2,19 @@ snippets:
   # tmuxp - session management
   - name: "[tload] tmuxp load session"
     keyword: "tload,"
-    snippet: uvx tmuxp load {{session}}
+    snippet: tmuxp load {{session}}
 
   - name: "[tls] tmuxp list sessions"
     keyword: "tls,"
-    snippet: uvx tmuxp ls
+    snippet: tmuxp ls
 
   - name: "[tfreeze] tmuxp freeze session"
     keyword: "tfreeze,"
-    snippet: uvx tmuxp freeze {{session}}
+    snippet: tmuxp freeze {{session}}
 
-  - name: "[tdebug] tmuxp debug-info"
-    keyword: "tdebug,"
-    snippet: uvx tmuxp debug-info
+  - name: "[tdbg] tmuxp debug-info"
+    keyword: "tdbg,"
+    snippet: tmuxp debug-info
 
   # tmux - session management
   - name: "[tn] tmux new session"
@@ -50,7 +50,7 @@ completions:
   # Finds .yaml, .yml, and .json files and strips the extension
   - name: tmuxp load session
     patterns:
-      - "^uvx tmuxp load $"
+      - "^tmuxp load $"
     # Find session files (yaml/yml/json) and remove file extensions
     sourceCommand: "find ~/.tmuxp -maxdepth 1 -type f \\( -name '*.yaml' -o -name '*.yml' -o -name '*.json' \\) -exec basename {} \\; 2>/dev/null | sed 's/\\.\\(yaml\\|yml\\|json\\)$//'"
     options:
@@ -61,7 +61,7 @@ completions:
   # tmuxp freeze completion for active sessions
   - name: tmuxp freeze session
     patterns:
-      - "^uvx tmuxp freeze $"
+      - "^tmuxp freeze $"
     sourceCommand: "tmux list-sessions -F '#{session_name}' 2>/dev/null"
     options:
       --prompt: "'tmux Session> '"
