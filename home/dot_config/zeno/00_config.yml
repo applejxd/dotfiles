@@ -55,7 +55,7 @@ completions:
   - name: ssh hosts
     patterns:
       - "^ssh( .*)? $"
-    sourceCommand: "cat ~/.ssh/config | grep Host | awk '{print $2}'"
+    sourceCommand: "cat ~/.ssh/config | grep '^Host ' | awk '{print $2}'"
     options:
       --prompt: "'SSH Host> '"
     callback: "awk '{print $2}'"
