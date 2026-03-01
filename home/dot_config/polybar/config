@@ -17,10 +17,10 @@ height = 38
 background = ${colors.background}
 foreground = ${colors.foreground}
 line-size = 3
-padding-left = 2
-padding-right = 2
+padding-left = 1
+padding-right = 1
 border-size = 0
-module-margin = 2
+module-margin = 1
 separator = |
 separator-foreground = ${colors.muted}
 font-0 = "Cica:size=13;3"
@@ -47,14 +47,14 @@ click-right = rofi -theme /usr/share/rofi/themes/Arc-Dark.rasi -show run -displa
 [module/terminal]
 type = custom/text
 content = ">_"
-content-padding = 1
+content-padding = 2
 content-foreground = ${colors.primary}
 click-left = i3-sensible-terminal
 
 [module/browser]
 type = custom/text
 content = "🔎"
-content-padding = 1
+content-padding = 2
 content-foreground = ${colors.primary}
 click-left = firefox
 
