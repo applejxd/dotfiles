@@ -108,16 +108,17 @@ content = ""
 content-padding = 2
 content-foreground = ${colors.alert}
 click-left = i3-nagbar -t warning -m 'Exit i3?' -B 'Logout' 'i3-msg exit' -B 'Reboot' 'systemctl reboot' -B 'Poweroff' 'systemctl poweroff'
+
 [module/terminal]
 type = custom/text
-content = ""
+content = ">_"
 content-padding = 2
 content-foreground = ${colors.primary}
 click-left = i3-sensible-terminal
 
 [module/browser]
 type = custom/text
-content = ""
+content = "🔎"
 content-padding = 2
 content-foreground = ${colors.primary}
 click-left = firefox
