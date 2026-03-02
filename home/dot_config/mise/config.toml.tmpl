@@ -38,11 +38,7 @@ chezmoi = "latest"
 "go:github.com/d-kuro/gwq/cmd/gwq" = "latest"
 
 # see https://mise.jdx.dev/dev-tools/backends/cargo.html
-{{- if eq .chezmoi.arch "amd64" }}
-"cargo:https://github.com/bvaisvil/zenith.git" = { version = "branch:master", features = "nvidia" }
-{{- else if eq .chezmoi.arch "arm64" }}
-"cargo:https://github.com/bvaisvil/zenith.git" = { version = "branch:master"}
-{{- end }}
+"aqua:bvaisvil/zenith" = "latest"
 
 {{- if eq .chezmoi.username "applejxd" }}
 yt-dlp = "latest"
