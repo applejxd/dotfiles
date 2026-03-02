@@ -105,9 +105,6 @@ fi
 # original alias #
 #----------------#
 
-# Restart Terminal
-alias relogin='exec $SHELL -l'
-
 alias up="cd .."
 alias upp="cd ../.."
 alias uppp="cd ../../.."
@@ -154,7 +151,6 @@ function cleanup() {
 function sha1() {
     echo -n "$1" | openssl sha1 | sed "s/^.* //"
 }
-alias sha2="openssl passwd -6 -salt 'SALTsalt'"
 
 #----------------#
 # zsh registered #
