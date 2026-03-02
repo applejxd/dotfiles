@@ -26,9 +26,19 @@ snippets:
       lbuffer: '^git\s+checkout\s+'
     evaluate: true # eval snippet
 
-  - name: "[pswd,] pwgen"
-    keyword: "pswd,"
+  - name: "[kgen] ssh keygen"
+    keyword: "kgen,"
+    snippet: "ssh-keygen -t ed25519 -P \"\""
+    context:
+      lbuffer: '^ssh-keygen\s+'
+    evaluate: true
+
+  - name: "[pgen] pwgen"
+    keyword: "pgen,"
     snippet: "pwgen -s -y -c -n 16"
+    context:
+      lbuffer: '^pwgen\s+'
+    evaluate: true
 
 completions:
   # simple sourceCommand, no callback
