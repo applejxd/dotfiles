@@ -7,8 +7,7 @@
       "Bash(git diff:*)",
       "Bash(git status:*)",
       "Bash(git log:*)",
-      "Bash(uv pip list:*)",
-      "mcp__sequential-thinking__sequentialthinking"
+      "Bash(uv pip list:*)"
     ],
     "ask": [
       "Bash(uv add:*)",

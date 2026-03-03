@@ -16,26 +16,11 @@
       "command": "npx"
     },
     "deepwiki": {
-      "url": "https://mcp.deepwiki.com/sse"
-    },
-    "fetch": {
-      "args": [
-        "mcp-server-fetch"
-      ],
-      "command": "uvx",
-      "env": {},
-      "type": "stdio"
+      "serverUrl": "https://mcp.deepwiki.com/mcp"
     },
     "playwright": {
       "args": [
         "@playwright/mcp@latest"
-      ],
-      "command": "npx"
-    },
-    "sequential-thinking": {
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
       ],
       "command": "npx"
     },
