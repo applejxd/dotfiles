@@ -28,6 +28,7 @@ nvm use --silent default
 {{- if eq .chezmoi.username "applejxd" }}
 # AI ツール
 npm list -g @google/gemini-cli >/dev/null 2>&1 || npm install -g @google/gemini-cli
+npm install -g @github/copilot
 {{- end }}
 
 echo "✅ 完了：Node.js と nvm をインストール/更新しました"
