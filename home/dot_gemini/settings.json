@@ -16,7 +16,7 @@
       "command": "npx"
     },
     "deepwiki": {
-      "serverUrl": "https://mcp.deepwiki.com/mcp"
+      "httpUrl": "https://mcp.deepwiki.com/mcp"
     },
     "playwright": {
       "args": [
