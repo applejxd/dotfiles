@@ -15,8 +15,8 @@
       "Bash(npm install:*)",
       "Bash(npm ci:*)",
       "Read(.env.*)",
-      "Write(.env.*)"
-      "Bash(git commit:*)",
+      "Write(.env.*)",
+      "Bash(git commit:*)"
     ],
     "deny": [
       "Bash(sudo:*)",
