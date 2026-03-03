@@ -17,7 +17,9 @@
       "google_web_search",
       "list_directory",
       "grep_search",
-      "web_fetch"
+      "web_fetch",
+      "read_wiki_structure",
+      "read_wiki_conents"
     ],
     "exclude": [
       "run_shell_command(rm)",
