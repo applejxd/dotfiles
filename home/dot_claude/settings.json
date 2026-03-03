@@ -15,7 +15,8 @@
       "Bash(npm ci:*)",
       "Read(.env.*)",
       "Write(.env.*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(python -c:*)"
     ],
     "deny": [
       "Bash(sudo:*)",
