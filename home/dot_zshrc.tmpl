@@ -134,7 +134,7 @@ zle -N switch-arch
 #------------#
 
 # cd completion
-# see http://bit.ly/2ZtPPrN
+# see https://qiita.com/yaotti/items/157ff0a46736ec793a91
 setopt auto_cd
 cdpath=(.. ~)
 function chpwd() {
@@ -161,7 +161,7 @@ bindkey '^Z' fancy-ctrl-z
 # zsh history #
 #-------------#
 
-# see http://bit.ly/2EXlQ1S
+# see https://yk5656.hatenadiary.org/entry/20160203/1461325853
 
 export HISTFILE=$HOME/.zsh_history
 
@@ -183,7 +183,11 @@ setopt hist_ignore_space
 #--------------#
 
 # texts
-alias -s {txt,dat,plt}='cat'
+if type "bat" >/dev/null 2>&1; then
+    alias -s {txt,dat,plt}='bat'
+else; 
+    alias -s {txt,dat,plt}='cat'
+fi
 
 {{- if eq .chezmoi.os "darwin" }}
 # images
@@ -198,7 +202,7 @@ alias -s php='php -f'
 alias -s hs='runhaskell'
 
 # unarchive
-# see http://bit.ly/2tCOvHP
+# see https://qiita.com/matsu_chara/items/8372616f52934c657214
 if type "aunpack" >/dev/null 2>&1; then
     alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
 else
@@ -206,7 +210,7 @@ else
 fi
 
 # compile
-# see http://bit.ly/2tCOvHP
+# see https://qiita.com/matsu_chara/items/8372616f52934c657214
 
 alias -s {c,cc,cpp}='runcpp'
 
@@ -229,7 +233,7 @@ function fancy-ctrl-z() {
 #-----#
 
 # z-fzf, emacs-like key-bindings
-# see http://bit.ly/2sEPZAJ
+# see https://github.com/junegunn/fzf/wiki/examples#z
 if type "_z" >/dev/null 2>&1; then
     function z-fzf() {
         local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
@@ -244,7 +248,7 @@ if type "_z" >/dev/null 2>&1; then
 fi
 
 # ghq-fzf
-# see http://bit.ly/2MMEb6e
+# see https://blog.tsub.me/post/move-from-peco-to-fzf/
 if type "ghq" >/dev/null 2>&1; then
     function ghq-fzf() {
         local selected_dir=$(ghq list | fzf --query="$LBUFFER")
