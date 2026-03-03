@@ -11,22 +11,6 @@
       "selectedType": "oauth-personal"
     }
   },
-  "tools": {
-    "allowed": [
-      "glob",
-      "google_web_search",
-      "list_directory",
-      "grep_search",
-      "web_fetch",
-      "read_wiki_structure",
-      "read_wiki_conents"
-    ],
-    "exclude": [
-      "run_shell_command(rm)",
-      "run_shell_command(pip install)",
-      "run_shell_command(python -m pip install)"
-    ]
-  },
   "mcpServers": {
     "arxiv-mcp-server": {
       "args": [
