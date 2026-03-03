@@ -1,4 +1,30 @@
 {
+  "general": {
+    "sessionRetention": {
+      "enabled": true,
+      "maxAge": "30d",
+      "warningAcknowledged": true
+    }
+  },
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  },
+  "tools": {
+    "allowed": [
+      "glob",
+      "google_web_search",
+      "list_directory",
+      "grep_search",
+      "web_fetch"
+    ],
+    "exclude": [
+      "run_shell_command(rm)",
+      "run_shell_command(pip install)",
+      "run_shell_command(python -m pip install)"
+    ]
+  },
   "mcpServers": {
     "arxiv-mcp-server": {
       "args": [
@@ -32,6 +58,5 @@
       "env": {},
       "type": "stdio"
     }
-  },
-  "selectedAuthType": "oauth-personal"
+  }
 }
