@@ -1,3 +1,8 @@
+{{- /* chezmoi:modify-template */ -}}
+# chezmoi-managed:start
+# see https://www.chezmoi.io/user-guide/manage-different-types-of-file/#manage-part-but-not-all-of-a-file
+# see https://blog.s2n.tech/posts/codex-config-toml-chezmoi/
+
 # see https://developers.openai.com/codex/config-basic
 
 # コマンド実行を承認するかどうかをプロンプトで確認すべきタイミング
@@ -9,8 +14,8 @@ approval_policy = "untrusted"
 
 # 最も安全（必要時のみ緩める）
 sandbox_mode = "read-only"
-# fWeb から最新情報を取得
-web_search = "live" 
+# Web から最新情報を取得
+web_search = "live"
 model_reasoning_effort = "medium"
 # pragmatic: 目的達成のために必要なだけの推論を行う
 personality = "pragmatic"
@@ -23,3 +28,6 @@ exclude = ["AWS_*","AZURE_*","*TOKEN*","*SECRET*","*KEY*"]
 
 [analytics]
 enabled = false
+# chezmoi-managed:end
+
+{{- .chezmoi.stdin | replaceAllRegex "(?s)^# chezmoi-managed:start.*?# chezmoi-managed:end\n*" "\n\n" -}}

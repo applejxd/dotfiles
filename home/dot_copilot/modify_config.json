@@ -1,0 +1,25 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /* merge (Sprig) はリストを統合せず上書きするため、allowed_urls は個別に concat+uniq で統合する */ -}}
+{{- $current := dict -}}
+{{- if ne .chezmoi.stdin "" -}}
+{{-   $current = fromJson .chezmoi.stdin -}}
+{{- end -}}
+{{- $managed := dict
+    "banner" "always"
+    "model" "gpt-5-mini"
+    "reasoning_effort" "high"
+-}}
+{{- $merged := merge $managed $current -}}
+{{- $_ := set $merged "allowed_urls" (concat
+    (list
+        "github.com"
+        "api.github.com"
+        "*.githubusercontent.com"
+        "hub.docker.com"
+        "archive.ubuntu.com"
+        "www.chezmoi.io"
+    )
+    (default (list) (get $current "allowed_urls"))
+    | uniq)
+-}}
+{{- $merged | toPrettyJson -}}
