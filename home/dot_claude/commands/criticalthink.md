@@ -1,5 +1,5 @@
 ---
-description: 厳格な批判的思考を用いて以前の回答を分析する
+description: 以前の回答を厳格な批判的思考を用いて分析する
 ---
 
 # criticalthink
