@@ -22,6 +22,7 @@
 - 実装機能
   - `/fleet [prompt]`：並列作業の指示（後述）
   - `/delegate [prompt]`：GitHub Copilot Agent に移行
+  - `/agent`: エージェントの作成・管理
 - レビュー機能  
   - `/diff`：差分をレビュー
   - `/review [prompt]`：コードレビュー
