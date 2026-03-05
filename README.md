@@ -55,10 +55,16 @@ chezmoi pull && chezmoi diff && chezmoi apply
 ### 設定ファイルの編集
 
 ```bash
-# 編集
+# chezmoi経由での編集 (推奨)
 chezmoi edit ~/.bashrc
 
-# 確認
+# 実ファイルを直接編集した場合の反映
+chezmoi add ~/.bashrc
+
+# 管理対象ファイルのうち、実ファイル側で変更があったものをすべて更新 (re-add)
+chezmoi re-add
+
+# 変更の確認
 chezmoi diff
 
 # 適用

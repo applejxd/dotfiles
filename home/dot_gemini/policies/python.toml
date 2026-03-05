@@ -1,0 +1,17 @@
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["pip", "pip3"]
+decision = "deny"
+priority = 100
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["python", "python3"]
+decision = "deny"
+priority = 100
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["uv", "uvx"]
+decision = "allow"
+priority = 100

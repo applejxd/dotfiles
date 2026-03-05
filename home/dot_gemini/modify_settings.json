@@ -1,0 +1,46 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /* merge (Sprig) はネストされた辞書を再帰的にマージするため、mcpServers 等の辞書はそのまま統合される */ -}}
+{{- $current := dict -}}
+{{- if ne .chezmoi.stdin "" -}}
+{{-   $current = fromJson .chezmoi.stdin -}}
+{{- end -}}
+{{- $managed := dict
+    "general" (dict
+        "sessionRetention" (dict
+            "enabled" true
+            "maxAge" "30d"
+            "warningAcknowledged" true
+        )
+    )
+    "security" (dict
+        "auth" (dict
+            "selectedType" "oauth-personal"
+        )
+    )
+    "mcpServers" (dict
+        "arxiv-mcp-server" (dict
+            "args" (list "arxiv-mcp-server")
+            "command" "uvx"
+            "env" (dict)
+            "type" "stdio"
+        )
+        "context7" (dict
+            "args" (list "-y" "@upstash/context7-mcp@latest")
+            "command" "npx"
+        )
+        "deepwiki" (dict
+            "httpUrl" "https://mcp.deepwiki.com/mcp"
+        )
+        "playwright" (dict
+            "args" (list "@playwright/mcp@latest")
+            "command" "npx"
+        )
+        "youtube" (dict
+            "args" (list "@anaisbetts/mcp-youtube")
+            "command" "npx"
+            "env" (dict)
+            "type" "stdio"
+        )
+    )
+-}}
+{{- merge $managed $current | toPrettyJson -}}

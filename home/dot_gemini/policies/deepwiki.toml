@@ -1,0 +1,9 @@
+[[rule]]
+toolName = "read_wiki_structure"
+decision = "allow"
+priority = 100
+
+[[rule]]
+toolName = "read_wiki_contents"
+decision = "allow"
+priority = 100

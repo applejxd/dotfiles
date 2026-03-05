@@ -27,23 +27,8 @@ nvm use --silent default
 
 {{- if eq .chezmoi.username "applejxd" }}
 # AI ツール
-# npm list -g @anthropic-ai/claude-code >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code 
-# npm list -g @google/gemini-cli >/dev/null 2>&1 || npm install -g @google/gemini-cli
-npm list -g @openai/codex >/dev/null 2>&1 || npm install -g @openai/codex
-
-# # MCP サーバ
-# claude mcp add sequential-thinking -s user -- npx -y @modelcontextprotocol/server-sequential-thinking || true
-# claude mcp add -s user --transport sse deepwiki https://mcp.deepwiki.com/sse || true
-# claude mcp add context7 -s user -- npx -y @upstash/context7-mcp@latest || true
-# claude mcp add playwright -s user -- npx @playwright/mcp@latest || true
-# claude mcp add fetch -s user -- uvx mcp-server-fetch || true
-
-# co-authored-by 無効化
-# tmp="$(mktemp)"
-# jq '.includeCoAuthoredBy = false' ~/.claude/settings.json 2>/dev/null > "$tmp" \
-#   || echo '{"includeCoAuthoredBy": false}' > "$tmp"
-# mv "$tmp" ~/.claude/settings.json
-
+npm list -g @google/gemini-cli >/dev/null 2>&1 || npm install -g @google/gemini-cli
+npm install -g @github/copilot
 {{- end }}
 
 echo "✅ 完了：Node.js と nvm をインストール/更新しました"
