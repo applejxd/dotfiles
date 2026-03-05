@@ -12,6 +12,7 @@
   - `/init`：プロジェクトの初期化
   - `/yolo`：すべて許可
   - `/cd [directory]`：現在のディレクトリを表示・移動
+  - `/resume [sessionId]`：セッションを再開
   - `/usage`：使用状況を表示
   - `/terminal-setup`：IDE 向けに改行をサポート
   - `/update`：CLI を更新
