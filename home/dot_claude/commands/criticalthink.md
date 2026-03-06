@@ -1,5 +1,5 @@
 ---
-Description: Analyze your own previous response with rigorous critical thinking.
+description: 以前の回答を厳格な批判的思考を用いて分析する
 ---
 
 # criticalthink
