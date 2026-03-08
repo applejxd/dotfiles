@@ -17,6 +17,12 @@
             "selectedType" "oauth-personal"
         )
     )
+    "experimental" (dict
+        "skills" (dict
+            "enabled" true
+        )
+        "enableAgents" true
+    )
     "mcpServers" (dict
         "arxiv-mcp-server" (dict
             "args" (list "arxiv-mcp-server")
