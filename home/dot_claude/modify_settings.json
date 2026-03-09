@@ -9,11 +9,12 @@
 -}}
 {{- $managedAllow := list
     "Read(README.md)"
-    "Read(pyproject.toml)"
     "Bash(git diff:*)"
     "Bash(git status:*)"
     "Bash(git log:*)"
-    "Bash(uv pip list:*)"
+    "Read(pyproject.toml)", 
+    "Bash(uv pip list:*)", 
+    "Bash(docker ps:*)"
 -}}
 {{- $managedAsk := list
     "Bash(uv add:*)"
@@ -23,6 +24,8 @@
     "Write(.env.*)"
     "Bash(git commit:*)"
     "Bash(python -c:*)"
+    "Bash(docker exec:*)"
+    "Bash(curl:*)"
 -}}
 {{- $managedDeny := list
     "Bash(sudo:*)"
@@ -45,7 +48,6 @@
     "Write(**/*secret*)"
     "Write(**/*credential*)"
     "Write(**/.ssh/*)"
-    "Bash(curl:*)"
     "Bash(wget:*)"
     "Bash(nc:*)"
     "Bash(telnet:*)"
@@ -59,7 +61,6 @@
     "Bash(pip:*)"
     "Bash(docker rm:*)"
     "Bash(docker rmi:*)"
-    "Bash(docker exec:*)"
     "mcp__supabase__execute_sql"
 -}}
 {{- $currentPerms := default (dict) (get $current "permissions") -}}
