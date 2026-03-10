@@ -29,11 +29,11 @@ snippets:
     snippet: "exec $SHELL -l"
 
   - name: "[sha2] sha2 hash"
-    keyword: "sha2"
+    keyword: "sha2,"
     snippet: "openssl passwd -6 -salt 'SALTsalt'"
   
   - name: "[find] search string recursively"
-    keyword: "find"
+    keyword: "find,"
     snippet: "find . -type f -name '{{.query}}'"
 
 completions:
