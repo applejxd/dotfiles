@@ -32,9 +32,13 @@ snippets:
     keyword: "sha2,"
     snippet: "openssl passwd -6 -salt 'SALTsalt'"
   
-  - name: "[find] search string recursively"
+  - name: "[find] search by name"
     keyword: "find,"
     snippet: "find . -type f -name '{{.query}}'"
+
+  - name: "[grep] search by content"
+    keyword: "grep,"
+    snippet: "grep '{{.query}}' -rl ."
 
 completions:
   # simple sourceCommand, no callback
