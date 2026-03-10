@@ -34,7 +34,7 @@ snippets:
   
   - name: "[find] search by name"
     keyword: "find,"
-    snippet: "find . -type f -name '{{.query}}'"
+    snippet: "find . -type f -name '*{{.query}}*'"
 
   - name: "[grep] search by content"
     keyword: "grep,"
