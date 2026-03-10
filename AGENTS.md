@@ -1,84 +1,87 @@
-# Chezmoi Dotfiles Project Rules
+# Chezmoi Dotfiles
 
-## 必須ルール
+chezmoi を使った個人用 dotfiles 管理リポジトリ。Windows / Ubuntu / WSL / macOS に対応。
 
-### スクリプト命名・実行順序
-- `run_once_XXX_name.sh(.tmpl)` - 一度だけ実行
-- `run_onchange_XXX_name.sh(.tmpl)` - ファイル変更時実行
-- 番号順序: 010_os_setup → 020_mise → 030_git → 800_vscode → 900_shell
+## Tech Stack
 
-### テンプレート使用
-- OS判定・パスワード管理時のみ .tmpl 使用
-- `hasKey` で変数存在確認: `{{- if and (hasKey . "var") .var }}`
+- **dotfiles 管理**: chezmoi
+- **ツールバージョン管理**: mise
+- **Python パッケージ管理**: uv
+- **コード品質**: pre-commit（gitleaks, yamllint, shellcheck）
+- **秘密管理**: Bitwarden + age 暗号化
+
+## セットアップ
+
+```bash
+mise install && uv sync && uv run pre-commit install
+```
+
+## コード品質チェック
+
+```bash
+uv run pre-commit run --all-files          # 全チェック
+mise exec shellcheck -- installer/**/*.sh  # Shell 構文チェック
+mise exec gitleaks -- detect --source .    # シークレット検出
+```
+
+## プロジェクト構造
+
+```
+home/
+  .chezmoiscripts/   # 自動実行スクリプト（chezmoi apply 時）
+  dot_config/        # ~/.config/ 配下の設定ファイル
+installer/
+  osx/               # macOS 用インストールスクリプト
+  ubuntu/            # Ubuntu 用インストールスクリプト
+config/              # アプリケーション設定ファイル
+docs/                # ドキュメント
+```
+
+## スクリプト命名規則
+
+| プレフィックス | 実行タイミング |
+|---|---|
+| `run_once_XXX_name.sh(.tmpl)` | 一度だけ実行 |
+| `run_onchange_XXX_name.sh(.tmpl)` | ファイル変更時に実行 |
+
+番号順序: `010_os_setup` → `020_mise` → `030_git` → `800_vscode` → `900_shell`
+
+## テンプレート規則
+
+- `.tmpl` は OS 判定・パスワード管理が必要な場合のみ使用
+- 変数存在確認: `{{- if and (hasKey . "var") .var }}`
 - パス参照: `{{ .chezmoi.workingTree }}/installer/`
 
-### エラーハンドリング
-- `set -eu` を全スクリプトで使用
+## エラーハンドリング
+
+- 全スクリプトの先頭に `set -eu`
 - ファイル存在確認後に実行
-- 重要でないコマンドは `|| true`
+- 重要でないコマンドは `|| true` でエラーを抑制
 
-### パスワード管理
-- 環境変数 `SUDO_PASSWORD` を優先
+## パスワード管理
+
+- 環境変数 `SUDO_PASSWORD` を優先使用
 - 空パスワードでも動作するよう実装
-- ログに出力しない
+- パスワードはログ・出力に含めない
 
-## 開発環境
+## Git ワークフロー
 
-### ツールチェーン
-- **mise**: ツールバージョン管理
-- **uv**: Pythonパッケージ管理
-- **pre-commit**: コード品質チェック
-
-### セットアップ
-```bash
-mise install && uv sync && uv run pre-commit install
-```
-
-### コード品質チェック
-```bash
-uv run pre-commit run --all-files
-mise exec shellcheck -- installer/**/*.sh
-mise exec gitleaks -- detect --source .
-```
+- ブランチ: `main` に直接コミット
+- コミット規約: Conventional Commits（`feat:`, `fix:`, `docs:`, `chore:` 等）
 
 ## 禁止事項
-- パスワードのハードコーディング
-- 外部URLへの直接依存
+
+- パスワード・シークレットのハードコーディング
 - エラーハンドリングなしのスクリプト
+- 対話的入力が必須のスクリプト
+- 長時間実行するスクリプト
 - 実行順序を無視した番号付け
-- 長時間実行スクリプト
-- 対話的入力必須スクリプト
 
-## クイックリファレンス
+## デバッグ
 
-### 開発作業
 ```bash
-# 新規環境セットアップ
-mise install && uv sync && uv run pre-commit install
-
-# ファイル編集
-chezmoi edit <ファイル>
-chezmoi diff
-chezmoi apply
-
-# 品質チェック
-uv run pre-commit run --all-files
+chezmoi apply --verbose          # 詳細ログ付きで適用
+chezmoi status                   # 状態確認
+chezmoi diff                     # 変更確認
+chezmoi execute-template <file>  # テンプレートのテスト
 ```
-
-### デバッグ
-- `chezmoi apply --verbose` - 詳細ログ
-- `chezmoi status` - 状態確認
-- `chezmoi diff` - 変更確認
-- `chezmoi execute-template` - テンプレートテスト
-
-### よくある問題
-- テンプレート構文エラー → execute-template でテスト
-- パスワード認証エラー → SUDO_PASSWORD 環境変数設定
-- ファイル参照エラー → パス確認
-- スクリプト実行順序問題 → 番号見直し
-
-### テンプレート構文例
-```go
-{{- if eq .chezmoi.os "linux" }}    # Linux判定
-{{- else if eq .chezmoi.os "darwin" }}  # macOS判定
-{{- if and (hasKey . "sudo_password") .sudo_password }}  # 安全な変数参照
