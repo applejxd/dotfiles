@@ -77,11 +77,6 @@ export AWS_REGION=us-east-1
 # for original binaries
 export PATH="${HOME}/bin:${PATH}"
 
-# Node.js
-export NVM_DIR="$HOME/.nvm"
-[[ -s "$NVM_DIR/nvm.sh" ]] && . "$NVM_DIR/nvm.sh"
-[[ -s "$NVM_DIR/bash_completion" ]] && . "$NVM_DIR/bash_completion"  
-
 # for CUDA
 if [[ -e "/usr/local/cuda" ]]; then
     export PATH="/usr/local/cuda/bin:${PATH}"
