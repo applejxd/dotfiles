@@ -17,19 +17,22 @@ if (Get-Command ghq -ea SilentlyContinue) {
 }
 
 # z-fzf
-Import-Module ZLocation
-if (Get-Command z -ea SilentlyContinue) {
-  function xf {
-    # ZLocation の一覧オブジェクトの Path プロパティ抜き出し
-    $path = z -l | ForEach-Object { Write-Output $_.Path } | fzf
-    if (!([string]::IsNullOrEmpty($path))) {
-      Set-Location "$path"
-      [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
+Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -Action {
+  Import-Module ZLocation -Scope Global -ErrorAction SilentlyContinue
+  if (Get-Command z -ea SilentlyContinue) {
+    function global:xf {
+      # ZLocation の一覧オブジェクトの Path プロパティ抜き出し
+      $path = z -l | ForEach-Object { Write-Output $_.Path } | fzf
+      if (!([string]::IsNullOrEmpty($path))) {
+        Set-Location "$path"
+        [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
+      }
+      Clear-Host
     }
-    Clear-Host
+    Set-PSReadLineKeyHandler -Chord 'Ctrl+x,Ctrl+f' -ScriptBlock { xf }
   }
-  Set-PSReadLineKeyHandler -Chord 'Ctrl+x,Ctrl+f' -ScriptBlock { xf }
-}
+  Unregister-Event -SubscriptionId $EventSubscriber.SubscriptionId
+} | Out-Null
 
 function sshf {
   $destination = Get-Content "$HOME\.ssh\config" | Select-String "^Host ([^*]+)$" | ForEach-Object { $_ -replace "Host ", "" } | fzf
