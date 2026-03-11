@@ -25,6 +25,7 @@ shellcheck = "latest"
 hadolint = "latest"
 python = "latest"
 uv = "latest"
+node = "latest"
 deno = "latest"
 
 # backends (keep the latest for building tools)
@@ -41,6 +42,8 @@ chezmoi = "latest"
 "aqua:bvaisvil/zenith" = "latest"
 
 {{- if eq .chezmoi.username "applejxd" }}
+"npm:@google/gemini-cli" = "latest"
+"npm:@openai/codex" = "latest"
 yt-dlp = "latest"
 {{- end }}
 

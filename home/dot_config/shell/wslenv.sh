@@ -15,7 +15,14 @@ export PATH="/mnt/c/Windows/System32/WindowsPowerShell/v1.0:$PATH"
 if [[ -d "/mnt/c/Progra~1/Microsoft VS Code" ]]; then
     export PATH="/mnt/c/Progra~1/Microsoft VS Code/bin:$PATH"
 else
-    _win_user=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
+    _win_user_cache="$HOME/.cache/win_user"
+    if [[ -f "$_win_user_cache" ]]; then
+        _win_user=$(<"$_win_user_cache")
+    else
+        mkdir -p "$HOME/.cache"
+        _win_user=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
+        echo "$_win_user" > "$_win_user_cache"
+    fi
     _vscode_path="/mnt/c/Users/${_win_user}/AppData/Local/Programs/Microsoft VS Code"
     if [[ -n "$_win_user" ]] && [[ -d "$_vscode_path" ]]; then
         export PATH="$_vscode_path/bin:$PATH"
