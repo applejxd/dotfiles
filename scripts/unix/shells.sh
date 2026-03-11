@@ -46,14 +46,14 @@ if ! grep -q "$(which bash)" /etc/shells; then
 fi
 
 # register fish
-if type "fish" >/dev/null 2>&1; then
+if command -v "fish" >/dev/null 2>&1; then
     if ! grep -q "$(which fish)" /etc/shells; then
         echo "$password" | sudo -S sh -c "echo $(which fish) >> /etc/shells"
     fi
 fi
 
 # register zsh
-if type "zsh" >/dev/null 2>&1; then
+if command -v "zsh" >/dev/null 2>&1; then
     if ! grep -q "$(which zsh)" /etc/shells; then
         echo "$password" | sudo -S sh -c "echo $(which zsh) >> /etc/shells"
     fi

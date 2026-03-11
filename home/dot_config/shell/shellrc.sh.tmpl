@@ -41,7 +41,7 @@ source "${HOME}/.config/shell/osxrc.sh"
 #---------#
 
 # z
-if ! type "z" >/dev/null 2>&1 && [ ! -e "${HOME}/.z" ]; then
+if ! command -v "z" >/dev/null 2>&1 && [ ! -e "${HOME}/.z" ]; then
     git clone --depth 1 https://github.com/rupa/z.git "${HOME}/.z"
 fi
 export _Z_DATA="${HOME}/.z/.z"
@@ -68,30 +68,30 @@ export LESS="-iMR -gSW -z-4 -x4"
 alias dirs="dirs -v"
 
 # "cat" cloning
-if type "bat" >/dev/null 2>&1; then
+if command -v "bat" >/dev/null 2>&1; then
     alias cat="bat --paging=never -p"
 fi
 
 # "cat" cloning
-if type "eza" >/dev/null 2>&1; then
+if command -v "eza" >/dev/null 2>&1; then
     alias ls="eza"
     alias lt='eza -T -L 3 -a -I "node_modules|.git|.cache|.venv"'
     alias ltl='eza -T -L 3 -a -I "node_modules|.git|.cache|.venv" -l'
 fi
 
 # adding git syntax sugar
-if type "hub" >/dev/null 2>&1; then
+if command -v "hub" >/dev/null 2>&1; then
     eval "$(hub alias -s)"
 fi
 
 # "diff" cloning & unified format: -u
-if type "colordiff" >/dev/null 2>&1; then
+if command -v "colordiff" >/dev/null 2>&1; then
     alias diff="colordiff -u"
 else
     alias diff="diff -u"
 fi
 
-if type "yazi" >/dev/null 2>&1; then
+if command -v "yazi" >/dev/null 2>&1; then
     function y() {
         local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
         command yazi "$@" --cwd-file="$tmp"

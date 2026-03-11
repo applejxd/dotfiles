@@ -24,7 +24,7 @@ fi
 
 # activate all initially to prevent unexpected uninitialized caes
 
-if type "fzf" >/dev/null 2>&1; then
+if command -v "fzf" >/dev/null 2>&1; then
     eval "$(fzf --zsh)"
     # common setting
     COMMON_FZF="${HOME}/.config/shell/fzf.sh"
@@ -145,7 +145,7 @@ zle -N switch-arch
 setopt auto_cd
 cdpath=(.. ~)
 function chpwd() {
-    if type "lsd" >/dev/null 2>&1; then
+    if command -v "lsd" >/dev/null 2>&1; then
         lsd
     else
         ls
@@ -190,7 +190,7 @@ setopt hist_ignore_space
 #--------------#
 
 # texts
-if type "bat" >/dev/null 2>&1; then
+if command -v "bat" >/dev/null 2>&1; then
     alias -s {txt,dat,plt}='bat'
 else; 
     alias -s {txt,dat,plt}='cat'
@@ -210,7 +210,7 @@ alias -s hs='runhaskell'
 
 # unarchive
 # see https://qiita.com/matsu_chara/items/8372616f52934c657214
-if type "aunpack" >/dev/null 2>&1; then
+if command -v "aunpack" >/dev/null 2>&1; then
     alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
 else
     alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=extract
@@ -241,7 +241,7 @@ function fancy-ctrl-z() {
 
 # z-fzf, emacs-like key-bindings
 # see https://github.com/junegunn/fzf/wiki/examples#z
-if type "_z" >/dev/null 2>&1; then
+if command -v "_z" >/dev/null 2>&1; then
     function z-fzf() {
         local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
         if [[ -n "$selected_dir" ]]; then
@@ -256,7 +256,7 @@ fi
 
 # ghq-fzf
 # see https://blog.tsub.me/post/move-from-peco-to-fzf/
-if type "ghq" >/dev/null 2>&1; then
+if command -v "ghq" >/dev/null 2>&1; then
     function ghq-fzf() {
         local selected_dir=$(ghq list | fzf --query="$LBUFFER")
         if [[ -n "$selected_dir" ]]; then

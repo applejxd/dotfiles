@@ -11,7 +11,7 @@ export FZF_CTRL_R_OPTS='--sort --exact'
 
 # search command
 # see https://qiita.com/kamykn/items/aa9920f07487559c0c7e
-if type "rg" >/dev/null 2>&1; then
+if command -v "rg" >/dev/null 2>&1; then
     export FZF_DEFAULT_COMMAND=(rg --files --hidden --follow --glob "!.git/*")
 else
     unset FZF_DEFAULT_COMMAND
@@ -20,7 +20,7 @@ fi
 # show below, show border, set hight
 export FZF_DEFAULT_OPTS='--layout=reverse --border --height 60%'
 # preview by bat, with color, with file name header, with grid
-if type "bat" >/dev/null 2>&1; then
+if command -v "bat" >/dev/null 2>&1; then
     export FZF_CTRL_T_OPTS='--preview "bat --color=always --style=header,grid --line-range :100 {}"'
 else
     unset FZF_CTRL_T_OPTS
@@ -28,7 +28,7 @@ fi
 
 # preview by tree, with color (enable Japanese)
 # see https://wonderwall.hatenablog.com/entry/2017/10/06/063000#--select-1---exit-0
-if type "tree" >/dev/null 2>&1; then
+if command -v "tree" >/dev/null 2>&1; then
     export FZF_ALT_C_OPTS='--preview "tree -C -N {} | head -200" --select-1 --exit-0'
 else
     unset FZF_ALT_C_OPTS
@@ -38,7 +38,7 @@ fi
 # wrapper #
 #---------#
 
-if type "_z" >/dev/null 2>&1; then
+if command -v "_z" >/dev/null 2>&1; then
     function xf() {
         local selected_dir
         selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
@@ -48,7 +48,7 @@ if type "_z" >/dev/null 2>&1; then
     }
 fi
 
-if type "ghq" >/dev/null 2>&1; then
+if command -v "ghq" >/dev/null 2>&1; then
     function xg() {
         local selected_dir
         selected_dir=$(ghq list | fzf)
@@ -58,7 +58,7 @@ if type "ghq" >/dev/null 2>&1; then
     }
 fi
 
-if type "gwq" >/dev/null 2>&1; then
+if command -v "gwq" >/dev/null 2>&1; then
     function xgw() {
         local selected_dir
         selected_dir=$(gwq list | fzf)
@@ -76,7 +76,7 @@ if type "gwq" >/dev/null 2>&1; then
     }
 fi
 
-if type "ghq" >/dev/null 2>&1; then
+if command -v "ghq" >/dev/null 2>&1; then
     function mise-select() {
         if [[ -z "$1" ]]; then
             return 1
@@ -151,7 +151,7 @@ fi
 # git #
 #-----#
 
-if type "git" >/dev/null 2>&1; then
+if command -v "git" >/dev/null 2>&1; then
     # fbr - checkout git branch
     # see http://bit.ly/34zmzkt
     function fbr() {
@@ -233,7 +233,7 @@ fi
 # Anaconda #
 #----------#
 
-# if type "conda" >/dev/null 2>&1; then
+# if command -v "conda" >/dev/null 2>&1; then
 #     alias condals="conda env list"
 
 #     function condarun() {
@@ -253,7 +253,7 @@ fi
 # docker #
 #--------#
 
-# if type "docker" >/dev/null 2>&1; then
+# if command -v "docker" >/dev/null 2>&1; then
 #     alias dim="docker images"
 #     alias dls="docker ps -a"
 #     alias dclean="docker container prune"
@@ -272,7 +272,7 @@ fi
 #         fi
 
 #         # GPU があれば使用
-#         if type "nvidia-smi" >/dev/null 2>&1; then
+#         if command -v "nvidia-smi" >/dev/null 2>&1; then
 #             cmd="${cmd} --gpus all"
 #         fi
 
@@ -373,7 +373,7 @@ fi
 # Singularity #
 #-------------#
 
-if type "singularity" >/dev/null 2>&1; then
+if command -v "singularity" >/dev/null 2>&1; then
     function sbuild() {
         local file_name
         file_name=$(find ./*.def | fzf)
@@ -454,7 +454,7 @@ fi
 # Homebrew #
 #----------#
 
-if type "brew" >/dev/null 2>&1; then
+if command -v "brew" >/dev/null 2>&1; then
     # Install or open the webpage for the selected application
     # using brew cask search as input source
     # and display a info quickview window for the currently marked application
