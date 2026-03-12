@@ -178,10 +178,11 @@ completions:
 
   - name: docker remove image
     patterns:
-      - "^docker rmi $"
-    sourceCommand: "docker images --filter 'dangling=true' --format '{{.Repository}}:{{.Tag}}'"
+      - "^docker rmi( .*)? $"
+    excludePatterns:
+      - "^docker rmi( .*)? -.* $"
+    sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
     options:
-      --multi: true
       --prompt: "'Docker Image> '"
 
   # Docker Compose completions
