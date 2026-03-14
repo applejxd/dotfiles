@@ -24,28 +24,8 @@
         "enableAgents" true
     )
     "mcpServers" (dict
-        "arxiv-mcp-server" (dict
-            "args" (list "arxiv-mcp-server")
-            "command" "uvx"
-            "env" (dict)
-            "type" "stdio"
-        )
-        "context7" (dict
-            "args" (list "-y" "@upstash/context7-mcp@latest")
-            "command" "npx"
-        )
         "deepwiki" (dict
             "httpUrl" "https://mcp.deepwiki.com/mcp"
-        )
-        "playwright" (dict
-            "args" (list "@playwright/mcp@latest")
-            "command" "npx"
-        )
-        "youtube" (dict
-            "args" (list "@anaisbetts/mcp-youtube")
-            "command" "npx"
-            "env" (dict)
-            "type" "stdio"
         )
     )
 -}}
