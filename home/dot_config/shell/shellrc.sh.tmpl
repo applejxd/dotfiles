@@ -56,6 +56,10 @@ if [[ ! -f "${HOME}/.vim/colors/iceberg.vim" ]]; then
     rm -rf "$temp_dir" 2>/dev/null || true
 fi 2>/dev/null || true
 
+if [[ ! -e "${HOME}/.tmux/plugins/tpm" ]]; then
+    git clone --depth 1 --quiet https://github.com/tmux-plugins/tpm "${HOME}/.tmux/plugins/tpm" 2>/dev/null
+fi
+
 #-----------------#
 # Command Wrapper #
 #-----------------#
