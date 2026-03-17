@@ -1,87 +1,58 @@
 # Chezmoi Dotfiles
 
-chezmoi を使った個人用 dotfiles 管理リポジトリ。Windows / Ubuntu / WSL / macOS に対応。
+chezmoi を使った個人用 dotfiles 管理リポジトリ。
+Windows / Ubuntu / WSL / macOS を対象に、設定ファイルと初期化スクリプトを管理する。
 
 ## Tech Stack
 
-- **dotfiles 管理**: chezmoi
-- **ツールバージョン管理**: mise
-- **Python パッケージ管理**: uv
-- **コード品質**: pre-commit（gitleaks, yamllint, shellcheck）
-- **秘密管理**: Bitwarden + age 暗号化
+- Language: Shell, Python, Chezmoi templates
+- Core Tools: chezmoi, mise, uv, pre-commit
+- Security: Bitwarden, age
 
-## セットアップ
+## Build & Test
 
-```bash
-mise install && uv sync && uv run pre-commit install
-```
+- Setup: `mise install && uv sync && uv run pre-commit install`
+- Validation: `uv run pre-commit run --all-files`
+- Shell check: `mise exec shellcheck -- installer/**/*.sh`
+- Secret scan: `mise exec gitleaks -- detect --source .`
 
-## コード品質チェック
+## Project Structure
 
-```bash
-uv run pre-commit run --all-files          # 全チェック
-mise exec shellcheck -- installer/**/*.sh  # Shell 構文チェック
-mise exec gitleaks -- detect --source .    # シークレット検出
-```
+- `home/`: ホームディレクトリ配下へ展開するファイル
+- `home/.chezmoiscripts/`: `chezmoi apply` 時に自動実行されるスクリプト
+- `home/dot_config/`: `~/.config/` 配下の設定
+- `config/`: アプリケーション設定ファイル
+- `docs/`: 運用・構成・セキュリティ関連ドキュメント
+- `scripts/`: 補助スクリプト
+- `test/`: テスト関連ファイル
 
-## プロジェクト構造
+## Code Style
 
-```
-home/
-  .chezmoiscripts/   # 自動実行スクリプト（chezmoi apply 時）
-  dot_config/        # ~/.config/ 配下の設定ファイル
-installer/
-  osx/               # macOS 用インストールスクリプト
-  ubuntu/            # Ubuntu 用インストールスクリプト
-config/              # アプリケーション設定ファイル
-docs/                # ドキュメント
-```
+- 既存ファイルの流儀を優先し、不要な形式変更は避ける
+- Shell スクリプトは先頭に `set -eu` を置く
+- chezmoi スクリプト名は `run_once_XXX_name.sh(.tmpl)` / `run_onchange_XXX_name.sh(.tmpl)` に従う
+- 実行順は番号で管理し、既存の順序体系を崩さない
+- `.tmpl` は OS 分岐や秘密情報・テンプレート変数が必要な場合のみ使う
+- テンプレート内の変数確認は `{{- if and (hasKey . "var") .var }}` の形を優先する
 
-## スクリプト命名規則
+## Architecture
 
-| プレフィックス | 実行タイミング |
-|---|---|
-| `run_once_XXX_name.sh(.tmpl)` | 一度だけ実行 |
-| `run_onchange_XXX_name.sh(.tmpl)` | ファイル変更時に実行 |
+- dotfiles は chezmoi の管理下で扱い、実ファイルを直接編集した場合は `chezmoi add` / `chezmoi re-add` で反映する
+- OS ごとの差分はテンプレートや OS 別スクリプトで吸収する
+- パスワードや秘密情報はハードコードせず、`SUDO_PASSWORD` や Bitwarden/age を使う
+- 対話入力が必須になるスクリプトや長時間実行スクリプトは避ける
 
-番号順序: `010_os_setup` → `020_mise` → `030_git` → `800_vscode` → `900_shell`
+## Workflow
 
-## テンプレート規則
+- ブランチ運用はこのリポジトリの実運用に合わせる
+- コミットメッセージは Conventional Commits（`feat:`, `fix:`, `docs:`, `chore:` など）を使う
+- 変更前後で `chezmoi diff` や必要な検証コマンドを使って影響を確認する
+- 新しいコマンドや運用手順を追加したら、関連する `README.md` や `docs/` を更新する
 
-- `.tmpl` は OS 判定・パスワード管理が必要な場合のみ使用
-- 変数存在確認: `{{- if and (hasKey . "var") .var }}`
-- パス参照: `{{ .chezmoi.workingTree }}/installer/`
+## Additional Rules
 
-## エラーハンドリング
-
-- 全スクリプトの先頭に `set -eu`
-- ファイル存在確認後に実行
-- 重要でないコマンドは `|| true` でエラーを抑制
-
-## パスワード管理
-
-- 環境変数 `SUDO_PASSWORD` を優先使用
-- 空パスワードでも動作するよう実装
-- パスワードはログ・出力に含めない
-
-## Git ワークフロー
-
-- ブランチ: `main` に直接コミット
-- コミット規約: Conventional Commits（`feat:`, `fix:`, `docs:`, `chore:` 等）
-
-## 禁止事項
-
-- パスワード・シークレットのハードコーディング
-- エラーハンドリングなしのスクリプト
-- 対話的入力が必須のスクリプト
-- 長時間実行するスクリプト
-- 実行順序を無視した番号付け
-
-## デバッグ
-
-```bash
-chezmoi apply --verbose          # 詳細ログ付きで適用
-chezmoi status                   # 状態確認
-chezmoi diff                     # 変更確認
-chezmoi execute-template <file>  # テンプレートのテスト
-```
+- 日本語で簡潔かつ丁寧に説明する
+- 破壊的操作や外部環境の変更は、明示依頼がない限り提案に留める
+- 秘密情報をログや出力に含めない
+- 作業範囲は基本的にリポジトリ内に限定する
+- サブディレクトリに別の `AGENTS.md` がある場合は、より近いものを優先する
