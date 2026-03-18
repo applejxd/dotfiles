@@ -28,6 +28,7 @@ python = "latest"
 uv = "latest"
 node = "latest"
 deno = "latest"
+"npm:@openai/codex" = "latest"
 
 # backends (keep the latest for building tools)
 rust = "latest"
@@ -44,7 +45,6 @@ chezmoi = "latest"
 
 {{- if eq .chezmoi.username "applejxd" }}
 "npm:@google/gemini-cli" = "latest"
-"npm:@openai/codex" = "latest"
 yt-dlp = "latest"
 {{- end }}
 
