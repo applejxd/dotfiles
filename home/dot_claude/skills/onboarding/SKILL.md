@@ -12,7 +12,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write
 
 ## 既存 AGENTS.md（自動読込）
 
-!`[ -f AGENTS.md ] && echo "=== 既存 AGENTS.md ===" && cat AGENTS.md || echo "(既存 AGENTS.md なし)"`
+!`if [ -f AGENTS.md ]; then echo "=== 既存 AGENTS.md ==="; cat AGENTS.md; echo "(既存 AGENTS.md なし)"; fi`
 
 ## 実行ルール（必須）
 
