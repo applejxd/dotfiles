@@ -1,8 +1,8 @@
 ---
 name: onboarding
-description: AGENTS.md を対話的に作成・最適化する。README.md との差別化、既存ルール探索、実在コマンド抽出、ギャップ質問、ドラフト提示、承認後の更新が必要なときに使う。`/onboarding [path|scope] [mode]` で実行。
-argument-hint: "[target-path(optional)] [mode: full|partial|minimal]"
-disable-model-invocation: true
+description: AGENTS.md を対話的に作成・最適化する。README.md との差別化、既存ルール探索、実在コマンド抽出、ギャップ質問、ドラフト提示、承認後の更新が必要なときに使う。
+context: fork
+agent: general-purpose
 allowed-tools: Read, Grep, Glob, Edit, Write
 ---
 
@@ -12,7 +12,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write
 
 ## 既存 AGENTS.md（自動読込）
 
-!`if [ -f AGENTS.md ]; then echo "=== 既存 AGENTS.md ==="; cat AGENTS.md; echo "(既存 AGENTS.md なし)"; fi`
+!`test -f AGENTS.md && cat AGENTS.md || echo "(既存 AGENTS.md なし)"`
 
 ## 実行ルール（必須）
 
