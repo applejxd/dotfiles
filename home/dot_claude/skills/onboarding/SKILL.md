@@ -1,6 +1,6 @@
 ---
 name: onboarding
-description: AGENTS.md を対話的に作成・最適化する。README.md との差別化、既存ルール探索、実在コマンド抽出、ギャップ質問、ドラフト提示、承認後の更新が必要なときに使う。
+description: "AGENTS.md を対話的に作成・最適化する。「AGENTS.md を作って／整理して」と言われたときに使う。"
 context: fork
 agent: general-purpose
 allowed-tools: Read, Grep, Glob, Edit, Write
@@ -12,7 +12,8 @@ allowed-tools: Read, Grep, Glob, Edit, Write
 
 ## 既存 AGENTS.md（自動読込）
 
-!`test -f AGENTS.md && cat AGENTS.md || echo "(既存 AGENTS.md なし)"`
+`${CLAUDE_SKILL_DIR}/scripts/check-agents.sh` を実行して既存の AGENTS.md の内容を取得する。
+ファイルが存在しない場合は `(既存 AGENTS.md なし)` と表示される。
 
 ## 実行ルール（必須）
 
@@ -93,6 +94,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write
 
 ## 参照ファイル
 
+- スクリプト: `${CLAUDE_SKILL_DIR}/scripts/check-agents.sh`
 - テンプレート: `${CLAUDE_SKILL_DIR}/references/agents-template.md`
 - チェックリスト: `${CLAUDE_SKILL_DIR}/references/review-checklist.md`
 
