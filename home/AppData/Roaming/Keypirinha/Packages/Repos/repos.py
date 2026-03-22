@@ -11,12 +11,11 @@ class _BasePlugin(kp.Plugin):
 
     ITEMCAT_RESULT = kp.ItemCategory.USER_BASE + 1
 
-    # 処理結果を保存するリスト
-    root_path = ""
-    repos = []
-
     def __init__(self):
         super().__init__()
+        # インスタンス変数として初期化（クラス変数の共有を避ける）
+        self.root_path = ""
+        self.repos = []
 
     def on_start(self):
         """初期化"""
@@ -84,7 +83,8 @@ class _BasePlugin(kp.Plugin):
             item (CatalogItem): on_suggest で選択した項目
             action (CatalogAction): [description]
         """
-        command = f"{self.open_command} {self.root_path}/{item.target()}"
+        # パスにスペースが含まれる場合も正しく動作するようクォートする
+        command = f'{self.open_command} "{self.root_path}/{item.target()}"'
         subprocess.run(command, shell=True, check=True)
 
 
@@ -105,6 +105,17 @@ class GhqWindows(_BasePlugin):
             )
             .stdout.decode("utf-8")
             .strip()
+        )
+        # バイナリ文字列を変換・改行コードでリスト化
+        self.repos = (
+            subprocess.run(
+                "powershell -ExecutionPolicy Bypass ghq list",
+                shell=True,
+                stdout=subprocess.PIPE,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .split()
         )
 
     def on_catalog(self):
@@ -133,19 +144,6 @@ class GhqWindows(_BasePlugin):
             ]
         )
 
-    def on_activated(self):
-        # バイナリ文字列を変換・改行コードでリスト化
-        self.repos = (
-            subprocess.run(
-                "powershell -ExecutionPolicy Bypass ghq list",
-                shell=True,
-                stdout=subprocess.PIPE,
-                check=True,
-            )
-            .stdout.decode("utf-8")
-            .split()
-        )
-
 
 class SrcWindows(_BasePlugin):
     def __init__(self):
@@ -164,7 +162,18 @@ class SrcWindows(_BasePlugin):
             )
             .stdout.decode("utf-8")
             .strip()
-            + "\src"
+            + "\\src"
+        )
+        # バイナリ文字列を変換・改行コードでリスト化
+        self.repos = (
+            subprocess.run(
+                "powershell -ExecutionPolicy Bypass Get-ChildItem $env:UserProfile\\src -Name",
+                shell=True,
+                stdout=subprocess.PIPE,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .split()
         )
 
     def on_catalog(self):
@@ -193,18 +202,6 @@ class SrcWindows(_BasePlugin):
             ]
         )
 
-    def on_activated(self):
-        # バイナリ文字列を変換・改行コードでリスト化
-        self.repos = (
-            subprocess.run(
-                "powershell -ExecutionPolicy Bypass Get-ChildItem $env:UserProfile\src -Name",
-                shell=True,
-                stdout=subprocess.PIPE,
-                check=True,
-            )
-            .stdout.decode("utf-8")
-            .split()
-        )
 
 
 class GhqWsl(_BasePlugin):
@@ -219,13 +216,25 @@ class GhqWsl(_BasePlugin):
 
         self.root_path = (
             subprocess.run(
-                "wsl bash -i -c 'ghq root'",
+                # -i (interactive) を外して .bashrc 読み込みによる遅延を回避
+                "wsl bash -c 'ghq root'",
                 shell=True,
                 stdout=subprocess.PIPE,
                 check=True,
             )
             .stdout.decode("utf-8")
             .strip()
+        )
+        # バイナリ文字列を変換・改行コードでリスト化
+        self.repos = (
+            subprocess.run(
+                "wsl bash -c 'ghq list'",
+                shell=True,
+                stdout=subprocess.PIPE,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .split()
         )
 
     def on_catalog(self):
@@ -252,16 +261,4 @@ class GhqWsl(_BasePlugin):
                     hit_hint=kp.ItemHitHint.NOARGS,
                 )
             ]
-        )
-
-    def on_activated(self):
-        self.repos = (
-            subprocess.run(
-                "wsl bash -i -c 'ghq list'",
-                shell=True,
-                stdout=subprocess.PIPE,
-                check=True,
-            )
-            .stdout.decode("utf-8")
-            .split()
         )
