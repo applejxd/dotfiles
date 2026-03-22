@@ -208,7 +208,7 @@ class GhqWsl(_BasePlugin):
     def __init__(self):
         super().__init__()
 
-        self.open_command = "wsl 'code'"
+        self.open_command = "wsl code"
 
     def on_start(self):
         """初期化"""
@@ -217,7 +217,7 @@ class GhqWsl(_BasePlugin):
         self.root_path = (
             subprocess.run(
                 # -i (interactive) を外して .bashrc 読み込みによる遅延を回避
-                "wsl bash -c 'ghq root'",
+                'wsl bash -c "ghq root"',
                 shell=True,
                 stdout=subprocess.PIPE,
                 check=True,
@@ -228,7 +228,7 @@ class GhqWsl(_BasePlugin):
         # バイナリ文字列を変換・改行コードでリスト化
         self.repos = (
             subprocess.run(
-                "wsl bash -c 'ghq list'",
+                'wsl bash -c "ghq list"',
                 shell=True,
                 stdout=subprocess.PIPE,
                 check=True,
