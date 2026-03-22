@@ -1,12 +1,7 @@
 # see https://keypirinha.com/api/plugin.html
-import datetime
-import os
 import subprocess
-from collections import namedtuple
-from typing import List
 
 import keypirinha as kp
-import keypirinha_util as kpu
 
 
 class _BasePlugin(kp.Plugin):
