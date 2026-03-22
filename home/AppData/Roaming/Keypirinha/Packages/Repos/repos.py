@@ -216,8 +216,8 @@ class GhqWsl(_BasePlugin):
 
         self.root_path = (
             subprocess.run(
-                # -i (interactive) を外して .bashrc 読み込みによる遅延を回避
-                'wsl bash -c "ghq root"',
+                # ghq は login shell の PATH に載るため -l が必要
+                'wsl bash -lc "ghq root"',
                 shell=True,
                 stdout=subprocess.PIPE,
                 check=True,
@@ -228,7 +228,7 @@ class GhqWsl(_BasePlugin):
         # バイナリ文字列を変換・改行コードでリスト化
         self.repos = (
             subprocess.run(
-                'wsl bash -c "ghq list"',
+                'wsl bash -lc "ghq list"',
                 shell=True,
                 stdout=subprocess.PIPE,
                 check=True,
