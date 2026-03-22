@@ -50,22 +50,19 @@ class _BasePlugin(kp.Plugin):
             return
 
         # サジェスト作成
-        suggestions = []
-
-        # 降順ループ
-        for idx in range(0, len(self.repos)):
-            # サジェスト追加
-            suggestions.append(
-                # CatalogItem オブジェクト生成
-                self.create_item(
-                    category=self.ITEMCAT_RESULT,
-                    label=self.repos[idx],
-                    short_desc=self.repos[idx],
-                    target=self.repos[idx],
-                    args_hint=kp.ItemArgsHint.FORBIDDEN,
-                    hit_hint=kp.ItemHitHint.IGNORE,
-                )
+        suggestions = [
+            # CatalogItem オブジェクト生成
+            self.create_item(
+                category=self.ITEMCAT_RESULT,
+                label=self.repos[idx],
+                short_desc=self.repos[idx],
+                target=self.repos[idx],
+                args_hint=kp.ItemArgsHint.FORBIDDEN,
+                hit_hint=kp.ItemHitHint.IGNORE,
             )
+            # 降順ループ
+            for idx in range(0, len(self.repos))
+        ]
 
         # サジェスト表示
         self.set_suggestions(
@@ -201,7 +198,6 @@ class SrcWindows(_BasePlugin):
                 )
             ]
         )
-
 
 
 class GhqWsl(_BasePlugin):
