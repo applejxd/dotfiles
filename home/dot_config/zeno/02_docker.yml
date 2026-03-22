@@ -34,7 +34,7 @@ snippets:
 
   - name: "[dex] docker exec interactive"
     keyword: "dex,"
-    snippet: docker exec -it {{container}} {{command}}
+    snippet: docker exec -it {{container}}
 
   - name: "[dexb] docker exec bash"
     keyword: "dexb,"
@@ -154,11 +154,29 @@ completions:
       --prompt: "'Running Container> '"
     callback: "awk '{print $NF}'"
 
+  - name: docker remove container
+    patterns:
+      - "^docker rm $"
+    sourceCommand: >-
+      docker ps -a --filter 'status=exited' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
+      | tail +2
+    options:
+      --multi: true
+      --prompt: "'Exited Container> '"
+    callback: "awk '{print $NF}'"
+
+  - name: docker remove image
+    patterns:
+      - "^docker rmi( .*)? $"
+    excludePatterns:
+      - "^docker rmi( .*)? -.* $"
+    sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
+    options:
+      --prompt: "'Docker Image> '"
+
   - name: docker exec container
     patterns:
       - "^docker exec( .*)? $"
-    excludePatterns:
-      - "^docker exec( .*)? -.* $"
     sourceCommand: >-
       docker ps --filter 'status=running' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
       | tail +2
@@ -169,24 +187,11 @@ completions:
   - name: docker logs container
     patterns:
       - "^docker logs( .*)? $"
-    excludePatterns:
-      - "^docker logs( .*)? -.* $"
     sourceCommand: >-
       docker ps -a --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
       | tail +2
     options:
       --prompt: "'Container> '"
-    callback: "awk '{print $NF}'"
-
-  - name: docker remove container
-    patterns:
-      - "^docker rm $"
-    sourceCommand: >-
-      docker ps -a --filter 'status=exited' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
-      | tail +2
-    options:
-      --multi: true
-      --prompt: "'Exited Container> '"
     callback: "awk '{print $NF}'"
 
   - name: docker inspect
@@ -205,15 +210,6 @@ completions:
       - "^docker run( .*)? $"
     excludePatterns:
       - "^docker run( .*)? -.* $"
-    sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
-    options:
-      --prompt: "'Docker Image> '"
-
-  - name: docker remove image
-    patterns:
-      - "^docker rmi( .*)? $"
-    excludePatterns:
-      - "^docker rmi( .*)? -.* $"
     sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
     options:
       --prompt: "'Docker Image> '"
