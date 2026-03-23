@@ -20,6 +20,10 @@ snippets:
     keyword: "dst,"
     snippet: docker start {{container}}
 
+  - name: "[da] docker attach container"
+    keyword: "da,"
+    snippet: docker attach {{container}}
+
   - name: "[drm] docker remove container"
     keyword: "drm,"
     snippet: docker rm {{container}}
@@ -30,7 +34,7 @@ snippets:
 
   - name: "[dex] docker exec interactive"
     keyword: "dex,"
-    snippet: docker exec -it {{container}} {{command}}
+    snippet: docker exec -it {{container}}
 
   - name: "[dexb] docker exec bash"
     keyword: "dexb,"
@@ -103,16 +107,16 @@ snippets:
     snippet: docker compose build
 
   # Docker system management
-  - name: "[dprune] docker system prune"
-    keyword: "dprune,"
+  - name: "[dpr] docker system prune"
+    keyword: "dpr,"
     snippet: docker system prune -f
 
   - name: "[dvprune] docker volume prune"
-    keyword: "dvprune,"
+    keyword: "dvpr,"
     snippet: docker volume prune -f
 
-  - name: "[dnprune] docker network prune"
-    keyword: "dnprune,"
+  - name: "[dnpr] docker network prune"
+    keyword: "dnpr,"
     snippet: docker network prune -f
 
 completions:
@@ -120,51 +124,85 @@ completions:
   - name: docker stop container
     patterns:
       - "^docker stop $"
-    sourceCommand: "docker ps --filter 'status=running' --format '{{.Names}}'"
+    sourceCommand: >-
+      docker ps --filter 'status=running' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}' 
+      | tail +2
     options:
       --multi: true
-      --prompt: "'Docker Container> '"
+      --prompt: "'Running Container> '"
+    callback: "awk '{print $NF}'"
 
   - name: docker start container
     patterns:
       - "^docker start $"
-    sourceCommand: "docker ps --filter 'status=exited' --format '{{.Names}}'"
+    sourceCommand: >-
+      docker ps --filter 'status=exited' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
+      | tail +2
     options:
       --multi: true
-      --prompt: "'Docker Container> '"
+      --prompt: "'Exited Container> '"
+    callback: "awk '{print $NF}'"
 
-  - name: docker exec container
+  - name: docker attach container
     patterns:
-      - "^docker exec( .*)? $"
-    excludePatterns:
-      - "^docker exec( .*)? -.* $"
-    sourceCommand: "docker ps --filter 'status=running' --format '{{.Names}}'"
+      - "^docker attach $"
+    sourceCommand: >-
+      docker ps --filter 'status=running' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
+      | tail +2
     options:
-      --prompt: "'Docker Container> '"
-
-  - name: docker logs container
-    patterns:
-      - "^docker logs( .*)? $"
-    excludePatterns:
-      - "^docker logs( .*)? -.* $"
-    sourceCommand: "docker ps -a --filter 'status=running' --format '{{.Names}}'"
-    options:
-      --prompt: "'Docker Container> '"
+      --multi: true
+      --prompt: "'Running Container> '"
+    callback: "awk '{print $NF}'"
 
   - name: docker remove container
     patterns:
       - "^docker rm $"
-    sourceCommand: "docker ps -a --filter 'status=exited' --format '{{.Names}}'"
+    sourceCommand: >-
+      docker ps -a --filter 'status=exited' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
+      | tail +2
     options:
       --multi: true
-      --prompt: "'Docker Container> '"
+      --prompt: "'Exited Container> '"
+    callback: "awk '{print $NF}'"
+
+  - name: docker remove image
+    patterns:
+      - "^docker rmi( .*)? $"
+    excludePatterns:
+      - "^docker rmi( .*)? -.* $"
+    sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
+    options:
+      --prompt: "'Docker Image> '"
+
+  - name: docker exec container
+    patterns:
+      - "^docker exec( .*)? $"
+    sourceCommand: >-
+      docker ps --filter 'status=running' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
+      | tail +2
+    options:
+      --prompt: "'Running Container> '"
+    callback: "awk '{print $NF}'"
+
+  - name: docker logs container
+    patterns:
+      - "^docker logs( .*)? $"
+    sourceCommand: >-
+      docker ps -a --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
+      | tail +2
+    options:
+      --prompt: "'Container> '"
+    callback: "awk '{print $NF}'"
 
   - name: docker inspect
     patterns:
       - "^docker inspect $"
-    sourceCommand: "docker ps -a --filter 'status=running' --format '{{.Names}}'"
+    sourceCommand: >-
+      docker ps -a --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
+      | tail +2
     options:
-      --prompt: "'Docker Container/Image> '"
+      --prompt: "'Container/Image> '"
+    callback: "awk '{print $NF}'"
 
   # Docker image completions
   - name: docker run image
@@ -172,15 +210,6 @@ completions:
       - "^docker run( .*)? $"
     excludePatterns:
       - "^docker run( .*)? -.* $"
-    sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
-    options:
-      --prompt: "'Docker Image> '"
-
-  - name: docker remove image
-    patterns:
-      - "^docker rmi( .*)? $"
-    excludePatterns:
-      - "^docker rmi( .*)? -.* $"
     sourceCommand: "docker images --format '{{.Repository}}:{{.Tag}}'"
     options:
       --prompt: "'Docker Image> '"

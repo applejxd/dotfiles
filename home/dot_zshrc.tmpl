@@ -5,7 +5,7 @@
 bindkey -e
 
 if [[ -e "${HOME}/.local/bin/mise" ]]; then
-    eval "$(~/.local/bin/mise activate zsh)"
+    eval "$("${HOME}/.local/bin/mise" activate zsh)"
 fi
 
 #--------#
@@ -80,23 +80,29 @@ zinit ice lucid depth"1" blockf
 zinit light yuki-yano/zeno.zsh
 source "$HOME/.config/shell/zeno.zsh"
 
-# (0a) compinit - 補完の基盤 (650msかかるため遅延)
-zinit ice wait'0a' lucid \
-    atload'autoload -Uz compinit; compinit -C'
-zinit light zdharma-continuum/null
-
-# (0b) 補完定義
-zinit ice wait'0b' lucid
+# (0a) 補完定義 - compinit の前に fpath へ追加
+zinit ice wait'0a' lucid
 zinit light zsh-users/zsh-completions
 
-# (0b) fzf-tab (必ず autosuggestions / fast-syntax-highlighting の前に読み込む)
-zinit ice wait'0b' lucid
+# (0a) mise 補完 - fpath へ追加 (compinit より前に必要)
+if [[ -f ~/.local/share/zsh/site-functions/_mise ]]; then
+    zinit ice wait'0a' lucid as"completion"
+    zinit snippet ~/.local/share/zsh/site-functions/_mise
+fi
+
+# (0b) compinit - 補完の基盤 (650msかかるため遅延)
+zinit ice wait'0b' lucid \
+    atload'zicompinit; zicdreplay'
+zinit light zdharma-continuum/null
+
+# (0c) fzf-tab (必ず autosuggestions / fast-syntax-highlighting の前に読み込む)
+zinit ice wait'0c' lucid
 zinit light Aloxaf/fzf-tab
 
-# (0c) ハイライト系
-zinit ice wait'0c' lucid
+# (0d) ハイライト系
+zinit ice wait'0d' lucid
 zinit light zsh-users/zsh-autosuggestions
-zinit ice wait'0c' lucid
+zinit ice wait'0d' lucid
 zinit light zdharma-continuum/fast-syntax-highlighting
 
 #---------------#

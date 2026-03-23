@@ -1,12 +1,7 @@
 # see https://keypirinha.com/api/plugin.html
-import datetime
-import os
 import subprocess
-from collections import namedtuple
-from typing import List
 
 import keypirinha as kp
-import keypirinha_util as kpu
 
 
 class _BasePlugin(kp.Plugin):
@@ -16,12 +11,11 @@ class _BasePlugin(kp.Plugin):
 
     ITEMCAT_RESULT = kp.ItemCategory.USER_BASE + 1
 
-    # 処理結果を保存するリスト
-    root_path = ""
-    repos = []
-
     def __init__(self):
         super().__init__()
+        # インスタンス変数として初期化（クラス変数の共有を避ける）
+        self.root_path = ""
+        self.repos = []
 
     def on_start(self):
         """初期化"""
@@ -56,22 +50,19 @@ class _BasePlugin(kp.Plugin):
             return
 
         # サジェスト作成
-        suggestions = []
-
-        # 降順ループ
-        for idx in range(0, len(self.repos)):
-            # サジェスト追加
-            suggestions.append(
-                # CatalogItem オブジェクト生成
-                self.create_item(
-                    category=self.ITEMCAT_RESULT,
-                    label=self.repos[idx],
-                    short_desc=self.repos[idx],
-                    target=self.repos[idx],
-                    args_hint=kp.ItemArgsHint.FORBIDDEN,
-                    hit_hint=kp.ItemHitHint.IGNORE,
-                )
+        suggestions = [
+            # CatalogItem オブジェクト生成
+            self.create_item(
+                category=self.ITEMCAT_RESULT,
+                label=self.repos[idx],
+                short_desc=self.repos[idx],
+                target=self.repos[idx],
+                args_hint=kp.ItemArgsHint.FORBIDDEN,
+                hit_hint=kp.ItemHitHint.IGNORE,
             )
+            # 降順ループ
+            for idx in range(0, len(self.repos))
+        ]
 
         # サジェスト表示
         self.set_suggestions(
@@ -89,7 +80,8 @@ class _BasePlugin(kp.Plugin):
             item (CatalogItem): on_suggest で選択した項目
             action (CatalogAction): [description]
         """
-        command = f"{self.open_command} {self.root_path}/{item.target()}"
+        # パスにスペースが含まれる場合も正しく動作するようクォートする
+        command = f'{self.open_command} "{self.root_path}/{item.target()}"'
         subprocess.run(command, shell=True, check=True)
 
 
@@ -110,6 +102,17 @@ class GhqWindows(_BasePlugin):
             )
             .stdout.decode("utf-8")
             .strip()
+        )
+        # バイナリ文字列を変換・改行コードでリスト化
+        self.repos = (
+            subprocess.run(
+                "powershell -ExecutionPolicy Bypass ghq list",
+                shell=True,
+                stdout=subprocess.PIPE,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .split()
         )
 
     def on_catalog(self):
@@ -138,19 +141,6 @@ class GhqWindows(_BasePlugin):
             ]
         )
 
-    def on_activated(self):
-        # バイナリ文字列を変換・改行コードでリスト化
-        self.repos = (
-            subprocess.run(
-                "powershell -ExecutionPolicy Bypass ghq list",
-                shell=True,
-                stdout=subprocess.PIPE,
-                check=True,
-            )
-            .stdout.decode("utf-8")
-            .split()
-        )
-
 
 class SrcWindows(_BasePlugin):
     def __init__(self):
@@ -169,7 +159,18 @@ class SrcWindows(_BasePlugin):
             )
             .stdout.decode("utf-8")
             .strip()
-            + "\src"
+            + "\\src"
+        )
+        # バイナリ文字列を変換・改行コードでリスト化
+        self.repos = (
+            subprocess.run(
+                "powershell -ExecutionPolicy Bypass Get-ChildItem $env:UserProfile\\src -Name",
+                shell=True,
+                stdout=subprocess.PIPE,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .split()
         )
 
     def on_catalog(self):
@@ -198,25 +199,12 @@ class SrcWindows(_BasePlugin):
             ]
         )
 
-    def on_activated(self):
-        # バイナリ文字列を変換・改行コードでリスト化
-        self.repos = (
-            subprocess.run(
-                "powershell -ExecutionPolicy Bypass Get-ChildItem $env:UserProfile\src -Name",
-                shell=True,
-                stdout=subprocess.PIPE,
-                check=True,
-            )
-            .stdout.decode("utf-8")
-            .split()
-        )
-
 
 class GhqWsl(_BasePlugin):
     def __init__(self):
         super().__init__()
 
-        self.open_command = "wsl 'code'"
+        self.open_command = "wsl code"
 
     def on_start(self):
         """初期化"""
@@ -224,13 +212,25 @@ class GhqWsl(_BasePlugin):
 
         self.root_path = (
             subprocess.run(
-                "wsl bash -i -c 'ghq root'",
+                # ghq は login shell の PATH に載るため -l が必要
+                'wsl bash -lc "ghq root"',
                 shell=True,
                 stdout=subprocess.PIPE,
                 check=True,
             )
             .stdout.decode("utf-8")
             .strip()
+        )
+        # バイナリ文字列を変換・改行コードでリスト化
+        self.repos = (
+            subprocess.run(
+                'wsl bash -lc "ghq list"',
+                shell=True,
+                stdout=subprocess.PIPE,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .split()
         )
 
     def on_catalog(self):
@@ -257,16 +257,4 @@ class GhqWsl(_BasePlugin):
                     hit_hint=kp.ItemHitHint.NOARGS,
                 )
             ]
-        )
-
-    def on_activated(self):
-        self.repos = (
-            subprocess.run(
-                "wsl bash -i -c 'ghq list'",
-                shell=True,
-                stdout=subprocess.PIPE,
-                check=True,
-            )
-            .stdout.decode("utf-8")
-            .split()
         )
