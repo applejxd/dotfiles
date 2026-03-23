@@ -42,7 +42,7 @@ cinst Keypirinha
 # Extensions #
 # ---------- #
 
-$install_dir = "$env:UserProfile\src\windows-setup\tools\Keypirinha\InstalledPackages"
+$install_dir = "$env:UserProfile\AppData\Roaming\Keypirinha\InstalledPackages"
 if (-not (Test-Path $install_dir)) {
     New-Item $install_dir -ItemType Directory
 }
@@ -76,7 +76,6 @@ function InstallRelease($repo_name, $file_path) {
 InstallRelease "Fuhrmann/keypirinha-url-shortener" "$install_dir\URLShortener.keypirinha-package"
 InstallRelease "psistorm/keypirinha-systemcommands" "$install_dir\SystemCommands.keypirinha-package"
 InstallRelease "clinden/keypirinha-colorpicker" "$install_dir\ColorPicker.keypirinha-package"
-InstallRelease "dozius/keypirinha-snippets" "$install_dir\Snippets.keypirinha-package"
 # Clipborad Manager
 InstallRelease "tuteken/Keypirinha-Plugin-Ditto" "$install_dir\Ditto.keypirinha-package"
 # Default Windows Apps
@@ -87,3 +86,5 @@ InstallRelease "fran-f/keypirinha-terminal-profiles" "$install_dir\Terminal-Prof
 InstallRelease "bantya/Keypirinha-EasySearch" "$install_dir\EasySearch.keypirinha-package"
 # Execute commands from >
 InstallRelease "bantya/Keypirinha-Command" "$install_dir\Command.keypirinha-package"
+
+# InstallRelease "dozius/keypirinha-snippets" "$install_dir\Snippets.keypirinha-package"
