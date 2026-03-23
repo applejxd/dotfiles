@@ -87,4 +87,5 @@ InstallRelease "bantya/Keypirinha-EasySearch" "$install_dir\EasySearch.keypirinh
 # Execute commands from >
 InstallRelease "bantya/Keypirinha-Command" "$install_dir\Command.keypirinha-package"
 
+# moved to https://codeberg.org/skullzy/keypirinha-snippets
 # InstallRelease "dozius/keypirinha-snippets" "$install_dir\Snippets.keypirinha-package"
