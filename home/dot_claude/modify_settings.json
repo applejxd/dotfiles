@@ -14,7 +14,14 @@
     "Bash(git log:*)"
     "Read(pyproject.toml)"
     "Bash(uv pip list:*)"
+    "Bash(uv sync:*)"
     "Bash(docker ps:*)"
+    "WebFetch(domain:github.com)"
+    "WebFetch(domain:hub.docker.com)"
+    "WebFetch(domain:docs.docker.com)"
+    "WebFetch(domain:raw.githubusercontent.com)"
+    "WebFetch(domain:dev.to)"
+    "WebFetch(domain:pypi.org)"
 -}}
 {{- $managedAsk := list
     "Bash(uv add:*)"
