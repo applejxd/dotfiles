@@ -1,3 +1,6 @@
 [submodule "home/AppData/Roaming/Keyhac/extension/fakeymacs"]
 	path = home/AppData/Roaming/Keyhac/extension/fakeymacs
 	url = https://github.com/smzht/fakeymacs.git
+[submodule "home/AppData/Roaming/Keypirinha/external_Packages"]
+	path = home/AppData/Roaming/Keypirinha/external_Packages
+	url = https://github.com/applejxd/keypirinha-extensions.git
