@@ -8,10 +8,8 @@ arch=$(uname -m)
 
 brew_path=""
 if [[ $arch == arm64 ]]; then
-  echo "Current Architecture: $arch"
   brew_path="/opt/homebrew/bin/brew"
 elif [[ $arch == x86_64 ]]; then
-  echo "Current Architecture: $arch"
   brew_path="/usr/local/bin/brew"
 fi
 

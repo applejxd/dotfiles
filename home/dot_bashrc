@@ -70,15 +70,15 @@ fi
 # bash-it #
 #---------#
 
-if [ ! -e "$HOME"/.bash_it ]; then
-    git clone --depth=1 https://github.com/Bash-it/bash-it.git "$HOME"/.bash_it
-fi
-
 # If not running interactively, don't do anything
 case $- in
 *i*) ;;
 *) return ;;
 esac
+
+if [ ! -e "$HOME"/.bash_it ]; then
+    git clone --depth=1 https://github.com/Bash-it/bash-it.git "$HOME"/.bash_it
+fi
 
 # Path to the bash it configuration
 export BASH_IT="$HOME/.bash_it"
