@@ -151,6 +151,8 @@ zle -N switch-arch
 setopt auto_cd
 cdpath=(.. ~)
 function chpwd() {
+    # stdout が TTY でない場合はスキップ（Claude Code bash ツール等の自動化環境での副作用を防ぐ）
+    [[ -t 1 ]] || return
     if command -v "lsd" >/dev/null 2>&1; then
         lsd
     else
@@ -198,7 +200,7 @@ setopt hist_ignore_space
 # texts
 if command -v "bat" >/dev/null 2>&1; then
     alias -s {txt,dat,plt}='bat'
-else; 
+else;
     alias -s {txt,dat,plt}='cat'
 fi
 

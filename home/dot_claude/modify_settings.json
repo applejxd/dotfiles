@@ -82,8 +82,12 @@
               "command" "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous-commands.sh")
     ))
 -}}
+{{- $managedEnv := dict
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" "1"
+-}}
 {{- $currentPerms := default (dict) (get $current "permissions") -}}
 {{- $currentHooks := default (dict) (get $current "hooks") -}}
+{{- $currentEnv := default (dict) (get $current "env") -}}
 {{- $merged := merge $managed $current -}}
 {{- $_ := set $merged "permissions" (dict
     "allow" (concat $managedAllow (default (list) (get $currentPerms "allow")) | uniq)
@@ -94,4 +98,5 @@
     "PostToolUse" (concat $managedPostToolUse (default (list) (get $currentHooks "PostToolUse")) | uniq)
     "PreToolUse"  (concat $managedPreToolUse  (default (list) (get $currentHooks "PreToolUse"))  | uniq)
 ) -}}
+{{- $_ := set $merged "env" (merge $managedEnv $currentEnv) -}}
 {{- $merged | toPrettyJson -}}
