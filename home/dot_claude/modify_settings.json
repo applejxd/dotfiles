@@ -70,11 +70,16 @@
     "Bash(docker rmi:*)"
     "mcp__supabase__execute_sql"
 -}}
+{{- $managedEnv := dict
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" "1"
+-}}
 {{- $currentPerms := default (dict) (get $current "permissions") -}}
+{{- $currentEnv := default (dict) (get $current "env") -}}
 {{- $merged := merge $managed $current -}}
 {{- $_ := set $merged "permissions" (dict
     "allow" (concat $managedAllow (default (list) (get $currentPerms "allow")) | uniq)
     "ask"   (concat $managedAsk   (default (list) (get $currentPerms "ask"))   | uniq)
     "deny"  (concat $managedDeny  (default (list) (get $currentPerms "deny"))  | uniq)
 ) -}}
+{{- $_ := set $merged "env" (merge $managedEnv $currentEnv) -}}
 {{- $merged | toPrettyJson -}}

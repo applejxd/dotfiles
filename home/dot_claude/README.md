@@ -2,6 +2,10 @@
 
 - [設定一覧](https://docs.claude.com/ja/docs/claude-code/settings)
   - Claude Code によるコミットの汚染を防ぐ: `includeCoAuthoredBy=false`
+  - Agent Teams を有効化: `env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+    - [Agent Teams ドキュメント](https://code.claude.com/docs/en/agent-teams)
+    - 複数エージェントが並列で協調作業するチーム機能（実験的機能）
+    - tmux 使用時はスプリットペインで各エージェントを表示可能
 
 ## デフォルトのスラッシュコマンド
 
