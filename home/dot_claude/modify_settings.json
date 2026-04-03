@@ -70,33 +70,16 @@
     "Bash(docker rmi:*)"
     "mcp__supabase__execute_sql"
 -}}
-{{- $managedPostToolUse := list
-    (dict "matcher" "Edit|Write" "hooks" (list
-        (dict "type" "command" "command" "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format-file.sh")
-    ))
--}}
-{{- $managedPreToolUse := list
-    (dict "matcher" "Bash" "hooks" (list
-        (dict "type" "command"
-              "if" "Bash(git push*|git reset*|git clean*|rm *|mv *|cp *|sudo *|terraform apply*|kubectl delete*|docker compose down*)"
-              "command" "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous-commands.sh")
-    ))
--}}
 {{- $managedEnv := dict
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" "1"
 -}}
 {{- $currentPerms := default (dict) (get $current "permissions") -}}
-{{- $currentHooks := default (dict) (get $current "hooks") -}}
 {{- $currentEnv := default (dict) (get $current "env") -}}
 {{- $merged := merge $managed $current -}}
 {{- $_ := set $merged "permissions" (dict
     "allow" (concat $managedAllow (default (list) (get $currentPerms "allow")) | uniq)
     "ask"   (concat $managedAsk   (default (list) (get $currentPerms "ask"))   | uniq)
     "deny"  (concat $managedDeny  (default (list) (get $currentPerms "deny"))  | uniq)
-) -}}
-{{- $_ := set $merged "hooks" (dict
-    "PostToolUse" (concat $managedPostToolUse (default (list) (get $currentHooks "PostToolUse")) | uniq)
-    "PreToolUse"  (concat $managedPreToolUse  (default (list) (get $currentHooks "PreToolUse"))  | uniq)
 ) -}}
 {{- $_ := set $merged "env" (merge $managedEnv $currentEnv) -}}
 {{- $merged | toPrettyJson -}}
