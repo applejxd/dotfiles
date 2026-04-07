@@ -10,6 +10,7 @@
 {{- $managedAllow := list
     "Read(README.md)"
     "Bash(git diff:*)"
+    "Bash(git -C * diff *)"
     "Bash(git status:*)"
     "Bash(git log:*)"
     "Read(pyproject.toml)"
