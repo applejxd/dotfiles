@@ -14,6 +14,7 @@
     "Bash(git -C * diff *)"
     "Bash(git status:*)"
     "Bash(git log:*)"
+    "Bash(git -C log:*)"
     "Read(pyproject.toml)"
     "Bash(uv pip list:*)"
     "Bash(uv sync:*)"
