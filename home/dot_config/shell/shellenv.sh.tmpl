@@ -59,6 +59,13 @@ export QT_IM_MODULE=fcitx
 # ghq root
 export GHQ_ROOT="${HOME}/src"
 
+{{- if eq .chezmoi.os "linux" }}
+# for rootless Docker
+if [[ -S "/run/user/$(id -u)/docker.sock" ]]; then
+    export DOCKER_HOST="unix:///run/user/$(id -u)/docker.sock"
+fi
+{{- end }}
+
 {{- if ne .chezmoi.username "applejxd" }}
 # see https://docs.claude.com/ja/docs/claude-code/amazon-bedrock
 export CLAUDE_CODE_USE_BEDROCK=1
