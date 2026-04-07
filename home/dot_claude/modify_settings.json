@@ -9,6 +9,7 @@
 -}}
 {{- $managedAllow := list
     "Read(README.md)"
+    "Bash(wc *)"
     "Bash(git diff:*)"
     "Bash(git -C * diff *)"
     "Bash(git status:*)"
