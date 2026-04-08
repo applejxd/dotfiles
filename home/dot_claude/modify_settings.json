@@ -1,13 +1,13 @@
 {{- /* chezmoi:modify-template */ -}}
-{{- /* merge (Sprig) はリストを統合せず上書きするため、permissions 内のリストは個別に concat+uniq で統合する */ -}}
+{{- /* permissions は managed の値で完全上書きする（concat+uniq によるマージは行わない） */ -}}
 {{- $current := dict -}}
 {{- if ne .chezmoi.stdin "" -}}
 {{-   $current = fromJson .chezmoi.stdin -}}
 {{- end -}}
-{{- $managed := dict
+{{- $defaults := dict
     "includeCoAuthoredBy" false
 -}}
-{{- $managedAllow := list
+{{- $allowList := list
     "Read(README.md)"
     "Bash(wc *)"
     "Bash(git diff:*)"
@@ -28,7 +28,7 @@
     "WebFetch(domain:dev.to)"
     "WebFetch(domain:pypi.org)"
 -}}
-{{- $managedAsk := list
+{{- $askList := list
     "Bash(uv add:*)"
     "Bash(npm install:*)"
     "Bash(npm ci:*)"
@@ -39,7 +39,7 @@
     "Bash(docker exec:*)"
     "Bash(curl:*)"
 -}}
-{{- $managedDeny := list
+{{- $denyList := list
     "Bash(sudo:*)"
     "Bash(rm:*)"
     "Bash(git push:*)"
@@ -75,16 +75,15 @@
     "Bash(docker rmi:*)"
     "mcp__supabase__execute_sql"
 -}}
-{{- $managedEnv := dict
+{{- $envDefaults := dict
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" "1"
 -}}
-{{- $currentPerms := default (dict) (get $current "permissions") -}}
 {{- $currentEnv := default (dict) (get $current "env") -}}
-{{- $merged := merge $managed $current -}}
-{{- $_ := set $merged "permissions" (dict
-    "allow" (concat $managedAllow (default (list) (get $currentPerms "allow")) | uniq)
-    "ask"   (concat $managedAsk   (default (list) (get $currentPerms "ask"))   | uniq)
-    "deny"  (concat $managedDeny  (default (list) (get $currentPerms "deny"))  | uniq)
+{{- $result := merge $defaults $current -}}
+{{- $_ := set $result "permissions" (dict
+    "allow" $allowList
+    "ask"   $askList
+    "deny"  $denyList
 ) -}}
-{{- $_ := set $merged "env" (merge $managedEnv $currentEnv) -}}
-{{- $merged | toPrettyJson -}}
+{{- $_ := set $result "env" (merge $envDefaults $currentEnv) -}}
+{{- $result | toPrettyJson -}}
