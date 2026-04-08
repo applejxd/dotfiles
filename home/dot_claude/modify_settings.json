@@ -1,5 +1,5 @@
 {{- /* chezmoi:modify-template */ -}}
-{{- /* permissions は managed の値で完全上書きする（concat+uniq によるマージは行わない） */ -}}
+{{- /* permissions は dotfiles の値で完全上書き、env は dotfiles の値を優先してマージする */ -}}
 {{- $current := dict -}}
 {{- if ne .chezmoi.stdin "" -}}
 {{-   $current = fromJson .chezmoi.stdin -}}
@@ -9,7 +9,7 @@
 -}}
 {{- $allowList := list
     "Read(README.md)"
-    "Bash(wc *)"
+    "Bash(wc:*)"
     "Bash(git diff:*)"
     "Bash(git status:*)"
     "Bash(git log:*)"
@@ -17,6 +17,7 @@
     "Bash(git -C * log *)"
     "Bash(git -C * show *)"
     "Bash(grep -n:*)"
+    "Bash(find:*)"
     "Read(pyproject.toml)"
     "Bash(uv pip list:*)"
     "Bash(uv sync:*)"
