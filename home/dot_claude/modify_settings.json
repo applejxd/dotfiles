@@ -80,6 +80,7 @@
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" "1"
 -}}
 {{- $currentEnv := default (dict) (get $current "env") -}}
+{{- $hookCmd := printf "python %s/.claude/hooks/check_bash.py" .chezmoi.homeDir -}}
 {{- $result := merge $defaults $current -}}
 {{- $_ := set $result "permissions" (dict
     "allow" $allowList
@@ -87,4 +88,14 @@
     "deny"  $denyList
 ) -}}
 {{- $_ := set $result "env" (merge $envDefaults $currentEnv) -}}
+{{- $_ := set $result "hooks" (dict
+    "PreToolUse" (list
+        (dict
+            "matcher" "Bash"
+            "hooks" (list
+                (dict "type" "command" "command" $hookCmd)
+            )
+        )
+    )
+) -}}
 {{- $result | toPrettyJson -}}
