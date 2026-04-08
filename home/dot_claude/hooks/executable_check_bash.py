@@ -129,8 +129,43 @@ def check_xargs_pipe(cmd: str) -> str | None:
     return None
 
 
+def _pip_suggestion(cmd: str) -> str:
+    """pip コマンドに対応する uv/uvx の代替案を返す"""
+    if re.search(r"\binstall\b", cmd):
+        return "代替: `uv add <package>` または `uvx <package>`"
+    if re.search(r"\buninstall\b", cmd):
+        return "代替: `uv remove <package>`"
+    if re.search(r"\blist\b", cmd):
+        return "代替: `uv pip list`"
+    if re.search(r"\bshow\b", cmd):
+        return "代替: `uv pip show <package>`"
+    if re.search(r"\bfreeze\b", cmd):
+        return "代替: `uv pip freeze`"
+    return "代替: `uv <subcommand>` または `uvx <tool>`"
+
+
+def check_pip_redirect(cmd: str) -> str | None:
+    """pip / python -m pip の直接使用を uv/uvx にリダイレクト"""
+    # 直接 pip コマンド
+    if re.match(r"\s*pip\b", cmd):
+        suggestion = _pip_suggestion(cmd)
+        return (
+            "pip の直接使用は禁止されています。uv / uvx を使用してください。\n"
+            f"{suggestion}"
+        )
+    # python -m pip
+    if re.search(r"\bpython\b.*\s-m\s+pip\b", cmd):
+        suggestion = _pip_suggestion(cmd)
+        return (
+            "`python -m pip` は禁止されています。uv / uvx を使用してください。\n"
+            f"{suggestion}"
+        )
+    return None
+
+
 CHECKS = [
     check_env_exposure,    # 引数なし環境変数露出は問答無用でブロック
+    check_pip_redirect,    # pip → uv/uvx へのリダイレクト
     check_file_read,
     check_archive,
     check_curl_file_send,
