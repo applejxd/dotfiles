@@ -89,6 +89,7 @@
     "Bash(mongod *)"
     "Bash(redis-cli *)"
     "Bash(pip *)"
+    "Bash(npm install -g *)"
     "Bash(docker rm *)"
     "Bash(docker rmi *)"
     "mcp__supabase__execute_sql"
