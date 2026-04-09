@@ -9,8 +9,10 @@ exit 2: ブロック（Claude にメッセージが表示される）
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+from pathlib import Path
 
 # ─── センシティブパスのパターン ──────────────────────────────────────
 SENSITIVE_PATH_PATTERNS = [
@@ -163,14 +165,24 @@ def check_pip_redirect(cmd: str) -> str | None:
     return None
 
 
-CHECKS = [
+# uv 非依存のチェック（常時有効）
+BASE_CHECKS = [
     check_env_exposure,    # 引数なし環境変数露出は問答無用でブロック
-    check_pip_redirect,    # pip → uv/uvx へのリダイレクト
     check_file_read,
     check_archive,
     check_curl_file_send,
     check_xargs_pipe,
 ]
+
+# uv プロジェクト限定のチェック
+UV_CHECKS = [
+    check_pip_redirect,    # pip → uv/uvx へのリダイレクト（uv.lock があるプロジェクトのみ）
+]
+
+
+def is_uv_project(cwd: str) -> bool:
+    """cwd に uv.lock が存在するか確認"""
+    return (Path(cwd) / "uv.lock").is_file()
 
 
 def main() -> None:
@@ -187,7 +199,10 @@ def main() -> None:
     if not cmd:
         sys.exit(0)
 
-    for check in CHECKS:
+    cwd = data.get("cwd", os.getcwd())
+    checks = BASE_CHECKS + (UV_CHECKS if is_uv_project(cwd) else [])
+
+    for check in checks:
         reason = check(cmd)
         if reason:
             print(f"[hook blocked] {reason}", file=sys.stderr)
