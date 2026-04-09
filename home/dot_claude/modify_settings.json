@@ -42,6 +42,8 @@
     "WebFetch(domain:pre-commit.com)"
     "WebFetch(domain:docs.anthropic.com)"
     "WebFetch(domain:modelcontextprotocol.io)"
+    "WebFetch(domain:arxiv.org)"
+    "WebFetch(domain:alphaxiv.org)"
 -}}
 {{- $askList := list
     "Bash(uv add *)"
@@ -87,6 +89,7 @@
     "Bash(mongod *)"
     "Bash(redis-cli *)"
     "Bash(pip *)"
+    "Bash(npm install -g *)"
     "Bash(docker rm *)"
     "Bash(docker rmi *)"
     "mcp__supabase__execute_sql"
