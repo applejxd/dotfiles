@@ -9,8 +9,10 @@ exit 2: ブロック（Claude にメッセージが表示される）
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+from pathlib import Path
 
 # ─── センシティブパスのパターン ──────────────────────────────────────
 SENSITIVE_PATH_PATTERNS = [
@@ -129,13 +131,58 @@ def check_xargs_pipe(cmd: str) -> str | None:
     return None
 
 
-CHECKS = [
+def _pip_suggestion(cmd: str) -> str:
+    """pip コマンドに対応する uv/uvx の代替案を返す"""
+    if re.search(r"\binstall\b", cmd):
+        return "代替: `uv add <package>` または `uvx <package>`"
+    if re.search(r"\buninstall\b", cmd):
+        return "代替: `uv remove <package>`"
+    if re.search(r"\blist\b", cmd):
+        return "代替: `uv pip list`"
+    if re.search(r"\bshow\b", cmd):
+        return "代替: `uv pip show <package>`"
+    if re.search(r"\bfreeze\b", cmd):
+        return "代替: `uv pip freeze`"
+    return "代替: `uv <subcommand>` または `uvx <tool>`"
+
+
+def check_pip_redirect(cmd: str) -> str | None:
+    """pip / python -m pip の直接使用を uv/uvx にリダイレクト"""
+    # 直接 pip コマンド
+    if re.match(r"\s*pip\b", cmd):
+        suggestion = _pip_suggestion(cmd)
+        return (
+            "pip の直接使用は禁止されています。uv / uvx を使用してください。\n"
+            f"{suggestion}"
+        )
+    # python -m pip
+    if re.search(r"\bpython\b.*\s-m\s+pip\b", cmd):
+        suggestion = _pip_suggestion(cmd)
+        return (
+            "`python -m pip` は禁止されています。uv / uvx を使用してください。\n"
+            f"{suggestion}"
+        )
+    return None
+
+
+# uv 非依存のチェック（常時有効）
+BASE_CHECKS = [
     check_env_exposure,    # 引数なし環境変数露出は問答無用でブロック
     check_file_read,
     check_archive,
     check_curl_file_send,
     check_xargs_pipe,
 ]
+
+# uv プロジェクト限定のチェック
+UV_CHECKS = [
+    check_pip_redirect,    # pip → uv/uvx へのリダイレクト（uv.lock があるプロジェクトのみ）
+]
+
+
+def is_uv_project(cwd: str) -> bool:
+    """cwd に uv.lock が存在するか確認"""
+    return (Path(cwd) / "uv.lock").is_file()
 
 
 def main() -> None:
@@ -152,7 +199,10 @@ def main() -> None:
     if not cmd:
         sys.exit(0)
 
-    for check in CHECKS:
+    cwd = data.get("cwd", os.getcwd())
+    checks = BASE_CHECKS + (UV_CHECKS if is_uv_project(cwd) else [])
+
+    for check in checks:
         reason = check(cmd)
         if reason:
             print(f"[hook blocked] {reason}", file=sys.stderr)

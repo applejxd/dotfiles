@@ -3,7 +3,7 @@ name: onboarding
 description: "AGENTS.md を対話的に作成・最適化する。「AGENTS.md を作って／整理して」と言われたときに使う。"
 context: fork
 agent: general-purpose
-allowed-tools: Read, Grep, Glob, Edit, Write
+allowed-tools: Write(AGENTS.md), Edit(AGENTS.md), Bash(*check-agents.sh*)
 ---
 
 # AGENTS.md Onboarding Skill

@@ -101,6 +101,7 @@
 -}}
 {{- $currentEnv := default (dict) (get $current "env") -}}
 {{- $hookCmd := printf "python %s/.claude/hooks/check_bash.py" .chezmoi.homeDir -}}
+{{- $stopHookCmd := printf "python %s/.claude/hooks/update-adr-on-stop.py" .chezmoi.homeDir -}}
 {{- $result := merge $defaults $current -}}
 {{- $_ := set $result "permissions" (dict
     "allow" $allowList
@@ -114,6 +115,13 @@
             "matcher" "Bash"
             "hooks" (list
                 (dict "type" "command" "command" $hookCmd)
+            )
+        )
+    )
+    "Stop" (list
+        (dict
+            "hooks" (list
+                (dict "type" "command" "command" $stopHookCmd)
             )
         )
     )

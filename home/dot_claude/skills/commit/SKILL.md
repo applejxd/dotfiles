@@ -3,7 +3,7 @@ name: commit
 description: "Conventional Commits 形式でコミットメッセージを生成する。「コミットして」「commit メッセージを作って」と言われたときに使う。"
 context: fork
 agent: general-purpose
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(*get-git-context.sh*)
 ---
 
 # コミットメッセージ生成スキル
