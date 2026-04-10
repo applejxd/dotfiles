@@ -18,6 +18,8 @@
     "Bash(git -C * show *)"
     "Bash(grep -n *)"
     "Bash(find *)"
+    "Bash(cmake -S * -B *)"
+    "Bash(cmake --build *)"
     "Read(pyproject.toml)"
     "Bash(uv pip list *)"
     "Bash(uv sync *)"
