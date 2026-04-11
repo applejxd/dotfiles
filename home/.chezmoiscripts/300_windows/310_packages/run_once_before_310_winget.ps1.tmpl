@@ -40,7 +40,7 @@ if ( ($PSVersionTable.PSEdition -eq 'Desktop') -or ($PSVersionTable.PSVersion.Ma
 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
 # PowerShellGet 自体を最新版に更新
 # PS7 でも WinPS5 でも共通してモジュール導入の安定性が増す
-Install-Module -Name PowerShellGet -Scope CurrentUser -Force
+Install-Module -Name PowerShellGet -Scope CurrentUser -Force -AllowClobber
 
 # fzf wrapper（fzf 本体は scoop/choco 等で別途インストール必須）
 Install-Module -Name PSFzf -Scope CurrentUser -Force
