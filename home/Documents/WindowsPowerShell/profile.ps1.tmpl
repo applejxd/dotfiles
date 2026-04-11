@@ -44,11 +44,13 @@ Set-Alias open explorer.exe
 Set-Alias pbcopy clip.exe
 Set-Alias pbpaste Get-Clipboard
 function relogin { powershell $Profile.CurrentUserAllHosts }
-function explorer-restart { Stop-Process -Name explorer -Force; Start-Process explorer }
+function explorer-restart { Stop-Process     -Name explorer -Force; Start-Process explorer }
 
 . "{{ .chezmoi.homeDir }}/Documents/commands/wsl.ps1"
-. "{{ .chezmoi.homeDir }}/Documents/commands/docker.ps1"
 . "{{ .chezmoi.homeDir }}/Documents/commands/pwgen.ps1"
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+  . "{{ .chezmoi.homeDir }}/Documents/commands/docker.ps1"
+} 
 
 #-----#
 # fzf #
