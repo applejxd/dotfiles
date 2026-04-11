@@ -124,17 +124,19 @@ zinit light sindresorhus/pure
 # docker #
 #--------#
 
-zinit ice wait'0e' lucid
-zinit light felixr/docker-zsh-completion
+if command -v docker >/dev/null 2>&1; then
+    zinit ice wait'0e' lucid
+    zinit light felixr/docker-zsh-completion
 
-zinit ice wait'0e' lucid pick"docker-fzf.zsh"
-zinit load mnowotnik/docker-fzf-completion
+    zinit ice wait'0e' lucid pick"docker-fzf.zsh"
+    zinit load mnowotnik/docker-fzf-completion
 
-zinit ice wait'0e' lucid pick'docker-fzf'
-zinit load MartinRamm/fzf-docker
+    zinit ice wait'0e' lucid pick'docker-fzf'
+    zinit load MartinRamm/fzf-docker
 
-zinit ice wait'0e' lucid as"program" pick"dfimage.bash"
-zinit load RyodoTanaka/.bash_extend
+    zinit ice wait'0e' lucid as"program" pick"dfimage.bash"
+    zinit load RyodoTanaka/.bash_extend
+fi
 
 #-----------------#
 # OS dependencies #
