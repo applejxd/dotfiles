@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-Claude Code Stop hook: docs/adr の更新を促す
+Claude Code TaskCompleted hook: docs/adr の更新を促す
 
 docs/adr/ にファイルが存在する場合のみ、ADR の更新を促す。
-exit 0: 停止を許可
-exit 2: 停止をブロックし、stderr のメッセージを Claude へのフィードバックとして渡す
+セッションごとに1回のみ実行し、無限ループを防止する。
+exit 0: タスク完了を許可
+exit 2: タスク完了をブロックし、stderr のメッセージを Claude へのフィードバックとして渡す
 """
 from __future__ import annotations
 
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -34,12 +36,16 @@ def main() -> None:
         sys.exit(0)  # 解析失敗時は許可
 
     hook_event = data.get("hook_event_name", "")
-    if hook_event != "Stop":
+    if hook_event != "TaskCompleted":
         sys.exit(0)
 
-    # stop_hook_active が True の場合は無限ループ防止のためスキップ
-    if data.get("stop_hook_active", False):
-        sys.exit(0)
+    # セッションごとに1回のみ実行（TaskCompleted の無限ループ防止）
+    session_id = data.get("session_id", "")
+    if session_id:
+        marker = Path(tempfile.gettempdir()) / f"claude_adr_checked_{session_id}"
+        if marker.exists():
+            sys.exit(0)
+        marker.touch()
 
     cwd = data.get("cwd", os.getcwd())
     adr_dir = find_adr_dir(cwd)
