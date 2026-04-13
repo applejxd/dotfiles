@@ -146,6 +146,43 @@ def _pip_suggestion(cmd: str) -> str:
     return "代替: `uv <subcommand>` または `uvx <tool>`"
 
 
+def check_git_c_dangerous(cmd: str) -> str | None:
+    """`git -C <dir>` 経由で deny 対象のサブコマンドを実行しようとしていないか"""
+    # git -C <path> [options] <subcommand> の形を検出
+    if not re.search(r"\bgit\b\s+-C\b", cmd):
+        return None
+    dangerous = ("push", "reset", "rebase", "config")
+    for sub in dangerous:
+        if re.search(rf"\bgit\b.*\s-C\s.*\b{sub}\b", cmd, re.IGNORECASE):
+            return (
+                f"`git -C` で禁止されたサブコマンド `{sub}` の実行を検出しました。\n"
+                f"このコマンドはセキュリティポリシーによりブロックされています。"
+            )
+    return None
+
+
+_FIND_DANGEROUS_EXEC_RE = re.compile(
+    r"\bfind\b.+?"
+    r"(?:"
+    r"-exec\s+(?:rm|unlink|shred|rmdir)\b"  # -exec rm/unlink/shred/rmdir
+    r"|-delete\b"                            # -delete フラグ
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def check_find_dangerous(cmd: str) -> str | None:
+    """`find -exec rm` や `find -delete` でファイルを削除しようとしていないか"""
+    if not re.search(r"\bfind\b", cmd):
+        return None
+    if _FIND_DANGEROUS_EXEC_RE.search(cmd):
+        return (
+            "`find` コマンドでファイル削除操作（-exec rm / -delete 等）を検出しました。\n"
+            "ファイル削除は明示的な承認が必要です。"
+        )
+    return None
+
+
 def check_pip_redirect(cmd: str) -> str | None:
     """pip / python -m pip の直接使用を uv/uvx にリダイレクト"""
     # 直接 pip コマンド
@@ -167,7 +204,9 @@ def check_pip_redirect(cmd: str) -> str | None:
 
 # uv 非依存のチェック（常時有効）
 BASE_CHECKS = [
-    check_env_exposure,    # 引数なし環境変数露出は問答無用でブロック
+    check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
+    check_git_c_dangerous,    # git -C 経由の deny サブコマンド実行をブロック
+    check_find_dangerous,     # find -exec rm / -delete によるファイル削除をブロック
     check_file_read,
     check_archive,
     check_curl_file_send,
