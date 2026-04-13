@@ -16,6 +16,8 @@
     "Bash(git -C:*)"
     "Bash(grep -n:*)"
     "Bash(find:*)"
+    "Bash(gcc:*)"
+    "Bash(g++:*)"
     "Bash(cmake -S:*)"
     "Bash(cmake --build:*)"
     "Read(pyproject.toml)"
