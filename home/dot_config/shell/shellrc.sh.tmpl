@@ -35,6 +35,13 @@ alias ls="ls --color=auto"
 source "${HOME}/.config/shell/osxrc.sh"
 {{- end }}
 
+{{- if contains "NAS" .chezmoi.hostname }}
+# QNAP NAS向け設定
+if [[ -e /opt/etc/profile ]]; then
+    source /opt/etc/profile
+fi 
+{{- end }}
+
 #---------#
 # Install #
 #---------#
