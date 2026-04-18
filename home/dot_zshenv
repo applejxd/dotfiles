@@ -6,8 +6,7 @@
 setopt no_global_rcs
 
 if [[ -e /etc/zsh/zshrc ]]; then
-    # VSCode の Terminal で Emacs キーバインドを使うため
-    # skip_global_compinit=1: システム側の compinit を抑制する
+    # skip_global_compinit=1: システム側の compinit を抑制し手動で明示的に実行
     # (fpath が不完全な状態で実行され .zcompdump が壊れたシンボリックリンクをスキャンするため)
     skip_global_compinit=1
     source /etc/zsh/zshrc
