@@ -90,9 +90,26 @@ if [[ -f ~/.local/share/zsh/site-functions/_mise ]]; then
     zinit snippet ~/.local/share/zsh/site-functions/_mise
 fi
 
+# zcompdump 整合性チェック: vendor completion ディレクトリが dump より新しければキャッシュを削除する。
+# パッケージの追加・削除後にディレクトリ mtime が更新される性質を利用して古いエントリを検知する。
+# (例: docker.io → docker-ce 切り替え後の "no such file or directory" エラーを防ぐ)
+# コスト: zsh/stat builtin の stat 約6回、fork なし、< 0.2ms
+function _zcompdump_validate() {
+    zmodload -F zsh/stat b:zstat 2>/dev/null || return
+    local dump="${ZDOTDIR:-$HOME}/.zcompdump"
+    [[ -s "$dump" ]] || return
+    local dump_mtime dir dir_mtime
+    dump_mtime=$(zstat +mtime "$dump" 2>/dev/null) || return
+    for dir in /usr/share/zsh/vendor-completions /usr/share/zsh/site-functions; do
+        [[ -d "$dir" ]] || continue
+        dir_mtime=$(zstat +mtime "$dir" 2>/dev/null) || continue
+        [[ $dir_mtime -gt $dump_mtime ]] && { rm -f "$dump" "${dump}.zwc"; return }
+    done
+}
+
 # (0b) compinit - 補完の基盤 (650msかかるため遅延)
 zinit ice wait'0b' lucid \
-    atload'zicompinit; zicdreplay'
+    atload'_zcompdump_validate; zicompinit; zicdreplay'
 zinit light zdharma-continuum/null
 
 # (0c) fzf-tab (必ず autosuggestions / fast-syntax-highlighting の前に読み込む)
