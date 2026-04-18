@@ -10,7 +10,9 @@
 {{- end }}
 
 # see https://www.chezmoi.io/reference/templates/bitwarden-functions/#automatic-bitwarden-cli-unlock
+{{- if lookPath "bw" }}
 bitwarden.unlock = "auto"
+{{- end }}
 # see https://www.chezmoi.io/user-guide/encryption/age/
 encryption = "age"
 
