@@ -52,6 +52,11 @@ export QT_IM_MODULE=fcitx
 
 {{- end }}
 
+{{- if contains "NAS" .chezmoi.hostname }}
+# QNAP NAS向け設定 (/tmp の容量が小さいため)
+export TMPDIR=/share/CACHEDEV1_DATA/.tmp
+{{- end }}
+
 #------#
 # Tool #
 #------#
