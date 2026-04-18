@@ -44,7 +44,7 @@
 [include]
 	path = {{ .chezmoi.destDir }}/.config/git/config
 
-{{- if eq .chezmoi.username "applejxd" }}
+{{- if and (eq .chezmoi.username "applejxd") (lookPath "bw") }}
 {{- with (bitwarden "item" "gitconfig") }}
 [user]
 	name = {{ .login.username }}

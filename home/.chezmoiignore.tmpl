@@ -61,6 +61,11 @@ Documents/**
 .vscode-server/**
 {{- end }}
 
+{{- if and (eq .chezmoi.username "applejxd") (not (lookPath "bw")) }}
+# applejxd ユーザで bw コマンドがない場合は bitwarden セクションをスキップ
+.config/chezmoi/key.txt
+{{- end }}
+
 # 以下は一度のみコピー・復号
 
 {{- if (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
