@@ -9,13 +9,10 @@
 # see https://ozuma.hatenablog.jp/entry/20141219/1418915137
 # see https://geek-techiela.blogspot.com/2014/07/shoptbash.html
 
-if [ -n "$BASH_VERSION" ]; then
-    # no cd
-    shopt -s autocd
-    # '**'' recursive match
-    shopt -s globstar
-fi
-
+# no cd
+shopt -s autocd
+# '**'' recursive match
+shopt -s globstar
 # fuzzy cd
 shopt -s cdspell
 # dotfiles match
