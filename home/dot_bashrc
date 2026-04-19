@@ -9,16 +9,19 @@
 # see https://ozuma.hatenablog.jp/entry/20141219/1418915137
 # see https://geek-techiela.blogspot.com/2014/07/shoptbash.html
 
-# no cd
-shopt -s autocd
+if [ -n "$BASH_VERSION" ]; then
+    # no cd
+    shopt -s autocd
+    # '**'' recursive match
+    shopt -s globstar
+fi
+
 # fuzzy cd
 shopt -s cdspell
 # dotfiles match
 shopt -s dotglob
 # regexp enable
 shopt -s extglob
-# '**'' recursive match
-shopt -s globstar
 # not to distinguish between uppercase and lowercase
 shopt -s nocaseglob
 
