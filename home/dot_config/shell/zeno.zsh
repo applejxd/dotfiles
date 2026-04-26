@@ -39,6 +39,14 @@ fi
 # zinit 側で zeno-bootstrap.zsh だけを source している前提。
 # `--lazy` を渡すと zeno-register-lazy-widgets により初回キー押下時に
 # zeno 本体 (zeno-init) が読み込まれ、ロード時間を短縮できる。
+#
+# lazy dispatch は以下の経路で関数を多段に呼ぶため、fzf-tab や
+# 各種補完プラグイン (felixr/docker-zsh-completion など) と組み合わさると
+# zsh のデフォルト FUNCNEST (500) を超えて
+# `zeno-ensure-loaded: maximum nested function level reached` を起こすことがある。
+# 余裕を持って 1000 に引き上げておく (chain が深い時のガードに過ぎず副作用は無い)。
+typeset -gx FUNCNEST=1000
+
 if (( $+functions[zeno-bind-default-keys] )); then
   zeno-bind-default-keys --lazy
 fi
