@@ -20,7 +20,7 @@ export ZENO_DISABLE_BUILTIN_COMPLETION=1
 # default (keep this to avoid compatibility issues)
 # export ZENO_GIT_CAT="cat"
 if command -v bat >/dev/null 2>&1; then
-  # git file preview with color    
+  # git file preview with color
   export ZENO_GIT_CAT="bat --color=always"
 else
   export ZENO_GIT_CAT="cat"
@@ -35,12 +35,18 @@ else
   export ZENO_GIT_TREE="tree"
 fi
 
-# zeno のデフォルトキーバインドを遅延登録する。
-# 現行の zeno は zeno-init を遅延実行する設計のため、シェル起動直後は
-# $ZENO_LOADED が空。`--lazy` を渡すと初回キー押下時に zeno-init が発火する。
-# upstream が標準 widget を増減した場合も自動で追従できる。
+# zeno のキーバインドを lazy 登録する。
+# zinit 側で zeno-bootstrap.zsh だけを source している前提。
+# `--lazy` を渡すと zeno-register-lazy-widgets により初回キー押下時に
+# zeno 本体 (zeno-init) が読み込まれ、ロード時間を短縮できる。
 if (( $+functions[zeno-bind-default-keys] )); then
   zeno-bind-default-keys --lazy
+fi
+
+# プロンプト準備や補完候補生成を裏で先行ロードしておくと初回操作が滑らか。
+# zsh-defer が無い場合は何もしない (eager に呼ぶとロードコストが発生するため)。
+if (( $+functions[zsh-defer] )) && (( $+functions[zeno-preload] )); then
+  zsh-defer zeno-preload
 fi
 
 # 追加・上書きしたいバインドはここに書く (デフォルト bindkey の後段で適用される)

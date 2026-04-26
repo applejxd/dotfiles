@@ -75,8 +75,13 @@ autoload -Uz _zinit
 # 依存順の調整: mise, zeno はプロンプトや fzf の表示崩れを防ぐため同期ロードに戻す
 # compinit などの重い処理のみ遅延ロードする
 
-# zeno.zsh (同期) - プロンプトの初期化に必要
-zinit ice lucid depth"1" blockf
+# zsh-defer - zeno の遅延初期化に必要 (zeno より前に同期ロード)
+zinit ice lucid depth"1"
+zinit light romkatv/zsh-defer
+
+# zeno.zsh (lazy) - bootstrap のみ source して初回キー押下時に本体ロード
+# pick で zeno-plugin.zsh ではなく zeno-bootstrap.zsh を読むことで eager 初期化を回避する
+zinit ice lucid depth"1" blockf pick"zeno-bootstrap.zsh"
 zinit light yuki-yano/zeno.zsh
 source "$HOME/.config/shell/zeno.zsh"
 
