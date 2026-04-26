@@ -6,4 +6,9 @@ shellcheck = "0.11.0"
 
 [tasks.dotfiles-update]
 description = "Update zinit itself and all zinit-managed plugins (run after `chezmoi update` on other PCs)"
-run = "zsh -ic 'zinit self-update && zinit update --all'"
+run = [
+  "zsh -ic 'zinit self-update && zinit update --all'",
+  # zinit completions ディレクトリには各プラグイン配下の補完ファイルへのシンボリックリンクが集約されるが、
+  # upstream が補完ファイルを削除するとリンクが宙ぶらりんになり compinit が警告を出す。更新後にまとめて掃除する。
+  "find \"${HOME}/.zinit/completions\" -xtype l -delete",
+]
