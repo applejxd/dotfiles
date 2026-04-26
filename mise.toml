@@ -8,6 +8,10 @@ shellcheck = "0.11.0"
 description = "Update zinit itself and all zinit-managed plugins (run after `chezmoi update` on other PCs)"
 run = [
   "zsh -ic 'zinit self-update && zinit update --all'",
+  # zeno のモジュールキャッシュを明示更新
+  # (ZENO_DISABLE_EXECUTE_CACHE_COMMAND=1 にしているため起動時の自動キャッシュは行わないので、
+  #  ここで一括して deno cache を最新化する)
+  "if [ -f \"${HOME}/.zinit/plugins/yuki-yano---zeno.zsh/src/cli.ts\" ]; then deno cache --node-modules-dir=auto --no-lock --no-check -- \"${HOME}/.zinit/plugins/yuki-yano---zeno.zsh/src/cli.ts\" || true; fi",
   # zinit completions ディレクトリには各プラグイン配下の補完ファイルへのシンボリックリンクが集約されるが、
   # upstream が補完ファイルを削除するとリンクが宙ぶらりんになり compinit が警告を出す。更新後にまとめて掃除する。
   "find \"${HOME}/.zinit/completions\" -xtype l -delete",

@@ -75,18 +75,10 @@ autoload -Uz _zinit
 # 依存順の調整: mise, zeno はプロンプトや fzf の表示崩れを防ぐため同期ロードに戻す
 # compinit などの重い処理のみ遅延ロードする
 
-# zsh-defer - zeno の遅延初期化に必要 (zeno より前に同期ロード)
-zinit ice lucid depth"1"
-zinit light romkatv/zsh-defer
-# 自己修復: 古い PC でプラグインがまだ無い場合に補填 (mise run dotfiles-update を忘れた時の保険)
-[[ -d "${HOME}/.zinit/plugins/romkatv---zsh-defer" ]] || zinit load romkatv/zsh-defer >/dev/null 2>&1
-
-# zeno.zsh (lazy) - bootstrap のみ source して初回キー押下時に本体ロード
-# pick で zeno-plugin.zsh ではなく zeno-bootstrap.zsh を読むことで eager 初期化を回避する
-zinit ice lucid depth"1" blockf pick"zeno-bootstrap.zsh"
+# zeno.zsh (eager) - upstream デフォルトの zeno-plugin.zsh で同期初期化
+# 起動高速化は ZENO_DISABLE_EXECUTE_CACHE_COMMAND=1 + mise run dotfiles-update に集約する
+zinit ice lucid depth"1" blockf
 zinit light yuki-yano/zeno.zsh
-# 自己修復: 旧キャッシュには zeno-bootstrap.zsh が無いため不在検知で update を発火する
-[[ -f "${HOME}/.zinit/plugins/yuki-yano---zeno.zsh/zeno-bootstrap.zsh" ]] || zinit update yuki-yano/zeno.zsh >/dev/null 2>&1
 source "$HOME/.config/shell/zeno.zsh"
 
 # (0a) 補完定義 - compinit の前に fpath へ追加
