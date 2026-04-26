@@ -35,35 +35,17 @@ else
   export ZENO_GIT_TREE="tree"
 fi
 
-if [[ -n $ZENO_LOADED ]]; then
-  bindkey ' '  zeno-auto-snippet
-
-  # fallback if snippet not matched (default: self-insert)
-  # export ZENO_AUTO_SNIPPET_FALLBACK=self-insert
-
-  # if you use zsh's incremental search
-  # bindkey -M isearch ' ' self-insert
-
-  bindkey '^m' zeno-auto-snippet-and-accept-line
-
-  bindkey '^i' zeno-completion
-
-  bindkey '^xx' zeno-insert-snippet           # open snippet picker (fzf) and insert at cursor
-
-  bindkey '^x '  zeno-insert-space
-  bindkey '^x^m' accept-line
-  bindkey '^x^z' zeno-toggle-auto-snippet
-
-  # preprompt bindings
-  bindkey '^xp' zeno-preprompt
-  bindkey '^xs' zeno-preprompt-snippet
-  # Outside ZLE you can run `zeno-preprompt git {{cmd}}` or `zeno-preprompt-snippet foo`
-  # to set the next prompt prefix; invoking them with an empty argument resets the state.
-
-  bindkey '^r' zeno-history-selection         # classic history widget
-  # bindkey '^r' zeno-smart-history-selection # smart history widget
-
-  # fallback if completion not matched
-  # (default: fzf-completion if exists; otherwise expand-or-complete)
-  # export ZENO_COMPLETION_FALLBACK=expand-or-complete
+# zeno のデフォルトキーバインドを遅延登録する。
+# 現行の zeno は zeno-init を遅延実行する設計のため、シェル起動直後は
+# $ZENO_LOADED が空。`--lazy` を渡すと初回キー押下時に zeno-init が発火する。
+# upstream が標準 widget を増減した場合も自動で追従できる。
+if (( $+functions[zeno-bind-default-keys] )); then
+  zeno-bind-default-keys --lazy
 fi
+
+# 追加・上書きしたいバインドはここに書く (デフォルト bindkey の後段で適用される)
+# 例:
+#   bindkey '^r' zeno-smart-history-selection   # smart history widget に切替
+#   bindkey -M isearch ' ' self-insert          # incremental search でスペースを通常入力に
+#   export ZENO_AUTO_SNIPPET_FALLBACK=self-insert
+#   export ZENO_COMPLETION_FALLBACK=expand-or-complete
