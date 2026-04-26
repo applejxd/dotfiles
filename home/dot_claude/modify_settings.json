@@ -107,6 +107,7 @@
 {{- $hookCmd := printf "python %s/.claude/hooks/check_bash.py" .chezmoi.homeDir -}}
 {{- $updateAdrCmd := printf "python %s/.claude/hooks/update-adr-on-stop.py" .chezmoi.homeDir -}}
 {{- $redirectTmpCmd := printf "python %s/.claude/hooks/redirect-tmp.py" .chezmoi.homeDir -}}
+{{- $markdownlintCmd := printf "bash %s/.claude/hooks/markdownlint.sh" .chezmoi.homeDir -}}
 {{- $result := merge $defaults $current -}}
 {{- $_ := set $result "permissions" (dict
     "allow" $allowList
@@ -125,6 +126,14 @@
         (dict
             "hooks" (list
                 (dict "type" "command" "command" $redirectTmpCmd)
+            )
+        )
+    )
+    "PostToolUse" (list
+        (dict
+            "matcher" "Edit|Write|MultiEdit"
+            "hooks" (list
+                (dict "type" "command" "command" $markdownlintCmd)
             )
         )
     )
