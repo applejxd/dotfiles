@@ -3,3 +3,7 @@ gitleaks = "8.28.0"
 go = "latest"
 uv = "latest"
 shellcheck = "0.11.0"
+
+[tasks.dotfiles-update]
+description = "Update zinit itself and all zinit-managed plugins (run after `chezmoi update` on other PCs)"
+run = "zsh -ic 'zinit self-update && zinit update --all'"

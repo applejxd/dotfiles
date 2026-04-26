@@ -50,6 +50,13 @@ chezmoi update
 chezmoi pull && chezmoi diff && chezmoi apply
 ```
 
+`chezmoi update` 後に zinit 管理プラグイン (zeno.zsh など) も最新化したい場合は次のタスクを実行する。
+chezmoi 自体はプラグインキャッシュに干渉しないため、手元の `~/.zinit/plugins/...` を refresh するための明示コマンド。
+
+```bash
+mise run dotfiles-update
+```
+
 ## 基本的な使用方法
 
 ### 設定ファイルの編集
