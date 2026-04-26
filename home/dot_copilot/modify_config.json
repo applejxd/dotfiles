@@ -1,8 +1,10 @@
 {{- /* chezmoi:modify-template */ -}}
 {{- /* merge (Sprig) はリストを統合せず上書きするため、allowed_urls は個別に concat+uniq で統合する */ -}}
+{{- /* Copilot CLI は config.json 先頭に // コメントを書き込むため、fromJson 前に除去する */ -}}
 {{- $current := dict -}}
 {{- if ne .chezmoi.stdin "" -}}
-{{-   $current = fromJson .chezmoi.stdin -}}
+{{-   $stdin := regexReplaceAll "(?m)^\\s*//[^\\n]*$" .chezmoi.stdin "" -}}
+{{-   $current = fromJson $stdin -}}
 {{- end -}}
 {{- $managed := dict
     "banner" "always"
