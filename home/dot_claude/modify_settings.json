@@ -75,6 +75,7 @@
     "Read(**/*secret*)"
     "Read(**/*credential*)"
     "Read(**/*password*)"
+    "Read(~/.copilot/settings.json)"
     "Read(.env)"
     "Write(.env)"
     "Write(**/secrets/**)"
