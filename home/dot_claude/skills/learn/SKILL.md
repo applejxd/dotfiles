@@ -6,6 +6,8 @@ agent: general-purpose
 allowed-tools: Read, Edit, Write, Grep, Glob
 ---
 
+# learn
+
 ## 手順
 
 ### 1. 現状の把握
@@ -42,7 +44,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob
 
 親エージェントに返すサマリーは以下の形式で**簡潔に**まとめる:
 
-```
+```text
 ## AGENTS.md 更新完了
 
 変更前: <N> 行 → 変更後: <M> 行

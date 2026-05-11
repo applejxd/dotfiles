@@ -75,7 +75,7 @@ allowed-tools: Read, Write(docs/adr/*), Edit(docs/adr/*), Glob
 達成前にスキルを終了することは禁止する。
 
 | 条件 | 完了の定義 |
-|---|---|
+| --- | --- |
 | **新規 ADR 作成完了** | `docs/adr/NNNN-title.md` が作成され、ユーザーに承認された |
 | **既存 ADR 更新完了** | ステータスまたは内容の変更がファイルに反映され、ユーザーに承認された |
 | **ADR 不要と確定** | ユーザーが明示的に「不要」と判断し、その理由をチャットに記録した |
@@ -89,7 +89,7 @@ allowed-tools: Read, Write(docs/adr/*), Edit(docs/adr/*), Glob
 1. `docs/adr/README.md` が存在する場合は ADR 索引を更新する
 2. 以下の完了サマリーを出力する:
 
-```
+```text
 ## ADR 作業完了
 
 ### 作成・更新したファイル

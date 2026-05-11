@@ -3,7 +3,7 @@
 ## ツール構成
 
 | ツール | 役割 | 自動修正 |
-|---|---|---|
+| --- | --- | --- |
 | `clang-format` | フォーマッター | ✅ |
 | `clang-tidy` | 静的解析（clangd のバックエンド） | ✅ 一部 |
 | `cppcheck` | 静的解析（メモリ・UB 検出） | ❌ レポートのみ |
@@ -15,7 +15,7 @@
 ## 検出ファイル
 
 | ファイル | 用途 |
-|---|---|
+| --- | --- |
 | `CMakeLists.txt` | CMake プロジェクト |
 | `compile_commands.json` | clang-tidy が参照するコンパイル DB |
 | `.clang-format` | clang-format 設定 |
@@ -70,7 +70,7 @@ clang-format --style=file --dump-config
 ## 自動修正の安全性
 
 | 操作 | 安全度 | 備考 |
-|---|---|---|
+| --- | --- | --- |
 | `clang-format -i` | ✅ 安全 | 純粋なフォーマット |
 | `clang-tidy --fix` | ✅ 概ね安全 | 機械的修正のみ |
 | `clang-tidy --fix-errors` | ⚠️ 要確認 | エラー扱いも修正する |
@@ -79,12 +79,14 @@ clang-format --style=file --dump-config
 ## 修正可能 vs 判断が必要な例
 
 **自動修正してよい:**
+
 - `modernize-use-nullptr` — `NULL` → `nullptr`
 - `modernize-use-override` — `override` キーワード追加
 - `readability-redundant-*` — 冗長な記述の削除
 - `clang-format` によるインデント・スペース整形
 
 **判断が必要（レポートのみ）:**
+
 - `cppcheck` のメモリリーク・UB 警告（設計変更が必要）
 - `clang-tidy` の `performance-*` 系（ロジック変更を伴う）
 - `bugprone-*` 系（誤検知の可能性あり、文脈判断が必要）

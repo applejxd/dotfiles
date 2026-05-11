@@ -4,7 +4,7 @@
 
 ## 構造
 
-```
+```text
 <type>[optional scope]: <description>
 
 [optional body]
@@ -15,7 +15,7 @@
 ## type 一覧
 
 | type | 意味 | SemVer |
-|------|------|--------|
+| ------ | ------ | -------- |
 | `feat` | 新機能 | MINOR |
 | `fix` | バグ修正 | PATCH |
 | `docs` | ドキュメントのみ | — |
@@ -36,7 +36,7 @@
 
 ## Breaking Change の表記
 
-```
+```text
 # 方法1: ! を使う（推奨）
 feat!: drop support for Node 6
 feat(api)!: remove deprecated endpoint
@@ -56,7 +56,7 @@ Breaking Change は MAJOR バンプに対応する。
 
 ## footer の形式
 
-```
+```text
 fix: prevent racing of requests
 
 Refs: #123
@@ -64,7 +64,7 @@ Reviewed-by: Alice
 BREAKING CHANGE: environment variables now take precedence over config files.
 ```
 
-- トークンと値は `: ` または ` #` で区切る
+- トークンと値は `:` または `#` で区切る
 - トークンの空白は `-` に置換する（例: `Acked-by`）
 - `BREAKING CHANGE` と `BREAKING-CHANGE` は同義
 
@@ -81,7 +81,7 @@ BREAKING CHANGE: environment variables now take precedence over config files.
 
 ## SemVer との対応
 
-```
+```text
 feat  → MINOR bump
 fix   → PATCH bump
 BREAKING CHANGE (any type) → MAJOR bump
@@ -89,7 +89,7 @@ BREAKING CHANGE (any type) → MAJOR bump
 
 ## 良い例
 
-```
+```text
 # シンプル
 docs: correct spelling of CHANGELOG
 

@@ -19,7 +19,7 @@ allowed-tools: Read, Edit, Write, Bash, Grep, Glob
 プロジェクトルートの設定ファイルから言語を判定し、言語ごとのガイドを読み込む:
 
 | 言語 | 判定ファイル | 参照ガイド |
-|------|-------------|-----------|
+| ------ | ------------- | ----------- |
 | Python | `pyproject.toml`, `setup.py`, `setup.cfg` | `${CLAUDE_SKILL_DIR}/references/python.md` |
 | JS/TS | `package.json`, `tsconfig.json` | `${CLAUDE_SKILL_DIR}/references/js-ts.md` |
 | Go | `go.mod` | `${CLAUDE_SKILL_DIR}/references/go-rust.md` |
@@ -41,7 +41,7 @@ allowed-tools: Read, Edit, Write, Bash, Grep, Glob
 
 ### 4. レポート出力
 
-```
+```text
 ## /fix 実行結果
 
 ### 実行した linter

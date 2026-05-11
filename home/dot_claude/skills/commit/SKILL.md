@@ -33,7 +33,7 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
 
 ## 出力フォーマット
 
-```
+```text
 <type>(<scope>): <subject>
 
 - Motivation: <why>
@@ -44,10 +44,12 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
 ## ポリシー
 
 **禁止**:
+
 - `git commit` / `git add` の実行
 - 共同著者タグ・Claude リンクの追加
 - 未測定の数値主張
 
 **要求**:
+
 - 提案コミット文の提示と簡潔な説明のみ
 - コミット実行前にユーザーの承認を求める
