@@ -27,7 +27,6 @@ sudo smap install bw --classic
 bw login
 ```
 
-
 ### 初期化と適用
 
 ```bash

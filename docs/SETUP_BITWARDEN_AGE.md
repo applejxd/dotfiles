@@ -58,6 +58,7 @@ chezmoi cat test_secret
 ## 使用方法
 
 ### 新しいマシンでの初期化
+
 ```bash
 # Bitwardenセットアップ
 bw login
@@ -68,6 +69,7 @@ chezmoi init --apply https://github.com/your-username/dotfiles.git
 ```
 
 ### 日常使用
+
 ```bash
 # Bitwardenアンロック（必要に応じて）
 export BW_SESSION="$(bw unlock --raw)"
@@ -80,6 +82,7 @@ chezmoi add --encrypt ~/.ssh/private_key
 ## トラブルシューティング
 
 ### 鍵が見つからない場合
+
 ```bash
 # Bitwardenアイテム確認
 bw list items --search "chezmoi-age-key"
@@ -89,12 +92,14 @@ chezmoi execute-template "{{ (bitwarden \"item\" \"chezmoi-age-key\").notes | b6
 ```
 
 ### 権限エラーの場合
+
 ```bash
 # 鍵ファイルの権限設定
 chmod 600 ~/.config/chezmoi/key.txt
 ```
 
 ## セキュリティ注意事項
+
 - age鍵はBitwardenのSecure Noteに暗号化されて保存されます
 - 鍵ファイルは600権限で作成されます
 - `BW_SESSION`環境変数には注意してください

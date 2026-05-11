@@ -3,7 +3,6 @@
 - カスタムスラッシュコマンドは claude のものを読み取れる
 - [config.json 仕様](https://docs.github.com/ja/enterprise-cloud@latest/copilot/reference/cli-command-reference#configuration-file-settings)
 
-
 ## デフォルトのスラッシュコマンド
 
 [マニュアル](https://docs.github.com/ja/copilot/reference/cli-command-reference#slash-commands-in-the-interactive-interface)

@@ -33,16 +33,19 @@ docker compose build
 ## 3. 典型的な実行
 
 ### 3.1 ドライラン（差分と doctor の確認のみ）
+
 ```bash
 ./test.sh
 ```
 
 ### 3.2 実適用（コンテナ内の `$HOME` に apply）
+
 ```bash
 ./test.sh apply
 ```
 
 ### 3.3 デバッグシェル（手動でコマンドを試す）
+
 ```bash
 ./test.sh shell
 # 例：コンテナ内で
@@ -100,18 +103,25 @@ CHEZMOI_ARGS="--include files=.bashrc" ./test.sh
 ## 6. よく使うレシピ
 
 - **Linux のみ検証**：
+
   ```bash
   CHEZMOI_ARGS="--include tag=linux" ./test.sh
   ```
+
 - **macOS 除外**：
+
   ```bash
   CHEZMOI_ARGS="--exclude tag=darwin" ./test.sh
   ```
+
 - **即時適用で挙動確認**：
+
   ```bash
   APPLY=1 ./test.sh apply
   ```
+
 - **手動で段階確認**：
+
   ```bash
   ./test.sh shell
   # コンテナ内で
