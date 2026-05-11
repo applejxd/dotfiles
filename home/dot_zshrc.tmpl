@@ -101,10 +101,12 @@ zinit ice wait'0c' lucid
 zinit light Aloxaf/fzf-tab
 
 # (0d) ハイライト系
-zinit ice wait'0d' lucid
-zinit light zsh-users/zsh-autosuggestions
+# zsh-autosuggestions は widget ラップ系プラグインの後にロードする必要があるため、
+# fast-syntax-highlighting → zsh-autosuggestions の順に並べる (公式 README 準拠)
 zinit ice wait'0d' lucid
 zinit light zdharma-continuum/fast-syntax-highlighting
+zinit ice wait'0d' lucid
+zinit light zsh-users/zsh-autosuggestions
 
 #---------------#
 # other plugins #
