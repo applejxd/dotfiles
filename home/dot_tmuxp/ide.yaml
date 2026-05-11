@@ -7,7 +7,7 @@ windows:
     layout: main-vertical
     panes:
       - yazi
-      - copilot --banner
+      - agent
       - zsh
 
   - window_name: git

@@ -14,6 +14,12 @@ else
 fi
 export VISUAL="$EDITOR"
 
+{{- if eq .chezmoi.username "applejxd" }}
+alias agent='copilot'
+{{- else }}
+alias agent='claude'
+{{- end }}
+
 # for Open3D visualizer
 export LIBGL_ALWAYS_INDIRECT=0
 
