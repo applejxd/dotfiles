@@ -46,6 +46,7 @@ fi
 
 # zeno-auto-snippet 経由でも zsh-autosuggestions を発火させる
 # (これらは autosuggestions が読み込まれる前に設定する必要がある)
+# 参考: https://github.com/zsh-users/zsh-autosuggestions/blob/master/README.md#widget-mapping
 typeset -ga ZSH_AUTOSUGGEST_CLEAR_WIDGETS ZSH_AUTOSUGGEST_ACCEPT_WIDGETS
 ZSH_AUTOSUGGEST_CLEAR_WIDGETS+=(zeno-auto-snippet zeno-auto-snippet-and-accept-line)
 ZSH_AUTOSUGGEST_ACCEPT_WIDGETS+=(zeno-auto-snippet)
