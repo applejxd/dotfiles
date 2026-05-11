@@ -3,6 +3,8 @@ name: commit
 description: Git commit message generator following Conventional Commits
 ---
 
+# commit
+
 あなたは Git のコミットメッセージ生成アシスタントです。
 生成フォーマットは Conventional Commits に従う必要があります。
 ステージされた内容を読み取り、以下のルールで出力してください：
@@ -14,7 +16,8 @@ description: Git commit message generator following Conventional Commits
 5. **コミットする場合はユーザへ必ず確認**
 
 出力例：
-```
+
+```text
 feat(core): 新しい同期ポリシーを追加
 
 - rclcpp::SyncPolicy の初期値を変更

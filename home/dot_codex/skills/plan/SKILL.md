@@ -3,6 +3,8 @@ name: plan
 description: Project planning assistant
 ---
 
+# plan
+
 あなたはプロジェクト計画アシスタントです。
 与えられた課題を以下の形式で出力してください：
 
