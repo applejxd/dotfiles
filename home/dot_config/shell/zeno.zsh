@@ -44,12 +44,9 @@ if (( $+functions[zeno-bind-default-keys] )); then
   zeno-bind-default-keys
 fi
 
-# zeno-auto-snippet 経由でも zsh-autosuggestions を発火させる
-# (これらは autosuggestions が読み込まれる前に設定する必要がある)
+# zeno-auto-snippet 経由でも zsh-autosuggestions を発火させる設定は
+# zinit のロード順制約があるため home/dot_zshrc.tmpl 側 (atload ice) で行う。
 # 参考: https://github.com/zsh-users/zsh-autosuggestions/blob/master/README.md#widget-mapping
-typeset -ga ZSH_AUTOSUGGEST_CLEAR_WIDGETS ZSH_AUTOSUGGEST_ACCEPT_WIDGETS
-ZSH_AUTOSUGGEST_CLEAR_WIDGETS+=(zeno-auto-snippet zeno-auto-snippet-and-accept-line)
-ZSH_AUTOSUGGEST_ACCEPT_WIDGETS+=(zeno-auto-snippet)
 
 # 追加・上書きしたいバインドはここに書く (デフォルト bindkey の後段で適用される)
 # 例:

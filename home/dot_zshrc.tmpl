@@ -102,10 +102,19 @@ zinit light Aloxaf/fzf-tab
 
 # (0d) ハイライト系
 # zsh-autosuggestions は widget ラップ系プラグインの後にロードする必要があるため、
-# fast-syntax-highlighting → zsh-autosuggestions の順に並べる (公式 README 準拠)
-zinit ice wait'0d' lucid
+# fast-syntax-highlighting → zsh-autosuggestions の順に並べる (公式 README 準拠)。
+# 起動初回プロンプトから suggestion を有効化するため両者とも eager で読み込む
+# (turbo にすると plugin ロード後の precmd #2 で初めて widget がラップされるため、
+#  起動直後 1 プロンプト分は suggestion が出ない)。
+zinit ice lucid
 zinit light zdharma-continuum/fast-syntax-highlighting
-zinit ice wait'0d' lucid
+# zsh-autosuggestions の widget 配列 (ZSH_AUTOSUGGEST_*_WIDGETS) は
+# upstream の config.zsh が `(( ! ${+VAR} )) &&` ガードでデフォルトを設定する。
+# プラグインより先に typeset すると defaults が消えるため、
+# 必ず source 完了後 (= zinit atload) に += する。
+zinit ice lucid atload'
+  ZSH_AUTOSUGGEST_CLEAR_WIDGETS+=(zeno-auto-snippet zeno-auto-snippet-and-accept-line)
+'
 zinit light zsh-users/zsh-autosuggestions
 
 #---------------#
