@@ -16,7 +16,7 @@ windows:
           - lazygit
 
   - window_name: monitor
-    layout: main-vertical
+    layout: main-horizontal
     panes:
       - btop
       - nvitop
