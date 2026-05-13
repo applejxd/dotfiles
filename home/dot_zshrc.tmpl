@@ -13,9 +13,9 @@ fi
 #--------#
 
 SHELL_CONF=$HOME/.config/shell
-if [ -e $COMMON_RC ]; then
+if [ -e "$SHELL_CONF/shellrc.sh" ]; then
     # loads z.sh
-    source $SHELL_CONF/shellrc.sh
+    source "$SHELL_CONF/shellrc.sh"
 fi
 
 #-------------#
@@ -30,19 +30,6 @@ if command -v "fzf" >/dev/null 2>&1; then
     COMMON_FZF="${HOME}/.config/shell/fzf.sh"
     [ -e $COMMON_FZF ] && source $COMMON_FZF
 fi
-
-if [[ -e /usr/local/Modules/init ]]; then
-    source /usr/local/Modules/init/zsh
-fi
-
-if [[ -e /opt/ros ]]; then
-    ros_dir=$(find /opt/ros -mindepth 1 -maxdepth 1 -type d | head -n 1)
-    source "${ros_dir}/setup.zsh"
-fi
-
-# iTerm2 shell integration
-[[ -f "${HOME}/.iterm2_shell_integration.zsh" ]] &&
-    source "${HOME}/.iterm2_shell_integration.zsh"
 
 # # for Cline
 # # see https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Shell-Integration-Unavailable#still-having-trouble
@@ -154,139 +141,17 @@ fi
 # OS dependencies #
 #-----------------#
 
-zle -N switch-arch
-
-#------------#
-# zsh proper #
-#------------#
-
-# cd completion
-# see https://qiita.com/yaotti/items/157ff0a46736ec793a91
-setopt auto_cd
-cdpath=(.. ~)
-function chpwd() {
-    # stdout が TTY でない場合はスキップ（Claude Code bash ツール等の自動化環境での副作用を防ぐ）
-    [[ -t 1 ]] || return
-    if command -v "lsd" >/dev/null 2>&1; then
-        lsd
-    else
-        ls
-    fi
-}
-
-# for glob expression
-# see https://qiita.com/nisaji/items/f9eede2164a74bc08db7
-setopt +o nomatch
-
-# auto pushd & no history
-setopt auto_pushd
-setopt pushd_ignore_dups
-
-# fg -> C-z
-zle -N fancy-ctrl-z
-bindkey '^Z' fancy-ctrl-z
-
-#-------------#
-# zsh history #
-#-------------#
-
-# see https://yk5656.hatenadiary.org/entry/20160203/1461325853
-
-export HISTFILE=$HOME/.zsh_history
-
-export HISTSIZE=100000
-export SAVEHIST=100000
-
-setopt share_history
-
-setopt hist_ignore_dups
-setopt hist_ignore_all_dups
-setopt hist_find_no_dups
-
-setopt hist_save_no_dups
-setopt hist_reduce_blanks
-setopt hist_ignore_space
-
-#--------------#
-# suffix alias #
-#--------------#
-
-# texts
-if command -v "bat" >/dev/null 2>&1; then
-    alias -s {txt,dat,plt}='bat'
-else;
-    alias -s {txt,dat,plt}='cat'
-fi
-
 {{- if eq .chezmoi.os "darwin" }}
-# images
-alias -s {pdf,jpg,jpeg,png,bmp,gif}='open -a Preview'
+zle -N switch-arch
 {{- end }}
 
-# scripts
-alias -s sh='bash'
-alias -s py='python'
-alias -s rb='ruby'
-alias -s php='php -f'
-alias -s hs='runhaskell'
+#--------------------#
+# ~/.zshrc.d loader  #
+#--------------------#
 
-# unarchive
-# see https://qiita.com/matsu_chara/items/8372616f52934c657214
-if command -v "aunpack" >/dev/null 2>&1; then
-    alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
-else
-    alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=extract
-fi
-
-# compile
-# see https://qiita.com/matsu_chara/items/8372616f52934c657214
-
-alias -s {c,cc,cpp}='runcpp'
-
-# fg -> C-z
-function fancy-ctrl-z() {
-    if [[ $#BUFFER -eq 0 ]]; then
-        BUFFER="fg"
-        # Finish editing the buffer
-        zle accept-line
-    else
-        # Push onto the buffer stack & Return to prompt
-        zle push-input
-        # Clear the screen
-        zle clear-screen
-    fi
-}
-
-#-----#
-# fzf #
-#-----#
-
-# z-fzf, emacs-like key-bindings
-# see https://github.com/junegunn/fzf/wiki/examples#z
-if command -v "_z" >/dev/null 2>&1; then
-    function z-fzf() {
-        local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
-        if [[ -n "$selected_dir" ]]; then
-            BUFFER="cd ${selected_dir}"
-            zle accept-line
-        fi
-        zle reset-prompt
-    }
-    zle -N z-fzf
-    bindkey "^X^F" z-fzf
-fi
-
-# ghq-fzf
-# see https://blog.tsub.me/post/move-from-peco-to-fzf/
-if command -v "ghq" >/dev/null 2>&1; then
-    function ghq-fzf() {
-        local selected_dir=$(ghq list | fzf --query="$LBUFFER")
-        if [[ -n "$selected_dir" ]]; then
-            BUFFER="cd $(ghq root)/${selected_dir}"
-            zle accept-line
-        fi
-        zle reset-prompt
-    }
-    zle -N ghq-fzf
-    bindkey "^X^G" ghq-fzf
+if [[ -d ${HOME}/.zshrc.d ]]; then
+    for f in ${HOME}/.zshrc.d/*.zsh(N); do
+        source "$f"
+    done
+    unset f
 fi

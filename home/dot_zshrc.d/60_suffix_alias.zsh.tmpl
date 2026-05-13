@@ -1,0 +1,34 @@
+#!/bin/zsh
+# 拡張子による suffix alias 定義
+
+# texts
+if command -v "bat" >/dev/null 2>&1; then
+    alias -s {txt,dat,plt}='bat'
+else;
+    alias -s {txt,dat,plt}='cat'
+fi
+
+{{- if eq .chezmoi.os "darwin" }}
+# images
+alias -s {pdf,jpg,jpeg,png,bmp,gif}='open -a Preview'
+{{- end }}
+
+# scripts
+alias -s sh='bash'
+alias -s py='python'
+alias -s rb='ruby'
+alias -s php='php -f'
+alias -s hs='runhaskell'
+
+# unarchive
+# see https://qiita.com/matsu_chara/items/8372616f52934c657214
+if command -v "aunpack" >/dev/null 2>&1; then
+    alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=aunpack
+else
+    alias -s {gz,tgz,zip,lzh,bz2,tbz,Z,tar,arj,xz}=extract
+fi
+
+# compile
+# see https://qiita.com/matsu_chara/items/8372616f52934c657214
+
+alias -s {c,cc,cpp}='runcpp'
