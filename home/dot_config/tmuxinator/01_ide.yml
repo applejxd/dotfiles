@@ -4,7 +4,7 @@ root: <%= ENV["PWD"] %>
 # main-pane-height はプロジェクト全体の tmux window option として設定
 # (tmuxinator は per-window の options ブロックをサポートしないため)
 # editor は main-vertical なので main-pane-height は無視される
-pre: tmux setw -g main-pane-height 60%
+on_project_start: tmux setw -g main-pane-height 60%
 
 pre_window: eval "$(mise activate zsh)"
 
