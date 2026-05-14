@@ -1,0 +1,16 @@
+name: monitor
+root: <%= ENV["PWD"] %>
+
+pre_window: eval "$(mise activate zsh)"
+
+windows:
+  - main:
+      - zsh
+
+  - system:
+      panes:
+        - zenith
+        - ctop
+
+  - btop:
+      - btop

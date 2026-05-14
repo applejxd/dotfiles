@@ -1,20 +1,16 @@
 snippets:
-  # tmuxp - session management
-  - name: "[tload] tmuxp load session"
+  # tmuxinator - session management
+  - name: "[tload] tmuxinator start session"
     keyword: "tload,"
-    snippet: tmuxp load {{session}}
+    snippet: tmuxinator start {{session}}
 
-  - name: "[tls] tmuxp list sessions"
+  - name: "[tls] tmuxinator list sessions"
     keyword: "tls,"
-    snippet: tmuxp ls
+    snippet: tmuxinator list
 
-  - name: "[tfreeze] tmuxp freeze session"
-    keyword: "tfreeze,"
-    snippet: tmuxp freeze {{session}}
-
-  - name: "[tdbg] tmuxp debug-info"
+  - name: "[tdbg] tmuxinator debug session"
     keyword: "tdbg,"
-    snippet: tmuxp debug-info
+    snippet: tmuxinator debug {{session}}
 
   # tmux - session management
   - name: "[tn] tmux new session"
@@ -46,25 +42,16 @@ snippets:
     snippet: tmux list-panes
 
 completions:
-  # tmuxp load completion from ~/.tmuxp directory
-  # Finds .yaml, .yml, and .json files and strips the extension
-  - name: tmuxp load session
+  # tmuxinator start completion from ~/.config/tmuxinator directory
+  # Finds .yml and .yaml files and strips the extension
+  - name: tmuxinator start session
     patterns:
-      - "^tmuxp load $"
-    # Find session files (yaml/yml/json) and remove file extensions
-    sourceCommand: "find ~/.tmuxp -maxdepth 1 -type f \\( -name '*.yaml' -o -name '*.yml' -o -name '*.json' \\) -exec basename {} \\; 2>/dev/null | sed 's/\\.\\(yaml\\|yml\\|json\\)$//'"
+      - "^tmuxinator (start|s|debug) $"
+    sourceCommand: "find ~/.config/tmuxinator -maxdepth 1 -type f \\( -name '*.yml' -o -name '*.yaml' \\) -exec basename {} \\; 2>/dev/null | sed 's/\\.\\(yml\\|yaml\\)$//'"
     options:
-      --prompt: "'tmuxp Session> '"
-      # Preview shows the actual session file content by checking each extension
-      --preview: "if [ -f ~/.tmuxp/{}.yaml ]; then cat ~/.tmuxp/{}.yaml; elif [ -f ~/.tmuxp/{}.yml ]; then cat ~/.tmuxp/{}.yml; elif [ -f ~/.tmuxp/{}.json ]; then cat ~/.tmuxp/{}.json; fi"
-
-  # tmuxp freeze completion for active sessions
-  - name: tmuxp freeze session
-    patterns:
-      - "^tmuxp freeze $"
-    sourceCommand: "tmux list-sessions -F '#{session_name}' 2>/dev/null"
-    options:
-      --prompt: "'tmux Session> '"
+      --prompt: "'tmuxinator Session> '"
+      # Preview shows the actual session file content
+      --preview: "if [ -f ~/.config/tmuxinator/{}.yml ]; then cat ~/.config/tmuxinator/{}.yml; elif [ -f ~/.config/tmuxinator/{}.yaml ]; then cat ~/.config/tmuxinator/{}.yaml; fi"
 
   # tmux attach completion
   - name: tmux attach session
