@@ -13,7 +13,8 @@
 set -eu
 
 INPUT="$(cat)"
-FILE_PATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty')"
+# Claude Code: tool_input.file_path / Copilot CLI: tool_input.path
+FILE_PATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty')"
 
 case "$FILE_PATH" in
   *.md|*.markdown) ;;

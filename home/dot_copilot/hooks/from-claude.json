@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^bash$",
+        "type": "command",
+        "bash": "python $HOME/.claude/hooks/check_bash.py",
+        "timeoutSec": 30
+      },
+      {
+        "type": "command",
+        "bash": "python $HOME/.claude/hooks/redirect-tmp.py",
+        "timeoutSec": 30
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(edit|create)$",
+        "type": "command",
+        "bash": "bash $HOME/.claude/hooks/markdownlint.sh",
+        "timeoutSec": 30
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "bash": "python $HOME/.claude/hooks/update-adr-on-stop.py",
+        "timeoutSec": 60
+      }
+    ]
+  }
+}
