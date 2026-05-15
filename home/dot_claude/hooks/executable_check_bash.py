@@ -231,7 +231,8 @@ def main() -> None:
         sys.exit(0)  # 解析失敗時はブロックしない
 
     tool_name = data.get("tool_name", "")
-    if tool_name != "Bash":
+    # Claude Code: "Bash" / Copilot CLI: "bash"
+    if tool_name not in ("Bash", "bash"):
         sys.exit(0)
 
     cmd: str = data.get("tool_input", {}).get("command", "")

@@ -36,7 +36,8 @@ def main() -> None:
         sys.exit(0)  # 解析失敗時は許可
 
     hook_event = data.get("hook_event_name", "")
-    if hook_event != "TaskCompleted":
+    # Claude Code: "TaskCompleted" / Copilot CLI (PascalCase compat): "Stop"
+    if hook_event not in ("TaskCompleted", "Stop"):
         sys.exit(0)
 
     # セッションごとに1回のみ実行（TaskCompleted の無限ループ防止）

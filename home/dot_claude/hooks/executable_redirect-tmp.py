@@ -57,11 +57,17 @@ def check_file_path(tool_input: dict) -> None:
 
 
 _TOOL_HANDLERS: dict[str, callable] = {
+    # Claude Code tool names
     "Bash": check_bash,
     "Read": check_file_path,
     "Write": check_file_path,
     "Edit": check_file_path,
     "MultiEdit": check_file_path,
+    # Copilot CLI tool names (lowercase)
+    "bash": check_bash,
+    "view": check_file_path,
+    "create": check_file_path,
+    "edit": check_file_path,
 }
 
 
