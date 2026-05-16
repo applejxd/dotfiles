@@ -1,0 +1,15 @@
+#!{{ lookPath "bash" }}
+# chezmoi modify_ script: rewrite Copilot CLI ~/.copilot/permissions-config.json
+# from the single source of truth at home/dot_config/agents/common.toml.
+set -eu
+
+REPO="{{ .chezmoi.workingTree }}"
+COMMON="${REPO}/home/dot_config/agents/common.toml"
+GENERATOR="${REPO}/scripts/agents/generate.py"
+
+if [ ! -f "${COMMON}" ] || [ ! -f "${GENERATOR}" ]; then
+  cat
+  exit 0
+fi
+
+python3 "${GENERATOR}" --target copilot-perms --common "${COMMON}" --existing /dev/stdin
