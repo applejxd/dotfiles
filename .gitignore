@@ -24,6 +24,11 @@ parts/
 sdist/
 var/
 wheels/
+
+# Re-include hook helper library (Python の build artifact ではなく chezmoi の
+# 配布対象。`lib/` の gitignore に巻き添えで除外されないよう明示的に例外化)
+!home/dot_claude/hooks/lib/
+!home/dot_claude/hooks/lib/**
 share/python-wheels/
 *.egg-info/
 .installed.cfg

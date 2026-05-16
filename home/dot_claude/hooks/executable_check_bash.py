@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """
-Claude Code PreToolUse hook: Bash コマンドの安全性チェック
+Agent (Claude Code / Copilot CLI) PreToolUse hook: Bash コマンドの安全性チェック
 
 危険なパターンを検出してブロックする。
-exit 0: 許可
-exit 2: ブロック（Claude にメッセージが表示される）
+出力規約は ``agent_compat.emit_pretool_deny`` に委譲する (両ツール対応)。
 """
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
 from pathlib import Path
+
+# 同一ディレクトリの lib/ にあるヘルパを import
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from agent_compat import (  # noqa: E402
+    emit_pretool_deny,
+    get_command,
+    normalize_tool_kind,
+    read_input,
+)
 
 # ─── センシティブパスのパターン ──────────────────────────────────────
 SENSITIVE_PATH_PATTERNS = [
@@ -225,17 +232,12 @@ def is_uv_project(cwd: str) -> bool:
 
 
 def main() -> None:
-    try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, EOFError):
-        sys.exit(0)  # 解析失敗時はブロックしない
+    data = read_input()
 
-    tool_name = data.get("tool_name", "")
-    # Claude Code: "Bash" / Copilot CLI: "bash"
-    if tool_name not in ("Bash", "bash"):
+    if normalize_tool_kind(data.get("tool_name", "")) != "bash":
         sys.exit(0)
 
-    cmd: str = data.get("tool_input", {}).get("command", "")
+    cmd = get_command(data.get("tool_input", {}))
     if not cmd:
         sys.exit(0)
 
@@ -245,8 +247,7 @@ def main() -> None:
     for check in checks:
         reason = check(cmd)
         if reason:
-            print(f"[hook blocked] {reason}", file=sys.stderr)
-            sys.exit(2)
+            emit_pretool_deny(f"[hook blocked] {reason}")
 
     sys.exit(0)
 
