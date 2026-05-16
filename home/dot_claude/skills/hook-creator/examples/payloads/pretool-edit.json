@@ -1,0 +1,12 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "test-session-002",
+  "timestamp": "2026-05-15T00:00:00.000Z",
+  "cwd": "/home/user/project",
+  "tool_name": "edit",
+  "tool_input": {
+    "path": "/tmp/should_be_blocked.txt",
+    "old_str": "foo",
+    "new_str": "bar"
+  }
+}

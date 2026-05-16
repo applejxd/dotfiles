@@ -1,0 +1,95 @@
+{
+  "_comment_overview": "両ツールの hook 設定ファイル例。コメントは JSON 標準ではないので、コピーして使う際は '_comment*' フィールドを削除すること。",
+
+  "_comment_claude": "===== Claude Code: ~/.claude/settings.json の hooks 節 (ネスト構造) =====",
+  "_claude_example": {
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/check_bash.py"
+            }
+          ]
+        },
+        {
+          "matcher": "Edit|Write|MultiEdit",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python /home/user/.claude/hooks/redirect-tmp.py"
+            }
+          ]
+        }
+      ],
+      "PostToolUse": [
+        {
+          "matcher": "Edit|Write|MultiEdit",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bash /home/user/.claude/hooks/markdownlint.sh"
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python /home/user/.claude/hooks/update-adr-on-stop.py"
+            }
+          ]
+        }
+      ]
+    }
+  },
+
+  "_comment_copilot": "===== Copilot CLI: ~/.copilot/hooks/<name>.json (フラット構造) =====",
+  "_copilot_example": {
+    "version": 1,
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "^bash$",
+          "type": "command",
+          "bash": "python $HOME/.claude/hooks/check_bash.py",
+          "powershell": "python $env:USERPROFILE\\.claude\\hooks\\check_bash.py",
+          "timeoutSec": 30
+        },
+        {
+          "matcher": "^(edit|create|view)$",
+          "type": "command",
+          "bash": "python $HOME/.claude/hooks/redirect-tmp.py",
+          "timeoutSec": 30
+        }
+      ],
+      "PostToolUse": [
+        {
+          "matcher": "^(edit|create)$",
+          "type": "command",
+          "bash": "bash $HOME/.claude/hooks/markdownlint.sh",
+          "timeoutSec": 30
+        }
+      ],
+      "Stop": [
+        {
+          "type": "command",
+          "bash": "python $HOME/.claude/hooks/update-adr-on-stop.py",
+          "timeoutSec": 60
+        }
+      ]
+    }
+  },
+
+  "_comment_notes": [
+    "matcher の挙動が異なる:",
+    "  - Claude: 'Bash' は exact match、'Edit|Write|MultiEdit' は OR",
+    "  - Copilot: '^(?:pattern)$' で anchored される。'^bash$' / '^(edit|create)$' のように明示的に書く",
+    "Copilot は bash と powershell の両キーで Windows 対応",
+    "両ツール対応のスクリプトを書けば、設定ファイルだけ別々で管理できる"
+  ]
+}

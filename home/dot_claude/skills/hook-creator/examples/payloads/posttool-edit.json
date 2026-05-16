@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "PostToolUse",
+  "session_id": "test-session-003",
+  "timestamp": "2026-05-15T00:00:00.000Z",
+  "cwd": "/home/user/project",
+  "tool_name": "edit",
+  "tool_input": {
+    "path": "/home/user/project/README.md",
+    "old_str": "old",
+    "new_str": "new"
+  },
+  "tool_result": {
+    "result_type": "success",
+    "text_result_for_llm": "File /home/user/project/README.md updated with changes."
+  }
+}
