@@ -15,11 +15,13 @@
 | `fix` | `home/dot_claude/skills/fix/` | `context:fork` + `${CLAUDE_SKILL_DIR}` + 言語別 references | `~/.copilot/skills/fix/SKILL.md.tmpl` + references/ | `migrated` | 0002, 0003, 0006 | SKILL-fix-* |
 | `learn` | `home/dot_claude/skills/learn/` | `context:fork`、`AGENTS.md`/`CLAUDE.md` 編集 | `~/.copilot/skills/learn/SKILL.md` | `migrated` | 0002, 0003 | SKILL-learn-* |
 | `onboarding` | `home/dot_claude/skills/onboarding/` | `context:fork` + `${CLAUDE_SKILL_DIR}` + 同梱 script | `~/.copilot/skills/onboarding/SKILL.md.tmpl` + references/ + scripts/ | `partial` | 0002, 0003, 0006 | SKILL-onboarding-* |
+| `github-issue` | `home/dot_claude/skills/github-issue/` | `context:fork` + `general-purpose` + `${CLAUDE_SKILL_DIR}` 参照 + 同梱 script + `mcp__github__*` 事前許可 | `~/.copilot/skills/github-issue/` (symlink 経由で共有) | `new` | 0002, 0003, 0006 | SKILL-github-issue-* |
 
 ステータス補足:
 
 - `partial` の `adr` / `onboarding` は `$ARGUMENTS` 受け渡しが Copilot で未確認 (ADR-0006) のため
 - `migrated` 判定は ADR-0003 の subagent 誘導文を本文に追加することで、振る舞いの再現を達成する想定
+- `new` の `github-issue` は移植元のない新規スキル（Claude 側で直接作成、Copilot からは symlink 経由で利用）。EARS 受け入れ基準は本書では割愛し、SKILL.md 本体の「ポリシー」節を一次仕様とする。
 
 ---
 
