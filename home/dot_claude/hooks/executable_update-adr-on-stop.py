@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
 """
-Claude Code TaskCompleted hook: docs/adr の更新を促す
+Agent (Claude Code / Copilot CLI) Stop hook: docs/adr の更新を促す
 
 docs/adr/ にファイルが存在する場合のみ、ADR の更新を促す。
-セッションごとに1回のみ実行し、無限ループを防止する。
-exit 0: タスク完了を許可
-exit 2: タスク完了をブロックし、stderr のメッセージを Claude へのフィードバックとして渡す
+セッションごとに1回のみ実行し、Stop の無限ループを防止する。
+
+出力規約は ``agent_compat.emit_stop_block`` に委譲する (両ツール対応)。
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
 import tempfile
 from pathlib import Path
+
+# 同一ディレクトリの lib/ にあるヘルパを import
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from agent_compat import emit_stop_block, read_input  # noqa: E402
+
+# 受理する event 名:
+#   Claude Code  : "Stop" (毎ターン), "TaskCompleted" (タスク完了時)
+#   Copilot CLI  : "Stop" (PascalCase 互換) / "agentStop" (camelCase)
+_STOP_EVENT_NAMES = {"Stop", "TaskCompleted", "agentStop"}
 
 
 def find_adr_dir(cwd: str) -> Path | None:
@@ -30,20 +38,15 @@ def has_adr_files(adr_dir: Path) -> bool:
 
 
 def main() -> None:
-    try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, EOFError):
-        sys.exit(0)  # 解析失敗時は許可
+    data = read_input()
 
-    hook_event = data.get("hook_event_name", "")
-    # Claude Code: "TaskCompleted" / Copilot CLI (PascalCase compat): "Stop"
-    if hook_event not in ("TaskCompleted", "Stop"):
+    if data.get("hook_event_name") not in _STOP_EVENT_NAMES:
         sys.exit(0)
 
-    # セッションごとに1回のみ実行（TaskCompleted の無限ループ防止）
+    # セッションごとに1回のみ実行（Stop の無限ループ防止）
     session_id = data.get("session_id", "")
     if session_id:
-        marker = Path(tempfile.gettempdir()) / f"claude_adr_checked_{session_id}"
+        marker = Path(tempfile.gettempdir()) / f"agent_adr_checked_{session_id}"
         if marker.exists():
             sys.exit(0)
         marker.touch()
@@ -69,8 +72,7 @@ def main() -> None:
         f"更新が不要な場合は「ADR 更新不要：（理由）」と返答してから終了してください。"
     )
 
-    print(message, file=sys.stderr)
-    sys.exit(2)
+    emit_stop_block(message)
 
 
 if __name__ == "__main__":

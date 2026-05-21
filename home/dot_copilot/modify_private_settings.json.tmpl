@@ -1,0 +1,18 @@
+#!{{ lookPath "bash" }}
+# chezmoi modify_ script: rewrite Copilot CLI ~/.copilot/settings.json's
+# allowedUrls / deniedUrls / trustedFolders from the single source of truth
+# at home/dot_config/agents/common.toml.
+# Other keys (copilotTokens, loggedInUsers, installedPlugins, ...) are
+# preserved as-is.
+set -eu
+
+REPO="{{ .chezmoi.workingTree }}"
+COMMON="${REPO}/home/dot_config/agents/common.toml"
+GENERATOR="${REPO}/scripts/agents/generate.py"
+
+if [ ! -f "${COMMON}" ] || [ ! -f "${GENERATOR}" ]; then
+  cat
+  exit 0
+fi
+
+python3 "${GENERATOR}" --target copilot-settings --common "${COMMON}" --existing /dev/stdin

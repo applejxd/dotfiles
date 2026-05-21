@@ -75,3 +75,8 @@ Documents/**
 {{- if (stat (joinPath .chezmoi.homeDir ".gitconfig")) }}
 .gitconfig
 {{- end }}
+
+# Python bytecode (generated at runtime, not part of dotfiles)
+**/__pycache__
+**/__pycache__/**
+**/*.pyc

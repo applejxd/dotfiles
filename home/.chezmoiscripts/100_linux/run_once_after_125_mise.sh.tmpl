@@ -21,11 +21,13 @@ echo "開発ツールをインストール/更新します..."
 if ! type python >/dev/null 2>&1; then
     echo "Python が見つかりません。Python のビルドに必要なパッケージをインストールします..."
 
+    # for building Python and Ruby
     # see https://github.com/pyenv/pyenv/wiki#suggested-build-environment
     sudo apt-get install -y \
         build-essential libssl-dev zlib1g-dev \
         libbz2-dev libreadline-dev libsqlite3-dev curl git \
-        libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+        libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
+        libyaml-dev
 fi
 
 mise self-update

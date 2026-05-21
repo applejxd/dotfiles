@@ -1,18 +1,33 @@
 #!/usr/bin/env python3
 """
-Claude Code PreToolUse hook: Bash コマンドの安全性チェック
+Agent (Claude Code / Copilot CLI) PreToolUse hook: Bash コマンドの安全性チェック
 
 危険なパターンを検出してブロックする。
-exit 0: 許可
-exit 2: ブロック（Claude にメッセージが表示される）
+出力規約は ``agent_compat.emit_pretool_deny`` に委譲する (両ツール対応)。
 """
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
 from pathlib import Path
+
+# 同一ディレクトリの lib/ にあるヘルパを import
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from agent_compat import (  # noqa: E402
+    emit_pretool_deny,
+    get_command,
+    normalize_tool_kind,
+    read_input,
+)
+
+# ~/.config/agents/ (chezmoi 管理) にある critical_deny を import
+_CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+sys.path.insert(0, os.path.join(_CONFIG_HOME, "agents"))
+try:
+    import critical_deny as _critical_deny  # noqa: E402
+except ImportError:  # pragma: no cover
+    _critical_deny = None  # type: ignore[assignment]
 
 # ─── センシティブパスのパターン ──────────────────────────────────────
 SENSITIVE_PATH_PATTERNS = [
@@ -202,8 +217,30 @@ def check_pip_redirect(cmd: str) -> str | None:
     return None
 
 
+def check_critical_deny(cmd: str) -> str | None:
+    """common.toml の bash.critical_deny に該当すれば block する.
+
+    Claude Code permission リストの既知バグ (cd && bypass, git -C bypass,
+    compound 命令の個別評価欠如) に対する最終防波堤。shell command を
+    normalize (cd, git -C, compound 分割) してから pattern match する。
+    """
+    if _critical_deny is None:
+        return None
+    patterns = _critical_deny.load_critical_deny()
+    if not patterns:
+        return None
+    matched = _critical_deny.find_critical_match(cmd, patterns)
+    if matched:
+        return (
+            f"`{matched}` は critical_deny パターンに一致するためブロックされました。\n"
+            "このコマンドは common.toml の [bash.critical_deny] で禁止されています。"
+        )
+    return None
+
+
 # uv 非依存のチェック（常時有効）
 BASE_CHECKS = [
+    check_critical_deny,      # ★最初に実行: common.toml の critical_deny を強制
     check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
     check_git_c_dangerous,    # git -C 経由の deny サブコマンド実行をブロック
     check_find_dangerous,     # find -exec rm / -delete によるファイル削除をブロック
@@ -225,17 +262,12 @@ def is_uv_project(cwd: str) -> bool:
 
 
 def main() -> None:
-    try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, EOFError):
-        sys.exit(0)  # 解析失敗時はブロックしない
+    data = read_input()
 
-    tool_name = data.get("tool_name", "")
-    # Claude Code: "Bash" / Copilot CLI: "bash"
-    if tool_name not in ("Bash", "bash"):
+    if normalize_tool_kind(data.get("tool_name", "")) != "bash":
         sys.exit(0)
 
-    cmd: str = data.get("tool_input", {}).get("command", "")
+    cmd = get_command(data.get("tool_input", {}))
     if not cmd:
         sys.exit(0)
 
@@ -245,8 +277,7 @@ def main() -> None:
     for check in checks:
         reason = check(cmd)
         if reason:
-            print(f"[hook blocked] {reason}", file=sys.stderr)
-            sys.exit(2)
+            emit_pretool_deny(f"[hook blocked] {reason}")
 
     sys.exit(0)
 

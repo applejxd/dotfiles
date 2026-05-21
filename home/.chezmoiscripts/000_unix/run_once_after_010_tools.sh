@@ -12,4 +12,6 @@ fi
 
 if ! command -v claude >/dev/null 2>&1; then
     curl -fsSL https://claude.ai/install.sh | bash
+    # deepwiki MCP
+    claude mcp add -s user -t http deepwiki https://mcp.deepwiki.com/mcp
 fi

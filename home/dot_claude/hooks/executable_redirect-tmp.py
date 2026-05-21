@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 """
-Claude Code PreToolUse hook: /tmp 使用をブロックし ./.tmp へリダイレクト
+Agent (Claude Code / Copilot CLI) PreToolUse hook: /tmp 使用をブロックし ./.tmp へリダイレクト
 
-対象ツール:
-  - Bash    : コマンド文字列に /tmp/ または $TMPDIR/${TMPDIR} が含まれる場合
-  - Read / Write / Edit / MultiEdit : file_path / path が /tmp/ で始まる場合
+対象 kind:
+  - bash   : コマンド文字列に /tmp/ または $TMPDIR/${TMPDIR} が含まれる場合
+  - view / create / edit : path が /tmp/ で始まる場合
 
-exit 0: 許可
-exit 2: ブロック（stderr のメッセージを Claude へのフィードバックとして渡す）
+出力規約は ``agent_compat.emit_pretool_deny`` に委譲する (両ツール対応)。
 """
 from __future__ import annotations
 
-import json
-import os
 import re
 import sys
+from pathlib import Path
+
+# 同一ディレクトリの lib/ にあるヘルパを import
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from agent_compat import (  # noqa: E402
+    emit_pretool_deny,
+    get_command,
+    get_path,
+    normalize_tool_kind,
+    read_input,
+)
 
 # /tmp/ リテラル、または $TMPDIR / ${TMPDIR} を含むパターン
 _TMP_BASH_PATTERN = re.compile(
@@ -39,46 +47,33 @@ _REDIRECT_MESSAGE = """\
 
 
 def _blocked(path_hint: str) -> None:
-    print(f"{_REDIRECT_MESSAGE}\n  検出パス/コマンド: {path_hint}", file=sys.stderr)
-    sys.exit(2)
+    emit_pretool_deny(f"{_REDIRECT_MESSAGE}\n  検出パス/コマンド: {path_hint}")
 
 
-def check_bash(tool_input: dict) -> None:
-    cmd: str = tool_input.get("command", "")
+def _check_bash(tool_input: dict) -> None:
+    cmd = get_command(tool_input)
     if _TMP_BASH_PATTERN.search(cmd):
         _blocked(cmd.strip()[:120])
 
 
-def check_file_path(tool_input: dict) -> None:
-    # Read / Write は "file_path"、Edit / MultiEdit は "path"
-    path: str = tool_input.get("file_path", "") or tool_input.get("path", "")
+def _check_file_path(tool_input: dict) -> None:
+    path = get_path(tool_input)
     if path.startswith(_TMP_PATH_PREFIX):
         _blocked(path)
 
 
-_TOOL_HANDLERS: dict[str, callable] = {
-    # Claude Code tool names
-    "Bash": check_bash,
-    "Read": check_file_path,
-    "Write": check_file_path,
-    "Edit": check_file_path,
-    "MultiEdit": check_file_path,
-    # Copilot CLI tool names (lowercase)
-    "bash": check_bash,
-    "view": check_file_path,
-    "create": check_file_path,
-    "edit": check_file_path,
+_HANDLERS = {
+    "bash": _check_bash,
+    "view": _check_file_path,
+    "create": _check_file_path,
+    "edit": _check_file_path,
 }
 
 
 def main() -> None:
-    try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, EOFError):
-        sys.exit(0)
-
-    tool_name: str = data.get("tool_name", "")
-    handler = _TOOL_HANDLERS.get(tool_name)
+    data = read_input()
+    kind = normalize_tool_kind(data.get("tool_name", ""))
+    handler = _HANDLERS.get(kind)
     if handler is None:
         sys.exit(0)
 

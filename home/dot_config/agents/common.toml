@@ -1,0 +1,201 @@
+# AI CLI 統合 permission 設定 (Claude Code / Copilot CLI 両対応の単一ソース)
+#
+# 生成先:
+#   ~/.claude/settings.json                  -> [bash] [file] [web] [claude]
+#   ~/.copilot/permissions-config.json       -> [bash.allow] [copilot.locations]
+#   ~/.copilot/settings.json (一部キーのみ)   -> [web] [copilot.trusted_folders]
+#
+# 3 層防御:
+#   1. CLI UI prompt (対話モードのみ)
+#   2. permission リスト (本ファイル由来、CLI のバグで bypass されることがある)
+#   3. hook (check_bash.py) で hard-block ... [bash.critical_deny]
+#
+# Claude Code は permission リストの既知バグが複数 open (cd && bypass, git -C bypass
+# 等。anthropics/claude-code#59498, #59006, #20085 ほか)。
+# したがって本当に止めたい命令は [bash.critical_deny] に書き、hook で hard-block する。
+
+# ---------------------------------------------------------------------------
+# Bash 系
+# ---------------------------------------------------------------------------
+[bash]
+# Best-effort allow (Claude: 文字列 pattern、Copilot: command name に集約)
+allow = [
+  "git diff:*",
+  "git status:*",
+  "git log:*",
+  "git -C:*",
+  "wc:*",
+  "grep -n:*",
+  "find:*",
+  "gcc:*",
+  "g++:*",
+  "cmake -S:*",
+  "cmake --build:*",
+  "uv pip list:*",
+  "uv sync:*",
+  "docker ps:*",
+  "mise run:*",
+]
+
+# Best-effort deny (Claude のみ反映、CLI バグで bypass される可能性あり)
+# critical_deny に書いた項目は hook で hard-block されるが、ここにも書いておくと
+# Claude UI で「deny されている」が利用者にも見える。
+deny = [
+  "sudo:*",
+  "rm:*",
+  "git push:*",
+  "git reset:*",
+  "git rebase:*",
+  "wget:*",
+  "nc:*",
+  "telnet:*",
+  "ssh:*",
+  "git config:*",
+  "npm install -g:*",
+  "npm uninstall:*",
+  "npm remove:*",
+  "psql:*",
+  "mysql:*",
+  "mongod:*",
+  "redis-cli:*",
+  "pip:*",
+  "docker rm:*",
+  "docker rmi:*",
+]
+
+# Claude のみ (Copilot は対話プロンプトがデフォルト動作なので不要)
+ask = [
+  "uv add:*",
+  "npm install:*",
+  "npm ci:*",
+  "mv:*",
+  "git commit:*",
+  "python -c:*",
+  "docker exec:*",
+  "curl:*",
+]
+
+# ★クリティカル: hook で必ず block (CLI permission を信用しない)
+# normalize 後の command 文字列に対する substring match。
+# normalize は cd && X -> X, git -C foo X -> git X, compound 分割 (&&, ;, |) を実施。
+critical_deny = [
+  "sudo",
+  "rm -rf",
+  "git push",
+  "git reset --hard",
+  "git rebase",
+]
+
+# ---------------------------------------------------------------------------
+# File 系 (主に Claude 用、Copilot は path-scope 設計のためマッピング不可)
+# ---------------------------------------------------------------------------
+[file]
+read_allow = [
+  "README.md",
+  "pyproject.toml",
+]
+
+# Claude のみ反映: Read(...) を ask に追加
+read_ask_globs = [
+  ".env.*",
+]
+
+# Claude のみ反映: Write(...) を ask に追加
+write_ask_globs = [
+  ".env.*",
+  "mise.toml",
+]
+
+# Claude: Read(...) deny に展開。hook の critical_deny には反映しない
+# (ファイルアクセスの hook は別途必要なら作る)
+read_deny_globs = [
+  "**/.ssh/*",
+  "**/id_rsa*",
+  "**/id_ed25519*",
+  "**/*token*",
+  "**/*key*",
+  "**/*secret*",
+  "**/*credential*",
+  "**/*password*",
+  ".env",
+  "~/.copilot/settings.json",
+  "~/.copilot/config.json",
+]
+
+write_deny_globs = [
+  "**/secrets/**",
+  "**/*secret*",
+  "**/*credential*",
+  "**/*token*",
+  "**/*password*",
+  "**/*key*",
+  "**/.ssh/*",
+  ".env",
+]
+
+# ---------------------------------------------------------------------------
+# Web 系
+# ---------------------------------------------------------------------------
+[web]
+# Claude: WebFetch(domain:...) として展開
+# Copilot: settings.json の allowedUrls に直接反映
+allow_domains = [
+  "github.com",
+  "api.github.com",
+  "docs.github.com",
+  "raw.githubusercontent.com",
+  "*.githubusercontent.com",
+  "hub.docker.com",
+  "docs.docker.com",
+  "pypi.org",
+  "docs.python.org",
+  "packaging.python.org",
+  "npmjs.com",
+  "docs.npmjs.com",
+  "registry.npmjs.org",
+  "chezmoi.io",
+  "www.chezmoi.io",
+  "mise.jdx.dev",
+  "docs.astral.sh",
+  "docs.anthropic.com",
+  "docs.claude.com",
+  "modelcontextprotocol.io",
+  "arxiv.org",
+  "alphaxiv.org",
+  "stackoverflow.com",
+  "dev.to",
+  "qiita.com",
+  "zenn.dev",
+  "pre-commit.com",
+]
+
+# Copilot のみ (Claude は対応キーなし)
+deny_domains = []
+
+# ---------------------------------------------------------------------------
+# Claude 固有
+# ---------------------------------------------------------------------------
+[claude]
+mcp_deny = [
+  "mcp__supabase__execute_sql",
+]
+
+# ---------------------------------------------------------------------------
+# Copilot 固有
+# ---------------------------------------------------------------------------
+[copilot]
+# settings.json の trustedFolders へ反映
+trusted_folders = [
+  "~/.local/share/chezmoi",
+  "~/sandbox",
+  "~/src/my-agent-core",
+  "~/src/apple-agent-core",
+]
+
+# permissions-config.json の locations へ反映
+# 各 location の approvals に bash.allow 由来の commands も自動追加される
+[[copilot.locations]]
+path = "~/.local/share/chezmoi"
+approvals = [
+  { kind = "write" },
+]
