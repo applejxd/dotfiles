@@ -23,7 +23,7 @@ brew install chezmoi
 Bitwarden CLI も必要なら
 
 ```bash
-sudo smap install bw --classic
+sudo snap install bw --classic
 bw login
 ```
 
