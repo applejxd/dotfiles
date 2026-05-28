@@ -202,10 +202,12 @@ function zpack() {
     # --threads=0 uses all available CPU cores
     # Override compression level via ZPACK_LEVEL (default: 19, max: 22 with --ultra)
     local level="${ZPACK_LEVEL:-19}"
-    if ! [[ "$level" =~ ^[0-9]+$ ]]; then
-        echo "zpack: ZPACK_LEVEL must be an integer (1-22): $level" >&2
-        return 1
-    fi
+    case "$level" in
+        ''|*[!0-9]*)
+            echo "zpack: ZPACK_LEVEL must be an integer (1-22): $level" >&2
+            return 1
+            ;;
+    esac
     if [ "$level" -lt 1 ] || [ "$level" -gt 22 ]; then
         echo "zpack: ZPACK_LEVEL out of range (1-22): $level" >&2
         return 1
@@ -214,13 +216,13 @@ function zpack() {
     if [ "$level" -gt 19 ]; then
         ultra_flag="--ultra"
     fi
+    set -- -T0 "-$level" -o "$dst"
+    if [ -n "$ultra_flag" ]; then
+        set -- -T0 "$ultra_flag" "-$level" -o "$dst"
+    fi
     if (
         set -o pipefail
-        if [ -n "$ultra_flag" ]; then
-            tar -cf - "$src" | zstd -T0 "$ultra_flag" "-$level" -o "$dst"
-        else
-            tar -cf - "$src" | zstd -T0 "-$level" -o "$dst"
-        fi
+        tar -cf - "$src" | zstd "$@"
     ); then
         echo "Created: $dst"
     else
