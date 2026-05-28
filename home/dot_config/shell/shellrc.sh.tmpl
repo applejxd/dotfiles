@@ -179,7 +179,7 @@ function extract() {
     *.gz) gzip -d "$1" ;;
     *.bz2) bzip2 -dc "$1" ;;
     *.Z) uncompress "$1" ;;
-    *.tar.zst | *.tzst) tar --zstd -xvf "$1" ;;
+    *.tar.zst | *.tzst) zstd -d --threads=0 -c "$1" | tar -xvf - ;;
     *.zst) zstd -d "$1" ;;
     *.tar) tar xvf "$1" ;;
     *.arj) unarj "$1" ;;
@@ -202,12 +202,27 @@ function zpack() {
     # --threads=0 uses all available CPU cores
     # Override compression level via ZPACK_LEVEL (default: 19, max: 22 with --ultra)
     local level="${ZPACK_LEVEL:-19}"
+    if ! [[ "$level" =~ ^[0-9]+$ ]]; then
+        echo "zpack: ZPACK_LEVEL must be an integer (1-22): $level" >&2
+        return 1
+    fi
+    if [ "$level" -lt 1 ] || [ "$level" -gt 22 ]; then
+        echo "zpack: ZPACK_LEVEL out of range (1-22): $level" >&2
+        return 1
+    fi
     local ultra_flag=""
-    if [ "$level" -gt 19 ] 2>/dev/null; then
+    if [ "$level" -gt 19 ]; then
         ultra_flag="--ultra"
     fi
-    tar -cf - "$src" | zstd -T0 $ultra_flag -"$level" -o "$dst"
-    echo "Created: $dst"
+    if (
+        set -o pipefail
+        tar -cf - "$src" | zstd -T0 $ultra_flag -"$level" -o "$dst"
+    ); then
+        echo "Created: $dst"
+    else
+        rm -f "$dst"
+        return 1
+    fi
 }
 
 # Extract a tar.zst archive
@@ -223,7 +238,14 @@ function zunpack() {
         return 1
     fi
     local dst="${2:-.}"
-    mkdir -p "$dst"
+    if [ -e "$dst" ] && [ ! -d "$dst" ]; then
+        echo "zunpack: $dst: Not a directory" >&2
+        return 1
+    fi
+    if ! mkdir -p "$dst"; then
+        echo "zunpack: failed to create directory: $dst" >&2
+        return 1
+    fi
     zstd -d --threads=0 -c "$src" | tar -xf - -C "$dst"
 }
 
