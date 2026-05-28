@@ -179,9 +179,46 @@ function extract() {
     *.gz) gzip -d "$1" ;;
     *.bz2) bzip2 -dc "$1" ;;
     *.Z) uncompress "$1" ;;
+    *.tar.zst | *.tzst) tar --zstd -xvf "$1" ;;
+    *.zst) zstd -d "$1" ;;
     *.tar) tar xvf "$1" ;;
     *.arj) unarj "$1" ;;
     esac
+}
+
+# Archive with tar + zstd (parallel, high compression)
+# Usage: zpack <dir_or_file> [output.tar.zst]
+function zpack() {
+    if [ "$#" -lt 1 ]; then
+        echo "Usage: zpack <dir_or_file> [output.tar.zst]" >&2
+        return 1
+    fi
+    local src="$1"
+    if [ ! -e "$src" ]; then
+        echo "zpack: $src: No such file or directory" >&2
+        return 1
+    fi
+    local dst="${2:-$(basename "$src").tar.zst}"
+    # --threads=0 uses all available CPU cores
+    tar -cf - "$src" | zstd -T0 --ultra -22 -o "$dst"
+    echo "Created: $dst"
+}
+
+# Extract a tar.zst archive
+# Usage: zunpack <archive.tar.zst> [output_dir]
+function zunpack() {
+    if [ "$#" -lt 1 ]; then
+        echo "Usage: zunpack <archive.tar.zst> [output_dir]" >&2
+        return 1
+    fi
+    local src="$1"
+    if [ ! -f "$src" ]; then
+        echo "zunpack: $src: No such file" >&2
+        return 1
+    fi
+    local dst="${2:-.}"
+    mkdir -p "$dst"
+    zstd -d --threads=0 -c "$src" | tar -xvf - -C "$dst"
 }
 
 # compile with atcoder compile options
