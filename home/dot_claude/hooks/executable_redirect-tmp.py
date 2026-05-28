@@ -7,8 +7,8 @@ Agent (Claude Code / Copilot CLI) PreToolUse hook: /tmp 使用をブロックし
   - view / create / edit : path が /tmp/ で始まる場合
 
 例外 (allowlist):
-  - ``/tmp/claude-<uid>/...`` 配下のパスは Claude Code のバックグラウンドタスク
-    などが利用するため通過させる (<uid> は数値ユーザ ID)。
+  - ``/tmp/claude-*/...`` 配下のパスは Claude Code のバックグラウンドタスクや
+    shell snapshot などが利用するため通過させる。
 
 出力規約は ``agent_compat.emit_pretool_deny`` に委譲する (両ツール対応)。
 """
@@ -32,9 +32,9 @@ from agent_compat import (  # noqa: E402
 
 _TMP_PATH_PREFIX = "/tmp/"
 
-# allowlist: Claude Code バックグラウンドタスク等が使う /tmp/claude-<uid>/...
-# (<uid> はプロセスの実効ユーザ ID を想定し数値のみ許可)
-_ALLOWED_TMP_PATTERN = re.compile(r"^/tmp/claude-\d+(?:/|$)")
+# allowlist: Claude Code が使う /tmp/claude-* 配下 (claude-<uid>/ や
+# claude-shell-snapshot-* など) は通過させる
+_ALLOWED_TMP_PATTERN = re.compile(r"^/tmp/claude-[^/]+(?:/|$)")
 
 # bash コマンド中の /tmp/ トークン抽出用 (空白や区切り文字までを 1 トークンとみなす)
 _TMP_BASH_TOKEN = re.compile(r"/tmp/[^\s;|&'\"`)>{}<]*")
@@ -49,7 +49,7 @@ _REDIRECT_MESSAGE = """\
 
   例: /tmp/result.json  →  ./.tmp/result.json
 
-  例外: /tmp/claude-<uid>/ 配下 (Claude Code バックグラウンドタスク等) は許可されます。
+  例外: /tmp/claude-*/ 配下 (Claude Code バックグラウンドタスク等) は許可されます。
 """
 
 
