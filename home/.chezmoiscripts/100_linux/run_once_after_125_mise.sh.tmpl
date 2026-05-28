@@ -32,5 +32,28 @@ fi
 
 mise self-update
 mise install
+# npm backend (例: @bitwarden/cli) の shim 生成タイミング保険
+mise reshim
 
 echo "✅ 完了：開発ツールをインストール/更新しました"
+
+{{- if eq .chezmoi.username "applejxd" }}
+
+# applejxd かつ Bitwarden から取得すべき age 鍵がまだ無い場合、
+# `mise install` 直後で bw が初めて使えるようになった可能性が高い。
+# Bitwarden ログイン -> chezmoi init/apply 再実行を促す案内を出す
+# (自動 init はマスターパスワード入力を要するため echo に留める)。
+if [[ ! -f "${HOME}/.config/chezmoi/key.txt" ]] && command -v bw >/dev/null 2>&1; then
+    cat <<'EOF'
+
+ℹ️  Bitwarden CLI (bw) が mise 経由で利用可能になりました。
+   age 暗号化鍵 (~/.config/chezmoi/key.txt) を取得するには次を実行してください:
+
+       bw login
+       export BW_SESSION="$(bw unlock --raw)"
+       chezmoi init applejxd   # .chezmoi.toml を bw 有り状態で再生成
+       chezmoi apply           # key.txt 取得 / gitconfig 等を再展開
+
+EOF
+fi
+{{- end }}
