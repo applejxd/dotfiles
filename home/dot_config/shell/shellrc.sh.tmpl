@@ -200,7 +200,13 @@ function zpack() {
     fi
     local dst="${2:-$(basename "$src").tar.zst}"
     # --threads=0 uses all available CPU cores
-    tar -cf - "$src" | zstd -T0 --ultra -22 -o "$dst"
+    # Override compression level via ZPACK_LEVEL (default: 19, max: 22 with --ultra)
+    local level="${ZPACK_LEVEL:-19}"
+    local ultra_flag=""
+    if [ "$level" -gt 19 ] 2>/dev/null; then
+        ultra_flag="--ultra"
+    fi
+    tar -cf - "$src" | zstd -T0 $ultra_flag -"$level" -o "$dst"
     echo "Created: $dst"
 }
 
@@ -218,7 +224,7 @@ function zunpack() {
     fi
     local dst="${2:-.}"
     mkdir -p "$dst"
-    zstd -d --threads=0 -c "$src" | tar -xvf - -C "$dst"
+    zstd -d --threads=0 -c "$src" | tar -xf - -C "$dst"
 }
 
 # compile with atcoder compile options
