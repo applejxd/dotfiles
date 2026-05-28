@@ -216,11 +216,16 @@ function zpack() {
     fi
     if (
         set -o pipefail
-        tar -cf - "$src" | zstd -T0 $ultra_flag -"$level" -o "$dst"
+        if [ -n "$ultra_flag" ]; then
+            tar -cf - "$src" | zstd -T0 "$ultra_flag" "-$level" -o "$dst"
+        else
+            tar -cf - "$src" | zstd -T0 "-$level" -o "$dst"
+        fi
     ); then
         echo "Created: $dst"
     else
         rm -f "$dst"
+        echo "zpack: failed to create archive: $dst" >&2
         return 1
     fi
 }
@@ -246,7 +251,13 @@ function zunpack() {
         echo "zunpack: failed to create directory: $dst" >&2
         return 1
     fi
-    zstd -d --threads=0 -c "$src" | tar -xf - -C "$dst"
+    if ! (
+        set -o pipefail
+        zstd -d --threads=0 -c "$src" | tar -xf - -C "$dst"
+    ); then
+        echo "zunpack: failed to extract archive: $src" >&2
+        return 1
+    fi
 }
 
 # compile with atcoder compile options
