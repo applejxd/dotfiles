@@ -50,6 +50,10 @@ chezmoi = "latest"
 
 {{- if eq .chezmoi.username "applejxd" }}
 "npm:@google/gemini-cli" = "latest"
+# Bitwarden CLI: snap 版が動作しなくなったため mise (npm backend) で導入。
+# chezmoi init 時点では bw 不在でも既存ガード (lookPath "bw") で apply が完走し、
+# apply 中の `mise install` でこの bw が入る。詳細は README / docs/SECURITY.md を参照。
+"npm:@bitwarden/cli" = "latest"
 yt-dlp = "latest"
 {{- end }}
 

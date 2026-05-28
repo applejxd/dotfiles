@@ -12,13 +12,23 @@
 
 #### 1. Bitwarden CLIのインストール
 
-```bash
-# Ubuntu
-sudo snap install bw
+通常は `chezmoi apply` 中に mise (`npm:@bitwarden/cli`) で自動投入されるため **明示インストール不要**。
+クリーン環境では「2 フェーズ bootstrap」（[README](../README.md) 参照）で:
 
-# macOS
+1. `chezmoi init applejxd && chezmoi apply` → mise が bw を含む全ツールを導入
+2. `bw login && export BW_SESSION="$(bw unlock --raw)"` → `chezmoi init applejxd && chezmoi apply` で Bitwarden 連携を有効化
+
+手動で先に入れたい / mise を使わない環境では:
+
+```bash
+# mise 経由（推奨・OS 共通）
+mise use -g npm:@bitwarden/cli
+
+# macOS (brew でも可。ただし mise 版と PATH 競合に注意)
 brew install bitwarden-cli
 ```
+
+> Ubuntu の `sudo snap install bw --classic` は動作不良のため非推奨。
 
 #### 2. Bitwardenアイテムの作成
 

@@ -7,6 +7,8 @@ chezmoiでBitwardenからage暗号化鍵を自動取得する設定手順です�
 ## 前提条件
 
 - Bitwarden CLIがインストール済み (`bw --version`で確認)
+  - 通常は `chezmoi apply` 中に mise (`npm:@bitwarden/cli`) で自動投入される。
+  - 手動で先に入れたい場合は `mise use -g npm:@bitwarden/cli` を推奨（snap 版は不可）。
 - age-keygenがインストール済み (`age-keygen --version`で確認)
 - Bitwardenアカウントでログイン済み
 
