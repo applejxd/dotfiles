@@ -189,8 +189,23 @@ function extract() {
 # Archive with tar + zstd (parallel, high compression)
 # Usage: zpack <dir_or_file> [output.tar.zst]
 function zpack() {
+    if [ "$#" -ge 1 ] && { [ "$1" = "-h" ] || [ "$1" = "--help" ]; }; then
+        cat <<'EOF'
+Usage: zpack <dir_or_file> [output.tar.zst]
+
+Compression level:
+  Set ZPACK_LEVEL to an integer between 1 and 22 (default: 19).
+  Levels 20-22 automatically enable --ultra.
+
+Examples:
+  zpack mydir
+  zpack mydir archive.tar.zst
+  ZPACK_LEVEL=22 zpack mydir
+EOF
+        return 0
+    fi
     if [ "$#" -lt 1 ]; then
-        echo "Usage: zpack <dir_or_file> [output.tar.zst]" >&2
+        echo "Usage: zpack <dir_or_file> [output.tar.zst] (see: zpack --help)" >&2
         return 1
     fi
     local src="$1"
@@ -235,8 +250,14 @@ function zpack() {
 # Extract a tar.zst archive
 # Usage: zunpack <archive.tar.zst> [output_dir]
 function zunpack() {
+    if [ "$#" -ge 1 ] && { [ "$1" = "-h" ] || [ "$1" = "--help" ]; }; then
+        cat <<'EOF'
+Usage: zunpack <archive.tar.zst> [output_dir]
+EOF
+        return 0
+    fi
     if [ "$#" -lt 1 ]; then
-        echo "Usage: zunpack <archive.tar.zst> [output_dir]" >&2
+        echo "Usage: zunpack <archive.tar.zst> [output_dir] (see: zunpack --help)" >&2
         return 1
     fi
     local src="$1"
