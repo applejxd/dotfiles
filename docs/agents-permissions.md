@@ -5,7 +5,7 @@ Claude Code / Copilot CLI の permission (allow/deny/ask) 設定を **単一ソ�
 
 ## ファイル構成
 
-```
+```text
 home/dot_config/agents/
     common.toml                              単一ソース
     critical_deny.py                         hook が import する shell normalizer
@@ -28,7 +28,7 @@ test/agents/
 ## 3 層防御モデル
 
 | 層 | 仕組み | 強度 |
-|---|---|---|
+| --- | --- | --- |
 | 1. CLI UI prompt | Claude/Copilot の対話モードで毎回確認 | 対話時のみ有効 |
 | 2. permission リスト | `~/.claude/settings.json` / `~/.copilot/{settings,permissions-config}.json` | 既知バグで bypass される ([後述](#claude-code-permission-リストの既知バグ)) |
 | 3. **hook (最終防波堤)** | `check_bash.py` が `bash.critical_deny` を強制 block | 上 2 層を全て bypass されても block |
@@ -52,7 +52,7 @@ CLI 側 permission リストは「best-effort」と扱い、本当に止めた�
 下記は 2026-05 時点で open。`critical_deny` + hook で必ず防ぐべき理由。
 
 | Issue | 概要 |
-|---|---|
+| --- | --- |
 | [#59498](https://github.com/anthropics/claude-code/issues/59498) | `cd /elsewhere && git push` が `Bash(git push:*)` ask/deny を bypass |
 | [#59006](https://github.com/anthropics/claude-code/issues/59006) | `git -C /path commit` が `Bash(git commit *)` deny を bypass |
 | [#20085](https://github.com/anthropics/claude-code/issues/20085) | compound 命令 (`a && b`) が個別評価されない |
@@ -118,7 +118,7 @@ chezmoi modify_ スクリプトは空 stdin を受けると空オブジェクト
 ## トラブルシュート
 
 | 症状 | 対応 |
-|---|---|
+| --- | --- |
 | apply 後 Claude が `permissions` を読まない | Claude Code は起動時に settings.json を読むので再起動 |
 | Copilot CLI で hook の deny が効かない | `~/.copilot/hooks/from-claude.json` が apply されているか確認。`copilot --log-level debug` で hook がロードされているか確認 |
 | `~/.config/agents/critical_deny.py` の import に失敗 | `~/.config/agents/__pycache__/` を削除して `chezmoi apply` をやり直し |
