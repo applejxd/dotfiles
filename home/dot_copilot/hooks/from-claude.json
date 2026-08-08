@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "^bash$",
+        "matcher": "Bash|bash",
         "type": "command",
         "bash": "python $HOME/.claude/hooks/check_bash.py",
         "timeoutSec": 30
@@ -16,7 +16,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "^(edit|create)$",
+        "matcher": "Edit|Write|edit|create",
         "type": "command",
         "bash": "bash $HOME/.claude/hooks/markdownlint.sh",
         "timeoutSec": 30
