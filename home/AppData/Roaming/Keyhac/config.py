@@ -25,7 +25,7 @@ def editor(path):
         # なければメモ帳
         editor_path = Path("notepad.exe")
     editor_path = f'\"{str(editor_path)}\"'
-        
+
     # see https://crftwr.github.io/keyhac/doc/ja/group__pyauto.html#gaed9cb14419b28016c15906a08d92102f
     shellExecute( None, editor_path, '"%s"'% path, "" )
 
@@ -36,10 +36,8 @@ def configure(keymap):
 
     # クリップボード拡張
     clipboard.configure(keymap)
-    
+
     # 設定ファイルを開くエディタ
     keymap.editor = editor
     # リストウィンドウを白いテーマで
     keymap.setTheme("white")
-
-    

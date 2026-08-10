@@ -20,4 +20,3 @@ run = [
 [tasks.clear-resurrect]
 description = "Clear zsh-resurrect cache"
 run = "rm -rf ~/.local/share/tmux/resurrect"
-

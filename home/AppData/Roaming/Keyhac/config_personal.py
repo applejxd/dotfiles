@@ -73,12 +73,12 @@ fc.emacs_target_class  += []
 # （Keyhac のメニューから「内部ログ」を ON にすると、processname や classname を確認することが
 #   できます）
 
-fc.not_emacs_target = ["wsl.exe",               # WSL                       
+fc.not_emacs_target = ["wsl.exe",               # WSL
                        "ubuntu.exe",            # WSL
                        "ubuntu1804.exe",        # WSL
                        "ubuntu2004.exe",        # WSL
-                       "ubuntu2204.exe",        # WSL                                                                     
-                       "WindowsTerminal.exe",   # Windows Terminal                       
+                       "ubuntu2204.exe",        # WSL
+                       "WindowsTerminal.exe",   # Windows Terminal
                        "ElonaC.exe",            # Game
                        "Akashicverse.exe",      # Game
                        "osu!.exe",              # Game

@@ -1,6 +1,6 @@
 # chezmoi リポジトリ検証（Docker 実行メモ）
 
-このメモは、コンテナ内のクリーンな `$HOME` に対して **chezmoi リポジトリを安全に検証**するための手順です。  
+このメモは、コンテナ内のクリーンな `$HOME` に対して **chezmoi リポジトリを安全に検証**するための手順です。
 `docker compose run` により毎回新規環境で `diff` →（必要に応じて）`apply` を実行できます。
 
 > すべてのコマンドは **リポジトリ直下**で実行してください。
@@ -25,7 +25,7 @@ chmod +x test.sh run_chezmoi.sh
 docker compose build
 ```
 
-> UID/GID をホストに合わせたい場合は、`compose.yaml` の `build.args` を有効化し  
+> UID/GID をホストに合わせたい場合は、`compose.yaml` の `build.args` を有効化し
 > `docker compose build --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g)` を利用してください。
 
 ---
@@ -133,29 +133,29 @@ CHEZMOI_ARGS="--include files=.bashrc" ./test.sh
 
 ## 7. トラブルシュート
 
-- **`compose.yaml` が見つからない/ボリュームが空**  
-  → コマンドを **リポジトリ直下**で実行しているか確認してください（`pwd` を確認）。  
+- **`compose.yaml` が見つからない/ボリュームが空**
+  → コマンドを **リポジトリ直下**で実行しているか確認してください（`pwd` を確認）。
   → `docker compose ls` / `docker compose config` で解決に役立つ情報を表示できます。
 
-- **`permission denied: test.sh`**  
+- **`permission denied: test.sh`**
   → `chmod +x test.sh` を付与してください。
 
-- **`chezmoi` が見つからない**  
+- **`chezmoi` が見つからない**
   → イメージを再ビルドしてください：`docker compose build --no-cache`
 
-- **apply が重く時間がかかる/外部取得が走る**  
-  → まずは `./test.sh`（dry-run）で差分を把握してから `APPLY=1` を検討してください。  
+- **apply が重く時間がかかる/外部取得が走る**
+  → まずは `./test.sh`（dry-run）で差分を把握してから `APPLY=1` を検討してください。
   → タグで範囲を絞る（`CHEZMOI_ARGS`）と負荷を抑えられます。
 
-- **一時的に `$HOME` を保持して再現性検証したい**  
-  → `compose.yaml` の `tmpfs` マウントをコメントアウトし、代わりに named volume を設定してください（例：`home_data:/home/tester`）。  
+- **一時的に `$HOME` を保持して再現性検証したい**
+  → `compose.yaml` の `tmpfs` マウントをコメントアウトし、代わりに named volume を設定してください（例：`home_data:/home/tester`）。
   → その際、末尾に `volumes: { home_data: {} }` を追加します。
 
 ---
 
 ## 8. クリーンアップ
 
-本構成は `docker compose run --rm` でコンテナを都度破棄します。残るのはイメージのみです。  
+本構成は `docker compose run --rm` でコンテナを都度破棄します。残るのはイメージのみです。
 ビルドキャッシュや未使用イメージを削除する場合：
 
 ```bash

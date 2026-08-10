@@ -40,7 +40,7 @@ return {
       "saghen/blink.cmp",
     },
     config = function()
-      -- (a) blink.cmp の capabilities を取得  
+      -- (a) blink.cmp の capabilities を取得
       local capabilities = require("blink.cmp").get_lsp_capabilities()
 
       -- (b) 全サーバ共通: 補完 capabilities を blink.cmp に揃える
