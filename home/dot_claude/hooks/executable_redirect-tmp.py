@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 # 同一ディレクトリの lib/ にあるヘルパを import
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
@@ -61,7 +62,7 @@ def _is_allowed_tmp_path(path: str) -> bool:
     return bool(_ALLOWED_TMP_PATTERN.match(path))
 
 
-def _check_bash(tool_input: dict) -> None:
+def _check_bash(tool_input: dict[str, Any]) -> None:
     cmd = get_command(tool_input)
     # $TMPDIR / $TEMP / $TMP の使用は解決先が不明なため一律 block
     if re.search(r"\$\{?(?:TMPDIR|TEMP|TMP)\}?", cmd):
@@ -74,7 +75,7 @@ def _check_bash(tool_input: dict) -> None:
             return
 
 
-def _check_file_path(tool_input: dict) -> None:
+def _check_file_path(tool_input: dict[str, Any]) -> None:
     path = get_path(tool_input)
     if path.startswith(_TMP_PATH_PREFIX) and not _is_allowed_tmp_path(path):
         _blocked(path)
@@ -90,12 +91,20 @@ _HANDLERS = {
 
 def main() -> None:
     data = read_input()
-    kind = normalize_tool_kind(data.get("tool_name", ""))
+    if not isinstance(data, dict):
+        sys.exit(0)
+
+    tool_name = data.get("tool_name")
+    tool_input = data.get("tool_input")
+    if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
+        sys.exit(0)
+
+    kind = normalize_tool_kind(tool_name)
     handler = _HANDLERS.get(kind)
     if handler is None:
         sys.exit(0)
 
-    handler(data.get("tool_input", {}))
+    handler(tool_input)
     sys.exit(0)
 
 
