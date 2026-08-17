@@ -39,7 +39,7 @@ _TOOL_KIND_MAP: dict[str, str] = {
     "create": "create",
     # ファイル編集系
     "Edit": "edit",
-    "MultiEdit": "edit",
+    "MultiEdit": "edit",  # Claude Code v2.0 系で削除済み (後方互換のため残す)
     "edit": "edit",
 }
 
@@ -61,7 +61,7 @@ def get_path(tool_input: dict[str, Any]) -> str:
     """ファイル系ツールのパスを取得。
 
     - Claude Code (Read/Write): "file_path"
-    - Claude Code (Edit/MultiEdit): "path"
+    - Claude Code (Edit): "path"
     - Copilot CLI (view/create/edit): "path"
     """
     return tool_input.get("file_path") or tool_input.get("path") or ""

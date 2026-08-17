@@ -3,7 +3,7 @@ name: adr
 description: "ADR（アーキテクチャ決定記録）を作成・更新する。「ADR を作って」「アーキテクチャの決定を記録して」と言われたときに使う。"
 context: fork
 agent: general-purpose
-allowed-tools: Read, Write(docs/adr/*), Edit(docs/adr/*), Glob
+allowed-tools: Read, Edit(docs/adr/*), Glob
 ---
 
 # ADR 作成・更新スキル

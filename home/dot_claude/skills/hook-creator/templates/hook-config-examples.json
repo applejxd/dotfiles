@@ -15,7 +15,7 @@
           ]
         },
         {
-          "matcher": "Edit|Write|MultiEdit",
+          "matcher": "Edit|Write",
           "hooks": [
             {
               "type": "command",
@@ -26,7 +26,7 @@
       ],
       "PostToolUse": [
         {
-          "matcher": "Edit|Write|MultiEdit",
+          "matcher": "Edit|Write",
           "hooks": [
             {
               "type": "command",
@@ -87,8 +87,10 @@
 
   "_comment_notes": [
     "matcher の挙動が異なる:",
-    "  - Claude: 'Bash' は exact match、'Edit|Write|MultiEdit' は OR",
+    "  - Claude: 'Bash' は exact match、'Edit|Write' は OR",
     "  - Copilot: '^(?:pattern)$' で anchored される。'^bash$' / '^(edit|create)$' のように明示的に書く",
+    "MultiEdit ツールは Claude Code v2.0 系で削除済み。matcher に書いても一致しないので不要",
+    "permission rule (allow/ask/deny や allowed-tools) では Write(path) が v2.1.210 で deprecated。Edit(path) を使う (hooks の matcher の Write は現役)",
     "Copilot は bash と powershell の両キーで Windows 対応",
     "両ツール対応のスクリプトを書けば、設定ファイルだけ別々で管理できる"
   ]

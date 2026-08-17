@@ -85,7 +85,7 @@
 | | 設定ソース | 実際に bind されているもの |
 | --- | --- | --- |
 | Claude Code | `home/dot_claude/modify_settings.json.tmpl`（permissions のみ生成、他キーは保持） | `~/.claude/settings.json` のキー: `enabledPlugins` / `env` / `hooks` / `includeCoAuthoredBy` / `permissions`。hook イベント: `PreToolUse` / `PostToolUse` / `TaskCompleted` |
-| Copilot CLI | `home/dot_copilot/hooks/from-claude.json`、`modify_private_settings.json.tmpl`、`modify_private_permissions-config.json.tmpl` | `PreToolUse`（`check_bash.py` matcher=`Bash\|bash`、`redirect-tmp.py` matcher なし）、`PostToolUse`（`markdownlint.sh`）、`Stop`（`update-adr-on-stop.py`） |
+| Copilot CLI | `home/dot_copilot/hooks/from-claude.json`、`modify_private_settings.json.tmpl`、`modify_private_permissions-config.json.tmpl` | `PreToolUse`（`check_bash.py` matcher=`Bash\|bash`、`redirect-tmp.py` matcher=`^(Bash\|bash\|Read\|view\|Write\|create\|Edit\|edit)$`）、`PostToolUse`（`markdownlint.sh`）、`Stop`（`update-adr-on-stop.py`） |
 | Codex CLI | `home/dot_codex/modify_config.toml`、`home/dot_codex/rules/*.rules` | `approval_policy = "untrusted"`、`sandbox_mode = "read-only"`、`web_search = "live"`、`personality = "pragmatic"`、`shell_environment_policy`（PATH/HOME/USER のみ）、rules 4 ファイル |
 
 権限の単一ソースは `home/dot_config/agents/common.toml`。生成は `scripts/agents/generate.py`。

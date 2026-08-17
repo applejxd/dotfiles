@@ -9,7 +9,7 @@
         "timeoutSec": 30
       },
       {
-        "matcher": "^(Bash|bash|Read|view|Write|create|Edit|MultiEdit|edit)$",
+        "matcher": "^(Bash|bash|Read|view|Write|create|Edit|edit)$",
         "type": "command",
         "bash": "python $HOME/.claude/hooks/redirect-tmp.py",
         "timeoutSec": 30

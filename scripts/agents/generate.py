@@ -51,6 +51,10 @@ def first_token(pattern: str) -> str:
 # ---------------------------------------------------------------------------
 
 def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
+    # 書き込み系の permission rule は Edit(path) に統一する。
+    # Claude Code v2.1.210 で Write(path) / NotebookEdit(path) / Glob(path) は
+    # deprecated となり、起動時警告が出るようになった (代替は Edit(path) / Read(path))。
+    # ref: anthropics/claude-code CHANGELOG.md v2.1.210
     bash = common.get("bash", {})
     file_ = common.get("file", {})
     web = common.get("web", {})
@@ -74,7 +78,7 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     for glob in file_.get("read_deny_globs", []):
         deny.append(f"Read({glob})")
     for glob in file_.get("write_deny_globs", []):
-        deny.append(f"Write({glob})")
+        deny.append(f"Edit({glob})")
     for mcp in claude.get("mcp_deny", []):
         deny.append(mcp)
 
@@ -84,7 +88,7 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     for glob in file_.get("read_ask_globs", []):
         ask.append(f"Read({glob})")
     for glob in file_.get("write_ask_globs", []):
-        ask.append(f"Write({glob})")
+        ask.append(f"Edit({glob})")
 
     # 順序を安定化 (重複除去しつつ元順序を保持)
     def uniq(seq: list[str]) -> list[str]:

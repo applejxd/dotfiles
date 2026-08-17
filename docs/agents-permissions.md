@@ -46,6 +46,14 @@ CLI 側 permission リストは「best-effort」と扱い、本当に止めた�
   確実に動作する
 - `[bash.deny]` は Claude 側のみ反映 (Copilot CLI は path-scope の設計のため
   CLI フラグでしか細粒度 deny を表現できない)
+- `[file.write_ask_globs]` / `[file.write_deny_globs]` は Claude の
+  **`Edit(path)`** rule として展開される。Claude Code v2.1.210 で
+  `Write(path)` / `NotebookEdit(path)` / `Glob(path)` の permission rule は
+  deprecated になり (起動時警告)、代替として `Edit(path)` / `Read(path)` が
+  案内されている
+  ([CHANGELOG v2.1.210](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md))。
+  なお `Write` ツール自体は現役なので、hooks の `matcher` に書く `Write` は
+  引き続き有効 (`MultiEdit` は v2.0 系で削除済みなので不要)
 
 ## Claude Code permission リストの既知バグ
 

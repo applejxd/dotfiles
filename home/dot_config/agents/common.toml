@@ -100,7 +100,8 @@ read_ask_globs = [
   ".env.*",
 ]
 
-# Claude のみ反映: Write(...) を ask に追加
+# Claude のみ反映: Edit(...) を ask に追加
+# (書き込み系 permission rule は Edit(path) に統一。Write(path) は v2.1.210 で deprecated)
 write_ask_globs = [
   ".env.*",
   "mise.toml",
@@ -122,6 +123,7 @@ read_deny_globs = [
   "~/.copilot/config.json",
 ]
 
+# Claude のみ反映: Edit(...) を deny に追加
 write_deny_globs = [
   "**/secrets/**",
   "**/*secret*",
