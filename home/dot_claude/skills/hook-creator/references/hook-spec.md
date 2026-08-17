@@ -16,8 +16,8 @@
 | ツール実行前 | `PreToolUse` | `PreToolUse` / `preToolUse` | block 可能 |
 | ツール実行後 (成功) | `PostToolUse` | `PostToolUse` / `postToolUse` | Copilot は出力が LLM に渡らない仕様 |
 | ツール実行後 (失敗) | `PostToolUseFailure` | `postToolUseFailure` | Copilot は additionalContext を返せる |
-| ターン終了 | `Stop` | `Stop` / `agentStop` | block 可能 |
-| Task 完了 | `TaskCompleted` | (相当なし) | Claude 固有 |
+| ターン終了 | `Stop` | `Stop` / `agentStop` | block 可能。Claude は 1 ターン 1 回 |
+| Task 完了 | `TaskCompleted` | (相当なし) | Claude 固有。**`TaskCreate` ツール経由のタスク完了時のみ**発火し、ターン終了では発火しない |
 | サブエージェント終了 | `SubagentStop` | `SubagentStop` / `subagentStop` | block 可能 |
 | サブエージェント開始 | (相当なし) | `subagentStart` | Copilot 固有 |
 | ユーザ入力 | `UserPromptSubmit` | `UserPromptSubmit` / `userPromptSubmitted` | block 可能 |
@@ -40,6 +40,20 @@ Claude → Copilot で hook を流用する場合の event 名対応:
 | ツール実行を抑止 | `{"PreToolUse"}` |
 | ターン終了で介入 | `{"Stop", "TaskCompleted", "agentStop"}` (3 つ全部受理) |
 | 失敗からのリカバリ提案 | `{"PostToolUseFailure", "postToolUseFailure"}` |
+
+**設定に書く event 名は `Stop` を選ぶこと。** `TaskCompleted` は実在するが
+`TaskCreate` ツール経由のタスク完了時にしか発火せず、「ターン終了で 1 回」の
+用途では実質動かない (公式 docs: `Stop` = "When Claude finishes responding"、
+cadence は "once per turn")。スクリプト側は上表のとおり複数名を受理しておくと
+移植時に壊れにくい。
+
+### matcher / timeout の共通仕様 (Claude Code)
+
+- `matcher` は省略・`""`・`"*"` のいずれでも「全マッチ」(公式仕様)
+- `Stop` / `UserPromptSubmit` / `PostToolBatch` などは **matcher 非対応**
+  (書いても silently ignored) なので省略する
+- `timeout` の単位は秒。`command` 型 hook のデフォルトは **600 秒**と長いので、
+  明示的に指定するのが望ましい (Copilot 側のキー名は `timeoutSec`)
 
 スクリプト側で `hook_event_name` の集合チェックにすると、両ツール対応 +
 将来の名前変更にも強い。
