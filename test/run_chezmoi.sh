@@ -3,7 +3,21 @@ set -euo pipefail
 
 # 環境変数
 : "${APPLY:=0}"                # 0=dry-run, 1=apply
-: "${CHEZMOI_ARGS:=}"          # 追加引数（例: "--include tag=linux --exclude tag=mac"）
+# NOTE: 変数名に CHEZMOI_ARGS は使えない。chezmoi 自身が予約しており、
+#       `chezmoi cd` のサブシェル等では CHEZMOI_ARGS="chezmoi cd" が
+#       export されている。これを diff/apply に渡すと不正な引数になる。
+: "${CHEZMOI_TEST_ARGS:=}"     # 追加引数（例: "--include tag=linux --exclude tag=mac"）
+
+# ソースディレクトリはコンテナ内では常に /repo。
+# `chezmoi init` は .chezmoi.toml.tmpl から設定ファイルを再生成するため、
+# 設定ファイルに書いた sourceDir は init で失われる（テンプレートに sourceDir が
+# 無いので既定値 ~/.local/share/chezmoi に戻ってしまう）。
+# そのため全ての chezmoi 呼び出しで --source を明示する。
+CHEZMOI_SOURCE=/repo
+CZ=(chezmoi --source="$CHEZMOI_SOURCE")
+
+# CHEZMOI_TEST_ARGS は空白区切りの追加引数。意図的に分割するので配列に展開する。
+read -r -a CHEZMOI_ARG_ARRAY <<< "${CHEZMOI_TEST_ARGS}"
 
 # 実行結果追跡
 TEST_RESULTS=()
@@ -14,7 +28,8 @@ log_result() {
     local step="$1"
     local status="$2"
     local details="${3:-}"
-    local timestamp=$(date '+%H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%H:%M:%S')
     TEST_RESULTS+=("[$timestamp] $step: $status $details")
     if [ "$status" = "FAILED" ] || [ "$status" = "TIMEOUT" ]; then
         TEST_STATUS="FAILED"
@@ -43,7 +58,7 @@ echo "== Environment =="
 echo "🗂️  User=$(whoami)"
 echo "🏠 HOME=$HOME"
 echo "📦 Repo=/repo  APPLY=$APPLY"
-echo "⚙️  CHEZMOI_ARGS=${CHEZMOI_ARGS}"
+echo "⚙️  CHEZMOI_TEST_ARGS=${CHEZMOI_TEST_ARGS}"
 echo "⏱️  Started at: $(date)"
 
 # HOMEディレクトリのセットアップ
@@ -60,7 +75,8 @@ rm -f "$HOME/.config/chezmoi/chezmoi.toml"
 if [ -f "/repo/home/.chezmoi.toml.tmpl" ]; then
     echo "📝 Found config template, using template-based initialization"
     # テンプレートを使って設定ファイル生成を試行
-    template_content=$(chezmoi execute-template --init --source=/repo < /repo/home/.chezmoi.toml.tmpl 2>/dev/null || echo "")
+    template_content=$(chezmoi execute-template --init --source="$CHEZMOI_SOURCE" \
+        < /repo/home/.chezmoi.toml.tmpl 2>&1) || template_content=""
 
     if [ -n "$template_content" ]; then
         echo "$template_content" > "$HOME/.config/chezmoi/chezmoi.toml"
@@ -85,7 +101,7 @@ sourceDir = "/repo"
 EOF
 fi
 
-# sourceDirを必ず設定（テンプレートに含まれていない場合のため）
+# sourceDir は --source フラグで毎回明示するので、設定ファイル側は保険にとどめる
 if ! grep -q "sourceDir" "$HOME/.config/chezmoi/chezmoi.toml"; then
     echo 'sourceDir = "/repo"' >> "$HOME/.config/chezmoi/chezmoi.toml"
 fi
@@ -98,16 +114,15 @@ git --version || true
 
 echo
 echo "== chezmoi doctor =="
-if chezmoi doctor; then
+if "${CZ[@]}" doctor; then
     log_result "doctor" "SUCCESS"
 else
     log_result "doctor" "WARNING" "(doctor warnings are not fatal)"
 fi
 
 echo
-echo "== chezmoi init (using pre-configured source) =="
-# 設定ファイルでsourceDirを設定済みなので、引数不要
-if chezmoi init --force; then
+echo "== chezmoi init (using --source=$CHEZMOI_SOURCE) =="
+if "${CZ[@]}" init --force; then
     log_result "init" "SUCCESS"
     echo "✅ Chezmoi initialized successfully"
 else
@@ -117,44 +132,60 @@ else
 fi
 
 echo
+echo "== source resolution check =="
+# init が設定を書き換えても --source で /repo を指せているかを確認する。
+# ここが壊れると diff/apply が「差分なし」に見えてテストが偽陽性になる。
+resolved_source=$("${CZ[@]}" source-path 2>&1) || resolved_source=""
+echo "source-path = ${resolved_source:-<failed>}"
+case "$resolved_source" in
+    /repo|/repo/*)
+        log_result "source-check" "SUCCESS" "($resolved_source)"
+        ;;
+    *)
+        log_result "source-check" "FAILED" "(expected under /repo, got: ${resolved_source:-<failed>})"
+        echo "❌ source dir is not /repo — diff/apply results would be meaningless"
+        show_summary
+        ;;
+esac
+
+echo
 echo "== chezmoi diff (dry-run) =="
 echo "Checking which files will be modified..."
-# diff は差分があると exit code 1, エラーは exit code > 1
+# chezmoi diff は差分の有無に関わらず正常終了は 0。非 0 はエラーなので失敗扱いにする。
+# stderr も取り込む (捨てるとテンプレートエラーを見逃す)。
 set +e
-diff_output=$(chezmoi diff ${CHEZMOI_ARGS} 2>/dev/null)
+diff_output=$("${CZ[@]}" diff "${CHEZMOI_ARG_ARRAY[@]}" 2>&1)
 diff_exit_code=$?
 set -e
 
-# ファイル数をカウントして表示
-if [ -n "$diff_output" ]; then
-    file_count=$(echo "$diff_output" | grep -c "^diff --git" 2>/dev/null || echo 0)
-    echo "📊 Found differences in $file_count files"
-    if [ "$file_count" -gt 0 ]; then
-        echo "First few files to be modified:"
-        echo "$diff_output" | grep "^diff --git" | head -5 | sed 's/^diff --git a\//  - /' | sed 's/ b\/.*//' 2>/dev/null || echo "  (unable to parse filenames)"
-        if [ "$file_count" -gt 5 ]; then
-            echo "  ... and $((file_count - 5)) more files"
-        fi
-    else
-        echo "No files found to modify"
-    fi
-    echo
-else
-    echo "No differences found"
-    echo
+if [ "$diff_exit_code" -ne 0 ]; then
+    echo "❌ chezmoi diff failed (exit code: $diff_exit_code)"
+    echo "$diff_output"
+    log_result "diff" "FAILED" "(exit code: $diff_exit_code)"
+    show_summary
 fi
 
-case $diff_exit_code in
-    0)
-        log_result "diff" "SUCCESS" "(no differences)"
-        ;;
-    1)
-        log_result "diff" "SUCCESS" "(differences found - this is expected)"
-        ;;
-    *)
-        log_result "diff" "FAILED" "(exit code: $diff_exit_code)"
-        ;;
-esac
+# ファイル数をカウントして表示
+# NOTE: `... | head -5` のように途中で打ち切るパイプは上流に SIGPIPE を返し、
+#       `set -o pipefail` により失敗扱いになってスクリプトが中断する。
+#       配列に読み込んでから bash のスライスで絞る。
+mapfile -t diff_files < <(grep "^diff --git" <<< "$diff_output" \
+    | sed 's/^diff --git a\//  - /; s/ b\/.*//')
+file_count=${#diff_files[@]}
+
+if [ "$file_count" -gt 0 ]; then
+    echo "📊 Found differences in $file_count files"
+    echo "First few files to be modified:"
+    printf '%s\n' "${diff_files[@]:0:5}"
+    if [ "$file_count" -gt 5 ]; then
+        echo "  ... and $((file_count - 5)) more files"
+    fi
+    log_result "diff" "SUCCESS" "($file_count files differ)"
+else
+    echo "No differences found"
+    log_result "diff" "SUCCESS" "(no differences)"
+fi
+echo
 
 if [ "${APPLY}" = "1" ]; then
   echo
@@ -165,7 +196,7 @@ if [ "${APPLY}" = "1" ]; then
 
   # 重い処理や外部取得が走る場合はここで発火
   # プログレス表示のため、リアルタイムでアウトプットを表示
-  if timeout 900 chezmoi apply --keep-going -v ${CHEZMOI_ARGS}; then
+  if timeout 900 "${CZ[@]}" apply --keep-going -v "${CHEZMOI_ARG_ARRAY[@]}"; then
       echo "----------------------------------------"
       echo "✅ Apply completed successfully!"
       log_result "apply" "SUCCESS"
@@ -183,7 +214,7 @@ if [ "${APPLY}" = "1" ]; then
 
   echo
   echo "== Re-run doctor after apply =="
-  if chezmoi doctor; then
+  if "${CZ[@]}" doctor; then
       log_result "post-apply-doctor" "SUCCESS"
   else
       log_result "post-apply-doctor" "WARNING" "(doctor warnings are not fatal)"
