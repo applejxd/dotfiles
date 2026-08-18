@@ -1,0 +1,6 @@
+{{- /*
+  ~/.copilot/hooks/from-claude.json は home/dot_config/agents/common.toml の
+  [[hooks]] から生成する。手で編集せず common.toml 側を直すこと。
+  Claude Code 側 (~/.claude/settings.json の hooks) も同じソースから生成される。
+*/ -}}
+{{ output "python3" (joinPath .chezmoi.workingTree "scripts/agents/generate.py") "--target" "copilot-hooks" "--common" (joinPath .chezmoi.workingTree "home/dot_config/agents/common.toml") "--existing" "/dev/null" -}}

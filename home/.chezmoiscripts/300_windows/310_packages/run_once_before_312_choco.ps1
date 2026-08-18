@@ -51,16 +51,16 @@ if (-not (Test-Path $install_dir)) {
 Function Invoke-UpdatedWebRequest {
     $version = $PSVersionTable.PSVersion.Major
     if ($version -le 5) {
-        $cmd = "Invoke-WebRequest $args -UseBasicParsing" 
+        $cmd = "Invoke-WebRequest $args -UseBasicParsing"
     }
     else {
-        $cmd = "Invoke-WebRequest $args" 
+        $cmd = "Invoke-WebRequest $args"
     }
     Invoke-Expression $cmd
 }
-  
+
 # function for downloading Keypirinha extensions
-function InstallRelease($repo_name, $file_path) { 
+function InstallRelease($repo_name, $file_path) {
     if (-not (Test-Path $install_dir\$file_path)) {
         # GitHub Release API
         $uri = "https://api.github.com/repos/" + $repo_name + "/releases/latest"

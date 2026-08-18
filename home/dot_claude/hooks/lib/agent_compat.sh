@@ -21,7 +21,7 @@ hook_normalize_tool_kind() {
         Bash|bash) echo bash ;;
         Read|view) echo view ;;
         Write|create) echo create ;;
-        Edit|MultiEdit|edit) echo edit ;;
+        Edit|MultiEdit|edit) echo edit ;;  # MultiEdit は Claude Code v2.0 系で削除済み
         *) echo "" ;;
     esac
 }

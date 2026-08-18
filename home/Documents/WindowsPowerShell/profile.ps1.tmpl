@@ -53,7 +53,7 @@ function explorer-restart { Stop-Process     -Name explorer -Force; Start-Proces
 . "{{ .chezmoi.homeDir }}/Documents/commands/pwgen.ps1"
 if (Get-Command docker -ErrorAction SilentlyContinue) {
   . "{{ .chezmoi.homeDir }}/Documents/commands/docker.ps1"
-} 
+}
 
 #-----#
 # fzf #

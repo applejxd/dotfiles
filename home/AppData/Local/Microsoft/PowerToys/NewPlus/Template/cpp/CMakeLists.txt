@@ -27,7 +27,7 @@ endfunction()
 
 # PCL の依存性を追加
 function(use_pcl target_name)
-    target_include_directories(${target_name} PRIVATE ${PCL_INCLUDE_DIRS}) 
+    target_include_directories(${target_name} PRIVATE ${PCL_INCLUDE_DIRS})
     target_link_libraries(${target_name} PRIVATE ${PCL_LIBRARIES})
     target_compile_definitions(${target_name} PRIVATE ${PCL_DEFINITIONS})
 endfunction()

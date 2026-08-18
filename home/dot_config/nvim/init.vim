@@ -6,4 +6,3 @@ source ~/.vimrc
 if has('nvim')
   lua require('config')
 endif
-

@@ -29,6 +29,8 @@ wheels/
 # 配布対象。`lib/` の gitignore に巻き添えで除外されないよう明示的に例外化)
 !home/dot_claude/hooks/lib/
 !home/dot_claude/hooks/lib/**
+# ただし hook 実行時に生成される bytecode cache は除外したまま
+home/dot_claude/hooks/lib/__pycache__/
 share/python-wheels/
 *.egg-info/
 .installed.cfg

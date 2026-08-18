@@ -20,24 +20,24 @@ sudo snap install chezmoi --classic
 brew install chezmoi
 ```
 
-Bitwarden CLI も必要なら
+> Bitwarden CLI (`bw`) は **事前インストール不要**。`chezmoi apply` 中に mise 経由 (`npm:@bitwarden/cli`) で自動投入される。
+> bw が必要なテンプレート展開 (age 鍵取得・gitconfig の user セクション等) は、bw 取得後に `chezmoi init` / `chezmoi apply` を再実行することでフェーズ 2 として反映される。
+
+### 初期化と適用（2 フェーズ bootstrap）
 
 ```bash
-sudo smap install bw --classic
+# フェーズ 1: bw 不在のまま初期化・適用
+chezmoi init applejxd     # bw 不在ガードにより bitwarden 関連はスキップされる
+chezmoi apply             # mise 本体 + npm:@bitwarden/cli を含む全ツールがここで入る
+
+# フェーズ 2: bw が使えるようになったので Bitwarden 連携を有効化
 bw login
+export BW_SESSION="$(bw unlock --raw)"
+chezmoi init applejxd     # .chezmoi.toml を bw 有り状態で再生成 (bitwarden.unlock="auto")
+chezmoi apply             # age 鍵取得・gitconfig user セクション展開などが反映される
 ```
 
-### 初期化と適用
-
-```bash
-# リポジトリから初期化
-chezmoi init applejxd
-
-# 設定ファイルを適用 (依存関係インストールあり)
-chezmoi apply
-# 設定ファイルを適用（依存関係インストールなし）
-chezmoi apply --exclude=scripts
-```
+依存関係スクリプトをスキップしたい場合は `chezmoi apply --exclude=scripts`。
 
 ### 更新
 

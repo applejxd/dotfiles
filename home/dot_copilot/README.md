@@ -1,7 +1,8 @@
 # Copilot CLI リファレンス
 
 - カスタムスラッシュコマンドは claude のものを読み取れる
-- [config.json 仕様](https://docs.github.com/ja/enterprise-cloud@latest/copilot/reference/cli-command-reference#configuration-file-settings)
+- ユーザ設定は `~/.copilot/settings.json`（旧 `config.json` から自動移行済み。`config.json` は認証等の自動管理状態のみ）
+- [設定ディレクトリ / settings.json 仕様](https://docs.github.com/ja/copilot/reference/copilot-cli-reference/cli-config-dir-reference#configuration-file-settings)
 
 ## デフォルトのスラッシュコマンド
 
@@ -22,7 +23,7 @@
   - `/fleet [prompt]`：並列作業の指示（後述）
   - `/delegate [prompt]`：GitHub Copilot Agent に移行
   - `/agent`: エージェントの作成・管理
-- レビュー機能  
+- レビュー機能
   - `/diff`：差分をレビュー
   - `/review [prompt]`：コードレビュー
 

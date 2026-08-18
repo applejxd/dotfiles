@@ -36,7 +36,7 @@ Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -Action {
 
 function sshf {
   $destination = Get-Content "$HOME\.ssh\config" | Select-String "^Host ([^*]+)$" | ForEach-Object { $_ -replace "Host ", "" } | fzf
-  if (!([string]::IsNullOrEmpty($destination))) { 
+  if (!([string]::IsNullOrEmpty($destination))) {
     ssh "$destination"
   }
   Clear-Host

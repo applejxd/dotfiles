@@ -57,6 +57,14 @@ bw sync
 export BW_SESSION="$(bw unlock --raw)"
 ```
 
+`bw: command not found` の場合は mise の shim が未生成の可能性がある:
+
+```bash
+mise install            # npm:@bitwarden/cli を含むツール一式を入れ直す
+mise reshim             # shim を再生成
+mise which bw           # 実体パスを確認 (~/.local/share/mise/installs/... 配下)
+```
+
 ### 2. age復号化エラー
 
 ```bash

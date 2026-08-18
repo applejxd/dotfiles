@@ -16,8 +16,8 @@
 | ツール実行前 | `PreToolUse` | `PreToolUse` / `preToolUse` | block 可能 |
 | ツール実行後 (成功) | `PostToolUse` | `PostToolUse` / `postToolUse` | Copilot は出力が LLM に渡らない仕様 |
 | ツール実行後 (失敗) | `PostToolUseFailure` | `postToolUseFailure` | Copilot は additionalContext を返せる |
-| ターン終了 | `Stop` | `Stop` / `agentStop` | block 可能 |
-| Task 完了 | `TaskCompleted` | (相当なし) | Claude 固有 |
+| ターン終了 | `Stop` | `Stop` / `agentStop` | block 可能。Claude は 1 ターン 1 回 |
+| Task 完了 | `TaskCompleted` | (相当なし) | Claude 固有。**`TaskCreate` ツール経由のタスク完了時のみ**発火し、ターン終了では発火しない |
 | サブエージェント終了 | `SubagentStop` | `SubagentStop` / `subagentStop` | block 可能 |
 | サブエージェント開始 | (相当なし) | `subagentStart` | Copilot 固有 |
 | ユーザ入力 | `UserPromptSubmit` | `UserPromptSubmit` / `userPromptSubmitted` | block 可能 |
@@ -41,6 +41,20 @@ Claude → Copilot で hook を流用する場合の event 名対応:
 | ターン終了で介入 | `{"Stop", "TaskCompleted", "agentStop"}` (3 つ全部受理) |
 | 失敗からのリカバリ提案 | `{"PostToolUseFailure", "postToolUseFailure"}` |
 
+**設定に書く event 名は `Stop` を選ぶこと。** `TaskCompleted` は実在するが
+`TaskCreate` ツール経由のタスク完了時にしか発火せず、「ターン終了で 1 回」の
+用途では実質動かない (公式 docs: `Stop` = "When Claude finishes responding"、
+cadence は "once per turn")。スクリプト側は上表のとおり複数名を受理しておくと
+移植時に壊れにくい。
+
+### matcher / timeout の共通仕様 (Claude Code)
+
+- `matcher` は省略・`""`・`"*"` のいずれでも「全マッチ」(公式仕様)
+- `Stop` / `UserPromptSubmit` / `PostToolBatch` などは **matcher 非対応**
+  (書いても silently ignored) なので省略する
+- `timeout` の単位は秒。`command` 型 hook のデフォルトは **600 秒**と長いので、
+  明示的に指定するのが望ましい (Copilot 側のキー名は `timeoutSec`)
+
 スクリプト側で `hook_event_name` の集合チェックにすると、両ツール対応 +
 将来の名前変更にも強い。
 
@@ -53,10 +67,22 @@ Claude → Copilot で hook を流用する場合の event 名対応:
 | シェル実行 | `Bash` | `bash` | `^bash$` (Copilot) / `Bash` (Claude) |
 | ファイル読み取り | `Read` | `view` | `^view$` / `Read` |
 | ファイル新規作成 | `Write` | `create` | `^create$` / `Write` |
-| ファイル編集 | `Edit`, `MultiEdit` | `edit` | `^edit$` / `Edit\|MultiEdit` |
+| ファイル編集 | `Edit` | `edit` | `^edit$` / `Edit` |
 | 検索 | `Grep` | `grep` | `^grep$` / `Grep` |
 | Glob | `Glob` | `glob` | `^glob$` / `Glob` |
 | ユーザ質問 | (相当なし) | `ask_user` | `^ask_user$` |
+
+> **注意 (Claude Code のツール名の変遷)**
+>
+> - `MultiEdit` は v2.0 系で削除され、`Edit` に統合された。matcher に書いても一致しない。
+> - `Write` ツール自体は現役（新規作成・上書き担当）で、hooks の `matcher` では
+>   引き続き有効。
+> - ただし **permission rule**（`permissions.allow/ask/deny`、skill の `allowed-tools`、
+>   hooks の `if:` 条件）の `Write(path)` は v2.1.210 で deprecated になり、起動時に
+>   警告が出る。書き込み系のパス指定は `Edit(path)` に統一する
+>   （ref: anthropics/claude-code CHANGELOG.md v2.1.210
+>   "Added a startup warning for `Write(path)`, `NotebookEdit(path)`, and `Glob(path)`
+>   permission rules — use `Edit(path)` or `Read(path)` instead"）。
 
 ### 正規化パターン (推奨)
 
@@ -66,7 +92,7 @@ Claude → Copilot で hook を流用する場合の event 名対応:
 _TOOL_KIND_MAP = {
     # Claude (PascalCase)
     "Bash": "bash", "Read": "view", "Write": "create",
-    "Edit": "edit", "MultiEdit": "edit", "Grep": "grep",
+    "Edit": "edit", "MultiEdit": "edit", "Grep": "grep",  # MultiEdit は削除済み (後方互換)
     # Copilot (lowercase)
     "bash": "bash", "view": "view", "create": "create",
     "edit": "edit", "grep": "grep",
@@ -80,7 +106,7 @@ _TOOL_KIND_MAP = {
 - **Copilot CLI**: `^(?:pattern)$` で **anchored** される。`bash` という
   matcher は `bash` という文字列 全体 にのみマッチ
 - **Claude Code**: パターンは部分マッチ含む独自構文。`Bash` は Bash tool 名と
-  exact 比較、`Edit|Write|MultiEdit` は OR 分岐
+  exact 比較、`Edit|Write` は OR 分岐
 - → 同じ matcher 文字列を両ツールで使うのは非推奨。設定ファイルを別々に書く
 
 ## 3. Payload schema
@@ -116,7 +142,7 @@ stdin で受け取る JSON ペイロード。
 ```
 
 - bash 系: `tool_input.command` (両ツール共通キー)
-- ファイル系: `tool_input.path` (Copilot 全般・Claude Edit/MultiEdit)
+- ファイル系: `tool_input.path` (Copilot 全般・Claude Edit)
   または `tool_input.file_path` (Claude Read/Write)
 
 **path 取得パターン**:

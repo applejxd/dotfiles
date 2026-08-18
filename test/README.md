@@ -1,6 +1,6 @@
 # chezmoi リポジトリ検証（Docker 実行メモ）
 
-このメモは、コンテナ内のクリーンな `$HOME` に対して **chezmoi リポジトリを安全に検証**するための手順です。  
+このメモは、コンテナ内のクリーンな `$HOME` に対して **chezmoi リポジトリを安全に検証**するための手順です。
 `docker compose run` により毎回新規環境で `diff` →（必要に応じて）`apply` を実行できます。
 
 > すべてのコマンドは **リポジトリ直下**で実行してください。
@@ -25,7 +25,7 @@ chmod +x test.sh run_chezmoi.sh
 docker compose build
 ```
 
-> UID/GID をホストに合わせたい場合は、`compose.yaml` の `build.args` を有効化し  
+> UID/GID をホストに合わせたい場合は、`compose.yaml` の `build.args` を有効化し
 > `docker compose build --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g)` を利用してください。
 
 ---
@@ -60,17 +60,21 @@ docker compose build
 `test.sh` 実行時に環境変数を前置して挿入できます。
 
 - `APPLY`：`0`（既定, dry-run）/ `1`（apply 実行）
-- `CHEZMOI_ARGS`：`chezmoi diff/apply` に渡す追加引数
+- `CHEZMOI_TEST_ARGS`：`chezmoi diff/apply` に渡す追加引数
+
+> **注意**: `CHEZMOI_ARGS` は使えません。chezmoi 自身が予約しており、
+> `chezmoi cd` のサブシェルでは `CHEZMOI_ARGS="chezmoi cd"` が export されています。
+> この名前を使うと、そのまま `chezmoi diff` の引数として渡ってテストが失敗します。
 
 ```bash
 # 例：タグで Linux のみ含める + apply 実行
-CHEZMOI_ARGS="--include tag=linux" APPLY=1 ./test.sh apply
+CHEZMOI_TEST_ARGS="--include tag=linux" APPLY=1 ./test.sh apply
 
 # 例：macOS を除外し dry-run（diff のみ）
-CHEZMOI_ARGS="--exclude tag=darwin" ./test.sh
+CHEZMOI_TEST_ARGS="--exclude tag=darwin" ./test.sh
 
 # 例：特定ファイル/グループに限定（定義に応じて調整）
-CHEZMOI_ARGS="--include files=.bashrc" ./test.sh
+CHEZMOI_TEST_ARGS="--include files=.bashrc" ./test.sh
 ```
 
 ---
@@ -82,19 +86,23 @@ CHEZMOI_ARGS="--include files=.bashrc" ./test.sh
 1. **環境情報表示** - ユーザー、HOME、chezmoi/gitバージョン
 2. **`chezmoi doctor`** - 環境診断（警告は非致命的として処理）
 3. **`chezmoi init --source=/repo`** - ホストリポジトリを読み取り専用でマウントして初期化
-4. **`chezmoi diff [${CHEZMOI_ARGS}]`** - 差分確認
-   - Exit code 0: 差分なし（成功）
-   - Exit code 1: 差分あり（正常、成功として扱う）
-   - Exit code > 1: 実際のエラー（失敗）
-5. **`APPLY=1` のとき `chezmoi apply --keep-going -v [${CHEZMOI_ARGS}]`** - 設定適用 → 再度 `doctor`
-6. **実行サマリー表示** - 各ステップの結果と最終的な成功/失敗判定
+4. **source 解決チェック** - `chezmoi source-path` が `/repo` 配下を指すことを確認
+   - `chezmoi init` は `.chezmoi.toml.tmpl` から設定を再生成するため、設定ファイルに
+     書いた `sourceDir` は失われる。全 chezmoi 呼び出しで `--source=/repo` を明示している
+   - ここが壊れると「差分なし」に見えてテストが偽陽性になるので、失敗時は即中断する
+5. **`chezmoi diff [${CHEZMOI_TEST_ARGS}]`** - 差分確認
+   - Exit code 0: 正常終了（差分の有無は出力の `diff --git` 行数で判定）
+   - Exit code != 0: エラー（失敗として中断。stderr も表示する）
+6. **`APPLY=1` のとき `chezmoi apply --keep-going -v [${CHEZMOI_TEST_ARGS}]`** - 設定適用 → 再度 `doctor`
+7. **実行サマリー表示** - 各ステップの結果と最終的な成功/失敗判定
 
 ### 改善された機能
 
 - **事前チェック**: Docker/Docker Compose の動作確認、compose.yaml の存在確認
 - **エラーハンドリング**: `|| true` の多用を避け、適切なエラー判定を実装
 - **実行結果追跡**: 各ステップの成功/失敗を記録し、最終サマリーで表示
-- **変数の安全性**: `CHEZMOI_ARGS` を引用符で囲み、スペースを含む引数に対応
+- **変数の安全性**: `CHEZMOI_TEST_ARGS` を配列に展開し、スペースを含む引数に対応
+- **偽陽性の防止**: `chezmoi diff` の stderr を捨てずに判定材料とし、source 解決も検証する
 
 > `$HOME` は `tmpfs` マウントで毎回クリーンです（`compose.yaml` 既定）。
 
@@ -105,13 +113,13 @@ CHEZMOI_ARGS="--include files=.bashrc" ./test.sh
 - **Linux のみ検証**：
 
   ```bash
-  CHEZMOI_ARGS="--include tag=linux" ./test.sh
+  CHEZMOI_TEST_ARGS="--include tag=linux" ./test.sh
   ```
 
 - **macOS 除外**：
 
   ```bash
-  CHEZMOI_ARGS="--exclude tag=darwin" ./test.sh
+  CHEZMOI_TEST_ARGS="--exclude tag=darwin" ./test.sh
   ```
 
 - **即時適用で挙動確認**：
@@ -133,29 +141,29 @@ CHEZMOI_ARGS="--include files=.bashrc" ./test.sh
 
 ## 7. トラブルシュート
 
-- **`compose.yaml` が見つからない/ボリュームが空**  
-  → コマンドを **リポジトリ直下**で実行しているか確認してください（`pwd` を確認）。  
+- **`compose.yaml` が見つからない/ボリュームが空**
+  → コマンドを **リポジトリ直下**で実行しているか確認してください（`pwd` を確認）。
   → `docker compose ls` / `docker compose config` で解決に役立つ情報を表示できます。
 
-- **`permission denied: test.sh`**  
+- **`permission denied: test.sh`**
   → `chmod +x test.sh` を付与してください。
 
-- **`chezmoi` が見つからない**  
+- **`chezmoi` が見つからない**
   → イメージを再ビルドしてください：`docker compose build --no-cache`
 
-- **apply が重く時間がかかる/外部取得が走る**  
-  → まずは `./test.sh`（dry-run）で差分を把握してから `APPLY=1` を検討してください。  
-  → タグで範囲を絞る（`CHEZMOI_ARGS`）と負荷を抑えられます。
+- **apply が重く時間がかかる/外部取得が走る**
+  → まずは `./test.sh`（dry-run）で差分を把握してから `APPLY=1` を検討してください。
+  → タグで範囲を絞る（`CHEZMOI_TEST_ARGS`）と負荷を抑えられます。
 
-- **一時的に `$HOME` を保持して再現性検証したい**  
-  → `compose.yaml` の `tmpfs` マウントをコメントアウトし、代わりに named volume を設定してください（例：`home_data:/home/tester`）。  
+- **一時的に `$HOME` を保持して再現性検証したい**
+  → `compose.yaml` の `tmpfs` マウントをコメントアウトし、代わりに named volume を設定してください（例：`home_data:/home/tester`）。
   → その際、末尾に `volumes: { home_data: {} }` を追加します。
 
 ---
 
 ## 8. クリーンアップ
 
-本構成は `docker compose run --rm` でコンテナを都度破棄します。残るのはイメージのみです。  
+本構成は `docker compose run --rm` でコンテナを都度破棄します。残るのはイメージのみです。
 ビルドキャッシュや未使用イメージを削除する場合：
 
 ```bash

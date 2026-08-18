@@ -2,7 +2,7 @@
 -- ~/.vimrc を source した後に init.vim から呼ばれる
 -- lazy.nvim をブートストラップし、lua/plugins/*.lua をロードする
 
--- 1. lazy.nvim 自体がインストールされていなければ自動 clone 
+-- 1. lazy.nvim 自体がインストールされていなければ自動 clone
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not (vim.uv or vim.loop).fs_stat(lazypath) then
   local out = vim.fn.system({

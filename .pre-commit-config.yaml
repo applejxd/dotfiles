@@ -21,6 +21,7 @@ repos:
         name: Check YAML syntax
       - id: check-toml
         name: Check TOML syntax
+        exclude: ^home/dot_codex/modify_config\.toml$
       - id: end-of-file-fixer
         name: Fix end of files
       - id: trailing-whitespace

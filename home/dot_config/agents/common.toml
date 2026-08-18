@@ -100,7 +100,8 @@ read_ask_globs = [
   ".env.*",
 ]
 
-# Claude のみ反映: Write(...) を ask に追加
+# Claude のみ反映: Edit(...) を ask に追加
+# (書き込み系 permission rule は Edit(path) に統一。Write(path) は v2.1.210 で deprecated)
 write_ask_globs = [
   ".env.*",
   "mise.toml",
@@ -122,6 +123,7 @@ read_deny_globs = [
   "~/.copilot/config.json",
 ]
 
+# Claude のみ反映: Edit(...) を deny に追加
 write_deny_globs = [
   "**/secrets/**",
   "**/*secret*",
@@ -199,3 +201,81 @@ path = "~/.local/share/chezmoi"
 approvals = [
   { kind = "write" },
 ]
+
+# ---------------------------------------------------------------------------
+# Hooks (Claude Code / Copilot CLI 共通の単一ソース)
+# ---------------------------------------------------------------------------
+# 生成先:
+#   ~/.claude/settings.json の hooks 節      <- claude_event / claude_matcher
+#   ~/.copilot/hooks/from-claude.json        <- copilot_event / copilot_matcher
+#
+# フィールド:
+#   id            識別子 (生成物には出ない。テスト・レビュー用)
+#   script        ~/.claude/hooks/ 配下のファイル名 (両 CLI とも同じ実体を共有)
+#   runner        起動コマンド ("python3" / "bash")
+#                 素の Ubuntu には `python` が無い (python3 のみ) ので python3 を使う
+#   purpose       用途メモ
+#   *_event       hook イベント名。空文字にするとその CLI には出力しない
+#   *_matcher     matcher。省略すると matcher キー自体を出力しない (= 全ツール)
+#   timeout_sec   タイムアウト秒。Claude の timeout / Copilot の timeoutSec へ反映
+#                 (Claude の command hook は未指定だと 600 秒と長いので明示する)
+#
+# matcher の書き分け (両 CLI で意味論が違うので共通化しない):
+#   Claude Code : tool 名の完全一致を `|` で OR 連結。PascalCase のみ
+#   Copilot CLI : `^(?:pattern)$` として anchored される。明示的に ^...$ を書く
+#                 PascalCase 名も Claude 互換モードで照合されるため両方列挙する
+
+[[hooks]]
+id = "check_bash"
+script = "check_bash.py"
+runner = "python3"
+purpose = "bash.critical_deny を hard-block する 3 層防御の最終防波堤"
+claude_event = "PreToolUse"
+claude_matcher = "Bash"
+copilot_event = "PreToolUse"
+copilot_matcher = "^(Bash|bash)$"
+timeout_sec = 30
+
+[[hooks]]
+id = "redirect-tmp"
+script = "redirect-tmp.py"
+runner = "python3"
+purpose = "/tmp 利用を検出して ./.tmp へ誘導する"
+# スクリプトが処理する kind は bash / view / create / edit の 4 つだけなので
+# matcher もそれに合わせる (無駄な hook 起動を避ける)
+claude_matcher = "Bash|Read|Write|Edit"
+claude_event = "PreToolUse"
+copilot_event = "PreToolUse"
+copilot_matcher = "^(Bash|bash|Read|view|Write|create|Edit|edit)$"
+timeout_sec = 30
+
+[[hooks]]
+id = "markdownlint"
+script = "markdownlint.sh"
+runner = "bash"
+purpose = "Markdown 編集後に markdownlint --fix と残存違反の警告"
+claude_event = "PostToolUse"
+claude_matcher = "Edit|Write"
+copilot_event = "PostToolUse"
+copilot_matcher = "^(Edit|Write|edit|create)$"
+timeout_sec = 30
+
+[[hooks]]
+id = "format-file"
+script = "format-file.sh"
+runner = "bash"
+purpose = "編集したファイルを拡張子に応じて整形 (ruff / clang-format / prettier)"
+claude_event = "PostToolUse"
+claude_matcher = "Edit|Write"
+copilot_event = "PostToolUse"
+copilot_matcher = "^(Edit|Write|edit|create)$"
+timeout_sec = 30
+
+[[hooks]]
+id = "update-adr-on-stop"
+script = "update-adr-on-stop.py"
+runner = "python3"
+purpose = "ターン終了時に ADR 更新の要否を確認する"
+claude_event = "Stop"
+copilot_event = "Stop"
+timeout_sec = 60

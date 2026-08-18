@@ -5,6 +5,7 @@ Usage:
     generate.py --target claude-settings --common PATH [--existing PATH]
     generate.py --target copilot-perms --common PATH [--existing PATH]
     generate.py --target copilot-settings --common PATH [--existing PATH]
+    generate.py --target copilot-hooks --common PATH
 
 If --existing is omitted, stdin is read. The merged JSON is printed to stdout.
 For Copilot, automatically-managed keys (copilotTokens, loggedInUsers, etc.) in
@@ -47,10 +48,87 @@ def first_token(pattern: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Hooks (Claude / Copilot 共通の単一ソース -> 各 CLI の設定形式へ)
+# ---------------------------------------------------------------------------
+
+# hook スクリプトの配置先。Claude / Copilot とも同じ実体を共有する。
+HOOKS_DIR = "~/.claude/hooks"
+
+
+def hook_command(hook: dict[str, Any], *, expand_home: bool) -> str:
+    """hook の起動コマンド文字列を組み立てる。
+
+    expand_home=True  -> "/home/user/.claude/hooks/x.py" (Claude 用の絶対パス)
+    expand_home=False -> "$HOME/.claude/hooks/x.py"      (Copilot 用)
+    """
+    runner = hook.get("runner", "python")
+    script = hook["script"]
+    base = expand_user(HOOKS_DIR) if expand_home else HOOKS_DIR.replace("~", "$HOME", 1)
+    return f"{runner} {base}/{script}"
+
+
+def build_claude_hooks(common: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """Claude Code の settings.json 用 hooks (ネスト構造) を組み立てる。
+
+    - matcher を省略すると「全マッチ」扱い (公式仕様)
+    - timeout は秒。省略時の command hook のデフォルトは 600 秒と長いため、
+      common.toml の timeout_sec を明示的に出力する
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for hook in common.get("hooks", []):
+        event = hook.get("claude_event")
+        if not event:
+            continue
+        entry: dict[str, Any] = {}
+        matcher = hook.get("claude_matcher")
+        if matcher:
+            entry["matcher"] = matcher
+        command: dict[str, Any] = {
+            "type": "command",
+            "command": hook_command(hook, expand_home=True),
+        }
+        timeout = hook.get("timeout_sec")
+        if timeout:
+            command["timeout"] = timeout
+        entry["hooks"] = [command]
+        out.setdefault(event, []).append(entry)
+    return out
+
+
+def build_copilot_hooks(common: dict[str, Any]) -> dict[str, Any]:
+    """Copilot CLI の ~/.copilot/hooks/*.json 用 hooks (フラット構造) を組み立てる。"""
+    hooks: dict[str, list[dict[str, Any]]] = {}
+    for hook in common.get("hooks", []):
+        event = hook.get("copilot_event")
+        if not event:
+            continue
+        entry: dict[str, Any] = {}
+        matcher = hook.get("copilot_matcher")
+        if matcher:
+            entry["matcher"] = matcher
+        entry["type"] = "command"
+        entry["bash"] = hook_command(hook, expand_home=False)
+        timeout = hook.get("timeout_sec")
+        if timeout:
+            entry["timeoutSec"] = timeout
+        hooks.setdefault(event, []).append(entry)
+    return {"version": 1, "hooks": hooks}
+
+
+def merge_copilot_hooks(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    # hooks ファイルは完全な生成物なので既存内容は参照しない
+    return build_copilot_hooks(common)
+
+
+# ---------------------------------------------------------------------------
 # Claude target
 # ---------------------------------------------------------------------------
 
 def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
+    # 書き込み系の permission rule は Edit(path) に統一する。
+    # Claude Code v2.1.210 で Write(path) / NotebookEdit(path) / Glob(path) は
+    # deprecated となり、起動時警告が出るようになった (代替は Edit(path) / Read(path))。
+    # ref: anthropics/claude-code CHANGELOG.md v2.1.210
     bash = common.get("bash", {})
     file_ = common.get("file", {})
     web = common.get("web", {})
@@ -74,7 +152,7 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     for glob in file_.get("read_deny_globs", []):
         deny.append(f"Read({glob})")
     for glob in file_.get("write_deny_globs", []):
-        deny.append(f"Write({glob})")
+        deny.append(f"Edit({glob})")
     for mcp in claude.get("mcp_deny", []):
         deny.append(mcp)
 
@@ -84,7 +162,7 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     for glob in file_.get("read_ask_globs", []):
         ask.append(f"Read({glob})")
     for glob in file_.get("write_ask_globs", []):
-        ask.append(f"Write({glob})")
+        ask.append(f"Edit({glob})")
 
     # 順序を安定化 (重複除去しつつ元順序を保持)
     def uniq(seq: list[str]) -> list[str]:
@@ -102,6 +180,7 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
 def merge_claude_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     out = dict(existing)
     out["permissions"] = build_claude_permissions(common)
+    out["hooks"] = build_claude_hooks(common)
     return out
 
 
@@ -177,6 +256,7 @@ def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> 
 
 TARGETS = {
     "claude-settings": merge_claude_settings,
+    "copilot-hooks": merge_copilot_hooks,
     "copilot-perms": merge_copilot_perms,
     "copilot-settings": merge_copilot_settings,
 }

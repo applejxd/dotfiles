@@ -15,7 +15,7 @@ snippets:
   - name: "[dsp] docker stop container"
     keyword: "dsp,"
     snippet: docker stop {{container}}
-  
+
   - name: "[dst] docker start container"
     keyword: "dst,"
     snippet: docker start {{container}}
@@ -125,7 +125,7 @@ completions:
     patterns:
       - "^docker stop $"
     sourceCommand: >-
-      docker ps --filter 'status=running' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}' 
+      docker ps --filter 'status=running' --format 'table {{.Image}}\t{{.Status}}\t{{.Names}}'
       | tail +2
     options:
       --multi: true

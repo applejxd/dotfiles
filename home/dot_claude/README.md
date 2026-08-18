@@ -7,6 +7,28 @@
     - 複数エージェントが並列で協調作業するチーム機能（実験的機能）
     - tmux 使用時はスプリットペインで各エージェントを表示可能
 
+## settings.json の管理範囲
+
+`~/.claude/settings.json` は chezmoi の `modify_settings.json.tmpl` が更新する。
+
+| キー | 管理 |
+| --- | --- |
+| `permissions` | `home/dot_config/agents/common.toml` から生成（apply で全置換） |
+| `hooks` | 同上（apply で全置換） |
+| `env` / `enabledPlugins` / `includeCoAuthoredBy` | 手動管理（apply では触らず保持） |
+
+## hook の追加手順
+
+1. `home/dot_claude/hooks/executable_<name>.(py|sh)` にスクリプトを置く
+   - パス取得やブロック出力は `lib/agent_compat.(py|sh)` を使うと両 CLI 対応になる
+2. `home/dot_config/agents/common.toml` の `[[hooks]]` に 1 エントリ追加する
+3. `chezmoi diff` で確認 → `chezmoi apply`
+4. Claude Code を再起動（settings.json は起動時に読まれる）
+
+`[[hooks]]` は `~/.claude/settings.json` と `~/.copilot/hooks/from-claude.json`
+の両方に展開されるので、CLI ごとに二重管理しなくてよい。
+詳細は [`docs/agents-permissions.md`](../../docs/agents-permissions.md)。
+
 ## デフォルトのスラッシュコマンド
 
 [マニュアル](https://docs.claude.com/en/docs/claude-code/interactive-mode#built-in-commands)
