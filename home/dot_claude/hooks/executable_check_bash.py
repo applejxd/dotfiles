@@ -34,7 +34,7 @@ from agent_compat import (  # noqa: E402
     read_input,
 )
 
-# ~/.config/agents/ (chezmoi 管理) にある critical_deny を import
+# ~/.config/agents/ (chezmoi 管理) にあるポリシーモジュールを import
 # AGENTS_CONFIG_DIR で差し替え可能 (テスト・コンテナから repo の実体を指すため)
 _AGENTS_DIR = os.environ.get("AGENTS_CONFIG_DIR")
 if not _AGENTS_DIR:
@@ -42,9 +42,9 @@ if not _AGENTS_DIR:
     _AGENTS_DIR = os.path.join(_CONFIG_HOME, "agents")
 sys.path.insert(0, _AGENTS_DIR)
 try:
-    import critical_deny as _critical_deny  # noqa: E402
+    import command_policy as _policy  # noqa: E402
 except ImportError:  # pragma: no cover
-    _critical_deny = None  # type: ignore[assignment]
+    _policy = None  # type: ignore[assignment]
 
 # ─── センシティブパスのパターン ──────────────────────────────────────
 SENSITIVE_PATH_PATTERNS = [
@@ -223,7 +223,7 @@ _PYTHON_BIN_RE = re.compile(r"^(?:/\S*/)?python[0-9.]*$")
 def check_pip_redirect(cmd: str) -> str | None:
     """pip / python -m pip の直接使用を uv/uvx にリダイレクトする。
 
-    critical_deny と同じ normalize を通してから各セグメントの先頭トークンを見るので、
+    ポリシー照合と同じ normalize を通してから各セグメントの先頭トークンを見るので、
     以下の既知の抜け道をすべて塞ぐ:
 
       * ``cd foo && pip install x``  (生文字列の先頭アンカーだと素通りしていた)
@@ -232,7 +232,7 @@ def check_pip_redirect(cmd: str) -> str | None:
       * ``/usr/bin/pip install x``   (絶対パス指定)
     """
     segments = (
-        _critical_deny.normalize(cmd) if _critical_deny is not None else [cmd]
+        _policy.normalize(cmd) if _policy is not None else [cmd]
     )
     for segment in segments:
         tokens = segment.split()
@@ -257,21 +257,21 @@ def check_pip_redirect(cmd: str) -> str | None:
 def check_policy_loaded(cmd: str) -> str | None:
     """ポリシー設定を読めないときは fail-closed で拒否する。
 
-    以前は import 失敗時に ``_critical_deny = None`` として全チェックを
+    以前は import 失敗時に ``_policy = None`` として全チェックを
     素通りさせていたため、``~/.config/agents/`` の破損 (docs のトラブルシュートに
     ある ``__pycache__`` 由来の import 失敗など) で **全ガードが無言で消えて**いた。
     ここで止めることで、壊れていることが必ず表面化する。
     """
-    if _critical_deny is None:
+    if _policy is None:
         return (
-            f"ポリシーモジュールを読み込めませんでした ({_AGENTS_DIR}/critical_deny.py)。\n"
+            f"ポリシーモジュールを読み込めませんでした ({_AGENTS_DIR}/command_policy.py)。\n"
             "安全のため bash コマンドを拒否しています。\n"
             "対処: `chezmoi apply ~/.config/agents` を実行し、"
             f"`{_AGENTS_DIR}/__pycache__/` が残っていれば削除してください。"
         )
-    if not Path(_critical_deny.DEFAULT_COMMON_PATH).is_file():
+    if not Path(_policy.DEFAULT_COMMON_PATH).is_file():
         return (
-            f"ポリシー定義が見つかりません ({_critical_deny.DEFAULT_COMMON_PATH})。\n"
+            f"ポリシー定義が見つかりません ({_policy.DEFAULT_COMMON_PATH})。\n"
             "安全のため bash コマンドを拒否しています。\n"
             "対処: `chezmoi apply ~/.config/agents` を実行してください。"
         )
@@ -285,8 +285,8 @@ def check_policy_deny(cmd: str) -> str | None:
     compound 命令の個別評価欠如) に対する最終防波堤。shell command を
     normalize (cd, git -C, compound 分割) してから pattern match する。
     """
-    patterns = _critical_deny.load_deny()
-    matched = _critical_deny.find_critical_match(cmd, patterns)
+    patterns = _policy.load_deny()
+    matched = _policy.find_match(cmd, patterns)
     if matched:
         return (
             f"`{matched}` は deny パターンに一致するためブロックされました。\n"
@@ -302,8 +302,8 @@ def check_policy_ask(cmd: str) -> str | None:
     deny チェックの後に評価されるので、より具体的な deny パターン
     (例: ``git reset --hard``) が一般形の ask (``git reset``) に優先する。
     """
-    patterns = _critical_deny.load_ask()
-    matched = _critical_deny.find_critical_match(cmd, patterns)
+    patterns = _policy.load_ask()
+    matched = _policy.find_match(cmd, patterns)
     if matched:
         return (
             f"`{matched}` は承認が必要な操作です (common.toml の [bash] ask)。\n"
@@ -363,11 +363,11 @@ def _is_catastrophic_rm_target(token: str) -> bool:
 def check_rm_root_guard(cmd: str) -> str | None:
     """`rm` がシステム全体・ホーム・親ディレクトリを対象にしていないか。
 
-    `cd /elsewhere && rm -rf /` のような回避を防ぐため、critical_deny と同じ
+    `cd /elsewhere && rm -rf /` のような回避を防ぐため、ポリシー照合と同じ
     normalize を通してから各セグメントを検査する。
     """
     segments = (
-        _critical_deny.normalize(cmd) if _critical_deny is not None else [cmd]
+        _policy.normalize(cmd) if _policy is not None else [cmd]
     )
     for segment in segments:
         tokens = segment.split()

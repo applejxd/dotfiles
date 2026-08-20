@@ -23,7 +23,7 @@ COMMON_PATH = ROOT / "home" / "dot_config" / "agents" / "common.toml"
 sys.path.insert(0, str(ROOT / "home" / "dot_config" / "agents"))
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
-import critical_deny as cd  # noqa: E402
+import command_policy as policy  # noqa: E402
 import generate as gen  # noqa: E402
 
 
@@ -131,13 +131,13 @@ def test_git_dash_c_is_not_allowed():
 
 
 def test_loader_reads_ask():
-    patterns = cd.load_ask(str(COMMON_PATH))
+    patterns = policy.load_ask(str(COMMON_PATH))
     assert "rm" in patterns
     assert "git commit" in patterns
 
 
 def test_loader_reads_deny():
-    patterns = cd.load_deny(str(COMMON_PATH))
+    patterns = policy.load_deny(str(COMMON_PATH))
     assert "git push" in patterns
     assert "rm" not in patterns
 
@@ -145,7 +145,7 @@ def test_loader_reads_deny():
 def test_hook_and_permissions_come_from_the_same_lists():
     """generate.py が出す Bash ルールと hook が読むパターンが 1:1 で対応すること."""
     perms = gen.build_claude_permissions(COMMON)
-    for key, loader in (("ask", cd.load_ask), ("deny", cd.load_deny)):
+    for key, loader in (("ask", policy.load_ask), ("deny", policy.load_deny)):
         from_permissions = {
             r[len("Bash("):-len(":*)")] for r in perms[key] if r.startswith("Bash(")
         }

@@ -18,7 +18,7 @@ Public API:
     load_deny(common_toml_path)             -> list[str]
     load_ask(common_toml_path)              -> list[str]
     normalize(command_str)                  -> list[str]
-    find_critical_match(command_str, patterns) -> str | None
+    find_match(command_str, patterns) -> str | None
 
 The module is intentionally dependency-free (Python stdlib only) so it can
 be imported from hooks running in minimal environments.
@@ -239,7 +239,7 @@ def _pattern_matches(segment: str, pattern: str) -> bool:
     return seg_tokens[: len(pat_tokens)] == pat_tokens
 
 
-def find_critical_match(command: str, patterns: Iterable[str]) -> str | None:
+def find_match(command: str, patterns: Iterable[str]) -> str | None:
     """Return the first matching pattern, or None."""
     pats = list(patterns)
     if not pats:
@@ -268,7 +268,7 @@ def _main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     patterns = load_deny(args.common)
-    match = find_critical_match(args.command, patterns)
+    match = find_match(args.command, patterns)
     if match is None:
         print("OK")
         return 0

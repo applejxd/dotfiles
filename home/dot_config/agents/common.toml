@@ -5,14 +5,15 @@
 #   ~/.copilot/permissions-config.json       -> [bash.allow] [copilot.locations]
 #   ~/.copilot/settings.json (一部キーのみ)   -> [web] [copilot.trusted_folders]
 #
-# 3 層防御:
-#   1. CLI UI prompt (対話モードのみ)
-#   2. permission リスト (本ファイル由来、CLI のバグで bypass されることがある)
-#   3. hook (check_bash.py) で hard-block ... [bash.critical_deny]
+# 2 層構成:
+#   1. permission リスト (本ファイル由来。Claude のみ。CLI 本体が評価する)
+#   2. hook (check_bash.py) が同じリストを読んで deny / ask を強制 (Claude + Copilot)
 #
 # Claude Code は permission リストの既知バグが複数 open (cd && bypass, git -C bypass
 # 等。anthropics/claude-code#59498, #59006, #20085 ほか)。
-# したがって本当に止めたい命令は [bash.critical_deny] に書き、hook で hard-block する。
+# hook 側は normalize してから照合するので、これらのバイパスも捕捉できる。
+# 逆に hook は設定を読めないと機能しないため、permission リストを併用して
+# 多層にしている (hook 自体も設定を読めないときは fail-closed で deny する)。
 
 # ---------------------------------------------------------------------------
 # Bash 系
@@ -167,7 +168,7 @@ write_ask_globs = [
   "mise.toml",
 ]
 
-# Claude: Read(...) deny に展開。hook の critical_deny には反映しない
+# Claude: Read(...) deny に展開。hook の bash ポリシーには反映しない
 # (ファイルアクセスの hook は別途必要なら作る)
 #
 # ★ `**/*key*` や `**/*token*` のような部分一致 glob は使わない。
@@ -333,7 +334,7 @@ approvals = [
 id = "check_bash"
 script = "check_bash.py"
 runner = "python3"
-purpose = "bash.critical_deny を hard-block する 3 層防御の最終防波堤"
+purpose = "[bash] deny / ask を両 CLI で強制する (permission リストの補完)"
 claude_event = "PreToolUse"
 claude_matcher = "Bash"
 copilot_event = "PreToolUse"

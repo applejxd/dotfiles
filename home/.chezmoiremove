@@ -1,0 +1,13 @@
+# chezmoi apply 時に削除するターゲット
+# https://www.chezmoi.io/reference/special-files/chezmoiremove/
+#
+# ここに書いたパスは、ソースから消えただけでは残ってしまう配備済みファイルを
+# 明示的に片付けるためのもの。移行が全マシンに行き渡ったら削除してよい。
+
+# 2026-08: critical_deny.py -> command_policy.py に改名 (中身は汎用の
+# normalize + policy matcher で、critical_deny という名前が実態と合わなくなった)
+.config/agents/critical_deny.py
+
+# NOTE: __pycache__ は .chezmoiignore で管理対象外にしているため、ここに書いても
+# 削除されない。古い .pyc が残って困る場合は手で削除する
+# (`rm -rf ~/.config/agents/__pycache__`)。

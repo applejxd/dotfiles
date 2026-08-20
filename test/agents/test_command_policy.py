@@ -1,7 +1,7 @@
-"""Tests for scripts/agents/critical_deny.py.
+"""Tests for home/dot_config/agents/command_policy.py.
 
 Run with: ``python3 -m pytest test/agents/`` or
-``python3 test/agents/test_critical_deny.py`` for ad-hoc execution.
+``python3 test/agents/test_command_policy.py`` for ad-hoc execution.
 """
 
 from __future__ import annotations
@@ -12,11 +12,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "home" / "dot_config" / "agents"))
 
-import critical_deny as cd  # noqa: E402
+import command_policy as policy  # noqa: E402
 
 
 # マッチャの動作を確認するための固定パターン (live な common.toml とは独立)。
-# 実際の分類 (critical_deny / critical_ask) は test_check_bash_decision.py で検証する。
+# 実際の分類 ([bash] deny / ask) は test_check_bash_decision.py で検証する。
 PATTERNS = ["sudo", "rm -rf", "git push", "git reset --hard", "git rebase"]
 
 
@@ -25,46 +25,46 @@ PATTERNS = ["sudo", "rm -rf", "git push", "git reset --hard", "git rebase"]
 # ---------------------------------------------------------------------------
 
 def test_split_compound_and():
-    assert cd.normalize("a && b") == ["a", "b"]
+    assert policy.normalize("a && b") == ["a", "b"]
 
 
 def test_split_compound_semicolon():
-    assert cd.normalize("a; b ; c") == ["a", "b", "c"]
+    assert policy.normalize("a; b ; c") == ["a", "b", "c"]
 
 
 def test_split_compound_pipe():
-    assert cd.normalize("a | b") == ["a", "b"]
+    assert policy.normalize("a | b") == ["a", "b"]
 
 
 def test_split_respects_quotes():
-    assert cd.normalize("echo 'a && b' && true") == ["echo 'a && b'", "true"]
+    assert policy.normalize("echo 'a && b' && true") == ["echo 'a && b'", "true"]
 
 
 def test_strip_cd_prefix():
     # compound 分割で ["cd /foo", "git push"] になり、cd-only は drop されて
     # 残るのは "git push" のみ
-    assert cd.normalize("cd /foo && git push") == ["git push"]
+    assert policy.normalize("cd /foo && git push") == ["git push"]
 
 
 def test_strip_cd_prefix_semicolon():
-    assert cd.normalize("cd /foo; git push") == ["git push"]
+    assert policy.normalize("cd /foo; git push") == ["git push"]
 
 
 def test_strip_git_dash_c():
-    assert cd.normalize("git -C /foo commit -m hi") == ["git commit -m hi"]
+    assert policy.normalize("git -C /foo commit -m hi") == ["git commit -m hi"]
 
 
 def test_strip_double_git_dash_c():
-    assert cd.normalize("git -C /a -C /b status") == ["git status"]
+    assert policy.normalize("git -C /a -C /b status") == ["git status"]
 
 
 def test_cd_then_git_dash_c():
-    assert cd.normalize("cd /x && git -C /y push") == ["git push"]
+    assert policy.normalize("cd /x && git -C /y push") == ["git push"]
 
 
 def test_idempotent_cd():
     # bare cd 単独は drop される (matching に影響しないので)
-    assert cd.normalize("cd /foo") == []
+    assert policy.normalize("cd /foo") == []
 
 
 # ---------------------------------------------------------------------------
@@ -72,31 +72,31 @@ def test_idempotent_cd():
 # ---------------------------------------------------------------------------
 
 def test_match_plain_git_push():
-    assert cd.find_critical_match("git push origin main", PATTERNS) == "git push"
+    assert policy.find_match("git push origin main", PATTERNS) == "git push"
 
 
 def test_match_cd_bypass():
-    assert cd.find_critical_match("cd /elsewhere && git push", PATTERNS) == "git push"
+    assert policy.find_match("cd /elsewhere && git push", PATTERNS) == "git push"
 
 
 def test_match_git_dash_c_bypass():
-    assert cd.find_critical_match("git -C /repo push origin", PATTERNS) == "git push"
+    assert policy.find_match("git -C /repo push origin", PATTERNS) == "git push"
 
 
 def test_match_compound_second_segment():
-    assert cd.find_critical_match("echo ok && rm -rf /tmp/x", PATTERNS) == "rm -rf"
+    assert policy.find_match("echo ok && rm -rf /tmp/x", PATTERNS) == "rm -rf"
 
 
 def test_match_sudo():
-    assert cd.find_critical_match("sudo apt-get install foo", PATTERNS) == "sudo"
+    assert policy.find_match("sudo apt-get install foo", PATTERNS) == "sudo"
 
 
 def test_match_git_reset_hard():
-    assert cd.find_critical_match("git reset --hard HEAD~1", PATTERNS) == "git reset --hard"
+    assert policy.find_match("git reset --hard HEAD~1", PATTERNS) == "git reset --hard"
 
 
 def test_match_git_rebase():
-    assert cd.find_critical_match("git rebase main", PATTERNS) == "git rebase"
+    assert policy.find_match("git rebase main", PATTERNS) == "git rebase"
 
 
 # ---------------------------------------------------------------------------
@@ -104,27 +104,27 @@ def test_match_git_rebase():
 # ---------------------------------------------------------------------------
 
 def test_no_match_pushd():
-    assert cd.find_critical_match("pushd /foo", PATTERNS) is None
+    assert policy.find_match("pushd /foo", PATTERNS) is None
 
 
 def test_no_match_git_status():
-    assert cd.find_critical_match("git status", PATTERNS) is None
+    assert policy.find_match("git status", PATTERNS) is None
 
 
 def test_no_match_git_reset_soft():
-    assert cd.find_critical_match("git reset HEAD~1", PATTERNS) is None
+    assert policy.find_match("git reset HEAD~1", PATTERNS) is None
 
 
 def test_no_match_rm_without_rf():
-    assert cd.find_critical_match("rm foo.txt", PATTERNS) is None
+    assert policy.find_match("rm foo.txt", PATTERNS) is None
 
 
 def test_no_match_empty():
-    assert cd.find_critical_match("", PATTERNS) is None
+    assert policy.find_match("", PATTERNS) is None
 
 
 def test_no_match_empty_patterns():
-    assert cd.find_critical_match("git push", []) is None
+    assert policy.find_match("git push", []) is None
 
 
 # ---------------------------------------------------------------------------
@@ -133,17 +133,17 @@ def test_no_match_empty_patterns():
 
 def test_real_bug_59498_cd_bypass():
     """anthropics/claude-code#59498: cd /diff && git push --dry-run"""
-    assert cd.find_critical_match("cd /different/path && git push --dry-run", PATTERNS) == "git push"
+    assert policy.find_match("cd /different/path && git push --dry-run", PATTERNS) == "git push"
 
 
 def test_real_bug_59006_git_dash_c_bypass():
     """anthropics/claude-code#59006: git -C /path commit -m '...'"""
-    assert cd.find_critical_match("git -C /path commit -m foo", ["git commit"]) == "git commit"
+    assert policy.find_match("git -C /path commit -m foo", ["git commit"]) == "git commit"
 
 
 def test_real_bug_20085_compound():
     """anthropics/claude-code#20085: compound commands treated as single pattern"""
-    assert cd.find_critical_match("ls && sudo rm -rf /", PATTERNS) == "sudo"
+    assert policy.find_match("ls && sudo rm -rf /", PATTERNS) == "sudo"
 
 
 # ---------------------------------------------------------------------------

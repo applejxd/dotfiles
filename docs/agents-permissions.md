@@ -8,7 +8,7 @@ Claude Code / Copilot CLI の permission (allow/deny/ask) と hook 登録を
 ```text
 home/dot_config/agents/
     common.toml                              単一ソース (permissions + hooks)
-    critical_deny.py                         hook が import する normalizer / matcher
+    command_policy.py                        hook が import する normalizer / matcher
                                              (deny / ask リストの loader も兼ねる)
 scripts/agents/
     generate.py                              modify_ / .tmpl から呼ばれる変換器
@@ -25,7 +25,7 @@ home/dot_copilot/
     modify_private_settings.json.tmpl        ~/.copilot/settings.json を更新
     modify_private_permissions-config.json.tmpl
 test/agents/
-    test_critical_deny.py                    shell normalize / match の unit test
+    test_command_policy.py                   shell normalize / match の unit test
     test_check_bash_decision.py              deny/ask 判定と rm root guard の test
     test_generate_hooks.py                   hook 生成の unit test
 ```
@@ -193,7 +193,7 @@ Copilot は PascalCase イベント名で書くと Claude の tool 名 (`Edit` /
 | [#20085](https://github.com/anthropics/claude-code/issues/20085) | compound 命令 (`a && b`) が個別評価されない |
 | [#52419](https://github.com/anthropics/claude-code/issues/52419) | VS Code 拡張の auto-attach が `.claudeignore` / deny を bypass |
 
-`test/agents/test_critical_deny.py` の `test_real_bug_*` ケースで、これらの
+`test/agents/test_command_policy.py` の `test_real_bug_*` ケースで、これらの
 bypass パターンを hook が確実に block することを保証している。
 
 ## Copilot CLI の制約 (実機確認済)
@@ -266,5 +266,5 @@ chezmoi modify_ スクリプトは空 stdin を受けると空オブジェクト
 | --- | --- |
 | apply 後 Claude が `permissions` / `hooks` を読まない | Claude Code は起動時に settings.json を読むので再起動 |
 | Copilot CLI で hook の deny が効かない | `~/.copilot/hooks/from-claude.json` が apply されているか確認。`copilot --log-level debug` で hook がロードされているか確認 |
-| `~/.config/agents/critical_deny.py` の import に失敗 | `~/.config/agents/__pycache__/` を削除して `chezmoi apply` をやり直し |
+| `~/.config/agents/command_policy.py` の import に失敗 | hook が fail-closed で全 bash を拒否する。`~/.config/agents/__pycache__/` を削除して `chezmoi apply` をやり直す |
 | common.toml の編集が反映されない | `chezmoi diff` で差分を確認 → `chezmoi apply` |
