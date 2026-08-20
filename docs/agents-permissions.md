@@ -69,9 +69,10 @@ hook の `ask` は無効化され、プロンプトすら出ずに拒否され�
 | --- | --- | --- |
 | 承認の余地なく禁止 | `sudo`, `git push`, `git reset --hard`, `git rebase` | `[bash.critical_deny]` + `[bash.deny]` |
 | 外部への漏洩・システム変更 | `ssh`, `nc`, `telnet`, `npm install -g`, DB クライアント | `[bash.deny]` |
+| 規約違反 | `pip` / `pip3` (uv / uvx を使う) | `[bash.deny]` + hook の `check_pip_redirect` |
 | 壊滅的な削除 | `rm -rf /`, `rm -rf ~`, `rm -rf /etc` | `check_bash.py` の `check_rm_root_guard` (hard-deny) |
 | 提案 → 承認 → 実行 | `rm -rf <プロジェクト内>`, `find -delete` | `[bash.critical_ask]` + `[bash.ask]` |
-| 復旧できる変更 | `wget`, `pip`, `npm uninstall`, `docker rm`/`rmi` | `[bash.ask]` |
+| 復旧できる変更 | `wget`, `npm uninstall`, `docker rm`/`rmi` | `[bash.ask]` |
 | 毎回判断したい | `git commit`, `curl`, `mv`, `npm install` | `[bash.ask]` |
 | 自動承認 | `git status`, `grep -n`, `uv sync` | `[bash.allow]` |
 
@@ -207,7 +208,7 @@ bypass パターンを hook が確実に block することを保証している
 
 ```bash
 uv run --with pytest --no-project pytest test/agents/ -q
-# -> 141 passed (critical_deny 26 + hook 生成 21 + deny/ask 判定 94)
+# -> 156 passed (critical_deny 26 + hook 生成 21 + deny/ask 判定 109)
 ```
 
 hook は `AGENTS_CONFIG_DIR` で agents 設定ディレクトリを差し替えられるので、

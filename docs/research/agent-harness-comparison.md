@@ -100,8 +100,9 @@
 | `prompt` | `git add` / `commit` / `push` / `reset` / `clean` / `branch -D`、`gh pr view` / `pr create` / `pr merge` / `pr checkout` / `issue create` / `issue close` / `repo clone`、`docker run` / `exec` / `build` / `rm` / `rmi`、`sed` |
 | `forbidden` | `git push --force`、`git push --force-with-lease`、`docker system prune` |
 
-**Python 系のルールは無い。** Copilot は `uv.lock` があるときだけ hook が `pip` を止め、
-Claude は `permissions.deny` の `Bash(pip:*)` で止まるが、**Codex は完全にノーガード**。
+**Python 系のルールは無い。** Copilot / Claude は hook の `check_pip_redirect` が
+プロジェクト種別を問わず `pip` を hard-deny し（`permissions.deny` の `Bash(pip:*)`
+とあわせて二重）、uv / uvx への代替案を返すが、**Codex は完全にノーガード**。
 
 ## 4. hook の I/O 差分
 
@@ -128,12 +129,12 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 
 | 抜け道 | 原因 | 影響範囲 |
 | --- | --- | --- |
-| `cd foo && pip install x` | `check_pip_redirect` が `re.match(r"\s*pip\b", cmd)` で生文字列の先頭にアンカー。`pip` は `critical_deny` に無いので normalize でも救済されない | Claude / Copilot |
-| `python3 -m pip install x` | `\bpython\b` が `python3` に対して単語境界を作らない | Claude / Copilot |
-| `pip3 install x` | 同上（`pip\b` が `pip3` にマッチしない） | Claude / Copilot |
+| ~~`cd foo && pip install x`~~ | ~~生文字列の先頭アンカー~~ **修正済**: `check_pip_redirect` が normalize 後のセグメント先頭トークンで判定するようになった | — |
+| ~~`python3 -m pip install x`~~ | ~~`\bpython\b` が `python3` に一致しない~~ **修正済**: `python[0-9.]*` で判定 | — |
+| ~~`pip3 install x`~~ | ~~`pip\b` が `pip3` に一致しない~~ **修正済**: `pip[0-9.]*` で判定 | — |
 | `bash -c "git push"` | `critical_deny.py` の `_split_compound` がクォート内を分割しないため、`shlex.split` 後の先頭トークンが `bash` になる | Claude / Copilot |
-| `cd foo && X` / `git -C foo X` で permission deny を回避 | Claude CLI の既知バグ。`critical_deny` の 5 項目のみ normalize で救済 | Claude |
-| `SENSITIVE_PATH_PATTERNS` の誤検知 | `['\"/\s]token` のような緩い部分一致。`grep -rn "api_key" src/` や `.env.example` も止まる | Claude / Copilot |
+| `cd foo && X` / `git -C foo X` で permission deny を回避 | Claude CLI の既知バグ。`critical_deny` / `critical_ask` の項目のみ normalize で救済 | Claude |
+| `SENSITIVE_PATH_PATTERNS` の誤検知 | `['\"/\s]token` のような緩い部分一致。`grep -rn "api_key" src/` や `.env.example`、さらにコマンド文字列に `.ssh` を含むだけの `git commit -m "... .ssh ..."` も止まる | Claude / Copilot |
 
 → 個人用指示の「**拒否条件を満たす別手段に切り替える。条件自体を回避する迂回（コマンドの
 分割・偽装、作業ディレクトリの付け替え）はしない**」は、この層を埋めるために存在する。

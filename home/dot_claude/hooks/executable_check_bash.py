@@ -214,22 +214,41 @@ def check_find_dangerous(cmd: str) -> str | None:
     return None
 
 
+_PIP_BIN_RE = re.compile(r"^(?:/\S*/)?pip[0-9.]*$")
+_PYTHON_BIN_RE = re.compile(r"^(?:/\S*/)?python[0-9.]*$")
+
+
 def check_pip_redirect(cmd: str) -> str | None:
-    """pip / python -m pip の直接使用を uv/uvx にリダイレクト"""
-    # 直接 pip コマンド
-    if re.match(r"\s*pip\b", cmd):
-        suggestion = _pip_suggestion(cmd)
-        return (
-            "pip の直接使用は禁止されています。uv / uvx を使用してください。\n"
-            f"{suggestion}"
-        )
-    # python -m pip
-    if re.search(r"\bpython\b.*\s-m\s+pip\b", cmd):
-        suggestion = _pip_suggestion(cmd)
-        return (
-            "`python -m pip` は禁止されています。uv / uvx を使用してください。\n"
-            f"{suggestion}"
-        )
+    """pip / python -m pip の直接使用を uv/uvx にリダイレクトする。
+
+    critical_deny と同じ normalize を通してから各セグメントの先頭トークンを見るので、
+    以下の既知の抜け道をすべて塞ぐ:
+
+      * ``cd foo && pip install x``  (生文字列の先頭アンカーだと素通りしていた)
+      * ``pip3 install x``           (``pip\\b`` が ``pip3`` に一致しなかった)
+      * ``python3 -m pip install x`` (``\\bpython\\b`` が ``python3`` に一致しなかった)
+      * ``/usr/bin/pip install x``   (絶対パス指定)
+    """
+    segments = (
+        _critical_deny.normalize(cmd) if _critical_deny is not None else [cmd]
+    )
+    for segment in segments:
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = tokens[0]
+        if _PIP_BIN_RE.match(head):
+            return (
+                "pip の直接使用は禁止されています。uv / uvx を使用してください。\n"
+                f"{_pip_suggestion(segment)}"
+            )
+        if _PYTHON_BIN_RE.match(head):
+            for i, token in enumerate(tokens[1:-1], start=1):
+                if token == "-m" and _PIP_BIN_RE.match(tokens[i + 1]):
+                    return (
+                        f"`{head} -m pip` は禁止されています。uv / uvx を使用してください。\n"
+                        f"{_pip_suggestion(segment)}"
+                    )
     return None
 
 
@@ -362,6 +381,7 @@ DENY_CHECKS = [
     check_critical_deny,      # common.toml の critical_deny を強制
     check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
     check_git_c_dangerous,    # git -C 経由の deny サブコマンド実行をブロック
+    check_pip_redirect,       # pip → uv/uvx (プロジェクト種別を問わず全面禁止)
     check_file_read,
     check_archive,
     check_curl_file_send,
@@ -374,16 +394,6 @@ ASK_CHECKS = [
     check_find_dangerous,     # find -exec rm / -delete によるファイル削除
 ]
 
-# uv プロジェクト限定のチェック
-UV_DENY_CHECKS = [
-    check_pip_redirect,    # pip → uv/uvx へのリダイレクト（uv.lock があるプロジェクトのみ）
-]
-
-
-def is_uv_project(cwd: str) -> bool:
-    """cwd に uv.lock が存在するか確認"""
-    return (Path(cwd) / "uv.lock").is_file()
-
 
 def main() -> None:
     data = read_input()
@@ -395,10 +405,7 @@ def main() -> None:
     if not cmd:
         sys.exit(0)
 
-    cwd = data.get("cwd", os.getcwd())
-    deny_checks = DENY_CHECKS + (UV_DENY_CHECKS if is_uv_project(cwd) else [])
-
-    for check in deny_checks:
+    for check in DENY_CHECKS:
         reason = check(cmd)
         if reason:
             emit_pretool_deny(f"[hook blocked] {reason}")

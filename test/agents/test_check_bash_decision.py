@@ -137,7 +137,7 @@ def test_generated_permissions_keep_critical_deny_in_deny():
 
 @pytest.mark.parametrize(
     "command",
-    ["wget:*", "pip:*", "npm uninstall:*", "npm remove:*", "docker rm:*", "docker rmi:*"],
+    ["wget:*", "npm uninstall:*", "npm remove:*", "docker rm:*", "docker rmi:*"],
 )
 def test_reversible_commands_are_ask_not_deny(command):
     """復旧可能な操作は deny ではなく ask (承認すれば実行できる)."""
@@ -149,13 +149,49 @@ def test_reversible_commands_are_ask_not_deny(command):
 @pytest.mark.parametrize(
     "command",
     ["sudo:*", "git push:*", "git reset:*", "git rebase:*", "ssh:*", "nc:*",
-     "telnet:*", "npm install -g:*", "psql:*", "mysql:*", "redis-cli:*"],
+     "telnet:*", "npm install -g:*", "pip:*", "pip3:*", "psql:*", "mysql:*",
+     "redis-cli:*"],
 )
 def test_high_risk_commands_stay_denied(command):
-    """外部への漏洩・システム変更に繋がるものは deny のまま."""
+    """外部への漏洩・システム変更・規約違反は deny のまま."""
     perms = gen.build_claude_permissions(COMMON)
     assert f"Bash({command})" in perms["deny"]
     assert f"Bash({command})" not in perms["ask"]
+
+
+# ---------------------------------------------------------------------------
+# pip の全面禁止 (uv/uvx へ誘導)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pip install requests",
+        "pip3 install requests",
+        "pip3.12 install requests",
+        "/usr/bin/pip install requests",
+        "python -m pip install requests",
+        "python3 -m pip install requests",
+        "python3.12 -m pip install requests",
+        "cd /somewhere && pip install requests",
+        "echo ok; pip uninstall requests",
+        "pip freeze",
+    ],
+)
+def test_pip_is_denied_everywhere(command):
+    """uv プロジェクトかどうかに関わらず pip は deny."""
+    decision, reason = run_hook(command, cwd="/tmp/not-a-uv-project")
+    assert decision == "deny", f"{command!r} -> {decision}"
+    assert "uv" in reason, f"uv への誘導が無い: {reason}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["uv pip list", "uv pip install requests", "uv add requests", "uv sync"],
+)
+def test_uv_commands_are_not_blocked_by_pip_check(command):
+    decision, _ = run_hook(command)
+    assert decision is None, f"{command!r} が誤ってブロックされた"
 
 
 # ---------------------------------------------------------------------------

@@ -56,6 +56,10 @@ deny = [
   "ssh:*",
   "git config:*",
   "npm install -g:*",
+  # pip は全面禁止 (uv / uvx を使う)。hook の check_pip_redirect が
+  # プロジェクト種別を問わず代替案付きで hard-deny する
+  "pip:*",
+  "pip3:*",
   "psql:*",
   "mysql:*",
   # mongod は DB サーバのデーモン。クライアントは mongosh なので両方挙げる
@@ -73,8 +77,6 @@ ask = [
   # curl と同種の取得コマンド。センシティブファイルの送信は hook の
   # check_curl_file_send が curl/wget 両方を hard-deny するので二重で守られる
   "wget:*",
-  # uv 規約は hook の check_pip_redirect が uv プロジェクトで担保する
-  "pip:*",
   "uv add:*",
   "npm install:*",
   "npm ci:*",
