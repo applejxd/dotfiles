@@ -159,6 +159,12 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     ask: list[str] = []
     for cmd in bash.get("ask", []):
         ask.append(f"Bash({cmd})")
+    for cmd in bash.get("critical_ask", []):
+        # critical_ask は hook が ask を返すが、Claude の permission 側にも
+        # 出しておくと UI で「確認が必要」と見える。
+        # deny に出してはいけない (deny が hook より優先され、プロンプトが
+        # 出なくなるため)。
+        ask.append(f"Bash({cmd}:*)")
     for glob in file_.get("read_ask_globs", []):
         ask.append(f"Read({glob})")
     for glob in file_.get("write_ask_globs", []):

@@ -15,6 +15,8 @@ sys.path.insert(0, str(ROOT / "home" / "dot_config" / "agents"))
 import critical_deny as cd  # noqa: E402
 
 
+# マッチャの動作を確認するための固定パターン (live な common.toml とは独立)。
+# 実際の分類 (critical_deny / critical_ask) は test_check_bash_decision.py で検証する。
 PATTERNS = ["sudo", "rm -rf", "git push", "git reset --hard", "git rebase"]
 
 

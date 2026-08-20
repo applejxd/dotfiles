@@ -42,6 +42,24 @@ hook_emit_pretool_deny() {
     exit 0
 }
 
+# PreToolUse でユーザ承認プロンプトを強制する (両ツール対応の JSON を stdout に出して exit 0)
+# deny と違い、承認されればツールはそのまま実行される。
+# 無人実行時は安全側に倒れる (Claude dontAsk / Copilot cloud agent では deny 相当)。
+# Usage: hook_emit_pretool_ask "理由文"
+hook_emit_pretool_ask() {
+    local reason="$1"
+    jq -n --arg r "$reason" '{
+        permissionDecision: "ask",
+        permissionDecisionReason: $r,
+        hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "ask",
+            permissionDecisionReason: $r
+        }
+    }'
+    exit 0
+}
+
 # PostToolUse などの非ブロック警告 (両ツールとも stderr メッセージ + exit 2 で
 # additionalContext として LLM に渡る)
 # Usage: hook_emit_posttool_warn "警告文"

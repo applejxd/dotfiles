@@ -15,6 +15,7 @@ segments and checks each segment against the critical_deny patterns from
 
 Public API:
     load_critical_deny(common_toml_path)    -> list[str]
+    load_critical_ask(common_toml_path)     -> list[str]
     normalize(command_str)                  -> list[str]
     find_critical_match(command_str, patterns) -> str | None
 
@@ -37,21 +38,51 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 # Common location for the source of truth managed by chezmoi.
-DEFAULT_COMMON_PATH = os.path.expanduser("~/.config/agents/common.toml")
+# ``AGENTS_CONFIG_DIR`` can point at a different directory, which lets tests and
+# containers exercise the hook against the repository copy instead of the
+# deployed one.
+def _default_config_dir() -> str:
+    override = os.environ.get("AGENTS_CONFIG_DIR")
+    if override:
+        return override
+    config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(config_home, "agents")
+
+
+DEFAULT_COMMON_PATH = os.path.join(_default_config_dir(), "common.toml")
 
 
 # ---------------------------------------------------------------------------
 # Configuration loader
 # ---------------------------------------------------------------------------
 
-def load_critical_deny(path: str = DEFAULT_COMMON_PATH) -> list[str]:
-    """Return the ``bash.critical_deny`` list, or an empty list if missing."""
+def _load_bash_list(key: str, path: str) -> list[str]:
+    """Return ``bash.<key>`` from common.toml, or an empty list if missing."""
     p = Path(path)
     if not p.exists():
         return []
     with p.open("rb") as f:
         data = tomllib.load(f)
-    return list(data.get("bash", {}).get("critical_deny", []))
+    return list(data.get("bash", {}).get(key, []))
+
+
+def load_critical_deny(path: str = DEFAULT_COMMON_PATH) -> list[str]:
+    """Return the ``bash.critical_deny`` list, or an empty list if missing.
+
+    Patterns here are hard-blocked by the hook: there is no way to approve them.
+    """
+    return _load_bash_list("critical_deny", path)
+
+
+def load_critical_ask(path: str = DEFAULT_COMMON_PATH) -> list[str]:
+    """Return the ``bash.critical_ask`` list, or an empty list if missing.
+
+    Patterns here make the hook return ``ask`` instead of ``deny``: the agent
+    proposes the command, the user approves it, and the command then runs.
+    Entries must NOT also appear in ``bash.deny`` because a matching deny rule
+    is evaluated before the hook decision and would block the prompt entirely.
+    """
+    return _load_bash_list("critical_ask", path)
 
 
 # ---------------------------------------------------------------------------

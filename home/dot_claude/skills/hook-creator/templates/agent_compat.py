@@ -100,6 +100,33 @@ def emit_pretool_deny(reason: str, *, exit_code: int = 0) -> None:
     sys.exit(exit_code)
 
 
+def emit_pretool_ask(reason: str, *, exit_code: int = 0) -> None:
+    """PreToolUse でユーザへの承認プロンプトを強制する。プロセスは終了する。
+
+    deny と違い、ユーザが承認すればツールはそのまま実行される。
+
+    各モードでの挙動 (2026-08 時点の公式 docs):
+      - Claude 対話 / auto / bypassPermissions : プロンプトが出る
+      - Claude dontAsk                          : 自動拒否
+      - Claude ``-p`` (非対話)                  : プロンプト不能。操作はスキップ
+      - Copilot cloud agent                     : deny として扱われる
+
+    注意: Claude では ask 時の reason はユーザにのみ表示され LLM には渡らない。
+    """
+    payload = {
+        "permissionDecision": "ask",
+        "permissionDecisionReason": reason,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "ask",
+            "permissionDecisionReason": reason,
+        },
+    }
+    json.dump(payload, sys.stdout, ensure_ascii=False)
+    sys.stdout.flush()
+    sys.exit(exit_code)
+
+
 def emit_stop_block(reason: str, *, exit_code: int = 0) -> None:
     """Stop/agentStop でターン継続を強制する。プロセスは終了する。
 

@@ -7,7 +7,7 @@
 Copilot CLI で各規約をテストした結果 (2026-05 検証):
 
 | 規約 | Copilot CLI | Claude Code (公式仕様) | 両対応 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | (A) `exit 2` + stderr のみ | ❌ ブロックされない | ✅ ブロック | ❌ |
 | (B) `exit 0` + stdout JSON | ✅ ブロック | ✅ ブロック (exit 0 で stdout JSON 解釈) | ✅ |
 | (C) `exit 2` + stdout JSON + stderr | ✅ ブロック | ✅ ブロック (exit 2 優先、stderr 採用) | ✅ |
@@ -42,10 +42,56 @@ Copilot CLI で各規約をテストした結果 (2026-05 検証):
 ### 各フィールドの値
 
 | `permissionDecision` | 効果 |
-|---|---|
+| --- | --- |
 | `"deny"` | ツール実行を拒否。`Reason` を agent に伝える |
 | `"allow"` | 通常 permission チェックを skip して許可 |
-| `"ask"` | ユーザに確認を求める (Copilot cloud agent では `deny` 扱い) |
+| `"ask"` | ユーザに確認を求める。承認されればツールは実行される |
+| `"defer"` | **Claude Code のみ / `-p` 専用**。ツールを保留し、呼び出し側プロセスが resume する |
+
+### `ask` を使う場面 (提案 → 承認 → 実行)
+
+「危険だが、人間が承認すれば実行してよい」操作は `deny` ではなく `ask` にする。
+`deny` だとユーザーが自分で手を動かす羽目になるが、`ask` なら承認するだけで
+エージェントがそのまま実行できる。
+
+```python
+from agent_compat import emit_pretool_ask
+
+emit_pretool_ask("削除対象を確認して問題なければ承認してください。")
+```
+
+```bash
+hook_emit_pretool_ask "削除対象を確認して問題なければ承認してください。"
+```
+
+各モードでの挙動 (2026-08 時点の公式 docs):
+
+| 実行環境 | `ask` の結果 |
+| --- | --- |
+| Claude 対話 (`default`) | プロンプトが出る (`[User]` などの出所ラベル付き) |
+| Claude `auto` | プロンプトが出る。classifier の暗黙 approve を封じる |
+| Claude `bypassPermissions` | プロンプトが出る (bypass でも ask は尊重される) |
+| Claude `dontAsk` | 自動拒否 |
+| Claude `-p` (非対話) | プロンプト不能。auto では当該操作をスキップして継続 |
+| Copilot CLI (対話) | プロンプトが出る |
+| Copilot cloud agent | **`deny` 扱い** (ユーザー不在のため) |
+
+→ 無人実行では必ず安全側に倒れるので、`deny` を `ask` に緩めても無人時のリスクは増えない。
+
+### ★ hook の決定は permission リストを上書きしない
+
+> "Hook decisions don't bypass permission rules. Claude Code evaluates deny and ask
+> rules regardless of what a PreToolUse hook returns"
+> — <https://code.claude.com/docs/en/permissions>
+
+評価順:
+
+```text
+permissions.deny > hook の ask/deny > permissions.ask > hook の allow > permissions.allow
+```
+
+**hook で `ask` を返したいコマンドを `permissions.deny` に書いてはいけない。**
+deny が先に評価され、プロンプトすら出ずに拒否される。
 
 ## 3. Stop / agentStop の block 形式
 
@@ -79,7 +125,7 @@ marker.touch()
 ## 4. PostToolUse の規約 (両ツールの差)
 
 | ツール | 動作 |
-|---|---|
+| --- | --- |
 | Claude Code | `exit 2 + stderr` で agent にフィードバック (block 不可) |
 | Copilot CLI | 出力は **LLM に渡らない仕様** (`Output processed: No`)。CLI UI に `!` プレフィックスで表示されるのみ |
 

@@ -40,9 +40,14 @@ allow = [
 # Best-effort deny (Claude のみ反映、CLI バグで bypass される可能性あり)
 # critical_deny に書いた項目は hook で hard-block されるが、ここにも書いておくと
 # Claude UI で「deny されている」が利用者にも見える。
+#
+# ★注意: permissions.deny は hook の判定より優先される。
+#   公式 docs: "Hook decisions don't bypass permission rules. Claude Code evaluates
+#   deny and ask rules regardless of what a PreToolUse hook returns"
+#   よって「hook で ask を出したい」コマンドをここに書いてはいけない
+#   (プロンプトすら出ずに問答無用で拒否される)。
 deny = [
   "sudo:*",
-  "rm:*",
   "git push:*",
   "git reset:*",
   "git rebase:*",
@@ -64,7 +69,10 @@ deny = [
 ]
 
 # Claude のみ (Copilot は対話プロンプトがデフォルト動作なので不要)
+# ここに書いたものは auto mode でも必ず確認プロンプトが出る
+# ("Explicit ask rules still force a prompt" -- 公式 docs)
 ask = [
+  "rm:*",
   "uv add:*",
   "npm install:*",
   "npm ci:*",
@@ -76,14 +84,23 @@ ask = [
 ]
 
 # ★クリティカル: hook で必ず block (CLI permission を信用しない)
-# normalize 後の command 文字列に対する substring match。
+# normalize 後の command 文字列に対する先頭トークン一致。
 # normalize は cd && X -> X, git -C foo X -> git X, compound 分割 (&&, ;, |) を実施。
 critical_deny = [
   "sudo",
-  "rm -rf",
   "git push",
   "git reset --hard",
   "git rebase",
+]
+
+# ★hook が ask を返す (= 提案 → ユーザーが承認 → そのまま実行)
+# critical_deny と同じ normalize / 照合を通すが、決定が deny ではなく ask になる。
+# 無人実行では安全側に倒れる (Claude dontAsk は自動拒否、-p はスキップ、
+# Copilot cloud agent は deny 扱い) ので、緩めても無人時のリスクは増えない。
+#
+# ここに書くコマンドは [bash.deny] に書いてはいけない (deny が優先されるため)。
+critical_ask = [
+  "rm -rf",
 ]
 
 # ---------------------------------------------------------------------------

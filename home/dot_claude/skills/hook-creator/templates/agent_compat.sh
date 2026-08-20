@@ -45,6 +45,23 @@ hook_emit_pretool_deny() {
     exit 0
 }
 
+# PreToolUse でユーザ承認プロンプトを強制する (承認されればツールは実行される)
+# 無人実行時は安全側に倒れる (Claude dontAsk / Copilot cloud agent では deny 相当)
+# Usage: hook_emit_pretool_ask "理由文"
+hook_emit_pretool_ask() {
+    local reason="$1"
+    jq -n --arg r "$reason" '{
+        permissionDecision: "ask",
+        permissionDecisionReason: $r,
+        hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "ask",
+            permissionDecisionReason: $r
+        }
+    }'
+    exit 0
+}
+
 # Stop / agentStop で block を返す (両ツール共通)
 # Usage: hook_emit_stop_block "次ターンに渡す追加プロンプト"
 hook_emit_stop_block() {

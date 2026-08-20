@@ -2,8 +2,18 @@
 """
 Agent (Claude Code / Copilot CLI) PreToolUse hook: Bash コマンドの安全性チェック
 
-危険なパターンを検出してブロックする。
-出力規約は ``agent_compat.emit_pretool_deny`` に委譲する (両ツール対応)。
+危険なパターンを検出して deny (拒否) または ask (ユーザー承認を要求) を返す。
+
+  - deny: 承認の余地なく拒否する。センシティブ情報の露出や壊滅的な削除など
+  - ask : エージェントが提案し、ユーザーが承認すればそのまま実行される。
+          ファイル削除のような「危険だが承認すれば妥当」な操作に使う
+
+出力規約は ``agent_compat.emit_pretool_deny`` / ``emit_pretool_ask`` に委譲する
+(両ツール対応)。
+
+注意: Claude Code では ``permissions.deny`` が hook の判定より優先される。
+ask を返したいコマンドを common.toml の [bash.deny] に書くとプロンプトすら
+出ないので、[bash.critical_ask] 側に書くこと。
 """
 from __future__ import annotations
 
@@ -15,6 +25,7 @@ from pathlib import Path
 # 同一ディレクトリの lib/ にあるヘルパを import
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 from agent_compat import (  # noqa: E402
+    emit_pretool_ask,
     emit_pretool_deny,
     get_command,
     normalize_tool_kind,
@@ -22,8 +33,12 @@ from agent_compat import (  # noqa: E402
 )
 
 # ~/.config/agents/ (chezmoi 管理) にある critical_deny を import
-_CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-sys.path.insert(0, os.path.join(_CONFIG_HOME, "agents"))
+# AGENTS_CONFIG_DIR で差し替え可能 (テスト・コンテナから repo の実体を指すため)
+_AGENTS_DIR = os.environ.get("AGENTS_CONFIG_DIR")
+if not _AGENTS_DIR:
+    _CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    _AGENTS_DIR = os.path.join(_CONFIG_HOME, "agents")
+sys.path.insert(0, _AGENTS_DIR)
 try:
     import critical_deny as _critical_deny  # noqa: E402
 except ImportError:  # pragma: no cover
@@ -192,8 +207,9 @@ def check_find_dangerous(cmd: str) -> str | None:
         return None
     if _FIND_DANGEROUS_EXEC_RE.search(cmd):
         return (
-            "`find` コマンドでファイル削除操作（-exec rm / -delete 等）を検出しました。\n"
-            "ファイル削除は明示的な承認が必要です。"
+            "`find` コマンドによるファイル削除操作（-exec rm / -delete 等）です。\n"
+            f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
+            "削除対象を確認して問題なければ承認してください。"
         )
     return None
 
@@ -238,20 +254,128 @@ def check_critical_deny(cmd: str) -> str | None:
     return None
 
 
+def check_critical_ask(cmd: str) -> str | None:
+    """common.toml の bash.critical_ask に該当すればユーザー承認を要求する.
+
+    deny と違い、ユーザーが承認すればそのまま実行される。
+    critical_deny と同じ normalize / 照合を通す。
+    """
+    if _critical_deny is None:
+        return None
+    patterns = _critical_deny.load_critical_ask()
+    if not patterns:
+        return None
+    matched = _critical_deny.find_critical_match(cmd, patterns)
+    if matched:
+        return (
+            f"`{matched}` は承認が必要な操作です (common.toml の [bash.critical_ask])。\n"
+            f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
+            "内容を確認して問題なければ承認してください。"
+        )
+    return None
+
+
+# ─── rm の壊滅的ターゲット (承認の余地なく deny) ──────────────────────
+# critical_ask で `rm -rf` を承認可能にする代わりに、取り返しのつかない
+# ターゲットだけはここで hard-deny する。
+# cwd 配下 (`.` / `./*` / `*`) は critical_ask 側に任せる (プロジェクト内は
+# ユーザーが承認して消せるべきなので、ここでは落とさない)。
+_CATASTROPHIC_DIRS = {
+    "/",
+    "/bin", "/boot", "/dev", "/etc", "/home", "/lib", "/lib64", "/opt",
+    "/proc", "/root", "/sbin", "/srv", "/sys", "/usr", "/var",
+    "/Applications", "/Library", "/System", "/Users", "/Volumes",
+}
+_HOME_TOKENS = {"~", "$HOME", "${HOME}"}
+# /home/<user> や /Users/<user> のようなホームディレクトリそのもの
+_HOME_DIR_RE = re.compile(r"^/(?:home|Users)/[^/]+$")
+_RM_BIN_RE = re.compile(r"^(?:/\S*/)?rm$")
+
+
+def _canonical_rm_target(raw: str) -> str | None:
+    """rm の引数を guard 比較用の正準形にする。
+
+    末尾の ``/*`` と ``/`` を畳む (``/etc/*`` は ``/etc`` と同じ危険度)。
+    """
+    token = raw.strip().strip("'\"")
+    if not token:
+        return None
+    while token.endswith("/*"):
+        token = token[:-2] or "/"
+    while len(token) > 1 and token.endswith("/"):
+        token = token[:-1]
+    return token or None
+
+
+def _is_catastrophic_rm_target(token: str) -> bool:
+    canonical = _canonical_rm_target(token)
+    if canonical is None:
+        return False
+    if canonical in _HOME_TOKENS or canonical == "..":
+        return True
+    if canonical in _CATASTROPHIC_DIRS:
+        return True
+    if _HOME_DIR_RE.match(canonical):
+        return True
+    if canonical == os.path.expanduser("~"):
+        return True
+    return False
+
+
+def check_rm_root_guard(cmd: str) -> str | None:
+    """`rm` がシステム全体・ホーム・親ディレクトリを対象にしていないか。
+
+    `cd /elsewhere && rm -rf /` のような回避を防ぐため、critical_deny と同じ
+    normalize を通してから各セグメントを検査する。
+    """
+    segments = (
+        _critical_deny.normalize(cmd) if _critical_deny is not None else [cmd]
+    )
+    for segment in segments:
+        tokens = segment.split()
+        if not tokens or not _RM_BIN_RE.match(tokens[0]):
+            continue
+        if any(t == "--no-preserve-root" for t in tokens):
+            return (
+                "`rm --no-preserve-root` は許可されていません。\n"
+                "ルートディレクトリの削除は承認の対象外です。"
+            )
+        for token in tokens[1:]:
+            if token.startswith("-"):
+                continue
+            if _is_catastrophic_rm_target(token):
+                return (
+                    f"`rm` が壊滅的なパス `{token}` を対象にしています。\n"
+                    "システム全体・ホーム・親ディレクトリの削除は承認の対象外です。\n"
+                    "削除したい対象を具体的なパスで指定し直してください。"
+                )
+    return None
+
+
 # uv 非依存のチェック（常時有効）
-BASE_CHECKS = [
-    check_critical_deny,      # ★最初に実行: common.toml の critical_deny を強制
+#
+# DENY_CHECKS が先に評価される。ASK_CHECKS は deny に該当しなかったものだけを
+# 対象にするので、例えば `rm -rf /` は root guard (deny) が critical_ask より
+# 優先される。
+DENY_CHECKS = [
+    check_rm_root_guard,      # ★最初に実行: 壊滅的な削除は承認の余地なし
+    check_critical_deny,      # common.toml の critical_deny を強制
     check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
     check_git_c_dangerous,    # git -C 経由の deny サブコマンド実行をブロック
-    check_find_dangerous,     # find -exec rm / -delete によるファイル削除をブロック
     check_file_read,
     check_archive,
     check_curl_file_send,
     check_xargs_pipe,
 ]
 
+# 承認を求めるチェック（ユーザーが許可すればそのまま実行される）
+ASK_CHECKS = [
+    check_critical_ask,       # common.toml の critical_ask
+    check_find_dangerous,     # find -exec rm / -delete によるファイル削除
+]
+
 # uv プロジェクト限定のチェック
-UV_CHECKS = [
+UV_DENY_CHECKS = [
     check_pip_redirect,    # pip → uv/uvx へのリダイレクト（uv.lock があるプロジェクトのみ）
 ]
 
@@ -272,12 +396,17 @@ def main() -> None:
         sys.exit(0)
 
     cwd = data.get("cwd", os.getcwd())
-    checks = BASE_CHECKS + (UV_CHECKS if is_uv_project(cwd) else [])
+    deny_checks = DENY_CHECKS + (UV_DENY_CHECKS if is_uv_project(cwd) else [])
 
-    for check in checks:
+    for check in deny_checks:
         reason = check(cmd)
         if reason:
             emit_pretool_deny(f"[hook blocked] {reason}")
+
+    for check in ASK_CHECKS:
+        reason = check(cmd)
+        if reason:
+            emit_pretool_ask(f"[hook] 承認が必要です\n{reason}")
 
     sys.exit(0)
 

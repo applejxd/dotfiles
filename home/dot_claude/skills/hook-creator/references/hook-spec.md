@@ -12,7 +12,7 @@
 備えており、Claude と同じ PascalCase 名 + snake_case フィールドで書ける。
 
 | カテゴリ | Claude Code | Copilot CLI | 備考 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | ツール実行前 | `PreToolUse` | `PreToolUse` / `preToolUse` | block 可能 |
 | ツール実行後 (成功) | `PostToolUse` | `PostToolUse` / `postToolUse` | Copilot は出力が LLM に渡らない仕様 |
 | ツール実行後 (失敗) | `PostToolUseFailure` | `postToolUseFailure` | Copilot は additionalContext を返せる |
@@ -36,7 +36,7 @@
 Claude → Copilot で hook を流用する場合の event 名対応:
 
 | Claude の意図 | スクリプトで受理すべき event 名 |
-|---|---|
+| --- | --- |
 | ツール実行を抑止 | `{"PreToolUse"}` |
 | ターン終了で介入 | `{"Stop", "TaskCompleted", "agentStop"}` (3 つ全部受理) |
 | 失敗からのリカバリ提案 | `{"PostToolUseFailure", "postToolUseFailure"}` |
@@ -55,6 +55,30 @@ cadence は "once per turn")。スクリプト側は上表のとおり複数名�
 - `timeout` の単位は秒。`command` 型 hook のデフォルトは **600 秒**と長いので、
   明示的に指定するのが望ましい (Copilot 側のキー名は `timeoutSec`)
 
+### PreToolUse の permissionDecision と優先順位
+
+Claude Code の `PreToolUse` が返せる値は **4 種**:
+
+| 値 | 効果 | Copilot CLI |
+| --- | --- | --- |
+| `allow` | permission プロンプトを skip して実行 | 同じ |
+| `deny` | 拒否。理由は LLM に渡る | 同じ |
+| `ask` | 確認プロンプトを強制。承認されれば実行される | 対応 (cloud agent では `deny` 扱い) |
+| `defer` | `-p` 専用。保留して呼び出し側が resume | 非対応 |
+
+**hook の決定は permission リストを上書きしない。**
+
+> "Hook decisions don't bypass permission rules. Claude Code evaluates deny and ask
+> rules regardless of what a PreToolUse hook returns"
+> — <https://code.claude.com/docs/en/permissions>
+
+```text
+permissions.deny > hook の ask/deny > permissions.ask > hook の allow > permissions.allow
+```
+
+`ask` を返したいコマンドを `permissions.deny` に書くと、プロンプトすら出ずに
+拒否される。詳細と使い分けは `decision-output.md` を参照。
+
 スクリプト側で `hook_event_name` の集合チェックにすると、両ツール対応 +
 将来の名前変更にも強い。
 
@@ -63,7 +87,7 @@ cadence は "once per turn")。スクリプト側は上表のとおり複数名�
 `PreToolUse` / `PostToolUse` の `tool_name` フィールドはツールで違う:
 
 | 用途 | Claude Code | Copilot CLI | matcher 例 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | シェル実行 | `Bash` | `bash` | `^bash$` (Copilot) / `Bash` (Claude) |
 | ファイル読み取り | `Read` | `view` | `^view$` / `Read` |
 | ファイル新規作成 | `Write` | `create` | `^create$` / `Write` |
@@ -116,7 +140,7 @@ stdin で受け取る JSON ペイロード。
 ### 3.1 共通フィールド
 
 | フィールド | Claude (snake_case) | Copilot camelCase | Copilot PascalCase 互換 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | セッション ID | `session_id` | `sessionId` | `session_id` |
 | 現在の cwd | `cwd` | `cwd` | `cwd` |
 | イベント名 | `hook_event_name` | (= 設定 key) | `hook_event_name` |
@@ -195,7 +219,7 @@ path = tool_input.get("file_path") or tool_input.get("path") or ""
 ## 4. 環境変数
 
 | 変数 | Claude Code | Copilot CLI |
-|---|---|---|
+| --- | --- | --- |
 | `COPILOT_CLI` | (なし) | `1` |
 | `CLAUDECODE` | (なし、または旧名) | (なし) |
 | `CLAUDE_PROJECT_DIR` | `${CLAUDE_PROJECT_DIR}` | (なし) |

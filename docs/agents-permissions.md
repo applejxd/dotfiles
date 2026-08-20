@@ -9,12 +9,13 @@ Claude Code / Copilot CLI の permission (allow/deny/ask) と hook 登録を
 home/dot_config/agents/
     common.toml                              単一ソース (permissions + hooks)
     critical_deny.py                         hook が import する shell normalizer
+                                             (critical_deny / critical_ask の loader も兼ねる)
 scripts/agents/
     generate.py                              modify_ / .tmpl から呼ばれる変換器
 home/dot_claude/
     modify_settings.json.tmpl                ~/.claude/settings.json を更新
 home/dot_claude/hooks/
-    executable_check_bash.py                 critical_deny を呼んで hard-block
+    executable_check_bash.py                 critical_deny/critical_ask を判定
     executable_redirect-tmp.py               /tmp 利用を ./.tmp へ誘導
     executable_markdownlint.sh               Markdown の lint
     executable_format-file.sh                拡張子別のフォーマッタ実行
@@ -25,25 +26,66 @@ home/dot_copilot/
     modify_private_permissions-config.json.tmpl
 test/agents/
     test_critical_deny.py                    shell normalize / match の unit test
+    test_check_bash_decision.py              deny/ask 判定と rm root guard の test
     test_generate_hooks.py                   hook 生成の unit test
 ```
 
 `modify_private_*` のように `private_` を付けることで mode 600 を保持し、
 `~/.copilot/settings.json` に含まれる `gho_xxx` トークンを保護している。
 
-## 3 層防御モデル
+## 4 層モデル
 
-| 層 | 仕組み | 強度 |
-| --- | --- | --- |
-| 1. CLI UI prompt | Claude/Copilot の対話モードで毎回確認 | 対話時のみ有効 |
-| 2. permission リスト | `~/.claude/settings.json` / `~/.copilot/{settings,permissions-config}.json` | 既知バグで bypass される ([後述](#claude-code-permission-リストの既知バグ)) |
-| 3. **hook (最終防波堤)** | `check_bash.py` が `bash.critical_deny` を強制 block | 上 2 層を全て bypass されても block |
+| 層 | 仕組み | 用途 | 無人実行時 |
+| --- | --- | --- | --- |
+| 1. CLI UI prompt | Claude/Copilot の対話モード | 都度確認 | 出せない |
+| 2. permission リスト | `~/.claude/settings.json` / `~/.copilot/{settings,permissions-config}.json` | allow / ask / deny | deny は全モードで有効 |
+| 3. **hook `critical_deny`** | `check_bash.py` → `deny` | 承認の余地なく止める | block |
+| 4. **hook `critical_ask`** | `check_bash.py` → `ask` | 提案 → 承認 → そのまま実行 | 安全側 (拒否/スキップ) |
 
 CLI 側 permission リストは「best-effort」と扱い、本当に止めたい命令は
-`[bash.critical_deny]` に書く。
+`[bash.critical_deny]` に書く。逆に「危険だが承認すれば実行してよい」命令は
+`[bash.critical_ask]` に書く。
 
-なお第 3 層の hook 登録自体も `common.toml` の `[[hooks]]` から生成されるため、
+第 3 / 第 4 層の hook 登録自体も `common.toml` の `[[hooks]]` から生成されるため、
 新規マシンで `chezmoi init --apply` した直後から両 CLI で有効になる。
+
+### ★ 評価順: `permissions.deny` は hook より優先される
+
+> "Hook decisions don't bypass permission rules. Claude Code evaluates deny and ask
+> rules regardless of what a PreToolUse hook returns"
+> — <https://code.claude.com/docs/en/permissions>
+
+```text
+permissions.deny > hook の ask/deny > permissions.ask > hook の allow > permissions.allow
+```
+
+つまり **`[bash.critical_ask]` に書いたコマンドを `[bash.deny]` にも書くと、
+hook の `ask` は無効化され、プロンプトすら出ずに拒否される**。
+両方に書かないこと (`test_check_bash_decision.py` で自動検査している)。
+
+### deny と ask の使い分け
+
+| 分類 | 例 | 置き場所 |
+| --- | --- | --- |
+| 承認の余地なく禁止 | `sudo`, `git push`, `git reset --hard`, `git rebase` | `[bash.critical_deny]` + `[bash.deny]` |
+| 壊滅的な削除 | `rm -rf /`, `rm -rf ~`, `rm -rf /etc` | `check_bash.py` の `check_rm_root_guard` (hard-deny) |
+| 提案 → 承認 → 実行 | `rm -rf <プロジェクト内>`, `find -delete` | `[bash.critical_ask]` + `[bash.ask]` |
+| 毎回判断したい | `git commit`, `curl`, `mv`, `npm install` | `[bash.ask]` |
+| 自動承認 | `git status`, `grep -n`, `uv sync` | `[bash.allow]` |
+
+### 無人実行時に `ask` がどうなるか
+
+| 実行環境 | `ask` の結果 |
+| --- | --- |
+| Claude 対話 (`default`) | プロンプトが出る |
+| Claude `auto` | プロンプトが出る (classifier の暗黙 approve を封じる) |
+| Claude `bypassPermissions` | プロンプトが出る |
+| Claude `dontAsk` | 自動拒否 |
+| Claude `-p` (非対話) | プロンプト不能。auto では当該操作をスキップして継続 |
+| Copilot cloud agent | `deny` 扱い |
+
+→ 無人実行では必ず安全側に倒れるため、**`deny` を `ask` に緩めても無人時のリスクは
+増えない**。対話時だけ「自分で手を動かす」手間が減る。
 
 ## hooks の単一ソース化
 
@@ -89,6 +131,8 @@ Copilot は PascalCase イベント名で書くと Claude の tool 名 (`Edit` /
   真実とする方針)
 - `[bash.critical_deny]` は hook が hard-block するので、Claude/Copilot 双方で
   確実に動作する
+- `[bash.critical_ask]` は hook が `ask` を返す。承認すればそのまま実行される。
+  **同じコマンドを `[bash.deny]` に書くと deny が優先されて無効になる**
 - `[bash.deny]` は Claude 側のみ反映 (Copilot CLI は path-scope の設計のため
   CLI フラグでしか細粒度 deny を表現できない)
 - `[file.write_ask_globs]` / `[file.write_deny_globs]` は Claude の
@@ -134,8 +178,11 @@ bypass パターンを hook が確実に block することを保証している
 
 ```bash
 uv run --with pytest --no-project pytest test/agents/ -q
-# -> 47 passed (critical_deny 26 + hook 生成 21)
+# -> 104 passed (critical_deny 26 + hook 生成 21 + deny/ask 判定 57)
 ```
+
+hook は `AGENTS_CONFIG_DIR` で agents 設定ディレクトリを差し替えられるので、
+`~/.config` へ apply する前でもリポジトリの `common.toml` に対してテストできる。
 
 ### dry-run
 

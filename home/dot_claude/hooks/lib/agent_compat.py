@@ -97,6 +97,45 @@ def emit_pretool_deny(reason: str, *, exit_code: int = 0) -> None:
     sys.exit(exit_code)
 
 
+def emit_pretool_ask(reason: str, *, exit_code: int = 0) -> None:
+    """PreToolUse でユーザへの承認プロンプトを強制する。プロセスは終了する。
+
+    deny と違い、ユーザが承認すればツールはそのまま実行される。
+    「エージェントが提案 → 人間が判断 → そのまま実行」を成立させるための決定。
+
+    出力は両ツール対応のフォーマット (emit_pretool_deny と同じ構造):
+      - Copilot CLI: top-level の permissionDecision を読む
+      - Claude Code: hookSpecificOutput.permissionDecision を読む
+
+    各モードでの挙動 (2026-08 時点の公式 docs):
+      - Claude 対話 / auto / bypassPermissions : プロンプトが出る
+        (auto では classifier の暗黙 approve を封じる)
+      - Claude dontAsk                          : 自動拒否
+      - Claude ``-p`` (非対話)                  : プロンプト不能。操作はスキップ
+      - Copilot cloud agent                     : deny として扱われる
+    つまり無人実行では安全側に倒れる。
+
+    Args:
+        reason: **ユーザ向け**の理由文。Claude では ask のとき reason は
+                ユーザには表示されるが LLM には渡らない (deny のときのみ渡る)。
+        exit_code: 0 を推奨 (両ツール対応)。
+    """
+    payload = {
+        # Copilot CLI 形式 (フラット)
+        "permissionDecision": "ask",
+        "permissionDecisionReason": reason,
+        # Claude Code 形式 (ネスト)
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "ask",
+            "permissionDecisionReason": reason,
+        },
+    }
+    json.dump(payload, sys.stdout, ensure_ascii=False)
+    sys.stdout.flush()
+    sys.exit(exit_code)
+
+
 def emit_stop_block(reason: str, *, exit_code: int = 0) -> None:
     """Stop/agentStop でターン継続を強制する。プロセスは終了する。
 
