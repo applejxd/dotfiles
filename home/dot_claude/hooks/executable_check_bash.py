@@ -278,6 +278,28 @@ def check_policy_loaded(cmd: str) -> str | None:
     return None
 
 
+_PIPE_TO_SHELL_RE = re.compile(
+    r"\|\s*(?:sudo\s+)?(?:/\S*/)?(?:sh|bash|zsh|dash|ksh|fish|ash|python[0-9.]*|perl|ruby|node)\b"
+    r"(?!\s+[^\s|&;<>-])",
+)
+
+
+def check_pipe_to_shell(cmd: str) -> str | None:
+    """`curl ... | sh` のように取得したものをそのまま実行していないか。
+
+    引数付きの `| bash script.sh` は対象外 (スクリプトを渡しているだけで、
+    パイプの内容をコードとして実行しているわけではない)。
+    """
+    if _PIPE_TO_SHELL_RE.search(cmd):
+        return (
+            "取得した内容をそのままシェル/インタプリタに流し込んでいます。\n"
+            f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
+            "内容を検証できないため許可されていません。\n"
+            "一度ファイルに保存して内容を確認してから実行してください。"
+        )
+    return None
+
+
 def check_policy_deny(cmd: str) -> str | None:
     """common.toml の bash.deny に該当すれば block する.
 
@@ -330,6 +352,11 @@ _HOME_DIR_RE = re.compile(r"^/(?:home|Users)/[^/]+$")
 _RM_BIN_RE = re.compile(r"^(?:/\S*/)?rm$")
 
 
+def _basename(token: str) -> str:
+    """``/bin/rm`` -> ``rm``"""
+    return token.rsplit("/", 1)[-1] if "/" in token else token
+
+
 def _canonical_rm_target(raw: str) -> str | None:
     """rm の引数を guard 比較用の正準形にする。
 
@@ -363,15 +390,16 @@ def _is_catastrophic_rm_target(token: str) -> bool:
 def check_rm_root_guard(cmd: str) -> str | None:
     """`rm` がシステム全体・ホーム・親ディレクトリを対象にしていないか。
 
-    `cd /elsewhere && rm -rf /` のような回避を防ぐため、ポリシー照合と同じ
-    normalize を通してから各セグメントを検査する。
+    `cd /elsewhere && rm -rf /` や `sh -c "rm -rf ~"` のような回避を防ぐため、
+    ポリシー照合と同じ normalize を通してから各セグメントを検査する。
+    normalize は shlex を通るため ``${HOME}`` の波括弧が落ちることがある。
+    元の文字列も併せて検査して取りこぼさないようにする。
     """
-    segments = (
-        _policy.normalize(cmd) if _policy is not None else [cmd]
-    )
+    segments = list(_policy.normalize(cmd)) if _policy is not None else []
+    segments.append(cmd)
     for segment in segments:
         tokens = segment.split()
-        if not tokens or not _RM_BIN_RE.match(tokens[0]):
+        if not tokens or not _RM_BIN_RE.match(_basename(tokens[0])):
             continue
         if any(t == "--no-preserve-root" for t in tokens):
             return (
@@ -401,6 +429,7 @@ DENY_CHECKS = [
     # 具体的な代替案を返せるチェックは、汎用の policy_deny より先に置く
     # (先に一致したものがメッセージを決めるため)
     check_pip_redirect,       # pip → uv/uvx (プロジェクト種別を問わず全面禁止)
+    check_pipe_to_shell,      # curl ... | sh の類
     check_policy_deny,        # common.toml の [bash] deny を強制
     check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
     check_git_c_dangerous,    # -C 経由の deny サブコマンド実行をブロック

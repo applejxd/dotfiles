@@ -180,33 +180,209 @@ def _strip_git_dash_c(segment: str) -> str:
 
 _CD_ONLY_RE = re.compile(r"^\s*cd(\s+\S+)?\s*$")
 
+# 先頭の環境変数代入 (FOO=1 BAR=2 cmd ...)
+_ENV_ASSIGN_RE = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*=(?:\"[^\"]*\"|'[^']*'|\S*)\s+)+(.+)$")
 
-def normalize(command: str) -> list[str]:
+# 値をフラグ以外の位置引数として取るラッパー。
+# 例: timeout 5 CMD / nice -n 5 CMD / stdbuf -oL CMD
+# 数値やサイズ指定はコマンド名ではないので読み飛ばす。
+_WRAPPER_POSITIONAL_ARG_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)?[smhd]?$")
+
+# コマンドをそのまま実行するラッパー。後続を評価対象に引き上げる。
+# 値は「コマンド名までに読み飛ばすオプションの取り方」を表す:
+#   "flags"      -> -x 形式のフラグを読み飛ばす
+#   "flags+args" -> フラグとその引数 (-u user, -I{} 等) も読み飛ばす
+#   "duration"   -> flags+args に加えて先頭の数値引数 (timeout 5) も読み飛ばす
+_WRAPPERS: dict[str, str] = {
+    "env": "flags",
+    "command": "flags",
+    "builtin": "flags",
+    "exec": "flags",
+    "nohup": "flags",
+    "setsid": "flags",
+    "stdbuf": "flags+args",
+    "nice": "flags+args",
+    "ionice": "flags+args",
+    "timeout": "duration",
+    "time": "flags",
+    "xargs": "flags+args",
+    "doas": "flags+args",
+    "proot": "flags+args",
+}
+
+# シェルを起動して文字列を実行するもの。-c の引数を再帰的に評価する。
+_SHELL_BINS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "ash"}
+
+# 文字列をそのままコードとして実行するもの
+_EVAL_BINS = {"eval", "source", "."}
+
+# グループ化・リダイレクトの飾りを落とすための文字
+_GROUPING_PREFIX = "({"
+_GROUPING_SUFFIX = ")}"
+
+
+def _basename(token: str) -> str:
+    """``/usr/bin/git`` -> ``git``. パス指定でポリシーを回避させない。"""
+    if "/" in token:
+        return token.rsplit("/", 1)[-1]
+    return token
+
+
+def _strip_grouping(segment: str) -> str:
+    """``(git push)`` や ``{ git push; }`` の飾りを落とす。"""
+    seg = segment.strip()
+    changed = True
+    while changed and seg:
+        changed = False
+        if seg[0] in _GROUPING_PREFIX:
+            seg = seg[1:].strip()
+            changed = True
+        while seg and seg[-1] in _GROUPING_SUFFIX + ";&":
+            seg = seg[:-1].strip()
+            changed = True
+    return seg
+
+
+def _strip_env_assignments(segment: str) -> str:
+    """``GIT_DIR=/x git push`` -> ``git push``"""
+    m = _ENV_ASSIGN_RE.match(segment.strip())
+    if m:
+        return m.group(1).strip()
+    return segment
+
+
+def _normalize_leading_path(segment: str) -> str:
+    """``/usr/bin/git push`` -> ``git push``"""
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        tokens = segment.split()
+    if not tokens:
+        return segment
+    head = _basename(tokens[0])
+    if head == tokens[0]:
+        return segment
+    rest = segment.split(None, 1)
+    return f"{head} {rest[1]}" if len(rest) > 1 else head
+
+
+def _strip_wrapper(segment: str) -> str:
+    """``timeout 5 git push`` -> ``git push``、``env FOO=1 git push`` -> ``git push``"""
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return segment
+    if not tokens:
+        return segment
+    head = _basename(tokens[0])
+    style = _WRAPPERS.get(head)
+    if style is None:
+        return segment
+
+    i = 1
+    while i < len(tokens):
+        token = tokens[i]
+        if token == "--":
+            i += 1
+            break
+        if token.startswith("-"):
+            # -I{} や -u root のように値が別トークンのものを読み飛ばす
+            if style in ("flags+args", "duration") and "=" not in token and len(token) == 2:
+                i += 2
+                continue
+            i += 1
+            continue
+        if style == "duration" and _WRAPPER_POSITIONAL_ARG_RE.match(token):
+            # timeout 5 CMD / timeout 1.5s CMD
+            i += 1
+            continue
+        if "=" in token and not token.startswith("/"):
+            # env FOO=1 のような代入
+            i += 1
+            continue
+        break
+    rest = tokens[i:]
+    if not rest:
+        return segment
+    return " ".join(shlex.quote(t) if " " in t else t for t in rest)
+
+
+def _expand_shell_invocation(segment: str) -> list[str] | None:
+    """``bash -c "git push"`` の中身を取り出す。対象外なら None。
+
+    ``eval 'git push'`` のように文字列をコードとして実行するものも同様に扱う。
+    """
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return None
+    if not tokens:
+        return None
+    head = _basename(tokens[0])
+
+    if head in _EVAL_BINS and len(tokens) > 1:
+        return [" ".join(tokens[1:])]
+
+    if head not in _SHELL_BINS:
+        return None
+    for i, token in enumerate(tokens[1:], start=1):
+        # -c / -lc / -xc のように c を含む短縮フラグ
+        if token.startswith("-") and not token.startswith("--") and "c" in token:
+            if i + 1 < len(tokens):
+                return [tokens[i + 1]]
+            return None
+    return None
+
+
+def _normalize_segment(segment: str) -> str:
+    """先頭トークンを変える飾りを繰り返し剥がす。"""
+    seg = segment
+    for _ in range(8):  # apply transformations repeatedly until fixed
+        new = _strip_grouping(seg)
+        new = _strip_cd_prefix(new)
+        new = _strip_git_dash_c(new)
+        new = _strip_env_assignments(new)
+        new = _strip_wrapper(new)
+        new = _normalize_leading_path(new)
+        if new == seg:
+            break
+        seg = new
+    return " ".join(seg.split())
+
+
+def normalize(command: str, _depth: int = 0) -> list[str]:
     """Return a list of normalized command segments suitable for matching.
 
     Compound operators (``&&``, ``||``, ``;``, ``|``) split the command into
-    logical segments. Each segment is further normalized:
+    logical segments. Each segment is then stripped of anything that merely
+    changes the leading token without changing what actually runs:
 
-      * Leading ``cd <path> && X`` (within a single segment) collapses to ``X``.
-      * Leading ``git -C <path>`` is stripped from git invocations.
-      * Pure ``cd`` segments left over from compound splitting are dropped
-        (they cannot match any deny pattern but would clutter the output).
+      * ``cd <path> && X``            -> ``X``
+      * ``git -C <path> <sub>``       -> ``git <sub>``
+      * ``(X)`` / ``{ X; }``          -> ``X``
+      * ``FOO=1 X``                   -> ``X``
+      * ``env`` / ``timeout`` / ``nohup`` / ``xargs`` などのラッパー -> 後続コマンド
+      * ``/usr/bin/X``                -> ``X``
+      * ``bash -c "X"`` / ``eval "X"`` -> ``X`` を再帰的に評価
+
+    Pure ``cd`` segments left over from compound splitting are dropped (they
+    cannot match any deny pattern but would clutter the output).
+
+    The shell wrapper itself is kept as a segment as well, so a rule targeting
+    ``sh`` (for example ``curl x | sh``) still matches.
     """
     segments = _split_compound(command)
     out: list[str] = []
     for seg in segments:
-        for _ in range(3):  # apply transformations repeatedly until fixed
-            new = _strip_cd_prefix(seg)
-            new = _strip_git_dash_c(new)
-            if new == seg:
-                break
-            seg = new
-        seg = " ".join(seg.split())
-        if not seg:
-            continue
-        if _CD_ONLY_RE.match(seg):
+        seg = _normalize_segment(seg)
+        if not seg or _CD_ONLY_RE.match(seg):
             continue
         out.append(seg)
+        if _depth < 3:
+            inner = _expand_shell_invocation(seg)
+            if inner:
+                for chunk in inner:
+                    out.extend(normalize(chunk, _depth + 1))
     return out
 
 

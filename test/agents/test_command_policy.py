@@ -147,6 +147,71 @@ def test_real_bug_20085_compound():
 
 
 # ---------------------------------------------------------------------------
+# 先頭トークンを変える飾りの剥がし
+# ---------------------------------------------------------------------------
+
+def test_normalize_strips_grouping():
+    assert policy.normalize("(git push)") == ["git push"]
+    assert policy.normalize("{ git push; }") == ["git push"]
+
+
+def test_normalize_strips_env_assignments():
+    assert policy.normalize("GIT_DIR=/x git push") == ["git push"]
+    assert policy.normalize("FOO=1 BAR=2 git push") == ["git push"]
+
+
+def test_normalize_strips_absolute_path():
+    assert policy.normalize("/usr/bin/git push") == ["git push"]
+
+
+def test_normalize_strips_wrappers():
+    assert policy.normalize("env git push") == ["git push"]
+    assert policy.normalize("command git push") == ["git push"]
+    assert policy.normalize("nohup git push") == ["git push"]
+    assert policy.normalize("timeout 5 git push") == ["git push"]
+    assert policy.normalize("timeout 1.5s git push") == ["git push"]
+    assert policy.normalize("nice -n 5 git push") == ["git push"]
+    assert policy.normalize("xargs -I{} git push") == ["git push"]
+
+
+def test_normalize_expands_shell_invocation():
+    assert "git push" in policy.normalize('bash -c "git push"')
+    assert "git push" in policy.normalize("sh -c 'git push'")
+    assert "git push" in policy.normalize('bash -lc "git push"')
+
+
+def test_normalize_expands_eval():
+    assert "git push" in policy.normalize("eval 'git push'")
+
+
+def test_normalize_keeps_the_shell_segment_itself():
+    """`curl x | sh` を検出できるよう、シェル起動自体もセグメントに残す."""
+    segments = policy.normalize('bash -c "git push"')
+    assert segments[0].startswith("bash")
+
+
+def test_normalize_handles_nested_wrappers():
+    assert "git push" in policy.normalize('env FOO=1 /usr/bin/timeout 5 bash -c "git push"')
+
+
+def test_normalize_recursion_is_bounded():
+    """自己参照的な入力でも停止すること."""
+    nested = 'bash -c "bash -c \\"bash -c \\\\\\"git push\\\\\\"\\""'
+    assert policy.normalize(nested)  # 例外にならず何か返ればよい
+
+
+def test_normalize_does_not_strip_script_arguments():
+    """`bash script.sh` はスクリプト実行なので中身を展開しない."""
+    assert policy.normalize("bash test/test.sh") == ["bash test/test.sh"]
+
+
+def test_find_match_sees_through_wrappers():
+    assert policy.find_match('bash -c "git push"', PATTERNS) == "git push"
+    assert policy.find_match("timeout 5 git push", PATTERNS) == "git push"
+    assert policy.find_match("(sudo apt install foo)", PATTERNS) == "sudo"
+
+
+# ---------------------------------------------------------------------------
 # Ad-hoc runner so we can execute without pytest
 # ---------------------------------------------------------------------------
 

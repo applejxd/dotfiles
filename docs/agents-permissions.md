@@ -55,8 +55,23 @@ Copilot CLI の `permissions-config.json` は deny / ask を表現できない
 ### 照合規則
 
 パターンは素のトークン列で書く (例: `git push`)。
-hook は normalize 後のセグメント先頭トークンで一致を見るので、
-`cd /elsewhere && git push` や作業ディレクトリを付け替える形式も捕捉できる。
+hook は normalize 後のセグメント先頭トークンで一致を見る。
+normalize は「実際に走るコマンドを変えずに先頭トークンだけを変える飾り」を
+すべて剥がすので、下記はいずれも `git push` として捕捉される:
+
+```bash
+cd /elsewhere && git push      # 作業ディレクトリの付け替え
+git -C /elsewhere push         # 同上 (-C オプション)
+bash -c "git push"             # シェル経由 (中身を再帰的に評価)
+eval 'git push'                # 文字列のコード実行
+env FOO=1 git push             # 環境変数プレフィクス
+timeout 5 git push             # ラッパーコマンド
+/usr/bin/git push              # 絶対パス
+(git push)  /  { git push; }   # グループ化
+```
+
+加えて `curl x | sh` のようなパイプ実行は `check_pipe_to_shell` が deny する
+(`bash script.sh` のようにスクリプトを渡すだけの呼び出しは対象外)。
 
 評価順は **deny → ask → allow**。より具体的なパターンを deny に置けば、
 一般形を ask にできる。
@@ -216,7 +231,7 @@ bypass パターンを hook が確実に block することを保証している
 
 ```bash
 uv run --with pytest --no-project pytest test/agents/ -q
-# -> 190 passed (normalize/match 26 + hook 生成 21 + deny/ask 判定 143)
+# -> 251 passed (normalize/match 37 + hook 生成 21 + deny/ask 判定 193)
 ```
 
 hook は `AGENTS_CONFIG_DIR` で agents 設定ディレクトリを差し替えられるので、

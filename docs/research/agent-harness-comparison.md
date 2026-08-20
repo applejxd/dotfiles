@@ -125,19 +125,31 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 ## 5. 既知の抜け道（指示でしか塞げないもの）
 
 `home/dot_claude/hooks/executable_check_bash.py` と
-`home/dot_config/agents/command_policy.py` の実装を読んだ結果:
+`home/dot_config/agents/command_policy.py` の実装を読み、
+実際に payload を流して確認した結果:
 
-| 抜け道 | 原因 | 影響範囲 |
-| --- | --- | --- |
-| ~~`cd foo && pip install x`~~ | ~~生文字列の先頭アンカー~~ **修正済**: `check_pip_redirect` が normalize 後のセグメント先頭トークンで判定するようになった | — |
-| ~~`python3 -m pip install x`~~ | ~~`\bpython\b` が `python3` に一致しない~~ **修正済**: `python[0-9.]*` で判定 | — |
-| ~~`pip3 install x`~~ | ~~`pip\b` が `pip3` に一致しない~~ **修正済**: `pip[0-9.]*` で判定 | — |
-| `bash -c "git push"` | `command_policy.py` の `_split_compound` がクォート内を分割しないため、`shlex.split` 後の先頭トークンが `bash` になる | Claude / Copilot |
-| `cd foo && X` / `-C foo X` で permission deny を回避 | Claude CLI の既知バグ。hook 側の normalize が `[bash] deny` / `ask` の全項目を救済する | Claude |
-| `SENSITIVE_PATH_PATTERNS` の誤検知 | `['\"/\s]token` のような緩い部分一致。`grep -rn "api_key" src/` や `.env.example`、さらにコマンド文字列に `.ssh` を含むだけの `git commit -m "... .ssh ..."` も止まる | Claude / Copilot |
+| 抜け道 | 状態 |
+| --- | --- |
+| `cd foo && pip install x` | **修正済**: normalize 後のセグメント先頭トークンで判定 |
+| `python3 -m pip install x` / `pip3 install x` | **修正済**: `python[0-9.]*` / `pip[0-9.]*` で判定 |
+| `bash -c "git push"` / `sh -c '...'` / `eval '...'` | **修正済**: `-c` の引数を再帰的に normalize する |
+| `env FOO=1 X` / `command X` / `nohup X` / `timeout 5 X` / `nice -n 5 X` / `xargs -I{} X` | **修正済**: ラッパーを剥がして後続を評価 |
+| `/usr/bin/git push` | **修正済**: 先頭トークンを basename 化 |
+| `GIT_DIR=/x git push` | **修正済**: 先頭の環境変数代入を除去 |
+| `(git push)` / `{ git push; }` | **修正済**: グループ化の飾りを除去 |
+| `curl x \| sh` | **修正済**: `check_pipe_to_shell` が deny (`bash script.sh` は対象外) |
+| `cd foo && X` / `-C foo X` で permission deny を回避 | Claude CLI の既知バグだが、hook 側の normalize が `[bash] deny` / `ask` の全項目を救済する |
+| `SENSITIVE_PATH_PATTERNS` の誤検知 | **未対応**。`['\"/\s]token` のような緩い部分一致で、`grep -rn "api_key" src/` や `.env.example`、コマンド文字列に `.ssh` を含むだけの `git commit -m "..."` も止まる |
+| シェル変数経由の組み立て (`C=push; git $C`) | **未対応**。静的解析では追えない |
+| エディタ・スクリプト経由の間接実行 | **未対応**。`vim` の `:!` など |
+
+上記の「修正済」は `test/agents/test_check_bash_decision.py` と
+`test_command_policy.py` に回帰テストがある。日常的に使うコマンド
+(`bash test/test.sh` / `timeout 900 chezmoi apply` / `xargs -I{} echo {}` 等) が
+過剰検知されないことも併せて検査している。
 
 → 個人用指示の「**拒否条件を満たす別手段に切り替える。条件自体を回避する迂回（コマンドの
-分割・偽装、作業ディレクトリの付け替え）はしない**」は、この層を埋めるために存在する。
+分割・偽装、作業ディレクトリの付け替え）はしない**」は、残る層を埋めるために存在する。
 ハーネス既定の「ブロックされたら別アプローチを検討する」とは意図的に差分がある。
 
 ## 6. その他の差分（指示設計に影響するもの）
