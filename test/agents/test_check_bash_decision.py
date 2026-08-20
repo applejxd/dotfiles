@@ -85,35 +85,72 @@ def run_hook(command: str, *, cwd: str | None = None) -> tuple[str | None, str]:
 # common.toml の整合性
 # ---------------------------------------------------------------------------
 
-def test_critical_ask_list_exists():
-    assert COMMON["bash"]["critical_ask"], "[bash.critical_ask] が空"
+def test_bash_has_exactly_three_lists():
+    """人が書くのは allow / ask / deny の 3 つだけ (critical_* は廃止)."""
+    assert sorted(COMMON["bash"]) == ["allow", "ask", "deny"]
 
 
-def test_critical_ask_and_deny_do_not_overlap():
-    overlap = set(COMMON["bash"]["critical_ask"]) & set(COMMON["bash"]["critical_deny"])
-    assert not overlap, f"critical_ask と critical_deny が重複: {overlap}"
+def test_lists_are_not_empty():
+    for key in ("allow", "ask", "deny"):
+        assert COMMON["bash"][key], f"[bash] {key} が空"
 
 
-def test_critical_ask_entries_are_not_in_bash_deny():
-    """deny は hook より優先されるので、ask させたいものを deny に書いてはいけない."""
-    deny_heads = {d.split(":", 1)[0] for d in COMMON["bash"]["deny"]}
-    for pattern in COMMON["bash"]["critical_ask"]:
-        head = pattern.split()[0]
-        assert head not in deny_heads, (
-            f"'{pattern}' を ask させたいが [bash.deny] に '{head}' がある。"
-            " deny が hook より優先されるためプロンプトが出ない"
-        )
+def test_ask_and_deny_do_not_overlap():
+    overlap = set(COMMON["bash"]["ask"]) & set(COMMON["bash"]["deny"])
+    assert not overlap, f"ask と deny が重複: {overlap}"
 
 
-def test_loader_reads_critical_ask():
-    patterns = cd.load_critical_ask(str(COMMON_PATH))
-    assert "rm -rf" in patterns
+def test_patterns_are_bare_tokens():
+    """パターンは素のトークン列。Claude の `:*` は generate.py が付ける."""
+    for key in ("allow", "ask", "deny"):
+        for pattern in COMMON["bash"][key]:
+            assert ":" not in pattern, f"[bash] {key} に Claude 記法が混入: {pattern}"
+            assert pattern == pattern.strip()
+            assert "  " not in pattern
 
 
-def test_loader_reads_critical_deny():
-    patterns = cd.load_critical_deny(str(COMMON_PATH))
-    assert "rm -rf" not in patterns
+def test_more_specific_deny_overrides_broader_ask():
+    """deny は ask より先に評価されるので、例外は deny 側に具体形で書ける."""
+    assert "git reset" in COMMON["bash"]["ask"]
+    assert "git reset --hard" in COMMON["bash"]["deny"]
+
+
+# ---------------------------------------------------------------------------
+# hook と permission の関係
+# ---------------------------------------------------------------------------
+# 同じ 3 リストから両方が作られるので、片方だけに書かれる状態は起こらない。
+# Copilot は permission リストを持たない (deny/ask 非対応) が、hook が同じ
+# リストを読むため両 CLI で同じ判定になる。
+
+
+def test_git_dash_c_is_not_allowed():
+    """作業ディレクトリを付け替える形式は permission バイパスの既知形式なので allow しない."""
+    assert not [a for a in COMMON["bash"]["allow"] if a.startswith("git -C")]
+    perms = gen.build_claude_permissions(COMMON)
+    assert "Bash(git -C:*)" not in perms["allow"]
+
+
+def test_loader_reads_ask():
+    patterns = cd.load_ask(str(COMMON_PATH))
+    assert "rm" in patterns
+    assert "git commit" in patterns
+
+
+def test_loader_reads_deny():
+    patterns = cd.load_deny(str(COMMON_PATH))
     assert "git push" in patterns
+    assert "rm" not in patterns
+
+
+def test_hook_and_permissions_come_from_the_same_lists():
+    """generate.py が出す Bash ルールと hook が読むパターンが 1:1 で対応すること."""
+    perms = gen.build_claude_permissions(COMMON)
+    for key, loader in (("ask", cd.load_ask), ("deny", cd.load_deny)):
+        from_permissions = {
+            r[len("Bash("):-len(":*)")] for r in perms[key] if r.startswith("Bash(")
+        }
+        from_hook = set(loader(str(COMMON_PATH)))
+        assert from_permissions == from_hook, f"{key} が食い違っている"
 
 
 # ---------------------------------------------------------------------------
@@ -122,14 +159,11 @@ def test_loader_reads_critical_deny():
 
 def test_generated_permissions_put_rm_in_ask_not_deny():
     perms = gen.build_claude_permissions(COMMON)
-    assert not [r for r in perms["deny"] if r.startswith("Bash(rm:")], (
-        "Bash(rm:*) が deny に残っていると hook の ask が無効化される"
-    )
+    assert not [r for r in perms["deny"] if r.startswith("Bash(rm:")]
     assert "Bash(rm:*)" in perms["ask"]
-    assert "Bash(rm -rf:*)" in perms["ask"]
 
 
-def test_generated_permissions_keep_critical_deny_in_deny():
+def test_generated_permissions_keep_high_risk_in_deny():
     perms = gen.build_claude_permissions(COMMON)
     assert "Bash(sudo:*)" in perms["deny"]
     assert "Bash(git push:*)" in perms["deny"]
@@ -137,26 +171,27 @@ def test_generated_permissions_keep_critical_deny_in_deny():
 
 @pytest.mark.parametrize(
     "command",
-    ["wget:*", "npm uninstall:*", "npm remove:*", "docker rm:*", "docker rmi:*"],
+    ["wget", "npm uninstall", "npm remove", "docker rm", "docker rmi",
+     "git clean", "git branch -D", "git commit", "gh pr create"],
 )
 def test_reversible_commands_are_ask_not_deny(command):
     """復旧可能な操作は deny ではなく ask (承認すれば実行できる)."""
     perms = gen.build_claude_permissions(COMMON)
-    assert f"Bash({command})" in perms["ask"]
-    assert f"Bash({command})" not in perms["deny"]
+    assert f"Bash({command}:*)" in perms["ask"]
+    assert f"Bash({command}:*)" not in perms["deny"]
 
 
 @pytest.mark.parametrize(
     "command",
-    ["sudo:*", "git push:*", "git reset:*", "git rebase:*", "ssh:*", "nc:*",
-     "telnet:*", "npm install -g:*", "pip:*", "pip3:*", "psql:*", "mysql:*",
-     "redis-cli:*"],
+    ["sudo", "git push", "git reset --hard", "git rebase", "ssh", "nc",
+     "telnet", "npm install -g", "pip", "pip3", "psql", "mysql",
+     "redis-cli", "docker system prune", "gh pr merge", "gh repo delete"],
 )
 def test_high_risk_commands_stay_denied(command):
     """外部への漏洩・システム変更・規約違反は deny のまま."""
     perms = gen.build_claude_permissions(COMMON)
-    assert f"Bash({command})" in perms["deny"]
-    assert f"Bash({command})" not in perms["ask"]
+    assert f"Bash({command}:*)" in perms["deny"]
+    assert f"Bash({command}:*)" not in perms["ask"]
 
 
 # ---------------------------------------------------------------------------
@@ -187,11 +222,17 @@ def test_pip_is_denied_everywhere(command):
 
 @pytest.mark.parametrize(
     "command",
-    ["uv pip list", "uv pip install requests", "uv add requests", "uv sync"],
+    ["uv pip list", "uv pip install requests", "uv sync"],
 )
 def test_uv_commands_are_not_blocked_by_pip_check(command):
     decision, _ = run_hook(command)
     assert decision is None, f"{command!r} が誤ってブロックされた"
+
+
+def test_uv_add_asks_but_is_not_denied():
+    """uv add は critical_ask なので ask。pip チェックに巻き込まれて deny にはならない."""
+    decision, reason = run_hook("uv add requests")
+    assert decision == "ask", f"-> {decision} ({reason})"
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +430,69 @@ def test_safe_commands_pass_through(command):
 
 
 # ---------------------------------------------------------------------------
+# 新規ガード: git clean / git branch -D / docker / gh
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git clean -fdx",
+        "git branch -D feature/old",
+        "docker rm my-container",
+        "docker rmi my-image",
+        "docker exec -it web sh",
+        "git commit -m 'wip'",
+        "gh pr create --fill",
+        "gh issue close 12",
+        "gh repo clone owner/name",
+        "gh api graphql -f query=...",
+    ],
+)
+def test_hook_asks_for_reviewable_operations(command):
+    decision, reason = run_hook(command)
+    assert decision == "ask", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "docker system prune -a --volumes",
+        "gh pr merge 12 --squash",
+        "gh release create v1.0.0",
+        "gh repo delete owner/name",
+    ],
+)
+def test_hook_denies_irreversible_remote_operations(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["gh pr list", "gh issue view 3", "gh run list", "gh auth status"],
+)
+def test_read_only_gh_passes_through(command):
+    decision, _ = run_hook(command)
+    assert decision is None, f"{command!r} が不要にブロックされた"
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        # normalize が `git -C <path> X` を `git X` に畳むので、critical_* に
+        # 載せておけば git -C バイパスも自動的に塞がる
+        ("git -C /elsewhere clean -fdx", "ask"),
+        ("git -C /elsewhere commit -m x", "ask"),
+        ("git -C /elsewhere push origin main", "deny"),
+        ("git -C /elsewhere rebase main", "deny"),
+    ],
+)
+def test_git_dash_c_bypass_is_covered(command, expected):
+    decision, reason = run_hook(command)
+    assert decision == expected, f"{command!r} -> {decision} ({reason})"
+
+
+# ---------------------------------------------------------------------------
 # ヘルパ単体
 # ---------------------------------------------------------------------------
 
@@ -413,3 +517,30 @@ def test_safe_commands_pass_through(command):
 )
 def test_is_catastrophic_rm_target(token, expected):
     assert HOOK._is_catastrophic_rm_target(token) is expected
+
+
+# ---------------------------------------------------------------------------
+# fail-closed
+# ---------------------------------------------------------------------------
+
+def test_missing_policy_denies_everything(tmp_path):
+    """ポリシーを読めないときは素通りではなく deny になること."""
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status"},
+        "cwd": str(ROOT),
+    }
+    env = {**os.environ, "AGENTS_CONFIG_DIR": str(tmp_path)}
+    proc = subprocess.run(
+        [sys.executable, str(HOOK_PATH)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+    assert proc.stdout.strip(), "設定が無いのに hook が沈黙した (fail-open)"
+    data = json.loads(proc.stdout)
+    assert data["permissionDecision"] == "deny"
+    assert "chezmoi apply" in data["permissionDecisionReason"]

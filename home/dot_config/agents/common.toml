@@ -18,104 +18,137 @@
 # Bash 系
 # ---------------------------------------------------------------------------
 [bash]
-# Best-effort allow (Claude: 文字列 pattern、Copilot: command name に集約)
-allow = [
-  "git diff:*",
-  "git status:*",
-  "git log:*",
-  "git -C:*",
-  "wc:*",
-  "grep -n:*",
-  "find:*",
-  "gcc:*",
-  "g++:*",
-  "cmake -S:*",
-  "cmake --build:*",
-  "uv pip list:*",
-  "uv sync:*",
-  "docker ps:*",
-  "mise run:*",
-]
-
-# Best-effort deny (Claude のみ反映、CLI バグで bypass される可能性あり)
-# critical_deny に書いた項目は hook で hard-block されるが、ここにも書いておくと
-# Claude UI で「deny されている」が利用者にも見える。
+# 人が書くのはこの 3 リストだけ。パターンは素のトークン列で書く
+# (例: "git push")。生成/参照の流れ:
 #
-# ★注意: permissions.deny は hook の判定より優先される。
-#   公式 docs: "Hook decisions don't bypass permission rules. Claude Code evaluates
-#   deny and ask rules regardless of what a PreToolUse hook returns"
-#   よって「hook で ask を出したい」コマンドをここに書いてはいけない
-#   (プロンプトすら出ずに問答無用で拒否される)。
-deny = [
-  "sudo:*",
-  "git push:*",
-  "git reset:*",
-  "git rebase:*",
-  "nc:*",
-  "telnet:*",
-  "ssh:*",
-  "git config:*",
-  "npm install -g:*",
-  # pip は全面禁止 (uv / uvx を使う)。hook の check_pip_redirect が
-  # プロジェクト種別を問わず代替案付きで hard-deny する
-  "pip:*",
-  "pip3:*",
-  "psql:*",
-  "mysql:*",
-  # mongod は DB サーバのデーモン。クライアントは mongosh なので両方挙げる
-  # (このリストの意図は「DB クライアントを触らせない」こと)
-  "mongod:*",
-  "mongosh:*",
-  "redis-cli:*",
-]
-
-# Claude のみ (Copilot は対話プロンプトがデフォルト動作なので不要)
-# ここに書いたものは auto mode でも必ず確認プロンプトが出る
-# ("Explicit ask rules still force a prompt" -- 公式 docs)
-ask = [
-  "rm:*",
-  # curl と同種の取得コマンド。センシティブファイルの送信は hook の
-  # check_curl_file_send が curl/wget 両方を hard-deny するので二重で守られる
-  "wget:*",
-  "uv add:*",
-  "npm install:*",
-  "npm ci:*",
-  # プロジェクト内の変更で lockfile と git から復旧できる (-g はシステム汚染なので deny 維持)
-  "npm uninstall:*",
-  "npm remove:*",
-  "mv:*",
-  "git commit:*",
-  "python -c:*",
-  "docker exec:*",
-  # コンテナ/イメージは再作成・再 pull できる (Codex rules でも prompt 扱い)
-  "docker rm:*",
-  "docker rmi:*",
-  "curl:*",
-]
-
-# ★クリティカル: hook で必ず block (CLI permission を信用しない)
-# normalize 後の command 文字列に対する先頭トークン一致。
+#   generate.py   -> ~/.claude/settings.json の permissions に Bash(<pattern>:*) を展開
+#   check_bash.py -> 同じリストを読み、Claude / Copilot 双方で deny / ask を強制
+#
+# 2 層に配る理由: hook は設定の読み込みに失敗しうる。permission リストは
+# CLI 本体が評価するので、hook が落ちても Claude 側の deny は生き残る。
+# (hook 自体も設定を読めないときは fail-closed で deny する)
+#
+# 照合規則: normalize 後のセグメント先頭トークン一致。
 # normalize は cd && X -> X, git -C foo X -> git X, compound 分割 (&&, ;, |) を実施。
-critical_deny = [
+# これにより作業ディレクトリを付け替えるバイパスも捕捉できる。
+#
+# 評価順は deny -> ask -> allow。より具体的なパターンを deny に置けば
+# 一般形を ask にできる (例: "git reset --hard" は deny、"git reset" は ask)。
+
+# 自動承認。読み取り専用・冪等なものだけ
+#
+# ★注意: Copilot CLI へは「先頭トークンのコマンド名」だけが渡る
+#   (permissions-config.json は deny/ask 非対応)。つまり "git diff" と書くと
+#   Copilot では git 全体が承認される。ask/deny 側は hook が強制するので
+#   実害は無いが、allow に新しいコマンドを足すときはこの粒度差を意識すること。
+#
+# 作業ディレクトリを付け替える形式 (-C オプション) は allow に入れない。
+# permission を回避する既知のバイパス形式 (anthropics/claude-code#59006) であり、
+# 対策を用意している意図と矛盾する。
+allow = [
+  "git diff",
+  "git status",
+  "git log",
+  "wc",
+  "grep -n",
+  "find",
+  "gcc",
+  "g++",
+  "cmake -S",
+  "cmake --build",
+  "uv pip list",
+  "uv sync",
+  "docker ps",
+  "mise run",
+  # gh の読み取り系 (github-issue skill が使う)
+  "gh auth status",
+  "gh pr list",
+  "gh pr view",
+  "gh issue list",
+  "gh issue view",
+  "gh repo view",
+  "gh run list",
+  "gh run view",
+  "gh project list",
+  "gh project view",
+  "gh project field-list",
+  "gh project item-list",
+]
+
+# 提案 -> ユーザーが承認 -> そのまま実行。
+# 「危険だが承認すれば妥当」なもの。取り返しがつく変更はここに置く。
+#
+# 無人実行では安全側に倒れる (Claude dontAsk は自動拒否、-p はスキップ、
+# Copilot cloud agent は deny 扱い) ので、緩めても無人時のリスクは増えない。
+ask = [
+  # 削除は承認制。壊滅的なターゲット (ルートやホーム) は check_rm_root_guard が deny
+  "rm",
+  # 未追跡ファイルを消すので git でも復旧できない
+  "git clean",
+  "git branch -D",
+  "git commit",
+  # --hard は deny。素の reset は index を戻すだけで作業ツリーを壊さない
+  "git reset",
+  "uv add",
+  "npm install",
+  "npm ci",
+  # プロジェクト内の変更で lockfile と git から復旧できる
+  "npm uninstall",
+  "npm remove",
+  "mv",
+  "python -c",
+  # 取得系。センシティブファイルの送信は check_curl_file_send が hard-deny する
+  "curl",
+  "wget",
+  # コンテナ/イメージは再作成・再 pull できる
+  "docker exec",
+  "docker rm",
+  "docker rmi",
+  # リモートに書き込むが取り消せる gh 操作
+  "gh pr create",
+  "gh pr checkout",
+  "gh issue create",
+  "gh issue close",
+  "gh issue comment",
+  "gh repo clone",
+  # Projects v2 の mutation を含む
+  "gh api graphql",
+]
+
+# 承認の余地なく拒否。
+# 判断基準: 外部に出る / システムを変える / 取り返しがつかない / 規約違反。
+deny = [
   "sudo",
+  # リモートに公開されるものは手動操作に委ねる
   "git push",
   "git reset --hard",
   "git rebase",
+  # core.hooksPath の書き換えで hook 自体を無効化できる
+  "git config",
+  # 外部への通信・横展開の経路
+  "nc",
+  "telnet",
+  "ssh",
+  # システム全体を汚す
+  "npm install -g",
+  # pip は全面禁止 (uv / uvx を使う)。hook の check_pip_redirect が
+  # プロジェクト種別を問わず代替案付きで hard-deny する
+  "pip",
+  "pip3",
+  # DB クライアント。mongod はサーバのデーモン、クライアントは mongosh
+  "psql",
+  "mysql",
+  "mongod",
+  "mongosh",
+  "redis-cli",
+  # -a --volumes はデータボリュームまで消す
+  "docker system prune",
+  # リモートに影響する gh 操作 (push と同じ基準)
+  "gh pr merge",
+  "gh release create",
+  "gh repo delete",
 ]
 
-# ★hook が ask を返す (= 提案 → ユーザーが承認 → そのまま実行)
-# critical_deny と同じ normalize / 照合を通すが、決定が deny ではなく ask になる。
-# 無人実行では安全側に倒れる (Claude dontAsk は自動拒否、-p はスキップ、
-# Copilot cloud agent は deny 扱い) ので、緩めても無人時のリスクは増えない。
-#
-# ここに書くコマンドは [bash.deny] に書いてはいけない (deny が優先されるため)。
-critical_ask = [
-  "rm -rf",
-]
-
-# ---------------------------------------------------------------------------
-# File 系 (主に Claude 用、Copilot は path-scope 設計のためマッピング不可)
-# ---------------------------------------------------------------------------
 [file]
 read_allow = [
   "README.md",

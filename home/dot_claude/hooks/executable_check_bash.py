@@ -8,12 +8,14 @@ Agent (Claude Code / Copilot CLI) PreToolUse hook: Bash コマンドの安全性
   - ask : エージェントが提案し、ユーザーが承認すればそのまま実行される。
           ファイル削除のような「危険だが承認すれば妥当」な操作に使う
 
+判定の主軸は common.toml の [bash] deny / ask。同じリストから Claude の
+permission も生成されるので、ルールは 1 箇所に書けばよい。
+permission リストは Claude にしか効かないが、この hook は Copilot にも効く。
+
 出力規約は ``agent_compat.emit_pretool_deny`` / ``emit_pretool_ask`` に委譲する
 (両ツール対応)。
 
-注意: Claude Code では ``permissions.deny`` が hook の判定より優先される。
-ask を返したいコマンドを common.toml の [bash.deny] に書くとプロンプトすら
-出ないので、[bash.critical_ask] 側に書くこと。
+fail-closed: ポリシー設定を読めない場合は素通りさせず deny する。
 """
 from __future__ import annotations
 
@@ -252,42 +254,59 @@ def check_pip_redirect(cmd: str) -> str | None:
     return None
 
 
-def check_critical_deny(cmd: str) -> str | None:
-    """common.toml の bash.critical_deny に該当すれば block する.
+def check_policy_loaded(cmd: str) -> str | None:
+    """ポリシー設定を読めないときは fail-closed で拒否する。
+
+    以前は import 失敗時に ``_critical_deny = None`` として全チェックを
+    素通りさせていたため、``~/.config/agents/`` の破損 (docs のトラブルシュートに
+    ある ``__pycache__`` 由来の import 失敗など) で **全ガードが無言で消えて**いた。
+    ここで止めることで、壊れていることが必ず表面化する。
+    """
+    if _critical_deny is None:
+        return (
+            f"ポリシーモジュールを読み込めませんでした ({_AGENTS_DIR}/critical_deny.py)。\n"
+            "安全のため bash コマンドを拒否しています。\n"
+            "対処: `chezmoi apply ~/.config/agents` を実行し、"
+            f"`{_AGENTS_DIR}/__pycache__/` が残っていれば削除してください。"
+        )
+    if not Path(_critical_deny.DEFAULT_COMMON_PATH).is_file():
+        return (
+            f"ポリシー定義が見つかりません ({_critical_deny.DEFAULT_COMMON_PATH})。\n"
+            "安全のため bash コマンドを拒否しています。\n"
+            "対処: `chezmoi apply ~/.config/agents` を実行してください。"
+        )
+    return None
+
+
+def check_policy_deny(cmd: str) -> str | None:
+    """common.toml の bash.deny に該当すれば block する.
 
     Claude Code permission リストの既知バグ (cd && bypass, git -C bypass,
     compound 命令の個別評価欠如) に対する最終防波堤。shell command を
     normalize (cd, git -C, compound 分割) してから pattern match する。
     """
-    if _critical_deny is None:
-        return None
-    patterns = _critical_deny.load_critical_deny()
-    if not patterns:
-        return None
+    patterns = _critical_deny.load_deny()
     matched = _critical_deny.find_critical_match(cmd, patterns)
     if matched:
         return (
-            f"`{matched}` は critical_deny パターンに一致するためブロックされました。\n"
-            "このコマンドは common.toml の [bash.critical_deny] で禁止されています。"
+            f"`{matched}` は deny パターンに一致するためブロックされました。\n"
+            "このコマンドは common.toml の [bash] deny で禁止されています。"
         )
     return None
 
 
-def check_critical_ask(cmd: str) -> str | None:
-    """common.toml の bash.critical_ask に該当すればユーザー承認を要求する.
+def check_policy_ask(cmd: str) -> str | None:
+    """common.toml の bash.ask に該当すればユーザー承認を要求する.
 
     deny と違い、ユーザーが承認すればそのまま実行される。
-    critical_deny と同じ normalize / 照合を通す。
+    deny チェックの後に評価されるので、より具体的な deny パターン
+    (例: ``git reset --hard``) が一般形の ask (``git reset``) に優先する。
     """
-    if _critical_deny is None:
-        return None
-    patterns = _critical_deny.load_critical_ask()
-    if not patterns:
-        return None
+    patterns = _critical_deny.load_ask()
     matched = _critical_deny.find_critical_match(cmd, patterns)
     if matched:
         return (
-            f"`{matched}` は承認が必要な操作です (common.toml の [bash.critical_ask])。\n"
+            f"`{matched}` は承認が必要な操作です (common.toml の [bash] ask)。\n"
             f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
             "内容を確認して問題なければ承認してください。"
         )
@@ -377,11 +396,14 @@ def check_rm_root_guard(cmd: str) -> str | None:
 # 対象にするので、例えば `rm -rf /` は root guard (deny) が critical_ask より
 # 優先される。
 DENY_CHECKS = [
-    check_rm_root_guard,      # ★最初に実行: 壊滅的な削除は承認の余地なし
-    check_critical_deny,      # common.toml の critical_deny を強制
-    check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
-    check_git_c_dangerous,    # git -C 経由の deny サブコマンド実行をブロック
+    check_policy_loaded,      # ★最初に実行: 設定が読めないなら fail-closed
+    check_rm_root_guard,      # 壊滅的な削除は承認の余地なし
+    # 具体的な代替案を返せるチェックは、汎用の policy_deny より先に置く
+    # (先に一致したものがメッセージを決めるため)
     check_pip_redirect,       # pip → uv/uvx (プロジェクト種別を問わず全面禁止)
+    check_policy_deny,        # common.toml の [bash] deny を強制
+    check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
+    check_git_c_dangerous,    # -C 経由の deny サブコマンド実行をブロック
     check_file_read,
     check_archive,
     check_curl_file_send,
@@ -390,7 +412,7 @@ DENY_CHECKS = [
 
 # 承認を求めるチェック（ユーザーが許可すればそのまま実行される）
 ASK_CHECKS = [
-    check_critical_ask,       # common.toml の critical_ask
+    check_policy_ask,         # common.toml の [bash] ask
     check_find_dangerous,     # find -exec rm / -delete によるファイル削除
 ]
 

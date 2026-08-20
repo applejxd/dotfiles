@@ -63,7 +63,7 @@
 - Claude Code は deny が効くが、**permission リストに既知の bypass がある**
   （`cd foo && X`、`git -C foo X`。anthropics/claude-code#59498, #59006, #20085 ほか）。
   `critical_deny.py` の normalize は `cd` 剥がしと `git -C` 展開で一部を救済するが、
-  `critical_deny` に載っていない項目（`pip` / `wget` / `ssh` / `docker rm` 等）は素通りする
+  hook は `[bash] deny` / `ask` の全項目を同じ normalize で照合する
 - Codex は既定が read-only サンドボックス + `approval_policy = "untrusted"` のため、
   **書き込みを伴う検証（テスト実行など）が構造的に承認エスカレーションを必要とする**
 
@@ -133,7 +133,7 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | ~~`python3 -m pip install x`~~ | ~~`\bpython\b` が `python3` に一致しない~~ **修正済**: `python[0-9.]*` で判定 | — |
 | ~~`pip3 install x`~~ | ~~`pip\b` が `pip3` に一致しない~~ **修正済**: `pip[0-9.]*` で判定 | — |
 | `bash -c "git push"` | `critical_deny.py` の `_split_compound` がクォート内を分割しないため、`shlex.split` 後の先頭トークンが `bash` になる | Claude / Copilot |
-| `cd foo && X` / `git -C foo X` で permission deny を回避 | Claude CLI の既知バグ。`critical_deny` / `critical_ask` の項目のみ normalize で救済 | Claude |
+| `cd foo && X` / `-C foo X` で permission deny を回避 | Claude CLI の既知バグ。hook 側の normalize が `[bash] deny` / `ask` の全項目を救済する | Claude |
 | `SENSITIVE_PATH_PATTERNS` の誤検知 | `['\"/\s]token` のような緩い部分一致。`grep -rn "api_key" src/` や `.env.example`、さらにコマンド文字列に `.ssh` を含むだけの `git commit -m "... .ssh ..."` も止まる | Claude / Copilot |
 
 → 個人用指示の「**拒否条件を満たす別手段に切り替える。条件自体を回避する迂回（コマンドの

@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""Shell command normalization + critical_deny matcher.
+"""Shell command normalization + policy matcher for AI CLI hooks.
 
-Designed to back the third defense layer for AI CLI permission systems
-(Claude Code / Copilot CLI). The first two layers (CLI UI prompt and the
-permission list) are best-effort and have known bypass bugs such as:
+Designed to back the hook layer of the permission system (Claude Code /
+Copilot CLI). The CLI-side permission list is best-effort and has known bypass
+bugs such as:
 
     cd /elsewhere && git push       # bypasses Bash(git push:*) ask/deny
     git -C /elsewhere commit ...    # bypasses Bash(git commit *) deny
     echo ok; rm -rf important       # second segment not evaluated separately
 
 This module normalizes a raw bash command into a list of logical command
-segments and checks each segment against the critical_deny patterns from
-``common.toml``. Anything that matches must be hard-blocked by the hook.
+segments and checks each segment against the ``bash.deny`` / ``bash.ask``
+patterns from ``common.toml``. The same lists drive both the generated
+permission rules and the hook, so a rule only has to be written once.
 
 Public API:
-    load_critical_deny(common_toml_path)    -> list[str]
-    load_critical_ask(common_toml_path)     -> list[str]
+    load_deny(common_toml_path)             -> list[str]
+    load_ask(common_toml_path)              -> list[str]
     normalize(command_str)                  -> list[str]
     find_critical_match(command_str, patterns) -> str | None
 
@@ -66,23 +67,24 @@ def _load_bash_list(key: str, path: str) -> list[str]:
     return list(data.get("bash", {}).get(key, []))
 
 
-def load_critical_deny(path: str = DEFAULT_COMMON_PATH) -> list[str]:
-    """Return the ``bash.critical_deny`` list, or an empty list if missing.
+def load_deny(path: str = DEFAULT_COMMON_PATH) -> list[str]:
+    """Return the ``bash.deny`` list, or an empty list if missing.
 
     Patterns here are hard-blocked by the hook: there is no way to approve them.
     """
-    return _load_bash_list("critical_deny", path)
+    return _load_bash_list("deny", path)
 
 
-def load_critical_ask(path: str = DEFAULT_COMMON_PATH) -> list[str]:
-    """Return the ``bash.critical_ask`` list, or an empty list if missing.
+def load_ask(path: str = DEFAULT_COMMON_PATH) -> list[str]:
+    """Return the ``bash.ask`` list, or an empty list if missing.
 
     Patterns here make the hook return ``ask`` instead of ``deny``: the agent
     proposes the command, the user approves it, and the command then runs.
-    Entries must NOT also appear in ``bash.deny`` because a matching deny rule
-    is evaluated before the hook decision and would block the prompt entirely.
+    ``deny`` is evaluated first, so a more specific deny pattern (for example
+    ``git reset --hard``) can carve an exception out of a broader ask pattern
+    (``git reset``).
     """
-    return _load_bash_list("critical_ask", path)
+    return _load_bash_list("ask", path)
 
 
 # ---------------------------------------------------------------------------
@@ -265,12 +267,12 @@ def _main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    patterns = load_critical_deny(args.common)
+    patterns = load_deny(args.common)
     match = find_critical_match(args.command, patterns)
     if match is None:
         print("OK")
         return 0
-    print(f"BLOCK: matched critical_deny pattern '{match}'")
+    print(f"BLOCK: matched deny pattern '{match}'")
     return 2
 
 

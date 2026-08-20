@@ -36,12 +36,12 @@ def expand_user(path: str) -> str:
 
 
 def first_token(pattern: str) -> str:
-    """Extract the first command name from a Claude-style bash pattern.
+    """Extract the first command name from a bash pattern.
 
-    "git diff:*"   -> "git"
-    "uv sync:*"    -> "uv"
-    "cmake -S:*"   -> "cmake"
-    "wc:*"         -> "wc"
+    "git diff"     -> "git"
+    "uv sync"      -> "uv"
+    "cmake -S"     -> "cmake"
+    "wc"           -> "wc"
     """
     head = pattern.split(":", 1)[0]
     return head.split()[0] if head else ""
@@ -125,6 +125,10 @@ def merge_copilot_hooks(_existing: dict[str, Any], common: dict[str, Any]) -> di
 # ---------------------------------------------------------------------------
 
 def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
+    # bash.allow / ask / deny は素のトークン列 (例: "git push") で書かれているので
+    # Claude の pattern 記法 Bash(git push:*) に展開する。
+    # 同じリストを hook (check_bash.py) も読むため、ルールは 1 箇所に書けばよい。
+    #
     # 書き込み系の permission rule は Edit(path) に統一する。
     # Claude Code v2.1.210 で Write(path) / NotebookEdit(path) / Glob(path) は
     # deprecated となり、起動時警告が出るようになった (代替は Edit(path) / Read(path))。
@@ -136,7 +140,7 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
 
     allow: list[str] = []
     for cmd in bash.get("allow", []):
-        allow.append(f"Bash({cmd})")
+        allow.append(f"Bash({cmd}:*)")
     for path in file_.get("read_allow", []):
         allow.append(f"Read({path})")
     for domain in web.get("allow_domains", []):
@@ -144,10 +148,6 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
 
     deny: list[str] = []
     for cmd in bash.get("deny", []):
-        deny.append(f"Bash({cmd})")
-    for cmd in bash.get("critical_deny", []):
-        # critical_deny は hook が hard-block するが、Claude permission にも
-        # ベストエフォートで反映しておく
         deny.append(f"Bash({cmd}:*)")
     for glob in file_.get("read_deny_globs", []):
         deny.append(f"Read({glob})")
@@ -158,12 +158,6 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
 
     ask: list[str] = []
     for cmd in bash.get("ask", []):
-        ask.append(f"Bash({cmd})")
-    for cmd in bash.get("critical_ask", []):
-        # critical_ask は hook が ask を返すが、Claude の permission 側にも
-        # 出しておくと UI で「確認が必要」と見える。
-        # deny に出してはいけない (deny が hook より優先され、プロンプトが
-        # 出なくなるため)。
         ask.append(f"Bash({cmd}:*)")
     for glob in file_.get("read_ask_globs", []):
         ask.append(f"Read({glob})")
