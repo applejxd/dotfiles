@@ -68,10 +68,39 @@ hook の `ask` は無効化され、プロンプトすら出ずに拒否され�
 | 分類 | 例 | 置き場所 |
 | --- | --- | --- |
 | 承認の余地なく禁止 | `sudo`, `git push`, `git reset --hard`, `git rebase` | `[bash.critical_deny]` + `[bash.deny]` |
+| 外部への漏洩・システム変更 | `ssh`, `nc`, `telnet`, `npm install -g`, DB クライアント | `[bash.deny]` |
 | 壊滅的な削除 | `rm -rf /`, `rm -rf ~`, `rm -rf /etc` | `check_bash.py` の `check_rm_root_guard` (hard-deny) |
 | 提案 → 承認 → 実行 | `rm -rf <プロジェクト内>`, `find -delete` | `[bash.critical_ask]` + `[bash.ask]` |
+| 復旧できる変更 | `wget`, `pip`, `npm uninstall`, `docker rm`/`rmi` | `[bash.ask]` |
 | 毎回判断したい | `git commit`, `curl`, `mv`, `npm install` | `[bash.ask]` |
 | 自動承認 | `git status`, `grep -n`, `uv sync` | `[bash.allow]` |
+
+判断基準:
+
+- **取り返しがつくか**: lockfile や git、再 pull で戻せるなら `ask` で十分
+- **外部に出るか**: リモートや外部ホストへ情報が出るものは `deny`
+  (`git push` / `ssh` / `nc` / `telnet`)
+- **摩擦があるか**: そもそも使わないコマンドを緩めても利益が無い。
+  DB クライアントは触る機会が無いので `deny` のまま置いている
+
+### credential 系 glob は部分一致にしない
+
+`[file.read_deny_globs]` / `[file.write_deny_globs]` に `**/*key*` のような
+部分一致 glob を書くと、正当なファイルまで巻き込む。実例:
+
+```text
+home/AppData/Roaming/Keyhac/extension/fakeymacs/keyhac.bat
+home/AppData/Roaming/Keyhac/.../key_bindings.org
+home/AppData/Roaming/Keyhac/.../keymap_layer.drawio
+```
+
+いずれも chezmoi 管理下でエージェントが編集する必要がある。
+一般的にも `tokenizer.py` / `keyboard.ts` / `monkey.md` などを誤検知する。
+
+→ `**/*.key` / `**/*_key` / `**/id_*` / `**/*.pem` / `**/.ssh/**` のように
+**拡張子・接尾辞・既知のファイル名で具体的に**書く。
+`test_check_bash_decision.py` が「正当なファイルが deny されないこと」と
+「秘密ファイルが確実に deny されること」の両方を検査している。
 
 ### 無人実行時に `ask` がどうなるか
 
@@ -178,7 +207,7 @@ bypass パターンを hook が確実に block することを保証している
 
 ```bash
 uv run --with pytest --no-project pytest test/agents/ -q
-# -> 104 passed (critical_deny 26 + hook 生成 21 + deny/ask 判定 57)
+# -> 141 passed (critical_deny 26 + hook 生成 21 + deny/ask 判定 94)
 ```
 
 hook は `AGENTS_CONFIG_DIR` で agents 設定ディレクトリを差し替えられるので、

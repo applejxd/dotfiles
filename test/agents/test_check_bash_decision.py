@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -132,6 +133,112 @@ def test_generated_permissions_keep_critical_deny_in_deny():
     perms = gen.build_claude_permissions(COMMON)
     assert "Bash(sudo:*)" in perms["deny"]
     assert "Bash(git push:*)" in perms["deny"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["wget:*", "pip:*", "npm uninstall:*", "npm remove:*", "docker rm:*", "docker rmi:*"],
+)
+def test_reversible_commands_are_ask_not_deny(command):
+    """復旧可能な操作は deny ではなく ask (承認すれば実行できる)."""
+    perms = gen.build_claude_permissions(COMMON)
+    assert f"Bash({command})" in perms["ask"]
+    assert f"Bash({command})" not in perms["deny"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["sudo:*", "git push:*", "git reset:*", "git rebase:*", "ssh:*", "nc:*",
+     "telnet:*", "npm install -g:*", "psql:*", "mysql:*", "redis-cli:*"],
+)
+def test_high_risk_commands_stay_denied(command):
+    """外部への漏洩・システム変更に繋がるものは deny のまま."""
+    perms = gen.build_claude_permissions(COMMON)
+    assert f"Bash({command})" in perms["deny"]
+    assert f"Bash({command})" not in perms["ask"]
+
+
+# ---------------------------------------------------------------------------
+# credential 系 glob の具体性
+# ---------------------------------------------------------------------------
+
+def _glob_to_regex(glob: str) -> re.Pattern[str]:
+    """`**/` と `*` だけを解釈する簡易 glob マッチャ."""
+    out = []
+    i = 0
+    while i < len(glob):
+        if glob.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif glob.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif glob[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        else:
+            out.append(re.escape(glob[i]))
+            i += 1
+    return re.compile("^" + "".join(out) + "$")
+
+
+def _matches_any(path: str, globs: list[str]) -> bool:
+    return any(_glob_to_regex(g).match(path) for g in globs)
+
+
+# 実際にこのリポジトリで管理していて、エージェントが読み書きする必要があるファイル
+LEGIT_PATHS = [
+    "home/AppData/Roaming/Keyhac/extension/fakeymacs/keyhac.bat",
+    "home/AppData/Roaming/Keyhac/extension/fakeymacs/fakeymacs_manuals/key_bindings.org",
+    "home/AppData/Roaming/Keyhac/extension/fakeymacs/fakeymacs_manuals/keymap_layer/keymap_layer.drawio",
+    "src/tokenizer.py",
+    "src/keyboard_layout.ts",
+    "docs/monkey-patching.md",
+]
+
+# 確実に守りたい秘密ファイル
+SECRET_PATHS = [
+    "home/.ssh/id_rsa",
+    "home/.ssh/config",
+    "home/.gnupg/private-keys-v1.d/foo",
+    ".env",
+    "config/service-account-prod.json",
+    "certs/server.pem",
+    "certs/server.key",
+    "secrets/db.yaml",
+    "app/api_token",
+    "app/refresh.token",
+    "home/.config/chezmoi/key.txt",
+    "aws/.aws/credentials",
+    "home/.netrc",
+]
+
+
+@pytest.mark.parametrize("path", LEGIT_PATHS)
+def test_legit_files_are_not_denied(path):
+    """`**/*key*` のような部分一致 glob による誤検知が無いこと."""
+    file_cfg = COMMON["file"]
+    assert not _matches_any(path, file_cfg["read_deny_globs"]), f"read deny 誤検知: {path}"
+    assert not _matches_any(path, file_cfg["write_deny_globs"]), f"write deny 誤検知: {path}"
+
+
+@pytest.mark.parametrize("path", SECRET_PATHS)
+def test_secret_files_are_still_denied(path):
+    file_cfg = COMMON["file"]
+    assert _matches_any(path, file_cfg["read_deny_globs"]), f"read deny の穴: {path}"
+
+
+def test_no_broad_substring_globs():
+    """`**/*key*` 形式 (前後に * が付く部分一致) を使っていないこと."""
+    file_cfg = COMMON["file"]
+    broad = re.compile(r"\*[A-Za-z0-9_.-]+\*")
+    for key in ("read_deny_globs", "write_deny_globs"):
+        for glob in file_cfg[key]:
+            base = glob.rsplit("/", 1)[-1]
+            if base in {"*secret*", "*credential*", "*password*"}:
+                # 誤検知しにくい語なので許容 (key / token は具体化済み)
+                continue
+            assert not broad.search(base), f"{key} に部分一致 glob: {glob}"
 
 
 # ---------------------------------------------------------------------------

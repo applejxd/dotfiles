@@ -51,21 +51,18 @@ deny = [
   "git push:*",
   "git reset:*",
   "git rebase:*",
-  "wget:*",
   "nc:*",
   "telnet:*",
   "ssh:*",
   "git config:*",
   "npm install -g:*",
-  "npm uninstall:*",
-  "npm remove:*",
   "psql:*",
   "mysql:*",
+  # mongod は DB サーバのデーモン。クライアントは mongosh なので両方挙げる
+  # (このリストの意図は「DB クライアントを触らせない」こと)
   "mongod:*",
+  "mongosh:*",
   "redis-cli:*",
-  "pip:*",
-  "docker rm:*",
-  "docker rmi:*",
 ]
 
 # Claude のみ (Copilot は対話プロンプトがデフォルト動作なので不要)
@@ -73,13 +70,24 @@ deny = [
 # ("Explicit ask rules still force a prompt" -- 公式 docs)
 ask = [
   "rm:*",
+  # curl と同種の取得コマンド。センシティブファイルの送信は hook の
+  # check_curl_file_send が curl/wget 両方を hard-deny するので二重で守られる
+  "wget:*",
+  # uv 規約は hook の check_pip_redirect が uv プロジェクトで担保する
+  "pip:*",
   "uv add:*",
   "npm install:*",
   "npm ci:*",
+  # プロジェクト内の変更で lockfile と git から復旧できる (-g はシステム汚染なので deny 維持)
+  "npm uninstall:*",
+  "npm remove:*",
   "mv:*",
   "git commit:*",
   "python -c:*",
   "docker exec:*",
+  # コンテナ/イメージは再作成・再 pull できる (Codex rules でも prompt 扱い)
+  "docker rm:*",
+  "docker rmi:*",
   "curl:*",
 ]
 
@@ -126,12 +134,36 @@ write_ask_globs = [
 
 # Claude: Read(...) deny に展開。hook の critical_deny には反映しない
 # (ファイルアクセスの hook は別途必要なら作る)
+#
+# ★ `**/*key*` や `**/*token*` のような部分一致 glob は使わない。
+#   このリポジトリだけでも keyhac.bat / key_bindings.org / keymap_layer.drawio
+#   のような正当なファイルを巻き込み、エージェントが編集できなくなる
+#   (一般的には tokenizer.py / keyword.py / monkey.py なども誤検知する)。
+#   拡張子・接尾辞・既知のファイル名で具体的に指定する。
 read_deny_globs = [
-  "**/.ssh/*",
+  "**/.ssh/**",
+  "**/.gnupg/**",
+  "**/.aws/credentials",
+  "**/.netrc",
+  "**/.npmrc",
+  "**/.pypirc",
   "**/id_rsa*",
   "**/id_ed25519*",
-  "**/*token*",
-  "**/*key*",
+  "**/id_ecdsa*",
+  "**/id_dsa*",
+  "**/*.pem",
+  "**/*.key",
+  "**/*.p12",
+  "**/*.pfx",
+  "**/*.jks",
+  "**/*.keystore",
+  "**/key.txt",
+  "**/*_key",
+  "**/*.token",
+  "**/*_token",
+  "**/token.json",
+  "**/service-account*.json",
+  "**/secrets/**",
   "**/*secret*",
   "**/*credential*",
   "**/*password*",
@@ -141,14 +173,34 @@ read_deny_globs = [
 ]
 
 # Claude のみ反映: Edit(...) を deny に追加
+# read_deny_globs と同じ理由で部分一致 glob は使わない
 write_deny_globs = [
+  "**/.ssh/**",
+  "**/.gnupg/**",
+  "**/.aws/credentials",
+  "**/.netrc",
+  "**/.npmrc",
+  "**/.pypirc",
+  "**/id_rsa*",
+  "**/id_ed25519*",
+  "**/id_ecdsa*",
+  "**/id_dsa*",
+  "**/*.pem",
+  "**/*.key",
+  "**/*.p12",
+  "**/*.pfx",
+  "**/*.jks",
+  "**/*.keystore",
+  "**/key.txt",
+  "**/*_key",
+  "**/*.token",
+  "**/*_token",
+  "**/token.json",
+  "**/service-account*.json",
   "**/secrets/**",
   "**/*secret*",
   "**/*credential*",
-  "**/*token*",
   "**/*password*",
-  "**/*key*",
-  "**/.ssh/*",
   ".env",
 ]
 
