@@ -180,6 +180,9 @@ FILE_READ_COMMANDS = [
     "sed", "awk", "less", "more", "sort", "uniq", "cut", "column",
     "strings", "xxd", "hexdump", "jq", "yq",
     "base64", "od", "xxd", "diff", "vimdiff",
+    # ファイルを開く / 情報を出すもの
+    "vim", "vi", "nvim", "emacs", "nano", "code", "codium", "subl",
+    "wc", "file", "stat", "realpath", "readlink",
     # 内容を別の場所へ複製・転送するもの (読み取りと同じ露出リスク)
     "cp", "mv", "install", "rsync", "scp", "sftp", "dd", "tee",
     "ln", "shred", "split", "gpg", "openssl",
@@ -664,6 +667,14 @@ def check_guard_tampering(cmd: str) -> str | None:
                 "hook や permission の無効化に繋がるため許可されていません。"
             )
 
+    # インラインコードやスクリプト中でパスを直接触る形 (`open('...', 'w')` など)
+    for m in re.finditer(r"""['"]([^'"]*(?:\.claude|\.copilot|/agents)[^'"]*)['"]""", cmd):
+        if _hits(m.group(1)):
+            return (
+                f"エージェントのガード設定 (`{m.group(1)}`) を操作しようとしています。\n"
+                "hook や permission の無効化に繋がるため許可されていません。"
+            )
+
     mutating = {
         "rm", "mv", "cp", "chmod", "chown", "truncate", "shred", "ln",
         "sed", "tee", "dd", "install",
@@ -780,6 +791,10 @@ def _is_catastrophic_rm_target(token: str) -> bool:
     if _HOME_DIR_RE.match(canonical):
         return True
     if canonical == os.path.expanduser("~"):
+        return True
+    # `~/.ssh` のような秘密領域そのものの削除も承認の対象外
+    base = os.path.basename(canonical)
+    if base in {".ssh", ".gnupg", ".aws", ".config", ".local", ".git"}:
         return True
     # `$PWD/../..` のように相対で上位へ抜ける形。
     # 実際の解決先は分からないので、`..` が 2 段以上あれば壊滅的とみなす。

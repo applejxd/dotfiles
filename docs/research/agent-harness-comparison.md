@@ -157,6 +157,10 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | `git filter-branch` / `update-ref -d` / `reflog expire` / `checkout --` / `restore` / `stash clear` | **修正済**: 復旧できない git 操作を deny |
 | `mkfs` / `dd of=/dev/sda` / `socat TCP-LISTEN` | **修正済**: デバイス破壊と待ち受けを deny |
 | `> ~/.claude/settings.json` (リダイレクトによる上書き) | **修正済**: `check_guard_tampering` がリダイレクト先も見る |
+| `if true; then X; fi` / `for ... do X done` / `case x in x) X;; esac` / `trap 'X' EXIT` / `! X` | **修正済**: 制御構文のキーワードとラベルを剥がす |
+| `$SHELL -c 'X'` / `PAGER=cat git push` / `git -c a=b push` | **修正済**: 変数で指したシェルと前置設定を評価 |
+| `vim ~/.ssh/id_rsa` / `wc -l` / `file` / `stat` によるセンシティブファイル参照 | **修正済**: エディタとファイル情報コマンドを検査対象に追加 |
+| `rm -rf ~/.ssh` | **修正済**: 秘密領域そのものの削除も root guard の対象 |
 | `cd foo && X` で permission deny を回避 | Claude CLI の既知バグだが、hook 側の normalize が `[bash] deny` / `ask` の全項目を救済する |
 | シェル変数経由の間接的な組み立て (別コマンドで定義した変数、配列、`${x:0:3}` 等) | **未対応**。静的解析では追えない |
 | エディタ・REPL 経由の間接実行 (`vim` の `:!` など) | **未対応** |
@@ -165,7 +169,7 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | エンコードされたコマンド (`printf '\x67\x69\x74'`、base64 の復号結果) | **未対応**。復号結果は静的に追えない |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある (465 件)。日常的に使うコマンド
+`test_command_policy.py` に回帰テストがある (499 件)。日常的に使うコマンド
 (`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
 `cp .env.example .env` / `git commit -m "fix token refresh"` /
 `docker run --rm alpine echo hi` / `npm run build` / `mise exec -- shellcheck x.sh` /
@@ -185,6 +189,7 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | 5 | ツールランナー・遅延実行・デバイス破壊 | 44 中 24 件 |
 | 6 | hook 自体の堅牢性 (不正入力・処理時間) | 21 中 8 件 |
 | 7 | 設定の壊れ方・Copilot 側のペイロード | 16 中 4 件 |
+| 8 | 制御構文・trap・ファイル情報コマンド (収束確認) | 46 中 15 件 |
 
 いずれの巡でも「正当なコマンドが過剰検知されないこと」を同時に測り、
 両方が 0 件になるまで繰り返した。

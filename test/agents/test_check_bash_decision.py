@@ -1145,6 +1145,74 @@ def test_overlong_command_is_denied():
 
 
 # ---------------------------------------------------------------------------
+# 8 巡目のバイパス (制御構文・trap・ファイル情報コマンド)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "if true; then git push; fi",
+        "for i in 1; do git push; done",
+        "while true; do git push; break; done",
+        "case x in x) git push;; esac",
+        "trap 'git push' EXIT",
+        "! git push",
+        "coproc git push",
+        "$SHELL -c 'git push'",
+        "${SHELL} -c 'git push'",
+        "exec 3>&1; git push",
+        "PAGER=cat git push",
+        "git -c protocol.ext.allow=always push",
+    ],
+)
+def test_control_flow_bypasses_are_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "vim ~/.ssh/id_rsa",
+        "code ~/.ssh/id_rsa",
+        "wc -l ~/.ssh/id_rsa",
+        "file ~/.ssh/id_rsa",
+        "stat ~/.ssh/id_rsa",
+        "less ~/.aws/credentials",
+        "cat ~/.ssh/id_*",
+        "rm -rf ~/.ssh",
+        "python3 -c \"open('/home/applejxd/.claude/settings.json','w')\"",
+        "cp /dev/null ~/.claude/hooks/check_bash.py",
+    ],
+)
+def test_round8_sensitive_access_is_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "if true; then echo ok; fi",
+        "for i in 1 2; do echo $i; done",
+        "while read l; do echo $l; done < f.txt",
+        "time make test",
+        "cat ~/.config/mise/config.toml",
+        "wc -l README.md",
+        "file README.md",
+        "stat README.md",
+        "vim README.md",
+        "PAGER=cat git log",
+        "echo ${SHELL}",
+        "git -c color.ui=always diff",
+    ],
+)
+def test_round8_false_positives(command):
+    decision, reason = run_hook(command)
+    assert decision in (None, "ask"), f"{command!r} が deny された ({reason})"
+
+
+# ---------------------------------------------------------------------------
 # fail-closed
 # ---------------------------------------------------------------------------
 

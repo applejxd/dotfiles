@@ -280,6 +280,10 @@ _SHELL_BINS = {
 
 # 文字列をそのままコードとして実行するもの
 _EVAL_BINS = {"eval", "source", "."}
+# 第 1 引数をコードとして登録するもの (`trap 'git push' EXIT`)
+_TRAP_BINS = {"trap"}
+# 変数でシェルを指す形 (`$SHELL -c '...'`)
+_SHELL_VAR_RE = re.compile(r"^\$\{?(?:SHELL|BASH|ZSH)\}?$")
 
 # サブコマンドの前に置けるグローバルオプション。
 # `git --no-pager push` を `git push` として照合できるようにする。
@@ -331,6 +335,16 @@ _AWK_SYSTEM_RE = re.compile(r'(?:system|print)\s*\(?\s*["\']?([^"\')]+)')
 _GROUPING_PREFIX = "({"
 _GROUPING_SUFFIX = ")}"
 
+# 制御構文のキーワード。`if true; then git push; fi` の then 以降を露出させる。
+# `case x in x) CMD;; esac` の `x)` のようなパターンラベルも落とす。
+_CONTROL_KEYWORD_RE = re.compile(
+    r"^(?:if|then|elif|else|fi|for|while|until|do|done|case|esac|select|"
+    r"function|time|coproc|in)\b\s*"
+)
+# `case x in x) CMD` の `x in ` や `x)` のようなラベル。
+# 通常のコマンドを削らないよう、`)` を含むラベルか `<語> in ` に限定する
+_CASE_LABEL_RE = re.compile(r"^[^\s()]+\s+in\s+(?=[^\s()]*\))|^\(?[^\s()]+\)\s*")
+
 # 先頭のリダイレクト (`> /dev/null git push` のような形)
 _LEADING_REDIRECT_RE = re.compile(r"^\s*(?:[0-9]*[<>]{1,2}&?\s*\S+\s+)+(.+)$")
 
@@ -348,7 +362,11 @@ def _basename(token: str) -> str:
 
 
 def _strip_grouping(segment: str) -> str:
-    """``(git push)`` や ``{ git push; }`` の飾りを落とす。"""
+    """``(git push)`` や ``{ git push; }`` の飾りを落とす。
+
+    ``if true; then X; fi`` のような制御構文のキーワードも取り除き、
+    実際に走るコマンドを露出させる。
+    """
     seg = segment.strip()
     changed = True
     while changed and seg:
@@ -358,6 +376,22 @@ def _strip_grouping(segment: str) -> str:
             changed = True
         while seg and seg[-1] in _GROUPING_SUFFIX + ";&":
             seg = seg[:-1].strip()
+            changed = True
+        # 先頭の制御構文キーワードを剥がす (`then git push` -> `git push`)
+        m = _CONTROL_KEYWORD_RE.match(seg)
+        if m:
+            seg = seg[m.end():].strip()
+            changed = True
+        # `case x in x) CMD` のラベル部分を剥がす。
+        # 通常のコマンドを削らないよう、`) ` で終わるラベルか
+        # `<語> in ` の形に限定する
+        m = _CASE_LABEL_RE.match(seg)
+        if m:
+            seg = seg[m.end():].strip()
+            changed = True
+        # `! git push` の否定
+        if seg.startswith("!"):
+            seg = seg[1:].strip()
             changed = True
     return seg
 
@@ -792,7 +826,11 @@ def _expand_shell_invocation(segment: str) -> list[str] | None:
     if head in _EVAL_BINS and len(tokens) > 1:
         return [" ".join(tokens[1:])]
 
-    if head not in _SHELL_BINS:
+    if head in _TRAP_BINS and len(tokens) > 1:
+        # trap 'CMD' SIGNAL … の第 1 引数がコード
+        return [tokens[1]]
+
+    if head not in _SHELL_BINS and not _SHELL_VAR_RE.match(tokens[0]):
         return None
     for i, token in enumerate(tokens[1:], start=1):
         # -c / -lc / -xc のように c を含む短縮フラグ
