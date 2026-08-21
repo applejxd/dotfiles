@@ -1492,6 +1492,64 @@ def test_round12_false_positives(command):
 
 
 # ---------------------------------------------------------------------------
+# 13 巡目 (環境変数の差し替え・区切り文字・秘密情報ストア)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "HOME=/tmp/fake cat ~/.ssh/id_rsa",
+        "HOME=/tmp/fake git push",
+        "git\tpush",
+        "git push;",
+        "{ git push ; }",
+        "( ( git push ) )",
+        "time git push",
+        "nohup git push &",
+        "git push |& cat",
+        "coproc git push",
+    ],
+)
+def test_round13_separators_and_env_are_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat ~/.ssh/id_ed25519",
+        "cat ~/.config/gh/hosts.yml",
+        "cat ~/.docker/config.json",
+        "cat ~/.netrc",
+        "cat ~/.kube/config",
+        "bw list items",
+        "bw get password foo",
+        "op read op://vault/item/field",
+        "vault kv get secret/foo",
+    ],
+)
+def test_round13_secret_stores_are_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat ~/.config/nvim/init.lua",
+        "cat ~/.gitconfig",
+        "time make test",
+        "nohup make build &",
+        "{ echo a ; echo b ; }",
+    ],
+)
+def test_round13_false_positives(command):
+    decision, reason = run_hook(command)
+    assert decision in (None, "ask"), f"{command!r} が deny された ({reason})"
+
+
+# ---------------------------------------------------------------------------
 # fail-closed
 # ---------------------------------------------------------------------------
 

@@ -220,6 +220,15 @@ deny = [
   "gh secret list",
   # トークンを直接引く操作 (gh api graphql は Projects v2 で使うので ask 側)
   "gh auth token",
+  # 秘密情報ストアからの読み出し (Bitwarden / 1Password / Vault)
+  "bw get",
+  "bw list",
+  "bw export",
+  "op read",
+  "op item get",
+  "vault read",
+  "vault kv get",
+  "chezmoi secret",
   # リモート先を差し替えると push 先が変わる
   "git remote add",
   "git remote set-url",

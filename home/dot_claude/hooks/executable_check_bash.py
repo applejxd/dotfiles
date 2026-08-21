@@ -91,7 +91,10 @@ _HISTORY_BASENAMES = {
     ".psql_history", ".mysql_history", ".node_repl_history",
 }
 # CLI の認証情報を保持するファイル
-_CREDENTIAL_PATHS = ("/.config/gh/hosts.yml", "/.docker/config.json", "/.git-credentials")
+_CREDENTIAL_PATHS = ("/.config/gh/hosts.yml", "/.docker/config.json",
+                     "/.git-credentials", "/.kube/config",
+                     "/.config/gcloud/credentials.db", "/.azure/msal_token_cache.json",
+                     "/.terraform.d/credentials.tfrc.json")
 
 # grep 系は最初の非フラグ引数が検索語なのでパス判定から除外する
 _PATTERN_FIRST_COMMANDS = {"grep", "rg", "ag", "ack", "egrep", "fgrep", "sed", "awk"}

@@ -175,6 +175,8 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | `docker volume prune` / `npm cache clean` / `aws s3 cp` / `gh release upload` | **修正済**: 復旧に時間がかかる削除と外部への転送経路を deny |
 | センシティブディレクトリの列挙 (`ls` / `find` / `git diff` の引数) | **修正済**: 列挙系コマンドと `git diff`/`show`/`blame` の引数も判定対象 |
 | `chezmoi forget` / `unlink` によるガード設定の除去 | **修正済**: `check_guard_tampering` の対象コマンドに追加 |
+| `HOME=/tmp/fake cat ~/.ssh/id_rsa` / `git\tpush` / `coproc` / `\|&` | **修正済**: 環境変数の前置と区切り文字の揺れを normalize が吸収 |
+| `cat ~/.kube/config` / `bw get` / `op read` / `vault kv get` | **修正済**: 資格情報ファイルと秘密情報ストアの読み出しを deny |
 | `cd ~/.ssh && cat id_rsa` / `cat $HOME/.ssh/*` / `cat ~/.ss?/id_rsa` | **修正済**: `expand_cd_targets` が cd 先を結合した変種も検査し、`$HOME` とワイルドカードもセンシティブ判定に含む |
 | `git config alias.p push` / `credential.helper` / `core.sshCommand` | **修正済**: `check_git_config_write` が任意コマンド実行に繋がる設定キーを deny |
 | `.git/config` / `.git/hooks` の直接書き換え | **修正済**: `check_guard_tampering` の対象に追加 |
@@ -184,7 +186,7 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | エンコードされたコマンド (`printf` のエスケープ列、base64 の復号結果) を変数経由で組み立てる形 | **未対応**。復号結果は静的に追えない |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある (613 件)。日常的に使うコマンド
+`test_command_policy.py` に回帰テストがある (637 件)。日常的に使うコマンド
 (`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
 `cp .env.example .env` / `git commit -m "fix token refresh"` /
 `docker run --rm alpine echo hi` / `npm run build` / `mise exec -- shellcheck x.sh` /
@@ -192,7 +194,7 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 
 ### 検証の進め方
 
-配備済み hook に payload を流す probe を角度を変えて 12 巡実施し、
+配備済み hook に payload を流す probe を角度を変えて 13 巡実施し、
 各巡で見つかった素通りを塞いでから回帰テストに固定した。
 
 | 巡 | 観点 | 発見 |
@@ -208,7 +210,12 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | 9 | 多段ラッパー・prune・列挙・クラウド転送 | 46 中 12 件 |
 | 10 | リバースシェル・権限昇格・永続化・エンコード | 47 中 13 件 |
 | 11 | heredoc 本文の扱い | 9 中 3 件 |
-| 12 | パス難読化・cd 経由の相対参照・git config (収束確認) | 37 中 3 件 |
+| 12 | パス難読化・cd 経由の相対参照・git config | 37 中 3 件 |
+| 13 | 環境変数の差し替え・区切り文字・秘密情報ストア (収束確認) | 34 中 3 件 |
+
+9 巡目以降は発見が 13 → 3 → 3 → 3 件と減り、13 巡目で見つかったのは
+資格情報ファイルと秘密情報ストア CLI の列挙漏れだけだった。
+仕組み自体の穴ではなくリストの追加で済む段階に入ったので、ここで収束とみなす。
 
 いずれの巡でも「正当なコマンドが過剰検知されないこと」を同時に測り、
 両方が 0 件になるまで繰り返した。
