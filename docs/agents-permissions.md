@@ -231,7 +231,7 @@ bypass パターンを hook が確実に block することを保証している
 
 ```bash
 uv run --with pytest --no-project pytest test/agents/ -q
-# -> 456 passed (normalize/match 37 + hook 生成 21 + deny/ask 判定 398)
+# -> 465 passed (normalize/match 37 + hook 生成 21 + deny/ask 判定 407)
 ```
 
 hook は `AGENTS_CONFIG_DIR` で agents 設定ディレクトリを差し替えられるので、
@@ -281,5 +281,5 @@ chezmoi modify_ スクリプトは空 stdin を受けると空オブジェクト
 | --- | --- |
 | apply 後 Claude が `permissions` / `hooks` を読まない | Claude Code は起動時に settings.json を読むので再起動 |
 | Copilot CLI で hook の deny が効かない | `~/.copilot/hooks/from-claude.json` が apply されているか確認。`copilot --log-level debug` で hook がロードされているか確認 |
-| `~/.config/agents/command_policy.py` の import に失敗 | hook が fail-closed で全 bash を拒否する。`~/.config/agents/__pycache__/` を削除して `chezmoi apply` をやり直す |
+| `~/.config/agents/command_policy.py` が読めない・壊れている | hook が fail-closed で全 bash を拒否する。`~/.config/agents/__pycache__/` を削除して `chezmoi apply` をやり直す |
 | common.toml の編集が反映されない | `chezmoi diff` で差分を確認 → `chezmoi apply` |

@@ -1148,6 +1148,63 @@ def test_overlong_command_is_denied():
 # fail-closed
 # ---------------------------------------------------------------------------
 
+@pytest.mark.parametrize(
+    ("label", "files"),
+    [
+        ("toml なし", {}),
+        ("toml が壊れている", {"common.toml": "this is not [valid toml"}),
+        ("bash セクションなし", {"common.toml": "[web]\nallow_domains = []\n"}),
+        ("リストが空", {"common.toml": "[bash]\nallow = []\nask = []\ndeny = []\n"}),
+        ("deny が文字列", {"common.toml": '[bash]\nallow = []\nask = []\ndeny = "git push"\n'}),
+        ("deny に数値が混入", {"common.toml": "[bash]\nallow = []\nask = []\ndeny = [1]\n"}),
+        ("モジュールが壊れている", {"command_policy.py": "syntax error ((("}),
+    ],
+)
+def test_broken_config_fails_closed(tmp_path, label, files):
+    """設定が壊れているときに素通りしないこと (fail-closed)."""
+    policy_src = (COMMON_PATH.parent / "command_policy.py").read_text(encoding="utf-8")
+    (tmp_path / "command_policy.py").write_text(policy_src, encoding="utf-8")
+    for name, content in files.items():
+        (tmp_path / name).write_text(content, encoding="utf-8")
+
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push"},
+        "cwd": str(ROOT),
+    }
+    proc = subprocess.run(
+        [sys.executable, str(HOOK_PATH)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, "AGENTS_CONFIG_DIR": str(tmp_path)},
+    )
+    assert proc.stdout.strip(), f"{label}: hook が沈黙した (fail-open)"
+    assert json.loads(proc.stdout)["permissionDecision"] == "deny", label
+
+
+@pytest.mark.parametrize("tool_name", ["Bash", "bash"])
+def test_both_cli_tool_names_are_checked(tool_name):
+    """Claude の Bash と Copilot の bash の両方で判定されること."""
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool_name,
+        "tool_input": {"command": "git push", "description": "push"},
+        "cwd": str(ROOT),
+    }
+    proc = subprocess.run(
+        [sys.executable, str(HOOK_PATH)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent)},
+    )
+    assert json.loads(proc.stdout)["permissionDecision"] == "deny"
+
+
 def test_missing_policy_denies_everything(tmp_path):
     """ポリシーを読めないときは素通りではなく deny になること."""
     payload = {

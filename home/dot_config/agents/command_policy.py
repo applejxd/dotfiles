@@ -58,13 +58,26 @@ DEFAULT_COMMON_PATH = os.path.join(_default_config_dir(), "common.toml")
 # ---------------------------------------------------------------------------
 
 def _load_bash_list(key: str, path: str) -> list[str]:
-    """Return ``bash.<key>`` from common.toml, or an empty list if missing."""
+    """Return ``bash.<key>`` from common.toml, or an empty list if missing.
+
+    Raises ``TypeError`` when the value is not a list of strings so that the
+    hook can fail closed instead of silently matching nothing. A bare string
+    would otherwise be split into characters by ``list()``.
+    """
     p = Path(path)
     if not p.exists():
         return []
     with p.open("rb") as f:
         data = tomllib.load(f)
-    return list(data.get("bash", {}).get(key, []))
+    bash = data.get("bash", {})
+    if not isinstance(bash, dict):
+        raise TypeError("[bash] セクションがテーブルではありません")
+    value = bash.get(key, [])
+    if not isinstance(value, list):
+        raise TypeError(f"[bash] {key} がリストではありません: {type(value).__name__}")
+    if not all(isinstance(v, str) for v in value):
+        raise TypeError(f"[bash] {key} に文字列以外が含まれています")
+    return list(value)
 
 
 def load_deny(path: str = DEFAULT_COMMON_PATH) -> list[str]:

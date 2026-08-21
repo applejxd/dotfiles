@@ -47,10 +47,12 @@ if not _AGENTS_DIR:
     _CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
     _AGENTS_DIR = os.path.join(_CONFIG_HOME, "agents")
 sys.path.insert(0, _AGENTS_DIR)
+_POLICY_IMPORT_ERROR: str | None = None
 try:
     import command_policy as _policy  # noqa: E402
-except ImportError:  # pragma: no cover
+except Exception as _exc:  # pragma: no cover - 構文エラー等も拾う
     _policy = None  # type: ignore[assignment]
+    _POLICY_IMPORT_ERROR = f"{type(_exc).__name__}: {_exc}"
 
 # ─── センシティブパスの判定 ──────────────────────────────────────────
 # コマンド文字列全体への部分一致は誤検知が多い
@@ -478,18 +480,48 @@ def check_policy_loaded(cmd: str) -> str | None:
     素通りさせていたため、``~/.config/agents/`` の破損 (docs のトラブルシュートに
     ある ``__pycache__`` 由来の import 失敗など) で **全ガードが無言で消えて**いた。
     ここで止めることで、壊れていることが必ず表面化する。
+
+    モジュールが読めても、期待する API やポリシーの中身が欠けていれば同様に拒否する。
     """
-    if _policy is None:
+    if _policy is None or _POLICY_IMPORT_ERROR is not None:
+        detail = f": {_POLICY_IMPORT_ERROR}" if _POLICY_IMPORT_ERROR else ""
         return (
-            f"ポリシーモジュールを読み込めませんでした ({_AGENTS_DIR}/command_policy.py)。\n"
+            f"ポリシーモジュールを読み込めませんでした ({_AGENTS_DIR}/command_policy.py){detail}。\n"
             "安全のため bash コマンドを拒否しています。\n"
             "対処: `chezmoi apply ~/.config/agents` を実行し、"
             f"`{_AGENTS_DIR}/__pycache__/` が残っていれば削除してください。"
         )
+    for name in ("normalize", "find_match", "load_deny", "load_ask"):
+        if not callable(getattr(_policy, name, None)):
+            return (
+                f"ポリシーモジュールに `{name}` がありません。\n"
+                "安全のため bash コマンドを拒否しています。\n"
+                "対処: `chezmoi apply ~/.config/agents` を実行してください。"
+            )
     if not Path(_policy.DEFAULT_COMMON_PATH).is_file():
         return (
             f"ポリシー定義が見つかりません ({_policy.DEFAULT_COMMON_PATH})。\n"
             "安全のため bash コマンドを拒否しています。\n"
+            "対処: `chezmoi apply ~/.config/agents` を実行してください。"
+        )
+    # deny / ask が空なら、設定が壊れているか読めていない
+    try:
+        deny = _policy.load_deny()
+        ask = _policy.load_ask()
+    except Exception as exc:
+        return (
+            f"ポリシー定義を解釈できませんでした ({exc})。\n"
+            "安全のため bash コマンドを拒否しています。"
+        )
+    if not isinstance(deny, list) or not isinstance(ask, list):
+        return (
+            "ポリシー定義の deny / ask がリストではありません。\n"
+            "安全のため bash コマンドを拒否しています。"
+        )
+    if not deny:
+        return (
+            f"ポリシー定義に [bash] deny がありません ({_policy.DEFAULT_COMMON_PATH})。\n"
+            "設定が壊れている可能性があるため、安全のため拒否しています。\n"
             "対処: `chezmoi apply ~/.config/agents` を実行してください。"
         )
     return None

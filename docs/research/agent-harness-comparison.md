@@ -165,7 +165,7 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | エンコードされたコマンド (`printf '\x67\x69\x74'`、base64 の復号結果) | **未対応**。復号結果は静的に追えない |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある (456 件)。日常的に使うコマンド
+`test_command_policy.py` に回帰テストがある (465 件)。日常的に使うコマンド
 (`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
 `cp .env.example .env` / `git commit -m "fix token refresh"` /
 `docker run --rm alpine echo hi` / `npm run build` / `mise exec -- shellcheck x.sh` /
@@ -184,6 +184,7 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | 4 | 引数に埋まったコマンド・秘密の露出・ガード改変 | 57 中 16 件 |
 | 5 | ツールランナー・遅延実行・デバイス破壊 | 44 中 24 件 |
 | 6 | hook 自体の堅牢性 (不正入力・処理時間) | 21 中 8 件 |
+| 7 | 設定の壊れ方・Copilot 側のペイロード | 16 中 4 件 |
 
 いずれの巡でも「正当なコマンドが過剰検知されないこと」を同時に測り、
 両方が 0 件になるまで繰り返した。
@@ -200,6 +201,19 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 いずれも **deny に倒す**ようにした。コマンド長は 10000 文字、
 normalize の展開はセグメント 200 個・1 セグメント 4000 文字を上限とする。
 これで最悪 20 秒かかっていた入力が 0.1 秒以下で判定を返すようになった。
+
+### 設定が壊れていても素通りしない
+
+7 巡目では「設定の壊れ方」を網羅した。モジュールの import 失敗だけを見ていたため、
+以下は素通りしていた。
+
+- `common.toml` に `[bash]` セクションが無い / リストが空
+- `deny` が文字列 (`list()` が文字単位に分解して事実上マッチしなくなる)
+- `command_policy.py` に構文エラー (`ImportError` ではなく `SyntaxError`)
+
+対策として `check_policy_loaded` が API の有無・リストの型・`deny` が空でないことまで
+検証し、`_load_bash_list` は型が違えば例外を投げるようにした。
+`chezmoi apply` を促すメッセージ付きで deny する。
 
 → 個人用指示の「**拒否条件を満たす別手段に切り替える。条件自体を回避する迂回（コマンドの
 分割・偽装、作業ディレクトリの付け替え）はしない**」は、残る層を埋めるために存在する。
