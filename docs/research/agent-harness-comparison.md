@@ -152,17 +152,40 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | `cat /proc/self/environ` / `echo $GITHUB_TOKEN` / `history` / `cat ~/.bash_history` | **修正済**: プロセス環境・履歴・秘密の環境変数名を検出 |
 | `rm ~/.claude/hooks/check_bash.py` / `git config core.hooksPath /dev/null` / `chmod -x` | **修正済**: `check_guard_tampering` が hook と permission 設定の改変を deny |
 | `rmdir /` / `find ~ -delete` / `rm -rf $PWD/../..` | **修正済**: root guard を rmdir/unlink と find の起点にも適用 |
+| `mise exec -- git push` / `npm run x -- git push` / `cargo run --` / `uv run python -c` | **修正済**: ツールランナーの `--` と `run` 以降を評価 |
+| `crontab` / `at` / `systemctl` による遅延実行 | **修正済**: deny リストに追加 |
+| `git filter-branch` / `update-ref -d` / `reflog expire` / `checkout --` / `restore` / `stash clear` | **修正済**: 復旧できない git 操作を deny |
+| `mkfs` / `dd of=/dev/sda` / `socat TCP-LISTEN` | **修正済**: デバイス破壊と待ち受けを deny |
+| `> ~/.claude/settings.json` (リダイレクトによる上書き) | **修正済**: `check_guard_tampering` がリダイレクト先も見る |
 | `cd foo && X` で permission deny を回避 | Claude CLI の既知バグだが、hook 側の normalize が `[bash] deny` / `ask` の全項目を救済する |
 | シェル変数経由の間接的な組み立て (別コマンドで定義した変数、配列、`${x:0:3}` 等) | **未対応**。静的解析では追えない |
 | エディタ・REPL 経由の間接実行 (`vim` の `:!` など) | **未対応** |
 | ネスト 2 段以上のコマンド置換 | **未対応**。正規表現で追えるのは 1 段まで |
+| 設定ファイル側で定義された名前の実行 (`pre-commit run <hook-id>` など) | **未対応**。実体はリポジトリの設定次第で静的に追えない |
+| エンコードされたコマンド (`printf '\x67\x69\x74'`、base64 の復号結果) | **未対応**。復号結果は静的に追えない |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある (403 件)。日常的に使うコマンド
+`test_command_policy.py` に回帰テストがある (439 件)。日常的に使うコマンド
 (`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
 `cp .env.example .env` / `git commit -m "fix token refresh"` /
-`docker run --rm alpine echo hi` / `find . -exec echo {} \;` 等) が
-過剰検知されないことも併せて検査している。
+`docker run --rm alpine echo hi` / `npm run build` / `mise exec -- shellcheck x.sh` /
+`truncate -s 0 build.log` 等) が過剰検知されないことも併せて検査している。
+
+### 検証の進め方
+
+配備済み hook に payload を流す probe を角度を変えて 5 巡実施し、
+各巡で見つかった素通りを塞いでから回帰テストに固定した。
+
+| 巡 | 観点 | 発見 |
+| --- | --- | --- |
+| 1 | シェル経由・ラッパー・絶対パス | 23 中 14 件 |
+| 2 | シェル構文・照合ロジック | 43 中 20 件 |
+| 3 | 間接実行・別名・情報持ち出し | 167 中 54 件 |
+| 4 | 引数に埋まったコマンド・秘密の露出・ガード改変 | 57 中 16 件 |
+| 5 | ツールランナー・遅延実行・デバイス破壊 | 44 中 24 件 |
+
+いずれの巡でも「正当なコマンドが過剰検知されないこと」を同時に測り、
+両方が 0 件になるまで繰り返した。
 
 → 個人用指示の「**拒否条件を満たす別手段に切り替える。条件自体を回避する迂回（コマンドの
 分割・偽装、作業ディレクトリの付け替え）はしない**」は、残る層を埋めるために存在する。

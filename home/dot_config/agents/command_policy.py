@@ -238,7 +238,14 @@ _WRAPPERS: dict[str, str] = {
     # 別プロセスとして起動するもの
     "entr": "flags",
     "watchexec": "flags+args",
+    # ツールランナー (`--` の後ろが実コマンドになる)
+    "mise": "runner",
+    "pnpm": "runner",
+    "yarn": "runner",
 }
+
+# `--` の後ろ、あるいは run/exec サブコマンドの後ろが実コマンドになるもの
+_RUNNER_SUBCOMMANDS = {"exec", "run", "run-script", "x", "dlx"}
 
 # 位置引数の中にコマンドが埋まっているもの。
 # 値は「コマンドが始まる位置を探す方法」を表す。
@@ -688,6 +695,21 @@ def _expand_embedded_commands(segment: str) -> list[str]:
         if i < len(tokens):
             out.append(" ".join(tokens[i:]))
         return out
+
+    # `mise exec -- CMD` / `npm run x -- CMD` / `cargo run -- CMD` のように
+    # `--` の後ろが実コマンドになるもの
+    if "--" in tokens[1:]:
+        idx = tokens.index("--", 1)
+        rest = tokens[idx + 1:]
+        if rest:
+            out.append(" ".join(rest))
+
+    # `uv run python -c "..."` のように run の後ろがそのままコマンドになるもの
+    if head in ("uv", "mise", "npm", "pnpm", "yarn", "cargo", "go", "poetry", "rye") and len(tokens) >= 3:
+        if tokens[1] in _RUNNER_SUBCOMMANDS:
+            rest = [t for t in tokens[2:] if t != "--"]
+            if rest:
+                out.append(" ".join(rest))
 
     return out
 

@@ -642,12 +642,17 @@ def test_legitimate_shell_usage_passes(command):
         "xargs -I{} echo {}",
         "python -m pytest",
         "make -j4",
-        "npx --yes markdownlint-cli2 README.md",
     ],
 )
 def test_everyday_commands_are_not_blocked(command):
     decision, reason = run_hook(command)
     assert decision is None, f"{command!r} が不要にブロックされた ({reason})"
+
+
+def test_npx_asks_but_is_not_denied():
+    """npx は任意パッケージを取得して実行するので確認を挟む (拒否はしない)."""
+    decision, reason = run_hook("npx --yes markdownlint-cli2 README.md")
+    assert decision == "ask", f"-> {decision} ({reason})"
 
 
 # ---------------------------------------------------------------------------
@@ -978,6 +983,96 @@ def test_round4_rm_guard_variants(command):
     ],
 )
 def test_round4_false_positives(command):
+    decision, reason = run_hook(command)
+    assert decision in (None, "ask"), f"{command!r} が deny された ({reason})"
+
+
+# ---------------------------------------------------------------------------
+# 5 巡目のバイパス (ツールランナー・遅延実行・デバイス破壊)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "npm run-script custom -- git push",
+        "mise exec -- git push",
+        "cargo run -- git push",
+        "go run ./cmd -- git push",
+        "uv run python -c \"import os; os.system('git push')\"",
+    ],
+)
+def test_tool_runner_bypasses_are_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "crontab -l",
+        "echo '* * * * * git push' | crontab -",
+        "systemctl --user enable evil.service",
+        "sleep 1; git push",
+    ],
+)
+def test_scheduled_execution_is_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git filter-branch --force --all",
+        "git update-ref -d refs/heads/main",
+        "git reflog expire --expire=now --all",
+        "git checkout -- .",
+        "git restore .",
+        "git stash clear",
+        "git worktree remove --force .",
+    ],
+)
+def test_destructive_git_operations_are_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "mkfs.ext4 /dev/sda",
+        "dd if=/dev/zero of=/dev/sda",
+        "socat TCP-LISTEN:4444 EXEC:/bin/sh",
+        "> ~/.claude/settings.json",
+        "cat /dev/null > ~/.claude/hooks/check_bash.py",
+        "truncate -s 0 ~/.claude/settings.json",
+        "chmod 000 ~/.config/agents/common.toml",
+    ],
+)
+def test_system_destruction_and_guard_removal_are_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "npm run build",
+        "npm test",
+        "cargo build",
+        "go build ./...",
+        "mise exec -- shellcheck x.sh",
+        "pre-commit run --all-files",
+        "uv run pytest",
+        "sleep 1",
+        "git stash list",
+        "git worktree list",
+        "truncate -s 0 build.log",
+        "> build.log",
+        "dd if=/dev/zero of=x bs=1M count=1",
+    ],
+)
+def test_round5_false_positives(command):
     decision, reason = run_hook(command)
     assert decision in (None, "ask"), f"{command!r} が deny された ({reason})"
 

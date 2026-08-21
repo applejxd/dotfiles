@@ -536,15 +536,23 @@ def check_interpreter_inline_code(cmd: str) -> str | None:
 
     normalize は素のコマンド列 (`os.system('git push')` の中身など) を
     取り出せないことがあるため、コード文字列そのものを検査する。
+    `uv run python -c ...` のようにランナー経由でも効くよう、元の文字列全体も見る。
     """
     for segment in _segments(cmd):
         tokens = segment.split()
         if not tokens:
             continue
-        head = re.sub(r"[0-9.]+$", "", _basename(tokens[0]))
-        if head not in _INLINE_CODE_BINS:
+        # ランナー (uv run / mise exec など) の後ろにインタプリタが来る形も拾う
+        head = None
+        for i, token in enumerate(tokens):
+            candidate = re.sub(r"[0-9.]+$", "", _basename(token))
+            if candidate in _INLINE_CODE_BINS:
+                head = candidate
+                rest = tokens[i + 1:]
+                break
+        if head is None:
             continue
-        if not any(t in _INLINE_CODE_FLAGS for t in tokens[1:]):
+        if not any(t in _INLINE_CODE_FLAGS for t in rest):
             continue
         # コード片にセンシティブなパスや外部実行が含まれていないか
         reason = is_sensitive_path(segment)
@@ -596,9 +604,28 @@ def check_history_access(cmd: str) -> str | None:
 
 
 def check_guard_tampering(cmd: str) -> str | None:
-    """hook や permission 設定そのものを無効化しようとしていないか。"""
+    """hook や permission 設定そのものを無効化しようとしていないか。
+
+    コマンドによる変更 (`rm` / `chmod` など) に加え、リダイレクトによる
+    上書き (`> ~/.claude/settings.json`) も検出する。
+    """
     targets = ("/.claude/hooks", "/.claude/settings.json", "/.copilot/hooks",
                "/.copilot/permissions-config.json", "/.config/agents")
+
+    def _hits(token: str) -> bool:
+        expanded = os.path.normpath(
+            token.strip("'\"").replace("~", os.path.expanduser("~"), 1)
+        )
+        return any(t in expanded for t in targets)
+
+    # リダイレクト先がガード設定なら、どのコマンドでも上書きになる
+    for m in re.finditer(r"[0-9]*>{1,2}\s*(\S+)", cmd):
+        if _hits(m.group(1)):
+            return (
+                f"エージェントのガード設定 (`{m.group(1)}`) を上書きしようとしています。\n"
+                "hook や permission の無効化に繋がるため許可されていません。"
+            )
+
     mutating = {
         "rm", "mv", "cp", "chmod", "chown", "truncate", "shred", "ln",
         "sed", "tee", "dd", "install",
@@ -611,15 +638,24 @@ def check_guard_tampering(cmd: str) -> str | None:
         if head not in mutating:
             continue
         for token in tokens[1:]:
-            expanded = os.path.normpath(
-                token.strip("'\"").replace("~", os.path.expanduser("~"), 1)
-            )
-            if any(t in expanded for t in targets):
+            if _hits(token):
                 return (
                     f"エージェントのガード設定 (`{token}`) を変更しようとしています。\n"
                     "hook や permission の無効化に繋がるため許可されていません。\n"
                     "設定を変えたい場合は chezmoi のソースを編集してください。"
                 )
+    return None
+
+
+def check_block_device_write(cmd: str) -> str | None:
+    """`dd of=/dev/sda` のようにブロックデバイスへ直接書き込んでいないか。"""
+    for segment in _segments(cmd):
+        m = re.search(r"\bof=(/dev/\S+)", segment)
+        if m and not re.match(r"^/dev/(?:null|stdout|stderr|tty|zero)$", m.group(1)):
+            return (
+                f"ブロックデバイス `{m.group(1)}` へ直接書き込もうとしています。\n"
+                "ディスクを破壊する操作は許可されていません。"
+            )
     return None
 
 
@@ -762,6 +798,7 @@ DENY_CHECKS = [
     check_secret_env_echo,    # echo $GITHUB_TOKEN の類
     check_history_access,     # history / fc
     check_guard_tampering,    # hook や settings.json の改変
+    check_block_device_write, # dd of=/dev/sda の類
     check_find_root_guard,    # find ~ -delete のような一括削除
     check_policy_deny,        # common.toml の [bash] deny を強制
     check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック

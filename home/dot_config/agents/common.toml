@@ -115,6 +115,15 @@ ask = [
   # Projects v2 の mutation を含む。gh api は任意のエンドポイントを叩けるので
   # 読み取りでも承認を挟む (gh auth token など秘密を引く形は deny 側)
   "gh api",
+  # gc 自体は無害だが --prune / --aggressive は復旧の余地を消す
+  "git gc",
+  # 任意パッケージをダウンロードして実行する
+  "npx",
+  "pnpm dlx",
+  "yarn dlx",
+  # 待ち受けサーバを立てる (ローカルの内容が外から見える)
+  "python -m http.server",
+  "python3 -m http.server",
   # 読み取り (--get / --list) も含めて確認を挟む。hook を無効化しうる
   # 書き込み (--global / core.hooksPath 等) は deny 側
   "git config",
@@ -138,6 +147,31 @@ deny = [
   "git config --add",
   "git config --replace-all",
   "git config --edit",
+  # 履歴・参照を書き換える / 作業内容を失わせる操作
+  "git filter-branch",
+  "git update-ref -d",
+  "git reflog expire",
+  "git stash clear",
+  "git stash drop",
+  "git worktree remove",
+  # 追跡ファイルの変更を破棄する (git でも復旧できない)
+  "git checkout --",
+  "git restore",
+  # スケジュール実行で監視外に逃がす
+  "crontab",
+  "at",
+  "batch",
+  "systemctl",
+  # ディスク・デバイスの破壊
+  "mkfs",
+  "mkfs.ext4",
+  "mkfs.xfs",
+  "fdisk",
+  "parted",
+  "wipefs",
+  # 待ち受け・トンネル (外部からの侵入経路)
+  "socat",
+  "ncat",
   # 外部への通信・横展開の経路
   "nc",
   "telnet",
