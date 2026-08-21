@@ -72,6 +72,9 @@ FILE_READ_COMMANDS = [
     "sed", "awk", "less", "more",
     "strings", "xxd", "hexdump",
     "base64", "od",
+    # 内容を別の場所へ複製・転送するもの (読み取りと同じ露出リスク)
+    "cp", "mv", "install", "rsync", "scp", "sftp", "dd", "tee",
+    "ln", "shred", "split", "gpg", "openssl",
 ]
 
 # ─── 環境変数を全件露出するコマンド（引数なし） ─────────────────────
@@ -218,18 +221,25 @@ def check_find_dangerous(cmd: str) -> str | None:
 
 _PIP_BIN_RE = re.compile(r"^(?:/\S*/)?pip[0-9.]*$")
 _PYTHON_BIN_RE = re.compile(r"^(?:/\S*/)?python[0-9.]*$")
+# -mpip のように -m と値がくっついた形
+_PYTHON_DASH_M_RE = re.compile(r"^-m(.+)$")
+# uvx / uv tool run / pipx など、pip を間接的に起動しうるランナー
+_PIP_RUNNERS = {"uvx", "pipx"}
 
 
 def check_pip_redirect(cmd: str) -> str | None:
     """pip / python -m pip の直接使用を uv/uvx にリダイレクトする。
 
     ポリシー照合と同じ normalize を通してから各セグメントの先頭トークンを見るので、
-    以下の既知の抜け道をすべて塞ぐ:
+    以下の抜け道をすべて塞ぐ:
 
       * ``cd foo && pip install x``  (生文字列の先頭アンカーだと素通りしていた)
       * ``pip3 install x``           (``pip\\b`` が ``pip3`` に一致しなかった)
       * ``python3 -m pip install x`` (``\\bpython\\b`` が ``python3`` に一致しなかった)
+      * ``python3 -mpip install x``  (``-m`` と値がくっついた形)
       * ``/usr/bin/pip install x``   (絶対パス指定)
+      * ``uvx pip install x``        (ランナー経由)
+      * ``uv pip install x`` は許可 (uv のサブコマンドであり pip 本体ではない)
     """
     segments = (
         _policy.normalize(cmd) if _policy is not None else [cmd]
@@ -238,17 +248,40 @@ def check_pip_redirect(cmd: str) -> str | None:
         tokens = segment.split()
         if not tokens:
             continue
-        head = tokens[0]
+        head = _basename(tokens[0])
         if _PIP_BIN_RE.match(head):
             return (
                 "pip の直接使用は禁止されています。uv / uvx を使用してください。\n"
                 f"{_pip_suggestion(segment)}"
             )
-        if _PYTHON_BIN_RE.match(head):
-            for i, token in enumerate(tokens[1:-1], start=1):
-                if token == "-m" and _PIP_BIN_RE.match(tokens[i + 1]):
+        if head in _PIP_RUNNERS and len(tokens) > 1:
+            # uvx pip install ... / pipx run pip ...
+            for token in tokens[1:]:
+                if token.startswith("-"):
+                    continue
+                if _PIP_BIN_RE.match(_basename(token)):
                     return (
-                        f"`{head} -m pip` は禁止されています。uv / uvx を使用してください。\n"
+                        f"`{head}` 経由の pip 実行は禁止されています。"
+                        "uv / uvx を使用してください。\n"
+                        f"{_pip_suggestion(segment)}"
+                    )
+                break
+        if _PYTHON_BIN_RE.match(head):
+            for i, token in enumerate(tokens[1:], start=1):
+                # -m pip (値が別トークン)
+                if token == "-m" and i + 1 < len(tokens):
+                    if _PIP_BIN_RE.match(_basename(tokens[i + 1])):
+                        return (
+                            f"`{head} -m pip` は禁止されています。"
+                            "uv / uvx を使用してください。\n"
+                            f"{_pip_suggestion(segment)}"
+                        )
+                # -mpip (値がくっついた形)
+                m = _PYTHON_DASH_M_RE.match(token)
+                if m and _PIP_BIN_RE.match(_basename(m.group(1))):
+                    return (
+                        f"`{head} -m pip` は禁止されています。"
+                        "uv / uvx を使用してください。\n"
                         f"{_pip_suggestion(segment)}"
                     )
     return None

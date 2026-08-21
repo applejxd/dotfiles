@@ -92,7 +92,8 @@ def load_ask(path: str = DEFAULT_COMMON_PATH) -> list[str]:
 # ---------------------------------------------------------------------------
 
 # Compound operators that introduce a new logical command.
-_COMPOUND_OPS = ("&&", "||", ";", "|")
+# `&` はバックグラウンド実行の区切り。`&&` を先に判定するため順序が重要。
+_COMPOUND_OPS = ("&&", "||", ";;", ";", "|", "&", "\n")
 
 
 def _split_compound(command: str) -> list[str]:
@@ -208,17 +209,58 @@ _WRAPPERS: dict[str, str] = {
     "xargs": "flags+args",
     "doas": "flags+args",
     "proot": "flags+args",
+    # 実行環境を差し替えるもの
+    "chroot": "flags+args",
+    "unshare": "flags+args",
+    "systemd-run": "flags+args",
+    "runuser": "flags+args",
+    # 監視・計測・並列実行
+    "watch": "flags+args",
+    "strace": "flags+args",
+    "ltrace": "flags+args",
+    "perf": "flags+args",
+    "valgrind": "flags+args",
+    "parallel": "flags+args",
+    "flock": "flags+args",
+    "ssh-agent": "flags",
+    "setarch": "flags+args",
+    "taskset": "flags+args",
+    "torify": "flags",
+    "torsocks": "flags",
 }
 
 # シェルを起動して文字列を実行するもの。-c の引数を再帰的に評価する。
-_SHELL_BINS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "ash"}
+# script / su も -c で文字列を渡せるのでここに含める。
+_SHELL_BINS = {
+    "sh", "bash", "zsh", "dash", "ksh", "fish", "ash",
+    "script", "su", "busybox",
+}
 
 # 文字列をそのままコードとして実行するもの
 _EVAL_BINS = {"eval", "source", "."}
 
+# サブコマンドの前に置けるグローバルオプション。
+# `git --no-pager push` を `git push` として照合できるようにする。
+_GLOBAL_OPTS: dict[str, str] = {
+    # コマンド名 -> "flags" (値を取らない) / "flags+args" (別トークンの値を取る)
+    "git": "flags+args",
+    "docker": "flags+args",
+    "gh": "flags+args",
+    "npm": "flags+args",
+    "uv": "flags+args",
+    "cargo": "flags+args",
+    "kubectl": "flags+args",
+}
+
 # グループ化・リダイレクトの飾りを落とすための文字
 _GROUPING_PREFIX = "({"
 _GROUPING_SUFFIX = ")}"
+
+# 先頭のリダイレクト (`> /dev/null git push` のような形)
+_LEADING_REDIRECT_RE = re.compile(r"^\s*(?:[0-9]*[<>]{1,2}&?\s*\S+\s+)+(.+)$")
+
+# コマンド置換 $(...) と `...`
+_CMD_SUBST_RE = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
 
 
 def _basename(token: str) -> str:
@@ -266,6 +308,107 @@ def _normalize_leading_path(segment: str) -> str:
     return f"{head} {rest[1]}" if len(rest) > 1 else head
 
 
+def _strip_leading_redirect(segment: str) -> str:
+    """``> /dev/null git push`` -> ``git push``"""
+    m = _LEADING_REDIRECT_RE.match(segment)
+    if m:
+        return m.group(1).strip()
+    return segment
+
+
+def _strip_global_options(segment: str) -> str:
+    """``git --no-pager push`` -> ``git push``
+
+    サブコマンドの前に置けるグローバルオプションを取り除き、
+    ``git push`` として照合できるようにする。
+    """
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return segment
+    if len(tokens) < 2:
+        return segment
+    head = _basename(tokens[0])
+    style = _GLOBAL_OPTS.get(head)
+    if style is None:
+        return segment
+
+    i = 1
+    while i < len(tokens) and tokens[i].startswith("-"):
+        token = tokens[i]
+        if token == "--":
+            i += 1
+            break
+        # --git-dir=/x のように値が同じトークンなら 1 つ進める
+        if "=" in token:
+            i += 1
+            continue
+        # -c user.name=x のように値が別トークンのもの
+        if style == "flags+args" and len(token) == 2:
+            i += 2
+            continue
+        i += 1
+    rest = tokens[i:]
+    if not rest:
+        return segment
+    return " ".join([head] + rest)
+
+
+def _expand_command_substitution(segment: str) -> list[str]:
+    """``$(echo git) push`` の中身と、置換を除いた残りを評価対象として返す。
+
+    置換部分が何を出力するかは静的には分からないので、
+      * 中身そのもの (``echo $(git push)`` の ``git push`` を捕捉)
+      * 置換を取り除いた残り (``$(echo git) push`` の ``push`` を捕捉)
+    の両方を返す。後者だけでは `git push` にはならないが、置換で先頭コマンドを
+    隠す形は「先頭トークンが不明」ということなので、残りを引数列として照合し、
+    さらに置換の中身と連結した形も候補に加える。
+    """
+    found: list[str] = []
+    inners: list[str] = []
+    for m in _CMD_SUBST_RE.finditer(segment):
+        inner = (m.group(1) or m.group(2) or "").strip()
+        if inner:
+            inners.append(inner)
+            found.append(inner)
+    if not inners:
+        return found
+
+    stripped = _CMD_SUBST_RE.sub(" ", segment).strip()
+    stripped = " ".join(stripped.split())
+    if stripped:
+        found.append(stripped)
+        # `$(echo git) push` -> 置換の出力が先頭コマンドになる想定で連結を試す。
+        # 中身の最終トークン (echo の引数など) をコマンド名候補として使う。
+        for inner in inners:
+            inner_tokens = inner.split()
+            if inner_tokens:
+                found.append(f"{inner_tokens[-1]} {stripped}")
+    return found
+
+
+def _looks_like_option_value(token: str) -> bool:
+    """``-f git`` の ``git`` のように、オプションの値ではなくコマンド名らしいかを見分ける。
+
+    値らしい (= 読み飛ばしてよい) 場合に True。数値・パス・記号を含むものは値とみなす。
+    素の英字トークンはコマンド名の可能性が高いので値とみなさない。
+    """
+    if token.startswith("-"):
+        return False
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_.+-]*", token):
+        # 単純な識別子はコマンド名の可能性がある
+        return False
+    return True
+
+
+def _looks_like_wrapper_operand(token: str) -> bool:
+    """``flock <lockfile> CMD`` の lockfile のような位置引数か。
+
+    パス・数値・記号を含むものだけを対象にし、素のコマンド名は食べない。
+    """
+    return _looks_like_option_value(token)
+
+
 def _strip_wrapper(segment: str) -> str:
     """``timeout 5 git push`` -> ``git push``、``env FOO=1 git push`` -> ``git push``"""
     try:
@@ -286,14 +429,22 @@ def _strip_wrapper(segment: str) -> str:
             i += 1
             break
         if token.startswith("-"):
-            # -I{} や -u root のように値が別トークンのものを読み飛ばす
+            # -I{} や -u root のように値が別トークンのものを読み飛ばす。
+            # ただし後続がコマンド名そのものなら値ではないので進めない
+            # (`strace -f git push` の `git` を食べてしまわないように)。
             if style in ("flags+args", "duration") and "=" not in token and len(token) == 2:
-                i += 2
-                continue
+                nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+                if nxt is not None and _looks_like_option_value(nxt):
+                    i += 2
+                    continue
             i += 1
             continue
         if style == "duration" and _WRAPPER_POSITIONAL_ARG_RE.match(token):
             # timeout 5 CMD / timeout 1.5s CMD
+            i += 1
+            continue
+        if style == "flags+args" and _looks_like_wrapper_operand(token) and i + 1 < len(tokens):
+            # flock <lockfile> CMD のように位置引数を取るもの
             i += 1
             continue
         if "=" in token and not token.startswith("/"):
@@ -339,11 +490,13 @@ def _normalize_segment(segment: str) -> str:
     seg = segment
     for _ in range(8):  # apply transformations repeatedly until fixed
         new = _strip_grouping(seg)
+        new = _strip_leading_redirect(new)
         new = _strip_cd_prefix(new)
         new = _strip_git_dash_c(new)
         new = _strip_env_assignments(new)
         new = _strip_wrapper(new)
         new = _normalize_leading_path(new)
+        new = _strip_global_options(new)
         if new == seg:
             break
         seg = new
@@ -353,17 +506,20 @@ def _normalize_segment(segment: str) -> str:
 def normalize(command: str, _depth: int = 0) -> list[str]:
     """Return a list of normalized command segments suitable for matching.
 
-    Compound operators (``&&``, ``||``, ``;``, ``|``) split the command into
-    logical segments. Each segment is then stripped of anything that merely
-    changes the leading token without changing what actually runs:
+    Compound operators (``&&``, ``||``, ``;``, ``|``, ``&`` and newlines) split
+    the command into logical segments. Each segment is then stripped of anything
+    that merely changes the leading token without changing what actually runs:
 
       * ``cd <path> && X``            -> ``X``
       * ``git -C <path> <sub>``       -> ``git <sub>``
       * ``(X)`` / ``{ X; }``          -> ``X``
+      * ``> /dev/null X``             -> ``X``
       * ``FOO=1 X``                   -> ``X``
       * ``env`` / ``timeout`` / ``nohup`` / ``xargs`` などのラッパー -> 後続コマンド
       * ``/usr/bin/X``                -> ``X``
+      * ``git --no-pager <sub>``      -> ``git <sub>`` (グローバルオプション)
       * ``bash -c "X"`` / ``eval "X"`` -> ``X`` を再帰的に評価
+      * ``$(X)`` / ``` `X` ```        -> ``X`` も独立して評価
 
     Pure ``cd`` segments left over from compound splitting are dropped (they
     cannot match any deny pattern but would clutter the output).
@@ -373,15 +529,19 @@ def normalize(command: str, _depth: int = 0) -> list[str]:
     """
     segments = _split_compound(command)
     out: list[str] = []
-    for seg in segments:
-        seg = _normalize_segment(seg)
-        if not seg or _CD_ONLY_RE.match(seg):
+    for raw in segments:
+        seg = _normalize_segment(raw)
+        if seg and not _CD_ONLY_RE.match(seg):
+            out.append(seg)
+        if _depth >= 3:
             continue
-        out.append(seg)
-        if _depth < 3:
-            inner = _expand_shell_invocation(seg)
-            if inner:
-                for chunk in inner:
+        # コマンド置換の中身は正規化前の文字列から拾う (クォートで消えるため)
+        for inner in _expand_command_substitution(raw):
+            out.extend(normalize(inner, _depth + 1))
+        if seg:
+            shell_inner = _expand_shell_invocation(seg)
+            if shell_inner:
+                for chunk in shell_inner:
                     out.extend(normalize(chunk, _depth + 1))
     return out
 
