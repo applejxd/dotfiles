@@ -115,6 +115,9 @@ ask = [
   # Projects v2 の mutation を含む。gh api は任意のエンドポイントを叩けるので
   # 読み取りでも承認を挟む (gh auth token など秘密を引く形は deny 側)
   "gh api",
+  # 読み取り (--get / --list) も含めて確認を挟む。hook を無効化しうる
+  # 書き込み (--global / core.hooksPath 等) は deny 側
+  "git config",
 ]
 
 # 承認の余地なく拒否。
@@ -125,8 +128,16 @@ deny = [
   "git push",
   "git reset --hard",
   "git rebase",
-  # core.hooksPath の書き換えで hook 自体を無効化できる
-  "git config",
+  # core.hooksPath の書き換えで hook 自体を無効化できる。
+  # 読み取り (--get / --list) は allow 側にあるので通る
+  "git config --global",
+  "git config --system",
+  "git config --local",
+  "git config core.hooksPath",
+  "git config --unset",
+  "git config --add",
+  "git config --replace-all",
+  "git config --edit",
   # 外部への通信・横展開の経路
   "nc",
   "telnet",

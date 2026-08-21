@@ -103,6 +103,10 @@ def _split_compound(command: str) -> list[str]:
     honoring single and double quotes and backslash escapes. It is not a full
     shell parser, but it is sufficient for the bypass patterns observed in
     Claude Code bugs (#59498, #20085 etc.).
+
+    The original command is kept as the first element so that constructs which
+    span the split points (here-strings containing newlines, function bodies,
+    ``find -exec ... \\;``) can still be inspected as a whole by callers.
     """
     segments: list[str] = []
     buf: list[str] = []
@@ -231,7 +235,21 @@ _WRAPPERS: dict[str, str] = {
     "taskset": "flags+args",
     "torify": "flags",
     "torsocks": "flags",
+    # 別プロセスとして起動するもの
+    "entr": "flags",
+    "watchexec": "flags+args",
 }
+
+# 位置引数の中にコマンドが埋まっているもの。
+# 値は「コマンドが始まる位置を探す方法」を表す。
+_EMBEDDED_COMMAND_RULES: dict[str, str] = {
+    "find": "after-exec",        # find . -exec CMD \;
+    "screen": "after-flags",     # screen -dm CMD
+    "tmux": "tmux",              # tmux new-session -d 'CMD'
+    "at": "flags",               # at now <<< 'CMD'
+}
+# find の -exec / -execdir / -ok
+_FIND_EXEC_FLAGS = {"-exec", "-execdir", "-ok", "-okdir"}
 
 # シェルを起動して文字列を実行するもの。-c の引数を再帰的に評価する。
 # script / su も -c で文字列を渡せるのでここに含める。
@@ -458,7 +476,10 @@ def _expand_interpreter_code(segment: str) -> list[str]:
 
 
 # here-string / here-doc でコードを渡す形 (`bash <<< "git push"`)
-_HERE_STRING_RE = re.compile(r"<<<\s*(.+)$")
+# 本体が改行を含むこともあるので DOTALL で末尾まで取る
+_HERE_STRING_RE = re.compile(r"<<<\s*(.+)\Z", re.S)
+# here-doc の本体を評価するためのパターン (`make -f /dev/stdin <<< '...'`)
+_STDIN_SCRIPT_RE = re.compile(r"-f\s+(?:/dev/stdin|-)\b")
 # プロセス置換 `<(...)` `>(...)`
 _PROC_SUBST_RE = re.compile(r"[<>]\(([^()]*)\)")
 # シェル関数定義 `f(){ git push; }` (後ろに呼び出しが続く形も許容)
@@ -487,7 +508,15 @@ def _expand_indirect_code(segment: str, full_command: str = "") -> list[str]:
     for src in sources:
         m = _HERE_STRING_RE.search(src)
         if m:
-            out.append(m.group(1).strip().strip("'\""))
+            body = m.group(1).strip().strip("'\"")
+            out.append(body)
+            # `make -f /dev/stdin <<< 'all:\n\tgit push'` のように
+            # here-doc 本体がスクリプトになる形は、行ごとにコマンド候補にする
+            if _STDIN_SCRIPT_RE.search(src):
+                for line in body.replace("\\n", "\n").replace("\\t", "\t").splitlines():
+                    stripped = line.strip().lstrip("\t").strip()
+                    if stripped and not stripped.endswith(":"):
+                        out.append(stripped)
 
         for pm in _PROC_SUBST_RE.finditer(src):
             inner = pm.group(1).strip()
@@ -604,6 +633,65 @@ def _looks_like_wrapper_operand(token: str) -> bool:
     return _looks_like_option_value(token)
 
 
+def _expand_embedded_commands(segment: str) -> list[str]:
+    """``find . -exec git push \\;`` のように引数中に埋まったコマンドを返す。
+
+    ``screen -dm CMD`` / ``tmux new-session -d 'CMD'`` /
+    ``git submodule foreach 'CMD'`` / ``docker run IMAGE CMD`` も同様に扱う。
+    """
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return []
+    if not tokens:
+        return []
+    head = _basename(tokens[0])
+    out: list[str] = []
+
+    if head == "find":
+        for i, token in enumerate(tokens):
+            if token in _FIND_EXEC_FLAGS and i + 1 < len(tokens):
+                rest = []
+                for t in tokens[i + 1:]:
+                    # shlex がエスケープを外すので `;` `\;` `+` のいずれも来る
+                    if t in (";", "\\;", "+", "\\+", "\\"):
+                        break
+                    rest.append(t)
+                if rest:
+                    out.append(" ".join(rest))
+        return out
+
+    if head in ("screen", "tmux", "at", "batch", "entr", "watchexec"):
+        # フラグとサブコマンドを読み飛ばし、残りをコマンドとみなす
+        rest = [t for t in tokens[1:] if not t.startswith("-")]
+        if head == "tmux" and rest and rest[0] in (
+            "new-session", "new", "new-window", "neww", "send-keys", "run-shell", "run",
+        ):
+            rest = rest[1:]
+        if rest:
+            out.append(" ".join(rest))
+        return out
+
+    if head == "git" and len(tokens) >= 4 and tokens[1] == "submodule" and tokens[2] == "foreach":
+        out.append(" ".join(tokens[3:]))
+        return out
+
+    if head == "docker" and len(tokens) >= 3 and tokens[1] in ("run", "exec"):
+        # フラグとその値、イメージ名/コンテナ名を読み飛ばす
+        i = 2
+        while i < len(tokens) and tokens[i].startswith("-"):
+            if "=" not in tokens[i] and len(tokens[i]) == 2 and i + 1 < len(tokens):
+                i += 2
+                continue
+            i += 1
+        i += 1  # イメージ名 / コンテナ名
+        if i < len(tokens):
+            out.append(" ".join(tokens[i:]))
+        return out
+
+    return out
+
+
 def _strip_wrapper(segment: str) -> str:
     """``timeout 5 git push`` -> ``git push``、``env FOO=1 git push`` -> ``git push``"""
     try:
@@ -675,7 +763,8 @@ def _expand_shell_invocation(segment: str) -> list[str] | None:
         # -c / -lc / -xc のように c を含む短縮フラグ
         if token.startswith("-") and not token.startswith("--") and "c" in token:
             if i + 1 < len(tokens):
-                return [tokens[i + 1]]
+                # クォートが外れて複数トークンに割れている場合は繋ぎ直す
+                return [" ".join(tokens[i + 1:])]
             return None
     return None
 
@@ -724,6 +813,11 @@ def normalize(command: str, _depth: int = 0) -> list[str]:
     """
     segments = _split_compound(command)
     out: list[str] = []
+    # 分割で壊れる構文 (改行を含む here-string、関数本体など) を拾うため、
+    # 最上位では元の文字列も間接展開の入力に含める
+    if _depth == 0 and command.strip() and command.strip() not in segments:
+        for inner in _expand_indirect_code(command, command):
+            out.extend(normalize(inner, _depth + 1))
     for raw in segments:
         seg = _normalize_segment(raw)
         if seg and not _CD_ONLY_RE.match(seg):
@@ -742,6 +836,11 @@ def normalize(command: str, _depth: int = 0) -> list[str]:
             # python -c / perl -e などに渡されたコード片
             for chunk in _expand_interpreter_code(seg):
                 out.extend(normalize(chunk, _depth + 1))
+            # find -exec / screen -dm / docker run などに埋まったコマンド。
+            # 正規化で末尾のエスケープが落ちることがあるので元の文字列も見る
+            for source in (seg, raw):
+                for chunk in _expand_embedded_commands(source):
+                    out.extend(normalize(chunk, _depth + 1))
     return out
 
 

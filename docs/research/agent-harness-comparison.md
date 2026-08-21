@@ -148,15 +148,20 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | `env \| grep -i key` / `printenv AWS_SECRET_ACCESS_KEY` / `true; env` | **修正済**: 全件出力に加えセンシティブな変数名も検出 |
 | `tac .env` / `sort ~/.aws/credentials` / `jq .` / `git add .env` / `tar czf out.tgz ~/.ssh` | **修正済**: 読み取り系コマンドを拡充し、アーカイブと `git add` も検査 |
 | `scp` / `rsync` / `gh gist create` / `gh secret list` / `git remote add` | **修正済**: 外部へ出す経路として deny |
+| `find . -exec git push \;` / `screen -dm` / `tmux new-session -d` / `docker run IMAGE CMD` / `git submodule foreach` | **修正済**: 引数に埋まったコマンドを取り出して評価 |
+| `cat /proc/self/environ` / `echo $GITHUB_TOKEN` / `history` / `cat ~/.bash_history` | **修正済**: プロセス環境・履歴・秘密の環境変数名を検出 |
+| `rm ~/.claude/hooks/check_bash.py` / `git config core.hooksPath /dev/null` / `chmod -x` | **修正済**: `check_guard_tampering` が hook と permission 設定の改変を deny |
+| `rmdir /` / `find ~ -delete` / `rm -rf $PWD/../..` | **修正済**: root guard を rmdir/unlink と find の起点にも適用 |
 | `cd foo && X` で permission deny を回避 | Claude CLI の既知バグだが、hook 側の normalize が `[bash] deny` / `ask` の全項目を救済する |
 | シェル変数経由の間接的な組み立て (別コマンドで定義した変数、配列、`${x:0:3}` 等) | **未対応**。静的解析では追えない |
 | エディタ・REPL 経由の間接実行 (`vim` の `:!` など) | **未対応** |
 | ネスト 2 段以上のコマンド置換 | **未対応**。正規表現で追えるのは 1 段まで |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある (361 件)。日常的に使うコマンド
+`test_command_policy.py` に回帰テストがある (403 件)。日常的に使うコマンド
 (`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
-`cp .env.example .env` / `git commit -m "fix token refresh"` 等) が
+`cp .env.example .env` / `git commit -m "fix token refresh"` /
+`docker run --rm alpine echo hi` / `find . -exec echo {} \;` 等) が
 過剰検知されないことも併せて検査している。
 
 → 個人用指示の「**拒否条件を満たす別手段に切り替える。条件自体を回避する迂回（コマンドの

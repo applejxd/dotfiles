@@ -75,6 +75,15 @@ _SENSITIVE_EXEMPT_RE = re.compile(
 )
 # /etc 配下の特定ファイル
 _SENSITIVE_ABS_PATHS = {"/etc/shadow", "/etc/passwd", "/etc/sudoers"}
+# プロセスの環境変数を覗くパス
+_PROC_ENVIRON_RE = re.compile(r"/proc/(?:\d+|self)/environ")
+# シェル履歴
+_HISTORY_BASENAMES = {
+    ".bash_history", ".zsh_history", ".sh_history", ".python_history",
+    ".psql_history", ".mysql_history", ".node_repl_history",
+}
+# CLI の認証情報を保持するファイル
+_CREDENTIAL_PATHS = ("/.config/gh/hosts.yml", "/.docker/config.json", "/.git-credentials")
 
 # grep 系は最初の非フラグ引数が検索語なのでパス判定から除外する
 _PATTERN_FIRST_COMMANDS = {"grep", "rg", "ag", "ack", "egrep", "fgrep", "sed", "awk"}
@@ -110,6 +119,13 @@ def _is_sensitive_token(token: str) -> str | None:
 
     if normalized in _SENSITIVE_ABS_PATHS:
         return normalized
+    if _PROC_ENVIRON_RE.search(normalized):
+        return "プロセスの環境変数"
+    if base in _HISTORY_BASENAMES:
+        return f"シェル履歴 ({base})"
+    for cred in _CREDENTIAL_PATHS:
+        if normalized.endswith(cred):
+            return base
     parts = normalized.split("/")
     for d in _SENSITIVE_DIRS:
         if d in parts or (d.count("/") and d in normalized):
@@ -337,15 +353,47 @@ _FIND_DANGEROUS_EXEC_RE = re.compile(
 
 
 def check_find_dangerous(cmd: str) -> str | None:
-    """`find -exec rm` や `find -delete` でファイルを削除しようとしていないか"""
+    """`find -exec rm` や `find -delete` でファイルを削除しようとしていないか。
+
+    削除対象がホームやシステム全体なら承認の余地なく deny する。
+    """
     if not re.search(r"\bfind\b", cmd):
         return None
-    if _FIND_DANGEROUS_EXEC_RE.search(cmd):
-        return (
-            "`find` コマンドによるファイル削除操作（-exec rm / -delete 等）です。\n"
-            f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
-            "削除対象を確認して問題なければ承認してください。"
-        )
+    if not _FIND_DANGEROUS_EXEC_RE.search(cmd):
+        return None
+    # find の探索起点が壊滅的なら deny (check_rm_root_guard 相当の扱い)
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens or _basename(tokens[0]) != "find":
+            continue
+        for token in tokens[1:]:
+            if token.startswith("-"):
+                break
+            if _is_catastrophic_rm_target(token):
+                return None  # deny 側で処理する
+    return (
+        "`find` コマンドによるファイル削除操作（-exec rm / -delete 等）です。\n"
+        f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
+        "削除対象を確認して問題なければ承認してください。"
+    )
+
+
+def check_find_root_guard(cmd: str) -> str | None:
+    """`find ~ -delete` のように壊滅的な範囲を一括削除していないか。"""
+    if not _FIND_DANGEROUS_EXEC_RE.search(cmd):
+        return None
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens or _basename(tokens[0]) != "find":
+            continue
+        for token in tokens[1:]:
+            if token.startswith("-"):
+                break
+            if _is_catastrophic_rm_target(token):
+                return (
+                    f"`find` が壊滅的なパス `{token}` を起点に削除しようとしています。\n"
+                    "システム全体・ホーム・親ディレクトリの一括削除は承認の対象外です。"
+                )
     return None
 
 
@@ -513,6 +561,68 @@ def check_interpreter_inline_code(cmd: str) -> str | None:
     return None
 
 
+def check_secret_env_echo(cmd: str) -> str | None:
+    """`echo $GITHUB_TOKEN` のようにセンシティブな環境変数を出力していないか。
+
+    値をそのまま画面やファイル、外部へ出す形を止める。
+    `echo $HOME` のような通常の変数は対象外。
+    シングルクォート内はシェルが展開しないので対象から外す
+    (コミットメッセージ等に変数名が出てくるだけのケースを誤検知しないため)。
+    """
+    unquoted = re.sub(r"'[^']*'", "", cmd)
+    for m in re.finditer(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", unquoted):
+        name = m.group(1)
+        if _SENSITIVE_ENV_RE.search(name):
+            return (
+                f"センシティブな環境変数 `${name}` を展開しようとしています。\n"
+                f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
+                "値を画面や外部に出さない形で扱ってください。"
+            )
+    return None
+
+
+def check_history_access(cmd: str) -> str | None:
+    """`history` でシェル履歴を読み出していないか (過去の秘密が残っている)。"""
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        if _basename(tokens[0]) in ("history", "fc"):
+            return (
+                "シェル履歴には過去に入力した秘密が残っている可能性があるため、"
+                "参照は許可されていません。"
+            )
+    return None
+
+
+def check_guard_tampering(cmd: str) -> str | None:
+    """hook や permission 設定そのものを無効化しようとしていないか。"""
+    targets = ("/.claude/hooks", "/.claude/settings.json", "/.copilot/hooks",
+               "/.copilot/permissions-config.json", "/.config/agents")
+    mutating = {
+        "rm", "mv", "cp", "chmod", "chown", "truncate", "shred", "ln",
+        "sed", "tee", "dd", "install",
+    }
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = _basename(tokens[0])
+        if head not in mutating:
+            continue
+        for token in tokens[1:]:
+            expanded = os.path.normpath(
+                token.strip("'\"").replace("~", os.path.expanduser("~"), 1)
+            )
+            if any(t in expanded for t in targets):
+                return (
+                    f"エージェントのガード設定 (`{token}`) を変更しようとしています。\n"
+                    "hook や permission の無効化に繋がるため許可されていません。\n"
+                    "設定を変えたい場合は chezmoi のソースを編集してください。"
+                )
+    return None
+
+
 def check_policy_deny(cmd: str) -> str | None:
     """common.toml の bash.deny に該当すれば block する.
 
@@ -562,7 +672,7 @@ _CATASTROPHIC_DIRS = {
 _HOME_TOKENS = {"~", "$HOME", "${HOME}"}
 # /home/<user> や /Users/<user> のようなホームディレクトリそのもの
 _HOME_DIR_RE = re.compile(r"^/(?:home|Users)/[^/]+$")
-_RM_BIN_RE = re.compile(r"^(?:/\S*/)?rm$")
+_RM_BIN_RE = re.compile(r"^(?:/\S*/)?(?:rm|rmdir|unlink)$")
 
 
 def _basename(token: str) -> str:
@@ -596,6 +706,10 @@ def _is_catastrophic_rm_target(token: str) -> bool:
     if _HOME_DIR_RE.match(canonical):
         return True
     if canonical == os.path.expanduser("~"):
+        return True
+    # `$PWD/../..` のように相対で上位へ抜ける形。
+    # 実際の解決先は分からないので、`..` が 2 段以上あれば壊滅的とみなす。
+    if canonical.count("..") >= 2:
         return True
     return False
 
@@ -645,6 +759,10 @@ DENY_CHECKS = [
     check_pipe_to_shell,      # curl ... | sh の類
     check_interpreter_inline_code,  # python -c "os.system(...)" の類
     check_git_add_sensitive,  # git add .env の類
+    check_secret_env_echo,    # echo $GITHUB_TOKEN の類
+    check_history_access,     # history / fc
+    check_guard_tampering,    # hook や settings.json の改変
+    check_find_root_guard,    # find ~ -delete のような一括削除
     check_policy_deny,        # common.toml の [bash] deny を強制
     check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
     check_git_c_dangerous,    # -C 経由の deny サブコマンド実行をブロック
