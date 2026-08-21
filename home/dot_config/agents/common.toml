@@ -272,6 +272,7 @@ write_ask_globs = [
 read_deny_globs = [
   "**/.ssh/**",
   "**/.gnupg/**",
+  "**/sops/age/**",
   "**/.aws/credentials",
   "**/.netrc",
   "**/.npmrc",
@@ -287,6 +288,7 @@ read_deny_globs = [
   "**/*.jks",
   "**/*.keystore",
   "**/key.txt",
+  "**/keys.txt",
   "**/*_key",
   "**/*.token",
   "**/*_token",
@@ -306,6 +308,7 @@ read_deny_globs = [
 write_deny_globs = [
   "**/.ssh/**",
   "**/.gnupg/**",
+  "**/sops/age/**",
   "**/.aws/credentials",
   "**/.netrc",
   "**/.npmrc",
@@ -321,6 +324,7 @@ write_deny_globs = [
   "**/*.jks",
   "**/*.keystore",
   "**/key.txt",
+  "**/keys.txt",
   "**/*_key",
   "**/*.token",
   "**/*_token",

@@ -63,14 +63,15 @@ except Exception as _exc:  # pragma: no cover - 構文エラー等も拾う
 # ファイル名そのものが秘密を意味するもの (basename の完全一致 / 前方一致)
 _SENSITIVE_BASENAMES = {
     ".env", ".netrc", ".pypirc", ".npmrc", "credentials", "key.txt",
-    "shadow", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+    "keys.txt", "shadow", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
 }
 _SENSITIVE_BASENAME_PREFIXES = ("id_rsa", "id_dsa", "id_ecdsa", "id_ed25519")
 _SENSITIVE_SUFFIXES = (
     ".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".ppk", ".asc",
 )
 # パスに含まれると秘密領域とみなすディレクトリ
-_SENSITIVE_DIRS = (".ssh", ".gnupg", ".aws", ".config/gh", "secrets")
+_SENSITIVE_DIRS = (".ssh", ".gnupg", ".aws", ".config/gh", ".config/sops",
+                   "sops/age", "secrets")
 # basename に含まれると秘密とみなす語 (パスらしいトークンにのみ適用)
 _SENSITIVE_WORD_RE = re.compile(
     r"(?:secret|password|passwd|credential|api[_-]?key|private[_-]?key|access[_-]?key)",

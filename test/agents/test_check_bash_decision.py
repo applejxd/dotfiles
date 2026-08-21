@@ -1598,6 +1598,37 @@ def test_shadowed_entries_are_enforced_by_hook(entry, decision):
     )
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat ~/.config/sops/age/keys.txt",
+        "cp ~/.config/sops/age/keys.txt ./k",
+        "cat ~/.config/sops/age/private_keys.txt",
+        "cat ~/.config/chezmoi/key.txt",
+        "ls ~/.config/sops/age/",
+        "tar -czf keys.tgz ~/.config/sops/age/",
+    ],
+)
+def test_age_key_files_are_denied(command):
+    """age の秘密鍵は chezmoi 用・sops 用のどちらも読み出せない.
+
+    `**/key.txt` は `keys.txt` にマッチしないため、sops 側の鍵が
+    素通りしていた。両方を明示的に固定する。
+    """
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+def test_age_key_globs_cover_both_systems():
+    """common.toml の glob が chezmoi 用と sops 用の両方を含むこと."""
+    file_policy = COMMON["file"]
+    for key in ("read_deny_globs", "write_deny_globs"):
+        globs = file_policy[key]
+        assert "**/key.txt" in globs, f"{key} に **/key.txt が無い"
+        assert "**/keys.txt" in globs, f"{key} に **/keys.txt が無い"
+        assert "**/sops/age/**" in globs, f"{key} に **/sops/age/** が無い"
+
+
 # ---------------------------------------------------------------------------
 # fail-closed
 # ---------------------------------------------------------------------------
