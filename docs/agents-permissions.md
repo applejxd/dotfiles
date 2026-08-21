@@ -231,7 +231,7 @@ bypass パターンを hook が確実に block することを保証している
 
 ```bash
 uv run --with pytest --no-project pytest test/agents/ -q
-# -> 439 passed (normalize/match 37 + hook 生成 21 + deny/ask 判定 381)
+# -> 456 passed (normalize/match 37 + hook 生成 21 + deny/ask 判定 398)
 ```
 
 hook は `AGENTS_CONFIG_DIR` で agents 設定ディレクトリを差し替えられるので、

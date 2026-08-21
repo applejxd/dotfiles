@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import tomllib
 from pathlib import Path
 
@@ -1075,6 +1076,72 @@ def test_system_destruction_and_guard_removal_are_denied(command):
 def test_round5_false_positives(command):
     decision, reason = run_hook(command)
     assert decision in (None, "ask"), f"{command!r} が deny された ({reason})"
+
+
+# ---------------------------------------------------------------------------
+# hook 自体の堅牢性 (6 巡目)
+# ---------------------------------------------------------------------------
+# hook がクラッシュしたりタイムアウトすると CLI 側は判定なしとして扱う
+# (= 素通り)。異常な入力でも必ず判定を返すことを保証する。
+
+
+def _run_raw(payload: str, timeout: int = 20):
+    proc = subprocess.run(
+        [sys.executable, str(HOOK_PATH)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env={**os.environ, "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent)},
+    )
+    return proc
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "",
+        "not json",
+        "[]",
+        "null",
+        '{"tool_name":"Bash"}',
+        '{"tool_name":"Bash","tool_input":{"command":123}}',
+        '{"tool_name":"Bash","tool_input":{"command":["git","push"]}}',
+        '{"tool_name":"Bash","tool_input":{"command":null}}',
+        '{"tool_name":null,"tool_input":{"command":"git push"}}',
+        '{"tool_name":"Bash","tool_input":"not a dict"}',
+    ],
+)
+def test_malformed_payload_does_not_crash(payload):
+    proc = _run_raw(payload)
+    assert proc.returncode == 0, f"rc={proc.returncode} stderr={proc.stderr[-200:]}"
+    assert "Traceback" not in proc.stderr
+
+
+@pytest.mark.parametrize(
+    ("label", "command"),
+    [
+        ("巨大な引数", "git push " + "x" * 50000),
+        ("大量セグメント", "; ".join(["echo ok"] * 2000 + ["git push"])),
+        ("深いネスト", "$(" * 50 + "git push" + ")" * 50),
+        ("長いパイプ", " | ".join(["cat"] * 500) + " | sh"),
+        ("長い here-string", "bash <<< '" + "a" * 20000 + "'"),
+        ("多数の代入", "; ".join([f"v{i}=x" for i in range(2000)]) + "; git push"),
+    ],
+)
+def test_pathological_input_still_decides_quickly(label, command):
+    """病的な入力でも 5 秒以内に判定を返すこと (タイムアウトで素通りさせない)."""
+    started = time.monotonic()
+    decision, reason = run_hook(command)
+    elapsed = time.monotonic() - started
+    assert elapsed < 5, f"{label}: {elapsed:.1f}s かかった"
+    assert decision == "deny", f"{label}: -> {decision} ({reason})"
+
+
+def test_overlong_command_is_denied():
+    decision, reason = run_hook("echo " + "x" * 20000)
+    assert decision == "deny"
+    assert "長すぎます" in reason
 
 
 # ---------------------------------------------------------------------------

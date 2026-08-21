@@ -809,6 +809,11 @@ def _normalize_segment(segment: str) -> str:
     return " ".join(seg.split())
 
 
+# 展開の上限。病的な入力で処理時間が爆発しないように抑える
+_MAX_SEGMENTS = 200
+_MAX_EXPANSION_LEN = 4000
+
+
 def normalize(command: str, _depth: int = 0) -> list[str]:
     """Return a list of normalized command segments suitable for matching.
 
@@ -834,17 +839,25 @@ def normalize(command: str, _depth: int = 0) -> list[str]:
     ``sh`` (for example ``curl x | sh``) still matches.
     """
     segments = _split_compound(command)
+    if len(segments) > _MAX_SEGMENTS:
+        # 病的に多い場合は先頭だけ見る (どのみち全部は検査しきれない)
+        segments = segments[:_MAX_SEGMENTS]
     out: list[str] = []
     # 分割で壊れる構文 (改行を含む here-string、関数本体など) を拾うため、
     # 最上位では元の文字列も間接展開の入力に含める
-    if _depth == 0 and command.strip() and command.strip() not in segments:
+    if (
+        _depth == 0
+        and command.strip()
+        and len(command) <= _MAX_EXPANSION_LEN
+        and command.strip() not in segments
+    ):
         for inner in _expand_indirect_code(command, command):
             out.extend(normalize(inner, _depth + 1))
     for raw in segments:
         seg = _normalize_segment(raw)
         if seg and not _CD_ONLY_RE.match(seg):
             out.append(seg)
-        if _depth >= 3:
+        if _depth >= 3 or len(raw) > _MAX_EXPANSION_LEN:
             continue
         # コマンド置換の中身は正規化前の文字列から拾う (クォートで消えるため)
         for inner in _expand_command_substitution(raw):

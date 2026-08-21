@@ -21,8 +21,14 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import sys
 from pathlib import Path
+
+# 検査の上限。これを超えるコマンドは内容を確認できないので拒否する
+_MAX_COMMAND_LEN = 10000
+# 自前のタイムアウト秒。hook の timeout (30s) より十分手前で打ち切る
+_SELF_TIMEOUT_SEC = 10
 
 # 同一ディレクトリの lib/ にあるヘルパを import
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
@@ -817,22 +823,69 @@ ASK_CHECKS = [
 
 
 def main() -> None:
+    # ── 自前のタイムアウト ─────────────────────────────────────────
+    # hook の実行が設定の timeout を超えると CLI 側は hook をスキップする
+    # (= 素通り)。異常に長いコマンドや病的な入力でそうならないよう、
+    # 余裕をもって自分で打ち切り、安全側 (deny) に倒す。
+    def _on_timeout(signum: int, frame: object) -> None:  # pragma: no cover
+        emit_pretool_deny(
+            "[hook blocked] コマンドの検査が時間内に終わりませんでした。\n"
+            "検査できない以上、安全のため拒否しています。\n"
+            "コマンドを短く分割して実行してください。"
+        )
+
+    try:
+        signal.signal(signal.SIGALRM, _on_timeout)
+        signal.alarm(_SELF_TIMEOUT_SEC)
+    except (AttributeError, ValueError):  # pragma: no cover - Windows など
+        pass
+
     data = read_input()
-
-    if normalize_tool_kind(data.get("tool_name", "")) != "bash":
+    if not isinstance(data, dict):
+        # 想定外のペイロードでも落とさない (CLI 側が hook 失敗を素通り扱いに
+        # することがあるため、例外で終わらせない)
         sys.exit(0)
 
-    cmd = get_command(data.get("tool_input", {}))
-    if not cmd:
+    tool_name = data.get("tool_name")
+    if not isinstance(tool_name, str):
         sys.exit(0)
+    if normalize_tool_kind(tool_name) != "bash":
+        sys.exit(0)
+
+    tool_input = data.get("tool_input")
+    if not isinstance(tool_input, dict):
+        sys.exit(0)
+    cmd = get_command(tool_input)
+    if not isinstance(cmd, str) or not cmd:
+        sys.exit(0)
+
+    # 長すぎるコマンドは検査コストが跳ね上がる。内容を確認できないので拒否する
+    if len(cmd) > _MAX_COMMAND_LEN:
+        emit_pretool_deny(
+            f"[hook blocked] コマンドが長すぎます ({len(cmd)} 文字)。\n"
+            f"{_MAX_COMMAND_LEN} 文字以内に収めるか、スクリプトファイルに書いて"
+            "内容を確認できる形にしてください。"
+        )
 
     for check in DENY_CHECKS:
-        reason = check(cmd)
+        try:
+            reason = check(cmd)
+        except Exception as exc:  # pragma: no cover - 判定不能なら安全側へ
+            emit_pretool_deny(
+                f"[hook blocked] コマンドの検査に失敗しました ({check.__name__}: {exc})。\n"
+                "検査できない以上、安全のため拒否しています。"
+            )
         if reason:
             emit_pretool_deny(f"[hook blocked] {reason}")
 
     for check in ASK_CHECKS:
-        reason = check(cmd)
+        try:
+            reason = check(cmd)
+        except Exception as exc:  # pragma: no cover
+            emit_pretool_deny(
+                f"[hook blocked] コマンドの検査に失敗しました ({check.__name__}: {exc})。\n"
+                "検査できない以上、安全のため拒否しています。"
+            )
         if reason:
             emit_pretool_ask(f"[hook] 承認が必要です\n{reason}")
 
