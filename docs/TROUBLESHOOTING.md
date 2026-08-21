@@ -68,17 +68,20 @@ mise which bw           # 実体パスを確認 (~/.local/share/mise/installs/..
 ### 2. age復号化エラー
 
 ```bash
-# キーファイルの確認
-ls -la ~/.config/age/
+# 鍵ファイルの存在確認 (中身は表示しない)
+ls -l ~/.config/sops/age/keys.txt
 
-# 手動復号化テスト
-age --decrypt -i ~/.config/age/key.txt [暗号化ファイル]
+# 復号テスト
+sops --decrypt [暗号化ファイル]
 ```
+
+鍵が無い場合は `bw unlock` してから `chezmoi apply` で展開されます。
+詳細は [SETUP_SOPS_AGE.md](SETUP_SOPS_AGE.md) を参照してください。
 
 ### 3. chezmoi設定確認
 
 ```bash
-# age設定確認
+# 設定値の確認
 chezmoi data
 
 # Bitwardenテンプレート関数テスト

@@ -10,8 +10,8 @@
 
 ### セキュリティとセットアップ
 
-- **[セキュリティ機能](SECURITY.md)** - Bitwarden と age 暗号化の概要と使用方法
-- **[Bitwarden + Age セットアップ](SETUP_BITWARDEN_AGE.md)** - 詳細なセットアップ手順
+- **[セキュリティ機能](SECURITY.md)** - Bitwarden と sops (age) の概要と使用方法
+- **[Bitwarden + sops セットアップ](SETUP_SOPS_AGE.md)** - 詳細なセットアップ手順
 
 ### 開発と運用
 

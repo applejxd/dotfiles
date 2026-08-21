@@ -56,20 +56,21 @@ Documents/**
 
 {{- if ne .chezmoi.username "applejxd" }}
 # 個人 PC のみで導入
-.config/chezmoi/key.txt
+.config/sops/age/keys.txt
 .vscode-server/
 .vscode-server/**
 {{- end }}
 
 {{- if and (eq .chezmoi.username "applejxd") (not (lookPath "bw")) }}
 # applejxd ユーザで bw コマンドがない場合は bitwarden セクションをスキップ
-.config/chezmoi/key.txt
+.config/sops/age/keys.txt
 {{- end }}
 
 # 以下は一度のみコピー・復号
+# (毎回 Bitwarden を引くと chezmoi diff がマスターパスワードを要求するため)
 
-{{- if (stat (joinPath .chezmoi.homeDir ".config/chezmoi/key.txt")) }}
-.config/chezmoi/key.txt
+{{- if (stat (joinPath .chezmoi.homeDir ".config/sops/age/keys.txt")) }}
+.config/sops/age/keys.txt
 {{- end }}
 
 {{- if (stat (joinPath .chezmoi.homeDir ".gitconfig")) }}

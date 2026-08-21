@@ -13,8 +13,6 @@
 {{- if lookPath "bw" }}
 bitwarden.unlock = "auto"
 {{- end }}
-# see https://www.chezmoi.io/user-guide/encryption/age/
-encryption = "age"
 
 # see https://www.chezmoi.io/user-guide/tools/editor/
 [edit]
@@ -32,10 +30,6 @@ args = [
     "-c",
     "cp {{ "{{ .Target }}" }} {{ "{{ .Target }}" }}.base && code --new-window --wait --merge {{ "{{ .Destination }}" }} {{ "{{ .Target }}" }} {{ "{{ .Target }}" }}.base {{ "{{ .Source }}" }}",
 ]
-
-[age]
-    identity = "~/.config/chezmoi/key.txt"
-    symmetric = true
 
 # see https://www.chezmoi.io/reference/configuration-file/interpreters/
 [interpreters.py]

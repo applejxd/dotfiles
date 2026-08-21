@@ -6,7 +6,7 @@ chezmoi を使用した個人用 dotfiles 管理リポジトリ。Windows/Ubuntu
 
 - **クロスプラットフォーム対応**: Windows/Ubuntu/WSL/macOS で動作
 - **自動セットアップ**: OS固有の依存関係を自動インストール
-- **セキュアな設定管理**: Bitwarden連携とage暗号化による機密情報保護
+- **セキュアな設定管理**: Bitwarden 連携と sops (age) による機密情報保護
 
 ## クイックスタート
 
@@ -21,7 +21,7 @@ brew install chezmoi
 ```
 
 > Bitwarden CLI (`bw`) は **事前インストール不要**。`chezmoi apply` 中に mise 経由 (`npm:@bitwarden/cli`) で自動投入される。
-> bw が必要なテンプレート展開 (age 鍵取得・gitconfig の user セクション等) は、bw 取得後に `chezmoi init` / `chezmoi apply` を再実行することでフェーズ 2 として反映される。
+> bw が必要なテンプレート展開 (sops の age 鍵取得・gitconfig の user セクション等) は、bw 取得後に `chezmoi init` / `chezmoi apply` を再実行することでフェーズ 2 として反映される。
 
 ### 初期化と適用（2 フェーズ bootstrap）
 
@@ -34,7 +34,7 @@ chezmoi apply             # mise 本体 + npm:@bitwarden/cli を含む全ツー�
 bw login
 export BW_SESSION="$(bw unlock --raw)"
 chezmoi init applejxd     # .chezmoi.toml を bw 有り状態で再生成 (bitwarden.unlock="auto")
-chezmoi apply             # age 鍵取得・gitconfig user セクション展開などが反映される
+chezmoi apply             # sops の age 鍵取得・gitconfig user セクション展開などが反映される
 ```
 
 依存関係スクリプトをスキップしたい場合は `chezmoi apply --exclude=scripts`。
@@ -82,10 +82,10 @@ chezmoi apply
 詳細な情報は以下のドキュメントを参照してください：
 
 - [プロジェクト構造](docs/STRUCTURE.md) - ディレクトリ構造と自動実行スクリプト
-- [セキュリティ機能](docs/SECURITY.md) - Bitwarden と age 暗号化の設定
+- [セキュリティ機能](docs/SECURITY.md) - Bitwarden と sops (age) の設定
 - [トラブルシューティング](docs/TROUBLESHOOTING.md) - よくある問題と解決方法
 - [開発者向け](docs/DEVELOPMENT.md) - 開発環境のセットアップとカスタマイズ
-- [Bitwarden + Age セットアップ](docs/SETUP_BITWARDEN_AGE.md) - 詳細なセットアップ手順
+- [Bitwarden + sops セットアップ](docs/SETUP_SOPS_AGE.md) - 詳細なセットアップ手順
 
 ## ライセンス
 
