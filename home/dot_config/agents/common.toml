@@ -121,6 +121,12 @@ ask = [
   "npx",
   "pnpm dlx",
   "yarn dlx",
+  "uvx",
+  "uv tool run",
+  "pipx run",
+  "pipx install",
+  # 素の疎通確認 (-z など) は使うが、-e/-c/-l は check_reverse_shell が deny する
+  "nc",
   # 待ち受けサーバを立てる (ローカルの内容が外から見える)
   "python -m http.server",
   "python3 -m http.server",
@@ -128,7 +134,6 @@ ask = [
   # 書き込み (--global / core.hooksPath 等) は deny 側
   "git config",
 ]
-
 # 承認の余地なく拒否。
 # 判断基準: 外部に出る / システムを変える / 取り返しがつかない / 規約違反。
 deny = [
@@ -161,7 +166,15 @@ deny = [
   "crontab",
   "at",
   "batch",
-  "systemctl",
+  # サービスの状態を変える (status / show などの読み取りは許可)
+  "systemctl enable",
+  "systemctl disable",
+  "systemctl mask",
+  "systemctl start",
+  "systemctl stop",
+  "systemctl restart",
+  "systemctl daemon-reload",
+  "systemd-run",
   # ディスク・デバイスの破壊
   "mkfs",
   "mkfs.ext4",
@@ -173,7 +186,6 @@ deny = [
   "socat",
   "ncat",
   # 外部への通信・横展開の経路
-  "nc",
   "telnet",
   "ssh",
   # システム全体を汚す
@@ -190,6 +202,14 @@ deny = [
   "redis-cli",
   # -a --volumes はデータボリュームまで消す
   "docker system prune",
+  "docker volume prune",
+  "docker image prune",
+  "docker container prune",
+  "docker network prune",
+  # キャッシュ削除は再取得に時間がかかる
+  "npm cache clean",
+  "yarn cache clean",
+  "pnpm store prune",
   # リモートに影響する gh 操作 (push と同じ基準)
   "gh pr merge",
   "gh release create",
@@ -206,6 +226,12 @@ deny = [
   "scp",
   "rsync",
   "sftp",
+  # クラウドストレージへの転送
+  "aws s3 cp",
+  "aws s3 sync",
+  "gsutil cp",
+  "az storage blob upload",
+  "gh release upload",
 ]
 
 [file]

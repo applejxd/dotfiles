@@ -97,6 +97,8 @@ _CREDENTIAL_PATHS = ("/.config/gh/hosts.yml", "/.docker/config.json", "/.git-cre
 _PATTERN_FIRST_COMMANDS = {"grep", "rg", "ag", "ack", "egrep", "fgrep", "sed", "awk"}
 # 末尾の引数が書き込み先になるコマンド (コピー先が .env でも読み取りではない)
 _DEST_LAST_COMMANDS = {"cp", "mv", "install", "ln", "rsync", "scp"}
+# ファイル内容を表示する git サブコマンド
+_GIT_FILE_SUBCOMMANDS = {"diff", "show", "log", "blame", "cat-file", "grep"}
 
 
 def _looks_like_path(token: str) -> bool:
@@ -183,6 +185,8 @@ FILE_READ_COMMANDS = [
     # ファイルを開く / 情報を出すもの
     "vim", "vi", "nvim", "emacs", "nano", "code", "codium", "subl",
     "wc", "file", "stat", "realpath", "readlink",
+    # ディレクトリの中身を列挙するもの (鍵ファイル名が漏れる)
+    "ls", "tree", "find", "fd",
     # 内容を別の場所へ複製・転送するもの (読み取りと同じ露出リスク)
     "cp", "mv", "install", "rsync", "scp", "sftp", "dd", "tee",
     "ln", "shred", "split", "gpg", "openssl",
@@ -213,7 +217,9 @@ _INLINE_EXEC_RE = re.compile(
 
 # ─── curl/wget でのファイル送信パターン ──────────────────────────────
 CURL_FILE_SEND_PATTERN = re.compile(
-    r"\b(curl|wget)\b.*(?:-d\s*@|-F\s*['\"]?[^=]+=@|--data-binary\s*@)",
+    r"\b(curl|wget)\b.*(?:-d\s*@|-F\s*['\"]?[^=]+=@|--data-binary\s*@"
+    r"|--data-raw\s*@|--data-urlencode\s*['\"]?[^=]*=@"
+    r"|-T\s|--upload-file\s|--post-file[=\s])",
     re.IGNORECASE,
 )
 
@@ -230,12 +236,23 @@ def _segments(cmd: str) -> list[str]:
 
 
 def check_file_read(cmd: str) -> str | None:
-    """ファイル読み込み・複製コマンドがセンシティブパスを対象にしていないか"""
+    """ファイル読み込み・複製コマンドがセンシティブパスを対象にしていないか。
+
+    `git diff <path>` のように、許可済みコマンドでも引数がセンシティブなら止める。
+    """
     for segment in _segments(cmd):
         tokens = segment.split()
         if not tokens:
             continue
         head = _basename(tokens[0])
+        if head == "git" and len(tokens) > 2 and tokens[1] in _GIT_FILE_SUBCOMMANDS:
+            matched = is_sensitive_path(" ".join(tokens[1:]))
+            if matched:
+                return (
+                    f"`git {tokens[1]}` がセンシティブなパスを対象にしています "
+                    f"(パターン: {matched})"
+                )
+            continue
         if head not in FILE_READ_COMMANDS:
             continue
         matched = is_sensitive_path(segment)
@@ -572,6 +589,100 @@ def check_git_add_sensitive(cmd: str) -> str | None:
     return None
 
 
+_HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+# heredoc 本文がシェルコマンドとして実行されるもの
+_HEREDOC_SHELL_BINS = {
+    "bash", "sh", "zsh", "ksh", "dash", "ash", "fish", "csh", "tcsh",
+    "env", "sudo", "eval", "source", ".",
+}
+# heredoc 本文がインタプリタのコードとして実行されるもの
+_HEREDOC_CODE_BINS = {
+    "python", "python2", "python3", "perl", "ruby", "node", "php",
+    "Rscript", "osascript",
+}
+
+
+def split_heredoc_body(cmd: str) -> str:
+    """heredoc 本文のうち実行されない部分を取り除いた検査対象を返す。
+
+    `cat <<'EOF' > note.md` の本文はファイルに書かれるだけでシェルには
+    渡らない。これをコマンドとして照合すると、ドキュメントに書いた
+    危険なコマンドの例示で誤検知する。本文が実行される形のときだけ残す。
+    インタプリタに渡る本文は `-c` 形式に組み替えて、インラインコードの
+    チェックが効くようにする。
+    """
+    lines = cmd.split("\n")
+    kept: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        kept.append(line)
+        matches = _HEREDOC_RE.findall(line)
+        i += 1
+        if not matches:
+            continue
+
+        kind = None
+        for token in line.split():
+            head = re.sub(r"[0-9.]+$", "", _basename(token.strip("'\"()`;|&")))
+            if head in _HEREDOC_SHELL_BINS:
+                kind = "shell"
+                break
+            if head in _HEREDOC_CODE_BINS:
+                kind = "code"
+                break
+
+        delimiters = {delim for _, delim in matches}
+        body: list[str] = []
+        while i < len(lines) and lines[i].strip() not in delimiters:
+            body.append(lines[i])
+            i += 1
+        if i < len(lines):
+            terminator = lines[i]
+            i += 1
+        else:
+            terminator = None
+
+        if kind == "shell":
+            kept.extend(body)
+        elif kind == "code":
+            kept.append("python3 -c " + " ".join(part.strip() for part in body))
+        if terminator is not None:
+            kept.append(terminator)
+    return "\n".join(kept)
+
+
+def expand_cd_targets(cmd: str) -> str:
+    """`cd <dir> && <cmd> <relpath>` の相対パスを結合した変種を返す。
+
+    `cd ~/.ssh && cat id_rsa` のように、作業ディレクトリを移してから
+    相対パスで触ると、パス単体ではセンシティブ判定に掛からない。
+    検査用に `cat ~/.ssh/id_rsa` 相当の文字列を組み立てて併せて見る。
+    """
+    variants: list[str] = []
+    for chunk in re.split(r"\n+", cmd):
+        parts = re.split(r"&&|\|\||;", chunk)
+        cwd = None
+        for part in parts:
+            tokens = part.split()
+            if not tokens:
+                continue
+            head = _basename(tokens[0])
+            if head == "cd" and len(tokens) >= 2:
+                cwd = tokens[1].strip("'\"")
+                continue
+            if cwd is None:
+                continue
+            rebuilt = [tokens[0]]
+            for token in tokens[1:]:
+                if token.startswith(("-", "/", "~", "$")):
+                    rebuilt.append(token)
+                else:
+                    rebuilt.append(f"{cwd.rstrip('/')}/{token}")
+            variants.append(" ".join(rebuilt))
+    return "\n".join(variants)
+
+
 def check_interpreter_inline_code(cmd: str) -> str | None:
     """`python3 -c "..."` / `perl -e "..."` の中でセンシティブな操作をしていないか。
 
@@ -651,7 +762,8 @@ def check_guard_tampering(cmd: str) -> str | None:
     上書き (`> ~/.claude/settings.json`) も検出する。
     """
     targets = ("/.claude/hooks", "/.claude/settings.json", "/.copilot/hooks",
-               "/.copilot/permissions-config.json", "/.config/agents")
+               "/.copilot/permissions-config.json", "/.config/agents",
+               "/.git/config", "/.git/hooks", ".git/config", ".git/hooks")
 
     def _hits(token: str) -> bool:
         expanded = os.path.normpath(
@@ -668,23 +780,48 @@ def check_guard_tampering(cmd: str) -> str | None:
             )
 
     # インラインコードやスクリプト中でパスを直接触る形 (`open('...', 'w')` など)
-    for m in re.finditer(r"""['"]([^'"]*(?:\.claude|\.copilot|/agents)[^'"]*)['"]""", cmd):
+    for m in re.finditer(r"""['"]([^'"]*(?:\.claude|\.copilot|/agents|\.git/)[^'"]*)['"]""", cmd):
         if _hits(m.group(1)):
             return (
                 f"エージェントのガード設定 (`{m.group(1)}`) を操作しようとしています。\n"
                 "hook や permission の無効化に繋がるため許可されていません。"
             )
 
+    # 環境変数の差し替えで hook の読み込み先やモジュール解決を乗っ取る形
+    for m in re.finditer(
+        r"\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK[A-Z_]*)=(\S*)", cmd
+    ):
+        name, value = m.group(1), m.group(2)
+        if name == "PYTHONPATH":
+            expanded = value.strip("'\"").replace("~", os.path.expanduser("~"), 1)
+            absolute = os.path.normpath(os.path.join(os.getcwd(), expanded))
+            # プロジェクト内への追加は正当なので、外部を指す場合だけ止める
+            if not absolute.startswith(os.getcwd() + os.sep):
+                return (
+                    f"`PYTHONPATH={value}` で hook のモジュール解決先を差し替えようと"
+                    "しています。\nリポジトリ外のパスの指定は許可されていません。"
+                )
+            continue
+        return (
+            f"`{name}` を差し替えて hook の設定読み込み先を変えようとしています。\n"
+            "hook や permission の無効化に繋がるため許可されていません。"
+        )
+
     mutating = {
-        "rm", "mv", "cp", "chmod", "chown", "truncate", "shred", "ln",
-        "sed", "tee", "dd", "install",
+        "rm", "rmdir", "unlink", "mv", "cp", "chmod", "chown", "truncate",
+        "shred", "ln", "sed", "tee", "dd", "install",
     }
+    # chezmoi は破壊的サブコマンドのときだけ対象にする (diff / status は無害)
+    chezmoi_mutating = {"forget", "destroy", "remove", "unmanage"}
     for segment in _segments(cmd):
         tokens = segment.split()
         if not tokens:
             continue
         head = _basename(tokens[0])
-        if head not in mutating:
+        if head == "chezmoi":
+            if len(tokens) < 2 or tokens[1] not in chezmoi_mutating:
+                continue
+        elif head not in mutating:
             continue
         for token in tokens[1:]:
             if _hits(token):
@@ -693,6 +830,173 @@ def check_guard_tampering(cmd: str) -> str | None:
                     "hook や permission の無効化に繋がるため許可されていません。\n"
                     "設定を変えたい場合は chezmoi のソースを編集してください。"
                 )
+    return None
+
+
+def check_reverse_shell(cmd: str) -> str | None:
+    """リバースシェル・待ち受けソケットの形を検出する。
+
+    `/dev/tcp` は bash 組み込みなので外部コマンドの照合では捕まらない。
+    `nc` などは疎通確認に使うため、実行系・待ち受け系フラグのときだけ止める。
+    """
+    m = re.search(r"/dev/(?:tcp|udp)/[^/\s]+/\d+", cmd)
+    if m:
+        return (
+            f"`{m.group(0)}` へのシェルリダイレクトはリバースシェルの形です。\n"
+            "外部への接続を伴うシェル実行は許可されていません。"
+        )
+
+    listeners = {"nc", "netcat", "ncat", "socat", "telnet"}
+    exec_flags = ("-e", "-c", "--exec", "--sh-exec", "--lua-exec")
+    listen_flags = ("-l", "-lp", "-lvp", "--listen", "-L")
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = _basename(tokens[0])
+        if head not in listeners:
+            continue
+        for token in tokens[1:]:
+            if token in exec_flags or token.startswith("EXEC:"):
+                return (
+                    f"`{head} {token}` はコマンドを外部接続に紐付ける形です。\n"
+                    "リバースシェルに繋がるため許可されていません。"
+                )
+            if token in listen_flags:
+                return (
+                    f"`{head} {token}` は待ち受けソケットを開く形です。\n"
+                    "外部からの侵入経路になるため許可されていません。"
+                )
+    return None
+
+
+def check_shell_startup_write(cmd: str) -> str | None:
+    """シェル起動ファイルや認証ファイルへの書き込みを検出する。
+
+    追記されると以後のすべてのシェルで任意コードが走るため、永続化の
+    典型的な足がかりになる。読み取りは許可する。
+    """
+    targets = (
+        ".bashrc", ".bash_profile", ".bash_login", ".zshrc", ".zshenv",
+        ".zprofile", ".profile", ".login", ".cshrc", ".kshrc",
+        "authorized_keys", "known_hosts", ".ssh/config", ".netrc",
+        "crontab", ".gitconfig",
+    )
+
+    def _hits(token: str) -> str | None:
+        cleaned = token.strip("'\"")
+        for target in targets:
+            if cleaned.endswith(target) or f"/{target}" in cleaned:
+                return target
+        return None
+
+    for m in re.finditer(r"[0-9]*>{1,2}\s*(\S+)", cmd):
+        hit = _hits(m.group(1))
+        if hit:
+            return (
+                f"シェル起動ファイル `{m.group(1)}` へ書き込もうとしています。\n"
+                "以後のシェルで任意コードが走るため許可されていません。"
+            )
+
+    writers = {"tee", "sed", "dd", "install", "truncate", "ln", "cp", "mv"}
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = _basename(tokens[0])
+        if head == "sed" and not any(t.startswith("-i") for t in tokens[1:]):
+            continue
+        if head not in writers:
+            continue
+        for token in tokens[1:]:
+            hit = _hits(token)
+            if hit:
+                return (
+                    f"シェル起動ファイル `{token}` を書き換えようとしています。\n"
+                    "以後のシェルで任意コードが走るため許可されていません。"
+                )
+    return None
+
+
+def check_privilege_escalation(cmd: str) -> str | None:
+    """setuid 付与やアカウント/認証設定の変更を検出する。"""
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = _basename(tokens[0])
+        if head == "chmod":
+            for token in tokens[1:]:
+                if re.fullmatch(r"[ugo]*\+s|[24][0-7]{3}", token):
+                    return (
+                        f"`chmod {token}` は setuid/setgid を付与する操作です。\n"
+                        "権限昇格に繋がるため許可されていません。"
+                    )
+        if head in {"usermod", "useradd", "adduser", "groupadd", "passwd",
+                    "chpasswd", "visudo", "gpasswd"}:
+            return (
+                f"`{head}` はアカウント・認証設定を変更する操作です。\n"
+                "権限昇格に繋がるため許可されていません。"
+            )
+    if re.search(r"/etc/(?:sudoers|passwd|shadow|group)", cmd):
+        return (
+            "認証設定ファイル (/etc 配下) を操作しようとしています。\n"
+            "権限昇格に繋がるため許可されていません。"
+        )
+    return None
+
+
+def check_encoded_command(cmd: str) -> str | None:
+    """デコード結果をそのままシェルへ流す形を検出する。
+
+    `base64 -d | sh` のように、正規化では中身を判定できない経路を塞ぐ。
+    """
+    decoders = r"(?:base64\s+(?:-d|--decode|-D)|xxd\s+-r|uudecode|openssl\s+enc\s+-d)"
+    shells = r"(?:ba|z|k|da)?sh\b|python3?\b|perl\b|ruby\b|node\b"
+    if re.search(rf"{decoders}[^|]*\|\s*(?:{shells})", cmd):
+        return (
+            "デコード結果を直接シェルに渡そうとしています。\n"
+            "内容を検査できないため許可されていません。"
+            "デコード結果をファイルに書き出して確認してから実行してください。"
+        )
+    if re.search(r"printf\s+['\"][^'\"]*\\x[0-9a-fA-F]{2}[^'\"]*['\"]\s*\|\s*"
+                 rf"(?:{shells})", cmd):
+        return (
+            "エスケープ列で組み立てたコマンドをシェルに渡そうとしています。\n"
+            "内容を検査できないため許可されていません。"
+        )
+    return None
+
+
+def check_git_config_write(cmd: str) -> str | None:
+    """任意コマンド実行や資格情報の奪取に繋がる git config の書き込みを止める。
+
+    `git config alias.p push` のように設定キーへ値を書くと、以後 `git p` で
+    deny 対象のコマンドを実行できてしまう。キー名は接頭辞が可変なので、
+    トークン完全一致のポリシー照合では拾えない。
+    """
+    dangerous = (
+        "alias.", "core.hookspath", "core.editor", "core.pager",
+        "core.sshcommand", "core.fsmonitor", "credential.", "url.",
+        "filter.", "diff.external", "difftool.", "mergetool.", "pager.",
+        "include.path", "includeif.", "sequence.editor", "gpg.program",
+        "ssh.variant", "protocol.",
+    )
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if len(tokens) < 3:
+            continue
+        if _basename(tokens[0]) != "git" or tokens[1] != "config":
+            continue
+        rest = [t for t in tokens[2:] if not t.startswith("-")]
+        if not rest:
+            continue
+        key = rest[0].lower()
+        if any(key.startswith(prefix) for prefix in dangerous) and len(rest) > 1:
+            return (
+                f"`git config {rest[0]}` は任意コマンドの実行や資格情報の取得に"
+                "繋がる設定です。\nエージェント経由での変更は許可されていません。"
+            )
     return None
 
 
@@ -851,6 +1155,11 @@ DENY_CHECKS = [
     check_secret_env_echo,    # echo $GITHUB_TOKEN の類
     check_history_access,     # history / fc
     check_guard_tampering,    # hook や settings.json の改変
+    check_reverse_shell,      # /dev/tcp や nc -e の類
+    check_shell_startup_write,  # .bashrc / authorized_keys への追記
+    check_privilege_escalation,  # setuid 付与・sudoers 変更
+    check_encoded_command,    # base64 -d | sh の類
+    check_git_config_write,   # git config alias.x / core.hooksPath の類
     check_block_device_write, # dd of=/dev/sda の類
     check_find_root_guard,    # find ~ -delete のような一括削除
     check_policy_deny,        # common.toml の [bash] deny を強制
@@ -860,6 +1169,15 @@ DENY_CHECKS = [
     check_archive,
     check_curl_file_send,
     check_xargs_pipe,
+]
+
+# パスだけを見るチェック。`cd` 展開版に対して二度目の適用をする
+_PATH_CHECKS = [
+    check_file_read,
+    check_guard_tampering,
+    check_shell_startup_write,
+    check_archive,
+    check_curl_file_send,
 ]
 
 # 承認を求めるチェック（ユーザーが許可すればそのまま実行される）
@@ -914,6 +1232,13 @@ def main() -> None:
             "内容を確認できる形にしてください。"
         )
 
+    # heredoc 本文のうち、ファイルに書かれるだけで実行されない部分を外す。
+    # ドキュメントに書いた危険なコマンド例で誤検知しないようにするため。
+    try:
+        cmd = split_heredoc_body(cmd)
+    except Exception:  # pragma: no cover - 解析できないときは元の文字列で検査
+        pass
+
     for check in DENY_CHECKS:
         try:
             reason = check(cmd)
@@ -924,6 +1249,21 @@ def main() -> None:
             )
         if reason:
             emit_pretool_deny(f"[hook blocked] {reason}")
+
+    # `cd <dir> && cat <relpath>` のように、作業ディレクトリ経由で相対参照する形。
+    # パスを結合した変種を作り、パスを見るチェックだけ改めて適用する。
+    try:
+        cd_variant = expand_cd_targets(cmd)
+    except Exception:  # pragma: no cover
+        cd_variant = ""
+    if cd_variant:
+        for check in _PATH_CHECKS:
+            try:
+                reason = check(cd_variant)
+            except Exception:  # pragma: no cover
+                continue
+            if reason:
+                emit_pretool_deny(f"[hook blocked] {reason}")
 
     for check in ASK_CHECKS:
         try:

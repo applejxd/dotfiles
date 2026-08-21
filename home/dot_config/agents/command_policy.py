@@ -253,8 +253,6 @@ _WRAPPERS: dict[str, str] = {
     "watchexec": "flags+args",
     # ツールランナー (`--` の後ろが実コマンドになる)
     "mise": "runner",
-    "pnpm": "runner",
-    "yarn": "runner",
 }
 
 # `--` の後ろ、あるいは run/exec サブコマンドの後ろが実コマンドになるもの
@@ -296,6 +294,8 @@ _GLOBAL_OPTS: dict[str, str] = {
     "uv": "flags+args",
     "cargo": "flags+args",
     "kubectl": "flags+args",
+    "systemctl": "flags+args",
+    "chezmoi": "flags+args",
 }
 
 # サブコマンドの別名。`git send-pack` は `git push` と同じ効果を持つ。

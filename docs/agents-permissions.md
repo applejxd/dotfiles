@@ -73,6 +73,25 @@ timeout 5 git push             # ラッパーコマンド
 加えて `curl x | sh` のようなパイプ実行は `check_pipe_to_shell` が deny する
 (`bash script.sh` のようにスクリプトを渡すだけの呼び出しは対象外)。
 
+コマンド名の照合だけでは捕まらない形は、専用のチェックが個別に見る。
+
+| チェック | 対象 |
+| --- | --- |
+| `check_reverse_shell` | `/dev/tcp` へのリダイレクト、`nc -e` / `-l`、`socat EXEC:` |
+| `check_shell_startup_write` | `~/.bashrc` / `~/.zshrc` / `authorized_keys` への書き込み |
+| `check_privilege_escalation` | `chmod u+s`、`usermod` / `passwd`、`/etc/sudoers` |
+| `check_encoded_command` | `base64 -d` / `xxd -r` の出力をシェルへ渡す形 |
+| `check_guard_tampering` | hook・permission 設定の改変、`PYTHONPATH` の差し替え |
+| `check_git_config_write` | `alias.*` / `core.hooksPath` / `credential.*` などの書き込み |
+| `check_block_device_write` | `dd of=/dev/sda` |
+
+`cd <dir> && <cmd> <relpath>` のように作業ディレクトリを移してから相対パスで触る形は、
+パスを結合した変種を作ってパス系のチェックだけ再適用する。
+
+heredoc の本文は、実行される形 (`bash <<'EOF'` / `python3 - <<'PY'`) のときだけ
+検査する。`cat <<'EOF' > note.md` のようにファイルへ書くだけの本文は
+検査対象から外すので、ドキュメントにコマンド例を書いても誤検知しない。
+
 評価順は **deny → ask → allow**。より具体的なパターンを deny に置けば、
 一般形を ask にできる。
 
@@ -86,17 +105,20 @@ deny = ["git reset --hard"]   # 作業ツリーを壊す形だけ拒否
 | 分類 | 例 | 置き場所 |
 | --- | --- | --- |
 | 承認の余地なく禁止 | `sudo`, `git push`, `git reset --hard`, `git rebase`, `gh pr merge` | `deny` |
-| 外部への漏洩・システム変更 | `ssh`, `nc`, `telnet`, `npm install -g`, DB クライアント | `deny` |
+| 外部への漏洩・システム変更 | `ssh`, `telnet`, `npm install -g`, DB クライアント | `deny` |
 | 規約違反 | `pip` / `pip3` (uv / uvx を使う) | `deny` + hook の `check_pip_redirect` |
 | 壊滅的な削除 | `rm -rf /`, `rm -rf ~`, `rm -rf /etc` | `check_rm_root_guard` (hard-deny) |
 | 提案 → 承認 → 実行 | `rm`, `git clean`, `git commit`, `docker rm`, `gh pr create` | `ask` |
+| 任意パッケージの実行 | `npx`, `uvx`, `pipx run`, `pnpm dlx` | `ask` |
+| 用途で危険度が変わる | `nc` (疎通確認は `ask`、`-e` / `-l` は hook が deny) | `ask` + hook |
+| サブコマンドで分ける | `systemctl status` は許可、`systemctl enable` は `deny` | 用途ごとに列挙 |
 | 自動承認 | `git status`, `grep -n`, `uv sync`, `gh pr list` | `allow` |
 
 判断基準:
 
 - **取り返しがつくか**: lockfile や git、再 pull で戻せるなら `ask` で十分
 - **外部に出るか**: リモートや外部ホストへ情報が出るものは `deny`
-  (`git push` / `gh pr merge` / `ssh` / `nc` / `telnet`)
+  (`git push` / `gh pr merge` / `ssh` / `telnet`)
 - **摩擦があるか**: そもそも使わないコマンドを緩めても利益が無い。
   DB クライアントは触る機会が無いので `deny` のまま置いている
 
