@@ -131,6 +131,11 @@ Copilot CLI へは `allow` の **先頭トークン (コマンド名)** だけ�
 作業ディレクトリを付け替える `-C` 形式は `allow` に入れない。
 permission を回避する既知のバイパス形式であり、対策を用意している意図と矛盾する。
 
+`allow` の先頭トークンと衝突する `ask` / `deny` エントリ（例: `git diff` を
+allow に置くと Copilot では `git push` まで承認される）は、
+`test_shadowed_entries_are_enforced_by_hook` が hook 側で確実に止まることを
+機械的に検査する。ここが落ちたら Copilot ではそのコマンドが無条件に通る。
+
 ### 無人実行時に `ask` がどうなるか
 
 | 実行環境 | `ask` の結果 |

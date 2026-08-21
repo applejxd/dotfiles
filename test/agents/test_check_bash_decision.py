@@ -1550,6 +1550,55 @@ def test_round13_false_positives(command):
 
 
 # ---------------------------------------------------------------------------
+# Copilot 側で allow に隠される (shadowing) 組み合わせ
+# ---------------------------------------------------------------------------
+
+def _shadowed_entries() -> list[tuple[str, str]]:
+    """allow の先頭トークンと衝突する ask / deny エントリを列挙する.
+
+    Copilot の permissions-config.json は ask / deny を扱えず、
+    allow の **先頭トークンだけ** が commandIdentifiers として渡る。
+    つまり `git diff` を allow に入れると Copilot では `git` 全体が承認され、
+    `git push` のような deny エントリが隠れてしまう。
+    実際に止めているのは hook なので、その保証をテストで固定する。
+    """
+    bash = COMMON["bash"]
+    allow_heads = {entry.split()[0] for entry in bash["allow"] if entry.split()}
+    shadowed: list[tuple[str, str]] = []
+    for decision in ("deny", "ask"):
+        for entry in bash[decision]:
+            tokens = entry.split()
+            if tokens and tokens[0] in allow_heads:
+                shadowed.append((entry, decision))
+    return shadowed
+
+
+SHADOWED_ENTRIES = _shadowed_entries()
+
+
+def test_shadowed_entries_exist():
+    """前提が崩れていないことの確認 (allow と衝突するエントリがあること)."""
+    assert SHADOWED_ENTRIES, "allow と衝突する ask/deny が 1 件も無いのは想定外"
+
+
+@pytest.mark.parametrize(
+    "entry,decision",
+    SHADOWED_ENTRIES,
+    ids=[f"{d}:{e}" for e, d in SHADOWED_ENTRIES],
+)
+def test_shadowed_entries_are_enforced_by_hook(entry, decision):
+    """Copilot で allow に隠れるエントリを hook が確実に止める.
+
+    ここが落ちたら、Copilot 側ではそのコマンドが無条件に通る状態になる。
+    """
+    got, reason = run_hook(entry)
+    assert got == decision, (
+        f"{entry!r} は allow の先頭トークンに隠れるため hook が {decision} を"
+        f"返す必要がある (実際: {got}) ({reason})"
+    )
+
+
+# ---------------------------------------------------------------------------
 # fail-closed
 # ---------------------------------------------------------------------------
 

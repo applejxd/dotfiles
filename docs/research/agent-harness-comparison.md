@@ -186,7 +186,7 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | エンコードされたコマンド (`printf` のエスケープ列、base64 の復号結果) を変数経由で組み立てる形 | **未対応**。復号結果は静的に追えない |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある (637 件)。日常的に使うコマンド
+`test_command_policy.py` に回帰テストがある (690 件)。日常的に使うコマンド
 (`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
 `cp .env.example .env` / `git commit -m "fix token refresh"` /
 `docker run --rm alpine echo hi` / `npm run build` / `mise exec -- shellcheck x.sh` /
