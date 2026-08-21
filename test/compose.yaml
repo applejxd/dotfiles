@@ -18,9 +18,12 @@ services:
       CHEZMOI_TEST_ARGS: ${CHEZMOI_TEST_ARGS:-}    # 追加引数
     volumes:
       - ../:/repo:ro
+      # apply では uv / mise / 各種 CLI を実際にインストールするため、
+      # 100m では tar 展開の途中で溢れる (exit status 2 になる)。
+      # tmpfs は使った分だけメモリを消費するので、上限だけ広く取る。
       - type: tmpfs
         target: /home/tester
         tmpfs:
-          size: 100m
+          size: 4g
     # ここを短く：ファイル化したスクリプトを実行
     command: ["/bin/bash", "-c", "run_chezmoi"]

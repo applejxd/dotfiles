@@ -44,7 +44,26 @@ docker compose build
 ./test.sh apply
 ```
 
-### 3.3 デバッグシェル（手動でコマンドを試す）
+> `.chezmoiscripts` は外部 CLI をネットワーク経由で入れるため、
+> インストーラ側の対話プロンプトやバージョン検証で失敗することがあります。
+> ファイルの展開だけを見たい場合は scripts を外してください。
+>
+> ```bash
+> CHEZMOI_TEST_ARGS="--exclude scripts" ./test.sh apply
+> ```
+
+### 3.3 hook の配備と判定の検証
+
+`chezmoi` が展開した hook が、新規環境でも実際に deny / pass を返すか確認します。
+
+```bash
+docker compose -f test/compose.yaml run --rm chezmoi bash /repo/test/verify_hooks.sh
+```
+
+配備されたファイル、`settings.json` に登録された hook の数、
+代表的なコマンドに対する判定を検査し、期待と違えば非ゼロで終了します。
+
+### 3.4 デバッグシェル（手動でコマンドを試す）
 
 ```bash
 ./test.sh shell
