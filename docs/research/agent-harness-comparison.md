@@ -131,21 +131,32 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | 抜け道 | 状態 |
 | --- | --- |
 | `cd foo && pip install x` | **修正済**: normalize 後のセグメント先頭トークンで判定 |
-| `python3 -m pip install x` / `pip3 install x` | **修正済**: `python[0-9.]*` / `pip[0-9.]*` で判定 |
-| `bash -c "git push"` / `sh -c '...'` / `eval '...'` | **修正済**: `-c` の引数を再帰的に normalize する |
+| `python3 -m pip install x` / `pip3 install x` / `uvx pip install x` | **修正済**: `python[0-9.]*` / `pip[0-9.]*` / ランナー経由で判定 |
+| `bash -c "git push"` / `sh -c '...'` / `eval '...'` / `su -c` / `script -qc` | **修正済**: `-c` の引数を再帰的に normalize する |
 | `env FOO=1 X` / `command X` / `nohup X` / `timeout 5 X` / `nice -n 5 X` / `xargs -I{} X` | **修正済**: ラッパーを剥がして後続を評価 |
+| `chroot` / `watch` / `parallel` / `flock` / `strace` / `pkexec` / `run0` 等 | **修正済**: 同上 (オプション値とコマンド名を判別) |
 | `/usr/bin/git push` | **修正済**: 先頭トークンを basename 化 |
 | `GIT_DIR=/x git push` | **修正済**: 先頭の環境変数代入を除去 |
-| `(git push)` / `{ git push; }` | **修正済**: グループ化の飾りを除去 |
+| `(git push)` / `{ git push; }` / `> /dev/null git push` / 改行区切り | **修正済**: 飾りを除去し、セグメント分割に改行と `&` を追加 |
+| `git --no-pager push` / `git -P push` / `git -c a=b push` | **修正済**: サブコマンド前のグローバルオプションを除去 |
+| `git send-pack` / `npm i -g` / `npm -g install` | **修正済**: サブコマンド別名とフラグ位置を正規形に寄せる |
+| `$(echo git) push` / `` `echo git` push `` / `echo $( (git push) )` | **修正済**: コマンド置換を展開 (1 段のネストまで) |
+| `f(){ git push; }; f` / `alias gp='git push'; gp` / `p=push; git $p` | **修正済**: 関数・alias 定義と同一コマンド列の変数代入を展開 |
+| `bash <<< "git push"` / `bash <(echo git push)` / `bash -c $'git push'` | **修正済**: here-string・プロセス置換・ANSI-C quoting を展開 |
+| `python3 -c "os.system('git push')"` / `perl -e` / `node -e` / `awk 'BEGIN{system(...)}'` | **修正済**: インラインコードを展開し、外部実行の形も検出 |
 | `curl x \| sh` | **修正済**: `check_pipe_to_shell` が deny (`bash script.sh` は対象外) |
-| `cd foo && X` / `-C foo X` で permission deny を回避 | Claude CLI の既知バグだが、hook 側の normalize が `[bash] deny` / `ask` の全項目を救済する |
-| `SENSITIVE_PATH_PATTERNS` の誤検知 | **未対応**。`['\"/\s]token` のような緩い部分一致で、`grep -rn "api_key" src/` や `.env.example`、コマンド文字列に `.ssh` を含むだけの `git commit -m "..."` も止まる |
-| シェル変数経由の組み立て (`C=push; git $C`) | **未対応**。静的解析では追えない |
-| エディタ・スクリプト経由の間接実行 | **未対応**。`vim` の `:!` など |
+| `env \| grep -i key` / `printenv AWS_SECRET_ACCESS_KEY` / `true; env` | **修正済**: 全件出力に加えセンシティブな変数名も検出 |
+| `tac .env` / `sort ~/.aws/credentials` / `jq .` / `git add .env` / `tar czf out.tgz ~/.ssh` | **修正済**: 読み取り系コマンドを拡充し、アーカイブと `git add` も検査 |
+| `scp` / `rsync` / `gh gist create` / `gh secret list` / `git remote add` | **修正済**: 外部へ出す経路として deny |
+| `cd foo && X` で permission deny を回避 | Claude CLI の既知バグだが、hook 側の normalize が `[bash] deny` / `ask` の全項目を救済する |
+| シェル変数経由の間接的な組み立て (別コマンドで定義した変数、配列、`${x:0:3}` 等) | **未対応**。静的解析では追えない |
+| エディタ・REPL 経由の間接実行 (`vim` の `:!` など) | **未対応** |
+| ネスト 2 段以上のコマンド置換 | **未対応**。正規表現で追えるのは 1 段まで |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある。日常的に使うコマンド
-(`bash test/test.sh` / `timeout 900 chezmoi apply` / `xargs -I{} echo {}` 等) が
+`test_command_policy.py` に回帰テストがある (361 件)。日常的に使うコマンド
+(`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
+`cp .env.example .env` / `git commit -m "fix token refresh"` 等) が
 過剰検知されないことも併せて検査している。
 
 → 個人用指示の「**拒否条件を満たす別手段に切り替える。条件自体を回避する迂回（コマンドの

@@ -112,8 +112,9 @@ ask = [
   "gh issue close",
   "gh issue comment",
   "gh repo clone",
-  # Projects v2 の mutation を含む
-  "gh api graphql",
+  # Projects v2 の mutation を含む。gh api は任意のエンドポイントを叩けるので
+  # 読み取りでも承認を挟む (gh auth token など秘密を引く形は deny 側)
+  "gh api",
 ]
 
 # 承認の余地なく拒否。
@@ -148,6 +149,18 @@ deny = [
   "gh pr merge",
   "gh release create",
   "gh repo delete",
+  # ローカルの内容を外部へ出す経路 (git push を deny にしているのと同じ基準)
+  "gh gist create",
+  "gh secret set",
+  "gh secret list",
+  # トークンを直接引く操作 (gh api graphql は Projects v2 で使うので ask 側)
+  "gh auth token",
+  # リモート先を差し替えると push 先が変わる
+  "git remote add",
+  "git remote set-url",
+  "scp",
+  "rsync",
+  "sftp",
 ]
 
 [file]

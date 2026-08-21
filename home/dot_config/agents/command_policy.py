@@ -214,6 +214,10 @@ _WRAPPERS: dict[str, str] = {
     "unshare": "flags+args",
     "systemd-run": "flags+args",
     "runuser": "flags+args",
+    "pkexec": "flags",
+    "run0": "flags+args",
+    "setpriv": "flags+args",
+    "capsh": "flags+args",
     # 監視・計測・並列実行
     "watch": "flags+args",
     "strace": "flags+args",
@@ -252,6 +256,39 @@ _GLOBAL_OPTS: dict[str, str] = {
     "kubectl": "flags+args",
 }
 
+# サブコマンドの別名。`git send-pack` は `git push` と同じ効果を持つ。
+# 正規形に寄せてから照合することで、別名によるすり抜けを防ぐ。
+_SUBCOMMAND_ALIASES: dict[tuple[str, str], str] = {
+    ("git", "send-pack"): "push",
+    ("npm", "i"): "install",
+    ("npm", "rm"): "uninstall",
+    ("npm", "un"): "uninstall",
+    ("npm", "r"): "uninstall",
+    ("docker", "container"): "container",
+}
+
+# `npm install -g` のように、後ろのフラグで意味が変わるもの。
+# (コマンド名, サブコマンド, フラグ集合) -> 正規形
+_FLAG_NORMALIZED: dict[tuple[str, str], tuple[set[str], str]] = {
+    ("npm", "install"): ({"-g", "--global"}, "install -g"),
+    ("npm", "uninstall"): ({"-g", "--global"}, "uninstall -g"),
+}
+
+# 文字列をコードとして受け取るインタプリタ。-c / -e の引数を再帰評価する。
+_INTERPRETER_FLAGS: dict[str, tuple[str, ...]] = {
+    "python": ("-c",),
+    "perl": ("-e", "-E"),
+    "ruby": ("-e",),
+    "node": ("-e", "--eval", "-p", "--print"),
+    "php": ("-r",),
+    "deno": ("eval",),
+}
+
+# awk / gawk はプログラム本体が最初の非フラグ引数なので別扱いにする
+_AWK_BINS = {"awk", "gawk", "mawk", "nawk"}
+# awk のプログラム中から外部コマンドを起動する形
+_AWK_SYSTEM_RE = re.compile(r'(?:system|print)\s*\(?\s*["\']?([^"\')]+)')
+
 # グループ化・リダイレクトの飾りを落とすための文字
 _GROUPING_PREFIX = "({"
 _GROUPING_SUFFIX = ")}"
@@ -259,8 +296,10 @@ _GROUPING_SUFFIX = ")}"
 # 先頭のリダイレクト (`> /dev/null git push` のような形)
 _LEADING_REDIRECT_RE = re.compile(r"^\s*(?:[0-9]*[<>]{1,2}&?\s*\S+\s+)+(.+)$")
 
-# コマンド置換 $(...) と `...`
-_CMD_SUBST_RE = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
+# コマンド置換 $(...) と `...`。ネストを 1 段扱えるようにする。
+_CMD_SUBST_RE = re.compile(r"\$\(((?:[^()]|\([^()]*\))*)\)|`([^`]*)`")
+# ANSI-C quoting $'...'
+_ANSI_C_QUOTE_RE = re.compile(r"\$'([^']*)'")
 
 
 def _basename(token: str) -> str:
@@ -321,6 +360,8 @@ def _strip_global_options(segment: str) -> str:
 
     サブコマンドの前に置けるグローバルオプションを取り除き、
     ``git push`` として照合できるようにする。
+    サブコマンドの別名 (``git send-pack`` -> ``git push``) や、
+    後置フラグで意味が変わるもの (``npm install -g``) も正規形に寄せる。
     """
     try:
         tokens = shlex.split(segment)
@@ -334,24 +375,176 @@ def _strip_global_options(segment: str) -> str:
         return segment
 
     i = 1
+    global_flags: list[str] = []
     while i < len(tokens) and tokens[i].startswith("-"):
         token = tokens[i]
         if token == "--":
             i += 1
             break
+        global_flags.append(token)
         # --git-dir=/x のように値が同じトークンなら 1 つ進める
         if "=" in token:
             i += 1
             continue
-        # -c user.name=x のように値が別トークンのもの
+        # -c user.name=x のように値が別トークンのもの。
+        # ただし後続がサブコマンドらしければ値ではない (`git -P push`)。
         if style == "flags+args" and len(token) == 2:
-            i += 2
-            continue
+            nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+            if nxt is not None and _looks_like_option_value(nxt):
+                global_flags.append(nxt)
+                i += 2
+                continue
         i += 1
     rest = tokens[i:]
     if not rest:
         return segment
+
+    sub = rest[0]
+    alias = _SUBCOMMAND_ALIASES.get((head, sub))
+    if alias:
+        sub = alias
+        rest = [alias] + rest[1:]
+
+    flag_rule = _FLAG_NORMALIZED.get((head, sub))
+    if flag_rule:
+        flags, canonical = flag_rule
+        # `npm install -g x` と `npm -g install x` の両方を拾う
+        tail_flags = [t for t in rest[1:] if t in flags]
+        pre_flags = [t for t in global_flags if t in flags]
+        if tail_flags or pre_flags:
+            kept = [t for t in rest[1:] if t not in flags]
+            return " ".join([head, canonical] + kept)
+
     return " ".join([head] + rest)
+
+
+def _expand_interpreter_code(segment: str) -> list[str]:
+    """``python3 -c "os.system('git push')"`` の中のコード片を返す。
+
+    インタプリタに渡された文字列そのものを独立したコマンド候補として扱う。
+    文字列の中身を厳密に解釈はできないが、``git push`` のような素の
+    コマンド列が入っていれば照合できる。
+    """
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return []
+    if not tokens:
+        return []
+    head = re.sub(r"[0-9.]+$", "", _basename(tokens[0]))
+
+    out: list[str] = []
+    if head in _AWK_BINS:
+        # awk 'BEGIN{system("git push")}' のようにプログラム本体から拾う
+        for m in _AWK_SYSTEM_RE.finditer(segment):
+            inner = m.group(1).strip()
+            if inner:
+                out.append(inner)
+        return out
+
+    flags = _INTERPRETER_FLAGS.get(head)
+    if not flags:
+        return []
+    for i, token in enumerate(tokens[1:], start=1):
+        if token in flags and i + 1 < len(tokens):
+            code = tokens[i + 1]
+            out.append(code)
+            # os.system('git push') のように引用符の中にあるコマンドも拾う
+            for m in re.finditer(r"""['"]([^'"]{3,})['"]""", code):
+                inner = m.group(1).strip()
+                if inner and " " in inner:
+                    out.append(inner)
+    return out
+
+
+# here-string / here-doc でコードを渡す形 (`bash <<< "git push"`)
+_HERE_STRING_RE = re.compile(r"<<<\s*(.+)$")
+# プロセス置換 `<(...)` `>(...)`
+_PROC_SUBST_RE = re.compile(r"[<>]\(([^()]*)\)")
+# シェル関数定義 `f(){ git push; }` (後ろに呼び出しが続く形も許容)
+_FUNC_DEF_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{(.*?)\}", re.S)
+# alias 定義 `alias gp='git push'`
+_ALIAS_DEF_RE = re.compile(
+    r"alias\s+[A-Za-z_][A-Za-z0-9_]*=(?:'([^']*)'|\"([^\"]*)\"|(\S+))"
+)
+# 変数代入 `p=push` (後で `git $p` の展開に使う)
+_VAR_ASSIGN_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)=([^\s;&|]+)")
+# 変数参照 `$p` / `${p}`
+_VAR_REF_RE = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?")
+
+
+def _expand_indirect_code(segment: str, full_command: str = "") -> list[str]:
+    """here-string / プロセス置換 / 関数定義 / alias 定義 / 変数展開の中身を返す。
+
+    ``;`` による分割で定義が途中で切れることがあるため、関数・alias 定義は
+    分割前の文字列 (``full_command``) からも探す。
+    """
+    out: list[str] = []
+    sources = [segment]
+    if full_command and full_command != segment:
+        sources.append(full_command)
+
+    for src in sources:
+        m = _HERE_STRING_RE.search(src)
+        if m:
+            out.append(m.group(1).strip().strip("'\""))
+
+        for pm in _PROC_SUBST_RE.finditer(src):
+            inner = pm.group(1).strip()
+            if inner:
+                out.append(inner)
+                # `sh <(echo git push)` の echo の引数もコマンド候補にする
+                out.extend(_echo_payloads(inner))
+
+        for fm in _FUNC_DEF_RE.finditer(src):
+            body = fm.group(1).strip().rstrip(";").strip()
+            if body:
+                out.append(body)
+
+        for am in _ALIAS_DEF_RE.finditer(src):
+            value = am.group(1) or am.group(2) or am.group(3) or ""
+            value = value.strip()
+            if value:
+                out.append(value)
+
+        for qm in _ANSI_C_QUOTE_RE.finditer(src):
+            inner = qm.group(1).strip()
+            if inner:
+                out.append(inner)
+
+    # `echo git push` を `$( )` 越しに実行する形
+    # (素の `echo 'git push is denied'` は文字列表示なので対象にしない)
+
+    # `p=push; git $p` のように同じコマンド列で定義された変数を展開する
+    if full_command and _VAR_REF_RE.search(segment):
+        assignments = dict(_VAR_ASSIGN_RE.findall(full_command))
+        if assignments:
+            def _sub(m: "re.Match[str]") -> str:
+                return assignments.get(m.group(1), m.group(0))
+
+            expanded = _VAR_REF_RE.sub(_sub, segment)
+            if expanded != segment:
+                out.append(expanded)
+
+    return out
+
+
+def _echo_payloads(segment: str) -> list[str]:
+    """``$(echo git push)`` のように echo の出力をコマンドとして使う形を捕捉する。
+
+    素の ``echo 'git push is denied'`` は単なる文字列表示なので対象外。
+    呼び出し側がコマンド置換やプロセス置換の内側だと分かっている場合にのみ使う。
+    """
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return []
+    if len(tokens) < 2 or _basename(tokens[0]) not in ("echo", "printf"):
+        return []
+    args = [t for t in tokens[1:] if not t.startswith("-")]
+    if not args:
+        return []
+    return [" ".join(args)]
 
 
 def _expand_command_substitution(segment: str) -> list[str]:
@@ -371,6 +564,8 @@ def _expand_command_substitution(segment: str) -> list[str]:
         if inner:
             inners.append(inner)
             found.append(inner)
+            # `$(echo git push)` は echo の引数がそのままコマンドになる
+            found.extend(_echo_payloads(inner))
     if not inners:
         return found
 
@@ -538,11 +733,15 @@ def normalize(command: str, _depth: int = 0) -> list[str]:
         # コマンド置換の中身は正規化前の文字列から拾う (クォートで消えるため)
         for inner in _expand_command_substitution(raw):
             out.extend(normalize(inner, _depth + 1))
+        # here-string / プロセス置換 / 関数定義 / alias 定義 / 変数展開
+        for inner in _expand_indirect_code(raw, command):
+            out.extend(normalize(inner, _depth + 1))
         if seg:
-            shell_inner = _expand_shell_invocation(seg)
-            if shell_inner:
-                for chunk in shell_inner:
-                    out.extend(normalize(chunk, _depth + 1))
+            for chunk in _expand_shell_invocation(seg) or []:
+                out.extend(normalize(chunk, _depth + 1))
+            # python -c / perl -e などに渡されたコード片
+            for chunk in _expand_interpreter_code(seg):
+                out.extend(normalize(chunk, _depth + 1))
     return out
 
 

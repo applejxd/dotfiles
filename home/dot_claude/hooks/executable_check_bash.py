@@ -46,47 +46,143 @@ try:
 except ImportError:  # pragma: no cover
     _policy = None  # type: ignore[assignment]
 
-# ─── センシティブパスのパターン ──────────────────────────────────────
-SENSITIVE_PATH_PATTERNS = [
-    r"\.env(?!\w)",        # .env（.env.example は除外）
-    r"\.ssh[/\\]",
-    r"id_rsa",
-    r"id_ed25519",
-    r"id_ecdsa",
-    r"['\"/\s]secret",
-    r"['\"/\s]password",
-    r"['\"/\s]credential",
-    r"['\"/\s]token",
-    r"['\"/\s]api[_-]?key",
-    r"\.pem$",
-    r"\.key$",
-    r"/etc/shadow",
-    r"/etc/passwd",
-    r"~/.netrc",
-    r"\.gnupg[/\\]",
-]
+# ─── センシティブパスの判定 ──────────────────────────────────────────
+# コマンド文字列全体への部分一致は誤検知が多い
+# (`grep -rn token .` の token は検索語であってパスではない、
+#  `git commit -m "fix token refresh"` の token はメッセージの一部)。
+# 引数トークンを 1 つずつ見て「パスらしいか」→「センシティブか」の順で判定する。
+
+# ファイル名そのものが秘密を意味するもの (basename の完全一致 / 前方一致)
+_SENSITIVE_BASENAMES = {
+    ".env", ".netrc", ".pypirc", ".npmrc", "credentials", "key.txt",
+    "shadow", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+}
+_SENSITIVE_BASENAME_PREFIXES = ("id_rsa", "id_dsa", "id_ecdsa", "id_ed25519")
+_SENSITIVE_SUFFIXES = (
+    ".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".ppk", ".asc",
+)
+# パスに含まれると秘密領域とみなすディレクトリ
+_SENSITIVE_DIRS = (".ssh", ".gnupg", ".aws", ".config/gh", "secrets")
+# basename に含まれると秘密とみなす語 (パスらしいトークンにのみ適用)
+_SENSITIVE_WORD_RE = re.compile(
+    r"(?:secret|password|passwd|credential|api[_-]?key|private[_-]?key|access[_-]?key)",
+    re.IGNORECASE,
+)
+# 明示的に除外する (サンプル・テンプレート)
+_SENSITIVE_EXEMPT_RE = re.compile(
+    r"(?:\.example$|\.sample$|\.template$|\.tmpl$|\.md$|\.rst$|\.txt\.example$)",
+    re.IGNORECASE,
+)
+# /etc 配下の特定ファイル
+_SENSITIVE_ABS_PATHS = {"/etc/shadow", "/etc/passwd", "/etc/sudoers"}
+
+# grep 系は最初の非フラグ引数が検索語なのでパス判定から除外する
+_PATTERN_FIRST_COMMANDS = {"grep", "rg", "ag", "ack", "egrep", "fgrep", "sed", "awk"}
+# 末尾の引数が書き込み先になるコマンド (コピー先が .env でも読み取りではない)
+_DEST_LAST_COMMANDS = {"cp", "mv", "install", "ln", "rsync", "scp"}
+
+
+def _looks_like_path(token: str) -> bool:
+    """引数がパスらしいか。検索語や通常の単語を除外するための判定。"""
+    if "/" in token or token.startswith("~"):
+        return True
+    if token.startswith(".") and len(token) > 1:
+        return True
+    # foo.pem のように既知の拡張子を持つもの
+    return token.lower().endswith(_SENSITIVE_SUFFIXES)
+
+
+def _is_sensitive_token(token: str) -> str | None:
+    """パスらしいトークンがセンシティブなら、その理由を返す。"""
+    cleaned = token.strip("'\"")
+    if not cleaned or not _looks_like_path(cleaned):
+        return None
+
+    expanded = cleaned.replace("~", os.path.expanduser("~"), 1)
+    normalized = os.path.normpath(expanded)
+    base = os.path.basename(normalized)
+
+    if _SENSITIVE_EXEMPT_RE.search(base):
+        return None
+    # `.env.example` のようにサンプルであることが接尾辞で分かるもの
+    if base.startswith(".env.") and base != ".env.local":
+        return None
+
+    if normalized in _SENSITIVE_ABS_PATHS:
+        return normalized
+    parts = normalized.split("/")
+    for d in _SENSITIVE_DIRS:
+        if d in parts or (d.count("/") and d in normalized):
+            return f"{d} 配下"
+    if base in _SENSITIVE_BASENAMES or base.startswith(_SENSITIVE_BASENAME_PREFIXES):
+        return base
+    if base.lower().endswith(_SENSITIVE_SUFFIXES):
+        return base
+    if _SENSITIVE_WORD_RE.search(base):
+        return base
+    return None
+
+
+def is_sensitive_path(text: str) -> str | None:
+    """コマンド文字列にセンシティブなパス引数が含まれていれば理由を返す。
+
+    ``cp .env.example .env`` のように「サンプルから作る」形は正当なので、
+    cp / mv の最終引数 (コピー先) は判定対象から外す。
+    """
+    tokens = text.split()
+    if not tokens:
+        return None
+    head = _basename(tokens[0].strip("'\""))
+    args = tokens[1:]
+    if head in _DEST_LAST_COMMANDS and len(args) >= 2:
+        # 末尾は書き込み先。読み取り元だけを見る
+        args = args[:-1]
+    skip_pattern_arg = head in _PATTERN_FIRST_COMMANDS
+    for token in args:
+        if token.startswith("-"):
+            continue
+        if skip_pattern_arg:
+            # 最初の非フラグ引数は検索語なので飛ばす
+            skip_pattern_arg = False
+            continue
+        reason = _is_sensitive_token(token)
+        if reason:
+            return reason
+    return None
 
 # ─── ファイル内容を読むコマンド ──────────────────────────────────────
 FILE_READ_COMMANDS = [
-    "grep", "cat", "head", "tail",
-    "sed", "awk", "less", "more",
-    "strings", "xxd", "hexdump",
-    "base64", "od",
+    "grep", "rg", "ag", "ack", "cat", "tac", "head", "tail", "nl",
+    "sed", "awk", "less", "more", "sort", "uniq", "cut", "column",
+    "strings", "xxd", "hexdump", "jq", "yq",
+    "base64", "od", "xxd", "diff", "vimdiff",
     # 内容を別の場所へ複製・転送するもの (読み取りと同じ露出リスク)
     "cp", "mv", "install", "rsync", "scp", "sftp", "dd", "tee",
     "ln", "shred", "split", "gpg", "openssl",
 ]
 
-# ─── 環境変数を全件露出するコマンド（引数なし） ─────────────────────
-ENV_EXPOSURE_COMMANDS = [
-    r"^\s*env\s*$",
-    r"^\s*printenv\s*$",
-    r"^\s*export\s*$",
-    r"^\s*set\s*$",
-]
+# ─── 環境変数を露出するコマンド ─────────────────────────────────────
+# 引数なしの全件露出に加え、`printenv AWS_SECRET_ACCESS_KEY` のような
+# 個別参照や `env | grep key` のような絞り込みも対象にする。
+ENV_EXPOSURE_BINS = {"env", "printenv", "export", "set", "declare", "typeset"}
+# 環境変数名としてセンシティブなもの
+_SENSITIVE_ENV_RE = re.compile(
+    r"(?:SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API[_-]?KEY|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|SESSION)",
+    re.IGNORECASE,
+)
 
 # ─── アーカイブコマンド ───────────────────────────────────────────────
 ARCHIVE_COMMANDS = ["tar", "zip", "gzip", "bzip2", "7z", "xz"]
+
+# ─── インラインコードを受け取るインタプリタ ─────────────────────────
+_INLINE_CODE_BINS = {"python", "perl", "ruby", "node", "php", "awk", "gawk", "mawk"}
+_INLINE_CODE_FLAGS = {"-c", "-e", "-E", "-r", "-p", "--eval", "--print"}
+# コード片から外部コマンドを起動する形
+_INLINE_EXEC_RE = re.compile(
+    r"(?:os\.system|subprocess\.|popen|execSync|spawnSync|child_process|"
+    r"\bsystem\s*\(|\bexec\s*\(|\bqx\s*[({/]|`[^`]+`|\bshell_exec\b|\bpassthru\b)",
+    re.IGNORECASE,
+)
 
 # ─── curl/wget でのファイル送信パターン ──────────────────────────────
 CURL_FILE_SEND_PATTERN = re.compile(
@@ -95,48 +191,82 @@ CURL_FILE_SEND_PATTERN = re.compile(
 )
 
 
-def is_sensitive_path(text: str) -> str | None:
-    """センシティブなパスパターンにマッチする最初のパターンを返す"""
-    for pattern in SENSITIVE_PATH_PATTERNS:
-        if re.search(pattern, text, re.IGNORECASE):
-            return pattern
-    return None
+def _segments(cmd: str) -> list[str]:
+    """normalize 済みセグメント + 元の文字列を返す。
+
+    normalize は shlex を通るのでクォートや ``${VAR}`` の形が変わる。
+    パターン照合では元の文字列も併せて見て取りこぼさないようにする。
+    """
+    segs = list(_policy.normalize(cmd)) if _policy is not None else []
+    segs.append(cmd)
+    return segs
 
 
 def check_file_read(cmd: str) -> str | None:
-    """ファイル読み込みコマンドがセンシティブパスを対象にしていないか"""
-    for command in FILE_READ_COMMANDS:
-        if re.search(rf"\b{re.escape(command)}\b", cmd):
-            matched = is_sensitive_path(cmd)
-            if matched:
-                return (
-                    f"`{command}` がセンシティブなパスを対象にしています "
-                    f"(パターン: {matched})"
-                )
+    """ファイル読み込み・複製コマンドがセンシティブパスを対象にしていないか"""
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = _basename(tokens[0])
+        if head not in FILE_READ_COMMANDS:
+            continue
+        matched = is_sensitive_path(segment)
+        if matched:
+            return (
+                f"`{head}` がセンシティブなパスを対象にしています "
+                f"(パターン: {matched})"
+            )
     return None
 
 
 def check_env_exposure(cmd: str) -> str | None:
-    """環境変数を全件露出するコマンドを検出"""
-    for pattern in ENV_EXPOSURE_COMMANDS:
-        if re.search(pattern, cmd):
+    """環境変数を露出するコマンドを検出。
+
+    引数なしの全件出力に加え、`printenv AWS_SECRET_ACCESS_KEY` のような
+    個別参照や `env | grep -i key` のような絞り込みも拒否する。
+    `env FOO=1 cmd` は normalize がラッパーとして剥がすのでここには来ない。
+    """
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = _basename(tokens[0])
+        if head not in ENV_EXPOSURE_BINS:
+            continue
+        args = [t for t in tokens[1:] if not t.startswith("-")]
+        if not args:
             return (
-                f"環境変数を全件出力するコマンドは許可されていません: `{cmd.strip()}`\n"
+                f"環境変数を全件出力するコマンドは許可されていません: `{segment.strip()}`\n"
                 "特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"
             )
+        if any(_SENSITIVE_ENV_RE.search(a) for a in args):
+            return (
+                f"センシティブな環境変数を出力しようとしています: `{segment.strip()}`"
+            )
+    # `env | grep -i key` のように絞り込む形
+    if re.search(r"\b(?:env|printenv)\b\s*(?:\||$)", cmd) and _SENSITIVE_ENV_RE.search(cmd):
+        return (
+            f"環境変数からセンシティブな値を抽出しようとしています: `{cmd.strip()[:200]}`"
+        )
     return None
 
 
 def check_archive(cmd: str) -> str | None:
     """アーカイブコマンドがセンシティブパスを含んでいないか"""
-    for command in ARCHIVE_COMMANDS:
-        if re.search(rf"\b{re.escape(command)}\b", cmd):
-            matched = is_sensitive_path(cmd)
-            if matched:
-                return (
-                    f"`{command}` でセンシティブなパスをアーカイブしようとしています "
-                    f"(パターン: {matched})"
-                )
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = _basename(tokens[0])
+        if head not in ARCHIVE_COMMANDS:
+            continue
+        matched = is_sensitive_path(segment)
+        if matched:
+            return (
+                f"`{head}` でセンシティブなパスをアーカイブしようとしています "
+                f"(パターン: {matched})"
+            )
     return None
 
 
@@ -333,6 +463,56 @@ def check_pipe_to_shell(cmd: str) -> str | None:
     return None
 
 
+def check_git_add_sensitive(cmd: str) -> str | None:
+    """`git add .env` のようにセンシティブファイルをバージョン管理に載せていないか"""
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if len(tokens) < 3:
+            continue
+        if _basename(tokens[0]) != "git" or tokens[1] not in ("add", "stage"):
+            continue
+        for token in tokens[2:]:
+            if token.startswith("-"):
+                continue
+            reason = _is_sensitive_token(token)
+            if reason:
+                return (
+                    f"センシティブなファイルを git に追加しようとしています ({reason})。\n"
+                    "秘密情報はコミットせず、.gitignore に追加してください。"
+                )
+    return None
+
+
+def check_interpreter_inline_code(cmd: str) -> str | None:
+    """`python3 -c "..."` / `perl -e "..."` の中でセンシティブな操作をしていないか。
+
+    normalize は素のコマンド列 (`os.system('git push')` の中身など) を
+    取り出せないことがあるため、コード文字列そのものを検査する。
+    """
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = re.sub(r"[0-9.]+$", "", _basename(tokens[0]))
+        if head not in _INLINE_CODE_BINS:
+            continue
+        if not any(t in _INLINE_CODE_FLAGS for t in tokens[1:]):
+            continue
+        # コード片にセンシティブなパスや外部実行が含まれていないか
+        reason = is_sensitive_path(segment)
+        if reason:
+            return (
+                f"`{head}` のインラインコードがセンシティブなパスを参照しています ({reason})。"
+            )
+        if _INLINE_EXEC_RE.search(segment):
+            return (
+                f"`{head}` のインラインコードから外部コマンドを実行しようとしています。\n"
+                f"実行しようとしているコマンド: {segment.strip()[:200]}\n"
+                "スクリプトファイルに書いて内容を確認できる形にしてください。"
+            )
+    return None
+
+
 def check_policy_deny(cmd: str) -> str | None:
     """common.toml の bash.deny に該当すれば block する.
 
@@ -463,6 +643,8 @@ DENY_CHECKS = [
     # (先に一致したものがメッセージを決めるため)
     check_pip_redirect,       # pip → uv/uvx (プロジェクト種別を問わず全面禁止)
     check_pipe_to_shell,      # curl ... | sh の類
+    check_interpreter_inline_code,  # python -c "os.system(...)" の類
+    check_git_add_sensitive,  # git add .env の類
     check_policy_deny,        # common.toml の [bash] deny を強制
     check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
     check_git_c_dangerous,    # -C 経由の deny サブコマンド実行をブロック
