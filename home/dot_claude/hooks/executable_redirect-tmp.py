@@ -68,12 +68,17 @@ _REDIRECT_TARGET_RE = re.compile(r"[0-9]*>{1,2}\s*(\S+)")
 
 # ─── bash コマンドの read-only / write 判定 ─────────────────────────
 # 常に書き込みとみなすコマンド (/tmp を対象にしていたら無条件で block)
+# 転送先が最後の引数になるもの (cp / mv / install / rsync / ln) は
+# _DEST_LAST_COMMANDS で個別に判定するのでここには含めない。
 _ALWAYS_WRITE_COMMANDS = {
-    "mkdir", "touch", "cp", "mv", "rm", "rmdir", "unlink", "dd", "tee",
-    "install", "truncate", "ln", "rsync", "mktemp",
+    "mkdir", "touch", "rm", "rmdir", "unlink", "dd", "tee",
+    "truncate", "mktemp",
     "tar", "zip", "unzip", "gzip", "gunzip", "split",
     "chmod", "chown", "chgrp", "git",
 }
+# 転送先が最後の引数になるコマンド。/tmp が転送元にあるだけなら読み取り。
+# (`cp /tmp/x ./y` は /tmp から読み出してリポジトリへ書くので block しない)
+_DEST_LAST_COMMANDS = {"cp", "mv", "install", "rsync", "ln"}
 # 読み取り専用とみなすコマンド (副作用が無ければ /tmp を対象にしても許可)
 _READ_ONLY_BASH_COMMANDS = {
     "cat", "less", "more", "head", "tail",
@@ -146,6 +151,17 @@ def _classify_segment(head: str, tokens: list[str]) -> str:
     "unknown" (未知のコマンドや判定できないもの) は呼び出し側で block 扱いにする
     (fail-safe)。
     """
+    if head in _DEST_LAST_COMMANDS:
+        # 転送先 (最後の非フラグ引数) が /tmp のときだけ書き込み。
+        # /tmp が転送元にあるだけなら読み出しなので許可する。
+        operands = [t for t in tokens[1:] if not t.startswith("-")]
+        if len(operands) < 2:
+            # 引数が足りない / 判定できない形は安全側に倒す
+            return "write"
+        dest = operands[-1].strip("'\"")
+        if dest.startswith(_TMP_PATH_PREFIX) and not _is_allowed_tmp_path(dest):
+            return "write"
+        return "read"
     if head in _ALWAYS_WRITE_COMMANDS:
         return "write"
     if head == "sed":

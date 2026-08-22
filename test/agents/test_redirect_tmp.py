@@ -127,8 +127,38 @@ def test_bash_write_commands_denied():
         assert run_bash(command) == "deny", command
 
 
-def test_bash_compound_command_with_write_segment_denied():
-    # 前半は read-only でも後半が書き込みなら全体を block する
+# ---------------------------------------------------------------------------
+# bash: /tmp からの読み出しは block しない
+#
+# Copilot CLI は大きいツール出力を /tmp/<epoch>-copilot-tool-output-*.txt に
+# 保存する。これをリポジトリへ取り込む操作まで「/tmp への書き込み」と
+# 判定すると作業が止まるため、転送先だけを見て判定する。
+# ---------------------------------------------------------------------------
+
+def test_bash_copy_out_of_tmp_allowed():
+    for command in (
+        "cp /tmp/1234-copilot-tool-output-ab.txt ./.tmp/out.md",
+        "cp -r /tmp/src ./dest",
+        "mv /tmp/x.txt ./docs/x.txt",
+        "rsync -a /tmp/src/ ./dest/",
+        "install -m 644 /tmp/x.conf ./etc/x.conf",
+    ):
+        assert run_bash(command) is None, command
+
+
+def test_bash_copy_into_tmp_still_denied():
+    """転送先が /tmp なら従来どおり block する."""
+    for command in (
+        "cp ./a.txt /tmp/x",
+        "cp /tmp/a.txt /tmp/b.txt",
+        "mv ./a.txt /tmp/x",
+        "rsync -a ./src/ /tmp/dest/",
+        "ln -s ./a.txt /tmp/link",
+    ):
+        assert run_bash(command) == "deny", command
+
+
+def test_bash_compound_command_with_write_segment_denied():    # 前半は read-only でも後半が書き込みなら全体を block する
     assert run_bash("cat /tmp/x && echo hi > /tmp/y") == "deny"
 
 

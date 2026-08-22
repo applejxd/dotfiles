@@ -435,6 +435,12 @@ _PYTHON_BIN_RE = re.compile(r"^(?:/\S*/)?python[0-9.]*$")
 _PYTHON_DASH_M_RE = re.compile(r"^-m(.+)$")
 # uvx / uv tool run / pipx など、pip を間接的に起動しうるランナー
 _PIP_RUNNERS = {"uvx", "pipx"}
+# 上記ランナーで値を取るオプション。値を実行対象と誤認しないよう読み飛ばす
+_PIP_RUNNER_VALUE_OPTS = {
+    "--from", "--with", "--with-editable", "--spec", "--index", "--index-url",
+    "--extra-index-url", "--constraint", "--python", "-p", "--pip-args",
+    "--find-links", "-f", "--refresh-package",
+}
 
 
 def check_pip_redirect(cmd: str) -> str | None:
@@ -466,8 +472,19 @@ def check_pip_redirect(cmd: str) -> str | None:
             )
         if head in _PIP_RUNNERS and len(tokens) > 1:
             # uvx pip install ... / pipx run pip ...
-            for token in tokens[1:]:
+            # `--from pkg` のように値を取るオプションは、その値ごと読み飛ばす
+            # (読み飛ばさないと値を実行対象と誤認して検査が止まる)
+            i = 1
+            # `pipx run pkg` の run のように、実行対象の前に挟まるサブコマンド
+            if head == "pipx" and i < len(tokens) and tokens[i] == "run":
+                i += 1
+            while i < len(tokens):
+                token = tokens[i]
                 if token.startswith("-"):
+                    if "=" not in token and token in _PIP_RUNNER_VALUE_OPTS:
+                        i += 2
+                    else:
+                        i += 1
                     continue
                 if _PIP_BIN_RE.match(_basename(token)):
                     return (
@@ -784,11 +801,16 @@ def check_guard_tampering(cmd: str) -> str | None:
             )
 
     # インラインコードやスクリプト中でパスを直接触る形 (`open('...', 'w')` など)
+    # インラインコードは読み書きの区別が静的に付かないので一律で止める。
+    # 内容を見たいだけなら cat / grep が使えるので、代替手段を案内する。
     for m in re.finditer(r"""['"]([^'"]*(?:\.claude|\.copilot|/agents|\.git/)[^'"]*)['"]""", cmd):
         if _hits(m.group(1)):
             return (
                 f"エージェントのガード設定 (`{m.group(1)}`) を操作しようとしています。\n"
-                "hook や permission の無効化に繋がるため許可されていません。"
+                "インラインコードは読み書きの区別が付かないため許可されていません。\n"
+                f"代替: 内容を見るだけなら `cat {m.group(1)}` や "
+                f"`grep <pattern> {m.group(1)}` を使ってください。\n"
+                "設定を変えたい場合は chezmoi のソースを編集してください。"
             )
 
     # 環境変数の差し替えで hook の読み込み先やモジュール解決を乗っ取る形
