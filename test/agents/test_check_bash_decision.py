@@ -959,6 +959,51 @@ def test_guard_tampering_is_denied(command):
 
 @pytest.mark.parametrize(
     "command",
+    [
+        # 閉じ引用符と次の開き引用符の間はクォートされていないシェルコード。
+        # ここをガード設定の「引用文字列」と誤認して読み取りを拒否していた。
+        'echo "a"; ls ~/.config/agents; echo "b"',
+        'echo "before" && cat ~/.claude/settings.json && echo "after"',
+        'echo "start"; chezmoi diff ~/.claude; echo "end"',
+        'echo "=== x ==="; chezmoi diff --no-pager ~/.copilot ~/.claude; echo "(end)"',
+        # 引用符が無い同等のコマンドは元から通っていた (挙動を揃える)
+        "cat ~/.claude/settings.json",
+        "chezmoi diff ~/.claude",
+        "grep -n defaultMode ~/.claude/settings.json",
+    ],
+)
+def test_guard_settings_can_be_read(command):
+    """ガード設定の読み取りは、引用符の有無にかかわらず拒否しないこと.
+
+    インラインコード以外では読み書きが区別できるので、読み取りまで
+    止める必要はない。書き込みは mutating コマンドとリダイレクトの
+    判定が捕捉する。
+    """
+    decision, reason = run_hook(command)
+    assert decision != "deny", f"{command!r} が deny された ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # インラインコードは読み書きの区別が付かないので deny のまま
+        "python3 -c \"open('/home/u/.claude/settings.json', 'w')\"",
+        "python3 -c \"print(open('/home/u/.config/agents/common.toml').read())\"",
+        "perl -e 'unlink \"/home/u/.claude/hooks/check_bash.py\"'",
+        # インラインコード以外の改変も deny のまま
+        "echo x > ~/.claude/settings.json",
+        "chezmoi forget ~/.claude/hooks/check_bash.py",
+        "unlink ~/.claude/hooks/check_bash.py",
+    ],
+)
+def test_guard_settings_writes_are_still_denied(command):
+    """読み取りを許可しても、改変とインラインコードは止まったままであること."""
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
     ["rm -rf ~/", "rmdir /", "find ~ -delete", "rm -r --force /", "rm -rf $PWD/../.."],
 )
 def test_round4_rm_guard_variants(command):

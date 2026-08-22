@@ -704,6 +704,28 @@ def expand_cd_targets(cmd: str) -> str:
     return "\n".join(variants)
 
 
+def _is_inline_code_segment(segment: str) -> bool:
+    """このセグメントがインタプリタへコード文字列を渡す形かどうか。
+
+    `python3 -c "..."` / `perl -e '...'` のほか、
+    `uv run python -c ...` のようにランナー経由の形も拾う。
+    """
+    return _inline_code_head(segment) is not None
+
+
+def _inline_code_head(segment: str) -> str | None:
+    """インラインコードを実行するインタプリタ名を返す (無ければ None)。"""
+    tokens = segment.split()
+    for i, token in enumerate(tokens):
+        candidate = re.sub(r"[0-9.]+$", "", _basename(token))
+        if candidate in _INLINE_CODE_BINS:
+            rest = tokens[i + 1:]
+            if any(t in _INLINE_CODE_FLAGS for t in rest):
+                return candidate
+            return None
+    return None
+
+
 def check_interpreter_inline_code(cmd: str) -> str | None:
     """`python3 -c "..."` / `perl -e "..."` の中でセンシティブな操作をしていないか。
 
@@ -712,20 +734,8 @@ def check_interpreter_inline_code(cmd: str) -> str | None:
     `uv run python -c ...` のようにランナー経由でも効くよう、元の文字列全体も見る。
     """
     for segment in _segments(cmd):
-        tokens = segment.split()
-        if not tokens:
-            continue
-        # ランナー (uv run / mise exec など) の後ろにインタプリタが来る形も拾う
-        head = None
-        for i, token in enumerate(tokens):
-            candidate = re.sub(r"[0-9.]+$", "", _basename(token))
-            if candidate in _INLINE_CODE_BINS:
-                head = candidate
-                rest = tokens[i + 1:]
-                break
+        head = _inline_code_head(segment)
         if head is None:
-            continue
-        if not any(t in _INLINE_CODE_FLAGS for t in rest):
             continue
         # コード片にセンシティブなパスや外部実行が含まれていないか
         reason = is_sensitive_path(segment)
@@ -800,18 +810,29 @@ def check_guard_tampering(cmd: str) -> str | None:
                 "hook や permission の無効化に繋がるため許可されていません。"
             )
 
-    # インラインコードやスクリプト中でパスを直接触る形 (`open('...', 'w')` など)
+    # インラインコードの中でパスを直接触る形 (`open('...', 'w')` など)。
     # インラインコードは読み書きの区別が静的に付かないので一律で止める。
-    # 内容を見たいだけなら cat / grep が使えるので、代替手段を案内する。
-    for m in re.finditer(r"""['"]([^'"]*(?:\.claude|\.copilot|/agents|\.git/)[^'"]*)['"]""", cmd):
-        if _hits(m.group(1)):
-            return (
-                f"エージェントのガード設定 (`{m.group(1)}`) を操作しようとしています。\n"
-                "インラインコードは読み書きの区別が付かないため許可されていません。\n"
-                f"代替: 内容を見るだけなら `cat {m.group(1)}` や "
-                f"`grep <pattern> {m.group(1)}` を使ってください。\n"
-                "設定を変えたい場合は chezmoi のソースを編集してください。"
-            )
+    #
+    # ★ この走査はコマンド全体ではなく、インタプリタのインラインコード
+    #   セグメントに限定する。全体を走査すると、閉じ引用符と次の開き引用符の
+    #   間 (実際にはクォートされていないシェルコード) を 1 つの引用文字列と
+    #   誤認する。例: `echo "a"; ls ~/.config/agents; echo "b"` の
+    #   `; ls ~/.config/agents; echo ` が引用文字列として一致してしまい、
+    #   読み取りしかしていないコマンドが拒否されていた。
+    for segment in _segments(cmd):
+        if not _is_inline_code_segment(segment):
+            continue
+        for m in re.finditer(
+            r"""['"]([^'"]*(?:\.claude|\.copilot|/agents|\.git/)[^'"]*)['"]""", segment
+        ):
+            if _hits(m.group(1)):
+                return (
+                    f"エージェントのガード設定 (`{m.group(1)}`) を操作しようとしています。\n"
+                    "インラインコードは読み書きの区別が付かないため許可されていません。\n"
+                    f"代替: 内容を見るだけなら `cat {m.group(1)}` や "
+                    f"`grep <pattern> {m.group(1)}` を使ってください。\n"
+                    "設定を変えたい場合は chezmoi のソースを編集してください。"
+                )
 
     # 環境変数の差し替えで hook の読み込み先やモジュール解決を乗っ取る形
     for m in re.finditer(

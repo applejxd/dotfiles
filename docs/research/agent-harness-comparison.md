@@ -184,11 +184,12 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | ドキュメント中のコマンド例 (`cat <<'EOF' > note.md` の本文) による誤検知 | **修正済**: `split_heredoc_body` が実行されない heredoc 本文を検査対象から外す |
 | `python3 - <<'PY'` の heredoc 本文からの外部実行 | **修正済**: インタプリタに渡る heredoc 本文はインラインコードとして検査する |
 | `uvx --from evil pip install` / `pipx run pip install` | **修正済**: ランナーの値付きオプションとサブコマンドを読み飛ばしてから pip を検出 |
+| `echo "a"; ls ~/.config/agents; echo "b"` が拒否される | **修正済**: 引用符スキャンをインラインコードのセグメントに限定。閉じ引用符と次の開き引用符の間を「引用文字列」と誤認していた |
 | `cp /tmp/<file> ./dst`（/tmp からの読み出し）が block される | **修正済**: 転送先が /tmp のときだけ書き込みとみなす |
 | エンコードされたコマンド (`printf` のエスケープ列、base64 の復号結果) を変数経由で組み立てる形 | **未対応**。復号結果は静的に追えない |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある (741 件)。日常的に使うコマンド
+`test_command_policy.py` に回帰テストがある (754 件)。日常的に使うコマンド
 (`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
 `cp .env.example .env` / `git commit -m "fix token refresh"` /
 `docker run --rm alpine echo hi` / `npm run build` / `mise exec -- shellcheck x.sh` /
@@ -296,6 +297,32 @@ copilot help config | grep -A 6 defaultPermissionMode
 ```
 
 Copilot CLI の設定を調べるときは、Web より先にこちらを見ること。
+
+### ツールの可用性はモードで変わる
+
+`task_complete` と `exit_plan_mode` は**排他的なモード依存ツール**。
+
+| モード | 提供されるツール |
+| --- | --- |
+| autopilot | `task_complete`（完了を通知する） |
+| plan | `exit_plan_mode`（計画の承認を求める） |
+| interactive | どちらもなし |
+
+`stayInAutopilot` の説明にも「the CLI remains in autopilot mode **after the agent
+calls `task_complete`**」とあり、autopilot 前提のツールだと分かる。
+ツールの有無自体を切り替える設定キーは無い。
+
+同一セッションの記録に両方の呼び出しが残る（例: `task_complete` 23 回 /
+`exit_plan_mode` 3 回）ため、**「利用不可」は恒久的な欠落ではなくモードの切り替え**。
+
+### `tool_search_tool` は組込ツールを列挙しない
+
+`tool_search_tool` が検索するのは**遅延ロードの MCP / 拡張ツールだけ**。
+`bash|view|edit|glob` を検索しても、常用している組込ツールは 1 つも返らない。
+現に利用可能な `exit_plan_mode` も返らない。
+
+したがって「`tool_search_tool` で見つからない → そのツールは存在しない」という
+推論は**成立しない**。可用性の判断にはシステム通知を使うこと。
 
 ## 7. その他の差分（指示設計に影響するもの）
 
