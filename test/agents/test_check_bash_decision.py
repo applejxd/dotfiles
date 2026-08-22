@@ -172,11 +172,11 @@ def test_generated_permissions_keep_high_risk_in_deny():
 
 @pytest.mark.parametrize(
     "command",
-    ["wget", "npm uninstall", "npm remove", "docker rm", "docker rmi",
+    ["wget", "docker rm", "docker rmi",
      "git clean", "git branch -D", "git commit", "gh pr create"],
 )
 def test_reversible_commands_are_ask_not_deny(command):
-    """復旧可能な操作は deny ではなく ask (承認すれば実行できる)."""
+    """復旧可能だが不可逆性・外部影響があるものは deny ではなく ask."""
     perms = gen.build_claude_permissions(COMMON)
     assert f"Bash({command}:*)" in perms["ask"]
     assert f"Bash({command}:*)" not in perms["deny"]
@@ -230,10 +230,10 @@ def test_uv_commands_are_not_blocked_by_pip_check(command):
     assert decision is None, f"{command!r} が誤ってブロックされた"
 
 
-def test_uv_add_asks_but_is_not_denied():
-    """uv add は critical_ask なので ask。pip チェックに巻き込まれて deny にはならない."""
+def test_uv_add_is_delegated_not_denied():
+    """uv add は未掲載 (LLM 判定へ委譲)。pip チェックに巻き込まれて deny にはならない."""
     decision, reason = run_hook("uv add requests")
-    assert decision == "ask", f"-> {decision} ({reason})"
+    assert decision is None, f"-> {decision} ({reason})"
 
 
 # ---------------------------------------------------------------------------
@@ -441,11 +441,9 @@ def test_safe_commands_pass_through(command):
         "git branch -D feature/old",
         "docker rm my-container",
         "docker rmi my-image",
-        "docker exec -it web sh",
         "git commit -m 'wip'",
         "gh pr create --fill",
         "gh issue close 12",
-        "gh repo clone owner/name",
         "gh api graphql -f query=...",
     ],
 )
@@ -650,10 +648,10 @@ def test_everyday_commands_are_not_blocked(command):
     assert decision is None, f"{command!r} が不要にブロックされた ({reason})"
 
 
-def test_npx_asks_but_is_not_denied():
-    """npx は任意パッケージを取得して実行するので確認を挟む (拒否はしない)."""
+def test_npx_is_delegated_but_dangerous_forms_are_denied():
+    """npx は未掲載 (LLM 判定へ委譲) だが、pip 経由などの危険な形は deny のまま."""
     decision, reason = run_hook("npx --yes markdownlint-cli2 README.md")
-    assert decision == "ask", f"-> {decision} ({reason})"
+    assert decision is None, f"-> {decision} ({reason})"
 
 
 # ---------------------------------------------------------------------------
@@ -1370,12 +1368,102 @@ def test_round10_false_positives(command):
 
 @pytest.mark.parametrize(
     "command",
-    ["uvx ruff format .", "npx --yes prettier", "pipx run black", "nc -z localhost 80"],
+    ["nc -z localhost 80", "pipx install black"],
 )
-def test_round10_arbitrary_package_runners_ask(command):
-    """任意パッケージを取得して実行する経路は承認を挟む."""
+def test_round10_network_and_global_installs_ask(command):
+    """待ち受け系とグローバル常駐は承認を挟む."""
     decision, reason = run_hook(command)
     assert decision == "ask", f"{command!r} -> {decision} ({reason})"
+
+
+# ---------------------------------------------------------------------------
+# LLM 判定モードへの委譲 (Claude auto の classifier / Copilot assisted)
+#
+# ask に載せると「どのモードでも自動承認されない」ためモードに到達しない。
+# allow に載せると手動モードでも無条件に通る。
+# → 未掲載にすることで、実行の可否を LLM に判断させる。
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "uvx ruff format .",
+        "uv tool run ruff check .",
+        "npx --yes prettier --write .",
+        "pnpm dlx prettier --check .",
+        "yarn dlx eslint .",
+        "pipx run black .",
+        "python -c 'print(1)'",
+        "python3 -m http.server 8000",
+        "uv add requests",
+        "npm install express",
+        "npm ci",
+        "npm uninstall express",
+        "npm remove express",
+        "mv notes.md docs/notes.md",
+        "docker exec mycontainer ls",
+        "gh repo clone owner/repo",
+        "git gc",
+    ],
+)
+def test_delegated_commands_are_unlisted(command):
+    """委譲対象は hook が判定を返さない (LLM 判定モードに到達する)."""
+    decision, reason = run_hook(command)
+    assert decision is None, f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "uvx", "uv tool run", "npx", "pnpm dlx", "yarn dlx", "pipx run",
+        "python -c", "uv add", "npm install", "npm ci", "npm uninstall",
+        "npm remove", "mv", "docker exec", "gh repo clone", "git gc",
+    ],
+)
+def test_delegated_commands_are_in_no_list(command):
+    """委譲対象は allow / ask / deny のいずれにも載っていないこと.
+
+    allow に入れると手動モードでも無条件に通るので、
+    「未掲載」であること自体を保証する。
+    """
+    bash = COMMON["bash"]
+    for name in ("allow", "ask", "deny"):
+        assert command not in bash[name], (
+            f"{command!r} が [bash] {name} に含まれている。"
+            "LLM 判定へ委譲するには未掲載である必要がある"
+        )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python -c \"import os; os.system('git push')\"",
+        "uvx --from evil pip install x",
+        "uvx pip install x",
+        "pipx run pip install x",
+        "npm install -g typescript",
+        "mv ~/.ssh/id_rsa ./key",
+        "docker exec c cat /root/.ssh/id_rsa",
+        "python3 -c 'open(\"/etc/shadow\").read()'",
+    ],
+)
+def test_delegated_commands_still_deny_dangerous_forms(command):
+    """委譲しても、危険な使い方は個別チェックが deny する."""
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+def test_permission_modes_are_generated():
+    """両 CLI の権限モードが common.toml から生成されること."""
+    merged = gen.merge_claude_settings({}, COMMON)
+    assert merged["permissions"]["defaultMode"] == COMMON["claude"]["default_permission_mode"]
+
+    copilot = COMMON["copilot"]
+    settings = gen.merge_copilot_settings({}, COMMON)
+    assert settings["defaultPermissionMode"] == copilot["default_permission_mode"]
+    # assisted は experimental な auto-approval 機能に依存する
+    if copilot["default_permission_mode"] == "assisted":
+        assert settings["experimental"] is True
 
 
 # ---------------------------------------------------------------------------

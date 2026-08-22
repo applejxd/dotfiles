@@ -109,10 +109,53 @@ deny = ["git reset --hard"]   # 作業ツリーを壊す形だけ拒否
 | 規約違反 | `pip` / `pip3` (uv / uvx を使う) | `deny` + hook の `check_pip_redirect` |
 | 壊滅的な削除 | `rm -rf /`, `rm -rf ~`, `rm -rf /etc` | `check_rm_root_guard` (hard-deny) |
 | 提案 → 承認 → 実行 | `rm`, `git clean`, `git commit`, `docker rm`, `gh pr create` | `ask` |
-| 任意パッケージの実行 | `npx`, `uvx`, `pipx run`, `pnpm dlx` | `ask` |
+| **LLM 判定へ委譲** | `npx`, `uvx`, `pipx run`, `python -c`, `npm install`, `mv` | **未掲載** |
 | 用途で危険度が変わる | `nc` (疎通確認は `ask`、`-e` / `-l` は hook が deny) | `ask` + hook |
 | サブコマンドで分ける | `systemctl status` は許可、`systemctl enable` は `deny` | 用途ごとに列挙 |
 | 自動承認 | `git status`, `grep -n`, `uv sync`, `gh pr list` | `allow` |
+
+### 「未掲載」という 4 つ目の選択肢
+
+両 CLI には LLM が安全性を判定するモードがある。
+
+| | Claude Code | Copilot CLI |
+| --- | --- | --- |
+| 手動 | `default`（別名 `manual`） | `manual` |
+| **LLM 判定** | **`auto`**（classifier という別モデルが審査） | **`assisted`**（LLM safety check） |
+| 全許可 | `bypassPermissions` | `allow-all` |
+
+**`ask` に載せるとこのモードに到達しない。**
+Claude Code は「explicit ask rule に一致するツールは、`bypassPermissions` を含む
+どのモードでも自動承認しない」と明記している。hook が返す `ask` も同様に
+プロンプトを最低保証する。
+
+したがって「LLM の判断に任せたい」コマンドは、`allow` ではなく
+**どのリストにも載せない**のが正しい。`allow` に入れると手動モードでも
+無条件に通ってしまい、かえって緩くなる。
+
+| 状態 | Claude auto | Copilot assisted |
+| --- | --- | --- |
+| `allow` | 無条件実行 | 無条件実行 |
+| `ask` | プロンプト | プロンプト |
+| **未掲載** | **classifier が判断** | **safety check が判断** |
+
+未掲載にしても hook の個別 deny チェックは効く。
+`uvx ruff format .` は通るが `uvx pip install x` は deny、
+`python -c 'print(1)'` は通るが `python -c "os.system('git push')"` は deny になる。
+
+モードは `common.toml` から両 CLI へ生成している。
+
+```toml
+[claude]
+default_permission_mode = "auto"
+
+[copilot]
+default_permission_mode = "assisted"
+experimental = true          # assisted は experimental な auto-approval に依存
+```
+
+Copilot の設定キーの権威ある一覧は Web ドキュメントではなく
+`copilot help config` にある。
 
 判断基準:
 

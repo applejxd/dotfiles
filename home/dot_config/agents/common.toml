@@ -79,6 +79,26 @@ allow = [
 # 提案 -> ユーザーが承認 -> そのまま実行。
 # 「危険だが承認すれば妥当」なもの。取り返しがつく変更はここに置く。
 #
+# ★ ask に載せると、両 CLI の LLM 判定モードに到達しない。
+#   Claude Code は「permissions.ask に一致するツールはどのモードでも
+#   自動承認されない」と明記され、hook の ask もプロンプトを最低保証する。
+#   Copilot CLI の assisted も同様に止まる。
+#   → LLM の判断に委ねたいコマンドは、allow ではなく「どのリストにも
+#     載せない (未掲載)」にする。allow に入れると手動モードでも無条件に
+#     通ってしまい、かえって緩くなる。
+#
+#   未掲載にしても hook の個別 deny チェックは効く。
+#   (check_interpreter_inline_code / check_pipe_to_shell /
+#    check_curl_file_send / check_reverse_shell など)
+#
+# ask に残す基準:
+#   1. 不可逆か            — 復旧できない削除・履歴の書き換え
+#   2. 外部に見えるか      — リモートへの書き込み、外部との通信
+#   3. 秘密や防御に触るか  — 認証情報、hook や permission の設定
+#
+# 逆に「引数を見れば妥当性が判断できる」「hook が危険な形を個別に捕捉できる」
+# ものは未掲載にして LLM 判定に委ねる (uvx / npx / python -c / npm install 等)。
+#
 # 無人実行では安全側に倒れる (Claude dontAsk は自動拒否、-p はスキップ、
 # Copilot cloud agent は deny 扱い) ので、緩めても無人時のリスクは増えない。
 ask = [
@@ -90,19 +110,10 @@ ask = [
   "git commit",
   # --hard は deny。素の reset は index を戻すだけで作業ツリーを壊さない
   "git reset",
-  "uv add",
-  "npm install",
-  "npm ci",
-  # プロジェクト内の変更で lockfile と git から復旧できる
-  "npm uninstall",
-  "npm remove",
-  "mv",
-  "python -c",
   # 取得系。センシティブファイルの送信は check_curl_file_send が hard-deny する
   "curl",
   "wget",
-  # コンテナ/イメージは再作成・再 pull できる
-  "docker exec",
+  # コンテナ/イメージは再作成・再 pull できるが状態を失う
   "docker rm",
   "docker rmi",
   # リモートに書き込むが取り消せる gh 操作
@@ -111,25 +122,13 @@ ask = [
   "gh issue create",
   "gh issue close",
   "gh issue comment",
-  "gh repo clone",
   # Projects v2 の mutation を含む。gh api は任意のエンドポイントを叩けるので
   # 読み取りでも承認を挟む (gh auth token など秘密を引く形は deny 側)
   "gh api",
-  # gc 自体は無害だが --prune / --aggressive は復旧の余地を消す
-  "git gc",
-  # 任意パッケージをダウンロードして実行する
-  "npx",
-  "pnpm dlx",
-  "yarn dlx",
-  "uvx",
-  "uv tool run",
-  "pipx run",
+  # グローバルに常駐する (pipx run は未掲載で LLM 判定に委ねる)
   "pipx install",
   # 素の疎通確認 (-z など) は使うが、-e/-c/-l は check_reverse_shell が deny する
   "nc",
-  # 待ち受けサーバを立てる (ローカルの内容が外から見える)
-  "python -m http.server",
-  "python3 -m http.server",
   # 読み取り (--get / --list) も含めて確認を挟む。hook を無効化しうる
   # 書き込み (--global / core.hooksPath 等) は deny 側
   "git config",
@@ -380,6 +379,16 @@ deny_domains = []
 # Claude 固有
 # ---------------------------------------------------------------------------
 [claude]
+# 新規セッションの権限モード (~/.claude/settings.json の permissions.defaultMode)
+#   "default" (= manual): 読み取り以外は都度プロンプト
+#   "acceptEdits"       : 読み取り + ファイル編集 + 一般的な filesystem コマンド
+#   "auto"              : classifier (別モデル) が審査して自動承認する
+#   "dontAsk"           : 事前承認済みのツールのみ (CI 向け)
+#   "bypassPermissions" : 全て素通り (隔離環境専用)
+# ask / deny リストと hook はどのモードでも効くので、auto でも防御は残る。
+# 出典: https://code.claude.com/docs/en/permission-modes
+default_permission_mode = "auto"
+
 mcp_deny = [
   "mcp__supabase__execute_sql",
 ]
@@ -388,6 +397,17 @@ mcp_deny = [
 # Copilot 固有
 # ---------------------------------------------------------------------------
 [copilot]
+# 新規対話セッションの権限モード (~/.copilot/settings.json)
+#   "manual" (既定): write / command は都度プロンプト。read-only は自動承認
+#   "assisted"     : LLM の safety check が安全と判断した要求を自動承認し、
+#                    それ以外はプロンプト。experimental な auto-approval が必要
+#   "allow-all"    : 全て自動承認 (--allow-all 相当)
+# 再開セッション・非対話実行・--allow-all 済みセッションでは無視される。
+# 出典: `copilot help config` (ローカル CLI が権威ある一覧を持つ)
+default_permission_mode = "assisted"
+# assisted は experimental な auto-approval 機能に依存する
+experimental = true
+
 # settings.json の trustedFolders へ反映
 trusted_folders = [
   "~/.local/share/chezmoi",

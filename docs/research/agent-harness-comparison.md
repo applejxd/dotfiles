@@ -183,10 +183,12 @@ Claude tool 名に変わる。`^bash$` は `Bash` にマッチしない。両対
 | `command git push` / `exec git push` / `'git' push` / `parallel` / `while read` | **修正済**: 組み込み前置・引用・並列実行も normalize が剥がす |
 | ドキュメント中のコマンド例 (`cat <<'EOF' > note.md` の本文) による誤検知 | **修正済**: `split_heredoc_body` が実行されない heredoc 本文を検査対象から外す |
 | `python3 - <<'PY'` の heredoc 本文からの外部実行 | **修正済**: インタプリタに渡る heredoc 本文はインラインコードとして検査する |
+| `uvx --from evil pip install` / `pipx run pip install` | **修正済**: ランナーの値付きオプションとサブコマンドを読み飛ばしてから pip を検出 |
+| `cp /tmp/<file> ./dst`（/tmp からの読み出し）が block される | **修正済**: 転送先が /tmp のときだけ書き込みとみなす |
 | エンコードされたコマンド (`printf` のエスケープ列、base64 の復号結果) を変数経由で組み立てる形 | **未対応**。復号結果は静的に追えない |
 
 上記の「修正済」は `test/agents/test_check_bash_decision.py` と
-`test_command_policy.py` に回帰テストがある (690 件)。日常的に使うコマンド
+`test_command_policy.py` に回帰テストがある (741 件)。日常的に使うコマンド
 (`bash test/test.sh` / `timeout 900 chezmoi apply` / `grep -rn token .` /
 `cp .env.example .env` / `git commit -m "fix token refresh"` /
 `docker run --rm alpine echo hi` / `npm run build` / `mise exec -- shellcheck x.sh` /
@@ -250,7 +252,52 @@ normalize の展開はセグメント 200 個・1 セグメント 4000 文字を
 分割・偽装、作業ディレクトリの付け替え）はしない**」は、残る層を埋めるために存在する。
 ハーネス既定の「ブロックされたら別アプローチを検討する」とは意図的に差分がある。
 
-## 6. その他の差分（指示設計に影響するもの）
+## 6. 承認モード（LLM による安全性判定）
+
+両 CLI とも「LLM が安全性を判定して自動承認する」モードを持つ。
+
+| | Claude Code | Copilot CLI |
+| --- | --- | --- |
+| 手動 | `default`（CLI 表示は Manual、別名 `manual`） | `manual` |
+| **LLM 判定** | **`auto`**（classifier という別モデルが審査） | **`assisted`**（LLM safety check） |
+| ファイル編集のみ自動 | `acceptEdits` | — |
+| 事前承認のみ | `dontAsk` | — |
+| 全許可 | `bypassPermissions` | `allow-all` |
+
+設定キーは次のとおり。`common.toml` から両方を生成している。
+
+| CLI | キー | 場所 |
+| --- | --- | --- |
+| Claude Code | `permissions.defaultMode` | `~/.claude/settings.json` |
+| Copilot CLI | `defaultPermissionMode` | `~/.copilot/settings.json` |
+
+### 重要な制約
+
+- **`ask` に載せたものはどのモードでも自動承認されない。**
+  Claude Code は「explicit ask rule に一致するツールは `bypassPermissions` を
+  含むどのモードでも自動承認しない」と明記。hook の `ask` も
+  「プロンプトを最低保証する」（CHANGELOG: a hook ask now floors the decision at a prompt）
+- したがって LLM に判断させたいコマンドは **`allow` ではなく未掲載**にする。
+  `allow` に入れると手動モードでも無条件に通り、かえって緩くなる
+- Copilot の `assisted` は **experimental な auto-approval 機能に依存**する。
+  機能が off、または組織ポリシーが auto-approval を禁じている場合は無視される
+- `defaultPermissionMode` は再開セッション・非対話実行・
+  `--allow-all` 済みセッションでは無視される
+- `deny` ルールは全モードで有効（`bypassPermissions` でも遮断される）
+
+### Copilot の設定キーは Web ドキュメントに載っていない
+
+`defaultPermissionMode` とその値（`manual` / `assisted` / `allow-all`）は
+Web ドキュメントの設定一覧では見つけられなかった。
+権威ある一覧は **ローカル CLI の `copilot help config`** にある。
+
+```bash
+copilot help config | grep -A 6 defaultPermissionMode
+```
+
+Copilot CLI の設定を調べるときは、Web より先にこちらを見ること。
+
+## 7. その他の差分（指示設計に影響するもの）
 
 | 項目 | Claude Code | Copilot CLI | Codex CLI |
 | --- | --- | --- | --- |
@@ -261,7 +308,7 @@ normalize の展開はセグメント 200 個・1 セグメント 4000 文字を
 | プランモード | `plan` permission mode | `/plan`、Shift+Tab | `/plan` |
 | Web 取得の既定 | `WebFetch` + ドメイン許可 | `allowedUrls` / `deniedUrls` | `web_search` 既定 `"cached"`（本環境は `"live"`） |
 
-## 7. 現在の個人用指示（2026-08-08 版）
+## 8. 現在の個人用指示（2026-08-08 版）
 
 3 ファイルとも同じ 4 セクション構成。差分は以下だけ。
 
@@ -276,7 +323,7 @@ normalize の展開はセグメント 200 個・1 セグメント 4000 文字を
 [`home/dot_copilot/copilot-instructions.md`](../../home/dot_copilot/copilot-instructions.md) /
 [`home/dot_codex/AGENTS.md`](../../home/dot_codex/AGENTS.md)
 
-## 8. 指示ファイル設計のベストプラクティス（出典付き）
+## 9. 指示ファイル設計のベストプラクティス（出典付き）
 
 | 原則 | 出典 |
 | --- | --- |
@@ -303,6 +350,8 @@ copilot --version && claude --version && codex --version
 
 | 優先 | 対象 | URL |
 | --- | --- | --- |
+| ★★★ | **Copilot CLI 設定の権威ある一覧（Web に無いキーがある）** | ローカルで `copilot help config` を実行 |
+| ★★★ | Claude Code permission モード（auto / classifier の挙動） | <https://code.claude.com/docs/en/permission-modes> |
 | ★★★ | Copilot CLI 設定ディレクトリ / settings.json 全キー | <https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference> |
 | ★★★ | Copilot hooks（イベント・matcher・I/O） | <https://docs.github.com/en/copilot/reference/hooks-reference> |
 | ★★★ | Claude Code hooks（イベント一覧が特に流動的） | <https://code.claude.com/docs/en/hooks> |

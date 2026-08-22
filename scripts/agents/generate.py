@@ -179,7 +179,13 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
 
 def merge_claude_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     out = dict(existing)
-    out["permissions"] = build_claude_permissions(common)
+    permissions = build_claude_permissions(common)
+    # 新規セッションの権限モード。ask / deny と hook はどのモードでも効くので、
+    # auto を既定にしても防御は残る。
+    mode = common.get("claude", {}).get("default_permission_mode")
+    if mode:
+        permissions["defaultMode"] = mode
+    out["permissions"] = permissions
     out["hooks"] = build_claude_hooks(common)
     return out
 
@@ -246,6 +252,14 @@ def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> 
         out.pop("deniedUrls", None)
 
     out["trustedFolders"] = [expand_user(p) for p in copilot.get("trusted_folders", [])]
+
+    # 新規対話セッションの権限モード。assisted は experimental な
+    # auto-approval 機能に依存するため、両方をここで揃える。
+    mode = copilot.get("default_permission_mode")
+    if mode:
+        out["defaultPermissionMode"] = mode
+    if "experimental" in copilot:
+        out["experimental"] = bool(copilot["experimental"])
 
     return out
 
