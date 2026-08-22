@@ -442,13 +442,14 @@ timeout_sec = 30
 id = "redirect-tmp"
 script = "redirect-tmp.py"
 runner = "python3"
-purpose = "/tmp 利用を検出して ./.tmp へ誘導する"
-# スクリプトが処理する kind は bash / view / create / edit の 4 つだけなので
-# matcher もそれに合わせる (無駄な hook 起動を避ける)
-claude_matcher = "Bash|Read|Write|Edit"
+purpose = "/tmp への書き込みを検出して ./.tmp へ誘導する (読み取り専用操作は許可)"
+# スクリプトが処理する kind は bash / create / edit の 3 つだけなので matcher
+# もそれに合わせる (無駄な hook 起動を避ける)。view (Read) は常に許可なので
+# hook を呼ぶ必要が無く、matcher から除外している。
+claude_matcher = "Bash|Write|Edit"
 claude_event = "PreToolUse"
 copilot_event = "PreToolUse"
-copilot_matcher = "^(Bash|bash|Read|view|Write|create|Edit|edit)$"
+copilot_matcher = "^(Bash|bash|Write|create|Edit|edit)$"
 timeout_sec = 30
 
 [[hooks]]
