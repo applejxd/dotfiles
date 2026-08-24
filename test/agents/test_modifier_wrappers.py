@@ -30,6 +30,7 @@ MODIFIERS = {
         "copilot-perms",
     ),
 }
+COPILOT_HOOKS = ROOT / "home" / "dot_copilot" / "hooks" / "from-claude.json.tmpl"
 
 
 def execute_template(template: str) -> bytes:
@@ -85,6 +86,12 @@ def test_modifier_targets_keep_json_names():
     for target, _ in MODIFIERS.values():
         assert target in managed
         assert f"{target}.py" not in managed
+
+
+def test_copilot_hooks_template_renders_as_json():
+    rendered = execute_template(COPILOT_HOOKS.read_text(encoding="utf-8"))
+
+    assert json.loads(rendered)["version"] == 1
 
 
 @pytest.mark.parametrize(("source", "_"), MODIFIERS.items())

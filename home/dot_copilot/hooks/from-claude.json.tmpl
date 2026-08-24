@@ -3,4 +3,10 @@
   [[hooks]] から生成する。手で編集せず common.toml 側を直すこと。
   Claude Code 側 (~/.claude/settings.json の hooks) も同じソースから生成される。
 */ -}}
-{{ output "python3" (joinPath .chezmoi.workingTree "scripts/agents/generate.py") "--target" "copilot-hooks" "--common" (joinPath .chezmoi.workingTree "home/dot_config/agents/common.toml") "--existing" "/dev/null" -}}
+{{- $generator := joinPath .chezmoi.workingTree "scripts/agents/generate.py" -}}
+{{- $common := joinPath .chezmoi.workingTree "home/dot_config/agents/common.toml" -}}
+{{- if eq .chezmoi.os "windows" -}}
+{{ output "py" "-3" $generator "--target" "copilot-hooks" "--common" $common "--existing" "NUL" -}}
+{{- else -}}
+{{ output "python3" $generator "--target" "copilot-hooks" "--common" $common "--existing" "/dev/null" -}}
+{{- end -}}
