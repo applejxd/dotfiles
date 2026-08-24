@@ -1,0 +1,61 @@
+# GitHub Pages へ静的ファイルをデプロイするワークフロー例。
+#
+# 設計方針: ノートブックの実行はローカル、デプロイはCI。
+# HTML は scripts/build-site.sh でローカル生成して site/ にコミットする。
+# このワークフローは事前ビルド済みの静的ファイルをアップロードするだけなので、
+# CI にAPIキーを置く必要がなく、CI側で課金も発生しない。
+
+name: Deploy site to GitHub Pages
+
+# yamllint は GitHub Actions の `on:` を真偽値と誤判定するため、この行だけ除外する。
+# 実際のワークフローへコピーする際、この注釈は残しても消しても動作は変わらない。
+# yamllint disable-line rule:truthy
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - imgs/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# デプロイの同時実行は1つに制限する。進行中のものはキャンセルしない。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # site/imgs/ を gitignore している場合、追跡下の imgs/ から復元する。
+      # エクスポートされた HTML は画像を相対パス `imgs/...` で参照するため。
+      - name: Copy images into the site
+        run: |
+          rm -rf site/imgs
+          cp -r imgs site/imgs
+
+      # `enablement: true` は、Pages が未設定のときに API 経由で有効化を試みる。
+      # これが無いと初回実行が "Get Pages site failed" で失敗し、
+      # Settings > Pages > Source を GitHub Actions へ手動変更するまで通らない。
+      # 権限によっては自動有効化も失敗するため、その場合は手動設定する。
+      - uses: actions/configure-pages@v6.0.0
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v5.0.0
