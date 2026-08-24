@@ -55,6 +55,11 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
   . "{{ .chezmoi.homeDir }}/Documents/commands/docker.ps1"
 }
 
+# `chezmoi cd` that keeps the current shell session
+function ccd {
+    Set-Location (chezmoi source-path)
+}
+
 #-----#
 # fzf #
 #-----#

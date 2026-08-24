@@ -101,6 +101,7 @@ else
     alias diff="diff -u"
 fi
 
+# history preserved yazi command
 if command -v "yazi" >/dev/null 2>&1; then
     function y() {
         local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
@@ -108,6 +109,13 @@ if command -v "yazi" >/dev/null 2>&1; then
         IFS= read -r -d '' cwd < "$tmp"
         [ "$cwd" != "$PWD" ] && [ -d "$cwd" ] && builtin cd -- "$cwd"
         rm -f -- "$tmp"
+    }
+fi
+
+# `chezmoi cd` that keeps the current shell session
+if command -v "chezmoi" >/dev/null 2>&1; then
+    function ccd() {
+        cd "$(chezmoi source-path)" || exit
     }
 fi
 
