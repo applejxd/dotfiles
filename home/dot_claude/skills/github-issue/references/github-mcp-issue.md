@@ -2,7 +2,7 @@
 
 > github-mcp-server が提供する issue 関連ツールの早見表。
 > Copilot CLI では内蔵 `github-mcp-server` が最初から有効。
-> Claude Code では `home/dot_claude/modify_settings.json.tmpl` 等で
+> Claude Code では `home/dot_claude/modify_settings.json.py.tmpl` 等で
 > 個別有効化が必要（このスキルは「MCP が使える前提」で書く）。
 
 ## 認証

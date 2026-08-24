@@ -34,9 +34,10 @@ args = [
 # see https://www.chezmoi.io/reference/configuration-file/interpreters/
 [interpreters.py]
 {{- if eq .chezmoi.os "windows" }}
-    command = 'C:\WINDOWS\py.EXE'
-{{- else if eq .chezmoi.os "linux" }}
-    command = '/usr/bin/python3'
+    command = "py"
+    args = ["-3"]
+{{- else }}
+    command = "python3"
 {{- end }}
 
 [data]

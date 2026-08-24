@@ -9,7 +9,7 @@
 
 ## settings.json の管理範囲
 
-`~/.claude/settings.json` は chezmoi の `modify_settings.json.tmpl` が更新する。
+`~/.claude/settings.json` は chezmoi の `modify_settings.json.py.tmpl` が更新する。
 
 | キー | 管理 |
 | --- | --- |

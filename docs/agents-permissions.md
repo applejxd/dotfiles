@@ -13,7 +13,7 @@ home/dot_config/agents/
 scripts/agents/
     generate.py                              modify_ / .tmpl から呼ばれる変換器
 home/dot_claude/
-    modify_settings.json.tmpl                ~/.claude/settings.json を更新
+    modify_settings.json.py.tmpl             ~/.claude/settings.json を更新
 home/dot_claude/hooks/
     executable_check_bash.py                 deny / ask を判定 (fail-closed)
     executable_redirect-tmp.py               /tmp 利用を ./.tmp へ誘導
@@ -22,8 +22,8 @@ home/dot_claude/hooks/
     executable_update-adr-on-stop.py         ターン終了時に ADR 更新を促す
 home/dot_copilot/
     hooks/from-claude.json.tmpl              ~/.copilot/hooks/from-claude.json を生成
-    modify_private_settings.json.tmpl        ~/.copilot/settings.json を更新
-    modify_private_permissions-config.json.tmpl
+    modify_private_settings.json.py.tmpl     ~/.copilot/settings.json を更新
+    modify_private_permissions-config.json.py.tmpl
 test/agents/
     test_command_policy.py                   shell normalize / match の unit test
     test_check_bash_decision.py              deny/ask 判定と rm root guard の test
@@ -218,7 +218,7 @@ home/AppData/Roaming/Keyhac/.../keymap_layer.drawio
 
 | 生成先 | 生成方法 | 使うフィールド |
 | --- | --- | --- |
-| `~/.claude/settings.json` の `hooks` | `modify_settings.json.tmpl` → `--target claude-settings` | `claude_event` / `claude_matcher` / `timeout_sec` |
+| `~/.claude/settings.json` の `hooks` | `modify_settings.json.py.tmpl` → `--target claude-settings` | `claude_event` / `claude_matcher` / `timeout_sec` |
 | `~/.copilot/hooks/from-claude.json` | `from-claude.json.tmpl` の `output` → `--target copilot-hooks` | `copilot_event` / `copilot_matcher` / `timeout_sec` |
 
 - hook スクリプトの実体は `~/.claude/hooks/` に 1 つだけ置き、Copilot からも

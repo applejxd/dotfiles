@@ -182,7 +182,7 @@ JSON 形式エラー、参照スクリプトの不在、matcher の anchored 規
 | Python hook 本体 | `home/dot_claude/hooks/executable_<name>.py` | `~/.claude/hooks/<name>.py` (実行属性付) |
 | Bash hook 本体 | `home/dot_claude/hooks/executable_<name>.sh` | `~/.claude/hooks/<name>.sh` (実行属性付) |
 | hook の登録情報 (両 CLI 共通) | `home/dot_config/agents/common.toml` の `[[hooks]]` | 下 2 行へ自動展開 |
-| Claude 設定 | `home/dot_claude/modify_settings.json.tmpl` (生成) | `~/.claude/settings.json` の `hooks` 節 |
+| Claude 設定 | `home/dot_claude/modify_settings.json.py.tmpl` (生成) | `~/.claude/settings.json` の `hooks` 節 |
 | Copilot 設定 | `home/dot_copilot/hooks/from-claude.json.tmpl` (生成) | `~/.copilot/hooks/from-claude.json` |
 
 **hook の登録先は `common.toml` の `[[hooks]]` 1 箇所**。設定ファイルは
