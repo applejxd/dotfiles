@@ -39,6 +39,23 @@ chezmoi apply             # sops の age 鍵取得・gitconfig user セクショ
 
 依存関係スクリプトをスキップしたい場合は `chezmoi apply --exclude=scripts`。
 
+### Windows での Herdr
+
+Windows ネイティブ環境では、`chezmoi apply` 時に公式インストーラーから Herdr の stable
+チャンネルをユーザースコープへ導入します。バイナリは
+`%USERPROFILE%\.herdr\packages\standalone\releases` で管理され、
+`%LOCALAPPDATA%\Programs\Herdr\bin` がユーザー PATH に追加されます。初回適用後に
+`herdr` が見つからない場合は、新しいターミナルを開いてください。
+
+以後の更新は Herdr 自身で行います。
+
+```powershell
+herdr update
+```
+
+Windows ARM64 では、公式の x86_64 ビルドが Windows のエミュレーション上で動作します。
+WSL 側にはこの Windows 用スクリプトでは導入されません。
+
 ### 更新
 
 ```bash
