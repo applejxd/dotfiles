@@ -1,0 +1,16 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$herdrPath = Join-Path $env:LOCALAPPDATA 'Programs\Herdr\bin\herdr.exe'
+if (-not (Test-Path -LiteralPath $herdrPath -PathType Leaf)) {
+  throw "Herdr is not available at $herdrPath"
+}
+
+{{- if eq .chezmoi.username "applejxd" }}
+& $herdrPath integration install copilot
+{{- else }}
+& $herdrPath integration install claude
+{{- end }}
+if ($LASTEXITCODE -ne 0) {
+  throw "Herdr integration installation failed with exit code $LASTEXITCODE"
+}

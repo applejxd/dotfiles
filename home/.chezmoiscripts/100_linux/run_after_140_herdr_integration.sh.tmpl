@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -euo pipefail
+
+herdr_path="${HOME}/.local/bin/herdr"
+if [[ ! -x "$herdr_path" ]]; then
+    echo "Herdr is not available at ${herdr_path}" >&2
+    exit 1
+fi
+
+{{- if eq .chezmoi.username "applejxd" }}
+"$herdr_path" integration install copilot
+{{- else }}
+"$herdr_path" integration install claude
+{{- end }}
