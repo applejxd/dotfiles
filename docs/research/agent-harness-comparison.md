@@ -74,7 +74,8 @@
 共通資産は `~/.claude` 配下に集約し、他ハーネスからは参照する。同一スクリプトを
 二重管理しないことが目的で、`agent_compat.py` が両ツールの I/O 差を吸収することを前提にしている。
 
-- skill: `~/.copilot/skills` は `../.claude/skills` への symlink（Copilot CLI は
+- skill: `~/.copilot/skills` は `.claude/skills` へのリンク（Unix は symlink、
+  Windows は directory junction。Copilot CLI は
   `.claude/skills` を公式サポートするため、コピーではなく参照で済む）
 - hook: `~/.copilot/hooks/from-claude.json` が `$HOME/.claude/hooks/*.py` を指す
 - permission: `home/dot_config/agents/common.toml` を単一ソースとし、
@@ -331,7 +332,7 @@ calls `task_complete`**」とあり、autopilot 前提のツールだと分か�
 | 応答言語の設定 | `settings.json` の `language`（例 `"japanese"`） | 設定キーなし → 指示ファイルで指定 | `personality` は文体のみ。言語は指示ファイル |
 | 自動メモリ | ✅ auto memory（Claude が自分で学習を書く） | `/chronicle` によるセッション履歴 | Memories（experimental、既定 off） |
 | 組み込みサブエージェント | `general-purpose` / `Explore` / `Plan` ほか | `explore` / `task` / `general-purpose` / `research` / `code-review` / `security-review` / `rubber-duck` | `multi_agent`（既定 on） |
-| skill | `~/.claude/skills/` | `~/.copilot/skills/`（本環境は `.claude/skills` への symlink）、`.claude/skills/` も公式サポート | `~/.codex/skills/` |
+| skill | `~/.claude/skills/` | `~/.copilot/skills/`（本環境は `.claude/skills` への symlink / junction）、`.claude/skills/` も公式サポート | `~/.codex/skills/` |
 | プランモード | `plan` permission mode | `/plan`、Shift+Tab | `/plan` |
 | Web 取得の既定 | `WebFetch` + ドメイン許可 | `allowedUrls` / `deniedUrls` | `web_search` 既定 `"cached"`（本環境は `"live"`） |
 

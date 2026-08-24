@@ -29,6 +29,24 @@ VS Code がインストールされていない場合、拡張機能のインス
 
 インストールスクリプトはローカルファイルを参照するため、ネットワーク接続は主に外部パッケージのダウンロード時のみ必要です。
 
+### 5. Windows で `.copilot/skills` のリンク作成に失敗する
+
+Windows では symlink 作成に Developer Mode または管理者権限が必要なため、
+`run_after_342_copilot_skills.ps1` が通常権限で directory junction を作成する。
+`.copilot/skills` が `chezmoi managed` に表示されないのは意図した動作。
+
+既存の通常ディレクトリにファイルがある場合は自動削除しない。内容を確認して別の場所へ
+移動してから再実行する。
+
+```powershell
+Get-Item "$HOME\.copilot\skills" -Force |
+    Select-Object FullName, LinkType, Target
+chezmoi apply
+```
+
+directory junction はローカルファイルシステム向けであり、ホームディレクトリが
+UNC/network path の場合は作成できない。
+
 ## ログの確認
 
 ```bash

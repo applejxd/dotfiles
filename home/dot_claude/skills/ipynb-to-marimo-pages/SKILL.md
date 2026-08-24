@@ -236,7 +236,7 @@ Markdownセルが全滅していても素通りする。実行時の健全性を
 ## 参照ファイル
 
 パスはこのスキルの base directory 基準。実体は
-`~/.claude/skills/ipynb-to-marimo-pages/`（`~/.copilot/skills` はここへの symlink）。
+`~/.claude/skills/ipynb-to-marimo-pages/`（`~/.copilot/skills` はここへの symlink / junction）。
 `${CLAUDE_SKILL_DIR}` / `${COPILOT_SKILL_DIR}` は **Copilot CLI では展開されない**ため、
 スクリプトを実行する際は上記の絶対パスで書く。
 

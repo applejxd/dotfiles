@@ -1,0 +1,72 @@
+$ErrorActionPreference = 'Stop'
+
+# Run on every apply so a deleted or replaced junction is repaired.
+$homeDir = {{ .chezmoi.homeDir | toJson }}
+$linkPath = Join-Path $homeDir '.copilot\skills'
+$skillsPath = Join-Path $homeDir '.claude\skills'
+$trimSeparators = [char[]] @(
+    [IO.Path]::DirectorySeparatorChar,
+    [IO.Path]::AltDirectorySeparatorChar
+)
+
+function Get-ResolvedTarget {
+    param([System.IO.FileSystemInfo] $Item)
+
+    $target = [string] $Item.Target
+    if ([IO.Path]::IsPathRooted($target)) {
+        return [IO.Path]::GetFullPath($target)
+    }
+
+    return [IO.Path]::GetFullPath(
+        (Join-Path (Split-Path $Item.FullName) $target)
+    )
+}
+
+function Test-CopilotSkillsJunction {
+    $item = Get-Item -LiteralPath $linkPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        return $false
+    }
+
+    if ($item.LinkType -notin @('Junction', 'SymbolicLink')) {
+        $children = @(Get-ChildItem -LiteralPath $linkPath -Force)
+        if ($item.PSIsContainer -and $children.Count -eq 0) {
+            Remove-Item -LiteralPath $linkPath -Force
+            return $false
+        }
+
+        Write-Warning "$linkPath contains unmanaged data. Move it aside and re-run chezmoi apply."
+        return $true
+    }
+
+    $actualTarget = (Get-ResolvedTarget -Item $item).TrimEnd($trimSeparators)
+    $expectedTarget = ([IO.Path]::GetFullPath($skillsPath)).TrimEnd($trimSeparators)
+    if ($actualTarget -ne $expectedTarget) {
+        Write-Warning "$linkPath points to '$actualTarget', expected '$expectedTarget'. Move it aside and re-run chezmoi apply."
+        return $true
+    }
+
+    if ($item.LinkType -eq 'Junction') {
+        return $true
+    }
+
+    & cmd.exe /d /c rmdir $linkPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to remove the existing symbolic link at $linkPath."
+    }
+    return $false
+}
+
+try {
+    New-Item -ItemType Directory -Path (Split-Path $linkPath) -Force | Out-Null
+    New-Item -ItemType Directory -Path $skillsPath -Force | Out-Null
+
+    if (Test-CopilotSkillsJunction) {
+        exit 0
+    }
+
+    New-Item -ItemType Junction -Path $linkPath -Target $skillsPath | Out-Null
+}
+catch {
+    Write-Warning "Failed to maintain the Copilot skills junction. Leave $linkPath unchanged and continue. Directory junctions require a local filesystem. $($_.Exception.Message)"
+}

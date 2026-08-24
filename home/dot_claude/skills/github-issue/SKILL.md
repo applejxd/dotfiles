@@ -68,7 +68,7 @@ Copilot CLI では `${CLAUDE_SKILL_DIR}` が展開されないため、絶対パ
 ## Projects カスタムフィールド更新の標準 3 ステップ
 
 同梱スクリプトは `~/.claude/skills/github-issue/scripts/` 配下にある。
-Copilot からも同じパス（`~/.copilot/skills/github-issue/scripts/` の symlink 経由）で見える。
+Copilot からも同じパス（`~/.copilot/skills/github-issue/scripts/` の symlink / junction 経由）で見える。
 
 ### Step 1: project と field の ID 解決
 
