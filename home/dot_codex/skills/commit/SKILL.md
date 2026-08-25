@@ -13,7 +13,12 @@ description: Git commit message generator following Conventional Commits
 2. スコープはファイルやモジュール名から推測（例: core, ui, db）
 3. 説明は簡潔に（デフォルトは英語・指示があればその言語）
 4. 本文に差分の要約を箇条書きで追加
-5. **コミットする場合はユーザへ必ず確認**
+5. コミット対象とメッセージを提示し、`git add` / `git commit` の実行前に
+   **ユーザーへ必ず確認**
+6. 承認後は対象ファイルだけを `git add` し、承認済みメッセージで
+   `git commit` を実行
+7. `--no-verify` などによる hook の回避は禁止
+8. 承認後に対象ファイルまたは差分が変わった場合は、実行前に再確認
 
 出力例：
 

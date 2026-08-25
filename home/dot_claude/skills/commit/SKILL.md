@@ -3,7 +3,7 @@ name: commit
 description: "Conventional Commits 形式でコミットメッセージを生成する。「コミットして」「commit メッセージを作って」と言われたときに使う。"
 context: fork
 agent: general-purpose
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(*get-git-context.sh*)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(*get-git-context.sh*)
 ---
 
 # コミットメッセージ生成スキル
@@ -45,11 +45,15 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
 
 **禁止**:
 
-- `git commit` / `git add` の実行
+- ユーザー承認前の `git add` / `git commit` の実行
+- `--no-verify` などによる hook の回避
 - 共同著者タグ・Claude リンクの追加
 - 未測定の数値主張
 
 **要求**:
 
-- 提案コミット文の提示と簡潔な説明のみ
-- コミット実行前にユーザーの承認を求める
+- 提案コミット文と対象ファイルを提示し、`git add` / `git commit` の実行前に
+  ユーザーの承認を得る
+- 承認された場合は対象ファイルだけを `git add` し、承認済みメッセージで
+  `git commit` を実行する
+- 承認後に対象ファイルまたは差分が変わった場合は、実行前に再確認する
