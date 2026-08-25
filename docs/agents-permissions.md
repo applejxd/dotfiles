@@ -112,7 +112,8 @@ deny = ["git reset --hard"]   # 作業ツリーを壊す形だけ拒否
 | **LLM 判定へ委譲** | `npx`, `uvx`, `pipx run`, `python -c`, `npm install`, `mv` | **未掲載** |
 | 用途で危険度が変わる | `nc` (疎通確認は `ask`、`-e` / `-l` は hook が deny) | `ask` + hook |
 | サブコマンドで分ける | `systemctl status` は許可、`systemctl enable` は `deny` | 用途ごとに列挙 |
-| 自動承認 | `git status`, `grep -n`, `uv sync`, `gh pr list` | `allow` |
+| 自動承認 | `git status`, `grep -n`, `uv sync` | `allow` |
+| GitHub 読み取り | `gh pr list`, `gh issue view`, `gh search code`, REST GET | **未掲載** |
 
 ### 「未掲載」という 4 つ目の選択肢
 
@@ -142,6 +143,25 @@ Claude Code は「explicit ask rule に一致するツールは、`bypassPermiss
 未掲載にしても hook の個別 deny チェックは効く。
 `uvx ruff format .` は通るが `uvx pip install x` は deny、
 `python -c 'print(1)'` は通るが `python -c "os.system('git push')"` は deny になる。
+
+`gh` も全て allow から外している。Copilot の `permissions-config.json` は
+`gh pr list` のような allow を先頭トークン `gh` に丸めるため、1件でも置くと
+未列挙の mutation まで assisted を迂回してしまう。読み取り系は未掲載、
+既知の mutation は ask / deny、`gh api` は hook の意味解析に委ねる。
+
+| `gh` の分類 | 例 | 結果 |
+| --- | --- | --- |
+| 読み取り CLI | `issue/pr/release/repo` の list/view、`gh search`、`gh status` | 未掲載 |
+| REST API 読み取り | 既定 GET、明示 GET / HEAD | 未掲載 |
+| GraphQL 読み取り | inline の `query` / `{ ... }` | 未掲載 |
+| API mutation | POST / PUT / PATCH / DELETE、暗黙 POST、GraphQL mutation | ask |
+| API 判定不能 | query 未指定、file / stdin query、動的 method | ask |
+| 秘密情報 | `auth token`, `auth status --show-token`, sensitive file payload | deny |
+
+`gh api -f/-F` は通常は暗黙に POST へ切り替わる。ただし
+`--method GET` を明示した場合は query parameter として扱うため未掲載にする。
+GraphQL は読み取り query でも HTTP POST を使うので、method ではなく operation
+本文を検査する。静的に安全性を確認できない場合は fail-open にせず ask へ倒す。
 
 モードは `common.toml` から両 CLI へ生成している。
 
@@ -178,6 +198,9 @@ permission を回避する既知のバイパス形式であり、対策を用意
 allow に置くと Copilot では `git push` まで承認される）は、
 `test_shadowed_entries_are_enforced_by_hook` が hook 側で確実に止まることを
 機械的に検査する。ここが落ちたら Copilot ではそのコマンドが無条件に通る。
+
+`gh` は衝突を hook で補うのではなく、allow から完全に外して
+`test_copilot_permissions_do_not_broadly_allow_gh` で再発を防ぐ。
 
 ### 無人実行時に `ask` がどうなるか
 

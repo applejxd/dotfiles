@@ -61,19 +61,9 @@ allow = [
   "uv sync",
   "docker ps",
   "mise run",
-  # gh の読み取り系 (github-issue skill が使う)
-  "gh auth status",
-  "gh pr list",
-  "gh pr view",
-  "gh issue list",
-  "gh issue view",
-  "gh repo view",
-  "gh run list",
-  "gh run view",
-  "gh project list",
-  "gh project view",
-  "gh project field-list",
-  "gh project item-list",
+  # gh は Copilot 側で先頭トークンまで粗粒度化されるため allow に置かない。
+  # 読み取り系は未掲載にして auto / assisted へ委譲し、mutation は ask / deny
+  # または check_bash.py の gh api 意味解析で止める。
 ]
 
 # 提案 -> ユーザーが承認 -> そのまま実行。
@@ -122,9 +112,8 @@ ask = [
   "gh issue create",
   "gh issue close",
   "gh issue comment",
-  # Projects v2 の mutation を含む。gh api は任意のエンドポイントを叩けるので
-  # 読み取りでも承認を挟む (gh auth token など秘密を引く形は deny 側)
-  "gh api",
+  # gh api は check_bash.py が REST method / GraphQL operation を解析する。
+  # GET / HEAD / query は未掲載、mutation と判定不能形式だけ ask にする。
   # グローバルに常駐する (pipx run は未掲載で LLM 判定に委ねる)
   "pipx install",
   # 素の疎通確認 (-z など) は使うが、-e/-c/-l は check_reverse_shell が deny する

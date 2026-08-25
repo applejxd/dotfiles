@@ -17,6 +17,7 @@ permission rules and the hook, so a rule only has to be written once.
 Public API:
     load_deny(common_toml_path)             -> list[str]
     load_ask(common_toml_path)              -> list[str]
+    split_command_segments(command_str)      -> list[str]
     normalize(command_str)                  -> list[str]
     find_match(command_str, patterns) -> str | None
 
@@ -165,6 +166,11 @@ def _split_compound(command: str) -> list[str]:
     return segments
 
 
+def split_command_segments(command: str) -> list[str]:
+    """Return raw logical command segments while preserving shell quoting."""
+    return _split_compound(command)
+
+
 def _strip_cd_prefix(segment: str) -> str:
     """Strip a leading ``cd <path>`` (with optional &&) that prefixes a command.
 
@@ -296,6 +302,12 @@ _GLOBAL_OPTS: dict[str, str] = {
     "kubectl": "flags+args",
     "systemctl": "flags+args",
     "chezmoi": "flags+args",
+}
+# 値を別トークンで取ることが仕様上確定している global option。
+# heuristic だけでは `--hostname github.com` の値をサブコマンドと誤認するため、
+# security policy の対象コマンドは明示する。
+_GLOBAL_OPTION_VALUE_FLAGS: dict[str, set[str]] = {
+    "gh": {"-R", "--repo", "--hostname"},
 }
 
 # サブコマンドの別名。`git send-pack` は `git push` と同じ効果を持つ。
@@ -457,6 +469,12 @@ def _strip_global_options(segment: str) -> str:
         # --git-dir=/x のように値が同じトークンなら 1 つ進める
         if "=" in token:
             i += 1
+            continue
+        if token in _GLOBAL_OPTION_VALUE_FLAGS.get(head, set()):
+            if i + 1 >= len(tokens):
+                return segment
+            global_flags.append(tokens[i + 1])
+            i += 2
             continue
         # -c user.name=x のように値が別トークンのもの。
         # ただし後続がサブコマンドらしければ値ではない (`git -P push`)。
@@ -663,6 +681,56 @@ def _expand_command_substitution(segment: str) -> list[str]:
             if inner_tokens:
                 found.append(f"{inner_tokens[-1]} {stripped}")
     return found
+
+
+def extract_command_substitutions(command: str) -> list[str]:
+    """Return command bodies executed by ``$(...)`` or backtick substitution."""
+    return [
+        inner
+        for match in _CMD_SUBST_RE.finditer(command)
+        if (inner := (match.group(1) or match.group(2) or "").strip())
+    ]
+
+
+def extract_function_bodies(command: str) -> list[str]:
+    """Return shell function bodies before compound-command splitting."""
+    header_re = re.compile(
+        r"(?:\bfunction\s+[A-Za-z_][A-Za-z0-9_]*(?:\s*\(\s*\))?"
+        r"|\b[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\))\s*\{"
+    )
+    bodies: list[str] = []
+    cursor = 0
+    while match := header_re.search(command, cursor):
+        start = match.end()
+        depth = 1
+        quote: str | None = None
+        escaped = False
+        i = start
+        while i < len(command):
+            char = command[i]
+            if escaped:
+                escaped = False
+            elif char == "\\" and quote != "'":
+                escaped = True
+            elif quote:
+                if char == quote:
+                    quote = None
+            elif char in {"'", '"', "`"}:
+                quote = char
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    body = command[start:i].strip().rstrip(";").strip()
+                    if body:
+                        bodies.append(body)
+                    cursor = i + 1
+                    break
+            i += 1
+        else:
+            cursor = match.end()
+    return bodies
 
 
 def _looks_like_option_value(token: str) -> bool:

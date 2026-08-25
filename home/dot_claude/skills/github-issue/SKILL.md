@@ -3,7 +3,7 @@ name: github-issue
 description: "GitHub issue の CRUD・コメント・ラベル・assignee 操作と、GitHub Projects v2 のカスタムフィールド更新を行う。「issue 作って」「issue を Project に入れて」「Project のステータスを In Progress にして」等で使う。標準操作は github MCP、Projects v2 は gh CLI を使い分ける。"
 context: fork
 agent: general-purpose
-allowed-tools: mcp__github__*, Bash(gh project list:*), Bash(gh project view:*), Bash(gh project field-list:*), Bash(gh project item-list:*), Bash(gh issue view:*), Bash(gh issue list:*), Bash(gh api graphql:*), Bash(gh auth status:*), Bash(*resolve-project.sh*), Bash(*add-issue-to-project.sh*), Bash(*set-project-field.sh*)
+allowed-tools: mcp__github__*, Bash(*resolve-project.sh*), Bash(*add-issue-to-project.sh*), Bash(*set-project-field.sh*)
 ---
 
 # github-issue skill

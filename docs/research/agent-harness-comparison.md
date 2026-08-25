@@ -97,7 +97,7 @@
 
 | decision | 対象 |
 | --- | --- |
-| `allow` | `git log` / `git status` / `git diff`、`gh pr list` / `gh issue list` / `gh issue view` / `gh repo view` / `gh run list` / `gh run view`、`docker ps` / `images` / `logs` / `inspect`、`grep` / `rg` / `awk` |
+| `allow` | `git log` / `git status` / `git diff`、`docker ps`、`grep` など。`gh` 読み取り系は Copilot で `gh` 全体に粗粒度化されるため未掲載 |
 | `prompt` | `git add` / `commit` / `push` / `reset` / `clean` / `branch -D`、`gh pr view` / `pr create` / `pr merge` / `pr checkout` / `issue create` / `issue close` / `repo clone`、`docker run` / `exec` / `build` / `rm` / `rmi`、`sed` |
 | `forbidden` | `git push --force`、`git push --force-with-lease`、`docker system prune` |
 
