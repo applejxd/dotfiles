@@ -14,3 +14,55 @@ if (-not (Test-Path -LiteralPath $herdrPath -PathType Leaf)) {
 if ($LASTEXITCODE -ne 0) {
   throw "Herdr integration installation failed with exit code $LASTEXITCODE"
 }
+
+$homeDir = {{ .chezmoi.homeDir | toJson }}
+$skillDir = Join-Path $homeDir '.claude\skills\herdr'
+$skillPath = Join-Path $skillDir 'SKILL.md'
+
+$startInfo = New-Object System.Diagnostics.ProcessStartInfo
+$startInfo.FileName = $herdrPath
+$startInfo.Arguments = '--skill'
+$startInfo.UseShellExecute = $false
+$startInfo.RedirectStandardOutput = $true
+$startInfo.RedirectStandardError = $true
+$startInfo.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$startInfo.StandardErrorEncoding = New-Object System.Text.UTF8Encoding($false)
+
+$process = New-Object System.Diagnostics.Process
+$process.StartInfo = $startInfo
+try {
+  [void] $process.Start()
+  $errorTask = $process.StandardError.ReadToEndAsync()
+  $skillText = $process.StandardOutput.ReadToEnd()
+  $process.WaitForExit()
+  $skillError = $errorTask.GetAwaiter().GetResult()
+
+  if ($process.ExitCode -ne 0) {
+    throw "Herdr agent skill generation failed with exit code $($process.ExitCode): $skillError"
+  }
+}
+finally {
+  $process.Dispose()
+}
+
+if ($skillText -notmatch '(?m)^name:\s*herdr\s*$') {
+  throw 'Herdr returned an invalid agent skill'
+}
+
+New-Item -ItemType Directory -Path $skillDir -Force | Out-Null
+$skillTempPath = Join-Path $skillDir ".$([System.Guid]::NewGuid().ToString('N')).tmp"
+$utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+try {
+  [System.IO.File]::WriteAllText($skillTempPath, $skillText, $utf8WithoutBom)
+  if (Test-Path -LiteralPath $skillPath -PathType Leaf) {
+    [System.IO.File]::Replace($skillTempPath, $skillPath, $null)
+  }
+  else {
+    [System.IO.File]::Move($skillTempPath, $skillPath)
+  }
+}
+finally {
+  if (Test-Path -LiteralPath $skillTempPath) {
+    Remove-Item -LiteralPath $skillTempPath -Force
+  }
+}

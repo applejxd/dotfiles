@@ -60,6 +60,11 @@ Herdr 管理の hook entry だけを追加・更新します。現在の状態�
 herdr integration status
 ```
 
+同じ `run_after` スクリプトが `herdr --skill` からリリース一致版の agent skill を生成し、
+`~/.claude/skills/herdr/SKILL.md` に配置します。Copilot CLI は
+`~/.copilot/skills` の symlink / junction を通じて同じスキルを参照します。
+`chezmoi apply` のたびに再生成されるため、Herdr 本体の更新後もスキルが追従します。
+
 初回適用後に `herdr` が見つからない場合は、新しいターミナルを開いてください。
 以後の Herdr 本体の更新は `herdr update` で行います。
 

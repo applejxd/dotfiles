@@ -13,3 +13,18 @@ fi
 {{- else }}
 "$herdr_path" integration install claude
 {{- end }}
+
+skill_dir="${HOME}/.claude/skills/herdr"
+skill_path="${skill_dir}/SKILL.md"
+mkdir -p "$skill_dir"
+skill_tmp="$(mktemp "${skill_dir}/.herdr-skill.XXXXXX")"
+trap 'rm -f "$skill_tmp"' EXIT
+
+"$herdr_path" --skill > "$skill_tmp"
+if ! grep -q '^name: herdr$' "$skill_tmp"; then
+    echo "Herdr returned an invalid agent skill" >&2
+    exit 1
+fi
+
+chmod 0644 "$skill_tmp"
+mv -f "$skill_tmp" "$skill_path"
