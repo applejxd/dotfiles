@@ -24,21 +24,24 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
 1. 上記コンテキストから **Conventional Commits** 形式のメッセージを作成する。
    詳細は `references/conventional-commits-spec.md` を参照する。
 2. メッセージ作成だけを依頼された場合は、対象ファイルとメッセージを提示して終了する。
-3. コミットを依頼された場合は、対象ファイルを列挙した次の形を**1回の Bash 呼び出し**
-   で実行する:
+3. コミットを依頼された場合は、**コマンドを出す前に** `echo "${COPILOT_CLI:-}"` を
+   実行して環境を判別し、次のどちらかに従う:
+   - 出力が `1` (Copilot CLI): 対象ファイルとコミットメッセージを提示し、
+     ユーザーの承認を得る。承認が得られなければコミットしない。
+     Copilot CLI 1.0.53 以降には hook の `ask` を TUI が数十 ms で自動承認する
+     既知バグ (github/copilot-cli#3590) があり、hook 確認が機能しないため。
+     このバグが修正されたらこの分岐を削除して hook 一本へ戻す。
+   - 出力が空 (Claude Code): 次の hook 確認が唯一の確認点になるため、
+     スキル独自の確認は挟まない。
+4. 上のゲートを満たしたうえで、対象ファイルを列挙した次の形を
+   **1回の Bash 呼び出し**で実行する:
 
    ```bash
    git add -- <対象ファイル...> && git commit -m '<件名>' -m '<本文>'
    ```
 
    `git commit` は共通 PreToolUse hook の ask 対象で、compound command 全体が
-   ステージング前に止まる。**Claude Code ではこの hook 確認が唯一の確認点**
-   なので、スキル独自の確認は挟まない。
-4. **Copilot CLI で実行している場合に限り**、上記コマンドを出す前に対象ファイルと
-   コミットメッセージを提示し、ユーザーの承認を得てから実行する。
-   Copilot CLI 1.0.53 以降には hook の `ask` を TUI が数十 ms で自動承認する
-   既知バグ (github/copilot-cli#3590) があり、hook 確認が機能しないため。
-   このバグが修正されたら、この手順を削除して hook 一本へ戻す。
+   ステージング前に止まる。
 5. コミット後に `git status --short` と `git log -1 --oneline` を実行し、
    コミットと作業ツリーを確認する。
 

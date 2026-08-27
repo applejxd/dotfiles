@@ -209,7 +209,7 @@ def test_compound_git_add_and_commit_requires_approval():
     assert decision == "ask", f"-> {decision} ({reason})"
 
 
-def test_commit_skills_use_single_hook_confirmation():
+def test_commit_skill_uses_direct_commands_and_compound_call():
     skill = COMMIT_SKILL_PATHS[0].read_text(encoding="utf-8")
     assert "git add -- <対象ファイル...> && git commit" in skill
     assert "スキル独自の確認は挟まない" in skill
@@ -225,11 +225,16 @@ def test_commit_skills_use_single_hook_confirmation():
 def test_commit_skill_works_around_copilot_ask_bug():
     """Copilot CLI 1.0.53+ は hook の ask を自動承認するため skill 側で確認する。
 
-    github/copilot-cli#3590 が修正されたらこの手順ごと削除してよい。
+    github/copilot-cli#3590 が修正されたらこの分岐ごと削除してよい。
     """
     skill = COMMIT_SKILL_PATHS[0].read_text(encoding="utf-8")
-    assert "Copilot CLI で実行している場合に限り" in skill
+    assert "COPILOT_CLI" in skill
     assert "github/copilot-cli#3590" in skill
+    # 承認ゲートが実行指示より後ろにあると、手順を順に辿る agent が
+    # 確認前にコミットしてしまう (バグ回避が無意味になる)。
+    gate = skill.index("COPILOT_CLI")
+    run = skill.index("git add -- <対象ファイル...> && git commit")
+    assert gate < run, "Copilot の承認ゲートが実行指示より後ろにある"
     docs = (ROOT / "docs" / "agents-permissions.md").read_text(encoding="utf-8")
     assert "github/copilot-cli/issues/3590" in docs
     assert "auto_approved" in docs
