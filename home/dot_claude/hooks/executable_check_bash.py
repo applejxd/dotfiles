@@ -224,13 +224,439 @@ _INLINE_EXEC_RE = re.compile(
     re.IGNORECASE,
 )
 
-# ─── curl/wget でのファイル送信パターン ──────────────────────────────
-CURL_FILE_SEND_PATTERN = re.compile(
-    r"\b(curl|wget)\b.*(?:-d\s*@|-F\s*['\"]?[^=]+=@|--data-binary\s*@"
-    r"|--data-raw\s*@|--data-urlencode\s*['\"]?[^=]*=@"
-    r"|-T\s|--upload-file\s|--post-file[=\s])",
-    re.IGNORECASE,
-)
+# ─── curl/wget の request / transfer 判定 ───────────────────────────
+_HTTP_READ_METHODS = {"GET", "HEAD"}
+_CURL_DATA_FLAGS = {
+    "-d", "--data", "--data-ascii", "--data-binary", "--data-raw",
+    "--data-urlencode", "--json",
+}
+_CURL_FORM_FLAGS = {"-F", "--form", "--form-string"}
+_CURL_UPLOAD_FLAGS = {"-T", "--upload-file"}
+_CURL_OUTPUT_FLAGS = {
+    "-o", "--output", "-D", "--dump-header", "-c", "--cookie-jar",
+    "--stderr", "--trace", "--trace-ascii",
+}
+_CURL_VALUE_FLAGS = {
+    "-A", "--user-agent", "-b", "--cookie",
+    "--connect-timeout", "-C", "--continue-at", "-D", "--dump-header",
+    "-e", "--referer", "-E", "--cert", "--cert-type", "--key",
+    "--key-type", "-H", "--header", "--hostpubmd5", "--hostpubsha256",
+    "--interface", "--limit-rate", "--local-port", "--max-filesize",
+    "-m", "--max-time", "--output-dir", "--proxy", "--proxy-header",
+    "--proxy-user", "-Q", "--quote", "-r", "--range", "--rate",
+    "--resolve", "--retry", "--retry-delay", "--retry-max-time",
+    "--socks4", "--socks4a", "--socks5", "--socks5-hostname",
+    "--speed-limit", "--speed-time", "--tls-max", "--tls13-ciphers",
+    "-u", "--user", "--url", "-w", "--write-out", "-x", "--proxy",
+    "-y", "--speed-time", "-Y", "--speed-limit",
+}
+_CURL_NO_VALUE_SHORT_FLAGS = set("012346#BaJMRZfFsSLIikvVqgGNnO")
+_CURL_CONFIG_FLAGS = {"-K", "--config"}
+_WGET_BODY_FLAGS = {
+    "--post-data", "--post-file", "--body-data", "--body-file",
+}
+_WGET_OUTPUT_FLAGS = {"-O", "--output-document"}
+_WGET_CONFIG_FLAGS = {"-e", "--execute", "--config"}
+_NON_EXECUTING_HTTP_PREFIXES = {
+    "cat", "echo", "file", "find", "grep", "ls", "rg", "sed", "stat",
+    "touch", "wc", "awk", "gawk", "printf",
+}
+
+
+def _resolve_http_long_option(
+    token: str, options: set[str]
+) -> tuple[str, bool]:
+    """Resolve an unambiguous curl/wget long-option prefix."""
+    if not token.startswith("--"):
+        return token, False
+    name, separator, value = token.partition("=")
+    if name in options:
+        return token, False
+    matches = [option for option in options if option.startswith(name)]
+    if len(matches) != 1:
+        return token, len(matches) > 1
+    resolved = matches[0]
+    if separator:
+        resolved = f"{resolved}={value}"
+    return resolved, False
+
+
+def _take_option_value(
+    args: list[str], index: int, token: str, short: str | None, long: str
+) -> tuple[str | None, int]:
+    """Return an attached/separate option value and the next index."""
+    if token.startswith(f"{long}="):
+        return token[len(long) + 1:], index + 1
+    if short and token.startswith(short) and token != short:
+        return token[len(short):], index + 1
+    if token == long or (short and token == short):
+        if index + 1 >= len(args):
+            return None, index + 1
+        return args[index + 1], index + 2
+    return None, index
+
+
+def _payload_source(kind: str, value: str) -> str | None:
+    """Extract a local file referenced by a curl/wget payload option."""
+    if kind in _CURL_UPLOAD_FLAGS or kind in {"--post-file", "--body-file"}:
+        return value
+    if kind in _CURL_FORM_FLAGS:
+        candidate = value.split("=", 1)[-1]
+        if candidate.startswith("@") or candidate.startswith("<"):
+            return candidate[1:].split(";", 1)[0]
+        return None
+    if value.startswith("@"):
+        return value[1:]
+    if kind == "--data-urlencode" and "@" in value:
+        return value.split("@", 1)[1]
+    return None
+
+
+def _new_http_call(tool: str) -> dict[str, object]:
+    return {
+        "tool": tool,
+        "method": None,
+        "body_kinds": [],
+        "payload_sources": [],
+        "output_targets": [],
+        "output_dir": None,
+        "remote_name": False,
+        "urls": [],
+        "get_mode": False,
+        "ambiguous": False,
+    }
+
+
+def _apply_curl_no_value_flags(
+    call: dict[str, object], flags: str
+) -> None:
+    """Apply request/output semantics from curl short flags without values."""
+    if "I" in flags:
+        call["method"] = "HEAD"
+    if "G" in flags:
+        call["get_mode"] = True
+    if "O" in flags:
+        call["remote_name"] = True
+
+
+def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, object]]:
+    """Parse one curl command, including transfers separated by ``--next``."""
+    calls: list[dict[str, object]] = []
+    call = _new_http_call("curl")
+    args = tokens[command_index + 1:]
+    i = 0
+    while i < len(args):
+        token = args[i]
+        token, ambiguous_prefix = _resolve_http_long_option(
+            token,
+            {
+                "--request", "--data", "--data-ascii", "--data-binary",
+                "--data-raw", "--data-urlencode", "--json", "--form",
+                "--form-string", "--upload-file", "--output", "--dump-header",
+                "--cookie-jar", "--stderr", "--trace", "--trace-ascii",
+                "--config", "--get", "--head", "--next", "--output-dir",
+                "--remote-name", "--remote-name-all", "--url",
+            },
+        )
+        if ambiguous_prefix:
+            call["ambiguous"] = True
+            i += 1
+            continue
+        if token in {"-:", "--next"}:
+            calls.append(call)
+            call = _new_http_call("curl")
+            i += 1
+            continue
+
+        cluster = re.fullmatch(r"-([fFsSLIikvVqgGNnO]*)([XdFToDc])(.*)", token)
+        if cluster:
+            prefix, option, attached = cluster.groups()
+            _apply_curl_no_value_flags(call, prefix)
+            value = attached
+            if not value:
+                if i + 1 >= len(args):
+                    call["ambiguous"] = True
+                    i += 1
+                    continue
+                value = args[i + 1]
+                i += 1
+            kind = {
+                "X": "-X", "d": "-d", "F": "-F", "T": "-T",
+                "o": "-o", "D": "-D", "c": "-c",
+            }[option]
+            if kind == "-X":
+                call["method"] = value
+            elif kind in _CURL_OUTPUT_FLAGS:
+                call["output_targets"].append(value)
+            else:
+                call["body_kinds"].append(kind)
+                source = _payload_source(kind, value)
+                if source:
+                    call["payload_sources"].append(source)
+            i += 1
+            continue
+
+        value, next_i = _take_option_value(args, i, token, "-X", "--request")
+        if next_i != i:
+            if value is None:
+                call["ambiguous"] = True
+            else:
+                call["method"] = value
+            i = next_i
+            continue
+        if token in {"-I", "--head"}:
+            call["method"] = "HEAD"
+            i += 1
+            continue
+        if token in {"-G", "--get"}:
+            call["get_mode"] = True
+            i += 1
+            continue
+        if token in {"-O", "--remote-name", "--remote-name-all"}:
+            call["remote_name"] = True
+            i += 1
+            continue
+
+        matched_kind: str | None = None
+        matched_value: str | None = None
+        for short, long in (
+            ("-d", "--data"), (None, "--data-ascii"),
+            (None, "--data-binary"), (None, "--data-raw"),
+            (None, "--data-urlencode"), (None, "--json"),
+            ("-F", "--form"), (None, "--form-string"),
+            ("-T", "--upload-file"), ("-o", "--output"),
+            ("-D", "--dump-header"), ("-c", "--cookie-jar"),
+            (None, "--stderr"), (None, "--trace"), (None, "--trace-ascii"),
+            (None, "--output-dir"), (None, "--url"),
+        ):
+            value, next_i = _take_option_value(args, i, token, short, long)
+            if next_i != i:
+                matched_kind = token.split("=", 1)[0]
+                if short and matched_kind.startswith(short):
+                    matched_kind = short
+                else:
+                    matched_kind = long
+                matched_value = value
+                break
+        if matched_kind is not None:
+            if matched_value is None:
+                call["ambiguous"] = True
+            elif matched_kind in _CURL_OUTPUT_FLAGS:
+                call["output_targets"].append(matched_value)
+            elif matched_kind == "--output-dir":
+                call["output_dir"] = matched_value
+            elif matched_kind == "--url":
+                call["urls"].append(matched_value)
+            else:
+                call["body_kinds"].append(matched_kind)
+                source = _payload_source(matched_kind, matched_value)
+                if source:
+                    call["payload_sources"].append(source)
+            i = next_i
+            continue
+
+        if any(
+            token == flag or token.startswith(f"{flag}=")
+            for flag in _CURL_CONFIG_FLAGS
+        ):
+            call["ambiguous"] = True
+            if token in _CURL_CONFIG_FLAGS and "=" not in token:
+                i += 2
+            else:
+                i += 1
+            continue
+
+        value_flag = next(
+            (
+                flag for flag in _CURL_VALUE_FLAGS
+                if (
+                    token == flag
+                    or token.startswith(f"{flag}=")
+                    or (len(flag) == 2 and token.startswith(flag) and token != flag)
+                )
+            ),
+            None,
+        )
+        if value_flag:
+            i += 2 if token == value_flag else 1
+            if i > len(args):
+                call["ambiguous"] = True
+            continue
+        short_value_flags = {
+            flag[1] for flag in _CURL_VALUE_FLAGS
+            if len(flag) == 2 and flag.startswith("-")
+        }
+        value_cluster = re.fullmatch(
+            rf"-[fFsSLIikvVqgGNnO]*([{''.join(sorted(short_value_flags))}])(.*)",
+            token,
+        )
+        if value_cluster:
+            if not value_cluster.group(2):
+                i += 2
+                if i > len(args):
+                    call["ambiguous"] = True
+            else:
+                i += 1
+            continue
+        if token.startswith("--"):
+            i += 1
+            continue
+        if token.startswith("-") and len(token) > 1:
+            short_flags = set(token[1:])
+            if short_flags.issubset(_CURL_NO_VALUE_SHORT_FLAGS):
+                _apply_curl_no_value_flags(call, token[1:])
+            else:
+                call["ambiguous"] = True
+            i += 1
+            continue
+        call["urls"].append(token)
+        i += 1
+    calls.append(call)
+    return calls
+
+
+def _parse_wget_tokens(tokens: list[str], command_index: int) -> list[dict[str, object]]:
+    """Parse one wget command into its request-relevant fields."""
+    call = _new_http_call("wget")
+    args = tokens[command_index + 1:]
+    i = 0
+    while i < len(args):
+        token = args[i]
+        token, ambiguous_prefix = _resolve_http_long_option(
+            token,
+            {
+                "--method", "--post-data", "--post-file", "--body-data",
+                "--body-file", "--output-document", "--execute", "--config",
+                "--directory-prefix",
+            },
+        )
+        if ambiguous_prefix:
+            call["ambiguous"] = True
+            i += 1
+            continue
+        output_cluster = re.fullmatch(r"-[A-Za-z]*O(.*)", token)
+        if output_cluster and not token.startswith("--"):
+            output = output_cluster.group(1)
+            if not output:
+                if i + 1 >= len(args):
+                    call["ambiguous"] = True
+                    i += 1
+                    continue
+                output = args[i + 1]
+                i += 1
+            call["output_targets"].append(output)
+            i += 1
+            continue
+        value, next_i = _take_option_value(args, i, token, None, "--method")
+        if next_i != i:
+            if value is None:
+                call["ambiguous"] = True
+            else:
+                call["method"] = value
+            i = next_i
+            continue
+
+        matched_kind: str | None = None
+        matched_value: str | None = None
+        for short, long in (
+            (None, "--post-data"), (None, "--post-file"),
+            (None, "--body-data"), (None, "--body-file"),
+            ("-O", "--output-document"),
+            ("-P", "--directory-prefix"),
+        ):
+            value, next_i = _take_option_value(args, i, token, short, long)
+            if next_i != i:
+                matched_kind = short if short and token.startswith(short) else long
+                matched_value = value
+                break
+        if matched_kind is not None:
+            if matched_value is None:
+                call["ambiguous"] = True
+            elif matched_kind in _WGET_OUTPUT_FLAGS:
+                call["output_targets"].append(matched_value)
+            elif matched_kind == "-P":
+                call["output_dir"] = matched_value
+            else:
+                call["body_kinds"].append(matched_kind)
+                source = _payload_source(matched_kind, matched_value)
+                if source:
+                    call["payload_sources"].append(source)
+            i = next_i
+            continue
+
+        if any(
+            token == flag or token.startswith(f"{flag}=")
+            for flag in _WGET_CONFIG_FLAGS
+        ):
+            call["ambiguous"] = True
+            if token in _WGET_CONFIG_FLAGS and "=" not in token:
+                i += 2
+            else:
+                i += 1
+            continue
+        if not token.startswith("-"):
+            call["urls"].append(token)
+        i += 1
+    return [call]
+
+
+def _parse_http_tokens(
+    tokens: list[str], command_index: int
+) -> list[dict[str, object]]:
+    tool = _basename(tokens[command_index])
+    if tool == "curl":
+        return _parse_curl_tokens(tokens, command_index)
+    return _parse_wget_tokens(tokens, command_index)
+
+
+def _http_transfer_calls(cmd: str) -> list[dict[str, object]]:
+    """Find curl/wget transfers through wrappers, substitutions, and functions."""
+    calls: list[dict[str, object]] = []
+    if _policy is None:
+        return calls
+    for body in _policy.extract_function_bodies(cmd):
+        calls.extend(_http_transfer_calls(body))
+    for raw_segment in _policy.split_command_segments(cmd):
+        try:
+            raw_tokens = shlex.split(raw_segment)
+        except ValueError:
+            raw_tokens = []
+        command_index = None
+        if (
+            raw_tokens
+            and _basename(raw_tokens[0]) not in _NON_EXECUTING_HTTP_PREFIXES
+        ):
+            command_index = next(
+                (
+                    i for i, token in enumerate(raw_tokens)
+                    if _basename(token) in {"curl", "wget"}
+                ),
+                None,
+            )
+        if command_index is not None:
+            calls.extend(_parse_http_tokens(raw_tokens, command_index))
+            for inner in _policy.extract_command_substitutions(raw_segment):
+                calls.extend(_http_transfer_calls(inner))
+            continue
+
+        normalized_segments = [
+            segment
+            for segment in _policy.normalize(raw_segment)
+            if segment.startswith(("curl ", "wget ")) or segment in {"curl", "wget"}
+        ]
+        if not normalized_segments:
+            continue
+        if not raw_tokens:
+            calls.append({**_new_http_call("unknown"), "ambiguous": True})
+            continue
+        for normalized_segment in normalized_segments:
+            try:
+                normalized_tokens = shlex.split(normalized_segment)
+            except ValueError:
+                calls.append({**_new_http_call("unknown"), "ambiguous": True})
+                continue
+            calls.extend(_parse_http_tokens(normalized_tokens, 0))
+    return calls
 
 
 # ─── GitHub CLI API の method / operation 判定 ─────────────────────
@@ -611,13 +1037,111 @@ def check_archive(cmd: str) -> str | None:
 
 def check_curl_file_send(cmd: str) -> str | None:
     """curl/wget でセンシティブファイルの内容を送信しようとしていないか"""
-    if CURL_FILE_SEND_PATTERN.search(cmd):
-        matched = is_sensitive_path(cmd)
-        if matched:
-            return (
-                f"curl/wget でセンシティブなファイルを送信しようとしています "
-                f"(パターン: {matched})"
+    for call in _http_transfer_calls(cmd):
+        sources = call["payload_sources"]
+        if not isinstance(sources, list):
+            continue
+        reads_stdin = any(
+            source in {"-", "/dev/stdin"} for source in sources
+        )
+        for source in sources:
+            if not isinstance(source, str) or source == "-":
+                continue
+            matched = _is_sensitive_token(source)
+            if matched:
+                tool = call["tool"]
+                return (
+                    f"{tool} でセンシティブなファイルを送信しようとしています "
+                    f"(パターン: {matched})"
+                )
+        if reads_stdin:
+            for match in re.finditer(r"(?<!<)<(?!<)\s*([^\s;&|]+)", cmd):
+                source = match.group(1).strip("'\"")
+                matched = _is_sensitive_token(source)
+                if matched:
+                    return (
+                        f"{call['tool']} が標準入力からセンシティブなファイルを"
+                        f"送信しようとしています (パターン: {matched})"
+                    )
+    return None
+
+
+def check_http_dangerous_output(cmd: str) -> str | None:
+    """Block curl/wget output that overwrites startup or authentication files."""
+    targets = (
+        ".bashrc", ".bash_profile", ".bash_login", ".zshrc", ".zshenv",
+        ".zprofile", ".profile", ".login", ".cshrc", ".kshrc",
+        "authorized_keys", "known_hosts", ".ssh/config", ".netrc",
+        "crontab", ".gitconfig",
+    )
+    for call in _http_transfer_calls(cmd):
+        output_targets = call["output_targets"]
+        urls = call["urls"]
+        if not isinstance(output_targets, list) or not isinstance(urls, list):
+            continue
+        output_dir = call["output_dir"]
+        remote_name = call["remote_name"]
+        if call["tool"] == "wget" and output_targets:
+            urls = []
+        if call["tool"] == "wget" or remote_name is True:
+            for url in urls:
+                if not isinstance(url, str):
+                    continue
+                path = url.split("?", 1)[0].rstrip("/")
+                name = path.rsplit("/", 1)[-1]
+                if name:
+                    if isinstance(output_dir, str):
+                        output_targets.append(f"{output_dir.rstrip('/')}/{name}")
+                    elif remote_name is True:
+                        output_targets.append(name)
+        for output in output_targets:
+            if not isinstance(output, str):
+                continue
+            cleaned = output.strip("'\"")
+            if any(
+                cleaned.endswith(target) or f"/{target}" in cleaned
+                for target in targets
+            ):
+                return (
+                    f"`{call['tool']}` が起動・認証設定ファイル `{output}` を"
+                    "上書きしようとしています。"
+                )
+    return None
+
+
+def check_curl_wget_mutation(cmd: str) -> str | None:
+    """Ask for HTTP writes while delegating proven reads to auto / assisted."""
+    for call in _http_transfer_calls(cmd):
+        tool = call["tool"]
+        method = call["method"]
+        body_kinds = call["body_kinds"]
+        payload_sources = call["payload_sources"]
+        get_mode = call["get_mode"]
+        ambiguous = call["ambiguous"]
+        if (
+            not isinstance(body_kinds, list)
+            or not isinstance(payload_sources, list)
+            or ambiguous is True
+        ):
+            return f"`{tool}` の request method または引数を静的に判定できません。"
+        explicit_method = method.upper() if isinstance(method, str) else None
+        if explicit_method is not None and not re.fullmatch(r"[A-Za-z]+", explicit_method):
+            return f"`{tool}` の HTTP method を静的に判定できません。"
+        if explicit_method is not None and explicit_method not in _HTTP_READ_METHODS:
+            return f"`{tool}` が読み取り以外の HTTP method ({explicit_method}) を使用します。"
+        if body_kinds:
+            query_only = (
+                tool == "curl"
+                and get_mode is True
+                and explicit_method is None
+                and not payload_sources
+                and all(kind in _CURL_DATA_FLAGS for kind in body_kinds)
             )
+            if not query_only:
+                return f"`{tool}` が request body または upload payload を送信します。"
+        if explicit_method in _HTTP_READ_METHODS or get_mode is True or not body_kinds:
+            continue
+        return f"`{tool}` の request を読み取り専用と確認できません。"
     return None
 
 
@@ -1497,6 +2021,7 @@ DENY_CHECKS = [
     check_guard_tampering,    # hook や settings.json の改変
     check_reverse_shell,      # /dev/tcp や nc -e の類
     check_shell_startup_write,  # .bashrc / authorized_keys への追記
+    check_http_dangerous_output,  # curl -o / wget -O で起動・認証設定を上書き
     check_privilege_escalation,  # setuid 付与・sudoers 変更
     check_encoded_command,    # base64 -d | sh の類
     check_git_config_write,   # git config alias.x / core.hooksPath の類
@@ -1524,6 +2049,7 @@ _PATH_CHECKS = [
 ASK_CHECKS = [
     check_policy_ask,         # common.toml の [bash] ask
     check_gh_api_mutation,    # REST / GraphQL の mutation と判定不能形式
+    check_curl_wget_mutation, # curl/wget の mutation と判定不能形式
     check_find_dangerous,     # find -exec rm / -delete によるファイル削除
 ]
 

@@ -163,6 +163,26 @@ Claude Code は「explicit ask rule に一致するツールは、`bypassPermiss
 GraphQL は読み取り query でも HTTP POST を使うので、method ではなく operation
 本文を検査する。静的に安全性を確認できない場合は fail-open にせず ask へ倒す。
 
+`curl` / `wget` も allow には置かず、読み取りと通常ダウンロードを未掲載にする。
+HTTP method と payload option は hook が transfer ごとに解析するため、
+`curl --next` で複数 request を連結した場合も、1件でも mutation があれば ask になる。
+
+| `curl` / `wget` の分類 | 例 | 結果 |
+| --- | --- | --- |
+| GET / HEAD | `curl URL`, `curl -I URL`, `wget URL`, `wget --spider URL` | 未掲載 |
+| query parameter | `curl -G -d q=test URL` | 未掲載 |
+| 通常ダウンロード | `curl -o file URL`, `wget -O file URL` | 未掲載 |
+| HTTP mutation | `curl -X POST`, `curl -d`, `wget --method=PUT` | ask |
+| upload / body | `curl -T file`, `curl -F file=@x`, `wget --post-file=x` | ask |
+| 判定不能 | config file、動的 method、option 値欠損 | ask |
+| 取得結果の直接実行 | `curl URL \| sh`, `wget -qO- URL \| bash` | deny |
+| 秘密情報の送信 | sensitive file payload、`$TOKEN` の header/body 展開 | deny |
+| 永続化先の上書き | `curl -o ~/.bashrc`, `wget -O ~/.ssh/authorized_keys` | deny |
+
+明示 GET / HEAD でも request body を送る指定があれば ask とする。
+例外は `curl -G` で、data option を URL query parameter に変換するため未掲載になる。
+通常ファイルへの保存はローカル書き込みだが、auto / assisted の安全性判定へ委譲する。
+
 モードは `common.toml` から両 CLI へ生成している。
 
 ```toml

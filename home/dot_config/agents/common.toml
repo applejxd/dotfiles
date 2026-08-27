@@ -100,9 +100,8 @@ ask = [
   "git commit",
   # --hard は deny。素の reset は index を戻すだけで作業ツリーを壊さない
   "git reset",
-  # 取得系。センシティブファイルの送信は check_curl_file_send が hard-deny する
-  "curl",
-  "wget",
+  # curl / wget は読み取りを未掲載にして auto / assisted へ委譲する。
+  # mutation / upload は hook が ask、秘密送信・直接実行・危険な出力先は deny。
   # コンテナ/イメージは再作成・再 pull できるが状態を失う
   "docker rm",
   "docker rmi",

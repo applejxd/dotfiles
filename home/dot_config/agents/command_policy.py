@@ -281,6 +281,9 @@ _SHELL_BINS = {
     "sh", "bash", "zsh", "dash", "ksh", "fish", "ash",
     "script", "su", "busybox",
 }
+_NON_EXECUTING_PREFIX_BINS = {
+    "cat", "echo", "find", "grep", "rg", "sed", "awk", "gawk", "printf",
+}
 
 # 文字列をそのままコードとして実行するもの
 _EVAL_BINS = {"eval", "source", "."}
@@ -910,6 +913,27 @@ def _expand_shell_invocation(segment: str) -> list[str] | None:
     return None
 
 
+def _expand_nested_shell_invocations(segment: str) -> list[str]:
+    """Extract ``sh -c`` code hidden behind an otherwise unknown prefix."""
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return []
+    if not tokens or _basename(tokens[0]) in _NON_EXECUTING_PREFIX_BINS:
+        return []
+    out: list[str] = []
+    for i, token in enumerate(tokens[1:], start=1):
+        head = _basename(token)
+        if head not in _SHELL_BINS and not _SHELL_VAR_RE.match(token):
+            continue
+        for j, flag in enumerate(tokens[i + 1:], start=i + 1):
+            if flag.startswith("-") and not flag.startswith("--") and "c" in flag:
+                if j + 1 < len(tokens):
+                    out.append(" ".join(tokens[j + 1:]))
+                break
+    return out
+
+
 def _normalize_segment(segment: str) -> str:
     """先頭トークンを変える飾りを繰り返し剥がす。"""
     seg = segment
@@ -986,6 +1010,8 @@ def normalize(command: str, _depth: int = 0) -> list[str]:
             out.extend(normalize(inner, _depth + 1))
         if seg:
             for chunk in _expand_shell_invocation(seg) or []:
+                out.extend(normalize(chunk, _depth + 1))
+            for chunk in _expand_nested_shell_invocations(seg):
                 out.extend(normalize(chunk, _depth + 1))
             # python -c / perl -e などに渡されたコード片
             for chunk in _expand_interpreter_code(seg):
