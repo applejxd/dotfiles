@@ -222,6 +222,19 @@ def test_commit_skills_use_single_hook_confirmation():
     assert ".claude/skills/commit/scripts/get-git-context.sh" in remove_paths
 
 
+def test_commit_skill_works_around_copilot_ask_bug():
+    """Copilot CLI 1.0.53+ は hook の ask を自動承認するため skill 側で確認する。
+
+    github/copilot-cli#3590 が修正されたらこの手順ごと削除してよい。
+    """
+    skill = COMMIT_SKILL_PATHS[0].read_text(encoding="utf-8")
+    assert "Copilot CLI で実行している場合に限り" in skill
+    assert "github/copilot-cli#3590" in skill
+    docs = (ROOT / "docs" / "agents-permissions.md").read_text(encoding="utf-8")
+    assert "github/copilot-cli/issues/3590" in docs
+    assert "auto_approved" in docs
+
+
 def test_codex_commit_skill_uses_separate_policy_checked_commands():
     skill = COMMIT_SKILL_PATHS[1].read_text(encoding="utf-8")
     assert "git add -- <対象ファイル...>\n   git commit" in skill

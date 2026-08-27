@@ -163,13 +163,29 @@ Claude Code は「explicit ask rule に一致するツールは、`bypassPermiss
 GraphQL は読み取り query でも HTTP POST を使うので、method ではなく operation
 本文を検査する。静的に安全性を確認できない場合は fail-open にせず ask へ倒す。
 
-`git commit` は commit skill 側で独自の確認を行わず、permission / hook の
-ask を唯一のユーザー確認点にする。スキルは
-`git add -- <files> && git commit ...` を1回の Bash 呼び出しで実行するため、
-compound command を解析する hook がステージング前に全体を止める。
-Claude Code と Copilot CLI は同じ PreToolUse hook の ask を確認点とするため、
-両CLIでユーザーに見える確認は1回だけになる。Claude Code の native permission は
-compound command の後半を再評価しないため、この形式では hook が強制を担う。
+`git commit` は commit skill と permission / hook で確認が重複しないよう、確認点を
+1つに保つ。スキルは `git add -- <files> && git commit ...` を1回の Bash 呼び出しで
+実行するため、compound command を解析する hook がステージング前に全体を止める。
+Claude Code の native permission は compound command の後半を再評価しないため、
+この形式では hook が強制を担う。
+
+ただし **Copilot CLI 1.0.53 以降は hook の `ask` が機能しない**。TUI が permission
+dialog を数十 ms 表示しただけで自動承認する既知バグ
+([github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590), OPEN)
+があるため。実測では hook 由来の permission 90 件のうち 79 件が
+`outcome=auto_approved` / `source=assisted_approval` で中央値 58ms (min 6ms /
+max 99ms) に解決され、人間が応答した 11 件は中央値 23.5 秒だった。
+`deny` はこのバグの影響を受けず正常にブロックする。
+
+このため `git commit` の確認点は CLI ごとに分ける:
+
+| CLI | 確認点 | 機械的強制 |
+| --- | --- | --- |
+| Claude Code | hook / permission の ask | あり |
+| Copilot CLI | commit skill の明示確認 | なし (バグ回避のため指示ベース) |
+| Codex CLI | `git.rules` の prompt | あり |
+
+Copilot 側のバグが修正されたら、skill の明示確認を削除して hook 一本へ戻す。
 
 `curl` / `wget` も allow には置かず、読み取りと通常ダウンロードを未掲載にする。
 HTTP method と payload option は hook が transfer ごとに解析するため、

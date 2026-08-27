@@ -31,9 +31,15 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
    git add -- <対象ファイル...> && git commit -m '<件名>' -m '<本文>'
    ```
 
-   `git commit` は共通 PreToolUse hook の ask 対象である。compound command 全体が
-   実行前に確認されるため、スキル独自の確認は挟まない。
-4. コミット後に `git status --short` と `git log -1 --oneline` を実行し、
+   `git commit` は共通 PreToolUse hook の ask 対象で、compound command 全体が
+   ステージング前に止まる。**Claude Code ではこの hook 確認が唯一の確認点**
+   なので、スキル独自の確認は挟まない。
+4. **Copilot CLI で実行している場合に限り**、上記コマンドを出す前に対象ファイルと
+   コミットメッセージを提示し、ユーザーの承認を得てから実行する。
+   Copilot CLI 1.0.53 以降には hook の `ask` を TUI が数十 ms で自動承認する
+   既知バグ (github/copilot-cli#3590) があり、hook 確認が機能しないため。
+   このバグが修正されたら、この手順を削除して hook 一本へ戻す。
+5. コミット後に `git status --short` と `git log -1 --oneline` を実行し、
    コミットと作業ツリーを確認する。
 
 ## スタイル規範
@@ -70,3 +76,4 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
 
 - 対象ファイルをパスで明示してステージする
 - hook の確認が拒否された場合はコミットせず停止する
+- Copilot CLI で承認が得られない場合はコミットせず停止する
