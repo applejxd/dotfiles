@@ -63,8 +63,14 @@ Claude Code の `PreToolUse` が返せる値は **4 種**:
 | --- | --- | --- |
 | `allow` | permission プロンプトを skip して実行 | 同じ |
 | `deny` | 拒否。理由は LLM に渡る | 同じ |
-| `ask` | 確認プロンプトを強制。承認されれば実行される | 対応 (cloud agent では `deny` 扱い) |
+| `ask` | 確認プロンプトを強制。承認されれば実行される | **1.0.53+ は自動承認される** (下記)。cloud agent では `deny` 扱い |
 | `defer` | `-p` 専用。保留して呼び出し側が resume | 非対応 |
+
+**Copilot CLI の `ask` は当てにできない。** v1.0.53 以降、hook が返した `ask` は
+permission dialog が数十 ms 表示されるだけで自動承認される
+([github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590)、
+1.0.81 時点で OPEN)。`deny` は正常に機能する。Copilot でも確実に止めたい操作は
+`deny` にするか、エージェント側で明示確認する (判別は `COPILOT_CLI` 環境変数)。
 
 **hook の決定は permission リストを上書きしない。**
 

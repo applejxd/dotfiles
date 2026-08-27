@@ -73,10 +73,19 @@ hook_emit_pretool_ask "削除対象を確認して問題なければ承認して
 | Claude `bypassPermissions` | プロンプトが出る (bypass でも ask は尊重される) |
 | Claude `dontAsk` | 自動拒否 |
 | Claude `-p` (非対話) | プロンプト不能。auto では当該操作をスキップして継続 |
-| Copilot CLI (対話) | プロンプトが出る |
+| Copilot CLI (対話) | **自動承認される** (既知バグ。下記) |
 | Copilot cloud agent | **`deny` 扱い** (ユーザー不在のため) |
 
 → 無人実行では必ず安全側に倒れるので、`deny` を `ask` に緩めても無人時のリスクは増えない。
+
+**ただし Copilot CLI の対話実行では `ask` が機能しない。** v1.0.53 以降、hook が
+返した `ask` は permission dialog が数十 ms 表示されるだけで自動承認される
+([github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590)、
+1.0.81 時点で OPEN)。`deny` はこのバグの影響を受けない。
+Copilot で確実に止めたい操作に `ask` を使ってはいけない。`deny` にするか、
+エージェント側で明示確認する (判別は `COPILOT_CLI` 環境変数)。
+切り分け手順と実測値は `docs/research/agent-harness-comparison.md` の
+「Copilot CLI では hook の `ask` が自動承認される」を参照。
 
 ### ★ hook の決定は permission リストを上書きしない
 

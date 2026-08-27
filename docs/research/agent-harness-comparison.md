@@ -4,6 +4,10 @@
 > **検証バージョン: Claude Code 2.1.143 / GitHub Copilot CLI 1.0.79-5 / Codex CLI 0.146.1**
 > （参考: Gemini CLI 0.33.1。本書の比較対象外）
 >
+> **追記 2026-08-27（Copilot CLI 1.0.81-8）**: §6 に
+> 「Copilot CLI では hook の `ask` が自動承認される」を追加し、
+> 「`ask` はどのモードでも自動承認されない」の記述を Claude Code 限定に訂正した。
+>
 > ハーネスの仕様は更新が激しい。本書を参照する前に必ず
 > [再確認すべき情報源](#再確認すべき情報源)のリンクを開き、差分を反映してから使うこと。
 > 本書は **3 ハーネスの差分** に絞った比較資料であり、各ツールの網羅的な仕様書ではない。
@@ -117,6 +121,9 @@
 
 **両対応の最小公倍数は「stdout に JSON + exit 0」。** `home/dot_claude/hooks/lib/agent_compat.py`
 がこの前提で書かれている。
+
+**ただし Copilot CLI では `ask` だけが機能しない。** `deny` は正常に遮断するが、
+`ask` は数十 ms で自動承認される（§6「Copilot CLI では hook の `ask` が自動承認される」）。
 
 **Copilot の PascalCase matcher の罠**: `PreToolUse` を PascalCase で書くと Claude 形式の
 matcher セマンティクスになり、照合対象が `Bash` / `Read` / `Write` / `Edit` / `Grep` などの
@@ -275,10 +282,12 @@ normalize の展開はセグメント 200 個・1 セグメント 4000 文字を
 
 ### 重要な制約
 
-- **`ask` に載せたものはどのモードでも自動承認されない。**
+- **`ask` に載せたものはどのモードでも自動承認されない**（Claude Code の場合）。
   Claude Code は「explicit ask rule に一致するツールは `bypassPermissions` を
   含むどのモードでも自動承認しない」と明記。hook の `ask` も
   「プロンプトを最低保証する」（CHANGELOG: a hook ask now floors the decision at a prompt）
+  → **Copilot CLI ではこれが成立しない。** hook 由来の `ask` はバグで自動承認される
+  （後述「Copilot CLI では hook の `ask` が自動承認される」）
 - したがって LLM に判断させたいコマンドは **`allow` ではなく未掲載**にする。
   `allow` に入れると手動モードでも無条件に通り、かえって緩くなる
 - Copilot の `assisted` は **experimental な auto-approval 機能に依存**する。
@@ -286,6 +295,46 @@ normalize の展開はセグメント 200 個・1 セグメント 4000 文字を
 - `defaultPermissionMode` は再開セッション・非対話実行・
   `--allow-all` 済みセッションでは無視される
 - `deny` ルールは全モードで有効（`bypassPermissions` でも遮断される）
+
+### Copilot CLI では hook の `ask` が自動承認される（2026-08-27 実測）
+
+`PreToolUse` hook が `permissionDecision: "ask"` を返しても、Copilot CLI は
+permission dialog を数十 ms 表示しただけで自動承認する。既知バグ
+[github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590)
+（v1.0.53 で入った回帰。1.0.81 時点で OPEN）。
+`deny` は影響を受けず正常に遮断するので、壊れているのは `ask` だけ。
+
+**厄介な点**: hook 自体は正しく動く。配備済み hook に payload を流すと `ask` を返すため、
+hook やポリシー設定を疑っても原因に辿り着けない。CLI 本体の問題なので設定では直せない。
+
+**切り分け手順** — `~/.copilot/session-state/<session-id>/events.jsonl` を読む。
+
+| 観測 | 意味 |
+| --- | --- |
+| `permission.requested` の `kind` が `hook` | hook は発火し `ask` を返している |
+| `permission.completed` が `outcome: auto_approved` / `source: assisted_approval` | CLI 側が自動承認した |
+| `requested` → `completed` の所要時間 | **100ms 未満なら本バグ**。秒オーダーなら人間が応答した |
+
+1 セッション分（hook 由来の permission 90 件）の実測値:
+
+| 結末 | 件数 | 所要時間 |
+| --- | --- | --- |
+| `auto_approved` | 79 | 中央値 58ms（min 6 / max 99） |
+| `prompted_user` | 11 | 中央値 23.5 秒（min 3.7 秒） |
+
+この 1 セッションでは両者の分布が重ならなかった（自動承認は最大 99ms、
+人間の応答は最短 3.7 秒）。所要時間は「確認が出なかった」のか
+「自分が見落としただけ」なのかを切り分ける最初の手がかりになる。
+
+**回避策** — 確実に止めたい操作は次のどちらかにする。
+
+- hook の `deny` にする。迂回不可だが、承認して先に進むこともできなくなる
+- エージェント側（skill や指示）で明示確認する。CLI の判別は `COPILOT_CLI`
+  環境変数で行う（Copilot CLI は `1`、Claude Code では未設定）
+
+`git commit` は後者を採用した（Claude Code は hook、Copilot CLI は skill が確認）。
+構成は [`docs/agents-permissions.md`](../agents-permissions.md) を参照。
+バグが修正されたら分岐を削除して hook 一本へ戻す。
 
 ### Copilot の設定キーは Web ドキュメントに載っていない
 
@@ -411,3 +460,7 @@ Claude Code と Codex は LLM 向けの索引を公開しているので、全�
 4. **Copilot の PascalCase matcher セマンティクス**（Claude tool 名照合が続くか）
 5. **各ハーネスの既定システムプロンプトの範囲**（指示ファイルから削れる項目が増えるか）
 6. Claude Code の hook イベント追加（`InstructionsLoaded` のような監査用途で使えるもの）
+7. **[github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590)
+   が修正されたか**（修正されれば commit skill の Copilot 分岐を削除して
+   hook の `ask` 一本へ戻せる）。確認は `events.jsonl` で hook 由来 permission の
+   `requested` → `completed` を測り、秒オーダーに戻っていれば修正済み

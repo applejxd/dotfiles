@@ -109,6 +109,8 @@ def emit_pretool_ask(reason: str, *, exit_code: int = 0) -> None:
       - Claude 対話 / auto / bypassPermissions : プロンプトが出る
       - Claude dontAsk                          : 自動拒否
       - Claude ``-p`` (非対話)                  : プロンプト不能。操作はスキップ
+      - Copilot CLI (対話)                      : **自動承認される**。1.0.53 以降の
+        既知バグ (github/copilot-cli#3590)。確実に止めたいなら deny を使う
       - Copilot cloud agent                     : deny として扱われる
 
     注意: Claude では ask 時の reason はユーザにのみ表示され LLM には渡らない。

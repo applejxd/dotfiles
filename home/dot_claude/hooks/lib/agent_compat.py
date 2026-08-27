@@ -112,6 +112,8 @@ def emit_pretool_ask(reason: str, *, exit_code: int = 0) -> None:
         (auto では classifier の暗黙 approve を封じる)
       - Claude dontAsk                          : 自動拒否
       - Claude ``-p`` (非対話)                  : プロンプト不能。操作はスキップ
+      - Copilot CLI (対話)                      : **自動承認される**。1.0.53 以降の
+        既知バグ (github/copilot-cli#3590)。確実に止めたいなら deny を使う
       - Copilot cloud agent                     : deny として扱われる
     つまり無人実行では安全側に倒れる。
 

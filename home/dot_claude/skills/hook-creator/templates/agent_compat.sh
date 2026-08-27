@@ -47,6 +47,8 @@ hook_emit_pretool_deny() {
 
 # PreToolUse でユーザ承認プロンプトを強制する (承認されればツールは実行される)
 # 無人実行時は安全側に倒れる (Claude dontAsk / Copilot cloud agent では deny 相当)
+# 注意: Copilot CLI の対話実行では ask が自動承認される (github/copilot-cli#3590)。
+#       確実に止めたいなら hook_emit_pretool_deny を使う。
 # Usage: hook_emit_pretool_ask "理由文"
 hook_emit_pretool_ask() {
     local reason="$1"

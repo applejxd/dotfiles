@@ -69,10 +69,15 @@ allow = [
 # 提案 -> ユーザーが承認 -> そのまま実行。
 # 「危険だが承認すれば妥当」なもの。取り返しがつく変更はここに置く。
 #
-# ★ ask に載せると、両 CLI の LLM 判定モードに到達しない。
+# ★ ask に載せると、Claude Code の LLM 判定モードに到達しない。
 #   Claude Code は「permissions.ask に一致するツールはどのモードでも
 #   自動承認されない」と明記され、hook の ask もプロンプトを最低保証する。
-#   Copilot CLI の assisted も同様に止まる。
+#   ただし Copilot CLI は 1.0.53 以降、hook の ask を数十 ms で自動承認する
+#   既知バグがある (github/copilot-cli#3590, OPEN)。deny は影響を受けない。
+#   → Copilot でも確実に止めたいものは ask ではなく deny に置くか、
+#     エージェント側で明示確認する (判別は COPILOT_CLI 環境変数)。
+#     詳細は docs/research/agent-harness-comparison.md の
+#     「Copilot CLI では hook の ask が自動承認される」を参照。
 #   → LLM の判断に委ねたいコマンドは、allow ではなく「どのリストにも
 #     載せない (未掲載)」にする。allow に入れると手動モードでも無条件に
 #     通ってしまい、かえって緩くなる。

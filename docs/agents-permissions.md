@@ -128,7 +128,8 @@ deny = ["git reset --hard"]   # 作業ツリーを壊す形だけ拒否
 **`ask` に載せるとこのモードに到達しない。**
 Claude Code は「explicit ask rule に一致するツールは、`bypassPermissions` を含む
 どのモードでも自動承認しない」と明記している。hook が返す `ask` も同様に
-プロンプトを最低保証する。
+プロンプトを最低保証する。**ただしこれが成立するのは Claude Code だけで、
+Copilot CLI では hook の `ask` が自動承認される**（後述の `git commit` の説明を参照）。
 
 したがって「LLM の判断に任せたい」コマンドは、`allow` ではなく
 **どのリストにも載せない**のが正しい。`allow` に入れると手動モードでも
