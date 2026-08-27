@@ -332,6 +332,13 @@ hook やポリシー設定を疑っても原因に辿り着けない。CLI 本�
 - エージェント側（skill や指示）で明示確認する。CLI の判別は `COPILOT_CLI`
   環境変数で行う（Copilot CLI は `1`、Claude Code では未設定）
 
+後者は指示ベースなので、**skill だけに書くと守られないことがある**。
+skill は呼び出したときしか読まれず、同じセッションでも次のターンで
+skill を経由しなければ規則ごと消える（実際にそれでゲートを素通りした）。
+Copilot 限定の規則は、常時読み込まれる `~/.copilot/copilot-instructions.md`
+に置くのが確実。このファイル自体が Copilot 専用なので、Claude Code 側に
+不要な確認が増えることもない。
+
 `git commit` は後者を採用した（Claude Code は hook、Copilot CLI は skill が確認）。
 構成は [`docs/agents-permissions.md`](../agents-permissions.md) を参照。
 バグが修正されたら分岐を削除して hook 一本へ戻す。

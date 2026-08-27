@@ -240,6 +240,22 @@ def test_commit_skill_works_around_copilot_ask_bug():
     assert "auto_approved" in docs
 
 
+def test_copilot_instructions_require_commit_approval():
+    """skill は呼び出さないと読まれないので、常時読込の指示にも同じ規則を置く。
+
+    実際にこのセッションで skill を再呼び出しせずコミットし、ゲートを
+    素通りさせた実績があるため、常時読込側が最後の砦になる。
+    """
+    path = ROOT / "home" / "dot_copilot" / "copilot-instructions.md"
+    instructions = path.read_text(encoding="utf-8")
+    assert "git commit" in instructions
+    assert "承認" in instructions
+    assert "github/copilot-cli#3590" in instructions
+    # Claude Code 側は hook が正常に動くので、同じ規則を書くと二重確認になる。
+    claude_md = (ROOT / "home" / "dot_claude" / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "github/copilot-cli#3590" not in claude_md
+
+
 def test_codex_commit_skill_uses_separate_policy_checked_commands():
     skill = COMMIT_SKILL_PATHS[1].read_text(encoding="utf-8")
     assert "git add -- <対象ファイル...>\n   git commit" in skill
