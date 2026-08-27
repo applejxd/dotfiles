@@ -19,8 +19,12 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
 
 ## タスク
 
-上記コンテキストを基に **Conventional Commits** 形式でコミットメッセージを下書きする。
+上記コンテキストを基に **Conventional Commits** 形式でコミットメッセージを作成する。
 仕様の詳細は `${CLAUDE_SKILL_DIR}/references/conventional-commits-spec.md` を参照。
+
+コミットメッセージの作成だけを依頼された場合はメッセージを提示する。
+コミットを依頼された場合は対象ファイルだけを `git add` し、そのメッセージで
+`git commit` を実行する。`git commit` は permission の ask で確認される。
 
 ## スタイル規範
 
@@ -45,15 +49,11 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
 
 **禁止**:
 
-- ユーザー承認前の `git add` / `git commit` の実行
 - `--no-verify` などによる hook の回避
 - 共同著者タグ・Claude リンクの追加
 - 未測定の数値主張
 
 **要求**:
 
-- 提案コミット文と対象ファイルを提示し、`git add` / `git commit` の実行前に
-  ユーザーの承認を得る
-- 承認された場合は対象ファイルだけを `git add` し、承認済みメッセージで
-  `git commit` を実行する
-- 承認後に対象ファイルまたは差分が変わった場合は、実行前に再確認する
+- コミット対象に含めるファイルだけを `git add` する
+- コミット後に `git status` と直近コミットを確認する
