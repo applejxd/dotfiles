@@ -8,6 +8,9 @@
 # normalize + policy matcher で、critical_deny という名前が実態と合わなくなった)
 .config/agents/critical_deny.py
 
+# commit skill の補助スクリプト廃止。読み取り専用 git コマンドを直接実行する。
+.claude/skills/commit/scripts/get-git-context.sh
+
 # NOTE: __pycache__ は .chezmoiignore で管理対象外にしているため、ここに書いても
 # 削除されない。古い .pyc が残って困る場合は手で削除する
 # (`rm -rf ~/.config/agents/__pycache__`)。

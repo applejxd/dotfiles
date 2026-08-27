@@ -163,6 +163,14 @@ Claude Code は「explicit ask rule に一致するツールは、`bypassPermiss
 GraphQL は読み取り query でも HTTP POST を使うので、method ではなく operation
 本文を検査する。静的に安全性を確認できない場合は fail-open にせず ask へ倒す。
 
+`git commit` は commit skill 側で独自の確認を行わず、permission / hook の
+ask を唯一のユーザー確認点にする。スキルは
+`git add -- <files> && git commit ...` を1回の Bash 呼び出しで実行するため、
+compound command を解析する hook がステージング前に全体を止める。
+Claude Code と Copilot CLI は同じ PreToolUse hook の ask を確認点とするため、
+両CLIでユーザーに見える確認は1回だけになる。Claude Code の native permission は
+compound command の後半を再評価しないため、この形式では hook が強制を担う。
+
 `curl` / `wget` も allow には置かず、読み取りと通常ダウンロードを未掲載にする。
 HTTP method と payload option は hook が transfer ごとに解析するため、
 `curl --next` で複数 request を連結した場合も、1件でも mutation があれば ask になる。

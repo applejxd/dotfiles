@@ -1,30 +1,43 @@
 ---
 name: commit
-description: Git commit message generator following Conventional Commits
+description: "Conventional Commits 形式のメッセージ作成と Git コミットを行う。「コミットして」「commit メッセージを作って」「変更をコミット」と言われたら必ず使う。"
 ---
 
-# commit
+# Git コミットスキル
 
-あなたは Git のコミットメッセージ生成アシスタントです。
-生成フォーマットは Conventional Commits に従う必要があります。
-ステージされた内容を読み取り、以下のルールで出力してください：
+## コンテキスト収集
 
-1. タイプは feat, fix, docs, style, refactor, test, chore から選択
-2. スコープはファイルやモジュール名から推測（例: core, ui, db）
-3. 説明は簡潔に（デフォルトは英語・指示があればその言語）
-4. 本文に差分の要約を箇条書きで追加
-5. コミット対象とメッセージを提示し、`git add` / `git commit` の実行前に
-   **ユーザーへ必ず確認**
-6. 承認後は対象ファイルだけを `git add` し、承認済みメッセージで
-   `git commit` を実行
-7. `--no-verify` などによる hook の回避は禁止
-8. 承認後に対象ファイルまたは差分が変わった場合は、実行前に再確認
+補助スクリプトは使わず、次を直接実行する:
 
-出力例：
+- `git status --short --branch`
+- `git diff HEAD`
+- `git branch --show-current`
+- `git log --oneline -10`
 
-```text
-feat(core): 新しい同期ポリシーを追加
+差分を論理単位に分け、ユーザーの変更や無関係な変更を混ぜない。
 
-- rclcpp::SyncPolicy の初期値を変更
-- テストケースを拡充
-```
+## 実行
+
+1. Conventional Commits に従ってメッセージを作成する。
+2. type は `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
+   `build`, `ci`, `chore` から選ぶ。
+3. 件名は命令形・72文字以内・文末ピリオドなしとする。
+4. メッセージ作成だけを依頼された場合は、対象ファイルとメッセージを提示して終了する。
+5. コミットを依頼された場合は、次のコマンドを個別に実行する:
+
+   ```bash
+   git add -- <対象ファイル...>
+   git commit -m '<件名>' -m '<本文>'
+   ```
+
+   `git add` と `git commit` は rules の prompt 対象とする。Codex の rules は
+   shell compound の内側を解析しないため、`&&` で連結しない。
+6. コミット後に `git status --short` と `git log -1 --oneline` で結果を確認する。
+
+## 禁止
+
+- `--no-verify` などによる hook の回避
+- `git add .` / `git add -A` による無関係な変更の追加
+- `git commit -a` / `git commit --all` による無関係な変更の追加
+- 明示依頼のない `git commit --amend`
+- 未測定の数値主張

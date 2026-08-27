@@ -23,6 +23,10 @@ COMMON_PATH = ROOT / "home" / "dot_config" / "agents" / "common.toml"
 GITHUB_ISSUE_SKILL_PATH = (
     ROOT / "home" / "dot_claude" / "skills" / "github-issue" / "SKILL.md"
 )
+COMMIT_SKILL_PATHS = [
+    ROOT / "home" / "dot_claude" / "skills" / "commit" / "SKILL.md",
+    ROOT / "home" / "dot_codex" / "skills" / "commit" / "SKILL.md",
+]
 
 sys.path.insert(0, str(ROOT / "home" / "dot_config" / "agents"))
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
@@ -196,6 +200,34 @@ def test_loader_reads_ask():
     patterns = policy.load_ask(str(COMMON_PATH))
     assert "rm" in patterns
     assert "git commit" in patterns
+
+
+def test_compound_git_add_and_commit_requires_approval():
+    decision, reason = run_hook(
+        "git add -- src/app.py && git commit -m 'fix: update app'"
+    )
+    assert decision == "ask", f"-> {decision} ({reason})"
+
+
+def test_commit_skills_use_single_hook_confirmation():
+    skill = COMMIT_SKILL_PATHS[0].read_text(encoding="utf-8")
+    assert "git add -- <対象ファイル...> && git commit" in skill
+    assert "スキル独自の確認は挟まない" in skill
+    assert "get-git-context.sh" not in skill
+    assert "git commit -a" in skill
+    assert not (
+        COMMIT_SKILL_PATHS[0].parent / "scripts" / "executable_get-git-context.sh"
+    ).exists()
+    remove_paths = (ROOT / "home" / ".chezmoiremove").read_text(encoding="utf-8")
+    assert ".claude/skills/commit/scripts/get-git-context.sh" in remove_paths
+
+
+def test_codex_commit_skill_uses_separate_policy_checked_commands():
+    skill = COMMIT_SKILL_PATHS[1].read_text(encoding="utf-8")
+    assert "git add -- <対象ファイル...>\n   git commit" in skill
+    assert "git add -- <対象ファイル...> &&" not in skill
+    assert "shell compound の内側を解析しない" in skill
+    assert "get-git-context.sh" not in skill
 
 
 def test_loader_reads_deny():

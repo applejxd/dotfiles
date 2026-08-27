@@ -1,26 +1,40 @@
 ---
 name: commit
-description: "Conventional Commits 形式でコミットメッセージを生成する。「コミットして」「commit メッセージを作って」と言われたときに使う。"
+description: "Conventional Commits 形式のメッセージ作成と Git コミットを行う。「コミットして」「commit メッセージを作って」「変更をコミット」と言われたら必ず使う。"
 context: fork
 agent: general-purpose
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(*get-git-context.sh*)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*)
 ---
 
-# コミットメッセージ生成スキル
+# Git コミットスキル
 
 ## コンテキスト収集
 
-`${CLAUDE_SKILL_DIR}/scripts/get-git-context.sh` を実行して以下を取得する:
+補助スクリプトは使わず、以下のコマンドを直接実行する:
 
-- `git status` — 変更ファイル一覧
-- `git diff HEAD` — ステージ済み＋未ステージ差分
+- `git status --short --branch` — 変更ファイルとブランチ
+- `git diff HEAD` — ステージ済み・未ステージの差分
 - `git branch --show-current` — 現在のブランチ
 - `git log --oneline -10` — 直近コミット履歴
 
-## タスク
+差分を論理単位に分け、ユーザーの変更や無関係な変更を混ぜない。
 
-上記コンテキストを基に **Conventional Commits** 形式でコミットメッセージを下書きする。
-仕様の詳細は `${CLAUDE_SKILL_DIR}/references/conventional-commits-spec.md` を参照。
+## 実行
+
+1. 上記コンテキストから **Conventional Commits** 形式のメッセージを作成する。
+   詳細は `references/conventional-commits-spec.md` を参照する。
+2. メッセージ作成だけを依頼された場合は、対象ファイルとメッセージを提示して終了する。
+3. コミットを依頼された場合は、対象ファイルを列挙した次の形を**1回の Bash 呼び出し**
+   で実行する:
+
+   ```bash
+   git add -- <対象ファイル...> && git commit -m '<件名>' -m '<本文>'
+   ```
+
+   `git commit` は共通 PreToolUse hook の ask 対象である。compound command 全体が
+   実行前に確認されるため、スキル独自の確認は挟まない。
+4. コミット後に `git status --short` と `git log -1 --oneline` を実行し、
+   コミットと作業ツリーを確認する。
 
 ## スタイル規範
 
@@ -45,15 +59,14 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
 
 **禁止**:
 
-- ユーザー承認前の `git add` / `git commit` の実行
 - `--no-verify` などによる hook の回避
+- `git add .` / `git add -A` による無関係な変更の追加
+- `git commit -a` / `git commit --all` による無関係な変更の追加
+- 明示依頼のない `git commit --amend`
 - 共同著者タグ・Claude リンクの追加
 - 未測定の数値主張
 
 **要求**:
 
-- 提案コミット文と対象ファイルを提示し、`git add` / `git commit` の実行前に
-  ユーザーの承認を得る
-- 承認された場合は対象ファイルだけを `git add` し、承認済みメッセージで
-  `git commit` を実行する
-- 承認後に対象ファイルまたは差分が変わった場合は、実行前に再確認する
+- 対象ファイルをパスで明示してステージする
+- hook の確認が拒否された場合はコミットせず停止する
