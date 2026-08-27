@@ -164,13 +164,14 @@ Copilot CLI では hook の `ask` が自動承認される**（後述の `git co
 GraphQL は読み取り query でも HTTP POST を使うので、method ではなく operation
 本文を検査する。静的に安全性を確認できない場合は fail-open にせず ask へ倒す。
 
-`git commit` は commit skill と permission / hook で確認が重複しないよう、確認点を
-1つに保つ。スキルは `git add -- <files> && git commit ...` を1回の Bash 呼び出しで
-実行するため、compound command を解析する hook がステージング前に全体を止める。
-Claude Code の native permission は compound command の後半を再評価しないため、
-この形式では hook が強制を担う。
+`git commit` の確認点は commit skill が持つ。skill は `git add -- <files>` と
+`git commit ...` を別々のコマンドとして実行し、commit の直前に対象ファイルと
+コミットメッセージを提示して承認を得る。ステージは取り消せるので `git add` は
+未掲載のままにし、確認はコミットメッセージを読む1回に絞る。compound command に
+しないのは、Claude Code の native permission も Codex の rules も `&&` の後半を
+再評価しないためで、単独実行にすれば CLI 側の強制もコミットに効く。
 
-ただし **Copilot CLI 1.0.53 以降は hook の `ask` が機能しない**。TUI が permission
+なお **Copilot CLI 1.0.53 以降は hook の `ask` が機能しない**。TUI が permission
 dialog を数十 ms 表示しただけで自動承認する既知バグ
 ([github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590), OPEN)
 があるため。実測では hook 由来の permission 90 件のうち 79 件が
@@ -178,19 +179,20 @@ dialog を数十 ms 表示しただけで自動承認する既知バグ
 max 99ms) に解決され、人間が応答した 11 件は中央値 23.5 秒だった。
 `deny` はこのバグの影響を受けず正常にブロックする。
 
-このため `git commit` の確認点は CLI ごとに分ける。skill は
-`echo "${COPILOT_CLI:-}"` で環境を判別し、コマンドを出す前に分岐する。
+このため skill 側では CLI を判別せず、どの CLI でも同じ文面で明示確認する。
 skill は呼び出したときしか読まれないため、Copilot 側は常時読み込まれる
 `~/.copilot/copilot-instructions.md` にも同じ規則を置いて二重化している
-（Claude Code 側は hook が正常に動くので置かない。置くと二重確認になる）:
+（Claude Code / Codex は機械的強制があるので置かない）:
 
-| CLI | 確認点 | 機械的強制 |
+| CLI | 機械的強制 | 実際の確認点 |
 | --- | --- | --- |
-| Claude Code | hook / permission の ask | あり |
-| Copilot CLI | commit skill の明示確認 | なし (バグ回避のため指示ベース) |
-| Codex CLI | `git.rules` の prompt | あり |
+| Claude Code | hook / permission の ask | skill の明示確認 + ask プロンプト |
+| Copilot CLI | なし (#3590 で自動承認される) | skill と copilot-instructions.md の指示 |
+| Codex CLI | `git.rules` の prompt | skill の明示確認 + prompt |
 
-Copilot 側のバグが修正されたら、skill の明示確認を削除して hook 一本へ戻す。
+Copilot 側のバグが修正されても skill の明示確認は残す。目的が
+「実行の可否」ではなく「コミットメッセージの確認」であり、CLI 依存の
+分岐を持たない方が文面を1つに保てるため。
 
 `curl` / `wget` も allow には置かず、読み取りと通常ダウンロードを未掲載にする。
 HTTP method と payload option は hook が transfer ごとに解析するため、

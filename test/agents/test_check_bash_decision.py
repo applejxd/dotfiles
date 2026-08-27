@@ -209,10 +209,11 @@ def test_compound_git_add_and_commit_requires_approval():
     assert decision == "ask", f"-> {decision} ({reason})"
 
 
-def test_commit_skill_uses_direct_commands_and_compound_call():
+def test_commit_skill_uses_direct_commands_and_separate_calls():
     skill = COMMIT_SKILL_PATHS[0].read_text(encoding="utf-8")
-    assert "git add -- <対象ファイル...> && git commit" in skill
-    assert "スキル独自の確認は挟まない" in skill
+    assert "git add -- <対象ファイル...>" in skill
+    assert "git add -- <対象ファイル...> &&" not in skill
+    assert "git commit -m '<件名>' -m '<本文>'" in skill
     assert "get-git-context.sh" not in skill
     assert "git commit -a" in skill
     assert not (
@@ -222,19 +223,27 @@ def test_commit_skill_uses_direct_commands_and_compound_call():
     assert ".claude/skills/commit/scripts/get-git-context.sh" in remove_paths
 
 
-def test_commit_skill_works_around_copilot_ask_bug():
-    """Copilot CLI 1.0.53+ は hook の ask を自動承認するため skill 側で確認する。
+def test_commit_skills_gate_on_message_approval_before_commit():
+    """承認は add ではなく commit の直前。目的はコミットメッセージの確認。
 
-    github/copilot-cli#3590 が修正されたらこの分岐ごと削除してよい。
+    ゲートが実行指示より後ろにあると、手順を順に辿る agent が確認前に
+    コミットしてしまうため、位置関係も検査する。
     """
-    skill = COMMIT_SKILL_PATHS[0].read_text(encoding="utf-8")
-    assert "COPILOT_CLI" in skill
-    assert "github/copilot-cli#3590" in skill
-    # 承認ゲートが実行指示より後ろにあると、手順を順に辿る agent が
-    # 確認前にコミットしてしまう (バグ回避が無意味になる)。
-    gate = skill.index("COPILOT_CLI")
-    run = skill.index("git add -- <対象ファイル...> && git commit")
-    assert gate < run, "Copilot の承認ゲートが実行指示より後ろにある"
+    for path in COMMIT_SKILL_PATHS:
+        skill = path.read_text(encoding="utf-8")
+        assert "この時点では承認を求めない" in skill, path
+        gate = skill.index("**コミット前の承認**")
+        stage = skill.index("git add -- <対象ファイル...>")
+        run = skill.index("git commit -m '<件名>' -m '<本文>'")
+        assert stage < gate < run, f"承認ゲートの位置が不正: {path}"
+
+
+def test_commit_skill_is_cli_agnostic():
+    """CLI 判別で分岐せず、どの CLI でも同じ手順で確認する."""
+    for path in COMMIT_SKILL_PATHS:
+        skill = path.read_text(encoding="utf-8")
+        assert "COPILOT_CLI" not in skill, path
+        assert "copilot-cli#3590" not in skill, path
     docs = (ROOT / "docs" / "agents-permissions.md").read_text(encoding="utf-8")
     assert "github/copilot-cli/issues/3590" in docs
     assert "auto_approved" in docs
@@ -258,7 +267,7 @@ def test_copilot_instructions_require_commit_approval():
 
 def test_codex_commit_skill_uses_separate_policy_checked_commands():
     skill = COMMIT_SKILL_PATHS[1].read_text(encoding="utf-8")
-    assert "git add -- <対象ファイル...>\n   git commit" in skill
+    assert "git add -- <対象ファイル...>" in skill
     assert "git add -- <対象ファイル...> &&" not in skill
     assert "shell compound の内側を解析しない" in skill
     assert "get-git-context.sh" not in skill

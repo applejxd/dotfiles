@@ -339,9 +339,11 @@ Copilot 限定の規則は、常時読み込まれる `~/.copilot/copilot-instru
 に置くのが確実。このファイル自体が Copilot 専用なので、Claude Code 側に
 不要な確認が増えることもない。
 
-`git commit` は後者を採用した（Claude Code は hook、Copilot CLI は skill が確認）。
+`git commit` は後者を採用した。commit skill は CLI を判別せず、どの CLI でも
+コミット直前に対象ファイルとメッセージを提示して承認を得る（Copilot 用の
+補強として `~/.copilot/copilot-instructions.md` にも同じ規則を置く）。
 構成は [`docs/agents-permissions.md`](../agents-permissions.md) を参照。
-バグが修正されたら分岐を削除して hook 一本へ戻す。
+バグが修正されても、確認の目的がメッセージのレビューなので明示確認は残す。
 
 ### Copilot の設定キーは Web ドキュメントに載っていない
 
