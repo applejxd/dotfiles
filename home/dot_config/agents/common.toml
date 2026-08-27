@@ -7,7 +7,9 @@
 #
 # 2 層構成:
 #   1. permission リスト (本ファイル由来。Claude のみ。CLI 本体が評価する)
-#   2. hook (check_bash.py) が同じリストを読んで deny / ask を強制 (Claude + Copilot)
+#   2. hook (check_bash.py) が同じリストを読んで deny / ask を強制
+#      (deny は両 CLI で有効。ask は Claude のみ。Copilot は下記 ★ のバグで
+#       hook の ask が自動承認される)
 #
 # Claude Code は permission リストの既知バグが複数 open (cd && bypass, git -C bypass
 # 等。anthropics/claude-code#59498, #59006, #20085 ほか)。
@@ -23,7 +25,8 @@
 # (例: "git push")。生成/参照の流れ:
 #
 #   generate.py   -> ~/.claude/settings.json の permissions に Bash(<pattern>:*) を展開
-#   check_bash.py -> 同じリストを読み、Claude / Copilot 双方で deny / ask を強制
+#   check_bash.py -> 同じリストを読み、deny は Claude / Copilot 双方で、
+#                    ask は Claude で強制する (Copilot の ask は下記 ★ 参照)
 #
 # 2 層に配る理由: hook は設定の読み込みに失敗しうる。permission リストは
 # CLI 本体が評価するので、hook が落ちても Claude 側の deny は生き残る。
@@ -444,7 +447,7 @@ approvals = [
 id = "check_bash"
 script = "check_bash.py"
 runner = "python3"
-purpose = "[bash] deny / ask を両 CLI で強制する (permission リストの補完)"
+purpose = "[bash] deny を両 CLI で、ask を Claude で強制する (permission リストの補完)"
 claude_event = "PreToolUse"
 claude_matcher = "Bash"
 copilot_event = "PreToolUse"

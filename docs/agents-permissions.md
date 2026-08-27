@@ -325,6 +325,7 @@ Copilot は PascalCase イベント名で書くと Claude の tool 名 (`Edit` /
   真実とする方針)
 - `[bash] deny` は hook が hard-block し、Claude では permission でも拒否される
 - `[bash] ask` は hook が `ask` を返す。承認すればそのまま実行される
+  (Copilot CLI では hook の `ask` が自動承認される既知バグがある。前述)
 - `[bash] allow` の先頭トークンだけが Copilot の承認済みコマンド名になる
   (Copilot は deny / ask を表現できないため、強制は hook が担う)
 - `[file.write_ask_globs]` / `[file.write_deny_globs]` は Claude の
