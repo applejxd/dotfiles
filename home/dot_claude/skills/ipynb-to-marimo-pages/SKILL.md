@@ -1,6 +1,6 @@
 ---
 name: ipynb-to-marimo-pages
-description: "Jupyter notebook (.ipynb) を marimo notebook へ移行し、セル分割とMarkdown解説を整え、HTML化してGitHub Pagesへ公開する。「ipynbをmarimoにして」「marimoノートブックを公開したい」「ノートブックのセルを整理して」「解説セルを整備して」と言われたときに使う。marimo以外のノートブック運用（nbconvert、Quarto、Jupyter Book）には使わない。"
+description: "Jupyter notebook (.ipynb) を marimo notebook へ移行し、セル分割とMarkdown解説を整え、HTML化してGitHub Pagesへ公開する。「ipynbをmarimoにして」「marimoノートブックを公開したい」「ノートブックのセルを整理して」「解説セルを整備して」「marimo の数式が正しく表示されない」と言われたときに使う。marimo以外のノートブック運用（nbconvert、Quarto、Jupyter Book）には使わない。"
 context: fork
 agent: general-purpose
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
@@ -9,7 +9,8 @@ allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 # ipynb → marimo → GitHub Pages 移行スキル
 
 Jupyter notebook を marimo notebook へ移行し、学習・共有に耐える形へ整理して
-静的HTMLとして公開するまでの手順。このリポジトリでの実施結果を基にしている。
+静的HTMLとして公開するまでの手順。2つのリポジトリでの実施結果を基にしている
+（数冊規模の教材移行と、38冊一括のリポジトリ全体移行）。
 
 ## 適用範囲
 
@@ -18,13 +19,16 @@ Jupyter notebook を marimo notebook へ移行し、学習・共有に耐える�
 | フェーズ | 内容 |
 | --- | --- |
 | 1 | `.ipynb` → marimo `.py` へ変換 |
-| 2 | コードセルを意味単位へ分割 |
-| 3 | Markdownセルで各セルの処理内容を解説 |
+| 2 | コードセルを意味単位へ分割し、Jupyter/Colab 依存を除去 |
+| 3 | Markdownセルで各セルの処理内容を解説（数式の書式に注意） |
 | 4 | HTML化（ノートブックを実際に実行する） |
 | 5 | GitHub Pages で公開 |
 
 **「解説セルを整備して」のようにフェーズ3だけを求められることが多い。**
 その場合は全フェーズを実行せず、該当フェーズだけを行う。
+
+数十冊を一括で扱う場合は、原本の1対1検査・自動検出ビルド・生成物の鮮度検査が
+追加で必要になる。`references/large-scale-migration.md` を参照する。
 
 ## 事前に必ず確認すること
 
@@ -43,9 +47,12 @@ uv run marimo convert notebook.ipynb -o notebook.py
 ```
 
 - 出力は**アウトプットが除去された** marimo notebook。
-- **元の `.ipynb` は削除せず `old/` 等へ残す。** 移行の正しさを後から検証する
-  唯一の基準になる。このリポジトリは `old/` に保持し、`docs/coverage.md` で
-  元教材との対応表を管理している。
+- **元の `.ipynb` は削除せず `legacy/`（`old/`）等へ残す。** 移行の正しさを
+  後から検証する唯一の基準になる。冊数が多い場合は原本と変換後の1対1対応を
+  機械的に検査し、リネームは対応表（`migration-map.json`）へ記録する。
+- **ファイル名がライブラリ名と衝突しないか確認する。** `sklearn.py` の中の
+  `import sklearn` はそのファイル自身を指す。`matplotlib.py`、`open3d.py` も
+  同様。衝突する場合は内容を表す名前へリネームする。
 - 変換直後は Jupyter 由来の「上から順に流す」構造のままで、marimo の
   依存グラフを活かせていない。フェーズ2で整理する。
 
@@ -55,7 +62,7 @@ uv run marimo convert notebook.ipynb -o notebook.py
 uv run marimo check --strict notebook.py
 ```
 
-## フェーズ2：コードセルの分割
+## フェーズ2：コードセルの分割と Jupyter 依存の除去
 
 marimo はセルを関数として扱い依存関係をDAGで解決する。分割時の制約は
 `references/marimo-cell-rules.md` に詳しくまとめてある。要点は3つ。
@@ -71,6 +78,26 @@ marimo はセルを関数として扱い依存関係をDAGで解決する。分�
 詰めず、それぞれの中間結果を確認できる単位に分ける。
 
 セル内で完結しないクラスは `@app.class_definition` を付けてモジュール直下へ置く。
+
+### Jupyter / Colab 固有の記述を落とす
+
+変換直後の `.py` には、marimo では動かない記述がそのまま残る。
+
+| 残るもの | 対処 |
+| --- | --- |
+| `%matplotlib inline` などの magic | 削除 |
+| `!pip install ...` | 依存を `pyproject.toml` へ移す |
+| `display(...)` | セル末尾の裸の式にする |
+| `google.colab` / Colab バッジ | 削除し、データ取得を固定URLへ置換 |
+| `IPython.display` | `mo.image` / `mo.Html` へ置換 |
+
+**動画・アニメーション・3D描画は headless で成立する形へ置き換える。**
+matplotlib のアニメーションは `to_jshtml()` を `mo.Html(...)` で包むか、GIF を
+生成して `mo.image("data:image/gif;base64,...")` で埋め込む。3D描画は
+offscreen レンダリングを使い、失敗時は明示的に静止画へフォールバックする。
+
+乱数 seed と device（CPU/GPU）は明示し、反復計算には必ず上限を置く。
+実行時間の暴走はフェーズ4で初めて表面化し、全体を止める。
 
 ## フェーズ3：Markdownセルの整備
 
@@ -93,6 +120,26 @@ def _():
 - `mo.md(r"""...""")` の中に `"""` を書かない。
 - Markdown セルは変数を定義も参照もしないため、**依存グラフに影響しない**。
   既存セルの実行順序・出力を変えずに安全に挿入できる。
+
+### 数式は KaTeX の制約に従う
+
+**移行後に最も頻発する不具合。** marimo の Markdown は KaTeX で描画するため、
+Jupyter（MathJax）で通っていた記法の一部が生テキストとして表示される。
+全規則は `references/math-rendering.md`。要点は4つ。
+
+- ディスプレイ数式は `$$...$$` のみ。`\[...\]`、`\begin{equation}`、`align`、
+  `split`、`gather` は**描画されない**。複数行は `$$` の内側で `aligned` を使う
+- `$$` は開始・終了とも**単独行**に置く（`$$\begin{aligned}` は不可）
+- 数式ブロック内で行頭を「`+` などの記号 + 空白」にしない。Markdown のリスト
+  項目と誤認されて数式が分断される（`+ v_k` は `+v_k` と書く）
+- 数式ブロック内を字下げしない。コードブロックと解釈される
+
+```shell
+python3 ~/.claude/skills/ipynb-to-marimo-pages/scripts/check-display-math.py notebooks
+```
+
+`ruff` も `marimo check --strict` も数式の書式を**一切検証しない**。
+このチェックはフェーズ5の CI にも入れる。
 
 ### 何を書くか
 
@@ -165,16 +212,28 @@ uv run marimo export html notebook.py -o site/notebook.html --force
 ```
 
 **重要な落とし穴**：`marimo export html` は**セルが例外を投げても exit 0 を返し、
-HTMLを書き出してしまう**。成否をログで判定し、失敗時はHTMLを破棄する必要がある。
+HTMLを書き出してしまう**。次の3つをすべて検査し、1つでも該当したら
+**出力を削除**して失敗扱いにする。
 
-```shell
-if grep -q "some cells failed to execute" "$log"; then
-    rm -f "$output"   # 壊れたHTMLを公開しない
-    failed=1
-fi
+```python
+ERROR_MARKERS = (
+    "some cells failed to execute",      # marimo の stdout
+    "MarimoExceptionRaisedError",        # stdout と生成HTMLの両方に出る
+    "Traceback (most recent call last)",
+)
 ```
 
-ビルドスクリプトの雛形は `references/build-site-example.sh`。
+stdout だけでなく**生成された HTML 本体も検査する**。正規表現で書く場合、
+raw 文字列内の `\\(` は「バックスラッシュ + 括弧」になり永久にマッチしない
+（実際に踏んだ。`references/pitfalls.md` の11節）。
+
+ビルドスクリプトの雛形は2種類ある。
+
+| 雛形 | 用途 |
+| --- | --- |
+| `references/build-site-example.sh` | 数冊規模。一覧を手で持つ |
+| `references/build-site-example.py` | 自動検出・manifest 付き。冊数が多い場合 |
+
 `--sandbox` は、ノートブックが PEP 723 のインライン依存を持たない場合は
 付けてはならない（隔離環境で依存を解決できず失敗する）。
 
@@ -185,6 +244,16 @@ grep -c 'MarimoExceptionRaisedError\|Traceback (most recent call last)' site/*.h
 ```
 
 0 でなければ実行時エラーが混入している。
+
+**数式が実際に描画されたかは HTML の grep では判定できない。** marimo は
+Markdown を JSON として埋め込み、KaTeX の描画はブラウザ上で行われる。
+ヘッドレスブラウザで `.katex-display` の数をソースと突き合わせる。
+
+```shell
+uv run --with playwright python \
+  ~/.claude/skills/ipynb-to-marimo-pages/scripts/audit-math-rendering.py \
+  --site site --notebooks notebooks
+```
 
 なお **HTML内の日本語は `\uXXXX` エスケープで格納される**。生の日本語で
 `grep` しても一致しない。デコードしてから照合すること。
@@ -198,9 +267,19 @@ python3 ~/.claude/skills/ipynb-to-marimo-pages/scripts/grep-exported-html.py sit
 **ノートブックの実行はローカル、デプロイはCI**、と分離する。こうすると
 CIにAPIキーを置かずに済み、CI側で課金も発生しない。
 
-- ローカル：`build-site.sh` でHTMLを生成し、`site/` をコミット
-- CI：`site/` をアップロードするだけ（ワークフロー例は
+- ローカル：ビルドスクリプトでHTMLを生成し、`site/` をコミット
+- CI：検査してから `site/` をアップロードするだけ（ワークフロー例は
   `references/pages-workflow-example.yml`）
+
+CI の検査は**デプロイの直前**に置く。最低限、次の3つ。
+
+1. 数式の書式（`check-display-math.py`）
+2. 生成物の鮮度：ソースと HTML の SHA-256 を manifest と照合し、
+   **ソースだけ更新して再生成し忘れた状態**を弾く
+3. サイトの整合：例外マーカー・ローカルリンク切れ・index との過不足
+
+`site/` をコミットする構成では、2 が無いと古いページを平気で公開してしまう。
+実装は `references/large-scale-migration.md` の7節。
 
 注意点：
 
@@ -209,12 +288,13 @@ CIにAPIキーを置かずに済み、CI側で課金も発生しない。
   よっては失敗する。その場合は手動設定してから再実行する。
 - エクスポートされたHTMLは画像を相対パス `imgs/...` で参照する。
   `site/imgs/` を gitignore する運用なら、**デプロイ時にCIで復元する**。
+- ワークフローの `paths:` に `notebooks/**` も含める。ソースだけの push でも
+  検査が走り、鮮度ゲートで止められる。
 
 ## コミットの分割
 
-このリポジトリでは「ノートブック本体の変更」と「HTML再生成」を
-**別コミットに分ける**慣例になっている。HTMLは生成物であり、レビュー時に
-本体の差分だけを追えるようにするため。
+「ノートブック本体の変更」と「HTML再生成」は**別コミットに分ける**。
+HTMLは生成物であり、レビュー時に本体の差分だけを追えるようにするため。
 
 ```text
 docs(notebooks): 各コードセルの処理内容をMarkdownで解説
@@ -227,11 +307,28 @@ docs(site): Markdown解説を追加した状態でHTMLを再生成
 uv run ruff check *.py                  # 静的検査
 uv run marimo check --strict *.py       # marimo の依存グラフ検査
 uv run pre-commit run --all-files       # リポジトリ定義の全フック
+python3 ~/.claude/skills/ipynb-to-marimo-pages/scripts/check-display-math.py notebooks
 ```
 
-**`marimo check --strict` は実行時エラーを検出しない。** `mo` が未定義で
-Markdownセルが全滅していても素通りする。実行時の健全性を確かめるには
-`marimo export html` まで通す必要がある。
+検査の守備範囲は次の通り。**上のどれも実行時エラーを検出しない。**
+
+| 検査 | 検出できるもの | 検出できないもの |
+| --- | --- | --- |
+| `ruff` | 構文・未使用 import | marimo 固有の制約すべて |
+| `marimo check --strict` | 変数の重複定義・循環参照 | 実行時エラー、`mo` 未定義 |
+| `check-display-math.py` | 数式の書式違反 | 数式の内容の誤り |
+| `marimo export html` | 実行時エラー | 数式が描画されたか |
+| `audit-math-rendering.py` | KaTeX の描画失敗 | 数式の内容の誤り |
+
+`marimo check --strict` は、`mo` が未定義で Markdownセルが全滅していても
+素通りする。実行時の健全性を確かめるには `marimo export html` まで通す。
+
+## 公開前の独立レビュー
+
+数十冊規模の移行や、ビルド・検査基盤を新設した場合は、**公開前に独立した
+レビューを1回入れる**。実際にこの工程で、失敗検知の正規表現が常に真になる
+バグと、部分ビルドが鮮度検査を素通りさせる穴という、実害のある欠陥が
+2件見つかった。指摘が無くなるまで反復する。
 
 ## 参照ファイル
 
@@ -243,10 +340,15 @@ Markdownセルが全滅していても素通りする。実行時の健全性を
 | ファイル | 内容 |
 | --- | --- |
 | `references/marimo-cell-rules.md` | セル分割時の変数ルールと構文 |
+| `references/math-rendering.md` | 数式の書式規則と検査方法 |
 | `references/pitfalls.md` | 実際に踏んだ落とし穴と対処 |
 | `references/markdown-templates.md` | Markdownセルの記述テンプレート |
-| `references/build-site-example.sh` | HTML化スクリプトの雛形 |
+| `references/large-scale-migration.md` | 数十冊規模の移行・ビルド基盤の運用 |
+| `references/build-site-example.sh` | HTML化スクリプトの雛形（数冊規模） |
+| `references/build-site-example.py` | 自動検出・manifest 付きビルドの雛形 |
 | `references/pages-workflow-example.yml` | Pages デプロイのワークフロー例 |
 | `scripts/verify-code-cells-unchanged.py` | コードセル不変の検証 |
 | `scripts/audit-markdown-coverage.py` | Markdown解説の網羅状況の集計 |
 | `scripts/grep-exported-html.py` | エクスポート済みHTMLの日本語検索 |
+| `scripts/check-display-math.py` | 数式の書式検査（静的） |
+| `scripts/audit-math-rendering.py` | 数式の描画検査（Chromium で実測） |

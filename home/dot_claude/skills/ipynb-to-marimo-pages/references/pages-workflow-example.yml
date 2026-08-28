@@ -13,9 +13,13 @@ name: Deploy site to GitHub Pages
 on:
   push:
     branches: [main]
+    # notebooks/ や scripts/ も対象に含める。ソースだけ更新して HTML を再生成
+    # し忘れた push でもワークフローが動き、鮮度検査で deploy を止められる。
     paths:
       - site/**
+      - notebooks/**
       - imgs/**
+      - scripts/**
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -37,6 +41,22 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7.0.1
+
+      # 生成物の検査はデプロイ前に行う。ここで落とせば、崩れたページや
+      # 再生成し忘れた古いページが公開されることはない。
+      #
+      # 下の3つは**プロジェクト側に置くスクリプト**であり、この雛形には
+      # 含まれない。check_math.py はスキルの scripts/check-display-math.py を
+      # そのまま配置すればよい。残り2つは
+      # references/large-scale-migration.md の1・7・9節を基に用意する。
+      # - check_math: 描画できない数式記法が残っていないか
+      # - check_migration --require-site: ソースと生成HTMLのハッシュが一致するか
+      # - check_site: 例外マーカー・リンク切れ・index との過不足
+      - name: Validate generated site
+        run: |
+          python scripts/check_math.py
+          python scripts/check_migration.py --require-site
+          python scripts/check_site.py
 
       # site/imgs/ を gitignore している場合、追跡下の imgs/ から復元する。
       # エクスポートされた HTML は画像を相対パス `imgs/...` で参照するため。
