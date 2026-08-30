@@ -235,7 +235,12 @@ def merge_copilot_perms(_existing: dict[str, Any], common: dict[str, Any]) -> di
 # ---------------------------------------------------------------------------
 
 # generate.py が管理するキー一覧 (これら以外は触らない)
-COPILOT_MANAGED_KEYS = {"allowedUrls", "deniedUrls", "trustedFolders"}
+COPILOT_MANAGED_KEYS = {
+    "allowedUrls",
+    "deniedUrls",
+    "includeCoAuthoredBy",
+    "trustedFolders",
+}
 
 
 def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
@@ -252,6 +257,9 @@ def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> 
         out.pop("deniedUrls", None)
 
     out["trustedFolders"] = [expand_user(p) for p in copilot.get("trusted_folders", [])]
+
+    if "include_co_authored_by" in copilot:
+        out["includeCoAuthoredBy"] = bool(copilot["include_co_authored_by"])
 
     # 新規対話セッションの権限モード。assisted は experimental な
     # auto-approval 機能に依存するため、両方をここで揃える。

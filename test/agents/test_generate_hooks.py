@@ -205,6 +205,12 @@ def test_copilot_hooks_ignore_existing_content():
     assert out == gen.build_copilot_hooks(COMMON)
 
 
+def test_copilot_settings_disable_co_author_trailer():
+    merged = gen.merge_copilot_settings({"includeCoAuthoredBy": True}, COMMON)
+
+    assert merged["includeCoAuthoredBy"] is False
+
+
 # ---------------------------------------------------------------------------
 # 両 CLI の整合性
 # ---------------------------------------------------------------------------

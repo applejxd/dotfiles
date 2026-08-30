@@ -3,6 +3,7 @@
 - カスタムスラッシュコマンドは claude のものを読み取れる
 - ユーザ設定は `~/.copilot/settings.json`（旧 `config.json` から自動移行済み。`config.json` は認証等の自動管理状態のみ）
 - [設定ディレクトリ / settings.json 仕様](https://docs.github.com/ja/copilot/reference/copilot-cli-reference/cli-config-dir-reference#configuration-file-settings)
+- `includeCoAuthoredBy=false` を chezmoi で強制し、Copilot が作成するコミットへ共同著者 trailer を追加しない
 
 ## デフォルトのスラッシュコマンド
 

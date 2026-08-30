@@ -393,6 +393,9 @@ mcp_deny = [
 # Copilot 固有
 # ---------------------------------------------------------------------------
 [copilot]
+# Copilot が作成するコミットへ Co-authored-by trailer を追加しない
+include_co_authored_by = false
+
 # 新規対話セッションの権限モード (~/.copilot/settings.json)
 #   "manual" (既定): write / command は都度プロンプト。read-only は自動承認
 #   "assisted"     : LLM の safety check が安全と判断した要求を自動承認し、
