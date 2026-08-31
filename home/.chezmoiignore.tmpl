@@ -83,3 +83,30 @@ Documents/**
 **/__pycache__
 **/__pycache__/**
 **/*.pyc
+
+# Orca (stablyai/orca) が生成・管理する実体。いずれもマシン固有の内容
+# (Windows 側の絶対パス、バージョンピン、worktree 実体) を含み、Orca 自身が
+# 再生成・更新するため chezmoi では追跡しない。
+# ここに列挙しておくと `chezmoi add` も警告を出して取り込みを拒否する。
+#
+# なお Orca は各 AI CLI の設定ファイルへ hook を注入する。それらは
+# scripts/agents/generate.py が「自分の生成したエントリだけを差し替える」
+# 実装になっているため、chezmoi apply で消えることはない。
+# see docs/agents-permissions.md
+.orca
+.orca/**
+.orca-relay
+.orca-relay/**
+.orca-wsl
+.orca-wsl/**
+.local/share/orca
+.local/share/orca/**
+.local/bin/orca-ide
+orca
+orca/**
+
+# npx skills (vercel-labs/skills) が管理する skill ストア。
+# Orca が初回起動時にインストールを促し、以降も Orca 側が更新を管理するため
+# chezmoi では追跡しない (二重管理を避ける)。
+.agents
+.agents/**

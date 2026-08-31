@@ -94,6 +94,26 @@ def test_multiedit_is_not_referenced():
 
 
 # ---------------------------------------------------------------------------
+# 外部ツール (Orca 等) の hook を模したフィクスチャ
+# ---------------------------------------------------------------------------
+
+# Orca が ~/.claude/settings.json に注入する hook を模したコマンド
+FOREIGN_COMMAND = (
+    'if [ -f "${HOME-}/.orca/agent-hooks/claude-hook.sh" ]; then '
+    '/bin/sh "${HOME-}/.orca/agent-hooks/claude-hook.sh"; else printf \'{}\\n\'; fi'
+)
+MANAGED_DIR = gen.expand_user(gen.HOOKS_DIR)
+
+
+def foreign_entry(matcher: str | None = None) -> dict:
+    entry: dict = {}
+    if matcher:
+        entry["matcher"] = matcher
+    entry["hooks"] = [{"type": "command", "command": FOREIGN_COMMAND, "timeout": 10}]
+    return entry
+
+
+# ---------------------------------------------------------------------------
 # Claude 出力
 # ---------------------------------------------------------------------------
 
@@ -157,10 +177,150 @@ def test_claude_settings_merge_preserves_other_keys():
     assert "permissions" in merged
 
 
-def test_claude_settings_merge_replaces_hooks():
-    existing = {"hooks": {"PreToolUse": [{"matcher": "Edit|Write|MultiEdit"}]}}
+def test_claude_settings_merge_regenerates_managed_hooks():
+    # hooks リストを持たない項目は解釈できないので温存し、管理 hook は再生成する
+    orphan = {"matcher": "Edit|Write|MultiEdit"}
+    merged = gen.merge_claude_settings({"hooks": {"PreToolUse": [orphan]}}, COMMON)
+    expected = gen.build_claude_hooks(COMMON)
+    assert merged["hooks"]["PreToolUse"] == expected["PreToolUse"] + [orphan]
+    assert merged["hooks"]["Stop"] == expected["Stop"]
+
+
+def test_stale_managed_hook_is_replaced_not_duplicated():
+    # common.toml から消したスクリプトの残骸は除去され、重複もしない。
+    # 同じイベントに同居する外部 hook は残ること (全置換では落ちる)。
+    stale = {
+        "matcher": "Bash",
+        "hooks": [
+            {
+                "type": "command",
+                "command": f"python3 {MANAGED_DIR}/removed-long-ago.py",
+                "timeout": 30,
+            }
+        ],
+    }
+    existing = {"hooks": {"PreToolUse": [stale, foreign_entry("*")]}}
     merged = gen.merge_claude_settings(existing, COMMON)
-    assert merged["hooks"] == gen.build_claude_hooks(COMMON)
+    commands = [
+        cmd["command"]
+        for entries in merged["hooks"].values()
+        for entry in entries
+        for cmd in entry["hooks"]
+    ]
+    assert not any("removed-long-ago.py" in c for c in commands)
+    assert len(commands) == len(set(commands))
+    assert FOREIGN_COMMAND in commands
+    expected = gen.build_claude_hooks(COMMON)
+    assert merged["hooks"]["PreToolUse"] == expected["PreToolUse"] + [foreign_entry("*")]
+
+
+# ---------------------------------------------------------------------------
+# hooks は外部ツール (Orca 等) との共有領域なので、管理外の項目を消さないこと
+# ---------------------------------------------------------------------------
+
+def test_is_managed_hook_command_detects_both_path_forms():
+    assert gen.is_managed_hook_command(f"python3 {MANAGED_DIR}/check_bash.py")
+    assert gen.is_managed_hook_command("python3 $HOME/.claude/hooks/check_bash.py")
+    assert not gen.is_managed_hook_command(FOREIGN_COMMAND)
+    assert not gen.is_managed_hook_command(None)
+
+
+def test_foreign_hooks_are_preserved_on_shared_event():
+    # chezmoi も使う PreToolUse に外部 hook が同居していても消えない
+    existing = {"hooks": {"PreToolUse": [foreign_entry("*")]}}
+    merged = gen.merge_claude_settings(existing, COMMON)
+    commands = [c["command"] for e in merged["hooks"]["PreToolUse"] for c in e["hooks"]]
+    assert FOREIGN_COMMAND in commands
+    # 管理 hook が先、外部 hook が後 (既存ファイルの並びに合わせて差分を最小化)
+    assert commands[-1] == FOREIGN_COMMAND
+    assert any(MANAGED_DIR in c for c in commands)
+
+
+def test_foreign_only_events_are_preserved():
+    # chezmoi が一切使わないイベントはキーごと温存する
+    existing = {
+        "hooks": {
+            "SessionStart": [foreign_entry()],
+            "PermissionRequest": [foreign_entry("*")],
+        }
+    }
+    merged = gen.merge_claude_settings(existing, COMMON)
+    for event in ("SessionStart", "PermissionRequest"):
+        assert event in merged["hooks"], f"{event} が消えている"
+        assert merged["hooks"][event][0]["hooks"][0]["command"] == FOREIGN_COMMAND
+
+
+def test_mixed_entry_is_filtered_per_command():
+    # 1 エントリに管理 / 外部が混在する場合はコマンド単位で絞り込む
+    mixed = {
+        "matcher": "Bash",
+        "hooks": [
+            {"type": "command", "command": f"python3 {MANAGED_DIR}/check_bash.py"},
+            {"type": "command", "command": FOREIGN_COMMAND, "timeout": 10},
+        ],
+    }
+    kept = gen.strip_managed_claude_hooks([mixed])
+    assert len(kept) == 1
+    assert [c["command"] for c in kept[0]["hooks"]] == [FOREIGN_COMMAND]
+    # 元のエントリを破壊しない
+    assert len(mixed["hooks"]) == 2
+
+
+def test_event_becoming_empty_is_dropped():
+    # 管理 hook しか無いイベントは消える。同じ入力で外部 hook が同居する
+    # イベントは残るので、「そもそも生成しない」のとは区別できる。
+    managed_only = {
+        "hooks": [{"type": "command", "command": f"python3 {MANAGED_DIR}/gone.py"}]
+    }
+    existing = {
+        "hooks": {
+            "PreCompact": [managed_only],
+            "SessionEnd": [managed_only, foreign_entry()],
+        }
+    }
+    merged = gen.merge_claude_settings(existing, COMMON)
+    assert "PreCompact" not in merged["hooks"]
+    assert merged["hooks"]["SessionEnd"] == [foreign_entry()]
+
+
+def test_falsy_foreign_value_is_preserved():
+    # 空リスト以外の falsy な値も、解釈できない以上は落とさない
+    existing = {"hooks": {"WeirdEvent": {}}}
+    merged = gen.merge_claude_settings(existing, COMMON)
+    assert merged["hooks"]["WeirdEvent"] == {}
+
+
+def test_merge_is_idempotent():
+    existing = {
+        "hooks": {
+            "PreToolUse": [foreign_entry("*")],
+            "SessionStart": [foreign_entry()],
+        }
+    }
+    once = gen.merge_claude_settings(existing, COMMON)
+    twice = gen.merge_claude_settings(once, COMMON)
+    assert once == twice
+
+
+def test_merge_tolerates_missing_or_broken_hooks():
+    assert gen.merge_claude_settings({}, COMMON)["hooks"] == gen.build_claude_hooks(COMMON)
+
+
+def test_unparseable_shapes_are_preserved_not_dropped():
+    # 解釈できない形は将来のスキーマ変更や未知のツールの可能性があるので残す。
+    # ただし chezmoi も生成するイベントで list 以外だった場合は結合できないので
+    # 生成物を優先する (Claude のスキーマ上 list 以外は元々無効)。
+    existing = {
+        "hooks": {
+            "WeirdEvent": {"command": "inline"},
+            "SessionStart": [{"matcher": "*", "command": "orca-inline"}],
+            "PreToolUse": "not-a-list",
+        }
+    }
+    merged = gen.merge_claude_settings(existing, COMMON)
+    assert merged["hooks"]["WeirdEvent"] == {"command": "inline"}
+    assert merged["hooks"]["SessionStart"] == [{"matcher": "*", "command": "orca-inline"}]
+    assert merged["hooks"]["PreToolUse"] == gen.build_claude_hooks(COMMON)["PreToolUse"]
 
 
 # ---------------------------------------------------------------------------
@@ -236,3 +396,57 @@ def test_both_clis_reference_the_same_scripts():
 
 def test_generate_target_registry():
     assert "copilot-hooks" in gen.TARGETS
+
+
+# ---------------------------------------------------------------------------
+# Gemini 出力 (hooks は Orca が書き込むので触らないこと)
+# ---------------------------------------------------------------------------
+
+def test_gemini_target_is_registered():
+    assert "gemini-settings" in gen.TARGETS
+
+
+def test_gemini_managed_branches_are_applied():
+    merged = gen.merge_gemini_settings({}, COMMON)
+    assert merged["general"]["sessionRetention"]["enabled"] is True
+    assert merged["security"]["auth"]["selectedType"] == "oauth-personal"
+    assert merged["experimental"]["skills"]["enabled"] is True
+    assert merged["experimental"]["enableAgents"] is True
+    assert merged["mcpServers"]["deepwiki"]["httpUrl"] == "https://mcp.deepwiki.com/mcp"
+
+
+def test_gemini_preserves_foreign_hooks():
+    existing = {"hooks": {"PreToolUse": [foreign_entry("*")]}}
+    merged = gen.merge_gemini_settings(existing, COMMON)
+    assert merged["hooks"] == existing["hooks"]
+
+
+def test_gemini_preserves_sibling_keys_in_managed_branch():
+    # 管理下の枝でも、管理外の兄弟キーは残す (mcpServers の他サーバなど)
+    existing = {
+        "mcpServers": {"other": {"command": "foo"}},
+        "experimental": {"someFlag": True},
+    }
+    merged = gen.merge_gemini_settings(existing, COMMON)
+    assert merged["mcpServers"]["other"] == {"command": "foo"}
+    assert merged["experimental"]["someFlag"] is True
+    assert merged["experimental"]["enableAgents"] is True
+
+
+def test_gemini_preserves_existing_key_order():
+    # Sprig の toPrettyJson と違いキー順を並べ替えないこと (差分ノイズ対策)
+    existing = {"zzz": 1, "hooks": {}, "aaa": 2}
+    merged = gen.merge_gemini_settings(existing, COMMON)
+    assert list(merged)[:3] == ["zzz", "hooks", "aaa"]
+
+
+def test_gemini_merge_is_idempotent():
+    existing = {"hooks": {"SessionStart": [foreign_entry()]}, "theme": "Default"}
+    once = gen.merge_gemini_settings(existing, COMMON)
+    assert gen.merge_gemini_settings(once, COMMON) == once
+
+
+def test_gemini_merge_does_not_mutate_input():
+    existing = {"experimental": {"someFlag": True}}
+    gen.merge_gemini_settings(existing, COMMON)
+    assert existing == {"experimental": {"someFlag": True}}

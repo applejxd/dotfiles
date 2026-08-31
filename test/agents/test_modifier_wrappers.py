@@ -29,6 +29,10 @@ MODIFIERS = {
         ".copilot/permissions-config.json",
         "copilot-perms",
     ),
+    ROOT / "home" / "dot_gemini" / "modify_settings.json.py.tmpl": (
+        ".gemini/settings.json",
+        "gemini-settings",
+    ),
 }
 COPILOT_HOOKS = ROOT / "home" / "dot_copilot" / "hooks" / "from-claude.json.tmpl"
 

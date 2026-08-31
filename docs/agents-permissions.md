@@ -24,10 +24,13 @@ home/dot_copilot/
     hooks/from-claude.json.tmpl              ~/.copilot/hooks/from-claude.json を生成
     modify_private_settings.json.py.tmpl     ~/.copilot/settings.json を更新
     modify_private_permissions-config.json.py.tmpl
+home/dot_gemini/
+    modify_settings.json.py.tmpl             ~/.gemini/settings.json を更新
 test/agents/
     test_command_policy.py                   shell normalize / match の unit test
     test_check_bash_decision.py              deny/ask 判定と rm root guard の test
-    test_generate_hooks.py                   hook 生成の unit test
+    test_generate_hooks.py                   hook 生成 / 外部 hook 温存の unit test
+    test_modifier_wrappers.py                modify_ ラッパーの end-to-end test
 ```
 
 `modify_private_*` のように `private_` を付けることで mode 600 を保持し、
@@ -297,11 +300,60 @@ home/AppData/Roaming/Keyhac/.../keymap_layer.drawio
 
 - hook スクリプトの実体は `~/.claude/hooks/` に 1 つだけ置き、Copilot からも
   同じファイルを呼ぶ (`$HOME/.claude/hooks/...`)
-- `hooks` キーは apply のたびに**全置換**される。CLI 側で手動追加した hook は
-  消えるので、必ず `common.toml` に転記する
+- `hooks` キーは Orca などの**外部ツールも追記する共有領域**なので、apply では
+  `~/.claude/hooks/` 配下を起動しているエントリだけを差し替える (後述)
+- CLI UI で手動追加した hook も `~/.claude/hooks/` を指していなければ残るが、
+  再現性が無いので `common.toml` に転記すること
 - `*_event` を空にすればその CLI には出力されない
 - `*_matcher` を省略すると `matcher` キー自体が出力されない (= 全マッチ)。
   `Stop` / `UserPromptSubmit` など matcher 非対応イベントでは省略すること
+
+### 外部ツールとの共存 (Orca / herdr)
+
+Orca は `~/.claude/settings.json` と `~/.gemini/settings.json` の `hooks` へ
+直接エントリを注入する。`permissions` が chezmoi の専有領域なのに対し、
+`hooks` は**共有領域**である。generate.py が `hooks` を全置換していた頃は
+`chezmoi apply` のたびに Orca の 12 エントリが消えていた
+(`SessionStart` / `UserPromptSubmit` / `SubagentStart` などは**イベントキーごと**)。
+
+現在の `merge_claude_hooks()` は次の規則で動く。
+
+| 判定 | 扱い |
+| --- | --- |
+| コマンドが `~/.claude/hooks/` (または `$HOME/.claude/hooks/`) を起動している | chezmoi の生成物。除去して `common.toml` から再生成 |
+| それ以外 | 外部由来。そのまま温存 |
+
+パス基準で所有権を判定できるのは、`~/.claude/hooks/` 配下が
+`home/dot_claude/hooks/` として**このリポジトリの管理下にある**ため。
+逆に言えば、このディレクトリにスクリプトを置いて `settings.json` へ手で
+登録しても、`common.toml` に転記していなければ次の apply で消える
+（`common.toml` を単一の真実とするための意図的な挙動）。
+
+- 絞り込みは**エントリ単位ではなくコマンド単位**。1 エントリの `hooks` リストに
+  管理対象と外部由来が混在していても、外部由来だけが残る
+- 削除するのは「全コマンドが自分の生成物だと確認できたエントリ」だけ。
+  解釈できない形（リストでない、`hooks` リストを持たない等）は将来のスキーマ
+  変更や未知のツールの書き込みでありうるので**そのまま残す**。
+  ただし chezmoi も生成するイベント（`PreToolUse` など）で値がリスト以外だった
+  場合は結合できないため生成物を優先する（Claude のスキーマ上リスト以外は
+  元々無効。完全に温存されるのは管理外イベントのみ）
+- 出力順は「管理エントリ → 外部エントリ」で、既存ファイルの並びと一致するため
+  差分が出ない。2 回適用しても結果は変わらない (冪等)
+
+他の CLI は元から衝突しない。
+
+| 設定ファイル | Orca の書き込み方 | chezmoi の管理方式 |
+| --- | --- | --- |
+| `~/.claude/settings.json` | `hooks` へ注入 | 管理エントリのみ差し替え |
+| `~/.gemini/settings.json` | `hooks` へ注入 | `GEMINI_MANAGED` の枝だけ上書き |
+| `~/.copilot/hooks/orca.json` | 専用ファイルを新規作成 | `from-claude.json` のみ生成 |
+| `~/.codex/config.toml` | 書き込み無し | `chezmoi-managed:start/end` マーカー間のみ |
+
+Orca 本体が生成する実体 (`~/.orca/`, `~/.orca-wsl/`, `~/.orca-relay/`,
+`~/.local/share/orca/`, `~/.local/bin/orca-ide`, `~/orca/`) と、`npx skills` が
+管理する skill ストア (`~/.agents/`) は chezmoi では追跡しない。
+マシン固有のパスやバージョンを埋め込んでおり、Orca 自身が更新機構を持つため。
+`home/.chezmoiignore.tmpl` に列挙してあるので `chezmoi add` も拒否される。
 
 ### matcher の書き分け (共通化してはいけない)
 

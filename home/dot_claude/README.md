@@ -14,7 +14,7 @@
 | キー | 管理 |
 | --- | --- |
 | `permissions` | `home/dot_config/agents/common.toml` から生成（apply で全置換） |
-| `hooks` | 同上（apply で全置換） |
+| `hooks` | 同上。ただし `~/.claude/hooks/` を起動するエントリだけを差し替え、Orca など外部ツールが注入した hook は温存する |
 | `env` / `enabledPlugins` / `includeCoAuthoredBy` | 手動管理（apply では触らず保持） |
 
 ## hook の追加手順

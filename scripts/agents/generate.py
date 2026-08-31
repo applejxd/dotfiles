@@ -6,6 +6,7 @@ Usage:
     generate.py --target copilot-perms --common PATH [--existing PATH]
     generate.py --target copilot-settings --common PATH [--existing PATH]
     generate.py --target copilot-hooks --common PATH
+    generate.py --target gemini-settings --common PATH [--existing PATH]
 
 If --existing is omitted, stdin is read. The merged JSON is printed to stdout.
 For Copilot, automatically-managed keys (copilotTokens, loggedInUsers, etc.) in
@@ -65,6 +66,85 @@ def hook_command(hook: dict[str, Any], *, expand_home: bool) -> str:
     script = hook["script"]
     base = expand_user(HOOKS_DIR) if expand_home else HOOKS_DIR.replace("~", "$HOME", 1)
     return f"{runner} {base}/{script}"
+
+
+def is_managed_hook_command(command: Any) -> bool:
+    """コマンド文字列が本リポジトリの生成した hook かどうかを判定する。
+
+    settings.json の hooks は Orca などの外部ツールも追記する共有領域なので、
+    「HOOKS_DIR 配下のスクリプトを起動しているか」で自分の生成物だけを識別する。
+    hook_command() は絶対パス表記と $HOME 表記の両方を出しうるので双方を見る。
+    """
+    if not isinstance(command, str):
+        return False
+    prefixes = (
+        expand_user(HOOKS_DIR) + "/",
+        HOOKS_DIR.replace("~", "$HOME", 1) + "/",
+    )
+    return any(prefix in command for prefix in prefixes)
+
+
+def strip_managed_claude_hooks(entries: Any) -> Any:
+    """1 イベント分の hook エントリ列から、管理対象のコマンドだけを取り除く。
+
+    削除するのは「全コマンドが自分の生成物だと確認できたエントリ」だけ。
+    解釈できない形 (list でない、"hooks" リストを持たない等) は将来のスキーマ
+    変更や未知のツールの書き込みでありうるのでそのまま残す。この関数の目的は
+    データを失わないことなので、判断できないものは触らない。
+    """
+    if not isinstance(entries, list):
+        return entries
+    kept: list[Any] = []
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("hooks"), list):
+            kept.append(entry)
+            continue
+        foreign = [
+            command
+            for command in entry["hooks"]
+            if not (
+                isinstance(command, dict)
+                and is_managed_hook_command(command.get("command"))
+            )
+        ]
+        if not foreign:
+            # 自分の生成物しか無いエントリ。common.toml から作り直す
+            continue
+        new_entry = dict(entry)
+        new_entry["hooks"] = foreign
+        kept.append(new_entry)
+    return kept
+
+
+def merge_claude_hooks(
+    existing: Any, common: dict[str, Any]
+) -> dict[str, list[dict[str, Any]]]:
+    """common.toml 由来の hook を再生成しつつ、外部ツールの hook を温存する。
+
+    出力順は「common.toml のイベント -> 既存にしか無いイベント」、各イベント内は
+    「再生成した管理エントリ -> 温存した外部エントリ」。既存ファイルの並びと
+    一致するため差分が最小になり、2 回適用しても結果が変わらない (冪等)。
+    """
+    managed = build_claude_hooks(common)
+    preserved: dict[str, Any] = {}
+    if isinstance(existing, dict):
+        for event, entries in existing.items():
+            kept = strip_managed_claude_hooks(entries)
+            if isinstance(kept, list) and not kept:
+                # 自分の生成物しか無かったイベント。生成側で作り直す
+                continue
+            preserved[event] = kept
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for event, entries in managed.items():
+        extra = preserved.get(event)
+        # 管理イベントは list 前提。Claude のスキーマ上 list 以外は元々無効なので、
+        # 結合できない値は生成物を優先する。
+        out[event] = list(entries) + (extra if isinstance(extra, list) else [])
+    for event, entries in preserved.items():
+        if event not in out:
+            out[event] = entries
+    return out
 
 
 def build_claude_hooks(common: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -186,7 +266,9 @@ def merge_claude_settings(existing: dict[str, Any], common: dict[str, Any]) -> d
     if mode:
         permissions["defaultMode"] = mode
     out["permissions"] = permissions
-    out["hooks"] = build_claude_hooks(common)
+    # permissions と違い hooks は Orca などの外部ツールも追記する共有領域なので、
+    # 自分が生成したエントリだけを差し替える。
+    out["hooks"] = merge_claude_hooks(existing.get("hooks"), common)
     return out
 
 
@@ -228,6 +310,57 @@ def build_copilot_locations(common: dict[str, Any]) -> dict[str, Any]:
 def merge_copilot_perms(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     # permissions-config.json は自動管理キーが無いので全置換で問題ない
     return build_copilot_locations(common)
+
+
+# ---------------------------------------------------------------------------
+# Gemini settings target (管理する枝だけ上書きし、他は温存)
+# ---------------------------------------------------------------------------
+
+# generate.py が管理する枝。ここに書いた葉だけを上書きし、それ以外
+# (Orca が書き込む hooks など) は既存の値と順序をそのまま残す。
+GEMINI_MANAGED: dict[str, Any] = {
+    "general": {
+        "sessionRetention": {
+            "enabled": True,
+            "maxAge": "30d",
+            "warningAcknowledged": True,
+        },
+    },
+    "security": {
+        "auth": {
+            "selectedType": "oauth-personal",
+        },
+    },
+    "experimental": {
+        "skills": {
+            "enabled": True,
+        },
+        "enableAgents": True,
+    },
+    "mcpServers": {
+        "deepwiki": {
+            "httpUrl": "https://mcp.deepwiki.com/mcp",
+        },
+    },
+}
+
+
+def deep_merge_managed(existing: Any, managed: dict[str, Any]) -> dict[str, Any]:
+    """existing のキー順を保ったまま managed の枝だけを再帰的に上書きする。"""
+    out = dict(existing) if isinstance(existing, dict) else {}
+    for key, value in managed.items():
+        if isinstance(value, dict):
+            out[key] = deep_merge_managed(out.get(key), value)
+        else:
+            out[key] = value
+    return out
+
+
+def merge_gemini_settings(existing: dict[str, Any], _common: dict[str, Any]) -> dict[str, Any]:
+    # Sprig の toPrettyJson は map のキーをアルファベット順に並べ替えるため、
+    # テンプレートで書き戻すと Gemini / Orca が書いた順序と毎回衝突して差分
+    # ノイズになっていた。Python の dict は挿入順を保つのでこれを避けられる。
+    return deep_merge_managed(existing, GEMINI_MANAGED)
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +414,7 @@ TARGETS = {
     "copilot-hooks": merge_copilot_hooks,
     "copilot-perms": merge_copilot_perms,
     "copilot-settings": merge_copilot_settings,
+    "gemini-settings": merge_gemini_settings,
 }
 
 
