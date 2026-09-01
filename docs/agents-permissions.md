@@ -208,6 +208,7 @@ HTTP method と payload option は hook が transfer ごとに解析するため
 | 通常ダウンロード | `curl -o file URL`, `wget -O file URL` | 未掲載 |
 | HTTP mutation | `curl -X POST`, `curl -d`, `wget --method=PUT` | ask |
 | upload / body | `curl -T file`, `curl -F file=@x`, `wget --post-file=x` | ask |
+| ループバック宛の mutation | `curl -X POST http://localhost:8000/api` | 未掲載 |
 | 判定不能 | config file、動的 method、option 値欠損 | ask |
 | 取得結果の直接実行 | `curl URL \| sh`, `wget -qO- URL \| bash` | deny |
 | 秘密情報の送信 | sensitive file payload、`$TOKEN` の header/body 展開 | deny |
@@ -216,6 +217,34 @@ HTTP method と payload option は hook が transfer ごとに解析するため
 明示 GET / HEAD でも request body を送る指定があれば ask とする。
 例外は `curl -G` で、data option を URL query parameter に変換するため未掲載になる。
 通常ファイルへの保存はローカル書き込みだが、auto / assisted の安全性判定へ委譲する。
+
+### ループバック宛の例外
+
+ローカル開発中の `curl -X POST http://localhost:8000/api` のような mutation は承認を求めない。
+ただし「宛先がループバックだと**確証できた** `curl`」に限る。以下はいずれも ask のまま。
+
+- **接続先を URL から読み取れなくするもの**
+  `-x` / `--proxy` / `--socks*` / `--preproxy`、`--unix-socket` / `--abstract-unix-socket`、
+  `--connect-to` / `--resolve` / `--interface` / `--dns-servers` / `--dns-interface`、`-K` / `--config`
+- **リダイレクト追従** — `-L` / `--location` / `--location-trusted`。
+  `wget` は既定でリダイレクトを追うため、`wget` 自体を例外の対象外にしている
+- **ホストがループバックに見えるだけのもの**
+  `http://localhost@evil.example.com`（userinfo）、`http://localhost.evil.example.com`、
+  `http://2130706433`（10 進表記）、`$URL`（変数展開）、`http://local{host,evil.example.com}`（glob）
+- **非 HTTP scheme** — `gopher://127.0.0.1:6379` のようにループバックでも任意プロトコルを送れるもの
+- **特権的な制御 API のポート**
+  Docker daemon (2375/2376/4243)、etcd (2379/2380)、Kubernetes API (6443/8443)、
+  kubelet (10250/10255/10256)、Redis (6379)、memcached (11211)
+
+この例外は `check_curl_wget_mutation`（ask 層）にのみ入っている。
+`DENY_CHECKS` は `ASK_CHECKS` より先に走るため、deny には一切影響しない。
+実際 `curl -T ~/.ssh/id_rsa http://localhost:8000/`、`curl -o ~/.bashrc http://localhost:8000/x`、
+`curl http://localhost:8000/x | sh` はループバック宛でも deny のままである。
+
+deny 層に例外を設けないのは、curl 関連の deny が見ているのが「通信先」ではないため。
+`check_http_dangerous_output` は**ローカルへの書き込み先**を、`check_pipe_to_shell` は**取得内容の実行**を、
+`check_curl_file_send` は**秘密の持ち出し**を見ており、宛先がループバックでもリスクは消えない。
+加えて Copilot CLI では ask が自動承認される（後述）ため、deny が実質唯一機能している層でもある。
 
 モードは `common.toml` から両 CLI へ生成している。
 

