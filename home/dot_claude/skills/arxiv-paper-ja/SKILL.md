@@ -36,7 +36,7 @@ TeX ソースがない、またはコンパイル不能な場合のみ PDF 抽�
 
 タイトル、要旨、目次、導入、結論、主要図表を先に読む。分野、論文の主張、記号体系、対象読者を把握してから訳語を決める。
 
-`references/translation-guidelines.md` を読み、論文固有の用語集を作る。機械的な逐語訳ではなく、その分野で通用する訳語を優先する。一般的な誤訳候補は `references/terminology.md` を参照する。
+`references/translation-guidelines.md` を読み、論文固有の用語集を作る。機械的な逐語訳ではなく、その分野で通用する訳語を優先する。一般的な誤訳候補と分野別（点群処理・SLAM・VAE/拡散モデル）の訳語は `references/terminology.md` を参照する。定訳が確認できない語は無理に訳さず、原語のまま書く。
 
 ### 4. TeX を壊さず翻訳する
 
