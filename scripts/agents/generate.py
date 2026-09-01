@@ -19,13 +19,9 @@ import argparse
 import json
 import os
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any
-
-try:
-    import tomllib  # Python 3.11+
-except ModuleNotFoundError:  # pragma: no cover - fallback for older Python
-    import tomli as tomllib  # type: ignore[no-redef]
 
 
 # ---------------------------------------------------------------------------
@@ -56,13 +52,20 @@ def first_token(pattern: str) -> str:
 HOOKS_DIR = "~/.claude/hooks"
 
 
-def hook_command(hook: dict[str, Any], *, expand_home: bool) -> str:
+def hook_command(
+    hook: dict[str, Any],
+    *,
+    expand_home: bool,
+    platform: str | None = None,
+) -> str:
     """hook の起動コマンド文字列を組み立てる。
 
     expand_home=True  -> "/home/user/.claude/hooks/x.py" (Claude 用の絶対パス)
     expand_home=False -> "$HOME/.claude/hooks/x.py"      (Copilot 用)
     """
     runner = hook.get("runner", "python")
+    if runner == "python3" and (platform or os.name) == "nt":
+        runner = "py -3"
     script = hook["script"]
     base = expand_user(HOOKS_DIR) if expand_home else HOOKS_DIR.replace("~", "$HOME", 1)
     return f"{runner} {base}/{script}"
@@ -147,7 +150,11 @@ def merge_claude_hooks(
     return out
 
 
-def build_claude_hooks(common: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def build_claude_hooks(
+    common: dict[str, Any],
+    *,
+    platform: str | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Claude Code の settings.json 用 hooks (ネスト構造) を組み立てる。
 
     - matcher を省略すると「全マッチ」扱い (公式仕様)
@@ -165,7 +172,11 @@ def build_claude_hooks(common: dict[str, Any]) -> dict[str, list[dict[str, Any]]
             entry["matcher"] = matcher
         command: dict[str, Any] = {
             "type": "command",
-            "command": hook_command(hook, expand_home=True),
+            "command": hook_command(
+                hook,
+                expand_home=True,
+                platform=platform,
+            ),
         }
         timeout = hook.get("timeout_sec")
         if timeout:
@@ -175,7 +186,11 @@ def build_claude_hooks(common: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     return out
 
 
-def build_copilot_hooks(common: dict[str, Any]) -> dict[str, Any]:
+def build_copilot_hooks(
+    common: dict[str, Any],
+    *,
+    platform: str | None = None,
+) -> dict[str, Any]:
     """Copilot CLI の ~/.copilot/hooks/*.json 用 hooks (フラット構造) を組み立てる。"""
     hooks: dict[str, list[dict[str, Any]]] = {}
     for hook in common.get("hooks", []):
@@ -187,7 +202,11 @@ def build_copilot_hooks(common: dict[str, Any]) -> dict[str, Any]:
         if matcher:
             entry["matcher"] = matcher
         entry["type"] = "command"
-        entry["bash"] = hook_command(hook, expand_home=False)
+        entry["bash"] = hook_command(
+            hook,
+            expand_home=False,
+            platform=platform,
+        )
         timeout = hook.get("timeout_sec")
         if timeout:
             entry["timeoutSec"] = timeout

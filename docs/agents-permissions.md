@@ -33,6 +33,11 @@ test/agents/
     test_modifier_wrappers.py                modify_ ラッパーの end-to-end test
 ```
 
+Python runtime は 3.11 以上を前提とし、TOML は標準ライブラリ `tomllib` で読む。
+Windows ではインストール済みの最新 Python 3 を選ぶ `py -3`、Unix では
+`python3` を使用する。3.11 未満では `tomllib` import が失敗するため、
+project の uv 環境や外部 `tomli` には依存しない。
+
 `modify_private_*` のように `private_` を付けることで mode 600 を保持し、
 `~/.copilot/settings.json` に含まれる `gho_xxx` トークンを保護している。
 

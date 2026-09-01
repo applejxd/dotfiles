@@ -35,6 +35,7 @@ MODIFIERS = {
     ),
 }
 COPILOT_HOOKS = ROOT / "home" / "dot_copilot" / "hooks" / "from-claude.json.tmpl"
+CHEZMOI_CONFIG = ROOT / "home" / ".chezmoi.toml.tmpl"
 
 
 def execute_template(template: str) -> bytes:
@@ -96,6 +97,14 @@ def test_copilot_hooks_template_renders_as_json():
     rendered = execute_template(COPILOT_HOOKS.read_text(encoding="utf-8"))
 
     assert json.loads(rendered)["version"] == 1
+
+
+def test_windows_templates_use_latest_python_3():
+    config = CHEZMOI_CONFIG.read_text(encoding="utf-8")
+    hooks = COPILOT_HOOKS.read_text(encoding="utf-8")
+
+    assert 'args = ["-3"]' in config
+    assert 'output "py" "-3"' in hooks
 
 
 @pytest.mark.parametrize(("source", "_"), MODIFIERS.items())

@@ -24,3 +24,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | --- | --- | --- | --- |
 | [0001](0001-external-tool-config-coexistence.md) | 外部ツールが書き込む設定領域と chezmoi の共存 | Accepted | 2026-08-30 |
 | [0002](0002-loopback-http-approval-scope.md) | ループバック宛 HTTP リクエストの承認緩和範囲 | Accepted | 2026-09-01 |
+| [0003](0003-require-python-311-for-agent-configuration.md) | agent 設定生成に Python 3.11 以上を要求する | Accepted | 2026-09-01 |
