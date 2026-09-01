@@ -19,12 +19,14 @@ fail-closed: ポリシー設定を読めない場合は素通りさせず deny �
 """
 from __future__ import annotations
 
+import fnmatch
 import ipaddress
 import os
 import re
 import shlex
 import signal
 import sys
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -32,6 +34,8 @@ from urllib.parse import urlsplit
 _MAX_COMMAND_LEN = 10000
 # 自前のタイムアウト秒。hook の timeout (30s) より十分手前で打ち切る
 _SELF_TIMEOUT_SEC = 10
+# PreToolUse payload の cwd (workspace ルート)。main() で設定する
+_PAYLOAD_CWD: str | None = None
 
 # 同一ディレクトリの lib/ にあるヘルパを import
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
@@ -57,6 +61,27 @@ except Exception as _exc:  # pragma: no cover - 構文エラー等も拾う
     _policy = None  # type: ignore[assignment]
     _POLICY_IMPORT_ERROR = f"{type(_exc).__name__}: {_exc}"
 
+
+# ─── ポリシー呼び出しのキャッシュ ───────────────────────────────────
+# hook は 1 プロセスにつき 1 コマンドしか検査せず、normalize もポリシー定義も
+# 同じ入力なら同じ結果になる。キャッシュしないと 1 コマンドあたり normalize が
+# 28 回、common.toml の tomllib パースが 4 回走る。
+@lru_cache(maxsize=64)
+def _normalize(command: str) -> tuple[str, ...]:
+    if _policy is None:
+        return ()
+    return tuple(_policy.normalize(command))
+
+
+@lru_cache(maxsize=1)
+def _deny_patterns() -> list[str]:
+    return _policy.load_deny()
+
+
+@lru_cache(maxsize=1)
+def _ask_patterns() -> list[str]:
+    return _policy.load_ask()
+
 # ─── センシティブパスの判定 ──────────────────────────────────────────
 # コマンド文字列全体への部分一致は誤検知が多い
 # (`grep -rn token .` の token は検索語であってパスではない、
@@ -72,9 +97,12 @@ _SENSITIVE_BASENAME_PREFIXES = ("id_rsa", "id_dsa", "id_ecdsa", "id_ed25519")
 _SENSITIVE_SUFFIXES = (
     ".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".ppk", ".asc",
 )
-# パスに含まれると秘密領域とみなすディレクトリ
+# パスに含まれると秘密領域とみなすディレクトリ (確実な証拠)
 _SENSITIVE_DIRS = (".ssh", ".gnupg", ".aws", ".config/gh", ".config/sops",
-                   "sops/age", "secrets")
+                   "sops/age")
+# 名前だけでは断定できないが、中身を読むときは秘密とみなすディレクトリ。
+# `ls tests/fixtures/secrets` のような列挙では適用しない (_LISTING_COMMANDS)。
+_HEURISTIC_SENSITIVE_DIRS = ("secrets",)
 # basename に含まれると秘密とみなす語 (パスらしいトークンにのみ適用)
 _SENSITIVE_WORD_RE = re.compile(
     r"(?:secret|password|passwd|credential|api[_-]?key|private[_-]?key|access[_-]?key)",
@@ -84,6 +112,17 @@ _SENSITIVE_WORD_RE = re.compile(
 _SENSITIVE_EXEMPT_RE = re.compile(
     r"(?:\.example$|\.sample$|\.template$|\.tmpl$|\.md$|\.rst$|\.txt\.example$)",
     re.IGNORECASE,
+)
+# ソースコードの拡張子。`src/secrets.py` や `internal/credentials.go` のように
+# 「秘密を扱うコード」は名前が秘密語彙に当たるだけで、中身は秘密ではない。
+# 語彙ヒューリスティック (_SENSITIVE_WORD_RE) の対象から外す。
+# 完全一致の規則 (.env / id_rsa / *.pem / .ssh 配下など) は従来どおり効く。
+_SOURCE_CODE_SUFFIXES = (
+    ".py", ".pyi", ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+    ".rs", ".rb", ".java", ".kt", ".kts", ".scala", ".c", ".h", ".cc",
+    ".cpp", ".hpp", ".cs", ".php", ".swift", ".ex", ".exs", ".erl",
+    ".hs", ".lua", ".pl", ".pm", ".dart", ".vue", ".svelte", ".sql",
+    ".sh", ".bash", ".zsh", ".fish", ".ps1", ".proto", ".graphql",
 )
 # /etc 配下の特定ファイル
 _SENSITIVE_ABS_PATHS = {"/etc/shadow", "/etc/passwd", "/etc/sudoers"}
@@ -101,7 +140,8 @@ _CREDENTIAL_PATHS = ("/.config/gh/hosts.yml", "/.docker/config.json",
                      "/.terraform.d/credentials.tfrc.json")
 
 # grep 系は最初の非フラグ引数が検索語なのでパス判定から除外する
-_PATTERN_FIRST_COMMANDS = {"grep", "rg", "ag", "ack", "egrep", "fgrep", "sed", "awk"}
+_PATTERN_FIRST_COMMANDS = {"grep", "rg", "ag", "ack", "egrep", "fgrep", "sed",
+                           "awk", "gawk", "mawk"}
 # 末尾の引数が書き込み先になるコマンド (コピー先が .env でも読み取りではない)
 _DEST_LAST_COMMANDS = {"cp", "mv", "install", "ln", "rsync", "scp"}
 # ファイル内容を表示する git サブコマンド
@@ -118,8 +158,13 @@ def _looks_like_path(token: str) -> bool:
     return token.lower().endswith(_SENSITIVE_SUFFIXES)
 
 
-def _is_sensitive_token(token: str) -> str | None:
-    """パスらしいトークンがセンシティブなら、その理由を返す。"""
+def _is_sensitive_token(token: str, *, heuristic: bool = True) -> str | None:
+    """パスらしいトークンがセンシティブなら、その理由を返す。
+
+    ``heuristic=False`` にすると、語彙による曖昧な判定 (`secrets` という名前の
+    ディレクトリなど) を行わず、確実な証拠 (`.env` / `id_rsa` / `.ssh` 配下 /
+    `*.pem` など) だけで判定する。
+    """
     cleaned = token.strip("'\"")
     if not cleaned:
         return None
@@ -153,14 +198,22 @@ def _is_sensitive_token(token: str) -> str | None:
     for d in _SENSITIVE_DIRS:
         if d in parts or (d.count("/") and d in normalized):
             return f"{d} 配下"
+    if heuristic:
+        for d in _HEURISTIC_SENSITIVE_DIRS:
+            if d in parts:
+                return f"{d} 配下"
     if base.lower().endswith(_SENSITIVE_SUFFIXES):
         return base
-    if _SENSITIVE_WORD_RE.search(base):
+    if (
+        heuristic
+        and _SENSITIVE_WORD_RE.search(base)
+        and not base.lower().endswith(_SOURCE_CODE_SUFFIXES)
+    ):
         return base
     return None
 
 
-def is_sensitive_path(text: str) -> str | None:
+def is_sensitive_path(text: str, *, heuristic: bool = True) -> str | None:
     """コマンド文字列にセンシティブなパス引数が含まれていれば理由を返す。
 
     ``cp .env.example .env`` のように「サンプルから作る」形は正当なので、
@@ -182,7 +235,7 @@ def is_sensitive_path(text: str) -> str | None:
             # 最初の非フラグ引数は検索語なので飛ばす
             skip_pattern_arg = False
             continue
-        reason = _is_sensitive_token(token)
+        reason = _is_sensitive_token(token, heuristic=heuristic)
         if reason:
             return reason
     return None
@@ -196,34 +249,114 @@ FILE_READ_COMMANDS = [
     # ファイルを開く / 情報を出すもの
     "vim", "vi", "nvim", "emacs", "nano", "code", "codium", "subl",
     "wc", "file", "stat", "realpath", "readlink",
-    # ディレクトリの中身を列挙するもの (鍵ファイル名が漏れる)
+    # ディレクトリを列挙するだけのコマンドは中身を読まない。
+    # `ls tests/fixtures/secrets` のような曖昧な名前で止めず、
+    # `.ssh` 配下や `.env` のような確実な証拠だけで判定する。
     "ls", "tree", "find", "fd",
     # 内容を別の場所へ複製・転送するもの (読み取りと同じ露出リスク)
     "cp", "mv", "install", "rsync", "scp", "sftp", "dd", "tee",
     "ln", "shred", "split", "gpg", "openssl",
 ]
 
+# 中身を読まず名前を列挙するだけのコマンド。語彙ヒューリスティックは適用しない
+_LISTING_COMMANDS = {"ls", "tree", "find", "fd"}
+
 # ─── 環境変数を露出するコマンド ─────────────────────────────────────
 # 引数なしの全件露出に加え、`printenv AWS_SECRET_ACCESS_KEY` のような
 # 個別参照や `env | grep key` のような絞り込みも対象にする。
 ENV_EXPOSURE_BINS = {"env", "printenv", "export", "set", "declare", "typeset"}
-# 環境変数名としてセンシティブなもの
+# `set` はオプションを付けるとシェルの挙動設定になり、変数を出力しない。
+# `set -e` / `set -eu` を全件出力と誤認しないよう、素の `set` だけを対象にする。
+_BARE_ONLY_DUMP_BINS = {"set"}
+# 環境変数名としてセンシティブなもの。
+# PAT / KEY / AUTH は単語として現れるときだけ拾う ($PATH や $MONKEY に当てない)。
 _SENSITIVE_ENV_RE = re.compile(
-    r"(?:SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API[_-]?KEY|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|SESSION)",
+    r"(?:SECRET|TOKEN|PASSWORD|PASSWD|PASSPHRASE|CREDENTIAL|SESSION"
+    r"|API[_-]?KEY|PRIV(?:ATE)?[_-]?KEY|ACCESS[_-]?KEY"
+    r"|(?:^|[_-])(?:PAT|KEY|AUTH)S?(?:[_-]|$))",
     re.IGNORECASE,
 )
 
 # ─── アーカイブコマンド ───────────────────────────────────────────────
 ARCHIVE_COMMANDS = ["tar", "zip", "gzip", "bzip2", "7z", "xz"]
 
+# ─── 書き込み先の抽出 ───────────────────────────────────────────────
+# `cp <src> <dest>` の src や `grep pat /etc/group` のように、パスが引数に
+# 現れるだけでは書き込みではない。書き込み先だけを取り出して判定する。
+# 最終引数だけが書き込み先になるもの
+_WRITE_DEST_LAST_COMMANDS = {"cp", "mv", "install", "ln", "rsync"}
+# 非オプション引数がすべて書き込み対象になるもの
+_WRITE_ALL_ARGS_COMMANDS = {
+    "tee", "truncate", "shred", "rm", "unlink", "rmdir", "chmod", "chown",
+    "chgrp", "touch", "mkdir", "dd", "sed",
+}
+
+
+def _write_targets(cmd: str) -> list[str]:
+    """コマンドが書き込み・変更しようとしているトークンを返す。"""
+    targets: list[str] = []
+    # `>| path` (noclobber 上書き) も拾う。`>&2` の fd 複製は対象外
+    for m in re.finditer(r"[0-9]*>{1,2}\|?\s*([^\s&][^\s;&|)<>]*)", cmd):
+        targets.append(m.group(1))
+    for segment in _segments(cmd):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        head = _basename(tokens[0])
+        for token in tokens[1:]:
+            if token.startswith("of="):
+                targets.append(token[3:])
+        args = [t for t in tokens[1:] if not t.startswith("-")]
+        if not args:
+            continue
+        if head == "sed":
+            # in-place 指定が無ければ読み取りのみ
+            if any(t.startswith("-i") for t in tokens[1:]):
+                targets.extend(args)
+        elif head in _WRITE_DEST_LAST_COMMANDS:
+            targets.append(args[-1])
+        elif head in _WRITE_ALL_ARGS_COMMANDS:
+            targets.extend(args)
+    return targets
+
+# 値をそのまま出力・複製する先 (check_secret_env_echo 用)
+_SECRET_SINK_COMMANDS = {
+    "echo", "printf", "print", "cat", "tee", "logger", "wall", "write",
+    "banner", "pbcopy", "xclip", "xsel", "clip", "wl-copy", "less", "more",
+    # stdin をそのまま stdout へ通す / 変換して出すフィルタ。
+    # 値がエージェントのトランスクリプトに出るので出力先と同じ扱いにする
+    "head", "tail", "base64", "xxd", "od", "hexdump", "strings", "rev",
+    "tr", "nl", "fold", "cut", "sed", "awk", "gawk", "jq", "yq",
+    "sort", "uniq", "column", "tac", "grep", "rg",
+}
+# 値を外部へ運ぶ経路。多くは common.toml の deny にもあるが、hook 側でも
+# 「秘密を渡している」ことを理由に確実に止める (`nc` は ask なので特に重要)。
+_SECRET_EGRESS_COMMANDS = {
+    "curl", "wget", "http", "httpie", "xh",
+    "nc", "netcat", "ncat", "socat", "telnet",
+    "ssh", "scp", "sftp", "rsync", "ftp",
+    "mail", "mailx", "sendmail", "aws", "gsutil", "az",
+}
+
 # ─── インラインコードを受け取るインタプリタ ─────────────────────────
 _INLINE_CODE_BINS = {"python", "perl", "ruby", "node", "php", "awk", "gawk", "mawk"}
+# プログラムを位置引数で受け取るもの
+_AWK_BINS = {"awk", "gawk", "mawk"}
 _INLINE_CODE_FLAGS = {"-c", "-e", "-E", "-r", "-p", "--eval", "--print"}
 # コード片から外部コマンドを起動する形
 _INLINE_EXEC_RE = re.compile(
     r"(?:os\.system|subprocess\.|popen|execSync|spawnSync|child_process|"
     r"\bsystem\s*\(|\bexec\s*\(|\bqx\s*[({/]|`[^`]+`|\bshell_exec\b|\bpassthru\b)",
     re.IGNORECASE,
+)
+# シェルの `$VAR` 展開を経由しない環境変数アクセス
+_INLINE_ENV_READ_RE = re.compile(
+    r"""os\.environ(?:\.get)?\s*[\[(]\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]"""
+    r"""|process\.env\s*\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]"""
+    r"""|process\.env\.([A-Za-z_][A-Za-z0-9_]*)"""
+    r"""|\$ENV\{\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?\s*\}"""
+    r"""|ENVIRON\s*\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]"""
+    r"""|getenv\s*\(\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]""",
 )
 
 # ─── curl/wget の request / transfer 判定 ───────────────────────────
@@ -738,7 +871,7 @@ def _http_transfer_calls(cmd: str) -> list[dict[str, object]]:
 
         normalized_segments = [
             segment
-            for segment in _policy.normalize(raw_segment)
+            for segment in _normalize(raw_segment)
             if segment.startswith(("curl ", "wget ")) or segment in {"curl", "wget"}
         ]
         if not normalized_segments:
@@ -905,7 +1038,7 @@ def _gh_api_calls(cmd: str) -> list[dict[str, object]]:
     for raw_segment in _policy.split_command_segments(cmd):
         normalized_segments = [
             segment
-            for segment in _policy.normalize(raw_segment)
+            for segment in _normalize(raw_segment)
             if segment.startswith("gh api")
         ]
         if not normalized_segments:
@@ -963,7 +1096,7 @@ def check_gh_token_exposure(cmd: str) -> str | None:
     """Block ``gh auth status`` variants that print the active token."""
     if _policy is None:
         return None
-    for segment in _policy.normalize(cmd):
+    for segment in _normalize(cmd):
         try:
             tokens = shlex.split(segment)
         except ValueError:
@@ -1042,15 +1175,16 @@ def check_gh_api_mutation(cmd: str) -> str | None:
     return None
 
 
-def _segments(cmd: str) -> list[str]:
+@lru_cache(maxsize=64)
+def _segments(cmd: str) -> tuple[str, ...]:
     """normalize 済みセグメント + 元の文字列を返す。
 
     normalize は shlex を通るのでクォートや ``${VAR}`` の形が変わる。
     パターン照合では元の文字列も併せて見て取りこぼさないようにする。
     """
-    segs = list(_policy.normalize(cmd)) if _policy is not None else []
+    segs = list(_normalize(cmd)) if _policy is not None else []
     segs.append(cmd)
-    return segs
+    return tuple(segs)
 
 
 def check_file_read(cmd: str) -> str | None:
@@ -1073,7 +1207,9 @@ def check_file_read(cmd: str) -> str | None:
             continue
         if head not in FILE_READ_COMMANDS:
             continue
-        matched = is_sensitive_path(segment)
+        matched = is_sensitive_path(
+            segment, heuristic=head not in _LISTING_COMMANDS
+        )
         if matched:
             return (
                 f"`{head}` がセンシティブなパスを対象にしています "
@@ -1097,7 +1233,7 @@ def check_env_exposure(cmd: str) -> str | None:
         if head not in ENV_EXPOSURE_BINS:
             continue
         args = [t for t in tokens[1:] if not t.startswith("-")]
-        if not args:
+        if not args and not (head in _BARE_ONLY_DUMP_BINS and len(tokens) > 1):
             return (
                 f"環境変数を全件出力するコマンドは許可されていません: `{segment.strip()}`\n"
                 "特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"
@@ -1176,6 +1312,8 @@ def check_http_dangerous_output(cmd: str) -> str | None:
         urls = call["urls"]
         if not isinstance(output_targets, list) or not isinstance(urls, list):
             continue
+        # call は他のチェックとも共有されるので、派生した出力先はコピーへ足す
+        output_targets = list(output_targets)
         output_dir = call["output_dir"]
         remote_name = call["remote_name"]
         if call["tool"] == "wget" and output_targets:
@@ -1282,21 +1420,6 @@ def _pip_suggestion(cmd: str) -> str:
     return "代替: `uv <subcommand>` または `uvx <tool>`"
 
 
-def check_git_c_dangerous(cmd: str) -> str | None:
-    """`git -C <dir>` 経由で deny 対象のサブコマンドを実行しようとしていないか"""
-    # git -C <path> [options] <subcommand> の形を検出
-    if not re.search(r"\bgit\b\s+-C\b", cmd):
-        return None
-    dangerous = ("push", "reset", "rebase", "config")
-    for sub in dangerous:
-        if re.search(rf"\bgit\b.*\s-C\s.*\b{sub}\b", cmd, re.IGNORECASE):
-            return (
-                f"`git -C` で禁止されたサブコマンド `{sub}` の実行を検出しました。\n"
-                f"このコマンドはセキュリティポリシーによりブロックされています。"
-            )
-    return None
-
-
 _FIND_DANGEROUS_EXEC_RE = re.compile(
     r"\bfind\b.+?"
     r"(?:"
@@ -1381,7 +1504,7 @@ def check_pip_redirect(cmd: str) -> str | None:
       * ``uv pip install x`` は許可 (uv のサブコマンドであり pip 本体ではない)
     """
     segments = (
-        _policy.normalize(cmd) if _policy is not None else [cmd]
+        _normalize(cmd) if _policy is not None else [cmd]
     )
     for segment in segments:
         tokens = segment.split()
@@ -1470,8 +1593,8 @@ def check_policy_loaded(cmd: str) -> str | None:
         )
     # deny / ask が空なら、設定が壊れているか読めていない
     try:
-        deny = _policy.load_deny()
-        ask = _policy.load_ask()
+        deny = _deny_patterns()
+        ask = _ask_patterns()
     except Exception as exc:
         return (
             f"ポリシー定義を解釈できませんでした ({exc})。\n"
@@ -1491,26 +1614,297 @@ def check_policy_loaded(cmd: str) -> str | None:
     return None
 
 
-_PIPE_TO_SHELL_RE = re.compile(
-    r"\|\s*(?:sudo\s+)?(?:/\S*/)?(?:sh|bash|zsh|dash|ksh|fish|ash|python[0-9.]*|perl|ruby|node)\b"
-    r"(?!\s+[^\s|&;<>-])",
-)
+_FETCH_COMMAND_RE = re.compile(r"\b(?:curl|wget)\b")
+# 取得内容をコードとして受け取りうる実行系
+_STDIN_CODE_SHELLS = {
+    "sh", "bash", "zsh", "dash", "ksh", "fish", "ash", "csh", "tcsh",
+    "eval", "source", ".", "script",
+}
+_STDIN_CODE_INTERPRETERS = {
+    "python", "perl", "ruby", "node", "php",
+}
+# 「stdin ではなくこの引数がコード/スクリプト」であることを示すフラグ。
+# ★ シェル (`sh` / `bash` 等) では `-e` `-m` `-p` は errexit / job control /
+#   privileged を意味する単なるオプションで、stdin は依然コードとして読まれる。
+#   そのためインタプリタとシェルで別のフラグ集合を使う。
+_INTERPRETER_CODE_ARG_FLAGS = {
+    "-c", "-e", "-m", "-p", "--eval", "--print", "--command",
+}
+_SHELL_CODE_ARG_FLAGS = {"-c", "--command"}
+# シェルに stdin をコードとして読ませるフラグ・引数
+# (`-s` はシェル専用なので `_reads_stdin_as_code` 側で個別に見る)
+_STDIN_CODE_FLAGS = {"-", "/dev/stdin", "/dev/fd/0", "/proc/self/fd/0"}
+# 実行対象を変えずに前置されるラッパーと、値を取るオプション。
+# 値を取るオプションを知らないと `env -u LANG bash` の LANG を head と
+# 誤認するため、ラッパーごとに持つ。
+_WRAPPER_VALUE_OPTS = {
+    "env": {"-u", "--unset", "-C", "--chdir"},
+    "sudo": {"-u", "--user", "-g", "--group", "-C", "--close-from",
+             "-p", "--prompt", "-D", "--chdir"},
+    "doas": {"-u", "-C"},
+    "xargs": {"-I", "-i", "--replace", "-n", "--max-args", "-L", "-P",
+              "--max-procs", "-d", "--delimiter", "-E", "-s", "--max-chars",
+              "-a", "--arg-file"},
+    "timeout": {"-k", "--kill-after", "-s", "--signal"},
+    "nice": {"-n", "--adjustment"},
+    "ionice": {"-c", "--class", "-n", "--classdata", "-p", "--pid"},
+    "stdbuf": {"-i", "--input", "-o", "--output", "-e", "--error"},
+    "nohup": set(),
+    "setsid": set(),
+    "command": set(),
+    "chronic": set(),
+    "time": set(),
+    "unbuffer": set(),
+    "exec": set(),
+}
+_EXEC_WRAPPERS = set(_WRAPPER_VALUE_OPTS)
+# 値の位置に秒数などの素の数値を取るラッパー
+_WRAPPER_NUMERIC_ARG = {"timeout", "nice", "ionice"}
+# コマンド置換そのものをコマンドとして起動する形 (`$(curl ...)` 単体)
+_SUBST_HEAD_RE = re.compile(r"^[\"']?(?:\$\(|`)")
+# プロセス置換 `<(...)` / `>(...)`
+_PROC_SUBST_RE = re.compile(r"[<>]\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
+
+
+def _cmd_name(token: str) -> str:
+    """トークンからコマンド名を取り出す (`python3` -> `python`)。
+
+    `.` (source の別名) は 1 文字なのでバージョン接尾辞の除去をしない。
+    除去すると空文字になり `_STDIN_CODE_SHELLS` の `.` と一致しなくなる。
+    """
+    name = _basename(token.strip("'\""))
+    if len(name) > 1:
+        name = re.sub(r"[0-9.]+$", "", name)
+    return name
+
+
+def _strip_exec_wrappers(
+    tokens: list[str], *, keep: frozenset[str] = frozenset()
+) -> list[str]:
+    """`env` / `timeout 5` / `nohup` などのラッパーを剥がしたトークン列を返す。
+
+    ``keep`` に挙げたラッパーは剥がさない。`xargs` は stdin の扱いそのものが
+    判定材料なので、パイプ右辺では残す必要がある。
+    """
+    i = 0
+    while i < len(tokens):
+        name = _cmd_name(tokens[i])
+        if name not in _EXEC_WRAPPERS or name in keep:
+            break
+        value_opts = _WRAPPER_VALUE_OPTS[name]
+        numeric = name in _WRAPPER_NUMERIC_ARG
+        i += 1
+        while i < len(tokens):
+            token = tokens[i]
+            # `env -S "bash -s"` の値はコマンドラインそのもの。
+            # 読み飛ばすと実行対象を見失うので、展開して解析を続ける
+            split_string = None
+            if token in {"-S", "--split-string"} and i + 1 < len(tokens):
+                split_string = tokens[i + 1]
+                rest = tokens[i + 2:]
+            elif token.startswith("--split-string="):
+                split_string = token.split("=", 1)[1]
+                rest = tokens[i + 1:]
+            elif token.startswith("-S") and len(token) > 2:
+                split_string = token[2:]
+                rest = tokens[i + 1:]
+            if split_string is not None:
+                return _strip_exec_wrappers(
+                    split_string.strip("'\"").split() + rest, keep=keep
+                )
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", token):
+                i += 1
+                continue
+            if token in value_opts:
+                i += 2
+                continue
+            if token.startswith("-") and token != "-":
+                i += 1
+                continue
+            if numeric and re.fullmatch(r"\d+(?:\.\d+)?[smhd]?", token):
+                i += 1
+                continue
+            break
+    return tokens[i:]
+
+
+def _executable_head_tokens(part: str) -> list[str]:
+    """パイプ右辺などから、実際に起動されるコマンドのトークン列を得る。"""
+    tokens = [t.strip("'\"").strip("(){}") for t in part.strip().split()]
+    return _strip_exec_wrappers(
+        [t for t in tokens if t], keep=frozenset({"xargs"})
+    )
+
+
+def _reads_stdin_as_code(tokens: list[str]) -> bool:
+    """このコマンドが標準入力をコードとして解釈するか。"""
+    if not tokens:
+        return False
+    head = _cmd_name(tokens[0])
+    if head == "sudo":
+        return _reads_stdin_as_code(tokens[1:])
+    if head == "xargs":
+        # `curl ... | xargs -0 sh -c` のように、流れてきた内容がそのまま
+        # コマンド文字列になる形を対象にする。
+        # `find . | xargs node script.js` はスクリプトを渡しているので対象外。
+        rest = tokens[1:]
+        # `-I{}` は stdin の内容を後続の引数へ埋め込むので、引数の有無を
+        # 問わずコードとして扱う
+        replaces = any(
+            token.startswith(("-I", "-i", "--replace")) for token in rest
+        )
+        for i, token in enumerate(rest):
+            name = _cmd_name(token)
+            if name in _STDIN_CODE_SHELLS or name in _STDIN_CODE_INTERPRETERS:
+                if replaces:
+                    return True
+                after = rest[i + 1:]
+                return not any(not a.startswith("-") for a in after)
+        return False
+    is_shell = head in _STDIN_CODE_SHELLS
+    if not is_shell and head not in _STDIN_CODE_INTERPRETERS:
+        return False
+    args = tokens[1:]
+    if is_shell and "-s" in args:
+        # `bash -s` は引数があっても stdin をコードとして読む
+        return True
+    code_flags = _SHELL_CODE_ARG_FLAGS if is_shell else _INTERPRETER_CODE_ARG_FLAGS
+    if any(arg in code_flags for arg in args):
+        # `-c CODE` / `-m module` はそれ自体がコード。
+        # 併記される `-` は入力データを指すのでコードではない
+        return False
+    if any(arg in _STDIN_CODE_FLAGS for arg in args):
+        return True
+    # スクリプトファイルを渡していれば stdin はデータ
+    return not any(not arg.startswith("-") for arg in args)
 
 
 def check_pipe_to_shell(cmd: str) -> str | None:
-    """`curl ... | sh` のように取得したものをそのまま実行していないか。
+    """取得した内容をそのままコードとして実行していないか。
 
-    引数付きの `| bash script.sh` は対象外 (スクリプトを渡しているだけで、
-    パイプの内容をコードとして実行しているわけではない)。
+    パイプ (`curl ... | sh`) だけでなく、等価な以下の形も対象にする:
+
+      * ``sh -c "$(curl ...)"`` / ``eval "$(curl ...)"``  コマンド置換
+      * ``bash <(curl ...)``                              プロセス置換
+      * ``curl ... -o f && sh f``                         保存してから実行
+
+    逆に ``cat data.json | python3 -c '...'`` のように、インラインコードや
+    スクリプトを持つインタプリタへ**データ**を流す形は対象外にする
+    (コード自体は check_interpreter_inline_code が別途検査する)。
     """
-    if _PIPE_TO_SHELL_RE.search(cmd):
+    def _blocked(detail: str) -> str:
         return (
-            "取得した内容をそのままシェル/インタプリタに流し込んでいます。\n"
+            f"取得した内容をそのままコードとして実行しようとしています ({detail})。\n"
             f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
             "内容を検証できないため許可されていません。\n"
             "一度ファイルに保存して内容を確認してから実行してください。"
         )
+
+    # パイプの右辺が stdin をコードとして読む形。
+    # `bash -c "curl ... | sh"` のように引用符の中にある形や、
+    # `curl ... |\n bash` の行継続、`| env bash` のようなラッパーも拾う。
+    joined = re.sub(r"\\\s*\n", " ", cmd)
+    joined = re.sub(r"\|\s*\n\s*", "| ", joined)
+    for chunk in re.split(r"[\n;]+", joined):
+        parts = chunk.split("|")
+        for part in parts[1:]:
+            if _reads_stdin_as_code(_executable_head_tokens(part)):
+                return _blocked("パイプ")
+
+    if _policy is None:
+        return None
+
+    # コマンド置換・プロセス置換で取得したものを実行系に渡す形
+    for segment in _policy.split_command_segments(cmd):
+        bodies = list(_policy.extract_command_substitutions(segment))
+        bodies.extend(m.group(1) for m in _PROC_SUBST_RE.finditer(segment))
+        if not any(_FETCH_COMMAND_RE.search(body) for body in bodies):
+            continue
+        tokens = segment.strip().split()
+        if not tokens:
+            continue
+        if _SUBST_HEAD_RE.match(tokens[0]):
+            return _blocked("コマンド置換・プロセス置換")
+        # `env bash -c ...` / `timeout 5 sh -c ...` のようにラッパーで
+        # 前置されても head を見失わないようにする
+        stripped = _strip_exec_wrappers(tokens)
+        if not stripped:
+            continue
+        head = _cmd_name(stripped[0])
+        if head in _STDIN_CODE_SHELLS or head in _STDIN_CODE_INTERPRETERS:
+            return _blocked("コマンド置換・プロセス置換")
+
+    # 取得先へ保存したファイルを、同じコマンドの中で実行する形
+    saved = _fetched_output_paths(cmd)
+    if saved:
+        def _is_saved(token: str) -> bool:
+            cleaned = token.strip("'\"")
+            return bool(cleaned) and (
+                cleaned in saved or os.path.basename(cleaned) in saved
+            )
+
+        for segment in _segments(cmd):
+            tokens = _strip_exec_wrappers(segment.split())
+            if not tokens:
+                continue
+            # `./install.sh` のように保存したファイルを直接起動する形
+            if _is_saved(tokens[0]):
+                return _blocked("保存したファイルの実行")
+            head = _cmd_name(tokens[0])
+            if head not in _STDIN_CODE_SHELLS and head not in _STDIN_CODE_INTERPRETERS:
+                continue
+            # 最初の非オプション引数が実行されるスクリプト。
+            # `python3 process.py data.csv` の data.csv では反応しない
+            for token in tokens[1:]:
+                if token.startswith("-"):
+                    continue
+                if _is_saved(token):
+                    return _blocked("保存したファイルの実行")
+                break
     return None
+
+
+def _fetched_output_paths(cmd: str) -> set[str]:
+    """curl / wget が書き出すローカルパスと、その basename を返す。
+
+    `-o` / `-O` / `--output-dir` に加えて、`curl URL > a.sh` のような
+    リダイレクトと、`wget URL` が URL の basename に保存する既定動作も見る。
+    """
+    paths: set[str] = set()
+
+    def _add(value: str) -> None:
+        cleaned = value.strip("'\"")
+        if cleaned and cleaned not in {"-", "/dev/stdout", "/dev/null"}:
+            paths.add(cleaned)
+
+    for call in _http_transfer_calls(cmd):
+        outputs = call["output_targets"]
+        if isinstance(outputs, list):
+            for output in outputs:
+                if isinstance(output, str):
+                    _add(output)
+        urls = call["urls"] if isinstance(call["urls"], list) else []
+        # `curl -O` と、出力先を指定しない `wget` は URL の basename に保存する
+        derives_name = call["remote_name"] is True or (
+            call["tool"] == "wget" and not outputs
+        )
+        if derives_name:
+            for url in urls:
+                if not isinstance(url, str):
+                    continue
+                name = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+                if name:
+                    _add(name)
+
+    # 取得と同じセグメント内のリダイレクト先
+    if _policy is not None:
+        for segment in _policy.split_command_segments(cmd):
+            if not _FETCH_COMMAND_RE.search(segment):
+                continue
+            for m in re.finditer(r"[0-9]*>{1,2}\|?\s*([^\s&][^\s;&|)<>]*)", segment):
+                _add(m.group(1))
+
+    return set(paths) | {os.path.basename(p) for p in paths}
 
 
 def check_git_add_sensitive(cmd: str) -> str | None:
@@ -1640,12 +2034,19 @@ def _inline_code_head(segment: str) -> str | None:
     """インラインコードを実行するインタプリタ名を返す (無ければ None)。"""
     tokens = segment.split()
     for i, token in enumerate(tokens):
-        candidate = re.sub(r"[0-9.]+$", "", _basename(token))
-        if candidate in _INLINE_CODE_BINS:
-            rest = tokens[i + 1:]
-            if any(t in _INLINE_CODE_FLAGS for t in rest):
+        candidate = _cmd_name(token)
+        if candidate not in _INLINE_CODE_BINS:
+            continue
+        rest = tokens[i + 1:]
+        if any(t in _INLINE_CODE_FLAGS for t in rest):
+            return candidate
+        # awk 系はプログラムを位置引数で受け取る (`-f` はファイル指定)
+        if candidate in _AWK_BINS and not any(
+            t == "-f" or t.startswith(("-f", "--file")) for t in rest
+        ):
+            if any(not t.startswith("-") for t in rest):
                 return candidate
-            return None
+        return None
     return None
 
 
@@ -1672,26 +2073,101 @@ def check_interpreter_inline_code(cmd: str) -> str | None:
                 f"実行しようとしているコマンド: {segment.strip()[:200]}\n"
                 "スクリプトファイルに書いて内容を確認できる形にしてください。"
             )
+        # `os.environ['GITHUB_TOKEN']` のように、シェルの `$VAR` 展開を
+        # 経由しない環境変数アクセス
+        for m in _INLINE_ENV_READ_RE.finditer(segment):
+            name = next((g for g in m.groups() if g), None)
+            if name and _SENSITIVE_ENV_RE.search(name):
+                return (
+                    f"`{head}` のインラインコードがセンシティブな環境変数 "
+                    f"`{name}` を読み出そうとしています。"
+                )
     return None
 
 
 def check_secret_env_echo(cmd: str) -> str | None:
-    """`echo $GITHUB_TOKEN` のようにセンシティブな環境変数を出力していないか。
+    """センシティブな環境変数の値を出力先へ流していないか。
 
-    値をそのまま画面やファイル、外部へ出す形を止める。
-    `echo $HOME` のような通常の変数は対象外。
-    シングルクォート内はシェルが展開しないので対象から外す
-    (コミットメッセージ等に変数名が出てくるだけのケースを誤検知しないため)。
+    止めるのは値が外に出る形だけにする:
+
+      * `echo $GITHUB_TOKEN` のように標準出力・ファイル・クリップボードへ出す
+      * `curl -H "Authorization: Bearer $TOKEN"` のように外部へ送る
+
+    `gh api -H "... $GITHUB_TOKEN"` や `docker run -e API_TOKEN=$API_TOKEN`、
+    `test -n "$GITHUB_TOKEN"` のように、値を出力せずプロセスへ渡すだけの形は
+    通常の開発操作なので対象外にする。
+    シングルクォート内はシェルが展開しないので対象から外す。
     """
-    unquoted = re.sub(r"'[^']*'", "", cmd)
-    for m in re.finditer(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", unquoted):
-        name = m.group(1)
-        if _SENSITIVE_ENV_RE.search(name):
-            return (
-                f"センシティブな環境変数 `${name}` を展開しようとしています。\n"
-                f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
-                "値を画面や外部に出さない形で扱ってください。"
+    def _sensitive_names(text: str, *, honour_quotes: bool = True) -> list[str]:
+        # `sh -c 'echo $TOKEN'` は子シェルが展開するので、コード引数を持つ
+        # セグメントではシングルクォートを剥がさずに見る。
+        # `\$TOKEN` のようにエスケープされた形はリテラルなので除外する
+        scanned = re.sub(r"'[^']*'", "", text) if honour_quotes else text
+        return [
+            m.group(1)
+            for m in re.finditer(
+                r"(?<!\\)\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", scanned
             )
+            if _SENSITIVE_ENV_RE.search(m.group(1))
+        ]
+
+    def _code_argument(tokens: list[str]) -> str | None:
+        """`sh -c CODE` / `python -c CODE` のコード引数を返す。"""
+        if _cmd_name(tokens[0]) not in (
+            _STDIN_CODE_SHELLS | _STDIN_CODE_INTERPRETERS
+        ):
+            return None
+        flags = _SHELL_CODE_ARG_FLAGS | _INTERPRETER_CODE_ARG_FLAGS
+        for i, token in enumerate(tokens[1:], start=1):
+            if token in flags and i + 1 < len(tokens):
+                return tokens[i + 1].strip("'\"")
+        return None
+
+    def _scan(text: str, *, honour_quotes: bool, depth: int = 0) -> str | None:
+        for segment in _segments(text):
+            tokens = segment.split()
+            if not tokens:
+                continue
+            names = _sensitive_names(segment, honour_quotes=honour_quotes)
+            if not names:
+                continue
+            head = _basename(tokens[0])
+            if head in _SECRET_SINK_COMMANDS:
+                return (
+                    f"センシティブな環境変数 `${names[0]}` を出力しようとしています。\n"
+                    f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
+                    "値を画面やファイルに出さない形で扱ってください。"
+                )
+            if head in _SECRET_EGRESS_COMMANDS:
+                return (
+                    f"センシティブな環境変数 `${names[0]}` を外部へ送信しようと"
+                    f"しています。\n実行しようとしているコマンド: {cmd.strip()[:200]}\n"
+                    "値を外部に出さない形で扱ってください。"
+                )
+            # `sh -c '...'` はコード引数を展開して同じ判定を続ける
+            if depth < 2:
+                inner = _code_argument(tokens)
+                if inner:
+                    hit = _scan(inner, honour_quotes=False, depth=depth + 1)
+                    if hit:
+                        return hit
+        return None
+
+    if not _sensitive_names(cmd, honour_quotes=False):
+        return None
+    hit = _scan(cmd, honour_quotes=True)
+    if hit:
+        return hit
+    # リダイレクトでファイルへ書き出す形 (`printf %s "$TOKEN" > f` など)
+    if _write_targets(cmd):
+        for m in re.finditer(r"[0-9]*>{1,2}\|?\s*[^\s&][^\s;&|)<>]*", cmd):
+            prefix = cmd[: m.start()]
+            names = _sensitive_names(prefix)
+            if names:
+                return (
+                    f"センシティブな環境変数 `${names[0]}` をファイルへ書き出そうと"
+                    f"しています。\n実行しようとしているコマンド: {cmd.strip()[:200]}"
+                )
     return None
 
 
@@ -1726,7 +2202,7 @@ def check_guard_tampering(cmd: str) -> str | None:
         return any(t in expanded for t in targets)
 
     # リダイレクト先がガード設定なら、どのコマンドでも上書きになる
-    for m in re.finditer(r"[0-9]*>{1,2}\s*(\S+)", cmd):
+    for m in re.finditer(r"[0-9]*>{1,2}\|?\s*([^\s&][^\s;&|)<>]*)", cmd):
         if _hits(m.group(1)):
             return (
                 f"エージェントのガード設定 (`{m.group(1)}`) を上書きしようとしています。\n"
@@ -1844,7 +2320,8 @@ def check_shell_startup_write(cmd: str) -> str | None:
     """シェル起動ファイルや認証ファイルへの書き込みを検出する。
 
     追記されると以後のすべてのシェルで任意コードが走るため、永続化の
-    典型的な足がかりになる。読み取りは許可する。
+    典型的な足がかりになる。読み取りは許可する
+    (`cp ~/.bashrc ./backup/` のように起動ファイルを複製元にする形は通す)。
     """
     targets = (
         ".bashrc", ".bash_profile", ".bash_login", ".zshrc", ".zshenv",
@@ -1855,35 +2332,37 @@ def check_shell_startup_write(cmd: str) -> str | None:
 
     def _hits(token: str) -> str | None:
         cleaned = token.strip("'\"")
+        base = os.path.basename(cleaned.rstrip("/"))
         for target in targets:
-            if cleaned.endswith(target) or f"/{target}" in cleaned:
+            if "/" in target:
+                if cleaned.endswith(target):
+                    return target
+            elif base == target:
                 return target
         return None
 
-    for m in re.finditer(r"[0-9]*>{1,2}\s*(\S+)", cmd):
-        hit = _hits(m.group(1))
-        if hit:
+    for token in _write_targets(cmd):
+        if _hits(token):
             return (
-                f"シェル起動ファイル `{m.group(1)}` へ書き込もうとしています。\n"
+                f"シェル起動ファイル `{token}` へ書き込もうとしています。\n"
                 "以後のシェルで任意コードが走るため許可されていません。"
             )
-
-    writers = {"tee", "sed", "dd", "install", "truncate", "ln", "cp", "mv"}
+    # インラインコードからの書き込み。読み書きの区別が静的に付かないので、
+    # 起動ファイルのパスを参照している時点で止める。
+    # 引用符の対応は静的に取れないため、パスになりうる文字列を切り出して見る。
     for segment in _segments(cmd):
-        tokens = segment.split()
-        if not tokens:
+        if not _is_inline_code_segment(segment):
             continue
-        head = _basename(tokens[0])
-        if head == "sed" and not any(t.startswith("-i") for t in tokens[1:]):
-            continue
-        if head not in writers:
-            continue
-        for token in tokens[1:]:
-            hit = _hits(token)
-            if hit:
+        for token in re.split(r"[^\w./~@:-]+", segment):
+            # `users[0].login` のような属性アクセスと区別するため、
+            # パス区切りかホーム参照を含むものだけを対象にする
+            if not token or not ("/" in token or token.startswith("~")):
+                continue
+            if _hits(token):
                 return (
-                    f"シェル起動ファイル `{token}` を書き換えようとしています。\n"
-                    "以後のシェルで任意コードが走るため許可されていません。"
+                    f"インラインコードがシェル起動ファイル `{token}` を"
+                    "参照しています。\n読み書きの区別が付かないため"
+                    "許可されていません。"
                 )
     return None
 
@@ -1897,7 +2376,10 @@ def check_privilege_escalation(cmd: str) -> str | None:
         head = _basename(tokens[0])
         if head == "chmod":
             for token in tokens[1:]:
-                if re.fullmatch(r"[ugo]*\+s|[24][0-7]{3}", token):
+                # `a+s` などの記号表記と、setuid/setgid ビットを含む 4 桁表記
+                if re.fullmatch(r"[ugoa]*\+[rwxXst]*s[rwxXst]*", token) or (
+                    re.fullmatch(r"[0-7]{4}", token) and int(token[0]) & 0o6
+                ):
                     return (
                         f"`chmod {token}` は setuid/setgid を付与する操作です。\n"
                         "権限昇格に繋がるため許可されていません。"
@@ -1908,9 +2390,19 @@ def check_privilege_escalation(cmd: str) -> str | None:
                 f"`{head}` はアカウント・認証設定を変更する操作です。\n"
                 "権限昇格に繋がるため許可されていません。"
             )
-    if re.search(r"/etc/(?:sudoers|passwd|shadow|group)", cmd):
+    # shadow / sudoers は root 専用で、読み取り自体が機密 (ハッシュや昇格経路)。
+    # passwd / group は world-readable なので、書き換えるときだけ止める。
+    if re.search(r"/etc/(?:sudoers|shadow)", cmd):
         return (
-            "認証設定ファイル (/etc 配下) を操作しようとしています。\n"
+            "認証設定ファイル (/etc/shadow, /etc/sudoers) を操作しようとしています。\n"
+            "権限昇格に繋がるため許可されていません。"
+        )
+    if any(
+        re.search(r"/etc/(?:passwd|group)", target)
+        for target in _write_targets(cmd)
+    ):
+        return (
+            "アカウント設定ファイル (/etc 配下) を書き換えようとしています。\n"
             "権限昇格に繋がるため許可されていません。"
         )
     return None
@@ -1989,7 +2481,7 @@ def check_policy_deny(cmd: str) -> str | None:
     compound 命令の個別評価欠如) に対する最終防波堤。shell command を
     normalize (cd, git -C, compound 分割) してから pattern match する。
     """
-    patterns = _policy.load_deny()
+    patterns = _deny_patterns()
     matched = _policy.find_match(cmd, patterns)
     if matched:
         return (
@@ -2005,10 +2497,16 @@ def check_policy_ask(cmd: str) -> str | None:
     deny と違い、ユーザーが承認すればそのまま実行される。
     deny チェックの後に評価されるので、より具体的な deny パターン
     (例: ``git reset --hard``) が一般形の ask (``git reset``) に優先する。
+
+    ``_ASK_EXEMPTIONS`` に登録したパターンは、条件を満たすときだけ承認を
+    省いて auto / assisted の判定へ委ねる。
     """
-    patterns = _policy.load_ask()
+    patterns = _ask_patterns()
     matched = _policy.find_match(cmd, patterns)
     if matched:
+        exemption = _ASK_EXEMPTIONS.get(matched.split()[0])
+        if exemption is not None and exemption(cmd):
+            return None
         return (
             f"`{matched}` は承認が必要な操作です (common.toml の [bash] ask)。\n"
             f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
@@ -2029,6 +2527,9 @@ _CATASTROPHIC_DIRS = {
     "/Applications", "/Library", "/System", "/Users", "/Volumes",
 }
 _HOME_TOKENS = {"~", "$HOME", "${HOME}"}
+# workspace ルートそのもの。中身を全部消すので、workspace 内であっても
+# 未コミット・未追跡のファイルごと失われる
+_WORKSPACE_ROOT_TOKENS = {".", "./", "*", "./*", "**", "./**", "*/", "./*/"}
 # /home/<user> や /Users/<user> のようなホームディレクトリそのもの
 _HOME_DIR_RE = re.compile(r"^/(?:home|Users)/[^/]+$")
 _RM_BIN_RE = re.compile(r"^(?:/\S*/)?(?:rm|rmdir|unlink)$")
@@ -2066,15 +2567,95 @@ def _is_catastrophic_rm_target(token: str) -> bool:
         return True
     if canonical == os.path.expanduser("~"):
         return True
+    # `.git` は自身だけでなく配下も対象にする。
+    # `.git/objects` や `.git/refs` を消せばリポジトリは復旧できない。
+    # `.g*t` のようにドット始まりの glob で届く形も含める
+    # (`build/*` の `*` まで拾わないよう、パターン側がドット始まりのときだけ)
+    parts = [p for p in canonical.split("/") if p]
+    for part in parts:
+        if part == ".git":
+            return True
+        if part.startswith(".") and fnmatch.fnmatch(".git", part):
+            return True
+        # ブレース展開の候補に `.git` が含まれる形
+        if "{" in part and ".git" in re.split(r"[{},]", part):
+            return True
     # `~/.ssh` のような秘密領域そのものの削除も承認の対象外
     base = os.path.basename(canonical)
-    if base in {".ssh", ".gnupg", ".aws", ".config", ".local", ".git"}:
+    if base in {".ssh", ".gnupg", ".aws", ".config", ".local"}:
         return True
     # `$PWD/../..` のように相対で上位へ抜ける形。
     # 実際の解決先は分からないので、`..` が 2 段以上あれば壊滅的とみなす。
     if canonical.count("..") >= 2:
         return True
     return False
+
+
+def _rm_is_workspace_local(cmd: str) -> bool:
+    """`rm` の対象がすべて workspace 内だと確証できるか。
+
+    確証できるときだけ承認を省いて auto / assisted の判定へ委ねる。
+    次のいずれかに当たれば False を返し、従来どおり承認を求める:
+
+      * workspace の位置が分からない (payload に ``cwd`` が無い)
+      * `cd` で基点が変わる (normalize は `cd` を畳むので元の文字列で見る)
+      * 変数展開・コマンド置換・ホーム参照を含む
+      * 絶対パス、`..` を含むパス、glob だけのトークン
+      * 解決先が workspace の外
+    """
+    workspace = _PAYLOAD_CWD
+    if not workspace or not os.path.isabs(workspace):
+        return False
+    workspace = os.path.normpath(workspace)
+    if _policy is None:
+        return False
+    # 基点を変えるもの (`cd` / `pushd` / `popd` / `chdir`) が含まれたら判定しない。
+    # `bash -c "cd /x && rm -rf y"` や `\cd`、`cd$IFS/x` も取りこぼさないよう、
+    # コマンド文字列全体を単語境界で見る
+    if re.search(r"""(?:^|[\s;&|("'\\])(?:cd|pushd|popd|chdir)(?![\w-])""", cmd):
+        return False
+    # 対象が標準入力から来る形は静的に読めない
+    if re.search(r"(?:^|[\s;&|(])xargs(?![\w-])", cmd):
+        return False
+
+    saw_target = False
+    for segment in _segments(cmd):
+        tokens = _strip_exec_wrappers(segment.strip().split())
+        if not tokens or not _RM_BIN_RE.match(_basename(tokens[0].strip("'\""))):
+            continue
+        targets = [t for t in tokens[1:] if not t.startswith("-")]
+        if not targets:
+            return False
+        for raw in targets:
+            token = raw.strip("'\"")
+            if not token:
+                return False
+            # 展開・ブレース展開は静的に解決できない
+            if any(ch in token for ch in "$`~{}"):
+                return False
+            if token.startswith("/"):
+                return False
+            components = [p for p in token.split("/") if p]
+            if ".." in components:
+                return False
+            # `.g*t` のように glob がドットディレクトリへ届く形は読めない
+            if any(
+                c.startswith(".") and any(g in c for g in "*?[")
+                for c in components
+            ):
+                return False
+            # `*` だけのようなトークンは範囲が読めない
+            if not re.search(r"[^*?/.\[\]]", token):
+                return False
+            resolved = os.path.normpath(os.path.join(workspace, token))
+            if resolved != workspace and not resolved.startswith(workspace + os.sep):
+                return False
+            saw_target = True
+    return saw_target
+
+
+# ask を省いてよい条件。パターンの先頭トークンで引く
+_ASK_EXEMPTIONS = {"rm": _rm_is_workspace_local}
 
 
 def check_rm_root_guard(cmd: str) -> str | None:
@@ -2085,7 +2666,7 @@ def check_rm_root_guard(cmd: str) -> str | None:
     normalize は shlex を通るため ``${HOME}`` の波括弧が落ちることがある。
     元の文字列も併せて検査して取りこぼさないようにする。
     """
-    segments = list(_policy.normalize(cmd)) if _policy is not None else []
+    segments = list(_normalize(cmd)) if _policy is not None else []
     segments.append(cmd)
     for segment in segments:
         tokens = segment.split()
@@ -2099,6 +2680,14 @@ def check_rm_root_guard(cmd: str) -> str | None:
         for token in tokens[1:]:
             if token.startswith("-"):
                 continue
+            # workspace ルートの一括削除。`find . -delete` のような探索起点とは
+            # 意味が違うので、rm 側でだけ判定する
+            if token.strip().strip("'\"") in _WORKSPACE_ROOT_TOKENS:
+                return (
+                    f"`rm` が作業ディレクトリ全体 (`{token}`) を対象にしています。\n"
+                    "git 管理外のファイルまで失われるため承認の対象外です。\n"
+                    "削除したい対象を具体的なパスで指定し直してください。"
+                )
             if _is_catastrophic_rm_target(token):
                 return (
                     f"`rm` が壊滅的なパス `{token}` を対象にしています。\n"
@@ -2137,7 +2726,8 @@ DENY_CHECKS = [
     check_find_root_guard,    # find ~ -delete のような一括削除
     check_policy_deny,        # common.toml の [bash] deny を強制
     check_env_exposure,       # 引数なし環境変数露出は問答無用でブロック
-    check_git_c_dangerous,    # -C 経由の deny サブコマンド実行をブロック
+    # `git -C <dir> <sub>` は normalize が `git <sub>` に畳むため
+    # check_policy_deny が捕捉する (専用チェックは誤検知しか生まなかった)
     check_file_read,
     check_archive,
     check_curl_file_send,
@@ -2195,6 +2785,11 @@ def main() -> None:
     tool_input = data.get("tool_input")
     if not isinstance(tool_input, dict):
         sys.exit(0)
+    # workspace の位置。`rm` の承認免除の判定に使う
+    global _PAYLOAD_CWD
+    payload_cwd = data.get("cwd")
+    if isinstance(payload_cwd, str) and payload_cwd:
+        _PAYLOAD_CWD = payload_cwd
     cmd = get_command(tool_input)
     if not isinstance(cmd, str) or not cmd:
         sys.exit(0)

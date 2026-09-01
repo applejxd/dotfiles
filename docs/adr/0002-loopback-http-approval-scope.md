@@ -174,6 +174,8 @@ deny を外して得られるのは `curl http://localhost/x | sh` や
 
 ## 関連 ADR
 
+- [ADR-0004](0004-hook-check-semantic-axis.md): 本 ADR の「deny は副作用の性質で
+  見る」という考え方を、hook の全チェックへ一般化した決定
 - [ADR-0001](0001-external-tool-config-coexistence.md): 同じ hook / permission
   生成系を扱うが、対象は外部ツールとの設定領域の共存であり、
   本 ADR の判定ロジックとは独立している

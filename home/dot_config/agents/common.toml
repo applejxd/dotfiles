@@ -100,7 +100,10 @@ allow = [
 # 無人実行では安全側に倒れる (Claude dontAsk は自動拒否、-p はスキップ、
 # Copilot cloud agent は deny 扱い) ので、緩めても無人時のリスクは増えない。
 ask = [
-  # 削除は承認制。壊滅的なターゲット (ルートやホーム) は check_rm_root_guard が deny
+  # 削除は承認制。壊滅的なターゲット (ルート・ホーム・作業ディレクトリ全体・
+  # .git 配下) は check_rm_root_guard が deny する。
+  # 逆に workspace 内と確証できる削除は hook が承認を省いて auto / assisted
+  # へ委ねる (詳細は docs/agents-permissions.md の「rm の承認範囲」)
   "rm",
   # 未追跡ファイルを消すので git でも復旧できない
   "git clean",
