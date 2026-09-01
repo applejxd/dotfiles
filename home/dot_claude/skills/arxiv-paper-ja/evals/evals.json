@@ -1,0 +1,23 @@
+{
+  "skill_name": "arxiv-paper-ja",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "https://arxiv.org/abs/2208.11970 を全文和訳して、数式と図を保った日本語 PDF にしてください。専門用語は機械的に直訳せず、再ビルド可能な TeX も残してください。",
+      "expected_output": "ライセンスを確認し、自然な専門日本語で全文を翻訳した再ビルド可能な TeX と日本語 PDF、用語集、検証記録が生成される。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "この arXiv PDF を日本語版としてタイプセットして: https://arxiv.org/pdf/1706.03762.pdf 数式・参考文献・図表を落とさず、図中の英語ラベルも必要なら和訳して。",
+      "expected_output": "PDF URL から arXiv ID と TeX ソースを取得し、図中ラベルを検査したうえで、日本語 PDF とソースを生成する。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "arXiv:2305.14314 のノートを和訳して PDF にして。point cloud registration など分野固有語は日本語の慣用訳を調べて統一してほしい。",
+      "expected_output": "論文分野を把握して論文固有の用語集を作り、point cloud registration を点群位置合わせとするなど自然な訳語で全文 PDF を生成する。",
+      "files": []
+    }
+  ]
+}
