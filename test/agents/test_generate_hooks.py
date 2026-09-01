@@ -71,6 +71,37 @@ def test_hook_runner_is_known():
         assert hook.get("runner") in {"python3", "bash"}
 
 
+def test_windows_python_hooks_use_latest_python_3():
+    claude = gen.build_claude_hooks(COMMON, platform="nt")
+    copilot = gen.build_copilot_hooks(COMMON, platform="nt")
+
+    commands = [
+        cmd["command"]
+        for entries in claude.values()
+        for entry in entries
+        for cmd in entry["hooks"]
+    ]
+    commands.extend(
+        entry["bash"]
+        for entries in copilot["hooks"].values()
+        for entry in entries
+    )
+    python_commands = [command for command in commands if command.endswith(".py")]
+    assert python_commands
+    assert all(command.startswith("py -3 ") for command in python_commands)
+
+
+def test_runtime_code_has_no_external_tomli_dependency():
+    runtime_files = [
+        ROOT / "scripts" / "agents" / "generate.py",
+        ROOT / "home" / "dot_config" / "agents" / "command_policy.py",
+    ]
+    for path in runtime_files:
+        source = path.read_text(encoding="utf-8")
+        assert "import tomllib" in source
+        assert "import tomli" not in source
+
+
 def test_claude_events_are_known():
     for hook in COMMON["hooks"]:
         event = hook.get("claude_event")

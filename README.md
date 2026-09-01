@@ -20,6 +20,15 @@ sudo snap install chezmoi --classic
 brew install chezmoi
 ```
 
+```powershell
+# Windows (PowerShell)
+winget install Python.Python.3.12 twpayne.chezmoi --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
+```
+
+Windows では chezmoi の設定生成と agent hook に **Python 3.11 以上**が必要。
+`py -3` でインストール済みの最新 Python 3 を選ぶため、Python 3.10 以下だけの
+環境では上記の Python 3.12 を先に導入する。追加の `pip install tomli` は不要。
+
 > Bitwarden CLI (`bw`) は **事前インストール不要**。`chezmoi apply` 中に mise 経由 (`npm:@bitwarden/cli`) で自動投入される。
 > bw が必要なテンプレート展開 (sops の age 鍵取得・gitconfig の user セクション等) は、bw 取得後に `chezmoi init` / `chezmoi apply` を再実行することでフェーズ 2 として反映される。
 

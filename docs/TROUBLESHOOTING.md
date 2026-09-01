@@ -47,6 +47,24 @@ chezmoi apply
 directory junction はローカルファイルシステム向けであり、ホームディレクトリが
 UNC/network path の場合は作成できない。
 
+### 6. Windows で `tomllib` または Python のエラーが出る
+
+設定生成と agent hook は Python 3.11 以上の標準ライブラリ `tomllib` を使用する。
+`tomli` の手動インストールは不要。次のコマンドで対応 Python を確認する。
+
+```powershell
+py -3 -c "import sys, tomllib; print(sys.version)"
+```
+
+Python 3.10 以下しかない場合は Python 3.12 を導入し、PowerShell を開き直してから
+`chezmoi apply` を再実行する。
+
+```powershell
+winget install --id Python.Python.3.12 --exact --silent `
+  --accept-package-agreements --accept-source-agreements
+chezmoi apply
+```
+
 ## ログの確認
 
 ```bash

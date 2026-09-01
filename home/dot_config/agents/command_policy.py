@@ -30,13 +30,9 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import tomllib
 from pathlib import Path
 from typing import Iterable
-
-try:
-    import tomllib  # Python 3.11+
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[no-redef]
 
 
 # Common location for the source of truth managed by chezmoi.
