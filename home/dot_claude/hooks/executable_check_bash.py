@@ -1818,6 +1818,12 @@ def check_pipe_to_shell(cmd: str) -> str | None:
     for segment in _policy.split_command_segments(cmd):
         bodies = list(_policy.extract_command_substitutions(segment))
         bodies.extend(m.group(1) for m in _PROC_SUBST_RE.finditer(segment))
+        # 引用付き heredoc の本文はシェルが展開しないため置換ではない
+        bodies = [
+            body
+            for body in bodies
+            if not any(body in literal for literal in _LITERAL_HEREDOC_BODIES)
+        ]
         if not any(_FETCH_COMMAND_RE.search(body) for body in bodies):
             continue
         tokens = segment.strip().split()
@@ -1928,6 +1934,10 @@ def check_git_add_sensitive(cmd: str) -> str | None:
 
 
 _HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+# 区切り子を引用した heredoc (`<<'PY'`) でインタプリタへ渡る本文。
+# シェルが展開しないので、中の `$(...)` はコマンド置換ではなくリテラル。
+# split_heredoc_body が記録し、check_pipe_to_shell が除外に使う。
+_LITERAL_HEREDOC_BODIES: list[str] = []
 # heredoc 本文がシェルコマンドとして実行されるもの
 _HEREDOC_SHELL_BINS = {
     "bash", "sh", "zsh", "ksh", "dash", "ash", "fish", "csh", "tcsh",
@@ -1971,6 +1981,9 @@ def split_heredoc_body(cmd: str) -> str:
                 break
 
         delimiters = {delim for _, delim in matches}
+        # `<<'EOF'` / `<<"EOF"` のように区切り子を引用すると、シェルは
+        # 本文中の `$(...)` や `` ` `` を展開しない
+        quoted = any(quote for quote, _ in matches)
         body: list[str] = []
         while i < len(lines) and lines[i].strip() not in delimiters:
             body.append(lines[i])
@@ -1982,9 +1995,16 @@ def split_heredoc_body(cmd: str) -> str:
             terminator = None
 
         if kind == "shell":
+            # `bash <<'EOF'` は本文を bash 自身が解釈するので、区切り子を
+            # 引用していても `$(...)` は実行時に展開される
             kept.extend(body)
         elif kind == "code":
-            kept.append("python3 -c " + " ".join(part.strip() for part in body))
+            code = " ".join(part.strip() for part in body)
+            if quoted:
+                # `python3 - <<'PY'` の本文はシェルが展開しない。
+                # コード中の `$(...)` は文字列リテラルであって置換ではない
+                _LITERAL_HEREDOC_BODIES.append(code)
+            kept.append("python3 -c " + code)
         if terminator is not None:
             kept.append(terminator)
     return "\n".join(kept)
