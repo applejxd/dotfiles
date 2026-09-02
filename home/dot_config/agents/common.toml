@@ -341,7 +341,8 @@ write_deny_globs = [
 # Web 系
 # ---------------------------------------------------------------------------
 [web]
-# Claude: WebFetch(domain:...) として展開
+# Claude: WebFetch(domain:...) として permissions.allow へ展開 (自動承認のみ。
+#         ここに無いドメインを拒否する効果は無い)
 # Copilot: settings.json の allowedUrls に直接反映
 allow_domains = [
   "github.com",

@@ -481,6 +481,25 @@ home/AppData/Roaming/Keyhac/.../keymap_layer.drawio
 `test_check_bash_decision.py` が「正当なファイルが deny されないこと」と
 「秘密ファイルが確実に deny されること」の両方を検査している。
 
+### `[web]` の allow_domains は制限ではない
+
+`common.toml` の `[web] allow_domains` は `generate.py` が
+`WebFetch(domain:...)` として **`permissions.allow` にだけ**展開する。
+つまり「このドメインは自動承認する」という意味であって、
+**リストに無いドメインを拒否する仕組みではない**。
+未掲載のドメインは `default_permission_mode`（現在 `auto`）の判定に落ち、
+classifier が通せば取得できる。
+
+| 生成先 | 反映されるキー | 効果 |
+| --- | --- | --- |
+| `~/.claude/settings.json` | `permissions.allow` | 自動承認のみ。deny 側へは出力されない |
+| `~/.copilot/settings.json` | `allowedUrls` / deny | Copilot は `deny_domains` も反映できる |
+
+Claude には「許可した以外を拒否する」表現手段が無い。
+`permissions.deny` に素の `WebFetch` を置くと **全 WebFetch が止まる**
+（deny が allow に優先するため、個別 allow で抜くこともできない）。
+ホワイトリスト運用にしたい場合は hook で URL を検査する必要がある。
+
 ## hooks の単一ソース化
 
 `[[hooks]]` に 1 度書けば、両 CLI の設定ファイルへ展開される。
