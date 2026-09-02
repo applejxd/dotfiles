@@ -47,6 +47,35 @@
 - `hyperref` の PDF メタデータを日本語版へ更新する。
 - 文書クラスの表示名 `Contents`、`Figure`、`Table`、`References` を日本語化する。
 
+## `article` から `ltjsarticle` へ移す際の落とし穴
+
+実測で繰り返し起きたもの。
+
+### `! LaTeX Error: Command \x already defined.`
+
+`luatexja` や `ltjsclasses` が読み込み時のスクラッチ用に `\x` を定義する。原著が `\newcommand{\x}{\vec{x}}` のような 1 文字マクロを持つと衝突する。原著マクロの定義を **全パッケージ読み込み後** へ移し、`\renewcommand` で上書きする。`\y`、`\z`、`\l` なども同じ理由で衝突しうる。
+
+### 付録の定理番号が「補題 付録 A.2」になる
+
+`ltjsarticle` の `\appendix` は `\thesection` を `\presectionname\@Alph\c@section\postsectionname` に再定義するため、`[section]` 依存の定理カウンタへ「付録」が混入する。節見出しの「付録 A」表記は残したまま、`\appendix` の直後でカウンタ表示だけ戻す。
+
+```tex
+\appendix
+\makeatletter
+\gdef\thetheorem{\@Alph\c@section.\@arabic\c@theorem}
+\makeatother
+```
+
+`theorem` 以外に `example`、`remark`、`definition` など、原著が定義した全カウンタへ同じ処理を行う。
+
+### `! Undefined control sequence. \thealgorithm -> \thechapter`
+
+原著が `\renewcommand{\thealgorithm}{\thechapter.\arabic{algorithm}}` を持つのに `article` 系クラスには `\thechapter` が無い。原著のままでもビルドできないので、`\arabic{algorithm}` へ変更する。原著側と訳文側の両方を直すと、原文の再ビルド比較ができる。
+
+### 環境名と自動生成語
+
+定理環境名（定理・命題・補題・系・定義・例・注意・予想・公理・問題）、`proof` の見出し「証明」、`\floatname{algorithm}{アルゴリズム}`、`algorithmic` 系の `\algorithmicprocedure` などは本文翻訳では変わらない。プリアンブルで個別に日本語化する。
+
 ## レイアウト
 
 - 原著が Letter の場合、日本語版は A4 へ変えるかを記録する。
