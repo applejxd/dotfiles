@@ -1,7 +1,11 @@
 {
   "config": {
     "default": true,
-    "MD013": false
+    // 行長は日本語混じりだと桁数の意味が薄いので見ない
+    "MD013": false,
+    // 「### 症状 / 原因 / 対処」のように、節ごとに同じ小見出しを繰り返す
+    // 構成を許す。親が違う見出しは重複とみなさない。
+    "MD024": { "siblings_only": true }
   },
   "ignores": [
     "node_modules",

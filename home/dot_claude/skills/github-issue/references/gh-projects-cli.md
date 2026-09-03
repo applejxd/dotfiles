@@ -19,7 +19,7 @@ read のみなら `read:project` でも可。
 ## サブコマンド早見表
 
 | 操作 | コマンド | 補足 |
-|---|---|---|
+| --- | --- | --- |
 | project 一覧 | `gh project list --owner OWNER --format json` | OWNER は user / org |
 | project 詳細 | `gh project view NUMBER --owner OWNER --format json` | `project_id` 取得 |
 | フィールド一覧 | `gh project field-list NUMBER --owner OWNER --format json` | field ID / option ID 取得 |
@@ -32,7 +32,7 @@ read のみなら `read:project` でも可。
 ## item-edit のフィールド種別ごとのフラグ
 
 | field 種別 | gh フラグ | 値 |
-|---|---|---|
+| --- | --- | --- |
 | Single select | `--single-select-option-id OPTION_ID` | option ID（field-list で解決） |
 | Iteration | `--iteration-id ITERATION_ID` | iteration ID（field-list で解決） |
 | Date | `--date YYYY-MM-DD` | ISO 8601 日付 |
@@ -117,7 +117,7 @@ org の場合は `user(...)` を `organization(...)` に置き換える。
 ## 落とし穴
 
 | 落とし穴 | 症状 | 対応 |
-|---|---|---|
+| --- | --- | --- |
 | **project number と project ID の混同** | `--project-id` に number を渡して `node id required` | `gh project view --format json` で `id` (`PVT_xxx`) を取る |
 | **user / org スコープの取り違え** | `Could not resolve to a node` | `--owner` を user / org 名で正しく指定。GraphQL は `user` / `organization` を切替 |
 | **scope 不足** | `Your token has not been granted the required scopes` | `gh auth refresh -s project` をユーザーに案内 |

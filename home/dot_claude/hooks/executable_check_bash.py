@@ -19,6 +19,7 @@ fail-closed: ポリシー設定を読めない場合は素通りさせず deny �
 """
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import ipaddress
 import os
@@ -56,7 +57,7 @@ if not _AGENTS_DIR:
 sys.path.insert(0, _AGENTS_DIR)
 _POLICY_IMPORT_ERROR: str | None = None
 try:
-    import command_policy as _policy  # noqa: E402
+    import command_policy as _policy
 except Exception as _exc:  # pragma: no cover - 構文エラー等も拾う
     _policy = None  # type: ignore[assignment]
     _POLICY_IMPORT_ERROR = f"{type(_exc).__name__}: {_exc}"
@@ -392,8 +393,7 @@ _CURL_VALUE_FLAGS = {
     "--socks4", "--socks4a", "--socks5", "--socks5-hostname",
     "--speed-limit", "--speed-time", "--tls-max", "--tls13-ciphers",
     "-u", "--user", "--unix-socket", "--abstract-unix-socket",
-    "--url", "-w", "--write-out", "-x", "--proxy",
-    "-y", "--speed-time", "-Y", "--speed-limit",
+    "--url", "-w", "--write-out", "-x", "-y", "-Y",
 }
 # localhost 例外を無効化するオプション。
 # 接続先を URL から読み取れなくする (proxy / socket / 名前解決の差し替え) か、
@@ -460,7 +460,7 @@ def _payload_source(kind: str, value: str) -> str | None:
         return value
     if kind in _CURL_FORM_FLAGS:
         candidate = value.split("=", 1)[-1]
-        if candidate.startswith("@") or candidate.startswith("<"):
+        if candidate.startswith(("@", "<")):
             return candidate[1:].split(";", 1)[0]
         return None
     if value.startswith("@"):
@@ -599,10 +599,7 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
             value, next_i = _take_option_value(args, i, token, short, long)
             if next_i != i:
                 matched_kind = token.split("=", 1)[0]
-                if short and matched_kind.startswith(short):
-                    matched_kind = short
-                else:
-                    matched_kind = long
+                matched_kind = short if short and matched_kind.startswith(short) else long
                 matched_value = value
                 break
         if matched_kind is not None:
@@ -1548,13 +1545,16 @@ def check_pip_redirect(cmd: str) -> str | None:
         if _PYTHON_BIN_RE.match(head):
             for i, token in enumerate(tokens[1:], start=1):
                 # -m pip (値が別トークン)
-                if token == "-m" and i + 1 < len(tokens):
-                    if _PIP_BIN_RE.match(_basename(tokens[i + 1])):
-                        return (
-                            f"`{head} -m pip` は禁止されています。"
-                            "uv / uvx を使用してください。\n"
-                            f"{_pip_suggestion(segment)}"
-                        )
+                if (
+                    token == "-m"
+                    and i + 1 < len(tokens)
+                    and _PIP_BIN_RE.match(_basename(tokens[i + 1]))
+                ):
+                    return (
+                        f"`{head} -m pip` は禁止されています。"
+                        "uv / uvx を使用してください。\n"
+                        f"{_pip_suggestion(segment)}"
+                    )
                 # -mpip (値がくっついた形)
                 m = _PYTHON_DASH_M_RE.match(token)
                 if m and _PIP_BIN_RE.match(_basename(m.group(1))):
@@ -1579,7 +1579,8 @@ def check_policy_loaded(cmd: str) -> str | None:
     if _policy is None or _POLICY_IMPORT_ERROR is not None:
         detail = f": {_POLICY_IMPORT_ERROR}" if _POLICY_IMPORT_ERROR else ""
         return (
-            f"ポリシーモジュールを読み込めませんでした ({_AGENTS_DIR}/command_policy.py){detail}。\n"
+            f"ポリシーモジュールを読み込めませんでした "
+            f"({_AGENTS_DIR}/command_policy.py){detail}。\n"
             "安全のため bash コマンドを拒否しています。\n"
             "対処: `chezmoi apply ~/.config/agents` を実行し、"
             f"`{_AGENTS_DIR}/__pycache__/` が残っていれば削除してください。"
@@ -2067,11 +2068,12 @@ def _inline_code_head(segment: str) -> str | None:
         if any(t in _INLINE_CODE_FLAGS for t in rest):
             return candidate
         # awk 系はプログラムを位置引数で受け取る (`-f` はファイル指定)
-        if candidate in _AWK_BINS and not any(
-            t == "-f" or t.startswith(("-f", "--file")) for t in rest
+        if (
+            candidate in _AWK_BINS
+            and not any(t == "-f" or t.startswith(("-f", "--file")) for t in rest)
+            and any(not t.startswith("-") for t in rest)
         ):
-            if any(not t.startswith("-") for t in rest):
-                return candidate
+            return candidate
         return None
     return None
 
@@ -2612,9 +2614,7 @@ def _is_catastrophic_rm_target(token: str) -> bool:
         return True
     # `$PWD/../..` のように相対で上位へ抜ける形。
     # 実際の解決先は分からないので、`..` が 2 段以上あれば壊滅的とみなす。
-    if canonical.count("..") >= 2:
-        return True
-    return False
+    return canonical.count("..") >= 2
 
 
 def _rm_is_workspace_local(cmd: str) -> bool:
@@ -2830,10 +2830,8 @@ def main() -> None:
 
     # heredoc 本文のうち、ファイルに書かれるだけで実行されない部分を外す。
     # ドキュメントに書いた危険なコマンド例で誤検知しないようにするため。
-    try:
+    with contextlib.suppress(Exception):  # 解析できないときは元の文字列で検査
         cmd = split_heredoc_body(cmd)
-    except Exception:  # pragma: no cover - 解析できないときは元の文字列で検査
-        pass
 
     for check in DENY_CHECKS:
         try:

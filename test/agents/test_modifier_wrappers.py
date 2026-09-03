@@ -161,7 +161,10 @@ def test_generator_failure_has_no_stdout(tmp_path: Path):
     generator.parent.mkdir(parents=True)
     common.write_text("", encoding="utf-8")
     generator.write_text(
-        "import sys\nprint('partial output')\nprint('failure marker', file=sys.stderr)\nsys.exit(7)\n",
+        "import sys\n"
+        "print('partial output')\n"
+        "print('failure marker', file=sys.stderr)\n"
+        "sys.exit(7)\n",
         encoding="utf-8",
     )
     wrapper = render_shared_wrapper(tmp_path, "claude-settings")

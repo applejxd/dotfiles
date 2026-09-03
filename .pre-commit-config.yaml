@@ -14,6 +14,20 @@ repos:
         files: \.(yaml|yml)$
         args: [--strict]
 
+      # --force-exclude が無いと、pre-commit がファイル名を明示的に渡すため
+      # pyproject.toml の extend-exclude (upstream 由来のコード) が無視される。
+      - id: ruff-local
+        name: Python Lint via uvx
+        entry: mise exec -- uvx ruff@0.16.5 check --force-exclude
+        language: system
+        types_or: [python, pyi]
+
+      - id: markdownlint-local
+        name: Markdown Lint via mise
+        entry: mise exec -- markdownlint-cli2
+        language: system
+        files: \.(md|markdown)$
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

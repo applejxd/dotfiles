@@ -5,11 +5,10 @@ from __future__ import annotations
 
 import argparse
 import io
-from pathlib import Path, PurePosixPath
 import re
 import tarfile
 import urllib.request
-
+from pathlib import Path, PurePosixPath
 
 ARXIV_ID = re.compile(
     r"(?:arxiv\.org/(?:abs|pdf|html|src)/)?"

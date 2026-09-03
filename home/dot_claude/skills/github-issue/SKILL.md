@@ -40,7 +40,7 @@ GitHub issue の標準操作は **github MCP** で、GitHub Projects v2 のカ�
 ## 役割分担（must read）
 
 | 操作 | 手段 | 補足 |
-|---|---|---|
+| --- | --- | --- |
 | Issue CRUD / コメント / ラベル / assignee / 検索 | **github MCP** (`mcp__github__*`) | 構造化 JSON で扱える、認証共有 |
 | Project への issue 追加・除去 | **gh CLI** (`gh project item-add` / `item-archive` / `item-delete`) | MCP 未提供 |
 | Project カスタムフィールド更新 | **gh CLI** (`gh project item-edit`) | field / option ID 解決が必要 |

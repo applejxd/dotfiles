@@ -165,7 +165,9 @@ def write_index(notebooks: list[Notebook]) -> None:
     <style>
       :root {{ color-scheme: light dark; font-family: system-ui, sans-serif; }}
       body {{ max-width: 64rem; margin: 0 auto; padding: 2rem 1rem 4rem; line-height: 1.6; }}
-      main {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }}
+      main {{
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem;
+      }}
       section {{ border: 1px solid #8886; border-radius: .75rem; padding: .5rem 1.25rem; }}
     </style>
   </head>

@@ -33,7 +33,7 @@
 
 実測（`nvcc -arch=sm_XX` に空のカーネルを与えた結果）:
 
-```
+```text
 12.8: sm_37 -> nvcc fatal   : Unsupported gpu architecture 'sm_37'
 12.8: sm_50 -> nvcc warning : Support for offline compilation for architectures
                               prior to '<compute/sm/lto>_75' will be removed in

@@ -16,7 +16,7 @@ from pathlib import Path
 
 # 同一ディレクトリの lib/ にあるヘルパを import
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
-from agent_compat import emit_stop_block, read_input  # noqa: E402
+from agent_compat import emit_stop_block, read_input
 
 # 受理する event 名:
 #   Claude Code  : "Stop" (毎ターン), "TaskCompleted" (タスク完了時)
@@ -59,7 +59,11 @@ def main() -> None:
 
     # ADR ファイル一覧を取得（参考情報として）
     adr_files = sorted(adr_dir.glob("*.md"))
-    adr_list = "\n".join(f"  - {f.name}" for f in adr_files) if adr_files else "  (非 .md ファイルを含む)"
+    adr_list = (
+        "\n".join(f"  - {f.name}" for f in adr_files)
+        if adr_files
+        else "  (非 .md ファイルを含む)"
+    )
 
     message = (
         f"docs/adr/ にアーキテクチャ決定記録（ADR）が存在します。\n"

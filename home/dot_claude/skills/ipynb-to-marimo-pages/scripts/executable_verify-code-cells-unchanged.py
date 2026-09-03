@@ -98,7 +98,7 @@ def main() -> int:
             f"DIFF {path}: {args.rev}={len(base_cells)} 件 / "
             f"現在={len(cur_cells)} 件"
         )
-        for before, after in zip(base_cells, cur_cells):
+        for before, after in zip(base_cells, cur_cells, strict=False):
             if before != after:
                 print(f"  --- {args.rev} ---")
                 print("  " + before[:500].replace("\n", "\n  "))

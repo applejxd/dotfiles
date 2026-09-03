@@ -1314,7 +1314,8 @@ def test_read_only_gh_api_is_delegated(command):
         "gh api graphql --input payload.json",
         "gh api graphql",
         "gh api graphql -f 'query=$QUERY'",
-        "bash -c \"gh api graphql -f 'query=mutation { deleteProjectV2(input: {}) { clientMutationId } }'\"",
+        "bash -c \"gh api graphql -f 'query=mutation { deleteProjectV2(input: {})"
+        " { clientMutationId } }'\"",
         'bash -c "gh api repos/a && gh api repos/b -f x=1"',
         'gh api repos/a -H "X-Test: $(gh api repos/b -f evil=1)"',
         "f(){ gh api repos/b -f evil=1; }; f",

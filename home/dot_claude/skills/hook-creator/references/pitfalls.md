@@ -49,7 +49,7 @@ agent にフィードバックされる stderr 警告も、Copilot では CLI UI
 
 実機検証 (2026-05):
 
-```
+```text
 CLAUDE_SKILL_DIR=<not set>
 COPILOT_SKILL_DIR=<not set>
 ```

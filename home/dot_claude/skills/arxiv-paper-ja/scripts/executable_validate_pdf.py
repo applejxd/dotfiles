@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import re
 import subprocess
 import sys
-
+from pathlib import Path
 
 FATAL_PATTERNS = {
     "missing glyph": re.compile(r"Missing character"),

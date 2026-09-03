@@ -31,8 +31,8 @@ import os
 import re
 import shlex
 import tomllib
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 
 # Common location for the source of truth managed by chezmoi.
@@ -492,7 +492,7 @@ def _strip_global_options(segment: str) -> str:
     alias = _SUBCOMMAND_ALIASES.get((head, sub))
     if alias:
         sub = alias
-        rest = [alias] + rest[1:]
+        rest = [alias, *rest[1:]]
 
     flag_rule = _FLAG_NORMALIZED.get((head, sub))
     if flag_rule:
@@ -502,9 +502,9 @@ def _strip_global_options(segment: str) -> str:
         pre_flags = [t for t in global_flags if t in flags]
         if tail_flags or pre_flags:
             kept = [t for t in rest[1:] if t not in flags]
-            return " ".join([head, canonical] + kept)
+            return " ".join([head, canonical, *kept])
 
-    return " ".join([head] + rest)
+    return " ".join([head, *rest])
 
 
 def _expand_interpreter_code(segment: str) -> list[str]:
@@ -619,7 +619,7 @@ def _expand_indirect_code(segment: str, full_command: str = "") -> list[str]:
     if full_command and _VAR_REF_RE.search(segment):
         assignments = dict(_VAR_ASSIGN_RE.findall(full_command))
         if assignments:
-            def _sub(m: "re.Match[str]") -> str:
+            def _sub(m: re.Match[str]) -> str:
                 return assignments.get(m.group(1), m.group(0))
 
             expanded = _VAR_REF_RE.sub(_sub, segment)
@@ -740,10 +740,8 @@ def _looks_like_option_value(token: str) -> bool:
     """
     if token.startswith("-"):
         return False
-    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_.+-]*", token):
-        # 単純な識別子はコマンド名の可能性がある
-        return False
-    return True
+    # 単純な識別子はコマンド名の可能性がある
+    return re.fullmatch(r"[A-Za-z][A-Za-z0-9_.+-]*", token) is None
 
 
 def _looks_like_wrapper_operand(token: str) -> bool:
@@ -819,11 +817,14 @@ def _expand_embedded_commands(segment: str) -> list[str]:
             out.append(" ".join(rest))
 
     # `uv run python -c "..."` のように run の後ろがそのままコマンドになるもの
-    if head in ("uv", "mise", "npm", "pnpm", "yarn", "cargo", "go", "poetry", "rye") and len(tokens) >= 3:
-        if tokens[1] in _RUNNER_SUBCOMMANDS:
-            rest = [t for t in tokens[2:] if t != "--"]
-            if rest:
-                out.append(" ".join(rest))
+    if (
+        head in ("uv", "mise", "npm", "pnpm", "yarn", "cargo", "go", "poetry", "rye")
+        and len(tokens) >= 3
+        and tokens[1] in _RUNNER_SUBCOMMANDS
+    ):
+        rest = [t for t in tokens[2:] if t != "--"]
+        if rest:
+            out.append(" ".join(rest))
 
     return out
 

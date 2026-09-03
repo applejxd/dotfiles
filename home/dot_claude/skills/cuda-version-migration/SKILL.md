@@ -82,7 +82,7 @@ os.environ.setdefault("TORCH_CUDA_ARCH_LIST", _default)
 
 実測（RTX 3070 / sm_86 のマシンで `TORCH_CUDA_ARCH_LIST=9.0` としてビルド）:
 
-```
+```text
 # exit(-1) 版 … 4 件目で pytest が消える。サマリも出ない
 ...F
 

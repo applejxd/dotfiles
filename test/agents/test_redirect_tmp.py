@@ -158,7 +158,8 @@ def test_bash_copy_into_tmp_still_denied():
         assert run_bash(command) == "deny", command
 
 
-def test_bash_compound_command_with_write_segment_denied():    # 前半は read-only でも後半が書き込みなら全体を block する
+# 前半は read-only でも後半が書き込みなら全体を block する
+def test_bash_compound_command_with_write_segment_denied():
     assert run_bash("cat /tmp/x && echo hi > /tmp/y") == "deny"
 
 

@@ -12,3 +12,26 @@ dependencies = [
 
 [tool.uv.sources]
 keypirinha-stub = { git = "https://github.com/applejxd/keypirinha-stub.git" }
+
+[tool.ruff]
+# upstream 由来のコードは対象外にする。
+# home/AppData は Keyhac / Keypirinha の同梱物、
+# home/dot_config/gdb は Eigen / OpenCV 付属の pretty printer。
+extend-exclude = [
+  "home/AppData",
+  "home/dot_config/gdb",
+]
+# 既存コードの実測に合わせる (最長 109 桁、100 桁超は 7 行だけ)。
+# 既定の 88 桁にすると 74 行の折り返しが必要になり、変更が本題からずれる。
+line-length = 100
+
+[tool.ruff.lint]
+# ruff の既定ルールはバージョンで変わるので明示する。
+# S (bandit) と BLE は選ばない。hook は「設定を読めなければ fail-closed で
+# deny する」ために意図的な広い except と subprocess 実行を持つため。
+# PERF も選ばない。permission リストの組み立ては「設定キー -> 権限の形」の
+# 対応を並列構造で見せる意図があり、要素数も数十なので内包表記に畳む利得が無い。
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "PIE", "RUF"]
+# RUF001-003 は全角括弧などを「紛らわしい文字」として弾く。
+# このリポジトリはコメント・メッセージを日本語で書くので意図した文字。
+ignore = ["RUF001", "RUF002", "RUF003"]

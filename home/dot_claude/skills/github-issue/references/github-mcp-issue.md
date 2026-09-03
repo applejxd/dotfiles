@@ -14,7 +14,7 @@
 ## ツール対応表（よく使うもの）
 
 | やりたいこと | MCP ツール | 主な引数 |
-|---|---|---|
+| --- | --- | --- |
 | issue 詳細を取る | `mcp__github__issue_read` (method=`get`) | `owner`, `repo`, `issue_number` |
 | コメント一覧 | `mcp__github__issue_read` (method=`get_comments`) | 同上 |
 | ラベル一覧 | `mcp__github__issue_read` (method=`get_labels`) | 同上 |

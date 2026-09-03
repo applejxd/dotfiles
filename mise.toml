@@ -3,6 +3,8 @@ gitleaks = "8.28.0"
 go = "latest"
 uv = "latest"
 shellcheck = "0.11.0"
+# pre-commit の Markdown Lint が使う。グローバル設定に頼るとクローン直後に無い。
+"npm:markdownlint-cli2" = "0.22.1"
 
 [tasks.dotfiles-update]
 description = "Update zinit itself and all zinit-managed plugins (run after `chezmoi update` on other PCs)"

@@ -19,7 +19,7 @@ CUDA 11 の拡張を 12 / 13 へ持っていく作業では、1 と 2 が同時�
 `torch/include/THC/` に残っているのは 2 ファイルだけで、中身は ATen への
 転送でしかない。
 
-```
+```text
 THC/THCDeviceUtils.cuh
 THC/THCAtomics.cuh   ->  #include <ATen/cuda/Atomic.cuh>
                          「torchvision が ATen のヘッダへ移行したら消す」
@@ -109,7 +109,7 @@ else:
 torch 2.x の `CUDAExtension` は `-std=c++17` を自分で足す。`setup.py` 側で
 `-std=c++14` を明示していると衝突するので消す。CUDA 12.8 では
 
-```
+```text
 There are no c++ version bounds defined for CUDA version 12.8
 ```
 
@@ -120,7 +120,7 @@ There are no c++ version bounds defined for CUDA version 12.8
 
 上限は toolkit の `crt/host_config.h` に書いてある。実測:
 
-```
+```text
 /usr/local/cuda-12.8/.../crt/host_config.h:  #if __GNUC__ > 14  -> error
 /usr/local/cuda-13.3/.../crt/host_config.h:  #if __GNUC__ > 15  -> error
 ```

@@ -29,7 +29,7 @@ from typing import Any
 
 # 同一ディレクトリの lib/ にあるヘルパを import
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
-from agent_compat import (  # noqa: E402
+from agent_compat import (
     emit_pretool_deny,
     get_command,
     get_path,
@@ -47,8 +47,8 @@ if not _AGENTS_DIR:
     _AGENTS_DIR = os.path.join(_CONFIG_HOME, "agents")
 sys.path.insert(0, _AGENTS_DIR)
 try:
-    import command_policy as _policy  # noqa: E402
-except Exception:  # noqa: BLE001 - 読み込めなくても hook 自体は動かす (fail-safe で block)
+    import command_policy as _policy
+except Exception:
     _policy = None  # type: ignore[assignment]
 
 # /tmp/ リテラル使用を検出するためのパターン群
@@ -169,7 +169,7 @@ def _classify_segment(head: str, tokens: list[str]) -> str:
         return "write" if any(t.startswith("-i") for t in tokens[1:]) else "read"
     if head == "curl":
         is_write = any(
-            t == "-O" or t.startswith("-o") or t.startswith("--output") or t == "--remote-name"
+            t in ("-O", "--remote-name") or t.startswith(("-o", "--output"))
             for t in tokens[1:]
         )
         return "write" if is_write else "unknown"

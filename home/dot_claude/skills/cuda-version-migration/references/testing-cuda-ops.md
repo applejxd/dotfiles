@@ -124,7 +124,7 @@ pytest に組み込む場合の要点は 4 つ。
 **わざと壊してテストが落ちることを確認する。** 実測（sm_86 のマシンで
 `TORCH_CUDA_ARCH_LIST=9.0` としてビルド）:
 
-```
+```text
 FAILED tests_ops/test_build_provenance.py::test_fatbin_contains_code_for_this_gpu
 FAILED tests_ops/test_ops_correctness.py::test_furthest_point_sampling[1-128-16]
 ...
@@ -133,7 +133,7 @@ FAILED tests_ops/test_ops_correctness.py::test_furthest_point_sampling[1-128-16]
 
 このとき、拡張のエラー処理が `exit(-1)` のままだと pytest ごと死ぬ。
 
-```
+```text
 # exit(-1) 版
 ...F                      <- 4 件目で消える。サマリも終了コードも残らない
 

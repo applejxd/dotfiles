@@ -70,7 +70,7 @@ pointnet2-ops = [
 
 `match-runtime = true` は**静的メタデータが必要**で、最初は次で弾かれた。
 
-```
+```text
 error: Extra build requirement `torch` was declared with `match-runtime = true`,
        but `pointnet2-ops` does not declare static metadata,
        making runtime-matching impossible
@@ -100,7 +100,7 @@ include-package-data = true
 
 3 のとき、実際に出力されたのはこれだった。
 
-```
+```text
 UserWarning: Unable to load pointnet2_ops cpp extension. JIT Compiling.
 ```
 
@@ -121,7 +121,7 @@ UserWarning: Unable to load pointnet2_ops cpp extension. JIT Compiling.
 
 ## 最終的な差分
 
-```
+```text
  pointnet2_ops_lib/pointnet2_ops/_ext-src/include/cuda_utils.h  | 16 +++---
  pointnet2_ops_lib/pointnet2_ops/_ext-src/include/utils.h       |  8 +--
  pointnet2_ops_lib/pointnet2_ops/_ext-src/src/ball_query.cpp    |  2 +-
@@ -234,7 +234,7 @@ minor version compatibility の範囲なので全テストが通っている。
 
 `mise.toml` の `[env]` は**シェルの環境変数を上書きする**。
 
-```
+```text
 $ TORCH_CUDA_ARCH_LIST=9.0 mise exec -- printenv TORCH_CUDA_ARCH_LIST
 8.6
 ```
@@ -245,7 +245,7 @@ $ TORCH_CUDA_ARCH_LIST=9.0 mise exec -- printenv TORCH_CUDA_ARCH_LIST
 
 ## 検証結果
 
-```
+```text
 $ mise exec -- uv run pytest tests_ops -q      # CUDA 12.8 / torch 2.11.0+cu128
 30 passed in 3.01s
 $ mise exec -- uv run pytest tests_ops -q      # CUDA 13.3 / torch 2.14.0+cu130
