@@ -301,6 +301,10 @@ read_deny_globs = [
   ".env",
   "~/.copilot/settings.json",
   "~/.copilot/config.json",
+  # エージェント CLI のランタイム設定。MCP サーバ定義の headers / env に
+  # PAT や API キーが平文で入りうる (`claude mcp add --env ...` など)。
+  # 設定ファイル自体は chezmoi 管理外なので、読めなくても運用に支障はない。
+  "~/.claude.json",
 ]
 
 # Claude のみ反映: Edit(...) を deny に追加
@@ -335,6 +339,9 @@ write_deny_globs = [
   "**/*credential*",
   "**/*password*",
   ".env",
+  "~/.copilot/settings.json",
+  "~/.copilot/config.json",
+  "~/.claude.json",
 ]
 
 # ---------------------------------------------------------------------------

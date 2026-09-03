@@ -171,6 +171,23 @@ world-readable な `passwd` / `group` は書き込み先のときだけ deny と
    中身を読まないため、`ls tests/fixtures/secrets` は通る。
    ただし確実な証拠 (`ls -la ~/.ssh`) は列挙でも deny のまま
 
+### エージェント CLI のランタイム設定も秘密扱いにする
+
+`~/.claude.json` と `~/.copilot/config.json` は CLI が自分で書き換えるランタイム
+設定で、chezmoi 管理外。MCP サーバ定義の `headers` / `env` に PAT や API キーが
+平文で入りうる (`claude mcp add --env GITHUB_PAT=...` など) ため、
+`[file] read_deny_globs` / `write_deny_globs` (Claude の `Read()` / `Edit()`) と
+`check_bash.py` (bash 経由の `cat` / `grep` / `jq`) の両方で deny する。
+
+同名でも `~/.claude/settings.json` や `~/.copilot/hooks/from-claude.json` は
+このリポジトリが生成する設定で秘密を含まないため、巻き込まない。
+`.claude.json` は basename 完全一致 (`_SENSITIVE_BASENAMES`)、
+`config.json` は名前が一般的すぎるのでディレクトリ込みの suffix 一致
+(`_CREDENTIAL_PATHS`) で判定する。
+
+MCP へトークンを渡すときは設定ファイルに直書きせず、環境変数や
+`gh auth token` のような外部の資格情報ストアを経由させる。
+
 ### 秘密の環境変数
 
 `check_secret_env_echo` は、値が**出力先へ流れる**ときだけ deny する。

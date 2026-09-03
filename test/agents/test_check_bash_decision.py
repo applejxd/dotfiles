@@ -2557,6 +2557,35 @@ def test_round13_secret_stores_are_denied(command):
 @pytest.mark.parametrize(
     "command",
     [
+        # MCP サーバ定義の headers / env に PAT が平文で入りうる
+        "cat ~/.claude.json",
+        "cat .claude.json",
+        "jq .mcpServers ~/.claude.json",
+        "cat ~/.copilot/config.json",
+    ],
+)
+def test_agent_runtime_config_is_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # 生成物・chezmoi 管理下の設定は秘密を含まないので巻き込まない
+        "cat ~/.claude/settings.json",
+        "cat ~/.copilot/hooks/from-claude.json",
+        "cat home/dot_copilot/hooks/from-claude.json.tmpl",
+    ],
+)
+def test_agent_settings_are_not_denied(command):
+    decision, reason = run_hook(command)
+    assert decision is None, f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
         "cat ~/.config/nvim/init.lua",
         "cat ~/.gitconfig",
         "time make test",

@@ -92,6 +92,9 @@ def _ask_patterns() -> list[str]:
 _SENSITIVE_BASENAMES = {
     ".env", ".netrc", ".pypirc", ".npmrc", "credentials", "key.txt",
     "keys.txt", "shadow", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+    # Claude Code のランタイム設定。MCP サーバ定義の headers / env に PAT や
+    # API キーが平文で入りうる (`claude mcp add --env ...` など)。
+    ".claude.json",
 }
 _SENSITIVE_BASENAME_PREFIXES = ("id_rsa", "id_dsa", "id_ecdsa", "id_ed25519")
 _SENSITIVE_SUFFIXES = (
@@ -137,7 +140,10 @@ _HISTORY_BASENAMES = {
 _CREDENTIAL_PATHS = ("/.config/gh/hosts.yml", "/.docker/config.json",
                      "/.git-credentials", "/.kube/config",
                      "/.config/gcloud/credentials.db", "/.azure/msal_token_cache.json",
-                     "/.terraform.d/credentials.tfrc.json")
+                     "/.terraform.d/credentials.tfrc.json",
+                     # Copilot CLI のランタイム設定 (basename が config.json で
+                     # 一般的すぎるため、ディレクトリ込みで指定する)。
+                     "/.copilot/config.json")
 
 # grep 系は最初の非フラグ引数が検索語なのでパス判定から除外する
 _PATTERN_FIRST_COMMANDS = {"grep", "rg", "ag", "ack", "egrep", "fgrep", "sed",
