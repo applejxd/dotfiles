@@ -13,21 +13,23 @@
 set -eu
 
 completions_dir="${HOME}/.zinit/completions"
-[ -d "$completions_dir" ] || exit 0
 
 removed=0
-for link in "$completions_dir"/*; do
-    [ -L "$link" ] || continue
-    case "$(readlink "$link")" in
-    *ohmyzsh---ohmyzsh*)
-        rm -f "$link"
-        removed=$((removed + 1))
-        ;;
-    esac
-done
-
-if [ "$removed" -gt 0 ]; then
-    # fpath 上のファイル数が変わるので compinit のダンプを作り直させる
-    rm -f "${HOME}"/.zcompdump "${HOME}"/.zcompdump.*
+if [ -d "$completions_dir" ]; then
+    for link in "$completions_dir"/*; do
+        [ -L "$link" ] || continue
+        case "$(readlink "$link")" in
+        *ohmyzsh---ohmyzsh*)
+            rm -f "$link"
+            removed=$((removed + 1))
+            ;;
+        esac
+    done
     echo "removed ${removed} ohmyzsh completion(s) from ${completions_dir}"
 fi
+
+# fpath の内容が変わるので compinit のダンプを作り直させる。
+# 名前は環境によって .zcompdump / .zcompdump.<host>.<pid> / .zcompdump-<host>-<ver>
+# / .zcompdump.zwc と揺れるため、まとめて消す (次回シェル起動で再生成される)。
+zdotdir="${ZDOTDIR:-$HOME}"
+rm -f "${zdotdir}"/.zcompdump "${zdotdir}"/.zcompdump.* "${zdotdir}"/.zcompdump-*

@@ -79,8 +79,18 @@ if [[ -f ~/.local/share/zsh/site-functions/_mise ]]; then
 fi
 
 # (0b) compinit - 補完の基盤 (650msかかるため遅延)
+# rupa/z は主関数を `_z` という補完関数の名前空間 (_*) に置いている。
+# fpath に別の `_z` (zsh-z 系の補完ファイル) があると compinit がそちらを
+# autoload 登録してしまい、`_z` が壊れる:
+#   - ファイルがあれば     -> `_z:39: command not found: zshz`
+#   - ファイルを消した後は -> `_z_precmd:1: _z: function definition file not found`
+# compinit 後に z.sh を読み直して `_z` を必ず実体の関数に戻す (再読込は冪等)。
+function zshrc-reload-z() {
+    [[ -r "${HOME}/.z/z.sh" ]] || return 0
+    source "${HOME}/.z/z.sh"
+}
 zinit ice wait'0b' lucid \
-    atload'zicompinit; zicdreplay'
+    atload'zicompinit; zicdreplay; zshrc-reload-z'
 zinit light zdharma-continuum/null
 
 # (0c) fzf-tab (必ず autosuggestions / fast-syntax-highlighting の前に読み込む)
