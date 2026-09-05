@@ -109,7 +109,11 @@ zinit light zsh-users/zsh-autosuggestions
 #---------------#
 
 # git
-zinit ice wait'0e' lucid pick"lib/git.zsh"
+# ohmyzsh は lib/git.zsh のみ利用する。
+# nocompletions を付けないと zinit が ohmyzsh 配下の _* を全て
+# ~/.zinit/completions/ へリンクしてしまい、未ロードのプラグイン用補完が
+# fpath に混ざる (例: zsh-z 用の _z が `_z:39: command not found: zshz` を出す)。
+zinit ice wait'0e' lucid blockf nocompletions pick"lib/git.zsh"
 zinit light ohmyzsh/ohmyzsh
 
 #------#

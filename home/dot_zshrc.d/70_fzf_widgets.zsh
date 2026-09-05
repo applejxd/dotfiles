@@ -3,7 +3,8 @@
 
 # z-fzf, emacs-like key-bindings
 # see https://github.com/junegunn/fzf/wiki/examples#z
-if command -v "_z" >/dev/null 2>&1; then
+# `_z` は補完関数の名前空間 (_*) と衝突するため、rupa/z の実体で判定する
+if [ -r "${HOME}/.z/z.sh" ]; then
     function z-fzf() {
         local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
         if [[ -n "$selected_dir" ]]; then

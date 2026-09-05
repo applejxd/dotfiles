@@ -46,13 +46,17 @@ fi
 # Install #
 #---------#
 
-# z
-if ! command -v "z" >/dev/null 2>&1 && [ ! -e "${HOME}/.z" ]; then
-    git clone --depth 1 https://github.com/rupa/z.git "${HOME}/.z"
+# z (rupa/z)
+# `command -v z` は無関係な z コマンドでも真になるため、z.sh の有無で判定する
+Z_DIR="${HOME}/.z"
+if [ ! -e "$Z_DIR" ]; then
+    git clone --depth 1 https://github.com/rupa/z.git "$Z_DIR"
 fi
-export _Z_DATA="${HOME}/.z/.z"
-# shellcheck source=/dev/null
-source "${HOME}/.z/z.sh"
+export _Z_DATA="${Z_DIR}/.z"
+if [ -r "${Z_DIR}/z.sh" ]; then
+    # shellcheck source=/dev/null
+    source "${Z_DIR}/z.sh"
+fi
 
 # iceberg theme for vim
 if [[ ! -f "${HOME}/.vim/colors/iceberg.vim" ]]; then

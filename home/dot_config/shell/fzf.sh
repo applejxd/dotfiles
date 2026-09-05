@@ -38,7 +38,7 @@ fi
 # wrapper #
 #---------#
 
-if command -v "_z" >/dev/null 2>&1; then
+if [ -r "${HOME}/.z/z.sh" ]; then
     function xf() {
         local selected_dir
         selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
