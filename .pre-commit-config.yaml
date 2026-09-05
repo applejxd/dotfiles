@@ -28,6 +28,16 @@ repos:
         language: system
         files: \.(md|markdown)$
 
+      # SKILL.md の frontmatter が壊れても CLI は起動時に
+      # "Failed to load 1 skill." としか言わないので、ここで先に弾く。
+      - id: skill-frontmatter-local
+        name: Skill frontmatter check
+        entry: >-
+          mise exec -- uv run --with pyyaml --no-project
+          python scripts/agents/validate_skills.py
+        language: system
+        files: ^home/[^/]+/skills/[^/]+/SKILL\.md$
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

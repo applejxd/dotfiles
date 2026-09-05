@@ -65,6 +65,27 @@ winget install --id Python.Python.3.12 --exact --silent `
 chezmoi apply
 ```
 
+### 7. CLI 起動時に `Failed to load 1 skill.` と出る
+
+SKILL.md の YAML frontmatter が壊れていると、CLI はそのスキルを黙って読み飛ばす。
+バナーには件数しか出ないので、どのファイルかは CLI に聞く。
+
+```bash
+copilot skill list          # 末尾に "The following skills failed to load:" が出る
+```
+
+リポジトリ側で先に弾くには、pre-commit と同じ検証を全ファイルに掛ける。
+
+```bash
+uv run --with pyyaml --no-project python scripts/agents/validate_skills.py
+```
+
+よくある原因は `description` を引用符なしで書いた場合の以下 2 つ。どちらも
+`description: "..."` と二重引用符で囲めば解消する。
+
+- `undefined symbol: _ZNK3c10` のような **コロン+空白**（mapping value と解釈されパースエラー）
+- `use # for comments` のような **空白+`#`**（以降がコメントとして無言で捨てられる）
+
 ## ログの確認
 
 ```bash

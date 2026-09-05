@@ -13,6 +13,7 @@ Windows / Ubuntu / WSL / macOS を対象に、設定ファイルと初期化ス�
 
 - Setup: `mise install && uv sync && uv run pre-commit install`
 - Validation: `uv run pre-commit run --all-files`
+- Agent tests: `uv run --with pytest --no-project pytest test/agents/ -q`
 - Shell check: `mise exec shellcheck -- installer/**/*.sh`
 - Secret scan: `mise exec gitleaks -- detect --source .`
 
@@ -34,6 +35,8 @@ Windows / Ubuntu / WSL / macOS を対象に、設定ファイルと初期化ス�
 - 実行順は番号で管理し、既存の順序体系を崩さない
 - `.tmpl` は OS 分岐や秘密情報・テンプレート変数が必要な場合のみ使う
 - テンプレート内の変数確認は `{{- if and (hasKey . "var") .var }}` の形を優先する
+- SKILL.md の frontmatter は `name` をディレクトリ名と一致させ、`:` や `#` を含む
+  `description` は二重引用符で囲む（囲まないと CLI がスキルを黙って読み飛ばす）
 
 ## Architecture
 
