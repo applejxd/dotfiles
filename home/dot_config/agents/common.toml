@@ -505,12 +505,3 @@ claude_matcher = "Edit|Write"
 copilot_event = "PostToolUse"
 copilot_matcher = "^(Edit|Write|edit|create)$"
 timeout_sec = 30
-
-[[hooks]]
-id = "update-adr-on-stop"
-script = "update-adr-on-stop.py"
-runner = "python3"
-purpose = "ターン終了時に ADR 更新の要否を確認する"
-claude_event = "Stop"
-copilot_event = "Stop"
-timeout_sec = 60

@@ -192,10 +192,22 @@ def test_claude_timeout_is_emitted():
 
 
 def test_claude_matcher_omitted_when_not_declared():
-    hooks = gen.build_claude_hooks(COMMON)
-    stop_entries = hooks.get("Stop", [])
-    assert stop_entries, "Stop hook が生成されていない"
-    for entry in stop_entries:
+    # matcher 非対応イベント (Stop 等) の hook は common.toml に無いこともあるので
+    # 合成した設定で挙動を確認する
+    synthetic = {
+        "hooks": [
+            {
+                "id": "matcherless",
+                "script": "check_bash.py",
+                "runner": "python3",
+                "claude_event": "Stop",
+                "timeout_sec": 30,
+            }
+        ]
+    }
+    entries = gen.build_claude_hooks(synthetic)["Stop"]
+    assert entries
+    for entry in entries:
         assert "matcher" not in entry
 
 
@@ -214,7 +226,7 @@ def test_claude_settings_merge_regenerates_managed_hooks():
     merged = gen.merge_claude_settings({"hooks": {"PreToolUse": [orphan]}}, COMMON)
     expected = gen.build_claude_hooks(COMMON)
     assert merged["hooks"]["PreToolUse"] == expected["PreToolUse"] + [orphan]
-    assert merged["hooks"]["Stop"] == expected["Stop"]
+    assert merged["hooks"]["PostToolUse"] == expected["PostToolUse"]
 
 
 def test_stale_managed_hook_is_replaced_not_duplicated():

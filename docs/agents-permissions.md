@@ -19,7 +19,6 @@ home/dot_claude/hooks/
     executable_redirect-tmp.py               /tmp 利用を ./.tmp へ誘導
     executable_markdownlint.sh               Markdown の lint
     executable_format-file.sh                拡張子別のフォーマッタ実行
-    executable_update-adr-on-stop.py         ターン終了時に ADR 更新を促す
 home/dot_copilot/
     hooks/from-claude.json.tmpl              ~/.copilot/hooks/from-claude.json を生成
     modify_private_settings.json.py.tmpl     ~/.copilot/settings.json を更新

@@ -40,7 +40,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "python /home/user/.claude/hooks/update-adr-on-stop.py"
+              "command": "python /home/user/.claude/hooks/notify-on-stop.py"
             }
           ]
         }
@@ -78,7 +78,7 @@
       "Stop": [
         {
           "type": "command",
-          "bash": "python $HOME/.claude/hooks/update-adr-on-stop.py",
+          "bash": "python $HOME/.claude/hooks/notify-on-stop.py",
           "timeoutSec": 60
         }
       ]

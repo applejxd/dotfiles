@@ -89,8 +89,8 @@
 
 | | 設定ソース | 実際に bind されているもの |
 | --- | --- | --- |
-| Claude Code | `home/dot_claude/modify_settings.json.py.tmpl`（`permissions` と `hooks` を生成、他キーは保持） | `~/.claude/settings.json` のキー: `enabledPlugins` / `env` / `hooks` / `includeCoAuthoredBy` / `permissions`。hook イベント: `PreToolUse` / `PostToolUse` / `Stop` |
-| Copilot CLI | `home/dot_copilot/hooks/from-claude.json.tmpl`（common.toml から生成）、`modify_private_settings.json.py.tmpl`、`modify_private_permissions-config.json.py.tmpl` | `PreToolUse`（`check_bash.py` matcher=`^(Bash\|bash)$`、`redirect-tmp.py` matcher=`^(Bash\|bash\|Read\|view\|Write\|create\|Edit\|edit)$`）、`PostToolUse`（`markdownlint.sh` / `format-file.sh`）、`Stop`（`update-adr-on-stop.py`） |
+| Claude Code | `home/dot_claude/modify_settings.json.py.tmpl`（`permissions` と `hooks` を生成、他キーは保持） | `~/.claude/settings.json` のキー: `enabledPlugins` / `env` / `hooks` / `includeCoAuthoredBy` / `permissions`。hook イベント: `PreToolUse` / `PostToolUse` |
+| Copilot CLI | `home/dot_copilot/hooks/from-claude.json.tmpl`（common.toml から生成）、`modify_private_settings.json.py.tmpl`、`modify_private_permissions-config.json.py.tmpl` | `PreToolUse`（`check_bash.py` matcher=`^(Bash\|bash)$`、`redirect-tmp.py` matcher=`^(Bash\|bash\|Read\|view\|Write\|create\|Edit\|edit)$`）、`PostToolUse`（`markdownlint.sh` / `format-file.sh`） |
 | Codex CLI | `home/dot_codex/modify_config.toml`、`home/dot_codex/rules/*.rules` | `approval_policy = "untrusted"`、`sandbox_mode = "read-only"`、`web_search = "live"`、`personality = "pragmatic"`、`shell_environment_policy`（PATH/HOME/USER のみ）、rules 4 ファイル |
 
 権限と hook の単一ソースは `home/dot_config/agents/common.toml`。
