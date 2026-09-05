@@ -5,6 +5,24 @@
 - [設定ディレクトリ / settings.json 仕様](https://docs.github.com/ja/copilot/reference/copilot-cli-reference/cli-config-dir-reference#configuration-file-settings)
 - `includeCoAuthoredBy=false` を chezmoi で強制し、Copilot が作成するコミットへ共同著者 trailer を追加しない
 
+## `trustedFolders` が `chezmoi diff` に出続ける
+
+`common.toml` の `trusted_folders` は `modify_private_settings.json.py.tmpl` が
+`settings.json` の `trustedFolders` へ書き込む。ところが CLI 側はこのキーを
+**読むだけで書き戻さない**ため、`copilot` を 1 回でも起動すると
+`settings.json` の再シリアライズで消える（他のキーは残る）。
+
+```bash
+chezmoi apply ~/.copilot/settings.json   # trustedFolders が入る
+copilot mcp get deepwiki                 # これだけで消える
+```
+
+CLI は自前のフォルダ信頼ストアを先に見て、無い場合に `trustedFolders` を
+fallback として参照する実装になっている（1.0.84-1 時点）。したがって
+
+- `chezmoi diff` にこの差分が出るのは**想定内のドリフト**で、追跡しなくてよい
+- キー自体は fallback として有効なので `common.toml` からは外さない
+
 ## デフォルトのスラッシュコマンド
 
 [マニュアル](https://docs.github.com/ja/copilot/reference/cli-command-reference#slash-commands-in-the-interactive-interface)
