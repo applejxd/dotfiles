@@ -527,6 +527,10 @@ Claude には「許可した以外を拒否する」表現手段が無い。
 
 - hook スクリプトの実体は `~/.claude/hooks/` に 1 つだけ置き、Copilot からも
   同じファイルを呼ぶ (`$HOME/.claude/hooks/...`)
+- Copilot の起動キーは Windows では `powershell`、Linux / macOS / WSL では
+  `bash`。パスは引用し、Windows の Python hook は `py -3 -X utf8` で起動する。
+  反映・切り分け手順は [Windows の hook 起動](../home/dot_copilot/README.md#windows-の-hook-起動)
+  を参照
 - `hooks` キーは Orca などの**外部ツールも追記する共有領域**なので、apply では
   `~/.claude/hooks/` 配下を起動しているエントリだけを差し替える (後述)
 - CLI UI で手動追加した hook も `~/.claude/hooks/` を指していなければ残るが、

@@ -60,14 +60,20 @@ def hook_command(
     """hook の起動コマンド文字列を組み立てる。
 
     expand_home=True  -> "/home/user/.claude/hooks/x.py" (Claude 用の絶対パス)
-    expand_home=False -> "$HOME/.claude/hooks/x.py"      (Copilot 用)
+    expand_home=False -> '"$HOME/.claude/hooks/x.py"'    (Copilot 用、空白を保護)
     """
     runner = hook.get("runner", "python")
     if runner == "python3" and (platform or os.name) == "nt":
         runner = "py -3"
+        if not expand_home:
+            # Windows の既定コードページでは hook の日本語 JSON が壊れる。
+            runner += " -X utf8"
     script = hook["script"]
     base = expand_user(HOOKS_DIR) if expand_home else HOOKS_DIR.replace("~", "$HOME", 1)
-    return f"{runner} {base}/{script}"
+    path = f"{base}/{script}"
+    if not expand_home:
+        path = f'"{path}"'
+    return f"{runner} {path}"
 
 
 def is_managed_hook_command(command: Any) -> bool:
@@ -192,6 +198,7 @@ def build_copilot_hooks(
 ) -> dict[str, Any]:
     """Copilot CLI の ~/.copilot/hooks/*.json 用 hooks (フラット構造) を組み立てる。"""
     hooks: dict[str, list[dict[str, Any]]] = {}
+    command_key = "powershell" if (platform or os.name) == "nt" else "bash"
     for hook in common.get("hooks", []):
         event = hook.get("copilot_event")
         if not event:
@@ -201,7 +208,7 @@ def build_copilot_hooks(
         if matcher:
             entry["matcher"] = matcher
         entry["type"] = "command"
-        entry["bash"] = hook_command(
+        entry[command_key] = hook_command(
             hook,
             expand_home=False,
             platform=platform,

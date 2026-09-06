@@ -6,9 +6,16 @@ Run with: ``uv run --with pytest --no-project pytest test/agents/`` or
 
 from __future__ import annotations
 
+import json
+import os
+import shlex
+import shutil
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
@@ -82,11 +89,11 @@ def test_windows_python_hooks_use_latest_python_3():
         for cmd in entry["hooks"]
     ]
     commands.extend(
-        entry["bash"]
+        entry["powershell"]
         for entries in copilot["hooks"].values()
         for entry in entries
     )
-    python_commands = [command for command in commands if command.endswith(".py")]
+    python_commands = [command for command in commands if command.rstrip('"').endswith(".py")]
     assert python_commands
     assert all(command.startswith("py -3 ") for command in python_commands)
 
@@ -387,20 +394,122 @@ def test_copilot_matchers_are_anchored():
             )
 
 
-def test_copilot_hook_uses_home_variable():
-    out = gen.build_copilot_hooks(COMMON)
+@pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
+def test_copilot_hook_uses_quoted_home_variable(platform, command_key):
+    out = gen.build_copilot_hooks(COMMON, platform=platform)
     for entries in out["hooks"].values():
         for entry in entries:
-            assert "$HOME/.claude/hooks/" in entry["bash"]
+            assert '"$HOME/.claude/hooks/' in entry[command_key]
+            assert entry[command_key].endswith('"')
 
 
-def test_copilot_hook_entry_keys():
-    out = gen.build_copilot_hooks(COMMON)
+@pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
+def test_copilot_hook_entry_keys(platform, command_key):
+    out = gen.build_copilot_hooks(COMMON, platform=platform)
     for entries in out["hooks"].values():
         for entry in entries:
-            assert set(entry) <= {"matcher", "type", "bash", "timeoutSec"}
+            assert set(entry) == {"matcher", "type", command_key, "timeoutSec"}
             assert entry["type"] == "command"
             assert isinstance(entry["timeoutSec"], int)
+
+
+@pytest.mark.parametrize(
+    ("platform", "command_key", "python_runner"),
+    [("posix", "bash", "python3"), ("nt", "powershell", "py -3 -X utf8")],
+)
+def test_copilot_commands_preserve_hooks_and_metadata(platform, command_key, python_runner):
+    out = gen.build_copilot_hooks(COMMON, platform=platform)
+    declared = [hook for hook in COMMON["hooks"] if hook.get("copilot_event")]
+    assert sum(len(entries) for entries in out["hooks"].values()) == len(declared)
+    for hook in declared:
+        runner = python_runner if hook["runner"] == "python3" else hook["runner"]
+        assert {
+            "matcher": hook["copilot_matcher"],
+            "type": "command",
+            command_key: f'{runner} "$HOME/.claude/hooks/{hook["script"]}"',
+            "timeoutSec": hook["timeout_sec"],
+        } in out["hooks"][hook["copilot_event"]]
+
+
+def test_copilot_defaults_to_host_platform():
+    assert gen.build_copilot_hooks(COMMON) == gen.build_copilot_hooks(COMMON, platform=os.name)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix shell execution test")
+@pytest.mark.parametrize(
+    ("hook_id", "command", "decision"),
+    [
+        ("check_bash", "git status", None),
+        ("check_bash", "git push", "deny"),
+        ("redirect-tmp", "cat /tmp/input.txt", None),
+        ("redirect-tmp", "echo hello > /tmp/output.txt", "deny"),
+    ],
+)
+def test_copilot_python_hooks_run_with_spaces_in_home(tmp_path, hook_id, command, decision):
+    home = tmp_path / "home with spaces"
+    hooks_dir = home / ".claude" / "hooks"
+    (hooks_dir / "lib").mkdir(parents=True)
+    hook = next(hook for hook in COMMON["hooks"] if hook["id"] == hook_id)
+    shutil.copyfile(HOOK_SRC_DIR / f"executable_{hook['script']}", hooks_dir / hook["script"])
+    shutil.copyfile(HOOK_SRC_DIR / "lib" / "agent_compat.py", hooks_dir / "lib" / "agent_compat.py")
+    out = gen.build_copilot_hooks({"hooks": [hook]}, platform="posix")
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "bash",
+        "tool_input": {"command": command},
+        "cwd": str(ROOT),
+    }
+    result = subprocess.run(
+        ["bash", "-c", out["hooks"]["PreToolUse"][0]["bash"]],
+        input=json.dumps(payload).encode("utf-8"),
+        capture_output=True,
+        timeout=30,
+        env={**os.environ, "HOME": str(home), "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent)},
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
+    assert result.stderr == b""
+    if decision is None:
+        assert result.stdout == b""
+    else:
+        assert json.loads(result.stdout.decode("utf-8"))["permissionDecision"] == decision
+
+
+@pytest.mark.parametrize(
+    ("hook_id", "command"),
+    [("check_bash", "git push"), ("redirect-tmp", "echo hello > /tmp/output.txt")],
+)
+def test_windows_python_hook_invocation_emits_utf8(hook_id, command):
+    hook = next(hook for hook in COMMON["hooks"] if hook["id"] == hook_id)
+    out = gen.build_copilot_hooks({"hooks": [hook]}, platform="nt")
+    invocation = shlex.split(out["hooks"]["PreToolUse"][0]["powershell"])
+    # PowerShell / py 自体は実行せず、生成した Python オプションと実スクリプトを検証。
+    assert invocation[:2] == ["py", "-3"]
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "bash",
+        "tool_input": {"command": command},
+        "cwd": str(ROOT),
+    }
+    env = {
+        **os.environ,
+        "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent),
+        "LC_ALL": "C",
+        "PYTHONCOERCECLOCALE": "0",
+        "PYTHONUTF8": "0",
+    }
+    env.pop("PYTHONIOENCODING", None)
+    result = subprocess.run(
+        [sys.executable, *invocation[2:-1], str(HOOK_SRC_DIR / f"executable_{hook['script']}")],
+        input=json.dumps(payload).encode("utf-8"),
+        capture_output=True,
+        timeout=30,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
+    assert result.stderr == b""
+    output = json.loads(result.stdout.decode("utf-8"))
+    assert output["permissionDecision"] == "deny"
+    assert not output["permissionDecisionReason"].isascii()
 
 
 def test_copilot_hooks_ignore_existing_content():
@@ -418,12 +527,13 @@ def test_copilot_settings_disable_co_author_trailer():
 # 両 CLI の整合性
 # ---------------------------------------------------------------------------
 
-def test_both_clis_reference_the_same_scripts():
-    claude = gen.build_claude_hooks(COMMON)
-    copilot = gen.build_copilot_hooks(COMMON)
+@pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
+def test_both_clis_reference_the_same_scripts(platform, command_key):
+    claude = gen.build_claude_hooks(COMMON, platform=platform)
+    copilot = gen.build_copilot_hooks(COMMON, platform=platform)
 
     def scripts(commands):
-        return {c.rsplit("/", 1)[-1] for c in commands}
+        return {c.rstrip('"').rsplit("/", 1)[-1] for c in commands}
 
     claude_scripts = scripts(
         cmd["command"]
@@ -432,7 +542,7 @@ def test_both_clis_reference_the_same_scripts():
         for cmd in entry["hooks"]
     )
     copilot_scripts = scripts(
-        entry["bash"] for entries in copilot["hooks"].values() for entry in entries
+        entry[command_key] for entries in copilot["hooks"].values() for entry in entries
     )
     assert claude_scripts == copilot_scripts
 
