@@ -50,12 +50,14 @@ if ($skillText -notmatch '(?m)^name:\s*herdr\s*$') {
 }
 
 New-Item -ItemType Directory -Path $skillDir -Force | Out-Null
-$skillTempPath = Join-Path $skillDir ".$([System.Guid]::NewGuid().ToString('N')).tmp"
+$skillUpdateId = [System.Guid]::NewGuid().ToString('N')
+$skillTempPath = Join-Path $skillDir ".$skillUpdateId.tmp"
+$skillBackupPath = Join-Path $skillDir ".$skillUpdateId.bak"
 $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
 try {
   [System.IO.File]::WriteAllText($skillTempPath, $skillText, $utf8WithoutBom)
   if (Test-Path -LiteralPath $skillPath -PathType Leaf) {
-    [System.IO.File]::Replace($skillTempPath, $skillPath, $null)
+    [System.IO.File]::Replace($skillTempPath, $skillPath, $skillBackupPath)
   }
   else {
     [System.IO.File]::Move($skillTempPath, $skillPath)
@@ -64,5 +66,8 @@ try {
 finally {
   if (Test-Path -LiteralPath $skillTempPath) {
     Remove-Item -LiteralPath $skillTempPath -Force
+  }
+  if (Test-Path -LiteralPath $skillBackupPath) {
+    Remove-Item -LiteralPath $skillBackupPath -Force
   }
 }
