@@ -17,8 +17,10 @@ keypirinha-stub = { git = "https://github.com/applejxd/keypirinha-stub.git" }
 # upstream 由来のコードは対象外にする。
 # home/AppData は Keyhac / Keypirinha の同梱物、
 # home/dot_config/gdb は Eigen / OpenCV 付属の pretty printer。
+# modify_json.py.tmpl は Go テンプレート展開後に Python として実行する。
 extend-exclude = [
   "home/AppData",
+  "home/.chezmoitemplates/modify_json.py.tmpl",
   "home/dot_config/gdb",
 ]
 # 既存コードの実測に合わせる (最長 109 桁、100 桁超は 7 行だけ)。

@@ -5,8 +5,10 @@
 # Unix のみ
 .chezmoiscripts/000_unix/
 .chezmoiscripts/000_unix/**
-.config/
-.config/**
+.config/*
+# AI CLI の共通ポリシーは Windows native でも必要
+!.config/agents/
+!.config/agents/**
 .config/tmuxinator/
 .config/tmuxinator/**
 .bash_profile
