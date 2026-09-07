@@ -3,6 +3,9 @@
     Install development tools
 #>
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 # Self-elevate the script if required
 # see https://www.chezmoi.io/user-guide/machines/windows/#run-a-powershell-script-as-admin-on-windows
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()  # Get current user identity
@@ -16,8 +19,11 @@ if (-not $isElevated) {
     $baseArguments = @('-File', $scriptPath)
     $allArguments = $baseArguments + $MyInvocation.UnboundArguments
 
-    Start-Process -Wait -FilePath PowerShell.exe -Verb Runas -ArgumentList $allArguments
-    Exit
+    $process = Start-Process -Wait -PassThru -FilePath PowerShell.exe -Verb Runas -ArgumentList $allArguments
+    if ($process.ExitCode -ne 0) {
+      throw "Elevated development setup failed with exit code $($process.ExitCode)"
+    }
+    Exit 0
   }
 }
 
@@ -28,8 +34,9 @@ Function winst {
   )
   if (-not (Get-Command winget -EA SilentlyContinue)) { throw "winget (App Installer) not found" }
 
-  $json = winget list --id $PackageId --exact --output json 2>$null
-  $installed = $json -and ($json.Trim() -ne '[]')
+  & winget list --id $PackageId --exact --disable-interactivity `
+      --accept-source-agreements | Out-Null
+  $installed = $LASTEXITCODE -eq 0
 
   if (-not $installed) {
     Write-Host "Installing $PackageId..."
@@ -62,6 +69,5 @@ winst Python.Python.3.10
 winst Python.Python.3.11
 winst Python.Python.3.12
 
-# GPU
-winst Nvidia.GeForceNow
+# GPU development toolkit
 winst Nvidia.CUDA

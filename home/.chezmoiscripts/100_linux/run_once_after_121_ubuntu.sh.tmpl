@@ -61,7 +61,7 @@ echo "✅ 完了：ユーティリティツールをインストール/更新し
 {{-   end }}
 {{- end }}
 
-{{- if eq .chezmoi.username "applejxd" }}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 echo "ClamAV をインストール/更新します..."
 
 echo "Installing security tools..." >&2

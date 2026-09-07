@@ -8,7 +8,7 @@ if [[ ! -x "$herdr_path" ]]; then
     exit 1
 fi
 
-{{- if eq .chezmoi.username "applejxd" }}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 "$herdr_path" integration install copilot
 {{- else }}
 "$herdr_path" integration install claude

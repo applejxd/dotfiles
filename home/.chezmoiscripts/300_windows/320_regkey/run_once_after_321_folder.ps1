@@ -7,24 +7,6 @@
     - The classic context menu tweak uses reg.exe for the unnamed default value stability.
 #>
 
-# Self-elevate the script if required
-# see https://www.chezmoi.io/user-guide/machines/windows/#run-a-powershell-script-as-admin-on-windows
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()  # Get current user identity
-$principal = [Security.Principal.WindowsPrincipal] $identity  # Create a principal object
-$adminRole = [Security.Principal.WindowsBuiltInRole] 'Administrator' # Define the admin role
-$isElevated = $principal.IsInRole($adminRole) # Check if the user has the admin role
-if (-not $isElevated) {
-  $buildNumber = [int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber)
-  if ($buildNumber -ge 6000) {  # Windows Vista / Windows Server 2008 or later
-    $scriptPath = $MyInvocation.MyCommand.Path
-    $baseArguments = @('-File', $scriptPath)
-    $allArguments = $baseArguments + $MyInvocation.UnboundArguments
-
-    Start-Process -Wait -FilePath PowerShell.exe -Verb Runas -ArgumentList $allArguments
-    Exit
-  }
-}
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -38,18 +20,40 @@ $settings = @(
   @{ Path = "$regRoot\Advanced";     Name = "LaunchTo";    Value = 1; Comment = "エクスプローラーの開始場所: PC" }
 )
 
+$needsRestart = $false
 foreach ($s in $settings) {
-  New-Item -Path $s.Path -Force | Out-Null
-
-  # 型を明示して作る（既に存在する場合も Force で上書き）
-  New-ItemProperty -Path $s.Path -Name $s.Name -PropertyType DWord -Value $s.Value -Force | Out-Null
+  if (-not (Test-Path -LiteralPath $s.Path)) {
+    $needsRestart = $true
+    continue
+  }
+  $currentValue = Get-ItemPropertyValue -LiteralPath $s.Path -Name $s.Name -ErrorAction SilentlyContinue
+  if ($currentValue -ne $s.Value) {
+    $needsRestart = $true
+  }
 }
 
 # --- Classic context menu (unnamed default value) ---
 $clsid = '{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}'
-$inproc = "HKCU\Software\Classes\CLSID\$clsid\InprocServer32"
-& reg.exe add $inproc /f /ve | Out-Null
+$inproc = "HKCU:\Software\Classes\CLSID\$clsid\InprocServer32"
+$inprocItem = Get-Item -LiteralPath $inproc -ErrorAction SilentlyContinue
+if ($null -eq $inprocItem -or $inprocItem.GetValue('') -ne '') {
+  $needsRestart = $true
+}
 
-# --- Apply by restarting Explorer ---
+if (-not $needsRestart) {
+  exit 0
+}
+
+foreach ($s in $settings) {
+  if (-not (Test-Path -LiteralPath $s.Path)) {
+    New-Item -Path $s.Path -Force | Out-Null
+  }
+  New-ItemProperty -Path $s.Path -Name $s.Name -PropertyType DWord -Value $s.Value -Force | Out-Null
+}
+if (-not (Test-Path -LiteralPath $inproc)) {
+  New-Item -Path $inproc -Force | Out-Null
+}
+Set-Item -LiteralPath $inproc -Value ''
+
 Stop-Process -Name explorer -Force
 Start-Process explorer.exe

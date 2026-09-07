@@ -5,23 +5,8 @@
     Install keypirinha via chocolatey
 #>
 
-# Self-elevate the script if required
-# see https://www.chezmoi.io/user-guide/machines/windows/#run-a-powershell-script-as-admin-on-windows
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()  # Get current user identity
-$principal = [Security.Principal.WindowsPrincipal] $identity  # Create a principal object
-$adminRole = [Security.Principal.WindowsBuiltInRole] 'Administrator' # Define the admin role
-$isElevated = $principal.IsInRole($adminRole) # Check if the user has the admin role
-if (-not $isElevated) {
-  $buildNumber = [int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber)
-  if ($buildNumber -ge 6000) {  # Windows Vista / Windows Server 2008 or later
-    $scriptPath = $MyInvocation.MyCommand.Path
-    $baseArguments = @('-File', $scriptPath)
-    $allArguments = $baseArguments + $MyInvocation.UnboundArguments
-
-    Start-Process -Wait -FilePath PowerShell.exe -Verb Runas -ArgumentList $allArguments
-    Exit
-  }
-}
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
 # ----- #
 # NuGet #
@@ -29,27 +14,32 @@ if (-not $isElevated) {
 
 # Windows PowerShell 5.x の場合のみ NuGet プロバイダーを導入・PowerShell 7 では失敗するためスキップ
 if ( ($PSVersionTable.PSEdition -eq 'Desktop') -or ($PSVersionTable.PSVersion.Major -lt 6) ) {
-  # WinPS5.x は古い暗号プロトコルを使っており、そのままだと失敗することが多い
-  # TLS1.2 を強制して NuGet Provider の取得を成功させる
-  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  # NuGet プロバイダーを導入（パッケージ管理に必要）
-  Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser
+  $nugetProvider = Get-PackageProvider -Name NuGet -ListAvailable -ErrorAction SilentlyContinue |
+      Sort-Object Version -Descending | Select-Object -First 1
+  if (-not $nugetProvider -or $nugetProvider.Version -lt [version]'2.8.5.201') {
+    # WinPS5.x は古い暗号プロトコルを使っており、そのままだと失敗することが多い
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser
+  }
 }
 # PSGallery を「信頼済みリポジトリ」に設定
-# これにより Install-Module 実行時にプロンプトが出なくなる
-Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-# PowerShellGet 自体を最新版に更新
-# PS7 でも WinPS5 でも共通してモジュール導入の安定性が増す
-Install-Module -Name PowerShellGet -Scope CurrentUser -Force -AllowClobber
+$psGallery = Get-PSRepository -Name PSGallery
+if ($psGallery.InstallationPolicy -ne 'Trusted') {
+  Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+}
 
-# fzf wrapper（fzf 本体は scoop/choco 等で別途インストール必須）
-Install-Module -Name PSFzf -Scope CurrentUser -Force
+function Install-ModuleIfMissing {
+  param([Parameter(Mandatory)][string]$Name)
 
-# z コマンド相当のディレクトリジャンプ機能
-Install-Module -Name ZLocation -Scope CurrentUser -Force
+  if (-not (Get-Module -ListAvailable -Name $Name)) {
+    Install-Module -Name $Name -Scope CurrentUser -Force -AllowClobber
+  }
+}
 
-# git プロンプト連携（ブランチやステータスを表示）
-Install-Module -Name posh-git -Scope CurrentUser -Force
+Install-ModuleIfMissing PowerShellGet
+Install-ModuleIfMissing PSFzf
+Install-ModuleIfMissing ZLocation
+Install-ModuleIfMissing posh-git
 
 # ------ #
 # winget #
@@ -58,12 +48,19 @@ Install-Module -Name posh-git -Scope CurrentUser -Force
 Function winst {
   param(
     [Parameter(Mandatory,Position=0)][string]$PackageId,
+    [string]$CheckCommand,
+    [string]$CheckPath,
     [Parameter(ValueFromRemainingArguments=$true)][string[]]$AdditionalArgs
   )
   if (-not (Get-Command winget -EA SilentlyContinue)) { throw "winget (App Installer) not found" }
 
-  $json = winget list --id $PackageId --exact --output json 2>$null
-  $installed = $json -and ($json.Trim() -ne '[]')
+  $installed = ($CheckCommand -and (Get-Command $CheckCommand -EA SilentlyContinue)) -or
+      ($CheckPath -and (Test-Path -LiteralPath $CheckPath -PathType Leaf))
+  if (-not $installed) {
+    & winget list --id $PackageId --exact --disable-interactivity `
+        --accept-source-agreements | Out-Null
+    $installed = $LASTEXITCODE -eq 0
+  }
 
   if (-not $installed) {
     Write-Host "Installing $PackageId..."
@@ -76,7 +73,7 @@ Function winst {
 }
 
 # Tools
-winst Microsoft.PowerShell
+winst Microsoft.PowerShell -CheckCommand pwsh
 winst Google.Chrome
 winst Google.JapaneseIME
 winst 7zip.7zip
@@ -92,23 +89,25 @@ winst SourceFoundry.HackFonts
 winst Microsoft.PowerToys
 winst Ditto.Ditto
 winst QL-Win.QuickLook
-winst Craftware.Keyhac
+winst Craftware.Keyhac -CheckPath "$env:ProgramFiles\keyhac\keyhac.exe"
 # Keypirinha requires system-wide installation to detect profiles
 winst WinSCP.WinSCP --scope machine
 
 # Development
 winst Git.Git
 winst OpenJS.NodeJS
+winst jdx.mise -CheckCommand mise
 winst Python.Launcher # needed by chezmoi
 winst Python.Python.3.12  # needed by chezmoi
-winst stral-sh.uv
+winst astral-sh.uv
 
 # AI
 winst GitHub.Copilot
 winst 9PLM9XGG6VKS  # Codex App
 
-{{- if eq .chezmoi.username "applejxd" }}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 winst Bitwarden.Bitwarden
+winst Bitwarden.CLI
 winst Apple.iCloud
 winst Apple.iTunes
 winst Google.GoogleDrive

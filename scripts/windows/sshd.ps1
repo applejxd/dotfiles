@@ -6,12 +6,21 @@
     from https://takuya-1st.hatenablog.jp/entry/2022/03/04/171043
 #>
 
+#Requires -RunAsAdministrator
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 #---------#
 # Install #
 #---------#
 
-Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
-Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+foreach ($name in @('OpenSSH.Client~~~~0.0.1.0', 'OpenSSH.Server~~~~0.0.1.0')) {
+    $capability = Get-WindowsCapability -Online -Name $name
+    if ($capability.State -ne 'Installed') {
+        Add-WindowsCapability -Online -Name $name | Out-Null
+    }
+}
 
 #---------#
 # Service #
@@ -27,8 +36,11 @@ Set-Service -Name sshd -StartupType 'Automatic'
 
 # ファイアウォールにルールを追加してSSHポートを開放
 
-# set firewall rule
-netsh advfirewall firewall add rule name="sshd" dir=in action=allow protocol=TCP localport=22
+$firewallRule = Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
+if (-not $firewallRule) {
+    New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' `
+        -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 | Out-Null
+}
 
 # # Confirm the Firewall rule is configured. It should be created automatically by setup. Run the following to verify
 # if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Select-Object Name, Enabled)) {
@@ -44,4 +56,6 @@ netsh advfirewall firewall add rule name="sshd" dir=in action=allow protocol=TCP
 
 # set default shell
 # New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Windows\system32\bash.exe" -PropertyType String -Force
-New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -PropertyType String -Force
+New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell `
+    -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" `
+    -PropertyType String -Force | Out-Null

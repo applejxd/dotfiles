@@ -415,7 +415,7 @@ def test_copilot_hook_entry_keys(platform, command_key):
 
 @pytest.mark.parametrize(
     ("platform", "command_key", "python_runner"),
-    [("posix", "bash", "python3"), ("nt", "powershell", "py -3 -X utf8")],
+    [("posix", "bash", "python3"), ("nt", "powershell", "py -3 -B -X utf8")],
 )
 def test_copilot_commands_preserve_hooks_and_metadata(platform, command_key, python_runner):
     out = gen.build_copilot_hooks(COMMON, platform=platform)

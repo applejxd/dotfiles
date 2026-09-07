@@ -114,7 +114,14 @@ bw sync
 export BW_SESSION="$(bw unlock --raw)"
 ```
 
-`bw: command not found` の場合は mise の shim が未生成の可能性がある:
+`bw: command not found` の場合、Windows では Winget の導入状態を確認する:
+
+```powershell
+winget install --id Bitwarden.CLI --exact
+Get-Command bw
+```
+
+Unix では mise の shim が未生成の可能性がある:
 
 ```bash
 mise install            # npm:@bitwarden/cli を含むツール一式を入れ直す

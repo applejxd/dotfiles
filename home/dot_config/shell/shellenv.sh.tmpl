@@ -14,7 +14,7 @@ else
 fi
 export VISUAL="$EDITOR"
 
-{{- if eq .chezmoi.username "applejxd" }}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 alias agent='copilot'
 {{- else }}
 alias agent='claude'
@@ -73,7 +73,7 @@ fi
 # ghq root
 export GHQ_ROOT="${HOME}/src"
 
-{{- if ne .chezmoi.username "applejxd" }}
+{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
 # see https://docs.claude.com/ja/docs/claude-code/amazon-bedrock
 export CLAUDE_CODE_USE_BEDROCK=1
 export AWS_REGION=us-east-1

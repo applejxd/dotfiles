@@ -3,6 +3,15 @@
     enable long path support
 #>
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$reg_root = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+$longPathsEnabled = Get-ItemPropertyValue -LiteralPath $reg_root -Name LongPathsEnabled -ErrorAction Ignore
+if ($longPathsEnabled -eq 1) {
+  exit 0
+}
+
 # Self-elevate the script if required
 # see https://www.chezmoi.io/user-guide/machines/windows/#run-a-powershell-script-as-admin-on-windows
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()  # Get current user identity
@@ -16,11 +25,12 @@ if (-not $isElevated) {
     $baseArguments = @('-File', $scriptPath)
     $allArguments = $baseArguments + $MyInvocation.UnboundArguments
 
-    Start-Process -Wait -FilePath PowerShell.exe -Verb Runas -ArgumentList $allArguments
-    Exit
+    $process = Start-Process -Wait -PassThru -FilePath PowerShell.exe -Verb Runas -ArgumentList $allArguments
+    if ($process.ExitCode -ne 0) {
+      throw "Elevated system configuration failed with exit code $($process.ExitCode)"
+    }
+    Exit 0
   }
 }
-
-$reg_root = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
 
 Set-ItemProperty "$reg_root" -Name 'LongPathsEnabled' -Value 1

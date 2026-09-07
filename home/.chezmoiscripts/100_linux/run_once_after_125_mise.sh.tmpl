@@ -37,7 +37,7 @@ mise reshim
 
 echo "✅ 完了：開発ツールをインストール/更新しました"
 
-{{- if eq .chezmoi.username "applejxd" }}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 
 # applejxd かつ Bitwarden から取得すべき sops の age 鍵がまだ無い場合、
 # `mise install` 直後で bw が初めて使えるようになった可能性が高い。

@@ -1,6 +1,28 @@
 # エンコーディングを US-ASCII から変更
 # see https://dattesar.com/powershell-utf8/
 $PSDefaultParameterValues['*:Encoding'] = 'utf8'
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[Console]::InputEncoding = $utf8NoBom
+[Console]::OutputEncoding = $utf8NoBom
+$OutputEncoding = $utf8NoBom
+
+# mise shims and directory-specific environments
+$miseCommand = Get-Command mise -ErrorAction Ignore
+if ($miseCommand) {
+  $miseArgs = @('activate', 'pwsh')
+  if (
+    $PSVersionTable.PSVersion.Major -lt 7 -or
+    [Environment]::GetCommandLineArgs() -contains '-NonInteractive'
+  ) {
+    $miseArgs += '--shims'
+  }
+  $miseActivation = & $miseCommand.Path @miseArgs | Out-String
+  if ($LASTEXITCODE -eq 0) {
+    Invoke-Expression $miseActivation
+  } else {
+    Write-Warning "mise activation failed with exit code $LASTEXITCODE"
+  }
+}
 
 # for Claude Code
 $env:Path += ";$env:USERPROFILE\.local\bin"
@@ -12,10 +34,9 @@ $env:Path += ";$env:USERPROFILE\.local\bin"
 # see https://ohmyposh.dev/docs/installation/customize
 # see https://github.com/JanDeDobbeleer/oh-my-posh/discussions/2089#discussioncomment-2569096
 $env:Path += ";$env:LocalAppData\Programs\oh-my-posh\bin"
-# if ($PSVersionTable.PSEdition -eq "Core") {
-  # PowerShell Coreまたは7以降
-Invoke-Expression (@(& oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\pure.omp.json") -join "`n")
-# }
+if (Get-Command oh-my-posh -ErrorAction Ignore) {
+  Invoke-Expression (@(& oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\pure.omp.json") -join "`n")
+}
 
 # キーバインド
 Set-PSReadLineOption -EditMode Emacs
@@ -23,17 +44,18 @@ Set-PSReadLineOption -BellStyle None
 # 標準だと Ctrl+d は DeleteCharOrExit のため、うっかり端末が終了することを防ぐ
 Set-PSReadLineKeyHandler -Chord 'Ctrl+d' -Function DeleteChar
 
-# Chocolatey profile
-$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
 Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -Action {
+  $ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
   if (Test-Path($ChocolateyProfile)) {
     Import-Module "$ChocolateyProfile" -Scope Global
   }
 
   # C-t と C-r のラッパー (PSFzf の遅延読み込み)
   if ($PSVersionTable.PSEdition -eq "Core") {
-    # PowerShell Coreまたは7以降
-    Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+    Import-Module PSFzf -Scope Global -ErrorAction SilentlyContinue
+    if (Get-Command Set-PsFzfOption -ErrorAction Ignore) {
+      Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+    }
   }
 
   Unregister-Event -SubscriptionId $EventSubscriber.SubscriptionId
@@ -46,13 +68,18 @@ Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -Action {
 Set-Alias open explorer.exe
 Set-Alias pbcopy clip.exe
 Set-Alias pbpaste Get-Clipboard
-function relogin { powershell $Profile.CurrentUserAllHosts }
+function relogin {
+  & (Get-Process -Id $PID).Path -NoExit
+}
 function explorer-restart { Stop-Process     -Name explorer -Force; Start-Process explorer }
 
 . "{{ .chezmoi.homeDir }}/Documents/commands/wsl.ps1"
 . "{{ .chezmoi.homeDir }}/Documents/commands/pwgen.ps1"
-if (Get-Command docker -ErrorAction SilentlyContinue) {
+if (Get-Command docker -ErrorAction Ignore) {
   . "{{ .chezmoi.homeDir }}/Documents/commands/docker.ps1"
+}
+if (Get-Command conda -ErrorAction Ignore) {
+  . "{{ .chezmoi.homeDir }}/Documents/commands/conda.ps1"
 }
 
 # `chezmoi cd` that keeps the current shell session

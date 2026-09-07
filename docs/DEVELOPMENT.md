@@ -10,6 +10,7 @@
 
 ```bash
 # miseがインストール済みの場合
+mise trust
 mise install
 
 # miseが未インストールの場合（chezmoi適用で自動インストール）
@@ -24,6 +25,10 @@ uv sync                    # 依存関係のインストール
 uv run pre-commit install  # pre-commitフックの設定
 ```
 
+Windows native と WSL で同じ worktree を共有する場合、mise が
+`UV_PROJECT_ENVIRONMENT` を切り替え、Windows は `.venv-windows`、
+Unix は `.venv` を使用します。OS の異なる Python 仮想環境を上書きしません。
+
 #### 3. 手動実行とテスト
 
 ```bash
@@ -32,7 +37,7 @@ uv run pre-commit run --all-files
 
 # 個別ツールの実行例
 mise exec gitleaks -- detect --source .
-uv run shellcheck installer/**/*.sh
+mise exec shellcheck -- installer/**/*.sh
 ```
 
 #### 4. 継続的な使用

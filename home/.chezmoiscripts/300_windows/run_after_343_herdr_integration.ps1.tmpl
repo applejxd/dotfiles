@@ -6,7 +6,7 @@ if (-not (Test-Path -LiteralPath $herdrPath -PathType Leaf)) {
   throw "Herdr is not available at $herdrPath"
 }
 
-{{- if eq .chezmoi.username "applejxd" }}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 & $herdrPath integration install copilot
 {{- else }}
 & $herdrPath integration install claude

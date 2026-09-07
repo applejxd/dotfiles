@@ -64,7 +64,7 @@ def hook_command(
     """
     runner = hook.get("runner", "python")
     if runner == "python3" and (platform or os.name) == "nt":
-        runner = "py -3"
+        runner = "py -3 -B"
         if not expand_home:
             # Windows の既定コードページでは hook の日本語 JSON が壊れる。
             runner += " -X utf8"

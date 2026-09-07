@@ -1,15 +1,17 @@
 function condals { conda env list }
 
 function condarun {
-  $env_name = (conda env list | Select-Object -Skip 2 | Select-Object -SkipLast 1 | fzf).Split(" ")[0]
-  if (![string]::IsNullOrEmpty($env_name)) {
-    conda activate "$env_name"
+  $selectedLine = conda env list | Select-Object -Skip 2 | fzf
+  if (-not [string]::IsNullOrWhiteSpace($selectedLine)) {
+    $envName = ($selectedLine -split '\s+')[0]
+    conda activate $envName
   }
 }
 
 function condarm {
-  $env_name = (conda env list | Select-Object -Skip 2 | Select-Object -SkipLast 1 | fzf).Split(" ")[0]
-  if (![string]::IsNullOrEmpty($env_name)) {
-    conda env remove -n "$env_name"
+  $selectedLine = conda env list | Select-Object -Skip 2 | fzf
+  if (-not [string]::IsNullOrWhiteSpace($selectedLine)) {
+    $envName = ($selectedLine -split '\s+')[0]
+    conda env remove -n $envName
   }
 }

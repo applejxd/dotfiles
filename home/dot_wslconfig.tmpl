@@ -1,6 +1,6 @@
 [wsl2]
 networkingMode=mirrored
 
-{{- if eq .chezmoi.username "applejxd" }}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 memory=32GB
 {{- end }}

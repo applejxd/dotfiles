@@ -5,6 +5,9 @@
     https://stackoverflow.com/questions/16023238/installing-system-font-with-powershell
 #>
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 # from https://win.just4fun.biz/?PowerShell/PowerShell%E3%81%A7%E3%83%95%E3%82%A9%E3%83%B3%E3%83%88%E4%B8%80%E8%A6%A7%E3%82%92%E5%8F%96%E5%BE%97%E3%81%99%E3%82%8B
 # from https://codezine.jp/article/detail/5007
 Add-Type -AssemblyName System.Drawing

@@ -12,16 +12,21 @@
 
 #### 1. Bitwarden CLIのインストール
 
-通常は `chezmoi apply` 中に mise (`npm:@bitwarden/cli`) で自動投入されるため **明示インストール不要**。
+通常は `chezmoi apply` 中に Windows では Winget (`Bitwarden.CLI`)、Unix では
+mise (`npm:@bitwarden/cli`) で自動投入されるため **明示インストール不要**。
 クリーン環境では「2 フェーズ bootstrap」（[README](../README.md) 参照）で:
 
-1. `chezmoi init applejxd && chezmoi apply` → mise が bw を含む全ツールを導入
-2. `bw login && export BW_SESSION="$(bw unlock --raw)"` → `chezmoi init applejxd && chezmoi apply` で Bitwarden 連携を有効化
+1. `chezmoi init applejxd && chezmoi apply` → OS ごとのパッケージ管理で bw を導入
+2. `bw login` と `BW_SESSION` の設定 → `chezmoi init applejxd && chezmoi apply` で
+   Bitwarden 連携を有効化（Windows は gitconfig、Unix は加えて sops age 鍵）
 
-手動で先に入れたい / mise を使わない環境では:
+手動で先に入れたい場合は:
 
 ```bash
-# mise 経由（推奨・OS 共通）
+# Windows
+winget install --id Bitwarden.CLI --exact
+
+# Unix: mise 経由
 mise use -g npm:@bitwarden/cli
 
 # macOS (brew でも可。ただし mise 版と PATH 競合に注意)

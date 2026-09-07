@@ -19,7 +19,7 @@ Windows の Python hook は次の形式になる。パスの引用でホーム�
 ```json
 {
   "type": "command",
-  "powershell": "py -3 -X utf8 \"$HOME/.claude/hooks/check_bash.py\"",
+  "powershell": "py -3 -B -X utf8 \"$HOME/.claude/hooks/check_bash.py\"",
   "timeoutSec": 30
 }
 ```
@@ -42,10 +42,10 @@ Python hook の起動には不要。
 ```powershell
 py -3 --version
 '{"hook_event_name":"PreToolUse","tool_name":"bash","tool_input":{"command":"git status"}}' |
-    py -3 -X utf8 "$HOME/.claude/hooks/check_bash.py"
+    py -3 -B -X utf8 "$HOME/.claude/hooks/check_bash.py"
 $LASTEXITCODE
 '{"hook_event_name":"PreToolUse","tool_name":"create","tool_input":{"path":"/tmp/hook-probe.txt"}}' |
-    py -3 -X utf8 "$HOME/.claude/hooks/redirect-tmp.py"
+    py -3 -B -X utf8 "$HOME/.claude/hooks/redirect-tmp.py"
 $LASTEXITCODE
 ```
 
