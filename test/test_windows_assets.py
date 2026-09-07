@@ -109,6 +109,7 @@ def test_powershell_profile_activates_mise():
     assert "activate pwsh --shims" in profile
     assert "$LASTEXITCODE -eq 0" in profile
     assert "[Console]::OutputEncoding = $utf8NoBom" in profile
+    assert "$invalidGitConfig" in profile
 
 
 def test_windows_terminal_settings_are_replaced_atomically():
@@ -148,3 +149,17 @@ def test_chocolatey_setup_supports_v1_and_v2_listing():
 
     assert "$chocoVersion.Major -lt 2" in script
     assert "$listArgs += '--local-only'" in script
+
+
+def test_scoop_setup_skips_installed_apps_and_invalid_git_config():
+    script = (
+        ROOT
+        / "home"
+        / ".chezmoiscripts"
+        / "300_windows"
+        / "310_packages"
+        / "run_once_before_311_scoop.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "$invalidGitConfig" in script
+    assert "$missingApps.Count -eq 0" in script

@@ -6,6 +6,28 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $utf8NoBom
 $OutputEncoding = $utf8NoBom
 
+# WSL/agent processes can forward GIT_CONFIG_COUNT without every indexed
+# KEY/VALUE pair, which makes all Windows Git commands fail.
+$gitConfigCount = 0
+$hasGitConfigCount = [int]::TryParse($env:GIT_CONFIG_COUNT, [ref]$gitConfigCount)
+$invalidGitConfig = $false
+if ($hasGitConfigCount) {
+  for ($i = 0; $i -lt $gitConfigCount; $i++) {
+    if (
+      -not (Test-Path "Env:GIT_CONFIG_KEY_$i") -or
+      -not (Test-Path "Env:GIT_CONFIG_VALUE_$i")
+    ) {
+      $invalidGitConfig = $true
+      break
+    }
+  }
+}
+if ($invalidGitConfig) {
+  Get-ChildItem Env: |
+    Where-Object Name -Match '^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$' |
+    Remove-Item
+}
+
 # mise shims and directory-specific environments
 $miseCommand = Get-Command mise -ErrorAction Ignore
 if ($miseCommand) {
