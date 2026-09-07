@@ -9,14 +9,9 @@ $OutputEncoding = $utf8NoBom
 # mise shims and directory-specific environments
 $miseCommand = Get-Command mise -ErrorAction Ignore
 if ($miseCommand) {
-  $miseArgs = @('activate', 'pwsh')
-  if (
-    $PSVersionTable.PSVersion.Major -lt 7 -or
-    [Environment]::GetCommandLineArgs() -contains '-NonInteractive'
-  ) {
-    $miseArgs += '--shims'
-  }
-  $miseActivation = & $miseCommand.Path @miseArgs | Out-String
+  # Full activation installs a command-not-found hook that calls PSReadLine
+  # before its history is initialized during profile startup.
+  $miseActivation = & $miseCommand.Path activate pwsh --shims | Out-String
   if ($LASTEXITCODE -eq 0) {
     Invoke-Expression $miseActivation
   } else {

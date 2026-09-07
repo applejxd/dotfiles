@@ -106,8 +106,7 @@ def test_powershell_profile_activates_mise():
         ROOT / "home/Documents/WindowsPowerShell/profile.ps1.tmpl"
     ).read_text(encoding="utf-8")
 
-    assert "@('activate', 'pwsh')" in profile
-    assert "$miseArgs += '--shims'" in profile
+    assert "activate pwsh --shims" in profile
     assert "$LASTEXITCODE -eq 0" in profile
     assert "[Console]::OutputEncoding = $utf8NoBom" in profile
 
