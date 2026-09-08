@@ -19,6 +19,7 @@ if [[ ! -e /usr/local/cuda ]]; then
         distribution="wsl-ubuntu"
     else
         distribution=$(
+            # shellcheck source=/dev/null
             . /etc/os-release
             echo "$ID""$VERSION_ID" | sed -e 's/\.//g'
         )

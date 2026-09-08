@@ -5,6 +5,7 @@ echo "設定を変更するため、パスワードを入力してください..
 sudo -v || exit 1
 
 # 値の定義 (分かりやすく設定)
+# shellcheck disable=SC2034  # 下の limits.conf ブロックを戻すときに使う
 MEMLOCK_KB=524288
 MEMLOCK_SYSTEMD="512M" # systemdはMやKのプレフィックスに対応している
 
