@@ -28,6 +28,8 @@ $chords = @{}
 Get-PSReadLineKeyHandler -Bound |
     Where-Object { $wantedChords -contains $_.Key } |
     ForEach-Object { $chords[$_.Key] = $_.Function }
+# pure テーマは前景色だけを使う。既定テーマは背景色 (48;2;) の powerline になる。
+$promptUsesBackgroundColor = (prompt) -match "$([char]27)\[[0-9;]*48;2;"
 $functions = @('pbcopy', 'pwgen', 'ccd', 'xg', 'xf', 'sshf', 'wslls', 'dls' |
     Where-Object { Get-Command $_ -CommandType Function -ErrorAction Ignore })
 $optional = @{}
@@ -44,6 +46,7 @@ $result = @{
     chords = $chords
     functions = $functions
     optional = $optional
+    promptUsesBackgroundColor = $promptUsesBackgroundColor
     pathDuplicates = @(
         $env:Path -split ';' | Where-Object { $_ } | Group-Object |
             Where-Object Count -gt 1 | ForEach-Object { $_.Name }
@@ -145,6 +148,9 @@ def test_deployed_profile_in_interactive_terminal(shell: str, tmp_path: Path):
         # oh-my-posh がプロンプトを差し替えていること
         # (prompt 関数自体は ZLocation が更に包むため、モジュールの有無で確認する)
         assert "oh-my-posh-core" in set(result["modules"])
+        # pure テーマであること。init 出力をキャッシュすると oh-my-posh が
+        # 採番していないセッション ID になり、既定の powerline テーマに戻る。
+        assert result["promptUsesBackgroundColor"] is False
         # mise の activate を繰り返してもPATHが伸びないこと
         assert result["pathDuplicates"] == []
         chords = result["chords"]

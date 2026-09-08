@@ -291,51 +291,17 @@ $poshTheme = if ($env:POSH_THEMES_PATH) {
   $null
 }
 if ($poshTheme -and [System.IO.File]::Exists($poshTheme)) {
-  $poshThemeStamp = [System.IO.FileInfo]::new($poshTheme).LastWriteTimeUtc.Ticks
-  $poshInit = Get-CachedInitScript -Name 'oh-my-posh' -CommandName 'oh-my-posh' `
-    -ExtraKey "$poshTheme|$poshThemeStamp" -Generator {
-    param([string]$Executable)
-
-    $output = (@(& $Executable init pwsh --config $poshTheme) -join "`n")
-    if ($LASTEXITCODE -ne 0) {
+  # oh-my-posh はテーマ設定をセッション ID に紐付けて登録するため、init 出力は
+  # キャッシュできない。別セッションで ID を採番し直すと登録が引けず、既定の
+  # テーマに戻ってしまう (実測: 同じ init スクリプトでも ID が違うと別テーマ)。
+  $poshCommand = @(Get-Command oh-my-posh -ErrorAction Ignore -CommandType Application)[0]
+  if ($poshCommand) {
+    $poshActivation = (@(& $poshCommand.Path init pwsh --config $poshTheme) -join "`n")
+    # Invoke-Expression は空文字を受け付けない (ValidateNotNullOrEmpty)
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($poshActivation)) {
+      Invoke-Expression $poshActivation
+    } else {
       Write-Warning "oh-my-posh init failed with exit code $LASTEXITCODE"
-      return $null
-    }
-    # init 出力にはセッションごとの GUID が埋め込まれる。キャッシュを使い回すと
-    # 全セッションで同じ ID になるため、読み込みのたびに採番する式へ置き換える。
-    # 置換できない場合は出力形式が変わっているので、キャッシュしない。
-    $replaced = [regex]::Replace(
-      $output,
-      '(?<=\$env:POSH_SESSION_ID\s*=\s*)"[0-9a-fA-F-]{36}"',
-      '[guid]::NewGuid().ToString()'
-    )
-    if ($replaced -eq $output) {
-      Write-Warning 'Unexpected oh-my-posh init output; skipping the cache.'
-      return $null
-    }
-    $replaced
-  }
-  if ($poshInit) {
-    # キャッシュした init は oh-my-posh 自身が生成した中間スクリプトを呼ぶ。
-    # それが消えていた場合はキャッシュを捨てて次回作り直す。
-    try {
-      . $poshInit
-    } catch {
-      Write-Warning "Cached oh-my-posh init failed; discarding the cache: $_"
-      [System.IO.File]::Delete($poshInit)
-      $poshInit = $null
-    }
-  }
-  if (-not $poshInit) {
-    $poshCommand = @(Get-Command oh-my-posh -ErrorAction Ignore -CommandType Application)[0]
-    if ($poshCommand) {
-      $poshActivation = (@(& $poshCommand.Path init pwsh --config $poshTheme) -join "`n")
-      # Invoke-Expression は空文字を受け付けない (ValidateNotNullOrEmpty)
-      if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($poshActivation)) {
-        Invoke-Expression $poshActivation
-      } else {
-        Write-Warning "oh-my-posh init failed with exit code $LASTEXITCODE"
-      }
     }
   }
 }

@@ -230,25 +230,40 @@ def test_powershell_init_cache_failure_does_not_skip_activation():
     assert "[Environment]::GetFolderPath('LocalApplicationData')" in profile
 
 
+def test_oh_my_posh_init_is_not_cached():
+    """oh-my-posh はテーマ設定をセッション ID に紐付けるため init はキャッシュ不可。
+
+    キャッシュした init を別セッションで読み込むと、oh-my-posh が採番していない
+    ID になり設定を引けず、既定テーマに戻る。実際のテーマは
+    test_powershell_interactive.py::test_deployed_profile_in_interactive_terminal
+    がレンダリング結果で検証する。
+    """
+    profile = (
+        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
+    ).read_text(encoding="utf-8-sig")
+
+    assert "POSH_SESSION_ID" not in profile
+    assert "Get-CachedInitScript" in profile
+    assert "-Name 'oh-my-posh'" not in profile
+    assert profile.count("Get-CachedInitScript -Name") == 1
+
+
 def test_cached_init_scripts_have_a_direct_fallback():
-    """キャッシュ本体が掴まれていても dot-source は失敗する。両方に退避経路を持つ。"""
+    """キャッシュ本体が掴まれていても dot-source は失敗する。退避経路を持つ。"""
     profile = (
         ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
     ).read_text(encoding="utf-8-sig")
 
     assert "Cached mise activation failed; running mise directly" in profile
-    assert "Cached oh-my-posh init failed" in profile
     # Invoke-Expression は空文字を受け付けない (ValidateNotNullOrEmpty)
     for call in re.findall(r"Invoke-Expression [^\n]*", strip_comments(profile)):
         assert re.fullmatch(r"Invoke-Expression \$\w+", call), call
     assert profile.count("[string]::IsNullOrWhiteSpace($miseActivation)") == 1
     assert profile.count("[string]::IsNullOrWhiteSpace($poshActivation)") == 1
-    # dot-source は 2 箇所とも try/catch の中にある
+    # dot-source は try/catch の中にある
     assert profile.count(". $miseInit") == 1
-    assert profile.count(". $poshInit") == 1
-    for call in (". $miseInit", ". $poshInit"):
-        head = profile.split(call, 1)[0]
-        assert head.rstrip().endswith("try {"), call
+    head = profile.split(". $miseInit", 1)[0]
+    assert head.rstrip().endswith("try {")
 
 
 def test_startup_detection_covers_positional_script_arguments():
@@ -280,13 +295,14 @@ def test_pbcopy_forwards_pipeline_input():
     assert "function pbcopy { $input | clip.exe }" in profile
 
 
-def test_powershell_init_cache_regenerates_a_session_id_for_oh_my_posh():
+def test_powershell_init_cache_is_keyed_on_the_executable():
+    """ツールを更新したらキャッシュを作り直す。"""
     profile = (
         ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
     ).read_text(encoding="utf-8-sig")
 
-    assert "POSH_SESSION_ID" in profile
-    assert "[guid]::NewGuid().ToString()" in profile
+    assert "$executable.FullName" in profile
+    assert "$executable.Length" in profile
     assert "$executable.LastWriteTimeUtc.Ticks" in profile
 
 
