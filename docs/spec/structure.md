@@ -14,15 +14,14 @@
 │   ├── .chezmoiscripts/       # `chezmoi apply` 時の自動実行
 │   ├── .chezmoitemplates/     # スクリプト・modify処理の共有テンプレート
 │   └── dot_config/            # `~/.config/` 配下へ展開する設定
-├── installer/                 # 個別用途の導入スクリプト
-├── scripts/                   # 生成・検証・保守用スクリプト
+├── scripts/                   # 個別用途の導入・生成・検証・保守用スクリプト
 ├── test/                      # pytest・コンテナ検証
 ├── mise.toml                  # 開発ツールとタスク
 └── pyproject.toml             # Python依存とlint設定
 ```
 
 chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `config/`、
-`scripts/`、`test/`、`docs/` は生成処理・開発・説明資料に使用します。
+`scripts/`、`test/`、`docs/` は導入・生成処理・開発・説明資料に使用します。
 
 ## 自動実行スクリプト
 
