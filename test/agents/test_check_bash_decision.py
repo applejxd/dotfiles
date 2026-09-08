@@ -618,6 +618,69 @@ def test_find_deletion_asks(command):
 
 @pytest.mark.parametrize(
     "command",
+    [
+        "rm -rf .tmp",
+        "rm -rf ./.tmp/run-1",
+        "rm -f .tmp/a.log .tmp/b.log",
+        f"rm -rf {ROOT}/.tmp",
+        f"rm -rf {ROOT}/.tmp/run-1",
+        "find ./.tmp -delete",
+        "find ./.tmp -name '*.log' -delete",
+        "find ./.tmp -type f -exec rm {} +",
+        f"find {ROOT}/.tmp -delete",
+    ],
+)
+def test_scratch_dir_deletion_is_delegated(command):
+    """使い捨ての ./.tmp 配下の削除は承認を省く (絶対パス・find も含む)."""
+    decision, reason = run_hook(command)
+    assert decision is None, f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # scratch の外が混ざる
+        "rm -rf .tmp /etc/hosts",
+        "rm -rf .tmp/../src",
+        "find ./.tmp -exec rm /etc/hosts {} +",
+        # 基点が変わる / 標準入力から来る / 展開が解決できない
+        "cd .tmp && rm -rf foo",
+        "echo .tmp | xargs rm -rf",
+        "rm -rf $PWD/.tmp",
+        # 他リポジトリの .tmp は workspace の外
+        "rm -rf ../other-repo/.tmp",
+    ],
+)
+def test_scratch_dir_exemption_is_fail_closed(command):
+    decision, reason = run_hook(command)
+    assert decision in {"ask", "deny"}, f"{command!r} -> {decision} ({reason})"
+
+
+def test_scratch_dir_git_target_is_still_denied():
+    """scratch 免除は `.git` の hard-deny を上書きしない."""
+    decision, reason = run_hook("rm -rf .tmp/.git")
+    assert decision == "deny", f"-> {decision} ({reason})"
+
+
+def test_scratch_symlink_escape_is_not_exempt(tmp_path):
+    """`.tmp/<link>` が外を指す symlink なら scratch 免除を与えない.
+
+    相対パスは既存の workspace 免除が拾うので、scratch 免除だけが効く
+    絶対パス形で確かめる。
+    """
+    workspace = tmp_path / "ws"
+    (workspace / ".tmp").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (workspace / ".tmp" / "escape").symlink_to(outside)
+    decision, reason = run_hook(
+        f"rm -rf {workspace}/.tmp/escape", cwd=str(workspace)
+    )
+    assert decision == "ask", f"-> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
     ["rm -rf ./*", "rm -rf .", "rm -rf ./", "rm -rf *", "rm -rf **"],
 )
 def test_workspace_root_rm_is_denied(command):

@@ -1447,6 +1447,9 @@ def check_find_dangerous(cmd: str) -> str | None:
         return None
     if not _FIND_DANGEROUS_EXEC_RE.search(cmd):
         return None
+    # 探索起点が使い捨ての一時ディレクトリ配下だけなら承認を省く
+    if _find_targets_scratch_only(cmd):
+        return None
     # find の探索起点が壊滅的なら deny (check_rm_root_guard 相当の扱い)
     for segment in _segments(cmd):
         tokens = segment.split()
@@ -2683,8 +2686,155 @@ def _rm_is_workspace_local(cmd: str) -> bool:
     return saw_target
 
 
+# 使い捨ての一時ディレクトリ。redirect-tmp.py が /tmp の代わりに誘導する先で、
+# 中身はいつ消えてもよい前提の置き場なので削除に承認を求めない。
+_SCRATCH_DIR_NAMES = (".tmp",)
+# find の -exec 系フラグ。渡すコマンドの引数を検査する起点になる
+_FIND_EXEC_FLAGS = {"-exec", "-execdir", "-ok", "-okdir"}
+
+
+def _workspace_root() -> str | None:
+    """PreToolUse payload の ``cwd``。取れない・相対なら None (fail-closed)。"""
+    workspace = _PAYLOAD_CWD
+    if not workspace or not os.path.isabs(workspace):
+        return None
+    return os.path.normpath(workspace)
+
+
+def _changes_base_dir(cmd: str) -> bool:
+    """`cd` / `pushd` などで基点が変わるか。変わると相対パスを解決できない。"""
+    return bool(
+        re.search(r"""(?:^|[\s;&|("'\\])(?:cd|pushd|popd|chdir)(?![\w-])""", cmd)
+    )
+
+
+def _resolves_into_scratch(token: str, workspace: str) -> bool:
+    """``token`` が ``<workspace>/.tmp`` 自身か、その配下に解決するか。
+
+    ``_rm_is_workspace_local`` と違い絶対パスも受け付ける (解決先が scratch の
+    内側だと確証できれば範囲は同じだけ狭いため)。展開・``..`` は解決できない
+    ので拒否し、途中の symlink で外へ抜ける形は realpath で弾く。
+    """
+    canonical = _canonical_rm_target(token)
+    if canonical is None:
+        return False
+    if any(ch in canonical for ch in "$`~{}"):
+        return False
+    components = [p for p in canonical.split("/") if p]
+    if ".." in components:
+        return False
+    resolved = os.path.normpath(os.path.join(workspace, canonical))
+    for name in _SCRATCH_DIR_NAMES:
+        root = os.path.join(workspace, name)
+        if resolved != root and not resolved.startswith(root + os.sep):
+            continue
+        # `.tmp/link` が外を指す symlink なら realpath が scratch の外へ出る。
+        # 未作成のパスは realpath が素通しになるので、そのまま内側と判定される
+        real_root = os.path.realpath(root)
+        real = os.path.realpath(resolved)
+        if real == real_root or real.startswith(real_root + os.sep):
+            return True
+    return False
+
+
+def _is_find_placeholder(token: str) -> bool:
+    """`find -exec` の ``{}`` プレースホルダか。
+
+    ``normalize()`` は shlex を通す過程で ``{}`` を ``{`` に削ることがあるので、
+    波括弧だけで構成されたトークンをまとめて扱う。
+    """
+    return bool(token) and set(token) <= {"{", "}"}
+
+
+def _rm_targets_scratch_only(cmd: str) -> bool:
+    """`rm` の対象がすべて scratch ディレクトリ配下だと確証できるか。"""
+    workspace = _workspace_root()
+    if workspace is None or _policy is None:
+        return False
+    if _changes_base_dir(cmd):
+        return False
+    if re.search(r"(?:^|[\s;&|(])xargs(?![\w-])", cmd):
+        return False
+
+    saw_target = False
+    find_scratch_only: bool | None = None
+    for segment in _segments(cmd):
+        tokens = _strip_exec_wrappers(segment.strip().split())
+        if not tokens or not _RM_BIN_RE.match(_basename(tokens[0].strip("'\""))):
+            continue
+        targets = [t for t in tokens[1:] if not t.startswith("-")]
+        if not targets:
+            return False
+        # `find ... -exec rm {} +` 展開形の終端記号は削除対象ではない
+        if any(_is_find_placeholder(t.strip("'\"")) for t in targets):
+            targets = [t for t in targets if t.strip("'\"") not in ("+", ";", "\\;")]
+        for raw in targets:
+            token = raw.strip("'\"")
+            if _is_find_placeholder(token):
+                # `find ./.tmp -exec rm {} +` を normalize が `rm {}` に展開した形。
+                # 実際の対象は find の探索起点なので、そちらで判定する
+                if find_scratch_only is None:
+                    find_scratch_only = _find_targets_scratch_only(cmd)
+                if not find_scratch_only:
+                    return False
+                saw_target = True
+                continue
+            if not _resolves_into_scratch(token, workspace):
+                return False
+            saw_target = True
+    return saw_target
+
+
+def _find_targets_scratch_only(cmd: str) -> bool:
+    """`find` の探索起点がすべて scratch 配下で、削除先も広がらないか。
+
+    `-exec` に渡す引数が ``{}`` 以外のパスを含む形 (`-exec rm /etc/x {} +`) は
+    探索起点の外を消せるので免除しない。
+    """
+    workspace = _workspace_root()
+    if workspace is None:
+        return False
+    if _changes_base_dir(cmd):
+        return False
+    if re.search(r"(?:^|[\s;&|(])xargs(?![\w-])", cmd):
+        return False
+
+    saw_root = False
+    for segment in _segments(cmd):
+        tokens = segment.strip().split()
+        if not tokens or _basename(tokens[0].strip("'\"")) != "find":
+            continue
+        rest = tokens[1:]
+        roots: list[str] = []
+        for token in rest:
+            if token.startswith("-"):
+                break
+            roots.append(token)
+        if not roots:
+            # 起点の省略は cwd 全体が対象になる
+            return False
+        for root in roots:
+            if not _resolves_into_scratch(root.strip("'\""), workspace):
+                return False
+            saw_root = True
+        for index, token in enumerate(rest):
+            if token not in _FIND_EXEC_FLAGS:
+                continue
+            # `-exec <cmd> [args...] ;|+` の args を見る
+            cursor = index + 2
+            while cursor < len(rest) and rest[cursor] not in (";", "\\;", "+"):
+                if rest[cursor].strip("'\"") != "{}":
+                    return False
+                cursor += 1
+    return saw_root
+
+
+def _rm_ask_exempt(cmd: str) -> bool:
+    return _rm_is_workspace_local(cmd) or _rm_targets_scratch_only(cmd)
+
+
 # ask を省いてよい条件。パターンの先頭トークンで引く
-_ASK_EXEMPTIONS = {"rm": _rm_is_workspace_local}
+_ASK_EXEMPTIONS = {"rm": _rm_ask_exempt}
 
 
 def check_rm_root_guard(cmd: str) -> str | None:

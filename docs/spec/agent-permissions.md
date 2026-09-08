@@ -282,6 +282,7 @@ auto / assisted の判定へ委ねる (`_ASK_EXEMPTIONS`)。
 | `rm -rf ../other-repo`, `~/Documents`, `/var/tmp/build` | ask |
 | `rm -rf $BUILD_DIR`, `"$OUT"/*`, `$(cat targets.txt)` | ask |
 | `cd /elsewhere && rm -rf data` | ask |
+| `rm -rf .tmp`, `<workspace>/.tmp/run-1`, `find ./.tmp -delete` | 未掲載 (scratch 免除) |
 
 免除の条件は次を**すべて**満たすこと。1 つでも欠ければ従来どおり ask にする。
 
@@ -305,6 +306,32 @@ deny 側は `check_rm_root_guard` が担う。作業ディレクトリ全体と 
 ブレース展開も対象にする。
 `.` は `find . -delete` のような探索起点としては正当なので、
 判定は `rm` 側にだけ置き `_is_catastrophic_rm_target` には入れない。
+
+### 使い捨てディレクトリ (`./.tmp`) の削除
+
+`redirect-tmp.py` が `/tmp` の代わりに誘導する `./.tmp` は「いつ消えてもよい」
+前提の置き場なので、ここだけは上の条件を緩めて承認を省く
+(`_rm_targets_scratch_only` / `_find_targets_scratch_only`)。
+
+workspace 免除との違いは 2 点だけ。
+
+- **絶対パスを受け付ける** (`rm -rf <workspace>/.tmp/run-1`)。
+  解決先が `.tmp` の内側だと確証できれば、範囲は workspace 免除より狭い
+- **`find` の削除も免除する** (`find ./.tmp -delete`,
+  `find ./.tmp -type f -exec rm {} +`)。
+  探索起点がすべて `.tmp` 配下で、`-exec` に渡す引数が `{}` だけのときに限る
+
+次はいずれも従来どおり ask にする。
+
+- 対象に scratch の外が 1 つでも混ざる (`rm -rf .tmp /etc/hosts`)
+- `..` を成分に含む (`rm -rf .tmp/../src`)
+- `cd` / `pushd` で基点が変わる、`xargs` で対象が標準入力から来る
+- `$` / `` ` `` / `~` / `{` / `}` を含む (`rm -rf $PWD/.tmp`)
+- `.tmp` 配下の symlink が外を指している (realpath で判定する)
+- `find` の探索起点を省略した形 (`find -delete` は cwd 全体が対象)
+
+`.git` の hard-deny は免除より先に評価されるので、`rm -rf .tmp/.git` は
+引き続き deny になる。
 
 なお `ask` は Copilot CLI では自動承認されるため、この緩和が実際に効くのは
 Claude Code だけである。逆に言うと、deny へ上げた 2 つは
