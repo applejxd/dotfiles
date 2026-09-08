@@ -19,7 +19,7 @@
 キー順を保つのは差分ノイズ対策。Go テンプレートの `toPrettyJson` は map の
 キーをアルファベット順に並べ替えるため、Gemini CLI や Orca が書き戻すたびに
 `chezmoi diff` へ意味の無い差分が出ていた。
-詳細は [`docs/agents-permissions.md`](../../docs/agents-permissions.md)。
+詳細は [エージェント権限仕様](../../docs/spec/agent-permissions.md)。
 
 ## デフォルトのスラッシュコマンド
 

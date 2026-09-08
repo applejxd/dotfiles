@@ -9,7 +9,7 @@
 `home/dot_claude/hooks/executable_check_bash.py` は `curl` / `wget` を
 transfer 単位で解析し、読み取りを未掲載（CLI の auto / assisted 判定へ委譲）、
 mutation を ask、秘密情報の送信・取得結果の直接実行・起動ファイルの上書きを
-deny に分類している。詳細は [`docs/agents-permissions.md`](../agents-permissions.md)。
+deny に分類している。詳細は [エージェント権限仕様](../spec/agent-permissions.md)。
 
 ローカル開発では `curl -X POST http://localhost:8000/api` のような
 自マシン宛の mutation が頻出し、そのたびに ask が出る。
@@ -136,7 +136,7 @@ deny を外して得られるのは `curl http://localhost/x | sh` や
       混入する問題を修正、`blocks_local` を transfer 単位で記録する
 - [x] `test/agents/test_check_bash_decision.py` に
       未掲載 11 件 / ask 維持 29 件 / deny 維持 6 件の回帰テストを追加
-- [x] `docs/agents-permissions.md` に「ループバック宛の例外」節を追加し、
+- [x] `docs/spec/agent-permissions.md` に「ループバック宛の例外」節を追加し、
       `common.toml` の該当コメントを更新
 - [x] `uvx pytest test/agents/` が全通過（1003 件）
 - [x] `uv run pre-commit run --all-files` が全通過
@@ -158,7 +158,7 @@ deny を外して得られるのは `curl http://localhost/x | sh` や
 
 - 判定条件が増え、利用者から見た挙動の予測が難しくなった。
   特に `-L` を足しただけで ask に戻る点は直感に反する
-  （`docs/agents-permissions.md` に除外条件を列挙して緩和）
+  （`docs/spec/agent-permissions.md` に除外条件を列挙して緩和）
 - 危険ポートの一覧が hook 内のハードコードであり、
   新しいローカル特権 API が現れたときに追随が必要
 - ループバック宛の mutation について、hook が守るのは

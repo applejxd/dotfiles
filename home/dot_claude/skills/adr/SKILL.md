@@ -18,7 +18,7 @@ allowed-tools: Read, Edit(docs/adr/*), Glob
 `docs/adr/` ディレクトリを探して以下を確認する:
 
 - 既存 ADR ファイルの一覧と最大番号（次番号の決定に使用）
-- `docs/adr/README.md` の有無（存在すれば完了時に更新）
+- `docs/adr/index.md` の有無（存在すれば完了時に更新）
 
 `docs/adr/` が存在しない場合はユーザーに確認してから最初の ADR ファイル作成時に自動生成する。
 
@@ -65,7 +65,7 @@ allowed-tools: Read, Edit(docs/adr/*), Glob
 ユーザーが明示承認したら:
 
 1. `docs/adr/NNNN-title.md` を作成（または既存ファイルを更新）する
-2. `docs/adr/README.md` が存在する場合は ADR 一覧に新規エントリを追記する
+2. `docs/adr/index.md` が存在する場合は ADR 一覧に新規エントリを追記する
 
 ---
 
@@ -86,7 +86,7 @@ allowed-tools: Read, Edit(docs/adr/*), Glob
 
 スキル終了前に以下を**必ず**実施する:
 
-1. `docs/adr/README.md` が存在する場合は ADR 索引を更新する
+1. `docs/adr/index.md` が存在する場合は ADR 索引を更新する
 2. 以下の完了サマリーを出力する:
 
 ```text
@@ -94,7 +94,7 @@ allowed-tools: Read, Edit(docs/adr/*), Glob
 
 ### 作成・更新したファイル
 - `docs/adr/NNNN-title.md` — <ステータス>: <1行サマリー>
-- `docs/adr/README.md` — 索引を更新（該当する場合）
+- `docs/adr/index.md` — 索引を更新（該当する場合）
 
 ### 決定内容サマリー
 - **タイトル**: <ADR タイトル>

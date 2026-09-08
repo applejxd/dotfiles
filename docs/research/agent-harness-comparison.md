@@ -95,7 +95,7 @@
 
 権限と hook の単一ソースは `home/dot_config/agents/common.toml`。
 生成は `scripts/agents/generate.py`。
-詳細は [`docs/agents-permissions.md`](../agents-permissions.md)。
+詳細は [エージェント権限仕様](../spec/agent-permissions.md)。
 
 ### Codex rules の decision 分布
 
@@ -342,7 +342,7 @@ Copilot 限定の規則は、常時読み込まれる `~/.copilot/copilot-instru
 `git commit` は後者を採用した。commit skill は CLI を判別せず、どの CLI でも
 コミット直前に対象ファイルとメッセージを提示して承認を得る（Copilot 用の
 補強として `~/.copilot/copilot-instructions.md` にも同じ規則を置く）。
-構成は [`docs/agents-permissions.md`](../agents-permissions.md) を参照。
+構成は [エージェント権限仕様](../spec/agent-permissions.md) を参照。
 バグが修正されても、確認の目的がメッセージのレビューなので明示確認は残す。
 
 ### Copilot の設定キーは Web ドキュメントに載っていない

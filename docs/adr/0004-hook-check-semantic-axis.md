@@ -8,7 +8,7 @@
 
 `home/dot_claude/hooks/executable_check_bash.py` は、両 CLI 共通の PreToolUse hook として
 bash コマンドを検査し `deny` / `ask` / 未掲載を返す。詳細は
-[`docs/agents-permissions.md`](../agents-permissions.md)。
+[エージェント権限仕様](../spec/agent-permissions.md)。
 
 「開発をできるだけ阻害せず、deny すべきところは確実に deny する」という観点で
 全チェックを棚卸しした。実測の出発点は次のとおり。
@@ -124,7 +124,7 @@ bash コマンドを検査し `deny` / `ask` / 未掲載を返す。詳細は
 - [x] 3 回の敵対的レビュー (`code-review`) で指摘された 18 件をすべて修正する
 - [x] 回帰テストを追加し `uvx pytest test/agents/` が 1169 件通過
 - [x] `uv run pre-commit run --all-files` が全通過
-- [x] `docs/agents-permissions.md` に判定軸と例外の根拠を記載
+- [x] `docs/spec/agent-permissions.md` に判定軸と例外の根拠を記載
 
 ## 結果
 

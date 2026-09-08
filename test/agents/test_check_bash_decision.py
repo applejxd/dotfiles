@@ -244,7 +244,7 @@ def test_commit_skill_is_cli_agnostic():
         skill = path.read_text(encoding="utf-8")
         assert "COPILOT_CLI" not in skill, path
         assert "copilot-cli#3590" not in skill, path
-    docs = (ROOT / "docs" / "agents-permissions.md").read_text(encoding="utf-8")
+    docs = (ROOT / "docs" / "spec" / "agent-permissions.md").read_text(encoding="utf-8")
     assert "github/copilot-cli/issues/3590" in docs
     assert "auto_approved" in docs
 

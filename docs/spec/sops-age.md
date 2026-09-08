@@ -43,7 +43,7 @@ Bitwarden Secrets Manager の `bws` は使用しない。
 - **`bitwarden.unlock = "auto"` を使う。** `BW_SESSION` が無いときだけ
   chezmoi が `bw unlock` を実行し、処理終了時に Vault を再ロックする
 - **エージェントからの読み出しは hook で拒否する。** `~/.config/sops/age/**` と
-  `keys.txt` をガード対象にしている（[agents-permissions.md](agents-permissions.md)）
+  `keys.txt` をガード対象にしている（[エージェント権限仕様](agent-permissions.md)）
 
 ## 1. 前提ツール
 
@@ -200,16 +200,33 @@ sops .env.json
 
 ## 8. 新しい PC・WSL 環境で復旧する
 
-chezmoi がテンプレートを評価する前に `bw` をインストールしておく。
-このリポジトリでは mise が `npm:@bitwarden/cli` を入れるため、
-[README](../README.md) の 2 フェーズ bootstrap に従う。
+このリポジトリは [README](../../README.md) の 2 フェーズ bootstrap を使う。
+フェーズ1では `bw` が必要なテンプレートをスキップしてツールを導入し、
+フェーズ2でBitwardenをアンロックして秘密情報を反映する。
 
 ```bash
-bw login
+# フェーズ1: bwを含むツールを導入
 chezmoi init --apply git@github.com:applejxd/dotfiles.git
+
+# フェーズ2（POSIX shell）: Bitwarden連携を有効化して再適用
+bw login
+export BW_SESSION="$(bw unlock --raw)"
+chezmoi init applejxd
+chezmoi apply
 ```
 
-chezmoi が Bitwarden のアンロックを要求し、`~/.config/sops/age/keys.txt` を生成する。
+Windows PowerShellではフェーズ2を次のように実行する。
+
+```powershell
+bw login
+$env:BW_SESSION = bw unlock --raw
+chezmoi init applejxd
+chezmoi apply
+```
+
+Unix / WSL では、chezmoi が Bitwarden のアンロックを要求し、
+`~/.config/sops/age/keys.txt` を生成する。Windows nativeではsops鍵を配備せず、
+Bitwarden由来のgitconfig設定だけを反映する。
 
 mise 側の鍵パス設定が dotfiles に含まれていない場合だけ次を実行する。
 

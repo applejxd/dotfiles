@@ -2,6 +2,16 @@
 
 Claude Code / Copilot CLI の permission (allow/deny/ask) と hook 登録を
 **単一ソース** で管理し、`chezmoi apply` で両 CLI の設定ファイルへ自動展開する仕組み。
+Gemini CLI は `GEMINI_MANAGED` で定義した一部設定だけを生成する。
+`hooks` はOrcaなどの外部ツールが管理するため保持し、`common.toml` からは生成しない。
+
+設計判断の根拠は次のADRを正本とする。
+
+- [ADR-0001: 外部ツール設定との共存](../adr/0001-external-tool-config-coexistence.md)
+- [ADR-0002: ループバックHTTPの承認範囲](../adr/0002-loopback-http-approval-scope.md)
+- [ADR-0003: agent設定生成にPython 3.11以上を要求](../adr/0003-require-python-311-for-agent-configuration.md)
+- [ADR-0004: hook判定軸](../adr/0004-hook-check-semantic-axis.md)
+- [ADR-0005: エージェント設定を秘密として扱う](../adr/0005-agent-runtime-config-as-secret.md)
 
 ## ファイル構成
 
@@ -29,7 +39,10 @@ test/agents/
     test_command_policy.py                   shell normalize / match の unit test
     test_check_bash_decision.py              deny/ask 判定と rm root guard の test
     test_generate_hooks.py                   hook 生成 / 外部 hook 温存の unit test
+    test_herdr_integration.py                Herdr統合の生成・保持
     test_modifier_wrappers.py                modify_ ラッパーの end-to-end test
+    test_redirect_tmp.py                     一時パス誘導の判定
+    test_skill_frontmatter.py                SKILL.md frontmatter検証
 ```
 
 Python runtime は 3.11 以上を前提とし、TOML は標準ライブラリ `tomllib` で読む。
@@ -530,7 +543,7 @@ Claude には「許可した以外を拒否する」表現手段が無い。
 - Copilot の起動キーは Windows では `powershell`、Linux / macOS / WSL では
   `bash`。パスは引用し、Windows の Python hook は bytecode を生成しない
   `py -3 -B -X utf8` で起動する。
-  反映・切り分け手順は [Windows の hook 起動](../home/dot_copilot/README.md#windows-の-hook-起動)
+  反映・切り分け手順は [Windows の hook 起動](../../home/dot_copilot/README.md#windows-の-hook-起動)
   を参照
 - `hooks` キーは Orca などの**外部ツールも追記する共有領域**なので、apply では
   `~/.claude/hooks/` 配下を起動しているエントリだけを差し替える (後述)
@@ -659,8 +672,7 @@ bypass パターンを hook が確実に block することを保証している
 ### unit test
 
 ```bash
-uv run --with pytest --no-project pytest test/agents/ -q
-# -> 499 passed (normalize/match 37 + hook 生成 21 + deny/ask 判定 441)
+uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q
 ```
 
 hook は `AGENTS_CONFIG_DIR` で agents 設定ディレクトリを差し替えられるので、

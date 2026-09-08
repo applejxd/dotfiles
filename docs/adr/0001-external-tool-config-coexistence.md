@@ -9,7 +9,7 @@
 このリポジトリは AI CLI（Claude Code / Copilot CLI / Codex / Gemini CLI）の
 permission と hook を `home/dot_config/agents/common.toml` に単一ソース化し、
 `scripts/agents/generate.py` を通して各 CLI の設定ファイルへ展開している。
-詳細は [`docs/agents-permissions.md`](../agents-permissions.md)。
+詳細は [エージェント権限仕様](../spec/agent-permissions.md)。
 
 ここに Orca（[stablyai/orca](https://github.com/stablyai/orca)）を導入した。
 Orca はコーディングエージェントを統括するデスクトップアプリで、
@@ -121,7 +121,7 @@ hook 設定の管理をやめ、CLI と Orca に任せる。
 - [x] `home/.chezmoiignore.tmpl` に Orca 関連パスを理由コメント付きで列挙
 - [x] `test/agents/test_generate_hooks.py` に外部 hook 温存・冪等性・
       解釈不能な形の温存の回帰テストを追加（修正を戻すと 7 件が失敗することを確認）
-- [x] `docs/agents-permissions.md` と各 CLI の `README.md` を更新
+- [x] `docs/spec/agent-permissions.md` と各 CLI の `README.md` を更新
 - [x] `uv run --with pytest --no-project pytest test/agents/` が全通過（957 件）
 - [x] `uv run pre-commit run --all-files` が全通過
 - [x] `chezmoi diff ~/.claude/settings.json` と

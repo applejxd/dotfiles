@@ -20,7 +20,7 @@ chezmoi apply
 #### 2. Python環境の構築
 
 ```bash
-# uvとPythonがmiseで管理されているため自動で利用可能
+# miseがuvを提供し、uvがpyproject.tomlに従ってPython 3.13以上を選択・取得
 uv sync                    # 依存関係のインストール
 uv run pre-commit install  # pre-commitフックの設定
 ```
@@ -37,7 +37,10 @@ uv run pre-commit run --all-files
 
 # 個別ツールの実行例
 mise exec gitleaks -- detect --source .
-mise exec shellcheck -- installer/**/*.sh
+mise exec shellcheck -- scripts/**/*.sh
+
+# agent設定・hook
+uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q
 ```
 
 #### 4. 継続的な使用
@@ -54,7 +57,7 @@ uv run pre-commit run --all-files
 #### 環境管理のメリット
 
 - **統一された環境管理**: mise → uv → pre-commitの一貫したツールチェーン
-- **新規環境での簡単セットアップ**: `mise install && uv sync && uv run pre-commit install`
+- **新規環境での簡単セットアップ**: `mise trust && mise install && uv sync && uv run pre-commit install`
 - **バージョン固定**: mise.tomlとuv.lockによる再現可能な環境
 - **段階的導入**: 既存環境に影響せず新規環境から適用可能
 
@@ -83,22 +86,25 @@ chezmoi apply
 
 ### スクリプトの無効化
 
-特定のスクリプトを実行したくない場合：
+一時的に全スクリプトを除外する場合：
 
 ```bash
-# ファイル名を変更して無効化
-chezmoi edit home/.chezmoiscripts/run_once_800_vscode_extensions.sh.tmpl
-# ファイル名から .tmpl を削除するか、ファイルを削除
+chezmoi apply --exclude=scripts
 ```
+
+恒久的に無効化する場合は、対象ファイルの `run_` 属性を外すか削除します。
+`.tmpl` は実行属性ではないため、拡張子だけを外しても無効化されません。
 
 ## テンプレート変数
 
 利用可能な chezmoi テンプレート変数：
 
-- `{{ .chezmoi.os }}` - OS名 (linux/darwin)
+- `{{ .chezmoi.os }}` - OS名 (`windows` / `linux` / `darwin`)
 - `{{ .chezmoi.homeDir }}` - ホームディレクトリパス
 - `{{ .chezmoi.sourceDir }}` - ソースディレクトリパス
-- `{{ .sudo_password }}` - sudo パスワード
+
+sudoパスワードはテンプレート変数へ保存せず、`SUDO_PASSWORD` または
+`get_sudo_password.sh.tmpl` を介して取得します。
 
 ## 新しいスクリプトの追加
 

@@ -27,7 +27,7 @@
 
 `[[hooks]]` は `~/.claude/settings.json` と `~/.copilot/hooks/from-claude.json`
 の両方に展開されるので、CLI ごとに二重管理しなくてよい。
-詳細は [`docs/agents-permissions.md`](../../docs/agents-permissions.md)。
+詳細は [エージェント権限仕様](../../docs/spec/agent-permissions.md)。
 
 ## デフォルトのスラッシュコマンド
 

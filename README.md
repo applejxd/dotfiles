@@ -124,13 +124,8 @@ chezmoi apply
 
 ## ドキュメント
 
-詳細な情報は以下のドキュメントを参照してください：
-
-- [プロジェクト構造](docs/STRUCTURE.md) - ディレクトリ構造と自動実行スクリプト
-- [セキュリティ機能](docs/SECURITY.md) - Bitwarden と sops (age) の設定
-- [トラブルシューティング](docs/TROUBLESHOOTING.md) - よくある問題と解決方法
-- [開発者向け](docs/DEVELOPMENT.md) - 開発環境のセットアップとカスタマイズ
-- [Bitwarden + sops セットアップ](docs/SETUP_SOPS_AGE.md) - 詳細なセットアップ手順
+詳細な仕様、運用手順、ADR、調査記録は
+[ドキュメント一覧](docs/index.md) から参照できます。
 
 ## ライセンス
 

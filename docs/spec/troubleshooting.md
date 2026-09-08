@@ -65,7 +65,21 @@ winget install --id Python.Python.3.12 --exact --silent `
 chezmoi apply
 ```
 
-### 7. CLI 起動時に `Failed to load 1 skill.` と出る
+### 7. WindowsでCopilot hookが起動しない
+
+生成済みhookがPowerShell用コマンドと `py -3` を使用しているか確認する。
+詳細な切り分けは
+[Copilot CLI: Windowsのhook起動](../../home/dot_copilot/README.md#windows-の-hook-起動)
+を参照。
+
+```powershell
+Get-Content "$HOME\.copilot\hooks\from-claude.json"
+'{"tool_name":"powershell","tool_input":{"command":"git status"}}' |
+    py -3 -B -X utf8 "$HOME\.claude\hooks\check_bash.py"
+$LASTEXITCODE
+```
+
+### 8. CLI 起動時に `Failed to load 1 skill.` と出る
 
 SKILL.md の YAML frontmatter が壊れていると、CLI はそのスキルを黙って読み飛ばす。
 バナーには件数しか出ないので、どのファイルかは CLI に聞く。
@@ -140,7 +154,7 @@ sops --decrypt [暗号化ファイル]
 ```
 
 鍵が無い場合は `bw unlock` してから `chezmoi apply` で展開されます。
-詳細は [SETUP_SOPS_AGE.md](SETUP_SOPS_AGE.md) を参照してください。
+詳細は [Secret管理セットアップ](sops-age.md) を参照してください。
 
 ### 3. chezmoi設定確認
 

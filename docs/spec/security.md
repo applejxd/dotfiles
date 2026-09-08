@@ -3,6 +3,8 @@
 ## 概要
 
 個人情報と機密設定を安全に管理するため、Bitwarden と sops (age) を使用します。
+この文書は役割分担とセキュリティ要件を定義し、詳細な導入・復旧手順は
+[Secret管理セットアップ](sops-age.md) に集約します。
 
 ## Bitwarden連携
 
@@ -14,7 +16,7 @@
 
 通常は `chezmoi apply` 中に Windows では Winget (`Bitwarden.CLI`)、Unix では
 mise (`npm:@bitwarden/cli`) で自動投入されるため **明示インストール不要**。
-クリーン環境では「2 フェーズ bootstrap」（[README](../README.md) 参照）で:
+クリーン環境では「2 フェーズ bootstrap」（[README](../../README.md) 参照）で:
 
 1. `chezmoi init applejxd && chezmoi apply` → OS ごとのパッケージ管理で bw を導入
 2. `bw login` と `BW_SESSION` の設定 → `chezmoi init applejxd && chezmoi apply` で
@@ -118,7 +120,7 @@ chezmoi apply
 ### 詳細な手順
 
 セットアップ、プロジェクトごとの設定、日常操作、新環境での復旧は
-[SETUP_SOPS_AGE.md](SETUP_SOPS_AGE.md) にまとめています。
+[Secret管理セットアップ](sops-age.md) にまとめています。
 
 > **補足**: 以前は chezmoi 本体の age 暗号化（`~/.config/chezmoi/key.txt` と
 > `encryption = "age"`）も設定していましたが、暗号化ファイルを一度も

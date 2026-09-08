@@ -120,7 +120,7 @@ chezmoi 管理外の CLI ランタイム設定を、内容にかかわらず秘�
       回帰テストを追加する
 - [x] `uv run --with pytest --no-project pytest test/agents/ -q` が通過（1224 件）
 - [x] `uv run pre-commit run --all-files` が全通過
-- [x] `docs/agents-permissions.md` に判定の根拠と一致方法の使い分けを記載
+- [x] `docs/spec/agent-permissions.md` に判定の根拠と一致方法の使い分けを記載
 
 ## 結果
 
