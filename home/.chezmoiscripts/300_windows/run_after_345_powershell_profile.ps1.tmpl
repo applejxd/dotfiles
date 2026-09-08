@@ -1,0 +1,78 @@
+﻿<#
+  .SYNOPSIS
+    Deploy the PowerShell profile loaders outside the chezmoi target tree
+  .DESCRIPTION
+    chezmoi は Documents 配下へローダーを配置するが、OneDrive の既知フォルダー
+    リダイレクトが有効な環境では $PROFILE が OneDrive 側を指すため、配置した
+    ローダーが一切読み込まれない。実際の MyDocuments を解決し、必要な場合だけ
+    そちらにも同じローダーを置く。
+    あわせて、旧構成 (Documents\commands) の残骸を掃除する。
+
+    パスは PowerShell の $HOME ではなく chezmoi が解決したホームを使う。
+    ドメイン参加機では $HOME (HOMEDRIVE+HOMEPATH) が chezmoi の ~
+    (%USERPROFILE%) と一致しないことがあるため。
+#>
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$loader = @(
+  '# $PROFILE ローダー。設定の実体は ~/.config/powershell/profile.ps1 にある。',
+  '# chezmoi の展開先と揃えるため、$HOME ではなく chezmoi が解決したホームを使う',
+  '# (ドメイン参加機では $HOME が %USERPROFILE% と一致しないことがある)。',
+  '. "{{ .chezmoi.homeDir }}/.config/powershell/profile.ps1"'
+) -join [Environment]::NewLine
+
+function Test-LoaderContent {
+  param([Parameter(Mandatory)][string]$Path)
+
+  if (-not [System.IO.File]::Exists($Path)) {
+    return $false
+  }
+  # Windows PowerShell 5.1 は BOM の無い .ps1 を ANSI コードページとして読み、
+  # 日本語コメントが直後の行を飲み込む。BOM が無ければ書き直す。
+  $bytes = [System.IO.File]::ReadAllBytes($Path)
+  if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+    return $false
+  }
+  # 改行コードが揃うとは限らないため、正規化してから比較する
+  $current = [System.IO.File]::ReadAllText($Path).Replace("`r`n", "`n").TrimEnd()
+  return $current -eq $loader.Replace("`r`n", "`n").TrimEnd()
+}
+
+$managedDocuments = Join-Path '{{ .chezmoi.homeDir }}' 'Documents'
+$actualDocuments = [Environment]::GetFolderPath('MyDocuments')
+
+if (
+  $actualDocuments -and
+  ($actualDocuments.TrimEnd('\') -ne $managedDocuments.TrimEnd('\'))
+) {
+  foreach ($hostDirectory in @('PowerShell', 'WindowsPowerShell')) {
+    $directory = Join-Path $actualDocuments $hostDirectory
+    $target = Join-Path $directory 'profile.ps1'
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    if (-not (Test-LoaderContent $target)) {
+      # Set-Content -Encoding utf8 は 5.1 が BOM 付き、7 が BOM 無しを書く。
+      # chezmoi は .ps1 を pwsh 7 で実行するため、BOM は明示的に付ける
+      # (-Encoding utf8BOM は 5.1 に無いので使えない)。
+      [System.IO.File]::WriteAllText(
+        $target,
+        $loader + [Environment]::NewLine,
+        [System.Text.UTF8Encoding]::new($true)
+      )
+      Write-Host "MyDocuments is redirected; updated $target"
+    }
+  }
+}
+
+# 旧構成: プロファイルから dot-source していた補助コマンド群。
+# ユーザーが後から置いたファイルを巻き込まないよう、.ps1 だけを消して
+# 空になった場合にのみディレクトリを削除する。
+$legacyCommands = Join-Path $managedDocuments 'commands'
+if (Test-Path -LiteralPath $legacyCommands -PathType Container) {
+  Get-ChildItem -LiteralPath $legacyCommands -File -Filter '*.ps1' | Remove-Item -Force
+  if (-not (Get-ChildItem -LiteralPath $legacyCommands -Force)) {
+    Remove-Item -LiteralPath $legacyCommands -Force
+    Write-Host "Removed the legacy command directory: $legacyCommands"
+  }
+}

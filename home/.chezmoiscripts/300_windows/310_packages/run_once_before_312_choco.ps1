@@ -1,4 +1,4 @@
-<#
+﻿<#
   .SYNOPSIS
     Install keypirinha and its extentions
   .DESCRIPTION

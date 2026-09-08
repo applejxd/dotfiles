@@ -1,4 +1,4 @@
-<#
+﻿<#
   .SYNOPSIS
     Set Explorer / Folder Options (HKCU) and restart Explorer.
 

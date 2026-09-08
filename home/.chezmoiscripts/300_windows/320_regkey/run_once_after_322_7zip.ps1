@@ -1,4 +1,4 @@
-<#
+﻿<#
   .SYNOPSIS
     decompress files by double-click using 7-Zip
   .DESCRIPTION

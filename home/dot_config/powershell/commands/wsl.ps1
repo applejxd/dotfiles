@@ -1,4 +1,4 @@
-function wslls { wsl -l -v }
+﻿function wslls { wsl -l -v }
 
 function Select-WslDistro {
   @(wsl -l -q) |

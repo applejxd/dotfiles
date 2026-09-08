@@ -1,4 +1,4 @@
-<#
+﻿<#
   .SYNOPSIS
     Install Herdr for native Windows
   .DESCRIPTION

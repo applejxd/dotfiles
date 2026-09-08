@@ -1,4 +1,4 @@
-<#
+﻿<#
   .SYNOPSIS
     enable long path support
 #>

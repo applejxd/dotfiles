@@ -1,4 +1,4 @@
-function dls { docker ps -a }
+﻿function dls { docker ps -a }
 
 function dim { docker images }
 

@@ -1,0 +1,382 @@
+﻿# PowerShell 7 / Windows PowerShell 5.1 共通プロファイル本体。
+#
+# $PROFILE (Documents 配下) にはこのファイルを dot-source するだけのローダーを
+# 置く。Documents は OneDrive の既知フォルダーリダイレクトで移動しうるため、
+# 設定の実体は ~/.config/powershell に置き、ローダーだけを配置する。
+# see home/.chezmoiscripts/300_windows/run_after_345_powershell_profile.ps1
+#
+# profile.ps1 は AllHosts プロファイルなので、エージェントやスクリプトからの
+# 非対話起動でも毎回読み込まれる。ここから対話ブロックまでは
+# Microsoft.PowerShell.{Management,Utility} と Get-Command を使わない。
+# いずれも初回呼び出しで 0.25 秒前後かかり、起動時間を支配するため。
+
+# エンコーディングを US-ASCII から変更
+# see https://dattesar.com/powershell-utf8/
+$PSDefaultParameterValues['*:Encoding'] = 'utf8'
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = $utf8NoBom
+[Console]::OutputEncoding = $utf8NoBom
+$OutputEncoding = $utf8NoBom
+
+{{ includeTemplate "powershell/git-config-env.ps1" }}
+
+#------#
+# PATH #
+#------#
+
+function Add-EnvPathEntry {
+  param([Parameter(Mandatory)][string]$Path)
+
+  $normalized = $Path.TrimEnd('\')
+  $entries = $env:Path -split ';' | ForEach-Object { $_.TrimEnd('\') }
+  if ($entries -notcontains $normalized) {
+    $env:Path = "$env:Path;$normalized"
+  }
+}
+
+# mise の activate は毎回 PATH の先頭へ追加するため、入れ子のシェルで PATH が
+# 際限なく伸びる。追加後に一度だけ重複を畳み、先頭側の優先順位だけを残す。
+function Remove-DuplicateEnvPathEntry {
+  $seen = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase
+  )
+  $env:Path = (
+    $env:Path -split ';' |
+      Where-Object { $_ } |
+      Where-Object { $seen.Add($_.TrimEnd('\')) }
+  ) -join ';'
+}
+
+#-------------------#
+# init のキャッシュ #
+#-------------------#
+
+# mise / oh-my-posh の init は毎起動で外部プロセスを起動し、合わせて 0.5 秒ほど
+# かかる。出力は実行ファイルが変わらない限り不変なのでキャッシュする。
+#
+# stamp には実行ファイルの絶対パス・サイズ・更新時刻を記録し、検証もそれだけで
+# 行う。Get-Command はコマンド探索を走らせて 0.2 秒かかるため、キャッシュが無効
+# なとき (初回・ツール更新後) にしか呼ばない。
+function Get-CachedInitScript {
+  [OutputType([string])]
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][string]$CommandName,
+    [Parameter(Mandatory)][scriptblock]$Generator,
+    [string]$ExtraKey = ''
+  )
+
+  # Join-Path は Microsoft.PowerShell.Management の読み込みを伴うため使わない。
+  # $null / 空文字を Combine へ渡すと例外ではなく相対パスになり、キャッシュが
+  # カレントディレクトリに作られてしまうため、先に解決しておく。
+  $localAppData = $env:LOCALAPPDATA
+  if ([string]::IsNullOrEmpty($localAppData)) {
+    $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
+  }
+  if ([string]::IsNullOrEmpty($localAppData)) {
+    return $null
+  }
+  $cacheRoot = [System.IO.Path]::Combine($localAppData, 'PowerShellProfileCache')
+  $cacheFile = [System.IO.Path]::Combine($cacheRoot, "$Name.ps1")
+  $stampFile = [System.IO.Path]::Combine($cacheRoot, "$Name.stamp")
+  # Windows PowerShell 5.1 は BOM の無い .ps1 を ANSI コードページとして読む。
+  # キャッシュには実行ファイルの絶対パスが入るため、BOM を付けないとユーザー名や
+  # インストール先に非 ASCII を含む環境で壊れる。
+  $utf8WithBom = [System.Text.UTF8Encoding]::new($true)
+
+  function Get-Stamp([string]$ExecutablePath) {
+    # 壊れた stamp から不正なパスを渡されても、起動時エラーではなく
+    # キャッシュミスとして扱う (FileInfo は不正な形式のパスで例外を投げる)。
+    try {
+      $executable = [System.IO.FileInfo]::new($ExecutablePath)
+      if (-not $executable.Exists) {
+        return $null
+      }
+      @(
+        $executable.FullName
+        $executable.Length
+        $executable.LastWriteTimeUtc.Ticks
+        $ExtraKey
+      ) -join '|'
+    } catch {
+      return $null
+    }
+  }
+
+  # 別シェルが同じ stamp を書き換えている最中は読めないことがある。
+  # その場合もキャッシュミスとして扱い、起動時エラーにはしない。
+  if ([System.IO.File]::Exists($cacheFile) -and [System.IO.File]::Exists($stampFile)) {
+    try {
+      $stamp = [System.IO.File]::ReadAllText($stampFile)
+      if ($stamp -and ((Get-Stamp $stamp.Split('|')[0]) -eq $stamp)) {
+        return $cacheFile
+      }
+    } catch { }
+  }
+
+  # 同名の実行ファイルが複数の PATH に存在しうる (例: winget の shim と本体)
+  $command = @(Get-Command $CommandName -ErrorAction Ignore -CommandType Application)[0]
+  if (-not $command) {
+    return $null
+  }
+  $stamp = Get-Stamp $command.Path
+  if (-not $stamp) {
+    return $null
+  }
+
+  $generated = & $Generator $command.Path
+  if ([string]::IsNullOrWhiteSpace($generated)) {
+    return $null
+  }
+
+  # 同時に起動したシェルが書き込み途中のファイルを読まないよう、一時ファイル経由で置く。
+  # stamp はキャッシュ本体の後に書くので、壊れた stamp は次回の再生成になるだけで済む。
+  # 置き換えに失敗しても生成済みの内容は使えるよう、一時ファイルのパスを返す
+  # (キャッシュはあくまで最適化で、失敗しても mise の activate 等は行う)。
+  # dot-source は .ps1 以外を Application として扱い、実行せずにシェル関連付けで
+  # 開こうとするため、一時ファイル名も .ps1 で終わらせる。
+  $tempFile = [System.IO.Path]::Combine($cacheRoot, "$Name.$PID.tmp.ps1")
+  try {
+    [System.IO.Directory]::CreateDirectory($cacheRoot) | Out-Null
+    # 置き換えへ失敗して残った一時ファイルを掃除する。同時に起動した別プロセスが
+    # 書き込み中のものを消さないよう、十分古いものだけを対象にする。
+    $staleBefore = [DateTime]::UtcNow.AddHours(-1)
+    foreach ($stale in [System.IO.Directory]::GetFiles($cacheRoot, "$Name.*.tmp.ps1")) {
+      try {
+        if ([System.IO.File]::GetLastWriteTimeUtc($stale) -lt $staleBefore) {
+          [System.IO.File]::Delete($stale)
+        }
+      } catch { }
+    }
+    [System.IO.File]::WriteAllText($tempFile, $generated, $utf8WithBom)
+    if ([System.IO.File]::Exists($cacheFile)) {
+      # PowerShell は $null を空文字へ変換するため、backup 無しは [NullString]::Value で渡す
+      [System.IO.File]::Replace($tempFile, $cacheFile, [NullString]::Value)
+    } else {
+      [System.IO.File]::Move($tempFile, $cacheFile)
+    }
+  } catch {
+    Write-Warning "Failed to store the $Name init cache: $_"
+    if ([System.IO.File]::Exists($tempFile)) {
+      return $tempFile
+    }
+    return $null
+  }
+
+  # 本体の設置後は stamp が書けなくても実害はない (次回再生成されるだけ)。
+  # 別シェルが検証のために stamp を読んでいると書き込みは競合しうるため、
+  # ここで失敗しても $cacheFile を返して activate は行う。
+  try {
+    [System.IO.File]::WriteAllText($stampFile, $stamp, $utf8WithBom)
+  } catch {
+    Write-Warning "Failed to store the $Name cache stamp: $_"
+  }
+  return $cacheFile
+}
+
+# mise shims and directory-specific environments
+$miseInit = Get-CachedInitScript -Name 'mise' -CommandName 'mise' -Generator {
+  param([string]$Executable)
+
+  # Full activation installs a command-not-found hook that calls PSReadLine
+  # before its history is initialized during profile startup.
+  $output = & $Executable activate pwsh --shims | Out-String
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "mise activation failed with exit code $LASTEXITCODE"
+    return $null
+  }
+  $output
+}
+if ($miseInit) {
+  # キャッシュ本体が別プロセスに掴まれていると dot-source は失敗する。
+  # shims が PATH に入らないと以降のツールが全て解決できなくなるため、
+  # oh-my-posh と同じく直接実行へフォールバックする。
+  try {
+    . $miseInit
+  } catch {
+    Write-Warning "Cached mise activation failed; running mise directly: $_"
+    $miseCommand = @(Get-Command mise -ErrorAction Ignore -CommandType Application)[0]
+    if ($miseCommand) {
+      $miseActivation = & $miseCommand.Path activate pwsh --shims | Out-String
+      # Invoke-Expression は空文字を受け付けない (ValidateNotNullOrEmpty)
+      if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($miseActivation)) {
+        Invoke-Expression $miseActivation
+      } else {
+        Write-Warning "mise activation failed with exit code $LASTEXITCODE"
+      }
+    }
+  }
+}
+
+# for Claude Code
+Add-EnvPathEntry "$env:USERPROFILE\.local\bin"
+
+# OneDrive の MyDocuments 同期は非推奨（パスが変更されるため）
+# see https://ohmyposh.dev/docs/installation/customize
+# see https://github.com/JanDeDobbeleer/oh-my-posh/discussions/2089#discussioncomment-2569096
+Add-EnvPathEntry "$env:LocalAppData\Programs\oh-my-posh\bin"
+
+Remove-DuplicateEnvPathEntry
+
+#--------------------#
+# alias / 補助コマンド #
+#--------------------#
+
+# Set-Alias は Microsoft.PowerShell.Utility の読み込みを伴うため関数で代用する。
+# pbcopy はパイプライン入力が本体なので $input で明示的に渡す
+# (エイリアスと違い、関数は既定では標準入力を子プロセスへ引き継がない)。
+function open { explorer.exe @args }
+function pbcopy { $input | clip.exe }
+function pbpaste { Get-Clipboard @args }
+function relogin { & (Get-Process -Id $PID).Path -NoExit }
+function explorer-restart { Stop-Process -Name explorer -Force; Start-Process explorer }
+
+# `chezmoi cd` that keeps the current shell session
+function ccd { Set-Location (chezmoi source-path) }
+
+# 定義するだけならコマンドの有無を調べる必要はなく、Get-Command の探索も避けられる
+. "$PSScriptRoot/commands/wsl.ps1"
+. "$PSScriptRoot/commands/pwgen.ps1"
+. "$PSScriptRoot/commands/docker.ps1"
+. "$PSScriptRoot/commands/fzf.ps1"
+
+# see https://github.com/junegunn/fzf/wiki/Windows
+$env:FZF_DEFAULT_OPTS = '--reverse --border'
+
+#------------------------#
+# ここから下は対話時のみ #
+#------------------------#
+
+# stdio のリダイレクトだけでは、自前のコンソールを持って起動する
+# `Start-Process pwsh -ArgumentList '-Command', ...` やタスクスケジューラを
+# 取りこぼす。起動引数も見て、-Command / -File / -EncodedCommand /
+# -NonInteractive が付いていれば非対話とみなす。ただし -NoExit があれば
+# 実行後に対話へ移るため対話として扱う。
+$startupIsNonInteractive = $false
+$startupKeepsRunning = $false
+foreach ($argument in [Environment]::GetCommandLineArgs()) {
+  if ($argument.Length -lt 2 -or ($argument[0] -ne '-' -and $argument[0] -ne '/')) {
+    # -File を省略した位置指定のスクリプト実行 (`pwsh script.ps1`)
+    if ($argument.EndsWith('.ps1', [StringComparison]::OrdinalIgnoreCase)) {
+      $startupIsNonInteractive = $true
+    }
+    continue
+  }
+  $switchName = $argument.Substring(1).ToLowerInvariant()
+  if (
+    'command'.StartsWith($switchName) -or
+    'file'.StartsWith($switchName) -or
+    'encodedcommand'.StartsWith($switchName) -or
+    'noninteractive'.StartsWith($switchName)
+  ) {
+    $startupIsNonInteractive = $true
+  }
+  if ('noexit'.StartsWith($switchName)) {
+    $startupKeepsRunning = $true
+  }
+}
+
+if (
+  [Console]::IsInputRedirected -or
+  [Console]::IsOutputRedirected -or
+  ($startupIsNonInteractive -and -not $startupKeepsRunning)
+) {
+  return
+}
+
+# テーマ
+$poshTheme = if ($env:POSH_THEMES_PATH) {
+  [System.IO.Path]::Combine($env:POSH_THEMES_PATH, 'pure.omp.json')
+} else {
+  $null
+}
+if ($poshTheme -and [System.IO.File]::Exists($poshTheme)) {
+  $poshThemeStamp = [System.IO.FileInfo]::new($poshTheme).LastWriteTimeUtc.Ticks
+  $poshInit = Get-CachedInitScript -Name 'oh-my-posh' -CommandName 'oh-my-posh' `
+    -ExtraKey "$poshTheme|$poshThemeStamp" -Generator {
+    param([string]$Executable)
+
+    $output = (@(& $Executable init pwsh --config $poshTheme) -join "`n")
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "oh-my-posh init failed with exit code $LASTEXITCODE"
+      return $null
+    }
+    # init 出力にはセッションごとの GUID が埋め込まれる。キャッシュを使い回すと
+    # 全セッションで同じ ID になるため、読み込みのたびに採番する式へ置き換える。
+    # 置換できない場合は出力形式が変わっているので、キャッシュしない。
+    $replaced = [regex]::Replace(
+      $output,
+      '(?<=\$env:POSH_SESSION_ID\s*=\s*)"[0-9a-fA-F-]{36}"',
+      '[guid]::NewGuid().ToString()'
+    )
+    if ($replaced -eq $output) {
+      Write-Warning 'Unexpected oh-my-posh init output; skipping the cache.'
+      return $null
+    }
+    $replaced
+  }
+  if ($poshInit) {
+    # キャッシュした init は oh-my-posh 自身が生成した中間スクリプトを呼ぶ。
+    # それが消えていた場合はキャッシュを捨てて次回作り直す。
+    try {
+      . $poshInit
+    } catch {
+      Write-Warning "Cached oh-my-posh init failed; discarding the cache: $_"
+      [System.IO.File]::Delete($poshInit)
+      $poshInit = $null
+    }
+  }
+  if (-not $poshInit) {
+    $poshCommand = @(Get-Command oh-my-posh -ErrorAction Ignore -CommandType Application)[0]
+    if ($poshCommand) {
+      $poshActivation = (@(& $poshCommand.Path init pwsh --config $poshTheme) -join "`n")
+      # Invoke-Expression は空文字を受け付けない (ValidateNotNullOrEmpty)
+      if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($poshActivation)) {
+        Invoke-Expression $poshActivation
+      } else {
+        Write-Warning "oh-my-posh init failed with exit code $LASTEXITCODE"
+      }
+    }
+  }
+}
+
+# キーバインド
+if (Get-Module PSReadLine) {
+  Set-PSReadLineOption -EditMode Emacs
+  Set-PSReadLineOption -BellStyle None
+  # 標準だと Ctrl+d は DeleteCharOrExit のため、うっかり端末が終了することを防ぐ
+  Set-PSReadLineKeyHandler -Chord 'Ctrl+d' -Function DeleteChar
+}
+
+# 起動を遅らせてよいモジュールは最初のプロンプト表示後にまとめて読み込む。
+# PSFzf と ZLocation だけで 1 秒ほどかかるため、登録はこの 1 箇所に集約する。
+Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -Action {
+  $chocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+  if ([System.IO.File]::Exists($chocolateyProfile)) {
+    try {
+      Import-Module $chocolateyProfile -Scope Global -ErrorAction Stop
+    } catch {
+      Write-Warning "Failed to import the Chocolatey profile: $_"
+    }
+  }
+
+  # PSFzf の PSReadLine 連携は Windows PowerShell 5.1 では安定しないため Core のみ
+  if ($PSVersionTable.PSEdition -eq 'Core') {
+    try {
+      Import-Module PSFzf -Scope Global -ErrorAction Stop
+      Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+    } catch {
+      Write-Warning "Failed to set up PSFzf: $_"
+    }
+  }
+
+  try {
+    Import-Module ZLocation -Scope Global -ErrorAction Stop
+  } catch {
+    Write-Warning "Failed to import ZLocation: $_"
+  }
+
+  Register-FzfKeyHandler
+
+  Unregister-Event -SubscriptionId $EventSubscriber.SubscriptionId
+} | Out-Null

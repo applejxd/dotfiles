@@ -1,4 +1,4 @@
-function pwgen {
+﻿function pwgen {
     <#
     .SYNOPSIS
         Unix の pwgen コマンドを再現する PowerShell 関数

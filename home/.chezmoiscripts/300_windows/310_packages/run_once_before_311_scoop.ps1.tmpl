@@ -1,4 +1,4 @@
-<#
+﻿<#
   .SYNOPSIS
     Install packages by scoop
   .DESCRIPTION
@@ -10,25 +10,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$gitConfigCount = 0
-$hasGitConfigCount = [int]::TryParse($env:GIT_CONFIG_COUNT, [ref]$gitConfigCount)
-$invalidGitConfig = $false
-if ($hasGitConfigCount) {
-  for ($i = 0; $i -lt $gitConfigCount; $i++) {
-    if (
-      -not (Test-Path "Env:GIT_CONFIG_KEY_$i") -or
-      -not (Test-Path "Env:GIT_CONFIG_VALUE_$i")
-    ) {
-      $invalidGitConfig = $true
-      break
-    }
-  }
-}
-if ($invalidGitConfig) {
-  Get-ChildItem Env: |
-    Where-Object Name -Match '^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$' |
-    Remove-Item
-}
+{{ includeTemplate "powershell/git-config-env.ps1" }}
 
 if (!(Get-Command scoop -ErrorAction Ignore)) {
   Invoke-WebRequest -useb get.scoop.sh | Invoke-Expression
