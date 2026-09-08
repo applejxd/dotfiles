@@ -2057,6 +2057,8 @@ def test_malformed_payload_does_not_crash(payload):
         ("長い here-string", "bash <<< '" + "a" * 20000 + "'"),
         ("多数の代入", "; ".join([f"v{i}=x" for i in range(2000)]) + "; git push"),
     ],
+    ids=["large-argument", "many-segments", "deep-nesting",
+         "long-pipeline", "long-here-string", "many-assignments"],
 )
 def test_pathological_input_still_decides_quickly(label, command):
     """病的な入力でも 5 秒以内に判定を返すこと (タイムアウトで素通りさせない)."""
@@ -2065,6 +2067,24 @@ def test_pathological_input_still_decides_quickly(label, command):
     elapsed = time.monotonic() - started
     assert elapsed < 5, f"{label}: {elapsed:.1f}s かかった"
     assert decision == "deny", f"{label}: -> {decision} ({reason})"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows native path semantics")
+@pytest.mark.parametrize(
+    "command",
+    [
+        r"cat C:\Users\example\.config\gh\hosts.yml",
+        r"cat C:\Users\example\.COPILOT\config.json",
+        r"ls C:\Users\example\.SSH",
+        r"cat secrets\prod.yaml",
+        r"echo x > C:\Users\example\.claude\settings.json",
+        r"echo x > .git\config",
+        r"rm C:\Users\example\.claude\hooks\check_bash.py",
+    ],
+)
+def test_windows_native_guard_paths_are_denied(command):
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
 
 
 def test_overlong_command_is_denied():
@@ -2720,9 +2740,9 @@ def test_broken_config_fails_closed(tmp_path, label, files):
     assert json.loads(proc.stdout)["permissionDecision"] == "deny", label
 
 
-@pytest.mark.parametrize("tool_name", ["Bash", "bash"])
+@pytest.mark.parametrize("tool_name", ["Bash", "bash", "powershell"])
 def test_both_cli_tool_names_are_checked(tool_name):
-    """Claude の Bash と Copilot の bash の両方で判定されること."""
+    """Claude と Copilot の Unix / Windows ツール名で判定されること."""
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": tool_name,

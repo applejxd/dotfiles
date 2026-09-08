@@ -467,7 +467,7 @@ purpose = "[bash] deny を両 CLI で、ask を Claude で強制する (permissi
 claude_event = "PreToolUse"
 claude_matcher = "Bash"
 copilot_event = "PreToolUse"
-copilot_matcher = "^(Bash|bash)$"
+copilot_matcher = "^(Bash|bash|powershell)$"
 timeout_sec = 30
 
 [[hooks]]
@@ -481,7 +481,7 @@ purpose = "/tmp への書き込みを検出して ./.tmp へ誘導する (読み
 claude_matcher = "Bash|Write|Edit"
 claude_event = "PreToolUse"
 copilot_event = "PreToolUse"
-copilot_matcher = "^(Bash|bash|Write|create|Edit|edit)$"
+copilot_matcher = "^(Bash|bash|powershell|Write|create|Edit|edit)$"
 timeout_sec = 30
 
 [[hooks]]

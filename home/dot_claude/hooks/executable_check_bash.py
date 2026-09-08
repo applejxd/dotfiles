@@ -157,12 +157,18 @@ _GIT_FILE_SUBCOMMANDS = {"diff", "show", "log", "blame", "cat-file", "grep"}
 
 def _looks_like_path(token: str) -> bool:
     """引数がパスらしいか。検索語や通常の単語を除外するための判定。"""
-    if "/" in token or token.startswith("~"):
+    if "/" in token or os.sep in token or token.startswith("~"):
         return True
     if token.startswith(".") and len(token) > 1:
         return True
     # foo.pem のように既知の拡張子を持つもの
     return token.lower().endswith(_SENSITIVE_SUFFIXES)
+
+
+def _normalize_guard_path(token: str) -> str:
+    """Keep native path semantics, but use slash-separated guard patterns."""
+    expanded = token.strip("'\"").replace("~", os.path.expanduser("~"), 1)
+    return os.path.normcase(os.path.normpath(expanded)).replace(os.sep, "/")
 
 
 def _is_sensitive_token(token: str, *, heuristic: bool = True) -> str | None:
@@ -176,8 +182,7 @@ def _is_sensitive_token(token: str, *, heuristic: bool = True) -> str | None:
     if not cleaned:
         return None
 
-    expanded = cleaned.replace("~", os.path.expanduser("~"), 1)
-    normalized = os.path.normpath(expanded)
+    normalized = _normalize_guard_path(cleaned)
     base = os.path.basename(normalized)
 
     if _SENSITIVE_EXEMPT_RE.search(base):
@@ -2224,9 +2229,7 @@ def check_guard_tampering(cmd: str) -> str | None:
                "/.git/config", "/.git/hooks", ".git/config", ".git/hooks")
 
     def _hits(token: str) -> bool:
-        expanded = os.path.normpath(
-            token.strip("'\"").replace("~", os.path.expanduser("~"), 1)
-        )
+        expanded = _normalize_guard_path(token)
         return any(t in expanded for t in targets)
 
     # リダイレクト先がガード設定なら、どのコマンドでも上書きになる

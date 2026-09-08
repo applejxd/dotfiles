@@ -20,6 +20,14 @@ if ($hasGitConfigCount) {
       $invalidGitConfig = $true
       break
     }
+    # Python env restoration drops empty values on Windows. For fsmonitor,
+    # "false" preserves the disabled state without breaking subsequent Git calls.
+    if (
+      (Get-Item "Env:GIT_CONFIG_KEY_$i").Value -eq 'core.fsmonitor' -and
+      (Get-Item "Env:GIT_CONFIG_VALUE_$i").Value -eq ''
+    ) {
+      Set-Item "Env:GIT_CONFIG_VALUE_$i" 'false'
+    }
   }
 }
 if ($invalidGitConfig) {

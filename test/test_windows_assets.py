@@ -112,6 +112,16 @@ def test_powershell_profile_activates_mise():
     assert "$invalidGitConfig" in profile
 
 
+def test_powershell_preserves_disabled_fsmonitor_without_empty_environment_value():
+    profile = (
+        ROOT / "home/Documents/WindowsPowerShell/profile.ps1.tmpl"
+    ).read_text(encoding="utf-8")
+
+    assert "(Get-Item \"Env:GIT_CONFIG_KEY_$i\").Value -eq 'core.fsmonitor'" in profile
+    assert "(Get-Item \"Env:GIT_CONFIG_VALUE_$i\").Value -eq ''" in profile
+    assert "Set-Item \"Env:GIT_CONFIG_VALUE_$i\" 'false'" in profile
+
+
 def test_windows_terminal_settings_are_replaced_atomically():
     script = (
         ROOT

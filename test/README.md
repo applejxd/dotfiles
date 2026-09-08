@@ -5,6 +5,35 @@
 
 > すべてのコマンドは **リポジトリ直下**で実行してください。
 
+## Windows / PowerShell の検証
+
+```powershell
+uv run --with pytest --with pyyaml --no-project pytest test\agents\ -q
+uv run --with pytest --with pywinpty --no-project pytest test\test_windows_assets.py test\test_powershell_interactive.py -q
+uv run pre-commit run --all-files
+```
+
+対話テストは **配備済みの実プロファイル**を PowerShell 7 と Windows PowerShell 5.1
+の ConPTY セッションで読み込み、プロンプト到達後の起動エラー、OnIdle ジョブのエラー、
+PSReadLine / PSFzf / ZLocation と基本コマンドを確認する。
+`chezmoi update` / `chezmoi apply` はテスト内で実行しないため、変更した設定は事前に適用する。
+Windows 以外、または `pywinpty` 未指定の場合は対話テストをスキップする。
+
+agent テストの `--no-project` 実行では、スキル frontmatter 検証用の `pyyaml` も必要。
+長大入力のテストには短い ID を付け、Windows の `PYTEST_CURRENT_TEST` 環境変数の
+32,767 文字制限を超えないようにする。
+
+pre-commit が実際には変更していないのに `files were modified by this hook` と報告し、
+Git が `missing config value GIT_CONFIG_VALUE_N` で失敗する場合は、
+`chezmoi apply` 後に PowerShell 7 を開き直す。
+Python の Windows 環境変数復元処理は空文字列を削除してしまうため、プロファイルは
+空の `core.fsmonitor` だけを同じ無効状態の `false` に置き換える。
+その他の有効な Git 設定は保持する。
+
+Windows の Copilot コマンド hook は `powershell` ツール名も照合・正規化する。
+agent テストでは生成された matcher と実 hook の判定を両方確認し、
+パスの `\` 区切りや大文字小文字によって既存の保護対象が見落とされないことも検証する。
+
 ---
 
 ## 1. 要件

@@ -31,6 +31,7 @@ _TOOL_KIND_MAP: dict[str, str] = {
     # bash 系
     "Bash": "bash",
     "bash": "bash",
+    "powershell": "bash",
     # ファイル読み取り系
     "Read": "view",
     "view": "view",

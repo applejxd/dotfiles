@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -173,9 +174,12 @@ def test_claude_hook_command_is_absolute_path():
     for entries in hooks.values():
         for entry in entries:
             for cmd in entry["hooks"]:
-                runner, path = cmd["command"].split(" ", 1)
-                assert runner in {"python3", "bash"}
-                assert path.startswith("/"), f"not absolute: {path}"
+                args = shlex.split(cmd["command"], posix=os.name != "nt")
+                assert args[0] in ({"py", "bash"} if os.name == "nt" else {"python3", "bash"})
+                if args[0] == "py":
+                    assert args[1:3] == ["-3", "-B"]
+                path = args[-1].strip('"')
+                assert Path(path).is_absolute(), f"not absolute: {path}"
                 assert "~" not in path and "$HOME" not in path
 
 
@@ -478,15 +482,17 @@ def test_copilot_python_hooks_run_with_spaces_in_home(tmp_path, hook_id, command
     ("hook_id", "command"),
     [("check_bash", "git push"), ("redirect-tmp", "echo hello > /tmp/output.txt")],
 )
-def test_windows_python_hook_invocation_emits_utf8(hook_id, command):
+@pytest.mark.parametrize("tool_name", ["bash", "powershell"])
+def test_windows_python_hook_invocation_emits_utf8(hook_id, command, tool_name):
     hook = next(hook for hook in COMMON["hooks"] if hook["id"] == hook_id)
     out = gen.build_copilot_hooks({"hooks": [hook]}, platform="nt")
     invocation = shlex.split(out["hooks"]["PreToolUse"][0]["powershell"])
     # PowerShell / py 自体は実行せず、生成した Python オプションと実スクリプトを検証。
     assert invocation[:2] == ["py", "-3"]
+    assert re.fullmatch(out["hooks"]["PreToolUse"][0]["matcher"], tool_name)
     payload = {
         "hook_event_name": "PreToolUse",
-        "tool_name": "bash",
+        "tool_name": tool_name,
         "tool_input": {"command": command},
         "cwd": str(ROOT),
     }

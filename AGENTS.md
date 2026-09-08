@@ -13,7 +13,8 @@ Windows / Ubuntu / WSL / macOS を対象に、設定ファイルと初期化ス�
 
 - Setup: `mise install && uv sync && uv run pre-commit install`
 - Validation: `uv run pre-commit run --all-files`
-- Agent tests: `uv run --with pytest --no-project pytest test/agents/ -q`
+- Agent tests: `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q`
+- Windows tests: `uv run --with pytest --with pywinpty --no-project pytest test/test_windows_assets.py test/test_powershell_interactive.py -q`
 - Shell check: `mise exec shellcheck -- installer/**/*.sh`
 - Secret scan: `mise exec gitleaks -- detect --source .`
 
