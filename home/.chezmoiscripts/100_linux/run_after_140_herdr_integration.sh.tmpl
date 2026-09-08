@@ -8,10 +8,22 @@ if [[ ! -x "$herdr_path" ]]; then
     exit 1
 fi
 
+# `herdr integration install` は settings.json を末尾改行なしで書き戻す。
+# この run_after_ は apply のたびに走るので、chezmoi が書いた形式 (末尾改行あり)
+# へ戻さないと chezmoi diff に恒常的な差分が出続ける。
+normalize_trailing_newline() {
+    local path="$1"
+    if [[ -s "$path" && -n "$(tail -c 1 "$path")" ]]; then
+        printf '\n' >>"$path"
+    fi
+}
+
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 "$herdr_path" integration install copilot
+normalize_trailing_newline "${HOME}/.copilot/settings.json"
 {{- else }}
 "$herdr_path" integration install claude
+normalize_trailing_newline "${HOME}/.claude/settings.json"
 {{- end }}
 
 skill_dir="${HOME}/.claude/skills/herdr"
