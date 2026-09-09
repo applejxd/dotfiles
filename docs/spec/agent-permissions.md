@@ -524,7 +524,14 @@ Copilot ではそのコマンドが丸ごと無防備になる。
 | プロジェクト内で完結 | **未掲載** (LLM 判定に委ねる) | `uv add` / `uv remove` / `uv pip install` / `uv sync` / `mise install` / `mise use` (ローカル) / `cmake --build` / `gcc -o build/x` |
 | ホームやシステムに残る | `ask` | `uv tool install` / `uv python install` / `uv self update` / `mise use -g` / `mise settings set` / `mise self-update` / `cmake --install` / `gcc -o /usr/local/bin/x` |
 | 外部に見える / 認証情報が残る | `ask` | `docker login` / `docker push` / `gh pr create` |
+| ツール自身を置き換える | `deny` | `uv self update` / `mise self-update` / `mise implode` / `rustup self update` / `chezmoi upgrade` / `npm install -g` |
 | root 相当を得られる | `deny` | `sudo` / `docker run --privileged` / `docker run -v /:/host` |
+
+ツールチェーンの更新を `ask` ではなく `deny` にするのは、影響が全プロジェクトに
+及ぶうえ、戻すには元のバージョンを知っている必要があり実質不可逆だから。
+エージェントが実行する正当な理由も無い。
+対象がツール自身ではないもの (`uv tool upgrade ruff`、`uv python install`) は
+プロジェクト外だが復旧可能なので `ask` に留める。
 
 venv や lockfile はプロジェクトを捨てれば消えるので、承認を挟む価値が
 承認疲れに見合わない。逆にホームやシステムへ出るものは、
@@ -537,6 +544,7 @@ venv や lockfile はプロジェクトを捨てれば消えるので、承認�
 `[bash] ask` に `mise ...` と書いても**一致しない**。mise の判定は
 `check_global_env_mutation` で行う。
 `test_mise_patterns_are_not_written_in_common_toml` が再発を防ぐ。
+`mise self-update` / `mise implode` は `check_tool_self_update` が deny する。
 
 フラグの位置が自由なもの (`mise use -g`、`cmake --build --target install`、
 `gcc -o <path>`、`docker run --privileged`) も前方一致では取りこぼすので、

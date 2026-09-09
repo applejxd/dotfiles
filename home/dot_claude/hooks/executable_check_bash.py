@@ -2569,6 +2569,10 @@ _MISE_GLOBAL_SUBCOMMANDS = {
     ("settings", "unset"): "mise の設定を書き換えます",
     ("settings", "add"): "mise の設定を書き換えます",
     ("global",): "ホームのグローバル設定を書き換えます",
+}
+# ツール自身を置き換える / 導入物を消す操作。承認の余地なく拒否する。
+# common.toml に書けない (mise は runner 扱いで normalize が先頭を落とす)
+_MISE_FATAL_SUBCOMMANDS = {
     ("self-update",): "mise 自身を更新します",
     ("implode",): "mise の導入物をすべて削除します",
 }
@@ -2591,6 +2595,35 @@ def _writes_outside_workspace(path: str) -> bool:
     expanded = os.path.expanduser(path)
     resolved = os.path.normpath(os.path.join(workspace, expanded))
     return not resolved.startswith(workspace + os.sep)
+
+
+def check_tool_self_update(cmd: str) -> str | None:
+    """ツール自身を置き換える / 導入物を消す操作を検出する。
+
+    `uv self update` などは common.toml の deny で拾えるが、mise は runner
+    扱いで normalize が先頭の `mise` を落とすため一致しない。ここで判定する。
+
+    エージェントがツールチェーンを更新する正当な理由は無く、影響は全
+    プロジェクトに及ぶ。元のバージョンを知らないと戻せないので deny にする。
+    """
+    for segment in _segments(cmd):
+        try:
+            tokens = shlex.split(segment)
+        except ValueError:
+            tokens = segment.split()
+        if not tokens or _basename(tokens[0].strip("'\"")) != "mise":
+            continue
+        subcommands = tuple(
+            t.strip("'\"") for t in tokens[1:] if not t.startswith("-")
+        )
+        for prefix, why in _MISE_FATAL_SUBCOMMANDS.items():
+            if subcommands[: len(prefix)] == prefix:
+                return (
+                    f"`mise {' '.join(prefix)}` は{why}。\n"
+                    "全プロジェクトに影響し元に戻しにくいため許可されていません。\n"
+                    "必要ならユーザー自身で実行してください。"
+                )
+    return None
 
 
 def check_global_env_mutation(cmd: str) -> str | None:
@@ -3103,6 +3136,7 @@ DENY_CHECKS = [
     check_http_dangerous_output,  # curl -o / wget -O で起動・認証設定を上書き
     check_privilege_escalation,  # setuid 付与・sudoers 変更
     check_docker_host_escape, # docker run --privileged / -v /:... の権限昇格
+    check_tool_self_update,   # mise self-update / implode
     check_encoded_command,    # base64 -d | sh の類
     check_git_config_write,   # git config alias.x / core.hooksPath の類
     check_block_device_write, # dd of=/dev/sda の類

@@ -691,9 +691,6 @@ def test_ordinary_docker_usage_is_not_blocked(command):
         "uv tool uninstall ruff",
         "uv tool upgrade ruff",
         "uv python install 3.13",
-        "uv self update",
-        "mise self-update",
-        "mise implode",
         # システムへ書き込む
         "cmake --install build",
         "cmake --build build --target install",
@@ -708,6 +705,44 @@ def test_ordinary_docker_usage_is_not_blocked(command):
 )
 def test_global_scope_mutation_asks(command):
     """プロジェクトの外に残る変更は承認を挟む."""
+    decision, reason = run_hook(command)
+    assert decision == "ask", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # ツール自身を置き換える
+        "uv self update",
+        "mise self-update",
+        "rustup self update",
+        "chezmoi upgrade",
+        # 導入物をまとめて消す
+        "mise implode",
+        # 既存: グローバルへの常駐
+        "npm install -g typescript",
+    ],
+)
+def test_tool_self_update_is_denied(command):
+    """ツールチェーンの更新はエージェントの仕事ではない.
+
+    影響が全プロジェクトに及び、元のバージョンを知らないと戻せないため
+    承認の余地なく拒否する。
+    """
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # ツール自身ではなく、管理下のツール / ランタイムを入れる形は ask 止まり
+        "uv tool upgrade ruff",
+        "uv python install 3.13",
+    ],
+)
+def test_managed_tool_upgrade_only_asks(command):
+    """`uv self update` と違い、対象がツール自身でなければ deny にしない."""
     decision, reason = run_hook(command)
     assert decision == "ask", f"{command!r} -> {decision} ({reason})"
 

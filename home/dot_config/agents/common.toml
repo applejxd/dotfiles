@@ -148,7 +148,6 @@ ask = [
   "uv tool upgrade",
   "uv python install",
   "uv python uninstall",
-  "uv self update",
   "cmake --install",
   # 認証情報がホームに残る / レジストリへ公開される
   "docker login",
@@ -215,6 +214,14 @@ deny = [
   "ssh",
   # システム全体を汚す
   "npm install -g",
+  # ツール自身を置き換える操作。エージェントが実行する正当な理由が無く、
+  # 影響が全プロジェクトに及ぶ。バージョンを戻すには元のバージョンを
+  # 知っている必要があり、実質不可逆。
+  # (mise の self-update / implode は runner 扱いで normalize が先頭を落とすため
+  #  check_tool_self_update が担当する)
+  "uv self update",
+  "rustup self update",
+  "chezmoi upgrade",
   # pip は全面禁止 (uv / uvx を使う)。hook の check_pip_redirect が
   # プロジェクト種別を問わず代替案付きで hard-deny する
   "pip",

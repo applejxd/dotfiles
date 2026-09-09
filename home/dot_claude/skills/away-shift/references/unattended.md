@@ -57,6 +57,7 @@ Copilot CLI の `permissions-config.json` はプロジェクト単位で
 | `apt` / `brew` / `pipx install` / `uv tool install` | 環境 | `uv run --no-project` で一時的に済ませる |
 | `uv pip install` / `uv add` / `uv remove` | 環境（依存が残る） | `uv run --with <pkg>` で一時的に済ませる |
 | `mise install` / `mise use -g` / `mise settings set` | 環境 | 使わない |
+| `uv self update` / `mise self-update` / `mise implode` | 環境（deny 済み） | 使わない |
 | `cmake --install` | 環境（システムへ書く） | ビルドまでに留める |
 | `docker rm` / `docker rmi` / `docker * prune` | 不可逆 | 触らない |
 | `gh pr create` / `gh issue create` / `gh issue comment` | 外部 | 本文案を `work/` に置く |
