@@ -259,6 +259,8 @@ deny = ["git reset --hard"]   # 作業ツリーを壊す形だけ拒否
 | 外部への漏洩・システム変更 | `ssh`, `telnet`, `npm install -g`, DB クライアント | `deny` |
 | 規約違反 | `pip` / `pip3` (uv / uvx を使う) | `deny` + hook の `check_pip_redirect` |
 | 壊滅的な削除 | `rm -rf /`, `rm -rf ~`, `rm -rf /etc` | `check_rm_root_guard` (hard-deny) |
+| コンテナ経由の権限昇格 | `docker run --privileged`, `-v /:/host`, docker socket | `check_docker_host_escape` (hard-deny) |
+| プロジェクト外への変更 | `mise use -g`, `cmake --install`, `gcc -o /usr/local/bin/x` | `ask` |
 | 提案 → 承認 → 実行 | `rm`, `git clean`, `git commit`, `docker rm`, `gh pr create` | `ask` |
 | **LLM 判定へ委譲** | `npx`, `uvx`, `pipx run`, `python -c`, `npm install`, `mv` | **未掲載** |
 | 用途で危険度が変わる | `nc` (疎通確認は `ask`、`-e` / `-l` は hook が deny) | `ask` + hook |
@@ -491,15 +493,64 @@ Copilot の設定キーの権威ある一覧は Web ドキュメントではな�
 
 Copilot CLI へは `allow` の **先頭トークン (コマンド名)** だけが渡る。
 `git diff` と書くと Copilot では `git` 全体が承認される。
-ただし ask / deny は hook が強制するので実害は無い。
+
+hook は permission 層とは独立に走るので、**仕様どおりなら** `ask` / `deny` が
+引数の粒度を補い、粗粒度化の実害は無い。ただし前提が 2 つある。
+
+1. `ask` に載っていること。載っていなければ hook も沈黙する
+   （例: `uv pip install` / `mise use -g` / `docker run --privileged` は
+   `uv` / `mise` / `docker` が allow の先頭トークンなので Copilot では
+   事前承認され、hook にも該当ルールが無い）
+2. `ask` が実際に止まること。現状 Copilot は hook の `ask` を自動承認する
+   既知バグがあり (github/copilot-cli#3590, OPEN)、実測 (1.0.84-2) でも
+   `git config --get user.name` が確認無しで実行された
+
+| hook の判定 | Claude | Copilot (仕様) | Copilot (現状) |
+| --- | --- | --- | --- |
+| `deny` | 止まる | 止まる | 止まる |
+| `ask` | プロンプトが出る | プロンプトが出る | **素通り** (#3590) |
+| 未掲載 / `allow` | 素通り | 素通り | 素通り |
+
+`allow` にコマンドを足すときは、そのコマンド名で始まる**破壊的な形が
+`ask` / `deny` に載っているか**を確認する。載せずに allow だけ足すと、
+Copilot ではそのコマンドが丸ごと無防備になる。
+
+### `ask` に載せるかどうかの判断軸
+
+**影響範囲がプロジェクト内で完結するか**で決める。
+
+| 影響範囲 | 扱い | 例 |
+| --- | --- | --- |
+| プロジェクト内で完結 | **未掲載** (LLM 判定に委ねる) | `uv add` / `uv remove` / `uv pip install` / `uv sync` / `mise install` / `mise use` (ローカル) / `cmake --build` / `gcc -o build/x` |
+| ホームやシステムに残る | `ask` | `uv tool install` / `uv python install` / `uv self update` / `mise use -g` / `mise settings set` / `mise self-update` / `cmake --install` / `gcc -o /usr/local/bin/x` |
+| 外部に見える / 認証情報が残る | `ask` | `docker login` / `docker push` / `gh pr create` |
+| root 相当を得られる | `deny` | `sudo` / `docker run --privileged` / `docker run -v /:/host` |
+
+venv や lockfile はプロジェクトを捨てれば消えるので、承認を挟む価値が
+承認疲れに見合わない。逆にホームやシステムへ出るものは、
+セッションが終わっても残るので確認する。
+
+### `mise` は common.toml に書けない
+
+`command_policy` は `mise` を runner として扱い、`normalize()` が先頭の
+`mise` を落とす (`mise settings set x` → `settings set x`)。そのため
+`[bash] ask` に `mise ...` と書いても**一致しない**。mise の判定は
+`check_global_env_mutation` で行う。
+`test_mise_patterns_are_not_written_in_common_toml` が再発を防ぐ。
+
+フラグの位置が自由なもの (`mise use -g`、`cmake --build --target install`、
+`gcc -o <path>`、`docker run --privileged`) も前方一致では取りこぼすので、
+同じく hook 側で判定する。
 
 作業ディレクトリを付け替える `-C` 形式は `allow` に入れない。
 permission を回避する既知のバイパス形式であり、対策を用意している意図と矛盾する。
 
 `allow` の先頭トークンと衝突する `ask` / `deny` エントリ（例: `git diff` を
 allow に置くと Copilot では `git push` まで承認される）は、
-`test_shadowed_entries_are_enforced_by_hook` が hook 側で確実に止まることを
+`test_shadowed_entries_are_enforced_by_hook` が hook 側で意図した判定を返すことを
 機械的に検査する。ここが落ちたら Copilot ではそのコマンドが無条件に通る。
+ただしこの検査が保証するのは **hook の判定まで**で、Copilot が `ask` を
+自動承認する分は埋められない。隠れるエントリのうち実際に止まるのは `deny` だけ。
 
 `gh` は衝突を hook で補うのではなく、allow から完全に外して
 `test_copilot_permissions_do_not_broadly_allow_gh` で再発を防ぐ。
