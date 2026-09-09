@@ -1,38 +1,85 @@
 # 無人実行で避けること
 
-## 承認プロンプトは無人時に「確認」にならない
+## 「承認が要るか」を判断基準にしない
 
-人がいない状態で承認を要求する操作を出すと、ツールによって挙動が割れる。
+理由は 2 つある。どちらも**ツールの不具合とは無関係**で、仕様どおりに
+動いていても成り立つ。
 
-| ツール / モード | 承認要求の扱い |
+### 1. 無人では承認が「確認」にならない
+
+席にいない以上、`ask` が出ても誰も答えない。各ツールの仕様上の帰結は
+「自動拒否」「スキップ」「応答待ちのまま停止」のいずれかで、**どれも
+目的を達成しない**。承認を挟めば安全に実行できる、という前提が成り立たない。
+
+| 実行環境 | `ask` の仕様上の結果 |
 | --- | --- |
-| Copilot CLI (1.0.53 以降) | hook の `ask` を数十 ms で自動承認する（github/copilot-cli#3590） |
-| Claude Code `dontAsk` | 自動拒否 |
-| Claude Code `-p` | スキップ |
-| Copilot cloud agent | deny 扱い |
+| Claude `dontAsk` | 自動拒否 |
+| Claude `-p` (非対話) | スキップして継続 |
+| Copilot cloud agent | `deny` 扱い |
+| 対話セッションで離席 | 応答が来るまで止まる（run 全体が無駄になる） |
 
-つまり「承認を求めておけば安全」は成り立たない。
-**そもそも承認が要る操作を計画に入れない**のが唯一の対処。
-`deny` は各ツールで正常に効くので、deny 対象に触れる計画も立てない。
+つまり「承認が要る操作」を計画に入れた時点で、そのサイクルは失敗する。
+
+### 2. そもそも `ask` が出ないことがある
+
+Copilot CLI の `permissions-config.json` はプロジェクト単位で
+コマンドを事前承認できる（`/add-dir` や `/allow-all` でも増える）。
+`commandIdentifiers` に `git` が入っていれば Copilot は `git` 系で
+プロンプトを出さない。`kind: "write"` があればファイル書き込みも同様。
+
+さらに、`common.toml` の `ask` / `deny` に載っていない破壊的な形もある
+（例: `docker run -v /:/host`、`uv tool install`、`mise use -g`）。
+**止められていない = やってよい、ではない。**
+
+## 判断基準
+
+次のどれかに当たるなら、承認の有無に関わらず**やらない**。
+
+1. **不可逆か** — 取り消せない。コミット、削除、履歴の書き換え
+2. **外部に見えるか** — リモートや外部サービスに出る
+3. **環境を変えるか** — インストール、設定変更、常駐プロセス
+
+迷ったらやらない。レポートに「これをやりたかった」と書けば、
+復帰したユーザが判断できる。それで十分速い。
 
 ## やらないことの一覧
 
-| 操作 | 理由 | 代わりに |
+| 操作 | 該当する基準 | 代わりに |
 | --- | --- | --- |
-| `git commit` / `git push` | ユーザの承認事項 | 差分を `work/` に置いて提示 |
-| `git clean` / `git reset --hard` | 未追跡ファイルを失う | 触らない |
-| `sudo` 全般 | システムを変える | レポートに必要性を書く |
-| `apt` / `brew` / `pipx install` | 環境が残る | `uv run --no-project` で一時的に済ませる |
-| `gh pr create` / `gh issue create` | 外部に見える | 本文案を `work/` に置く |
-| リポジトリ本体のファイル編集 | 復帰時に差分が読めない状態で残る | `work/` にコピーして試す |
-| 長時間のバックグラウンド常駐 | 停止できないまま残る | サイクル内で完結させる |
+| `git commit` / `git push` | 不可逆・外部 | 差分を `work/` に置いて提示 |
+| `git clean` / `git reset --hard` / `git branch -D` | 不可逆 | 触らない |
+| `git stash drop` / `git checkout --` / `git restore` | 不可逆 | 触らない |
+| `git config`（`--get` を含む） | 環境 | 触らない。設定値はファイルを読む |
+| `work/` の外への `rm` / `find -delete` | 不可逆 | 消さない。`work/` 配下で作業する |
+| `sudo` 全般 | 環境 | レポートに必要性を書く |
+| `docker run` の `--privileged` / `-v /:...` / `--pid=host` | 環境（ホストを直接触れる） | 使わない |
+| `docker exec` でのシェル起動 | 環境 | 使わない |
+| `apt` / `brew` / `pipx install` / `uv tool install` | 環境 | `uv run --no-project` で一時的に済ませる |
+| `uv pip install` / `uv add` / `uv remove` | 環境（依存が残る） | `uv run --with <pkg>` で一時的に済ませる |
+| `mise install` / `mise use -g` / `mise settings set` | 環境 | 使わない |
+| `cmake --install` | 環境（システムへ書く） | ビルドまでに留める |
+| `docker rm` / `docker rmi` / `docker * prune` | 不可逆 | 触らない |
+| `gh pr create` / `gh issue create` / `gh issue comment` | 外部 | 本文案を `work/` に置く |
+| `gh pr checkout` / `gh issue close` | 不可逆・外部 | 触らない |
+| `nc` による疎通確認 | 外部 | 必要性をレポートに書く |
+| リポジトリ本体のファイル編集 | 不可逆（復帰時に差分が読めない） | `work/` にコピーして試す |
+| 長時間のバックグラウンド常駐 | 環境 | サイクル内で完結させる |
+
+この表は代表例で、網羅ではない。`~/.config/agents/common.toml` の
+`[bash] ask` / `[bash] deny` に載っているものは当然やらないが、
+**そこに無くても上の 3 基準に当たるならやらない**。
+`uv tool install` や `docker run -v /:...` のように、
+`ask` にも `deny` にも載っていない環境変更が実在する。
 
 ## やってよいこと
 
 - 読み取り（`git diff`、`git log`、ファイル閲覧、`grep`）
 - `./.tmp/away-shift/<run-id>/work/` 配下での作成・編集・削除
-- 既存のテスト / lint / ビルドの実行（環境を変えないもの）
-- `uv run --no-project` / `uvx` による一時的なツール実行
+  （`.tmp` 配下の削除は hook の scratch 免除で承認不要）
+- 既存のテスト / lint / ビルドの実行（依存を追加せず、成果物を
+  リポジトリ外へインストールしないもの）
+- `uv run --no-project` / `uv run --with <pkg>` / `uvx` による一時的なツール実行
+  （`uv add` / `uv pip install` と違い、プロジェクトの依存を書き換えない）
 - ネットワーク読み取り（ドキュメント参照、`gh` の読み取り系）
 
 ## リポジトリ本体に触れたくなったら
