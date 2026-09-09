@@ -43,8 +43,13 @@
 #
 # ★注意: Copilot CLI へは「先頭トークンのコマンド名」だけが渡る
 #   (permissions-config.json は deny/ask 非対応)。つまり "git diff" と書くと
-#   Copilot では git 全体が承認される。ask/deny 側は hook が強制するので
-#   実害は無いが、allow に新しいコマンドを足すときはこの粒度差を意識すること。
+#   Copilot では git 全体が承認される。
+#   仕様どおりなら ask/deny が引数の粒度を補うが、それは「破壊的な形が
+#   ask/deny に載っている」ことが前提。載せずに allow だけ足すと、Copilot では
+#   そのコマンドが丸ごと無防備になる (現時点の穴: uv pip install / uv add /
+#   uv tool install / mise install / mise use -g / docker run --privileged /
+#   docker run -v /:... / docker exec / cmake --install はどれも沈黙する)。
+#   なお現状の Copilot は ask を自動承認する既知バグを抱える (#3590, OPEN)。
 #
 # 作業ディレクトリを付け替える形式 (-C オプション) は allow に入れない。
 # permission を回避する既知のバイパス形式 (anthropics/claude-code#59006) であり、
@@ -128,6 +133,26 @@ ask = [
   # GET / HEAD / query は未掲載、mutation と判定不能形式だけ ask にする。
   # グローバルに常駐する (pipx run は未掲載で LLM 判定に委ねる)
   "pipx install",
+  # プロジェクトの外に残る変更だけを ask にする。判断軸は「影響範囲が
+  # プロジェクト内で完結するか」。
+  #   プロジェクト内 (未掲載 / LLM 判定): uv add / uv remove / uv pip install /
+  #     uv sync / uv lock / mise install / mise use (ローカル)
+  #   プロジェクト外 (ask): 下記
+  # mise 系はここに書けない。command_policy が mise を runner として扱い、
+  # normalize が先頭の `mise` を落とすため前方一致しない
+  # (`mise use -g` / `mise settings set` / `mise global` は
+  #  check_global_env_mutation が担当)。
+  # `cmake --build --target install` もフラグの位置が自由なので同関数が見る。
+  "uv tool install",
+  "uv tool uninstall",
+  "uv tool upgrade",
+  "uv python install",
+  "uv python uninstall",
+  "uv self update",
+  "cmake --install",
+  # 認証情報がホームに残る / レジストリへ公開される
+  "docker login",
+  "docker push",
   # 素の疎通確認 (-z など) は使うが、-e/-c/-l は check_reverse_shell が deny する
   "nc",
   # 読み取り (--get / --list) も含めて確認を挟む。hook を無効化しうる

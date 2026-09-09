@@ -619,6 +619,146 @@ def test_find_deletion_asks(command):
 @pytest.mark.parametrize(
     "command",
     [
+        # ホストのファイルシステムを丸ごと渡す
+        "docker run --rm -v /:/host alpine sh",
+        "docker run -v /etc:/etc alpine sh",
+        "docker run --mount type=bind,source=/,target=/host alpine sh",
+        # docker socket は root 相当
+        "docker run -v /var/run/docker.sock:/var/run/docker.sock alpine sh",
+        # 全権限・特権 capability
+        "docker run --privileged alpine sh",
+        "docker container run --privileged alpine sh",
+        "docker run --cap-add=SYS_ADMIN alpine sh",
+        "docker run --cap-add SYS_MODULE alpine sh",
+        "docker run --cap-add=ALL alpine sh",
+        # ホームをそのまま渡す
+        "docker run --rm -v ~:/h alpine sh",
+    ],
+)
+def test_docker_host_escape_is_denied(command):
+    """`sudo` を deny する以上、docker 経由の同等操作も deny にする."""
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "docker run --network host alpine sh",
+        "docker run --net=host alpine sh",
+        "docker run --pid=host alpine ps",
+        "docker run --pid host alpine ps",
+        "docker run --ipc=host alpine sh",
+        "docker run --userns=host alpine sh",
+    ],
+)
+def test_docker_namespace_sharing_asks(command):
+    """分離を弱めるだけの形は root 相当ではないので ask に留める."""
+    decision, reason = run_hook(command)
+    assert decision == "ask", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "docker run --rm -v ./data:/data alpine ls /data",
+        "docker run --rm -v $PWD/out:/out alpine sh",
+        "docker run --rm -p 8080:80 nginx",
+        "docker build -t x .",
+        "docker ps",
+        "docker compose up -d",
+        # `--privileged` に似た文字列が引数に現れるだけの形
+        "docker run alpine echo --privileged-looking",
+    ],
+)
+def test_ordinary_docker_usage_is_not_blocked(command):
+    decision, reason = run_hook(command)
+    assert decision is None, f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # ホームのグローバル設定を書き換える。フラグの位置は問わない
+        "mise use -g node@22",
+        "mise use node@22 -g",
+        "mise use --global node@22",
+        "mise global node@22",
+        "mise settings set experimental true",
+        "mise settings unset experimental",
+        # ホームへツールを常駐させる
+        "uv tool install ruff",
+        "uv tool uninstall ruff",
+        "uv tool upgrade ruff",
+        "uv python install 3.13",
+        "uv self update",
+        "mise self-update",
+        "mise implode",
+        # システムへ書き込む
+        "cmake --install build",
+        "cmake --build build --target install",
+        # プロジェクトの外へ実行ファイルを置く
+        "gcc -o /usr/local/bin/x x.c",
+        "gcc -o ~/.local/bin/x x.c",
+        "g++ -o /usr/local/bin/x x.cpp",
+        # 認証情報がホームに残る / レジストリへ公開される
+        "docker login",
+        "docker push myimage",
+    ],
+)
+def test_global_scope_mutation_asks(command):
+    """プロジェクトの外に残る変更は承認を挟む."""
+    decision, reason = run_hook(command)
+    assert decision == "ask", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # venv / プロジェクト設定で完結するものは未掲載のまま LLM 判定に委ねる
+        "uv add requests",
+        "uv remove requests",
+        "uv pip install requests",
+        "uv sync",
+        "uv lock",
+        "uv run pytest",
+        "mise use node@22",
+        "mise install",
+        "mise install node@22",
+        "mise run test",
+        "cmake -S . -B build",
+        "cmake --build build",
+        # プロジェクト内へ出力するビルドは止めない
+        "gcc -o ./out x.c",
+        "gcc -o build/out x.c",
+        "gcc -c x.c",
+        "docker build -t x .",
+    ],
+)
+def test_project_scope_mutation_is_delegated(command):
+    """プロジェクト内で完結する変更は承認を求めない (autopilot に任せる)."""
+    decision, reason = run_hook(command)
+    assert decision is None, f"{command!r} -> {decision} ({reason})"
+
+
+def test_mise_patterns_are_not_written_in_common_toml():
+    """mise は normalize で先頭トークンが落ちるため toml パターンが効かない.
+
+    `mise settings set` のように common.toml へ書いても
+    `settings set ...` に正規化されて一致しない。hook 側
+    (`check_global_env_mutation`) で判定すること。
+    """
+    for key in ("ask", "deny"):
+        for pattern in COMMON["bash"][key]:
+            assert not pattern.startswith("mise "), (
+                f"[bash] {key} の {pattern!r} は normalize で先頭の `mise` が"
+                "落ちるため一致しない。check_global_env_mutation で判定すること"
+            )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
         "rm -rf .tmp",
         "rm -rf ./.tmp/run-1",
         "rm -f .tmp/a.log .tmp/b.log",

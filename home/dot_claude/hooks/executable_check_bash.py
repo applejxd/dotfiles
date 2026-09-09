@@ -2442,6 +2442,209 @@ def check_privilege_escalation(cmd: str) -> str | None:
     return None
 
 
+_DOCKER_RUN_SUBCOMMANDS = {"run", "create"}
+# コンテナに root 相当を与えるもの (deny)
+_DOCKER_PRIVILEGED_FLAGS = {"--privileged"}
+# 分離を弱めるが root 相当ではないもの (ask)。値は `=` でも空白でも書ける
+_DOCKER_NAMESPACE_OPTS = {"--pid", "--ipc", "--userns", "--uts", "--network", "--net"}
+_DOCKER_MOUNT_FLAGS = {"-v", "--volume", "--mount"}
+# コンテナへ渡すと実質 root になるホスト側のパス
+_DOCKER_FATAL_MOUNTS = ("/", "/etc", "/root", "/boot", "/usr", "/dev",
+                        "/var/run/docker.sock", "/run/docker.sock")
+_DOCKER_CAP_DANGEROUS = {"SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "ALL"}
+
+
+def _docker_mount_source(token: str) -> str | None:
+    """`-v src:dst` / `--mount type=bind,source=src,...` の src を返す。"""
+    if "=" in token and ("source=" in token or "src=" in token or
+                         token.startswith("type=")):
+        for part in token.split(","):
+            key, _, value = part.partition("=")
+            if key.strip() in {"source", "src"}:
+                return value.strip()
+        return None
+    source = token.split(":", 1)[0]
+    return source or None
+
+
+def _docker_run_tokens(segment: str) -> list[str] | None:
+    """`docker run` / `docker container create` の引数列を返す。該当しなければ None。"""
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        tokens = segment.split()
+    if not tokens or _basename(tokens[0].strip("'\"")) != "docker":
+        return None
+    subcommands = [t for t in tokens[1:] if not t.startswith("-")]
+    if not (_DOCKER_RUN_SUBCOMMANDS & set(subcommands[:2])):
+        return None
+    return [t.strip("'\"") for t in tokens[1:]]
+
+
+def _docker_opt_value(rest: list[str], index: int) -> tuple[str, str]:
+    """`--net=host` と `--net host` の両方から (キー, 値) を取り出す。"""
+    key, sep, value = rest[index].partition("=")
+    if sep:
+        return key, value
+    following = rest[index + 1] if index + 1 < len(rest) else ""
+    return key, ("" if following.startswith("-") else following)
+
+
+def check_docker_host_escape(cmd: str) -> str | None:
+    """`docker run` でホストの root 相当を得られる形を検出する。
+
+    `sudo` を deny している以上、コンテナ経由で同じことができる形も同じ扱いに
+    する。`--privileged`、ホストのルートや `/etc` のマウント、docker socket の
+    マウントは承認の余地が無い。
+
+    分離を弱めるだけの `--network host` などは `check_docker_isolation` が ask
+    にする。オプションの順序と `=` の有無に依存しないようトークンを走査する。
+    """
+    for segment in _segments(cmd):
+        rest = _docker_run_tokens(segment)
+        if rest is None:
+            continue
+        for index, token in enumerate(rest):
+            if token in _DOCKER_PRIVILEGED_FLAGS:
+                return (
+                    f"`docker {token}` はコンテナに全権限を与える操作です。\n"
+                    "コンテナ経由の権限昇格に繋がるため許可されていません。"
+                )
+            key, value = _docker_opt_value(rest, index)
+            if key == "--cap-add" and value.upper() in _DOCKER_CAP_DANGEROUS:
+                return (
+                    f"`docker --cap-add {value}` は特権相当の capability です。\n"
+                    "コンテナ経由の権限昇格に繋がるため許可されていません。"
+                )
+            if token in _DOCKER_MOUNT_FLAGS or key in _DOCKER_MOUNT_FLAGS:
+                mount = value if key in _DOCKER_MOUNT_FLAGS else ""
+                if not mount and token in _DOCKER_MOUNT_FLAGS:
+                    mount = rest[index + 1] if index + 1 < len(rest) else ""
+                source = _docker_mount_source(mount) if mount else None
+                canonical = _canonical_rm_target(source) if source else None
+                if canonical is None:
+                    continue
+                if canonical in _DOCKER_FATAL_MOUNTS or canonical in _HOME_TOKENS:
+                    return (
+                        f"`docker` がホストの `{source}` をコンテナへマウント"
+                        "しようとしています。\n"
+                        "ホストのファイルを直接書き換えられるため許可されていません。"
+                    )
+    return None
+
+
+def check_docker_isolation(cmd: str) -> str | None:
+    """`docker run --network host` のように分離を弱める形を検出する。
+
+    root 相当ではないので deny にはしないが、ホストのネットワークや
+    プロセス空間へ届くので確認を挟む。
+    """
+    for segment in _segments(cmd):
+        rest = _docker_run_tokens(segment)
+        if rest is None:
+            continue
+        for index in range(len(rest)):
+            key, value = _docker_opt_value(rest, index)
+            if key in _DOCKER_NAMESPACE_OPTS and value == "host":
+                return (
+                    f"`docker {key} host` はホストの名前空間をコンテナと"
+                    "共有します。\n"
+                    f"実行しようとしているコマンド: {segment.strip()[:200]}\n"
+                    "分離が弱まるため、内容を確認して問題なければ承認してください。"
+                )
+    return None
+
+
+# ─── プロジェクト外 (global) への変更 ────────────────────────────────
+# 判断軸は「影響範囲がプロジェクト内で完結するか」。
+# `uv add` のような venv 内の変更は未掲載にして LLM の判断に委ねる。
+# ホームやシステムに残るものだけ ask にする。
+#
+# mise は command_policy が runner として扱い、normalize が先頭の `mise` を
+# 落とす (`mise settings set x` -> `settings set x`)。そのため common.toml に
+# `mise ...` と書いても照合されない。mise の判定はここで行う。
+_MISE_GLOBAL_FLAGS = {"-g", "--global"}
+_MISE_GLOBAL_SUBCOMMANDS = {
+    ("settings", "set"): "mise の設定を書き換えます",
+    ("settings", "unset"): "mise の設定を書き換えます",
+    ("settings", "add"): "mise の設定を書き換えます",
+    ("global",): "ホームのグローバル設定を書き換えます",
+    ("self-update",): "mise 自身を更新します",
+    ("implode",): "mise の導入物をすべて削除します",
+}
+# ビルド成果物の出力先を取るオプション
+_COMPILER_BINS = {"gcc", "g++", "cc", "c++", "clang", "clang++"}
+
+
+def _writes_outside_workspace(path: str) -> bool:
+    """コンパイラの出力先などが workspace の外を指すか。
+
+    判定できないとき (workspace 不明・変数展開あり) は False を返す。ここは
+    「プロジェクト外への影響」を拾うための補助で、fail-closed にすると
+    通常のビルドまで止まるため。
+    """
+    workspace = _workspace_root()
+    if workspace is None or not path:
+        return False
+    if any(ch in path for ch in "$`"):
+        return False
+    expanded = os.path.expanduser(path)
+    resolved = os.path.normpath(os.path.join(workspace, expanded))
+    return not resolved.startswith(workspace + os.sep)
+
+
+def check_global_env_mutation(cmd: str) -> str | None:
+    """プロジェクトの外に残る環境変更を検出する。
+
+    `mise use -g` はホームの設定を書き換え、`cmake --build --target install` は
+    システムへファイルを置く。どちらもフラグの位置が自由なので、
+    common.toml の前方一致パターンでは取りこぼす。
+    """
+    for segment in _segments(cmd):
+        try:
+            tokens = shlex.split(segment)
+        except ValueError:
+            tokens = segment.split()
+        if not tokens:
+            continue
+        head = _basename(tokens[0].strip("'\""))
+        rest = [t.strip("'\"") for t in tokens[1:]]
+        if head == "mise":
+            subcommands = tuple(t for t in rest if not t.startswith("-"))
+            if subcommands[:1] == ("use",) and (_MISE_GLOBAL_FLAGS & set(rest)):
+                return (
+                    "`mise use -g` はホームのグローバル設定を書き換えます。\n"
+                    f"実行しようとしているコマンド: {segment.strip()[:200]}\n"
+                    "プロジェクト内で済むなら `-g` を外してください。"
+                )
+            for prefix, why in _MISE_GLOBAL_SUBCOMMANDS.items():
+                if subcommands[: len(prefix)] == prefix:
+                    return (
+                        f"`mise {' '.join(prefix)}` は{why}。\n"
+                        f"実行しようとしているコマンド: {segment.strip()[:200]}\n"
+                        "内容を確認して問題なければ承認してください。"
+                    )
+        if head == "cmake" and "--target" in rest:
+            target = rest[rest.index("--target") + 1 :]
+            if target and target[0] == "install":
+                return (
+                    "`cmake --build --target install` はビルド成果物を"
+                    "システムへインストールします。\n"
+                    f"実行しようとしているコマンド: {segment.strip()[:200]}\n"
+                    "インストール先を確認して問題なければ承認してください。"
+                )
+        if head in _COMPILER_BINS and "-o" in rest:
+            output = rest[rest.index("-o") + 1 :]
+            if output and _writes_outside_workspace(output[0]):
+                return (
+                    f"`{head} -o {output[0]}` はプロジェクトの外へ実行ファイルを"
+                    "書き出します。\n"
+                    f"実行しようとしているコマンド: {segment.strip()[:200]}\n"
+                    "出力先を確認して問題なければ承認してください。"
+                )
+    return None
+
+
 def check_encoded_command(cmd: str) -> str | None:
     """デコード結果をそのままシェルへ流す形を検出する。
 
@@ -2899,6 +3102,7 @@ DENY_CHECKS = [
     check_shell_startup_write,  # .bashrc / authorized_keys への追記
     check_http_dangerous_output,  # curl -o / wget -O で起動・認証設定を上書き
     check_privilege_escalation,  # setuid 付与・sudoers 変更
+    check_docker_host_escape, # docker run --privileged / -v /:... の権限昇格
     check_encoded_command,    # base64 -d | sh の類
     check_git_config_write,   # git config alias.x / core.hooksPath の類
     check_block_device_write, # dd of=/dev/sda の類
@@ -2928,6 +3132,8 @@ ASK_CHECKS = [
     check_gh_api_mutation,    # REST / GraphQL の mutation と判定不能形式
     check_curl_wget_mutation, # curl/wget の mutation と判定不能形式
     check_find_dangerous,     # find -exec rm / -delete によるファイル削除
+    check_docker_isolation,   # docker run --network host のような分離の緩和
+    check_global_env_mutation,  # mise use -g / cmake --target install
 ]
 
 
