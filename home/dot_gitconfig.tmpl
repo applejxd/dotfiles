@@ -21,6 +21,8 @@
 [core]
 	editor = vim
 	quotepath = false
+	# ~/.config/git/ignore (chezmoi管理) をグローバルgitignoreとして有効化
+	excludesfile = {{ .chezmoi.destDir }}/.config/git/ignore
 	# set case-sensitivity according to OS
 	# (Windows filesystems are usually case-insensitive)
 {{- if eq .chezmoi.os "windows" }}
@@ -44,12 +46,7 @@
 [include]
 	path = {{ .chezmoi.destDir }}/.config/git/config
 
-{{- if and (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) (lookPath "bw") }}
-{{- with (bitwarden "item" "gitconfig") }}
-[user]
-	name = {{ .login.username }}
-	{{- with (bitwardenFields "item" "gitconfig") }}
-	email = {{ .email.value }}
-	{{- end }}
-{{- end }}
-{{- end }}
+# [user] (name/email) は Bitwarden 由来のため専用ファイルに分離している。
+# see home/dot_config/git/private_user.tmpl
+[include]
+	path = {{ .chezmoi.destDir }}/.config/git/user

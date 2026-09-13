@@ -29,3 +29,50 @@ USER_ENV=$HOME/.config/shell/userenv.zsh
 if [ -e $USER_ENV ]; then
     source $USER_ENV
 fi
+
+#------------------------------#
+# Repo-local TMPDIR redirect   #
+#------------------------------#
+# gitリポジトリ内にいる間は TMPDIR をそのリポジトリ直下の .tmp に向ける。
+# /tmp への書き込みを減らし、hook (redirect-tmp.py) が誘導する ./.tmp と
+# 書き込み先を揃える。リポジトリ外ではここまでに確定した TMPDIR (NAS向けの
+# 上書き等を含む) に戻すため、この処理は COMMON_ENV/USER_ENV より後に置く。
+#
+# 判定に `git rev-parse --show-toplevel` を使うと fork+exec が発生し、
+# .zshenv は全zsh起動 (対話/非対話問わず) の度に読まれるためコストが
+# 積み重なる (実測: baseline比 +約1.5ms/回)。代わりに `.git` の有無を
+# 遡って調べる純zshループを使い、fork無しで判定する (実測: baseline比で
+# 増加なし)。`.git` はworktreeでもファイルとして存在するため `-e` (存在
+# チェック) で通常のrepoともworktreeとも判定できる。
+#
+# 「リポジトリ外に戻す元の値」は、この .zshenv が最初に読まれた時点
+# (= まだ TMPDIR がリダイレクトされていない状態) で一度だけ捕捉し、
+# 環境変数として export しておく。ここを `${TMPDIR:-/tmp}` のまま毎回
+# 再計算すると、既にリポジトリA内でTMPDIRがリダイレクトされたシェルから
+# 起動した子シェル (agentのbashツール等) がリポジトリBの外へ`cd`した際に、
+# 「本来の値」ではなく「親が書き換えた後のリポジトリA向けTMPDIR」を
+# フォールバック先として引き継いでしまう (ネストしたシェルで実機確認済みの不具合)。
+if [[ -z "${_TMPDIR_REPO_LOCAL_ORIG:-}" ]]; then
+    export _TMPDIR_REPO_LOCAL_ORIG="${TMPDIR:-/tmp}"
+fi
+
+function _tmpdir_repo_local_update() {
+    local dir="$PWD" repo_root=""
+    while [[ -n "$dir" ]]; do
+        if [[ -e "$dir/.git" ]]; then
+            repo_root="$dir"
+            break
+        fi
+        [[ "$dir" == "/" ]] && break
+        dir=${dir:h}
+    done
+
+    if [[ -n "$repo_root" ]]; then
+        local repo_tmp="${repo_root}/.tmp"
+        [[ -d "$repo_tmp" ]] || mkdir -p "$repo_tmp"
+        export TMPDIR="$repo_tmp"
+    else
+        export TMPDIR="$_TMPDIR_REPO_LOCAL_ORIG"
+    fi
+}
+_tmpdir_repo_local_update

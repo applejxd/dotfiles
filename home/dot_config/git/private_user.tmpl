@@ -1,0 +1,18 @@
+{{- /*
+  ~/.gitconfig の [user] セクション専用ファイル (chezmoiが [include] で読み込む)。
+  Bitwarden からの秘密情報取得を含むため、.chezmoiignore.tmpl により
+  「初回のみレンダリングし、以降は管理対象から除外」される (毎回 chezmoi
+  diff/apply の度に Bitwarden マスターパスワードを要求されるのを防ぐため)。
+  それ以外の git 設定 (core/credential/pull/ghq 等) は dot_gitconfig.tmpl
+  側で通常通り毎回管理する (このファイルにBitwarden依存を閉じ込めることで、
+  dot_gitconfig.tmpl 本体を常時メンテナンス可能なファイルに保つ)。
+*/ -}}
+{{- if and (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) (lookPath "bw") }}
+{{- with (bitwarden "item" "gitconfig") }}
+[user]
+	name = {{ .login.username }}
+	{{- with (bitwardenFields "item" "gitconfig") }}
+	email = {{ .email.value }}
+	{{- end }}
+{{- end }}
+{{- end }}

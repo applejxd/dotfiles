@@ -83,8 +83,8 @@ Documents/**
 .config/sops/age/keys.txt
 {{- end }}
 
-{{- if (stat (joinPath .chezmoi.homeDir ".gitconfig")) }}
-.gitconfig
+{{- if (stat (joinPath .chezmoi.homeDir ".config/git/user")) }}
+.config/git/user
 {{- end }}
 
 # Python bytecode (generated at runtime, not part of dotfiles)
