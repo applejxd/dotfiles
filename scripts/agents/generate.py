@@ -310,10 +310,29 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
 
     承認モード (auto-allow 等) には触れない: sandbox は既存の承認フローの
     上に追加される OS レベルの防御としてのみ働かせる。
+
+    ネットワークは ``[web]`` のドメイン列をそのまま
+    ``sandbox.network.allowedDomains`` / ``deniedDomains`` に渡す。
+    Claude は ``WebFetch(domain:...)`` の許可ルールからも sandbox の
+    allowlist を組み立てるため実質二重になるが、permission 側の記法が
+    変わっても sandbox の許可が崩れないよう明示しておく。
+
+    なお許可外ドメインを **拒否** する ``network.strictAllowlist`` は
+    Claude Code v2.1.219 以降が必要。それ未満では許可外ドメインは拒否ではなく
+    **承認プロンプト** になるため、ネットワークだけは filesystem のような
+    whitelist (deny-by-default) にはできない。
     """
     sandbox = common.get("sandbox", {})
     deny = list(sandbox.get("deny", []))
     write_deny_extra = list(sandbox.get("write_deny_extra", []))
+    web = common.get("web", {})
+
+    network: dict[str, Any] = {
+        "allowedDomains": _uniq(list(web.get("allow_domains", []))),
+    }
+    denied_domains = _uniq(list(web.get("deny_domains", [])))
+    if denied_domains:
+        network["deniedDomains"] = denied_domains
 
     return {
         "enabled": True,
@@ -325,6 +344,7 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
             "denyWrite": _uniq(deny + write_deny_extra),
             "allowWrite": _uniq(list(sandbox.get("write_allow", []))),
         },
+        "network": network,
     }
 
 

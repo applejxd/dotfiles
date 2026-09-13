@@ -104,10 +104,14 @@ glob 記法とは **書式が異なる**:
   (パッケージマネージャのキャッシュ)。
 - `write_deny_extra` (Claude のみ): read は許すが write を禁止する対象
   (hook/permission 設定の改竄防止、シェル起動ファイル、認証ファイル)。
-- `.git/config` / `.git/hooks` はリポジトリ相対のパスで、chezmoi が管理する
-  user 設定では表現できないため **sandbox の対象外** (hook の
-  `check_guard_tampering` に残る)。プロジェクト単位の `.claude/settings.json`
-  を生成する仕組みができたら移行を検討する。
+- `.git/config` / `.git/hooks` はリポジトリ相対のパスなので `common.toml` には
+  書けないが、**Claude sandbox の "Protected paths" が常時保護している**
+  (`allowWrite` や `Edit` 許可ルールでも解除できない)。同じく cwd 配下の
+  シェル起動ファイル・`.gitconfig`・`.claude/**`・`.mcp.json`、および
+  `~/.claude` のほとんどと `~/.claude.json` も自動で write 保護される。
+  Copilot 側は cwd 外に書けないこと自体が保護になる。
+  hook の `check_guard_tampering` は、sandbox の外で動く操作
+  (承認済みの unsandboxed コマンドなど) 向けの二重化として残す。
 
 #### なぜ Claude 専用キーが残るのか (whitelist に揃えた後も)
 
@@ -174,6 +178,65 @@ symlink は張ってもよいが、許可は実パスに与える必要がある
 sandbox は `sandbox.enabled = true` のみを設定し、`autoAllowBashIfSandboxed`
 等の承認モードには触れない。既存の承認フロー (`permissions.defaultMode`) は
 変えず、sandbox は純粋に追加の防御層として働く (副作用を最小化するため)。
+
+### ネットワーク層 (`[web]` → `sandbox.network`)
+
+ファイル層と違い、**ネットワークは両 CLI で足並みを揃えられない**。
+
+| | Claude | Copilot |
+| --- | --- | --- |
+| 粒度 | **ドメイン単位** (`allowedDomains` / `deniedDomains`) | **on/off のみ** (`allowOutbound` / `allowLocalNetwork`) |
+| 強制方法 | sandbox 外のプロキシ。全サブプロセスに適用 | OS レベル |
+| 許可外の扱い | **承認プロンプト** (既定) | 単純に不可 |
+
+`common.toml` の `[web] allow_domains` は Claude の
+`sandbox.network.allowedDomains` に、`deny_domains` は `deniedDomains` に
+反映される。なお Claude は `WebFetch(domain:...)` の許可ルールからも
+sandbox の allowlist を組み立てるため実質二重だが、permission 側の記法が
+変わっても sandbox の許可が崩れないよう明示的に出している。
+
+> [!WARNING]
+> **sandbox に効く wildcard は先頭の `*.` と単独の `*` だけ**。
+> `example.*` のように他の位置に置いた wildcard は `WebFetch` には効くが
+> sandbox 側は無視するため、穴が開いたつもりで開いていない状態になる
+> (`test_web_wildcards_are_sandbox_compatible` で固定)。
+
+#### ネットワークだけ whitelist にできない理由
+
+許可外ドメインを **拒否** する `sandbox.network.strictAllowlist` は
+**Claude Code v2.1.219 以降**が必要。それ未満では許可外ドメインは拒否されず
+**承認プロンプト**になるため、filesystem のような deny-by-default にはできない。
+CLI を更新できたら `strictAllowlist = true` を入れることでネットワークも
+whitelist 化できる (`allowManagedDomainsOnly` は managed settings 専用)。
+
+同様に、認証情報を sandbox 側で落とす `sandbox.credentials`
+(`envVars` を unset する `deny`、値を伏せたままツールを動かす `mask`) は
+**v2.1.187 以降**が必要。使えるようになれば `check_secret_env_echo` や
+`check_gh_token_exposure` の一部を肩代わりできる。
+
+#### WSL2 での抜け穴
+
+WSL2 では Windows バイナリ (`cmd.exe`, `/mnt/c/...`) の起動が Unix domain
+socket 経由になるため、**seccomp フィルタが無いと sandbox から脱出できる**
+(公式: "the optional seccomp filter has to be installed to block the socket
+in the first place")。フィルタは
+`npm install -g @anthropic-ai/sandbox-runtime` で導入する。
+`/sandbox` の Dependencies タブに不足が出ていないか確認すること。
+
+#### sandbox に移せないネットワーク系チェック
+
+以下は「どのドメインに繋ぐか」では表現できないため hook に残す:
+
+| チェック | 残す理由 |
+| --- | --- |
+| `check_reverse_shell` | `/dev/tcp`・`nc -e`・待ち受けソケット。ドメイン許可の話ではない |
+| `check_pipe_to_shell` | `curl \| sh` は**許可済みドメイン**でも成立する |
+| `check_curl_file_send` | 許可済みドメインへの外部送信は sandbox では止まらない |
+| `check_pip_redirect` | uv に統一するという**ポリシー**であってセキュリティではない |
+| `check_gh_api_*` | GitHub API の意味解釈が必要 |
+
+逆に `check_http_dangerous_output` (`curl` でシェル起動ファイルを上書き) は
+下記の Protected paths と `denyWrite` で**完全に冗長**になっている。
 
 ### このマシンだけで許可を足す (chezmoi 管理に影響を与えない)
 

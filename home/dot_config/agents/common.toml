@@ -382,7 +382,20 @@ write_deny_globs = [
 [web]
 # Claude: WebFetch(domain:...) として permissions.allow へ展開 (自動承認のみ。
 #         ここに無いドメインを拒否する効果は無い)
+#         さらに sandbox.network.allowedDomains にも反映される。
+#         Claude は WebFetch の許可ルールからも sandbox の allowlist を作るので
+#         実質二重だが、permission 側の記法が変わっても崩れないよう明示する。
 # Copilot: settings.json の allowedUrls に直接反映
+#          (Copilot の sandbox にドメイン単位の制御は無く、allowOutbound /
+#           allowLocalNetwork の on/off だけ。allowedUrls は web fetch ツール層)
+#
+# ★sandbox に効く wildcard は **先頭の `*.` と 単独の `*` だけ**。
+#   `example.*` のように他の位置に置いた wildcard は WebFetch には効くが
+#   sandbox 側は無視する (公式ドキュメントに明記)。
+#
+# ★許可外ドメインを「拒否」する network.strictAllowlist は Claude Code
+#   v2.1.219 以降が必要。それ未満では許可外は拒否ではなく **承認プロンプト**
+#   になるため、ネットワークは filesystem のような whitelist にはできない。
 allow_domains = [
   "github.com",
   "api.github.com",
@@ -413,7 +426,9 @@ allow_domains = [
   "pre-commit.com",
 ]
 
-# Copilot のみ (Claude は対応キーなし)
+# Copilot のみ allowedUrls/deniedUrls に反映 (Claude の permissions には
+# 対応キーが無い)。ただし Claude でも sandbox.network.deniedDomains には
+# 反映される: 広い allowlist wildcard の内側を個別に塞ぐのに使える。
 deny_domains = []
 
 # ---------------------------------------------------------------------------
@@ -470,8 +485,12 @@ deny = [
 # Claude のみ: read は許すが write を禁止する対象 (改竄防止)。
 # Copilot は deny-by-default で cwd の外に書けないため設定不要
 # (実測: /sandbox policy に $HOME 配下の read-write 許可は出てこない)。
-# `.git/config` / `.git/hooks` はリポジトリ相対で user 設定では表現できない
-# ため対象外 (hook の check_guard_tampering に残す)。
+# `.git/config` / `.git/hooks` はリポジトリ相対で user 設定では表現できないが、
+# Claude sandbox の "Protected paths" が常時 write 保護しているので不要
+# (allowWrite でも解除できない)。cwd 配下のシェル起動ファイル・.gitconfig・
+# .claude/** や ~/.claude のほとんども同様に自動保護される。
+# → 下の write_deny_extra はその多重防御であり、cwd が $HOME の場合や
+#   sandbox の外で動く操作に備えた保険として残してある。
 write_deny_extra = [
   "~/.claude/hooks", "~/.claude/settings.json", "~/.claude/settings.local.json",
   "~/.copilot/hooks", "~/.copilot/permissions-config.json", "~/.config/agents",

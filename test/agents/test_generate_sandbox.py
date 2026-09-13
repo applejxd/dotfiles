@@ -141,6 +141,7 @@ def test_build_claude_sandbox_empty_section():
             "denyWrite": [],
             "allowWrite": [],
         },
+        "network": {"allowedDomains": []},
     }
 
 
@@ -394,3 +395,44 @@ def test_secret_config_dirs_are_denied_even_though_config_is_allowed():
     for secret_path in ("~/.config/sops/age", "~/.config/gh/hosts.yml"):
         assert secret_path in deny, f"{secret_path} が deny に無い"
     assert any("Bitwarden" in p for p in deny), "Bitwarden CLI の設定が deny に無い"
+
+
+# ---------------------------------------------------------------------------
+# sandbox.network (Claude のみ)
+# ---------------------------------------------------------------------------
+
+def test_claude_sandbox_network_mirrors_web_allow_domains():
+    network = gen.build_claude_sandbox(COMMON)["network"]
+    assert network["allowedDomains"] == COMMON["web"]["allow_domains"]
+
+
+def test_claude_sandbox_network_omits_empty_denied_domains():
+    # 空の deniedDomains を書くと意味が無いので出さない。
+    network = gen.build_claude_sandbox({"web": {"allow_domains": ["a.example"]}})[
+        "network"
+    ]
+    assert "deniedDomains" not in network
+
+
+def test_claude_sandbox_network_emits_denied_domains_when_set():
+    common = {"web": {"allow_domains": ["*.example.com"], "deny_domains": ["bad.example.com"]}}
+    network = gen.build_claude_sandbox(common)["network"]
+    assert network["deniedDomains"] == ["bad.example.com"]
+
+
+def test_web_wildcards_are_sandbox_compatible():
+    # sandbox に効く wildcard は先頭の "*." と単独の "*" だけ。
+    # "example.*" のような形は WebFetch には効くが sandbox 側は無視するため、
+    # 気付かずに穴が開いたつもりになるのを防ぐ。
+    for domain in COMMON["web"]["allow_domains"] + COMMON["web"]["deny_domains"]:
+        if "*" not in domain:
+            continue
+        assert domain == "*" or domain.startswith("*."), (
+            f"'{domain}' の wildcard は sandbox に効かない。"
+            "先頭の '*.' か単独の '*' だけが有効。"
+        )
+
+
+def test_merge_claude_settings_includes_network():
+    merged = gen.merge_claude_settings({}, COMMON)
+    assert merged["sandbox"]["network"]["allowedDomains"]
