@@ -473,3 +473,66 @@ def test_network_allow_has_no_wildcards():
     # shell 通信先は具体的なホストを書く (wildcard は [web] 側で足りている)。
     for domain in COMMON["sandbox"]["network_allow"]:
         assert "*" not in domain, f"network_allow に wildcard: {domain}"
+
+
+# ---------------------------------------------------------------------------
+# sandbox.seccomp (mise 導入分への橋渡し)
+# ---------------------------------------------------------------------------
+# Claude は apply-seccomp を npm のグローバル領域でしか自動検出しないが、
+# このリポジトリは mise で入れる (npm install -g は [bash] deny)。
+# mise は独自ディレクトリへ隔離するため、公式の代替手段である
+# sandbox.seccomp.applyPath でパスを直接指す。
+
+def test_seccomp_arch_maps_known_machines():
+    assert gen.seccomp_arch("x86_64") == "x64"
+    assert gen.seccomp_arch("amd64") == "x64"
+    assert gen.seccomp_arch("aarch64") == "arm64"
+    assert gen.seccomp_arch("arm64") == "arm64"
+
+
+def test_seccomp_arch_returns_none_for_unsupported():
+    # 非対応アーキではパスを組み立てない (誤ったパスを設定しない)。
+    assert gen.seccomp_arch("riscv64") is None
+    assert gen.seccomp_arch("i686") is None
+
+
+def test_common_toml_declares_seccomp_apply_path():
+    template = COMMON["sandbox"]["seccomp_apply_path"]
+    assert "{arch}" in template, "アーキテクチャのプレースホルダが無い"
+    assert template.startswith("~/"), "ホーム相対で書くこと"
+    assert template.endswith("apply-seccomp")
+    # mise の latest エイリアス経由にしてバージョン更新に追従させる
+    assert "/latest/" in template
+
+
+def test_build_seccomp_config_returns_none_when_missing(tmp_path):
+    common = {
+        "sandbox": {"seccomp_apply_path": str(tmp_path / "nope" / "{arch}" / "apply-seccomp")}
+    }
+    assert gen.build_seccomp_config(common, machine="x86_64") is None
+
+
+def test_build_seccomp_config_returns_none_for_unsupported_arch():
+    assert gen.build_seccomp_config(COMMON, machine="riscv64") is None
+
+
+def test_build_seccomp_config_returns_none_without_declaration():
+    assert gen.build_seccomp_config({"sandbox": {}}) is None
+
+
+def test_build_seccomp_config_uses_existing_binary(tmp_path):
+    binary = tmp_path / "x64" / "apply-seccomp"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+    common = {"sandbox": {"seccomp_apply_path": str(tmp_path / "{arch}" / "apply-seccomp")}}
+    assert gen.build_seccomp_config(common, machine="x86_64") == {
+        "applyPath": str(binary)
+    }
+
+
+def test_claude_sandbox_omits_seccomp_when_unavailable(tmp_path):
+    # 未導入のマシンでは seccomp キー自体を出さず、Claude の自動検出に任せる。
+    common = {
+        "sandbox": {"seccomp_apply_path": str(tmp_path / "{arch}" / "apply-seccomp")},
+    }
+    assert "seccomp" not in gen.build_claude_sandbox(common)

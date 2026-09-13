@@ -231,37 +231,43 @@ Claude Code v2.1.187 以降では `sandbox.credentials` で、sandbox 内の
 肩代わりできるが、`mask` は TLS 終端 (`network.tlsTerminate`) を要求し
 プロキシに平文を見せることになるため、導入は別途検討する (現在は未使用)。
 
-#### WSL2 での抜け穴 (要・手動セットアップ)
+#### WSL2 での抜け穴 (seccomp フィルタ)
 
 WSL2 では Windows バイナリ (`cmd.exe`, `/mnt/c/...`) の起動が Unix domain
 socket 経由になるため、**seccomp フィルタが無いと sandbox から脱出できる**
 (公式: "the optional seccomp filter has to be installed to block the socket
-in the first place")。未導入だと Claude は起動時に
+in the first place")。未導入だと Claude は
 `[Sandbox Linux] apply-seccomp binary not available - unix socket blocking
 disabled.` を出す。
 
+このリポジトリでは **mise で導入し、パスを settings.json で教える**方式を
+取っている。`npm install -g` は `[bash] deny` で禁止しているため使わない。
+
+- `home/dot_config/mise/config.toml.tmpl` の
+  `"npm:@anthropic-ai/sandbox-runtime"` が本体を入れる。
+- `common.toml` の `[sandbox] seccomp_apply_path` が導入先を指し、
+  `generate.py` が `sandbox.seccomp.applyPath` を生成する。
+
 > [!IMPORTANT]
-> **これは `mise` では入れられない。** Claude が `apply-seccomp` を探すのは
-> 次の場所だけで、いずれも npm のグローバル領域である:
+> **mise に書くだけでは効かない。** Claude が `apply-seccomp` を自動検出するのは
+> npm のグローバル領域だけである:
 >
-> - `/usr/local/lib/node_modules` / `/usr/lib/node_modules` /
->   `/opt/homebrew/lib/node_modules`
 > - npm グローバル prefix (`npm -g config get prefix`) 配下の `lib/node_modules`
+> - `/usr/lib` / `/usr/local/lib` / `/opt/homebrew/lib` の `node_modules`
 >
 > mise の `npm:` バックエンドはパッケージを
-> `~/.local/share/mise/installs/npm-.../` に**隔離**するため、上記のどこにも
-> 現れず検出されない (実機で npm prefix 配下の `@anthropic-ai/` が空のままに
-> なることを確認済み)。`markdownlint-cli2` や `@bitwarden/cli` と同じ要領で
-> mise に書いても**効果が無い**ので注意。
+> `~/.local/share/mise/installs/npm-.../` へ**隔離**するため、上記のどこにも
+> 現れない (実機で npm prefix 配下の `@anthropic-ai/` が空のままになることを
+> 確認済み)。そこで公式が用意している代替手段
+> 「copy `vendor/seccomp/*` from sandbox-runtime and set
+> `sandbox.seccomp.bpfPath` and `applyPath` in settings.json」を使い、
+> **コピーの代わりに mise の導入先を直接指している**。
 
-導入は公式手順どおり **npm のグローバルインストール**で行う:
+`seccomp_apply_path` の `{arch}` は `generate.py` が `x64` / `arm64` に
+置換する。バージョン更新に追従するよう mise の `latest` エイリアスを経由し、
+**パスが実在するときだけ**設定を出力する (未導入のマシンや非対応
+アーキテクチャでは設定が出ず、Claude は従来どおり自動検出に戻るだけ)。
 
-```bash
-npm install -g @anthropic-ai/sandbox-runtime
-```
-
-`npm install -g` は `[bash] deny` で禁止している (「システム全体を汚す」) ため、
-**エージェントではなく人間が実行する**。これは数少ない手動セットアップ項目。
 導入後は `/sandbox` の Dependencies タブに不足が出ていないことを確認する。
 
 #### sandbox に移せないネットワーク系チェック

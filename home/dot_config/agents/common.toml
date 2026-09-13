@@ -598,6 +598,23 @@ network_allow = [
   "mise-versions.jdx.dev",
 ]
 
+# Claude のみ: sandbox が使う seccomp フィルタ (apply-seccomp) のパス。
+#
+# Claude はこのバイナリを npm のグローバル領域
+# (`npm -g config get prefix` 配下の lib/node_modules、/usr/lib、
+#  /usr/local/lib、/opt/homebrew/lib) でしか自動検出しない。
+# mise の npm: バックエンドは ~/.local/share/mise/installs/npm-.../ へ
+# 隔離するため自動検出されないので、公式が用意している代替手段
+# (「copy vendor/seccomp/* from sandbox-runtime and set
+#   sandbox.seccomp.bpfPath and applyPath in settings.json」) を使い、
+# mise の導入先を settings.json から直接指す。
+# これで `npm install -g` (= [bash] deny) を使わずに mise だけで完結する。
+#
+# {arch} は generate.py が x64 / arm64 に置換する。
+# パスが存在しないマシン (未導入 / 非対応 OS) では設定を出力しないので、
+# 共有の common.toml に書いても他環境を壊さない。
+seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/{arch}/apply-seccomp"
+
 # ---------------------------------------------------------------------------
 # Claude 固有
 # ---------------------------------------------------------------------------

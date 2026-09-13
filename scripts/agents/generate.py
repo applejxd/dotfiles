@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import sys
 import tomllib
 from pathlib import Path
@@ -292,6 +293,45 @@ def _uniq(seq: list[str]) -> list[str]:
     return out
 
 
+def seccomp_arch(machine: str | None = None) -> str | None:
+    """``uname -m`` 相当の値を sandbox-runtime の vendor ディレクトリ名へ変換。
+
+    サポート外のアーキテクチャでは None を返し、呼び出し側は設定を出さない。
+    """
+    value = (machine or platform.machine()).lower()
+    if value in {"x86_64", "amd64", "x64"}:
+        return "x64"
+    if value in {"aarch64", "arm64"}:
+        return "arm64"
+    return None
+
+
+def build_seccomp_config(
+    common: dict[str, Any], *, machine: str | None = None
+) -> dict[str, Any] | None:
+    """``sandbox.seccomp`` を組み立てる (見つからなければ None)。
+
+    Claude は apply-seccomp を npm のグローバル領域でしか自動検出しないが、
+    このリポジトリでは mise で導入する (``npm install -g`` は [bash] deny)。
+    mise は独自ディレクトリへ隔離するので自動検出に頼れないため、公式が
+    用意している ``sandbox.seccomp.applyPath`` でパスを直接指す。
+
+    存在しないパスを設定すると sandbox の起動が壊れかねないので、
+    **実在するときだけ** 出力する。未導入のマシンや非対応アーキテクチャでは
+    単に設定が出ず、Claude は従来どおり自動検出にフォールバックする。
+    """
+    template = common.get("sandbox", {}).get("seccomp_apply_path")
+    if not template:
+        return None
+    arch = seccomp_arch(machine)
+    if arch is None:
+        return None
+    path = Path(expand_user(template.replace("{arch}", arch)))
+    if not path.is_file():
+        return None
+    return {"applyPath": str(path)}
+
+
 def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
     """Claude の sandbox.filesystem を whitelist (deny-by-default) で組み立てる。
 
@@ -340,7 +380,7 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
     if sandbox.get("network_strict"):
         network["strictAllowlist"] = True
 
-    return {
+    out: dict[str, Any] = {
         "enabled": True,
         "filesystem": {
             # ホーム全体を塞いでから read_allow で穴を開ける。
@@ -352,6 +392,10 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
         },
         "network": network,
     }
+    seccomp = build_seccomp_config(common)
+    if seccomp:
+        out["seccomp"] = seccomp
+    return out
 
 
 def merge_claude_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:

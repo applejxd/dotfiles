@@ -54,6 +54,18 @@ sops = "latest"
 # chezmoi init 時点では bw 不在でも既存ガード (lookPath "bw") で apply が完走し、
 # apply 中の `mise install` でこの bw が入る。詳細は README / docs/spec/security.md を参照。
 "npm:@bitwarden/cli" = "latest"
+# Claude Code の sandbox が使う seccomp フィルタ (Unix domain socket の遮断)。
+# 無くても sandbox 自体は動くが、WSL2 では Windows バイナリ (cmd.exe や
+# /mnt/c/... 配下) の起動が Unix socket 経由になるため、これが無いと
+# sandbox 内から Windows 側のプロセスを起動して脱出できてしまう。
+#
+# 注意: Claude は apply-seccomp を npm のグローバル領域でしか自動検出せず、
+# mise は独自ディレクトリへ隔離するのでここに書くだけでは見つけてもらえない。
+# 公式が用意している代替手段 (settings.json の sandbox.seccomp.applyPath で
+# パスを直接指定する) を使って橋渡ししている。生成は
+# scripts/agents/generate.py の build_claude_sandbox が行う。
+# see https://code.claude.com/docs/en/sandboxing (WSL2 notes / Dependencies)
+"npm:@anthropic-ai/sandbox-runtime" = "latest"
 yt-dlp = "latest"
 {{- end }}
 
