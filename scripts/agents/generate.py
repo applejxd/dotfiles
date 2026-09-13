@@ -282,6 +282,36 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     return {"allow": uniq(allow), "ask": uniq(ask), "deny": uniq(deny)}
 
 
+def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
+    """sandbox.enabled / sandbox.filesystem.denyRead / denyWrite を組み立てる。
+
+    common.toml の [sandbox] は素のパス列 (sandbox 記法。`~/` 始まりの
+    wildcard を含む) で書かれているので、そのまま denyRead/denyWrite に
+    展開する。承認モード (auto-allow 等) には触れない: sandbox は既存の
+    承認フローの上に追加される OS レベルの防御としてのみ働かせる。
+    """
+    sandbox = common.get("sandbox", {})
+    deny_read = list(sandbox.get("deny_read", []))
+    deny_write = deny_read + list(sandbox.get("deny_write_extra", []))
+
+    def uniq(seq: list[str]) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for x in seq:
+            if x not in seen:
+                seen.add(x)
+                out.append(x)
+        return out
+
+    return {
+        "enabled": True,
+        "filesystem": {
+            "denyRead": uniq(deny_read),
+            "denyWrite": uniq(deny_write),
+        },
+    }
+
+
 def merge_claude_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     out = dict(existing)
     permissions = build_claude_permissions(common)
@@ -294,6 +324,7 @@ def merge_claude_settings(existing: dict[str, Any], common: dict[str, Any]) -> d
     # permissions と違い hooks は Orca などの外部ツールも追記する共有領域なので、
     # 自分が生成したエントリだけを差し替える。
     out["hooks"] = merge_claude_hooks(existing.get("hooks"), common)
+    out["sandbox"] = build_claude_sandbox(common)
     return out
 
 

@@ -39,6 +39,7 @@ test/agents/
     test_command_policy.py                   shell normalize / match の unit test
     test_check_bash_decision.py              deny/ask 判定と rm root guard の test
     test_generate_hooks.py                   hook 生成 / 外部 hook 温存の unit test
+    test_generate_sandbox.py                 sandbox 設定生成の unit test
     test_herdr_integration.py                Herdr統合の生成・保持
     test_modifier_wrappers.py                modify_ ラッパーの end-to-end test
     test_redirect_tmp.py                     一時パス誘導の判定
@@ -53,24 +54,64 @@ project の uv 環境や外部 `tomli` には依存しない。
 `modify_private_*` のように `private_` を付けることで mode 600 を保持し、
 `~/.copilot/settings.json` に含まれる `gho_xxx` トークンを保護している。
 
-## 2 層構成
+## 3 層構成
 
 | 層 | 仕組み | 効く CLI |
 | --- | --- | --- |
+| 0. sandbox | `~/.claude/settings.json` の `sandbox.filesystem.denyRead/denyWrite` (generate.py が生成)。OS レベル (bwrap/Seatbelt) で強制されるパス単位の deny | **Claude のみ (2026-09時点)** |
 | 1. permission リスト | `~/.claude/settings.json` の `permissions` (generate.py が生成) | **Claude のみ** |
 | 2. hook | `check_bash.py` が同じリストを読んで deny / ask を返す | **Claude + Copilot** |
 
-人が書くのは `common.toml` の `[bash] allow / ask / deny` の **3 つだけ**。
-そこから permission リストが生成され、hook も同じリストを読む。
-ルールを 2 箇所に書く必要はない。
+人が書くのは `common.toml` の `[bash] allow / ask / deny` と `[sandbox]` の
+パス列だけ。そこから permission リストと sandbox 設定が生成され、hook も
+同じ `[bash]` リストを読む。ルールを複数箇所に書く必要はない。
 
-**なぜ 2 層に配るのか**: hook は設定の読み込みに失敗しうる
+**なぜ複数層に配るのか**: hook は設定の読み込みに失敗しうる
 (`~/.config/agents/__pycache__` 由来の import 失敗など、トラブルシュートに実例あり)。
 permission リストは CLI 本体が評価するので、hook が落ちても Claude 側の deny は残る。
 hook 自体も設定を読めないときは **fail-closed** で deny する。
+sandbox はさらにその外側で OS が強制するため、hook や permission リストの
+実装バグ・迂回パターンに関係なく該当パスへのアクセスを止められる
+(ただし sandbox が対応できるのは「パスへのアクセス可否」のみで、コマンドの
+意味を解釈する判定 (`check_secret_env_echo` 等) は代替できない)。
 
 Copilot CLI の `permissions-config.json` は deny / ask を表現できない
-(公式仕様) ため、Copilot 側の強制は hook が全面的に担う。
+(公式仕様) ため、Copilot 側の強制は hook が全面的に担う。sandbox についても
+Copilot は 2026-09 時点で JSON スキーマが非公開 (public preview、`/sandbox`
+UI が前提) かつ Filesystem パス指定がワイルドカード非対応・絶対パス限定と
+判明しているため、`common.toml` の `[sandbox] copilot_deny_paths` は
+自動生成の対象外としてある (スキーマを実機確認してから
+`merge_copilot_settings` に反映する)。
+
+### sandbox 層 (`[sandbox]`)
+
+`common.toml` の `[sandbox]` に書くパスは、permission の `Read()`/`Edit()`
+glob 記法とは **書式が異なる**:
+
+- `~/` 始まりで home からの相対、`/` 始まりで絶対、無印/`./` はプロジェクト
+  相対 (ただし **user 設定 `~/.claude/settings.json` では無印/`./` は
+  `~/.claude` 基準になる**)。ホーム全体に効かせたいパターンは必ず `~/` を
+  明示すること (`~/**/*.pem` のように wildcard も使える)。
+- `deny_read`: 秘密情報 (`.ssh` / `.gnupg` / `id_rsa*` / `*.pem` /
+  `secrets/**` 等) とシェル履歴。読み書きどちらも拒否したいので
+  `build_claude_sandbox()` が `denyWrite` にもそのまま含める。
+- `deny_write_extra`: `deny_read` に加えて write のみ拒否したい対象
+  (hook/permission 設定自体の改竄防止、シェル起動ファイル、認証ファイル)。
+- `.git/config` / `.git/hooks` はリポジトリ相対のパスで、chezmoi が管理する
+  user 設定では表現できないため **sandbox の対象外** (hook の
+  `check_guard_tampering` に残る)。プロジェクト単位の `.claude/settings.json`
+  を生成する仕組みができたら移行を検討する。
+- `copilot_deny_paths`: Copilot 用に用意した絶対パスのみのサブセット
+  (wildcard 不可の制約に合わせてある)。実機で `/sandbox` を操作して
+  `~/.copilot/settings.json` の実際のキー構造を確認するまでは未使用。
+
+sandbox は `sandbox.enabled = true` のみを設定し、`autoAllowBashIfSandboxed`
+等の承認モードには触れない。既存の承認フロー (`permissions.defaultMode`) は
+変えず、sandbox は純粋に追加の防御層として働く (副作用を最小化するため)。
+
+`/tmp` の read/write を sandbox で全面遮断する案は、zsh 側で
+リポジトリ直下 `.tmp` へ `TMPDIR` を向ける仕組みとセットで行う将来タスクで
+あり、現時点では対象外 (`executable_redirect-tmp.py` が引き続き担当する)。
 
 ### 照合規則
 

@@ -417,6 +417,61 @@ allow_domains = [
 deny_domains = []
 
 # ---------------------------------------------------------------------------
+# Sandbox 系 (Claude: sandbox.filesystem.denyRead/denyWrite, Copilot: 実機確認後)
+# ---------------------------------------------------------------------------
+#
+# hook (check_bash.py) がコマンド文字列を正規表現でパースして拒否している
+# 「特定パスへのアクセス可否」の一部を、OS レベルで強制される sandbox の
+# Filesystem 層 (Deny) に移す。sandbox は迂回耐性が高く hook の保守も軽くなる。
+#
+# 注意: sandbox のパス記法は permission (Read()/Edit()) の glob 記法と異なる。
+# `~/` `/` `./`(無印) の解決規則があり、user 設定 (~/.claude/settings.json)
+# では無印/`./` は `~/.claude` 基準になる。ホーム全体に効かせたいパターンは
+# 必ず `~/` を明示すること。
+# 出典: https://code.claude.com/docs/en/sandboxing (Configure sandboxing)
+[sandbox]
+# 秘密情報。read/write 両方拒否。[file] の read_deny_globs/write_deny_globs と
+# 同じ対象を、sandbox の記法 (~/ 始まりの wildcard) で書き直したもの。
+deny_read = [
+  "~/.ssh", "~/.gnupg", "~/sops/age", "~/.aws/credentials", "~/.netrc",
+  "~/.npmrc", "~/.pypirc", "~/.claude.json", "~/.copilot/settings.json",
+  "~/.copilot/config.json",
+  "~/**/id_rsa*", "~/**/id_ed25519*", "~/**/id_ecdsa*", "~/**/id_dsa*",
+  "~/**/*.pem", "~/**/*.key", "~/**/*.p12", "~/**/*.pfx", "~/**/*.jks",
+  "~/**/*.keystore", "~/**/key.txt", "~/**/keys.txt", "~/**/*_key",
+  "~/**/*.token", "~/**/*_token", "~/**/token.json",
+  "~/**/service-account*.json", "~/**/secrets/**",
+  "~/**/*secret*", "~/**/*credential*", "~/**/*password*", "~/**/.env",
+  # シェル履歴 (読み取りだけ拒否すれば十分)
+  "~/.bash_history", "~/.zsh_history", "~/.python_history", "~/.node_repl_history",
+]
+
+# write のみ追加で拒否する対象 (deny_read の内容は denyWrite にも含める)。
+# hook/permission 設定自体の改竄防止と、シェル起動ファイル・認証ファイルへの
+# 書き込み禁止。`.git/config` / `.git/hooks` はリポジトリ相対で user 設定では
+# 表現できないため対象外 (hook 側に残す)。
+deny_write_extra = [
+  "~/.claude/hooks", "~/.claude/settings.json", "~/.claude/settings.local.json",
+  "~/.copilot/hooks", "~/.copilot/permissions-config.json", "~/.config/agents",
+  "~/.bashrc", "~/.bash_profile", "~/.bash_login", "~/.profile",
+  "~/.zshrc", "~/.zshenv", "~/.zprofile", "~/.cshrc", "~/.kshrc", "~/.login",
+  "~/.ssh/authorized_keys", "~/.ssh/known_hosts", "~/.gitconfig",
+]
+
+# Copilot: sandbox の Filesystem パス指定はワイルドカード非対応・絶対パス限定
+# (公式ドキュメントに明記)。かつ settings.json 内の実際のキー構造も
+# public preview のため未確認。実機で /sandbox を操作して構造を確認してから
+# generate.py 側に反映する (docs/spec/agent-permissions.md に手順を残す)。
+# 判明するまでは deny_read/deny_write_extra のうち絶対パスのみのサブセットを
+# 手動で反映する想定。
+copilot_deny_paths = [
+  "~/.ssh", "~/.gnupg", "~/.aws", "~/.netrc", "~/.npmrc", "~/.pypirc",
+  "~/.claude.json", "~/.claude/hooks", "~/.claude/settings.json",
+  "~/.copilot/hooks", "~/.copilot/permissions-config.json", "~/.config/agents",
+  "~/.bashrc", "~/.zshrc", "~/.gitconfig", "~/.bash_history", "~/.zsh_history",
+]
+
+# ---------------------------------------------------------------------------
 # Claude 固有
 # ---------------------------------------------------------------------------
 [claude]
