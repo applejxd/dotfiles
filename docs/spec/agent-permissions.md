@@ -150,6 +150,73 @@ sandbox は `sandbox.enabled = true` のみを設定し、`autoAllowBashIfSandbo
 等の承認モードには触れない。既存の承認フロー (`permissions.defaultMode`) は
 変えず、sandbox は純粋に追加の防御層として働く (副作用を最小化するため)。
 
+### このマシンだけで許可を足す (chezmoi 管理に影響を与えない)
+
+データセット置き場 (`/data1`) や外部マウントなど、**このマシンでしか意味が
+無いパス**を共有の `common.toml` に書きたくない場合の手段。共有設定を汚さず、
+`chezmoi diff` にも出ない方法が CLI ごとに用意してある。
+
+> [!IMPORTANT]
+> `~/.claude/settings.json` の `sandbox` キーを直接編集しても無駄。
+> `chezmoi apply` のたびに `generate.py` が丸ごと生成し直すため上書きされる。
+> `~/.copilot/settings.json` も `deniedPaths` だけは同様に再生成される。
+
+#### 1. `~/.config/agents/local.toml` (Claude・マシン全体)
+
+`generate.py` は起動時にこのファイルがあれば読み、`[sandbox]` の
+**追記だけ**を共有設定にマージする。chezmoi の管理対象ではないので
+`chezmoi apply` でも消えず、`chezmoi diff` にも現れない。
+
+```toml
+# ~/.config/agents/local.toml (chezmoi 管理外・このマシン専用)
+[sandbox]
+read_allow  = ["/data1", "/data2"]   # データセットは read-only で十分
+write_allow = ["/data1/outputs"]     # 書き出し先だけ read-write
+deny        = ["/data1/private"]     # 許可した中の一部を塞ぐことも可能
+```
+
+- 反映させるには `chezmoi apply` を実行する (生成時に読まれる)。
+- 追記できるのは `read_allow` / `write_allow` / `deny` /
+  `write_deny_extra` のみ。**共有設定のエントリを消したり緩めたりはできない**
+  (`sandbox.enabled = false` のようなキーは無視される)。
+- パスは実在している必要がある。存在しないパスは bwrap の bind-mount が
+  失敗する要因になる。
+- `AGENTS_LOCAL_CONFIG` 環境変数でファイルの場所を差し替えられる (テスト用)。
+- `~/.config/agents` は `write_deny_extra` に入っているため、**sandbox 内の
+  コマンドからは書けない**。エージェントがここに許可を書き足して自分の
+  権限を広げることはできない。
+
+#### 2. `.claude/settings.local.json` (Claude・プロジェクト単位)
+
+Claude の設定スコープは上から managed → `claude --settings` →
+`.claude/settings.local.json` (project local) → `.claude/settings.json`
+(shared project) → `~/.claude/settings.json` (user) の 5 段。
+**`sandbox.filesystem` の配列はスコープをまたいでマージされる**
+(上書きではなく結合) ので、project local に穴だけ書けばよい。
+このファイルは Claude 自身が global gitignore に追加するためコミットされない。
+
+```json
+{ "sandbox": { "filesystem": { "allowRead": ["/data1"] } } }
+```
+
+user スコープに `settings.local.json` は**存在しない**。マシン全体に効かせたい
+場合は 1 の `local.toml` を使うこと。
+
+#### 3. `/sandbox config` の TUI (Copilot・マシン全体)
+
+Copilot は `readonlyPaths` / `readwritePaths` を **`generate.py` が触らない**
+設計なので、TUI で足した許可はそのまま残る (`chezmoi apply` でも消えない)。
+`deniedPaths` だけが共有の `deny` から再生成される。
+
+#### 4. 一時的に 1 セッションだけ
+
+- Claude: `claude --settings '{"sandbox":{"filesystem":{"allowRead":["/data1"]}}}'`
+- Copilot: `--add-dir` で作業ディレクトリを足す
+
+> [!NOTE]
+> どの方法でも **symlink は許可の手段にならない**。プロジェクト配下に
+> `/data1` へのリンクを張っても、許可は実パスに与える必要がある (後述)。
+
 ### Copilot の sandbox は Claude と別物
 
 Copilot の sandbox 設定は `~/.copilot/settings.json` の `sandbox` キーに入る。

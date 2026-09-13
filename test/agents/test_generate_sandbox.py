@@ -271,3 +271,85 @@ def test_both_clis_share_the_same_deny_source():
         assert path.replace(home, "~", 1) in claude, (
             f"Copilot で deny しているのに Claude 側に無い: {path}"
         )
+
+
+# ---------------------------------------------------------------------------
+# ローカル上書き (~/.config/agents/local.toml) — chezmoi 管理外
+# ---------------------------------------------------------------------------
+
+def _write_local(tmp_path: Path, body: str) -> Path:
+    p = tmp_path / "local.toml"
+    p.write_text(body, encoding="utf-8")
+    return p
+
+
+def test_local_overlay_missing_file_is_ignored(tmp_path):
+    assert gen.load_local_overlay(tmp_path / "nope.toml") == {}
+
+
+def test_local_overlay_broken_file_is_ignored(tmp_path, capsys):
+    # 壊れたローカル設定で chezmoi apply 全体を落とさないこと。
+    p = _write_local(tmp_path, "this is not = valid = toml\n")
+    assert gen.load_local_overlay(p) == {}
+    assert "warning" in capsys.readouterr().err
+
+
+def test_local_overlay_appends_read_allow(tmp_path):
+    p = _write_local(tmp_path, '[sandbox]\nread_allow = ["/data1", "/data2"]\n')
+    merged = gen.apply_local_overlay(COMMON, gen.load_local_overlay(p))
+    read_allow = merged["sandbox"]["read_allow"]
+    # 共有設定のエントリは残り、ローカル分が後ろに足される
+    assert read_allow[: len(COMMON["sandbox"]["read_allow"])] == COMMON["sandbox"]["read_allow"]
+    assert read_allow[-2:] == ["/data1", "/data2"]
+
+
+def test_local_overlay_reaches_generated_claude_settings(tmp_path):
+    p = _write_local(tmp_path, '[sandbox]\nread_allow = ["/data1"]\n')
+    merged = gen.apply_local_overlay(COMMON, gen.load_local_overlay(p))
+    fs = gen.build_claude_sandbox(merged)["filesystem"]
+    assert "/data1" in fs["allowRead"]
+    # whitelist の骨格は壊れていないこと
+    assert fs["denyRead"][0] == "~/"
+
+
+def test_local_overlay_can_add_deny_but_not_remove(tmp_path):
+    p = _write_local(tmp_path, '[sandbox]\ndeny = ["/data1/private"]\n')
+    merged = gen.apply_local_overlay(COMMON, gen.load_local_overlay(p))
+    deny = merged["sandbox"]["deny"]
+    assert "/data1/private" in deny
+    # 共有設定の deny が消えていないこと (追記のみ)
+    assert set(COMMON["sandbox"]["deny"]) <= set(deny)
+
+
+def test_local_overlay_does_not_mutate_shared_common(tmp_path):
+    before = list(COMMON["sandbox"]["read_allow"])
+    p = _write_local(tmp_path, '[sandbox]\nread_allow = ["/data1"]\n')
+    gen.apply_local_overlay(COMMON, gen.load_local_overlay(p))
+    assert COMMON["sandbox"]["read_allow"] == before
+
+
+def test_local_overlay_ignores_unknown_keys(tmp_path):
+    # 想定外のキーで権限を広げられないこと (許可キーは LOCAL_SANDBOX_KEYS のみ)。
+    p = _write_local(
+        tmp_path, '[sandbox]\nenabled = false\ncopilot_deny_paths = ["/x"]\n'
+    )
+    merged = gen.apply_local_overlay(COMMON, gen.load_local_overlay(p))
+    assert "enabled" not in merged["sandbox"]
+    assert "copilot_deny_paths" not in merged["sandbox"]
+    assert gen.build_claude_sandbox(merged)["enabled"] is True
+
+
+def test_local_overlay_path_respects_env(monkeypatch, tmp_path):
+    monkeypatch.setenv(gen.LOCAL_OVERLAY_ENV, str(tmp_path / "custom.toml"))
+    assert gen.local_overlay_path() == tmp_path / "custom.toml"
+
+
+def test_local_overlay_default_path_is_outside_chezmoi_source(monkeypatch):
+    # chezmoi のソースツリーではなく実ホーム側を見ること
+    # (ソース内に置くと chezmoi 管理対象になってしまう)。
+    monkeypatch.delenv(gen.LOCAL_OVERLAY_ENV, raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    path = gen.local_overlay_path()
+    assert path.name == "local.toml"
+    assert path.parent.name == "agents"
+    assert ROOT not in path.parents

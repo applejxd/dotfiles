@@ -489,6 +489,12 @@ write_deny_extra = [
 #    わざわざ許可することになり、Copilot の防御を弱めてしまう。
 #
 # 上の deny はこの穴の内側でも効く (より具体的なパスが勝つ)。
+#
+# ★このマシンでしか使わないパス (/data1 等) はここに書かないこと。
+#   chezmoi 管理外の ~/.config/agents/local.toml に [sandbox] read_allow として
+#   書けば、共有設定を汚さず chezmoi diff にも出さずに追記できる。
+#   詳細は docs/spec/agent-permissions.md の
+#   「このマシンだけで許可を足す」節を参照。
 read_allow = [
   # ツールチェーン (mise / uv / cargo / node / go / TeX)
   # 注: 存在しないパスは bwrap の bind-mount が失敗する要因になり得るので、

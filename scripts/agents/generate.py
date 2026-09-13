@@ -557,6 +557,61 @@ def load_common(path: str) -> dict[str, Any]:
         return tomllib.load(f)
 
 
+# chezmoi 管理外のローカル上書き。存在しなければ無視する。
+# このマシンだけで通したいパス (データセット置き場やマウント先など) を、
+# 共有の common.toml を汚さずに足すための口。
+#   ~/.config/agents/local.toml   (AGENTS_LOCAL_CONFIG で差し替え可)
+#
+# chezmoi は管理下に無いファイルを消さないので、apply しても残る。
+# また ~/.config/agents は [sandbox] write_deny_extra に入っており
+# sandbox 内のコマンドからは書けないので、エージェント自身がここに
+# 許可を書き足して自分の権限を広げることはできない。
+LOCAL_OVERLAY_ENV = "AGENTS_LOCAL_CONFIG"
+
+# ローカル上書きを許すキー。いずれも **追記のみ** で、共有設定の
+# エントリを消したり緩めたりはできない (deny を弱める方向には使えない)。
+LOCAL_SANDBOX_KEYS = ("read_allow", "write_allow", "deny", "write_deny_extra")
+
+
+def local_overlay_path() -> Path:
+    override = os.environ.get(LOCAL_OVERLAY_ENV)
+    if override:
+        return Path(override)
+    config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return Path(config_home) / "agents" / "local.toml"
+
+
+def load_local_overlay(path: Path | None = None) -> dict[str, Any]:
+    target = path or local_overlay_path()
+    try:
+        with target.open("rb") as f:
+            return tomllib.load(f)
+    except FileNotFoundError:
+        return {}
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        # 壊れたローカル設定で apply 全体を落とさない。共有設定だけで続行する。
+        print(f"warning: ignoring {target}: {exc}", file=sys.stderr)
+        return {}
+
+
+def apply_local_overlay(
+    common: dict[str, Any], local: dict[str, Any]
+) -> dict[str, Any]:
+    """ローカル上書きを common へ追記する (既存エントリは消さない)。"""
+    local_sandbox = local.get("sandbox") or {}
+    if not local_sandbox:
+        return common
+
+    merged = dict(common)
+    sandbox = dict(merged.get("sandbox") or {})
+    for key in LOCAL_SANDBOX_KEYS:
+        extra = local_sandbox.get(key)
+        if extra:
+            sandbox[key] = _uniq(list(sandbox.get(key, [])) + list(extra))
+    merged["sandbox"] = sandbox
+    return merged
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True, choices=sorted(TARGETS))
@@ -569,6 +624,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     common = load_common(args.common)
+    common = apply_local_overlay(common, load_local_overlay())
     existing = load_existing(args.existing)
     merger = TARGETS[args.target]
     merged = merger(existing, common)
