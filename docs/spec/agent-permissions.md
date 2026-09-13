@@ -231,17 +231,38 @@ Claude Code v2.1.187 以降では `sandbox.credentials` で、sandbox 内の
 肩代わりできるが、`mask` は TLS 終端 (`network.tlsTerminate`) を要求し
 プロキシに平文を見せることになるため、導入は別途検討する (現在は未使用)。
 
-#### WSL2 での抜け穴
+#### WSL2 での抜け穴 (要・手動セットアップ)
 
 WSL2 では Windows バイナリ (`cmd.exe`, `/mnt/c/...`) の起動が Unix domain
 socket 経由になるため、**seccomp フィルタが無いと sandbox から脱出できる**
 (公式: "the optional seccomp filter has to be installed to block the socket
-in the first place")。
+in the first place")。未導入だと Claude は起動時に
+`[Sandbox Linux] apply-seccomp binary not available - unix socket blocking
+disabled.` を出す。
 
-このリポジトリでは `home/dot_config/mise/config.toml.tmpl` に
-`"npm:@anthropic-ai/sandbox-runtime"` として宣言してあるので、
-`mise install` で入る (`npm install -g` は `[bash] deny` で禁止しているため
-使わない)。`/sandbox` の Dependencies タブに不足が出ていないか確認すること。
+> [!IMPORTANT]
+> **これは `mise` では入れられない。** Claude が `apply-seccomp` を探すのは
+> 次の場所だけで、いずれも npm のグローバル領域である:
+>
+> - `/usr/local/lib/node_modules` / `/usr/lib/node_modules` /
+>   `/opt/homebrew/lib/node_modules`
+> - npm グローバル prefix (`npm -g config get prefix`) 配下の `lib/node_modules`
+>
+> mise の `npm:` バックエンドはパッケージを
+> `~/.local/share/mise/installs/npm-.../` に**隔離**するため、上記のどこにも
+> 現れず検出されない (実機で npm prefix 配下の `@anthropic-ai/` が空のままに
+> なることを確認済み)。`markdownlint-cli2` や `@bitwarden/cli` と同じ要領で
+> mise に書いても**効果が無い**ので注意。
+
+導入は公式手順どおり **npm のグローバルインストール**で行う:
+
+```bash
+npm install -g @anthropic-ai/sandbox-runtime
+```
+
+`npm install -g` は `[bash] deny` で禁止している (「システム全体を汚す」) ため、
+**エージェントではなく人間が実行する**。これは数少ない手動セットアップ項目。
+導入後は `/sandbox` の Dependencies タブに不足が出ていないことを確認する。
 
 #### sandbox に移せないネットワーク系チェック
 
