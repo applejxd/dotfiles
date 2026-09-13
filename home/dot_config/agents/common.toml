@@ -458,6 +458,7 @@ deny = [
   "~/.ssh", "~/.gnupg", "~/.config/sops/age", "~/.aws", "~/.netrc",
   "~/.npmrc", "~/.pypirc", "~/.docker/config.json",
   "~/.git-credentials", "~/.config/gh/hosts.yml",
+  "~/.config/Bitwarden CLI",
   "~/.claude.json", "~/.copilot/settings.json", "~/.copilot/config.json",
   "~/.bash_history", "~/.zsh_history", "~/.python_history",
   "~/.node_repl_history",
@@ -495,18 +496,25 @@ write_deny_extra = [
 #   書けば、共有設定を汚さず chezmoi diff にも出さずに追記できる。
 #   詳細は docs/spec/agent-permissions.md の
 #   「このマシンだけで許可を足す」節を参照。
+#
+# ★ここは Copilot の実効ポリシー (実測) に合わせて絞ってある。作業中の
+#   プロジェクトは cwd として自動で read-write 許可されるので、
+#   `~/src` のような「他のリポジトリ」を開ける必要は無い
+#   (Copilot 側も許可していない)。別ディレクトリを読ませたいときは
+#   `claude --add-dir <path>` を使う。恒久的に必要なら local.toml へ。
 read_allow = [
   # ツールチェーン (mise / uv / cargo / node / go / TeX)
+  # Copilot の allowDevToolAccess が自動許可する範囲に相当する。
   # 注: 存在しないパスは bwrap の bind-mount が失敗する要因になり得るので、
   # 実在するものだけを書くこと (GOPATH 未設定なら ~/go が既定)。
   "~/.local", "~/.cache", "~/.cargo", "~/.rustup", "~/.nvm", "~/.npm",
   "~/go", "~/.texlive",
   # ツールの設定 (git, gh, mise, nvim 等)。秘密は上の deny で個別に塞ぐ
   "~/.config", "~/.gitconfig",
-  # AI CLI 自身の設定・skill (設定の改竄は write_deny_extra 側で禁止)
-  "~/.claude", "~/.copilot", "~/.codex", "~/.gemini", "~/.agents",
-  # 作業場所
-  "~/src", "~/sandbox", "~/worktrees", "~/papers",
+  # skill 置き場。Copilot も "Personal skill roots" として
+  # この 2 つ **だけ** を read-only 許可している (実測) ので合わせる。
+  # AI CLI の設定ディレクトリ全体 (~/.claude, ~/.copilot 等) は開けない。
+  "~/.claude/skills", "~/.agents/skills",
 ]
 
 # Claude のみ: cwd + セッション temp 以外に書き込みを許す場所。

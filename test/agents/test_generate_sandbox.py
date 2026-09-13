@@ -353,3 +353,44 @@ def test_local_overlay_default_path_is_outside_chezmoi_source(monkeypatch):
     assert path.name == "local.toml"
     assert path.parent.name == "agents"
     assert ROOT not in path.parents
+
+
+# ---------------------------------------------------------------------------
+# Claude が Copilot より緩くならないこと
+# ---------------------------------------------------------------------------
+# 運用方針: Copilot は家用で緩め、Claude は会社用で厳し目。
+# read_allow は Copilot の allowDevToolAccess が自動許可する範囲の代替なので、
+# そこを超えて「他のリポジトリ」まで開けると方針が逆転してしまう。
+# 実測した Copilot の実効ポリシーには $HOME 配下の作業ディレクトリ許可は無く、
+# skill も ~/.agents/skills と ~/.claude/skills だけが read-only で出る。
+
+# 作業中のプロジェクトは cwd として自動許可されるため、ここを開ける必要は無い。
+# 恒久的に必要なら ~/.config/agents/local.toml、一時的なら --add-dir を使う。
+WORKSPACE_ROOTS = ("~/src", "~/sandbox", "~/worktrees", "~/papers")
+
+
+def test_read_allow_does_not_open_other_repositories():
+    read_allow = set(COMMON["sandbox"]["read_allow"])
+    for root in WORKSPACE_ROOTS:
+        assert root not in read_allow, (
+            f"{root} を read_allow に入れると、作業中でない他リポジトリまで "
+            "読めてしまい Copilot より緩くなる。cwd は自動許可されるので不要。"
+        )
+
+
+def test_read_allow_does_not_open_whole_agent_config_dirs():
+    # AI CLI の設定ディレクトリ全体を開けない (skill のサブディレクトリのみ)。
+    read_allow = set(COMMON["sandbox"]["read_allow"])
+    for d in ("~/.claude", "~/.copilot", "~/.codex", "~/.gemini", "~/.agents"):
+        assert d not in read_allow, (
+            f"{d} 全体ではなく skill のサブディレクトリだけを許可すること"
+        )
+
+
+def test_secret_config_dirs_are_denied_even_though_config_is_allowed():
+    # ~/.config を丸ごと開けている以上、その中の秘密は個別に塞ぐ必要がある。
+    deny = set(COMMON["sandbox"]["deny"])
+    assert "~/.config" in COMMON["sandbox"]["read_allow"]
+    for secret_path in ("~/.config/sops/age", "~/.config/gh/hosts.yml"):
+        assert secret_path in deny, f"{secret_path} が deny に無い"
+    assert any("Bitwarden" in p for p in deny), "Bitwarden CLI の設定が deny に無い"

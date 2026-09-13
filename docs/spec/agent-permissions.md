@@ -99,7 +99,7 @@ glob 記法とは **書式が異なる**:
 - `deny` (両 CLI 共通): whitelist の内側でも遮断する秘密情報。read/write 両方。
   公式に "Rules that you configure are always kept" とあり自動付与に勝つ。
 - `read_allow` (Claude のみ): whitelist に開ける読み取りの穴。
-  ツールチェーン (`~/.local` `~/.cache` `~/.cargo` 等) と作業場所。
+  ツールチェーン (`~/.local` `~/.cache` `~/.cargo` 等) と skill 置き場のみ。
 - `write_allow` (Claude のみ): cwd + temp 以外に書き込みを許す場所
   (パッケージマネージャのキャッシュ)。
 - `write_deny_extra` (Claude のみ): read は許すが write を禁止する対象
@@ -109,8 +109,33 @@ glob 記法とは **書式が異なる**:
   `check_guard_tampering` に残る)。プロジェクト単位の `.claude/settings.json`
   を生成する仕組みができたら移行を検討する。
 
-`read_allow` / `write_allow` / `write_deny_extra` を **Copilot に渡さない**
-理由は後述 (渡すと Copilot の防御を弱めるか、無意味)。
+#### なぜ Claude 専用キーが残るのか (whitelist に揃えた後も)
+
+モデルを揃えても、次の 2 点は **機構の差**として残るため Copilot には渡さない:
+
+| キー | Copilot に渡さない理由 |
+| --- | --- |
+| `read_allow` / `write_allow` | Copilot は `allowDevToolAccess` が `PATH` 上のツール・パッケージマネージャのキャッシュを**自動で**許可する。Claude には相当機能が無いので手動補償しているだけで、渡すと Copilot が既に触れないパスまで開けてしまう |
+| `write_deny_extra` | Copilot は cwd の外に**そもそも書けない**ので、改竄防止の deny を足す意味が無い |
+
+つまり「Claude 専用」は *方針の差ではなく実装の差*。両者の**実効ポリシーは
+揃っている**必要がある。
+
+> [!IMPORTANT]
+> 運用方針は Copilot が家用で緩め、Claude が会社用で厳し目。
+> `read_allow` を安易に広げると **Claude の方が緩くなり方針が逆転する**。
+> 実測した Copilot の実効ポリシーには `$HOME` 配下の作業ディレクトリ許可は
+> 無く、skill も `~/.agents/skills` と `~/.claude/skills` だけが出る。
+> そのため `read_allow` にも `~/src` のような他リポジトリや、
+> AI CLI の設定ディレクトリ全体 (`~/.claude` 等) を入れない
+> (`test_read_allow_does_not_open_other_repositories` 他で固定)。
+> 作業中のプロジェクトは cwd として自動許可されるので不要。
+> 別ディレクトリが要るときは `claude --add-dir <path>`、恒久的に必要なら
+> `~/.config/agents/local.toml` を使う。
+
+`~/.config` は丸ごと開けているため、その中の秘密 (`sops/age`,
+`gh/hosts.yml`, `Bitwarden CLI`) は `deny` で個別に塞いでいる
+(`test_secret_config_dirs_are_denied_even_though_config_is_allowed`)。
 
 #### なぜ広い名前マッチを deny に置かないか
 
