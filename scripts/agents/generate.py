@@ -282,32 +282,48 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     return {"allow": uniq(allow), "ask": uniq(ask), "deny": uniq(deny)}
 
 
-def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
-    """sandbox.enabled / sandbox.filesystem.denyRead / denyWrite を組み立てる。
+def _uniq(seq: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for x in seq:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
 
-    common.toml の [sandbox] は素のパス列 (sandbox 記法。`~/` 始まりの
-    wildcard を含む) で書かれているので、そのまま denyRead/denyWrite に
-    展開する。承認モード (auto-allow 等) には触れない: sandbox は既存の
-    承認フローの上に追加される OS レベルの防御としてのみ働かせる。
+
+def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
+    """Claude の sandbox.filesystem を whitelist (deny-by-default) で組み立てる。
+
+    Claude の既定は「read 全許可 + deny を引く」ブラックリストだが、
+    ``denyRead`` に ``~/`` を置いて ``allowRead`` で穴を開けると
+    Copilot と同じ deny-by-default に揃えられる (公式ドキュメントに構成例あり)。
+
+    whitelist にするのは迂回耐性のためだけではない。Claude の Linux sandbox は
+    deny 対象の各パスに ``/dev/null`` を bind-mount する実装なので、
+    ``~/**/*secret*`` のような広い名前マッチを deny に置くと数千個の
+    bind-mount が必要になり実用に耐えない (common.toml のコメント参照)。
+    ``~/`` 1 本なら展開されない。
+
+    書き込み側は Claude も元から whitelist (cwd + セッション temp + 明示許可)
+    なので、``allowWrite`` に追加分を渡すだけでよい。
+
+    承認モード (auto-allow 等) には触れない: sandbox は既存の承認フローの
+    上に追加される OS レベルの防御としてのみ働かせる。
     """
     sandbox = common.get("sandbox", {})
-    deny_read = list(sandbox.get("deny_read", []))
-    deny_write = deny_read + list(sandbox.get("deny_write_extra", []))
-
-    def uniq(seq: list[str]) -> list[str]:
-        seen: set[str] = set()
-        out: list[str] = []
-        for x in seq:
-            if x not in seen:
-                seen.add(x)
-                out.append(x)
-        return out
+    deny = list(sandbox.get("deny", []))
+    write_deny_extra = list(sandbox.get("write_deny_extra", []))
 
     return {
         "enabled": True,
         "filesystem": {
-            "denyRead": uniq(deny_read),
-            "denyWrite": uniq(deny_write),
+            # ホーム全体を塞いでから read_allow で穴を開ける。
+            # deny は穴の内側でも効く (より具体的なパスが勝つ)。
+            "denyRead": _uniq(["~/", *deny]),
+            "allowRead": _uniq(list(sandbox.get("read_allow", []))),
+            "denyWrite": _uniq(deny + write_deny_extra),
+            "allowWrite": _uniq(list(sandbox.get("write_allow", []))),
         },
     }
 
@@ -429,7 +445,53 @@ COPILOT_MANAGED_KEYS = {
     "deniedUrls",
     "includeCoAuthoredBy",
     "trustedFolders",
+    # sandbox は丸ごとではなく enabled と
+    # userPolicy.filesystem.deniedPaths のみ (下記 build_copilot_sandbox)
+    "sandbox",
 }
+
+
+def build_copilot_sandbox(
+    existing_sandbox: Any, common: dict[str, Any]
+) -> dict[str, Any]:
+    """settings.json の sandbox キーを組み立てる (deniedPaths のみ生成)。
+
+    Copilot の sandbox は元から **deny-by-default のホワイトリスト**で、
+    既定の許可は cwd (read/write)、リポジトリ全体 (read)、``.git``、
+    ``PATH`` 上のツール (read-only)、パッケージマネージャのキャッシュ程度。
+    そのため ``common.toml`` の ``read_allow`` / ``write_allow`` /
+    ``write_deny_extra`` は **渡さない**:
+
+    - ``read_allow`` / ``write_allow`` は Claude に dev-tool 自動許可が無い
+      ことの補償なので、Copilot に渡すと既に触れないパスをわざわざ開けて
+      防御を弱めてしまう。
+    - ``write_deny_extra`` (改竄防止) は cwd の外に書けない時点で不要。
+
+    ``deniedPaths`` は共通の ``deny`` から導出するが、Copilot は
+    **絶対パス限定・ワイルドカード非対応**なので wildcard を含むものは除く。
+
+    ``readwritePaths`` / ``readonlyPaths`` は ``/sandbox config`` の TUI から
+    手で足す作業用の許可リストなので生成側で消さない。
+    ``network`` / ``allowBypass`` / ``allowDevToolAccess`` / ``auth`` などの
+    挙動設定にも触れない。
+    """
+    out: dict[str, Any] = dict(existing_sandbox) if isinstance(existing_sandbox, dict) else {}
+    out["enabled"] = True
+
+    user_policy = dict(out.get("userPolicy") or {})
+    filesystem = dict(user_policy.get("filesystem") or {})
+
+    sandbox = common.get("sandbox", {})
+    denied = [
+        expand_user(path)
+        for path in sandbox.get("deny", [])
+        if "*" not in path and "?" not in path
+    ]
+    filesystem["deniedPaths"] = _uniq(denied)
+
+    user_policy["filesystem"] = filesystem
+    out["userPolicy"] = user_policy
+    return out
 
 
 def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
@@ -457,6 +519,8 @@ def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> 
         out["defaultPermissionMode"] = mode
     if "experimental" in copilot:
         out["experimental"] = bool(copilot["experimental"])
+
+    out["sandbox"] = build_copilot_sandbox(existing.get("sandbox"), common)
 
     return out
 

@@ -417,40 +417,61 @@ allow_domains = [
 deny_domains = []
 
 # ---------------------------------------------------------------------------
-# Sandbox 系 (Claude: sandbox.filesystem.denyRead/denyWrite, Copilot: 実機確認後)
+# Sandbox 系 (OS レベルのファイルアクセス制御)
 # ---------------------------------------------------------------------------
 #
 # hook (check_bash.py) がコマンド文字列を正規表現でパースして拒否している
-# 「特定パスへのアクセス可否」の一部を、OS レベルで強制される sandbox の
-# Filesystem 層 (Deny) に移す。sandbox は迂回耐性が高く hook の保守も軽くなる。
+# 「特定パスへのアクセス可否」を、OS レベルで強制される sandbox に移す。
+# sandbox は迂回耐性が高く (symlink や変数展開で抜けられない)、hook の保守も軽くなる。
 #
-# 注意: sandbox のパス記法は permission (Read()/Edit()) の glob 記法と異なる。
-# `~/` `/` `./`(無印) の解決規則があり、user 設定 (~/.claude/settings.json)
-# では無印/`./` は `~/.claude` 基準になる。ホーム全体に効かせたいパターンは
-# 必ず `~/` を明示すること。
-# 出典: https://code.claude.com/docs/en/sandboxing (Configure sandboxing)
+# ## 両 CLI を whitelist (deny-by-default) で揃える
+#
+# Copilot の sandbox は元から deny-by-default。Claude は既定が「read 全許可 +
+# deny を引く」ブラックリストだが、denyRead に "~/" を置いて allowRead で
+# 穴を開けることで同じ whitelist 方式にできる (公式ドキュメントに構成例あり)。
+# 書き込み側は両者とも元から whitelist (cwd + セッション temp + 明示許可のみ)。
+#
+# whitelist にする理由は迂回耐性だけではない。Claude の Linux sandbox は
+# deny 対象の **各パスに /dev/null を bind-mount する** 実装のため、
+# 広い名前マッチの glob deny は致命的になる。実測 (この環境) では
+# 名前マッチ 3 パターンだけで 2704 件、deny 全体で 3239 件に展開された。
+# → コマンド 1 回ごとに数千個の bind-mount が必要になり実用に耐えない。
+# また deny 対象が symlink を経由すると bwrap のセットアップごと失敗する
+# 既知の不具合がある (anthropics/claude-code#45451)。
+# whitelist なら deny は "~/" の 1 本で済み、どちらの問題も起きない。
+#
+# ## パス記法 (permission の Read()/Edit() glob とは別物)
+#
+# `~/` 始まりで home 相対、`/` 始まりで絶対、無印/`./` はプロジェクト相対
+# (ただし user 設定 ~/.claude/settings.json では無印/`./` は ~/.claude 基準)。
+# ホーム全体に効かせたいパターンは必ず `~/` を明示すること。
+# Copilot は **絶対パス限定・ワイルドカード非対応・存在しないパスは無効化**。
+#
+# 出典: https://code.claude.com/docs/en/sandboxing
+#       https://docs.github.com/copilot/concepts/agents/copilot-cli/understanding-local-sandboxing
 [sandbox]
-# 秘密情報。read/write 両方拒否。[file] の read_deny_globs/write_deny_globs と
-# 同じ対象を、sandbox の記法 (~/ 始まりの wildcard) で書き直したもの。
-deny_read = [
-  "~/.ssh", "~/.gnupg", "~/sops/age", "~/.aws/credentials", "~/.netrc",
-  "~/.npmrc", "~/.pypirc", "~/.claude.json", "~/.copilot/settings.json",
-  "~/.copilot/config.json",
-  "~/**/id_rsa*", "~/**/id_ed25519*", "~/**/id_ecdsa*", "~/**/id_dsa*",
-  "~/**/*.pem", "~/**/*.key", "~/**/*.p12", "~/**/*.pfx", "~/**/*.jks",
-  "~/**/*.keystore", "~/**/key.txt", "~/**/keys.txt", "~/**/*_key",
-  "~/**/*.token", "~/**/*_token", "~/**/token.json",
-  "~/**/service-account*.json", "~/**/secrets/**",
-  "~/**/*secret*", "~/**/*credential*", "~/**/*password*", "~/**/.env",
-  # シェル履歴 (読み取りだけ拒否すれば十分)
-  "~/.bash_history", "~/.zsh_history", "~/.python_history", "~/.node_repl_history",
+# 両 CLI 共通: whitelist の内側でも遮断する秘密情報 (read/write 両方)。
+# 公式に "Rules that you configure are always kept" とあり、自動付与に勝つ。
+# ここは whitelist の穴 (read_allow) の中に秘密が置かれている場合の保険。
+# 広い名前マッチは上記のとおり bind-mount が爆発するので入れないこと。
+deny = [
+  "~/.ssh", "~/.gnupg", "~/.config/sops/age", "~/.aws", "~/.netrc",
+  "~/.npmrc", "~/.pypirc", "~/.docker/config.json",
+  "~/.git-credentials", "~/.config/gh/hosts.yml",
+  "~/.claude.json", "~/.copilot/settings.json", "~/.copilot/config.json",
+  "~/.bash_history", "~/.zsh_history", "~/.python_history",
+  "~/.node_repl_history",
+  # whitelist の内側に置かれがちなもの (Claude のみ。Copilot は wildcard 不可)
+  "~/**/.env", "~/**/id_rsa*", "~/**/id_ed25519*", "~/**/id_ecdsa*",
+  "~/**/id_dsa*", "~/**/service-account*.json",
 ]
 
-# write のみ追加で拒否する対象 (deny_read の内容は denyWrite にも含める)。
-# hook/permission 設定自体の改竄防止と、シェル起動ファイル・認証ファイルへの
-# 書き込み禁止。`.git/config` / `.git/hooks` はリポジトリ相対で user 設定では
-# 表現できないため対象外 (hook 側に残す)。
-deny_write_extra = [
+# Claude のみ: read は許すが write を禁止する対象 (改竄防止)。
+# Copilot は deny-by-default で cwd の外に書けないため設定不要
+# (実測: /sandbox policy に $HOME 配下の read-write 許可は出てこない)。
+# `.git/config` / `.git/hooks` はリポジトリ相対で user 設定では表現できない
+# ため対象外 (hook の check_guard_tampering に残す)。
+write_deny_extra = [
   "~/.claude/hooks", "~/.claude/settings.json", "~/.claude/settings.local.json",
   "~/.copilot/hooks", "~/.copilot/permissions-config.json", "~/.config/agents",
   "~/.bashrc", "~/.bash_profile", "~/.bash_login", "~/.profile",
@@ -458,18 +479,55 @@ deny_write_extra = [
   "~/.ssh/authorized_keys", "~/.ssh/known_hosts", "~/.gitconfig",
 ]
 
-# Copilot: sandbox の Filesystem パス指定はワイルドカード非対応・絶対パス限定
-# (公式ドキュメントに明記)。かつ settings.json 内の実際のキー構造も
-# public preview のため未確認。実機で /sandbox を操作して構造を確認してから
-# generate.py 側に反映する (docs/spec/agent-permissions.md に手順を残す)。
-# 判明するまでは deny_read/deny_write_extra のうち絶対パスのみのサブセットを
-# 手動で反映する想定。
-copilot_deny_paths = [
-  "~/.ssh", "~/.gnupg", "~/.aws", "~/.netrc", "~/.npmrc", "~/.pypirc",
-  "~/.claude.json", "~/.claude/hooks", "~/.claude/settings.json",
-  "~/.copilot/hooks", "~/.copilot/permissions-config.json", "~/.config/agents",
-  "~/.bashrc", "~/.zshrc", "~/.gitconfig", "~/.bash_history", "~/.zsh_history",
+# Claude のみ: whitelist に開ける読み取りの穴。
+#
+# Copilot には allowDevToolAccess があり PATH 上のツール・パッケージ
+# マネージャのキャッシュ・レジストリを自動で read 許可するが、Claude には
+# 相当する仕組みが無い。そのため denyRead に "~/" を置くと $HOME 配下の
+# ツールチェーンが読めなくなるので、ここで手動補償する。
+# → **Copilot 側には渡さない**。渡すと deny-by-default で既に触れないパスを
+#    わざわざ許可することになり、Copilot の防御を弱めてしまう。
+#
+# 上の deny はこの穴の内側でも効く (より具体的なパスが勝つ)。
+read_allow = [
+  # ツールチェーン (mise / uv / cargo / node / go / TeX)
+  # 注: 存在しないパスは bwrap の bind-mount が失敗する要因になり得るので、
+  # 実在するものだけを書くこと (GOPATH 未設定なら ~/go が既定)。
+  "~/.local", "~/.cache", "~/.cargo", "~/.rustup", "~/.nvm", "~/.npm",
+  "~/go", "~/.texlive",
+  # ツールの設定 (git, gh, mise, nvim 等)。秘密は上の deny で個別に塞ぐ
+  "~/.config", "~/.gitconfig",
+  # AI CLI 自身の設定・skill (設定の改竄は write_deny_extra 側で禁止)
+  "~/.claude", "~/.copilot", "~/.codex", "~/.gemini", "~/.agents",
+  # 作業場所
+  "~/src", "~/sandbox", "~/worktrees", "~/papers",
 ]
+
+# Claude のみ: cwd + セッション temp 以外に書き込みを許す場所。
+# パッケージマネージャがキャッシュを書けないとビルドが失敗するため。
+# Copilot は同等の場所を allowDevToolAccess が自動で read-write 許可する。
+write_allow = [
+  "~/.cache", "~/.npm", "~/.cargo/registry", "~/.local/share/mise",
+  "~/.local/state",
+]
+
+# Copilot 側の deniedPaths は上の `deny` から自動導出する
+# (generate.py の build_copilot_sandbox)。導出時の制約:
+#
+# - **ワイルドカードを含むエントリは除外**される。Copilot はワイルドカード
+#   非対応のため (公式ドキュメントに明記)。`~/**/.env` 等は Claude のみに効く。
+# - `~/` は絶対パスへ展開される。
+# - **存在しないパスの deny は Copilot 側で黙って無効化される**
+#   (`/sandbox policy` の Notes 節に does not exist と出る)。
+#   例: ~/.netrc ~/.npmrc ~/.pypirc は未作成なら enforce されないが、
+#   後で作られたときに次セッションから効くよう `deny` に残してある。
+#
+# Copilot は deny-by-default なので `write_deny_extra` / `read_allow` /
+# `write_allow` は渡さない (上の各コメント参照)。
+#
+# なお ~/.ssh を denied にすると git over SSH は使えなくなるが、
+# sandbox の auth.git / auth.gh が GitHub へのトークンを注入するため
+# HTTPS 経由の git / gh は sandbox 内でも動作する。
 
 # ---------------------------------------------------------------------------
 # Claude 固有
