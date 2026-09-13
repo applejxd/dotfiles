@@ -562,6 +562,42 @@ write_allow = [
 # sandbox の auth.git / auth.gh が GitHub へのトークンを注入するため
 # HTTPS 経由の git / gh は sandbox 内でも動作する。
 
+# Claude のみ: sandbox のネットワークを whitelist (deny-by-default) にする。
+# true にすると許可外ドメインは承認プロンプトではなく **拒否** される。
+# Claude Code v2.1.219 以降が必要。
+#
+# Copilot にはドメイン単位の制御が無く (allowOutbound の on/off だけ)、
+# outbound は全ドメイン許可のままなので、この設定は Claude 専用。
+# `allowedUrls` は「プロンプトを省略する URL」であって通信制限ではない。
+network_strict = true
+
+# Claude のみ: sandbox のネットワーク許可に **追加** するドメイン。
+# [web] allow_domains と合算して sandbox.network.allowedDomains になる。
+#
+# [web] allow_domains は WebFetch (エージェントがページを読む) 用なので、
+# 「ドキュメントサイト」が並ぶ。一方こちらは shell コマンドが実際に通信する先
+# (パッケージの実体を配るCDN等) を書く。混ぜると、CDN が WebFetch で
+# 自動承認されたり、逆にドキュメントサイトに shell から繋げてしまうため分ける。
+#
+# network_strict = true だと、ここに無いドメインへの接続は sandbox 内では
+# 失敗する。ただし失敗は即座の破綻ではなく「sandbox 外での再実行を求める
+# 承認プロンプト」に落ちるので、不足が判明したら足せばよい。
+network_allow = [
+  # Python (uv / pip): pypi.org はメタデータ、実体は files.pythonhosted.org
+  "files.pythonhosted.org",
+  # GitHub: git clone / リリース資産のダウンロード
+  # (objects.githubusercontent.com は [web] の *.githubusercontent.com で拾う)
+  "codeload.github.com",
+  # Rust (cargo)
+  "crates.io", "static.crates.io", "index.crates.io",
+  # Go modules
+  "proxy.golang.org", "sum.golang.org",
+  # Deno / JSR
+  "deno.land", "jsr.io",
+  # mise のバージョン一覧
+  "mise-versions.jdx.dev",
+]
+
 # ---------------------------------------------------------------------------
 # Claude 固有
 # ---------------------------------------------------------------------------

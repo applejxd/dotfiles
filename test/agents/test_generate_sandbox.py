@@ -403,7 +403,9 @@ def test_secret_config_dirs_are_denied_even_though_config_is_allowed():
 
 def test_claude_sandbox_network_mirrors_web_allow_domains():
     network = gen.build_claude_sandbox(COMMON)["network"]
-    assert network["allowedDomains"] == COMMON["web"]["allow_domains"]
+    # [web] の分は先頭に、[sandbox] network_allow の分が後ろに続く
+    web_domains = COMMON["web"]["allow_domains"]
+    assert network["allowedDomains"][: len(web_domains)] == web_domains
 
 
 def test_claude_sandbox_network_omits_empty_denied_domains():
@@ -436,3 +438,38 @@ def test_web_wildcards_are_sandbox_compatible():
 def test_merge_claude_settings_includes_network():
     merged = gen.merge_claude_settings({}, COMMON)
     assert merged["sandbox"]["network"]["allowedDomains"]
+
+
+def test_claude_sandbox_network_strict_allowlist_enabled():
+    # network_strict = true で許可外ドメインが拒否される (v2.1.219+ が必要)。
+    assert COMMON["sandbox"]["network_strict"] is True
+    assert gen.build_claude_sandbox(COMMON)["network"]["strictAllowlist"] is True
+
+
+def test_claude_sandbox_network_strict_omitted_when_false():
+    network = gen.build_claude_sandbox({"sandbox": {"network_strict": False}})["network"]
+    assert "strictAllowlist" not in network
+
+
+def test_claude_sandbox_network_merges_web_and_network_allow():
+    network = gen.build_claude_sandbox(COMMON)["network"]
+    allowed = network["allowedDomains"]
+    for domain in COMMON["web"]["allow_domains"]:
+        assert domain in allowed
+    for domain in COMMON["sandbox"]["network_allow"]:
+        assert domain in allowed
+    assert len(allowed) == len(set(allowed)), "allowedDomains に重複がある"
+
+
+def test_network_allow_is_disjoint_from_web_allow_domains():
+    # 役割が違う 2 つのリスト (WebFetch 用 / shell 通信用) なので、
+    # 重複して書かれていたらどちらかに寄せるべきサイン。
+    web = set(COMMON["web"]["allow_domains"])
+    shell = set(COMMON["sandbox"]["network_allow"])
+    assert not (web & shell), f"両方に書かれている: {sorted(web & shell)}"
+
+
+def test_network_allow_has_no_wildcards():
+    # shell 通信先は具体的なホストを書く (wildcard は [web] 側で足りている)。
+    for domain in COMMON["sandbox"]["network_allow"]:
+        assert "*" not in domain, f"network_allow に wildcard: {domain}"

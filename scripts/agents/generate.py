@@ -311,16 +311,18 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
     承認モード (auto-allow 等) には触れない: sandbox は既存の承認フローの
     上に追加される OS レベルの防御としてのみ働かせる。
 
-    ネットワークは ``[web]`` のドメイン列をそのまま
-    ``sandbox.network.allowedDomains`` / ``deniedDomains`` に渡す。
+    ネットワークは ``[web] allow_domains`` (WebFetch 用のドキュメントサイト) と
+    ``[sandbox] network_allow`` (shell が実際に通信するCDN等) を合算して
+    ``sandbox.network.allowedDomains`` に渡す。
     Claude は ``WebFetch(domain:...)`` の許可ルールからも sandbox の
-    allowlist を組み立てるため実質二重になるが、permission 側の記法が
+    allowlist を組み立てるため前者は実質二重になるが、permission 側の記法が
     変わっても sandbox の許可が崩れないよう明示しておく。
 
-    なお許可外ドメインを **拒否** する ``network.strictAllowlist`` は
-    Claude Code v2.1.219 以降が必要。それ未満では許可外ドメインは拒否ではなく
-    **承認プロンプト** になるため、ネットワークだけは filesystem のような
-    whitelist (deny-by-default) にはできない。
+    ``[sandbox] network_strict`` が真なら ``strictAllowlist`` を立てて
+    許可外ドメインを **拒否** する (Claude Code v2.1.219 以降が必要)。
+    これを立てないと許可外は拒否ではなく **承認プロンプト** になる。
+    Copilot にはドメイン単位の制御が無いため (``allowOutbound`` の on/off
+    だけ)、ネットワークだけは両 CLI で揃えられない。
     """
     sandbox = common.get("sandbox", {})
     deny = list(sandbox.get("deny", []))
@@ -328,11 +330,15 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
     web = common.get("web", {})
 
     network: dict[str, Any] = {
-        "allowedDomains": _uniq(list(web.get("allow_domains", []))),
+        "allowedDomains": _uniq(
+            list(web.get("allow_domains", [])) + list(sandbox.get("network_allow", []))
+        ),
     }
     denied_domains = _uniq(list(web.get("deny_domains", [])))
     if denied_domains:
         network["deniedDomains"] = denied_domains
+    if sandbox.get("network_strict"):
+        network["strictAllowlist"] = True
 
     return {
         "enabled": True,

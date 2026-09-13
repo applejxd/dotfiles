@@ -48,6 +48,13 @@ sops = "latest"
 # see https://mise.jdx.dev/dev-tools/backends/cargo.html
 "aqua:bvaisvil/zenith" = "latest"
 
+# Claude Code の sandbox が使う seccomp フィルタ (Unix domain socket の遮断)。
+# 無くても sandbox 自体は動くが、WSL2 では Windows バイナリ (cmd.exe や
+# /mnt/c/... 配下) の起動が Unix socket 経由になるため、これが無いと
+# sandbox 内から Windows 側のプロセスを起動して脱出できてしまう。
+# see https://code.claude.com/docs/en/sandboxing (WSL2 notes / Dependencies)
+"npm:@anthropic-ai/sandbox-runtime" = "latest"
+
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 "npm:@google/gemini-cli" = "latest"
 # Bitwarden CLI: snap 版が動作しなくなったため mise (npm backend) で導入。

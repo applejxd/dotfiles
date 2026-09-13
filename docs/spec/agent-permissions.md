@@ -189,11 +189,16 @@ sandbox は `sandbox.enabled = true` のみを設定し、`autoAllowBashIfSandbo
 | 強制方法 | sandbox 外のプロキシ。全サブプロセスに適用 | OS レベル |
 | 許可外の扱い | **承認プロンプト** (既定) | 単純に不可 |
 
-`common.toml` の `[web] allow_domains` は Claude の
-`sandbox.network.allowedDomains` に、`deny_domains` は `deniedDomains` に
-反映される。なお Claude は `WebFetch(domain:...)` の許可ルールからも
-sandbox の allowlist を組み立てるため実質二重だが、permission 側の記法が
-変わっても sandbox の許可が崩れないよう明示的に出している。
+`common.toml` の `[web] allow_domains` (WebFetch 用のドキュメントサイト) と
+`[sandbox] network_allow` (shell が実際に通信する CDN 等) を合算したものが
+Claude の `sandbox.network.allowedDomains` になり、`deny_domains` は
+`deniedDomains` に反映される。2 つに分けているのは役割が違うため:
+前者を増やすと WebFetch の自動承認が広がり、後者を増やすと shell の通信先が
+広がる (`test_network_allow_is_disjoint_from_web_allow_domains` で混在を検出)。
+
+なお Claude は `WebFetch(domain:...)` の許可ルールからも sandbox の allowlist を
+組み立てるため前者は実質二重だが、permission 側の記法が変わっても sandbox の
+許可が崩れないよう明示的に出している。
 
 > [!WARNING]
 > **sandbox に効く wildcard は先頭の `*.` と単独の `*` だけ**。
@@ -201,27 +206,42 @@ sandbox の allowlist を組み立てるため実質二重だが、permission �
 > sandbox 側は無視するため、穴が開いたつもりで開いていない状態になる
 > (`test_web_wildcards_are_sandbox_compatible` で固定)。
 
-#### ネットワークだけ whitelist にできない理由
+#### ネットワークも whitelist にしてある (Claude のみ)
 
-許可外ドメインを **拒否** する `sandbox.network.strictAllowlist` は
-**Claude Code v2.1.219 以降**が必要。それ未満では許可外ドメインは拒否されず
-**承認プロンプト**になるため、filesystem のような deny-by-default にはできない。
-CLI を更新できたら `strictAllowlist = true` を入れることでネットワークも
-whitelist 化できる (`allowManagedDomainsOnly` は managed settings 専用)。
+`[sandbox] network_strict = true` から `sandbox.network.strictAllowlist` を
+立てており、**許可外ドメインへの接続は拒否される** (Claude Code v2.1.219 以降が
+必要)。これが無いと許可外は拒否ではなく**承認プロンプト**になる。
 
-同様に、認証情報を sandbox 側で落とす `sandbox.credentials`
-(`envVars` を unset する `deny`、値を伏せたままツールを動かす `mask`) は
-**v2.1.187 以降**が必要。使えるようになれば `check_secret_env_echo` や
-`check_gh_token_exposure` の一部を肩代わりできる。
+許可漏れがあっても即座に破綻はしない。sandbox 内で接続が失敗し、
+「sandbox 外での再実行」を求める承認プロンプトに落ちるだけなので、
+足りないドメインが判明したら `network_allow` に追記すればよい。
+
+**Copilot 側は outbound が全ドメイン許可のまま**で、これは変えられない
+(ドメイン単位の設定が存在しないため)。`allowedUrls` は公式に
+"URLs or domains allowed without prompting" とあるとおり**承認プロンプトの
+省略リスト**であって通信制限ではなく、sandbox 内の `curl` は任意のホストへ
+到達できる。結果としてネットワークは Claude (会社用・厳しめ) と
+Copilot (家用・緩め) で非対称なままになるが、これは運用方針とは一致している。
+
+#### 認証情報を sandbox 側で落とす (`sandbox.credentials`)
+
+Claude Code v2.1.187 以降では `sandbox.credentials` で、sandbox 内の
+環境変数を unset する (`deny`) か、値を伏せたままツールを動かす (`mask`)
+ことができる。`check_secret_env_echo` や `check_gh_token_exposure` の一部を
+肩代わりできるが、`mask` は TLS 終端 (`network.tlsTerminate`) を要求し
+プロキシに平文を見せることになるため、導入は別途検討する (現在は未使用)。
 
 #### WSL2 での抜け穴
 
 WSL2 では Windows バイナリ (`cmd.exe`, `/mnt/c/...`) の起動が Unix domain
 socket 経由になるため、**seccomp フィルタが無いと sandbox から脱出できる**
 (公式: "the optional seccomp filter has to be installed to block the socket
-in the first place")。フィルタは
-`npm install -g @anthropic-ai/sandbox-runtime` で導入する。
-`/sandbox` の Dependencies タブに不足が出ていないか確認すること。
+in the first place")。
+
+このリポジトリでは `home/dot_config/mise/config.toml.tmpl` に
+`"npm:@anthropic-ai/sandbox-runtime"` として宣言してあるので、
+`mise install` で入る (`npm install -g` は `[bash] deny` で禁止しているため
+使わない)。`/sandbox` の Dependencies タブに不足が出ていないか確認すること。
 
 #### sandbox に移せないネットワーク系チェック
 
