@@ -1,62 +1,42 @@
 # Chezmoi Dotfiles
 
-chezmoi を使った個人用 dotfiles 管理リポジトリ。
-Windows / Ubuntu / WSL / macOS を対象に、設定ファイルと初期化スクリプトを管理する。
+chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用リポジトリ。
+`home/` 配下が chezmoi の source state で、それ以外は導入・生成・検証用。
+構成やセットアップの詳細は [docs/index.md](docs/index.md) にある。
 
-## Tech Stack
+## 検証
 
-- Language: Shell, Python, Chezmoi templates
-- Core Tools: chezmoi, mise, uv, pre-commit
-- Security: Bitwarden, age
+変更したら該当するものを実行し、出力を根拠として示す。
 
-## Build & Test
+| 対象 | コマンド |
+| --- | --- |
+| 全体（lint / secret scan） | `uv run pre-commit run --all-files` |
+| agent 設定・hook | `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` |
+| Windows 資産 | `uv run --with pytest --with pywinpty --no-project pytest test/test_windows_assets.py test/test_powershell_interactive.py -q` |
+| シェルスクリプト | `git ls-files '*.sh' \| xargs mise exec shellcheck -- shellcheck` |
+| 展開結果 | `chezmoi diff` |
 
-- Setup: `mise install && uv sync && uv run pre-commit install`
-- Validation: `uv run pre-commit run --all-files`
-- Agent tests: `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q`
-- Windows tests: `uv run --with pytest --with pywinpty --no-project pytest test/test_windows_assets.py test/test_powershell_interactive.py -q`
-- Shell check: `git ls-files '*.sh' | xargs mise exec shellcheck -- shellcheck`
-- Secret scan: `mise exec gitleaks -- detect --source .`
+初回のみ `mise install && uv sync && uv run pre-commit install` が要る。
 
-## Project Structure
+## このリポジトリ固有の約束
 
-- `home/`: ホームディレクトリ配下へ展開するファイル
-- `home/.chezmoiscripts/`: `chezmoi apply` 時に自動実行されるスクリプト
-- `home/dot_config/`: `~/.config/` 配下の設定
-- `config/`: アプリケーション設定ファイル
-- `docs/`: 運用・構成・セキュリティ関連ドキュメント
-- `scripts/`: 補助スクリプト
-- `test/`: テスト関連ファイル
+ここに無いことは一般的な流儀で判断してよい。
 
-## Code Style
-
-- 既存ファイルの流儀を優先し、不要な形式変更は避ける
-- Shell スクリプトは先頭に `set -eu` を置く
-- chezmoi スクリプト名は `run_once_XXX_name.sh(.tmpl)` / `run_onchange_XXX_name.sh(.tmpl)` に従う
-- 実行順は番号で管理し、既存の順序体系を崩さない
-- `.tmpl` は OS 分岐や秘密情報・テンプレート変数が必要な場合のみ使う
-- テンプレート内の変数確認は `{{- if and (hasKey . "var") .var }}` の形を優先する
-- SKILL.md の frontmatter は `name` をディレクトリ名と一致させ、`:` や `#` を含む
+- 実ファイルを直接編集したら `chezmoi add` / `chezmoi re-add` で source state へ戻す
+- `home/.chezmoiscripts/` は `run_once_` / `run_onchange_` / `run_after_` と 3 桁番号で
+  実行順を管理する。既存の番号体系を崩さない
+- シェルスクリプトは先頭に `set -eu` を置く
+- `.tmpl` は OS 分岐・chezmoi データ・秘密情報が要るときだけ付ける。テンプレート内の
+  変数確認は `{{- if and (hasKey . "var") .var }}` の形にする
+- `.ps1` / `.ps1.tmpl` は UTF-8 BOM 付きで保存する。BOM が無いと PowerShell 5.1 が
+  CP932 として読み、日本語コメントが次行のコードを無警告で飲み込む
+- `SKILL.md` の frontmatter は `name` をディレクトリ名と一致させ、`:` や `#` を含む
   `description` は二重引用符で囲む（囲まないと CLI がスキルを黙って読み飛ばす）
-
-## Architecture
-
-- dotfiles は chezmoi の管理下で扱い、実ファイルを直接編集した場合は `chezmoi add` / `chezmoi re-add` で反映する
-- OS ごとの差分はテンプレートや OS 別スクリプトで吸収する
-- パスワードや秘密情報はハードコードせず、`SUDO_PASSWORD` や Bitwarden/age を使う
-- 対話入力が必須になるスクリプトや長時間実行スクリプトは避ける
-
-## Workflow
-
-- ブランチ運用はこのリポジトリの実運用に合わせる
-- コミットメッセージは Conventional Commits（`feat:`, `fix:`, `docs:`, `chore:` など）を使う
-- 変更前後で `chezmoi diff` や必要な検証コマンドを使って影響を確認する
-- 新しいコマンドや運用手順を追加したら、関連する `README.md` や `docs/` を更新する
-
-## Additional Rules
-
-- 日本語で簡潔かつ丁寧に説明する
-- 破壊的操作や外部環境の変更は、明示依頼がない限り提案に留める
-- 秘密情報をログや出力に含めない
-- 作業範囲は基本的にリポジトリ内に限定する
-- サブディレクトリに別の `AGENTS.md` がある場合は、より近いものを優先する
+- AI CLI の permission / hook / sandbox は `home/dot_config/agents/common.toml` が
+  単一ソース。生成先（`~/.claude/settings.json` 等）を直接編集しない
+- 秘密情報はソースに書かず `SUDO_PASSWORD` / Bitwarden / sops + age を使う
+- 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない
+- コミットメッセージは Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）
+- 運用手順やコマンドを追加したら `README.md` と `docs/` の該当ファイル・`index.md` を
+  更新する
+- ユーザーへの説明とドキュメントは日本語で書く

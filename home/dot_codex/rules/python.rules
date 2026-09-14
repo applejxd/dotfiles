@@ -1,0 +1,40 @@
+# rules for the Python toolchain
+# see https://developers.openai.com/codex/rules/
+# This is the Starlark syntax
+#
+# Python の依存管理は uv / uvx に統一する。以前は AGENTS.md に「uv を使う」と
+# 書いていたが、指示は読み飛ばされうるので機構側へ移した。Claude Code /
+# Copilot CLI では check_bash.py の check_pip_redirect が同じ判定を担当し、
+# Gemini CLI では policies/python.toml が担当する。
+# 判定軸は「周囲の Python 環境を書き換えるか」。読み取りだけの pip は
+# `uv pip list` / `uv pip show` で代替できるので、まとめて forbidden にする。
+
+prefix_rule(
+    pattern = [["pip", "pip3"]],
+    decision = "forbidden",
+    justification = "pip mutates the ambient Python environment. Use `uv add`, `uv remove`, `uvx`, or `uv pip ...` instead.",
+    match = [
+        "pip install requests",
+        "pip3 install -r requirements.txt",
+        "pip uninstall requests",
+        "pip list",
+    ],
+    not_match = [
+        # `uv pip ...` は uv のサブコマンドであって pip 本体ではない
+        "uv pip list",
+        "uv pip install requests",
+    ],
+)
+
+prefix_rule(
+    pattern = [["python", "python3"], "-m", "pip"],
+    decision = "forbidden",
+    justification = "`python -m pip` is pip by another name. Use `uv add`, `uv remove`, `uvx`, or `uv pip ...` instead.",
+    match = [
+        "python -m pip install requests",
+        "python3 -m pip install -e .",
+    ],
+    not_match = [
+        "python3 -m pytest",
+    ],
+)
