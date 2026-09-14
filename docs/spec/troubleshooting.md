@@ -178,6 +178,66 @@ sudo apt-get install -y bubblewrap slirp4netns util-linux iptables
 `enforcementMode` を `firewall` 以外へ変更する。フィルタが不要になるぶん
 `iptables` 系の probe も走らなくなる。
 
+### 10. mise の npm ツールが `Cannot find module` で落ちる
+
+`bw` / `markdownlint-cli2` など **npm backend で入れたツール**が、ある日
+突然こうなる。`mise ls` には正常に出るので気付きにくい。
+
+```text
+Error: Cannot find module
+  '~/.local/share/mise/installs/npm-bitwarden-cli/latest/node_modules/
+   .mise/@bitwarden+cli@2026.7.0/node_modules/@bitwarden/cli/build/bw.js'
+```
+
+`chezmoi apply` は Bitwarden を引くテンプレート (`.config/git/user` など) で
+止まり、pre-commit なら Markdown Lint が `exec: node: not found` で落ちる。
+
+#### 原因
+
+mise の npm backend は実体を **`~/.cache/aube/virtual-store/`** に置き、
+`installs/` 配下からそこへ symlink を張る構造だった。`~/.cache` は本来
+「消えてよい」場所なので、キャッシュ削除ツールや手動の `rm -rf ~/.cache` で
+**リンク先だけが消えて symlink が宙ぶらりんになる**。
+
+実測 (npm-bitwarden-cli): `.mise/` 配下 213 個の symlink が全滅していた。
+
+#### 対処
+
+ディレクトリごと消してから入れ直す。`mise install --force` だけでは
+**使用中の `bin/` を削除できず `Read-only file system` で失敗する**
+(PATH 上のディレクトリは sandbox が read-only で bind-mount するため。
+項目 9 の下の節を参照)。
+
+```bash
+rm -rf ~/.local/share/mise/installs/npm-bitwarden-cli
+mise install "npm:@bitwarden/cli"
+bw --version
+```
+
+壊れているツールをまとめて洗い出すには、`.mise/` 配下の壊れた symlink を
+数えるのが早い。
+
+```bash
+find ~/.local/share/mise/installs -path '*/node_modules/.mise/*' \
+     -maxdepth 6 -xtype l -printf '%h\n' | sort -u
+```
+
+> [!NOTE]
+> この検索には **PATH に載っていない古い残骸**も出る。mise は以前
+> `installs/<tool>/` という名前で入れており、現在の `installs/npm-<tool>/`
+> とは別物として残る (実測: `installs/markdownlint-cli2/0.23.2` が壊れた
+> まま残っていたが、PATH には `npm-markdownlint-cli2` しか無く無害だった)。
+> `~/.config/mise/config.toml` とリポジトリの `mise.toml` に宣言が無ければ
+> 残骸なので、そのまま消してよい。
+
+#### 再発するか
+
+入れ直した後の `.mise/` 配下は **symlink ではなく実体のディレクトリ**に
+なっていた (bitwarden 214 件・markdownlint 87 件・sandbox-runtime 6 件とも
+symlink 0)。この形ならキャッシュ削除では壊れない。
+再び symlink 構造で入るようなら、`~/.cache` を消さない運用にするか、
+消した直後に上記の入れ直しを行う。
+
 ## ログの確認
 
 ```bash
