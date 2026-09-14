@@ -659,6 +659,18 @@ trusted_folders = [
   "~/src/apple-agent-core",
 ]
 
+# settings.json の enabledPlugins へ反映 (書いたキーだけを上書きし、
+# ここに無いプラグインの有効/無効はユーザーの設定をそのまま残す)。
+#
+# anthropic-agent-skills マーケットプレイスの document-skills と
+# example-skills は **中身が完全に同一** (実測: skills 配下の差分は
+# 実行時生成物の __pycache__ のみ)。両方有効にすると pptx / docx / pdf /
+# xlsx など 17 スキルがすべて二重に登録されるため、実際に使われている
+# 方 (document-skills 側にのみ __pycache__ がある) を残して他方を落とす。
+[copilot.enabled_plugins]
+"document-skills@anthropic-agent-skills" = true
+"example-skills@anthropic-agent-skills" = false
+
 # permissions-config.json の locations へ反映
 # 各 location の approvals に bash.allow 由来の commands も自動追加される
 [[copilot.locations]]

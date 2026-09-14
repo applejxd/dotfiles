@@ -38,6 +38,7 @@ home/dot_gemini/
 test/agents/
     test_command_policy.py                   shell normalize / match の unit test
     test_check_bash_decision.py              deny/ask 判定と rm root guard の test
+    test_generate_copilot_plugins.py         enabledPlugins 生成 / 重複解消の unit test
     test_generate_hooks.py                   hook 生成 / 外部 hook 温存の unit test
     test_generate_sandbox.py                 sandbox 設定生成の unit test
     test_herdr_integration.py                Herdr統合の生成・保持
@@ -1157,6 +1158,27 @@ bypass パターンを hook が確実に block することを保証している
 - `~/.copilot/settings.json` の `copilotTokens` / `loggedInUsers` /
   `installedPlugins` 等は Copilot 自動管理なので、generate.py はキー名
   ホワイトリスト方式で温存する。
+
+### プラグイン (skill) の重複に注意
+
+`anthropic-agent-skills` マーケットプレイスの **`document-skills` と
+`example-skills` は中身が完全に同一** (実測: `skills/` 配下の差分は実行時
+生成物の `__pycache__` のみで、`pptx` / `docx` / `pdf` / `xlsx` など 17 スキルが
+一致)。両方有効にすると全スキルが二重に登録される。
+
+`common.toml` の `[copilot.enabled_plugins]` でどちらを残すかを宣言し、
+`merge_copilot_settings` が `settings.json` の `enabledPlugins` へ反映する。
+**書いたキーだけを上書き**し、ここに無いプラグインはユーザーの設定を残す
+(マーケットプレイスから別途入れたものを消さないため)。
+
+なお個別スキル単位の無効化はできず、プラグインごとの on/off しかない。
+`pptx` だけを外すことはできないので、`document-skills` を落とすと
+`docx` / `pdf` / `xlsx` なども一緒に消える点に注意。
+
+自前の `powerpoint-studio` スキル (`home/dot_claude/skills/`) は
+プラグインの `pptx` と**競合しない**。前者は新規作成・大幅改稿の専用で、
+description に「単なる .pptx のテキスト抽出や軽微な一語置換には使わない」と
+明示してあり、抽出・軽微修正は後者が担当する。
 
 ## 動作確認手順
 

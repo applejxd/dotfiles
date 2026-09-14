@@ -515,6 +515,8 @@ COPILOT_MANAGED_KEYS = {
     "deniedUrls",
     "includeCoAuthoredBy",
     "trustedFolders",
+    # enabledPlugins は丸ごとではなく common.toml に書いたキーだけ
+    "enabledPlugins",
     # sandbox は丸ごとではなく enabled と
     # userPolicy.filesystem.deniedPaths のみ (下記 build_copilot_sandbox)
     "sandbox",
@@ -591,6 +593,14 @@ def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> 
         out["experimental"] = bool(copilot["experimental"])
 
     out["sandbox"] = build_copilot_sandbox(existing.get("sandbox"), common)
+
+    # enabledPlugins は他の経路 (マーケットプレイスの追加操作など) でも
+    # 増えるため、common.toml に書いたキーだけを上書きして残りは温存する。
+    enabled_plugins = copilot.get("enabled_plugins")
+    if enabled_plugins:
+        merged_plugins = dict(existing.get("enabledPlugins") or {})
+        merged_plugins.update({k: bool(v) for k, v in enabled_plugins.items()})
+        out["enabledPlugins"] = merged_plugins
 
     return out
 
