@@ -178,10 +178,14 @@ sudo apt-get install -y bubblewrap slirp4netns util-linux iptables
 `enforcementMode` を `firewall` 以外へ変更する。フィルタが不要になるぶん
 `iptables` 系の probe も走らなくなる。
 
-### 10. mise の npm ツールが `Cannot find module` で落ちる
+### 10. mise の npm ツールが突然動かなくなる
 
 `bw` / `markdownlint-cli2` など **npm backend で入れたツール**が、ある日
-突然こうなる。`mise ls` には正常に出るので気付きにくい。
+突然落ちるようになる。`mise ls` には正常に出るので気付きにくい。
+
+観測された壊れ方は 2 通りあり、**症状は違うが対処は同じ**。
+
+#### パターン A: キャッシュの実体が消えた
 
 ```text
 Error: Cannot find module
@@ -189,19 +193,34 @@ Error: Cannot find module
    .mise/@bitwarden+cli@2026.7.0/node_modules/@bitwarden/cli/build/bw.js'
 ```
 
-`chezmoi apply` は Bitwarden を引くテンプレート (`.config/git/user` など) で
-止まり、pre-commit なら Markdown Lint が `exec: node: not found` で落ちる。
+mise の npm backend は依存の実体を **`~/.cache/aube/virtual-store/`** に置き、
+`installs/` 配下からそこへ symlink を張ることがある。`~/.cache` は本来
+「消えてよい」場所なので、キャッシュ削除で **リンク先だけが消えて
+symlink が宙ぶらりんになる**。
 
-#### 原因
+実測 (npm-bitwarden-cli 2026.7.0): `.mise/` 配下 213 個の symlink が全滅。
+一方で依存の少ない `npm-anthropic-ai-sandbox-runtime` (6 件) は実体ディレクトリ
+で入っており無傷だった。**キャッシュへ symlink したツールだけが壊れる。**
 
-mise の npm backend は実体を **`~/.cache/aube/virtual-store/`** に置き、
-`installs/` 配下からそこへ symlink を張る構造だった。`~/.cache` は本来
-「消えてよい」場所なので、キャッシュ削除ツールや手動の `rm -rf ~/.cache` で
-**リンク先だけが消えて symlink が宙ぶらりんになる**。
+#### パターン B: 導入物の一部が欠けた
 
-実測 (npm-bitwarden-cli): `.mise/` 配下 213 個の symlink が全滅していた。
+```text
+exec: node: not found      # あるいは shim が解決できない
+```
 
-#### 対処
+古い世代の導入物は `bin/` と `lib/` の 2 階層で、`bin/<tool>` が
+`../lib/node_modules/...` を指す。ここで **`lib/` だけが失われる**ことがある。
+
+実測 (npm-markdownlint-cli2 0.22.1、2026-04 導入): `bin/` は残っているのに
+`lib/` が無くリンクが宙ぶらりん。同じ世代の `npm-google-gemini-cli`
+(2026-03 導入) は無傷なので、一斉移行やバージョン差ではなく**個別の欠損**。
+
+> [!NOTE]
+> **どちらも「何が消したか」は特定できていない。** キャッシュ削除ツール、
+> ディスク掃除、中断した導入などが候補だが、記録が残らないため確認できない。
+> 分かっているのは「消えた結果こうなる」ところまで。
+
+#### 対処 (共通)
 
 ディレクトリごと消してから入れ直す。`mise install --force` だけでは
 **使用中の `bin/` を削除できず `Read-only file system` で失敗する**
@@ -214,8 +233,7 @@ mise install "npm:@bitwarden/cli"
 bw --version
 ```
 
-壊れているツールをまとめて洗い出すには、`.mise/` 配下の壊れた symlink を
-数えるのが早い。
+パターン A を洗い出すには、`.mise/` 配下の壊れた symlink を数えるのが早い。
 
 ```bash
 find ~/.local/share/mise/installs -path '*/node_modules/.mise/*' \
