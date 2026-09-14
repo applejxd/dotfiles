@@ -123,10 +123,10 @@ def test_modifiers_preserve_unicode_and_are_idempotent(
     first = run_wrapper(wrapper, data)
     assert first.returncode == 0, first.stderr.decode(errors="replace")
     parsed = json.loads(first.stdout)
-    if metadata[1] == "copilot-perms":
-        assert "unmanaged" not in parsed
-    else:
-        assert parsed["unmanaged"] == "日本語"
+    # permissions-config.json は CLI 自身が承認を書き込むファイルなので、
+    # 生成側は locations を union するだけで他のキーには触らない
+    # (全置換すると chezmoi apply のたびに対話承認が消える)。
+    assert parsed["unmanaged"] == "日本語"
     assert first.stdout.endswith(b"\n")
     assert b"\r\n" not in first.stdout
 

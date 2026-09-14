@@ -29,3 +29,5 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0003](0003-require-python-311-for-agent-configuration.md) | agent 設定生成に Python 3.11 以上を要求する | Accepted | 2026-09-01 |
 | [0004](0004-hook-check-semantic-axis.md) | hook の判定軸を表層構文から副作用の性質へ移す | Accepted | 2026-09-01 |
 | [0005](0005-agent-runtime-config-as-secret.md) | エージェント CLI のランタイム設定を秘密として扱う | Accepted | 2026-09-03 |
+| [0006](0006-instructions-to-mechanisms.md) | エージェントへの指示を減らし、強制は機構へ寄せる | Accepted | 2026-09-14 |
+| [0007](0007-filesystem-guard-boundary.md) | filesystem ガードの機構を「両 CLI が強制できるか」で分ける | Accepted | 2026-09-14 |

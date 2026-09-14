@@ -247,7 +247,7 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     allow: list[str] = []
     for cmd in bash.get("allow", []):
         allow.append(f"Bash({cmd}:*)")
-    for path in file_.get("read_allow", []):
+    for path in file_.get("claude_read_allow", []):
         allow.append(f"Read({path})")
     for domain in web.get("allow_domains", []):
         allow.append(f"WebFetch(domain:{domain})")
@@ -255,9 +255,9 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     deny: list[str] = []
     for cmd in bash.get("deny", []):
         deny.append(f"Bash({cmd}:*)")
-    for glob in file_.get("read_deny_globs", []):
+    for glob in file_.get("claude_read_deny_globs", []):
         deny.append(f"Read({glob})")
-    for glob in file_.get("write_deny_globs", []):
+    for glob in file_.get("claude_write_deny_globs", []):
         deny.append(f"Edit({glob})")
     for mcp in claude.get("mcp_deny", []):
         deny.append(mcp)
@@ -265,9 +265,9 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     ask: list[str] = []
     for cmd in bash.get("ask", []):
         ask.append(f"Bash({cmd}:*)")
-    for glob in file_.get("read_ask_globs", []):
+    for glob in file_.get("claude_read_ask_globs", []):
         ask.append(f"Read({glob})")
-    for glob in file_.get("write_ask_globs", []):
+    for glob in file_.get("claude_write_ask_globs", []):
         ask.append(f"Edit({glob})")
 
     # 順序を安定化 (重複除去しつつ元順序を保持)
@@ -291,6 +291,56 @@ def _uniq(seq: list[str]) -> list[str]:
             seen.add(x)
             out.append(x)
     return out
+
+
+# ``[sandbox]`` で使えるキー。命名は **共有 = 無印 / CLI 固有 = CLI 名の接頭辞**
+# で統一する ([[hooks]] の claude_event / copilot_event と同じ規則)。
+SHARED_SANDBOX_KEYS = frozenset({"deny", "seccomp_apply_path"})
+CLAUDE_SANDBOX_KEYS = frozenset({
+    "claude_read_allow",
+    "claude_write_allow",
+    "claude_write_deny",
+    "claude_network_allow",
+    "claude_network_strict",
+})
+COPILOT_SANDBOX_KEYS = frozenset({
+    "copilot_read_allow",
+    "copilot_write_allow",
+})
+KNOWN_SANDBOX_KEYS = SHARED_SANDBOX_KEYS | CLAUDE_SANDBOX_KEYS | COPILOT_SANDBOX_KEYS
+
+# ``[file]`` は 5 キーすべて Claude 専用。Copilot の permissions-config.json は
+# bash の allow と locations しか表現できず、ファイル規則を持てないため。
+# Copilot 側の等価な保護は ``[sandbox] deny`` (OS レベル) と check_file_read.py。
+KNOWN_FILE_KEYS = frozenset({
+    "claude_read_allow",
+    "claude_read_ask_globs",
+    "claude_write_ask_globs",
+    "claude_read_deny_globs",
+    "claude_write_deny_globs",
+})
+
+
+def _reject_unknown(section: str, present: set[str], known: frozenset[str]) -> None:
+    unknown = sorted(present - known)
+    if unknown:
+        raise ValueError(
+            f"[{section}] に未知のキーがあります: "
+            + ", ".join(unknown)
+            + "\n綴り間違いか旧名の可能性があります。"
+            " そのままでは設定が無視され、許可したつもりの規則が効きません。"
+            "\n使えるキー: " + ", ".join(sorted(known))
+        )
+
+
+def validate_sandbox_keys(common: dict[str, Any]) -> None:
+    """``[sandbox]`` / ``[file]`` に未知のキーが無いか検査する (fail-closed)。
+
+    キーを読み違えても ``.get(key, [])`` は静かに空リストを返すため、
+    綴り間違いや旧名の残りは **防御が黙って消える** 形で現れる。
+    """
+    _reject_unknown("sandbox", set(common.get("sandbox", {})), KNOWN_SANDBOX_KEYS)
+    _reject_unknown("file", set(common.get("file", {})), KNOWN_FILE_KEYS)
 
 
 def seccomp_arch(machine: str | None = None) -> str | None:
@@ -366,18 +416,18 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
     """
     sandbox = common.get("sandbox", {})
     deny = list(sandbox.get("deny", []))
-    write_deny_extra = list(sandbox.get("write_deny_extra", []))
+    write_deny_extra = list(sandbox.get("claude_write_deny", []))
     web = common.get("web", {})
 
     network: dict[str, Any] = {
         "allowedDomains": _uniq(
-            list(web.get("allow_domains", [])) + list(sandbox.get("network_allow", []))
+            list(web.get("allow_domains", [])) + list(sandbox.get("claude_network_allow", []))
         ),
     }
     denied_domains = _uniq(list(web.get("deny_domains", [])))
     if denied_domains:
         network["deniedDomains"] = denied_domains
-    if sandbox.get("network_strict"):
+    if sandbox.get("claude_network_strict"):
         network["strictAllowlist"] = True
 
     out: dict[str, Any] = {
@@ -386,9 +436,9 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
             # ホーム全体を塞いでから read_allow で穴を開ける。
             # deny は穴の内側でも効く (より具体的なパスが勝つ)。
             "denyRead": _uniq(["~/", *deny]),
-            "allowRead": _uniq(list(sandbox.get("read_allow", []))),
+            "allowRead": _uniq(list(sandbox.get("claude_read_allow", []))),
             "denyWrite": _uniq(deny + write_deny_extra),
-            "allowWrite": _uniq(list(sandbox.get("write_allow", []))),
+            "allowWrite": _uniq(list(sandbox.get("claude_write_allow", []))),
         },
         "network": network,
     }
@@ -444,14 +494,62 @@ def build_copilot_locations(common: dict[str, Any]) -> dict[str, Any]:
             if "commands" in ap:
                 entry["commandIdentifiers"] = ap["commands"]
             approvals.append(entry)
-        locations[path] = {"tool_approvals": approvals}
+        location: dict[str, Any] = {"tool_approvals": approvals}
+
+        # このプロジェクトで作業しているときだけ開く追加ディレクトリ。
+        # ★公式仕様: "Each directory must exist when the CLI applies the
+        #   configuration" — 存在しないパスは落とす。
+        allowed = [expand_user(d) for d in loc.get("allowed_directories", [])]
+        existing_dirs = [d for d in allowed if Path(d).is_dir()]
+        if existing_dirs:
+            location["allowed_directories"] = _uniq(existing_dirs)
+        locations[path] = location
 
     return {"locations": locations}
 
 
-def merge_copilot_perms(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
-    # permissions-config.json は自動管理キーが無いので全置換で問題ない
-    return build_copilot_locations(common)
+def merge_copilot_perms(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``permissions-config.json`` を更新する (既存の承認は温存)。
+
+    ★このファイルは **CLI 自身が書き込む**。公式に
+      "When you approve a tool or grant access to a directory for the current
+      location, the CLI records the decision here" とある。
+      全置換すると **`chezmoi apply` のたびに対話承認が消える**ので、
+      location 単位で union する。
+    """
+    generated = build_copilot_locations(common)
+    if not isinstance(existing, dict):
+        return generated
+
+    current = existing.get("locations")
+    if not isinstance(current, dict):
+        current = {}
+
+    out: dict[str, Any] = {}
+    for path, entry in current.items():
+        out[path] = dict(entry) if isinstance(entry, dict) else entry
+
+    for path, entry in generated["locations"].items():
+        base = out.get(path)
+        if not isinstance(base, dict):
+            out[path] = entry
+            continue
+        merged = dict(base)
+        for key in ("tool_approvals", "allowed_directories"):
+            incoming = entry.get(key)
+            if not incoming:
+                continue
+            existing_value = base.get(key)
+            kept = list(existing_value) if isinstance(existing_value, list) else []
+            for item in incoming:
+                if item not in kept:
+                    kept.append(item)
+            merged[key] = kept
+        out[path] = merged
+
+    result = dict(existing)
+    result["locations"] = out
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -561,6 +659,22 @@ def build_copilot_sandbox(
     ]
     filesystem["deniedPaths"] = _uniq(denied)
 
+    # 自動許可の穴埋め。TUI で足した既存エントリを消さないよう合算する
+    for key, source in (
+        ("readonlyPaths", "copilot_read_allow"),
+        ("readwritePaths", "copilot_write_allow"),
+    ):
+        extra = [
+            expand_user(path)
+            for path in sandbox.get(source, [])
+            if "*" not in path and "?" not in path
+        ]
+        if not extra and key not in filesystem:
+            continue
+        current = filesystem.get(key)
+        current = list(current) if isinstance(current, list) else []
+        filesystem[key] = _uniq(current + extra)
+
     user_policy["filesystem"] = filesystem
     out["userPolicy"] = user_policy
     return out
@@ -650,7 +764,20 @@ LOCAL_OVERLAY_ENV = "AGENTS_LOCAL_CONFIG"
 
 # ローカル上書きを許すキー。いずれも **追記のみ** で、共有設定の
 # エントリを消したり緩めたりはできない (deny を弱める方向には使えない)。
-LOCAL_SANDBOX_KEYS = ("read_allow", "write_allow", "deny", "write_deny_extra")
+LOCAL_SANDBOX_KEYS = (
+    "deny",
+    "claude_read_allow",
+    "claude_write_allow",
+    "claude_write_deny",
+    "copilot_read_allow",
+    "copilot_write_allow",
+)
+
+# local.toml の [[copilot.locations]] で書けるキー。
+# Copilot はリポジトリ内の設定ファイルから sandbox / permissions を足せない
+# (公式のリポジトリ設定キー一覧に含まれない) ため、プロジェクト単位の許可は
+# ここが実質唯一の「共有設定を汚さない置き場」になる。
+LOCAL_LOCATION_KEYS = ("path", "approvals", "allowed_directories")
 
 
 def local_overlay_path() -> Path:
@@ -674,21 +801,94 @@ def load_local_overlay(path: Path | None = None) -> dict[str, Any]:
         return {}
 
 
-def apply_local_overlay(
-    common: dict[str, Any], local: dict[str, Any]
-) -> dict[str, Any]:
-    """ローカル上書きを common へ追記する (既存エントリは消さない)。"""
-    local_sandbox = local.get("sandbox") or {}
-    if not local_sandbox:
-        return common
-
-    merged = dict(common)
+def _merge_local_sandbox(
+    merged: dict[str, Any], local_sandbox: dict[str, Any]
+) -> None:
+    """local.toml の ``[sandbox]`` を追記する (既存エントリは消さない)。"""
+    ignored = sorted(set(local_sandbox) - set(LOCAL_SANDBOX_KEYS))
+    if ignored:
+        print(
+            "warning: local.toml の [sandbox] で追記できないキーを無視しました: "
+            + ", ".join(ignored)
+            + " (使えるキー: " + ", ".join(LOCAL_SANDBOX_KEYS) + ")",
+            file=sys.stderr,
+        )
     sandbox = dict(merged.get("sandbox") or {})
     for key in LOCAL_SANDBOX_KEYS:
         extra = local_sandbox.get(key)
         if extra:
             sandbox[key] = _uniq(list(sandbox.get(key, [])) + list(extra))
     merged["sandbox"] = sandbox
+
+
+def _merge_local_locations(merged: dict[str, Any], local_locations: list[Any]) -> None:
+    """local.toml の ``[[copilot.locations]]`` を追記する。
+
+    Copilot はリポジトリ内の設定ファイルから sandbox / permissions を足せない
+    ので、プロジェクト単位の許可はここが「共有設定を汚さない置き場」になる。
+    同じ ``path`` が共有側にもある場合は union する (置き換えない)。
+    """
+    existing: dict[str, Any] = {}
+    order: list[str] = []
+    for entry in merged.get("copilot", {}).get("locations", []):
+        if not isinstance(entry, dict) or "path" not in entry:
+            continue
+        existing[entry["path"]] = dict(entry)
+        order.append(entry["path"])
+
+    for entry in local_locations:
+        if not isinstance(entry, dict) or "path" not in entry:
+            print(
+                "warning: local.toml の [[copilot.locations]] に path がない"
+                " エントリを無視しました",
+                file=sys.stderr,
+            )
+            continue
+        ignored = sorted(set(entry) - set(LOCAL_LOCATION_KEYS))
+        if ignored:
+            print(
+                "warning: local.toml の [[copilot.locations]] で追記できない"
+                "キーを無視しました: " + ", ".join(ignored)
+                + " (使えるキー: " + ", ".join(LOCAL_LOCATION_KEYS) + ")",
+                file=sys.stderr,
+            )
+        path = entry["path"]
+        if path not in existing:
+            existing[path] = {"path": path}
+            order.append(path)
+        target = existing[path]
+        for key in ("approvals", "allowed_directories"):
+            extra = entry.get(key)
+            if not extra:
+                continue
+            if key == "allowed_directories":
+                target[key] = _uniq(list(target.get(key, [])) + list(extra))
+            else:
+                current = list(target.get(key, []))
+                for item in extra:
+                    if item not in current:
+                        current.append(item)
+                target[key] = current
+
+    copilot = dict(merged.get("copilot") or {})
+    copilot["locations"] = [existing[p] for p in order]
+    merged["copilot"] = copilot
+
+
+def apply_local_overlay(
+    common: dict[str, Any], local: dict[str, Any]
+) -> dict[str, Any]:
+    """ローカル上書きを common へ追記する (既存エントリは消さない)。"""
+    local_sandbox = local.get("sandbox") or {}
+    local_locations = (local.get("copilot") or {}).get("locations") or []
+    if not local_sandbox and not local_locations:
+        return common
+
+    merged = dict(common)
+    if local_sandbox:
+        _merge_local_sandbox(merged, local_sandbox)
+    if local_locations:
+        _merge_local_locations(merged, local_locations)
     return merged
 
 
@@ -705,6 +905,8 @@ def main(argv: list[str] | None = None) -> int:
 
     common = load_common(args.common)
     common = apply_local_overlay(common, load_local_overlay())
+    # 旧名・綴り間違いは防御を黙って消すので、生成前に落とす
+    validate_sandbox_keys(common)
     existing = load_existing(args.existing)
     merger = TARGETS[args.target]
     merged = merger(existing, common)

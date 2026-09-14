@@ -31,7 +31,8 @@ import os
 import re
 import shlex
 import tomllib
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -95,6 +96,83 @@ def load_ask(path: str = DEFAULT_COMMON_PATH) -> list[str]:
     (``git reset``).
     """
     return _load_bash_list("ask", path)
+
+
+def _load_file_list(key: str, path: str = DEFAULT_COMMON_PATH) -> list[str]:
+    """Return one ``[file]`` glob list, failing closed on a malformed value."""
+    p = Path(path)
+    if not p.exists():
+        return []
+    with p.open("rb") as f:
+        data = tomllib.load(f)
+    file_ = data.get("file", {})
+    if not isinstance(file_, dict):
+        raise TypeError("[file] セクションがテーブルではありません")
+    value = file_.get(key, [])
+    if not isinstance(value, list):
+        raise TypeError(f"[file] {key} がリストではありません: {type(value).__name__}")
+    if not all(isinstance(v, str) for v in value):
+        raise TypeError(f"[file] {key} に文字列以外が含まれています")
+    return list(value)
+
+
+def load_read_deny_globs(path: str = DEFAULT_COMMON_PATH) -> list[str]:
+    """Return ``[file] claude_read_deny_globs``.
+
+    Claude はこのリストから ``Read()`` の deny permission を生成するが、
+    Copilot にはファイル規則が無い。そのため ``check_file_read.py`` が
+    このリストを読んで同じ判断を再現する。
+    """
+    return _load_file_list("claude_read_deny_globs", path)
+
+
+# ---------------------------------------------------------------------------
+# glob 照合 (permission の Read()/Edit() と同じ記法)
+# ---------------------------------------------------------------------------
+# ``**/`` と ``*`` だけを解釈する。``fnmatch`` は ``*`` が ``/`` を跨いでしまい
+# ``**/`` と区別できないため使わない。
+
+
+@lru_cache(maxsize=256)
+def glob_to_regex(glob: str) -> re.Pattern[str]:
+    """Compile a permission-style glob into an anchored regex."""
+    out: list[str] = []
+    i = 0
+    while i < len(glob):
+        if glob.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif glob.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif glob[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        else:
+            out.append(re.escape(glob[i]))
+            i += 1
+    return re.compile("^" + "".join(out) + "$")
+
+
+def matches_any_glob(path: str, globs: Sequence[str]) -> str | None:
+    """Return the first glob matching ``path``, or ``None``.
+
+    パスは区切りを ``/`` に揃えてから照合する (Windows 対策)。
+    """
+    if not path:
+        return None
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    candidates = [normalized]
+    home = os.path.expanduser("~").replace("\\", "/")
+    if home and normalized.startswith(home + "/"):
+        candidates.append("~/" + normalized[len(home) + 1:])
+    for glob in globs:
+        pattern = glob_to_regex(glob)
+        if any(pattern.match(c) for c in candidates):
+            return glob
+    return None
 
 
 # ---------------------------------------------------------------------------

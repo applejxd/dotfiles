@@ -18,6 +18,7 @@
 | Bitwarden / sops の仕組みを知る | [セキュリティ](spec/security.md) |
 | sops + age を導入・復旧する | [Secret管理セットアップ](spec/sops-age.md) |
 | AI CLI のpermission / hookを変更する | [エージェント権限仕様](spec/agent-permissions.md) |
+| sandboxで何ができるか調べる | [sandbox機能の包括調査](research/sandbox-capabilities.md) |
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |
 | 設計理由を確認する | [ADR一覧](adr/index.md) |
 | 技術調査の結果を確認する | [調査記録一覧](research/index.md) |

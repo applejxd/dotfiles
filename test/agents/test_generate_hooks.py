@@ -550,7 +550,19 @@ def test_both_clis_reference_the_same_scripts(platform, command_key):
     copilot_scripts = scripts(
         entry[command_key] for entries in copilot["hooks"].values() for entry in entries
     )
-    assert claude_scripts == copilot_scripts
+    # ★片側だけに登録する hook は例外として明示する (ADR-0007)。
+    #   Claude に native な機構 (permission) がある場合、hook を足しても
+    #   防御は増えず実行コストだけが乗るため、あえて登録しない。
+    copilot_only = {"check_file_read.py"}
+    assert copilot_scripts - claude_scripts == copilot_only
+    assert claude_scripts - copilot_scripts == set()
+
+
+def test_copilot_only_hooks_are_declared_without_a_claude_event():
+    by_id = {h["id"]: h for h in COMMON["hooks"]}
+    entry = by_id["check_file_read"]
+    assert "claude_event" not in entry
+    assert entry["copilot_event"] == "PreToolUse"
 
 
 def test_generate_target_registry():

@@ -276,19 +276,19 @@ deny = [
 ]
 
 [file]
-read_allow = [
+claude_read_allow = [
   "README.md",
   "pyproject.toml",
 ]
 
 # Claude のみ反映: Read(...) を ask に追加
-read_ask_globs = [
+claude_read_ask_globs = [
   ".env.*",
 ]
 
 # Claude のみ反映: Edit(...) を ask に追加
 # (書き込み系 permission rule は Edit(path) に統一。Write(path) は v2.1.210 で deprecated)
-write_ask_globs = [
+claude_write_ask_globs = [
   ".env.*",
   "mise.toml",
 ]
@@ -301,7 +301,7 @@ write_ask_globs = [
 #   のような正当なファイルを巻き込み、エージェントが編集できなくなる
 #   (一般的には tokenizer.py / keyword.py / monkey.py なども誤検知する)。
 #   拡張子・接尾辞・既知のファイル名で具体的に指定する。
-read_deny_globs = [
+claude_read_deny_globs = [
   "**/.ssh/**",
   "**/.gnupg/**",
   "**/sops/age/**",
@@ -341,7 +341,7 @@ read_deny_globs = [
 
 # Claude のみ反映: Edit(...) を deny に追加
 # read_deny_globs と同じ理由で部分一致 glob は使わない
-write_deny_globs = [
+claude_write_deny_globs = [
   "**/.ssh/**",
   "**/.gnupg/**",
   "**/sops/age/**",
@@ -467,7 +467,7 @@ deny_domains = []
 [sandbox]
 # 両 CLI 共通: whitelist の内側でも遮断する秘密情報 (read/write 両方)。
 # 公式に "Rules that you configure are always kept" とあり、自動付与に勝つ。
-# ここは whitelist の穴 (read_allow) の中に秘密が置かれている場合の保険。
+# ここは whitelist の穴 (claude_read_allow) の中に秘密が置かれている場合の保険。
 # 広い名前マッチは上記のとおり bind-mount が爆発するので入れないこと。
 deny = [
   "~/.ssh", "~/.gnupg", "~/.config/sops/age", "~/.aws", "~/.netrc",
@@ -489,9 +489,9 @@ deny = [
 # Claude sandbox の "Protected paths" が常時 write 保護しているので不要
 # (allowWrite でも解除できない)。cwd 配下のシェル起動ファイル・.gitconfig・
 # .claude/** や ~/.claude のほとんども同様に自動保護される。
-# → 下の write_deny_extra はその多重防御であり、cwd が $HOME の場合や
+# → 下の claude_write_deny はその多重防御であり、cwd が $HOME の場合や
 #   sandbox の外で動く操作に備えた保険として残してある。
-write_deny_extra = [
+claude_write_deny = [
   "~/.claude/hooks", "~/.claude/settings.json", "~/.claude/settings.local.json",
   "~/.copilot/hooks", "~/.copilot/permissions-config.json", "~/.config/agents",
   "~/.bashrc", "~/.bash_profile", "~/.bash_login", "~/.profile",
@@ -511,7 +511,7 @@ write_deny_extra = [
 # 上の deny はこの穴の内側でも効く (より具体的なパスが勝つ)。
 #
 # ★このマシンでしか使わないパス (/data1 等) はここに書かないこと。
-#   chezmoi 管理外の ~/.config/agents/local.toml に [sandbox] read_allow として
+#   chezmoi 管理外の ~/.config/agents/local.toml に [sandbox] claude_read_allow として
 #   書けば、共有設定を汚さず chezmoi diff にも出さずに追記できる。
 #   詳細は docs/spec/agent-permissions.md の
 #   「このマシンだけで許可を足す」節を参照。
@@ -521,7 +521,7 @@ write_deny_extra = [
 #   `~/src` のような「他のリポジトリ」を開ける必要は無い
 #   (Copilot 側も許可していない)。別ディレクトリを読ませたいときは
 #   `claude --add-dir <path>` を使う。恒久的に必要なら local.toml へ。
-read_allow = [
+claude_read_allow = [
   # ツールチェーン (mise / uv / cargo / node / go / TeX)
   # Copilot の allowDevToolAccess が自動許可する範囲に相当する。
   # 注: 存在しないパスは bwrap の bind-mount が失敗する要因になり得るので、
@@ -539,9 +539,44 @@ read_allow = [
 # Claude のみ: cwd + セッション temp 以外に書き込みを許す場所。
 # パッケージマネージャがキャッシュを書けないとビルドが失敗するため。
 # Copilot は同等の場所を allowDevToolAccess が自動で read-write 許可する。
-write_allow = [
+claude_write_allow = [
   "~/.cache", "~/.npm", "~/.cargo/registry", "~/.local/share/mise",
   "~/.local/state",
+]
+
+# Copilot のみ: allowDevToolAccess が取りこぼす分を補う。
+#
+# 実測 (Copilot CLI 1.0.84-5, Ubuntu) では自動付与の粒度が直感と一致しない。
+#   見える  : /usr/lib /usr/lib/x86_64-linux-gnu /usr/bin /usr/share /etc pkgconfig
+#   見えない: /usr/include /usr/local/* /usr/src /opt /sys /var/lib
+#             ~/.cache/uv は read-only、~/.local/share/uv/python は不可視
+# → ライブラリは見えるのにヘッダが見えず C/C++/cgo のビルドが落ちる。
+#   uv が動かないとこのリポジトリの検証コマンドが一切通らない。
+#
+# claude_* を流用しないこと。あれは Claude 用の広い補償で、渡すと
+# deny-by-default の利点を失う。ここは実測した穴だけを名指しで塞ぐ。
+# すべて read-only (書ければビルド成果物に任意コードを混ぜられる)。
+# 存在しないパスは Copilot 側で無効化されるだけなので環境差は気にしない。
+# Claude は denyRead が "~/" 配下だけなので /usr や /opt は元から読める。
+#
+# TUI で足した分とは合算されるので、ここから消しても settings.json からは
+# 消えない (削除は TUI)。詳細は docs/spec/agent-permissions.md。
+copilot_read_allow = [
+  "~/.local/share/uv/python",   # .venv/bin/python のリンク先
+  # mise の installs 全体。allowDevToolAccess は PATH 上の
+  # `<tool>/latest/bin` を bind-mount するが、bind-mount は symlink を辿った
+  # 実体を貼るため **`latest` という symlink 自体がビューから消える**。
+  # PATH が latest 経由なので `node: not found` になる (実測)。
+  # 親ごと許可すると素通しになり symlink が保たれる。read-only 固定
+  # (write を与えると PATH 上の全ツールを改竄できてしまう)。
+  "~/.local/share/mise/installs",
+  "/usr/include",               # システムヘッダ
+  "/usr/local",                 # include / lib / share / cuda をまとめて
+  "/usr/src",                   # カーネルヘッダ (DKMS, CUDA ドライバ)
+  "/opt",                       # サードパーティのツールチェーン
+]
+copilot_write_allow = [
+  "~/.cache/uv",                # lock と展開済みパッケージを書く
 ]
 
 # Copilot 側の deniedPaths は上の `deny` から自動導出する
@@ -555,8 +590,8 @@ write_allow = [
 #   例: ~/.netrc ~/.npmrc ~/.pypirc は未作成なら enforce されないが、
 #   後で作られたときに次セッションから効くよう `deny` に残してある。
 #
-# Copilot は deny-by-default なので `write_deny_extra` / `read_allow` /
-# `write_allow` は渡さない (上の各コメント参照)。
+# Copilot は deny-by-default なので `claude_write_deny` / `claude_read_allow` /
+# `claude_write_allow` は渡さない (上の各コメント参照)。
 #
 # なお ~/.ssh を denied にすると git over SSH は使えなくなるが、
 # sandbox の auth.git / auth.gh が GitHub へのトークンを注入するため
@@ -569,7 +604,7 @@ write_allow = [
 # Copilot にはドメイン単位の制御が無く (allowOutbound の on/off だけ)、
 # outbound は全ドメイン許可のままなので、この設定は Claude 専用。
 # `allowedUrls` は「プロンプトを省略する URL」であって通信制限ではない。
-network_strict = true
+claude_network_strict = true
 
 # Claude のみ: sandbox のネットワーク許可に **追加** するドメイン。
 # [web] allow_domains と合算して sandbox.network.allowedDomains になる。
@@ -579,10 +614,10 @@ network_strict = true
 # (パッケージの実体を配るCDN等) を書く。混ぜると、CDN が WebFetch で
 # 自動承認されたり、逆にドキュメントサイトに shell から繋げてしまうため分ける。
 #
-# network_strict = true だと、ここに無いドメインへの接続は sandbox 内では
+# claude_network_strict = true だと、ここに無いドメインへの接続は sandbox 内では
 # 失敗する。ただし失敗は即座の破綻ではなく「sandbox 外での再実行を求める
 # 承認プロンプト」に落ちるので、不足が判明したら足せばよい。
-network_allow = [
+claude_network_allow = [
   # Python (uv / pip): pypi.org はメタデータ、実体は files.pythonhosted.org
   "files.pythonhosted.org",
   # GitHub: git clone / リリース資産のダウンロード
@@ -701,6 +736,11 @@ approvals = [
 #   Claude Code : tool 名の完全一致を `|` で OR 連結。PascalCase のみ
 #   Copilot CLI : `^(?:pattern)$` として anchored される。明示的に ^...$ を書く
 #                 PascalCase 名も Claude 互換モードで照合されるため両方列挙する
+#
+# ★イベントは PreToolUse を使い permissionRequest は使わないこと。
+#   後者は「後の hook が前を上書き」かつ読み込み順が user -> project なので、
+#   開いているリポジトリ側の hook に決定を奪われる。
+#   PreToolUse は deny が常に勝つ (test_check_file_read.py で固定)。
 
 [[hooks]]
 id = "check_bash"
@@ -725,6 +765,23 @@ claude_matcher = "Bash|Write|Edit"
 claude_event = "PreToolUse"
 copilot_event = "PreToolUse"
 copilot_matcher = "^(Bash|bash|powershell|Write|create|Edit|edit)$"
+timeout_sec = 30
+
+[[hooks]]
+id = "check_file_read"
+script = "check_file_read.py"
+runner = "python3"
+purpose = "[file] claude_read_deny_globs を Copilot のファイル読み取りにも適用する"
+# ★Copilot 専用 (claude_event を書かない)。
+#   Claude は同じリストから Read() の deny permission を生成済みで、CLI 本体が
+#   評価するため hook は要らない。付けると全ファイル読み取りに Python の
+#   プロセス起動 (数十 ms) が乗るだけで、防御は増えない。
+#   一方 Copilot は permissions-config.json にファイル規則が無く、sandbox の
+#   deniedPaths も絶対パス限定・ワイルドカード非対応で cwd は自動許可される。
+#   つまりリポジトリ内の秘密ファイルを止める手段が hook しかない。
+#   詳細は docs/adr/0007-filesystem-guard-boundary.md
+copilot_event = "PreToolUse"
+copilot_matcher = "^(Read|view)$"
 timeout_sec = 30
 
 [[hooks]]
