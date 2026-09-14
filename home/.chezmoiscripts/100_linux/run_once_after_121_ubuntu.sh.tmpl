@@ -31,7 +31,19 @@ sudo apt install -y \
     make cmake gcc g++ clang libclang-dev pkg-config build-essential
 
 # sandbox tools
-sudo apt-get -y install bubblewrap socat
+# Copilot CLI / Claude Code の Linux sandbox は Microsoft MXC の bubblewrap
+# backend で動く。network.enforcementMode = "firewall" のとき、backend は
+#   bwrap / slirp4netns / unshare / nsenter / iptables / ip6tables
+#   および iptables-restore / ip6tables-restore
+# を使い、どれか欠けると **起動を拒否する**。bash / ripgrep など sandbox を
+# 経由するツールが全て実行不能になる。不足は 1 つずつしか報告されないので
+# まとめて入れる。
+#   bubblewrap  -> bwrap (0.5.0 以上。一部モードは 0.8 以上)
+#   slirp4netns -> 非特権ユーザでのネットワーク名前空間
+#   util-linux  -> unshare / nsenter (Ubuntu では essential だが明示する)
+#   iptables    -> iptables / ip6tables と各 restore、および nft バックエンド
+# 出典: microsoft/mxc backends/bubblewrap/common/src/proxy_network.rs の probe
+sudo apt-get -y install bubblewrap slirp4netns util-linux iptables socat
 
 # install GitHub CLI
 if ! command -v gh &> /dev/null; then

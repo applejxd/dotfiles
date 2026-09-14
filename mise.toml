@@ -5,6 +5,10 @@ uv = "latest"
 shellcheck = "0.11.0"
 # pre-commit の Markdown Lint が使う。グローバル設定に頼るとクローン直後に無い。
 "npm:markdownlint-cli2" = "0.22.1"
+# markdownlint-cli2 の shim は node を exec するが、`mise exec` は
+# この [tools] に載ったものしか PATH へ置かない。node が無いと
+# `exec: node: not found` で Markdown Lint が落ちる。
+node = "latest"
 
 [env]
 UV_PROJECT_ENVIRONMENT = "{% if os() == 'windows' %}.venv-windows{% else %}.venv{% endif %}"
