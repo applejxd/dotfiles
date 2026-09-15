@@ -303,6 +303,27 @@ read/write、read-only、denied。
 > **「PATH 上の実行ファイルと共有ライブラリは通るがヘッダは通らない」**
 > のように、自動付与の粒度は直感と一致しない。
 
+取りこぼしより深刻な問題がもう 1 つある。
+
+> [!CAUTION]
+> **自動付与はユーザ指定の read-write を上書きする。**
+> `~/.cache/uv` を `readwritePaths` に入れても ro で bind され、
+> `uv run` が EROFS のままだった。`/sandbox policy` は Read-write と
+> 表示するため、**表示からは気付けない**。
+>
+> sandbox 実装 (`microsoft/mxc` の `normalize_filesystem_paths`) が同一パスの
+> RO/RW 競合を「最も制限的な意図」= RO へ解決し、その解決が出所
+> (ユーザ指定 / 自動発見) を区別しないことによる。
+> 公開 issue は `github/copilot-cli#4846`。
+>
+> → このリポジトリでは `allowDevToolAccess` を **無効**にし、必要な範囲を
+> `copilot_read_allow` / `copilot_write_allow` に明示している
+> ([ADR-0008](../adr/0008-explicit-dev-tool-grants.md))。
+> 切ると同じ mount が `rw` に変わることを `findmnt` で確認済み。
+>
+> 権限を疑うときは表示ではなく mount を見ること:
+> `findmnt -T <path> -o TARGET,SOURCE,OPTIONS`
+
 ### 3.2 設定キー
 
 `~/.copilot/settings.json` の `sandbox` 以下:
@@ -311,6 +332,7 @@ read/write、read-only、denied。
 | --- | --- | --- |
 | `enabled` | `false` | 有効化 |
 | `allowBypass` | `true` | 個別コマンドの sandbox 脱出を要求できる |
+| `allowDevToolAccess` | `true` | 開発ツールの自動許可。**当リポジトリでは `false`** (ADR-0008) |
 | `sandboxMcpServers` | `true` | MCP サーバも sandbox 内で動かす |
 | `sandboxLspServers` | `true` | LSP サーバも同様 |
 | `auth.git` / `auth.gh` | `true` | 認証情報を注入して sandbox 内でも git / gh を通す |
@@ -446,8 +468,9 @@ root が必要)、`nf_conntrack` 未ロードは `Invalid argument` としか出
    影響も受けない。`gh` への影響を実測してから
 2. **`failIfUnavailable: true`** — 「有効にしたつもりで素通り」を防ぐ。
    ただし依存が欠けた環境で Claude Code が起動しなくなる
-3. **Copilot の `allowDevToolAccess` 取りこぼし棚卸し** — uv 以外にも
-   同種の穴がないか、`/sandbox policy` で定期確認する
+3. **`copilot_read_allow` の棚卸し** — `allowDevToolAccess` を切ったので、
+   新しいツールチェーンを入れたら追記が要る。不足は不可視 (ENOENT) で
+   現れるので、動かないツールが出たら `/sandbox policy` と `findmnt` で確認する
 
 ## 9. 用語の対応表
 

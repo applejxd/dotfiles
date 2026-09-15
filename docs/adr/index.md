@@ -31,3 +31,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0005](0005-agent-runtime-config-as-secret.md) | エージェント CLI のランタイム設定を秘密として扱う | Accepted | 2026-09-03 |
 | [0006](0006-instructions-to-mechanisms.md) | エージェントへの指示を減らし、強制は機構へ寄せる | Accepted | 2026-09-14 |
 | [0007](0007-filesystem-guard-boundary.md) | filesystem ガードの機構を「両 CLI が強制できるか」で分ける | Accepted | 2026-09-14 |
+| [0008](0008-explicit-dev-tool-grants.md) | Copilot の開発ツール自動許可を切り、必要な範囲を明示する | Accepted | 2026-09-14 |

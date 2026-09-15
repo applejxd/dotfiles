@@ -132,8 +132,9 @@ Copilot CLI の `permissions-config.json` は deny / ask を表現できない
    Anthropic のドキュメントが例示している形で、回避策ではない
 
 コストは `claude_read_allow` のパスを手で維持していること。
-Copilot は `allowDevToolAccess` が同等を自動で行うため、この一覧は
-「Claude に自動付与が無いことの補償」であって方針の差ではない。
+Copilot 側も `copilot_read_allow` で同じものを列挙する。以前は
+`allowDevToolAccess` が自動で行っていたが、不具合のため切っている
+([ADR-0008](../adr/0008-explicit-dev-tool-grants.md))。
 
 > [!NOTE]
 > 揃えているのは **filesystem だけ**。network は Copilot にドメイン単位の
@@ -156,8 +157,9 @@ Copilot は `allowDevToolAccess` が同等を自動で行うため、この一�
 | `[sandbox] claude_write_deny` | Claude | read は許すが write を禁止する対象。`deny` に**追加**される |
 | `[sandbox] claude_network_allow` | Claude | shell が実際に通信する先 (CDN 等) |
 | `[sandbox] claude_network_strict` | Claude | 許可外ドメインを拒否する (v2.1.219+) |
-| `[sandbox] copilot_read_allow` | Copilot | `allowDevToolAccess` が取りこぼす読み取り |
+| `[sandbox] copilot_read_allow` | Copilot | Copilot が読める場所 (whitelist の本体) |
 | `[sandbox] copilot_write_allow` | Copilot | 同上の書き込み |
+| `[sandbox] copilot_allow_dev_tool_access` | Copilot | 開発ツールの自動許可。`false` 固定 |
 | `[file] claude_*` (5 キー) | Claude | `Read()` / `Edit()` の allow / ask / deny |
 | `[bash] allow` / `ask` / `deny` | 両方 | ただし粒度が違う |
 
@@ -197,7 +199,7 @@ denied path でも真を返すので判定に使わない。
 
 | 不足している側 | 典型的な原因 | 書く場所 |
 | --- | --- | --- |
-| Copilot だけ | `allowDevToolAccess` の取りこぼし | `copilot_read_allow` / `copilot_write_allow` |
+| Copilot だけ | ホーム外、または `copilot_read_allow` に未列挙 | `copilot_read_allow` / `copilot_write_allow` |
 | Claude だけ | ホーム配下で `denyRead: ["~/"]` に掛かった | `claude_read_allow` / `claude_write_allow` |
 | 両方 | 真に共通の要件 | それでも**両方のキーに書く**。無印キーは作らない |
 
@@ -234,20 +236,32 @@ Claude の `denyRead` は `~/` 配下しか塞いでいないため。
 > 禁止を置くと片方だけ無防備になる。遮断は `[sandbox] deny` (両 CLI) か
 > hook で行う。境界は [ADR-0007](../adr/0007-filesystem-guard-boundary.md)。
 
-#### 自動許可の取りこぼしを補う (`copilot_read_allow` / `copilot_write_allow`)
+#### Copilot が読み書きできる場所 (`copilot_read_allow` / `copilot_write_allow`)
 
-`allowDevToolAccess` は万能ではない。公式ドキュメントはキャッシュの扱いを
-"read-only for most locations, and read/write for selected writable locations"
-と書いており、**uv はこの選別から漏れている**。実測 (Copilot CLI 1.0.84-5):
+Copilot の filesystem は deny-by-default なので、このリストが
+**Copilot に見える範囲そのもの**になる。以前は `allowDevToolAccess` が
+`PATH` 上のツールやキャッシュを自動で許可していたが、
+**この自動付与は切ってある** ([ADR-0008](../adr/0008-explicit-dev-tool-grants.md))。
+
+切った理由は 2 つ。
+
+1. **取りこぼす。** 公式ドキュメントはキャッシュの扱いを
+   "read-only for most locations, and read/write for selected writable locations"
+   と書いており、**uv はこの選別から漏れていた**
+2. **ユーザ指定を上書きする。** `readwritePaths` に書いたパスを自動付与の
+   read-only が潰す (`github/copilot-cli#4846`)。しかも `/sandbox policy` は
+   Read-write と表示するので、**表示からは気付けない**
+
+実測 (Copilot CLI 1.0.84-5、dev-tool access が ON だった頃):
 
 | パス | 実効権限 | 結果 |
 | --- | --- | --- |
-| `~/.cache/uv` | read-only | `uv run` が lock を作れず即エラー |
+| `~/.cache/uv` | read-only (RW 指定しても) | `uv run` が lock を作れず EROFS |
 | `~/.local/share/uv/python` | 不可視 | `.venv/bin/python` の実体を辿れない |
 | `/usr/include` | 不可視 | C/C++/cgo のビルドが `fatal error: stdlib.h` で落ちる |
 | `/usr/local` 配下 | 不可視 | ローカル導入のヘッダ・ライブラリ・CUDA を参照できない |
 
-自動付与の粒度は直感と一致しない。実測 (Ubuntu) では
+自動付与の粒度は直感と一致しなかった。実測 (Ubuntu) では
 **ライブラリは見えるのにヘッダが見えない**。
 
 ```text
@@ -256,24 +270,68 @@ Claude の `denyRead` は `~/` 配下しか塞いでいないため。
 見えない: /usr/include /usr/local/* /usr/src /opt /sys /var/lib
 ```
 
+現在のリストは `claude_read_allow` とほぼ同じ内容に、ホーム外を足した形になる。
+
 ```toml
-copilot_read_allow  = [
-  "~/.local/share/uv/python",      # interpreter
-  "~/.local/share/mise/installs",  # latest symlink を保つ (下記)
-  "/usr/include",                  # システムヘッダ
-  "/usr/local",                    # include / lib / share / cuda をまとめて
-  "/usr/src",                      # カーネルヘッダ (DKMS, CUDA ドライバ)
-  "/opt",                          # サードパーティのツールチェーン
+copilot_read_allow = [
+  "~/.local", "~/.cargo", "~/.rustup", "~/.nvm",
+  "~/go", "~/.texlive",           # ツールチェーン
+  "~/.config", "~/.gitconfig",    # ツールの設定 (秘密は deny で個別に塞ぐ)
+  "/usr/include",                 # システムヘッダ
+  "/usr/local",                   # include / lib / share / cuda をまとめて
+  "/usr/src",                     # カーネルヘッダ (DKMS, CUDA ドライバ)
+  "/opt",                         # サードパーティのツールチェーン
 ]
-copilot_write_allow = ["~/.cache/uv"]
+copilot_write_allow = [
+  "~/.cache", "~/.npm", "~/.cargo/registry", "~/.local/state",
+]
 ```
 
-すべて **read-only**。書ければ以後のビルド成果物へ任意コードを混ぜられる。
+書き込みは**キャッシュ類だけ**。それ以外は read-only にする。書ければ
+以後のビルド成果物へ任意コードを混ぜられる。
 **存在しないパスを書いても害は無い** (Copilot は実在しないパスをポリシーから
 落とし `/sandbox policy` の Notes に記載するだけ)。
 Claude は `denyRead` が `~/` 配下だけなので `/usr` や `/opt` は元から読める。
 
-#### PATH 上のディレクトリは read-only で固定される
+> [!CAUTION]
+> **同じパスを read と write の両方に書いてはいけない。**
+> sandbox 実装は同一パスの RO/RW 競合を「最も制限的な意図」= RO へ解決する
+> ため、**write 指定が無言で消える**。これが上記 2 の不具合の本体で、
+> ユーザ指定どうしでも同じことが起きる。
+> write 権限は read を含むので、書きたい場所は `copilot_write_allow` にだけ
+> 書く (`~/.cache` `~/.npm` がこれに当たる)。
+> `build_copilot_sandbox` が重複を検出して apply を止める。
+>
+> 親子関係 (`~/.local` と `~/.local/state`) は
+> 「より具体的なパスが勝つ」規則で解決されるので問題ない。
+
+書き込みを許す場所の選び方にも注意が要る。
+
+> [!WARNING]
+> **`~/.local/share/mise` を `copilot_write_allow` に入れてはいけない。**
+> PATH 上の全ツールが書き換え可能になり、`git` や `python` を差し替えて
+> 以後のコマンドを乗っ取る経路ができる。sandbox が防ごうとしている当のもの。
+> read だけで `mise exec` は動く。
+
+#### `/sandbox policy` の表示は実効性を保証しない
+
+上記 2 の不具合で分かったことだが、**`/sandbox policy` が Read-write と
+表示していても、実際には read-only で bind されていることがある**。
+sandbox 実装は同一パスに RO と RW が来たとき「最も制限的な意図」として
+RO を採り、その解決は出所 (ユーザ指定 / 自動発見) を区別しない。
+
+権限を疑ったときは表示ではなく mount を見る。
+
+```bash
+findmnt -T ~/.cache/uv -o TARGET,SOURCE,OPTIONS
+```
+
+#### PATH 上のディレクトリは read-only で固定される (dev-tool access が ON のとき)
+
+> [!NOTE]
+> この節は `copilot_allow_dev_tool_access = true` のときの挙動。
+> 現在は `false` にしているので、この自動付与は起きない。
+> 他マシンや既定設定でこの症状に当たったときのために残してある。
 
 `allowDevToolAccess` は `PATH` に載っているディレクトリを **read-only で
 bind-mount** する。公式の意図は
@@ -293,14 +351,9 @@ bind-mount** する。公式の意図は
 `Read-only file system (os error 30)` で失敗する。sandbox の外で
 ディレクトリごと消してから入れ直すこと。
 
-> [!WARNING]
-> **`~/.local/share/mise` を `copilot_write_allow` に入れてはいけない。**
-> PATH 上の全ツールが書き換え可能になり、`git` や `python` を差し替えて
-> 以後のコマンドを乗っ取る経路ができる。sandbox が防ごうとしている当のもの。
-
 #### bind-mount は symlink を「実体」に置き換える
 
-PATH 上のディレクトリを bind-mount する副作用として、
+ディレクトリを bind-mount する副作用として、
 **そのパスが symlink だとビューから消える**。bind-mount は symlink を辿った
 先を貼るので、リンクそのものはマウント後の名前空間に存在しない。
 
@@ -321,8 +374,9 @@ PATH          : .../node/latest/bin             ← 解決できない
 **対処は親ディレクトリごと許可すること。** 親を許可した領域は bind-mount では
 なく素通しになり、中の symlink はリンクのまま見える。実測でも
 `/usr/local` を許可した後は `cuda -> /etc/alternatives/cuda` が
-symlink として見えている。そのため `copilot_read_allow` に
-`~/.local/share/mise/installs` を置いている (read-only)。
+symlink として見えている。`copilot_read_allow` が
+`~/.local/share/mise/installs` ではなく **`~/.local` ごと** 許可しているのは
+この理由による。
 
 > [!NOTE]
 > 「symlink が一律に消える」わけではない。消えるのは
@@ -337,11 +391,11 @@ symlink として見えている。そのため `copilot_read_allow` に
 | --- | --- | --- |
 | 絶対パス・ワイルドカード無しの遮断 | `[sandbox] deny` | 両方 (OS レベル) |
 | glob / cwd 相対 / 意味論を含む遮断 | hook | 両方 |
-| 片方の自動付与を再現する**許可** | `claude_*` / `copilot_*` | 片方 (補償) |
+| CLI ごとに書き方が違う**許可** | `claude_*` / `copilot_*` | 片方ずつ |
 
 規則は 1 つだけ覚えればよい。
 
-> **CLI 固有キーに「禁止」を置かない。** 許可の補償にだけ使う。
+> **CLI 固有キーに「禁止」を置かない。** 許可にだけ使う。
 
 許可の非対称は実効ポリシーを揃えるためのもので安全側に働くが、
 禁止の非対称はそのまま穴になる。実際、`[file] claude_read_deny_globs` は
@@ -420,7 +474,7 @@ glob 記法とは **書式が異なる**:
 
 | キー | Copilot に渡さない理由 |
 | --- | --- |
-| `claude_read_allow` / `claude_write_allow` | Copilot は `allowDevToolAccess` が `PATH` 上のツール・パッケージマネージャのキャッシュを**自動で**許可する。Claude には相当機能が無いので手動補償しているだけで、渡すと Copilot が既に触れないパスまで開けてしまう |
+| `claude_read_allow` / `claude_write_allow` | Copilot は同じ役割を `copilot_read_allow` / `copilot_write_allow` が担う。内容はほぼ同じだが、ホーム外 (`/usr` `/opt`) の扱いが違う (Claude は `denyRead` が `~/` 配下だけなので元から読める) ので別キーにしてある |
 | `claude_write_deny` | Copilot は cwd の外に**そもそも書けない**ので、改竄防止の deny を足す意味が無い |
 
 つまり「Claude 専用」は *方針の差ではなく実装の差*。両者の**実効ポリシーは
@@ -743,7 +797,7 @@ Copilot の sandbox 設定は `~/.copilot/settings.json` の `sandbox` キーに
 "sandbox": {
   "enabled": true,
   "allowBypass": true,          // sandbox 外での実行を都度承認で許可
-  "allowDevToolAccess": true,   // パッケージマネージャの設定/キャッシュに read
+  "allowDevToolAccess": false,  // 自動許可。ADR-0008 により無効化
   "addCurrentWorkingDirectory": true,
   "sandboxMcpServers": true,
   "sandboxLspServers": true,
@@ -767,11 +821,11 @@ Claude との差で特に重要なもの:
   whitelist 化し、**両者のモデルを揃えてある**。
   → Copilot は cwd の外への書き込みがそもそもできないので、
   `claude_write_deny` (改竄防止) に相当する設定は**渡していない**。
-- **`claude_read_allow` / `claude_write_allow` を Copilot に渡してはいけない**。これらは
-  Claude に `allowDevToolAccess` 相当の自動付与が無いことの補償であり、
-  Copilot に渡すと deny-by-default で既に触れないパス (`~/.config` 等) を
-  わざわざ開けて防御を弱めてしまう
-  (`test_copilot_sandbox_does_not_receive_claude_allow_lists` で固定)。
+- **`claude_read_allow` / `claude_write_allow` を Copilot に渡してはいけない**。
+  Copilot 側は `copilot_read_allow` / `copilot_write_allow` が同じ役割を担う。
+  内容はほぼ同じだが、ホーム外の扱いと write の範囲が違うため
+  生成側が参照するキーを取り違えないことをテストで固定している
+  (`test_copilot_sandbox_reads_only_the_copilot_keys`)。
 - **ワイルドカード非対応・絶対パス限定** (公式ドキュメントに明記)。
   `deny` に書いた `~/**/.env` のようなパターンは Copilot 側では
   自動的に除外される (`build_copilot_sandbox` が `*` を含む要素を落とす)。
@@ -800,11 +854,11 @@ Claude との差で特に重要なもの:
   ツールは同じポリシーを**ソフトウェア的に自己チェックするだけ**
   (OS のバックストップが無い)。リモート MCP には適用されない。
 
-`generate.py` が管理するのは `enabled` と
-`userPolicy.filesystem.deniedPaths` **のみ**。`readwritePaths` /
-`readonlyPaths` は `/sandbox config` の TUI から手で足す作業用の許可リストなので
-生成側で消さない。`network` / `allowBypass` / `allowDevToolAccess` / `auth`
-といった挙動設定にも触れない (家用の緩い運用を壊さないため)。
+`generate.py` が管理するのは `enabled`・`allowDevToolAccess`・
+`userPolicy.filesystem` の 3 リスト。`network` / `allowBypass` / `auth`
+といった挙動設定には触れない (家用の緩い運用を壊さないため)。
+`readwritePaths` / `readonlyPaths` は `/sandbox config` の TUI から足した分と
+`common.toml` の分を **union** する (生成側が手作業の追加を消さない)。
 
 #### 実測した既定の許可範囲 (WSL2, chezmoi リポジトリを cwd として `/sandbox policy`)
 

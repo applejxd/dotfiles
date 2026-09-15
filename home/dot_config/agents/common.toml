@@ -544,40 +544,56 @@ claude_write_allow = [
   "~/.local/state",
 ]
 
-# Copilot のみ: allowDevToolAccess が取りこぼす分を補う。
+# Copilot のみ: 開発ツールへの許可を **明示的に** 与える。
 #
-# 実測 (Copilot CLI 1.0.84-5, Ubuntu) では自動付与の粒度が直感と一致しない。
-#   見える  : /usr/lib /usr/lib/x86_64-linux-gnu /usr/bin /usr/share /etc pkgconfig
-#   見えない: /usr/include /usr/local/* /usr/src /opt /sys /var/lib
-#             ~/.cache/uv は read-only、~/.local/share/uv/python は不可視
-# → ライブラリは見えるのにヘッダが見えず C/C++/cgo のビルドが落ちる。
-#   uv が動かないとこのリポジトリの検証コマンドが一切通らない。
+# ★allowDevToolAccess は OFF にしている (copilot_allow_dev_tool_access)。
+#   自動付与は便利だが、**ユーザ指定の read-write を自動付与の read-only が
+#   上書きする** 不具合がある (github/copilot-cli#4846)。
+#   実測: ~/.cache/uv を readwritePaths に入れても ro bind され `uv run` が
+#   EROFS。dev-tool access を切ると同じ mount が rw になり解消した。
+#   MXC 側は同一パスの RO/RW 競合を「最も制限的な意図」= RO へ解決する実装で、
+#   出所 (ユーザ指定/自動発見) を区別しない。
+#   → 明示できないものに頼らず、必要な範囲を自分で列挙する方針へ倒した。
+#   判断の経緯は docs/adr/0008-explicit-dev-tool-grants.md
 #
-# claude_* を流用しないこと。あれは Claude 用の広い補償で、渡すと
-# deny-by-default の利点を失う。ここは実測した穴だけを名指しで塞ぐ。
-# すべて read-only (書ければビルド成果物に任意コードを混ぜられる)。
-# 存在しないパスは Copilot 側で無効化されるだけなので環境差は気にしない。
-# Claude は denyRead が "~/" 配下だけなので /usr や /opt は元から読める。
+# 内容は claude_read_allow / claude_write_allow とほぼ同じになる。
+# 自動付与が無くなった以上、両 CLI が同じ補償を必要とするため。
+# ホーム外 (/usr /opt) は Claude では既定で読めるので Copilot にだけ要る。
 #
-# TUI で足した分とは合算されるので、ここから消しても settings.json からは
-# 消えない (削除は TUI)。詳細は docs/spec/agent-permissions.md。
+# すべて read-only を基本とし、書き込みはキャッシュ類に限る。
+# ~/.local/share/mise は **write に入れない** (PATH 上のツールを差し替えられる)。
 copilot_read_allow = [
-  "~/.local/share/uv/python",   # .venv/bin/python のリンク先
-  # mise の installs 全体。allowDevToolAccess は PATH 上の
-  # `<tool>/latest/bin` を bind-mount するが、bind-mount は symlink を辿った
-  # 実体を貼るため **`latest` という symlink 自体がビューから消える**。
-  # PATH が latest 経由なので `node: not found` になる (実測)。
-  # 親ごと許可すると素通しになり symlink が保たれる。read-only 固定
-  # (write を与えると PATH 上の全ツールを改竄できてしまう)。
-  "~/.local/share/mise/installs",
+  # ツールチェーン。~/.local は bin (mise 本体) / share/mise / share/uv を含む
+  # ★~/.cache と ~/.npm はここに書かない。下の copilot_write_allow と
+  #   同一パスで衝突し、RO 側に潰される (下記の注記)。
+  "~/.local", "~/.cargo", "~/.rustup", "~/.nvm",
+  "~/go", "~/.texlive",
+  # ツールの設定。秘密は上の deny で個別に塞ぐ
+  "~/.config", "~/.gitconfig",
+  # ホーム外 (Claude は denyRead が "~/" 配下だけなので元から読める)
   "/usr/include",               # システムヘッダ
   "/usr/local",                 # include / lib / share / cuda をまとめて
   "/usr/src",                   # カーネルヘッダ (DKMS, CUDA ドライバ)
   "/opt",                       # サードパーティのツールチェーン
 ]
+
+# ★read と write に **同じパス** を書いてはいけない。
+#   sandbox 実装は同一パスの RO/RW 競合を「最も制限的な意図」= RO へ解決する
+#   ため、write 指定が無言で無効になる (これが #4846 の本体)。
+#   read 権限は write 指定に含まれるので、書きたい場所は write だけに書く。
+#   generate.py の build_copilot_sandbox が重複を検出して apply を止める。
+#
+#   親子関係 (~/.local と ~/.local/state 等) は「より具体的なパスが勝つ」
+#   規則で解決されるので問題ない。
 copilot_write_allow = [
-  "~/.cache/uv",                # lock と展開済みパッケージを書く
+  # パッケージマネージャのキャッシュ。書けないとビルドが毎回やり直しになる
+  # (~/.cache/uv / ~/.cache/pre-commit / ~/.cache/go-build を含む)
+  "~/.cache", "~/.npm", "~/.cargo/registry", "~/.local/state",
 ]
+
+# Copilot のみ: PATH やキャッシュの自動 read-only 付与を切る。
+# 上の copilot_read_allow / copilot_write_allow で明示的に置き換える。
+copilot_allow_dev_tool_access = false
 
 # Copilot 側の deniedPaths は上の `deny` から自動導出する
 # (generate.py の build_copilot_sandbox)。導出時の制約:

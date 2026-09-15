@@ -248,7 +248,8 @@ def test_copilot_sandbox_preserves_allow_lists_and_behavior_keys():
     assert "/home/u/src" in fs["readonlyPaths"]
     assert "/stale/entry" not in fs["deniedPaths"], "deniedPaths は生成側が全置換する"
     assert sandbox["allowBypass"] is True
-    assert sandbox["allowDevToolAccess"] is True
+    # COMMON は copilot_allow_dev_tool_access = false を持つので上書きされる
+    assert sandbox["allowDevToolAccess"] is False
     assert sandbox["auth"] == {"git": True, "gh": True}
     assert sandbox["userPolicy"]["network"] == {
         "allowOutbound": True,
@@ -619,33 +620,101 @@ def test_absolute_sandbox_paths_stay_outside_home():
 # Copilot の許可リスト
 # ---------------------------------------------------------------------------
 
-def test_copilot_sandbox_does_not_receive_claude_allow_lists():
-    fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    claude_only = set(COMMON["sandbox"]["claude_read_allow"]) | set(
-        COMMON["sandbox"]["claude_write_allow"]
-    )
-    granted = set(fs.get("readonlyPaths", [])) | set(fs.get("readwritePaths", []))
-    for path in claude_only:
-        assert gen.expand_user(path) not in granted
+def test_copilot_sandbox_reads_only_the_copilot_keys():
+    # 生成側が claude_* を誤って流用していないこと。
+    #
+    # ★dev-tool access を切った結果、両 CLI の許可内容は **ほぼ同じになる**
+    #   (自動付与が無くなれば同じ補償が要るため)。したがって
+    #   「互いに素であること」ではなく「参照するキーが正しいこと」を固定する。
+    common = {
+        "sandbox": {
+            "deny": [],
+            "claude_read_allow": ["/claude-only-ro"],
+            "claude_write_allow": ["/claude-only-rw"],
+            "copilot_read_allow": ["/copilot-ro"],
+            "copilot_write_allow": ["/copilot-rw"],
+        }
+    }
+    fs = gen.build_copilot_sandbox(None, common)["userPolicy"]["filesystem"]
+    assert fs["readonlyPaths"] == ["/copilot-ro"]
+    assert fs["readwritePaths"] == ["/copilot-rw"]
+
+    claude_fs = gen.build_claude_sandbox(common)["filesystem"]
+    assert claude_fs["allowRead"] == ["/claude-only-ro"]
+    assert claude_fs["allowWrite"] == ["/claude-only-rw"]
+
+
+def test_copilot_read_and_write_allow_must_not_overlap():
+    # 同一パスが RO と RW の両方にあると、sandbox 実装が「最も制限的な意図」
+    # として RO へ解決し write が無言で消える (github/copilot-cli#4846)。
+    # 生成時に落として気付けるようにする。
+    common = {
+        "sandbox": {
+            "deny": [],
+            "copilot_read_allow": ["~/.cache", "~/.local"],
+            "copilot_write_allow": ["~/.cache"],
+        }
+    }
+    with pytest.raises(ValueError, match=r"copilot_read_allow"):
+        gen.build_copilot_sandbox(None, common)
+
+
+def test_copilot_parent_child_paths_are_allowed_to_coexist():
+    # 親子は「より具体的なパスが勝つ」規則で解決されるので衝突ではない。
+    common = {
+        "sandbox": {
+            "deny": [],
+            "copilot_read_allow": ["~/.local"],
+            "copilot_write_allow": ["~/.local/state"],
+        }
+    }
+    fs = gen.build_copilot_sandbox(None, common)["userPolicy"]["filesystem"]
+    assert fs["readonlyPaths"] == [gen.expand_user("~/.local")]
+    assert fs["readwritePaths"] == [gen.expand_user("~/.local/state")]
+
+
+def test_real_common_toml_has_no_copilot_allow_overlap():
+    ro = set(COMMON["sandbox"]["copilot_read_allow"])
+    rw = set(COMMON["sandbox"]["copilot_write_allow"])
+    assert not (ro & rw)
 
 
 def test_copilot_sandbox_grants_uv_paths_so_uv_run_works():
+    # uv が動かないとこのリポジトリの検証コマンドが一切通らない。
+    # interpreter は ~/.local 配下、キャッシュは ~/.cache 配下で賄う。
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    assert gen.expand_user("~/.cache/uv") in fs["readwritePaths"]
-    assert gen.expand_user("~/.local/share/uv/python") in fs["readonlyPaths"]
+    assert gen.expand_user("~/.cache") in fs["readwritePaths"]
+    assert gen.expand_user("~/.local") in fs["readonlyPaths"]
 
 
-def test_copilot_sandbox_grants_mise_installs_to_keep_symlinks():
+def test_copilot_sandbox_grants_the_mise_toolchain():
+    # mise 本体 (~/.local/bin) と installs はどちらも ~/.local に含まれる。
     # bind-mount は symlink を辿った実体を貼るため、PATH 上の <tool>/latest/bin
-    # を貼ると latest 自体が消える。親ごと許可すると素通しになる。
+    # だけを貼ると latest 自体が消える。親ごと許可すれば素通しになる。
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    assert gen.expand_user("~/.local/share/mise/installs") in fs["readonlyPaths"]
+    assert gen.expand_user("~/.local") in fs["readonlyPaths"]
+
+
+def test_copilot_dev_tool_access_is_disabled():
+    # 自動付与はユーザ指定の read-write を read-only で上書きするため切る
+    # (github/copilot-cli#4846)。切った分は copilot_read_allow で明示する。
+    assert gen.build_copilot_sandbox(None, COMMON)["allowDevToolAccess"] is False
+
+
+def test_dev_tool_access_key_is_optional():
+    # キーが無い設定では allowDevToolAccess を出力せず、既存値を温存する
+    common = {"sandbox": {"deny": []}}
+    assert "allowDevToolAccess" not in gen.build_copilot_sandbox(None, common)
+    existing = {"allowDevToolAccess": True}
+    assert gen.build_copilot_sandbox(existing, common)["allowDevToolAccess"] is True
 
 
 def test_mise_installs_is_never_writable():
+    # write を与えると PATH 上の全ツールを差し替えられる。
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
     for path in fs.get("readwritePaths", []):
         assert "mise" not in path, f"mise 配下に write を与えている: {path}"
+        assert not path.endswith("/.local"), "~/.local 全体に write を与えている"
 
 
 def test_copilot_sandbox_grants_system_build_paths():

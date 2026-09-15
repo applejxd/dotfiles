@@ -293,6 +293,15 @@ def _uniq(seq: list[str]) -> list[str]:
     return out
 
 
+def _expand_sandbox_paths(paths: list[str]) -> list[str]:
+    """``~`` を展開し、Copilot が扱えないワイルドカード入りを落とす。"""
+    return [
+        expand_user(path)
+        for path in paths
+        if "*" not in path and "?" not in path
+    ]
+
+
 # ``[sandbox]`` で使えるキー。命名は **共有 = 無印 / CLI 固有 = CLI 名の接頭辞**
 # で統一する ([[hooks]] の claude_event / copilot_event と同じ規則)。
 SHARED_SANDBOX_KEYS = frozenset({"deny", "seccomp_apply_path"})
@@ -306,6 +315,7 @@ CLAUDE_SANDBOX_KEYS = frozenset({
 COPILOT_SANDBOX_KEYS = frozenset({
     "copilot_read_allow",
     "copilot_write_allow",
+    "copilot_allow_dev_tool_access",
 })
 KNOWN_SANDBOX_KEYS = SHARED_SANDBOX_KEYS | CLAUDE_SANDBOX_KEYS | COPILOT_SANDBOX_KEYS
 
@@ -624,51 +634,66 @@ COPILOT_MANAGED_KEYS = {
 def build_copilot_sandbox(
     existing_sandbox: Any, common: dict[str, Any]
 ) -> dict[str, Any]:
-    """settings.json の sandbox キーを組み立てる (deniedPaths のみ生成)。
+    """settings.json の sandbox キーを組み立てる。
 
-    Copilot の sandbox は元から **deny-by-default のホワイトリスト**で、
-    既定の許可は cwd (read/write)、リポジトリ全体 (read)、``.git``、
-    ``PATH`` 上のツール (read-only)、パッケージマネージャのキャッシュ程度。
-    そのため ``common.toml`` の ``read_allow`` / ``write_allow`` /
-    ``write_deny_extra`` は **渡さない**:
+    Copilot の sandbox は **deny-by-default のホワイトリスト**。既定の許可は
+    cwd (read/write)、``.git``、skill 置き場、システムの ``/usr`` 一部程度で、
+    ``$HOME`` 直下は一切含まれない。
 
-    - ``read_allow`` / ``write_allow`` は Claude に dev-tool 自動許可が無い
-      ことの補償なので、Copilot に渡すと既に触れないパスをわざわざ開けて
-      防御を弱めてしまう。
-    - ``write_deny_extra`` (改竄防止) は cwd の外に書けない時点で不要。
+    ``allowDevToolAccess`` (PATH・キャッシュの自動 read-only 付与) は
+    **無効にしている** (ADR-0008)。そのためツールチェーンへの許可は
+    ``copilot_read_allow`` / ``copilot_write_allow`` が全面的に担う。
 
-    ``deniedPaths`` は共通の ``deny`` から導出するが、Copilot は
+    Claude 専用キーは渡さない:
+
+    - ``claude_read_allow`` / ``claude_write_allow`` は Copilot 側の
+      ``copilot_*`` が同じ役割を担う。ホーム外の扱いと write の範囲が違う
+      (Claude は ``denyRead`` が ``~/`` 配下だけなので ``/usr`` は元から読める)。
+    - ``claude_write_deny`` (改竄防止) は cwd の外に書けない時点で不要。
+
+    ``deniedPaths`` は共通の ``deny`` から導出して**置き換える**。Copilot は
     **絶対パス限定・ワイルドカード非対応**なので wildcard を含むものは除く。
 
     ``readwritePaths`` / ``readonlyPaths`` は ``/sandbox config`` の TUI から
-    手で足す作業用の許可リストなので生成側で消さない。
-    ``network`` / ``allowBypass`` / ``allowDevToolAccess`` / ``auth`` などの
-    挙動設定にも触れない。
+    手で足した分を消さないよう **合算**する。
+    ``network`` / ``allowBypass`` / ``auth`` などの挙動設定には触れない。
     """
     out: dict[str, Any] = dict(existing_sandbox) if isinstance(existing_sandbox, dict) else {}
     out["enabled"] = True
 
+    sandbox = common.get("sandbox", {})
+
+    # PATH やキャッシュへの自動 read-only 付与。これが有効だと、同じパスへの
+    # **ユーザ指定の read-write を自動側の read-only が上書きする**
+    # (github/copilot-cli#4846。MXC は同一パスの RO/RW 競合を RO へ解決する)。
+    # 明示制御へ倒すため false を渡す。詳細は ADR-0008。
+    if "copilot_allow_dev_tool_access" in sandbox:
+        out["allowDevToolAccess"] = bool(sandbox["copilot_allow_dev_tool_access"])
+
     user_policy = dict(out.get("userPolicy") or {})
     filesystem = dict(user_policy.get("filesystem") or {})
 
-    sandbox = common.get("sandbox", {})
-    denied = [
-        expand_user(path)
-        for path in sandbox.get("deny", [])
-        if "*" not in path and "?" not in path
-    ]
+    denied = _expand_sandbox_paths(sandbox.get("deny", []))
     filesystem["deniedPaths"] = _uniq(denied)
 
-    # 自動許可の穴埋め。TUI で足した既存エントリを消さないよう合算する
-    for key, source in (
-        ("readonlyPaths", "copilot_read_allow"),
-        ("readwritePaths", "copilot_write_allow"),
-    ):
-        extra = [
-            expand_user(path)
-            for path in sandbox.get(source, [])
-            if "*" not in path and "?" not in path
-        ]
+    # ツールチェーンへの許可。dev-tool 自動付与を切っているので、これが
+    # Copilot の $HOME 配下の可視範囲そのものになる。
+    # TUI で足した既存エントリを消さないよう合算する
+    ro_src = _expand_sandbox_paths(sandbox.get("copilot_read_allow", []))
+    rw_src = _expand_sandbox_paths(sandbox.get("copilot_write_allow", []))
+
+    # 同一パスを read と write の両方に書くと、sandbox 実装が競合を
+    # 「最も制限的な意図」= read-only へ解決し、write が無言で消える
+    # (github/copilot-cli#4846)。write は read を含むので write だけに書く。
+    overlap = sorted(set(ro_src) & set(rw_src))
+    if overlap:
+        raise ValueError(
+            "copilot_read_allow と copilot_write_allow に同じパスがある: "
+            + ", ".join(overlap)
+            + " (read-only に潰されるので write 側にだけ書くこと)"
+        )
+
+    for key, extra in (("readonlyPaths", ro_src), ("readwritePaths", rw_src)):
         if not extra and key not in filesystem:
             continue
         current = filesystem.get(key)
