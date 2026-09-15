@@ -14,9 +14,13 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 | agent 設定・hook | `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` |
 | Windows 資産 | `uv run --with pytest --with pywinpty --no-project pytest test/test_windows_assets.py test/test_powershell_interactive.py -q` |
 | シェルスクリプト | `git ls-files '*.sh' \| xargs mise exec shellcheck -- shellcheck` |
-| 展開結果 | `chezmoi diff` |
+| 展開結果 | `chezmoi diff`（sandbox 内では不可。下記） |
 
 初回のみ `mise install && uv sync && uv run pre-commit install` が要る。
+
+`chezmoi diff` は **AI CLI の sandbox 内では意味のある結果を返さない**。
+`~/` が deny-by-default で不可視のため、展開先が空に見えて全て「new file」
+になる。sandbox 外のシェルで実行すること。
 
 ## このリポジトリ固有の約束
 

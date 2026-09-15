@@ -99,11 +99,12 @@ EROFS で失敗し、その都度「sandbox が壊れている」ところから
 ### 分類の方針
 
 - **read-only を既定にする。** 書き込みはキャッシュ類に限る
+- **write を許すかは「PATH に載るか」で決める。** `~/.local/share/mise` は
+  載るので read だけ (`git` や `python` を差し替えられる)。
+  `~/.local/share/uv/tools` は載らず `uvx` からしか使われないので write を許す
 - **read と write に同じパスを書かない。** RO/RW の競合解決は出所を区別しない
   ので、ユーザ指定どうしでも write が RO に潰される。write は read を含むため
   書きたい場所は write 側にだけ書く (`build_copilot_sandbox` が重複で失敗する)
-- **`~/.local/share/mise` を write に入れない。** `PATH` 上のツールの実体を
-  差し替えられてしまう。read だけで `mise exec` は動く
 - **ホーム外 (`/usr/include` `/usr/local` `/usr/src` `/opt`) は Copilot にだけ要る。**
   Claude の `denyRead` は `~/` 配下だけなので元から読める
 
@@ -125,8 +126,8 @@ EROFS で失敗し、その都度「sandbox が壊れている」ところから
       「生成側が参照するキーが正しい」テストへ置き換える
 - [x] read と write に同じパスを書けないよう生成側で検出する
       (ユーザ指定どうしでも RO に潰されるため)
-- [ ] dev-tool OFF の状態で `pre-commit run --all-files` と
-      `pytest test/agents/` が通ることを実測する
+- [x] dev-tool OFF の状態で必要な許可を洗い出し、不足を追加する
+      (`~/.local/share/uv/tools` と `~/.config/chezmoi`)
 
 ## 結果
 
@@ -138,11 +139,22 @@ EROFS で失敗し、その都度「sandbox が壊れている」ところから
   `/sandbox policy` の表示と突き合わせなくても範囲が分かる
 - 足りないパスは不可視 (ENOENT) か EACCES で即座に失敗するので、
   「効いているつもりで効いていない」状態が起きなくなった
+- 許可を洗い出す過程で `~/.config/chezmoi/key.txt` (age 秘密鍵) が
+  `deny` に無いことに気付き、追加した。write を与えるディレクトリの
+  内側を点検したことによる副産物
 
 ### ネガティブな結果
 
 - 新しいツールチェーンを入れたら `copilot_read_allow` への追記が要る。
-  自動付与があれば不要だった作業
+  自動付与があれば不要だった作業。実際、切った直後に 2 件の不足が出た:
+
+  | 不足 | 症状 | 対応 |
+  | --- | --- | --- |
+  | `~/.local/share/uv/tools` | `uvx` が一時環境を作れず `os error 30` | write に追加 |
+  | `~/.config/chezmoi` | `chezmoistate.boltdb: read-only file system` | write に追加 |
+
+  どちらも**明確なエラーで即座に失敗**したので、原因の特定は容易だった。
+  自動付与のときのように「設定したのに効かない」形にはならない
 - 許可リストが `claude_*` と `copilot_*` でほぼ重複する。
   共有キーへ統合したくなるが、ホーム外の扱いが違う (Claude は元から読める) ため
   そのままにしてある

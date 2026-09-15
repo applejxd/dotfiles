@@ -474,6 +474,10 @@ deny = [
   "~/.npmrc", "~/.pypirc", "~/.docker/config.json",
   "~/.git-credentials", "~/.config/gh/hosts.yml",
   "~/.config/Bitwarden CLI",
+  # chezmoi の age 秘密鍵。下の write 許可 (~/.config/chezmoi) の内側だが
+  # より具体的なパスが勝つので遮断される。
+  # このリポジトリに encrypted_ ファイルは無いため、塞いでも chezmoi は動く。
+  "~/.config/chezmoi/key.txt",
   "~/.claude.json", "~/.copilot/settings.json", "~/.copilot/config.json",
   "~/.bash_history", "~/.zsh_history", "~/.python_history",
   "~/.node_repl_history",
@@ -538,10 +542,16 @@ claude_read_allow = [
 
 # Claude のみ: cwd + セッション temp 以外に書き込みを許す場所。
 # パッケージマネージャがキャッシュを書けないとビルドが失敗するため。
-# Copilot は同等の場所を allowDevToolAccess が自動で read-write 許可する。
+# Copilot 側の同等物は copilot_write_allow (下記)。
 claude_write_allow = [
   "~/.cache", "~/.npm", "~/.cargo/registry", "~/.local/share/mise",
   "~/.local/state",
+  # uvx が実行のたびに一時環境を作る場所 (copilot_write_allow に同じ)
+  "~/.local/share/uv/tools",
+  # chezmoi の永続 state (chezmoistate.boltdb)。書けないと
+  # `chezmoi managed` / `chezmoi diff` が read-only file system で落ちる。
+  # 内側の key.txt は上の deny で塞いである。
+  "~/.config/chezmoi",
 ]
 
 # Copilot のみ: 開発ツールへの許可を **明示的に** 与える。
@@ -589,6 +599,18 @@ copilot_write_allow = [
   # パッケージマネージャのキャッシュ。書けないとビルドが毎回やり直しになる
   # (~/.cache/uv / ~/.cache/pre-commit / ~/.cache/go-build を含む)
   "~/.cache", "~/.npm", "~/.cargo/registry", "~/.local/state",
+  # uvx が実行のたびに一時環境を作る場所。RO だと
+  # `Read-only file system (os error 30) at ".../uv/tools/.tmpXXXX"` で
+  # pre-commit の uvx hook (ruff / yamllint) が落ちる。
+  # PATH には載らず `uvx <tool>` からしか使われないので、
+  # ~/.local/share/mise (PATH 上の git / python を差し替えられる) とは
+  # リスクの質が違う。元より ~/.cache/uv が rw な時点で
+  # uvx 経由のコードは同じ経路で汚染できる。
+  "~/.local/share/uv/tools",
+  # chezmoi の永続 state (chezmoistate.boltdb)。書けないと
+  # `chezmoi managed` / `chezmoi diff` が read-only file system で落ちる。
+  # 内側の key.txt は上の deny で塞いである。
+  "~/.config/chezmoi",
 ]
 
 # Copilot のみ: PATH やキャッシュの自動 read-only 付与を切る。

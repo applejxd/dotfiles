@@ -284,6 +284,8 @@ copilot_read_allow = [
 ]
 copilot_write_allow = [
   "~/.cache", "~/.npm", "~/.cargo/registry", "~/.local/state",
+  "~/.local/share/uv/tools",      # uvx の一時環境
+  "~/.config/chezmoi",            # chezmoi の永続 state (boltdb)
 ]
 ```
 
@@ -312,6 +314,19 @@ Claude は `denyRead` が `~/` 配下だけなので `/usr` や `/opt` は元か
 > PATH 上の全ツールが書き換え可能になり、`git` や `python` を差し替えて
 > 以後のコマンドを乗っ取る経路ができる。sandbox が防ごうとしている当のもの。
 > read だけで `mise exec` は動く。
+>
+> 対して `~/.local/share/uv/tools` は write に入れてある。**PATH に載らず**
+> `uvx <tool>` からしか使われないので質が違う。しかも `~/.cache/uv` が
+> rw な時点で uvx 経由のコードは同じ経路で汚染できるため、リスクは増えない。
+> RO のままだと `uvx` が一時環境を作れず、pre-commit の ruff / yamllint が
+> `Read-only file system (os error 30) at ".../uv/tools/.tmpXXXX"` で落ちる。
+
+判断の基準は **「PATH に載るか」**。載るものは read だけにする。
+
+許可した領域の内側に秘密があるときは、`deny` に個別のパスを書けば
+「より具体的なパスが勝つ」規則で遮断される。
+`~/.config/chezmoi` は state (boltdb) のために write を与えているが、
+同じディレクトリの age 秘密鍵は `deny` で塞いである。
 
 #### `/sandbox policy` の表示は実効性を保証しない
 
@@ -1671,3 +1686,6 @@ chezmoi modify_ スクリプトは空 stdin を受けると空オブジェクト
 | Copilot CLI で hook の deny が効かない | `~/.copilot/hooks/from-claude.json` が apply されているか確認。`copilot --log-level debug` で hook がロードされているか確認 |
 | `~/.config/agents/command_policy.py` が読めない・壊れている | hook が fail-closed で全 bash を拒否する。`~/.config/agents/__pycache__/` を削除して `chezmoi apply` をやり直す |
 | common.toml の編集が反映されない | `chezmoi diff` で差分を確認 → `chezmoi apply` |
+| `chezmoi diff` が全て「new file」になる | **AI CLI の sandbox 内で実行している**。`~/` が不可視で展開先が空に見えるため。sandbox 外のシェルで実行する |
+| `chezmoi` が `chezmoistate.boltdb: read-only file system` で落ちる | `~/.config/chezmoi` が write 許可に入っているか確認 (`copilot_write_allow` / `claude_write_allow`) |
+| `uvx` が `os error 30 at ".../uv/tools/.tmpXXXX"` で落ちる | `~/.local/share/uv/tools` が write 許可に入っているか確認 |

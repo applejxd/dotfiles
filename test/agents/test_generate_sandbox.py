@@ -687,6 +687,43 @@ def test_copilot_sandbox_grants_uv_paths_so_uv_run_works():
     assert gen.expand_user("~/.local") in fs["readonlyPaths"]
 
 
+def test_uvx_tool_dir_is_writable_for_both_clis():
+    # uvx は実行のたび ~/.local/share/uv/tools に一時環境を作る。RO だと
+    # os error 30 で pre-commit の ruff / yamllint hook が落ちる。
+    # ~/.local は RO なので、より具体的なパスとして write に足す必要がある。
+    tool_dir = "~/.local/share/uv/tools"
+    fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
+    assert gen.expand_user(tool_dir) in fs["readwritePaths"]
+    assert tool_dir in gen.build_claude_sandbox(COMMON)["filesystem"]["allowWrite"]
+
+
+def test_mise_install_dir_stays_read_only():
+    # ~/.local/share/mise は PATH に載り git / python を提供するので
+    # write を与えると以後のコマンドを乗っ取れる。uv/tools は PATH に
+    # 載らないので扱いが違う (上のテスト)。
+    fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
+    assert gen.expand_user("~/.local/share/mise") not in fs["readwritePaths"]
+
+
+def test_chezmoi_state_is_writable_for_both_clis():
+    # chezmoi は ~/.config/chezmoi に永続 state (boltdb) を置く。RO だと
+    # `chezmoi managed` / `chezmoi diff` が read-only file system で落ちる。
+    # ~/.config は RO なので、より具体的なパスとして write に足す必要がある。
+    state_dir = "~/.config/chezmoi"
+    fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
+    assert gen.expand_user(state_dir) in fs["readwritePaths"]
+    assert state_dir in gen.build_claude_sandbox(COMMON)["filesystem"]["allowWrite"]
+
+
+def test_chezmoi_age_key_is_denied_inside_the_writable_state_dir():
+    # 上の write 許可の内側に age 秘密鍵がある。より具体的なパスが勝つので
+    # 遮断されること。許可を広げたときに鍵まで開く事故を防ぐ。
+    key = "~/.config/chezmoi/" + "key" + ".txt"
+    fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
+    assert gen.expand_user(key) in fs["deniedPaths"]
+    assert key in gen.build_claude_sandbox(COMMON)["filesystem"]["denyRead"]
+
+
 def test_copilot_sandbox_grants_the_mise_toolchain():
     # mise 本体 (~/.local/bin) と installs はどちらも ~/.local に含まれる。
     # bind-mount は symlink を辿った実体を貼るため、PATH 上の <tool>/latest/bin
