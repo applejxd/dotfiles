@@ -263,7 +263,14 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
         deny.append(mcp)
 
     ask: list[str] = []
+    # ask_hook_owned のコマンドは check_bash.py が承認要否まで判定するので、
+    # 静的な ask ルールにはしない。Claude の explicit ask はどのモードでも
+    # 自動承認されず、hook の allow でも上書きできない (v2.1.77 以降) ため、
+    # 静的 ask を出すと hook 側の exemption が無効化される。
+    hook_owned = set(bash.get("ask_hook_owned", []))
     for cmd in bash.get("ask", []):
+        if cmd in hook_owned:
+            continue
         ask.append(f"Bash({cmd}:*)")
     for glob in file_.get("claude_read_ask_globs", []):
         ask.append(f"Read({glob})")

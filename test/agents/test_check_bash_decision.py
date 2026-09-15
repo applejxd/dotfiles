@@ -152,8 +152,12 @@ def run_hook(command: str, *, cwd: str | None = None) -> tuple[str | None, str]:
 # ---------------------------------------------------------------------------
 
 def test_bash_has_exactly_three_lists():
-    """人が書くのは allow / ask / deny の 3 つだけ (critical_* は廃止)."""
-    assert sorted(COMMON["bash"]) == ["allow", "ask", "deny"]
+    """人が書く policy は allow / ask / deny の 3 つだけ (critical_* は廃止)。
+
+    ``ask_hook_owned`` は policy そのものではなく、ask のうち hook が承認要否まで
+    判定するものを指す注記なので別枠。
+    """
+    assert sorted(COMMON["bash"]) == ["allow", "ask", "ask_hook_owned", "deny"]
 
 
 def test_lists_are_not_empty():
@@ -280,13 +284,20 @@ def test_loader_reads_deny():
 
 
 def test_hook_and_permissions_come_from_the_same_lists():
-    """generate.py が出す Bash ルールと hook が読むパターンが 1:1 で対応すること."""
+    """generate.py が出す Bash ルールと hook が読むパターンが対応すること。
+
+    例外は ``ask_hook_owned``。hook は bash.ask を丸ごと policy として読むが、
+    generate.py は静的 ask を出さない (出すと hook の exemption が auto で
+    無効になる)。この差分だけを引いてから比較する。
+    """
     perms = gen.build_claude_permissions(COMMON)
     for key, loader in (("ask", policy.load_ask), ("deny", policy.load_deny)):
         from_permissions = {
             r[len("Bash("):-len(":*)")] for r in perms[key] if r.startswith("Bash(")
         }
         from_hook = set(loader(str(COMMON_PATH)))
+        if key == "ask":
+            from_hook -= set(COMMON["bash"]["ask_hook_owned"])
         assert from_permissions == from_hook, f"{key} が食い違っている"
 
 
@@ -294,10 +305,16 @@ def test_hook_and_permissions_come_from_the_same_lists():
 # 生成される permission リスト
 # ---------------------------------------------------------------------------
 
-def test_generated_permissions_put_rm_in_ask_not_deny():
+def test_generated_permissions_leave_rm_to_the_hook():
+    """rm は deny にも静的 ask にも出さず、hook の判定に委ねる。
+
+    静的 ask を出すと auto モードでも必ずプロンプトが出るため、
+    「workspace 内の削除は承認を省く」という設計が実機で成立しなくなる。
+    """
     perms = gen.build_claude_permissions(COMMON)
     assert not [r for r in perms["deny"] if r.startswith("Bash(rm:")]
-    assert "Bash(rm:*)" in perms["ask"]
+    assert "Bash(rm:*)" not in perms["ask"]
+    assert "rm" in COMMON["bash"]["ask_hook_owned"]
 
 
 def test_generated_permissions_keep_high_risk_in_deny():
@@ -512,6 +529,43 @@ def test_rm_inside_workspace_is_delegated(command):
     """workspace 内と確証できる削除は auto / assisted の判定へ委ねる."""
     decision, reason = run_hook(command)
     assert decision is None, f"{command!r} -> {decision} ({reason})"
+
+
+def test_hook_owned_ask_is_not_emitted_as_a_static_claude_rule():
+    """hook が承認要否まで判定するコマンドに静的 ask を出してはいけない。
+
+    Claude の explicit ask は **どのモードでも自動承認されない**
+    (bypassPermissions を含む)。さらに PreToolUse hook の allow は
+    v2.1.77 以降 ask を上書きしない。したがって静的 ask を残したままだと
+    `rm -rf build/` のような workspace 内の削除でも auto モードで必ず
+    プロンプトが出て、hook 側の委譲 (test_rm_inside_workspace_is_delegated)
+    が実機で無効になる。hook のテストだけでは検出できない食い違いなので、
+    生成物と hook の宣言をここで突き合わせる。
+
+    ref: https://code.claude.com/docs/en/permission-modes
+         「Actions no mode auto-approves ... Tools matched by an explicit ask rule」
+    """
+    common = load_common()
+    bash = common["bash"]
+    hook_owned = bash["ask_hook_owned"]
+
+    # hook 自身は bash.ask を policy として読むので、載っている必要がある
+    for cmd in hook_owned:
+        assert cmd in bash["ask"], f"{cmd!r} が bash.ask に無い"
+
+    # 宣言と hook の実装が食い違っていないこと
+    assert set(hook_owned) == set(HOOK._ASK_EXEMPTIONS), (
+        "ask_hook_owned と check_bash.py の _ASK_EXEMPTIONS が一致しない: "
+        f"{sorted(hook_owned)} vs {sorted(HOOK._ASK_EXEMPTIONS)}"
+    )
+
+    # 生成される Claude の permissions.ask に静的ルールを出さない
+    perms = gen.build_claude_permissions(common)
+    for cmd in hook_owned:
+        assert f"Bash({cmd}:*)" not in perms["ask"], (
+            f"Bash({cmd}:*) が permissions.ask に出力されている。"
+            "hook の exemption が auto モードで無効になる"
+        )
 
 
 def test_rm_without_cwd_falls_back_to_ask():

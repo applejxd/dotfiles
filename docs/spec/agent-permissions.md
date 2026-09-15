@@ -1130,6 +1130,28 @@ auto / assisted の判定へ委ねる (`_ASK_EXEMPTIONS`)。
 `rm -rf node_modules` / `build` / `.venv` のような再生成可能な成果物の削除で
 毎回止まると、承認が形骸化するため。
 
+> [!CAUTION]
+> この委譲を成立させるには、`rm` を **Claude の `permissions.ask` に出してはいけない**。
+> Claude の explicit ask は[どのモードでも自動承認されない](https://code.claude.com/docs/en/permission-modes)
+> (`bypassPermissions` を含む)。PreToolUse hook の `allow` も v2.1.77 以降は
+> ask を上書きしない。hook が黙っても静的 ask が残っていれば auto で必ず
+> プロンプトが出て、上表の「未掲載」が実機では ask になる。
+>
+> そのため `[bash]` に `ask_hook_owned` を置き、generate.py はこのリストの
+> コマンドを静的 ask から除外する。hook 側は `bash.ask` を丸ごと policy として
+> 読むので、`ask` への掲載はそのまま必要。
+>
+> 代償として、hook が起動に失敗した場合は静的 ask の保険が無くなり auto の
+> classifier 頼りになる。deny 側 (`check_rm_root_guard`) も hook 内なので、
+> 壊滅的ターゲットの防御はもともと hook の可用性に依存している。
+>
+> Copilot は `permissions-config.json` が allow 専用 (`tool_approvals` /
+> `allowed_directories`) で ask を持たないため、この分岐の影響を受けない。
+>
+> 整合性は `test_check_bash_decision.py` の
+> `test_hook_owned_ask_is_not_emitted_as_a_static_claude_rule` が
+> `_ASK_EXEMPTIONS` と突き合わせて固定する。
+
 | 形 | 結果 |
 | --- | --- |
 | `rm -rf node_modules`, `rm -f *.pyc`, `rm src/old.py` | 未掲載 |

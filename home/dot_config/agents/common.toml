@@ -108,7 +108,8 @@ ask = [
   # 削除は承認制。壊滅的なターゲット (ルート・ホーム・作業ディレクトリ全体・
   # .git 配下) は check_rm_root_guard が deny する。
   # 逆に workspace 内と確証できる削除は hook が承認を省いて auto / assisted
-  # へ委ねる (詳細は docs/spec/agent-permissions.md の「rm の承認範囲」)
+  # へ委ねる (詳細は docs/spec/agent-permissions.md の「rm の承認範囲」)。
+  # この委譲を成立させるため ask_hook_owned にも載せている (下の注記を参照)
   "rm",
   # 未追跡ファイルを消すので git でも復旧できない
   "git clean",
@@ -157,6 +158,32 @@ ask = [
   # 読み取り (--get / --list) も含めて確認を挟む。hook を無効化しうる
   # 書き込み (--global / core.hooksPath 等) は deny 側
   "git config",
+]
+# ★ask のうち「hook が承認要否まで判定する」もの。
+#
+#   ここに書いたコマンドは ask に残したまま (hook が読む policy の一部)、
+#   Claude の permissions.ask へは出力しない。check_bash.py の
+#   _ASK_EXEMPTIONS が「workspace 内の rm」のように承認を省く条件を持つため。
+#
+#   理由: Claude の explicit ask は **どのモードでも自動承認されない**
+#   (bypassPermissions を含む)。また PreToolUse hook の allow は
+#   v2.1.77 以降 ask を上書きしない。したがって静的 ask を出すと、
+#   hook が黙っても auto で必ずプロンプトが出て exemption が無効化される。
+#   ref: https://code.claude.com/docs/en/permission-modes
+#        「Actions no mode auto-approves ... Tools matched by an explicit ask rule」
+#
+#   トレードオフ: 静的 ask が無くなるので、hook が起動に失敗した場合は
+#   auto の classifier 頼りになる。deny 側 (check_rm_root_guard) は
+#   hook 内なので同じ前提。壊滅的ターゲットの防御は hook の可用性に依存する。
+#
+#   Copilot は permissions-config.json が allow 専用 (tool_approvals /
+#   allowed_directories) で ask を持たないため、この分岐の影響を受けない。
+#
+#   ここに足したら test_check_bash_decision.py の
+#   test_hook_owned_ask_is_not_emitted_as_a_static_claude_rule が
+#   _ASK_EXEMPTIONS との一致を検証する。
+ask_hook_owned = [
+  "rm",
 ]
 # 承認の余地なく拒否。
 # 判断基準: 外部に出る / システムを変える / 取り返しがつかない / 規約違反。
