@@ -225,7 +225,7 @@ def test_claude_matcher_omitted_when_not_declared():
 def test_claude_settings_merge_preserves_other_keys():
     existing = {"env": {"FOO": "1"}, "includeCoAuthoredBy": False}
     merged = gen.merge_claude_settings(existing, COMMON)
-    assert merged["env"] == {"FOO": "1"}
+    assert merged["env"] == {"FOO": "1", "DISABLE_AUTOUPDATER": "1"}
     assert merged["includeCoAuthoredBy"] is False
     assert "hooks" in merged
     assert "permissions" in merged

@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+# mise config: {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}
+
 sudo -v
 
 echo "mise をインストール/更新します..."
@@ -31,7 +33,7 @@ if ! type python >/dev/null 2>&1; then
 fi
 
 mise self-update
-mise install
+mise -C "$HOME" install
 # npm backend (例: @bitwarden/cli) の shim 生成タイミング保険
 mise reshim
 

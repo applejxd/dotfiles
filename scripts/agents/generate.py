@@ -467,10 +467,14 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
 
 def merge_claude_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     out = dict(existing)
+    claude = common.get("claude", {})
+    if "auto_update" in claude:
+        out["env"] = dict(existing.get("env") or {})
+        out["env"]["DISABLE_AUTOUPDATER"] = "0" if claude["auto_update"] else "1"
     permissions = build_claude_permissions(common)
     # 新規セッションの権限モード。ask / deny と hook はどのモードでも効くので、
     # auto を既定にしても防御は残る。
-    mode = common.get("claude", {}).get("default_permission_mode")
+    mode = claude.get("default_permission_mode")
     if mode:
         permissions["defaultMode"] = mode
     out["permissions"] = permissions
@@ -627,6 +631,7 @@ def merge_gemini_settings(existing: dict[str, Any], _common: dict[str, Any]) -> 
 # generate.py が管理するキー一覧 (これら以外は触らない)
 COPILOT_MANAGED_KEYS = {
     "allowedUrls",
+    "autoUpdate",
     "deniedUrls",
     "includeCoAuthoredBy",
     "trustedFolders",
@@ -717,6 +722,8 @@ def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> 
     copilot = common.get("copilot", {})
 
     out = dict(existing)
+    if "auto_update" in copilot:
+        out["autoUpdate"] = bool(copilot["auto_update"])
     out["allowedUrls"] = list(web.get("allow_domains", []))
     deny = list(web.get("deny_domains", []))
     if deny:

@@ -5,11 +5,16 @@
 # Unix のみ
 .chezmoiscripts/000_unix/
 .chezmoiscripts/000_unix/**
+.chezmoiscripts/400_unix/
+.chezmoiscripts/400_unix/**
 .config/*
 # AI CLI の共通ポリシーは Windows native でも必要
 !.config/agents/
 !.config/agents/command_policy.py
 !.config/agents/common.toml
+# Windows 向け mise 設定は Herdr と AI CLI のみを宣言する
+!.config/mise/
+!.config/mise/config.toml
 # PowerShell プロファイルの実体 (Documents 配下は 1 行のローダーのみ)
 !.config/powershell/
 !.config/powershell/**

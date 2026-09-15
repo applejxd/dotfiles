@@ -1,0 +1,20 @@
+﻿Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# mise config: {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}
+
+$homeDir = {{ .chezmoi.homeDir | toJson }}
+$miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
+if (-not $miseCommand) {
+  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+  $miseCommand = Get-Command mise -CommandType Application -ErrorAction Stop
+}
+
+& $miseCommand.Path -C $homeDir install
+if ($LASTEXITCODE -ne 0) {
+  throw "mise install failed with exit code $LASTEXITCODE"
+}
+& $miseCommand.Path reshim
+if ($LASTEXITCODE -ne 0) {
+  throw "mise reshim failed with exit code $LASTEXITCODE"
+}

@@ -14,6 +14,8 @@
 | 目的 | 文書 |
 | --- | --- |
 | リポジトリ全体の構成を知る | [プロジェクト構造](spec/structure.md) |
+| Herdr を mise で導入・更新する | [Herdr の管理](spec/structure.md#herdr-の管理) |
+| Claude Code / Copilot CLI を mise で管理する | [mise による CLI 管理](spec/structure.md#mise-による-cli-管理) |
 | 開発環境を準備して検証する | [開発ガイド](spec/development.md) |
 | Bitwarden / sops の仕組みを知る | [セキュリティ](spec/security.md) |
 | sops + age を導入・復旧する | [Secret管理セットアップ](spec/sops-age.md) |

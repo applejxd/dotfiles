@@ -53,19 +53,46 @@ chezmoi apply             # gitconfig user セクション、Unix では sops ag
 
 依存関係スクリプトをスキップしたい場合は `chezmoi apply --exclude=scripts`。
 
+### Claude Code / Copilot CLI の mise 管理
+
+Claude Code (`claude-code`) と Copilot CLI (`copilot`) の本体は
+`~/.config/mise/config.toml` に宣言し、**通常の `mise install` で一括導入**します。
+mise の aqua backend から公式ネイティブバイナリを取得するため、npm 版は不要です。
+Unix の uv も mise にまとめ、旧 `010_tools.sh` は廃止しました。
+Codex CLI の自動インストールは行いません。
+
+Linux / WSL / macOS は両方、Windows は Copilot CLI を導入し、`applejxd` 以外では
+Claude Code も導入します。既存の OS / username 別の導入範囲は変えません。
+OS 別の mise セットアップを先に実行し、Herdr 連携と Unix の DeepWiki MCP 登録を
+その後に行います。設定・認証・既存の MCP / hook は保持します。
+
+CLI 自身の自動更新は `common.toml` から無効化し、更新元を mise に統一します。
+ホームディレクトリで次を実行してください。
+
+```bash
+mise upgrade claude-code copilot
+chezmoi apply
+```
+
+Windows の `applejxd` は `mise upgrade copilot` のみを使います。
+自動更新を止めるため、新機能・セキュリティ修正の取り込みには定期的な更新が必要です。
+実行順と旧インストーラー版からの移行は
+[mise による CLI 管理](docs/spec/structure.md#mise-による-cli-管理)を参照してください。
+
 ### Herdr と agent integration
 
-Windows native、Linux、WSL では、`chezmoi apply` 時に公式インストーラーから Herdr を
-ユーザースコープへ導入します。Windows のバイナリは
-`%LOCALAPPDATA%\Programs\Herdr\bin`、Linux / WSL では `~/.local/bin` に配置されます。
-macOS は現在の自動導入対象外です。
+Windows native、Linux、WSL では、`chezmoi apply` 時に **mise** で Herdr を
+ユーザースコープへ導入します。`~/.config/mise/config.toml` の `herdr = "latest"` を
+使い、mise の aqua backend が公式 GitHub Releases のバイナリを取得します。
+Windows ではこの設定に Herdr と上記 AI CLI のみを配備し、Unix 専用ツールは導入しません。
+macOS は従来どおり Herdr の自動導入対象外です。
 
 agent integration は設定ファイルの配備後に毎回冪等に再適用されます。
 
 | chezmoi username | integration | 前提となる agent CLI |
 | --- | --- | --- |
-| `applejxd` | GitHub Copilot CLI | Windows は Winget、Linux / WSL は公式 installer で導入 |
-| その他 | Claude Code | Windows / Linux / WSL は公式 installer で導入 |
+| `applejxd` | GitHub Copilot CLI | mise で導入 |
+| その他 | Claude Code | mise で導入 |
 
 Herdr は `~/.copilot/settings.json` または `~/.claude/settings.json` の既存設定を保持し、
 Herdr 管理の hook entry だけを追加・更新します。現在の状態は次で確認できます。
@@ -80,7 +107,16 @@ herdr integration status
 `chezmoi apply` のたびに再生成されるため、Herdr 本体の更新後もスキルが追従します。
 
 初回適用後に `herdr` が見つからない場合は、新しいターミナルを開いてください。
-以後の Herdr 本体の更新は `herdr update` で行います。
+以後は `herdr update` ではなく、mise で本体を更新してから integration と skill を
+再生成します（ホームディレクトリで実行）。
+
+```bash
+mise upgrade herdr
+chezmoi apply
+```
+
+旧インストーラー版が残っている場合の確認・移行手順は
+[Herdr の管理](docs/spec/structure.md#herdr-の管理)を参照してください。
 
 Windows ARM64 では、Herdr 公式の x86_64 ビルドが Windows のエミュレーション上で動作します。
 

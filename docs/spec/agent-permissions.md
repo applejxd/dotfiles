@@ -47,8 +47,10 @@ test/agents/
     test_check_file_read.py                  ファイル読み取り遮断と glob 照合の test
     test_generate_copilot_plugins.py         enabledPlugins 生成 / 重複解消の unit test
     test_generate_hooks.py                   hook 生成 / 外部 hook 温存の unit test
+    test_generate_updates.py                 CLI 自動更新停止 / 既存 env 保持
     test_generate_sandbox.py                 sandbox 設定生成の unit test
     test_herdr_integration.py                Herdr統合の生成・保持
+    test_mise_agents.py                      mise 導入後の DeepWiki MCP 設定
     test_modifier_wrappers.py                modify_ ラッパーの end-to-end test
     test_redirect_tmp.py                     一時パス誘導の判定
     test_skill_frontmatter.py                SKILL.md frontmatter検証
@@ -61,6 +63,22 @@ project の uv 環境や外部 `tomli` には依存しない。
 
 `modify_private_*` のように `private_` を付けることで mode 600 を保持し、
 `~/.copilot/settings.json` に含まれる `gho_xxx` トークンを保護している。
+
+## CLI 本体の更新
+
+Claude Code / Copilot CLI 本体は mise で管理します。CLI 側で別の版へ更新されて
+mise の指定や切り戻しが効かなくなることを避けるため、自動更新もここから停止します。
+
+| `common.toml` | 生成先 |
+| --- | --- |
+| `[claude] auto_update = false` | `~/.claude/settings.json` の `env.DISABLE_AUTOUPDATER = "1"` |
+| `[copilot] auto_update = false` | `~/.copilot/settings.json` の `autoUpdate = false` |
+
+Claude の既存 `env` はこのキーだけを上書きし、それ以外の環境変数を保持します。
+どちらも共通設定にキーがなければ既存値には触れません。
+`DISABLE_AUTOUPDATER` はバックグラウンド更新のみを止めるため、手動の
+`claude update` / `copilot update` も使わず、mise で更新してください。
+導入順と更新手順は [mise による CLI 管理](structure.md#mise-による-cli-管理)を参照。
 
 ## 3 層構成
 

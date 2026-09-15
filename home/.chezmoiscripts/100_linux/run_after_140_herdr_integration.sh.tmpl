@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-herdr_path="${HOME}/.local/bin/herdr"
+# 125 の mise bootstrap は別プロセスなので、PATH の activate に依存しない。
+mise_path="${HOME}/.local/bin/mise"
+herdr_path="$("$mise_path" -C "$HOME" which herdr)"
 if [[ ! -x "$herdr_path" ]]; then
     echo "Herdr is not available at ${herdr_path}" >&2
     exit 1
@@ -19,12 +21,20 @@ normalize_trailing_newline() {
 }
 
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
-"$herdr_path" integration install copilot
-normalize_trailing_newline "${HOME}/.copilot/settings.json"
+agent_command="copilot"
 {{- else }}
-"$herdr_path" integration install claude
-normalize_trailing_newline "${HOME}/.claude/settings.json"
+agent_command="claude"
 {{- end }}
+agent_path="$("$mise_path" -C "$HOME" which "$agent_command")"
+if [[ ! -x "$agent_path" ]]; then
+    echo "${agent_command} is not available at ${agent_path}" >&2
+    exit 1
+fi
+# shell の activate 前でも、125 で導入した CLI を Herdr から見つける。
+PATH="$(dirname "$agent_path"):$PATH"
+export PATH
+"$herdr_path" integration install "$agent_command"
+normalize_trailing_newline "${HOME}/.${agent_command}/settings.json"
 
 skill_dir="${HOME}/.claude/skills/herdr"
 skill_path="${skill_dir}/SKILL.md"

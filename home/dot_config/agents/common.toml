@@ -3,7 +3,7 @@
 # 生成先:
 #   ~/.claude/settings.json                  -> [bash] [file] [web] [claude]
 #   ~/.copilot/permissions-config.json       -> [bash.allow] [copilot.locations]
-#   ~/.copilot/settings.json (一部キーのみ)   -> [web] [copilot.trusted_folders]
+#   ~/.copilot/settings.json (一部キーのみ)   -> [web] [copilot]
 #
 # 2 層構成:
 #   1. permission リスト (本ファイル由来。Claude のみ。CLI 本体が評価する)
@@ -719,6 +719,10 @@ seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runt
 # Claude 固有
 # ---------------------------------------------------------------------------
 [claude]
+# 本体は mise で管理し、CLI 側のバックグラウンド更新を止める。
+# settings.json の env.DISABLE_AUTOUPDATER="1" へ変換する。
+auto_update = false
+
 # 新規セッションの権限モード (~/.claude/settings.json の permissions.defaultMode)
 #   "default" (= manual): 読み取り以外は都度プロンプト
 #   "acceptEdits"       : 読み取り + ファイル編集 + 一般的な filesystem コマンド
@@ -737,6 +741,9 @@ mcp_deny = [
 # Copilot 固有
 # ---------------------------------------------------------------------------
 [copilot]
+# settings.json の autoUpdate へ反映。本体の更新は mise upgrade copilot で行う。
+auto_update = false
+
 # Copilot が作成するコミットへ Co-authored-by trailer を追加しない
 include_co_authored_by = false
 

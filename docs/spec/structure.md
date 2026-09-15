@@ -29,13 +29,15 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 
 | 範囲 | 対象 | 主な役割 |
 | --- | --- | --- |
-| `000_unix/` | Linux / macOS | 共通ツール、zinit補完の保守 |
+| `000_unix/` | Linux / macOS | zinit補完の保守 |
 | `100_linux/` | Ubuntu / WSL | OSパッケージ、mise、shell、Herdr |
-| `200_mac/` | macOS | Homebrew、macOS defaults |
+| `200_mac/` | macOS | Homebrew、mise、macOS defaults |
 | `300_windows/` | Windows native | Winget/Scoop/Chocolatey、レジストリ、Terminal、AI CLI統合 |
+| `400_unix/` | Linux / macOS | mise 導入後の Claude Code MCP 設定 |
 
 スクリプト名は `run_once_XXX_name`、`run_onchange_XXX_name`、
 `run_after_XXX_name` などのchezmoi属性と3桁番号で順序を管理します。
+同じ `before` / `after` 内ではディレクトリを含むパス順です。
 
 - `run_once_`: 同じ内容が成功済みなら再実行しない
 - `run_onchange_`: 内容が変わった場合に再実行する
@@ -46,13 +48,80 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 
 | 環境 | 主な導入経路 |
 | --- | --- |
-| Windows native | Winget、Scoop、Chocolatey、PowerShell |
+| Windows native | Winget、Scoop、Chocolatey、mise（Herdr / AI CLI）、PowerShell |
 | Ubuntu | apt、mise |
 | WSL | Windows連携設定、apt、mise |
 | macOS | Homebrew、mise |
 
 OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別スクリプトで
 吸収します。秘密情報はソースへ直接書かず、Bitwardenとsops/ageを使用します。
+
+## mise による CLI 管理
+
+本体の宣言は `home/dot_config/mise/config.toml.tmpl` に集約します。
+`claude-code = "latest"` / `copilot = "latest"` は mise の aqua backend から
+公式ネイティブバイナリを取得します。Linux / WSL / macOS は両方、Windows は
+Copilot CLI と Herdr のみ（`applejxd` 以外では Claude Code も）を宣言します。
+Windows 用設定には Unix 専用ツールや設定を含めません。
+Unix の uv も同じ mise 設定で導入します。uv の重複導入と使用しなくなった
+Codex CLI の自動インストールを持っていた `000_unix/010_tools` は廃止しました。
+Codex の既存設定や Windows の Codex App はこの変更の対象外です。
+
+ツールごとの導入コマンドは持たず、設定配備後にホームディレクトリを基準として
+**引数なしの `mise install`** を実行します。
+
+| 環境 | mise の一括導入 | 後続の設定 |
+| --- | --- | --- |
+| Linux / WSL | OS 依存パッケージの後、`100_linux/125_mise` | `100_linux/140_herdr_integration` → `400_unix/410_claude_mcp` |
+| macOS | Homebrew の後、`200_mac/225_mise` | `400_unix/410_claude_mcp` |
+| Windows | `310_winget` で mise を導入し、設定配備後に `310_packages/313_mise` | `343_herdr_integration` |
+
+mise の各スクリプトは `run_onchange_after_` とし、設定テンプレートのハッシュを
+含めます。ツール宣言が変われば一括導入が再実行されます。
+Unix の DeepWiki MCP 登録は `.claude.json` の user scope に未登録の場合だけ行い、
+既存のカスタム設定は上書きしません。壊れた JSON はエラーで停止します。
+
+CLI 自身の自動更新は `common.toml` の `[claude] auto_update = false` /
+`[copilot] auto_update = false` から停止します。mise で指定・固定した版と、
+CLI が独自に更新した版の不一致を防ぐためです。
+更新はホームディレクトリで `mise upgrade claude-code copilot` を実行し、
+`chezmoi apply` で後続設定を再適用します。Windows の `applejxd` は
+`mise upgrade copilot` のみです。自動更新がなくなる分、修正を取り込むには
+定期的な更新が必要です。
+
+旧 installer のランチャーや Windows の Winget 版 Copilot は自動削除しません。
+新しいターミナルで `mise which claude` / `mise which copilot` と実際の
+`command -v` / `Get-Command` の結果を比べ、mise の実体または shim が選ばれる
+ことを確認します。旧版が優先される場合は CLI を終了し、旧ランチャーの削除や
+旧パッケージのアンインストール、PATH の整理を行ってください。
+`~/.claude/`、`~/.claude.json`、`~/.copilot/` の設定・認証・履歴は削除しません。
+
+## Herdr の管理
+
+Herdr は `home/dot_config/mise/config.toml.tmpl` の `herdr = "latest"` で管理します。
+Linux / WSL と Windows native にのみ展開し、macOS は従来どおり自動導入しません。
+Windows の `.config/mise/config.toml` は `.chezmoiignore.tmpl` の除外例外とし、
+上記の AI CLI とともに宣言します。
+
+Linux では `125`、Windows では `313` の `mise install` で Herdr も導入します。
+後続の `140` / `343` の `run_after` は再インストールせず、
+`mise which herdr` で解決した実体を使って agent integration とリリース一致版の
+skill を生成します。選択した agent CLI の mise 管理パスを PATH の先頭へ置くため、
+初回の shell activate 前でも連携できます。
+どちらもホームディレクトリを基準に mise を実行するため、apply を起動した
+プロジェクトのツール指定や PATH 上の旧 Herdr に依存しません。
+
+本体の更新はホームディレクトリで `mise upgrade herdr` を実行し、続けて
+`chezmoi apply` で integration と skill を再生成します。mise の管理情報と実体が
+食い違うため、`herdr update` は使いません。
+
+旧インストーラーの `~/.local/bin/herdr`（Linux / WSL）や
+`%LOCALAPPDATA%\Programs\Herdr\bin\herdr.exe`（Windows）は自動削除しません。
+移行後は新しいターミナルで `mise which herdr` と、Linux なら `command -v herdr`、
+PowerShell なら `Get-Command herdr` を確認し、mise の実体または shim が選ばれる
+ことを確認してください。旧版が選ばれる場合は、Herdr を終了してから旧バイナリだけを
+削除するか、mise の shim が先に見つかるよう PATH を整理します。
+Herdr のユーザーデータ・設定は削除しません。
 
 ## PowerShellプロファイル
 

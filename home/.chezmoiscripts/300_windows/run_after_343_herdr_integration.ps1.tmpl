@@ -1,21 +1,39 @@
 ﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$herdrPath = Join-Path $env:LOCALAPPDATA 'Programs\Herdr\bin\herdr.exe'
+$homeDir = {{ .chezmoi.homeDir | toJson }}
+$miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
+if (-not $miseCommand) {
+  # 同じ apply の Winget スクリプトで mise を初めて導入した場合。
+  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+  $miseCommand = Get-Command mise -CommandType Application -ErrorAction Stop
+}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
+$agentCommand = 'copilot'
+{{- else }}
+$agentCommand = 'claude'
+{{- end }}
+$herdrPath = & $miseCommand.Path -C $homeDir which herdr
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($herdrPath)) {
+  throw "Failed to resolve Herdr via mise (exit code $LASTEXITCODE)"
+}
 if (-not (Test-Path -LiteralPath $herdrPath -PathType Leaf)) {
   throw "Herdr is not available at $herdrPath"
 }
 
-{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
-& $herdrPath integration install copilot
-{{- else }}
-& $herdrPath integration install claude
-{{- end }}
+$agentPath = & $miseCommand.Path -C $homeDir which $agentCommand
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($agentPath)) {
+  throw "Failed to resolve $agentCommand via mise (exit code $LASTEXITCODE)"
+}
+if (-not (Test-Path -LiteralPath $agentPath -PathType Leaf)) {
+  throw "$agentCommand is not available at $agentPath"
+}
+$env:Path = (Split-Path -Parent $agentPath) + ';' + $env:Path
+& $herdrPath integration install $agentCommand
 if ($LASTEXITCODE -ne 0) {
   throw "Herdr integration installation failed with exit code $LASTEXITCODE"
 }
 
-$homeDir = {{ .chezmoi.homeDir | toJson }}
 $skillDir = Join-Path $homeDir '.claude\skills\herdr'
 $skillPath = Join-Path $skillDir 'SKILL.md'
 

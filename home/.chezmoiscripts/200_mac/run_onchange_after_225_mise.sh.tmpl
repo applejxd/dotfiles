@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# mise config: {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}
+
+mise_path="${HOME}/.local/bin/mise"
+if [[ ! -x "$mise_path" ]]; then
+    if command -v mise >/dev/null 2>&1; then
+        mise_path="$(command -v mise)"
+    else
+        curl -fsSL https://mise.run | sh
+    fi
+fi
+
+"$mise_path" -C "$HOME" install
+"$mise_path" reshim

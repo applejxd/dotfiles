@@ -2,6 +2,15 @@
 # https://mise.jdx.dev/configuration.html
 
 [tools]
+copilot = "latest"
+{{- if or (ne .chezmoi.os "windows") (not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username)) }}
+claude-code = "latest"
+{{- end }}
+{{- if or (eq .chezmoi.os "linux") (eq .chezmoi.os "windows") }}
+herdr = "latest"
+{{- end }}
+
+{{- if ne .chezmoi.os "windows" }}
 usage = "latest" # for mise completion
 
 # CLI
@@ -77,3 +86,4 @@ all_compile = true
 experimental = true
 # for API keys
 sops.age_key_file = "~/.config/sops/age/keys.txt"
+{{- end }}
