@@ -38,6 +38,8 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   `description` は二重引用符で囲む（囲まないと CLI がスキルを黙って読み飛ばす）
 - AI CLI の permission / hook / sandbox は `home/dot_config/agents/common.toml.tmpl` が
   単一ソース。生成先（`~/.claude/settings.json` 等）を直接編集しない
+- `common.toml.tmpl` のコメントは「その行を編集するときに要る注記」だけにする。
+  仕組み・判断基準・既知の不具合・実測値は `docs/spec/agent-permissions.md` が正本
 - 秘密情報はソースに書かず `SUDO_PASSWORD` / Bitwarden / sops + age を使う
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない
 - コミットメッセージは Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）

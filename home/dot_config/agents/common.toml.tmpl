@@ -1,61 +1,38 @@
-# AI CLI 統合 permission 設定 (Claude Code / Copilot CLI 両対応の単一ソース)
+# AI CLI の permission / hook / sandbox / MCP の単一ソース。
 #
 # 生成先:
-#   ~/.claude/settings.json                  -> [bash] [file] [web] [claude]
-#   ~/.copilot/permissions-config.json       -> [bash.allow] [copilot.locations]
-#   ~/.copilot/settings.json (一部キーのみ)   -> [web] [copilot]
-#   ~/.copilot/mcp-config.json               -> [[mcp]]
-#   ~/.codex/config.toml の mcp_servers      -> [[mcp]]
+#   ~/.claude/settings.json              <- [bash] [file] [web] [claude] [sandbox] [[hooks]]
+#   ~/.copilot/permissions-config.json   <- [bash.allow] [copilot.locations]
+#   ~/.copilot/settings.json             <- [web] [copilot] [sandbox]
+#   ~/.copilot/hooks/from-claude.json    <- [[hooks]]
+#   ~/.copilot/mcp-config.json           <- [[mcp]]
+#   ~/.codex/config.toml の mcp_servers  <- [[mcp]]
 #
-# 2 層構成:
-#   1. permission リスト (本ファイル由来。Claude のみ。CLI 本体が評価する)
-#   2. hook (check_bash.py) が同じリストを読んで deny / ask を強制
-#      (deny は両 CLI で有効。ask は Claude のみ。Copilot は下記 ★ のバグで
-#       hook の ask が自動承認される)
+# ★仕組み・判断基準・既知の不具合・実測値は docs/spec/agent-permissions.md が正本。
+#   値を足す前にそちらを読むこと。ここには「その行を編集するときに要る注記」
+#   だけを置き、経緯は書かない。
 #
-# Claude Code は permission リストの既知バグが複数 open (cd && bypass, git -C bypass
-# 等。anthropics/claude-code#59498, #59006, #20085 ほか)。
-# hook 側は normalize してから照合するので、これらのバイパスも捕捉できる。
-# 逆に hook は設定を読めないと機能しないため、permission リストを併用して
-# 多層にしている (hook 自体も設定を読めないときは fail-closed で deny する)。
+# このファイルは chezmoi テンプレート。ユーザ・OS の出し分けはここに書く
+# (生成側は展開後の表だけを見る)。
 
 # ---------------------------------------------------------------------------
 # Bash 系
 # ---------------------------------------------------------------------------
 [bash]
-# 人が書くのはこの 3 リストだけ。パターンは素のトークン列で書く
-# (例: "git push")。生成/参照の流れ:
-#
-#   generate.py   -> ~/.claude/settings.json の permissions に Bash(<pattern>:*) を展開
-#   check_bash.py -> 同じリストを読み、deny は Claude / Copilot 双方で、
-#                    ask は Claude で強制する (Copilot の ask は下記 ★ 参照)
-#
-# 2 層に配る理由: hook は設定の読み込みに失敗しうる。permission リストは
-# CLI 本体が評価するので、hook が落ちても Claude 側の deny は生き残る。
-# (hook 自体も設定を読めないときは fail-closed で deny する)
-#
-# 照合規則: normalize 後のセグメント先頭トークン一致。
-# normalize は cd && X -> X, git -C foo X -> git X, compound 分割 (&&, ;, |) を実施。
-# これにより作業ディレクトリを付け替えるバイパスも捕捉できる。
-#
-# 評価順は deny -> ask -> allow。より具体的なパターンを deny に置けば
-# 一般形を ask にできる (例: "git reset --hard" は deny、"git reset" は ask)。
+# 人が書くのはこの 3 リストだけ。パターンは素のトークン列 (例: "git push")。
+# 照合は normalize 後のセグメント先頭トークン一致
+# (cd && X -> X, git -C foo X -> git X, compound は &&/;/| で分割)。
+# 評価順は deny -> ask -> allow。具体形を deny に置けば一般形を ask にできる
+# (例: "git reset --hard" は deny、"git reset" は ask)。
+# see docs/spec/agent-permissions.md 「3 層構成」「`ask` に載せるかどうかの判断軸」
 
 # 自動承認。読み取り専用・冪等なものだけ
 #
-# ★注意: Copilot CLI へは「先頭トークンのコマンド名」だけが渡る
-#   (permissions-config.json は deny/ask 非対応)。つまり "git diff" と書くと
-#   Copilot では git 全体が承認される。
-#   仕様どおりなら ask/deny が引数の粒度を補うが、それは「破壊的な形が
-#   ask/deny に載っている」ことが前提。載せずに allow だけ足すと、Copilot では
-#   そのコマンドが丸ごと無防備になる (現時点の穴: uv pip install / uv add /
-#   uv tool install / mise install / mise use -g / docker run --privileged /
-#   docker run -v /:... / docker exec / cmake --install はどれも沈黙する)。
-#   なお現状の Copilot は ask を自動承認する既知バグを抱える (#3590, OPEN)。
+# ★Copilot へは **先頭トークンのコマンド名だけ** が渡る。"git diff" と書くと
+#   Copilot では git 全体が承認される。破壊的な形を ask / deny に載せずに
+#   allow だけ足すと、そのコマンドが Copilot で丸ごと無防備になる。
 #
-# 作業ディレクトリを付け替える形式 (-C オプション) は allow に入れない。
-# permission を回避する既知のバイパス形式 (anthropics/claude-code#59006) であり、
-# 対策を用意している意図と矛盾する。
+# ★作業ディレクトリを付け替える形式 (-C) は allow に入れない (バイパス経路)。
 allow = [
   "git diff",
   "git status",
@@ -79,38 +56,22 @@ allow = [
 # 提案 -> ユーザーが承認 -> そのまま実行。
 # 「危険だが承認すれば妥当」なもの。取り返しがつく変更はここに置く。
 #
-# ★ ask に載せると、Claude Code の LLM 判定モードに到達しない。
-#   Claude Code は「permissions.ask に一致するツールはどのモードでも
-#   自動承認されない」と明記され、hook の ask もプロンプトを最低保証する。
-#   ただし Copilot CLI は 1.0.53 以降、hook の ask を数十 ms で自動承認する
-#   既知バグがある (github/copilot-cli#3590, OPEN)。deny は影響を受けない。
-#   → Copilot でも確実に止めたいものは ask ではなく deny に置くか、
-#     エージェント側で明示確認する (判別は COPILOT_CLI 環境変数)。
-#     詳細は docs/research/agent-harness-comparison.md の
-#     「Copilot CLI では hook の ask が自動承認される」を参照。
-#   → LLM の判断に委ねたいコマンドは、allow ではなく「どのリストにも
-#     載せない (未掲載)」にする。allow に入れると手動モードでも無条件に
-#     通ってしまい、かえって緩くなる。
-#
-#   未掲載にしても hook の個別 deny チェックは効く。
-#   (check_interpreter_inline_code / check_pipe_to_shell /
-#    check_curl_file_send / check_reverse_shell など)
-#
-# ask に残す基準:
+# ask に残す基準 (どれかに当たるもの):
 #   1. 不可逆か            — 復旧できない削除・履歴の書き換え
 #   2. 外部に見えるか      — リモートへの書き込み、外部との通信
 #   3. 秘密や防御に触るか  — 認証情報、hook や permission の設定
+# 引数を見れば妥当性が判断できるものは **未掲載** にして LLM 判定へ委ねる。
+# allow に入れてはいけない (手動モードでも無条件に通り、かえって緩くなる)。
 #
-# 逆に「引数を見れば妥当性が判断できる」「hook が危険な形を個別に捕捉できる」
-# ものは未掲載にして LLM 判定に委ねる (uvx / npx / python -c / npm install 等)。
-#
-# 無人実行では安全側に倒れる (Claude dontAsk は自動拒否、-p はスキップ、
-# Copilot cloud agent は deny 扱い) ので、緩めても無人時のリスクは増えない。
+# ★Copilot は hook の ask を自動承認する既知バグがある。確実に止めたいものは
+#   ask ではなく deny に置く。
+# see docs/spec/agent-permissions.md 「`ask` に載せるかどうかの判断軸」、
+#     docs/research/agent-harness-comparison.md 「hook の ask が自動承認される」
 ask = [
   # 削除は承認制。壊滅的なターゲット (ルート・ホーム・作業ディレクトリ全体・
   # .git 配下) は check_rm_root_guard が deny する。
   # 逆に workspace 内と確証できる削除は hook が承認を省いて auto / assisted
-  # へ委ねる (詳細は docs/spec/agent-permissions.md の「rm の承認範囲」)。
+  # へ委ねる (詳細は docs/spec/agent-permissions.md の「`rm` の承認範囲」)。
   # この委譲を成立させるため ask_hook_owned にも載せている (下の注記を参照)
   "rm",
   # 未追跡ファイルを消すので git でも復旧できない
@@ -136,16 +97,9 @@ ask = [
   # GET / HEAD / query は未掲載、mutation と判定不能形式だけ ask にする。
   # グローバルに常駐する (pipx run は未掲載で LLM 判定に委ねる)
   "pipx install",
-  # プロジェクトの外に残る変更だけを ask にする。判断軸は「影響範囲が
-  # プロジェクト内で完結するか」。
-  #   プロジェクト内 (未掲載 / LLM 判定): uv add / uv remove / uv pip install /
-  #     uv sync / uv lock / mise install / mise use (ローカル)
-  #   プロジェクト外 (ask): 下記
-  # mise 系はここに書けない。command_policy が mise を runner として扱い、
-  # normalize が先頭の `mise` を落とすため前方一致しない
-  # (`mise use -g` / `mise settings set` / `mise global` は
-  #  check_global_env_mutation が担当)。
-  # `cmake --build --target install` もフラグの位置が自由なので同関数が見る。
+  # プロジェクトの外に残る変更だけを ask にする (内で完結するものは未掲載)。
+  # mise 系はここに書けない。normalize が runner の先頭 `mise` を落とすため
+  # 前方一致しない (check_global_env_mutation が担当)。
   "uv tool install",
   "uv tool uninstall",
   "uv tool upgrade",
@@ -162,28 +116,11 @@ ask = [
   "git config",
 ]
 # ★ask のうち「hook が承認要否まで判定する」もの。
-#
-#   ここに書いたコマンドは ask に残したまま (hook が読む policy の一部)、
-#   Claude の permissions.ask へは出力しない。check_bash.py の
-#   _ASK_EXEMPTIONS が「workspace 内の rm」のように承認を省く条件を持つため。
-#
-#   理由: Claude の explicit ask は **どのモードでも自動承認されない**
-#   (bypassPermissions を含む)。また PreToolUse hook の allow は
-#   v2.1.77 以降 ask を上書きしない。したがって静的 ask を出すと、
-#   hook が黙っても auto で必ずプロンプトが出て exemption が無効化される。
-#   ref: https://code.claude.com/docs/en/permission-modes
-#        「Actions no mode auto-approves ... Tools matched by an explicit ask rule」
-#
-#   トレードオフ: 静的 ask が無くなるので、hook が起動に失敗した場合は
-#   auto の classifier 頼りになる。deny 側 (check_rm_root_guard) は
-#   hook 内なので同じ前提。壊滅的ターゲットの防御は hook の可用性に依存する。
-#
-#   Copilot は permissions-config.json が allow 専用 (tool_approvals /
-#   allowed_directories) で ask を持たないため、この分岐の影響を受けない。
-#
-#   ここに足したら test_check_bash_decision.py の
-#   test_hook_owned_ask_is_not_emitted_as_a_static_claude_rule が
-#   _ASK_EXEMPTIONS との一致を検証する。
+#   ask には残しつつ Claude の permissions.ask へは出力しない
+#   (静的 ask を出すと hook の exemption がどのモードでも無効化されるため)。
+#   足したら check_bash.py の _ASK_EXEMPTIONS にも条件を書く。対応は
+#   test_hook_owned_ask_is_not_emitted_as_a_static_claude_rule が検証する。
+# see docs/spec/agent-permissions.md 「`rm` の承認範囲」
 ask_hook_owned = [
   "rm",
 ]
@@ -243,11 +180,8 @@ deny = [
   "ssh",
   # システム全体を汚す
   "npm install -g",
-  # ツール自身を置き換える操作。エージェントが実行する正当な理由が無く、
-  # 影響が全プロジェクトに及ぶ。バージョンを戻すには元のバージョンを
-  # 知っている必要があり、実質不可逆。
-  # (mise の self-update / implode は runner 扱いで normalize が先頭を落とすため
-  #  check_tool_self_update が担当する)
+  # ツール自身を置き換える操作 (実質不可逆で影響が全プロジェクトに及ぶ)。
+  # mise の self-update / implode は check_tool_self_update が担当する。
   "uv self update",
   "rustup self update",
   "chezmoi upgrade",
@@ -323,13 +257,9 @@ claude_write_ask_globs = [
 ]
 
 # Claude: Read(...) deny に展開。hook の bash ポリシーには反映しない
-# (ファイルアクセスの hook は別途必要なら作る)
 #
-# ★ `**/*key*` や `**/*token*` のような部分一致 glob は使わない。
-#   このリポジトリだけでも keyhac.bat / key_bindings.org / keymap_layer.drawio
-#   のような正当なファイルを巻き込み、エージェントが編集できなくなる
-#   (一般的には tokenizer.py / keyword.py / monkey.py なども誤検知する)。
-#   拡張子・接尾辞・既知のファイル名で具体的に指定する。
+# ★`**/*key*` のような部分一致 glob は使わない。keyhac.bat / tokenizer.py の
+#   ような正当なファイルを巻き込む。拡張子・接尾辞・既知の名前で指定する。
 claude_read_deny_globs = [
   "**/.ssh/**",
   "**/.gnupg/**",
@@ -409,22 +339,14 @@ claude_write_deny_globs = [
 # Web 系
 # ---------------------------------------------------------------------------
 [web]
-# Claude: WebFetch(domain:...) として permissions.allow へ展開 (自動承認のみ。
-#         ここに無いドメインを拒否する効果は無い)
-#         さらに sandbox.network.allowedDomains にも反映される。
-#         Claude は WebFetch の許可ルールからも sandbox の allowlist を作るので
-#         実質二重だが、permission 側の記法が変わっても崩れないよう明示する。
-# Copilot: settings.json の allowedUrls に直接反映
-#          (Copilot の sandbox にドメイン単位の制御は無く、allowOutbound /
-#           allowLocalNetwork の on/off だけ。allowedUrls は web fetch ツール層)
+# Claude: permissions.allow の WebFetch(domain:...) と
+#         sandbox.network.allowedDomains へ展開 (自動承認のみ。ここに無い
+#         ドメインを拒否する効果は無い)
+# Copilot: settings.json の allowedUrls (sandbox にドメイン単位の制御は無い)
 #
 # ★sandbox に効く wildcard は **先頭の `*.` と 単独の `*` だけ**。
-#   `example.*` のように他の位置に置いた wildcard は WebFetch には効くが
-#   sandbox 側は無視する (公式ドキュメントに明記)。
-#
-# ★許可外ドメインを「拒否」する network.strictAllowlist は Claude Code
-#   v2.1.219 以降が必要。それ未満では許可外は拒否ではなく **承認プロンプト**
-#   になるため、ネットワークは filesystem のような whitelist にはできない。
+#   `example.*` は WebFetch には効くが sandbox 側は無視する。
+# see docs/spec/agent-permissions.md 「ネットワーク」
 allow_domains = [
   "github.com",
   "api.github.com",
@@ -464,40 +386,25 @@ deny_domains = []
 # Sandbox 系 (OS レベルのファイルアクセス制御)
 # ---------------------------------------------------------------------------
 #
-# hook (check_bash.py) がコマンド文字列を正規表現でパースして拒否している
-# 「特定パスへのアクセス可否」を、OS レベルで強制される sandbox に移す。
-# sandbox は迂回耐性が高く (symlink や変数展開で抜けられない)、hook の保守も軽くなる。
+# 両 CLI とも whitelist (deny-by-default)。Claude は denyRead に "~/" を置き、
+# allowRead で穴を開けることで Copilot と同じ方式に揃えている。
 #
-# ## 両 CLI を whitelist (deny-by-default) で揃える
+# ★広い名前マッチの glob を deny に置かないこと。Claude の Linux sandbox は
+#   deny 対象の各パスに /dev/null を bind-mount するため、コマンド 1 回ごとに
+#   数千個の mount が必要になり実用に耐えない (実測値は docs 参照)。
 #
-# Copilot の sandbox は元から deny-by-default。Claude は既定が「read 全許可 +
-# deny を引く」ブラックリストだが、denyRead に "~/" を置いて allowRead で
-# 穴を開けることで同じ whitelist 方式にできる (公式ドキュメントに構成例あり)。
-# 書き込み側は両者とも元から whitelist (cwd + セッション temp + 明示許可のみ)。
+# ★パス記法は permission の Read()/Edit() glob とは別物。
+#   `~/` で home 相対、`/` で絶対、無印/`./` はプロジェクト相対
+#   (user 設定では ~/.claude 基準)。ホーム全体に効かせるなら `~/` を明示する。
+#   Copilot は絶対パス限定・ワイルドカード非対応・存在しないパスは無効。
 #
-# whitelist にする理由は迂回耐性だけではない。Claude の Linux sandbox は
-# deny 対象の **各パスに /dev/null を bind-mount する** 実装のため、
-# 広い名前マッチの glob deny は致命的になる。実測 (この環境) では
-# 名前マッチ 3 パターンだけで 2704 件、deny 全体で 3239 件に展開された。
-# → コマンド 1 回ごとに数千個の bind-mount が必要になり実用に耐えない。
-# また deny 対象が symlink を経由すると bwrap のセットアップごと失敗する
-# 既知の不具合がある (anthropics/claude-code#45451)。
-# whitelist なら deny は "~/" の 1 本で済み、どちらの問題も起きない。
-#
-# ## パス記法 (permission の Read()/Edit() glob とは別物)
-#
-# `~/` 始まりで home 相対、`/` 始まりで絶対、無印/`./` はプロジェクト相対
-# (ただし user 設定 ~/.claude/settings.json では無印/`./` は ~/.claude 基準)。
-# ホーム全体に効かせたいパターンは必ず `~/` を明示すること。
-# Copilot は **絶対パス限定・ワイルドカード非対応・存在しないパスは無効化**。
-#
-# 出典: https://code.claude.com/docs/en/sandboxing
-#       https://docs.github.com/copilot/concepts/agents/copilot-cli/understanding-local-sandboxing
+# see docs/spec/agent-permissions.md 「sandbox」
+#     https://code.claude.com/docs/en/sandboxing
+#     https://docs.github.com/copilot/concepts/agents/copilot-cli/understanding-local-sandboxing
 [sandbox]
 # 両 CLI 共通: whitelist の内側でも遮断する秘密情報 (read/write 両方)。
 # 公式に "Rules that you configure are always kept" とあり、自動付与に勝つ。
-# ここは whitelist の穴 (claude_read_allow) の中に秘密が置かれている場合の保険。
-# 広い名前マッチは上記のとおり bind-mount が爆発するので入れないこと。
+# whitelist の穴 (claude_read_allow) の中に秘密がある場合の保険。
 deny = [
   "~/.ssh", "~/.gnupg", "~/.config/sops/age", "~/.aws", "~/.netrc",
   "~/.npmrc", "~/.pypirc", "~/.docker/config.json",
@@ -516,14 +423,9 @@ deny = [
 ]
 
 # Claude のみ: read は許すが write を禁止する対象 (改竄防止)。
-# Copilot は deny-by-default で cwd の外に書けないため設定不要
-# (実測: /sandbox policy に $HOME 配下の read-write 許可は出てこない)。
-# `.git/config` / `.git/hooks` はリポジトリ相対で user 設定では表現できないが、
-# Claude sandbox の "Protected paths" が常時 write 保護しているので不要
-# (allowWrite でも解除できない)。cwd 配下のシェル起動ファイル・.gitconfig・
-# .claude/** や ~/.claude のほとんども同様に自動保護される。
-# → 下の claude_write_deny はその多重防御であり、cwd が $HOME の場合や
-#   sandbox の外で動く操作に備えた保険として残してある。
+# Claude sandbox の "Protected paths" がほぼ同じ範囲を常時保護しているので、
+# これは cwd が $HOME の場合などに備えた多重防御。
+# Copilot は deny-by-default で cwd の外に書けないため不要。
 claude_write_deny = [
   "~/.claude/hooks", "~/.claude/settings.json", "~/.claude/settings.local.json",
   "~/.copilot/hooks", "~/.copilot/permissions-config.json", "~/.config/agents",
@@ -533,39 +435,23 @@ claude_write_deny = [
 ]
 
 # Claude のみ: whitelist に開ける読み取りの穴。
-#
-# Copilot には allowDevToolAccess があり PATH 上のツール・パッケージ
-# マネージャのキャッシュ・レジストリを自動で read 許可するが、Claude には
-# 相当する仕組みが無い。そのため denyRead に "~/" を置くと $HOME 配下の
-# ツールチェーンが読めなくなるので、ここで手動補償する。
-# → **Copilot 側には渡さない**。渡すと deny-by-default で既に触れないパスを
-#    わざわざ許可することになり、Copilot の防御を弱めてしまう。
-#
+# Copilot の allowDevToolAccess に相当する仕組みが Claude に無いので手動補償する。
 # 上の deny はこの穴の内側でも効く (より具体的なパスが勝つ)。
 #
-# ★このマシンでしか使わないパス (/data1 等) はここに書かないこと。
-#   chezmoi 管理外の ~/.config/agents/local.toml に [sandbox] claude_read_allow として
-#   書けば、共有設定を汚さず chezmoi diff にも出さずに追記できる。
-#   詳細は docs/spec/agent-permissions.md の
-#   「このマシンだけで許可を足す」節を参照。
-#
-# ★ここは Copilot の実効ポリシー (実測) に合わせて絞ってある。作業中の
-#   プロジェクトは cwd として自動で read-write 許可されるので、
-#   `~/src` のような「他のリポジトリ」を開ける必要は無い
-#   (Copilot 側も許可していない)。別ディレクトリを読ませたいときは
-#   `claude --add-dir <path>` を使う。恒久的に必要なら local.toml へ。
+# ★Copilot 側には渡さない。deny-by-default で既に触れないパスを許可することに
+#   なり、防御が弱まる。
+# ★このマシンでしか使わないパスはここに書かない。chezmoi 管理外の
+#   ~/.config/agents/local.toml に [sandbox] claude_read_allow として書く。
+# ★実在するパスだけを書く (存在しないパスは bind-mount 失敗の要因になる)。
+# see docs/spec/agent-permissions.md 「このマシンだけで許可を足す」
 claude_read_allow = [
   # ツールチェーン (mise / uv / cargo / node / go / TeX)
-  # Copilot の allowDevToolAccess が自動許可する範囲に相当する。
-  # 注: 存在しないパスは bwrap の bind-mount が失敗する要因になり得るので、
-  # 実在するものだけを書くこと (GOPATH 未設定なら ~/go が既定)。
   "~/.local", "~/.cache", "~/.cargo", "~/.rustup", "~/.nvm", "~/.npm",
   "~/go", "~/.texlive",
   # ツールの設定 (git, gh, mise, nvim 等)。秘密は上の deny で個別に塞ぐ
   "~/.config", "~/.gitconfig",
-  # skill 置き場。Copilot も "Personal skill roots" として
-  # この 2 つ **だけ** を read-only 許可している (実測) ので合わせる。
-  # AI CLI の設定ディレクトリ全体 (~/.claude, ~/.copilot 等) は開けない。
+  # skill 置き場。Copilot も "Personal skill roots" としてこの 2 つだけを
+  # read-only 許可している (実測) ので合わせる。
   "~/.claude/skills", "~/.agents/skills",
 ]
 
@@ -583,28 +469,17 @@ claude_write_allow = [
   "~/.config/chezmoi",
 ]
 
-# Copilot のみ: 開発ツールへの許可を **明示的に** 与える。
-#
-# ★allowDevToolAccess は OFF にしている (copilot_allow_dev_tool_access)。
-#   自動付与は便利だが、**ユーザ指定の read-write を自動付与の read-only が
-#   上書きする** 不具合がある (github/copilot-cli#4846)。
-#   実測: ~/.cache/uv を readwritePaths に入れても ro bind され `uv run` が
-#   EROFS。dev-tool access を切ると同じ mount が rw になり解消した。
-#   MXC 側は同一パスの RO/RW 競合を「最も制限的な意図」= RO へ解決する実装で、
-#   出所 (ユーザ指定/自動発見) を区別しない。
-#   → 明示できないものに頼らず、必要な範囲を自分で列挙する方針へ倒した。
-#   判断の経緯は docs/adr/0008-explicit-dev-tool-grants.md
-#
-# 内容は claude_read_allow / claude_write_allow とほぼ同じになる。
-# 自動付与が無くなった以上、両 CLI が同じ補償を必要とするため。
+# Copilot のみ: 開発ツールへの許可を明示的に与える。
+# allowDevToolAccess を切っている (下記) ので、必要な範囲はここが全て負う。
+# 内容は claude_read_allow / claude_write_allow とほぼ同じ。
 # ホーム外 (/usr /opt) は Claude では既定で読めるので Copilot にだけ要る。
 #
-# すべて read-only を基本とし、書き込みはキャッシュ類に限る。
-# ~/.local/share/mise は **write に入れない** (PATH 上のツールを差し替えられる)。
+# ★~/.local/share/mise は write に入れない (PATH 上のツールを差し替えられる)。
+# see docs/adr/0008-explicit-dev-tool-grants.md
 copilot_read_allow = [
   # ツールチェーン。~/.local は bin (mise 本体) / share/mise / share/uv を含む
   # ★~/.cache と ~/.npm はここに書かない。下の copilot_write_allow と
-  #   同一パスで衝突し、RO 側に潰される (下記の注記)。
+  #   同一パスになり RO 側に潰される (下記の注記)。
   "~/.local", "~/.cargo", "~/.rustup", "~/.nvm",
   "~/go", "~/.texlive",
   # ツールの設定。秘密は上の deny で個別に塞ぐ
@@ -616,28 +491,18 @@ copilot_read_allow = [
   "/opt",                       # サードパーティのツールチェーン
 ]
 
-# ★read と write に **同じパス** を書いてはいけない。
-#   sandbox 実装は同一パスの RO/RW 競合を「最も制限的な意図」= RO へ解決する
-#   ため、write 指定が無言で無効になる (これが #4846 の本体)。
-#   read 権限は write 指定に含まれるので、書きたい場所は write だけに書く。
-#   generate.py の build_copilot_sandbox が重複を検出して apply を止める。
-#
-#   親子関係 (~/.local と ~/.local/state 等) は「より具体的なパスが勝つ」
-#   規則で解決されるので問題ない。
+# ★read と write に **同じパス** を書いてはいけない。同一パスの RO/RW 競合は
+#   RO へ解決され、write 指定が無言で消える。書きたい場所は write だけに書く
+#   (write は read を含む)。generate.py が重複を検出して apply を止める。
+#   親子関係 (~/.local と ~/.local/state 等) は具体的な方が勝つので問題ない。
 copilot_write_allow = [
   # パッケージマネージャのキャッシュ。書けないとビルドが毎回やり直しになる
   # (~/.cache/uv / ~/.cache/pre-commit / ~/.cache/go-build を含む)
   "~/.cache", "~/.npm", "~/.cargo/registry", "~/.local/state",
-  # uvx が実行のたびに一時環境を作る場所。RO だと
-  # `Read-only file system (os error 30) at ".../uv/tools/.tmpXXXX"` で
-  # pre-commit の uvx hook (ruff / yamllint) が落ちる。
-  # PATH には載らず `uvx <tool>` からしか使われないので、
-  # ~/.local/share/mise (PATH 上の git / python を差し替えられる) とは
-  # リスクの質が違う。元より ~/.cache/uv が rw な時点で
-  # uvx 経由のコードは同じ経路で汚染できる。
+  # uvx が実行のたびに一時環境を作る場所。RO だと pre-commit の uvx hook
+  # (ruff / yamllint) が os error 30 で落ちる。PATH には載らない。
   "~/.local/share/uv/tools",
-  # chezmoi の永続 state (chezmoistate.boltdb)。書けないと
-  # `chezmoi managed` / `chezmoi diff` が read-only file system で落ちる。
+  # chezmoi の永続 state。書けないと `chezmoi managed` / `diff` が落ちる。
   # 内側の key.txt は上の deny で塞いである。
   "~/.config/chezmoi",
 ]
@@ -646,19 +511,11 @@ copilot_write_allow = [
 # 上の copilot_read_allow / copilot_write_allow で明示的に置き換える。
 copilot_allow_dev_tool_access = false
 
-# Copilot 側の deniedPaths は上の `deny` から自動導出する
-# (generate.py の build_copilot_sandbox)。導出時の制約:
-#
-# - **ワイルドカードを含むエントリは除外**される。Copilot はワイルドカード
-#   非対応のため (公式ドキュメントに明記)。`~/**/.env` 等は Claude のみに効く。
-# - `~/` は絶対パスへ展開される。
-# - **存在しないパスの deny は Copilot 側で黙って無効化される**
-#   (`/sandbox policy` の Notes 節に does not exist と出る)。
-#   例: ~/.netrc ~/.npmrc ~/.pypirc は未作成なら enforce されないが、
-#   後で作られたときに次セッションから効くよう `deny` に残してある。
-#
-# Copilot は deny-by-default なので `claude_write_deny` / `claude_read_allow` /
-# `claude_write_allow` は渡さない (上の各コメント参照)。
+# Copilot 側の deniedPaths は上の `deny` から自動導出する。
+# ワイルドカードを含むものは除外される (Copilot は非対応)。
+# 存在しないパスの deny は黙って無効化されるが、後で作られたときに効くよう
+# `deny` には残してある。
+# see docs/spec/agent-permissions.md 「sandbox」
 #
 # なお ~/.ssh を denied にすると git over SSH は使えなくなるが、
 # sandbox の auth.git / auth.gh が GitHub へのトークンを注入するため
@@ -674,16 +531,10 @@ copilot_allow_dev_tool_access = false
 claude_network_strict = true
 
 # Claude のみ: sandbox のネットワーク許可に **追加** するドメイン。
-# [web] allow_domains と合算して sandbox.network.allowedDomains になる。
-#
-# [web] allow_domains は WebFetch (エージェントがページを読む) 用なので、
-# 「ドキュメントサイト」が並ぶ。一方こちらは shell コマンドが実際に通信する先
-# (パッケージの実体を配るCDN等) を書く。混ぜると、CDN が WebFetch で
-# 自動承認されたり、逆にドキュメントサイトに shell から繋げてしまうため分ける。
-#
-# claude_network_strict = true だと、ここに無いドメインへの接続は sandbox 内では
-# 失敗する。ただし失敗は即座の破綻ではなく「sandbox 外での再実行を求める
-# 承認プロンプト」に落ちるので、不足が判明したら足せばよい。
+# [web] allow_domains (WebFetch 用のドキュメントサイト) と合算される。
+# こちらには shell が実際に通信する先 (パッケージ配布 CDN 等) だけを書く。
+# 混ぜると CDN が WebFetch で自動承認されるので分けている。
+# 不足しても破綻はせず「sandbox 外での再実行を求める承認」に落ちる。
 claude_network_allow = [
   # Python (uv / pip): pypi.org はメタデータ、実体は files.pythonhosted.org
   "files.pythonhosted.org",
@@ -701,20 +552,11 @@ claude_network_allow = [
 ]
 
 # Claude のみ: sandbox が使う seccomp フィルタ (apply-seccomp) のパス。
-#
-# Claude はこのバイナリを npm のグローバル領域
-# (`npm -g config get prefix` 配下の lib/node_modules、/usr/lib、
-#  /usr/local/lib、/opt/homebrew/lib) でしか自動検出しない。
-# mise の npm: バックエンドは ~/.local/share/mise/installs/npm-.../ へ
-# 隔離するため自動検出されないので、公式が用意している代替手段
-# (「copy vendor/seccomp/* from sandbox-runtime and set
-#   sandbox.seccomp.bpfPath and applyPath in settings.json」) を使い、
-# mise の導入先を settings.json から直接指す。
-# これで `npm install -g` (= [bash] deny) を使わずに mise だけで完結する。
-#
-# {arch} は generate.py が x64 / arm64 に置換する。
-# パスが存在しないマシン (未導入 / 非対応 OS) では設定を出力しないので、
-# 共有の common.toml に書いても他環境を壊さない。
+# Claude は npm のグローバル領域しか自動検出しないが、このリポジトリは mise で
+# 入れるので、公式の代替手段 (settings.json でパスを直接指す) で橋渡しする。
+# {arch} は generate.py が x64 / arm64 に置換する。パスが無いマシンでは
+# 設定を出力しないので、共有の common.toml に書いても他環境を壊さない。
+# see docs/spec/agent-permissions.md 「seccomp」
 seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/{arch}/apply-seccomp"
 
 # ---------------------------------------------------------------------------
@@ -725,13 +567,8 @@ seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runt
 # settings.json の env.DISABLE_AUTOUPDATER="1" へ変換する。
 auto_update = false
 
-# 新規セッションの権限モード (~/.claude/settings.json の permissions.defaultMode)
-#   "default" (= manual): 読み取り以外は都度プロンプト
-#   "acceptEdits"       : 読み取り + ファイル編集 + 一般的な filesystem コマンド
-#   "auto"              : classifier (別モデル) が審査して自動承認する
-#   "dontAsk"           : 事前承認済みのツールのみ (CI 向け)
-#   "bypassPermissions" : 全て素通り (隔離環境専用)
-# ask / deny リストと hook はどのモードでも効くので、auto でも防御は残る。
+# 新規セッションの権限モード。default / acceptEdits / auto / dontAsk /
+# bypassPermissions から選ぶ。ask / deny と hook はどのモードでも効く。
 # 出典: https://code.claude.com/docs/en/permission-modes
 default_permission_mode = "auto"
 
@@ -749,12 +586,8 @@ auto_update = false
 # Copilot が作成するコミットへ Co-authored-by trailer を追加しない
 include_co_authored_by = false
 
-# 新規対話セッションの権限モード (~/.copilot/settings.json)
-#   "manual" (既定): write / command は都度プロンプト。read-only は自動承認
-#   "assisted"     : LLM の safety check が安全と判断した要求を自動承認し、
-#                    それ以外はプロンプト。experimental な auto-approval が必要
-#   "allow-all"    : 全て自動承認 (--allow-all 相当)
-# 再開セッション・非対話実行・--allow-all 済みセッションでは無視される。
+# 新規対話セッションの権限モード。manual / assisted / allow-all から選ぶ。
+# 再開セッション・非対話実行では無視される。
 # 出典: `copilot help config` (ローカル CLI が権威ある一覧を持つ)
 default_permission_mode = "assisted"
 # assisted は experimental な auto-approval 機能に依存する
@@ -769,13 +602,10 @@ trusted_folders = [
 ]
 
 # settings.json の enabledPlugins へ反映 (書いたキーだけを上書きし、
-# ここに無いプラグインの有効/無効はユーザーの設定をそのまま残す)。
+# ここに無いプラグインはユーザーの設定をそのまま残す)。
 #
-# anthropic-agent-skills マーケットプレイスの document-skills と
-# example-skills は **中身が完全に同一** (実測: skills 配下の差分は
-# 実行時生成物の __pycache__ のみ)。両方有効にすると pptx / docx / pdf /
-# xlsx など 17 スキルがすべて二重に登録されるため、実際に使われている
-# 方 (document-skills 側にのみ __pycache__ がある) を残して他方を落とす。
+# document-skills と example-skills は中身が同一で、両方有効にすると
+# 17 スキルが二重登録される。実際に使われている方だけを残す。
 [copilot.enabled_plugins]
 "document-skills@anthropic-agent-skills" = true
 "example-skills@anthropic-agent-skills" = false
@@ -791,31 +621,14 @@ approvals = [
 # ---------------------------------------------------------------------------
 # MCP サーバ (Claude Code / Copilot CLI / Codex CLI 共通の単一ソース)
 # ---------------------------------------------------------------------------
-# 生成先:
-#   ~/.copilot/mcp-config.json         <- generate.py --target copilot-mcp
-#   ~/.codex/config.toml の mcp_servers <- modify_config.toml がこの表から描画
-#   ~/.claude.json                     <- 410 のスクリプトが `claude mcp add`
-#                                         で登録する (未登録のものだけ)
-#
-# Claude だけ生成でなく CLI 経由なのは、user scope の定義先である
-# ~/.claude.json が chezmoi 管理外だから (ADR-0005: 秘密として扱う)。
-#
 # フィールド:
-#   id         サーバ名。生成物のキーになる (英数字・ハイフン・アンダースコアのみ。
-#              Claude Code の予約語・記法の制約に合わせる)
+#   id         サーバ名 (英数字・ハイフン・アンダースコアのみ)
 #   purpose    用途 (生成物には出ない。レビュー用)
 #   transport  "http" (url) か "stdio" (command / args)
-#   url        transport = "http" のエンドポイント
-#   command    transport = "stdio" で起動するコマンド
-#   args       command に渡す引数 (省略可)
 #
-# ★このファイルは chezmoi テンプレート (.chezmoitemplates/agents/common.toml)。
-#   ユーザ・OS で出し分けたいときは Go テンプレートの条件を書く。生成側
-#   (generate.py / Codex / Claude) は展開後の表だけを見るので、条件の解釈が
-#   1 か所で済む。
-#
-# ★トークンを common.toml に書かない。headers に秘密が要るサーバは、
-#   ここではなく環境変数参照として各 CLI 側で設定する (ADR-0005)。
+# ★トークンをここに書かない。headers に秘密が要るサーバは環境変数参照として
+#   各 CLI 側で設定する (ADR-0005)。
+# see docs/spec/agent-permissions.md 「MCP サーバ」
 [[mcp]]
 id = "deepwiki"
 purpose = "GitHub リポジトリのドキュメントを検索する"
@@ -825,18 +638,8 @@ url = "https://mcp.deepwiki.com/mcp"
 {{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
 
 # DuckDuckGo 検索。applejxd は Copilot CLI 内蔵の web 検索を使うので入れない。
-#
-# uvx で起動する。ddgs 本体を別途入れる形 (mise の pipx backend 等) より確実:
-#   - 追加のインストールと `mise reshim` が要らない
-#   - mise の npm / pipx backend はキャッシュ破棄で壊れる既知の事象がある
-#     (docs/spec/troubleshooting.md)
-#   - MCP サーバは sandbox 内で起動する (Copilot は sandboxMcpServers = true) が、
-#     uvx が使う ~/.cache/uv と ~/.local/share/uv/tools は書き込み許可済みで、
-#     pypi.org / files.pythonhosted.org も [web] と network_allow で許可済み
-#
 # ★`--from ddgs[mcp]` が要る。素の `uvx ddgs mcp` は
 #   "Error: MCP dependencies not installed" で起動しない (実測)。
-# see https://github.com/deedy5/ddgs (`ddgs mcp` は stdio)
 [[mcp]]
 id = "ddgs"
 purpose = "DuckDuckGo で web 検索する"
@@ -848,30 +651,21 @@ args = ["--from", "ddgs[mcp]", "ddgs", "mcp"]
 # ---------------------------------------------------------------------------
 # Hooks (Claude Code / Copilot CLI 共通の単一ソース)
 # ---------------------------------------------------------------------------
-# 生成先:
-#   ~/.claude/settings.json の hooks 節      <- claude_event / claude_matcher
-#   ~/.copilot/hooks/from-claude.json        <- copilot_event / copilot_matcher
-#
 # フィールド:
 #   id            識別子 (生成物には出ない。テスト・レビュー用)
-#   script        ~/.claude/hooks/ 配下のファイル名 (両 CLI とも同じ実体を共有)
-#   runner        起動コマンド ("python3" / "bash")
-#                 素の Ubuntu には `python` が無い (python3 のみ) ので python3 を使う
+#   script        ~/.claude/hooks/ 配下のファイル名 (両 CLI が同じ実体を共有)
+#   runner        "python3" / "bash" (素の Ubuntu に `python` は無い)
 #   purpose       用途メモ
 #   *_event       hook イベント名。空文字にするとその CLI には出力しない
-#   *_matcher     matcher。省略すると matcher キー自体を出力しない (= 全ツール)
-#   timeout_sec   タイムアウト秒。Claude の timeout / Copilot の timeoutSec へ反映
-#                 (Claude の command hook は未指定だと 600 秒と長いので明示する)
+#   *_matcher     省略すると matcher キー自体を出力しない (= 全ツール)
+#   timeout_sec   Claude の timeout / Copilot の timeoutSec へ反映
 #
-# matcher の書き分け (両 CLI で意味論が違うので共通化しない):
-#   Claude Code : tool 名の完全一致を `|` で OR 連結。PascalCase のみ
-#   Copilot CLI : `^(?:pattern)$` として anchored される。明示的に ^...$ を書く
-#                 PascalCase 名も Claude 互換モードで照合されるため両方列挙する
-#
-# ★イベントは PreToolUse を使い permissionRequest は使わないこと。
-#   後者は「後の hook が前を上書き」かつ読み込み順が user -> project なので、
-#   開いているリポジトリ側の hook に決定を奪われる。
-#   PreToolUse は deny が常に勝つ (test_check_file_read.py で固定)。
+# ★matcher は両 CLI で意味論が違うので共通化しない。
+#   Claude: tool 名の完全一致を `|` で OR 連結 (PascalCase のみ)
+#   Copilot: `^(?:pattern)$` として anchored。PascalCase も照合されるため両方書く
+# ★イベントは PreToolUse を使い permissionRequest は使わない
+#   (後者は後勝ちマージで、リポジトリ側の hook に決定を奪われる)。
+# see docs/spec/agent-permissions.md 「hook」
 
 [[hooks]]
 id = "check_bash"
