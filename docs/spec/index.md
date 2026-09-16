@@ -4,7 +4,7 @@
 
 | 文書 | 内容 |
 | --- | --- |
-| [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoiスクリプトの順序、対応OS、Herdr / AI CLIのmise管理 |
+| [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoiスクリプトの順序、対応OS、gh / Herdr / AI CLIのmise管理 |
 | [開発ガイド](development.md) | mise / uv / pre-commitを使った開発と検証 |
 | [セキュリティ](security.md) | Bitwarden、sops、ageの役割と要件 |
 | [Secret管理セットアップ](sops-age.md) | sops + ageの導入、日常操作、復旧 |

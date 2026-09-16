@@ -53,6 +53,14 @@ chezmoi apply             # gitconfig user セクション、Unix では sops ag
 
 依存関係スクリプトをスキップしたい場合は `chezmoi apply --exclude=scripts`。
 
+### GitHub CLI の mise 管理
+
+GitHub CLI (`gh`) は Windows / Linux / WSL / macOS 共通で
+`~/.config/mise/config.toml` の `gh = "latest"` から導入します。
+Ubuntu の個別 APT 導入処理は使わず、既存の一括 `mise install` に任せます。
+更新はホームディレクトリで `mise upgrade gh` を実行してください。
+認証設定は変更しません。Git 本体の導入方法も従来どおりです。
+
 ### Claude Code / Copilot CLI の mise 管理
 
 Claude Code (`claude-code`) と Copilot CLI (`copilot`) の本体は
@@ -84,7 +92,7 @@ Windows の `applejxd` は `mise upgrade copilot` のみを使います。
 Windows native、Linux、WSL では、`chezmoi apply` 時に **mise** で Herdr を
 ユーザースコープへ導入します。`~/.config/mise/config.toml` の `herdr = "latest"` を
 使い、mise の aqua backend が公式 GitHub Releases のバイナリを取得します。
-Windows ではこの設定に Herdr と上記 AI CLI のみを配備し、Unix 専用ツールは導入しません。
+Windows ではこの設定に gh・Herdr・上記 AI CLI を配備し、Unix 専用ツールは導入しません。
 macOS は従来どおり Herdr の自動導入対象外です。
 
 agent integration は設定ファイルの配備後に毎回冪等に再適用されます。

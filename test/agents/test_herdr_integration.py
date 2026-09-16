@@ -63,13 +63,14 @@ def render_template(path, *, os_name="linux", username="applejxd", home="/test-h
 def test_mise_config_keeps_platform_scope(os_name, username):
     config = tomllib.loads(render_template(MISE_CONFIG, os_name=os_name, username=username))
     tools = config["tools"]
+    assert tools["gh"] == "latest"
     assert tools["copilot"] == "latest"
     has_claude = os_name != "windows" or not username.endswith("applejxd")
     assert ("claude-code" in tools) == has_claude
     if has_claude:
         assert tools["claude-code"] == "latest"
     if os_name == "windows":
-        expected = {"herdr": "latest", "copilot": "latest"}
+        expected = {"gh": "latest", "herdr": "latest", "copilot": "latest"}
         if has_claude:
             expected["claude-code"] = "latest"
         assert config == {"tools": expected}
@@ -105,6 +106,14 @@ def test_direct_installers_are_removed():
     assert "winst GitHub.Copilot" not in winget
     assert "winst jdx.mise" in winget
     assert not (SCRIPTS / "000_unix" / "run_once_after_010_tools.sh").exists()
+
+
+def test_github_cli_has_no_separate_apt_install():
+    source = (SCRIPTS / "100_linux/run_once_after_121_ubuntu.sh.tmpl").read_text()
+    assert "cli.github.com/packages" not in source
+    assert "githubcli-archive-keyring" not in source
+    assert not re.search(r"\bapt(?:-get)?\s+install\s+gh\b", source)
+    assert "wget curl git unzip" in source
 
 
 @pytest.mark.parametrize("username,agent", [("applejxd", "copilot"), ("other", "claude")])

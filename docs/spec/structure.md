@@ -48,7 +48,7 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 
 | 環境 | 主な導入経路 |
 | --- | --- |
-| Windows native | Winget、Scoop、Chocolatey、mise（Herdr / AI CLI）、PowerShell |
+| Windows native | Winget、Scoop、Chocolatey、mise（gh / Herdr / AI CLI）、PowerShell |
 | Ubuntu | apt、mise |
 | WSL | Windows連携設定、apt、mise |
 | macOS | Homebrew、mise |
@@ -61,11 +61,19 @@ OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別ス
 本体の宣言は `home/dot_config/mise/config.toml.tmpl` に集約します。
 `claude-code = "latest"` / `copilot = "latest"` は mise の aqua backend から
 公式ネイティブバイナリを取得します。Linux / WSL / macOS は両方、Windows は
-Copilot CLI と Herdr のみ（`applejxd` 以外では Claude Code も）を宣言します。
+Copilot CLI と Herdr（`applejxd` 以外では Claude Code も）を宣言します。
+GitHub CLI は全 OS 共通で `gh = "latest"` を宣言し、aqua の `cli/cli` から導入します。
 Windows 用設定には Unix 専用ツールや設定を含めません。
 Unix の uv も同じ mise 設定で導入します。uv の重複導入と使用しなくなった
 Codex CLI の自動インストールを持っていた `000_unix/010_tools` は廃止しました。
 Codex の既存設定や Windows の Codex App はこの変更の対象外です。
+
+`gh` の更新はホームディレクトリで `mise upgrade gh` を実行します。
+Ubuntu の `121_ubuntu` では GitHub CLI 用の APT リポジトリ・鍵の登録と
+`apt install gh` を行いません。Git 本体の APT 導入は維持します。
+既存の APT 版や登録済みリポジトリ・鍵、認証設定は自動削除しません。
+移行後は `mise which gh` と `command -v gh` / `Get-Command gh` を比較し、
+mise の実体または shim が選ばれることを確認してください。
 
 ツールごとの導入コマンドは持たず、設定配備後にホームディレクトリを基準として
 **引数なしの `mise install`** を実行します。

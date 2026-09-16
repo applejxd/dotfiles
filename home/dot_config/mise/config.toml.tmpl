@@ -2,6 +2,7 @@
 # https://mise.jdx.dev/configuration.html
 
 [tools]
+gh = "latest"
 copilot = "latest"
 {{- if or (ne .chezmoi.os "windows") (not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username)) }}
 claude-code = "latest"
