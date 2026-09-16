@@ -1,1 +1,1 @@
-{{ template "modify_json.py.tmpl" (dict "workingTree" .chezmoi.workingTree "target" "gemini-settings") -}}
+{{ template "modify_json.py.tmpl" (dict "workingTree" .chezmoi.workingTree "common" (includeTemplate "dot_config/agents/common.toml.tmpl" .) "target" "gemini-settings") -}}

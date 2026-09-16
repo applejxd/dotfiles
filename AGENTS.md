@@ -36,7 +36,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   CP932 として読み、日本語コメントが次行のコードを無警告で飲み込む
 - `SKILL.md` の frontmatter は `name` をディレクトリ名と一致させ、`:` や `#` を含む
   `description` は二重引用符で囲む（囲まないと CLI がスキルを黙って読み飛ばす）
-- AI CLI の permission / hook / sandbox は `home/dot_config/agents/common.toml` が
+- AI CLI の permission / hook / sandbox は `home/dot_config/agents/common.toml.tmpl` が
   単一ソース。生成先（`~/.claude/settings.json` 等）を直接編集しない
 - 秘密情報はソースに書かず `SUDO_PASSWORD` / Bitwarden / sops + age を使う
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない

@@ -13,7 +13,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -22,8 +21,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
+from agents_common import agents_config_dir, load_common  # noqa: E402
 
-COMMON_PATH = ROOT / "home" / "dot_config" / "agents" / "common.toml"
+COMMON_PATH = agents_config_dir() / "common.toml"
+
 HOOK_SRC_DIR = ROOT / "home" / "dot_claude" / "hooks"
 
 # Claude Code 公式 docs の hook イベント一覧のうち、本リポジトリで使う可能性のあるもの。
@@ -45,9 +46,6 @@ KNOWN_CLAUDE_EVENTS = {
 CLAUDE_EVENTS_WITHOUT_MATCHER = {"UserPromptSubmit", "Stop"}
 
 
-def load_common() -> dict:
-    with COMMON_PATH.open("rb") as f:
-        return tomllib.load(f)
 
 
 COMMON = load_common()

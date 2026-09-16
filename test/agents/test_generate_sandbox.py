@@ -9,7 +9,6 @@ from __future__ import annotations
 import copy
 import os
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -18,14 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
-
-COMMON_PATH = ROOT / "home" / "dot_config" / "agents" / "common.toml"
-
-
-def load_common() -> dict:
-    with COMMON_PATH.open("rb") as f:
-        return tomllib.load(f)
-
+from agents_common import load_common  # noqa: E402
 
 COMMON = load_common()
 

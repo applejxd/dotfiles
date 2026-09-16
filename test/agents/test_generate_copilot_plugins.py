@@ -10,18 +10,15 @@ Run with: ``uv run --with pytest --no-project pytest test/agents/``
 from __future__ import annotations
 
 import sys
-import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
+from agents_common import load_common  # noqa: E402
 
-COMMON_PATH = ROOT / "home" / "dot_config" / "agents" / "common.toml"
-
-with COMMON_PATH.open("rb") as f:
-    COMMON = tomllib.load(f)
+COMMON = load_common()
 
 
 def test_common_toml_declares_enabled_plugins():

@@ -4,38 +4,45 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path({{ .workingTree | toJson }})
 TARGET = {{ .target | toJson }}
+# common.toml は chezmoi テンプレートなので、描画済みの内容を受け取る。
+# 配備先 (~/.config/agents/common.toml) は modify_ の実行時点ではまだ
+# 更新されていない (.claude/ の方が .config/ より先に適用される) ため使えない。
+COMMON = {{ .common | toJson }}
 
 
 def main() -> int:
     data = sys.stdin.buffer.read()
-    common = REPO / "home" / "dot_config" / "agents" / "common.toml"
     generator = REPO / "scripts" / "agents" / "generate.py"
 
-    if not common.is_file() or not generator.is_file():
+    if not COMMON or not generator.is_file():
         sys.stdout.buffer.write(data)
         return 0
 
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(generator),
-            "--target",
-            TARGET,
-            "--common",
-            str(common),
-        ],
-        input=data,
-        stdout=subprocess.PIPE,
-        env=env,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory() as work:
+        common = Path(work) / "common.toml"
+        common.write_text(COMMON, encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(generator),
+                "--target",
+                TARGET,
+                "--common",
+                str(common),
+            ],
+            input=data,
+            stdout=subprocess.PIPE,
+            env=env,
+            check=False,
+        )
     if result.returncode != 0:
         return result.returncode
 

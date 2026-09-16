@@ -27,6 +27,8 @@ PREFLIGHT_PATH = (
 )
 HOOK_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_check_bash.py"
 
+from agents_common import agents_config_dir  # noqa: E402
+
 
 def load_preflight():
     spec = importlib.util.spec_from_file_location("preflight", PREFLIGHT_PATH)
@@ -43,7 +45,7 @@ preflight = load_preflight()
 def use_repository_hook(monkeypatch):
     """配布先ではなくリポジトリの hook を見るようにする."""
     monkeypatch.setattr(preflight, "HOOK_PATH", HOOK_PATH)
-    monkeypatch.setenv("AGENTS_CONFIG_DIR", str(ROOT / "home" / "dot_config" / "agents"))
+    monkeypatch.setenv("AGENTS_CONFIG_DIR", str(agents_config_dir()))
 
 
 @pytest.mark.parametrize(

@@ -32,8 +32,8 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 | `000_unix/` | Linux / macOS | zinit補完の保守 |
 | `100_linux/` | Ubuntu / WSL | OSパッケージ、mise、shell、Herdr |
 | `200_mac/` | macOS | Homebrew、mise、macOS defaults |
-| `300_windows/` | Windows native | Winget/Scoop/Chocolatey、レジストリ、Terminal、AI CLI統合 |
-| `400_unix/` | Linux / macOS | mise 導入後の Claude Code MCP 設定 |
+| `300_windows/` | Windows native | Winget/Scoop/Chocolatey、レジストリ、Terminal、AI CLI統合、MCP登録 |
+| `400_unix/` | Linux / macOS | mise 導入後の Claude Code への MCP 登録 |
 
 スクリプト名は `run_once_XXX_name`、`run_onchange_XXX_name`、
 `run_after_XXX_name` などのchezmoi属性と3桁番号で順序を管理します。
@@ -86,8 +86,10 @@ mise の実体または shim が選ばれることを確認してください。
 
 mise の各スクリプトは `run_onchange_after_` とし、設定テンプレートのハッシュを
 含めます。ツール宣言が変われば一括導入が再実行されます。
-Unix の DeepWiki MCP 登録は `.claude.json` の user scope に未登録の場合だけ行い、
-既存のカスタム設定は上書きしません。壊れた JSON はエラーで停止します。
+Unix の MCP 登録は `common.toml` の `[[mcp]]` のうち `.claude.json` の
+user scope に未登録のものだけを対象にし、既存のカスタム設定は上書きしません。
+壊れた JSON はエラーで停止します。詳細は
+[MCP サーバ](agent-permissions.md#mcp-サーバ)を参照。
 
 CLI 自身の自動更新は `common.toml` の `[claude] auto_update = false` /
 `[copilot] auto_update = false` から停止します。mise で指定・固定した版と、

@@ -167,7 +167,7 @@ def test_chezmoi_applies_mise_config_before_bootstrap_and_integrations(tmp_path,
         render_template(ROOT / "home/.chezmoiignore.tmpl", os_name=os_name, home=destination)
     )
     winget = SCRIPTS / "300_windows/310_packages/run_once_before_310_winget.ps1.tmpl"
-    mcp = SCRIPTS / "400_unix/run_once_after_410_claude_mcp.sh"
+    mcp = SCRIPTS / "400_unix/run_onchange_after_410_claude_mcp.sh.tmpl"
     for path in [*MISE_SCRIPTS.values(), LINUX_SCRIPT, WINDOWS_SCRIPT, winget, mcp]:
         assert path.is_file()
         relative = str(path.relative_to(SCRIPTS)).removesuffix(".tmpl")

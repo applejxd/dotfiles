@@ -38,6 +38,15 @@ repos:
         language: system
         files: ^home/[^/]+/skills/[^/]+/SKILL\.md$
 
+      # common.toml は chezmoi テンプレートなので check-toml が使えない。
+      # hook が fail-closed で読む正本なので、描画結果を検査して代替する。
+      - id: common-toml-local
+        name: Rendered common.toml check
+        entry: mise exec -- python3 scripts/agents/validate_common.py
+        language: system
+        pass_filenames: false
+        files: ^(home/dot_config/agents/common\.toml\.tmpl|scripts/agents/(generate|validate_common)\.py)$
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

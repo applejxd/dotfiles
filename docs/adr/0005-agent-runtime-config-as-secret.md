@@ -7,7 +7,7 @@
 ## コンテキスト
 
 このリポジトリは AI CLI の permission と hook を
-`home/dot_config/agents/common.toml` に単一ソース化し、
+`home/dot_config/agents/common.toml.tmpl` に単一ソース化し、
 `scripts/agents/generate.py` から各 CLI の設定へ展開している。
 秘密ファイルの読み書きは 2 つの層で止めている。
 

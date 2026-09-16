@@ -6,7 +6,7 @@
 
 ## コンテキスト
 
-このリポジトリは `home/dot_config/agents/common.toml` を単一ソースとして、
+このリポジトリは `home/dot_config/agents/common.toml.tmpl` を単一ソースとして、
 `scripts/agents/generate.py` から各 AI CLI の設定を生成する。導入後の hook も
 `home/dot_config/agents/command_policy.py` から同じ TOML を読む。
 

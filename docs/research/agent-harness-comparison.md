@@ -82,7 +82,7 @@
   Windows は directory junction。Copilot CLI は
   `.claude/skills` を公式サポートするため、コピーではなく参照で済む）
 - hook: `~/.copilot/hooks/from-claude.json` が `$HOME/.claude/hooks/*.py` を指す
-- permission: `home/dot_config/agents/common.toml` を単一ソースとし、
+- permission: `home/dot_config/agents/common.toml.tmpl` を単一ソースとし、
   `scripts/agents/generate.py` が各ハーネスの形式へ変換する
 
 ### bind 一覧
@@ -93,7 +93,7 @@
 | Copilot CLI | `home/dot_copilot/hooks/from-claude.json.tmpl`（common.toml から生成）、`modify_private_settings.json.py.tmpl`、`modify_private_permissions-config.json.py.tmpl` | `PreToolUse`（`check_bash.py` matcher=`^(Bash\|bash)$`、`redirect-tmp.py` matcher=`^(Bash\|bash\|Read\|view\|Write\|create\|Edit\|edit)$`）、`PostToolUse`（`markdownlint.sh` / `format-file.sh`） |
 | Codex CLI | `home/dot_codex/modify_config.toml`、`home/dot_codex/rules/*.rules` | `approval_policy = "untrusted"`、`sandbox_mode = "read-only"`、`web_search = "live"`、`personality = "pragmatic"`、`shell_environment_policy`（PATH/HOME/USER のみ）、rules 4 ファイル |
 
-権限と hook の単一ソースは `home/dot_config/agents/common.toml`。
+権限と hook の単一ソースは `home/dot_config/agents/common.toml.tmpl`。
 生成は `scripts/agents/generate.py`。
 詳細は [エージェント権限仕様](../spec/agent-permissions.md)。
 

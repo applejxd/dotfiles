@@ -7,7 +7,7 @@
 ## コンテキスト
 
 このリポジトリは AI CLI（Claude Code / Copilot CLI / Codex / Gemini CLI）の
-permission と hook を `home/dot_config/agents/common.toml` に単一ソース化し、
+permission と hook を `home/dot_config/agents/common.toml.tmpl` に単一ソース化し、
 `scripts/agents/generate.py` を通して各 CLI の設定ファイルへ展開している。
 詳細は [エージェント権限仕様](../spec/agent-permissions.md)。
 

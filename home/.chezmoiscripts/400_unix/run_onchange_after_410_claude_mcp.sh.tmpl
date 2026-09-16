@@ -1,0 +1,47 @@
+{{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
+#!/bin/bash
+
+set -euo pipefail
+
+# Claude の user scope の MCP 定義先である ~/.claude.json は chezmoi 管理外
+# (ADR-0005: 秘密として扱う) なので、ほかの CLI のように生成できない。
+# common.toml の [[mcp]] のうち未登録のものだけを CLI 経由で登録する。
+mise_path="${HOME}/.local/bin/mise"
+if [[ ! -x "$mise_path" ]]; then
+    mise_path="$(command -v mise)"
+fi
+claude_path="$("$mise_path" -C "$HOME" which claude)"
+
+# バイナリの有無では判定しない。移行済み・途中失敗からの再実行でも
+# 既存の設定を保つ。壊れた ~/.claude.json は上書きせずエラーで止める。
+missing="$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+managed = json.loads(r'''{{ $common.mcp | toJson }}''')
+
+try:
+    with (Path.home() / ".claude.json").open(encoding="utf-8") as stream:
+        configured = json.load(stream).get("mcpServers", {})
+except FileNotFoundError:
+    configured = {}
+
+for server in managed:
+    if server["id"] in configured:
+        continue
+    transport = server["transport"]
+    if transport == "http":
+        spec = {"type": "http", "url": server["url"]}
+    elif transport == "stdio":
+        spec = {"command": server["command"], "args": server.get("args", [])}
+    else:
+        raise SystemExit("unsupported transport: " + repr(transport))
+    print(server["id"] + "\t" + json.dumps(spec))
+PY
+)"
+
+# add-json なら http と stdio を同じ経路で登録できる (引数の切り分けが要らない)
+while IFS=$'\t' read -r name spec; do
+    [[ -n "$name" ]] || continue
+    "$claude_path" mcp add-json -s user "$name" "$spec"
+done <<<"$missing"

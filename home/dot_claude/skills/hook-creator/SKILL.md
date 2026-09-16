@@ -181,7 +181,7 @@ JSON 形式エラー、参照スクリプトの不在、matcher の anchored 規
 | 共通ヘルパ | `home/dot_claude/hooks/lib/{agent_compat.py,agent_compat.sh}` | `~/.claude/hooks/lib/` |
 | Python hook 本体 | `home/dot_claude/hooks/executable_<name>.py` | `~/.claude/hooks/<name>.py` (実行属性付) |
 | Bash hook 本体 | `home/dot_claude/hooks/executable_<name>.sh` | `~/.claude/hooks/<name>.sh` (実行属性付) |
-| hook の登録情報 (両 CLI 共通) | `home/dot_config/agents/common.toml` の `[[hooks]]` | 下 2 行へ自動展開 |
+| hook の登録情報 (両 CLI 共通) | `home/dot_config/agents/common.toml.tmpl` の `[[hooks]]` | 下 2 行へ自動展開 |
 | Claude 設定 | `home/dot_claude/modify_settings.json.py.tmpl` (生成) | `~/.claude/settings.json` の `hooks` 節 |
 | Copilot 設定 | `home/dot_copilot/hooks/from-claude.json.tmpl` (生成) | `~/.copilot/hooks/from-claude.json` |
 
@@ -192,7 +192,7 @@ JSON 形式エラー、参照スクリプトの不在、matcher の anchored 規
 新規スクリプトを追加するときは:
 
 1. `home/dot_claude/hooks/executable_<name>.{py,sh}` を作成
-2. `home/dot_config/agents/common.toml` の `[[hooks]]` にエントリを追加
+2. `home/dot_config/agents/common.toml.tmpl` の `[[hooks]]` にエントリを追加
    (`claude_event` / `claude_matcher` / `copilot_event` / `copilot_matcher` /
    `runner` / `timeout_sec`)
 3. `chezmoi diff` で確認 → `chezmoi apply`

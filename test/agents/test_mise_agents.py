@@ -1,7 +1,8 @@
-"""Check post-mise DeepWiki setup without touching the real home."""
+"""Check post-mise MCP registration for Claude without touching the real home."""
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -10,8 +11,45 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "home/.chezmoiscripts/400_unix/run_once_after_410_claude_mcp.sh"
+sys.path.insert(0, str(ROOT / "scripts" / "agents"))
+
+import generate as gen  # noqa: E402
+from agents_common import load_common  # noqa: E402
+
+SCRIPT = ROOT / "home/.chezmoiscripts/400_unix/run_onchange_after_410_claude_mcp.sh.tmpl"
+# applejxd では除外されるサーバがあるので、両方のユーザで確かめる
+USERS = ["applejxd", "tester"]
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="Unix MCP setup script")
+
+
+def render_script(username):
+    chezmoi = shutil.which("chezmoi")
+    if chezmoi is None:
+        pytest.skip("chezmoi is not installed")
+    context = json.dumps(json.dumps({"chezmoi": {"username": username}}))
+    result = subprocess.run(
+        [chezmoi, "--source", str(ROOT), "execute-template"],
+        input=f"{{{{ with {context} | fromJson }}}}\n"
+        + SCRIPT.read_text(encoding="utf-8")
+        + "\n{{ end }}",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+def expected_servers(username):
+    """generate.py (Copilot 側) と同じ結果になるはず、を Claude の形で表す。"""
+    return {
+        name: (
+            {"type": "http", "url": server["url"]}
+            if server["transport"] == "http"
+            else {"command": server["command"], "args": server["args"]}
+        )
+        for name, server in gen.mcp_servers(load_common(username))
+    }
 
 
 @pytest.fixture
@@ -38,12 +76,12 @@ def environment(tmp_path):
             assert args[2:] == ["which", "claude"]
             print(str(Path(os.environ["MANAGED_BIN"]) / args[3]))
         elif tool == "claude" and stage == "mcp":
-            assert args == ["mcp", "add", "-s", "user", "-t", "http",
-                            "deepwiki", "https://mcp.deepwiki.com/mcp"]
+            # `claude mcp add-json -s user <name> <json>`
+            assert args[:4] == ["mcp", "add-json", "-s", "user"]
+            name, spec = args[4:]
             path = Path.home() / ".claude.json"
             config = json.loads(path.read_text()) if path.exists() else {}
-            config.setdefault("mcpServers", {})["deepwiki"] = {
-                "type": "http", "url": "https://mcp.deepwiki.com/mcp"}
+            config.setdefault("mcpServers", {})[name] = json.loads(spec)
             path.write_text(json.dumps(config))
         else:
             sys.exit("unexpected command: " + tool + " " + repr(args))
@@ -64,9 +102,9 @@ def environment(tmp_path):
     return home, env
 
 
-def run_setup(env):
+def run_setup(script, env):
     return subprocess.run(
-        ["bash", str(SCRIPT)], env=env, capture_output=True, text=True, check=False
+        ["bash"], input=script, env=env, capture_output=True, text=True, check=False
     )
 
 
@@ -75,24 +113,33 @@ def commands(env):
     return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 
 
-def test_managed_claude_is_used_and_mcp_setup_is_idempotent(environment):
+@pytest.mark.parametrize("username", USERS)
+def test_servers_for_this_user_are_registered_once(environment, username):
     home, env = environment
+    script = render_script(username)
+    expected = expected_servers(username)
+    assert expected, "登録対象が 1 つも無い"
     for _ in range(2):
-        result = run_setup(env)
+        result = run_setup(script, env)
         assert result.returncode == 0, result.stderr
+
+    registered = json.loads((home / ".claude.json").read_text())["mcpServers"]
+    assert registered == expected
+    # 2 回目は登録済みなので追加しない
     calls = commands(env)
-    assert calls.count(["mise", "-C", str(home), "which", "claude"]) == 1
-    assert sum(call[:2] == ["claude", "mcp"] for call in calls) == 1
-    config = json.loads((home / ".claude.json").read_text())
-    assert config["mcpServers"]["deepwiki"]["url"] == "https://mcp.deepwiki.com/mcp"
+    assert sum(call[:2] == ["claude", "mcp"] for call in calls) == len(expected)
 
 
 def test_existing_custom_mcp_configuration_is_preserved(environment):
     home, env = environment
     path = home / ".claude.json"
-    existing = {"mcpServers": {"deepwiki": {"command": "custom"}, "other": {}}, "keep": True}
+    existing = {
+        "mcpServers": {name: {"command": "custom"} for name in expected_servers("tester")},
+        "keep": True,
+    }
+    existing["mcpServers"]["other"] = {}
     path.write_text(json.dumps(existing))
-    result = run_setup(env)
+    result = run_setup(render_script("tester"), env)
     assert result.returncode == 0, result.stderr
     assert json.loads(path.read_text()) == existing
     assert all(call[:2] != ["claude", "mcp"] for call in commands(env))
@@ -102,7 +149,7 @@ def test_malformed_claude_config_fails_without_overwriting_it(environment):
     home, env = environment
     path = home / ".claude.json"
     path.write_text("{invalid")
-    result = run_setup(env)
+    result = run_setup(render_script("tester"), env)
     assert result.returncode != 0
     assert "JSONDecodeError" in result.stderr
     assert path.read_text() == "{invalid"
@@ -112,11 +159,12 @@ def test_malformed_claude_config_fails_without_overwriting_it(environment):
 @pytest.mark.parametrize("stage", ["which", "mcp"])
 def test_failed_mcp_registration_can_be_retried(environment, stage):
     home, env = environment
-    result = run_setup({**env, "FAIL_STAGE": stage})
+    script = render_script("tester")
+    result = run_setup(script, {**env, "FAIL_STAGE": stage})
     assert result.returncode != 0
     assert f"failed {stage}" in result.stderr
     assert not (home / ".claude.json").exists()
-    retry = run_setup(env)
+    retry = run_setup(script, env)
     assert retry.returncode == 0, retry.stderr
     assert (home / ".claude.json").exists()
 
@@ -127,5 +175,5 @@ def test_mise_on_path_is_supported_without_a_local_launcher(environment):
     alternate.mkdir(parents=True)
     (home / ".local/bin/mise").rename(alternate / "mise")
     env["PATH"] = str(alternate) + os.pathsep + env["PATH"]
-    result = run_setup(env)
+    result = run_setup(render_script("tester"), env)
     assert result.returncode == 0, result.stderr

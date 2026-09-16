@@ -12,14 +12,12 @@ import re
 import subprocess
 import sys
 import time
-import tomllib
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 HOOK_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_check_bash.py"
-COMMON_PATH = ROOT / "home" / "dot_config" / "agents" / "common.toml"
 GITHUB_ISSUE_SKILL_PATH = (
     ROOT / "home" / "dot_claude" / "skills" / "github-issue" / "SKILL.md"
 )
@@ -33,11 +31,11 @@ sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import command_policy as policy  # noqa: E402
 import generate as gen  # noqa: E402
+from agents_common import agents_config_dir, load_common  # noqa: E402
+
+COMMON_PATH = agents_config_dir() / "common.toml"
 
 
-def load_common() -> dict:
-    with COMMON_PATH.open("rb") as f:
-        return tomllib.load(f)
 
 
 COMMON = load_common()

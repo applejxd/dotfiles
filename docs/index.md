@@ -21,6 +21,7 @@
 | Bitwarden / sops の仕組みを知る | [セキュリティ](spec/security.md) |
 | sops + age を導入・復旧する | [Secret管理セットアップ](spec/sops-age.md) |
 | AI CLI のpermission / hookを変更する | [エージェント権限仕様](spec/agent-permissions.md) |
+| MCP サーバを追加・変更する | [MCP サーバ](spec/agent-permissions.md#mcp-サーバ) |
 | sandboxで何ができるか調べる | [sandbox機能の包括調査](research/sandbox-capabilities.md) |
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |
 | 設計理由を確認する | [ADR一覧](adr/index.md) |

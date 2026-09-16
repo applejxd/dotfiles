@@ -71,7 +71,7 @@ Codex CLI の自動インストールは行いません。
 
 Linux / WSL / macOS は両方、Windows は Copilot CLI を導入し、`applejxd` 以外では
 Claude Code も導入します。既存の OS / username 別の導入範囲は変えません。
-OS 別の mise セットアップを先に実行し、Herdr 連携と Unix の DeepWiki MCP 登録を
+OS 別の mise セットアップを先に実行し、Herdr 連携と Unix の MCP 登録を
 その後に行います。設定・認証・既存の MCP / hook は保持します。
 
 CLI 自身の自動更新は `common.toml` から無効化し、更新元を mise に統一します。

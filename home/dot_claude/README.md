@@ -13,7 +13,7 @@
 
 | キー | 管理 |
 | --- | --- |
-| `permissions` | `home/dot_config/agents/common.toml` から生成（apply で全置換） |
+| `permissions` | `home/dot_config/agents/common.toml.tmpl` から生成（apply で全置換） |
 | `hooks` | 同上。ただし `~/.claude/hooks/` を起動するエントリだけを差し替え、Orca など外部ツールが注入した hook は温存する |
 | `env` / `enabledPlugins` / `includeCoAuthoredBy` | 手動管理（apply では触らず保持） |
 
@@ -21,7 +21,7 @@
 
 1. `home/dot_claude/hooks/executable_<name>.(py|sh)` にスクリプトを置く
    - パス取得やブロック出力は `lib/agent_compat.(py|sh)` を使うと両 CLI 対応になる
-2. `home/dot_config/agents/common.toml` の `[[hooks]]` に 1 エントリ追加する
+2. `home/dot_config/agents/common.toml.tmpl` の `[[hooks]]` に 1 エントリ追加する
 3. `chezmoi diff` で確認 → `chezmoi apply`
 4. Claude Code を再起動（settings.json は起動時に読まれる）
 

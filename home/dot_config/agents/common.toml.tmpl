@@ -4,6 +4,8 @@
 #   ~/.claude/settings.json                  -> [bash] [file] [web] [claude]
 #   ~/.copilot/permissions-config.json       -> [bash.allow] [copilot.locations]
 #   ~/.copilot/settings.json (一部キーのみ)   -> [web] [copilot]
+#   ~/.copilot/mcp-config.json               -> [[mcp]]
+#   ~/.codex/config.toml の mcp_servers      -> [[mcp]]
 #
 # 2 層構成:
 #   1. permission リスト (本ファイル由来。Claude のみ。CLI 本体が評価する)
@@ -785,6 +787,63 @@ path = "~/.local/share/chezmoi"
 approvals = [
   { kind = "write" },
 ]
+
+# ---------------------------------------------------------------------------
+# MCP サーバ (Claude Code / Copilot CLI / Codex CLI 共通の単一ソース)
+# ---------------------------------------------------------------------------
+# 生成先:
+#   ~/.copilot/mcp-config.json         <- generate.py --target copilot-mcp
+#   ~/.codex/config.toml の mcp_servers <- modify_config.toml がこの表から描画
+#   ~/.claude.json                     <- 410 のスクリプトが `claude mcp add`
+#                                         で登録する (未登録のものだけ)
+#
+# Claude だけ生成でなく CLI 経由なのは、user scope の定義先である
+# ~/.claude.json が chezmoi 管理外だから (ADR-0005: 秘密として扱う)。
+#
+# フィールド:
+#   id         サーバ名。生成物のキーになる (英数字・ハイフン・アンダースコアのみ。
+#              Claude Code の予約語・記法の制約に合わせる)
+#   purpose    用途 (生成物には出ない。レビュー用)
+#   transport  "http" (url) か "stdio" (command / args)
+#   url        transport = "http" のエンドポイント
+#   command    transport = "stdio" で起動するコマンド
+#   args       command に渡す引数 (省略可)
+#
+# ★このファイルは chezmoi テンプレート (.chezmoitemplates/agents/common.toml)。
+#   ユーザ・OS で出し分けたいときは Go テンプレートの条件を書く。生成側
+#   (generate.py / Codex / Claude) は展開後の表だけを見るので、条件の解釈が
+#   1 か所で済む。
+#
+# ★トークンを common.toml に書かない。headers に秘密が要るサーバは、
+#   ここではなく環境変数参照として各 CLI 側で設定する (ADR-0005)。
+[[mcp]]
+id = "deepwiki"
+purpose = "GitHub リポジトリのドキュメントを検索する"
+transport = "http"
+url = "https://mcp.deepwiki.com/mcp"
+
+{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
+
+# DuckDuckGo 検索。applejxd は Copilot CLI 内蔵の web 検索を使うので入れない。
+#
+# uvx で起動する。ddgs 本体を別途入れる形 (mise の pipx backend 等) より確実:
+#   - 追加のインストールと `mise reshim` が要らない
+#   - mise の npm / pipx backend はキャッシュ破棄で壊れる既知の事象がある
+#     (docs/spec/troubleshooting.md)
+#   - MCP サーバは sandbox 内で起動する (Copilot は sandboxMcpServers = true) が、
+#     uvx が使う ~/.cache/uv と ~/.local/share/uv/tools は書き込み許可済みで、
+#     pypi.org / files.pythonhosted.org も [web] と network_allow で許可済み
+#
+# ★`--from ddgs[mcp]` が要る。素の `uvx ddgs mcp` は
+#   "Error: MCP dependencies not installed" で起動しない (実測)。
+# see https://github.com/deedy5/ddgs (`ddgs mcp` は stdio)
+[[mcp]]
+id = "ddgs"
+purpose = "DuckDuckGo で web 検索する"
+transport = "stdio"
+command = "uvx"
+args = ["--from", "ddgs[mcp]", "ddgs", "mcp"]
+{{- end }}
 
 # ---------------------------------------------------------------------------
 # Hooks (Claude Code / Copilot CLI 共通の単一ソース)

@@ -1,4 +1,6 @@
 {{- /* chezmoi:modify-template */ -}}
+{{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
+{{- $userConfig := .chezmoi.stdin | replaceAllRegex "(?s)^# chezmoi-managed:start.*?# chezmoi-managed:end(?:\\r?\\n)*" "" -}}
 # chezmoi-managed:start
 # see https://www.chezmoi.io/user-guide/manage-different-types-of-file/#manage-part-but-not-all-of-a-file
 # see https://blog.s2n.tech/posts/codex-config-toml-chezmoi/
@@ -34,9 +36,25 @@ enabled = false
 
 [windows]
 sandbox = "elevated"
-
-[mcp_servers.deepwiki]
+{{ range $common.mcp }}
+{{- /*
+     管理ブロックの外に同名の [mcp_servers.<id>] があると TOML が重複宣言に
+     なり、Codex は設定ファイル全体を読めなくなる。黙って壊すより apply を
+     止めて、どちらを残すかをユーザに決めてもらう。
+  */ -}}
+{{- if regexMatch (printf "(?m)^\\[mcp_servers\\.%s\\]" .id) $userConfig }}
+{{-   fail (printf "~/.codex/config.toml の管理ブロック外に [mcp_servers.%s] がある。common.toml と重複するのでどちらかを消すこと" .id) }}
+{{- end }}
+[mcp_servers.{{ .id }}]
 enabled = true
-url = "https://mcp.deepwiki.com/mcp"
+{{- if eq .transport "http" }}
+url = {{ .url | quote }}
+{{- else if eq .transport "stdio" }}
+command = {{ .command | quote }}
+args = {{ index . "args" | default list | toJson }}
+{{- else }}
+{{-   fail (printf "[[mcp]] %s: transport %q は未対応" .id .transport) }}
+{{- end }}
+{{ end -}}
 # chezmoi-managed:end
 {{- .chezmoi.stdin | replaceAllRegex "(?s)^# chezmoi-managed:start.*?# chezmoi-managed:end(?:\\r?\\n)*" "\n\n" -}}

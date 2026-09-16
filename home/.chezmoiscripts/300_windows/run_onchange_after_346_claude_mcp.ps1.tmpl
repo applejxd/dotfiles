@@ -1,0 +1,62 @@
+﻿{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) -}}
+{{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# Claude の user scope の MCP 定義先である ~/.claude.json は chezmoi 管理外
+# (ADR-0005: 秘密として扱う) なので、ほかの CLI のように生成できない。
+# common.toml の [[mcp]] のうち未登録のものだけを CLI 経由で登録する。
+# Unix 側の 400_unix/410 と同じ役割 (あちらは .chezmoiignore で Windows 除外)。
+$homeDir = {{ .chezmoi.homeDir | toJson }}
+$miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
+if (-not $miseCommand) {
+  # 同じ apply の Winget スクリプトで mise を初めて導入した場合。
+  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+  $miseCommand = Get-Command mise -CommandType Application -ErrorAction Stop
+}
+
+$claudePath = & $miseCommand.Path -C $homeDir which claude
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($claudePath)) {
+  throw "Failed to resolve claude via mise (exit code $LASTEXITCODE)"
+}
+
+$managed = @'
+{{ $common.mcp | toJson }}
+'@ | ConvertFrom-Json
+
+# バイナリの有無では判定しない。移行済み・途中失敗からの再実行でも
+# 既存の設定を保つ。壊れた ~/.claude.json は上書きせずエラーで止める。
+$configPath = Join-Path $homeDir '.claude.json'
+$configured = @()
+if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+  $config = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+  if ($config.PSObject.Properties.Name -contains 'mcpServers' -and $config.mcpServers) {
+    $configured = @($config.mcpServers.PSObject.Properties.Name)
+  }
+}
+
+foreach ($server in $managed) {
+  if ($configured -contains $server.id) {
+    continue
+  }
+  if ($server.transport -eq 'http') {
+    $spec = [ordered]@{ type = 'http'; url = $server.url }
+  }
+  elseif ($server.transport -eq 'stdio') {
+    # PowerShell の自動変数と衝突しない名前を使う
+    $serverArgs = @()
+    if ($server.PSObject.Properties.Name -contains 'args' -and $server.args) {
+      $serverArgs = @($server.args)
+    }
+    $spec = [ordered]@{ command = $server.command; args = $serverArgs }
+  }
+  else {
+    throw "unsupported transport: $($server.transport)"
+  }
+  # add-json なら http と stdio を同じ経路で登録できる (引数の切り分けが要らない)
+  & $claudePath mcp add-json -s user $server.id ($spec | ConvertTo-Json -Compress)
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to register the $($server.id) MCP server (exit code $LASTEXITCODE)"
+  }
+}
+{{- end -}}

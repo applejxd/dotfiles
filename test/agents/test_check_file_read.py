@@ -10,7 +10,6 @@ import json
 import os
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -18,24 +17,19 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 AGENTS_DIR = ROOT / "home" / "dot_config" / "agents"
 HOOK = ROOT / "home" / "dot_claude" / "hooks" / "executable_check_file_read.py"
-COMMON_PATH = AGENTS_DIR / "common.toml"
 
 sys.path.insert(0, str(AGENTS_DIR))
 import command_policy as policy  # noqa: E402
+from agents_common import agents_config_dir, load_common  # noqa: E402
 
-
-def load_common() -> dict:
-    with COMMON_PATH.open("rb") as f:
-        return tomllib.load(f)
-
-
+COMMON_PATH = agents_config_dir() / "common.toml"
 COMMON = load_common()
 
 
 def run_hook(tool_name: str, path: str, *, config_dir: Path | None = None) -> dict:
     """hook を実プロセスで起動し、出力 JSON を返す (無出力なら空 dict)。"""
     env = dict(os.environ)
-    env["AGENTS_CONFIG_DIR"] = str(config_dir or AGENTS_DIR)
+    env["AGENTS_CONFIG_DIR"] = str(config_dir or COMMON_PATH.parent)
     payload = json.dumps(
         {
             "hook_event_name": "PreToolUse",

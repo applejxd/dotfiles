@@ -29,12 +29,18 @@ MODIFIERS = {
         ".copilot/permissions-config.json",
         "copilot-perms",
     ),
+    ROOT / "home" / "dot_copilot" / "modify_mcp-config.json.py.tmpl": (
+        ".copilot/mcp-config.json",
+        "copilot-mcp",
+    ),
     ROOT / "home" / "dot_gemini" / "modify_settings.json.py.tmpl": (
         ".gemini/settings.json",
         "gemini-settings",
     ),
 }
-COPILOT_HOOKS = ROOT / "home" / "dot_copilot" / "hooks" / "from-claude.json.tmpl"
+COPILOT_HOOKS = (
+    ROOT / "home" / "dot_copilot" / "hooks" / "modify_from-claude.json.py.tmpl"
+)
 CHEZMOI_CONFIG = ROOT / "home" / ".chezmoi.toml.tmpl"
 
 
@@ -60,6 +66,7 @@ def render_shared_wrapper(working_tree: Path, target: str) -> bytes:
     template = (
         '{{ template "modify_json.py.tmpl" '
         f'(dict "workingTree" {json.dumps(str(working_tree))} '
+        '"common" (includeTemplate "dot_config/agents/common.toml.tmpl" .) '
         f'"target" {json.dumps(target)})'
         " }}"
     )
@@ -93,18 +100,23 @@ def test_modifier_targets_keep_json_names():
         assert f"{target}.py" not in managed
 
 
-def test_copilot_hooks_template_renders_as_json():
-    rendered = execute_template(COPILOT_HOOKS.read_text(encoding="utf-8"))
+def test_copilot_hooks_modifier_renders_as_json():
+    # hooks ファイルは完全な生成物なので、既存内容があっても作り直す
+    result = run_wrapper(render_modifier(COPILOT_HOOKS), b'{"stale": true}')
 
-    assert json.loads(rendered)["version"] == 1
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    generated = json.loads(result.stdout)
+    assert generated["version"] == 1
+    assert "stale" not in generated
 
 
 def test_windows_templates_use_latest_python_3():
     config = CHEZMOI_CONFIG.read_text(encoding="utf-8")
-    hooks = COPILOT_HOOKS.read_text(encoding="utf-8")
 
     assert 'args = ["-3"]' in config
-    assert 'output "py" "-3"' in hooks
+    # hooks の生成も modify_ 経由になったので、Windows の Python 選択は
+    # [interpreters.py] が受け持つ (テンプレート側に py -3 を書かない)
+    assert "modify_json.py.tmpl" in COPILOT_HOOKS.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(("source", "_"), MODIFIERS.items())

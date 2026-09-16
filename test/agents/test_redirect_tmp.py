@@ -13,7 +13,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HOOK_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_redirect-tmp.py"
-COMMON_PATH = ROOT / "home" / "dot_config" / "agents" / "common.toml"
+from agents_common import agents_config_dir  # noqa: E402
+
+COMMON_PATH = agents_config_dir() / "common.toml"
 
 
 def run_hook(tool_name: str, tool_input: dict) -> str | None:

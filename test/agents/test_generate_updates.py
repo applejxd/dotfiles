@@ -2,7 +2,6 @@
 
 import copy
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -11,10 +10,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
+from agents_common import load_common  # noqa: E402
 
-COMMON = tomllib.loads(
-    (ROOT / "home/dot_config/agents/common.toml").read_text(encoding="utf-8")
-)
+COMMON = load_common()
 
 
 def test_common_disables_native_auto_updates():

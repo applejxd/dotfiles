@@ -5,6 +5,7 @@ Usage:
     generate.py --target claude-settings --common PATH [--existing PATH]
     generate.py --target copilot-perms --common PATH [--existing PATH]
     generate.py --target copilot-settings --common PATH [--existing PATH]
+    generate.py --target copilot-mcp --common PATH [--existing PATH]
     generate.py --target copilot-hooks --common PATH
     generate.py --target gemini-settings --common PATH [--existing PATH]
 
@@ -625,6 +626,113 @@ def merge_gemini_settings(existing: dict[str, Any], _common: dict[str, Any]) -> 
 
 
 # ---------------------------------------------------------------------------
+# MCP サーバ (common.toml の [[mcp]] -> 各 CLI の形式)
+# ---------------------------------------------------------------------------
+
+# Claude Code はサーバ名に使える文字を「英数字・ハイフン・アンダースコア」に
+# 限っている。Codex 側では id がそのまま TOML のキー (`[mcp_servers.<id>]`) に
+# なるため、ここを外れた名前は生成物を壊す。
+MCP_ID_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+)
+# transport ごとの必須キー。両方の形のキーを持つ定義は生成先で曖昧になるので、
+# ここに無いキーは (typo も含めて) 弾く。
+MCP_TRANSPORT_KEYS = {
+    "http": {"url"},
+    "stdio": {"command", "args"},
+}
+MCP_COMMON_KEYS = {"id", "purpose", "transport"}
+
+
+def mcp_servers(common: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """``[[mcp]]`` を (名前, 定義) の宣言順リストにして返す。
+
+    ユーザ・OS による出し分けは common.toml 側の chezmoi テンプレートが
+    済ませているので、ここには条件が無い (展開後の表だけを見る)。
+
+    設定ミスは黙って無効な MCP 定義を書き出すより、apply を止めた方がよい
+    (生成先の 3 つが食い違ったまま気付けなくなる)。
+    """
+    servers: list[tuple[str, dict[str, Any]]] = []
+    seen: set[str] = set()
+    for server in common.get("mcp", []):
+        name = server.get("id", "")
+        if not name or set(name) - MCP_ID_CHARS:
+            raise ValueError(
+                f"[[mcp]] の id が不正: {name!r} "
+                "(英数字・ハイフン・アンダースコアのみ)"
+            )
+        if name in seen:
+            raise ValueError(f"[[mcp]] の id が重複している: {name}")
+        seen.add(name)
+
+        transport = server.get("transport")
+        if transport not in MCP_TRANSPORT_KEYS:
+            raise ValueError(
+                f"[[mcp]] {name} の transport が未対応: {transport!r} "
+                f"(対応: {', '.join(sorted(MCP_TRANSPORT_KEYS))})"
+            )
+        unknown = set(server) - MCP_COMMON_KEYS - MCP_TRANSPORT_KEYS[transport]
+        if unknown:
+            raise ValueError(
+                f"[[mcp]] {name} に {transport} では使わないキーがある: "
+                + ", ".join(sorted(unknown))
+            )
+
+        entry: dict[str, Any] = {"transport": transport}
+        if transport == "http":
+            url = server.get("url")
+            if not url:
+                raise ValueError(f"[[mcp]] {name} に url が無い")
+            entry["url"] = url
+        else:
+            command = server.get("command")
+            if not command:
+                raise ValueError(f"[[mcp]] {name} に command が無い")
+            args = server.get("args", [])
+            if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+                raise ValueError(f"[[mcp]] {name} の args は文字列のリストで書く")
+            entry["command"] = command
+            entry["args"] = list(args)
+
+        servers.append((name, entry))
+    return servers
+
+
+def merge_copilot_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.copilot/mcp-config.json`` の ``mcpServers`` を更新する。
+
+    このファイルは CLI 自身も書き込む (`copilot mcp add` / `/mcp`) ので、
+    common.toml に書いた名前だけを差し替え、ほかのサーバは残す。
+    同じ名前でも ``headers`` / ``env`` / ``tools`` には触れない: 前 2 つは
+    トークンを環境変数参照で入れる場所 (ADR-0005)、最後は手元で絞った
+    公開範囲で、どれも common.toml が持たない情報だから。
+    """
+    out = dict(existing) if isinstance(existing, dict) else {}
+    servers = dict(out.get("mcpServers") or {})
+    for name, server in mcp_servers(common):
+        entry = dict(servers.get(name) or {})
+        if server["transport"] == "http":
+            entry["type"] = "http"
+            entry["url"] = server["url"]
+            entry.setdefault("headers", {})
+            stale = ("command", "args")
+        else:
+            # Copilot は stdio を "local" と呼ぶ (実測: `copilot mcp add` の出力)
+            entry["type"] = "local"
+            entry["command"] = server["command"]
+            entry["args"] = server["args"]
+            stale = ("url", "headers")
+        # transport を変えたときに前の形のキーを残さない (両方あると曖昧になる)
+        for key in stale:
+            entry.pop(key, None)
+        entry.setdefault("tools", ["*"])
+        servers[name] = entry
+    out["mcpServers"] = servers
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Copilot settings target (一部キーのみ置換し、他は温存)
 # ---------------------------------------------------------------------------
 
@@ -765,10 +873,16 @@ def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> 
 TARGETS = {
     "claude-settings": merge_claude_settings,
     "copilot-hooks": merge_copilot_hooks,
+    "copilot-mcp": merge_copilot_mcp,
     "copilot-perms": merge_copilot_perms,
     "copilot-settings": merge_copilot_settings,
     "gemini-settings": merge_gemini_settings,
 }
+
+# 既存内容を一切参照しない (完全生成の) ターゲット。
+# 既存ファイルが壊れた JSON でも作り直せるよう、読み込み自体を省く。
+# 省かないと、壊れたファイルを直すための apply がパースで失敗して詰む。
+FULL_GENERATION_TARGETS = {"copilot-hooks"}
 
 
 def load_existing(path: str | None) -> dict[str, Any]:
@@ -946,7 +1060,7 @@ def main(argv: list[str] | None = None) -> int:
     common = apply_local_overlay(common, load_local_overlay())
     # 旧名・綴り間違いは防御を黙って消すので、生成前に落とす
     validate_sandbox_keys(common)
-    existing = load_existing(args.existing)
+    existing = {} if args.target in FULL_GENERATION_TARGETS else load_existing(args.existing)
     merger = TARGETS[args.target]
     merged = merger(existing, common)
 

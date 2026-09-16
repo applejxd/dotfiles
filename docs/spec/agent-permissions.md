@@ -22,11 +22,17 @@ sandbox が **何を提供しているか** (採用していない機能も含�
 
 ```text
 home/dot_config/agents/
-    common.toml                              単一ソース (permissions + hooks)
+    common.toml.tmpl                         単一ソース (permissions + hooks + MCP)
+                                             chezmoi テンプレート。ユーザ・OS の
+                                             出し分けはここに書く
     command_policy.py                        hook が import する normalizer / matcher
                                              (deny / ask リストの loader も兼ねる)
 scripts/agents/
     generate.py                              modify_ / .tmpl から呼ばれる変換器
+    validate_common.py                       描画結果の TOML / スキーマ検査
+home/.chezmoiscripts/
+    300_windows/run_onchange_after_346_claude_mcp.ps1.tmpl  未登録の MCP を claude へ登録
+    400_unix/run_onchange_after_410_claude_mcp.sh.tmpl      同上 (Unix)
 home/dot_claude/
     modify_settings.json.py.tmpl             ~/.claude/settings.json を更新
 home/dot_claude/hooks/
@@ -36,12 +42,16 @@ home/dot_claude/hooks/
     executable_markdownlint.sh               Markdown の lint
     executable_format-file.sh                拡張子別のフォーマッタ実行
 home/dot_copilot/
-    hooks/from-claude.json.tmpl              ~/.copilot/hooks/from-claude.json を生成
+    hooks/modify_from-claude.json.py.tmpl    ~/.copilot/hooks/from-claude.json を生成
     modify_private_settings.json.py.tmpl     ~/.copilot/settings.json を更新
     modify_private_permissions-config.json.py.tmpl
+    modify_mcp-config.json.py.tmpl           ~/.copilot/mcp-config.json を更新
+home/dot_codex/
+    modify_config.toml                       ~/.codex/config.toml の管理ブロックを描画
 home/dot_gemini/
     modify_settings.json.py.tmpl             ~/.gemini/settings.json を更新
 test/agents/
+    agents_common.py                         描画した common.toml をテストへ渡す
     test_command_policy.py                   shell normalize / match の unit test
     test_check_bash_decision.py              deny/ask 判定と rm root guard の test
     test_check_file_read.py                  ファイル読み取り遮断と glob 照合の test
@@ -50,11 +60,27 @@ test/agents/
     test_generate_updates.py                 CLI 自動更新停止 / 既存 env 保持
     test_generate_sandbox.py                 sandbox 設定生成の unit test
     test_herdr_integration.py                Herdr統合の生成・保持
-    test_mise_agents.py                      mise 導入後の DeepWiki MCP 設定
+    test_mcp_servers.py                      MCP の単一ソース化と 3 CLI への生成
+    test_mise_agents.py                      Claude への MCP 登録スクリプト
     test_modifier_wrappers.py                modify_ ラッパーの end-to-end test
     test_redirect_tmp.py                     一時パス誘導の判定
     test_skill_frontmatter.py                SKILL.md frontmatter検証
 ```
+
+`common.toml` は **chezmoi テンプレート**なので、ユーザ・OS による出し分けを
+`{{ if }}` で書ける。生成側 (`generate.py` を呼ぶ modify\_ など) は
+`includeTemplate "dot_config/agents/common.toml.tmpl"` で描画結果を受け取る
+(`include` は描画しない。`includeTemplate` は `.chezmoitemplates/` に無ければ
+source directory を探すので、配備用のテンプレートをそのまま共有できる)。
+
+**配備済みファイルは使えない**。modify\_ が動く時点では `~/.config/agents/common.toml`
+がまだ更新されておらず、`chezmoi diff` や部分適用でも当てにできない。
+
+素の TOML ではなくなるため `check-toml` は効かない (ファイル名が `.toml` で
+終わらないので対象外)。代わりに pre-commit の `common-toml-local` が
+`scripts/agents/validate_common.py` を呼び、出し分けの両側を描画して
+TOML として読めること・必須の deny リストが空でないこと・`[[mcp]]` が
+スキーマに合うことを確認する。chezmoi が無い環境では skip せず失敗する。
 
 Python runtime は 3.11 以上を前提とし、TOML は標準ライブラリ `tomllib` で読む。
 Windows ではインストール済みの最新 Python 3 を選ぶ `py -3`、Unix では
@@ -79,6 +105,73 @@ Claude の既存 `env` はこのキーだけを上書きし、それ以外の環
 `DISABLE_AUTOUPDATER` はバックグラウンド更新のみを止めるため、手動の
 `claude update` / `copilot update` も使わず、mise で更新してください。
 導入順と更新手順は [mise による CLI 管理](structure.md#mise-による-cli-管理)を参照。
+
+## MCP サーバ
+
+MCP サーバの定義も `common.toml` の `[[mcp]]` が単一ソース。同じサーバを
+CLI ごとに書くと、URL を変えたときに片方だけ古いまま残る。
+
+```toml
+[[mcp]]
+id = "deepwiki"
+purpose = "GitHub リポジトリのドキュメントを検索する"
+transport = "http"
+url = "https://mcp.deepwiki.com/mcp"
+
+{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
+[[mcp]]
+id = "ddgs"
+purpose = "DuckDuckGo で web 検索する"
+transport = "stdio"
+command = "uvx"
+args = ["--from", "ddgs[mcp]", "ddgs", "mcp"]
+{{- end }}
+```
+
+| CLI | 生成先 | 生成する仕組み |
+| --- | --- | --- |
+| Copilot CLI | `~/.copilot/mcp-config.json` | `generate.py --target copilot-mcp` |
+| Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
+| Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
+
+Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
+
+**Claude だけ生成ではない理由**: user scope の定義先である `~/.claude.json` は
+MCP の `headers` / `env` に秘密が入りうるため chezmoi 管理外にしている
+([ADR-0005](../adr/0005-agent-runtime-config-as-secret.md))。
+そのためファイルを書かず、`[[mcp]]` のうち **未登録のものだけ** を CLI 経由で
+追加する。既に同名のサーバがあれば触らないので、手元で差し替えた定義は残る。
+`run_onchange_` なので `[[mcp]]` を増やすと次の `chezmoi apply` で登録される。
+`add-json` を使うのは、http と stdio を同じ経路で登録できるため。
+
+**適用範囲の非対称性**: この仕組みが揃えるのは「配布する既定値」であって、
+全 CLI の状態の完全同期ではない。宣言から消したサーバは Copilot / Claude の
+手元設定からは消えない (Codex は管理ブロックごと再生成するので消える)。
+`chezmoi apply --exclude=scripts` や `chezmoi diff` では Claude の登録だけが
+走らない点も同じ理由による。
+
+**Codex の衝突**: 管理ブロックの外に同名の `[mcp_servers.<id>]` があると
+TOML の重複宣言になり、Codex が設定ファイル全体を読めなくなる。黙って壊さない
+よう、`modify_config.toml` が衝突を検出して `apply` を止める。
+
+**ユーザ・OS による出し分け**: `common.toml` 側のテンプレートに書く。生成側
+3 つは展開後の表だけを見るので、条件の解釈は 1 か所で済む。上の例では
+`applejxd` に `ddgs` を入れない (Copilot CLI 内蔵の web 検索を使うため)。
+
+**transport**: `http` は `url`、`stdio` は `command` / `args` を書く。
+`stdio` のサーバは `uvx` から起動する形にしておくと、本体を別途入れずに済み、
+`mise reshim` の要否やバックエンドの破損に左右されない。MCP サーバは sandbox
+内で動く (Copilot は `sandboxMcpServers: true`) が、`uvx` が使う `~/.cache/uv`
+と `~/.local/share/uv/tools` は書き込み許可済みで、`pypi.org` /
+`files.pythonhosted.org` も許可済みなので追加設定は要らない。
+
+**生成側が触らないもの**: Copilot の `headers` / `env` / `tools`、および
+common.toml に無いサーバは既存値のまま残す。前 2 つは秘密、最後は公開範囲の
+設定で、どれも `common.toml` が持たない情報だから。
+
+未対応の transport・重複 id・不正な id・transport に無いキー (typo) は
+`generate.py` が `apply` を止める。トークンは `common.toml` に書かず、
+環境変数参照として各 CLI 側で設定する。
 
 ## 3 層構成
 
