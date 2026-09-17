@@ -71,6 +71,42 @@ chezmoi が `skip template` を返し、検査対象から外れる。
 - `home/.chezmoitemplates/**` — 単体では描画できない（`test_modifier_wrappers.py` が担保）
 - `.chezmoi.toml.tmpl` — `execute-template --init` が要る
 
+##### Windows 実機での検証
+
+次を変更したら **Windows の PowerShell で**検証する。WSL / Linux では実行できない。
+
+- `home/**/*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`
+- `home/.chezmoiscripts/300_windows/`
+- Windows 向けの hook 起動コマンド生成（`scripts/agents/generate.py`）
+
+```powershell
+chezmoi apply
+uv run --with pytest --with pywinpty --no-project pytest test\test_windows_assets.py test\test_powershell_interactive.py -q
+```
+
+`test_powershell_interactive.py` は**配備済みの実プロファイル**を PowerShell 7 と
+Windows PowerShell 5.1 の ConPTY セッションで読み込み、プロンプト到達後の状態を
+検査する。だから先に `chezmoi apply` が要る。`pywinpty` はその ConPTY を Python から
+扱うための依存で、Rust ビルドの Windows 専用パッケージ。WSL / Linux では
+**依存解決の時点でビルドに失敗する**。
+
+| 環境 | 実行できる範囲 |
+| --- | --- |
+| Windows (pwsh) | 静的 + 対話 |
+| WSL / Linux | 静的のみ（`uv run --with pytest --no-project pytest test/test_windows_assets.py -q`） |
+
+対話テストは `os.name != "nt"` で全件 skip するため、WSL で
+「27 passed / 4 skipped」を見ても Windows 側は未検証である。静的テストが拾えるのは
+UTF-8 BOM、winget の記法、プロファイルの字面までで、次は拾えない。
+
+- 起動エラーと OnIdle ジョブのエラー（どちらもコンソールに出ない）
+- 対話時だけ実行するブロック（PSReadLine / oh-my-posh / PSFzf / ZLocation、
+  `pbcopy` などの補助関数）
+- oh-my-posh の init をキャッシュすると pure テーマが既定の powerline へ戻る問題、
+  `mise activate` の PATH 重複、`Ctrl+d` の既定バインドが端末を閉じる問題
+
+実機で回せない場合は「Windows 未検証」と明記する。
+
 #### 4. 継続的な使用
 
 ```bash

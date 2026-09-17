@@ -12,7 +12,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 | --- | --- |
 | 全体（lint / secret scan） | `uv run pre-commit run --all-files` |
 | agent 設定・hook | `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` |
-| Windows 資産 | `uv run --with pytest --with pywinpty --no-project pytest test/test_windows_assets.py test/test_powershell_interactive.py -q` |
+| Windows 資産（静的） | `uv run --with pytest --no-project pytest test/test_windows_assets.py -q` |
 | シェルスクリプト | `git ls-files '*.sh' \| xargs mise exec shellcheck -- shellcheck` |
 | テンプレート（描画して検査） | `mise exec -- python3 scripts/lint_templates.py` |
 | 展開結果 | `chezmoi diff`（sandbox 内では不可。下記） |
@@ -26,6 +26,26 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 `chezmoi diff` は **AI CLI の sandbox 内では意味のある結果を返さない**。
 `~/` が deny-by-default で不可視のため、展開先が空に見えて全て「new file」
 になる。sandbox 外のシェルで実行すること。
+
+### Windows 実機での検証
+
+次を触ったら、**Windows の PowerShell で**以下を実行する。WSL / Linux では実行できない。
+
+- `home/**/*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`
+- `home/.chezmoiscripts/300_windows/`
+- Windows 向けの hook 起動コマンド生成（`scripts/agents/generate.py`）
+
+```powershell
+chezmoi apply
+uv run --with pytest --with pywinpty --no-project pytest test\test_windows_assets.py test\test_powershell_interactive.py -q
+```
+
+- 対話テストは**配備済みの実プロファイル**を ConPTY で読むため、先に `chezmoi apply` が要る
+- `pywinpty` は Windows 専用（Rust ビルド）。WSL / Linux では依存解決の時点で失敗する
+- 対話テストは `os.name != "nt"` で全件 skip する。WSL で「27 passed / 4 skipped」を
+  見ても **Windows 側は未検証**。実機で回せない場合はそう明記する
+- 何が拾えて何が拾えないかは
+  [開発ガイド](docs/spec/development.md#windows-実機での検証)
 
 ## このリポジトリ固有の約束
 
