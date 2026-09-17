@@ -105,11 +105,15 @@ ls -la "$HOME/.claude/hooks/lib/" 2>/dev/null
 Copilot CLI 用設定ファイルからスクリプトを呼ぶときは **absolute path** が安全:
 
 ```json
-{ "bash": "python $HOME/.claude/hooks/my_hook.py" }
+{ "bash": "python \"$HOME/.claude/hooks/my_hook.py\"" }
 ```
 
-`$HOME` は環境変数として展開される。`${CLAUDE_PROJECT_DIR}` のような Claude 専用
-変数は Copilot では展開されないので注意 (`references/pitfalls.md` 参照)。
+`$HOME` は環境変数として展開される。パスは必ず引用してホームの空白を保護する。
+`powershell` キーでは `$HOME` を使わず絶対パスを単一引用符で囲む
+（PowerShell の `$HOME` は `HOMEDRIVE`+`HOMEPATH` 由来で `%USERPROFILE%` と
+一致しないことがあり、単一引用符は `-Command` 経由でもリテラルのまま残る）。
+`${CLAUDE_PROJECT_DIR}` のような Claude 専用変数は Copilot では展開されないので
+注意 (`references/pitfalls.md` 参照)。
 
 ## 検証手順
 

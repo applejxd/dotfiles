@@ -51,31 +51,49 @@ def first_token(pattern: str) -> str:
 
 # hook スクリプトの配置先。Claude / Copilot とも同じ実体を共有する。
 HOOKS_DIR = "~/.claude/hooks"
+# ホーム表記に依存せず「このディレクトリを起動しているか」を判定するための部分。
+HOOKS_DIR_TAIL = HOOKS_DIR.removeprefix("~") + "/"
+
+
+def quote_powershell(value: str) -> str:
+    """PowerShell の単一引用符で囲む (リテラル扱い、`'` は `''` へ二重化)。
+
+    Copilot が `powershell` フィールドを `-Command` へ渡す場合、二重引用符は
+    外側の引用と衝突して失われうる。単一引用符なら中身は展開も再解釈もされない。
+    """
+    return "'" + value.replace("'", "''") + "'"
 
 
 def hook_command(
     hook: dict[str, Any],
     *,
-    expand_home: bool,
+    launcher: str,
     platform: str | None = None,
 ) -> str:
     """hook の起動コマンド文字列を組み立てる。
 
-    expand_home=True  -> "/home/user/.claude/hooks/x.py" (Claude 用の絶対パス)
-    expand_home=False -> '"$HOME/.claude/hooks/x.py"'    (Copilot 用、空白を保護)
+    launcher は生成先フィールドを解釈する側。パス表記と引用符が変わる。
+
+    | launcher     | 生成先                          | パス   | 引用            |
+    | ------------ | ------------------------------- | ------ | --------------- |
+    | "claude"     | settings.json の hooks[].command | 絶対   | `"..."`         |
+    | "bash"       | from-claude.json の bash (Unix) | $HOME  | `"..."`         |
+    | "powershell" | from-claude.json の powershell  | 絶対   | `'...'`         |
+
+    Windows で `$HOME` を使わないのは、PowerShell の `$HOME` が
+    `HOMEDRIVE`+`HOMEPATH` 由来で chezmoi の `~` (`%USERPROFILE%`) と
+    一致しないことがあるため (docs/spec/structure.md)。生成は対象マシン上で
+    走るので `expand_user()` は chezmoi と同じホームを返す。
     """
     runner = hook.get("runner", "python")
     if runner == "python3" and (platform or os.name) == "nt":
-        runner = "py -3 -B"
-        if not expand_home:
-            # Windows の既定コードページでは hook の日本語 JSON が壊れる。
-            runner += " -X utf8"
-    script = hook["script"]
-    base = expand_user(HOOKS_DIR) if expand_home else HOOKS_DIR.replace("~", "$HOME", 1)
-    path = f"{base}/{script}"
-    if not expand_home:
-        path = f'"{path}"'
-    return f"{runner} {path}"
+        # -B: __pycache__ を作らない / -X utf8: 既定コードページだと日本語 JSON が壊れる
+        runner = "py -3 -B -X utf8"
+    # bash フィールドは Unix 専用。ホームを埋め込まず $HOME を参照させる。
+    base = HOOKS_DIR.replace("~", "$HOME", 1) if launcher == "bash" else expand_user(HOOKS_DIR)
+    path = f"{base}/{hook['script']}"
+    quoted = quote_powershell(path) if launcher == "powershell" else f'"{path}"'
+    return f"{runner} {quoted}"
 
 
 def is_managed_hook_command(command: Any) -> bool:
@@ -83,15 +101,13 @@ def is_managed_hook_command(command: Any) -> bool:
 
     settings.json の hooks は Orca などの外部ツールも追記する共有領域なので、
     「HOOKS_DIR 配下のスクリプトを起動しているか」で自分の生成物だけを識別する。
-    hook_command() は絶対パス表記と $HOME 表記の両方を出しうるので双方を見る。
+    ホーム部分の表記 (絶対パス / `$HOME` / `~`) と引用符の有無は問わない。
+    絶対パスで比較すると PowerShell の `''` エスケープや別表記のホームを
+    取りこぼし、消し損ねた hook が二重登録される。
     """
     if not isinstance(command, str):
         return False
-    prefixes = (
-        expand_user(HOOKS_DIR) + "/",
-        HOOKS_DIR.replace("~", "$HOME", 1) + "/",
-    )
-    return any(prefix in command for prefix in prefixes)
+    return HOOKS_DIR_TAIL in command.replace("\\", "/")
 
 
 def strip_managed_claude_hooks(entries: Any) -> Any:
@@ -181,7 +197,7 @@ def build_claude_hooks(
             "type": "command",
             "command": hook_command(
                 hook,
-                expand_home=True,
+                launcher="claude",
                 platform=platform,
             ),
         }
@@ -212,7 +228,7 @@ def build_copilot_hooks(
         entry["type"] = "command"
         entry[command_key] = hook_command(
             hook,
-            expand_home=False,
+            launcher=command_key,
             platform=platform,
         )
         timeout = hook.get("timeout_sec")

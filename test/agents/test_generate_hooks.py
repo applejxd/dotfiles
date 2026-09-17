@@ -92,9 +92,11 @@ def test_windows_python_hooks_use_latest_python_3():
         for entries in copilot["hooks"].values()
         for entry in entries
     )
-    python_commands = [command for command in commands if command.rstrip('"').endswith(".py")]
+    python_commands = [
+        command for command in commands if command.rstrip("\"'").endswith(".py")
+    ]
     assert python_commands
-    assert all(command.startswith("py -3 ") for command in python_commands)
+    assert all(command.startswith("py -3 -B -X utf8 ") for command in python_commands)
 
 
 def test_runtime_code_has_no_external_tomli_dependency():
@@ -164,7 +166,7 @@ def test_claude_hooks_cover_every_declared_hook():
     ]
     for hook in COMMON["hooks"]:
         if hook.get("claude_event"):
-            assert any(c.endswith(hook["script"]) for c in commands)
+            assert any(c.rstrip("\"'").endswith(hook["script"]) for c in commands)
 
 
 def test_claude_hook_command_is_absolute_path():
@@ -396,13 +398,85 @@ def test_copilot_matchers_are_anchored():
             )
 
 
-@pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
-def test_copilot_hook_uses_quoted_home_variable(platform, command_key):
-    out = gen.build_copilot_hooks(COMMON, platform=platform)
+def test_copilot_unix_hook_uses_quoted_home_variable():
+    out = gen.build_copilot_hooks(COMMON, platform="posix")
     for entries in out["hooks"].values():
         for entry in entries:
-            assert '"$HOME/.claude/hooks/' in entry[command_key]
-            assert entry[command_key].endswith('"')
+            assert '"$HOME/.claude/hooks/' in entry["bash"]
+            assert entry["bash"].endswith('"')
+
+
+def test_copilot_windows_hook_uses_absolute_path_in_single_quotes():
+    # PowerShell の $HOME は HOMEDRIVE+HOMEPATH 由来で chezmoi の ~ と一致しない
+    # ことがある (docs/spec/structure.md)。単一引用符は -Command 経由でも
+    # リテラルのまま残る。
+    out = gen.build_copilot_hooks(COMMON, platform="nt")
+    home = gen.expand_user(gen.HOOKS_DIR)
+    for entries in out["hooks"].values():
+        for entry in entries:
+            command = entry["powershell"]
+            assert "$HOME" not in command
+            assert f"'{home}/" in command
+            assert command.endswith("'")
+
+
+# ---------------------------------------------------------------------------
+# ホームに空白やアポストロフィがあっても 1 引数に収まること
+# ---------------------------------------------------------------------------
+
+# 空白と ' はどちらも Windows のファイル名として合法。
+WEIRD_HOME = r"C:\Users\O'Brien First Last"
+WEIRD_HOOK = {"script": "check_bash.py", "runner": "python3"}
+
+
+@pytest.fixture
+def weird_home(monkeypatch):
+    monkeypatch.setattr(gen, "expand_user", lambda p: p.replace("~", WEIRD_HOME, 1))
+    return f"{WEIRD_HOME}/.claude/hooks/check_bash.py"
+
+
+def powershell_single_quoted_arg(command: str) -> str:
+    """PowerShell の単一引用符で囲まれた末尾の引数を取り出す。"""
+    assert command.endswith("'"), command
+    return command[command.index("'") + 1 : -1].replace("''", "'")
+
+
+def test_claude_windows_hook_path_is_one_argument(weird_home):
+    # Claude Code は Windows でも hook コマンドを shell (Git Bash) に渡す。
+    command = gen.hook_command(WEIRD_HOOK, launcher="claude", platform="nt")
+    assert "$HOME" not in command
+    assert shlex.split(command) == ["py", "-3", "-B", "-X", "utf8", weird_home]
+
+
+def test_copilot_powershell_hook_path_is_one_argument(weird_home):
+    command = gen.hook_command(WEIRD_HOOK, launcher="powershell", platform="nt")
+    assert "$HOME" not in command
+    assert command.startswith("py -3 -B -X utf8 ")
+    # ' は '' へ二重化され、PowerShell 側で元のパスへ戻る
+    assert "''Brien" in command
+    assert powershell_single_quoted_arg(command) == weird_home
+
+
+def test_claude_unix_hook_path_is_one_argument(weird_home):
+    command = gen.hook_command(WEIRD_HOOK, launcher="claude", platform="posix")
+    assert shlex.split(command) == ["python3", weird_home]
+
+
+def test_copilot_unix_hook_keeps_home_variable(weird_home):
+    # bash フィールドは Unix 専用。ホームを埋め込まず $HOME を参照させる。
+    command = gen.hook_command(WEIRD_HOOK, launcher="bash", platform="posix")
+    assert command == 'python3 "$HOME/.claude/hooks/check_bash.py"'
+
+
+def test_managed_hook_detection_survives_quoting(weird_home):
+    for launcher, platform in [
+        ("claude", "nt"),
+        ("claude", "posix"),
+        ("powershell", "nt"),
+        ("bash", "posix"),
+    ]:
+        command = gen.hook_command(WEIRD_HOOK, launcher=launcher, platform=platform)
+        assert gen.is_managed_hook_command(command), command
 
 
 @pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
@@ -425,10 +499,14 @@ def test_copilot_commands_preserve_hooks_and_metadata(platform, command_key, pyt
     assert sum(len(entries) for entries in out["hooks"].values()) == len(declared)
     for hook in declared:
         runner = python_runner if hook["runner"] == "python3" else hook["runner"]
+        if command_key == "powershell":
+            path = f"'{gen.expand_user(gen.HOOKS_DIR)}/{hook['script']}'"
+        else:
+            path = f'"$HOME/.claude/hooks/{hook["script"]}"'
         assert {
             "matcher": hook["copilot_matcher"],
             "type": "command",
-            command_key: f'{runner} "$HOME/.claude/hooks/{hook["script"]}"',
+            command_key: f"{runner} {path}",
             "timeoutSec": hook["timeout_sec"],
         } in out["hooks"][hook["copilot_event"]]
 
@@ -537,7 +615,7 @@ def test_both_clis_reference_the_same_scripts(platform, command_key):
     copilot = gen.build_copilot_hooks(COMMON, platform=platform)
 
     def scripts(commands):
-        return {c.rstrip('"').rsplit("/", 1)[-1] for c in commands}
+        return {c.rstrip("\"'").rsplit("/", 1)[-1] for c in commands}
 
     claude_scripts = scripts(
         cmd["command"]

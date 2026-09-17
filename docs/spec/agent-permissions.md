@@ -1627,9 +1627,23 @@ Claude には「許可した以外を拒否する」表現手段が無い。
 | `~/.copilot/hooks/from-claude.json` | `from-claude.json.tmpl` の `output` → `--target copilot-hooks` | `copilot_event` / `copilot_matcher` / `timeout_sec` |
 
 - hook スクリプトの実体は `~/.claude/hooks/` に 1 つだけ置き、Copilot からも
-  同じファイルを呼ぶ (`$HOME/.claude/hooks/...`)
+  同じファイルを呼ぶ
 - Copilot の起動キーは Windows では `powershell`、Linux / macOS / WSL では
-  `bash`。パスは引用し、Windows の Python hook は bytecode を生成しない
+  `bash`。パスの表記と引用は起動キーごとに変える
+
+  | 生成先フィールド | パス | 引用 |
+  | --- | --- | --- |
+  | Claude の `command` | 絶対パス | `"..."` |
+  | Copilot の `bash` | `$HOME/...` | `"..."` |
+  | Copilot の `powershell` | 絶対パス | `'...'` (`'` は `''` へ) |
+
+  Windows で `$HOME` を使わないのは、PowerShell の `$HOME` が
+  `HOMEDRIVE`+`HOMEPATH` 由来で chezmoi の `~` (`%USERPROFILE%`) と一致しない
+  ことがあるため ([structure.md](structure.md))。生成は `chezmoi apply` 時に
+  対象マシン上で走るので、絶対パスは必ずそのマシンのホームを指す。
+  `powershell` を単一引用符にするのは、値が `-Command` へ渡された場合に
+  二重引用符が外側の引用と衝突しうるため。
+  Windows の Python hook は bytecode を生成せず日本語 JSON を壊さない
   `py -3 -B -X utf8` で起動する。
   反映・切り分け手順は [Windows の hook 起動](../../home/dot_copilot/README.md#windows-の-hook-起動)
   を参照
@@ -1653,7 +1667,7 @@ Orca は `~/.claude/settings.json` と `~/.gemini/settings.json` の `hooks` へ
 
 | 判定 | 扱い |
 | --- | --- |
-| コマンドが `~/.claude/hooks/` (または `$HOME/.claude/hooks/`) を起動している | chezmoi の生成物。除去して `common.toml` から再生成 |
+| コマンドが `~/.claude/hooks/` を起動している (ホームの表記と引用は問わない) | chezmoi の生成物。除去して `common.toml` から再生成 |
 | それ以外 | 外部由来。そのまま温存 |
 
 パス基準で所有権を判定できるのは、`~/.claude/hooks/` 配下が

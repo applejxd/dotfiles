@@ -56,8 +56,8 @@
         {
           "matcher": "^bash$",
           "type": "command",
-          "bash": "python $HOME/.claude/hooks/check_bash.py",
-          "powershell": "python $env:USERPROFILE\\.claude\\hooks\\check_bash.py",
+          "bash": "python \"$HOME/.claude/hooks/check_bash.py\"",
+          "powershell": "python 'C:\\Users\\<you>\\.claude\\hooks\\check_bash.py'",
           "timeoutSec": 30
         },
         {
@@ -92,6 +92,8 @@
     "MultiEdit ツールは Claude Code v2.0 系で削除済み。matcher に書いても一致しないので不要",
     "permission rule (allow/ask/deny や allowed-tools) では Write(path) が v2.1.210 で deprecated。Edit(path) を使う (hooks の matcher の Write は現役)",
     "Copilot は bash と powershell の両キーで Windows 対応",
+    "パスは必ず引用する。bash は \"...\"、powershell は '...' (単一引用符はリテラル扱いで -Command に強い)",
+    "powershell キーで $HOME は使わない。HOMEDRIVE+HOMEPATH 由来で %USERPROFILE% と一致しないことがある",
     "両ツール対応のスクリプトを書けば、設定ファイルだけ別々で管理できる"
   ]
 }

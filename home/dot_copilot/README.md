@@ -13,23 +13,30 @@
 仕様は [GitHub Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference#command-hooks)
 を参照。
 
-Windows の Python hook は次の形式になる。パスの引用でホームディレクトリの
-空白を保護し、`-X utf8` で stdin / stdout の日本語 JSON を UTF-8 に固定する。
+Windows の Python hook は次の形式になる。パスは `$HOME` を使わず絶対パスを
+**単一引用符**で囲み、`-X utf8` で stdin / stdout の日本語 JSON を UTF-8 に固定する。
 
 ```json
 {
   "type": "command",
-  "powershell": "py -3 -B -X utf8 \"$HOME/.claude/hooks/check_bash.py\"",
+  "powershell": "py -3 -B -X utf8 'C:\\Users\\example/.claude/hooks/check_bash.py'",
   "timeoutSec": 30
 }
 ```
+
+`$HOME` を使わないのは、PowerShell の `$HOME` が `HOMEDRIVE`+`HOMEPATH` 由来で、
+ホームをリダイレクトしたドメイン参加機では chezmoi の `~`（`%USERPROFILE%`）と
+一致しないため。パスは `chezmoi apply` の実行時に確定するので、生成結果は
+必ずそのマシンのホームを指す。単一引用符なのは、`powershell` の値が
+`-Command` へ渡される場合に二重引用符が外側の引用と衝突しうるため
+（単一引用符の中は展開も再解釈もされない。`'` は `''` へ二重化する）。
 
 更新したソースを Windows に取り込んだ後、PowerShell で対象設定だけを反映し、
 Copilot CLI を再起動する。
 
 ```powershell
-chezmoi diff "$HOME/.copilot/hooks/from-claude.json"
-chezmoi apply --exclude=scripts "$HOME/.copilot/hooks/from-claude.json"
+chezmoi diff "$env:USERPROFILE\.copilot\hooks\from-claude.json"
+chezmoi apply --exclude=scripts "$env:USERPROFILE\.copilot\hooks\from-claude.json"
 ```
 
 Python 3.11 以上 (`tomllib` が必要) を `py -3` で起動できることが前提。
@@ -42,10 +49,10 @@ Python hook の起動には不要。
 ```powershell
 py -3 --version
 '{"hook_event_name":"PreToolUse","tool_name":"bash","tool_input":{"command":"git status"}}' |
-    py -3 -B -X utf8 "$HOME/.claude/hooks/check_bash.py"
+    py -3 -B -X utf8 "$env:USERPROFILE\.claude\hooks\check_bash.py"
 $LASTEXITCODE
 '{"hook_event_name":"PreToolUse","tool_name":"create","tool_input":{"path":"/tmp/hook-probe.txt"}}' |
-    py -3 -B -X utf8 "$HOME/.claude/hooks/redirect-tmp.py"
+    py -3 -B -X utf8 "$env:USERPROFILE\.claude\hooks\redirect-tmp.py"
 $LASTEXITCODE
 ```
 
