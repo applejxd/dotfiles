@@ -14,7 +14,7 @@ function open() {
     if [ "$#" != 1 ]; then
         explorer.exe .
     else
-        if [ -e $1 ]; then
+        if [ -e "$1" ]; then
             explorer.exe "$(wslpath -w "$1")" 2> /dev/null
         else
             echo "open: $1 : No such file or directory"
@@ -108,10 +108,13 @@ fi
 # history preserved yazi command
 if command -v "yazi" >/dev/null 2>&1; then
     function y() {
-        local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+        local tmp cwd
+        tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
         command yazi "$@" --cwd-file="$tmp"
         IFS= read -r -d '' cwd < "$tmp"
-        [ "$cwd" != "$PWD" ] && [ -d "$cwd" ] && builtin cd -- "$cwd"
+        if [ "$cwd" != "$PWD" ] && [ -d "$cwd" ]; then
+            builtin cd -- "$cwd" || return
+        fi
         rm -f -- "$tmp"
     }
 fi

@@ -9,9 +9,7 @@ export DEBIAN_FRONTEND=noninteractive
 ARCH="$(dpkg --print-architecture)"
 KEYRING="/usr/share/keyrings/microsoft.gpg"
 VSCODE_LIST="/etc/apt/sources.list.d/vscode.list"
-EDGE_LIST="/etc/apt/sources.list.d/microsoft-edge.list"
 VSCODE_LINE="deb [arch=${ARCH} signed-by=${KEYRING}] https://packages.microsoft.com/repos/code stable main"
-EDGE_LINE="deb [arch=${ARCH} signed-by=${KEYRING}] https://packages.microsoft.com/repos/edge stable main"
 
 sudo -v
 sudo apt-get -yq install --no-install-recommends ca-certificates apt-transport-https wget gpg
@@ -33,6 +31,9 @@ if (( changed )); then sudo apt-get -yq update; changed=0; fi
 command -v code >/dev/null 2>&1 || sudo apt-get -yq install code
 
 #---[ 3) Edge: repo & command ]---
+# Edge は現在導入しない。再開するときは変数ごと戻すこと。
+#EDGE_LIST="/etc/apt/sources.list.d/microsoft-edge.list"
+#EDGE_LINE="deb [arch=${ARCH} signed-by=${KEYRING}] https://packages.microsoft.com/repos/edge stable main"
 #if [[ ! -e "$EDGE_LIST" ]] || ! grep -Fqx "$EDGE_LINE" "$EDGE_LIST" 2>/dev/null; then
 #  echo "$EDGE_LINE" | sudo tee "$EDGE_LIST" >/dev/null
 #  changed=1
