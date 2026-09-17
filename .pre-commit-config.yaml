@@ -40,12 +40,23 @@ repos:
 
       # common.toml は chezmoi テンプレートなので check-toml が使えない。
       # hook が fail-closed で読む正本なので、描画結果を検査して代替する。
+      # (TOML として読めるかは lint-templates-local でも見る。こちらは
+      #  ポリシー固有のスキーマが主目的)
       - id: common-toml-local
         name: Rendered common.toml check
         entry: mise exec -- python3 scripts/agents/validate_common.py
         language: system
         pass_filenames: false
         files: ^(home/dot_config/agents/common\.toml\.tmpl|scripts/agents/(generate|validate_common)\.py)$
+
+      # identify は *.tmpl に何のタグも付けないため、check-toml / ruff /
+      # shellcheck がテンプレートを素通りする。描画してから振り分ける。
+      - id: lint-templates-local
+        name: Lint rendered chezmoi templates
+        entry: mise exec -- python3 scripts/lint_templates.py
+        language: system
+        pass_filenames: false
+        files: (\.tmpl|^scripts/lint_templates\.py)$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

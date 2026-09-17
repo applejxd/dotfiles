@@ -14,7 +14,12 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 | agent 設定・hook | `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` |
 | Windows 資産 | `uv run --with pytest --with pywinpty --no-project pytest test/test_windows_assets.py test/test_powershell_interactive.py -q` |
 | シェルスクリプト | `git ls-files '*.sh' \| xargs mise exec shellcheck -- shellcheck` |
+| テンプレート（描画して検査） | `mise exec -- python3 scripts/lint_templates.py` |
 | 展開結果 | `chezmoi diff`（sandbox 内では不可。下記） |
+
+`*.tmpl` は `identify` がタグを付けないため、`check-toml` / ruff / shellcheck が
+素通りする。`scripts/lint_templates.py` が描画してから振り分けるので、
+テンプレートを編集したらこれを実行する（pre-commit にも入っている）。
 
 初回のみ `mise install && uv sync && uv run pre-commit install` が要る。
 

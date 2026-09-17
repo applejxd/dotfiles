@@ -37,11 +37,39 @@ uv run pre-commit run --all-files
 
 # 個別ツールの実行例
 mise exec gitleaks -- detect --source .
-mise exec shellcheck -- scripts/**/*.sh
+git ls-files '*.sh' | xargs mise exec shellcheck -- shellcheck
+
+# chezmoi テンプレートを描画して検査
+mise exec -- python3 scripts/lint_templates.py
 
 # agent設定・hook
 uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q
 ```
+
+##### テンプレートの検査
+
+`identify` は `*.tmpl` に一切タグを付けないため、`check-toml` / ruff /
+shellcheck はテンプレートを素通りする（この穴は sh 14 / py 8 / toml 4 の
+ファイルに空いていた）。`scripts/lint_templates.py` は
+`chezmoi execute-template` で描画し、**描画後の拡張子**で既存の linter へ
+振り分ける。
+
+分岐の両側を通すため、ファイルごとに描画コンテキストを変える。
+
+| 軸 | 決め方 |
+| --- | --- |
+| OS | `home/.chezmoiscripts/` のディレクトリ規約（`100_linux/` なら linux だけ） |
+| username | `.chezmoi.username` を参照するファイルだけ `applejxd` と別ユーザの 2 通り |
+
+`--skip-secrets` を付けるので Bitwarden は呼ばれない。秘密を使うテンプレートは
+chezmoi が `skip template` を返し、検査対象から外れる。
+
+対象外:
+
+- `.ps1.tmpl` — PSScriptAnalyzer（pwsh 本体）が要る
+- `.zsh.tmpl` — shellcheck が zsh をサポートしない
+- `home/.chezmoitemplates/**` — 単体では描画できない（`test_modifier_wrappers.py` が担保）
+- `.chezmoi.toml.tmpl` — `execute-template --init` が要る
 
 #### 4. 継続的な使用
 
