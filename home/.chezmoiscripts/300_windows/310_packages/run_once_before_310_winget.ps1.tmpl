@@ -86,7 +86,6 @@ winst SourceFoundry.HackFonts
 
 # Utilities
 winst Microsoft.PowerToys
-winst Ditto.Ditto
 winst QL-Win.QuickLook
 winst Craftware.Keyhac -CheckPath "$env:ProgramFiles\keyhac\keyhac.exe"
 # Keypirinha requires system-wide installation to detect profiles
@@ -100,9 +99,6 @@ winst Python.Launcher # needed by chezmoi
 winst Python.Python.3.12  # needed by chezmoi
 winst astral-sh.uv
 
-# AI
-winst 9PLM9XGG6VKS  # Codex App
-
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 winst Bitwarden.Bitwarden
 winst Bitwarden.CLI
@@ -110,12 +106,16 @@ winst Apple.iCloud
 winst Apple.iTunes
 winst Google.GoogleDrive
 winst Dropbox.Dropbox
+winst Ditto.Ditto
 
 winst Spotify.Spotify
 winst Valve.Steam
 winst Amazon.Kindle
 winst Discord.Discord
 winst Wacom.WacomTabletDriver
+
+# AI
+winst 9PLM9XGG6VKS  # Codex App
 {{- end }}
 
 # #---------#
