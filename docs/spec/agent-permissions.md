@@ -1301,6 +1301,9 @@ auto / assisted の判定へ委ねる (`_ASK_EXEMPTIONS`)。
 - ドット始まりの成分に glob を含まない (`.g*t` は `.git` に届く)
 - 対象が glob だけのトークンでない (`*` / `**` は範囲が読めない)
 - `cwd` を基準に解決した先が workspace の内側
+- realpath で解決しても workspace の内側に留まる。途中の成分が symlink だと
+  文字列比較だけでは外へ抜けるため、両方を見る。比較は workspace 側も
+  realpath に揃えるので、workspace 自体が symlink 配下にあっても誤判定しない
 
 deny 側は `check_rm_root_guard` が担う。作業ディレクトリ全体と `.git` 配下を
 追加したのは、**workspace 内でも取り返しがつかない**ためである
@@ -1331,11 +1334,19 @@ workspace 免除との違いは 2 点だけ。
 - `..` を成分に含む (`rm -rf .tmp/../src`)
 - `cd` / `pushd` で基点が変わる、`xargs` で対象が標準入力から来る
 - `$` / `` ` `` / `~` / `{` / `}` を含む (`rm -rf $PWD/.tmp`)
-- `.tmp` 配下の symlink が外を指している (realpath で判定する)
+- symlink が workspace の外を指している。`.tmp` 配下のリンクだけでなく、
+  `.tmp` 自身が外を向いている場合も弾く (realpath で判定する)。
+  **相対指定と絶対指定で判定は同じ**。workspace 免除が scratch 免除より
+  先に成立するため、realpath 検査は両方に入れてある
 - `find` の探索起点を省略した形 (`find -delete` は cwd 全体が対象)
 
 `.git` の hard-deny は免除より先に評価されるので、`rm -rf .tmp/.git` は
 引き続き deny になる。
+
+免除が落ちて ask になったときは、`check_policy_ask` が通る書き方を
+メッセージに添える (`rm -rf .tmp/<名前>` の形にする、`cd` や変数展開と
+混ぜない)。常時読み込まれる個人用カスタム指示に書くと毎ターン
+コンテキストを消費するため、**止めた時点のメッセージで誘導する**方を採った。
 
 なお `ask` は Copilot CLI では自動承認されるため、この緩和が実際に効くのは
 Claude Code だけである。逆に言うと、deny へ上げた 2 つは
