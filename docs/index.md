@@ -11,11 +11,12 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 ## 現在有効な状態
 
 - **利用できるもの**: chezmoi による配備、`common.toml` からの権限 / hook / MCP 生成、
-  sops + age による秘密管理、`checkpoint` スキル（手動起動）
+  sops + age による秘密管理、`checkpoint` スキル（手動起動）と圧縮前後の hook
 - **既知の制限・未検証範囲**:
-  - `checkpoint` スキルは**手動起動のみ**。hook による自動化は未実装
+  - **実機での圧縮試験は未実施**（`chezmoi apply` と新しいセッションが要る）
   - Windows 実機での検証は未実施（source state は更新済み）
   - Copilot では圧縮直後の自動注入ができない（イベントが存在しない）
+  - Copilot では文脈使用率を推定できないため、閾値監視は見送り
 - **現行仕様**: [仕様・運用](spec/index.md)
 
 ## 活動中
@@ -61,6 +62,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | Bitwarden / sops の仕組みを知る | [セキュリティ](spec/security.md) |
 | sops + age を導入・復旧する | [Secret管理セットアップ](spec/sops-age.md) |
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
+| 圧縮を跨いで作業文脈を保つ仕組みを知る | [文脈の引き継ぎ](spec/checkpoint.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-permissions.md#mcp-サーバ) |
 | sandbox で何ができるか調べる | [sandbox機能の包括調査](research/sandbox-capabilities.md) |
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |

@@ -730,3 +730,30 @@ claude_matcher = "Edit|Write"
 copilot_event = "PostToolUse"
 copilot_matcher = "^(Edit|Write|edit|create)$"
 timeout_sec = 30
+
+[[hooks]]
+id = "checkpoint_precompact"
+script = "checkpoint_precompact.py"
+runner = "python3"
+purpose = "圧縮の直前に機械的な事実だけを checkpoint へ記録する (保険)"
+# ★絶対にブロックしない。context-limit エラーからの回復として発火した自動圧縮
+#   を止めると、元のエラーが表面化して現在のリクエストが失敗する。
+# ★Copilot も PascalCase で登録する。camelCase だと入力に hook_event_name が
+#   入らない (docs/research/compaction-hooks.md 記録 E3)。
+claude_event = "PreCompact"
+copilot_event = "PreCompact"
+timeout_sec = 30
+
+[[hooks]]
+id = "checkpoint_restore"
+script = "checkpoint_restore.py"
+runner = "python3"
+purpose = "圧縮の直後に自分の checkpoint をコンテキストへ戻す"
+# ★Claude 専用 (copilot_event を書かない)。
+#   Copilot には対応するイベントが無い。preCompact は通知専用で postCompact 相当
+#   も存在しないため、圧縮直後の自動注入は原理的にできない。Copilot 側は指示
+#   ファイルの恒久ルールに頼る best-effort になる。
+#   詳細は docs/research/compaction-hooks.md 記録 E1
+claude_event = "SessionStart"
+claude_matcher = "compact"
+timeout_sec = 30

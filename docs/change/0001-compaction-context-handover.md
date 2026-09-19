@@ -97,22 +97,25 @@
 
 ## 実装・検証
 
-**完了（段 1〜3）:**
+**完了（段 1〜6）:**
 
-- `home/dot_claude/skills/checkpoint/scripts/executable_checkpoint.py`
-  — 保存先解決 / アトミック書き込み / 構造 lint / 鮮度検査
-- `SKILL.md`、`checkpoint-template.md`、`change-template.md`
+- `home/dot_claude/skills/checkpoint/` — スキル、雛形 4 種、CLI
 - 両 CLI の指示ファイルへ恒久ルール
-- `test/agents/test_checkpoint.py`（27 件）
+- `docs/` の 4 種類 + ダッシュボード + `scripts/lint_docs.py`
+- `adr` スキルを `checkpoint` へ統合
+- **hook 2 本**（`PreCompact` の機械記録 / `SessionStart` matcher `compact` の復帰）
 
 **検証結果:**
 
-- `pytest test/agents/ -q` → 1657 passed, 7 skipped
+- `pytest test/agents/ test/test_lint_docs.py -q` → 1694 passed, 7 skipped
 - 古い記録（`covered_through=msg-42`）に新しい要求（`msg-99`）→ lint が exit 1
 - 15 回書き込んでも他セッションのファイルは無傷
 - 復帰試験: 1098 文字（予算 2000 の 55%）で「引き継ぎに十分」と判定
+- 機械記録が意味内容・`updated_at`・`covered_through` を壊さないことを実測
+- スキル未配備でも hook は exit 0（圧縮を止めない）
 
-**未検証**: Windows 実機、`chezmoi diff`（sandbox 内では `~/` が不可視のため無意味）
+**未検証**: **実機での圧縮試験**（`chezmoi apply` + 新セッションが必要）、
+Windows 実機、`chezmoi diff`（sandbox 内では `~/` が不可視のため無意味）
 
 ## 重要な更新
 

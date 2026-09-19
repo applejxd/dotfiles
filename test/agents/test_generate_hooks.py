@@ -35,6 +35,7 @@ KNOWN_CLAUDE_EVENTS = {
     "PreToolUse",
     "PostToolUse",
     "PostToolUseFailure",
+    "PostToolBatch",
     "SubagentStop",
     "Stop",
     "PreCompact",
@@ -292,14 +293,16 @@ def test_foreign_hooks_are_preserved_on_shared_event():
 
 def test_foreign_only_events_are_preserved():
     # chezmoi が一切使わないイベントはキーごと温存する
+    # ★ここで使うイベントは、common.toml で登録していないものを選ぶ。
+    #   登録済みのイベントを使うと、生成された hook が混ざって意図が崩れる。
     existing = {
         "hooks": {
-            "SessionStart": [foreign_entry()],
+            "Notification": [foreign_entry()],
             "PermissionRequest": [foreign_entry("*")],
         }
     }
     merged = gen.merge_claude_settings(existing, COMMON)
-    for event in ("SessionStart", "PermissionRequest"):
+    for event in ("Notification", "PermissionRequest"):
         assert event in merged["hooks"], f"{event} が消えている"
         assert merged["hooks"][event][0]["hooks"][0]["command"] == FOREIGN_COMMAND
 
@@ -323,17 +326,18 @@ def test_mixed_entry_is_filtered_per_command():
 def test_event_becoming_empty_is_dropped():
     # 管理 hook しか無いイベントは消える。同じ入力で外部 hook が同居する
     # イベントは残るので、「そもそも生成しない」のとは区別できる。
+    # ★common.toml で登録していないイベントを使う (登録済みだと生成分が残る)。
     managed_only = {
         "hooks": [{"type": "command", "command": f"python3 {MANAGED_DIR}/gone.py"}]
     }
     existing = {
         "hooks": {
-            "PreCompact": [managed_only],
+            "Notification": [managed_only],
             "SessionEnd": [managed_only, foreign_entry()],
         }
     }
     merged = gen.merge_claude_settings(existing, COMMON)
-    assert "PreCompact" not in merged["hooks"]
+    assert "Notification" not in merged["hooks"]
     assert merged["hooks"]["SessionEnd"] == [foreign_entry()]
 
 
@@ -364,16 +368,17 @@ def test_unparseable_shapes_are_preserved_not_dropped():
     # 解釈できない形は将来のスキーマ変更や未知のツールの可能性があるので残す。
     # ただし chezmoi も生成するイベントで list 以外だった場合は結合できないので
     # 生成物を優先する (Claude のスキーマ上 list 以外は元々無効)。
+    # ★温存側には common.toml で登録していないイベントを使う。
     existing = {
         "hooks": {
             "WeirdEvent": {"command": "inline"},
-            "SessionStart": [{"matcher": "*", "command": "orca-inline"}],
+            "Notification": [{"matcher": "*", "command": "orca-inline"}],
             "PreToolUse": "not-a-list",
         }
     }
     merged = gen.merge_claude_settings(existing, COMMON)
     assert merged["hooks"]["WeirdEvent"] == {"command": "inline"}
-    assert merged["hooks"]["SessionStart"] == [{"matcher": "*", "command": "orca-inline"}]
+    assert merged["hooks"]["Notification"] == [{"matcher": "*", "command": "orca-inline"}]
     assert merged["hooks"]["PreToolUse"] == gen.build_claude_hooks(COMMON)["PreToolUse"]
 
 
@@ -481,10 +486,18 @@ def test_managed_hook_detection_survives_quoting(weird_home):
 
 @pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
 def test_copilot_hook_entry_keys(platform, command_key):
+    """Copilot の登録に出るキーを固定する。
+
+    ``matcher`` は**省略されうる**。matcher を持たないイベント
+    (``PreCompact`` など) では出力されない。省略を許さないと、
+    そうしたイベントを登録できなくなる。
+    """
     out = gen.build_copilot_hooks(COMMON, platform=platform)
+    required = {"type", command_key, "timeoutSec"}
     for entries in out["hooks"].values():
         for entry in entries:
-            assert set(entry) == {"matcher", "type", command_key, "timeoutSec"}
+            assert required <= set(entry)
+            assert set(entry) - required <= {"matcher"}
             assert entry["type"] == "command"
             assert isinstance(entry["timeoutSec"], int)
 
@@ -503,12 +516,16 @@ def test_copilot_commands_preserve_hooks_and_metadata(platform, command_key, pyt
             path = f"'{gen.expand_user(gen.HOOKS_DIR)}/{hook['script']}'"
         else:
             path = f'"$HOME/.claude/hooks/{hook["script"]}"'
-        assert {
-            "matcher": hook["copilot_matcher"],
+        expected = {
             "type": "command",
             command_key: f"{runner} {path}",
             "timeoutSec": hook["timeout_sec"],
-        } in out["hooks"][hook["copilot_event"]]
+        }
+        # matcher は省略されうる。matcher を持たないイベント (PreCompact など)
+        # では copilot_matcher を宣言しないので、出力にも現れない。
+        if "copilot_matcher" in hook:
+            expected["matcher"] = hook["copilot_matcher"]
+        assert expected in out["hooks"][hook["copilot_event"]]
 
 
 def test_copilot_defaults_to_host_platform():
@@ -630,8 +647,12 @@ def test_both_clis_reference_the_same_scripts(platform, command_key):
     #   Claude に native な機構 (permission) がある場合、hook を足しても
     #   防御は増えず実行コストだけが乗るため、あえて登録しない。
     copilot_only = {"check_file_read.py"}
+    #   逆に、Copilot 側に対応するイベントが無い場合も片側だけになる。
+    #   checkpoint_restore は SessionStart matcher=compact に載せるが、Copilot に
+    #   は圧縮直後のイベントが存在しない (docs/research/compaction-hooks.md E1)。
+    claude_only = {"checkpoint_restore.py"}
     assert copilot_scripts - claude_scripts == copilot_only
-    assert claude_scripts - copilot_scripts == set()
+    assert claude_scripts - copilot_scripts == claude_only
 
 
 def test_copilot_only_hooks_are_declared_without_a_claude_event():
