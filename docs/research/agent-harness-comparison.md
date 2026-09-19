@@ -433,14 +433,35 @@ calls `task_complete`**」とあり、autopilot 前提のツールだと分か�
 「ハーネス差分の調査が重い」を理由に OSS ハーネスへ一本化できないかを 2 度検討した
 （2026-09-15 / 2026-09-19）。**2 度とも見送り**。3 度目を始める前にここを読むこと。
 
+**V2 の詳細な仕様は [OpenCode V2 の仕様](opencode-v2-capabilities.md) にある。**
+本節は判断とその根拠だけを持つ。
+
 ### 見送りの根拠（一次情報）
+
+> **重要な訂正 2026-09-20**: 当初の根拠 4 点のうち、**3 点が誤りか降格**した。
+> 残るのは #1 のみ。詳しくは各行と後述の「一本化が可能になった」を読むこと。
 
 | # | 事実 | 影響 | 出典 |
 | --- | --- | --- | --- |
-| 1 | **V1 / V2 が非互換のまま並行開発中**。V2 は `CLAUDE.md` フォールバックを廃止、`instructions` 配列は未解決を自認 | 「更新のたびに設定が壊れる」が確定的に起きる時期。**これが現時点で最大の理由** | <https://opencode.ai/v2/docs/instructions> |
-| 2 | compaction 系 hook は `experimental.` 接頭辞 | checkpoint 機構を非安定 API に賭けることになる | `packages/plugin/src/index.ts` |
-| 3 | 会社は Claude Code のみ許可 | Copilot CLI → OpenCode の置換であり、**ハーネス数は 2 のまま減らない** | 運用上の制約 |
+| 1 | **V2 は公開されているが非常に若い**。`@opencode/cli` 2.0.0 が 2026-09-11、2.0.10 が 09-19。**8 日で 11 リリース**（約 1.4 回/日）。`instructions` 配列・セッション共有・**LSP** が「受理するが動かない」 | この頻度で仕様を追うのは、いま払っている維持コストと変わらない。**現時点で唯一の見送り理由** | [V2 仕様](opencode-v2-capabilities.md)、`npm view @opencode/cli time` |
+| 2 | ~~compaction 系 hook は `experimental.` 接頭辞~~ | **V2 で解消**。`ctx.session.hook("compaction")` から `experimental.` が外れ、`result` を設定すれば要約を自分で書ける | <https://opencode.ai/v2/docs/build/plugins> |
+| 3 | ~~会社は Claude Code のみ許可~~ | **誤り**。指定されているのは **Bedrock 経由であること**だけ。OpenCode は Bedrock も Copilot 契約も公式サポートするため、**1 本化が現実に可能**（下記） | <https://opencode.ai/docs/providers/#amazon-bedrock> |
 | 4 | OpenCode に **OS レベル sandbox が無い**。あるのはアプリ層の `permission` のみ | **決定的ではない**（下記）。ただし [ADR 0007](../adr/0007-filesystem-guard-boundary.md) の層 0 を使う設計はそのまま持ち込めない | リポジトリ内 `bubblewrap`/`seccomp`/`landlock` 検索 0 件、<https://opencode.ai/docs/permissions/> |
+
+#### 一本化が可能になった（#3 の訂正）
+
+当初は「会社が Claude Code 固定なので、Copilot CLI を OpenCode に替えてもハーネスは
+2 つのまま」と考えていた。これは前提が誤っていた。**業務環境の要件は「Bedrock 経由で
+あること」だけ**で、クライアントの指定は無い。
+
+| 環境 | 接続先 | OpenCode の対応 |
+| --- | --- | --- |
+| 自宅 | GitHub Copilot 契約 | `/connect` で公式サポート（GitHub との正式提携） |
+| 業務 | AWS Bedrock | provider として公式サポート（`AWS_PROFILE` / `aws sso login`） |
+
+つまり **OpenCode 1 本で両環境を賄える**。これは他の候補（Pi / DSH）には無い性質で、
+「ハーネス差の吸収」という作業そのものが消える。見送りの理由が
+「一本化できないから」から「**V2 がまだ安定していないから**」だけに変わった。
 
 #### #4 を決定的な根拠にしない理由
 
@@ -464,7 +485,7 @@ sandbox は**目的ではなく代替手段**である。Claude Code の permiss
 
 | 項目 | 内容 | 出典 |
 | --- | --- | --- |
-| skill 資産 | `.claude/skills/` / `~/.claude/skills/` を**パスそのまま**読む。移行コスト 0 | <https://opencode.ai/docs/skills/> |
+| skill 資産 | `.claude/skills/` / `~/.claude/skills/` を**パスそのまま**読む。移行コスト 0。**V2 でも compatibility ソースとして読み続ける**（V2 で切られたのは `CLAUDE.md` だけ） | <https://opencode.ai/docs/skills/> / <https://opencode.ai/v2/docs/skills> |
 | Copilot 契約 | GitHub の正式提携として公式サポート（`/connect`） | <https://github.blog/changelog/2026-01-16-github-copilot-now-supports-opencode/> |
 | Bedrock | `AWS_PROFILE` / `aws sso login` 込みで公式サポート | <https://opencode.ai/docs/providers/#amazon-bedrock> |
 | compaction | 圧縮プロンプト自体を差し替え可能で、Copilot CLI より primitive が広い | `experimental.session.compacting` |
@@ -503,15 +524,24 @@ churn の中心は fan-out 層（`generate.py` の CLI 別出力）ではなく�
 
 ### 再評価のトリガー
 
-次のいずれかが起きたときだけ、この判断を開き直す。
+**条件は 1 つに減った。** 当初挙げた 4 条件のうち 3 つは既に満たされているか、
+前提が誤りだった（上の訂正を参照）。
 
-1. **V2 への移行が完了し、config スキーマが安定する**（最優先で見る）
-2. **compaction 系 hook から `experimental.` が外れる**
-3. **会社の許可ハーネスが変わる**（Claude Code 固定でなくなる）
-4. Claude Code の permission のバグが解消し、sandbox に頼る必要が無くなる
-   （そうなると OpenCode の「OS 隔離が無い」も同時に問題でなくなる）
+1. **V2 のリリース速度が落ち着く**（2026-09-11 の 2.0.0 公開から 8 日で 11
+   リリース。約 1.4 回/日。この頻度が下がること）かつ **`instructions` 配列や
+   LSP のような「受理するが動かない」項目が解消する**
 
-1 が解消するまでは、移行しても「更新のたびに壊れる」痛みを別の形で払うだけ。
+これだけが残っている。満たされたら、**見送りではなく移行を前提に**再評価すること。
+1 本化できる候補は現時点で OpenCode だけで、そうなれば「ハーネス差の吸収」という
+作業自体が消える。
+
+判定のしかたと確認先は
+[V2 仕様の「再確認すべき情報源」](opencode-v2-capabilities.md#再確認すべき情報源)
+にまとめてある。
+
+> ★パッケージ名を間違えないこと。V2 は **`@opencode/cli`**（2026-09-20 時点で
+> 2.0.10）。`opencode-ai` は V1（1.18.31）、`@opencode-ai/cli` は別物で
+> `latest` が beta ビルドを指す。3 つとも存在するので取り違えやすい。
 
 ## 再確認すべき情報源
 
