@@ -22,8 +22,8 @@
 ## 現在地
 
 段 1〜6 が完了し、本体へマージして `chezmoi apply` まで済んだ。
-スキルと hook が配備され、手で `checkpoint` と呼べば復帰用記録が残る。
-残るのは**実機での圧縮試験**だけで、これは新しいセッションでしか確かめられない。
+**実機の `/compact` で `PreCompact` が発火することを確認した**（[E5](../research/compaction-hooks.md)）。
+残るのは Claude での復帰注入のタイミング確認と Windows 実機。
 
 **分かったこと:**
 
@@ -32,19 +32,21 @@
 - 両 CLI とも「リポジトリ単位で永続する共有の置き場」を持たない。
   Claude の `scratchpad_dir` も Copilot の session-state も**セッション単位**
 - したがって、セッションを跨いで要る知識は **`docs/` 側（案件）が正本**であるべき
+- **Copilot は hook の登録を起動時にしか読まない。** 追加・変更したら `/restart` が要る
 
 **まだ分からないこと:**
 
-- 圧縮後の最初のモデル要求時点で checkpoint が届くか
-- `preCompact` の `transcriptPath` に usage が載るか
+- 圧縮後の最初のモデル要求時点で checkpoint が届くか（Claude でのみ検証可能）
 - Windows 実機での hook 発火と起動時間
 
-**決着したこと（E3 / E4）:**
+**決着したこと（E3 / E4 / E5）:**
 
 - **Copilot は PascalCase 登録で snake_case 入力が来る**。稼働中の hook が
-  snake_case のキーしか読まずに機能していることで裏付けられた
-- **Copilot の `PostToolUse` からは文脈使用率を推定できない**。
-  入力に `transcript_path` が無い。閾値監視は Copilot では成立しない
+  snake_case のキーしか読まずに機能していることで裏付けられた。
+  `events.jsonl` に残る camelCase の記録は**内部表現**であり、配送形式ではない
+- **Copilot では文脈使用率を推定できない**。`postToolUse` に `transcript_path` が
+  無いのに加え、`preCompact` の `transcriptPath` をたどっても載っているのは
+  補助モデルの usage と課金量だけで、本体の会話の消費量は記録されない（E5）
 
 ## 評価基準
 
@@ -75,17 +77,20 @@
 | `fork` に checkpoint を書かせる | 会話全体を継承し、親の文脈を使わない | 分岐はスナップショット。古い fork が親の新しい記録を上書きする | — | **見送り** | — |
 | `TaskCompleted` で促す | タスク完了は自然な区切り | `additionalContext` 非対応（[E2](../research/compaction-hooks.md)）。exit 2 の強制しかできない | — | **見送り** | — |
 | セッション横断の GC | ファイルが溜まらない | 稼働中の他セッションの記録を消す | — | **見送り** | — |
-| Copilot で文脈使用率を推定して閾値監視 | 長い探索の取りこぼしを拾える | **`PostToolUse` 入力に `transcript_path` が無い**（[E4](../research/compaction-hooks.md)） | `preCompact` の `transcriptPath` に usage が載るか | **見送り（現時点）** | 必要になったら E5 |
+| Copilot で文脈使用率を推定して閾値監視 | 長い探索の取りこぼしを拾える | **`PostToolUse` 入力に `transcript_path` が無い**（[E4](../research/compaction-hooks.md)）。`preCompact` の `transcriptPath` をたどっても、載るのは補助モデルの usage と課金量だけ（[E5](../research/compaction-hooks.md)） | — | **見送り（決着）** | — |
 
 ## 次の調査・実験
 
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
-| P0-3 | 圧縮後、作業再開前に checkpoint が届くか | 実機で圧縮を起こし、最初のモデル要求時点を観測 |
-| P0-7 | Copilot の hook 入力契約 | PascalCase 登録で VS Code 互換形式が来るか。`transcript_path` の有無 |
-| P0-2 | Copilot で使用率を取得できるか | hook 入力と `transcriptPath` を採取して突き合わせ |
-| P0-1 | ターン途中の圧縮に先回りできるか | 長いツールループ中に自動圧縮を起こしイベント順を記録 |
+| P0-3 | 圧縮後、作業再開前に checkpoint が届くか | Claude 実機で圧縮を起こし、最初のモデル要求時点を観測 |
+| P0-1 | ターン途中の圧縮に先回りできるか | 長いツールループ中に自動圧縮を起こしイベント順を記録。`events.jsonl` から事後に復元できる |
 | P1-4 | Windows 実機での動作 | 実機の PowerShell で配備・発火・起動時間を確認 |
+
+**決着済み**: P0-7（Copilot の hook 入力契約、[E3](../research/compaction-hooks.md) /
+[E5](../research/compaction-hooks.md)）、
+P0-2（使用率の取得、[E4](../research/compaction-hooks.md) /
+[E5](../research/compaction-hooks.md)）
 
 ## 仕様への変更案
 
@@ -128,8 +133,24 @@
 - **hook の実ファイルは sandbox から不可視**（`~/.claude/hooks` が ENOENT、
   `~/.copilot/settings.json` が EACCES）。追加許可は再起動まで効かない
 
-**未検証**: **実機での圧縮試験**（新しいセッションが必要）、
-Windows 実機、`chezmoi diff`（sandbox 内では `~/` が不可視のため無意味）
+**実機での圧縮試験（2026-09-19、Copilot CLI 1.0.87-0）:**
+
+1 回目は発火しなかったが、原因は実装ではなく **Copilot が hook の登録を
+起動時にしか読まない**ことだった（プロセス起動 12:38:40 / 登録更新 12:51:32）。
+設定を変えず `/restart` しただけで 2 回目は発火した。詳細は
+[E5](../research/compaction-hooks.md)。
+
+| 項目 | 期待 | 実測 |
+| --- | --- | --- |
+| `## Snapshot` の `snapshot_at` | 圧縮時刻へ更新 | `2026-09-19T15:59:37+09:00` |
+| `trigger` | 手動圧縮を記録 | `manual` |
+| ヘッダ `updated_at` | 不変 | `2026-09-19T13:45:00+09:00` |
+| ヘッダ `covered_through` | 不変 | `manual@2026-09-19T13:45:00+09:00` |
+| 意味内容 6 節 | 無傷 | 無傷 |
+
+**未検証**: 圧縮直後の復帰注入（**Claude でのみ検証可能**。Copilot に
+`SessionStart(compact)` 相当が無い）、Windows 実機、
+`chezmoi diff`（sandbox 内では `~/` が不可視のため無意味）
 
 ## 重要な更新
 
@@ -142,6 +163,8 @@ Windows 実機、`chezmoi diff`（sandbox 内では `~/` が不可視のため�
 | 2026-09-19 | 文字数予算を 2000 で確定 | 復帰試験の実測が 1098 文字で「ちょうどよい」判定 |
 | 2026-09-19 | Copilot の閾値監視を「見送り」へ | `PostToolUse` 入力に `transcript_path` が無いことを実測（[E4](../research/compaction-hooks.md)） |
 | 2026-09-19 | `.chezmoiremove` をディレクトリ指定へ | `adr` skill を消したのにファイルを個別に並べたため、空の `skills/adr/` が残った。ディレクトリを書けば再帰削除される（実測）。同じ理由で残っていた `commit/scripts/` も直した |
+| 2026-09-19 | Copilot の閾値監視を「決着（見送り）」へ | `preCompact` の `transcriptPath` をたどっても、本体会話の消費量は記録されない（[E5](../research/compaction-hooks.md)） |
+| 2026-09-19 | `snapshot_at` をヘッダから機械節へ一本化 | hook はヘッダを触らない設計なので、ヘッダに置くと誰も更新せず「未取得」に見え続けた。旧雛形の名残は `lint` の警告で拾う |
 
 ## 終了結果
 

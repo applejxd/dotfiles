@@ -243,3 +243,118 @@ $ grep -rn "transcript_path\|transcriptPath" home/dot_claude/hooks/
 ### 参照
 
 出典: <https://docs.github.com/en/copilot/reference/hooks-reference>
+
+## 記録 E5 — 2026-09-19
+
+- **対象バージョン**: GitHub Copilot CLI 1.0.87-0
+- **環境**: WSL / Ubuntu
+
+### 問い
+
+配備した `PreCompact` hook が実機の圧縮で発火するか。発火しないとき、
+何を見れば原因を切り分けられるか。
+
+### 事前の予想
+
+登録が正しければ発火すると考えていた。最初の `/compact` では発火しなかったため、
+hook の実装か登録の誤りを疑った。
+
+### 方法・条件
+
+1. `/compact` 後に checkpoint を確認
+2. Copilot のデバッグログで圧縮の時刻と hook の実行窓を測る
+3. `~/.copilot/session-state/<id>/events.jsonl` から hook の入力を取り出す
+4. 取り出した入力で配備済み hook を手で再実行
+5. `ps` でプロセスの起動時刻と hook 登録ファイルの更新時刻を比べる
+6. `/restart` 後に `/compact` をやり直す
+
+### 結果
+
+#### 1 回目（発火せず）
+
+- 圧縮は起きたが checkpoint の `## Snapshot` は更新されなかった
+- 圧縮直前の hook 実行窓は 63ms。自前 hook の実測は成功時 120ms
+- その 63ms の stdout は `{}` で、出所は `~/.orca/agent-hooks/copilot-hook.sh`
+  （`~/.copilot/hooks/orca.json` が `PreCompact` を含む全イベントを登録している）
+- 取り出した実ペイロードで配備済み hook を手で流すと**成功し `## Snapshot` を書いた**
+
+| 事実 | 時刻 |
+| --- | --- |
+| copilot プロセス（PID 94180）の起動 | 12:38:40 |
+| `~/.copilot/hooks/from-claude.json` の更新 | 12:51:32 |
+
+#### 2 回目（`/restart` 後、発火した）
+
+- 設定は一切変えず `/restart` しただけで `## Snapshot` が更新された
+- `snapshot_at: 2026-09-19T15:59:37+09:00` / `trigger: manual`
+- ヘッダの `updated_at`・`covered_through` と意味内容は無傷
+- `events.jsonl` 側にも同時刻の `preCompact` が残っている
+
+#### `events.jsonl` に記録される入力（`hook.start` の `data.input`）
+
+```json
+{"transcriptPath": "…/session-state/<id>/events.jsonl", "trigger": "manual",
+ "customInstructions": "", "sessionId": "<id>",
+ "timestamp": 1789801177127, "cwd": "…"}
+```
+
+イベント別のキー（この 1 セッション分を全件走査した結果）:
+
+| hookType | 入力キー | `transcriptPath` |
+| --- | --- | --- |
+| `preCompact` | `customInstructions` `cwd` `sessionId` `timestamp` `transcriptPath` `trigger` | あり |
+| `agentStop` | `cwd` `sessionId` `stopReason` `stop_hook_active` `timestamp` `transcriptPath` | あり |
+| `subagentStart` / `subagentStop` | （略）`transcriptPath` を含む | あり |
+| `postToolUse` | `cwd` `sessionId` `timestamp` `toolArgs` `toolName` `toolResult` | **なし** |
+| `preToolUse` | `cwd` `sessionId` `toolCalls` | **なし** |
+
+#### ★この記録は hook プロセスへ渡る形式とは別物
+
+- `events.jsonl` の `preToolUse` は `{sessionId, cwd, toolCalls:[…]}` で、
+  `tool_name` を持たない
+- 一方 `executable_check_bash.py:3237` は `data.get("tool_name")` **だけ**を読む
+- それでいて同セッションで実際にブロックが発生した
+  （`rm ./.git/.write-probe`、`git stash drop`）
+
+両立する説明は 1 つだけで、**`events.jsonl` は内部表現を記録しており、
+PascalCase 登録の hook へ実際に渡るのは E3 のとおり snake_case 形式**である。
+デバッグで入力を読むときは、キー名をそのまま実装の前提にしてはいけない。
+
+#### usage（E4 の未解決点への回答）
+
+`transcriptPath`（= `events.jsonl`）に `responseUsage.prompt_tokens` は**ある**。
+ただし内訳は次のとおりで、本体の会話ではない。
+
+| 記録された `model.model_call_started` | 件数 |
+| --- | --- |
+| `gpt-5.4-nano` | 35 |
+| `gpt-4o-mini` | 2 |
+| `claude-opus-5` | 2 |
+
+usage を伴う `model.model_call_success` は 39 件、`prompt_tokens` は 530〜806。
+同セッションの `assistant.message` は 1014 件あるので、本体のモデル呼び出しは
+ここに載っていない。`session.usage_checkpoint`（47 件）が持つのは
+`totalNanoAiu` / `totalPremiumRequests` という**課金量**で、文脈使用量ではない。
+
+### 考察
+
+**原因は実装ではなく設定の読み込み時期だった。** Copilot は hook の登録を
+**起動時にしか読まない**。hook を追加・変更したら `/restart` が要る。
+`check_bash.py` などが動き続けていたのは、起動前から登録済みだったため。
+
+`events.jsonl` は hook デバッグの一次情報として使える。ただし上記のとおり
+記録される形と配送される形が違うので、**「何が起きたか」の時系列を追う用途**に
+限り、**入力スキーマの根拠には使わない**。
+
+usage については、**`transcriptPath` を得ても文脈使用率は推定できない**。
+E4 の「Copilot で閾値監視を成立させる根拠が無い」は、`preCompact` に
+`transcriptPath` があると分かった後も**変わらない**。
+
+### 次の問い
+
+- 圧縮直後、作業再開前に記録が届くか（Claude でのみ検証可能。未着手）
+- Windows 実機での発火と起動時間（未着手）
+
+### 参照
+
+出典: <https://docs.github.com/en/copilot/reference/hooks-reference>
