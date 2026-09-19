@@ -21,7 +21,9 @@
 
 ## 現在地
 
-段 1〜3 が完了し、手で `checkpoint` と呼べば復帰用記録が残る状態になった。
+段 1〜6 が完了し、本体へマージして `chezmoi apply` まで済んだ。
+スキルと hook が配備され、手で `checkpoint` と呼べば復帰用記録が残る。
+残るのは**実機での圧縮試験**だけで、これは新しいセッションでしか確かめられない。
 
 **分かったこと:**
 
@@ -93,7 +95,8 @@
 | スキル | （なし）→ `checkpoint` | 手順の単一ソース | 適用済み `7c6703c` |
 | `docs/` | 3 分類 → 4 種類 + ダッシュボード | [ADR-0010](../adr/0010-exploratory-spec-driven-docs.md) | 適用済み `2e7b44e` |
 | `adr` スキル | 独立 → `checkpoint` へ統合 | 役割が重複していた | 適用済み（段 6） |
-| `spec/` | 未作成 | 段 7 以降で作る | 未適用 |
+| `spec/` | （なし）→ `checkpoint.md` | 運用仕様の正本が要る | 適用済み `2e7b44e` |
+| `.chezmoiremove` | ファイル個別指定 → ディレクトリ指定 | 配下を並べると空ディレクトリが残る（実測） | 適用済み `6ecdba7` |
 
 ## 実装・検証
 
@@ -107,14 +110,25 @@
 
 **検証結果:**
 
-- `pytest test/agents/ test/test_lint_docs.py -q` → 1694 passed, 7 skipped
+- `pytest test/agents/ test/test_lint_docs.py -q` → 1702 passed, 7 skipped
 - 古い記録（`covered_through=msg-42`）に新しい要求（`msg-99`）→ lint が exit 1
 - 15 回書き込んでも他セッションのファイルは無傷
 - 復帰試験: 1098 文字（予算 2000 の 55%）で「引き継ぎに十分」と判定
 - 機械記録が意味内容・`updated_at`・`covered_through` を壊さないことを実測
 - スキル未配備でも hook は exit 0（圧縮を止めない）
 
-**未検証**: **実機での圧縮試験**（`chezmoi apply` + 新セッションが必要）、
+**配備の確認（2026-09-19、`chezmoi apply` 後）:**
+
+- `~/.claude/skills/checkpoint/` に SKILL.md・雛形 4 種・`checkpoint.py`（実行権限付き）
+- **配備版の `checkpoint.py paths` が worktree ルートを正しく解決**した
+  （`.git` がファイルでも `git rev-parse` 経由で解決できている）
+- 生成される hook は Claude が `PreCompact` と `SessionStart`(matcher `compact`)、
+  Copilot が `PreCompact`。matcher 省略時はキーごと省かれ `null` にならない
+- `chezmoi managed` に hook 3 本が含まれ、`.chezmoiignore` で落ちていない
+- **hook の実ファイルは sandbox から不可視**（`~/.claude/hooks` が ENOENT、
+  `~/.copilot/settings.json` が EACCES）。追加許可は再起動まで効かない
+
+**未検証**: **実機での圧縮試験**（新しいセッションが必要）、
 Windows 実機、`chezmoi diff`（sandbox 内では `~/` が不可視のため無意味）
 
 ## 重要な更新
@@ -127,6 +141,7 @@ Windows 実機、`chezmoi diff`（sandbox 内では `~/` が不可視のため�
 | 2026-09-19 | 保存先を常にセッション別名へ | 所有権の交渉・ロック・固定名の奪い合いが不要になる |
 | 2026-09-19 | 文字数予算を 2000 で確定 | 復帰試験の実測が 1098 文字で「ちょうどよい」判定 |
 | 2026-09-19 | Copilot の閾値監視を「見送り」へ | `PostToolUse` 入力に `transcript_path` が無いことを実測（[E4](../research/compaction-hooks.md)） |
+| 2026-09-19 | `.chezmoiremove` をディレクトリ指定へ | `adr` skill を消したのにファイルを個別に並べたため、空の `skills/adr/` が残った。ディレクトリを書けば再帰削除される（実測）。同じ理由で残っていた `commit/scripts/` も直した |
 
 ## 終了結果
 

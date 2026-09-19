@@ -13,7 +13,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 - **利用できるもの**: chezmoi による配備、`common.toml` からの権限 / hook / MCP 生成、
   sops + age による秘密管理、`checkpoint` スキル（手動起動）と圧縮前後の hook
 - **既知の制限・未検証範囲**:
-  - **実機での圧縮試験は未実施**（`chezmoi apply` と新しいセッションが要る）
+  - **実機での圧縮試験は未実施**（配備は済んだ。新しいセッションが要る）
   - Windows 実機での検証は未実施（source state は更新済み）
   - Copilot では圧縮直後の自動注入ができない（イベントが存在しない）
   - Copilot では文脈使用率を推定できないため、閾値監視は見送り
@@ -23,7 +23,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
-| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜3 完了。Copilot で文脈使用率を取得できるかが最大の未解決点 | P0-2 / P0-3 の実測 |
+| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。配備まで済み、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
 
 ## 判断待ち・障害
 

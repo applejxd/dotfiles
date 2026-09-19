@@ -39,7 +39,7 @@
 
 | # | 目的 | 状態 | 最大の未解決点 | 次の確認 | 更新日 |
 | --- | --- | --- | --- | --- | --- |
-| [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | Copilot で使用率を取得できるか | P0-2 の実測 | 2026-09-19 |
+| [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | 圧縮後、作業再開前に checkpoint が届くか | P0-3 の実測 | 2026-09-19 |
 
 ## 保留
 
