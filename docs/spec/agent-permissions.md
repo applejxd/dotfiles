@@ -36,7 +36,17 @@ home/.chezmoiscripts/
 home/dot_claude/
     modify_settings.json.py.tmpl             ~/.claude/settings.json を更新
 home/dot_claude/hooks/
-    executable_check_bash.py                 deny / ask を判定 (fail-closed)
+    executable_check_bash.py                 入出力とループのみ (fail-closed)
+    lib/bashrules/                           bash コマンド検査ルールの本体
+        __init__.py                          DENY / ASK の登録簿 (★評価順の正本)
+        tables.toml                          検査に使うデータ (Python 不要で編集可)
+        tables.py                            tables.toml の読み込み
+        _shared.py                           共通ユーティリティ・ポリシー層の参照
+        policy.py                            common.toml の deny / ask を照合
+        sensitive.py  http.py  ghapi.py      関心事ごとの判定
+        rm.py  docker.py                     同上
+        rules_exec.py  rules_guard.py        同上
+        rules_files.py                       同上
     executable_check_file_read.py            Copilot のファイル読み取りを遮断 (fail-closed)
     executable_redirect-tmp.py               /tmp 利用を ./.tmp へ誘導
     executable_markdownlint.sh               Markdown の lint
@@ -1665,6 +1675,37 @@ Claude には「許可した以外を拒否する」表現手段が無い。
 - `*_event` を空にすればその CLI には出力されない
 - `*_matcher` を省略すると `matcher` キー自体が出力されない (= 全マッチ)。
   `Stop` / `UserPromptSubmit` など matcher 非対応イベントでは省略すること
+
+### bash 検査ルールの足し方
+
+`check_bash.py` は入出力とループだけを持ち、判定は
+`~/.claude/hooks/lib/bashrules/` にある。足す場所は 3 段階で選ぶ。
+
+| やりたいこと | 編集する場所 | Python |
+| --- | --- | --- |
+| コマンド名の前方一致で許可 / 禁止 | `common.toml` の `[bash]` | 不要 |
+| 守る名前・検査するオプションを足す | `bashrules/tables.toml` | 不要 |
+| 上記で表せない判定 | `bashrules/*.py` + `__init__.py` | 必要 |
+
+Python を書く場合は、内容に合うモジュールへ
+`check_xxx(cmd: str) -> str | None` を定義し (拒否理由の文字列を返し、
+問題なければ `None`)、`bashrules/__init__.py` の `DENY_CHECKS` か
+`ASK_CHECKS` に 1 行足す。
+
+| モジュール | 担当 |
+| --- | --- |
+| `rules_exec.py` | 任意コード実行 (`curl \| sh`、`python -c`、リバースシェル) |
+| `rules_guard.py` | 防御機構・環境の改変 (hook、起動ファイル、権限昇格) |
+| `rules_files.py` | ファイルの読み書き・持ち出し |
+| `sensitive.py` | 秘密情報の検出 |
+| `http.py` / `ghapi.py` | `curl` / `wget` / `gh api` の字句解析 |
+| `rm.py` / `docker.py` | 削除 / コンテナ |
+| `policy.py` | `common.toml` の deny / ask 照合 |
+| `_shared.py` | 共通ユーティリティ (正規化・パス判定) |
+
+★`__init__.py` のリストは**順序に意味がある**。先に一致したものがユーザーへ
+のメッセージを決めるため、具体的な代替案を出せるルールを汎用のものより前に
+置く。`check_policy_loaded` が先頭なのは fail-closed のため。
 
 ### 外部ツールとの共存 (Orca / herdr)
 

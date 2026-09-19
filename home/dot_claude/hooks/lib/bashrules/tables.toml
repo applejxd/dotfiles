@@ -1,0 +1,353 @@
+# Bash コマンド検査で使う表 (データ)
+#
+# ★ここは Python を書かずに編集できる。守りたいファイル名や、検査したい
+#   コマンド・オプションが増えたら、該当セクションの配列に 1 行足せばよい。
+#   判定のロジックそのものは同じディレクトリの *.py にある。
+#
+# 編集したらテストを回すこと:
+#   uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q
+#
+# コマンド名の前方一致で足りる許可 / 禁止は、このファイルではなく
+# ~/.config/agents/common.toml の [bash] allow / deny / ask に書く。
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 秘密情報の検出に使う名前。守りたいものが増えたらここに足す。
+# ──────────────────────────────────────────────────────────────────────────
+[sensitive]
+# ファイル名そのものが秘密を意味するもの (basename の完全一致 / 前方一致)
+sensitive_basenames = [
+  ".claude.json", ".env", ".netrc", ".npmrc", ".pypirc", "credentials", "id_dsa",
+  "id_ecdsa", "id_ed25519", "id_rsa", "key.txt", "keys.txt", "shadow",
+]
+
+sensitive_basename_prefixes = ["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"]
+
+# パスに含まれると秘密領域とみなすディレクトリ (確実な証拠)
+sensitive_dirs = [".ssh", ".gnupg", ".aws", ".config/gh", ".config/sops", "sops/age"]
+
+# 名前だけでは断定できないが、中身を読むときは秘密とみなすディレクトリ。
+# `ls tests/fixtures/secrets` のような列挙では適用しない (_LISTING_COMMANDS)。
+heuristic_sensitive_dirs = ["secrets"]
+
+# ソースコードの拡張子。`src/secrets.py` や `internal/credentials.go` のように
+# 「秘密を扱うコード」は名前が秘密語彙に当たるだけで、中身は秘密ではない。
+# 語彙ヒューリスティック (_SENSITIVE_WORD_RE) の対象から外す。
+# 完全一致の規則 (.env / id_rsa / *.pem / .ssh 配下など) は従来どおり効く。
+source_code_suffixes = [
+  ".py", ".pyi", ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".rs", ".rb",
+  ".java", ".kt", ".kts", ".scala", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".php",
+  ".swift", ".ex", ".exs", ".erl", ".hs", ".lua", ".pl", ".pm", ".dart", ".vue",
+  ".svelte", ".sql", ".sh", ".bash", ".zsh", ".fish", ".ps1", ".proto", ".graphql",
+]
+
+# /etc 配下の特定ファイル
+sensitive_abs_paths = ["/etc/passwd", "/etc/shadow", "/etc/sudoers"]
+
+# シェル履歴
+history_basenames = [
+  ".bash_history", ".mysql_history", ".node_repl_history", ".psql_history",
+  ".python_history", ".sh_history", ".zsh_history",
+]
+
+# CLI の認証情報を保持するファイル
+credential_paths = [
+  "/.config/gh/hosts.yml", "/.docker/config.json", "/.git-credentials",
+  "/.kube/config", "/.config/gcloud/credentials.db", "/.azure/msal_token_cache.json",
+  "/.terraform.d/credentials.tfrc.json", "/.copilot/config.json",
+]
+
+# grep 系は最初の非フラグ引数が検索語なのでパス判定から除外する
+pattern_first_commands = ["ack", "ag", "awk", "egrep", "fgrep", "gawk", "grep", "mawk", "rg", "sed"]
+
+# 末尾の引数が書き込み先になるコマンド (コピー先が .env でも読み取りではない)
+dest_last_commands = ["cp", "install", "ln", "mv", "rsync", "scp"]
+
+# 値をそのまま出力・複製する先 (check_secret_env_echo 用)
+secret_sink_commands = [
+  "awk", "banner", "base64", "cat", "clip", "column", "cut", "echo", "fold", "gawk",
+  "grep", "head", "hexdump", "jq", "less", "logger", "more", "nl", "od", "pbcopy",
+  "print", "printf", "rev", "rg", "sed", "sort", "strings", "tac", "tail", "tee",
+  "tr", "uniq", "wall", "wl-copy", "write", "xclip", "xsel", "xxd", "yq",
+]
+
+# 値を外部へ運ぶ経路。多くは common.toml の deny にもあるが、hook 側でも
+# 「秘密を渡している」ことを理由に確実に止める (`nc` は ask なので特に重要)。
+secret_egress_commands = [
+  "aws", "az", "curl", "ftp", "gsutil", "http", "httpie", "mail", "mailx", "nc",
+  "ncat", "netcat", "rsync", "scp", "sendmail", "sftp", "socat", "ssh", "telnet",
+  "wget", "xh",
+]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# curl / wget のオプション表。新しいフラグが増えたらここに足す。
+# ──────────────────────────────────────────────────────────────────────────
+[http]
+# ─── curl/wget の request / transfer 判定 ───────────────────────────
+http_read_methods = ["GET", "HEAD"]
+
+curl_data_flags = [
+  "--data", "--data-ascii", "--data-binary", "--data-raw", "--data-urlencode",
+  "--json", "-d",
+]
+
+curl_output_flags = [
+  "--cookie-jar", "--dump-header", "--output", "--stderr", "--trace",
+  "--trace-ascii", "-D", "-c", "-o",
+]
+
+curl_value_flags = [
+  "--abstract-unix-socket", "--cert", "--cert-type", "--connect-timeout",
+  "--connect-to", "--continue-at", "--cookie", "--dns-interface", "--dns-ipv4-addr",
+  "--dns-ipv6-addr", "--dns-servers", "--dump-header", "--header", "--hostpubmd5",
+  "--hostpubsha256", "--interface", "--key", "--key-type", "--limit-rate",
+  "--local-port", "--max-filesize", "--max-time", "--noproxy", "--output-dir",
+  "--preproxy", "--proxy", "--proxy-header", "--proxy-user", "--proxy1.0", "--quote",
+  "--range", "--rate", "--referer", "--resolve", "--retry", "--retry-delay",
+  "--retry-max-time", "--socks4", "--socks4a", "--socks5", "--socks5-hostname",
+  "--speed-limit", "--speed-time", "--tls-max", "--tls13-ciphers", "--unix-socket",
+  "--url", "--user", "--user-agent", "--write-out", "-A", "-C", "-D", "-E", "-H",
+  "-Q", "-Y", "-b", "-e", "-m", "-r", "-u", "-w", "-x", "-y",
+]
+
+# localhost 例外を無効化するオプション。
+# 接続先を URL から読み取れなくする (proxy / socket / 名前解決の差し替え) か、
+# リダイレクト追従で URL 以外のホストへ到達しうるもの。
+curl_local_blocking_flags = [
+  "--abstract-unix-socket", "--config", "--connect-to", "--dns-interface",
+  "--dns-servers", "--interface", "--location", "--location-trusted", "--preproxy",
+  "--proxy", "--proxy1.0", "--resolve", "--socks4", "--socks4a", "--socks5",
+  "--socks5-hostname", "--unix-socket", "-K", "-L", "-x",
+]
+
+curl_config_flags = ["--config", "-K"]
+
+wget_body_flags = ["--body-data", "--body-file", "--post-data", "--post-file"]
+
+wget_output_flags = ["--output-document", "-O"]
+
+wget_config_flags = ["--config", "--execute", "-e"]
+
+non_executing_http_prefixes = [
+  "awk", "cat", "echo", "file", "find", "gawk", "grep", "ls", "printf", "rg", "sed",
+  "stat", "touch", "wc",
+]
+
+# curl は scheme 省略時に http を補う。ここに無い scheme は localhost 例外の対象外
+# (gopher:// や dict:// はループバック宛でも任意プロトコルの送信に使えるため)。
+local_url_schemes = ["http", "https"]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# gh api のオプション表。
+# ──────────────────────────────────────────────────────────────────────────
+[ghapi]
+# ─── GitHub CLI API の method / operation 判定 ─────────────────────
+gh_api_method_flags = ["--method", "-X"]
+
+gh_api_field_flags = ["--field", "--raw-field", "-F", "-f"]
+
+gh_api_input_flags = ["--input"]
+
+gh_api_value_flags = [
+  "--cache", "--header", "--hostname", "--jq", "--preview", "--template", "-H", "-p",
+  "-q", "-t",
+]
+
+gh_api_read_methods = ["GET", "HEAD"]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 削除で壊滅的とみなす対象。
+# ──────────────────────────────────────────────────────────────────────────
+[rm]
+# ─── rm の壊滅的ターゲット (承認の余地なく deny) ──────────────────────
+# critical_ask で `rm -rf` を承認可能にする代わりに、取り返しのつかない
+# ターゲットだけはここで hard-deny する。
+# cwd 配下 (`.` / `./*` / `*`) は critical_ask 側に任せる (プロジェクト内は
+# ユーザーが承認して消せるべきなので、ここでは落とさない)。
+catastrophic_dirs = [
+  "/", "/Applications", "/Library", "/System", "/Users", "/Volumes", "/bin", "/boot",
+  "/dev", "/etc", "/home", "/lib", "/lib64", "/opt", "/proc", "/root", "/sbin",
+  "/srv", "/sys", "/usr", "/var",
+]
+
+# workspace ルートそのもの。中身を全部消すので、workspace 内であっても
+# 未コミット・未追跡のファイルごと失われる
+workspace_root_tokens = ["*", "**", "*/", ".", "./", "./*", "./**", "./*/"]
+
+# find の -exec 系フラグ。渡すコマンドの引数を検査する起点になる
+find_exec_flags = ["-exec", "-execdir", "-ok", "-okdir"]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# docker でホスト側へ影響しうるオプション。
+# ──────────────────────────────────────────────────────────────────────────
+[docker]
+docker_run_subcommands = ["create", "run"]
+
+# コンテナに root 相当を与えるもの (deny)
+docker_privileged_flags = ["--privileged"]
+
+# 分離を弱めるが root 相当ではないもの (ask)。値は `=` でも空白でも書ける
+docker_namespace_opts = ["--ipc", "--net", "--network", "--pid", "--userns", "--uts"]
+
+docker_mount_flags = ["--mount", "--volume", "-v"]
+
+# コンテナへ渡すと実質 root になるホスト側のパス
+docker_fatal_mounts = [
+  "/", "/etc", "/root", "/boot", "/usr", "/dev", "/var/run/docker.sock",
+  "/run/docker.sock",
+]
+
+docker_cap_dangerous = ["ALL", "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE"]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 任意コード実行に繋がるインタプリタ・フラグの表。
+# ──────────────────────────────────────────────────────────────────────────
+[rules_exec]
+# ─── インラインコードを受け取るインタプリタ ─────────────────────────
+inline_code_bins = ["awk", "gawk", "mawk", "node", "perl", "php", "python", "ruby"]
+
+# プログラムを位置引数で受け取るもの
+awk_bins = ["awk", "gawk", "mawk"]
+
+inline_code_flags = ["--eval", "--print", "-E", "-c", "-e", "-p", "-r"]
+
+# シェルに stdin をコードとして読ませるフラグ・引数
+# (`-s` はシェル専用なので `_reads_stdin_as_code` 側で個別に見る)
+stdin_code_flags = ["-", "/dev/fd/0", "/dev/stdin", "/proc/self/fd/0"]
+
+# 実行対象を変えずに前置されるラッパーと、値を取るオプション。
+# 値を取るオプションを知らないと `env -u LANG bash` の LANG を head と
+# 誤認するため、ラッパーごとに持つ。
+wrapper_value_opts = { "env" = ["--chdir", "--unset", "-C", "-u"], "sudo" = [
+  "--chdir", "--close-from", "--group", "--prompt", "--user", "-C", "-D", "-g", "-p",
+  "-u",
+], "doas" = ["-C", "-u"], "xargs" = [
+  "--arg-file", "--delimiter", "--max-args", "--max-chars", "--max-procs",
+  "--replace", "-E", "-I", "-L", "-P", "-a", "-d", "-i", "-n", "-s",
+], "timeout" = ["--kill-after", "--signal", "-k", "-s"], "nice" = ["--adjustment", "-n"], "ionice" = ["--class", "--classdata", "--pid", "-c", "-n", "-p"], "stdbuf" = ["--error", "--input", "--output", "-e", "-i", "-o"], "nohup" = [], "setsid" = [], "command" = [], "chronic" = [], "time" = [], "unbuffer" = [], "exec" = [] }
+
+# 値の位置に秒数などの素の数値を取るラッパー
+wrapper_numeric_arg = ["ionice", "nice", "timeout"]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ファイルを読む / 環境変数を出すコマンドの表。
+# ──────────────────────────────────────────────────────────────────────────
+[rules_files]
+# ファイル内容を表示する git サブコマンド
+git_file_subcommands = ["blame", "cat-file", "diff", "grep", "log", "show"]
+
+# 中身を読まず名前を列挙するだけのコマンド。語彙ヒューリスティックは適用しない
+listing_commands = ["fd", "find", "ls", "tree"]
+
+# ─── 環境変数を露出するコマンド ─────────────────────────────────────
+# 引数なしの全件露出に加え、`printenv AWS_SECRET_ACCESS_KEY` のような
+# 個別参照や `env | grep key` のような絞り込みも対象にする。
+env_exposure_bins = ["declare", "env", "export", "printenv", "set", "typeset"]
+
+# `set` はオプションを付けるとシェルの挙動設定になり、変数を出力しない。
+# `set -e` / `set -eu` を全件出力と誤認しないよう、素の `set` だけを対象にする。
+bare_only_dump_bins = ["set"]
+
+# ─── アーカイブコマンド ───────────────────────────────────────────────
+archive_commands = ["tar", "zip", "gzip", "bzip2", "7z", "xz"]
+
+# uvx / uv tool run / pipx など、pip を間接的に起動しうるランナー
+pip_runners = ["pipx", "uvx"]
+
+# 上記ランナーで値を取るオプション。値を実行対象と誤認しないよう読み飛ばす
+pip_runner_value_opts = [
+  "--constraint", "--extra-index-url", "--find-links", "--from", "--index",
+  "--index-url", "--pip-args", "--python", "--refresh-package", "--spec", "--with",
+  "--with-editable", "-f", "-p",
+]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 環境を永続的に変えるコマンドの表。
+# ──────────────────────────────────────────────────────────────────────────
+[rules_guard]
+# ─── プロジェクト外 (global) への変更 ────────────────────────────────
+# 判断軸は「影響範囲がプロジェクト内で完結するか」。
+# `uv add` のような venv 内の変更は未掲載にして LLM の判断に委ねる。
+# ホームやシステムに残るものだけ ask にする。
+#
+# mise は command_policy が runner として扱い、normalize が先頭の `mise` を
+# 落とす (`mise settings set x` -> `settings set x`)。そのため common.toml に
+# `mise ...` と書いても照合されない。mise の判定はここで行う。
+mise_global_flags = ["--global", "-g"]
+
+# ビルド成果物の出力先を取るオプション
+compiler_bins = ["c++", "cc", "clang", "clang++", "g++", "gcc"]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 複数のルールが共用する表。
+# ──────────────────────────────────────────────────────────────────────────
+[_shared]
+sensitive_suffixes = [".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".ppk", ".asc"]
+
+# ─── ファイル内容を読むコマンド ──────────────────────────────────────
+file_read_commands = [
+  "grep", "rg", "ag", "ack", "cat", "tac", "head", "tail", "nl", "sed", "awk",
+  "less", "more", "sort", "uniq", "cut", "column", "strings", "xxd", "hexdump", "jq",
+  "yq", "base64", "od", "xxd", "diff", "vimdiff", "vim", "vi", "nvim", "emacs",
+  "nano", "code", "codium", "subl", "wc", "file", "stat", "realpath", "readlink",
+  "ls", "tree", "find", "fd", "cp", "mv", "install", "rsync", "scp", "sftp", "dd",
+  "tee", "ln", "shred", "split", "gpg", "openssl",
+]
+
+# ─── 書き込み先の抽出 ───────────────────────────────────────────────
+# `cp <src> <dest>` の src や `grep pat /etc/group` のように、パスが引数に
+# 現れるだけでは書き込みではない。書き込み先だけを取り出して判定する。
+# 最終引数だけが書き込み先になるもの
+write_dest_last_commands = ["cp", "install", "ln", "mv", "rsync"]
+
+# 非オプション引数がすべて書き込み対象になるもの
+write_all_args_commands = [
+  "chgrp", "chmod", "chown", "dd", "mkdir", "rm", "rmdir", "sed", "shred", "tee",
+  "touch", "truncate", "unlink",
+]
+
+curl_form_flags = ["--form", "--form-string", "-F"]
+
+curl_upload_flags = ["--upload-file", "-T"]
+
+# 取得内容をコードとして受け取りうる実行系
+stdin_code_shells = [
+  ".", "ash", "bash", "csh", "dash", "eval", "fish", "ksh", "script", "sh", "source",
+  "tcsh", "zsh",
+]
+
+stdin_code_interpreters = ["node", "perl", "php", "python", "ruby"]
+
+# 「stdin ではなくこの引数がコード/スクリプト」であることを示すフラグ。
+# ★ シェル (`sh` / `bash` 等) では `-e` `-m` `-p` は errexit / job control /
+#   privileged を意味する単なるオプションで、stdin は依然コードとして読まれる。
+#   そのためインタプリタとシェルで別のフラグ集合を使う。
+interpreter_code_arg_flags = ["--command", "--eval", "--print", "-c", "-e", "-m", "-p"]
+
+shell_code_arg_flags = ["--command", "-c"]
+
+# heredoc 本文がシェルコマンドとして実行されるもの
+heredoc_shell_bins = [
+  ".", "ash", "bash", "csh", "dash", "env", "eval", "fish", "ksh", "sh", "source",
+  "sudo", "tcsh", "zsh",
+]
+
+# heredoc 本文がインタプリタのコードとして実行されるもの
+heredoc_code_bins = [
+  "Rscript", "node", "osascript", "perl", "php", "python", "python2", "python3",
+  "ruby",
+]
+
+home_tokens = ["$HOME", "${HOME}", "~"]
+
+# 使い捨ての一時ディレクトリ。redirect-tmp.py が /tmp の代わりに誘導する先で、
+# 中身はいつ消えてもよい前提の置き場なので削除に承認を求めない。
+scratch_dir_names = [".tmp"]

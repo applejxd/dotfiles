@@ -549,6 +549,10 @@ def test_copilot_python_hooks_run_with_spaces_in_home(tmp_path, hook_id, command
     hook = next(hook for hook in COMMON["hooks"] if hook["id"] == hook_id)
     shutil.copyfile(HOOK_SRC_DIR / f"executable_{hook['script']}", hooks_dir / hook["script"])
     shutil.copyfile(HOOK_SRC_DIR / "lib" / "agent_compat.py", hooks_dir / "lib" / "agent_compat.py")
+    # check_bash.py は判定ルールを lib/bashrules/ に持つ (配備にも必要)
+    bashrules = HOOK_SRC_DIR / "lib" / "bashrules"
+    if bashrules.is_dir():
+        shutil.copytree(bashrules, hooks_dir / "lib" / "bashrules")
     out = gen.build_copilot_hooks({"hooks": [hook]}, platform="posix")
     payload = {
         "hook_event_name": "PreToolUse",
