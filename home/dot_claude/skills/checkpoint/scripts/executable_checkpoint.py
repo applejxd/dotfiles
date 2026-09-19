@@ -273,6 +273,26 @@ def _section_items(body: str, heading: str) -> list[str]:
     return items
 
 
+def _section_sizes(body: str) -> list[tuple[str, int]]:
+    """見出しごとの文字数を、多い順に返す。
+
+    予算を超えたときに「どこを削るか」を機械的に示すため。全体の文字数だけ
+    を告げると、書き手が当てずっぽうで削って何往復もすることになる。
+    """
+    lines = body.splitlines()
+    starts: list[tuple[int, str]] = [
+        (i, line.strip())
+        for i, line in enumerate(lines)
+        if line.strip() in REQUIRED_HEADINGS
+    ]
+    sizes: list[tuple[str, int]] = []
+    for pos, (start, heading) in enumerate(starts):
+        end = starts[pos + 1][0] if pos + 1 < len(starts) else len(lines)
+        content = "\n".join(lines[start + 1 : end]).strip()
+        sizes.append((heading, len(content)))
+    return sorted(sizes, key=lambda item: item[1], reverse=True)
+
+
 def lint(
     text: str,
     *,
@@ -301,7 +321,14 @@ def lint(
 
     length = len(body.strip())
     if length > budget:
-        errors.append(f"意味内容が {length} 文字 (予算 {budget} 文字)")
+        breakdown = " / ".join(
+            f"{heading} {size}" for heading, size in _section_sizes(body) if size
+        )
+        over = length - budget
+        errors.append(
+            f"意味内容が {length} 文字 (予算 {budget} 文字、{over} 文字超過)。"
+            f"内訳: {breakdown}"
+        )
 
     errors.extend(_fence_violations(body))
 

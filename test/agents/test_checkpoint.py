@@ -47,10 +47,20 @@ def cp():
 
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
-    """テスト用の git リポジトリ。除外設定の検証に使う。"""
+    """テスト用の git リポジトリ。除外設定の検証に使う。
+
+    ★利用者のグローバル除外（`~/.config/git/ignore`）を遮断する。
+    そこに `.tmp/` があると `ensure_ignored` は「既に無視されている」と判断して
+    何も書かないため、遮断しないと環境しだいで結果が変わる。
+    """
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "t"], cwd=tmp_path, check=True)
+    empty = tmp_path / "empty-excludes"
+    empty.write_text("", encoding="utf-8")
+    subprocess.run(
+        ["git", "config", "core.excludesFile", str(empty)], cwd=tmp_path, check=True
+    )
     return tmp_path
 
 
@@ -201,6 +211,19 @@ def test_budget_counts_only_semantic_content(cp):
     assert any("予算" in e for e in errors)
 
 
+def test_budget_error_names_the_section_to_cut(cp):
+    """★全体の文字数だけ告げると、書き手が当てずっぽうで削ることになる。"""
+    text = valid_checkpoint().replace("- 完了: X", "- " + "z" * 2500)
+    errors, _ = cp.lint(text, budget=2000)
+    assert len(errors) == 1
+    message = errors[0]
+    assert "超過" in message
+    assert "内訳" in message
+    # 最も大きい節が先頭に来ること（削る先が一目で分かる）
+    head = message.split("内訳: ", 1)[1]
+    assert head.startswith("## State"), head
+
+
 def test_long_fence_outside_refs_is_rejected(cp):
     fence = "```\n" + "line\n" * 20 + "```\n"
     text = valid_checkpoint().replace("## Evidence\n", f"## Evidence\n{fence}")
@@ -320,6 +343,25 @@ def test_ensure_ignored_is_idempotent(cp, git_repo: Path):
     cp.ensure_ignored(paths)
     second = cp.ensure_ignored(paths)
     assert second["updated"] is False
+
+
+def test_ensure_ignored_skips_writing_when_already_ignored(cp, git_repo: Path):
+    """★利用者のグローバル除外が `.tmp/` を持つ環境を再現する。
+
+    この場合 `ensure_ignored` は何も書かない。目的は「無視されている」ことで
+    あって、除外ファイルへ書くこと自体ではないため。
+    """
+    excludes = git_repo / "user-excludes"
+    excludes.write_text(f"{cp.TMP_DIRNAME}/\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "config", "core.excludesFile", str(excludes)], cwd=git_repo, check=True
+    )
+
+    paths = cp.resolve_paths("session-x", git_repo)
+    result = cp.ensure_ignored(paths)
+
+    assert result["ignored"] is True
+    assert result["updated"] is False, "既に無視されているなら書かない"
 
 
 def test_ensure_ignored_outside_git_is_not_an_error(cp, tmp_path: Path, monkeypatch):
