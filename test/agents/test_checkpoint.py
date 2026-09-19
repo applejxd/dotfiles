@@ -222,6 +222,28 @@ def test_multiple_next_items_are_warning_not_error(cp):
     assert any("Next" in w for w in warnings)
 
 
+def test_stale_snapshot_at_in_header_is_flagged(cp):
+    """★旧雛形の名残。hook はヘッダを触らないので永久に空のまま残る。"""
+    text = valid_checkpoint().replace(
+        "     covered_through: msg-1\n",
+        "     covered_through: msg-1\n     snapshot_at:\n",
+    )
+    errors, warnings = cp.lint(text)
+    assert errors == [], "復帰は妨げないので警告に留めること"
+    assert any("snapshot_at" in w for w in warnings)
+
+
+def test_snapshot_at_in_machine_section_is_not_flagged(cp):
+    """機械節の snapshot_at が正本。こちらを警告してはいけない。"""
+    text = valid_checkpoint() + (
+        "\n<!-- machine: ここから下は PreCompact が上書きする。"
+        "意味内容の予算に含めない -->\n"
+        "## Snapshot\n\n- snapshot_at: 2026-09-19T15:59:37+09:00\n"
+    )
+    _, warnings = cp.lint(text)
+    assert not any("snapshot_at" in w for w in warnings)
+
+
 # --- 鮮度検査 -----------------------------------------------------------
 
 

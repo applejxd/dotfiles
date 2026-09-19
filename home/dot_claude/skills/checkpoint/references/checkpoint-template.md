@@ -3,7 +3,8 @@
 下のコードブロックの中身をそのまま写して使う。
 
 - 見出しは 6 つを**この順序で**置く。`checkpoint.py lint --structure` が検査する
-- `<!-- machine: -->` より下は hook が上書きするので、人も AI も書かない
+- `<!-- machine: -->` より下は hook が上書きするので、人も AI も書かない。
+  圧縮時刻・HEAD・作業ツリーの状態はそこに入る。**ヘッダには書かない**
 - `covered_through` には**その要求の固定境界**を書く。現在の会話地点ではない
 
 復帰試験（段 3）で分かった、外すと復帰できなくなる点:
@@ -21,7 +22,6 @@
      cli: claude|copilot
      updated_at: <ISO8601>
      covered_through: <その要求の固定境界>
-     snapshot_at: <ISO8601>
 -->
 # Checkpoint — <作業の短い名前>
 

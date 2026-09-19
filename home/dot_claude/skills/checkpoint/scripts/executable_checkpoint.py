@@ -305,8 +305,16 @@ def lint(
 
     errors.extend(_fence_violations(body))
 
+    header = parse_header(text)
+    # 旧雛形はヘッダにも snapshot_at を置いていた。hook はヘッダを触らないので
+    # 永久に空のまま残り、「圧縮時刻が未取得」に見える。正本は機械節の方。
+    if "snapshot_at" in header:
+        warnings.append(
+            "ヘッダの `snapshot_at` は旧雛形の名残 (機械節が正本なので削る)"
+        )
+
     if boundary is not None:
-        covered = parse_header(text).get("covered_through", "")
+        covered = header.get("covered_through", "")
         if covered != boundary:
             errors.append(
                 f"covered_through が要求の境界と違う (記録 {covered!r} / 要求 {boundary!r})"

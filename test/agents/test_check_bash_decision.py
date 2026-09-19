@@ -243,8 +243,15 @@ def test_commit_skill_uses_direct_commands_and_separate_calls():
     assert not (
         COMMIT_SKILL_PATHS[0].parent / "scripts" / "executable_get-git-context.sh"
     ).exists()
-    remove_paths = (ROOT / "home" / ".chezmoiremove").read_text(encoding="utf-8")
-    assert ".claude/skills/commit/scripts/get-git-context.sh" in remove_paths
+    # ★ファイル個別指定だと中身が消えた後に空の scripts/ が残るため、
+    #   ディレクトリごと消している (.chezmoiremove 冒頭の規則)。
+    remove_lines = [
+        line.strip()
+        for line in (ROOT / "home" / ".chezmoiremove")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert ".claude/skills/commit/scripts" in remove_lines
 
 
 def test_commit_skills_gate_on_message_approval_before_commit():
