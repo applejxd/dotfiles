@@ -1,8 +1,8 @@
 # CHG-0001: compaction を跨いで作業文脈を失わない
 
 - **状態**: In progress
-- **更新日**: 2026-09-19
-- **基準**: Claude Code 2.1.x 系ドキュメント / GitHub Copilot CLI 1.0.84-8
+- **更新日**: 2026-09-20
+- **基準**: Claude Code 2.1.x 系ドキュメント / GitHub Copilot CLI 1.0.87-0
 
 ## 目的と非目的
 
@@ -17,17 +17,21 @@
 
 - 圧縮アルゴリズムそのものへの介入
 - 全会話の保存（必要なのは復帰に要る最小限）
-- Copilot での「圧縮直後の注入」の保証（イベントが存在しないため best-effort）
+- 圧縮直後の注入を**両 CLI で同じ時点に**揃えること。Claude は作業再開の前、
+  Copilot は最初のツール実行の直後で、1 ツール分の差が残る（E7）
 
 ## 現在地
 
 段 1〜6 が完了し、本体へマージして `chezmoi apply` まで済んだ。
 **実機の `/compact` で `PreCompact` が発火することを確認した**（[E5](../research/compaction-hooks.md)）。
-残るのは Claude での復帰注入のタイミング確認と Windows 実機。
+**Copilot 側の復帰注入も実装した**（`PreCompact` の印 + `postToolUse`、E7）。
+残るのは両 CLI での復帰注入の実機確認と Windows 実機。
 
 **分かったこと:**
 
-- Claude は全工程を hook で構成できる。Copilot は「圧縮直後の注入」だけができない
+- **両 CLI とも全工程を hook で構成できる。** Copilot に `SessionStart` matcher
+  `compact` 相当は無いが、通知専用の `PreCompact` が印を置き `postToolUse` が
+  `additionalContext` で返せば繋がる（E7）
 - `compaction` はセッションを終わらせない。圧縮を跨ぐだけなら `.tmp` で足りる
 - 両 CLI とも「リポジトリ単位で永続する共有の置き場」を持たない。
   Claude の `scratchpad_dir` も Copilot の session-state も**セッション単位**
@@ -36,10 +40,11 @@
 
 **まだ分からないこと:**
 
-- 圧縮後の最初のモデル要求時点で checkpoint が届くか（Claude でのみ検証可能）
+- 圧縮後の最初のモデル要求時点で checkpoint が届くか（両 CLI とも実機未検証。
+  hook 単体では両経路とも動作確認済み）
 - Windows 実機での hook 発火と起動時間
 
-**決着したこと（E3 / E4 / E5）:**
+**決着したこと（E3 / E4 / E5 / E6 / E7）:**
 
 - **Copilot は PascalCase 登録で snake_case 入力が来る**。稼働中の hook が
   snake_case のキーしか読まずに機能していることで裏付けられた。
@@ -50,6 +55,9 @@
   **閾値を跨ぐ前に読める場所が無い**（E5 / E6）
 - **自動圧縮でも `PreCompact` は確実に呼ばれる**。ツールループへの割り込みではなく
   assistant ターンの境界で起きるため、機械記録を取り損ねる経路は無い（E6）
+- **Copilot でも圧縮直後の自動注入はできる**（E7）。E1 の「原理的にできない」は
+  誤りで、「圧縮イベントの有無」しか調べていなかったことが原因。
+  **通知専用のイベントでも印は置ける**ので、注入は別イベントへ委ねられる
 
 ## 評価基準
 

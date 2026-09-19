@@ -110,7 +110,12 @@ hook は非対応。つまり hook 自身が docs を書くことはできず、
 
 - 相が 3 つに増え、「どこまで保存したか」を表す状態が要る
 - 共有知識が案件へ昇格していない状態を、記録側で示す必要がある
-- Copilot では圧縮直後の自動注入ができず、best-effort に留まる
+- Copilot の圧縮直後の注入は Claude より 1 ツール分遅れる（同じターン内には届く）
+
+> **訂正 2026-09-20**: 当初ここには「Copilot では圧縮直後の自動注入ができず、
+> best-effort に留まる」と書いていたが、誤りだった。`postToolUse` が
+> `additionalContext` を返せるため、`PreCompact` が印を置けば自動注入は成立する。
+> 詳細は [compaction-hooks.md 記録 E7](../research/compaction-hooks.md)。
 
 ### 中立的な結果
 

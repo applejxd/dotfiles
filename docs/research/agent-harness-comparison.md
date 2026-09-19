@@ -10,6 +10,9 @@
 >
 > **追記 2026-09-19**: §10 に OpenCode への乗り換え評価（2 度目、見送り）と
 > 再評価トリガーを追加した。一本化を再検討する前に §10 を読むこと。
+> なお sandbox は**目的ではなく代替手段**である（Claude Code の permission が
+> 機能しないための迂回）。ハーネス評価では「sandbox の有無」ではなく
+> 「permission だけで必要な禁止を表現できるか」を見る。
 >
 > ハーネスの仕様は更新が激しい。本書を参照する前に必ず
 > [再確認すべき情報源](#再確認すべき情報源)のリンクを開き、差分を反映してから使うこと。
@@ -434,11 +437,28 @@ calls `task_complete`**」とあり、autopilot 前提のツールだと分か�
 
 | # | 事実 | 影響 | 出典 |
 | --- | --- | --- | --- |
-| 1 | OpenCode に **OS レベル sandbox が無い**。あるのはアプリ層の `permission` のみ | [ADR 0007](../adr/0007-filesystem-guard-boundary.md) の「層 0 = 両方が OS レベルで強制」という前提が崩れる。移行は書き直しではなく**土台の消滅** | リポジトリ内 `bubblewrap`/`seccomp`/`landlock` 検索 0 件、<https://opencode.ai/docs/permissions/> |
-| 2 | 代替の隔離は Docker Sandboxes（別製品）か非公式ラッパー（opencodebox / ai-jail） | 単一ソースからの生成対象にできない。**ハーネス調査がさらに増える** | <https://docs.docker.com/ai/sandboxes/agents/opencode/> |
-| 3 | **V1 / V2 が非互換のまま並行開発中**。V2 は `CLAUDE.md` フォールバックを廃止、`instructions` 配列は未解決を自認 | 「更新のたびに設定が壊れる」が確定的に起きる時期 | <https://opencode.ai/v2/docs/instructions> |
-| 4 | compaction 系 hook は `experimental.` 接頭辞 | checkpoint 機構を非安定 API に賭けることになる | `packages/plugin/src/index.ts` |
-| 5 | 会社は Claude Code のみ許可 | Copilot CLI → OpenCode の置換であり、**ハーネス数は 2 のまま減らない** | 運用上の制約 |
+| 1 | **V1 / V2 が非互換のまま並行開発中**。V2 は `CLAUDE.md` フォールバックを廃止、`instructions` 配列は未解決を自認 | 「更新のたびに設定が壊れる」が確定的に起きる時期。**これが現時点で最大の理由** | <https://opencode.ai/v2/docs/instructions> |
+| 2 | compaction 系 hook は `experimental.` 接頭辞 | checkpoint 機構を非安定 API に賭けることになる | `packages/plugin/src/index.ts` |
+| 3 | 会社は Claude Code のみ許可 | Copilot CLI → OpenCode の置換であり、**ハーネス数は 2 のまま減らない** | 運用上の制約 |
+| 4 | OpenCode に **OS レベル sandbox が無い**。あるのはアプリ層の `permission` のみ | **決定的ではない**（下記）。ただし [ADR 0007](../adr/0007-filesystem-guard-boundary.md) の層 0 を使う設計はそのまま持ち込めない | リポジトリ内 `bubblewrap`/`seccomp`/`landlock` 検索 0 件、<https://opencode.ai/docs/permissions/> |
+
+#### #4 を決定的な根拠にしない理由
+
+sandbox は**目的ではなく代替手段**である。Claude Code の permission が実質的に
+機能しなかったため OS レベルへ降ろしただけで、permission が正しく設定できるなら
+そちらでよい。sandbox は副作用が多く障害も起こすため、実運用では disable して
+いることもある。
+
+したがって OpenCode を評価するときは「sandbox が無い」ではなく
+**「permission だけで必要な禁止を表現しきれるか」**を見る。OpenCode 側には
+次の 2 つがあり、本リポジトリのガード構成（静的ルール + 意味判定 hook）と
+対応が付く。
+
+| 本リポジトリ | OpenCode の対応物 |
+| --- | --- |
+| `[bash] allow/deny/ask` の静的ルール | `permission` セクション（12 キー、`allow`/`ask`/`deny`、ワイルドカード、後勝ち） |
+| `check_bash.py` の意味判定 hook | `permission.ask(input, output: { status })` プラグインフック |
+| `[sandbox] deny` の OS レベル遮断 | **対応物なし**（`external_directory` である程度代替） |
 
 ### 見送っても認めるべき OpenCode の利点
 
@@ -469,25 +489,29 @@ churn の中心は fan-out 層（`generate.py` の CLI 別出力）ではなく�
 - `2f23c92` keep Claude's sandbox **no looser than** Copilot's
 - `3778396` make sandbox policy **symmetric** across Claude and Copilot
 
-一方 `checkpoint_restore.py` は既に **Claude 専用**で、Copilot は指示ファイル頼みの
-best-effort に劣化している（[docs/spec/checkpoint.md](../spec/checkpoint.md)）。
-つまり非対称は既に受け入れているのに方針として認めていないため、機構を足すたびに
-「両対応にできないか」を設計し直す分を払っている。
-**ハーネスを替えてもこの構造は変わらない。**
+ただし「対称化を諦める」が答えとは限らない。**諦める前に、弱いと思っていた側の
+機構を調べ直すこと。** 実例が記録 E7 で、「Copilot では圧縮直後の自動注入が
+できない」という前提は誤りだった。`postToolUse` が `additionalContext` を返せる
+ので、`PreCompact` が印を置けば繋がる。非対称は**妥協の産物であって仕様では
+なかった**。
 
-機構を足すときは、対称化を試みる前に「どのハーネスで保証し、どこから best-effort か」を
-先に決めて固定する。
+判断の順序:
+
+1. 弱い側に**別経路**が無いか調べる（E7 はここで解決した）
+2. 無ければ、どこまで保証しどこから best-effort かを決めて**固定する**
+3. 固定した内容をテストに落とす（`test_compaction_restore_is_wired_on_both_clis`）
 
 ### 再評価のトリガー
 
 次のいずれかが起きたときだけ、この判断を開き直す。
 
-1. **OpenCode に OS レベルの隔離が入る**（本体機能として。Docker / 非公式ラッパーは不可）
-2. **V2 への移行が完了し、config スキーマが安定する**
-3. **compaction 系 hook から `experimental.` が外れる**
-4. **会社の許可ハーネスが変わる**（Claude Code 固定でなくなる）
+1. **V2 への移行が完了し、config スキーマが安定する**（最優先で見る）
+2. **compaction 系 hook から `experimental.` が外れる**
+3. **会社の許可ハーネスが変わる**（Claude Code 固定でなくなる）
+4. Claude Code の permission のバグが解消し、sandbox に頼る必要が無くなる
+   （そうなると OpenCode の「OS 隔離が無い」も同時に問題でなくなる）
 
-1 と 4 が揃わない限り、移行しても現在の維持コストは減らない。
+1 が解消するまでは、移行しても「更新のたびに壊れる」痛みを別の形で払うだけ。
 
 ## 再確認すべき情報源
 

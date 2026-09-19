@@ -15,7 +15,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 - **既知の制限・未検証範囲**:
   - **実機での圧縮試験は未実施**（配備は済んだ。新しいセッションが要る）
   - Windows 実機での検証は未実施（source state は更新済み）
-  - Copilot では圧縮直後の自動注入ができない（イベントが存在しない）
+  - Copilot の圧縮直後の注入は Claude より 1 ツール分遅い（同じターン内には届く）
   - Copilot では文脈使用率を推定できないため、閾値監視は見送り
 - **現行仕様**: [仕様・運用](spec/index.md)
 
@@ -23,7 +23,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
-| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。配備まで済み、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
+| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
 
 ## 判断待ち・障害
 
@@ -31,6 +31,9 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 ## 最近の重要な変更
 
+- 2026-09-20 — Copilot でも圧縮直後に checkpoint を自動注入（`PreCompact` の印 +
+  `postToolUse`）。「原理的にできない」という誤った前提を訂正
+  — [記録 E7](research/compaction-hooks.md)
 - 2026-09-19 — `adr` スキルを `checkpoint` へ統合（役割の重複を解消）
   — [CHG-0001](change/0001-compaction-context-handover.md)
 - 2026-09-19 — docs を「情報の役割」で分け、案件を中心に置く運用へ
