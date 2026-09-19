@@ -22,6 +22,7 @@
 | 文書 | 内容 |
 | --- | --- |
 | [エージェントハーネス比較](agent-harness-comparison.md) | Claude Code / Copilot CLI / Codex CLIの機能・強制層・設定差分 |
+| [compaction 関連の hook 仕様](compaction-hooks.md) | 圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測 |
 | [sandbox機能の包括調査](sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
 | [zenoとzsh-autosuggestionsの連携](zeno-autosuggestions-integration.md) | widget競合の原因、ロード順、回避策 |
 

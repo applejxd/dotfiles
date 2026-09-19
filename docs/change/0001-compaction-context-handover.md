@@ -33,9 +33,16 @@
 
 **まだ分からないこと:**
 
-- Copilot で文脈使用率を取得できるか（`PostToolUse` 入力に `transcript_path` が無い）
 - 圧縮後の最初のモデル要求時点で checkpoint が届くか
+- `preCompact` の `transcriptPath` に usage が載るか
 - Windows 実機での hook 発火と起動時間
+
+**決着したこと（E3 / E4）:**
+
+- **Copilot は PascalCase 登録で snake_case 入力が来る**。稼働中の hook が
+  snake_case のキーしか読まずに機能していることで裏付けられた
+- **Copilot の `PostToolUse` からは文脈使用率を推定できない**。
+  入力に `transcript_path` が無い。閾値監視は Copilot では成立しない
 
 ## 評価基準
 
@@ -59,13 +66,14 @@
 | 候補 | 支持する根拠 | 不利な点・反証 | 未検証点 | 扱い | 次の確認 |
 | --- | --- | --- | --- | --- | --- |
 | `SessionStart` matcher `compact` で注入 | 公式が圧縮直後の注入点と明記。プレーン stdout も可 | Claude 専用 | 実機での発火 | **有望** | P0-3 |
-| `PostCompact` で注入 | — | decision control が無く注入できない | — | **見送り** | — |
+| `PostCompact` で注入 | — | decision control が無く注入できない（[E1](../research/compaction-hooks.md)） | — | **見送り** | — |
 | 指示ファイルで無条件に読ませる | システムプロンプト側なので圧縮されない | 自律実行の途中では発火しない | 実効性 | **検証中** | P0-3 |
 | Copilot `PostToolUse` で 1 回注入 | `exec`/`args` でシェル非依存。当初の Windows 理由は撤回 | 復帰後の最初のツールは注入前に実行される | 発火頻度 | **保留** | P0-3 の結果しだい |
 | `PreCompact` をブロックして書かせる | 手動なら安全 | `auto` を止めると context-limit 回復時にリクエストが失敗する | — | **見送り（auto）** | — |
 | `fork` に checkpoint を書かせる | 会話全体を継承し、親の文脈を使わない | 分岐はスナップショット。古い fork が親の新しい記録を上書きする | — | **見送り** | — |
-| `TaskCompleted` で促す | タスク完了は自然な区切り | `additionalContext` 非対応。exit 2 の強制しかできない | — | **見送り** | — |
+| `TaskCompleted` で促す | タスク完了は自然な区切り | `additionalContext` 非対応（[E2](../research/compaction-hooks.md)）。exit 2 の強制しかできない | — | **見送り** | — |
 | セッション横断の GC | ファイルが溜まらない | 稼働中の他セッションの記録を消す | — | **見送り** | — |
+| Copilot で文脈使用率を推定して閾値監視 | 長い探索の取りこぼしを拾える | **`PostToolUse` 入力に `transcript_path` が無い**（[E4](../research/compaction-hooks.md)） | `preCompact` の `transcriptPath` に usage が載るか | **見送り（現時点）** | 必要になったら E5 |
 
 ## 次の調査・実験
 
@@ -115,6 +123,7 @@
 | 2026-09-18 | checkpoint の書き手を親に限定 | 古い fork が親の新しい記録を上書きする |
 | 2026-09-19 | 保存先を常にセッション別名へ | 所有権の交渉・ロック・固定名の奪い合いが不要になる |
 | 2026-09-19 | 文字数予算を 2000 で確定 | 復帰試験の実測が 1098 文字で「ちょうどよい」判定 |
+| 2026-09-19 | Copilot の閾値監視を「見送り」へ | `PostToolUse` 入力に `transcript_path` が無いことを実測（[E4](../research/compaction-hooks.md)） |
 
 ## 終了結果
 
