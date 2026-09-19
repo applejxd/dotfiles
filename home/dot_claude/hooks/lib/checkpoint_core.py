@@ -19,15 +19,55 @@ hook が同じ結果を得られるように 1 箇所へ寄せてある。ここ
 
 from __future__ import annotations
 
-import contextlib
 import datetime as dt
 import importlib.util
-import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+# 印まわりは速度の都合で別モジュールにしてある (checkpoint_pending の冒頭参照)。
+# 利用側がどちらを import しても同じものを得られるよう、ここから再 export する。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from checkpoint_pending import (
+    DEFAULT_PENDING_DIR,
+    MAX_CONTEXT_BYTES,
+    PENDING_DIR_ENV,
+    clear_restore_pending,
+    debug_log,
+    mark_restore_pending,
+    pending_dir,
+    read_input,
+    session_id_of,
+    take_restore_pending,
+    truncate_for_context,
+)
+
+# 前半は checkpoint_pending からの再 export。後半はこのモジュール自身のもの。
+__all__ = [
+    "DEFAULT_PENDING_DIR",
+    "GIT_TIMEOUT_SEC",
+    "MACHINE_MARKER",
+    "MAX_CONTEXT_BYTES",
+    "MAX_LISTED_FILES",
+    "PENDING_DIR_ENV",
+    "clear_restore_pending",
+    "collect_snapshot",
+    "debug_log",
+    "load_skill_module",
+    "mark_restore_pending",
+    "pending_dir",
+    "read_checkpoint",
+    "read_input",
+    "replace_machine_section",
+    "session_id_of",
+    "skeleton",
+    "take_restore_pending",
+    "trigger_of",
+    "truncate_for_context",
+    "write_snapshot",
+]
 
 # スキル側の実装を単一ソースとして読み込む。配備先は chezmoi が決めるので、
 # 実行時に解決する。
@@ -60,28 +100,6 @@ def load_skill_module(path: Path | None = None) -> Any | None:
         return module
     except Exception:  # pragma: no cover - 壊れた配備でも hook を落とさない
         return None
-
-
-def read_input() -> dict[str, Any]:
-    """stdin の JSON を読む。壊れていても落とさない。"""
-    try:
-        data = json.load(sys.stdin)
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def session_id_of(data: dict[str, Any]) -> str:
-    """hook 入力からセッション ID を取り出す。
-
-    PascalCase で登録しているので snake_case が来る (記録 E3)。将来 camelCase
-    で来る経路もありうるので両方見る。
-    """
-    for key in ("session_id", "sessionId"):
-        value = data.get(key)
-        if isinstance(value, str) and value:
-            return value
-    return ""
 
 
 def trigger_of(data: dict[str, Any]) -> str:
@@ -216,6 +234,11 @@ def write_snapshot(data: dict[str, Any], module: Any | None = None) -> dict[str,
     target = Path(paths["checkpoint"])
     root = Path(paths["root"])
 
+    # 圧縮直後へ割り込めない CLI のために、ここで印を残す。
+    # ★書き込みの成否より前に置く。機械節の更新に失敗しても、既にある
+    #   checkpoint は戻す価値があるため。
+    pending = mark_restore_pending(data, target)
+
     existed = target.exists()
     text = target.read_text(encoding="utf-8") if existed else skeleton(session)
     updated = replace_machine_section(text, collect_snapshot(root, trigger_of(data)))
@@ -223,9 +246,9 @@ def write_snapshot(data: dict[str, Any], module: Any | None = None) -> dict[str,
     try:
         module.atomic_write(target, updated)
     except OSError as exc:
-        return {"ok": False, "reason": str(exc)}
+        return {"ok": False, "reason": str(exc), "pending": pending}
 
-    return {"ok": True, "created": not existed, "path": str(target)}
+    return {"ok": True, "created": not existed, "path": str(target), "pending": pending}
 
 
 def read_checkpoint(data: dict[str, Any], module: Any | None = None) -> str | None:
@@ -257,14 +280,3 @@ def read_checkpoint(data: dict[str, Any], module: Any | None = None) -> str | No
         return target.read_text(encoding="utf-8")
     except OSError:
         return None
-
-
-def debug_log(name: str, payload: dict[str, Any]) -> None:
-    """デバッグ用の記録。環境変数が立っているときだけ書く。
-
-    hook は静かに失敗しがちなので、追跡できる口を残しておく。
-    """
-    if not os.environ.get("CHECKPOINT_HOOK_DEBUG"):
-        return
-    with contextlib.suppress(Exception):  # pragma: no cover
-        sys.stderr.write(json.dumps({"hook": name, **payload}, ensure_ascii=False) + "\n")

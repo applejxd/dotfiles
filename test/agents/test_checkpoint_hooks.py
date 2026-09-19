@@ -15,6 +15,7 @@ Run with: ``uv run --with pytest --no-project pytest test/agents/ -q``
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -50,6 +51,19 @@ def core():
 @pytest.fixture(scope="module")
 def skill():
     return _load("checkpoint_cli", SKILL_PATH)
+
+
+@pytest.fixture(autouse=True)
+def isolated_pending(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """復帰待ちの印を tmp へ隔離する。
+
+    ★autouse にする。印の既定の置き場は ``~/.cache/checkpoint-hooks`` なので、
+      隔離を忘れたテストが 1 つでもあると実ホームを汚す。hook を subprocess で
+      起動するテストにも ``os.environ`` 経由で伝わる。
+    """
+    target = tmp_path / "pending"
+    monkeypatch.setenv("CHECKPOINT_PENDING_DIR", str(target))
+    return target
 
 
 @pytest.fixture
@@ -318,3 +332,126 @@ def test_restore_hook_reports_when_nothing_to_restore(repo: Path):
 def test_restore_hook_survives_broken_input():
     done = run_hook("checkpoint_restore", "{")
     assert done.returncode == 0
+
+
+# --- 圧縮直後の復帰 (Copilot 経路) --------------------------------------
+#
+# Claude は SessionStart(matcher=compact) で作業再開の「前」に割り込める。
+# Copilot には対応イベントが無いので、PreCompact が印を置き、次の PostToolUse
+# が additionalContext として本文を返す。ここで押さえるのは次の 4 点。
+#
+# - 印が無いときは**何も出力しない**こと (全ツール呼び出しで発火するため)
+# - 一度戻したら**二度と戻さない**こと (毎ツール注入し続けない)
+# - 印が指すのが**自分の checkpoint** のときだけ読むこと
+# - additionalContext の 10 KB 上限を**超えないこと**
+
+
+def test_precompact_leaves_a_restore_marker(core, skill, repo: Path, isolated_pending: Path):
+    """圧縮直前に印を残す。これが Copilot 側の復帰の起点になる。"""
+    data = {"session_id": "sess-mark", "cwd": str(repo), "trigger": "auto"}
+    result = core.write_snapshot(data, module=skill)
+
+    assert result["pending"] is True
+    marker = isolated_pending / "sessmark.pending"
+    assert marker.exists()
+    assert marker.read_text(encoding="utf-8") == result["path"]
+
+
+def test_marker_is_written_even_if_the_snapshot_fails(core, skill, repo: Path, monkeypatch):
+    """機械節が書けなくても、既にある checkpoint は戻す価値がある。"""
+
+    def boom(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(skill, "atomic_write", boom)
+    data = {"session_id": "sess-fail", "cwd": str(repo), "trigger": "auto"}
+    result = core.write_snapshot(data, module=skill)
+
+    assert result["ok"] is False
+    assert result["pending"] is True
+
+
+def test_take_restore_pending_returns_content_once(core, tmp_path: Path, isolated_pending: Path):
+    """戻すのは 1 回だけ。残すとツール呼び出しのたび注入し続ける。"""
+    target = tmp_path / "checkpoint-abcd1234.md"
+    target.write_text(WRITTEN, encoding="utf-8")
+    isolated_pending.mkdir(parents=True, exist_ok=True)
+    (isolated_pending / "s1.pending").write_text(str(target), encoding="utf-8")
+
+    data = {"session_id": "s1"}
+    assert "## Goal" in (core.take_restore_pending(data) or "")
+    assert core.take_restore_pending(data) is None
+
+
+def test_take_restore_pending_refuses_a_foreign_path(core, tmp_path: Path, isolated_pending: Path):
+    """★印が別のファイルを指していても読まない。
+
+    印は自分で書いたものだが、壊れた印や古い印で任意のファイルを読み上げる
+    経路を作らない。``checkpoint-*.md`` という自分の命名だけを受け付ける。
+    """
+    secret = tmp_path / "id_rsa"
+    secret.write_text("PRIVATE KEY", encoding="utf-8")
+    isolated_pending.mkdir(parents=True, exist_ok=True)
+    (isolated_pending / "s2.pending").write_text(str(secret), encoding="utf-8")
+
+    assert core.take_restore_pending({"session_id": "s2"}) is None
+
+
+def test_unreadable_marker_does_not_retry_forever(core, isolated_pending: Path):
+    """読めない印でも 1 回で諦める。消さないと毎ツール再試行する。"""
+    isolated_pending.mkdir(parents=True, exist_ok=True)
+    marker = isolated_pending / "s3.pending"
+    marker.write_text("/nonexistent/checkpoint-zzzz.md", encoding="utf-8")
+
+    assert core.take_restore_pending({"session_id": "s3"}) is None
+    assert not marker.exists()
+
+
+def test_truncate_respects_the_byte_budget(core):
+    """★文字数ではなくバイト数で測る。日本語は 1 文字 3 バイト。"""
+    out = core.truncate_for_context("あ" * 5000, limit=1000)
+    assert len(out.encode("utf-8")) <= 1000
+    assert "省略しました" in out
+
+
+def test_truncate_keeps_short_text_intact(core):
+    assert core.truncate_for_context("短い", limit=1000) == "短い"
+
+
+def test_restore_pending_hook_is_silent_without_a_marker():
+    """★印が無いときは無言。全ツール呼び出しで発火するので最重要。
+
+    空出力なら Copilot は元のツール結果をそのまま使う。
+    """
+    done = run_hook("checkpoint_restore_pending", '{"session_id": "nobody"}')
+    assert done.returncode == 0
+    assert done.stdout.strip() == ""
+
+
+def test_restore_pending_hook_emits_additional_context(tmp_path: Path, isolated_pending: Path):
+    target = tmp_path / "checkpoint-abcd1234.md"
+    target.write_text(WRITTEN, encoding="utf-8")
+    isolated_pending.mkdir(parents=True, exist_ok=True)
+    (isolated_pending / "sess9.pending").write_text(str(target), encoding="utf-8")
+
+    done = run_hook("checkpoint_restore_pending", '{"session_id": "sess-9"}')
+    assert done.returncode == 0
+
+    payload = json.loads(done.stdout)
+    assert "## Goal" in payload["additionalContext"]
+    assert len(payload["additionalContext"].encode("utf-8")) <= 10_000
+
+
+def test_restore_pending_hook_survives_broken_input():
+    done = run_hook("checkpoint_restore_pending", "これは JSON ではない")
+    assert done.returncode == 0
+
+
+def test_claude_restore_clears_the_marker(core, isolated_pending: Path):
+    """Claude で戻せたなら印は用済み。残すと二重注入になる。"""
+    isolated_pending.mkdir(parents=True, exist_ok=True)
+    marker = isolated_pending / "s4.pending"
+    marker.write_text("/somewhere/checkpoint-s4.md", encoding="utf-8")
+
+    core.clear_restore_pending({"session_id": "s4"})
+    assert not marker.exists()

@@ -750,10 +750,21 @@ script = "checkpoint_restore.py"
 runner = "python3"
 purpose = "圧縮の直後に自分の checkpoint をコンテキストへ戻す"
 # ★Claude 専用 (copilot_event を書かない)。
-#   Copilot には対応するイベントが無い。preCompact は通知専用で postCompact 相当
-#   も存在しないため、圧縮直後の自動注入は原理的にできない。Copilot 側は指示
-#   ファイルの恒久ルールに頼る best-effort になる。
-#   詳細は docs/research/compaction-hooks.md 記録 E1
+#   Claude はここで作業再開の「前」に割り込める。Copilot には対応イベントが
+#   無いため checkpoint_restore_pending が PostToolUse に相乗りする。
 claude_event = "SessionStart"
 claude_matcher = "compact"
+timeout_sec = 30
+
+[[hooks]]
+id = "checkpoint_restore_pending"
+script = "checkpoint_restore_pending.py"
+runner = "python3"
+purpose = "Copilot で圧縮直後の最初のツール実行に相乗りして checkpoint を戻す"
+# ★Copilot 専用 (claude_event を書かない)。Claude は SessionStart で足りる。
+# ★matcher を付けない。圧縮の後に最初に来るツールが何かは選べないため。
+#   全ツールで発火するので、印が無いときは git もスキル読込もせず stat 1 回で
+#   抜けること。checkpoint_core.pending_dir() がホーム固定なのはこのため。
+# ★PascalCase で登録する。理由は checkpoint_precompact と同じ (記録 E3)。
+copilot_event = "PostToolUse"
 timeout_sec = 30

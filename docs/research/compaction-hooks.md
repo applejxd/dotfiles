@@ -47,6 +47,11 @@ context compaction を跨いで作業文脈を保つために、両 CLI の hook
 `SessionStart` の matcher `compact` だった。Copilot には対応するイベントが無く、
 圧縮直後の自動注入は原理的にできない。
 
+> **訂正 (記録 E7)**: 最後の一文は誤り。「`SessionStart` 相当の単一イベントが
+> 無い」までは正しいが、そこから「自動注入ができない」を導いたのが飛躍だった。
+> `postToolUse` は `additionalContext` を返せるので、`PreCompact` が印を置き
+> `postToolUse` が拾えば自動注入は成立する。詳細は記録 E7。
+
 `PreCompact` は `prompt` / `agent` hook に非対応なので、hook からモデルを動かす
 こともできない。
 
@@ -464,6 +469,108 @@ hook は外部プロセスであり、圧縮は hook の完了直後に始まる
 ### 次の問い
 
 - 圧縮直後、作業再開前に記録が届くか（Claude でのみ検証可能。未着手）
+- Windows 実機での発火と起動時間（未着手）
+
+### 参照
+
+出典: <https://docs.github.com/en/copilot/reference/hooks-reference>
+
+## 記録 E7 — 2026-09-19
+
+- **対象バージョン**: GitHub Copilot CLI 1.0.87-0 / 公式 hooks reference
+- **環境**: WSL / Ubuntu
+
+### 問い
+
+Copilot で圧縮直後の自動注入は本当にできないのか。E1 の結論を疑う。
+
+### 事前の予想
+
+E1 で「原理的にできない」と結論していた。`postCompact` 相当のイベントが無く、
+`preCompact` が通知専用であることは実測済みだったため、覆らないと考えていた。
+
+### 方法・条件
+
+公式 hooks reference のイベント表と出力仕様を、**注入可否の観点で**読み直した。
+E1 では「圧縮イベントがあるか」だけを見ており、「圧縮以外の経路で注入できるか」
+を見ていなかった。
+
+### 結果
+
+**`postToolUse` はコンテキストを注入できる。**
+
+| イベント | Output processed |
+| --- | --- |
+| `postToolUse` | Yes — can modify the tool result or **inject additional context for the model** |
+| `postToolUseFailure` | Yes — can provide recovery guidance via `additionalContext` |
+| `notification` | Optional — can inject `additionalContext` into the session |
+| `sessionStart` | Optional — can inject `additionalContext` into the session |
+| `preCompact` | No — notification only |
+
+`postToolUse` の出力:
+
+```typescript
+{
+    modifiedResult?: { resultType: "success"; textResultForLlm: string };
+    additionalContext?: string;
+}
+```
+
+> `additionalContext` — Additional guidance appended to `textResultForLlm` so the
+> model sees it after the tool output on the same turn. When multiple hooks return
+> `additionalContext`, the results are joined with a double newline and
+> **capped at 10 KB**.
+
+`matcher` は `toolName` への正規表現で、省略すると全ツールで発火する。
+
+### 考察
+
+**E1 の「原理的にできない」は誤りだった。** 誤りの構造は次のとおり。
+
+- 正しい: 「`SessionStart(matcher=compact)` に相当する**単一のイベント**は無い」
+- 誤り: そこから「自動注入は**できない**」を導いた
+
+E1 は「圧縮イベントの有無」だけを調べ、「他のイベントで注入できるか」を
+調べていない。**通知専用のイベントでも、印を置くことはできる。** 注入の担い手を
+別のイベントに委ねれば繋がる。
+
+成立する経路:
+
+1. `PreCompact` が印を置く（通知専用でも副作用は出せる）
+2. 次の `postToolUse` が印を見て `additionalContext` で本文を返す
+
+E6 で「自動圧縮は assistant ターンの境界で起き、圧縮後は同じツールループが
+続く」と実測済みなので、圧縮の直後にはほぼ確実にツール呼び出しが来る。
+
+**Claude との差は「原理的な不可能」ではなく「1 ツール分の遅れ」**になった。
+
+| | Claude | Copilot |
+| --- | --- | --- |
+| 注入の契機 | `SessionStart` matcher `compact` | `PreCompact` の印 → 次の `postToolUse` |
+| 届く時点 | 作業を再開する**前** | 最初のツール実行の**直後**（同じターン内） |
+| 上限 | なし（stdout 全文） | **10 KB**（`additionalContext`） |
+
+### 実装上の制約
+
+**`postToolUse` は全てのツール呼び出しで発火する。** 印が無いときのコストが
+そのままツール 1 回ごとの税になる。実測（WSL / Ubuntu, Python 3.12）:
+
+| 構成 | 1 回あたり |
+| --- | --- |
+| `python3` の素の起動 | 17ms |
+| 印の判定だけ（`checkpoint_pending`） | 33ms |
+| `checkpoint_core` まで読む | 48ms |
+| 配備した hook（分離後） | **41ms** |
+
+`checkpoint_core` は `subprocess` / `importlib.util` / `datetime` を読み込むため、
+import するだけで 13ms 余分にかかる。印まわりを `checkpoint_pending.py` へ
+切り出したのはこのため。**印の置き場をホーム直下に固定**しているのも同じ理由で、
+リポジトリ内に置くと在処を知るのに `git rev-parse` の subprocess が要る。
+
+### 次の問い
+
+- 実機の自動圧縮で `postToolUse` の注入が届くか（未着手。`/restart` が要る）
+- 10 KB を超える checkpoint をどう扱うか（現状は末尾を切って全文の在処を示す）
 - Windows 実機での発火と起動時間（未着手）
 
 ### 参照

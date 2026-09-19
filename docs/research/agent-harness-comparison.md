@@ -8,6 +8,9 @@
 > 「Copilot CLI では hook の `ask` が自動承認される」を追加し、
 > 「`ask` はどのモードでも自動承認されない」の記述を Claude Code 限定に訂正した。
 >
+> **追記 2026-09-19**: §10 に OpenCode への乗り換え評価（2 度目、見送り）と
+> 再評価トリガーを追加した。一本化を再検討する前に §10 を読むこと。
+>
 > ハーネスの仕様は更新が激しい。本書を参照する前に必ず
 > [再確認すべき情報源](#再確認すべき情報源)のリンクを開き、差分を反映してから使うこと。
 > 本書は **3 ハーネスの差分** に絞った比較資料であり、各ツールの網羅的な仕様書ではない。
@@ -421,6 +424,70 @@ calls `task_complete`**」とあり、autopilot 前提のツールだと分か�
 | 機械的に強制したいものは指示ではなく hook にする | Claude Code memory |
 | 矛盾する指示があるとモデルが恣意的に選ぶ | Claude Code memory |
 | 曖昧語（should / might / 適切に）を避け、検証可能に書く | awesome-copilot / Claude Code memory |
+
+## 10. 乗り換え候補の評価（OpenCode / 2026-09-19）
+
+「ハーネス差分の調査が重い」を理由に OSS ハーネスへ一本化できないかを 2 度検討した
+（2026-09-15 / 2026-09-19）。**2 度とも見送り**。3 度目を始める前にここを読むこと。
+
+### 見送りの根拠（一次情報）
+
+| # | 事実 | 影響 | 出典 |
+| --- | --- | --- | --- |
+| 1 | OpenCode に **OS レベル sandbox が無い**。あるのはアプリ層の `permission` のみ | [ADR 0007](../adr/0007-filesystem-guard-boundary.md) の「層 0 = 両方が OS レベルで強制」という前提が崩れる。移行は書き直しではなく**土台の消滅** | リポジトリ内 `bubblewrap`/`seccomp`/`landlock` 検索 0 件、<https://opencode.ai/docs/permissions/> |
+| 2 | 代替の隔離は Docker Sandboxes（別製品）か非公式ラッパー（opencodebox / ai-jail） | 単一ソースからの生成対象にできない。**ハーネス調査がさらに増える** | <https://docs.docker.com/ai/sandboxes/agents/opencode/> |
+| 3 | **V1 / V2 が非互換のまま並行開発中**。V2 は `CLAUDE.md` フォールバックを廃止、`instructions` 配列は未解決を自認 | 「更新のたびに設定が壊れる」が確定的に起きる時期 | <https://opencode.ai/v2/docs/instructions> |
+| 4 | compaction 系 hook は `experimental.` 接頭辞 | checkpoint 機構を非安定 API に賭けることになる | `packages/plugin/src/index.ts` |
+| 5 | 会社は Claude Code のみ許可 | Copilot CLI → OpenCode の置換であり、**ハーネス数は 2 のまま減らない** | 運用上の制約 |
+
+### 見送っても認めるべき OpenCode の利点
+
+| 項目 | 内容 | 出典 |
+| --- | --- | --- |
+| skill 資産 | `.claude/skills/` / `~/.claude/skills/` を**パスそのまま**読む。移行コスト 0 | <https://opencode.ai/docs/skills/> |
+| Copilot 契約 | GitHub の正式提携として公式サポート（`/connect`） | <https://github.blog/changelog/2026-01-16-github-copilot-now-supports-opencode/> |
+| Bedrock | `AWS_PROFILE` / `aws sso login` 込みで公式サポート | <https://opencode.ai/docs/providers/#amazon-bedrock> |
+| compaction | 圧縮プロンプト自体を差し替え可能で、Copilot CLI より primitive が広い | `experimental.session.compacting` |
+
+→ **設定を一切移さずに試せる**ので、評価したくなったら `npm i -g opencode-ai`
+（mise なら `aqua:anomalyco/opencode`）を入れて `/connect` するだけでよい。
+`common.toml` にも `generate.py` にも触れないこと。chezmoi には入れない
+（会社機は Claude Code のみ許可のため）。
+
+### 痛みの源は harness の数ではない
+
+実測（2026-09-19）:
+
+| 指標 | 値 |
+| --- | --- |
+| 直近 30 日のコミット | 130 中 98 件（75%）がエージェント領域 |
+| 全期間のコミット | 546 中 83 件（15%） |
+
+churn の中心は fan-out 層（`generate.py` の CLI 別出力）ではなく、
+**「両ハーネスで同じ挙動にする」という自己都合の目標**にある。
+
+- `2f23c92` keep Claude's sandbox **no looser than** Copilot's
+- `3778396` make sandbox policy **symmetric** across Claude and Copilot
+
+一方 `checkpoint_restore.py` は既に **Claude 専用**で、Copilot は指示ファイル頼みの
+best-effort に劣化している（[docs/spec/checkpoint.md](../spec/checkpoint.md)）。
+つまり非対称は既に受け入れているのに方針として認めていないため、機構を足すたびに
+「両対応にできないか」を設計し直す分を払っている。
+**ハーネスを替えてもこの構造は変わらない。**
+
+機構を足すときは、対称化を試みる前に「どのハーネスで保証し、どこから best-effort か」を
+先に決めて固定する。
+
+### 再評価のトリガー
+
+次のいずれかが起きたときだけ、この判断を開き直す。
+
+1. **OpenCode に OS レベルの隔離が入る**（本体機能として。Docker / 非公式ラッパーは不可）
+2. **V2 への移行が完了し、config スキーマが安定する**
+3. **compaction 系 hook から `experimental.` が外れる**
+4. **会社の許可ハーネスが変わる**（Claude Code 固定でなくなる）
+
+1 と 4 が揃わない限り、移行しても現在の維持コストは減らない。
 
 ## 再確認すべき情報源
 

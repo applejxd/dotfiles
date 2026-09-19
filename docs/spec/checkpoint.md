@@ -73,8 +73,9 @@
 
 | イベント | スクリプト | 動作 |
 | --- | --- | --- |
-| Claude `PreCompact` / Copilot `PreCompact` | `checkpoint_precompact.py` | 機械的事実だけを記録。**絶対にブロックしない** |
-| Claude `SessionStart` matcher `compact` | `checkpoint_restore.py` | 自分の記録を stdout へ出す（**Claude 専用**） |
+| Claude `PreCompact` / Copilot `PreCompact` | `checkpoint_precompact.py` | 機械的事実だけを記録し、復帰待ちの印を置く。**絶対にブロックしない** |
+| Claude `SessionStart` matcher `compact` | `checkpoint_restore.py` | 自分の記録を stdout へ出し、印を消す（**Claude 専用**） |
+| Copilot `PostToolUse` | `checkpoint_restore_pending.py` | 印があれば `additionalContext` で記録を返す（**Copilot 専用**） |
 
 **Copilot も PascalCase で登録する。** camelCase だと入力に `hook_event_name` が
 入らない（記録 E3）。
@@ -90,9 +91,21 @@ hook へ渡る形式とは違う。キー名を実装の前提にしない（記
 自動圧縮をブロックすると「元のエラーが表面化し、現在のリクエストが失敗する」と
 明記している。機械記録のためにユーザーの作業を失わせるのは割に合わない。
 
-**Copilot に復帰 hook が無い理由**: `preCompact` は通知専用で、`postCompact`
-相当のイベントも存在しない。圧縮直後の自動注入は原理的にできず、指示ファイルに
-頼る best-effort になる。
+**Copilot の復帰が 2 段になっている理由**: Copilot には `SessionStart`
+matcher `compact` に相当する単一のイベントが無い。代わりに `PreCompact` が印を
+置き、次の `postToolUse` が `additionalContext` で本文を返す。**通知専用の
+イベントでも印を置くことはできる**ので、注入の担い手を別のイベントへ委ねれば
+繋がる（記録 E7）。差は「不可能」ではなく**1 ツール分の遅れ**である。
+
+| | Claude | Copilot |
+| --- | --- | --- |
+| 届く時点 | 作業を再開する**前** | 最初のツール実行の**直後**（同じターン内） |
+| 上限 | なし（stdout 全文） | **10 KB**（`additionalContext`。超えたら末尾を切って在処を示す） |
+
+**`postToolUse` は全ツールで発火する。** 印が無いときのコストがツール 1 回ごとの
+税になるため、印まわりは `checkpoint_pending.py` へ切り出し、置き場も
+`~/.cache/checkpoint-hooks/` に固定してある（`git rev-parse` を避けるため）。
+実測 41ms/回。内訳は記録 E7。
 
 **自動圧縮でも取りこぼさない**: 自動圧縮はツールループへの割り込みではなく
 assistant ターンの境界で起きるため、`PreCompact` は確実に呼ばれる（記録 E6）。
@@ -125,12 +138,13 @@ hook が静かに失敗したときは `CHECKPOINT_HOOK_DEBUG=1` を立てると
 - **スキルは手動起動でも使える。** 「checkpoint して」で A1（実行状態の保存）が走る
 - **A2（案件の更新）と B（`docs/` への文書化）の手順は
   `references/procedure.md` にある。** A1 を終えてから読む
-- **Copilot では圧縮直後の自動注入ができない**（イベントが存在しない）
+- **Copilot でも圧縮直後の自動注入ができる**（`PreCompact` の印 + `postToolUse`。
+  記録 E7）。Claude より 1 ツール分だけ遅い
 - **Copilot では文脈使用率を推定できない。** `PostToolUse` の入力に
   `transcript_path` が無く（記録 E4）、トークン情報は圧縮時とセッション終了時に
   しか出ない（記録 E6）。閾値監視は**見送りで決着**
 - **圧縮試験は Copilot で実施済み**（記録 E5 / E6）。
-  **圧縮直後の復帰注入は未検証**で、これは Claude でのみ確かめられる
+  **圧縮直後の復帰注入は実機未検証**。hook 単体では両経路とも動作確認済み
 - **Windows 実機での検証は未実施**（source state は更新済み）
 
 ## 関連

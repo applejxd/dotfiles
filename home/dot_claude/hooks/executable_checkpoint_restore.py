@@ -3,9 +3,9 @@
 
 登録先: Claude ``SessionStart`` matcher ``compact`` (**Claude 専用**)
 
-Copilot には対応するイベントが無い。``preCompact`` は通知専用で、``postCompact``
-相当も存在しないため、圧縮直後の自動注入は原理的にできない (記録 E1)。
-Copilot 側は指示ファイルの恒久ルールに頼る best-effort になる。
+Claude はここで作業再開の**前**に割り込める。Copilot には対応するイベントが
+無いため、``checkpoint_restore_pending.py`` が ``PostToolUse`` に相乗りして
+同じ結果を得る (1 ツール分だけ遅い)。詳細は記録 E1 / E7。
 
 ``SessionStart`` は「plain stdout already reaches Claude for this event」なので、
 全文を出すだけでよい。JSON を組む必要は無い。
@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 
-from checkpoint_core import debug_log, read_checkpoint, read_input
+from checkpoint_core import clear_restore_pending, debug_log, read_checkpoint, read_input
 
 HEADER = (
     "以下は圧縮前に保存した作業の引き継ぎ記録です。"
@@ -38,6 +38,10 @@ HEADER = (
 def main() -> int:
     data = read_input()
     text = read_checkpoint(data)
+
+    # ここで戻せたので、Copilot 向けの印は用済み。残すと次のツール実行で
+    # 二重に注入される。
+    clear_restore_pending(data)
 
     if text is None:
         # 記録が無い / 読めないことを伝えるだけ。他のファイルを探しに行かせない。
