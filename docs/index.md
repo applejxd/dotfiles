@@ -1,13 +1,48 @@
-# ドキュメント
+# 現在地とドキュメント
 
-このリポジトリの詳細資料は、目的別に3カテゴリへ整理しています。
-基本的な導入手順はリポジトリ直下の [README](../README.md) を参照してください。
+目的: Windows / Ubuntu / WSL / macOS の dotfiles を chezmoi で管理し、
+AI CLI の権限・hook・スキルを単一ソースから生成する。
 
-| カテゴリ | 内容 |
-| --- | --- |
-| [仕様・運用](spec/index.md) | 構成、開発、セキュリティ、セットアップ、トラブル対応 |
-| [ADR](adr/index.md) | 採用した設計判断、却下した選択肢、トレードオフ |
-| [調査記録](research/index.md) | 比較調査、原因分析、アップストリーム情報 |
+- **最終レビュー**: 2026-09-19
+- **対象範囲**: source state は全 OS ぶん。**配備・確認済みは Linux / WSL のみ**
+
+導入手順はリポジトリ直下の [README](../README.md) を参照。
+
+## 現在有効な状態
+
+- **利用できるもの**: chezmoi による配備、`common.toml` からの権限 / hook / MCP 生成、
+  sops + age による秘密管理、`checkpoint` スキル（手動起動）
+- **既知の制限・未検証範囲**:
+  - `checkpoint` スキルは**手動起動のみ**。hook による自動化は未実装
+  - Windows 実機での検証は未実施（source state は更新済み）
+  - Copilot では圧縮直後の自動注入ができない（イベントが存在しない）
+- **現行仕様**: [仕様・運用](spec/index.md)
+
+## 活動中
+
+| 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
+| --- | --- | --- | --- |
+| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜3 完了。Copilot で文脈使用率を取得できるかが最大の未解決点 | P0-2 / P0-3 の実測 |
+
+## 判断待ち・障害
+
+- なし
+
+## 最近の重要な変更
+
+- 2026-09-19 — `checkpoint` スキルを追加（compaction を跨ぐ復帰記録）
+  — [CHG-0001](change/0001-compaction-context-handover.md)
+- 2026-09-14 — Copilot の開発ツール自動許可を切り、必要な範囲を明示
+  — [ADR-0008](adr/0008-explicit-dev-tool-grants.md)
+
+## 段階と置き場所
+
+| 段階 | カテゴリ | 答える問い | 寿命 |
+| --- | --- | --- | --- |
+| 探索・計画 | [探索・変更案件](change/index.md) | この目的をどう達成するか | 永続（終了後も状態を付けて残す） |
+| 観測 | [調査記録](research/index.md) | 何を観測したか | 永続（追加のみ） |
+| 決定 | [ADR](adr/index.md) | なぜその選択をしたか | 永続（覆すときは新規 ADR） |
+| 仕様 | [仕様・運用](spec/index.md) | 今どうなっているか | 永続（置換） |
 
 ## 目的から探す
 
@@ -21,16 +56,22 @@
 | Windows 資産を実機で検証する | [Windows 実機での検証](spec/development.md#windows-実機での検証) |
 | Bitwarden / sops の仕組みを知る | [セキュリティ](spec/security.md) |
 | sops + age を導入・復旧する | [Secret管理セットアップ](spec/sops-age.md) |
-| AI CLI のpermission / hookを変更する | [エージェント権限仕様](spec/agent-permissions.md) |
+| AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-permissions.md#mcp-サーバ) |
-| sandboxで何ができるか調べる | [sandbox機能の包括調査](research/sandbox-capabilities.md) |
+| sandbox で何ができるか調べる | [sandbox機能の包括調査](research/sandbox-capabilities.md) |
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |
+| いま何を探索しているか知る | [探索・変更案件](change/index.md) |
 | 設計理由を確認する | [ADR一覧](adr/index.md) |
 | 技術調査の結果を確認する | [調査記録一覧](research/index.md) |
 
 ## 配置ルール
 
-- 運用手順・現在の仕様は `spec/`
-- 長期的な設計判断は `adr/`
-- 時点依存の比較・検証記録は `research/`
-- 新しい文書を追加したら、対応するカテゴリの `index.md` も更新する
+- 複数候補があり、まだ決着していない → `change/` の案件
+- 実際に観測・実測した → `research/` に日付つきの記録を追加
+- 後で理由を失うと困る重要な選択をした → `adr/`
+- 今の動き方・使い方が変わった → `spec/`
+- **このセッション限りの実行状態** → docs に書かない。
+  `checkpoint` スキルが解決するセッション別ファイルへ（固定パスを書かない）
+- 文書を増減したら、対応するカテゴリの `index.md` も更新する
+- **全ての作業が 4 種類を生産するわけではない。** 誤字修正や単純な設定変更に
+  案件や比較表を要求しない

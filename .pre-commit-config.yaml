@@ -58,6 +58,15 @@ repos:
         pass_filenames: false
         files: (\.tmpl|^scripts/lint_templates\.py)$
 
+      # 索引と実ファイルの整合。索引が腐ると docs 全体が腐るので機械に見せる。
+      # 検査するのは整合だけで、記述の妥当性は判定しない。
+      - id: lint-docs-local
+        name: Lint docs index consistency
+        entry: mise exec -- python3 scripts/lint_docs.py
+        language: system
+        pass_filenames: false
+        files: ^(docs/.*\.md|scripts/lint_docs\.py)$
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

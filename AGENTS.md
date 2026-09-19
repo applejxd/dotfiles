@@ -15,6 +15,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 | Windows 資産（静的） | `uv run --with pytest --no-project pytest test/test_windows_assets.py -q` |
 | シェルスクリプト | `git ls-files '*.sh' \| xargs mise exec shellcheck -- shellcheck` |
 | テンプレート（描画して検査） | `mise exec -- python3 scripts/lint_templates.py` |
+| docs の索引整合 | `mise exec -- python3 scripts/lint_docs.py` |
 | 展開結果 | `chezmoi diff`（sandbox 内では不可。下記） |
 
 `*.tmpl` は `identify` がタグを付けないため、`check-toml` / ruff / shellcheck が
