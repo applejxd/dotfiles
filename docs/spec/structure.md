@@ -111,3 +111,33 @@ OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別ス
 | --- | --- | --- |
 | `pwsh` | 510 ms | 312 ms |
 | `powershell` | 359 ms | 182 ms |
+
+## 個人用カスタム指示
+
+全リポジトリで常時読み込まれる指示は、CLI ごとに読む先のファイル名が違います。
+本文はほぼ同じなので、共通部分を 1 ファイルに集約して埋め込みます。
+
+| パス | 役割 |
+| --- | --- |
+| `home/.chezmoitemplates/agent-instructions.md` | 3 CLI 共通の本文（応答・停止と報告・検証） |
+| `home/dot_claude/CLAUDE.md.tmpl` | `~/.claude/CLAUDE.md`。共通本文のみ |
+| `home/dot_codex/AGENTS.md.tmpl` | `~/.codex/AGENTS.md`。共通本文のみ |
+| `home/dot_copilot/copilot-instructions.md.tmpl` | `~/.copilot/copilot-instructions.md`。共通本文 + コミット節 |
+
+この構成には次の理由があります。
+
+- **手で複製するとズレる**: 3 ファイルを個別に保守していたところ、「停止と報告」
+  の機構名（hook / rules / 承認プロンプト）と「検証」のサンドボックス言及が
+  実際にズレていました。共通本文を 1 ファイルにして埋め込み先を増やすだけに
+  します。
+- **CLI 固有の節だけを足す**: Copilot のコミット節は
+  [github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590)
+  という Copilot 固有の事実を理由に書いているため、機械的強制がある
+  Claude Code / Codex CLI には置きません（`docs/spec/agent-permissions.md` の
+  CLI 別の表を参照）。
+- **テンプレート内で分岐しない**: 固有の節は該当ファイルへ直接書き足します。
+  `{{ if }}` を使わないので、テストは `includeTemplate` を展開するだけで
+  実体を再現できます（`test_personal_instructions_share_one_source`）。
+- **リポジトリ直下の `AGENTS.md` は対象外**: 適用範囲（このリポジトリのみ）も
+  内容（リポジトリ固有の約束）も別系統です。判断の経緯は
+  [ADR-0006](../adr/0006-instructions-to-mechanisms.md) にあります。

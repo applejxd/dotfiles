@@ -27,6 +27,28 @@ COMMIT_SKILL_PATHS = [
     ROOT / "home" / "dot_claude" / "skills" / "commit" / "SKILL.md",
     ROOT / "home" / "dot_codex" / "skills" / "commit" / "SKILL.md",
 ]
+CHEZMOI_TEMPLATES = ROOT / "home" / ".chezmoitemplates"
+# 常時読み込まれる個人用カスタム指示。共通部分は .chezmoitemplates に置き、
+# 各 CLI のファイルは includeTemplate で取り込む (CLI 固有の節だけ追記する)
+INSTRUCTION_PATHS = {
+    "claude": ROOT / "home" / "dot_claude" / "CLAUDE.md.tmpl",
+    "codex": ROOT / "home" / "dot_codex" / "AGENTS.md.tmpl",
+    "copilot": ROOT / "home" / "dot_copilot" / "copilot-instructions.md.tmpl",
+}
+SHARED_INSTRUCTIONS = "agent-instructions.md"
+_INCLUDE_RE = re.compile(r'\{\{-?\s*includeTemplate\s+"([^"]+)"\s*-?\}\}')
+
+
+def render_instructions(cli: str) -> str:
+    """指示ファイルの ``includeTemplate`` を展開して実体を得る。
+
+    ``chezmoi execute-template`` を呼ばずに済ませるため、この 1 形式だけを
+    自前で展開する。テンプレート側で分岐は使わない約束なのでこれで足りる。
+    """
+    text = INSTRUCTION_PATHS[cli].read_text(encoding="utf-8")
+    return _INCLUDE_RE.sub(
+        lambda m: (CHEZMOI_TEMPLATES / m.group(1)).read_text(encoding="utf-8"), text
+    )
 
 sys.path.insert(0, str(ROOT / "home" / "dot_config" / "agents"))
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
@@ -259,14 +281,36 @@ def test_copilot_instructions_require_commit_approval():
     実際にこのセッションで skill を再呼び出しせずコミットし、ゲートを
     素通りさせた実績があるため、常時読込側が最後の砦になる。
     """
-    path = ROOT / "home" / "dot_copilot" / "copilot-instructions.md"
-    instructions = path.read_text(encoding="utf-8")
+    path = ROOT / "home" / "dot_copilot" / "copilot-instructions.md.tmpl"
+    instructions = render_instructions("copilot")
     assert "git commit" in instructions
     assert "承認" in instructions
     assert "github/copilot-cli#3590" in instructions
-    # Claude Code 側は hook が正常に動くので、同じ規則を書くと二重確認になる。
-    claude_md = (ROOT / "home" / "dot_claude" / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "github/copilot-cli#3590" not in claude_md
+    assert path.exists()
+    # Claude Code / Codex CLI は機械的強制があるので、同じ規則を書くと
+    # 二重確認になる (docs/spec/agent-permissions.md の CLI 別の表を参照)
+    for cli in ("claude", "codex"):
+        assert "github/copilot-cli#3590" not in render_instructions(cli), cli
+
+
+def test_personal_instructions_share_one_source():
+    """個人用カスタム指示の共通部分は 1 ファイルに集約する.
+
+    3 CLI 分を手で複製すると文面がズレる (実際に「停止と報告」と「検証」で
+    ズレていた)。共通部分は .chezmoitemplates に置き、各 CLI のファイルは
+    includeTemplate で取り込んだうえで固有の節だけを足す。
+    """
+    shared = (CHEZMOI_TEMPLATES / SHARED_INSTRUCTIONS).read_text(encoding="utf-8")
+    assert shared.startswith("# 個人用カスタム指示")
+    for cli, path in INSTRUCTION_PATHS.items():
+        raw = path.read_text(encoding="utf-8")
+        assert f'includeTemplate "{SHARED_INSTRUCTIONS}"' in raw, cli
+        # 共通部分が丸ごと展開され、見出しが重複しないこと
+        rendered = render_instructions(cli)
+        assert shared.rstrip("\n") in rendered, cli
+        assert rendered.count("# 個人用カスタム指示") == 1, cli
+        # 分岐を持ち込まない (持ち込むと render_instructions が嘘になる)
+        assert "{{ if" not in raw and "{{if" not in raw, cli
 
 
 def test_codex_commit_skill_uses_separate_policy_checked_commands():

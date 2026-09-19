@@ -10,7 +10,7 @@
 
 | 系統 | ファイル | 適用範囲 |
 | --- | --- | --- |
-| 個人用カスタム指示 | `home/dot_claude/CLAUDE.md`、`home/dot_codex/AGENTS.md`、`home/dot_copilot/copilot-instructions.md` | 全リポジトリ |
+| 個人用カスタム指示 | `home/dot_claude/CLAUDE.md.tmpl`、`home/dot_codex/AGENTS.md.tmpl`、`home/dot_copilot/copilot-instructions.md.tmpl`（共通本文は `home/.chezmoitemplates/agent-instructions.md`） | 全リポジトリ |
 | リポジトリ規約 | リポジトリ直下の `AGENTS.md` | このリポジトリ |
 
 どちらも全ターンのコンテキストに載る。棚卸ししたところ、`AGENTS.md` の
