@@ -18,7 +18,8 @@ dotfiles は「なぜその形なのか」が失われやすい。
 - ステータスは `Proposed` / `Accepted` / `Deprecated` / `Superseded by ADR-NNNN`
 - 決定を覆す場合は既存 ADR を書き換えず、新しい ADR を起こして
   古い方を `Superseded by` にする
-- テンプレートは `home/dot_claude/skills/adr/references/adr-template.md`
+- テンプレートは `~/.claude/skills/checkpoint/references/adr-template.md`
+  （作成・更新は `checkpoint` スキルが担う）
 
 ## 一覧
 
@@ -32,3 +33,5 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0006](0006-instructions-to-mechanisms.md) | エージェントへの指示を減らし、強制は機構へ寄せる | Accepted | 2026-09-14 |
 | [0007](0007-filesystem-guard-boundary.md) | filesystem ガードの機構を「両 CLI が強制できるか」で分ける | Accepted | 2026-09-14 |
 | [0008](0008-explicit-dev-tool-grants.md) | Copilot の開発ツール自動許可を切り、必要な範囲を明示する | Accepted | 2026-09-14 |
+| [0009](0009-save-before-documenting.md) | コンテキスト圧縮に備えて、保存と文書化を分ける | Accepted | 2026-09-19 |
+| [0010](0010-exploratory-spec-driven-docs.md) | docs を「段階」ではなく「情報の役割」で分け、案件を中心に置く | Accepted | 2026-09-19 |

@@ -14,6 +14,11 @@
 # 2026-09: ターン終了時に ADR 更新を促す Stop hook を廃止。
 .claude/hooks/update-adr-on-stop.py
 
+# 2026-09: adr skill を廃止し、ADR の作成・更新を checkpoint skill へ統合した。
+# テンプレートは checkpoint skill の references へ移設済み。
+.claude/skills/adr/SKILL.md
+.claude/skills/adr/references/adr-template.md
+
 # NOTE: __pycache__ は .chezmoiignore で管理対象外にしているため、ここに書いても
 # 削除されない。古い .pyc が残って困る場合は手で削除する
 # (`rm -rf ~/.config/agents/__pycache__`)。

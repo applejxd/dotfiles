@@ -30,8 +30,12 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 ## 最近の重要な変更
 
-- 2026-09-19 — `checkpoint` スキルを追加（compaction を跨ぐ復帰記録）
+- 2026-09-19 — `adr` スキルを `checkpoint` へ統合（役割の重複を解消）
   — [CHG-0001](change/0001-compaction-context-handover.md)
+- 2026-09-19 — docs を「情報の役割」で分け、案件を中心に置く運用へ
+  — [ADR-0010](adr/0010-exploratory-spec-driven-docs.md)
+- 2026-09-19 — `checkpoint` スキルを追加（compaction を跨ぐ復帰記録）
+  — [ADR-0009](adr/0009-save-before-documenting.md)
 - 2026-09-14 — Copilot の開発ツール自動許可を切り、必要な範囲を明示
   — [ADR-0008](adr/0008-explicit-dev-tool-grants.md)
 
