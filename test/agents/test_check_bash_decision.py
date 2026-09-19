@@ -936,11 +936,7 @@ def test_scratch_dir_git_target_is_still_denied():
 
 
 def test_scratch_symlink_escape_is_not_exempt(tmp_path):
-    """`.tmp/<link>` が外を指す symlink なら scratch 免除を与えない.
-
-    相対パスは既存の workspace 免除が拾うので、scratch 免除だけが効く
-    絶対パス形で確かめる。
-    """
+    """`.tmp/<link>` が外を指す symlink なら scratch 免除を与えない."""
     workspace = tmp_path / "ws"
     (workspace / ".tmp").mkdir(parents=True)
     outside = tmp_path / "outside"
@@ -950,6 +946,74 @@ def test_scratch_symlink_escape_is_not_exempt(tmp_path):
         f"rm -rf {workspace}/.tmp/escape", cwd=str(workspace)
     )
     assert decision == "ask", f"-> {decision} ({reason})"
+
+
+@pytest.mark.parametrize("style", ["relative", "absolute"])
+@pytest.mark.parametrize("target", [".tmp/escape", ".tmp/escape/item"])
+def test_symlink_escape_is_not_exempt_in_either_path_style(tmp_path, style, target):
+    """symlink で外へ抜ける形は、相対でも絶対でも免除しない.
+
+    workspace 免除は scratch 免除より先に成立するのに realpath を見ていな
+    かったため、同じ対象でも相対指定だけが素通りしていた。書き方で判定が
+    変わると、免除の根拠 (対象が workspace の内側だと確証できる) が崩れる。
+    """
+    workspace = tmp_path / "ws"
+    (workspace / ".tmp").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "item").write_text("x")
+    (workspace / ".tmp" / "escape").symlink_to(outside, target_is_directory=True)
+    arg = target if style == "relative" else f"{workspace}/{target}"
+    decision, reason = run_hook(f"rm -rf {arg}", cwd=str(workspace))
+    assert decision == "ask", f"-> {decision} ({reason})"
+
+
+def test_scratch_root_symlink_escape_is_not_exempt(tmp_path):
+    """`.tmp` 自身が外を指す symlink なら、その配下も免除しない.
+
+    scratch 免除は `.tmp` の realpath を基準に内外を判定するので、ルート
+    自体が外を向いていると配下がすべて「内側」に見えてしまう。
+    """
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (workspace / ".tmp").symlink_to(outside, target_is_directory=True)
+    for arg in (".tmp/item", f"{workspace}/.tmp/item"):
+        decision, reason = run_hook(f"rm -rf {arg}", cwd=str(workspace))
+        assert decision == "ask", f"{arg} -> {decision} ({reason})"
+
+
+def test_symlinked_workspace_is_still_exempt(tmp_path):
+    """workspace 自体が symlink 配下にあっても免除は効く.
+
+    realpath 検査は root 側も realpath に揃えるので、`/tmp` が
+    `/private/tmp` の symlink である macOS のような環境でも誤判定しない。
+    """
+    real = tmp_path / "real"
+    (real / ".tmp").mkdir(parents=True)
+    link = tmp_path / "link"
+    link.symlink_to(real, target_is_directory=True)
+    for arg in (".tmp/run-1", f"{link}/.tmp/run-1"):
+        decision, reason = run_hook(f"rm -rf {arg}", cwd=str(link))
+        assert decision is None, f"{arg} -> {decision} ({reason})"
+
+
+def test_rm_ask_reason_shows_the_exempt_form_for_scratch(tmp_path):
+    """免除が落ちた `.tmp` の削除には、通る書き方をその場で示す.
+
+    常時読み込まれる指示に書くとコンテキストを毎ターン消費するので、
+    止めた時点のメッセージで誘導する。
+    """
+    workspace = tmp_path / "ws"
+    (workspace / ".tmp").mkdir(parents=True)
+    decision, reason = run_hook("cd .tmp && rm -rf foo", cwd=str(workspace))
+    assert decision == "ask", f"-> {decision} ({reason})"
+    assert "rm -rf .tmp/<名前>" in reason
+    assert "cd" in reason and "xargs" in reason
+    # `.tmp` と無関係な削除には出さない (的外れな誘導になる)
+    _, other = run_hook("cd src && rm -rf build", cwd=str(workspace))
+    assert "rm -rf .tmp/<名前>" not in other
 
 
 @pytest.mark.parametrize(

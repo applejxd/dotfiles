@@ -2761,6 +2761,23 @@ def check_policy_deny(cmd: str) -> str | None:
     return None
 
 
+def _rm_ask_hint(cmd: str) -> str:
+    """`rm` が ask になったとき、承認不要な書き方を示すヒント。
+
+    免除は静的に読める形にしか効かない (`cd` / 変数展開 / `xargs` は不可)。
+    エージェントは止められた時点でこの文面を読むので、常時読み込まれる指示に
+    同じことを書くより確実で、コンテキストも消費しない。
+    """
+    if ".tmp" not in cmd:
+        return ""
+    return (
+        "\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は"
+        "不要です。\n"
+        "`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、"
+        "承認が必要になります。"
+    )
+
+
 def check_policy_ask(cmd: str) -> str | None:
     """common.toml の bash.ask に該当すればユーザー承認を要求する.
 
@@ -2777,10 +2794,11 @@ def check_policy_ask(cmd: str) -> str | None:
         exemption = _ASK_EXEMPTIONS.get(matched.split()[0])
         if exemption is not None and exemption(cmd):
             return None
+        hint = _rm_ask_hint(cmd) if matched.split()[0] == "rm" else ""
         return (
             f"`{matched}` は承認が必要な操作です (common.toml の [bash] ask)。\n"
             f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
-            "内容を確認して問題なければ承認してください。"
+            f"内容を確認して問題なければ承認してください。{hint}"
         )
     return None
 
@@ -2859,6 +2877,20 @@ def _is_catastrophic_rm_target(token: str) -> bool:
     return canonical.count("..") >= 2
 
 
+def _realpath_stays_inside(root: str, path: str) -> bool:
+    """``path`` が realpath 解決後も ``root`` の内側に留まるか。
+
+    途中の成分が symlink だと ``normpath`` の比較だけでは外へ抜ける
+    (`.tmp/link/item` の `link` が外を指す形)。未作成のパスは realpath が
+    素通しになるので、存在する範囲の解決結果で判定する。
+    ``root`` 側も realpath に揃えるので、workspace 自体が symlink 配下に
+    あっても誤判定しない。
+    """
+    real_root = os.path.realpath(root)
+    real = os.path.realpath(path)
+    return real == real_root or real.startswith(real_root + os.sep)
+
+
 def _rm_is_workspace_local(cmd: str) -> bool:
     """`rm` の対象がすべて workspace 内だと確証できるか。
 
@@ -2869,7 +2901,7 @@ def _rm_is_workspace_local(cmd: str) -> bool:
       * `cd` で基点が変わる (normalize は `cd` を畳むので元の文字列で見る)
       * 変数展開・コマンド置換・ホーム参照を含む
       * 絶対パス、`..` を含むパス、glob だけのトークン
-      * 解決先が workspace の外
+      * 解決先が workspace の外 (symlink で抜ける形も realpath で弾く)
     """
     workspace = _PAYLOAD_CWD
     if not workspace or not os.path.isabs(workspace):
@@ -2918,6 +2950,11 @@ def _rm_is_workspace_local(cmd: str) -> bool:
             resolved = os.path.normpath(os.path.join(workspace, token))
             if resolved != workspace and not resolved.startswith(workspace + os.sep):
                 return False
+            # 成分に symlink があると normpath だけでは外へ抜ける。
+            # 絶対パス指定は scratch 免除が realpath で弾いているので、
+            # 相対パスのこちら側も同じ基準に揃える
+            if not _realpath_stays_inside(workspace, resolved):
+                return False
             saw_target = True
     return saw_target
 
@@ -2964,11 +3001,13 @@ def _resolves_into_scratch(token: str, workspace: str) -> bool:
         root = os.path.join(workspace, name)
         if resolved != root and not resolved.startswith(root + os.sep):
             continue
+        # scratch ルート自体が外を指す symlink なら、配下はすべて workspace の
+        # 外にある。root を基準に比べると内側と誤判定するので先に弾く
+        if not _realpath_stays_inside(workspace, root):
+            return False
         # `.tmp/link` が外を指す symlink なら realpath が scratch の外へ出る。
         # 未作成のパスは realpath が素通しになるので、そのまま内側と判定される
-        real_root = os.path.realpath(root)
-        real = os.path.realpath(resolved)
-        if real == real_root or real.startswith(real_root + os.sep):
+        if _realpath_stays_inside(root, resolved):
             return True
     return False
 
