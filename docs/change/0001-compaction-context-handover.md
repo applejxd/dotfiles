@@ -45,8 +45,11 @@
   snake_case のキーしか読まずに機能していることで裏付けられた。
   `events.jsonl` に残る camelCase の記録は**内部表現**であり、配送形式ではない
 - **Copilot では文脈使用率を推定できない**。`postToolUse` に `transcript_path` が
-  無いのに加え、`preCompact` の `transcriptPath` をたどっても載っているのは
-  補助モデルの usage と課金量だけで、本体の会話の消費量は記録されない（E5）
+  無いのに加え、トークン情報は `session.compaction_start` /
+  `session.compaction_complete` / `session.shutdown` にしか出ない。
+  **閾値を跨ぐ前に読める場所が無い**（E5 / E6）
+- **自動圧縮でも `PreCompact` は確実に呼ばれる**。ツールループへの割り込みではなく
+  assistant ターンの境界で起きるため、機械記録を取り損ねる経路は無い（E6）
 
 ## 評価基準
 
@@ -77,20 +80,20 @@
 | `fork` に checkpoint を書かせる | 会話全体を継承し、親の文脈を使わない | 分岐はスナップショット。古い fork が親の新しい記録を上書きする | — | **見送り** | — |
 | `TaskCompleted` で促す | タスク完了は自然な区切り | `additionalContext` 非対応（[E2](../research/compaction-hooks.md)）。exit 2 の強制しかできない | — | **見送り** | — |
 | セッション横断の GC | ファイルが溜まらない | 稼働中の他セッションの記録を消す | — | **見送り** | — |
-| Copilot で文脈使用率を推定して閾値監視 | 長い探索の取りこぼしを拾える | **`PostToolUse` 入力に `transcript_path` が無い**（[E4](../research/compaction-hooks.md)）。`preCompact` の `transcriptPath` をたどっても、載るのは補助モデルの usage と課金量だけ（[E5](../research/compaction-hooks.md)） | — | **見送り（決着）** | — |
+| Copilot で文脈使用率を推定して閾値監視 | 長い探索の取りこぼしを拾える | **`PostToolUse` 入力に `transcript_path` が無い**（[E4](../research/compaction-hooks.md)）。トークン情報は圧縮時とセッション終了時にしか出ず、閾値を跨ぐ前に読めない（[E6](../research/compaction-hooks.md)） | — | **見送り（決着）** | — |
 
 ## 次の調査・実験
 
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
 | P0-3 | 圧縮後、作業再開前に checkpoint が届くか | Claude 実機で圧縮を起こし、最初のモデル要求時点を観測 |
-| P0-1 | ターン途中の圧縮に先回りできるか | 長いツールループ中に自動圧縮を起こしイベント順を記録。`events.jsonl` から事後に復元できる |
 | P1-4 | Windows 実機での動作 | 実機の PowerShell で配備・発火・起動時間を確認 |
 
 **決着済み**: P0-7（Copilot の hook 入力契約、[E3](../research/compaction-hooks.md) /
 [E5](../research/compaction-hooks.md)）、
 P0-2（使用率の取得、[E4](../research/compaction-hooks.md) /
-[E5](../research/compaction-hooks.md)）
+[E6](../research/compaction-hooks.md)）、
+P0-1（ターン途中の圧縮、[E6](../research/compaction-hooks.md)）
 
 ## 仕様への変更案
 
@@ -165,6 +168,7 @@ P0-2（使用率の取得、[E4](../research/compaction-hooks.md) /
 | 2026-09-19 | `.chezmoiremove` をディレクトリ指定へ | `adr` skill を消したのにファイルを個別に並べたため、空の `skills/adr/` が残った。ディレクトリを書けば再帰削除される（実測）。同じ理由で残っていた `commit/scripts/` も直した |
 | 2026-09-19 | Copilot の閾値監視を「決着（見送り）」へ | `preCompact` の `transcriptPath` をたどっても、本体会話の消費量は記録されない（[E5](../research/compaction-hooks.md)） |
 | 2026-09-19 | `snapshot_at` をヘッダから機械節へ一本化 | hook はヘッダを触らない設計なので、ヘッダに置くと誰も更新せず「未取得」に見え続けた。旧雛形の名残は `lint` の警告で拾う |
+| 2026-09-19 | 「逐次保存 + 圧縮直前の機械記録」の構成を実測で裏付け | 自動圧縮は assistant ターンの境界で起き、`PreCompact` は確実に呼ばれるが、その時点でモデルに意味内容を書かせる余地は無い（[E6](../research/compaction-hooks.md)） |
 
 ## 終了結果
 

@@ -358,3 +358,114 @@ E4 の「Copilot で閾値監視を成立させる根拠が無い」は、`preCo
 ### 参照
 
 出典: <https://docs.github.com/en/copilot/reference/hooks-reference>
+
+## 記録 E6 — 2026-09-19
+
+- **対象バージョン**: GitHub Copilot CLI 1.0.87-0
+- **環境**: WSL / Ubuntu
+
+### 問い
+
+ターン途中で自動圧縮が起きたとき、hook はどの順で呼ばれるか。
+圧縮に先回りして意味内容を書く余地はあるか。
+
+### 事前の予想
+
+自動圧縮はツールループの途中に割り込むため、`PreCompact` が呼ばれない経路が
+あるかもしれないと考えていた。
+
+### 方法・条件
+
+`events.jsonl`（1 セッション、全 12,000 行超）を全件走査し、
+`trigger: auto` の `preCompact` を含む前後のイベントを時系列で復元した。
+同セッションには auto 1 回・manual 2 回の圧縮が記録されている。
+
+### 結果
+
+#### 自動圧縮（`trigger: auto`）前後のイベント順
+
+```text
+03:45:25.830  assistant.turn_end
+03:45:25.830  assistant.turn_start      ← 次のモデル呼び出しへ入る
+03:45:26.928  hook.start   preCompact
+03:45:26.947  hook.end     preCompact   (success: true)
+03:45:26.957  session.compaction_start
+03:46:37.732  session.compaction_complete
+03:45:35.365  assistant.message         ← 圧縮後、同じツールループを継続
+```
+
+**割り込みではなく、assistant ターンの境界**で起きていた。直前のツール実行は
+`tool.execution_complete` まで完了しており、`user.message` は挟まらない。
+
+#### auto と manual で順序が逆になる
+
+| trigger | 順序 |
+| --- | --- |
+| `auto` | `hook.start/end` → `session.compaction_start` |
+| `manual` | `session.compaction_start` → `hook.start/end` |
+
+どちらも `session.compaction_complete` より前に hook は終わっている。
+auto では `hook.end` の 10ms 後に `compaction_start` が来ており、hook の完了を
+待っているように見える（**1 例のみ**なので断定はしない）。
+
+#### `trigger` の呼び名がイベントと hook 入力で違う
+
+| 場所 | 自動圧縮の値 |
+| --- | --- |
+| hook 入力の `trigger` | `auto` |
+| `session.compaction_start` の `trigger` | `threshold` |
+
+#### 3 回の圧縮の実測
+
+| 時刻 | trigger | 圧縮前 | 圧縮後 | 除去メッセージ | 増減 |
+| --- | --- | --- | --- | --- | --- |
+| 03:45 | threshold | 748,942 | 94,257 | 1,155 | -654,689 |
+| 04:52 | manual | 170,929 | 54,840 | 302 | -116,089 |
+| 06:59 | manual | 42,649 | 54,650 | 72 | **+12,001** |
+
+- 自動圧縮の発動点は `currentTokens 748,942 / tokenLimit 936,000` = **80.0%**
+- `tokenLimit` は `threshold` のときだけ入り、manual には無い
+- **3 回目は圧縮して逆に増えた。** 要約文が元の 73 メッセージより長かったため。
+  短い文脈で `/compact` を打つと目減りしないどころか増える
+
+#### トークン情報の所在（E5 の訂正）
+
+E5 では「本体の会話の消費量は記録されない」と書いたが、**不正確だった**。
+全イベント種別を数え直した結果は次のとおり。
+
+| キー `currentTokens` / `tokenLimit` を持つ種別 | 件数 |
+| --- | --- |
+| `session.compaction_start` | 3 |
+| `session.compaction_complete` | 3 |
+| `session.shutdown` | 2 |
+
+正しくは「**圧縮時とセッション終了時にしか記録されない**」。
+`model.*`（41 件）は補助モデルの呼び出しで、本体の `assistant.message`
+1,054 件とは対応しない、という E5 の観測自体は変わらない。
+
+### 考察
+
+**予想は外れた。** 自動圧縮でも `PreCompact` は確実に呼ばれる。
+割り込みではなくターン境界なので、機械記録を取り損ねる経路は無い。
+
+一方で、**その時点でモデルに意味内容を書かせることはできない**。
+hook は外部プロセスであり、圧縮は hook の完了直後に始まる。
+「重要な区切りでの逐次保存（Tier 1）＋圧縮直前の機械記録」という構成は、
+この観測によって裏付けられた。圧縮直前に一括で書かせる設計だと、
+自動圧縮では間に合わない。
+
+閾値監視については、**E5 の結論は変わらない**。トークン情報は
+圧縮時と終了時にしか出ないので、閾値を跨ぐ前に読むことができない。
+「載っていない」ではなく「読みたい時点には出ていない」が正確な理由である。
+
+**運用上の注意**: 文脈が小さいときの手動 `/compact` は逆効果になりうる
+（実測で +12,001 トークン）。
+
+### 次の問い
+
+- 圧縮直後、作業再開前に記録が届くか（Claude でのみ検証可能。未着手）
+- Windows 実機での発火と起動時間（未着手）
+
+### 参照
+
+出典: <https://docs.github.com/en/copilot/reference/hooks-reference>
