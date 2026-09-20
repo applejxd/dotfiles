@@ -318,6 +318,20 @@ def test_personal_instructions_share_one_source():
         assert "{{ if" not in raw and "{{if" not in raw, cli
 
 
+def test_personal_instructions_require_japanese_tool_arguments():
+    """ユーザーに表示されるツール引数も日本語で書かせる.
+
+    「ユーザーへの説明は日本語で書く」だけでは `bash` の `description` などの
+    引数までは含むと読まれず、実際に英語のまま出力されていた。hook が返せるのは
+    allow / deny / ask だけで引数の書き換えはできないため (ADR 0006 の例外)、
+    共通本文に明示する。
+    """
+    for cli in INSTRUCTION_PATHS:
+        rendered = render_instructions(cli)
+        assert "description" in rendered, cli
+        assert "ユーザーに表示される引数も日本語で書く" in rendered, cli
+
+
 def test_codex_commit_skill_uses_separate_policy_checked_commands():
     skill = COMMIT_SKILL_PATHS[1].read_text(encoding="utf-8")
     assert "git add -- <対象ファイル...>" in skill
