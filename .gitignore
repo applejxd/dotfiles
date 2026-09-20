@@ -30,7 +30,10 @@ wheels/
 !home/dot_claude/hooks/lib/
 !home/dot_claude/hooks/lib/**
 # ただし hook 実行時に生成される bytecode cache は除外したまま
+# ★入れ子のパッケージ (bashrules/ など) も含める。直下だけを書くと、上の
+#   `!.../lib/**` が入れ子の __pycache__ まで除外解除してしまう。
 home/dot_claude/hooks/lib/__pycache__/
+home/dot_claude/hooks/lib/**/__pycache__/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
