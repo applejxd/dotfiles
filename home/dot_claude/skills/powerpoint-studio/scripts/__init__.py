@@ -1,0 +1,1 @@
+"""PowerPoint Studio validation utilities."""

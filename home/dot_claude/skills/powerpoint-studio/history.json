@@ -1,0 +1,49 @@
+{
+  "started_at": "2026-09-11T00:00:00Z",
+  "skill_name": "powerpoint-studio",
+  "current_best": "v5",
+  "iterations": [
+    {
+      "version": "v0",
+      "parent": null,
+      "expectation_pass_rate": 0.6,
+      "grading_result": "baseline",
+      "is_current_best": false
+    },
+    {
+      "version": "v1",
+      "parent": "v0",
+      "expectation_pass_rate": 0.8,
+      "grading_result": "won",
+      "is_current_best": false
+    },
+    {
+      "version": "v2",
+      "parent": "v1",
+      "expectation_pass_rate": 0.9,
+      "grading_result": "won",
+      "is_current_best": false
+    },
+    {
+      "version": "v3",
+      "parent": "v2",
+      "expectation_pass_rate": 0.96,
+      "grading_result": "won",
+      "is_current_best": false
+    },
+    {
+      "version": "v4",
+      "parent": "v3",
+      "expectation_pass_rate": 1.0,
+      "grading_result": "won",
+      "is_current_best": false
+    },
+    {
+      "version": "v5",
+      "parent": "v4",
+      "expectation_pass_rate": 1.0,
+      "grading_result": "won",
+      "is_current_best": true
+    }
+  ]
+}

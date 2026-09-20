@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "title": "AI review rollout",
+    "audience": "Engineering leadership",
+    "duration_minutes": 12,
+    "objective": "Approve a four-week pilot",
+    "language": "en"
+  },
+  "slides": [
+    {
+      "id": "s01",
+      "role": "hook",
+      "title": "Review wait time, not coding time, is now the bottleneck",
+      "claim": "Median review wait exceeds active implementation time.",
+      "evidence": ["metric: 19h review wait", "metric: 6h implementation"],
+      "visual": {
+        "type": "chart",
+        "source": "metrics.csv",
+        "purpose": "Compare elapsed time"
+      },
+      "layout": "hero-data",
+      "speaker_goal": "Frame the operational bottleneck.",
+      "transition": "Show where the delay enters the workflow."
+    },
+    {
+      "id": "s02",
+      "role": "mechanism",
+      "title": "A first-pass AI review removes avoidable queueing",
+      "claim": "Automated checks move routine feedback before human review.",
+      "evidence": ["workflow observation"],
+      "visual": {
+        "type": "diagram",
+        "source": "workflow.dot",
+        "purpose": "Show the changed review sequence"
+      },
+      "layout": "process",
+      "speaker_goal": "Explain what changes and what does not.",
+      "transition": "Quantify the expected pilot outcome."
+    },
+    {
+      "id": "s03",
+      "role": "action",
+      "title": "A four-week pilot can validate impact without changing merge authority",
+      "claim": "The pilot is reversible and keeps humans responsible for merge decisions.",
+      "evidence": ["pilot plan"],
+      "visual": {
+        "type": "native-shapes",
+        "source": "deck-plan",
+        "purpose": "Show stages, owners, and gates"
+      },
+      "layout": "roadmap",
+      "speaker_goal": "Ask for pilot approval.",
+      "transition": "Close on the decision."
+    }
+  ]
+}

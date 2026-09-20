@@ -1,0 +1,82 @@
+[
+  {
+    "query": "来週の取締役会向けに、添付の corporate-template.pptx を使って12枚の投資提案を作って。売上推移、競合比較、実行ロードマップを入れ、テンプレートからはみ出さないようにしてほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "results.csv と model-architecture.png から英語の研究発表スライドを作成してください。精度だけでなく標準偏差とレイテンシも示し、方法図の矢印や文字が潰れない pptx にしてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "この3枚の管理画面スクショを使って顧客デモ資料を作りたい。単なる機能一覧ではなく導入前の課題から成果まで流れを作って、見せたい場所にだけ注釈を入れて。",
+    "should_trigger": true
+  },
+  {
+    "query": "パワポをいい感じにして。今の deck.pptx は全部タイトルと箇条書きだけなので、図解やグラフを増やしつつ役員が5分で判断できる構成に全面改稿してほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "ブランドチームから渡された .potx のレイアウトを崩さず、長めの日本語原稿を営業提案資料に落とし込んでください。文字を小さく押し込むのではなく、必要ならページを分けてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "I need an editable 10-slide PowerPoint for a product launch. Use native charts for the adoption data, an SVG architecture diagram, speaker notes, and a complete rendered QA pass before delivery.",
+    "should_trigger": true
+  },
+  {
+    "query": "old-deck.pptx の内容は正しいのですが、画像がぼけ、図の線が交差し、ページごとの見た目もバラバラです。構成から見直して登壇に使える品質まで磨いてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "学会発表のスライドを8枚にまとめて。実験条件、baseline、ablation、limitation を入れ、結果のスクリーンショットとグラフを読みやすく配置した PowerPoint が必要です。",
+    "should_trigger": true
+  },
+  {
+    "query": "Create a customer story deck from interview-notes.md and four product screenshots. The final deliverable must be a .pptx that stays editable and does not distort the screenshots.",
+    "should_trigger": true
+  },
+  {
+    "query": "四半期レビューのプレゼンを作ってください。数字の羅列ではなく、何が変わったか、なぜか、次に何を決めるかが一続きで分かるようにし、各ページに適切な視覚を置いてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "meeting.pptx の3ページ目にある会社名を OldCorp から NewCorp に置換して保存して。レイアウトや他の内容は一切変えないで。",
+    "should_trigger": false
+  },
+  {
+    "query": "この PowerPoint から全テキストと発表者ノートを抽出し、章ごとの Markdown に変換してください。新しいスライドは作らなくてよいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "ブラウザで動く横スクロール式のアニメーションプレゼンを単一HTMLで作って。PowerPoint ファイルは不要で、WebGL背景とキーボード操作を入れてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "既存のスライド画像を5枚まとめて1枚のPNGコンタクトシートにしてください。内容の編集やデッキ生成は不要です。",
+    "should_trigger": false
+  },
+  {
+    "query": "sales.xlsx の地域別売上を集計し、Excel 内にピボットテーブルと棒グラフを追加してください。会議資料への貼り付けは自分で行います。",
+    "should_trigger": false
+  },
+  {
+    "query": "README に載せるシステム構成図を Mermaid で1枚作ってください。スライドやプレゼン資料は必要ありません。",
+    "should_trigger": false
+  },
+  {
+    "query": "deck.pptx が開けないので ZIP として展開し、壊れている relationship XML を特定してください。デザイン改善や新規ページ作成は求めていません。",
+    "should_trigger": false
+  },
+  {
+    "query": "プレゼンの話し方を練習したいので、この原稿を10分に収まるよう短くして、想定質問を作ってください。スライドファイル自体は変更しないでください。",
+    "should_trigger": false
+  },
+  {
+    "query": "このPDF版の講演資料を読み、内容の要点と主張の弱い箇所をレビューしてください。新しいPPTXの作成は不要です。",
+    "should_trigger": false
+  },
+  {
+    "query": "Google Slides API で既存プレゼンの閲覧権限をチーム全員へ付与するスクリプトを書いてください。スライドの内容やデザインは変更しません。",
+    "should_trigger": false
+  }
+]

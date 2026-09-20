@@ -123,3 +123,30 @@ orca/**
 # chezmoi では追跡しない (二重管理を避ける)。
 .agents
 .agents/**
+
+# powerpoint-studio スキルが実行時に作る成果物。
+# スキール本体 (SKILL.md / scripts / assets / references / lock ファイル) は
+# chezmoi の配布対象だが、以下は実行のたびに再生成されるため追跡しない。
+# ここに列挙しておくと `chezmoi add` も警告を出して取り込みを拒否する。
+#
+# - .venv / node_modules: uv と npm が作る依存の実体
+# - .pytest_cache / .ruff_cache / .tmp: ツールの作業領域
+# - evals/*: 評価の入出力。生成物と実行ログで、レビュー対象ではない
+.claude/skills/powerpoint-studio/.venv
+.claude/skills/powerpoint-studio/.venv/**
+.claude/skills/powerpoint-studio/node_modules
+.claude/skills/powerpoint-studio/node_modules/**
+.claude/skills/powerpoint-studio/.pytest_cache
+.claude/skills/powerpoint-studio/.pytest_cache/**
+.claude/skills/powerpoint-studio/.ruff_cache
+.claude/skills/powerpoint-studio/.ruff_cache/**
+.claude/skills/powerpoint-studio/.tmp
+.claude/skills/powerpoint-studio/.tmp/**
+.claude/skills/powerpoint-studio/evals/files
+.claude/skills/powerpoint-studio/evals/files/**
+.claude/skills/powerpoint-studio/evals/runs
+.claude/skills/powerpoint-studio/evals/runs/**
+.claude/skills/powerpoint-studio/evals/blind
+.claude/skills/powerpoint-studio/evals/blind/**
+.claude/skills/powerpoint-studio/evals/final-verification
+.claude/skills/powerpoint-studio/evals/final-verification/**

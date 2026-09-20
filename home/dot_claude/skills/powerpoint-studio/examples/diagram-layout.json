@@ -1,0 +1,23 @@
+{
+  "width": 900,
+  "height": 440,
+  "font_family": "Noto Sans CJK JP",
+  "font_path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+  "font_size": 22,
+  "line_height": 28,
+  "padding": 12,
+  "clearance": 10,
+  "placement": {"width_inches": 10, "height_inches": 5, "min_font_pt": 11},
+  "nodes": [
+    {"id": "start", "box": [20, 80, 100, 80], "lines": ["START"], "fill": "#E8EBF0", "stroke": "#14213D"},
+    {"id": "review", "box": [250, 80, 190, 80], "lines": ["Review", "Input clear?"], "fill": "#FBF1DE", "stroke": "#E9A23B"},
+    {"id": "end", "box": [660, 80, 160, 80], "lines": ["END"], "fill": "#E6F3F2", "stroke": "#008F95"},
+    {"id": "human", "box": [250, 300, 240, 80], "lines": ["Ask for clarification"], "fill": "#F6E8E3", "stroke": "#C65D4B"}
+  ],
+  "edges": [
+    {"id": "start-review", "from": "start", "to": "review", "kind": "main", "points": [[120, 120], [250, 120]], "color": "#5E6B78"},
+    {"id": "review-end", "from": "review", "to": "end", "kind": "main", "points": [[440, 120], [660, 120]], "color": "#008F95", "label": {"text": "Yes", "box": [480, 60, 110, 44]}},
+    {"id": "review-human", "from": "review", "to": "human", "kind": "branch", "points": [[370, 160], [370, 300]], "color": "#C65D4B", "label": {"text": "No", "box": [390, 206, 80, 44]}},
+    {"id": "human-review", "from": "human", "to": "review", "kind": "return", "points": [[250, 340], [210, 340], [210, 210], [295, 210], [295, 160]], "color": "#C65D4B", "label": {"text": "Resume", "box": [65, 256, 125, 44]}}
+  ]
+}

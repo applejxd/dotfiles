@@ -1,0 +1,14 @@
+{
+  "nodes": 9,
+  "edges": 12,
+  "branch_points": 3,
+  "loops": 2,
+  "nested_groups": 1,
+  "swimlanes": 0,
+  "edge_crossing_risk": true,
+  "long_labels": true,
+  "exact_topology_required": true,
+  "automatic_layout_required": true,
+  "frequent_powerpoint_editing": false,
+  "native_render_failed": false
+}

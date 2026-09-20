@@ -1,0 +1,51 @@
+{
+  "provider": "Amazon Bedrock",
+  "runtime": "Claude Code",
+  "model": "Claude Sonnet 5",
+  "endpoint": "global cross-region",
+  "pricing_source": "https://aws.amazon.com/bedrock/pricing/",
+  "pricing_as_of": "2026-09-12",
+  "pricing_basis": "public list price, pre-tax",
+  "currency": "JPY",
+  "exchange_rate": 154,
+  "pricing_multiplier": 1,
+  "rates": {
+    "input_per_mtok": 2,
+    "output_per_mtok": 10,
+    "cache_write_5m_per_mtok": 2.5,
+    "cache_write_1h_per_mtok": 4,
+    "cache_read_per_mtok": 0.2
+  },
+  "actual_usage": {
+    "input_tokens": 150000,
+    "output_tokens": 30000,
+    "cache_write_5m_tokens": 80000,
+    "cache_write_1h_tokens": 0,
+    "cache_read_tokens": 400000
+  },
+  "actual_cost_override_usd": 1.42,
+  "actual_cost_source": "Claude Code total_cost_usd estimate; AWS CUR is authoritative",
+  "remaining_usage": {
+    "low": {
+      "input_tokens": 200000,
+      "output_tokens": 50000,
+      "cache_write_5m_tokens": 100000,
+      "cache_write_1h_tokens": 0,
+      "cache_read_tokens": 800000
+    },
+    "base": {
+      "input_tokens": 450000,
+      "output_tokens": 120000,
+      "cache_write_5m_tokens": 250000,
+      "cache_write_1h_tokens": 0,
+      "cache_read_tokens": 2500000
+    },
+    "high": {
+      "input_tokens": 900000,
+      "output_tokens": 250000,
+      "cache_write_5m_tokens": 500000,
+      "cache_write_1h_tokens": 0,
+      "cache_read_tokens": 6000000
+    }
+  }
+}
