@@ -8,6 +8,7 @@ Usage:
     generate.py --target copilot-mcp --common PATH [--existing PATH]
     generate.py --target copilot-hooks --common PATH
     generate.py --target gemini-settings --common PATH [--existing PATH]
+    generate.py --target opencode-config --common PATH [--existing PATH]
 
 If --existing is omitted, stdin is read. The merged JSON is printed to stdout.
 For Copilot, automatically-managed keys (copilotTokens, loggedInUsers, etc.) in
@@ -883,6 +884,212 @@ def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> 
 
 
 # ---------------------------------------------------------------------------
+# OpenCode config target (~/.config/opencode/opencode.json)
+# ---------------------------------------------------------------------------
+
+OPENCODE_SCHEMA = "https://opencode.ai/config.json"
+
+# ``formatter`` の各エントリで使えるキー (公式 Formatters ガイドの表)。
+OPENCODE_FORMATTER_KEYS = frozenset({"disabled", "command", "environment", "extensions"})
+
+# 組み込み formatter の名前。ここに載っている名前は ``command`` /
+# ``extensions`` を省いても組み込みの値を継承するが、載っていない名前は
+# 両方揃っていないと **OpenCode が黙って無視する** ので生成時に弾く。
+OPENCODE_BUILTIN_FORMATTERS = frozenset({
+    "gofmt", "mix", "oxfmt", "prettier", "biome", "zig", "clang-format",
+    "ktlint", "ruff", "air", "uv", "rubocop", "standardrb", "htmlbeautifier",
+    "dart", "ocamlformat", "terraform", "latexindent", "gleam", "shfmt",
+    "nixfmt", "rustfmt", "pint", "ormolu", "cljfmt", "dfmt",
+})
+
+
+def build_opencode_formatter(common: dict[str, Any]) -> dict[str, Any]:
+    """``[opencode.formatter]`` を検査して ``formatter`` の値にする。
+
+    オブジェクトを渡すと組み込み formatter も有効になる (公式:
+    "An object also enables the built-ins")。つまりここへ書くのは組み込みに
+    無いものだけでよい。
+
+    Claude / Copilot では PostToolUse hook (``format-file.sh`` /
+    ``markdownlint.sh``) が担っている役割で、OpenCode では CLI 本体の機能。
+    hook 機構が無くてもここだけは等価な結果になる。
+
+    綴り間違いや不完全な定義は「整形されないだけ」で表に出ないので、
+    生成時に落とす (``[sandbox]`` の未知キー検査と同じ fail-closed)。
+    """
+    formatter = common.get("opencode", {}).get("formatter")
+    if formatter is None:
+        return {}
+    if not isinstance(formatter, dict):
+        raise ValueError("[opencode.formatter] はテーブルで書く")
+
+    for name, entry in formatter.items():
+        if not isinstance(entry, dict):
+            raise ValueError(f"[opencode.formatter.{name}] はテーブルで書く")
+        _reject_unknown(f"opencode.formatter.{name}", set(entry), OPENCODE_FORMATTER_KEYS)
+
+        command = entry.get("command")
+        if command is not None and (
+            not isinstance(command, list)
+            or not command
+            or not all(isinstance(arg, str) for arg in command)
+        ):
+            raise ValueError(
+                f"[opencode.formatter.{name}] の command は argv の文字列リストで書く "
+                "(シェルは通らない。ファイルは $FILE で参照する)"
+            )
+
+        extensions = entry.get("extensions")
+        if extensions is not None:
+            if not isinstance(extensions, list) or not all(
+                isinstance(ext, str) for ext in extensions
+            ):
+                raise ValueError(
+                    f"[opencode.formatter.{name}] の extensions は文字列のリストで書く"
+                )
+            bad = [ext for ext in extensions if not ext.startswith(".")]
+            if bad:
+                raise ValueError(
+                    f"[opencode.formatter.{name}] の extensions は先頭のドットが要る: "
+                    + ", ".join(bad)
+                )
+
+        # 組み込みに無い名前は両方揃っていないと OpenCode が動かせない。
+        # disabled だけのエントリは「消す」意図なので対象外。
+        if name not in OPENCODE_BUILTIN_FORMATTERS and not entry.get("disabled"):
+            missing = [key for key in ("command", "extensions") if not entry.get(key)]
+            if missing:
+                raise ValueError(
+                    f"[opencode.formatter.{name}] は組み込みに無いので "
+                    + " と ".join(missing)
+                    + " が要る (欠けると OpenCode が黙って無視する)"
+                )
+
+    return formatter
+
+
+def opencode_path_patterns(pattern: str) -> list[str]:
+    """``[file]`` の glob を OpenCode の ``resource`` パターンへ直す。
+
+    OpenCode のワイルドカードは ``*`` (``/`` を含む 0 文字以上) と ``?`` だけで、
+    ``**`` という記法は無い。``**/x`` をそのまま渡すと ``*`` 2 つとして読まれ、
+    ``foox`` のような意図しないパスにも当たる。
+
+    ``**/`` は「0 段以上のディレクトリ」なので、``x`` (ルート直下) と
+    ``*/x`` (入れ子) の 2 本に割る。展開後が ``*`` で始まるものは後者を
+    既に含むので足さない (``*.pem`` は ``/home/u/a.pem`` にも当たる)。
+    """
+    body = pattern
+    nested = body.startswith("**/")
+    if nested:
+        body = body[3:]
+    body = body.replace("/**/", "/*/").replace("/**", "/*").replace("**", "*")
+    patterns = [body]
+    if nested and not body.startswith("*"):
+        patterns.append("*/" + body)
+    return patterns
+
+
+def opencode_rules(action: str, effect: str, resources: list[str]) -> list[dict[str, str]]:
+    return [
+        {"action": action, "resource": resource, "effect": effect}
+        for resource in _uniq(resources)
+    ]
+
+
+def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
+    """``permissions`` の順序付きリストを組み立てる。
+
+    OpenCode は **後に書いた規則が勝つ** (Claude の deny > ask > allow とは別)。
+    そのため allow -> ask -> deny の順に並べる。``git reset`` が ask で
+    ``git reset --hard`` が deny、という具体形の上書きはこの順序で成立する。
+
+    ``shell`` の resource は「コマンド文字列」。末尾 ` *` は引数無しの形にも
+    当たる仕様なので、``[bash]`` の素のトークン列へ ` *` を足すだけでよい。
+    複合コマンドは OpenCode の scanner が分割してから照合する。
+
+    ``ask_hook_owned`` も ask として出す。**OpenCode に hook 機構は無い**ので、
+    Claude で hook に委ねている判定 (``rm`` の workspace 内判定など) を
+    肩代わりするものが無く、静的な ask を外すと素通りになる。
+    """
+    bash = common.get("bash", {})
+    file_ = common.get("file", {})
+
+    rules: list[dict[str, str]] = []
+
+    rules += opencode_rules("shell", "allow", [f"{cmd} *" for cmd in bash.get("allow", [])])
+    rules += opencode_rules("shell", "ask", [f"{cmd} *" for cmd in bash.get("ask", [])])
+    rules += opencode_rules("shell", "deny", [f"{cmd} *" for cmd in bash.get("deny", [])])
+
+    for action, key, effect in (
+        ("read", "claude_read_ask_globs", "ask"),
+        ("edit", "claude_write_ask_globs", "ask"),
+        ("read", "claude_read_deny_globs", "deny"),
+        ("edit", "claude_write_deny_globs", "deny"),
+    ):
+        resources: list[str] = []
+        for glob in file_.get(key, []):
+            resources += opencode_path_patterns(glob)
+        rules += opencode_rules(action, effect, resources)
+
+    return rules
+
+
+def merge_opencode_mcp(existing_mcp: Any, common: dict[str, Any]) -> dict[str, Any]:
+    """``mcp.servers`` を更新する (common.toml に無いサーバは残す)。
+
+    ``opencode mcp add`` や ``/mcps`` も同じファイルへ書くため、宣言した名前
+    だけを差し替える。``headers`` / ``environment`` / ``oauth`` には触らない:
+    いずれもトークンを環境変数参照で入れる場所で、common.toml が持たない情報
+    だから (ADR-0005)。
+    """
+    out = dict(existing_mcp) if isinstance(existing_mcp, dict) else {}
+    servers = dict(out.get("servers") or {})
+    for name, server in mcp_servers(common):
+        entry = dict(servers.get(name) or {})
+        if server["transport"] == "http":
+            # OpenCode は http を "remote" と呼ぶ (V2 の MCP ガイド)
+            entry["type"] = "remote"
+            entry["url"] = server["url"]
+            stale = ("command", "cwd", "environment")
+        else:
+            # stdio は "local"。command は実行ファイルと引数を 1 本の配列で書く
+            entry["type"] = "local"
+            entry["command"] = [server["command"], *server["args"]]
+            stale = ("url", "headers", "oauth")
+        # transport を変えたときに前の形のキーを残さない (両方あると曖昧になる)
+        for key in stale:
+            entry.pop(key, None)
+        servers[name] = entry
+    out["servers"] = servers
+    return out
+
+
+def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.config/opencode/opencode.json`` (global config) を更新する。
+
+    ``permissions`` は毎回置き換える。対話で「常に許可」した内容は
+    project scope の saved approval として別に保存され、このファイルには
+    入らないので、置き換えても手元の承認は失われない。
+    """
+    out: dict[str, Any] = {"$schema": OPENCODE_SCHEMA}
+    out.update(existing)
+    out["$schema"] = OPENCODE_SCHEMA
+
+    opencode = common.get("opencode", {})
+    if "auto_update" in opencode:
+        out["update"] = "notify" if opencode["auto_update"] else "disable"
+
+    formatter = build_opencode_formatter(common)
+    if formatter:
+        out["formatter"] = formatter
+
+    out["permissions"] = build_opencode_permissions(common)
+    out["mcp"] = merge_opencode_mcp(existing.get("mcp"), common)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------
 
@@ -893,6 +1100,7 @@ TARGETS = {
     "copilot-perms": merge_copilot_perms,
     "copilot-settings": merge_copilot_settings,
     "gemini-settings": merge_gemini_settings,
+    "opencode-config": merge_opencode_config,
 }
 
 # 既存内容を一切参照しない (完全生成の) ターゲット。

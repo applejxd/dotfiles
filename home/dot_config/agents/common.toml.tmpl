@@ -7,6 +7,7 @@
 #   ~/.copilot/hooks/from-claude.json    <- [[hooks]]
 #   ~/.copilot/mcp-config.json           <- [[mcp]]
 #   ~/.codex/config.toml の mcp_servers  <- [[mcp]]
+#   ~/.config/opencode/opencode.json     <- [bash] [file] [opencode] [[mcp]]
 #
 # ★仕組み・判断基準・既知の不具合・実測値は docs/spec/agent-permissions.md が正本。
 #   値を足す前にそちらを読むこと。ここには「その行を編集するときに要る注記」
@@ -24,6 +25,9 @@
 # (cd && X -> X, git -C foo X -> git X, compound は &&/;/| で分割)。
 # 評価順は deny -> ask -> allow。具体形を deny に置けば一般形を ask にできる
 # (例: "git reset --hard" は deny、"git reset" は ask)。
+#
+# ★OpenCode だけは「後に書いた規則が勝つ」。generate.py が allow -> ask -> deny
+#   の順に並べて同じ優先順位を作るので、リストの書き方は変えなくてよい。
 # see docs/spec/agent-permissions.md 「3 層構成」「`ask` に載せるかどうかの判断軸」
 
 # 自動承認。読み取り専用・冪等なものだけ
@@ -120,6 +124,10 @@ ask = [
 #   (静的 ask を出すと hook の exemption がどのモードでも無効化されるため)。
 #   足したら check_bash.py の _ASK_EXEMPTIONS にも条件を書く。対応は
 #   test_hook_owned_ask_is_not_emitted_as_a_static_claude_rule が検証する。
+#
+# ★OpenCode には除外が効かない (hook 機構が無く、委譲先が存在しない)。
+#   そのため OpenCode へは素の ask として出る。ここに足すものは
+#   「hook が無ければ毎回 ask で妥当」な粒度に保つこと。
 # see docs/spec/agent-permissions.md 「`rm` の承認範囲」
 ask_hook_owned = [
   "rm",
@@ -239,24 +247,33 @@ deny = [
 ]
 
 [file]
+# ★キー名の `claude_` は歴史的なもので、現在は Claude と OpenCode が読む。
+#   Copilot の permissions-config.json にはファイル規則が無いので渡らない
+#   (等価な保護は [sandbox] deny と check_file_read.py が担う)。
+#   OpenCode へは read / edit の permission rule として出る。
+#   `**` 記法は OpenCode に無いため generate.py が `*` 主体へ変換する
+#   (see docs/spec/agent-permissions.md 「glob の記法差」)。
+#
+# ★allow のリスト (下の claude_read_allow) だけは OpenCode へ出さない。
+#   OpenCode は allow が既定なので同じ意味の規則が増えるだけになる。
 claude_read_allow = [
   "README.md",
   "pyproject.toml",
 ]
 
-# Claude のみ反映: Read(...) を ask に追加
+# Claude / OpenCode に反映: Read(...) を ask に追加
 claude_read_ask_globs = [
   ".env.*",
 ]
 
-# Claude のみ反映: Edit(...) を ask に追加
+# Claude / OpenCode に反映: Edit(...) を ask に追加
 # (書き込み系 permission rule は Edit(path) に統一。Write(path) は v2.1.210 で deprecated)
 claude_write_ask_globs = [
   ".env.*",
   "mise.toml",
 ]
 
-# Claude: Read(...) deny に展開。hook の bash ポリシーには反映しない
+# Claude / OpenCode: Read(...) deny に展開。hook の bash ポリシーには反映しない
 #
 # ★`**/*key*` のような部分一致 glob は使わない。keyhac.bat / tokenizer.py の
 #   ような正当なファイルを巻き込む。拡張子・接尾辞・既知の名前で指定する。
@@ -296,6 +313,9 @@ claude_read_deny_globs = [
   # PAT や API キーが平文で入りうる (`claude mcp add --env ...` など)。
   # 設定ファイル自体は chezmoi 管理外なので、読めなくても運用に支障はない。
   "~/.claude.json",
+  # OpenCode のバックグラウンドサービス認証情報 (service.json の password)。
+  # 同じ階層の opencode.json は生成物なので read は塞がない (write は下で塞ぐ)。
+  "~/.config/opencode/service.json",
 ]
 
 # Claude のみ反映: Edit(...) を deny に追加
@@ -333,6 +353,11 @@ claude_write_deny_globs = [
   "~/.copilot/settings.json",
   "~/.copilot/config.json",
   "~/.claude.json",
+  # OpenCode 自身の permission 設定。書けるとエージェントが自分の deny を
+  # 外せてしまう ([sandbox] claude_write_deny と同じ趣旨の permission 側の保険)。
+  # 正本はこのリポジトリなので、変更は chezmoi apply 経由で入れる。
+  "~/.config/opencode/opencode.json",
+  "~/.config/opencode/service.json",
 ]
 
 # ---------------------------------------------------------------------------
@@ -415,6 +440,8 @@ deny = [
   # このリポジトリに encrypted_ ファイルは無いため、塞いでも chezmoi は動く。
   "~/.config/chezmoi/key.txt",
   "~/.claude.json", "~/.copilot/settings.json", "~/.copilot/config.json",
+  # OpenCode のサービス認証情報 (password が平文で入る)
+  "~/.config/opencode/service.json",
   "~/.bash_history", "~/.zsh_history", "~/.python_history",
   "~/.node_repl_history",
   # whitelist の内側に置かれがちなもの (Claude のみ。Copilot は wildcard 不可)
@@ -429,6 +456,8 @@ deny = [
 claude_write_deny = [
   "~/.claude/hooks", "~/.claude/settings.json", "~/.claude/settings.local.json",
   "~/.copilot/hooks", "~/.copilot/permissions-config.json", "~/.config/agents",
+  # OpenCode の global config (permission / MCP の生成先)
+  "~/.config/opencode",
   "~/.bashrc", "~/.bash_profile", "~/.bash_login", "~/.profile",
   "~/.zshrc", "~/.zshenv", "~/.zprofile", "~/.cshrc", "~/.kshrc", "~/.login",
   "~/.ssh/authorized_keys", "~/.ssh/known_hosts", "~/.gitconfig",
@@ -620,7 +649,43 @@ approvals = [
 ]
 
 # ---------------------------------------------------------------------------
-# MCP サーバ (Claude Code / Copilot CLI / Codex CLI 共通の単一ソース)
+# OpenCode 固有
+# ---------------------------------------------------------------------------
+[opencode]
+# opencode.json の update へ反映 ("disable" / "notify")。本体は公式
+# インストーラーで導入し、更新は `opencode upgrade` を明示的に実行する。
+auto_update = false
+
+# ★[web] は OpenCode へ渡さない。webfetch の resource は「URL 全体」で、
+#   `*` が `/` も跨ぐため `*://*.example.com/*` が
+#   `https://evil.test/x.example.com/y` にも当たる。ドメイン許可を正しく
+#   表現できないので、誤った allowlist を出すより出さない方を選んでいる。
+# ★[claude] mcp_deny も渡さない。OpenCode のツール名は `<server>_<tool>` で
+#   Claude の `mcp__<server>__<tool>` と別体系のため、機械変換すると
+#   実在しない名前を deny したまま気付けなくなる。
+# see docs/spec/agent-permissions.md 「OpenCode へ渡さないもの」
+
+# 編集後の整形。Claude / Copilot では PostToolUse hook (format-file.sh /
+# markdownlint.sh) がやっていることを、OpenCode では組み込み機能が担う。
+#
+# ★このテーブルを書くと **組み込み formatter も全部有効になる**
+#   (公式: "An object also enables the built-ins")。ruff / clang-format /
+#   prettier / shfmt は組み込みにあるので、ここへ書くのは
+#   **組み込みに無いものだけ**。
+# ★command は argv 配列で、シェルは通らない。`$FILE` が絶対パスに置換される。
+# ★組み込みに無い名前は command と extensions の両方が要る
+#   (片方だけだと OpenCode が黙って無視する)。generate.py が検査して止める。
+# see docs/spec/agent-permissions.md 「整形 (formatter)」
+
+# markdownlint-cli2 は組み込みに無い。mise の "npm:markdownlint-cli2" が
+# PATH へ shim を置くので素の名前で呼べる。未導入のマシンでは OpenCode が
+# 失敗をログに残して次の formatter へ進むだけで、編集自体は通る。
+[opencode.formatter.markdownlint]
+command = ["markdownlint-cli2", "--fix", "$FILE"]
+extensions = [".md", ".markdown"]
+
+# ---------------------------------------------------------------------------
+# MCP サーバ (Claude Code / Copilot CLI / Codex CLI / OpenCode 共通の単一ソース)
 # ---------------------------------------------------------------------------
 # フィールド:
 #   id         サーバ名 (英数字・ハイフン・アンダースコアのみ)

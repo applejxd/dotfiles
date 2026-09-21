@@ -2,6 +2,7 @@
 
 Claude Code / Copilot CLI の permission (allow/deny/ask) と hook 登録を
 **単一ソース** で管理し、`chezmoi apply` で両 CLI の設定ファイルへ自動展開する仕組み。
+OpenCode V2 は hook を持たないので、同じソースから permission と MCP だけを生成する。
 Gemini CLI は `GEMINI_MANAGED` で定義した一部設定だけを生成する。
 `hooks` はOrcaなどの外部ツールが管理するため保持し、`common.toml` からは生成しない。
 
@@ -60,6 +61,9 @@ home/dot_codex/
     modify_config.toml                       ~/.codex/config.toml の管理ブロックを描画
 home/dot_gemini/
     modify_settings.json.py.tmpl             ~/.gemini/settings.json を更新
+home/dot_config/opencode/
+    modify_opencode.json.py.tmpl             ~/.config/opencode/opencode.json を更新
+    AGENTS.md.tmpl                           global 指示 (共有テンプレートを include)
 test/agents/
     agents_common.py                         描画した common.toml をテストへ渡す
     test_command_policy.py                   shell normalize / match の unit test
@@ -67,6 +71,7 @@ test/agents/
     test_check_file_read.py                  ファイル読み取り遮断と glob 照合の test
     test_generate_copilot_plugins.py         enabledPlugins 生成 / 重複解消の unit test
     test_generate_hooks.py                   hook 生成 / 外部 hook 温存の unit test
+    test_generate_opencode.py                OpenCode の permission / MCP 生成の test
     test_generate_updates.py                 CLI 自動更新停止 / 既存 env 保持
     test_generate_sandbox.py                 sandbox 設定生成の unit test
     test_herdr_integration.py                Herdr統合の生成・保持
@@ -123,6 +128,7 @@ apply のたびに勝手な版へ動かないよう、CLI 自身の自動更新�
 | --- | --- |
 | `[claude] auto_update = false` | `~/.claude/settings.json` の `env.DISABLE_AUTOUPDATER = "1"` |
 | `[copilot] auto_update = false` | `~/.copilot/settings.json` の `autoUpdate = false` |
+| `[opencode] auto_update = false` | `~/.config/opencode/opencode.json` の `update = "disable"` |
 
 Claude の既存 `env` はこのキーだけを上書きし、それ以外の環境変数を保持します。
 どちらも共通設定にキーがなければ既存値には触れません。
@@ -155,10 +161,15 @@ args = ["--from", "ddgs[mcp]", "ddgs", "mcp"]
 | CLI | 生成先 | 生成する仕組み |
 | --- | --- | --- |
 | Copilot CLI | `~/.copilot/mcp-config.json` | `generate.py --target copilot-mcp` |
+| OpenCode V2 | `~/.config/opencode/opencode.json` の `mcp.servers` | `generate.py --target opencode-config` |
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
+
+**transport 名の違い**: OpenCode は `http` を `remote`、`stdio` を `local` と呼び、
+`command` は実行ファイルと引数を **1 本の配列**で書く (Copilot は `command` と
+`args` に分かれる)。`generate.py` が `[[mcp]]` から各形式へ変換する。
 
 **Claude だけ生成ではない理由**: user scope の定義先である `~/.claude.json` は
 MCP の `headers` / `env` に秘密が入りうるため chezmoi 管理外にしている
@@ -189,9 +200,10 @@ TOML の重複宣言になり、Codex が設定ファイル全体を読めなく
 と `~/.local/share/uv/tools` は書き込み許可済みで、`pypi.org` /
 `files.pythonhosted.org` も許可済みなので追加設定は要らない。
 
-**生成側が触らないもの**: Copilot の `headers` / `env` / `tools`、および
-common.toml に無いサーバは既存値のまま残す。前 2 つは秘密、最後は公開範囲の
-設定で、どれも `common.toml` が持たない情報だから。
+**生成側が触らないもの**: Copilot の `headers` / `env` / `tools`、OpenCode の
+`headers` / `environment` / `oauth`、および common.toml に無いサーバは既存値の
+まま残す。前者は秘密、最後は公開範囲の設定で、どれも `common.toml` が持たない
+情報だから。
 
 未対応の transport・重複 id・不正な id・transport に無いキー (typo) は
 `generate.py` が `apply` を止める。トークンは `common.toml` に書かず、
@@ -224,6 +236,113 @@ Copilot CLI の `permissions-config.json` は deny / ask を表現できない
 `merge_copilot_settings` が `sandbox.userPolicy.filesystem.deniedPaths` を
 生成する (deny リストは両 CLI で共通。ただし Copilot はワイルドカードを
 扱えないため、生成時に `*` を含む要素だけ落とす)。
+
+### OpenCode V2 の扱い
+
+OpenCode V2 には hook 機構も sandbox も無い。使えるのは permission 層だけで、
+`common.toml` の意図は `~/.config/opencode/opencode.json` の `permissions`
+だけで表現しきる必要がある。生成は `generate.py --target opencode-config`。
+
+| 層 | OpenCode での状態 |
+| --- | --- |
+| 0. sandbox | **無い**。OS レベルの強制は効かない |
+| 1. permission リスト | `opencode.json` の `permissions` (generate.py が生成) |
+| 2. hook | **無い**。`check_bash.py` 相当の意味解析は動かない |
+
+PostToolUse 系の hook (`format-file.sh` / `markdownlint.sh`) だけは、CLI 本体の
+`formatter` 機能で等価な結果になる ([整形 (formatter)](#整形-formatter))。
+
+この差から、Claude / Copilot 向けとは 3 点だけ扱いを変えている。
+
+**`ask_hook_owned` を除外しない**: Claude では `rm` のような「hook が承認要否
+まで判定する」コマンドを静的 `ask` から外す (静的 ask を出すと hook の
+exemption がどのモードでも無効化されるため)。OpenCode には委譲先が無いので、
+外すと素通りになる。そのため素の `ask` として出す。`rm` は毎回確認になる。
+
+**deny の最終防衛線が permission リストしかない**: Claude では hook と sandbox
+が同じ deny を別経路で強制するが、OpenCode では `permissions` が落ちれば
+防御ごと消える。`opencode.json` 自身を `[file] claude_write_deny_globs` と
+`[sandbox] claude_write_deny` に入れて、エージェントが自分の deny を
+書き換えられないようにしてある。
+
+**`~/.config/opencode/service.json` は秘密扱い**: background service の
+認証 password が平文で入る。`[sandbox] deny` と読み取り deny の両方に入れる。
+
+#### glob の記法差
+
+OpenCode のワイルドカードは `*` (**`/` を含む** 0 文字以上) と `?` だけで、
+`**` という記法が無い。`[file]` の glob をそのまま渡すと `**/x` が「`*` 2 つ」
+として読まれ、`foox` のような意図しないパスにも当たる。
+
+`generate.py` の `opencode_path_patterns()` が次の規則で変換する。
+
+| `[file]` の glob | OpenCode の resource | 理由 |
+| --- | --- | --- |
+| `**/.netrc` | `.netrc` と `*/.netrc` | `**/` は「0 段以上」なので 2 本に割る |
+| `**/.ssh/**` | `.ssh/*` と `*/.ssh/*` | 同上 |
+| `**/*.pem` | `*.pem` のみ | `*` が `/` を跨ぐので入れ子側を含む |
+| `.env` | `.env` | `**` が無いものはそのまま |
+
+`test_generate_opencode.py` が変換表と「生成物に `**` が残らないこと」を固定する。
+
+#### 整形 (formatter)
+
+`format-file.sh` / `markdownlint.sh` は PostToolUse hook なので OpenCode では
+動かないが、ここだけは **CLI 本体の機能で等価な結果になる**。`opencode.json` の
+`formatter` に `[opencode.formatter]` を出力する。
+
+| hook が呼んでいたもの | OpenCode での担い手 |
+| --- | --- |
+| `ruff format` (`.py`) | 組み込み `ruff` |
+| `clang-format -i` (`.c` / `.cpp` / `.h`) | 組み込み `clang-format` |
+| `prettier --write` (`.js` / `.ts` / `.json` / `.yaml`) | 組み込み `prettier` |
+| `markdownlint-cli2 --fix` (`.md`) | **組み込みに無い**。`[opencode.formatter.markdownlint]` |
+
+テーブルを 1 つでも書くと組み込み formatter が全部有効になる（公式:
+"An object also enables the built-ins"）。そのため `common.toml` に書くのは
+**組み込みに無いものだけ**でよく、ruff / clang-format / prettier を
+二重管理しなくて済む。
+
+`command` は argv 配列でシェルを通さない。`$FILE` が絶対パスに置換される。
+組み込みに無い名前は `command` と `extensions` の両方が無いと **OpenCode が
+黙って無視する**ため、`generate.py` が検査して `apply` を止める（拡張子の
+先頭ドット忘れ・シェル文字列との取り違えも同様）。
+
+hook 版との違いが 2 つある。
+
+- **残った違反の警告が出ない**。`markdownlint.sh` は自動修正後に残った
+  MD013 などを agent へ返すが、formatter は整形するだけ。違反の検出は
+  pre-commit の `Markdown Lint` が受け持つ
+- **同じ拡張子に複数が一致すると先勝ち**。組み込みが先、custom が後の順で
+  試し、最初に成功したところで止まる。`prettier` は `package.json` に依存が
+  宣言されている場合だけ動くので、このリポジトリでは `.md` は
+  `markdownlint` に落ちる。JS プロジェクトでは `prettier` が先に取る
+
+#### OpenCode へ渡さないもの
+
+| 渡さないもの | 理由 |
+| --- | --- |
+| `[web] allow_domains` / `deny_domains` | `webfetch` の resource は **URL 全体**で、`*` が `/` を跨ぐ。`*://*.example.com/*` は `https://evil.test/x.example.com/y` にも当たり、ドメイン許可を正しく書けない。過大な allowlist を出すより出さない方を選ぶ |
+| `[file] claude_read_allow` | OpenCode は allow が既定 (`{action:"*", resource:"*", effect:"allow"}`)。同義の規則が増えるだけ |
+| `[claude] mcp_deny` | Claude の `mcp__<server>__<tool>` と OpenCode の `<server>_<tool>` は別体系。機械変換すると実在しない名前を deny したまま気付けない |
+| `[[hooks]]` | hook 機構が無い |
+| `[sandbox]` | sandbox が無い (`claude_write_deny` の意図だけ `[file]` 側へ写している) |
+
+`allow` のリスト自体は `shell` について出力している。OpenCode の既定が
+allow-by-default なので現時点では no-op だが、意図の記録であり、
+後で `{action:"shell", resource:"*", effect:"ask"}` を足したときに
+そのまま効く位置に並ぶ。
+
+#### 後勝ちの照合
+
+OpenCode は **最後に一致した規則が勝つ**。Claude の deny > ask > allow とは
+逆なので、`generate.py` が `allow` → `ask` → `deny` の順に並べて同じ優先順位を
+作る。並びが崩れると `git reset --hard` の deny を `git reset` の ask が
+上書きしてしまうため、`test_effects_are_ordered_allow_then_ask_then_deny` で
+固定している。
+
+`common.toml` 側の書き方は Claude 向けと同じでよい (具体形を deny、一般形を
+ask に置く)。
 
 ### Codex CLI / Gemini CLI の扱い
 
@@ -1632,6 +1751,7 @@ classifier が通せば取得できる。
 | --- | --- | --- |
 | `~/.claude/settings.json` | `permissions.allow` | 自動承認のみ。deny 側へは出力されない |
 | `~/.copilot/settings.json` | `allowedUrls` / deny | Copilot は `deny_domains` も反映できる |
+| `~/.config/opencode/opencode.json` | (出力しない) | resource が URL 全体で、ドメイン許可を正しく書けない ([OpenCode へ渡さないもの](#opencode-へ渡さないもの)) |
 
 Claude には「許可した以外を拒否する」表現手段が無い。
 `permissions.deny` に素の `WebFetch` を置くと **全 WebFetch が止まる**

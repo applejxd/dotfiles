@@ -251,10 +251,16 @@ Herdr のユーザーデータ・設定は削除しません。
 
 | パス | 役割 |
 | --- | --- |
-| `home/.chezmoitemplates/agent-instructions.md` | 3 CLI 共通の本文（応答・停止と報告・検証） |
+| `home/.chezmoitemplates/agent-instructions.md` | 4 CLI 共通の本文（応答・停止と報告・検証） |
 | `home/dot_claude/CLAUDE.md.tmpl` | `~/.claude/CLAUDE.md`。共通本文のみ |
 | `home/dot_codex/AGENTS.md.tmpl` | `~/.codex/AGENTS.md`。共通本文のみ |
+| `home/dot_config/opencode/AGENTS.md.tmpl` | `~/.config/opencode/AGENTS.md`。共通本文のみ |
 | `home/dot_copilot/copilot-instructions.md.tmpl` | `~/.copilot/copilot-instructions.md`。共通本文 + コミット節 |
+
+OpenCode V2 が global 指示として読むのは `~/.config/opencode/AGENTS.md` だけで、
+`CLAUDE.md` へのフォールバックはありません（公式 Instructions ガイド）。
+同じホームに `~/.claude/CLAUDE.md` があっても読まれないため、専用の
+埋め込み先を用意しています。
 
 この構成には次の理由があります。
 

@@ -17,6 +17,8 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
   - Windows 実機での検証は未実施（source state は更新済み）
   - Copilot の圧縮直後の注入は Claude より 1 ツール分遅い（同じターン内には届く）
   - Copilot では文脈使用率を推定できないため、閾値監視は見送り
+  - OpenCode は hook / sandbox を持たないため、防御が permission リスト 1 層だけ
+    （[OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い)）
 - **現行仕様**: [仕様・運用](spec/index.md)
 
 ## 活動中
@@ -65,6 +67,8 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | Bitwarden / sops の仕組みを知る | [セキュリティ](spec/security.md) |
 | sops + age を導入・復旧する | [Secret管理セットアップ](spec/sops-age.md) |
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
+| OpenCode の権限がなぜ他と違うか知る | [OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い) |
+| OpenCode のプラグインを検討する | [プラグイン生態系の棚卸し](research/opencode-plugins.md) |
 | 圧縮を跨いで作業文脈を保つ仕組みを知る | [文脈の引き継ぎ](spec/checkpoint.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-permissions.md#mcp-サーバ) |
 | sandbox で何ができるか調べる | [sandbox機能の包括調査](research/sandbox-capabilities.md) |

@@ -40,6 +40,7 @@
 | # | 目的 | 状態 | 最大の未解決点 | 次の確認 | 更新日 |
 | --- | --- | --- | --- | --- | --- |
 | [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | 圧縮後、作業再開前に checkpoint が届くか | P0-3 の実測 | 2026-09-19 |
+| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、自動化率を機構で回復する | Planned | 並列実行時の cwd 相関が未確立 | 段階 1 の allow 選定 | 2026-09-21 |
 
 ## 保留
 

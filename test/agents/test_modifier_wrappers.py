@@ -37,6 +37,10 @@ MODIFIERS = {
         ".gemini/settings.json",
         "gemini-settings",
     ),
+    ROOT / "home" / "dot_config" / "opencode" / "modify_opencode.json.py.tmpl": (
+        ".config/opencode/opencode.json",
+        "opencode-config",
+    ),
 }
 COPILOT_HOOKS = (
     ROOT / "home" / "dot_copilot" / "hooks" / "modify_from-claude.json.py.tmpl"

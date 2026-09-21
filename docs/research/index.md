@@ -23,6 +23,10 @@
 | --- | --- |
 | [エージェントハーネス比較](agent-harness-comparison.md) | Claude Code / Copilot CLI / Codex CLIの機能・強制層・設定差分、OpenCodeへの乗り換え評価 |
 | [OpenCode V2の仕様](opencode-v2-capabilities.md) | permission・plugin hook・skill・compaction・V1からの移行と未実装項目 |
+| [OpenCodeプラグイン生態系の棚卸し](opencode-plugins.md) | 主要プラグインのV1/V2世代判定、Claude Code hook互換3件、oh-my-opencodeの衝突点 |
+| [OpenCode V2 plugin APIの実測](opencode-plugin-api-probe.md) | permission hookの入力・deny実効性・ロード失敗時のfail-open、生コマンドとcwdの取得経路 |
+| [OpenCode V2のpermission適用範囲の穴](opencode-permission-gaps.md) | grep/globがread denyを迂回する実測、カスタムツールのpermissionバイパス |
+| [OpenCode V2 pluginの相関と承認要求の可否](opencode-plugin-correlation.md) | 並列実行時のcwd相関、plugin から ask を出せるかの実測、ctx.permission.rules の不在 |
 | [compaction 関連の hook 仕様](compaction-hooks.md) | 圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測 |
 | [sandbox機能の包括調査](sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
 | [zenoとzsh-autosuggestionsの連携](zeno-autosuggestions-integration.md) | widget競合の原因、ロード順、回避策 |

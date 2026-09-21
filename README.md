@@ -85,6 +85,8 @@ Linux / WSL / macOS は 3 つとも、Windows は Copilot CLI と OpenCode V2 �
 （インストーラーに `.zshrc` を書き換えさせないため）。
 
 CLI 自身の自動更新は `common.toml` から無効化しています。更新は手動です。
+（Claude は `env.DISABLE_AUTOUPDATER`、Copilot は `autoUpdate`、
+OpenCode は `update = "disable"` へ展開されます。）
 
 ```bash
 claude update                                          # Claude Code
