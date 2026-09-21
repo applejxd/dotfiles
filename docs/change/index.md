@@ -40,7 +40,7 @@
 | # | 目的 | 状態 | 最大の未解決点 | 次の確認 | 更新日 |
 | --- | --- | --- | --- | --- | --- |
 | [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | 圧縮後、作業再開前に checkpoint が届くか | P0-3 の実測 | 2026-09-19 |
-| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、自動化率を機構で回復する | Planned | 並列バッチの 1 件が ask だとステップ全体が中断する | 段階 1 の実装 | 2026-09-21 |
+| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、自動化率を機構で回復する | Planned | 調査は決着。Claude / Copilot も既定 ask にするかは未判断 | 段階 1 の実装 | 2026-09-21 |
 
 ## 保留
 

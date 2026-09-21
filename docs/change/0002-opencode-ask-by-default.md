@@ -103,12 +103,10 @@ sandbox・MCP を生成している。判定ロジックは Python
 
 ### まだ分からないこと
 
-- 並列バッチ内の 1 件が `ask` に落ちると**ステップ全体が中断する**
-  （非対話実行で実測）。plugin が `allow` と判定済みの呼び出しまで
-  `Tool execution interrupted` で巻き添えになる。対話モードでも
-  同じ挙動かは未確認（P1-4）
 - Claude / Copilot も既定 ask にするか。Copilot は hook の `ask` が
-  自動承認されるバグ（github/copilot-cli#3590）があるため効果が限定的
+  自動承認されるバグ（github/copilot-cli#3590）があるため効果が限定的。
+  **OpenCode でも `--auto` 実行時は同じ構図が仕様として存在する**
+  （[ask と並列バッチ](../research/opencode-ask-and-parallel-batch.md)）
 
 ## 評価基準
 
@@ -137,16 +135,18 @@ sandbox・MCP を生成している。判定ロジックは Python
 
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
-| P1-4 | 並列バッチの巻き添え中断が対話モードでも起きるか | 対話セッションで 1 件だけ ask に落ちる並列バッチを再現する |
+| （なし） | 調査は決着。段階 1 の実装待ち | — |
 
 決着済み: P0-1 / P0-2（[plugin の相関と承認要求の可否](../research/opencode-plugin-correlation.md)）、
-P1-3（[shell allow の費用対効果と plugin ゲート](../research/opencode-shell-allow-and-plugin-gate.md)）。
+P1-3（[shell allow の費用対効果と plugin ゲート](../research/opencode-shell-allow-and-plugin-gate.md)）、
+P1-4（[ask と並列バッチ](../research/opencode-ask-and-parallel-batch.md)）。
 
 | # | 結果 |
 | --- | --- |
 | P0-1 | **解決。** `shell.create.before` は不要。`tool.execute.before` の `input.workdir` が cwd を持ち `id` 付きなので相関に迷いがない。`workdir` 省略時はセッションのディレクトリで確定する |
-| P0-2 | **不可能。** plugin から承認要求を作る API が存在しない。`ctx.permission` は `hook` / `list` / `get` / `reply` のみで、新規作成の口が無い |
+| P0-2 | **不可能。** plugin から承認要求を作る API が存在しない。`ctx.permission` は `hook` / `list` / `get` / `reply` のみで、新規作成の口が無い。ただし**既にある要求へ答えることはできる**（`reply` のスキーマを確定） |
 | P1-3 | **決着。** allow は読み取り専用 7 件。任意コード実行を含む 6 件のうち 5 件は実測ヒット 0 で、落としても確認は 1 件も増えない。あわせて **plugin が `ask` を `allow` へ引き上げられること**を実測した（段階 2 の前提） |
+| P1-4 | **前提が誤っていた。** `ask` は並列バッチを壊さない（承認待ち 4 秒でも兄弟 3 件が全て成功）。壊すのは**拒否**で、これは期待動作。代わりに「`ask` の実効はモードで変わる」という別の制約が判明した |
 
 ## 仕様への変更案
 
@@ -258,6 +258,20 @@ deny にしてはいけない（deny は hook を呼ばないため代替案を�
 | `$` / バッククォートを含む（間接参照で静的に解決できない） | 触らない（`ask` へ落とす） |
 | それ以外の列挙形 | `allow` |
 
+**3 分岐目は対話利用でしか安全弁にならない。** `ask` の実効は実行モードで
+変わるため（[ask と並列バッチ](../research/opencode-ask-and-parallel-batch.md)）。
+
+| 実行 | 3 分岐目の実効 |
+| --- | --- |
+| 対話 | 意図どおり。ユーザに判断が出る |
+| `opencode run --auto` | **自動承認される。**安全弁にならない |
+| `opencode run`（`--auto` なし） | 自動拒否され、並列バッチごと落ちる |
+
+`--auto` は「明示的に deny されていない permission を自動承認」する。
+つまり自動実行では plugin の `deny` だけが効く。**自動実行で確実に
+止めたいものは `ask` ではなく `deny` に倒す。**この案件は「できるだけ
+全自動で走らせたい」が前提なので、3 分岐目に安全性を期待しない。
+
 実装上の制約が 2 つある。
 
 - **`e.resources` ではなく `tool.execute.before` の生コマンドを読む。**
@@ -293,6 +307,17 @@ enum 引数 1 個のツールにする。ツールを 5 個作るのではなく
 上の「候補比較」を参照。
 
 ## 重要な更新
+
+**2026-09-21 — 巻き添え中断の原因を取り違えていた（P1-4）。**
+
+「並列バッチ内の 1 件が `ask` に落ちるとステップ全体が中断する」と記録して
+いたが、原因は `ask` ではなく**拒否**だった。承認待ちを 4 秒作っても兄弟
+3 件は全て成功する（[実測](../research/opencode-ask-and-parallel-batch.md)）。
+拒否でステップが止まるのは期待動作なので、リスクではない。
+
+代わりに別の制約が判明した。**`ask` の実効は実行モードで変わる。**
+`--auto` では `ask` が自動承認されるため、段階 2 で「曖昧なら `ask`」と
+する分岐は自動実行の安全弁にならない。止めたいものは `deny` に倒す。
 
 **2026-09-21 — 段階 2 の実現性が確定した。**
 

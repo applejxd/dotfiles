@@ -29,6 +29,7 @@
 | [OpenCode V2 pluginの相関と承認要求の可否](opencode-plugin-correlation.md) | 並列実行時のcwd相関、plugin から ask を出せるかの実測、ctx.permission.rules の不在 |
 | [OpenCode V2のshell allowの費用対効果とpluginゲート](opencode-shell-allow-and-plugin-gate.md) | 実履歴1,247セグメントでのallow被覆率、静的パターンのクォート/変数回避、ask→allow引き上げの実測 |
 | [OpenCode V2のツール登録とコンテキストコスト](opencode-tool-context-cost.md) | ツール一覧の固定費、codemode true/false の差、ツール化の可否判断 |
+| [OpenCode V2のaskと並列バッチ](opencode-ask-and-parallel-batch.md) | 承認待ちは並列を壊さない実測、拒否が中断の起点、permission.reply のスキーマ、askの実効がモードで変わる |
 | [compaction 関連の hook 仕様](compaction-hooks.md) | 圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測 |
 | [sandbox機能の包括調査](sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
 | [zenoとzsh-autosuggestionsの連携](zeno-autosuggestions-integration.md) | widget競合の原因、ロード順、回避策 |
