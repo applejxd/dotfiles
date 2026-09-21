@@ -15,6 +15,8 @@ OpenCode の既定を `ask` にする。そのうえで確認回数を機構（h
 
 ## 現在地
 
+### 発端
+
 このリポジトリは `home/dot_config/agents/common.toml.tmpl` を単一ソースとして、
 Claude Code / Copilot CLI / Codex CLI / Gemini CLI の permission・hook・
 sandbox・MCP を生成している。判定ロジックは Python
@@ -36,7 +38,7 @@ sandbox・MCP を生成している。判定ロジックは Python
 ユーザはこれを受けて「LLM 判定は不安定でトークンも嵩む」として classifier
 前提を捨てる決定をした。
 
-**決定済みの方針:**
+### 決定済みの方針
 
 1. permission の既定を `ask` にする
 2. 確認回数の回復は指示（AGENTS.md）ではなく機構（hook）で行う。これは
@@ -45,33 +47,15 @@ sandbox・MCP を生成している。判定ロジックは Python
 3. ハーネスごとに設定を作り込む方向へ移行する。OpenCode を tier 1 とし、
    `common.toml` の `[bash]` は Claude / Copilot 用として当面そのまま残す
 
-**分かったこと:**
+### 段階の優先順位を決めた実測
 
-関連する調査記録は次の 3 本。
+実セッションのシェル呼び出しを `&&` `;` パイプで分割し、OpenCode の
+照合規則で再生した。**測定時点は 2026-09-21、1,005 セグメント。既定 ask で
+の確認総数は 959 件**（現行 allow 14 件を適用）。
 
-- [opencode-plugins.md](../research/opencode-plugins.md) —
-  プラグイン生態系の棚卸し
-- [opencode-plugin-api-probe.md](../research/opencode-plugin-api-probe.md) —
-  plugin API の実測
-- [opencode-permission-gaps.md](../research/opencode-permission-gaps.md) —
-  permission 適用範囲の穴
-
-実セッション 184 件のシェル呼び出し（`&&` `;` `|` で分割して 755 セグメント）
-を、OpenCode の照合規則（後勝ち・`*` は `/` を跨ぐ・末尾の `*`（先頭の
-半角空白込み）は引数無しにも一致）で再生した。
-
-数字は 2 種類あり、**一致しない**ので区別する。
-
-| 用語 | 意味 |
-| --- | --- |
-| セグメント数 | シェル呼び出しを `&&` `;` パイプで分割した断片の数 |
-| 確認減少数 | そのうち既定 ask で確認になるものの数。移行して実際に消える確認の数 |
-
-ずれるのは、一部のコマンドが静的 allow に載っていて既に無確認で通っている
-ため。既に通っているものを移しても確認は減らない。
-
-測定時点は 2026-09-21、1,005 セグメント。既定 ask での確認総数は
-959 件（現行 allow 14 件を適用）。
+数字は 2 種類あり**一致しない**。「セグメント数」は断片の数、
+「確認減少数」は移行して実際に消える確認の数で、一部が既に静的 allow で
+無確認に通っているためずれる。
 
 | 移行対象 | セグメント数 | 確認減少数 | 備考 |
 | --- | ---: | ---: | --- |
@@ -84,83 +68,45 @@ sandbox・MCP を生成している。判定ロジックは Python
 
 5 つの対策で 959 → 390 件まで減る計算になる。効果の順位は
 読み取り移行（−205）が最大で、`cd` 廃止（−163）、`echo` 廃止（−105）、
-`grep` 移行（−39）、`verify`（−57）と続く。この順位は当初の想定
-（ツール化が主役）を否定するもので、**読み取り移行が最優先**という結論に
-なった。
+`verify`（−57）、`grep` 移行（−39）と続く。**この順位は当初の想定
+（ツール化が主役）を否定するもので、読み取り移行が最優先**という結論に
+なった。段階 1〜4 の並びはこの順位に従っている。
 
-残り 390 件は `python3 -c` / `opencode api` / `export` / `sed 's` /
-`curl -fsSL` など、その場限りのコマンドで列挙では潰せない。
+残り 390 件は `python3 -c` / `export` / `sed 's` / `curl -fsSL` など、
+その場限りのコマンドで列挙では潰せない（段階 4 の対象）。
 
-測定元の `~/.local/share/opencode/opencode.db` は作業のたびに増えるため、
-**件数は測定時点でしか意味を持たない**。またサンプルは調査セッション由来で
-`python3 -c` による分析が多い偏りがある。比率の傾向を見る用途に限ること。
+測定手順と標本の偏りは
+[permission 適用範囲の穴](../research/opencode-permission-gaps.md)を参照。
+**件数は測定時点でしか意味を持たない。**
 
-生成済み `opencode.json` の shell allow は 14 件だが、うち 7 件
-（`find` / `gcc` / `g++` / `cmake -S` / `cmake --build` / `uv sync` /
-`mise run`）が任意コード実行を含む。`common.toml` のコメントは
-「読み取り専用・冪等なものだけ」と書いてあり実態と乖離している。
+### 設計を決めている実測結果
 
-OpenCode V2 plugin API の実測結果は次のとおり。
+詳細と実験手順は各調査記録にある。ここには判断を動かした結論だけ置く。
 
-- `.opencode/plugins/*.js` は自動ロードされる。`@opencode/plugin` の
-  import すら不要で、`id` と `setup` を持つ default export だけでよい
-- 発火順は `tool.execute.before` → `shell.create.before` →
-  `permission.evaluate`
-- `tool.execute.before` は生コマンド（分割前）と `id` を持つ。
-  `permission.evaluate` の `source.id` と一致するので相関できる
-- `shell.create.before` は `cwd` を持つが `id` を持たない。ただし
-  **P0-1 の決着により、この hook は使わない**。`tool.execute.before` の
-  `input.workdir` が cwd を持ち `id` 付きなので、そちらで完結する
-- `permission.evaluate` で `effect="deny"` にすると実際にブロックでき、
-  `message` がエージェントへ届く
-- hook 内の例外は fail-closed（実行が止まる）。プラグインのロード失敗は
-  fail-open（無防備に実行される。ただし WARN ログには出る）
-- 設定の `deny` は hook を呼ばない（公式記載を実証）。つまり静的 deny を
-  置くと代替案メッセージを返せない
-- 非対話実行（`opencode run`）は `ask` を自動拒否する
+| 結論 | 設計への影響 | 出典 |
+| --- | --- | --- |
+| V2 対応のサードパーティ製プラグインは 1 件も無い | 既製品に乗れない。自作する | [生態系](../research/opencode-plugins.md) |
+| 設定の `deny` は hook を呼ばない | 静的 deny は代替案を返せない。既定 ask のまま hook で deny へ変える | [plugin API](../research/opencode-plugin-api-probe.md) |
+| プラグインのロード失敗は fail-open | 故障時に無防備になる。段階 1 の静的 allow 縮小を先に済ませる | 同上 |
+| `tool.execute.before` が生コマンドと `id` と `workdir` を持つ | cwd 相関はこの hook 単独で完結する。`e.resources` は変数代入を落とすので使わない | [相関と承認要求](../research/opencode-plugin-correlation.md) |
+| plugin から `ask` を**作る** API は無い | カスタムツールは「無確認で安全な設計にする」か「作らない」の二択 | 同上 |
+| plugin は `ask` を `allow` へ**引き上げられる** | 段階 2 以降の「機構で確認を回復する」構想が成立する | [allow の費用対効果と plugin ゲート](../research/opencode-shell-allow-and-plugin-gate.md) |
+| `grep` / `glob` が `read` の deny を迂回する | 読み取りをツールへ移す際、保護を同時に入れる必要がある | [permission の穴](../research/opencode-permission-gaps.md) |
+| `execute.after` で結果を濾せる | 検索は通しつつ出力だけ伏字化できる。確認を増やさずに塞げる | 同上 |
+| 静的パターンはクォートと変数で回避できる | deny パターンは allow を残す口実にならない。`shlex` 正規化つきの plugin が要る | [plugin ゲート](../research/opencode-shell-allow-and-plugin-gate.md) |
+| `codemode` 既定なら固定費 0 bytes | ツール化によるコンテキスト逼迫を理由に避ける必要はない | [ツールのコンテキストコスト](../research/opencode-tool-context-cost.md) |
 
-permission の穴として次を実測した（重要）。
+現行 allow 14 件のうち 6 件（`find` / `gcc` / `g++` / `cmake -S` /
+`cmake --build` / `uv sync` / `mise run`）が任意コード実行を含み、
+`common.toml` のコメント「読み取り専用・冪等なものだけ」と乖離している。
+うち `find` 以外は実測ヒット 0 で、落としても確認は増えない。
 
-- `grep` の permission resource は検索正規表現のみで、検索先パスが
-  入らない。`read` で deny したファイルの中身が `grep` の結果から逐語的に
-  返った（カナリア実験で確認）。ファイルごとの `read` 判定も走らない
-- `glob` も `read` deny 対象のパスを列挙する
-- `editor.add` で登録したカスタムツールには `permission.evaluate` が
-  発火しない。`--auto` なしでも無確認で実行される
+### まだ分からないこと
 
-ただし保護は自作できることを実測で確認した。
-
-- `grep` / `glob` の `tool.execute.before` は `path` / `include` を持つ。
-  `source.id` で相関して判断できる
-- `permission.hook("evaluate")` から `grep` を deny できる
-  （理由メッセージも届く）
-- `tool.hook("execute.after")` で `grep` の結果を書き換えられる
-  （秘密を含む行の伏字化に成功）。検索は通しつつ出力だけ濾せるので
-  確認回数が増えない
-- カスタムツールは `tool.hook("execute.before")` で例外を投げれば実行を
-  止められる。`e.input` の書き換えも効く（引数の正規化・制約が可能）
-
-`session.hook("context")` でモデルへ送られる直前のツール一覧を観測した。
-ベースラインは 13 ツール・12,596 bytes、システムプロンプト 30,015 bytes。
-
-- `codemode: true`（既定）で登録したツールは常時提示の一覧に**載らない**
-  （固定費 0 bytes）。`search()` 経由の遅延提示になる
-- `codemode: false` で登録すると載る（単純なツール 1 個で 111 bytes）
-
-したがってツール化によるコンテキスト逼迫は、既定のまま登録すれば問題に
-ならない。
-
-npm の人気順 20 件を依存から判定した結果、**V2 対応のサードパーティ製
-プラグインは 1 件も見つからなかった**。oh-my-opencode（OmO）も最新 beta
-（2026-09-20 公開）を含めて V1（`@opencode-ai/plugin`）のまま。Claude Code
-hook 互換を謳うプラグイン 3 件も全て V1。したがって既製品に乗る道は現時点で
-無く、自作するしかない。
-
-なおこの環境では Orca の `orca-opencode-status.js` が V1 形式のため V2 で
-ロードに失敗している（副次的な発見）。
-
-**まだ分からないこと:**
-
+- 並列バッチ内の 1 件が `ask` に落ちると**ステップ全体が中断する**
+  （非対話実行で実測）。plugin が `allow` と判定済みの呼び出しまで
+  `Tool execution interrupted` で巻き添えになる。対話モードでも
+  同じ挙動かは未確認（P1-4）
 - Claude / Copilot も既定 ask にするか。Copilot は hook の `ask` が
   自動承認されるバグ（github/copilot-cli#3590）があるため効果が限定的
 
@@ -191,14 +137,16 @@ hook 互換を謳うプラグイン 3 件も全て V1。したがって既製品
 
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
-| P1-3 | allow に残すコマンドの選定 | ユーザと相談しながら段階 1 の allow リストを確定する |
+| P1-4 | 並列バッチの巻き添え中断が対話モードでも起きるか | 対話セッションで 1 件だけ ask に落ちる並列バッチを再現する |
 
-決着済み: P0-1 / P0-2（[plugin の相関と承認要求の可否](../research/opencode-plugin-correlation.md)）。
+決着済み: P0-1 / P0-2（[plugin の相関と承認要求の可否](../research/opencode-plugin-correlation.md)）、
+P1-3（[shell allow の費用対効果と plugin ゲート](../research/opencode-shell-allow-and-plugin-gate.md)）。
 
 | # | 結果 |
 | --- | --- |
 | P0-1 | **解決。** `shell.create.before` は不要。`tool.execute.before` の `input.workdir` が cwd を持ち `id` 付きなので相関に迷いがない。`workdir` 省略時はセッションのディレクトリで確定する |
 | P0-2 | **不可能。** plugin から承認要求を作る API が存在しない。`ctx.permission` は `hook` / `list` / `get` / `reply` のみで、新規作成の口が無い |
+| P1-3 | **決着。** allow は読み取り専用 7 件。任意コード実行を含む 6 件のうち 5 件は実測ヒット 0 で、落としても確認は 1 件も増えない。あわせて **plugin が `ask` を `allow` へ引き上げられること**を実測した（段階 2 の前提） |
 
 ## 仕様への変更案
 
@@ -241,10 +189,30 @@ Claude / Copilot にも影響して効果の切り分けができなくなるた
   出ないこと」を固定するテストを追加
 
 allow の選定基準は、副作用なし・冪等・任意コード実行を含まないこと。
-`find` は `-delete` / `-exec` があるので入れない。ビルド系（`gcc` /
-`cmake` / `uv sync` / `mise run`）はプロジェクトのコードを実行するので
-入れない。残す候補は `git diff` / `git status` / `git log` / `wc` /
-`uv pip list` / `docker ps` 程度。
+実履歴 1,247 セグメントでの実測（[費用対効果の調査](../research/opencode-shell-allow-and-plugin-gate.md)）
+にもとづき、次の 7 件に確定した。
+
+```toml
+[opencode.shell]
+allow = [
+  "git diff", "git status", "git log",
+  "wc", "grep -n",
+  "uv pip list", "docker ps",
+]
+```
+
+落とすのは `find` / `gcc` / `g++` / `cmake -S` / `cmake --build` /
+`uv sync` / `mise run` の 7 件。うち `find` 以外の 6 件は**実測ヒット 0** で、
+落としても確認は 1 件も増えない。`find` のみ +7 件（0.6%）増えるが、
+段階 2 の選別器で回収する。
+
+`find` に対して「`-exec` の付いた形だけを静的 deny する」案は採らない。
+`find . -exe""c …` のようにクォートを挟むと deny を素通りし、
+`find *` の allow に一致して**無確認で任意コード実行**になるため。
+deny パターンは allow を残す口実にしかならない。
+
+`uv pip list` と `docker ps` はヒット 0 だが、読み取り専用でリスクが無く、
+他プロジェクトでの利用が見込めるため残す。
 
 撤退方法は `[opencode.shell]` を削除するだけ。`[bash]` に触らないので
 他 CLI へ影響しない。
@@ -274,6 +242,37 @@ deny にしてはいけない（deny は hook を呼ばないため代替案を�
 `grep` / `glob` へ誘導する場合は、`tool.execute.before` で `path` /
 `include` を退避し、`execute.after` で結果を濾す保護を同時に入れる。
 
+#### `find` の選別器
+
+段階 1 で `find` を allow から外した分を、ここで回収する。丸ごと deny には
+**しない**。逃げ場が `python3 -c "os.walk(…)"` や `ls -R` になり、かえって
+悪化するため。実測した 7 件は全てファイル列挙で、うち 3 件は深さ制限つきの
+ワークスペース外の列挙（`find / -maxdepth 6 …`）なので `glob` では素直に
+書けない。
+
+3 分岐にする。
+
+| 条件 | 判定 |
+| --- | --- |
+| 危険フラグ（`-exec` / `-execdir` / `-ok` / `-okdir` / `-delete` / `-fprint*`） | `deny` + `glob` への誘導メッセージ |
+| `$` / バッククォートを含む（間接参照で静的に解決できない） | 触らない（`ask` へ落とす） |
+| それ以外の列挙形 | `allow` |
+
+実装上の制約が 2 つある。
+
+- **`e.resources` ではなく `tool.execute.before` の生コマンドを読む。**
+  scanner が `;` で分割する際に変数代入を落とすため
+  （`Z=--zap; echo hi $Z x` → `echo hi $Z x`）。`id` で相関する
+- **`shlex` 相当の正規化を通す。** クォート除去をしないと
+  `-exe""c` が素通りする。既存の `bashrules` へ橋渡しするのが筋だが、
+  `check_find_dangerous` は `-exec rm` 系と `-delete` しか見ていないので、
+  `-exec sh -c` と `-fprint*` の追加が要る
+
+`ask` → `allow` の引き上げが効くことは実測済み
+（[plugin ゲートの調査](../research/opencode-shell-allow-and-plugin-gate.md)）。
+deny のメッセージが逐語で届き、エージェントが `glob` へ乗り換えて
+タスクを完遂することも確認した。
+
 ### 段階 3 の詳細
 
 `AGENTS.md` の検証コマンド表を
@@ -295,7 +294,17 @@ enum 引数 1 個のツールにする。ツールを 5 個作るのではなく
 
 ## 重要な更新
 
-（なし）
+**2026-09-21 — 段階 2 の実現性が確定した。**
+
+plugin が `permission.evaluate` で `ask` を `allow` へ**引き上げられる**ことを
+実測した（[調査](../research/opencode-shell-allow-and-plugin-gate.md)）。
+本案件は「既定を ask にして、確認回数を機構で回復する」構想に全面的に
+依存しているが、それまで deny 側しか実測していなかった。ここが通ったので
+段階 2 以降は不確実性ではなく実装作業になった。
+
+同時に、**並列バッチの巻き添え中断**という新しいリスクが見つかった。
+「できるだけ全自動で走らせたい」という前提に直接効くため、既定 ask への
+移行はこの性質とセットで評価する。
 
 ## 終了結果
 
