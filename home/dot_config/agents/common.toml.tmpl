@@ -358,6 +358,11 @@ claude_write_deny_globs = [
   # 正本はこのリポジトリなので、変更は chezmoi apply 経由で入れる。
   "~/.config/opencode/opencode.json",
   "~/.config/opencode/service.json",
+  # プロジェクト側の OpenCode 設定。ここに書いた permission は
+  # グローバルの deny に勝つ (実測)。書けると自分で権限を広げられる。
+  # see docs/research/opencode/permission/gaps.md
+  "**/.opencode/opencode.json",
+  "**/.opencode/opencode.jsonc",
   # git の設定。diff.<name>.command / core.fsmonitor などに任意コマンドを
   # 書けるため、git diff や git status が実行手段になる (実測)。
   # see docs/research/opencode/permission/allow-list-audit.md

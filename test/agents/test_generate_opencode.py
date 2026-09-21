@@ -320,6 +320,16 @@ def test_git_config_is_write_denied(resource: str):
     assert resource in rules("edit", "deny")
 
 
+# プロジェクト側の設定に書いた permission はグローバルの deny に勝つ (実測)。
+# 書けるとエージェントが自分で権限を広げられる。
+# see docs/research/opencode/permission/gaps.md
+@pytest.mark.parametrize(
+    "resource", ["*/.opencode/opencode.json", "*/.opencode/opencode.jsonc"]
+)
+def test_project_config_is_write_denied(resource: str):
+    assert resource in rules("edit", "deny")
+
+
 @pytest.mark.parametrize("command", ["git diff", "git status"])
 def test_git_commands_that_execute_are_not_allowed(command: str):
     """`git diff` は外部 diff、`git status` は fsmonitor で任意コマンドを起動する。

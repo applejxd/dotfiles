@@ -13,48 +13,39 @@ OpenCode の既定を `ask` にする。そのうえで**秘密へのアクセ�
 **非目的**: Claude Code / Copilot CLI の設計変更。今回は OpenCode V2 のみを
 対象にする。
 
-## 運用モード（sandbox の有無）
+## sandbox について（検討済み・採用しない）
 
-OpenCode には sandbox が内蔵されていないが、**`opencode` のプロセスごと
-bubblewrap で隔離すれば外から被せられる**
-（[sandbox の調査](../research/opencode-sandbox.md)）。
+OpenCode に sandbox は内蔵されていないが、`opencode` のプロセスごと
+bubblewrap で隔離すれば外から被せられる。**実測で成立したうえで、
+採用しないと判断した**（[sandbox の調査](../research/opencode/permission/sandbox.md)）。
 
-したがって**2 つのモードを前提に設計する**。
+| 期待 | 実際 |
+| --- | --- |
+| 自動化率が上がる | **上がらない**（自動実行では `ask` が素通り） |
+| 確認回数が減る | **減らない**（既定 `ask` を維持するため） |
+| 敵対的なリポジトリから守れる | **守れない**（プロジェクト設定で外せる） |
+| このリポジトリが安全になる | **ならない**（`chezmoi` が snap 版で bwrap 内から動かない） |
 
-| | A: sandbox 有効 | B: sandbox 無効 |
-| --- | --- | --- |
-| shell 経由の読み書き | **境界あり**（ファイルが存在しない） | 境界なし |
-| `read` / `grep` ツール経由 | 境界あり | permission の deny |
-| 想定 | `chezmoi` を使わないプロジェクト | **このリポジトリ** |
+残る利点は「`chezmoi` を使わないプロジェクトで、難読化された持ち出しを
+止められる」ことだけ。費用（ラッパーの自作と維持、macOS 未実装、
+常駐サービス経由の脱出対策）に見合わないと判断した。
 
-**このリポジトリは B で運用する。** `chezmoi` が snap 版で bwrap 内から
-起動できないため（実測）。書き込み範囲の問題ではないので、
-秘密だけ隠す形にしても解決しない。
-
-### 設計上の帰結
-
-**弱いほう（B）を基準に設計し、sandbox は上に重ねる層として扱う。**
-エージェントがこのリポジトリで最も危険な操作（permission 設定自体の
-書き換え）を行う以上、B で成立しない設計は採らない。
-
-この前提から、段階 2 の内容が変わる。B では `cat` / `grep` が
-`read` deny を迂回できてしまうので、**構造化ツールへの誘導が
-「確認回数の削減」ではなく「保護される層へ寄せる」手段になる**
-（[permission の穴](../research/opencode-permission-gaps.md)）。
+**したがって本案件は「境界が無い」前提で設計する。** permission と
+plugin は**安全網であって境界ではない**。この区別を保ったまま、
+どこまで手をかけるかを決める。
 
 ### 設定で入れる保護は設定で外せる
 
+sandbox の調査中に判明した、採否と無関係に効く事実。
 `<project>/.opencode/opencode.json` の permission は**グローバルの deny に
-勝つ**（実測）。同じことが `shell` にも起きる。
+勝つ**（[permission の穴](../research/opencode/permission/gaps.md)）。
 
 | 影響 | 内容 |
 | --- | --- |
-| 外部リポジトリ | `.opencode/opencode.json` を含むリポジトリを開くだけで保護が外れる |
+| 外部リポジトリ | `.opencode/opencode.json` を含むリポジトリを開くだけで保護が外れる。**塞げない** |
 | 自分のリポジトリ | そのファイルへの write deny が無いと、エージェントが自分で権限を広げられる |
 
-後者は `**/.opencode/opencode.json` を write deny に足して塞ぐ（未対応）。
-前者は塞げない。**敵対的なリポジトリを想定するなら、設定ではなく
-起動方法（プロセスごとの隔離）に頼るしかない。**
+後者は `**/.opencode/opencode.json` を write deny に足して塞ぐ。
 
 ## 現在地
 
@@ -119,7 +110,7 @@ sandbox・MCP を生成している。判定ロジックは Python
 その場限りのコマンドで列挙では潰せない（段階 4 の対象）。
 
 測定手順と標本の偏りは
-[permission 適用範囲の穴](../research/opencode-permission-gaps.md)を参照。
+[permission 適用範囲の穴](../research/opencode/permission/gaps.md)を参照。
 **件数は測定時点でしか意味を持たない。**
 
 ### 設計を決めている実測結果
@@ -128,16 +119,16 @@ sandbox・MCP を生成している。判定ロジックは Python
 
 | 結論 | 設計への影響 | 出典 |
 | --- | --- | --- |
-| V2 対応のサードパーティ製プラグインは 1 件も無い | 既製品に乗れない。自作する | [生態系](../research/opencode-plugins.md) |
-| 設定の `deny` は hook を呼ばない | 静的 deny は代替案を返せない。既定 ask のまま hook で deny へ変える | [plugin API](../research/opencode-plugin-api-probe.md) |
+| V2 対応のサードパーティ製プラグインは 1 件も無い | 既製品に乗れない。自作する | [生態系](../research/opencode/plugin/ecosystem.md) |
+| 設定の `deny` は hook を呼ばない | 静的 deny は代替案を返せない。既定 ask のまま hook で deny へ変える | [plugin API](../research/opencode/plugin/api-probe.md) |
 | プラグインのロード失敗は fail-open | 故障時に無防備になる。段階 1 の静的 allow 縮小を先に済ませる | 同上 |
-| `tool.execute.before` が生コマンドと `id` と `workdir` を持つ | cwd 相関はこの hook 単独で完結する。`e.resources` は変数代入を落とすので使わない | [相関と承認要求](../research/opencode-plugin-correlation.md) |
+| `tool.execute.before` が生コマンドと `id` と `workdir` を持つ | cwd 相関はこの hook 単独で完結する。`e.resources` は変数代入を落とすので使わない | [相関と承認要求](../research/opencode/plugin/correlation.md) |
 | plugin から `ask` を**作る** API は無い | カスタムツールは「無確認で安全な設計にする」か「作らない」の二択 | 同上 |
-| plugin は `ask` を `allow` へ**引き上げられる** | 段階 2 以降の「機構で確認を回復する」構想が成立する | [allow の費用対効果と plugin ゲート](../research/opencode-shell-allow-and-plugin-gate.md) |
-| `grep` / `glob` が `read` の deny を迂回する | 読み取りをツールへ移す際、保護を同時に入れる必要がある | [permission の穴](../research/opencode-permission-gaps.md) |
+| plugin は `ask` を `allow` へ**引き上げられる** | 段階 2 以降の「機構で確認を回復する」構想が成立する | [allow の費用対効果と plugin ゲート](../research/opencode/permission/shell-allow-and-plugin-gate.md) |
+| `grep` / `glob` が `read` の deny を迂回する | 読み取りをツールへ移す際、保護を同時に入れる必要がある | [permission の穴](../research/opencode/permission/gaps.md) |
 | `execute.after` で結果を濾せる | 検索は通しつつ出力だけ伏字化できる。確認を増やさずに塞げる | 同上 |
-| 静的パターンはクォートと変数で回避できる | deny パターンは allow を残す口実にならない。`shlex` 正規化つきの plugin が要る | [plugin ゲート](../research/opencode-shell-allow-and-plugin-gate.md) |
-| `codemode` 既定なら固定費 0 bytes | ツール化によるコンテキスト逼迫を理由に避ける必要はない | [ツールのコンテキストコスト](../research/opencode-tool-context-cost.md) |
+| 静的パターンはクォートと変数で回避できる | deny パターンは allow を残す口実にならない。`shlex` 正規化つきの plugin が要る | [plugin ゲート](../research/opencode/permission/shell-allow-and-plugin-gate.md) |
+| `codemode` 既定なら固定費 0 bytes | ツール化によるコンテキスト逼迫を理由に避ける必要はない | [ツールのコンテキストコスト](../research/opencode/tool-context-cost.md) |
 
 現行 allow 14 件のうち 6 件（`find` / `gcc` / `g++` / `cmake -S` /
 `cmake --build` / `uv sync` / `mise run`）が任意コード実行を含み、
@@ -149,7 +140,7 @@ sandbox・MCP を生成している。判定ロジックは Python
 - Claude / Copilot も既定 ask にするか。Copilot は hook の `ask` が
   自動承認されるバグ（github/copilot-cli#3590）があるため効果が限定的。
   **OpenCode でも `--auto` 実行時は同じ構図が仕様として存在する**
-  （[ask と並列バッチ](../research/opencode-ask-and-parallel-batch.md)）
+  （[ask と並列バッチ](../research/opencode/ask-and-parallel-batch.md)）
 
 ## 評価基準
 
@@ -157,33 +148,28 @@ sandbox・MCP を生成している。判定ロジックは Python
 
 1. 段階 1 の完了時点で、Claude / Copilot / Codex / Gemini の生成物に diff
    が出ないこと（テストで固定）
-2. **モード B（sandbox 無効）で**、保護対象のファイルを `cat` / `grep` /
-   `head` で読んだ内容がモデルへ渡らないこと。素直な形で実測して判定する
+2. **自動実行のまま**、保護対象のファイルを `cat` / `grep` / `head` で
+   読んだ内容がモデルへ渡らないこと。素直な形で実測して判定する
 3. 任意コード実行を含むコマンドが OpenCode の allow に 1 件も無いこと
 4. プラグインがロードに失敗しても、危険側（無条件許可）に倒れないこと
-5. **モード A（sandbox 有効）で**、難読化した形（`base64` / 変数展開 /
-   `python3 -c`）でも保護対象へ到達できないこと
 
-基準 2 と 5 で**要求水準を分けている**。モード B では文字列・出力の検査
-しか手段が無く、符号化されるとすり抜けるため「境界」を要求できない
-（[出力フィルタ](../research/opencode-output-filter-and-subagents.md)）。
-モード A は OS の名前空間で効くので難読化に耐える（実測）。
+**基準 2 に「難読化した形でも遮断」は求めない。** 出力を符号化されると
+内容照合をすり抜けるため達成不能（[出力フィルタ](../research/opencode/permission/output-filter-and-subagents.md)）。
+それを要求するなら sandbox が要るが、採用しないと判断した。
 
 基準 2 は 2 度書き換えている。当初の「確認減少数が総数の 6 割以上」は
-**測定単位の誤り**で達成不能だった（下記「重要な更新」）。次に置いた
-「難読化した形でも遮断」も**モード B では達成不能**と実測で判明したため、
-モード A の基準 5 へ移した。
+**測定単位の誤り**で達成不能だった（下記「重要な更新」）。
 
-**モード B の伏字化は事故と素朴なプロンプトインジェクションへの安全網で
-あって、意図的な持ち出しへの境界ではない。** この限界を認めた上で置く。
+**伏字化は事故と素朴なプロンプトインジェクションへの安全網であって、
+意図的な持ち出しへの境界ではない。** この限界を認めた上で置く。
 
 ## 候補比較
 
-段階 5（残り約 280 件への手当）の候補。段階 1〜4 の実績を見てから
+段階 4（残り約 280 件への手当）の候補。段階 1〜3 の実績を見てから
 判断する。「耐えられる頻度」なら何もしない選択もある。
 
-sandbox は候補から**段階 3 へ昇格**した（[調査](../research/opencode-sandbox.md)で
-成立を実測したため）。
+sandbox は候補として検討し、**採用しない**と判断した（上の
+「sandbox について」）。
 
 | 候補 | 支持する根拠 | 不利な点・反証 | 未検証点 | 扱い | 次の確認 |
 | --- | --- | --- | --- | --- | --- |
@@ -195,17 +181,20 @@ sandbox は候補から**段階 3 へ昇格**した（[調査](../research/openc
 
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
-| P3-4 | macOS の `sandbox-exec` で同等のことができるか | **macOS 実機が要る**（Windows 実機検証と同じ扱い）。段階 3 を後回しにしたので保留 |
+| （なし） | P3-1 〜 P3-3 は決着。段階 2 の実装待ち | — |
+
+P3-4（macOS の `sandbox-exec`）は**打ち切り**。sandbox を採用しないと
+決めたため、調べても使い道が無い。
 
 決着済み（2026-09-22）:
 
 | # | 結果 |
 | --- | --- |
-| P3-1 | **成立。** `read` ツールは deny を守る（`permission.rejected`）。同じファイルが shell の `cat` では読めた。**誘導の前提が実測で裏づいた**（[permission の穴](../research/opencode-permission-gaps.md)） |
+| P3-1 | **成立。** `read` ツールは deny を守る（`permission.rejected`）。同じファイルが shell の `cat` では読めた。**誘導の前提が実測で裏づいた**（[permission の穴](../research/opencode/permission/gaps.md)） |
 | P3-2 | **`execute.after` で濾せる。** `grep` / `glob` の `result.content[].text` に絶対パスが埋まっているので、`read` の deny glob で落とせる。実測で `grep` は場所と内容が消え、`glob` は空になった。ただし件数ヘッダと `metadata` が残るので**存在だけは漏れる**。書式解析なので壊れやすい |
 | P3-3 | **プロセスごと隔離は全ツールを覆うが、常駐サービスが穴。** localhost の `opencode serve --service` へ内側から到達でき、`~/.config/opencode/service.json` のパスワードを読めると完全に迂回できる。対処は service.json のマスクと `--unshare-pid`（実測）。ネットワーク名前空間は LLM API に要るので分けられない |
 
-決着済み（[出力フィルタと子エージェント](../research/opencode-output-filter-and-subagents.md)）:
+決着済み（[出力フィルタと子エージェント](../research/opencode/permission/output-filter-and-subagents.md)）:
 
 | # | 結果 |
 | --- | --- |
@@ -214,9 +203,9 @@ sandbox は候補から**段階 3 へ昇格**した（[調査](../research/openc
 | P2-3 | **設定不要。** `continue_loop_on_deny: false` を明示しても `--auto` + plugin の deny ではループが続き、代替案どおり別コマンドを実行した |
 | P2-4 | **子エージェントも共通の permission に従う。** 親の部分集合ではない。hook は子の呼び出しにも発火し `agent` に名前が入る。子エージェントの起動自体も `action:"subagent"` / `resource:"<名前>"` で deny できる。`primary_tools` は効果を確認できず、頼らない |
 
-決着済み: P0-1 / P0-2（[plugin の相関と承認要求の可否](../research/opencode-plugin-correlation.md)）、
-P1-3（[shell allow の費用対効果と plugin ゲート](../research/opencode-shell-allow-and-plugin-gate.md)）、
-P1-4（[ask と並列バッチ](../research/opencode-ask-and-parallel-batch.md)）。
+決着済み: P0-1 / P0-2（[plugin の相関と承認要求の可否](../research/opencode/plugin/correlation.md)）、
+P1-3（[shell allow の費用対効果と plugin ゲート](../research/opencode/permission/shell-allow-and-plugin-gate.md)）、
+P1-4（[ask と並列バッチ](../research/opencode/ask-and-parallel-batch.md)）。
 
 | # | 結果 |
 | --- | --- |
@@ -244,36 +233,13 @@ P1-4（[ask と並列バッチ](../research/opencode-ask-and-parallel-batch.md)�
 | --- | --- | --- |
 | 0 | `grep`/`glob` の穴と plugin API の実測、計測基盤の確立 | 完了 |
 | 1 | `[opencode.shell]` 新設 + 既定 ask | **完了**（2026-09-21） |
-| 2 | プラグイン基盤 + 読み取り経路の保護（モード B の本体） | **着手中**（基盤と `cd` 規則が完了） |
-| 3 | sandbox（モード A。Linux 限定・このリポジトリは無効） | 未着手 |
-| 4 | `verify` ツール | 未着手 |
-| 5 | 残り約 280 件への手当 | 判断保留 |
+| 2 | プラグイン基盤 + 読み取り経路の保護 | **着手中**（基盤と `cd` 規則が完了） |
+| 3 | `verify` ツール | 未着手 |
+| 4 | 残り約 280 件への手当 | 判断保留 |
 
-段階 2 と 3 は**独立して価値がある**。2 はモード B（このリポジトリ）の
-保護、3 は他プロジェクトでの境界。2 が先なのは、このリポジトリが
-主な作業場所だから。
-
-#### 段階 3 の費用対効果（2026-09-22 の結論）
-
-**sandbox の利点は当初の見込みより薄い。実装は後回しでよい。**
-
-検討の過程で、期待していた効果がほとんど否定された。
-
-| 期待 | 実際 |
-| --- | --- |
-| 自動化率が上がる | **上がらない**（自動実行では `ask` が素通り） |
-| 確認回数が減る | **減らない**（既定 `ask` を維持するため） |
-| 段階 5 が楽になる | **楽にならない**（結果が有界になるだけ） |
-| 敵対的なリポジトリから守れる | **守れない**（プロジェクト設定で外せる） |
-| このリポジトリが安全になる | **ならない**（`chezmoi` が動かず無効運用） |
-
-残る利点は 1 つだけ。**`chezmoi` を使わないプロジェクトで、
-難読化された持ち出し（`base64` 等）を止められる。** モード B の
-伏字化はここですり抜けるため、その差分だけが sandbox の価値。
-
-それでも調査した意味はあった。「境界が無い」と認めた上で段階 2 を
-設計するのと、知らずに設計するのとでは、伏字化にどこまで手をかけるかの
-判断が変わる。現在は**安全網であって境界ではない**と明記できている。
+sandbox は検討して**採用しない**と判断した（上の
+「[sandbox について](#sandbox-について検討済み採用しない)」）。
+したがって段階 2 が唯一の防御層になる。
 
 ### 段階 1 の詳細
 
@@ -294,8 +260,8 @@ Claude / Copilot にも影響して効果の切り分けができなくなるた
   出ないこと」を固定するテストを追加
 
 allow の選定基準は、副作用なし・冪等・任意コード実行を含まないこと。
-実履歴での実測（[費用対効果の調査](../research/opencode-shell-allow-and-plugin-gate.md)）
-と、その後の監査（[allow リスト監査](../research/opencode-allow-list-audit.md)）
+実履歴での実測（[費用対効果の調査](../research/opencode/permission/shell-allow-and-plugin-gate.md)）
+と、その後の監査（[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）
 にもとづき、次の 5 件に確定した。
 
 ```toml
@@ -364,7 +330,7 @@ read / edit は 50 / 52 件で変化なし（224 → 218 rules）
 この実機試験の過程で、それまでの調査記録が使っていた隔離手段
 （`XDG_CONFIG_HOME` の差し替え）が**誤りだった**ことが判明した。
 正しくは `OPENCODE_CONFIG_DIR`。過去の記録の結論は
-いずれも有効（[試験環境の隔離方法](../research/opencode-test-isolation.md)）。
+いずれも有効（[試験環境の隔離方法](../research/opencode/test-isolation.md)）。
 
 残作業は無し。2026-09-21 に `chezmoi apply` で実環境へ配備済み
 （`~/.config/opencode/opencode.json` に 218 rules、先頭が
@@ -380,7 +346,7 @@ overlay に `opencode.json` が無いため permission 層ごと消える。
 （2026-09-21）。`OPENCODE_CONFIG_DIR` があるときだけ働く。
 `chezmoi apply` と Orca の再起動後、実環境で **218 rules が読まれ
 `pip --version` が deny される**ことを確認済み
-（[試験環境の隔離方法](../research/opencode-test-isolation.md)）。
+（[試験環境の隔離方法](../research/opencode/test-isolation.md)）。
 
 なお `ask` は自動承認されて素通りし、`deny` だけが貫通を許さない。
 段階 2 で「自動実行で止めたいものは `deny` に倒す」とした方針が、
@@ -388,8 +354,7 @@ overlay に `opencode.json` が無いため permission 層ごと消える。
 
 ### 段階 2 の詳細
 
-**モード B（sandbox 無効）でも秘密へ届かせないための層。** このリポジトリは
-モード B で運用するので、ここが実質の防御になる。
+**sandbox を採用しない以上、ここが唯一の防御層になる。**
 
 `--auto` では `ask` が自動承認されるため、効くのは `deny` だけ。
 確認回数は目的ではない（当初はそう設計していたが誤りだった。後述）。
@@ -402,8 +367,8 @@ overlay に `opencode.json` が無いため permission 層ごと消える。
 
 段階 1 の監査で見つかった穴は、どれも permission の `read` / `edit` を
 **shell 経由で迂回**することに起因する
-（[allow リスト監査](../research/opencode-allow-list-audit.md)、
-[permission の穴](../research/opencode-permission-gaps.md)）。
+（[allow リスト監査](../research/opencode/permission/allow-list-audit.md)、
+[permission の穴](../research/opencode/permission/gaps.md)）。
 
 | 経路 | `read` / `edit` の deny |
 | --- | --- |
@@ -435,7 +400,7 @@ overlay に `opencode.json` が無いため permission 層ごと消える。
 **件数ヘッダと `metadata` も書き換える**こと。放置すると
 「`Found 1 matches`」だけ残って存在が漏れ、結果とも矛盾する（実測）。
 
-伏字化は**成立する**（[実測](../research/opencode-output-filter-and-subagents.md)）。
+伏字化は**成立する**（[実測](../research/opencode/permission/output-filter-and-subagents.md)）。
 本体は `result.content` の `[{type:"text", text}]` で、ここを書き換えると
 モデルには伏字だけが届く。コマンドをクォートや変数で難読化しても、
 出力に対して働くので効く。
@@ -443,11 +408,11 @@ overlay に `opencode.json` が無いため permission 層ごと消える。
 ただし**境界ではない**。出力を `base64` や `tr` で変換されるとすり抜ける
 （実測）。実行前のコマンド検査はクォートと変数ですり抜ける。
 **どちらも一方向にしか効かず、組み合わせても迂回の費用を上げるだけ。**
-境界が要るならモード A（段階 3）。
+境界が要るなら sandbox しかないが、採用しないと判断した。
 
 書き込み側は**完全には塞げない**。`printf` / `tee` / `python3 -c` と
 経路が無数にある。文字列検査は境界にならない
-（[静的パターンの回避](../research/opencode-shell-allow-and-plugin-gate.md)）。
+（[静的パターンの回避](../research/opencode/permission/shell-allow-and-plugin-gate.md)）。
 費用対効果を見て、明らかな形だけ deny する。
 
 #### 誘導の対象と、確認回数への副次効果
@@ -494,7 +459,7 @@ plugin は `~/.config/opencode/guide-plugin/` に置き、生成した
 `common.toml` の `[[opencode.shell.guide]]` から `rules.json` として生成し、
 `index.js` はそれを読むだけにする（単一ソースを保つ）。
 
-この形にしか選択肢が無い（[plugin のロード経路](../research/opencode-plugin-loading.md)）。
+この形にしか選択肢が無い（[plugin のロード経路](../research/opencode/plugin/loading.md)）。
 
 - 明示指定は**絶対パスのディレクトリ**でないと解決されない。単一ファイルも
   `~` も**黙って無視される**
@@ -516,7 +481,7 @@ if (e.effect === "allow") return
 ```
 
 `allow` でも `permission.evaluate` は発火するため、これを書かないと
-[bypass エージェント](../research/opencode-bypass-agent.md)が誘導 hook に
+[bypass エージェント](../research/opencode/permission/bypass-agent.md)が誘導 hook に
 引っかかって機能しない。bypass は全 action が `allow` になるので、
 この 1 行がそのままエージェント識別の代わりになる（実測）。
 誘導対象は allow の 5 件と重ならないので取りこぼしは無い。
@@ -529,7 +494,7 @@ if (/[<>]/.test(cmd)) return   // ask のまま
 
 scanner はリダイレクトを分割せず resource に残すため、引き上げると
 `find . -name x > path` のような任意書き込みが無確認で通る
-（[allow リスト監査](../research/opencode-allow-list-audit.md)）。
+（[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）。
 plugin は生コマンドを読むのでリダイレクトを検出できる。
 `deny` 側（誘導）には当てない。止める方向に倒すのは常に安全。
 
@@ -551,7 +516,7 @@ plugin は生コマンドを読むのでリダイレクトを検出できる。
 | それ以外の列挙形 | `allow` |
 
 **3 分岐目は対話利用でしか安全弁にならない。** `ask` の実効は実行モードで
-変わるため（[ask と並列バッチ](../research/opencode-ask-and-parallel-batch.md)）。
+変わるため（[ask と並列バッチ](../research/opencode/ask-and-parallel-batch.md)）。
 
 | 実行 | 3 分岐目の実効 |
 | --- | --- |
@@ -575,82 +540,11 @@ plugin は生コマンドを読むのでリダイレクトを検出できる。
   `-exec sh -c` と `-fprint*` の追加が要る
 
 `ask` → `allow` の引き上げが効くことは実測済み
-（[plugin ゲートの調査](../research/opencode-shell-allow-and-plugin-gate.md)）。
+（[plugin ゲートの調査](../research/opencode/permission/shell-allow-and-plugin-gate.md)）。
 deny のメッセージが逐語で届き、エージェントが `glob` へ乗り換えて
 タスクを完遂することも確認した。
 
-### 段階 3 の詳細（sandbox / モード A）
-
-bubblewrap で隔離する。段階 2 が「安全網」なのに対し、これは**境界**。
-permission と出力フィルタを破った手口（`base64` / 変数展開 /
-`python3 -c`）がいずれも止まることを実測済み
-（[sandbox の調査](../research/opencode-sandbox.md)）。
-
-#### 方式: `shell` 差し替えではなくプロセスごと隔離
-
-当初は設定の `shell` をラッパーへ向ける案だったが、**設定で入れる保護は
-設定で外せる**。`<project>/.opencode/opencode.json` に `"shell": "/bin/bash"`
-と書けばラッパーは呼ばれない（実測）。permission も同じく上書きできる。
-
-そこで `opencode` **自体**を bwrap の中で起動する。
-
-| | `shell` 差し替え | プロセスごと隔離 |
-| --- | --- | --- |
-| 覆う範囲 | shell ツールのみ | **全ツール + MCP + plugin** |
-| プロジェクト設定で外せるか | **外せる** | 外せない |
-| 切り替え | 設定・環境変数 | **起動方法** |
-
-後者は permission の穴（`grep` / `glob` が `read` deny を迂回する）と
-MCP が sandbox の外という問題も同時に解決する。
-
-覆うパスは `[sandbox] deny` を流用する。Claude / Copilot と同じ表から
-生成でき、単一ソースが保てる。deny リスト型にする（allow リスト型は
-`mise` / `uv` が見えなくなって成立しない。実測）。
-
-#### 有効・無効
-
-切り替えは**起動単位**になる。ラッパー経由で起動すれば有効、
-直接起動すれば無効。
-
-**このリポジトリは無効で運用する。** 理由は当初書いた「書き込み範囲」
-ではなく、**`chezmoi` が snap 版で bwrap 内から起動できない**ため（実測）。
-秘密だけ隠して書き込みを許す形にしても解決しない。
-
-```console
-$ bwrap … chezmoi status
-snap-confine is packaged without necessary permissions and cannot continue
-```
-
-`mise` / `python3` / `git` / `uv` は動くので、`chezmoi` を使わない
-プロジェクトなら有効にできる。
-
-#### 制約
-
-プロセスごと隔離なので、`shell` / `read` / `grep` / MCP / plugin は
-すべて同じ名前空間に入る（P3-3 で確認）。`shell` 差し替え案にあった
-「ツール経由は外側」という穴は無くなる。
-
-**ただし常駐サービスが穴になる。** `opencode serve --service` は
-localhost で待ち受けており、内側から到達できる（ネットワーク名前空間は
-LLM API に要るので分けられない）。`~/.config/opencode/service.json` の
-パスワードを読まれると完全に迂回される。対処は service.json のマスクと
-`--unshare-pid`、内側は `--standalone` で起動すること（実測）。
-
-| OS | 扱い |
-| --- | --- |
-| Linux / WSL2 | `bwrap`。実測済み |
-| macOS | `sandbox-exec` を自作。Apple が deprecated 扱い。**実機検証が要る** |
-| Windows | 手段なし（Claude も非対応なので差は開かない） |
-
-OS 差は「分岐」ではなく**ベンダーが持っていた責任を引き取る**話。
-Claude / Copilot は Seatbelt / bubblewrap を内蔵しており、このリポジトリは
-deny パスを宣言するだけで済んでいた。
-
-sandbox 内でも**ワークスペースの破壊とネットワーク経由の持ち出しは
-防げない**（書き込み可能にし、`--share-net` を付けるため）。
-オーバーヘッドは 1 回 +24 ms。撤退は起動方法を戻すだけ。
-
-### 段階 4 の詳細
+### 段階 3 の詳細
 
 `AGENTS.md` の検証コマンド表を
 `verify(target: "all" | "agents" | "templates" | "docs" | "shell")` という
@@ -664,11 +558,11 @@ enum 引数 1 個のツールにする。ツールを 5 個作るのではなく
 という議論は成立しない（ファイルを書ける権限と、それをホストユーザー権限で
 実行できる権限は別）。ゲートは `tool.execute.before` で自作する。
 
-### 段階 5 の詳細
+### 段階 4 の詳細
 
 残り約 280 件はその場限りのコマンドで列挙では潰せない。
 
-**第一候補は「何もしない」。** 段階 5 の目的は確認回数の削減だが、
+**第一候補は「何もしない」。** 段階 4 の目的は確認回数の削減だが、
 **自動実行では `allow` と `ask` が等価**なので、効くのは対話時だけ。
 この案件の前提は「できるだけ全自動で走らせたい」なので、優先度は低い。
 
@@ -691,33 +585,28 @@ sandbox があれば shell の被害は有界になるので、既定を `allow`
 
 ## 重要な更新
 
-**2026-09-22 — sandbox が使えると分かり、2 モード前提へ組み直した。**
+**2026-09-22 — sandbox を検討し、採用しないと決めた。**
 
 OpenCode に sandbox は内蔵されていないが、**`opencode` のプロセスごと
 bubblewrap で隔離すれば被せられる**と実測で分かった
-（[sandbox の調査](../research/opencode-sandbox.md)）。
+（[sandbox の調査](../research/opencode/permission/sandbox.md)）。
+成立を確かめたうえで**採用しない**と判断した。利点がほぼ否定されたため
+（上の「sandbox について」）。
 
-これを受けて 5 点を変えた。
+これを受けて 4 点を変えた。
 
-- **運用モードを明示した。** このリポジトリは sandbox を**無効**にする
-  （`chezmoi` が snap 版で bwrap 内から動かないため）。したがって
-  **弱いほうを基準に設計する**
+- **境界を持たない前提に統一した。** permission と plugin は
+  **安全網であって境界ではない**。この区別を保ったまま設計する
 - **誘導の位置づけを戻した。** 前回は「確認削減の効果が小さい」として
-  格下げしたが、モード B では `cat` を `read` ツールへ寄せることが
+  格下げしたが、`cat` を `read` ツールへ寄せることは
   **deny の効かない経路から効く経路へ移す**保護そのものになる
-- **評価基準をモード別にした。** モード B に「難読化にも耐える」ことは
-  要求できない。難読化耐性はモード A の基準 5 へ移した
-- **sandbox の方式を変えた。** 当初の `shell` 差し替えは
-  **プロジェクト設定で外せる**（実測）。`opencode` のプロセスごと
-  隔離する形にすると、設定では外せず、全ツールと MCP も覆える
+- **評価基準から「難読化耐性」を外した。** 出力を符号化されると
+  すり抜けるため達成不能。sandbox なしでは要求できない
 - **既定を `allow` に戻さないと決めた。** sandbox があっても
-  自動化率は上がらず、故障時に危険側へ倒れるため（段階 5 の詳細）
-
-段階は 2（モード B の保護）と 3（モード A の境界）に分かれ、
-**置き換えではなく併用**になる。
+  自動化率は上がらず、故障時に危険側へ倒れるため（段階 4 の詳細）
 
 あわせて**プロジェクト設定がグローバルの deny に勝つ**ことが判明した。
-`**/.opencode/opencode.json` への write deny が要る（未対応）。
+`**/.opencode/opencode.json` への write deny を追加する。
 
 **2026-09-21 — 確認回数の測定単位が誤っていた。段階 2 の目的を振り直す。**
 
@@ -747,7 +636,7 @@ bubblewrap で隔離すれば被せられる**と実測で分かった
 
 段階 1 で「任意コード実行を含まない」を基準にビルド系と `find` を外したが、
 その基準で残した `git diff` / `git status` が**どちらも任意コード実行の
-経路を持っていた**（[allow リスト監査](../research/opencode-allow-list-audit.md)）。
+経路を持っていた**（[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）。
 基準の適用漏れで、Astra のレビューと実測で判明した。両方を allow から外し、
 `.git/config` 等を write deny へ追加した。
 
@@ -768,7 +657,7 @@ bubblewrap で隔離すれば被せられる**と実測で分かった
 段階 1 の実機試験で、生成した global config が読まれていないことに気付いた。
 原因は **OpenCode が config dir の決定に `XDG_CONFIG_HOME` を使わない**こと。
 正しくは `OPENCODE_CONFIG_DIR`
-（[試験環境の隔離方法](../research/opencode-test-isolation.md)）。
+（[試験環境の隔離方法](../research/opencode/test-isolation.md)）。
 
 過去の調査記録の**結論はいずれも有効**。global config に permission を
 置いた実験が今日まで 1 件も無く、全てプロジェクト側の
@@ -779,7 +668,7 @@ bubblewrap で隔離すれば被せられる**と実測で分かった
 
 「並列バッチ内の 1 件が `ask` に落ちるとステップ全体が中断する」と記録して
 いたが、原因は `ask` ではなく**拒否**だった。承認待ちを 4 秒作っても兄弟
-3 件は全て成功する（[実測](../research/opencode-ask-and-parallel-batch.md)）。
+3 件は全て成功する（[実測](../research/opencode/ask-and-parallel-batch.md)）。
 拒否でステップが止まるのは期待動作なので、リスクではない。
 
 代わりに別の制約が判明した。**`ask` の実効は実行モードで変わる。**
@@ -789,7 +678,7 @@ bubblewrap で隔離すれば被せられる**と実測で分かった
 **2026-09-21 — 段階 2 の実現性が確定した。**
 
 plugin が `permission.evaluate` で `ask` を `allow` へ**引き上げられる**ことを
-実測した（[調査](../research/opencode-shell-allow-and-plugin-gate.md)）。
+実測した（[調査](../research/opencode/permission/shell-allow-and-plugin-gate.md)）。
 本案件は「既定を ask にして、確認回数を機構で回復する」構想に全面的に
 依存しているが、それまで deny 側しか実測していなかった。ここが通ったので
 段階 2 以降は不確実性ではなく実装作業になった。
