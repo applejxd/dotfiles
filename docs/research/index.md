@@ -35,6 +35,7 @@
 | [OpenCode V2のカスタムエージェント(Bypass)とキーバインド](opencode-bypass-agent.md) | keybindsがV2で除去される実証、modeではなくagentで実装する、permission="allow"の展開、bypassが外す防御の範囲 |
 | [OpenCode V2のpluginロード経路](opencode-plugin-loading.md) | 明示指定は絶対パスのディレクトリのみ、~が展開されない、失敗が無言、Orca overlayとの関係、Claude Codeとの仕組みの違い |
 | [OpenCode V2の出力フィルタと子エージェント](opencode-output-filter-and-subagents.md) | execute.afterでshell出力を伏字化できる実証、符号化ですり抜ける限界、continue_loop_on_deny、子エージェントも共通permissionに従う |
+| [OpenCode V2にsandboxはあるか](opencode-sandbox.md) | 組み込みsandboxが無いことの4情報源での確認、shell差し替えによるbubblewrap適用の実証、permission層を破った手口が止まる実測、残る穴と採用時の論点 |
 | [compaction 関連の hook 仕様](compaction-hooks.md) | 圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測 |
 | [sandbox機能の包括調査](sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
 | [zenoとzsh-autosuggestionsの連携](zeno-autosuggestions-integration.md) | widget競合の原因、ロード順、回避策 |
