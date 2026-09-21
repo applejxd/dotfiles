@@ -60,7 +60,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
 | [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
-| [CHG-0002](change/0002-opencode-ask-by-default.md) | Planned | 調査は決着。段階 1 の allow は読み取り専用 7 件に確定 | 段階 1 の実装（`[opencode.shell]` 新設 + 既定 ask） |
+| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 1 完了・配備済み。既定 ask が実環境で有効 | 段階 2（プラグイン基盤 + 誘導 hook） |
 
 ## 判断待ち・障害
 

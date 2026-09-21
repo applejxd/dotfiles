@@ -9,6 +9,12 @@
 > **本記録は [CHG-0002](../change/0002-opencode-ask-by-default.md) の
 > 「現在地」節に書かれていた実測を、2026-09-21 に調査記録へ移設したもの。**
 > 観測日は移設日と同じ。内容は変更していない。
+>
+> **訂正 (2026-09-21)**: 隔離手段の記述は誤り。OpenCode は config dir の
+> 決定に `XDG_CONFIG_HOME` を使わない（`OPENCODE_CONFIG_DIR` が正しい）。
+> **本記録の結論は有効**（permission を使わない測定で、
+> global config に依存していないため）。
+> 詳細は [試験環境の隔離方法](opencode-test-isolation.md)。
 
 ## 0. 本書の用途
 

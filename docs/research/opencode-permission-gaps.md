@@ -5,6 +5,12 @@
 >
 > 隔離環境（`XDG_CONFIG_HOME` / `XDG_DATA_HOME` を差し替え + `--standalone`）での実測。
 > 実環境の `~/.config/opencode/` には触れていない。
+>
+> **訂正 (2026-09-21)**: 隔離手段の記述は誤り。OpenCode は config dir の
+> 決定に `XDG_CONFIG_HOME` を使わない（`OPENCODE_CONFIG_DIR` が正しい）。
+> **本記録の結論は有効**（permission をプロジェクト側に置いており、
+> global config に依存していないため）。
+> 詳細は [試験環境の隔離方法](opencode-test-isolation.md)。
 
 ## 0. 本書の用途
 

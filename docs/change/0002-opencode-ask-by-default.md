@@ -1,6 +1,6 @@
 # CHG-0002: OpenCode の permission を既定 ask にし、自動化率を機構で回復する
 
-- **状態**: Planned
+- **状態**: In progress
 - **更新日**: 2026-09-21
 - **基準**: OpenCode V2
 
@@ -165,7 +165,7 @@ P1-4（[ask と並列バッチ](../research/opencode-ask-and-parallel-batch.md)�
 | 段階 | 内容 | 状態 |
 | --- | --- | --- |
 | 0 | `grep`/`glob` の穴と plugin API の実測、計測基盤の確立 | 完了 |
-| 1 | `[opencode.shell]` 新設 + 既定 ask | 未着手 |
+| 1 | `[opencode.shell]` 新設 + 既定 ask | **完了**（2026-09-21） |
 | 2 | プラグイン基盤 + 誘導 hook | 未着手 |
 | 3 | `verify` ツール | 未着手 |
 | 4 | 残り約 280 件への手当 | 判断保留 |
@@ -216,6 +216,51 @@ deny パターンは allow を残す口実にしかならない。
 
 撤退方法は `[opencode.shell]` を削除するだけ。`[bash]` に触らないので
 他 CLI へ影響しない。
+
+#### 実施結果（2026-09-21）
+
+| 検証 | 結果 |
+| --- | --- |
+| `test/agents/` | 1,793 passed, 7 skipped（変更前 1,782 から +11） |
+| pre-commit 全 12 フック | 全て Passed |
+| 他 CLI への波及 | 7 ターゲット中 6 つがバイト単位で同一 |
+| 実機挙動 | allow は無確認、未掲載は `ask` |
+
+他 CLI の無差分は目視ではなく、`HEAD` の worktree を立てて全ターゲットの
+生成物を突き合わせて確認した。`opencode-config` だけが変わり、内訳も
+意図どおりだった。
+
+```text
+- cmake --build *  - cmake -S *  - find *  - g++ *
+- gcc *  - mise run *  - uv sync *
++ {"action":"shell","resource":"*","effect":"ask"}
+read / edit は 50 / 52 件で変化なし（224 → 218 rules）
+```
+
+実機では `git status --short` が無確認で実行され、`echo HELLO` が `ask` に
+落ちた。**変更前の `echo` は無条件許可だった**ので、狙った変化が出ている。
+
+```json
+{"res":["git status --short"],"effect":"allow"}
+{"res":["echo HELLO"],"effect":"ask"}
+```
+
+この実機試験の過程で、それまでの調査記録が使っていた隔離手段
+（`XDG_CONFIG_HOME` の差し替え）が**誤りだった**ことが判明した。
+正しくは `OPENCODE_CONFIG_DIR`。過去の記録の結論は
+いずれも有効（[試験環境の隔離方法](../research/opencode-test-isolation.md)）。
+
+残作業は無し。2026-09-21 に `chezmoi apply` で実環境へ配備済み
+（`~/.config/opencode/opencode.json` に 218 rules、先頭が
+`{shell, *, ask}`、allow は 7 件）。
+
+**ただし Orca 経由のセッションでは効かない。** Orca が
+`OPENCODE_CONFIG_DIR` を overlay へ向けており、OpenCode v2 はこれを
+global config の**置き換え**として扱う（upstream の既知の不具合
+[#32825](https://github.com/anomalyco/opencode/issues/32825)、Open）。
+overlay に `opencode.json` が無いため permission 層ごと消える。
+回避策は `OPENCODE_CONFIG` の併用
+（[試験環境の隔離方法](../research/opencode-test-isolation.md)）。
 
 ### 段階 2 の詳細
 
@@ -307,6 +352,18 @@ enum 引数 1 個のツールにする。ツールを 5 個作るのではなく
 上の「候補比較」を参照。
 
 ## 重要な更新
+
+**2026-09-21 — 試験環境の隔離手段が誤っていた。**
+
+段階 1 の実機試験で、生成した global config が読まれていないことに気付いた。
+原因は **OpenCode が config dir の決定に `XDG_CONFIG_HOME` を使わない**こと。
+正しくは `OPENCODE_CONFIG_DIR`
+（[試験環境の隔離方法](../research/opencode-test-isolation.md)）。
+
+過去の調査記録の**結論はいずれも有効**。global config に permission を
+置いた実験が今日まで 1 件も無く、全てプロジェクト側の
+`.opencode/opencode.json` を使っていたため。実環境への書き込みも発生して
+いない。各記録の冒頭に訂正の注記を足した。
 
 **2026-09-21 — 巻き添え中断の原因を取り違えていた（P1-4）。**
 
