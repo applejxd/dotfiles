@@ -259,6 +259,80 @@ B の状態を実測した。`git status --short` は無確認で実行され、
 
 サイズと評価コストは倍になるが、判定結果は変わらない。
 
+### なぜ Orca が `OPENCODE_CONFIG_DIR` を設定するのか
+
+[stablyai/orca#10328](https://github.com/stablyai/orca/pull/10328) が該当機能。
+
+> OpenCode reports status via a JS **plugin** dropped into `OPENCODE_CONFIG_DIR`
+> (unlike Claude/Codex, which use managed `hooks.json` scripts).
+
+Orca のサイドバーへ Idle / Working / Done を出すためだけの仕組み。Claude や
+Codex は `hooks.json` で済むが、OpenCode は plugin を置く必要があり、その
+置き場所として `OPENCODE_CONFIG_DIR` を使っている。
+
+Orca は**既存の `OPENCODE_CONFIG_DIR` があれば symlink で overlay へ mirror**
+してから自分の plugin を足す設計で、ユーザー設定を壊さない配慮がある。
+元の値は `ORCA_OPENCODE_SOURCE_CONFIG_DIR` に退避される。
+
+**しかし既定の `~/.config/opencode` は mirror の対象外。** mirror するのは
+「ユーザーが既に指定していた config dir」だけなので、`OPENCODE_CONFIG_DIR` を
+設定していない環境では plugin だけの素の overlay が作られる。
+
+さらに Orca 側のレビューには次の記述がある。
+
+> OpenCode also confirmed **`OPENCODE_CONFIG_DIR` is additive**:
+> default XDG config and the extra directory were both loaded.
+
+**検証されたのは OpenCode 1.18.x（v1）。** v2 で挙動が変わったため、
+Orca の前提が崩れている。どちらも単体では正しく、組み合わせで壊れる。
+
+### overlay の plugin は v2 でロードに失敗している
+
+`~/.local/share/opencode/log/opencode.log` より。
+
+```text
+level=WARN message="failed to load plugin"
+  target=.../opencode-overlays/<hash>/plugins/orca-opencode-status.js
+  cause="Plugin must export a default definition with an id and an effect or
+         setup function. SchemaError(Missing key at ["default"]["effect"]
+         / ["default"]["setup"])"
+```
+
+つまり現状は、**overlay の目的（ステータス表示）が達成できていないまま、
+副作用（global config を隠す）だけが出ている**。
+
+Orca は [#14612](https://github.com/stablyai/orca/pull/14612) で V2 互換に
+取り組んでいるが、そちらは `server()` を足す内容で、2.0.10 が要求する
+`effect` / `setup` とは噛み合っていない（PR 本文に「1.18.18 で検証、
+v2 では未確認」と明記されている）。
+
+### 採用した対処
+
+`home/dot_config/shell/shellenv.sh.tmpl` に条件付きで入れた。
+`shellenv.sh` は `.zshenv` から無条件に source され、**zsh のあらゆる起動で
+最初に走る**ため、Orca がログインシェル経由で opencode を起動する経路に
+間に合う。
+
+```sh
+if [[ -n "${OPENCODE_CONFIG_DIR:-}" && -f "${HOME}/.config/opencode/opencode.json" ]]; then
+  export OPENCODE_CONFIG="${HOME}/.config/opencode/opencode.json"
+fi
+```
+
+`OPENCODE_CONFIG_DIR` があるときだけ働くので、二重 merge を避けられる。
+Orca が将来 mirror するようになったり overlay をやめたりしても、
+自然に無害化する。
+
+実環境での確認（`opencode api config.get`）:
+
+| 条件 | global config |
+| --- | --- |
+| 現状の Orca セッション | **document 0 件** |
+| 条件分岐が発火した状態 | **218 rules を 1 回** |
+
+Orca 側には `agentStatusHooksEnabled` を `false` にして overlay をやめる
+経路もあるが、内部の `PtySpawnConfig` の値で、UI から切れるかは**未確認**。
+
 ## 8. 配備先の想定は正しい
 
 実環境の `~/.config/opencode/` には OpenCode 自身が作った `service.json` が

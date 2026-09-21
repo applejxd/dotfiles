@@ -2,26 +2,15 @@
 
 set -euo pipefail
 
-# OpenCode を隔離環境で実行する。
-#
-# 実環境のセッション DB (~/.local/share/opencode/opencode.db) を汚さずに
-# permission や plugin の挙動を試すための入口。
-#
-# ★XDG_CONFIG_HOME / XDG_DATA_HOME / HOME は差し替えてはいけない。
-#   OpenCode は config dir の決定に XDG_CONFIG_HOME を使わず、認証情報は
-#   セッション DB の credential テーブルにあるため、どれを差し替えても
-#   「Model unavailable」か認証失敗になる。
-# see docs/research/opencode-test-isolation.md
+# OpenCode を隔離環境で実行する。実環境のセッション DB を汚さない。
 #
 # Usage:
 #   mise run opencode:probe -- '<prompt>'
 #   OPENCODE_PROBE_CONFIG=<dir> mise run opencode:probe -- '<prompt>'
 #
-# OPENCODE_PROBE_CONFIG を渡すと global config も隔離する。
-#
-# ★渡さない場合は OPENCODE_CONFIG_DIR を **明示的に外す**。環境に値が残って
-#   いると黙って継承してしまい、試験結果が呼び出し元の状態に左右される
-#   (Orca 経由のセッションは opencode.json を持たない overlay を指している)。
+# ★XDG_CONFIG_HOME / XDG_DATA_HOME / HOME は差し替えない (いずれも壊れる)。
+#   隔離は OPENCODE_DB と OPENCODE_CONFIG_DIR で行う。
+# see docs/research/opencode-test-isolation.md
 
 REAL_DB="${HOME}/.local/share/opencode/opencode.db"
 WORKDIR="${OPENCODE_PROBE_DIR:-/tmp/opencode/probe}"
