@@ -3,7 +3,7 @@
 > **調査日: 2026-09-21 / 2026-09-22**
 > **対象: `opencode v2.0.10`**
 >
-> [CHG-0002](../change/0002-opencode-ask-by-default.md) の調査項目
+> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の調査項目
 > P2-1 〜 P2-4。段階 2 の目的を「確認削減」から「自動実行で効く穴塞ぎ」へ
 > 振り直したのに伴い、その成立条件を確かめた。
 
@@ -20,7 +20,7 @@
 
 ## 1. P2-1: `execute.after` は shell の出力を書き換えられる
 
-`grep` ツールでは[実証済み](opencode-permission-gaps.md)だったが、
+`grep` ツールでは[実証済み](gaps.md)だったが、
 `shell` でも成立する。
 
 ### イベントの形
@@ -158,7 +158,7 @@ shell 判定の直後に `Error: Transport` で落ち、痕跡ファイルも作
 **`primary_tools` は原因ではない。** 子エージェントを起動する実行そのものが
 隔離環境（`opencode_probe.sh`）で完走しない。probe は `OPENCODE_DB` を
 差し替えるため、子セッションの生成まわりが影響を受けている可能性が高い
-（[試験環境の隔離方法](opencode-test-isolation.md)）。
+（[試験環境の隔離方法](../test-isolation.md)）。
 
 hook の観測（セクション 4）は判定までで成立しているので結論は変わらない。
 `primary_tools` の意味は**未確認のまま**で、**頼らない**。
@@ -169,4 +169,4 @@ hook の観測（セクション 4）は判定までで成立しているので�
 - `--auto` なしの拒否パスに `continue_loop_on_deny` が効くか（**未検証**）
 - `result.content` の構造が将来変わらないか（**未追跡**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)

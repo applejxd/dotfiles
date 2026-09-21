@@ -10,16 +10,16 @@
 > 決定に `XDG_CONFIG_HOME` を使わない（`OPENCODE_CONFIG_DIR` が正しい）。
 > **本記録の結論は有効**（permission をプロジェクト側に置いており、
 > global config に依存していないため）。
-> 詳細は [試験環境の隔離方法](opencode-test-isolation.md)。
+> 詳細は [試験環境の隔離方法](../test-isolation.md)。
 
 ## 0. 本書の用途
 
-[プラグイン生態系の棚卸し](opencode-plugins.md) で
+[プラグイン生態系の棚卸し](ecosystem.md) で
 「既製プラグインに乗る道は無い」と判明したため、
 **自作するとして技術的に成立するか**を実機で確認した。
 
 判定したいのは 1 点。
-[エージェント権限仕様](../spec/agent-permissions.md#opencode-v2-の扱い) の
+[エージェント権限仕様](../../../spec/agent-permissions.md#opencode-v2-の扱い) の
 `check_bash.py` 相当（意味解析による deny / ask）を OpenCode へ載せられるか。
 
 ## 1. 結論
@@ -178,7 +178,7 @@ level=WARN message="failed to load plugin"
 ```
 
 V1 形式のため V2 のローダ契約を満たしていない。
-[生態系の棚卸し](opencode-plugins.md) の「主要プラグインは V1 のまま」と整合する。
+[生態系の棚卸し](ecosystem.md) の「主要プラグインは V1 のまま」と整合する。
 この環境では **Orca の status プラグインが現在機能していない**。
 
 ## 再確認すべき情報源
@@ -187,4 +187,4 @@ V1 形式のため V2 のローダ契約を満たしていない。
 - <https://opencode.ai/v2/docs/permissions>（`PermissionEvaluation` の形）
 - 並列実行時の `shell.create.before` と `permission.evaluate` の対応付け（**未検証**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)

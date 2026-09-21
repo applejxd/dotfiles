@@ -23,7 +23,7 @@
 ## 現在地
 
 段 1〜6 が完了し、本体へマージして `chezmoi apply` まで済んだ。
-**実機の `/compact` で `PreCompact` が発火することを確認した**（[E5](../research/compaction-hooks.md)）。
+**実機の `/compact` で `PreCompact` が発火することを確認した**（[E5](../research/agents/compaction-hooks.md)）。
 **Copilot 側の復帰注入も実装した**（`PreCompact` の印 + `postToolUse`、E7）。
 残るのは両 CLI での復帰注入の実機確認と Windows 実機。
 
@@ -81,14 +81,14 @@
 | 候補 | 支持する根拠 | 不利な点・反証 | 未検証点 | 扱い | 次の確認 |
 | --- | --- | --- | --- | --- | --- |
 | `SessionStart` matcher `compact` で注入 | 公式が圧縮直後の注入点と明記。プレーン stdout も可 | Claude 専用 | 実機での発火 | **有望** | P0-3 |
-| `PostCompact` で注入 | — | decision control が無く注入できない（[E1](../research/compaction-hooks.md)） | — | **見送り** | — |
+| `PostCompact` で注入 | — | decision control が無く注入できない（[E1](../research/agents/compaction-hooks.md)） | — | **見送り** | — |
 | 指示ファイルで無条件に読ませる | システムプロンプト側なので圧縮されない | 自律実行の途中では発火しない | 実効性 | **検証中** | P0-3 |
 | Copilot `PostToolUse` で 1 回注入 | `exec`/`args` でシェル非依存。当初の Windows 理由は撤回 | 復帰後の最初のツールは注入前に実行される | 発火頻度 | **保留** | P0-3 の結果しだい |
 | `PreCompact` をブロックして書かせる | 手動なら安全 | `auto` を止めると context-limit 回復時にリクエストが失敗する | — | **見送り（auto）** | — |
 | `fork` に checkpoint を書かせる | 会話全体を継承し、親の文脈を使わない | 分岐はスナップショット。古い fork が親の新しい記録を上書きする | — | **見送り** | — |
-| `TaskCompleted` で促す | タスク完了は自然な区切り | `additionalContext` 非対応（[E2](../research/compaction-hooks.md)）。exit 2 の強制しかできない | — | **見送り** | — |
+| `TaskCompleted` で促す | タスク完了は自然な区切り | `additionalContext` 非対応（[E2](../research/agents/compaction-hooks.md)）。exit 2 の強制しかできない | — | **見送り** | — |
 | セッション横断の GC | ファイルが溜まらない | 稼働中の他セッションの記録を消す | — | **見送り** | — |
-| Copilot で文脈使用率を推定して閾値監視 | 長い探索の取りこぼしを拾える | **`PostToolUse` 入力に `transcript_path` が無い**（[E4](../research/compaction-hooks.md)）。トークン情報は圧縮時とセッション終了時にしか出ず、閾値を跨ぐ前に読めない（[E6](../research/compaction-hooks.md)） | — | **見送り（決着）** | — |
+| Copilot で文脈使用率を推定して閾値監視 | 長い探索の取りこぼしを拾える | **`PostToolUse` 入力に `transcript_path` が無い**（[E4](../research/agents/compaction-hooks.md)）。トークン情報は圧縮時とセッション終了時にしか出ず、閾値を跨ぐ前に読めない（[E6](../research/agents/compaction-hooks.md)） | — | **見送り（決着）** | — |
 
 ## 次の調査・実験
 
@@ -97,11 +97,11 @@
 | P0-3 | 圧縮後、作業再開前に checkpoint が届くか | Claude 実機で圧縮を起こし、最初のモデル要求時点を観測 |
 | P1-4 | Windows 実機での動作 | 実機の PowerShell で配備・発火・起動時間を確認 |
 
-**決着済み**: P0-7（Copilot の hook 入力契約、[E3](../research/compaction-hooks.md) /
-[E5](../research/compaction-hooks.md)）、
-P0-2（使用率の取得、[E4](../research/compaction-hooks.md) /
-[E6](../research/compaction-hooks.md)）、
-P0-1（ターン途中の圧縮、[E6](../research/compaction-hooks.md)）
+**決着済み**: P0-7（Copilot の hook 入力契約、[E3](../research/agents/compaction-hooks.md) /
+[E5](../research/agents/compaction-hooks.md)）、
+P0-2（使用率の取得、[E4](../research/agents/compaction-hooks.md) /
+[E6](../research/agents/compaction-hooks.md)）、
+P0-1（ターン途中の圧縮、[E6](../research/agents/compaction-hooks.md)）
 
 ## 仕様への変更案
 
@@ -149,7 +149,7 @@ P0-1（ターン途中の圧縮、[E6](../research/compaction-hooks.md)）
 1 回目は発火しなかったが、原因は実装ではなく **Copilot が hook の登録を
 起動時にしか読まない**ことだった（プロセス起動 12:38:40 / 登録更新 12:51:32）。
 設定を変えず `/restart` しただけで 2 回目は発火した。詳細は
-[E5](../research/compaction-hooks.md)。
+[E5](../research/agents/compaction-hooks.md)。
 
 | 項目 | 期待 | 実測 |
 | --- | --- | --- |
@@ -172,11 +172,11 @@ P0-1（ターン途中の圧縮、[E6](../research/compaction-hooks.md)）
 | 2026-09-18 | checkpoint の書き手を親に限定 | 古い fork が親の新しい記録を上書きする |
 | 2026-09-19 | 保存先を常にセッション別名へ | 所有権の交渉・ロック・固定名の奪い合いが不要になる |
 | 2026-09-19 | 文字数予算を 2000 で確定 | 復帰試験の実測が 1098 文字で「ちょうどよい」判定 |
-| 2026-09-19 | Copilot の閾値監視を「見送り」へ | `PostToolUse` 入力に `transcript_path` が無いことを実測（[E4](../research/compaction-hooks.md)） |
+| 2026-09-19 | Copilot の閾値監視を「見送り」へ | `PostToolUse` 入力に `transcript_path` が無いことを実測（[E4](../research/agents/compaction-hooks.md)） |
 | 2026-09-19 | `.chezmoiremove` をディレクトリ指定へ | `adr` skill を消したのにファイルを個別に並べたため、空の `skills/adr/` が残った。ディレクトリを書けば再帰削除される（実測）。同じ理由で残っていた `commit/scripts/` も直した |
-| 2026-09-19 | Copilot の閾値監視を「決着（見送り）」へ | `preCompact` の `transcriptPath` をたどっても、本体会話の消費量は記録されない（[E5](../research/compaction-hooks.md)） |
+| 2026-09-19 | Copilot の閾値監視を「決着（見送り）」へ | `preCompact` の `transcriptPath` をたどっても、本体会話の消費量は記録されない（[E5](../research/agents/compaction-hooks.md)） |
 | 2026-09-19 | `snapshot_at` をヘッダから機械節へ一本化 | hook はヘッダを触らない設計なので、ヘッダに置くと誰も更新せず「未取得」に見え続けた。旧雛形の名残は `lint` の警告で拾う |
-| 2026-09-19 | 「逐次保存 + 圧縮直前の機械記録」の構成を実測で裏付け | 自動圧縮は assistant ターンの境界で起き、`PreCompact` は確実に呼ばれるが、その時点でモデルに意味内容を書かせる余地は無い（[E6](../research/compaction-hooks.md)） |
+| 2026-09-19 | 「逐次保存 + 圧縮直前の機械記録」の構成を実測で裏付け | 自動圧縮は assistant ターンの境界で起き、`PreCompact` は確実に呼ばれるが、その時点でモデルに意味内容を書かせる余地は無い（[E6](../research/agents/compaction-hooks.md)） |
 
 ## 終了結果
 

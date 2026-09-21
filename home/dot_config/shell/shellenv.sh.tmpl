@@ -98,7 +98,7 @@ export PATH="${HOME}/bin:${PATH}"
 
 # Orca が OPENCODE_CONFIG_DIR を設定すると、v2 では global config が読まれなくなる。
 # OPENCODE_CONFIG を併用して戻す。無条件に設定すると二重 merge になるので条件付き。
-# see docs/research/opencode-test-isolation.md
+# see docs/research/opencode/test-isolation.md
 if [[ -n "${OPENCODE_CONFIG_DIR:-}" && -f "${HOME}/.config/opencode/opencode.json" ]]; then
   export OPENCODE_CONFIG="${HOME}/.config/opencode/opencode.json"
 fi

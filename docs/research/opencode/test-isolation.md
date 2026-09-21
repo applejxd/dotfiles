@@ -9,7 +9,7 @@
 
 ## 0. 本書の用途
 
-[CHG-0002](../change/0002-opencode-ask-by-default.md) 段階 1 の実機試験で、
+[CHG-0002](../../change/0002-opencode-ask-by-default.md) 段階 1 の実機試験で、
 生成した global config が読まれていないことに気付いた。原因を特定し、
 正しい隔離手段と、過去の記録への影響範囲を確定する。
 
@@ -39,7 +39,7 @@
 
 `OPENCODE_CONFIG_DIR` を使った場合、`permission.evaluate` の hook は
 **発火しなかった**。設定の deny が hook より前段で効くという
-[既知の性質](opencode-plugin-api-probe.md)と整合する。
+[既知の性質](plugin/api-probe.md)と整合する。
 
 バイナリから拾える関連の環境変数は次のとおり。
 
@@ -151,7 +151,7 @@ opencode run --standalone \
 - permission を試すだけならプロジェクト側の `.opencode/opencode.json` でよい。
   global config の挙動を見るときだけ `OPENCODE_CONFIG_DIR` が要る
 - `OPENCODE_DB` を省くと、試験セッションが実環境の DB に残り、
-  [利用実績の集計](opencode-shell-allow-and-plugin-gate.md)の母数が汚れる
+  [利用実績の集計](permission/shell-allow-and-plugin-gate.md)の母数が汚れる
 
 ### 制約: 子エージェントを起動する試験は完走しない
 
@@ -162,7 +162,7 @@ opencode run --standalone \
 
 hook の観測（`tool.execute.before` / `permission.evaluate`）は判定まで
 届くので、**権限まわりの確認には使える**。実行結果まで見たい場合は
-この手順では取れない（[出力フィルタと子エージェント](opencode-output-filter-and-subagents.md)）。
+この手順では取れない（[出力フィルタと子エージェント](permission/output-filter-and-subagents.md)）。
 
 ## 6. 過去の記録への影響
 
@@ -171,12 +171,12 @@ hook の観測（`tool.execute.before` / `permission.evaluate`）は判定まで
 
 | 記録 | permission の置き場所 | 判定 |
 | --- | --- | --- |
-| [permission 適用範囲の穴](opencode-permission-gaps.md) | プロジェクトの `.opencode/opencode.json` | 有効 |
-| [plugin API の実測](opencode-plugin-api-probe.md) | 同上 | 有効 |
-| [相関と承認要求の可否](opencode-plugin-correlation.md) | 同上（`$schema` のみ）+ plugin | 有効 |
-| [allow の費用対効果と plugin ゲート](opencode-shell-allow-and-plugin-gate.md) | 同上 | 有効 |
-| [ask と並列バッチ](opencode-ask-and-parallel-batch.md) | 同上 | 有効 |
-| [ツールのコンテキストコスト](opencode-tool-context-cost.md) | permission を使わない | 有効 |
+| [permission 適用範囲の穴](permission/gaps.md) | プロジェクトの `.opencode/opencode.json` | 有効 |
+| [plugin API の実測](plugin/api-probe.md) | 同上 | 有効 |
+| [相関と承認要求の可否](plugin/correlation.md) | 同上（`$schema` のみ）+ plugin | 有効 |
+| [allow の費用対効果と plugin ゲート](permission/shell-allow-and-plugin-gate.md) | 同上 | 有効 |
+| [ask と並列バッチ](ask-and-parallel-batch.md) | 同上 | 有効 |
+| [ツールのコンテキストコスト](tool-context-cost.md) | permission を使わない | 有効 |
 
 ただし各記録の冒頭にある「`XDG_CONFIG_HOME` を差し替えた隔離環境」という
 記述は**手段として誤り**。実際には OpenCode は実環境の
@@ -359,7 +359,7 @@ Permission denied: shell                            ← deny が実効
 
 `ask` 側は自動承認されて素通りする。`deny` だけが貫通を許さない。
 段階 2 で「自動実行で止めたいものは `ask` ではなく `deny` に倒す」と
-決めた根拠（[ask と並列バッチ](opencode-ask-and-parallel-batch.md)）が
+決めた根拠（[ask と並列バッチ](ask-and-parallel-batch.md)）が
 配備後の実環境でも成り立っている。
 
 ### 注意: 常駐サービス経由の起動では届かないことがある
@@ -401,4 +401,4 @@ tr '\0' '\n' < /proc/<pid>/environ | grep OPENCODE_CONFIG
 - `opencode models` が利用可否を反映しない件が仕様か不具合か（**未確認**）
 - 隔離 DB の種が古くなる周期（トークン更新の頻度。**未測定**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../index.md)

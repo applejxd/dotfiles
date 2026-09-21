@@ -3,7 +3,7 @@
 > **調査日: 2026-09-21**
 > **対象: `opencode v2.0.10`**
 >
-> [CHG-0002](../change/0002-opencode-ask-by-default.md) 段階 2 の誘導 plugin を
+> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) 段階 2 の誘導 plugin を
 > どこに置くかを決めるための実測。**公式ドキュメントと実装が食い違う。**
 
 ## 0. 結論
@@ -49,7 +49,7 @@ $ opencode api config.get --standalone
 ## 2. Orca overlay との関係
 
 Orca は `OPENCODE_CONFIG_DIR` を自前の overlay へ向ける
-（[試験環境の隔離方法](opencode-test-isolation.md)）。
+（[試験環境の隔離方法](../test-isolation.md)）。
 
 ```text
 ~/.orca-relay/opencode-overlays/<hash>/
@@ -104,4 +104,4 @@ Claude 側は絶対パスのコマンドを固定ファイルに書くだけで�
 - 単一ファイル指定が将来のバージョンで動くようになるか（**未追跡**）
 - `plugins` の `-` プレフィックスによる無効化が実際に効くか（**未検証**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)

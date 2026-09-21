@@ -5,17 +5,17 @@
 >
 > 隔離環境（`XDG_CONFIG_HOME` / `XDG_DATA_HOME` を差し替え + `--standalone`）
 > での実測。実環境の `~/.config/opencode/` は無傷。
-> [CHG-0002](../change/0002-opencode-ask-by-default.md) の P1-4 を潰すための調査。
+> [CHG-0002](../../change/0002-opencode-ask-by-default.md) の P1-4 を潰すための調査。
 >
 > **訂正 (2026-09-21)**: 隔離手段の記述は誤り。OpenCode は config dir の
 > 決定に `XDG_CONFIG_HOME` を使わない（`OPENCODE_CONFIG_DIR` が正しい）。
 > **本記録の結論は有効**（permission をプロジェクト側に置いており、
 > global config に依存していないため）。
-> 詳細は [試験環境の隔離方法](opencode-test-isolation.md)。
+> 詳細は [試験環境の隔離方法](test-isolation.md)。
 
 ## 0. 本書の用途
 
-[allow の費用対効果と plugin ゲート](opencode-shell-allow-and-plugin-gate.md)
+[allow の費用対効果と plugin ゲート](permission/shell-allow-and-plugin-gate.md)
 で、並列バッチ内の 1 件が `ask` に落ちるとステップ全体が中断する現象を
 観測した。対話モードでも同じかが未確認だったため、原因を切り分ける。
 
@@ -127,7 +127,7 @@ for await (const e of ctx.event.subscribe()) {
 
 ### P0-2 への補足
 
-[相関と承認要求の可否](opencode-plugin-correlation.md)で
+[相関と承認要求の可否](plugin/correlation.md)で
 「plugin から承認要求を**作る** API は無い」と結論した。これは有効なまま
 だが、**既にある要求に答えることはできる**という補足が付く。
 
@@ -175,4 +175,4 @@ Copilot の hook の `ask` が自動承認されるバグ（github/copilot-cli#3
   （`always` / `reject` は未検証）
 - <https://opencode.ai/v2/docs/build/plugins>（`permission.reply` の記載追加）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../index.md)

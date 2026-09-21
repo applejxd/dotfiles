@@ -6,7 +6,7 @@
 > 隔離環境（`XDG_CONFIG_HOME` / `XDG_DATA_HOME` を差し替え + `--standalone`）
 > での実測。
 >
-> **本記録は [CHG-0002](../change/0002-opencode-ask-by-default.md) の
+> **本記録は [CHG-0002](../../change/0002-opencode-ask-by-default.md) の
 > 「現在地」節に書かれていた実測を、2026-09-21 に調査記録へ移設したもの。**
 > 観測日は移設日と同じ。内容は変更していない。
 >
@@ -14,7 +14,7 @@
 > 決定に `XDG_CONFIG_HOME` を使わない（`OPENCODE_CONFIG_DIR` が正しい）。
 > **本記録の結論は有効**（permission を使わない測定で、
 > global config に依存していないため）。
-> 詳細は [試験環境の隔離方法](opencode-test-isolation.md)。
+> 詳細は [試験環境の隔離方法](test-isolation.md)。
 
 ## 0. 本書の用途
 
@@ -64,4 +64,4 @@ CHG-0002 の `verify` ツールは既定（`codemode: true`）で登録する。
 - ツール数を増やしたとき `search()` 側のコストがどう伸びるか（**未測定**）
 - `codemode: true` でモデルがツールを発見できる確率（**未測定**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../index.md)

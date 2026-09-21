@@ -84,7 +84,7 @@ hook_emit_pretool_ask "削除対象を確認して問題なければ承認して
 1.0.81 時点で OPEN)。`deny` はこのバグの影響を受けない。
 Copilot で確実に止めたい操作に `ask` を使ってはいけない。`deny` にするか、
 エージェント側で明示確認する (判別は `COPILOT_CLI` 環境変数)。
-切り分け手順と実測値は `docs/research/agent-harness-comparison.md` の
+切り分け手順と実測値は `docs/research/agents/harness-comparison.md` の
 「Copilot CLI では hook の `ask` が自動承認される」を参照。
 
 ### ★ hook の決定は permission リストを上書きしない

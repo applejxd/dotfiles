@@ -4,7 +4,7 @@
 > [zsh-users/zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions)
 > を同時に使う場合に必要な追加設定の調査記録。
 > 当リポジトリでは
-> [`home/dot_config/shell/zeno.zsh`](../../home/dot_config/shell/zeno.zsh) で対応済み。
+> [`home/dot_config/shell/zeno.zsh`](../../../home/dot_config/shell/zeno.zsh) で対応済み。
 
 ## 1. 症状
 

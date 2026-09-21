@@ -211,7 +211,7 @@ def test_bypass_is_the_only_agent_from_common():
 # --- 誘導 plugin ---------------------------------------------------------
 # 明示指定は絶対パスのディレクトリでないと解決されない。相対でも ``~`` でも
 # 単一ファイルでも、OpenCode は**黙って無視する**。
-# see docs/research/opencode-plugin-loading.md
+# see docs/research/opencode/plugin/loading.md
 
 
 def test_guide_plugin_is_registered_as_absolute_directory():
@@ -312,7 +312,7 @@ def test_allow_is_not_widened_silently():
 
 # `.git/config` へ書けると diff.<name>.command / core.fsmonitor に任意コマンドを
 # 仕込めて、git diff / git status が実行手段になる (実測)。
-# see docs/research/opencode-allow-list-audit.md
+# see docs/research/opencode/permission/allow-list-audit.md
 @pytest.mark.parametrize(
     "resource", ["*/.git/config", "*/.git/hooks/*", "~/.gitconfig"]
 )

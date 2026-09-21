@@ -9,11 +9,11 @@
 
 ## 0. 本書の用途
 
-[OpenCode V2 の仕様](opencode-v2-capabilities.md) が「OpenCode 単体で何ができるか」を
+[OpenCode V2 の仕様](../v2-capabilities.md) が「OpenCode 単体で何ができるか」を
 扱うのに対し、本書は **「第三者プラグインで補えるか」** を扱う。
 
 具体的には、`check_bash.py` 相当の hook を OpenCode へ持ち込む手段として
-[エージェント権限仕様](../spec/agent-permissions.md#opencode-v2-の扱い) が挙げた
+[エージェント権限仕様](../../../spec/agent-permissions.md#opencode-v2-の扱い) が挙げた
 3 つの選択肢のうち、「既製プラグインに乗る」が成立するかを判定する。
 
 ## 1. 結論の先出し
@@ -38,7 +38,7 @@
 [V2 の移行ガイド](https://opencode.ai/v2/docs/migrate-v1)が
 「設定ファイルは互換、**意図的な破壊的変更はサーバ API と plugin API のみ**」と
 明記しているとおり、**V1 プラグインの実装は V2 では動かない**。
-この点は[OpenCode V2 の仕様 §10](opencode-v2-capabilities.md) で既に
+この点は[OpenCode V2 の仕様 §10](../v2-capabilities.md) で既に
 「plugin 実装は全面書き直し」と記録済みで、本調査はそれを生態系側から裏付けた。
 
 ## 2. 実測: 主要プラグインの API 世代
@@ -161,7 +161,7 @@ awesome-opencode に約 130 件。分類すると本リポジトリに関係す�
    具体的には `ctx.permission.hook("evaluate")` が
    `check_bash.py` に必要な情報（cwd・生コマンド）を渡すか
 4. 生態系が V1 に留まっている事実は、
-   [OpenCode V2 の仕様 §11](opencode-v2-capabilities.md)の
+   [OpenCode V2 の仕様 §11](../v2-capabilities.md)の
    「成熟度だけが見送り理由」という評価を補強する
 
 ## 再確認すべき情報源
@@ -180,4 +180,4 @@ curl -sS https://registry.npmjs.org/oh-my-opencode | jq -r '.versions[.["dist-ta
 - <https://opencode.ai/v2/docs/build/plugins/migrate-v1>（移行ガイド）
 - [OmO の ROADMAP](https://github.com/code-yeongyu/oh-my-openagent/blob/HEAD/ROADMAP.md)（マルチハーネス対応の進捗）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)

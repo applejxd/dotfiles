@@ -3,7 +3,7 @@
 > **調査日: 2026-09-21**
 > **対象: `opencode v2.0.10` / `git 2.43.0`**
 >
-> [CHG-0002](../change/0002-opencode-ask-by-default.md) 段階 1 の allow を
+> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) 段階 1 の allow を
 > 確定させるための監査。`github-copilot/gpt-6-astra` へレビューを依頼し、
 > 指摘を実測で検証した。
 
@@ -156,7 +156,7 @@ allow → ask → deny の順に並べるため deny が常に後ろにある。
 ### 「プラグインができたら解禁」では不十分
 
 段階 2 のプラグインが実行前の文字列を検査するだけなら、クォート・変数・
-子プロセスによる迂回が残る（[静的パターンの回避](opencode-shell-allow-and-plugin-gate.md)
+子プロセスによる迂回が残る（[静的パターンの回避](shell-allow-and-plugin-gate.md)
 と整合）。解禁条件は実装の有無ではなく、**秘密へのアクセスを実際に
 遮断できること**。
 
@@ -185,4 +185,4 @@ allow → ask → deny の順に並べるため deny が常に後ろにある。
 - <https://opencode.ai/v2/docs/permissions>（最終一致、scanner の best-effort 性）
 - リダイレクト先を permission の対象にする upstream の動きがあるか（**未調査**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)

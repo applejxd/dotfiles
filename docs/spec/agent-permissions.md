@@ -17,7 +17,7 @@ Gemini CLI は `GEMINI_MANAGED` で定義した一部設定だけを生成する
 - [ADR-0007: filesystem ガードの機構境界](../adr/0007-filesystem-guard-boundary.md)
 
 sandbox が **何を提供しているか** (採用していない機能も含む) の網羅は
-[sandbox機能の包括調査](../research/sandbox-capabilities.md) を参照。
+[sandbox機能の包括調査](../research/agents/sandbox-capabilities.md) を参照。
 
 ## ファイル構成
 
@@ -395,7 +395,7 @@ Copilot 側も `copilot_read_allow` で同じものを列挙する。以前は
 > 制御が無く、`allowedUrls` も「プロンプトを省略する URL」であって制限では
 > ないため、**実効ポリシーを揃えられない**。
 > 層ごとの方式の違いは
-> [sandbox機能の包括調査](../research/sandbox-capabilities.md) を参照。
+> [sandbox機能の包括調査](../research/agents/sandbox-capabilities.md) を参照。
 
 #### キー名の規則
 

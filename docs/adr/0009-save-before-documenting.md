@@ -115,7 +115,7 @@ hook は非対応。つまり hook 自身が docs を書くことはできず、
 > **訂正 2026-09-20**: 当初ここには「Copilot では圧縮直後の自動注入ができず、
 > best-effort に留まる」と書いていたが、誤りだった。`postToolUse` が
 > `additionalContext` を返せるため、`PreCompact` が印を置けば自動注入は成立する。
-> 詳細は [compaction-hooks.md 記録 E7](../research/compaction-hooks.md)。
+> 詳細は [compaction-hooks.md 記録 E7](../research/agents/compaction-hooks.md)。
 
 ### 中立的な結果
 

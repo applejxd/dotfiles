@@ -4,7 +4,7 @@
 
 設計判断の理由は [ADR-0009](../adr/0009-save-before-documenting.md)、
 両 CLI のイベント仕様は
-[compaction 関連の hook 仕様](../research/compaction-hooks.md) を参照。
+[compaction 関連の hook 仕様](../research/agents/compaction-hooks.md) を参照。
 
 ## 構成
 
@@ -151,7 +151,7 @@ hook が静かに失敗したときは `CHECKPOINT_HOOK_DEBUG=1` を立てると
 
 - 設計理由: [ADR-0009](../adr/0009-save-before-documenting.md)
 - docs の運用: [ADR-0010](../adr/0010-exploratory-spec-driven-docs.md)
-- イベント仕様の実測: [compaction 関連の hook 仕様](../research/compaction-hooks.md)
+- イベント仕様の実測: [compaction 関連の hook 仕様](../research/agents/compaction-hooks.md)
 - 進行中の案件: [CHG-0001](../change/0001-compaction-context-handover.md)
 
 [仕様一覧へ戻る](index.md)

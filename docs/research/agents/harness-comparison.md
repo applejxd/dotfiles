@@ -101,7 +101,7 @@
 
 権限と hook の単一ソースは `home/dot_config/agents/common.toml.tmpl`。
 生成は `scripts/agents/generate.py`。
-詳細は [エージェント権限仕様](../spec/agent-permissions.md)。
+詳細は [エージェント権限仕様](../../spec/agent-permissions.md)。
 
 ### Codex rules の decision 分布
 
@@ -348,7 +348,7 @@ Copilot 限定の規則は、常時読み込まれる `~/.copilot/copilot-instru
 `git commit` は後者を採用した。commit skill は CLI を判別せず、どの CLI でも
 コミット直前に対象ファイルとメッセージを提示して承認を得る（Copilot 用の
 補強として `~/.copilot/copilot-instructions.md` にも同じ規則を置く）。
-構成は [エージェント権限仕様](../spec/agent-permissions.md) を参照。
+構成は [エージェント権限仕様](../../spec/agent-permissions.md) を参照。
 バグが修正されても、確認の目的がメッセージのレビューなので明示確認は残す。
 
 ### Copilot の設定キーは Web ドキュメントに載っていない
@@ -411,9 +411,9 @@ calls `task_complete`**」とあり、autopilot 前提のツールだと分か�
 | 停止と報告 | 拒否条件を満たす別手段に切り替える。迂回はしない | Claude：「hook や permission」＋`cd` / `git -C` の付け替えを明示。Copilot：「hook や承認プロンプト」。Codex：「rules や承認プロンプト」＋`--no-verify` を明示 |
 | 検証 | 定義されたテスト / lint / ビルドを探して実行し出力を示す。未実行の結果を推測しない | Codex のみ「サンドボックスで実行できない場合」を追加 |
 
-各ファイル: [`home/dot_claude/CLAUDE.md`](../../home/dot_claude/CLAUDE.md) /
-[`home/dot_copilot/copilot-instructions.md`](../../home/dot_copilot/copilot-instructions.md) /
-[`home/dot_codex/AGENTS.md`](../../home/dot_codex/AGENTS.md)
+各ファイル: [`home/dot_claude/CLAUDE.md`](../../../home/dot_claude/CLAUDE.md.tmpl) /
+[`home/dot_copilot/copilot-instructions.md`](../../../home/dot_copilot/copilot-instructions.md.tmpl) /
+[`home/dot_codex/AGENTS.md`](../../../home/dot_codex/AGENTS.md.tmpl)
 
 ## 9. 指示ファイル設計のベストプラクティス（出典付き）
 
@@ -433,7 +433,7 @@ calls `task_complete`**」とあり、autopilot 前提のツールだと分か�
 「ハーネス差分の調査が重い」を理由に OSS ハーネスへ一本化できないかを 2 度検討した
 （2026-09-15 / 2026-09-19）。**2 度とも見送り**。3 度目を始める前にここを読むこと。
 
-**V2 の詳細な仕様は [OpenCode V2 の仕様](opencode-v2-capabilities.md) にある。**
+**V2 の詳細な仕様は [OpenCode V2 の仕様](../opencode/v2-capabilities.md) にある。**
 本節は判断とその根拠だけを持つ。
 
 ### 見送りの根拠（一次情報）
@@ -443,10 +443,10 @@ calls `task_complete`**」とあり、autopilot 前提のツールだと分か�
 
 | # | 事実 | 影響 | 出典 |
 | --- | --- | --- | --- |
-| 1 | **V2 は公開されているが非常に若い**。`@opencode/cli` 2.0.0 が 2026-09-11、2.0.10 が 09-19。**8 日で 11 リリース**（約 1.4 回/日）。`instructions` 配列・セッション共有・**LSP** が「受理するが動かない」 | この頻度で仕様を追うのは、いま払っている維持コストと変わらない。**現時点で唯一の見送り理由** | [V2 仕様](opencode-v2-capabilities.md)、`npm view @opencode/cli time` |
+| 1 | **V2 は公開されているが非常に若い**。`@opencode/cli` 2.0.0 が 2026-09-11、2.0.10 が 09-19。**8 日で 11 リリース**（約 1.4 回/日）。`instructions` 配列・セッション共有・**LSP** が「受理するが動かない」 | この頻度で仕様を追うのは、いま払っている維持コストと変わらない。**現時点で唯一の見送り理由** | [V2 仕様](../opencode/v2-capabilities.md)、`npm view @opencode/cli time` |
 | 2 | ~~compaction 系 hook は `experimental.` 接頭辞~~ | **V2 で解消**。`ctx.session.hook("compaction")` から `experimental.` が外れ、`result` を設定すれば要約を自分で書ける | <https://opencode.ai/v2/docs/build/plugins> |
 | 3 | ~~会社は Claude Code のみ許可~~ | **誤り**。指定されているのは **Bedrock 経由であること**だけ。OpenCode は Bedrock も Copilot 契約も公式サポートするため、**1 本化が現実に可能**（下記） | <https://opencode.ai/docs/providers/#amazon-bedrock> |
-| 4 | OpenCode に **OS レベル sandbox が無い**。あるのはアプリ層の `permission` のみ | **決定的ではない**（下記）。ただし [ADR 0007](../adr/0007-filesystem-guard-boundary.md) の層 0 を使う設計はそのまま持ち込めない | リポジトリ内 `bubblewrap`/`seccomp`/`landlock` 検索 0 件、<https://opencode.ai/docs/permissions/> |
+| 4 | OpenCode に **OS レベル sandbox が無い**。あるのはアプリ層の `permission` のみ | **決定的ではない**（下記）。ただし [ADR 0007](../../adr/0007-filesystem-guard-boundary.md) の層 0 を使う設計はそのまま持ち込めない | リポジトリ内 `bubblewrap`/`seccomp`/`landlock` 検索 0 件、<https://opencode.ai/docs/permissions/> |
 
 #### 一本化が可能になった（#3 の訂正）
 
@@ -536,7 +536,7 @@ churn の中心は fan-out 層（`generate.py` の CLI 別出力）ではなく�
 作業自体が消える。
 
 判定のしかたと確認先は
-[V2 仕様の「再確認すべき情報源」](opencode-v2-capabilities.md#再確認すべき情報源)
+[V2 仕様の「再確認すべき情報源」](../opencode/v2-capabilities.md#再確認すべき情報源)
 にまとめてある。
 
 > ★パッケージ名を間違えないこと。V2 は **`@opencode/cli`**（2026-09-20 時点で

@@ -14,30 +14,54 @@
 - 陳腐化しても削除しない。「いつ時点か」が分かれば古い観測にも価値がある
 - **現在の総合判断は [探索・変更案件](../change/index.md) の候補比較表が正本。**
   ここを全部読まないと現状が分からない状態にしない
-- 大きくなったらディレクトリへ分割し、`YYYY-MM-DD-<pass>.md` を並べる
+- 増えたらサブディレクトリへ分ける。現在は対象（`agents/` / `opencode/` /
+  `shell/`）で分け、`opencode/` はさらに主題（`permission/` / `plugin/`）で
+  分けている
 - テンプレートは `~/.claude/skills/checkpoint/references/research-template.md`
 
 ## 一覧
 
+### エージェント CLI 横断
+
 | 文書 | 内容 |
 | --- | --- |
-| [エージェントハーネス比較](agent-harness-comparison.md) | Claude Code / Copilot CLI / Codex CLIの機能・強制層・設定差分、OpenCodeへの乗り換え評価 |
-| [OpenCode V2の仕様](opencode-v2-capabilities.md) | permission・plugin hook・skill・compaction・V1からの移行と未実装項目 |
-| [OpenCodeプラグイン生態系の棚卸し](opencode-plugins.md) | 主要プラグインのV1/V2世代判定、Claude Code hook互換3件、oh-my-opencodeの衝突点 |
-| [OpenCode V2 plugin APIの実測](opencode-plugin-api-probe.md) | permission hookの入力・deny実効性・ロード失敗時のfail-open、生コマンドとcwdの取得経路 |
-| [OpenCode V2のpermission適用範囲の穴](opencode-permission-gaps.md) | grep/globがread denyを迂回する実測、カスタムツールのpermissionバイパス |
-| [OpenCode V2 pluginの相関と承認要求の可否](opencode-plugin-correlation.md) | 並列実行時のcwd相関、plugin から ask を出せるかの実測、ctx.permission.rules の不在 |
-| [OpenCode V2のshell allowの費用対効果とpluginゲート](opencode-shell-allow-and-plugin-gate.md) | 実履歴1,247セグメントでのallow被覆率、静的パターンのクォート/変数回避、ask→allow引き上げの実測 |
-| [OpenCode V2のツール登録とコンテキストコスト](opencode-tool-context-cost.md) | ツール一覧の固定費、codemode true/false の差、ツール化の可否判断 |
-| [OpenCode V2のaskと並列バッチ](opencode-ask-and-parallel-batch.md) | 承認待ちは並列を壊さない実測、拒否が中断の起点、permission.reply のスキーマ、askの実効がモードで変わる |
-| [OpenCode V2の試験環境の隔離方法](opencode-test-isolation.md) | XDG_CONFIG_HOME が効かない実証、OPENCODE_CONFIG_DIR、Copilot モデルの引き方、過去記録への影響評価 |
-| [OpenCode V2のallowリスト監査](opencode-allow-list-audit.md) | git diff/statusの任意コード実行、sed -n の危険性、リダイレクトが resource に残る実証、allowとaskの等価性 |
-| [OpenCode V2のカスタムエージェント(Bypass)とキーバインド](opencode-bypass-agent.md) | keybindsがV2で除去される実証、modeではなくagentで実装する、permission="allow"の展開、bypassが外す防御の範囲 |
-| [OpenCode V2のpluginロード経路](opencode-plugin-loading.md) | 明示指定は絶対パスのディレクトリのみ、~が展開されない、失敗が無言、Orca overlayとの関係、Claude Codeとの仕組みの違い |
-| [OpenCode V2の出力フィルタと子エージェント](opencode-output-filter-and-subagents.md) | execute.afterでshell出力を伏字化できる実証、符号化ですり抜ける限界、continue_loop_on_deny、子エージェントも共通permissionに従う |
-| [OpenCode V2にsandboxはあるか](opencode-sandbox.md) | 組み込みsandboxが無いことの4情報源での確認、shell差し替えによるbubblewrap適用の実証、permission層を破った手口が止まる実測、残る穴と採用時の論点 |
-| [compaction 関連の hook 仕様](compaction-hooks.md) | 圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測 |
-| [sandbox機能の包括調査](sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
-| [zenoとzsh-autosuggestionsの連携](zeno-autosuggestions-integration.md) | widget競合の原因、ロード順、回避策 |
+| [エージェントハーネス比較](agents/harness-comparison.md) | Claude Code / Copilot CLI / Codex CLIの機能・強制層・設定差分、OpenCodeへの乗り換え評価 |
+| [sandbox機能の包括調査](agents/sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
+| [compaction 関連の hook 仕様](agents/compaction-hooks.md) | 圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測 |
+
+### OpenCode 全般
+
+| 文書 | 内容 |
+| --- | --- |
+| [OpenCode V2の仕様](opencode/v2-capabilities.md) | permission・plugin hook・skill・compaction・V1からの移行と未実装項目 |
+| [OpenCode V2の試験環境の隔離方法](opencode/test-isolation.md) | XDG_CONFIG_HOME が効かない実証、OPENCODE_CONFIG_DIR、Copilot モデルの引き方、過去記録への影響評価 |
+| [OpenCode V2のツール登録とコンテキストコスト](opencode/tool-context-cost.md) | ツール一覧の固定費、codemode true/false の差、ツール化の可否判断 |
+| [OpenCode V2のaskと並列バッチ](opencode/ask-and-parallel-batch.md) | 承認待ちは並列を壊さない実測、拒否が中断の起点、permission.reply のスキーマ、askの実効がモードで変わる |
+
+### OpenCode の permission
+
+| 文書 | 内容 |
+| --- | --- |
+| [permission適用範囲の穴](opencode/permission/gaps.md) | grep/globがread denyを迂回する実測、カスタムツールのバイパス、プロジェクト設定がグローバルに勝つ、read ツールは deny を守る |
+| [shell allowの費用対効果とpluginゲート](opencode/permission/shell-allow-and-plugin-gate.md) | 実履歴1,247セグメントでのallow被覆率、静的パターンのクォート/変数回避、ask→allow引き上げの実測 |
+| [allowリスト監査](opencode/permission/allow-list-audit.md) | git diff/statusの任意コード実行、sed -n の危険性、リダイレクトが resource に残る実証、allowとaskの等価性 |
+| [出力フィルタと子エージェント](opencode/permission/output-filter-and-subagents.md) | execute.afterでshell出力を伏字化できる実証、符号化ですり抜ける限界、continue_loop_on_deny、子エージェントも共通permissionに従う |
+| [カスタムエージェント(Bypass)とキーバインド](opencode/permission/bypass-agent.md) | keybindsがV2で除去される実証、modeではなくagentで実装する、permission="allow"の展開、bypassが外す防御の範囲 |
+| [sandboxはあるか](opencode/permission/sandbox.md) | 組み込みsandboxが無いことの確認、プロセスごと隔離の実証、常駐サービス経由の脱出、snapが動かない、採用しない判断の根拠 |
+
+### OpenCode の plugin
+
+| 文書 | 内容 |
+| --- | --- |
+| [plugin生態系の棚卸し](opencode/plugin/ecosystem.md) | 主要プラグインのV1/V2世代判定、Claude Code hook互換3件、oh-my-opencodeの衝突点 |
+| [plugin APIの実測](opencode/plugin/api-probe.md) | permission hookの入力・deny実効性・ロード失敗時のfail-open、生コマンドとcwdの取得経路 |
+| [pluginの相関と承認要求の可否](opencode/plugin/correlation.md) | 並列実行時のcwd相関、plugin から ask を出せるかの実測、ctx.permission.rules の不在 |
+| [pluginのロード経路](opencode/plugin/loading.md) | 明示指定は絶対パスのディレクトリのみ、~が展開されない、失敗が無言、Orca overlayとの関係、Claude Codeとの仕組みの違い |
+
+### シェル
+
+| 文書 | 内容 |
+| --- | --- |
+| [zenoとzsh-autosuggestionsの連携](shell/zeno-autosuggestions-integration.md) | widget競合の原因、ロード順、回避策 |
 
 [ドキュメント一覧へ戻る](../index.md)

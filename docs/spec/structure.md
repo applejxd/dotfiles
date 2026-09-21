@@ -7,7 +7,7 @@
 ├── config/                    # アプリケーションへマージする共有設定
 ├── docs/
 │   ├── adr/                   # アーキテクチャ決定記録
-│   ├── research/              # 調査・比較・検証記録
+│   ├── research/              # 調査・比較・検証記録（対象ごとにサブディレクトリ）
 │   ├── spec/                  # 現在有効な仕様と運用手順
 │   └── index.md               # ドキュメント入口
 ├── home/                      # chezmoiのsource state（.chezmoirootで指定）

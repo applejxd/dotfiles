@@ -656,7 +656,7 @@ def test_both_clis_reference_the_same_scripts(platform, command_key):
     #   逆に、Copilot 側に対応するイベントが無い場合も片側だけになる。
     #   checkpoint_restore は SessionStart matcher=compact に載せる。Copilot に
     #   圧縮直後のイベントは無いが、PreCompact の印 + PostToolUse で同じ結果を
-    #   得る (docs/research/compaction-hooks.md E7)。
+    #   得る (docs/research/agents/compaction-hooks.md E7)。
     claude_only = {"checkpoint_restore.py"}
     assert copilot_scripts - claude_scripts == copilot_only
     assert claude_scripts - copilot_scripts == claude_only

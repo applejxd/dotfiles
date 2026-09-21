@@ -70,7 +70,7 @@ allow = [
 # ★Copilot は hook の ask を自動承認する既知バグがある。確実に止めたいものは
 #   ask ではなく deny に置く。
 # see docs/spec/agent-permissions.md 「`ask` に載せるかどうかの判断軸」、
-#     docs/research/agent-harness-comparison.md 「hook の ask が自動承認される」
+#     docs/research/agents/harness-comparison.md 「hook の ask が自動承認される」
 ask = [
   # 削除は承認制。壊滅的なターゲット (ルート・ホーム・作業ディレクトリ全体・
   # .git 配下) は check_rm_root_guard が deny する。
@@ -360,7 +360,7 @@ claude_write_deny_globs = [
   "~/.config/opencode/service.json",
   # git の設定。diff.<name>.command / core.fsmonitor などに任意コマンドを
   # 書けるため、git diff や git status が実行手段になる (実測)。
-  # see docs/research/opencode-allow-list-audit.md
+  # see docs/research/opencode/permission/allow-list-audit.md
   "**/.git/config",
   "**/.git/hooks/**",
   "~/.gitconfig",
@@ -674,7 +674,7 @@ auto_update = false
 # OpenCode のカスタムエージェント (V1 の「モード」に相当。mode は非推奨)。
 # permission = "allow" は全 action / 全 resource の allow へ展開される (実測)。
 # ★bypass は permission 層を丸ごと無効にする。秘密ファイルの read deny も外れる。
-# see docs/research/opencode-bypass-agent.md
+# see docs/research/opencode/permission/bypass-agent.md
 [opencode.agent.bypass]
 description = "全ツールを無確認で実行する (permission を全て allow で上書き)"
 permission = "allow"
@@ -683,7 +683,7 @@ permission = "allow"
 # ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。
 # ★リダイレクトは resource に残ったまま前方一致するので、載せたコマンドは
 #   すべて `> path` による任意書き込みの手段にもなる (実測)。
-# see docs/research/opencode-allow-list-audit.md
+# see docs/research/opencode/permission/allow-list-audit.md
 [opencode.shell]
 allow = [
   "git log",
@@ -842,7 +842,7 @@ purpose = "圧縮の直前に機械的な事実だけを checkpoint へ記録す
 # ★絶対にブロックしない。context-limit エラーからの回復として発火した自動圧縮
 #   を止めると、元のエラーが表面化して現在のリクエストが失敗する。
 # ★Copilot も PascalCase で登録する。camelCase だと入力に hook_event_name が
-#   入らない (docs/research/compaction-hooks.md 記録 E3)。
+#   入らない (docs/research/agents/compaction-hooks.md 記録 E3)。
 claude_event = "PreCompact"
 copilot_event = "PreCompact"
 timeout_sec = 30

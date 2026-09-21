@@ -10,7 +10,7 @@ set -euo pipefail
 #
 # ★XDG_CONFIG_HOME / XDG_DATA_HOME / HOME は差し替えない (いずれも壊れる)。
 #   隔離は OPENCODE_DB と OPENCODE_CONFIG_DIR で行う。
-# see docs/research/opencode-test-isolation.md
+# see docs/research/opencode/test-isolation.md
 
 REAL_DB="${HOME}/.local/share/opencode/opencode.db"
 WORKDIR="${OPENCODE_PROBE_DIR:-/tmp/opencode/probe}"

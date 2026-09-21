@@ -8,8 +8,8 @@
 > 差分を反映してから使うこと。
 >
 > このリポジトリで実際に採用している設定は
-> [エージェント権限仕様](../spec/agent-permissions.md)、
-> 判断の根拠は [ADR-0007](../adr/0007-filesystem-guard-boundary.md) が正本。
+> [エージェント権限仕様](../../spec/agent-permissions.md)、
+> 判断の根拠は [ADR-0007](../../adr/0007-filesystem-guard-boundary.md) が正本。
 > **本書は「何ができるか」の網羅**であり、「何を採用したか」ではない。
 
 ## 0. 本書の用途
@@ -318,7 +318,7 @@ read/write、read-only、denied。
 >
 > → このリポジトリでは `allowDevToolAccess` を **無効**にし、必要な範囲を
 > `copilot_read_allow` / `copilot_write_allow` に明示している
-> ([ADR-0008](../adr/0008-explicit-dev-tool-grants.md))。
+> ([ADR-0008](../../adr/0008-explicit-dev-tool-grants.md))。
 > 切ると同じ mount が `rw` に変わることを `findmnt` で確認済み。
 >
 > 権限を疑うときは表示ではなく mount を見ること:
@@ -393,7 +393,7 @@ sandbox ではなく `~/.copilot/permissions-config.json` の
 加えて iptables は **nft バックエンド**が要り (legacy は `/run/xtables.lock` に
 root が必要)、`nf_conntrack` 未ロードは `Invalid argument` としか出ない。
 
-→ [トラブルシューティング](../spec/troubleshooting.md) の項目 9 に対処を記載。
+→ [トラブルシューティング](../../spec/troubleshooting.md) の項目 9 に対処を記載。
 
 ## 4. 何が sandbox の中で動くのか
 
@@ -498,4 +498,4 @@ root が必要)、`nf_conntrack` 未ロードは `Invalid argument` としか出
 - Linux backend の実装: `microsoft/mxc` の
   `backends/bubblewrap/common/src/proxy_network.rs` (依存の probe とエラー文言)
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../index.md)

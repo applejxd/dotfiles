@@ -9,7 +9,7 @@
 
 ## 0. 本書の用途
 
-[ハーネス比較 §10](agent-harness-comparison.md) で「OpenCode への一本化は
+[ハーネス比較 §10](../agents/harness-comparison.md) で「OpenCode への一本化は
 **V2 が落ち着くまで見送り**」と決めた。その再評価に要る材料をここに置く。
 §10 を開き直すときは、まず本書の[再確認すべき情報源](#再確認すべき情報源)を
 走らせて差分を取ること。
@@ -202,7 +202,7 @@ interface PermissionEvaluation {
 
 つまり「設定で `deny`、hook で条件付きに緩める」ができない。本リポジトリが
 Claude で踏んだ「静的 `ask` と hook の所有権が競合する」問題
-（[ADR 0006](../adr/0006-instructions-to-mechanisms.md) 周辺）と同種の制約なので、
+（[ADR 0006](../../adr/0006-instructions-to-mechanisms.md) 周辺）と同種の制約なので、
 **deny は hook 側に寄せる**設計になる。
 
 ### transform（hook とは別枠）
@@ -294,7 +294,7 @@ curl -X POST http://localhost:4096/api/session/ses_example/compact -d '{}'
 ```
 
 **文脈使用率を直接返す API は V2 のドキュメントでは確認できず。**
-Copilot CLI と同じ制約がここにもある（[compaction-hooks.md](compaction-hooks.md)
+Copilot CLI と同じ制約がここにもある（[compaction-hooks.md](../agents/compaction-hooks.md)
 記録 E5 / E6）。
 
 介入は `ctx.session.hook("compaction")` で、`result` を設定すればモデル呼び出しを
@@ -398,7 +398,7 @@ V2 のリリースノートはミラーされていない。
 最も重い項目は hook である。現在 `bashrules/` に 3,410 行あり、これを
 TypeScript プラグインへ移す必要がある。ただし V2 では
 `ctx.permission.hook("evaluate")` が構造化された入出力を持つため、
-exit code と stdout JSON の作法（[ADR 0004](../adr/0004-hook-check-semantic-axis.md)）
+exit code と stdout JSON の作法（[ADR 0004](../../adr/0004-hook-check-semantic-axis.md)）
 に費やしていた労力は不要になる。
 
 ## 再確認すべき情報源

@@ -94,7 +94,7 @@ pip 26.0.1 from ...  (exit 0)
 - `.git/config` の write deny
 
 つまり bypass 中は「エージェントがホスト権限で何でもできる」。
-[段階 1 の設計](../change/0002-opencode-ask-by-default.md)が前提にしている
+[段階 1 の設計](../../../change/0002-opencode-ask-by-default.md)が前提にしている
 防御は 1 つも残らない。
 
 既定エージェントは変えていないので、**明示的に `--agent bypass` を
@@ -125,7 +125,7 @@ opencode run --agent bypass '<prompt>'
 
 ### 実測: `allow` でも `permission.evaluate` は発火する
 
-config の `deny` は hook を呼ばずに前段で効く（[plugin API の実測](opencode-plugin-api-probe.md)）。
+config の `deny` は hook を呼ばずに前段で効く（[plugin API の実測](../plugin/api-probe.md)）。
 `allow` も同じなら bypass 中は plugin が無力になるはずだが、**そうではない**。
 
 `{shell, *, ask}` のみの config に bypass を足し、`ZAPTEST` を含む
@@ -178,4 +178,4 @@ plugin だけが上の規約で明示的に譲る形になる。
 - `agents` へ正規化される仕様がドキュメント化されているか（**未確認**）
 - `permission: "allow"` 以外の文字列（`"ask"` / `"deny"`）の展開（**未検証**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)

@@ -67,14 +67,15 @@ SUPERSEDED_RE = re.compile(r"Superseded by ADR-(\d{4})")
 
 
 def _linked_targets(index: Path) -> set[str]:
-    """索引から張られている同ディレクトリ内の .md 名を集める。"""
+    """索引から張られている配下の .md を集める (サブディレクトリを含む)。"""
     text = index.read_text(encoding="utf-8")
     names: set[str] = set()
     for target in LINK_RE.findall(text):
         target = target.split("#", 1)[0].strip()
         if not target.endswith(".md"):
             continue
-        if "/" in target:
+        # 上位や別カテゴリへのリンクは対象外
+        if target.startswith(("../", "/", "http")):
             continue
         names.add(target)
     return names
@@ -107,7 +108,9 @@ def check_category(docs: Path, name: str) -> list[str]:
         return [f"{name}/index.md が無い"]
 
     documents = sorted(
-        p for p in directory.glob("*.md") if p.name != "index.md"
+        p
+        for p in directory.rglob("*.md")
+        if p.name != "index.md" or p.parent != directory
     )
     linked = _linked_targets(index)
     index_text = index.read_text(encoding="utf-8")
@@ -119,8 +122,9 @@ def check_category(docs: Path, name: str) -> list[str]:
 
     # 2. 掲載漏れが無いか
     for document in documents:
-        if document.name not in linked:
-            problems.append(f"{name}/{document.name} が index.md に載っていない")
+        relative = document.relative_to(directory).as_posix()
+        if relative not in linked:
+            problems.append(f"{name}/{relative} が index.md に載っていない")
 
     # 3. 番号の一意性 (カテゴリ内)
     if name in NUMBERED:

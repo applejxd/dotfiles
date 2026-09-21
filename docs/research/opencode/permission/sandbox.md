@@ -3,9 +3,9 @@
 > **調査日: 2026-09-22**
 > **対象: `opencode v2.0.10` / `bwrap 0.9.0` / Ubuntu 24.04**
 >
-> [CHG-0002](../change/0002-opencode-ask-by-default.md) の段階 2 で、
+> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の段階 2 で、
 > permission 層も出力フィルタも**境界にならない**と分かったため
-> （[出力フィルタと子エージェント](opencode-output-filter-and-subagents.md)）、
+> （[出力フィルタと子エージェント](output-filter-and-subagents.md)）、
 > OS レベルの隔離が使えるかを調べた。
 
 ## 0. 結論
@@ -26,8 +26,8 @@
 これは**この 3 CLI のうち OpenCode だけが欠いている層**を埋める話。
 Claude Code と Copilot CLI は OS レベル sandbox を内蔵しており、
 このリポジトリは既にその設定を生成している
-（[sandbox 機能の包括調査](sandbox-capabilities.md)、
-[agent-permissions](../spec/agent-permissions.md)）。
+（[sandbox 機能の包括調査](../../agents/sandbox-capabilities.md)、
+[agent-permissions](../../../spec/agent-permissions.md)）。
 
 ## 1. 組み込みの sandbox は無い
 
@@ -67,7 +67,7 @@ plugin は OpenCode と同じプロセスで動き、`tool.execute.before` /
 | 実行前のコマンド検査 | `-exe""c` / `F=path; cat $F` / 子プロセス |
 | 実行後の出力検査 | `base64` / `tr` による符号化 |
 
-どちらも[実測](opencode-output-filter-and-subagents.md)で確認した。
+どちらも[実測](output-filter-and-subagents.md)で確認した。
 **プロセスの外側に境界を置かない限り塞がらない。**
 
 ## 3. `shell` を差し替えると外から被せられる
@@ -195,7 +195,7 @@ exec bwrap … /bin/bash "$@"
 **制約**: 環境変数は OpenCode のプロセスに渡っている必要がある。
 常駐サービス（`opencode serve --service`）は長命で、起動時の環境が
 固定されるため、途中で `export` しても届かない
-（[試験環境の隔離方法](opencode-test-isolation.md)）。
+（[試験環境の隔離方法](../test-isolation.md)）。
 `--standalone` や新しいセッションでは効く。
 
 ### エージェント単位では切り替えられない
@@ -219,7 +219,7 @@ plugin の `deny` を `bypass` が貫通しなかったのと同じ構図で、
 
 これは「このリポジトリで無効にする」手段として使う一方、
 **外部リポジトリが同じ方法で sandbox を外せる**ことを意味する。
-permission も同じく上書きできる（[permission の穴](opencode-permission-gaps.md)）。
+permission も同じく上書きできる（[permission の穴](gaps.md)）。
 
 つまり `shell` 差し替えは、**信頼できないリポジトリに対しては効かない**。
 守りたい相手が「プロンプトインジェクションで誘導されたエージェント」なら
@@ -373,7 +373,7 @@ Windows で効かないのは Claude でも同じなので、新たに悪くは�
 
 `sandbox-exec` は Apple が deprecated 扱いにしており、プロファイルの
 自作と維持は新たな負担になる。**macOS 実機での検証が別途要る**
-（Windows 実機検証と同じ扱い。[開発ガイド](../spec/development.md)）。
+（Windows 実機検証と同じ扱い。[開発ガイド](../../../spec/development.md)）。
 本書の実測はすべて Linux（Ubuntu 24.04 / bwrap 0.9.0）のもの。
 
 ## 再確認すべき情報源
@@ -383,4 +383,4 @@ Windows で効かないのは Claude でも同じなので、新たに悪くは�
 - `shell` の差し替えが `terminal` 機能にも及ぶか（**未検証**）
 - 子エージェントと MCP サーバが `shell` 設定を継承するか（**未検証**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)

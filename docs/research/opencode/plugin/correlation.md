@@ -4,17 +4,17 @@
 > **対象: `opencode v2.0.10`**
 >
 > 隔離環境（`XDG_CONFIG_HOME` / `XDG_DATA_HOME` を差し替え + `--standalone`）での実測。
-> [CHG-0002](../change/0002-opencode-ask-by-default.md) の P0-1 / P0-2 を潰すための調査。
+> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の P0-1 / P0-2 を潰すための調査。
 >
 > **訂正 (2026-09-21)**: 隔離手段の記述は誤り。OpenCode は config dir の
 > 決定に `XDG_CONFIG_HOME` を使わない（`OPENCODE_CONFIG_DIR` が正しい）。
 > **本記録の結論は有効**（permission をプロジェクト側に置いており、
 > global config に依存していないため）。
-> 詳細は [試験環境の隔離方法](opencode-test-isolation.md)。
+> 詳細は [試験環境の隔離方法](../test-isolation.md)。
 
 ## 0. 本書の用途
 
-[CHG-0002](../change/0002-opencode-ask-by-default.md) が抱えていた 2 つの不確実性に決着をつける。
+[CHG-0002](../../../change/0002-opencode-ask-by-default.md) が抱えていた 2 つの不確実性に決着をつける。
 
 | # | 減らしたい不確実性 |
 | --- | --- |
@@ -92,7 +92,7 @@
 `cd` を deny して `workdir` へ誘導すれば、cwd は常に
 `tool.execute.before` から id 付きで取れる。
 
-つまり [CHG-0002](../change/0002-opencode-ask-by-default.md) 段階 2 の
+つまり [CHG-0002](../../../change/0002-opencode-ask-by-default.md) 段階 2 の
 `cd` 誘導は、確認回数を減らすだけでなく **cwd 相関を成立させる前提**でもある。
 
 ## 3. P0-2: plugin から承認要求を出せるか
@@ -151,7 +151,7 @@ ctx.tool.reload / list / transform / hook
 ctx.permission.hook / list / get / reply
 ```
 
-これは [CHG-0002](../change/0002-opencode-ask-by-default.md) 段階 4 の候補
+これは [CHG-0002](../../../change/0002-opencode-ask-by-default.md) 段階 4 の候補
 「session スコープの事前宣言」が**現時点では実装できない**ことを意味する。
 ドキュメントが先行しているのか、別経路があるのかは**未確認**。
 
@@ -169,4 +169,4 @@ ctx.permission.hook / list / get / reply
 - <https://opencode.ai/v2/docs/build/plugins>（`ctx.permission.rules` の記載と実装の乖離）
 - plugin から承認要求を作る公式手段が追加されるか（**未確認**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)

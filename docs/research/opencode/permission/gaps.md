@@ -10,7 +10,7 @@
 > 決定に `XDG_CONFIG_HOME` を使わない（`OPENCODE_CONFIG_DIR` が正しい）。
 > **本記録の結論は有効**（permission をプロジェクト側に置いており、
 > global config に依存していないため）。
-> 詳細は [試験環境の隔離方法](opencode-test-isolation.md)。
+> 詳細は [試験環境の隔離方法](../test-isolation.md)。
 
 ## 0. 本書の用途
 
@@ -256,7 +256,7 @@ B の観測は次のとおり。
 上表の `grep` 行だけ乖離が大きい（70 対 39）のは、現行 allow の
 `grep -n` と `find` が効いているため。
 
-このリポジトリは [CHG-0002](../change/0002-opencode-ask-by-default.md) の段階 1 で、
+このリポジトリは [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の段階 1 で、
 任意コード実行を含む 7 件（`find` / `gcc` / `g++` / `cmake -S` / `cmake --build` /
 `uv sync` / `mise run`）を allow から落とす予定である。**落とすと `find` が
 ask に変わるため、`grep`/`glob` への移行で減る確認は 39 → 70 件に増える。**
@@ -312,7 +312,7 @@ pip 26.0.1 from ...        ← 実行された
 
 同じことが `shell`（既定シェル）にも起きる。グローバルでラッパーを
 指定していても、プロジェクト側で `/bin/bash` に戻せば**外れる**
-（[sandbox の調査](opencode-sandbox.md)で実測）。
+（[sandbox の調査](sandbox.md)で実測）。
 
 ### 含意
 
@@ -330,7 +330,7 @@ pip 26.0.1 from ...        ← 実行された
 
 **含意はもう一つある。** 設定で入れる保護は、設定で外せる。
 プロジェクト設定に勝てる層を置きたいなら、**OpenCode のプロセスごと
-隔離する**しかない（[sandbox の調査](opencode-sandbox.md)）。
+隔離する**しかない（[sandbox の調査](sandbox.md)）。
 
 ## 6. 誘導先は本当に保護されているか（2026-09-22 実測）
 
@@ -396,4 +396,4 @@ glob: "/…/work/canary.txt"
   `execute.before` によるゲートは実測で成立しているが、公式の想定用途かは不明）
 - `execute.before` から `ask`（ユーザ確認）を出す手段があるか（**未確認**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)

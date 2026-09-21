@@ -10,8 +10,8 @@
 方法や仕様は定まっていないことが多く、複数の手法を並行して試し、より良いものを
 選んで仕様を更新していく。
 
-実際、`research/sandbox-capabilities.md` は「設定を触るたびに知らなかった機能が
-出てきた」と書いており、`research/agent-harness-comparison.md` は複数候補の比較
+実際、`research/agents/sandbox-capabilities.md` は「設定を触るたびに知らなかった機能が
+出てきた」と書いており、`research/agents/harness-comparison.md` は複数候補の比較
 そのものになっている。
 
 docs に期待するのは 2 つ。

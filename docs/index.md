@@ -73,7 +73,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
   — [CHG-0002](change/0002-opencode-ask-by-default.md)
 - 2026-09-20 — Copilot でも圧縮直後に checkpoint を自動注入（`PreCompact` の印 +
   `postToolUse`）。「原理的にできない」という誤った前提を訂正
-  — [記録 E7](research/compaction-hooks.md)
+  — [記録 E7](research/agents/compaction-hooks.md)
 - 2026-09-19 — `adr` スキルを `checkpoint` へ統合（役割の重複を解消）
   — [CHG-0001](change/0001-compaction-context-handover.md)
 - 2026-09-19 — docs を「情報の役割」で分け、案件を中心に置く運用へ
@@ -97,10 +97,10 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | sops + age を導入・復旧する | [Secret管理セットアップ](spec/sops-age.md) |
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
 | OpenCode の権限がなぜ他と違うか知る | [OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い) |
-| OpenCode のプラグインを検討する | [プラグイン生態系の棚卸し](research/opencode-plugins.md) |
+| OpenCode のプラグインを検討する | [プラグイン生態系の棚卸し](research/opencode/plugin/ecosystem.md) |
 | 圧縮を跨いで作業文脈を保つ仕組みを知る | [文脈の引き継ぎ](spec/checkpoint.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-permissions.md#mcp-サーバ) |
-| sandbox で何ができるか調べる | [sandbox機能の包括調査](research/sandbox-capabilities.md) |
+| sandbox で何ができるか調べる | [sandbox機能の包括調査](research/agents/sandbox-capabilities.md) |
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |
 | いま何を探索しているか知る | [探索・変更案件](change/index.md) |
 | 設計理由を確認する | [ADR一覧](adr/index.md) |

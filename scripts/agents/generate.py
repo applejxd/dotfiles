@@ -1064,7 +1064,7 @@ def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> d
 # 設定ディレクトリ直下で自動探索され、明示指定と二重にロードされる。
 # 明示指定は**ディレクトリ**でないと解決されず、``~`` も展開されない
 # (どちらも黙って無視される)。
-# see docs/research/opencode-plugin-loading.md
+# see docs/research/opencode/plugin/loading.md
 OPENCODE_GUIDE_PLUGIN = "~/.config/opencode/guide-plugin"
 
 

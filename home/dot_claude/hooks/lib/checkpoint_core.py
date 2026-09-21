@@ -13,7 +13,7 @@ hook が同じ結果を得られるように 1 箇所へ寄せてある。ここ
 
 参照:
 
-- docs/research/compaction-hooks.md (記録 E3 / E4)
+- docs/research/agents/compaction-hooks.md (記録 E3 / E4)
 - docs/adr/0009-save-before-documenting.md
 """
 

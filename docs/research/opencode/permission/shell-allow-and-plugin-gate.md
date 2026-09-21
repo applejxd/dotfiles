@@ -6,13 +6,13 @@
 > 実履歴の集計は `~/.local/share/opencode/opencode.db` の複製から。
 > 挙動の実測は隔離環境（`XDG_CONFIG_HOME` / `XDG_DATA_HOME` を差し替え +
 > `--standalone`）で行った。実環境の `~/.config/opencode/` は無傷。
-> [CHG-0002](../change/0002-opencode-ask-by-default.md) の P1-3 を潰すための調査。
+> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の P1-3 を潰すための調査。
 >
 > **訂正 (2026-09-21)**: 隔離手段の記述は誤り。OpenCode は config dir の
 > 決定に `XDG_CONFIG_HOME` を使わない（`OPENCODE_CONFIG_DIR` が正しい）。
 > **本記録の結論は有効**（permission をプロジェクト側に置いており、
 > global config に依存していないため）。
-> 詳細は [試験環境の隔離方法](opencode-test-isolation.md)。
+> 詳細は [試験環境の隔離方法](../test-isolation.md)。
 
 ## 0. 本書の用途
 
@@ -97,7 +97,7 @@ allow の採否はリスク基準で決めるべきで、頻度は「落とし�
 
 読み取り系（`grep` / `head` / `tail` / `sed -n` / `cat` / `ls`）を足すと
 被覆は 5% → 約 32% になるが、これらは
-[read deny を迂回する](opencode-permission-gaps.md)。現行の `grep -n` が
+[read deny を迂回する](gaps.md)。現行の `grep -n` が
 既にこの穴を開けている。**段階 1 では広げず、保護を作ってから広げる。**
 
 ## 3. 静的パターンの表現力と限界
@@ -117,7 +117,7 @@ allow の採否はリスク基準で決めるべきで、頻度は「落とし�
 `*` は空白を跨いで一致し、`-exec*` は `-execdir` にも当たる。
 deny 時は `permission.evaluate` の hook が**呼ばれなかった**。
 config の deny が hook より前段で効くという
-[既知の性質](opencode-plugin-api-probe.md)と整合する。
+[既知の性質](../plugin/api-probe.md)と整合する。
 
 ### クォートと変数で回避できる
 
@@ -307,4 +307,4 @@ allow = [
 - `glob` ツールで深さ制限つきの列挙ができるか（**未確認**）
 - `gcc` / `cmake` の利用頻度を C++ プロジェクトの履歴で再測定（**未実施**）
 
-[調査記録一覧へ戻る](index.md)
+[調査記録一覧へ戻る](../../index.md)
