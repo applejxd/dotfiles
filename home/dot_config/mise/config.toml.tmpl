@@ -3,10 +3,8 @@
 
 [tools]
 gh = "latest"
-copilot = "latest"
-{{- if or (ne .chezmoi.os "windows") (not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username)) }}
-claude-code = "latest"
-{{- end }}
+# AI CLI (claude / copilot / opencode) は mise で管理しない。
+# 各社公式のインストーラーへ一本化している。docs/spec/structure.md を参照。
 {{- if or (eq .chezmoi.os "linux") (eq .chezmoi.os "windows") }}
 herdr = "latest"
 {{- end }}

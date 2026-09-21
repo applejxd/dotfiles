@@ -388,6 +388,28 @@ def test_standalone_windows_installers_use_supported_winget_detection():
     assert "Nvidia.GeForceNow" not in cuda
 
 
+def test_agent_cli_installer_uses_official_windows_channels():
+    script = (
+        ROOT
+        / "home"
+        / ".chezmoiscripts"
+        / "300_windows"
+        / "310_packages"
+        / "run_onchange_after_314_agent_cli.ps1.tmpl"
+    ).read_text(encoding="utf-8-sig")
+
+    # Windows では公式が手段を分ける: install.ps1 / winget / npm
+    assert "https://claude.ai/install.ps1" in script
+    assert "winget install --id GitHub.Copilot --exact" in script
+    assert "npm install -g '@opencode/cli'" in script
+    # install.sh は Windows を拒否するので使わない
+    assert "claude.ai/install.sh" not in script
+    # 既に入っている CLI は触らない
+    assert script.count("Test-CliInstalled '") == 3
+    # winget / npm の失敗を握り潰さない
+    assert script.count("$LASTEXITCODE -ne 0") == 2
+
+
 def test_chocolatey_setup_supports_v1_and_v2_listing():
     script = (
         ROOT

@@ -91,6 +91,11 @@ export AWS_REGION=us-east-1
 # for original binaries
 export PATH="${HOME}/bin:${PATH}"
 
+# OpenCode V2
+# 公式インストーラーは --no-modify-path で走らせている (.zshrc を書き換えさせない)。
+# 代わりに導入先をここで通す。
+[[ -d "${HOME}/.opencode/bin" ]] && export PATH="${HOME}/.opencode/bin:${PATH}"
+
 # for CUDA
 if [[ -e "/usr/local/cuda" ]]; then
     export PATH="/usr/local/cuda/bin:${PATH}"

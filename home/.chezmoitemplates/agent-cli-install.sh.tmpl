@@ -1,0 +1,36 @@
+{{- /*
+AI CLI (Claude Code / Copilot CLI / OpenCode V2) を各社公式のインストーラーで導入する。
+呼び出し側は 100_linux / 200_mac の run_onchange_after_ スクリプト。
+共有するのは本体だけで、呼び出し側が shebang と set -eu を置く。
+*/ -}}
+# 既に入っているものは触らない。更新は README の手順 (手動) に従う。
+# 公式インストーラーはどれも導入先が PATH にあるかを確認する。特に Copilot CLI は
+# 見つからないと rc ファイル追記の可否を /dev/tty から対話で聞くため、
+# chezmoi apply が止まらないよう先に通しておく。
+PATH="${HOME}/.local/bin:${HOME}/.opencode/bin:${PATH}"
+export PATH
+
+if command -v claude >/dev/null 2>&1; then
+    echo "Claude Code は導入済みです"
+else
+    echo "Claude Code を導入します..."
+    curl -fsSL https://claude.ai/install.sh | bash
+fi
+
+if command -v copilot >/dev/null 2>&1; then
+    echo "Copilot CLI は導入済みです"
+else
+    echo "Copilot CLI を導入します..."
+    curl -fsSL https://gh.io/copilot-install | bash
+fi
+
+if command -v opencode >/dev/null 2>&1; then
+    echo "OpenCode V2 は導入済みです"
+else
+    echo "OpenCode V2 を導入します..."
+    # --no-modify-path: インストーラーが .zshrc / .bashrc へ PATH を追記すると
+    # chezmoi 管理のシェル設定と衝突する。PATH は shellenv.sh 側で通している。
+    curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path
+fi
+
+echo "✅ 完了：AI CLI を導入しました"

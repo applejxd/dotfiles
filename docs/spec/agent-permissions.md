@@ -116,8 +116,8 @@ project の uv 環境や外部 `tomli` には依存しない。
 
 ## CLI 本体の更新
 
-Claude Code / Copilot CLI 本体は mise で管理します。CLI 側で別の版へ更新されて
-mise の指定や切り戻しが効かなくなることを避けるため、自動更新もここから停止します。
+Claude Code / Copilot CLI 本体は各社公式のインストーラーで導入します。
+apply のたびに勝手な版へ動かないよう、CLI 自身の自動更新は停止します。
 
 | `common.toml` | 生成先 |
 | --- | --- |
@@ -126,9 +126,9 @@ mise の指定や切り戻しが効かなくなることを避けるため、自
 
 Claude の既存 `env` はこのキーだけを上書きし、それ以外の環境変数を保持します。
 どちらも共通設定にキーがなければ既存値には触れません。
-`DISABLE_AUTOUPDATER` はバックグラウンド更新のみを止めるため、手動の
-`claude update` / `copilot update` も使わず、mise で更新してください。
-導入順と更新手順は [mise による CLI 管理](structure.md#mise-による-cli-管理)を参照。
+`DISABLE_AUTOUPDATER` はバックグラウンド更新のみを止めるため、更新したいときは
+明示的に `claude update` などを実行します。
+導入順と更新手順は [AI CLI の導入](structure.md#ai-cli-の導入)を参照。
 
 ## MCP サーバ
 

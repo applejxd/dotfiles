@@ -21,10 +21,15 @@ if (-not (Test-Path -LiteralPath $herdrPath -PathType Leaf)) {
   throw "Herdr is not available at $herdrPath"
 }
 
-$agentPath = & $miseCommand.Path -C $homeDir which $agentCommand
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($agentPath)) {
-  throw "Failed to resolve $agentCommand via mise (exit code $LASTEXITCODE)"
+# AI CLI は mise ではなく公式手段 (install.ps1 / winget / npm) で入るため、
+# machine / user の PATH を取り込んでから探す。
+$env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+    [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
+$agentApp = Get-Command $agentCommand -CommandType Application -ErrorAction SilentlyContinue
+if (-not $agentApp) {
+  throw "$agentCommand is not available on PATH"
 }
+$agentPath = $agentApp.Path
 if (-not (Test-Path -LiteralPath $agentPath -PathType Leaf)) {
   throw "$agentCommand is not available at $agentPath"
 }

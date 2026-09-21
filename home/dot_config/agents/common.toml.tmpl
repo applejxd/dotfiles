@@ -563,7 +563,7 @@ seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runt
 # Claude 固有
 # ---------------------------------------------------------------------------
 [claude]
-# 本体は mise で管理し、CLI 側のバックグラウンド更新を止める。
+# CLI 側のバックグラウンド更新を止める (本体は公式インストーラーで導入)。
 # settings.json の env.DISABLE_AUTOUPDATER="1" へ変換する。
 auto_update = false
 
@@ -580,7 +580,8 @@ mcp_deny = [
 # Copilot 固有
 # ---------------------------------------------------------------------------
 [copilot]
-# settings.json の autoUpdate へ反映。本体の更新は mise upgrade copilot で行う。
+# settings.json の autoUpdate へ反映。本体は公式インストーラー (Unix は
+# gh.io/copilot-install、Windows は winget) で更新する。
 auto_update = false
 
 # Copilot が作成するコミットへ Co-authored-by trailer を追加しない

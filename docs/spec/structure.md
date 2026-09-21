@@ -59,14 +59,13 @@ OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別ス
 ## mise による CLI 管理
 
 本体の宣言は `home/dot_config/mise/config.toml.tmpl` に集約します。
-`claude-code = "latest"` / `copilot = "latest"` は mise の aqua backend から
-公式ネイティブバイナリを取得します。Linux / WSL / macOS は両方、Windows は
-Copilot CLI と Herdr（`applejxd` 以外では Claude Code も）を宣言します。
 GitHub CLI は全 OS 共通で `gh = "latest"` を宣言し、aqua の `cli/cli` から導入します。
 Windows 用設定には Unix 専用ツールや設定を含めません。
 Unix の uv も同じ mise 設定で導入します。uv の重複導入と使用しなくなった
 Codex CLI の自動インストールを持っていた `000_unix/010_tools` は廃止しました。
 Codex の既存設定や Windows の Codex App はこの変更の対象外です。
+AI CLI（Claude Code / Copilot CLI / OpenCode V2）は mise では管理しません。
+[AI CLI の導入](#ai-cli-の導入)を参照。
 
 `gh` の更新はホームディレクトリで `mise upgrade gh` を実行します。
 Ubuntu の `121_ubuntu` では GitHub CLI 用の APT リポジトリ・鍵の登録と
@@ -80,9 +79,9 @@ mise の実体または shim が選ばれることを確認してください。
 
 | 環境 | mise の一括導入 | 後続の設定 |
 | --- | --- | --- |
-| Linux / WSL | OS 依存パッケージの後、`100_linux/125_mise` | `100_linux/140_herdr_integration` → `400_unix/410_claude_mcp` |
-| macOS | Homebrew の後、`200_mac/225_mise` | `400_unix/410_claude_mcp` |
-| Windows | `310_winget` で mise を導入し、設定配備後に `310_packages/313_mise` | `343_herdr_integration` |
+| Linux / WSL | OS 依存パッケージの後、`100_linux/125_mise` | `100_linux/126_agent_cli` → `100_linux/140_herdr_integration` → `400_unix/410_claude_mcp` |
+| macOS | Homebrew の後、`200_mac/225_mise` | `200_mac/226_agent_cli` → `400_unix/410_claude_mcp` |
+| Windows | `310_winget` で mise を導入し、設定配備後に `310_packages/313_mise` | `310_packages/314_agent_cli` → `343_herdr_integration` |
 
 mise の各スクリプトは `run_onchange_after_` とし、設定テンプレートのハッシュを
 含めます。ツール宣言が変われば一括導入が再実行されます。
@@ -91,19 +90,71 @@ user scope に未登録のものだけを対象にし、既存のカスタム設
 壊れた JSON はエラーで停止します。詳細は
 [MCP サーバ](agent-permissions.md#mcp-サーバ)を参照。
 
-CLI 自身の自動更新は `common.toml` の `[claude] auto_update = false` /
-`[copilot] auto_update = false` から停止します。mise で指定・固定した版と、
-CLI が独自に更新した版の不一致を防ぐためです。
-更新はホームディレクトリで `mise upgrade claude-code copilot` を実行し、
-`chezmoi apply` で後続設定を再適用します。Windows の `applejxd` は
-`mise upgrade copilot` のみです。自動更新がなくなる分、修正を取り込むには
-定期的な更新が必要です。
+## AI CLI の導入
 
-旧 installer のランチャーや Windows の Winget 版 Copilot は自動削除しません。
-新しいターミナルで `mise which claude` / `mise which copilot` と実際の
-`command -v` / `Get-Command` の結果を比べ、mise の実体または shim が選ばれる
-ことを確認します。旧版が優先される場合は CLI を終了し、旧ランチャーの削除や
-旧パッケージのアンインストール、PATH の整理を行ってください。
+Claude Code / Copilot CLI / OpenCode V2 は**各社公式のインストーラー**で導入します。
+実体は `home/.chezmoitemplates/agent-cli-install.sh`（Unix 共通の本体）と、
+それを `includeTemplate` する OS 別スクリプトです。
+
+| OS | スクリプト | Claude Code | Copilot CLI | OpenCode V2 |
+| --- | --- | --- | --- | --- |
+| Linux / WSL | `100_linux/126_agent_cli` | `claude.ai/install.sh` | `gh.io/copilot-install` | `opencode.ai/v2/install` |
+| macOS | `200_mac/226_agent_cli` | 同上 | 同上 | 同上 |
+| Windows | `310_packages/314_agent_cli` | `claude.ai/install.ps1` | `winget install GitHub.Copilot` | `npm install -g @opencode/cli` |
+
+Windows で手段が分かれるのは公式側の制約です。
+
+- Claude の `install.sh` は `MINGW*/MSYS*/CYGWIN*` を検出して明示的に終了する
+- Copilot の公式スクリプトは Windows を検出すると `winget install GitHub.Copilot`
+  へ委譲する。つまり winget が公式手段そのもの
+- OpenCode V2 は PowerShell インストーラーを提供せず、ドキュメントに
+  「Windows package managers are not supported」と明記している。
+  zip の直接展開を除けば npm が唯一のパッケージ手段
+
+導入範囲は mise 版から変えていません。Linux / WSL / macOS は 3 つとも、
+Windows は Copilot CLI と OpenCode V2 を導入し、`applejxd` 以外では
+Claude Code も導入します。
+
+スクリプトは `run_onchange_after_` で、**既に PATH 上にある CLI には触りません**。
+CLI を足したときだけ内容が変わって再実行され、その CLI だけが入ります。
+毎回ダウンロードしないので apply が遅くなりません。
+
+### インストーラーに副作用を持たせない
+
+OpenCode のインストーラーは既定で `.zshrc` / `.bashrc` / `.zshenv` などへ
+PATH 行を追記します。これらは chezmoi 管理なので、追記されると
+`chezmoi diff` に恒常的な差分が出ます。`--no-modify-path` を付けて止め、
+`~/.opencode/bin` の PATH は `home/dot_config/shell/shellenv.sh.tmpl` で通します。
+
+Copilot のインストーラーは導入先が PATH に無いと、rc ファイルへ追記してよいかを
+`/dev/tty` から対話で尋ねます。`chezmoi apply` が入力待ちで止まるため、
+スクリプト側で `~/.local/bin` を先に PATH へ入れて分岐に入らせません。
+
+### 更新
+
+自動更新は `common.toml` の `[claude] auto_update = false` /
+`[copilot] auto_update = false` で止めたままです。更新は手動で行います。
+
+| CLI | Unix | Windows |
+| --- | --- | --- |
+| Claude Code | `claude update` | `claude update` |
+| Copilot CLI | `curl -fsSL https://gh.io/copilot-install \| bash` | `winget upgrade --id GitHub.Copilot --exact` |
+| OpenCode V2 | `opencode upgrade` | `npm update -g '@opencode/cli'` |
+
+### mise 版からの移行
+
+mise が入れた `claude-code` / `copilot` は自動削除しません。
+不要になったので、次で確認してから手で片付けてください。
+
+```bash
+mise ls --installed | grep -E 'claude-code|copilot'
+mise uninstall claude-code copilot   # 任意
+mise prune
+```
+
+新しいターミナルで `command -v claude` / `command -v copilot`
+（PowerShell なら `Get-Command`）が公式インストーラーの実体を指すことを確認します。
+mise の shim が残って優先される場合は `mise reshim` を実行してください。
 `~/.claude/`、`~/.claude.json`、`~/.copilot/` の設定・認証・履歴は削除しません。
 
 ## Herdr の管理
@@ -111,12 +162,14 @@ CLI が独自に更新した版の不一致を防ぐためです。
 Herdr は `home/dot_config/mise/config.toml.tmpl` の `herdr = "latest"` で管理します。
 Linux / WSL と Windows native にのみ展開し、macOS は従来どおり自動導入しません。
 Windows の `.config/mise/config.toml` は `.chezmoiignore.tmpl` の除外例外とし、
-上記の AI CLI とともに宣言します。
+gh とともに宣言します。
 
 Linux では `125`、Windows では `313` の `mise install` で Herdr も導入します。
 後続の `140` / `343` の `run_after` は再インストールせず、
 `mise which herdr` で解決した実体を使って agent integration とリリース一致版の
-skill を生成します。選択した agent CLI の mise 管理パスを PATH の先頭へ置くため、
+skill を生成します。agent CLI は mise 管理ではなくなったため、
+`~/.local/bin` / `~/.opencode/bin`（Windows は machine / user の PATH）を
+先頭へ置いてから `command -v` / `Get-Command` で解決します。
 初回の shell activate 前でも連携できます。
 どちらもホームディレクトリを基準に mise を実行するため、apply を起動した
 プロジェクトのツール指定や PATH 上の旧 Herdr に依存しません。

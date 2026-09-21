@@ -1,0 +1,60 @@
+﻿Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# AI CLI (Claude Code / Copilot CLI / OpenCode V2) を公式手段で導入する。
+# mise では管理しない。理由と更新手順は docs/spec/structure.md を参照。
+
+$homeDir = {{ .chezmoi.homeDir | toJson }}
+
+function Update-PathFromEnvironment {
+  # 同じ apply の winget / npm スクリプトで PATH が増えていても拾えるようにする。
+  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+      [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
+}
+
+function Test-CliInstalled {
+  param([Parameter(Mandatory)][string]$Name)
+
+  if (Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue) { return $true }
+  Update-PathFromEnvironment
+  return [bool] (Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue)
+}
+
+{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
+# Claude Code: 公式ネイティブインストーラー (install.sh は Windows を拒否する)。
+if (Test-CliInstalled 'claude') {
+  Write-Host 'Claude Code is already installed.'
+} else {
+  Write-Host 'Installing Claude Code...'
+  & ([scriptblock]::Create((Invoke-RestMethod https://claude.ai/install.ps1)))
+  Update-PathFromEnvironment
+}
+{{- end }}
+
+# Copilot CLI: 公式インストールスクリプトが Windows で委譲する先と同じ winget。
+if (Test-CliInstalled 'copilot') {
+  Write-Host 'Copilot CLI is already installed.'
+} else {
+  if (-not (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue)) {
+    throw 'winget (App Installer) not found'
+  }
+  Write-Host 'Installing Copilot CLI...'
+  & winget install --id GitHub.Copilot --exact --silent --disable-interactivity `
+      --accept-package-agreements --accept-source-agreements
+  if ($LASTEXITCODE -ne 0) { throw "winget install failed: $LASTEXITCODE" }
+  Update-PathFromEnvironment
+}
+
+# OpenCode V2: 公式が示す Windows 向けの唯一のパッケージ手段が npm。
+# (curl / PowerShell のインストーラーと Windows パッケージマネージャは未提供)
+if (Test-CliInstalled 'opencode') {
+  Write-Host 'OpenCode V2 is already installed.'
+} else {
+  if (-not (Get-Command npm -CommandType Application -ErrorAction SilentlyContinue)) {
+    throw 'npm not found (winget の OpenJS.NodeJS を先に導入してください)'
+  }
+  Write-Host 'Installing OpenCode V2...'
+  & npm install -g '@opencode/cli'
+  if ($LASTEXITCODE -ne 0) { throw "npm install -g @opencode/cli failed: $LASTEXITCODE" }
+  Update-PathFromEnvironment
+}
