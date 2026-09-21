@@ -13,6 +13,10 @@ node = "latest"
 [env]
 UV_PROJECT_ENVIRONMENT = "{% if os() == 'windows' %}.venv-windows{% else %}.venv{% endif %}"
 
+[tasks."opencode:probe"]
+description = "隔離環境で opencode を実行する（実 DB を汚さない）"
+run = "./scripts/opencode_probe.sh"
+
 [tasks.dotfiles-update]
 description = "Update zinit itself and all zinit-managed plugins (run after `chezmoi update` on other PCs)"
 run = [
