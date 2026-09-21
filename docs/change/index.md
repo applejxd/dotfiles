@@ -41,6 +41,7 @@
 | --- | --- | --- | --- | --- | --- |
 | [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | 圧縮後、作業再開前に checkpoint が届くか | P0-3 の実測 | 2026-09-19 |
 | [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、自動化率を機構で回復する | In progress | 調査は決着。段階 1 は配備済みで既定 ask が実環境で有効 | 段階 2（プラグイン基盤 + 誘導 hook） | 2026-09-21 |
+| [0003](0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | Planned | 設定由来のディレクトリから `tui.ts` が読まれるか | 実装して TUI で目視確認 | 2026-09-22 |
 
 ## 保留
 
