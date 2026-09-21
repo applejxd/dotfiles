@@ -1004,8 +1004,17 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     そのため allow -> ask -> deny の順に並べる。``git reset`` が ask で
     ``git reset --hard`` が deny、という具体形の上書きはこの順序で成立する。
 
+    先頭に ``{shell, "*", ask}`` を置いて既定を ask にする。最も一般的な規則
+    なので **必ず先頭**でなければならない (後ろに置くと全部を ask で塗り潰す)。
+    これが無いと、未掲載のコマンドは classifier ではなく無条件許可になる。
+    OpenCode に classifier が無いため。
+
+    ``shell`` の allow だけ ``[opencode.shell]`` から取る。``[bash] allow`` は
+    Claude / Copilot と共有しており、未掲載を classifier へ委ねる前提で
+    組まれているため、既定 ask の OpenCode とは前提が違う。
+
     ``shell`` の resource は「コマンド文字列」。末尾 ` *` は引数無しの形にも
-    当たる仕様なので、``[bash]`` の素のトークン列へ ` *` を足すだけでよい。
+    当たる仕様なので、素のトークン列へ ` *` を足すだけでよい。
     複合コマンドは OpenCode の scanner が分割してから照合する。
 
     ``ask_hook_owned`` も ask として出す。**OpenCode に hook 機構は無い**ので、
@@ -1014,10 +1023,11 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     """
     bash = common.get("bash", {})
     file_ = common.get("file", {})
+    shell_allow = common.get("opencode", {}).get("shell", {}).get("allow", [])
 
-    rules: list[dict[str, str]] = []
+    rules: list[dict[str, str]] = [{"action": "shell", "resource": "*", "effect": "ask"}]
 
-    rules += opencode_rules("shell", "allow", [f"{cmd} *" for cmd in bash.get("allow", [])])
+    rules += opencode_rules("shell", "allow", [f"{cmd} *" for cmd in shell_allow])
     rules += opencode_rules("shell", "ask", [f"{cmd} *" for cmd in bash.get("ask", [])])
     rules += opencode_rules("shell", "deny", [f"{cmd} *" for cmd in bash.get("deny", [])])
 

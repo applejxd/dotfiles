@@ -665,6 +665,31 @@ auto_update = false
 #   実在しない名前を deny したまま気付けなくなる。
 # see docs/spec/agent-permissions.md 「OpenCode へ渡さないもの」
 
+# OpenCode 専用の shell allow。**[bash] allow とは別物**で、共用しない。
+#
+# [bash] allow は Claude / Copilot と共有しており、未掲載のコマンドを
+# classifier (auto / assisted) へ委ねる前提で組まれている。OpenCode に
+# classifier は無く、未掲載は既定 ask になる。前提が違うので分けている。
+#
+# ★ここに載せたものだけが **無確認で実行される**。選定基準は「副作用なし・
+#   冪等・任意コード実行を含まない」。ビルド系 (gcc / cmake / uv sync /
+#   mise run) と find は、実行するコードを自分で決められるので載せない。
+# ★find に対して「-exec の付いた形だけ deny する」案は採らない。
+#   `find . -exe""c …` がクォートで deny を素通りし、`find *` の allow に
+#   一致して無確認になるため。deny パターンは allow を残す口実にならない。
+# see docs/change/0002-opencode-ask-by-default.md 「段階 1 の詳細」
+#     docs/research/opencode-shell-allow-and-plugin-gate.md
+[opencode.shell]
+allow = [
+  "git diff",
+  "git status",
+  "git log",
+  "wc",
+  "grep -n",
+  "uv pip list",
+  "docker ps",
+]
+
 # 編集後の整形。Claude / Copilot では PostToolUse hook (format-file.sh /
 # markdownlint.sh) がやっていることを、OpenCode では組み込み機能が担う。
 #

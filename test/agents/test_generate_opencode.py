@@ -101,15 +101,33 @@ def test_unmanaged_keys_survive():
 # 後勝ち (OpenCode 固有の照合規則)
 # ---------------------------------------------------------------------------
 
+def test_default_is_ask_and_the_catch_all_comes_first():
+    """未掲載のコマンドを無条件許可にしない。
+
+    OpenCode に classifier は無いので、``[bash]`` の「未掲載は auto / assisted
+    へ委ねる」設計がそのままだと無条件実行になる。``*`` は最も一般的な規則
+    なので **先頭**に無ければならない。後ろにあると全部を ask で塗り潰す。
+    """
+    shell = [r for r in generated()["permissions"] if r["action"] == "shell"]
+    assert shell[0] == {"action": "shell", "resource": "*", "effect": "ask"}
+    assert [r["resource"] for r in shell[1:]].count("*") == 0
+
+
 def test_effects_are_ordered_allow_then_ask_then_deny():
     """OpenCode は **最後に一致した規則** が勝つ。
 
     Claude の deny > ask > allow と逆なので、並び順が優先順位そのものになる。
     崩れると ``git reset --hard`` の deny を ``git reset`` の ask が上書きする。
+
+    shell だけは先頭の ``*`` (既定 ask) を除いてから見る。これは最も一般的な
+    規則で、allow より前に来るのが正しい。
     """
     order = {"allow": 0, "ask": 1, "deny": 2}
     for action in ("shell", "read", "edit"):
-        seen = [order[r["effect"]] for r in generated()["permissions"] if r["action"] == action]
+        found = [r for r in generated()["permissions"] if r["action"] == action]
+        if action == "shell":
+            found = found[1:]
+        seen = [order[r["effect"]] for r in found]
         assert seen == sorted(seen), f"{action} の effect 並びが崩れている"
 
 
@@ -126,10 +144,91 @@ def test_specific_deny_comes_after_the_general_ask(general: str, specific: str):
 # shell
 # ---------------------------------------------------------------------------
 
-def test_shell_rules_cover_every_declared_command():
-    for effect in ("allow", "ask", "deny"):
+def test_shell_allow_comes_from_the_opencode_section():
+    """allow だけ ``[opencode.shell]`` から取る (``[bash]`` と共有しない)。
+
+    ``[bash] allow`` は Claude / Copilot と共有しており、未掲載を classifier
+    へ委ねる前提で組まれている。OpenCode は既定 ask なので前提が違う。
+    """
+    expected = [f"{cmd} *" for cmd in COMMON["opencode"]["shell"]["allow"]]
+    assert rules("shell", "allow") == expected
+
+
+def test_shell_ask_and_deny_still_come_from_bash():
+    for effect in ("ask", "deny"):
         expected = [f"{cmd} *" for cmd in COMMON["bash"][effect]]
-        assert rules("shell", effect) == expected
+        # 先頭の catch-all (既定 ask) は [bash] 由来ではないので外す
+        assert [r for r in rules("shell", effect) if r != "*"] == expected
+
+
+# 実行するコードを呼び出し側が決められるもの。allow に載ると、そのコマンドが
+# 無確認で任意コード実行の入口になる。
+# - find     -exec / -delete / -fprintf
+# - gcc/g++  -B や specs ファイルで任意プログラムを起動できる
+# - cmake    CMakeLists.txt がそのまま実行される
+# - uv sync  依存のビルドフックが走る
+# - mise run タスク定義が走る
+ARBITRARY_CODE_EXECUTION = ("find", "gcc", "g++", "cmake", "uv sync", "mise run")
+
+
+@pytest.mark.parametrize("command", ARBITRARY_CODE_EXECUTION)
+def test_allow_has_no_arbitrary_code_execution(command: str):
+    """段階 1 の受入条件。
+
+    これらは実測で ``find`` 以外のヒットが 0 件だった。確認を増やさずに
+    落とせるので、allow に戻す理由があるなら測り直してからにする。
+    """
+    for resource in rules("shell", "allow"):
+        assert not resource.startswith(command), f"{resource} は任意コード実行を含む"
+
+
+def test_allow_is_not_widened_silently():
+    """allow が増えたら気付けるようにする。
+
+    ここを更新するときは docs/change/0002-opencode-ask-by-default.md の
+    「段階 1 の詳細」と、その根拠になった実測も一緒に見直すこと。
+    """
+    assert rules("shell", "allow") == [
+        "git diff *",
+        "git status *",
+        "git log *",
+        "wc *",
+        "grep -n *",
+        "uv pip list *",
+        "docker ps *",
+    ]
+
+
+def test_bash_allow_is_untouched_so_other_clis_do_not_move():
+    """``[bash] allow`` は Claude / Copilot 用に残す (段階 1 の非目的)。
+
+    ここが縮むと他 CLI の確認回数が変わり、OpenCode 側の効果を切り分け
+    られなくなる。撤退も ``[opencode.shell]`` の削除だけでは済まなくなる。
+    """
+    bash_allow = COMMON["bash"]["allow"]
+    for command in ARBITRARY_CODE_EXECUTION:
+        assert any(cmd.startswith(command) for cmd in bash_allow), (
+            f"{command} が [bash] allow から消えている。"
+            "OpenCode 側だけを絞るのが段階 1 の前提"
+        )
+
+
+def test_dropping_them_from_opencode_does_not_reach_copilot():
+    """Copilot の commandIdentifiers は ``[bash] allow`` 由来のまま。
+
+    段階 1 の受入条件「他 CLI の生成物に diff が出ない」の機械的な固定。
+    """
+    approvals = gen.build_copilot_locations(COMMON)["locations"]
+    names = {
+        command
+        for location in approvals.values()
+        for approval in location["tool_approvals"]
+        if approval.get("kind") == "commands"
+        for command in approval["commandIdentifiers"]
+    }
+    assert {"find", "gcc", "cmake"} <= names
+    # OpenCode 専用の allow は Copilot へ漏れない
+    assert "docker" in names or "docker ps" not in names
 
 
 def test_hook_owned_ask_is_still_emitted():
