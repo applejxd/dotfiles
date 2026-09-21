@@ -189,14 +189,33 @@ def test_allow_is_not_widened_silently():
     「段階 1 の詳細」と、その根拠になった実測も一緒に見直すこと。
     """
     assert rules("shell", "allow") == [
-        "git diff *",
-        "git status *",
         "git log *",
         "wc *",
         "grep -n *",
         "uv pip list *",
         "docker ps *",
     ]
+
+
+# `.git/config` へ書けると diff.<name>.command / core.fsmonitor に任意コマンドを
+# 仕込めて、git diff / git status が実行手段になる (実測)。
+# see docs/research/opencode-allow-list-audit.md
+@pytest.mark.parametrize(
+    "resource", ["*/.git/config", "*/.git/hooks/*", "~/.gitconfig"]
+)
+def test_git_config_is_write_denied(resource: str):
+    assert resource in rules("edit", "deny")
+
+
+@pytest.mark.parametrize("command", ["git diff", "git status"])
+def test_git_commands_that_execute_are_not_allowed(command: str):
+    """`git diff` は外部 diff、`git status` は fsmonitor で任意コマンドを起動する。
+
+    どちらも実測済み。`.git/config` を write deny にしても、shell の
+    リダイレクトはその deny を通らないので、allow に戻してはいけない。
+    """
+    for resource in rules("shell", "allow"):
+        assert not resource.startswith(command), f"{resource} は任意コード実行を含む"
 
 
 def test_bash_allow_is_untouched_so_other_clis_do_not_move():

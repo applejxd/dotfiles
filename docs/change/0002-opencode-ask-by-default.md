@@ -189,22 +189,33 @@ Claude / Copilot にも影響して効果の切り分けができなくなるた
   出ないこと」を固定するテストを追加
 
 allow の選定基準は、副作用なし・冪等・任意コード実行を含まないこと。
-実履歴 1,247 セグメントでの実測（[費用対効果の調査](../research/opencode-shell-allow-and-plugin-gate.md)）
-にもとづき、次の 7 件に確定した。
+実履歴での実測（[費用対効果の調査](../research/opencode-shell-allow-and-plugin-gate.md)）
+と、その後の監査（[allow リスト監査](../research/opencode-allow-list-audit.md)）
+にもとづき、次の 5 件に確定した。
 
 ```toml
 [opencode.shell]
 allow = [
-  "git diff", "git status", "git log",
-  "wc", "grep -n",
+  "git log", "wc", "grep -n",
   "uv pip list", "docker ps",
 ]
 ```
 
+当初は `git diff` / `git status` も載せていたが、監査で**どちらも任意コード
+実行の経路を持つ**と判明したため外した。`git diff` は `.git/config` の
+`diff.<name>.command`（外部 diff）、`git status` は `core.fsmonitor` で
+任意コマンドを起動する（いずれも実測）。あわせて `.git/config` /
+`.git/hooks/**` / `~/.gitconfig` を write deny に追加した。
+
+**allow に載せたコマンドは全て任意ファイル書き込みの手段にもなる。**
+scanner はリダイレクトを分割せず resource に残すため、
+`wc -l f.txt > path` が `wc *` に前方一致して無確認で通る（実測）。
+この性質があるので、allow は最小に保つ以外の守り方が無い。
+
 落とすのは `find` / `gcc` / `g++` / `cmake -S` / `cmake --build` /
-`uv sync` / `mise run` の 7 件。うち `find` 以外の 6 件は**実測ヒット 0** で、
-落としても確認は 1 件も増えない。`find` のみ +7 件（0.6%）増えるが、
-段階 2 の選別器で回収する。
+`uv sync` / `mise run` と、上記 2 件。ビルド系 6 件は実測ヒット 0 なので
+確認は増えない。`find` が +7 件、`git diff` / `git status` が +42 件
+（合わせて約 2%）増えるが、段階 2 の選別器で回収する。
 
 `find` に対して「`-exec` の付いた形だけを静的 deny する」案は採らない。
 `find . -exe""c …` のようにクォートを挟むと deny を素通りし、
@@ -360,6 +371,26 @@ enum 引数 1 個のツールにする。ツールを 5 個作るのではなく
 上の「候補比較」を参照。
 
 ## 重要な更新
+
+**2026-09-21 — allow の選定基準を既存リスト自身が満たしていなかった。**
+
+段階 1 で「任意コード実行を含まない」を基準にビルド系と `find` を外したが、
+その基準で残した `git diff` / `git status` が**どちらも任意コード実行の
+経路を持っていた**（[allow リスト監査](../research/opencode-allow-list-audit.md)）。
+基準の適用漏れで、Astra のレビューと実測で判明した。両方を allow から外し、
+`.git/config` 等を write deny へ追加した。
+
+あわせて 2 つの理解を訂正した。
+
+- **`allow` を増やしても `deny` は弱まらない。** permission は多層防御では
+  なく最終一致で決まる 1 つの判定で、deny は常に後ろにある。以前の
+  「deny の前段が緩む」という記述は誤り
+- **自動実行では `allow` と `ask` は等価。** したがって allow の増減は
+  自動実行の権限境界を変えず、効果は対話時の確認回数だけ
+
+さらに、**リダイレクトが resource に残る**ため allow 済みコマンドが
+任意書き込みの手段になることが分かった（`wc -l f.txt > path` が
+無確認で通る）。allow を最小に保つ以外の守り方が無い。
 
 **2026-09-21 — 試験環境の隔離手段が誤っていた。**
 
