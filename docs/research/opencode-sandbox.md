@@ -20,6 +20,8 @@
 | `shell` 差し替えで隔離できるか | **できる**（実測） |
 | permission 層を破った手口を止められるか | **止まる**（ファイルが存在しなくなるため） |
 | 任意のタイミングで有効・無効にできるか | **できる**（プロジェクト単位・環境変数の 2 通り） |
+| 敵対的なリポジトリにも効くか | **効かない**（プロジェクト設定で外せる。セクション 5） |
+| より強い方式はあるか | **ある**（`opencode` のプロセスごと隔離。セクション 5） |
 
 これは**この 3 CLI のうち OpenCode だけが欠いている層**を埋める話。
 Claude Code と Copilot CLI は OS レベル sandbox を内蔵しており、
@@ -205,7 +207,66 @@ permission を全 allow にしても、ファイルが存在しない状態は�
 plugin の `deny` を `bypass` が貫通しなかったのと同じ構図で、
 **sandbox は permission より外側の層**であることの裏付けでもある。
 
-## 5. 残る穴
+## 5. `shell` 差し替えの限界と、より強い方式（2026-09-22 追記）
+
+`shell` の差し替えは**設定で入れる保護なので、設定で外せる**。
+
+### プロジェクト設定で無効化できてしまう
+
+グローバルでラッパーを指定していても、
+`<project>/.opencode/opencode.json` に `"shell": "/bin/bash"` を書けば
+ラッパーは**1 度も呼ばれない**（セクション 4 で実測）。
+
+これは「このリポジトリで無効にする」手段として使う一方、
+**外部リポジトリが同じ方法で sandbox を外せる**ことを意味する。
+permission も同じく上書きできる（[permission の穴](opencode-permission-gaps.md)）。
+
+つまり `shell` 差し替えは、**信頼できないリポジトリに対しては効かない**。
+守りたい相手が「プロンプトインジェクションで誘導されたエージェント」なら
+有効だが、「敵対的なリポジトリ」なら無効。
+
+### より強い方式: OpenCode のプロセスごと隔離する
+
+`opencode` 自体を bwrap の中で起動すれば、設定では外せない。
+
+```console
+$ ./sb.sh -c 'opencode --version'
+opencode v2.0.12                 ← 起動する
+$ ./sb.sh -c 'ls ~/.ssh | wc -l'
+0                                ← 秘密は見えない
+```
+
+| | `shell` 差し替え | プロセスごと隔離 |
+| --- | --- | --- |
+| 覆う範囲 | shell ツールのみ | **全ツール + MCP + plugin** |
+| プロジェクト設定で外せるか | **外せる** | 外せない |
+| 有効・無効の切り替え | 設定・環境変数 | **起動方法**（ラッパー経由か否か） |
+| 実装場所 | `opencode.json` の 1 行 | 起動コマンド（mise task / alias） |
+
+**後者のほうが素直**。permission の穴（`grep` / `glob` が `read` deny を
+迂回する）も、MCP が sandbox の外という問題も、同時に解決する。
+
+切り替えは「ラッパー経由で起動するかどうか」になるので、
+プロジェクト単位ではなく**起動単位**になる。
+
+## 6. snap で配布されたコマンドは動かない
+
+`chezmoi` はこのマシンで snap 版（`/snap/bin/chezmoi` → `/usr/bin/snap`）。
+bwrap の中では起動できない。
+
+```console
+$ ./sb.sh -c 'chezmoi status'
+snap-confine is packaged without necessary permissions and cannot continue
+required permitted capability cap_dac_override not found in current capabilities
+```
+
+`mise` / `python3` / `git` / `uv` は動く（実測）。
+
+**このリポジトリで sandbox を無効にする理由は「書き込み範囲」ではなく
+これ。** 秘密だけ隠して書き込みを許す形（Claude / Copilot と同じ方針）に
+しても、`chezmoi` が動かないので成立しない。
+
+## 7. 残る穴
 
 `shell` の差し替えは **shell ツールにしか効かない**。
 
@@ -226,7 +287,7 @@ plugin の `deny` を `bypass` が貫通しなかったのと同じ構図で、
 
 現在の構成は前者が空いていた。ここを埋めるのが sandbox の役割。
 
-## 6. 採用する場合の検討事項
+## 8. 採用する場合の検討事項
 
 | 論点 | 内容 |
 | --- | --- |

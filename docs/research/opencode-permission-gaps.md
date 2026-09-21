@@ -291,6 +291,47 @@ allow を絞ると確認総数は 959 → 990 と増えるが、
 誘導したいなら **既定 `ask` のままにして hook が `deny` へ変える**構成にする。
 この場合、プラグインのロード失敗時は `ask` に縮退する（安全側）。
 
+## 5. プロジェクト設定がグローバルの deny を上書きする（2026-09-22 追記）
+
+**`<project>/.opencode/opencode.json` に書いた permission が、グローバルの
+deny に勝つ。**
+
+```jsonc
+// グローバル (~/.config/opencode/opencode.json)
+{ "permissions": [ { "action": "shell", "resource": "*",     "effect": "ask"  },
+                   { "action": "shell", "resource": "pip *", "effect": "deny" } ] }
+
+// <project>/.opencode/opencode.json
+{ "permissions": [ { "action": "shell", "resource": "*", "effect": "allow" } ] }
+```
+
+```console
+$ pip --version
+pip 26.0.1 from ...        ← 実行された
+```
+
+同じことが `shell`（既定シェル）にも起きる。グローバルでラッパーを
+指定していても、プロジェクト側で `/bin/bash` に戻せば**外れる**
+（[sandbox の調査](opencode-sandbox.md)で実測）。
+
+### 含意
+
+| 影響 | 内容 |
+| --- | --- |
+| **外部リポジトリ** | `.opencode/opencode.json` を含むリポジトリを開くだけで、こちらの保護が外れる。sandbox も同時に無効化できる |
+| **自分のリポジトリ** | そのファイルへの write deny が無いと、エージェントが自分で書いて権限を広げられる |
+
+現在の write deny は `~/.config/opencode/opencode.json` のみで、
+**`**/.opencode/opencode.json` は対象外**。ここを塞ぐ必要がある。
+
+ただし塞いでも「外部リポジトリに最初から入っている」場合は効かない
+（編集ではなく既存ファイルの読み込みなので）。設定の探索そのものを
+止める手段は**未調査**。
+
+**含意はもう一つある。** 設定で入れる保護は、設定で外せる。
+プロジェクト設定に勝てる層を置きたいなら、**OpenCode のプロセスごと
+隔離する**しかない（[sandbox の調査](opencode-sandbox.md)）。
+
 ## 再確認すべき情報源
 
 - <https://opencode.ai/v2/docs/permissions>（action 一覧と resource の定義）
