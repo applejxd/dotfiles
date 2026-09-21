@@ -153,6 +153,17 @@ opencode run --standalone \
 - `OPENCODE_DB` を省くと、試験セッションが実環境の DB に残り、
   [利用実績の集計](opencode-shell-allow-and-plugin-gate.md)の母数が汚れる
 
+### 制約: 子エージェントを起動する試験は完走しない
+
+`subagent` ツールで子エージェントを起動させると、**3 回とも子側の
+最初のツール判定の直後に `Error: Transport` で落ちた**（設定を変えた
+2 通りと対照 1 通り）。`OPENCODE_DB` を差し替えていることが原因と
+思われるが未特定。
+
+hook の観測（`tool.execute.before` / `permission.evaluate`）は判定まで
+届くので、**権限まわりの確認には使える**。実行結果まで見たい場合は
+この手順では取れない（[出力フィルタと子エージェント](opencode-output-filter-and-subagents.md)）。
+
 ## 6. 過去の記録への影響
 
 **結論はいずれも有効。** 理由は、global config に permission を置いた実験が

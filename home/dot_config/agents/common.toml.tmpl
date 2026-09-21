@@ -693,6 +693,15 @@ allow = [
   "docker ps",
 ]
 
+# 誘導。pattern に一致したら deny して message を返す。
+# pattern は JavaScript の正規表現で、生のコマンド全体に当てる
+# (scanner は変数代入を落とすため e.resources は使わない)。
+# ★deny にすること。ask では自動実行で素通りする。
+# see docs/change/0002-opencode-ask-by-default.md 「段階 2 の詳細」
+[[opencode.shell.guide]]
+pattern = '(^|&&|\|\||;|\n)\s*cd\s'
+message = "cd は使わないでください。shell ツールの workdir 引数でディレクトリを指定できます。"
+
 # 編集後の整形。Claude / Copilot では PostToolUse hook (format-file.sh /
 # markdownlint.sh) がやっていることを、OpenCode では組み込み機能が担う。
 #

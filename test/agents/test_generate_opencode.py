@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -205,6 +206,93 @@ def test_agents_not_declared_in_common_are_kept():
 def test_bypass_is_the_only_agent_from_common():
     """権限を緩めるエージェントが黙って増えないようにする。"""
     assert set(generated()["agent"]) == {"bypass"}
+
+
+# --- 誘導 plugin ---------------------------------------------------------
+# 明示指定は絶対パスのディレクトリでないと解決されない。相対でも ``~`` でも
+# 単一ファイルでも、OpenCode は**黙って無視する**。
+# see docs/research/opencode-plugin-loading.md
+
+
+def test_guide_plugin_is_registered_as_absolute_directory():
+    entries = generated()["plugins"]
+    assert gen.opencode_guide_plugin_path() in entries
+    for entry in entries:
+        assert not entry.startswith("~"), f"{entry}: ~ は展開されない"
+
+
+def test_guide_plugin_directory_name_is_not_auto_discovered():
+    """``plugin`` / ``plugins`` は設定ディレクトリ直下で自動探索される。
+
+    その名前にすると明示指定と合わせて二重にロードされる。
+    """
+    assert Path(gen.OPENCODE_GUIDE_PLUGIN).name not in {"plugin", "plugins"}
+
+
+def test_guide_plugin_files_exist():
+    source = ROOT / "home/dot_config/opencode/guide-plugin"
+    assert (source / "index.js").is_file()
+    assert (source / "modify_rules.json.py.tmpl").is_file()
+
+
+def test_plugins_not_declared_in_common_are_kept():
+    existing = {"plugins": ["opencode-acme-plugin"]}
+    merged = gen.merge_opencode_config(existing, COMMON)["plugins"]
+    assert merged[0] == "opencode-acme-plugin"
+    assert gen.opencode_guide_plugin_path() in merged
+
+
+def test_guide_plugin_is_not_registered_twice():
+    existing = {"plugins": [gen.opencode_guide_plugin_path()]}
+    merged = gen.merge_opencode_config(existing, COMMON)["plugins"]
+    assert merged.count(gen.opencode_guide_plugin_path()) == 1
+
+
+def test_guide_rules_are_generated():
+    rules_json = gen.build_opencode_guide({}, COMMON)["guide"]
+    assert rules_json, "誘導規則が 1 件も無い"
+    for rule in rules_json:
+        assert set(rule) == {"pattern", "message"}
+        re.compile(rule["pattern"])
+
+
+def test_cd_is_guided_to_workdir():
+    """最も件数の多い誘導。実機で deny とメッセージの到達を確認済み。
+
+    区切りの後ろの ``cd`` も見る。先頭だけを見る形では実履歴で 15 件
+    取りこぼした。
+    see docs/change/0002-opencode-ask-by-default.md
+    """
+    rules_json = gen.build_opencode_guide({}, COMMON)["guide"]
+    for command in ("cd sub && cat x", 'ls -la; echo "---"; cd /tmp && ls'):
+        hit = [r for r in rules_json if re.search(r["pattern"], command)]
+        assert len(hit) == 1, command
+        assert "workdir" in hit[0]["message"]
+
+
+def test_separator_echo_is_not_guided():
+    """区切り用途の ``echo`` は誘導しない。
+
+    確認が 1 件も減らないうえ、deny は 1 往復を捨てさせるので差し引き
+    マイナスだった（実履歴 466 呼び出しで実測）。
+    see docs/change/0002-opencode-ask-by-default.md 「誘導（優先度を下げる）」
+    """
+    rules_json = gen.build_opencode_guide({}, COMMON)["guide"]
+    assert not [r for r in rules_json if re.search(r["pattern"], 'echo "--- env ---"')]
+
+
+@pytest.mark.parametrize("broken", [{"pattern": "x"}, {"message": "y"}, {}])
+def test_guide_rule_without_pattern_or_message_is_rejected(broken: dict):
+    common = copy.deepcopy(COMMON)
+    common["opencode"]["shell"]["guide"] = [broken]
+    with pytest.raises(SystemExit):
+        gen.build_opencode_guide({}, common)
+
+
+def test_guide_target_is_fully_generated():
+    """壊れた rules.json でも apply でやり直せるようにする。"""
+    assert "opencode-guide" in gen.TARGETS
+    assert "opencode-guide" in gen.FULL_GENERATION_TARGETS
 
 
 def test_allow_is_not_widened_silently():

@@ -1045,6 +1045,42 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     return rules
 
 
+def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, str]]:
+    """誘導 plugin が読む判定表 (``rules.json``)。"""
+    out = []
+    for rule in common.get("opencode", {}).get("shell", {}).get("guide") or []:
+        pattern, message = rule.get("pattern"), rule.get("message")
+        if not pattern or not message:
+            raise SystemExit("opencode.shell.guide は pattern と message が要る")
+        out.append({"pattern": pattern, "message": message})
+    return out
+
+
+def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    return {"guide": opencode_guide_rules(common)}
+
+
+# 誘導 plugin の置き場。plugin / plugins という名前にしないこと。その 2 つは
+# 設定ディレクトリ直下で自動探索され、明示指定と二重にロードされる。
+# 明示指定は**ディレクトリ**でないと解決されず、``~`` も展開されない
+# (どちらも黙って無視される)。
+# see docs/research/opencode-plugin-loading.md
+OPENCODE_GUIDE_PLUGIN = "~/.config/opencode/guide-plugin"
+
+
+def opencode_guide_plugin_path() -> str:
+    return os.path.expanduser(OPENCODE_GUIDE_PLUGIN)
+
+
+def merge_opencode_plugins(existing_plugins: Any, common: dict[str, Any]) -> list[Any]:
+    """``plugins`` を更新する (宣言外のエントリは残す)。"""
+    path = opencode_guide_plugin_path()
+    out = [p for p in (existing_plugins or []) if p not in (path, OPENCODE_GUIDE_PLUGIN)]
+    if opencode_guide_rules(common):
+        out.append(path)
+    return out
+
+
 def merge_opencode_agents(existing_agent: Any, common: dict[str, Any]) -> dict[str, Any]:
     """``agent`` を更新する (common.toml に無いエージェントは残す)。
 
@@ -1112,6 +1148,9 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
         out["formatter"] = formatter
 
     out["permissions"] = build_opencode_permissions(common)
+    plugins = merge_opencode_plugins(existing.get("plugins"), common)
+    if plugins:
+        out["plugins"] = plugins
     agent = merge_opencode_agents(existing.get("agent"), common)
     if agent:
         out["agent"] = agent
@@ -1131,12 +1170,13 @@ TARGETS = {
     "copilot-settings": merge_copilot_settings,
     "gemini-settings": merge_gemini_settings,
     "opencode-config": merge_opencode_config,
+    "opencode-guide": build_opencode_guide,
 }
 
 # 既存内容を一切参照しない (完全生成の) ターゲット。
 # 既存ファイルが壊れた JSON でも作り直せるよう、読み込み自体を省く。
 # 省かないと、壊れたファイルを直すための apply がパースで失敗して詰む。
-FULL_GENERATION_TARGETS = {"copilot-hooks"}
+FULL_GENERATION_TARGETS = {"copilot-hooks", "opencode-guide"}
 
 
 def load_existing(path: str | None) -> dict[str, Any]:
