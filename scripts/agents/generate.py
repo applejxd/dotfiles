@@ -1045,6 +1045,23 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     return rules
 
 
+def merge_opencode_agents(existing_agent: Any, common: dict[str, Any]) -> dict[str, Any]:
+    """``agent`` を更新する (common.toml に無いエージェントは残す)。
+
+    OpenCode 側が ``/agents`` などで同じファイルへ書くため、宣言した名前だけを
+    差し替える (``mcp`` と同じ方針)。
+
+    ``permission`` に ``"allow"`` のような文字列を置くと、OpenCode が
+    ``{action:"*", resource:"*", effect:"allow"}`` へ展開する (実測)。
+    """
+    out = dict(existing_agent) if isinstance(existing_agent, dict) else {}
+    for name, agent in (common.get("opencode", {}).get("agent") or {}).items():
+        entry = dict(out.get(name) or {})
+        entry.update(agent)
+        out[name] = entry
+    return out
+
+
 def merge_opencode_mcp(existing_mcp: Any, common: dict[str, Any]) -> dict[str, Any]:
     """``mcp.servers`` を更新する (common.toml に無いサーバは残す)。
 
@@ -1095,6 +1112,9 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
         out["formatter"] = formatter
 
     out["permissions"] = build_opencode_permissions(common)
+    agent = merge_opencode_agents(existing.get("agent"), common)
+    if agent:
+        out["agent"] = agent
     out["mcp"] = merge_opencode_mcp(existing.get("mcp"), common)
     return out
 

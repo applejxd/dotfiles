@@ -671,6 +671,14 @@ auto_update = false
 #   実在しない名前を deny したまま気付けなくなる。
 # see docs/spec/agent-permissions.md 「OpenCode へ渡さないもの」
 
+# OpenCode のカスタムエージェント (V1 の「モード」に相当。mode は非推奨)。
+# permission = "allow" は全 action / 全 resource の allow へ展開される (実測)。
+# ★bypass は permission 層を丸ごと無効にする。秘密ファイルの read deny も外れる。
+# see docs/research/opencode-bypass-agent.md
+[opencode.agent.bypass]
+description = "全ツールを無確認で実行する (permission を全て allow で上書き)"
+permission = "allow"
+
 # OpenCode 専用の shell allow ([bash] とは共用しない。前提が違う)。
 # ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。
 # ★リダイレクトは resource に残ったまま前方一致するので、載せたコマンドは

@@ -32,6 +32,7 @@
 | [OpenCode V2のaskと並列バッチ](opencode-ask-and-parallel-batch.md) | 承認待ちは並列を壊さない実測、拒否が中断の起点、permission.reply のスキーマ、askの実効がモードで変わる |
 | [OpenCode V2の試験環境の隔離方法](opencode-test-isolation.md) | XDG_CONFIG_HOME が効かない実証、OPENCODE_CONFIG_DIR、Copilot モデルの引き方、過去記録への影響評価 |
 | [OpenCode V2のallowリスト監査](opencode-allow-list-audit.md) | git diff/statusの任意コード実行、sed -n の危険性、リダイレクトが resource に残る実証、allowとaskの等価性 |
+| [OpenCode V2のカスタムエージェント(Bypass)とキーバインド](opencode-bypass-agent.md) | keybindsがV2で除去される実証、modeではなくagentで実装する、permission="allow"の展開、bypassが外す防御の範囲 |
 | [compaction 関連の hook 仕様](compaction-hooks.md) | 圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測 |
 | [sandbox機能の包括調査](sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
 | [zenoとzsh-autosuggestionsの連携](zeno-autosuggestions-integration.md) | widget競合の原因、ロード順、回避策 |

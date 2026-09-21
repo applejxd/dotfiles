@@ -182,6 +182,31 @@ def test_allow_has_no_arbitrary_code_execution(command: str):
         assert not resource.startswith(command), f"{resource} は任意コード実行を含む"
 
 
+def test_bypass_agent_is_declared():
+    """全ツールを無確認で実行するカスタムエージェント。
+
+    ``permission = "allow"`` は OpenCode が
+    ``{action:"*", resource:"*", effect:"allow"}`` へ展開する (実測)。
+    V1 の ``mode`` は非推奨なので ``agent`` で出す。
+    """
+    agent = generated()["agent"]["bypass"]
+    assert agent["permission"] == "allow"
+    assert agent["description"]
+
+
+def test_agents_not_declared_in_common_are_kept():
+    """``/agents`` などが同じファイルへ書くので、宣言した名前だけ差し替える。"""
+    existing = {"agent": {"mine": {"description": "手で足したもの"}}}
+    merged = gen.merge_opencode_config(existing, COMMON)["agent"]
+    assert merged["mine"] == {"description": "手で足したもの"}
+    assert "bypass" in merged
+
+
+def test_bypass_is_the_only_agent_from_common():
+    """権限を緩めるエージェントが黙って増えないようにする。"""
+    assert set(generated()["agent"]) == {"bypass"}
+
+
 def test_allow_is_not_widened_silently():
     """allow が増えたら気付けるようにする。
 
