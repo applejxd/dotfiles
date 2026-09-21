@@ -195,13 +195,15 @@ sandbox は候補から**段階 3 へ昇格**した（[調査](../research/openc
 
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
-| P3-1 | `read` ツールが `read` deny を実際に守るか（誘導先が本当に保護されているか） | 保護対象を `read` ツールで開かせ、deny されることを実測する |
-| P3-2 | `grep` / `glob` ツールの保護を hook でどう自作するか | `execute.before` で `path` を検査する案と、`execute.after` で結果を濾す案を比較する |
-| P3-3 | `shell` 差し替えが `terminal` 機能と MCP・子エージェントへ波及するか | ラッパーのログで呼び出し元を数える |
-| P3-4 | macOS の `sandbox-exec` で同等のことができるか | **macOS 実機が要る**（Windows 実機検証と同じ扱い） |
+| P3-4 | macOS の `sandbox-exec` で同等のことができるか | **macOS 実機が要る**（Windows 実機検証と同じ扱い）。段階 3 を後回しにしたので保留 |
 
-**P3-1 が段階 2 の前提。** ここが崩れると「保護される層へ寄せる」という
-誘導の根拠が消え、伏字化だけが残る。
+決着済み（2026-09-22）:
+
+| # | 結果 |
+| --- | --- |
+| P3-1 | **成立。** `read` ツールは deny を守る（`permission.rejected`）。同じファイルが shell の `cat` では読めた。**誘導の前提が実測で裏づいた**（[permission の穴](../research/opencode-permission-gaps.md)） |
+| P3-2 | **`execute.after` で濾せる。** `grep` / `glob` の `result.content[].text` に絶対パスが埋まっているので、`read` の deny glob で落とせる。実測で `grep` は場所と内容が消え、`glob` は空になった。ただし件数ヘッダと `metadata` が残るので**存在だけは漏れる**。書式解析なので壊れやすい |
+| P3-3 | **プロセスごと隔離は全ツールを覆うが、常駐サービスが穴。** localhost の `opencode serve --service` へ内側から到達でき、`~/.config/opencode/service.json` のパスワードを読めると完全に迂回できる。対処は service.json のマスクと `--unshare-pid`（実測）。ネットワーク名前空間は LLM API に要るので分けられない |
 
 決着済み（[出力フィルタと子エージェント](../research/opencode-output-filter-and-subagents.md)）:
 
@@ -250,6 +252,28 @@ P1-4（[ask と並列バッチ](../research/opencode-ask-and-parallel-batch.md)�
 段階 2 と 3 は**独立して価値がある**。2 はモード B（このリポジトリ）の
 保護、3 は他プロジェクトでの境界。2 が先なのは、このリポジトリが
 主な作業場所だから。
+
+#### 段階 3 の費用対効果（2026-09-22 の結論）
+
+**sandbox の利点は当初の見込みより薄い。実装は後回しでよい。**
+
+検討の過程で、期待していた効果がほとんど否定された。
+
+| 期待 | 実際 |
+| --- | --- |
+| 自動化率が上がる | **上がらない**（自動実行では `ask` が素通り） |
+| 確認回数が減る | **減らない**（既定 `ask` を維持するため） |
+| 段階 5 が楽になる | **楽にならない**（結果が有界になるだけ） |
+| 敵対的なリポジトリから守れる | **守れない**（プロジェクト設定で外せる） |
+| このリポジトリが安全になる | **ならない**（`chezmoi` が動かず無効運用） |
+
+残る利点は 1 つだけ。**`chezmoi` を使わないプロジェクトで、
+難読化された持ち出し（`base64` 等）を止められる。** モード B の
+伏字化はここですり抜けるため、その差分だけが sandbox の価値。
+
+それでも調査した意味はあった。「境界が無い」と認めた上で段階 2 を
+設計するのと、知らずに設計するのとでは、伏字化にどこまで手をかけるかの
+判断が変わる。現在は**安全網であって境界ではない**と明記できている。
 
 ### 段階 1 の詳細
 
@@ -401,10 +425,15 @@ overlay に `opencode.json` が無いため permission 層ごと消える。
 
 | 穴 | 例 | 手段 | 効き目 |
 | --- | --- | --- | --- |
-| 秘密ファイルの読み出し | `cat ~/.ssh/id_ed25519` | 誘導 → `read` ツール | **deny が効く** |
+| 秘密ファイルの読み出し | `cat ~/.ssh/id_ed25519` | 誘導 → `read` ツール | **deny が効く**（P3-1 で実測） |
 | 同上（誘導を抜けたもの） | `sed -n 1p ~/.aws/credentials` | `execute.after` で伏字化 | 安全網 |
-| 検索での読み出し | `grep -r . ~/.aws` | `grep` ツールへ誘導 + hook で保護 | **保護は自作** |
+| 検索での読み出し | `grep -r . ~/.aws` | `grep` ツールへ誘導 + `execute.after` で結果を濾す | **濾せる**（P3-2 で実測） |
 | 保護パスへの書き込み | `echo x > ~/.config/opencode/opencode.json` | 文字列検査で `deny` | 限界あり |
+
+`grep` / `glob` の保護は `result.content[].text` に埋まった絶対パスを
+`read` の deny glob で判定して落とす。単一ソースを保てる。
+**件数ヘッダと `metadata` も書き換える**こと。放置すると
+「`Found 1 matches`」だけ残って存在が漏れ、結果とも矛盾する（実測）。
 
 伏字化は**成立する**（[実測](../research/opencode-output-filter-and-subagents.md)）。
 本体は `result.content` の `[{type:"text", text}]` で、ここを書き換えると
@@ -596,6 +625,16 @@ snap-confine is packaged without necessary permissions and cannot continue
 プロジェクトなら有効にできる。
 
 #### 制約
+
+プロセスごと隔離なので、`shell` / `read` / `grep` / MCP / plugin は
+すべて同じ名前空間に入る（P3-3 で確認）。`shell` 差し替え案にあった
+「ツール経由は外側」という穴は無くなる。
+
+**ただし常駐サービスが穴になる。** `opencode serve --service` は
+localhost で待ち受けており、内側から到達できる（ネットワーク名前空間は
+LLM API に要るので分けられない）。`~/.config/opencode/service.json` の
+パスワードを読まれると完全に迂回される。対処は service.json のマスクと
+`--unshare-pid`、内側は `--standalone` で起動すること（実測）。
 
 | OS | 扱い |
 | --- | --- |

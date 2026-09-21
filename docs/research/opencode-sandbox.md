@@ -266,7 +266,58 @@ required permitted capability cap_dac_override not found in current capabilities
 これ。** 秘密だけ隠して書き込みを許す形（Claude / Copilot と同じ方針）に
 しても、`chezmoi` が動かないので成立しない。
 
-## 7. 残る穴
+## 7. 常駐サービス経由の脱出（P3-3、2026-09-22）
+
+プロセスごと隔離しても、**localhost の常駐サービスが穴になる**。
+
+`opencode serve --service` が動いている環境では、sandbox の内側から
+到達できる。ネットワーク名前空間は分けられない（LLM API に要る）ため。
+
+```console
+$ ./sbx.sh -c 'curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:49374/'
+401
+```
+
+401 が返るのは認証があるから。**その資格情報は
+`~/.config/opencode/service.json` にある。**
+
+```json
+{"password": "…"}
+```
+
+内側で読めてしまうと、外側のサービスにツールを実行させられる。
+**sandbox の完全な迂回**になる。
+
+### 対処
+
+| 対処 | 効果 |
+| --- | --- |
+| `--ro-bind /dev/null ~/.config/opencode/service.json` | パスワードが読めなくなる（実測） |
+| `--unshare-pid` | 他プロセスが見えない（5 個まで減った） |
+
+`/proc/<外側の pid>/environ` は**もともと読めなかった**（権限拒否）ので、
+そこからの漏洩は無い。
+
+対処後の実測。
+
+```console
+$ ./sbx2.sh -c 'wc -c < ~/.config/opencode/service.json'
+/home/applejxd/.config/opencode/service.json: 許可がありません
+$ ./sbx2.sh -c 'ls /proc | grep -c "^[0-9]"'
+5
+```
+
+**残余リスク**: 資格情報が他の場所にも置かれていないかは未確認。
+「塞いだ」と断定はできない。sandbox 内では `--standalone` で起動し、
+サービスを使わせないのが素直。
+
+### 覆う範囲は構成上そろう
+
+プロセスごと隔離なので、`shell` / `read` / `grep` / MCP サーバ / plugin は
+すべて同じ名前空間の中に入る（子プロセス、または同一プロセス）。
+`shell` 差し替え案で残っていた「ツール経由は外側」という穴は無くなる。
+
+## 8. 残る穴
 
 `shell` の差し替えは **shell ツールにしか効かない**。
 
@@ -287,7 +338,7 @@ required permitted capability cap_dac_override not found in current capabilities
 
 現在の構成は前者が空いていた。ここを埋めるのが sandbox の役割。
 
-## 8. 採用する場合の検討事項
+## 9. 採用する場合の検討事項
 
 | 論点 | 内容 |
 | --- | --- |

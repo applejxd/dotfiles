@@ -332,6 +332,62 @@ pip 26.0.1 from ...        ← 実行された
 プロジェクト設定に勝てる層を置きたいなら、**OpenCode のプロセスごと
 隔離する**しかない（[sandbox の調査](opencode-sandbox.md)）。
 
+## 6. 誘導先は本当に保護されているか（2026-09-22 実測）
+
+段階 2 の誘導は「deny が効かない経路から効く経路へ移す」ことを狙う。
+その前提を確かめた。
+
+### `read` ツールは deny を守る（P3-1）
+
+`{action:"read", resource:"*canary*", effect:"deny"}` を置いて、
+同じファイルを 2 通りで読ませた。
+
+| 経路 | 結果 |
+| --- | --- |
+| `read` ツール | **`permission.rejected`**（内容は返らない） |
+| shell の `cat canary.txt` | **中身が出た** |
+
+**誘導の前提は成立する。** `cat` → `read` へ寄せれば deny が効く。
+
+（エージェント自身も「read は塞がれているのに shell から同じファイルが
+読める。意図した差なのか」と報告した。穴が目に見える形で出ている。）
+
+### `grep` / `glob` は deny を守らない。hook で濾せる（P3-2）
+
+どちらも `read` deny を無視して結果を返す（既知の穴の再確認）。
+保護は `execute.after` で自作できる。
+
+`execute.before` は解決済みの絶対パスを持つ。
+
+```json
+{"tool":"grep","input":{"pattern":"CANARY","path":"/…/work"}}
+```
+
+ただし `path` は**検索の起点**でしかなく、その下に保護対象があっても
+分からない。したがって**結果側で濾す**。
+
+`execute.after` の `result.content` は `[{type:"text", text}]` で、
+**text に絶対パスが埋まっている**。
+
+```text
+grep: "Found 1 matches\n/…/work/canary.txt:\n  Line 2: value=CANARY-MARKER-12345\n"
+glob: "/…/work/canary.txt"
+```
+
+パスで判定して落とせる。実測では次のようになった。
+
+| ツール | 濾した後にエージェントが受け取ったもの |
+| --- | --- |
+| `grep` | `Found 1 matches`（場所も内容も消えた） |
+| `glob` | 空 |
+
+**課題**: 件数ヘッダ（`Found 1 matches`）と `metadata`
+（`{"matches":1}`）が残るため、**存在だけは漏れる**うえ結果と矛盾する。
+実装時は両方を書き換える。人間向けのテキスト形式を解析するので、
+**書式が変わると壊れる**点にも注意がいる。
+
+判定に使うパターンは `read` の deny glob から生成すれば単一ソースを保てる。
+
 ## 再確認すべき情報源
 
 - <https://opencode.ai/v2/docs/permissions>（action 一覧と resource の定義）
