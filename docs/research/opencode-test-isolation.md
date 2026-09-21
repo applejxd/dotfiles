@@ -333,6 +333,47 @@ Orca が将来 mirror するようになったり overlay をやめたりして�
 Orca 側には `agentStatusHooksEnabled` を `false` にして overlay をやめる
 経路もあるが、内部の `PtySpawnConfig` の値で、UI から切れるかは**未確認**。
 
+### 配備後の実機確認（2026-09-21）
+
+`chezmoi apply` と Orca の再起動後に確認した。permission 層は生きている。
+
+```text
+OPENCODE_CONFIG=~/.config/opencode/opencode.json   ← 条件分岐が発火
+doc: ~/.config/opencode/opencode.json | permissions: 218
+  shell 先頭: {'action': 'shell', 'resource': '*', 'effect': 'ask'}
+
+$ pip --version
+Permission denied: shell                            ← deny が実効
+```
+
+`ask` 側は自動承認されて素通りする。`deny` だけが貫通を許さない。
+段階 2 で「自動実行で止めたいものは `ask` ではなく `deny` に倒す」と
+決めた根拠（[ask と並列バッチ](opencode-ask-and-parallel-batch.md)）が
+配備後の実環境でも成り立っている。
+
+### 注意: 常駐サービス経由の起動では届かないことがある
+
+再起動の前後でプロセス構成が変わった。
+
+```text
+再起動前: /init → zsh -l          → opencode -s ses_...
+再起動後: /init → opencode serve --service → zsh -c
+```
+
+**`shellenv.sh` は zsh の起動時にしか走らない。** 今回はサービスが
+修正後（21:14:35 > コミット 21:09:49）に立ち上がり、かつ zsh を経由した
+ため `OPENCODE_CONFIG` を持っていた。
+
+しかしサービスは長命で、シェルを経由しない経路で起動されると古い環境を
+持ち続ける。**permission が効いていない疑いがあるときは、まず
+`/proc/<service pid>/environ` に `OPENCODE_CONFIG` があるかを見る。**
+無ければサービスを再起動する。
+
+```bash
+pgrep -af 'opencode serve'
+tr '\0' '\n' < /proc/<pid>/environ | grep OPENCODE_CONFIG
+```
+
 ## 8. 配備先の想定は正しい
 
 実環境の `~/.config/opencode/` には OpenCode 自身が作った `service.json` が

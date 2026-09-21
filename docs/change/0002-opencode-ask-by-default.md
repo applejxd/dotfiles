@@ -261,10 +261,14 @@ global config の**置き換え**として扱う（upstream の既知の不具�
 overlay に `opencode.json` が無いため permission 層ごと消える。
 
 対処として `shellenv.sh` に条件付きで `OPENCODE_CONFIG` を入れた
-（2026-09-21）。`OPENCODE_CONFIG_DIR` があるときだけ働く。実環境で
-global config が 0 件から 218 rules へ復活することを確認済み
+（2026-09-21）。`OPENCODE_CONFIG_DIR` があるときだけ働く。
+`chezmoi apply` と Orca の再起動後、実環境で **218 rules が読まれ
+`pip --version` が deny される**ことを確認済み
 （[試験環境の隔離方法](../research/opencode-test-isolation.md)）。
-**反映には `chezmoi apply` と新しいセッションが要る。**
+
+なお `ask` は自動承認されて素通りし、`deny` だけが貫通を許さない。
+段階 2 で「自動実行で止めたいものは `deny` に倒す」とした方針が、
+配備後の実環境でも裏付けられた。
 
 ### 段階 2 の詳細
 
