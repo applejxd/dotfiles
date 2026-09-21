@@ -121,6 +121,57 @@ opencode run --agent bypass '<prompt>'
 # TUI では Tab または switch_mode のキーバインドで切り替える
 ```
 
+## 5. plugin は bypass を貫通する（段階 2 の前提）
+
+### 実測: `allow` でも `permission.evaluate` は発火する
+
+config の `deny` は hook を呼ばずに前段で効く（[plugin API の実測](opencode-plugin-api-probe.md)）。
+`allow` も同じなら bypass 中は plugin が無力になるはずだが、**そうではない**。
+
+`{shell, *, ask}` のみの config に bypass を足し、`ZAPTEST` を含む
+コマンドを `deny` へ上書きする plugin を置いて比較した（どちらも `--auto`）。
+
+| エージェント | `e.effect`（hook 到達時） | plugin の上書き | 結果 |
+| --- | --- | --- | --- |
+| 既定 | `ask` | `deny` へ | ブロック |
+| `bypass` | **`allow`** | `deny` へ | **ブロック** |
+
+```json
+{"cmd":"echo ZAPTEST","effectBefore":"allow","effectAfter":"deny"}
+```
+
+つまり **permission 層を全 allow にしても plugin は止められる**。
+bypass は「逃げ道」として不完全だった。
+
+### 解決: 「すでに `allow` のものには触らない」
+
+plugin にエージェント識別 API は要らない。**bypass が全て `allow` に
+なること自体が信号になる。**
+
+```js
+if (e.effect === "allow") return   // bypass はここで素通りする
+```
+
+| エージェント | hook 到達時の `effect` | 誘導 hook |
+| --- | --- | --- |
+| 既定 | ほぼ全て `ask`（allow は 5 件だけ） | 効く |
+| `bypass` | 全て `allow` | 素通り |
+
+同じ plugin で両方を実測した。
+
+```console
+opencode run --auto            'echo ZAPTEST'   → Blocked（plugin が deny）
+opencode run --auto --agent bypass 'echo ZAPTEST'   → ZAPTEST（exit 0）
+```
+
+誘導対象（`cd` / `echo` / `cat` / `find` など）は allow の 5 件と
+重ならないので、この規約による取りこぼしは無い。
+
+**制約**: config の `deny` は hook が発火しないため、plugin からは
+緩められない。ただし bypass はエージェント側の permission が全て `allow`
+なので、そもそも global の deny 規則に当たらない（`pip --version` で実測済み）。
+plugin だけが上の規約で明示的に譲る形になる。
+
 ## 再確認すべき情報源
 
 - V2 にキーバインド設定の経路があるか（**未確認**）

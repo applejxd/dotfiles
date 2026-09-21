@@ -306,6 +306,35 @@ deny にしてはいけない（deny は hook を呼ばないため代替案を�
 `grep` / `glob` へ誘導する場合は、`tool.execute.before` で `path` /
 `include` を退避し、`execute.after` で結果を濾す保護を同時に入れる。
 
+#### plugin 全体に効く 2 つの規約
+
+段階 1 の監査と bypass の実装で判明した制約を、選別器・誘導 hook の
+両方に効く規約として先に置く。
+
+**規約 1: すでに `allow` と判定されたものには触らない。**
+
+```js
+if (e.effect === "allow") return
+```
+
+`allow` でも `permission.evaluate` は発火するため、これを書かないと
+[bypass エージェント](../research/opencode-bypass-agent.md)が誘導 hook に
+引っかかって機能しない。bypass は全 action が `allow` になるので、
+この 1 行がそのままエージェント識別の代わりになる（実測）。
+誘導対象は allow の 5 件と重ならないので取りこぼしは無い。
+
+**規約 2: リダイレクトを含むコマンドは `allow` へ引き上げない。**
+
+```js
+if (/[<>]/.test(cmd)) return   // ask のまま
+```
+
+scanner はリダイレクトを分割せず resource に残すため、引き上げると
+`find . -name x > path` のような任意書き込みが無確認で通る
+（[allow リスト監査](../research/opencode-allow-list-audit.md)）。
+plugin は生コマンドを読むのでリダイレクトを検出できる。
+`deny` 側（誘導）には当てない。止める方向に倒すのは常に安全。
+
 #### `find` の選別器
 
 段階 1 で `find` を allow から外した分を、ここで回収する。丸ごと deny には
@@ -320,6 +349,7 @@ deny にしてはいけない（deny は hook を呼ばないため代替案を�
 | --- | --- |
 | 危険フラグ（`-exec` / `-execdir` / `-ok` / `-okdir` / `-delete` / `-fprint*`） | `deny` + `glob` への誘導メッセージ |
 | `$` / バッククォートを含む（間接参照で静的に解決できない） | 触らない（`ask` へ落とす） |
+| リダイレクトを含む（規約 2） | 触らない（`ask` へ落とす） |
 | それ以外の列挙形 | `allow` |
 
 **3 分岐目は対話利用でしか安全弁にならない。** `ask` の実効は実行モードで
