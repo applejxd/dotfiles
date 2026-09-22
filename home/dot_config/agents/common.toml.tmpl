@@ -873,6 +873,23 @@ db = ".opencode-sandbox/opencode.db"
 # 隔離版の設定ディレクトリ。緩和をここだけに閉じ込める。
 config_dir = ".opencode-sandbox/config"
 
+# 境界内から出てよいドメインの追加分 (OpenCode の境界だけに効く)。
+# [web] allow_domains と [sandbox] claude_network_allow に足す形で使う。
+# ★モデル提供元をここに入れないと、境界内からモデルへ到達できない。
+#   proxy が CONNECT を 403 で落とすだけなので、症状は「応答が来ない」になる。
+# ★wildcard は **先頭の `*.` と 単独の `*` だけ**効く。
+network_allow = [
+  # GitHub Copilot (モデル API)
+  "api.githubcopilot.com",
+  "*.githubcopilot.com",
+  # OpenCode 本体のサービス (更新確認・カタログ)
+  "opencode.ai",
+  "*.opencode.ai",
+  # Anthropic / OpenAI を使うときに要る
+  "api.anthropic.com",
+  "api.openai.com",
+]
+
 # 境界を定義するもの。ワークスペース相対で書く。
 # ★「次回の隔離起動時に、実行コード・境界設定・緩和設定の選択を決定する
 #   入力一式」を信頼の鎖から導出する。ファイル名の列挙では足りない。

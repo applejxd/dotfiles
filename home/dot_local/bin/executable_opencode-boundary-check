@@ -75,18 +75,25 @@ fi
 # --- 6. 許可外ドメインへ出られないこと ---
 # ★到達できない理由を区別する。許可済みドメインが引けることを対照に使い、
 #   「ネットワーク自体が死んでいるだけ」を合格にしない。
+# ★proxy の起動を待つ。srt の proxy (localhost:3128) は境界の生成直後には
+#   まだ待ち受けていないことがあり、1 回目の要求は rc=7 で落ちる (実地で踏んだ)。
 if command -v curl >/dev/null 2>&1; then
-  if curl -s -m 10 -o /dev/null "https://${BOUNDARY_ALLOWED_HOST:-api.githubcopilot.com}" 2>/dev/null; then
-    control=yes
+  control=no
+  i=0
+  while [ "$i" -lt 15 ]; do
+    if curl -s -m 10 -o /dev/null "https://${BOUNDARY_ALLOWED_HOST:-github.com}" 2>/dev/null; then
+      control=yes
+      break
+    fi
+    i=$((i + 1))
+    sleep 2
+  done
+  if [ "$control" != yes ]; then
+    bad "許可済みドメイン (${BOUNDARY_ALLOWED_HOST:-github.com}) へ到達できず、拒否か不通かを判別できない"
+  elif curl -s -m 10 -o /dev/null "https://${BOUNDARY_DENIED_HOST:-example.com}" 2>/dev/null; then
+    bad "許可外ドメイン (${BOUNDARY_DENIED_HOST:-example.com}) へ到達した"
   else
-    control=no
-  fi
-  if curl -s -m 10 -o /dev/null "https://${BOUNDARY_DENIED_HOST:-example.com}" 2>/dev/null; then
-    bad "許可外ドメインへ到達した"
-  elif [ "$control" = yes ]; then
     ok "許可外ドメインへ到達しない (許可済みは通る)"
-  else
-    bad "許可済みドメインにも到達できず、拒否か不通かを判別できない"
   fi
 else
   bad "curl が無くネットワークの検査ができない"

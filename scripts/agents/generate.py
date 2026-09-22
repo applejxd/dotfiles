@@ -1244,7 +1244,11 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     web = common.get("web", {})
     network: dict[str, Any] = {
         "allowedDomains": _uniq(
-            list(web.get("allow_domains", [])) + list(sandbox_cfg.get("claude_network_allow", []))
+            list(web.get("allow_domains", []))
+            + list(sandbox_cfg.get("claude_network_allow", []))
+            # OpenCode の境界だけに効く追加分。モデル提供元がここに無いと
+            # proxy が CONNECT を 403 で落とし、モデルへ到達できない。
+            + list(cfg.get("network_allow", []))
         ),
         "deniedDomains": _uniq(list(web.get("deny_domains", []))),
         "allowLocalBinding": False,
