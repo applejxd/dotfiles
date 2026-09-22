@@ -40,8 +40,8 @@
 | # | 目的 | 状態 | 最大の未解決点 | 次の確認 | 更新日 |
 | --- | --- | --- | --- | --- | --- |
 | [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | 圧縮後、作業再開前に checkpoint が届くか | P0-3 の実測 | 2026-09-19 |
-| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、自動化率を機構で回復する | In progress | 調査は決着。段階 1 は配備済みで既定 ask が実環境で有効 | 段階 2（プラグイン基盤 + 誘導 hook） | 2026-09-21 |
-| [0003](0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | Planned | 設定由来のディレクトリから `tui.ts` が読まれるか | 実装して TUI で目視確認 | 2026-09-22 |
+| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、自動化率を機構で回復する | In progress | sandbox は不採用。境界が無い前提で段階 2 が唯一の防御層 | 段階 2 の本体（read 誘導・grep フィルタ・伏字化） | 2026-09-22 |
+| [0003](0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | In progress | Bedrock 側の遅延と日本語品質が未測定 | 数日使って遅延の体感を判断（P2） | 2026-09-22 |
 
 ## 保留
 
