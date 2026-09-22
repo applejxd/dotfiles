@@ -211,6 +211,51 @@ def test_bypass_is_the_only_agent_from_common():
 # 誘導の素通り判定はエージェント名で行う。effect で見ると静的 allow を含む
 # 呼び出し (cd x && git log) まで素通りする。
 # see docs/research/opencode/permission/hook-order.md
+# grep / glob は read の deny を迂回するので、結果を plugin 側で濾す。
+# 判定パターンは read の deny glob から生成して単一ソースを保つ。
+# see docs/research/opencode/permission/gaps.md
+@pytest.mark.parametrize(
+    ("path", "blocked"),
+    [
+        ("/home/u/.ssh/id_ed25519", True),
+        ("/home/u/.aws/credentials", True),
+        ("/srv/app/certs/server.pem", True),
+        ("/home/u/proj/.env", True),
+        ("/home/u/proj/id_rsa.bak", True),
+        ("/home/u/.gnupg/x/y/z.gpg", True),
+        ("/home/u/proj/README.md", False),
+        ("/home/u/proj/environment.yml", False),
+        ("/home/u/sshconfig", False),
+    ],
+)
+def test_read_deny_regexes_match_absolute_paths(path, blocked):
+    pats = [re.compile(p) for p in gen.build_opencode_guide({}, COMMON)["read_deny"]]
+    assert any(p.search(path) for p in pats) is blocked, path
+
+
+def test_read_deny_regexes_cover_every_glob():
+    globs = COMMON["file"]["claude_read_deny_globs"]
+    assert len(gen.build_opencode_guide({}, COMMON)["read_deny"]) == len(globs)
+
+
+@pytest.mark.parametrize(
+    ("glob", "matches", "misses"),
+    [
+        ("**/.ssh/**", ["/a/b/.ssh/c/d"], ["/a/b/ssh/c"]),
+        ("**/*.pem", ["/a/b/c.pem"], ["/a/b/pem"]),
+        (".env", ["/a/b/.env"], ["/a/b/.env.sample"]),
+        ("**/id_rsa*", ["/a/id_rsa", "/a/id_rsa.pub"], ["/a/myid_rsa"]),
+    ],
+)
+def test_glob_to_regex_keeps_slash_boundaries(glob, matches, misses):
+    """``*`` は ``/`` を跨がない。跨ぐと無関係なパスまで落として作業が止まる。"""
+    pat = re.compile(gen.glob_to_regex(glob))
+    for path in matches:
+        assert pat.search(path), f"{glob} が {path} に当たらない"
+    for path in misses:
+        assert not pat.search(path), f"{glob} が {path} に当たってしまう"
+
+
 def test_bypass_agents_are_named_in_the_rules():
     assert gen.build_opencode_guide({}, COMMON)["bypass_agents"] == ["bypass"]
 

@@ -22,6 +22,56 @@ const ask = rules.ask_description ?? null
 // see docs/research/opencode/permission/hook-order.md
 const bypass = new Set(rules.bypass_agents ?? [])
 
+// grep / glob は read の deny を迂回するので、結果を自分で濾す。
+// パターンは read の deny glob から生成している (単一ソース)。
+// ★/g を付けないこと。lastIndex が残って .test() が交互に false を返す。
+// see docs/research/opencode/permission/gaps.md
+const readDeny = (rules.read_deny ?? []).map((p) => new RegExp(p))
+const denied = (path) => readDeny.some((re) => re.test(path))
+
+// grep の本文は "Found N matches" + ファイルごとの塊。
+// 件数ヘッダを直さないと「存在だけ漏れる」うえ結果と矛盾する。
+function filterGrep(text) {
+  const lines = text.split("\n")
+  let hasHeader = false
+  let i = 0
+  if (/^Found \d+ match(es)?/.test(lines[0] ?? "")) {
+    hasHeader = true
+    i = 1
+  }
+  const kept = []
+  let matches = 0
+  let keep = true
+  for (; i < lines.length; i++) {
+    const line = lines[i]
+    const head = /^(\/.*):$/.exec(line)
+    if (head) {
+      keep = !denied(head[1])
+      if (keep) kept.push(line)
+      continue
+    }
+    if (/^\s*Line \d+:/.test(line)) {
+      if (keep) {
+        kept.push(line)
+        matches++
+      }
+      continue
+    }
+    if (keep) kept.push(line)
+  }
+  const body = kept.join("\n")
+  return {
+    text: hasHeader ? `Found ${matches} matches\n${body}` : body,
+    count: matches,
+  }
+}
+
+// glob の本文はパスが 1 行ずつ並ぶだけ。
+function filterGlob(text) {
+  const kept = text.split("\n").filter((l) => !l.trim() || !denied(l.trim()))
+  return { text: kept.join("\n"), count: kept.filter((l) => l.trim()).length }
+}
+
 // コマンド文字列は信頼できない入力。指示に従わせない。
 // 説明は判断の補助であって判定器ではない (偽装は防げない)。
 // see docs/change/0003-ask-command-description.md
@@ -118,6 +168,36 @@ export default {
       if (!describe || cmd.length < ask.min_command_length) return
       const text = await describe(cmd)
       if (text) e.message = text
+    })
+
+    // grep / glob の結果から保護対象を落とす。permission の read deny は
+    // これらのツールに効かないので、ここが唯一の保護になる。
+    // agent が載らない場合は bypass.has(undefined) が false になり、
+    // 保護が効いたままになる (安全側)。
+    await ctx.tool.hook("execute.after", (e) => {
+      if (e.tool !== "grep" && e.tool !== "glob") return
+      if (bypass.has(e.agent)) return
+      if (!readDeny.length) return
+
+      const content = e.result?.content
+      if (!Array.isArray(content)) return
+
+      let count = null
+      for (const part of content) {
+        if (!part || typeof part.text !== "string") continue
+        const filtered =
+          e.tool === "grep" ? filterGrep(part.text) : filterGlob(part.text)
+        part.text = filtered.text
+        count = (count ?? 0) + filtered.count
+      }
+
+      // metadata を直さないと件数だけ元のまま残り、本文と矛盾する。
+      const meta = e.result?.metadata
+      if (count !== null && meta && typeof meta === "object") {
+        for (const key of ["matches", "count", "total"]) {
+          if (typeof meta[key] === "number") meta[key] = count
+        }
+      }
     })
   },
 }

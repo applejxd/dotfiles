@@ -1104,10 +1104,50 @@ def opencode_bypass_agents(common: dict[str, Any]) -> list[str]:
     return sorted(n for n, a in agents.items() if a.get("permission") == "allow")
 
 
+def glob_to_regex(glob: str) -> str:
+    """``[file]`` の glob を、絶対パスに当てる正規表現へ直す。
+
+    ``grep`` / ``glob`` ツールの結果には**絶対パスが埋まっている**ので、
+    どの階層に現れても当たるようにする（``(?:^|/)`` で始める）。
+    see docs/research/opencode/permission/gaps.md
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(glob):
+        if glob.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif glob.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif glob[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif glob[i] == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(glob[i]))
+            i += 1
+    return "(?:^|/)" + "".join(out) + "$"
+
+
+def opencode_read_deny_regexes(common: dict[str, Any]) -> list[str]:
+    """``grep`` / ``glob`` の結果を濾すためのパターン。
+
+    ``read`` の deny glob と同じものを使う。両ツールは permission の
+    ``read`` deny を迂回するので、保護は plugin 側で自作するしかない。
+    see docs/research/opencode/permission/gaps.md
+    """
+    globs = common.get("file", {}).get("claude_read_deny_globs") or []
+    return [glob_to_regex(str(g)) for g in globs]
+
+
 def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
         "guide": opencode_guide_rules(common),
         "bypass_agents": opencode_bypass_agents(common),
+        "read_deny": opencode_read_deny_regexes(common),
     }
     ask = opencode_ask_description(common)
     if ask:
