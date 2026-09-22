@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import sqlite3
 import subprocess
 import sys
@@ -139,6 +138,29 @@ def inner_env(sandbox: dict) -> dict[str, str]:
     return env
 
 
+def resolve_node() -> str:
+    """node の実体を返す。**shim を使わない。**
+
+    mise の shim は mise 本体への symlink なので、呼ぶたびに版解決が走り、
+    ネットワーク確認で止まることがある (実地で踏んだ)。加えて mise は
+    ワークスペース内の設定を読むので、**境界を張る前に可変な入力を
+    経由する**ことになり、信頼の鎖が切れる。
+    see docs/change/0004-opencode-sandbox.md 「信頼の鎖」
+    """
+    installs = HOME / ".local/share/mise/installs/node"
+    candidates = sorted(
+        (p for p in installs.glob("*/bin/node") if p.is_file() and not p.is_symlink()),
+        # 24.5.0 のような完全な版を優先し、新しいものから選ぶ
+        key=lambda p: (len(p.parent.parent.name.split(".")), p.parent.parent.name),
+        reverse=True,
+    )
+    for path in (*candidates, Path("/usr/bin/node"), Path("/usr/local/bin/node")):
+        if path.is_file():
+            return str(path)
+    die("node の実体が見つからない", "mise install node で入れる")
+    raise AssertionError  # die は必ず終了する
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -156,9 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         die(f"srt が無い: {runtime}")
     if not OPENCODE.is_file():
         die(f"opencode が無い: {OPENCODE}")
-    node = shutil.which("node", path=f"{HOME}/.local/share/mise/shims:/usr/bin:/bin")
-    if not node:
-        die("node が見つからない")
+    node = resolve_node()
 
     require_clean(workspace, args.allow_dirty)
     for key in ("data_home", "config_dir"):
@@ -192,11 +212,16 @@ def main(argv: list[str] | None = None) -> int:
                 "BOUNDARY_DENIED_HOST": "example.com",
             }
             # ★パイプへ通さないこと。終了コードが置き換わり失敗を取りこぼす。
-            done = subprocess.run(  # noqa: S603
-                [node, str(runtime), "-s", boundary, "-c", f"sh {CHECK}"],
-                env=check_env,
-                check=False,
-            )
+            # ★止まったら起動しない。判定できない ≠ 合格。
+            try:
+                done = subprocess.run(  # noqa: S603
+                    [node, str(runtime), "-s", boundary, "-c", f"sh {CHECK}"],
+                    env=check_env,
+                    check=False,
+                    timeout=180,
+                )
+            except subprocess.TimeoutExpired:
+                die("境界チェックが時間内に終わらなかった", "判定できないので起動しない")
             if done.returncode != 0:
                 die("起動時の境界チェックが不合格", "上の ★NG を見て設定を直す")
 

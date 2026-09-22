@@ -186,3 +186,9 @@ pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 .tmp/
+
+# 隔離版 OpenCode の作業領域 (ランチャーが作る)。
+# snapshot・隔離用 DB・隔離版の設定が入る。ignore しないと
+# 未保存変更のゲートが必ず落ちる。
+# see docs/change/0004-opencode-sandbox.md
+.opencode-sandbox/
