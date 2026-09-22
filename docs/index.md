@@ -51,8 +51,8 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
   - Windows 実機での検証は未実施（source state は更新済み）
   - Copilot の圧縮直後の注入は Claude より 1 ツール分遅い（同じターン内には届く）
   - Copilot では文脈使用率を推定できないため、閾値監視は見送り
-  - OpenCode は hook / sandbox を持たないため、防御が permission リスト 1 層だけ
-    （[OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い)）
+  - OpenCode に sandbox は無い。防御は permission リストと plugin の 2 層で、
+    どちらも境界ではない（[OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い)）
 - **現行仕様**: [仕様・運用](spec/index.md)
 
 ## 活動中
@@ -60,7 +60,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
 | [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
-| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 1 完了・配備済み。既定 ask が実環境で有効 | 段階 2（プラグイン基盤 + 誘導 hook） |
+| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 既定 ask・誘導・`grep` / `glob` の結果フィルタを配備済み | 段階 2-C（shell 出力の伏字化） |
 
 ## 判断待ち・障害
 

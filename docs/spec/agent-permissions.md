@@ -355,6 +355,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 | 役割 | 実体 | 登録先 |
 | --- | --- | --- |
 | 誘導（deny + 代替案）と説明の生成 | `index.js` | `opencode.json` の `plugins` |
+| `grep` / `glob` の結果フィルタ | `index.js` | 同上 |
 | 確認画面への説明表示（toast） | `tui.ts` | **`cli.json` の `plugins`** |
 
 **登録先が分かれるのは仕様。** `opencode.json` に書いたディレクトリからは
@@ -377,6 +378,30 @@ plugin が守る規約は 2 つ。
   `cd x && git log`（`git log` が静的 allow）のように、allow を含む呼び出しまで
   誘導が素通りする
 - **リダイレクトを含むコマンドは `allow` へ引き上げない**
+
+`bypass` は**誘導も結果フィルタも両方**素通りする。規則ごとに効かせ分ける
+ことも技術的には可能だが採らない。誘導が誤爆したときの逃げ道を残すほうが
+重要で、`bypass` は「秘密を読むために一時的に全部外す」用途も兼ねるため。
+
+##### `grep` / `glob` の結果フィルタ
+
+permission の `read` deny は**この 2 つのツールに効かない**
+（[permission の穴](../research/opencode/permission/gaps.md)）。そのため
+`tool.execute.after` で結果から保護対象を落とす。
+
+- 判定パターンは `[file] claude_read_deny_globs` から生成する（単一ソース）。
+  `*` は `/` を跨がず、`**` だけ跨ぐ
+- `grep` はファイル単位の塊を落とし、**件数ヘッダも訂正する**
+  （`Found 2 matches` → `Found 1 matches`）。放置すると存在だけ漏れて
+  本文と矛盾する。`metadata` の件数も同時に直す
+- 正規表現に `/g` を付けない。`lastIndex` が残って `.test()` が交互に
+  `false` を返し、半分すり抜ける
+
+**効くのは `grep` / `glob` ツールだけで、shell の `grep` には効かない。**
+shell 経由の読み取りは誘導（`cat` / `head` / `tail` / `sed -n` を `read` へ）
+で減らしているが、`grep -n` は静的 allow なので素通りする。ここは
+[CHG-0002](../change/0002-opencode-ask-by-default.md) 段階 2-C の
+出力伏字化が受け持つ。
 
 **サーバ側 plugin を更新したら `opencode service restart` が要る。**
 常駐サービスのプロセス内で動くため、`chezmoi apply` だけでは反映されない。
