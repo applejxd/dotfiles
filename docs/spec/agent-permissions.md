@@ -239,15 +239,18 @@ Copilot CLI の `permissions-config.json` は deny / ask を表現できない
 
 ### OpenCode V2 の扱い
 
-OpenCode V2 には hook 機構も sandbox も無い。使えるのは permission 層だけで、
-`common.toml` の意図は `~/.config/opencode/opencode.json` の `permissions`
-だけで表現しきる必要がある。生成は `generate.py --target opencode-config`。
+OpenCode V2 に sandbox は無い。強制に使えるのは permission リストと
+plugin の 2 つで、`common.toml` の意図はその範囲で表現する。
+生成は `generate.py --target opencode-config`。
 
 | 層 | OpenCode での状態 |
 | --- | --- |
-| 0. sandbox | **無い**。OS レベルの強制は効かない |
-| 1. permission リスト | `opencode.json` の `permissions` (generate.py が生成) |
-| 2. hook | **無い**。`check_bash.py` 相当の意味解析は動かない |
+| 0. sandbox | **無い**。OS レベルの強制は効かない（[検討して不採用](../change/0002-opencode-ask-by-default.md)） |
+| 1. permission リスト | `opencode.json` の `permissions`。**既定は `ask`** |
+| 2. hook | plugin の `permission.evaluate` / `tool.execute.*`（`guide-plugin`） |
+
+**permission と plugin は安全網であって境界ではない。** 実行前の文字列検査は
+クォートと変数で、実行後の出力検査は `base64` ですり抜ける（実測）。
 
 PostToolUse 系の hook (`format-file.sh` / `markdownlint.sh`) だけは、CLI 本体の
 `formatter` 機能で等価な結果になる ([整形 (formatter)](#整形-formatter))。
@@ -325,13 +328,69 @@ hook 版との違いが 2 つある。
 | `[web] allow_domains` / `deny_domains` | `webfetch` の resource は **URL 全体**で、`*` が `/` を跨ぐ。`*://*.example.com/*` は `https://evil.test/x.example.com/y` にも当たり、ドメイン許可を正しく書けない。過大な allowlist を出すより出さない方を選ぶ |
 | `[file] claude_read_allow` | OpenCode は allow が既定 (`{action:"*", resource:"*", effect:"allow"}`)。同義の規則が増えるだけ |
 | `[claude] mcp_deny` | Claude の `mcp__<server>__<tool>` と OpenCode の `<server>_<tool>` は別体系。機械変換すると実在しない名前を deny したまま気付けない |
-| `[[hooks]]` | hook 機構が無い |
+| `[[hooks]]` | Claude の hook 契約とは別物。OpenCode 側は plugin で書く |
 | `[sandbox]` | sandbox が無い (`claude_write_deny` の意図だけ `[file]` 側へ写している) |
 
-`allow` のリスト自体は `shell` について出力している。OpenCode の既定が
-allow-by-default なので現時点では no-op だが、意図の記録であり、
-後で `{action:"shell", resource:"*", effect:"ask"}` を足したときに
-そのまま効く位置に並ぶ。
+#### 既定は `ask`
+
+`permissions` の先頭に `{action:"shell", resource:"*", effect:"ask"}` を置き、
+**未掲載のコマンドが無条件に通らないようにしてある**。shell の `allow` は
+`[opencode.shell]` に書いた 5 件だけで、`[bash]` とは共用しない
+（`[bash]` は 3 CLI 共通のため、触ると効果の切り分けができなくなる）。
+
+allow の基準は副作用なし・冪等・**任意コード実行を含まない**こと。
+`git diff` / `git status` は `.git/config` 経由で任意コマンドを起動できる
+ため載せない。
+
+**allow に載せたコマンドは任意ファイル書き込みの手段にもなる。** scanner が
+リダイレクトを分割せず resource に残すので、`wc -l f.txt > path` が `wc *`
+に前方一致する。allow は最小に保つ以外の守り方が無い。
+
+#### plugin 層 (`guide-plugin`)
+
+`~/.config/opencode/guide-plugin/` に置く。判定表は `common.toml` の
+`[[opencode.shell.guide]]` と `[opencode.ask_description]` から
+`rules.json` として生成し、plugin は読むだけにする。
+
+| 役割 | 実体 | 登録先 |
+| --- | --- | --- |
+| 誘導（deny + 代替案）と説明の生成 | `index.js` | `opencode.json` の `plugins` |
+| 確認画面への説明表示（toast） | `tui.ts` | **`cli.json` の `plugins`** |
+
+**登録先が分かれるのは仕様。** `opencode.json` に書いたディレクトリからは
+TUI 側が読まれない。どちらも**絶対パスのディレクトリ**でないと解決されず、
+`~` も単一ファイルも黙って無視される。
+
+plugin が守る規約は 2 つ。
+
+- **すでに `allow` のものには触らない。** `bypass` エージェントを壊さない
+  （bypass は全 action が `allow` になるので、これが識別の代わりになる）
+- **リダイレクトを含むコマンドは `allow` へ引き上げない**
+
+**サーバ側 plugin を更新したら `opencode service restart` が要る。**
+常駐サービスのプロセス内で動くため、`chezmoi apply` だけでは反映されない。
+TUI 側は CLI プロセスなので再起動は不要。
+
+#### 確認画面に出るコマンドの説明
+
+60 文字以上のコマンドで確認が出るとき、安価なモデルが 1 行の日本語説明を
+作り、toast で表示する。破壊的操作・外部送信・秘密への接触があれば
+先頭に `⚠` が付く。
+
+```toml
+[opencode.ask_description]
+models = ["amazon-bedrock/us.anthropic...", "github-copilot/claude-haiku-4.5", ...]
+```
+
+`models` は上から試し、使えたものを採用する。**Bedrock 未設定なら自動的に
+Copilot へ落ちる**（catalog に無いものは通信せず飛ばす）。
+
+**説明は判断の補助であって判定器ではない。** コマンド文字列は信頼できない
+入力で、偽装は原理的に防げない。確認画面は常に生コマンドを表示するので、
+そちらが一次情報。
+
+モデル呼び出しが失敗・タイムアウトしても**確認は通常どおり出る**
+（説明が付かないだけ）。
 
 #### 後勝ちの照合
 

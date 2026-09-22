@@ -1,8 +1,12 @@
 # CHG-0003: 確認画面で長いコマンドを判断可能にする
 
-- **状態**: Planned
+- **状態**: Done
 - **更新日**: 2026-09-22
+- **終了日**: 2026-09-22
 - **基準**: OpenCode V2（`v2.0.12`）
+
+> **この文書は当時の記録。** 現在の仕様は
+> [agent-permissions](../spec/agent-permissions.md)「確認画面に出るコマンドの説明」。
 
 ## 目的と非目的
 
@@ -235,4 +239,38 @@ plugin のロード可否を目視なしで判定できる
 
 ## 終了結果
 
-<!-- Done / Abandoned にするとき記入 -->
+**採用。実装して配備済み。**
+
+必須基準は 4 つとも満たした。
+
+| # | 基準 | 結果 |
+| --- | --- | --- |
+| 1 | 60 文字以上のコマンドで説明が確認と同時に出る | **達成**（TUI で目視確認） |
+| 2 | モデルが失敗・タイムアウトしても確認は通常どおり出る | **達成**（候補を全て無効にして実測） |
+| 3 | バックエンドを決め打ちしない | **達成**（Bedrock 未設定で Copilot へ自動的に落ちる） |
+| 4 | `allow` 判定済みには触らない | **達成**（規約 1。`bypass` を壊さない） |
+
+望ましい条件も満たした。コマンド単位のキャッシュを持ち、`⚠` は
+破壊的操作・外部送信・秘密への接触にだけ付く（4 種類 × 2 回で 8/8 一致）。
+
+### 反映先
+
+- 仕様: [agent-permissions](../spec/agent-permissions.md)
+  「plugin 層」「確認画面に出るコマンドの説明」
+- 実装: `home/dot_config/opencode/guide-plugin/`、
+  `home/dot_config/agents/common.toml.tmpl` の `[opencode.ask_description]`
+- 観測: [ask 画面へ説明を出す](../research/opencode/plugin/ask-description.md)、
+  [ロード経路](../research/opencode/plugin/loading.md)、
+  [試験環境の隔離方法](../research/opencode/test-isolation.md)
+
+### 移管した未完事項
+
+| # | 内容 | 移管先 |
+| --- | --- | --- |
+| P2 | 生成の遅延（Haiku で平均 1.1 秒）が実運用で許容範囲か | 運用で判断。不満なら `min_command_length` の調整で済む |
+| P3 | `cli.json` が Orca の overlay 下でも読まれるか | 実環境では読まれることを確認済み。他環境は未検証 |
+| P4 | Bedrock 側の遅延と日本語品質 | provider を設定できたら実測（[コスパ比較](../research/opencode/plugin/ask-description.md)） |
+| — | `app_bottom` スロットでの固定表示 | `api.slots` が実装されたら再評価 |
+
+いずれも**この案件の成立を妨げない**。P4 は外部要因で待ち、
+それ以外は設定値の調整か将来の API 追加待ち。
