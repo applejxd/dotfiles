@@ -20,7 +20,19 @@
 | `plugins: ["~/path/dir"]` | 無視（`~` は展開されない） |
 | `<OPENCODE_CONFIG_DIR>/plugins/` 直下 | 自動探索される |
 | `<OPENCODE_CONFIG_DIR>/plugin/` 直下 | 自動探索される |
-| `<cwd>/.opencode/plugins/` 直下 | 自動探索される |
+| `<cwd>/.opencode/plugins/` 直下 | ~~自動探索される~~ **`v2.0.12` では探索されない** |
+
+> [!WARNING]
+> **訂正 (2026-09-23 / `v2.0.12`)**: `<cwd>/.opencode/plugins/<名前>/index.js`
+> は**読み込まれない**。同じ形を `<OPENCODE_CONFIG_DIR>/plugins/` へ置いた
+> 対照は読み込まれたので、違いは置き場所だけ。
+> プロジェクト設定がまるごと効かなくなっているのと同じ変化と見られる
+> （[permission の穴 §5](../permission/gaps.md#5-プロジェクト設定とグローバル設定の優劣2026-09-23-再測)）。
+>
+> 測ったのは `opencode run`（ヘッドレス）のみ。**TUI は未検証。**
+>
+> ついでに分かったこと: **plugin はサーバ起動時ではなくセッション開始時に
+> 読み込まれる。** `opencode api get` を叩くだけでは動かない。
 
 `package.json` は不要。`index.js` だけのディレクトリで足りる。
 
