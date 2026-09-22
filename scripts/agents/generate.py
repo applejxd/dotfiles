@@ -1005,6 +1005,52 @@ def opencode_rules(action: str, effect: str, resources: list[str]) -> list[dict[
     ]
 
 
+def build_opencode_sandbox_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
+    """隔離版の ``permissions`` を、通常版の宣言から導出する。
+
+    **通常版は変えない。** 緩和を隔離版だけに閉じ込めるため、同じ宣言から
+    別のリストを作る。取りこぼしを避けるので、宣言を足せば両方に反映される。
+
+    捨ててよいのは「境界が到達させないもの」だけ。**ワークスペース相対の
+    秘密 glob と ``.git/hooks`` は捨てない。** それらは境界の外の話ではなく、
+    shell から届く (= permission は誤操作の抑止にしかならない)。
+    see docs/change/0004-opencode-sandbox.md 「段階 3」
+    """
+    cfg = common.get("opencode", {}).get("sandbox", {}).get("permissions", {})
+    drop_shell = [re.compile(p) for p in cfg.get("drop_shell", [])]
+    drop_prefixes = tuple(cfg.get("drop_path_prefixes", []))
+    default_effect = str(cfg.get("default_shell_effect", "ask"))
+
+    out: list[dict[str, str]] = []
+    for rule in build_opencode_permissions(common):
+        action, resource = rule["action"], rule["resource"]
+        if action == "shell":
+            if resource == "*":
+                # 既定の反転。境界内なので列挙をやめる
+                out.append({**rule, "effect": default_effect})
+                continue
+            if any(p.match(resource) for p in drop_shell):
+                continue
+        elif action in ("read", "edit") and resource.startswith(drop_prefixes):
+            continue
+        out.append(rule)
+    return out
+
+
+def opencode_sandbox_policies(common: dict[str, Any]) -> list[dict[str, str]]:
+    """隔離版の ``experimental.policies``。**運用上の禁止だけ**を置く。
+
+    policies は permission 検査を hard-deny するもので、**任意コードへの
+    境界ではない**。plugin のコードを sandbox しないし、不正な statement は
+    警告付きで破棄されるので、置いた事実ではなく有効性を確認する。
+    """
+    cfg = common.get("opencode", {}).get("sandbox", {}).get("policies", {})
+    return [
+        {"action": "permission", "resource": str(r), "effect": "deny"}
+        for r in cfg.get("deny", [])
+    ]
+
+
 def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     """``permissions`` の順序付きリストを組み立てる。
 
@@ -1266,10 +1312,23 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
             },
         },
     }
-    for key in ("data_home", "db", "config_dir"):
+    for key in ("data_home", "db"):
         value = _under_workspace(key)
         if value:
             out[key] = value
+    # 隔離版の設定ディレクトリは**ワークスペースの外**。内側からは allowRead
+    # だけなので、緩和設定を自分で広げられない。ランチャーが起動のたびに
+    # ここへ opencode.json を書き直す。
+    config_dir = cfg.get("config_dir")
+    if config_dir:
+        out["config_dir"] = expand_user(str(config_dir))
+    out["permissions"] = build_opencode_sandbox_permissions(common)
+    policies = opencode_sandbox_policies(common)
+    if policies:
+        out["policies"] = policies
+    prompt = cfg.get("system_prompt")
+    if prompt:
+        out["system_prompt"] = str(prompt).strip()
     return out
 
 

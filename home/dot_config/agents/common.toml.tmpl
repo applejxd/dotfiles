@@ -835,6 +835,7 @@ read = [
   "~/.local/share/mise",
   "~/.local/bin",
   "~/.config/opencode",
+  "~/.config/opencode-sandbox",
   "~/.config/shell",
   "~/.config/mise",
   "~/.config/chezmoi",
@@ -870,8 +871,10 @@ data_home = ".opencode-sandbox/data"
 # 資格情報と migration だけ引き継ぐ (migration を消すと壊れる)。
 db = ".opencode-sandbox/opencode.db"
 
-# 隔離版の設定ディレクトリ。緩和をここだけに閉じ込める。
-config_dir = ".opencode-sandbox/config"
+# 隔離版の設定ディレクトリ。★ワークスペースの外に置く。
+# 内側からは allowRead のみ (= 書けない) になり、緩和設定を自分で広げられない。
+# ランチャーが起動のたびに生成し直す。
+config_dir = "~/.config/opencode-sandbox"
 
 # 境界内から出てよいドメインの追加分 (OpenCode の境界だけに効く)。
 # [web] allow_domains と [sandbox] claude_network_allow に足す形で使う。
@@ -890,6 +893,17 @@ network_allow = [
   "api.openai.com",
 ]
 
+# 隔離版の permission を、通常版の宣言から導出するための指定。
+# ★通常版 (~/.config/opencode) は 225 件のまま。ここは隔離版だけに効く。
+#
+# 判定の基準 (外部レビューの区分):
+#   OS   境界が到達させない。permission が無くても守られる → 捨てる
+#   ツール read/edit は止まるが **shell からは届く** → 残す (誤操作の抑止)
+#   運用  事故防止。強制ではない → 残す
+#
+# ★「残したから守られている」と読んではいけない。permission は任意コードへの
+#   境界ではない。ワークスペース内の秘密と .git/hooks は shell から届く。
+# see docs/change/0004-opencode-sandbox.md 「段階 3」
 # 境界を定義するもの。ワークスペース相対で書く。
 # ★「次回の隔離起動時に、実行コード・境界設定・緩和設定の選択を決定する
 #   入力一式」を信頼の鎖から導出する。ファイル名の列挙では足りない。
@@ -901,6 +915,85 @@ protected = [
   "home/dot_local/bin",
   "scripts/agents",
   "home/dot_config/mise",
+]
+
+# 境界の存在と範囲をエージェントへ伝える。
+# ★説明上の対策であって、書き込み失敗を保証するものではない。
+#   実測で `ls ~/.ssh` の ENOENT を見て「存在しないので作れます」と誤診した。
+#   実行していれば鍵は消える領域へ書かれていた。
+# see docs/research/opencode/permission/sandbox-runtime.md 「20. 境界は見えない」
+system_prompt = """
+この環境は OS のアクセス制御で囲われています。次を前提に判断してください。
+
+1. ホスト HOME の大部分は隠されています。`ENOENT`（存在しない）は
+   ホスト上の不存在を意味しません。隠されているだけのことがあります。
+2. 成果の永続化先は、この作業ディレクトリです。他の永続化先や
+   読み取り専用の例外は、明示されたものに限られます。
+3. 一時領域への書き込みは、ホストの同名パスへの反映を意味しません。
+   隔離の終了時に破棄されます。
+4. 鍵の生成・認証設定・ホストへの展開（`chezmoi apply` など）は、
+   境界の外で行う操作です。ここでは行わず、必要なら利用者へ依頼してください。
+5. 内側の観測だけで「ホストへ反映できた」と報告しないでください。
+6. 拒否されたアクセスを、別パス・symlink・別ツールで回避しないでください。
+   回避せず、拒否された事実を報告してください。
+7. ホストで実行されるコード（`.chezmoiscripts/`・mise タスク・シェル起動設定・
+   Git hooks・ランチャー）を変更したときは、対象と**実行される契機**を
+   報告してください。
+"""
+
+# --- ここから下はサブテーブル。★ベアキーを後ろに足さないこと ---
+#     足すとこのサブテーブルに属してしまい、[opencode.sandbox] から消える。
+
+[opencode.sandbox.permissions]
+# 既定を ask から allow へ反転する。境界内なので列挙をやめる。
+# ★ワークスペースの破壊は止まらない。snapshot による復旧で扱う (保証ではない)。
+default_shell_effect = "allow"
+
+# 境界内から到達できないので捨てる shell 規則 (先頭一致の正規表現)。
+drop_shell = [
+  # 特権・デバイス・サービス管理
+  '^(sudo|systemctl|systemd-run|service|crontab|at|batch)\b',
+  '^(mkfs[.a-z0-9]*|mount|umount|fdisk|parted|wipefs|dd)\b',
+  # 境界外の設定
+  '^git config --(global|system)',
+  # グローバル領域への導入 (境界内では消えるだけ)
+  '^(npm install -g|pipx install|uv tool (install|uninstall|upgrade))',
+  '^(uv python (install|uninstall)|rustup self|uv self|pip3? )',
+  '^(npm cache clean|yarn cache clean|pnpm store prune)',
+  '^docker (container|image|network|system|volume) prune',
+  '^cmake --install',
+  # 既定が allow になるので個別の allow は不要
+  '^(git log|wc|grep -n|uv pip list|docker ps)\b',
+  # ★確認をやめ snapshot による復旧で扱う
+  '^(rm|mv|cp|truncate|shred|find)\b',
+  '^git commit\b',
+]
+
+# 境界が隠すので捨てる read/edit 規則 (パスの先頭一致)。
+# ★ワークスペース相対の glob (*secret* など) は **捨てない**。
+#   境界の外の話ではなく、shell から届く。
+drop_path_prefixes = [
+  "~/",
+  "$HOME/",
+  "/home/",
+  "/root/",
+  "/etc/",
+  "/var/",
+  "/usr/",
+]
+
+[opencode.sandbox.policies]
+# グローバル設定に置くとプロジェクト設定から解除できない。
+# ★任意コードへの境界ではない。permission 検査を通る操作にしか効かず、
+#   plugin のコードを sandbox しない。不正な statement は警告付きで破棄される
+#   ので、置いた事実ではなく**有効性**を確認する。
+# ★hard-deny には承認による例外が無い。通常業務で承認付き利用を想定する操作は
+#   ここへ置かない。
+deny = [
+  "shell:git push *",
+  "shell:gh repo delete *",
+  "shell:chezmoi apply *",
+  "shell:chezmoi re-add *",
 ]
 
 # ID・既定値・キー記法は公式一覧が正本。
