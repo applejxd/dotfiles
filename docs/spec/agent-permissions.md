@@ -414,9 +414,21 @@ TUI のキーバインドは **`cli.json` 側にしか無い**。`opencode.json`
 値は文字列・カンマ区切り・配列・`{key, preventDefault}` のテーブルが使える。
 無効化は `false` か `"none"`。`<leader>` は既定 `ctrl+x` で、タイムアウトだけ
 `keybinds` の外（`leader.timeout`）にある。ID・既定値・キー記法は
-[公式一覧](https://opencode.ai/v2/docs/cli/keybinds)が正本で、**未知の ID は
-OpenCode が拒否する**。generate.py は一覧を持たず、綴りの形だけ検査する
-（版で増減するため）。
+[公式一覧](https://opencode.ai/v2/docs/cli/keybinds)が正本。
+
+**公式一覧は最新版向けで、2.0.12 に無い ID が載っている。** しかも未知の ID は
+「拒否される」と書かれているが、実際には**その行だけ黙って無視され**、
+他の行は生きる。無視された leader 系の binding は次のキーが素通りして
+文字入力になるため、気づきにくい。ID を足す前に実在を確認する。
+
+```console
+$ strings -n 4 ~/.opencode/bin/opencode | grep -x 'service.restart'
+service.restart
+```
+
+実測で分かった不在の例が `permission.mode`（自動承認のトグル）。2.0.12 には
+代替も無いので、確認の一時解除は
+[bypass エージェント](../research/opencode/permission/bypass-agent.md)を使う。
 
 **宣言したら `keybinds` テーブルごと `common.toml` の持ち物になる。**
 1 件消したときに配備先へ残らないようにするため。節ごと無ければ触らない。
@@ -430,8 +442,6 @@ OpenCode が拒否する**。generate.py は一覧を持たず、綴りの形だ
 - `<leader>` の空きは `d` `f` `h` `j` `k` `o` `p` `v` `z` の 9 文字だけ。
   `d` は `diff.open`（既定 `none`）用に空けてある
 
-`permission.mode` は自動承認のトグルで、既定 `ask` の構成では
-`bypass` エージェントへ切り替えるより軽い一時解除になる。
 `service.restart` は**サーバ側 plugin を更新したときに要る**再起動
 （[plugin 層](#plugin-層-guide-plugin)）を 1 キーにしたもの。
 

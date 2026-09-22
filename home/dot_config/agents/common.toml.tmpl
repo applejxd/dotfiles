@@ -708,7 +708,10 @@ pattern = '(^|&&|\|\||;|\n)\s*cd\s'
 message = "cd は使わないでください。shell ツールの workdir 引数でディレクトリを指定できます。"
 
 # TUI のキーバインド。出力先は **cli.json** (opencode.json には書けない)。
-# ID・既定値・キー記法は公式一覧が正本。未知の ID は OpenCode が拒否する。
+# ID・既定値・キー記法は公式一覧が正本。
+# ★公式一覧は最新版向け。未知の ID は **黙って無視される** (「拒否する」と
+#   書かれているが 2.0.12 の実測では他の行だけ生きる)。足す前に実在を確認する:
+#     strings -n 4 ~/.opencode/bin/opencode | grep -x '<id>'
 # 無効化は false か "none"。<leader> は既定 ctrl+x。
 # see docs/spec/agent-permissions.md 「キーバインド」
 [opencode.keybinds]
@@ -716,8 +719,6 @@ message = "cd は使わないでください。shell ツールの workdir 引数
 #   session.interrupt へ渡すと Ctrl+C でアプリごと終了する。
 "app.exit" = "ctrl+d"
 "session.interrupt" = "ctrl+c,escape"
-# <leader>d は diff.open 用に空けてある。
-"permission.mode" = "<leader>p"
 "service.restart" = "<leader>v"
 
 # 確認画面に出すコマンドの説明。長いワンライナーは目視で追えないので、

@@ -359,7 +359,7 @@ def test_cli_json_is_not_registered_twice():
 # 誤配置に気付けないので出力先を固定する。
 def test_keybinds_go_to_cli_json_only():
     cli = gen.merge_opencode_cli({}, COMMON)
-    assert cli["keybinds"]["permission.mode"] == "<leader>p"
+    assert cli["keybinds"]["service.restart"] == "<leader>v"
     assert "keybinds" not in gen.merge_opencode_config({}, COMMON)
 
 
