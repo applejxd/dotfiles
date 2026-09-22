@@ -1334,6 +1334,15 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     prompt = cfg.get("system_prompt")
     if prompt:
         out["system_prompt"] = str(prompt).strip()
+    # 既定モデルの優先順。ランチャーが資格情報のある provider を上から選ぶ。
+    # ★実在しない ID を書くと起動しても応答が来ないので、宣言側で確認する。
+    preference = cfg.get("model_preference") or []
+    if preference:
+        out["model_preference"] = [
+            {"provider": str(p.get("provider", "")), "model": str(p.get("model", ""))}
+            for p in preference
+            if p.get("provider") and p.get("model")
+        ]
     return out
 
 

@@ -987,6 +987,14 @@ drop_path_prefixes = [
   "/usr/",
 ]
 
+# 隔離版の既定モデル。**上から順**に、資格情報がある provider を選ぶ。
+# ★初回だけ置く。以降は TUI で選んだ値を尊重する (ランチャーは上書きしない)。
+# ★provider ID とモデル ID は実在を確認してから書く。無いものを書くと
+#   起動しても応答が来ない。確認方法は公式のモデル一覧。
+[[opencode.sandbox.model_preference]]
+provider = "github-copilot"
+model = "claude-opus-5"
+
 [opencode.sandbox.policies]
 # グローバル設定に置くとプロジェクト設定から解除できない。
 # ★任意コードへの境界ではない。permission 検査を通る操作にしか効かず、

@@ -212,6 +212,21 @@ def test_isolated_loads_guide_plugin_for_redaction():
         assert not any(path.startswith(p) for p in allow_write), f"{path} を境界内から書ける"
 
 
+def test_model_preference_is_declared():
+    """既定モデルを宣言しておく。無いと初回に何が選ばれるか環境依存になる。
+
+    ★provider ID とモデル ID は実在を確認してから書くこと。無いものを書くと
+      起動しても応答が来ない。
+    """
+    out = gen.opencode_sandbox(COMMON)
+    if out is None:
+        return
+    preference = out.get("model_preference") or []
+    assert preference, "model_preference が無い"
+    for entry in preference:
+        assert entry["provider"] and entry["model"], f"不完全な指定: {entry}"
+
+
 def test_system_prompt_mentions_enoent():
     """境界は見えないので、ENOENT の意味を伝えること。"""
     prompt = SANDBOX.get("system_prompt", "")

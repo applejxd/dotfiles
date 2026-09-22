@@ -141,13 +141,28 @@ def inner_env(sandbox: dict) -> dict[str, str]:
 def write_isolated_config(sandbox: dict) -> None:
     """隔離版の設定を ``config_dir`` へ書き出す。
 
-    **起動のたびに書き直す。** 設定ディレクトリはワークスペースの外にあり、
-    境界内からは ``allowRead`` だけなので、内側から緩和を広げられない。
-    書き手は常に境界の外 (このランチャー) になる。
+    **緩和に関わるキーだけを差し替え、それ以外は残す。**
+    設定ディレクトリはワークスペースの外にあり、境界内からは ``allowRead``
+    だけなので、内側から緩和を広げられない。書き手は常に境界の外になる。
+
+    ★丸ごと上書きしてはいけない。TUI で選んだモデルなど、こちらが管理して
+      いないキーまで毎回消える（実際にそのバグを出した）。
+      ``mcp`` と同じ方針で、宣言外のエントリは残す。
     """
     config_dir = Path(sandbox["config_dir"])
     config_dir.mkdir(parents=True, exist_ok=True)
+    target = config_dir / "opencode.json"
+
+    existing: dict = {}
+    if target.is_file():
+        try:
+            existing = json.loads(target.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            # 壊れていたら作り直す（読めないまま残すと起動できない）
+            existing = {}
+
     config: dict = {
+        **existing,
         "$schema": "https://opencode.ai/config.json",
         "permissions": sandbox.get("permissions", []),
         # ワークスペース破壊の復旧手段。★保証ではない (日常の取り消し機能)。
@@ -158,15 +173,18 @@ def write_isolated_config(sandbox: dict) -> None:
     if policies:
         # ★不正な statement は警告付きで破棄される。置いた事実ではなく
         #   有効性を確認すること (サーバのログに警告が出る)。
-        config["experimental"] = {"policies": policies}
+        config["experimental"] = {**existing.get("experimental", {}), "policies": policies}
     plugins = sandbox.get("plugins")
     if plugins:
         # 目的は伏字化。境界はワークスペースの中を守らないので、`.env` などが
         # そのままモデルの文脈へ入るのを防ぐ。plugin 自体は allowRead だけの
         # 場所にあり、境界内から書き換えられない。
         config["plugins"] = plugins
+    # 既定モデルは初回だけ置く。以降は利用者が TUI で変えた値を尊重する。
+    model = pick_model(sandbox)
+    if model and "model" not in config:
+        config["model"] = model
 
-    target = config_dir / "opencode.json"
     target.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     prompt = sandbox.get("system_prompt")
@@ -174,6 +192,32 @@ def write_isolated_config(sandbox: dict) -> None:
         # 境界の存在をエージェントへ伝える。説明上の対策であって、
         # 書き込み失敗を保証するものではない。
         (config_dir / "AGENTS.md").write_text(prompt + "\n", encoding="utf-8")
+
+
+def pick_model(sandbox: dict) -> str | None:
+    """宣言した優先順で、使える provider の最初のモデルを選ぶ。
+
+    使えるかどうかは隔離用 DB の ``credential`` に資格情報があるかで見る。
+    無い provider を既定にすると起動しても応答が来ない。
+    """
+    preferences = sandbox.get("model_preference") or []
+    if not preferences:
+        return None
+    db = Path(sandbox["db"])
+    if not db.is_file():
+        return None
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        available = {row[0] for row in con.execute("select integration_id from credential")}
+        con.close()
+    except sqlite3.Error:
+        return None
+    for entry in preferences:
+        provider = str(entry.get("provider", ""))
+        model = str(entry.get("model", ""))
+        if provider and model and provider in available:
+            return f"{provider}/{model}"
+    return None
 
 
 def resolve_node() -> str:
