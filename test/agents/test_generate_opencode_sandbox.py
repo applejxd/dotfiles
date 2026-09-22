@@ -148,9 +148,12 @@ def test_sandbox_output_shape():
     out = gen.opencode_sandbox(COMMON)
     if out is None:  # srt が無いマシンでは出力しない (macOS / Windows / 初回前)
         return
-    for key in ("runtime_path", "workspace", "data_home", "db", "config_dir", "permissions"):
+    for key in ("runtime_path", "projects", "config_dir", "permissions"):
         assert key in out, f"{key} が出力に無い"
-    filesystem = out["config"]["filesystem"]
+    for key in ("workspace", "data_home", "db", "config"):
+        assert key in out["projects"][0], f"project に {key} が無い"
+    project = out["projects"][0]
+    filesystem = project["config"]["filesystem"]
     assert out["config_dir"] not in filesystem["allowWrite"], "config_dir が書ける"
     assert any(
         out["config_dir"].startswith(p) for p in filesystem["allowRead"]
@@ -165,7 +168,7 @@ def test_model_provider_domain_allowed():
     out = gen.opencode_sandbox(COMMON)
     if out is None:
         return
-    domains = out["config"]["network"]["allowedDomains"]
+    domains = out["projects"][0]["config"]["network"]["allowedDomains"]
     assert "api.githubcopilot.com" in domains, "モデル提供元が許可リストに無い"
 
 
@@ -188,8 +191,9 @@ def test_protected_paths_are_not_filtered_by_existence():
     out = gen.opencode_sandbox(COMMON)
     if out is None:
         return
-    workspace = out["workspace"]
-    deny_write = out["config"]["filesystem"]["denyWrite"]
+    project = out["projects"][0]
+    workspace = project["workspace"]
+    deny_write = project["config"]["filesystem"]["denyWrite"]
     expected = {str(Path(workspace) / rel) for rel in SANDBOX.get("protected", [])}
     assert expected == set(deny_write), "protected の一部が denyWrite へ渡っていない"
 
@@ -205,8 +209,9 @@ def test_isolated_loads_guide_plugin_for_redaction():
         return
     plugins = out.get("plugins") or []
     assert plugins, "隔離版に plugin が無い (伏字化が効かない)"
-    allow_read = out["config"]["filesystem"]["allowRead"]
-    allow_write = out["config"]["filesystem"]["allowWrite"]
+    filesystem = out["projects"][0]["config"]["filesystem"]
+    allow_read = filesystem["allowRead"]
+    allow_write = filesystem["allowWrite"]
     for path in plugins:
         assert any(path.startswith(p) for p in allow_read), f"{path} を境界内から読めない"
         assert not any(path.startswith(p) for p in allow_write), f"{path} を境界内から書ける"
@@ -233,7 +238,7 @@ def test_protected_paths_may_not_exist_on_host():
     out = gen.opencode_sandbox(COMMON)
     if out is None:
         return
-    deny_write = out["config"]["filesystem"]["denyWrite"]
+    deny_write = out["projects"][0]["config"]["filesystem"]["denyWrite"]
     missing = [p for p in deny_write if not Path(p).exists()]
     assert missing, "存在しない保護対象が無い (.opencode が消えた?)"
 

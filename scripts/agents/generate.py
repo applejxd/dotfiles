@@ -1244,10 +1244,63 @@ def opencode_redact(common: dict[str, Any]) -> dict[str, Any] | None:
     return out
 
 
+def _project_boundary(
+    cfg: dict[str, Any],
+    common: dict[str, Any],
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    """プロジェクト 1 つ分の境界設定を組み立てる。
+
+    共通の許可リストに、プロジェクト固有の追加分を足す。
+    **許可リストはプロジェクト側のファイルに置かない。** 敵対的なリポジトリが
+    自分で ``~/.ssh`` を許可できてしまい、グローバル設定が負ける穴と同じになる。
+    ここ (``common.toml``) がプロジェクトパスをキーとして持つ。
+    """
+    workspace = expand_user(str(project["path"]))
+    read = [expand_user(str(p)) for p in cfg.get("read") or []]
+    write = [expand_user(str(p)) for p in cfg.get("write") or []]
+    deny_read = [expand_user(str(p)) for p in cfg.get("deny_read") or ["~"]]
+    # プロジェクト固有の追加分。機密でないパスだけを開ける。
+    read += [expand_user(str(p)) for p in project.get("read") or []]
+    write += [expand_user(str(p)) for p in project.get("write") or []]
+    protected = [str(Path(workspace) / rel) for rel in cfg.get("protected") or []]
+
+    sandbox_cfg = common.get("sandbox", {})
+    web = common.get("web", {})
+    network: dict[str, Any] = {
+        "allowedDomains": _uniq(
+            list(web.get("allow_domains", []))
+            + list(sandbox_cfg.get("claude_network_allow", []))
+            + list(cfg.get("network_allow", []))
+            + list(project.get("network_allow", []))
+        ),
+        "deniedDomains": _uniq(list(web.get("deny_domains", []))),
+        "allowLocalBinding": False,
+    }
+    out: dict[str, Any] = {
+        "workspace": workspace,
+        "config": {
+            "network": network,
+            "filesystem": {
+                "denyRead": _uniq(deny_read),
+                "allowRead": _uniq([workspace, *read]),
+                "allowWrite": _uniq([workspace, *write]),
+                "denyWrite": protected,
+            },
+        },
+    }
+    for key in ("data_home", "db"):
+        rel = cfg.get(key)
+        if rel:
+            out[key] = str(Path(workspace) / str(rel))
+    return out
+
+
 def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
-    """OpenCode を丸ごと囲う境界の設定 (CHG-0004 段階 2)。
+    """OpenCode を丸ごと囲う境界の設定 (CHG-0004 段階 2・4)。
 
     ランチャーが ``srt -s <この設定> -c "opencode --standalone"`` で使う。
+    **プロジェクトごとに 1 つ**の境界設定を出し、ランチャーが cwd で選ぶ。
 
     **``runtime_path`` の実体があるときだけ返す。** 無いマシン (macOS /
     Windows / 初回 apply 前) では設定を出さず、ランチャーは起動を断る。
@@ -1267,53 +1320,14 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     if not runtime or not Path(runtime).is_file():
         return None
 
-    workspace = expand_user(str(cfg["workspace"]))
-    read = [expand_user(str(p)) for p in cfg.get("read") or []]
-    write = [expand_user(str(p)) for p in cfg.get("write") or []]
-    deny_read = [expand_user(str(p)) for p in cfg.get("deny_read") or ["~"]]
-    # 保護対象はワークスペース相対。
-    # ★存在しないパスも渡す。srt は存在しないパスにも denyWrite を効かせ、
-    #   **作成そのものを阻止する**（実測）。存在フィルタを掛けると、
-    #   「まだ無いから守らない」という最も守りたい場面で保護が外れる。
-    #   .opencode/plugins は作られると自動ロードされるので、これが要る。
-    protected = [str(Path(workspace) / rel) for rel in cfg.get("protected") or []]
-    # 安全網・DB・隔離版の設定はワークスペース配下 (= allowWrite)。
-    # data_home を既定のままにすると、snapshot が境界内の消える領域へ書かれ、
-    # 捕捉は成功したように見えるのに復元できない。
-    def _under_workspace(key: str) -> str | None:
-        rel = cfg.get(key)
-        return str(Path(workspace) / str(rel)) if rel else None
+    # 主プロジェクト + 追加宣言。順序は宣言順で、ランチャーは最長一致で選ぶ。
+    declared: list[dict[str, Any]] = [{"path": cfg["workspace"]}]
+    declared += [dict(p) for p in cfg.get("project") or [] if p.get("path")]
 
-    sandbox_cfg = common.get("sandbox", {})
-    web = common.get("web", {})
-    network: dict[str, Any] = {
-        "allowedDomains": _uniq(
-            list(web.get("allow_domains", []))
-            + list(sandbox_cfg.get("claude_network_allow", []))
-            # OpenCode の境界だけに効く追加分。モデル提供元がここに無いと
-            # proxy が CONNECT を 403 で落とし、モデルへ到達できない。
-            + list(cfg.get("network_allow", []))
-        ),
-        "deniedDomains": _uniq(list(web.get("deny_domains", []))),
-        "allowLocalBinding": False,
-    }
     out: dict[str, Any] = {
         "runtime_path": runtime,
-        "workspace": workspace,
-        "config": {
-            "network": network,
-            "filesystem": {
-                "denyRead": _uniq(deny_read),
-                "allowRead": _uniq([workspace, *read]),
-                "allowWrite": _uniq([workspace, *write]),
-                "denyWrite": protected,
-            },
-        },
+        "projects": [_project_boundary(cfg, common, p) for p in declared],
     }
-    for key in ("data_home", "db"):
-        value = _under_workspace(key)
-        if value:
-            out[key] = value
     # 隔離版の設定ディレクトリは**ワークスペースの外**。内側からは allowRead
     # だけなので、緩和設定を自分で広げられない。ランチャーが起動のたびに
     # ここへ opencode.json を書き直す。
@@ -1323,8 +1337,8 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     out["permissions"] = build_opencode_sandbox_permissions(common)
     # 誘導 plugin を隔離版でも読み込む。**目的は伏字化**（境界内の `.env` などが
     # そのままモデルの文脈へ入るのを防ぐ）。境界はワークスペースの中を守らない。
-    # ★段階 5 で、境界内では無意味になった層（`cat` → `read` の誘導、
-    #   結果フィルタ、パス参照の伏字化）を削り、**内容の形の伏字化だけ**を残す。
+    # ★段階 5 で当初案（`grep` / `glob` の無効化と誘導の削除）は撤回した。
+    #   消すと `read` / `edit` の deny が空振りする。
     #   see docs/change/0004-opencode-sandbox.md 「段階 5」
     if opencode_guide_rules(common) or opencode_redact(common):
         out["plugins"] = [opencode_guide_plugin_path()]

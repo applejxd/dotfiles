@@ -52,10 +52,33 @@ def load_boundary() -> dict:
             "境界の設定が出力されていない",
             "srt が入っていないか enabled=false。このマシンは非対応",
         )
-    for key in ("runtime_path", "workspace", "data_home", "db", "config_dir"):
+    for key in ("runtime_path", "projects", "config_dir"):
         if not sandbox.get(key):
             die(f"境界の設定に {key} が無い")
     return sandbox
+
+
+def pick_project(sandbox: dict, cwd: Path) -> dict:
+    """cwd が属するプロジェクトを選ぶ。**最長一致**。
+
+    宣言されていない場所から起動したら**止める**。何を開けてよいか分からない
+    まま境界を張ると、別プロジェクトの許可で動かすことになる。
+    許可リストは ``common.toml`` 側にあり、**プロジェクト側のファイルには
+    置かない**（敵対的なリポジトリが自分で許可を足せてしまうため）。
+    """
+    resolved = cwd.resolve()
+    matches = [
+        project
+        for project in sandbox["projects"]
+        if resolved == Path(project["workspace"]) or Path(project["workspace"]) in resolved.parents
+    ]
+    if not matches:
+        known = "\n".join(f"    {p['workspace']}" for p in sandbox["projects"])
+        die(
+            f"ここは境界の宣言が無い場所: {resolved}",
+            f"common.toml の [[opencode.sandbox.project]] へ足す。宣言済み:\n{known}",
+        )
+    return max(matches, key=lambda p: len(p["workspace"]))
 
 
 def require_clean(workspace: Path, allow_dirty: bool) -> None:
@@ -116,7 +139,7 @@ def seed_db(db: Path) -> None:
     print(f"隔離用 DB を作った: {db}", file=sys.stderr)
 
 
-def inner_env(sandbox: dict) -> dict[str, str]:
+def inner_env(sandbox: dict, project: dict) -> dict[str, str]:
     """境界の内側へ渡す環境変数。継承する資格情報を落とす。"""
     drop = {
         "GH_TOKEN",
@@ -132,13 +155,13 @@ def inner_env(sandbox: dict) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if k not in drop}
     # ★XDG_DATA_HOME を永続領域へ向けないと snapshot が境界終了時に消える。
     #   捕捉は成功したように見えるので気づけない。
-    env["XDG_DATA_HOME"] = sandbox["data_home"]
-    env["OPENCODE_DB"] = sandbox["db"]
+    env["XDG_DATA_HOME"] = project["data_home"]
+    env["OPENCODE_DB"] = project["db"]
     env["OPENCODE_CONFIG_DIR"] = sandbox["config_dir"]
     return env
 
 
-def write_isolated_config(sandbox: dict) -> None:
+def write_isolated_config(sandbox: dict, project: dict) -> None:
     """隔離版の設定を ``config_dir`` へ書き出す。
 
     **緩和に関わるキーだけを差し替え、それ以外は残す。**
@@ -181,7 +204,7 @@ def write_isolated_config(sandbox: dict) -> None:
         # 場所にあり、境界内から書き換えられない。
         config["plugins"] = plugins
     # 既定モデルは初回だけ置く。以降は利用者が TUI で変えた値を尊重する。
-    model = pick_model(sandbox)
+    model = pick_model(sandbox, project)
     if model and "model" not in config:
         config["model"] = model
 
@@ -194,7 +217,7 @@ def write_isolated_config(sandbox: dict) -> None:
         (config_dir / "AGENTS.md").write_text(prompt + "\n", encoding="utf-8")
 
 
-def pick_model(sandbox: dict) -> str | None:
+def pick_model(sandbox: dict, project: dict) -> str | None:
     """宣言した優先順で、使える provider の最初のモデルを選ぶ。
 
     使えるかどうかは隔離用 DB の ``credential`` に資格情報があるかで見る。
@@ -203,7 +226,7 @@ def pick_model(sandbox: dict) -> str | None:
     preferences = sandbox.get("model_preference") or []
     if not preferences:
         return None
-    db = Path(sandbox["db"])
+    db = Path(project["db"])
     if not db.is_file():
         return None
     try:
@@ -255,38 +278,40 @@ def main(argv: list[str] | None = None) -> int:
 
     sandbox = load_boundary()
     runtime = Path(sandbox["runtime_path"])
-    workspace = Path(sandbox["workspace"])
     if not runtime.is_file():
         die(f"srt が無い: {runtime}")
     if not OPENCODE.is_file():
         die(f"opencode が無い: {OPENCODE}")
     node = resolve_node()
 
+    # ★どのプロジェクトの境界を張るかは cwd で決める。宣言が無ければ止める。
+    project = pick_project(sandbox, Path.cwd())
+    workspace = Path(project["workspace"])
+
     require_clean(workspace, args.allow_dirty)
-    for key in ("data_home",):
-        Path(sandbox[key]).mkdir(parents=True, exist_ok=True)
-    write_isolated_config(sandbox)
-    seed_db(Path(sandbox["db"]))
+    Path(project["data_home"]).mkdir(parents=True, exist_ok=True)
+    write_isolated_config(sandbox, project)
+    seed_db(Path(project["db"]))
 
     # 境界の設定は本人だけが読める一時ファイルへ置く (srt は外側で読む)。
     with tempfile.NamedTemporaryFile(
         "w", suffix=".json", prefix="opencode-boundary-", delete=False
     ) as f:
-        json.dump(sandbox["config"], f)
+        json.dump(project["config"], f)
         boundary = f.name
     os.chmod(boundary, 0o600)
 
-    env = inner_env(sandbox)
+    env = inner_env(sandbox, project)
     try:
         if not args.skip_check and CHECK.is_file():
-            allowed = sandbox["config"]["network"].get("allowedDomains") or []
+            allowed = project["config"]["network"].get("allowedDomains") or []
             check_env = {
                 **env,
                 "BOUNDARY_WORKSPACE": str(workspace),
                 # 境界の内側では $HOME が差し替わるので、実ホームは別に渡す
                 "HOME_REAL": str(HOME),
                 "BOUNDARY_PROTECTED": " ".join(
-                    sandbox["config"]["filesystem"].get("denyWrite") or []
+                    project["config"]["filesystem"].get("denyWrite") or []
                 ),
                 # 拒否と不通を区別するための対照
                 "BOUNDARY_ALLOWED_HOST": next(

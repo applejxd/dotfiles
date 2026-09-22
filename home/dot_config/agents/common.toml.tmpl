@@ -995,6 +995,21 @@ drop_path_prefixes = [
 provider = "github-copilot"
 model = "claude-opus-5"
 
+# 追加のプロジェクト。ランチャーが cwd で選ぶ (最長一致)。
+# ★宣言の無い場所からは起動しない。何を開けてよいか分からないまま境界を
+#   張ると、別プロジェクトの許可で動かすことになる。
+# ★許可リストをプロジェクト側のファイルに置かないこと。敵対的なリポジトリが
+#   自分で ~/.ssh を許可できてしまい、グローバル設定が負ける穴と同じになる。
+#   ここがプロジェクトパスをキーとして持つ。
+# ★/mnt 配下も狙い撃ちで開けられ、symlink 越しにも届く (実測)。
+#
+# 例:
+#   [[opencode.sandbox.project]]
+#   path = "~/src/example"
+#   read = ["/mnt/d/datasets/example"]   # 機密でないものだけ
+#   write = []
+#   network_allow = ["api.example.com"]
+
 [opencode.sandbox.policies]
 # グローバル設定に置くとプロジェクト設定から解除できない。
 # ★任意コードへの境界ではない。permission 検査を通る操作にしか効かず、
