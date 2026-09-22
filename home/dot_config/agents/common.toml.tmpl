@@ -722,6 +722,63 @@ pattern = '(^|&&|;|\n)\s*sed\s+-n\s'
 unless = '[|<>]'
 message = "sed -n でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。"
 
+# shell 出力の伏字化。誘導と結果フィルタを抜けて shell を通ったものへの安全網。
+# ★境界ではない。base64 や tr で変換されるとすり抜ける (実測)。事故と素朴な
+#   プロンプトインジェクションを想定した層で、意図的な持ち出しは止まらない。
+# ★shell の出力にだけ掛ける。read / grep へ広げないこと。伏せた本文を元に
+#   edit されると、ファイルへ [伏字:…] がそのまま書き込まれる。
+# see docs/research/opencode/permission/output-filter-and-subagents.md
+[opencode.redact]
+enabled = true
+# 保護対象のパスを参照したコマンドは、出力全体を伏せる。
+# 判定表は [file] claude_read_deny_globs から生成する。
+# ★`**/*secret*` のような部分一致 glob は自動で除かれる。コマンドには
+#   docs/spec/secret-handling.md のような正当なパスも載るため。
+deny_path_output = true
+
+# 内容の形で伏せるもの。pattern は JavaScript の正規表現で、
+# **大文字小文字を区別せず**当てる (GITHUB_TOKEN と github_token を分けない)。
+# ★当たった範囲がそのまま置き換わる。値だけに当てること。前置きの語は
+#   後読み `(?<=…)` で外に出す。
+[[opencode.redact.rule]]
+name = "秘密鍵"
+pattern = '-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----'
+
+[[opencode.redact.rule]]
+name = "age 秘密鍵"
+pattern = 'AGE-SECRET-KEY-1[0-9A-Z]{50,}'
+
+[[opencode.redact.rule]]
+name = "AWS アクセスキー"
+pattern = '\b(AKIA|ASIA)[0-9A-Z]{16}\b'
+
+[[opencode.redact.rule]]
+name = "GitHub トークン"
+pattern = '\bgh[pousr]_[A-Za-z0-9]{30,}\b'
+
+[[opencode.redact.rule]]
+name = "Slack トークン"
+pattern = '\bxox[abprs]-[A-Za-z0-9-]{10,}\b'
+
+[[opencode.redact.rule]]
+name = "API キー"
+pattern = '\bsk-[A-Za-z0-9_-]{20,}\b'
+
+[[opencode.redact.rule]]
+name = "Google API キー"
+pattern = '\bAIza[0-9A-Za-z_-]{35}\b'
+
+[[opencode.redact.rule]]
+name = "JWT"
+pattern = '\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'
+
+# 代入の形。値が「不透明な長い文字列」か「引用符で囲まれたもの」のときだけ
+# 伏せる。★これを緩めると `const token = getToken()` のような**コード**まで
+# 伏字になり、shell 経由の grep が読めなくなる。
+[[opencode.redact.rule]]
+name = "代入された秘密"
+pattern = '''(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)["']?\s*[=:]\s*)("[^"\n]{6,}"|'[^'\n]{6,}'|[A-Za-z0-9_\-+/=.]{16,})'''
+
 # TUI のキーバインド。出力先は **cli.json** (opencode.json には書けない)。
 # ID・既定値・キー記法は公式一覧が正本。
 # ★公式一覧は最新版向け。未知の ID は **黙って無視される** (「拒否する」と

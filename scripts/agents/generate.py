@@ -1132,6 +1132,18 @@ def glob_to_regex(glob: str) -> str:
     return "(?:^|/)" + "".join(out) + "$"
 
 
+def _home_variants(glob: str) -> list[str]:
+    """``~/`` 始まりの glob を、展開した形と併せて 2 本にする。
+
+    ``grep`` / ``glob`` の結果には**展開済みの絶対パス**が載るので、
+    ``~`` のままの正規表現は一度も当たらない。コマンド文字列には
+    ``~`` のまま書かれるので、どちらの形も残す。
+    """
+    if not glob.startswith("~/"):
+        return [glob]
+    return [glob, expand_user(glob)]
+
+
 def opencode_read_deny_regexes(common: dict[str, Any]) -> list[str]:
     """``grep`` / ``glob`` の結果を濾すためのパターン。
 
@@ -1140,7 +1152,47 @@ def opencode_read_deny_regexes(common: dict[str, Any]) -> list[str]:
     see docs/research/opencode/permission/gaps.md
     """
     globs = common.get("file", {}).get("claude_read_deny_globs") or []
-    return [glob_to_regex(str(g)) for g in globs]
+    return [glob_to_regex(v) for g in globs for v in _home_variants(str(g))]
+
+
+def opencode_deny_path_regexes(common: dict[str, Any]) -> list[str]:
+    """コマンド文字列に載ったパスへ当てるパターン (出力全体を伏せる判定)。
+
+    ``read`` の deny glob から作るが、``**/*secret*`` のような**部分一致**は
+    除く。``docs/secret-handling.md`` のような正当なパスまで当たり、
+    無関係な出力を丸ごと伏せてしまうため。
+    末尾の ``/**`` を落としてから最終要素で判定する
+    (``**/.ssh/**`` の最終要素は ``**`` になり、素の判定では落ちる)。
+    """
+    out: list[str] = []
+    for g in common.get("file", {}).get("claude_read_deny_globs") or []:
+        base = str(g).removesuffix("/**").rsplit("/", 1)[-1]
+        if len(base) > 1 and base.startswith("*") and base.endswith("*"):
+            continue
+        out.extend(glob_to_regex(v) for v in _home_variants(str(g)))
+    return out
+
+
+def opencode_redact(common: dict[str, Any]) -> dict[str, Any] | None:
+    """shell 出力の伏字化の設定 (``rules.json`` の ``redact``)。
+
+    誘導と結果フィルタを抜けたものへの安全網。**境界ではない**
+    (``base64`` や ``tr`` で変換されるとすり抜ける)。
+    see docs/research/opencode/permission/output-filter-and-subagents.md
+    """
+    cfg = common.get("opencode", {}).get("redact")
+    if not cfg or not cfg.get("enabled"):
+        return None
+    rules: list[dict[str, str]] = []
+    for rule in cfg.get("rule") or []:
+        name, pattern = rule.get("name"), rule.get("pattern")
+        if not name or not pattern:
+            raise SystemExit("opencode.redact.rule は name と pattern が要る")
+        rules.append({"name": str(name), "pattern": str(pattern)})
+    out: dict[str, Any] = {"rule": rules}
+    if cfg.get("deny_path_output"):
+        out["deny_path"] = opencode_deny_path_regexes(common)
+    return out
 
 
 def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
@@ -1152,6 +1204,9 @@ def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> d
     ask = opencode_ask_description(common)
     if ask:
         out["ask_description"] = ask
+    redact = opencode_redact(common)
+    if redact:
+        out["redact"] = redact
     return out
 
 

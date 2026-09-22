@@ -13,6 +13,8 @@ from __future__ import annotations
 import copy
 import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -234,8 +236,27 @@ def test_read_deny_regexes_match_absolute_paths(path, blocked):
 
 
 def test_read_deny_regexes_cover_every_glob():
-    globs = COMMON["file"]["claude_read_deny_globs"]
-    assert len(gen.build_opencode_guide({}, COMMON)["read_deny"]) == len(globs)
+    """``~/`` 始まりだけ 2 本になる (``~`` のままと展開済みの絶対パス)。"""
+    globs = [str(g) for g in COMMON["file"]["claude_read_deny_globs"]]
+    expected = len(globs) + sum(1 for g in globs if g.startswith("~/"))
+    assert len(gen.build_opencode_guide({}, COMMON)["read_deny"]) == expected
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "~/.claude.json",
+        str(Path("~/.claude.json").expanduser()),
+        str(Path("~/.config/opencode/service.json").expanduser()),
+    ],
+)
+def test_read_deny_covers_expanded_home_paths(path):
+    """``grep`` / ``glob`` の結果には**展開済みの絶対パス**しか載らない。
+
+    ``~`` のままの正規表現だけだと一度も当たらず、保護が丸ごと抜ける。
+    """
+    pats = [re.compile(p) for p in gen.build_opencode_guide({}, COMMON)["read_deny"]]
+    assert any(p.search(path) for p in pats), path
 
 
 @pytest.mark.parametrize(
@@ -271,6 +292,113 @@ def test_only_all_allow_agents_are_treated_as_bypass():
         }
     }
     assert gen.build_opencode_guide({}, common)["bypass_agents"] == ["loose"]
+
+
+# --- shell 出力の伏字化 (段階 2-C) ----------------------------------------
+# 伏字規則は**可変長の後読み**を使うので Python の ``re`` では再現できない。
+# 判定器そのものを node で動かす。
+# see docs/research/opencode/permission/output-filter-and-subagents.md
+
+
+@pytest.fixture(scope="module")
+def guide_js(tmp_path_factory):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
+    work = tmp_path_factory.mktemp("guide-js")
+    src = (ROOT / "home/dot_config/opencode/guide-plugin/index.js").read_text("utf-8")
+    (work / "mod.mjs").write_text(src + "\nexport { redact, deniedPathIn }\n", "utf-8")
+    (work / "rules.json").write_text(
+        json.dumps(gen.build_opencode_guide({}, COMMON)), "utf-8"
+    )
+    (work / "run.mjs").write_text(
+        "import * as m from './mod.mjs'\n"
+        "const [fn, args] = JSON.parse(process.argv[2])\n"
+        "console.log(JSON.stringify(args.map((a) => m[fn](a))))\n",
+        "utf-8",
+    )
+
+    def call(fn: str, args: list[str]) -> list:
+        done = subprocess.run(
+            [node, str(work / "run.mjs"), json.dumps([fn, args])],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return json.loads(done.stdout)
+
+    return call
+
+
+SECRET_SHAPES = [
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nb3Blb\n-----END OPENSSH PRIVATE KEY-----",
+    "AKIAIOSFODNN7EXAMPLE",
+    "ghp_" + "a" * 36,
+    "xoxb-1234567890-abcdefgh",
+    "sk-" + "A1b2C3d4" * 4,
+    "GITHUB_TOKEN=abcdefghijklmnopqrstuvwx",
+    "password: 'hunter2000'",
+    # ★高エントロピーな値を直書きしない。gitleaks が拾う。
+    "aws_secret_access_key = " + "SAMPLE" * 4,
+]
+
+# ★ここを誤爆させると、shell 経由で読んだ**コード**が読めなくなる。
+# 代入形の規則を緩めたら必ずここへ例を足す。
+INNOCENT_TEXT = [
+    "const token = getToken()",
+    'api_key = os.environ["API_KEY"]',
+    "grep -rn token src/",
+    "commit abc1234 fix: トークン更新の失敗を直す",
+    "password = None",
+]
+
+
+def test_secret_shapes_are_redacted(guide_js):
+    for text, out in zip(SECRET_SHAPES, guide_js("redact", SECRET_SHAPES), strict=True):
+        assert "[伏字:" in out, text
+
+
+def test_ordinary_text_is_left_alone(guide_js):
+    for text, out in zip(INNOCENT_TEXT, guide_js("redact", INNOCENT_TEXT), strict=True):
+        assert out == text
+
+
+# 出力全体を伏せる判定。コマンド中の「パスらしい語」だけを見る。
+HOME = str(Path("~").expanduser())
+DENIED_COMMANDS = [
+    "sed -n 1p ~/.aws/credentials",
+    "awk 'NR==1' /home/u/.ssh/id_ed25519",
+    f"python3 -c 'print(open(\"{HOME}/.config/opencode/service.json\").read())'",
+    "cat /home/u/proj/.env",
+]
+# ★検索語としての secret / password を巻き込まないこと。巻き込むと
+# 無関係なコマンドの出力が丸ごと消える。
+ALLOWED_COMMANDS = [
+    "grep -rn secret docs/",
+    "git log -- docs/spec/secret-handling.md",
+    "wc -l README.md",
+]
+
+
+def test_commands_touching_protected_paths_are_detected(guide_js):
+    for cmd, hit in zip(
+        DENIED_COMMANDS, guide_js("deniedPathIn", DENIED_COMMANDS), strict=True
+    ):
+        assert hit, cmd
+
+
+def test_ordinary_commands_are_not_detected(guide_js):
+    for cmd, hit in zip(
+        ALLOWED_COMMANDS, guide_js("deniedPathIn", ALLOWED_COMMANDS), strict=True
+    ):
+        assert hit is None, f"{cmd} -> {hit}"
+
+
+def test_substring_globs_are_excluded_from_path_matching():
+    """``**/*secret*`` のような部分一致は出力全体を伏せる判定に使わない。"""
+    deny = gen.build_opencode_guide({}, COMMON)["redact"]["deny_path"]
+    assert all(not re.search(p, "docs/spec/secret-handling.md") for p in deny)
+    assert any(re.search(p, "/home/u/.ssh/id_ed25519") for p in deny)
 
 
 # --- 誘導 plugin ---------------------------------------------------------

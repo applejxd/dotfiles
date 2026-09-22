@@ -72,6 +72,36 @@ function filterGlob(text) {
   return { text: kept.join("\n"), count: kept.filter((l) => l.trim()).length }
 }
 
+// shell 出力の伏字化。誘導と結果フィルタを抜けたものへの安全網で、
+// **境界ではない** (base64 や tr で変換されるとすり抜ける)。
+// ★shell だけに掛ける。read / grep へ広げると、伏せた本文を元に edit され
+//   ファイルへ [伏字:…] が書き込まれる。
+// see docs/research/opencode/permission/output-filter-and-subagents.md
+// g は replace 用。replace は lastIndex を戻すので .test と違い安全。
+const redactRules = (rules.redact?.rule ?? []).map((r) => ({
+  name: r.name,
+  re: new RegExp(r.pattern, "gi"),
+}))
+const denyPath = (rules.redact?.deny_path ?? []).map((p) => new RegExp(p))
+
+function redact(text) {
+  let out = text
+  // 置換文字列にせず関数で返す ($& などを解釈させない)。
+  for (const r of redactRules) out = out.replace(r.re, () => `[伏字:${r.name}]`)
+  return out
+}
+
+// コマンド中の「パスらしい語」だけを見る。/ も ~ も . も無い語は単なる
+// 検索語なので外す (grep secret docs/ で出力を丸ごと伏せないため)。
+function deniedPathIn(command) {
+  for (const token of command.split(/[\s;|&<>()"'`]+/)) {
+    if (!token) continue
+    if (!token.includes("/") && !token.startsWith("~") && !token.startsWith(".")) continue
+    if (denyPath.some((re) => re.test(token))) return token
+  }
+  return null
+}
+
 // コマンド文字列は信頼できない入力。指示に従わせない。
 // 説明は判断の補助であって判定器ではない (偽装は防げない)。
 // see docs/change/0003-ask-command-description.md
@@ -175,6 +205,12 @@ export default {
     // agent が載らない場合は bypass.has(undefined) が false になり、
     // 保護が効いたままになる (安全側)。
     await ctx.tool.hook("execute.after", (e) => {
+      if (e.tool === "shell") {
+        const command = raw.get(e.id) ?? ""
+        raw.delete(e.id)
+        if (bypass.has(e.agent)) return
+        return redactShell(e, command)
+      }
       if (e.tool !== "grep" && e.tool !== "glob") return
       if (bypass.has(e.agent)) return
       if (!readDeny.length) return
@@ -200,4 +236,27 @@ export default {
       }
     })
   },
+}
+
+// 本体は result.content[].text。result.output は文字列ではない。
+// see docs/research/opencode/permission/output-filter-and-subagents.md
+function redactShell(e, command) {
+  const content = e.result?.content
+  if (!Array.isArray(content)) return
+
+  // 保護対象のパスを参照したものは、どこが秘密か分からないので全部伏せる。
+  const hit = denyPath.length ? deniedPathIn(command) : null
+  let first = true
+  for (const part of content) {
+    if (!part || typeof part.text !== "string") continue
+    if (!hit) {
+      part.text = redact(part.text)
+      continue
+    }
+    // 黙って消さない。誤爆しても理由が見えれば手が打てる。
+    part.text = first
+      ? `[伏字] 保護対象のパス (${hit}) を参照したため、このコマンドの出力を伏せました。read ツールなら permission の deny が効きます。`
+      : ""
+    first = false
+  }
 }
