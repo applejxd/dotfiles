@@ -228,6 +228,49 @@ CLI は毎回 node の起動とプロキシの初期化を行うため。**実�
 参考として、確認を 1 回出すと人間の応答待ちで秒単位かかる。約 94% の
 呼び出しが無確認になるなら、数百 ms の固定費は割に合う可能性が高い。
 
+## 12. `--stdio` は行き止まり（P0-1 の再確認）
+
+`opencode serve` に `--stdio` があるので、TCP を避けられれば
+「サービスごと包む」案が復活する可能性を追った。**復活しない。**
+
+TUI 側の接続手段は `--server <URL>`（HTTP）だけで、stdio で繋ぐ口が無い。
+`--stdio` は別用途（ACP / MCP）のもの。
+
+## 13. 組み込みツールは `execute.before` で止められる
+
+反転案（shell で代替できるツールを禁止して境界の内側へ寄せる）の要。
+`execute.before` で例外を投げると**ツールが失敗し、メッセージがモデルへ届く**。
+
+```text
+✗ Grep "Dotfiles" failed
+Error: grep ツールは使えません。shell の `grep -rn` を使ってください。
+```
+
+モデルは理由をそのまま報告し、指示どおり代替手段を試さなかった。
+誘導の `deny` と同じ挙動で、**向きだけが逆**になる。
+
+| | いまの誘導 | 反転後 |
+| --- | --- | --- |
+| 目的 | permission の `deny` が効く経路へ寄せる | **OS の境界の内側へ寄せる** |
+| 例 | `cat` → `read` ツール | `grep` ツール → shell の `grep -rn` |
+
+## 14. 保護機構そのものが書き換えられる
+
+`edit` の permission を実際に当てて確かめた。**全て書ける。**
+
+```text
+★書ける  home/dot_config/agents/common.toml.tmpl
+★書ける  home/dot_config/opencode/guide-plugin/index.js
+★書ける  scripts/agents/generate.py
+★書ける  home/dot_config/mise/config.toml.tmpl
+```
+
+`chezmoi apply` を 1 回承認させれば保護が消える。**境界の内側で完結する経路**で、
+外部レビュー（Astra）の指摘どおりだった。
+
+`srt` の `denyWrite` は `allowWrite` より優先されるので、ワークスペース内でも
+これらだけ書き込み禁止にできる。
+
 ## 再確認すべき情報源
 
 | # | 減らしたい不確実性 | 方法 |
