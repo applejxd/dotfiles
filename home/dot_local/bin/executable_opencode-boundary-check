@@ -58,16 +58,25 @@ case "${XDG_DATA_HOME:-}" in
 esac
 
 # --- 5. 保護対象を変更できないこと ---
-# denyWrite が効いていれば EROFS になる。効いていなければ書けてしまう。
+# ★存在するとは限らない。srt は存在しないパスにも denyWrite を効かせ、
+#   **作成そのものを阻止する**。存在を前提にすると、まだ無いものを
+#   「検査できない」と誤判定する (実地で踏んだ)。
+#   どちらの場合も「書けないこと」を確かめる形に揃える。
 if [ -n "${BOUNDARY_PROTECTED:-}" ]; then
   for p in $BOUNDARY_PROTECTED; do
-    if [ ! -d "$p" ]; then
-      bad "保護対象が見当たらず検査できない: $p"
-    elif ( : > "$p/.boundary-protected.$$" ) 2>/dev/null; then
-      rm -f "$p/.boundary-protected.$$" 2>/dev/null
-      bad "保護対象へ書けてしまう: $p"
+    if [ -d "$p" ]; then
+      probe="$p/.boundary-protected.$$"
+      if ( : > "$probe" ) 2>/dev/null; then
+        rm -f "$probe" 2>/dev/null
+        bad "保護対象へ書けてしまう: $p"
+      else
+        ok "保護対象へ書けない: $p"
+      fi
+    elif mkdir -p "$p" 2>/dev/null; then
+      rmdir "$p" 2>/dev/null
+      bad "保護対象を作れてしまう: $p"
     else
-      ok "保護対象へ書けない: $p"
+      ok "保護対象を作れない: $p"
     fi
   done
 fi

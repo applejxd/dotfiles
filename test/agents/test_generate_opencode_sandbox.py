@@ -212,6 +212,32 @@ def test_isolated_loads_guide_plugin_for_redaction():
         assert not any(path.startswith(p) for p in allow_write), f"{path} を境界内から書ける"
 
 
+def test_boundary_check_handles_nonexistent_protected_paths():
+    """★保護対象は存在するとは限らない。
+
+    srt は存在しないパスにも denyWrite を効かせ、作成そのものを阻止する。
+    存在を前提にすると「検査できない」と誤判定し、境界は正常なのに
+    起動できなくなる (実地で踏んだ)。
+    """
+    check = ROOT / "home" / "dot_local" / "bin" / "executable_opencode-boundary-check"
+    body = check.read_text(encoding="utf-8")
+    assert "保護対象を作れない" in body, "存在しない保護対象を検査していない"
+    assert "保護対象が見当たらず検査できない" not in body, "存在を前提にした判定が残っている"
+
+
+def test_protected_paths_may_not_exist_on_host():
+    """宣言した保護対象のうち、ホストに無いものがあっても構わない。
+
+    ``.opencode`` は「作られたら困る」対象なので、存在しない状態が正常。
+    """
+    out = gen.opencode_sandbox(COMMON)
+    if out is None:
+        return
+    deny_write = out["config"]["filesystem"]["denyWrite"]
+    missing = [p for p in deny_write if not Path(p).exists()]
+    assert missing, "存在しない保護対象が無い (.opencode が消えた?)"
+
+
 def test_model_preference_is_declared():
     """既定モデルを宣言しておく。無いと初回に何が選ばれるか環境依存になる。
 
