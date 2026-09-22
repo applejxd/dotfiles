@@ -138,6 +138,38 @@ def inner_env(sandbox: dict) -> dict[str, str]:
     return env
 
 
+def write_isolated_config(sandbox: dict) -> None:
+    """隔離版の設定を ``config_dir`` へ書き出す。
+
+    **起動のたびに書き直す。** 設定ディレクトリはワークスペースの外にあり、
+    境界内からは ``allowRead`` だけなので、内側から緩和を広げられない。
+    書き手は常に境界の外 (このランチャー) になる。
+    """
+    config_dir = Path(sandbox["config_dir"])
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config: dict = {
+        "$schema": "https://opencode.ai/config.json",
+        "permissions": sandbox.get("permissions", []),
+        # ワークスペース破壊の復旧手段。★保証ではない (日常の取り消し機能)。
+        #   復旧データ自身が同じ shell から消せるし、捕捉は best effort。
+        "snapshots": True,
+    }
+    policies = sandbox.get("policies")
+    if policies:
+        # ★不正な statement は警告付きで破棄される。置いた事実ではなく
+        #   有効性を確認すること (サーバのログに警告が出る)。
+        config["experimental"] = {"policies": policies}
+
+    target = config_dir / "opencode.json"
+    target.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    prompt = sandbox.get("system_prompt")
+    if prompt:
+        # 境界の存在をエージェントへ伝える。説明上の対策であって、
+        # 書き込み失敗を保証するものではない。
+        (config_dir / "AGENTS.md").write_text(prompt + "\n", encoding="utf-8")
+
+
 def resolve_node() -> str:
     """node の実体を返す。**shim を使わない。**
 
@@ -181,8 +213,9 @@ def main(argv: list[str] | None = None) -> int:
     node = resolve_node()
 
     require_clean(workspace, args.allow_dirty)
-    for key in ("data_home", "config_dir"):
+    for key in ("data_home",):
         Path(sandbox[key]).mkdir(parents=True, exist_ok=True)
+    write_isolated_config(sandbox)
     seed_db(Path(sandbox["db"]))
 
     # 境界の設定は本人だけが読める一時ファイルへ置く (srt は外側で読む)。
