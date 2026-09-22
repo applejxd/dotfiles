@@ -554,6 +554,19 @@ def test_here_strings_and_quoted_markers_are_left_alone(command):
     assert _guided(command) is None, command
 
 
+def test_heredocs_written_as_prose_are_left_alone():
+    """保護対象の綴りを**文章として**書いたときの誤爆を外す。
+
+    実地で踏んだ。コミットメッセージにヒアドキュメントの例を書いただけで
+    deny され、コミットできなくなった。伏字化の ``deny_path_unless`` と
+    同じ型・同じ割り切りで、連結した形は素通りする。
+    """
+    prose = "git commit -m 'feat: python3 - <<PY をやめる\n\n- 理由\n'"
+    assert _guided(prose) is None
+    # 連結すると素通りする。これは承知の穴。
+    assert _guided("git commit -m x && cat > f <<EOF\ny\nEOF") is None
+
+
 def test_separator_echo_is_not_guided():
     """区切り用途の ``echo`` は誘導しない。
 
