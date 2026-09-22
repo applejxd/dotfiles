@@ -414,7 +414,8 @@ TUI のキーバインドは **`cli.json` 側にしか無い**。`opencode.json`
 値は文字列・カンマ区切り・配列・`{key, preventDefault}` のテーブルが使える。
 無効化は `false` か `"none"`。`<leader>` は既定 `ctrl+x` で、タイムアウトだけ
 `keybinds` の外（`leader.timeout`）にある。ID・既定値・キー記法は
-[公式一覧](https://opencode.ai/v2/docs/cli/keybinds)が正本。
+[公式一覧](https://opencode.ai/v2/docs/cli/keybinds)が正本。実測は
+[キーバインドの調査](../research/opencode/keybinds.md)。
 
 **公式一覧は最新版向けで、2.0.12 に無い ID が載っている。** しかも未知の ID は
 「拒否される」と書かれているが、実際には**その行だけ黙って無視され**、
