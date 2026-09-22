@@ -268,7 +268,7 @@ plugin のロード可否を目視なしで判定できる
 | # | 内容 | 移管先 |
 | --- | --- | --- |
 | P2 | 生成の遅延（Haiku で平均 1.1 秒）が実運用で許容範囲か | 運用で判断。不満なら `min_command_length` の調整で済む |
-| P3 | `cli.json` が Orca の overlay 下でも読まれるか | 実環境では読まれることを確認済み。他環境は未検証 |
+| P3 | `cli.json` が Orca の overlay 下でも読まれるか | **読まれない**と 2026-09-22 に確定。`shellenv.sh` が `OPENCODE_CLI_CONFIG_CONTENT` で本文を流し込む形で解決（[ロード経路](../../research/opencode/plugin/loading.md)） |
 | P4 | Bedrock 側の遅延と日本語品質 | provider を設定できたら実測（[コスパ比較](../../research/opencode/plugin/ask-description.md)） |
 | — | `app_bottom` スロットでの固定表示 | `api.slots` が実装されたら再評価 |
 

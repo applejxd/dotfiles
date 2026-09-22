@@ -103,6 +103,14 @@ if [[ -n "${OPENCODE_CONFIG_DIR:-}" && -f "${HOME}/.config/opencode/opencode.jso
   export OPENCODE_CONFIG="${HOME}/.config/opencode/opencode.json"
 fi
 
+# cli.json (キーバインドと TUI plugin) も同じ理由で読まれなくなる。
+# ★パスを渡す変数が無い。CLI 側は CONTENT しか受け取らない。
+# see docs/research/opencode/plugin/loading.md
+if [[ -n "${OPENCODE_CONFIG_DIR:-}" && -f "${HOME}/.config/opencode/cli.json" ]]; then
+  OPENCODE_CLI_CONFIG_CONTENT="$(<"${HOME}/.config/opencode/cli.json")"
+  export OPENCODE_CLI_CONFIG_CONTENT
+fi
+
 # for CUDA
 if [[ -e "/usr/local/cuda" ]]; then
     export PATH="/usr/local/cuda/bin:${PATH}"

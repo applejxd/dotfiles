@@ -361,6 +361,11 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 TUI 側が読まれない。どちらも**絶対パスのディレクトリ**でないと解決されず、
 `~` も単一ファイルも黙って無視される。
 
+**`cli.json` は Orca セッションでは読まれない。** `OPENCODE_CONFIG_DIR` が
+overlay を指すためで、パス指定の環境変数は存在しない。`shellenv.sh` が
+`OPENCODE_CLI_CONFIG_CONTENT` へ本文を流し込んで補う。TUI plugin と
+[キーバインド](#キーバインド)の両方がこれに依存する。
+
 plugin が守る規約は 2 つ。
 
 - **すでに `allow` のものには触らない。** `bypass` エージェントを壊さない
@@ -429,6 +434,10 @@ OpenCode が拒否する**。generate.py は一覧を持たず、綴りの形だ
 `bypass` エージェントへ切り替えるより軽い一時解除になる。
 `service.restart` は**サーバ側 plugin を更新したときに要る**再起動
 （[plugin 層](#plugin-層-guide-plugin)）を 1 キーにしたもの。
+
+**Orca セッションでは `shellenv.sh` の注入が前提**（[plugin 層](#plugin-層-guide-plugin)）。
+`cli.json` が読まれないと**キーバインドは丸ごと既定に戻る**ので、
+`app.exit` が `ctrl+c` を握ったままになり Ctrl+C で終了する。
 
 #### 後勝ちの照合
 

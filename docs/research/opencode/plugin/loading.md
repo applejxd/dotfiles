@@ -108,8 +108,33 @@ OPENCODE_CONFIG     = ~/.config/opencode/opencode.json ← 既存の対処
 説明するが、**2.0.12 では実装と食い違う**（ロード経路の食い違いはこれで 2 件目）。
 
 `cli.json` の位置は `~/.config/opencode/cli.json`。
-**Orca の overlay 下では読まれない可能性がある**（`OPENCODE_CONFIG_DIR` 基準。
-`OPENCODE_CONFIG` は `opencode.json` しか差し替えない）。**未検証。**
+**Orca の overlay 下では読まれない**（`OPENCODE_CONFIG_DIR` 基準。
+`OPENCODE_CONFIG` は `opencode.json` しか差し替えない）。2026-09-22 に確定した。
+
+| 条件 | `cli.json` |
+| --- | --- |
+| `OPENCODE_CONFIG_DIR` 未設定 | `~/.config/opencode/cli.json` を読む |
+| `OPENCODE_CONFIG_DIR` = overlay（Orca セッション） | **読まない**。plugin もキーバインドも既定に戻る |
+| `OPENCODE_CONFIG_DIR` = `cli.json` を置いたディレクトリ | そこから読む |
+
+**パスを渡す環境変数は無い。** バイナリが持つのは
+`OPENCODE_CLI_CONFIG_CONTENT`（JSON 本文）だけで、`OPENCODE_CONFIG` の
+CLI 版に当たるものが存在しない。そのため `shellenv.sh` で本文を流し込む。
+
+```sh
+if [[ -n "${OPENCODE_CONFIG_DIR:-}" && -f "${HOME}/.config/opencode/cli.json" ]]; then
+  OPENCODE_CLI_CONFIG_CONTENT="$(<"${HOME}/.config/opencode/cli.json")"
+  export OPENCODE_CLI_CONFIG_CONTENT
+fi
+```
+
+確認は**キー入力では取れない**。隔離環境では Orca 自身の plugin が失敗して
+モーダルが開き、そこにキーが吸われる。ログの `role=cli` を数えるほうが確実。
+
+| 条件 | `role=cli` の行 | `guide-plugin` |
+| --- | ---: | --- |
+| overlay のみ | 0 | 無し |
+| overlay + `OPENCODE_CLI_CONFIG_CONTENT` | 12 | **有り** |
 
 ## 5. Claude Code との違い
 
@@ -133,7 +158,6 @@ Claude 側は絶対パスのコマンドを固定ファイルに書くだけで�
 - <https://opencode.ai/v2/docs/plugins>（単一ファイル指定の例が実装と食い違う）
 - <https://opencode.ai/v2/docs/cli/plugins>（「`cli.json` へ重ねて書く必要はない」と
   説明するが、2.0.12 では TUI plugin は `cli.json` が必須）
-- `cli.json` が Orca の overlay 下で読まれるか（**未検証**）
 - 単一ファイル指定が将来のバージョンで動くようになるか（**未追跡**）
 - `plugins` の `-` プレフィックスによる無効化が実際に効くか（**未検証**）
 
