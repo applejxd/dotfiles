@@ -10,6 +10,8 @@ const rules = JSON.parse(
 
 const compiled = (rules.guide ?? []).map((r) => ({
   re: new RegExp(r.pattern),
+  // 除外条件。pattern に当たっても unless に当たれば見送る。
+  unless: r.unless ? new RegExp(r.unless) : null,
   message: r.message,
 }))
 
@@ -95,6 +97,7 @@ export default {
       const cmd = raw.get(e.source?.id) ?? e.resources.join(" ; ")
       for (const rule of compiled) {
         if (!rule.re.test(cmd)) continue
+        if (rule.unless && rule.unless.test(cmd)) continue
         e.effect = "deny"
         e.message = rule.message
         return

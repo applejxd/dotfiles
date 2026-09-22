@@ -1054,13 +1054,21 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, str]]:
-    """誘導 plugin が読む判定表 (``rules.json``)。"""
+    """誘導 plugin が読む判定表 (``rules.json``)。
+
+    ``unless`` は任意。``pattern`` に当たっても ``unless`` に当たれば見送る。
+    除外条件を ``pattern`` へ畳み込むと読めない正規表現になるため分けている。
+    """
     out = []
     for rule in common.get("opencode", {}).get("shell", {}).get("guide") or []:
         pattern, message = rule.get("pattern"), rule.get("message")
         if not pattern or not message:
             raise SystemExit("opencode.shell.guide は pattern と message が要る")
-        out.append({"pattern": pattern, "message": message})
+        entry = {"pattern": pattern, "message": message}
+        unless = rule.get("unless")
+        if unless:
+            entry["unless"] = unless
+        out.append(entry)
     return out
 
 

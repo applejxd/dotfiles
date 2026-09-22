@@ -248,12 +248,28 @@ def test_guide_plugin_is_not_registered_twice():
     assert merged.count(gen.opencode_guide_plugin_path()) == 1
 
 
+def _guided(command: str) -> dict[str, str] | None:
+    """plugin と同じ判定。先に当たった規則が勝ち、``unless`` は見送る。
+
+    see home/dot_config/opencode/guide-plugin/index.js
+    """
+    for rule in gen.build_opencode_guide({}, COMMON)["guide"]:
+        if not re.search(rule["pattern"], command):
+            continue
+        if rule.get("unless") and re.search(rule["unless"], command):
+            continue
+        return rule
+    return None
+
+
 def test_guide_rules_are_generated():
     rules_json = gen.build_opencode_guide({}, COMMON)["guide"]
     assert rules_json, "誘導規則が 1 件も無い"
     for rule in rules_json:
-        assert set(rule) == {"pattern", "message"}
+        assert set(rule) <= {"pattern", "message", "unless"}
         re.compile(rule["pattern"])
+        if "unless" in rule:
+            re.compile(rule["unless"])
 
 
 def test_cd_is_guided_to_workdir():
@@ -263,11 +279,39 @@ def test_cd_is_guided_to_workdir():
     取りこぼした。
     see docs/change/0002-opencode-ask-by-default.md
     """
-    rules_json = gen.build_opencode_guide({}, COMMON)["guide"]
     for command in ("cd sub && cat x", 'ls -la; echo "---"; cd /tmp && ls'):
-        hit = [r for r in rules_json if re.search(r["pattern"], command)]
-        assert len(hit) == 1, command
-        assert "workdir" in hit[0]["message"]
+        hit = _guided(command)
+        assert hit is not None, command
+        assert "workdir" in hit["message"], command
+
+
+# 読み取りは read ツールへ寄せる。deny が効かない経路から効く経路へ移すのが
+# 目的で、確認回数は副次効果。
+# see docs/change/0002-opencode-ask-by-default.md 「段階 2」
+@pytest.mark.parametrize(
+    "command",
+    ["cat foo.txt", "head -20 a.py", "tail -n 5 log", "sed -n '1,20p' f.md"],
+)
+def test_reads_are_guided_to_the_read_tool(command):
+    hit = _guided(command)
+    assert hit is not None, command
+    assert "read" in hit["message"], command
+
+
+# read で代替できない形まで止めると作業が止まるだけになる。
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat a.txt | wc -l",  # パイプの途中
+        "cat a b > c",  # 結合してリダイレクト
+        "head -c 100 bin",  # バイト数指定
+        "tail -f app.log",  # 追尾
+        "sed -i 's/a/b/' f",  # 置換 (読み取りではない)
+        "grep -n foo *.py",  # 別の規則の領分
+    ],
+)
+def test_reads_that_have_no_tool_equivalent_are_left_alone(command):
+    assert _guided(command) is None, command
 
 
 def test_separator_echo_is_not_guided():

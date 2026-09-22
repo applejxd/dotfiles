@@ -701,11 +701,26 @@ allow = [
 # 誘導。pattern に一致したら deny して message を返す。
 # pattern は JavaScript の正規表現で、生のコマンド全体に当てる
 # (scanner は変数代入を落とすため e.resources は使わない)。
+# unless は任意の除外条件。pattern に当たっても unless に当たれば見送る。
 # ★deny にすること。ask では自動実行で素通りする。
-# see docs/change/0002-opencode-ask-by-default.md 「段階 2 の詳細」
+# see docs/change/0002-opencode-ask-by-default.md 「段階 2」
 [[opencode.shell.guide]]
 pattern = '(^|&&|\|\||;|\n)\s*cd\s'
 message = "cd は使わないでください。shell ツールの workdir 引数でディレクトリを指定できます。"
+
+# 読み取りを read ツールへ寄せる。目的は確認回数ではなく保護で、
+# shell 経由では read の deny が効かないため。
+# ★パイプ・リダイレクトを含む形は除外する。read で代替できないので
+#   deny すると作業が止まるだけになる。head -c / tail -f も同様。
+[[opencode.shell.guide]]
+pattern = '(^|&&|;|\n)\s*(cat|head|tail)\s'
+unless = '[|<>]|\s-{1,2}(c|f|bytes|follow)\b'
+message = "cat / head / tail でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。"
+
+[[opencode.shell.guide]]
+pattern = '(^|&&|;|\n)\s*sed\s+-n\s'
+unless = '[|<>]'
+message = "sed -n でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。"
 
 # TUI のキーバインド。出力先は **cli.json** (opencode.json には書けない)。
 # ID・既定値・キー記法は公式一覧が正本。
