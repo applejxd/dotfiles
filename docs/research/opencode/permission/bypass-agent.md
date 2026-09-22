@@ -121,6 +121,26 @@ opencode run --agent bypass '<prompt>'
 # TUI では Tab または switch_mode のキーバインドで切り替える
 ```
 
+### モデルは bypass を起動できない（2026-09-22 実測）
+
+**これは設計の土台なので必ず維持する。** `subagent` で起動しようとすると
+拒否される。
+
+```text
+Agent bypass cannot run as a subagent
+```
+
+`mode` を指定していないため primary 扱いになっている。したがって bypass は
+**人間だけが選べる操作**で、プロンプトインジェクションで自分から
+境界を外すことはできない。
+
+> **`mode = "all"` や `"subagent"` を足した瞬間に穴が開く。**
+> モデルが自力で全保護を外せるようになるため、テストで固定する。
+
+なお `subagent` action には permission 規則が **1 件も無く既定 allow**。
+`general` / `explore` は自由に起動できるが、これらは**グローバルの
+permission に従う**ので脱出経路にはならない（[出力フィルタと子エージェント](output-filter-and-subagents.md)）。
+
 ## 5. plugin は bypass を貫通する（段階 2 の前提）
 
 ### 実測: `allow` でも `permission.evaluate` は発火する
