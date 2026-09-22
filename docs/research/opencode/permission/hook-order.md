@@ -92,7 +92,35 @@ bypass だけを逃がせる。
 `source` は `{type:"tool", messageID, id}` で、`id` が
 `tool.execute.before` の `id` と一致する（生コマンドの相関に使う）。
 
-## 6. 計装の手順
+## 6. 配備を確かめる手順（踏んだ落とし穴つき）
+
+サーバ側 plugin は常駐サービスのプロセス内で動く。`chezmoi apply` だけでは
+反映されず、**`opencode service restart` が要る**（`Ctrl+X` → `v`）。
+
+反映されたかを確かめるには、サービスの**起動時刻**が `rules.json` の更新より
+後であることを見る。ここで 2 回誤った。
+
+| 誤り | なぜ駄目か | 正しい方法 |
+| --- | --- | --- |
+| `stat -c %Y /proc/<pid>` を起動時刻として使う | **起動時刻ではない。** 実行中に動く | `ps -o lstart= -p <pid>` |
+| `pgrep -f "opencode serve --service"` で PID を取る | `-f` はコマンドライン全体に当たるため、**その文字列を含む自分自身のシェル**にヒットする。`head -1` が毎回「たった今起動した」偽の PID を返す | `ps -C opencode -o pid,lstart,args` |
+
+この 2 つで「再起動を確認した」と 3 回誤判定し、**誘導が一度も効いていない
+状態を「配備済み」と記録した**。`execute.after` の hook は別経路で再読み込み
+されていたため動いており、それが誤りを覆い隠した。
+
+**`evaluate` が効かないときは、まず再起動を疑う。** 自動承認モードや hook の
+未発火を疑う前に、`ps -C opencode` で起動時刻を見る。
+
+### 効いているかの最小確認
+
+配備済みの規則を 1 つ叩く。deny が返れば `evaluate` は生きている。
+
+```sh
+head -1 README.md   # 誘導が効いていれば permission.rejected が返る
+```
+
+## 7. 計装の手順
 
 配備物には触らず、`.tmp` に複製を置いて `plugins` で絶対パス指定する。
 

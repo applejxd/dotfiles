@@ -446,6 +446,17 @@ shell 経由の読み取りは誘導（`cat` / `head` / `tail` / `sed -n` を `r
 常駐サービスのプロセス内で動くため、`chezmoi apply` だけでは反映されない。
 TUI 側は CLI プロセスなので再起動は不要。
 
+反映されたかは**サービスの起動時刻**で見る。`ps -C opencode -o pid,lstart`
+を使うこと。`pgrep -f "opencode serve"` は**自分自身のシェル**に当たり、
+`stat -c %Y /proc/<pid>` は**起動時刻ではない**。どちらも偽の「再起動済み」を
+返す（[hook の呼ばれ方](../research/opencode/permission/hook-order.md)）。
+
+効いているかは配備済みの規則を 1 つ叩けば分かる。
+
+```sh
+head -1 README.md   # 誘導が生きていれば permission.rejected が返る
+```
+
 #### 確認画面に出るコマンドの説明
 
 60 文字以上のコマンドで確認が出るとき、安価なモデルが 1 行の日本語説明を
