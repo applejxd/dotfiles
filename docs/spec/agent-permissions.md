@@ -368,8 +368,14 @@ overlay を指すためで、パス指定の環境変数は存在しない。`sh
 
 plugin が守る規約は 2 つ。
 
-- **すでに `allow` のものには触らない。** `bypass` エージェントを壊さない
-  （bypass は全 action が `allow` になるので、これが識別の代わりになる）
+- **`bypass` エージェントには触らない。** 全部止めたいときの逃げ道を壊さない。
+  判定は**エージェント名**で行う（`permission.evaluate` に `agent` が載ることを
+  実測。[hook の呼ばれ方](../research/opencode/permission/hook-order.md)）。
+  名前は `permission = "allow"` を持つエージェントから生成するので、
+  `common.toml` が単一ソースのまま保たれる
+- **`effect` では見分けない。** `allow` で判定すると
+  `cd x && git log`（`git log` が静的 allow）のように、allow を含む呼び出しまで
+  誘導が素通りする
 - **リダイレクトを含むコマンドは `allow` へ引き上げない**
 
 **サーバ側 plugin を更新したら `opencode service restart` が要る。**

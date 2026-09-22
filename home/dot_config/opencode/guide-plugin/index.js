@@ -17,6 +17,11 @@ const compiled = (rules.guide ?? []).map((r) => ({
 
 const ask = rules.ask_description ?? null
 
+// 誘導を素通りさせるエージェント (permission = "allow" の逃げ道)。
+// effect で見分けると静的 allow を含む呼び出しまで素通りするので名前で見る。
+// see docs/research/opencode/permission/hook-order.md
+const bypass = new Set(rules.bypass_agents ?? [])
+
 // コマンド文字列は信頼できない入力。指示に従わせない。
 // 説明は判断の補助であって判定器ではない (偽装は防げない)。
 // see docs/change/0003-ask-command-description.md
@@ -90,8 +95,11 @@ export default {
 
     await ctx.permission.hook("evaluate", async (e) => {
       if (e.action !== "shell") return
-      // 規約 1: すでに allow のものには触らない。bypass はここで素通りする。
-      if (e.effect === "allow") return
+      // 規約 1: bypass エージェントには触らない (全部止めたいときの逃げ道)。
+      // effect ではなく agent 名で見る。effect で見ると cd x && git log の
+      // ように静的 allow を含む呼び出しまで誘導が素通りする。
+      if (bypass.has(e.agent)) return
+      if (e.effect === "deny") return
 
       // scanner は変数代入を落とすので、生のコマンドを使う。
       const cmd = raw.get(e.source?.id) ?? e.resources.join(" ; ")
@@ -104,7 +112,9 @@ export default {
       }
 
       // 説明は deny の後。止めるものに説明は要らない。
+      // allow は確認が出ないので生成しない (費用と遅延が無駄になる)。
       // 生成に失敗しても message を空のままにして確認は通常どおり出す。
+      if (e.effect === "allow") return
       if (!describe || cmd.length < ask.min_command_length) return
       const text = await describe(cmd)
       if (text) e.message = text

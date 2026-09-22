@@ -1091,8 +1091,24 @@ def opencode_ask_description(common: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def opencode_bypass_agents(common: dict[str, Any]) -> list[str]:
+    """誘導を素通りさせるエージェント名。
+
+    ``permission = "allow"`` を持つものが「全部止めたいときの逃げ道」。
+    以前は ``e.effect == "allow"`` で見分けていたが、それだと静的 allow を
+    含む呼び出しまで誘導が素通りしてしまう（``cd x && git log`` など）。
+    ``permission.evaluate`` に ``agent`` が載ることを実測したので名前で見る。
+    see docs/research/opencode/permission/hook-order.md
+    """
+    agents = common.get("opencode", {}).get("agent") or {}
+    return sorted(n for n, a in agents.items() if a.get("permission") == "allow")
+
+
 def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {"guide": opencode_guide_rules(common)}
+    out: dict[str, Any] = {
+        "guide": opencode_guide_rules(common),
+        "bypass_agents": opencode_bypass_agents(common),
+    }
     ask = opencode_ask_description(common)
     if ask:
         out["ask_description"] = ask

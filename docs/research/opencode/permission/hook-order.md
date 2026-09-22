@@ -68,7 +68,31 @@ execute.before   cmd="echo hi"              → ask（自動承認）→ complet
 
 誘導が**代替案の提示として機能している**ことの実測。
 
-## 5. 計装の手順
+## 5. `evaluate` のイベントに `agent` が載る
+
+`permission.evaluate` のイベントは次の形。
+
+```text
+sessionID / agent / action / resources / metadata / source / effect
+```
+
+`bypass` エージェントで走らせると `agent:"bypass"` と `effect:"allow"` が
+同時に届く。
+
+| 実行 | `execute.before` の `agent` | `evaluate` の `agent` | `effect` |
+| --- | --- | --- | --- |
+| 既定 | `build` | `build` | `ask` |
+| `--agent bypass` | `bypass` | `bypass` | `allow` |
+
+**これで `effect === "allow"` による bypass 判定を置き換えられる。**
+effect で見分けると、静的 allow を含む呼び出し（`cd x && git log`）まで
+誘導が素通りしてしまう。名前で見れば誘導を allow にも効かせつつ、
+bypass だけを逃がせる。
+
+`source` は `{type:"tool", messageID, id}` で、`id` が
+`tool.execute.before` の `id` と一致する（生コマンドの相関に使う）。
+
+## 6. 計装の手順
 
 配備物には触らず、`.tmp` に複製を置いて `plugins` で絶対パス指定する。
 

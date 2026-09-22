@@ -208,6 +208,26 @@ def test_bypass_is_the_only_agent_from_common():
     assert set(generated()["agent"]) == {"bypass"}
 
 
+# 誘導の素通り判定はエージェント名で行う。effect で見ると静的 allow を含む
+# 呼び出し (cd x && git log) まで素通りする。
+# see docs/research/opencode/permission/hook-order.md
+def test_bypass_agents_are_named_in_the_rules():
+    assert gen.build_opencode_guide({}, COMMON)["bypass_agents"] == ["bypass"]
+
+
+def test_only_all_allow_agents_are_treated_as_bypass():
+    common = {
+        "opencode": {
+            "agent": {
+                "loose": {"permission": "allow"},
+                "tight": {"permission": "ask"},
+                "plain": {"description": "権限を触らない"},
+            }
+        }
+    }
+    assert gen.build_opencode_guide({}, common)["bypass_agents"] == ["loose"]
+
+
 # --- 誘導 plugin ---------------------------------------------------------
 # 明示指定は絶対パスのディレクトリでないと解決されない。相対でも ``~`` でも
 # 単一ファイルでも、OpenCode は**黙って無視する**。
