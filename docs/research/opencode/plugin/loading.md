@@ -24,6 +24,9 @@
 
 `package.json` は不要。`index.js` だけのディレクトリで足りる。
 
+**ただし上表はサーバ側 plugin の話。** TUI 側 plugin は経路が違い、
+`cli.json` に書かないと読まれない（セクション 4）。
+
 公式ドキュメントは `"/absolute/path/plugin.ts"` という**単一ファイル指定を
 例示している**が、2.0.10 では動かない。設定スキーマ（`opencode.ai/config.json`）
 がキー名を `plugin`（単数）としている点も V1 のままで、実際は `plugins` /
@@ -81,7 +84,34 @@ OPENCODE_CONFIG     = ~/.config/opencode/opencode.json ← 既存の対処
 設定ディレクトリ直下のこの 2 つは自動探索される。明示指定と同じ場所に
 置くと二重ロードになるため、`guide-plugin` のような別名にする。
 
-## 4. Claude Code との違い
+## 4. TUI plugin は `cli.json` に書かないと読まれない（2026-09-22 追記）
+
+サーバ側 plugin と TUI 側 plugin では**読まれる経路が違う**。
+`opencode.json` の `plugins` に書いたディレクトリは、サーバ側しか
+ロードされない。
+
+`script` による自動検証（[試験環境の隔離方法](../test-isolation.md)）で
+比較した。対照はプロジェクト直下の `.opencode/plugins/<name>/tui.ts`。
+
+| 指定方法 | `package.json` | TUI plugin |
+| --- | --- | --- |
+| `opencode.json` の `plugins` | 無し | **読まれない** |
+| `opencode.json` の `plugins` | `exports: {"./tui": "./tui.ts"}` あり | **読まれない** |
+| **`cli.json` の `plugins`** | 無し | **読まれる** |
+| **`cli.json` の `plugins`** | あり | **読まれる** |
+| `<project>/.opencode/plugins/<name>/tui.ts` | — | 読まれる |
+
+**`package.json` は不要。** 必要なのは `cli.json` への登録。
+
+公式ドキュメントは「`opencode.json` に書いた plugin が TUI 部品を
+持っていれば CLI が自動で読む。`cli.json` へ重ねて書く必要はない」と
+説明するが、**2.0.12 では実装と食い違う**（ロード経路の食い違いはこれで 2 件目）。
+
+`cli.json` の位置は `~/.config/opencode/cli.json`。
+**Orca の overlay 下では読まれない可能性がある**（`OPENCODE_CONFIG_DIR` 基準。
+`OPENCODE_CONFIG` は `opencode.json` しか差し替えない）。**未検証。**
+
+## 5. Claude Code との違い
 
 同じ「hook を配る」でも仕組みが違い、OpenCode 側だけ不確実性が多い。
 
@@ -101,6 +131,9 @@ Claude 側は絶対パスのコマンドを固定ファイルに書くだけで�
 ## 再確認すべき情報源
 
 - <https://opencode.ai/v2/docs/plugins>（単一ファイル指定の例が実装と食い違う）
+- <https://opencode.ai/v2/docs/cli/plugins>（「`cli.json` へ重ねて書く必要はない」と
+  説明するが、2.0.12 では TUI plugin は `cli.json` が必須）
+- `cli.json` が Orca の overlay 下で読まれるか（**未検証**）
 - 単一ファイル指定が将来のバージョンで動くようになるか（**未追跡**）
 - `plugins` の `-` プレフィックスによる無効化が実際に効くか（**未検証**）
 

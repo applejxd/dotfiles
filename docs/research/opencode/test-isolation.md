@@ -164,6 +164,79 @@ hook の観測（`tool.execute.before` / `permission.evaluate`）は判定まで
 届くので、**権限まわりの確認には使える**。実行結果まで見たい場合は
 この手順では取れない（[出力フィルタと子エージェント](permission/output-filter-and-subagents.md)）。
 
+### TUI を自動で検証する
+
+TUI plugin は `opencode run` では読み込まれない（サーバ側 plugin だけが動く）。
+かといって対話で毎回目視するのは反復が遅い。**`script` で擬似端末を与えると
+自動化できる。**
+
+```bash
+env -C "$WORKDIR" OPENCODE_CONFIG_DIR="$CFG" OPENCODE_DB="$SEED" \
+  timeout 25 script -qec "opencode" /dev/null >/dev/null 2>&1
+```
+
+plugin 側はロードされた印をファイルへ書く。
+
+```js
+import { appendFileSync } from "node:fs"
+export default {
+  id: "probe-tui",
+  setup: () => appendFileSync("/path/to/marker.log", "setup\n"),
+}
+```
+
+**対照を必ず置く。** TUI が起動していないのか、plugin が読まれないのかを
+区別できないと結論を誤る。プロジェクト直下の `.opencode/plugins/<name>/tui.ts`
+は確実に読まれるので、これを対照にする。
+
+```text
+control: setup          ← TUI は起動している
+withPkg: setup          ← 検証対象も読まれた
+```
+
+`timeout` で落とすので TUI は正常終了しない。**判定はマーカーの有無だけで
+行い、終了コードは見ない。**
+
+この方法で分かること・分からないこと:
+
+| 分かる | 分からない |
+| --- | --- |
+| plugin がロードされたか | 実際の描画結果 |
+| 購読や登録が成功したか | 表示位置・見た目 |
+| API が存在するか（`api.slots` など） | 操作した結果 |
+
+描画の確認は目視が要る。ロードや API の有無はここで潰せる。
+
+### plugin を更新したらサービスを再起動する
+
+**サーバ側 plugin は常駐サービスのプロセス内で動く。** `chezmoi apply` で
+ファイルを更新しても、動いているサービスは読み直さない。
+
+```console
+$ ps -o lstart= -p $(pgrep -f "opencode serve --service")
+月  9月 21 22:02:00 2026          ← サービスの起動
+$ stat -c %y ~/.config/opencode/guide-plugin/index.js
+2026-09-22 08:44:14               ← plugin の更新
+```
+
+この状態では**古い plugin が動き続ける**。反映するには再起動する。
+
+```bash
+opencode service restart
+```
+
+**TUI 側 plugin は影響を受けない。** CLI プロセスは起動のたびに新しく、
+plugin もそこで読まれる。実測で確かめた（`api` のキーがサービス接続時と
+`--standalone` で完全に一致）。
+
+| 層 | 動く場所 | サービス再起動 |
+| --- | --- | --- |
+| サーバ側 plugin（`index.js`） | 常駐サービス | **要る** |
+| TUI 側 plugin（`tui.ts`） | CLI プロセス | 要らない |
+
+切り分けを誤ると「plugin が壊れている」と誤診する。実際に
+[ask 画面の説明](plugin/ask-description.md)の実装でこれを踏んだ。
+
 ## 6. 過去の記録への影響
 
 **結論はいずれも有効。** 理由は、global config に permission を置いた実験が

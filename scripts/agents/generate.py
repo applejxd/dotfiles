@@ -1056,8 +1056,31 @@ def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, str]]:
     return out
 
 
+def opencode_ask_description(common: dict[str, Any]) -> dict[str, Any] | None:
+    """確認画面に出す説明の設定 (``rules.json`` の ``ask_description``)。
+
+    plugin 側は設定を持たず、ここで組み立てたものを読むだけにする。
+    """
+    cfg = common.get("opencode", {}).get("ask_description")
+    if not cfg or not cfg.get("enabled"):
+        return None
+    models = [str(m) for m in cfg.get("models") or []]
+    if not models:
+        raise SystemExit("opencode.ask_description は models が 1 件以上要る")
+    return {
+        "min_command_length": int(cfg.get("min_command_length", 60)),
+        "duration_ms": int(cfg.get("duration_ms", 20000)),
+        "timeout_ms": int(cfg.get("timeout_ms", 5000)),
+        "models": models,
+    }
+
+
 def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
-    return {"guide": opencode_guide_rules(common)}
+    out: dict[str, Any] = {"guide": opencode_guide_rules(common)}
+    ask = opencode_ask_description(common)
+    if ask:
+        out["ask_description"] = ask
+    return out
 
 
 # 誘導 plugin の置き場。plugin / plugins という名前にしないこと。その 2 つは
@@ -1076,7 +1099,7 @@ def merge_opencode_plugins(existing_plugins: Any, common: dict[str, Any]) -> lis
     """``plugins`` を更新する (宣言外のエントリは残す)。"""
     path = opencode_guide_plugin_path()
     out = [p for p in (existing_plugins or []) if p not in (path, OPENCODE_GUIDE_PLUGIN)]
-    if opencode_guide_rules(common):
+    if opencode_guide_rules(common) or opencode_ask_description(common):
         out.append(path)
     return out
 
@@ -1128,6 +1151,26 @@ def merge_opencode_mcp(existing_mcp: Any, common: dict[str, Any]) -> dict[str, A
     return out
 
 
+def merge_opencode_cli(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.config/opencode/cli.json`` を更新する。
+
+    TUI 側 plugin は **``cli.json`` からしか読まれない**（``opencode.json`` の
+    ``plugins`` はサーバ側だけ）。``attention`` などユーザ設定が同居するので、
+    宣言したエントリだけを差し替える。
+    see docs/research/opencode/plugin/loading.md
+    """
+    out = dict(existing)
+    path = opencode_guide_plugin_path()
+    plugins = [p for p in (out.get("plugins") or []) if p not in (path, OPENCODE_GUIDE_PLUGIN)]
+    if opencode_guide_rules(common) or opencode_ask_description(common):
+        plugins.append(path)
+    if plugins:
+        out["plugins"] = plugins
+    else:
+        out.pop("plugins", None)
+    return out
+
+
 def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """``~/.config/opencode/opencode.json`` (global config) を更新する。
 
@@ -1169,6 +1212,7 @@ TARGETS = {
     "copilot-perms": merge_copilot_perms,
     "copilot-settings": merge_copilot_settings,
     "gemini-settings": merge_gemini_settings,
+    "opencode-cli": merge_opencode_cli,
     "opencode-config": merge_opencode_config,
     "opencode-guide": build_opencode_guide,
 }

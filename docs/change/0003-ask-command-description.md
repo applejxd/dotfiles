@@ -78,12 +78,15 @@
 
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
-| P1 | 設定由来のプラグインディレクトリから `tui.ts` が読まれるか | `guide-plugin/tui.ts` を置いて `chezmoi apply` 後に TUI で確認する |
-| P2 | 生成の遅延が許容範囲か | 実運用で数日使って判断する |
+| P2 | 生成の遅延が許容範囲か | 実運用で数日使って判断する（Haiku で平均 1.1 秒） |
+| P4 | Bedrock 側の最適なモデル | provider を設定できたら Nova Lite / Micro を含めて実測する |
+| P3 | `cli.json` が Orca の overlay 下でも読まれるか | overlay 相当の環境で `script` 検証する |
 
-**P1 が不成立なら設計が変わる。** その場合は TUI 部分だけプロジェクト側
-（`<project>/.opencode/plugins/`）へ置く形になり、全プロジェクトへ配る
-手段を別に考える必要がある。
+決着済み:
+
+| # | 結果 |
+| --- | --- |
+| P1 | **不成立。`opencode.json` の `plugins` からは TUI plugin が読まれない。** `package.json` に `exports` を足しても同じ。**`cli.json` に書くと読まれる**（[ロード経路](../research/opencode/plugin/loading.md)）。設計を `cli.json` の生成を含む形へ変更した |
 
 ## 仕様への変更案
 
@@ -93,6 +96,7 @@
 | `generate.py` | `rules.json` に `guide` のみ → `ask_description` も出す | plugin は設定を持たず読むだけにする | 未着手 |
 | `guide-plugin/index.js` | 誘導のみ → 説明の生成と `message` への格納を追加 | 生成はサーバ側 plugin でしかできない | 未着手 |
 | `guide-plugin/tui.ts` | （なし）→ `permission.asked` を購読して toast 表示 | 表示は TUI 側 plugin でしかできない | 未着手 |
+| `~/.config/opencode/cli.json` | （なし）→ `plugins` に guide-plugin を登録 | **TUI plugin は `cli.json` からしか読まれない**（実測） | 未着手 |
 | `test_generate_opencode.py` | （なし）→ 設定の生成と既定値を固定するテスト | 閾値やモデル候補が黙って変わらないようにする | 未着手 |
 
 ## 実装・検証
@@ -108,6 +112,13 @@ index.js   (サーバ)  ask のとき説明を生成し e.message へ
         ↓ permission.asked イベントの message
 tui.ts     (CLI)     toast で表示
 ```
+
+登録先が 2 つに分かれる。**サーバ側と TUI 側でロード経路が違う**ため。
+
+| 登録先 | 読まれるもの |
+| --- | --- |
+| `opencode.json` の `plugins` | `index.js`（サーバ側） |
+| `cli.json` の `plugins` | `tui.ts`（TUI 側） |
 
 **2 つの plugin に割れるのは仕様上の制約。** 生成はサーバ側でしかできず、
 表示は TUI 側でしかできない。`message` がその間を渡す唯一の通路になる。
@@ -162,13 +173,19 @@ duration_ms = 20000
 timeout_ms = 5000
 models = [
   "github-copilot/claude-haiku-4.5",
+  "github-copilot/gpt-5.4-mini",
   "amazon-bedrock/anthropic.claude-haiku-4-5",
+  "github-copilot/gpt-5.6-luna",
 ]
 ```
 
 `models` は上から試す。**一覧に載っていても利用可能とは限らない**ので、
 「一覧に無い」「呼び出しに失敗した」のどちらもセッション内で記憶して
 次の候補へ倒す。Bedrock を足すときはここへ 1 行加えるだけにする。
+
+**順序は安さではなく遅延で決めた**（[モデルの比較](../research/opencode/plugin/ask-description.md)）。
+費用の差は月 1 ドル未満だが、遅延は確認が出るまでの待ち時間に直結する。
+最安の Luna は最大 6.2 秒で `timeout_ms` を超えた。
 
 ### 失敗時の挙動
 
@@ -193,6 +210,17 @@ models = [
 | 失敗時 | 候補を全て無効な名前にして、確認が通常どおり出ることを確認 |
 
 ## 重要な更新
+
+**2026-09-22 — TUI plugin の登録先が別だった（P1）。**
+
+`opencode.json` の `plugins` に書いたディレクトリからは **TUI plugin が
+読まれない**。`package.json` に `exports` を足しても変わらない。
+`cli.json` に書くと読まれる（実測）。公式ドキュメントは「`cli.json` へ
+重ねて書く必要はない」と説明しており、実装と食い違う。
+
+あわせて **TUI の自動検証法**が確立した。`script` で擬似端末を与えれば
+plugin のロード可否を目視なしで判定できる
+（[試験環境の隔離方法](../research/opencode/test-isolation.md)）。
 
 **2026-09-22 — 設計を確定。表示経路は toast だけに絞った。**
 

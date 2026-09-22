@@ -295,6 +295,66 @@ def test_guide_target_is_fully_generated():
     assert "opencode-guide" in gen.FULL_GENERATION_TARGETS
 
 
+# --- 確認画面の説明 (CHG-0003) -------------------------------------------
+# 表示は TUI plugin の toast。権限ダイアログには出せない。
+# see docs/research/opencode/plugin/ask-description.md
+
+
+def test_ask_description_is_generated():
+    ask = gen.build_opencode_guide({}, COMMON)["ask_description"]
+    assert ask["models"], "モデル候補が空"
+    assert ask["min_command_length"] > 0
+    assert ask["timeout_ms"] > 0
+    assert ask["duration_ms"] > 0
+
+
+def test_ask_description_is_not_locked_to_one_backend():
+    """Bedrock と GitHub Copilot の両方を予定しているので決め打ちしない。"""
+    models = gen.build_opencode_guide({}, COMMON)["ask_description"]["models"]
+    providers = {ref.split("/", 1)[0] for ref in models}
+    assert len(providers) >= 2, f"provider が 1 つしかない: {providers}"
+
+
+def test_ask_description_can_be_disabled():
+    common = copy.deepcopy(COMMON)
+    common["opencode"]["ask_description"]["enabled"] = False
+    assert "ask_description" not in gen.build_opencode_guide({}, common)
+
+
+def test_ask_description_without_models_is_rejected():
+    common = copy.deepcopy(COMMON)
+    common["opencode"]["ask_description"]["models"] = []
+    with pytest.raises(SystemExit):
+        gen.build_opencode_guide({}, common)
+
+
+def test_tui_plugin_file_exists():
+    """表示側。これが無いと説明は生成されても誰も見ない。"""
+    assert (ROOT / "home/dot_config/opencode/guide-plugin/tui.ts").is_file()
+
+
+# TUI 側 plugin は cli.json からしか読まれない (opencode.json の plugins は
+# サーバ側だけ)。実測で package.json の exports を足しても変わらなかった。
+# see docs/research/opencode/plugin/loading.md
+def test_cli_json_registers_the_plugin():
+    cli = gen.merge_opencode_cli({}, COMMON)
+    assert gen.opencode_guide_plugin_path() in cli["plugins"]
+
+
+def test_cli_json_keeps_user_settings():
+    existing = {"attention": {"enabled": True}, "plugins": ["opencode-acme"]}
+    cli = gen.merge_opencode_cli(existing, COMMON)
+    assert cli["attention"] == {"enabled": True}
+    assert cli["plugins"][0] == "opencode-acme"
+    assert cli["plugins"].count(gen.opencode_guide_plugin_path()) == 1
+
+
+def test_cli_json_is_not_registered_twice():
+    existing = {"plugins": [gen.opencode_guide_plugin_path()]}
+    cli = gen.merge_opencode_cli(existing, COMMON)
+    assert cli["plugins"].count(gen.opencode_guide_plugin_path()) == 1
+
+
 def test_allow_is_not_widened_silently():
     """allow が増えたら気付けるようにする。
 
