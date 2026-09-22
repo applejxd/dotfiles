@@ -519,6 +519,41 @@ def test_reads_that_have_no_tool_equivalent_are_left_alone(command):
     assert _guided(command) is None, command
 
 
+# ヒアドキュメントは write ツールへ寄せる。目的は確認 1 回あたりの負担で、
+# 実履歴ではヒアドキュメント付きが 177 件・総文字数の 46.9% を占めていた。
+# 保護にもなる: python3 - <<PY で書く経路には edit の deny が効かない。
+# see docs/change/0002-opencode-ask-by-default.md 「段階 3」
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python3 - <<'PY'\nprint(1)\nPY",
+        "mise exec -- python3 - <<PY\nimport os\nPY",
+        "cat > a.txt <<'EOF'\nx\nEOF",
+        "tee -a log <<EOF\nx\nEOF",
+        "sqlite3 db.sqlite <<-SQL\nselect 1;\nSQL",
+    ],
+)
+def test_heredocs_are_guided_to_the_write_tool(command):
+    hit = _guided(command)
+    assert hit is not None, command
+    assert "write" in hit["message"], command
+
+
+# ★`<<<` は here-string で 1 行。終端行も本文も無いので write の出番がない。
+# ★末尾の改行を要求しないと、クォート内の `<<` まで当たる。
+@pytest.mark.parametrize(
+    "command",
+    [
+        "grep -f - <<< 'pattern'",
+        "wc -l < README.md",
+        "echo 'a << b'",
+        "git log --oneline -3",
+    ],
+)
+def test_here_strings_and_quoted_markers_are_left_alone(command):
+    assert _guided(command) is None, command
+
+
 def test_separator_echo_is_not_guided():
     """区切り用途の ``echo`` は誘導しない。
 
