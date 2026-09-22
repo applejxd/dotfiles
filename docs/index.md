@@ -62,7 +62,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | --- | --- | --- | --- |
 | [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
 | [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。段階 4 以降は CHG-0004 待ちで保留 | CHG-0004 の段階 2 |
-| [CHG-0004](change/0004-opencode-sandbox.md) | In progress | 事前確認は全て決着。固定費 44 ms でゲート通過。対処後の自動化率は 98.7% の見込み | 段階 1（chezmoi を snap から外す） |
+| [CHG-0004](change/0004-opencode-sandbox.md) | In progress | 段階 1 完了。固定費 44 ms でゲート通過。対処後の自動化率は 98.7% の見込み | 段階 2（plugin が shell を `srt` で包む） |
 
 ## 判断待ち・障害
 

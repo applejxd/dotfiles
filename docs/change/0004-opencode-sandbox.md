@@ -84,7 +84,7 @@ plugin に安全網を積んできた。段階 3 まで配備した時点で次�
 | 段階 | 内容 | 状態 |
 | --- | --- | --- |
 | 0 | `srt` の成立確認と構成の決定 | **完了**（2026-09-22） |
-| 1 | `chezmoi` を snap から外す | 未着手 |
+| 1 | `chezmoi` を snap から外す | **完了**（2026-09-22） |
 | 2 | plugin が shell の実行を `srt` で包む | 未着手 |
 | 3 | plugin が境界の実在を確認して `ask` → `allow` へ反転 | 未着手 |
 | 4 | 許可リスト（パス・ドメイン）を `common.toml` で単一ソース化 | 未着手 |
@@ -155,9 +155,9 @@ plugin は node（サービス）の中で動くので、CLI ではなく**ラ�
 - 版は `latest` の浮動指定で **Claude Code と共有**している。片方の都合で
   上がると両方の挙動が変わる
 
-### 段階 1: `chezmoi` を snap から外す
+### 段階 1: `chezmoi` を snap から外す（完了）
 
-snap 版は bwrap 内で動かない。ブートストラップの 1 行を差し替える。
+snap 版は bwrap 内で動かない。ブートストラップの 1 行を差し替えた。
 
 ```sh
 # README の変更
@@ -165,27 +165,28 @@ snap 版は bwrap 内で動かない。ブートストラップの 1 行を差�
 + sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
 ```
 
-`~/.local/bin` は PATH にあり、`sudo` も不要になる。`chezmoi upgrade` が
-使えるようになる副次効果もある（snap 版では効かない）。
-
 **mise 先行には変えない。** `chezmoi` が `mise` を入れる一方向の依存を保つ。
 逆にすると `chezmoi apply` の最中に mise 自身を更新する場面が自己参照になる。
 
-#### 実地で確認したこと（2026-09-22）
+#### snap を外して分かったこと（2026-09-22）
 
-公式インストーラで `~/.local/bin` へ入れ、境界内で比べた。
+**`chezmoi = "latest"` は既に mise で宣言されていた**（`config.toml.tmpl`）。
+`/snap/bin` が PATH で mise の shim より前にあり、**それを覆い隠していただけ**
+だった。snap を外した時点で mise 管理版へ切り替わった。
 
-| 版 | 境界内での挙動 |
+したがって公式インストーラが要るのは**初回の bootstrap だけ**で、以降は
+mise が引き継ぐ。`~/.local/bin` のコピーは残さなくてよい（重複するので削除した）。
+
+#### 完了の確認
+
+| 確認 | 結果 |
 | --- | --- |
-| snap（`/snap/bin`） | **失敗**（`cmd_run.go` エラー） |
-| 公式（`~/.local/bin`） | `--version` / `source-path` / `execute-template` **全て成功** |
+| 削除前の安全性（`status` / `diff` の出力） | snap 版と公式版で**完全一致**（151 行） |
+| 設定の置き場 | `~/.config/chezmoi/`。snap の外にあり失うものなし |
+| 現在の解決先 | `~/.local/share/mise/installs/chezmoi/latest/chezmoi` |
+| **境界内での動作** | `--version` / `source-path` / `execute-template` / `data` **全て成功** |
 
-**残る作業は snap の削除だけ**（`sudo snap remove chezmoi`）。`/snap/bin` は
-PATH で `~/.local/bin` より**前**に来るため、消さないと古い方が使われ続ける。
-`sudo` が要るので手作業になる。
-
-**完了条件**: snap を外した状態で `chezmoi apply` が通り、sandbox 内で
-`chezmoi --version` が動くこと。
+`chezmoi apply` の実行は利用者の判断に委ねる（`status` に未適用の差分がある）。
 
 ### 段階 2: plugin が shell の実行を包む
 

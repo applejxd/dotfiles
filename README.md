@@ -23,11 +23,15 @@ brew install chezmoi
 > **snap 版は使わない。** snap の confinement 下では
 > [AI CLI の sandbox](docs/change/0004-opencode-sandbox.md) の内側で
 > 起動できず、`chezmoi apply` が失敗する（実測）。
-> 静的バイナリなら `chezmoi upgrade` も使える（snap 版では効かない）。
+>
+> **上記は初回の bootstrap だけ。** 以降は mise が
+> `chezmoi = "latest"` で管理を引き継ぐ（`config.toml.tmpl`）。
+> `chezmoi apply` 後は mise 版が使われるため、`~/.local/bin` の
+> コピーは残さなくてよい。
 >
 > 既に snap 版が入っている場合は `sudo snap remove chezmoi` で外す。
-> `/snap/bin` は PATH で `~/.local/bin` より前に来るため、消さないと
-> 古い方が使われ続ける。
+> `/snap/bin` は PATH で mise の shim より前に来るため、**消さないと
+> mise 管理版が使われない**。削除後は `hash -r` を実行する。
 
 ```powershell
 # Windows (PowerShell)
