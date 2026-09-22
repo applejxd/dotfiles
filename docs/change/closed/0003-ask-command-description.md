@@ -6,7 +6,7 @@
 - **基準**: OpenCode V2（`v2.0.12`）
 
 > **この文書は当時の記録。** 現在の仕様は
-> [agent-permissions](../spec/agent-permissions.md)「確認画面に出るコマンドの説明」。
+> [agent-permissions](../../spec/agent-permissions.md)「確認画面に出るコマンドの説明」。
 
 ## 目的と非目的
 
@@ -17,7 +17,7 @@
 
 **非目的**:
 
-- 確認回数を減らすこと。それは [CHG-0002](0002-opencode-ask-by-default.md) の
+- 確認回数を減らすこと。それは [CHG-0002](../0002-opencode-ask-by-default.md) の
   領分で、しかも**自動実行では `allow` と `ask` が等価**なので効果が薄い
 - 説明を根拠に自動承認すること。**判断の補助であって判定器ではない**
 - 権限ダイアログそのものの見た目を変えること（後述のとおり不可能）
@@ -26,7 +26,7 @@
 
 ### 分かったこと（すべて実測）
 
-出典は[ask 画面へ説明を出す](../research/opencode/plugin/ask-description.md)。
+出典は[ask 画面へ説明を出す](../../research/opencode/plugin/ask-description.md)。
 
 | 事実 | 影響 |
 | --- | --- |
@@ -60,7 +60,7 @@
    （説明が無いだけ。確認を止めない）
 3. バックエンドを 1 つに決め打ちしない。候補リストの上から試し、
    使えたものを採用する
-4. `allow` と判定済みのものには触らない（[CHG-0002 の規約 1](0002-opencode-ask-by-default.md)）。
+4. `allow` と判定済みのものには触らない（[CHG-0002 の規約 1](../0002-opencode-ask-by-default.md)）。
    `bypass` エージェントの素通りを壊さない
 
 **望ましい:**
@@ -83,14 +83,14 @@
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
 | P2 | 生成の遅延が許容範囲か | 実運用で数日使って判断する（Haiku で平均 1.1 秒） |
-| P4 | Bedrock 側の遅延と日本語品質 | provider を設定できたら実測する。Nova Micro は Haiku の 1/32 の価格だが**未検証**（[コスパ比較](../research/opencode/plugin/ask-description.md)） |
+| P4 | Bedrock 側の遅延と日本語品質 | provider を設定できたら実測する。Nova Micro は Haiku の 1/32 の価格だが**未検証**（[コスパ比較](../../research/opencode/plugin/ask-description.md)） |
 | P3 | `cli.json` が Orca の overlay 下でも読まれるか | overlay 相当の環境で `script` 検証する |
 
 決着済み:
 
 | # | 結果 |
 | --- | --- |
-| P1 | **不成立。`opencode.json` の `plugins` からは TUI plugin が読まれない。** `package.json` に `exports` を足しても同じ。**`cli.json` に書くと読まれる**（[ロード経路](../research/opencode/plugin/loading.md)）。設計を `cli.json` の生成を含む形へ変更した |
+| P1 | **不成立。`opencode.json` の `plugins` からは TUI plugin が読まれない。** `package.json` に `exports` を足しても同じ。**`cli.json` に書くと読まれる**（[ロード経路](../../research/opencode/plugin/loading.md)）。設計を `cli.json` の生成を含む形へ変更した |
 
 ## 仕様への変更案
 
@@ -191,7 +191,7 @@ models = [
 「一覧に無い」「呼び出しに失敗した」のどちらもセッション内で記憶して
 次の候補へ倒す。Bedrock を足すときはここへ 1 行加えるだけにする。
 
-**順序は安さではなく遅延で決めた**（[モデルの比較](../research/opencode/plugin/ask-description.md)）。
+**順序は安さではなく遅延で決めた**（[モデルの比較](../../research/opencode/plugin/ask-description.md)）。
 費用の差は月 1 ドル未満だが、遅延は確認が出るまでの待ち時間に直結する。
 最安の Luna は最大 6.2 秒で `timeout_ms` を超えた。
 
@@ -228,7 +228,7 @@ models = [
 
 あわせて **TUI の自動検証法**が確立した。`script` で擬似端末を与えれば
 plugin のロード可否を目視なしで判定できる
-（[試験環境の隔離方法](../research/opencode/test-isolation.md)）。
+（[試験環境の隔離方法](../../research/opencode/test-isolation.md)）。
 
 **2026-09-22 — 設計を確定。表示経路は toast だけに絞った。**
 
@@ -255,13 +255,13 @@ plugin のロード可否を目視なしで判定できる
 
 ### 反映先
 
-- 仕様: [agent-permissions](../spec/agent-permissions.md)
+- 仕様: [agent-permissions](../../spec/agent-permissions.md)
   「plugin 層」「確認画面に出るコマンドの説明」
 - 実装: `home/dot_config/opencode/guide-plugin/`、
   `home/dot_config/agents/common.toml.tmpl` の `[opencode.ask_description]`
-- 観測: [ask 画面へ説明を出す](../research/opencode/plugin/ask-description.md)、
-  [ロード経路](../research/opencode/plugin/loading.md)、
-  [試験環境の隔離方法](../research/opencode/test-isolation.md)
+- 観測: [ask 画面へ説明を出す](../../research/opencode/plugin/ask-description.md)、
+  [ロード経路](../../research/opencode/plugin/loading.md)、
+  [試験環境の隔離方法](../../research/opencode/test-isolation.md)
 
 ### 移管した未完事項
 
@@ -269,7 +269,7 @@ plugin のロード可否を目視なしで判定できる
 | --- | --- | --- |
 | P2 | 生成の遅延（Haiku で平均 1.1 秒）が実運用で許容範囲か | 運用で判断。不満なら `min_command_length` の調整で済む |
 | P3 | `cli.json` が Orca の overlay 下でも読まれるか | 実環境では読まれることを確認済み。他環境は未検証 |
-| P4 | Bedrock 側の遅延と日本語品質 | provider を設定できたら実測（[コスパ比較](../research/opencode/plugin/ask-description.md)） |
+| P4 | Bedrock 側の遅延と日本語品質 | provider を設定できたら実測（[コスパ比較](../../research/opencode/plugin/ask-description.md)） |
 | — | `app_bottom` スロットでの固定表示 | `api.slots` が実装されたら再評価 |
 
 いずれも**この案件の成立を妨げない**。P4 は外部要因で待ち、

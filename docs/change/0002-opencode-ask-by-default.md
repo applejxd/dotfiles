@@ -15,7 +15,7 @@
 - 確認回数の削減。**自動実行では `allow` と `ask` が等価**なので、
   自動化率には効かない（後述）
 - 確認画面の情報量を増やすこと。それは
-  [CHG-0003](0003-ask-command-description.md) が扱う
+  [CHG-0003](closed/0003-ask-command-description.md) が扱う
 
 ## 発端
 

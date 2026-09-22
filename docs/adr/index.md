@@ -35,3 +35,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0008](0008-explicit-dev-tool-grants.md) | Copilot の開発ツール自動許可を切り、必要な範囲を明示する | Accepted | 2026-09-14 |
 | [0009](0009-save-before-documenting.md) | コンテキスト圧縮に備えて、保存と文書化を分ける | Accepted | 2026-09-19 |
 | [0010](0010-exploratory-spec-driven-docs.md) | docs を「段階」ではなく「情報の役割」で分け、案件を中心に置く | Accepted | 2026-09-19 |
+| [0011](0011-close-change-records-into-subdirectory.md) | 終了した案件を `change/closed/` へ移す | Accepted | 2026-09-22 |
