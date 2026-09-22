@@ -49,6 +49,7 @@
 | [出力フィルタと子エージェント](opencode/permission/output-filter-and-subagents.md) | execute.afterでshell出力を伏字化できる実証、符号化ですり抜ける限界、continue_loop_on_deny、子エージェントも共通permissionに従う |
 | [カスタムエージェント(Bypass)とキーバインド](opencode/permission/bypass-agent.md) | keybindsがV2で除去される実証、modeではなくagentで実装する、permission="allow"の展開、bypassが外す防御の範囲 |
 | [sandboxはあるか](opencode/permission/sandbox.md) | 組み込みsandboxが無いことの確認、プロセスごと隔離の実証、常駐サービス経由の脱出、snapが動かない、採用しない判断の根拠 |
+| [hookの呼ばれ方とactionの種類](opencode/permission/hook-order.md) | execute.beforeが評価より前に走る実測、external_directoryが別actionで立つ、誘導のdenyは確認を出さない、計装の手順 |
 
 ### OpenCode の plugin
 
