@@ -51,8 +51,9 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
   - Windows 実機での検証は未実施（source state は更新済み）
   - Copilot の圧縮直後の注入は Claude より 1 ツール分遅い（同じターン内には届く）
   - Copilot では文脈使用率を推定できないため、閾値監視は見送り
-  - OpenCode に sandbox は無い。防御は permission リストと plugin の 2 層で、
-    どちらも境界ではない（[OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い)）
+  - **列挙型の規則では権限境界を作れない。** write deny の 38 glob は shell の
+    リダイレクトに一切効いていなかった。保護の主役を OS のアクセス制御へ移す
+    （[CHG-0004](change/0004-opencode-sandbox.md)。Ubuntu / WSL のみ）
 - **現行仕様**: [仕様・運用](spec/index.md)
 
 ## 活動中
@@ -60,7 +61,8 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
 | [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
-| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 2 完了。負担の本体は確認の回数ではなく 1 回あたりの量（中央値 245 字） | 段階 3（ヒアドキュメントを write へ誘導） |
+| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。段階 4 以降は CHG-0004 待ちで保留 | CHG-0004 の段階 2 |
+| [CHG-0004](change/0004-opencode-sandbox.md) | In progress | `srt` は成立。包んだサービスと TUI の通信が未検証 | P0-1（サービスを `srt` 配下で起動） |
 
 ## 判断待ち・障害
 
