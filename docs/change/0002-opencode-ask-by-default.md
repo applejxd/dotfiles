@@ -96,12 +96,22 @@ bubblewrap で隔離すれば可能だが、**採用しないと判断した**�
 | `[opencode.shell] allow` 5 件 | 配備済み |
 | write deny（`.git/config` / `.opencode/opencode.json` 等） | 配備済み |
 | `bypass` エージェント（全ツール許可の逃げ道） | 配備済み |
-| 誘導 plugin の基盤（`guide-plugin`） | 配備済み。規則は `cd` 1 件のみ |
+| 誘導 plugin の基盤（`guide-plugin`） | 配備済み |
+| 誘導規則（`cd` / `cat`・`head`・`tail` / `sed -n`） | 配備済み |
+| `grep` / `glob` の結果フィルタ | 配備済み。実地で確認 |
+
+誘導の素通り判定は**エージェント名**で行う。`effect` で見ると静的 allow を
+含む呼び出し（`cd x && git log`）まで素通りしていた
+（[hook の呼ばれ方](../research/opencode/permission/hook-order.md)）。
+
+結果フィルタは実地で確認した。保護対象を含む検索で、該当ファイルが結果から
+消え、**件数ヘッダも訂正される**（`Found 2 matches` → `Found 1 matches`）。
 
 ### 残っていること
 
-段階 2 の本体（`read` への誘導、`grep` / `glob` の結果フィルタ、
-shell 出力の伏字化）。設計は確定し、前提も実測で裏づけ済み。
+shell 出力の伏字化（段階 2-C）。誘導を抜けて shell を通ったものへの安全網。
+設計は確定し、前提も実測で裏づけ済み
+（[出力フィルタ](../research/opencode/permission/output-filter-and-subagents.md)）。
 
 ### まだ分からないこと
 
@@ -129,7 +139,7 @@ shell 出力の伏字化）。設計は確定し、前提も実測で裏づけ�
 | --- | --- | --- |
 | 0 | 穴と plugin API の実測、計測基盤の確立 | 完了 |
 | 1 | `[opencode.shell]` 新設 + 既定 ask | **完了**（2026-09-21） |
-| 2 | plugin 基盤 + 読み取り経路の保護 | **着手中**（基盤と `cd` 規則が完了） |
+| 2 | plugin 基盤 + 読み取り経路の保護 | **着手中**（誘導と結果フィルタが完了。残りは伏字化） |
 | 3 | `verify` ツール | 未着手 |
 | 4 | 残り約 280 件への手当 | 判断保留 |
 
@@ -367,7 +377,8 @@ P3-4（macOS の `sandbox-exec`）は sandbox 不採用のため**打ち切り**
 | `generate.py` | allow を `[bash]` から取得 → `[opencode.shell]` から取得 + 先頭に `{shell, *, ask}` | 既定を ask にする本体 | **適用済み** |
 | `claude_write_deny_globs` | `.git/config` / `.opencode/opencode.json` 等を追加 | どちらも書けると防御を外せる（実測） | **適用済み** |
 | `guide-plugin` | （なし）→ 誘導 hook の基盤 | 静的 deny は代替案を返せない | **適用済み**（規則は `cd` 1 件） |
-| `guide-plugin` | `cd` のみ → `read` 誘導・`grep` フィルタ・伏字化 | 段階 2 の本体 | 未着手 |
+| `guide-plugin` | `cd` のみ → `read` 誘導・`grep` / `glob` フィルタ | 段階 2 の本体 | **適用済み** |
+| `guide-plugin` | （なし）→ shell 出力の伏字化 | 段階 2-C の安全網 | 未着手 |
 | AGENTS.md の検証コマンド表 | 5 コマンドの手打ち → `verify` ツール 1 個 | コンテキストコストが 3 倍違う | 未着手 |
 
 ## 重要な更新
