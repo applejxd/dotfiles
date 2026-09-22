@@ -394,6 +394,40 @@ glob: "/…/work/canary.txt"
 > 死んでいた。`~` のままの形と展開済みの形の 2 本に増やして直した
 > （コマンド文字列には `~` のまま書かれるので、どちらも要る）。
 
+### 追記（2026-09-22）: そもそもツールごと無効化できる
+
+濾す必要は無かった。**トップレベルの `tools` で無効化できる。**
+
+```jsonc
+{ "tools": { "grep": false, "glob": false } }
+```
+
+実測では**モデルにツールが提示されず**、自分から shell の `grep` へ
+切り替えた。誘導メッセージも要らない。
+
+```text
+> grep ツールは直接利用できないため、shell コマンドで grep を実行します。
+$ grep "Dotfiles" README.md
+```
+
+plugin で `execute.before` から例外を投げる方法（これも成立する）より優れる。
+ツール定義のコンテキストを消費せず、失敗の 1 往復も生じない。
+
+| 手段 | 効くか | 備考 |
+| --- | --- | --- |
+| `permissions` 配列に `{action:"grep", effect:"deny"}` | **効かない** | V2 の配列は `grep` / `glob` をアクションとして持たない |
+| トップレベルの `tools: {"grep": false}` | **効く** | 採用 |
+| エージェント単位の `tools` | — | 公式に deprecated（`permission` を使えとある） |
+
+> **`permissions` は未知のアクションを黙って無視する。** エラーにならないので
+> deny したつもりで素通りする。`denyRead` の癖・`~/` の glob・未知の keybind と
+> 同じ型の事故で、**書いたら必ず実地で確かめる**。
+>
+> 公式スキーマ（`https://opencode.ai/config.json`）の `permission` は
+> **V1 のオブジェクト形式**で、`read` / `edit` / `glob` / `grep` / `bash` 等を
+> アクションとして持つ。このリポジトリが使う V2 の `permissions` 配列とは
+> 別物なので、スキーマを根拠にしないこと。
+
 ## 再確認すべき情報源
 
 - <https://opencode.ai/v2/docs/permissions>（action 一覧と resource の定義）

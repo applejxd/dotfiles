@@ -13,12 +13,21 @@ chezmoi を使用した個人用 dotfiles 管理リポジトリ。Windows/Ubuntu
 ### インストール
 
 ```bash
-# Ubuntu
-sudo snap install chezmoi --classic
+# Ubuntu / WSL (公式インストーラ。sudo 不要)
+sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
 
 # macOS
 brew install chezmoi
 ```
+
+> **snap 版は使わない。** snap の confinement 下では
+> [AI CLI の sandbox](docs/change/0004-opencode-sandbox.md) の内側で
+> 起動できず、`chezmoi apply` が失敗する（実測）。
+> 静的バイナリなら `chezmoi upgrade` も使える（snap 版では効かない）。
+>
+> 既に snap 版が入っている場合は `sudo snap remove chezmoi` で外す。
+> `/snap/bin` は PATH で `~/.local/bin` より前に来るため、消さないと
+> 古い方が使われ続ける。
 
 ```powershell
 # Windows (PowerShell)
