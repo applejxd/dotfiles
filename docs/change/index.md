@@ -42,7 +42,7 @@
 | # | 目的 | 状態 | 最大の未解決点 | 次の確認 | 更新日 |
 | --- | --- | --- | --- | --- | --- |
 | [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | 圧縮後、作業再開前に checkpoint が届くか | P0-3 の実測 | 2026-09-19 |
-| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | In progress | 段階 2 完了。境界は無い前提で、読み取り経路は誘導・結果フィルタ・伏字化の 3 層 | 段階 3（`verify` ツール）の要否 | 2026-09-22 |
+| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | In progress | 段階 2 完了。負担の本体は確認の回数ではなく 1 回あたりの量（中央値 245 字） | 段階 3（ヒアドキュメントを write へ誘導） | 2026-09-22 |
 
 ## 保留
 
