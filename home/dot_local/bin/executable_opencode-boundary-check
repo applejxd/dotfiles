@@ -1,0 +1,100 @@
+#!/bin/sh
+# 境界の実在を「挙動」で確かめる (CHG-0004 段階 2)。
+# ランチャーが opencode を起動する前に、境界の内側で 1 回走らせる。
+#
+# ★値を根拠にしない。/proc/self/status の Seccomp:2 は「何らかの filter が
+#   付いている」ことしか示さず、親環境由来のものでも同じ値になる。
+# ★エラーコード単独でも判定しない。ECONNREFUSED は「待ち受けていないだけ」、
+#   EACCES は「元からの権限」かもしれない。逆に ENOENT は、対象を隠す方式では
+#   正しい隔離結果になる。
+# ★判別できなければ止める。判定できない ≠ 合格。
+#
+# 終了コード 0 = 合格 / 1 = 不合格 (ランチャーは起動を中止する)
+# see docs/change/0004-opencode-sandbox.md
+
+WS="${BOUNDARY_WORKSPACE:?BOUNDARY_WORKSPACE が未設定}"
+fail=0
+ok()   { printf '  OK   %s\n' "$1"; }
+bad()  { printf '  ★NG  %s\n' "$1"; fail=1; }
+
+# 「隠されている」を合格とする確認。対象がホストに存在することは
+# ランチャー側 (境界の外) が確かめた前提で、ここでは見えないことを見る。
+hidden() { # $1=パス
+  if [ -e "$1" ]; then bad "$1 が見えている"; else ok "$1 は見えない"; fi
+}
+
+# --- 1. ホストの秘密 ---
+hidden "$HOME_REAL/.ssh"
+hidden "$HOME_REAL/.git-credentials"
+hidden "$HOME_REAL/.config/gh"
+
+# --- 2. Windows 側 (WSL) ---
+if [ -e /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; then
+  hidden /mnt/c/Users
+  hidden /mnt/c/Windows
+fi
+
+# --- 3. 作業領域は書ける (書けないと作業にならない) ---
+probe="$WS/.boundary-probe.$$"
+if ( : > "$probe" ) 2>/dev/null; then
+  rm -f "$probe"; ok "作業領域へ書ける"
+else
+  bad "作業領域へ書けない"
+fi
+
+# --- 4. 安全網の保存先が永続領域を指していること ---
+# ★内側からは「書けた」ことしか分からない。実体が残るかは隔離の終了後に
+#   ランチャー側が確かめる。ここでは指し先だけを検査する。
+case "${XDG_DATA_HOME:-}" in
+  "") bad "XDG_DATA_HOME が未設定 (snapshot が境界終了時に消える)" ;;
+  "$WS"/*)
+    if ( : > "$XDG_DATA_HOME/.writable.$$" ) 2>/dev/null; then
+      rm -f "$XDG_DATA_HOME/.writable.$$"; ok "XDG_DATA_HOME は作業領域の中で書ける"
+    else
+      bad "XDG_DATA_HOME ($XDG_DATA_HOME) へ書けない"
+    fi
+    ;;
+  *) bad "XDG_DATA_HOME が作業領域の外 ($XDG_DATA_HOME)" ;;
+esac
+
+# --- 5. 保護対象を変更できないこと ---
+# denyWrite が効いていれば EROFS になる。効いていなければ書けてしまう。
+if [ -n "${BOUNDARY_PROTECTED:-}" ]; then
+  for p in $BOUNDARY_PROTECTED; do
+    if [ ! -d "$p" ]; then
+      bad "保護対象が見当たらず検査できない: $p"
+    elif ( : > "$p/.boundary-protected.$$" ) 2>/dev/null; then
+      rm -f "$p/.boundary-protected.$$" 2>/dev/null
+      bad "保護対象へ書けてしまう: $p"
+    else
+      ok "保護対象へ書けない: $p"
+    fi
+  done
+fi
+
+# --- 6. 許可外ドメインへ出られないこと ---
+# ★到達できない理由を区別する。許可済みドメインが引けることを対照に使い、
+#   「ネットワーク自体が死んでいるだけ」を合格にしない。
+if command -v curl >/dev/null 2>&1; then
+  if curl -s -m 10 -o /dev/null "https://${BOUNDARY_ALLOWED_HOST:-api.githubcopilot.com}" 2>/dev/null; then
+    control=yes
+  else
+    control=no
+  fi
+  if curl -s -m 10 -o /dev/null "https://${BOUNDARY_DENIED_HOST:-example.com}" 2>/dev/null; then
+    bad "許可外ドメインへ到達した"
+  elif [ "$control" = yes ]; then
+    ok "許可外ドメインへ到達しない (許可済みは通る)"
+  else
+    bad "許可済みドメインにも到達できず、拒否か不通かを判別できない"
+  fi
+else
+  bad "curl が無くネットワークの検査ができない"
+fi
+
+if [ "$fail" -eq 0 ]; then
+  printf '境界チェック: 合格\n'
+else
+  printf '境界チェック: 不合格 (起動を中止する)\n'
+fi
+exit "$fail"

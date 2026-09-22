@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""OpenCode を OS のアクセス制御で囲って起動する (CHG-0004 段階 2)。
+
+``srt -s <境界> -c "opencode --standalone"`` の形で、TUI とサーバを同じ
+プロセスのまま境界の内側へ入れる。境界をまたぐ接続が無いので成立する。
+see docs/change/0004-opencode-sandbox.md
+
+**このスクリプトは境界が張られる前にホストで動く。** したがって:
+
+- 実体は絶対パスで呼ぶ (PATH の差し替えを防ぐ)
+- ワークスペース内のコード (mise タスク・シェル設定) を経由しない
+- 境界の設定は ``denyWrite`` で保護された生成物だけを読む
+
+失敗したら**起動しない**。素の OpenCode へ落とすと境界にならない。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HOME = Path.home()
+RULES = HOME / ".config/opencode/guide-plugin/rules.json"
+OPENCODE = HOME / ".opencode/bin/opencode"
+CHECK = HOME / ".local/bin/opencode-boundary-check"
+# 隔離用 DB へ引き継ぐもの。migration を消すとスキーマ管理が壊れる。
+DB_KEEP = ("credential", "account", "account_state", "control_account", "migration")
+
+
+def die(message: str, hint: str = "") -> None:
+    print(f"境界を張れないので起動しない: {message}", file=sys.stderr)
+    if hint:
+        print(f"  {hint}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def load_boundary() -> dict:
+    if not RULES.is_file():
+        die(f"{RULES} が無い", "chezmoi apply で生成する")
+    try:
+        sandbox = json.loads(RULES.read_text(encoding="utf-8")).get("sandbox")
+    except json.JSONDecodeError as e:
+        die(f"{RULES} を読めない: {e}")
+    if not sandbox:
+        die(
+            "境界の設定が出力されていない",
+            "srt が入っていないか enabled=false。このマシンは非対応",
+        )
+    for key in ("runtime_path", "workspace", "data_home", "db", "config_dir"):
+        if not sandbox.get(key):
+            die(f"境界の設定に {key} が無い")
+    return sandbox
+
+
+def require_clean(workspace: Path, allow_dirty: bool) -> None:
+    """未保存の変更を境界へ持ち込んでいないか確かめる。
+
+    **これは保全ではない。** 境界の内側からローカルの履歴も消せる。
+    独立した復旧元と言えるのは信頼済みリモートへ push 済みのものだけで、
+    その復旧にもリモート側の保持と可用性が要る。
+    see docs/change/0004-opencode-sandbox.md
+    """
+    if allow_dirty:
+        return
+    done = subprocess.run(  # noqa: S603
+        ["/usr/bin/git", "-C", str(workspace), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if done.returncode != 0:
+        die(f"git status に失敗した: {done.stderr.strip()[:200]}")
+    changes = [line for line in done.stdout.splitlines() if line.strip()]
+    if changes:
+        print(f"未保存の変更が {len(changes)} 件ある:", file=sys.stderr)
+        for line in changes[:10]:
+            print(f"  {line}", file=sys.stderr)
+        if len(changes) > 10:
+            print(f"  … 他 {len(changes) - 10} 件", file=sys.stderr)
+        die(
+            "境界の内側からは、これらもローカルの履歴も失われうる",
+            "コミット (できれば push) するか、承知のうえで --allow-dirty を付ける",
+        )
+
+
+def seed_db(db: Path) -> None:
+    """隔離用 DB を作る。資格情報と migration だけ引き継ぐ。
+
+    ホストの DB を共有すると他プロジェクトの会話が境界内へ入る。
+    """
+    if db.exists():
+        return
+    source = HOME / ".local/share/opencode/opencode.db"
+    if not source.is_file():
+        die(f"元の DB が無い: {source}", "一度 opencode を起動して認証する")
+    db.parent.mkdir(parents=True, exist_ok=True)
+    src = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
+    dst = sqlite3.connect(str(db))
+    src.backup(dst)
+    src.close()
+    tables = [r[0] for r in dst.execute("select name from sqlite_master where type='table'")]
+    dst.execute("pragma foreign_keys=off")
+    for table in tables:
+        if table in DB_KEEP or table.startswith("sqlite_"):
+            continue
+        dst.execute(f"delete from {table}")  # noqa: S608
+    dst.commit()
+    dst.execute("vacuum")
+    dst.close()
+    print(f"隔離用 DB を作った: {db}", file=sys.stderr)
+
+
+def inner_env(sandbox: dict) -> dict[str, str]:
+    """境界の内側へ渡す環境変数。継承する資格情報を落とす。"""
+    drop = {
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_ENTERPRISE_TOKEN",
+        "SSH_AUTH_SOCK",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "OPENCODE_CONFIG",
+        "OPENCODE_CLI_CONFIG_CONTENT",
+    }
+    env = {k: v for k, v in os.environ.items() if k not in drop}
+    # ★XDG_DATA_HOME を永続領域へ向けないと snapshot が境界終了時に消える。
+    #   捕捉は成功したように見えるので気づけない。
+    env["XDG_DATA_HOME"] = sandbox["data_home"]
+    env["OPENCODE_DB"] = sandbox["db"]
+    env["OPENCODE_CONFIG_DIR"] = sandbox["config_dir"]
+    return env
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="未保存の変更があっても起動する (失いうることを承知のうえで)",
+    )
+    parser.add_argument("--skip-check", action="store_true", help=argparse.SUPPRESS)
+    args, passthrough = parser.parse_known_args(argv)
+
+    sandbox = load_boundary()
+    runtime = Path(sandbox["runtime_path"])
+    workspace = Path(sandbox["workspace"])
+    if not runtime.is_file():
+        die(f"srt が無い: {runtime}")
+    if not OPENCODE.is_file():
+        die(f"opencode が無い: {OPENCODE}")
+    node = shutil.which("node", path=f"{HOME}/.local/share/mise/shims:/usr/bin:/bin")
+    if not node:
+        die("node が見つからない")
+
+    require_clean(workspace, args.allow_dirty)
+    for key in ("data_home", "config_dir"):
+        Path(sandbox[key]).mkdir(parents=True, exist_ok=True)
+    seed_db(Path(sandbox["db"]))
+
+    # 境界の設定は本人だけが読める一時ファイルへ置く (srt は外側で読む)。
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".json", prefix="opencode-boundary-", delete=False
+    ) as f:
+        json.dump(sandbox["config"], f)
+        boundary = f.name
+    os.chmod(boundary, 0o600)
+
+    env = inner_env(sandbox)
+    try:
+        if not args.skip_check and CHECK.is_file():
+            allowed = sandbox["config"]["network"].get("allowedDomains") or []
+            check_env = {
+                **env,
+                "BOUNDARY_WORKSPACE": str(workspace),
+                # 境界の内側では $HOME が差し替わるので、実ホームは別に渡す
+                "HOME_REAL": str(HOME),
+                "BOUNDARY_PROTECTED": " ".join(
+                    sandbox["config"]["filesystem"].get("denyWrite") or []
+                ),
+                # 拒否と不通を区別するための対照
+                "BOUNDARY_ALLOWED_HOST": next(
+                    (d for d in allowed if not d.startswith("*")), "github.com"
+                ),
+                "BOUNDARY_DENIED_HOST": "example.com",
+            }
+            # ★パイプへ通さないこと。終了コードが置き換わり失敗を取りこぼす。
+            done = subprocess.run(  # noqa: S603
+                [node, str(runtime), "-s", boundary, "-c", f"sh {CHECK}"],
+                env=check_env,
+                check=False,
+            )
+            if done.returncode != 0:
+                die("起動時の境界チェックが不合格", "上の ★NG を見て設定を直す")
+
+        os.execve(  # noqa: S606
+            node,
+            [node, str(runtime), "-s", boundary, "-c", f"{OPENCODE} --standalone"]
+            + list(passthrough),
+            env,
+        )
+    finally:
+        # execve が成功するとここは走らない (その場合 srt が読み終えている)
+        Path(boundary).unlink(missing_ok=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

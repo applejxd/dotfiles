@@ -808,21 +808,22 @@ pattern = '\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'
 name = "代入された秘密"
 pattern = '''(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)["']?\s*[=:]\s*)("[^"\n]{6,}"|'[^'\n]{6,}'|[A-Za-z0-9_\-+/=.]{16,})'''
 
-# shell の実行を OS のアクセス制御で囲う (CHG-0004 段階 2)。
-# plugin が @anthropic-ai/sandbox-runtime のライブラリ API で包む。
+# OpenCode を丸ごと OS のアクセス制御で囲う (CHG-0004 段階 2)。
+# ランチャーが srt で境界を張ってから opencode --standalone を起動する。
+# 同一プロセスなので境界をまたぐ接続が無く、read/edit・plugin・LSP も境界内。
 #
 # ★generate.py は runtime_path の実体があるときだけ設定を出力する。
-#   無いマシン (macOS / Windows / 初回 apply 前) では plugin が「非対応」と
-#   見なし、包まず deny もしない (現状どおり ask)。seccomp_apply_path と同じ作り。
-# ★bypass エージェントは包まない。wrapper のバグや denyWrite からの
-#   唯一の復旧経路なので塞がない。
-#   see docs/research/opencode/permission/bypass-agent.md
+#   無いマシン (macOS / Windows / 初回 apply 前) では境界の設定が出ず、
+#   ランチャーは起動を断る。seccomp_apply_path と同じ作り。
+# ★復旧は「ランチャーを使わない」。ただし未審査の作業コピーを通常版で
+#   開いてはいけない (plugin/MCP/LSP が審査前に動く)。
 # see docs/change/0004-opencode-sandbox.md
 [opencode.sandbox]
 enabled = true
 # 初回はこのリポジトリ限定。ワークスペースの実行時注入は動いてから足す。
 workspace = "~/.local/share/chezmoi"
-runtime_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/dist/index.js"
+# ランチャーが起動する srt の CLI (ライブラリ API ではない)。
+runtime_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js"
 
 # ★R1: allowWrite の「祖先」をここに書かない。書くと allowWrite が無効になる。
 #   ワークスペース自身は完全一致なので問題ない (generate.py が両方へ入れる)。
@@ -830,33 +831,59 @@ runtime_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/la
 #   触りうる場所は必ずどちらかに載せる。
 # see docs/research/opencode/permission/sandbox-runtime.md
 read = [
+  "~/.opencode",
   "~/.local/share/mise",
   "~/.local/bin",
+  "~/.config/opencode",
   "~/.config/shell",
   "~/.config/mise",
   "~/.config/chezmoi",
 ]
 
 # ★R1: 根ごと指定する。サブディレクトリ指定は効かない。
+# ★/tmp はここに書かない。deny_read に入れると空の tmpfs で覆われ、
+#   内側から書けてホストとは双方向に分離される。
 write = [
   "~/.cache",
-  "/tmp",
 ]
 
-# 境界を定義するファイル。ワークスペース相対で書く。
-# 書けると「書き換える → chezmoi apply → 再起動 → 境界が消える」が成立する。
-# 変更するときは bypass エージェントへ切り替える。
+# 広く塞ぐ領域。「広く deny → read で戻す」でしか効かない。
+# ★/mnt: denyRead の ~ は WSL の Windows 側を守らない。実測で /mnt/c/Users まで
+#   読めていた。/mnt/d などを使うときは read で狙い撃ちする (symlink 越しも届く)。
+# ★/tmp・/var/tmp・/dev/shm: 実測でホストと共有されていた。
+# see docs/research/opencode/permission/sandbox-runtime.md 「21. 境界の外に残る経路」
+deny_read = [
+  "~",
+  "/mnt",
+  "/tmp",
+  "/var/tmp",
+  "/dev/shm",
+]
+
+# 安全網 (snapshot) の保存先。★外すと安全網が消える。
+# 既定の ~/.local/share/opencode は境界内では隠れて消える領域なので、
+# 捕捉は成功したように見えるのに境界を抜けると復元できない (実測)。
+# ワークスペース配下 (= allowWrite) へ向ける。
+data_home = ".opencode-sandbox/data"
+
+# 隔離用の DB。共有すると他プロジェクトの会話が境界内へ入る。
+# 資格情報と migration だけ引き継ぐ (migration を消すと壊れる)。
+db = ".opencode-sandbox/opencode.db"
+
+# 隔離版の設定ディレクトリ。緩和をここだけに閉じ込める。
+config_dir = ".opencode-sandbox/config"
+
+# 境界を定義するもの。ワークスペース相対で書く。
+# ★「次回の隔離起動時に、実行コード・境界設定・緩和設定の選択を決定する
+#   入力一式」を信頼の鎖から導出する。ファイル名の列挙では足りない。
+#   保護対象を、変更できる生成器から次回上書きできるなら保護は迂回されている。
+# 変更するときは境界の外 (ランチャーを使わない) で行う。
 protected = [
   "home/dot_config/agents",
   "home/dot_config/opencode/guide-plugin",
+  "home/dot_local/bin",
   "scripts/agents",
   "home/dot_config/mise",
-]
-
-# 包まないコマンド (境界の外)。ask のまま残る。
-# ★コマンド全体が一致するときだけ。連結されていたら包む側に倒す。
-unwrapped = [
-  '^\s*chezmoi\s+(apply|re-add|add)\b[^&;|<>]*$',
 ]
 
 # ID・既定値・キー記法は公式一覧が正本。
