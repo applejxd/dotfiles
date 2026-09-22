@@ -707,6 +707,19 @@ allow = [
 pattern = '(^|&&|\|\||;|\n)\s*cd\s'
 message = "cd は使わないでください。shell ツールの workdir 引数でディレクトリを指定できます。"
 
+# TUI のキーバインド。出力先は **cli.json** (opencode.json には書けない)。
+# ID・既定値・キー記法は公式一覧が正本。未知の ID は OpenCode が拒否する。
+# 無効化は false か "none"。<leader> は既定 ctrl+x。
+# see docs/spec/agent-permissions.md 「キーバインド」
+[opencode.keybinds]
+# ★app.exit の既定は "ctrl+c,ctrl+d,<leader>q"。ctrl+c を外さずに
+#   session.interrupt へ渡すと Ctrl+C でアプリごと終了する。
+"app.exit" = "ctrl+d"
+"session.interrupt" = "ctrl+c,escape"
+# <leader>d は diff.open 用に空けてある。
+"permission.mode" = "<leader>p"
+"service.restart" = "<leader>v"
+
 # 確認画面に出すコマンドの説明。長いワンライナーは目視で追えないので、
 # 安価なモデルに 1 行で要約させる。
 # ★権限ダイアログ自体には出せない (message も metadata も描画されない)。

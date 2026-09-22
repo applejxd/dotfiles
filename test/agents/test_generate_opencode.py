@@ -355,6 +355,69 @@ def test_cli_json_is_not_registered_twice():
     assert cli["plugins"].count(gen.opencode_guide_plugin_path()) == 1
 
 
+# キーバインドは cli.json 側にしか無い。opencode.json へ書いても読まれず、
+# 誤配置に気付けないので出力先を固定する。
+def test_keybinds_go_to_cli_json_only():
+    cli = gen.merge_opencode_cli({}, COMMON)
+    assert cli["keybinds"]["permission.mode"] == "<leader>p"
+    assert "keybinds" not in gen.merge_opencode_config({}, COMMON)
+
+
+# ctrl+c を session.interrupt へ渡すには app.exit から外すのが必須。
+# app.exit の既定は "ctrl+c,ctrl+d,<leader>q" なので、残すと Ctrl+C が
+# 中断ではなくアプリ終了になる。
+def test_ctrl_c_interrupts_instead_of_exiting():
+    keybinds = gen.merge_opencode_cli({}, COMMON)["keybinds"]
+    assert "ctrl+c" in keybinds["session.interrupt"].split(",")
+    assert "ctrl+c" not in keybinds["app.exit"].split(",")
+    assert "ctrl+d" in keybinds["app.exit"].split(",")
+
+
+def test_keybinds_replace_the_whole_table():
+    """宣言した以上は common.toml の持ち物。消した分が配備先に残らない。"""
+    existing = {"keybinds": {"app.debug": "ctrl+g"}, "attention": {"enabled": True}}
+    cli = gen.merge_opencode_cli(existing, COMMON)
+    assert "app.debug" not in cli["keybinds"]
+    assert cli["attention"] == {"enabled": True}
+
+
+def test_keybinds_are_left_alone_when_undeclared():
+    existing = {"keybinds": {"app.debug": "ctrl+g"}}
+    cli = gen.merge_opencode_cli(existing, {"opencode": {}})
+    assert cli["keybinds"] == {"app.debug": "ctrl+g"}
+
+
+@pytest.mark.parametrize(
+    "binding",
+    ["", True, [], ["ctrl+a", ""], 1, {"preventDefault": False}, {"key": ""}],
+)
+def test_keybind_value_is_rejected_when_malformed(binding):
+    with pytest.raises(ValueError):
+        gen.build_opencode_keybinds({"opencode": {"keybinds": {"app.exit": binding}}})
+
+
+@pytest.mark.parametrize("command", ["App.Exit", "app exit", "appexit", ""])
+def test_keybind_id_is_rejected_when_not_an_id(command):
+    with pytest.raises(ValueError):
+        gen.build_opencode_keybinds({"opencode": {"keybinds": {command: "ctrl+d"}}})
+
+
+@pytest.mark.parametrize(
+    "binding",
+    ["ctrl+d", "ctrl+c,escape", ["ctrl+c", "escape"], False, "none",
+     {"key": "ctrl+v", "preventDefault": False}],
+)
+def test_keybind_value_is_accepted_when_documented(binding):
+    """公式 Keybinds ガイドが挙げている書き方をすべて通す。"""
+    out = gen.build_opencode_keybinds({"opencode": {"keybinds": {"prompt.paste": binding}}})
+    assert out["prompt.paste"] == binding
+
+
+def test_keybind_leader_is_allowed_as_an_id():
+    out = gen.build_opencode_keybinds({"opencode": {"keybinds": {"leader": "ctrl+space"}}})
+    assert out["leader"] == "ctrl+space"
+
+
 def test_allow_is_not_widened_silently():
     """allow が増えたら気付けるようにする。
 

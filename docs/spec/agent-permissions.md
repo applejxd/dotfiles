@@ -392,6 +392,44 @@ Copilot へ落ちる**（catalog に無いものは通信せず飛ばす）。
 モデル呼び出しが失敗・タイムアウトしても**確認は通常どおり出る**
 （説明が付かないだけ）。
 
+#### キーバインド
+
+TUI のキーバインドは **`cli.json` 側にしか無い**。`opencode.json` へ書いても
+読まれず、誤配置に気づけないので `[opencode.keybinds]` を単一ソースにして
+`merge_opencode_cli()` が `cli.json` へ出す。
+
+```toml
+[opencode.keybinds]
+"app.exit" = "ctrl+d"
+"session.interrupt" = "ctrl+c,escape"
+"permission.mode" = "<leader>p"
+"service.restart" = "<leader>v"
+```
+
+値は文字列・カンマ区切り・配列・`{key, preventDefault}` のテーブルが使える。
+無効化は `false` か `"none"`。`<leader>` は既定 `ctrl+x` で、タイムアウトだけ
+`keybinds` の外（`leader.timeout`）にある。ID・既定値・キー記法は
+[公式一覧](https://opencode.ai/v2/docs/cli/keybinds)が正本で、**未知の ID は
+OpenCode が拒否する**。generate.py は一覧を持たず、綴りの形だけ検査する
+（版で増減するため）。
+
+**宣言したら `keybinds` テーブルごと `common.toml` の持ち物になる。**
+1 件消したときに配備先へ残らないようにするため。節ごと無ければ触らない。
+
+割り当てで注意する点が 2 つある。
+
+- **`ctrl+c` を `session.interrupt` へ渡すには `app.exit` から外す。**
+  `app.exit` の既定は `ctrl+c,ctrl+d,<leader>q` で、残したままだと
+  Ctrl+C が中断ではなくアプリ終了になる
+  （`test_ctrl_c_interrupts_instead_of_exiting` で固定）
+- `<leader>` の空きは `d` `f` `h` `j` `k` `o` `p` `v` `z` の 9 文字だけ。
+  `d` は `diff.open`（既定 `none`）用に空けてある
+
+`permission.mode` は自動承認のトグルで、既定 `ask` の構成では
+`bypass` エージェントへ切り替えるより軽い一時解除になる。
+`service.restart` は**サーバ側 plugin を更新したときに要る**再起動
+（[plugin 層](#plugin-層-guide-plugin)）を 1 キーにしたもの。
+
 #### 後勝ちの照合
 
 OpenCode は **最後に一致した規則が勝つ**。Claude の deny > ask > allow とは

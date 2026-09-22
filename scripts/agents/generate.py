@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -902,6 +903,13 @@ OPENCODE_BUILTIN_FORMATTERS = frozenset({
     "nixfmt", "rustfmt", "pint", "ormolu", "cljfmt", "dfmt",
 })
 
+# キーバインドの ID。公式一覧は ``leader`` 以外すべてドット区切り。
+# 一覧そのものは持たない (OpenCode の版で増減するため)。綴り崩れだけ弾く。
+OPENCODE_KEYBIND_ID = re.compile(r"^(leader|[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+)$")
+
+# テーブル形式で書くときのキー (公式 Keybinds ガイド)。
+OPENCODE_KEYBIND_OBJECT_KEYS = frozenset({"key", "preventDefault"})
+
 
 def build_opencode_formatter(common: dict[str, Any]) -> dict[str, Any]:
     """``[opencode.formatter]`` を検査して ``formatter`` の値にする。
@@ -1151,15 +1159,71 @@ def merge_opencode_mcp(existing_mcp: Any, common: dict[str, Any]) -> dict[str, A
     return out
 
 
+def _opencode_keybind_value(command: str, binding: Any) -> Any:
+    """``[opencode.keybinds]`` の値 1 件を検査する。"""
+    where = f"[opencode.keybinds] の {command}"
+    if binding is False:
+        return binding
+    if binding is True:
+        raise ValueError(f'{where} に true は書けない (無効化は false か "none")')
+    if isinstance(binding, str):
+        if not binding:
+            raise ValueError(f'{where} が空文字 (無効化は "none" と書く)')
+        return binding
+    if isinstance(binding, list):
+        if not binding or not all(isinstance(key, str) and key for key in binding):
+            raise ValueError(f"{where} のリストは空でない文字列だけで書く")
+        return binding
+    if isinstance(binding, dict):
+        _reject_unknown(
+            f"opencode.keybinds.{command}", set(binding), OPENCODE_KEYBIND_OBJECT_KEYS
+        )
+        key = binding.get("key")
+        if not isinstance(key, str) or not key:
+            raise ValueError(f"{where} はテーブルで書くなら key が要る")
+        return binding
+    raise ValueError(f"{where} は文字列・リスト・テーブル・false のどれかで書く")
+
+
+def build_opencode_keybinds(common: dict[str, Any]) -> dict[str, Any]:
+    """``[opencode.keybinds]`` を検査して ``cli.json`` の ``keybinds`` にする。
+
+    キーバインドは **``cli.json`` 側にしか無い**。``opencode.json`` へ書いても
+    読まれないので、誤配置に気づけない。
+    see docs/spec/agent-permissions.md 「キーバインド」
+    """
+    keybinds = common.get("opencode", {}).get("keybinds")
+    if keybinds is None:
+        return {}
+    if not isinstance(keybinds, dict):
+        raise ValueError("[opencode.keybinds] はテーブルで書く")
+
+    out: dict[str, Any] = {}
+    for command, binding in keybinds.items():
+        if not OPENCODE_KEYBIND_ID.match(command):
+            raise ValueError(
+                f"[opencode.keybinds] の {command!r} は ID の形をしていない "
+                "(公式一覧の ID をそのまま書く)"
+            )
+        out[command] = _opencode_keybind_value(command, binding)
+    return out
+
+
 def merge_opencode_cli(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """``~/.config/opencode/cli.json`` を更新する。
 
     TUI 側 plugin は **``cli.json`` からしか読まれない**（``opencode.json`` の
-    ``plugins`` はサーバ側だけ）。``attention`` などユーザ設定が同居するので、
-    宣言したエントリだけを差し替える。
+    ``plugins`` はサーバ側だけ）。キーバインドも同じくここにしか書けない。
+    ``attention`` などユーザ設定が同居するので、宣言したエントリだけを
+    差し替える。
     see docs/research/opencode/plugin/loading.md
     """
     out = dict(existing)
+    keybinds = build_opencode_keybinds(common)
+    if keybinds:
+        # 宣言したら keybinds テーブルごと common.toml 側の持ち物にする。
+        # 1 件消したときに配備先へ残らないようにするため。
+        out["keybinds"] = keybinds
     path = opencode_guide_plugin_path()
     plugins = [p for p in (out.get("plugins") or []) if p not in (path, OPENCODE_GUIDE_PLUGIN)]
     if opencode_guide_rules(common) or opencode_ask_description(common):
