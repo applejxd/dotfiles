@@ -141,6 +141,32 @@ echo ZAPTEST → deny（「代わりに echo FALLBACK を実行してくださ�
 - 子エージェントに個別の手当ては要らない。`subagent` の resource で
   起動できるエージェントを絞るのは別途検討する
 
+## 5-A. 配備後の実測（2026-09-22）
+
+段階 2-C として配備した。効き方は設計どおり。
+
+| 経路 | 結果 |
+| --- | --- |
+| `grep -n "" notes.md`（`GITHUB_TOKEN` と `AKIA…` を含む） | 両方 `[伏字:…]`。`user=demo` は無傷 |
+| `wc -l ~/.claude.json` | 出力全体が伏字。理由が本文に残る |
+| `wc -l README.md` / `git log` / `grep -n secret docs/…` | 無変化 |
+
+**誤爆を 1 件踏んだ。** コミットメッセージに `~/.claude.json` と書いただけで
+`git commit` の出力が丸ごと伏字になった。判定はコマンド文字列を見るので、
+**文章として書いた名前と実際の参照を区別できない**。`deny_path_unless`
+（`git` / `gh` のメッセージ指定を除外）で収めた。
+
+除外はコマンド全体に当たるので `git commit -m x && cat ~/.aws/credentials` は
+素通りする。この穴は誘導の `deny` が受け持つ。
+
+設計上の注意が 2 つ増えた。
+
+- **`read` / `grep` へ広げない。** 伏せた本文を元に `edit` されると、
+  ファイルへ `[伏字:…]` がそのまま書き込まれる
+- **代入形の規則を緩めない。** 値が不透明な長い文字列か引用符付きのとき
+  だけ伏せる。緩めると `const token = getToken()` のようなコードまで
+  伏字になり、shell 経由の `grep` が読めなくなる
+
 ## 6. `primary_tools` は効果を確認できていない
 
 `experimental.primary_tools: ["shell"]`（primary エージェント限定にする

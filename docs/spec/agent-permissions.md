@@ -356,6 +356,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 | --- | --- | --- |
 | 誘導（deny + 代替案）と説明の生成 | `index.js` | `opencode.json` の `plugins` |
 | `grep` / `glob` の結果フィルタ | `index.js` | 同上 |
+| shell 出力の伏字化 | `index.js` | 同上 |
 | 確認画面への説明表示（toast） | `tui.ts` | **`cli.json` の `plugins`** |
 
 **登録先が分かれるのは仕様。** `opencode.json` に書いたディレクトリからは
@@ -399,9 +400,47 @@ permission の `read` deny は**この 2 つのツールに効かない**
 
 **効くのは `grep` / `glob` ツールだけで、shell の `grep` には効かない。**
 shell 経由の読み取りは誘導（`cat` / `head` / `tail` / `sed -n` を `read` へ）
-で減らしているが、`grep -n` は静的 allow なので素通りする。ここは
-[CHG-0002](../change/0002-opencode-ask-by-default.md) 段階 2-C の
+で減らしているが、`grep -n` は静的 allow なので素通りする。ここは下の
 出力伏字化が受け持つ。
+
+**`~/` 始まりの glob は 2 本に展開する。** 結果には展開済みの絶対パスしか
+載らないため、`~` のままの正規表現は一度も当たらない。コマンド文字列には
+`~` のまま書かれるので、どちらの形も残す。
+
+##### shell 出力の伏字化
+
+誘導と結果フィルタを抜けて shell を通ったものへの安全網。
+`tool.execute.after` で `result.content[].text` を書き換える
+（`result.output` は文字列ではない）。手段は 2 つある。
+
+| 手段 | 当てる先 | 効き方 |
+| --- | --- | --- |
+| 内容の形（`[[opencode.redact.rule]]`） | 出力本文 | 当たった範囲だけを `[伏字:名前]` に替える |
+| 参照したパス（`deny_path`） | コマンド文字列 | **出力全体**を伏せ、理由を本文に残す |
+
+- 内容の形は**大文字小文字を区別せず**当てる（`GITHUB_TOKEN` と
+  `github_token` を分けない）。当たった範囲がそのまま置き換わるので、
+  前置きの語は後読み `(?<=…)` で外に出す
+- **代入形の規則を緩めない。** 値が「不透明な長い文字列」か「引用符で
+  囲まれたもの」のときだけ伏せる。緩めると `const token = getToken()` の
+  ような**コード**まで伏字になり、shell 経由の `grep` が読めなくなる
+- パス判定には `**/*secret*` のような**部分一致 glob を使わない**。
+  コマンドには `docs/spec/secret-handling.md` のような正当なパスも載る
+- 誤爆時は**黙って消さない**。理由を本文に残せば手が打てる
+
+`deny_path_unless` は出力全体を伏せる判定の除外。保護パス名を**文章として**
+書いたときの誤爆を外す（`git commit -m '… ~/.claude.json …'` で出力が
+丸ごと消えるのを防ぐ）。**除外はコマンド全体に当たる**ので
+`git commit -m x && cat ~/.aws/credentials` は素通りするが、そこは誘導の
+`deny` が受け持つ。
+
+**伏字化は shell の出力にだけ掛ける。`read` / `grep` へ広げてはいけない。**
+伏せた本文を元に `edit` されると、ファイルへ `[伏字:…]` がそのまま
+書き込まれる。
+
+**境界ではない。** `base64` や `tr` で変換されるとすり抜ける（実測）。
+事故と素朴なプロンプトインジェクションを想定した層で、意図的な持ち出しは
+止まらない（[出力フィルタ](../research/opencode/permission/output-filter-and-subagents.md)）。
 
 **サーバ側 plugin を更新したら `opencode service restart` が要る。**
 常駐サービスのプロセス内で動くため、`chezmoi apply` だけでは反映されない。
