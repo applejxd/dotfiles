@@ -735,6 +735,12 @@ enabled = true
 # ★`**/*secret*` のような部分一致 glob は自動で除かれる。コマンドには
 #   docs/spec/secret-handling.md のような正当なパスも載るため。
 deny_path_output = true
+# 出力全体を伏せる判定の除外。pattern ではなくコマンド全体に当てる。
+# ★保護パス名を「文章として」書いたときの誤爆を外すためのもの。
+#   git commit -m '… ~/.claude.json …' で出力が丸ごと消えるのを防ぐ。
+# ★`git commit -m x && cat ~/.ssh/id_rsa` のような連結は素通りする。
+#   そこは誘導 (cat の deny) が受け持つ。伏字化は境界ではない。
+deny_path_unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
 
 # 内容の形で伏せるもの。pattern は JavaScript の正規表現で、
 # **大文字小文字を区別せず**当てる (GITHUB_TOKEN と github_token を分けない)。

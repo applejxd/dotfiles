@@ -377,6 +377,8 @@ ALLOWED_COMMANDS = [
     "grep -rn secret docs/",
     "git log -- docs/spec/secret-handling.md",
     "wc -l README.md",
+    # 保護パス名を「文章として」書いた形。実地で踏んだ誤爆。
+    "git commit -m 'docs: ~/.claude.json を read deny に足す' 2>&1 | grep -E x",
 ]
 
 
@@ -392,6 +394,16 @@ def test_ordinary_commands_are_not_detected(guide_js):
         ALLOWED_COMMANDS, guide_js("deniedPathIn", ALLOWED_COMMANDS), strict=True
     ):
         assert hit is None, f"{cmd} -> {hit}"
+
+
+def test_the_unless_hole_is_known(guide_js):
+    """除外規則はコマンド全体に当たるので、連結すると素通りする。
+
+    伏字化は境界ではない。この形は誘導 (``cat`` の deny) が受け持つ。
+    """
+    cmd = "git commit -m 'x' && cat ~/.aws/credentials"
+    assert guide_js("deniedPathIn", [cmd])[0] is None
+    assert _guided(cmd), "誘導で止まらないなら穴が二重になる"
 
 
 def test_substring_globs_are_excluded_from_path_matching():

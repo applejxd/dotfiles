@@ -83,6 +83,11 @@ const redactRules = (rules.redact?.rule ?? []).map((r) => ({
   re: new RegExp(r.pattern, "gi"),
 }))
 const denyPath = (rules.redact?.deny_path ?? []).map((p) => new RegExp(p))
+// 保護パス名を「文章として」書いたときの誤爆を外す (git commit -m など)。
+// /g を付けないこと。lastIndex が残って .test() が交互に false を返す。
+const denyPathUnless = rules.redact?.deny_path_unless
+  ? new RegExp(rules.redact.deny_path_unless)
+  : null
 
 function redact(text) {
   let out = text
@@ -94,6 +99,7 @@ function redact(text) {
 // コマンド中の「パスらしい語」だけを見る。/ も ~ も . も無い語は単なる
 // 検索語なので外す (grep secret docs/ で出力を丸ごと伏せないため)。
 function deniedPathIn(command) {
+  if (denyPathUnless && denyPathUnless.test(command)) return null
   for (const token of command.split(/[\s;|&<>()"'`]+/)) {
     if (!token) continue
     if (!token.includes("/") && !token.startsWith("~") && !token.startsWith(".")) continue

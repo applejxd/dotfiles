@@ -1192,6 +1192,9 @@ def opencode_redact(common: dict[str, Any]) -> dict[str, Any] | None:
     out: dict[str, Any] = {"rule": rules}
     if cfg.get("deny_path_output"):
         out["deny_path"] = opencode_deny_path_regexes(common)
+        unless = cfg.get("deny_path_unless")
+        if unless:
+            out["deny_path_unless"] = str(unless)
     return out
 
 
