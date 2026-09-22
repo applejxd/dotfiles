@@ -79,7 +79,7 @@
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
 | P2 | 生成の遅延が許容範囲か | 実運用で数日使って判断する（Haiku で平均 1.1 秒） |
-| P4 | Bedrock 側の最適なモデル | provider を設定できたら Nova Lite / Micro を含めて実測する |
+| P4 | Bedrock 側の遅延と日本語品質 | provider を設定できたら実測する。Nova Micro は Haiku の 1/32 の価格だが**未検証**（[コスパ比較](../research/opencode/plugin/ask-description.md)） |
 | P3 | `cli.json` が Orca の overlay 下でも読まれるか | overlay 相当の環境で `script` 検証する |
 
 決着済み:
@@ -172,12 +172,16 @@ min_command_length = 60
 duration_ms = 20000
 timeout_ms = 5000
 models = [
+  "amazon-bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "amazon-bedrock/anthropic.claude-haiku-4-5-20251001-v1:0",
   "github-copilot/claude-haiku-4.5",
   "github-copilot/gpt-5.4-mini",
-  "amazon-bedrock/anthropic.claude-haiku-4-5",
-  "github-copilot/gpt-5.6-luna",
 ]
 ```
+
+**Bedrock 優先**（us-east-1 前提）。provider 未設定なら catalog に無いので
+即座に次へ落ちる（実測）。新しい Anthropic モデルは推論プロファイル
+（`us.` 接頭辞）が要ることが多いため、素の ID も並べる。
 
 `models` は上から試す。**一覧に載っていても利用可能とは限らない**ので、
 「一覧に無い」「呼び出しに失敗した」のどちらもセッション内で記憶して
