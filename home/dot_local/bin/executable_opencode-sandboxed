@@ -52,33 +52,74 @@ def load_boundary() -> dict:
             "境界の設定が出力されていない",
             "srt が入っていないか enabled=false。このマシンは非対応",
         )
-    for key in ("runtime_path", "projects", "config_dir"):
+    for key in ("runtime_path", "base", "config_dir"):
         if not sandbox.get(key):
             die(f"境界の設定に {key} が無い")
     return sandbox
 
 
-def pick_project(sandbox: dict, cwd: Path) -> dict:
-    """cwd が属するプロジェクトを選ぶ。**最長一致**。
+def project_extras(sandbox: dict, workspace: Path) -> dict:
+    """この起動ディレクトリに足す追加の許可を返す。
 
-    宣言されていない場所から起動したら**止める**。何を開けてよいか分からない
-    まま境界を張ると、別プロジェクトの許可で動かすことになる。
-    許可リストは ``common.toml`` 側にあり、**プロジェクト側のファイルには
-    置かない**（敵対的なリポジトリが自分で許可を足せてしまうため）。
+    **宣言が無ければ追加はゼロ**（共通の許可だけで動く）。宣言は「機密でない
+    パスを開けたい」ときにだけ要る。
+
+    ★許可リストはプロジェクト側のファイルに置かない。敵対的なリポジトリが
+      自分で ``~/.ssh`` を許可できてしまい、グローバル設定が負ける穴と同じに
+      なる。``common.toml`` がプロジェクトパスをキーとして持つ。
     """
-    resolved = cwd.resolve()
     matches = [
-        project
-        for project in sandbox["projects"]
-        if resolved == Path(project["workspace"]) or Path(project["workspace"]) in resolved.parents
+        p
+        for p in sandbox.get("projects") or []
+        if workspace == Path(p["path"]) or Path(p["path"]) in workspace.parents
     ]
     if not matches:
-        known = "\n".join(f"    {p['workspace']}" for p in sandbox["projects"])
-        die(
-            f"ここは境界の宣言が無い場所: {resolved}",
-            f"common.toml の [[opencode.sandbox.project]] へ足す。宣言済み:\n{known}",
-        )
-    return max(matches, key=lambda p: len(p["workspace"]))
+        return {"read": [], "write": [], "network_allow": []}
+    # 入れ子なら内側が勝つ
+    return max(matches, key=lambda p: len(p["path"]))
+
+
+def build_boundary(sandbox: dict, workspace: Path) -> dict:
+    """起動ディレクトリを書き込み可能領域として境界を組み立てる。
+
+    **起動ディレクトリ以下は無条件に許可する。** どこで起動するかは利用者の
+    責務。Claude Code の sandbox と同じ考え方。
+    """
+    base = sandbox["base"]
+    extras = project_extras(sandbox, workspace)
+    read = [*base.get("read", []), *extras.get("read", [])]
+    write = [*base.get("write", []), *extras.get("write", [])]
+    network = dict(base["network"])
+    if extras.get("network_allow"):
+        network["allowedDomains"] = [
+            *network.get("allowedDomains", []),
+            *extras["network_allow"],
+        ]
+    return {
+        "network": network,
+        "filesystem": {
+            "denyRead": base.get("deny_read", []),
+            # ★R1: ワークスペースは allowRead と allowWrite の両方へ完全一致で
+            #   入れる。祖先を allowRead に載せると書き込みが無効化される。
+            "allowRead": _uniq([str(workspace), *read]),
+            "allowWrite": _uniq([str(workspace), *write]),
+            "denyWrite": [str(workspace / rel) for rel in base.get("protected", [])],
+        },
+    }
+
+
+def _uniq(values: list[str]) -> list[str]:
+    seen: dict[str, None] = {}
+    for value in values:
+        seen.setdefault(value, None)
+    return list(seen)
+
+
+def workspace_paths(sandbox: dict, workspace: Path) -> dict[str, str]:
+    """安全網と DB の置き場。起動ディレクトリごとに分かれる。"""
+    return {
+        key: str(workspace / rel) for key, rel in (sandbox.get("paths") or {}).items()
+    }
 
 
 def require_clean(workspace: Path, allow_dirty: bool) -> None:
@@ -98,7 +139,15 @@ def require_clean(workspace: Path, allow_dirty: bool) -> None:
         check=False,
     )
     if done.returncode != 0:
-        die(f"git status に失敗した: {done.stderr.strip()[:200]}")
+        # Git リポジトリでないときは止めない（起動場所は利用者の責務）。
+        # ただし snapshot は Git リポジトリでしか効かないので、復旧手段が
+        # 無いことは伝える。
+        print(
+            "注意: ここは Git リポジトリではない。snapshot による取り消しが効かず、"
+            "壊した作業は戻せない",
+            file=sys.stderr,
+        )
+        return
     changes = [line for line in done.stdout.splitlines() if line.strip()]
     if changes:
         print(f"未保存の変更が {len(changes)} 件ある:", file=sys.stderr)
@@ -284,9 +333,15 @@ def main(argv: list[str] | None = None) -> int:
         die(f"opencode が無い: {OPENCODE}")
     node = resolve_node()
 
-    # ★どのプロジェクトの境界を張るかは cwd で決める。宣言が無ければ止める。
-    project = pick_project(sandbox, Path.cwd())
-    workspace = Path(project["workspace"])
+    # ★起動ディレクトリ以下は無条件に許可する。どこで起動するかは利用者の責務。
+    #   宣言 ([[opencode.sandbox.project]]) は「機密でないパスを追加で開けたい」
+    #   ときにだけ要る。
+    workspace = Path.cwd().resolve()
+    project = {
+        "workspace": str(workspace),
+        "config": build_boundary(sandbox, workspace),
+        **workspace_paths(sandbox, workspace),
+    }
 
     require_clean(workspace, args.allow_dirty)
     Path(project["data_home"]).mkdir(parents=True, exist_ok=True)

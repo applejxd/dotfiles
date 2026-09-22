@@ -820,9 +820,9 @@ pattern = '''(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client
 # see docs/change/0004-opencode-sandbox.md
 [opencode.sandbox]
 enabled = true
-# 初回はこのリポジトリ限定。ワークスペースの実行時注入は動いてから足す。
-workspace = "~/.local/share/chezmoi"
-# ランチャーが起動する srt の CLI (ライブラリ API ではない)。
+# ワークスペースは**起動ディレクトリ**。その配下は無条件に許可する
+# (どこで起動するかは利用者の責務)。宣言は追加の許可が要るときだけ。
+# ランチャーが srt の CLI を起動する (ライブラリ API ではない)。
 runtime_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js"
 
 # ★R1: allowWrite の「祖先」をここに書かない。書くと allowWrite が無効になる。
@@ -995,19 +995,21 @@ drop_path_prefixes = [
 provider = "github-copilot"
 model = "claude-opus-5"
 
-# 追加のプロジェクト。ランチャーが cwd で選ぶ (最長一致)。
-# ★宣言の無い場所からは起動しない。何を開けてよいか分からないまま境界を
-#   張ると、別プロジェクトの許可で動かすことになる。
+# 追加のプロジェクト。**追加の許可が要るときだけ**書く。
+# 宣言が無い場所でも起動できる (共通分だけになる)。ランチャーは cwd に
+# 当たる宣言を最長一致で選び、共通の許可リストへ上乗せする。
+#
 # ★許可リストをプロジェクト側のファイルに置かないこと。敵対的なリポジトリが
 #   自分で ~/.ssh を許可できてしまい、グローバル設定が負ける穴と同じになる。
 #   ここがプロジェクトパスをキーとして持つ。
 # ★/mnt 配下も狙い撃ちで開けられ、symlink 越しにも届く (実測)。
+# ★機密でないものだけ開ける。ここへ書いたものは境界の内側から読める。
 #
 # 例:
 #   [[opencode.sandbox.project]]
 #   path = "~/src/example"
-#   read = ["/mnt/d/datasets/example"]   # 機密でないものだけ
-#   write = []
+#   read = ["/mnt/d/datasets/example"]
+#   write = ["/mnt/d/outputs/example"]
 #   network_allow = ["api.example.com"]
 
 [opencode.sandbox.policies]

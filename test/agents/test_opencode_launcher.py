@@ -16,8 +16,6 @@ import sqlite3
 import sys
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
@@ -178,47 +176,107 @@ def test_model_is_absent_without_credentials(tmp_path):
     assert launcher["pick_model"](sandbox, project) is None
 
 
-def test_project_is_selected_by_cwd(tmp_path):
-    """★どのプロジェクトの境界を張るかは cwd で決める。
+def _sandbox_with_projects(tmp_path: Path) -> dict:
+    return {
+        "base": {
+            "read": ["/opt/shared"],
+            "write": [],
+            "deny_read": ["/home/u", "/mnt", "/tmp"],
+            "protected": [".opencode"],
+            "network": {
+                "allowedDomains": ["github.com"],
+                "deniedDomains": [],
+                "allowLocalBinding": False,
+            },
+        },
+        "paths": {"data_home": ".opencode-sandbox/data", "db": ".opencode-sandbox/opencode.db"},
+        "projects": [
+            {
+                "path": str(tmp_path / "alpha"),
+                "read": ["/mnt/d/alpha"],
+                "write": [],
+                "network_allow": ["api.alpha.test"],
+            },
+            {
+                "path": str(tmp_path / "beta"),
+                "read": [],
+                "write": ["/mnt/e/beta-out"],
+                "network_allow": [],
+            },
+        ],
+    }
 
-    以前は単一のワークスペース固定で、別の場所から起動しても
-    そのワークスペースを境界にしていた。
+
+def test_launch_directory_is_always_writable(tmp_path):
+    """★起動ディレクトリ以下は無条件に許可する。
+
+    どこで起動するかは利用者の責務。宣言は追加の許可が要るときだけ。
     """
     launcher = _launcher()
-    sandbox = {
-        "projects": [
-            {"workspace": str(tmp_path / "alpha")},
-            {"workspace": str(tmp_path / "beta")},
-        ]
-    }
-    (tmp_path / "beta" / "src").mkdir(parents=True)
-    chosen = launcher["pick_project"](sandbox, tmp_path / "beta" / "src")
-    assert chosen["workspace"] == str(tmp_path / "beta")
+    sandbox = _sandbox_with_projects(tmp_path)
+    where = tmp_path / "undeclared" / "deep"
+    filesystem = launcher["build_boundary"](sandbox, where)["filesystem"]
+    assert str(where) in filesystem["allowWrite"]
+    # R1: ワークスペースは allowRead にも完全一致で入れる
+    assert str(where) in filesystem["allowRead"]
 
 
-def test_longest_match_wins(tmp_path):
+def test_undeclared_location_gets_no_extras(tmp_path):
+    """宣言が無ければ追加はゼロ。共通分だけで動く。"""
+    launcher = _launcher()
+    sandbox = _sandbox_with_projects(tmp_path)
+    boundary = launcher["build_boundary"](sandbox, tmp_path / "gamma")
+    assert "/mnt/d/alpha" not in boundary["filesystem"]["allowRead"]
+    assert "/mnt/e/beta-out" not in boundary["filesystem"]["allowWrite"]
+    assert boundary["network"]["allowedDomains"] == ["github.com"]
+
+
+def test_project_extras_do_not_leak_across_projects(tmp_path):
+    """★プロジェクト固有の追加が、別のプロジェクトへ漏れないこと。"""
+    launcher = _launcher()
+    sandbox = _sandbox_with_projects(tmp_path)
+
+    alpha = launcher["build_boundary"](sandbox, tmp_path / "alpha" / "sub")
+    assert "/mnt/d/alpha" in alpha["filesystem"]["allowRead"]
+    assert "/mnt/e/beta-out" not in alpha["filesystem"]["allowWrite"]
+    assert "api.alpha.test" in alpha["network"]["allowedDomains"]
+
+    beta = launcher["build_boundary"](sandbox, tmp_path / "beta")
+    assert "/mnt/e/beta-out" in beta["filesystem"]["allowWrite"]
+    assert "/mnt/d/alpha" not in beta["filesystem"]["allowRead"]
+    assert "api.alpha.test" not in beta["network"]["allowedDomains"]
+
+
+def test_nested_declaration_inner_wins(tmp_path):
     """入れ子の宣言では、より内側を選ぶ。"""
     launcher = _launcher()
-    outer = tmp_path / "repo"
-    inner = outer / "packages" / "app"
-    inner.mkdir(parents=True)
-    sandbox = {"projects": [{"workspace": str(outer)}, {"workspace": str(inner)}]}
-    assert launcher["pick_project"](sandbox, inner)["workspace"] == str(inner)
+    outer, inner = tmp_path / "repo", tmp_path / "repo" / "pkg"
+    sandbox = {
+        "base": {
+            "read": [],
+            "write": [],
+            "deny_read": [],
+            "protected": [],
+            "network": {"allowedDomains": []},
+        },
+        "paths": {},
+        "projects": [
+            {"path": str(outer), "read": ["/outer"], "write": [], "network_allow": []},
+            {"path": str(inner), "read": ["/inner"], "write": [], "network_allow": []},
+        ],
+    }
+    allow_read = launcher["build_boundary"](sandbox, inner)["filesystem"]["allowRead"]
+    assert "/inner" in allow_read
+    assert "/outer" not in allow_read
 
 
-def test_unknown_location_refuses_to_start(tmp_path, capsys):
-    """★宣言の無い場所からは起動しない。
-
-    何を開けてよいか分からないまま境界を張ると、別プロジェクトの許可で
-    動かすことになる。
-    """
+def test_protected_paths_are_workspace_relative(tmp_path):
+    """保護対象は起動ディレクトリと組み合わせる。"""
     launcher = _launcher()
-    sandbox = {"projects": [{"workspace": str(tmp_path / "alpha")}]}
-    (tmp_path / "elsewhere").mkdir()
-    with pytest.raises(SystemExit) as excinfo:
-        launcher["pick_project"](sandbox, tmp_path / "elsewhere")
-    assert excinfo.value.code == 1
-    assert "境界の宣言が無い場所" in capsys.readouterr().err
+    sandbox = _sandbox_with_projects(tmp_path)
+    where = tmp_path / "gamma"
+    deny_write = launcher["build_boundary"](sandbox, where)["filesystem"]["denyWrite"]
+    assert str(where / ".opencode") in deny_write
 
 
 def test_system_prompt_is_written(tmp_path):

@@ -35,7 +35,7 @@ def test_sandbox_bare_keys_not_swallowed_by_subtable():
     ``protected`` が ``[opencode.sandbox.permissions]`` に落ちると
     ``denyWrite`` が空になり、保護が黙って消える (実際に一度作り込んだ)。
     """
-    for key in ("workspace", "runtime_path", "protected", "deny_read", "config_dir"):
+    for key in ("runtime_path", "protected", "deny_read", "config_dir"):
         assert key in SANDBOX, f"[opencode.sandbox].{key} が無い (サブテーブルに吸われた?)"
     for key in ("permissions", "policies"):
         assert isinstance(SANDBOX.get(key), dict), f"[opencode.sandbox.{key}] が無い"
@@ -48,11 +48,15 @@ def test_deny_read_covers_windows_and_tmp():
         assert required in deny, f"deny_read に {required} が無い"
 
 
-def test_config_dir_is_outside_workspace():
-    """隔離版の設定を内側から書き換えられないこと。"""
-    workspace = gen.expand_user(str(SANDBOX["workspace"]))
+def test_config_dir_is_outside_any_workspace():
+    """隔離版の設定を内側から書き換えられないこと。
+
+    ワークスペースは起動ディレクトリなので、config_dir は ``~/.config`` 側の
+    固定パスにして、どの起動ディレクトリからも外に出るようにする。
+    """
     config_dir = gen.expand_user(str(SANDBOX["config_dir"]))
-    assert not config_dir.startswith(workspace), "config_dir がワークスペース内にある"
+    home = gen.expand_user("~")
+    assert config_dir.startswith(f"{home}/.config/"), "config_dir が ~/.config の外にある"
 
 
 def test_data_home_is_inside_workspace():
@@ -148,16 +152,15 @@ def test_sandbox_output_shape():
     out = gen.opencode_sandbox(COMMON)
     if out is None:  # srt が無いマシンでは出力しない (macOS / Windows / 初回前)
         return
-    for key in ("runtime_path", "projects", "config_dir", "permissions"):
+    for key in ("runtime_path", "base", "paths", "config_dir", "permissions"):
         assert key in out, f"{key} が出力に無い"
-    for key in ("workspace", "data_home", "db", "config"):
-        assert key in out["projects"][0], f"project に {key} が無い"
-    project = out["projects"][0]
-    filesystem = project["config"]["filesystem"]
-    assert out["config_dir"] not in filesystem["allowWrite"], "config_dir が書ける"
-    assert any(
-        out["config_dir"].startswith(p) for p in filesystem["allowRead"]
-    ), "config_dir が読めない"
+    for key in ("read", "write", "deny_read", "protected", "network"):
+        assert key in out["base"], f"base に {key} が無い"
+    for key in ("data_home", "db"):
+        assert key in out["paths"], f"paths に {key} が無い"
+    base = out["base"]
+    assert out["config_dir"] not in base["write"], "config_dir が書ける"
+    assert any(out["config_dir"].startswith(p) for p in base["read"]), "config_dir が読めない"
 
 
 def test_model_provider_domain_allowed():
@@ -168,7 +171,7 @@ def test_model_provider_domain_allowed():
     out = gen.opencode_sandbox(COMMON)
     if out is None:
         return
-    domains = out["projects"][0]["config"]["network"]["allowedDomains"]
+    domains = out["base"]["network"]["allowedDomains"]
     assert "api.githubcopilot.com" in domains, "モデル提供元が許可リストに無い"
 
 
@@ -191,11 +194,9 @@ def test_protected_paths_are_not_filtered_by_existence():
     out = gen.opencode_sandbox(COMMON)
     if out is None:
         return
-    project = out["projects"][0]
-    workspace = project["workspace"]
-    deny_write = project["config"]["filesystem"]["denyWrite"]
-    expected = {str(Path(workspace) / rel) for rel in SANDBOX.get("protected", [])}
-    assert expected == set(deny_write), "protected の一部が denyWrite へ渡っていない"
+    # 素材のまま (ワークスペース相対) で渡り、ランチャーが起動ディレクトリと
+    # 組み合わせる。存在フィルタを掛けないこと。
+    assert set(out["base"]["protected"]) == set(SANDBOX.get("protected", []))
 
 
 def test_isolated_loads_guide_plugin_for_redaction():
@@ -209,12 +210,10 @@ def test_isolated_loads_guide_plugin_for_redaction():
         return
     plugins = out.get("plugins") or []
     assert plugins, "隔離版に plugin が無い (伏字化が効かない)"
-    filesystem = out["projects"][0]["config"]["filesystem"]
-    allow_read = filesystem["allowRead"]
-    allow_write = filesystem["allowWrite"]
+    base = out["base"]
     for path in plugins:
-        assert any(path.startswith(p) for p in allow_read), f"{path} を境界内から読めない"
-        assert not any(path.startswith(p) for p in allow_write), f"{path} を境界内から書ける"
+        assert any(path.startswith(p) for p in base["read"]), f"{path} を境界内から読めない"
+        assert not any(path.startswith(p) for p in base["write"]), f"{path} を境界内から書ける"
 
 
 def test_boundary_check_handles_nonexistent_protected_paths():
@@ -238,9 +237,7 @@ def test_protected_paths_may_not_exist_on_host():
     out = gen.opencode_sandbox(COMMON)
     if out is None:
         return
-    deny_write = out["projects"][0]["config"]["filesystem"]["denyWrite"]
-    missing = [p for p in deny_write if not Path(p).exists()]
-    assert missing, "存在しない保護対象が無い (.opencode が消えた?)"
+    assert ".opencode" in out["base"]["protected"], ".opencode が保護対象から消えた"
 
 
 def test_model_preference_is_declared():
