@@ -808,7 +808,57 @@ pattern = '\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'
 name = "代入された秘密"
 pattern = '''(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)["']?\s*[=:]\s*)("[^"\n]{6,}"|'[^'\n]{6,}'|[A-Za-z0-9_\-+/=.]{16,})'''
 
-# TUI のキーバインド。出力先は **cli.json** (opencode.json には書けない)。
+# shell の実行を OS のアクセス制御で囲う (CHG-0004 段階 2)。
+# plugin が @anthropic-ai/sandbox-runtime のライブラリ API で包む。
+#
+# ★generate.py は runtime_path の実体があるときだけ設定を出力する。
+#   無いマシン (macOS / Windows / 初回 apply 前) では plugin が「非対応」と
+#   見なし、包まず deny もしない (現状どおり ask)。seccomp_apply_path と同じ作り。
+# ★bypass エージェントは包まない。wrapper のバグや denyWrite からの
+#   唯一の復旧経路なので塞がない。
+#   see docs/research/opencode/permission/bypass-agent.md
+# see docs/change/0004-opencode-sandbox.md
+[opencode.sandbox]
+enabled = true
+# 初回はこのリポジトリ限定。ワークスペースの実行時注入は動いてから足す。
+workspace = "~/.local/share/chezmoi"
+runtime_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/dist/index.js"
+
+# ★R1: allowWrite の「祖先」をここに書かない。書くと allowWrite が無効になる。
+#   ワークスペース自身は完全一致なので問題ない (generate.py が両方へ入れる)。
+# ★R2: read にも write にも無い領域への書き込みは「成功したように見えて消える」。
+#   触りうる場所は必ずどちらかに載せる。
+# see docs/research/opencode/permission/sandbox-runtime.md
+read = [
+  "~/.local/share/mise",
+  "~/.local/bin",
+  "~/.config/shell",
+  "~/.config/mise",
+  "~/.config/chezmoi",
+]
+
+# ★R1: 根ごと指定する。サブディレクトリ指定は効かない。
+write = [
+  "~/.cache",
+  "/tmp",
+]
+
+# 境界を定義するファイル。ワークスペース相対で書く。
+# 書けると「書き換える → chezmoi apply → 再起動 → 境界が消える」が成立する。
+# 変更するときは bypass エージェントへ切り替える。
+protected = [
+  "home/dot_config/agents",
+  "home/dot_config/opencode/guide-plugin",
+  "scripts/agents",
+  "home/dot_config/mise",
+]
+
+# 包まないコマンド (境界の外)。ask のまま残る。
+# ★コマンド全体が一致するときだけ。連結されていたら包む側に倒す。
+unwrapped = [
+  '^\s*chezmoi\s+(apply|re-add|add)\b[^&;|<>]*$',
+]
+
 # ID・既定値・キー記法は公式一覧が正本。
 # ★公式一覧は最新版向け。未知の ID は **黙って無視される** (「拒否する」と
 #   書かれているが 2.0.12 の実測では他の行だけ生きる)。足す前に実在を確認する:

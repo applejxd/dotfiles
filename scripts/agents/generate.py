@@ -1198,6 +1198,60 @@ def opencode_redact(common: dict[str, Any]) -> dict[str, Any] | None:
     return out
 
 
+def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
+    """shell を包む sandbox の設定 (``rules.json`` の ``sandbox``)。
+
+    **``runtime_path`` の実体があるときだけ返す。** 無いマシン (macOS /
+    Windows / 初回 apply 前) では設定を出さず、plugin は「非対応」と見なして
+    包まず deny もしない。``seccomp_apply_path`` と同じ作り。
+
+    ``allowRead`` に ``allowWrite`` の祖先を載せてはいけない (R1)。
+    ワークスペースは両方へ完全一致で入れる。
+    see docs/research/opencode/permission/sandbox-runtime.md
+    """
+    cfg = common.get("opencode", {}).get("sandbox")
+    if not cfg or not cfg.get("enabled"):
+        return None
+    runtime = expand_user(str(cfg.get("runtime_path", "")))
+    if not runtime or not Path(runtime).is_file():
+        return None
+
+    workspace = expand_user(str(cfg["workspace"]))
+    read = [expand_user(str(p)) for p in cfg.get("read") or []]
+    write = [expand_user(str(p)) for p in cfg.get("write") or []]
+    # 保護対象はワークスペース相対。存在するものだけ渡す
+    # (存在しないパスを deny しても意味が無く、他プロジェクトへ広げるときに
+    #  そのまま使える形にしておく)。
+    protected = [
+        str(Path(workspace) / rel)
+        for rel in cfg.get("protected") or []
+        if (Path(workspace) / rel).exists()
+    ]
+
+    sandbox_cfg = common.get("sandbox", {})
+    web = common.get("web", {})
+    network: dict[str, Any] = {
+        "allowedDomains": _uniq(
+            list(web.get("allow_domains", [])) + list(sandbox_cfg.get("claude_network_allow", []))
+        ),
+        "deniedDomains": _uniq(list(web.get("deny_domains", []))),
+        "allowLocalBinding": False,
+    }
+    return {
+        "runtime_path": runtime,
+        "unwrapped": [str(p) for p in cfg.get("unwrapped") or []],
+        "config": {
+            "network": network,
+            "filesystem": {
+                "denyRead": [expand_user("~")],
+                "allowRead": _uniq([workspace, *read]),
+                "allowWrite": _uniq([workspace, *write]),
+                "denyWrite": protected,
+            },
+        },
+    }
+
+
 def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
         "guide": opencode_guide_rules(common),
@@ -1210,6 +1264,9 @@ def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> d
     redact = opencode_redact(common)
     if redact:
         out["redact"] = redact
+    sandbox = opencode_sandbox(common)
+    if sandbox:
+        out["sandbox"] = sandbox
     return out
 
 

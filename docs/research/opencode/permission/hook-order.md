@@ -120,7 +120,25 @@ bypass だけを逃がせる。
 head -1 README.md   # 誘導が効いていれば permission.rejected が返る
 ```
 
-## 7. 計装の手順
+## 7. `execute.before` の差し替えは `evaluate` へ波及する
+
+**sandbox の包み方を決める分岐点になった。** plugin が `e.input.command` を
+書き換えると、後続の `permission.evaluate` は**書き換え後**の文字列を見る。
+
+```json
+{"phase":"before","before":"echo PROBE_ORIGINAL","after":"echo PROBE_MUTATED_BY_PLUGIN"}
+{"phase":"evaluate","effect":"ask","resources":["echo PROBE_MUTATED_BY_PLUGIN"]}
+```
+
+したがって sandbox で包むと、権限評価は `bwrap …` で始まる文字列に対して
+行われ、**静的 allow 5 件と deny 85 件が一致しなくなる**。
+plugin でコマンドを差し替えて包む構成は採れない
+（[CHG-0004](../../../change/0004-opencode-sandbox.md)）。
+
+`e.input` は **`command` ただ 1 つ**で、`env` や独自フィールドを足しても
+シェルへは届かない（実測）。**plugin から外部プロセスへ値を渡す側路は無い。**
+
+## 8. 計装の手順
 
 配備物には触らず、`.tmp` に複製を置いて `plugins` で絶対パス指定する。
 
