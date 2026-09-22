@@ -62,7 +62,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | --- | --- | --- | --- |
 | [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
 | [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。段階 4 以降は CHG-0004 待ちで保留 | CHG-0004 の段階 5（層の縮小） |
-| [CHG-0004](change/0004-opencode-sandbox.md) | In progress | 段階 1〜3 完了。`opencode --standalone` ごと `srt` で包む構成が実地で成立。隔離版の permission は 225 → 168 件 | 段階 4（許可パスの単一ソース化） |
+| [CHG-0004](change/0004-opencode-sandbox.md) | In progress | 段階 1〜3・5 完了。隔離版の permission は 225 → 168 件。段階 5 は当初案（`grep`/`glob` 無効化）を撤回。境界はワークスペースの中を守らないため保護が下がる | 段階 4（他プロジェクトへ広げるときに着手） |
 
 ## 判断待ち・障害
 
