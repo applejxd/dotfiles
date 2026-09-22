@@ -169,6 +169,49 @@ def test_model_provider_domain_allowed():
     assert "api.githubcopilot.com" in domains, "モデル提供元が許可リストに無い"
 
 
+def test_protected_includes_workspace_plugin_dir():
+    """★``.opencode/plugins`` は置かれると自動ロードされる。
+
+    境界内で動くのでホストへは出られないが、permission 評価と同じプロセス
+    なのでツール層の規則を自ら無効化できる。**まだ存在しなくても**塞ぐ。
+    """
+    assert ".opencode" in SANDBOX.get("protected", []), "protected に .opencode が無い"
+
+
+def test_protected_paths_are_not_filtered_by_existence():
+    """★存在しないパスも denyWrite へ渡すこと。
+
+    srt は存在しないパスにも denyWrite を効かせ、作成そのものを阻止する
+    (実測)。存在フィルタを掛けると「まだ無いから守らない」という最も
+    守りたい場面で保護が外れる。
+    """
+    out = gen.opencode_sandbox(COMMON)
+    if out is None:
+        return
+    workspace = out["workspace"]
+    deny_write = out["config"]["filesystem"]["denyWrite"]
+    expected = {str(Path(workspace) / rel) for rel in SANDBOX.get("protected", [])}
+    assert expected == set(deny_write), "protected の一部が denyWrite へ渡っていない"
+
+
+def test_isolated_loads_guide_plugin_for_redaction():
+    """境界はワークスペースの中を守らないので、伏字化が要る。
+
+    ★段階 5 で、境界内では無意味な層 (誘導・結果フィルタ・パス参照の伏字化)
+      を削り、内容の形の伏字化だけを残す予定。
+    """
+    out = gen.opencode_sandbox(COMMON)
+    if out is None:
+        return
+    plugins = out.get("plugins") or []
+    assert plugins, "隔離版に plugin が無い (伏字化が効かない)"
+    allow_read = out["config"]["filesystem"]["allowRead"]
+    allow_write = out["config"]["filesystem"]["allowWrite"]
+    for path in plugins:
+        assert any(path.startswith(p) for p in allow_read), f"{path} を境界内から読めない"
+        assert not any(path.startswith(p) for p in allow_write), f"{path} を境界内から書ける"
+
+
 def test_system_prompt_mentions_enoent():
     """境界は見えないので、ENOENT の意味を伝えること。"""
     prompt = SANDBOX.get("system_prompt", "")

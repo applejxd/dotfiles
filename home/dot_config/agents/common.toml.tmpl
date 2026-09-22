@@ -915,6 +915,11 @@ protected = [
   "home/dot_local/bin",
   "scripts/agents",
   "home/dot_config/mise",
+  # ★.opencode/plugins は置かれると**自動ロードされる**。境界内で動くので
+  #   ホストへは出られないが、permission 評価と同じプロセスなのでツール層の
+  #   規則を自ら無効化できる。まだ存在しなくても塞ぐ (srt は存在しないパスにも
+  #   denyWrite を効かせ、作成そのものを阻止する)。
+  ".opencode",
 ]
 
 # 境界の存在と範囲をエージェントへ伝える。

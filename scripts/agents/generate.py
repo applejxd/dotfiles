@@ -1271,14 +1271,12 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     read = [expand_user(str(p)) for p in cfg.get("read") or []]
     write = [expand_user(str(p)) for p in cfg.get("write") or []]
     deny_read = [expand_user(str(p)) for p in cfg.get("deny_read") or ["~"]]
-    # 保護対象はワークスペース相対。存在するものだけ渡す
-    # (存在しないパスを deny しても意味が無く、他プロジェクトへ広げるときに
-    #  そのまま使える形にしておく)。
-    protected = [
-        str(Path(workspace) / rel)
-        for rel in cfg.get("protected") or []
-        if (Path(workspace) / rel).exists()
-    ]
+    # 保護対象はワークスペース相対。
+    # ★存在しないパスも渡す。srt は存在しないパスにも denyWrite を効かせ、
+    #   **作成そのものを阻止する**（実測）。存在フィルタを掛けると、
+    #   「まだ無いから守らない」という最も守りたい場面で保護が外れる。
+    #   .opencode/plugins は作られると自動ロードされるので、これが要る。
+    protected = [str(Path(workspace) / rel) for rel in cfg.get("protected") or []]
     # 安全網・DB・隔離版の設定はワークスペース配下 (= allowWrite)。
     # data_home を既定のままにすると、snapshot が境界内の消える領域へ書かれ、
     # 捕捉は成功したように見えるのに復元できない。
@@ -1323,6 +1321,13 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     if config_dir:
         out["config_dir"] = expand_user(str(config_dir))
     out["permissions"] = build_opencode_sandbox_permissions(common)
+    # 誘導 plugin を隔離版でも読み込む。**目的は伏字化**（境界内の `.env` などが
+    # そのままモデルの文脈へ入るのを防ぐ）。境界はワークスペースの中を守らない。
+    # ★段階 5 で、境界内では無意味になった層（`cat` → `read` の誘導、
+    #   結果フィルタ、パス参照の伏字化）を削り、**内容の形の伏字化だけ**を残す。
+    #   see docs/change/0004-opencode-sandbox.md 「段階 5」
+    if opencode_guide_rules(common) or opencode_redact(common):
+        out["plugins"] = [opencode_guide_plugin_path()]
     policies = opencode_sandbox_policies(common)
     if policies:
         out["policies"] = policies

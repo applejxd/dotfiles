@@ -159,6 +159,12 @@ def write_isolated_config(sandbox: dict) -> None:
         # ★不正な statement は警告付きで破棄される。置いた事実ではなく
         #   有効性を確認すること (サーバのログに警告が出る)。
         config["experimental"] = {"policies": policies}
+    plugins = sandbox.get("plugins")
+    if plugins:
+        # 目的は伏字化。境界はワークスペースの中を守らないので、`.env` などが
+        # そのままモデルの文脈へ入るのを防ぐ。plugin 自体は allowRead だけの
+        # 場所にあり、境界内から書き換えられない。
+        config["plugins"] = plugins
 
     target = config_dir / "opencode.json"
     target.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
