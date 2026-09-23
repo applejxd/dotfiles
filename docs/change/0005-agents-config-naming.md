@@ -112,7 +112,7 @@ OpenCode 境界 allowedDomains             44 件 = [web] 28 + 同 10 + OpenCode
 
 | 段 | 内容 | 規模 | 挙動 | 状態 |
 | --- | --- | --- | --- | --- |
-| **A1** | 改名。`claude_` を実態に合わせる | 62 箇所 / 15 ファイル | 変化なし | 未着手 |
+| **A1** | 改名。`claude_` を実態に合わせる | 62 箇所 / 15 ファイル | 変化なし | **完了**（2026-09-23） |
 | **A2** | `claude_` / `copilot_` が残ったもの（57 件）を native へ分離 | 57 件 | 変化なし | 未着手 |
 | ~~A3~~ | ~~OpenCode 固有のモデル API を移す~~ | — | — | **消滅**（既に正しい場所） |
 | A4 | 廃止の是非を再評価 | — | — | 保留 |
@@ -148,9 +148,10 @@ test/agents/ 4 ファイル / docs/ 6 ファイル
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `file.claude_*_globs` 4 件 | 接頭辞を外す | 97% が OpenCode へも届く | 未着手 |
-| `sandbox.claude_network_allow` | → `shell_network_allow` | Claude / OpenCode 共通。用途で命名 | 未着手 |
-| `sandbox.{claude,copilot}_*` 57 件 | `common.toml` → 各 native | 1 ハーネスにしか届かない | 未着手 |
+| `file.claude_*_globs` 4 件 | 接頭辞を外す | 97% が OpenCode へも届く | **完了**（2026-09-23） |
+| `sandbox.claude_network_allow` | → `shell_network_allow` | Claude / OpenCode 共通。用途で命名 | **完了**（2026-09-23） |
+| `sandbox.{claude,copilot}_*` 57 件 | `common.toml` → 各 native | 1 ハーネスにしか届かない | 未着手（A2） |
+| `sandbox.claude_write_deny` | 扱いを決める | ADR-0007 規則 3 に違反 | **未解決**（A2 で判断） |
 | `common.toml` の廃止 | — | 81% が共通。`modify_` の保存機能を失う | **見送り** |
 
 ## 重要な更新
@@ -159,6 +160,34 @@ test/agents/ 4 ファイル / docs/ 6 ファイル
   改名 + 分離へ方針転換した。廃止は見送り（根拠は上記 4 点）
 - **2026-09-23**: A3（OpenCode 固有ドメインの移動）は、既に正しい場所にあったため
   消滅。計画策定時の調査漏れ
+- **2026-09-23**: A1 完了。**改名は ADR-0007 の原則を覆すものではなく、原則へ
+  戻す作業だった**。ADR-0007 は「共有 = 無印 / CLI 固有 = CLI 名の接頭辞」を
+  定めており、当時 `[file]` は Claude だけが読んでいたので接頭辞が正しかった。
+  CHG-0004 で OpenCode が同じリストを読むようになり、**事実の側が変わった**のに
+  名前が追随していなかった
+- **2026-09-23**: 改名の過程で、テスト 3 件が**旧規約そのものを固定**していた
+  ことが判明（`test_file_section_keys_are_all_claude_prefixed` など）。
+  新規約を固定する形へ書き換えた
+
+### A1 で見つかった副産物
+
+| 発見 | 内容 |
+| --- | --- |
+| コメントの嘘 2 件 | `shell_network_allow` に「この設定は Claude 専用」、`write_deny_globs` に「Claude のみ反映」。どちらも OpenCode にも届いており誤り。修正した |
+| 集合の配置誤り | `shell_network_allow` が `CLAUDE_SANDBOX_KEYS` に入っていた。`SHARED_SANDBOX_KEYS` へ移した（検査専用の集合なので挙動は不変） |
+| **ADR-0007 規則 3 違反が 1 件残存** | `[sandbox] claude_write_deny` は「CLI 固有キーに置かれた禁止」。規則 3 が禁じている形。**A2 で扱う** |
+
+## 重要な未解決点
+
+`[sandbox] claude_write_deny`（20 件）は ADR-0007 の規則 3
+「CLI 固有キーは『許可』の補償にだけ使う。『禁止』を置かない」に違反している。
+
+A2 で native へ移す前に、**どちらが正しいか**を決める必要がある。
+
+| 案 | 内容 |
+| --- | --- |
+| 禁止を共有へ上げる | 他の CLI でも同じ禁止を効かせる。規則 3 に適合 |
+| Claude 固有のまま native へ | 規則 3 を緩める。なぜ片側だけでよいかの根拠が要る |
 
 ## 終了結果
 

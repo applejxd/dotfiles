@@ -209,5 +209,5 @@ def test_hooks_never_use_permission_request_event():
 def test_hook_reads_the_same_list_as_claude_permissions():
     # ルールが 2 箇所に分かれると片方だけ古くなる。同じキーを見ていること。
     assert policy.load_read_deny_globs(str(COMMON_PATH)) == (
-        COMMON["file"]["claude_read_deny_globs"]
+        COMMON["file"]["read_deny_globs"]
     )

@@ -117,13 +117,13 @@ def _load_file_list(key: str, path: str = DEFAULT_COMMON_PATH) -> list[str]:
 
 
 def load_read_deny_globs(path: str = DEFAULT_COMMON_PATH) -> list[str]:
-    """Return ``[file] claude_read_deny_globs``.
+    """Return ``[file] read_deny_globs``.
 
     Claude はこのリストから ``Read()`` の deny permission を生成するが、
     Copilot にはファイル規則が無い。そのため ``check_file_read.py`` が
     このリストを読んで同じ判断を再現する。
     """
-    return _load_file_list("claude_read_deny_globs", path)
+    return _load_file_list("read_deny_globs", path)
 
 
 # ---------------------------------------------------------------------------

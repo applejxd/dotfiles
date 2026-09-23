@@ -512,21 +512,21 @@ SECRET_PATHS = [
 def test_legit_files_are_not_denied(path):
     """`**/*key*` のような部分一致 glob による誤検知が無いこと."""
     file_cfg = COMMON["file"]
-    assert not _matches_any(path, file_cfg["claude_read_deny_globs"]), f"read deny 誤検知: {path}"
-    assert not _matches_any(path, file_cfg["claude_write_deny_globs"]), f"write deny 誤検知: {path}"
+    assert not _matches_any(path, file_cfg["read_deny_globs"]), f"read deny 誤検知: {path}"
+    assert not _matches_any(path, file_cfg["write_deny_globs"]), f"write deny 誤検知: {path}"
 
 
 @pytest.mark.parametrize("path", SECRET_PATHS)
 def test_secret_files_are_still_denied(path):
     file_cfg = COMMON["file"]
-    assert _matches_any(path, file_cfg["claude_read_deny_globs"]), f"read deny の穴: {path}"
+    assert _matches_any(path, file_cfg["read_deny_globs"]), f"read deny の穴: {path}"
 
 
 def test_no_broad_substring_globs():
     """`**/*key*` 形式 (前後に * が付く部分一致) を使っていないこと."""
     file_cfg = COMMON["file"]
     broad = re.compile(r"\*[A-Za-z0-9_.-]+\*")
-    for key in ("claude_read_deny_globs", "claude_write_deny_globs"):
+    for key in ("read_deny_globs", "write_deny_globs"):
         for glob in file_cfg[key]:
             base = glob.rsplit("/", 1)[-1]
             if base in {"*secret*", "*credential*", "*password*"}:
@@ -3111,7 +3111,7 @@ def test_age_key_files_are_denied(command):
 def test_age_key_globs_cover_both_systems():
     """common.toml の glob が chezmoi 用と sops 用の両方を含むこと."""
     file_policy = COMMON["file"]
-    for key in ("claude_read_deny_globs", "claude_write_deny_globs"):
+    for key in ("read_deny_globs", "write_deny_globs"):
         globs = file_policy[key]
         assert "**/key.txt" in globs, f"{key} に **/key.txt が無い"
         assert "**/keys.txt" in globs, f"{key} に **/keys.txt が無い"

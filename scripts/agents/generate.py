@@ -274,9 +274,9 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     deny: list[str] = []
     for cmd in bash.get("deny", []):
         deny.append(f"Bash({cmd}:*)")
-    for glob in file_.get("claude_read_deny_globs", []):
+    for glob in file_.get("read_deny_globs", []):
         deny.append(f"Read({glob})")
-    for glob in file_.get("claude_write_deny_globs", []):
+    for glob in file_.get("write_deny_globs", []):
         deny.append(f"Edit({glob})")
     for mcp in claude.get("mcp_deny", []):
         deny.append(mcp)
@@ -291,9 +291,9 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
         if cmd in hook_owned:
             continue
         ask.append(f"Bash({cmd}:*)")
-    for glob in file_.get("claude_read_ask_globs", []):
+    for glob in file_.get("read_ask_globs", []):
         ask.append(f"Read({glob})")
-    for glob in file_.get("claude_write_ask_globs", []):
+    for glob in file_.get("write_ask_globs", []):
         ask.append(f"Edit({glob})")
 
     # 順序を安定化 (重複除去しつつ元順序を保持)
@@ -330,12 +330,11 @@ def _expand_sandbox_paths(paths: list[str]) -> list[str]:
 
 # ``[sandbox]`` で使えるキー。命名は **共有 = 無印 / CLI 固有 = CLI 名の接頭辞**
 # で統一する ([[hooks]] の claude_event / copilot_event と同じ規則)。
-SHARED_SANDBOX_KEYS = frozenset({"deny", "seccomp_apply_path"})
+SHARED_SANDBOX_KEYS = frozenset({"deny", "seccomp_apply_path", "shell_network_allow"})
 CLAUDE_SANDBOX_KEYS = frozenset({
     "claude_read_allow",
     "claude_write_allow",
     "claude_write_deny",
-    "claude_network_allow",
     "claude_network_strict",
 })
 COPILOT_SANDBOX_KEYS = frozenset({
@@ -345,15 +344,18 @@ COPILOT_SANDBOX_KEYS = frozenset({
 })
 KNOWN_SANDBOX_KEYS = SHARED_SANDBOX_KEYS | CLAUDE_SANDBOX_KEYS | COPILOT_SANDBOX_KEYS
 
-# ``[file]`` は 5 キーすべて Claude 専用。Copilot の permissions-config.json は
-# bash の allow と locations しか表現できず、ファイル規則を持てないため。
-# Copilot 側の等価な保護は ``[sandbox] deny`` (OS レベル) と check_file_read.py。
+# ``[file]`` の deny / ask glob は **Claude 専用ではない**。
+#   - Claude   : Read() / Edit() の permission になる
+#   - OpenCode : 通常版・境界版の read / edit 規則になる (CHG-0004 で追加)
+#   - Copilot  : check_file_read.py が同じリストを view ツールへ適用する
+# そのため接頭辞を付けない (ADR-0007「共有 = 無印」)。
+# ``claude_read_allow`` だけは Claude 固有の補償なので接頭辞を残す。
 KNOWN_FILE_KEYS = frozenset({
     "claude_read_allow",
-    "claude_read_ask_globs",
-    "claude_write_ask_globs",
-    "claude_read_deny_globs",
-    "claude_write_deny_globs",
+    "read_ask_globs",
+    "write_ask_globs",
+    "read_deny_globs",
+    "write_deny_globs",
 })
 
 
@@ -457,7 +459,7 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
 
     network: dict[str, Any] = {
         "allowedDomains": _uniq(
-            list(web.get("allow_domains", [])) + list(sandbox.get("claude_network_allow", []))
+            list(web.get("allow_domains", [])) + list(sandbox.get("shell_network_allow", []))
         ),
     }
     denied_domains = _uniq(list(web.get("deny_domains", [])))
@@ -1086,10 +1088,10 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     rules += opencode_rules("shell", "deny", [f"{cmd} *" for cmd in bash.get("deny", [])])
 
     for action, key, effect in (
-        ("read", "claude_read_ask_globs", "ask"),
-        ("edit", "claude_write_ask_globs", "ask"),
-        ("read", "claude_read_deny_globs", "deny"),
-        ("edit", "claude_write_deny_globs", "deny"),
+        ("read", "read_ask_globs", "ask"),
+        ("edit", "write_ask_globs", "ask"),
+        ("read", "read_deny_globs", "deny"),
+        ("edit", "write_deny_globs", "deny"),
     ):
         resources: list[str] = []
         for glob in file_.get(key, []):
@@ -1197,7 +1199,7 @@ def opencode_read_deny_regexes(common: dict[str, Any]) -> list[str]:
     ``read`` deny を迂回するので、保護は plugin 側で自作するしかない。
     see docs/research/opencode/permission/gaps.md
     """
-    globs = common.get("file", {}).get("claude_read_deny_globs") or []
+    globs = common.get("file", {}).get("read_deny_globs") or []
     return [glob_to_regex(v) for g in globs for v in _home_variants(str(g))]
 
 
@@ -1211,7 +1213,7 @@ def opencode_deny_path_regexes(common: dict[str, Any]) -> list[str]:
     (``**/.ssh/**`` の最終要素は ``**`` になり、素の判定では落ちる)。
     """
     out: list[str] = []
-    for g in common.get("file", {}).get("claude_read_deny_globs") or []:
+    for g in common.get("file", {}).get("read_deny_globs") or []:
         base = str(g).removesuffix("/**").rsplit("/", 1)[-1]
         if len(base) > 1 and base.startswith("*") and base.endswith("*"):
             continue
@@ -1289,7 +1291,7 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
             "network": {
                 "allowedDomains": _uniq(
                     list(web.get("allow_domains", []))
-                    + list(sandbox_cfg.get("claude_network_allow", []))
+                    + list(sandbox_cfg.get("shell_network_allow", []))
                     + list(cfg.get("network_allow", []))
                 ),
                 "deniedDomains": _uniq(list(web.get("deny_domains", []))),

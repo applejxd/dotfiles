@@ -146,6 +146,34 @@ Claude は同じリストから `Read()` deny permission を生成済みで、CL
   hook でも代替できない (shell 経由の通信は `check_bash.py` が見るが、
   CLI 内蔵の web fetch は対象外)
 
+## 後日の更新（2026-09-23）
+
+**`[file]` への `claude_` 接頭辞は [CHG-0005](../change/0005-agents-config-naming.md)
+で外した。** 本 ADR の**原則（共有 = 無印 / CLI 固有 = CLI 名の接頭辞）は変えて
+いない**。原則はそのままに、事実の側が変わった。
+
+| 当時 | 現在 |
+| --- | --- |
+| `[file]` の glob は Claude の `Read()` / `Edit()` permission になるだけ | Claude に加えて **OpenCode の通常版・境界版**の read / edit 規則にもなる（[CHG-0004](../change/0004-opencode-sandbox.md)） |
+| Copilot へは `check_file_read.py` で別途適用 | 同じ（変わらず） |
+
+3 つの CLI へ届くものに `claude_` が付いたままだと、**規則 3（CLI 固有キーに
+禁止を置かない）に違反して見える**。実際には両側に効いているので、接頭辞を
+外して実態に合わせた。
+
+```text
+claude_read_deny_globs   → read_deny_globs
+claude_write_deny_globs  → write_deny_globs
+claude_read_ask_globs    → read_ask_globs
+claude_write_ask_globs   → write_ask_globs
+claude_network_allow     → shell_network_allow   ([sandbox]。Claude と OpenCode)
+```
+
+`claude_read_allow` は Claude 固有の補償なので**接頭辞を残した**。
+
+> **未解決**: `[sandbox] claude_write_deny` は「CLI 固有キーに置かれた禁止」で、
+> 規則 3 に照らすと違反のまま残っている。CHG-0005 で扱う。
+
 ## 関連 ADR
 
 - [ADR-0006](0006-instructions-to-mechanisms.md): 指示ではなく機構で強制する

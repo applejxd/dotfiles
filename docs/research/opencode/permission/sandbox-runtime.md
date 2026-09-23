@@ -159,6 +159,11 @@ internal error, please report: running "…"
 `mise.jdx.dev` が入っていない（`mise-versions.jdx.dev` はある）。
 OpenCode を包むなら実地で不足を洗う必要がある。
 
+> **2026-09-23 追記**: この観測の後、OpenCode の境界も同じリストを読むように
+> なったため、キーは `shell_network_allow` へ改名した
+> （[CHG-0005](../../../change/0005-agents-config-naming.md)）。
+> 「Claude 向け」は当時の記述。
+
 不足しても破綻はせず、接続が失敗するだけなので追記で回復できる。
 
 ## 7. 境界をまたぐ接続は成立しない（P0-1 の**部分的な**結論）

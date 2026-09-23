@@ -35,7 +35,7 @@ REQUIRED = [
     ("bash", "deny"),
     ("bash", "ask"),
     ("bash", "allow"),
-    ("file", "claude_read_deny_globs"),
+    ("file", "read_deny_globs"),
     ("sandbox", "deny"),
 ]
 

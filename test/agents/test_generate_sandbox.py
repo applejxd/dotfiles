@@ -400,7 +400,7 @@ def test_secret_config_dirs_are_denied_even_though_config_is_allowed():
 
 def test_claude_sandbox_network_mirrors_web_allow_domains():
     network = gen.build_claude_sandbox(COMMON)["network"]
-    # [web] の分は先頭に、[sandbox] claude_network_allow の分が後ろに続く
+    # [web] の分は先頭に、[sandbox] shell_network_allow の分が後ろに続く
     web_domains = COMMON["web"]["allow_domains"]
     assert network["allowedDomains"][: len(web_domains)] == web_domains
 
@@ -453,7 +453,7 @@ def test_claude_sandbox_network_merges_web_and_network_allow():
     allowed = network["allowedDomains"]
     for domain in COMMON["web"]["allow_domains"]:
         assert domain in allowed
-    for domain in COMMON["sandbox"]["claude_network_allow"]:
+    for domain in COMMON["sandbox"]["shell_network_allow"]:
         assert domain in allowed
     assert len(allowed) == len(set(allowed)), "allowedDomains に重複がある"
 
@@ -462,14 +462,14 @@ def test_network_allow_is_disjoint_from_web_allow_domains():
     # 役割が違う 2 つのリスト (WebFetch 用 / shell 通信用) なので、
     # 重複して書かれていたらどちらかに寄せるべきサイン。
     web = set(COMMON["web"]["allow_domains"])
-    shell = set(COMMON["sandbox"]["claude_network_allow"])
+    shell = set(COMMON["sandbox"]["shell_network_allow"])
     assert not (web & shell), f"両方に書かれている: {sorted(web & shell)}"
 
 
 def test_network_allow_has_no_wildcards():
     # shell 通信先は具体的なホストを書く (wildcard は [web] 側で足りている)。
-    for domain in COMMON["sandbox"]["claude_network_allow"]:
-        assert "*" not in domain, f"claude_network_allow に wildcard: {domain}"
+    for domain in COMMON["sandbox"]["shell_network_allow"]:
+        assert "*" not in domain, f"shell_network_allow に wildcard: {domain}"
 
 
 # ---------------------------------------------------------------------------
@@ -573,9 +573,32 @@ def test_validate_sandbox_keys_accepts_the_real_config():
     gen.validate_sandbox_keys(COMMON)
 
 
-def test_file_section_keys_are_all_claude_prefixed():
+def test_file_section_keys_follow_the_sharing_based_convention():
+    """★ADR-0007「共有 = 無印 / CLI 固有 = CLI 名の接頭辞」を [file] へ適用する。
+
+    deny / ask の glob は Claude・OpenCode・Copilot (hook 経由) の 3 つへ届くので
+    無印。``claude_read_allow`` だけが Claude 固有の補償なので接頭辞を持つ。
+    """
     for key in COMMON["file"]:
-        assert key.startswith("claude_"), f"[file] の {key} に接頭辞が無い"
+        if key.startswith("claude_"):
+            assert key == "claude_read_allow", (
+                f"[file] の {key} は複数 CLI へ届くので接頭辞を外す"
+            )
+        else:
+            assert key.endswith("_globs"), f"[file] に想定外の無印キー: {key}"
+
+
+def test_file_deny_globs_have_no_cli_prefix():
+    """★禁止に CLI 接頭辞を付けない（ADR-0007 規則 3）。
+
+    接頭辞が付くと「片側にしか効かない禁止」に見え、実際に効いている
+    OpenCode / Copilot の保護が設定から読み取れなくなる。
+    """
+    for key in COMMON["file"]:
+        if "deny" in key or "ask" in key:
+            assert not key.startswith(("claude_", "copilot_")), (
+                f"禁止・確認のキーに CLI 接頭辞が付いている: {key}"
+            )
 
 
 def test_file_section_keys_are_known():
@@ -584,10 +607,27 @@ def test_file_section_keys_are_known():
 
 
 def test_validate_rejects_legacy_file_names():
-    for legacy in ("read_allow", "read_deny_globs", "write_ask_globs"):
+    """旧名 (CLI 接頭辞つきの glob キー) は未知キーとして弾く。
+
+    ``.get(key, [])`` は静かに空リストを返すので、旧名が残ると
+    **防御が黙って消える**。
+    """
+    for legacy in (
+        "claude_read_deny_globs",
+        "claude_write_deny_globs",
+        "claude_read_ask_globs",
+        "claude_write_ask_globs",
+    ):
         with pytest.raises(ValueError) as excinfo:
             gen.validate_sandbox_keys({"file": {legacy: ["x"]}})
         assert legacy in str(excinfo.value)
+
+
+def test_validate_rejects_legacy_sandbox_network_name():
+    """``claude_network_allow`` は Claude 専用ではなくなったので旧名。"""
+    with pytest.raises(ValueError) as excinfo:
+        gen.validate_sandbox_keys({"sandbox": {"claude_network_allow": ["x"]}})
+    assert "claude_network_allow" in str(excinfo.value)
 
 
 def test_file_deny_globs_have_a_sandbox_counterpart_for_copilot():

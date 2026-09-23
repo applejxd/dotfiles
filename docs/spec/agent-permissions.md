@@ -264,7 +264,7 @@ exemption がどのモードでも無効化されるため)。OpenCode には委
 
 **deny の最終防衛線が permission リストしかない**: Claude では hook と sandbox
 が同じ deny を別経路で強制するが、OpenCode では `permissions` が落ちれば
-防御ごと消える。`opencode.json` 自身を `[file] claude_write_deny_globs` と
+防御ごと消える。`opencode.json` 自身を `[file] write_deny_globs` と
 `[sandbox] claude_write_deny` に入れて、エージェントが自分の deny を
 書き換えられないようにしてある。
 
@@ -390,7 +390,7 @@ permission の `read` deny は**この 2 つのツールに効かない**
 （[permission の穴](../research/opencode/permission/gaps.md)）。そのため
 `tool.execute.after` で結果から保護対象を落とす。
 
-- 判定パターンは `[file] claude_read_deny_globs` から生成する（単一ソース）。
+- 判定パターンは `[file] read_deny_globs` から生成する（単一ソース）。
   `*` は `/` を跨がず、`**` だけ跨ぐ
 - `grep` はファイル単位の塊を落とし、**件数ヘッダも訂正する**
   （`Found 2 matches` → `Found 1 matches`）。放置すると存在だけ漏れて
@@ -636,7 +636,7 @@ Claude の allowRead に /mnt・/tmp 系: なし
 | `[sandbox] claude_read_allow` | Claude | whitelist に開ける読み取りの穴 |
 | `[sandbox] claude_write_allow` | Claude | cwd + temp 以外に書き込みを許す場所 |
 | `[sandbox] claude_write_deny` | Claude | read は許すが write を禁止する対象。`deny` に**追加**される |
-| `[sandbox] claude_network_allow` | Claude | shell が実際に通信する先 (CDN 等) |
+| `[sandbox] shell_network_allow` | Claude | shell が実際に通信する先 (CDN 等) |
 | `[sandbox] claude_network_strict` | Claude | 許可外ドメインを拒否する (v2.1.219+) |
 | `[sandbox] copilot_read_allow` | Copilot | Copilot が読める場所 (whitelist の本体) |
 | `[sandbox] copilot_write_allow` | Copilot | 同上の書き込み |
@@ -894,7 +894,7 @@ symlink として見えている。`copilot_read_allow` が
 > **CLI 固有キーに「禁止」を置かない。** 許可にだけ使う。
 
 許可の非対称は実効ポリシーを揃えるためのもので安全側に働くが、
-禁止の非対称はそのまま穴になる。実際、`[file] claude_read_deny_globs` は
+禁止の非対称はそのまま穴になる。実際、`[file] read_deny_globs` は
 Claude の `Read()` deny にしかならず、**リポジトリ内に置かれた秘密ファイルが
 Copilot からは読める**状態だった。現在は `check_file_read.py` が同じリストを
 読んで Copilot 側を埋めている。
@@ -1065,7 +1065,7 @@ Claude の `sandbox.network.allowedDomains` になり、`deny_domains` は
 
 許可漏れがあっても即座に破綻はしない。sandbox 内で接続が失敗し、
 「sandbox 外での再実行」を求める承認プロンプトに落ちるだけなので、
-足りないドメインが判明したら `claude_network_allow` に追記すればよい。
+足りないドメインが判明したら `shell_network_allow` に追記すればよい。
 
 **Copilot 側は outbound が全ドメイン許可のまま**で、これは変えられない
 (ドメイン単位の設定が存在しないため)。`allowedUrls` は公式に
@@ -1533,7 +1533,7 @@ world-readable な `passwd` / `group` は書き込み先のときだけ deny と
 `~/.claude.json` と `~/.copilot/config.json` は CLI が自分で書き換えるランタイム
 設定で、chezmoi 管理外。MCP サーバ定義の `headers` / `env` に PAT や API キーが
 平文で入りうる (`claude mcp add --env GITHUB_PAT=...` など) ため、
-`[file] claude_read_deny_globs` / `claude_write_deny_globs` (Claude の `Read()` / `Edit()`) と
+`[file] read_deny_globs` / `write_deny_globs` (Claude の `Read()` / `Edit()`) と
 `check_bash.py` (bash 経由の `cat` / `grep` / `jq`) の両方で deny する。
 
 同名でも `~/.claude/settings.json` や `~/.copilot/hooks/from-claude.json` は

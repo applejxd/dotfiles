@@ -790,7 +790,7 @@ chezmoi 管理下でも機密でないパス（`~/.config/shell` など）は、
 
 #### ドメイン
 
-`[sandbox] claude_network_allow` は現在 **Claude 専用**（Copilot にドメイン単位の
+`[sandbox] shell_network_allow` は現在 **Claude 専用**（Copilot にドメイン単位の
 制御が無いため）。OpenCode でも使えば同じリストを共有できる。
 
 実履歴で不足が判明しているものを先に足す。
@@ -1147,7 +1147,7 @@ OpenCode の稼働に必要なものを明示的な例外とするか、決め�
 | 保留するもの | 理由 |
 | --- | --- |
 | リダイレクト先を分解して `edit` の判定表に当てる | **ホストについては**境界が同じことを OS 側で行う。ワークスペース内には効かないので、必要になったら戻す |
-| `claude_write_deny_globs` にシェル起動ファイルを追加 | 境界の内側に入れなければ足りる（macOS / Windows では別途必要） |
+| `write_deny_globs` にシェル起動ファイルを追加 | 境界の内側に入れなければ足りる（macOS / Windows では別途必要） |
 | 少数の静的 allow を増やす | 隔離版では既定が `allow` になったので不要 |
 
 > **「境界ができれば不要になる」としたものの一部は、ワークスペース内では
@@ -1419,7 +1419,7 @@ OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continu
 | `guide-plugin` | 結果フィルタ 37 件 | `grep` / `glob` を無効化しないので引き続き要る | **維持** |
 | `guide-plugin` | 伏字化のパス判定 34 件 | 境界内では不活性だが、通常版では現役。分岐を足す価値が無い | **維持** |
 | sandbox の `denyWrite` | （なし）→ **次回の隔離起動を決める入力一式** | 書き換えて `chezmoi apply` されると保護が消える | **完了**。`protected` 6 件 |
-| `[sandbox] claude_network_allow` | Claude 専用 → OpenCode にも適用。`opencode.ai` / `claude.ai` / `mise.jdx.dev` を追加 | 同じ許可リストを共有できる。失敗 53 件の解消 | **完了**。3 件とも反映（`claude.ai` は 2026-09-23 に追加） |
+| `[sandbox] shell_network_allow` | Claude 専用 → OpenCode にも適用。`opencode.ai` / `claude.ai` / `mise.jdx.dev` を追加 | 同じ許可リストを共有できる。失敗 53 件の解消 | **完了**。3 件とも反映（`claude.ai` は 2026-09-23 に追加） |
 | GitHub の読み取り専用 PAT | （なし）→ **当面入れない** | 必要が生じるまで持ち込まない | **見送り** |
 | サービスの起動 | 包む対象は**実行主体ごと**（`--standalone`） | 同一プロセスなので境界をまたがない | **完了** |
 | `guide-plugin` が shell を包む | — | **不採用**（案 A / B とも破棄） | **不採用** |

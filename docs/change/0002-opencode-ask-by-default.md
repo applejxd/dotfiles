@@ -254,7 +254,7 @@ OpenCode の確認ダイアログには `once` / `always` / `reject` があり�
 | --- | --- | --- | --- |
 | `common.toml.tmpl` | `[bash] allow` を共用 → `[opencode.shell] allow` を新設 | `[bash]` は 3 CLI 共通で切り分けできない | 適用済み |
 | `generate.py` | allow を `[opencode.shell]` から取得 + 先頭に `{shell, *, ask}` | 既定を ask にする本体 | 適用済み |
-| `claude_write_deny_globs` | `.git/config` / `.opencode/opencode.json` 等を追加 | どちらも書けると防御を外せる | 適用済み |
+| `write_deny_globs` | `.git/config` / `.opencode/opencode.json` 等を追加 | どちらも書けると防御を外せる | 適用済み |
 | `guide-plugin` | （なし）→ 誘導 hook の基盤 | 静的 deny は代替案を返せない | 適用済み |
 | `guide-plugin` | `cd` のみ → `read` 誘導・`grep` / `glob` フィルタ・伏字化 | 段階 2 の本体 | 適用済み |
 | `guide-plugin` | （なし）→ **ヒアドキュメントを `write` へ誘導** | 段階 3 の本体 | **着手中** |

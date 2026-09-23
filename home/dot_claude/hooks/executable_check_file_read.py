@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Agent PreToolUse hook: ファイル読み取りツールのセンシティブパス遮断。
 
-`[file] claude_read_deny_globs` は Claude では ``Read()`` の deny permission に
+`[file] read_deny_globs` は Claude では ``Read()`` の deny permission に
 なるが、Copilot には対応する機構が無い:
 
   - ``permissions-config.json`` はファイル規則を表現できない (bash の allow と
@@ -13,7 +13,7 @@
 Copilot からは読めてしまう。ここを埋めるのがこの hook。
 
 判定は Claude の permission と **同じリスト** (``common.toml`` の
-``[file] claude_read_deny_globs``) を読むので、ルールは 1 箇所に書けばよい。
+``[file] read_deny_globs``) を読むので、ルールは 1 箇所に書けばよい。
 
 fail-closed: ポリシーを読めない場合は素通りさせず deny する。
 """
@@ -80,7 +80,7 @@ def main() -> None:
 
     if not globs:
         emit_pretool_deny(
-            "ポリシー定義に [file] claude_read_deny_globs がありません。\n"
+            "ポリシー定義に [file] read_deny_globs がありません。\n"
             "設定が壊れている可能性があるため、安全のため拒否しています。\n"
             "対処: `chezmoi apply ~/.config/agents` を実行してください。"
         )

@@ -262,13 +262,13 @@ claude_read_allow = [
 ]
 
 # Claude / OpenCode に反映: Read(...) を ask に追加
-claude_read_ask_globs = [
+read_ask_globs = [
   ".env.*",
 ]
 
 # Claude / OpenCode に反映: Edit(...) を ask に追加
 # (書き込み系 permission rule は Edit(path) に統一。Write(path) は v2.1.210 で deprecated)
-claude_write_ask_globs = [
+write_ask_globs = [
   ".env.*",
   "mise.toml",
 ]
@@ -277,7 +277,7 @@ claude_write_ask_globs = [
 #
 # ★`**/*key*` のような部分一致 glob は使わない。keyhac.bat / tokenizer.py の
 #   ような正当なファイルを巻き込む。拡張子・接尾辞・既知の名前で指定する。
-claude_read_deny_globs = [
+read_deny_globs = [
   "**/.ssh/**",
   "**/.gnupg/**",
   "**/sops/age/**",
@@ -318,9 +318,9 @@ claude_read_deny_globs = [
   "~/.config/opencode/service.json",
 ]
 
-# Claude のみ反映: Edit(...) を deny に追加
+# Claude / OpenCode に反映: Edit(...) を deny に追加
 # read_deny_globs と同じ理由で部分一致 glob は使わない
-claude_write_deny_globs = [
+write_deny_globs = [
   "**/.ssh/**",
   "**/.gnupg/**",
   "**/sops/age/**",
@@ -571,12 +571,13 @@ copilot_allow_dev_tool_access = false
 # `allowedUrls` は「プロンプトを省略する URL」であって通信制限ではない。
 claude_network_strict = true
 
-# Claude のみ: sandbox のネットワーク許可に **追加** するドメイン。
+# shell が実際に通信する先 (パッケージ配布 CDN 等) の許可。
+# **Claude の sandbox と OpenCode の境界の両方**に効く (Copilot にはドメイン
+# 単位の制御が無いので効かない)。
 # [web] allow_domains (WebFetch 用のドキュメントサイト) と合算される。
-# こちらには shell が実際に通信する先 (パッケージ配布 CDN 等) だけを書く。
 # 混ぜると CDN が WebFetch で自動承認されるので分けている。
 # 不足しても破綻はせず「sandbox 外での再実行を求める承認」に落ちる。
-claude_network_allow = [
+shell_network_allow = [
   # Python (uv / pip): pypi.org はメタデータ、実体は files.pythonhosted.org
   "files.pythonhosted.org",
   # GitHub: git clone / リリース資産のダウンロード
@@ -755,7 +756,7 @@ message = "ヒアドキュメントでスクリプトを渡さないでくださ
 [opencode.redact]
 enabled = true
 # 保護対象のパスを参照したコマンドは、出力全体を伏せる。
-# 判定表は [file] claude_read_deny_globs から生成する。
+# 判定表は [file] read_deny_globs から生成する。
 # ★`**/*secret*` のような部分一致 glob は自動で除かれる。コマンドには
 #   docs/spec/secret-handling.md のような正当なパスも載るため。
 deny_path_output = true
@@ -883,7 +884,7 @@ db = ".opencode-sandbox/opencode.db"
 config_dir = "~/.config/opencode-sandbox"
 
 # 境界内から出てよいドメインの追加分 (OpenCode の境界だけに効く)。
-# [web] allow_domains と [sandbox] claude_network_allow に足す形で使う。
+# [web] allow_domains と [sandbox] shell_network_allow に足す形で使う。
 # ★モデル提供元をここに入れないと、境界内からモデルへ到達できない。
 #   proxy が CONNECT を 403 で落とすだけなので、症状は「応答が来ない」になる。
 # ★wildcard は **先頭の `*.` と 単独の `*` だけ**効く。
@@ -1168,7 +1169,7 @@ timeout_sec = 30
 id = "check_file_read"
 script = "check_file_read.py"
 runner = "python3"
-purpose = "[file] claude_read_deny_globs を Copilot のファイル読み取りにも適用する"
+purpose = "[file] read_deny_globs を Copilot のファイル読み取りにも適用する"
 # ★Copilot 専用 (claude_event を書かない)。
 #   Claude は同じリストから Read() の deny permission を生成済みで、CLI 本体が
 #   評価するため hook は要らない。付けると全ファイル読み取りに Python の

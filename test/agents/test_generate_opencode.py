@@ -237,7 +237,7 @@ def test_read_deny_regexes_match_absolute_paths(path, blocked):
 
 def test_read_deny_regexes_cover_every_glob():
     """``~/`` 始まりだけ 2 本になる (``~`` のままと展開済みの絶対パス)。"""
-    globs = [str(g) for g in COMMON["file"]["claude_read_deny_globs"]]
+    globs = [str(g) for g in COMMON["file"]["read_deny_globs"]]
     expected = len(globs) + sum(1 for g in globs if g.startswith("~/"))
     assert len(gen.build_opencode_guide({}, COMMON)["read_deny"]) == expected
 
@@ -838,7 +838,7 @@ def test_no_double_star_reaches_the_generated_rules():
         assert "**" not in rule["resource"], rule
 
 
-@pytest.mark.parametrize("key", ["claude_read_deny_globs", "claude_write_deny_globs"])
+@pytest.mark.parametrize("key", ["read_deny_globs", "write_deny_globs"])
 def test_every_file_deny_glob_is_converted(key: str):
     action = "read" if "read" in key else "edit"
     emitted = set(rules(action, "deny"))
