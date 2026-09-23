@@ -275,6 +275,41 @@ tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree
 - 内側へ渡す環境変数から資格情報を落とす
   （`GH_TOKEN` / `SSH_AUTH_SOCK` / `AWS_*` など）
 
+## 版の扱い（未固定）
+
+`srt` は **research preview** であり、README が明記している。
+
+> As this is an early research preview, APIs and configuration formats may evolve.
+
+一方、導入は浮動指定のまま。**Claude Code と同じ実体を共有している**ので、
+更新は両方へ同時に効く。
+
+```toml
+# home/dot_config/mise/config.toml.tmpl
+"npm:@anthropic-ai/sandbox-runtime" = "latest"
+```
+
+| 依存の仕方 | 対象 | 設定フォーマット変更の影響 |
+| --- | --- | --- |
+| CLI + 設定 JSON | **`ocs`** | 境界の組み立てが通らなくなりうる |
+| `vendor/seccomp/apply-seccomp` のみ | Claude Code | パスが変われば seccomp が無効化される |
+
+**現状は「固定せず、起動時チェックで検知する」を選んでいる。**
+境界チェックは挙動で判定し、判定できなければ起動しないので、
+壊れた場合は**起動を断る形で気づける**（fail-closed）。
+
+- 更新時は「正常なコマンドが通る」ではなく
+  **「拒否すべきものが拒否される」**ことを確かめる
+  （deny・直接通信・Unix socket・cwd 違い・並行実行）
+- `--recheck` で前回の合格を捨てて検査し直す
+- 版を固定する場合は `latest` を実際の版へ置き換える。
+  そのとき `seccomp_apply_path` も同じ版を指す必要がある
+  （[エージェント権限仕様](agent-permissions.md#wsl2-での抜け穴-seccomp-フィルタ)）
+
+> **検知できるのは「境界が壊れたこと」までで、「設定の意味が変わったこと」は
+> 検知できない。** 例えば新しい許可キーが増え、既定値が緩い方向であっても、
+> チェック項目に無ければ合格する。更新時は変更履歴も読むこと。
+
 ## 既知の制約
 
 | 制約 | 内容 |

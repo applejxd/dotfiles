@@ -595,6 +595,35 @@ Copilot 側も `copilot_read_allow` で同じものを列挙する。以前は
 > 層ごとの方式の違いは
 > [sandbox機能の包括調査](../research/agents/sandbox-capabilities.md) を参照。
 
+#### ホーム外の経路は塞いでいない（契約と実装の不一致）
+
+`deny` / `claude_read_allow` が扱うのは **`~/` 配下だけ**。ホーム外は
+sandbox runtime の既定（読みは全許可）のまま残る。
+
+| 経路 | Claude / Copilot | `ocs`（OpenCode） |
+| --- | --- | --- |
+| `/mnt`（WSL の Windows 側） | **塞いでいない** | `deny_read` で遮断 |
+| `/tmp` `/var/tmp` `/dev/shm` | **塞いでいない**（ホストと共有） | `deny_read` で遮断（専用 tmpfs になる） |
+
+`denyRead: ["~/"]` は Windows 側を守らない。OpenCode 側では実測で
+`/mnt/c/Users` まで読めることを確認して塞いだ
+（[CHG-0004](../change/0004-opencode-sandbox.md)、
+[調査記録 21 節](../research/opencode/permission/sandbox-runtime.md)）。
+**Claude / Copilot 側には同じ対処を入れていない。**
+
+判定（2026-09-23 時点、`~/.claude/settings.json` を実測）:
+
+```text
+Claude の denyRead に /mnt・/tmp 系: なし
+Claude の allowRead に /mnt・/tmp 系: なし
+```
+
+- 意図的に開けているのであれば、その旨をここに書いて確定させる
+- 意図していないなら `[sandbox] deny` に `/mnt` `/tmp` `/var/tmp` `/dev/shm`
+  を足す。**ただし `deny` は Copilot の `deniedPaths` にも流れる**ので、
+  両 CLI への影響を確かめてから入れる
+- `/tmp` を塞ぐと専用の空 tmpfs になり、ホストとのファイル受け渡しが切れる
+
 #### キー名の規則
 
 `common.toml` のキーは **共有 = 無印 / CLI 固有 = CLI 名の接頭辞** で統一する
@@ -1091,6 +1120,15 @@ disabled.` を出す。
 アーキテクチャでは設定が出ず、Claude は従来どおり自動検出に戻るだけ)。
 
 導入後は `/sandbox` の Dependencies タブに不足が出ていないことを確認する。
+
+> [!NOTE]
+> **版は固定していない。** `sandbox-runtime` は research preview で、
+> README が「API と設定フォーマットは変わりうる」と明記している。
+> `latest` 経由なので Claude と OpenCode (`ocs`) へ同時に効く。
+> 判断の記録と更新時の検証手順は
+> [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md#版の扱い未固定)。
+> Claude 側は `applyPath` が実在しなくなると**設定が出力されず自動検出へ戻る**
+> ため、seccomp が黙って無効化されうる。
 
 #### sandbox に移せないネットワーク系チェック
 
