@@ -995,19 +995,18 @@ drop_path_prefixes = [
 provider = "github-copilot"
 model = "claude-opus-5"
 
-# 追加のプロジェクト。**追加の許可が要るときだけ**書く。
-# 宣言が無い場所でも起動できる (共通分だけになる)。ランチャーは cwd に
-# 当たる宣言を最長一致で選び、共通の許可リストへ上乗せする。
+# プロジェクト個別の追加許可はここに書かない。
+# <起動ディレクトリ>/.opencode/sandbox.toml が要求し、ランチャーが人の承認を
+# 取って初めて効く (承認は ~/.local/state/opencode-sandbox/trusted.json)。
+# パスがマシン依存にならず、宣言がリポジトリと一緒に移動するため。
 #
-# ★許可リストをプロジェクト側のファイルに置かないこと。敵対的なリポジトリが
-#   自分で ~/.ssh を許可できてしまい、グローバル設定が負ける穴と同じになる。
-#   ここがプロジェクトパスをキーとして持つ。
+# ★リポジトリは「要求」できるが「付与」はできない。承認を外さないこと。
+#   OpenCode 自身の permission は実際にこの穴を持っている
+#   (docs/research/opencode/permission/gaps.md 第 5 節)。
+# ★機密でないものだけ承認する。承認したものは境界の内側から読める。
 # ★/mnt 配下も狙い撃ちで開けられ、symlink 越しにも届く (実測)。
-# ★機密でないものだけ開ける。ここへ書いたものは境界の内側から読める。
 #
-# 例:
-#   [[opencode.sandbox.project]]
-#   path = "~/src/example"
+# 例 (プロジェクト側の .opencode/sandbox.toml):
 #   read = ["/mnt/d/datasets/example"]
 #   write = ["/mnt/d/outputs/example"]
 #   network_allow = ["api.example.com"]

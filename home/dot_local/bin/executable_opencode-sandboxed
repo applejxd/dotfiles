@@ -17,6 +17,7 @@ see docs/change/0004-opencode-sandbox.md
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sqlite3
@@ -64,19 +65,20 @@ def project_extras(sandbox: dict, workspace: Path) -> dict:
     **宣言が無ければ追加はゼロ**（共通の許可だけで動く）。宣言は「機密でない
     パスを開けたい」ときにだけ要る。
 
-    ★許可リストはプロジェクト側のファイルに置かない。敵対的なリポジトリが
-      自分で ``~/.ssh`` を許可できてしまい、グローバル設定が負ける穴と同じに
-      なる。``common.toml`` がプロジェクトパスをキーとして持つ。
+    宣言は ``<起動ディレクトリ>/.opencode/sandbox.toml`` に置く。複数 PC で
+    使えるようリポジトリと一緒に移動させるため。
+
+    ★リポジトリは「要求」できるが「付与」はできない。ここは要求を読むだけで、
+      実際に許可するかは :func:`ensure_trusted` の承認を通す。敵対的な
+      リポジトリが自分で ``~/.ssh`` を開けられる構造にしないこと
+      (OpenCode 自身の permission が実際にその穴を持っている。
+      docs/research/opencode/permission/gaps.md 第 5 節)。
     """
-    matches = [
-        p
-        for p in sandbox.get("projects") or []
-        if workspace == Path(p["path"]) or Path(p["path"]) in workspace.parents
-    ]
-    if not matches:
+    del sandbox  # 共通設定は使わない (宣言はプロジェクト側にある)
+    request = read_request(workspace)
+    if request is None:
         return {"read": [], "write": [], "network_allow": []}
-    # 入れ子なら内側が勝つ
-    return max(matches, key=lambda p: len(p["path"]))
+    return request["extras"]
 
 
 def build_boundary(sandbox: dict, workspace: Path) -> dict:
@@ -113,6 +115,142 @@ def _uniq(values: list[str]) -> list[str]:
     for value in values:
         seen.setdefault(value, None)
     return list(seen)
+
+
+REQUEST_REL = ".opencode/sandbox.toml"
+TRUST = HOME / ".local/state/opencode-sandbox/trusted.json"
+REQUEST_KEYS = ("read", "write", "network_allow")
+
+
+def _resolve_requested(value: str, workspace: Path) -> str:
+    """要求されたパスを実際に開く形へ直す。
+
+    ``~`` を展開し、相対パスは起動ディレクトリ基準にする。展開後の形を
+    承認画面に出すこと。人が承認するのは「何が開くか」であって、
+    書かれた文字列ではない。
+    """
+    expanded = Path(value).expanduser()
+    if not expanded.is_absolute():
+        expanded = workspace / expanded
+    return str(expanded)
+
+
+def read_request(workspace: Path) -> dict | None:
+    """``.opencode/sandbox.toml`` の要求を読む。無ければ ``None``。
+
+    **ここは読むだけ。許可はしない。**
+    """
+    path = workspace / REQUEST_REL
+    if not path.is_file():
+        return None
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover - 3.11 未満
+        die(f"{path} を読めない (tomllib が無い)", "Python 3.11 以降が要る")
+    raw = path.read_bytes()
+    try:
+        data = tomllib.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        die(f"{path} を解釈できない: {exc}")
+    unknown = sorted(set(data) - set(REQUEST_KEYS))
+    if unknown:
+        die(f"{path} に知らない項目がある: {', '.join(unknown)}")
+    extras: dict[str, list[str]] = {}
+    for key in REQUEST_KEYS:
+        values = data.get(key) or []
+        if not isinstance(values, list) or any(not isinstance(v, str) for v in values):
+            die(f"{path} の {key} は文字列の配列でなければならない")
+        extras[key] = [
+            v if key == "network_allow" else _resolve_requested(v, workspace)
+            for v in values
+        ]
+    if not any(extras.values()):
+        return None
+    return {
+        "path": path,
+        # ★要求そのもののハッシュ。1 文字でも変われば承認をやり直す。
+        "digest": hashlib.sha256(raw).hexdigest(),
+        "extras": extras,
+    }
+
+
+def load_trust() -> dict:
+    if not TRUST.is_file():
+        return {}
+    try:
+        data = json.loads(TRUST.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        # 壊れていたら承認なしとして扱う (安全側)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_trust(workspace: Path, digest: str) -> None:
+    TRUST.parent.mkdir(parents=True, exist_ok=True)
+    record = load_trust()
+    record[str(workspace)] = {"digest": digest, "approved": _now()}
+    TRUST.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    TRUST.chmod(0o600)
+
+
+def _now() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def describe_request(workspace: Path, request: dict) -> str:
+    lines = [
+        "このリポジトリは境界の外への追加の許可を要求しています。",
+        f"  {request['path']}",
+        "",
+    ]
+    labels = {"read": "読める", "write": "書ける", "network_allow": "通信"}
+    for key, label in labels.items():
+        values = request["extras"][key]
+        lines.append(f"  {label:4}: {', '.join(values) if values else '(なし)'}")
+    lines += [
+        "",
+        f"  起動ディレクトリ ({workspace}) 以下は元から読み書きできます。",
+        "  ここに挙がっているのは、それ以外に開くものです。",
+    ]
+    return "\n".join(lines)
+
+
+def ensure_trusted(workspace: Path, assume_yes: bool) -> None:
+    """要求を承認済みにする。承認できなければ**起動しない**。
+
+    ★承認の記録は境界の外 (``~/.local/state``) に置く。内側から書けると
+      自分で自分を承認できてしまう。
+    ★マシンごとの記録なので、別 PC では改めて承認が要る。宣言だけが
+      リポジトリと一緒に移動する。
+    """
+    request = read_request(workspace)
+    if request is None:
+        return
+    known = load_trust().get(str(workspace))
+    if isinstance(known, dict) and known.get("digest") == request["digest"]:
+        return
+
+    print(describe_request(workspace, request), file=sys.stderr)
+    if isinstance(known, dict):
+        print("\n  ★ 前回の承認から内容が変わっています。", file=sys.stderr)
+    if assume_yes:
+        save_trust(workspace, request["digest"])
+        print("  --trust が指定されたので承認しました。", file=sys.stderr)
+        return
+    if not sys.stdin.isatty():
+        die(
+            "追加の許可が承認されていない",
+            "対話できないので承認を求められない。--trust を付けるか端末から起動する",
+        )
+    try:
+        answer = input("\n許可しますか? [y/N]: ")
+    except (EOFError, KeyboardInterrupt):
+        answer = ""
+    if answer.strip().lower() not in ("y", "yes"):
+        die("追加の許可を承認しなかった", f"要求を見直すなら {request['path']}")
+    save_trust(workspace, request["digest"])
 
 
 def workspace_paths(sandbox: dict, workspace: Path) -> dict[str, str]:
@@ -323,6 +461,11 @@ def main(argv: list[str] | None = None) -> int:
         help="未保存の変更があっても起動する (失いうることを承知のうえで)",
     )
     parser.add_argument("--skip-check", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--trust",
+        action="store_true",
+        help=".opencode/sandbox.toml の要求を確認せず承認する (自動化用)",
+    )
     args, passthrough = parser.parse_known_args(argv)
 
     sandbox = load_boundary()
@@ -334,9 +477,12 @@ def main(argv: list[str] | None = None) -> int:
     node = resolve_node()
 
     # ★起動ディレクトリ以下は無条件に許可する。どこで起動するかは利用者の責務。
-    #   宣言 ([[opencode.sandbox.project]]) は「機密でないパスを追加で開けたい」
-    #   ときにだけ要る。
+    #   追加の許可は <起動ディレクトリ>/.opencode/sandbox.toml で**要求**され、
+    #   人が承認して初めて効く。リポジトリは付与できない。
     workspace = Path.cwd().resolve()
+    # ★境界を組み立てる前に承認を通すこと。順序を逆にすると、未承認の要求で
+    #   境界を張ってから尋ねることになる。
+    ensure_trusted(workspace, args.trust)
     project = {
         "workspace": str(workspace),
         "config": build_boundary(sandbox, workspace),

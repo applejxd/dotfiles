@@ -16,6 +16,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
@@ -176,7 +178,7 @@ def test_model_is_absent_without_credentials(tmp_path):
     assert launcher["pick_model"](sandbox, project) is None
 
 
-def _sandbox_with_projects(tmp_path: Path) -> dict:
+def _base_sandbox() -> dict:
     return {
         "base": {
             "read": ["/opt/shared"],
@@ -189,94 +191,177 @@ def _sandbox_with_projects(tmp_path: Path) -> dict:
                 "allowLocalBinding": False,
             },
         },
-        "paths": {"data_home": ".opencode-sandbox/data", "db": ".opencode-sandbox/opencode.db"},
-        "projects": [
-            {
-                "path": str(tmp_path / "alpha"),
-                "read": ["/mnt/d/alpha"],
-                "write": [],
-                "network_allow": ["api.alpha.test"],
-            },
-            {
-                "path": str(tmp_path / "beta"),
-                "read": [],
-                "write": ["/mnt/e/beta-out"],
-                "network_allow": [],
-            },
-        ],
+        "paths": {
+            "data_home": ".opencode-sandbox/data",
+            "db": ".opencode-sandbox/opencode.db",
+        },
     }
+
+
+def _request(workspace: Path, body: str) -> Path:
+    path = workspace / ".opencode" / "sandbox.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+    return path
 
 
 def test_launch_directory_is_always_writable(tmp_path):
     """★起動ディレクトリ以下は無条件に許可する。
 
-    どこで起動するかは利用者の責務。宣言は追加の許可が要るときだけ。
+    どこで起動するかは利用者の責務。要求は追加の許可が要るときだけ。
     """
     launcher = _launcher()
-    sandbox = _sandbox_with_projects(tmp_path)
     where = tmp_path / "undeclared" / "deep"
-    filesystem = launcher["build_boundary"](sandbox, where)["filesystem"]
+    where.mkdir(parents=True)
+    filesystem = launcher["build_boundary"](_base_sandbox(), where)["filesystem"]
     assert str(where) in filesystem["allowWrite"]
     # R1: ワークスペースは allowRead にも完全一致で入れる
     assert str(where) in filesystem["allowRead"]
 
 
-def test_undeclared_location_gets_no_extras(tmp_path):
-    """宣言が無ければ追加はゼロ。共通分だけで動く。"""
+def test_no_request_means_no_extras(tmp_path):
+    """要求が無ければ追加はゼロ。共通分だけで動く。"""
     launcher = _launcher()
-    sandbox = _sandbox_with_projects(tmp_path)
-    boundary = launcher["build_boundary"](sandbox, tmp_path / "gamma")
-    assert "/mnt/d/alpha" not in boundary["filesystem"]["allowRead"]
-    assert "/mnt/e/beta-out" not in boundary["filesystem"]["allowWrite"]
+    (tmp_path / "gamma").mkdir()
+    boundary = launcher["build_boundary"](_base_sandbox(), tmp_path / "gamma")
+    assert boundary["filesystem"]["allowRead"] == [
+        str(tmp_path / "gamma"),
+        "/opt/shared",
+    ]
     assert boundary["network"]["allowedDomains"] == ["github.com"]
 
 
-def test_project_extras_do_not_leak_across_projects(tmp_path):
-    """★プロジェクト固有の追加が、別のプロジェクトへ漏れないこと。"""
+def test_request_adds_only_to_its_own_workspace(tmp_path):
+    """★要求は、それを置いたワークスペースにしか効かない。"""
     launcher = _launcher()
-    sandbox = _sandbox_with_projects(tmp_path)
+    alpha, beta = tmp_path / "alpha", tmp_path / "beta"
+    alpha.mkdir()
+    beta.mkdir()
+    _request(
+        alpha,
+        'read = ["/mnt/d/alpha"]\nnetwork_allow = ["api.alpha.test"]\n',
+    )
 
-    alpha = launcher["build_boundary"](sandbox, tmp_path / "alpha" / "sub")
-    assert "/mnt/d/alpha" in alpha["filesystem"]["allowRead"]
-    assert "/mnt/e/beta-out" not in alpha["filesystem"]["allowWrite"]
-    assert "api.alpha.test" in alpha["network"]["allowedDomains"]
+    got = launcher["build_boundary"](_base_sandbox(), alpha)
+    assert "/mnt/d/alpha" in got["filesystem"]["allowRead"]
+    assert "api.alpha.test" in got["network"]["allowedDomains"]
 
-    beta = launcher["build_boundary"](sandbox, tmp_path / "beta")
-    assert "/mnt/e/beta-out" in beta["filesystem"]["allowWrite"]
-    assert "/mnt/d/alpha" not in beta["filesystem"]["allowRead"]
-    assert "api.alpha.test" not in beta["network"]["allowedDomains"]
+    other = launcher["build_boundary"](_base_sandbox(), beta)
+    assert "/mnt/d/alpha" not in other["filesystem"]["allowRead"]
+    assert "api.alpha.test" not in other["network"]["allowedDomains"]
 
 
-def test_nested_declaration_inner_wins(tmp_path):
-    """入れ子の宣言では、より内側を選ぶ。"""
+def test_request_is_not_inherited_by_subdirectories(tmp_path):
+    """★親の要求で子を動かさない。
+
+    起動ディレクトリが境界なので、要求もその場のものだけを見る。
+    """
     launcher = _launcher()
-    outer, inner = tmp_path / "repo", tmp_path / "repo" / "pkg"
-    sandbox = {
-        "base": {
-            "read": [],
-            "write": [],
-            "deny_read": [],
-            "protected": [],
-            "network": {"allowedDomains": []},
-        },
-        "paths": {},
-        "projects": [
-            {"path": str(outer), "read": ["/outer"], "write": [], "network_allow": []},
-            {"path": str(inner), "read": ["/inner"], "write": [], "network_allow": []},
-        ],
-    }
-    allow_read = launcher["build_boundary"](sandbox, inner)["filesystem"]["allowRead"]
-    assert "/inner" in allow_read
+    outer = tmp_path / "repo"
+    inner = outer / "pkg"
+    inner.mkdir(parents=True)
+    _request(outer, 'read = ["/outer"]\n')
+    allow_read = launcher["build_boundary"](_base_sandbox(), inner)["filesystem"][
+        "allowRead"
+    ]
     assert "/outer" not in allow_read
+
+
+def test_request_paths_are_resolved(tmp_path):
+    """``~`` と相対パスは展開してから境界へ渡す。
+
+    人が承認するのは「何が開くか」なので、書かれた文字列のままにしない。
+    """
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    _request(ws, 'read = ["~/datasets", "sub/dir"]\n')
+    allow_read = launcher["build_boundary"](_base_sandbox(), ws)["filesystem"][
+        "allowRead"
+    ]
+    assert str(Path.home() / "datasets") in allow_read
+    assert str(ws / "sub/dir") in allow_read
+    assert "~/datasets" not in allow_read
 
 
 def test_protected_paths_are_workspace_relative(tmp_path):
     """保護対象は起動ディレクトリと組み合わせる。"""
     launcher = _launcher()
-    sandbox = _sandbox_with_projects(tmp_path)
     where = tmp_path / "gamma"
-    deny_write = launcher["build_boundary"](sandbox, where)["filesystem"]["denyWrite"]
+    where.mkdir()
+    deny_write = launcher["build_boundary"](_base_sandbox(), where)["filesystem"][
+        "denyWrite"
+    ]
     assert str(where / ".opencode") in deny_write
+
+
+def test_unapproved_request_refuses_to_start(tmp_path, monkeypatch):
+    """★承認していない要求では起動しない。
+
+    リポジトリは「要求」できるが「付与」はできない。
+    """
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    _request(ws, 'read = ["/mnt/d/alpha"]\n')
+    monkeypatch.setitem(launcher, "TRUST", tmp_path / "trusted.json")
+    monkeypatch.setattr(launcher["sys"].stdin, "isatty", lambda: False)
+    with pytest.raises(SystemExit):
+        launcher["ensure_trusted"](ws, False)
+
+
+def test_approval_is_recorded_outside_the_workspace(tmp_path, monkeypatch):
+    """承認の記録は境界の外に置く。内側から書けると自分で承認できる。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    _request(ws, 'read = ["/mnt/d/alpha"]\n')
+    trust = tmp_path / "state" / "trusted.json"
+    monkeypatch.setitem(launcher, "TRUST", trust)
+
+    launcher["ensure_trusted"](ws, True)  # --trust
+    assert ws not in trust.parents, "承認の記録がワークスペースの中にある"
+    # 2 回目は尋ねずに通る (端末が無くても落ちない)
+    monkeypatch.setattr(launcher["sys"].stdin, "isatty", lambda: False)
+    launcher["ensure_trusted"](ws, False)
+
+
+def test_changed_request_needs_reapproval(tmp_path, monkeypatch):
+    """★要求が変わったら承認をやり直す。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    _request(ws, 'read = ["/mnt/d/alpha"]\n')
+    monkeypatch.setitem(launcher, "TRUST", tmp_path / "trusted.json")
+    launcher["ensure_trusted"](ws, True)
+
+    _request(ws, 'read = ["/mnt/d/alpha", "/home/u/.ssh"]\n')
+    monkeypatch.setattr(launcher["sys"].stdin, "isatty", lambda: False)
+    with pytest.raises(SystemExit):
+        launcher["ensure_trusted"](ws, False)
+
+
+def test_unknown_keys_in_request_refuse_to_start(tmp_path):
+    """知らない項目は黙って無視しない。読み違えたまま承認させない。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    _request(ws, 'read = ["/mnt/d/alpha"]\nallow_all = true\n')
+    with pytest.raises(SystemExit):
+        launcher["read_request"](ws)
+
+
+def test_approval_prompt_shows_what_opens(tmp_path):
+    """承認画面に、実際に開くものが出ること。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    _request(ws, 'read = ["/mnt/d/alpha"]\nnetwork_allow = ["api.alpha.test"]\n')
+    text = launcher["describe_request"](ws, launcher["read_request"](ws))
+    assert "/mnt/d/alpha" in text
+    assert "api.alpha.test" in text
+    assert str(ws / ".opencode" / "sandbox.toml") in text
+
 
 
 def test_system_prompt_is_written(tmp_path):

@@ -1300,18 +1300,10 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
         "paths": {
             key: str(cfg[key]) for key in ("data_home", "db") if cfg.get(key)
         },
-        # 追加の許可が要るプロジェクトだけ宣言する。**共通分への上乗せ**。
-        # ★許可リストをプロジェクト側のファイルに置かないこと。
-        "projects": [
-            {
-                "path": expand_user(str(p["path"])),
-                "read": _uniq([expand_user(str(x)) for x in p.get("read") or []]),
-                "write": _uniq([expand_user(str(x)) for x in p.get("write") or []]),
-                "network_allow": _uniq([str(x) for x in p.get("network_allow") or []]),
-            }
-            for p in cfg.get("project") or []
-            if p.get("path")
-        ],
+        # ★プロジェクト個別の追加許可はここに持たない。
+        #   <起動ディレクトリ>/.opencode/sandbox.toml が「要求」し、ランチャーが
+        #   人の承認を取って初めて効く。複数 PC で宣言を持ち回れるようにするため。
+        #   see docs/change/0004-opencode-sandbox.md
     }
     # 隔離版の設定ディレクトリは**ワークスペースの外**。内側からは allowRead
     # だけなので、緩和設定を自分で広げられない。ランチャーが起動のたびに
