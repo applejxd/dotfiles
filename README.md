@@ -116,6 +116,24 @@ npm update -g '@opencode/cli'
 旧 mise 版（`mise install claude-code` / `copilot`）からの移行手順は
 [AI CLI の導入](docs/spec/structure.md#ai-cli-の導入)を参照してください。
 
+### oh-my-pi (`omp`) — 試用中
+
+Linux / WSL / macOS では `omp` も導入します（`curl -fsSL https://omp.sh/install | sh`）。
+Pi のフォークで、LSP 統合・DAP・subagent を持ちます。
+
+```bash
+omp        # 起動。境界 (ocs) の外で動く
+```
+
+**`omp` は `~/.claude` を設定探索ルートとして読むため、このリポジトリの
+skills 16 個が追加設定なしで使えます。**
+
+> **permission 機構を持たない設計です。** Pi 系は安全性より利便性を取る方針で、
+> 権限制御は拡張か外部の sandbox に委ねます。保護は「どこで起動するか」と
+> git の使い方に依存します。**対象リポジトリ直下で起動し、開始前に作業を
+> 区切ってコミットしてください。**
+> 経緯と代償の一覧は [CHG-0006](docs/change/0006-pi-harness-trial.md) にあります。
+
 ### Herdr と agent integration
 
 Windows native、Linux、WSL では、`chezmoi apply` 時に **mise** で Herdr を

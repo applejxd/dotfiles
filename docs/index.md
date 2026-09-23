@@ -63,7 +63,8 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
 | [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。段階 4 以降は CHG-0004 待ちで保留 | CHG-0004 の段階 5（層の縮小） |
 | [CHG-0004](change/0004-opencode-sandbox.md) | In progress | 段階 1〜3・5 完了。隔離版の permission は 225 → 168 件。段階 5 は当初案（`grep`/`glob` 無効化）を撤回。**起動ディレクトリの選び方で境界が消える穴が未対処** | B1（危険な起動ディレクトリを拒否する） |
-| [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。共通は 81% | A1（改名。生成物は変えない） |
+| [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。A1 完了 | A2 の要否（CHG-0006 の結論待ち） |
+| [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。`omp` は `~/.claude` を標準で読む | 段 2（普段の作業を 1 周通す） |
 
 ## 判断待ち・障害
 

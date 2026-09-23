@@ -33,4 +33,17 @@ else
     curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path
 fi
 
+# oh-my-pi (omp)。Pi のフォークで LSP / DAP / subagent を持つ。
+# ★境界 (ocs) の外で動く。permission 機構を持たない設計なので、
+#   保護は「どこで起動するか」と git の使い方に依存する。
+#   see docs/change/0006-pi-harness-trial.md
+# 設定は ~/.omp/agent/ だが、omp は ~/.claude も config root として読むため
+# 既存の skills (16 個) は追加設定なしで見える。
+if command -v omp >/dev/null 2>&1; then
+    echo "oh-my-pi は導入済みです"
+else
+    echo "oh-my-pi を導入します..."
+    curl -fsSL https://omp.sh/install | sh
+fi
+
 echo "✅ 完了：AI CLI を導入しました"

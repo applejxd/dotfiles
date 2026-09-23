@@ -118,12 +118,14 @@ def test_unix_agent_cli_installer_uses_official_sources(os_name):
     assert "https://claude.ai/install.sh" in source
     assert "https://gh.io/copilot-install" in source
     assert "https://opencode.ai/v2/install" in source
+    # oh-my-pi は試用中 (CHG-0006)。Unix のみで、Windows へは広げない
+    assert "https://omp.sh/install" in source
     # インストーラーに chezmoi 管理の rc ファイルを書き換えさせない
     assert "--no-modify-path" in source
     # Copilot の対話プロンプト (PATH 未登録時の rc 追記確認) に入らせない
     assert source.index('PATH="${HOME}/.local/bin') < source.index("copilot-install")
     # 既に入っている CLI は触らない
-    assert source.count("if command -v ") == 3
+    assert source.count("if command -v ") == 4
     assert "mise" not in source
 
 
