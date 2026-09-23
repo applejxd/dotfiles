@@ -19,20 +19,6 @@
 その移行先である `read` / `grep` / `glob` が、
 `read` の deny ルールと同じ保護を提供するかを確認した。
 
-> [!WARNING]
-> **訂正 (2026-09-23 / `v2.0.12`): 本書 §1〜4 の測り方は現行版では再現しない。**
->
-> 当時は permission を**プロジェクト側**（`.opencode/opencode.json`）に置いて
-> 測った。`v2.0.12` では**プロジェクト側の permission は一切効かない**
-> （[§5](#5-プロジェクト設定とグローバル設定の優劣2026-09-23-再測)で実測）。
-> 同じ手順を今なぞると deny がそもそも掛からず、`read` の基準すら成立しない。
->
-> `grep` / `glob` がバイパスするという**結論そのものは疑っていない**
-> （`read` に deny が掛かってさえいれば差は出る）。危ういのは**手順の
-> 再利用**で、本書を見て試験を組み直すときは permission を
-> グローバル側（`OPENCODE_CONFIG_DIR`）へ置くこと。§6 も置き場所を
-> 記録していないので、同じ疑いが掛かる。
-
 ## 1. 結論
 
 | 検証 | 結果 |
@@ -303,94 +289,77 @@ allow を絞ると確認総数は 959 → 990 と増えるが、
 誘導したいなら **既定 `ask` のままにして hook が `deny` へ変える**構成にする。
 この場合、プラグインのロード失敗時は `ask` に縮退する（安全側）。
 
-## 5. プロジェクト設定とグローバル設定の優劣（2026-09-23 再測）
-
-> **結論が 2026-09-22 の記録と逆になった。** 現行版（`v2.0.12`）では
-> **プロジェクト側の permission は一切効かない。**
-
-### 当時の記録（2026-09-22 / 版不明）
+## 5. プロジェクト設定がグローバルの deny を上書きする（2026-09-23 再確認）
 
 **`<project>/.opencode/opencode.json` に書いた permission が、グローバルの
-deny に勝つ**と記録していた。
+deny に勝つ。**
 
 ```jsonc
-// グローバル (~/.config/opencode/opencode.json)
-{ "permissions": [ { "action": "shell", "resource": "*",     "effect": "ask"  },
-                   { "action": "shell", "resource": "pip *", "effect": "deny" } ] }
+// グローバル (OPENCODE_CONFIG_DIR/opencode.json)
+{ "permission": { "edit": { "*": "allow", "*gdeny*": "deny", "*gonly*": "deny" } } }
 
 // <project>/.opencode/opencode.json
-{ "permissions": [ { "action": "shell", "resource": "*", "effect": "allow" } ] }
+{ "permission": { "edit": { "*gdeny*": "allow" } } }
 ```
 
 ```console
-$ pip --version
-pip 26.0.1 from ...        ← 実行された
+✗ Write gonly.txt failed   Permission denied: edit   ← グローバルだけの deny は効く
+← Write gdeny.txt          Created file successfully ← プロジェクトが勝った
 ```
 
-### 再測（2026-09-23 / `v2.0.12`）
+`gonly` が対照。**グローバルの deny 自体は効いている**うえで、
+プロジェクトが名指しした `gdeny` だけが通る。TUI とヘッドレス
+（`opencode run`）の両方で同じ結果。
 
-同じ条件では**再現しない**。9 種類を対照つきで測り、すべてグローバルが勝った。
+### 他の経路（2026-09-23 追加実測）
 
-| 経路 | プロジェクト側の書き方 | 結果 |
-| --- | --- | --- |
-| `.opencode/opencode.json` | `permission`（旧形式） | **効かない** |
-| `.opencode/opencode.json` | `permissions`（新形式・配列） | **効かない** |
-| `<root>/opencode.json` | `permission` | **効かない** |
-| `.opencode/opencode.json` | `agent.build.permission` | **効かない** |
-| `.opencode/opencode.json` | 競合の無い deny を単独で置く | **効かない** |
-| `.opencode/opencode.json` | `shell`（bash ツールのシェル） | **効かない** |
-| `.opencode/opencode.json` | `mcp`（ローカルサーバ＝プロセス起動） | **効かない** |
-| `.opencode/plugins/<名前>/index.js` | 自動探索 | **効かない** |
-| `.opencode/opencode.json` | `model`（無害な鍵） | **効かない** |
+| プロジェクト側に置いたもの | 結果 |
+| --- | --- |
+| `permission` / `permissions` | **グローバルの deny に勝つ** |
+| `experimental.policies` | **勝てない。グローバルが勝つ** |
+| `.opencode/plugins/<名前>/index.js` | **実行される**（任意コード実行） |
+| `mcp`（ローカルサーバ） | **プロセスが起動する** |
 
-5 行目と最終行が効いている。**グローバルが何も言っていない対象を
-プロジェクト側だけで指定しても通らない。** つまり「並び順で負ける」のではなく
-**規則ごと捨てられている**。無害な `model` すら効かないので、
-**プロジェクト設定文書がまるごと使われていない**と見てよい。
+**`policies` だけが保たれる。** 拒否時のメッセージで層を区別できる
+（`Permission denied: ...` か `Blocked by configuration policy` か）。
 
-設定自体は読み込まれている（`/api/config` に載り、`info.permissions` も
-解析済みで入っている）。効くのは実行時の評価に届いていないため。
-
-上流にも「プロジェクト側の `permissions` はエージェントに対して
-許可しない」旨のテストがあるとの回答を得た（DeepWiki 経由・未検証）。
-ただし `model` まで効かないのは**回帰の疑い**がある。
-
-> [!IMPORTANT]
-> **測ったのは `opencode run`（ヘッドレス）だけ。TUI は未検証。**
->
-> このリポジトリで TUI を使うと、プロジェクトの `AGENTS.md` は
-> **読み込まれている**（システムプロンプトに入る）。一方
-> `opencode run` では、対照つきで測っても読み込まれない。
-> **クライアントによって違う。**
->
-> permission の評価はサーバ側なので TUI でも同じはずだが、
-> **確かめていない**。TUI での挙動を前提にしないこと。
+plugin と mcp は permission より強い。**クローンしただけで任意のコードが
+動く**ので、permission の優劣より先に効く。plugin はサーバ起動時ではなく
+**セッション開始時**に読み込まれる。
 
 ### 含意
 
 | 影響 | 内容 |
 | --- | --- |
-| **外部リポジトリ** | `opencode run` では `.opencode/opencode.json` を含むリポジトリを開いても設定は効かない。TUI は未検証 |
-| **自分のリポジトリ** | 同上。プロジェクト単位の設定が使えないという**不便**の側面もある |
-| **既存の deny** | `**/.opencode/opencode.json` への write deny は**保険として残す** |
+| **外部リポジトリ** | `.opencode/` を含むリポジトリを開くだけで、permission は外れ、plugin と mcp は実行される |
+| **自分のリポジトリ** | そのファイルへの write deny が無いと、エージェントが自分で書いて権限を広げられる |
+
+現在の write deny は `~/.config/opencode/opencode.json` のみで、
+**`**/.opencode/opencode.json` は対象外**。ここを塞ぐ必要がある。
+
+ただし塞いでも「外部リポジトリに最初から入っている」場合は効かない
+（編集ではなく既存ファイルの読み込みなので）。
+
+**含意はもう一つある。** 設定で入れる保護は、設定で外せる。
+プロジェクト設定に勝てる層を置きたいなら、**OpenCode のプロセスごと
+隔離する**しかない（[sandbox の調査](sandbox.md)）。
+`policies` は勝つが、plugin と mcp を止められないので単独では足りない。
 
 > [!CAUTION]
-> **この挙動に寄りかからないこと。**
+> **試験の落とし穴: `PWD` を合わせること。**
 >
-> 一度逆転した挙動であり、こちらでは**機構を特定できていない**
-> （実装を読むと「読み込み順のまま連結 + `findLast`」で
-> プロジェクトが勝つはずだった。実測と合わない）。
-> 版が上がればまた変わりうる。
+> 2026-09-23 に一度「プロジェクト設定は何も効かない」と誤った結論を出した。
+> 原因は、子プロセスの `cwd` だけ変えて **`PWD` を呼び出し元のまま**に
+> していたこと。OpenCode は `PWD` を見てプロジェクトを決めるため、
+> 試験用ワークスペースは**プロジェクトですらなかった**。
 >
-> 設定で入れる保護は設定で外せる、という前提は据え置く。
-> プロジェクト設定に確実に勝つ層が要るなら、**OpenCode のプロセスごと
-> 隔離する**（[sandbox の調査](sandbox.md) /
-> [CHG-0004](../../../change/0004-opencode-sandbox.md)）。
-
-`experimental.policies` は別経路で、**グローバルが勝つ**（同日実測）。
-拒否時のメッセージが `Permission denied` ではなく
-`Blocked by configuration policy` になるので、どちらの層で止まったか
-区別できる。
+> 紛らわしいのは、`/api/config` には試験用ワークスペースの
+> `.opencode/opencode.json` が**読み込み済みとして並ぶ**こと。
+> 設定の探索と、セッションのプロジェクト解決が別の基準で動いている。
+> 「読み込まれている」ことを「効いている」ことの根拠にしない。
+>
+> 見分け方: エージェントに相対パスでファイルを作らせ、**どこに出来るか**を
+> 見る。意図した場所でなければ `PWD` がずれている。
 
 ## 6. 誘導先は本当に保護されているか（2026-09-22 実測）
 

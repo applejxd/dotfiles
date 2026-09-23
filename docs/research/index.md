@@ -43,7 +43,7 @@
 
 | 文書 | 内容 |
 | --- | --- |
-| [permission適用範囲の穴](opencode/permission/gaps.md) | grep/globがread denyを迂回する実測、カスタムツールのバイパス、プロジェクト設定とグローバル設定の優劣（v2.0.12 で逆転）、read ツールは deny を守る |
+| [permission適用範囲の穴](opencode/permission/gaps.md) | grep/globがread denyを迂回する実測、カスタムツールのバイパス、プロジェクト設定がグローバルに勝つ（policiesだけは勝てない・plugin/mcpは実行される）、read ツールは deny を守る |
 | [設計を縛る制約の総覧](opencode/permission/constraints.md) | CHG-0002の判断の根拠を1枚にまとめたもの。制約13項目、境界が無いこと、sandboxを採用しない理由、誘導対象の選定計測 |
 | [Anthropic Sandbox Runtime の適用可否](opencode/permission/sandbox-runtime.md) | srtは汎用で導入済み、denyReadは許可領域の内側にしか効かない、認証情報を落とすだけでgit push/ghが止まる、ドメイン制限とseccompの実測、chezmoi(snap)が動かない |
 | [shell allowの費用対効果とpluginゲート](opencode/permission/shell-allow-and-plugin-gate.md) | 実履歴1,247セグメントでのallow被覆率、静的パターンのクォート/変数回避、ask→allow引き上げの実測 |
