@@ -137,8 +137,8 @@ OpenCode を OS のアクセス制御で囲って起動する
 **何を守り、何を守らないか**を書く。
 
 ```bash
-opencode                # 境界の内側 (ocs) で起動する
-opencode --no-sandbox   # 素の OpenCode。境界の外での復旧・chezmoi apply 用
+ocs         # 境界の内側で起動する
+opencode    # 素の OpenCode（境界なし）
 ```
 
 ### 何を守り、何を守らないか

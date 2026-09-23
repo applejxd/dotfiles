@@ -201,20 +201,21 @@ npm install -g @anthropic-ai/sandbox-runtime
 
 ### 隔離版 OpenCode（Ubuntu / WSL）
 
-OS のアクセス制御で囲った OpenCode を起動します。
+OS のアクセス制御で囲った OpenCode を起動します。通常版と**併用**する段階で、
+既定はまだ通常版です（[CHG-0004](docs/change/0004-opencode-sandbox.md)）。
 
 ```bash
-opencode          # 境界の内側 (ocs) で起動する
-opencode --no-sandbox   # 素の OpenCode。境界の外での復旧・chezmoi apply 用
-ocs               # ocs を直接呼んでもよい
+ocs         # 境界の内側で起動する
+opencode    # 素の OpenCode（境界なし）
 ```
 
 `~/.local/bin` は PATH に入っているのでフルパスは要りません。
 中身は `opencode --standalone` を境界の内側で起動するラッパーです。
 `ocs` へ渡した引数はそのまま OpenCode へ届きます（`ocs --continue` など）。
 
-> `opencode` の関数は **`ocs` が無いとき素の OpenCode へ落としません**。
-> 落とすと「境界があるつもりで無い」状態になるためです。
+> **起動ディレクトリで境界が決まります。** その配下が読み書き可能になるので、
+> **作業対象のディレクトリで起動してください**。`cd ~ && ocs` するとホーム全体が
+> 対象になり、保護が実質無くなります（未対処）。
 
 起動前に境界チェックが走り、**1 つでも通ってはいけない操作が通ったら起動しません**。
 同じ入力での合格は 24 時間だけ再利用します（`--recheck` でやり直し）。

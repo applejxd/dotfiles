@@ -307,23 +307,3 @@ function runcpp() {
     shift
     ./"$fname" "$@"
 }
-
-# OpenCode は既定で境界の内側 (ocs) から起動する。
-# 素の OpenCode が要るとき (境界の外での復旧・chezmoi apply など) は
-# --no-sandbox を**明示**する。
-#
-# ★fail-open にしないこと。ocs が無い / 起動を断ったときに素の opencode へ
-#   落としてはいけない。落とすと「境界があるつもりで無い」状態になる。
-# see docs/change/0004-opencode-sandbox.md
-function opencode() {
-    if [ "${1:-}" = "--no-sandbox" ]; then
-        shift
-        command opencode "$@"
-        return
-    fi
-    if ! command -v ocs >/dev/null 2>&1; then
-        echo "opencode: ocs が無い。素で起動するなら opencode --no-sandbox" >&2
-        return 1
-    fi
-    ocs "$@"
-}
