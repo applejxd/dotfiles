@@ -134,7 +134,7 @@ OpenCode を OS のアクセス制御で囲って起動する
 （[CHG-0004](../change/0004-opencode-sandbox.md)）。通常版と**併用**する段階。
 
 ```bash
-~/.local/bin/opencode-sandboxed
+ocs
 ```
 
 ### 何を守り、何を守らないか

@@ -29,7 +29,7 @@ from pathlib import Path
 HOME = Path.home()
 RULES = HOME / ".config/opencode/guide-plugin/rules.json"
 OPENCODE = HOME / ".opencode/bin/opencode"
-CHECK = HOME / ".local/bin/opencode-boundary-check"
+CHECK = HOME / ".local/bin/ocs-boundary-check"
 # 隔離用 DB へ引き継ぐもの。migration を消すとスキーマ管理が壊れる。
 DB_KEEP = ("credential", "account", "account_state", "control_account", "migration")
 

@@ -712,7 +712,7 @@ network_allow = ["api.example.com"]
 「何が開くか」であって、書かれた文字列ではない。
 
 ```console
-$ opencode-sandboxed
+$ ocs
 このリポジトリは境界の外への追加の許可を要求しています。
   /home/u/src/example/.opencode/sandbox.toml
 
@@ -1005,7 +1005,7 @@ fine-grained PAT、読み取り専用 deploy key、権限を絞った GitHub App
 
 **実行時に切り替えられること自体が案 B を不採用にした理由**でもある
 （コマンド文字列で sandbox を解除する構造は認可として不適切）。
-現実的な切り替えは起動時の選択（`opencode` / `opencode-sandboxed`）。
+現実的な切り替えは起動時の選択（`opencode` / `ocs`）。
 
 決着済み（[調査記録](../research/opencode/permission/sandbox-runtime.md)）:
 

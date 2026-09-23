@@ -205,8 +205,11 @@ OS のアクセス制御で囲った OpenCode を起動します。通常版と*
 既定はまだ通常版です（[CHG-0004](docs/change/0004-opencode-sandbox.md)）。
 
 ```bash
-~/.local/bin/opencode-sandboxed
+ocs
 ```
+
+`~/.local/bin` は PATH に入っているのでフルパスは要りません。
+中身は `opencode --standalone` を境界の内側で起動するラッパーです。
 
 起動前に境界チェックが走り、**1 つでも通ってはいけない操作が通ったら起動しません**。
 未コミット・未追跡の変更があるときも止まります（`--allow-dirty` で承知のうえ続行）。

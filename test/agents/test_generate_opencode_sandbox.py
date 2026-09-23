@@ -223,7 +223,7 @@ def test_boundary_check_handles_nonexistent_protected_paths():
     存在を前提にすると「検査できない」と誤判定し、境界は正常なのに
     起動できなくなる (実地で踏んだ)。
     """
-    check = ROOT / "home" / "dot_local" / "bin" / "executable_opencode-boundary-check"
+    check = ROOT / "home" / "dot_local" / "bin" / "executable_ocs-boundary-check"
     body = check.read_text(encoding="utf-8")
     assert "保護対象を作れない" in body, "存在しない保護対象を検査していない"
     assert "保護対象が見当たらず検査できない" not in body, "存在を前提にした判定が残っている"

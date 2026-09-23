@@ -27,3 +27,8 @@
 # NOTE: __pycache__ は .chezmoiignore で管理対象外にしているため、ここに書いても
 # 削除されない。古い .pyc が残って困る場合は手で削除する
 # (`rm -rf ~/.config/agents/__pycache__`)。
+
+# 2026-09: opencode-sandboxed -> ocs に改名 (毎回打つコマンドなので短くした)。
+# 対になる境界チェックも ocs-boundary-check へ揃えた。
+.local/bin/opencode-sandboxed
+.local/bin/opencode-boundary-check

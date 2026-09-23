@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 import generate as gen  # noqa: E402
 from agents_common import load_common  # noqa: E402
 
-LAUNCHER = ROOT / "home" / "dot_local" / "bin" / "executable_opencode-sandboxed"
+LAUNCHER = ROOT / "home" / "dot_local" / "bin" / "executable_ocs"
 COMMON = load_common()
 
 
