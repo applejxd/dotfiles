@@ -222,6 +222,46 @@ def test_launch_directory_is_always_writable(tmp_path):
     assert str(where) in filesystem["allowRead"]
 
 
+@pytest.mark.parametrize(
+    "where",
+    ["/home/u", "/home", "/", "/tmp", "/mnt"],
+    ids=["deny_read そのもの", "その祖先", "ルート", "/tmp", "/mnt"],
+)
+def test_workspace_that_cancels_deny_read_is_rejected(where):
+    """★deny_read を打ち消す場所では起動しない。
+
+    R3 で allowRead が denyRead に勝つため、deny_read の項目そのものか
+    その祖先で起動すると、その deny が丸ごと無効になる。
+    """
+    launcher = _launcher()
+    with pytest.raises(SystemExit):
+        launcher["reject_unsafe_workspace"](_base_sandbox(), Path(where))
+
+
+@pytest.mark.parametrize(
+    "where",
+    ["/home/u/work/repo", "/tmp/scratch", "/opt/shared/x"],
+    ids=["ホーム配下", "/tmp 配下", "deny_read の外"],
+)
+def test_workspace_below_deny_read_is_allowed(where):
+    """子孫での起動は安全なので通す。/tmp/x は /tmp の deny を壊さない。"""
+    launcher = _launcher()
+    launcher["reject_unsafe_workspace"](_base_sandbox(), Path(where))
+
+
+def test_unsafe_workspace_is_rejected_before_boundary_is_built(tmp_path, monkeypatch):
+    """★拒否は境界を組み立てる前に起きること。
+
+    順序が逆だと、打ち消された境界を一度作ってから捨てることになる。
+    """
+    launcher = _launcher()
+    built = []
+    monkeypatch.setitem(launcher, "build_boundary", lambda *a: built.append(a))
+    with pytest.raises(SystemExit):
+        launcher["reject_unsafe_workspace"](_base_sandbox(), Path("/home/u"))
+    assert built == []
+
+
 def test_no_request_means_no_extras(tmp_path):
     """要求が無ければ追加はゼロ。共通分だけで動く。"""
     launcher = _launcher()

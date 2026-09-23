@@ -110,6 +110,26 @@ def git_common_dir(workspace: Path) -> Path | None:
     return common
 
 
+def reject_unsafe_workspace(sandbox: dict, workspace: Path) -> None:
+    """``denyRead`` を打ち消してしまう起動ディレクトリを拒否する。
+
+    ★R3: ``allowRead`` は ``denyRead`` に勝つ。起動ディレクトリは無条件に
+    ``allowRead`` へ入るので、``denyRead`` の項目**そのもの**か、その**祖先**で
+    起動すると、その deny が丸ごと無効になる。``cd ~ && ocs`` でホーム全体が
+    読み書き可能になり、``~/.ssh`` まで見えるのがこれ (実測で再現)。
+
+    子孫での起動は安全なので許す (``/tmp/x`` は ``/tmp`` の deny を壊さない)。
+    """
+    denied = [Path(p) for p in sandbox["base"].get("deny_read", [])]
+    for target in denied:
+        if workspace == target or target.is_relative_to(workspace):
+            die(
+                f"保護対象を打ち消す場所で起動しようとした: {workspace}",
+                f"ここで起動すると {target} の denyRead が無効になる。"
+                "作業対象のディレクトリへ cd してから起動する。",
+            )
+
+
 def build_boundary(sandbox: dict, workspace: Path) -> dict:
     """起動ディレクトリを書き込み可能領域として境界を組み立てる。
 
@@ -832,6 +852,8 @@ def main(argv: list[str] | None = None) -> int:
     #   追加の許可は <起動ディレクトリ>/.opencode/sandbox.toml で**要求**され、
     #   人が承認して初めて効く。リポジトリは付与できない。
     workspace = Path.cwd().resolve()
+    # ★境界を組み立てる前に、境界を無意味にする起動ディレクトリを弾く。
+    reject_unsafe_workspace(sandbox, workspace)
     # ★境界を組み立てる前に承認を通すこと。順序を逆にすると、未承認の要求で
     #   境界を張ってから尋ねることになる。
     ensure_trusted(workspace, args.trust)

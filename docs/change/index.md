@@ -43,7 +43,8 @@
 | --- | --- | --- | --- | --- | --- |
 | [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | 圧縮後、作業再開前に checkpoint が届くか | P0-3 の実測 | 2026-09-19 |
 | [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | In progress | 段階 3 まで配備済み。段階 4 以降は CHG-0004 の結果待ちで保留 | CHG-0004 の段階 2（サービスを包めるか） | 2026-09-22 |
-| [0004](0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | In progress | 段階 1 完了。固定費 44 ms でゲート通過。対処後の自動化率は 98.7% の見込み | 段階 2（plugin が shell を `srt` で包む） | 2026-09-22 |
+| [0004](0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | In progress | 起動ディレクトリの選び方で境界が消える（`cd ~ && ocs` を実測）。外部レビューの欠陥 5 件が未対処 | B1（危険な起動ディレクトリを拒否する） | 2026-09-23 |
+| [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | In progress | 共通は 81%。`claude_` 接頭辞なのに OpenCode へも届くキーが 5 種 85 件ある | A1（改名。`chezmoi diff` が空であること） | 2026-09-23 |
 
 ## 保留
 
