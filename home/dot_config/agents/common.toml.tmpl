@@ -839,6 +839,11 @@ read = [
   "~/.config/shell",
   "~/.config/mise",
   "~/.config/chezmoi",
+  # skill 置き場。deny_read の ~ に埋もれて **skill が 1 つも読めなくなる**
+  # (実測で確認した)。read のみなので境界は弱まらない。Claude Code も
+  # "Personal skill roots" としてこの 2 つを read-only で開けている。
+  "~/.claude/skills",
+  "~/.agents/skills",
 ]
 
 # ★R1: 根ごと指定する。サブディレクトリ指定は効かない。

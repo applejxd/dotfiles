@@ -20,10 +20,12 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HOME = Path.home()
@@ -81,6 +83,33 @@ def project_extras(sandbox: dict, workspace: Path) -> dict:
     return request["extras"]
 
 
+def git_common_dir(workspace: Path) -> Path | None:
+    """linked worktree のとき、共有 ``.git`` の実体を返す。
+
+    worktree の ``.git`` は「外のディレクトリを指すファイル」なので、
+    起動ディレクトリ以下しか開いていないと **``git status`` すら通らない**
+    (``fatal: not a git repository``。実測)。
+
+    ★ここは境界の外で走る。``/usr/bin/git`` を絶対パスで呼ぶ。
+    """
+    done = subprocess.run(  # noqa: S603
+        ["/usr/bin/git", "-C", str(workspace), "rev-parse", "--path-format=absolute",
+         "--git-common-dir"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if done.returncode != 0:
+        return None
+    common = Path(done.stdout.strip())
+    if not common.is_dir():
+        return None
+    # 通常のリポジトリ (共有 .git が起動ディレクトリの中) なら足すものは無い
+    if common == workspace or workspace in common.parents:
+        return None
+    return common
+
+
 def build_boundary(sandbox: dict, workspace: Path) -> dict:
     """起動ディレクトリを書き込み可能領域として境界を組み立てる。
 
@@ -91,12 +120,20 @@ def build_boundary(sandbox: dict, workspace: Path) -> dict:
     extras = project_extras(sandbox, workspace)
     read = [*base.get("read", []), *extras.get("read", [])]
     write = [*base.get("write", []), *extras.get("write", [])]
+    protected = [str(workspace / rel) for rel in base.get("protected", [])]
     network = dict(base["network"])
     if extras.get("network_allow"):
         network["allowedDomains"] = [
             *network.get("allowedDomains", []),
             *extras["network_allow"],
         ]
+    common = git_common_dir(workspace)
+    if common:
+        # commit / branch 操作に共有 .git への書き込みが要る。
+        # ★hooks と config は除く。ここへ書けると**ホストで実行される
+        #   コード**を仕込めてしまう (Claude Code も同じ 2 つを denyWrite にする)。
+        write = [*write, str(common)]
+        protected = [*protected, str(common / "hooks"), str(common / "config")]
     return {
         "network": network,
         "filesystem": {
@@ -105,7 +142,7 @@ def build_boundary(sandbox: dict, workspace: Path) -> dict:
             #   入れる。祖先を allowRead に載せると書き込みが無効化される。
             "allowRead": _uniq([str(workspace), *read]),
             "allowWrite": _uniq([str(workspace), *write]),
-            "denyWrite": [str(workspace / rel) for rel in base.get("protected", [])],
+            "denyWrite": protected,
         },
     }
 
@@ -119,7 +156,22 @@ def _uniq(values: list[str]) -> list[str]:
 
 REQUEST_REL = ".opencode/sandbox.toml"
 TRUST = HOME / ".local/state/opencode-sandbox/trusted.json"
+CHECKED = HOME / ".local/state/opencode-sandbox/checked.json"
+# 起動前の退避先。★境界の内側から触れない場所に置くこと。
+#   内側からの書き込みは成功したように見えてホストへ届かない (R2。実測済み)。
+BACKUPS = HOME / ".local/state/opencode-sandbox/backups"
+# 退避の上限。★緩める方向は容量に直結する。
+BACKUP_KEEP = 5  # 起動ディレクトリごとの世代数
+BACKUP_MAX_BYTES = 128 * 1024 * 1024  # 起動ディレクトリごとの合計
+BACKUP_TOTAL_MAX_BYTES = 1024 * 1024 * 1024  # 全体の合計 (プロジェクト数に依らず)
+BACKUP_MAX_AGE_DAYS = 30  # 触らなくなったプロジェクトの分を捨てる
+# ★これを超える作業ツリーは退避しない。**ハッシュする前に**測ること。
+#   作ってから間引く設計だと、巨大なリポジトリで .git を肥大させたうえに
+#   時間を使ってしまう (実測: 追跡対象だけで 84 GB のリポジトリがあった)。
+BACKUP_MAX_SOURCE_BYTES = 256 * 1024 * 1024
 REQUEST_KEYS = ("read", "write", "network_allow")
+# 合格の再利用期間。★短くする方向にしか動かさないこと。
+CHECK_TTL_SECONDS = 24 * 60 * 60
 
 
 def _resolve_requested(value: str, workspace: Path) -> str:
@@ -253,6 +305,54 @@ def ensure_trusted(workspace: Path, assume_yes: bool) -> None:
     save_trust(workspace, request["digest"])
 
 
+def check_digest(sandbox: dict, boundary: dict) -> str:
+    """境界チェックの結果を再利用してよい範囲を表すハッシュ。
+
+    **判定に効く入力を全て混ぜる。** どれかが変われば再検査になる。
+    ここに混ぜ忘れたものは「変わっても古い合格が使われる」ことになる。
+    """
+    digest = hashlib.sha256()
+    digest.update(json.dumps(boundary, sort_keys=True).encode("utf-8"))
+    for path in (Path(sandbox["runtime_path"]), CHECK, OPENCODE):
+        digest.update(str(path).encode("utf-8"))
+        try:
+            # opencode は 200 MiB あるので中身ではなく大きさと更新時刻で見る
+            stat = path.stat()
+            digest.update(f"{stat.st_size}:{stat.st_mtime_ns}".encode())
+        except OSError:
+            digest.update(b"missing")
+    return digest.hexdigest()
+
+
+def check_is_fresh(digest: str) -> bool:
+    """同じ入力での合格が、まだ有効期間の内にあるか。"""
+    if not CHECKED.is_file():
+        return False
+    try:
+        record = json.loads(CHECKED.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(record, dict) or record.get("digest") != digest:
+        return False
+    from datetime import datetime, timezone
+
+    try:
+        passed = datetime.fromisoformat(str(record.get("passed")))
+    except ValueError:
+        return False
+    age = (datetime.now(timezone.utc) - passed).total_seconds()
+    # 時計が巻き戻っていたら再検査する (age < 0 を合格にしない)
+    return 0 <= age < CHECK_TTL_SECONDS
+
+
+def save_check(digest: str) -> None:
+    CHECKED.parent.mkdir(parents=True, exist_ok=True)
+    CHECKED.write_text(
+        json.dumps({"digest": digest, "passed": _now()}, indent=2), encoding="utf-8"
+    )
+    CHECKED.chmod(0o600)
+
+
 def workspace_paths(sandbox: dict, workspace: Path) -> dict[str, str]:
     """安全網と DB の置き場。起動ディレクトリごとに分かれる。"""
     return {
@@ -260,43 +360,211 @@ def workspace_paths(sandbox: dict, workspace: Path) -> dict[str, str]:
     }
 
 
-def require_clean(workspace: Path, allow_dirty: bool) -> None:
-    """未保存の変更を境界へ持ち込んでいないか確かめる。
-
-    **これは保全ではない。** 境界の内側からローカルの履歴も消せる。
-    独立した復旧元と言えるのは信頼済みリモートへ push 済みのものだけで、
-    その復旧にもリモート側の保持と可用性が要る。
-    see docs/change/0004-opencode-sandbox.md
-    """
-    if allow_dirty:
-        return
-    done = subprocess.run(  # noqa: S603
-        ["/usr/bin/git", "-C", str(workspace), "status", "--porcelain"],
+def _git(workspace: Path, *args: str, index: Path | None = None):
+    """境界の外で git を動かす。★実体を絶対パスで呼ぶ (PATH 差し替え対策)。"""
+    env = dict(os.environ)
+    if index is not None:
+        env["GIT_INDEX_FILE"] = str(index)
+    return subprocess.run(  # noqa: S603
+        ["/usr/bin/git", "-C", str(workspace), *args],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
-    if done.returncode != 0:
+
+
+def backup_key(workspace: Path) -> str:
+    """退避先のディレクトリ名。人が読める名前 + 衝突しない識別子。"""
+    digest = hashlib.sha256(str(workspace).encode("utf-8")).hexdigest()[:12]
+    return f"{workspace.name}-{digest}"
+
+
+def measure_source(toplevel: Path, rel: Path) -> int | None:
+    """退避対象の合計サイズ。上限を超えたら打ち切って ``None`` を返す。
+
+    ★``git add`` **の前に**測る。作ってから間引くと、巨大なリポジトリでは
+      84 GB をハッシュして ``.git/objects`` を肥大させたうえで捨てることに
+      なる。一覧は安い（実測: 264 ファイル / 84 GB を 0.04 秒）。
+    """
+    listed = _git(
+        toplevel, "ls-files", "-c", "-o", "--exclude-standard", "-z", "--", rel.as_posix()
+    )
+    if listed.returncode != 0:
+        return 0
+    total = 0
+    for name in listed.stdout.split("\0"):
+        if not name:
+            continue
+        try:
+            total += (toplevel / name).stat().st_size
+        except OSError:
+            # 消えた・辿れない分は数えない (測れないものは退避もできない)
+            continue
+        if total > BACKUP_MAX_SOURCE_BYTES:
+            return None
+    return total
+
+
+def git_toplevel(workspace: Path) -> Path | None:
+    """workspace を含むリポジトリの根。Git リポジトリでなければ ``None``。"""
+    done = _git(workspace, "rev-parse", "--show-toplevel")
+    return Path(done.stdout.strip()) if done.returncode == 0 else None
+
+
+def stage_worktree(toplevel: Path, rel: Path, index: Path) -> str | None:
+    """起動ディレクトリ以下の中身を表す tree を作り、その SHA を返す。
+
+    ★作業ツリーには**一切触らない**。``git stash`` とは別物で、一時 index へ
+      ``add`` して tree を書くだけ。再開時に変更が巻き戻ることはない。
+    ★``git add -A`` なので ``.gitignore`` が効く。``.opencode-sandbox/`` の
+      DB などは入らない。
+    ★**git は親を遡る。** サブディレクトリで起動しても親リポジトリ全体を
+      掴まないよう、パススペックで起動ディレクトリ以下に限る。境界が書き込みを
+      許す範囲と揃える。
+
+    退避するものが無ければ ``None``。
+    """
+    # 起動ディレクトリごと .gitignore されているなら退避するものは無い
+    if rel != Path(".") and _git(toplevel, "check-ignore", "-q", rel.as_posix()).returncode == 0:
+        return None
+
+    # ★plumbing は **toplevel から** 走らせる。サブディレクトリから走らせると
+    #   index に載るパスの基準がずれ、親のファイルが tree から落ちる (実測)。
+    head = _git(toplevel, "rev-parse", "--verify", "HEAD^{tree}")
+    if head.returncode == 0:
+        read = _git(toplevel, "read-tree", head.stdout.strip(), index=index)
+        if read.returncode != 0:
+            die(f"作業ツリーを退避できない (read-tree): {read.stderr.strip()}")
+    added = _git(toplevel, "add", "-A", "--", rel.as_posix(), index=index)
+    if added.returncode != 0:
+        die(f"作業ツリーを退避できない (add): {added.stderr.strip()}")
+    written = _git(toplevel, "write-tree", index=index)
+    if written.returncode != 0:
+        die(f"作業ツリーを退避できない (write-tree): {written.stderr.strip()}")
+
+    tree = _narrow(toplevel, written.stdout.strip(), rel)
+    if tree is None:
+        # 起動ディレクトリに追跡対象が 1 つも無い
+        return None
+    if head.returncode == 0 and tree == _narrow(toplevel, head.stdout.strip(), rel):
+        # HEAD と同じ内容 = 未コミットの変更が無い
+        return None
+    return tree
+
+
+def _narrow(toplevel: Path, tree: str, rel: Path) -> str | None:
+    """tree を起動ディレクトリ以下へ絞り込む。該当が無ければ ``None``。"""
+    if rel == Path("."):
+        return tree
+    found = _git(toplevel, "rev-parse", "--verify", f"{tree}:{rel.as_posix()}")
+    return found.stdout.strip() if found.returncode == 0 else None
+
+
+def _prune(paths, keep: int | None, max_bytes: int) -> None:
+    """新しい順に残し、件数か合計サイズを超えた分を落とす。"""
+    files = sorted(
+        (p for p in paths if p.is_file()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    total = 0
+    for position, path in enumerate(files):
+        total += path.stat().st_size
+        if (keep is not None and position >= keep) or total > max_bytes:
+            path.unlink(missing_ok=True)
+
+
+def prune_backups(directory: Path) -> None:
+    """古い退避を落とす。★ここを緩めると容量に直結する。
+
+    起動ディレクトリごとの上限だけでは、**プロジェクトが増えるほど全体が
+    青天井になる**。全体の合計と期限も併せて押さえる。
+    """
+    cutoff = time.time() - BACKUP_MAX_AGE_DAYS * 86400
+    for path in BACKUPS.rglob("*.tgz"):
+        if path.is_file() and path.stat().st_mtime < cutoff:
+            path.unlink(missing_ok=True)
+    _prune(directory.glob("*.tgz"), BACKUP_KEEP, BACKUP_MAX_BYTES)
+    _prune(BACKUPS.rglob("*.tgz"), None, BACKUP_TOTAL_MAX_BYTES)
+    # 空になった置き場を片付ける (触らなくなったプロジェクトの分)
+    for child in sorted(BACKUPS.glob("*")):
+        if child.is_dir() and not any(child.iterdir()):
+            child.rmdir()
+
+
+def backup_worktree(workspace: Path, skip: bool) -> None:
+    """起動前に作業ツリーを境界の外へ退避する。
+
+    境界はワークスペースの**中**を守らない。未コミットの変更は snapshot でも
+    git でも戻せないことがあるので、起動のたびに複製を外へ出しておく。
+
+    ★退避先は境界の内側から触れない (``~/.local/state`` は deny_read の ``~``
+      に入り、allowWrite にも無い)。内側からの書き込みは成功したように見えて
+      ホストへ届かない (R2。実測で確認済み)。
+    ★同じ内容なら同じ tree SHA になるので、変化が無い限り増えない。
+    ★**退避できなかったら起動しない。** 「退避したつもり」で作業を始めるのが
+      一番危ない。
+    """
+    if skip:
+        return
+    toplevel = git_toplevel(workspace)
+    if toplevel is None:
         # Git リポジトリでないときは止めない（起動場所は利用者の責務）。
-        # ただし snapshot は Git リポジトリでしか効かないので、復旧手段が
-        # 無いことは伝える。
+        # ただし退避も snapshot も効かないので、戻せないことは伝える。
         print(
-            "注意: ここは Git リポジトリではない。snapshot による取り消しが効かず、"
+            "注意: ここは Git リポジトリではない。退避も snapshot も効かず、"
             "壊した作業は戻せない",
             file=sys.stderr,
         )
         return
-    changes = [line for line in done.stdout.splitlines() if line.strip()]
-    if changes:
-        print(f"未保存の変更が {len(changes)} 件ある:", file=sys.stderr)
-        for line in changes[:10]:
-            print(f"  {line}", file=sys.stderr)
-        if len(changes) > 10:
-            print(f"  … 他 {len(changes) - 10} 件", file=sys.stderr)
+    rel = workspace.relative_to(toplevel)
+
+    # ★ハッシュする前に大きさを見る。超えるなら退避も起動もしない。
+    if measure_source(toplevel, rel) is None:
         die(
-            "境界の内側からは、これらもローカルの履歴も失われうる",
-            "コミット (できれば push) するか、承知のうえで --allow-dirty を付ける",
+            f"退避対象が大きすぎる (> {BACKUP_MAX_SOURCE_BYTES // (1024 * 1024)} MiB): {workspace}",
+            "退避すると .git が肥大し時間も掛かる。"
+            "承知のうえで退避せず起動するなら --no-backup",
         )
+
+    index = Path(tempfile.mkstemp(prefix="ocs-index-")[1])
+    try:
+        tree = stage_worktree(toplevel, rel, index)
+    finally:
+        index.unlink(missing_ok=True)
+    if tree is None:
+        return
+
+    directory = BACKUPS / backup_key(workspace)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        die(
+            f"退避先を作れない: {exc}",
+            "退避せずに起動すると、壊した未コミットの変更は戻せない。"
+            "承知のうえで進むなら --no-backup",
+        )
+    # ★内容が同じなら作り直さない。中断と再開を繰り返しても溜まらない。
+    if any(directory.glob(f"*-{tree[:12]}.tgz")):
+        return
+
+    stamp = _now().replace(":", "").replace("-", "")
+    target = directory / f"{stamp}-{tree[:12]}.tgz"
+    done = _git(toplevel, "archive", "--format=tar.gz", "-o", str(target), tree)
+    if done.returncode != 0 or not target.is_file():
+        target.unlink(missing_ok=True)
+        die(
+            f"作業ツリーを退避できない: {done.stderr.strip()}",
+            "退避せずに起動すると、壊した未コミットの変更は戻せない。"
+            "承知のうえで進むなら --no-backup",
+        )
+    try:
+        target.chmod(0o600)
+        prune_backups(directory)
+    except OSError as exc:
+        die(f"退避の後始末に失敗した: {exc}")
+    print(f"作業ツリーを退避した: {target}", file=sys.stderr)
 
 
 def seed_db(db: Path) -> None:
@@ -348,6 +616,33 @@ def inner_env(sandbox: dict, project: dict) -> dict[str, str]:
     return env
 
 
+HOST_CONFIG = HOME / ".config/opencode/opencode.json"
+# 通常版から引き継ぐキー。★見た目と操作感だけ。許可リストで持つこと。
+#   permissions / plugins / mcp / agent / experimental / tools を足すと、
+#   通常版の設定から隔離版の緩和を決められるようになる (境界の意味が消える)。
+INHERIT_KEYS = ("theme", "keybinds", "username", "layout", "model", "small_model")
+
+
+def inherit_ui(config: dict) -> dict:
+    """通常版で選んだ見た目・操作感を、まだ無いキーにだけ取り込む。
+
+    隔離版を使い始めるたびにテーマとキーバインドを選び直す羽目になるのを
+    防ぐだけのもの。**既にある値は上書きしない**（隔離版での選択が優先）。
+    """
+    if not HOST_CONFIG.is_file():
+        return config
+    try:
+        host = json.loads(HOST_CONFIG.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return config
+    if not isinstance(host, dict):
+        return config
+    for key in INHERIT_KEYS:
+        if key in host and key not in config:
+            config[key] = host[key]
+    return config
+
+
 def write_isolated_config(sandbox: dict, project: dict) -> None:
     """隔離版の設定を ``config_dir`` へ書き出す。
 
@@ -394,6 +689,7 @@ def write_isolated_config(sandbox: dict, project: dict) -> None:
     model = pick_model(sandbox, project)
     if model and "model" not in config:
         config["model"] = model
+    config = inherit_ui(config)
 
     target.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -430,6 +726,19 @@ def pick_model(sandbox: dict, project: dict) -> str | None:
     return None
 
 
+def inner_command(passthrough: list[str]) -> str:
+    """境界の内側で走らせるコマンド文字列を組み立てる。
+
+    ★``srt -c`` はコマンド文字列を 1 個しか取らない。追加の引数を後ろへ
+      並べても srt の位置引数になり、**エラーも出さずに捨てられる**
+      (``ocs --continue`` が素の起動になっていた)。渡したい引数は
+      必ずこの文字列の中に入れる。
+
+    ``-c`` は「エスケープしない sh -c」なので、こちらで引用符を付ける。
+    """
+    return shlex.join([str(OPENCODE), "--standalone", *passthrough])
+
+
 def resolve_node() -> str:
     """node の実体を返す。**shim を使わない。**
 
@@ -453,14 +762,57 @@ def resolve_node() -> str:
     raise AssertionError  # die は必ず終了する
 
 
+def run_check(node: str, runtime: Path, boundary: str, project: dict, env: dict) -> None:
+    """境界チェックを 1 回走らせる。不合格なら**起動しない**。"""
+    allowed = project["config"]["network"].get("allowedDomains") or []
+    check_env = {
+        **env,
+        "BOUNDARY_WORKSPACE": project["workspace"],
+        # 境界の内側では $HOME が差し替わるので、実ホームは別に渡す
+        "HOME_REAL": str(HOME),
+        "BOUNDARY_PROTECTED": " ".join(
+            project["config"]["filesystem"].get("denyWrite") or []
+        ),
+        # 拒否と不通を区別するための対照
+        "BOUNDARY_ALLOWED_HOST": next(
+            (d for d in allowed if not d.startswith("*")), "github.com"
+        ),
+        "BOUNDARY_DENIED_HOST": "example.com",
+    }
+    # ★パイプへ通さないこと。終了コードが置き換わり失敗を取りこぼす。
+    # ★止まったら起動しない。判定できない ≠ 合格。
+    try:
+        done = subprocess.run(  # noqa: S603
+            [node, str(runtime), "-s", boundary, "-c", f"sh {CHECK}"],
+            env=check_env,
+            check=False,
+            timeout=180,
+        )
+    except subprocess.TimeoutExpired:
+        die("境界チェックが時間内に終わらなかった", "判定できないので起動しない")
+    if done.returncode != 0:
+        die("起動時の境界チェックが不合格", "上の ★NG を見て設定を直す")
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog=(
+            "ここで解釈しない引数は opencode へそのまま渡す。"
+            "例: ocs --continue / ocs --session ses_xxx"
+        ),
+    )
     parser.add_argument(
-        "--allow-dirty",
+        "--no-backup",
         action="store_true",
-        help="未保存の変更があっても起動する (失いうることを承知のうえで)",
+        help="起動前の退避をしない (壊した未コミットの変更は戻せなくなる)",
     )
     parser.add_argument("--skip-check", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--recheck",
+        action="store_true",
+        help="前回の合格を使わず、境界チェックをやり直す",
+    )
     parser.add_argument(
         "--trust",
         action="store_true",
@@ -489,7 +841,7 @@ def main(argv: list[str] | None = None) -> int:
         **workspace_paths(sandbox, workspace),
     }
 
-    require_clean(workspace, args.allow_dirty)
+    backup_worktree(workspace, args.no_backup)
     Path(project["data_home"]).mkdir(parents=True, exist_ok=True)
     write_isolated_config(sandbox, project)
     seed_db(Path(project["db"]))
@@ -503,41 +855,20 @@ def main(argv: list[str] | None = None) -> int:
     os.chmod(boundary, 0o600)
 
     env = inner_env(sandbox, project)
+    digest = check_digest(sandbox, project["config"])
     try:
         if not args.skip_check and CHECK.is_file():
-            allowed = project["config"]["network"].get("allowedDomains") or []
-            check_env = {
-                **env,
-                "BOUNDARY_WORKSPACE": str(workspace),
-                # 境界の内側では $HOME が差し替わるので、実ホームは別に渡す
-                "HOME_REAL": str(HOME),
-                "BOUNDARY_PROTECTED": " ".join(
-                    project["config"]["filesystem"].get("denyWrite") or []
-                ),
-                # 拒否と不通を区別するための対照
-                "BOUNDARY_ALLOWED_HOST": next(
-                    (d for d in allowed if not d.startswith("*")), "github.com"
-                ),
-                "BOUNDARY_DENIED_HOST": "example.com",
-            }
-            # ★パイプへ通さないこと。終了コードが置き換わり失敗を取りこぼす。
-            # ★止まったら起動しない。判定できない ≠ 合格。
-            try:
-                done = subprocess.run(  # noqa: S603
-                    [node, str(runtime), "-s", boundary, "-c", f"sh {CHECK}"],
-                    env=check_env,
-                    check=False,
-                    timeout=180,
-                )
-            except subprocess.TimeoutExpired:
-                die("境界チェックが時間内に終わらなかった", "判定できないので起動しない")
-            if done.returncode != 0:
-                die("起動時の境界チェックが不合格", "上の ★NG を見て設定を直す")
+            # ★入力が 1 つでも変われば digest が変わり、再検査になる。
+            #   有効期間を過ぎたときも同じ。合格を無期限には使わない。
+            if not args.recheck and check_is_fresh(digest):
+                print("境界チェック: 前回の合格を再利用 (--recheck でやり直す)", file=sys.stderr)
+            else:
+                run_check(node, runtime, boundary, project, env)
+                save_check(digest)
 
         os.execve(  # noqa: S606
             node,
-            [node, str(runtime), "-s", boundary, "-c", f"{OPENCODE} --standalone"]
-            + list(passthrough),
+            [node, str(runtime), "-s", boundary, "-c", inner_command(passthrough)],
             env,
         )
     finally:

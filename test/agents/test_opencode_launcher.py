@@ -12,8 +12,11 @@ see docs/change/0004-opencode-sandbox.md
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -372,3 +375,412 @@ def test_system_prompt_is_written(tmp_path):
     agents = Path(sandbox["config_dir"]) / "AGENTS.md"
     assert agents.is_file(), "AGENTS.md が書かれていない"
     assert agents.read_text(encoding="utf-8").strip(), "AGENTS.md が空"
+
+
+# --- 渡した引数が opencode まで届くこと -------------------------------------
+
+
+def test_passthrough_reaches_opencode():
+    """★srt の -c はコマンド文字列を 1 個しか取らない。
+
+    後ろへ並べた引数は srt の位置引数になり **エラーも出さずに捨てられる**。
+    `ocs --continue` が素の起動になっていた回帰。
+    """
+    launcher = _launcher()
+    got = launcher["inner_command"](["--continue"])
+    assert got.endswith("--standalone --continue"), got
+    assert "--session ses_x" in launcher["inner_command"](["--session", "ses_x"])
+
+
+def test_passthrough_is_quoted():
+    """コマンド文字列へ入れる以上、引用符はこちらで付ける。"""
+    launcher = _launcher()
+    got = launcher["inner_command"](["--prompt", "a; rm -rf /"])
+    assert "'a; rm -rf /'" in got, got
+
+
+# --- git worktree ------------------------------------------------------------
+
+
+def _worktree(tmp_path: Path) -> tuple[Path, Path]:
+    """linked worktree を 1 つ作り、(共有 .git, worktree) を返す。"""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    run = lambda *a: subprocess.run(  # noqa: E731
+        ["git", "-C", str(repo), *a], check=True, capture_output=True
+    )
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+    run("config", "user.email", "t@t")
+    run("config", "user.name", "t")
+    (repo / "a.txt").write_text("hi", encoding="utf-8")
+    run("add", "-A")
+    run("commit", "-qm", "init")
+    run("worktree", "add", "-q", str(tmp_path / "wt"), "-b", "feat")
+    return repo / ".git", tmp_path / "wt"
+
+
+def test_worktree_shares_the_main_git_dir(tmp_path):
+    """★linked worktree の .git は起動ディレクトリの外を指す。
+
+    足さないと `git status` すら `not a git repository` で落ちる (実測)。
+    """
+    launcher = _launcher()
+    common, wt = _worktree(tmp_path)
+    filesystem = launcher["build_boundary"](_base_sandbox(), wt)["filesystem"]
+    assert str(common) in filesystem["allowWrite"], "共有 .git が書けない"
+
+
+def test_worktree_git_hooks_and_config_stay_protected(tmp_path):
+    """★共有 .git を開けても hooks と config は閉じたままにする。
+
+    ここへ書けると **ホストで実行されるコード** を仕込める。
+    """
+    launcher = _launcher()
+    common, wt = _worktree(tmp_path)
+    deny_write = launcher["build_boundary"](_base_sandbox(), wt)["filesystem"]["denyWrite"]
+    assert str(common / "hooks") in deny_write
+    assert str(common / "config") in deny_write
+
+
+def test_plain_repository_adds_nothing(tmp_path):
+    """通常のリポジトリでは足すものが無い (起動ディレクトリの中にある)。"""
+    launcher = _launcher()
+    repo = tmp_path / "plain"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+    assert launcher["git_common_dir"](repo) is None
+
+
+# --- 境界チェックの再利用 ----------------------------------------------------
+
+
+def test_check_digest_changes_with_the_boundary(tmp_path, monkeypatch):
+    """★境界が変われば再検査になること。
+
+    ここに混ぜ忘れた入力は「変わっても古い合格が使われる」ことになる。
+    """
+    launcher = _launcher()
+    sandbox = {"runtime_path": str(tmp_path / "srt.js")}
+    one = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a"]}})
+    two = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a", "/b"]}})
+    assert one != two, "境界を広げても digest が変わっていない"
+
+
+def test_check_is_reused_only_while_fresh(tmp_path, monkeypatch):
+    """同じ入力の合格は使い回すが、期限を過ぎたら再検査する。"""
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "CHECKED", tmp_path / "checked.json")
+    assert launcher["check_is_fresh"]("d1") is False, "記録が無いのに合格にした"
+
+    launcher["save_check"]("d1")
+    assert launcher["check_is_fresh"]("d1") is True
+    assert launcher["check_is_fresh"]("d2") is False, "別の入力で合格にした"
+
+    monkeypatch.setitem(launcher, "CHECK_TTL_SECONDS", 0)
+    assert launcher["check_is_fresh"]("d1") is False, "期限を過ぎても合格にした"
+
+
+# --- 通常版から引き継ぐ設定 --------------------------------------------------
+
+
+def test_ui_keys_are_inherited_but_never_overwritten(tmp_path, monkeypatch):
+    """見た目・操作感は引き継ぎ、隔離版で選んだ値は残す。"""
+    launcher = _launcher()
+    host = tmp_path / "host.json"
+    host.write_text(
+        json.dumps({"theme": "dark", "model": "p/host"}), encoding="utf-8"
+    )
+    monkeypatch.setitem(launcher, "HOST_CONFIG", host)
+    got = launcher["inherit_ui"]({"model": "p/chosen"})
+    assert got["theme"] == "dark", "テーマが引き継がれていない"
+    assert got["model"] == "p/chosen", "隔離版の選択が上書きされた"
+
+
+def test_security_keys_are_never_inherited(tmp_path, monkeypatch):
+    """★緩和に関わるキーを通常版から持ち込まないこと。
+
+    持ち込めると、境界の外の設定で境界の内側の permission を決められる。
+    """
+    launcher = _launcher()
+    host = tmp_path / "host.json"
+    host.write_text(
+        json.dumps(
+            {
+                "permissions": [],
+                "plugins": ["evil"],
+                "mcp": {"x": {}},
+                "agent": {"a": {}},
+                "experimental": {"policies": []},
+                "tools": {"bash": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(launcher, "HOST_CONFIG", host)
+    got = launcher["inherit_ui"]({})
+    assert got == {}, f"引き継いではいけないキーが入った: {sorted(got)}"
+
+
+def test_skill_roots_are_readable_inside_the_boundary():
+    """★skill 置き場が read に載っていること。
+
+    deny_read の ~ に埋もれると skill が 1 つも読めなくなる (実測)。
+    """
+    read = (gen.opencode_sandbox(COMMON) or {}).get("base", {}).get("read", [])
+    joined = " ".join(read)
+    assert ".claude/skills" in joined, "~/.claude/skills が読めない"
+    assert ".agents/skills" in joined, "~/.agents/skills が読めない"
+
+
+# --- 起動前の退避 ------------------------------------------------------------
+
+
+def _repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+    for key, value in (("user.email", "t@t"), ("user.name", "t")):
+        subprocess.run(
+            ["git", "-C", str(repo), "config", key, value], check=True, capture_output=True
+        )
+    (repo / "a.txt").write_text("base\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "init"], check=True, capture_output=True
+    )
+    return repo
+
+
+def _backups(launcher: dict) -> list[Path]:
+    return sorted(launcher["BACKUPS"].rglob("*.tgz"))
+
+
+def test_backup_never_touches_the_worktree(tmp_path, monkeypatch):
+    """★`git stash` とは別物。作業ツリーを巻き戻さないこと。
+
+    再開のたびに変更が消えるなら、退避ではなく破壊になる。
+    """
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    repo = _repo(tmp_path)
+    (repo / "a.txt").write_text("changed\n", encoding="utf-8")
+    (repo / "b.txt").write_text("untracked\n", encoding="utf-8")
+
+    launcher["backup_worktree"](repo, False)
+
+    assert (repo / "a.txt").read_text(encoding="utf-8") == "changed\n", "変更が巻き戻った"
+    assert (repo / "b.txt").is_file(), "未追跡ファイルが消えた"
+
+
+def test_backup_is_skipped_when_nothing_is_uncommitted(tmp_path, monkeypatch):
+    """未コミットの変更が無ければ退避しない。"""
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    launcher["backup_worktree"](_repo(tmp_path), False)
+    assert _backups(launcher) == []
+
+
+def test_identical_content_is_not_backed_up_twice(tmp_path, monkeypatch):
+    """★中断と再開を繰り返しても溜まらないこと。
+
+    同じ内容なら同じ tree SHA になるので作り直さない。
+    """
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    repo = _repo(tmp_path)
+    (repo / "a.txt").write_text("changed\n", encoding="utf-8")
+
+    launcher["backup_worktree"](repo, False)
+    launcher["backup_worktree"](repo, False)
+    assert len(_backups(launcher)) == 1, "同じ内容で 2 つ作られた"
+
+    (repo / "a.txt").write_text("changed again\n", encoding="utf-8")
+    launcher["backup_worktree"](repo, False)
+    assert len(_backups(launcher)) == 2, "内容が変わったのに退避されていない"
+
+
+def test_backup_excludes_ignored_files(tmp_path, monkeypatch):
+    """.gitignore が効くこと (隔離用 DB などを巻き込まない)。"""
+    import tarfile
+
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    repo = _repo(tmp_path)
+    (repo / ".gitignore").write_text("heavy/\n", encoding="utf-8")
+    (repo / "heavy").mkdir()
+    (repo / "heavy" / "db.bin").write_text("x" * 1000, encoding="utf-8")
+
+    launcher["backup_worktree"](repo, False)
+    with tarfile.open(_backups(launcher)[0]) as archive:
+        names = archive.getnames()
+    assert "heavy/db.bin" not in names, f"無視されるはずのものが入った: {names}"
+    assert ".gitignore" in names
+
+
+def test_backup_is_restorable(tmp_path, monkeypatch):
+    """★退避から中身が戻せること。ファイルが在ることを合格にしない。"""
+    import tarfile
+
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    repo = _repo(tmp_path)
+    (repo / "a.txt").write_text("precious\n", encoding="utf-8")
+
+    launcher["backup_worktree"](repo, False)
+    out = tmp_path / "restored"
+    with tarfile.open(_backups(launcher)[0]) as archive:
+        archive.extractall(out, filter="data")
+    assert (out / "a.txt").read_text(encoding="utf-8") == "precious\n"
+
+
+def test_old_backups_are_pruned(tmp_path, monkeypatch):
+    """世代数で頭を押さえること。"""
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    monkeypatch.setitem(launcher, "BACKUP_KEEP", 3)
+    repo = _repo(tmp_path)
+    for i in range(6):
+        (repo / "a.txt").write_text(f"rev {i}\n", encoding="utf-8")
+        launcher["backup_worktree"](repo, False)
+    assert len(_backups(launcher)) == 3
+
+
+def test_oversized_worktree_is_measured_before_hashing(tmp_path, monkeypatch):
+    """★大きすぎる作業ツリーは、**ハッシュする前に**断ること。
+
+    作ってから間引くと、巨大なリポジトリで .git を肥大させたうえに
+    時間を使う（実測で追跡対象だけ 84 GB のリポジトリがあった）。
+    """
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    monkeypatch.setitem(launcher, "BACKUP_MAX_SOURCE_BYTES", 1024)
+    repo = _repo(tmp_path)
+    (repo / "big.bin").write_text("x" * 4096, encoding="utf-8")
+
+    before = _git_object_count(repo)
+    with pytest.raises(SystemExit):
+        launcher["backup_worktree"](repo, False)
+    assert _backups(launcher) == [], "断ったのに退避が残っている"
+    assert _git_object_count(repo) == before, "断る前に .git へ書き込んでいる"
+
+
+def _git_object_count(repo: Path) -> int:
+    done = subprocess.run(
+        ["git", "-C", str(repo), "count-objects", "-v"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for line in done.stdout.splitlines():
+        if line.startswith("count:"):
+            return int(line.split()[1])
+    return 0
+
+
+def test_total_size_is_capped_across_projects(tmp_path, monkeypatch):
+    """★起動ディレクトリごとの上限だけでは全体が青天井になる。
+
+    プロジェクトが増えても合計で頭を押さえること。
+    """
+    launcher = _launcher()
+    store = tmp_path / "store"
+    monkeypatch.setitem(launcher, "BACKUPS", store)
+    monkeypatch.setitem(launcher, "BACKUP_TOTAL_MAX_BYTES", 1)  # 実質 1 件だけ残る
+    for name in ("one", "two", "three"):
+        repo = _repo(tmp_path / name)
+        (repo / "a.txt").write_text(f"{name}\n", encoding="utf-8")
+        launcher["backup_worktree"](repo, False)
+    assert len(_backups(launcher)) <= 1, "全体の上限が効いていない"
+
+
+def test_expired_backups_are_dropped(tmp_path, monkeypatch):
+    """触らなくなったプロジェクトの分を期限で捨てること。"""
+    launcher = _launcher()
+    store = tmp_path / "store"
+    monkeypatch.setitem(launcher, "BACKUPS", store)
+    stale = store / "abandoned-000000000000"
+    stale.mkdir(parents=True)
+    old = stale / "20200101T000000+0000-deadbeefcafe.tgz"
+    old.write_bytes(b"old")
+    ancient = time.time() - (launcher["BACKUP_MAX_AGE_DAYS"] + 1) * 86400
+    os.utime(old, (ancient, ancient))
+
+    repo = _repo(tmp_path)
+    (repo / "a.txt").write_text("fresh\n", encoding="utf-8")
+    launcher["backup_worktree"](repo, False)
+
+    assert not old.exists(), "期限切れの退避が残っている"
+    assert not stale.exists(), "空になった置き場が残っている"
+
+
+def test_launch_is_refused_when_the_backup_fails(tmp_path, monkeypatch):
+    """★退避できなければ**起動しない**。
+
+    「退避したつもり」で作業を始めるのが一番危ない。
+    """
+    launcher = _launcher()
+    blocked = tmp_path / "blocked"
+    blocked.mkdir()
+    blocked.chmod(0o500)
+    monkeypatch.setitem(launcher, "BACKUPS", blocked)
+    repo = _repo(tmp_path)
+    (repo / "a.txt").write_text("changed\n", encoding="utf-8")
+    try:
+        with pytest.raises(SystemExit):
+            launcher["backup_worktree"](repo, False)
+    finally:
+        blocked.chmod(0o700)
+
+
+def test_backup_location_is_outside_the_workspace(tmp_path, monkeypatch):
+    """★退避先が境界の内側にあってはいけない。
+
+    内側から消せるなら復旧元にならない。
+    """
+    launcher = _launcher()
+    repo = _repo(tmp_path)
+    assert repo not in launcher["BACKUPS"].parents, "退避先がワークスペースの中にある"
+    assert str(launcher["BACKUPS"]).startswith(str(Path.home() / ".local/state"))
+
+
+def test_backup_is_scoped_to_the_launch_directory(tmp_path, monkeypatch):
+    """★git は親を遡る。サブディレクトリで起動しても親全体を掴まないこと。
+
+    境界が書き込みを許すのは起動ディレクトリ以下なので、退避も揃える。
+    """
+    import tarfile
+
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    repo = _repo(tmp_path)
+    pkg = repo / "pkg"
+    pkg.mkdir()
+    (pkg / "inner.txt").write_text("work\n", encoding="utf-8")
+
+    launcher["backup_worktree"](pkg, False)
+
+    with tarfile.open(_backups(launcher)[0]) as archive:
+        names = archive.getnames()
+    assert "inner.txt" in names, f"起動ディレクトリの中身が入っていない: {names}"
+    assert "a.txt" not in names, f"親リポジトリまで退避した: {names}"
+
+
+def test_untracked_only_directory_does_not_block_launch(tmp_path, monkeypatch):
+    """退避するものが無くても起動を止めないこと。
+
+    Git リポジトリでない場所や、中身が全て .gitignore の場所が当たる。
+    """
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    repo = _repo(tmp_path)
+    (repo / ".gitignore").write_text("skip/\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "ignore"], check=True, capture_output=True
+    )
+    skipped = repo / "skip"
+    skipped.mkdir()
+    (skipped / "junk.txt").write_text("junk\n", encoding="utf-8")
+
+    launcher["backup_worktree"](skipped, False)  # 例外を出さないこと
+    assert _backups(launcher) == []

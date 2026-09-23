@@ -134,7 +134,8 @@ OpenCode を OS のアクセス制御で囲って起動する
 （[CHG-0004](../change/0004-opencode-sandbox.md)）。通常版と**併用**する段階。
 
 ```bash
-ocs
+opencode                # 境界の内側 (ocs) で起動する
+opencode --no-sandbox   # 素の OpenCode。境界の外での復旧・chezmoi apply 用
 ```
 
 ### 何を守り、何を守らないか
@@ -145,7 +146,7 @@ OS 側へ移した。ただし境界は万能ではない。
 | 守る | 守らない |
 | --- | --- |
 | ホストの秘密（`~/.ssh`・認証情報） | **ワークスペースの中**。`.env` や `.git/hooks` は shell から届く |
-| Windows 側（`/mnt`）とホストの `/tmp` | 未コミット作業とローカルの Git 履歴 |
+| Windows 側（`/mnt`）とホストの `/tmp` | ローカルの Git 履歴（未コミット作業は起動前に退避する） |
 | 許可ドメイン以外への通信 | 許可ドメインへ何を送るか |
 | 保護機構そのもの（`denyWrite`） | 許可した範囲内での事故 |
 
