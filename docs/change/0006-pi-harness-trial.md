@@ -47,7 +47,7 @@ permission 機構を持たないと明記があり、権限制御は拡張か外
 | skills | Agent Skills 仕様に準拠 | 同左 |
 | 固有機能 | 拡張（TypeScript、ホットリロード）、4 モード（interactive / print-JSON / RPC / SDK） | LSP 統合、DAP（実デバッガ駆動）、subagents、plan mode、hashline edits、time-traveling rules |
 
-### 最も重要な発見: `omp` は `~/.claude` を標準で読む
+### 最も重要な発見: `omp` は `~/.claude` を探索ルートに含むが、skills は opt-in
 
 `omp` の設定探索ルートは次の固定順（公式ドキュメント
 `docs/config-usage.md` の記述）。
@@ -58,19 +58,42 @@ user-level bases:  ~/.omp/agent,  ~/.claude,  ~/.codex,  ~/.gemini
 project-level:     <cwd>/.omp,    <cwd>/.claude,  ...
 ```
 
-**このリポジトリの skills 16 個は、追加設定なしで `omp` から見える。**
-導入コストがほぼゼロになる。
+**ただし「探索ルートに含む」ことと「`~/.claude/skills` を読む」ことは別。**
+実機で確認した既定値:
+
+```text
+skills.enableClaudeUser    = false   ← 既定で無効
+skills.enableClaudeProject = true
+skills.enableAgentsUser    = true
+skills.enablePiUser        = true
+```
+
+| 置き場 | 件数 | 既定で見えるか |
+| --- | ---: | --- |
+| `~/.claude/skills`（このリポジトリの自作） | 16 | **見えない** |
+| `~/.agents/skills`（Orca 由来） | 4 | 見える |
+
+**素のままでは自作 skills が 1 つも使えない。** フラグ
+（`enableClaudeUser`）ではなく `skills.customDirectories` にパスで明示する
+方式を採った。フラグは `~/.claude` 配下の何が有効になるか読めないが、
+パス指定なら「どこから来た skill か」が設定を見るだけで分かる。
 
 ### 訂正した思い込み
 
 | 当初 | 実際 |
 | --- | --- |
 | 設定は `~/.omp/config.yml` | `~/.omp/agent/config.yml` |
-| skills の再利用には設定が要る | 標準で `~/.claude` を読む |
+| skills の再利用には設定が要る | **設定が要る（当初の想定が正しかった）。** 一度「標準で読む」と誤認したが、実機で `enableClaudeUser = false` を確認して撤回 |
 | 「設定形式が違うから単一ソースに入れない」 | **形式変換は生成器の得意分野**。本質は「同じ意味の設定項目が無い」こと |
 
 3 つ目が重要。理由を取り違えると次の判断を誤る。JSON / YAML の差は障害では
 ない。permission という**概念自体が無い**ことが障害。
+
+2 つ目は自分の誤りを記録として残す。`config-usage.md` の config roots に
+`.claude` があるのを見て「skills も読む」と早合点した。**探索ルートに含むことと、
+その配下の資産を読むことは別**だった。外部レビュー（Astra）は
+「他ツールのユーザー領域の読み込みは opt-in」と正しく指摘しており、
+実機の既定値がそれを裏付けた。
 
 ### まだ分からないこと
 
@@ -120,14 +143,15 @@ project-level:     <cwd>/.omp,    <cwd>/.claude,  ...
 
 | 段 | 内容 | 状態 |
 | --- | --- | --- |
-| 1 | `omp` を導入する（既存の AI CLI 導入スクリプトへ合流） | **完了**（2026-09-24） |
+| 1 | `omp` を導入する（既存の AI CLI 導入スクリプトへ合流） | **完了**（2026-09-24。`v18.2.11`） |
+| 1.5 | 自作 skills を `omp` から見えるようにする | **完了**（2026-09-24） |
 | 2 | 普段の作業を 1 周通す（認証・skills・MCP・編集・再開） | 未着手 |
 | 3 | 常用 skills が動くか確認し、動かないものを記録 | 未着手 |
 | 4 | Pi を比較用に追加し、同じ開始コミット・同じ課題で比べる | 未着手 |
 | 5 | 第一サポートを決める（または「決めない」と決める） | 未着手 |
 
-**段 1 と 2 の間に設定を作り込まない。** `omp` は `~/.claude` を読むので、
-まず素のまま使って何が足りないかを観測する。
+**段 2 より先に設定を作り込まない。** ただし skills が 1 つも見えないのは
+観測以前なので、段 1.5 だけは先に入れた。
 
 ## 候補比較
 
@@ -144,14 +168,32 @@ project-level:     <cwd>/.omp,    <cwd>/.claude,  ...
 | --- | --- | --- | --- |
 | `agent-cli-install.sh.tmpl` | （なし）→ `omp` を追加 | 既存 3 CLI と同じ流儀に合流させる | **完了** |
 | `[web] allow_domains` | → `pi.dev` / `omp.sh` を追加 | ドキュメント参照用 | **完了** |
+| `400_unix/420_omp_skills` | （なし）→ `skills.customDirectories` へ `~/.claude/skills` を追記 | 既定 `enableClaudeUser = false` で自作 skills が 1 つも見えない | **完了** |
 | `common.toml` の permission 生成 | 変更しない | **permission という概念が無い**ので翻訳先が無い | **対象外** |
-| `~/.omp/agent/` の chezmoi 管理 | 当面しない | 認証・セッション・自動生成 memory を含む。素のまま使って不足を観測する | **保留** |
+| `~/.omp/agent/config.yml` の chezmoi 管理 | 丸ごとは管理しない | 認証・セッション・自動生成 memory を含む。**必要な 1 項目だけ** CLI 経由で追記する | **完了**（方式を確定） |
+
+### `~/.omp/agent/config.yml` を `modify_` にしなかった理由
+
+`omp` 自身がこのファイルを書き換える。`modify_` でファイルを所有すると、
+UI や `omp config set` で変えた分と綱引きになる。
+
+代わりに `run_onchange_after_` から **`omp` の writer を呼ぶ**方式にした
+（`~/.claude.json` を CLI 経由で触る `410_claude_mcp` と同じ考え方）。
+追記のみで、既にあるものは触らない。
+
+> **実装で踏んだ癖**: `omp config get --json` は配列ではなく
+> `{"key":…, "value":[…]}` を返す。配列として読むと必ず解析に失敗し、
+> 毎回「未登録」と判定して冪等性が壊れる（実際に一度踏んだ）。
 
 ## 重要な更新
 
 - **2026-09-24**: 起票。**安全性の軸で評価しない**ことを前提として明記した
-- **2026-09-24**: `omp` が `~/.claude` を config root として読むと判明し、
-  導入コストの見積もりが大きく下がった
+- **2026-09-24**: `omp` が `~/.claude` を config root として読むと知り、
+  「skills は設定不要」と判断した。**これは誤りで同日中に撤回**（下記）
+- **2026-09-24**: 実機で `skills.enableClaudeUser = false`（既定）を確認。
+  探索ルートに `.claude` が含まれることと、`~/.claude/skills` を読むことは
+  別だった。**素のままでは自作 skills が 1 つも見えない**。
+  `skills.customDirectories` へパスで明示する方式で対処した
 - **2026-09-24**: `[CHG-0005](0005-agents-config-naming.md)` の A2（固有設定の
   native 分離）は、この案件の結論が出るまで**優先度を下げる**。
   第一サポートが変わるなら、整理の対象も変わるため

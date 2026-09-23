@@ -125,8 +125,10 @@ Pi のフォークで、LSP 統合・DAP・subagent を持ちます。
 omp        # 起動。境界 (ocs) の外で動く
 ```
 
-**`omp` は `~/.claude` を設定探索ルートとして読むため、このリポジトリの
-skills 16 個が追加設定なしで使えます。**
+**`omp` は `~/.claude` を設定探索ルートに含みますが、他ツールのユーザ領域の
+skills 読み込みは既定で無効です**（`skills.enableClaudeUser = false`）。
+`chezmoi apply` 時に `skills.customDirectories` へ `~/.claude/skills` を
+追記するので、このリポジトリの skills 16 個が使えます。
 
 > **permission 機構を持たない設計です。** Pi 系は安全性より利便性を取る方針で、
 > 権限制御は拡張か外部の sandbox に委ねます。保護は「どこで起動するか」と
