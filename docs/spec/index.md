@@ -23,6 +23,7 @@
 | [セキュリティ](security.md) | Bitwarden、sops、ageの役割と要件 |
 | [Secret管理セットアップ](sops-age.md) | sops + ageの導入、日常操作、復旧 |
 | [エージェント権限仕様](agent-permissions.md) | Claude Code / Copilot CLI中心のpermissionと、各CLIへのhook・MCP生成 |
+| [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) | `ocs` の構成、起動順序、境界の組み立て規則、状態の置き場、起動前の退避 |
 | [文脈の引き継ぎ](checkpoint.md) | 圧縮を跨いで作業文脈を保つ checkpoint の保存先・記録の形・hook |
 | [トラブルシューティング](troubleshooting.md) | よくある障害の原因と対処 |
 

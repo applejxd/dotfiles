@@ -99,6 +99,8 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | sops + age を導入・復旧する | [Secret管理セットアップ](spec/sops-age.md) |
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
 | OpenCode の権限がなぜ他と違うか知る | [OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い) |
+| OpenCode を境界の内側で起動する仕組みを知る | [OpenCode 隔離起動のアーキテクチャ](spec/opencode-sandbox.md) |
+| 境界内で読めない・書けない原因を調べる | [境界の組み立ての規則](spec/opencode-sandbox.md#組み立ての規則) |
 | OpenCode のプラグインを検討する | [プラグイン生態系の棚卸し](research/opencode/plugin/ecosystem.md) |
 | 圧縮を跨いで作業文脈を保つ仕組みを知る | [文脈の引き継ぎ](spec/checkpoint.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-permissions.md#mcp-サーバ) |

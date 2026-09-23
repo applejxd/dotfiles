@@ -132,6 +132,9 @@ chezmoi apply
 
 OpenCode を OS のアクセス制御で囲って起動する
 （[CHG-0004](../change/0004-opencode-sandbox.md)）。通常版と**併用**する段階。
+構成・起動順序・境界の組み立て規則は
+[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)。ここでは
+**何を守り、何を守らないか**を書く。
 
 ```bash
 opencode                # 境界の内側 (ocs) で起動する
