@@ -9,8 +9,8 @@ OpenCode を OS のアクセス制御で囲って起動する仕組みの構成�
 - ここは**現在の構成**だけを書く
 
 ```bash
-opencode                # 境界の内側（ocs）で起動する
-opencode --no-sandbox   # 素の OpenCode。境界の外での復旧・chezmoi apply 用
+ocs         # 境界の内側で起動する
+opencode    # 素の OpenCode（境界なし）
 ```
 
 ## 中心にある考え方
@@ -314,10 +314,15 @@ tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree
 
 | 制約 | 内容 |
 | --- | --- |
+| **起動ディレクトリの選び方で境界が消える** | 起動ディレクトリは無条件に `allowRead` と `allowWrite` へ入り、**`allowRead` は `denyRead` に勝つ**（R3）。`cd ~ && ocs` すると `denyRead: ~` が打ち消され、`~/.ssh` などが読み書きできる（実測）。**作業対象のディレクトリで起動すること**。未対処 |
 | セッション中に境界を変えられない | bwrap の名前空間はプロセス起動時に作られる。`/add-dir` 相当は無い |
 | コマンド単位の逃げ道が無い | プロセス単位で包む以上、`dangerouslyDisableSandbox` 相当は作れない |
 | 履歴・設定が通常版と分かれる | DB を分けているため。セッションの移送は `session export` / `import` |
 | 境界はエージェントから見えない | `ENOENT` を「存在しない」と誤診する。`AGENTS.md` で明示的に伝えている |
 | `read` が既定で拒否 | Claude Code は既定で全許可。参照したい場所は個別に開ける必要がある |
+| **資格情報は境界内にある** | 隔離 DB が `credential` を引き継ぎ、その DB はワークスペース内にある。モデル API の資格情報は内側から読める |
+
+> 未対処の欠陥と簡素化の選択肢は
+> [CHG-0004 の外部レビュー節](../change/0004-opencode-sandbox.md#外部レビュー2026-09-23-未対処の欠陥と簡素化の選択肢)にまとめてある。
 
 [仕様一覧へ戻る](index.md)
