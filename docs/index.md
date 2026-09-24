@@ -61,7 +61,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
 | [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
-| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。**CHG-0004 の完了でブロックが解けた**。段階 4 以降は計画の見直しが要る | 計画の再評価 |
+| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。**CHG-0004 完了で保留を解き、計画を 3 分割**（4a 実施 / 4b 見送り / 5 は第一サポート決定待ち） | 段階 4a（読み取り専用コマンドの静的 allow） |
 | [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。A1 完了 | A2 の要否（CHG-0006 の結論待ち） |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。`enabledProviders` の効果が実機未確認 | 段 2 の冒頭で `/mcp list` を見る |
 | [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み | 段 2（共有ランタイムとハーネスの節分け） |

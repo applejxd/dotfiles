@@ -42,7 +42,7 @@
 | # | 目的 | 状態 | 最大の未解決点 | 次の確認 | 更新日 |
 | --- | --- | --- | --- | --- | --- |
 | [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | 圧縮後、作業再開前に checkpoint が届くか | P0-3 の実測 | 2026-09-19 |
-| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | In progress | 段階 3 まで配備済み。段階 4 以降は CHG-0004 の結果待ちで保留 | CHG-0004 の段階 2（サービスを包めるか） | 2026-09-22 |
+| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | In progress | 段階 3 まで配備済み。**CHG-0004 完了で保留を解き、計画を 3 分割した**（4a 実施 / 4b 見送り / 5 は第一サポート決定待ち） | 段階 4a（読み取り専用コマンドの静的 allow） | 2026-09-24 |
 | [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | In progress | A1 完了（生成物は不変）。A2 は CHG-0006 の結論待ちで優先度を下げた | A2 の要否判断 | 2026-09-24 |
 | [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | `enabledProviders = ["claude"]` の効果が実機未確認（omp が未認証で `/mcp list` に到達できず）。MCP が届くかは不明 | 段 2 の冒頭で `/mcp list` に `deepwiki` が出るか | 2026-09-24 |
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。再開条件は「境界へ入れたいハーネスが 2 つ目になったとき」 | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-24 |
