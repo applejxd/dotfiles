@@ -146,6 +146,7 @@ CLI ごとに書くと、URL を変えたときに片方だけ古いまま残る
 [[mcp]]
 id = "ddgs"
 purpose = "DuckDuckGo で web 検索する"
+clis = ["claude"]
 transport = "stdio"
 command = "uvx"
 args = ["--from", "ddgs[mcp]", "ddgs", "mcp"]
@@ -164,6 +165,15 @@ Gemini CLI と Antigravity は使わないため対象外。既存の定義は�
 **applejxd では `[[mcp]]` が 0 件になる。** `deepwiki` は 2026-09-25 に外し、
 `ddgs` は元から対象外のため。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない
 ので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
+
+**生成先を絞るには `clis` を書く。** 省略すると 4 つ全部に入る。`ddgs` は
+`clis = ["claude"]` にしてあり、Claude Code にだけ入る（Copilot は内蔵の
+web 検索があり、OpenCode / Codex では使わない）。書ける値は `claude` /
+`copilot` / `opencode` / `codex` で、それ以外を書くと apply が止まる。
+
+その結果、**Copilot / OpenCode / Codex 向けのサーバは現在 0 件**である。
+Codex の重複宣言ガードは `[[mcp]]` が 1 つ以上ないと発火しないので、試験だけ
+合成したソースで確かめている。
 
 **宣言を消しても生成先からは消えない。** `merge_*_mcp` は宣言されたサーバを
 足す・更新するだけで、消えたサーバを刈らない。既に生成された設定から取り除くには

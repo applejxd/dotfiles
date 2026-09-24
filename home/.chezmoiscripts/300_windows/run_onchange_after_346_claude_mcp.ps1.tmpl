@@ -1,7 +1,7 @@
 ﻿{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) -}}
 {{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
 {{- $mcp := list -}}
-{{- if hasKey $common "mcp" }}{{ $mcp = $common.mcp }}{{ end -}}
+{{- if hasKey $common "mcp" }}{{ range $common.mcp }}{{ if or (not (hasKey . "clis")) (has "claude" .clis) }}{{ $mcp = append $mcp . }}{{ end }}{{ end }}{{ end -}}
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 

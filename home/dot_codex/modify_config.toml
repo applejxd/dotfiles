@@ -1,7 +1,7 @@
 {{- /* chezmoi:modify-template */ -}}
 {{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
 {{- $mcp := list -}}
-{{- if hasKey $common "mcp" }}{{ $mcp = $common.mcp }}{{ end -}}
+{{- if hasKey $common "mcp" }}{{ range $common.mcp }}{{ if or (not (hasKey . "clis")) (has "codex" .clis) }}{{ $mcp = append $mcp . }}{{ end }}{{ end }}{{ end -}}
 {{- $userConfig := .chezmoi.stdin | replaceAllRegex "(?s)^# chezmoi-managed:start.*?# chezmoi-managed:end(?:\\r?\\n)*" "" -}}
 # chezmoi-managed:start
 # see https://www.chezmoi.io/user-guide/manage-different-types-of-file/#manage-part-but-not-all-of-a-file

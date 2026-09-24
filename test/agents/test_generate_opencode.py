@@ -1066,12 +1066,15 @@ def test_mcp_servers_come_from_common(username: str):
     common = load_common(username)
     merged = gen.merge_opencode_config({}, common)
     assert merged["mcp"]["servers"] == {
-        name: opencode_entry(server) for name, server in gen.mcp_servers(common)
+        name: opencode_entry(server)
+        for name, server in gen.mcp_servers(common, "opencode")
     }
 
 
 def test_mcp_covers_stdio():
-    servers = gen.merge_opencode_config({}, load_common("tester"))["mcp"]["servers"]
+    # 宣言済みの stdio サーバは claude 限定になったので、合成した定義で確かめる。
+    stdio = {"id": "x", "transport": "stdio", "command": "uvx", "args": ["demo"]}
+    servers = gen.merge_opencode_config({}, {"mcp": [stdio]})["mcp"]["servers"]
     assert any(entry["type"] == "local" for entry in servers.values())
 
 

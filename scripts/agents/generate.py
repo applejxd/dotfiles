@@ -656,14 +656,22 @@ MCP_TRANSPORT_KEYS = {
     "http": {"url"},
     "stdio": {"command", "args"},
 }
-MCP_COMMON_KEYS = {"id", "purpose", "transport"}
+MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis"}
+
+# ``clis`` に書ける生成先。省略したら全部に入る。
+MCP_CLIS = {"claude", "copilot", "opencode", "codex"}
 
 
-def mcp_servers(common: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+def mcp_servers(
+    common: dict[str, Any], cli: str | None = None
+) -> list[tuple[str, dict[str, Any]]]:
     """``[[mcp]]`` を (名前, 定義) の宣言順リストにして返す。
 
     ユーザ・OS による出し分けは common.toml 側の chezmoi テンプレートが
     済ませているので、ここには条件が無い (展開後の表だけを見る)。
+
+    ``cli`` を渡すと、``clis`` でその生成先を除いたサーバを落とす。
+    ``clis`` を書かないサーバは全部の生成先に入る。
 
     設定ミスは黙って無効な MCP 定義を書き出すより、apply を止めた方がよい
     (生成先の 3 つが食い違ったまま気付けなくなる)。
@@ -693,6 +701,20 @@ def mcp_servers(common: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
                 f"[[mcp]] {name} に {transport} では使わないキーがある: "
                 + ", ".join(sorted(unknown))
             )
+
+        targets = server.get("clis")
+        if targets is not None:
+            if not isinstance(targets, list) or not targets:
+                raise ValueError(f"[[mcp]] {name} の clis は空でないリストで書く")
+            bad = sorted(set(targets) - MCP_CLIS)
+            if bad:
+                raise ValueError(
+                    f"[[mcp]] {name} の clis に未対応の生成先がある: "
+                    + ", ".join(bad)
+                    + f" (対応: {', '.join(sorted(MCP_CLIS))})"
+                )
+            if cli is not None and cli not in targets:
+                continue
 
         entry: dict[str, Any] = {"transport": transport}
         if transport == "http":
@@ -725,7 +747,7 @@ def merge_copilot_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[
     """
     out = dict(existing) if isinstance(existing, dict) else {}
     servers = dict(out.get("mcpServers") or {})
-    for name, server in mcp_servers(common):
+    for name, server in mcp_servers(common, "copilot"):
         entry = dict(servers.get(name) or {})
         if server["transport"] == "http":
             entry["type"] = "http"
@@ -1439,7 +1461,7 @@ def merge_opencode_mcp(existing_mcp: Any, common: dict[str, Any]) -> dict[str, A
     """
     out = dict(existing_mcp) if isinstance(existing_mcp, dict) else {}
     servers = dict(out.get("servers") or {})
-    for name, server in mcp_servers(common):
+    for name, server in mcp_servers(common, "opencode"):
         entry = dict(servers.get(name) or {})
         if server["transport"] == "http":
             # OpenCode は http を "remote" と呼ぶ (V2 の MCP ガイド)

@@ -46,11 +46,17 @@ HTTP = {"id": "x", "transport": "http", "url": "https://example.com/mcp"}
 STDIO = {"id": "x", "transport": "stdio", "command": "uvx", "args": ["demo"]}
 
 
-def render(path: Path, username: str | None = None, stdin: str | None = None) -> str:
+def render(
+    path: Path,
+    username: str | None = None,
+    stdin: str | None = None,
+    source: Path | None = None,
+) -> str:
     """テンプレートを描画する。
 
     ``username`` を渡すと ``.chezmoi.username`` を差し替える。
     ``stdin`` を渡すと modify-template の既存ファイル内容として扱う。
+    ``source`` を渡すと ``includeTemplate`` の解決先を差し替える。
     """
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
@@ -70,7 +76,7 @@ def render(path: Path, username: str | None = None, stdin: str | None = None) ->
         )
         stdin = None
 
-    command = [chezmoi, "--source", str(ROOT), "execute-template"]
+    command = [chezmoi, "--source", str(source or ROOT), "execute-template"]
     if stdin is None:
         command_input = template
     else:
@@ -83,8 +89,8 @@ def render(path: Path, username: str | None = None, stdin: str | None = None) ->
     return result.stdout
 
 
-def servers_for(username):
-    return gen.mcp_servers(load_common(username))
+def servers_for(username, cli=None):
+    return gen.mcp_servers(load_common(username), cli)
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +130,34 @@ def test_declared_servers_pass_validation():
     assert [name for name, _ in gen.mcp_servers(TESTER)] == [
         s["id"] for s in TESTER["mcp"]
     ]
+
+
+def test_ddgs_goes_to_claude_only():
+    """★applejxd 以外でも `ddgs` は Claude Code にだけ入る。
+
+    Copilot は内蔵の web 検索があり、OpenCode / Codex では使わない。
+    `clis` を外すと 4 つ全部に入ってしまう。
+    """
+    ids = {
+        cli: [name for name, _ in gen.mcp_servers(TESTER, cli)]
+        for cli in sorted(gen.MCP_CLIS)
+    }
+    assert ids["claude"] == ["ddgs"]
+    assert ids["copilot"] == ids["opencode"] == ids["codex"] == []
+
+
+def test_clis_filters_only_the_servers_that_declare_it():
+    common = {"mcp": [{**HTTP, "id": "everywhere"}, {**HTTP, "id": "only", "clis": ["claude"]}]}
+    assert [n for n, _ in gen.mcp_servers(common, "claude")] == ["everywhere", "only"]
+    assert [n for n, _ in gen.mcp_servers(common, "codex")] == ["everywhere"]
+    # cli を渡さなければ絞らない
+    assert [n for n, _ in gen.mcp_servers(common)] == ["everywhere", "only"]
+
+
+@pytest.mark.parametrize("clis", [[], "claude", ["claude", "nope"]])
+def test_a_broken_clis_stops_apply(clis):
+    with pytest.raises(ValueError):
+        gen.mcp_servers({"mcp": [{**HTTP, "clis": clis}]})
 
 
 @pytest.mark.parametrize(
@@ -196,12 +230,13 @@ def test_copilot_mcp_is_generated_from_common(username):
     common = load_common(username)
     merged = gen.merge_copilot_mcp({}, common)
     assert merged["mcpServers"] == {
-        name: copilot_entry(server) for name, server in gen.mcp_servers(common)
+        name: copilot_entry(server) for name, server in gen.mcp_servers(common, "copilot")
     }
 
 
 def test_copilot_mcp_covers_stdio():
-    merged = gen.merge_copilot_mcp({}, load_common("tester"))
+    # 宣言済みの stdio サーバは claude 限定になったので、合成した定義で確かめる。
+    merged = gen.merge_copilot_mcp({}, {"mcp": [STDIO]})
     assert any(entry["type"] == "local" for entry in merged["mcpServers"].values())
 
 
@@ -269,7 +304,7 @@ def test_codex_config_renders_the_servers_for_this_user(username):
     rendered = tomllib.loads(render(CODEX_CONFIG, username=username))
     # サーバが 0 件なら [mcp_servers.*] を 1 つも書かない (節ごと生えない)。
     assert rendered.get("mcp_servers", {}) == {
-        name: codex_entry(server) for name, server in servers_for(username)
+        name: codex_entry(server) for name, server in servers_for(username, "codex")
     }
     # 既存の手書き設定を壊していないこと
     assert rendered["approval_policy"] == "untrusted"
@@ -352,14 +387,35 @@ def test_cli_sources_do_not_filter_by_user():
     assert "applejxd" in TEMPLATE.read_text(encoding="utf-8")
 
 
-def test_codex_stops_when_an_unmanaged_table_would_collide():
+@pytest.fixture(scope="module")
+def codex_source(tmp_path_factory):
+    """codex を対象にした ``[[mcp]]`` を 1 つ足した合成ソース。
+
+    ``clis`` で絞った結果、codex 向けのサーバは 0 件になった。衝突ガードは
+    ``range`` の内側にあるので、宣言が 1 つも無いと発火しない。ここだけ
+    common.toml を差し替えて確かめる。
+    """
+    root = tmp_path_factory.mktemp("codex-src")
+    (root / ".chezmoiroot").write_text("home\n", encoding="utf-8")
+    target = root / "home/dot_config/agents"
+    target.mkdir(parents=True)
+    target.joinpath("common.toml.tmpl").write_text(
+        TEMPLATE.read_text(encoding="utf-8")
+        + '\n[[mcp]]\nid = "ddgs"\npurpose = "試験用"\nclis = ["codex"]\n'
+        'transport = "stdio"\ncommand = "uvx"\nargs = ["demo"]\n',
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_codex_stops_when_an_unmanaged_table_would_collide(codex_source):
     """管理ブロック外の同名 MCP を放置すると TOML が重複宣言になる。"""
     conflict = (
         "# chezmoi-managed:start\nstale = true\n# chezmoi-managed:end\n\n"
         '[mcp_servers.ddgs]\ncommand = "old"\n'
     )
     with pytest.raises(AssertionError, match=r"mcp_servers\.ddgs"):
-        render(CODEX_CONFIG, username="tester", stdin=conflict)
+        render(CODEX_CONFIG, username="tester", stdin=conflict, source=codex_source)
 
 
 def test_rendered_policy_is_validated_by_a_hook():
