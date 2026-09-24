@@ -380,6 +380,7 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 | 境界はエージェントから見えない | `ENOENT` を「存在しない」と誤診する。`AGENTS.md` で明示的に伝えている |
 | `read` が既定で拒否 | Claude Code は既定で全許可。参照したい場所は個別に開ける必要がある |
 | **資格情報は境界内にある** | 隔離 DB が `credential` を引き継ぎ、その DB はワークスペース内にある。モデル API の資格情報は内側から読める |
+| **常駐サービスの認証情報も読める** | `~/.config/opencode/service.json` が `allowRead` の `~/.config/opencode` に巻き込まれている。**通信路は `allowLocalBinding: False` が塞いでいるだけ**で、防御が 1 枚しかない |
 
 > 未対処の欠陥と簡素化の選択肢は
 > [CHG-0004 の外部レビュー節](../change/0004-opencode-sandbox.md#外部レビュー2026-09-23-未対処の欠陥と簡素化の選択肢)にまとめてある。
