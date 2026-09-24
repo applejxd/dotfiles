@@ -1,11 +1,16 @@
 ---
 name: explain
 description: 現在の会話での作業内容・コード変更を要約して分かりやすく解説する。作業の振り返りや他者への共有に使う。
-context: fork
-agent: Explore
 ---
 
 # explain
+
+> **この skill は fork しない（`context: fork` を付けない）**
+>
+> 入力が親の会話そのものなので、独立したサブエージェントでは成立しない。
+> OpenCode は `context` を読み捨てるため無害だが（記録 E1）、Claude Code 側で
+> 効くと**会話が見えないまま要約を書く**ことになる。
+> see docs/research/opencode/skill-frontmatter.md
 
 ## タスク
 

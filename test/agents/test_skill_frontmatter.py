@@ -96,3 +96,51 @@ def test_too_long_description_is_rejected(tmp_path):
     path = write_skill(tmp_path, "sample", f"name: sample\ndescription: {long_text}")
     errors = vs.validate(path)
     assert any("文字を超える" in e for e in errors)
+
+
+def write_skill_with_body(tmp_path: Path, name: str, frontmatter: str, body: str) -> Path:
+    skill_dir = tmp_path / name
+    skill_dir.mkdir()
+    path = skill_dir / "SKILL.md"
+    path.write_text(f"---\n{frontmatter}\n---\n\n{body}\n", encoding="utf-8")
+    return path
+
+
+def test_fork_with_conversation_dependent_body_is_rejected(tmp_path):
+    """★fork は会話の分岐ではなく新規コンテキストのサブエージェント。
+
+    2026-09-19 に adr skill を廃止した理由がこれ (ac7749a)。同じ欠陥が
+    explain / learn に残っていた。OpenCode は context を読み捨てるので
+    無害だが、Claude Code 側で効くと会話が見えないまま要約を書く。
+
+    see docs/research/opencode/skill-frontmatter.md
+    """
+    path = write_skill_with_body(
+        tmp_path,
+        "sample",
+        "name: sample\ndescription: x\ncontext: fork",
+        "これまでの会話を振り返り、要約せよ。",
+    )
+    errors = vs.validate(path)
+    assert any("context: fork" in e for e in errors)
+
+
+def test_fork_without_conversation_dependency_is_accepted(tmp_path):
+    """入力がリポジトリの状態で完結するなら fork してよい (commit / fix など)。"""
+    path = write_skill_with_body(
+        tmp_path,
+        "sample",
+        "name: sample\ndescription: x\ncontext: fork",
+        "`git diff` を読んでコミットメッセージを書く。",
+    )
+    assert vs.validate(path) == []
+
+
+def test_conversation_dependent_body_without_fork_is_accepted(tmp_path):
+    path = write_skill_with_body(
+        tmp_path,
+        "sample",
+        "name: sample\ndescription: x",
+        "これまでの会話を振り返り、要約せよ。",
+    )
+    assert vs.validate(path) == []

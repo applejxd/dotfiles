@@ -39,6 +39,20 @@ FRAGILE_PLAIN_PATTERNS = {
     " #": "空白+# 以降がコメントとして捨てられる",
 }
 
+# 本文がこれらを含むスキルは、入力が**親の会話そのもの**なので
+# 独立したサブエージェントでは成立しない。
+# OpenCode は `context` を読み捨てるので無害だが (記録 E1)、Claude Code 側で
+# 効くと会話が見えないまま要約や知見を書くことになる。
+# 2026-09-19 に adr skill を廃止した理由がこれ (ac7749a)。
+# see docs/research/opencode/skill-frontmatter.md
+CONVERSATION_MARKERS = (
+    "これまでの会話",
+    "現在の会話",
+    "会話を振り返",
+    "会話履歴",
+    "会話コンテクスト",
+)
+
 
 def split_frontmatter(text: str) -> tuple[str, str] | None:
     """先頭の `---` ブロックを (frontmatter, 残り) で返す。無ければ None。"""
@@ -71,6 +85,25 @@ def check_plain_scalar(frontmatter: str, key: str, errors: list[str]) -> None:
             )
 
 
+def check_fork_needs_no_conversation(
+    data: dict, body: str, errors: list[str]
+) -> None:
+    """会話を入力にするスキルが fork を宣言していたら弾く。
+
+    fork は会話の分岐ではなく**新規コンテキストのサブエージェント**なので、
+    親の会話が見えない。外すのは OpenCode では無害 (元から無視される)。
+    """
+    if data.get("context") != "fork":
+        return
+    found = [marker for marker in CONVERSATION_MARKERS if marker in body]
+    if found:
+        errors.append(
+            f"本文が親の会話を要求している（{', '.join(found)}）のに "
+            "context: fork を宣言している。fork は新規コンテキストの"
+            "サブエージェントなので会話が見えない"
+        )
+
+
 def validate(path: Path) -> list[str]:
     """1 つの SKILL.md を検証し、エラーメッセージの一覧を返す。"""
     errors: list[str] = []
@@ -79,7 +112,7 @@ def validate(path: Path) -> list[str]:
     parts = split_frontmatter(text)
     if parts is None:
         return ["先頭の `---` で囲んだ YAML frontmatter が無い"]
-    frontmatter, _ = parts
+    frontmatter, body = parts
 
     try:
         data = yaml.safe_load(frontmatter)
@@ -111,6 +144,8 @@ def validate(path: Path) -> list[str]:
 
     for key in ("name", "description"):
         check_plain_scalar(frontmatter, key, errors)
+
+    check_fork_needs_no_conversation(data, body, errors)
 
     return errors
 

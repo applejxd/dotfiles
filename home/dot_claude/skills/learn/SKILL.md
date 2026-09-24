@@ -1,12 +1,17 @@
 ---
 name: learn
 description: 会話履歴から AGENTS.md/CLAUDE.md に追記すべき知見を抽出し、差分を提案する。会話中に新たな規約・パターン・落とし穴が判明した際に使う。
-context: fork
-agent: general-purpose
 allowed-tools: Read, Edit, Write, Grep, Glob
 ---
 
 # learn
+
+> **この skill は fork しない（`context: fork` を付けない）**
+>
+> 入力が親の会話そのものなので、独立したサブエージェントでは成立しない。
+> OpenCode は `context` を読み捨てるため無害だが（記録 E1）、Claude Code 側で
+> 効くと**会話が見えないまま知見を捏造する**ことになる。
+> see docs/research/opencode/skill-frontmatter.md
 
 ## 手順
 
