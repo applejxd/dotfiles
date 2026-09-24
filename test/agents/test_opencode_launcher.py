@@ -506,6 +506,71 @@ def test_check_digest_changes_with_the_boundary(tmp_path, monkeypatch):
     assert one != two, "境界を広げても digest が変わっていない"
 
 
+def test_handoff_reads_the_isolated_db_and_writes_the_host_db(tmp_path, monkeypatch):
+    """★移送は「隔離用 DB から読み、ホストの DB へ書く」こと。
+
+    取り込み側に ``OPENCODE_DB`` が残っていると隔離用 DB へ書き戻すことに
+    なり、境界の外から再開できない。``--standalone`` を付けないことで
+    常駐サービス（ホスト DB）へ届かせる。
+    """
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    (ws / ".opencode-sandbox").mkdir(parents=True)
+    db = ws / ".opencode-sandbox" / "opencode.db"
+    db.write_bytes(b"x")
+    monkeypatch.setitem(launcher, "HOME", tmp_path / "home")
+
+    calls: list[dict] = []
+
+    def fake_run(cmd, **kw):
+        calls.append({"cmd": cmd, "env": kw.get("env") or {}})
+        if "export" in cmd:
+            Path(kw["stdout"].name).write_text("{}", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setitem(launcher, "subprocess", subprocess)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    launcher["handoff_session"](ws, "ses_x")
+
+    export, import_ = calls
+    assert "export" in export["cmd"] and "--standalone" in export["cmd"]
+    assert export["env"]["OPENCODE_DB"] == str(db), "隔離用 DB から読んでいない"
+
+    assert "import" in import_["cmd"]
+    assert "OPENCODE_DB" not in import_["env"], "取り込み側に OPENCODE_DB が残っている"
+    assert "--standalone" not in import_["cmd"], "常駐サービス(ホスト DB)へ届かない"
+    assert str(ws) in import_["cmd"], "--directory にワークスペースを渡していない"
+
+
+def test_handoff_staging_is_outside_the_workspace(tmp_path, monkeypatch):
+    """★書き出す JSON をワークスペース内に置かないこと。
+
+    境界内から書ける場所に置くと、取り込む前に内容を差し替えられる。
+    """
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    (ws / ".opencode-sandbox").mkdir(parents=True)
+    (ws / ".opencode-sandbox" / "opencode.db").write_bytes(b"x")
+    home = tmp_path / "home"
+    monkeypatch.setitem(launcher, "HOME", home)
+
+    seen: list[Path] = []
+
+    def fake_run(cmd, **kw):
+        if "export" in cmd:
+            path = Path(kw["stdout"].name)
+            seen.append(path)
+            path.write_text("{}", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    launcher["handoff_session"](ws, "ses_x")
+
+    assert seen, "書き出しが走っていない"
+    assert ws not in seen[0].parents, f"ワークスペース内に置いた: {seen[0]}"
+    assert str(home) in str(seen[0]), "状態領域の外に置いた"
+
+
 def test_seed_db_never_copies_host_conversations(tmp_path, monkeypatch):
     """★ホストの会話をワークスペースへ**一度も書かない**こと。
 

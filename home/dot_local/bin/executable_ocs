@@ -37,7 +37,16 @@ DB_KEEP = ("credential", "account", "account_state", "control_account", "migrati
 
 
 def die(message: str, hint: str = "") -> None:
-    print(f"境界を張れないので起動しない: {message}", file=sys.stderr)
+    fail("境界を張れないので起動しない", message, hint)
+
+
+def fail(context: str, message: str, hint: str = "") -> None:
+    """失敗して止める。``context`` で**何ができなかったか**を言い分ける。
+
+    ★管理用の操作 (``--handoff`` など) は境界を張らない。そこで
+      「起動しない」と言うと、利用者が原因を取り違える。
+    """
+    print(f"{context}: {message}", file=sys.stderr)
     if hint:
         print(f"  {hint}", file=sys.stderr)
     raise SystemExit(1)
@@ -869,6 +878,84 @@ def prune_boundaries() -> None:
             pass  # 消せなくても起動は妨げない
 
 
+def handoff_session(workspace: Path, session_id: str) -> int:
+    """隔離セッションをホストの DB へ移す。
+
+    移したあとは、OpenCode が終了時に表示する ``opencode -s <ID>`` が
+    **そのまま動く**。``session import`` は ID を保つ（実測）。
+
+    ★DB を共有せずに済ませる。隔離用 DB をホストから覗く仕組みは無く、
+      共有すると他プロジェクトの会話が境界内へ入る。必要なものだけ移送する。
+    ★書き出す JSON は**ワークスペースの外**へ置く。境界内から書ける場所に
+      置くと、取り込む前に内容を差し替えられる。
+    """
+    db = workspace / ".opencode-sandbox" / "opencode.db"
+    if not db.is_file():
+        fail(
+            "セッションを移送できない",
+            f"隔離用 DB が無い: {db}",
+            "このディレクトリで ocs を起動したことがない。",
+        )
+    staging = HOME / ".local/state/opencode-sandbox"
+    staging.mkdir(parents=True, exist_ok=True)
+    os.chmod(staging, 0o700)
+
+    with tempfile.TemporaryDirectory(dir=str(staging)) as work:
+        dump = Path(work) / "session.json"
+        export_env = dict(os.environ)
+        export_env["OPENCODE_DB"] = str(db)
+        with dump.open("wb") as out:
+            exported = subprocess.run(  # noqa: S603
+                [str(OPENCODE), "session", "export", session_id, "--standalone"],
+                stdout=out,
+                env=export_env,
+                check=False,
+            )
+        if exported.returncode != 0 or dump.stat().st_size == 0:
+            fail(
+                "セッションを移送できない",
+                f"隔離セッションを書き出せない: {session_id}",
+                "ID を確かめる: ocs --list-sessions",
+            )
+
+        # ★取り込み先はホストの DB。OPENCODE_DB を落とし、--standalone も
+        #   付けない (付けないと常駐サービス = ホスト DB が応答する)。
+        import_env = dict(os.environ)
+        import_env.pop("OPENCODE_DB", None)
+        imported = subprocess.run(  # noqa: S603
+            [
+                str(OPENCODE),
+                "session",
+                "import",
+                str(dump),
+                "--directory",
+                str(workspace),
+            ],
+            env=import_env,
+            check=False,
+        )
+    if imported.returncode != 0:
+        fail("セッションを移送できない", f"ホストの DB へ取り込めない: {session_id}")
+    print(f"\n  境界の外から再開できます:  opencode -s {session_id}", file=sys.stderr)
+    return 0
+
+
+def list_isolated_sessions(workspace: Path) -> int:
+    """隔離用 DB のセッションを並べる。``--handoff`` に渡す ID を選ぶため。"""
+    db = workspace / ".opencode-sandbox" / "opencode.db"
+    if not db.is_file():
+        fail(
+            "セッションを並べられない",
+            f"隔離用 DB が無い: {db}",
+            "このディレクトリで ocs を起動したことがない。",
+        )
+    env = dict(os.environ)
+    env["OPENCODE_DB"] = str(db)
+    return subprocess.run(  # noqa: S603
+        [str(OPENCODE), "session", "list", "--standalone"], env=env, check=False
+    ).returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -893,6 +980,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=".opencode/sandbox.toml の要求を確認せず承認する (自動化用)",
     )
+    parser.add_argument(
+        "--handoff",
+        metavar="ID",
+        help="隔離セッションをホストの DB へ移す (以後 opencode -s ID で再開できる)",
+    )
+    parser.add_argument(
+        "--list-sessions",
+        action="store_true",
+        help="隔離用 DB のセッションを並べる (--handoff に渡す ID を選ぶため)",
+    )
     args, passthrough = parser.parse_known_args(argv)
 
     sandbox = load_boundary()
@@ -901,6 +998,15 @@ def main(argv: list[str] | None = None) -> int:
         die(f"srt が無い: {runtime}")
     if not OPENCODE.is_file():
         die(f"opencode が無い: {OPENCODE}")
+
+    # ★管理用の操作は**境界を張らずにホストで動く**。境界の中からは
+    #   ホストの DB へ書けないので、移送は外側でしかできない。
+    #   起動ディレクトリの検査も要らない (境界を作らないため)。
+    if args.list_sessions:
+        return list_isolated_sessions(Path.cwd().resolve())
+    if args.handoff:
+        return handoff_session(Path.cwd().resolve(), args.handoff)
+
     node = resolve_node()
 
     # ★起動ディレクトリ以下は無条件に許可する。どこで起動するかは利用者の責務。

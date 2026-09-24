@@ -290,6 +290,27 @@ tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree
 | `--recheck` | 前回の合格を使わず境界チェックをやり直す |
 | `--trust` | `.opencode/sandbox.toml` の要求を確認せず承認する（自動化用） |
 | `--skip-check` | 境界チェックを省く。**検査スクリプトが無いときの逃げ道**（起動を断られたときのエラーがこれを案内する） |
+| `--list-sessions` | 隔離用 DB のセッションを並べる |
+| `--handoff <ID>` | 隔離セッションをホストの DB へ移す。以後 `opencode -s <ID>` で再開できる |
+
+### セッションの引き継ぎ
+
+境界の内側で作ったセッションは隔離用 DB にあり、**そのままでは外から開けない**
+（`OPENCODE_DB` と `--standalone` の両方が要る）。移送すると、OpenCode が
+終了時に表示する `opencode -s <ID>` が**そのまま動く**。
+
+```bash
+ocs --list-sessions            # ID を選ぶ
+ocs --handoff ses_xxxxxxxx     # ホストの DB へ移す
+opencode -s ses_xxxxxxxx       # 境界の外で再開
+```
+
+- `session import` は **ID を保つ**（実測）。DB を共有する必要はない
+- 書き出す JSON は**ワークスペースの外**へ置く。境界内から書ける場所だと、
+  取り込む前に内容を差し替えられる
+- 取り込みは `OPENCODE_DB` を落とし、`--standalone` も**付けない**。
+  付けないことで常駐サービス（＝ホストの DB）へ届く
+- **移送は複製**で、隔離用 DB からは消えない
 
 > **`srt -c` はコマンド文字列を 1 個しか取らない。** 後ろへ並べた引数は
 > `srt` の位置引数になり、**エラーも出さずに捨てられる**。渡したい引数は
@@ -355,7 +376,7 @@ tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree
 | --- | --- |
 | セッション中に境界を変えられない | bwrap の名前空間はプロセス起動時に作られる。`/add-dir` 相当は無い |
 | コマンド単位の逃げ道が無い | プロセス単位で包む以上、`dangerouslyDisableSandbox` 相当は作れない |
-| 履歴・設定が通常版と分かれる | DB を分けているため。セッションの移送は `session export` / `import` |
+| 履歴・設定が通常版と分かれる | DB を分けているため。セッションの移送は `ocs --handoff`（[引き継ぎ](#セッションの引き継ぎ)） |
 | 境界はエージェントから見えない | `ENOENT` を「存在しない」と誤診する。`AGENTS.md` で明示的に伝えている |
 | `read` が既定で拒否 | Claude Code は既定で全許可。参照したい場所は個別に開ける必要がある |
 | **資格情報は境界内にある** | 隔離 DB が `credential` を引き継ぎ、その DB はワークスペース内にある。モデル API の資格情報は内側から読める |

@@ -276,6 +276,17 @@ opencode    # 素の OpenCode（境界なし）
 tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree>.tgz -C <復元先>
 ```
 
+境界の内側で作ったセッションは隔離用 DB にあり、**そのままでは外から開けません**。
+移すと `opencode -s <ID>` がそのまま使えます。
+
+```bash
+ocs --list-sessions          # ID を選ぶ
+ocs --handoff ses_xxxxxxxx   # ホストの DB へ移す
+opencode -s ses_xxxxxxxx     # 境界の外で再開
+```
+
+> **移送は複製**で、隔離側からは消えません。ID は保たれます。
+
 **起動ディレクトリ以下は無条件に読み書きできます。** どこで起動するかは利用者の
 責務です。それ以外を開けたいときだけ、プロジェクトに要求ファイルを置きます。
 
