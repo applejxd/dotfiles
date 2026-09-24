@@ -78,6 +78,42 @@ skills.enablePiUser        = true
 方式を採った。フラグは `~/.claude` 配下の何が有効になるか読めないが、
 パス指定なら「どこから来た skill か」が設定を見るだけで分かる。
 
+### 2 つ目の門: `enabledProviders` が他ツールのユーザ領域を丸ごと閉じている
+
+`skills.enableClaudeUser` は**門の 1 枚目でしかなかった**。公式ドキュメント
+`docs/settings.md` に、より上流の門がある。
+
+> `enabledProviders` opts foreign user-level configuration sources into
+> discovery. Its default is empty, so user roots from Cursor, Codex, Claude,
+> Claude marketplace plugins, Gemini, OpenCode, Windsurf, and GitHub **do not
+> load until their provider id is listed**. Project roots remain enabled.
+
+つまり既定では、`~/.claude` 配下のユーザ領域は**何一つ読まれない**。
+skills だけの話ではなかった。閉じていたのは次の全部。
+
+| 資産 | 実体 | 既定 |
+| --- | --- | --- |
+| **MCP サーバ定義** | `~/.claude.json` の `mcpServers`（`deepwiki`） | **読まれない** |
+| スラッシュコマンド | `~/.claude/commands/*.md`（4 件） | 読まれない |
+| ユーザ文脈ファイル | `~/.claude/CLAUDE.md` | 読まれない |
+| LSP 設定 | `~/.claude/lsp.*` | 読まれない |
+| skills | `~/.claude/skills`（16 件） | 読まれない |
+
+**段 1.5 で skills が通ったのは、`customDirectories` がプロバイダ機構を
+迂回して直接ディレクトリを走査するため。** 門を開けたのではなく、
+横を通していた。だから MCP には効かなかった。
+
+`enabledProviders: [claude]` を入れると 1 枚目の門が開く。`*` / `all` では
+なく `claude` だけにしたのは、codex / gemini / opencode / cursor / windsurf /
+github / claude-plugins まで同時に開くと「どの定義が採用されたか見えにくい」
+という既知の懸念（下記「未解決点」）をそのまま悪化させるため。
+
+> **`~/.claude/hooks/` は開いても実行されない**（確認済み）。omp が拾う hook は
+> `hooks/pre/` `hooks/post/` 配下の `.ts` / `.js` ファクトリだけで、このリポジトリが
+> 置いているのは `~/.claude/hooks/*.py` と `*.sh`。`pre/` / `post/` も無い。
+> `settings.json` の `hooks` 節（Claude Code 形式）も omp は読まない。
+> **Claude 用に生成した hook が omp で暴発する経路は無い。**
+
 ### 訂正した思い込み
 
 | 当初 | 実際 |
@@ -104,6 +140,112 @@ skills.enablePiUser        = true
 - MCP の接続定義を共有できても、OAuth のログイン状態まで共有できるとは限らない
 - `omp` の subagent が使う隔離バックエンドの実体（README は
   "optionally workspace-isolated" と書いており、常に git worktree とは限らない）
+
+## 推奨設定（`omp config list` の全項目を見た結果）
+
+`omp config list` は 9 節・約 400 項目ある。**ほとんどは既定のままでよい。**
+既定が明らかに惜しいもの、既存資産と繋がるものだけを挙げる。
+
+### 採用（実装済み）
+
+| 設定 | 既定 → 採用値 | なぜその値か |
+| --- | --- | --- |
+| `enabledProviders` | `[]` → `["claude"]` | 既定では `~/.claude.json` の MCP も `~/.claude/commands` も**読まれない**。`*` にせず `claude` だけにして、採用元を 1 つに絞る |
+| `commands.enableClaudeUser` | `false` → `true` | `~/.claude/commands/*.md`（`ask` / `commit` / `criticalthink` / `onboarding`）をそのまま `/ask` 等として使える。新規に書くものが無い |
+| `bashInterceptor.enabled` | `false` → `true` | 下記 |
+| `skills.customDirectories` | `[]` → `~/.claude/skills` | 段 1.5 で実施済み |
+
+### `bashInterceptor` を入れた理由と、正確な挙動
+
+`bash` を `read` / `grep` / `glob` / `edit` / `write` / `hub` へ振り替える。
+**内蔵の既定パターンが、このリポジトリが `common.toml` に書いている誘導規則と
+ほぼ同じ内容**（`cat`/`head`/`tail` → `read`、`grep`/`rg` → `grep`、
+`find`/`fd` → `glob`、`sed -i` → `edit`、`echo >` → `write`）。
+**パターンを 1 行も書かずに他の CLI と挙動が揃う**ので採った。
+
+> **呼称の食い違いを実測した。** 公式ドキュメントは "redirects Bash commands
+> to dedicated tools **rather than defining whether a command may execute**"
+> と書くが、`omp config list` の説明文は "**Block** shell commands that have
+> dedicated tools" になっている。実際にはその bash 呼び出し自体は通らず、
+> モデルへ「こちらのツールを使え」と返る。**止まるのは事実**。
+> ただし止める対象は道具の選び方であって到達範囲ではない（同じことは
+> `eval` 経由でも素通りする）。**境界ではない**ので、この案件の軸と矛盾しない。
+
+### 見送り（根拠つき）
+
+| 設定 | 見送る理由 |
+| --- | --- |
+| `task.isolation.enabled` / `worktree.*` | subagent の隔離バックエンドの実体が未確認（下記「まだ分からないこと」）。段 2 の前に作り込まない |
+| `memory.backend` / `autolearn.enabled` | 外部サービスや追加モデルが要る。素の使い勝手を測る前に入れると、何が効いたか分からなくなる |
+| `find.enabled` | `auto` のままで足りる。`on` は `judge` ロールが TypeSafe の native モデルに解決できるときだけ働き、`TYPESAFE_API_KEY` が要る |
+| `github.enabled` | 内蔵 GitHub ツール。`github-issue` skill と繋がる見込みはあるが、**認証経路が未確認**（`gh` の資格情報を使うのか独自なのか読めなかった） |
+| `enabledProviders` に `*` | 7 ソースを同時に開くと、採用された定義の出所が追えない |
+
+### 好みで決まるもの（実装しない。使ってみて決める）
+
+ここは「正解がある」類ではないので値を置かない。段 2 を回してから選ぶ。
+
+| 設定 | 既定 | 振れ幅 |
+| --- | --- | --- |
+| `autoResume` | `false` | `true` にすると同じディレクトリの直近セッションを自動で継ぐ。`omp -c` を毎回打つか、勝手に繋がるのを嫌うかの好み |
+| `compaction.idleEnabled` | `false` | `true` は待ち時間中に圧縮を済ませる。ターン中に止まらなくなる代わり、裏でトークンを使う |
+| `readLineNumbers` | `false` | `edit.mode = hashline` が既に行番号付きで読ませるので、重ねる意味があるかは好み |
+| `includeWorkspaceTree` | `false` | 起動時にツリーを入れる。当たりは早くなるが文脈を食う |
+| `tui.vimMode` / `tui.mouse` | `false` | 操作の好み |
+| `error.notify` | `off` | `on` で失敗時に通知。WSL で通知が届くかは**未確認** |
+
+### 採らなかった実装方式: `PI_CONFIG_FILES` オーバーレイ
+
+「chezmoi 管理の YAML を 1 枚置いて `PI_CONFIG_FILES` で読ませる」方式も
+検討した。書き込み競合が原理的に起きない（オーバーレイは読み取り専用）点は
+魅力だが、2 つの理由で採らなかった。
+
+- **優先順位が `/settings` より上。** `defaults <- global <- project <-
+  PI_CONFIG_FILES <- --config <- runtime` なので、オーバーレイに書いた鍵は
+  UI から変更できなくなる（変更は global に書かれ、負ける）
+- **ファイルが無いと起動が落ちる。** オーバーレイは strict で、欠損・不正
+  YAML・非マッピングが全てハードエラー。chezmoi 適用前の環境で `omp` が
+  起動しなくなる
+
+## Pi を入れるならこの設定（未導入。調査のみ）
+
+実装はしない（段 4 の材料）。公式ドキュメント
+`packages/coding-agent/docs/` を読んで分かったこと。
+
+### Pi は MCP を持たない
+
+**`packages/coding-agent/docs/` の 39 ファイル全てに `MCP` の記述が 1 件も無い。**
+`settings.md` にも MCP の項目が無い。拡張（TypeScript）で自作する余地は
+あるが、**`common.toml` の `[[mcp]]` を Pi へ配る先が存在しない。**
+
+これは omp との実質的な差になる。omp 側は `enabledProviders: [claude]` の
+1 行で既存の MCP 定義が繋がるのに対し、Pi は同じことに拡張の実装が要る。
+
+> 後述のとおり**この判定は静的な読みのみ**で、実機では確認していない。
+
+### 設定の置き場と、既定で惜しいところ
+
+設定は `~/.pi/agent/settings.json`（`PI_CODING_AGENT_DIR` で移動可能）。
+omp の `~/.omp/agent/config.yml` とは**別物なので共有させない**
+（既存の「未解決点」のとおり）。
+
+| 設定 | 既定 | 入れるなら | 理由 |
+| --- | --- | --- | --- |
+| `defaultTools` | `["read","bash","edit","write"]` | `+ grep` `find` `ls` | **これが一番惜しい。** `grep` / `find` / `ls` は実装されているのに既定で無効で、素のままだと検索を全部 `bash` でやることになる |
+| `skills` | `[]` | `["~/.claude/skills"]` | Pi が素で見るのは `~/.pi/agent/skills` と `~/.agents/skills` だけ。自作 16 個は `~/.claude/skills` にあるので明示が要る（omp の `customDirectories` と同じ話） |
+| `defaultThinkingLevel` | `"medium"` | `"high"` | omp の既定は `high`。比較の条件を揃えるため |
+| `defaultProjectTrust` | `"ask"` | 変えない | 段 4 では毎回聞かせて、どこを信頼したか見えるようにする |
+
+`skills` は**再帰的に**走査される（omp の `customDirectories` は非再帰）。
+同じパスを渡しても拾う範囲が違いうるので、段 4 で件数を突き合わせる。
+
+### 比較を成立させるための注意
+
+- `enableInstallTelemetry` の既定が `true`。匿名の導入・更新レポートを送る。
+  止めるかは好み
+- Pi の skills は `name` とディレクトリ名の不一致を**警告しない**。このリポジトリの
+  約束（`SKILL.md` の `name` はディレクトリ名と一致）は Pi では検出されないので、
+  Pi で通っても他で通るとは限らない
 
 ## 評価基準
 
@@ -145,6 +287,7 @@ skills.enablePiUser        = true
 | --- | --- | --- |
 | 1 | `omp` を導入する（既存の AI CLI 導入スクリプトへ合流） | **完了**（2026-09-24。`v18.2.11`） |
 | 1.5 | 自作 skills を `omp` から見えるようにする | **完了**（2026-09-24） |
+| 1.6 | 既存の MCP / コマンドを `omp` へ繋ぐ（`enabledProviders`） | **完了**（2026-09-24。実機での疎通は段 2） |
 | 2 | 普段の作業を 1 周通す（認証・skills・MCP・編集・再開） | 未着手 |
 | 3 | 常用 skills が動くか確認し、動かないものを記録 | 未着手 |
 | 4 | Pi を比較用に追加し、同じ開始コミット・同じ課題で比べる | 未着手 |
@@ -169,6 +312,10 @@ skills.enablePiUser        = true
 | `agent-cli-install.sh.tmpl` | （なし）→ `omp` を追加 | 既存 3 CLI と同じ流儀に合流させる | **完了** |
 | `[web] allow_domains` | → `pi.dev` / `omp.sh` を追加 | ドキュメント参照用 | **完了** |
 | `400_unix/420_omp_skills` | （なし）→ `skills.customDirectories` へ `~/.claude/skills` を追記 | 既定 `enableClaudeUser = false` で自作 skills が 1 つも見えない | **完了** |
+| `400_unix/430_omp_claude_assets` | （なし）→ `enabledProviders` へ `claude` を追記 | 既定 `[]` で `~/.claude.json` の MCP もコマンドも読まれない | **完了** |
+| 同上 | （なし）→ `commands.enableClaudeUser` を `true` に種まき | 既存の Claude コマンド 4 件をそのまま使う | **完了** |
+| 同上 | （なし）→ `bashInterceptor.enabled` を `true` に種まき | 内蔵の既定パターンが `common.toml` の誘導規則とほぼ同じ。**パターンを書かずに**他 CLI と挙動が揃う | **完了** |
+| `common.toml` へ omp 固有設定を足す | **足さない** | 「共通プロファイルを増やさず個別設定に書く」方針。omp の設定は `~/.omp/agent/config.yml` が正本 | **対象外** |
 | `common.toml` の permission 生成 | 変更しない | **permission という概念が無い**ので翻訳先が無い | **対象外** |
 | `~/.omp/agent/config.yml` の chezmoi 管理 | 丸ごとは管理しない | 認証・セッション・自動生成 memory を含む。**必要な 1 項目だけ** CLI 経由で追記する | **完了**（方式を確定） |
 
@@ -185,6 +332,24 @@ UI や `omp config set` で変えた分と綱引きになる。
 > `{"key":…, "value":[…]}` を返す。配列として読むと必ず解析に失敗し、
 > 毎回「未登録」と判定して冪等性が壊れる（実際に一度踏んだ）。
 
+### 真偽値を「一度だけ置く」ことにした理由
+
+配列（`customDirectories` / `enabledProviders`）は**追記で冪等にできる**。
+既にあれば足さない、が素直に書ける。
+
+真偽値はそうはいかない。`omp config get` が返すのは**実効値**なので、
+「まだ設定していない」と「既定値と同じ値を意図して明示した」が区別できない。
+毎回入れ直す実装にすると、UI や `omp config set` で意図して戻した設定を
+次の `chezmoi apply` が黙って覆す。
+
+そこで `~/.omp/agent/.chezmoi-seeded` に**置いた鍵の名前を控え、2 回目以降は
+触らない**。初期値だけこちらが用意し、以後はユーザのものにする。
+
+`run_once_` を使わなかったのは、**omp 未導入の回を取りこぼすため**。
+`run_once_` はスクリプト内容ごとに 1 回しか走らないので、その 1 回で
+`omp` が無いと二度と種まきされない。`run_onchange_` + 控えなら、omp があった
+回にだけ控えるので導入が後になっても拾える。
+
 ## 重要な更新
 
 - **2026-09-24**: 起票。**安全性の軸で評価しない**ことを前提として明記した
@@ -197,9 +362,30 @@ UI や `omp config set` で変えた分と綱引きになる。
 - **2026-09-24**: `[CHG-0005](0005-agents-config-naming.md)` の A2（固有設定の
   native 分離）は、この案件の結論が出るまで**優先度を下げる**。
   第一サポートが変わるなら、整理の対象も変わるため
+- **2026-09-24**: `omp config list` の全項目（9 節・約 400 件）を見た。
+  **`skills.enableClaudeUser` は門の 1 枚目でしかなかった。** より上流に
+  `enabledProviders` があり、既定 `[]` で `~/.claude` のユーザ領域が
+  **丸ごと**閉じている。段 1.5 で skills が通ったのは
+  `customDirectories` がプロバイダ機構を迂回していたためで、**MCP には
+  効いていなかった**。`enabledProviders: [claude]` で 1 枚目を開けた
+- **2026-09-24**: Pi の公式ドキュメント 39 ファイルに **MCP の記述が 1 件も無い**
+  ことを確認。`common.toml` の `[[mcp]]` を Pi へ配る先は現時点で存在しない
+  （静的な読みのみ。実機未確認）
 
 ## 未解決点
 
+- **`enabledProviders: [claude]` の効果を実機で確認できていない。**
+  `omp` が未認証（`No models available`）で、`/mcp list` はモデル呼び出しを
+  伴うため到達しなかった。**段 2 の最初に `/mcp list` で `deepwiki` が
+  出ることを確認する。** 出なければこの設定は無効
+- `enabledProviders` を開くと omp が `~/.claude/settings.json` を**設定源**と
+  しても読むかは**未確認**。公式ドキュメントは「他ツールが寄与するのは
+  project レベルの設定」と読めるので user レベルの同ファイルは対象外の
+  はずだが、裏は取れていない。読まれた場合 `permissions` / `hooks` /
+  `sandbox` といった omp のスキーマに無い鍵をどう扱うかも不明
+- `~/.claude/CLAUDE.md` がユーザ文脈として載るようになったはず。
+  omp の文脈は `~/.omp/agent/AGENTS.md` が最優先で**ユーザ文脈は 1 つしか
+  生き残らない**ため、どちらが採用されたか段 2 で確認する
 - `omp` は設定ファイルを**自身も書き換える**（設定移行、MCP 設定の書き込み）。
   UI で変えたら chezmoi へ戻す運用を徹底しないと、次の `apply` で消える
 - 便利な自動発見の代償として、**どの定義が採用されたかが見えにくい**。

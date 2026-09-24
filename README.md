@@ -125,10 +125,20 @@ Pi のフォークで、LSP 統合・DAP・subagent を持ちます。
 omp        # 起動。境界 (ocs) の外で動く
 ```
 
-**`omp` は `~/.claude` を設定探索ルートに含みますが、他ツールのユーザ領域の
-skills 読み込みは既定で無効です**（`skills.enableClaudeUser = false`）。
-`chezmoi apply` 時に `skills.customDirectories` へ `~/.claude/skills` を
-追記するので、このリポジトリの skills 16 個が使えます。
+**`omp` は `~/.claude` を設定探索ルートに含みますが、他ツールのユーザ領域は
+既定で 1 つも読みません**（`enabledProviders` の既定が空）。
+`chezmoi apply` が次の 3 つを設定するので、既存の資産がそのまま使えます。
+
+| 設定 | 繋がるもの |
+| --- | --- |
+| `skills.customDirectories` | `~/.claude/skills` の自作 skills 16 個 |
+| `enabledProviders: [claude]` | `~/.claude.json` の MCP サーバ定義、`~/.claude/commands` |
+| `commands.enableClaudeUser` | `/ask` `/commit` `/criticalthink` `/onboarding` |
+
+あわせて `bashInterceptor.enabled` を有効にし、`cat` / `grep` / `sed -i` などを
+`read` / `grep` / `edit` へ誘導します（他の CLI と挙動を揃えるため）。
+**真偽値の 2 つは初回のみ設定**し、以後 `omp config set` や `/settings` で
+変えた値は上書きしません（`~/.omp/agent/.chezmoi-seeded` で管理）。
 
 > **permission 機構を持たない設計です。** Pi 系は安全性より利便性を取る方針で、
 > 権限制御は拡張か外部の sandbox に委ねます。保護は「どこで起動するか」と
