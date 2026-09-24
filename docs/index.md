@@ -62,15 +62,26 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | --- | --- | --- | --- |
 | [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。**4 は全て見送り**、5 は第一サポート決定待ち。既存 allow のリダイレクト穴を塞いだ | 段階 5（CHG-0006 の結論待ち） |
 | [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。A1 完了 | A2 の要否（CHG-0006 の結論待ち） |
-| [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。`enabledProviders` の効果が実機未確認 | 段 2 の冒頭で `/mcp list` を見る |
+| [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。段 2（常用）に着手。使って決まった設定の回収は段 2.5 | 段 2 の冒頭で `/mcp list` ではなくスラッシュコマンドを見る |
 | [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み | 段 2（共有ランタイムとハーネスの節分け） |
 
 ## 判断待ち・障害
 
-- なし
+- **Claude Code が使えない**（2026-09-25〜）。OAuth が期限切れで、再開には
+  契約が要る。**棚上げと判断した。** 止まるのは Claude 実機の検証だけで、
+  `~/.claude/skills` などの資産は OpenCode / Copilot から使われ続ける
+  （`~/.copilot/skills` は symlink、OpenCode は監視対象に含む）。
+  再開条件は「Claude Code を再契約したとき」
+  - 保留中の測定: [`context: fork` が Claude 側で効くか](research/opencode/skill-frontmatter.md)
 
 ## 最近の重要な変更
 
+- 2026-09-25 — スキルを役割で分離。`checkpoint` は復帰記録（A1）、`sdd-docs` は
+  `docs/` の文書化（A2 / B）。description が 2 つの仕事を名乗っていた
+  — [checkpoint 仕様](spec/checkpoint.md)
+- 2026-09-25 — `context: fork` は OpenCode に**読み捨てられる**と実測。
+  スキーマに存在せず、スキルは常に会話へ展開される
+  — [スキル frontmatter の解釈範囲](research/opencode/skill-frontmatter.md)
 - 2026-09-25 — 圧縮要約そのものを checkpoint にした。保存と復帰が同じ成果物に
   なり、両者がずれる余地が無くなった
   — [CHG-0001](change/closed/0001-compaction-context-handover.md)

@@ -43,7 +43,7 @@
 | --- | --- | --- | --- | --- | --- |
 | [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | In progress | **4a も見送りになった**（候補がほぼ全部、任意コード実行の経路）。既存 allow のリダイレクト穴は塞いだ | 段階 5（第一サポート決定待ち） | 2026-09-24 |
 | [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | In progress | A1 完了（生成物は不変）。A2 は CHG-0006 の結論待ちで優先度を下げた | A2 の要否判断 | 2026-09-24 |
-| [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | `enabledProviders = ["claude"]` の効果が実機未確認（omp が未認証）。deepwiki を外して MCP が 0 件になり、`/mcp list` での判定は使えない | 段 2 の冒頭で `~/.claude/commands/*.md` がスラッシュコマンドに出るか | 2026-09-25 |
+| [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | 段 2（常用）に着手。`enabledProviders = ["claude"]` の効果は常用の初回に判定する。使って決まった設定の回収（段 2.5）を計画へ追加 | 段 2 の冒頭で `~/.claude/commands/*.md` がスラッシュコマンドに出るか | 2026-09-25 |
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。再開条件は「境界へ入れたいハーネスが 2 つ目になったとき」 | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-24 |
 
 ## 保留
