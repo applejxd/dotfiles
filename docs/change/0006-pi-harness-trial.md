@@ -11,7 +11,7 @@
 
 **非目的**:
 
-- **これらを OS 境界（`ocs`）へ入れること。** 下記「軸について」を参照
+- **これらを OS 境界（`ocs`）へ入れること。** 「軸について」を参照
 - `common.toml` の permission 生成系へ組み込むこと
 - 4 OS すべてへの展開。まず Ubuntu / WSL で 1 つ通す
 
@@ -32,7 +32,7 @@ permission 機構を持たないと明記があり、権限制御は拡張か外
 拡張性・IDE 統合）が全部「欠点」として出力されるため、判断材料にならない。
 
 **代わりに、払っている代償を正確に言語化したうえで利便性を取る。**
-代償は下記「払う代償」に列挙する。「危険だからやめる」ではなく
+代償は「払う代償」に列挙する。「危険だからやめる」ではなく
 「これが起きうると知ったうえで使う」という形にする。
 
 ## 実施計画
@@ -137,7 +137,7 @@ skills だけの話ではなかった。閉じていたのは次の全部。
 `enabledProviders: [claude]` を入れると 1 枚目の門が開く。`*` / `all` では
 なく `claude` だけにしたのは、codex / gemini / opencode / cursor / windsurf /
 github / claude-plugins まで同時に開くと「どの定義が採用されたか見えにくい」
-という既知の懸念（下記「未解決点」）をそのまま悪化させるため。
+という既知の懸念（「未解決点」）をそのまま悪化させるため。
 
 > **`~/.claude/hooks/` は開いても実行されない**（確認済み）。omp が拾う hook は
 > `hooks/pre/` `hooks/post/` 配下の `.ts` / `.js` ファクトリだけで、このリポジトリが
@@ -296,7 +296,7 @@ UI や `omp config set` で変えた分と綱引きになる。
 | --- | --- | --- |
 | `enabledProviders` | `[]` → `["claude"]` | 既定では `~/.claude.json` の MCP も `~/.claude/commands` も**読まれない**。`*` にせず `claude` だけにして、採用元を 1 つに絞る |
 | `commands.enableClaudeUser` | `false` → `true` | `~/.claude/commands/*.md`（`ask` / `commit` / `criticalthink` / `onboarding`）をそのまま `/ask` 等として使える。新規に書くものが無い |
-| `bashInterceptor.enabled` | `false` → `true` | 下記 |
+| `bashInterceptor.enabled` | `false` → `true` | 内蔵の既定パターンが `common.toml` の誘導規則とほぼ同じで、**パターンを書かずに**他 CLI と挙動が揃う（「`bashInterceptor` を入れた理由と、正確な挙動」） |
 | `skills.customDirectories` | `[]` → `~/.claude/skills` | 段 1.5 で実施済み |
 
 ### `bashInterceptor` を入れた理由と、正確な挙動
@@ -319,7 +319,7 @@ UI や `omp config set` で変えた分と綱引きになる。
 
 | 設定 | 見送る理由 |
 | --- | --- |
-| `task.isolation.enabled` / `worktree.*` | subagent の隔離バックエンドの実体が未確認（下記「まだ分からないこと」）。段 2 の前に作り込まない |
+| `task.isolation.enabled` / `worktree.*` | subagent の隔離バックエンドの実体が未確認（「現在地」の「まだ分からないこと」）。段 2 の前に作り込まない |
 | `memory.backend` / `autolearn.enabled` | 外部サービスや追加モデルが要る。素の使い勝手を測る前に入れると、何が効いたか分からなくなる |
 | `find.enabled` | `auto` のままで足りる。`on` は `judge` ロールが TypeSafe の native モデルに解決できるときだけ働き、`TYPESAFE_API_KEY` が要る |
 | `github.enabled` | 内蔵 GitHub ツール。`github-issue` skill と繋がる見込みはあるが、**認証経路が未確認**（`gh` の資格情報を使うのか独自なのか読めなかった） |
@@ -365,7 +365,7 @@ UI や `omp config set` で変えた分と綱引きになる。
 これは omp との実質的な差になる。omp 側は `enabledProviders: [claude]` の
 1 行で既存の MCP 定義が繋がるのに対し、Pi は同じことに拡張の実装が要る。
 
-> 後述のとおり**この判定は静的な読みのみ**で、実機では確認していない。
+> **この判定は静的な読みのみ**で、実機では確認していない。
 
 ### 設定の置き場と、既定で惜しいところ
 
@@ -395,7 +395,7 @@ omp の `~/.omp/agent/config.yml` とは**別物なので共有させない**
 
 - **2026-09-24**: 起票。**安全性の軸で評価しない**ことを前提として明記した
 - **2026-09-24**: `omp` が `~/.claude` を config root として読むと知り、
-  「skills は設定不要」と判断した。**これは誤りで同日中に撤回**（下記）
+  「skills は設定不要」と判断した。**これは誤りで同日中に撤回**（次項）
 - **2026-09-24**: 実機で `skills.enableClaudeUser = false`（既定）を確認。
   探索ルートに `.claude` が含まれることと、`~/.claude/skills` を読むことは
   別だった。**素のままでは自作 skills が 1 つも見えない**。
