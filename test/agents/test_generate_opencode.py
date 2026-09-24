@@ -715,6 +715,55 @@ def test_keybind_leader_is_allowed_as_an_id():
     assert out["leader"] == "ctrl+space"
 
 
+def test_redirect_guard_covers_every_allowed_command():
+    """★allow に載せたコマンドは、書き込み形が塞がれていること。
+
+    allow は**前方一致**で、リダイレクトは resource に残る。つまり
+    ``git log`` を allow に載せた時点で ``git log > ~/.bashrc`` が
+    **無確認で通る**。guide 規則は effect が allow でも走るので、そこで
+    書き込み形だけ deny する。
+
+    **allow を増やしたらこのテストが落ちる。** 歯止めも一緒に足すこと。
+    """
+    guards = [
+        g
+        for g in gen.opencode_guide_rules(COMMON)
+        if "リダイレクト" in g["message"] and "allow" in g["message"]
+    ]
+    assert len(guards) == 1, "リダイレクトの歯止めが 1 件でない"
+    pattern = re.compile(guards[0]["pattern"])
+    unless = re.compile(guards[0]["unless"])
+
+    for command in COMMON["opencode"]["shell"]["allow"]:
+        probe = f"{command} > /home/u/.bashrc"
+        assert pattern.search(probe) and not unless.search(probe), (
+            f"allow の {command!r} が書き込み形で素通りする"
+        )
+
+
+def test_redirect_guard_lets_through_reads_and_stderr():
+    """★止めるのは書き込みだけ。読み取りと stderr の付け替えは通す。
+
+    ここを広げると作業が止まる。`2>/dev/null` や `2>&1` は日常的に使う。
+    """
+    guards = [
+        g
+        for g in gen.opencode_guide_rules(COMMON)
+        if "リダイレクト" in g["message"] and "allow" in g["message"]
+    ]
+    pattern = re.compile(guards[0]["pattern"])
+    unless = re.compile(guards[0]["unless"])
+
+    for probe in (
+        "git log --oneline -5",
+        "git log 2>&1 | head",
+        "wc -l a.txt 2>/dev/null",
+        "git log | wc -l",
+    ):
+        blocked = bool(pattern.search(probe)) and not unless.search(probe)
+        assert not blocked, f"{probe!r} を止めてしまう"
+
+
 def test_allow_is_not_widened_silently():
     """allow が増えたら気付けるようにする。
 

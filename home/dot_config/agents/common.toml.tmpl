@@ -749,6 +749,20 @@ pattern = '(^|&&|;|\n)\s*sed\s+-n\s'
 unless = '[|<>]'
 message = "sed -n でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。"
 
+# allow に載っているコマンドの「書き込み形」を塞ぐ (CHG-0002 段階 4a の副産物)。
+# ★allow は **前方一致**で、リダイレクトは resource に残る。つまり
+#   `git log` が allow に載っている時点で `git log > ~/.bashrc` が
+#   **無確認で通る**。これは 4a を検討する過程で見つけた**既存の穴**。
+# ★guide 規則は effect が allow でも走る (plugin は deny のときだけ手前で
+#   抜ける)。so allow を維持したまま、書き込み形だけここで deny できる。
+# ★unless は stderr の付け替えと /dev/null を外す。これらは書き込みではない。
+# ★対象は [opencode.shell] allow と揃えること。allow を増やすならここも足す。
+# see docs/change/0002-opencode-ask-by-default.md 「段階 4a」
+[[opencode.shell.guide]]
+pattern = '(^|&&|\|\||;|\n)\s*(wc|grep\s+-n|git\s+log|uv\s+pip\s+list|docker\s+ps)\b[^\n]*>'
+unless = '2>&1|>&\s*\d|>\s*/dev/null'
+message = "allow されたコマンドの出力をリダイレクトで書き込まないでください。ファイルを作る・書き換えるときは write / edit ツールを使ってください。"
+
 # ヒアドキュメントを write ツールへ寄せる。目的は確認 1 回あたりの負担で、
 # 実履歴ではヒアドキュメント付きが 177 件 (16.9%)・中央値 1,012 字だった。
 # 読めない長文を形式的に承認するより、1 行の確認 + 差分で見せるほうがよい。
