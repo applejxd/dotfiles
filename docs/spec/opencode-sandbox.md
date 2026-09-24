@@ -163,6 +163,7 @@ flowchart LR
         TRUSTED["trusted.json<br>追加許可の承認"]
         CHECKED["checked.json<br>境界チェックの合格"]
         BACKUPS["backups/<br>起動前の退避"]
+        BOUNDARIES["boundaries/<br>srt へ渡す境界の定義"]
     end
     subgraph readonly["境界の外（内側から読めるだけ）"]
         SBCFG["~/.config/opencode-sandbox/<br>opencode.json / AGENTS.md"]
@@ -265,6 +266,11 @@ tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree
   判定すると**穴が開いていても合格になる**
 - 合格は**判定に効く入力のハッシュ**（境界設定・`srt`・`opencode`・検査script）と
   24 時間の期限つきで再利用する。`--recheck` でやり直す
+- **検査スクリプトが無ければ起動しない。** 配備の失敗やファイル消失が
+  「検査を飛ばして起動」に化けると、保護が消えても気づけない。
+  省くときは `--skip-check` を明示する
+- **保護対象が通常ファイルのときは追記（`>>`）で書き込み可否を見る。**
+  `mkdir` の失敗を合格と読むと、書けるのに合格する。`>` は中身を切り詰めるので使わない
 
 ## コマンドとフラグ
 

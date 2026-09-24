@@ -177,6 +177,14 @@ def _uniq(values: list[str]) -> list[str]:
 REQUEST_REL = ".opencode/sandbox.toml"
 TRUST = HOME / ".local/state/opencode-sandbox/trusted.json"
 CHECKED = HOME / ".local/state/opencode-sandbox/checked.json"
+# 境界の設定を渡す場所。★ワークスペースの外に置くこと。
+#   tempfile の既定は TMPDIR に従い、TMPDIR はワークスペース内を指している。
+#   そこは allowWrite 領域なので、srt が読む前に**内側から書き換えられる**
+#   (同一 UID では 0600 でも別セッションを隔離できない)。
+#   さらに execve のため finally が走らず、残骸が溜まり続けていた (実測 19 個)。
+BOUNDARIES = HOME / ".local/state/opencode-sandbox/boundaries"
+# 残骸の掃除。execve で消せないので、次回起動時に古いものを捨てる。
+BOUNDARY_MAX_AGE_SECONDS = 24 * 60 * 60
 # 起動前の退避先。★境界の内側から触れない場所に置くこと。
 #   内側からの書き込みは成功したように見えてホストへ届かない (R2。実測済み)。
 BACKUPS = HOME / ".local/state/opencode-sandbox/backups"
@@ -814,6 +822,22 @@ def run_check(node: str, runtime: Path, boundary: str, project: dict, env: dict)
         die("起動時の境界チェックが不合格", "上の ★NG を見て設定を直す")
 
 
+def prune_boundaries() -> None:
+    """境界設定の残骸を捨てる。
+
+    ★``execve`` はプロセスを置き換えるので ``finally`` が走らない。自分では
+    消せないので、**次の起動が前回の分を捨てる**。稼働中のセッションのものを
+    消さないよう、古いものだけに絞る。
+    """
+    cutoff = time.time() - BOUNDARY_MAX_AGE_SECONDS
+    for path in BOUNDARIES.glob("opencode-boundary-*.json"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            pass  # 消せなくても起動は妨げない
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -868,9 +892,13 @@ def main(argv: list[str] | None = None) -> int:
     write_isolated_config(sandbox, project)
     seed_db(Path(project["db"]))
 
-    # 境界の設定は本人だけが読める一時ファイルへ置く (srt は外側で読む)。
+    # 境界の設定は**ワークスペースの外**へ置く (srt は外側で読む)。
+    # 内側からは deny_read の ~ 配下で見えないため、読む前の改竄ができない。
+    BOUNDARIES.mkdir(parents=True, exist_ok=True)
+    os.chmod(BOUNDARIES, 0o700)
+    prune_boundaries()
     with tempfile.NamedTemporaryFile(
-        "w", suffix=".json", prefix="opencode-boundary-", delete=False
+        "w", suffix=".json", prefix="opencode-boundary-", dir=str(BOUNDARIES), delete=False
     ) as f:
         json.dump(project["config"], f)
         boundary = f.name
@@ -879,7 +907,16 @@ def main(argv: list[str] | None = None) -> int:
     env = inner_env(sandbox, project)
     digest = check_digest(sandbox, project["config"])
     try:
-        if not args.skip_check and CHECK.is_file():
+        if not args.skip_check:
+            # ★fail-closed。検査スクリプトが無ければ**起動しない**。
+            #   以前は `and CHECK.is_file()` で、配備の失敗やファイル消失が
+            #   「検査を飛ばして起動」に化けていた。境界を張れないなら
+            #   起動しない、という方針とここだけ逆向きだった。
+            if not CHECK.is_file():
+                die(
+                    f"境界チェックが無い: {CHECK}",
+                    "chezmoi apply で配備する。検査を省くなら --skip-check を明示する。",
+                )
             # ★入力が 1 つでも変われば digest が変わり、再検査になる。
             #   有効期間を過ぎたときも同じ。合格を無期限には使わない。
             if not args.recheck and check_is_fresh(digest):

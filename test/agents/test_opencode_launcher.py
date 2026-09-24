@@ -506,6 +506,60 @@ def test_check_digest_changes_with_the_boundary(tmp_path, monkeypatch):
     assert one != two, "境界を広げても digest が変わっていない"
 
 
+def test_boundary_check_is_fail_closed():
+    """★検査スクリプトが無ければ起動しないこと。
+
+    以前は ``if not args.skip_check and CHECK.is_file():`` で、配備の失敗や
+    ファイル消失が「検査を飛ばして起動」に化けていた。保護が消えても
+    誰も気づかない形なので、**存在しないときは die** にする。
+    """
+    body = LAUNCHER.read_text(encoding="utf-8")
+    assert "if not args.skip_check and CHECK.is_file():" not in body, (
+        "fail-open の条件が残っている"
+    )
+    assert "if not CHECK.is_file():" in body, "検査スクリプトの不在を弾いていない"
+
+
+def test_boundary_file_lives_outside_the_workspace():
+    """★境界の定義をワークスペース内に置かないこと。
+
+    tempfile の既定は TMPDIR に従い、このリポジトリでは TMPDIR が
+    ワークスペース内を指す。そこは allowWrite 領域なので、srt が読む前に
+    **内側から書き換えられる**（同一 UID では 0600 でも別セッションを
+    隔離できない）。
+    """
+    launcher = _launcher()
+    boundaries = launcher["BOUNDARIES"]
+    assert ".local/state/opencode-sandbox" in str(boundaries), (
+        f"境界の置き場が状態領域の外: {boundaries}"
+    )
+    assert "/.tmp" not in str(boundaries), "TMPDIR 配下に置いている"
+
+
+def test_prune_boundaries_drops_only_stale_files(tmp_path, monkeypatch):
+    """★残骸だけ捨て、稼働中のものは残すこと。
+
+    execve で finally が走らないため自分では消せない。次の起動が前回の分を
+    捨てるが、並行して動いているセッションの分を消してはいけない。
+    """
+    launcher = _launcher()
+    monkeypatch.setitem(launcher, "BOUNDARIES", tmp_path)
+    monkeypatch.setitem(launcher, "BOUNDARY_MAX_AGE_SECONDS", 3600)
+
+    stale = tmp_path / "opencode-boundary-old.json"
+    fresh = tmp_path / "opencode-boundary-new.json"
+    other = tmp_path / "checked.json"
+    for p in (stale, fresh, other):
+        p.write_text("{}", encoding="utf-8")
+    os.utime(stale, (0, time.time() - 7200))
+
+    launcher["prune_boundaries"]()
+
+    assert not stale.exists(), "古い残骸が残っている"
+    assert fresh.exists(), "稼働中のものを消した"
+    assert other.exists(), "対象外のファイルを消した"
+
+
 def test_check_is_reused_only_while_fresh(tmp_path, monkeypatch):
     """同じ入力の合格は使い回すが、期限を過ぎたら再検査する。"""
     launcher = _launcher()

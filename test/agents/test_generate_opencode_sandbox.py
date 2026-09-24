@@ -265,6 +265,22 @@ def test_boundary_check_handles_nonexistent_protected_paths():
     assert "保護対象が見当たらず検査できない" not in body, "存在を前提にした判定が残っている"
 
 
+def test_boundary_check_detects_writable_regular_file():
+    """★保護対象が「書ける通常ファイル」のとき合格にしないこと。
+
+    ``-d`` でないと ``mkdir -p`` へ落ちるが、通常ファイルが存在すれば
+    mkdir は必ず失敗する。それを「作れない＝合格」と読むと、**書けるのに
+    合格**する。検査したいのは「書けないこと」であって
+    「ディレクトリを作れないこと」ではない。
+    """
+    check = ROOT / "home" / "dot_local" / "bin" / "executable_ocs-boundary-check"
+    body = check.read_text(encoding="utf-8")
+    assert 'elif [ -e "$p" ]; then' in body, "通常ファイルの分岐が無い"
+    # ★`>` だと中身を切り詰める。検査で保護対象を壊してはいけない。
+    assert '( : >> "$p" )' in body, "追記で書き込み可否を見ていない"
+    assert '( : > "$p" )' not in body, "保護対象を切り詰める書き方が入っている"
+
+
 def test_protected_paths_may_not_exist_on_host():
     """宣言した保護対象のうち、ホストに無いものがあっても構わない。
 

@@ -72,6 +72,15 @@ if [ -n "${BOUNDARY_PROTECTED:-}" ]; then
       else
         ok "保護対象へ書けない: $p"
       fi
+    elif [ -e "$p" ]; then
+      # ★通常ファイルとして存在する場合。ここを mkdir で判定すると
+      #   「既に在るので作れない」を合格と読んでしまい、**書けるのに合格**する。
+      #   追記で開けるかを見る。`>>` なので中身は変えない (`>` は切り詰める)。
+      if ( : >> "$p" ) 2>/dev/null; then
+        bad "保護対象へ書けてしまう: $p"
+      else
+        ok "保護対象へ書けない: $p"
+      fi
     elif mkdir -p "$p" 2>/dev/null; then
       rmdir "$p" 2>/dev/null
       bad "保護対象を作れてしまう: $p"
