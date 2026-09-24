@@ -142,12 +142,6 @@ MCP サーバの定義も `common.toml` の `[[mcp]]` が単一ソース。同�
 CLI ごとに書くと、URL を変えたときに片方だけ古いまま残る。
 
 ```toml
-[[mcp]]
-id = "deepwiki"
-purpose = "GitHub リポジトリのドキュメントを検索する"
-transport = "http"
-url = "https://mcp.deepwiki.com/mcp"
-
 {{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
 [[mcp]]
 id = "ddgs"
@@ -166,6 +160,14 @@ args = ["--from", "ddgs[mcp]", "ddgs", "mcp"]
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
+
+**applejxd では `[[mcp]]` が 0 件になる。** `deepwiki` は 2026-09-25 に外し、
+`ddgs` は元から対象外のため。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない
+ので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
+
+**宣言を消しても生成先からは消えない。** `merge_*_mcp` は宣言されたサーバを
+足す・更新するだけで、消えたサーバを刈らない。既に生成された設定から取り除くには
+各 CLI の削除コマンドを使う。
 
 **transport 名の違い**: OpenCode は `http` を `remote`、`stdio` を `local` と呼び、
 `command` は実行ファイルと引数を **1 本の配列**で書く (Copilot は `command` と

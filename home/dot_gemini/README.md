@@ -12,7 +12,7 @@
 
 | キー | 管理 |
 | --- | --- |
-| `general.sessionRetention` / `security.auth` / `experimental` / `mcpServers.deepwiki` | `GEMINI_MANAGED` から生成 |
+| `general.sessionRetention` / `security.auth` / `experimental` | `GEMINI_MANAGED` から生成 |
 | `hooks` | 手動管理。Orca が注入するため apply では触らない |
 | その他 | 手動管理（apply では触らず保持） |
 

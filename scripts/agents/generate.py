@@ -619,11 +619,6 @@ GEMINI_MANAGED: dict[str, Any] = {
         },
         "enableAgents": True,
     },
-    "mcpServers": {
-        "deepwiki": {
-            "httpUrl": "https://mcp.deepwiki.com/mcp",
-        },
-    },
 }
 
 

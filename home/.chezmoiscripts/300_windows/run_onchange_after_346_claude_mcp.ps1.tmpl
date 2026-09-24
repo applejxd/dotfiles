@@ -1,5 +1,7 @@
 ﻿{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) -}}
 {{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
+{{- $mcp := list -}}
+{{- if hasKey $common "mcp" }}{{ $mcp = $common.mcp }}{{ end -}}
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -21,7 +23,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($claudePath)) {
 }
 
 $managed = @'
-{{ $common.mcp | toJson }}
+{{ $mcp | toJson }}
 '@ | ConvertFrom-Json
 
 # バイナリの有無では判定しない。移行済み・途中失敗からの再実行でも

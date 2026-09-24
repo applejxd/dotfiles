@@ -1,4 +1,6 @@
 {{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
+{{- $mcp := list -}}
+{{- if hasKey $common "mcp" }}{{ $mcp = $common.mcp }}{{ end -}}
 #!/bin/bash
 
 set -euo pipefail
@@ -18,7 +20,7 @@ missing="$(python3 - <<'PY'
 import json
 from pathlib import Path
 
-managed = json.loads(r'''{{ $common.mcp | toJson }}''')
+managed = json.loads(r'''{{ $mcp | toJson }}''')
 
 try:
     with (Path.home() / ".claude.json").open(encoding="utf-8") as stream:

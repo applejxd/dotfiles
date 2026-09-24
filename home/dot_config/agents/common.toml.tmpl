@@ -1155,12 +1155,7 @@ extensions = [".md", ".markdown"]
 # ★トークンをここに書かない。headers に秘密が要るサーバは環境変数参照として
 #   各 CLI 側で設定する (ADR-0005)。
 # see docs/spec/agent-permissions.md 「MCP サーバ」
-[[mcp]]
-id = "deepwiki"
-purpose = "GitHub リポジトリのドキュメントを検索する"
-transport = "http"
-url = "https://mcp.deepwiki.com/mcp"
-
+# ★deepwiki は索引が古く、実ソースと食い違う説明を返すため 2026-09-25 に外した。
 {{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
 
 # DuckDuckGo 検索。applejxd は Copilot CLI 内蔵の web 検索を使うので入れない。

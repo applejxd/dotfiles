@@ -118,12 +118,13 @@ def test_servers_for_this_user_are_registered_once(environment, username):
     home, env = environment
     script = render_script(username)
     expected = expected_servers(username)
-    assert expected, "登録対象が 1 つも無い"
     for _ in range(2):
         result = run_setup(script, env)
         assert result.returncode == 0, result.stderr
 
-    registered = json.loads((home / ".claude.json").read_text())["mcpServers"]
+    # applejxd は登録対象が 0 件。その場合 ~/.claude.json を作らない。
+    config = home / ".claude.json"
+    registered = json.loads(config.read_text())["mcpServers"] if config.exists() else {}
     assert registered == expected
     # 2 回目は登録済みなので追加しない
     calls = commands(env)

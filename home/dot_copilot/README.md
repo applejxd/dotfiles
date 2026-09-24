@@ -69,7 +69,7 @@ $LASTEXITCODE
 
 ```bash
 chezmoi apply ~/.copilot/settings.json   # trustedFolders が入る
-copilot mcp get deepwiki                 # これだけで消える
+copilot mcp get ddgs                     # これだけで消える
 ```
 
 CLI は自前のフォルダ信頼ストアを先に見て、無い場合に `trustedFolders` を

@@ -710,7 +710,8 @@ def test_gemini_managed_branches_are_applied():
     assert merged["security"]["auth"]["selectedType"] == "oauth-personal"
     assert merged["experimental"]["skills"]["enabled"] is True
     assert merged["experimental"]["enableAgents"] is True
-    assert merged["mcpServers"]["deepwiki"]["httpUrl"] == "https://mcp.deepwiki.com/mcp"
+    # MCP は宣言しない。deepwiki を外した時点で管理対象が 0 件になった。
+    assert "mcpServers" not in gen.GEMINI_MANAGED
 
 
 def test_gemini_preserves_foreign_hooks():

@@ -1,7 +1,3 @@
 {
-  "mcpServers": {
-    "deepwiki": {
-      "serverUrl": "https://mcp.deepwiki.com/mcp"
-    }
-  }
+  "mcpServers": {}
 }

@@ -1076,12 +1076,15 @@ def test_mcp_covers_stdio():
 
 
 def test_mcp_keeps_servers_and_secret_fields_it_does_not_own():
-    name = COMMON["mcp"][0]["id"]
+    # 宣言済みの remote サーバが 0 件になったので、合成した定義で確かめる。
+    http = {"id": "x", "transport": "http", "url": "https://example.com/mcp"}
+    common = {"mcp": [http]}
+    name = http["id"]
     existing = {
         "mcp": {
             "timeout": {"startup": 45000},
             "servers": {
-                "added-by-cli": {"type": "remote", "url": "https://example.com/mcp"},
+                "added-by-cli": {"type": "remote", "url": "https://other.test/mcp"},
                 name: {
                     "type": "remote",
                     "url": "https://stale.example.com/mcp",
@@ -1090,14 +1093,14 @@ def test_mcp_keeps_servers_and_secret_fields_it_does_not_own():
             },
         }
     }
-    merged = gen.merge_opencode_config(existing, COMMON)
+    merged = gen.merge_opencode_config(existing, common)
     servers = merged["mcp"]["servers"]
 
     assert merged["mcp"]["timeout"] == {"startup": 45000}
     assert servers["added-by-cli"] == existing["mcp"]["servers"]["added-by-cli"]
     assert servers[name]["headers"] == {"Authorization": "Bearer {env:EXAMPLE_TOKEN}"}
     # url は common.toml が正本
-    assert servers[name]["url"] == COMMON["mcp"][0]["url"]
+    assert servers[name]["url"] == http["url"]
 
 
 def test_mcp_drops_keys_of_the_previous_transport():

@@ -376,8 +376,11 @@ UI や `omp config set` で変えた分と綱引きになる。
 
 - **`enabledProviders: [claude]` の効果を実機で確認できていない。**
   `omp` が未認証（`No models available`）で、`/mcp list` はモデル呼び出しを
-  伴うため到達しなかった。**段 2 の最初に `/mcp list` で `deepwiki` が
-  出ることを確認する。** 出なければこの設定は無効
+  伴うため到達しなかった。
+  **2026-09-25 に `deepwiki` を外し、applejxd の `[[mcp]]` は 0 件になった。**
+  `/mcp list` で判定する当初の手は使えない。代わりに
+  `~/.claude/commands/*.md` がスラッシュコマンドとして出るかで確かめる
+  （同じ `enabledProviders` に閉じ込められている資産なので判定として等価）
 - `enabledProviders` を開くと omp が `~/.claude/settings.json` を**設定源**と
   しても読むかは**未確認**。公式ドキュメントは「他ツールが寄与するのは
   project レベルの設定」と読めるので user レベルの同ファイルは対象外の

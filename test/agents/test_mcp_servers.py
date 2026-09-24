@@ -29,6 +29,9 @@ import generate as gen  # noqa: E402
 from agents_common import load_common, render_common  # noqa: E402
 
 COMMON = load_common()
+# applejxd は MCP を 1 つも持たない (deepwiki を外し、ddgs は元から対象外)。
+# サーバの中身を確かめる試験は、必ず 1 つ以上ある tester 側で行う。
+TESTER = load_common("tester")
 CLAUDE_SCRIPT = ROOT / "home/.chezmoiscripts/400_unix/run_onchange_after_410_claude_mcp.sh.tmpl"
 CLAUDE_WINDOWS_SCRIPT = (
     ROOT / "home/.chezmoiscripts/300_windows/run_onchange_after_346_claude_mcp.ps1.tmpl"
@@ -92,19 +95,35 @@ def servers_for(username):
 def test_rendered_common_is_valid_toml(username):
     """テンプレート化で check-toml が効かなくなる分をここで担保する。"""
     rendered = tomllib.loads(render_common(username))
-    assert rendered["mcp"], "[[mcp]] が無い"
+    # applejxd は 0 件。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない。
+    expected = 0 if username == "applejxd" else 1
+    assert len(rendered.get("mcp", [])) >= expected
     assert rendered["bash"]["deny"], "描画で他の節が壊れていない"
 
 
+def test_deepwiki_is_declared_nowhere():
+    """★deepwiki を戻さないこと。
+
+    索引が古く、実ソース (v2.0.14) と食い違う説明を返した。上流を読むなら
+    `gh api` でタグを指定して取る。
+    see docs/change/0001-compaction-context-handover.md
+    """
+    for username in USERS:
+        ids = [s["id"] for s in load_common(username).get("mcp", [])]
+        assert "deepwiki" not in ids, f"{username}: deepwiki が残っている"
+
+
 def test_common_declares_mcp_servers():
-    for server in COMMON["mcp"]:
+    for server in TESTER["mcp"]:
         assert server["purpose"], f"{server['id']}: purpose が空"
         allowed = gen.MCP_COMMON_KEYS | gen.MCP_TRANSPORT_KEYS[server["transport"]]
         assert set(server) <= allowed
 
 
 def test_declared_servers_pass_validation():
-    assert [name for name, _ in gen.mcp_servers(COMMON)] == [s["id"] for s in COMMON["mcp"]]
+    assert [name for name, _ in gen.mcp_servers(TESTER)] == [
+        s["id"] for s in TESTER["mcp"]
+    ]
 
 
 @pytest.mark.parametrize(
@@ -187,11 +206,13 @@ def test_copilot_mcp_covers_stdio():
 
 
 def test_copilot_mcp_keeps_servers_and_fields_it_does_not_own():
-    name = COMMON["mcp"][0]["id"]
+    # 宣言済みの http サーバが 0 件になったので、合成した定義で確かめる。
+    common = {"mcp": [HTTP]}
+    name = HTTP["id"]
     existing = {
         "mcpServers": {
             # CLI 側で足したサーバは消さない
-            "added-by-cli": {"type": "http", "url": "https://example.com/mcp"},
+            "added-by-cli": {"type": "http", "url": "https://other.example.com/mcp"},
             # 同じサーバでも headers (秘密) と tools (公開範囲) は触らない
             name: {
                 "type": "http",
@@ -203,7 +224,7 @@ def test_copilot_mcp_keeps_servers_and_fields_it_does_not_own():
         "unmanaged": True,
     }
     before = copy.deepcopy(existing)
-    merged = gen.merge_copilot_mcp(existing, COMMON)
+    merged = gen.merge_copilot_mcp(existing, common)
 
     assert merged["unmanaged"] is True
     assert merged["mcpServers"]["added-by-cli"] == before["mcpServers"]["added-by-cli"]
@@ -211,9 +232,9 @@ def test_copilot_mcp_keeps_servers_and_fields_it_does_not_own():
     assert kept["headers"] == {"Authorization": "${EXAMPLE_TOKEN}"}
     assert kept["tools"] == ["search"]
     # url は common.toml が正本なので更新する
-    assert kept["url"] == COMMON["mcp"][0]["url"]
+    assert kept["url"] == HTTP["url"]
     assert existing == before
-    assert gen.merge_copilot_mcp(merged, COMMON) == merged
+    assert gen.merge_copilot_mcp(merged, common) == merged
 
 
 def test_copilot_mcp_drops_keys_of_the_previous_transport():
@@ -246,7 +267,8 @@ def codex_entry(server):
 @pytest.mark.parametrize("username", USERS)
 def test_codex_config_renders_the_servers_for_this_user(username):
     rendered = tomllib.loads(render(CODEX_CONFIG, username=username))
-    assert rendered["mcp_servers"] == {
+    # サーバが 0 件なら [mcp_servers.*] を 1 つも書かない (節ごと生えない)。
+    assert rendered.get("mcp_servers", {}) == {
         name: codex_entry(server) for name, server in servers_for(username)
     }
     # 既存の手書き設定を壊していないこと

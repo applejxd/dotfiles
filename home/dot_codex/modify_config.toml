@@ -1,5 +1,7 @@
 {{- /* chezmoi:modify-template */ -}}
 {{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
+{{- $mcp := list -}}
+{{- if hasKey $common "mcp" }}{{ $mcp = $common.mcp }}{{ end -}}
 {{- $userConfig := .chezmoi.stdin | replaceAllRegex "(?s)^# chezmoi-managed:start.*?# chezmoi-managed:end(?:\\r?\\n)*" "" -}}
 # chezmoi-managed:start
 # see https://www.chezmoi.io/user-guide/manage-different-types-of-file/#manage-part-but-not-all-of-a-file
@@ -36,7 +38,7 @@ enabled = false
 
 [windows]
 sandbox = "elevated"
-{{ range $common.mcp }}
+{{ range $mcp }}
 {{- /*
      管理ブロックの外に同名の [mcp_servers.<id>] があると TOML が重複宣言に
      なり、Codex は設定ファイル全体を読めなくなる。黙って壊すより apply を
