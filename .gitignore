@@ -192,3 +192,24 @@ pyrightconfig.json
 # 未保存変更のゲートが必ず落ちる。
 # see docs/change/0004-opencode-sandbox.md
 .opencode-sandbox/
+
+# srt が境界を張るとき、保護対象をワークスペース内に**読み取り専用の
+# 空ファイル**として実体化する (DANGEROUS_FILES / DANGEROUS_DIRECTORIES)。
+# ocs を起動するたびに現れ、ignore しないと `git add -A` が巻き込み、
+# pre-commit が読み取り専用の .opencode で失敗する (実際に踏んだ)。
+# ★このリポジトリの source state は home/ 配下なので、ルート直下に
+#   同名の正規ファイルは存在しない。
+# see docs/change/0004-opencode-sandbox.md
+/.bashrc
+/.bash_profile
+/.zshrc
+/.zprofile
+/.profile
+/.gitconfig
+/.gitmodules
+/.ripgreprc
+/.mcp.json
+/.idea
+/.vscode
+/.opencode
+/.claude/
