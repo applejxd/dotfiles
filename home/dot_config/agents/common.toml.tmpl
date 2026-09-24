@@ -605,6 +605,28 @@ shell_network_allow = [
 seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/{arch}/apply-seccomp"
 
 # ---------------------------------------------------------------------------
+# プロバイダ (モデル API の接続先)
+# ---------------------------------------------------------------------------
+# ★ハーネスから切り離す。 境界内からモデルへ到達できないとハーネスは動かないが、
+#   その接続先は「どのハーネスか」ではなく「どのプロバイダを使うか」で決まる。
+#   ハーネス側に書くと、同じプロバイダを使う別ハーネスを足すたびに同じドメインを
+#   書き直すことになる (ハーネス × プロバイダで増殖する)。
+#
+# 使う側は providers = ["github-copilot", ...] で参照する。
+# 不足すると proxy が CONNECT を 403 で落とすだけなので、症状は
+# 「応答が来ない」になる。
+# see docs/change/0007-harness-profiles.md
+
+[provider.github-copilot]
+network_allow = ["api.githubcopilot.com", "*.githubcopilot.com"]
+
+[provider.anthropic]
+network_allow = ["api.anthropic.com"]
+
+[provider.openai]
+network_allow = ["api.openai.com"]
+
+# ---------------------------------------------------------------------------
 # Claude 固有
 # ---------------------------------------------------------------------------
 [claude]
@@ -888,20 +910,20 @@ config_dir = "~/.config/opencode-sandbox"
 
 # 境界内から出てよいドメインの追加分 (OpenCode の境界だけに効く)。
 # [web] allow_domains と [sandbox] shell_network_allow に足す形で使う。
-# ★モデル提供元をここに入れないと、境界内からモデルへ到達できない。
-#   proxy が CONNECT を 403 で落とすだけなので、症状は「応答が来ない」になる。
+# ★ここには **ハーネス自身のサービス**だけを書く。モデル API の接続先は
+#   [provider.*] に置き、下の providers で参照する (プロバイダを替えても
+#   ここを触らずに済む)。
 # ★wildcard は **先頭の `*.` と 単独の `*` だけ**効く。
 network_allow = [
-  # GitHub Copilot (モデル API)
-  "api.githubcopilot.com",
-  "*.githubcopilot.com",
   # OpenCode 本体のサービス (更新確認・カタログ)
   "opencode.ai",
   "*.opencode.ai",
-  # Anthropic / OpenAI を使うときに要る
-  "api.anthropic.com",
-  "api.openai.com",
 ]
+
+# 使うモデル API のプロバイダ。[provider.*] の network_allow を合算する。
+# ★入れ忘れると境界内からモデルへ到達できない。proxy が CONNECT を 403 で
+#   落とすだけなので、症状は「応答が来ない」になる。
+providers = ["github-copilot", "anthropic", "openai"]
 
 # 隔離版の permission を、通常版の宣言から導出するための指定。
 # ★通常版 (~/.config/opencode) は 225 件のまま。ここは隔離版だけに効く。

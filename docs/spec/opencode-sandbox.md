@@ -105,7 +105,7 @@ flowchart TD
 | `allowRead` | 起動ディレクトリ、`~/.opencode`、`~/.local/share/mise`、`~/.local/bin`、`~/.config/{opencode,opencode-sandbox,shell,mise,chezmoi}`、`~/.claude/skills`、`~/.agents/skills` |
 | `denyRead` | `~`、`/mnt`、`/tmp`、`/var/tmp`、`/dev/shm` |
 | `denyWrite` | 起動ディレクトリ内の保護対象、worktree の `.git/{hooks,config}` |
-| `network` | 許可ドメインのみ（**モデル提供元を入れ忘れると応答が来ない**） |
+| `network` | 許可ドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../change/0007-harness-profiles.md)） |
 
 ### 組み立ての規則
 

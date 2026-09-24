@@ -14,6 +14,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
@@ -173,6 +175,40 @@ def test_model_provider_domain_allowed():
         return
     domains = out["base"]["network"]["allowedDomains"]
     assert "api.githubcopilot.com" in domains, "モデル提供元が許可リストに無い"
+
+
+def test_provider_domains_come_from_the_provider_layer():
+    """★モデル API の接続先はハーネスではなく [provider.*] に置く。
+
+    ハーネス側に書くと、同じプロバイダを使う別ハーネスを足すたびに
+    同じドメインを書き直すことになる (ハーネス × プロバイダで増殖する)。
+    """
+    harness_own = COMMON["opencode"]["sandbox"].get("network_allow", [])
+    for domain in ("api.githubcopilot.com", "api.anthropic.com", "api.openai.com"):
+        assert domain not in harness_own, f"{domain} がハーネス側に残っている"
+    declared = COMMON["opencode"]["sandbox"].get("providers", [])
+    assert declared, "providers の宣言が無い"
+    assert set(declared) <= set(COMMON["provider"]), "未定義の provider を参照している"
+
+
+def test_unknown_provider_is_rejected_instead_of_ignored():
+    """★綴り間違いを黙って無視しない (fail-closed)。
+
+    ``.get(name, {})`` で空を返すと、誤りは「境界内からモデルへ到達できない」
+    という形でしか現れない。proxy が 403 を返すだけなので原因に辿り着けない。
+    """
+    with pytest.raises(ValueError) as excinfo:
+        gen.provider_domains(COMMON, ["githubcopilot"])  # 正しくは github-copilot
+    assert "githubcopilot" in str(excinfo.value)
+
+
+def test_provider_layer_is_shared_not_harness_specific():
+    """[provider.*] はハーネス名を含まない。プロバイダ名だけで引けること。"""
+    for name in COMMON["provider"]:
+        assert "opencode" not in name, f"provider 名にハーネス名が混じっている: {name}"
+        assert COMMON["provider"][name].get("network_allow"), (
+            f"[provider.{name}] に network_allow が無い"
+        )
 
 
 def test_protected_includes_workspace_plugin_dir():

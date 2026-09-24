@@ -1246,6 +1246,29 @@ def opencode_redact(common: dict[str, Any]) -> dict[str, Any] | None:
     return out
 
 
+def provider_domains(common: dict[str, Any], names: Any) -> list[str]:
+    """``[provider.*]`` の ``network_allow`` を名前で引いて合算する。
+
+    ★未知の名前は **例外**にする。``.get(name, {})`` で黙って空を返すと、
+    綴り間違いが「境界内からモデルへ到達できない」という形でしか現れない。
+    そのときの症状は proxy が CONNECT を 403 で落とすだけの「応答が来ない」で、
+    原因に辿り着けない。
+    """
+    if not names:
+        return []
+    providers = common.get("provider") or {}
+    out: list[str] = []
+    for name in names:
+        entry = providers.get(name)
+        if entry is None:
+            known = ", ".join(sorted(providers)) or "(なし)"
+            raise ValueError(
+                f"未知の provider: {name!r}。[provider.{name}] が無い。定義済み: {known}"
+            )
+        out += list(entry.get("network_allow", []))
+    return out
+
+
 def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     """OpenCode を丸ごと囲う境界の**素材** (CHG-0004 段階 2・4)。
 
@@ -1293,6 +1316,7 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
                     list(web.get("allow_domains", []))
                     + list(sandbox_cfg.get("shell_network_allow", []))
                     + list(cfg.get("network_allow", []))
+                    + provider_domains(common, cfg.get("providers", []))
                 ),
                 "deniedDomains": _uniq(list(web.get("deny_domains", []))),
                 "allowLocalBinding": False,
