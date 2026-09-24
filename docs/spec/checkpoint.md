@@ -30,9 +30,17 @@ hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた。口は 3 �
 
 | 口 | いつ | すること |
 | --- | --- | --- |
-| `session.hook("compaction")` | 圧縮の LLM 要求を組み立てるとき | `checkpoint.py snapshot` を呼ぶ**だけ** |
+| `session.hook("compaction")` | 圧縮の LLM 要求を組み立てるとき | 機械節を書き、`session.generate` で 6 節を生成し、`e.result` に入れる |
 | `ctx.event.subscribe()` | `session.compaction.ended` が流れたとき | `ctx.storage` に印を置く |
 | `session.hook("context")` | 毎要求 | 印があれば checkpoint を `event.system` へ入れる。ユーザの手番なら印を消す |
+
+**圧縮の要約と引き継ぎは同じ成果物にする。** 別々に持つと必ず片方が古くなる
+（実際に意味内容だけ 1 日古いまま残った）。`e.result` を設定すると OpenCode は
+自前の要約生成を飛ばすので、モデル呼び出しの回数は増えない。
+
+生成は `ctx.session.generate({ sessionID, prompt })` で行う。**会話履歴が見えて
+いる**ので、材料を詰め直す必要は無い。プロンプトは
+`references/checkpoint-template.md` をそのまま貼る（書式の単一ソース）。
 
 **記録する口と印を置く口を分けてある。** 圧縮フックは「圧縮を試みる側」に
 付いていて、その後 `Nothing to compact yet` で**失敗することがある**（実測）。
@@ -47,6 +55,11 @@ hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた。口は 3 �
 - **plugin は機械節を自分で組み立てない。** 生成と保存先の解決は
   `checkpoint.py` が単一ソース。二重に持つと必ずずれる
 - **どの口も例外を投げない。** 圧縮を壊さないことが最優先
+- **生成に失敗したら `e.result` を設定しない。** OpenCode 標準の要約に戻る。
+  壊れた引き継ぎを要約として残すより良い。空が返ることがあるので 1 度だけ
+  引き直し、6 節が揃わなければ捨てる
+- **`generate` の再入を防ぐ。** generate もモデル呼び出しなので、文脈が溢れた
+  ままだと圧縮を誘発しうる。同じセッションで二重に走らせない
 - **印が無いときは `ctx.storage` を 1 回読むだけで抜ける。**
   `context` は 1 手番のうち**ステップごとに**走る（実測で 5 回）
 - **印を消すのはユーザの手番に届けてから。** 圧縮の直後に走るのは内部の継続

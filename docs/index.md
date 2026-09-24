@@ -60,7 +60,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
-| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | **圧縮を跨いだ復帰を通しで実測**。欠陥 2 件を直し、上流ソース（v2.0.14）で裏取り済み | `closed/` へ移すか判断する |
+| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | **意味内容まで自動生成**。圧縮要約と引き継ぎを同じ成果物にした。上流 v2.0.14 で裏取り済み | 実機の圧縮で自動生成が成立するか確認する |
 | [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。**4 は全て見送り**、5 は第一サポート決定待ち。既存 allow のリダイレクト穴を塞いだ | 段階 5（CHG-0006 の結論待ち） |
 | [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。A1 完了 | A2 の要否（CHG-0006 の結論待ち） |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。`enabledProviders` の効果が実機未確認 | 段 2 の冒頭で `/mcp list` を見る |

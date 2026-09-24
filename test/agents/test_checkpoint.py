@@ -492,3 +492,21 @@ def test_snapshot_is_quiet_when_it_cannot_work(tmp_path: Path):
     done = run_cli(["snapshot", "--session", "!!!", "--cwd", str(tmp_path)])
     assert done.returncode == 0
     assert json.loads(done.stdout)["ok"] is False
+
+
+def test_the_pre_move_skill_is_removed_on_apply():
+    """★移動前の ~/.claude/skills/checkpoint を配備先から消すこと。
+
+    chezmoi は source から消えただけのファイルを削除しない。残すと
+    OpenCode が**古い方を読む**（実測: SKILL.md の CLI パスが .claude を
+    指し、snapshot サブコマンドが無い版が読み込まれた）。
+
+    see docs/change/0001-compaction-context-handover.md 「方針転換」
+    """
+    lines = [
+        line.strip()
+        for line in (ROOT / "home" / ".chezmoiremove").read_text(encoding="utf-8").splitlines()
+    ]
+    assert ".claude/skills/checkpoint" in lines
+    # source 側にも復活していないこと (同名があると apply が inconsistent で落ちる)
+    assert not (ROOT / "home/dot_claude/skills/checkpoint").exists()

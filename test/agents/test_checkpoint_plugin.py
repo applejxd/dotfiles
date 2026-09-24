@@ -15,7 +15,6 @@ see docs/change/0001-compaction-context-handover.md
 from __future__ import annotations
 
 import json
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -24,21 +23,29 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = ROOT / "home/dot_config/opencode/checkpoint-plugin/index.js"
-CLI = ROOT / "home/dot_config/opencode/skills/checkpoint/scripts/executable_checkpoint.py"
+SKILL = ROOT / "home/dot_config/opencode/skills/checkpoint"
+CLI = SKILL / "scripts/executable_checkpoint.py"
+TEMPLATE = SKILL / "references/checkpoint-template.md"
 
 SESSION = "ses_testABC12345"
 # checkpoint.py の _short_sid と同じ規則 (英数字だけを残して先頭 8 文字)。
 SHORT = "sestestA"
 
-RUNNER = """
+RUNNER = r"""
 import * as plugin from "./mod.mjs"
 
 const [kase, cwd, session] = JSON.parse(process.argv[2])
 
-const makeCtx = (events = []) => {
+const BODY = ["Goal", "Constraints", "State", "Evidence", "Next", "Refs"]
+  .map((s) => `## ${s}\n\nKUJIRA42\n`)
+  .join("\n")
+
+const makeCtx = (events = [], replies = []) => {
   const store = new Map()
+  const calls = []
   return {
     _store: store,
+    _calls: calls,
     storage: {
       get: async (k) => store.get(k),
       set: async (k, v) => void store.set(k, v),
@@ -50,12 +57,20 @@ const makeCtx = (events = []) => {
           for (const e of events) yield e
         })(),
     },
+    session: {
+      generate: async (arg) => {
+        calls.push(arg)
+        return { text: replies.shift() ?? "" }
+      },
+    },
   }
 }
 
 const dump = (ctx, event) => ({
   keys: [...ctx._store.keys()],
   system: (event?.system ?? []).map((s) => String(s.text).slice(0, 60)),
+  summary: event?.result?.summary ?? null,
+  generateCalls: ctx._calls.length,
 })
 
 const ended = { type: "session.compaction.ended", data: { sessionID: session } }
@@ -85,6 +100,34 @@ const cases = {
     const ctx = makeCtx()
     await plugin.onCompaction(ctx, { sessionID: session }, cwd)
     return dump(ctx)
+  },
+  // 圧縮の直前に引き継ぎを生成し、要約そのものに使う。
+  "compaction-generates-the-record": async () => {
+    const ctx = makeCtx([], [BODY])
+    const event = { sessionID: session }
+    await plugin.onCompaction(ctx, event, cwd)
+    return dump(ctx, event)
+  },
+  // 空が返ることがある (実測)。1 度だけ引き直す。
+  "compaction-retries-once": async () => {
+    const ctx = makeCtx([], ["", BODY])
+    const event = { sessionID: session }
+    await plugin.onCompaction(ctx, event, cwd)
+    return dump(ctx, event)
+  },
+  // 生成できなければ要約を乗っ取らない (OpenCode 標準の要約に戻る)。
+  "compaction-falls-back-when-empty": async () => {
+    const ctx = makeCtx([], [])
+    const event = { sessionID: session }
+    await plugin.onCompaction(ctx, event, cwd)
+    return dump(ctx, event)
+  },
+  // 6 節が揃わない生成物は採用しない。
+  "compaction-rejects-a-malformed-body": async () => {
+    const ctx = makeCtx([], ["## Goal\n\nこれだけ"])
+    const event = { sessionID: session }
+    await plugin.onCompaction(ctx, event, cwd)
+    return dump(ctx, event)
   },
   // ユーザの手番へ届いたら消す。
   "context-user-turn": async () => {
@@ -145,14 +188,17 @@ def call(tmp_path_factory, repo):
         pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
 
     work = tmp_path_factory.mktemp("cp-js")
-    # CLI は配備先を指す。試験では**リポジトリ内の実体**へ向け直す。
-    src = re.sub(
-        r"const CLI = join\(.*?\n\)",
-        f'const CLI = {json.dumps(str(CLI))}',
-        PLUGIN.read_text("utf-8"),
-        flags=re.DOTALL,
+    # CLI と雛形は配備先を指す。試験では**リポジトリ内の実体**へ向け直す。
+    src = PLUGIN.read_text("utf-8")
+    src = src.replace(
+        'const CLI = join(SKILL, "scripts/checkpoint.py")',
+        f"const CLI = {json.dumps(str(CLI))}",
     )
-    assert "join(" not in src.split("\n\n")[1], "CLI の差し替えに失敗した"
+    src = src.replace(
+        'const TEMPLATE = join(SKILL, "references/checkpoint-template.md")',
+        f"const TEMPLATE = {json.dumps(str(TEMPLATE))}",
+    )
+    assert "join(SKILL" not in src, "配備先の差し替えに失敗した"
     (work / "mod.mjs").write_text(src, "utf-8")
     (work / "run.mjs").write_text(RUNNER, "utf-8")
 
@@ -189,6 +235,43 @@ def test_events_without_a_session_are_ignored(call):
 def test_the_compaction_hook_never_sets_the_marker(call):
     """★欠陥 A の再発防止。圧縮フックは機械節を書くだけ。"""
     assert call("compaction-sets-no-marker")["keys"] == []
+
+
+def test_the_record_is_generated_and_becomes_the_summary(call):
+    """★圧縮の要約と引き継ぎを一本化する。
+
+    別々に持つと必ず片方が古くなる（実際に意味内容だけ 1 日古いまま残った）。
+    ``e.result`` を設定すると OpenCode は自前の要約生成を飛ばす（実測）。
+    """
+    result = call("compaction-generates-the-record")
+    assert result["generateCalls"] == 1
+    summary = result["summary"]
+    assert summary is not None
+    for heading in ("Goal", "Constraints", "State", "Evidence", "Next", "Refs"):
+        assert f"## {heading}" in summary
+    # 機械節も同じ成果物に入る
+    assert "## Snapshot" in summary
+    assert result["keys"] == []
+
+
+def test_an_empty_generation_is_retried_once(call):
+    """★空が返ることがある（実測: 同じプロンプトで通ったり空だったり）。"""
+    result = call("compaction-retries-once")
+    assert result["generateCalls"] == 2
+    assert result["summary"] is not None
+
+
+@pytest.mark.parametrize(
+    "case", ["compaction-falls-back-when-empty", "compaction-rejects-a-malformed-body"]
+)
+def test_a_bad_generation_leaves_the_summary_alone(call, case):
+    """★生成に失敗したら要約を乗っ取らない。
+
+    ``result`` を設定しなければ OpenCode が自前で要約する。壊れた引き継ぎを
+    要約として残すより、標準の要約に戻る方がよい。
+    """
+    result = call(case)
+    assert result["summary"] is None
 
 
 def test_the_record_reaches_a_user_turn_and_is_then_consumed(call):

@@ -24,6 +24,11 @@
 # テンプレートは checkpoint skill の references へ移設済み。
 .claude/skills/adr
 
+# 2026-09: checkpoint skill を ~/.config/opencode/skills へ移した (OpenCode 専用化)。
+# 残すと OpenCode が**古い方を読む** (実測: SKILL.md の CLI パスが .claude を指し、
+# snapshot サブコマンドが無い版が読み込まれた)。
+.claude/skills/checkpoint
+
 # NOTE: __pycache__ は .chezmoiignore で管理対象外にしているため、ここに書いても
 # 削除されない。古い .pyc が残って困る場合は手で削除する
 # (`rm -rf ~/.config/agents/__pycache__`)。

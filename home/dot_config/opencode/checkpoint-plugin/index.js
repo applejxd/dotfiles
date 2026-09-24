@@ -7,10 +7,9 @@ import { join } from "node:path"
 // この plugin には書かない (Python 側と二重に持つと必ずずれる)。
 // ★スキルは OpenCode 専用。~/.claude/skills ではなくここにある。
 //   see docs/change/0001-compaction-context-handover.md 「方針転換」
-const CLI = join(
-  homedir(),
-  ".config/opencode/skills/checkpoint/scripts/checkpoint.py",
-)
+const SKILL = join(homedir(), ".config/opencode/skills/checkpoint")
+const CLI = join(SKILL, "scripts/checkpoint.py")
+const TEMPLATE = join(SKILL, "references/checkpoint-template.md")
 
 // 圧縮を跨いだことを示す印。ctx.storage はセッションではなく plugin に
 // 紐づくので、キーにセッション ID を含める。
@@ -22,14 +21,24 @@ export const key = (sessionID) => `pending:${sessionID}`
 //   publish して返る。Ended は成功経路でしか publish されない。
 const ENDED = "session.compaction.ended"
 
-const run = (args, cwd) =>
+// lint --structure が検査する 6 節。生成物がこれを満たさなければ採用しない。
+const SECTIONS = ["Goal", "Constraints", "State", "Evidence", "Next", "Refs"]
+
+// ★再入防止。generate も模型呼び出しなので、文脈が溢れたままだと圧縮を
+//   誘発しうる。同じセッションで二重に走らせない。
+const BUSY = new Set()
+
+const run = (args, cwd, input) =>
   new Promise((resolve) => {
-    execFile(
+    const child = execFile(
       "python3",
       [CLI, ...args],
       { cwd, timeout: 20_000 },
       (err, stdout) => resolve(err ? null : stdout),
     )
+    if (input !== undefined) {
+      child.stdin.end(input)
+    }
   })
 
 const paths = async (sessionID, cwd) => {
@@ -42,20 +51,71 @@ const paths = async (sessionID, cwd) => {
   }
 }
 
-// 圧縮の要求を組み立てるとき。機械的な事実だけを残す。
+const prompt = () =>
+  "いまから会話が圧縮されます。後任が作業を再開できる引き継ぎを書いてください。\n\n"
+  + "出力の決まり:\n"
+  + "- 下の雛形の 6 つの見出しを、この順序で、markdown でそのまま出す\n"
+  + "- ヘッダのコメント (<!-- checkpoint: -->) と機械節は**書かない**\n"
+  + "- 全体で 2000 文字以内。前置きや説明を添えない\n"
+  + "- 推測を書かない。`## Evidence` は実行したコマンドと結果だけ\n"
+  + "- `## Next` は次の 1 手を、手順と合格条件まで書く\n\n"
+  + `${readFileSync(TEMPLATE, "utf8")}`
+
+const header = (sessionID) =>
+  `<!-- checkpoint: v1\n     session: ${sessionID}\n     cli: opencode\n`
+  + `     updated_at: ${new Date().toISOString()}\n`
+  + "     covered_through: 圧縮の直前 (plugin が自動生成)\n-->\n"
+
+// 圧縮の要求を組み立てるとき。
 // ★ここで印を置かないこと。このフックは「圧縮を試みる側」に付いていて、
-//   この後 "Nothing to compact yet" で**失敗することがある** (実測)。
-//   置くと、起きていない圧縮の引き継ぎを後続の要求へ流し込む。
+//   この後 "Nothing to compact yet" で失敗することがある (実測)。
 // ★絶対に投げない。ここで失敗しても圧縮そのものを壊してはいけない。
 export async function onCompaction(ctx, e, cwd) {
   if (!e?.sessionID) return
+
+  // 機械的な事実は無条件に残す。生成が失敗しても最低限これは残る。
+  await run(
+    ["snapshot", "--session", e.sessionID, "--cwd", cwd, "--trigger", "compaction"],
+    cwd,
+  ).catch(() => null)
+
+  if (BUSY.has(e.sessionID)) return
+  BUSY.add(e.sessionID)
   try {
+    // ★generate は会話履歴が見えている (実測)。材料を詰め直す必要は無い。
+    // ★空文字が返ることがある (実測)。1 度だけ引き直す。
+    let body = ""
+    for (let attempt = 0; attempt < 2 && !body; attempt++) {
+      const out = await ctx.session.generate({
+        sessionID: e.sessionID,
+        prompt: prompt(),
+        options: { temperature: 0 },
+      })
+      const text = out?.text?.trim() ?? ""
+      if (text && SECTIONS.every((s) => text.includes(`## ${s}`))) body = text
+    }
+    if (!body) return
+
+    const resolved = await paths(e.sessionID, cwd)
+    if (!resolved?.checkpoint) return
+
+    await run(
+      ["write", resolved.checkpoint, "--keep-prev", resolved.prev],
+      cwd,
+      `${header(e.sessionID)}${body}\n`,
+    )
     await run(
       ["snapshot", "--session", e.sessionID, "--cwd", cwd, "--trigger", "compaction"],
       cwd,
     )
+
+    // 圧縮の要約そのものを引き継ぎにする。別々に持つと必ず片方が古くなる。
+    // ★result を設定すると OpenCode は自前の要約生成を飛ばす (実測)。
+    e.result = { summary: readFileSync(resolved.checkpoint, "utf8") }
   } catch {
-    // 握りつぶす。圧縮を止めないことが最優先。
+    // 握りつぶす。result を設定しなければ OpenCode の要約に戻るだけ。
+  } finally {
+    BUSY.delete(e.sessionID)
   }
 }
 
@@ -82,7 +142,7 @@ export async function watchCompaction(ctx) {
 
 // 毎要求。印があれば checkpoint をシステム側へ入れる。
 // ★印が無いときは ctx.storage を 1 回読むだけで抜けること。このフックは
-//   1 手番のうち**ステップごとに**走る (実測で 5 回)。重い処理を置くと全体が遅くなる。
+//   1 手番のうち**ステップごとに**走る (実測で 5 回)。
 // ★消すのはユーザの手番に届けてから。圧縮の直後に走るのは内部の継続要求の
 //   ことがあり、そこで消すと**次にユーザが話しかけたときには残っていない**。
 export async function onContext(ctx, e, cwd) {

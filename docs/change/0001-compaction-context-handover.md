@@ -117,6 +117,53 @@ Error: Nothing to compact yet      ← 圧縮は起きていない
 
 **圧縮を跨いでユーザの手番へ引き継ぎが届くことを、通しで確認できた。**
 
+### 圧縮要約と引き継ぎを一本化した（2026-09-25）
+
+ここまでの構成には穴が残っていた。**意味内容を書くのは人（モデル）の手作業**で、
+plugin が自動で書けるのは機械節だけだった。実際にこのリポジトリの作業中、
+機械節は 02:55 に更新されたのに意味内容は前日 22:30 のまま取り残された。
+
+#### 使える口を実測した
+
+| 口 | 結果 |
+| --- | --- |
+| `e.result = { summary }` | **採用される。** `status=completed` で要約が差し替わり、OpenCode 自前の生成は走らない |
+| `ctx.session.generate({ sessionID, prompt })` | **成功。** `{"text":"..."}` を返す |
+| `generate` から会話履歴が見えるか | **見える。** 会話中の合言葉（`KIRIN9`）を即答した |
+
+上流の型にも明記がある。
+
+```ts
+export interface SessionCompaction extends SessionContext {
+  /** Set to use this compaction and skip the model request. */
+  result?: SessionCompactionResult
+}
+```
+
+#### 設計
+
+圧縮フックで `session.generate` を呼び、雛形どおりの 6 節を書かせて
+checkpoint に保存し、**同じものを `e.result.summary` に入れる**。
+
+- **モデル呼び出しは増えない。** OpenCode はもともと圧縮で 1 回呼ぶ。その 1 回を
+  自前の生成に置き換えるだけ
+- **会話を詰め直さない。** `generate` は履歴が見えている
+- **書式は `references/checkpoint-template.md` が単一ソース。** プロンプトに
+  そのまま貼る
+
+#### 退避の設計
+
+`generate` は**同じプロンプトでも空文字を返すことがある**（実測。使い捨て環境の
+無料モデルで再現）。そのため:
+
+- 機械節は生成の前に**無条件で**書く。生成が失敗しても事実だけは残る
+- 空なら 1 度だけ引き直す
+- 6 節が揃わなければ捨てて `e.result` を**設定しない** → OpenCode 標準の要約に戻る
+- `generate` もモデル呼び出しなので、同じセッションでの再入を禁じる
+
+実際に生成が空になった回では、この退避どおり機械節だけが残り、OpenCode の要約で
+会話が続いた。**壊れ方が設計どおりであることも確認できた。**
+
 ## 方針転換: OpenCode 専用にする（2026-09-24）
 
 スキルの置き場を `~/.claude/skills/checkpoint` から
