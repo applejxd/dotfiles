@@ -9,7 +9,7 @@
 - 欠陥 B: 圧縮の直後に走るのは内部の継続要求のことがある。そこで印を消すと
   **次にユーザが話しかけたときには残っていない**
 
-see docs/change/0001-compaction-context-handover.md
+see docs/change/closed/0001-compaction-context-handover.md
 """
 
 from __future__ import annotations

@@ -60,7 +60,6 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
-| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | **意味内容まで自動生成**。圧縮要約と引き継ぎを同じ成果物にした。上流 v2.0.14 で裏取り済み | 実機の圧縮で自動生成が成立するか確認する |
 | [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。**4 は全て見送り**、5 は第一サポート決定待ち。既存 allow のリダイレクト穴を塞いだ | 段階 5（CHG-0006 の結論待ち） |
 | [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。A1 完了 | A2 の要否（CHG-0006 の結論待ち） |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。`enabledProviders` の効果が実機未確認 | 段 2 の冒頭で `/mcp list` を見る |
@@ -72,6 +71,10 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 ## 最近の重要な変更
 
+- 2026-09-25 — 圧縮要約そのものを checkpoint にした。保存と復帰が同じ成果物に
+  なり、両者がずれる余地が無くなった
+  — [CHG-0001](change/closed/0001-compaction-context-handover.md)
+
 - 2026-09-21 — OpenCode V2 の permission / MCP を `common.toml` から生成。
   「未掲載＝classifier へ委譲」が OpenCode では無条件許可へ退化していた
   — [CHG-0002](change/0002-opencode-ask-by-default.md)
@@ -79,7 +82,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
   `postToolUse`）。「原理的にできない」という誤った前提を訂正
   — [記録 E7](research/agents/compaction-hooks.md)
 - 2026-09-19 — `adr` スキルを `checkpoint` へ統合（役割の重複を解消）
-  — [CHG-0001](change/0001-compaction-context-handover.md)
+  — [CHG-0001](change/closed/0001-compaction-context-handover.md)
 - 2026-09-19 — docs を「情報の役割」で分け、案件を中心に置く運用へ
   — [ADR-0010](adr/0010-exploratory-spec-driven-docs.md)
 - 2026-09-19 — `checkpoint` スキルを追加（compaction を跨ぐ復帰記録）

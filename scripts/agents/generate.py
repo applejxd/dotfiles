@@ -1408,7 +1408,7 @@ OPENCODE_GUIDE_PLUGIN = "~/.config/opencode/guide-plugin"
 
 # checkpoint plugin の置き場。命名の制約は guide-plugin と同じ。
 # 圧縮の直前に機械節を書き、直後に checkpoint をシステム側へ戻す。
-# see docs/change/0001-compaction-context-handover.md
+# see docs/change/closed/0001-compaction-context-handover.md
 OPENCODE_CHECKPOINT_PLUGIN = "~/.config/opencode/checkpoint-plugin"
 
 
@@ -1417,7 +1417,7 @@ OPENCODE_CHECKPOINT_PLUGIN = "~/.config/opencode/checkpoint-plugin"
 # v2.0.14 はここを走査しない (実測: 監視対象は ~/.opencode/skills で、
 # ~/.config/opencode/skills に置いた skill は登録されない)。未文書の
 # ~/.opencode/skills へ移すより、文書化されている `skills` 設定で名指しする。
-# see docs/change/0001-compaction-context-handover.md 「skill が読まれない」
+# see docs/change/closed/0001-compaction-context-handover.md 「skill が読まれない」
 OPENCODE_SKILLS = "~/.config/opencode/skills"
 
 

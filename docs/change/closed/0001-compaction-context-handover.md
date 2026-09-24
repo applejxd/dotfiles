@@ -1,9 +1,17 @@
 # CHG-0001: compaction を跨いで作業文脈を失わない
 
-- **状態**: In progress
-- **更新日**: 2026-09-24
+- **状態**: Done
+- **更新日**: 2026-09-25
+- **終了日**: 2026-09-25
 - **基準**: OpenCode V2（plugin API の `session.hook`）。
   Claude Code 2.1.x / Copilot CLI 1.0.87-0 での実装は**当時の記録**として残す
+
+> **この文書は当時の記録。** 現在の仕様は
+> [checkpoint](../../spec/checkpoint.md)。
+>
+> 当初の設計（逐次保存 + 圧縮直前の機械記録 + 圧縮直後の注入）は、
+> OpenCode V2 の plugin API により**圧縮フック 1 本**へ縮んだ。
+> 撤回した前提とその理由は「重要な更新」にある。
 
 ## 目的と非目的
 
@@ -347,7 +355,7 @@ title:      (s) => I("title",      s, ...),
 これらは動いているので消さないが、**この案件の対象からは外す**。
 
 段 1〜6 が完了し、本体へマージして `chezmoi apply` まで済んだ。
-**実機の `/compact` で `PreCompact` が発火することを確認した**（[E5](../research/agents/compaction-hooks.md)）。
+**実機の `/compact` で `PreCompact` が発火することを確認した**（[E5](../../research/agents/compaction-hooks.md)）。
 **Copilot 側の復帰注入も実装した**（`PreCompact` の印 + `postToolUse`、E7）。
 残るのは両 CLI での復帰注入の実機確認と Windows 実機。
 
@@ -405,14 +413,14 @@ title:      (s) => I("title",      s, ...),
 | 候補 | 支持する根拠 | 不利な点・反証 | 未検証点 | 扱い | 次の確認 |
 | --- | --- | --- | --- | --- | --- |
 | `SessionStart` matcher `compact` で注入 | 公式が圧縮直後の注入点と明記。プレーン stdout も可 | Claude 専用 | 実機での発火 | **有望** | P0-3 |
-| `PostCompact` で注入 | — | decision control が無く注入できない（[E1](../research/agents/compaction-hooks.md)） | — | **見送り** | — |
+| `PostCompact` で注入 | — | decision control が無く注入できない（[E1](../../research/agents/compaction-hooks.md)） | — | **見送り** | — |
 | 指示ファイルで無条件に読ませる | システムプロンプト側なので圧縮されない | 自律実行の途中では発火しない | 実効性 | **検証中** | P0-3 |
 | Copilot `PostToolUse` で 1 回注入 | `exec`/`args` でシェル非依存。当初の Windows 理由は撤回 | 復帰後の最初のツールは注入前に実行される | 発火頻度 | **保留** | P0-3 の結果しだい |
 | `PreCompact` をブロックして書かせる | 手動なら安全 | `auto` を止めると context-limit 回復時にリクエストが失敗する | — | **見送り（auto）** | — |
 | `fork` に checkpoint を書かせる | 会話全体を継承し、親の文脈を使わない | 分岐はスナップショット。古い fork が親の新しい記録を上書きする | — | **見送り** | — |
-| `TaskCompleted` で促す | タスク完了は自然な区切り | `additionalContext` 非対応（[E2](../research/agents/compaction-hooks.md)）。exit 2 の強制しかできない | — | **見送り** | — |
+| `TaskCompleted` で促す | タスク完了は自然な区切り | `additionalContext` 非対応（[E2](../../research/agents/compaction-hooks.md)）。exit 2 の強制しかできない | — | **見送り** | — |
 | セッション横断の GC | ファイルが溜まらない | 稼働中の他セッションの記録を消す | — | **見送り** | — |
-| Copilot で文脈使用率を推定して閾値監視 | 長い探索の取りこぼしを拾える | **`PostToolUse` 入力に `transcript_path` が無い**（[E4](../research/agents/compaction-hooks.md)）。トークン情報は圧縮時とセッション終了時にしか出ず、閾値を跨ぐ前に読めない（[E6](../research/agents/compaction-hooks.md)） | — | **見送り（決着）** | — |
+| Copilot で文脈使用率を推定して閾値監視 | 長い探索の取りこぼしを拾える | **`PostToolUse` 入力に `transcript_path` が無い**（[E4](../../research/agents/compaction-hooks.md)）。トークン情報は圧縮時とセッション終了時にしか出ず、閾値を跨ぐ前に読めない（[E6](../../research/agents/compaction-hooks.md)） | — | **見送り（決着）** | — |
 
 ## 次の調査・実験
 
@@ -421,11 +429,11 @@ title:      (s) => I("title",      s, ...),
 | P0-3 | 圧縮後、作業再開前に checkpoint が届くか | Claude 実機で圧縮を起こし、最初のモデル要求時点を観測 |
 | P1-4 | Windows 実機での動作 | 実機の PowerShell で配備・発火・起動時間を確認 |
 
-**決着済み**: P0-7（Copilot の hook 入力契約、[E3](../research/agents/compaction-hooks.md) /
-[E5](../research/agents/compaction-hooks.md)）、
-P0-2（使用率の取得、[E4](../research/agents/compaction-hooks.md) /
-[E6](../research/agents/compaction-hooks.md)）、
-P0-1（ターン途中の圧縮、[E6](../research/agents/compaction-hooks.md)）
+**決着済み**: P0-7（Copilot の hook 入力契約、[E3](../../research/agents/compaction-hooks.md) /
+[E5](../../research/agents/compaction-hooks.md)）、
+P0-2（使用率の取得、[E4](../../research/agents/compaction-hooks.md) /
+[E6](../../research/agents/compaction-hooks.md)）、
+P0-1（ターン途中の圧縮、[E6](../../research/agents/compaction-hooks.md)）
 
 ## 仕様への変更案
 
@@ -433,7 +441,7 @@ P0-1（ターン途中の圧縮、[E6](../research/agents/compaction-hooks.md)�
 | --- | --- | --- | --- |
 | 指示ファイル | （なし）→ 「文脈の引き継ぎ」節 | 圧縮を跨いで生き残る唯一の層 | 適用済み `7c6703c` |
 | スキル | （なし）→ `checkpoint` | 手順の単一ソース | 適用済み `7c6703c` |
-| `docs/` | 3 分類 → 4 種類 + ダッシュボード | [ADR-0010](../adr/0010-exploratory-spec-driven-docs.md) | 適用済み `2e7b44e` |
+| `docs/` | 3 分類 → 4 種類 + ダッシュボード | [ADR-0010](../../adr/0010-exploratory-spec-driven-docs.md) | 適用済み `2e7b44e` |
 | `adr` スキル | 独立 → `checkpoint` へ統合 | 役割が重複していた | 適用済み（段 6） |
 | `spec/` | （なし）→ `checkpoint.md` | 運用仕様の正本が要る | 適用済み `2e7b44e` |
 | `.chezmoiremove` | ファイル個別指定 → ディレクトリ指定 | 配下を並べると空ディレクトリが残る（実測） | 適用済み `6ecdba7` |
@@ -473,7 +481,7 @@ P0-1（ターン途中の圧縮、[E6](../research/agents/compaction-hooks.md)�
 1 回目は発火しなかったが、原因は実装ではなく **Copilot が hook の登録を
 起動時にしか読まない**ことだった（プロセス起動 12:38:40 / 登録更新 12:51:32）。
 設定を変えず `/restart` しただけで 2 回目は発火した。詳細は
-[E5](../research/agents/compaction-hooks.md)。
+[E5](../../research/agents/compaction-hooks.md)。
 
 | 項目 | 期待 | 実測 |
 | --- | --- | --- |
@@ -483,8 +491,25 @@ P0-1（ターン途中の圧縮、[E6](../research/agents/compaction-hooks.md)�
 | ヘッダ `covered_through` | 不変 | `manual@2026-09-19T13:45:00+09:00` |
 | 意味内容 6 節 | 無傷 | 無傷 |
 
-**未検証**: 圧縮直後の復帰注入（**Claude でのみ検証可能**。Copilot に
-`SessionStart(compact)` 相当が無い）、Windows 実機、
+**実機での圧縮試験（2026-09-25、OpenCode 2.0.14）:**
+
+**この案件の主目的がここで成立した。** 自動圧縮が走り、`session.hook("compaction")`
+が意味内容 6 節を生成して `.tmp/checkpoint-sesf3286.md` へ書き、同じ内容が
+圧縮要約としてセッションへ戻った。**書いたものと戻ったものが同一**である。
+
+| 項目 | 期待 | 実測 |
+| --- | --- | --- |
+| 意味内容 6 節 | 圧縮時点の内容で埋まる | 埋まった（`## Goal` 〜 `## Refs`） |
+| `## Next` の具体性 | 次の一手が読める | 「この圧縮の結果を検査する」と手順つきで書かれた |
+| `## Snapshot` の `snapshot_at` | 圧縮時刻 | `2026-09-25T05:01:10+09:00` |
+| `trigger` | 自動圧縮を記録 | `compaction` |
+| 前世代の退避 | `.prev.md` へ | 同時刻で退避された |
+| 圧縮要約としての復帰 | 同じ内容が戻る | 戻った（この文書の更新はその文脈で書いている） |
+
+モデル呼び出しは増えていない。圧縮のために元々走る 1 回を `session.generate` で
+使い回しているため、**要約の代わりに checkpoint が出てくる**構図になる。
+
+**未検証**: Windows 実機、
 `chezmoi diff`（sandbox 内では `~/` が不可視のため無意味）
 
 ## 重要な更新
@@ -496,12 +521,29 @@ P0-1（ターン途中の圧縮、[E6](../research/agents/compaction-hooks.md)�
 | 2026-09-18 | checkpoint の書き手を親に限定 | 古い fork が親の新しい記録を上書きする |
 | 2026-09-19 | 保存先を常にセッション別名へ | 所有権の交渉・ロック・固定名の奪い合いが不要になる |
 | 2026-09-19 | 文字数予算を 2000 で確定 | 復帰試験の実測が 1098 文字で「ちょうどよい」判定 |
-| 2026-09-19 | Copilot の閾値監視を「見送り」へ | `PostToolUse` 入力に `transcript_path` が無いことを実測（[E4](../research/agents/compaction-hooks.md)） |
+| 2026-09-19 | Copilot の閾値監視を「見送り」へ | `PostToolUse` 入力に `transcript_path` が無いことを実測（[E4](../../research/agents/compaction-hooks.md)） |
 | 2026-09-19 | `.chezmoiremove` をディレクトリ指定へ | `adr` skill を消したのにファイルを個別に並べたため、空の `skills/adr/` が残った。ディレクトリを書けば再帰削除される（実測）。同じ理由で残っていた `commit/scripts/` も直した |
-| 2026-09-19 | Copilot の閾値監視を「決着（見送り）」へ | `preCompact` の `transcriptPath` をたどっても、本体会話の消費量は記録されない（[E5](../research/agents/compaction-hooks.md)） |
+| 2026-09-19 | Copilot の閾値監視を「決着（見送り）」へ | `preCompact` の `transcriptPath` をたどっても、本体会話の消費量は記録されない（[E5](../../research/agents/compaction-hooks.md)） |
 | 2026-09-19 | `snapshot_at` をヘッダから機械節へ一本化 | hook はヘッダを触らない設計なので、ヘッダに置くと誰も更新せず「未取得」に見え続けた。旧雛形の名残は `lint` の警告で拾う |
-| 2026-09-19 | 「逐次保存 + 圧縮直前の機械記録」の構成を実測で裏付け | 自動圧縮は assistant ターンの境界で起き、`PreCompact` は確実に呼ばれるが、その時点でモデルに意味内容を書かせる余地は無い（[E6](../research/agents/compaction-hooks.md)） |
+| 2026-09-19 | 「逐次保存 + 圧縮直前の機械記録」の構成を実測で裏付け | 自動圧縮は assistant ターンの境界で起き、`PreCompact` は確実に呼ばれるが、その時点でモデルに意味内容を書かせる余地は無い（[E6](../../research/agents/compaction-hooks.md)） |
+| 2026-09-25 | 対象を OpenCode V2 のみへ絞り、hook 層 3 本を撤去 | `session.hook` に専用の口があり、両 CLI 前提で要った工夫がまるごと不要になる |
+| 2026-09-25 | 「圧縮の時点でモデルに意味内容を書かせる余地は無い」を撤回 | `session.hook("compaction")` は `session.generate` を呼べる。**圧縮要約と引き継ぎを一本化**でき、モデル呼び出しも増えない |
+| 2026-09-25 | skill 置き場を `skills` 設定で名指し | `~/.config/opencode/skills` は公式ドキュメントに載るが v2.0.14 は走査しない |
 
 ## 終了結果
 
-（未終了）
+**採用・配備済み（2026-09-25）。**
+
+圧縮要約そのものを checkpoint にした。圧縮が走ると
+`session.hook("compaction")` が意味内容 6 節を生成してファイルへ書き、
+同じものを `e.result` に入れてセッションへ返す。**保存と復帰が同じ成果物**に
+なったので、両者がずれる余地が無くなった。
+
+当初の設計（逐次保存 + 圧縮直前の機械記録 + 圧縮直後の注入）から、
+**圧縮フック 1 本**へ縮んだ。撤回した前提は「圧縮の時点でモデルに意味内容を
+書かせる余地は無い」で、これは両 CLI の hook が外部プロセスだったことに
+由来する制約だった。plugin はホストの中で動き、モデルを呼べる。
+
+現行仕様は [checkpoint](../../spec/checkpoint.md)。
+
+**引き継ぐ未検証**: Windows 実機での動作（`300_windows/346` の順序変更）。

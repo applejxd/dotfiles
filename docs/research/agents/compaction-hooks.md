@@ -1,6 +1,6 @@
 # compaction 関連の hook 仕様
 
-<!-- 現在の総合判断は docs/change/0001-compaction-context-handover.md の
+<!-- 現在の総合判断は docs/change/closed/0001-compaction-context-handover.md の
      候補比較表が正本。ここは「いつ何を観測したか」を積む場所 -->
 
 context compaction を跨いで作業文脈を保つために、両 CLI の hook で何ができて

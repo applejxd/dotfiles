@@ -41,7 +41,6 @@
 
 | # | 目的 | 状態 | 最大の未解決点 | 次の確認 | 更新日 |
 | --- | --- | --- | --- | --- | --- |
-| [0001](0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | In progress | **圧縮要約と引き継ぎを一本化**。圧縮フックで `session.generate` を呼び 6 節を自動生成し、`e.result` に入れる（モデル呼び出しは増えない）。欠陥 2 件は修正済み | 実機の圧縮で自動生成が成立するか確認する | 2026-09-25 |
 | [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | In progress | **4a も見送りになった**（候補がほぼ全部、任意コード実行の経路）。既存 allow のリダイレクト穴は塞いだ | 段階 5（第一サポート決定待ち） | 2026-09-24 |
 | [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | In progress | A1 完了（生成物は不変）。A2 は CHG-0006 の結論待ちで優先度を下げた | A2 の要否判断 | 2026-09-24 |
 | [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | `enabledProviders = ["claude"]` の効果が実機未確認（omp が未認証）。deepwiki を外して MCP が 0 件になり、`/mcp list` での判定は使えない | 段 2 の冒頭で `~/.claude/commands/*.md` がスラッシュコマンドに出るか | 2026-09-25 |
@@ -58,5 +57,6 @@
 
 | # | 目的 | 結果 | 終了日 | 現行仕様 / ADR |
 | --- | --- | --- | --- | --- |
+| [0001](closed/0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | 採用・配備済み（圧縮要約そのものを checkpoint にした） | 2026-09-25 | [checkpoint](../spec/checkpoint.md) |
 | [0004](closed/0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | 採用・配備済み | 2026-09-24 | [opencode-sandbox](../spec/opencode-sandbox.md) |
 | [0003](closed/0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | 採用・配備済み | 2026-09-22 | [agent-permissions](../spec/agent-permissions.md) |

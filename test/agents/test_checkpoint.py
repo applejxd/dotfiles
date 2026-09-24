@@ -501,7 +501,7 @@ def test_the_pre_move_skill_is_removed_on_apply():
     OpenCode が**古い方を読む**（実測: SKILL.md の CLI パスが .claude を
     指し、snapshot サブコマンドが無い版が読み込まれた）。
 
-    see docs/change/0001-compaction-context-handover.md 「方針転換」
+    see docs/change/closed/0001-compaction-context-handover.md 「方針転換」
     """
     lines = [
         line.strip()

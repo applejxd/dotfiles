@@ -667,7 +667,7 @@ def test_checkpoint_hooks_are_gone_from_both_clis():
     印の保存は ``ctx.storage`` で、**どれも Claude / Copilot に同等物が無い**。
     hook 側へ戻すと、一番機能の薄い CLI に合わせた設計に引きずられる。
 
-    see docs/change/0001-compaction-context-handover.md
+    see docs/change/closed/0001-compaction-context-handover.md
     """
     assert not [h for h in COMMON["hooks"] if h["id"].startswith("checkpoint")]
 

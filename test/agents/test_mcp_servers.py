@@ -112,7 +112,7 @@ def test_deepwiki_is_declared_nowhere():
 
     索引が古く、実ソース (v2.0.14) と食い違う説明を返した。上流を読むなら
     `gh api` でタグを指定して取る。
-    see docs/change/0001-compaction-context-handover.md
+    see docs/change/closed/0001-compaction-context-handover.md
     """
     for username in USERS:
         ids = [s["id"] for s in load_common(username).get("mcp", [])]

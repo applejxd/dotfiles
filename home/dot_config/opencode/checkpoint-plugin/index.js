@@ -6,7 +6,7 @@ import { join } from "node:path"
 // checkpoint スキルの CLI。機械節の生成と保存先の解決はここが単一ソースで、
 // この plugin には書かない (Python 側と二重に持つと必ずずれる)。
 // ★スキルは OpenCode 専用。~/.claude/skills ではなくここにある。
-//   see docs/change/0001-compaction-context-handover.md 「方針転換」
+//   see docs/change/closed/0001-compaction-context-handover.md 「方針転換」
 const SKILL = join(homedir(), ".config/opencode/skills/checkpoint")
 const CLI = join(SKILL, "scripts/checkpoint.py")
 const TEMPLATE = join(SKILL, "references/checkpoint-template.md")

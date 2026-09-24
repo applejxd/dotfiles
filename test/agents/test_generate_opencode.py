@@ -462,7 +462,7 @@ def test_checkpoint_plugin_is_always_registered():
     で、どちらもこの plugin が担う。載っていないと**圧縮を跨いだ時点で
     文脈が失われる**。
 
-    see docs/change/0001-compaction-context-handover.md
+    see docs/change/closed/0001-compaction-context-handover.md
     """
     merged = gen.merge_opencode_config({}, COMMON)["plugins"]
     assert gen.opencode_checkpoint_plugin_path() in merged
@@ -482,7 +482,7 @@ def test_the_skills_directory_is_always_registered():
     ``~/.opencode/skills`` 側で、``~/.config/opencode/skills`` に置いた skill は
     ``/api/skill`` に現れない）。``skills`` 設定で名指しすると登録される。
 
-    see docs/change/0001-compaction-context-handover.md
+    see docs/change/closed/0001-compaction-context-handover.md
     """
     merged = gen.merge_opencode_config({}, COMMON)["skills"]
     assert gen.opencode_skills_path() in merged
