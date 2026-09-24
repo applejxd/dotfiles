@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -451,6 +452,44 @@ def test_guide_plugin_is_not_registered_twice():
     existing = {"plugins": [gen.opencode_guide_plugin_path()]}
     merged = gen.merge_opencode_config(existing, COMMON)["plugins"]
     assert merged.count(gen.opencode_guide_plugin_path()) == 1
+
+
+def test_checkpoint_plugin_is_always_registered():
+    """★圧縮は設定と無関係に起きるので、常に読み込む。
+
+    2026-09-25 に checkpoint を OpenCode 専用へ寄せた。圧縮の捕捉は
+    ``session.hook("compaction")``、復帰注入は ``session.hook("context")``
+    で、どちらもこの plugin が担う。載っていないと**圧縮を跨いだ時点で
+    文脈が失われる**。
+
+    see docs/change/0001-compaction-context-handover.md
+    """
+    merged = gen.merge_opencode_config({}, COMMON)["plugins"]
+    assert gen.opencode_checkpoint_plugin_path() in merged
+
+
+def test_checkpoint_plugin_is_not_registered_twice():
+    existing = {"plugins": [gen.opencode_checkpoint_plugin_path()]}
+    merged = gen.merge_opencode_config(existing, COMMON)["plugins"]
+    assert merged.count(gen.opencode_checkpoint_plugin_path()) == 1
+
+
+def test_checkpoint_plugin_is_readable_inside_the_boundary():
+    """★隔離版でも圧縮は起きる。
+
+    ``ocs`` は ``~/.config/opencode`` を丸ごとは開けない (R4: ``service.json``
+    が読めてしまうため)。plugin 本体とスキルの CLI を名指しで開けていないと、
+    **境界の内側でだけ** checkpoint が動かない。
+    """
+    sandbox = gen.opencode_sandbox(COMMON)
+    assert gen.opencode_checkpoint_plugin_path() in sandbox["plugins"]
+
+    readable = sandbox["base"]["read"]
+    for needed in (
+        gen.opencode_checkpoint_plugin_path(),
+        os.path.expanduser("~/.config/opencode/skills"),
+    ):
+        assert needed in readable, f"{needed} が境界内から読めない"
 
 
 def _guided(command: str) -> dict[str, str] | None:

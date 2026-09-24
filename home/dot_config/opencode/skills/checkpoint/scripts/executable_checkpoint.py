@@ -32,6 +32,7 @@ exit code:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -56,6 +57,9 @@ REQUIRED_HEADINGS = (
     "## Next",
     "## Refs",
 )
+
+# 機械節に列挙する変更ファイルの上限。全部載せると意味内容を押し出す。
+MAX_LISTED_FILES = 20
 
 # 機械が書く節。意味内容の文字数予算には含めない。
 MACHINE_MARKER = "<!-- machine:"
@@ -354,6 +358,121 @@ def lint(
     return errors, warnings
 
 
+def _porcelain_path(line: str) -> str:
+    """``git status --porcelain=v1`` の 1 行からパスだけを取り出す。
+
+    ★行頭は「2 文字の状態 + 空白」。ただし ``` M path``` のように状態が
+    1 文字ぶん空白のこともあるので、固定長で切ると先頭 1 文字を食う。
+    空白で区切って取り直す。
+    """
+    body = line[2:].strip() if len(line) > 2 else line.strip()
+    # リネームは ``old -> new``。新しい方だけ載せる。
+    if " -> " in body:
+        body = body.split(" -> ", 1)[1]
+    return body.strip('"')
+
+
+def collect_snapshot(root: Path, trigger: str = "") -> str:
+    """機械的な事実だけを集める。
+
+    集めるのは「誰が見ても同じ答えになるもの」に限る。意味内容はモデルが
+    書くので、ここでは触らない。
+    """
+    now = dt.datetime.now(dt.UTC).astimezone().isoformat(timespec="seconds")
+
+    head = _run_git(["rev-parse", "--short", "HEAD"], root) or "(不明)"
+    branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], root) or "(不明)"
+
+    status = _run_git(["status", "--porcelain=v1"], root) or ""
+    status_lines = [line for line in status.splitlines() if line.strip()]
+
+    # 生の diff は長くなりすぎる。要約だけを載せる。
+    shortstat = _run_git(["diff", "--shortstat"], root) or "(差分なし)"
+
+    listed = [_porcelain_path(line) for line in status_lines[:MAX_LISTED_FILES]]
+    overflow = len(status_lines) - len(listed)
+
+    parts = [
+        f"{MACHINE_MARKER} ここから下は機械が上書きする。意味内容の予算に含めない -->",
+        "## Snapshot",
+        "",
+        f"- snapshot_at: {now}",
+        f"- trigger: {trigger or '(不明)'}",
+        f"- head: {head} ({branch})",
+        f"- status: {len(status_lines)} 件",
+        f"- diff: {shortstat}",
+    ]
+    if listed:
+        parts.append("- changed:")
+        parts.extend(f"  - {name}" for name in listed)
+        if overflow > 0:
+            parts.append(f"  - …ほか {overflow} 件")
+    return "\n".join(parts) + "\n"
+
+
+def skeleton(session: str) -> str:
+    """checkpoint が無いときに作る骨格。
+
+    空よりはマシ、という位置づけ。意味内容は埋まっていないので、これだけで
+    復帰できるとは考えない。
+    """
+    return (
+        f"<!-- checkpoint: v1\n"
+        f"     session: {session}\n"
+        f"     cli: opencode\n"
+        f"     updated_at: (未記入)\n"
+        f"     covered_through: (未記入)\n"
+        f"-->\n"
+        "# Checkpoint — (未記入)\n\n"
+        "## Goal\n\n"
+        "(未記入。圧縮前に `checkpoint` スキルが実行されなかった)\n\n"
+        "## Constraints\n\n(未記入)\n\n"
+        "## State\n\n(未記入)\n\n"
+        "## Evidence\n\n(未記入)\n\n"
+        "## Next\n\n(未記入)\n\n"
+        "## Refs\n\n(未記入)\n"
+    )
+
+
+def replace_machine_section(text: str, snapshot: str) -> str:
+    """機械節だけを差し替える。
+
+    ★意味内容には触れない。``updated_at`` と ``covered_through`` も動かさない。
+    ここを動かすと、古い内容が「新鮮」に見えてしまう。
+    """
+    index = text.find(MACHINE_MARKER)
+    body = text if index == -1 else text[:index]
+    body = body.rstrip("\n") + "\n"
+    return f"{body}\n{snapshot}"
+
+
+def write_snapshot(
+    session: str, start: Path | None = None, trigger: str = ""
+) -> dict[str, object]:
+    """機械節を書く。結果を辞書で返す (呼び出し側がログに使う)。
+
+    **決して例外を投げない。** 圧縮の直前に走るので、ここで失敗しても
+    セッションを止めてはいけない。
+    """
+    try:
+        paths = resolve_paths(session, start)
+    except ValueError as exc:
+        return {"ok": False, "reason": str(exc)}
+
+    target = Path(paths["checkpoint"])
+    root = Path(paths["root"])
+
+    try:
+        existed = target.exists()
+        text = target.read_text(encoding="utf-8") if existed else skeleton(session)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(target, replace_machine_section(text, collect_snapshot(root, trigger)))
+    except OSError as exc:
+        return {"ok": False, "reason": str(exc)}
+
+    return {"ok": True, "created": not existed, "path": str(target)}
+
+
 def _cmd_paths(args: argparse.Namespace) -> int:
     paths = resolve_paths(args.session, Path(args.cwd) if args.cwd else None)
     payload: dict[str, object] = dict(paths)
@@ -388,6 +507,18 @@ def _cmd_write(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _cmd_snapshot(args: argparse.Namespace) -> int:
+    result = write_snapshot(
+        args.session,
+        Path(args.cwd) if args.cwd else None,
+        args.trigger or "",
+    )
+    json.dump(result, sys.stdout, ensure_ascii=False)
+    sys.stdout.write("\n")
+    # ★失敗でも 0 を返す。圧縮の直前に走るので、ここで止めてはいけない。
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="checkpoint の保存先解決と検査")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -418,6 +549,14 @@ def build_parser() -> argparse.ArgumentParser:
     write.add_argument("path", help="checkpoint のパス")
     write.add_argument("--keep-prev", help="直前の世代を残すパス")
     write.set_defaults(func=_cmd_write)
+
+    snapshot = sub.add_parser(
+        "snapshot", help="機械節だけを書く (plugin が圧縮の直前に呼ぶ)"
+    )
+    snapshot.add_argument("--session", required=True, help="セッション ID")
+    snapshot.add_argument("--cwd", help="起点ディレクトリ (既定は現在地)")
+    snapshot.add_argument("--trigger", help="圧縮の契機 (auto / manual など)")
+    snapshot.set_defaults(func=_cmd_snapshot)
 
     return parser
 

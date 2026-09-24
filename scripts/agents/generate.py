@@ -1344,6 +1344,10 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     #   消すと `read` / `edit` の deny が空振りする。
     if opencode_guide_rules(common) or opencode_redact(common):
         out["plugins"] = [opencode_guide_plugin_path()]
+    # 隔離版でも圧縮は起きる。checkpoint plugin を載せないと、境界の内側でだけ
+    # 文脈が失われる。読むのは plugin 本体とスキルの CLI だけで、書き込みは
+    # ワークスペース内の .tmp/ に閉じる。
+    out.setdefault("plugins", []).append(opencode_checkpoint_plugin_path())
     policies = opencode_sandbox_policies(common)
     if policies:
         out["policies"] = policies
@@ -1385,6 +1389,15 @@ def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> d
 # see docs/research/opencode/plugin/loading.md
 OPENCODE_GUIDE_PLUGIN = "~/.config/opencode/guide-plugin"
 
+# checkpoint plugin の置き場。命名の制約は guide-plugin と同じ。
+# 圧縮の直前に機械節を書き、直後に checkpoint をシステム側へ戻す。
+# see docs/change/0001-compaction-context-handover.md
+OPENCODE_CHECKPOINT_PLUGIN = "~/.config/opencode/checkpoint-plugin"
+
+
+def opencode_checkpoint_plugin_path() -> str:
+    return os.path.expanduser(OPENCODE_CHECKPOINT_PLUGIN)
+
 
 def opencode_guide_plugin_path() -> str:
     return os.path.expanduser(OPENCODE_GUIDE_PLUGIN)
@@ -1393,9 +1406,14 @@ def opencode_guide_plugin_path() -> str:
 def merge_opencode_plugins(existing_plugins: Any, common: dict[str, Any]) -> list[Any]:
     """``plugins`` を更新する (宣言外のエントリは残す)。"""
     path = opencode_guide_plugin_path()
-    out = [p for p in (existing_plugins or []) if p not in (path, OPENCODE_GUIDE_PLUGIN)]
+    checkpoint = opencode_checkpoint_plugin_path()
+    known = (path, OPENCODE_GUIDE_PLUGIN, checkpoint, OPENCODE_CHECKPOINT_PLUGIN)
+    out = [p for p in (existing_plugins or []) if p not in known]
     if opencode_guide_rules(common) or opencode_ask_description(common):
         out.append(path)
+    # checkpoint plugin は常に読み込む。common.toml に切り替えは置かない
+    # (圧縮は設定と無関係に起きるため)。
+    out.append(checkpoint)
     return out
 
 

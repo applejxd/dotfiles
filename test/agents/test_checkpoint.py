@@ -417,3 +417,78 @@ def test_cli_write_keeps_previous_generation(tmp_path: Path):
 
     assert target.read_text(encoding="utf-8") == "第 2 世代"
     assert prev.read_text(encoding="utf-8") == "第 1 世代"
+
+
+# ---------------------------------------------------------------------------
+# snapshot (checkpoint-plugin が圧縮の直前に呼ぶ)
+# ---------------------------------------------------------------------------
+
+
+def _repo(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"
+    root.mkdir()
+    for args in (
+        ["init", "-q"],
+        ["config", "user.email", "t@example.com"],
+        ["config", "user.name", "t"],
+    ):
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+    (root / "a.txt").write_text("hi\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "init"], cwd=root, check=True, capture_output=True
+    )
+    return root
+
+
+def test_snapshot_creates_a_skeleton_with_machine_facts(tmp_path: Path):
+    """圧縮前にスキルが走らなかった場合の保険。骨格 + 機械節を作る。"""
+    root = _repo(tmp_path)
+    done = run_cli(["snapshot", "--session", "ses_abc12345", "--cwd", str(root)])
+    assert done.returncode == 0
+
+    result = json.loads(done.stdout)
+    assert result["ok"] is True and result["created"] is True
+
+    text = Path(result["path"]).read_text(encoding="utf-8")
+    head = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert f"- head: {head}" in text
+    assert "## Snapshot" in text
+    # 骨格の 6 節が揃っていること (lint --structure が通る形)。
+    for heading in ("Goal", "Constraints", "State", "Evidence", "Next", "Refs"):
+        assert f"## {heading}" in text
+
+
+def test_snapshot_never_touches_the_written_content(tmp_path: Path):
+    """★意味内容を上書きしないこと。
+
+    機械節だけを差し替える。``updated_at`` も動かさない。ここを動かすと
+    古い内容が「新鮮」に見えてしまう。
+    """
+    root = _repo(tmp_path)
+    run_cli(["snapshot", "--session", "ses_abc12345", "--cwd", str(root)])
+    paths = json.loads(
+        run_cli(["paths", "--session", "ses_abc12345", "--cwd", str(root)]).stdout
+    )
+    target = Path(paths["checkpoint"])
+
+    body = valid_checkpoint()
+    target.write_text(body, encoding="utf-8")
+    run_cli(["snapshot", "--session", "ses_abc12345", "--cwd", str(root)])
+
+    after = target.read_text(encoding="utf-8")
+    kept, _, _ = after.partition("<!-- machine:")
+    assert kept.strip() == body.partition("<!-- machine:")[0].strip()
+
+
+def test_snapshot_is_quiet_when_it_cannot_work(tmp_path: Path):
+    """★失敗しても 0 で返すこと。圧縮の直前に走るので止めてはいけない。"""
+    done = run_cli(["snapshot", "--session", "!!!", "--cwd", str(tmp_path)])
+    assert done.returncode == 0
+    assert json.loads(done.stdout)["ok"] is False

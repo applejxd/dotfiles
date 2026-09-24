@@ -650,16 +650,37 @@ def test_both_clis_reference_the_same_scripts(platform, command_key):
     # ★片側だけに登録する hook は例外として明示する (ADR-0007)。
     #   Claude に native な機構 (permission) がある場合、hook を足しても
     #   防御は増えず実行コストだけが乗るため、あえて登録しない。
-    #   checkpoint_restore_pending は逆向きで、Claude には SessionStart
-    #   matcher=compact があるので PostToolUse に相乗りする必要が無い。
-    copilot_only = {"check_file_read.py", "checkpoint_restore_pending.py"}
-    #   逆に、Copilot 側に対応するイベントが無い場合も片側だけになる。
-    #   checkpoint_restore は SessionStart matcher=compact に載せる。Copilot に
-    #   圧縮直後のイベントは無いが、PreCompact の印 + PostToolUse で同じ結果を
-    #   得る (docs/research/agents/compaction-hooks.md E7)。
-    claude_only = {"checkpoint_restore.py"}
+    copilot_only = {"check_file_read.py"}
+    #   2026-09-25: checkpoint の 3 本を撤去したので claude_only は空になった。
+    #   checkpoint は OpenCode 専用になり、圧縮の捕捉と復帰注入は
+    #   checkpoint-plugin が session.hook で担う。
+    claude_only: set[str] = set()
     assert copilot_scripts - claude_scripts == copilot_only
     assert claude_scripts - copilot_scripts == claude_only
+
+
+def test_checkpoint_hooks_are_gone_from_both_clis():
+    """★checkpoint を hook で再実装しないこと。
+
+    2026-09-25 に OpenCode 専用へ寄せた。圧縮の捕捉は
+    ``session.hook("compaction")``、復帰注入は ``session.hook("context")``、
+    印の保存は ``ctx.storage`` で、**どれも Claude / Copilot に同等物が無い**。
+    hook 側へ戻すと、一番機能の薄い CLI に合わせた設計に引きずられる。
+
+    see docs/change/0001-compaction-context-handover.md
+    """
+    assert not [h for h in COMMON["hooks"] if h["id"].startswith("checkpoint")]
+
+    for platform, key in (("posix", "bash"), ("nt", "powershell")):
+        claude = gen.build_claude_hooks(COMMON, platform=platform)
+        copilot = gen.build_copilot_hooks(COMMON, platform=platform)
+        commands = [
+            cmd["command"]
+            for entries in claude.values()
+            for entry in entries
+            for cmd in entry["hooks"]
+        ] + [entry[key] for entries in copilot["hooks"].values() for entry in entries]
+        assert not [c for c in commands if "checkpoint" in c]
 
 
 def test_copilot_only_hooks_are_declared_without_a_claude_event():
@@ -669,37 +690,6 @@ def test_copilot_only_hooks_are_declared_without_a_claude_event():
     assert entry["copilot_event"] == "PreToolUse"
 
 
-def test_compaction_restore_is_wired_on_both_clis():
-    """★圧縮直後の復帰を片側だけにしない。
-
-    Claude は SessionStart(matcher=compact) で作業再開の前に割り込む。Copilot
-    には対応イベントが無いので、PreCompact が置いた印を PostToolUse が拾う。
-    経路は違うが、どちらも「圧縮を跨いで記録が自動で戻る」ことを満たす。
-    """
-    by_id = {h["id"]: h for h in COMMON["hooks"]}
-
-    # 保存側は両方に載っている。
-    assert by_id["checkpoint_precompact"]["claude_event"] == "PreCompact"
-    assert by_id["checkpoint_precompact"]["copilot_event"] == "PreCompact"
-
-    # 復帰側は CLI ごとに別のイベントへ載る。
-    claude_side = by_id["checkpoint_restore"]
-    assert claude_side["claude_matcher"] == "compact"
-    assert "copilot_event" not in claude_side
-
-    copilot_side = by_id["checkpoint_restore_pending"]
-    assert copilot_side["copilot_event"] == "PostToolUse"
-    assert "claude_event" not in copilot_side
-    # ★matcher を付けない。圧縮の後に最初に来るツールは選べない。
-    assert "copilot_matcher" not in copilot_side
-
-
-def test_restore_pending_is_registered_for_every_tool():
-    copilot = gen.build_copilot_hooks(COMMON, platform="posix")
-    entries = copilot["hooks"]["PostToolUse"]
-    mine = [e for e in entries if "checkpoint_restore_pending.py" in e["bash"]]
-    assert len(mine) == 1
-    assert "matcher" not in mine[0]
 
 
 def test_generate_target_registry():

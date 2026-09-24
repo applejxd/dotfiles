@@ -21,19 +21,38 @@
 | 層 | 実体 | 役割 |
 | --- | --- | --- |
 | 指示ファイル | `home/dot_claude/CLAUDE.md` / `home/dot_copilot/copilot-instructions.md` | 恒久ルール。「文脈の引き継ぎ」節 |
-| スキル | `home/dot_config/opencode/skills/checkpoint/` | 手順・雛形の単一ソース。**OpenCode だけが読む** |
-| hook | `home/dot_config/agents/common.toml.tmpl` の `[[hooks]]` | 圧縮直前の記録と直後の復帰 |
+| スキル | `home/dot_config/opencode/skills/checkpoint/` | 手順・雛形・CLI の単一ソース |
+| plugin | `home/dot_config/opencode/checkpoint-plugin/` | 圧縮直前の記録と直後の復帰注入 |
 
-> **hook 層は Claude / Copilot 向けのまま残っている。** スキルが OpenCode 専用に
-> なったため、この 3 本（`checkpoint_precompact` / `checkpoint_restore` /
-> `checkpoint_restore_pending`）は**手順書を持たない CLI で動き続ける**状態。
-> 撤去するか OpenCode plugin へ寄せるかは未決。
+### plugin が担うこと
+
+hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた。
+
+| 口 | いつ | すること |
+| --- | --- | --- |
+| `session.hook("compaction")` | 圧縮の LLM 要求を組み立てるとき | `checkpoint.py snapshot` を呼び、`ctx.storage` に印を置く |
+| `session.hook("context")` | 毎要求 | 印があれば checkpoint を `event.system` へ入れ、印を消す |
+
+**フックは「圧縮を起動する側」ではなく「圧縮の要求を組み立てる側」に付いている。**
+自動圧縮と `/compact` で経路が分かれないのはこのため。
+
+設計上の約束:
+
+- **plugin は機械節を自分で組み立てない。** 生成と保存先の解決は
+  `checkpoint.py` が単一ソース。二重に持つと必ずずれる
+- **どちらのフックも例外を投げない。** 圧縮を壊さないことが最優先
+- **印が無いときは `ctx.storage` を 1 回読むだけで抜ける。**
+  `context` は毎要求で走るので、ここに重い処理を置くと全体が遅くなる
+- **印は読む前に消す。** 残すと毎要求で python を起動し続ける
 
 ### 境界の内側から読めること
 
 `ocs` の `read` は `~/.config/opencode` を**丸ごとは開けない**（R4）。
-移動にあわせて `~/.config/opencode/skills` を明示的に足してある。
-**これが無いと境界内で checkpoint スキルが読めない。**
+次の 2 つを名指しで開けている。**これが無いと境界内でだけ checkpoint が
+動かない。**
+
+- `~/.config/opencode/checkpoint-plugin`（plugin 本体）
+- `~/.config/opencode/skills`（スキルと CLI）
 
 ## 保存先
 

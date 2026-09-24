@@ -882,6 +882,9 @@ read = [
   #   1 枚になる。deny を足すのではなく **開ける範囲を狭める** のが正しい
   #   (R3 で allowRead は denyRead に勝つため、名指しの deny は効かない)。
   "~/.config/opencode/guide-plugin",
+  # checkpoint plugin の実体。圧縮は境界の内側でも起きるので、載せないと
+  # 内側でだけ文脈が失われる。read のみ。
+  "~/.config/opencode/checkpoint-plugin",
   # checkpoint スキルの実体。CHG-0001 の方針転換で OpenCode 専用になり、
   # ~/.claude/skills から ~/.config/opencode/skills へ移した。R4 で
   # ~/.config/opencode を丸ごと開けないようにしてあるため、**ここを足さないと
@@ -1254,40 +1257,9 @@ copilot_event = "PostToolUse"
 copilot_matcher = "^(Edit|Write|edit|create)$"
 timeout_sec = 30
 
-[[hooks]]
-id = "checkpoint_precompact"
-script = "checkpoint_precompact.py"
-runner = "python3"
-purpose = "圧縮の直前に機械的な事実だけを checkpoint へ記録する (保険)"
-# ★絶対にブロックしない。context-limit エラーからの回復として発火した自動圧縮
-#   を止めると、元のエラーが表面化して現在のリクエストが失敗する。
-# ★Copilot も PascalCase で登録する。camelCase だと入力に hook_event_name が
-#   入らない (docs/research/agents/compaction-hooks.md 記録 E3)。
-claude_event = "PreCompact"
-copilot_event = "PreCompact"
-timeout_sec = 30
-
-[[hooks]]
-id = "checkpoint_restore"
-script = "checkpoint_restore.py"
-runner = "python3"
-purpose = "圧縮の直後に自分の checkpoint をコンテキストへ戻す"
-# ★Claude 専用 (copilot_event を書かない)。
-#   Claude はここで作業再開の「前」に割り込める。Copilot には対応イベントが
-#   無いため checkpoint_restore_pending が PostToolUse に相乗りする。
-claude_event = "SessionStart"
-claude_matcher = "compact"
-timeout_sec = 30
-
-[[hooks]]
-id = "checkpoint_restore_pending"
-script = "checkpoint_restore_pending.py"
-runner = "python3"
-purpose = "Copilot で圧縮直後の最初のツール実行に相乗りして checkpoint を戻す"
-# ★Copilot 専用 (claude_event を書かない)。Claude は SessionStart で足りる。
-# ★matcher を付けない。圧縮の後に最初に来るツールが何かは選べないため。
-#   全ツールで発火するので、印が無いときは git もスキル読込もせず stat 1 回で
-#   抜けること。checkpoint_core.pending_dir() がホーム固定なのはこのため。
-# ★PascalCase で登録する。理由は checkpoint_precompact と同じ (記録 E3)。
-copilot_event = "PostToolUse"
-timeout_sec = 30
+# checkpoint の hook 3 本 (checkpoint_precompact / checkpoint_restore /
+# checkpoint_restore_pending) は 2026-09-25 に撤去した。
+# checkpoint は OpenCode 専用になり、圧縮の捕捉と復帰注入は
+# ~/.config/opencode/checkpoint-plugin が session.hook で担う。
+# 手順書を持たない CLI で hook だけ動き続ける状態を解消するのが目的。
+# see docs/change/0001-compaction-context-handover.md

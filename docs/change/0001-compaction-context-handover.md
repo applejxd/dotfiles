@@ -21,6 +21,40 @@
 - **Claude Code / Copilot CLI への対応**（2026-09-24 に対象外とした。
   実装済みのものは動いているので残すが、以後は OpenCode V2 だけを見る）
 
+### hook 層を撤去して plugin へ寄せた（2026-09-25）
+
+Claude / Copilot 向けの hook 3 本を撤去し、OpenCode plugin で建て直した。
+
+| 撤去したもの | 置き換え |
+| --- | --- |
+| `checkpoint_precompact`（Claude + Copilot） | `session.hook("compaction")` |
+| `checkpoint_restore`（Claude `SessionStart`） | `session.hook("context")` |
+| `checkpoint_restore_pending`（Copilot `PostToolUse`） | 同上（印は `ctx.storage`） |
+| `checkpoint_core.py` / `checkpoint_pending.py` | `checkpoint.py snapshot` |
+
+機械節の生成と保存先の解決は **`checkpoint.py` が単一ソース**。plugin は
+それを呼ぶだけで、ロジックを持たない（二重に持つと必ずずれる）。
+
+Copilot 側が必要としていた「印 + `PostToolUse` で相乗り」という二段構えは、
+`ctx.storage` が使えるので**不要になった**。
+
+#### 通しの実測
+
+使い捨ての git リポジトリで、1 回の要求の中に「圧縮 → 復帰」を並べて実行した。
+
+```text
+onCompaction → checkpoint.py snapshot → .tmp/checkpoint-sesf2b79.md 生成
+             → ctx.storage に印
+onContext    → 印を読む → ファイルを読む → e.system へ push
+```
+
+モデルに「引き継ぎ記録の `head` の値だけを答えて」と尋ねたところ **`c5a92c8`**
+と答え、リポジトリの実際の HEAD と**完全に一致**した。
+**注入が届いて読まれていることを、通しで確認できた。**
+
+> `compaction` フック自体の発火は、依然として実機の圧縮でしか確かめられない。
+> ここで確かめたのは「発火したあと正しく動くか」まで。
+
 ## 方針転換: OpenCode 専用にする（2026-09-24）
 
 スキルの置き場を `~/.claude/skills/checkpoint` から
@@ -50,16 +84,7 @@
 
 ### 残っている不整合
 
-hook 層の 3 本は **Claude / Copilot 向けのまま**。
-
-| hook | 対象 |
-| --- | --- |
-| `checkpoint_precompact` | Claude + Copilot |
-| `checkpoint_restore` | Claude |
-| `checkpoint_restore_pending` | Copilot |
-
-スキルが OpenCode 専用になったので、これらは**手順書を持たない CLI で動き続ける**。
-撤去するか OpenCode plugin へ寄せるかは**未決**。
+hook 層の 3 本は 2026-09-25 に撤去した（上記）。**不整合は解消済み。**
 
 ## 現在地
 
