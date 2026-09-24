@@ -119,5 +119,5 @@ uv run pre-commit run --all-files
 ## 参照
 
 - 復帰記録の保存: `checkpoint` スキル（A1。`.tmp/` のセッション別ファイル）
-- 雛形: `~/.config/opencode/skills/sdd-docs/references/`
+- 雛形: `~/.claude/skills/sdd-docs/references/`
   （`adr-template.md` / `change-template.md` / `research-template.md`）

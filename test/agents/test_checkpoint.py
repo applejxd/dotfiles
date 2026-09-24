@@ -517,6 +517,9 @@ def test_the_pre_move_skill_is_removed_on_apply():
 # ---------------------------------------------------------------------------
 
 SKILLS = ROOT / "home/dot_config/opencode/skills"
+# sdd-docs は OpenCode に依存しないので ~/.claude/skills 側に置く。
+# そこは OpenCode がネイティブに監視し、~/.copilot/skills も張られている。
+SDD_DOCS = ROOT / "home/dot_claude/skills/sdd-docs"
 MOVED_REFERENCES = ("adr-template.md", "change-template.md", "research-template.md")
 
 
@@ -528,15 +531,28 @@ def test_the_documentation_procedure_lives_in_sdd_docs():
 
     see docs/spec/checkpoint.md 「スキルを A1 と A2/B に分けた」
     """
-    assert (SKILLS / "sdd-docs/SKILL.md").exists()
+    assert (SDD_DOCS / "SKILL.md").exists()
     # 手順の実体が checkpoint 側へ戻っていないこと
     assert not (SKILLS / "checkpoint/references/procedure.md").exists()
+
+
+def test_sdd_docs_does_not_depend_on_opencode():
+    """★置き場は OpenCode への結合で決まる。
+
+    checkpoint は plugin が絶対パスで読むので OpenCode 専用。sdd-docs は
+    markdown と lint_docs.py だけなので、3 CLI に届く ~/.claude/skills へ置く。
+    OpenCode 側へ戻すと、`skills` 設定という回避策に依存することになる。
+    """
+    assert not (SKILLS / "sdd-docs").exists()
+    text = (SDD_DOCS / "SKILL.md").read_text(encoding="utf-8")
+    for opencode_only in ("ctx.storage", "session.hook", "checkpoint.py"):
+        assert opencode_only not in text
 
 
 def test_the_templates_moved_to_sdd_docs():
     """★雛形は使う側 (sdd-docs) に置く。両方に置くと必ずずれる。"""
     for name in MOVED_REFERENCES:
-        assert (SKILLS / "sdd-docs/references" / name).exists()
+        assert (SDD_DOCS / "references" / name).exists()
         assert not (SKILLS / "checkpoint/references" / name).exists()
     # checkpoint が使う雛形だけが残ること
     assert (SKILLS / "checkpoint/references/checkpoint-template.md").exists()
