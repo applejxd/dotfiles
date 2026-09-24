@@ -50,6 +50,26 @@ def test_deny_read_covers_windows_and_tmp():
         assert required in deny, f"deny_read に {required} が無い"
 
 
+def test_global_opencode_config_is_not_opened_wholesale():
+    """★``~/.config/opencode`` を丸ごと開けないこと。
+
+    境界内で要るのは plugin の実体だけで、隔離版の設定は ``config_dir``
+    (``~/.config/opencode-sandbox``) 側にある。丸ごと開けると
+    ``service.json`` (常駐サービスの認証情報) まで読めてしまう。
+    通信路は ``allowLocalBinding = false`` が塞いでいるが、防御が 1 枚になる。
+
+    ★deny を足すのではなく**開ける範囲を狭める**。R3 で ``allowRead`` は
+      ``denyRead`` に勝つため、名指しの deny は効かない。
+    """
+    out = gen.opencode_sandbox(COMMON)
+    if out is None:
+        return
+    read = out["base"]["read"]
+    home = str(Path.home())
+    assert f"{home}/.config/opencode" not in read, "global config を丸ごと開けている"
+    assert f"{home}/.config/opencode/guide-plugin" in read, "plugin が読めない"
+
+
 def test_config_dir_is_outside_any_workspace():
     """隔離版の設定を内側から書き換えられないこと。
 

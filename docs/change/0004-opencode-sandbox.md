@@ -1124,6 +1124,9 @@ OpenCode の稼働に必要なものを明示的な例外とするか、決め�
 
 ### 記録されていなかった事実 2: 常駐サービスの認証情報も読める
 
+> **2026-09-24 に対処した。** `allowRead` を `~/.config/opencode` から
+> `~/.config/opencode/guide-plugin` へ**狭めた**。以下は対処前の観測。
+
 ホストの `opencode serve --service` は loopback で待ち受け、認証情報を
 `~/.config/opencode/service.json` に持つ。**これが境界の内側から読める。**
 
@@ -1153,8 +1156,36 @@ OpenCode の稼働に必要なものを明示的な例外とするか、決め�
 | 案 | 内容 | 懸念 |
 | --- | --- | --- |
 | `service.json` を名指しで塞ぐ | `deny_read` 相当へ追加 | R3 で `allowRead` が勝つため、`~/.config/opencode` を開けている限り効くか要確認 |
-| 読み取り範囲を絞る | `~/.config/opencode` 全体ではなく必要なファイルだけ開ける | 何が必要かの洗い出しが要る |
+| **読み取り範囲を絞る** | `~/.config/opencode` 全体ではなく必要なファイルだけ開ける | 何が必要かの洗い出しが要る |
 | 何もしない | 通信路が塞がっていることに依存する | **多層防御が成立しない** |
+
+#### 採ったのは「範囲を絞る」（2026-09-24）
+
+**方針の判断は不要だった。** 境界内の OpenCode が実際に使うのは次の 2 つで、
+`~/.config/opencode` を丸ごと開ける理由が無かった。
+
+```text
+config_dir : ~/.config/opencode-sandbox       ← 隔離版の設定はこちら
+plugins    : ~/.config/opencode/guide-plugin  ← 必要なのはこの 1 つだけ
+```
+
+`allowRead` を `~/.config/opencode` → `~/.config/opencode/guide-plugin` へ
+狭めた。**deny を足すのではなく allow を狭める**のが正しい形で、R3
+（`allowRead` が `denyRead` に勝つ）の心配も要らなくなる。
+
+境界を張って実測した結果:
+
+| 対象 | 対処後 |
+| --- | --- |
+| `service.json` | **読めない** |
+| `opencode.json`（通常版 225 件） | **読めない** |
+| `AGENTS.md`（通常版） | **読めない** |
+| `guide-plugin/index.js` / `rules.json` | 読める（必要） |
+| `opencode-sandbox/opencode.json` | 読める（必要） |
+
+> **「まとめて扱う」という当初の整理は誤りだった。** 隔離 DB の資格情報は
+> エージェントが**必要とする**もので方針の判断が要るが、`service.json` は
+> **不要な巻き込み**で、判断なしに消せた。性質が正反対だった。
 
 ### 簡素化の選択肢
 

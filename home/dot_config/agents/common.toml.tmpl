@@ -861,7 +861,13 @@ read = [
   "~/.opencode",
   "~/.local/share/mise",
   "~/.local/bin",
-  "~/.config/opencode",
+  # ★`~/.config/opencode` を丸ごと開けないこと。境界内で要るのは plugin の
+  #   実体だけで、隔離版の設定は config_dir (~/.config/opencode-sandbox) 側。
+  #   丸ごと開けると `service.json` (常駐サービスの認証情報) まで読めてしまう
+  #   (実測)。通信路は allowLocalBinding = false が塞いでいるが、防御が
+  #   1 枚になる。deny を足すのではなく **開ける範囲を狭める** のが正しい
+  #   (R3 で allowRead は denyRead に勝つため、名指しの deny は効かない)。
+  "~/.config/opencode/guide-plugin",
   "~/.config/opencode-sandbox",
   "~/.config/shell",
   "~/.config/mise",

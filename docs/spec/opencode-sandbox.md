@@ -117,6 +117,10 @@ flowchart TD
   消える」。** エラーが出ないので気づけない。触りうる場所は必ずどちらかに載せる
 - **R3: `denyRead` は許可領域の内側にしか効かない。** 広く塞いでから `read` で
   戻す形にする（`denyRead: ~` → `allowRead` で個別に開ける）
+- **R4: 開ける範囲は必要な深さまで絞る。** R3 の裏返しとして、広く開けた中の
+  一部を deny で塞ぎ直すことはできない。`~/.config/opencode` を丸ごと開けて
+  `service.json`（常駐サービスの認証情報）まで読めていた（実測）。
+  **plugin が要るなら `guide-plugin` だけを開ける**
 
 > **`denyRead: ~` は WSL の Windows 側を守らない。** 実測で `/mnt/c/Users` まで
 > 読めていたので `/mnt` を明示的に塞いでいる。`/mnt/d` などを使うときは
@@ -380,7 +384,6 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 | 境界はエージェントから見えない | `ENOENT` を「存在しない」と誤診する。`AGENTS.md` で明示的に伝えている |
 | `read` が既定で拒否 | Claude Code は既定で全許可。参照したい場所は個別に開ける必要がある |
 | **資格情報は境界内にある** | 隔離 DB が `credential` を引き継ぎ、その DB はワークスペース内にある。モデル API の資格情報は内側から読める |
-| **常駐サービスの認証情報も読める** | `~/.config/opencode/service.json` が `allowRead` の `~/.config/opencode` に巻き込まれている。**通信路は `allowLocalBinding: False` が塞いでいるだけ**で、防御が 1 枚しかない |
 
 > 未対処の欠陥と簡素化の選択肢は
 > [CHG-0004 の外部レビュー節](../change/0004-opencode-sandbox.md#外部レビュー2026-09-23-未対処の欠陥と簡素化の選択肢)にまとめてある。
