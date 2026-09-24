@@ -26,24 +26,39 @@
 
 ### plugin が担うこと
 
-hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた。
+hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた。口は 3 つある。
 
 | 口 | いつ | すること |
 | --- | --- | --- |
-| `session.hook("compaction")` | 圧縮の LLM 要求を組み立てるとき | `checkpoint.py snapshot` を呼び、`ctx.storage` に印を置く |
-| `session.hook("context")` | 毎要求 | 印があれば checkpoint を `event.system` へ入れ、印を消す |
+| `session.hook("compaction")` | 圧縮の LLM 要求を組み立てるとき | `checkpoint.py snapshot` を呼ぶ**だけ** |
+| `ctx.event.subscribe()` | `session.compaction.ended` が流れたとき | `ctx.storage` に印を置く |
+| `session.hook("context")` | 毎要求 | 印があれば checkpoint を `event.system` へ入れる。ユーザの手番なら印を消す |
 
-**フックは「圧縮を起動する側」ではなく「圧縮の要求を組み立てる側」に付いている。**
-自動圧縮と `/compact` で経路が分かれないのはこのため。
+**記録する口と印を置く口を分けてある。** 圧縮フックは「圧縮を試みる側」に
+付いていて、その後 `Nothing to compact yet` で**失敗することがある**（実測）。
+ここで印を置くと、起きていない圧縮の引き継ぎを後続の要求へ流し込む。
+
+上流（v2.0.14 `packages/core/src/session/compaction.ts`）では、この門番が
+`prepare` より前にあり `Failed` を publish して返る。`Ended` は成功経路でしか
+出ない。**だから印は `Ended` にだけ結び付ける。**
 
 設計上の約束:
 
 - **plugin は機械節を自分で組み立てない。** 生成と保存先の解決は
   `checkpoint.py` が単一ソース。二重に持つと必ずずれる
-- **どちらのフックも例外を投げない。** 圧縮を壊さないことが最優先
+- **どの口も例外を投げない。** 圧縮を壊さないことが最優先
 - **印が無いときは `ctx.storage` を 1 回読むだけで抜ける。**
-  `context` は毎要求で走るので、ここに重い処理を置くと全体が遅くなる
-- **印は読む前に消す。** 残すと毎要求で python を起動し続ける
+  `context` は 1 手番のうち**ステップごとに**走る（実測で 5 回）
+- **印を消すのはユーザの手番に届けてから。** 圧縮の直後に走るのは内部の継続
+  要求のことがあり、そこで消すと**次にユーザが話しかけたときには残っていない**
+- **購読では一致しないイベントを素通しする。** 購読の容量は 4096 件で、消費が
+  遅れると購読ごと落ちる
+
+`ctx.event.subscribe` の引数は**イベント名ではない**。上流の
+`packages/client/src/shared-events.ts` では
+`subscribe(options?: SubscribeOptions)` で、`SubscribeOptions` は
+`{ signal?, onActivity? }` だけ。名前を渡しても絞り込まれないので、`type` は
+自分で見る。ペイロードは `properties` ではなく **`data`** に入る。
 
 ### 境界の内側から読めること
 

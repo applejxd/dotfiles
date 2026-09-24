@@ -38,22 +38,84 @@ Claude / Copilot 向けの hook 3 本を撤去し、OpenCode plugin で建て直
 Copilot 側が必要としていた「印 + `PostToolUse` で相乗り」という二段構えは、
 `ctx.storage` が使えるので**不要になった**。
 
-#### 通しの実測
+#### 実機の圧縮で `compaction` フックの発火を確認した
 
-使い捨ての git リポジトリで、1 回の要求の中に「圧縮 → 復帰」を並べて実行した。
+`chezmoi apply` 後、このリポジトリでの実作業中に自動圧縮が起きた。
 
 ```text
-onCompaction → checkpoint.py snapshot → .tmp/checkpoint-sesf2b79.md 生成
-             → ctx.storage に印
-onContext    → 印を読む → ファイルを読む → e.system へ push
+.tmp/checkpoint-sesf3286.md
+- snapshot_at: 2026-09-25T02:55:20+09:00
+- trigger: compaction
+- head: b8e7765 (main)
 ```
 
-モデルに「引き継ぎ記録の `head` の値だけを答えて」と尋ねたところ **`c5a92c8`**
-と答え、リポジトリの実際の HEAD と**完全に一致**した。
-**注入が届いて読まれていることを、通しで確認できた。**
+`trigger: compaction` は **plugin にしか書けない値**である（撤去した hook は
+`auto` / `manual` を入れていた）。**最後まで静的解析しか根拠が無かった
+「`compaction` フックが実機で発火するか」が、これで実測に置き換わった。**
 
-> `compaction` フック自体の発火は、依然として実機の圧縮でしか確かめられない。
-> ここで確かめたのは「発火したあと正しく動くか」まで。
+#### そのかわり欠陥が 2 つ出た（2026-09-25）
+
+同じ圧縮で**復帰注入は届かなかった**。印は消えているのに、圧縮後の手番の
+文脈に記録が無い。調べたところ原因は 2 つあった。
+
+**欠陥 A — 起きていない圧縮で印が置かれる。** 使い捨てリポジトリで再現した。
+
+```text
+COMPACTION 発火 → snapshot → 印を置いた
+Error: Nothing to compact yet      ← 圧縮は起きていない
+（次の普通の要求） 印あり → 注入した (408 文字)
+モデル: KUJIRA42                   ← 起きていない圧縮の引き継ぎを読んだ
+```
+
+圧縮フックは「圧縮を**試みる**側」に付いている。上流
+（v2.0.14 `packages/core/src/session/compaction.ts`）では
+`Nothing to compact yet` の門番が `prepare` より前にあり、そこでは `Failed`
+を publish して返る。`Ended` は成功経路でしか出ない。
+
+**欠陥 B — 印がユーザの手番まで残らない。** `context` フックは 1 手番のうち
+**ステップごとに**走る（実測で 5 回）。圧縮の直後に走るのは内部の継続要求の
+ことがあり、そこで読み捨てると次にユーザが話しかけたときには残っていない。
+
+#### 直した（2026-09-25）
+
+記録する口と印を置く口を分けた。
+
+| 口 | すること |
+| --- | --- |
+| `session.hook("compaction")` | `checkpoint.py snapshot` を呼ぶ**だけ** |
+| `ctx.event.subscribe()` | `session.compaction.ended` を見て印を置く |
+| `session.hook("context")` | 印があれば注入。**ユーザの手番なら**消す |
+
+##### 上流ソースで裏を取った
+
+実測と deepwiki の説明が食い違ったため、`gh` で v2.0.14 のソースを直接読んだ。
+**deepwiki の説明は誤りで、実測が正しかった。**
+
+| 項目 | deepwiki | 実ソース v2.0.14 |
+| --- | --- | --- |
+| `subscribe` の引数 | イベント型で絞り込む | `SubscribeOptions`（`signal` / `onActivity`）のみ。**絞り込まない** |
+| ペイロードの場所 | `properties` | **`data`**（`SessionEvent.Compaction.Failed["data"]`） |
+| `session.compaction.failed` | 存在しない | 存在する |
+
+`packages/client/src/shared-events.ts` の
+`subscribe(options?: SubscribeOptions): AsyncIterable<A>` が実体。購読の容量は
+**4096 件**で、消費が遅れると購読ごと落ちる。一致しないイベントは何もせずに
+素通しすること。
+
+##### 通しの実測
+
+使い捨てリポジトリで**本物の自動圧縮**を起こした（`compaction.buffer` を
+極端に大きくする）。`session_message` に `status: completed` の圧縮が記録され、
+その後の再試行だけが `failed` になった。
+
+```text
+圧縮 completed → Ended → 印を置いた
+再試行 failed  → 印は増えない          ← 欠陥 A が直っている
+圧縮後のユーザ手番 → 注入 → 印を消費
+モデル: KUJIRA42                        ← 記録にしか無い語を答えた
+```
+
+**圧縮を跨いでユーザの手番へ引き継ぎが届くことを、通しで確認できた。**
 
 ## 方針転換: OpenCode 専用にする（2026-09-24）
 
