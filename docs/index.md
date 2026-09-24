@@ -60,8 +60,6 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
-| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。**4 は全て見送り**、5 は第一サポート決定待ち。既存 allow のリダイレクト穴を塞いだ | 段階 5（CHG-0006 の結論待ち） |
-| [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。A1 完了 | A2 の要否（CHG-0006 の結論待ち） |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。段 2（常用）に着手。使って決まった設定の回収は段 2.5 | 段 2 の冒頭で `/mcp list` ではなくスラッシュコマンドを見る |
 | [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み | 段 2（共有ランタイムとハーネスの節分け） |
 
@@ -73,6 +71,10 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
   （`~/.copilot/skills` は symlink、OpenCode は監視対象に含む）。
   再開条件は「Claude Code を再契約したとき」
   - 保留中の測定: [`context: fork` が Claude 側で効くか](research/opencode/skill-frontmatter.md)
+- **CHG-0002 / CHG-0005 を保留へ移した**（2026-09-25）。どちらも残りは 1 段だけで、
+  CHG-0006 の第一サポート決定を待っている。CHG-0002 は段階 3 まで配備済みで
+  動いており、**止まっているだけで壊れてはいない**
+  — [案件の索引](change/index.md)
 
 ## 最近の重要な変更
 

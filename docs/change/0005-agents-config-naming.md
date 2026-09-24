@@ -1,9 +1,19 @@
 # CHG-0005: `common.toml` の命名を実態に合わせ、固有設定を分離する
 
-- **状態**: In progress
-- **更新日**: 2026-09-23
+- **状態**: Paused
+- **更新日**: 2026-09-25
 - **基準**: `common.toml.tmpl` 1242 行 / `generate.py` 1736 行。生成先は
   Claude・Copilot・OpenCode 通常版・OpenCode 境界版の 4 ハーネス
+
+> **2026-09-25 に保留へ移した。** A1（改名）は完了、A3 は消滅、A4 は保留。
+> **残るのは A2（固有設定の native 分離）だけ。**
+>
+> **再開条件**: [CHG-0006](0006-pi-harness-trial.md) が第一サポートを決めたとき。
+> 第一サポートが変われば整理の対象も変わるため、先に動かすと手戻りになる。
+>
+> **A2 に入る前に決めることが 1 つある**（CHG-0006 と独立に片付けられる）。
+> `[sandbox] claude_write_deny` の 20 件が ADR-0007 の規則 3 に違反している件。
+> 「未解決点」を参照。
 
 ## 目的と非目的
 
@@ -19,6 +29,42 @@
 
 **発端**: 「`common.toml` を廃止して各ハーネス専用の設定へ移行したい」という
 提案。調べた結果、**問題は器ではなく命名**だった。
+
+## 実施計画
+
+| 段 | 内容 | 規模 | 挙動 | 状態 |
+| --- | --- | --- | --- | --- |
+| **A1** | 改名。`claude_` を実態に合わせる | 62 箇所 / 15 ファイル | 変化なし | **完了**（2026-09-23） |
+| **A2** | `claude_` / `copilot_` が残ったもの（57 件）を native へ分離 | 57 件 | 変化なし | 未着手 |
+| ~~A3~~ | ~~OpenCode 固有のモデル API を移す~~ | — | — | **消滅**（既に正しい場所） |
+| A4 | 廃止の是非を再評価 | — | — | 保留 |
+
+### A1 の改名案
+
+| 現在 | 変更後 | 理由 |
+| --- | --- | --- |
+| `file.claude_read_deny_globs` | `file.read_deny_globs` | Claude / OpenCode 共通 |
+| `file.claude_write_deny_globs` | `file.write_deny_globs` | 同上 |
+| `file.claude_read_ask_globs` | `file.read_ask_globs` | 同上 |
+| `file.claude_write_ask_globs` | `file.write_ask_globs` | 同上 |
+| `sandbox.claude_network_allow` | `sandbox.shell_network_allow` | 用途（shell の通信先）で命名 |
+
+`sandbox.claude_write_deny` / `claude_read_allow` / `claude_write_allow` /
+`copilot_read_allow` / `copilot_write_allow` は**そのまま**。本当に固有なので
+接頭辞が正しい。
+
+### A1 の注意点
+
+改名対象は設定ファイルだけではない。**稼働中のコードがキー名を読む**。
+
+```text
+home/dot_claude/hooks/executable_check_file_read.py   稼働中の hook
+home/dot_config/agents/command_policy.py              稼働中の判定
+scripts/agents/validate_common.py                     検証スクリプト
+test/agents/ 4 ファイル / docs/ 6 ファイル
+```
+
+`chezmoi apply` 後に hook の再確認が要る（`test_check_file_read.py` が押さえる）。
 
 ## 現在地
 
@@ -93,6 +139,18 @@ OpenCode 境界 allowedDomains             44 件 = [web] 28 + 同 10 + OpenCode
   挙げたが、**既に `[opencode.sandbox] network_allow` にある**。移す先が無いので
   **A3 は消滅**した
 
+## 未解決点
+
+`[sandbox] claude_write_deny`（20 件）は ADR-0007 の規則 3
+「CLI 固有キーは『許可』の補償にだけ使う。『禁止』を置かない」に違反している。
+
+A2 で native へ移す前に、**どちらが正しいか**を決める必要がある。
+
+| 案 | 内容 |
+| --- | --- |
+| 禁止を共有へ上げる | 他の CLI でも同じ禁止を効かせる。規則 3 に適合 |
+| Claude 固有のまま native へ | 規則 3 を緩める。なぜ片側だけでよいかの根拠が要る |
+
 ## 評価基準
 
 **必須**:
@@ -107,42 +165,6 @@ OpenCode 境界 allowedDomains             44 件 = [web] 28 + 同 10 + OpenCode
 
 - `generate.py` から「共通でないものを共通の器に入れるための分岐」が減る
 - `local.toml` の `LOCAL_SANDBOX_KEYS` が固有キーだけを列挙する形に揃う
-
-## 実施計画
-
-| 段 | 内容 | 規模 | 挙動 | 状態 |
-| --- | --- | --- | --- | --- |
-| **A1** | 改名。`claude_` を実態に合わせる | 62 箇所 / 15 ファイル | 変化なし | **完了**（2026-09-23） |
-| **A2** | `claude_` / `copilot_` が残ったもの（57 件）を native へ分離 | 57 件 | 変化なし | 未着手 |
-| ~~A3~~ | ~~OpenCode 固有のモデル API を移す~~ | — | — | **消滅**（既に正しい場所） |
-| A4 | 廃止の是非を再評価 | — | — | 保留 |
-
-### A1 の改名案
-
-| 現在 | 変更後 | 理由 |
-| --- | --- | --- |
-| `file.claude_read_deny_globs` | `file.read_deny_globs` | Claude / OpenCode 共通 |
-| `file.claude_write_deny_globs` | `file.write_deny_globs` | 同上 |
-| `file.claude_read_ask_globs` | `file.read_ask_globs` | 同上 |
-| `file.claude_write_ask_globs` | `file.write_ask_globs` | 同上 |
-| `sandbox.claude_network_allow` | `sandbox.shell_network_allow` | 用途（shell の通信先）で命名 |
-
-`sandbox.claude_write_deny` / `claude_read_allow` / `claude_write_allow` /
-`copilot_read_allow` / `copilot_write_allow` は**そのまま**。本当に固有なので
-接頭辞が正しい。
-
-### A1 の注意点
-
-改名対象は設定ファイルだけではない。**稼働中のコードがキー名を読む**。
-
-```text
-home/dot_claude/hooks/executable_check_file_read.py   稼働中の hook
-home/dot_config/agents/command_policy.py              稼働中の判定
-scripts/agents/validate_common.py                     検証スクリプト
-test/agents/ 4 ファイル / docs/ 6 ファイル
-```
-
-`chezmoi apply` 後に hook の再確認が要る（`test_check_file_read.py` が押さえる）。
 
 ## 仕様への変更案
 
@@ -176,18 +198,6 @@ test/agents/ 4 ファイル / docs/ 6 ファイル
 | コメントの嘘 2 件 | `shell_network_allow` に「この設定は Claude 専用」、`write_deny_globs` に「Claude のみ反映」。どちらも OpenCode にも届いており誤り。修正した |
 | 集合の配置誤り | `shell_network_allow` が `CLAUDE_SANDBOX_KEYS` に入っていた。`SHARED_SANDBOX_KEYS` へ移した（検査専用の集合なので挙動は不変） |
 | **ADR-0007 規則 3 違反が 1 件残存** | `[sandbox] claude_write_deny` は「CLI 固有キーに置かれた禁止」。規則 3 が禁じている形。**A2 で扱う** |
-
-## 重要な未解決点
-
-`[sandbox] claude_write_deny`（20 件）は ADR-0007 の規則 3
-「CLI 固有キーは『許可』の補償にだけ使う。『禁止』を置かない」に違反している。
-
-A2 で native へ移す前に、**どちらが正しいか**を決める必要がある。
-
-| 案 | 内容 |
-| --- | --- |
-| 禁止を共有へ上げる | 他の CLI でも同じ禁止を効かせる。規則 3 に適合 |
-| Claude 固有のまま native へ | 規則 3 を緩める。なぜ片側だけでよいかの根拠が要る |
 
 ## 終了結果
 

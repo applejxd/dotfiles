@@ -22,45 +22,6 @@
 > モデル API とハーネスを一体化しない。同じハーネスでプロバイダを切り替える
 > たびに境界プロファイルが増殖する。
 
-## 現在地
-
-### 3 層への割り当て（`[opencode.sandbox]` 14 キーを分類した）
-
-| 層 | 持たせるもの | 現物 |
-| --- | --- | --- |
-| **共有ランタイム** | 境界生成、パス検証、退避、検査、後始末 | `runtime_path` `enabled` `deny_read`、`read` のツールチェーン 5 件、`write`、`protected` のリポジトリ制御 4 件 |
-| **ハーネス** | 実行ファイルと引数、専用 HOME/XDG、設定・状態の形式 | `read` の `~/.opencode` 系 3 件、`protected` の 2 件、`data_home` `db` `config_dir`、`system_prompt` `permissions` `model_preference` `policies`、`opencode.ai` ×2 |
-| **プロバイダ** | API 接続先、認証方式、資格情報の参照先 | `api.githubcopilot.com` `*.githubcopilot.com` `api.anthropic.com` `api.openai.com` |
-
-### なぜ 2 層では足りないか
-
-当初案は「共有 + ハーネス」の 2 層で、モデル API のドメインをハーネス側に
-置いていた。これだと **ハーネス × プロバイダ**で増殖する。
-
-```text
-2 層:  [opencode.sandbox] network_allow = [copilot, anthropic, openai, opencode.ai]
-       [pi.sandbox]       network_allow = [copilot, anthropic, openai, pi.dev]
-                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 重複
-3 層:  [provider.github-copilot] / [provider.anthropic] / [provider.openai]
-       [opencode.sandbox] providers = [...] + 自分のサービスだけ
-```
-
-`ocs` の実測（汎用 758 行 / OpenCode 固有 107 行 = 12%）は汎用化の見込みを
-示すが、**行数比は抽象の安定性を示さない**（Astra の指摘）。2 つ目の実装を
-作って初めて境界線が分かる。
-
-## 評価基準
-
-**必須**:
-
-- プロバイダ層の導入で**許可ドメインの集合が変わらない**
-- `test/agents/` が全件通る
-- 未知の provider 名を**黙って無視しない**（fail-closed）
-
-**望ましい**:
-
-- ハーネスを 1 つ足すときに `generate.py` を触らずに済む
-
 ## 実施計画
 
 | 段 | 内容 | 状態 |
@@ -97,6 +58,71 @@ providers = ["github-copilot", "anthropic", "openai"]
 空を返すと、綴り間違いが「境界内からモデルへ到達できない」という形でしか
 現れず、proxy が CONNECT を 403 で落とすだけなので原因に辿り着けない。
 
+## 現在地
+
+### 3 層への割り当て（`[opencode.sandbox]` 14 キーを分類した）
+
+| 層 | 持たせるもの | 現物 |
+| --- | --- | --- |
+| **共有ランタイム** | 境界生成、パス検証、退避、検査、後始末 | `runtime_path` `enabled` `deny_read`、`read` のツールチェーン 5 件、`write`、`protected` のリポジトリ制御 4 件 |
+| **ハーネス** | 実行ファイルと引数、専用 HOME/XDG、設定・状態の形式 | `read` の `~/.opencode` 系 3 件、`protected` の 2 件、`data_home` `db` `config_dir`、`system_prompt` `permissions` `model_preference` `policies`、`opencode.ai` ×2 |
+| **プロバイダ** | API 接続先、認証方式、資格情報の参照先 | `api.githubcopilot.com` `*.githubcopilot.com` `api.anthropic.com` `api.openai.com` |
+
+### なぜ 2 層では足りないか
+
+当初案は「共有 + ハーネス」の 2 層で、モデル API のドメインをハーネス側に
+置いていた。これだと **ハーネス × プロバイダ**で増殖する。
+
+```text
+2 層:  [opencode.sandbox] network_allow = [copilot, anthropic, openai, opencode.ai]
+       [pi.sandbox]       network_allow = [copilot, anthropic, openai, pi.dev]
+                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 重複
+3 層:  [provider.github-copilot] / [provider.anthropic] / [provider.openai]
+       [opencode.sandbox] providers = [...] + 自分のサービスだけ
+```
+
+`ocs` の実測（汎用 758 行 / OpenCode 固有 107 行 = 12%）は汎用化の見込みを
+示すが、**行数比は抽象の安定性を示さない**（Astra の指摘）。2 つ目の実装を
+作って初めて境界線が分かる。
+
+## 未解決点
+
+- **段 3 の動機が弱まっている。** CHG-0006 で「Pi / omp を境界へ入れない」と
+  決めたため、汎用化の使い道が当面ない。**再開条件は「境界へ入れたい
+  ハーネスが 2 つ目になったとき」**
+- **段 3 をやるなら B5（静的境界）と合流しうる。**
+  [CHG-0004](closed/0004-opencode-sandbox.md) の B5 は単独では割に合わず見送ったが、
+  ハーネス非依存にするなら静的な宣言の方が素直になる可能性がある。
+  段 3 に着手するときは、B5 を改めて検討対象に入れる
+- 段 2 は**取りかかれる**（2026-09-24 に確認）。当初「`local.toml` の追記口との
+  兼ね合いが未確認」と書いたが**誤り**だった。`local.toml` は
+  `common["sandbox"]` にしか触らず、段 2 の対象 `common["opencode"]["sandbox"]`
+  とはキーが 1 つも重ならない（[CHG-0005](0005-agents-config-naming.md) の
+  A2 の論点と取り違えていた）。このマシンに `local.toml` は存在もしない。
+  **本当の難所は次の 3 つ**:
+  - `protected` はワークスペース相対で、実体は「**この dotfiles リポジトリの
+    制御ファイルを守る**」項目。共有層へ置くと「どのハーネスでも共有」と
+    読めてしまい、性質が伝わらない
+  - `enabled` の意味が「OpenCode の境界を使うか」から「境界機構そのものを
+    使うか」へ変わる。ハーネスごとに切りたくなったとき**両方に必要**になりうる
+  - `~/.claude/skills` は資産としてはハーネス非依存だが、**名前にハーネス名が
+    入ったまま共有層へ置く**ことになる（実体パスなので変えられない）
+- プロバイダ層は現在ドメインしか持たない。Astra の提案では**認証方式と
+  資格情報の参照先**も持つべきだが、[CHG-0004](closed/0004-opencode-sandbox.md) の
+  B2（資格情報の露出）と絡むため、そちらの結論を待つ
+
+## 評価基準
+
+**必須**:
+
+- プロバイダ層の導入で**許可ドメインの集合が変わらない**
+- `test/agents/` が全件通る
+- 未知の provider 名を**黙って無視しない**（fail-closed）
+
+**望ましい**:
+
+- ハーネスを 1 つ足すときに `generate.py` を触らずに済む
+
 ## 段 4: 改名について（未決）
 
 `ocs` は **o**pen**c**ode **s**andbox の略で、ハーネス非依存にするなら名前が
@@ -131,32 +157,6 @@ providers = ["github-copilot", "anthropic", "openai"]
   軸が利便性（CHG-0006）へ移った際に**どこにも記録されず消えかけていた**。
   記録として起こし直した
 - **2026-09-24**: 段 1 完了。生成物の差分は並び順 2 行のみ
-
-## 未解決点
-
-- **段 3 の動機が弱まっている。** CHG-0006 で「Pi / omp を境界へ入れない」と
-  決めたため、汎用化の使い道が当面ない。**再開条件は「境界へ入れたい
-  ハーネスが 2 つ目になったとき」**
-- **段 3 をやるなら B5（静的境界）と合流しうる。**
-  [CHG-0004](closed/0004-opencode-sandbox.md) の B5 は単独では割に合わず見送ったが、
-  ハーネス非依存にするなら静的な宣言の方が素直になる可能性がある。
-  段 3 に着手するときは、B5 を改めて検討対象に入れる
-- 段 2 は**取りかかれる**（2026-09-24 に確認）。当初「`local.toml` の追記口との
-  兼ね合いが未確認」と書いたが**誤り**だった。`local.toml` は
-  `common["sandbox"]` にしか触らず、段 2 の対象 `common["opencode"]["sandbox"]`
-  とはキーが 1 つも重ならない（[CHG-0005](0005-agents-config-naming.md) の
-  A2 の論点と取り違えていた）。このマシンに `local.toml` は存在もしない。
-  **本当の難所は次の 3 つ**:
-  - `protected` はワークスペース相対で、実体は「**この dotfiles リポジトリの
-    制御ファイルを守る**」項目。共有層へ置くと「どのハーネスでも共有」と
-    読めてしまい、性質が伝わらない
-  - `enabled` の意味が「OpenCode の境界を使うか」から「境界機構そのものを
-    使うか」へ変わる。ハーネスごとに切りたくなったとき**両方に必要**になりうる
-  - `~/.claude/skills` は資産としてはハーネス非依存だが、**名前にハーネス名が
-    入ったまま共有層へ置く**ことになる（実体パスなので変えられない）
-- プロバイダ層は現在ドメインしか持たない。Astra の提案では**認証方式と
-  資格情報の参照先**も持つべきだが、[CHG-0004](closed/0004-opencode-sandbox.md) の
-  B2（資格情報の露出）と絡むため、そちらの結論を待つ
 
 ## 終了結果
 
