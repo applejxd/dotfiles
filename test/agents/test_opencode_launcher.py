@@ -285,11 +285,11 @@ def test_request_adds_only_to_its_own_workspace(tmp_path):
         'read = ["/mnt/d/alpha"]\nnetwork_allow = ["api.alpha.test"]\n',
     )
 
-    got = launcher["build_boundary"](_base_sandbox(), alpha)
+    got = launcher["build_boundary"](_base_sandbox(), alpha, launcher["read_request"](alpha))
     assert "/mnt/d/alpha" in got["filesystem"]["allowRead"]
     assert "api.alpha.test" in got["network"]["allowedDomains"]
 
-    other = launcher["build_boundary"](_base_sandbox(), beta)
+    other = launcher["build_boundary"](_base_sandbox(), beta, launcher["read_request"](beta))
     assert "/mnt/d/alpha" not in other["filesystem"]["allowRead"]
     assert "api.alpha.test" not in other["network"]["allowedDomains"]
 
@@ -319,9 +319,9 @@ def test_request_paths_are_resolved(tmp_path):
     ws = tmp_path / "proj"
     ws.mkdir()
     _request(ws, 'read = ["~/datasets", "sub/dir"]\n')
-    allow_read = launcher["build_boundary"](_base_sandbox(), ws)["filesystem"][
-        "allowRead"
-    ]
+    allow_read = launcher["build_boundary"](
+        _base_sandbox(), ws, launcher["read_request"](ws)
+    )["filesystem"]["allowRead"]
     assert str(Path.home() / "datasets") in allow_read
     assert str(ws / "sub/dir") in allow_read
     assert "~/datasets" not in allow_read
@@ -350,7 +350,7 @@ def test_unapproved_request_refuses_to_start(tmp_path, monkeypatch):
     monkeypatch.setitem(launcher, "TRUST", tmp_path / "trusted.json")
     monkeypatch.setattr(launcher["sys"].stdin, "isatty", lambda: False)
     with pytest.raises(SystemExit):
-        launcher["ensure_trusted"](ws, False)
+        launcher["ensure_trusted"](ws, False, launcher["read_request"](ws))
 
 
 def test_approval_is_recorded_outside_the_workspace(tmp_path, monkeypatch):
@@ -362,11 +362,11 @@ def test_approval_is_recorded_outside_the_workspace(tmp_path, monkeypatch):
     trust = tmp_path / "state" / "trusted.json"
     monkeypatch.setitem(launcher, "TRUST", trust)
 
-    launcher["ensure_trusted"](ws, True)  # --trust
+    launcher["ensure_trusted"](ws, True, launcher["read_request"](ws))  # --trust
     assert ws not in trust.parents, "承認の記録がワークスペースの中にある"
     # 2 回目は尋ねずに通る (端末が無くても落ちない)
     monkeypatch.setattr(launcher["sys"].stdin, "isatty", lambda: False)
-    launcher["ensure_trusted"](ws, False)
+    launcher["ensure_trusted"](ws, False, launcher["read_request"](ws))
 
 
 def test_changed_request_needs_reapproval(tmp_path, monkeypatch):
@@ -376,12 +376,12 @@ def test_changed_request_needs_reapproval(tmp_path, monkeypatch):
     ws.mkdir()
     _request(ws, 'read = ["/mnt/d/alpha"]\n')
     monkeypatch.setitem(launcher, "TRUST", tmp_path / "trusted.json")
-    launcher["ensure_trusted"](ws, True)
+    launcher["ensure_trusted"](ws, True, launcher["read_request"](ws))
 
     _request(ws, 'read = ["/mnt/d/alpha", "/home/u/.ssh"]\n')
     monkeypatch.setattr(launcher["sys"].stdin, "isatty", lambda: False)
     with pytest.raises(SystemExit):
-        launcher["ensure_trusted"](ws, False)
+        launcher["ensure_trusted"](ws, False, launcher["read_request"](ws))
 
 
 def test_unknown_keys_in_request_refuse_to_start(tmp_path):
@@ -504,6 +504,76 @@ def test_check_digest_changes_with_the_boundary(tmp_path, monkeypatch):
     one = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a"]}})
     two = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a", "/b"]}})
     assert one != two, "境界を広げても digest が変わっていない"
+
+
+def test_seed_db_never_copies_host_conversations(tmp_path, monkeypatch):
+    """★ホストの会話をワークスペースへ**一度も書かない**こと。
+
+    以前は ``src.backup(dst)`` で丸ごと写してから要らないテーブルを
+    削除していた。削除前の全会話がワークスペース内に存在する時間帯があり、
+    同じワークスペースで別セッションが動いていれば読めた。
+    """
+    launcher = _launcher()
+    home = tmp_path / "home"
+    source = home / ".local/share/opencode/opencode.db"
+    source.parent.mkdir(parents=True)
+    con = sqlite3.connect(str(source))
+    con.execute("create table credential (id text, integration_id text)")
+    con.execute("create table migration (id integer)")
+    con.execute("create table session_v2 (id text, title text)")
+    con.execute("create table session_message (id text, body text)")
+    con.execute("insert into credential values ('c1', 'github-copilot')")
+    con.execute("insert into migration values (1)")
+    con.execute("insert into session_v2 values ('s1', 'ホストの会話')")
+    con.execute("insert into session_message values ('m1', '秘密の本文')")
+    con.commit()
+    con.close()
+
+    monkeypatch.setitem(launcher, "HOME", home)
+    out = tmp_path / "ws" / ".opencode-sandbox" / "opencode.db"
+    launcher["seed_db"](out)
+
+    got = sqlite3.connect(f"file:{out}?mode=ro", uri=True)
+    counts = {
+        name: got.execute(f'select count(*) from "{name}"').fetchone()[0]
+        for (name,) in got.execute(
+            "select name from sqlite_master where type='table'"
+            " and name not like 'sqlite_%'"
+        )
+    }
+    got.close()
+
+    assert counts["credential"] == 1, "資格情報が引き継がれていない"
+    assert counts["migration"] == 1, "migration が無いと OpenCode が壊れる"
+    assert counts["session_v2"] == 0, "ホストの会話が入っている"
+    assert counts["session_message"] == 0, "ホストのメッセージが入っている"
+    # ★スキーマは残す。テーブルごと消すと OpenCode が作り直せない。
+    assert "session_v2" in counts, "スキーマまで落としている"
+    # 削除済みデータが空きページに残っていないこと (本文が生で出ないこと)
+    assert b"\xe7\xa7\x98\xe5\xaf\x86" not in out.read_bytes(), "本文がファイルに残っている"
+
+
+def test_seed_db_does_not_leave_a_half_built_db(tmp_path, monkeypatch):
+    """★書き途中を ``db.exists()`` に拾わせないこと。
+
+    途中で落ちたものが残ると、次回は初期化を飛ばして**不完全な DB を
+    恒久的に再利用**する。別名で作ってから rename する。
+    """
+    launcher = _launcher()
+    home = tmp_path / "home"
+    source = home / ".local/share/opencode/opencode.db"
+    source.parent.mkdir(parents=True)
+    con = sqlite3.connect(str(source))
+    con.execute("create table credential (id text)")
+    con.commit()
+    con.close()
+
+    monkeypatch.setitem(launcher, "HOME", home)
+    out = tmp_path / "ws" / "opencode.db"
+    launcher["seed_db"](out)
+
+    leftovers = list(out.parent.glob("*.building"))
+    assert not leftovers, f"作業用ファイルが残っている: {leftovers}"
 
 
 def test_boundary_check_is_fail_closed():

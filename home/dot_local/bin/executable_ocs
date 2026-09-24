@@ -61,7 +61,7 @@ def load_boundary() -> dict:
     return sandbox
 
 
-def project_extras(sandbox: dict, workspace: Path) -> dict:
+def project_extras(sandbox: dict, workspace: Path, request: dict | None) -> dict:
     """この起動ディレクトリに足す追加の許可を返す。
 
     **宣言が無ければ追加はゼロ**（共通の許可だけで動く）。宣言は「機密でない
@@ -75,9 +75,11 @@ def project_extras(sandbox: dict, workspace: Path) -> dict:
       リポジトリが自分で ``~/.ssh`` を開けられる構造にしないこと
       (OpenCode 自身の permission が実際にその穴を持っている。
       docs/research/opencode/permission/gaps.md 第 5 節)。
+    ★``request`` は**呼び出し側が一度だけ読んだもの**を受け取る。ここで
+      読み直すと、承認した内容と適用する内容が別物になりうる (間に書き換え
+      られると、承認していない許可が境界へ入る)。
     """
-    del sandbox  # 共通設定は使わない (宣言はプロジェクト側にある)
-    request = read_request(workspace)
+    del sandbox, workspace  # 共通設定も再読み込みも使わない
     if request is None:
         return {"read": [], "write": [], "network_allow": []}
     return request["extras"]
@@ -130,14 +132,14 @@ def reject_unsafe_workspace(sandbox: dict, workspace: Path) -> None:
             )
 
 
-def build_boundary(sandbox: dict, workspace: Path) -> dict:
+def build_boundary(sandbox: dict, workspace: Path, request: dict | None = None) -> dict:
     """起動ディレクトリを書き込み可能領域として境界を組み立てる。
 
     **起動ディレクトリ以下は無条件に許可する。** どこで起動するかは利用者の
     責務。Claude Code の sandbox と同じ考え方。
     """
     base = sandbox["base"]
-    extras = project_extras(sandbox, workspace)
+    extras = project_extras(sandbox, workspace, request)
     read = [*base.get("read", []), *extras.get("read", [])]
     write = [*base.get("write", []), *extras.get("write", [])]
     protected = [str(workspace / rel) for rel in base.get("protected", [])]
@@ -297,15 +299,16 @@ def describe_request(workspace: Path, request: dict) -> str:
     return "\n".join(lines)
 
 
-def ensure_trusted(workspace: Path, assume_yes: bool) -> None:
+def ensure_trusted(workspace: Path, assume_yes: bool, request: dict | None) -> None:
     """要求を承認済みにする。承認できなければ**起動しない**。
 
     ★承認の記録は境界の外 (``~/.local/state``) に置く。内側から書けると
       自分で自分を承認できてしまう。
     ★マシンごとの記録なので、別 PC では改めて承認が要る。宣言だけが
       リポジトリと一緒に移動する。
+    ★``request`` は**呼び出し側が一度だけ読んだもの**を受け取る。承認する
+      内容と境界へ入る内容が同一であることを、同じ辞書を使うことで保証する。
     """
-    request = read_request(workspace)
     if request is None:
         return
     known = load_trust().get(str(workspace))
@@ -599,6 +602,16 @@ def seed_db(db: Path) -> None:
     """隔離用 DB を作る。資格情報と migration だけ引き継ぐ。
 
     ホストの DB を共有すると他プロジェクトの会話が境界内へ入る。
+
+    ★**ホストの DB をワークスペースへ複製しない。** 以前は
+      ``src.backup(dst)`` で丸ごと写してから要らないテーブルを削除して
+      いたが、削除前の全会話がワークスペース内に存在する時間帯があった。
+      さらに途中で落ちると ``db.exists()`` が真になり、**未削除の DB を
+      恒久的に再利用**してしまう。
+      いまはスキーマだけ写し、``DB_KEEP`` の行だけを入れる。落ちた場合も
+      ワークスペースに残るのはホストのデータを含まない不完全な DB になる。
+    ★書き途中を ``db.exists()`` に拾わせないため、**別名で作ってから
+      rename** する。rename は同一ファイルシステム上で原子的。
     """
     if db.exists():
         return
@@ -606,19 +619,37 @@ def seed_db(db: Path) -> None:
     if not source.is_file():
         die(f"元の DB が無い: {source}", "一度 opencode を起動して認証する")
     db.parent.mkdir(parents=True, exist_ok=True)
+    staging = db.with_name(db.name + ".building")
+    staging.unlink(missing_ok=True)
+
     src = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
-    dst = sqlite3.connect(str(db))
-    src.backup(dst)
-    src.close()
-    tables = [r[0] for r in dst.execute("select name from sqlite_master where type='table'")]
-    dst.execute("pragma foreign_keys=off")
-    for table in tables:
-        if table in DB_KEEP or table.startswith("sqlite_"):
-            continue
-        dst.execute(f"delete from {table}")  # noqa: S608
-    dst.commit()
-    dst.execute("vacuum")
-    dst.close()
+    try:
+        schema = [
+            (name, sql)
+            for name, sql in src.execute(
+                "select name, sql from sqlite_master"
+                " where sql is not null and name not like 'sqlite_%'"
+            )
+        ]
+        dst = sqlite3.connect(str(staging))
+        try:
+            for _, sql in schema:
+                dst.execute(sql)
+            for table in DB_KEEP:
+                if not any(name == table for name, _ in schema):
+                    continue
+                rows = list(src.execute(f'select * from "{table}"'))  # noqa: S608
+                if not rows:
+                    continue
+                marks = ",".join("?" * len(rows[0]))
+                dst.executemany(f'insert into "{table}" values ({marks})', rows)  # noqa: S608
+            dst.commit()
+        finally:
+            dst.close()
+    finally:
+        src.close()
+
+    staging.replace(db)
     print(f"隔離用 DB を作った: {db}", file=sys.stderr)
 
 
@@ -878,12 +909,15 @@ def main(argv: list[str] | None = None) -> int:
     workspace = Path.cwd().resolve()
     # ★境界を組み立てる前に、境界を無意味にする起動ディレクトリを弾く。
     reject_unsafe_workspace(sandbox, workspace)
+    # ★要求は**ここで一度だけ**読む。承認と適用で読み直すと、間に書き換え
+    #   られたとき「承認していない許可が境界へ入る」ことになる。
+    request = read_request(workspace)
     # ★境界を組み立てる前に承認を通すこと。順序を逆にすると、未承認の要求で
     #   境界を張ってから尋ねることになる。
-    ensure_trusted(workspace, args.trust)
+    ensure_trusted(workspace, args.trust, request)
     project = {
         "workspace": str(workspace),
-        "config": build_boundary(sandbox, workspace),
+        "config": build_boundary(sandbox, workspace, request),
         **workspace_paths(sandbox, workspace),
     }
 
