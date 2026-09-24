@@ -1,8 +1,9 @@
 # CHG-0001: compaction を跨いで作業文脈を失わない
 
 - **状態**: In progress
-- **更新日**: 2026-09-20
-- **基準**: Claude Code 2.1.x 系ドキュメント / GitHub Copilot CLI 1.0.87-0
+- **更新日**: 2026-09-24
+- **基準**: OpenCode V2（plugin API の `session.hook`）。
+  Claude Code 2.1.x / Copilot CLI 1.0.87-0 での実装は**当時の記録**として残す
 
 ## 目的と非目的
 
@@ -17,10 +18,55 @@
 
 - 圧縮アルゴリズムそのものへの介入
 - 全会話の保存（必要なのは復帰に要る最小限）
-- 圧縮直後の注入を**両 CLI で同じ時点に**揃えること。Claude は作業再開の前、
-  Copilot は最初のツール実行の直後で、1 ツール分の差が残る（E7）
+- **Claude Code / Copilot CLI への対応**（2026-09-24 に対象外とした。
+  実装済みのものは動いているので残すが、以後は OpenCode V2 だけを見る）
 
 ## 現在地
+
+> **2026-09-24 — 対象を OpenCode V2 のみへ絞り、再評価した。**
+> Claude Code / Copilot CLI は対象外とする（実装済みのものはそのまま残す）。
+> **OpenCode V2 では、両 CLI の hook で組んだ構成より素直に実現できる。**
+
+### OpenCode V2 の plugin API に専用の口がある
+
+| 口 | できること |
+| --- | --- |
+| `session.hook("compaction")` | **圧縮そのものに介入**する。要約対象の transcript を `messages` で受け取り、`result` を入れれば要約自体を差し替えられる |
+| `session.hook("context")` | エージェントループの**毎リクエスト直前**に `event.system` へテキストを push できる |
+| `ctx.storage` | plugin スコープの**永続 JSON 置き場**（`get` / `set` / `remove` / prefix 走査） |
+
+### 両 CLI 前提の設計で要った工夫が、まるごと不要になる
+
+| 両 CLI で必要だったもの | OpenCode V2 では |
+| --- | --- |
+| Copilot の `PreCompact` は通知専用なので、**印を置いて `postToolUse` で注入**する | `context` フックが**次のモデル要求で直接** system に足せる |
+| そのため**1 ツール分の注入遅れ**が残る（非目的として許容していた） | **遅れが無い**。ツール実行を待たない |
+| 圧縮を跨ぐだけなら `.tmp` で足りる（永続の置き場が無いため） | `ctx.storage` が**永続する**。セッションを跨げる |
+| Copilot は hook 登録を**起動時にしか読まない**（`/restart` が要る） | plugin の `setup` で登録し、`reload()` も持つ |
+
+### 覆った結論が 2 つある
+
+- 「**両 CLI とも『リポジトリ単位で永続する共有の置き場』を持たない**」
+  → OpenCode には `ctx.storage` がある。`ctx.location.project` で
+  プロジェクトを識別できるため、キーに含めればリポジトリ単位にできる
+  （**スコープの実際の挙動は未検証**）
+- 「圧縮直後の注入は 1 ツール分ずれる」
+  → OpenCode では `context` フックが毎リクエスト直前に走るのでずれない
+
+### まだ分からないこと
+
+- `compaction` フックが**自動圧縮でも発火するか**（手動 `/compact` との差）
+- `ctx.storage` のスコープが**プロジェクト単位か、plugin インスタンス単位か**
+- `context` フックで push した system テキストが、**圧縮後の最初の要求に
+  確実に載るか**（フックの登録順と、圧縮の前後関係）
+- 注入した内容がモデルに**効いているか**（届くことと効くことは別）
+
+### 実装済みのもの（Claude / Copilot、対象外だが残す）
+
+段 1〜6 が完了し、本体へマージして `chezmoi apply` まで済んだ。
+**実機の `/compact` で `PreCompact` が発火することを確認した**（E5）。
+**Copilot 側の復帰注入も実装した**（`PreCompact` の印 + `postToolUse`、E7）。
+これらは動いているので消さないが、**この案件の対象からは外す**。
 
 段 1〜6 が完了し、本体へマージして `chezmoi apply` まで済んだ。
 **実機の `/compact` で `PreCompact` が発火することを確認した**（[E5](../research/agents/compaction-hooks.md)）。
