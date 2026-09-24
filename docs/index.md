@@ -62,7 +62,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | --- | --- | --- | --- |
 | [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
 | [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。段階 4 以降は CHG-0004 待ちで保留 | CHG-0004 の段階 5（層の縮小） |
-| [CHG-0004](change/0004-opencode-sandbox.md) | In progress | 段階 1〜3・5 完了。隔離版の permission は 225 → 168 件。段階 5 は当初案（`grep`/`glob` 無効化）を撤回。**起動ディレクトリの穴は B1 で対処済み**。外部レビューの欠陥が未対処 | B3（TOCTOU・fail-open・保護チェック） |
+| [CHG-0004](change/0004-opencode-sandbox.md) | In progress | 段階 1〜3・5 完了。隔離版の permission は 225 → 168 件。**B1〜B4 完了、B5 は見送り**。判断待ちなしの項目は尽きた | 資格情報の扱いを決める |
 | [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。A1 完了 | A2 の要否（CHG-0006 の結論待ち） |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。`enabledProviders` の効果が実機未確認 | 段 2 の冒頭で `/mcp list` を見る |
 | [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み | 段 2（共有ランタイムとハーネスの節分け） |
