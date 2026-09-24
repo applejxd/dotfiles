@@ -1,6 +1,6 @@
 ---
 name: checkpoint
-description: "コンテキスト圧縮を跨いで作業文脈を失わないよう、復帰用の記録を保存する。ADR（アーキテクチャ決定記録）の作成・更新も行う。「checkpoint して」「引き継ぎを作って」「文脈を保存して」「ADR を作って」と言われたとき、逼迫を促されたとき、手動で圧縮する前に使う。"
+description: "コンテキスト圧縮を跨いで作業文脈を失わないよう、復帰用の記録を .tmp のセッション別ファイルへ保存する。「checkpoint して」「引き継ぎを作って」「文脈を保存して」と言われたとき、逼迫を促されたとき、手動で圧縮する前に使う。docs/ への文書化（案件更新・ADR・調査記録・仕様）は sdd-docs スキルが担うので、そちらには使わない。"
 allowed-tools: Read, Edit, Bash, Glob, Grep
 ---
 
@@ -19,8 +19,7 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 | --- | --- |
 | 「checkpoint して」/ hook の促し | **A1 だけ** |
 | 「引き継ぎを作って」/「文脈を保存して」 | A1 |
-| **「ADR を作って」** | **ADR の作成と `docs/adr/index.md` への掲載だけ**（下記） |
-| 「案件を更新して」/「docs に反映して」 | **A1 を終えてから** `references/procedure.md` |
+| 「案件を更新して」/「docs に反映して」/「ADR を作って」 | **`sdd-docs` スキル**（A2 / B）。逼迫しているなら A1 を先に |
 | 「現状を教えて」 | 読むだけ。書かない |
 
 **子エージェントの中では何もしない。** 親の記録は親だけが書く。
@@ -50,21 +49,6 @@ uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-
    ```bash
    uv run --no-project python "$CP" lint <checkpoint パス> --structure
    ```
-
-## ADR の作成・更新
-
-`references/adr-template.md` を使う。
-
-- 番号は `docs/adr/` の最大値 + 1（4 桁ゼロ埋め）。ファイル名は `NNNN-kebab-case.md`
-- **作成したら `docs/adr/index.md` の一覧へ 1 行追加する**（索引の検査が未掲載を落とす）
-- **決定の受諾（`Accepted`）と実装の完了は別物。** 実装の進捗は ADR に書かず、
-  `docs/change/` の案件が持つ
-- 既存 ADR のステータスを変えるときは、変更理由を必ず書く
-- 決定を覆すときは既存 ADR を書き換えず、新しい ADR を起こして古い方を
-  `Superseded by ADR-NNNN` にする
-- `docs/adr/` 以外にファイルを作らない
-
-ADR を頼まれたときは、**案件整理・ダッシュボード更新・他カテゴリの docs には触らない**。
 
 ## 書くときの原則
 
@@ -98,9 +82,7 @@ ADR を頼まれたときは、**案件整理・ダッシュボード更新・�
 
 ## 参照
 
-- **A2 / B の手順**: `~/.config/opencode/skills/checkpoint/references/procedure.md`
-  （案件の更新と `docs/` への文書化。A1 を終えてから読む）
-- 雛形: `~/.config/opencode/skills/checkpoint/references/`
-  （`checkpoint-template.md` / `adr-template.md` / `change-template.md` /
-  `research-template.md`）
+- **`docs/` への文書化**: `sdd-docs` スキル
+  （案件更新・ADR・調査記録・仕様・索引。A1 を終えてから）
+- 雛形: `~/.config/opencode/skills/checkpoint/references/checkpoint-template.md`
 - CLI: `~/.config/opencode/skills/checkpoint/scripts/checkpoint.py`

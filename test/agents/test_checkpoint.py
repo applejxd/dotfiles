@@ -510,3 +510,65 @@ def test_the_pre_move_skill_is_removed_on_apply():
     assert ".claude/skills/checkpoint" in lines
     # source 側にも復活していないこと (同名があると apply が inconsistent で落ちる)
     assert not (ROOT / "home/dot_claude/skills/checkpoint").exists()
+
+
+# ---------------------------------------------------------------------------
+# sdd-docs への分離 (A1 と A2/B)
+# ---------------------------------------------------------------------------
+
+SKILLS = ROOT / "home/dot_config/opencode/skills"
+MOVED_REFERENCES = ("adr-template.md", "change-template.md", "research-template.md")
+
+
+def test_the_documentation_procedure_lives_in_sdd_docs():
+    """★A2 / B は sdd-docs skill が持つ。checkpoint は A1 だけ。
+
+    分けたのは description が 2 つの仕事を名乗っていたため。あわせて plugin が
+    A1 を自動化し、「先に保存」の順序を 1 ファイルで担保する必要が薄れた。
+
+    see docs/spec/checkpoint.md 「スキルを A1 と A2/B に分けた」
+    """
+    assert (SKILLS / "sdd-docs/SKILL.md").exists()
+    # 手順の実体が checkpoint 側へ戻っていないこと
+    assert not (SKILLS / "checkpoint/references/procedure.md").exists()
+
+
+def test_the_templates_moved_to_sdd_docs():
+    """★雛形は使う側 (sdd-docs) に置く。両方に置くと必ずずれる。"""
+    for name in MOVED_REFERENCES:
+        assert (SKILLS / "sdd-docs/references" / name).exists()
+        assert not (SKILLS / "checkpoint/references" / name).exists()
+    # checkpoint が使う雛形だけが残ること
+    assert (SKILLS / "checkpoint/references/checkpoint-template.md").exists()
+
+
+def test_the_checkpoint_skill_no_longer_claims_documentation():
+    """★description が 2 つの仕事を名乗るとルーティングが濁る。
+
+    「ADR を作って」で checkpoint が選ばれると、A1 の手順ごと読み込まれる。
+    ADR に触れること自体は禁じない。sdd-docs へ誘導する否定文は有用なので、
+    **自分の仕事として名乗る表現**と、手順の実体が戻ることだけを落とす。
+    """
+    text = (SKILLS / "checkpoint/SKILL.md").read_text(encoding="utf-8")
+    description = next(line for line in text.splitlines() if line.startswith("description:"))
+    assert "作成・更新も行う" not in description
+    assert "sdd-docs" in description
+    # 手順の実体が本体へ戻っていないこと (references は遅延読み込みだが本体は毎回読まれる)
+    assert "## ADR の作成・更新" not in text
+
+
+def test_the_moved_references_are_removed_on_apply():
+    """★配備済みの旧パスを消すこと。残すと古い雛形が読まれる。
+
+    references/ は checkpoint-template.md が残るのでディレクトリごとは消せない。
+    移した 4 ファイルを個別に並べる。
+    """
+    lines = [
+        line.strip()
+        for line in (ROOT / "home" / ".chezmoiremove").read_text(encoding="utf-8").splitlines()
+    ]
+    base = ".config/opencode/skills/checkpoint/references"
+    for name in (*MOVED_REFERENCES, "procedure.md"):
+        assert f"{base}/{name}" in lines
+    # ディレクトリごと消すと checkpoint-template.md まで巻き込む
+    assert base not in lines

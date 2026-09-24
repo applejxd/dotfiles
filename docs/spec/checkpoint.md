@@ -21,8 +21,11 @@
 | 層 | 実体 | 役割 |
 | --- | --- | --- |
 | 指示ファイル | `home/dot_claude/CLAUDE.md` / `home/dot_copilot/copilot-instructions.md` | 恒久ルール。「文脈の引き継ぎ」節 |
-| スキル | `home/dot_config/opencode/skills/checkpoint/` | 手順・雛形・CLI の単一ソース |
+| スキル | `home/dot_config/opencode/skills/checkpoint/` | A1 の手順・雛形・CLI の単一ソース |
 | plugin | `home/dot_config/opencode/checkpoint-plugin/` | 圧縮直前の記録と直後の復帰注入 |
+
+`docs/` への文書化（A2 / B）は **`sdd-docs` スキル**が持つ。分離の理由は
+[スキルを A1 と A2/B に分けた](#スキルを-a1-と-a2b-に分けた)。
 
 ### plugin が担うこと
 
@@ -103,6 +106,31 @@ Global の探索先として挙げるが、v2.0.14 はそこを走査しない�
 ```sh
 opencode api get /api/skill
 ```
+
+### スキルを A1 と A2/B に分けた
+
+**`checkpoint` は A1 だけを持つ。** `docs/` への文書化（A2 / B）は
+`sdd-docs` スキルが持つ。
+
+| スキル | 対象 | 起動 |
+| --- | --- | --- |
+| `checkpoint` | `.tmp/` のセッション別記録 | 圧縮フックが自動。手動でも呼べる |
+| `sdd-docs` | `docs/change/` `adr/` `research/` `spec/` と索引 | 人が頼んだときだけ |
+
+分けた理由は 2 つ。
+
+1. **description が 2 つの仕事を名乗っていた。** 「復帰記録を保存する。ADR の
+   作成・更新も行う」という形で、ルーティングの手掛かりが濁っていた
+2. **plugin が A1 を自動化した。** A1 と A2/B を束ねていたのは「先に保存」の
+   順序を 1 ファイルで担保するためだったが、圧縮時の A1 はスキルと無関係に
+   走るようになったので、束ねる必要が薄れた
+
+2026-09-19 に `adr` スキルを `checkpoint` へ統合したのは**これを否定しない**。
+当時退けたのは `context: fork` で動く別スキルで、親の会話を見られず棚卸しを
+渡し直す手間が勝っていた。同じセッションで動く兄弟スキルにはその欠点が無い。
+
+**残るコスト**: 「先に A1」の順序がスキルを跨ぐ約束になる。両方の `SKILL.md`
+に明記して補う。
 
 ## 保存先
 
@@ -223,8 +251,8 @@ hook が静かに失敗したときは `CHECKPOINT_HOOK_DEBUG=1` を立てると
 ## 現在の状態と制限
 
 - **スキルは手動起動でも使える。** 「checkpoint して」で A1（実行状態の保存）が走る
-- **A2（案件の更新）と B（`docs/` への文書化）の手順は
-  `references/procedure.md` にある。** A1 を終えてから読む
+- **A2（案件の更新）と B（`docs/` への文書化）は `sdd-docs` スキルが持つ。**
+  文脈が逼迫しているなら A1 を先に終える
 - **Copilot でも圧縮直後の自動注入ができる**（`PreCompact` の印 + `postToolUse`。
   記録 E7）。Claude より 1 ツール分だけ遅い
 - **Copilot では文脈使用率を推定できない。** `PostToolUse` の入力に
@@ -238,6 +266,7 @@ hook が静かに失敗したときは `CHECKPOINT_HOOK_DEBUG=1` を立てると
 
 - 設計理由: [ADR-0009](../adr/0009-save-before-documenting.md)
 - docs の運用: [ADR-0010](../adr/0010-exploratory-spec-driven-docs.md)
+- 文書化の手順: `~/.config/opencode/skills/sdd-docs/SKILL.md`（A2 / B）
 - イベント仕様の実測: [compaction 関連の hook 仕様](../research/agents/compaction-hooks.md)
 - 経緯の記録: [CHG-0001](../change/closed/0001-compaction-context-handover.md)
 

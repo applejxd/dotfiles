@@ -29,6 +29,15 @@
 # snapshot サブコマンドが無い版が読み込まれた)。
 .claude/skills/checkpoint
 
+# 2026-09: 探索型 SDD の docs 運用 (A2 / B) を sdd-docs skill へ分離した。
+# checkpoint skill は A1 (.tmp への復帰記録) だけを持つ。
+# references/ は checkpoint-template.md が残るのでディレクトリごとは消せない。
+# 移した 4 ファイルだけを並べる。
+.config/opencode/skills/checkpoint/references/procedure.md
+.config/opencode/skills/checkpoint/references/adr-template.md
+.config/opencode/skills/checkpoint/references/change-template.md
+.config/opencode/skills/checkpoint/references/research-template.md
+
 # NOTE: __pycache__ は .chezmoiignore で管理対象外にしているため、ここに書いても
 # 削除されない。古い .pyc が残って困る場合は手で削除する
 # (`rm -rf ~/.config/agents/__pycache__`)。

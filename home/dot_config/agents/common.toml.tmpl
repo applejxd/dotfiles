@@ -885,10 +885,10 @@ read = [
   # checkpoint plugin の実体。圧縮は境界の内側でも起きるので、載せないと
   # 内側でだけ文脈が失われる。read のみ。
   "~/.config/opencode/checkpoint-plugin",
-  # checkpoint スキルの実体。CHG-0001 の方針転換で OpenCode 専用になり、
+  # OpenCode スキルの実体 (checkpoint / sdd-docs など)。CHG-0001 の方針転換で
   # ~/.claude/skills から ~/.config/opencode/skills へ移した。R4 で
   # ~/.config/opencode を丸ごと開けないようにしてあるため、**ここを足さないと
-  # 境界の内側で checkpoint が読めなくなる**。read のみなので境界は弱まらない。
+  # 境界の内側でスキルが 1 つも読めなくなる**。read のみなので境界は弱まらない。
   "~/.config/opencode/skills",
   "~/.config/opencode-sandbox",
   "~/.config/shell",

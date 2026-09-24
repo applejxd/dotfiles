@@ -35,7 +35,7 @@
 - 終了した案件の先頭には
   「この文書は当時の記録。現在の仕様は `spec/...`」の注記を置く
 - 番号は再利用しない。連続性は要求しない（終了で欠番が出るのは正常）
-- テンプレートは `~/.config/opencode/skills/checkpoint/references/change-template.md`
+- テンプレートは `~/.config/opencode/skills/sdd-docs/references/change-template.md`
 
 ## 活動中
 
