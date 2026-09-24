@@ -10,7 +10,7 @@
 # ★判別できなければ止める。判定できない ≠ 合格。
 #
 # 終了コード 0 = 合格 / 1 = 不合格 (ランチャーは起動を中止する)
-# see docs/change/0004-opencode-sandbox.md
+# see docs/change/closed/0004-opencode-sandbox.md
 
 WS="${BOUNDARY_WORKSPACE:?BOUNDARY_WORKSPACE が未設定}"
 fail=0

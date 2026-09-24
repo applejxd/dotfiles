@@ -133,7 +133,7 @@ head -1 README.md   # 誘導が効いていれば permission.rejected が返る
 したがって sandbox で包むと、権限評価は `bwrap …` で始まる文字列に対して
 行われ、**静的 allow 5 件と deny 85 件が一致しなくなる**。
 plugin でコマンドを差し替えて包む構成は採れない
-（[CHG-0004](../../../change/0004-opencode-sandbox.md)）。
+（[CHG-0004](../../../change/closed/0004-opencode-sandbox.md)）。
 
 `e.input` は **`command` ただ 1 つ**で、`env` や独自フィールドを足しても
 シェルへは届かない（実測）。**plugin から外部プロセスへ値を渡す側路は無い。**

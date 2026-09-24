@@ -53,7 +53,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
   - Copilot では文脈使用率を推定できないため、閾値監視は見送り
   - **列挙型の規則では権限境界を作れない。** write deny の 38 glob は shell の
     リダイレクトに一切効いていなかった。保護の主役を OS のアクセス制御へ移す
-    （[CHG-0004](change/0004-opencode-sandbox.md)。Ubuntu / WSL のみ）
+    （[CHG-0004](change/closed/0004-opencode-sandbox.md)。Ubuntu / WSL のみ）
 - **現行仕様**: [仕様・運用](spec/index.md)
 
 ## 活動中
@@ -61,8 +61,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
 | [CHG-0001](change/0001-compaction-context-handover.md) | In progress | 段 1〜6 完了。両 CLI に復帰注入を実装し、実機での圧縮試験だけが残る | P0-3（新しいセッションで圧縮を起こす） |
-| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。段階 4 以降は CHG-0004 待ちで保留 | CHG-0004 の段階 5（層の縮小） |
-| [CHG-0004](change/0004-opencode-sandbox.md) | In progress | 段階 1〜3・5 完了。隔離版の permission は 225 → 168 件。**B1〜B4 完了、B5 は見送り**。判断待ちなしの項目は尽きた | 資格情報の扱いを決める |
+| [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。**CHG-0004 の完了でブロックが解けた**。段階 4 以降は計画の見直しが要る | 計画の再評価 |
 | [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。A1 完了 | A2 の要否（CHG-0006 の結論待ち） |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。`enabledProviders` の効果が実機未確認 | 段 2 の冒頭で `/mcp list` を見る |
 | [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み | 段 2（共有ランタイムとハーネスの節分け） |

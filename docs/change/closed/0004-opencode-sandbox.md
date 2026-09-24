@@ -1,9 +1,18 @@
 # CHG-0004: OpenCode の保護を OS のアクセス制御へ移す
 
-- **状態**: In progress
-- **更新日**: 2026-09-23
+- **状態**: Done
+- **更新日**: 2026-09-24
+- **終了日**: 2026-09-24
 - **基準**: OpenCode V2（`v2.0.12`）/ `@anthropic-ai/sandbox-runtime` v0.0.76
-- **対象 OS**: **Ubuntu / WSL のみ**（macOS と Windows は [CHG-0002](0002-opencode-ask-by-default.md) の方針を維持）
+- **対象 OS**: **Ubuntu / WSL のみ**（macOS と Windows は [CHG-0002](../0002-opencode-ask-by-default.md) の方針を維持）
+
+> **この文書は当時の記録。** 現在の仕様は
+> [opencode-sandbox](../../spec/opencode-sandbox.md)。
+>
+> **段階 3 の「強さの列を持つ対応表」は作らないと決めた**（2026-09-24）。
+> 目的は「どの規則がどの強さで守られているか」を追えるようにすることだが、
+> その情報は本文の分類表（処遇と根拠の 10 区分）に既にある。168 行の表を
+> 改めて作る価値は薄いと判断した。
 
 ## 目的と非目的
 
@@ -20,7 +29,7 @@
 
 ## 発端
 
-[CHG-0002](0002-opencode-ask-by-default.md) は「境界は無い」という前提で
+[CHG-0002](../0002-opencode-ask-by-default.md) は「境界は無い」という前提で
 plugin に安全網を積んできた。段階 3 まで配備した時点で次が見えた。
 
 | 観測 | 内容 |
@@ -93,13 +102,13 @@ plugin に安全網を積んできた。段階 3 まで配備した時点で次�
 
 > **構成が変わった（2026-09-23）。** 当初は「plugin が shell の実行ごとに包む」
 > 設計だったが、**実行主体ごと包めることが実測で分かった**ので差し替えた。
-> 経緯は[調査記録の 19 節](../research/opencode/permission/sandbox-runtime.md)。
+> 経緯は[調査記録の 19 節](../../research/opencode/permission/sandbox-runtime.md)。
 
 ### 段階 0: `srt` の成立確認と構成の決定（完了）
 
 `@anthropic-ai/sandbox-runtime` は Claude 専用ではなく**汎用**で、seccomp の
 ために**既に導入済み**だった。実地で次を確認した
-（[調査記録](../research/opencode/permission/sandbox-runtime.md)）。
+（[調査記録](../../research/opencode/permission/sandbox-runtime.md)）。
 
 | 検査 | 結果 |
 | --- | --- |
@@ -125,7 +134,7 @@ plugin に安全網を積んできた。段階 3 まで配備した時点で次�
 > **この結論の一般化は誤りだった（2026-09-23 に訂正）。** 当てはまるのは
 > **境界をまたぐ構成だけ**。`opencode --standalone` は TUI とサーバが
 > **同一プロセス**なので、またぐ接続が発生しない。実測で成立した
-> （[調査記録 19 節](../research/opencode/permission/sandbox-runtime.md)）。
+> （[調査記録 19 節](../../research/opencode/permission/sandbox-runtime.md)）。
 >
 > ネットワーク名前空間が除かれる性質は、境界としては**利点**でもある。
 > 内側の OpenCode は**外側の共有サービスへ到達できない**ので、
@@ -161,7 +170,7 @@ plugin に安全網を積んできた。段階 3 まで配備した時点で次�
 - 版は `latest` の浮動指定で **Claude Code と共有**している。片方の都合で
   上がると両方の挙動が変わる
 
-規則の導出は[調査記録](../research/opencode/permission/sandbox-runtime.md)。
+規則の導出は[調査記録](../../research/opencode/permission/sandbox-runtime.md)。
 
 #### 復旧経路は境界の外だが、**同じ作業コピーを開いてはいけない**
 
@@ -208,7 +217,7 @@ formatter・LSP という**実行経路**がある。隔離側が変更した作
 
 > `bypass` は subagent として起動できない（実測で
 > `Agent bypass cannot run as a subagent` を確認）。
-> [bypass エージェント](../research/opencode/permission/bypass-agent.md)の記録は
+> [bypass エージェント](../../research/opencode/permission/bypass-agent.md)の記録は
 > 残すが、この計画では使わない。
 
 #### ランチャーが境界を張るまでの信頼の鎖
@@ -469,7 +478,7 @@ mise タスクも含む。**保護対象を、変更できる生成器から次�
 #### 起動後に再現した既知の問題
 
 `ls ~/.ssh` に対しモデルが**「存在しない」と報告した**。境界が隠していることは
-伝わらない（[調査記録 20 節](../research/opencode/permission/sandbox-runtime.md)）。
+伝わらない（[調査記録 20 節](../../research/opencode/permission/sandbox-runtime.md)）。
 段階 3 のシステムプロンプトで対処する。
 
 ### 段階 3: 隔離版の設定系統を分け、規則を作り替える（概ね完了）
@@ -759,7 +768,7 @@ $ ocs
 > **なぜ承認が要るか。** 要求だけで通すと、敵対的なリポジトリが
 > `~/.ssh` を自分で開けられる。これは**仮定ではなく実在する穴**で、
 > OpenCode 自身の permission がまさにそうなっている
-> （[permission の穴 §5](../research/opencode/permission/gaps.md#5-プロジェクト設定がグローバルの-deny-を上書きする2026-09-23-再確認)）。
+> （[permission の穴 §5](../../research/opencode/permission/gaps.md#5-プロジェクト設定がグローバルの-deny-を上書きする2026-09-23-再確認)）。
 >
 > 承認の記録は**境界の外**（`~/.local/state`）に置く。内側から書けるなら
 > エージェントが自分で自分を承認できる。
@@ -783,7 +792,7 @@ chezmoi 管理下でも機密でないパス（`~/.config/shell` など）は、
 | `. ~/.config/shell/shellenv.sh` | — | **読み込み成功** |
 
 `/mnt` 配下も狙い撃ちで開けられ、**symlink 越しにも届く**
-（[調査記録 25 節](../research/opencode/permission/sandbox-runtime.md)）。
+（[調査記録 25 節](../../research/opencode/permission/sandbox-runtime.md)）。
 データ処理で `/mnt/d` の対象を扱う場合はここに書く。
 
 **完了条件**: プロジェクトを cwd で選び、宣言の無い場所では起動しないこと。
@@ -958,7 +967,7 @@ fine-grained PAT、読み取り専用 deploy key、権限を絞った GitHub App
 - 誘導 5 件は境界内でも全て有効だと確定した
 - 段階 3 で読み込んだ `guide-plugin` は、**削らずそのまま使う**
 
-> [CHG-0002](0002-opencode-ask-by-default.md) の保留分も、この判断に合わせて
+> [CHG-0002](../0002-opencode-ask-by-default.md) の保留分も、この判断に合わせて
 > 見直す。「境界ができれば不要になる」としていたものの一部は、
 > **ワークスペース内では不要にならない**。
 
@@ -966,7 +975,7 @@ fine-grained PAT、読み取り専用 deploy key、権限を絞った GitHub App
 
 ## 着手順（2026-09-23 に確定）
 
-外部レビューで洗い出した項目に、[CHG-0005](0005-agents-config-naming.md)（設定の
+外部レビューで洗い出した項目に、[CHG-0005](../0005-agents-config-naming.md)（設定の
 命名整理）を交えた全体の順序。**A 系統と B 系統に依存関係は無い。**
 
 ```text
@@ -1056,7 +1065,7 @@ ocs 全体            1080 行              ← 14%
 
 - `ocs` の動的な組み立てが原因で不具合が出たとき
 - **境界に入れるハーネスが増えて組み立てが複雑化したとき**
-  （[CHG-0007](0007-harness-profiles.md) の段 3 と合流する）
+  （[CHG-0007](../0007-harness-profiles.md) の段 3 と合流する）
 
 2 つ目が現実的。ハーネス非依存にするなら、そのときは静的な宣言の方が
 素直になる可能性がある。**B5 は単独では割に合わないが、CHG-0007 と
@@ -1168,7 +1177,7 @@ A を採った理由:
 用途・対象・利用量を絞れる短命な資格情報が発行できるようになったとき、
 または境界外の認証ブローカーが**既製で**使えるようになったとき。
 `omp` の `auth-broker` が同じ問題への別解なので、
-[CHG-0006](0006-pi-harness-trial.md) の段 2 で構造を観察すると材料になる。
+[CHG-0006](../0006-pi-harness-trial.md) の段 2 で構造を観察すると材料になる。
 
 ### 記録されていなかった事実 2: 常駐サービスの認証情報も読める
 
@@ -1321,7 +1330,7 @@ plugins    : ~/.config/opencode/guide-plugin  ← 必要なのはこの 1 つだ
 
 ## 保留にしたもの
 
-[CHG-0002](0002-opencode-ask-by-default.md) 段階 4 以降のうち、次は**保留**する。
+[CHG-0002](../0002-opencode-ask-by-default.md) 段階 4 以降のうち、次は**保留**する。
 境界ができれば不要になるか、作り直しになるため。
 
 | 保留するもの | 理由 |
@@ -1365,7 +1374,7 @@ plugins    : ~/.config/opencode/guide-plugin  ← 必要なのはこの 1 つだ
 | `mcp`（ローカルサーバ） | **プロセスが起動する** |
 
 詳細は
-[permission の穴 §5](../research/opencode/permission/gaps.md#5-プロジェクト設定がグローバルの-deny-を上書きする2026-09-23-再確認)。
+[permission の穴 §5](../../research/opencode/permission/gaps.md#5-プロジェクト設定がグローバルの-deny-を上書きする2026-09-23-再確認)。
 
 **この案件の前提は変わらない。** `policies` は保たれるが、plugin と mcp を
 止められないので単独では足りず、**プロセスごと隔離する**必要がある。
@@ -1400,7 +1409,7 @@ plugins    : ~/.config/opencode/guide-plugin  ← 必要なのはこの 1 つだ
 （コマンド文字列で sandbox を解除する構造は認可として不適切）。
 現実的な切り替えは起動時の選択（`opencode` / `ocs`）。
 
-決着済み（[調査記録](../research/opencode/permission/sandbox-runtime.md)）:
+決着済み（[調査記録](../../research/opencode/permission/sandbox-runtime.md)）:
 
 - **P0-1 成立**。`opencode --standalone` ごと包める（TUI 含む実測）。
   「サービスごと包むと届かない」は**境界をまたぐ構成に限った話**だった
@@ -1561,7 +1570,7 @@ plugins    : ~/.config/opencode/guide-plugin  ← 必要なのはこの 1 つだ
 ### 境界の外から再開する手順（記録）
 
 > **2026-09-24 に B4 で `ocs --handoff` を入れた。** 通常はそちらを使う
-> （[引き継ぎの仕様](../spec/opencode-sandbox.md#セッションの引き継ぎ)）。
+> （[引き継ぎの仕様](../../spec/opencode-sandbox.md#セッションの引き継ぎ)）。
 > 以下は移送せずに直接開く場合の手順で、下記の注意がそのまま残る。
 
 隔離版のセッションは `OPENCODE_DB` で分かれているため、素の `opencode --continue`

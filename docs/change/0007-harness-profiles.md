@@ -15,7 +15,7 @@
 - `common.toml` の permission 翻訳を拡張すること（[CHG-0005](0005-agents-config-naming.md)）
 - Pi / oh-my-pi を境界へ入れること。あれは**利便性の軸**で進める
   （[CHG-0006](0006-pi-harness-trial.md)）。本案件は「将来入れたくなったとき」の備え
-- `ocs` の既知の欠陥を直すこと（[CHG-0004](0004-opencode-sandbox.md) の B2 / B3）
+- `ocs` の既知の欠陥を直すこと（[CHG-0004](closed/0004-opencode-sandbox.md) の B2 / B3）
 
 **発端**: 外部レビュー（Astra）の指摘。
 
@@ -138,7 +138,7 @@ providers = ["github-copilot", "anthropic", "openai"]
   決めたため、汎用化の使い道が当面ない。**再開条件は「境界へ入れたい
   ハーネスが 2 つ目になったとき」**
 - **段 3 をやるなら B5（静的境界）と合流しうる。**
-  [CHG-0004](0004-opencode-sandbox.md) の B5 は単独では割に合わず見送ったが、
+  [CHG-0004](closed/0004-opencode-sandbox.md) の B5 は単独では割に合わず見送ったが、
   ハーネス非依存にするなら静的な宣言の方が素直になる可能性がある。
   段 3 に着手するときは、B5 を改めて検討対象に入れる
 - 段 2 は**取りかかれる**（2026-09-24 に確認）。当初「`local.toml` の追記口との
@@ -155,7 +155,7 @@ providers = ["github-copilot", "anthropic", "openai"]
   - `~/.claude/skills` は資産としてはハーネス非依存だが、**名前にハーネス名が
     入ったまま共有層へ置く**ことになる（実体パスなので変えられない）
 - プロバイダ層は現在ドメインしか持たない。Astra の提案では**認証方式と
-  資格情報の参照先**も持つべきだが、[CHG-0004](0004-opencode-sandbox.md) の
+  資格情報の参照先**も持つべきだが、[CHG-0004](closed/0004-opencode-sandbox.md) の
   B2（資格情報の露出）と絡むため、そちらの結論を待つ
 
 ## 終了結果

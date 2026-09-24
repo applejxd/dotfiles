@@ -607,7 +607,7 @@ sandbox runtime の既定（読みは全許可）のまま残る。
 
 `denyRead: ["~/"]` は Windows 側を守らない。OpenCode 側では実測で
 `/mnt/c/Users` まで読めることを確認して塞いだ
-（[CHG-0004](../change/0004-opencode-sandbox.md)、
+（[CHG-0004](../change/closed/0004-opencode-sandbox.md)、
 [調査記録 21 節](../research/opencode/permission/sandbox-runtime.md)）。
 **Claude / Copilot 側には同じ対処を入れていない。**
 

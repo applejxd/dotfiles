@@ -2,7 +2,7 @@
 
 > **調査日: 2026-09-22 / 対象: `@anthropic-ai/sandbox-runtime` v0.0.76（Ubuntu on WSL2）**
 >
-> [CHG-0004](../../../change/0004-opencode-sandbox.md) の前提調査。
+> [CHG-0004](../../../change/closed/0004-opencode-sandbox.md) の前提調査。
 > 「個別に穴を塞ぎ続ける」方針から「OS のアクセス制御を主役にする」方針へ
 > 切り替えられるかを確かめた。
 
@@ -600,7 +600,7 @@ deny を緩める前に、境界内から読める資格情報で**何ができ�
 > 全会話がワークスペース内に存在する時間帯ができ、途中で落ちると
 > `db.exists()` が未削除の DB を拾って恒久的に再利用してしまう。
 > 現在は「スキーマだけ写し、残すテーブルの行だけを入れる」
-> （[CHG-0004](../../../change/0004-opencode-sandbox.md) の B3 #2）。
+> （[CHG-0004](../../../change/closed/0004-opencode-sandbox.md) の B3 #2）。
 > 以下は当時の観測。
 
 | 残すテーブル | 理由 |

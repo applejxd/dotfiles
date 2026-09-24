@@ -21,7 +21,7 @@ brew install chezmoi
 ```
 
 > **snap 版は使わない。** snap の confinement 下では
-> [AI CLI の sandbox](docs/change/0004-opencode-sandbox.md) の内側で
+> [AI CLI の sandbox](docs/change/closed/0004-opencode-sandbox.md) の内側で
 > 起動できず、`chezmoi apply` が失敗する（実測）。
 >
 > **上記は初回の bootstrap だけ。** 以降は mise が
@@ -232,7 +232,7 @@ npm install -g @anthropic-ai/sandbox-runtime
 ### 隔離版 OpenCode（Ubuntu / WSL）
 
 OS のアクセス制御で囲った OpenCode を起動します。通常版と**併用**する段階で、
-既定はまだ通常版です（[CHG-0004](docs/change/0004-opencode-sandbox.md)）。
+既定はまだ通常版です（[CHG-0004](docs/change/closed/0004-opencode-sandbox.md)）。
 
 ```bash
 ocs         # 境界の内側で起動する

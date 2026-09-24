@@ -6,7 +6,7 @@ Run with: ``uv run --with pytest --no-project pytest test/agents/`` or
 ★ここで守りたいのは「緩和が隔離版だけに閉じ込められていること」と
   「境界が守らないものを permission から捨てていないこと」。
   後者を誤って捨てると、保護が静かに消える。
-see docs/change/0004-opencode-sandbox.md
+see docs/change/closed/0004-opencode-sandbox.md
 """
 
 from __future__ import annotations

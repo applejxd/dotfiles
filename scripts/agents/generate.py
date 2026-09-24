@@ -1016,7 +1016,7 @@ def build_opencode_sandbox_permissions(common: dict[str, Any]) -> list[dict[str,
     捨ててよいのは「境界が到達させないもの」だけ。**ワークスペース相対の
     秘密 glob と ``.git/hooks`` は捨てない。** それらは境界の外の話ではなく、
     shell から届く (= permission は誤操作の抑止にしかならない)。
-    see docs/change/0004-opencode-sandbox.md 「段階 3」
+    see docs/change/closed/0004-opencode-sandbox.md 「段階 3」
     """
     cfg = common.get("opencode", {}).get("sandbox", {}).get("permissions", {})
     drop_shell = [re.compile(p) for p in cfg.get("drop_shell", [])]
@@ -1329,7 +1329,7 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
         # ★プロジェクト個別の追加許可はここに持たない。
         #   <起動ディレクトリ>/.opencode/sandbox.toml が「要求」し、ランチャーが
         #   人の承認を取って初めて効く。複数 PC で宣言を持ち回れるようにするため。
-        #   see docs/change/0004-opencode-sandbox.md
+        #   see docs/change/closed/0004-opencode-sandbox.md
     }
     # 隔離版の設定ディレクトリは**ワークスペースの外**。内側からは allowRead
     # だけなので、緩和設定を自分で広げられない。ランチャーが起動のたびに

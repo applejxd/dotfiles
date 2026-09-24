@@ -6,7 +6,7 @@ Run with: ``uv run --with pytest --no-project pytest test/agents/`` or
 ★守りたいのは「緩和に関わるキーは毎回差し替わる」ことと
   「それ以外のキーは残る」ことの両立。
   丸ごと上書きすると、TUI で選んだモデルが毎回消える (実際に出したバグ)。
-see docs/change/0004-opencode-sandbox.md
+see docs/change/closed/0004-opencode-sandbox.md
 """
 
 from __future__ import annotations

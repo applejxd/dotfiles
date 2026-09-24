@@ -27,7 +27,7 @@ permission 機構を持たないと明記があり、権限制御は拡張か外
 > Pi does not include a built-in permission system for restricting filesystem,
 > process, network, or credential access.
 
-したがって **[CHG-0004](0004-opencode-sandbox.md) と同じ安全性第一の物差しで
+したがって **[CHG-0004](closed/0004-opencode-sandbox.md) と同じ安全性第一の物差しで
 評価しない。** 同じ物差しを当てると、これらの harness の長所（最小構成・
 拡張性・IDE 統合）が全部「欠点」として出力されるため、判断材料にならない。
 

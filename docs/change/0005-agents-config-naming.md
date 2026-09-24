@@ -15,7 +15,7 @@
 - `common.toml` の廃止。検討したが**見送った**（下記）
 - 生成物の挙動を変えること。**全段で `chezmoi diff` が空**であること
 - OpenCode 境界の欠陥への対処。それは
-  [CHG-0004](0004-opencode-sandbox.md) が扱う
+  [CHG-0004](closed/0004-opencode-sandbox.md) が扱う
 
 **発端**: 「`common.toml` を廃止して各ハーネス専用の設定へ移行したい」という
 提案。調べた結果、**問題は器ではなく命名**だった。

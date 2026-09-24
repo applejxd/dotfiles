@@ -154,7 +154,7 @@ Claude は同じリストから `Read()` deny permission を生成済みで、CL
 
 | 当時 | 現在 |
 | --- | --- |
-| `[file]` の glob は Claude の `Read()` / `Edit()` permission になるだけ | Claude に加えて **OpenCode の通常版・境界版**の read / edit 規則にもなる（[CHG-0004](../change/0004-opencode-sandbox.md)） |
+| `[file]` の glob は Claude の `Read()` / `Edit()` permission になるだけ | Claude に加えて **OpenCode の通常版・境界版**の read / edit 規則にもなる（[CHG-0004](../change/closed/0004-opencode-sandbox.md)） |
 | Copilot へは `check_file_read.py` で別途適用 | 同じ（変わらず） |
 
 3 つの CLI へ届くものに `claude_` が付いたままだと、**規則 3（CLI 固有キーに

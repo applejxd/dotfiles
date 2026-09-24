@@ -844,7 +844,7 @@ pattern = '''(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client
 #   ランチャーは起動を断る。seccomp_apply_path と同じ作り。
 # ★復旧は「ランチャーを使わない」。ただし未審査の作業コピーを通常版で
 #   開いてはいけない (plugin/MCP/LSP が審査前に動く)。
-# see docs/change/0004-opencode-sandbox.md
+# see docs/change/closed/0004-opencode-sandbox.md
 [opencode.sandbox]
 enabled = true
 # ワークスペースは**起動ディレクトリ**。その配下は無条件に許可する
@@ -941,7 +941,7 @@ providers = ["github-copilot", "anthropic", "openai"]
 #
 # ★「残したから守られている」と読んではいけない。permission は任意コードへの
 #   境界ではない。ワークスペース内の秘密と .git/hooks は shell から届く。
-# see docs/change/0004-opencode-sandbox.md 「段階 3」
+# see docs/change/closed/0004-opencode-sandbox.md 「段階 3」
 # 境界を定義するもの。ワークスペース相対で書く。
 # ★「次回の隔離起動時に、実行コード・境界設定・緩和設定の選択を決定する
 #   入力一式」を信頼の鎖から導出する。ファイル名の列挙では足りない。

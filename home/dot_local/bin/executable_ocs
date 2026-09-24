@@ -3,7 +3,7 @@
 
 ``srt -s <境界> -c "opencode --standalone"`` の形で、TUI とサーバを同じ
 プロセスのまま境界の内側へ入れる。境界をまたぐ接続が無いので成立する。
-see docs/change/0004-opencode-sandbox.md
+see docs/change/closed/0004-opencode-sandbox.md
 
 **このスクリプトは境界が張られる前にホストで動く。** したがって:
 
@@ -814,7 +814,7 @@ def resolve_node() -> str:
     ネットワーク確認で止まることがある (実地で踏んだ)。加えて mise は
     ワークスペース内の設定を読むので、**境界を張る前に可変な入力を
     経由する**ことになり、信頼の鎖が切れる。
-    see docs/change/0004-opencode-sandbox.md 「信頼の鎖」
+    see docs/change/closed/0004-opencode-sandbox.md 「信頼の鎖」
     """
     installs = HOME / ".local/share/mise/installs/node"
     candidates = sorted(
