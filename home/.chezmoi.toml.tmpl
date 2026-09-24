@@ -32,12 +32,22 @@ args = [
 ]
 
 # see https://www.chezmoi.io/reference/configuration-file/interpreters/
+# modify script は tomllib (Python 3.11 以上) を使う。system の python3 が
+# 3.10 以下だと `No module named 'tomllib'` で apply が止まるため、
+# バージョン付きの実行ファイルがあればそちらを優先する。
+# see docs/adr/0003-require-python-311-for-agent-configuration.md
+{{- $python := "python3" }}
+{{- range $candidate := list "python3.11" "python3.12" "python3.13" "python3.14" }}
+{{-   if lookPath $candidate }}
+{{-     $python = $candidate }}
+{{-   end }}
+{{- end }}
 [interpreters.py]
 {{- if eq .chezmoi.os "windows" }}
     command = "py"
     args = ["-3"]
 {{- else }}
-    command = "python3"
+    command = "{{ $python }}"
 {{- end }}
 
 [data]

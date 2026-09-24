@@ -23,9 +23,19 @@ import os
 import platform
 import re
 import sys
-import tomllib
 from pathlib import Path
 from typing import Any
+
+try:
+    import tomllib
+except ModuleNotFoundError as exc:  # Python 3.10 以下には tomllib が無い
+    raise SystemExit(
+        "agent 設定の生成には Python 3.11 以上が必要です"
+        f" (実行中: {platform.python_version()} / {sys.executable})。"
+        " chezmoi の [interpreters.py] が古い python を指していると起きます。"
+        " `chezmoi init` で設定を作り直すか、3.11 以上を導入してください。"
+        " see docs/spec/troubleshooting.md"
+    ) from exc
 
 # ---------------------------------------------------------------------------
 # Helpers

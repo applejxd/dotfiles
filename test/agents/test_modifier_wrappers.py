@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -190,3 +191,130 @@ def test_generator_failure_has_no_stdout(tmp_path: Path):
     assert result.returncode == 7
     assert result.stdout == b""
     assert b"failure marker" in result.stderr
+
+
+# chezmoi が modify script を動かす Python は [interpreters.py] 次第で 3.10 以下の
+# ことがある。その値は chezmoi init のときに確定するので、apply 中に mise が
+# 新しい Python を入れても同じ apply では効かない。ラッパー側で選び直す。
+#
+# ラッパーは `from __future__` で始まるので前に行を足せない。別ファイルから
+# runpy で起動して、tomllib だけを隠す。
+BLOCK_TOMLLIB = """
+import importlib.abc
+import runpy
+import sys
+
+
+class Blocker(importlib.abc.MetaPathFinder):
+    def find_spec(self, name, path, target=None):
+        if name == "tomllib":
+            raise ModuleNotFoundError("No module named 'tomllib'", name=name)
+        return None
+
+
+sys.meta_path.insert(0, Blocker())
+runpy.run_path({wrapper!r}, run_name="__main__")
+"""
+
+
+def run_wrapper_without_tomllib(
+    wrapper: bytes,
+    data: bytes,
+    *,
+    tmp_path: Path,
+    path: str | None = None,
+    home: str | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    """実行中の Python から tomllib だけを隠してラッパーを動かす。"""
+    script = tmp_path / "wrapper.py"
+    script.write_bytes(wrapper)
+    env = None
+    if path is not None or home is not None:
+        env = dict(os.environ)
+        if path is not None:
+            env["PATH"] = path
+        if home is not None:
+            env["HOME"] = home
+    return subprocess.run(
+        [sys.executable, "-c", BLOCK_TOMLLIB.format(wrapper=str(script))],
+        cwd=ROOT,
+        input=data,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+
+def test_wrapper_finds_another_python_when_tomllib_is_missing(tmp_path: Path):
+    """3.10 以下で動かされても、PATH に 3.11 以上があれば生成は成功する。"""
+    wrapper = render_modifier(
+        ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl"
+    )
+
+    result = run_wrapper_without_tomllib(wrapper, b"{}", tmp_path=tmp_path)
+
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert isinstance(json.loads(result.stdout), dict)
+
+
+def test_wrapper_falls_back_to_the_current_python_when_none_is_found(tmp_path: Path):
+    """代わりが見つからなくても、ラッパー自身は壊れない。
+
+    generate.py を現在の Python で起動して判断を委ねる。3.11 未満なら
+    生成側の import ガードが理由を説明して落ちる (test_python_requirement.py)。
+    """
+    empty_path = tmp_path / "empty-bin"
+    empty_path.mkdir()
+    empty_home = tmp_path / "empty-home"
+    empty_home.mkdir()
+    wrapper = render_modifier(
+        ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl"
+    )
+
+    result = run_wrapper_without_tomllib(
+        wrapper,
+        b"{}",
+        tmp_path=tmp_path,
+        path=str(empty_path),
+        home=str(empty_home),
+    )
+
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert isinstance(json.loads(result.stdout), dict)
+
+
+@pytest.mark.parametrize(
+    "layout",
+    [
+        ".local/share/mise/installs/python/3.13.6/bin/python3.13",
+        ".local/share/uv/python/cpython-3.13.11-linux-x86_64-gnu/bin/python3.13",
+    ],
+)
+def test_wrapper_finds_toolchain_python_outside_path(tmp_path: Path, layout: str):
+    """mise / uv の Python は shim が PATH に無くても使える。
+
+    sudo で system Python を入れずに済ませるための経路なので、
+    PATH を空にしても生成が通ることを確認する。
+    """
+    if sys.platform == "win32":
+        pytest.skip("Windows は [interpreters.py] の py -3 が最新を選ぶ")
+    home = tmp_path / "home"
+    installed = home / layout
+    installed.parent.mkdir(parents=True)
+    installed.symlink_to(sys.executable)
+    empty_path = tmp_path / "empty-bin"
+    empty_path.mkdir()
+    wrapper = render_modifier(
+        ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl"
+    )
+
+    result = run_wrapper_without_tomllib(
+        wrapper,
+        b"{}",
+        tmp_path=tmp_path,
+        path=str(empty_path),
+        home=str(home),
+    )
+
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert isinstance(json.loads(result.stdout), dict)

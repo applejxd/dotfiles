@@ -13,7 +13,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 | 全体（lint / secret scan） | `uv run pre-commit run --all-files` |
 | agent 設定・hook | `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` |
 | Windows 資産（静的） | `uv run --with pytest --no-project pytest test/test_windows_assets.py -q` |
-| chezmoi の展開範囲 | `uv run --with pytest --no-project pytest test/test_chezmoi_ignore.py -q` |
+| chezmoi の展開範囲 | `uv run --with pytest --no-project pytest test/test_chezmoi_templates.py -q` |
 | シェルスクリプト | `git ls-files '*.sh' \| xargs mise exec shellcheck -- shellcheck` |
 | テンプレート（描画して検査） | `mise exec -- python3 scripts/lint_templates.py` |
 | docs の索引整合 | `mise exec -- python3 scripts/lint_docs.py` |
