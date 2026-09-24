@@ -1412,8 +1412,30 @@ OPENCODE_GUIDE_PLUGIN = "~/.config/opencode/guide-plugin"
 OPENCODE_CHECKPOINT_PLUGIN = "~/.config/opencode/checkpoint-plugin"
 
 
+# skill の置き場。**明示しないと読まれない。**
+# 公式ドキュメントは ~/.config/opencode/skills を Global の探索先として挙げるが、
+# v2.0.14 はここを走査しない (実測: 監視対象は ~/.opencode/skills で、
+# ~/.config/opencode/skills に置いた skill は登録されない)。未文書の
+# ~/.opencode/skills へ移すより、文書化されている `skills` 設定で名指しする。
+# see docs/change/0001-compaction-context-handover.md 「skill が読まれない」
+OPENCODE_SKILLS = "~/.config/opencode/skills"
+
+
 def opencode_checkpoint_plugin_path() -> str:
     return os.path.expanduser(OPENCODE_CHECKPOINT_PLUGIN)
+
+
+def opencode_skills_path() -> str:
+    return os.path.expanduser(OPENCODE_SKILLS)
+
+
+def merge_opencode_skills(existing_skills: Any) -> list[Any]:
+    """``skills`` を更新する (宣言外のエントリは残す)。"""
+    path = opencode_skills_path()
+    known = (path, OPENCODE_SKILLS)
+    out = [s for s in (existing_skills or []) if s not in known]
+    out.append(path)
+    return out
 
 
 def opencode_guide_plugin_path() -> str:
@@ -1583,6 +1605,7 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
     agent = merge_opencode_agents(existing.get("agent"), common)
     if agent:
         out["agent"] = agent
+    out["skills"] = merge_opencode_skills(existing.get("skills"))
     out["mcp"] = merge_opencode_mcp(existing.get("mcp"), common)
     return out
 

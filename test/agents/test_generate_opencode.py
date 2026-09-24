@@ -474,6 +474,33 @@ def test_checkpoint_plugin_is_not_registered_twice():
     assert merged.count(gen.opencode_checkpoint_plugin_path()) == 1
 
 
+def test_the_skills_directory_is_always_registered():
+    """★明示しないと skill が 1 つも読まれない。
+
+    公式ドキュメントは ``~/.config/opencode/skills`` を Global の探索先として
+    挙げるが、v2.0.14 は**そこを走査しない**（実測。監視対象は
+    ``~/.opencode/skills`` 側で、``~/.config/opencode/skills`` に置いた skill は
+    ``/api/skill`` に現れない）。``skills`` 設定で名指しすると登録される。
+
+    see docs/change/0001-compaction-context-handover.md
+    """
+    merged = gen.merge_opencode_config({}, COMMON)["skills"]
+    assert gen.opencode_skills_path() in merged
+
+
+def test_the_skills_directory_is_not_registered_twice():
+    existing = {"skills": [gen.opencode_skills_path()]}
+    merged = gen.merge_opencode_config(existing, COMMON)["skills"]
+    assert merged.count(gen.opencode_skills_path()) == 1
+
+
+def test_skills_not_declared_in_common_are_kept():
+    existing = {"skills": ["~/shared/opencode-skills"]}
+    merged = gen.merge_opencode_config(existing, COMMON)["skills"]
+    assert merged[0] == "~/shared/opencode-skills"
+    assert gen.opencode_skills_path() in merged
+
+
 def test_checkpoint_plugin_is_readable_inside_the_boundary():
     """★隔離版でも圧縮は起きる。
 

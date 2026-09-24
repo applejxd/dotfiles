@@ -164,6 +164,42 @@ checkpoint に保存し、**同じものを `e.result.summary` に入れる**。
 実際に生成が空になった回では、この退避どおり機械節だけが残り、OpenCode の要約で
 会話が続いた。**壊れ方が設計どおりであることも確認できた。**
 
+### skill が読まれない（2026-09-25）
+
+`chezmoi apply` の直後、`checkpoint` スキルがモデルの一覧から消えた。
+`~/.claude/skills/checkpoint`（移動前のコピー）が `.chezmoiremove` で削除され、
+移動先の `~/.config/opencode/skills/checkpoint` が**代わりに入ってこなかった**。
+
+#### 切り分け
+
+公式ドキュメントは `~/.config/opencode/skills` を Global の探索先として挙げる。
+それでも読まれないので、使い捨てスキルを各所に置いて `/api/skill` で数えた。
+
+| 置き場 | 登録された |
+| --- | --- |
+| `~/.opencode/skills` | **される** |
+| `~/.config/opencode/skills` | されない |
+| `skills` 設定で名指し | **される** |
+
+サービスのログでも裏が取れる。監視対象に `~/.config/opencode/skills` が無い。
+
+```text
+path=/home/applejxd/.claude/skills    type=directory
+path=/home/applejxd/.opencode/skills  type=file
+```
+
+**登録は動的に更新される。** 置いた 3 秒後には `/api/skill` に現れるので、
+再起動は要らない。最初「登録が起動時のまま」と結論したのは誤りで、待ち時間を
+置かずに問い合わせていたための誤読だった。
+
+#### 対処
+
+`~/.opencode/skills` へ移せば動くが、**この置き場は文書化されていない**。
+一方 `skills` 設定は文書化されていて、既定の探索先がどちらでも効く。
+そちらを採った。`merge_opencode_config` が `skills` を常に書く。
+
+`plugins` と同じく、宣言外のエントリは残して重複は足さない。
+
 ## 方針転換: OpenCode 専用にする（2026-09-24）
 
 スキルの置き場を `~/.claude/skills/checkpoint` から

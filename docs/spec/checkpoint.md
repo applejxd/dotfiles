@@ -82,6 +82,28 @@ hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた。口は 3 �
 - `~/.config/opencode/checkpoint-plugin`（plugin 本体）
 - `~/.config/opencode/skills`（スキルと CLI）
 
+### スキルは `skills` 設定で名指しする
+
+**置くだけでは読まれない。** 公式ドキュメントは `~/.config/opencode/skills` を
+Global の探索先として挙げるが、v2.0.14 はそこを走査しない（実測。監視対象は
+`~/.opencode/skills` 側）。`opencode.json` の `skills` に名指しすると登録される。
+
+```jsonc
+{ "skills": ["/home/<user>/.config/opencode/skills"] }
+```
+
+生成は `merge_opencode_skills`（`scripts/agents/generate.py`）が常に行う。
+未文書の `~/.opencode/skills` へ移さないのは、既定の探索先が将来変わっても
+`skills` 設定なら効くため。
+
+登録は**動的に更新される**（置いた数秒後に `/api/skill` へ現れる）。反映を
+確かめるときは待ってから数える。待たずに問い合わせると、反映前を見て
+「読まれていない」と誤読する。
+
+```sh
+opencode api get /api/skill
+```
+
 ## 保存先
 
 **常にセッション別の名前**を使う。固定名を奪い合わないので、ロックも所有権の
