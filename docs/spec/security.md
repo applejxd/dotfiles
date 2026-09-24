@@ -104,6 +104,11 @@ age の秘密鍵は Bitwarden から自動で展開されます。
 一度展開された後は `.chezmoiignore` により再展開されません。
 毎回 Bitwarden を引くと `chezmoi diff` がマスターパスワードを要求するためです。
 
+`BW_SESSION` が設定されていない間は、`~/.config/sops/age/keys.txt` と
+`~/.config/git/user` は展開対象から外れます（未ログインの環境で
+`chezmoi apply` 全体が止まるのを防ぐため）。展開したいときは
+`export BW_SESSION="$(bw unlock --raw)"` してから `chezmoi apply` します。
+
 **SOPS 用の age 秘密鍵を、同じ age 鍵で chezmoi 暗号化してはいけません。**
 復号に必要な鍵が暗号化ファイル内にある循環状態になります。
 

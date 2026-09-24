@@ -256,6 +256,37 @@ symlink 0)。この形ならキャッシュ削除では壊れない。
 再び symlink 構造で入るようなら、`~/.cache` を消さない運用にするか、
 消した直後に上記の入れ直しを行う。
 
+### 11. 久しぶりの `chezmoi update` が Bitwarden で止まる
+
+```text
+chezmoi: warning: config file template has changed, run chezmoi init to regenerate config file
+.config/git/ignore has changed since chezmoi last wrote it?
+You are not logged in.
+chezmoi: .config/git/user: template: ...: error calling bitwarden:
+  ... bw unlock --raw: exit status 1
+```
+
+3 つが同時に起きているので、上から順に片付ける。
+
+| 行 | 意味 | 対処 |
+| --- | --- | --- |
+| `config file template has changed` | `home/.chezmoi.toml.tmpl` が更新された。`~/.config/chezmoi/chezmoi.toml` は古いまま | `chezmoi init` |
+| `... has changed since chezmoi last wrote it?` | 展開先が chezmoi の記録と食い違う。上書き可否を聞かれている | `chezmoi diff` で中身を見てから答える |
+| `error calling bitwarden` | `bw` は入ったが未ログイン。`bw unlock` が失敗しテンプレートが落ちる | `bw login` してセッションを張る |
+
+```bash
+chezmoi init                                  # 設定ファイルを再生成
+chezmoi diff ~/.config/git/ignore             # 上書きしてよいか確認
+bw login && bw sync
+export BW_SESSION="$(bw unlock --raw)"
+chezmoi apply
+```
+
+`BW_SESSION` を張らないまま `chezmoi apply` しても止まらない。
+`.chezmoiignore.tmpl` がセッションの無い間だけ `~/.config/git/user` と
+`~/.config/sops/age/keys.txt` を無視するため、この 2 つは未展開のまま次回に回る。
+Bitwarden を使わないマシンならそのままで構わない。
+
 ## ログの確認
 
 ```bash

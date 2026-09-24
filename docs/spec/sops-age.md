@@ -38,6 +38,9 @@ Bitwarden Secrets Manager の `bws` は使用しない。
   パーミッションが 600 になる
 - **`.chezmoiignore` で「一度だけ展開」にする。** 毎回 Bitwarden を引くと
   `chezmoi diff` がマスターパスワードを要求して日常操作が止まる
+- **`BW_SESSION` が無い間は展開自体を無視する。** セッションが無いと chezmoi が
+  `bw unlock` を走らせ、未ログインの環境では `You are not logged in.` で
+  `chezmoi apply` 全体が止まる。無視して次回に回すほうが安全
 - **Bitwarden Item 名が一意でない場合は Item UUID を指定する。**
   名前解決に失敗するとテンプレート評価が落ちる
 - **`bitwarden.unlock = "auto"` を使う。** `BW_SESSION` が無いときだけ
