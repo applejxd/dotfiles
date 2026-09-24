@@ -55,11 +55,46 @@
 
 ### まだ分からないこと
 
-- `compaction` フックが**自動圧縮でも発火するか**（手動 `/compact` との差）
-- `ctx.storage` のスコープが**プロジェクト単位か、plugin インスタンス単位か**
-- `context` フックで push した system テキストが、**圧縮後の最初の要求に
-  確実に載るか**（フックの登録順と、圧縮の前後関係）
-- 注入した内容がモデルに**効いているか**（届くことと効くことは別）
+> **2026-09-24 に実測した。** 4 件のうち 3 件が解決。残り 1 件は長い会話が要る。
+
+| 論点 | 結果 |
+| --- | --- |
+| `compaction` フックが**自動圧縮でも発火するか** | **未検証**。1 ターンの会話では圧縮が起きない。登録は成功する |
+| `ctx.storage` のスコープ | **OpenCode の DB に入る**（`OPENCODE_DB` で指した DB 内にマーカーを検出）。したがって `ocs` ではワークスペースごと、通常版ではホスト DB で共通 |
+| `context` フックで push した system が**要求に載るか** | **載る**。`event.system` の要素が 4 → 5 になった |
+| 届くことと**効くこと** | **効いた**。返答が指定どおり `ZEBRA7` で始まった |
+
+#### 実測の手順と結果
+
+使い捨てディレクトリに `.opencode/plugins/hookprobe/index.js` を置き、
+`OPENCODE_DB` を隔離して `opencode run --standalone` を実行した。
+
+```text
+setup: opencode=2.0.14
+location: dir=<使い捨てディレクトリ>
+project: id=29ee32ab...
+storage: 読み戻し={"marker":"STORAGEMARK42"}
+registered: context / compaction / generate / title    ← 4 つとも成功
+fire: title messages=1
+fire: context messages=1
+inject: system になった要素数=5
+```
+
+モデルの返答は `ZEBRA7 ok` で始まった。**注入した system 指示がそのまま効いている。**
+
+これで CHG-0001 の中核（圧縮後に文脈を注入する）は、**機構としては成立が
+確認できた**。残るのは「圧縮という出来事を捉えられるか」だけ。
+
+#### `compaction` フックを確かめる方法（未実施）
+
+1 ターンでは起きないので、次のどちらかが要る。
+
+- 長い会話を作って自動圧縮を跨ぐ
+- `/compact` を手で実行する（TUI が要るので **assistant では回せない**）
+
+**登録が成功し、`context` が確実に発火することまでは確認済み**なので、
+`compaction` が発火しなくても「`context` 側で印を見て注入する」形に
+退避できる（印の置き場は `ctx.storage`）。
 
 ### 実装済みのもの（Claude / Copilot、対象外だが残す）
 
