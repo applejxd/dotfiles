@@ -10,17 +10,6 @@ $ErrorActionPreference = 'Stop'
 # common.toml の [[mcp]] のうち未登録のものだけを CLI 経由で登録する。
 # Unix 側の 400_unix/410 と同じ役割 (あちらは .chezmoiignore で Windows 除外)。
 $homeDir = {{ .chezmoi.homeDir | toJson }}
-$miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
-if (-not $miseCommand) {
-  # 同じ apply の Winget スクリプトで mise を初めて導入した場合。
-  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
-  $miseCommand = Get-Command mise -CommandType Application -ErrorAction Stop
-}
-
-$claudePath = & $miseCommand.Path -C $homeDir which claude
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($claudePath)) {
-  throw "Failed to resolve claude via mise (exit code $LASTEXITCODE)"
-}
 
 $managed = @'
 {{ $mcp | toJson }}
@@ -35,6 +24,22 @@ if (Test-Path -LiteralPath $configPath -PathType Leaf) {
   if ($config.PSObject.Properties.Name -contains 'mcpServers' -and $config.mcpServers) {
     $configured = @($config.mcpServers.PSObject.Properties.Name)
   }
+}
+
+# ★登録するものが無いなら claude を探さない。clis で絞った結果 0 件になる
+#   ことがあり、そこで mise に claude を要求すると apply ごと落ちる。
+if (@($managed).Count -eq 0) { return }
+
+$miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
+if (-not $miseCommand) {
+  # 同じ apply の Winget スクリプトで mise を初めて導入した場合。
+  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+  $miseCommand = Get-Command mise -CommandType Application -ErrorAction Stop
+}
+
+$claudePath = & $miseCommand.Path -C $homeDir which claude
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($claudePath)) {
+  throw "Failed to resolve claude via mise (exit code $LASTEXITCODE)"
 }
 
 foreach ($server in $managed) {

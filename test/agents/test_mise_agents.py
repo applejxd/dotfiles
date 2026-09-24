@@ -113,6 +113,43 @@ def commands(env):
     return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 
 
+def test_nothing_to_register_does_not_need_claude(tmp_path):
+    """★登録対象が 0 件なら claude を探さないこと。
+
+    `clis` で絞った結果 0 件になることがある。そこで mise に claude を
+    要求すると、使っていない CLI のために apply 全体が落ちる (実際に
+    "claude is a mise bin however it is not currently active" で止まった)。
+    """
+    script = render_script("applejxd")
+    home = tmp_path / "home"
+    home.mkdir()
+    log = tmp_path / "commands.jsonl"
+    # bash と python3 だけの PATH。mise も claude も無いので、見に行ったら落ちる。
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for tool in ("bash", "python3"):
+        found = shutil.which(tool)
+        if not found:
+            pytest.skip(f"{tool} が無い")
+        (bin_dir / tool).symlink_to(found)
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "COMMAND_LOG": str(log),
+        "PATH": str(bin_dir),
+    }
+    result = subprocess.run(
+        [str(bin_dir / "bash")],
+        input=script,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not log.exists()
+
+
 @pytest.mark.parametrize("username", USERS)
 def test_servers_for_this_user_are_registered_once(environment, username):
     home, env = environment

@@ -8,11 +8,6 @@ set -euo pipefail
 # Claude の user scope の MCP 定義先である ~/.claude.json は chezmoi 管理外
 # (ADR-0005: 秘密として扱う) なので、ほかの CLI のように生成できない。
 # common.toml の [[mcp]] のうち未登録のものだけを CLI 経由で登録する。
-mise_path="${HOME}/.local/bin/mise"
-if [[ ! -x "$mise_path" ]]; then
-    mise_path="$(command -v mise)"
-fi
-claude_path="$("$mise_path" -C "$HOME" which claude)"
 
 # バイナリの有無では判定しない。移行済み・途中失敗からの再実行でも
 # 既存の設定を保つ。壊れた ~/.claude.json は上書きせずエラーで止める。
@@ -41,6 +36,16 @@ for server in managed:
     print(server["id"] + "\t" + json.dumps(spec))
 PY
 )"
+
+# ★登録するものが無いなら claude を探さない。clis で絞った結果 0 件になる
+#   ことがあり、そこで mise に claude を要求すると apply ごと落ちる。
+[[ -n "$missing" ]] || exit 0
+
+mise_path="${HOME}/.local/bin/mise"
+if [[ ! -x "$mise_path" ]]; then
+    mise_path="$(command -v mise)"
+fi
+claude_path="$("$mise_path" -C "$HOME" which claude)"
 
 # add-json なら http と stdio を同じ経路で登録できる (引数の切り分けが要らない)
 while IFS=$'\t' read -r name spec; do
