@@ -29,7 +29,7 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 
 | 範囲 | 対象 | 主な役割 |
 | --- | --- | --- |
-| `000_unix/` | Linux / macOS | zinit補完の保守 |
+| `000_unix/` | Linux / macOS | Python 3.11 以上の確保（ファイル適用より前）、zinit補完の保守 |
 | `100_linux/` | Ubuntu / WSL | OSパッケージ、mise、shell、Herdr |
 | `200_mac/` | macOS | Homebrew、mise、macOS defaults |
 | `300_windows/` | Windows native | Winget/Scoop/Chocolatey、レジストリ、Terminal、AI CLI統合、MCP登録 |

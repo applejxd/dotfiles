@@ -63,9 +63,20 @@ package installation とネットワーク依存を持ち込むため却下す�
 2. Windows の chezmoi Python interpreter と Python hook は `py -3` を使い、
    インストール済みの最新 Python 3 を選択する。3.11 未満は `tomllib` import
    failure として明示的に失敗させる
-3. Windows quick start は Python 3.12 を chezmoi より先に導入する
-4. `tomli` の手動・自動インストール、および repository への vendoringは行わない
-5. policy module を import できない hook は既存方針どおり fail-closed とする
+3. Unix の chezmoi Python interpreter は `python3.14` から `python3.11` の順に
+   探して見つかった最新版を使い、どれも無ければ `python3` に戻す。system の
+   `python3` が 3.10 以下の環境でも apply が通るようにするため
+4. modify script のラッパーは、自分が 3.10 以下で動かされた場合に 3.11 以上の
+   Python を探して generate.py を起動する。PATH に加えて mise / uv の導入先
+   (`~/.local/share/{mise/installs,uv}/python/*`) も直接見るので、shim が
+   PATH に無くても sudo なしで復旧できる。`[interpreters.py]` の値は
+   `chezmoi init` のときに確定し、同じ apply の中では変えられないため
+5. まっさらな環境では `000_unix/run_before_005_python.sh` がファイル適用より
+   先に 3.11 以上を 1 つ確保する。無ければ uv をユーザ領域へ入れて
+   `uv python install` する。sudo は使わず、失敗しても apply は止めない
+6. Windows quick start は Python 3.12 を chezmoi より先に導入する
+7. `tomli` の手動・自動インストール、および repository への vendoringは行わない
+8. policy module を import できない hook は既存方針どおり fail-closed とする
 
 ## 完了条件
 

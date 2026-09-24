@@ -287,6 +287,71 @@ chezmoi apply
 `~/.config/sops/age/keys.txt` を無視するため、この 2 つは未展開のまま次回に回る。
 Bitwarden を使わないマシンならそのままで構わない。
 
+### 12. Unix で `No module named 'tomllib'` が出て apply が止まる
+
+```text
+Traceback (most recent call last):
+  File "~/.local/share/chezmoi/scripts/agents/generate.py", line 26, in <module>
+    import tomllib
+ModuleNotFoundError: No module named 'tomllib'
+chezmoi: .claude/settings.json: exit status 1
+```
+
+`tomllib` は Python 3.11 以上の標準ライブラリ。chezmoi は project の uv 環境では
+なく `[interpreters.py]` で指定した Python で modify script を実行するので、
+**system の `python3` が 3.10 以下**だとここで落ちる。
+Ubuntu 22.04 の既定は 3.10、20.04 は 3.8 なので該当する（24.04 は 3.12 で問題ない）。
+
+現在は 2 段構えで防いでいるので、通常はこのエラーを見ない。
+
+1. `000_unix/run_before_005_python.sh` が**ファイル適用より前に**走り、3.11 以上が
+   無ければ uv をユーザ領域へ入れて `uv python install` する（sudo 不要）
+2. ラッパー (`home/.chezmoitemplates/modify_json.py.tmpl`) が実行時に探し直す
+   - 自分自身 → PATH の `python3.14` … `python3.11` → PATH の `python3` / `python`
+   - `~/.local/share/mise/installs/python/*/bin/python3.*`
+   - `~/.local/share/uv/python/*/bin/python3.*`
+
+つまり **1 つでも 3.11 以上があれば `chezmoi apply` だけで通る**。
+上のエラーが出るのは、どこにも無く、かつ 1 の自動取得も失敗した場合だけ
+（オフライン環境など）。その場合は先に警告が出ている。
+
+```text
+⚠️  uv を導入できませんでした。3.11 以上の Python を手動で入れてください。
+```
+
+手元の状況を確認する。
+
+```bash
+python3 --version
+ls ~/.local/share/mise/installs/python/*/bin/python3.* 2>/dev/null
+ls ~/.local/share/uv/python/*/bin/python3.* 2>/dev/null
+```
+
+自分で入れる場合も **sudo は要らない**。
+
+```bash
+uv python install 3.13     # uv があるなら
+mise use -g python@3.13    # mise があるなら
+chezmoi apply
+```
+
+どちらも使えないときの最後の手段が system への導入。
+
+```bash
+sudo apt-get install -y python3.12
+chezmoi apply
+```
+
+> [!NOTE]
+> ツール一式を入れる `100_linux/run_onchange_after_125_mise.sh.tmpl` は
+> `run_before_` へ移していない。あれが読む `~/.config/mise/config.toml` は
+> ファイル適用で展開されるので前倒しできず、`all_compile = true` による
+> Python のソースビルドと `sudo apt-get` が apply の冒頭に来てしまうため。
+> 必要なのは Python 1 つなので、専用の小さな `run_before_` を分けている。
+
+`tomli` は入れない。理由は
+[ADR-0003](../adr/0003-require-python-311-for-agent-configuration.md) を参照。
+
 ## ログの確認
 
 ```bash
