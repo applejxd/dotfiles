@@ -19,7 +19,7 @@
 ```markdown
 <!-- checkpoint: v1
      session: <セッション ID>
-     cli: claude|copilot
+     cli: opencode
      updated_at: <ISO8601>
      covered_through: <その要求の固定境界>
 -->

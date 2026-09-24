@@ -27,7 +27,8 @@ CORE_PATH = ROOT / "home" / "dot_claude" / "hooks" / "lib" / "checkpoint_core.py
 SKILL_PATH = (
     ROOT
     / "home"
-    / "dot_claude"
+    / "dot_config"
+    / "opencode"
     / "skills"
     / "checkpoint"
     / "scripts"

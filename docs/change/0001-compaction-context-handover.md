@@ -21,6 +21,46 @@
 - **Claude Code / Copilot CLI への対応**（2026-09-24 に対象外とした。
   実装済みのものは動いているので残すが、以後は OpenCode V2 だけを見る）
 
+## 方針転換: OpenCode 専用にする（2026-09-24）
+
+スキルの置き場を `~/.claude/skills/checkpoint` から
+**`~/.config/opencode/skills/checkpoint`** へ移した。
+
+**理由は依存の深さ。** この仕組みが要るものは、どれも OpenCode V2 の独自機能。
+
+| 要るもの | 使う口 | 他 CLI の同等物 |
+| --- | --- | --- |
+| 圧縮そのものの捕捉 | `session.hook("compaction")` | Claude は `PreCompact`、Copilot は印 + `PostToolUse` の二段 |
+| 圧縮後の注入 | `session.hook("context")` | Claude は `SessionStart` matcher `compact` のみ |
+| 印の永続化 | `ctx.storage` | **どちらも無い**（セッション単位の置き場しかない） |
+| 要約の差し替え | `agent.compaction` / `compaction` フック | 無い |
+
+横断させようとすると、**一番機能の薄い CLI に合わせる**ことになる。
+`ctx.storage` の代替が無い時点で、印を置く設計が CLI ごとに変わる。
+横断の維持費に見合わないと判断した。
+
+### 移動にあたって踏んだ落とし穴
+
+`ocs` の `read` は **`~/.config/opencode` を丸ごとは開けていない**。
+`service.json`（常駐サービスの認証情報）が読めてしまうため、R4 で
+`guide-plugin` だけに絞ってあった。
+
+このまま移すと**境界の内側でスキルが読めなくなる**ので、
+`~/.config/opencode/skills` を明示的に足した（read のみ、境界は弱まらない）。
+
+### 残っている不整合
+
+hook 層の 3 本は **Claude / Copilot 向けのまま**。
+
+| hook | 対象 |
+| --- | --- |
+| `checkpoint_precompact` | Claude + Copilot |
+| `checkpoint_restore` | Claude |
+| `checkpoint_restore_pending` | Copilot |
+
+スキルが OpenCode 専用になったので、これらは**手順書を持たない CLI で動き続ける**。
+撤去するか OpenCode plugin へ寄せるかは**未決**。
+
 ## 現在地
 
 > **2026-09-24 — 対象を OpenCode V2 のみへ絞り、再評価した。**
@@ -59,7 +99,7 @@
 
 | 論点 | 結果 |
 | --- | --- |
-| `compaction` フックが**自動圧縮でも発火するか** | **未検証**。1 ターンの会話では圧縮が起きない。登録は成功する |
+| `compaction` フックが**自動圧縮でも発火するか** | **静的には解決**（下記）。実測は未了 |
 | `ctx.storage` のスコープ | **OpenCode の DB に入る**（`OPENCODE_DB` で指した DB 内にマーカーを検出）。したがって `ocs` ではワークスペースごと、通常版ではホスト DB で共通 |
 | `context` フックで push した system が**要求に載るか** | **載る**。`event.system` の要素が 4 → 5 になった |
 | 届くことと**効くこと** | **効いた**。返答が指定どおり `ZEBRA7` で始まった |
@@ -84,6 +124,39 @@ inject: system になった要素数=5
 
 これで CHG-0001 の中核（圧縮後に文脈を注入する）は、**機構としては成立が
 確認できた**。残るのは「圧縮という出来事を捉えられるか」だけ。
+
+#### 自動と手動で経路が分かれないこと（2026-09-24、静的解析）
+
+実機の `/compact` を待たずに、**バイナリの読み取りで決着した**。
+セッション要求を組み立てる箇所に、4 つの経路とフック名の対応がある。
+
+```js
+primary:    (s) => I("primary",    s, i("context",    s.agent)),
+compaction: (s) => I("compaction", s, i("compaction", s.agent)),
+generate:   (s) => I("generate",   s, i("generate",   s.agent)),
+title:      (s) => I("title",      s, ...),
+```
+
+`i` は `H.trigger("session", <名前>, ...)` を返す。つまり**フックは「圧縮を
+起動する側」ではなく「圧縮の LLM 要求を組み立てる側」に付いている**。
+
+自動圧縮も `/compact` も、要約を作るには同じ `request.compaction(...)` を
+通る。**分岐が存在しないので、片方だけ発火しないことは起こらない。**
+
+> **証拠の強さに注意。** これは難読化された配布バイナリの静的読み取りで、
+> 実測より一段弱い。実機の `/compact` で発火を見たら、ここを実測に更新する。
+
+あわせて設定スキーマから拾ったもの。
+
+| キー | 内容 |
+| --- | --- |
+| `compaction.auto` | 自動圧縮の有効化（既定 `true`） |
+| `compaction.keep.tokens` | 直近を逐語で残すトークン数 |
+| `compaction.buffer` | 圧縮中のあふれを避ける余白 |
+| `agent.compaction` | **圧縮専用エージェントを設定できる** |
+
+最後の `agent.compaction` は**plugin を書かずに要約のプロンプト自体を
+差し替えられる**可能性がある。実装手段の候補として未評価。
 
 #### `compaction` フックを確かめる方法（未実施）
 
@@ -199,7 +272,7 @@ P0-1（ターン途中の圧縮、[E6](../research/agents/compaction-hooks.md)�
 
 **完了（段 1〜6）:**
 
-- `home/dot_claude/skills/checkpoint/` — スキル、雛形 4 種、CLI
+- `home/dot_config/opencode/skills/checkpoint/` — スキル、雛形 4 種、CLI
 - 両 CLI の指示ファイルへ恒久ルール
 - `docs/` の 4 種類 + ダッシュボード + `scripts/lint_docs.py`
 - `adr` スキルを `checkpoint` へ統合
@@ -216,7 +289,7 @@ P0-1（ターン途中の圧縮、[E6](../research/agents/compaction-hooks.md)�
 
 **配備の確認（2026-09-19、`chezmoi apply` 後）:**
 
-- `~/.claude/skills/checkpoint/` に SKILL.md・雛形 4 種・`checkpoint.py`（実行権限付き）
+- `~/.config/opencode/skills/checkpoint/` に SKILL.md・雛形 4 種・`checkpoint.py`（実行権限付き）
 - **配備版の `checkpoint.py paths` が worktree ルートを正しく解決**した
   （`.git` がファイルでも `git rev-parse` 経由で解決できている）
 - 生成される hook は Claude が `PreCompact` と `SessionStart`(matcher `compact`)、

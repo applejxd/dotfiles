@@ -28,7 +28,7 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 ## A1: 実行状態の保存
 
 ```bash
-CP=~/.claude/skills/checkpoint/scripts/checkpoint.py
+CP=~/.config/opencode/skills/checkpoint/scripts/checkpoint.py
 uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-ignored
 ```
 
@@ -98,9 +98,9 @@ ADR を頼まれたときは、**案件整理・ダッシュボード更新・�
 
 ## 参照
 
-- **A2 / B の手順**: `~/.claude/skills/checkpoint/references/procedure.md`
+- **A2 / B の手順**: `~/.config/opencode/skills/checkpoint/references/procedure.md`
   （案件の更新と `docs/` への文書化。A1 を終えてから読む）
-- 雛形: `~/.claude/skills/checkpoint/references/`
+- 雛形: `~/.config/opencode/skills/checkpoint/references/`
   （`checkpoint-template.md` / `adr-template.md` / `change-template.md` /
   `research-template.md`）
-- CLI: `~/.claude/skills/checkpoint/scripts/checkpoint.py`
+- CLI: `~/.config/opencode/skills/checkpoint/scripts/checkpoint.py`

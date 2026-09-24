@@ -18,7 +18,7 @@ dotfiles は「なぜその形なのか」が失われやすい。
 - ステータスは `Proposed` / `Accepted` / `Deprecated` / `Superseded by ADR-NNNN`
 - 決定を覆す場合は既存 ADR を書き換えず、新しい ADR を起こして
   古い方を `Superseded by` にする
-- テンプレートは `~/.claude/skills/checkpoint/references/adr-template.md`
+- テンプレートは `~/.config/opencode/skills/checkpoint/references/adr-template.md`
   （作成・更新は `checkpoint` スキルが担う）
 
 ## 一覧

@@ -2,6 +2,13 @@
 
 コンテキスト圧縮を跨いで、作業の経緯・決定・残作業を失わないための仕組み。
 
+> **2026-09-24: OpenCode 専用にした。**
+> 圧縮の捕捉に `session.hook("compaction")`、印の保存に `ctx.storage` と、
+> **OpenCode V2 の独自機能に強く依存する**ため、CLI 横断を諦めた。
+> 置き場も `~/.claude/skills` から OpenCode 標準の
+> `~/.config/opencode/skills` へ移した。経緯は
+> [CHG-0001](../change/0001-compaction-context-handover.md)。
+
 設計判断の理由は [ADR-0009](../adr/0009-save-before-documenting.md)、
 両 CLI のイベント仕様は
 [compaction 関連の hook 仕様](../research/agents/compaction-hooks.md) を参照。
@@ -14,8 +21,19 @@
 | 層 | 実体 | 役割 |
 | --- | --- | --- |
 | 指示ファイル | `home/dot_claude/CLAUDE.md` / `home/dot_copilot/copilot-instructions.md` | 恒久ルール。「文脈の引き継ぎ」節 |
-| スキル | `home/dot_claude/skills/checkpoint/` | 手順・雛形の単一ソース |
+| スキル | `home/dot_config/opencode/skills/checkpoint/` | 手順・雛形の単一ソース。**OpenCode だけが読む** |
 | hook | `home/dot_config/agents/common.toml.tmpl` の `[[hooks]]` | 圧縮直前の記録と直後の復帰 |
+
+> **hook 層は Claude / Copilot 向けのまま残っている。** スキルが OpenCode 専用に
+> なったため、この 3 本（`checkpoint_precompact` / `checkpoint_restore` /
+> `checkpoint_restore_pending`）は**手順書を持たない CLI で動き続ける**状態。
+> 撤去するか OpenCode plugin へ寄せるかは未決。
+
+### 境界の内側から読めること
+
+`ocs` の `read` は `~/.config/opencode` を**丸ごとは開けない**（R4）。
+移動にあわせて `~/.config/opencode/skills` を明示的に足してある。
+**これが無いと境界内で checkpoint スキルが読めない。**
 
 ## 保存先
 
@@ -39,7 +57,7 @@
 ## 記録の形
 
 見出しは 6 つを順序どおりに置く。雛形は
-`~/.claude/skills/checkpoint/references/checkpoint-template.md`。
+`~/.config/opencode/skills/checkpoint/references/checkpoint-template.md`。
 
 | 節 | 内容 |
 | --- | --- |
@@ -118,7 +136,7 @@ assistant ターンの境界で起きるため、`PreCompact` は確実に呼ば
 ## 使い方
 
 ```bash
-CP=~/.claude/skills/checkpoint/scripts/checkpoint.py
+CP=~/.config/opencode/skills/checkpoint/scripts/checkpoint.py
 
 # 保存先を解決する（固定パスを自分で組み立てない）
 uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-ignored

@@ -17,7 +17,7 @@
 - 増えたらサブディレクトリへ分ける。現在は対象（`agents/` / `opencode/` /
   `shell/`）で分け、`opencode/` はさらに主題（`permission/` / `plugin/`）で
   分けている
-- テンプレートは `~/.claude/skills/checkpoint/references/research-template.md`
+- テンプレートは `~/.config/opencode/skills/checkpoint/references/research-template.md`
 
 ## 一覧
 

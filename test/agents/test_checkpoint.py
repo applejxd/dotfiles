@@ -24,7 +24,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = (
     ROOT
     / "home"
-    / "dot_claude"
+    / "dot_config"
+    / "opencode"
     / "skills"
     / "checkpoint"
     / "scripts"

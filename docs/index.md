@@ -60,7 +60,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
-| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | **OpenCode V2 で中核が成立**。`context` フックの注入がモデルに効くことを実測 | `compaction` フックの発火確認（TUI が要る） |
+| [CHG-0001](change/0001-compaction-context-handover.md) | In progress | **OpenCode 専用化**。スキルを OpenCode 標準パスへ移動。注入が効くことは実測済み | Claude/Copilot 向け hook 3 本の去就 |
 | [CHG-0002](change/0002-opencode-ask-by-default.md) | In progress | 段階 3 まで配備済み。**4 は全て見送り**、5 は第一サポート決定待ち。既存 allow のリダイレクト穴を塞いだ | 段階 5（CHG-0006 の結論待ち） |
 | [CHG-0005](change/0005-agents-config-naming.md) | In progress | `common.toml` の廃止案を測定の結果見送り、命名の是正へ方針転換。A1 完了 | A2 の要否（CHG-0006 の結論待ち） |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。`enabledProviders` の効果が実機未確認 | 段 2 の冒頭で `/mcp list` を見る |

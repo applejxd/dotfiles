@@ -3,7 +3,7 @@
 段 5 (圧縮直前の機械記録と圧縮直後の復帰) に必要な範囲だけを持つ。
 
 **保存先の解決・アトミック書き込み・検査は再実装しない。** それらは
-``~/.claude/skills/checkpoint/scripts/checkpoint.py`` が持っていて、スキルと
+``~/.config/opencode/skills/checkpoint/scripts/checkpoint.py`` が持っていて、スキルと
 hook が同じ結果を得られるように 1 箇所へ寄せてある。ここはその利用側になる。
 
 状態機械と使用率の推定は**ここに置かない**。あれは Tier 2 (閾値監視) の都合で
