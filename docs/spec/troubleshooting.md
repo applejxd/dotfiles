@@ -352,6 +352,71 @@ chezmoi apply
 `tomli` は入れない。理由は
 [ADR-0003](../adr/0003-require-python-311-for-agent-configuration.md) を参照。
 
+### 13. `opencode` が mise に「global default version を指定しろ」と言う
+
+```text
+mise ERROR No version is set for shim: opencode
+Set a global default version with: mise use -g opencode@<version>
+```
+
+言われたとおり `mise use -g` すると今度はこうなる。
+
+```text
+configuration invalid at ...
+```
+
+#### 原因
+
+`opencode` が公式 V2 ではなく **mise の残骸 shim** に解決されている。
+
+AI CLI は `d0abd95` で mise 管理から各社公式インストーラーへ一本化したが、
+**切り替え前の shim と installs は残る**。しかも PATH 上では mise の shims が
+公式の導入先より前に来る（実測: shims が 50 番目、`~/.local/bin` が 60 番目）。
+
+ここから抜けられない輪ができる。
+
+1. shim だけが残っている
+2. `chezmoi apply` が `~/.config/mise/config.toml` を上書きし、宣言が消える
+   （このファイルは chezmoi 管理で、正本は `home/dot_config/mise/config.toml.tmpl`）
+3. `opencode` → shim → 版を解決できず上のエラー
+4. `mise use -g opencode@latest` すると宣言が復活して動く
+5. 次の `chezmoi apply` でまた消える → 3 へ戻る
+
+`configuration invalid` の方は**別物が入る**ために起きる。
+
+```bash
+mise registry opencode   # -> aqua:anomalyco/opencode
+```
+
+これは V1 系で、生成される `~/.config/opencode/opencode.json` は V2 スキーマ
+（`permissions` は順序付きルール配列）。V1 のバイナリが V2 の設定を読んで弾く。
+世代の違いは [V2 の仕様](../research/opencode/v2-capabilities.md) を参照。
+
+#### 対処
+
+`run_onchange_after_126_agent_cli.sh.tmpl`（Unix）が残骸を掃除し、shim を
+「導入済み」と数えないようになったので、通常は `chezmoi apply` で解消する。
+
+```bash
+chezmoi apply
+exec zsh                 # PATH を張り直す
+command -v opencode      # ~/.opencode/bin/opencode であること
+opencode --version       # v2.x であること
+```
+
+手で消す場合は次のとおり。`mise use -g` で足した宣言は `chezmoi apply` が戻す。
+
+```bash
+rm -f ~/.local/share/mise/shims/{claude,copilot,opencode}
+rm -rf ~/.local/share/mise/installs/{claude,claude-code,copilot,opencode}
+chezmoi apply
+```
+
+> [!NOTE]
+> Windows 側（`run_onchange_after_314_agent_cli.ps1.tmpl`）は `Get-Command` で
+> 判定しており、同じ掃除は入れていない。実機で確認できていないため。
+> Windows で同じ症状が出たら `%LOCALAPPDATA%\mise\shims` を確認する。
+
 ## ログの確認
 
 ```bash
