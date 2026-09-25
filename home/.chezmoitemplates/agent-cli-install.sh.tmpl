@@ -48,40 +48,66 @@ is_installed() {
     esac
 }
 
-if is_installed claude; then
-    echo "Claude Code は導入済みです"
-else
-    echo "Claude Code を導入します..."
-    curl -fsSL https://claude.ai/install.sh | bash
-fi
+# 各インストーラーは本体を pipe で流し込むので、失敗を個別に受け止められるよう
+# 関数に包む。特に oh-my-pi は api.github.com の releases/latest を curl -fsSL で
+# 引くため、未認証のレート制限 (60 回/時) を超えると 403 で落ちる。
+install_claude() { curl -fsSL https://claude.ai/install.sh | bash; }
+install_copilot() { curl -fsSL https://gh.io/copilot-install | bash; }
+# --no-modify-path: インストーラーが .zshrc / .bashrc へ PATH を追記すると
+# chezmoi 管理のシェル設定と衝突する。PATH は shellenv.sh 側で通している。
+install_opencode() { curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path; }
+install_omp() { curl -fsSL https://omp.sh/install | sh; }
 
-if is_installed copilot; then
-    echo "Copilot CLI は導入済みです"
-else
-    echo "Copilot CLI を導入します..."
-    curl -fsSL https://gh.io/copilot-install | bash
-fi
+# 1 つの導入失敗で残り全部を巻き添えにしない。呼び出し側は set -euo pipefail だが、
+# if の条件に置いた失敗では errexit が働かないので、ここで取りこぼしを集める。
+failed_clis=""
 
-if is_installed opencode; then
-    echo "OpenCode V2 は導入済みです"
-else
-    echo "OpenCode V2 を導入します..."
-    # --no-modify-path: インストーラーが .zshrc / .bashrc へ PATH を追記すると
-    # chezmoi 管理のシェル設定と衝突する。PATH は shellenv.sh 側で通している。
-    curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path
-fi
+ensure_cli() {
+    name="$1"
+    command_name="$2"
+    installer="$3"
 
+    if is_installed "${command_name}"; then
+        echo "${name} は導入済みです"
+        return 0
+    fi
+    echo "${name} を導入します..."
+    if "${installer}"; then
+        echo "${name} を導入しました"
+    else
+        echo "⚠️  ${name} の導入に失敗しました" >&2
+        failed_clis="${failed_clis}${failed_clis:+ }${command_name}"
+    fi
+}
+
+ensure_cli 'Claude Code' claude install_claude
+ensure_cli 'Copilot CLI' copilot install_copilot
+ensure_cli 'OpenCode V2' opencode install_opencode
 # oh-my-pi (omp)。Pi のフォークで LSP / DAP / subagent を持つ。
 # ★境界 (ocs) の外で動く。permission 機構を持たない設計なので、
 #   保護は「どこで起動するか」と git の使い方に依存する。
 #   see docs/change/0006-pi-harness-trial.md
 # 設定は ~/.omp/agent/ だが、omp は ~/.claude も config root として読むため
 # 既存の skills (16 個) は追加設定なしで見える。
-if is_installed omp; then
-    echo "oh-my-pi は導入済みです"
-else
-    echo "oh-my-pi を導入します..."
-    curl -fsSL https://omp.sh/install | sh
-fi
+ensure_cli 'oh-my-pi' omp install_omp
 
-echo "✅ 完了：AI CLI を導入しました"
+if [ -n "${failed_clis}" ]; then
+    # ここで非ゼロを返すと apply 全体が止まり、後続のスクリプトまで巻き添えに
+    # なる。外部インストーラーの一時的な不調で dotfiles の適用を止めたくないので
+    # 警告に留める。再実行の手順は docs/spec/troubleshooting.md にもある。
+    cat >&2 <<EOF
+
+⚠️  導入できなかった CLI:${failed_clis}
+    GitHub API のレート制限 (未認証で 60 回/時) に当たると 403 で失敗する。
+    残量は次で見られる:
+      curl -s https://api.github.com/rate_limit
+    時間をおいて chezmoi apply を再実行するか、手で入れる:
+      curl -fsSL https://claude.ai/install.sh | bash
+      curl -fsSL https://gh.io/copilot-install | bash
+      curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path
+      curl -fsSL https://omp.sh/install | sh
+EOF
+    echo "⚠️  完了：一部の AI CLI が入っていません"
+else
+    echo "✅ 完了：AI CLI を導入しました"
+fi

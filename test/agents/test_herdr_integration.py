@@ -142,13 +142,20 @@ def test_unix_agent_cli_installer_ignores_stale_mise_shims(os_name):
     """
     source = render_template(AGENT_CLI_SCRIPTS[os_name], os_name=os_name)
 
-    # AI CLI 4 種すべて、残骸 shim を除外する判定を通す
-    assert source.count("if is_installed ") == 4
+    # 4 種とも ensure_cli を通す。判定と導入の分岐はそこ 1 箇所だけにある
+    assert source.count("\nensure_cli ") == 4
+    for command_name in ("claude", "copilot", "opencode", "omp"):
+        assert f" {command_name} install_{command_name}\n" in source
+    # その ensure_cli が shim を除外する
+    assert 'if is_installed "${command_name}"' in source
     assert '"${mise_root}/shims/"*) return 1' in source
 
 
-def run_agent_cli_installer(script: str, home: Path, tmp_path: Path):
-    """curl をスタブ化して導入スクリプトを実際に動かす。"""
+def run_agent_cli_installer(script: str, home: Path, tmp_path: Path, fail_url: str = ""):
+    """curl をスタブ化して導入スクリプトを実際に動かす。
+
+    ``fail_url`` を渡すと、その URL への curl だけを 403 相当で失敗させる。
+    """
     bash = shutil.which("bash")
     if bash is None:
         pytest.skip("bash is not available")
@@ -160,7 +167,13 @@ def run_agent_cli_installer(script: str, home: Path, tmp_path: Path):
             (stub_bin / tool).symlink_to(found)
     curl_log = tmp_path / "curl.log"
     curl = stub_bin / "curl"
-    curl.write_text(f'#!/bin/sh\necho "$*" >> "{curl_log}"\nexit 0\n', encoding="utf-8")
+    fail_branch = (
+        f'case "$*" in *{fail_url}*) exit 22 ;; esac\n' if fail_url else ""
+    )
+    curl.write_text(
+        f'#!/bin/sh\necho "$*" >> "{curl_log}"\n{fail_branch}exit 0\n',
+        encoding="utf-8",
+    )
     curl.chmod(0o755)
     rendered = tmp_path / "install.sh"
     rendered.write_text(script, encoding="utf-8")
@@ -175,6 +188,34 @@ def run_agent_cli_installer(script: str, home: Path, tmp_path: Path):
     )
     called = curl_log.read_text(encoding="utf-8") if curl_log.exists() else ""
     return result, called
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
+def test_one_failed_installer_does_not_block_the_others(tmp_path: Path):
+    """1 つの導入失敗で残りを巻き添えにしない。
+
+    呼び出し側は set -euo pipefail なので、素の `curl | sh` だと最初の失敗で
+    スクリプトごと中断していた。oh-my-pi は api.github.com の releases/latest を
+    curl -fsSL で引くため、未認証のレート制限 (60 回/時) を超えると 403 で落ちる。
+    """
+    script = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux")
+    home = tmp_path / "home"
+    home.mkdir()
+
+    result, called = run_agent_cli_installer(
+        script, home, tmp_path, fail_url="omp.sh/install"
+    )
+
+    # 失敗しても後続は試される
+    assert "https://claude.ai/install.sh" in called
+    assert "https://gh.io/copilot-install" in called
+    assert "https://opencode.ai/v2/install" in called
+    assert "https://omp.sh/install" in called
+    # dotfiles の適用は止めない。外部インストーラーの不調で apply を落とさない
+    assert result.returncode == 0, result.stderr
+    # 黙って成功したことにしない
+    assert "omp" in result.stderr
+    assert "rate_limit" in result.stderr
 
 
 def make_executable(path: Path, exit_code: int = 0) -> None:
