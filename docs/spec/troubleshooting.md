@@ -423,6 +423,63 @@ chezmoi apply
 > 判定しており、同じ掃除は入れていない。実機で確認できていないため。
 > Windows で同じ症状が出たら `%LOCALAPPDATA%\mise\shims` を確認する。
 
+### 14. `agent_cli.sh` が 403 で失敗する
+
+```text
+curl: (22) The requested URL returned error: 403
+```
+
+#### 原因
+
+oh-my-pi のインストーラーが最新リリースを **GitHub API** から引くため。
+
+```bash
+curl -fsSL https://api.github.com/repos/${REPO}/releases/latest
+```
+
+未認証の GitHub API は **60 リクエスト/時**で、超えると 403 を返す。`-f` が
+付いているので curl は失敗し、以前は呼び出し側の `set -euo pipefail` によって
+**スクリプトごと中断**していた。その結果、後ろに並ぶ CLI が巻き添えで
+入らなくなっていた。
+
+#### 現在の挙動
+
+`agent-cli-install.sh.tmpl` は CLI ごとに失敗を受け止めるので、1 つ 403 でも
+残りは導入される。失敗した分は最後にまとめて報告される。
+
+```text
+⚠️  導入できなかった CLI: omp
+⚠️  完了：一部の AI CLI が入っていません
+```
+
+**`chezmoi apply` 自体は成功する**（外部インストーラーの一時的な不調で
+dotfiles の適用を止めないため）。
+
+#### 対処
+
+レート制限の残量を確認する。
+
+```bash
+curl -s https://api.github.com/rate_limit
+```
+
+`remaining` が 0 なら 1 時間ほどで戻る。待ってから再実行する。
+
+```bash
+chezmoi apply
+```
+
+急ぐなら手で入れる。
+
+```bash
+curl -fsSL https://omp.sh/install | sh
+```
+
+> [!NOTE]
+> `run_onchange_` はスクリプト内容のハッシュで再実行を判定する。内容が変わって
+> いないと再実行されないので、`chezmoi apply` で走らせ直したいときは
+> `chezmoi state delete-bucket --bucket=scriptState` を使う（項目 2）。
+
 ## ログの確認
 
 ```bash
