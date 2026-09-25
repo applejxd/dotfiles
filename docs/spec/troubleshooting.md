@@ -352,7 +352,9 @@ chezmoi apply
 `tomli` は入れない。理由は
 [ADR-0003](../adr/0003-require-python-311-for-agent-configuration.md) を参照。
 
-### 13. `opencode` が mise に「global default version を指定しろ」と言う
+### 13. AI CLI が mise に「global default version を指定しろ」と言う
+
+`opencode` / `omp` / `claude` / `copilot` のどれでも起きる。
 
 ```text
 mise ERROR No version is set for shim: opencode
@@ -365,9 +367,13 @@ Set a global default version with: mise use -g opencode@<version>
 configuration invalid at ...
 ```
 
+> [!WARNING]
+> `omp` はそもそも mise のレジストリに無い（`tool not found in registry: omp`）ので、
+> `mise use -g omp` は成功しない。指示に従っても抜けられない。
+
 #### 原因
 
-`opencode` が公式 V2 ではなく **mise の残骸 shim** に解決されている。
+CLI が公式の導入先ではなく **mise の残骸 shim** に解決されている。
 
 AI CLI は `d0abd95` で mise 管理から各社公式インストーラーへ一本化したが、
 **切り替え前の shim と installs は残る**。しかも PATH 上では mise の shims が
@@ -407,8 +413,8 @@ opencode --version       # v2.x であること
 手で消す場合は次のとおり。`mise use -g` で足した宣言は `chezmoi apply` が戻す。
 
 ```bash
-rm -f ~/.local/share/mise/shims/{claude,copilot,opencode}
-rm -rf ~/.local/share/mise/installs/{claude,claude-code,copilot,opencode}
+rm -f ~/.local/share/mise/shims/{claude,copilot,opencode,omp}
+rm -rf ~/.local/share/mise/installs/{claude,claude-code,copilot,opencode,omp}
 chezmoi apply
 ```
 
