@@ -142,8 +142,8 @@ def test_unix_agent_cli_installer_ignores_stale_mise_shims(os_name):
     """
     source = render_template(AGENT_CLI_SCRIPTS[os_name], os_name=os_name)
 
-    # AI CLI 3 種は shim を除外する判定を通す。omp は mise 管理歴が無いので対象外
-    assert source.count("if is_installed ") == 3
+    # AI CLI 4 種すべて、残骸 shim を除外する判定を通す
+    assert source.count("if is_installed ") == 4
     assert '"${mise_root}/shims/"*) return 1' in source
 
 
@@ -194,12 +194,11 @@ def test_stale_shims_are_pruned_and_official_cli_is_installed(tmp_path: Path):
     script = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux")
     home = tmp_path / "home"
     mise = home / ".local/share/mise"
-    for shim in ("claude", "copilot", "opencode"):
+    for shim in ("claude", "copilot", "opencode", "omp"):
         make_executable(mise / "shims" / shim, exit_code=1)
     # shim 名と installs 名は一致しない (claude-code の shim は claude)
     for installed in ("claude", "claude-code", "copilot", "opencode"):
         (mise / "installs" / installed).mkdir(parents=True)
-    make_executable(home / ".local/bin/omp")
 
     result, called = run_agent_cli_installer(script, home, tmp_path)
 
@@ -209,6 +208,8 @@ def test_stale_shims_are_pruned_and_official_cli_is_installed(tmp_path: Path):
     assert "https://claude.ai/install.sh" in called
     assert "https://gh.io/copilot-install" in called
     assert "https://opencode.ai/v2/install" in called
+    # omp も mise の残骸 shim に覆われることがある (実測で報告あり)
+    assert "https://omp.sh/install" in called
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")

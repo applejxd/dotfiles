@@ -25,13 +25,13 @@ export PATH
 mise_root="${HOME}/.local/share/mise"
 
 # shim 名と installs 名は一致しない (claude-code の shim は claude) ので別に消す。
-for stale in claude copilot opencode; do
+for stale in claude copilot opencode omp; do
     if [ -e "${mise_root}/shims/${stale}" ]; then
         echo "mise の残骸 shim を削除します: ${stale}"
         rm -f "${mise_root:?}/shims/${stale}"
     fi
 done
-for stale in claude claude-code copilot opencode; do
+for stale in claude claude-code copilot opencode omp; do
     if [ -e "${mise_root}/installs/${stale}" ]; then
         echo "mise の残骸を削除します: installs/${stale}"
         rm -rf "${mise_root:?}/installs/${stale:?}"
@@ -77,7 +77,7 @@ fi
 #   see docs/change/0006-pi-harness-trial.md
 # 設定は ~/.omp/agent/ だが、omp は ~/.claude も config root として読むため
 # 既存の skills (16 個) は追加設定なしで見える。
-if command -v omp >/dev/null 2>&1; then
+if is_installed omp; then
     echo "oh-my-pi は導入済みです"
 else
     echo "oh-my-pi を導入します..."
