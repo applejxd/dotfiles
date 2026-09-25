@@ -124,9 +124,110 @@ def test_unix_agent_cli_installer_uses_official_sources(os_name):
     assert "--no-modify-path" in source
     # Copilot の対話プロンプト (PATH 未登録時の rc 追記確認) に入らせない
     assert source.index('PATH="${HOME}/.local/bin') < source.index("copilot-install")
-    # 既に入っている CLI は触らない
-    assert source.count("if command -v ") == 4
-    assert "mise" not in source
+    # AI CLI 本体は mise で入れない (公式インストーラーへ一本化)。
+    # 残骸掃除の経緯はコメントに書いてあるので、実行される行だけを見る
+    commands = "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("#")
+    )
+    assert "mise use" not in commands
+    assert "mise install" not in commands
+
+
+@pytest.mark.parametrize("os_name", ["linux", "darwin"])
+def test_unix_agent_cli_installer_ignores_stale_mise_shims(os_name):
+    """残骸 shim を「導入済み」と数えない。
+
+    数えると公式版の導入が永久にスキップされ、PATH 上で先に来る shim が
+    起動し続ける (実測: shims が 50 番目、~/.local/bin が 60 番目)。
+    """
+    source = render_template(AGENT_CLI_SCRIPTS[os_name], os_name=os_name)
+
+    # AI CLI 3 種は shim を除外する判定を通す。omp は mise 管理歴が無いので対象外
+    assert source.count("if is_installed ") == 3
+    assert '"${mise_root}/shims/"*) return 1' in source
+
+
+def run_agent_cli_installer(script: str, home: Path, tmp_path: Path):
+    """curl をスタブ化して導入スクリプトを実際に動かす。"""
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash is not available")
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    for tool in ("bash", "sh", "rm", "ls", "cat"):
+        found = shutil.which(tool)
+        if found:
+            (stub_bin / tool).symlink_to(found)
+    curl_log = tmp_path / "curl.log"
+    curl = stub_bin / "curl"
+    curl.write_text(f'#!/bin/sh\necho "$*" >> "{curl_log}"\nexit 0\n', encoding="utf-8")
+    curl.chmod(0o755)
+    rendered = tmp_path / "install.sh"
+    rendered.write_text(script, encoding="utf-8")
+
+    shims = home / ".local/share/mise/shims"
+    result = subprocess.run(
+        [bash, str(rendered)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={"HOME": str(home), "PATH": f"{shims}:{stub_bin}"},
+    )
+    called = curl_log.read_text(encoding="utf-8") if curl_log.exists() else ""
+    return result, called
+
+
+def make_executable(path: Path, exit_code: int = 0) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"#!/bin/sh\nexit {exit_code}\n", encoding="utf-8")
+    path.chmod(0o755)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
+def test_stale_shims_are_pruned_and_official_cli_is_installed(tmp_path: Path):
+    """残骸 shim しか無い環境では、掃除したうえで公式版を入れる。
+
+    版を解決できない shim は「mise use -g で global default version を指定しろ」
+    と言って止まる。~/.config/mise/config.toml は chezmoi 管理なので、
+    指示どおり mise use -g しても次の apply で宣言が消えて元へ戻る。
+    """
+    script = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux")
+    home = tmp_path / "home"
+    mise = home / ".local/share/mise"
+    for shim in ("claude", "copilot", "opencode"):
+        make_executable(mise / "shims" / shim, exit_code=1)
+    # shim 名と installs 名は一致しない (claude-code の shim は claude)
+    for installed in ("claude", "claude-code", "copilot", "opencode"):
+        (mise / "installs" / installed).mkdir(parents=True)
+    make_executable(home / ".local/bin/omp")
+
+    result, called = run_agent_cli_installer(script, home, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert not list((mise / "shims").iterdir()), "残骸 shim が残っている"
+    assert not list((mise / "installs").iterdir()), "残骸 installs が残っている"
+    assert "https://claude.ai/install.sh" in called
+    assert "https://gh.io/copilot-install" in called
+    assert "https://opencode.ai/v2/install" in called
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
+def test_official_cli_is_not_reinstalled_when_shims_shadow_it(tmp_path: Path):
+    """公式版が既にあるなら、shim を消すだけで入れ直さない。"""
+    script = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux")
+    home = tmp_path / "home"
+    mise = home / ".local/share/mise"
+    for shim in ("claude", "copilot"):
+        make_executable(mise / "shims" / shim, exit_code=1)
+    for cli in ("claude", "copilot", "omp"):
+        make_executable(home / ".local/bin" / cli)
+    make_executable(home / ".opencode/bin/opencode")
+
+    result, called = run_agent_cli_installer(script, home, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert not list((mise / "shims").iterdir()), "残骸 shim が残っている"
+    assert called == "", f"不要な再導入をしている: {called}"
 
 
 def test_github_cli_has_no_separate_apt_install():

@@ -10,21 +10,59 @@ AI CLI (Claude Code / Copilot CLI / OpenCode V2) を各社公式のインスト�
 PATH="${HOME}/.local/bin:${HOME}/.opencode/bin:${PATH}"
 export PATH
 
-if command -v claude >/dev/null 2>&1; then
+# AI CLI を mise 管理から公式インストーラーへ移したとき、mise の shim と
+# installs は残る。これが 2 通りに悪さをする。
+#
+#   - shim は PATH 上で ~/.local/bin より前にあるので、公式版を入れても
+#     起動するのは shim のまま (実測: shims が 50 番目、~/.local/bin が 60 番目)
+#   - 版を解決できない shim は「mise use -g で global default version を
+#     指定しろ」と言って止まる。~/.config/mise/config.toml は chezmoi 管理なので、
+#     言われたとおり mise use -g しても次の apply で宣言が消え、同じ状態へ戻る。
+#     さらに mise registry の opencode は aqua:anomalyco/opencode (V1 系) で、
+#     生成する設定は V2 スキーマなので configuration invalid になる
+#
+# see docs/spec/troubleshooting.md
+mise_root="${HOME}/.local/share/mise"
+
+# shim 名と installs 名は一致しない (claude-code の shim は claude) ので別に消す。
+for stale in claude copilot opencode; do
+    if [ -e "${mise_root}/shims/${stale}" ]; then
+        echo "mise の残骸 shim を削除します: ${stale}"
+        rm -f "${mise_root:?}/shims/${stale}"
+    fi
+done
+for stale in claude claude-code copilot opencode; do
+    if [ -e "${mise_root}/installs/${stale}" ]; then
+        echo "mise の残骸を削除します: installs/${stale}"
+        rm -rf "${mise_root:?}/installs/${stale:?}"
+    fi
+done
+
+# 残骸 shim は実体が無くても command -v を満たす。そのまま「導入済み」と
+# 判定すると公式版の導入が永久にスキップされるので、shim は数えない。
+is_installed() {
+    resolved=$(command -v "$1" 2>/dev/null) || return 1
+    case "${resolved}" in
+        "${mise_root}/shims/"*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+if is_installed claude; then
     echo "Claude Code は導入済みです"
 else
     echo "Claude Code を導入します..."
     curl -fsSL https://claude.ai/install.sh | bash
 fi
 
-if command -v copilot >/dev/null 2>&1; then
+if is_installed copilot; then
     echo "Copilot CLI は導入済みです"
 else
     echo "Copilot CLI を導入します..."
     curl -fsSL https://gh.io/copilot-install | bash
 fi
 
-if command -v opencode >/dev/null 2>&1; then
+if is_installed opencode; then
     echo "OpenCode V2 は導入済みです"
 else
     echo "OpenCode V2 を導入します..."
