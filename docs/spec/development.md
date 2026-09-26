@@ -46,6 +46,18 @@ mise exec -- python3 scripts/lint_templates.py
 uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q
 ```
 
+##### gitleaks はプレビルドを使う
+
+pre-commit の gitleaks フックは、公式リポジトリ（`language: golang`）ではなく
+`mise exec -- gitleaks` を呼ぶローカルフックにしています。版は `mise.toml` の
+`gitleaks = "8.28.0"` が正本です。
+
+公式フックは、初回にフック環境を作るとき Go のツールチェーンを落として
+gitleaks を**ソースからビルド**します。Raspberry Pi 4（RAM 3.7GB、swap 0）では
+このビルドでメモリが尽き、SSH も応答しなくなって電源の抜き差しが要りました
+（2026-09-26）。mise なら GitHub Releases のバイナリを落とすだけで済みます。
+フックの id は `gitleaks` のままなので、`SKIP=gitleaks` はそのまま使えます。
+
 ##### テンプレートの検査
 
 `identify` は `*.tmpl` に一切タグを付けないため、`check-toml` / ruff /

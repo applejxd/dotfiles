@@ -1,9 +1,15 @@
 ---
 repos:
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.28.0
+  # 公式の language: golang はフック環境を作るときに Go でソースビルドし、
+  # Raspberry Pi をメモリ枯渇で固めた。mise のプレビルドを使う
+  # (docs/spec/development.md#gitleaks-はプレビルドを使う)
+  - repo: local
     hooks:
       - id: gitleaks
+        name: Detect hardcoded secrets
+        entry: mise exec -- gitleaks git --pre-commit --redact --staged --verbose
+        language: system
+        pass_filenames: false
 
   - repo: local
     hooks:
