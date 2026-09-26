@@ -264,6 +264,9 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
   運用が `chezmoi update` 中心で `init` を呼ばないため。
   この教訓は `AGENTS.md` へ「`chezmoi init` を前提にした設計にしない」として
   一般化した
+- **2026-09-26**: 2 周目までに入った GUI 一式・VS Code・ClamAV を消す
+  `scripts/raspi/uninstall_gui.sh` を追加。xrdp も手動導入だが i3 セッション
+  前提なので対象に含めた（ユーザー判断）。ブラウザ類と `~/.vscode-server` は残す
 
 ## 終了結果
 
@@ -305,7 +308,8 @@ true
   それを守っている。手当ては
   [トラブルシューティング](../../spec/troubleshooting.md)に記載した
 - **2 周目で入った `code` / GUI 一式 / ClamAV は残っている。** `.chezmoiignore`
-  は展開を止めるだけで、apt で入れたパッケージは消さない。消すなら手動
+  は展開を止めるだけで、apt で入れたパッケージは消さない。終了後に
+  `scripts/raspi/uninstall_gui.sh` を用意し、実機で実行した
 - `.chezmoi.toml.tmpl` を変更したため
   `run chezmoi init to regenerate config file` の警告が出る。判定はもう
   `[data]` に依存しないので実害は無い。気になれば `chezmoi init` を 1 回打つ

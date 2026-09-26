@@ -113,6 +113,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | --- | --- |
 | リポジトリ全体の構成を知る | [プロジェクト構造](spec/structure.md) |
 | Raspberry Pi へ導入する | [Raspberry Pi](spec/structure.md#raspberry-pi) |
+| Raspberry Pi に入った GUI 一式を消す | [入ってしまった GUI 一式を消す](spec/structure.md#入ってしまった-gui-一式を消す) |
 | Herdr を mise で導入・更新する | [Herdr の管理](spec/structure.md#herdr-の管理) |
 | GitHub CLI を mise で導入・更新する | [mise による CLI 管理](spec/structure.md#mise-による-cli-管理) |
 | Claude Code / Copilot CLI / OpenCode を導入・更新する | [AI CLI の導入](spec/structure.md#ai-cli-の導入) |

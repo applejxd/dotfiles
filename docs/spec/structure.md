@@ -139,6 +139,37 @@ Pi でそこに入ると十数分かけてから失敗します。`false` にす
 `140_herdr_integration` / `400_unix` が丸ごと走らなくなりました。
 未導入のものは `mise ls --missing` で確認できます。
 
+### 入ってしまった GUI 一式を消す
+
+raspi 判定が効く前の `apply`（2026-02 の初回と、CHG-0008 の 2 周目）では、
+上の表で「導入しない」としたものが入りました。`.chezmoiignore` は展開を
+止めるだけで、**既に入ったものは消しません**。`scripts/raspi/uninstall_gui.sh`
+でまとめて取り除きます。
+
+```bash
+chezmoi execute-template '{{ includeTemplate "is-raspi" . }}'   # true でないと次の apply で戻る
+scripts/raspi/uninstall_gui.sh --dry-run   # 消すものを表示するだけ
+scripts/raspi/uninstall_gui.sh
+```
+
+| 種類 | 消すもの |
+| --- | --- |
+| apt | `i3 rofi polybar lxappearance xsel`、`code`、`clamav clamav-daemon`、`xrdp xorgxrdp` と、それらを消すと孤立する依存（X サーバ、`i3-wm` など） |
+| APT ソース | `vscode.list` / `vscode.sources` / `microsoft-edge.list`。他のソースが使っていなければ `microsoft.gpg` も |
+| ファイル | `~/.vscode`、`~/.config/Code`、`~/.config/i3`、`~/.config/polybar`、X 系ドットファイル、Cica フォント、xrdp / ClamAV のログと定義 DB |
+| その他 | `xdg-desktop-portal-gnome` の mask、空の `~/thinclient_drives` |
+
+`xrdp` は chezmoi ではなく手動で入れたものですが、セッションが `~/.xsession`
+（`exec i3`）前提なので一緒に消します。次のものは残します。
+
+- `~/.vscode-server`（Remote-SSH で繋いだときに VS Code が使う）
+- chromium / firefox / chromedriver（chezmoi 由来ではない）
+- 実行前から `autoremove` の対象だったパッケージ
+- GitHub CLI の APT 登録（`121_ubuntu` と同じく触らない）
+
+Raspberry Pi と判定できないとき（手がかりは `is-raspi` と同じ）と、対象以外の
+パッケージが依存で巻き込まれるときは、何も消さずに中止します。
+
 Raspberry Pi 固有のシステム設定（memlock など）は chezmoi では管理せず、
 `scripts/raspi/` に置いたまま手動で実行します。
 詳細は [CHG-0008](../change/closed/0008-raspi-branching.md) を参照。

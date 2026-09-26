@@ -77,6 +77,8 @@ chezmoi execute-template '{{ includeTemplate "is-raspi" . }}'   # true なら分
 
 32bit (armhf) は対象外です。導入されないものの一覧、判定の仕組み、
 Pi 固有のシステム設定は [Raspberry Pi](docs/spec/structure.md#raspberry-pi) を参照。
+古い `apply` で入った GUI 一式は `scripts/raspi/uninstall_gui.sh` で消せます
+（[詳細](docs/spec/structure.md#入ってしまった-gui-一式を消す)）。
 
 ### GitHub CLI の mise 管理
 
