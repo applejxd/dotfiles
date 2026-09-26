@@ -3,16 +3,10 @@
 # see https://www.chezmoi.io/user-guide/setup/#create-a-config-file-on-a-new-machine-automatically
 
 {{- /*
-Raspberry Pi の判定。3 つの手がかりの OR にする (単独ではどれも取りこぼす)。
-理由と各手がかりの守備範囲は docs/spec/structure.md#raspberry-pi が正本。
+Raspberry Pi の判定はここに置かない。chezmoi update が chezmoi init を
+呼ばないため、[data] に入れると判定が古いまま固定される。
+判定は .chezmoitemplates/is-raspi が単一ソース。
 */ -}}
-{{- $osrelease := .chezmoi.kernel.osrelease | lower }}
-{{- $is_raspi := and (eq .chezmoi.os "linux") (or
-      (stat "/proc/device-tree/model")
-      (contains "raspi" $osrelease)
-      (contains "-rpi-" $osrelease)
-      (stat "/etc/rpi-issue")) }}
-
 {{- $http_proxy := env "http_proxy" }}
 {{- $https_proxy := env "https_proxy" }}
 {{- $no_proxy := "localhost,127.0.0.1,::1,.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16" }}
@@ -62,11 +56,6 @@ args = [
 {{- end }}
 
 [data]
-{{- if $is_raspi }}
-    # 参照側は {{ "{{- if and (hasKey . \"is_raspi\") .is_raspi }}" }} の形で書く
-    # (init し直していないマシンでは鍵自体が無いため)
-    is_raspi = true
-{{- end }}
 {{- if $http_proxy }}
     http_proxy = "{{ $http_proxy }}"
 {{- end }}

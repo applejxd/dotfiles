@@ -4,7 +4,25 @@ set -euo pipefail
 
 sudo -v
 
-{{- $raspi := and (hasKey . "is_raspi") .is_raspi }}
+{{- $raspi := eq (includeTemplate "is-raspi" .) "true" }}
+
+#-------------------#
+# apt ソースの掃除  #
+#-------------------#
+# 壊れた・重複した登録を残すと apt update が毎回警告を出す。
+# 掃除は update より前に行う (警告のもとを先に消すため)。
+
+# VS Code: code パッケージが置く vscode.sources と、111_microsoft が過去に
+# 置いた vscode.list が二重登録になる。110_native は Raspberry Pi では
+# 無視されるため、掃除はここに置く (全 Linux で走る)。
+if [[ -e /etc/apt/sources.list.d/vscode.sources && -e /etc/apt/sources.list.d/vscode.list ]]; then
+    echo "VS Code の APT ソースが二重なので自前の .list を削除します"
+    sudo rm -f /etc/apt/sources.list.d/vscode.list
+fi
+
+# GitHub CLI の APT 登録には触らない (鍵の更新も削除もしない)。
+# gh は mise へ移したが、既存の登録・鍵・認証は自動で変更しない方針。
+# NO_PUBKEY の警告が出る場合の手当ては docs/spec/troubleshooting.md を参照。
 
 # Refresh
 echo "Ubuntu パッケージを更新します..."

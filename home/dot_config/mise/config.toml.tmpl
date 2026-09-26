@@ -2,7 +2,7 @@
 # https://mise.jdx.dev/configuration.html
 # 宣言の理由は docs/spec/structure.md#mise-による-cli-管理 が正本
 
-{{- $raspi := and (hasKey . "is_raspi") .is_raspi }}
+{{- $raspi := eq (includeTemplate "is-raspi" .) "true" }}
 
 [tools]
 gh = "latest"

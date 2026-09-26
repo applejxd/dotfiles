@@ -43,7 +43,7 @@
 | --- | --- | --- | --- | --- | --- |
 | [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | 段 2（常用）に着手。`enabledProviders = ["claude"]` の効果は常用の初回に判定する。使って決まった設定の回収（段 2.5）を計画へ追加 | 段 2 の冒頭で `~/.claude/commands/*.md` がスラッシュコマンドに出るか | 2026-09-25 |
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる** | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-25 |
-| [0008](0008-raspi-branching.md) | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える | In progress | 段 5 の 1 周目で判定方法・ruby・失敗の伝播の 3 つが誤りだった。**直した版は実機で未検証** | 実機で `chezmoi init` からやり直し、apply が完走するか | 2026-09-26 |
+| [0008](0008-raspi-branching.md) | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える | In progress | 2 周目で ruby は実証（956 秒失敗 → 57.3 秒成功）。分岐は `init` 未実行で未発動。判定を `includeTemplate` へ移した | 3 周目の実機 apply で分岐が発動するか | 2026-09-26 |
 
 ## 保留
 

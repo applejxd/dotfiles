@@ -29,7 +29,8 @@
 | 2 | 既存バグの修正（WSL ガードの不一致） | **完了**（2026-09-25） |
 | 3 | `all_compile` を python 限定へ絞る | **完了**（2026-09-25） |
 | 4 | `is_raspi` の導入と分岐の実装 | **完了**（2026-09-25） |
-| 5 | 実機の Raspberry Pi で `chezmoi init` から通す | **進行中**（2026-09-26 に 1 周目。3 つの誤りが出た） |
+| 5 | 実機の Raspberry Pi で `chezmoi init` から通す | **進行中**（2026-09-26 に 2 周目。ruby は実証、分岐は未発動） |
+| 6 | 判定を `chezmoi update` だけで効く形にする | **完了**（2026-09-26） |
 
 ## 現在地
 
@@ -91,6 +92,34 @@ os-release でも判定できない（`raspbian` になるのは 32bit 版だけ
 > `.chezmoi.toml.tmpl` は `lint_templates.py` の除外対象なので、
 > **lint では検出されない**。`chezmoi execute-template --init` で確かめる。
 
+### 判定を `[data]` から `includeTemplate` へ移した（2 周目の教訓）
+
+2 周目の実機適用で **raspi 分岐が 1 つも発動しなかった**。原因は判定の置き場所。
+
+```text
+chezmoi: warning: config file template has changed, run chezmoi init to regenerate config file
+```
+
+`[data] is_raspi` は `chezmoi init` のときにしか書かれない。**`chezmoi update` は
+`git pull` + `apply` であって `init` を呼ばない**ため、判定が生成されず全分岐が
+「非 raspi」に倒れた。実機では `code` を 219 MB 更新し、GUI パッケージと ClamAV も
+そのまま導入された。
+
+**`[data]` 方式が間違っていたわけではない。** `init` を都度実行すれば成立する。
+問題は、普段の運用が `chezmoi update` 中心で **`init` を忘れやすい**こと。
+`apply` は警告を出すが、大量の出力に埋もれて見逃す（実際に見逃した）。
+「README に手順を書く」で守らせる設計が弱かった。
+**運用が `chezmoi update` 中心なら、`init` を前提にした設計を選んではいけない。**
+
+`home/.chezmoitemplates/is-raspi` へ移し、参照側は毎回評価する形にした。
+
+```gotmpl
+{{ $raspi := eq (includeTemplate "is-raspi" .) "true" }}
+```
+
+`is_raspi` をデータで渡せば検出より優先されるので、`lint_templates.py` の
+raspi 軸と手動での強制はそのまま使える。
+
 ### ruby のソースビルドが実機で失敗した — 原因は `all_compile` だった
 
 実測 **956 秒で BUILD FAILED**。
@@ -149,18 +178,18 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
 
 ## 未解決点
 
-- **段 5 の 1 周目で 3 つの誤りが出た**（2026-09-26）。判定方法・ruby・
-  失敗の伝播。いずれも直したが、**直した版はまだ実機で通していない**
-- **`[settings.ruby] compile = false` の効きを実機で確認していない。**
-  `jdx/ruby` に `ruby-4.0.7.arm64_linux.tar.gz` があることは確認したが、
-  Pi で実際にプレビルドが選ばれるかは見ていない。もし選ばれなければ
-  ソースビルドではなく**即エラー**になるので、失敗は早く分かる
+- **raspi 分岐は実機でまだ 1 度も発動していない。** 2 周目は `init` 未実行で
+  判定が生成されず、全部「非 raspi」に倒れた。3 周目（`includeTemplate` 版）が
+  本当の初検証になる
+- **実機に前回の適用結果が残っている。** 2 周目で `code` / GUI / ClamAV が
+  入ってしまった。分岐が効いても**既に入ったものは消えない**（`.chezmoiignore`
+  は展開しないだけで、apt で入れたパッケージは残る）。消したいなら手動
+- **`121_ubuntu` は `run_once_` なので、内容が変わった今回は再実行される。**
+  apt ソースの掃除（VS Code の重複、GitHub CLI の鍵）はそこで走る
 - **`rust` / `go` は Raspberry Pi でも残した。** どちらもプリコンパイル済み
   バイナリが arm64 にあるので ruby のような問題は起きないはずだが、未確認
 - `LC_ALL=ja_JP.UTF-8` を `shellenv.sh` が無条件に設定する。ロケールが
   生成されていないと毎コマンド警告が出る可能性がある。実機で確認する
-- `.chezmoi.toml.tmpl` で判定するため、**`chezmoi init` を再実行しないと
-  `is_raspi` が現れない**。既存マシンでは鍵が無く既存動作のままになる
 - **`.chezmoi.toml.tmpl` は `lint_templates.py` の除外対象**。テンプレート
   コメントの `*/` 事故のように、lint では捕まらない壊れ方がある。
   変更したら `chezmoi execute-template --init` で必ず描画を確かめる
@@ -194,6 +223,9 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
 | `125_mise.sh.tmpl` | `mise install` の失敗を警告に留める | ruby 1 個の失敗で後続 3 スクリプトが丸ごと走らなかった | **完了** |
 | `mise/config.toml.tmpl` | raspi では `[settings.ruby] compile = false` | 既定のフォールバックに入ると十数分かけてから失敗する | **完了** |
 | raspi で `ruby` / `gem:tmuxinator` を外す | **やらない**（一度やって撤回） | arm64 のプレビルドが `jdx/ruby` に実在する。原因は `all_compile` だった | **撤回** |
+| `121_ubuntu.sh.tmpl` | VS Code の APT ソース重複を掃除 | `vscode.list` と `vscode.sources` が二重登録され `apt update` が毎回警告。`110_native` は raspi で無視されるのでここに置く | **完了** |
+| `111_microsoft.sh.tmpl` | `vscode.sources` があれば `.list` を作らない | 重複の再発を防ぐ | **完了** |
+| GitHub CLI の APT 鍵を自動更新 | **やらない**（一度書いて撤回） | `121_ubuntu` は gh の APT 登録・鍵に触らない方針で、`test_github_cli_has_no_separate_apt_install` が守っている。手当ては `troubleshooting.md` へ | **撤回** |
 | 32bit（armhf）対応 | **やらない** | AI CLI 4 本とも arch 判定で拒否する。分岐では解決しない | **対象外** |
 | Pi 固有設定の chezmoi 管理 | **やらない** | `scripts/raspi/browser_mem.sh` のままにする | **対象外** |
 
@@ -218,6 +250,14 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
 - **2026-09-26**: テンプレートコメントに `*/` を書くと Go テンプレートの
   コメントが早期終了すると判明（`**/etc/...` で踏んだ）。
   `.chezmoi.toml.tmpl` は lint の除外対象なので検出されない
+- **2026-09-26**: 2 周目の実機適用。**ruby は実証、分岐は 1 つも発動せず**。
+  `all_compile` の縮小が効き、ruby はプレビルドで 57.3 秒（前回は 956 秒で失敗）。
+  一方 `chezmoi init` を通していなかったため `[data] is_raspi` が無く、
+  raspi 分岐が全部「非 raspi」に倒れた
+- **2026-09-26**: 判定を `[data]` から `.chezmoitemplates/is-raspi` へ移した。
+  運用が `chezmoi update` 中心で `init` を呼ばないため。
+  この教訓は `AGENTS.md` へ「`chezmoi init` を前提にした設計にしない」として
+  一般化した
 
 ## 終了結果
 

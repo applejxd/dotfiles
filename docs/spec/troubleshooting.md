@@ -480,6 +480,49 @@ curl -fsSL https://omp.sh/install | sh
 > いないと再実行されないので、`chezmoi apply` で走らせ直したいときは
 > `chezmoi state delete-bucket --bucket=scriptState` を使う（項目 2）。
 
+### `apt update` が GitHub CLI で `NO_PUBKEY` 警告を出す
+
+`gh` を mise 管理へ移す前に登録した APT リポジトリが残っていて、署名鍵が
+失効している。症状は `apt update` のたびに次が出ること。
+
+```text
+GPG エラー: https://cli.github.com/packages stable InRelease:
+  公開鍵を利用できないため、以下の署名は検証できませんでした: NO_PUBKEY ...
+```
+
+**chezmoi は自動で直さない。** 既存の APT 登録・鍵・認証設定は自動削除しない
+方針のため（[mise による CLI 管理](structure.md#mise-による-cli-管理)）。
+手で選ぶ。`gh` は mise から入るので、消しても困らない。
+
+```bash
+# 登録の場所を確認する
+grep -rl 'cli\.github\.com' /etc/apt/sources.list.d/
+
+# A) もう使わないので消す（mise 版の gh はそのまま使える）
+sudo rm /etc/apt/sources.list.d/github-cli.list
+sudo apt-get update
+
+# B) APT 版の gh を使い続けるので鍵だけ入れ直す
+wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg |
+  sudo tee /usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null
+sudo chmod 0644 /usr/share/keyrings/githubcli-archive-keyring.gpg
+sudo apt-get update
+```
+
+どちらを選んでも `mise which gh` の結果は変わらない。
+
+### `apt update` が VS Code のソース二重登録を警告する
+
+`vscode.list`（`111_microsoft` が作る）と `vscode.sources`（`code` パッケージ
+自身が置く deb822 形式）が競合している。**これは `chezmoi apply` が自動で直す**
+（`121_ubuntu` が `.sources` のあるときに `.list` を削除する）。
+手で消すなら次のとおり。
+
+```bash
+sudo rm -f /etc/apt/sources.list.d/vscode.list
+sudo apt-get update
+```
+
 ## ログの確認
 
 ```bash

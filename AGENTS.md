@@ -72,4 +72,12 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 - コミットメッセージは Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）
 - 運用手順やコマンドを追加したら `README.md` と `docs/` の該当ファイル・`index.md` を
   更新する
+- **`README.md` は「最短で動かす」ためだけに保つ。** 各項目は数行 + `docs/` への
+  リンクに留め、背景・一覧表・失敗談・仕組みの説明は `docs/` へ逃がす。
+  同じ手順を README と `docs/` の両方に書かない
+- **`chezmoi init` を前提にした設計にしない。** 普段の運用は `chezmoi update`
+  （`git pull` + `apply`）が中心で `init` を呼ばない。マシン判定などは
+  `.chezmoitemplates/` の共有テンプレートへ置き、`apply` のたびに評価させる。
+  `chezmoi.toml` の `[data]` は `init` 時にしか更新されない
+  （[CHG-0008](docs/change/0008-raspi-branching.md)）
 - ユーザーへの説明とドキュメントは日本語で書く

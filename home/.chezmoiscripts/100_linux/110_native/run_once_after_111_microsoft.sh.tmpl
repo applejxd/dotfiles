@@ -9,6 +9,7 @@ export DEBIAN_FRONTEND=noninteractive
 ARCH="$(dpkg --print-architecture)"
 KEYRING="/usr/share/keyrings/microsoft.gpg"
 VSCODE_LIST="/etc/apt/sources.list.d/vscode.list"
+VSCODE_SOURCES="/etc/apt/sources.list.d/vscode.sources"
 VSCODE_LINE="deb [arch=${ARCH} signed-by=${KEYRING}] https://packages.microsoft.com/repos/code stable main"
 
 sudo -v
@@ -23,7 +24,16 @@ if [[ ! -s "$KEYRING" ]]; then
 fi
 
 #---[ 2) VS Code: repo & command ]---
-if [[ ! -e "$VSCODE_LIST" ]] || ! grep -Fqx "$VSCODE_LINE" "$VSCODE_LIST" 2>/dev/null; then
+# code パッケージ自身が deb822 形式の /etc/apt/sources.list.d/vscode.sources を
+# 置く。自前の vscode.list と二重登録になり apt update が毎回警告を出すので、
+# パッケージ側があるときは自前の .list を作らない (あれば消す)。
+if [[ -e "$VSCODE_SOURCES" ]]; then
+  if [[ -e "$VSCODE_LIST" ]]; then
+    echo "VS Code の APT ソースが二重なので自前の .list を削除します"
+    sudo rm -f "$VSCODE_LIST"
+    changed=1
+  fi
+elif [[ ! -e "$VSCODE_LIST" ]] || ! grep -Fqx "$VSCODE_LINE" "$VSCODE_LIST" 2>/dev/null; then
   echo "$VSCODE_LINE" | sudo tee "$VSCODE_LIST" >/dev/null
   changed=1
 fi

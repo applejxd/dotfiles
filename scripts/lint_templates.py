@@ -114,7 +114,8 @@ def target_users(text: str) -> tuple[str, ...]:
 
 
 def target_raspi(text: str) -> tuple[bool, ...]:
-    return RASPI if "is_raspi" in text else RASPI[:1]
+    # includeTemplate 経由の参照 (is-raspi) と、データ直参照 (is_raspi) の両方を拾う
+    return RASPI if ("is-raspi" in text or "is_raspi" in text) else RASPI[:1]
 
 
 def render(

@@ -63,14 +63,35 @@ OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別ス
 Claude Code / Copilot CLI / OpenCode V2 / oh-my-pi の公式インストーラーはいずれも
 x64 と arm64 しか受け付けず、`armv7l` を検出すると明示的に終了します。
 
-判定は `home/.chezmoi.toml.tmpl` が次の 3 つの OR で行い、
-`[data] is_raspi = true` として全テンプレートへ配ります。単独ではどれも取りこぼします。
+判定は `home/.chezmoitemplates/is-raspi` が単一ソースです。次の 3 つの OR で
+判定し、`"true"` か空文字を返します。単独ではどれも取りこぼします。
 
 | 手がかり | 拾えるもの |
 | --- | --- |
 | `/proc/device-tree/model` の存在 | ハードウェアの申告。OS を問わず Raspberry Pi なら必ずある |
 | `.chezmoi.kernel.osrelease` に `raspi` / `-rpi-` | Ubuntu for Raspberry Pi の `-raspi` フレーバー、Raspberry Pi OS の `+rpt-rpi-` |
 | `/etc/rpi-issue` の存在 | Raspberry Pi OS のイメージ |
+
+参照側はこう書きます。
+
+```gotmpl
+{{ $raspi := eq (includeTemplate "is-raspi" .) "true" }}
+```
+
+**`chezmoi.toml` の `[data]` には置きません。** `[data]` でも判定自体は動きますが、
+値が書かれるのは `chezmoi init` のときだけです。普段の運用は `chezmoi update`
+（`git pull` + `apply`）が中心で、**これは `init` を呼びません**。
+
+`init` を都度実行すれば `[data]` 方式でも成立します。ただし実機ではそれを忘れ、
+判定が生成されないまま全分岐が「非 raspi」に倒れました。`apply` は
+`config file template has changed, run chezmoi init to regenerate config file`
+と警告しますが、**大量の出力に埋もれて見逃します**。
+
+手順で守らせる設計をやめ、`includeTemplate` で `apply` のたびに評価する形に
+しました。`init` を実行してもしなくても同じ結果になります。
+
+データで上書きもできます。`is_raspi` を渡すと検出より優先されるので、
+テスト（`lint_templates.py` の raspi 軸）と手動での強制に使えます。
 
 **`/etc/rpi-issue` だけでは足りません。** 実機は Ubuntu 22.04 for Raspberry Pi で、
 このファイルは Raspberry Pi OS 専用のため存在しませんでした。
