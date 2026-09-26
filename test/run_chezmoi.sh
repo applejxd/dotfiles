@@ -82,8 +82,11 @@ log_result() {
     local timestamp
     timestamp=$(date '+%H:%M:%S')
     TEST_RESULTS+=("[$timestamp] $step: $status $details")
+    # 優先度: FAILED > UNDETERMINED > SUCCESS。DEFERRED は後段に判定を委ねるだけ
     if [ "$status" = "FAILED" ] || [ "$status" = "TIMEOUT" ]; then
         TEST_STATUS="FAILED"
+    elif [ "$status" = "UNDETERMINED" ] && [ "$TEST_STATUS" = "SUCCESS" ]; then
+        TEST_STATUS="UNDETERMINED"
     fi
 }
 
@@ -102,6 +105,8 @@ show_summary() {
 
     if [ "$TEST_STATUS" = "FAILED" ]; then
         exit 1
+    elif [ "$TEST_STATUS" = "UNDETERMINED" ]; then
+        exit 2
     fi
 }
 
@@ -258,7 +263,7 @@ if [ "$diff_exit_code" -ne 0 ]; then
     #   走らせないので、素の機械では diff が先に落ちるのが正常な姿になる。
     #   ここで止めると apply に一度も到達できない。
     if [ "${APPLY}" = "1" ]; then
-        log_result "diff" "UNDETERMINED" "(exit code: $diff_exit_code / apply で判定する)"
+        log_result "diff" "DEFERRED" "(exit code: $diff_exit_code / apply で判定する)"
         echo "⏭️  apply モードなので続行します (diff は判定材料にしない)"
     else
         log_result "diff" "FAILED" "(exit code: $diff_exit_code)"
@@ -275,7 +280,7 @@ mapfile -t diff_files < <(grep "^diff --git" <<< "$diff_output" \
 file_count=${#diff_files[@]}
 
 # 失敗した diff の件数は判定材料にならない (途中で止まっているため)。
-# 上で UNDETERMINED を記録済みなので、ここでは二重に記録しない。
+# 上で DEFERRED を記録済みなので、ここでは二重に記録しない。
 if [ "$diff_exit_code" -ne 0 ]; then
     echo "📊 (diff は途中で失敗したので件数は参考値: ${file_count})"
 elif [ "$file_count" -gt 0 ]; then

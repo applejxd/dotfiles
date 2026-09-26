@@ -36,10 +36,15 @@ echo "✅ 完了：Ubuntu パッケージを更新しました"
 {{- if not $raspi }}
 
 # Known folders
-echo "既知のフォルダを整理します..."
-LANG=C xdg-user-dirs-update --force
-rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュメント ミュージック ピクチャ ビデオ
-echo "✅ 完了：既知のフォルダを整理しました"
+# xdg-user-dirs-update は Desktop 版にしか無い (Server / WSL では skip)
+if command -v xdg-user-dirs-update >/dev/null 2>&1; then
+    echo "既知のフォルダを整理します..."
+    LANG=C xdg-user-dirs-update --force
+    rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュメント ミュージック ピクチャ ビデオ
+    echo "✅ 完了：既知のフォルダを整理しました"
+else
+    echo "xdg-user-dirs-update が無いので既知のフォルダの整理を飛ばします"
+fi
 {{- end }}
 
 # Basics
