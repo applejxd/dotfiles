@@ -51,10 +51,76 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 | Windows native | Winget、Scoop、Chocolatey、mise（gh / Herdr / AI CLI）、PowerShell |
 | Ubuntu | apt、mise |
 | WSL | Windows連携設定、apt、mise |
+| Raspberry Pi（64bit / ヘッドレス） | apt、mise（GUI・VS Code・ソースビルドを除く） |
 | macOS | Homebrew、mise |
 
 OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別スクリプトで
 吸収します。秘密情報はソースへ直接書かず、Bitwardenとsops/ageを使用します。
+
+### Raspberry Pi
+
+64bit の Raspberry Pi OS（ヘッドレス）を対象にします。**32bit（armhf）は対象外**です。
+Claude Code / Copilot CLI / OpenCode V2 / oh-my-pi の公式インストーラーはいずれも
+x64 と arm64 しか受け付けず、`armv7l` を検出すると明示的に終了します。
+
+判定は `home/.chezmoi.toml.tmpl` が次の 3 つの OR で行い、
+`[data] is_raspi = true` として全テンプレートへ配ります。単独ではどれも取りこぼします。
+
+| 手がかり | 拾えるもの |
+| --- | --- |
+| `/proc/device-tree/model` の存在 | ハードウェアの申告。OS を問わず Raspberry Pi なら必ずある |
+| `.chezmoi.kernel.osrelease` に `raspi` / `-rpi-` | Ubuntu for Raspberry Pi の `-raspi` フレーバー、Raspberry Pi OS の `+rpt-rpi-` |
+| `/etc/rpi-issue` の存在 | Raspberry Pi OS のイメージ |
+
+**`/etc/rpi-issue` だけでは足りません。** 実機は Ubuntu 22.04 for Raspberry Pi で、
+このファイルは Raspberry Pi OS 専用のため存在しませんでした。
+64bit の Raspberry Pi OS は `/etc/os-release` が `ID=debian` になるので、
+os-release でも判定できません（`raspbian` は 32bit 版のみ）。
+
+参照側は `{{- if and (hasKey . "is_raspi") .is_raspi }}` の形で書きます。
+`chezmoi init` をし直していないマシンには鍵自体が無いため、
+**鍵の不在を「Raspberry Pi ではない」として扱う**必要があります。
+
+| 対象 | Raspberry Pi での扱い |
+| --- | --- |
+| `100_linux/110_native/`（VS Code と拡張 20 個） | 導入しない |
+| i3 / rofi / polybar / lxappearance / xsel | 導入しない |
+| `.config/i3`、`.config/polybar`、`.Xmodmap`、`.xsession`、`.xsessionrc` | 展開しない |
+| `xdg-user-dirs-update`、`systemctl --user mask` | 実行しない（ヘッドレスでは失敗して apply が止まる） |
+| ClamAV | 導入しない（`clamd` が常駐で 1GB 超を占める） |
+| `pipx:nvitop` | 宣言しない（NVIDIA GPU が前提） |
+| `[settings.python] compile` | 宣言しない（Tkinter が要らない） |
+| `[settings.ruby] compile` | `false` を宣言する（後述） |
+| Cica フォント | fontconfig が無ければスクリプト側で早期終了 |
+
+### ruby はプレビルドで入れる
+
+`ruby` と `gem:tmuxinator` は Raspberry Pi でも宣言します。mise は既定で
+`jdx/ruby` のプレビルド版を落とし、**Linux arm64 (glibc) 向けも用意されています**。
+
+実機で ruby のソースビルドが 956 秒かけて失敗したのは、`all_compile = true` が
+**全言語で**プリコンパイル済みバイナリを禁じていたためです。この設定を
+`[settings.python] compile` へ絞ったことで、ruby はプレビルドに戻ります。
+
+Raspberry Pi では加えて `[settings.ruby] compile = false` を宣言します。
+mise の既定は「プレビルドが無ければ `ruby-build` へフォールバック」で、
+Pi でそこに入ると十数分かけてから失敗します。`false` にすると
+**プレビルドが無い時点で即エラー**になり、長時間の徒労を避けられます。
+
+`libyaml-dev` は `121_ubuntu` の build tools に入れてあります。プレビルドを
+使う限り不要ですが、x86 / WSL がソースビルドへ落ちたときの保険です
+（`psych` 拡張のビルドに要ります）。
+
+### ツール 1 個の失敗で apply を止めない
+
+`125_mise` は `mise install` が失敗しても**警告に留めます**。実機では ruby の
+ビルドが落ちただけでスクリプトが非ゼロを返し、後続の `126_agent_cli` /
+`140_herdr_integration` / `400_unix` が丸ごと走らなくなりました。
+未導入のものは `mise ls --missing` で確認できます。
+
+Raspberry Pi 固有のシステム設定（memlock など）は chezmoi では管理せず、
+`scripts/raspi/` に置いたまま手動で実行します。
+詳細は [CHG-0008](../change/0008-raspi-branching.md) を参照。
 
 ## mise による CLI 管理
 
@@ -85,10 +151,36 @@ mise の実体または shim が選ばれることを確認してください。
 
 mise の各スクリプトは `run_onchange_after_` とし、設定テンプレートのハッシュを
 含めます。ツール宣言が変われば一括導入が再実行されます。
+
 Unix の MCP 登録は `common.toml` の `[[mcp]]` のうち `.claude.json` の
 user scope に未登録のものだけを対象にし、既存のカスタム設定は上書きしません。
 壊れた JSON はエラーで停止します。詳細は
 [MCP サーバ](agent-permissions.md#mcp-サーバ)を参照。
+
+### mise の settings
+
+`[settings]` に置いている宣言と、その理由です。
+`config.toml.tmpl` 側のコメントは参照だけに留めています。
+
+| 設定 | 対象 | 理由 |
+| --- | --- | --- |
+| `experimental = true` | 全 OS | task runner を使うため |
+| `sops.age_key_file` | 全 OS | API キーの復号先を固定するため |
+| `[settings.python] compile = true` | raspi 以外 | プリコンパイル済みバイナリは Tkinter を含まないため。[参照](https://www.python.jp/install/ubuntu/index.html) |
+| `[settings.ruby] compile = false` | raspi のみ | [ruby はプレビルドで入れる](#ruby-はプレビルドで入れる)を参照 |
+
+**`all_compile` は使いません。** この設定は「**全言語で**プリコンパイル済み
+バイナリを使わない」という意味で、Tkinter という目的に対して範囲が広すぎます。
+以前は `all_compile = true` を置いていたため node と ruby までソースビルドに
+なっていました。mise 側も `all_compile` の自動既定を非推奨化しており、
+2027.8.0 で削除予定です。
+
+### npm backend で入れている 2 つ
+
+| ツール | 理由 |
+| --- | --- |
+| `npm:@bitwarden/cli` | snap 版が動作しなくなったため。bw 不在でも `apply` は完走し、その `apply` 中に入ります。[セキュリティ](security.md#bitwarden連携) |
+| `npm:@anthropic-ai/sandbox-runtime` | Claude Code の sandbox が使う seccomp フィルタ。WSL2 では無いと sandbox から脱出できます。mise の隔離先を `settings.json` の `sandbox.seccomp.applyPath` へ橋渡しする必要があり、生成は `scripts/agents/generate.py` が行います。[WSL2 での抜け穴](agent-permissions.md#wsl2-での抜け穴-seccomp-フィルタ) |
 
 ## AI CLI の導入
 

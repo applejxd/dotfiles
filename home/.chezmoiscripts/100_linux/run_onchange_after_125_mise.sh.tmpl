@@ -33,11 +33,32 @@ if ! type python >/dev/null 2>&1; then
 fi
 
 mise self-update
+
+# ツール 1 個の失敗で apply 全体を巻き添えにしない
+# (docs/spec/structure.md#ツール-1-個の失敗で-apply-を止めない)
+set +e
 mise -C "$HOME" install
+mise_status=$?
+set -e
+
 # npm backend (例: @bitwarden/cli) の shim 生成タイミング保険
 mise reshim
 
-echo "✅ 完了：開発ツールをインストール/更新しました"
+if [[ "$mise_status" -ne 0 ]]; then
+    cat >&2 <<'EOF'
+
+⚠️  一部の開発ツールを導入できませんでした。
+    残りの導入は続行します。未導入のものは次で確認できます:
+      mise ls --missing
+    個別に入れ直す例:
+      mise install ruby
+    詳細は docs/spec/troubleshooting.md を参照。
+
+EOF
+    echo "⚠️  完了：一部の開発ツールが入っていません"
+else
+    echo "✅ 完了：開発ツールをインストール/更新しました"
+fi
 
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 

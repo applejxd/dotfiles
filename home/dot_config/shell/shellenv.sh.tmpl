@@ -128,8 +128,9 @@ fi
 
 {{- if eq .chezmoi.os "linux" }}
 # for TeX Live (local)
+# バイナリのディレクトリ名はアーキテクチャごとに違う (x86_64-linux / aarch64-linux)
 if [ -d "${HOME}/.texlive" ]; then
-    export PATH="${HOME}/.texlive/main/bin/x86_64-linux:${PATH}"
+    export PATH="${HOME}/.texlive/main/bin/{{ if eq .chezmoi.arch "arm64" }}aarch64{{ else }}x86_64{{ end }}-linux:${PATH}"
     export MANPATH="${HOME}/.texlive/main/texmf-dist/doc/man${MANPATH:+:${MANPATH}}"
     export INFOPATH="${HOME}/.texlive/main/texmf-dist/doc/info${INFOPATH:+:${INFOPATH}}"
 fi

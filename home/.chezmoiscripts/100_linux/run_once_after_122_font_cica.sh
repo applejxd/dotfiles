@@ -4,6 +4,14 @@
 
 set -euo pipefail
 
+# fontconfig が無い環境 (ヘッドレスの Raspberry Pi OS Lite など) では、
+# fc-list が無いまま「未導入」と判定されて進み、末尾の fc-cache で
+# command not found になる。set -e で apply 全体が止まるので先に降りる。
+if ! command -v fc-cache >/dev/null 2>&1 || ! command -v fc-list >/dev/null 2>&1; then
+    echo "fontconfig が無いので Cica フォントの導入を飛ばします"
+    exit 0
+fi
+
 CICA_VERSION="v5.0.3"
 CICA_URL="https://github.com/miiton/Cica/releases/download/${CICA_VERSION}/Cica_${CICA_VERSION}.zip"
 FONT_DIR="$HOME/.local/share/fonts/Cica"

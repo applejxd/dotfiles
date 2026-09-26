@@ -57,8 +57,16 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   `description` は二重引用符で囲む（囲まないと CLI がスキルを黙って読み飛ばす）
 - AI CLI の permission / hook / sandbox は `home/dot_config/agents/common.toml.tmpl` が
   単一ソース。生成先（`~/.claude/settings.json` 等）を直接編集しない
-- `common.toml.tmpl` のコメントは「その行を編集するときに要る注記」だけにする。
-  仕組み・判断基準・既知の不具合・実測値は `docs/spec/agent-permissions.md` が正本
+- **設定ファイル・スクリプトのコメントは「その行を編集するときに要る注記」だけにする。**
+  仕組み・判断基準・既知の不具合・実測値・経緯は `docs/` が正本で、コメントからは
+  参照先だけを示す（`# see docs/spec/structure.md#見出し`）。
+  同じ説明をコメントと `docs/` の両方に書かない（更新時に必ず片方が古くなる）
+  - 正本の対応: `common.toml.tmpl` → `docs/spec/agent-permissions.md`、
+    `mise/config.toml.tmpl` と `.chezmoiscripts/` → `docs/spec/structure.md`
+  - コメントに残してよい例: 非自明な 1 行の意図、公式ドキュメントの URL、
+    消すと壊れる理由の 1 文
+  - `docs/` へ移すもの: 背景・比較・代替案・実測値・失敗談・「なぜ他の方法を
+    採らなかったか」
 - 秘密情報はソースに書かず `SUDO_PASSWORD` / Bitwarden / sops + age を使う
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない
 - コミットメッセージは Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）

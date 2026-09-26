@@ -4,6 +4,8 @@ set -euo pipefail
 
 sudo -v
 
+{{- $raspi := and (hasKey . "is_raspi") .is_raspi }}
+
 # Refresh
 echo "Ubuntu パッケージを更新します..."
 sudo apt-get update && sudo apt-get upgrade -y
@@ -13,42 +15,46 @@ echo "✅ 完了：Ubuntu パッケージを更新しました"
 # config #
 #--------#
 
+{{- if not $raspi }}
+
 # Known folders
 echo "既知のフォルダを整理します..."
 LANG=C xdg-user-dirs-update --force
 rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュメント ミュージック ピクチャ ビデオ
 echo "✅ 完了：既知のフォルダを整理しました"
+{{- end }}
 
 # Basics
 echo "基本的なツールをインストール/更新します..."
 sudo apt-get install -y \
     wget curl git unzip tree tig jq \
-    python3-tomlkit manpages-ja xsel xdg-utils \
-    i3 rofi polybar lxappearance
+    python3-tomlkit manpages-ja xdg-utils
+
+{{- if not $raspi }}
+
+# GUI (デスクトップ環境。ヘッドレスでは入れない)
+sudo apt-get install -y \
+    xsel i3 rofi polybar lxappearance
+{{- end }}
 
 # Build tools
+# libyaml-dev は ruby の psych 拡張に要る (docs/spec/structure.md#ruby-はプレビルドで入れる)
 sudo apt install -y \
-    make cmake gcc g++ clang libclang-dev pkg-config build-essential
+    make cmake gcc g++ clang libclang-dev pkg-config build-essential \
+    libyaml-dev
 
 # sandbox tools
-# Copilot CLI / Claude Code の Linux sandbox は Microsoft MXC の bubblewrap
-# backend で動く。network.enforcementMode = "firewall" のとき、backend は
-#   bwrap / slirp4netns / unshare / nsenter / iptables / ip6tables
-#   および iptables-restore / ip6tables-restore
-# を使い、どれか欠けると **起動を拒否する**。bash / ripgrep など sandbox を
-# 経由するツールが全て実行不能になる。不足は 1 つずつしか報告されないので
-# まとめて入れる。
-#   bubblewrap  -> bwrap (0.5.0 以上。一部モードは 0.8 以上)
-#   slirp4netns -> 非特権ユーザでのネットワーク名前空間
-#   util-linux  -> unshare / nsenter (Ubuntu では essential だが明示する)
-#   iptables    -> iptables / ip6tables と各 restore、および nft バックエンド
-# 出典: microsoft/mxc backends/bubblewrap/common/src/proxy_network.rs の probe
+# 1 つでも欠けると AI CLI の sandbox が起動を拒否する
+# (docs/research/agents/sandbox-capabilities.md#35-linux-の依存)
 sudo apt-get -y install bubblewrap slirp4netns util-linux iptables socat
+
+{{- if not $raspi }}
 
 # use gtk instead of gnome for GUI in i3wm
 # see https://www.simple-web-system.work/entry/2023/09/02/012031
 echo "i3wm で GUI アプリケーションを使うための設定を行います..."
 systemctl --user mask xdg-desktop-portal-gnome
+{{- end }}
 
 echo "✅ 完了：基本的なツールをインストール/更新しました"
 
@@ -60,7 +66,9 @@ echo "✅ 完了：ユーティリティツールをインストール/更新し
 {{-   end }}
 {{- end }}
 
-{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
+{{- if and (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) (not $raspi) }}
+# Raspberry Pi では入れない。clamd が常駐で 1GB 超を占める
+# (docs/spec/structure.md#raspberry-pi)
 echo "ClamAV をインストール/更新します..."
 
 echo "Installing security tools..." >&2

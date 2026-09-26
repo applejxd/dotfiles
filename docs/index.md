@@ -62,6 +62,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | --- | --- | --- | --- |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。段 2（常用）に着手。使って決まった設定の回収は段 2.5 | 段 2 の冒頭で `/mcp list` ではなくスラッシュコマンドを見る |
 | [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み | 段 2（共有ランタイムとハーネスの節分け） |
+| [CHG-0008](change/0008-raspi-branching.md) | In progress | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える。実機 1 周目で判定方法と ruby が誤りだった | 直した版で実機の apply が完走するか |
 
 ## 判断待ち・障害
 
@@ -108,6 +109,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 目的 | 文書 |
 | --- | --- |
 | リポジトリ全体の構成を知る | [プロジェクト構造](spec/structure.md) |
+| Raspberry Pi へ導入する | [Raspberry Pi](spec/structure.md#raspberry-pi) |
 | Herdr を mise で導入・更新する | [Herdr の管理](spec/structure.md#herdr-の管理) |
 | GitHub CLI を mise で導入・更新する | [mise による CLI 管理](spec/structure.md#mise-による-cli-管理) |
 | Claude Code / Copilot CLI / OpenCode を導入・更新する | [AI CLI の導入](spec/structure.md#ai-cli-の導入) |

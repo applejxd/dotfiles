@@ -66,6 +66,33 @@ chezmoi apply             # gitconfig user セクション、Unix では sops ag
 
 依存関係スクリプトをスキップしたい場合は `chezmoi apply --exclude=scripts`。
 
+### Raspberry Pi (64bit / ヘッドレス)
+
+手順は Ubuntu / WSL と同じですが、**`chezmoi init` を必ず通してください**。
+Raspberry Pi かどうかは `~/.config/chezmoi/chezmoi.toml` の `is_raspi` で判定し、
+その鍵は `chezmoi init` のときにしか書かれません。設定ファイルを手で持ち込むと
+GUI 一式や VS Code まで入ります。
+
+```bash
+chezmoi init applejxd
+chezmoi apply
+grep is_raspi ~/.config/chezmoi/chezmoi.toml   # is_raspi = true なら分岐が有効
+```
+
+Raspberry Pi では GUI (i3 / rofi / polybar)、VS Code と拡張、ClamAV、
+`pipx:nvitop`、Python のソースビルドを導入しません。
+`ruby` は導入します（mise が arm64 のプレビルドを落とします）が、
+プレビルドが無いときにソースビルドへ落ちないよう
+`[settings.ruby] compile = false` を宣言します。
+
+**32bit (armhf) の Raspberry Pi OS は対象外です。** Claude Code / Copilot CLI /
+OpenCode V2 / oh-my-pi の公式インストーラーはいずれも x64 と arm64 しか
+受け付けず、`armv7l` では終了します。
+
+memlock などの Raspberry Pi 固有のシステム設定は chezmoi では管理せず、
+`scripts/raspi/` のスクリプトを手動で実行します。
+詳細は [Raspberry Pi](docs/spec/structure.md#raspberry-pi) を参照。
+
 ### GitHub CLI の mise 管理
 
 GitHub CLI (`gh`) は Windows / Linux / WSL / macOS 共通で
