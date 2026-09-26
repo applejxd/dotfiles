@@ -71,7 +71,7 @@ package installation とネットワーク依存を持ち込むため却下す�
    (`~/.local/share/{mise/installs,uv}/python/*`) も直接見るので、shim が
    PATH に無くても sudo なしで復旧できる。`[interpreters.py]` の値は
    `chezmoi init` のときに確定し、同じ apply の中では変えられないため
-5. まっさらな環境では `000_unix/run_before_005_python.sh` がファイル適用より
+5. まっさらな環境では `000_unix/run_before_005_python.sh.tmpl` がファイル適用より
    先に 3.11 以上を 1 つ確保する。無ければ uv をユーザ領域へ入れて
    `uv python install` する。sudo は使わず、失敗しても apply は止めない
 6. Windows quick start は Python 3.12 を chezmoi より先に導入する
@@ -109,7 +109,7 @@ package installation とネットワーク依存を持ち込むため却下す�
 
 `[interpreters.py]` が焼かれるのは `chezmoi init` の瞬間で、その時点では
 3.11 以上が無いことがある（まっさらな機械、あるいは `python3` が 3.10 の
-Ubuntu 22.04）。後から `run_before_005_python.sh` が uv で入れる Python は
+Ubuntu 22.04）。後から `run_before_005_python.sh.tmpl` が uv で入れる Python は
 PATH に出ないため、`python3` を指したままだと `modify` script が全滅する。
 
 そこで PATH 上に 3.11 以上が無いときは、設定が固定パスの shim
@@ -121,8 +121,14 @@ Docker の cold start 検証で実測。**残差分 16 件 → 1 件**になっ�
 ある warm start だったためで、初回導入の証明にはなっていなかった。
 
 設定側（`home/.chezmoi.toml.tmpl`）と用意する側
-（`home/.chezmoiscripts/000_unix/run_before_005_python.sh`）でパスがずれると
+（`home/.chezmoiscripts/000_unix/run_before_005_python.sh.tmpl`）でパスがずれると
 静かに壊れるため、`test/agents/test_python_requirement.py` が一致を検査する。
+
+**どちらも `.chezmoi.homeDir` を基準にする。** スクリプト側を `$HOME` にすると、
+`chezmoi apply --destination` のように両者が一致しない場面でずれる。そのため
+スクリプトをテンプレート（`.sh.tmpl`）にして homeDir を埋め込んだ。
+Python の実体の探索（uv / mise の導入先）は実行時の `$HOME` のままでよい。
+そちらは実際にファイルが置かれる場所だからである。
 
 ## 関連 ADR
 

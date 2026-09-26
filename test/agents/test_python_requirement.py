@@ -9,6 +9,7 @@ see docs/adr/0003-require-python-311-for-agent-configuration.md
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -78,12 +79,46 @@ def test_missing_tomllib_reports_the_offending_interpreter():
 # ファイル適用 (= modify script) より先に 3.11 以上を 1 つ確保する。
 # ---------------------------------------------------------------------------
 
-BEFORE_SCRIPT = ROOT / "home" / ".chezmoiscripts" / "000_unix" / "run_before_005_python.sh"
+BEFORE_TEMPLATE = (
+    ROOT / "home" / ".chezmoiscripts" / "000_unix" / "run_before_005_python.sh.tmpl"
+)
 
 # 実物の Python を用意しなくても分岐を通せるよう、`-c 'import tomllib'` の
 # 成否だけを固定したスタブを置く。
 WITH_TOMLLIB = "#!/bin/sh\nexit 0\n"
 WITHOUT_TOMLLIB = "#!/bin/sh\nexit 1\n"
+
+
+def render_before_script(home: Path, destination: Path) -> Path:
+    """`.chezmoi.homeDir` を差し替えて描画し、実行できる形で置く。
+
+    このスクリプトは shim のパスを `$HOME` ではなく chezmoi の homeDir から
+    取る。両者がずれても正しい場所へ張ることを確かめたいので、テストからは
+    別々の値を渡せるようにしておく。
+    """
+    chezmoi = shutil.which("chezmoi")
+    if chezmoi is None:
+        pytest.skip("chezmoi is not installed")
+    context = {"chezmoi": {"homeDir": str(home), "os": "linux", "username": "tester"}}
+    source = (
+        "{{ with "
+        + json.dumps(json.dumps(context))
+        + " | fromJson }}\n"
+        + BEFORE_TEMPLATE.read_text(encoding="utf-8")
+        + "\n{{ end }}"
+    )
+    result = subprocess.run(
+        [chezmoi, "--source", str(ROOT), "execute-template"],
+        input=source,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    script = destination / "run_before_005_python.sh"
+    script.write_text(result.stdout, encoding="utf-8")
+    script.chmod(0o755)
+    return script
 
 
 def write_stub(path: Path, body: str) -> Path:
@@ -112,12 +147,15 @@ def make_sandbox(tmp_path: Path) -> tuple[Path, Path]:
     return bin_dir, home
 
 
-def run_before_script(bin_dir: Path, home: Path) -> subprocess.CompletedProcess[str]:
+def run_before_script(
+    bin_dir: Path, home: Path, *, chezmoi_home: Path | None = None
+) -> subprocess.CompletedProcess[str]:
     bash = shutil.which("bash")
     if bash is None:
         pytest.skip("bash is not available")
+    script = render_before_script(chezmoi_home or home, bin_dir.parent)
     return subprocess.run(
-        [bash, str(BEFORE_SCRIPT)],
+        [bash, str(script)],
         capture_output=True,
         text=True,
         check=False,
@@ -191,8 +229,8 @@ def test_before_script_uses_uv_without_sudo(tmp_path: Path):
 
 def test_before_script_runs_ahead_of_file_application():
     """`run_before_` でないと modify script より後になり意味がない。"""
-    assert BEFORE_SCRIPT.name.startswith("run_before_")
-    assert BEFORE_SCRIPT.parent.name == "000_unix"
+    assert BEFORE_TEMPLATE.name.startswith("run_before_")
+    assert BEFORE_TEMPLATE.parent.name == "000_unix"
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
@@ -218,15 +256,42 @@ def test_before_script_links_the_interpreter_shim(tmp_path: Path):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
+def test_shim_follows_chezmoi_home_not_the_environment(tmp_path: Path):
+    """shim は `$HOME` ではなく chezmoi の homeDir 側へ張る。
+
+    設定を焼く側 (`.chezmoi.toml.tmpl`) が `.chezmoi.homeDir` を使うので、
+    張る側が `$HOME` を見ていると両者がずれたときに静かに壊れる
+    (`chezmoi apply --destination` など)。
+    Python の実体は実行時の `$HOME` 側にあるものを指す。
+    """
+    bin_dir, home = make_sandbox(tmp_path)
+    chezmoi_home = tmp_path / "chezmoi-home"
+    chezmoi_home.mkdir()
+    write_stub(bin_dir / "python3", WITHOUT_TOMLLIB)
+    real = home / ".local/share/uv/python/cpython-3.13.11-linux-x86_64-gnu/bin/python3.13"
+    write_stub(real, WITH_TOMLLIB)
+
+    result = run_before_script(bin_dir, home, chezmoi_home=chezmoi_home)
+
+    assert result.returncode == 0, result.stderr
+    assert not (home / ".local/bin/chezmoi-python3").exists(), "$HOME 側へ張っている"
+    shim = chezmoi_home / ".local/bin/chezmoi-python3"
+    assert shim.is_symlink(), "chezmoi の homeDir 側へ張られていない"
+    assert shim.resolve() == real.resolve()
+
+
 def test_shim_path_matches_the_config_template():
     """スクリプトが張る先と、設定が指す先が一致していること。
 
-    別ファイルなので、片方だけ変えると静かに壊れる。
+    別ファイルなので、片方だけ変えると静かに壊れる。どちらも
+    `.chezmoi.homeDir` を基準にしていることまで確かめる。
     """
-    script = BEFORE_SCRIPT.read_text(encoding="utf-8")
-    config = (
-        BEFORE_SCRIPT.parents[2] / ".chezmoi.toml.tmpl"
-    ).read_text(encoding="utf-8")
+    script = BEFORE_TEMPLATE.read_text(encoding="utf-8")
+    config = (BEFORE_TEMPLATE.parents[2] / ".chezmoi.toml.tmpl").read_text(
+        encoding="utf-8"
+    )
     shim_rel = ".local/bin/chezmoi-python3"
     assert shim_rel in script
     assert shim_rel in config
+    assert ".chezmoi.homeDir" in script, "スクリプトが $HOME 依存に戻っている"
+    assert ".chezmoi.homeDir" in config

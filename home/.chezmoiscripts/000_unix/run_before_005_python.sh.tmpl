@@ -23,7 +23,12 @@ has_tomllib() {
 # init 時に 3.11 以上が PATH に無いと、設定にはこの shim が焼かれる
 # (see home/.chezmoi.toml.tmpl)。ここで実体へ張り直す。
 # run_before_ なので modify script より先に走る。
-SHIM="${HOME}/.local/bin/chezmoi-python3"
+#
+# ★`$HOME` ではなく chezmoi の .chezmoi.homeDir を埋め込む。
+#   設定を焼く側と張る側で参照元が違うと、両者がずれたときに静かに壊れる
+#   (`chezmoi apply --destination` など HOME と一致しない場合)。
+#   uv / mise の探索は実行時の $HOME のままでよい。実体がそこにあるため。
+SHIM="{{ .chezmoi.homeDir }}/.local/bin/chezmoi-python3"
 
 link_shim() {
     # 自分自身を指してループさせない

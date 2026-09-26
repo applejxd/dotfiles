@@ -161,17 +161,5 @@ def test_interpreter_falls_back_to_shim_without_modern_python(tmp_path, availabl
     # chezmoi は直接 exec するので、~ ではなく絶対パスである必要がある
     assert 'command = "/' in command, command
 
-
-def test_python_bootstrap_maintains_the_interpreter_shim():
-    """005 が shim を張る。設定が指す先と実体が一致していること。
-
-    設定側 (`.chezmoi.toml.tmpl`) と用意する側 (`005_python.sh`) が
-    別ファイルなので、パスがずれると静かに壊れる。
-    """
-    script = (
-        ROOT / "home" / ".chezmoiscripts" / "000_unix" / "run_before_005_python.sh"
-    ).read_text(encoding="utf-8")
-    assert '.local/bin/chezmoi-python3' in script
-    assert "link_shim" in script
-    config = CONFIG_TEMPLATE.read_text(encoding="utf-8")
-    assert '.local/bin/chezmoi-python3' in config
+    # 設定側と用意する側 (005) のパス一致は
+    # test/agents/test_python_requirement.py が検査する (同じことを二度書かない)

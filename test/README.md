@@ -156,7 +156,7 @@ chezmoi: .claude/settings.json: exec: "python3": executable file not found in $P
 ```
 
 順序の問題だった。`chezmoi init` が `[interpreters.py]` を焼く時点では
-3.11 以上どころか `python3` すら無く、後から `run_before_005_python.sh` が
+3.11 以上どころか `python3` すら無く、後から `run_before_005_python.sh.tmpl` が
 uv で入れる Python は PATH に出ない。
 
 固定パスの shim（`~/.local/bin/chezmoi-python3`）を挟んで解決した。
