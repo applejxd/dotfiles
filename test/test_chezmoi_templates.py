@@ -128,18 +128,50 @@ def interpreter_command(rendered: str) -> str:
 @pytest.mark.parametrize(
     ("available", "expected"),
     [
-        ([], 'command = "python3"'),
-        (["python3"], 'command = "python3"'),
         (["python3", "python3.11"], 'command = "python3.11"'),
         (["python3", "python3.11", "python3.13"], 'command = "python3.13"'),
         (["python3.12", "python3.14"], 'command = "python3.14"'),
     ],
 )
 def test_interpreter_prefers_newest_versioned_python(tmp_path, available, expected):
-    """tomllib のある 3.11 以上を優先する。無ければ素の python3 に戻す。
+    """PATH に 3.11 以上があれば、その中で最も新しいものを使う。
 
     system の python3 が 3.10 以下だと modify script が
     `No module named 'tomllib'` で落ち、apply 全体が止まるため。
+    バージョン無しの `python3` だけの場合は shim へ倒す
+    (下の test_interpreter_falls_back_to_shim_without_modern_python)。
     """
     bin_dir = fake_executables(tmp_path, available)
     assert interpreter_command(render_config(path_dir=bin_dir)) == expected
+
+
+@pytest.mark.parametrize("available", [[], ["python3"], ["python3", "python3.10"]])
+def test_interpreter_falls_back_to_shim_without_modern_python(tmp_path, available):
+    """3.11 以上が PATH に無ければ、005 が張る shim の絶対パスを指す。
+
+    この設定が焼かれるのは `chezmoi init` の瞬間で、まっさらな機械では
+    まだ 3.11 以上が無い。後から uv で入る Python は PATH に出ないので、
+    `python3` を指したままだと modify script が全滅する
+    (素の Ubuntu で実測: 残差分 16 件すべて modify)。
+    `python3` が 3.10 の Ubuntu 22.04 でも同じ結末になる。
+    """
+    bin_dir = fake_executables(tmp_path, available)
+    command = interpreter_command(render_config(path_dir=bin_dir))
+    assert command.endswith('/.local/bin/chezmoi-python3"'), command
+    # chezmoi は直接 exec するので、~ ではなく絶対パスである必要がある
+    assert 'command = "/' in command, command
+
+
+def test_python_bootstrap_maintains_the_interpreter_shim():
+    """005 が shim を張る。設定が指す先と実体が一致していること。
+
+    設定側 (`.chezmoi.toml.tmpl`) と用意する側 (`005_python.sh`) が
+    別ファイルなので、パスがずれると静かに壊れる。
+    """
+    script = (
+        ROOT / "home" / ".chezmoiscripts" / "000_unix" / "run_before_005_python.sh"
+    ).read_text(encoding="utf-8")
+    assert '.local/bin/chezmoi-python3' in script
+    assert "link_shim" in script
+    config = CONFIG_TEMPLATE.read_text(encoding="utf-8")
+    assert '.local/bin/chezmoi-python3' in config

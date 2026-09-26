@@ -19,6 +19,31 @@ has_tomllib() {
     "$1" -c 'import tomllib' >/dev/null 2>&1
 }
 
+# chezmoi の [interpreters.py] が指す固定パス。
+# init 時に 3.11 以上が PATH に無いと、設定にはこの shim が焼かれる
+# (see home/.chezmoi.toml.tmpl)。ここで実体へ張り直す。
+# run_before_ なので modify script より先に走る。
+SHIM="${HOME}/.local/bin/chezmoi-python3"
+
+link_shim() {
+    # 自分自身を指してループさせない
+    if [ "$1" = "$SHIM" ]; then
+        return 0
+    fi
+    # ★ここで apply を止めない。このスクリプトの契約は「失敗しても先へ進む」。
+    #   dirname は使わずパラメータ展開で済ませる (外部コマンドを増やさない)。
+    shim_dir="${SHIM%/*}"
+    if ! mkdir -p "$shim_dir" 2>/dev/null; then
+        echo "⚠️  ${shim_dir} を作成できませんでした (modify script の Python 解決は次回へ)" >&2
+        return 0
+    fi
+    if ! ln -sfn "$1" "$SHIM" 2>/dev/null; then
+        echo "⚠️  ${SHIM} を張れませんでした (modify script の Python 解決は次回へ)" >&2
+        return 0
+    fi
+    echo "modify script 用の Python を ${SHIM} へ張りました -> $1"
+}
+
 # 見つけた実行ファイルのパスを出力する。無ければ非ゼロで返る。
 find_python() {
     local candidate resolved
@@ -43,6 +68,7 @@ find_python() {
 
 if found=$(find_python); then
     echo "Python 3.11 以上を確認しました: ${found}"
+    link_shim "$found"
     exit 0
 fi
 
@@ -68,6 +94,7 @@ fi
 
 if found=$(find_python); then
     echo "✅ Python 3.11 以上を用意しました: ${found}"
+    link_shim "$found"
 else
     echo "⚠️  Python を用意できませんでした。agent 設定の生成は次回に持ち越されます。" >&2
     echo "    詳細: docs/spec/troubleshooting.md" >&2

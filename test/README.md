@@ -147,31 +147,34 @@ everything's installed!
 false を返す。`compose.yaml` の `tmpfs: - /home/tester:exec,...` で解消した。
 **これはハーネスの欠陥であってリポジトリの不具合ではなかった。**
 
-### 未解決: `modify_` スクリプトが `python3` を解決できない
+### 解決済み: `modify_` スクリプトが `python3` を解決できない
 
-素の Ubuntu で apply すると、`modify_` が全滅する（残差分 16 件）。
+素の Ubuntu で apply すると `modify_` が全滅していた（残差分 16 件）。
 
 ```text
 chezmoi: .claude/settings.json: exec: "python3": executable file not found in $PATH
 ```
 
-順序の問題。
+順序の問題だった。`chezmoi init` が `[interpreters.py]` を焼く時点では
+3.11 以上どころか `python3` すら無く、後から `run_before_005_python.sh` が
+uv で入れる Python は PATH に出ない。
 
-1. `chezmoi init` が `.chezmoi.toml.tmpl` を描画し、`lookPath` で見つかった
-   Python を `[interpreters.py]` に焼き込む
-2. この時点では 3.11 以上どころか `python3` すら無いので `command = "python3"` になる
-3. `run_before_005_python.sh` が uv で Python 3.13 を入れるが、
-   実体は `~/.local/share/uv/python/.../bin/python3.13` で **PATH に出ない**
-4. `modify_` は `python3` を探して失敗する
+固定パスの shim（`~/.local/bin/chezmoi-python3`）を挟んで解決した。
+init 時に PATH 上で 3.11 以上が見つからなければ設定はこの shim を指し、
+005 が毎 apply その実体へ張り直す（`run_before_` なので modify より先に走る）。
+`python3` が 3.10 の Ubuntu 22.04 も同じ経路で救われる。
 
-実機の Raspberry Pi で通ったのは、mise の Python が既に PATH にある
-**warm start** だったため。初回導入の証明にはなっていない。
+**実測で残差分 16 件 → 1 件**（残りはスクリプト 6 件で、これは diff に出るのが正常）。
 
-Ubuntu 22.04 のような `python3` が 3.10 の環境でも、`tomllib` が無いので
-同じ結末になりうる（[ADR-0003](../docs/adr/0003-require-python-311-for-agent-configuration.md)）。
+### 環境都合と切り分けるもの
 
-> **`Dockerfile` に `python3` を足せば見かけ上は消えるが、足さない。**
-> それは依存漏れを隠す行為で、このハーネスが検出したい当のものになる。
+次は**リポジトリの不具合ではない**。合否ではなく「未判定」として扱う。
+
+| 症状 | 実体 |
+| --- | --- |
+| `no space left on device` | tmpfs の上限。`$HOME` 使用率 95% 以上なら UNDETERMINED にする |
+| apply が 15 分で打ち切り | 回線速度。実測で mise の取得が 145 kB/s まで落ちた |
+| `導入できなかった CLI:claude` | ネットワークか GitHub のレート制限 |
 
 ### 未着手
 

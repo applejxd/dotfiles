@@ -5,6 +5,7 @@ set -euo pipefail
 : "${APPLY:=0}"                # 0=dry-run, 1=apply
 : "${IS_RASPI:=0}"             # 1 なら Raspberry Pi 扱いを注入する
 : "${SOURCE_MODE:=clone}"      # clone=追跡ファイルのみ / mount=作業ツリーそのまま
+: "${INCLUDE_DIRTY:=0}"        # clone に未コミットの変更 (追跡ファイル) を載せる
 : "${SKIP_INIT:=0}"            # 1 なら init を省く (chezmoi update の経路)
 : "${APPLY_TWICE:=0}"          # 1 なら apply を 2 回回して冪等性を見る
 # NOTE: 変数名に CHEZMOI_ARGS は使えない。chezmoi 自身が予約しており、
@@ -44,6 +45,26 @@ resolve_source() {
     echo "📥 clone しました (追跡ファイルのみ): $CHEZMOI_SOURCE"
     echo "   commit: $(git -C "$CHEZMOI_SOURCE" rev-parse --short HEAD)"
     log_result "clone" "SUCCESS" "($(git -C "$CHEZMOI_SOURCE" rev-parse --short HEAD))"
+
+    # 未コミットの変更を載せる (追跡ファイルのみ)。
+    # コミット前に検証したいときに使う。/repo は読み取り専用なので
+    # --no-optional-locks で index を書かせない。
+    # 未追跡ファイルは載らない (それを検出するのが clone の目的でもある)。
+    if [ "${INCLUDE_DIRTY}" = "1" ]; then
+        if patch=$(git --no-optional-locks -C /repo diff HEAD 2>/dev/null) \
+            && [ -n "$patch" ]; then
+            if printf '%s\n' "$patch" | git -C "$CHEZMOI_SOURCE" apply -; then
+                echo "📝 未コミットの変更を載せました (追跡ファイルのみ)"
+                log_result "include-dirty" "SUCCESS"
+            else
+                echo "❌ 未コミットの変更を載せられませんでした"
+                log_result "include-dirty" "FAILED"
+                show_summary
+            fi
+        else
+            echo "📝 未コミットの変更はありません"
+        fi
+    fi
 }
 
 # CHEZMOI_TEST_ARGS は空白区切りの追加引数。意図的に分割するので配列に展開する。
@@ -287,9 +308,16 @@ if [ "${APPLY}" = "1" ]; then
   else
       exit_code=$?
       echo "----------------------------------------"
-      if [ $exit_code -eq 124 ]; then
+      # ★容量枯渇は「リポジトリの不具合」ではなく環境の限界。
+      #   tmpfs の上限に当たっただけで FAILED にすると、判定の意味が濁る。
+      home_use=$(df -P "$HOME" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
+      if [ -n "${home_use:-}" ] && [ "$home_use" -ge 95 ]; then
+          echo "💾 \$HOME の使用率が ${home_use}% です。容量不足の可能性が高い"
+          echo "   compose.yaml の tmpfs size を増やして再実行してください"
+          log_result "apply" "UNDETERMINED" "(\$HOME 使用率 ${home_use}% / 容量不足)"
+      elif [ $exit_code -eq 124 ]; then
           echo "⏰ Apply timed out after 15 minutes"
-          log_result "apply" "TIMEOUT" "(apply timed out after 15 minutes)"
+          log_result "apply" "UNDETERMINED" "(15 分で打ち切り)"
       else
           echo "❌ Apply failed with exit code: $exit_code"
           log_result "apply" "FAILED" "(apply command failed with exit code: $exit_code)"

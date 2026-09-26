@@ -103,6 +103,27 @@ package installation とネットワーク依存を持ち込むため却下す�
 - Python 本体は Windows bootstrap の明示的な前提として残る
 - ADR-0001 の `common.toml` 単一ソースと外部設定共存の決定は変更しない
 
+### 追記: 固定パスの shim で解決する（2026-09-26）
+
+**決定は変えない。** 実現方法だけ補う。
+
+`[interpreters.py]` が焼かれるのは `chezmoi init` の瞬間で、その時点では
+3.11 以上が無いことがある（まっさらな機械、あるいは `python3` が 3.10 の
+Ubuntu 22.04）。後から `run_before_005_python.sh` が uv で入れる Python は
+PATH に出ないため、`python3` を指したままだと `modify` script が全滅する。
+
+そこで PATH 上に 3.11 以上が無いときは、設定が固定パスの shim
+`~/.local/bin/chezmoi-python3` を指す。`005` が毎 apply その実体へ張り直す
+（`run_before_` なので `modify` より先に走る）。
+
+Docker の cold start 検証で実測。**残差分 16 件 → 1 件**になった。
+実機の Raspberry Pi で従来も通っていたのは、mise の Python が既に PATH に
+ある warm start だったためで、初回導入の証明にはなっていなかった。
+
+設定側（`home/.chezmoi.toml.tmpl`）と用意する側
+（`home/.chezmoiscripts/000_unix/run_before_005_python.sh`）でパスがずれると
+静かに壊れるため、`test/agents/test_python_requirement.py` が一致を検査する。
+
 ## 関連 ADR
 
 - [ADR-0001](0001-external-tool-config-coexistence.md): `common.toml` を単一ソースに

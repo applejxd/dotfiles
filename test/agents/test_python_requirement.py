@@ -99,7 +99,8 @@ def make_sandbox(tmp_path: Path) -> tuple[Path, Path]:
     home = tmp_path / "home"
     bin_dir.mkdir()
     home.mkdir()
-    for tool in ("bash", "sh", "mktemp", "rm", "uname"):
+    # python の発見とネットワーク遮断が主眼なので、素朴なファイル操作の道具は通す
+    for tool in ("bash", "sh", "mktemp", "rm", "uname", "mkdir", "ln"):
         found = shutil.which(tool)
         if found:
             (bin_dir / tool).symlink_to(found)
@@ -192,3 +193,40 @@ def test_before_script_runs_ahead_of_file_application():
     """`run_before_` でないと modify script より後になり意味がない。"""
     assert BEFORE_SCRIPT.name.startswith("run_before_")
     assert BEFORE_SCRIPT.parent.name == "000_unix"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
+def test_before_script_links_the_interpreter_shim(tmp_path: Path):
+    """見つけた Python を chezmoi が指す固定パスへ張る。
+
+    `.chezmoi.toml.tmpl` は init 時に 3.11 以上が PATH に無いと、この shim を
+    `[interpreters.py]` へ焼く。後から uv で入る Python は PATH に出ないので、
+    ここで橋渡ししないと modify script が全滅する
+    (素の Ubuntu で実測: 残差分 16 件すべて modify)。
+    """
+    bin_dir, home = make_sandbox(tmp_path)
+    write_stub(bin_dir / "python3", WITHOUT_TOMLLIB)
+    real = home / ".local/share/uv/python/cpython-3.13.11-linux-x86_64-gnu/bin/python3.13"
+    write_stub(real, WITH_TOMLLIB)
+
+    result = run_before_script(bin_dir, home)
+
+    assert result.returncode == 0, result.stderr
+    shim = home / ".local/bin/chezmoi-python3"
+    assert shim.is_symlink(), "shim が張られていない"
+    assert shim.resolve() == real.resolve()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
+def test_shim_path_matches_the_config_template():
+    """スクリプトが張る先と、設定が指す先が一致していること。
+
+    別ファイルなので、片方だけ変えると静かに壊れる。
+    """
+    script = BEFORE_SCRIPT.read_text(encoding="utf-8")
+    config = (
+        BEFORE_SCRIPT.parents[2] / ".chezmoi.toml.tmpl"
+    ).read_text(encoding="utf-8")
+    shim_rel = ".local/bin/chezmoi-python3"
+    assert shim_rel in script
+    assert shim_rel in config
