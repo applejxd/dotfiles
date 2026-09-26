@@ -6,6 +6,7 @@ set -euo pipefail
 : "${IS_RASPI:=0}"             # 1 なら Raspberry Pi 扱いを注入する
 : "${SOURCE_MODE:=clone}"      # clone=追跡ファイルのみ / mount=作業ツリーそのまま
 : "${INCLUDE_DIRTY:=0}"        # clone に未コミットの変更 (追跡ファイル) を載せる
+: "${PREPARE_PYTHON:=0}"       # diff の前に run_before_005_python だけ走らせる
 : "${SKIP_INIT:=0}"            # 1 なら init を省く (chezmoi update の経路)
 : "${APPLY_TWICE:=0}"          # 1 なら apply を 2 回回して冪等性を見る
 # NOTE: 変数名に CHEZMOI_ARGS は使えない。chezmoi 自身が予約しており、
@@ -36,7 +37,11 @@ resolve_source() {
     fi
     CHEZMOI_SOURCE="$HOME/src/dotfiles"
     mkdir -p "$(dirname "$CHEZMOI_SOURCE")"
-    if ! git clone --quiet /repo "$CHEZMOI_SOURCE"; then
+    # ~/.gitconfig は検証対象なので書かない。-c では効かない
+    # see test/README.md#ソースは既定で-clone-する
+    REPO_GITCONFIG=$(mktemp)
+    printf '[safe]\n\tdirectory = /repo\n\tdirectory = /repo/.git\n' > "$REPO_GITCONFIG"
+    if ! GIT_CONFIG_GLOBAL="$REPO_GITCONFIG" git clone --quiet /repo "$CHEZMOI_SOURCE"; then
         echo "❌ /repo の clone に失敗しました"
         log_result "clone" "FAILED"
         show_summary
@@ -51,18 +56,19 @@ resolve_source() {
     # --no-optional-locks で index を書かせない。
     # 未追跡ファイルは載らない (それを検出するのが clone の目的でもある)。
     if [ "${INCLUDE_DIRTY}" = "1" ]; then
-        if patch=$(git --no-optional-locks -C /repo diff HEAD 2>/dev/null) \
-            && [ -n "$patch" ]; then
-            if printf '%s\n' "$patch" | git -C "$CHEZMOI_SOURCE" apply -; then
-                echo "📝 未コミットの変更を載せました (追跡ファイルのみ)"
-                log_result "include-dirty" "SUCCESS"
-            else
-                echo "❌ 未コミットの変更を載せられませんでした"
-                log_result "include-dirty" "FAILED"
-                show_summary
-            fi
-        else
+        if ! patch=$(GIT_CONFIG_GLOBAL="$REPO_GITCONFIG" git --no-optional-locks -C /repo diff HEAD); then
+            echo "❌ /repo の未コミットの変更を読めませんでした"
+            log_result "include-dirty" "FAILED"
+            show_summary
+        elif [ -z "$patch" ]; then
             echo "📝 未コミットの変更はありません"
+        elif printf '%s\n' "$patch" | git -C "$CHEZMOI_SOURCE" apply -; then
+            echo "📝 未コミットの変更を載せました (追跡ファイルのみ)"
+            log_result "include-dirty" "SUCCESS"
+        else
+            echo "❌ 未コミットの変更を載せられませんでした"
+            log_result "include-dirty" "FAILED"
+            show_summary
         fi
     fi
 }
@@ -243,6 +249,31 @@ case "$resolved_source" in
         show_summary
         ;;
 esac
+
+# dryrun / place はスクリプトを走らせないので、modify script 用の Python を
+# 実際の apply と同じ順序 (run_before_ が先) でここだけ用意する。
+# see test/README.md#使い方
+if [ "${PREPARE_PYTHON}" = "1" ]; then
+    echo
+    echo "== run_before_005_python (modify script 用の Python) =="
+    shim="$HOME/.local/bin/chezmoi-python3"
+    if ! prepare_script=$("${CZ[@]}" execute-template \
+            < "$("${CZ[@]}" source-path)/.chezmoiscripts/000_unix/run_before_005_python.sh.tmpl"); then
+        log_result "prepare-python" "FAILED" "(005 の描画に失敗)"
+        show_summary
+    fi
+    if ! bash -c "$prepare_script"; then
+        log_result "prepare-python" "FAILED" "(005 が非 0 で終了)"
+        show_summary
+    fi
+    if [ -x "$shim" ]; then
+        log_result "prepare-python" "SUCCESS" "($(readlink "$shim"))"
+    else
+        # 005 は取得に失敗しても apply を止めない契約なので、ここで判定する
+        log_result "prepare-python" "UNDETERMINED" "(Python を用意できず。回線を確認)"
+        show_summary
+    fi
+fi
 
 echo
 echo "== chezmoi diff (dry-run) =="

@@ -20,6 +20,7 @@ x-common: &common
     SKIP_INIT: ${SKIP_INIT:-0} # 1 なら init を省く (chezmoi update の経路)
     APPLY_TWICE: ${APPLY_TWICE:-0} # 1 なら apply を 2 回回して冪等性を見る
     INCLUDE_DIRTY: ${INCLUDE_DIRTY:-0} # 1 なら未コミットの変更 (追跡分) も載せる
+    PREPARE_PYTHON: ${PREPARE_PYTHON:-0} # 1 なら diff の前に 005 だけ走らせる
     # chezmoi 自身が CHEZMOI_ARGS を export する (`chezmoi cd` のサブシェル等)。
     # 衝突するとテストの diff/apply に不正な引数が渡るため別名にしている。
     CHEZMOI_TEST_ARGS: ${CHEZMOI_TEST_ARGS:-}

@@ -74,8 +74,8 @@ echo
 "${compose[@]}" build "$service"
 
 case "$mode" in
-  dryrun) APPLY=0 "${compose[@]}" run --rm "$service" ;;
-  place)  APPLY=1 CHEZMOI_TEST_ARGS="${CHEZMOI_TEST_ARGS:---exclude scripts}" \
+  dryrun) APPLY=0 PREPARE_PYTHON=1 "${compose[@]}" run --rm "$service" ;;
+  place)  APPLY=1 PREPARE_PYTHON=1 CHEZMOI_TEST_ARGS="${CHEZMOI_TEST_ARGS:---exclude scripts}" \
             "${compose[@]}" run --rm "$service" ;;
   apply)  APPLY=1 "${compose[@]}" run --rm "$service" ;;
   update) APPLY=1 SKIP_INIT=1 APPLY_TWICE=1 "${compose[@]}" run --rm "$service" ;;

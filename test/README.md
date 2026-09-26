@@ -82,6 +82,13 @@ bash test/test.sh raspi2204 apply            # 実機 Pi に近い構成で cold
 IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 ```
 
+**`dryrun` / `place` は diff の前に `run_before_005_python` だけを走らせる**
+（`PREPARE_PYTHON=1`）。Docker の素のイメージには Python が無く、どちらのモードも
+`.chezmoiscripts` を走らせないので、そのままでは modify script 用の Python
+（005 が張る shim）が無く `chezmoi diff` の段で必ず失敗する。実際の apply と
+同じ順序（`run_before_` が先）を再現する形で、uv が Python を取りに行くので
+回線に依存する。取得できなければ `prepare-python: UNDETERMINED` で止まる。
+
 ### 環境変数
 
 | 変数 | 既定 | 意味 |
@@ -89,6 +96,8 @@ IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 | `APPLY` | `0` | `1` で apply まで実行 |
 | `IS_RASPI` | `0`（`raspi2204` のみ `1`） | `1` で Raspberry Pi 扱いを注入 |
 | `SOURCE_MODE` | `clone` | `mount` にすると未コミットの変更ごと検証 |
+| `INCLUDE_DIRTY` | `0` | `1` で clone に未コミットの変更（追跡ファイル分）を載せる |
+| `PREPARE_PYTHON` | `0`（`dryrun` / `place` は `1`） | `1` で diff の前に 005 だけ走らせる |
 | `CHEZMOI_TEST_ARGS` | 空 | `diff` / `apply` への追加引数 |
 
 > `CHEZMOI_ARGS` は**使えない**。chezmoi 自身が予約しており、`chezmoi cd` の
@@ -106,6 +115,13 @@ IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 - **`git add` し忘れ**を検出できる
 
 未コミットの変更を試したいときだけ `SOURCE_MODE=mount` にする。
+
+`/repo` はホストの UID が所有するが、`ubuntu:24.04` は UID 1000 に `ubuntu`
+ユーザが既にいるので `tester` は別の UID になり、git が dubious ownership で
+拒む。`~/.gitconfig` は検証対象なので `safe.directory` を書かず、`$HOME` 外の
+一時ファイルを `GIT_CONFIG_GLOBAL` で `/repo` を読む git にだけ渡す。
+`git -c safe.directory=...` は clone の所有者検査まで届かない（git 2.43 で実測）。
+`userdel ubuntu` でイメージ側を合わせる案は、ホスト UID との一致に依存するので採らない。
 
 ### 失敗を握り潰さない
 
@@ -170,6 +186,20 @@ init 時に PATH 上で 3.11 以上が見つからなければ設定はこの sh
 
 `xdg-user-dirs-update` は Desktop 版にしか無く、`set -eu` でスクリプトが止まり
 以降の apt 導入が全て走らなかった。コマンドが無ければ整理を飛ばすようにした。
+
+### 解決済み: `.codex/config.toml` が 2 回目の apply まで安定しない
+
+`modify_config.toml` は、既存ファイルに管理ブロックが無いと（新規・ユーザが先に
+書いた設定）、その中身を `# chezmoi-managed:end` の直後へ改行なしで連結していた。
+ユーザ設定の 1 行目がコメントに吸収され、2 回目の apply で元に戻る。
+終端マーカーの後に常に改行を出し、ユーザ設定は空行を挟んでつなぐようにした。
+
+### 未解決: Codex のトップレベルのキーが直前のテーブルに入る
+
+ユーザ部分は管理ブロック（最後が `[windows]` や `[mcp_servers.*]`）の後ろにつながるので、
+ユーザ部分のトップレベルのキー（`model = ...` など）は TOML 上そのテーブルに属する
+（`windows.model` になることを確認済み）。テーブル（`[profiles.*]` など）は影響しない。
+管理ブロックを末尾へ移すだけでは逆向きに同じことが起きるので、構造を見たマージが要る。
 
 ### 環境都合と切り分けるもの
 
