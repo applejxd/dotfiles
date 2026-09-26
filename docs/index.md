@@ -62,7 +62,6 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | --- | --- | --- | --- |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。段 2（常用）に着手。使って決まった設定の回収は段 2.5 | 段 2 の冒頭で `/mcp list` ではなくスラッシュコマンドを見る |
 | [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み | 段 2（共有ランタイムとハーネスの節分け） |
-| [CHG-0008](change/0008-raspi-branching.md) | In progress | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える。ruby は実機で実証済み、分岐は判定を作り直して未検証 | 3 周目の実機 apply で分岐が発動するか |
 
 ## 判断待ち・障害
 
@@ -79,6 +78,10 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 ## 最近の重要な変更
 
+- 2026-09-26 — Raspberry Pi（64bit / ヘッドレス）を導入対象に追加。判定は
+  `.chezmoitemplates/is-raspi` で `apply` のたびに評価する。
+  **`chezmoi init` を前提にした設計にしない**という規約を得た
+  — [CHG-0008](change/closed/0008-raspi-branching.md)
 - 2026-09-25 — スキルを役割で分離。`checkpoint` は復帰記録（A1）、`sdd-docs` は
   `docs/` の文書化（A2 / B）。description が 2 つの仕事を名乗っていた
   — [checkpoint 仕様](spec/checkpoint.md)

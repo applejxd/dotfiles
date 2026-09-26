@@ -79,5 +79,5 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   （`git pull` + `apply`）が中心で `init` を呼ばない。マシン判定などは
   `.chezmoitemplates/` の共有テンプレートへ置き、`apply` のたびに評価させる。
   `chezmoi.toml` の `[data]` は `init` 時にしか更新されない
-  （[CHG-0008](docs/change/0008-raspi-branching.md)）
+  （[CHG-0008](docs/change/closed/0008-raspi-branching.md)）
 - ユーザーへの説明とドキュメントは日本語で書く

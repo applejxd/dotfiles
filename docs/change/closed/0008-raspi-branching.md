@@ -1,9 +1,18 @@
 # CHG-0008: Raspberry Pi（64bit / ヘッドレス）を導入対象に加える
 
-- **状態**: In progress
-- **更新日**: 2026-09-25
+- **状態**: Done
+- **更新日**: 2026-09-26
+- **終了日**: 2026-09-26
 - **基準**: 導入対象は Windows / Ubuntu / WSL / macOS の 4 つ。Linux の分岐は
   WSL / native の 2 値のみで、アーキテクチャ軸と GUI 有無の軸が無い
+
+> **この文書は当時の記録。** 現在の仕様は
+> [プロジェクト構造](../../spec/structure.md#raspberry-pi)。
+>
+> 実機で 3 周した記録を含む。1 周目は ruby のビルドで停止、2 周目は
+> `chezmoi init` 未実行で分岐が発動せず、3 周目で完走した。
+> **途中で撤回した判断（ruby を Pi から外す / GitHub CLI の APT 鍵を
+> 自動更新する）もそのまま残している。**
 
 ## 目的と非目的
 
@@ -29,7 +38,7 @@
 | 2 | 既存バグの修正（WSL ガードの不一致） | **完了**（2026-09-25） |
 | 3 | `all_compile` を python 限定へ絞る | **完了**（2026-09-25） |
 | 4 | `is_raspi` の導入と分岐の実装 | **完了**（2026-09-25） |
-| 5 | 実機の Raspberry Pi で `chezmoi init` から通す | **進行中**（2026-09-26 に 2 周目。ruby は実証、分岐は未発動） |
+| 5 | 実機の Raspberry Pi で apply を完走させる | **完了**（2026-09-26。3 周目で達成） |
 | 6 | 判定を `chezmoi update` だけで効く形にする | **完了**（2026-09-26） |
 
 ## 現在地
@@ -178,21 +187,18 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
 
 ## 未解決点
 
-- **raspi 分岐は実機でまだ 1 度も発動していない。** 2 周目は `init` 未実行で
-  判定が生成されず、全部「非 raspi」に倒れた。3 周目（`includeTemplate` 版）が
-  本当の初検証になる
-- **実機に前回の適用結果が残っている。** 2 周目で `code` / GUI / ClamAV が
-  入ってしまった。分岐が効いても**既に入ったものは消えない**（`.chezmoiignore`
-  は展開しないだけで、apt で入れたパッケージは残る）。消したいなら手動
-- **`121_ubuntu` は `run_once_` なので、内容が変わった今回は再実行される。**
-  apt ソースの掃除（VS Code の重複、GitHub CLI の鍵）はそこで走る
-- **`rust` / `go` は Raspberry Pi でも残した。** どちらもプリコンパイル済み
-  バイナリが arm64 にあるので ruby のような問題は起きないはずだが、未確認
-- `LC_ALL=ja_JP.UTF-8` を `shellenv.sh` が無条件に設定する。ロケールが
-  生成されていないと毎コマンド警告が出る可能性がある。実機で確認する
-- **`.chezmoi.toml.tmpl` は `lint_templates.py` の除外対象**。テンプレート
-  コメントの `*/` 事故のように、lint では捕まらない壊れ方がある。
-  変更したら `chezmoi execute-template --init` で必ず描画を確かめる
+終了時点で残っているもの。いずれも Raspberry Pi の運用を妨げない。
+
+- **`rust` / `go` の個別確認はしていない。** 3 周目で
+  `mise all tools are installed` を確認したので導入自体は成立しているが、
+  どちらがプレビルドで入ったかは見ていない
+- **`LC_ALL=ja_JP.UTF-8` の影響は未確認。** ロケール未生成なら警告が出るはず
+  だが、3 周目のログには出なかった。問題が出たら対処する
+- **`.chezmoi.toml.tmpl` は `lint_templates.py` の除外対象。** テンプレート
+  コメントの `*/` 事故のように lint では捕まらない壊れ方がある。
+  変更したら `chezmoi execute-template --init` で描画を確かめる
+- **32bit（armhf）は対象外のまま。** AI CLI 4 本が arch 判定で拒否するため、
+  分岐では解決しない
 
 ## 評価基準
 
@@ -261,4 +267,55 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
 
 ## 終了結果
 
-<!-- Done にするとき記入 -->
+**採用・配備済み。** 2026-09-26 の 3 周目で、実機（Ubuntu 22.04 / aarch64 /
+Raspberry Pi）の `chezmoi update` が 45 秒で完走し、raspi 分岐が全て発動した。
+
+### 判定が効いた証拠
+
+```console
+$ chezmoi execute-template '{{ includeTemplate "is-raspi" . }}'
+true
+```
+
+`chezmoi init` は実行していない。`chezmoi update` だけで効いた（段 6 の狙いどおり）。
+
+### 分岐が効いた証拠（適用ログの「出なかったもの」）
+
+| 期待 | ログの観測 |
+| --- | --- |
+| GUI パッケージを入れない | 基本ツールは `manpages-ja` / `python3-tomlkit` / `tig` / `tree` / `curl` / `git` / `jq` / `unzip` / `wget` / `xdg-utils` のみ。`xsel` `i3` `rofi` `polybar` `lxappearance` が**無い** |
+| `xdg-user-dirs-update` を飛ばす | 「既知のフォルダを整理します」が**出ない** |
+| `systemctl --user mask` を飛ばす | 「i3wm で GUI アプリケーションを使うための設定」が**出ない** |
+| ClamAV を入れない | 「ClamAV をインストール/更新します」が**出ない** |
+| `110_native` を無視する | VS Code の apt 更新が**走らない** |
+| apply が完走する | Herdr integration（`~/.copilot/hooks/herdr-agent-state.sh`）まで到達 |
+
+### 併せて解消したもの
+
+| 項目 | 結果 |
+| --- | --- |
+| ruby のソースビルド失敗 | `mise all tools are installed`。2 周目で 57.3 秒のプレビルド導入に成功済み（1 周目は 956 秒で BUILD FAILED） |
+| VS Code の APT 二重登録 | `apt update` から `vscode.list` と `vscode.sources` の重複警告が**消えた**（2 周目は大量に出ていた） |
+| `libyaml-dev` | 導入済みで維持 |
+
+### 残したもの（意図的）
+
+- **GitHub CLI の `NO_PUBKEY` 警告は残っている。** `121_ubuntu` は gh の APT
+  登録・鍵に触らない方針で、`test_github_cli_has_no_separate_apt_install` が
+  それを守っている。手当ては
+  [トラブルシューティング](../../spec/troubleshooting.md)に記載した
+- **2 周目で入った `code` / GUI 一式 / ClamAV は残っている。** `.chezmoiignore`
+  は展開を止めるだけで、apt で入れたパッケージは消さない。消すなら手動
+- `.chezmoi.toml.tmpl` を変更したため
+  `run chezmoi init to regenerate config file` の警告が出る。判定はもう
+  `[data]` に依存しないので実害は無い。気になれば `chezmoi init` を 1 回打つ
+
+### 学び（`AGENTS.md` へ一般化した）
+
+- **`chezmoi init` を前提にした設計にしない。** 運用は `chezmoi update` 中心で
+  `init` を呼ばない。マシン判定は `.chezmoitemplates/` に置き、`apply` の
+  たびに評価させる
+- **裏を取らずに原因を断定しない。** 「mise の ruby は常にソースビルド」と
+  思い込んで ruby を Pi から外しかけた。実際はプレビルドが既定で、
+  arm64 版も存在し、真犯人は `all_compile` だった
+- **設定ファイルのコメントは参照だけにする。** 説明は `docs/` が正本

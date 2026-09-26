@@ -43,7 +43,6 @@
 | --- | --- | --- | --- | --- | --- |
 | [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | 段 2（常用）に着手。`enabledProviders = ["claude"]` の効果は常用の初回に判定する。使って決まった設定の回収（段 2.5）を計画へ追加 | 段 2 の冒頭で `~/.claude/commands/*.md` がスラッシュコマンドに出るか | 2026-09-25 |
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる** | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-25 |
-| [0008](0008-raspi-branching.md) | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える | In progress | 2 周目で ruby は実証（956 秒失敗 → 57.3 秒成功）。分岐は `init` 未実行で未発動。判定を `includeTemplate` へ移した | 3 周目の実機 apply で分岐が発動するか | 2026-09-26 |
 
 ## 保留
 
@@ -59,3 +58,4 @@
 | [0001](closed/0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | 採用・配備済み（圧縮要約そのものを checkpoint にした） | 2026-09-25 | [checkpoint](../spec/checkpoint.md) |
 | [0004](closed/0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | 採用・配備済み | 2026-09-24 | [opencode-sandbox](../spec/opencode-sandbox.md) |
 | [0003](closed/0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | 採用・配備済み | 2026-09-22 | [agent-permissions](../spec/agent-permissions.md) |
+| [0008](closed/0008-raspi-branching.md) | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える | 採用・配備済み（実機 3 周目で apply が 45 秒で完走。判定は `chezmoi update` だけで効く） | 2026-09-26 | [プロジェクト構造](../spec/structure.md#raspberry-pi) |

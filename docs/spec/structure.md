@@ -141,7 +141,7 @@ Pi でそこに入ると十数分かけてから失敗します。`false` にす
 
 Raspberry Pi 固有のシステム設定（memlock など）は chezmoi では管理せず、
 `scripts/raspi/` に置いたまま手動で実行します。
-詳細は [CHG-0008](../change/0008-raspi-branching.md) を参照。
+詳細は [CHG-0008](../change/closed/0008-raspi-branching.md) を参照。
 
 ## mise による CLI 管理
 
