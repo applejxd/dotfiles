@@ -27,19 +27,20 @@ if (Test-Path -LiteralPath $configPath -PathType Leaf) {
 }
 
 # ★登録するものが無いなら claude を探さない。clis で絞った結果 0 件になる
-#   ことがあり、そこで mise に claude を要求すると apply ごと落ちる。
+#   ことがあり、そこで claude を要求すると apply ごと落ちる。
 if (@($managed).Count -eq 0) { return }
 
-$miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
-if (-not $miseCommand) {
-  # 同じ apply の Winget スクリプトで mise を初めて導入した場合。
-  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
-  $miseCommand = Get-Command mise -CommandType Application -ErrorAction Stop
-}
-
-$claudePath = & $miseCommand.Path -C $homeDir which claude
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($claudePath)) {
-  throw "Failed to resolve claude via mise (exit code $LASTEXITCODE)"
+# 公式インストーラー (310_packages/314 の install.ps1) の導入先を優先する。
+# 同じ apply で入れた直後は PATH に無いので、machine / user の PATH も取り込む
+$claudePath = Join-Path $homeDir '.local\bin\claude.exe'
+if (-not (Test-Path -LiteralPath $claudePath -PathType Leaf)) {
+  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+      [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
+  $claudeCommand = Get-Command claude -CommandType Application -ErrorAction SilentlyContinue
+  if (-not $claudeCommand) {
+    throw 'claude is not available. Install it and re-run chezmoi apply'
+  }
+  $claudePath = $claudeCommand.Path
 }
 
 foreach ($server in $managed) {

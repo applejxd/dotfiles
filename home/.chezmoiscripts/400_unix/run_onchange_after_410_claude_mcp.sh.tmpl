@@ -38,14 +38,18 @@ PY
 )"
 
 # ★登録するものが無いなら claude を探さない。clis で絞った結果 0 件になる
-#   ことがあり、そこで mise に claude を要求すると apply ごと落ちる。
+#   ことがあり、そこで claude を要求すると apply ごと落ちる。
 [[ -n "$missing" ]] || exit 0
 
-mise_path="${HOME}/.local/bin/mise"
-if [[ ! -x "$mise_path" ]]; then
-    mise_path="$(command -v mise)"
+# 公式インストーラーの導入先を優先する (100_linux/126 / 200_mac/226 が入れる)。
+# apply 中の PATH に ~/.local/bin が無いことがあるので直接見る
+claude_path="${HOME}/.local/bin/claude"
+if [[ ! -x "$claude_path" ]]; then
+    if ! claude_path="$(command -v claude)"; then
+        echo "❌ claude が見つかりません。導入後に chezmoi apply を再実行してください" >&2
+        exit 1
+    fi
 fi
-claude_path="$("$mise_path" -C "$HOME" which claude)"
 
 # add-json なら http と stdio を同じ経路で登録できる (引数の切り分けが要らない)
 while IFS=$'\t' read -r name spec; do

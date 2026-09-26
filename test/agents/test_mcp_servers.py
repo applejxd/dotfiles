@@ -368,13 +368,16 @@ def test_claude_script_embeds_only_this_users_servers(username):
 
 
 def test_windows_claude_script_covers_the_same_servers():
-    """Windows の Claude にも登録する (mise は非 applejxd へ claude を入れる)。"""
+    """Windows の Claude にも登録する (非 applejxd には install.ps1 で claude が入る)。"""
     source = CLAUDE_WINDOWS_SCRIPT.read_bytes()
     # WinPS 5.1 は BOM が無いと CP932 として読む
     assert source.startswith(b"\xef\xbb\xbf")
 
     rendered = render(CLAUDE_WINDOWS_SCRIPT, username="tester")
     assert "mcp add-json -s user" in rendered
+    # AI CLI は mise で入れないので、mise に claude を尋ねない
+    assert "which claude" not in rendered
+    assert "'.local\\bin\\claude.exe'" in rendered
     embedded = json.loads(rendered.split("@'", 1)[1].split("'@", 1)[0])
     assert [server["id"] for server in embedded] == [
         name for name, _ in servers_for("tester")

@@ -69,6 +69,7 @@ test/agents/
     test_command_policy.py                   shell normalize / match の unit test
     test_check_bash_decision.py              deny/ask 判定と rm root guard の test
     test_check_file_read.py                  ファイル読み取り遮断と glob 照合の test
+    test_claude_mcp_registration.py          Claude への MCP 登録スクリプト (Unix)
     test_generate_copilot_plugins.py         enabledPlugins 生成 / 重複解消の unit test
     test_generate_hooks.py                   hook 生成 / 外部 hook 温存の unit test
     test_generate_opencode.py                OpenCode の permission / MCP 生成の test
@@ -76,7 +77,6 @@ test/agents/
     test_generate_sandbox.py                 sandbox 設定生成の unit test
     test_herdr_integration.py                Herdr統合の生成・保持
     test_mcp_servers.py                      MCP の単一ソース化と 3 CLI への生成
-    test_mise_agents.py                      Claude への MCP 登録スクリプト
     test_modifier_wrappers.py                modify_ ラッパーの end-to-end test
     test_redirect_tmp.py                     一時パス誘導の判定
     test_skill_frontmatter.py                SKILL.md frontmatter検証
