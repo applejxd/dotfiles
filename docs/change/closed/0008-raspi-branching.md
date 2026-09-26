@@ -232,6 +232,7 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
 | `121_ubuntu.sh.tmpl` | VS Code の APT ソース重複を掃除 | `vscode.list` と `vscode.sources` が二重登録され `apt update` が毎回警告。`110_native` は raspi で無視されるのでここに置く | **完了** |
 | `111_microsoft.sh.tmpl` | `vscode.sources` があれば `.list` を作らない | 重複の再発を防ぐ | **完了** |
 | GitHub CLI の APT 鍵を自動更新 | **やらない**（一度書いて撤回） | `121_ubuntu` は gh の APT 登録・鍵に触らない方針で、`test_github_cli_has_no_separate_apt_install` が守っている。手当ては `troubleshooting.md` へ | **撤回** |
+| `121_ubuntu.sh.tmpl` | （なし）→ raspi で zram-tools / earlyoom を導入・設定 | swap 0 でメモリが尽き、SSH ごと固まって電源の抜き差しが要った。Ubuntu for Pi では `linux-modules-extra-raspi` も要る | **完了**（実機で zram 1.9GB と earlyoom の稼働を確認） |
 | 32bit（armhf）対応 | **やらない** | AI CLI 4 本とも arch 判定で拒否する。分岐では解決しない | **対象外** |
 | Pi 固有設定の chezmoi 管理 | **やらない** | `scripts/raspi/browser_mem.sh` のままにする | **対象外** |
 
@@ -267,6 +268,9 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
 - **2026-09-26**: 2 周目までに入った GUI 一式・VS Code・ClamAV を消す
   `scripts/raspi/uninstall_gui.sh` を追加。xrdp も手動導入だが i3 セッション
   前提なので対象に含めた（ユーザー判断）。ブラウザ類と `~/.vscode-server` は残す
+- **2026-09-26**: 実機が SSH に応答しなくなり、電源の抜き差しで復旧した。swap 0 の
+  状態でメモリが尽き、sshd ごと固まったと推定。Raspberry Pi でだけ zram と earlyoom を
+  入れるようにした（`121_ubuntu`）
 
 ## 終了結果
 

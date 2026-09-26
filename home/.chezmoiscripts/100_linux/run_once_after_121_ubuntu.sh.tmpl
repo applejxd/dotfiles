@@ -76,6 +76,40 @@ systemctl --user mask xdg-desktop-portal-gnome
 
 echo "✅ 完了：基本的なツールをインストール/更新しました"
 
+{{- if $raspi }}
+
+# メモリ枯渇で SSH ごと固まるのを防ぐ
+# (docs/spec/structure.md#メモリが尽きても-ssh-できるようにする)
+echo "zram と earlyoom をインストール/設定します..."
+sudo apt-get install -y zram-tools earlyoom
+# Ubuntu for Raspberry Pi は zram モジュールを別パッケージに分けている
+if ! modinfo zram >/dev/null 2>&1; then
+    sudo apt-get install -y linux-modules-extra-raspi
+fi
+sudo tee /etc/default/zramswap >/dev/null <<'EOF'
+ALGO=zstd
+PERCENT=50
+PRIORITY=100
+EOF
+sudo tee /etc/sysctl.d/99-zram.conf >/dev/null <<'EOF'
+vm.swappiness=100
+vm.page-cluster=0
+EOF
+# systemd が空白で分割して渡すので、正規表現に空白や引用符を入れない
+sudo tee /etc/default/earlyoom >/dev/null <<'EOF'
+EARLYOOM_ARGS="-r 3600 --avoid ^(sshd|systemd|systemd-journal|systemd-logind|tailscaled)$"
+EOF
+sudo sysctl -q -p /etc/sysctl.d/99-zram.conf
+sudo systemctl restart earlyoom.service
+# カーネル更新の直後は、実行中のカーネル用のモジュールがまだ無い
+if modinfo zram >/dev/null 2>&1; then
+    sudo systemctl restart zramswap.service
+else
+    echo "zram は次の再起動から有効になります"
+fi
+echo "✅ 完了：zram と earlyoom をインストール/設定しました"
+{{- end }}
+
 {{- if eq .chezmoi.os "linux" }}
 {{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
 echo "ユーティリティツールをインストール/更新します..."

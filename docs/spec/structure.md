@@ -113,6 +113,7 @@ os-release でも判定できません（`raspbian` は 32bit 版のみ）。
 | `[settings.python] compile` | 宣言しない（Tkinter が要らない） |
 | `[settings.ruby] compile` | `false` を宣言する（後述） |
 | Cica フォント | fontconfig が無ければスクリプト側で早期終了 |
+| zram-tools / earlyoom | **Raspberry Pi だけで導入する**（[後述](#メモリが尽きても-ssh-できるようにする)） |
 
 ### ruby はプレビルドで入れる
 
@@ -138,6 +139,26 @@ Pi でそこに入ると十数分かけてから失敗します。`false` にす
 ビルドが落ちただけでスクリプトが非ゼロを返し、後続の `126_agent_cli` /
 `140_herdr_integration` / `400_unix` が丸ごと走らなくなりました。
 未導入のものは `mise ls --missing` で確認できます。
+
+### メモリが尽きても SSH できるようにする
+
+Raspberry Pi 4（RAM 3.7GB、SD カード）は swap が 0 だと、メモリが尽きても
+OOM キラーがなかなか動きません。その間カーネルはプログラムのコードを追い出しては
+SD から読み直すため、**sshd も応答しなくなり、電源を抜くしかなくなります**
+（2026-09-26 に実機で発生。pre-commit が gitleaks を Go でソースビルドしている
+最中に 12 分以上ログが途絶えた）。`121_ubuntu` が Raspberry Pi でだけ次を入れます。
+
+| 設定 | 値 | 理由 |
+| --- | --- | --- |
+| zram（`/etc/default/zramswap`） | `zstd`、RAM の 50%、優先度 100 | RAM を圧縮して swap にする。SD に swap を置くと読み書きが遅く、溢れたときに結局固まるうえ、SD も傷む。既定の 256MB では足りない |
+| `linux-modules-extra-raspi` | zram モジュールが無いときだけ入れる | Ubuntu for Raspberry Pi は zram を別パッケージに分けている（約 95MB）。無いと `zramswap` が `Module zram not found` で起動しない |
+| `vm.swappiness` | 100 | zram は速いので、早めに使わせる |
+| `vm.page-cluster` | 0 | zram では先読みの効果が無い |
+| earlyoom（`/etc/default/earlyoom`） | 既定のしきい値（空きメモリと空き swap の両方が 10% 以下）で最大のプロセスを止める。sshd / systemd / tailscaled は対象外 | 固まる前に重い処理を止めて、SSH できる状態を保つ |
+
+earlyoom の `--avoid` の正規表現に空白や引用符を入れてはいけません。
+systemd は `$EARLYOOM_ARGS` を空白で分割するだけで、引用符を解釈しないためです。
+効いているかは `swapon --show` と `journalctl -u earlyoom -b` で確認できます。
 
 ### 入ってしまった GUI 一式を消す
 
