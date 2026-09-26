@@ -58,6 +58,20 @@ repos:
         pass_filenames: false
         files: (\.tmpl|^scripts/lint_templates\.py)$
 
+      # 実機で踏んだ 4 件の回帰テスト。lint_templates.py では捕まらない範囲を
+      # 埋める (`.chezmoi.toml.tmpl` は lint の除外対象、`is-raspi` は拡張子が
+      # 無いので lint の対象にも起動条件にも入らない)。3 秒程度で終わる。
+      # see docs/change/closed/0008-raspi-branching.md
+      - id: raspi-regression-local
+        name: Raspberry Pi 判定と分岐の回帰テスト
+        entry: >-
+          mise exec -- uv run --with pytest --no-project
+          pytest test/test_raspi_detection.py -q
+        language: system
+        pass_filenames: false
+        files: >-
+          (^home/\.chezmoitemplates/is-raspi$|^home/\.chezmoi(ignore|\.toml)\.tmpl$|^home/dot_config/mise/config\.toml\.tmpl$|^test/test_raspi_detection\.py$)
+
       # 索引と実ファイルの整合。索引が腐ると docs 全体が腐るので機械に見せる。
       # 検査するのは整合だけで、記述の妥当性は判定しない。
       - id: lint-docs-local

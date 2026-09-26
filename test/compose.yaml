@@ -1,29 +1,92 @@
+# chezmoi の cold start 検証用サービス群。
+#
+# 使い方は test/README.md を参照。既定 (ubuntu2404) は従来どおり。
+# 実機の Raspberry Pi は Ubuntu 22.04 / aarch64 なので、それに寄せた
+# サービスを用意している。ただし **コンテナはホストのカーネルを共有する**
+# ため、is-raspi の自動判定 (kernel.osrelease や /proc/device-tree/model)
+# は再現できない。raspi サービスは IS_RASPI=1 で判定を注入する。
+# see docs/change/closed/0008-raspi-branching.md
+
+x-common: &common
+  working_dir: /home/tester
+  environment: &common-env
+    TZ: Asia/Tokyo
+    LANG: ja_JP.UTF-8
+    LC_ALL: ja_JP.UTF-8
+    HOME: /home/tester
+    APPLY: ${APPLY:-0} # 0=dry-run, 1=apply
+    IS_RASPI: ${IS_RASPI:-0} # 1 なら Raspberry Pi 扱いを注入する
+    # chezmoi 自身が CHEZMOI_ARGS を export する (`chezmoi cd` のサブシェル等)。
+    # 衝突するとテストの diff/apply に不正な引数が渡るため別名にしている。
+    CHEZMOI_TEST_ARGS: ${CHEZMOI_TEST_ARGS:-}
+  volumes:
+    - ../:/repo:ro
+    # apply では uv / mise / 各種 CLI を実際にインストールするため、
+    # 100m では tar 展開の途中で溢れる (exit status 2 になる)。
+    # tmpfs は使った分だけメモリを消費するので、上限だけ広く取る。
+    - type: tmpfs
+      target: /home/tester
+      tmpfs:
+        size: 4g
+  command: ["/bin/bash", "-c", "run_chezmoi"]
+
+x-build-args: &build-args
+  USER_UID: ${USER_UID:-1000}
+  USER_GID: ${USER_GID:-1000}
+
 services:
-  chezmoi:
+  # 既定。最新の LTS で「壊れていないか」を最短で見る
+  ubuntu2404:
+    <<: *common
     build:
       context: .
-      # UID/GID をホストに合わせたい場合は以下を有効化
       args:
-        USER_UID: ${USER_UID:-1000}
-        USER_GID: ${USER_GID:-1000}
-    working_dir: /home/tester
+        <<: *build-args
+        BASE_IMAGE: ubuntu:24.04
+
+  # 実機の Raspberry Pi と同じディストリ (22.04)。
+  # system python が 3.10 なので、run_before_005_python の経路を通る
+  ubuntu2204:
+    <<: *common
+    build:
+      context: .
+      args:
+        <<: *build-args
+        BASE_IMAGE: ubuntu:22.04
+
+  # 実機の Raspberry Pi に最も近い (22.04 / arm64)。
+  # x86 ホストでは QEMU エミュレーションになるので遅い
+  raspi2204:
+    <<: *common
+    platform: linux/arm64
     environment:
-      TZ: Asia/Tokyo
-      LANG: ja_JP.UTF-8
-      LC_ALL: ja_JP.UTF-8
-      HOME: /home/tester
-      APPLY: ${APPLY:-0}                 # 0=dry-run, 1=apply
-      # chezmoi 自身が CHEZMOI_ARGS を export する (`chezmoi cd` のサブシェル等)。
-      # 衝突するとテストの diff/apply に不正な引数が渡るため別名にしている。
-      CHEZMOI_TEST_ARGS: ${CHEZMOI_TEST_ARGS:-}    # 追加引数
-    volumes:
-      - ../:/repo:ro
-      # apply では uv / mise / 各種 CLI を実際にインストールするため、
-      # 100m では tar 展開の途中で溢れる (exit status 2 になる)。
-      # tmpfs は使った分だけメモリを消費するので、上限だけ広く取る。
-      - type: tmpfs
-        target: /home/tester
-        tmpfs:
-          size: 4g
-    # ここを短く：ファイル化したスクリプトを実行
-    command: ["/bin/bash", "-c", "run_chezmoi"]
+      <<: *common-env
+      IS_RASPI: ${IS_RASPI:-1} # このサービスは既定で Raspberry Pi 扱い
+    build:
+      context: .
+      platforms:
+        - linux/arm64
+      args:
+        <<: *build-args
+        BASE_IMAGE: ubuntu:22.04
+
+  # arm64 のバイナリ配布と依存解決だけを見たいとき (最新 LTS)
+  arm2404:
+    <<: *common
+    platform: linux/arm64
+    build:
+      context: .
+      platforms:
+        - linux/arm64
+      args:
+        <<: *build-args
+        BASE_IMAGE: ubuntu:24.04
+
+  # 旧名との互換。既定サービスの別名
+  chezmoi:
+    <<: *common
+    build:
+      context: .
+      args:
+        <<: *build-args
+        BASE_IMAGE: ubuntu:24.04

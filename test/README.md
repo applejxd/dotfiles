@@ -42,195 +42,140 @@ agent テストでは生成された matcher と実 hook の判定を両方確�
 
 ---
 
-## 1. 要件
+## 1. Docker での cold start 検証
 
-- Docker Engine（推奨: v24 以上）
-- Docker Compose V2（`docker compose` コマンドが使えること）
-- ネットワークが必要な外部取得のためコンテナから外部へ接続可能であること
+**新しい機械で `chezmoi apply` が人手を介さず完走するか**を、実機を汚さずに試す。
+頻度は低くてよい。回すきっかけは AGENTS.md と下の「いつ回すか」を参照。
 
----
+### 要件
 
-## 2. 初回セットアップ
+- Docker Engine v24 以上 / Docker Compose V2
+- コンテナから外部への接続（外部 CLI を取りに行くため）
+- arm64 サービスを使うなら QEMU（`docker buildx ls` で `linux/arm64` が出ること）
 
-```bash
-# 実行権限の付与（初回のみ）
-chmod +x test.sh run_chezmoi.sh
-
-# イメージのビルド
-docker compose build
-```
-
-> UID/GID をホストに合わせたい場合は、`compose.yaml` の `build.args` を有効化し
-> `docker compose build --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g)` を利用してください。
-
----
-
-## 3. 典型的な実行
-
-### 3.1 ドライラン（差分と doctor の確認のみ）
+### 使い方
 
 ```bash
-./test.sh
+bash test/test.sh [service] [mode]
 ```
 
-### 3.2 実適用（コンテナ内の `$HOME` に apply）
+**リポジトリ直下から実行する。** 引数は順不同。
+
+| service | 中身 | 用途 |
+| --- | --- | --- |
+| `ubuntu2404`（既定） | Ubuntu 24.04 / amd64 | 最短で「壊れていないか」を見る |
+| `ubuntu2204` | Ubuntu 22.04 / amd64 | 実機 Pi と同じディストリ。system python が 3.10 |
+| `raspi2204` | Ubuntu 22.04 / **arm64** | 実機 Pi に最も近い。既定で `IS_RASPI=1` |
+| `arm2404` | Ubuntu 24.04 / **arm64** | arm64 のバイナリ配布と依存解決だけ見たいとき |
+
+| mode | 中身 | 所要 |
+| --- | --- | --- |
+| `dryrun`（既定） | doctor と `chezmoi diff` まで | 数十秒 |
+| `place` | `--exclude scripts` で apply。配置だけ見る | 数十秒 |
+| `apply` | スクリプト込みの cold start | 十数分 |
+| `shell` | コンテナへ入る | — |
 
 ```bash
-./test.sh apply
+bash test/test.sh                            # 既定で dry-run
+bash test/test.sh ubuntu2204 place           # 22.04 で配置だけ
+bash test/test.sh raspi2204 apply            # 実機 Pi に近い構成で cold start
+IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 ```
 
-> `.chezmoiscripts` は外部 CLI をネットワーク経由で入れるため、
-> インストーラ側の対話プロンプトやバージョン検証で失敗することがあります。
-> ファイルの展開だけを見たい場合は scripts を外してください。
->
-> ```bash
-> CHEZMOI_TEST_ARGS="--exclude scripts" ./test.sh apply
-> ```
+### 環境変数
 
-### 3.3 hook の配備と判定の検証
+| 変数 | 既定 | 意味 |
+| --- | --- | --- |
+| `APPLY` | `0` | `1` で apply まで実行 |
+| `IS_RASPI` | `0`（`raspi2204` のみ `1`） | `1` で Raspberry Pi 扱いを注入 |
+| `SOURCE_MODE` | `clone` | `mount` にすると未コミットの変更ごと検証 |
+| `CHEZMOI_TEST_ARGS` | 空 | `diff` / `apply` への追加引数 |
 
-`chezmoi` が展開した hook が、新規環境でも実際に deny / pass を返すか確認します。
+> `CHEZMOI_ARGS` は**使えない**。chezmoi 自身が予約しており、`chezmoi cd` の
+> サブシェルでは `CHEZMOI_ARGS="chezmoi cd"` が export されている。
+
+## 2. 設計上の約束（崩さないこと）
+
+### ソースは既定で clone する
+
+`/repo` は読み取り専用でマウントするが、**既定ではそこから `git clone` して
+追跡ファイルだけを使う**（`SOURCE_MODE=clone`）。理由は 3 つ。
+
+- 新 PC が実際に受け取るものと同じになる
+- ローカルの汚れ（`.venv`、壊れた symlink）を持ち込まない
+- **`git add` し忘れ**を検出できる
+
+未コミットの変更を試したいときだけ `SOURCE_MODE=mount` にする。
+
+### 失敗を握り潰さない
+
+設定テンプレートの描画に失敗したら、そこで止める。以前は代替 config を書いて
+続行していたが、これは**検出したい不具合そのものを隠す**（`*/` でコメントが
+壊れた事故が実際にあった）。
+
+### 依存を先入れしない
+
+`Dockerfile` には「素の機械に最初からあるもの」だけを入れる。`zsh` などを
+先に入れると、それを導入するはずの `.chezmoiscripts` が no-op になり、
+依存漏れを隠す。
+
+### Raspberry Pi の自動判定は再現できない
+
+**コンテナはホストのカーネルを共有する。** `uname -r` はホストの値が出るし、
+`/proc/device-tree/model` も無い。arm64 エミュレーションでも同じ。
+そのため `raspi2204` は `IS_RASPI=1` で**判定を注入**して、分岐の「帰結」だけを見る。
+
+判定ロジックそのものは `test/test_raspi_detection.py` が検証する（Docker 不要、3 秒）。
+
+## 3. 既知の未達（2026-09-26 時点）
+
+E2E はまだ全部通っていない。現状わかっていること。
+
+| 現象 | 状況 |
+| --- | --- |
+| `dryrun` が `exec: "python3": executable file not found` で失敗 | **実機の不具合ではない。** `modify_` スクリプトが python3 を要る。用意するのは `run_before_005_python.sh` だが、`diff` はスクリプトを走らせない。`place` / `apply` なら通るはず |
+| `apply` のフル実行 | **一度も通していない。** どこまで行くか未知 |
+| 2 フェーズ bootstrap（bw 連携） | 未対応。`bw login` は対話が要るので、無認証で通る範囲までしか見ていない |
+
+`Dockerfile` に `python3` を足せば dry-run は通るが、**依存漏れを隠すので足さない**。
+
+## 4. いつ回すか
+
+頻度ではなく、きっかけで決める。
+
+- `.chezmoiscripts/` にファイルを足した / 番号順を変えた
+- `.chezmoi.toml.tmpl`・`.chezmoitemplates/`・`mise/config.toml.tmpl` を触った
+- 新しいマシンを組む直前
+- 半年以上回していないと気づいたとき（腐敗の検知そのもの）
+
+## 5. 結果の読み方
+
+`run_chezmoi` は各段の成否を記録し、最後にサマリーを出す。
+
+```text
+[19:16:01] clone: SUCCESS (ef7d476)
+[19:16:01] config-template: SUCCESS
+[19:16:02] diff: FAILED (exit code: 1)
+OVERALL STATUS: FAILED
+```
+
+**失敗を「環境都合」と「リポジトリの不具合」に即断で二分しない。**
+タイムアウト（既定 900 秒）や tmpfs の上限（4GB）に当たった場合は、
+合否ではなく「未判定」として扱う。ruby は単独で 956 秒かかった実績がある。
+
+## 6. hook の配備と判定の検証
 
 ```bash
-docker compose -f test/compose.yaml run --rm chezmoi bash /repo/test/verify_hooks.sh
+docker compose -f test/compose.yaml run --rm ubuntu2404 bash /repo/test/verify_hooks.sh
 ```
 
-配備されたファイル、`settings.json` に登録された hook の数、
-代表的なコマンドに対する判定を検査し、期待と違えば非ゼロで終了します。
+配備されたファイル、`settings.json` に登録された hook の数、代表的なコマンドに
+対する判定を検査し、期待と違えば非ゼロで終了する。
 
-### 3.4 デバッグシェル（手動でコマンドを試す）
+## 7. クリーンアップ
 
-```bash
-./test.sh shell
-# 例：コンテナ内で
-# run_chezmoi           # 既定動作
-# APPLY=1 run_chezmoi   # その場で apply まで実行
-```
-
----
-
-## 4. オプション（環境変数）
-
-`test.sh` 実行時に環境変数を前置して挿入できます。
-
-- `APPLY`：`0`（既定, dry-run）/ `1`（apply 実行）
-- `CHEZMOI_TEST_ARGS`：`chezmoi diff/apply` に渡す追加引数
-
-> **注意**: `CHEZMOI_ARGS` は使えません。chezmoi 自身が予約しており、
-> `chezmoi cd` のサブシェルでは `CHEZMOI_ARGS="chezmoi cd"` が export されています。
-> この名前を使うと、そのまま `chezmoi diff` の引数として渡ってテストが失敗します。
-
-```bash
-# 例：タグで Linux のみ含める + apply 実行
-CHEZMOI_TEST_ARGS="--include tag=linux" APPLY=1 ./test.sh apply
-
-# 例：macOS を除外し dry-run（diff のみ）
-CHEZMOI_TEST_ARGS="--exclude tag=darwin" ./test.sh
-
-# 例：特定ファイル/グループに限定（定義に応じて調整）
-CHEZMOI_TEST_ARGS="--include files=.bashrc" ./test.sh
-```
-
----
-
-## 5. 実行の流れ（内部で行っていること）
-
-`run_chezmoi` スクリプト（コンテナ内 `/usr/local/bin/run_chezmoi`）は以下を順に実行し、各ステップの成功/失敗を記録します。
-
-1. **環境情報表示** - ユーザー、HOME、chezmoi/gitバージョン
-2. **`chezmoi doctor`** - 環境診断（警告は非致命的として処理）
-3. **`chezmoi init --source=/repo`** - ホストリポジトリを読み取り専用でマウントして初期化
-4. **source 解決チェック** - `chezmoi source-path` が `/repo` 配下を指すことを確認
-   - `chezmoi init` は `.chezmoi.toml.tmpl` から設定を再生成するため、設定ファイルに
-     書いた `sourceDir` は失われる。全 chezmoi 呼び出しで `--source=/repo` を明示している
-   - ここが壊れると「差分なし」に見えてテストが偽陽性になるので、失敗時は即中断する
-5. **`chezmoi diff [${CHEZMOI_TEST_ARGS}]`** - 差分確認
-   - Exit code 0: 正常終了（差分の有無は出力の `diff --git` 行数で判定）
-   - Exit code != 0: エラー（失敗として中断。stderr も表示する）
-6. **`APPLY=1` のとき `chezmoi apply --keep-going -v [${CHEZMOI_TEST_ARGS}]`** - 設定適用 → 再度 `doctor`
-7. **実行サマリー表示** - 各ステップの結果と最終的な成功/失敗判定
-
-### 改善された機能
-
-- **事前チェック**: Docker/Docker Compose の動作確認、compose.yaml の存在確認
-- **エラーハンドリング**: `|| true` の多用を避け、適切なエラー判定を実装
-- **実行結果追跡**: 各ステップの成功/失敗を記録し、最終サマリーで表示
-- **変数の安全性**: `CHEZMOI_TEST_ARGS` を配列に展開し、スペースを含む引数に対応
-- **偽陽性の防止**: `chezmoi diff` の stderr を捨てずに判定材料とし、source 解決も検証する
-
-> `$HOME` は `tmpfs` マウントで毎回クリーンです（`compose.yaml` 既定）。
-
----
-
-## 6. よく使うレシピ
-
-- **Linux のみ検証**：
-
-  ```bash
-  CHEZMOI_TEST_ARGS="--include tag=linux" ./test.sh
-  ```
-
-- **macOS 除外**：
-
-  ```bash
-  CHEZMOI_TEST_ARGS="--exclude tag=darwin" ./test.sh
-  ```
-
-- **即時適用で挙動確認**：
-
-  ```bash
-  APPLY=1 ./test.sh apply
-  ```
-
-- **手動で段階確認**：
-
-  ```bash
-  ./test.sh shell
-  # コンテナ内で
-  run_chezmoi
-  APPLY=1 run_chezmoi
-  ```
-
----
-
-## 7. トラブルシュート
-
-- **`compose.yaml` が見つからない/ボリュームが空**
-  → コマンドを **リポジトリ直下**で実行しているか確認してください（`pwd` を確認）。
-  → `docker compose ls` / `docker compose config` で解決に役立つ情報を表示できます。
-
-- **`permission denied: test.sh`**
-  → `chmod +x test.sh` を付与してください。
-
-- **`chezmoi` が見つからない**
-  → イメージを再ビルドしてください：`docker compose build --no-cache`
-
-- **apply が重く時間がかかる/外部取得が走る**
-  → まずは `./test.sh`（dry-run）で差分を把握してから `APPLY=1` を検討してください。
-  → タグで範囲を絞る（`CHEZMOI_TEST_ARGS`）と負荷を抑えられます。
-
-- **一時的に `$HOME` を保持して再現性検証したい**
-  → `compose.yaml` の `tmpfs` マウントをコメントアウトし、代わりに named volume を設定してください（例：`home_data:/home/tester`）。
-  → その際、末尾に `volumes: { home_data: {} }` を追加します。
-
----
-
-## 8. クリーンアップ
-
-本構成は `docker compose run --rm` でコンテナを都度破棄します。残るのはイメージのみです。
-ビルドキャッシュや未使用イメージを削除する場合：
+`docker compose run --rm` でコンテナは都度破棄される。残るのはイメージのみ。
 
 ```bash
 docker image prune -f
-# さらに徹底する場合（注意）
-docker system prune -af
 ```
-
----
-
-## 9. 補足
-
-- `run_chezmoi.sh` のロジックを編集すれば、`state` のダンプや `apply` 前後の追加チェックなども容易に拡張できます。
-- OS やディストリ間差分を見たい場合は、`Dockerfile` のベースイメージを差し替えてビルドしてください（例：`debian:12`, `fedora:40` など；必要に応じてパッケージ名を調整）。
-
----
