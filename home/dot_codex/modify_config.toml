@@ -59,4 +59,5 @@ args = {{ index . "args" | default list | toJson }}
 {{- end }}
 {{ end -}}
 # chezmoi-managed:end
-{{- .chezmoi.stdin | replaceAllRegex "(?s)^# chezmoi-managed:start.*?# chezmoi-managed:end(?:\\r?\\n)*" "\n\n" -}}
+{{ if trim $userConfig }}
+{{ $userConfig }}{{ end -}}

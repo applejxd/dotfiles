@@ -321,6 +321,37 @@ def test_codex_config_keeps_the_users_own_settings():
     assert tomllib.loads(rendered)["profiles"]["mine"] == {"model": "gpt-5"}
 
 
+USER_TABLE = '[profiles.mine]\nmodel = "gpt-5"\n'
+
+
+@pytest.mark.parametrize(
+    "existing",
+    [
+        pytest.param("", id="new-file"),
+        pytest.param(USER_TABLE, id="user-only"),
+        pytest.param(
+            f"# chezmoi-managed:start\nstale = true\n# chezmoi-managed:end\n\n{USER_TABLE}",
+            id="managed",
+        ),
+        # 旧テンプレートが管理ブロック無しの既存ファイルに書いた形
+        pytest.param(
+            f"# chezmoi-managed:start\nstale = true\n# chezmoi-managed:end{USER_TABLE}",
+            id="glued",
+        ),
+    ],
+)
+def test_codex_config_is_stable_from_the_first_apply(existing):
+    """1 回目の apply で安定し、管理ブロックの終端とユーザ設定を分ける。"""
+    first = render(CODEX_CONFIG, username="tester", stdin=existing)
+    second = render(CODEX_CONFIG, username="tester", stdin=first)
+
+    assert second == first
+    assert "# chezmoi-managed:end\n" in first
+    assert first.endswith("\n")
+    if "profiles.mine" in existing:
+        assert tomllib.loads(first)["profiles"]["mine"] == {"model": "gpt-5"}
+
+
 # ---------------------------------------------------------------------------
 # Claude 登録スクリプト (~/.claude.json は管理外なので CLI 経由)
 # ---------------------------------------------------------------------------
