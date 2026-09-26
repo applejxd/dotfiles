@@ -5,6 +5,8 @@ set -euo pipefail
 : "${APPLY:=0}"                # 0=dry-run, 1=apply
 : "${IS_RASPI:=0}"             # 1 なら Raspberry Pi 扱いを注入する
 : "${SOURCE_MODE:=clone}"      # clone=追跡ファイルのみ / mount=作業ツリーそのまま
+: "${SKIP_INIT:=0}"            # 1 なら init を省く (chezmoi update の経路)
+: "${APPLY_TWICE:=0}"          # 1 なら apply を 2 回回して冪等性を見る
 # NOTE: 変数名に CHEZMOI_ARGS は使えない。chezmoi 自身が予約しており、
 #       `chezmoi cd` のサブシェル等では CHEZMOI_ARGS="chezmoi cd" が
 #       export されている。これを diff/apply に渡すと不正な引数になる。
@@ -179,14 +181,24 @@ else
 fi
 
 echo
-echo "== chezmoi init (using --source=$CHEZMOI_SOURCE) =="
-if "${CZ[@]}" init --force; then
-    log_result "init" "SUCCESS"
-    echo "✅ Chezmoi initialized successfully"
+# ★`chezmoi update` の再現では init を通さない。
+#   普段の運用は `git pull` + `apply` で、init を呼ばない。実機では
+#   その差で [data] が古いまま固定され、分岐が 1 つも発動しなかった。
+#   init を必ず走らせるハーネスでは、この系統の不具合を構造的に検出できない。
+#   see docs/change/closed/0008-raspi-branching.md
+if [ "${SKIP_INIT}" = "1" ]; then
+    echo "== chezmoi init をスキップ (chezmoi update の経路を再現) =="
+    log_result "init" "SKIPPED" "(update 経路の再現)"
 else
-    log_result "init" "FAILED"
-    echo "❌ Chezmoi initialization failed"
-    show_summary
+    echo "== chezmoi init (using --source=$CHEZMOI_SOURCE) =="
+    if "${CZ[@]}" init --force; then
+        log_result "init" "SUCCESS"
+        echo "✅ Chezmoi initialized successfully"
+    else
+        log_result "init" "FAILED"
+        echo "❌ Chezmoi initialization failed"
+        show_summary
+    fi
 fi
 
 echo
@@ -281,6 +293,42 @@ if [ "${APPLY}" = "1" ]; then
       else
           echo "❌ Apply failed with exit code: $exit_code"
           log_result "apply" "FAILED" "(apply command failed with exit code: $exit_code)"
+      fi
+  fi
+
+  # 2 回目の apply。冪等性 (再実行で無駄な作業や差分が出ないこと) を見る。
+  # run_once_ の履歴が効いているか、run_after_ が毎回書き戻して差分を
+  # 作っていないかがここで出る。
+  if [ "${APPLY_TWICE}" = "1" ]; then
+      echo
+      echo "== chezmoi apply (2 回目 / 冪等性の確認) =="
+      if timeout 900 "${CZ[@]}" apply --keep-going -v "${CHEZMOI_ARG_ARRAY[@]}"; then
+          log_result "apply-2nd" "SUCCESS"
+      else
+          second_code=$?
+          if [ $second_code -eq 124 ]; then
+              log_result "apply-2nd" "TIMEOUT"
+          else
+              log_result "apply-2nd" "FAILED" "(exit code: $second_code)"
+          fi
+      fi
+
+      echo
+      echo "== 残差分の確認 (apply 後に diff が空であること) =="
+      set +e
+      residual=$("${CZ[@]}" diff "${CHEZMOI_ARG_ARRAY[@]}" 2>&1)
+      residual_code=$?
+      set -e
+      residual_files=$(grep -c "^diff --git" <<< "$residual" || true)
+      if [ "$residual_code" -ne 0 ]; then
+          log_result "residual-diff" "UNDETERMINED" "(diff が失敗: $residual_code)"
+      elif [ "$residual_files" -eq 0 ]; then
+          log_result "residual-diff" "SUCCESS" "(差分なし)"
+      else
+          echo "⚠️  apply 後にも差分が残っています ($residual_files 件)"
+          grep "^diff --git" <<< "$residual" \
+              | sed 's/^diff --git a\//  - /; s/ b\/.*//' | head -10
+          log_result "residual-diff" "FAILED" "($residual_files 件の差分が残る)"
       fi
   fi
 

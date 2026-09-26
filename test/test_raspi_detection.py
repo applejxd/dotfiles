@@ -202,6 +202,40 @@ def test_detection_lives_in_shared_template():
         assert marker in body, f"{marker} を見ていない"
 
 
+def test_detection_works_without_any_config_data():
+    """設定データが一切無くても判定できる。
+
+    これが「`chezmoi update` だけで効く」ことの本体。`[data]` に依存すると
+    `chezmoi init` を通すまで値が現れず、実機では分岐が 1 つも発動しなかった。
+    ここで渡す文脈に `is_raspi` は入っていない。
+    """
+    assert detect(context(osrelease="6.8.0-1021-raspi")) is True
+
+
+def test_no_template_depends_on_is_raspi_data():
+    """`is_raspi` をデータとして直接読むテンプレートを増やさない。
+
+    参照側が `.is_raspi` を直に見ると、また `chezmoi init` 依存に戻る。
+    分岐したいテンプレートは必ず `includeTemplate "is-raspi"` を通す。
+    上書き用の鍵を解釈してよいのは共有テンプレートだけ。
+    """
+    offenders = []
+    for path in sorted(HOME.rglob("*.tmpl")):
+        if "is_raspi" in path.read_text(encoding="utf-8-sig"):
+            offenders.append(path.relative_to(HOME).as_posix())
+    assert offenders == [], (
+        "`.is_raspi` を直接読んでいる。includeTemplate \"is-raspi\" を使うこと: "
+        + ", ".join(offenders)
+    )
+
+
+def test_branching_templates_go_through_shared_template():
+    """raspi 分岐を持つテンプレートが共有テンプレート経由になっている。"""
+    for template in (IGNORE_TEMPLATE, MISE_TEMPLATE):
+        body = template.read_text(encoding="utf-8-sig")
+        assert 'includeTemplate "is-raspi"' in body, f"{template.name} が経由していない"
+
+
 # ---------------------------------------------------------------------------
 # 事故 3: all_compile の範囲が広すぎた
 # ---------------------------------------------------------------------------

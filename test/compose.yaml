@@ -16,18 +16,29 @@ x-common: &common
     HOME: /home/tester
     APPLY: ${APPLY:-0} # 0=dry-run, 1=apply
     IS_RASPI: ${IS_RASPI:-0} # 1 なら Raspberry Pi 扱いを注入する
+    SOURCE_MODE: ${SOURCE_MODE:-clone} # clone=追跡ファイルのみ / mount=作業ツリー
+    SKIP_INIT: ${SKIP_INIT:-0} # 1 なら init を省く (chezmoi update の経路)
+    APPLY_TWICE: ${APPLY_TWICE:-0} # 1 なら apply を 2 回回して冪等性を見る
     # chezmoi 自身が CHEZMOI_ARGS を export する (`chezmoi cd` のサブシェル等)。
     # 衝突するとテストの diff/apply に不正な引数が渡るため別名にしている。
     CHEZMOI_TEST_ARGS: ${CHEZMOI_TEST_ARGS:-}
   volumes:
     - ../:/repo:ro
-    # apply では uv / mise / 各種 CLI を実際にインストールするため、
-    # 100m では tar 展開の途中で溢れる (exit status 2 になる)。
-    # tmpfs は使った分だけメモリを消費するので、上限だけ広く取る。
-    - type: tmpfs
-      target: /home/tester
-      tmpfs:
-        size: 4g
+  # $HOME は毎回クリーンな tmpfs にする。
+  #
+  # ★exec を明示する。Docker の tmpfs は既定で noexec が付き、$HOME へ入れた
+  #   実行ファイルが一切起動できない。uv / mise / AI CLI はすべて $HOME 配下に
+  #   入るので、これが無いと cold start は必ず失敗し、しかも
+  #   「uv を導入できませんでした」のような紛らわしい形で出る
+  #   (ファイルは -rwxr-xr-x で存在するのに test -x が false になる)。
+  #   マウントオプションを渡せるのはこの短縮構文だけ (volumes の long 構文は
+  #   size と mode しか受け付けない)。
+  #
+  # ★size: apply は uv / mise / 各種 CLI を実際に展開するので 100m では
+  #   tar 展開の途中で溢れる。tmpfs は使った分だけメモリを消費するので
+  #   上限だけ広く取る。
+  tmpfs:
+    - /home/tester:exec,mode=0755,size=4g
   command: ["/bin/bash", "-c", "run_chezmoi"]
 
 x-build-args: &build-args

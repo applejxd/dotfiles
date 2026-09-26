@@ -129,15 +129,54 @@ IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 
 ## 3. 既知の未達（2026-09-26 時点）
 
-E2E はまだ全部通っていない。現状わかっていること。
+E2E はまだ完走しない。`update` モードまでは組み上がっている。
 
-| 現象 | 状況 |
-| --- | --- |
-| `dryrun` が `exec: "python3": executable file not found` で失敗 | **実機の不具合ではない。** `modify_` スクリプトが python3 を要る。用意するのは `run_before_005_python.sh` だが、`diff` はスクリプトを走らせない。`place` / `apply` なら通るはず |
-| `apply` のフル実行 | **一度も通していない。** どこまで行くか未知 |
-| 2 フェーズ bootstrap（bw 連携） | 未対応。`bw login` は対話が要るので、無認証で通る範囲までしか見ていない |
+### 解決済み: tmpfs の `noexec`
 
-`Dockerfile` に `python3` を足せば dry-run は通るが、**依存漏れを隠すので足さない**。
+`$HOME` の tmpfs に既定で `noexec` が付き、**そこへ入れた実行ファイルが一切
+起動できなかった**。uv / mise / AI CLI はすべて `$HOME` 配下に入るので、
+cold start は必ず失敗する。しかも症状が紛らわしい。
+
+```text
+installing to /home/tester/.local/bin
+everything's installed!
+⚠️  uv を導入できませんでした          ← ファイルは -rwxr-xr-x で存在する
+```
+
+`test -x` は `access(2)` を使うため、`noexec` の上では権限ビットがあっても
+false を返す。`compose.yaml` の `tmpfs: - /home/tester:exec,...` で解消した。
+**これはハーネスの欠陥であってリポジトリの不具合ではなかった。**
+
+### 未解決: `modify_` スクリプトが `python3` を解決できない
+
+素の Ubuntu で apply すると、`modify_` が全滅する（残差分 16 件）。
+
+```text
+chezmoi: .claude/settings.json: exec: "python3": executable file not found in $PATH
+```
+
+順序の問題。
+
+1. `chezmoi init` が `.chezmoi.toml.tmpl` を描画し、`lookPath` で見つかった
+   Python を `[interpreters.py]` に焼き込む
+2. この時点では 3.11 以上どころか `python3` すら無いので `command = "python3"` になる
+3. `run_before_005_python.sh` が uv で Python 3.13 を入れるが、
+   実体は `~/.local/share/uv/python/.../bin/python3.13` で **PATH に出ない**
+4. `modify_` は `python3` を探して失敗する
+
+実機の Raspberry Pi で通ったのは、mise の Python が既に PATH にある
+**warm start** だったため。初回導入の証明にはなっていない。
+
+Ubuntu 22.04 のような `python3` が 3.10 の環境でも、`tomllib` が無いので
+同じ結末になりうる（[ADR-0003](../docs/adr/0003-require-python-311-for-agent-configuration.md)）。
+
+> **`Dockerfile` に `python3` を足せば見かけ上は消えるが、足さない。**
+> それは依存漏れを隠す行為で、このハーネスが検出したい当のものになる。
+
+### 未着手
+
+- `apply` のフル実行を成功させること
+- 2 フェーズ bootstrap（`bw login` は対話が要るので、無認証で通る範囲までしか見ていない）
 
 ## 4. いつ回すか
 
