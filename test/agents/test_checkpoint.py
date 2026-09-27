@@ -65,10 +65,10 @@ def git_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def valid_checkpoint(boundary: str = "msg-1") -> str:
+def valid_checkpoint(boundary: str = "msg-1", session: str = "abc12345") -> str:
     return (
         f"<!-- checkpoint: v1\n"
-        f"     session: abc12345\n"
+        f"     session: {session}\n"
         f"     covered_through: {boundary}\n"
         f"-->\n"
         "# Checkpoint — sample\n\n"
@@ -127,17 +127,85 @@ def test_session_id_without_usable_characters_is_rejected(cp, tmp_path: Path):
         cp.resolve_paths("----", tmp_path)
 
 
+# 近い時刻に作られた 2 つのセッション。英数字化した先頭 8 文字が同じになる。
+SESSION = "ses_f1d80f67affeAbCdEfGhIjKlMn"
+NEIGHBOR = "ses_f1d80c05cffeOpQrStUvWxYz01"
+
+
+def test_neighboring_sessions_get_separate_records(cp, git_repo: Path):
+    """★先頭が揃うセッション ID でも保存先が分かれ、互いの記録を読まない。
+
+    OpenCode の ID は時刻由来なので、切り詰めると衝突する。
+    """
+    a = cp.resolve_paths(SESSION, git_repo)
+    b = cp.resolve_paths(NEIGHBOR, git_repo)
+    assert a["session_short"] == b["session_short"], "前提: 表示用の短い ID は同じ"
+    for key in ("checkpoint", "prev", "state"):
+        assert a[key] != b[key], f"{key} が衝突している"
+
+    for session, word in ((SESSION, "AAA"), (NEIGHBOR, "BBB")):
+        done = run_cli(
+            ["write", cp.resolve_paths(session, git_repo)["checkpoint"]],
+            stdin=valid_checkpoint(session=session).replace("達成条件を 1 行で。", word),
+        )
+        assert done.returncode == 0
+
+    for session, mine, theirs in ((SESSION, "AAA", "BBB"), (NEIGHBOR, "BBB", "AAA")):
+        done = run_cli(["read", "--session", session, "--cwd", str(git_repo)])
+        assert done.returncode == 0, done.stderr
+        assert mine in done.stdout
+        assert theirs not in done.stdout
+
+
+def test_read_refuses_a_record_owned_by_another_session(cp, git_repo: Path):
+    """★保存名の正規化は可逆ではない。ヘッダの session でも持ち主を確かめる。"""
+    target = Path(cp.resolve_paths(NEIGHBOR, git_repo)["checkpoint"])
+    target.parent.mkdir(parents=True)
+    target.write_text(valid_checkpoint(session=SESSION), encoding="utf-8")
+
+    done = run_cli(["read", "--session", NEIGHBOR, "--cwd", str(git_repo)])
+
+    assert done.returncode == 1
+    assert done.stdout == ""
+    assert "別セッション" in done.stderr
+
+
+@pytest.mark.parametrize("text", ["", "# Checkpoint\n\n## Goal\n\nヘッダ無し\n"])
+def test_read_refuses_a_record_without_an_owner(cp, git_repo: Path, text: str):
+    target = Path(cp.resolve_paths(SESSION, git_repo)["checkpoint"])
+    target.parent.mkdir(parents=True)
+    target.write_text(text, encoding="utf-8")
+    assert run_cli(["read", "--session", SESSION, "--cwd", str(git_repo)]).returncode == 1
+
+
+def test_read_without_a_record_is_failure_not_crash(git_repo: Path):
+    done = run_cli(["read", "--session", SESSION, "--cwd", str(git_repo)])
+    assert done.returncode == 1
+    assert "無い" in done.stderr
+
+
+def test_lint_checks_the_owner_when_asked(cp):
+    errors, _ = cp.lint(valid_checkpoint(session=SESSION), session=NEIGHBOR)
+    assert any("session" in e for e in errors)
+    errors, _ = cp.lint(valid_checkpoint(session=SESSION), session=SESSION)
+    assert errors == []
+
+
 # --- GC をしないこと ----------------------------------------------------
 
 
-def test_writing_never_touches_other_sessions(cp, tmp_path: Path):
+def test_writing_never_touches_other_sessions(cp, git_repo: Path):
     """★保存はセッション横断の削除をしない。
 
     件数や日数で消すと、稼働中の別セッションの checkpoint と Pending まで
     消えてしまう。保存先を分離した目的そのものが壊れるので回帰させない。
+
+    ★専用の repo を渡す。tmp_path はリポジトリの .tmp 配下に作られるので、
+    git 初期化していないと親のリポジトリへ書いてしまう。
     """
-    mine = cp.resolve_paths("session-mine", tmp_path)
-    other = cp.resolve_paths("session-other", tmp_path)
+    mine = cp.resolve_paths("session-mine", git_repo)
+    other = cp.resolve_paths("session-other", git_repo)
+    assert Path(mine["root"]) == git_repo.resolve()
 
     Path(other["checkpoint"]).parent.mkdir(parents=True, exist_ok=True)
     Path(other["checkpoint"]).write_text("他セッションの記録", encoding="utf-8")
@@ -260,7 +328,7 @@ def test_stale_snapshot_at_in_header_is_flagged(cp):
 def test_snapshot_at_in_machine_section_is_not_flagged(cp):
     """機械節の snapshot_at が正本。こちらを警告してはいけない。"""
     text = valid_checkpoint() + (
-        "\n<!-- machine: ここから下は PreCompact が上書きする。"
+        "\n<!-- machine: ここから下は機械が上書きする。"
         "意味内容の予算に含めない -->\n"
         "## Snapshot\n\n- snapshot_at: 2026-09-19T15:59:37+09:00\n"
     )
@@ -389,10 +457,11 @@ def run_cli(args: list[str], stdin: str = "") -> subprocess.CompletedProcess:
     )
 
 
-def test_cli_paths_emits_json(tmp_path: Path):
-    done = run_cli(["paths", "--session", "session-x", "--cwd", str(tmp_path)])
+def test_cli_paths_emits_json(git_repo: Path):
+    done = run_cli(["paths", "--session", "session-x", "--cwd", str(git_repo)])
     assert done.returncode == 0
     payload = json.loads(done.stdout)
+    assert payload["session"] == "session-x"
     assert payload["checkpoint"].endswith(".md")
     assert payload["state"].endswith(".state.json")
 
@@ -481,13 +550,31 @@ def test_snapshot_never_touches_the_written_content(tmp_path: Path):
     )
     target = Path(paths["checkpoint"])
 
-    body = valid_checkpoint()
+    body = valid_checkpoint(session="ses_abc12345")
     target.write_text(body, encoding="utf-8")
     run_cli(["snapshot", "--session", "ses_abc12345", "--cwd", str(root)])
 
     after = target.read_text(encoding="utf-8")
     kept, _, _ = after.partition("<!-- machine:")
     assert kept.strip() == body.partition("<!-- machine:")[0].strip()
+    assert "## Snapshot" in after
+
+
+def test_snapshot_refuses_a_record_owned_by_another_session(git_repo: Path):
+    """★別セッションの記録へ機械節を足さない (持ち主はヘッダで確かめる)。"""
+    paths = json.loads(
+        run_cli(["paths", "--session", NEIGHBOR, "--cwd", str(git_repo)]).stdout
+    )
+    target = Path(paths["checkpoint"])
+    target.parent.mkdir(parents=True)
+    body = valid_checkpoint(session=SESSION)
+    target.write_text(body, encoding="utf-8")
+
+    done = run_cli(["snapshot", "--session", NEIGHBOR, "--cwd", str(git_repo)])
+
+    assert done.returncode == 0
+    assert json.loads(done.stdout)["ok"] is False
+    assert target.read_text(encoding="utf-8") == body
 
 
 def test_snapshot_is_quiet_when_it_cannot_work(tmp_path: Path):

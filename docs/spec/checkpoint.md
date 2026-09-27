@@ -20,8 +20,8 @@
 
 | 層 | 実体 | 役割 |
 | --- | --- | --- |
-| 指示ファイル | `home/dot_claude/CLAUDE.md` / `home/dot_copilot/copilot-instructions.md` | 恒久ルール。「文脈の引き継ぎ」節 |
-| スキル | `home/dot_config/opencode/skills/checkpoint/` | A1 の手順・雛形・CLI の単一ソース |
+| 指示ファイル | `home/.chezmoitemplates/agent-instructions.md`（各 CLI の指示ファイルへ展開） | 恒久ルール。「文脈の引き継ぎ」節 |
+| スキル | `home/dot_config/opencode/skills/checkpoint/` | A1 と復帰の手順・雛形・CLI の単一ソース |
 | plugin | `home/dot_config/opencode/checkpoint-plugin/` | 圧縮直前の記録と直後の復帰注入 |
 
 `docs/` への文書化（A2 / B）は **`sdd-docs` スキル**が持つ。分離の理由は
@@ -29,13 +29,15 @@
 
 ### plugin が担うこと
 
-hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた。口は 3 つある。
+hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた（旧構成は
+[CHG-0001](../change/closed/0001-compaction-context-handover.md) の
+「hook 層を撤去して plugin へ寄せた」節）。口は 3 つある。
 
 | 口 | いつ | すること |
 | --- | --- | --- |
-| `session.hook("compaction")` | 圧縮の LLM 要求を組み立てるとき | 機械節を書き、`session.generate` で 6 節を生成し、`e.result` に入れる |
+| `session.hook("compaction")` | 圧縮の LLM 要求を組み立てるとき | 機械節を書き、`session.generate` で 6 節を生成して保存し、`e.result` に入れる |
 | `ctx.event.subscribe()` | `session.compaction.ended` が流れたとき | `ctx.storage` に印を置く |
-| `session.hook("context")` | 毎要求 | 印があれば checkpoint を `event.system` へ入れる。ユーザの手番なら印を消す |
+| `session.hook("context")` | 毎要求 | 印があれば `checkpoint.py read` の出力を `event.system` へ入れる。ユーザの手番なら印を消す |
 
 **圧縮の要約と引き継ぎは同じ成果物にする。** 別々に持つと必ず片方が古くなる
 （実際に意味内容だけ 1 日古いまま残った）。`e.result` を設定すると OpenCode は
@@ -55,12 +57,11 @@ hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた。口は 3 �
 
 設計上の約束:
 
-- **plugin は機械節を自分で組み立てない。** 生成と保存先の解決は
-  `checkpoint.py` が単一ソース。二重に持つと必ずずれる
+- **plugin は機械節を自分で組み立てない。** 生成・保存先の解決・記録の持ち主の
+  照合は `checkpoint.py` が単一ソース。二重に持つと必ずずれる
 - **どの口も例外を投げない。** 圧縮を壊さないことが最優先
-- **生成に失敗したら `e.result` を設定しない。** OpenCode 標準の要約に戻る。
-  壊れた引き継ぎを要約として残すより良い。空が返ることがあるので 1 度だけ
-  引き直し、6 節が揃わなければ捨てる
+- **生成・保存に失敗したら `e.result` を設定しない。** 詳細は
+  [失敗時の動作](#失敗時の動作)
 - **`generate` の再入を防ぐ。** generate もモデル呼び出しなので、文脈が溢れた
   ままだと圧縮を誘発しうる。同じセッションで二重に走らせない
 - **印が無いときは `ctx.storage` を 1 回読むだけで抜ける。**
@@ -141,16 +142,26 @@ OpenCode 専用。`sdd-docs` は markdown を編集して `lint_docs.py` を回�
 ## 保存先
 
 **常にセッション別の名前**を使う。固定名を奪い合わないので、ロックも所有権の
-交渉も要らない。
+交渉も要らない。`<sid>` はセッション ID から英数字以外を除いた**完全な ID**。
 
 ```text
-<リポジトリルート>/.tmp/checkpoint-<sid8>.md        本体
-<リポジトリルート>/.tmp/checkpoint-<sid8>.prev.md   直前の世代
-<リポジトリルート>/.tmp/checkpoint-<sid8>.state.json 状態 (Tier 2 用、未実装)
+<リポジトリルート>/.tmp/checkpoint-<sid>.md         本体
+<リポジトリルート>/.tmp/checkpoint-<sid>.prev.md    直前の世代
+<リポジトリルート>/.tmp/checkpoint-<sid>.state.json 状態 (Tier 2 用、未実装)
 ```
 
+- **ID を切り詰めない。** OpenCode のセッション ID は時刻由来で、近い時刻に
+  作られたセッション（`ses_f1d80f67affe…` と `ses_f1d80c05cffe…`）は先頭が揃う。
+  2026-09-27 まで使っていた「英数字の先頭 8 文字」ではどちらも `sesf1d80` になり、
+  互いの記録を読み書きした。`paths` が返す `session_short` は表示用で、保存名には
+  使わない
+- **読むときはヘッダの `session:` でも持ち主を確かめる。** 英数字以外を除く正規化は
+  可逆ではないので、名前だけでは一意と言い切れない。一致しない記録は `read` が
+  exit 1 で拒み、`snapshot` も機械節を足さない
+- 旧形式（`checkpoint-<sid8>.md`）は読まない。`.tmp/` の一時記録なので、移行期に
+  1 度だけ自動注入が効かないだけで済む
 - リポジトリルートは `git rev-parse --show-toplevel` で決める。
-  **hook の `cwd` はサブディレクトリのことがある**ので `./` を前提にしない
+  **plugin の `cwd` はサブディレクトリのことがある**ので `./` を前提にしない
 - git の無視設定は `git rev-parse --git-path info/exclude` で解決する。
   **`.git` はファイルのこともある**（linked worktree / chezmoi の source state）
 - `.gitignore` は共有ファイルなので書き換えない
@@ -162,6 +173,19 @@ OpenCode 専用。`sdd-docs` は markdown を編集して `lint_docs.py` を回�
 見出しは 6 つを順序どおりに置く。雛形は
 `~/.config/opencode/skills/checkpoint/references/checkpoint-template.md`。
 
+```text
+<!-- checkpoint: v1
+     session: <完全なセッション ID。paths が返す session>
+     cli: opencode
+     updated_at: <ISO8601>
+     covered_through: <その要求の固定境界>
+-->
+# Checkpoint — <作業名>
+## Goal … ## Refs          意味内容 (モデルが書く)
+<!-- machine: … -->
+## Snapshot                機械節 (checkpoint.py snapshot が書く)
+```
+
 | 節 | 内容 |
 | --- | --- |
 | `## Goal` | 達成したら終わりと言える条件（3 行以内） |
@@ -171,10 +195,11 @@ OpenCode 専用。`sdd-docs` は markdown を編集して `lint_docs.py` を回�
 | `## Next` | 次の 1 手。「何を」で止めず**「どうやって」**まで |
 | `## Refs` | `docs/...` のパス + 読む理由。未作成なら「未作成」と明記 |
 
-`<!-- machine: -->` より下は hook が上書きするので、人も AI も書かない。
+`<!-- machine: -->` より下は `checkpoint.py snapshot` が上書きするので、人も AI も
+書かない。plugin は圧縮の直前に、生成の前後で 1 度ずつ呼ぶ。
 
-**圧縮時刻（`snapshot_at`）は機械節にだけ置く。** hook はヘッダを触らない設計
-なので、ヘッダに書くと誰も更新せず「未取得」に見え続ける。旧雛形の名残として
+**圧縮時刻（`snapshot_at`）は機械節にだけ置く。** `snapshot` はヘッダを触らない
+設計なので、ヘッダに書くと誰も更新せず「未取得」に見え続ける。旧雛形の名残として
 残っていた場合は `lint` が警告する。
 
 **文字数予算は 2000 文字**（意味内容のみ。機械節は別枠）。復帰試験の実測では
@@ -184,57 +209,31 @@ OpenCode 専用。`sdd-docs` は markdown を編集して `lint_docs.py` を回�
 
 **`covered_through` を、その保存要求の固定境界と比べる。**
 
-- **mtime では判定しない。** 圧縮直前の hook が機械節を書くと mtime が更新され、
-  古い意味内容が「新鮮」に見えてしまう
+- **mtime では判定しない。** 圧縮直前の `snapshot` が機械節を書くと mtime が
+  更新され、古い意味内容が「新鮮」に見えてしまう
 - **「現在の会話地点」とも比べない。** 保存や検査そのもので境界が進み、正しく
   保存しても永久に一致しない
 - 境界は要求が立った時点で 1 つだけ固定し、以降動かさない
 
-## hook
+## 失敗時の動作
 
-| イベント | スクリプト | 動作 |
-| --- | --- | --- |
-| Claude `PreCompact` / Copilot `PreCompact` | `checkpoint_precompact.py` | 機械的事実だけを記録し、復帰待ちの印を置く。**絶対にブロックしない** |
-| Claude `SessionStart` matcher `compact` | `checkpoint_restore.py` | 自分の記録を stdout へ出し、印を消す（**Claude 専用**） |
-| Copilot `PostToolUse` | `checkpoint_restore_pending.py` | 印があれば `additionalContext` で記録を返す（**Copilot 専用**） |
+**どの失敗も圧縮と会話を止めない。** 失敗したら「何もしない」側へ倒し、
+OpenCode 標準の動作に任せる。壊れた・古い引き継ぎを要約として残すより、
+標準の要約に戻る方が良い。
 
-**Copilot も PascalCase で登録する。** camelCase だと入力に `hook_event_name` が
-入らない（記録 E3）。
+| 失敗 | 動作 |
+| --- | --- |
+| `snapshot` が書けない | 捨てる（`ok: false` を返し exit 0）。生成はそのまま続ける |
+| `generate` が空を返す | 1 度だけ引き直す |
+| 生成物に 6 節が揃わない | 捨てる。`e.result` を設定しない → OpenCode 標準の要約 |
+| `write` が失敗する | `e.result` を設定しない。**残っていた古い記録を要約に採用しない** |
+| 読み直した記録に生成した本文が無い | `e.result` を設定しない |
+| 注入時に記録が無い・持ち主が違う | 何も注入しない。印は残す |
 
-**Copilot は hook の登録を起動時にしか読まない。** 追加・変更したら `/restart`
-が要る。しないと、設定は正しいのに発火しない（記録 E5）。
-
-**発火しないときは `~/.copilot/session-state/<id>/events.jsonl` を見る。**
-`hook.start` / `hook.end` が時系列で残る。ただしそこに載る入力は**内部表現**で、
-hook へ渡る形式とは違う。キー名を実装の前提にしない（記録 E5）。
-
-**ブロックしない理由**: 公式は、context-limit エラーからの回復として発火した
-自動圧縮をブロックすると「元のエラーが表面化し、現在のリクエストが失敗する」と
-明記している。機械記録のためにユーザーの作業を失わせるのは割に合わない。
-
-**Copilot の復帰が 2 段になっている理由**: Copilot には `SessionStart`
-matcher `compact` に相当する単一のイベントが無い。代わりに `PreCompact` が印を
-置き、次の `postToolUse` が `additionalContext` で本文を返す。**通知専用の
-イベントでも印を置くことはできる**ので、注入の担い手を別のイベントへ委ねれば
-繋がる（記録 E7）。差は「不可能」ではなく**1 ツール分の遅れ**である。
-
-| | Claude | Copilot |
-| --- | --- | --- |
-| 届く時点 | 作業を再開する**前** | 最初のツール実行の**直後**（同じターン内） |
-| 上限 | なし（stdout 全文） | **10 KB**（`additionalContext`。超えたら末尾を切って在処を示す） |
-
-**`postToolUse` は全ツールで発火する。** 印が無いときのコストがツール 1 回ごとの
-税になるため、印まわりは `checkpoint_pending.py` へ切り出し、置き場も
-`~/.cache/checkpoint-hooks/` に固定してある（`git rev-parse` を避けるため）。
-実測 41ms/回。内訳は記録 E7。
-
-**自動圧縮でも取りこぼさない**: 自動圧縮はツールループへの割り込みではなく
-assistant ターンの境界で起きるため、`PreCompact` は確実に呼ばれる（記録 E6）。
-ただしその時点でモデルに意味内容を書かせる余地は無いので、**意味内容は
-区切りごとに手で保存しておく**必要がある。
-
-**文脈が小さいときに `/compact` を打たない**: 要約文の方が長くなり、
-かえって増えることがある（実測で 42,649 → 54,650 トークン。記録 E6）。
+**`write` の成否は必ず見る。** plugin の CLI 呼び出しは失敗を `null` に変えて
+握りつぶす。成否を見ずに読み直すと、前回の正常な記録が残っていればそれを読み、
+**古い引き継ぎが要約に化ける**（圧縮後の会話は古い `## Next` から再開する）。
+2026-09-27 まではこの状態だった。
 
 ## 使い方
 
@@ -247,25 +246,27 @@ uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-
 # 書く
 uv run --no-project python "$CP" write <checkpoint パス> --keep-prev <prev パス>
 
-# 構造を検査する
-uv run --no-project python "$CP" lint <checkpoint パス> --structure
+# 構造と持ち主を検査する
+uv run --no-project python "$CP" lint <checkpoint パス> --structure --session "<セッションID>"
+
+# 自分の記録を読む（復帰。持ち主が違えば exit 1）
+uv run --no-project python "$CP" read --session "<セッションID>"
 ```
 
-hook が静かに失敗したときは `CHECKPOINT_HOOK_DEBUG=1` を立てると stderr に
-理由が出る。
+`snapshot` は plugin 専用（`--session` / `--cwd` / `--trigger`）。結果を JSON で
+返し、失敗しても exit 0 で抜ける。
 
 ## 現在の状態と制限
 
-- **スキルは手動起動でも使える。** 「checkpoint して」で A1（実行状態の保存）が走る
+- **スキルは手動起動でも使える。** 「checkpoint して」で A1（実行状態の保存）が走る。
+  再開時は `read` で自分の記録を読む（SKILL.md の「復帰」節）
 - **A2（案件の更新）と B（`docs/` への文書化）は `sdd-docs` スキルが持つ。**
   文脈が逼迫しているなら A1 を先に終える
-- **Copilot でも圧縮直後の自動注入ができる**（`PreCompact` の印 + `postToolUse`。
-  記録 E7）。Claude より 1 ツール分だけ遅い
-- **Copilot では文脈使用率を推定できない。** `PostToolUse` の入力に
-  `transcript_path` が無く（記録 E4）、トークン情報は圧縮時とセッション終了時に
-  しか出ない（記録 E6）。閾値監視は**見送りで決着**
-- **圧縮試験は Copilot で実施済み**（記録 E5 / E6）。
-  **圧縮直後の復帰注入は実機未検証**。hook 単体では両経路とも動作確認済み
+- **OpenCode の実機で、圧縮 → 記録の生成 → ユーザの手番への注入を通しで確認済み**
+  （[CHG-0001](../change/closed/0001-compaction-context-handover.md)「通しの実測」）
+- **保存名の変更（完全な ID + ヘッダ照合）と `write` 失敗時の退避は、
+  テスト（`test/agents/test_checkpoint*.py`）だけで確認している。** 実機の圧縮では
+  未検証
 - **Windows 実機での検証は未実施**（source state は更新済み）
 
 ## 関連

@@ -3,13 +3,15 @@
 
 compaction を跨いで作業文脈を失わないようにするため、セッションの実行状態を
 リポジトリ内の使い捨てディレクトリへ保存する。保存先の決め方と検査をここへ
-寄せて、スキル本文・hook の双方が同じ結果を得られるようにする。
+寄せて、スキル本文・plugin の双方が同じ結果を得られるようにする。
 
 サブコマンド:
 
     paths   保存先を解決して JSON で返す
+    read    自分の記録を読む (ヘッダの session が一致しなければ exit 1)
     lint    checkpoint を検査する (--structure で構造のみ)
     write   stdin の内容を checkpoint へアトミックに書く
+    snapshot 機械節だけを書く (plugin が圧縮の直前に呼ぶ)
 
 exit code:
 
@@ -93,7 +95,7 @@ def _run_git(args: list[str], cwd: Path) -> str | None:
 def repo_root(start: Path) -> Path:
     """リポジトリルートを返す。git でなければ start をそのまま使う。
 
-    hook の cwd はサブディレクトリのことがあるので ``./`` を前提にしない。
+    呼び出し側の cwd はサブディレクトリのことがあるので ``./`` を前提にしない。
     """
     top = _run_git(["rev-parse", "--show-toplevel"], start)
     if top:
@@ -101,12 +103,16 @@ def repo_root(start: Path) -> Path:
     return start
 
 
-def _short_sid(session_id: str) -> str:
-    """セッション ID を保存先の名前に使える形へ縮める。"""
+def _session_slug(session_id: str) -> str:
+    """セッション ID をファイル名に使える形へ直す。
+
+    ★切り詰めない。OpenCode の ID は時刻由来で、近い時刻のセッションは
+    先頭が揃う。see docs/spec/checkpoint.md#保存先
+    """
     cleaned = re.sub(r"[^0-9A-Za-z]", "", session_id)
     if not cleaned:
         raise ValueError("session id is empty after normalization")
-    return cleaned[:8]
+    return cleaned
 
 
 def resolve_paths(session_id: str, start: Path | None = None) -> dict[str, str]:
@@ -118,16 +124,39 @@ def resolve_paths(session_id: str, start: Path | None = None) -> dict[str, str]:
     start = start or Path.cwd()
     root = repo_root(start)
     base = root / TMP_DIRNAME
-    sid = _short_sid(session_id)
-    stem = f"checkpoint-{sid}"
+    slug = _session_slug(session_id)
+    stem = f"checkpoint-{slug}"
     return {
         "root": str(root),
         "base": str(base),
-        "session_short": sid,
+        "session": session_id,
+        # 表示用。保存名には使わない。
+        "session_short": slug[:8],
         "checkpoint": str(base / f"{stem}.md"),
         "prev": str(base / f"{stem}.prev.md"),
         "state": str(base / f"{stem}.state.json"),
     }
+
+
+def owned_by(text: str, session_id: str) -> bool:
+    """記録のヘッダの ``session:`` が session_id と一致するか。"""
+    return parse_header(text).get("session") == session_id
+
+
+def read_own(session_id: str, start: Path | None = None) -> tuple[str | None, str]:
+    """自分の記録を読む。(本文, 読めなかった理由) を返す。
+
+    保存名の正規化は可逆ではないので、ヘッダでも持ち主を確かめる。
+    """
+    paths = resolve_paths(session_id, start)
+    target = Path(paths["checkpoint"])
+    if not target.exists():
+        return None, f"checkpoint が無い: {target}"
+    text = target.read_text(encoding="utf-8")
+    if not owned_by(text, session_id):
+        found = parse_header(text).get("session", "(無し)")
+        return None, f"別セッションの記録 (session: {found}): {target}"
+    return text, ""
 
 
 def _check_ignore(root: Path, target: str) -> bool | None:
@@ -302,11 +331,12 @@ def lint(
     *,
     budget: int = DEFAULT_BUDGET,
     boundary: str | None = None,
+    session: str | None = None,
 ) -> tuple[list[str], list[str]]:
     """checkpoint を検査して (エラー, 警告) を返す。
 
     ``boundary`` を渡すと鮮度も見る。渡さなければ構造だけを見る。
-    現在の会話地点とは決して比べない。
+    現在の会話地点とは決して比べない。``session`` を渡すとヘッダの持ち主も見る。
     """
     errors: list[str] = []
     warnings: list[str] = []
@@ -337,7 +367,7 @@ def lint(
     errors.extend(_fence_violations(body))
 
     header = parse_header(text)
-    # 旧雛形はヘッダにも snapshot_at を置いていた。hook はヘッダを触らないので
+    # 旧雛形はヘッダにも snapshot_at を置いていた。snapshot はヘッダを触らないので
     # 永久に空のまま残り、「圧縮時刻が未取得」に見える。正本は機械節の方。
     if "snapshot_at" in header:
         warnings.append(
@@ -350,6 +380,12 @@ def lint(
             errors.append(
                 f"covered_through が要求の境界と違う (記録 {covered!r} / 要求 {boundary!r})"
             )
+
+    if session is not None and header.get("session") != session:
+        errors.append(
+            f"ヘッダの session がセッション ID と違う "
+            f"(記録 {header.get('session', '')!r} / 要求 {session!r})。復帰時に読まれない"
+        )
 
     next_items = _section_items(body, "## Next")
     if len(next_items) > 1:
@@ -465,6 +501,8 @@ def write_snapshot(
     try:
         existed = target.exists()
         text = target.read_text(encoding="utf-8") if existed else skeleton(session)
+        if existed and not owned_by(text, session):
+            return {"ok": False, "reason": f"別セッションの記録: {target}"}
         target.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(target, replace_machine_section(text, collect_snapshot(root, trigger)))
     except OSError as exc:
@@ -490,12 +528,23 @@ def _cmd_lint(args: argparse.Namespace) -> int:
         return EXIT_FAIL
     text = target.read_text(encoding="utf-8")
     boundary = None if args.structure else args.boundary
-    errors, warnings = lint(text, budget=args.budget, boundary=boundary)
+    errors, warnings = lint(
+        text, budget=args.budget, boundary=boundary, session=args.session
+    )
     for warning in warnings:
         print(f"warning: {warning}")
     for error in errors:
         print(f"error: {error}", file=sys.stderr)
     return EXIT_FAIL if errors else EXIT_OK
+
+
+def _cmd_read(args: argparse.Namespace) -> int:
+    text, reason = read_own(args.session, Path(args.cwd) if args.cwd else None)
+    if text is None:
+        print(f"error: {reason}", file=sys.stderr)
+        return EXIT_FAIL
+    sys.stdout.write(text)
+    return EXIT_OK
 
 
 def _cmd_write(args: argparse.Namespace) -> int:
@@ -543,7 +592,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_BUDGET,
         help="意味内容の文字数予算",
     )
+    check.add_argument("--session", help="ヘッダの session と照合するセッション ID")
     check.set_defaults(func=_cmd_lint)
+
+    read = sub.add_parser("read", help="自分の記録を読む (ヘッダの session を照合する)")
+    read.add_argument("--session", required=True, help="セッション ID")
+    read.add_argument("--cwd", help="起点ディレクトリ (既定は現在地)")
+    read.set_defaults(func=_cmd_read)
 
     write = sub.add_parser("write", help="stdin の内容をアトミックに書く")
     write.add_argument("path", help="checkpoint のパス")

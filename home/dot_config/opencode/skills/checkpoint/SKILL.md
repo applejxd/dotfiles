@@ -17,10 +17,10 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 
 | 言われ方 | やること |
 | --- | --- |
-| 「checkpoint して」/ hook の促し | **A1 だけ** |
+| 「checkpoint して」/ 逼迫の促し | **A1 だけ** |
 | 「引き継ぎを作って」/「文脈を保存して」 | A1 |
 | 「案件を更新して」/「docs に反映して」/「ADR を作って」 | **`sdd-docs` スキル**（A2 / B）。逼迫しているなら A1 を先に |
-| 「現状を教えて」 | 読むだけ。書かない |
+| 「現状を教えて」/ 作業の再開 | **復帰**。読むだけ。書かない |
 
 **子エージェントの中では何もしない。** 親の記録は親だけが書く。
 
@@ -33,11 +33,12 @@ uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-
 
 1. 上で保存先を解決する。**固定パスを自分で組み立てない**
    （保存先はセッション別。別セッションの記録を読む事故を防ぐ）
-2. **要求境界を決める** — hook に促された場合は**その要求の境界を引き継ぐ**。
+2. **要求境界を決める** — 促されて起動した場合は**その要求の境界を引き継ぐ**。
    取り直すと、要求時とスキル起動時がずれて永久に一致しない。
    促しが無い手動起動なら、この時点を境界にする
 3. `references/checkpoint-template.md` の 6 節を埋める。
-   `covered_through` に 2 の境界を書く
+   ヘッダの `session` に 1 が返した `session` を**そのまま**書き、
+   `covered_through` に 2 の境界を書く（`session` が違うと復帰時に読まれない）
 4. 書く:
 
    ```bash
@@ -47,8 +48,23 @@ uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-
 5. 通るまで直す:
 
    ```bash
-   uv run --no-project python "$CP" lint <checkpoint パス> --structure
+   uv run --no-project python "$CP" lint <checkpoint パス> --structure --session "<セッションID>"
    ```
+
+## 復帰
+
+圧縮の直後は plugin が自分の記録を自動で注入する。注入が無いとき
+（手動で再開するとき・「現状を教えて」）だけ次を行う。
+
+```bash
+uv run --no-project python "$CP" read --session "<セッションID>"
+```
+
+1. `read` は `paths` と同じ規則でセッション別のパスを解決し、自分の記録を出す。
+   **ファイルを直接開かない**（別セッションの記録を読むことがある）
+2. exit 1 なら読める記録が無い（未保存、またはヘッダの `session` が違う）。
+   他のセッションの記録で代用しない
+3. `## Next` から再開する
 
 ## 書くときの原則
 

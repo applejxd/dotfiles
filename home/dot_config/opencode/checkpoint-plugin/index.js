@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-// checkpoint スキルの CLI。機械節の生成と保存先の解決はここが単一ソースで、
-// この plugin には書かない (Python 側と二重に持つと必ずずれる)。
+// checkpoint スキルの CLI。機械節の生成・保存先の解決・記録の持ち主の照合は
+// ここが単一ソースで、この plugin には書かない (Python 側と二重に持つと必ずずれる)。
 // ★スキルは OpenCode 専用。~/.claude/skills ではなくここにある。
 //   see docs/change/closed/0001-compaction-context-handover.md 「方針転換」
 const SKILL = join(homedir(), ".config/opencode/skills/checkpoint")
@@ -103,19 +103,25 @@ export async function onCompaction(ctx, e, cwd) {
     const resolved = await paths(e.sessionID, cwd)
     if (!resolved?.checkpoint) return
 
-    await run(
+    // ★write の成否を見ること。失敗したまま読むと、残っていた古い記録を
+    //   要約に採用してしまう。
+    const wrote = await run(
       ["write", resolved.checkpoint, "--keep-prev", resolved.prev],
       cwd,
       `${header(e.sessionID)}${body}\n`,
     )
+    if (wrote === null) return
     await run(
       ["snapshot", "--session", e.sessionID, "--cwd", cwd, "--trigger", "compaction"],
       cwd,
     )
 
+    const summary = await run(["read", "--session", e.sessionID, "--cwd", cwd], cwd)
+    if (!summary?.includes(body)) return
+
     // 圧縮の要約そのものを引き継ぎにする。別々に持つと必ず片方が古くなる。
     // ★result を設定すると OpenCode は自前の要約生成を飛ばす (実測)。
-    e.result = { summary: readFileSync(resolved.checkpoint, "utf8") }
+    e.result = { summary }
   } catch {
     // 握りつぶす。result を設定しなければ OpenCode の要約に戻るだけ。
   } finally {
@@ -155,10 +161,8 @@ export async function onContext(ctx, e, cwd) {
     const pending = await ctx.storage.get(key(e.sessionID))
     if (!pending) return
 
-    const resolved = await paths(e.sessionID, cwd)
-    if (!resolved?.checkpoint) return
-
-    const text = readFileSync(resolved.checkpoint, "utf8").trim()
+    // read はヘッダの session を照合し、別セッションの記録なら失敗する。
+    const text = (await run(["read", "--session", e.sessionID, "--cwd", cwd], cwd))?.trim()
     if (!text) return
 
     e.system.push({
