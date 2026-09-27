@@ -316,39 +316,39 @@ fi
 
 if command -v "brew" >/dev/null 2>&1; then
     # Install or open the webpage for the selected application
-    # using brew cask search as input source
+    # using brew search --casks as input source
     # and display a info quickview window for the currently marked application
     function install() {
         local token
-        token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
+        token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew info --cask {}')
 
         if [ -n "$token" ]; then
             echo "(I)nstall or open the (h)omepage of $token"
             read -r input
             if [ "$input" = "i" ] || [ "$input" = "I" ]; then
-                brew cask install "$token"
+                brew install --cask "$token"
             fi
             if [ "$input" = "h" ] || [ "$input" = "H" ]; then
-                brew cask home "$token"
+                brew home "$token"
             fi
         fi
     }
 
     # Uninstall or open the webpage for the selected application
-    # using brew list as input source (all brew cask installed applications)
+    # using brew list as input source (all installed casks)
     # and display a info quickview window for the currently marked application
     function uninstall() {
         local token
-        token=$(brew cask list | fzf-tmux --query="$1" +m --preview 'brew cask info {}')
+        token=$(brew list --cask | fzf-tmux --query="$1" +m --preview 'brew info --cask {}')
 
         if [ -n "$token" ]; then
             echo "(U)ninstall or open the (h)omepage of $token"
             read -r input
             if [ "$input" = "u" ] || [ "$input" = "U" ]; then
-                brew cask uninstall "$token"
+                brew uninstall --cask "$token"
             fi
             if [ "$input" = "h" ] || [ "$input" = "H" ]; then
-                brew cask home "$token"
+                brew home "$token"
             fi
         fi
     }
