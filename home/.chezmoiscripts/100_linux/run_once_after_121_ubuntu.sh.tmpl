@@ -134,10 +134,15 @@ echo "ClamAV をインストール/更新します..."
 
 echo "Installing security tools..." >&2
 sudo apt-get -y install clamav clamav-daemon
-sudo systemctl stop clamav-freshclam
-sudo freshclam
-sudo systemctl start clamav-daemon.service
-sudo systemctl start clamav-freshclam.service
+# systemd の無い環境 (コンテナなど) ではサービスが動かないので、定義の更新ごと飛ばす
+if [ -d /run/systemd/system ]; then
+    sudo systemctl stop clamav-freshclam
+    sudo freshclam
+    sudo systemctl start clamav-daemon.service
+    sudo systemctl start clamav-freshclam.service
+else
+    echo "systemd が動いていないので ClamAV のサービス操作と定義の更新を飛ばします"
+fi
 
 echo "✅ 完了：ClamAV をインストール/更新しました"
 {{- end }}
