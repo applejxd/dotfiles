@@ -305,7 +305,11 @@ Ubuntu 22.04 の既定は 3.10、20.04 は 3.8 なので該当する（24.04 は
 現在は 2 段構えで防いでいるので、通常はこのエラーを見ない。
 
 1. `000_unix/run_before_005_python.sh.tmpl` が**ファイル適用より前に**走り、3.11 以上が
-   無ければ uv をユーザ領域へ入れて `uv python install` する（sudo 不要）
+   無ければ uv をユーザ領域へ入れて `uv python install` する（sudo 不要）。
+   見つけた Python は `~/.local/bin/chezmoi-python3` へ張る。`[interpreters.py]` は
+   init 時に PATH 上で 3.11 以上が見つからなければこの shim を指すので、後から uv で
+   入った（PATH に出ない）Python でも modify script が動く
+   （[ADR-0003](../adr/0003-require-python-311-for-agent-configuration.md)）
 2. ラッパー (`home/.chezmoitemplates/modify_json.py.tmpl`) が実行時に探し直す
    - 自分自身 → PATH の `python3.14` … `python3.11` → PATH の `python3` / `python`
    - `~/.local/share/mise/installs/python/*/bin/python3.*`
@@ -351,6 +355,14 @@ chezmoi apply
 
 `tomli` は入れない。理由は
 [ADR-0003](../adr/0003-require-python-311-for-agent-configuration.md) を参照。
+
+まっさらな機械で `chezmoi apply` より先に `chezmoi diff` を回すと、次のエラーに
+なることがある。diff はスクリプトを走らせないので、005 がまだ shim を張っていない。
+`chezmoi apply` を 1 回回せば解消する。
+
+```text
+chezmoi: .claude/settings.json: fork/exec /home/<user>/.local/bin/chezmoi-python3: no such file or directory
+```
 
 ### 13. AI CLI が mise に「global default version を指定しろ」と言う
 

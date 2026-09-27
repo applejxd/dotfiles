@@ -2130,7 +2130,7 @@ herdr 自身が `run_after_140` / `343` で毎回導入し直す今の方式の�
 | `~/.claude/settings.json` | `hooks` へ注入 | 管理エントリのみ差し替え |
 | `~/.gemini/settings.json` | `hooks` へ注入 | `GEMINI_MANAGED` の枝だけ上書き |
 | `~/.copilot/hooks/orca.json` | 専用ファイルを新規作成 | `from-claude.json` のみ生成 |
-| `~/.codex/config.toml` | 書き込み無し | `chezmoi-managed:start/end` マーカー間のみ |
+| `~/.codex/config.toml` | 書き込み無し | `chezmoi-managed:start/end`（トップレベルのキー）と `chezmoi-managed:tables:start/end`（テーブル）のマーカー間のみ |
 
 Orca 本体が生成する実体 (`~/.orca/`, `~/.orca-wsl/`, `~/.orca-relay/`,
 `~/.local/share/orca/`, `~/.local/bin/orca-ide`, `~/orca/`) と、`npx skills` が
