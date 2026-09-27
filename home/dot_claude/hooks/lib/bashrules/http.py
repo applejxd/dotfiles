@@ -43,9 +43,6 @@ _CURL_NO_VALUE_SHORT_FLAGS = set("012346#BaJMRZfFsSLIikvVqgGNnO")
 _CURL_CONFIG_FLAGS = tables.as_set("http", "curl_config_flags")
 
 
-_WGET_BODY_FLAGS = tables.as_set("http", "wget_body_flags")
-
-
 _WGET_OUTPUT_FLAGS = tables.as_set("http", "wget_output_flags")
 
 

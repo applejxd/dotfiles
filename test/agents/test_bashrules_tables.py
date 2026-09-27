@@ -10,13 +10,18 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 HOOK_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_check_bash.py"
+BASHRULES_DIR = HOOK_PATH.parent / "lib" / "bashrules"
 
 sys.path.insert(0, str(ROOT / "test" / "agents"))
 
@@ -25,19 +30,15 @@ from agents_common import agents_config_dir  # noqa: E402
 AGENTS_DIR = agents_config_dir()
 
 
-def _run(hook: Path, command: str) -> tuple[str | None, str]:
-    """hook を subprocess で動かし (decision, reason) を返す。
-
-    decision は hook が沈黙したとき (= 許可) に None。その場合は CLI 側が
-    素通り扱いにするため、stderr を reason として返して切り分けられるようにする。
-    """
+def _run_raw(hook: Path, command: str) -> subprocess.CompletedProcess[str]:
+    """hook を subprocess で動かし、検査していない実行結果を返す。"""
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
         "tool_input": {"command": command},
         "cwd": str(ROOT),
     }
-    proc = subprocess.run(
+    return subprocess.run(
         [sys.executable, str(hook)],
         input=json.dumps(payload),
         capture_output=True,
@@ -46,8 +47,24 @@ def _run(hook: Path, command: str) -> tuple[str | None, str]:
         timeout=30,
         env={**os.environ, "AGENTS_CONFIG_DIR": str(AGENTS_DIR)},
     )
+
+
+def _run(hook: Path, command: str) -> tuple[str | None, str]:
+    """hook を subprocess で動かし (decision, reason) を返す。
+
+    decision は hook が沈黙したとき (= 許可) に None。CLI はクラッシュした hook も
+    素通りさせるので、沈黙はクリーンな終了 (exit 0 / Traceback なし) のときだけ
+    受け付ける。
+    """
+    proc = _run_raw(hook, command)
     out = proc.stdout.strip()
     if not out:
+        assert proc.returncode == 0, (
+            f"hook が無出力で異常終了した (rc={proc.returncode}): {proc.stderr[-500:]}"
+        )
+        assert "Traceback" not in proc.stderr, (
+            f"hook が無出力で例外を出した: {proc.stderr[-500:]}"
+        )
         return None, proc.stderr.strip()
     data = json.loads(out)
     return data["permissionDecision"], data.get("permissionDecisionReason", "")
@@ -64,6 +81,14 @@ def _run_with_tables(tmp_path: Path, command: str, mutate) -> tuple[str | None, 
     tables = hooks / "lib" / "bashrules" / "tables.toml"
     tables.write_text(mutate(tables.read_text(encoding="utf-8")), encoding="utf-8")
     return _run(hooks / HOOK_PATH.name, command)
+
+
+def test_run_rejects_silent_crash(tmp_path):
+    """無出力でクラッシュした hook を「許可」と取り違えないこと (ヘルパーの回帰)."""
+    hook = tmp_path / "fake_hook.py"
+    hook.write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
+    with pytest.raises(AssertionError):
+        _run(hook, "git status")
 
 
 def test_tables_toml_edit_changes_the_decision(tmp_path):
@@ -101,3 +126,42 @@ def test_broken_tables_toml_does_not_silently_allow(tmp_path):
     )
     assert decision == "deny", f"壊れた TOML で素通りした (fail-open): {reason}"
     assert "検査ルールを読み込めませんでした" in reason
+
+
+_TABLE_LOAD_RE = re.compile(
+    r'^(\w+)\s*=\s*tables\.as_\w+\(\s*"(\w+)"\s*,\s*"(\w+)"\s*\)', re.MULTILINE
+)
+
+
+def _table_loads() -> list[tuple[str, str, str]]:
+    """``NAME = tables.as_xxx("section", "key")`` を (file, NAME, section.key) で返す。"""
+    loads = []
+    for path in sorted(BASHRULES_DIR.glob("*.py")):
+        for m in _TABLE_LOAD_RE.finditer(path.read_text(encoding="utf-8")):
+            loads.append((path.name, m.group(1), f"{m.group(2)}.{m.group(3)}"))
+    return loads
+
+
+def test_every_table_key_is_loaded():
+    """TOML に書いたキーはどこかで読まれること (編集しても効かない表を残さない)."""
+    with (BASHRULES_DIR / "tables.toml").open("rb") as fh:
+        data = tomllib.load(fh)
+    defined = {f"{section}.{key}" for section, body in data.items() for key in body}
+    loaded = {key for _, _, key in _table_loads()}
+    assert defined - loaded == set(), "どこからも読まれていないキー"
+
+
+def test_every_loaded_table_is_used():
+    """読み込んだ表の定数が判定に使われていること (定義だけのデッドコードを残さない)."""
+    sources = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in BASHRULES_DIR.glob("*.py")
+    }
+    unused = []
+    for filename, name, key in _table_loads():
+        pattern = re.compile(rf"\b{re.escape(name)}\b")
+        uses = sum(len(pattern.findall(text)) for text in sources.values())
+        # 1 回は定義そのもの
+        if uses < 2:
+            unused.append(f"{filename}: {name} ({key})")
+    assert unused == []

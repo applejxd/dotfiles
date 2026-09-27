@@ -76,15 +76,27 @@ for command, want in CASES:
     proc = subprocess.run(
         ["python3", HOOK], input=payload, capture_output=True, text=True, timeout=30
     )
-    try:
-        output = json.loads(proc.stdout or "{}")
-    except json.JSONDecodeError:
-        output = {}
-    got = output.get("hookSpecificOutput", {}).get("permissionDecision", "pass")
-    ok = got == want if want == "deny" else got != "deny"
+    stdout = proc.stdout.strip()
+    broken = False
+    if not stdout:
+        broken = proc.returncode != 0 or "Traceback" in proc.stderr
+        got = f"crash(rc={proc.returncode})" if broken else "pass"
+    else:
+        try:
+            output = json.loads(stdout)
+        except json.JSONDecodeError:
+            output = None
+        if isinstance(output, dict):
+            got = output.get("hookSpecificOutput", {}).get("permissionDecision", "pass")
+        else:
+            broken = True
+            got = "invalid-json"
+    ok = not broken and (got == want if want == "deny" else got != "deny")
     if not ok:
         failures += 1
     print(f"{'ok ' if ok else '❌ '} {command:<32} want={want} got={got}")
+    if broken:
+        print(f"    stdout={proc.stdout[-200:]!r} stderr={proc.stderr[-200:]!r}")
 
 if failures:
     print(f"❌ {failures} 件が期待と違います")

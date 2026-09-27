@@ -26,8 +26,18 @@ COMMON_PATH = agents_config_dir() / "common.toml"
 COMMON = load_common()
 
 
-def run_hook(tool_name: str, path: str, *, config_dir: Path | None = None) -> dict:
-    """hook を実プロセスで起動し、出力 JSON を返す (無出力なら空 dict)。"""
+def run_hook(
+    tool_name: str,
+    path: str,
+    *,
+    config_dir: Path | None = None,
+    hook: Path = HOOK,
+) -> dict:
+    """hook を実プロセスで起動し、出力 JSON を返す (無出力なら空 dict)。
+
+    無出力は exit 0 かつ Traceback なしのときだけ受け付ける (クラッシュを許可と
+    取り違えない)。
+    """
     env = dict(os.environ)
     env["AGENTS_CONFIG_DIR"] = str(config_dir or COMMON_PATH.parent)
     payload = json.dumps(
@@ -38,7 +48,7 @@ def run_hook(tool_name: str, path: str, *, config_dir: Path | None = None) -> di
         }
     )
     proc = subprocess.run(
-        [sys.executable, "-B", str(HOOK)],
+        [sys.executable, "-B", str(hook)],
         input=payload,
         capture_output=True,
         text=True,
@@ -47,11 +57,29 @@ def run_hook(tool_name: str, path: str, *, config_dir: Path | None = None) -> di
     )
     assert proc.returncode == 0, f"hook が異常終了: {proc.stderr}"
     out = proc.stdout.strip()
-    return json.loads(out) if out else {}
+    if not out:
+        assert "Traceback" not in proc.stderr, f"hook が無出力で例外を出した: {proc.stderr}"
+        return {}
+    return json.loads(out)
 
 
 def is_denied(result: dict) -> bool:
     return result.get("permissionDecision") == "deny"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "import sys\nsys.exit(1)\n",
+        "import sys\nsys.stderr.write('Traceback (most recent call last):\\n')\n",
+    ],
+)
+def test_run_hook_rejects_silent_crash(tmp_path, body):
+    """無出力でクラッシュした hook を「許可」と取り違えないこと (ヘルパーの回帰)."""
+    hook = tmp_path / "fake_hook.py"
+    hook.write_text(body, encoding="utf-8")
+    with pytest.raises(AssertionError):
+        run_hook("view", "README.md", hook=hook)
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +179,7 @@ def test_missing_path_is_ignored():
         env=env,
     )
     assert proc.returncode == 0
+    assert "Traceback" not in proc.stderr
     assert proc.stdout.strip() == ""
 
 

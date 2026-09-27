@@ -123,8 +123,6 @@ curl_local_blocking_flags = [
 
 curl_config_flags = ["--config", "-K"]
 
-wget_body_flags = ["--body-data", "--body-file", "--post-data", "--post-file"]
-
 wget_output_flags = ["--output-document", "-O"]
 
 wget_config_flags = ["--config", "--execute", "-e"]
@@ -146,8 +144,6 @@ local_url_schemes = ["http", "https"]
 # ─── GitHub CLI API の method / operation 判定 ─────────────────────
 gh_api_method_flags = ["--method", "-X"]
 
-gh_api_field_flags = ["--field", "--raw-field", "-F", "-f"]
-
 gh_api_input_flags = ["--input"]
 
 gh_api_value_flags = [
@@ -163,10 +159,8 @@ gh_api_read_methods = ["GET", "HEAD"]
 # ──────────────────────────────────────────────────────────────────────────
 [rm]
 # ─── rm の壊滅的ターゲット (承認の余地なく deny) ──────────────────────
-# critical_ask で `rm -rf` を承認可能にする代わりに、取り返しのつかない
-# ターゲットだけはここで hard-deny する。
-# cwd 配下 (`.` / `./*` / `*`) は critical_ask 側に任せる (プロジェクト内は
-# ユーザーが承認して消せるべきなので、ここでは落とさない)。
+# `rm` 自体は common.toml の [bash] ask で承認可能にしている。ここに挙げる
+# 取り返しのつかないターゲットだけは承認の余地なく deny する。
 catastrophic_dirs = [
   "/", "/Applications", "/Library", "/System", "/Users", "/Volumes", "/bin", "/boot",
   "/dev", "/etc", "/home", "/lib", "/lib64", "/opt", "/proc", "/root", "/sbin",

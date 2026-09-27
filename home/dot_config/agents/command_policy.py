@@ -338,14 +338,6 @@ _WRAPPERS: dict[str, str] = {
 # `--` の後ろ、あるいは run/exec サブコマンドの後ろが実コマンドになるもの
 _RUNNER_SUBCOMMANDS = {"exec", "run", "run-script", "x", "dlx"}
 
-# 位置引数の中にコマンドが埋まっているもの。
-# 値は「コマンドが始まる位置を探す方法」を表す。
-_EMBEDDED_COMMAND_RULES: dict[str, str] = {
-    "find": "after-exec",        # find . -exec CMD \;
-    "screen": "after-flags",     # screen -dm CMD
-    "tmux": "tmux",              # tmux new-session -d 'CMD'
-    "at": "flags",               # at now <<< 'CMD'
-}
 # find の -exec / -execdir / -ok
 _FIND_EXEC_FLAGS = {"-exec", "-execdir", "-ok", "-okdir"}
 

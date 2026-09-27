@@ -9,7 +9,7 @@
      - 任意コード実行         -> ``rules_exec.py``
      - 防御機構・環境の改変   -> ``rules_guard.py``
      - ファイルの読み書き     -> ``rules_files.py``
-     - 秘密情報              -> ``secrets.py``
+     - 秘密情報              -> ``sensitive.py``
      - curl / wget           -> ``http.py``
      - gh api                -> ``ghapi.py``
      - 削除                  -> ``rm.py``
@@ -66,8 +66,8 @@ from .sensitive import check_git_add_sensitive, check_history_access, check_secr
 # uv 非依存のチェック（常時有効）
 #
 # DENY_CHECKS が先に評価される。ASK_CHECKS は deny に該当しなかったものだけを
-# 対象にするので、例えば `rm -rf /` は root guard (deny) が critical_ask より
-# 優先される。
+# 対象にするので、例えば `rm -rf /` は root guard (deny) が `[bash] ask` の
+# `rm` より優先される。
 DENY_CHECKS = [
     check_policy_loaded,      # ★最初に実行: 設定が読めないなら fail-closed
     check_rm_root_guard,      # 壊滅的な削除は承認の余地なし

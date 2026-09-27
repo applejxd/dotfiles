@@ -133,10 +133,11 @@ def load_hook_module():
 HOOK = load_hook_module()
 
 
-def run_hook(command: str, *, cwd: str | None = None) -> tuple[str | None, str]:
-    """Run the hook as a subprocess and return (decision, reason).
+def run_hook_raw(
+    command: str, *, cwd: str | None = None, hook: Path = HOOK_PATH
+) -> subprocess.CompletedProcess[str]:
+    """Run the hook as a subprocess and return the unchecked process result.
 
-    decision is None when the hook stayed silent (the command is allowed).
     AGENTS_CONFIG_DIR points the hook at the repository copy of the agents
     config so the result does not depend on what is currently deployed to
     ~/.config.
@@ -148,8 +149,8 @@ def run_hook(command: str, *, cwd: str | None = None) -> tuple[str | None, str]:
         "cwd": cwd or str(ROOT),
     }
     env = {**os.environ, "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent)}
-    proc = subprocess.run(
-        [sys.executable, str(HOOK_PATH)],
+    return subprocess.run(
+        [sys.executable, str(hook)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -157,15 +158,66 @@ def run_hook(command: str, *, cwd: str | None = None) -> tuple[str | None, str]:
         timeout=30,
         env=env,
     )
+
+
+def run_hook(
+    command: str, *, cwd: str | None = None, hook: Path = HOOK_PATH
+) -> tuple[str | None, str]:
+    """Run the hook and return (decision, reason).
+
+    decision is None when the hook stayed silent (the command is allowed).
+    A silent exit is only accepted when it is a clean one: CLIs treat a
+    crashed hook as "no decision", so a crash must fail the test instead of
+    passing as an allow.
+    """
+    proc = run_hook_raw(command, cwd=cwd, hook=hook)
     out = proc.stdout.strip()
     if not out:
-        # hook が沈黙 (= 許可) か、クラッシュか区別できるように stderr を返す
+        assert proc.returncode == 0, (
+            f"hook が無出力で異常終了した (rc={proc.returncode}): {proc.stderr[-500:]}"
+        )
+        assert "Traceback" not in proc.stderr, (
+            f"hook が無出力で例外を出した: {proc.stderr[-500:]}"
+        )
         return None, proc.stderr.strip()
     data = json.loads(out)
     # Copilot 形式と Claude 形式の両方に同じ決定が入っているはず
     assert data["permissionDecision"] == data["hookSpecificOutput"]["permissionDecision"]
     assert data["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     return data["permissionDecision"], data.get("permissionDecisionReason", "")
+
+
+# ---------------------------------------------------------------------------
+# run_hook 自体の検査
+# ---------------------------------------------------------------------------
+
+def _fake_hook(tmp_path: Path, body: str) -> Path:
+    hook = tmp_path / "fake_hook.py"
+    hook.write_text(body, encoding="utf-8")
+    return hook
+
+
+@pytest.mark.parametrize(
+    ("label", "body"),
+    [
+        ("無出力で exit 1", "import sys\nsys.exit(1)\n"),
+        ("無出力で例外", "raise RuntimeError('boom')\n"),
+        (
+            "無出力で Traceback を出して exit 0",
+            "import sys\nsys.stderr.write('Traceback (most recent call last):\\n')\n",
+        ),
+    ],
+)
+def test_run_hook_rejects_silent_crash(tmp_path, label, body):
+    """クラッシュした hook を「許可」と取り違えないこと."""
+    hook = _fake_hook(tmp_path, body)
+    with pytest.raises(AssertionError):
+        run_hook("git status", hook=hook)
+
+
+def test_run_hook_accepts_clean_silence(tmp_path):
+    hook = _fake_hook(tmp_path, "import sys\nsys.stdin.read()\n")
+    assert run_hook("git status", hook=hook) == (None, "")
 
 
 # ---------------------------------------------------------------------------

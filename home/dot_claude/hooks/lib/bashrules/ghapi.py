@@ -15,9 +15,6 @@ from .sensitive import _is_sensitive_token
 _GH_API_METHOD_FLAGS = tables.as_set("ghapi", "gh_api_method_flags")
 
 
-_GH_API_FIELD_FLAGS = tables.as_set("ghapi", "gh_api_field_flags")
-
-
 _GH_API_INPUT_FLAGS = tables.as_set("ghapi", "gh_api_input_flags")
 
 

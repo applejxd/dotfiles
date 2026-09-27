@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 HOOK_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_redirect-tmp.py"
 from agents_common import agents_config_dir  # noqa: E402
@@ -18,12 +20,16 @@ from agents_common import agents_config_dir  # noqa: E402
 COMMON_PATH = agents_config_dir() / "common.toml"
 
 
-def run_hook(tool_name: str, tool_input: dict) -> str | None:
+def run_hook(
+    tool_name: str, tool_input: dict, *, hook: Path = HOOK_PATH
+) -> str | None:
     """Run the hook as a subprocess and return the permissionDecision.
 
-    Returns None when the hook stayed silent (= allowed). AGENTS_CONFIG_DIR
-    points the hook at the repository copy of command_policy.py so the result
-    does not depend on what is currently deployed to ~/.config.
+    Returns None when the hook stayed silent (= allowed); a silent exit is only
+    accepted when it is clean, so a crash is not mistaken for an allow.
+    AGENTS_CONFIG_DIR points the hook at the repository copy of
+    command_policy.py so the result does not depend on what is currently
+    deployed to ~/.config.
     """
     payload = {
         "hook_event_name": "PreToolUse",
@@ -33,7 +39,7 @@ def run_hook(tool_name: str, tool_input: dict) -> str | None:
     }
     env = {**os.environ, "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent)}
     proc = subprocess.run(
-        [sys.executable, str(HOOK_PATH)],
+        [sys.executable, str(hook)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -44,6 +50,7 @@ def run_hook(tool_name: str, tool_input: dict) -> str | None:
     out = proc.stdout.strip()
     if not out:
         assert proc.returncode == 0, proc.stderr
+        assert "Traceback" not in proc.stderr, proc.stderr
         return None
     data = json.loads(out)
     assert data["permissionDecision"] == data["hookSpecificOutput"]["permissionDecision"]
@@ -56,6 +63,21 @@ def run_bash(command: str) -> str | None:
 
 def run_path(tool_name: str, path: str) -> str | None:
     return run_hook(tool_name, {"path": path, "file_path": path})
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "import sys\nsys.exit(1)\n",
+        "import sys\nsys.stderr.write('Traceback (most recent call last):\\n')\n",
+    ],
+)
+def test_run_hook_rejects_silent_crash(tmp_path, body):
+    """無出力でクラッシュした hook を「許可」と取り違えないこと (ヘルパーの回帰)."""
+    hook = tmp_path / "fake_hook.py"
+    hook.write_text(body, encoding="utf-8")
+    with pytest.raises(AssertionError):
+        run_hook("Bash", {"command": "ls"}, hook=hook)
 
 
 # ---------------------------------------------------------------------------
