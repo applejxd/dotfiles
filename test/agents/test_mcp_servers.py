@@ -352,6 +352,42 @@ def test_codex_config_is_stable_from_the_first_apply(existing):
         assert tomllib.loads(first)["profiles"]["mine"] == {"model": "gpt-5"}
 
 
+USER_ROOT = 'model = "o3"\n'
+# ab28fee までの形式。管理ブロック 1 つにテーブルまで入り、ユーザ部分は後ろ
+SINGLE_BLOCK = (
+    '# chezmoi-managed:start\nstale = true\n[windows]\nsandbox = "x"\n'
+    "# chezmoi-managed:end\n\n"
+)
+
+
+@pytest.mark.parametrize(
+    "existing",
+    [
+        pytest.param(USER_ROOT, id="root-only"),
+        pytest.param(f"{USER_ROOT}\n{USER_TABLE}", id="root-and-table"),
+        pytest.param(f"{SINGLE_BLOCK}{USER_ROOT}{USER_TABLE}", id="single-block"),
+        # 管理ブロックより前にトップレベルのキーが書かれた形
+        pytest.param(f"{USER_ROOT}{SINGLE_BLOCK}{USER_TABLE}", id="before-block"),
+    ],
+)
+def test_codex_config_keeps_user_root_keys_at_the_root(existing):
+    """ユーザのトップレベルのキーが管理側のテーブルに吸収されない。
+
+    まとめて後ろへ足すと、`model = ...` が直前の `[windows]` などに属して
+    `windows.model` になっていた。
+    """
+    first = render(CODEX_CONFIG, username="tester", stdin=existing)
+    second = render(CODEX_CONFIG, username="tester", stdin=first)
+    parsed = tomllib.loads(first)
+
+    assert second == first
+    assert parsed["model"] == "o3"
+    assert parsed["windows"] == {"sandbox": "elevated"}
+    assert "stale" not in parsed
+    if "profiles.mine" in existing:
+        assert parsed["profiles"]["mine"] == {"model": "gpt-5"}
+
+
 # ---------------------------------------------------------------------------
 # Claude 登録スクリプト (~/.claude.json は管理外なので CLI 経由)
 # ---------------------------------------------------------------------------

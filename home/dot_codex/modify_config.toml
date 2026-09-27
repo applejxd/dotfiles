@@ -2,7 +2,14 @@
 {{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
 {{- $mcp := list -}}
 {{- if hasKey $common "mcp" }}{{ range $common.mcp }}{{ if or (not (hasKey . "clis")) (has "codex" .clis) }}{{ $mcp = append $mcp . }}{{ end }}{{ end }}{{ end -}}
-{{- $userConfig := .chezmoi.stdin | replaceAllRegex "(?s)^# chezmoi-managed:start.*?# chezmoi-managed:end(?:\\r?\\n)*" "" -}}
+{{- /* ユーザのトップレベルのキーを管理テーブルの後ろへ置かない (see test/README.md#解決済み-codex-のトップレベルのキーが直前のテーブルに入る) */ -}}
+{{- $userConfig := .chezmoi.stdin
+      | replaceAllRegex "(?ms)^# chezmoi-managed:start.*?^# chezmoi-managed:end(?:\\r?\\n)*" ""
+      | replaceAllRegex "(?ms)^# chezmoi-managed:tables:start.*?^# chezmoi-managed:tables:end(?:\\r?\\n)*" "" -}}
+{{- $userParts := regexSplit "(?m)^\\[" $userConfig 2 -}}
+{{- $userRoot := trim (index $userParts 0) -}}
+{{- $userTables := "" -}}
+{{- if gt (len $userParts) 1 }}{{ $userTables = trim (printf "[%s" (index $userParts 1)) }}{{ end -}}
 # chezmoi-managed:start
 # see https://www.chezmoi.io/user-guide/manage-different-types-of-file/#manage-part-but-not-all-of-a-file
 # see https://blog.s2n.tech/posts/codex-config-toml-chezmoi/
@@ -23,7 +30,13 @@ web_search = "live"
 model_reasoning_effort = "medium"
 # pragmatic: 目的達成のために必要なだけの推論を行う
 personality = "pragmatic"
+# chezmoi-managed:end
+{{- with $userRoot }}
 
+{{ . }}
+{{- end }}
+
+# chezmoi-managed:tables:start
 # see https://developers.openai.com/codex/config-advanced#shell-environment-policy
 [shell_environment_policy]
 inherit = "core"
@@ -58,6 +71,7 @@ args = {{ index . "args" | default list | toJson }}
 {{-   fail (printf "[[mcp]] %s: transport %q は未対応" .id .transport) }}
 {{- end }}
 {{ end -}}
-# chezmoi-managed:end
-{{ if trim $userConfig }}
-{{ $userConfig }}{{ end -}}
+# chezmoi-managed:tables:end
+{{ with $userTables }}
+{{ . }}
+{{ end -}}
