@@ -343,6 +343,10 @@ skill を生成します。agent CLI は mise 管理ではなくなったため�
 `chezmoi apply` で integration と skill を再生成します。mise の管理情報と実体が
 食い違うため、`herdr update` は使いません。
 
+herdr が Claude の `settings.json` に足す hook（`~/.claude/hooks/herdr-agent-state.sh`）は、
+chezmoi 側の生成処理が外部の hook として残します。仕組みは
+[外部ツールとの共存](agent-permissions.md#外部ツールとの共存-orca--herdr) を参照してください。
+
 旧インストーラーの `~/.local/bin/herdr`（Linux / WSL）や
 `%LOCALAPPDATA%\Programs\Herdr\bin\herdr.exe`（Windows）は自動削除しません。
 移行後は新しいターミナルで `mise which herdr` と、Linux なら `command -v herdr`、

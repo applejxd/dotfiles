@@ -78,10 +78,12 @@ fallback として参照する実装になっている（1.0.84-1 時点）。�
 - `chezmoi diff` にこの差分が出るのは**想定内のドリフト**で、追跡しなくてよい
 - キー自体は fallback として有効なので `common.toml` からは外さない
 
-同じ理由で `chezmoi apply` 直後にも `settings.json` の差分が残る。`run_after_140_herdr_integration.sh.tmpl`
-が呼ぶ `herdr integration install copilot` が、chezmoi の書き込みの後に
-settings.json を**末尾改行なし**で書き直すため。差分は `\ No newline at end of file`
-の 1 行だけで、内容は一致している。
+同じ理由で、Windows では `chezmoi apply` 直後にも `settings.json` の差分が残る
+（実機では未確認）。`run_after_343_herdr_integration.ps1.tmpl` が呼ぶ
+`herdr integration install copilot` が、chezmoi の書き込みの後に settings.json を
+**末尾改行なし**で書き直すため。差分は `\ No newline at end of file` の 1 行だけで、
+内容は一致している。Linux / WSL の `run_after_140_herdr_integration.sh.tmpl` は
+書き直しの後に末尾改行を補うので、この差分は出ない。
 
 ## デフォルトのスラッシュコマンド
 

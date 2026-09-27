@@ -108,21 +108,33 @@ def hook_command(
     return f"{runner} {quoted}"
 
 
-def is_managed_hook_command(command: Any) -> bool:
-    """コマンド文字列が本リポジトリの生成した hook かどうかを判定する。
+def managed_hook_scripts(common: dict[str, Any]) -> frozenset[str]:
+    """このリポジトリが HOOKS_DIR に配る hook のスクリプト名 (現役 + 撤去済み)。
 
-    settings.json の hooks は Orca などの外部ツールも追記する共有領域なので、
-    「HOOKS_DIR 配下のスクリプトを起動しているか」で自分の生成物だけを識別する。
+    see docs/spec/agent-permissions.md#外部ツールとの共存-orca--herdr
+    """
+    current = {hook["script"] for hook in common.get("hooks", []) if "script" in hook}
+    retired = common.get("retired_hooks", {}).get("scripts", [])
+    return frozenset(current | set(retired))
+
+
+def is_managed_hook_command(command: Any, scripts: frozenset[str]) -> bool:
+    """コマンド文字列が本リポジトリの hook (``scripts`` のどれか) を起動しているか。
+
     ホーム部分の表記 (絶対パス / `$HOME` / `~`) と引用符の有無は問わない。
     絶対パスで比較すると PowerShell の `''` エスケープや別表記のホームを
     取りこぼし、消し損ねた hook が二重登録される。
+    スクリプト名の直後は引用符・空白・末尾のいずれかに限る
+    (`check_bash.py.bak` などを自分の hook と誤認しない)。
     """
-    if not isinstance(command, str):
+    if not isinstance(command, str) or not scripts:
         return False
-    return HOOKS_DIR_TAIL in command.replace("\\", "/")
+    names = "|".join(re.escape(name) for name in sorted(scripts))
+    pattern = re.escape(HOOKS_DIR_TAIL) + f"(?:{names})" + r"(?=$|[\s\"'])"
+    return re.search(pattern, command.replace("\\", "/")) is not None
 
 
-def strip_managed_claude_hooks(entries: Any) -> Any:
+def strip_managed_claude_hooks(entries: Any, scripts: frozenset[str]) -> Any:
     """1 イベント分の hook エントリ列から、管理対象のコマンドだけを取り除く。
 
     削除するのは「全コマンドが自分の生成物だと確認できたエントリ」だけ。
@@ -142,7 +154,7 @@ def strip_managed_claude_hooks(entries: Any) -> Any:
             for command in entry["hooks"]
             if not (
                 isinstance(command, dict)
-                and is_managed_hook_command(command.get("command"))
+                and is_managed_hook_command(command.get("command"), scripts)
             )
         ]
         if not foreign:
@@ -164,10 +176,11 @@ def merge_claude_hooks(
     一致するため差分が最小になり、2 回適用しても結果が変わらない (冪等)。
     """
     managed = build_claude_hooks(common)
+    scripts = managed_hook_scripts(common)
     preserved: dict[str, Any] = {}
     if isinstance(existing, dict):
         for event, entries in existing.items():
-            kept = strip_managed_claude_hooks(entries)
+            kept = strip_managed_claude_hooks(entries, scripts)
             if isinstance(kept, list) and not kept:
                 # 自分の生成物しか無かったイベント。生成側で作り直す
                 continue

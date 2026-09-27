@@ -80,7 +80,7 @@ hook 設定の管理をやめ、CLI と Orca に任せる。
 
 具体的な規則は次のとおり。
 
-1. **所有権はディレクトリ単位で判定する。**
+1. **所有権はディレクトリ単位で判定する。**（2026-09-27 に改定。下の「追記」を参照）
    コマンドが `~/.claude/hooks/`（または `$HOME/.claude/hooks/`）を起動していれば
    chezmoi の生成物とみなす。このディレクトリは `home/dot_claude/hooks/` として
    リポジトリが全体を所有しているため、パス基準の判定が成立する。
@@ -153,6 +153,28 @@ hook 設定の管理をやめ、CLI と Orca に任せる。
   同じ `modify_json.py.tmpl` ラッパー経由に揃った
 - Codex のみ TOML のためマーカー方式が残るが、
   「管理範囲を明示して外部の追記を壊さない」という考え方は共通になった
+
+### 追記: 所有権をスクリプト名で判定する（2026-09-27）
+
+**決定事項の規則 1 を改定する。** 規則 2（コマンド単位の絞り込み）とその他は変えない。
+
+`~/.claude/hooks/` はリポジトリだけの物ではなかった。herdr
+（`herdr integration install claude`）も `herdr-agent-state.sh` をここに置き、
+`SessionStart` へ登録する。ディレクトリで判定すると apply のたびにこれを消し、
+`run_after_140_herdr_integration` が足し直すので、2 回 apply しても
+`settings.json` が安定しなかった（Docker の `update` モードで発覚）。
+
+改定後は、`[[hooks]].script`（現役）と `[retired_hooks].scripts`（撤去済み）に
+名前があるスクリプトを起動するコマンドだけを chezmoi の生成物とみなす。
+撤去済みの一覧は、選択肢 1 の利点だった「消したスクリプトの残骸の掃除」を保つためにある。
+
+- 解消した欠点: ここに置いた外部の hook（herdr など）が消える
+- 新しい欠点: hook を撤去したときに `[retired_hooks]` へ足し忘れると、古い登録が
+  外部の hook として残る
+- 手で置いて登録した hook は、`common.toml` に転記しなくても残るようになった
+  （再現性が無いので転記する運用は変えない）
+
+詳細は [外部ツールとの共存](../spec/agent-permissions.md#外部ツールとの共存-orca--herdr)。
 
 ## 関連 ADR
 

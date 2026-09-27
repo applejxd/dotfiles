@@ -1253,9 +1253,14 @@ copilot_event = "PostToolUse"
 copilot_matcher = "^(Edit|Write|edit|create)$"
 timeout_sec = 30
 
-# checkpoint の hook 3 本 (checkpoint_precompact / checkpoint_restore /
-# checkpoint_restore_pending) は 2026-09-25 に撤去した。
-# checkpoint は OpenCode 専用になり、圧縮の捕捉と復帰注入は
-# ~/.config/opencode/checkpoint-plugin が session.hook で担う。
-# 手順書を持たない CLI で hook だけ動き続ける状態を解消するのが目的。
-# see docs/change/closed/0001-compaction-context-handover.md
+# 撤去した hook のスクリプト名。hook を撤去したらここへ足すこと
+# (足し忘れると settings.json の古い登録が外部の hook として残る)。
+# see docs/spec/agent-permissions.md#外部ツールとの共存-orca--herdr
+[retired_hooks]
+scripts = [
+    "block-dangerous-commands.sh",
+    "update-adr-on-stop.py",
+    "checkpoint_precompact.py",
+    "checkpoint_restore.py",
+    "checkpoint_restore_pending.py",
+]

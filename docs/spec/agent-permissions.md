@@ -2037,9 +2037,9 @@ Claude には「許可した以外を拒否する」表現手段が無い。
   反映・切り分け手順は [Windows の hook 起動](../../home/dot_copilot/README.md#windows-の-hook-起動)
   を参照
 - `hooks` キーは Orca などの**外部ツールも追記する共有領域**なので、apply では
-  `~/.claude/hooks/` 配下を起動しているエントリだけを差し替える (後述)
-- CLI UI で手動追加した hook も `~/.claude/hooks/` を指していなければ残るが、
-  再現性が無いので `common.toml` に転記すること
+  このリポジトリの hook スクリプトを起動しているエントリだけを差し替える (後述)
+- CLI UI で手動追加した hook も、このリポジトリのスクリプトを指していなければ
+  残るが、再現性が無いので `common.toml` に転記すること
 - `*_event` を空にすればその CLI には出力されない
 - `*_matcher` を省略すると `matcher` キー自体が出力されない (= 全マッチ)。
   `Stop` / `UserPromptSubmit` など matcher 非対応イベントでは省略すること
@@ -2087,14 +2087,30 @@ Orca は `~/.claude/settings.json` と `~/.gemini/settings.json` の `hooks` へ
 
 | 判定 | 扱い |
 | --- | --- |
-| コマンドが `~/.claude/hooks/` を起動している (ホームの表記と引用は問わない) | chezmoi の生成物。除去して `common.toml` から再生成 |
+| コマンドが `~/.claude/hooks/<名前>` を起動し、`<名前>` が `[[hooks]].script` か `[retired_hooks].scripts` にある (ホームの表記と引用は問わない) | chezmoi の生成物。除去して `common.toml` から再生成 |
 | それ以外 | 外部由来。そのまま温存 |
 
-パス基準で所有権を判定できるのは、`~/.claude/hooks/` 配下が
-`home/dot_claude/hooks/` として**このリポジトリの管理下にある**ため。
+**ディレクトリではなくスクリプト名で所有権を決める。** `~/.claude/hooks/` は
+共有ディレクトリで、herdr（`herdr integration install claude`）も
+`herdr-agent-state.sh` をここに置き、`SessionStart` に登録する。
+以前はディレクトリで判定していたので、apply のたびに herdr の hook を消し、
+直後の `run_after_140_herdr_integration` が足し直していた。2 回 apply しても
+`settings.json` が安定せず、その間は hook が無い状態になる
+（Docker の `update` モードで発覚）。
+
+`[retired_hooks].scripts` は撤去した hook の名前で、`settings.json` に残った
+古い登録を消すためにある。一覧は git 履歴から作った
+（`block-dangerous-commands.sh` / `update-adr-on-stop.py` / checkpoint の 3 本）。
+**hook を撤去したらここへ足す。** 足し忘れると古い登録が外部の hook として残る。
+名前の直後が引用符・空白・末尾でない場合（`check_bash.py.bak` など）は一致させない。
+
 逆に言えば、このディレクトリにスクリプトを置いて `settings.json` へ手で
-登録しても、`common.toml` に転記していなければ次の apply で消える
-（`common.toml` を単一の真実とするための意図的な挙動）。
+登録しても、`common.toml` に転記していなければ外部の hook として残り続ける。
+
+herdr の hook を `common.toml` から生成する案は採らない。herdr の版や OS ごとに
+スクリプト名・引数・起動形式が変わり、それを追従する責任まで負うことになるため。
+herdr 自身が `run_after_140` / `343` で毎回導入し直す今の方式のほうが、
+`mise upgrade herdr` 後の追従や登録の消失からの復旧も兼ねられる。
 
 - 絞り込みは**エントリ単位ではなくコマンド単位**。1 エントリの `hooks` リストに
   管理対象と外部由来が混在していても、外部由来だけが残る

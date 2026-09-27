@@ -242,14 +242,14 @@ def test_claude_settings_merge_regenerates_managed_hooks():
 
 
 def test_stale_managed_hook_is_replaced_not_duplicated():
-    # common.toml から消したスクリプトの残骸は除去され、重複もしない。
+    # 撤去済み (retired_hooks) のスクリプトの残骸は除去され、重複もしない。
     # 同じイベントに同居する外部 hook は残ること (全置換では落ちる)。
     stale = {
         "matcher": "Bash",
         "hooks": [
             {
                 "type": "command",
-                "command": f"python3 {MANAGED_DIR}/removed-long-ago.py",
+                "command": f"python3 {MANAGED_DIR}/checkpoint_restore.py",
                 "timeout": 30,
             }
         ],
@@ -262,7 +262,7 @@ def test_stale_managed_hook_is_replaced_not_duplicated():
         for entry in entries
         for cmd in entry["hooks"]
     ]
-    assert not any("removed-long-ago.py" in c for c in commands)
+    assert not any("checkpoint_restore.py" in c for c in commands)
     assert len(commands) == len(set(commands))
     assert FOREIGN_COMMAND in commands
     expected = gen.build_claude_hooks(COMMON)
@@ -273,11 +273,104 @@ def test_stale_managed_hook_is_replaced_not_duplicated():
 # hooks は外部ツール (Orca 等) との共有領域なので、管理外の項目を消さないこと
 # ---------------------------------------------------------------------------
 
+SCRIPTS = gen.managed_hook_scripts(COMMON)
+
+# `herdr integration install claude` が settings.json へ足す hook (Docker で実測)。
+# スクリプトは HOOKS_DIR に置かれるが、このリポジトリの hook ではない
+HERDR_ENTRY = {
+    "matcher": "^(startup|resume|clear|compact|fork)$",
+    "hooks": [
+        {
+            "type": "command",
+            "command": f"bash '{MANAGED_DIR}/herdr-agent-state.sh' session",
+            "timeout": 10,
+        }
+    ],
+}
+
+
+def test_herdr_hook_in_the_shared_directory_is_preserved():
+    """HOOKS_DIR に置かれた外部の hook を自分の hook と誤認して消さない。"""
+    existing = {"hooks": {"SessionStart": [HERDR_ENTRY]}}
+    merged = gen.merge_claude_settings(existing, COMMON)
+    assert merged["hooks"]["SessionStart"] == [HERDR_ENTRY]
+
+
+def test_generation_is_stable_with_herdr_installer_in_between():
+    """生成 -> Herdr の導入 -> 生成 を繰り返しても結果が変わらない。
+
+    防御 hook (check_bash.py) はどの段階でも PreToolUse の Bash に居ること。
+    """
+
+    def install_herdr(settings: dict) -> dict:
+        hooks = settings.setdefault("hooks", {})
+        entries = hooks.setdefault("SessionStart", [])
+        if HERDR_ENTRY not in entries:
+            entries.append(json.loads(json.dumps(HERDR_ENTRY)))
+        return settings
+
+    def has_check_bash(settings: dict) -> bool:
+        return any(
+            entry.get("matcher") == "Bash"
+            and any(
+                cmd["command"].endswith('/check_bash.py"') for cmd in entry["hooks"]
+            )
+            for entry in settings["hooks"]["PreToolUse"]
+        )
+
+    first = gen.merge_claude_settings({}, COMMON)
+    assert has_check_bash(first)
+    installed = install_herdr(json.loads(json.dumps(first)))
+    second = gen.merge_claude_settings(installed, COMMON)
+    assert has_check_bash(second)
+    assert second == installed
+    third = gen.merge_claude_settings(install_herdr(json.loads(json.dumps(second))), COMMON)
+    assert third == second
+
+
+def test_unknown_script_in_the_shared_directory_is_preserved():
+    command = f"python3 {MANAGED_DIR}/someone-elses-hook.py"
+    assert not gen.is_managed_hook_command(command, SCRIPTS)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"python3 {MANAGED_DIR}/check_bash.py.bak",
+        f"python3 {MANAGED_DIR}/xcheck_bash.py",
+        f"python3 {MANAGED_DIR}/check_bash.pyc",
+    ],
+)
+def test_similar_names_are_not_mistaken_for_managed(command):
+    assert not gen.is_managed_hook_command(command, SCRIPTS)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'python3 "C:\\Users\\o\'neil\\.claude\\hooks\\check_bash.py"',
+        "py -3 -B -X utf8 'C:\\Users\\o''neil\\.claude\\hooks\\check_bash.py'",
+        "bash $HOME/.claude/hooks/markdownlint.sh --fix",
+        f"python3 {MANAGED_DIR}/checkpoint_restore_pending.py",
+    ],
+)
+def test_managed_forms_are_detected(command):
+    assert gen.is_managed_hook_command(command, SCRIPTS)
+
+
+def test_retired_scripts_are_not_current_hooks():
+    """撤去済みの一覧に現役の hook が混ざると、管理の意図が読めなくなる。"""
+    current = {hook["script"] for hook in COMMON["hooks"]}
+    retired = set(COMMON["retired_hooks"]["scripts"])
+    assert retired
+    assert not current & retired
+
+
 def test_is_managed_hook_command_detects_both_path_forms():
-    assert gen.is_managed_hook_command(f"python3 {MANAGED_DIR}/check_bash.py")
-    assert gen.is_managed_hook_command("python3 $HOME/.claude/hooks/check_bash.py")
-    assert not gen.is_managed_hook_command(FOREIGN_COMMAND)
-    assert not gen.is_managed_hook_command(None)
+    assert gen.is_managed_hook_command(f"python3 {MANAGED_DIR}/check_bash.py", SCRIPTS)
+    assert gen.is_managed_hook_command("python3 $HOME/.claude/hooks/check_bash.py", SCRIPTS)
+    assert not gen.is_managed_hook_command(FOREIGN_COMMAND, SCRIPTS)
+    assert not gen.is_managed_hook_command(None, SCRIPTS)
 
 
 def test_foreign_hooks_are_preserved_on_shared_event():
@@ -316,7 +409,7 @@ def test_mixed_entry_is_filtered_per_command():
             {"type": "command", "command": FOREIGN_COMMAND, "timeout": 10},
         ],
     }
-    kept = gen.strip_managed_claude_hooks([mixed])
+    kept = gen.strip_managed_claude_hooks([mixed], SCRIPTS)
     assert len(kept) == 1
     assert [c["command"] for c in kept[0]["hooks"]] == [FOREIGN_COMMAND]
     # 元のエントリを破壊しない
@@ -328,7 +421,7 @@ def test_event_becoming_empty_is_dropped():
     # イベントは残るので、「そもそも生成しない」のとは区別できる。
     # ★common.toml で登録していないイベントを使う (登録済みだと生成分が残る)。
     managed_only = {
-        "hooks": [{"type": "command", "command": f"python3 {MANAGED_DIR}/gone.py"}]
+        "hooks": [{"type": "command", "command": f"python3 {MANAGED_DIR}/update-adr-on-stop.py"}]
     }
     existing = {
         "hooks": {
@@ -481,7 +574,7 @@ def test_managed_hook_detection_survives_quoting(weird_home):
         ("bash", "posix"),
     ]:
         command = gen.hook_command(WEIRD_HOOK, launcher=launcher, platform=platform)
-        assert gen.is_managed_hook_command(command), command
+        assert gen.is_managed_hook_command(command, SCRIPTS), command
 
 
 @pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])

@@ -205,6 +205,13 @@ AI CLI を公式インストーラーでの導入へ切り替えた後も、410�
 `mise which claude` で探していた。公式の導入先（`~/.local/bin/claude`）、
 次に PATH の順に探すようにした。Windows 側は静的テストのみで、実機では未確認。
 
+### 解決済み: 2 回目の apply でも `.claude/settings.json` の差分が消えない
+
+`generate.py` が `~/.claude/hooks/` 配下を起動する hook をすべて自分の物とみなし、
+herdr が同じディレクトリに置く `herdr-agent-state.sh` の hook を apply のたびに消していた
+（直後の `140` が足し直す）。所有権をスクリプト名（現役 + 撤去済み）で決めるようにした。
+see [外部ツールとの共存](../docs/spec/agent-permissions.md#外部ツールとの共存-orca--herdr)
+
 ### 解決済み: Codex のトップレベルのキーが直前のテーブルに入る
 
 ユーザ部分を管理ブロック（最後が `[windows]` や `[mcp_servers.*]`）の後ろへまとめて
