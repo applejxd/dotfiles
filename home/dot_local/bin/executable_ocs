@@ -32,6 +32,9 @@ HOME = Path.home()
 RULES = HOME / ".config/opencode/guide-plugin/rules.json"
 OPENCODE = HOME / ".opencode/bin/opencode"
 CHECK = HOME / ".local/bin/ocs-boundary-check"
+# 境界チェックで「見えない」ことを確かめる対象。HOME 相対と WSL の Windows 側。
+HIDDEN_HOME_TARGETS = (".ssh", ".git-credentials", ".config/gh")
+WSL_HIDDEN_TARGETS = ("/mnt/c/Users", "/mnt/c/Windows")
 # 隔離用 DB へ引き継ぐもの。migration を消すとスキーマ管理が壊れる。
 DB_KEEP = ("credential", "account", "account_state", "control_account", "migration")
 
@@ -70,7 +73,7 @@ def load_boundary() -> dict:
     return sandbox
 
 
-def project_extras(sandbox: dict, workspace: Path, request: dict | None) -> dict:
+def project_extras(request: dict | None) -> dict:
     """この起動ディレクトリに足す追加の許可を返す。
 
     **宣言が無ければ追加はゼロ**（共通の許可だけで動く）。宣言は「機密でない
@@ -88,7 +91,6 @@ def project_extras(sandbox: dict, workspace: Path, request: dict | None) -> dict
       読み直すと、承認した内容と適用する内容が別物になりうる (間に書き換え
       られると、承認していない許可が境界へ入る)。
     """
-    del sandbox, workspace  # 共通設定も再読み込みも使わない
     if request is None:
         return {"read": [], "write": [], "network_allow": []}
     return request["extras"]
@@ -148,7 +150,7 @@ def build_boundary(sandbox: dict, workspace: Path, request: dict | None = None) 
     責務。Claude Code の sandbox と同じ考え方。
     """
     base = sandbox["base"]
-    extras = project_extras(sandbox, workspace, request)
+    extras = project_extras(request)
     read = [*base.get("read", []), *extras.get("read", [])]
     write = [*base.get("write", []), *extras.get("write", [])]
     protected = [str(workspace / rel) for rel in base.get("protected", [])]
@@ -345,14 +347,16 @@ def ensure_trusted(workspace: Path, assume_yes: bool, request: dict | None) -> N
     save_trust(workspace, request["digest"])
 
 
-def check_digest(sandbox: dict, boundary: dict) -> str:
+def check_digest(sandbox: dict, boundary: dict, hidden: list[str]) -> str:
     """境界チェックの結果を再利用してよい範囲を表すハッシュ。
 
     **判定に効く入力を全て混ぜる。** どれかが変われば再検査になる。
     ここに混ぜ忘れたものは「変わっても古い合格が使われる」ことになる。
+    ``hidden`` はホストに在る検査対象。後から現れたものを古い合格で素通りさせない。
     """
     digest = hashlib.sha256()
     digest.update(json.dumps(boundary, sort_keys=True).encode("utf-8"))
+    digest.update(json.dumps(hidden).encode("utf-8"))
     for path in (Path(sandbox["runtime_path"]), CHECK, OPENCODE):
         digest.update(str(path).encode("utf-8"))
         try:
@@ -733,7 +737,11 @@ def write_isolated_config(sandbox: dict, project: dict) -> None:
         except json.JSONDecodeError:
             # 壊れていたら作り直す（読めないまま残すと起動できない）
             existing = {}
+    if not isinstance(existing, dict):
+        existing = {}
 
+    # ★管理キーは空でも差し替える (空なら取り除く)。
+    #   see docs/spec/opencode-sandbox.md#隔離版の設定の書き出し方
     config: dict = {
         **existing,
         "$schema": "https://opencode.ai/config.json",
@@ -742,17 +750,27 @@ def write_isolated_config(sandbox: dict, project: dict) -> None:
         #   復旧データ自身が同じ shell から消せるし、捕捉は best effort。
         "snapshots": True,
     }
+    experimental = existing.get("experimental")
+    experimental = dict(experimental) if isinstance(experimental, dict) else {}
     policies = sandbox.get("policies")
     if policies:
         # ★不正な statement は警告付きで破棄される。置いた事実ではなく
         #   有効性を確認すること (サーバのログに警告が出る)。
-        config["experimental"] = {**existing.get("experimental", {}), "policies": policies}
+        experimental["policies"] = policies
+    else:
+        experimental.pop("policies", None)
+    if experimental:
+        config["experimental"] = experimental
+    else:
+        config.pop("experimental", None)
     plugins = sandbox.get("plugins")
     if plugins:
         # 目的は伏字化。境界はワークスペースの中を守らないので、`.env` などが
         # そのままモデルの文脈へ入るのを防ぐ。plugin 自体は allowRead だけの
         # 場所にあり、境界内から書き換えられない。
         config["plugins"] = plugins
+    else:
+        config.pop("plugins", None)
     # 既定モデルは初回だけ置く。以降は利用者が TUI で変えた値を尊重する。
     model = pick_model(sandbox, project)
     if model and "model" not in config:
@@ -762,10 +780,13 @@ def write_isolated_config(sandbox: dict, project: dict) -> None:
     target.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     prompt = sandbox.get("system_prompt")
+    agents = config_dir / "AGENTS.md"
     if prompt:
         # 境界の存在をエージェントへ伝える。説明上の対策であって、
         # 書き込み失敗を保証するものではない。
-        (config_dir / "AGENTS.md").write_text(prompt + "\n", encoding="utf-8")
+        agents.write_text(prompt + "\n", encoding="utf-8")
+    else:
+        agents.unlink(missing_ok=True)
 
 
 def pick_model(sandbox: dict, project: dict) -> str | None:
@@ -830,28 +851,69 @@ def resolve_node() -> str:
     raise AssertionError  # die は必ず終了する
 
 
-def run_check(node: str, runtime: Path, boundary: str, project: dict, env: dict) -> None:
-    """境界チェックを 1 回走らせる。不合格なら**起動しない**。"""
+def hidden_targets() -> dict[str, list[str]]:
+    """境界の内側で「見えない」ことを確かめる対象を、ホスト側の有無で分ける。
+
+    ★ホストに無いものは内側でも見えなくて当然で、隔離の証拠にならない。
+      在ると分かっているものだけを検査に回す。
+      see docs/change/closed/0004-opencode-sandbox.md#拒否されたと試験できなかったを区別する
+    """
+    candidates = [str(HOME / rel) for rel in HIDDEN_HOME_TARGETS]
+    if _is_wsl():
+        candidates += WSL_HIDDEN_TARGETS
+    present = [p for p in candidates if _exists(p)]
+    return {"present": present, "absent": [p for p in candidates if p not in present]}
+
+
+def _is_wsl() -> bool:
+    try:
+        return "microsoft" in Path("/proc/version").read_text(encoding="utf-8").lower()
+    except OSError:
+        return False
+
+
+def _exists(path: str) -> bool:
+    try:
+        return Path(path).exists()
+    except OSError:
+        return False
+
+
+def _lines(paths: list[str]) -> str:
+    """検査スクリプトへ渡すパスの列。★区切りは改行なので、改行を含むパスは弾く。"""
+    for path in paths:
+        if "\n" in path:
+            die(f"改行を含むパスは境界チェックへ渡せない: {path!r}")
+    return "\n".join(paths)
+
+
+def check_environment(project: dict, env: dict, hidden: dict[str, list[str]]) -> dict:
+    """境界チェックへ渡す環境変数。パスの列は改行区切りにする (空白・glob を壊さない)。"""
     allowed = project["config"]["network"].get("allowedDomains") or []
-    check_env = {
+    return {
         **env,
         "BOUNDARY_WORKSPACE": project["workspace"],
-        # 境界の内側では $HOME が差し替わるので、実ホームは別に渡す
-        "HOME_REAL": str(HOME),
-        "BOUNDARY_PROTECTED": " ".join(
-            project["config"]["filesystem"].get("denyWrite") or []
-        ),
+        "BOUNDARY_HIDDEN": _lines(hidden["present"]),
+        "BOUNDARY_HIDDEN_ABSENT": _lines(hidden["absent"]),
+        "BOUNDARY_PROTECTED": _lines(project["config"]["filesystem"].get("denyWrite") or []),
         # 拒否と不通を区別するための対照
         "BOUNDARY_ALLOWED_HOST": next(
             (d for d in allowed if not d.startswith("*")), "github.com"
         ),
         "BOUNDARY_DENIED_HOST": "example.com",
     }
+
+
+def run_check(
+    node: str, runtime: Path, boundary: str, project: dict, env: dict, hidden: dict
+) -> None:
+    """境界チェックを 1 回走らせる。不合格なら**起動しない**。"""
+    check_env = check_environment(project, env, hidden)
     # ★パイプへ通さないこと。終了コードが置き換わり失敗を取りこぼす。
     # ★止まったら起動しない。判定できない ≠ 合格。
     try:
         done = subprocess.run(  # noqa: S603
-            [node, str(runtime), "-s", boundary, "-c", f"sh {CHECK}"],
+            [node, str(runtime), "-s", boundary, "-c", shlex.join(["/bin/sh", str(CHECK)])],
             env=check_env,
             check=False,
             timeout=180,
@@ -1045,7 +1107,8 @@ def main(argv: list[str] | None = None) -> int:
     os.chmod(boundary, 0o600)
 
     env = inner_env(sandbox, project)
-    digest = check_digest(sandbox, project["config"])
+    hidden = hidden_targets()
+    digest = check_digest(sandbox, project["config"], hidden["present"])
     try:
         if not args.skip_check:
             # ★fail-closed。検査スクリプトが無ければ**起動しない**。
@@ -1062,7 +1125,7 @@ def main(argv: list[str] | None = None) -> int:
             if not args.recheck and check_is_fresh(digest):
                 print("境界チェック: 前回の合格を再利用 (--recheck でやり直す)", file=sys.stderr)
             else:
-                run_check(node, runtime, boundary, project, env)
+                run_check(node, runtime, boundary, project, env, hidden)
                 save_check(digest)
 
         os.execve(  # noqa: S606

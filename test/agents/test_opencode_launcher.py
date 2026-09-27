@@ -420,6 +420,62 @@ def test_system_prompt_is_written(tmp_path):
     assert agents.read_text(encoding="utf-8").strip(), "AGENTS.md が空"
 
 
+def test_emptied_managed_keys_leave_no_residue(tmp_path):
+    """★管理キーは空になったら取り除くこと (値あり → 空 → 未指定)。
+
+    空のとき既存を残すと、生成側で外した plugin・policy・説明が隔離版に居座る。
+    管理外のキーと利用者が選んだモデルは、どの段階でも残す。
+    """
+    launcher = _launcher()
+    project = _project(tmp_path)
+    full = _sandbox(
+        tmp_path,
+        policies=[{"statement": "x"}],
+        plugins=["/opt/plugin.js"],
+        system_prompt="境界の説明",
+    )
+    config_dir = Path(full["config_dir"])
+    target = config_dir / "opencode.json"
+    agents = config_dir / "AGENTS.md"
+
+    launcher["write_isolated_config"](full, project)
+    config = json.loads(target.read_text(encoding="utf-8"))
+    assert config["plugins"] == ["/opt/plugin.js"]
+    assert config["experimental"]["policies"] == [{"statement": "x"}]
+    assert agents.is_file()
+    config["model"] = "github-copilot/claude-sonnet-5"
+    config["username"] = "alice"
+    config["experimental"]["other"] = True
+    target.write_text(json.dumps(config), encoding="utf-8")
+
+    emptied = {**full, "policies": [], "plugins": [], "system_prompt": ""}
+    unspecified = {
+        k: v for k, v in full.items() if k not in ("policies", "plugins", "system_prompt")
+    }
+    for stage, sandbox in (("空", emptied), ("未指定", unspecified)):
+        launcher["write_isolated_config"](sandbox, project)
+        after = json.loads(target.read_text(encoding="utf-8"))
+        assert "plugins" not in after, f"{stage}: plugins が残った"
+        assert after.get("experimental") == {"other": True}, (
+            f"{stage}: policies が残ったか、管理外の experimental が消えた"
+        )
+        assert not agents.exists(), f"{stage}: AGENTS.md が残った"
+        assert after["model"] == "github-copilot/claude-sonnet-5", f"{stage}: model が消えた"
+        assert after["username"] == "alice", f"{stage}: 宣言外のキーが消えた"
+        assert after["permissions"] == full["permissions"]
+
+
+def test_experimental_is_dropped_when_only_policies_were_in_it(tmp_path):
+    """policies だけだった ``experimental`` は、空の入れ物を残さない。"""
+    launcher = _launcher()
+    project = _project(tmp_path)
+    sandbox = _sandbox(tmp_path, policies=[{"statement": "x"}])
+    launcher["write_isolated_config"](sandbox, project)
+    launcher["write_isolated_config"]({**sandbox, "policies": []}, project)
+    target = Path(sandbox["config_dir"]) / "opencode.json"
+    assert "experimental" not in json.loads(target.read_text(encoding="utf-8"))
+
+
 # --- 渡した引数が opencode まで届くこと -------------------------------------
 
 
@@ -504,9 +560,19 @@ def test_check_digest_changes_with_the_boundary(tmp_path, monkeypatch):
     """
     launcher = _launcher()
     sandbox = {"runtime_path": str(tmp_path / "srt.js")}
-    one = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a"]}})
-    two = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a", "/b"]}})
+    one = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a"]}}, [])
+    two = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a", "/b"]}}, [])
     assert one != two, "境界を広げても digest が変わっていない"
+
+
+def test_check_digest_changes_when_a_hidden_target_appears(tmp_path):
+    """★後からホストに現れた秘密を、古い合格で素通りさせないこと。"""
+    launcher = _launcher()
+    sandbox = {"runtime_path": str(tmp_path / "srt.js")}
+    boundary = {"filesystem": {"allowWrite": ["/a"]}}
+    before = launcher["check_digest"](sandbox, boundary, [])
+    after = launcher["check_digest"](sandbox, boundary, ["/home/u/.ssh"])
+    assert before != after, "検査対象が増えても digest が変わっていない"
 
 
 def test_handoff_reads_the_isolated_db_and_writes_the_host_db(tmp_path, monkeypatch):
@@ -1017,3 +1083,204 @@ def test_untracked_only_directory_does_not_block_launch(tmp_path, monkeypatch):
 
     launcher["backup_worktree"](skipped, False)  # 例外を出さないこと
     assert _backups(launcher) == []
+
+
+# --- 境界チェックへの受け渡し ------------------------------------------------
+
+CHECK_SCRIPT = ROOT / "home" / "dot_local" / "bin" / "executable_ocs-boundary-check"
+
+
+def _check_project(workspace: Path, protected: list[str]) -> dict:
+    return {
+        "workspace": str(workspace),
+        "config": {
+            "network": {"allowedDomains": ["allowed.test"]},
+            "filesystem": {"denyWrite": protected},
+        },
+    }
+
+
+def _run_check_script(
+    tmp_path: Path, launcher: dict, protected: list[str], hidden: dict
+) -> subprocess.CompletedProcess:
+    """検査スクリプトを境界なしで走らせる。環境はランチャーが組んだものを使う。
+
+    curl は偽物に差し替え、許可済みドメインだけ通る状況を作る。
+    """
+    ws = tmp_path / "ws"
+    (ws / "data").mkdir(parents=True, exist_ok=True)
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir(exist_ok=True)
+    curl = fakebin / "curl"
+    curl.write_text(
+        '#!/bin/sh\ncase "$*" in *allowed.test*) exit 0 ;; esac\nexit 7\n', encoding="utf-8"
+    )
+    curl.chmod(0o755)
+    base = {
+        "PATH": f"{fakebin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+        "XDG_DATA_HOME": str(ws / "data"),
+    }
+    env = launcher["check_environment"](_check_project(ws, protected), base, hidden)
+    return subprocess.run(
+        ["/bin/sh", str(CHECK_SCRIPT)],
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+        timeout=60,
+    )
+
+
+def test_protected_paths_with_spaces_and_globs_reach_the_check_intact(tmp_path):
+    """★空白や glob 文字を含む保護対象を、分割も展開もせずに検査すること。
+
+    以前は空白で連結して未引用で展開していたので、``a b`` は ``a`` と ``b``
+    に割れ、``c*`` は作業領域のファイル名へ化けて、本来の対象を検査しなかった。
+    境界なしで走らせるので、全て「書けてしまう」が正しい結果になる。
+    """
+    launcher = _launcher()
+    ws = tmp_path / "ws"
+    spaced_dir = ws / "dir with space"
+    spaced_dir.mkdir(parents=True)
+    spaced_file = ws / "file name.txt"
+    spaced_file.write_text("keep\n", encoding="utf-8")
+    (ws / "globX").write_text("", encoding="utf-8")
+    glob = ws / "glob*"
+
+    done = _run_check_script(
+        tmp_path,
+        launcher,
+        [str(spaced_dir), str(spaced_file), str(glob)],
+        {"present": [], "absent": []},
+    )
+
+    assert f"保護対象へ書けてしまう: {spaced_dir}\n" in done.stdout, done.stdout
+    assert f"保護対象へ書けてしまう: {spaced_file}\n" in done.stdout, done.stdout
+    assert f"保護対象を作れてしまう: {glob}\n" in done.stdout, done.stdout
+    assert "globX" not in done.stdout, f"glob が展開された: {done.stdout}"
+    assert spaced_file.read_text(encoding="utf-8") == "keep\n", "保護対象の中身を壊した"
+    assert not glob.exists(), "検査で作ったものを片付けていない"
+    assert done.returncode == 1
+
+
+def test_hidden_paths_with_spaces_reach_the_check_intact(tmp_path):
+    """★見えてはいけない対象も、空白で割らずに検査すること。"""
+    launcher = _launcher()
+    visible = tmp_path / "secret dir"
+    visible.mkdir()
+    gone = tmp_path / "gone dir"
+    done = _run_check_script(
+        tmp_path, launcher, [], {"present": [str(visible)], "absent": [str(gone)]}
+    )
+    assert f"★NG  {visible} が見えている\n" in done.stdout, done.stdout
+    assert f"SKIP {gone} はホストに無いので検査しない\n" in done.stdout, done.stdout
+    assert done.returncode == 1
+
+
+def test_check_script_reports_every_failure_before_exiting(tmp_path):
+    """★``set -eu`` を入れても集計が途中で切れないこと。
+
+    NG が複数あっても全て並び、最後の判定まで届くこと。
+    """
+    launcher = _launcher()
+    visible = tmp_path / "secret"
+    visible.mkdir()
+    writable = tmp_path / "ws" / "protected dir"
+    writable.mkdir(parents=True)
+    done = _run_check_script(
+        tmp_path, launcher, [str(writable)], {"present": [str(visible)], "absent": []}
+    )
+    assert done.stdout.count("★NG") == 2, done.stdout
+    assert "OK   許可外ドメインへ到達しない" in done.stdout, "途中で打ち切られた"
+    assert "境界チェック: 不合格" in done.stdout
+    assert done.returncode == 1
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root は読み取り専用ディレクトリにも書ける")
+def test_check_script_passes_when_nothing_leaks(tmp_path):
+    """漏れが無ければ合格すること (``set -eu`` で正常系が落ちないこと)。"""
+    launcher = _launcher()
+    locked = tmp_path / "locked dir"
+    locked.mkdir()
+    locked.chmod(0o500)
+    try:
+        done = _run_check_script(
+            tmp_path,
+            launcher,
+            [str(locked / "not created")],
+            {"present": [str(tmp_path / "hidden inside")], "absent": []},
+        )
+    finally:
+        locked.chmod(0o700)
+    assert "境界チェック: 合格" in done.stdout, done.stdout + done.stderr
+    assert done.returncode == 0
+
+
+def test_check_script_refuses_without_the_path_lists(tmp_path):
+    """★ランチャーと検査スクリプトの受け渡しが食い違ったら合格にしない。"""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    done = subprocess.run(
+        ["/bin/sh", str(CHECK_SCRIPT)],
+        env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "BOUNDARY_WORKSPACE": str(ws)},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+        timeout=60,
+    )
+    assert done.returncode != 0
+    assert "合格" not in done.stdout
+
+
+def test_path_with_newline_is_refused(tmp_path):
+    """★区切りが改行なので、改行を含むパスは渡さずに止める。"""
+    launcher = _launcher()
+    with pytest.raises(SystemExit):
+        launcher["check_environment"](
+            _check_project(tmp_path, ["/w/a\nb"]), {}, {"present": [], "absent": []}
+        )
+
+
+def test_hidden_targets_are_split_by_host_presence(tmp_path, monkeypatch):
+    """★ホストに無いものは「見えない」を合格の根拠にしない。
+
+    在ると分かっているものだけを検査に回し、無いものは SKIP として示す。
+    """
+    launcher = _launcher()
+    home = tmp_path / "home"
+    (home / ".ssh").mkdir(parents=True)
+    monkeypatch.setitem(launcher, "HOME", home)
+    monkeypatch.setitem(launcher, "_is_wsl", lambda: False)
+    got = launcher["hidden_targets"]()
+    assert got["present"] == [str(home / ".ssh")]
+    assert str(home / ".git-credentials") in got["absent"]
+    assert str(home / ".config/gh") in got["absent"]
+    assert not any(p.startswith("/mnt/c") for p in got["present"] + got["absent"])
+
+
+def test_check_is_invoked_with_absolute_quoted_shell(tmp_path, monkeypatch):
+    """★検査は ``/bin/sh`` を絶対パスで呼び、スクリプトのパスは引用する。
+
+    ``srt -c`` は引用しない ``sh -c`` なので、空白入りのパスは割れる。
+    """
+    launcher = _launcher()
+    check = tmp_path / "bin dir" / "ocs-boundary-check"
+    monkeypatch.setitem(launcher, "CHECK", check)
+    seen: list[list[str]] = []
+
+    def fake_run(cmd, **kw):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    launcher["run_check"](
+        "/usr/bin/node",
+        tmp_path / "srt.js",
+        str(tmp_path / "b.json"),
+        _check_project(tmp_path, []),
+        {},
+        {"present": [], "absent": []},
+    )
+    assert seen[0][-1] == f"/bin/sh '{check}'", seen[0]
