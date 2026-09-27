@@ -48,6 +48,10 @@ RUN if ! getent group ${USER_GID} >/dev/null; then \
 COPY run_chezmoi.sh /usr/local/bin/run_chezmoi
 RUN chmod +x /usr/local/bin/run_chezmoi
 
+# BOOTSTRAP=1 のときだけ PATH の先頭に置く bw のスタブ (既定では PATH に無い)
+COPY bw-stub.sh /opt/bw-stub/bw
+RUN chmod +x /opt/bw-stub/bw
+
 USER ${USER_NAME}
 WORKDIR /home/${USER_NAME}
 

@@ -385,7 +385,9 @@ def test_harness_injects_is_raspi_after_init():
     `raspi2204 apply` が Pi 以外の経路を検証したまま SUCCESS になる。
     """
     script = (ROOT / "test" / "run_chezmoi.sh").read_text(encoding="utf-8")
-    init = script.index('init --force')
-    inject = script.index("is_raspi = true")
-    verify = script.index('log_result "inject-is-raspi" "SUCCESS"')
-    assert init < inject < verify
+    init = script.index("init --force")
+    call = script.index('if [ "${IS_RASPI}" = "1" ]; then\n    inject_is_raspi\nfi')
+    assert init < call
+    # bootstrap のフェーズ 2 も init --force するので、その後にも注入し直す
+    second_init = script.index("init --force", init + 1)
+    assert "inject_is_raspi" in script[second_init : script.index("apply", second_init)]

@@ -7,13 +7,15 @@ Usage:
   bash test/test.sh [service] [mode]
 
   service : ubuntu2404 (既定) | ubuntu2204 | raspi2204 | arm2404
-  mode    : dryrun (既定) | place | apply | update | shell
+  mode    : dryrun (既定) | place | apply | update | bootstrap | shell
 
   dryrun : doctor と diff まで (数十秒)
   place  : apply するがスクリプトを除外する (--exclude scripts)。配置だけ見る
   apply  : スクリプト込みの cold start (十数分。ネットワーク必須)
   update : init を省いて apply する (chezmoi update の経路)。2 回回して
            冪等性と残差分も見る
+  bootstrap : ユーザ applejxd で apply した後、bw のスタブで login 済みを
+           再現して 2 フェーズ bootstrap (Bitwarden 由来のファイル) を見る
   shell  : コンテナへ入る
 
 Examples:
@@ -34,7 +36,7 @@ USAGE
 }
 
 SERVICES="ubuntu2404 ubuntu2204 raspi2204 arm2404 chezmoi"
-MODES="dryrun place apply update shell"
+MODES="dryrun place apply update bootstrap shell"
 
 check_prerequisites() {
     echo "== Prerequisites Check =="
@@ -62,6 +64,11 @@ done
 
 check_prerequisites
 
+# Bitwarden を使うファイルは個人用でしか展開しないので、イメージのユーザごと替える
+if [ "$mode" = "bootstrap" ]; then
+  export CONTAINER_USER=applejxd
+fi
+
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-chezmoi-test}"
 compose=(docker compose -f test/compose.yaml)
 
@@ -80,6 +87,7 @@ run_mode() {
               "${compose[@]}" run --rm "$service" ;;
     apply)  APPLY=1 "${compose[@]}" run --rm "$service" ;;
     update) APPLY=1 SKIP_INIT=1 APPLY_TWICE=1 "${compose[@]}" run --rm "$service" ;;
+    bootstrap) APPLY=1 BOOTSTRAP=1 "${compose[@]}" run --rm "$service" ;;
   esac
 }
 
@@ -97,7 +105,7 @@ dirty=$(git status --porcelain --untracked-files=no | wc -l | tr -d ' ')
 log_file="${log_dir}/$(date '+%Y%m%d-%H%M%S')-${service}-${mode}.log"
 {
   echo "# started_at=${started_at} commit=${commit} dirty_files=${dirty}"
-  echo "# service=${service} mode=${mode} IS_RASPI=${IS_RASPI:-} SOURCE_MODE=${SOURCE_MODE:-clone} INCLUDE_DIRTY=${INCLUDE_DIRTY:-0} APPLY_TIMEOUT=${APPLY_TIMEOUT:-900}"
+  echo "# service=${service} mode=${mode} CONTAINER_USER=${CONTAINER_USER:-tester} IS_RASPI=${IS_RASPI:-} SOURCE_MODE=${SOURCE_MODE:-clone} INCLUDE_DIRTY=${INCLUDE_DIRTY:-0} APPLY_TIMEOUT=${APPLY_TIMEOUT:-900}"
 } > "$log_file"
 
 set +e

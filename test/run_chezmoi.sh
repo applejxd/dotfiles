@@ -10,6 +10,7 @@ set -euo pipefail
 : "${APPLY_TIMEOUT:=900}"      # apply 1 回あたりの上限 (秒)。arm64 のエミュレーションでは延ばす
 : "${SKIP_INIT:=0}"            # 1 なら init を省く (chezmoi update の経路)
 : "${APPLY_TWICE:=0}"          # 1 なら apply を 2 回回して冪等性を見る
+: "${BOOTSTRAP:=0}"            # 1 なら bw のスタブで 2 フェーズ bootstrap を検証する
 # NOTE: 変数名に CHEZMOI_ARGS は使えない。chezmoi 自身が予約しており、
 #       `chezmoi cd` のサブシェル等では CHEZMOI_ARGS="chezmoi cd" が
 #       export されている。これを diff/apply に渡すと不正な引数になる。
@@ -207,13 +208,13 @@ else
     fi
 fi
 
-# Raspberry Pi 扱いの注入。init の後に行う (init --force が設定を作り直して消すため)。
+# Raspberry Pi 扱いの注入。init のたびに後から行う (init --force が設定を作り直して消すため)。
 # ★コンテナはホストのカーネルを共有するので、is-raspi の自動判定
 #   (kernel.osrelease / /proc/device-tree/model) は原理的に再現できない。
 #   分岐の「帰結」を見たいので、データ上書きで判定だけ与える。
 #   判定ロジックそのものの検証は test/test_raspi_detection.py が担う。
-if [ "${IS_RASPI}" = "1" ]; then
-    cfg="$HOME/.config/chezmoi/chezmoi.toml"
+inject_is_raspi() {
+    local cfg="$HOME/.config/chezmoi/chezmoi.toml" injected
     # [data] はテンプレート末尾の節なので、末尾追記でその中に入る。
     # 前提が崩れたら黙って効かなくなるので、節の数を確かめてから追記する。
     if [ "$(grep -c '^\[data\]' "$cfg")" -ne 1 ]; then
@@ -232,6 +233,10 @@ if [ "${IS_RASPI}" = "1" ]; then
     fi
     log_result "inject-is-raspi" "SUCCESS" "(Raspberry Pi 扱いで検証する)"
     echo "🍓 Raspberry Pi 扱いを注入しました"
+}
+
+if [ "${IS_RASPI}" = "1" ]; then
+    inject_is_raspi
 fi
 
 echo
@@ -329,6 +334,85 @@ else
 fi
 echo
 
+# 2 フェーズ bootstrap の検証。Bitwarden は bw のスタブ (/opt/bw-stub/bw) で置き換える。
+# see test/README.md#bootstrap-モード
+BW_STUB_DIR=/opt/bw-stub
+BW_FILES=(".config/git/user" ".config/sops/age/keys.txt")
+
+run_bootstrap_phases() {
+    local f missing="" leaked="" calls residual residual_code
+    export BW_STUB_LOG=/tmp/bw-stub.log
+
+    # Bitwarden を使うファイルは個人用 (applejxd) でしか展開しない
+    if [ "$(whoami)" != "applejxd" ]; then
+        log_result "bootstrap-phase1" "FAILED" "(ユーザが $(whoami)。CONTAINER_USER=applejxd で回す)"
+        return 0
+    fi
+    echo
+    echo "== bootstrap フェーズ 1 の確認 (bw の login 前は秘密のファイルを作らない) =="
+    for f in "${BW_FILES[@]}"; do
+        [ -e "$HOME/$f" ] && leaked="$leaked $f"
+    done
+    if [ -n "$leaked" ]; then
+        log_result "bootstrap-phase1" "FAILED" "(login 前に作られている:$leaked)"
+    else
+        log_result "bootstrap-phase1" "SUCCESS" "(秘密のファイルは未展開)"
+    fi
+
+    echo
+    echo "== bootstrap フェーズ 2 (bw login 済みをスタブで再現して init + apply) =="
+    : > "$BW_STUB_LOG"
+    if ! PATH="$BW_STUB_DIR:$PATH" BW_SESSION=bw-stub-session "${CZ[@]}" init --force; then
+        log_result "bootstrap-phase2" "FAILED" "(init に失敗)"
+        return 0
+    fi
+    if [ "${IS_RASPI}" = "1" ]; then
+        inject_is_raspi
+    fi
+    local apply_ok=1
+    if ! PATH="$BW_STUB_DIR:$PATH" BW_SESSION=bw-stub-session \
+        timeout "${APPLY_TIMEOUT}" "${CZ[@]}" apply --keep-going "${CHEZMOI_ARG_ARRAY[@]}"; then
+        # --keep-going なので、スクリプトが落ちてもファイルは展開されている。中身は見る
+        apply_ok=0
+    fi
+    grep -q 'name = bw-stub-user' "$HOME/.config/git/user" 2>/dev/null || missing="$missing git/user:name"
+    grep -q 'email = bw-stub@example.invalid' "$HOME/.config/git/user" 2>/dev/null || missing="$missing git/user:email"
+    grep -q 'bw-stub: dummy age identity' "$HOME/.config/sops/age/keys.txt" 2>/dev/null || missing="$missing keys.txt"
+    echo "bw の呼び出し:"
+    sed 's/^/  bw /' "$BW_STUB_LOG"
+    if [ -n "$missing" ]; then
+        log_result "bootstrap-phase2" "FAILED" "(スタブの値が入っていない:$missing)"
+    elif [ "$apply_ok" = 0 ]; then
+        log_result "bootstrap-phase2" "FAILED" "(ファイルは展開されたが apply に失敗)"
+    else
+        log_result "bootstrap-phase2" "SUCCESS" "(bw を $(wc -l < "$BW_STUB_LOG") 回呼んで展開)"
+    fi
+
+    echo
+    echo "== bootstrap フェーズ 3 (セッション無しで再 apply。Bitwarden を引き直さない) =="
+    : > "$BW_STUB_LOG"
+    if ! PATH="$BW_STUB_DIR:$PATH" timeout "${APPLY_TIMEOUT}" \
+        "${CZ[@]}" apply --keep-going "${CHEZMOI_ARG_ARRAY[@]}"; then
+        log_result "bootstrap-phase3" "FAILED" "(apply に失敗)"
+        return 0
+    fi
+    set +e
+    residual=$(PATH="$BW_STUB_DIR:$PATH" "${CZ[@]}" diff --exclude scripts "${CHEZMOI_ARG_ARRAY[@]}" 2>&1)
+    residual_code=$?
+    set -e
+    calls=$(wc -l < "$BW_STUB_LOG")
+    if [ "$residual_code" -ne 0 ]; then
+        log_result "bootstrap-phase3" "FAILED" "(diff が失敗: $residual_code)"
+    elif grep -q '^diff --git' <<< "$residual"; then
+        log_result "bootstrap-phase3" "FAILED" "($(grep -c '^diff --git' <<< "$residual") 件の差分が残る)"
+    elif [ "$calls" -ne 0 ]; then
+        sed 's/^/  bw /' "$BW_STUB_LOG"
+        log_result "bootstrap-phase3" "FAILED" "(セッション無しで bw を $calls 回呼んだ)"
+    else
+        log_result "bootstrap-phase3" "SUCCESS" "(差分なし / bw を呼ばない)"
+    fi
+}
+
 if [ "${APPLY}" = "1" ]; then
   echo
   echo "== chezmoi apply (keep-going, verbose) =="
@@ -398,6 +482,10 @@ if [ "${APPLY}" = "1" ]; then
           printf '%s\n' "${residual_list[@]:0:10}"
           log_result "residual-diff" "FAILED" "($residual_files 件の差分が残る)"
       fi
+  fi
+
+  if [ "${BOOTSTRAP}" = "1" ]; then
+      run_bootstrap_phases
   fi
 
   echo

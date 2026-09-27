@@ -78,6 +78,8 @@ mise run e2e -- [service] [mode]    # 同じもの
 | `dryrun`（既定） | doctor と `chezmoi diff` まで | 数十秒 |
 | `place` | `--exclude scripts` で apply。配置だけ見る | 数十秒 |
 | `apply` | スクリプト込みの cold start | 十数分 |
+| `update` | init を省いて apply を 2 回。冪等性と残差分を見る（`chezmoi update` の経路） | 十数分 |
+| `bootstrap` | ユーザ applejxd で apply した後、bw のスタブで 2 フェーズ bootstrap を見る（[後述](#bootstrap-モード)） | 20 分前後 |
 | `shell` | コンテナへ入る | — |
 
 ```bash
@@ -108,6 +110,27 @@ IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 
 > `CHEZMOI_ARGS` は**使えない**。chezmoi 自身が予約しており、`chezmoi cd` の
 > サブシェルでは `CHEZMOI_ARGS="chezmoi cd"` が export されている。
+
+### bootstrap モード
+
+新しい機械の手順（[セキュリティ](../docs/spec/security.md) の「2 フェーズ bootstrap」）を
+再現する。Bitwarden（`bw`）は `test/bw-stub.sh` で置き換え、本物の Vault には触れない。
+
+| フェーズ | 操作 | 合格条件 |
+| --- | --- | --- |
+| 1 | `BW_SESSION` 無しで init + apply | `~/.config/git/user` と `~/.config/sops/age/keys.txt` が**作られない** |
+| 2 | スタブを PATH の先頭に置き、`BW_SESSION` を設定して init + apply | 2 つのファイルにスタブの値が入る |
+| 3 | `BW_SESSION` 無しで apply と diff | 残差分 0 件で、**スタブが呼ばれない**（Bitwarden を引き直さない） |
+
+- Bitwarden を使うファイルは個人用でしか展開しないので、コンテナのユーザを
+  `applejxd` にする（`CONTAINER_USER=applejxd`。`bootstrap` モードが自動で設定する）。
+  そのため個人用の分岐（Copilot との herdr 連携、MCP の除外など）も通る
+- スタブは `bw status` / `unlock` / `lock` / `sync` / `get item <名前>` だけに答え、
+  知らない呼び方は失敗させる。呼ばれた引数はログに残す
+- 値はすべてダミー。age の鍵も `AGE-SECRET-KEY-` の形にしない（gitleaks の誤検知を避ける）。
+  apply 中に sops の復号は走らないので、中身が鍵として無効でも困らない
+- 見られるのは「テンプレートと除外条件が 2 フェーズの流れで正しく動くか」まで。
+  本物の `bw` の出力形式が変わっても検出できない
 
 ### GitHub Actions
 
@@ -187,8 +210,9 @@ WSL と Raspberry Pi では除外されるので、手元の Docker では一度
 ### systemd は無い
 
 コンテナの PID 1 は systemd ではないので、`systemctl` は失敗する。
-`121_ubuntu.sh` の Pi の節は `/run/systemd/system` が無ければサービスの再起動を
-飛ばす。`sysctl -p` も読み取り専用の `/proc/sys` に書けず警告を出すが、止まらない。
+`121_ubuntu.sh` は `/run/systemd/system` が無ければ、Pi の節（earlyoom / zramswap）と
+個人用の節（ClamAV。定義の更新も含む）のサービス操作を飛ばす。
+`sysctl -p` も読み取り専用の `/proc/sys` に書けず警告を出すが、止まらない。
 
 ## 3. 既知の未達（2026-09-27 時点）
 
@@ -298,7 +322,7 @@ GitHub Actions の `arm2404` で発覚。111 は `apt-get update` をせずに�
 
 ### 未着手
 
-- 2 フェーズ bootstrap（`bw login` は対話が要るので、無認証で通る範囲までしか見ていない）
+- 2 フェーズ bootstrap の本物の `bw` での確認（`bootstrap` モードはスタブで流れだけを見る）
 - `arm2404`（arm64、Pi 扱いなし）での `apply`
 
 ## 4. いつ回すか

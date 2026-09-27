@@ -22,6 +22,9 @@ mise (`npm:@bitwarden/cli`) で自動投入されるため **明示インスト�
 2. `bw login` と `BW_SESSION` の設定 → `chezmoi init applejxd && chezmoi apply` で
    Bitwarden 連携を有効化（Windows は gitconfig、Unix は加えて sops age 鍵）
 
+この流れは Docker で `mise run e2e -- ubuntu2204 bootstrap` として検証できる
+（`bw` はスタブで置き換える。[bootstrap モード](../../test/README.md#bootstrap-モード)）。
+
 手動で先に入れたい場合は:
 
 ```bash
