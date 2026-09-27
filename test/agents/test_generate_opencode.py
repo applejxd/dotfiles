@@ -1192,6 +1192,14 @@ def test_formatter_is_omitted_when_common_has_none():
     assert kept["formatter"] == {"mine": {}}
 
 
+def test_formatter_declared_empty_replaces_the_existing_table():
+    """空テーブルでも宣言は宣言。未宣言 (触らない) と取り違えると残骸が残る。"""
+    existing = {"formatter": {"stale": {"command": ["x", "$FILE"], "extensions": [".x"]}}}
+    out = gen.merge_opencode_config(existing, {"opencode": {"formatter": {}}})
+    assert out["formatter"] == {}
+    assert gen.build_opencode_formatter({"opencode": {}}) is None
+
+
 @pytest.mark.parametrize(
     "entry",
     [

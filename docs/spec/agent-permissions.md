@@ -325,6 +325,9 @@ OpenCode のワイルドカードは `*` (**`/` を含む** 0 文字以上) と 
 **組み込みに無いものだけ**でよく、ruff / clang-format / prettier を
 二重管理しなくて済む。
 
+宣言したら `formatter` テーブルごと `common.toml` の持ち物になる。節ごと無ければ
+触らない。空の `[opencode.formatter]` は `{}`（組み込みだけ）に置き換える。
+
 `command` は argv 配列でシェルを通さない。`$FILE` が絶対パスに置換される。
 組み込みに無い名前は `command` と `extensions` の両方が無いと **OpenCode が
 黙って無視する**ため、`generate.py` が検査して `apply` を止める（拡張子の

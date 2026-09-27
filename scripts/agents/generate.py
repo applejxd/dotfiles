@@ -942,8 +942,10 @@ OPENCODE_KEYBIND_ID = re.compile(r"^(leader|[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+)$")
 OPENCODE_KEYBIND_OBJECT_KEYS = frozenset({"key", "preventDefault"})
 
 
-def build_opencode_formatter(common: dict[str, Any]) -> dict[str, Any]:
+def build_opencode_formatter(common: dict[str, Any]) -> dict[str, Any] | None:
     """``[opencode.formatter]`` を検査して ``formatter`` の値にする。
+
+    未宣言は ``None`` (既存に触らない)、空テーブルは ``{}`` (置き換える)。
 
     オブジェクトを渡すと組み込み formatter も有効になる (公式:
     "An object also enables the built-ins")。つまりここへ書くのは組み込みに
@@ -958,7 +960,7 @@ def build_opencode_formatter(common: dict[str, Any]) -> dict[str, Any]:
     """
     formatter = common.get("opencode", {}).get("formatter")
     if formatter is None:
-        return {}
+        return None
     if not isinstance(formatter, dict):
         raise ValueError("[opencode.formatter] はテーブルで書く")
 
@@ -1632,7 +1634,7 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
         out["update"] = "notify" if opencode["auto_update"] else "disable"
 
     formatter = build_opencode_formatter(common)
-    if formatter:
+    if formatter is not None:
         out["formatter"] = formatter
 
     out["permissions"] = build_opencode_permissions(common)
