@@ -124,7 +124,9 @@ gh workflow run e2e -f service=raspi2204 -f mode=update   # 手元から起動�
 ```
 
 - arm64 のサービス（`raspi2204` / `arm2404`）は `ubuntu-24.04-arm` の runner で
-  **エミュレーション無しに**動く（公開リポジトリは無料）
+  **エミュレーション無しに**動く（公開リポジトリは無料）。`raspi2204 update` は
+  約 3 分で終わった（手元の QEMU では apply 1 回に約 25 分）。arm64 を見るなら
+  こちらが速い
 - runner は WSL ではない素の Ubuntu なので、WSL2 ホストの Docker では見られない
   「WSL ではない Linux」の経路もここで見られる
 - `APPLY_TIMEOUT` は 2700 秒、ジョブの上限は 120 分
@@ -289,8 +291,7 @@ init を省く `update` 以外（`dryrun` / `place` / `apply`）はすべて影�
 ### 未着手
 
 - 2 フェーズ bootstrap（`bw login` は対話が要るので、無認証で通る範囲までしか見ていない）
-- `arm2404`（arm64 エミュレーション、Pi 扱いなし）での `apply`
-- `raspi2204` の `update`（2 回目の apply と残差分）
+- `arm2404`（arm64、Pi 扱いなし）での `apply`
 
 ## 4. いつ回すか
 
