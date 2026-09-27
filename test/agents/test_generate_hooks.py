@@ -1,4 +1,4 @@
-"""Tests for hook generation in scripts/agents/generate.py.
+"""Tests for hook generation in scripts/agents/hooks.py (called from generate.py).
 
 Run with: ``uv run --with pytest --no-project pytest test/agents/`` or
 ``python3 -m pytest test/agents/``.
@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
+import hooks as hk  # noqa: E402
 from agents_common import agents_config_dir, load_common  # noqa: E402
 
 COMMON_PATH = agents_config_dir() / "common.toml"
@@ -79,8 +80,8 @@ def test_hook_runner_is_known():
 
 
 def test_windows_python_hooks_use_latest_python_3():
-    claude = gen.build_claude_hooks(COMMON, platform="nt")
-    copilot = gen.build_copilot_hooks(COMMON, platform="nt")
+    claude = hk.build_claude_hooks(COMMON, platform="nt")
+    copilot = hk.build_copilot_hooks(COMMON, platform="nt")
 
     commands = [
         cmd["command"]
@@ -142,7 +143,7 @@ FOREIGN_COMMAND = (
     'if [ -f "${HOME-}/.orca/agent-hooks/claude-hook.sh" ]; then '
     '/bin/sh "${HOME-}/.orca/agent-hooks/claude-hook.sh"; else printf \'{}\\n\'; fi'
 )
-MANAGED_DIR = gen.expand_user(gen.HOOKS_DIR)
+MANAGED_DIR = hk.expand_user(hk.HOOKS_DIR)
 
 
 def foreign_entry(matcher: str | None = None) -> dict:
@@ -158,7 +159,7 @@ def foreign_entry(matcher: str | None = None) -> dict:
 # ---------------------------------------------------------------------------
 
 def test_claude_hooks_cover_every_declared_hook():
-    hooks = gen.build_claude_hooks(COMMON)
+    hooks = hk.build_claude_hooks(COMMON)
     commands = [
         cmd["command"]
         for entries in hooks.values()
@@ -171,7 +172,7 @@ def test_claude_hooks_cover_every_declared_hook():
 
 
 def test_claude_hook_command_is_absolute_path():
-    hooks = gen.build_claude_hooks(COMMON)
+    hooks = hk.build_claude_hooks(COMMON)
     for entries in hooks.values():
         for entry in entries:
             for cmd in entry["hooks"]:
@@ -185,7 +186,7 @@ def test_claude_hook_command_is_absolute_path():
 
 
 def test_claude_hook_entry_keys():
-    hooks = gen.build_claude_hooks(COMMON)
+    hooks = hk.build_claude_hooks(COMMON)
     for entries in hooks.values():
         for entry in entries:
             assert set(entry) <= {"matcher", "hooks"}
@@ -195,7 +196,7 @@ def test_claude_hook_entry_keys():
 
 
 def test_claude_timeout_is_emitted():
-    hooks = gen.build_claude_hooks(COMMON)
+    hooks = hk.build_claude_hooks(COMMON)
     for entries in hooks.values():
         for entry in entries:
             for cmd in entry["hooks"]:
@@ -217,7 +218,7 @@ def test_claude_matcher_omitted_when_not_declared():
             }
         ]
     }
-    entries = gen.build_claude_hooks(synthetic)["Stop"]
+    entries = hk.build_claude_hooks(synthetic)["Stop"]
     assert entries
     for entry in entries:
         assert "matcher" not in entry
@@ -236,7 +237,7 @@ def test_claude_settings_merge_regenerates_managed_hooks():
     # hooks リストを持たない項目は解釈できないので温存し、管理 hook は再生成する
     orphan = {"matcher": "Edit|Write|MultiEdit"}
     merged = gen.merge_claude_settings({"hooks": {"PreToolUse": [orphan]}}, COMMON)
-    expected = gen.build_claude_hooks(COMMON)
+    expected = hk.build_claude_hooks(COMMON)
     assert merged["hooks"]["PreToolUse"] == expected["PreToolUse"] + [orphan]
     assert merged["hooks"]["PostToolUse"] == expected["PostToolUse"]
 
@@ -265,7 +266,7 @@ def test_stale_managed_hook_is_replaced_not_duplicated():
     assert not any("checkpoint_restore.py" in c for c in commands)
     assert len(commands) == len(set(commands))
     assert FOREIGN_COMMAND in commands
-    expected = gen.build_claude_hooks(COMMON)
+    expected = hk.build_claude_hooks(COMMON)
     assert merged["hooks"]["PreToolUse"] == expected["PreToolUse"] + [foreign_entry("*")]
 
 
@@ -273,7 +274,7 @@ def test_stale_managed_hook_is_replaced_not_duplicated():
 # hooks は外部ツール (Orca 等) との共有領域なので、管理外の項目を消さないこと
 # ---------------------------------------------------------------------------
 
-SCRIPTS = gen.managed_hook_scripts(COMMON)
+SCRIPTS = hk.managed_hook_scripts(COMMON)
 
 # `herdr integration install claude` が settings.json へ足す hook (Docker で実測)。
 # スクリプトは HOOKS_DIR に置かれるが、このリポジトリの hook ではない
@@ -330,7 +331,7 @@ def test_generation_is_stable_with_herdr_installer_in_between():
 
 def test_unknown_script_in_the_shared_directory_is_preserved():
     command = f"python3 {MANAGED_DIR}/someone-elses-hook.py"
-    assert not gen.is_managed_hook_command(command, SCRIPTS)
+    assert not hk.is_managed_hook_command(command, SCRIPTS)
 
 
 @pytest.mark.parametrize(
@@ -342,7 +343,7 @@ def test_unknown_script_in_the_shared_directory_is_preserved():
     ],
 )
 def test_similar_names_are_not_mistaken_for_managed(command):
-    assert not gen.is_managed_hook_command(command, SCRIPTS)
+    assert not hk.is_managed_hook_command(command, SCRIPTS)
 
 
 @pytest.mark.parametrize(
@@ -355,7 +356,7 @@ def test_similar_names_are_not_mistaken_for_managed(command):
     ],
 )
 def test_managed_forms_are_detected(command):
-    assert gen.is_managed_hook_command(command, SCRIPTS)
+    assert hk.is_managed_hook_command(command, SCRIPTS)
 
 
 def test_retired_scripts_are_not_current_hooks():
@@ -367,10 +368,10 @@ def test_retired_scripts_are_not_current_hooks():
 
 
 def test_is_managed_hook_command_detects_both_path_forms():
-    assert gen.is_managed_hook_command(f"python3 {MANAGED_DIR}/check_bash.py", SCRIPTS)
-    assert gen.is_managed_hook_command("python3 $HOME/.claude/hooks/check_bash.py", SCRIPTS)
-    assert not gen.is_managed_hook_command(FOREIGN_COMMAND, SCRIPTS)
-    assert not gen.is_managed_hook_command(None, SCRIPTS)
+    assert hk.is_managed_hook_command(f"python3 {MANAGED_DIR}/check_bash.py", SCRIPTS)
+    assert hk.is_managed_hook_command("python3 $HOME/.claude/hooks/check_bash.py", SCRIPTS)
+    assert not hk.is_managed_hook_command(FOREIGN_COMMAND, SCRIPTS)
+    assert not hk.is_managed_hook_command(None, SCRIPTS)
 
 
 def test_foreign_hooks_are_preserved_on_shared_event():
@@ -409,7 +410,7 @@ def test_mixed_entry_is_filtered_per_command():
             {"type": "command", "command": FOREIGN_COMMAND, "timeout": 10},
         ],
     }
-    kept = gen.strip_managed_claude_hooks([mixed], SCRIPTS)
+    kept = hk.strip_managed_claude_hooks([mixed], SCRIPTS)
     assert len(kept) == 1
     assert [c["command"] for c in kept[0]["hooks"]] == [FOREIGN_COMMAND]
     # 元のエントリを破壊しない
@@ -454,7 +455,7 @@ def test_merge_is_idempotent():
 
 
 def test_merge_tolerates_missing_or_broken_hooks():
-    assert gen.merge_claude_settings({}, COMMON)["hooks"] == gen.build_claude_hooks(COMMON)
+    assert gen.merge_claude_settings({}, COMMON)["hooks"] == hk.build_claude_hooks(COMMON)
 
 
 def test_unparseable_shapes_are_preserved_not_dropped():
@@ -472,7 +473,7 @@ def test_unparseable_shapes_are_preserved_not_dropped():
     merged = gen.merge_claude_settings(existing, COMMON)
     assert merged["hooks"]["WeirdEvent"] == {"command": "inline"}
     assert merged["hooks"]["Notification"] == [{"matcher": "*", "command": "orca-inline"}]
-    assert merged["hooks"]["PreToolUse"] == gen.build_claude_hooks(COMMON)["PreToolUse"]
+    assert merged["hooks"]["PreToolUse"] == hk.build_claude_hooks(COMMON)["PreToolUse"]
 
 
 # ---------------------------------------------------------------------------
@@ -480,12 +481,12 @@ def test_unparseable_shapes_are_preserved_not_dropped():
 # ---------------------------------------------------------------------------
 
 def test_copilot_hooks_version():
-    out = gen.build_copilot_hooks(COMMON)
+    out = hk.build_copilot_hooks(COMMON)
     assert out["version"] == 1
 
 
 def test_copilot_matchers_are_anchored():
-    out = gen.build_copilot_hooks(COMMON)
+    out = hk.build_copilot_hooks(COMMON)
     for entries in out["hooks"].values():
         for entry in entries:
             matcher = entry.get("matcher")
@@ -497,7 +498,7 @@ def test_copilot_matchers_are_anchored():
 
 
 def test_copilot_unix_hook_uses_quoted_home_variable():
-    out = gen.build_copilot_hooks(COMMON, platform="posix")
+    out = hk.build_copilot_hooks(COMMON, platform="posix")
     for entries in out["hooks"].values():
         for entry in entries:
             assert '"$HOME/.claude/hooks/' in entry["bash"]
@@ -508,8 +509,8 @@ def test_copilot_windows_hook_uses_absolute_path_in_single_quotes():
     # PowerShell の $HOME は HOMEDRIVE+HOMEPATH 由来で chezmoi の ~ と一致しない
     # ことがある (docs/spec/structure.md)。単一引用符は -Command 経由でも
     # リテラルのまま残る。
-    out = gen.build_copilot_hooks(COMMON, platform="nt")
-    home = gen.expand_user(gen.HOOKS_DIR)
+    out = hk.build_copilot_hooks(COMMON, platform="nt")
+    home = hk.expand_user(hk.HOOKS_DIR)
     for entries in out["hooks"].values():
         for entry in entries:
             command = entry["powershell"]
@@ -529,7 +530,7 @@ WEIRD_HOOK = {"script": "check_bash.py", "runner": "python3"}
 
 @pytest.fixture
 def weird_home(monkeypatch):
-    monkeypatch.setattr(gen, "expand_user", lambda p: p.replace("~", WEIRD_HOME, 1))
+    monkeypatch.setattr(hk, "expand_user", lambda p: p.replace("~", WEIRD_HOME, 1))
     return f"{WEIRD_HOME}/.claude/hooks/check_bash.py"
 
 
@@ -541,13 +542,13 @@ def powershell_single_quoted_arg(command: str) -> str:
 
 def test_claude_windows_hook_path_is_one_argument(weird_home):
     # Claude Code は Windows でも hook コマンドを shell (Git Bash) に渡す。
-    command = gen.hook_command(WEIRD_HOOK, launcher="claude", platform="nt")
+    command = hk.hook_command(WEIRD_HOOK, launcher="claude", platform="nt")
     assert "$HOME" not in command
     assert shlex.split(command) == ["py", "-3", "-B", "-X", "utf8", weird_home]
 
 
 def test_copilot_powershell_hook_path_is_one_argument(weird_home):
-    command = gen.hook_command(WEIRD_HOOK, launcher="powershell", platform="nt")
+    command = hk.hook_command(WEIRD_HOOK, launcher="powershell", platform="nt")
     assert "$HOME" not in command
     assert command.startswith("py -3 -B -X utf8 ")
     # ' は '' へ二重化され、PowerShell 側で元のパスへ戻る
@@ -556,13 +557,13 @@ def test_copilot_powershell_hook_path_is_one_argument(weird_home):
 
 
 def test_claude_unix_hook_path_is_one_argument(weird_home):
-    command = gen.hook_command(WEIRD_HOOK, launcher="claude", platform="posix")
+    command = hk.hook_command(WEIRD_HOOK, launcher="claude", platform="posix")
     assert shlex.split(command) == ["python3", weird_home]
 
 
 def test_copilot_unix_hook_keeps_home_variable(weird_home):
     # bash フィールドは Unix 専用。ホームを埋め込まず $HOME を参照させる。
-    command = gen.hook_command(WEIRD_HOOK, launcher="bash", platform="posix")
+    command = hk.hook_command(WEIRD_HOOK, launcher="bash", platform="posix")
     assert command == 'python3 "$HOME/.claude/hooks/check_bash.py"'
 
 
@@ -573,8 +574,8 @@ def test_managed_hook_detection_survives_quoting(weird_home):
         ("powershell", "nt"),
         ("bash", "posix"),
     ]:
-        command = gen.hook_command(WEIRD_HOOK, launcher=launcher, platform=platform)
-        assert gen.is_managed_hook_command(command, SCRIPTS), command
+        command = hk.hook_command(WEIRD_HOOK, launcher=launcher, platform=platform)
+        assert hk.is_managed_hook_command(command, SCRIPTS), command
 
 
 @pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
@@ -585,7 +586,7 @@ def test_copilot_hook_entry_keys(platform, command_key):
     (``PreCompact`` など) では出力されない。省略を許さないと、
     そうしたイベントを登録できなくなる。
     """
-    out = gen.build_copilot_hooks(COMMON, platform=platform)
+    out = hk.build_copilot_hooks(COMMON, platform=platform)
     required = {"type", command_key, "timeoutSec"}
     for entries in out["hooks"].values():
         for entry in entries:
@@ -600,13 +601,13 @@ def test_copilot_hook_entry_keys(platform, command_key):
     [("posix", "bash", "python3"), ("nt", "powershell", "py -3 -B -X utf8")],
 )
 def test_copilot_commands_preserve_hooks_and_metadata(platform, command_key, python_runner):
-    out = gen.build_copilot_hooks(COMMON, platform=platform)
+    out = hk.build_copilot_hooks(COMMON, platform=platform)
     declared = [hook for hook in COMMON["hooks"] if hook.get("copilot_event")]
     assert sum(len(entries) for entries in out["hooks"].values()) == len(declared)
     for hook in declared:
         runner = python_runner if hook["runner"] == "python3" else hook["runner"]
         if command_key == "powershell":
-            path = f"'{gen.expand_user(gen.HOOKS_DIR)}/{hook['script']}'"
+            path = f"'{hk.expand_user(hk.HOOKS_DIR)}/{hook['script']}'"
         else:
             path = f'"$HOME/.claude/hooks/{hook["script"]}"'
         expected = {
@@ -622,7 +623,7 @@ def test_copilot_commands_preserve_hooks_and_metadata(platform, command_key, pyt
 
 
 def test_copilot_defaults_to_host_platform():
-    assert gen.build_copilot_hooks(COMMON) == gen.build_copilot_hooks(COMMON, platform=os.name)
+    assert hk.build_copilot_hooks(COMMON) == hk.build_copilot_hooks(COMMON, platform=os.name)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Unix shell execution test")
@@ -641,12 +642,13 @@ def test_copilot_python_hooks_run_with_spaces_in_home(tmp_path, hook_id, command
     (hooks_dir / "lib").mkdir(parents=True)
     hook = next(hook for hook in COMMON["hooks"] if hook["id"] == hook_id)
     shutil.copyfile(HOOK_SRC_DIR / f"executable_{hook['script']}", hooks_dir / hook["script"])
-    shutil.copyfile(HOOK_SRC_DIR / "lib" / "agent_compat.py", hooks_dir / "lib" / "agent_compat.py")
+    for helper in ("agent_compat.py", "policy_loader.py"):
+        shutil.copyfile(HOOK_SRC_DIR / "lib" / helper, hooks_dir / "lib" / helper)
     # check_bash.py は判定ルールを lib/bashrules/ に持つ (配備にも必要)
     bashrules = HOOK_SRC_DIR / "lib" / "bashrules"
     if bashrules.is_dir():
         shutil.copytree(bashrules, hooks_dir / "lib" / "bashrules")
-    out = gen.build_copilot_hooks({"hooks": [hook]}, platform="posix")
+    out = hk.build_copilot_hooks({"hooks": [hook]}, platform="posix")
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "bash",
@@ -675,7 +677,7 @@ def test_copilot_python_hooks_run_with_spaces_in_home(tmp_path, hook_id, command
 @pytest.mark.parametrize("tool_name", ["bash", "powershell"])
 def test_windows_python_hook_invocation_emits_utf8(hook_id, command, tool_name):
     hook = next(hook for hook in COMMON["hooks"] if hook["id"] == hook_id)
-    out = gen.build_copilot_hooks({"hooks": [hook]}, platform="nt")
+    out = hk.build_copilot_hooks({"hooks": [hook]}, platform="nt")
     invocation = shlex.split(out["hooks"]["PreToolUse"][0]["powershell"])
     # PowerShell / py 自体は実行せず、生成した Python オプションと実スクリプトを検証。
     assert invocation[:2] == ["py", "-3"]
@@ -709,8 +711,8 @@ def test_windows_python_hook_invocation_emits_utf8(hook_id, command, tool_name):
 
 
 def test_copilot_hooks_ignore_existing_content():
-    out = gen.merge_copilot_hooks({"hooks": {"Stop": [{"bash": "stale"}]}}, COMMON)
-    assert out == gen.build_copilot_hooks(COMMON)
+    out = hk.merge_copilot_hooks({"hooks": {"Stop": [{"bash": "stale"}]}}, COMMON)
+    assert out == hk.build_copilot_hooks(COMMON)
 
 
 def test_copilot_settings_disable_co_author_trailer():
@@ -725,8 +727,8 @@ def test_copilot_settings_disable_co_author_trailer():
 
 @pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
 def test_both_clis_reference_the_same_scripts(platform, command_key):
-    claude = gen.build_claude_hooks(COMMON, platform=platform)
-    copilot = gen.build_copilot_hooks(COMMON, platform=platform)
+    claude = hk.build_claude_hooks(COMMON, platform=platform)
+    copilot = hk.build_copilot_hooks(COMMON, platform=platform)
 
     def scripts(commands):
         return {c.rstrip("\"'").rsplit("/", 1)[-1] for c in commands}
@@ -765,8 +767,8 @@ def test_checkpoint_hooks_are_gone_from_both_clis():
     assert not [h for h in COMMON["hooks"] if h["id"].startswith("checkpoint")]
 
     for platform, key in (("posix", "bash"), ("nt", "powershell")):
-        claude = gen.build_claude_hooks(COMMON, platform=platform)
-        copilot = gen.build_copilot_hooks(COMMON, platform=platform)
+        claude = hk.build_claude_hooks(COMMON, platform=platform)
+        copilot = hk.build_copilot_hooks(COMMON, platform=platform)
         commands = [
             cmd["command"]
             for entries in claude.values()

@@ -20,7 +20,6 @@ view (Read) は kind として扱わない (常に許可): 読み取りには副
 """
 from __future__ import annotations
 
-import os
 import re
 import shlex
 import sys
@@ -36,20 +35,11 @@ from agent_compat import (
     normalize_tool_kind,
     read_input,
 )
+from policy_loader import load_policy
 
-# ~/.config/agents/ (chezmoi 管理) の command_policy.normalize() を使い、
-# bash コマンドを `&&`/`;`/`|` 等で分割してから read/write を判定する。
-# check_bash.py と同じ import 方法 (AGENTS_CONFIG_DIR で差し替え可能)。
-# 読み込めない場合は read/write を判定できないため fail-safe で block する。
-_AGENTS_DIR = os.environ.get("AGENTS_CONFIG_DIR")
-if not _AGENTS_DIR:
-    _CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    _AGENTS_DIR = os.path.join(_CONFIG_HOME, "agents")
-sys.path.insert(0, _AGENTS_DIR)
-try:
-    import command_policy as _policy
-except Exception:
-    _policy = None  # type: ignore[assignment]
+# command_policy.normalize() で bash コマンドを `&&`/`;`/`|` 等で分割してから
+# read/write を判定する。読み込めない場合は判定できないため fail-safe で block する。
+_policy = load_policy().module
 
 # /tmp/ リテラル使用を検出するためのパターン群
 

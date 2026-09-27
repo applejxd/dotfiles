@@ -1,7 +1,7 @@
 """bashrules/tables.toml (Python を書かずに編集できるデータ層) の振る舞い。
 
 利用者が TOML だけを編集したときに何が起きるかを確かめる。
-判定そのものの網羅は test_check_bash_decision.py 側にある。
+判定そのものの網羅は test_check_bash_*.py 側にある。
 
 Run with: ``uv run --with pytest --no-project pytest test/agents/ -q``
 """

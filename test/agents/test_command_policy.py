@@ -6,7 +6,9 @@ Run with: ``python3 -m pytest test/agents/`` or
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,7 +17,7 @@ sys.path.insert(0, str(ROOT / "home" / "dot_config" / "agents"))
 import command_policy as policy  # noqa: E402
 
 # マッチャの動作を確認するための固定パターン (live な common.toml とは独立)。
-# 実際の分類 ([bash] deny / ask) は test_check_bash_decision.py で検証する。
+# 実際の分類 ([bash] deny / ask) は test_check_bash_*.py で検証する。
 PATTERNS = ["sudo", "rm -rf", "git push", "git reset --hard", "git rebase"]
 
 
@@ -208,6 +210,66 @@ def test_find_match_sees_through_wrappers():
     assert policy.find_match('bash -c "git push"', PATTERNS) == "git push"
     assert policy.find_match("timeout 5 git push", PATTERNS) == "git push"
     assert policy.find_match("(sudo apt install foo)", PATTERNS) == "sudo"
+
+
+# ---------------------------------------------------------------------------
+# 設定の読み込み
+# ---------------------------------------------------------------------------
+
+def test_default_common_path_is_resolved_at_call_time():
+    """import 後に AGENTS_CONFIG_DIR を変えても既定のパスが追従すること."""
+    saved = os.environ.get("AGENTS_CONFIG_DIR")
+    try:
+        os.environ["AGENTS_CONFIG_DIR"] = os.path.join("x", "agents")
+        assert policy.default_common_path() == os.path.join("x", "agents", "common.toml")
+    finally:
+        if saved is None:
+            os.environ.pop("AGENTS_CONFIG_DIR", None)
+        else:
+            os.environ["AGENTS_CONFIG_DIR"] = saved
+
+
+def _load_from(text: str, loader):
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "common.toml"
+        path.write_text(text, encoding="utf-8")
+        return loader(str(path))
+
+
+def test_loaders_read_their_own_section():
+    text = '[bash]\ndeny = ["git push"]\nask = ["rm"]\n[file]\nread_deny_globs = ["**/*.key"]\n'
+    assert _load_from(text, policy.load_deny) == ["git push"]
+    assert _load_from(text, policy.load_ask) == ["rm"]
+    assert _load_from(text, policy.load_read_deny_globs) == ["**/*.key"]
+
+
+def test_loaders_return_empty_when_file_is_missing():
+    with tempfile.TemporaryDirectory() as tmp:
+        missing = str(Path(tmp) / "common.toml")
+        assert policy.load_deny(missing) == []
+        assert policy.load_read_deny_globs(missing) == []
+
+
+def test_loaders_reject_malformed_values():
+    """文字列や数値の混入は TypeError にし、hook が fail-closed できるようにする."""
+    cases = [
+        ('bash = "x"\n', policy.load_deny, "[bash] セクション"),
+        ('[bash]\ndeny = "git push"\n', policy.load_deny, "[bash] deny がリスト"),
+        ("[bash]\nask = [1]\n", policy.load_ask, "[bash] ask に文字列以外"),
+        ('file = "x"\n', policy.load_read_deny_globs, "[file] セクション"),
+        (
+            '[file]\nread_deny_globs = "**/*.key"\n',
+            policy.load_read_deny_globs,
+            "[file] read_deny_globs がリスト",
+        ),
+    ]
+    for text, loader, message in cases:
+        try:
+            _load_from(text, loader)
+        except TypeError as exc:
+            assert message in str(exc), (text, str(exc))
+        else:
+            raise AssertionError(f"TypeError にならなかった: {text!r}")
 
 
 # ---------------------------------------------------------------------------

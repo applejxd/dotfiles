@@ -15,8 +15,9 @@ patterns from ``common.toml``. The same lists drive both the generated
 permission rules and the hook, so a rule only has to be written once.
 
 Public API:
-    load_deny(common_toml_path)             -> list[str]
-    load_ask(common_toml_path)              -> list[str]
+    default_common_path()                   -> str
+    load_deny(common_toml_path=None)        -> list[str]
+    load_ask(common_toml_path=None)         -> list[str]
     split_command_segments(command_str)      -> list[str]
     normalize(command_str)                  -> list[str]
     find_match(command_str, patterns) -> str | None
@@ -48,45 +49,47 @@ def _default_config_dir() -> str:
     return os.path.join(config_home, "agents")
 
 
-DEFAULT_COMMON_PATH = os.path.join(_default_config_dir(), "common.toml")
+def default_common_path() -> str:
+    """Return the deployed ``common.toml`` path, resolved at call time."""
+    return os.path.join(_default_config_dir(), "common.toml")
 
 
 # ---------------------------------------------------------------------------
 # Configuration loader
 # ---------------------------------------------------------------------------
 
-def _load_bash_list(key: str, path: str) -> list[str]:
-    """Return ``bash.<key>`` from common.toml, or an empty list if missing.
+def _load_str_list(section: str, key: str, path: str | None) -> list[str]:
+    """Return ``[<section>] <key>`` from common.toml, or an empty list if missing.
 
     Raises ``TypeError`` when the value is not a list of strings so that the
     hook can fail closed instead of silently matching nothing. A bare string
     would otherwise be split into characters by ``list()``.
     """
-    p = Path(path)
+    p = Path(path if path is not None else default_common_path())
     if not p.exists():
         return []
     with p.open("rb") as f:
         data = tomllib.load(f)
-    bash = data.get("bash", {})
-    if not isinstance(bash, dict):
-        raise TypeError("[bash] セクションがテーブルではありません")
-    value = bash.get(key, [])
+    table = data.get(section, {})
+    if not isinstance(table, dict):
+        raise TypeError(f"[{section}] セクションがテーブルではありません")
+    value = table.get(key, [])
     if not isinstance(value, list):
-        raise TypeError(f"[bash] {key} がリストではありません: {type(value).__name__}")
+        raise TypeError(f"[{section}] {key} がリストではありません: {type(value).__name__}")
     if not all(isinstance(v, str) for v in value):
-        raise TypeError(f"[bash] {key} に文字列以外が含まれています")
+        raise TypeError(f"[{section}] {key} に文字列以外が含まれています")
     return list(value)
 
 
-def load_deny(path: str = DEFAULT_COMMON_PATH) -> list[str]:
+def load_deny(path: str | None = None) -> list[str]:
     """Return the ``bash.deny`` list, or an empty list if missing.
 
     Patterns here are hard-blocked by the hook: there is no way to approve them.
     """
-    return _load_bash_list("deny", path)
+    return _load_str_list("bash", "deny", path)
 
 
-def load_ask(path: str = DEFAULT_COMMON_PATH) -> list[str]:
+def load_ask(path: str | None = None) -> list[str]:
     """Return the ``bash.ask`` list, or an empty list if missing.
 
     Patterns here make the hook return ``ask`` instead of ``deny``: the agent
@@ -95,35 +98,17 @@ def load_ask(path: str = DEFAULT_COMMON_PATH) -> list[str]:
     ``git reset --hard``) can carve an exception out of a broader ask pattern
     (``git reset``).
     """
-    return _load_bash_list("ask", path)
+    return _load_str_list("bash", "ask", path)
 
 
-def _load_file_list(key: str, path: str = DEFAULT_COMMON_PATH) -> list[str]:
-    """Return one ``[file]`` glob list, failing closed on a malformed value."""
-    p = Path(path)
-    if not p.exists():
-        return []
-    with p.open("rb") as f:
-        data = tomllib.load(f)
-    file_ = data.get("file", {})
-    if not isinstance(file_, dict):
-        raise TypeError("[file] セクションがテーブルではありません")
-    value = file_.get(key, [])
-    if not isinstance(value, list):
-        raise TypeError(f"[file] {key} がリストではありません: {type(value).__name__}")
-    if not all(isinstance(v, str) for v in value):
-        raise TypeError(f"[file] {key} に文字列以外が含まれています")
-    return list(value)
-
-
-def load_read_deny_globs(path: str = DEFAULT_COMMON_PATH) -> list[str]:
+def load_read_deny_globs(path: str | None = None) -> list[str]:
     """Return ``[file] read_deny_globs``.
 
     Claude はこのリストから ``Read()`` の deny permission を生成するが、
     Copilot にはファイル規則が無い。そのため ``check_file_read.py`` が
     このリストを読んで同じ判断を再現する。
     """
-    return _load_file_list("read_deny_globs", path)
+    return _load_str_list("file", "read_deny_globs", path)
 
 
 # ---------------------------------------------------------------------------
@@ -1139,12 +1124,13 @@ def find_match(command: str, patterns: Iterable[str]) -> str | None:
 def _main(argv: list[str] | None = None) -> int:
     import argparse
 
+    default_path = default_common_path()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", help="bash command string to check")
     parser.add_argument(
         "--common",
-        default=DEFAULT_COMMON_PATH,
-        help=f"path to common.toml (default: {DEFAULT_COMMON_PATH})",
+        default=default_path,
+        help=f"path to common.toml (default: {default_path})",
     )
     args = parser.parse_args(argv)
 

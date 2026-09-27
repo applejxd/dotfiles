@@ -12,25 +12,15 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 from functools import lru_cache
+
+from policy_loader import load_policy
 
 from . import tables
 
-# ─── ポリシー層の読み込み ────────────────────────────────────────────
-# ~/.config/agents/ (chezmoi 管理) にあるポリシーモジュールを import する。
-# AGENTS_CONFIG_DIR で差し替え可能 (テスト・コンテナから repo の実体を指すため)
-_AGENTS_DIR = os.environ.get("AGENTS_CONFIG_DIR")
-if not _AGENTS_DIR:
-    _CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    _AGENTS_DIR = os.path.join(_CONFIG_HOME, "agents")
-sys.path.insert(0, _AGENTS_DIR)
-_POLICY_IMPORT_ERROR: str | None = None
-try:
-    import command_policy as _policy
-except Exception as _exc:  # pragma: no cover - 構文エラー等も拾う
-    _policy = None  # type: ignore[assignment]
-    _POLICY_IMPORT_ERROR = f"{type(_exc).__name__}: {_exc}"
+# 失敗しても例外にしない。拒否は policy.check_policy_loaded が行う
+_POLICY_IMPORT = load_policy()
+_policy = _POLICY_IMPORT.module
 
 
 # ─── PreToolUse payload の cwd ───────────────────────────────────────
@@ -47,10 +37,6 @@ def set_payload_cwd(value: str | None) -> None:
 
 def payload_cwd() -> str | None:
     return _PAYLOAD_CWD
-
-
-# PreToolUse payload の cwd (workspace ルート)。main() で設定する
-_PAYLOAD_CWD: str | None = None
 
 
 # ─── ポリシー呼び出しのキャッシュ ───────────────────────────────────

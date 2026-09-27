@@ -14,17 +14,18 @@ from __future__ import annotations
 import tomllib
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 _PATH = Path(__file__).resolve().parent / "tables.toml"
 
 
 @lru_cache(maxsize=1)
-def _data() -> dict:
+def _data() -> dict[str, Any]:
     with _PATH.open("rb") as fh:
         return tomllib.load(fh)
 
 
-def _raw(section: str, key: str):
+def _raw(section: str, key: str) -> Any:
     try:
         return _data()[section][key]
     except KeyError as exc:  # pragma: no cover - 設定ミスは起動時に気付きたい
@@ -43,5 +44,5 @@ def as_list(section: str, key: str) -> list[str]:
     return list(_raw(section, key))
 
 
-def as_dict(section: str, key: str) -> dict[str, str]:
+def as_dict(section: str, key: str) -> dict[str, list[str]]:
     return dict(_raw(section, key))

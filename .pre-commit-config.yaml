@@ -53,7 +53,7 @@ repos:
         entry: mise exec -- python3 scripts/agents/validate_common.py
         language: system
         pass_filenames: false
-        files: ^(home/dot_config/agents/common\.toml\.tmpl|scripts/agents/(generate|validate_common)\.py)$
+        files: ^(home/dot_config/agents/common\.toml\.tmpl|scripts/agents/(generate|hooks|validate_common)\.py)$
 
       # identify は *.tmpl に何のタグも付けないため、check-toml / ruff /
       # shellcheck がテンプレートを素通りする。描画してから振り分ける。

@@ -19,7 +19,6 @@ fail-closed: ポリシーを読めない場合は素通りさせず deny する�
 """
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -30,18 +29,10 @@ from agent_compat import (
     normalize_tool_kind,
     read_input,
 )
+from policy_loader import load_policy
 
-_AGENTS_DIR = os.environ.get("AGENTS_CONFIG_DIR")
-if not _AGENTS_DIR:
-    _CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    _AGENTS_DIR = os.path.join(_CONFIG_HOME, "agents")
-sys.path.insert(0, _AGENTS_DIR)
-_POLICY_IMPORT_ERROR: str | None = None
-try:
-    import command_policy as _policy
-except Exception as _exc:  # pragma: no cover - 構文エラー等も拾う
-    _policy = None  # type: ignore[assignment]
-    _POLICY_IMPORT_ERROR = f"{type(_exc).__name__}: {_exc}"
+_POLICY_IMPORT = load_policy()
+_policy = _POLICY_IMPORT.module
 
 
 def main() -> None:
@@ -63,7 +54,7 @@ def main() -> None:
     if _policy is None:
         emit_pretool_deny(
             "ポリシーモジュールを読み込めませんでした "
-            f"({_AGENTS_DIR}/command_policy.py): {_POLICY_IMPORT_ERROR}\n"
+            f"({_POLICY_IMPORT.agents_dir}/command_policy.py): {_POLICY_IMPORT.error}\n"
             "安全のためファイル読み取りを拒否しています。\n"
             "対処: `chezmoi apply ~/.config/agents` を実行してください。"
         )

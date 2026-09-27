@@ -6,19 +6,14 @@
 """
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
 
-from ._shared import _policy
+from ._shared import _POLICY_IMPORT, _policy
 from .rm import _rm_ask_exempt, _rm_ask_hint
 
-# ~/.config/agents/ (chezmoi 管理) にあるポリシーモジュールを import
-# AGENTS_CONFIG_DIR で差し替え可能 (テスト・コンテナから repo の実体を指すため)
-_AGENTS_DIR = os.environ.get("AGENTS_CONFIG_DIR")
-
-
-_POLICY_IMPORT_ERROR: str | None = None
+_AGENTS_DIR = _POLICY_IMPORT.agents_dir
+_POLICY_IMPORT_ERROR = _POLICY_IMPORT.error
 
 
 @lru_cache(maxsize=1)
@@ -50,16 +45,17 @@ def check_policy_loaded(cmd: str) -> str | None:
             "対処: `chezmoi apply ~/.config/agents` を実行し、"
             f"`{_AGENTS_DIR}/__pycache__/` が残っていれば削除してください。"
         )
-    for name in ("normalize", "find_match", "load_deny", "load_ask"):
+    for name in ("normalize", "find_match", "load_deny", "load_ask", "default_common_path"):
         if not callable(getattr(_policy, name, None)):
             return (
                 f"ポリシーモジュールに `{name}` がありません。\n"
                 "安全のため bash コマンドを拒否しています。\n"
                 "対処: `chezmoi apply ~/.config/agents` を実行してください。"
             )
-    if not Path(_policy.DEFAULT_COMMON_PATH).is_file():
+    common_path = _policy.default_common_path()
+    if not Path(common_path).is_file():
         return (
-            f"ポリシー定義が見つかりません ({_policy.DEFAULT_COMMON_PATH})。\n"
+            f"ポリシー定義が見つかりません ({common_path})。\n"
             "安全のため bash コマンドを拒否しています。\n"
             "対処: `chezmoi apply ~/.config/agents` を実行してください。"
         )
@@ -79,7 +75,7 @@ def check_policy_loaded(cmd: str) -> str | None:
         )
     if not deny:
         return (
-            f"ポリシー定義に [bash] deny がありません ({_policy.DEFAULT_COMMON_PATH})。\n"
+            f"ポリシー定義に [bash] deny がありません ({common_path})。\n"
             "設定が壊れている可能性があるため、安全のため拒否しています。\n"
             "対処: `chezmoi apply ~/.config/agents` を実行してください。"
         )

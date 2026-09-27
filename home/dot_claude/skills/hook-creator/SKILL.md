@@ -199,7 +199,7 @@ hook 関連ファイルを以下の場所で管理する:
 
 | 種類 | chezmoi source | 配備先 |
 | --- | --- | --- |
-| 共通ヘルパ | `home/dot_claude/hooks/lib/{agent_compat.py,agent_compat.sh}` | `~/.claude/hooks/lib/` |
+| 共通ヘルパ | `home/dot_claude/hooks/lib/{agent_compat.py,agent_compat.sh,policy_loader.py}` | `~/.claude/hooks/lib/` |
 | Python hook 本体 | `home/dot_claude/hooks/executable_<name>.py` | `~/.claude/hooks/<name>.py` (実行属性付) |
 | Bash hook 本体 | `home/dot_claude/hooks/executable_<name>.sh` | `~/.claude/hooks/<name>.sh` (実行属性付) |
 | hook の登録情報 (両 CLI 共通) | `home/dot_config/agents/common.toml.tmpl` の `[[hooks]]` | 下 2 行へ自動展開 |

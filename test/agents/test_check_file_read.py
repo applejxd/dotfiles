@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -186,6 +187,26 @@ def test_missing_path_is_ignored():
 def test_fails_closed_when_policy_is_unreadable(tmp_path):
     # 設定を読めないときに素通りさせない (check_bash.py と同じ方針)
     assert is_denied(run_hook("view", "README.md", config_dir=tmp_path))
+
+
+def test_policy_dir_falls_back_to_xdg_config_home(tmp_path):
+    """AGENTS_CONFIG_DIR が無ければ $XDG_CONFIG_HOME/agents を読むこと."""
+    shutil.copytree(COMMON_PATH.parent, tmp_path / "agents")
+    env = {k: v for k, v in os.environ.items() if k != "AGENTS_CONFIG_DIR"}
+    env["XDG_CONFIG_HOME"] = str(tmp_path)
+    for path, denied in (("certs/server.key", True), ("README.md", False)):
+        proc = subprocess.run(
+            [sys.executable, "-B", str(HOOK)],
+            input=json.dumps(
+                {"hook_event_name": "PreToolUse", "tool_name": "view", "tool_input": {"path": path}}
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert bool(proc.stdout.strip()) is denied, (path, proc.stdout, proc.stderr)
 
 
 # ---------------------------------------------------------------------------
