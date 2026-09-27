@@ -32,6 +32,7 @@ INSTRUCTION_PATHS = {
     "claude": ROOT / "home" / "dot_claude" / "CLAUDE.md.tmpl",
     "codex": ROOT / "home" / "dot_codex" / "AGENTS.md.tmpl",
     "copilot": ROOT / "home" / "dot_copilot" / "copilot-instructions.md.tmpl",
+    "opencode": ROOT / "home" / "dot_config" / "opencode" / "AGENTS.md.tmpl",
 }
 SHARED_INSTRUCTIONS = "agent-instructions.md"
 _INCLUDE_RE = re.compile(r'\{\{-?\s*includeTemplate\s+"([^"]+)"\s*-?\}\}')
@@ -347,8 +348,22 @@ def test_copilot_instructions_require_commit_approval():
     assert path.exists()
     # Claude Code / Codex CLI は機械的強制があるので、同じ規則を書くと
     # 二重確認になる (docs/spec/agent-permissions.md の CLI 別の表を参照)
-    for cli in ("claude", "codex"):
+    for cli in ("claude", "codex", "opencode"):
         assert "github/copilot-cli#3590" not in render_instructions(cli), cli
+
+
+def test_checkpoint_instructions_reach_opencode_only():
+    """checkpoint スキルは OpenCode にしか配っていない。
+
+    共通本文に置くと、Claude / Codex / Copilot に存在しないスキルの実行を
+    毎回要求することになる。
+    """
+    assert "checkpoint" not in (CHEZMOI_TEMPLATES / SHARED_INSTRUCTIONS).read_text(
+        encoding="utf-8"
+    )
+    assert "`checkpoint` スキル" in render_instructions("opencode")
+    for cli in ("claude", "codex", "copilot"):
+        assert "checkpoint" not in render_instructions(cli), cli
 
 
 def test_personal_instructions_share_one_source():

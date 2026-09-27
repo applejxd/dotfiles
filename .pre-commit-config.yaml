@@ -42,7 +42,7 @@ repos:
           mise exec -- uv run --with pyyaml --no-project
           python scripts/agents/validate_skills.py
         language: system
-        files: ^home/[^/]+/skills/[^/]+/SKILL\.md$
+        files: ^home/(dot_claude|dot_codex|dot_config/opencode)/skills/[^/]+/SKILL\.md$
 
       # common.toml は chezmoi テンプレートなので check-toml が使えない。
       # hook が fail-closed で読む正本なので、描画結果を検査して代替する。

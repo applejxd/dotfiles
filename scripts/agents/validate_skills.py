@@ -24,8 +24,14 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# ホームに配る skill は chezmoi のソースツリー配下にまとまっている。
-SKILL_GLOB = "home/*/skills/*/SKILL.md"
+# 配布する skill のルート。増やしたら .pre-commit-config.yaml の
+# skill-frontmatter-local の files も合わせる（テストが突き合わせる）。
+# 再帰で探さないのは、skill に同梱した資材の中の SKILL.md を拾わないため。
+SKILL_ROOTS = (
+    "home/dot_claude/skills",
+    "home/dot_codex/skills",
+    "home/dot_config/opencode/skills",
+)
 
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -150,10 +156,17 @@ def validate(path: Path) -> list[str]:
     return errors
 
 
+def discover(root: Path = ROOT) -> list[Path]:
+    """配布する全 SKILL.md（各ルートの直下 1 階層）を返す。"""
+    return sorted(
+        path for skills in SKILL_ROOTS for path in (root / skills).glob("*/SKILL.md")
+    )
+
+
 def collect(argv: list[str]) -> list[Path]:
     if argv:
         return [Path(a) for a in argv]
-    return sorted(ROOT.glob(SKILL_GLOB))
+    return discover()
 
 
 def main(argv: list[str]) -> int:

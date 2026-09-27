@@ -51,6 +51,20 @@ Claude Code / Copilot CLI 双方で動く hook を作成・検証するための
 そのほかのスコープ外: 既存 hook を一括変換する自動マイグレーションツール。
 必要に応じて手作業で `references/` を参照しながら対応する。
 
+## 登録先の判定 (最初に行う)
+
+hook の登録先は、chezmoi でこのリポジトリの `common.toml` が管理しているかで変わる。
+
+```bash
+test -f "$(chezmoi source-path 2>/dev/null)/dot_config/agents/common.toml.tmpl" \
+  && echo managed || echo unmanaged
+```
+
+- **managed**: 登録は `common.toml` の `[[hooks]]` だけに書く。生成先
+  (`~/.claude/settings.json` / `~/.copilot/hooks/*.json`) を直接編集しても次の
+  `chezmoi apply` で上書きされる。手順は「chezmoi 管理下に置く流儀」節
+- **unmanaged**: 生成先へ直接登録する。判断フロー 5 と配置表のとおり
+
 ## 前提確認 (1 メッセージにまとめて質問)
 
 以下が未確定の場合、まとめて確認する:
@@ -85,13 +99,16 @@ ls -la "$HOME/.claude/hooks/lib/" 2>/dev/null
    → `references/hook-spec.md` の正規化マッピングで kind に統一
 4. **path / command の取り出し方を決める**
    → `agent_compat.py` の `get_path()` / `get_command()` を利用
-5. **設定ファイル (`~/.copilot/hooks/*.json` または `~/.claude/settings.json`)
-   への登録**
-   → `templates/hook-config-examples.json` の該当箇所をコピペ
+5. **登録** (「登録先の判定」の結果で分岐)
+   → managed: `common.toml.tmpl` の `[[hooks]]` にエントリを追加
+   → unmanaged: `templates/hook-config-examples.json` の該当箇所を
+   `~/.claude/settings.json` / `~/.copilot/hooks/*.json` へコピペ
 6. **検証**
    → `scripts/verify-hook.sh` に `examples/payloads/*.json` を流して挙動確認
 
-## テンプレート選択と配置
+## テンプレート選択と配置 (unmanaged の場合)
+
+managed の場合の配置は「chezmoi 管理下に置く流儀」節の表を使う。
 
 | 用途 | テンプレート | 配置先 (推奨) |
 | --- | --- | --- |
@@ -176,9 +193,9 @@ JSON 形式エラー、参照スクリプトの不在、matcher の anchored 規
 
 詳細は `references/pitfalls.md` 全項目を参照。
 
-## chezmoi 管理下に置く流儀
+## chezmoi 管理下に置く流儀 (managed の場合)
 
-このリポジトリでは hook 関連ファイルを以下の場所で管理:
+hook 関連ファイルを以下の場所で管理する:
 
 | 種類 | chezmoi source | 配備先 |
 | --- | --- | --- |
@@ -187,11 +204,9 @@ JSON 形式エラー、参照スクリプトの不在、matcher の anchored 規
 | Bash hook 本体 | `home/dot_claude/hooks/executable_<name>.sh` | `~/.claude/hooks/<name>.sh` (実行属性付) |
 | hook の登録情報 (両 CLI 共通) | `home/dot_config/agents/common.toml.tmpl` の `[[hooks]]` | 下 2 行へ自動展開 |
 | Claude 設定 | `home/dot_claude/modify_settings.json.py.tmpl` (生成) | `~/.claude/settings.json` の `hooks` 節 |
-| Copilot 設定 | `home/dot_copilot/hooks/from-claude.json.tmpl` (生成) | `~/.copilot/hooks/from-claude.json` |
+| Copilot 設定 | `home/dot_copilot/hooks/modify_from-claude.json.py.tmpl` (生成) | `~/.copilot/hooks/from-claude.json` |
 
-**hook の登録先は `common.toml` の `[[hooks]]` 1 箇所**。設定ファイルは
-`scripts/agents/generate.py` が生成するので、`~/.claude/settings.json` や
-`~/.copilot/hooks/*.json` を直接編集しても次の `chezmoi apply` で上書きされる。
+設定ファイルは `scripts/agents/generate.py` が `[[hooks]]` から生成する。
 
 新規スクリプトを追加するときは:
 
