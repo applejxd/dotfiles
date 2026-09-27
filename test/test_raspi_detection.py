@@ -376,3 +376,16 @@ def test_wsl_script_is_excluded_on_native_linux():
     """
     entries = ignore_entries(context(is_raspi=False))
     assert ".chezmoiscripts/100_linux/120_wsl.sh" in entries
+
+
+def test_harness_injects_is_raspi_after_init():
+    """Docker のハーネスは Pi 扱いを init の後に注入する。
+
+    前に注入すると `chezmoi init --force` が設定を作り直して消し、
+    `raspi2204 apply` が Pi 以外の経路を検証したまま SUCCESS になる。
+    """
+    script = (ROOT / "test" / "run_chezmoi.sh").read_text(encoding="utf-8")
+    init = script.index('init --force')
+    inject = script.index("is_raspi = true")
+    verify = script.index('log_result "inject-is-raspi" "SUCCESS"')
+    assert init < inject < verify

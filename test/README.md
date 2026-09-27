@@ -149,9 +149,23 @@ IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 
 判定ロジックそのものは `test/test_raspi_detection.py` が検証する（Docker 不要、3 秒）。
 
-## 3. 既知の未達（2026-09-26 時点）
+### WSL ホストでは素の Linux を再現できない
 
-E2E はまだ完走しない。`update` モードまでは組み上がっている。
+同じ理由で、WSL2 上の Docker では**どのサービスも WSL 扱い**になる。
+`.chezmoiignore.tmpl` はカーネル名に `microsoft` が含まれるかで WSL を見分けるため、
+`120_wsl.sh` などが走る。WSL ではない Linux の経路は、素の Linux ホストの Docker か
+実機で見る。
+
+### systemd は無い
+
+コンテナの PID 1 は systemd ではないので、`systemctl` は失敗する。
+`121_ubuntu.sh` の Pi の節は `/run/systemd/system` が無ければサービスの再起動を
+飛ばす。`sysctl -p` も読み取り専用の `/proc/sys` に書けず警告を出すが、止まらない。
+
+## 3. 既知の未達（2026-09-27 時点）
+
+`ubuntu2204` の `apply` と `update`（2 回の apply と残差分 0 件）は通る。
+以下は、そこへ至るまでに直したものと、まだ見ていないもの。
 
 ### 解決済み: tmpfs の `noexec`
 
@@ -213,6 +227,15 @@ herdr が同じディレクトリに置く `herdr-agent-state.sh` の hook を a
 （直後の `140` が足し直す）。所有権をスクリプト名（現役 + 撤去済み）で決めるようにした。
 see [外部ツールとの共存](../docs/spec/agent-permissions.md#外部ツールとの共存-orca--herdr)
 
+### 解決済み: init を通すモードで Pi 扱いの注入が消えていた
+
+`IS_RASPI=1` の注入（`[data]` への `is_raspi = true` の追記）を init の**前**に
+行っていたので、`place` / `apply` では `chezmoi init --force` が設定を作り直して
+消していた。注入の確認も init の前だったため、`inject-is-raspi: SUCCESS` のまま
+Pi 以外の経路を検証していた（i3 が入り zram-tools が入らないことで発覚）。
+init を省く `update` 以外（`dryrun` / `place` / `apply`）はすべて影響を受けていた。
+注入と確認を init の後へ移し、順序を `test/test_raspi_detection.py` で検査する。
+
 ### 解決済み: Codex のトップレベルのキーが直前のテーブルに入る
 
 ユーザ部分を管理ブロック（最後が `[windows]` や `[mcp_servers.*]`）の後ろへまとめて
@@ -241,7 +264,8 @@ see [外部ツールとの共存](../docs/spec/agent-permissions.md#外部ツー
 ### 未着手
 
 - 2 フェーズ bootstrap（`bw login` は対話が要るので、無認証で通る範囲までしか見ていない）
-- `raspi2204` / `arm2404`（arm64 エミュレーション）での `apply`
+- `arm2404`（arm64 エミュレーション、Pi 扱いなし）での `apply`
+- `raspi2204` の `update`（2 回目の apply と残差分）
 
 ## 4. いつ回すか
 

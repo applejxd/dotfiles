@@ -173,33 +173,6 @@ if ! grep -q "sourceDir" "$HOME/.config/chezmoi/chezmoi.toml"; then
     echo "sourceDir = \"${CHEZMOI_SOURCE}\"" >> "$HOME/.config/chezmoi/chezmoi.toml"
 fi
 
-# Raspberry Pi 扱いの注入。
-# ★コンテナはホストのカーネルを共有するので、is-raspi の自動判定
-#   (kernel.osrelease / /proc/device-tree/model) は原理的に再現できない。
-#   分岐の「帰結」を見たいので、データ上書きで判定だけ与える。
-#   判定ロジックそのものの検証は test/test_raspi_detection.py が担う。
-if [ "${IS_RASPI}" = "1" ]; then
-    cfg="$HOME/.config/chezmoi/chezmoi.toml"
-    # [data] はテンプレート末尾の節なので、末尾追記でその中に入る。
-    # 前提が崩れたら黙って効かなくなるので、節の数を確かめてから追記する。
-    if [ "$(grep -c '^\[data\]' "$cfg")" -ne 1 ]; then
-        echo "❌ [data] 節が 1 つではないので is_raspi を注入できません"
-        log_result "inject-is-raspi" "FAILED" "([data] 節が 1 つではない)"
-        show_summary
-    fi
-    printf '    is_raspi = true\n' >> "$cfg"
-    # 注入が効いたかを実際に評価して確かめる (追記位置の前提が崩れたら落とす)
-    injected=$(chezmoi --source="$CHEZMOI_SOURCE" execute-template \
-        '{{ includeTemplate "is-raspi" . }}' 2>&1) || injected="<failed>"
-    if [ "$injected" != "true" ]; then
-        echo "❌ is_raspi の注入が効いていません (got: ${injected})"
-        log_result "inject-is-raspi" "FAILED" "(got: ${injected})"
-        show_summary
-    fi
-    log_result "inject-is-raspi" "SUCCESS" "(Raspberry Pi 扱いで検証する)"
-    echo "🍓 Raspberry Pi 扱いを注入しました"
-fi
-
 echo "📁 Final chezmoi config:"
 cat "$HOME/.config/chezmoi/chezmoi.toml"
 chezmoi --version
@@ -232,6 +205,33 @@ else
         echo "❌ Chezmoi initialization failed"
         show_summary
     fi
+fi
+
+# Raspberry Pi 扱いの注入。init の後に行う (init --force が設定を作り直して消すため)。
+# ★コンテナはホストのカーネルを共有するので、is-raspi の自動判定
+#   (kernel.osrelease / /proc/device-tree/model) は原理的に再現できない。
+#   分岐の「帰結」を見たいので、データ上書きで判定だけ与える。
+#   判定ロジックそのものの検証は test/test_raspi_detection.py が担う。
+if [ "${IS_RASPI}" = "1" ]; then
+    cfg="$HOME/.config/chezmoi/chezmoi.toml"
+    # [data] はテンプレート末尾の節なので、末尾追記でその中に入る。
+    # 前提が崩れたら黙って効かなくなるので、節の数を確かめてから追記する。
+    if [ "$(grep -c '^\[data\]' "$cfg")" -ne 1 ]; then
+        echo "❌ [data] 節が 1 つではないので is_raspi を注入できません"
+        log_result "inject-is-raspi" "FAILED" "([data] 節が 1 つではない)"
+        show_summary
+    fi
+    printf '    is_raspi = true\n' >> "$cfg"
+    # 注入が効いたかを実際に評価して確かめる (追記位置の前提が崩れたら落とす)
+    injected=$(chezmoi --source="$CHEZMOI_SOURCE" execute-template \
+        '{{ includeTemplate "is-raspi" . }}' 2>&1) || injected="<failed>"
+    if [ "$injected" != "true" ]; then
+        echo "❌ is_raspi の注入が効いていません (got: ${injected})"
+        log_result "inject-is-raspi" "FAILED" "(got: ${injected})"
+        show_summary
+    fi
+    log_result "inject-is-raspi" "SUCCESS" "(Raspberry Pi 扱いで検証する)"
+    echo "🍓 Raspberry Pi 扱いを注入しました"
 fi
 
 echo
