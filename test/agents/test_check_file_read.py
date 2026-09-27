@@ -42,6 +42,7 @@ def run_hook(tool_name: str, path: str, *, config_dir: Path | None = None) -> di
         input=payload,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
     )
     assert proc.returncode == 0, f"hook が異常終了: {proc.stderr}"
@@ -146,6 +147,7 @@ def test_missing_path_is_ignored():
         input=payload,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
     )
     assert proc.returncode == 0

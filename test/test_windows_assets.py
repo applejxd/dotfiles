@@ -1,3 +1,4 @@
+import ast
 import re
 from pathlib import Path
 
@@ -464,3 +465,31 @@ def test_powershell_sources_start_with_a_utf8_bom():
         if not path.read_bytes().startswith(b"\xef\xbb\xbf")
     ]
     assert missing == []
+
+
+# PowerShell の出力は UTF-8 とは限らない (Windows PowerShell 5.1 は OEM コードページ)
+ENCODING_EXEMPT = {"test/test_powershell_interactive.py"}
+
+
+def test_subprocess_text_mode_specifies_encoding():
+    """テストの subprocess は text=True なら encoding も明示する。
+
+    省くと英語版 Windows の既定 (cp1252) で chezmoi の日本語出力を読んで失敗し、
+    終了コード 0 のまま stdout が None になる。
+    """
+    missing = []
+    for path in sorted((ROOT / "test").rglob("*.py")):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in ENCODING_EXEMPT:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "attr", getattr(node.func, "id", ""))
+            if name not in {"run", "check_output", "Popen"}:
+                continue
+            keywords = {kw.arg for kw in node.keywords}
+            if keywords & {"text", "universal_newlines"} and "encoding" not in keywords:
+                missing.append(f"{rel}:{node.lineno}")
+    assert not missing, missing

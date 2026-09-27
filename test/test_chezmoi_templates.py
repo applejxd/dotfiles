@@ -53,6 +53,7 @@ def render(*, home: str, username: str = "applejxd", bw_session: str = "") -> se
         input=template,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         env=env,
     )
@@ -102,6 +103,7 @@ def render_config(*, path_dir: Path | None = None) -> str:
         input=CONFIG_TEMPLATE.read_text(encoding="utf-8"),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         env=env,
     )

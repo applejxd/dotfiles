@@ -324,6 +324,7 @@ def guide_js(tmp_path_factory):
             [node, str(work / "run.mjs"), json.dumps([fn, args])],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         )
         return json.loads(done.stdout)

@@ -37,6 +37,7 @@ def render_common(username: str | None = None) -> str:
         [chezmoi, "--source", str(ROOT), "execute-template", template],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr

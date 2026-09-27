@@ -83,7 +83,7 @@ def render(
         command += ["--with-stdin", template]
         command_input = stdin
     result = subprocess.run(
-        command, input=command_input, capture_output=True, text=True, check=False
+        command, input=command_input, capture_output=True, text=True, encoding="utf-8", check=False
     )
     assert result.returncode == 0, result.stderr
     return result.stdout

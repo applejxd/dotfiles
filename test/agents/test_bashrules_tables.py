@@ -42,6 +42,7 @@ def _run(hook: Path, command: str) -> tuple[str | None, str]:
         input=json.dumps(payload),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
         env={**os.environ, "AGENTS_CONFIG_DIR": str(AGENTS_DIR)},
     )

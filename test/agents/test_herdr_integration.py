@@ -59,6 +59,7 @@ def render_template(path, *, os_name="linux", username="applejxd", home="/test-h
         input=template,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -183,6 +184,7 @@ def run_agent_cli_installer(script: str, home: Path, tmp_path: Path, fail_url: s
         [bash, str(rendered)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         env={"HOME": str(home), "PATH": f"{shims}:{stub_bin}"},
     )
@@ -372,6 +374,7 @@ def test_chezmoi_applies_mise_config_before_bootstrap_and_integrations(tmp_path,
         env={**os.environ, "HOME": str(destination)},
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -462,6 +465,7 @@ def run_linux_integration(home, env, username="applejxd"):
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
 

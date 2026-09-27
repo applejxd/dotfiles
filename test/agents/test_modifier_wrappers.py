@@ -96,6 +96,7 @@ def test_modifier_targets_keep_json_names():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr

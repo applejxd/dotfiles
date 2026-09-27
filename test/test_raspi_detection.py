@@ -90,6 +90,7 @@ def render(template: Path, ctx: dict) -> str:
         input=source,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, f"描画に失敗した:\n{result.stderr}"
@@ -107,6 +108,7 @@ def detect(ctx: dict) -> bool:
         input=source,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, f"描画に失敗した:\n{result.stderr}"
@@ -189,6 +191,7 @@ def test_config_template_does_not_emit_is_raspi():
         input=CONFIG_TEMPLATE.read_text(encoding="utf-8-sig"),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -312,6 +315,7 @@ def test_config_template_renders_as_valid_toml():
         input=CONFIG_TEMPLATE.read_text(encoding="utf-8-sig"),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr

@@ -207,6 +207,7 @@ def call(tmp_path_factory, repo):
             [node, str(work / "run.mjs"), json.dumps([kase, str(repo), SESSION])],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         )
         return json.loads(done.stdout)

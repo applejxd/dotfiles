@@ -323,6 +323,7 @@ def test_ensure_ignored_adds_exclude_entry(cp, git_repo: Path):
         cwd=git_repo,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout.strip()
     exclude = Path(rel)
@@ -383,6 +384,7 @@ def run_cli(args: list[str], stdin: str = "") -> subprocess.CompletedProcess:
         input=stdin,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
 
@@ -456,6 +458,7 @@ def test_snapshot_creates_a_skeleton_with_machine_facts(tmp_path: Path):
         cwd=root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout.strip()
     assert f"- head: {head}" in text

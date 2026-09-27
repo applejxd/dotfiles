@@ -55,6 +55,11 @@ agent テストでは生成された matcher と実 hook の判定を両方確�
   隠し、Windows Server なので Windows 11 とも違う
 - 個人用（applejxd）の分岐。runner のユーザは `runneradmin`
 
+runner は英語版で、Python の既定の文字コードは cp1252 になる。テストの
+`subprocess.run(..., text=True)` は `encoding="utf-8"` を必ず明示する
+（省くと chezmoi の日本語出力を読めず、終了コード 0 のまま `stdout` が `None` になる）。
+`test_windows_assets.py` が構文木で検査している。
+
 ---
 
 ## 1. Docker での cold start 検証

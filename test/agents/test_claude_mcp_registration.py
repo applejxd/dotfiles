@@ -34,6 +34,7 @@ def render_script(username):
         + "\n{{ end }}",
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -113,7 +114,13 @@ def minimal_bin(tmp_path):
 
 def run_setup(script, env):
     return subprocess.run(
-        ["bash"], input=script, env=env, capture_output=True, text=True, check=False
+        ["bash"],
+        input=script,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
     )
 
 

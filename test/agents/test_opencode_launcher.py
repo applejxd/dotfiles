@@ -899,6 +899,7 @@ def _git_object_count(repo: Path) -> int:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     for line in done.stdout.splitlines():
         if line.startswith("count:"):

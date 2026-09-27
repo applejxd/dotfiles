@@ -46,6 +46,7 @@ def run_without_tomllib() -> subprocess.CompletedProcess[str]:
         [sys.executable, "-c", BLOCK_TOMLLIB.format(path=str(GENERATE))],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         cwd=ROOT,
     )
@@ -112,6 +113,7 @@ def render_before_script(home: Path, destination: Path) -> Path:
         input=source,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -158,6 +160,7 @@ def run_before_script(
         [bash, str(script)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         env={"HOME": str(home), "PATH": str(bin_dir)},
     )

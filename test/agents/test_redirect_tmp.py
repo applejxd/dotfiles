@@ -37,6 +37,7 @@ def run_hook(tool_name: str, tool_input: dict) -> str | None:
         input=json.dumps(payload),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
         env=env,
     )

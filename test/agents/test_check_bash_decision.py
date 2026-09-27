@@ -153,6 +153,7 @@ def run_hook(command: str, *, cwd: str | None = None) -> tuple[str | None, str]:
         input=json.dumps(payload),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
         env=env,
     )
@@ -644,6 +645,7 @@ def test_rm_without_cwd_falls_back_to_ask():
         input=json.dumps(payload),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
         env=env,
     )
@@ -2439,6 +2441,7 @@ def _run_raw(payload: str, timeout: int = 20):
         input=payload,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=timeout,
         env={**os.environ, "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent)},
     )
@@ -3152,6 +3155,7 @@ def test_broken_config_fails_closed(tmp_path, label, files):
         input=json.dumps(payload),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
         env={**os.environ, "AGENTS_CONFIG_DIR": str(tmp_path)},
     )
@@ -3173,6 +3177,7 @@ def test_both_cli_tool_names_are_checked(tool_name):
         input=json.dumps(payload),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
         env={**os.environ, "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent)},
     )
@@ -3193,6 +3198,7 @@ def test_missing_policy_denies_everything(tmp_path):
         input=json.dumps(payload),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
         env=env,
     )
