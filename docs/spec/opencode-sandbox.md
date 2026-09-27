@@ -216,7 +216,8 @@ OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continu
 ### 隔離版の設定の書き出し方
 
 - 緩和に関わるキー（`permissions` / `snapshots` / `policies` / `plugins`）は
-  **毎回差し替える**
+  **毎回差し替える**。生成側が空なら取り除く（`AGENTS.md` も同じ）。
+  `permissions` だけは空でも `[]` を書く（消すと OpenCode の既定に戻るため）
 - それ以外のキーは**残す**。丸ごと上書きすると TUI で選んだ値が毎回消える
 - 通常版からは**見た目・操作感のキーだけ**引き継ぐ
   （`theme` / `keybinds` / `username` / `layout` / `model` / `small_model`）
@@ -285,6 +286,11 @@ tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree
 - **検査スクリプトが無ければ起動しない。** 配備の失敗やファイル消失が
   「検査を飛ばして起動」に化けると、保護が消えても気づけない。
   省くときは `--skip-check` を明示する
+- **隠す対象はホストに在るものだけで判定する。** `ocs` が境界の外で存在を
+  確かめ、在るものを `BOUNDARY_HIDDEN`、無いものを `BOUNDARY_HIDDEN_ABSENT`
+  （`SKIP` と表示）で渡す。在る対象の一覧も合格のハッシュに入れる
+- **パスは改行区切りの環境変数で渡す**（`BOUNDARY_HIDDEN` / `BOUNDARY_PROTECTED`）。
+  空白や glob 文字を含むパスを割らないため。改行を含むパスでは起動しない
 - **保護対象が通常ファイルのときは追記（`>>`）で書き込み可否を見る。**
   `mkdir` の失敗を合格と読むと、書けるのに合格する。`>` は中身を切り詰めるので使わない
 

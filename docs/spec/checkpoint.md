@@ -20,7 +20,7 @@
 
 | 層 | 実体 | 役割 |
 | --- | --- | --- |
-| 指示ファイル | `home/.chezmoitemplates/agent-instructions.md`（各 CLI の指示ファイルへ展開） | 恒久ルール。「文脈の引き継ぎ」節 |
+| 指示ファイル | `home/dot_config/opencode/AGENTS.md.tmpl` | 恒久ルール。「文脈の引き継ぎ」節（OpenCode にだけ置く） |
 | スキル | `home/dot_config/opencode/skills/checkpoint/` | A1 と復帰の手順・雛形・CLI の単一ソース |
 | plugin | `home/dot_config/opencode/checkpoint-plugin/` | 圧縮直前の記録と直後の復帰注入 |
 

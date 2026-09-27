@@ -368,8 +368,11 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 #### plugin 層 (`guide-plugin`)
 
 `~/.config/opencode/guide-plugin/` に置く。判定表は `common.toml` の
-`[[opencode.shell.guide]]` と `[opencode.ask_description]` から
-`rules.json` として生成し、plugin は読むだけにする。
+`[[opencode.shell.guide]]`・`[opencode.redact]`・`[opencode.ask_description]`・
+`[file] read_deny_globs` から `rules.json` として生成し、plugin は読むだけにする。
+`index.js` はこのどれかが有効なら、`tui.ts` は `ask_description` が有効な
+ときだけ登録する（`generate.py` の `opencode_guide_server_needed` /
+`opencode_guide_tui_needed`）。
 
 | 役割 | 実体 | 登録先 |
 | --- | --- | --- |
@@ -377,6 +380,9 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 | `grep` / `glob` の結果フィルタ | `index.js` | 同上 |
 | shell 出力の伏字化 | `index.js` | 同上 |
 | 確認画面への説明表示（toast） | `tui.ts` | **`cli.json` の `plugins`** |
+
+隔離版（`ocs`）は `cli.json` を渡さないので `tui.ts` は読まれない。
+説明の生成だけでは隔離版に `index.js` を載せない。
 
 **登録先が分かれるのは仕様。** `opencode.json` に書いたディレクトリからは
 TUI 側が読まれない。どちらも**絶対パスのディレクトリ**でないと解決されず、
@@ -489,6 +495,7 @@ models = ["amazon-bedrock/us.anthropic...", "github-copilot/claude-haiku-4.5", .
 
 `models` は上から試し、使えたものを採用する。**Bedrock 未設定なら自動的に
 Copilot へ落ちる**（catalog に無いものは通信せず飛ばす）。
+toast の表示時間は `duration_ms`（既定 20000）で、`tui.ts` が `rules.json` から読む。
 
 **説明は判断の補助であって判定器ではない。** コマンド文字列は信頼できない
 入力で、偽装は原理的に防げない。確認画面は常に生コマンドを表示するので、
@@ -533,6 +540,7 @@ service.restart
 
 **宣言したら `keybinds` テーブルごと `common.toml` の持ち物になる。**
 1 件消したときに配備先へ残らないようにするため。節ごと無ければ触らない。
+空の `[opencode.keybinds]` を書くと既存を空にする（すべて既定に戻る）。
 
 割り当てで注意する点が 2 つある。
 
