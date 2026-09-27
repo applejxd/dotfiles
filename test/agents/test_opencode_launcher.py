@@ -1199,7 +1199,9 @@ def test_check_script_reports_every_failure_before_exiting(tmp_path):
     assert done.returncode == 1
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root は読み取り専用ディレクトリにも書ける")
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0, reason="root は読み取り専用ディレクトリにも書ける"
+)
 def test_check_script_passes_when_nothing_leaks(tmp_path):
     """漏れが無ければ合格すること (``set -eu`` で正常系が落ちないこと)。"""
     launcher = _launcher()
