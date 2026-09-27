@@ -97,7 +97,7 @@ dirty=$(git status --porcelain --untracked-files=no | wc -l | tr -d ' ')
 log_file="${log_dir}/$(date '+%Y%m%d-%H%M%S')-${service}-${mode}.log"
 {
   echo "# started_at=${started_at} commit=${commit} dirty_files=${dirty}"
-  echo "# service=${service} mode=${mode} IS_RASPI=${IS_RASPI:-} SOURCE_MODE=${SOURCE_MODE:-clone} INCLUDE_DIRTY=${INCLUDE_DIRTY:-0}"
+  echo "# service=${service} mode=${mode} IS_RASPI=${IS_RASPI:-} SOURCE_MODE=${SOURCE_MODE:-clone} INCLUDE_DIRTY=${INCLUDE_DIRTY:-0} APPLY_TIMEOUT=${APPLY_TIMEOUT:-900}"
 } > "$log_file"
 
 set +e

@@ -83,7 +83,7 @@ mise run e2e -- [service] [mode]    # 同じもの
 ```bash
 bash test/test.sh                            # 既定で dry-run
 bash test/test.sh ubuntu2204 place           # 22.04 で配置だけ
-bash test/test.sh raspi2204 apply            # 実機 Pi に近い構成で cold start
+APPLY_TIMEOUT=5400 bash test/test.sh raspi2204 apply  # 実機 Pi に近い構成で cold start (arm64 は遅い)
 IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 ```
 
@@ -103,6 +103,7 @@ IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 | `SOURCE_MODE` | `clone` | `mount` にすると未コミットの変更ごと検証 |
 | `INCLUDE_DIRTY` | `0` | `1` で clone に未コミットの変更（追跡ファイル分）を載せる |
 | `PREPARE_PYTHON` | `0`（`dryrun` / `place` は `1`） | `1` で diff の前に 005 だけ走らせる |
+| `APPLY_TIMEOUT` | `900` | apply 1 回あたりの上限（秒）。arm64 のエミュレーションでは延ばす |
 | `CHEZMOI_TEST_ARGS` | 空 | `diff` / `apply` への追加引数 |
 
 > `CHEZMOI_ARGS` は**使えない**。chezmoi 自身が予約しており、`chezmoi cd` の
@@ -234,7 +235,7 @@ see [外部ツールとの共存](../docs/spec/agent-permissions.md#外部ツー
 | 症状 | 実体 |
 | --- | --- |
 | `no space left on device` | tmpfs の上限。`$HOME` 使用率 95% 以上なら UNDETERMINED にする |
-| apply が 15 分で打ち切り | 回線速度。実測で mise の取得が 23〜145 kB/s まで落ちた |
+| apply が上限（`APPLY_TIMEOUT`、既定 15 分）で打ち切り | 回線速度か arm64 のエミュレーション。実測で mise の取得が 23〜145 kB/s まで落ちた |
 | `導入できなかった CLI:claude` | ネットワークか GitHub のレート制限 |
 
 ### 未着手
@@ -263,7 +264,7 @@ OVERALL STATUS: FAILED
 ```
 
 **失敗を「環境都合」と「リポジトリの不具合」に即断で二分しない。**
-タイムアウト（既定 900 秒）や tmpfs の上限（8GB）に当たった場合は、
+タイムアウト（`APPLY_TIMEOUT`、既定 900 秒）や tmpfs の上限（8GB）に当たった場合は、
 合否ではなく「未判定」として扱う。ruby は単独で 956 秒かかった実績がある。
 
 | 段の状態 | 意味 | 総合判定への影響 |

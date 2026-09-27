@@ -7,6 +7,7 @@ set -euo pipefail
 : "${SOURCE_MODE:=clone}"      # clone=追跡ファイルのみ / mount=作業ツリーそのまま
 : "${INCLUDE_DIRTY:=0}"        # clone に未コミットの変更 (追跡ファイル) を載せる
 : "${PREPARE_PYTHON:=0}"       # diff の前に run_before_005_python だけ走らせる
+: "${APPLY_TIMEOUT:=900}"      # apply 1 回あたりの上限 (秒)。arm64 のエミュレーションでは延ばす
 : "${SKIP_INIT:=0}"            # 1 なら init を省く (chezmoi update の経路)
 : "${APPLY_TWICE:=0}"          # 1 なら apply を 2 回回して冪等性を見る
 # NOTE: 変数名に CHEZMOI_ARGS は使えない。chezmoi 自身が予約しており、
@@ -337,7 +338,7 @@ if [ "${APPLY}" = "1" ]; then
 
   # 重い処理や外部取得が走る場合はここで発火
   # プログレス表示のため、リアルタイムでアウトプットを表示
-  if timeout 900 "${CZ[@]}" apply --keep-going -v "${CHEZMOI_ARG_ARRAY[@]}"; then
+  if timeout "${APPLY_TIMEOUT}" "${CZ[@]}" apply --keep-going -v "${CHEZMOI_ARG_ARRAY[@]}"; then
       echo "----------------------------------------"
       echo "✅ Apply completed successfully!"
       log_result "apply" "SUCCESS"
@@ -352,8 +353,8 @@ if [ "${APPLY}" = "1" ]; then
           echo "   compose.yaml の tmpfs size を増やして再実行してください"
           log_result "apply" "UNDETERMINED" "(\$HOME 使用率 ${home_use}% / 容量不足)"
       elif [ $exit_code -eq 124 ]; then
-          echo "⏰ Apply timed out after 15 minutes"
-          log_result "apply" "UNDETERMINED" "(15 分で打ち切り)"
+          echo "⏰ Apply timed out after ${APPLY_TIMEOUT} seconds"
+          log_result "apply" "UNDETERMINED" "(${APPLY_TIMEOUT} 秒で打ち切り)"
       else
           echo "❌ Apply failed with exit code: $exit_code"
           log_result "apply" "FAILED" "(apply command failed with exit code: $exit_code)"
@@ -366,12 +367,12 @@ if [ "${APPLY}" = "1" ]; then
   if [ "${APPLY_TWICE}" = "1" ]; then
       echo
       echo "== chezmoi apply (2 回目 / 冪等性の確認) =="
-      if timeout 900 "${CZ[@]}" apply --keep-going -v "${CHEZMOI_ARG_ARRAY[@]}"; then
+      if timeout "${APPLY_TIMEOUT}" "${CZ[@]}" apply --keep-going -v "${CHEZMOI_ARG_ARRAY[@]}"; then
           log_result "apply-2nd" "SUCCESS"
       else
           second_code=$?
           if [ $second_code -eq 124 ]; then
-              log_result "apply-2nd" "UNDETERMINED" "(15 分で打ち切り)"
+              log_result "apply-2nd" "UNDETERMINED" "(${APPLY_TIMEOUT} 秒で打ち切り)"
           else
               log_result "apply-2nd" "FAILED" "(exit code: $second_code)"
           fi
