@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -79,13 +80,18 @@ def render_shared_wrapper(working_tree: Path, target: str) -> bytes:
 
 
 def run_wrapper(wrapper: bytes, data: bytes) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(
-        [sys.executable, "-c", wrapper.decode("utf-8")],
-        cwd=ROOT,
-        input=data,
-        capture_output=True,
-        check=False,
-    )
+    # -c で渡すと、common.toml を埋め込んだラッパーが Windows のコマンドラインの
+    # 上限 (32767 文字) を超える (WinError 206)。ファイルに書いてから起動する
+    with tempfile.TemporaryDirectory() as work:
+        script = Path(work) / "wrapper.py"
+        script.write_bytes(wrapper)
+        return subprocess.run(
+            [sys.executable, str(script)],
+            cwd=ROOT,
+            input=data,
+            capture_output=True,
+            check=False,
+        )
 
 
 def test_modifier_targets_keep_json_names():
@@ -123,6 +129,24 @@ def test_windows_templates_use_latest_python_3():
     # hooks の生成も modify_ 経由になったので、Windows の Python 選択は
     # [interpreters.py] が受け持つ (テンプレート側に py -3 を書かない)
     assert "modify_json.py.tmpl" in COPILOT_HOOKS.read_text(encoding="utf-8")
+
+
+def test_wrapper_accepts_common_checked_out_with_crlf():
+    """source が CRLF で checkout されていても common.toml を壊さない。
+
+    Windows の core.autocrlf では埋め込まれる common.toml が \\r\\n になる。
+    既定の改行変換で書くと \\r\\r\\n になり TOML として読めない。
+    Linux の write_text は変換しないので、ここで効くのは Windows だけ。
+    """
+    wrapper = render_modifier(ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl")
+    lines = wrapper.decode("utf-8").splitlines(keepends=True)
+    common_line = next(i for i, line in enumerate(lines) if line.startswith("COMMON = "))
+    common = json.loads(lines[common_line].removeprefix("COMMON = "))
+    lines[common_line] = "COMMON = " + json.dumps(common.replace("\n", "\r\n")) + "\n"
+    result = run_wrapper("".join(lines).encode("utf-8"), b"{}")
+
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert isinstance(json.loads(result.stdout), dict)
 
 
 @pytest.mark.parametrize(("source", "_"), MODIFIERS.items())

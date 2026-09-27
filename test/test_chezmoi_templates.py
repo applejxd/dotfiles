@@ -105,6 +105,15 @@ def test_opencode_config_is_deployed_on_windows(tmp_path, target):
     assert target in rendered
 
 
+@pytest.mark.parametrize(
+    ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", True)]
+)
+def test_ocs_launcher_is_linux_only(tmp_path, os_name, ignored):
+    """ocs は bwrap で OpenCode を囲うので Ubuntu / WSL 専用 (CHG-0004)。"""
+    rendered = render(home=str(tmp_path), os_name=os_name)
+    assert (".local/bin/ocs" in rendered) is ignored
+
+
 def render_config(*, path_dir: Path | None = None) -> str:
     """`.chezmoi.toml.tmpl` を --init で描画する。
 

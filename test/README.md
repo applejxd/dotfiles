@@ -64,6 +64,12 @@ runner は英語版で、Python の既定の文字コードは cp1252 になる�
 （省くと chezmoi の日本語出力を読めず、終了コード 0 のまま `stdout` が `None` になる）。
 `test_windows_assets.py` が構文木で検査している。
 
+runner は checkout 時に改行を CRLF にする（`core.autocrlf`）。modify script の共通ラッパー
+（`home/.chezmoitemplates/modify_json.py.tmpl`）は、埋め込んだ common.toml を
+`newline=""` で書き出す。既定の改行変換だと `\r\r\n` になり、TOML として読めずに
+すべての modify script が落ちる（Windows の runner で発覚。autocrlf を有効にした
+Windows の機械でも同じことが起きる）。
+
 ---
 
 ## 1. Docker での cold start 検証

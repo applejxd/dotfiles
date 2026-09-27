@@ -98,7 +98,9 @@ def main() -> int:
     env["PYTHONIOENCODING"] = "utf-8"
     with tempfile.TemporaryDirectory() as work:
         common = Path(work) / "common.toml"
-        common.write_text(COMMON, encoding="utf-8")
+        # newline="": 中身をそのまま書く。source が CRLF で checkout されている
+        # (Windows の core.autocrlf) と、既定の変換で \r\r\n になり TOML として壊れる
+        common.write_text(COMMON, encoding="utf-8", newline="")
         result = subprocess.run(
             [
                 generator_python(),

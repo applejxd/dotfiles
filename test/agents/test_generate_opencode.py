@@ -586,6 +586,7 @@ def test_skills_not_declared_in_common_are_kept():
     assert gen.opencode_skills_path() in merged
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="ocs の境界は Linux 専用 (CHG-0004)")
 def test_checkpoint_plugin_is_readable_inside_the_boundary():
     """★隔離版でも圧縮は起きる。
 

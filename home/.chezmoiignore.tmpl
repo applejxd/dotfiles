@@ -58,6 +58,12 @@ Documents/**
 .mackup.cfg
 {{- end }}
 
+{{- if ne .chezmoi.os "linux" }}
+# OpenCode を bwrap で囲う起動スクリプトは Ubuntu / WSL 専用
+# see docs/change/closed/0004-opencode-sandbox.md
+.local/bin/ocs
+{{- end }}
+
 {{- if eq .chezmoi.os "linux" }}
 {{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
 .chezmoiscripts/100_linux/110_native/

@@ -25,6 +25,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
+
+# ocs は bwrap で囲うので Ubuntu / WSL 専用 (CHG-0004)。他の OS には配らない
+pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="ocs は Linux 専用")
 from agents_common import load_common  # noqa: E402
 
 LAUNCHER = ROOT / "home" / "dot_local" / "bin" / "executable_ocs"
