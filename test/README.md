@@ -129,8 +129,10 @@ gh workflow run e2e -f service=raspi2204 -f mode=update   # 手元から起動�
   「WSL ではない Linux」の経路もここで見られる
 - `APPLY_TIMEOUT` は 2700 秒、ジョブの上限は 120 分
 - ログ（`.tmp/e2e/`）は artifact に 30 日残り、判定の一覧はジョブの Summary に出る
-- 導入スクリプトは GitHub の API を認証なしで呼ぶものがあり、runner は IP を
-  共有するので、レート制限で落ちることがある（その場合は再実行する）
+- runner は IP を共有するので、認証なしの GitHub API はすぐ上限（1 時間 60 回）に
+  当たる。mise には `MISE_GITHUB_TOKEN` にジョブのトークン（読み取りのみ）を渡して
+  避けている（compose はホストに変数があるときだけコンテナへ引き継ぐ）。
+  mise 以外の導入スクリプトには渡していないので、それらが上限に当たったら再実行する
 
 ## 2. 設計上の約束（崩さないこと）
 

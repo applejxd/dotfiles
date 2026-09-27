@@ -73,6 +73,8 @@ jobs:
       - name: Run test/test.sh
         env:
           APPLY_TIMEOUT: "2700"
+          # runner は IP を共有するので、認証なしだと mise が GitHub API の上限に当たる
+          MISE_GITHUB_TOKEN: ${{ github.token }}
           SERVICE: ${{ matrix.service }}
           MODE: ${{ matrix.mode }}
         run: bash test/test.sh "$SERVICE" "$MODE"
