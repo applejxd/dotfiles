@@ -4,7 +4,7 @@
 # mise #
 #------#
 
-if command -v "ghq" >/dev/null 2>&1; then
+if command -v "mise" >/dev/null 2>&1; then
     function mise-select() {
         if [[ -z "$1" ]]; then
             return 1
