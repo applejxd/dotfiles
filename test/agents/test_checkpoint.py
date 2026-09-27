@@ -270,6 +270,28 @@ def test_structure_lint_reports_missing_heading(cp):
     assert any("## Evidence" in e for e in errors)
 
 
+def test_structure_lint_reports_duplicated_heading(cp):
+    """同じ見出しが 2 回あると、復帰時にどちらが正か分からない。"""
+    text = valid_checkpoint() + "\n## Refs\n- 重複\n"
+    errors, _ = cp.lint(text)
+    assert any("重複" in e and "## Refs" in e for e in errors)
+
+
+@pytest.mark.parametrize(
+    "stray",
+    [
+        "本文中に ## Evidence と書いただけ\n",
+        "```text\n## Evidence\n```\n",
+    ],
+    ids=["文中", "コードブロック"],
+)
+def test_structure_lint_counts_only_real_headings(cp, stray: str):
+    """行頭の見出しだけを数える。文中やコードブロックの文字列は見出しではない。"""
+    text = valid_checkpoint().replace("## Evidence\n- `pytest -q`: 3 passed\n\n", stray)
+    errors, _ = cp.lint(text)
+    assert any("見出しが無い: ## Evidence" in e for e in errors)
+
+
 def test_structure_lint_reports_wrong_order(cp):
     text = (
         "# Checkpoint\n\n"

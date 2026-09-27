@@ -170,7 +170,9 @@ OpenCode 専用。`sdd-docs` は markdown を編集して `lint_docs.py` を回�
 
 ## 記録の形
 
-見出しは 6 つを順序どおりに置く。雛形は
+見出しは 6 つを順序どおりに、それぞれ 1 回だけ置く。`lint --structure` は
+行頭の `##` だけを見出しとして数え（文中とコードブロックの中は数えない）、
+欠け・重複・順序違いを不合格にする。雛形は
 `~/.config/opencode/skills/checkpoint/references/checkpoint-template.md`。
 
 ```text

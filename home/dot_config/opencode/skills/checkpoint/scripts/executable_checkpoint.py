@@ -260,6 +260,20 @@ def split_machine(text: str) -> tuple[str, str]:
     return text[:index], text[index:]
 
 
+def _headings(body: str) -> list[tuple[int, str]]:
+    """``## `` で始まる見出し行を (行番号, 見出し) で返す。コードブロックの中は数えない。"""
+    found: list[tuple[int, str]] = []
+    fence = False
+    for number, line in enumerate(body.splitlines(), start=1):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            fence = not fence
+            continue
+        if not fence and stripped.startswith("## "):
+            found.append((number, stripped))
+    return found
+
+
 def _fence_violations(body: str) -> list[str]:
     """``## Refs`` 以外にある長いフェンスを探す。"""
     problems: list[str] = []
@@ -343,15 +357,19 @@ def lint(
 
     body, _machine = split_machine(text)
 
+    headings = _headings(body)
     position = -1
     for heading in REQUIRED_HEADINGS:
-        found = body.find(heading)
-        if found == -1:
+        lines = [number for number, text in headings if text == heading]
+        if not lines:
             errors.append(f"見出しが無い: {heading}")
             continue
-        if found < position:
+        if len(lines) > 1:
+            where = "・".join(str(n) for n in lines)
+            errors.append(f"見出しが重複している: {heading} ({where} 行目)")
+        if lines[0] < position:
             errors.append(f"見出しの順序が違う: {heading}")
-        position = found
+        position = lines[0]
 
     length = len(body.strip())
     if length > budget:
