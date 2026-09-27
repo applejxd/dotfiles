@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -eu
+
 sudo -v
 
 if [ ! -f /tmp/texlive.iso ]; then
@@ -7,7 +9,7 @@ if [ ! -f /tmp/texlive.iso ]; then
 fi
 
 # mount iso
-mkdir "${HOME}/install-tl"
+mkdir -p "${HOME}/install-tl"
 sudo mount -o loop /tmp/texlive.iso "${HOME}/install-tl"
 
 # install
@@ -18,8 +20,8 @@ cd "${HOME}/install-tl" || exit
 
 # refresh
 cd "${HOME}" || exit
-sudo umount "${HOME}/instalal-tl"
-rm -rf "${HOME}/instalal-tl"
+sudo umount "${HOME}/install-tl"
+rm -rf "${HOME}/install-tl"
 rm /tmp/texlive.iso
 
 # # LaTeX
