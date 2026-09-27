@@ -105,12 +105,16 @@ sudo tee /etc/default/earlyoom >/dev/null <<'EOF'
 EARLYOOM_ARGS="-r 3600 --avoid ^(sshd|systemd|systemd-journal|systemd-logind|tailscaled)$"
 EOF
 sudo sysctl -q -p /etc/sysctl.d/99-zram.conf
-sudo systemctl restart earlyoom.service
-# カーネル更新の直後は、実行中のカーネル用のモジュールがまだ無い
-if modinfo zram >/dev/null 2>&1; then
-    sudo systemctl restart zramswap.service
-else
+# systemd の無い環境 (コンテナなど) では設定だけ置いて先へ進む
+if [ ! -d /run/systemd/system ]; then
+    echo "systemd が動いていないので earlyoom / zramswap の再起動を飛ばします"
+elif ! modinfo zram >/dev/null 2>&1; then
+    sudo systemctl restart earlyoom.service
+    # カーネル更新の直後は、実行中のカーネル用のモジュールがまだ無い
     echo "zram は次の再起動から有効になります"
+else
+    sudo systemctl restart earlyoom.service
+    sudo systemctl restart zramswap.service
 fi
 echo "✅ 完了：zram と earlyoom をインストール/設定しました"
 {{- end }}

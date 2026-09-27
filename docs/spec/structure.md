@@ -115,6 +115,9 @@ os-release でも判定できません（`raspbian` は 32bit 版のみ）。
 | Cica フォント | fontconfig が無ければスクリプト側で早期終了 |
 | zram-tools / earlyoom | **Raspberry Pi だけで導入する**（[後述](#メモリが尽きても-ssh-できるようにする)） |
 
+`xdg-user-dirs-update` は Raspberry Pi 以外でも、コマンドが無ければ（Server 版・WSL・
+コンテナなど Desktop 環境の無い機械）既知フォルダの整理ごと飛ばします。
+
 ### ruby はプレビルドで入れる
 
 `ruby` と `gem:tmuxinator` は Raspberry Pi でも宣言します。mise は既定で
@@ -159,6 +162,8 @@ SD から読み直すため、**sshd も応答しなくなり、電源を抜く�
 earlyoom の `--avoid` の正規表現に空白や引用符を入れてはいけません。
 systemd は `$EARLYOOM_ARGS` を空白で分割するだけで、引用符を解釈しないためです。
 効いているかは `swapon --show` と `journalctl -u earlyoom -b` で確認できます。
+systemd が動いていない環境（Docker の検証コンテナなど）では、設定ファイルだけ置いて
+サービスの再起動を飛ばします。
 
 ### 入ってしまった GUI 一式を消す
 
