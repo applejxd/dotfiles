@@ -43,8 +43,9 @@ agent テストでは生成された matcher と実 hook の判定を両方確�
 ### Windows の GitHub Actions
 
 `.github/workflows/windows.yml` が `windows-2025` の runner で `test/agents/` と
-`test/test_windows_assets.py` を回す。**当面は手動実行のみ**（Windows で初めて回した
-ときの失敗を振り分け終えたら、Windows 関連のパスへの push でも起動するよう戻す）。
+`test/test_windows_assets.py` を回す。Windows 関連のパス（`*.ps1`、PowerShell と
+OpenCode の設定、`300_windows/`、共有テンプレート、agent 設定・hook、`scripts/agents/`、
+対象のテスト）への push と、手動実行で起動する。
 
 pytest は `PYTHONUTF8=1` で回す。本番の hook は `py -3 -B -X utf8` で起動するので
 （`scripts/agents/generate.py`）、テストが起動する hook もそれに揃えるため。

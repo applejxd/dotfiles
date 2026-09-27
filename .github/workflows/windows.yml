@@ -3,8 +3,20 @@ name: windows
 # Windows で agent 設定と Windows 資産のテストを回す (WSL では skip される分岐を拾う)。
 # 実機 (Windows 11) の検証の代わりにはならない。see test/README.md#windows-の-github-actions
 "on":
-  # 失敗の振り分けが終わるまで手動のみ。終わったら Windows 関連のパスへの push を戻す
-  # see test/README.md#windows-の-github-actions
+  push:
+    paths:
+      - "home/**/*.ps1"
+      - "home/**/*.ps1.tmpl"
+      - "home/dot_config/powershell/**"
+      - "home/dot_config/opencode/**"
+      - "home/.chezmoiscripts/300_windows/**"
+      - "home/.chezmoitemplates/**"
+      - "home/dot_config/agents/**"
+      - "home/dot_claude/hooks/**"
+      - "scripts/agents/**"
+      - "test/agents/**"
+      - "test/test_windows_assets.py"
+      - ".github/workflows/windows.yml"
   workflow_dispatch:
 
 permissions:
