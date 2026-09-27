@@ -244,8 +244,8 @@ def test_copilot_sandbox_preserves_allow_lists_and_behavior_keys():
     }
     sandbox = gen.build_copilot_sandbox(existing, COMMON)
     fs = sandbox["userPolicy"]["filesystem"]
-    assert "/home/u/work" in fs["readwritePaths"]
-    assert "/home/u/src" in fs["readonlyPaths"]
+    assert sandbox_path("/home/u/work") in fs["readwritePaths"]
+    assert sandbox_path("/home/u/src") in fs["readonlyPaths"]
     assert "/stale/entry" not in fs["deniedPaths"], "deniedPaths は生成側が全置換する"
     assert sandbox["allowBypass"] is True
     # COMMON は copilot_allow_dev_tool_access = false を持つので上書きされる
@@ -832,8 +832,8 @@ def test_copilot_allow_lists_merge_instead_of_replacing():
         }
     }
     fs = gen.build_copilot_sandbox(existing, common)["userPolicy"]["filesystem"]
-    assert "/manual/ro" in fs["readonlyPaths"]
-    assert "/manual/rw" in fs["readwritePaths"]
+    assert sandbox_path("/manual/ro") in fs["readonlyPaths"]
+    assert sandbox_path("/manual/rw") in fs["readwritePaths"]
     assert fs["readonlyPaths"].count(sandbox_path("~/dup")) == 1
 
 
