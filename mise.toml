@@ -13,6 +13,10 @@ node = "latest"
 [env]
 UV_PROJECT_ENVIRONMENT = "{% if os() == 'windows' %}.venv-windows{% else %}.venv{% endif %}"
 
+[tasks.e2e]
+description = "Docker で cold start を検証する（引数: [service] [mode]。test/README.md 参照）"
+run = "bash test/test.sh"
+
 [tasks."opencode:probe"]
 description = "隔離環境で opencode を実行する（実 DB を汚さない）"
 run = "./scripts/opencode_probe.sh"

@@ -371,7 +371,7 @@ if [ "${APPLY}" = "1" ]; then
       else
           second_code=$?
           if [ $second_code -eq 124 ]; then
-              log_result "apply-2nd" "TIMEOUT"
+              log_result "apply-2nd" "UNDETERMINED" "(15 分で打ち切り)"
           else
               log_result "apply-2nd" "FAILED" "(exit code: $second_code)"
           fi
@@ -379,19 +379,22 @@ if [ "${APPLY}" = "1" ]; then
 
       echo
       echo "== 残差分の確認 (apply 後に diff が空であること) =="
+      # 毎回走るスクリプト (run_before_005 など) は常に差分に出るので除く。
+      # スクリプトの成否は apply の終了コードで見ている
       set +e
-      residual=$("${CZ[@]}" diff "${CHEZMOI_ARG_ARRAY[@]}" 2>&1)
+      residual=$("${CZ[@]}" diff --exclude scripts "${CHEZMOI_ARG_ARRAY[@]}" 2>&1)
       residual_code=$?
       set -e
-      residual_files=$(grep -c "^diff --git" <<< "$residual" || true)
+      mapfile -t residual_list < <(grep "^diff --git" <<< "$residual" \
+          | sed 's/^diff --git a\//  - /; s/ b\/.*//')
+      residual_files=${#residual_list[@]}
       if [ "$residual_code" -ne 0 ]; then
           log_result "residual-diff" "UNDETERMINED" "(diff が失敗: $residual_code)"
       elif [ "$residual_files" -eq 0 ]; then
           log_result "residual-diff" "SUCCESS" "(差分なし)"
       else
           echo "⚠️  apply 後にも差分が残っています ($residual_files 件)"
-          grep "^diff --git" <<< "$residual" \
-              | sed 's/^diff --git a\//  - /; s/ b\/.*//' | head -10
+          printf '%s\n' "${residual_list[@]:0:10}"
           log_result "residual-diff" "FAILED" "($residual_files 件の差分が残る)"
       fi
   fi

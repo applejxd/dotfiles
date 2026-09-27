@@ -73,11 +73,44 @@ echo
 
 "${compose[@]}" build "$service"
 
-case "$mode" in
-  dryrun) APPLY=0 PREPARE_PYTHON=1 "${compose[@]}" run --rm "$service" ;;
-  place)  APPLY=1 PREPARE_PYTHON=1 CHEZMOI_TEST_ARGS="${CHEZMOI_TEST_ARGS:---exclude scripts}" \
-            "${compose[@]}" run --rm "$service" ;;
-  apply)  APPLY=1 "${compose[@]}" run --rm "$service" ;;
-  update) APPLY=1 SKIP_INIT=1 APPLY_TWICE=1 "${compose[@]}" run --rm "$service" ;;
-  shell)  "${compose[@]}" run --rm "$service" bash ;;
-esac
+run_mode() {
+  case "$mode" in
+    dryrun) APPLY=0 PREPARE_PYTHON=1 "${compose[@]}" run --rm "$service" ;;
+    place)  APPLY=1 PREPARE_PYTHON=1 CHEZMOI_TEST_ARGS="${CHEZMOI_TEST_ARGS:---exclude scripts}" \
+              "${compose[@]}" run --rm "$service" ;;
+    apply)  APPLY=1 "${compose[@]}" run --rm "$service" ;;
+    update) APPLY=1 SKIP_INIT=1 APPLY_TWICE=1 "${compose[@]}" run --rm "$service" ;;
+  esac
+}
+
+if [ "$mode" = "shell" ]; then
+  exec "${compose[@]}" run --rm "$service" bash
+fi
+
+# 実行の記録。低頻度で回すので、いつ・何を・どの結果だったかを後から辿れるようにする
+log_dir=".tmp/e2e"
+mkdir -p "$log_dir"
+started_at=$(date '+%Y-%m-%dT%H:%M:%S%z')
+started_epoch=$(date +%s)
+commit=$(git rev-parse --short HEAD)
+dirty=$(git status --porcelain --untracked-files=no | wc -l | tr -d ' ')
+log_file="${log_dir}/$(date '+%Y%m%d-%H%M%S')-${service}-${mode}.log"
+{
+  echo "# started_at=${started_at} commit=${commit} dirty_files=${dirty}"
+  echo "# service=${service} mode=${mode} IS_RASPI=${IS_RASPI:-} SOURCE_MODE=${SOURCE_MODE:-clone} INCLUDE_DIRTY=${INCLUDE_DIRTY:-0}"
+} > "$log_file"
+
+set +e
+run_mode 2>&1 | tee -a "$log_file"
+status=${PIPESTATUS[0]}
+set -e
+
+elapsed=$(( $(date +%s) - started_epoch ))
+overall=$(sed -n 's/^OVERALL STATUS: //p' "$log_file" | tail -n 1)
+history="${log_dir}/history.tsv"
+[ -f "$history" ] || printf 'started_at\tcommit\tdirty_files\tservice\tmode\tseconds\texit\toverall\tlog\n' > "$history"
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$started_at" "$commit" "$dirty" "$service" "$mode" \
+  "$elapsed" "$status" "${overall:-UNKNOWN}" "$log_file" >> "$history"
+echo
+echo "📝 記録: ${log_file} (${elapsed} 秒 / exit ${status}) → ${history}"
+exit "$status"

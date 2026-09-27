@@ -119,6 +119,19 @@ UTF-8 BOM、winget の記法、プロファイルの字面までで、次は拾�
 
 実機で回せない場合は「Windows 未検証」と明記する。
 
+##### 新しい機械での初回導入を Docker で検証する
+
+素の Ubuntu コンテナで `chezmoi init` / `apply` が人手なしで通るかを試す。
+毎回は回さず、`.chezmoiscripts/` や `.chezmoi.toml.tmpl` を触ったときに回す。
+
+```bash
+mise run e2e                        # ubuntu2404 で dry-run（数十秒）
+mise run e2e -- ubuntu2204 apply    # 22.04 で cold start（十数分）
+```
+
+実行ごとのログと結果の一覧は `.tmp/e2e/` に残る。サービス・モード・判定の読み方は
+[test/README.md](../../test/README.md)。
+
 #### 4. 継続的な使用
 
 ```bash
