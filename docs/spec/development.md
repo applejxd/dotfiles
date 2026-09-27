@@ -130,7 +130,8 @@ mise run e2e -- ubuntu2204 apply    # 22.04 で cold start（十数分）
 APPLY_TIMEOUT=5400 mise run e2e -- raspi2204 apply  # arm64 (QEMU) で cold start
 ```
 
-実行ごとのログと結果の一覧は `.tmp/e2e/` に残る。サービス・モード・判定の読み方は
+実行ごとのログと結果の一覧は `.tmp/e2e/` に残る。月 1 回は GitHub Actions でも
+回る（手動でも起動できる）。サービス・モード・判定の読み方は
 [test/README.md](../../test/README.md)。
 
 #### 4. 継続的な使用

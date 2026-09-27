@@ -109,6 +109,29 @@ IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 > `CHEZMOI_ARGS` は**使えない**。chezmoi 自身が予約しており、`chezmoi cd` の
 > サブシェルでは `CHEZMOI_ARGS="chezmoi cd"` が export されている。
 
+### GitHub Actions
+
+`.github/workflows/e2e.yml` が同じ `test/test.sh` を GitHub の runner で回す。
+毎 push では回さない。
+
+| きっかけ | 対象 |
+| --- | --- |
+| 毎月 2 日 03:00 JST（`schedule`） | `ubuntu2204 update` と `raspi2204 update` |
+| Actions 画面の **Run workflow**（`workflow_dispatch`） | サービスとモードを選ぶ |
+
+```bash
+gh workflow run e2e -f service=raspi2204 -f mode=update   # 手元から起動する場合
+```
+
+- arm64 のサービス（`raspi2204` / `arm2404`）は `ubuntu-24.04-arm` の runner で
+  **エミュレーション無しに**動く（公開リポジトリは無料）
+- runner は WSL ではない素の Ubuntu なので、WSL2 ホストの Docker では見られない
+  「WSL ではない Linux」の経路もここで見られる
+- `APPLY_TIMEOUT` は 2700 秒、ジョブの上限は 120 分
+- ログ（`.tmp/e2e/`）は artifact に 30 日残り、判定の一覧はジョブの Summary に出る
+- 導入スクリプトは GitHub の API を認証なしで呼ぶものがあり、runner は IP を
+  共有するので、レート制限で落ちることがある（その場合は再実行する）
+
 ## 2. 設計上の約束（崩さないこと）
 
 ### ソースは既定で clone する

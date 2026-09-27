@@ -1,0 +1,106 @@
+name: e2e
+
+# Docker の素の Ubuntu で chezmoi の初回導入 (cold start) を検証する。
+# 毎 push では回さない。see test/README.md#github-actions
+"on":
+  schedule:
+    # 毎月 2 日 03:00 JST
+    - cron: "0 18 1 * *"
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "検証するサービス"
+        type: choice
+        default: ubuntu2204
+        options: [ubuntu2404, ubuntu2204, raspi2204, arm2404]
+      mode:
+        description: "モード"
+        type: choice
+        default: update
+        options: [dryrun, place, apply, update]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          SERVICE: ${{ inputs.service }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -eu
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            targets="$SERVICE:$MODE"
+          else
+            targets="ubuntu2204:update raspi2204:update"
+          fi
+          items=""
+          for target in $targets; do
+            service="${target%%:*}"
+            mode="${target##*:}"
+            # arm64 のサービスは arm64 の runner で直接動かす (QEMU を使わない)
+            case "$service" in
+              raspi2204|arm2404) runner="ubuntu-24.04-arm" ;;
+              *) runner="ubuntu-24.04" ;;
+            esac
+            items="${items:+$items,}{\"service\":\"$service\",\"mode\":\"$mode\",\"runner\":\"$runner\"}"
+          done
+          echo "matrix={\"include\":[${items}]}" >> "$GITHUB_OUTPUT"
+
+  e2e:
+    needs: plan
+    name: ${{ matrix.service }} ${{ matrix.mode }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run test/test.sh
+        env:
+          APPLY_TIMEOUT: "2700"
+          SERVICE: ${{ matrix.service }}
+          MODE: ${{ matrix.mode }}
+        run: bash test/test.sh "$SERVICE" "$MODE"
+
+      - name: Summarize
+        if: always()
+        env:
+          SERVICE: ${{ matrix.service }}
+          MODE: ${{ matrix.mode }}
+        run: |
+          {
+            echo "### $SERVICE $MODE"
+            echo
+            echo '```text'
+            log=$(tail -n +2 .tmp/e2e/history.tsv 2>/dev/null | tail -n 1 | cut -f 9)
+            if [ -n "$log" ] && [ -f "$log" ]; then
+              sed -n '/== TEST EXECUTION SUMMARY ==/,$p' "$log" | grep -E '^\[|^OVERALL' || true
+            else
+              echo "ログがありません (test.sh が記録前に止まった)"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-${{ matrix.service }}-${{ matrix.mode }}
+          path: .tmp/e2e/
+          if-no-files-found: warn
+          retention-days: 30
