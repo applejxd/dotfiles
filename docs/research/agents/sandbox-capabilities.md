@@ -8,7 +8,7 @@
 > 差分を反映してから使うこと。
 >
 > このリポジトリで実際に採用している設定は
-> [エージェント権限仕様](../../spec/agent-permissions.md)、
+> [sandbox (Claude Code / Copilot CLI)](../../spec/agent-sandbox.md)、
 > 判断の根拠は [ADR-0007](../../adr/0007-filesystem-guard-boundary.md) が正本。
 > **本書は「何ができるか」の網羅**であり、「何を採用したか」ではない。
 

@@ -35,7 +35,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 - `home/**/*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`
 - `home/.chezmoiscripts/300_windows/`
-- Windows 向けの hook 起動コマンド生成（`scripts/agents/generate.py`）
+- Windows 向けの hook 起動コマンド生成（`scripts/agents/hooks.py`）
 
 対話テストは `os.name != "nt"` で全件 skip する。WSL で「27 passed / 4 skipped」を
 見ても **Windows 側は未検証**。実機で回せない場合はそう明記する。
@@ -61,7 +61,8 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   仕組み・判断基準・既知の不具合・実測値・経緯は `docs/` が正本で、コメントからは
   参照先だけを示す（`# see docs/spec/structure.md#見出し`）。
   同じ説明をコメントと `docs/` の両方に書かない（更新時に必ず片方が古くなる）
-  - 正本の対応: `common.toml.tmpl` → `docs/spec/agent-permissions.md`、
+  - 正本の対応: `common.toml.tmpl` → `docs/spec/agent-permissions.md`（入口）と
+    分割先の `agent-config-generation.md` / `agent-command-policy.md` / `agent-sandbox.md`、
     `mise/config.toml.tmpl` と `.chezmoiscripts/` → `docs/spec/structure.md`
   - コメントに残してよい例: 非自明な 1 行の意図、公式ドキュメントの URL、
     消すと壊れる理由の 1 文

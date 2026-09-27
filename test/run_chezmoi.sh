@@ -40,7 +40,7 @@ resolve_source() {
     CHEZMOI_SOURCE="$HOME/src/dotfiles"
     mkdir -p "$(dirname "$CHEZMOI_SOURCE")"
     # ~/.gitconfig は検証対象なので書かない。-c では効かない
-    # see test/README.md#ソースは既定で-clone-する
+    # see docs/spec/testing.md#ソースは既定で-clone-する
     REPO_GITCONFIG=$(mktemp)
     printf '[safe]\n\tdirectory = /repo\n\tdirectory = /repo/.git\n' > "$REPO_GITCONFIG"
     if ! GIT_CONFIG_GLOBAL="$REPO_GITCONFIG" git clone --quiet /repo "$CHEZMOI_SOURCE"; then
@@ -258,7 +258,7 @@ esac
 
 # dryrun / place はスクリプトを走らせないので、modify script 用の Python を
 # 実際の apply と同じ順序 (run_before_ が先) でここだけ用意する。
-# see test/README.md#使い方
+# see docs/spec/testing.md#使い方
 if [ "${PREPARE_PYTHON}" = "1" ]; then
     echo
     echo "== run_before_005_python (modify script 用の Python) =="
@@ -335,7 +335,7 @@ fi
 echo
 
 # 2 フェーズ bootstrap の検証。Bitwarden は bw のスタブ (/opt/bw-stub/bw) で置き換える。
-# see test/README.md#bootstrap-モード
+# see docs/spec/testing.md#bootstrap-モード
 BW_STUB_DIR=/opt/bw-stub
 BW_FILES=(".config/git/user" ".config/sops/age/keys.txt")
 

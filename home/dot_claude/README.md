@@ -19,7 +19,7 @@
 | `enabledPlugins` / `includeCoAuthoredBy` | 手動管理（apply では触らず保持） |
 
 所有権の判定規則は
-[外部ツールとの共存](../../docs/spec/agent-permissions.md#外部ツールとの共存-orca--herdr)。
+[外部ツールとの共存](../../docs/spec/agent-config-generation.md#外部ツールとの共存-orca--herdr)。
 
 ## hook の追加手順
 

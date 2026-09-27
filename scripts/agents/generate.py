@@ -1255,7 +1255,7 @@ def opencode_guide_server_needed(common: dict[str, Any], *, tui: bool) -> bool:
     ``index.js`` の役割 (誘導・``grep`` / ``glob`` の結果フィルタ・伏字化・
     説明の生成) が 1 つでも有効なら要る。説明は TUI 側の toast でしか
     見えないので、``tui`` が偽 (TUI plugin が読まれない隔離版) なら数えない。
-    see docs/spec/agent-permissions.md#plugin-層-guide-plugin
+    see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
     """
     return bool(
         opencode_guide_rules(common)
@@ -1363,7 +1363,7 @@ def build_opencode_keybinds(common: dict[str, Any]) -> dict[str, Any] | None:
     キーバインドは **``cli.json`` 側にしか無い**。``opencode.json`` へ書いても
     読まれないので、誤配置に気づけない。
     未宣言は None、空テーブルは ``{}`` (既存を空で置き換える) と区別する。
-    see docs/spec/agent-permissions.md 「キーバインド」
+    see docs/spec/agent-config-generation.md 「キーバインド」
     """
     keybinds = common.get("opencode", {}).get("keybinds")
     if keybinds is None:

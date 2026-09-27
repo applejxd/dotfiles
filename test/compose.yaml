@@ -47,7 +47,7 @@ x-common: &common
     - /home/${CONTAINER_USER:-tester}:exec,mode=0755,size=8g
   command: ["/bin/bash", "-c", "run_chezmoi"]
 
-# CONTAINER_USER=applejxd で個人用の分岐 (Bitwarden を含む) を通す。see test/README.md#bootstrap-モード
+# CONTAINER_USER=applejxd で個人用の分岐 (Bitwarden を含む) を通す。see docs/spec/testing.md#bootstrap-モード
 x-build-args: &build-args
   USER_NAME: ${CONTAINER_USER:-tester}
   USER_UID: ${USER_UID:-1000}

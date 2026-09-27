@@ -66,7 +66,7 @@ def hook_command(
 def managed_hook_scripts(common: dict[str, Any]) -> frozenset[str]:
     """このリポジトリが HOOKS_DIR に配る hook のスクリプト名 (現役 + 撤去済み)。
 
-    see docs/spec/agent-permissions.md#外部ツールとの共存-orca--herdr
+    see docs/spec/agent-config-generation.md#外部ツールとの共存-orca--herdr
     """
     current = {hook["script"] for hook in common.get("hooks", []) if "script" in hook}
     retired = common.get("retired_hooks", {}).get("scripts", [])

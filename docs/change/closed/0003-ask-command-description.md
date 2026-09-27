@@ -6,7 +6,7 @@
 - **基準**: OpenCode V2（`v2.0.12`）
 
 > **この文書は当時の記録。** 現在の仕様は
-> [agent-permissions](../../spec/agent-permissions.md)「確認画面に出るコマンドの説明」。
+> [agent-config-generation](../../spec/agent-config-generation.md#確認画面に出るコマンドの説明)「確認画面に出るコマンドの説明」。
 
 ## 目的と非目的
 
@@ -255,7 +255,7 @@ plugin のロード可否を目視なしで判定できる
 
 ### 反映先
 
-- 仕様: [agent-permissions](../../spec/agent-permissions.md)
+- 仕様: [agent-config-generation](../../spec/agent-config-generation.md#確認画面に出るコマンドの説明)
   「plugin 層」「確認画面に出るコマンドの説明」
 - 実装: `home/dot_config/opencode/guide-plugin/`、
   `home/dot_config/agents/common.toml.tmpl` の `[opencode.ask_description]`

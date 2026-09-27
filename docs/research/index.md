@@ -15,7 +15,7 @@
 - **現在の総合判断は [探索・変更案件](../change/index.md) の候補比較表が正本。**
   ここを全部読まないと現状が分からない状態にしない
 - 増えたらサブディレクトリへ分ける。現在は対象（`agents/` / `opencode/` /
-  `shell/`）で分け、`opencode/` はさらに主題（`permission/` / `plugin/`）で
+  `shell/` / `testing/`）で分け、`opencode/` はさらに主題（`permission/` / `plugin/`）で
   分けている
 - テンプレートは `~/.claude/skills/sdd-docs/references/research-template.md`
 
@@ -64,6 +64,12 @@
 | [pluginの相関と承認要求の可否](opencode/plugin/correlation.md) | 並列実行時のcwd相関、plugin から ask を出せるかの実測、ctx.permission.rules の不在 |
 | [pluginのロード経路](opencode/plugin/loading.md) | 明示指定は絶対パスのディレクトリのみ、~が展開されない、失敗が無言、Orca overlayとの関係、Claude Codeとの仕組みの違い |
 | [ask画面へ説明を出す](opencode/plugin/ask-description.md) | 権限ダイアログがmessageを読まない実証、TUI pluginのtoastなら出せる、app_bottomスロットが2.0.12に無い、安価モデルでの説明生成 |
+
+### テスト
+
+| 文書 | 内容 |
+| --- | --- |
+| [Docker の cold start 検証で直した障害](testing/docker-cold-start-fixes.md) | tmpfs の noexec、modify_ の python3 解決、Pi 扱いの注入が init で消える、Codex の TOML 連結など解決済み 9 件の経緯 |
 
 ### シェル
 

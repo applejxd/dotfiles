@@ -348,7 +348,7 @@ Copilot 限定の規則は、常時読み込まれる `~/.copilot/copilot-instru
 `git commit` は後者を採用した。commit skill は CLI を判別せず、どの CLI でも
 コミット直前に対象ファイルとメッセージを提示して承認を得る（Copilot 用の
 補強として `~/.copilot/copilot-instructions.md` にも同じ規則を置く）。
-構成は [エージェント権限仕様](../../spec/agent-permissions.md) を参照。
+構成は [「未掲載」という 4 つ目の選択肢](../../spec/agent-command-policy.md#未掲載という-4-つ目の選択肢) を参照。
 バグが修正されても、確認の目的がメッセージのレビューなので明示確認は残す。
 
 ### Copilot の設定キーは Web ドキュメントに載っていない

@@ -18,11 +18,15 @@
 
 | 文書 | 内容 |
 | --- | --- |
-| [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoiスクリプトの順序、対応OS、gh / Herdrのmise管理、AI CLIの公式インストーラーでの導入、個人用カスタム指示の共有 |
+| [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoiスクリプトの順序、対応OS、chezmoi 本体の導入、gh / Herdrのmise管理、AI CLIの公式インストーラーでの導入、oh-my-pi の設定、個人用カスタム指示の共有 |
 | [開発ガイド](development.md) | mise / uv / pre-commitを使った開発と検証 |
+| [テストと検証の仕組み](testing.md) | Docker ハーネスのモード・環境変数・判定の契約、GitHub Actions で見ている範囲、既知の未達 |
 | [セキュリティ](security.md) | Bitwarden、sops、ageの役割と要件 |
 | [Secret管理セットアップ](sops-age.md) | sops + ageの導入、日常操作、復旧 |
-| [エージェント権限仕様](agent-permissions.md) | Claude Code / Copilot CLI中心のpermissionと、各CLIへのhook・MCP生成 |
+| [エージェント権限仕様](agent-permissions.md) | AI CLI の permission / hook / sandbox の入口。CLI ごとの適用範囲、3 層の概要、動作確認・導入・トラブルシュート |
+| [設定の生成と所有権](agent-config-generation.md) | `common.toml` の構成と編集ルール、生成先と所有権、MCP、OpenCode の設定、hook の単一ソース化 |
+| [コマンド・ファイルの判定](agent-command-policy.md) | 照合規則、allow / ask / deny の使い分けと例外、bash 検査ルールの足し方、CLI 差 |
+| [sandbox (Claude Code / Copilot CLI)](agent-sandbox.md) | sandbox 層・ネットワーク層・seccomp、マシン固有の許可 (`local.toml`) |
 | [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) | `ocs` の構成、起動順序、境界の組み立て規則、状態の置き場、起動前の退避 |
 | [文脈の引き継ぎ](checkpoint.md) | 圧縮を跨いで作業文脈を保つ checkpoint の保存先・記録の形・plugin・失敗時の動作 |
 | [トラブルシューティング](troubleshooting.md) | よくある障害の原因と対処 |

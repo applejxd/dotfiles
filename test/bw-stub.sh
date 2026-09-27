@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 2 フェーズ bootstrap の検証用に Bitwarden CLI (bw) を置き換えるスタブ。
 # 秘密は持たない。値はすべてダミーで、呼ばれた引数を BW_STUB_LOG に残す。
-# see test/README.md#bootstrap-モード
+# see docs/spec/testing.md#bootstrap-モード
 set -eu
 
 log="${BW_STUB_LOG:-/tmp/bw-stub.log}"

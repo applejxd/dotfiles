@@ -2,7 +2,7 @@
 {{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml -}}
 {{- $mcp := list -}}
 {{- if hasKey $common "mcp" }}{{ range $common.mcp }}{{ if or (not (hasKey . "clis")) (has "codex" .clis) }}{{ $mcp = append $mcp . }}{{ end }}{{ end }}{{ end -}}
-{{- /* ユーザのトップレベルのキーを管理テーブルの後ろへ置かない (see test/README.md#解決済み-codex-のトップレベルのキーが直前のテーブルに入る) */ -}}
+{{- /* ユーザのトップレベルのキーを管理テーブルの後ろへ置かない (see docs/research/testing/docker-cold-start-fixes.md#9-codex-のトップレベルのキーが直前のテーブルに入る2026-09-27) */ -}}
 {{- $userConfig := .chezmoi.stdin
       | replaceAllRegex "(?ms)^# chezmoi-managed:start.*?^# chezmoi-managed:end(?:\\r?\\n)*" ""
       | replaceAllRegex "(?ms)^# chezmoi-managed:tables:start.*?^# chezmoi-managed:tables:end(?:\\r?\\n)*" "" -}}

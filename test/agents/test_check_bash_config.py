@@ -445,7 +445,7 @@ def test_commit_skill_is_cli_agnostic():
         skill = path.read_text(encoding="utf-8")
         assert "COPILOT_CLI" not in skill, path
         assert "copilot-cli#3590" not in skill, path
-    docs = (ROOT / "docs" / "spec" / "agent-permissions.md").read_text(encoding="utf-8")
+    docs = (ROOT / "docs" / "spec" / "agent-command-policy.md").read_text(encoding="utf-8")
     assert "github/copilot-cli/issues/3590" in docs
     assert "auto_approved" in docs
 
@@ -471,7 +471,7 @@ def test_copilot_instructions_require_commit_approval():
     assert "github/copilot-cli#3590" in instructions
     assert path.exists()
     # Claude Code / Codex CLI は機械的強制があるので、同じ規則を書くと
-    # 二重確認になる (docs/spec/agent-permissions.md の CLI 別の表を参照)
+    # 二重確認になる (docs/spec/agent-command-policy.md の CLI 別の表を参照)
     for cli in ("claude", "codex", "opencode"):
         assert "github/copilot-cli#3590" not in render_instructions(cli), cli
 

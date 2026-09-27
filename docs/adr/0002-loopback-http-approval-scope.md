@@ -9,7 +9,7 @@
 `home/dot_claude/hooks/executable_check_bash.py` は `curl` / `wget` を
 transfer 単位で解析し、読み取りを未掲載（CLI の auto / assisted 判定へ委譲）、
 mutation を ask、秘密情報の送信・取得結果の直接実行・起動ファイルの上書きを
-deny に分類している。詳細は [エージェント権限仕様](../spec/agent-permissions.md)。
+deny に分類している。詳細は [ループバック宛の例外](../spec/agent-command-policy.md#ループバック宛の例外)。
 
 ローカル開発では `curl -X POST http://localhost:8000/api` のような
 自マシン宛の mutation が頻出し、そのたびに ask が出る。

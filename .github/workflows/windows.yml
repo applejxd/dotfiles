@@ -1,7 +1,7 @@
 name: windows
 
 # Windows で agent 設定と Windows 資産のテストを回す (WSL では skip される分岐を拾う)。
-# 実機 (Windows 11) の検証の代わりにはならない。see test/README.md#windows-の-github-actions
+# 実機 (Windows 11) の検証の代わりにはならない。see docs/spec/testing.md#windows-の-github-actions
 "on":
   push:
     paths:

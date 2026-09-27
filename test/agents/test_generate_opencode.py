@@ -832,7 +832,7 @@ def test_cli_json_is_not_registered_twice():
 
 # guide plugin の各役割を 1 つだけ有効にした common。
 # index.js はどれか 1 つでも有効なら要り、tui.ts は説明の toast (ask_description) にだけ要る。
-# see docs/spec/agent-permissions.md#plugin-層-guide-plugin
+# see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
 GUIDE_FEATURES = {
     "guide": {"opencode": {"shell": {"guide": [{"pattern": "^cat ", "message": "read へ"}]}}},
     "read_filter": {"file": {"read_deny_globs": ["**/.env"]}},

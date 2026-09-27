@@ -275,7 +275,7 @@ def test_isolated_loads_guide_plugin_for_redaction():
 # guide plugin の役割を 1 つだけ有効にした隔離版。通常版と同じ判定関数を通す。
 # ★ask_description は数えない。ocs は cli.json を渡さず tui.ts が読まれないので、
 #   説明を生成しても表示されない。
-# see docs/spec/agent-permissions.md#plugin-層-guide-plugin
+# see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
 ISOLATED_GUIDE_ROLES = {
     "guide": ({"opencode": {"shell": {"guide": [{"pattern": "^cat ", "message": "m"}]}}}, True),
     "read_filter": ({"file": {"read_deny_globs": ["**/.env"]}}, True),

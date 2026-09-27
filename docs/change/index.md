@@ -57,5 +57,5 @@
 | --- | --- | --- | --- | --- |
 | [0001](closed/0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | 採用・配備済み（圧縮要約そのものを checkpoint にした） | 2026-09-25 | [checkpoint](../spec/checkpoint.md) |
 | [0004](closed/0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | 採用・配備済み | 2026-09-24 | [opencode-sandbox](../spec/opencode-sandbox.md) |
-| [0003](closed/0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | 採用・配備済み | 2026-09-22 | [agent-permissions](../spec/agent-permissions.md) |
+| [0003](closed/0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | 採用・配備済み | 2026-09-22 | [agent-config-generation](../spec/agent-config-generation.md#確認画面に出るコマンドの説明) |
 | [0008](closed/0008-raspi-branching.md) | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える | 採用・配備済み（実機 3 周目で apply が 45 秒で完走。判定は `chezmoi update` だけで効く） | 2026-09-26 | [プロジェクト構造](../spec/structure.md#raspberry-pi) |

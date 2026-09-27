@@ -44,7 +44,19 @@ mise exec -- python3 scripts/lint_templates.py
 
 # agent設定・hook
 uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q
+
+# Windows 資産（静的）と chezmoi の展開範囲
+uv run --with pytest --no-project pytest test/test_windows_assets.py -q
+uv run --with pytest --no-project pytest test/test_chezmoi_templates.py -q
+
+# docs の索引整合
+mise exec -- python3 scripts/lint_docs.py
+
+# OpenCode の実機試験（実 DB を汚さない）
+mise run opencode:probe -- '<prompt>'
 ```
+
+テストの種類と入口の一覧は [test/README.md](../../test/README.md)。
 
 ##### gitleaks はプレビルドを使う
 
@@ -89,7 +101,7 @@ chezmoi が `skip template` を返し、検査対象から外れる。
 
 - `home/**/*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`
 - `home/.chezmoiscripts/300_windows/`
-- Windows 向けの hook 起動コマンド生成（`scripts/agents/generate.py`）
+- Windows 向けの hook 起動コマンド生成（`scripts/agents/hooks.py`）
 
 ```powershell
 chezmoi apply
@@ -105,7 +117,7 @@ Windows PowerShell 5.1 の ConPTY セッションで読み込み、プロンプ�
 | 環境 | 実行できる範囲 |
 | --- | --- |
 | Windows (pwsh) | 静的 + 対話 |
-| GitHub Actions（`windows.yml`） | 静的と agent 設定のテスト。対話は回さない（[範囲](../../test/README.md#windows-の-github-actions)） |
+| GitHub Actions（`windows.yml`） | 静的と agent 設定のテスト。対話は回さない（[範囲](testing.md#windows-の-github-actions)） |
 | WSL / Linux | 静的のみ（`uv run --with pytest --no-project pytest test/test_windows_assets.py -q`） |
 
 対話テストは `os.name != "nt"` で全件 skip するため、WSL で
@@ -133,7 +145,7 @@ APPLY_TIMEOUT=5400 mise run e2e -- raspi2204 apply  # arm64 (QEMU) で cold star
 
 実行ごとのログと結果の一覧は `.tmp/e2e/` に残る。月 1 回は GitHub Actions でも
 回る（手動でも起動できる）。サービス・モード・判定の読み方は
-[test/README.md](../../test/README.md)。
+[テストと検証の仕組み](testing.md#docker-での-cold-start-検証)。
 
 #### 4. 継続的な使用
 
@@ -165,16 +177,7 @@ uv run pre-commit run --all-files
 
 ### 設定ファイルの編集
 
-```bash
-# 設定ファイルを編集
-chezmoi edit ~/.bashrc
-
-# 変更を確認
-chezmoi diff
-
-# 変更を適用
-chezmoi apply
-```
+編集・反映・確認の手順は [README の「設定ファイルの編集」](../../README.md#設定ファイルの編集)。
 
 ### スクリプトの無効化
 

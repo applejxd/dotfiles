@@ -390,7 +390,7 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 - `--recheck` で前回の合格を捨てて検査し直す
 - 版を固定する場合は `latest` を実際の版へ置き換える。
   そのとき `seccomp_apply_path` も同じ版を指す必要がある
-  （[エージェント権限仕様](agent-permissions.md#wsl2-での抜け穴-seccomp-フィルタ)）
+  （[エージェント権限仕様](agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ)）
 
 > **検知できるのは「境界が壊れたこと」までで、「設定の意味が変わったこと」は
 > 検知できない。** 例えば新しい許可キーが増え、既定値が緩い方向であっても、

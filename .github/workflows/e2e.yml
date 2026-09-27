@@ -1,7 +1,7 @@
 name: e2e
 
 # Docker の素の Ubuntu で chezmoi の初回導入 (cold start) を検証する。
-# 毎 push では回さない。see test/README.md#github-actions
+# 毎 push では回さない。see docs/spec/testing.md#github-actions
 "on":
   schedule:
     # 毎月 2 日 03:00 JST

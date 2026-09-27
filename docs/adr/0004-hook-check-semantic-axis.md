@@ -8,7 +8,7 @@
 
 `home/dot_claude/hooks/executable_check_bash.py` は、両 CLI 共通の PreToolUse hook として
 bash コマンドを検査し `deny` / `ask` / 未掲載を返す。詳細は
-[エージェント権限仕様](../spec/agent-permissions.md)。
+[コマンド・ファイルの判定](../spec/agent-command-policy.md)。
 
 「開発をできるだけ阻害せず、deny すべきところは確実に deny する」という観点で
 全チェックを棚卸しした。実測の出発点は次のとおり。

@@ -226,10 +226,24 @@ mise の実体または shim が選ばれることを確認してください。
 mise の各スクリプトは `run_onchange_after_` とし、設定テンプレートのハッシュを
 含めます。ツール宣言が変われば一括導入が再実行されます。
 
+### chezmoi 本体
+
+README の公式インストーラ（`get.chezmoi.io`、Windows は winget）は初回の
+bootstrap だけに使います。以降は mise が `chezmoi = "latest"` で管理を引き継ぎ
+（`config.toml.tmpl`）、`chezmoi apply` 後は mise 版が使われるため、
+`~/.local/bin` のコピーは残さなくてよいです。
+
+**snap 版は使いません。** snap の confinement 下では
+[AI CLI の sandbox](../change/closed/0004-opencode-sandbox.md) の内側で
+起動できず、`chezmoi apply` が失敗します（実測）。
+既に snap 版が入っている場合は `sudo snap remove chezmoi` で外します。
+`/snap/bin` は PATH で mise の shim より前に来るため、**消さないと
+mise 管理版が使われません**。削除後は `hash -r` を実行します。
+
 Unix の MCP 登録は `common.toml` の `[[mcp]]` のうち `.claude.json` の
 user scope に未登録のものだけを対象にし、既存のカスタム設定は上書きしません。
 壊れた JSON はエラーで停止します。詳細は
-[MCP サーバ](agent-permissions.md#mcp-サーバ)を参照。
+[MCP サーバ](agent-config-generation.md#mcp-サーバ)を参照。
 
 ### mise の settings
 
@@ -254,7 +268,11 @@ user scope に未登録のものだけを対象にし、既存のカスタム設
 | ツール | 理由 |
 | --- | --- |
 | `npm:@bitwarden/cli` | snap 版が動作しなくなったため。bw 不在でも `apply` は完走し、その `apply` 中に入ります。[セキュリティ](security.md#bitwarden連携) |
-| `npm:@anthropic-ai/sandbox-runtime` | Claude Code の sandbox が使う seccomp フィルタ。WSL2 では無いと sandbox から脱出できます。mise の隔離先を `settings.json` の `sandbox.seccomp.applyPath` へ橋渡しする必要があり、生成は `scripts/agents/generate.py` が行います。[WSL2 での抜け穴](agent-permissions.md#wsl2-での抜け穴-seccomp-フィルタ) |
+| `npm:@anthropic-ai/sandbox-runtime` | Claude Code の sandbox が使う seccomp フィルタ。WSL2 では無いと sandbox から脱出できます。mise の隔離先を `settings.json` の `sandbox.seccomp.applyPath` へ橋渡しする必要があり、生成は `scripts/agents/generate.py` が行います。[WSL2 での抜け穴](agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ) |
+
+seccomp フィルタは手で `npm install -g` する必要はありません。導入先が実在する
+ときだけ `~/.claude/settings.json` に設定が出るため、初回は mise の導入後に
+もう一度 `chezmoi apply` します。
 
 ## AI CLI の導入
 
@@ -302,6 +320,8 @@ Copilot のインストーラーは導入先が PATH に無いと、rc ファイ
 
 自動更新は `common.toml` の `[claude] auto_update = false` /
 `[copilot] auto_update = false` で止めたままです。更新は手動で行います。
+OpenCode も含めた生成先のキーは
+[CLI 本体の更新](agent-config-generation.md#cli-本体の更新)を参照。
 
 | CLI | Unix | Windows |
 | --- | --- | --- |
@@ -331,9 +351,38 @@ mise prune
 mise の shim が残って優先される場合は `mise reshim` を実行してください。
 `~/.claude/`、`~/.claude.json`、`~/.copilot/` の設定・認証・履歴は削除しません。
 
+### oh-my-pi（`omp`）の設定
+
+`omp` は試用中です（[CHG-0006](../change/0006-pi-harness-trial.md)）。
+Linux / WSL / macOS で `curl -fsSL https://omp.sh/install | sh` により導入します。
+Pi のフォークで、LSP 統合・DAP・subagent を持ちます。起動は `omp` で、
+境界（`ocs`）の外で動きます。
+
+**`omp` は `~/.claude` を設定探索ルートに含みますが、他ツールのユーザ領域は
+既定で 1 つも読みません**（`enabledProviders` の既定が空）。
+`chezmoi apply` が次の 3 つを設定するので、既存の資産がそのまま使えます。
+
+| 設定 | 繋がるもの |
+| --- | --- |
+| `skills.customDirectories` | `~/.claude/skills` の自作 skills 16 個 |
+| `enabledProviders: [claude]` | `~/.claude.json` の MCP サーバ定義、`~/.claude/commands` |
+| `commands.enableClaudeUser` | `/ask` `/commit` `/criticalthink` `/onboarding` |
+
+あわせて `bashInterceptor.enabled` を有効にし、`cat` / `grep` / `sed -i` などを
+`read` / `grep` / `edit` へ誘導します（他の CLI と挙動を揃えるため）。
+**真偽値の 2 つは初回のみ設定**し、以後 `omp config set` や `/settings` で
+変えた値は上書きしません（`~/.omp/agent/.chezmoi-seeded` で管理）。
+
+> **permission 機構を持たない設計です。** Pi 系は安全性より利便性を取る方針で、
+> 権限制御は拡張か外部の sandbox に委ねます。保護は「どこで起動するか」と
+> git の使い方に依存します。**対象リポジトリ直下で起動し、開始前に作業を
+> 区切ってコミットしてください。**
+> 経緯と代償の一覧は [CHG-0006](../change/0006-pi-harness-trial.md) にあります。
+
 ## Herdr の管理
 
 Herdr は `home/dot_config/mise/config.toml.tmpl` の `herdr = "latest"` で管理します。
+mise の aqua backend が公式 GitHub Releases のバイナリをユーザースコープへ取得します。
 Linux / WSL と Windows native にのみ展開し、macOS は従来どおり自動導入しません。
 Windows の `.config/mise/config.toml` は `.chezmoiignore.tmpl` の除外例外とし、
 gh とともに宣言します。
@@ -352,9 +401,37 @@ skill を生成します。agent CLI は mise 管理ではなくなったため�
 `chezmoi apply` で integration と skill を再生成します。mise の管理情報と実体が
 食い違うため、`herdr update` は使いません。
 
+```bash
+mise upgrade herdr
+chezmoi apply
+```
+
+初回適用後に `herdr` が見つからない場合は、新しいターミナルを開いてください。
+Windows ARM64 では、Herdr 公式の x86_64 ビルドが Windows のエミュレーション上で動作します。
+
+### agent integration と skill
+
+agent integration は設定ファイルの配備後に毎回冪等に再適用されます。
+
+| chezmoi username | integration | 前提となる agent CLI |
+| --- | --- | --- |
+| `applejxd` | GitHub Copilot CLI | 公式インストーラーで導入 |
+| その他 | Claude Code | 公式インストーラーで導入 |
+
+Herdr は `~/.copilot/settings.json` または `~/.claude/settings.json` の既存設定を保持し、
+Herdr 管理の hook entry だけを追加・更新します。現在の状態は `herdr integration status`
+で確認できます。
+
+同じ `run_after` スクリプトが `herdr --skill` からリリース一致版の agent skill を生成し、
+`~/.claude/skills/herdr/SKILL.md` に配置します。Copilot CLI は
+`~/.copilot/skills` の symlink / junction を通じて同じスキルを参照します。
+`chezmoi apply` のたびに再生成されるため、Herdr 本体の更新後もスキルが追従します。
+
 herdr が Claude の `settings.json` に足す hook（`~/.claude/hooks/herdr-agent-state.sh`）は、
 chezmoi 側の生成処理が外部の hook として残します。仕組みは
-[外部ツールとの共存](agent-permissions.md#外部ツールとの共存-orca--herdr) を参照してください。
+[外部ツールとの共存](agent-config-generation.md#外部ツールとの共存-orca--herdr) を参照してください。
+
+### 旧インストーラー版からの移行
 
 旧インストーラーの `~/.local/bin/herdr`（Linux / WSL）や
 `%LOCALAPPDATA%\Programs\Herdr\bin\herdr.exe`（Windows）は自動削除しません。
@@ -449,7 +526,7 @@ OpenCode V2 が global 指示として読むのは `~/.config/opencode/AGENTS.md
 - **CLI 固有の節だけを足す**: Copilot のコミット節は
   [github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590)
   という Copilot 固有の事実を理由に書いているため、機械的強制がある
-  Claude Code / Codex CLI には置きません（`docs/spec/agent-permissions.md` の
+  Claude Code / Codex CLI には置きません（`docs/spec/agent-command-policy.md` の
   CLI 別の表を参照）。
 - **テンプレート内で分岐しない**: 固有の節は該当ファイルへ直接書き足します。
   `{{ if }}` を使わないので、テストは `includeTemplate` を展開するだけで

@@ -69,7 +69,7 @@ allow = [
 #
 # ★Copilot は hook の ask を自動承認する既知バグがある。確実に止めたいものは
 #   ask ではなく deny に置く。
-# see docs/spec/agent-permissions.md 「`ask` に載せるかどうかの判断軸」、
+# see docs/spec/agent-command-policy.md 「`ask` に載せるかどうかの判断軸」、
 #     docs/research/agents/harness-comparison.md 「hook の ask が自動承認される」
 ask = [
   # 削除は承認制。壊滅的なターゲット (ルート・ホーム・作業ディレクトリ全体・
@@ -128,7 +128,7 @@ ask = [
 # ★OpenCode には除外が効かない (hook 機構が無く、委譲先が存在しない)。
 #   そのため OpenCode へは素の ask として出る。ここに足すものは
 #   「hook が無ければ毎回 ask で妥当」な粒度に保つこと。
-# see docs/spec/agent-permissions.md 「`rm` の承認範囲」
+# see docs/spec/agent-command-policy.md 「`rm` の承認範囲」
 ask_hook_owned = [
   "rm",
 ]
@@ -252,7 +252,7 @@ deny = [
 #   (等価な保護は [sandbox] deny と check_file_read.py が担う)。
 #   OpenCode へは read / edit の permission rule として出る。
 #   `**` 記法は OpenCode に無いため generate.py が `*` 主体へ変換する
-#   (see docs/spec/agent-permissions.md 「glob の記法差」)。
+#   (see docs/spec/agent-config-generation.md 「glob の記法差」)。
 #
 # ★allow のリスト (下の claude_read_allow) だけは OpenCode へ出さない。
 #   OpenCode は allow が既定なので同じ意味の規則が増えるだけになる。
@@ -382,7 +382,7 @@ write_deny_globs = [
 #
 # ★sandbox に効く wildcard は **先頭の `*.` と 単独の `*` だけ**。
 #   `example.*` は WebFetch には効くが sandbox 側は無視する。
-# see docs/spec/agent-permissions.md 「ネットワーク」
+# see docs/spec/agent-sandbox.md 「ネットワーク」
 allow_domains = [
   "github.com",
   "api.github.com",
@@ -438,7 +438,7 @@ deny_domains = []
 #   (user 設定では ~/.claude 基準)。ホーム全体に効かせるなら `~/` を明示する。
 #   Copilot は絶対パス限定・ワイルドカード非対応・存在しないパスは無効。
 #
-# see docs/spec/agent-permissions.md 「sandbox」
+# see docs/spec/agent-sandbox.md 「sandbox」
 #     https://code.claude.com/docs/en/sandboxing
 #     https://docs.github.com/copilot/concepts/agents/copilot-cli/understanding-local-sandboxing
 [sandbox]
@@ -487,7 +487,7 @@ claude_write_deny = [
 # ★このマシンでしか使わないパスはここに書かない。chezmoi 管理外の
 #   ~/.config/agents/local.toml に [sandbox] claude_read_allow として書く。
 # ★実在するパスだけを書く (存在しないパスは bind-mount 失敗の要因になる)。
-# see docs/spec/agent-permissions.md 「このマシンだけで許可を足す」
+# see docs/spec/agent-sandbox.md 「このマシンだけで許可を足す」
 claude_read_allow = [
   # ツールチェーン (mise / uv / cargo / node / go / TeX)
   "~/.local", "~/.cache", "~/.cargo", "~/.rustup", "~/.nvm", "~/.npm",
@@ -559,7 +559,7 @@ copilot_allow_dev_tool_access = false
 # ワイルドカードを含むものは除外される (Copilot は非対応)。
 # 存在しないパスの deny は黙って無効化されるが、後で作られたときに効くよう
 # `deny` には残してある。
-# see docs/spec/agent-permissions.md 「sandbox」
+# see docs/spec/agent-sandbox.md 「sandbox」
 #
 # なお ~/.ssh を denied にすると git over SSH は使えなくなるが、
 # sandbox の auth.git / auth.gh が GitHub へのトークンを注入するため
@@ -601,7 +601,7 @@ shell_network_allow = [
 # 入れるので、公式の代替手段 (settings.json でパスを直接指す) で橋渡しする。
 # {arch} は generate.py が x64 / arm64 に置換する。パスが無いマシンでは
 # 設定を出力しないので、共有の common.toml に書いても他環境を壊さない。
-# see docs/spec/agent-permissions.md 「seccomp」
+# see docs/spec/agent-sandbox.md 「seccomp」
 seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/{arch}/apply-seccomp"
 
 # ---------------------------------------------------------------------------
@@ -701,7 +701,7 @@ auto_update = false
 # ★[claude] mcp_deny も渡さない。OpenCode のツール名は `<server>_<tool>` で
 #   Claude の `mcp__<server>__<tool>` と別体系のため、機械変換すると
 #   実在しない名前を deny したまま気付けなくなる。
-# see docs/spec/agent-permissions.md 「OpenCode へ渡さないもの」
+# see docs/spec/agent-config-generation.md 「OpenCode へ渡さないもの」
 
 # OpenCode のカスタムエージェント (V1 の「モード」に相当。mode は非推奨)。
 # permission = "allow" は全 action / 全 resource の allow へ展開される (実測)。
@@ -1090,7 +1090,7 @@ deny = [
 #   書かれているが 2.0.12 の実測では他の行だけ生きる)。足す前に実在を確認する:
 #     strings -n 4 ~/.opencode/bin/opencode | grep -x '<id>'
 # 無効化は false か "none"。<leader> は既定 ctrl+x。
-# see docs/spec/agent-permissions.md 「キーバインド」
+# see docs/spec/agent-config-generation.md 「キーバインド」
 [opencode.keybinds]
 # ★app.exit の既定は "ctrl+c,ctrl+d,<leader>q"。ctrl+c を外さずに
 #   session.interrupt へ渡すと Ctrl+C でアプリごと終了する。
@@ -1135,7 +1135,7 @@ models = [
 # ★command は argv 配列で、シェルは通らない。`$FILE` が絶対パスに置換される。
 # ★組み込みに無い名前は command と extensions の両方が要る
 #   (片方だけだと OpenCode が黙って無視する)。generate.py が検査して止める。
-# see docs/spec/agent-permissions.md 「整形 (formatter)」
+# see docs/spec/agent-config-generation.md 「整形 (formatter)」
 
 # markdownlint-cli2 は組み込みに無い。mise の "npm:markdownlint-cli2" が
 # PATH へ shim を置くので素の名前で呼べる。未導入のマシンでは OpenCode が
@@ -1154,7 +1154,7 @@ extensions = [".md", ".markdown"]
 #
 # ★トークンをここに書かない。headers に秘密が要るサーバは環境変数参照として
 #   各 CLI 側で設定する (ADR-0005)。
-# see docs/spec/agent-permissions.md 「MCP サーバ」
+# see docs/spec/agent-config-generation.md 「MCP サーバ」
 # ★deepwiki は索引が古く、実ソースと食い違う説明を返すため 2026-09-25 に外した。
 {{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
 
@@ -1255,7 +1255,7 @@ timeout_sec = 30
 
 # 撤去した hook のスクリプト名。hook を撤去したらここへ足すこと
 # (足し忘れると settings.json の古い登録が外部の hook として残る)。
-# see docs/spec/agent-permissions.md#外部ツールとの共存-orca--herdr
+# see docs/spec/agent-config-generation.md#外部ツールとの共存-orca--herdr
 [retired_hooks]
 scripts = [
     "block-dangerous-commands.sh",

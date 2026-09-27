@@ -65,7 +65,7 @@ sops = "latest"
 # snap 版が動かないため npm backend (docs/spec/security.md#bitwarden連携)
 "npm:@bitwarden/cli" = "latest"
 # Claude sandbox の seccomp フィルタ。WSL2 では無いと脱出できる
-# (docs/spec/agent-permissions.md#wsl2-での抜け穴-seccomp-フィルタ)
+# (docs/spec/agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ)
 "npm:@anthropic-ai/sandbox-runtime" = "latest"
 yt-dlp = "latest"
 {{- end }}

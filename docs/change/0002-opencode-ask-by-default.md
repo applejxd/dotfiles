@@ -162,7 +162,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 | 伏字化 | shell 出力を `execute.after` で書き換える | 安全網 |
 
 **誘導は確認削減の施策ではなく保護の一部。** 実装の詳細は
-[エージェントの権限設定](../spec/agent-permissions.md)が正本。
+[plugin 層](../spec/agent-config-generation.md#plugin-層-guide-plugin)が正本。
 
 #### 成果（実履歴 1,031 呼び出し）
 

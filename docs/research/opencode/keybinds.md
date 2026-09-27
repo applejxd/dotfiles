@@ -5,7 +5,7 @@
 - **一次情報**: <https://opencode.ai/v2/docs/cli/keybinds>
 
 現在の割り当てと運用は
-[エージェント権限仕様](../../spec/agent-permissions.md)「キーバインド」が正本。
+[設定の生成と所有権](../../spec/agent-config-generation.md#キーバインド)「キーバインド」が正本。
 ここには実測だけを残す。
 
 ## 1. 公式一覧は最新版向けで、2.0.12 に無い ID が載っている

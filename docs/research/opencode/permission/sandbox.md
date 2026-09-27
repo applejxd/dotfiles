@@ -27,7 +27,7 @@
 Claude Code と Copilot CLI は OS レベル sandbox を内蔵しており、
 このリポジトリは既にその設定を生成している
 （[sandbox 機能の包括調査](../../agents/sandbox-capabilities.md)、
-[agent-permissions](../../../spec/agent-permissions.md)）。
+[agent-sandbox](../../../spec/agent-sandbox.md)）。
 
 ## 1. 組み込みの sandbox は無い
 
