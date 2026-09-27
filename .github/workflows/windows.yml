@@ -1,0 +1,63 @@
+name: windows
+
+# Windows で agent 設定と Windows 資産のテストを回す (WSL では skip される分岐を拾う)。
+# 実機 (Windows 11) の検証の代わりにはならない。see test/README.md#windows-の-github-actions
+"on":
+  push:
+    paths:
+      - "home/**/*.ps1"
+      - "home/**/*.ps1.tmpl"
+      - "home/dot_config/powershell/**"
+      - "home/.chezmoiscripts/300_windows/**"
+      - "home/.chezmoitemplates/**"
+      - "home/dot_config/agents/**"
+      - "home/dot_claude/hooks/**"
+      - "scripts/agents/**"
+      - "test/agents/**"
+      - "test/test_windows_assets.py"
+      - ".github/workflows/windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      # test/agents は chezmoi が無いとモジュールごと skip する
+      - name: Install chezmoi
+        run: |
+          $bin = Join-Path $env:RUNNER_TEMP 'chezmoi-bin'
+          iex "&{$(irm 'https://get.chezmoi.io/ps1')} -b '$bin'"
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+
+      - name: Tool versions
+        run: |
+          $PSVersionTable.PSVersion.ToString()
+          chezmoi --version
+          uv --version
+          foreach ($tool in 'git', 'node', 'bash', 'py') {
+            $found = Get-Command $tool -ErrorAction SilentlyContinue
+            if ($found) { "${tool}: $($found.Source)" } else { "${tool}: (none)" }
+          }
+          "ImageOS=$env:ImageOS ImageVersion=$env:ImageVersion"
+
+      - name: pytest
+        run: >-
+          uv run --python 3.13 --with pytest --with pyyaml --no-project
+          pytest test/agents/ test/test_windows_assets.py -q -ra

@@ -105,6 +105,7 @@ Windows PowerShell 5.1 の ConPTY セッションで読み込み、プロンプ�
 | 環境 | 実行できる範囲 |
 | --- | --- |
 | Windows (pwsh) | 静的 + 対話 |
+| GitHub Actions（`windows.yml`） | 静的と agent 設定のテスト。対話は回さない（[範囲](../../test/README.md#windows-の-github-actions)） |
 | WSL / Linux | 静的のみ（`uv run --with pytest --no-project pytest test/test_windows_assets.py -q`） |
 
 対話テストは `os.name != "nt"` で全件 skip するため、WSL で

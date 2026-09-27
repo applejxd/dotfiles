@@ -40,6 +40,21 @@ Windows の Copilot コマンド hook は `powershell` ツール名も照合・�
 agent テストでは生成された matcher と実 hook の判定を両方確認し、
 パスの `\` 区切りや大文字小文字によって既存の保護対象が見落とされないことも検証する。
 
+### Windows の GitHub Actions
+
+`.github/workflows/windows.yml` が `windows-2025` の runner で `test/agents/` と
+`test/test_windows_assets.py` を回す。Windows 関連のパス（`*.ps1`、`300_windows/`、
+`scripts/agents/`、共通の agent 設定・hook など）への push と、手動実行で起動する。
+
+**実機（Windows 11）の検証の代わりにはならない。** 見ていないもの:
+
+- 対話テスト（`test_powershell_interactive.py`）。配置済みのプロファイルと
+  mise / fzf / oh-my-posh などが要るので回していない
+- `.chezmoiscripts` の実行（winget / scoop / choco / レジストリ / 電源設定）。
+  runner は管理者で UAC が無効、Chrome・Git・Node などが最初から入っていて導入漏れを
+  隠し、Windows Server なので Windows 11 とも違う
+- 個人用（applejxd）の分岐。runner のユーザは `runneradmin`
+
 ---
 
 ## 1. Docker での cold start 検証
