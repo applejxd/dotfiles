@@ -1475,6 +1475,23 @@ def test_launcher_code_is_not_writable_from_agent_sandboxes(deployed):
         assert not _covers(entries, deployed), f"{key} が {deployed} を書き込み可能にしている"
 
 
+STATE_DIR = "~/.local/state/opencode-sandbox"
+
+
+def test_launcher_state_is_denied_to_agent_sandboxes():
+    """★承認 (trusted.json) と合格 (checked.json) の記録は ocs の外の CLI からも書けない。
+
+    ~/.local/state は Claude / Copilot の write 許可に入っているので、名指しの
+    deny が無いと、ocs の外で動くエージェントが承認や合格を偽造できる。
+    """
+    assert _covers(COMMON["sandbox"]["deny"], STATE_DIR)
+    claude = gen.build_claude_sandbox(COMMON)["filesystem"]
+    assert _covers(claude["denyWrite"], STATE_DIR)
+    copilot = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
+    assert os.path.expanduser(STATE_DIR) in copilot["deniedPaths"]
+    assert f"{STATE_DIR}/**" in COMMON["file"]["write_deny_globs"]
+
+
 @pytest.mark.parametrize("source", ["home/dot_local/bin", "home/dot_local/share/ocs"])
 def test_launcher_source_is_protected_inside_the_boundary(source):
     """★ocs の source state は境界の内側から書き換えられないこと (denyWrite)。"""

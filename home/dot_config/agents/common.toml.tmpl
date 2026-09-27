@@ -358,6 +358,8 @@ write_deny_globs = [
   # 正本はこのリポジトリなので、変更は chezmoi apply 経由で入れる。
   "~/.config/opencode/opencode.json",
   "~/.config/opencode/service.json",
+  # ocs の承認と合格の記録 ([sandbox] deny と同じ趣旨の permission 側の保険)
+  "~/.local/state/opencode-sandbox/**",
   # プロジェクト側の OpenCode 設定。ここに書いた permission は
   # グローバルの deny に勝つ (実測)。書けると自分で権限を広げられる。
   # see docs/research/opencode/permission/gaps.md
@@ -457,6 +459,10 @@ deny = [
   "~/.claude.json", "~/.copilot/settings.json", "~/.copilot/config.json",
   # OpenCode のサービス認証情報 (password が平文で入る)
   "~/.config/opencode/service.json",
+  # ocs の承認と境界チェックの合格の記録。下の write 許可 (~/.local/state) の
+  # 内側なので名指しで塞ぐ。書けると ocs の外から承認を偽造できる
+  # see docs/spec/opencode-sandbox.md#信頼の鎖
+  "~/.local/state/opencode-sandbox",
   "~/.bash_history", "~/.zsh_history", "~/.python_history",
   "~/.node_repl_history",
   # whitelist の内側に置かれがちなもの (Claude のみ。Copilot は wildcard 不可)

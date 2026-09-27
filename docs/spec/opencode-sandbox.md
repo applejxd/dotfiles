@@ -363,6 +363,11 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
   （`GH_TOKEN` / `SSH_AUTH_SOCK` / `AWS_*` など）
 - **ランチャーが読み込むコードは、入口と同じだけ保護する。** 本体を別ファイルへ
   分けた分だけ鎖が延びるので、置き場・読み込み方・配布先を入口に揃える（下記）
+- **承認と合格の記録（`~/.local/state/opencode-sandbox/`）は、ほかの CLI からも
+  書けなくする。** `~/.local/state` は Claude / Copilot の sandbox の write 許可に
+  入っているので、`[sandbox] deny` と `[file] write_deny_globs` で名指しして塞ぐ。
+  塞がないと、ocs の外で動くエージェントが `trusted.json` や `checked.json` を
+  書き換え、承認や境界チェックの合格を偽造できる
 
 ### ランチャーの構成
 
