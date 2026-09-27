@@ -21,9 +21,6 @@ export const key = (sessionID) => `pending:${sessionID}`
 //   publish して返る。Ended は成功経路でしか publish されない。
 const ENDED = "session.compaction.ended"
 
-// lint --structure が検査する 6 節。生成物がこれを満たさなければ採用しない。
-const SECTIONS = ["Goal", "Constraints", "State", "Evidence", "Next", "Refs"]
-
 // ★再入防止。generate も模型呼び出しなので、文脈が溢れたままだと圧縮を
 //   誘発しうる。同じセッションで二重に走らせない。
 const BUSY = new Set()
@@ -54,6 +51,11 @@ const paths = async (sessionID, cwd) => {
     return null
   }
 }
+
+// ★受け入れ判定は CLI の lint が単一ソース。見出しをここで数え直さない。
+//   see docs/spec/checkpoint.md#失敗時の動作
+const accepts = async (record, sessionID, cwd) =>
+  (await run(["lint", "-", "--headings-only", "--session", sessionID], cwd, record)) !== null
 
 const prompt = () =>
   "いまから会話が圧縮されます。後任が作業を再開できる引き継ぎを書いてください。\n\n"
@@ -87,8 +89,9 @@ export async function onCompaction(ctx, e, cwd) {
   BUSY.add(e.sessionID)
   try {
     // ★generate は会話履歴が見えている (実測)。材料を詰め直す必要は無い。
-    // ★空文字が返ることがある (実測)。1 度だけ引き直す。
+    // ★空文字が返ることがある (実測)。lint に通らない生成と合わせて 1 度だけ引き直す。
     let body = ""
+    let record = ""
     for (let attempt = 0; attempt < 2 && !body; attempt++) {
       const out = await ctx.session.generate({
         sessionID: e.sessionID,
@@ -96,7 +99,12 @@ export async function onCompaction(ctx, e, cwd) {
         options: { temperature: 0 },
       })
       const text = out?.text?.trim() ?? ""
-      if (text && SECTIONS.every((s) => text.includes(`## ${s}`))) body = text
+      if (!text) continue
+      const candidate = `${header(e.sessionID)}${text}\n`
+      if (await accepts(candidate, e.sessionID, cwd)) {
+        body = text
+        record = candidate
+      }
     }
     if (!body) return
 
@@ -108,7 +116,7 @@ export async function onCompaction(ctx, e, cwd) {
     const wrote = await run(
       ["write", resolved.checkpoint, "--keep-prev", resolved.prev],
       cwd,
-      `${header(e.sessionID)}${body}\n`,
+      record,
     )
     if (wrote === null) return
     await run(

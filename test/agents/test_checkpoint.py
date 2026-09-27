@@ -520,6 +520,35 @@ def test_cli_lint_missing_file_is_failure_not_crash(tmp_path: Path):
     assert done.returncode == 1
 
 
+def test_cli_lint_reads_stdin():
+    """plugin は生成した本文を保存前に stdin で検査する。"""
+    assert run_cli(["lint", "-"], stdin=valid_checkpoint()).returncode == 0
+    broken = valid_checkpoint() + "\n## Refs\n- 重複\n"
+    done = run_cli(["lint", "-"], stdin=broken)
+    assert done.returncode == 1
+    assert "重複" in done.stderr
+
+
+def test_headings_only_skips_budget_and_fences(cp):
+    """plugin の受け入れ判定用。予算超過や長いフェンスでは落とさない。"""
+    fence = "```\n" + "line\n" * 20 + "```\n"
+    text = valid_checkpoint().replace("- 完了: X", "- " + "z" * 2500 + "\n" + fence)
+    assert cp.lint(text)[0] != []
+    assert cp.lint(text, headings_only=True)[0] == []
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        valid_checkpoint() + "\n## Refs\n- 重複\n",
+        valid_checkpoint().replace("## Evidence\n", "本文中に ## Evidence\n"),
+    ],
+    ids=["重複", "文中"],
+)
+def test_headings_only_still_checks_headings(cp, broken: str):
+    assert cp.lint(broken, headings_only=True)[0] != []
+
+
 def test_cli_write_keeps_previous_generation(tmp_path: Path):
     target = tmp_path / "checkpoint.md"
     prev = tmp_path / "checkpoint.prev.md"

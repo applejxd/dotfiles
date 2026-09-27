@@ -46,6 +46,15 @@ const BODY = ["Goal", "Constraints", "State", "Evidence", "Next", "Refs"]
   .map((s) => `## ${s}\n\nKUJIRA42\n`)
   .join("\n")
 
+// lint が重複として落とす生成。文字列を含むかどうかだけでは見分けられない。
+const DUPLICATED = `${BODY}\n## Refs\n\nKUJIRA42\n`
+
+// 「## Evidence」が文中にしか無い生成。
+const INLINE = BODY.replace("## Evidence\n\nKUJIRA42\n", "本文中に ## Evidence と書いただけ\n")
+
+// 予算 (2000 文字) を超えるが見出しは正しい生成。
+const LONG = BODY.replace("## State\n\nKUJIRA42\n", `## State\n\nKUJIRA42 ${"x".repeat(3000)}\n`)
+
 const makeCtx = (events = [], replies = []) => {
   const store = new Map()
   const calls = []
@@ -131,6 +140,34 @@ const cases = {
   // 6 節が揃わない生成物は採用しない。
   "compaction-rejects-a-malformed-body": async () => {
     const ctx = makeCtx([], ["## Goal\n\nこれだけ"])
+    const event = { sessionID: session }
+    await plugin.onCompaction(ctx, event, cwd)
+    return dump(ctx, event)
+  },
+  // 見出しが重複した生成物は、引き直しても採用しない。
+  "compaction-rejects-duplicated-headings": async () => {
+    const ctx = makeCtx([], [DUPLICATED, DUPLICATED])
+    const event = { sessionID: session }
+    await plugin.onCompaction(ctx, event, cwd)
+    return dump(ctx, event)
+  },
+  // 見出しの文字列が文中にあるだけの生成物は採用しない。
+  "compaction-rejects-inline-headings": async () => {
+    const ctx = makeCtx([], [INLINE, INLINE])
+    const event = { sessionID: session }
+    await plugin.onCompaction(ctx, event, cwd)
+    return dump(ctx, event)
+  },
+  // lint に通らない生成は、空と同じく 1 度だけ引き直す。
+  "compaction-retries-after-a-rejected-body": async () => {
+    const ctx = makeCtx([], [DUPLICATED, BODY])
+    const event = { sessionID: session }
+    await plugin.onCompaction(ctx, event, cwd)
+    return dump(ctx, event)
+  },
+  // 予算超過は受け入れを妨げない。
+  "compaction-accepts-an-over-budget-body": async () => {
+    const ctx = makeCtx([], [LONG])
     const event = { sessionID: session }
     await plugin.onCompaction(ctx, event, cwd)
     return dump(ctx, event)
@@ -319,6 +356,40 @@ def test_a_bad_generation_leaves_the_summary_alone(call, case):
     """
     result = call(case)
     assert result["summary"] is None
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["compaction-rejects-duplicated-headings", "compaction-rejects-inline-headings"],
+)
+def test_a_body_that_fails_lint_is_not_adopted(call, repo, case):
+    """★受け入れ判定を CLI の lint に揃える。
+
+    旧実装は「`## Goal` などの文字列を含むか」だけを見ていて、見出しが重複した
+    生成や、文中に見出しの文字列があるだけの生成を要約に採用していた。
+    採用しない生成は保存もしない。
+    """
+    result = call(case)
+
+    assert result["generateCalls"] == 2
+    assert result["summary"] is None
+    saved = Path(resolve(repo, SESSION)["checkpoint"]).read_text(encoding="utf-8")
+    assert GENERATED not in saved
+
+
+def test_a_body_that_fails_lint_is_retried_once(call):
+    result = call("compaction-retries-after-a-rejected-body")
+    assert result["generateCalls"] == 2
+    assert result["summary"] is not None
+    assert result["summary"].count("## Refs") == 1
+
+
+def test_an_over_budget_body_is_still_adopted(call):
+    """★予算超過では捨てない。捨てると新しい引き継ぎより古い記録が残る。"""
+    result = call("compaction-accepts-an-over-budget-body")
+    assert result["generateCalls"] == 1
+    assert result["summary"] is not None
+    assert GENERATED in result["summary"]
 
 
 def test_a_failed_write_does_not_adopt_the_old_record(call, repo):

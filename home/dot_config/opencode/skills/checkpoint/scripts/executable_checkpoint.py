@@ -346,11 +346,14 @@ def lint(
     budget: int = DEFAULT_BUDGET,
     boundary: str | None = None,
     session: str | None = None,
+    headings_only: bool = False,
 ) -> tuple[list[str], list[str]]:
     """checkpoint を検査して (エラー, 警告) を返す。
 
     ``boundary`` を渡すと鮮度も見る。渡さなければ構造だけを見る。
     現在の会話地点とは決して比べない。``session`` を渡すとヘッダの持ち主も見る。
+    ``headings_only`` は予算とフェンスを見ない (plugin の受け入れ判定用。
+    see docs/spec/checkpoint.md#失敗時の動作)。
     """
     errors: list[str] = []
     warnings: list[str] = []
@@ -372,7 +375,7 @@ def lint(
         position = lines[0]
 
     length = len(body.strip())
-    if length > budget:
+    if not headings_only and length > budget:
         breakdown = " / ".join(
             f"{heading} {size}" for heading, size in _section_sizes(body) if size
         )
@@ -382,7 +385,8 @@ def lint(
             f"内訳: {breakdown}"
         )
 
-    errors.extend(_fence_violations(body))
+    if not headings_only:
+        errors.extend(_fence_violations(body))
 
     header = parse_header(text)
     # 旧雛形はヘッダにも snapshot_at を置いていた。snapshot はヘッダを触らないので
@@ -540,14 +544,21 @@ def _cmd_paths(args: argparse.Namespace) -> int:
 
 
 def _cmd_lint(args: argparse.Namespace) -> int:
-    target = Path(args.path)
-    if not target.exists():
-        print(f"error: checkpoint が無い: {target}", file=sys.stderr)
-        return EXIT_FAIL
-    text = target.read_text(encoding="utf-8")
+    if args.path == "-":
+        text = sys.stdin.read()
+    else:
+        target = Path(args.path)
+        if not target.exists():
+            print(f"error: checkpoint が無い: {target}", file=sys.stderr)
+            return EXIT_FAIL
+        text = target.read_text(encoding="utf-8")
     boundary = None if args.structure else args.boundary
     errors, warnings = lint(
-        text, budget=args.budget, boundary=boundary, session=args.session
+        text,
+        budget=args.budget,
+        boundary=boundary,
+        session=args.session,
+        headings_only=args.headings_only,
     )
     for warning in warnings:
         print(f"warning: {warning}")
@@ -601,8 +612,13 @@ def build_parser() -> argparse.ArgumentParser:
     paths.set_defaults(func=_cmd_paths)
 
     check = sub.add_parser("lint", help="checkpoint を検査する")
-    check.add_argument("path", help="checkpoint のパス")
+    check.add_argument("path", help="checkpoint のパス (- なら stdin)")
     check.add_argument("--structure", action="store_true", help="構造だけを見る")
+    check.add_argument(
+        "--headings-only",
+        action="store_true",
+        help="見出しの欠け・重複・順序だけを見る (予算とフェンスは見ない)",
+    )
     check.add_argument("--boundary", help="その要求の固定境界")
     check.add_argument(
         "--budget",
