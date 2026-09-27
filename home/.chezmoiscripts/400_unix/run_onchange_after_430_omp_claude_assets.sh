@@ -29,20 +29,26 @@ fi
 # ---------------------------------------------------------------------------
 # ★`omp config get --json` は配列ではなく {"key":…, "value":[…]} を返す。
 #   配列として読むと必ず解析に失敗し、毎回「未登録」と判定してしまう。
-current="$("$omp_path" config get enabledProviders --json 2>/dev/null || echo '{}')"
-next="$(CURRENT="$current" python3 - <<'PY'
+# 取得・解析に失敗したら書き戻さない (空配列扱いにすると既存の登録を消す)。
+if ! current="$("$omp_path" config get enabledProviders --json 2>/dev/null)"; then
+    echo "警告: omp の enabledProviders を取得できないので Claude 資産の接続を飛ばします" >&2
+    exit 0
+fi
+if ! next="$(CURRENT="$current" python3 - <<'PY'
 import json
 import os
+import sys
 
 try:
     parsed = json.loads(os.environ["CURRENT"])
 except json.JSONDecodeError:
-    parsed = None
+    sys.exit(1)
 
 # {"key":…, "value":[…]} と素の配列の両方を受ける (出力形式の変化に備える)。
+# 未設定でも "value": [] が返る。配列以外は形式が変わったとみなし触らない。
 current = parsed.get("value") if isinstance(parsed, dict) else parsed
 if not isinstance(current, list):
-    current = []
+    sys.exit(1)
 
 # enabledProviders は素の文字列のほかに path スコープ付きの dict も取る。
 # 文字列だけを見る (dict は "どこでも有効" ではないので判定に使えない)。
@@ -54,7 +60,10 @@ if names & {"claude", "*", "all"}:
 else:
     print(json.dumps([*current, "claude"]))
 PY
-)"
+)"; then
+    echo "警告: omp の enabledProviders を解釈できないので Claude 資産の接続を飛ばします" >&2
+    exit 0
+fi
 
 if [[ -z "$next" ]]; then
     echo "omp の claude ソースは有効化済みです"

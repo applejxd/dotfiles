@@ -26,33 +26,39 @@ fi
 target="${HOME}/.claude/skills"
 
 # 既に入っていれば何もしない。他のエントリは保つ (置き換えない)。
+# 取得・解析に失敗したら書き戻さない (空配列扱いにすると既存の登録を消す)。
 # ★`omp config get --json` は配列ではなく {"key":…, "value":[…]} を返す。
 #   配列として読むと必ず解析に失敗し、毎回「未登録」と判定してしまう。
-current="$("$omp_path" config get skills.customDirectories --json 2>/dev/null || echo '{}')"
-next="$(TARGET="$target" CURRENT="$current" python3 - <<'PY'
+if ! current="$("$omp_path" config get skills.customDirectories --json 2>/dev/null)"; then
+    echo "警告: omp の skills.customDirectories を取得できないので登録を飛ばします" >&2
+    exit 0
+fi
+if ! next="$(TARGET="$target" CURRENT="$current" python3 - <<'PY'
 import json
 import os
+import sys
 
 target = os.environ["TARGET"]
 try:
     parsed = json.loads(os.environ["CURRENT"])
 except json.JSONDecodeError:
-    parsed = None
+    sys.exit(1)
 
 # {"key":…, "value":[…]} と素の配列の両方を受ける (出力形式の変化に備える)。
-if isinstance(parsed, dict):
-    current = parsed.get("value")
-else:
-    current = parsed
+# 未設定でも "value": [] が返る。配列以外は形式が変わったとみなし触らない。
+current = parsed.get("value") if isinstance(parsed, dict) else parsed
 if not isinstance(current, list):
-    current = []
+    sys.exit(1)
 
 if target in current:
     print("")
 else:
     print(json.dumps([*current, target]))
 PY
-)"
+)"; then
+    echo "警告: omp の skills.customDirectories を解釈できないので登録を飛ばします" >&2
+    exit 0
+fi
 
 if [[ -z "$next" ]]; then
     echo "omp の skills 参照先は登録済みです"

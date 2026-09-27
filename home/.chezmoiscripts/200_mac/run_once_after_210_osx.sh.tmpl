@@ -6,11 +6,6 @@ set -euo pipefail
 
 echo "Starting macOS system setup..." >&2
 
-# Mac OS X use bash 3.2, and process substitution is unable
-tmp_file=$(mktemp)
-# see https://tm.root-n.com/programming:shell_script:command:trap
-trap 'rm -f "$tmp_file"' EXIT HUP INT QUIT TERM
-
 # for x86_64 architecture
 yes A | softwareupdate --install-rosetta
 
@@ -33,8 +28,7 @@ brew update
 
 if [[ $(uname -m) == arm64 ]]; then
     # GUI apps
-    curl -fsSL https://raw.githubusercontent.com/applejxd/dotfiles/main/installer/osx/brew_mas_cask.rb >"$tmp_file"
-    brew bundle --file="$tmp_file"
+    brew bundle --file={{ joinPath .chezmoi.workingTree "scripts" "osx" "brew_mas_cask.rb" | quote }}
 
     # Password required GUI apps
     echo "$password" | brew install avast-security
