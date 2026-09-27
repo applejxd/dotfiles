@@ -617,6 +617,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows の既定は \n を \r\n に変える。plugin は read の出力と生成した本文を
+    # 突き合わせるので、記録のファイル (LF) とバイト単位で揃える
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

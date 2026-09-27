@@ -178,6 +178,25 @@ def test_read_refuses_a_record_without_an_owner(cp, git_repo: Path, text: str):
     assert run_cli(["read", "--session", SESSION, "--cwd", str(git_repo)]).returncode == 1
 
 
+def test_read_emits_the_record_byte_for_byte(cp, git_repo: Path):
+    """plugin は read の出力に生成した本文が含まれるかを見る。改行を変えてはいけない。
+
+    Windows の標準出力は既定で \\n を \\r\\n に変えるので、そこでだけ効く。
+    """
+    target = Path(cp.resolve_paths(SESSION, git_repo)["checkpoint"])
+    target.parent.mkdir(parents=True)
+    target.write_bytes(valid_checkpoint(session=SESSION).encode("utf-8"))
+
+    done = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), "read", "--session", SESSION, "--cwd", str(git_repo)],
+        capture_output=True,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+    assert done.stdout == target.read_bytes()
+
+
 def test_read_without_a_record_is_failure_not_crash(git_repo: Path):
     done = run_cli(["read", "--session", SESSION, "--cwd", str(git_repo)])
     assert done.returncode == 1
