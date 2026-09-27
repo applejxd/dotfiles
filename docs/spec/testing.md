@@ -19,7 +19,7 @@ PSReadLine / PSFzf / ZLocation と基本コマンドである。
 Windows 以外、または `pywinpty` 未指定の場合は対話テストをスキップする。
 
 プロファイル本体は `~/.config/powershell/profile.ps1` で、`$PROFILE`
-（`Documents/PowerShell` と `Documents/WindowsPowerShell`）は1行のローダーである。
+（`Documents/PowerShell` と `Documents/WindowsPowerShell`）は dot-source するだけのローダーである。
 起動時間の切り分けには `-NoProfile` との差を見る。`mise` の init は
 `%LOCALAPPDATA%\PowerShellProfileCache` にキャッシュされるため、
 再生成の挙動を試すときはこのディレクトリを削除する。`oh-my-posh` の init は

@@ -441,17 +441,68 @@ PowerShell なら `Get-Command herdr` を確認し、mise の実体または shi
 削除するか、mise の shim が先に見つかるよう PATH を整理します。
 Herdr のユーザーデータ・設定は削除しません。
 
+## シェルプラグインの取得
+
+シェルの rc が読み込むプラグインは、起動時ではなく `chezmoi apply` が
+`home/.chezmoiexternal.toml.tmpl` で取得します。rc は存在するときだけ読み込み、
+無くてもシェルは起動します（zinit が無い場合は案内を 1 行出し、`zinit` を
+何もしない関数にします）。
+
+| 取得先 | 取得元 | 種類 |
+| --- | --- | --- |
+| `~/.z` | rupa/z | git-repo（`--depth 1`） |
+| `~/.zinit/bin` | zdharma-continuum/zinit | git-repo |
+| `~/.bash_it` | Bash-it/bash-it | git-repo（`--depth 1`） |
+| `~/.tmux/plugins/tpm` | tmux-plugins/tpm | git-repo（`--depth 1`） |
+| `~/.vim/colors/iceberg.vim` | cocopon/iceberg.vim | file |
+
+Windows native では rc を配らないため対象外です。Linux / WSL / Raspberry Pi /
+macOS では同じです。
+
+各項目は**パスがまだ無いときだけ宣言します**（`stat` で判定）。chezmoi 2.72 の
+git-repo external には次の挙動があり、既に clone 済みの機械を壊すためです。
+
+- 記録の無いパスが既にあると、`refreshPeriod` に関係なく初回の apply で
+  `git pull` を実行する
+- pull に失敗すると記録が残らず、apply のたびに失敗する
+  （`bash-it update` の後は detached HEAD なので必ず失敗する）
+- 同じパスにファイルがあると削除してから pull し、失敗する
+  （rupa/z の既定のデータファイル `~/.z` が消える）
+- Git 管理でないディレクトリだと、外側のリポジトリで pull が走る
+
+このため chezmoi は取得後の更新をしません。更新は各ツールに任せます
+（zinit は `mise run dotfiles-update`、bash-it は `bash-it update`、tpm は tmux の
+prefix + U）。取り直すときはパスを消してから `chezmoi apply` します。
+新しい機械では apply に git とネットワークが要り、取得に失敗すると apply が
+エラーになります。
+
+### fzf の関数
+
+`~/.config/shell/fzf.sh` は、fzf がある場合だけ `.bashrc` / `.zshrc` から
+読み込まれる入口です。同じ階層の `fzf/` にある次の 3 ファイルを順に読み込みます。
+
+| ファイル | 中身 |
+| --- | --- |
+| `fzf/core.sh` | `FZF_*` のオプションと、移動・汎用の関数（`xf` / `xg` / `xgw` / `v` / `sshf` / `fgg` など） |
+| `fzf/git.sh` | git の関数（`fbr` / `fbrm` / `fshow` / `cdworktree` / `fadd`） |
+| `fzf/tools.sh` | mise / Singularity / Homebrew の関数 |
+
+各ファイルの関数は、対応するコマンドがある場合だけ定義されます。Windows では
+`.chezmoiignore` の `.config/*` によって `fzf/` ごと配られません。
+
 ## PowerShellプロファイル
 
 設定の実体は `home/dot_config/powershell/` に置き、`$PROFILE`
 （`Documents/PowerShell/` と `Documents/WindowsPowerShell/`）へは
-それをdot-sourceする1行のローダーだけを配置します。
+それをdot-sourceするだけのローダーを配置します。
 
 | パス | 役割 |
 | --- | --- |
 | `home/dot_config/powershell/profile.ps1.tmpl` | PowerShell 7 / 5.1 共通の本体 |
+| `home/dot_config/powershell/cache.ps1` | init 出力のキャッシュ（`Get-CachedInitScript`）。本体がトップレベルで dot-source する |
 | `home/dot_config/powershell/commands/*.ps1` | 用途別の関数（wsl、docker、fzf、pwgen） |
 | `home/Documents/*/profile.ps1.tmpl` | `$PROFILE` から本体を呼ぶローダー |
+| `home/.chezmoitemplates/powershell/profile-loader.ps1` | `$PROFILE` ローダーの本文。Documents 配下と `run_after_345` が共有する |
 | `home/.chezmoitemplates/powershell/git-config-env.ps1` | プロファイルとScoopスクリプトで共有する `GIT_CONFIG_*` の正規化 |
 | `home/.chezmoiscripts/300_windows/run_after_345_powershell_profile.ps1.tmpl` | `Documents` がリダイレクトされている場合のローダー再配置 |
 
@@ -468,6 +519,9 @@ Herdr のユーザーデータ・設定は削除しません。
   `.ps1` をANSIコードページ（ja-JPならCP932）として読みます。日本語コメントの
   行末バイトが改行を飲み込み、**直後のコードがエラーも警告も無く実行されなく
   なります**。`test_powershell_sources_start_with_a_utf8_bom` で強制します。
+- **分割したファイルはトップレベルで dot-source する**: 関数の中から dot-source すると
+  定義がその関数のスコープに閉じ、セッションから見えなくなります。
+  `test_init_cache_is_dot_sourced_at_the_top_level` で固定します。
   `.chezmoitemplates/` 配下は他ファイルへ埋め込むため対象外です。
 - **対話時と非対話時を分ける**: `profile.ps1` はAllHostsプロファイルのため、
   エージェントやスクリプトからの起動でも毎回読み込まれます。プロンプト
