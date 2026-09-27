@@ -120,7 +120,13 @@ def test_opencode_config_is_deployed_on_windows(tmp_path, target):
 def test_ocs_launcher_is_linux_only(tmp_path, os_name, ignored):
     """ocs は bwrap で OpenCode を囲うので Ubuntu / WSL 専用 (CHG-0004)。"""
     rendered = render(home=str(tmp_path), os_name=os_name)
-    for target in (".local/bin/ocs", ".local/share/ocs", ".local/share/ocs/**"):
+    targets = (
+        ".local/bin/ocs",
+        ".local/bin/ocs-boundary-check",
+        ".local/share/ocs",
+        ".local/share/ocs/**",
+    )
+    for target in targets:
         assert (target in rendered) is ignored, target
 
 
