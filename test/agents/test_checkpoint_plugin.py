@@ -92,11 +92,37 @@ const ended = { type: "session.compaction.ended", data: { sessionID: session } }
 const failed = { type: "session.compaction.failed", data: { sessionID: session } }
 
 const cases = {
-  // 成功した圧縮だけが印を置く。
+  // 成功した圧縮で、その回に記録を保存できていれば印を置く。
   "watch-ended": async () => {
+    const ctx = makeCtx([ended])
+    await ctx.storage.set(plugin.savedKey(session), { at: "x" })
+    await plugin.watchCompaction(ctx)
+    return dump(ctx)
+  },
+  // 記録を保存できなかった圧縮では、成功しても印を置かない。
+  "watch-ended-without-record": async () => {
     const ctx = makeCtx([ended])
     await plugin.watchCompaction(ctx)
     return dump(ctx)
+  },
+  // 生成に失敗した圧縮の後は、以前の記録を注入しない (通しの流れ)。
+  "failed-generation-then-ended": async () => {
+    const ctx = makeCtx([ended], [])
+    await ctx.storage.set(plugin.savedKey(session), { at: "前回の圧縮" })
+    await plugin.onCompaction(ctx, { sessionID: session }, cwd)
+    await plugin.watchCompaction(ctx)
+    const event = { sessionID: session, system: [], messages: [{ role: "user" }] }
+    await plugin.onContext(ctx, event, cwd)
+    return dump(ctx, event)
+  },
+  // 生成に成功した圧縮の後は注入する (通しの流れ)。
+  "generated-then-ended": async () => {
+    const ctx = makeCtx([ended], [BODY])
+    await plugin.onCompaction(ctx, { sessionID: session }, cwd)
+    await plugin.watchCompaction(ctx)
+    const event = { sessionID: session, system: [], messages: [{ role: "user" }] }
+    await plugin.onContext(ctx, event, cwd)
+    return dump(ctx, event)
   },
   // 失敗や無関係なイベントでは置かない。
   "watch-others": async () => {
@@ -297,6 +323,32 @@ def test_only_a_completed_compaction_sets_the_marker(call):
     assert call("watch-ended")["keys"] == [f"pending:{SESSION}"]
 
 
+def test_a_compaction_without_a_saved_record_sets_no_marker(call):
+    """記録を保存できなかった回は、圧縮が成功しても注入の印を置かない。"""
+    assert call("watch-ended-without-record")["keys"] == []
+
+
+def test_a_failed_generation_does_not_inject_an_older_record(call, repo):
+    """★生成に失敗して標準の要約に戻った回に、以前の記録を渡さない。
+
+    以前は保存先に残る古い記録を「圧縮前に保存した引き継ぎ」として注入していた。
+    """
+    seed(repo, SESSION, record(SESSION, "OLDRECORD"))
+
+    result = call("failed-generation-then-ended")
+
+    assert result["summary"] is None
+    assert result["system"] == []
+    assert result["keys"] == []
+
+
+def test_a_generated_record_is_injected_after_the_compaction(call):
+    result = call("generated-then-ended")
+    assert len(result["system"]) == 1
+    assert GENERATED in result["system"][0]
+    assert result["keys"] == []
+
+
 def test_failed_or_unrelated_events_set_nothing(call):
     """★失敗した圧縮で印を置かないこと。
 
@@ -334,7 +386,8 @@ def test_the_record_is_generated_and_becomes_the_summary(call, repo):
     # 要約と保存した記録は同じもの
     saved = Path(resolve(repo, SESSION)["checkpoint"]).read_text(encoding="utf-8")
     assert summary == saved
-    assert result["keys"] == []
+    # 注入の印は圧縮の成功イベントで置く。ここでは「保存できた」印だけ
+    assert result["keys"] == [f"saved:{SESSION}"]
 
 
 def test_an_empty_generation_is_retried_once(call):

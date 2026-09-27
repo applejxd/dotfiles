@@ -36,7 +36,7 @@ hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた（旧構成�
 | 口 | いつ | すること |
 | --- | --- | --- |
 | `session.hook("compaction")` | 圧縮の LLM 要求を組み立てるとき | 機械節を書き、`session.generate` で 6 節を生成して保存し、`e.result` に入れる |
-| `ctx.event.subscribe()` | `session.compaction.ended` が流れたとき | `ctx.storage` に印を置く |
+| `ctx.event.subscribe()` | `session.compaction.ended` が流れたとき | その回に記録を保存できていれば `ctx.storage` に印を置く |
 | `session.hook("context")` | 毎要求 | 印があれば `checkpoint.py read` の出力を `event.system` へ入れる。ユーザの手番なら印を消す |
 
 **圧縮の要約と引き継ぎは同じ成果物にする。** 別々に持つと必ず片方が古くなる
@@ -54,6 +54,10 @@ hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた（旧構成�
 上流（v2.0.14 `packages/core/src/session/compaction.ts`）では、この門番が
 `prepare` より前にあり `Failed` を publish して返る。`Ended` は成功経路でしか
 出ない。**だから印は `Ended` にだけ結び付ける。**
+
+ただし `Ended` だけでは、生成に失敗して標準の要約に戻った回も区別できない。
+圧縮フックは記録を保存して要約に採用できたときだけ `saved:<セッション>` を置き、
+`Ended` はそれがあるときだけ注入の印に変える。
 
 設計上の約束:
 
@@ -230,6 +234,7 @@ OpenCode 標準の動作に任せる。壊れた・古い引き継ぎを要約�
 | 生成物が `lint --headings-only` に通らない | 空と同じく 1 度だけ引き直す。2 回とも通らなければ捨てる。保存せず `e.result` も設定しない → OpenCode 標準の要約 |
 | `write` が失敗する | `e.result` を設定しない。**残っていた古い記録を要約に採用しない** |
 | 読み直した記録に生成した本文が無い | `e.result` を設定しない |
+| 上のどれかで記録を採用しなかった | 圧縮が成功しても注入の印を置かない。**以前の記録を「圧縮前に保存した引き継ぎ」として渡さない** |
 | 注入時に記録が無い・持ち主が違う | 何も注入しない。印は残す |
 
 **受け入れ判定は CLI の `lint` にだけ置く。** plugin はヘッダを付けた記録を

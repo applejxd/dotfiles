@@ -15,6 +15,11 @@ const TEMPLATE = join(SKILL, "references/checkpoint-template.md")
 // 紐づくので、キーにセッション ID を含める。
 export const key = (sessionID) => `pending:${sessionID}`
 
+// この回の圧縮で記録を保存して要約に採用できたことを示す印。
+// ★これが無い圧縮では注入しない。生成に失敗して標準の要約に戻った回に、
+//   以前の記録を「圧縮前に保存した引き継ぎ」として渡してしまうため。
+export const savedKey = (sessionID) => `saved:${sessionID}`
+
 // 圧縮が**成功した**ことを知らせるイベント。
 // ★上流 (v2.0.14 packages/core/src/session/compaction.ts) では
 //   "Nothing to compact yet" の門番が prepare より前にあり、そこでは Failed を
@@ -88,6 +93,8 @@ export async function onCompaction(ctx, e, cwd) {
   if (BUSY.has(e.sessionID)) return
   BUSY.add(e.sessionID)
   try {
+    // 前回の圧縮の印を持ち越さない。今回保存できたときだけ置き直す。
+    await ctx.storage.remove(savedKey(e.sessionID))
     // ★generate は会話履歴が見えている (実測)。材料を詰め直す必要は無い。
     // ★空文字が返ることがある (実測)。lint に通らない生成と合わせて 1 度だけ引き直す。
     let body = ""
@@ -130,6 +137,7 @@ export async function onCompaction(ctx, e, cwd) {
     // 圧縮の要約そのものを引き継ぎにする。別々に持つと必ず片方が古くなる。
     // ★result を設定すると OpenCode は自前の要約生成を飛ばす (実測)。
     e.result = { summary }
+    await ctx.storage.set(savedKey(e.sessionID), { at: new Date().toISOString() })
   } catch {
     // 握りつぶす。result を設定しなければ OpenCode の要約に戻るだけ。
   } finally {
@@ -137,7 +145,7 @@ export async function onCompaction(ctx, e, cwd) {
   }
 }
 
-// 圧縮が成功したときだけ印を置く。
+// 圧縮が成功し、かつその回に記録を保存できたときだけ印を置く。
 // ★subscribe の引数は**イベント名ではない**。上流 v2.0.14 の
 //   packages/client/src/shared-events.ts では
 //   `subscribe(options?: SubscribeOptions): AsyncIterable<A>` で、
@@ -151,6 +159,8 @@ export async function watchCompaction(ctx) {
       if (event?.type !== ENDED) continue
       const sessionID = event.data?.sessionID
       if (!sessionID) continue
+      if (!(await ctx.storage.get(savedKey(sessionID)))) continue
+      await ctx.storage.remove(savedKey(sessionID))
       await ctx.storage.set(key(sessionID), { at: new Date().toISOString() })
     }
   } catch {
