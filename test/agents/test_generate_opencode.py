@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -255,9 +256,69 @@ def test_read_deny_covers_expanded_home_paths(path):
     """``grep`` / ``glob`` の結果には**展開済みの絶対パス**しか載らない。
 
     ``~`` のままの正規表現だけだと一度も当たらず、保護が丸ごと抜ける。
+    plugin は照合の前に ``\\`` を ``/`` へ揃えるので、ここでも揃える。
     """
     pats = [re.compile(p) for p in gen.build_opencode_guide({}, COMMON)["read_deny"]]
-    assert any(p.search(path) for p in pats), path
+    normalized = path.replace("\\", "/")
+    assert any(p.search(normalized) for p in pats), path
+
+
+WINDOWS_GREP = "\n".join(
+    [
+        "Found 5 matches",
+        "C:\\Users\\tester\\.ssh\\id_ed25519:",
+        "  Line 1: secret",
+        "C:/Users/tester/.claude.json:",
+        "  Line 2: secret",
+        "C:\\USERS\\TESTER\\.SSH\\config:",
+        "  Line 3: secret",
+        "\\\\server\\share\\.ssh\\known_hosts:",
+        "  Line 4: secret",
+        "C:\\Users\\tester\\proj\\README.md:",
+        "  Line 5: ok",
+    ]
+)
+
+
+def test_windows_grep_results_drop_protected_files(guide_js_windows):
+    """Windows の grep は ``C:\\...`` の見出しで返る。区切り・大小文字・UNC を問わず伏せる。"""
+    [out] = guide_js_windows("filterGrep", [WINDOWS_GREP])
+    assert out["count"] == 1, out
+    assert "secret" not in out["text"], out["text"]
+    assert "README.md" in out["text"]
+    assert out["text"].startswith("Found 1 matches")
+
+
+def test_windows_glob_results_drop_protected_files(guide_js_windows):
+    listing = "\n".join(
+        [
+            "C:\\Users\\tester\\.ssh\\id_rsa",
+            "C:\\Users\\tester\\.claude.json",
+            "C:\\Users\\tester\\proj\\certs\\server.key",
+            "C:\\Users\\tester\\proj\\src\\main.py",
+        ]
+    )
+    [out] = guide_js_windows("filterGlob", [listing])
+    assert out["count"] == 1, out
+    assert out["text"].strip() == "C:\\Users\\tester\\proj\\src\\main.py"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "type C:\\Users\\tester\\.ssh\\id_ed25519",
+        "Get-Content C:/Users/tester/.claude.json",
+        "cat .ssh\\id_rsa",
+    ],
+)
+def test_windows_commands_touching_protected_paths_are_detected(guide_js_windows, command):
+    [token] = guide_js_windows("deniedPathIn", [command])
+    assert token, command
+
+
+def test_windows_ordinary_paths_are_left_alone(guide_js_windows):
+    commands = ["type C:\\Users\\tester\\proj\\README.md", "dir src\\lib"]
+    assert guide_js_windows("deniedPathIn", commands) == [None, None]
 
 
 @pytest.mark.parametrize(
@@ -301,17 +362,22 @@ def test_only_all_allow_agents_are_treated_as_bypass():
 # see docs/research/opencode/permission/output-filter-and-subagents.md
 
 
-@pytest.fixture(scope="module")
-def guide_js(tmp_path_factory):
+def _load_guide_js(work: Path, rules: dict, *, windows: bool = False):
+    """guide plugin を node で読み込み、内部の関数を呼べるようにする。
+
+    ``windows=True`` なら ``process.platform`` を ``win32`` に差し替えてから読む
+    (plugin は読み込み時に OS を見る)。
+    """
     node = shutil.which("node")
     if not node:
         pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
-    work = tmp_path_factory.mktemp("guide-js")
     src = (ROOT / "home/dot_config/opencode/guide-plugin/index.js").read_text("utf-8")
-    (work / "mod.mjs").write_text(src + "\nexport { redact, deniedPathIn }\n", "utf-8")
-    (work / "rules.json").write_text(
-        json.dumps(gen.build_opencode_guide({}, COMMON)), "utf-8"
+    prelude = (
+        'Object.defineProperty(process, "platform", { value: "win32" })\n' if windows else ""
     )
+    exports = "\nexport { redact, deniedPathIn, filterGrep, filterGlob }\n"
+    (work / "mod.mjs").write_text(prelude + src + exports, "utf-8")
+    (work / "rules.json").write_text(json.dumps(rules), "utf-8")
     (work / "run.mjs").write_text(
         "import * as m from './mod.mjs'\n"
         "const [fn, args] = JSON.parse(process.argv[2])\n"
@@ -330,6 +396,24 @@ def guide_js(tmp_path_factory):
         return json.loads(done.stdout)
 
     return call
+
+
+@pytest.fixture(scope="module")
+def guide_js(tmp_path_factory):
+    work = tmp_path_factory.mktemp("guide-js")
+    return _load_guide_js(work, gen.build_opencode_guide({}, COMMON))
+
+
+WINDOWS_HOME = "C:\\Users\\tester"
+
+
+@pytest.fixture(scope="module")
+def guide_js_windows(tmp_path_factory):
+    """Windows の機械で生成・実行したときの plugin。ホームは C:\\Users\\tester。"""
+    work = tmp_path_factory.mktemp("guide-js-win")
+    with mock.patch.object(gen, "expand_user", lambda p: p.replace("~", WINDOWS_HOME, 1)):
+        rules = gen.build_opencode_guide({}, COMMON)
+    return _load_guide_js(work, rules, windows=True)
 
 
 SECRET_SHAPES = [

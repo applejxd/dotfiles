@@ -198,7 +198,9 @@ def test_copilot_sandbox_expands_to_absolute_paths():
     denied = fs["deniedPaths"]
     assert denied, "deniedPaths が空"
     for path in denied:
-        assert path.startswith("/"), f"絶対パスでない: {path}"
+        assert os.path.isabs(path), f"絶対パスでない: {path}"
+        if os.name == "nt":
+            assert "/" not in path, f"区切りが混ざっている: {path}"
         assert "~" not in path, f"チルダが残っている: {path}"
         assert "*" not in path, f"Copilot はワイルドカード非対応: {path}"
 

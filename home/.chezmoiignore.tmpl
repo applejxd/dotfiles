@@ -18,6 +18,10 @@
 # PowerShell プロファイルの実体 (Documents 配下は 1 行のローダーのみ)
 !.config/powershell/
 !.config/powershell/**
+# OpenCode は 314 が Windows にも入れる。permission と guide plugin が無いと保護が無い
+# see docs/spec/agent-permissions.md#windows-での扱い
+!.config/opencode/
+!.config/opencode/**
 .config/tmuxinator/
 .config/tmuxinator/**
 .bash_profile

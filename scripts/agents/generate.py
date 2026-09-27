@@ -343,12 +343,15 @@ def _uniq(seq: list[str]) -> list[str]:
 
 
 def _expand_sandbox_paths(paths: list[str]) -> list[str]:
-    """``~`` を展開し、Copilot が扱えないワイルドカード入りを落とす。"""
-    return [
-        expand_user(path)
-        for path in paths
-        if "*" not in path and "?" not in path
-    ]
+    """``~`` を展開し、Copilot が扱えないワイルドカード入りを落とす。
+
+    Windows では ``C:\\Users\\x/.ssh`` と区切りが混ざるので、OS の形式へ揃える
+    (Copilot の設定例は ``C:\\Users\\...``)。see docs/spec/agent-permissions.md#windows-での扱い
+    """
+    out = [expand_user(path) for path in paths if "*" not in path and "?" not in path]
+    if os.name == "nt":
+        out = [os.path.normpath(path) for path in out]
+    return out
 
 
 # ``[sandbox]`` で使えるキー。命名は **共有 = 無印 / CLI 固有 = CLI 名の接頭辞**
@@ -1226,10 +1229,12 @@ def _home_variants(glob: str) -> list[str]:
     ``grep`` / ``glob`` の結果には**展開済みの絶対パス**が載るので、
     ``~`` のままの正規表現は一度も当たらない。コマンド文字列には
     ``~`` のまま書かれるので、どちらの形も残す。
+    展開した形は ``/`` 区切りに揃える。Windows では ``C:\\Users\\x/.ssh`` と
+    混ざるが、plugin は照合の前に ``\\`` を ``/`` へ揃えるため。
     """
     if not glob.startswith("~/"):
         return [glob]
-    return [glob, expand_user(glob)]
+    return [glob, expand_user(glob).replace("\\", "/")]
 
 
 def opencode_read_deny_regexes(common: dict[str, Any]) -> list[str]:

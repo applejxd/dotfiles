@@ -28,11 +28,15 @@ const SECTIONS = ["Goal", "Constraints", "State", "Evidence", "Next", "Refs"]
 //   誘発しうる。同じセッションで二重に走らせない。
 const BUSY = new Set()
 
+// Windows には python3 が無いことが多い。hook と同じ起動形式に揃える (generate.py の hook_command)
+const PYTHON =
+  process.platform === "win32" ? ["py", ["-3", "-X", "utf8"]] : ["python3", []]
+
 const run = (args, cwd, input) =>
   new Promise((resolve) => {
     const child = execFile(
-      "python3",
-      [CLI, ...args],
+      PYTHON[0],
+      [...PYTHON[1], CLI, ...args],
       { cwd, timeout: 20_000 },
       (err, stdout) => resolve(err ? null : stdout),
     )

@@ -26,8 +26,18 @@ const bypass = new Set(rules.bypass_agents ?? [])
 // パターンは read の deny glob から生成している (単一ソース)。
 // ★/g を付けないこと。lastIndex が残って .test() が交互に false を返す。
 // see docs/research/opencode/permission/gaps.md
-const readDeny = (rules.read_deny ?? []).map((p) => new RegExp(p))
-const denied = (path) => readDeny.some((re) => re.test(path))
+// パターンは / 区切り。Windows の結果は C:\... で返り、大小文字も区別しないので揃えてから当てる
+const WINDOWS = process.platform === "win32"
+const toSlash = (path) => path.replace(/\\/g, "/")
+const pathRegExp = (p) => new RegExp(p, WINDOWS ? "i" : "")
+const readDeny = (rules.read_deny ?? []).map(pathRegExp)
+const denied = (path) => {
+  const p = toSlash(path)
+  return readDeny.some((re) => re.test(p))
+}
+
+// grep の塊の見出し。POSIX の絶対パス、ドライブ付き (C:\ / C:/)、UNC (\\server) を認める
+const GREP_HEAD = /^((?:\/|[A-Za-z]:[\\/]|\\\\).*):$/
 
 // grep の本文は "Found N matches" + ファイルごとの塊。
 // 件数ヘッダを直さないと「存在だけ漏れる」うえ結果と矛盾する。
@@ -44,7 +54,7 @@ function filterGrep(text) {
   let keep = true
   for (; i < lines.length; i++) {
     const line = lines[i]
-    const head = /^(\/.*):$/.exec(line)
+    const head = GREP_HEAD.exec(line)
     if (head) {
       keep = !denied(head[1])
       if (keep) kept.push(line)
@@ -82,7 +92,7 @@ const redactRules = (rules.redact?.rule ?? []).map((r) => ({
   name: r.name,
   re: new RegExp(r.pattern, "gi"),
 }))
-const denyPath = (rules.redact?.deny_path ?? []).map((p) => new RegExp(p))
+const denyPath = (rules.redact?.deny_path ?? []).map(pathRegExp)
 // 保護パス名を「文章として」書いたときの誤爆を外す (git commit -m など)。
 // /g を付けないこと。lastIndex が残って .test() が交互に false を返す。
 const denyPathUnless = rules.redact?.deny_path_unless
@@ -96,14 +106,15 @@ function redact(text) {
   return out
 }
 
-// コマンド中の「パスらしい語」だけを見る。/ も ~ も . も無い語は単なる
+// コマンド中の「パスらしい語」だけを見る。区切り (/ \) も ~ も . も無い語は単なる
 // 検索語なので外す (grep secret docs/ で出力を丸ごと伏せないため)。
 function deniedPathIn(command) {
   if (denyPathUnless && denyPathUnless.test(command)) return null
   for (const token of command.split(/[\s;|&<>()"'`]+/)) {
     if (!token) continue
-    if (!token.includes("/") && !token.startsWith("~") && !token.startsWith(".")) continue
-    if (denyPath.some((re) => re.test(token))) return token
+    if (!/[/\\]/.test(token) && !token.startsWith("~") && !token.startsWith(".")) continue
+    const p = toSlash(token)
+    if (denyPath.some((re) => re.test(p))) return token
   }
   return null
 }

@@ -29,10 +29,12 @@ def chezmoi_bin() -> str:
     return chezmoi
 
 
-def render(*, home: str, username: str = "applejxd", bw_session: str = "") -> set[str]:
+def render(
+    *, home: str, username: str = "applejxd", bw_session: str = "", os_name: str = "linux"
+) -> set[str]:
     context = {
         "chezmoi": {
-            "os": "linux",
+            "os": os_name,
             "username": username,
             "homeDir": home,
             "kernel": {"osrelease": "Linux"},
@@ -86,6 +88,21 @@ def test_bitwarden_targets_are_expanded_only_once(tmp_path, target):
 def test_bitwarden_targets_are_personal_only(tmp_path, target):
     """個人 PC 以外では Bitwarden 由来のファイルを置かない。"""
     assert target in render(home=str(tmp_path), username="other", bw_session="dummy")
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["!.config/opencode/", "!.config/opencode/**"],
+)
+def test_opencode_config_is_deployed_on_windows(tmp_path, target):
+    """Windows でも OpenCode の permission と guide plugin を配る。
+
+    314 が OpenCode を入れるのに設定が .config/* の除外に巻き込まれると、
+    読み取り禁止も shell の制限も効かないまま動く。
+    """
+    rendered = render(home=str(tmp_path), os_name="windows")
+    assert ".config/*" in rendered
+    assert target in rendered
 
 
 def render_config(*, path_dir: Path | None = None) -> str:

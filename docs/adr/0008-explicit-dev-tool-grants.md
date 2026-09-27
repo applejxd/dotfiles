@@ -165,6 +165,9 @@ EROFS で失敗し、その都度「sandbox が壊れている」ところから
   明示した許可は自動付与の有無に関わらず効く
 - `allowDevToolAccess` は `/sandbox config` の TUI からも切り替えられるが、
   `chezmoi apply` で `common.toml` の値に戻る。手で変えた設定は残らない
+- 実測は Linux のもの。Windows の Copilot の sandbox は Insiders ビルドが要り、
+  パス単位の deny も版次第なので、ここでの保証は Windows には及ばない
+  （[Windows での扱い](../spec/agent-permissions.md#windows-での扱い)）
 
 ## 関連 ADR
 

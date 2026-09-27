@@ -2226,6 +2226,29 @@ bypass パターンを hook が確実に block することを保証している
 description に「単なる .pptx のテキスト抽出や軽微な一語置換には使わない」と
 明示してあり、抽出・軽微修正は後者が担当する。
 
+## Windows での扱い
+
+Windows native では、CLI ごとに OS レベルの保護の有無が違う。
+**Windows 11 の実機では確かめていない**（2026-09-27 時点。GitHub Actions の
+Windows Server でテストを回したのと、上流のソース・公式資料を読んだのが根拠）。
+
+| CLI | 何が効くか |
+| --- | --- |
+| Claude Code | `permissions` と hook は効く。**sandbox は native Windows 非対応**（公式は macOS・Linux・WSL2 のみ）。`settings.json` に `denyRead` を書いても OS では強制されない |
+| Copilot CLI | `permissions-config.json` と hook は効く。sandbox は **Windows Insiders ビルドが必要**で、パス単位の deny は CLI と同梱の MXC の版次第（changelog 1.0.76 は「Windows cannot deny per path」、上流の MXC には deny 対応の判定がある）。`deniedPaths` は Windows では `C:\Users\...` の形に揃えて出す |
+| OpenCode | `opencode.json` の permission と guide plugin が効く |
+
+OpenCode は `310_packages/314_agent_cli` が Windows にも入れるので、`.chezmoiignore.tmpl`
+の `.config/*` の除外から `.config/opencode/` を外している。以前は外しておらず、
+Windows の OpenCode は読み取り禁止も shell の制限も無いまま動いていた。
+
+Windows の OpenCode は grep / glob の結果を `C:\...`（Node の `path.resolve()`）で返す。
+guide plugin は読み取り禁止の正規表現（`/` 区切り）を当てる前に `\` を `/` へ揃え、
+Windows では大小文字を区別しない。grep の見出しはドライブ付き・UNC も認め、
+shell のコマンド中の `\` 区切りのパスも候補にする。生成側（`_home_variants`）も
+`~` を展開した形を `/` 区切りに揃える。permission の read の deny は OpenCode 自身が
+`/` に揃えて照合するので、この問題は無い。
+
 ## 動作確認手順
 
 ### unit test
