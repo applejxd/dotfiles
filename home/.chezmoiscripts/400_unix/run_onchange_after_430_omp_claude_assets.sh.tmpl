@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# omp が後から入ったら 1 回走り直すための印 (run_onchange_ は中身が変わらないと再実行されない)
+# omp: {{ if or (stat (joinPath .chezmoi.homeDir ".local/bin/omp")) (lookPath "omp") }}present{{ else }}absent{{ end }}
+
 # omp (oh-my-pi) から、このリポジトリが既に持っている Claude 側の資産を使う。
 #
 # ★`enabledProviders` の既定は空で、**他ツールのユーザ領域は 1 つも読まれない**。

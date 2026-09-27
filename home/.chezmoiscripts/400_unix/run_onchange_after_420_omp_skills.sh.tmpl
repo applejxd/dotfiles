@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# omp が後から入ったら 1 回走り直すための印 (run_onchange_ は中身が変わらないと再実行されない)
+# omp: {{ if or (stat (joinPath .chezmoi.homeDir ".local/bin/omp")) (lookPath "omp") }}present{{ else }}absent{{ end }}
+
 # omp (oh-my-pi) は ~/.claude を設定探索ルートに含むが、**他ツールの
 # ユーザ領域 skills の読み込みは opt-in** で、既定は無効。
 #   skills.enableClaudeUser = false

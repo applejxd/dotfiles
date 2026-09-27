@@ -2,6 +2,7 @@
 
 1. リポジトリ自身への raw URL が実在しないパスを指し、初回導入が 404 で止まった
 2. omp の設定取得に失敗すると空配列とみなし、既存の登録を上書きしていた
+3. omp が後から入っても run_onchange_ の中身が変わらず、設定が一度も入らなかった
 """
 
 from __future__ import annotations
@@ -18,8 +19,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "home"
 SCRIPTS = HOME / ".chezmoiscripts" / "400_unix"
-OMP_SKILLS = SCRIPTS / "run_onchange_after_420_omp_skills.sh"
-OMP_CLAUDE_ASSETS = SCRIPTS / "run_onchange_after_430_omp_claude_assets.sh"
+OMP_SKILLS = SCRIPTS / "run_onchange_after_420_omp_skills.sh.tmpl"
+OMP_CLAUDE_ASSETS = SCRIPTS / "run_onchange_after_430_omp_claude_assets.sh.tmpl"
 
 SELF_URL = re.compile(
     r"(?:raw\.githubusercontent\.com/applejxd/dotfiles"
@@ -233,3 +234,36 @@ def test_omp_claude_assets_skips_when_enabled(tmp_path, existing):
     )
     assert result.returncode == 0, result.stderr
     assert "enabledProviders" not in sets
+
+
+@pytest.mark.parametrize("script", [OMP_SKILLS, OMP_CLAUDE_ASSETS], ids=lambda p: p.name[:30])
+def test_omp_scripts_rerun_once_omp_appears(tmp_path, script):
+    """omp の有無で描画結果が変わること。変わらないと後から入れた omp を拾えない。"""
+    chezmoi = shutil.which("chezmoi")
+    if chezmoi is None:
+        pytest.skip("chezmoi が無い")
+    home = tmp_path / "home"
+    home.mkdir()
+
+    def render() -> str:
+        env = {**os.environ, "HOME": str(home), "PATH": "/usr/bin:/bin"}
+        result = subprocess.run(
+            [chezmoi, "--source", str(ROOT), "execute-template"],
+            input=script.read_text(encoding="utf-8"),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+            check=True,
+        )
+        return result.stdout
+
+    absent = render()
+    omp = home / ".local" / "bin" / "omp"
+    omp.parent.mkdir(parents=True)
+    omp.write_text("#!/bin/sh\n", encoding="utf-8")
+    omp.chmod(0o755)
+    present = render()
+
+    assert "# omp: absent" in absent
+    assert "# omp: present" in present
