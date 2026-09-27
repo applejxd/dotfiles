@@ -16,12 +16,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$loader = @(
-  '# $PROFILE ローダー。設定の実体は ~/.config/powershell/profile.ps1 にある。',
-  '# chezmoi の展開先と揃えるため、$HOME ではなく chezmoi が解決したホームを使う',
-  '# (ドメイン参加機では $HOME が %USERPROFILE% と一致しないことがある)。',
-  '. "{{ .chezmoi.homeDir }}/.config/powershell/profile.ps1"'
-) -join [Environment]::NewLine
+$loader = (@'
+{{ includeTemplate "powershell/profile-loader.ps1" . | trim }}
+'@ -split '\r?\n') -join [Environment]::NewLine
 
 function Test-LoaderContent {
   param([Parameter(Mandatory)][string]$Path)

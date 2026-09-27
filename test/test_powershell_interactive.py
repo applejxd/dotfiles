@@ -30,7 +30,8 @@ Get-PSReadLineKeyHandler -Bound |
     ForEach-Object { $chords[$_.Key] = $_.Function }
 # pure テーマは前景色だけを使う。既定テーマは背景色 (48;2;) の powerline になる。
 $promptUsesBackgroundColor = (prompt) -match "$([char]27)\[[0-9;]*48;2;"
-$functions = @('pbcopy', 'pwgen', 'ccd', 'xg', 'xf', 'sshf', 'wslls', 'dls' |
+$functions = @(
+    'pbcopy', 'pwgen', 'ccd', 'xg', 'xf', 'sshf', 'wslls', 'dls', 'Get-CachedInitScript' |
     Where-Object { Get-Command $_ -CommandType Function -ErrorAction Ignore })
 $optional = @{}
 foreach ($tool in 'ghq', 'z') {
@@ -142,9 +143,10 @@ def test_deployed_profile_in_interactive_terminal(shell: str, tmp_path: Path):
         assert {"chezmoi.exe", "mise.exe", "uv.exe", "fzf.exe"} <= set(result["commands"])
         assert {"PSReadLine", "ZLocation"} <= set(result["modules"])
         # プロファイルが定義する補助コマンドが対話セッションに揃っていること
-        assert {"pbcopy", "pwgen", "ccd", "xg", "xf", "sshf", "wslls", "dls"} <= set(
-            result["functions"]
-        )
+        # (分割したファイルを dot-source しても、定義がグローバルに残ること)
+        assert {
+            "pbcopy", "pwgen", "ccd", "xg", "xf", "sshf", "wslls", "dls", "Get-CachedInitScript"
+        } <= set(result["functions"])
         # oh-my-posh がプロンプトを差し替えていること
         # (prompt 関数自体は ZLocation が更に包むため、モジュールの有無で確認する)
         assert "oh-my-posh-core" in set(result["modules"])

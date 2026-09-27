@@ -108,16 +108,24 @@ def test_windows_shell_helpers_handle_selection_safely():
     assert "$uid = [int]" in wsl
 
 
+PROFILE_LOADER_INCLUDE = '{{ includeTemplate "powershell/profile-loader.ps1" . | trim }}'
+
+
 def test_profile_loaders_only_dot_source_the_shared_profile():
     """Documents 配下はローダーに保ち、実体は ~/.config/powershell に置く。"""
+    template = (
+        ROOT / "home/.chezmoitemplates/powershell/profile-loader.ps1"
+    ).read_text(encoding="utf-8")
+    # PowerShell の $HOME は HOMEDRIVE+HOMEPATH 由来で、ドメイン参加機では
+    # chezmoi の ~ (%USERPROFILE%) と一致しないことがある
+    assert "$HOME" not in strip_comments(template)
+    assert '. "{{ .chezmoi.homeDir }}/.config/powershell/profile.ps1"' in template
     for host_directory in ("PowerShell", "WindowsPowerShell"):
         loader_directory = ROOT / "home" / "Documents" / host_directory
         assert not (loader_directory / "profile.ps1").exists()
         loader = (loader_directory / "profile.ps1.tmpl").read_text(encoding="utf-8-sig")
-        # PowerShell の $HOME は HOMEDRIVE+HOMEPATH 由来で、ドメイン参加機では
-        # chezmoi の ~ (%USERPROFILE%) と一致しないことがある
-        assert "$HOME" not in strip_comments(loader)
-        assert '. "{{ .chezmoi.homeDir }}/.config/powershell/profile.ps1"' in loader
+        # 本文は run_after_345 と共有し、Documents 側に独自のコードを持たない
+        assert loader == PROFILE_LOADER_INCLUDE + "\n"
 
 
 def test_powershell_profile_activates_mise():
@@ -179,18 +187,29 @@ def test_powershell_profile_avoids_slow_cmdlets_before_the_interactive_guard():
     template = (
         ROOT / "home/.chezmoitemplates/powershell/git-config-env.ps1"
     ).read_text(encoding="utf-8-sig")
-    head = strip_comments(split_at_interactive_guard(profile)[0] + template)
+    cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
+    head = strip_comments(split_at_interactive_guard(profile)[0] + template + cache)
 
     for slow in ("New-Object", "Join-Path", "Set-Alias", "Test-Path", "Get-Item ", "Get-Content"):
         assert slow not in head, slow
 
 
-def test_powershell_init_cache_returns_before_running_command_discovery():
-    """キャッシュが有効な間は Get-Command のコマンド探索を走らせない。"""
+def test_init_cache_is_dot_sourced_at_the_top_level():
+    """関数の中で dot-source すると、定義がその関数のスコープに閉じてしまう。"""
     profile = (
         ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
     ).read_text(encoding="utf-8-sig")
-    body = strip_comments(profile).split("function Get-CachedInitScript", 1)[1]
+    head = split_at_interactive_guard(profile)[0]
+
+    dot_source = re.search(r'^\. "\$PSScriptRoot/cache\.ps1"$', head, re.MULTILINE)
+    assert dot_source, "cache.ps1 をトップレベルで読み込んでいない"
+    assert dot_source.start() < profile.index("Get-CachedInitScript -Name")
+
+
+def test_powershell_init_cache_returns_before_running_command_discovery():
+    """キャッシュが有効な間は Get-Command のコマンド探索を走らせない。"""
+    cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
+    body = strip_comments(cache).split("function Get-CachedInitScript", 1)[1]
 
     cache_hit = body.index("return $cacheFile")
     discovery = body.index("Get-Command $CommandName")
@@ -202,33 +221,32 @@ def test_powershell_init_cache_is_written_with_a_bom():
     profile = (
         ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
     ).read_text(encoding="utf-8-sig")
+    cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
 
-    assert "$utf8WithBom = [System.Text.UTF8Encoding]::new($true)" in profile
-    for call in re.findall(r"\[System\.IO\.File\]::WriteAllText\([^)]*\)", profile):
+    assert "$utf8WithBom = [System.Text.UTF8Encoding]::new($true)" in cache
+    for call in re.findall(r"\[System\.IO\.File\]::WriteAllText\([^)]*\)", profile + cache):
         assert "$utf8WithBom" in call, call
 
 
 def test_powershell_init_cache_failure_does_not_skip_activation():
     """キャッシュは最適化であり、保存に失敗しても生成済みの内容を使う。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
 
-    assert "Failed to store the $Name init cache" in profile
-    assert "return $tempFile" in profile
+    assert "Failed to store the $Name init cache" in cache
+    assert "return $tempFile" in cache
     # 本体の設置に成功した後の stamp 書き込み失敗で activate を落とさない
-    assert "Failed to store the $Name cache stamp" in profile
+    assert "Failed to store the $Name cache stamp" in cache
     # 別シェルが書き換え中の stamp は読めないことがある。起動時エラーにしない
-    assert "$stamp = [System.IO.File]::ReadAllText($stampFile)" in profile
-    read_guard = profile.split("$stamp = [System.IO.File]::ReadAllText($stampFile)", 1)[0]
+    assert "$stamp = [System.IO.File]::ReadAllText($stampFile)" in cache
+    read_guard = cache.split("$stamp = [System.IO.File]::ReadAllText($stampFile)", 1)[0]
     assert read_guard.rstrip().endswith("try {")
     # dot-source は .ps1 以外を Application として扱い、実行せずに開こうとする
-    assert '"$Name.$PID.tmp.ps1"' in profile
-    assert '"$Name.*.tmp.ps1"' in profile
+    assert '"$Name.$PID.tmp.ps1"' in cache
+    assert '"$Name.*.tmp.ps1"' in cache
     # 同時起動した別プロセスの書き込み中ファイルを消さない
-    assert "[DateTime]::UtcNow.AddHours(-1)" in profile
+    assert "[DateTime]::UtcNow.AddHours(-1)" in cache
     # LOCALAPPDATA 未定義時に相対パスのキャッシュを作らない
-    assert "[Environment]::GetFolderPath('LocalApplicationData')" in profile
+    assert "[Environment]::GetFolderPath('LocalApplicationData')" in cache
 
 
 def test_oh_my_posh_init_is_not_cached():
@@ -242,9 +260,10 @@ def test_oh_my_posh_init_is_not_cached():
     profile = (
         ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
     ).read_text(encoding="utf-8-sig")
+    cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
 
-    assert "POSH_SESSION_ID" not in profile
-    assert "Get-CachedInitScript" in profile
+    assert "POSH_SESSION_ID" not in profile + cache
+    assert "function Get-CachedInitScript" in cache
     assert "-Name 'oh-my-posh'" not in profile
     assert profile.count("Get-CachedInitScript -Name") == 1
 
@@ -298,13 +317,11 @@ def test_pbcopy_forwards_pipeline_input():
 
 def test_powershell_init_cache_is_keyed_on_the_executable():
     """ツールを更新したらキャッシュを作り直す。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
 
-    assert "$executable.FullName" in profile
-    assert "$executable.Length" in profile
-    assert "$executable.LastWriteTimeUtc.Ticks" in profile
+    assert "$executable.FullName" in cache
+    assert "$executable.Length" in cache
+    assert "$executable.LastWriteTimeUtc.Ticks" in cache
 
 
 def test_fzf_key_handlers_are_registered_from_a_single_place():
@@ -315,13 +332,14 @@ def test_fzf_key_handlers_are_registered_from_a_single_place():
     profile = (
         ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
     ).read_text(encoding="utf-8-sig")
+    cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
 
     assert "Register-EngineEvent" not in fzf
     assert "function Register-FzfKeyHandler" in fzf
     assert profile.count("Register-EngineEvent") == 1
     assert "Register-FzfKeyHandler" in profile
     # 失敗を握り潰さない
-    assert "-ErrorAction SilentlyContinue" not in profile
+    assert "-ErrorAction SilentlyContinue" not in profile + cache
 
 
 def test_profile_loader_is_redeployed_when_documents_is_redirected():
@@ -335,7 +353,8 @@ def test_profile_loader_is_redeployed_when_documents_is_redirected():
 
     assert "[Environment]::GetFolderPath('MyDocuments')" in script
     assert "'PowerShell', 'WindowsPowerShell'" in script
-    assert '. "{{ .chezmoi.homeDir }}/.config/powershell/profile.ps1"' in script
+    # Documents 配下のローダーと同じ本文を書く
+    assert PROFILE_LOADER_INCLUDE in script
     # ローダー本体と同じ内容を書くため、$HOME ではなく chezmoi のホームを使う
     assert "$managedDocuments = Join-Path '{{ .chezmoi.homeDir }}' 'Documents'" in script
     # Set-Content -Encoding utf8 は 5.1 が BOM 付き、7 が BOM 無しを書く。

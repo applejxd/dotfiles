@@ -1,0 +1,4 @@
+# $PROFILE ローダー。設定の実体は ~/.config/powershell/profile.ps1 にある。
+# chezmoi の展開先と揃えるため、$HOME ではなく chezmoi が解決したホームを使う
+# (ドメイン参加機では $HOME が %USERPROFILE% と一致しないことがある)。
+. "{{ .chezmoi.homeDir }}/.config/powershell/profile.ps1"
