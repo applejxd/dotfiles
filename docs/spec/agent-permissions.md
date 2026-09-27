@@ -175,9 +175,11 @@ web 検索があり、OpenCode / Codex では使わない）。書ける値は `
 Codex の重複宣言ガードは `[[mcp]]` が 1 つ以上ないと発火しないので、試験だけ
 合成したソースで確かめている。
 
-**宣言を消しても生成先からは消えない。** `merge_*_mcp` は宣言されたサーバを
-足す・更新するだけで、消えたサーバを刈らない。既に生成された設定から取り除くには
-各 CLI の削除コマンドを使う。
+**宣言を消しても Copilot / OpenCode / Claude の生成先からは消えない。**
+`merge_copilot_mcp` / `merge_opencode_mcp` は宣言されたサーバを足す・更新するだけで、
+消えたサーバを刈らない (Claude も未登録のものを追加するだけ)。既に生成された
+設定から取り除くには各 CLI の削除コマンドを使う。例外は Codex で、
+`modify_config.toml` が管理ブロックごと描き直すので宣言から消せば消える。
 
 **transport 名の違い**: OpenCode は `http` を `remote`、`stdio` を `local` と呼び、
 `command` は実行ファイルと引数を **1 本の配列**で書く (Copilot は `command` と
@@ -192,7 +194,7 @@ MCP の `headers` / `env` に秘密が入りうるため chezmoi 管理外にし
 `add-json` を使うのは、http と stdio を同じ経路で登録できるため。
 
 **適用範囲の非対称性**: この仕組みが揃えるのは「配布する既定値」であって、
-全 CLI の状態の完全同期ではない。宣言から消したサーバは Copilot / Claude の
+全 CLI の状態の完全同期ではない。宣言から消したサーバは Copilot / OpenCode / Claude の
 手元設定からは消えない (Codex は管理ブロックごと再生成するので消える)。
 `chezmoi apply --exclude=scripts` や `chezmoi diff` では Claude の登録だけが
 走らない点も同じ理由による。
@@ -251,13 +253,18 @@ Copilot CLI の `permissions-config.json` は deny / ask を表現できない
 
 ### OpenCode V2 の扱い
 
-OpenCode V2 に sandbox は無い。強制に使えるのは permission リストと
-plugin の 2 つで、`common.toml` の意図はその範囲で表現する。
+この節は**通常起動 (`opencode`)** の扱いを書く。通常起動の OpenCode V2 に
+sandbox は無い。強制に使えるのは permission リストと plugin の 2 つで、
+`common.toml` の意図はその範囲で表現する。
 生成は `generate.py --target opencode-config`。
 
-| 層 | OpenCode での状態 |
+Ubuntu / WSL では OpenCode を丸ごと OS のアクセス制御で囲う**隔離起動 (`ocs`)**
+も併用している。その境界と permission の違いは
+[隔離版 OpenCode](opencode-sandbox.md) が正本。
+
+| 層 | OpenCode (通常起動) での状態 |
 | --- | --- |
-| 0. sandbox | **無い**。OS レベルの強制は効かない（[検討して不採用](../change/0002-opencode-ask-by-default.md)） |
+| 0. sandbox | **無い**。OS レベルの強制は効かない（[検討して不採用](../change/0002-opencode-ask-by-default.md)。隔離起動 `ocs` は別。[隔離版 OpenCode](opencode-sandbox.md)） |
 | 1. permission リスト | `opencode.json` の `permissions`。**既定は `ask`** |
 | 2. hook | plugin の `permission.evaluate` / `tool.execute.*`（`guide-plugin`） |
 
@@ -341,7 +348,7 @@ hook 版との違いが 2 つある。
 | `[file] claude_read_allow` | OpenCode は allow が既定 (`{action:"*", resource:"*", effect:"allow"}`)。同義の規則が増えるだけ |
 | `[claude] mcp_deny` | Claude の `mcp__<server>__<tool>` と OpenCode の `<server>_<tool>` は別体系。機械変換すると実在しない名前を deny したまま気付けない |
 | `[[hooks]]` | Claude の hook 契約とは別物。OpenCode 側は plugin で書く |
-| `[sandbox]` | sandbox が無い (`claude_write_deny` の意図だけ `[file]` 側へ写している) |
+| `[sandbox]` | 通常起動に sandbox が無い (`claude_write_deny` の意図だけ `[file]` 側へ写している)。隔離起動 `ocs` は `[opencode.sandbox]` と `[sandbox] shell_network_allow` を使う ([隔離版 OpenCode](opencode-sandbox.md)) |
 
 #### 既定は `ask`
 
@@ -644,16 +651,17 @@ Claude の allowRead に /mnt・/tmp 系: なし
 | キー | 効く CLI | 用途 |
 | --- | --- | --- |
 | `[sandbox] deny` | 両方 | whitelist の内側でも遮断する秘密情報 (read/write 両方) |
-| `[sandbox] seccomp_apply_path` | 両方 | seccomp の適用バイナリ |
+| `[sandbox] seccomp_apply_path` | Claude | seccomp の適用バイナリ |
 | `[sandbox] claude_read_allow` | Claude | whitelist に開ける読み取りの穴 |
 | `[sandbox] claude_write_allow` | Claude | cwd + temp 以外に書き込みを許す場所 |
 | `[sandbox] claude_write_deny` | Claude | read は許すが write を禁止する対象。`deny` に**追加**される |
-| `[sandbox] shell_network_allow` | Claude | shell が実際に通信する先 (CDN 等) |
+| `[sandbox] shell_network_allow` | Claude・隔離版 OpenCode | shell が実際に通信する先 (CDN 等) |
 | `[sandbox] claude_network_strict` | Claude | 許可外ドメインを拒否する (v2.1.219+) |
 | `[sandbox] copilot_read_allow` | Copilot | Copilot が読める場所 (whitelist の本体) |
 | `[sandbox] copilot_write_allow` | Copilot | 同上の書き込み |
 | `[sandbox] copilot_allow_dev_tool_access` | Copilot | 開発ツールの自動許可。`false` 固定 |
-| `[file] claude_*` (5 キー) | Claude | `Read()` / `Edit()` の allow / ask / deny |
+| `[file] claude_read_allow` | Claude | `Read()` の allow |
+| `[file] read_ask_globs` / `write_ask_globs` / `read_deny_globs` / `write_deny_globs` | Claude・OpenCode (Copilot は `read_deny_globs` のみ) | Claude の `Read()` / `Edit()`、OpenCode の `read` / `edit` の ask / deny。Copilot は `check_file_read.py` が view へ適用 |
 | `[bash] allow` / `ask` / `deny` | 両方 | ただし粒度が違う |
 
 無印は「両 CLI に効く」を意味する。**片方にしか渡らない設定を無印で足しては
@@ -720,7 +728,9 @@ Claude の `denyRead` は `~/` 配下しか塞いでいないため。
 
 ##### Step 6. 根拠を書き、テストで固定する
 
-`common.toml` のコメントに **実測値**と**何が壊れたか**を残す。
+`common.toml.tmpl` のコメントには **その値を足す/消すときの制約** と参照先
+(`see docs/spec/agent-permissions.md 「<見出し>」`) だけを残す。**実測値**と
+**何が壊れたか**はこの文書の該当節へ書く ([コメントの書き分け](#コメントの書き分け))。
 `test/agents/test_generate_sandbox.py` に、そのパスが期待どおりの権限で
 生成されることと、**write を与えていない**ことを固定する。
 
@@ -1053,7 +1063,7 @@ sandbox は `sandbox.enabled = true` のみを設定し、`autoAllowBashIfSandbo
 | 許可外の扱い | **承認プロンプト** (既定) | 単純に不可 |
 
 `common.toml` の `[web] allow_domains` (WebFetch 用のドキュメントサイト) と
-`[sandbox] network_allow` (shell が実際に通信する CDN 等) を合算したものが
+`[sandbox] shell_network_allow` (shell が実際に通信する CDN 等) を合算したものが
 Claude の `sandbox.network.allowedDomains` になり、`deny_domains` は
 `deniedDomains` に反映される。2 つに分けているのは役割が違うため:
 前者を増やすと WebFetch の自動承認が広がり、後者を増やすと shell の通信先が
@@ -1071,7 +1081,7 @@ Claude の `sandbox.network.allowedDomains` になり、`deny_domains` は
 
 #### ネットワークも whitelist にしてある (Claude のみ)
 
-`[sandbox] network_strict = true` から `sandbox.network.strictAllowlist` を
+`[sandbox] claude_network_strict = true` から `sandbox.network.strictAllowlist` を
 立てており、**許可外ドメインへの接続は拒否される** (Claude Code v2.1.219 以降が
 必要)。これが無いと許可外は拒否ではなく**承認プロンプト**になる。
 
@@ -1265,9 +1275,10 @@ location, the CLI records the decision here」とある。
 
 #### 5. `/sandbox config` の TUI (Copilot・マシン全体)
 
-Copilot は `readonlyPaths` / `readwritePaths` を **`generate.py` が触らない**
-設計なので、TUI で足した許可はそのまま残る (`chezmoi apply` でも消えない)。
-`deniedPaths` だけが共有の `deny` から再生成される。
+Copilot の `readonlyPaths` / `readwritePaths` は、`generate.py` が既存の値に
+`copilot_read_allow` / `copilot_write_allow` を**合算**して書く (既存分は消さない)。
+そのため TUI で足した許可はそのまま残る (`chezmoi apply` でも消えない)。
+`deniedPaths` だけは共有の `deny` で**置き換え**て再生成する。
 
 #### 6. 一時的に 1 セッションだけ
 
@@ -1911,8 +1922,8 @@ Copilot ではそのコマンドが丸ごと無防備になる。
 
 | 影響範囲 | 扱い | 例 |
 | --- | --- | --- |
-| プロジェクト内で完結 | **未掲載** (LLM 判定に委ねる) | `uv add` / `uv remove` / `uv pip install` / `uv sync` / `mise install` / `mise use` (ローカル) / `cmake --build` / `gcc -o build/x` |
-| ホームやシステムに残る | `ask` | `uv tool install` / `uv python install` / `uv self update` / `mise use -g` / `mise settings set` / `mise self-update` / `cmake --install` / `gcc -o /usr/local/bin/x` |
+| プロジェクト内で完結 | **未掲載** (LLM 判定に委ねる)。`uv sync` / `cmake --build` / `gcc` は `allow` | `uv add` / `uv remove` / `uv pip install` / `uv sync` / `mise install` / `mise use` (ローカル) / `cmake --build` / `gcc -o build/x` |
+| ホームやシステムに残る | `ask` | `uv tool install` / `uv python install` / `mise use -g` / `mise settings set` / `cmake --install` / `gcc -o /usr/local/bin/x` |
 | 外部に見える / 認証情報が残る | `ask` | `docker login` / `docker push` / `gh pr create` |
 | ツール自身を置き換える | `deny` | `uv self update` / `mise self-update` / `mise implode` / `rustup self update` / `chezmoi upgrade` / `npm install -g` |
 | root 相当を得られる | `deny` | `sudo` / `docker run --privileged` / `docker run -v /:/host` |
@@ -2291,8 +2302,12 @@ echo '{"tool_input":{"path":"/path/to/foo.py"}}' | bash ~/.claude/hooks/format-f
 ## 新環境セットアップ
 
 1. `chezmoi init --apply <repo>` で全ファイルが配置される
-2. `~/.config/agents/common.toml` を編集して必要な項目を追加
-3. `chezmoi apply` で両 CLI 設定が再生成される
+2. 全マシン共通の項目はリポジトリの `home/dot_config/agents/common.toml.tmpl` へ
+   追加する。配備先の `~/.config/agents/common.toml` は `chezmoi apply` のたびに
+   上書きされるので直接編集しない
+3. このマシンだけの項目は chezmoi 管理外の `~/.config/agents/local.toml` へ書く
+   ([このマシンだけで許可を足す](#このマシンだけで許可を足す-chezmoi-管理に影響を与えない))
+4. `chezmoi apply` で両 CLI 設定が再生成される
 
 なお初回 apply 時、Claude Code が未起動なら `~/.claude/settings.json` は存在しない。
 chezmoi modify_ スクリプトは空 stdin を受けると空オブジェクトとして扱い、common.toml

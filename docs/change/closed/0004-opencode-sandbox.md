@@ -1637,4 +1637,37 @@ OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continu
 
 ## 終了結果
 
-<!-- Done / Abandoned にするとき記入 -->
+**採用・配備済み（2026-09-24）。** Ubuntu / WSL のみ。通常版 `opencode` と**併用**する。
+
+`opencode --standalone` を**プロセスごと** `srt`（`@anthropic-ai/sandbox-runtime`）の
+内側で起動するランチャー `ocs` を置いた。コマンド文字列の検査ではなく、
+「効果が境界の外に出るか」で守る。
+
+- 読み取りは `denyRead: ~` から必要な場所だけを開ける deny-by-default。
+  `/mnt` と `/tmp` 系も塞ぐ
+- ワークスペースは起動ディレクトリ。`deny_read` を打ち消す場所では起動しない（B1）
+- 境界を張れないとき・起動時チェックが判定できないときは起動しない（fail-closed）
+- 安全網・DB・設定を隔離版専用に分ける（`.opencode-sandbox/`、
+  `~/.config/opencode-sandbox`）。セッションは `ocs --handoff` で移す
+- 追加の許可は `.opencode/sandbox.toml` の要求と、境界の外にある承認に分ける
+
+**モデル API の資格情報は境界内に残る**（隔離 DB が引き継ぐ）。
+[明示的な例外として受け入れた](#決定-明示的な例外として受け入れる2026-09-24)。
+規則の総数を減らす当初の目標は未達で、必須基準を安全性へ差し替えた
+（[評価基準](#評価基準)）。
+
+### 反映先
+
+- 仕様: [OpenCode 隔離起動のアーキテクチャ](../../spec/opencode-sandbox.md)、
+  守る範囲は [セキュリティ](../../spec/security.md#ai-エージェントの実行境界ubuntu--wsl)
+- 実装: `home/dot_config/agents/common.toml.tmpl` の `[opencode.sandbox]`、
+  `~/.local/bin/ocs` / `ocs-boundary-check`
+- 観測: [sandbox-runtime の調査記録](../../research/opencode/permission/sandbox-runtime.md)
+
+### 残件
+
+- 既定を `ocs` へ切り替える条件（「完成」の定義）は未定義（[着手順](#着手順2026-09-23-に確定)）
+- A2 / A4 は [CHG-0005](../0005-agents-config-naming.md) 側で保留
+- 未確認の P1-1〜P1-6（[次の調査・実験](#次の調査実験)）と、外部レビューの未対処分
+  （[外部レビュー](#外部レビュー2026-09-23-未対処の欠陥と簡素化の選択肢)）
+- `rules.json` の `sandbox` キーを分離するかは未評価（[当初案と違う形になったもの](#当初案と違う形になったもの)）

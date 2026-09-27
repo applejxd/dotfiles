@@ -21,9 +21,10 @@ Windows 以外、または `pywinpty` 未指定の場合は対話テストをス
 
 プロファイル本体は `~/.config/powershell/profile.ps1` で、`$PROFILE`
 （`Documents/PowerShell` と `Documents/WindowsPowerShell`）は1行のローダーである。
-起動時間の切り分けには `-NoProfile` との差を見る。`mise` / `oh-my-posh` の init は
+起動時間の切り分けには `-NoProfile` との差を見る。`mise` の init は
 `%LOCALAPPDATA%\PowerShellProfileCache` にキャッシュされるため、
-再生成の挙動を試すときはこのディレクトリを削除する。
+再生成の挙動を試すときはこのディレクトリを削除する。`oh-my-posh` の init は
+テーマ設定がセッションごとに登録されるためキャッシュせず、毎起動で実行する。
 
 agent テストの `--no-project` 実行では、スキル frontmatter 検証用の `pyyaml` も必要。
 長大入力のテストには短い ID を付け、Windows の `PYTEST_CURRENT_TEST` 環境変数の

@@ -45,12 +45,12 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 ## 現在有効な状態
 
 - **利用できるもの**: chezmoi による配備、`common.toml` からの権限 / hook / MCP 生成、
-  sops + age による秘密管理、`checkpoint` スキル（手動起動）と圧縮前後の hook
+  sops + age による秘密管理、`checkpoint` スキル（手動起動）と OpenCode の圧縮 plugin
+  （`checkpoint-plugin`。実機の自動圧縮で引き継ぎを確認済み。
+  [CHG-0001](change/closed/0001-compaction-context-handover.md)）
 - **既知の制限・未検証範囲**:
-  - **実機での圧縮試験は未実施**（配備は済んだ。新しいセッションが要る）
   - Windows 実機での検証は未実施（source state は更新済み）
-  - Copilot の圧縮直後の注入は Claude より 1 ツール分遅い（同じターン内には届く）
-  - Copilot では文脈使用率を推定できないため、閾値監視は見送り
+  - 圧縮を跨ぐ引き継ぎは OpenCode V2 のみ。Claude / Copilot 向けの圧縮 hook は撤去した
   - **列挙型の規則では権限境界を作れない。** write deny の 38 glob は shell の
     リダイレクトに一切効いていなかった。保護の主役を OS のアクセス制御へ移す
     （[CHG-0004](change/closed/0004-opencode-sandbox.md)。Ubuntu / WSL のみ）

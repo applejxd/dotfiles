@@ -98,10 +98,6 @@ x64 と arm64 しか受け付けず、`armv7l` を検出すると明示的に終
 64bit の Raspberry Pi OS は `/etc/os-release` が `ID=debian` になるので、
 os-release でも判定できません（`raspbian` は 32bit 版のみ）。
 
-参照側は `{{- if and (hasKey . "is_raspi") .is_raspi }}` の形で書きます。
-`chezmoi init` をし直していないマシンには鍵自体が無いため、
-**鍵の不在を「Raspberry Pi ではない」として扱う**必要があります。
-
 | 対象 | Raspberry Pi での扱い |
 | --- | --- |
 | `100_linux/110_native/`（VS Code と拡張 20 個） | 導入しない |
@@ -263,8 +259,8 @@ user scope に未登録のものだけを対象にし、既存のカスタム設
 ## AI CLI の導入
 
 Claude Code / Copilot CLI / OpenCode V2 は**各社公式のインストーラー**で導入します。
-実体は `home/.chezmoitemplates/agent-cli-install.sh`（Unix 共通の本体）と、
-それを `includeTemplate` する OS 別スクリプトです。
+実体は `home/.chezmoitemplates/agent-cli-install.sh.tmpl`（Unix 共通の本体）と、
+それを `template` で取り込む OS 別スクリプトです。
 
 | OS | スクリプト | Claude Code | Copilot CLI | OpenCode V2 |
 | --- | --- | --- | --- | --- |
@@ -283,9 +279,11 @@ Windows で手段が分かれるのは公式側の制約です。
 
 導入範囲は mise 版から変えていません。Linux / WSL / macOS は 3 つとも、
 Windows は Copilot CLI と OpenCode V2 を導入し、`applejxd` 以外では
-Claude Code も導入します。
+Claude Code も導入します。Linux / WSL / macOS では加えて oh-my-pi (`omp`) も
+公式インストーラーで入れます。
 
 スクリプトは `run_onchange_after_` で、**既に PATH 上にある CLI には触りません**。
+ただし mise の shim（`~/.local/share/mise/shims/` 配下）は導入済みと数えません。
 CLI を足したときだけ内容が変わって再実行され、その CLI だけが入ります。
 毎回ダウンロードしないので apply が遅くなりません。
 
@@ -313,11 +311,17 @@ Copilot のインストーラーは導入先が PATH に無いと、rc ファイ
 
 ### mise 版からの移行
 
-mise が入れた `claude-code` / `copilot` は自動削除しません。
-不要になったので、次で確認してから手で片付けてください。
+Unix（Linux / WSL / macOS）では、`126_agent_cli` / `226_agent_cli` が実行されるたびに
+mise の残骸を自動で削除します。対象は shim の `claude` / `copilot` / `opencode` / `omp` と、
+`installs/` の `claude` / `claude-code` / `copilot` / `opencode` / `omp` です
+（shim が公式版より先に PATH で見つかり、起動を横取りするため。経緯は
+[トラブルシューティング](troubleshooting.md) の「13. AI CLI が mise に…」）。
 
-```bash
-mise ls --installed | grep -E 'claude-code|copilot'
+Windows の `314_agent_cli` は削除しません。mise が入れた `claude-code` / `copilot` が
+残っていれば、次で確認してから手で片付けてください。
+
+```powershell
+mise ls --installed | Select-String 'claude-code|copilot'
 mise uninstall claude-code copilot   # 任意
 mise prune
 ```

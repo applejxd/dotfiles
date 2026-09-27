@@ -13,9 +13,13 @@
 
 | キー | 管理 |
 | --- | --- |
-| `permissions` | `home/dot_config/agents/common.toml.tmpl` から生成（apply で全置換） |
-| `hooks` | 同上。ただし `~/.claude/hooks/` を起動するエントリだけを差し替え、Orca など外部ツールが注入した hook は温存する |
-| `env` / `enabledPlugins` / `includeCoAuthoredBy` | 手動管理（apply では触らず保持） |
+| `permissions` / `sandbox` | `home/dot_config/agents/common.toml.tmpl` から生成（apply で全置換） |
+| `hooks` | 同上。ただし本リポジトリの hook（`.claude/hooks/<名前>` を起動し、`<名前>` が現役または撤去済みの管理スクリプト名に一致するコマンド）だけを差し替え、Orca / herdr など外部ツールの hook は温存する |
+| `env` | 手動管理。例外として `[claude] auto_update` から `DISABLE_AUTOUPDATER` だけを更新する |
+| `enabledPlugins` / `includeCoAuthoredBy` | 手動管理（apply では触らず保持） |
+
+所有権の判定規則は
+[外部ツールとの共存](../../docs/spec/agent-permissions.md#外部ツールとの共存-orca--herdr)。
 
 ## hook の追加手順
 

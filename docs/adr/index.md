@@ -19,7 +19,7 @@ dotfiles は「なぜその形なのか」が失われやすい。
 - 決定を覆す場合は既存 ADR を書き換えず、新しい ADR を起こして
   古い方を `Superseded by` にする
 - テンプレートは `~/.claude/skills/sdd-docs/references/adr-template.md`
-  （作成・更新は `checkpoint` スキルが担う）
+  （作成・更新は `sdd-docs` スキルが担う）
 
 ## 一覧
 

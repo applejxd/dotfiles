@@ -218,28 +218,15 @@ chezmoi 自体はプラグインキャッシュに干渉しないため、手元
 mise run dotfiles-update
 ```
 
-### 手動セットアップ (Linux / WSL2 で Claude Code を使う場合)
+### Claude Code の seccomp フィルタ (Linux / WSL2)
 
-Claude Code の sandbox が使う seccomp フィルタだけは、chezmoi でも mise でも
-導入できないため手で入れる。
+Claude Code の sandbox が使う seccomp フィルタ (`@anthropic-ai/sandbox-runtime`) は
+mise が入れ、導入先は `chezmoi apply` が生成する `~/.claude/settings.json` で Claude に教える。
+手で `npm install -g` する必要はない。導入先が実在するときだけ設定が出るため、
+初回は mise の導入後にもう一度 `chezmoi apply` する。
 
-```bash
-npm install -g @anthropic-ai/sandbox-runtime
-```
-
-- **なぜ mise ではないか**: Claude はこのバイナリを npm のグローバル領域
-  (`npm -g config get prefix` 配下の `lib/node_modules` など) でしか探さない。
-  mise の `npm:` バックエンドはパッケージを独自ディレクトリへ隔離するため
-  検出されない。
-- **なぜ自動化しないか**: `npm install -g` はエージェントに対して
-  `[bash] deny` で禁止している (システム全体を汚すため)。
-- **入れないとどうなるか**: WSL2 では Windows バイナリ (`cmd.exe` や
-  `/mnt/c/...`) の起動が Unix domain socket 経由になるので、フィルタが無いと
-  sandbox 内から Windows 側のプロセスを起動して**脱出できる**。
-  未導入時、Claude は起動時に `apply-seccomp binary not available -
-  unix socket blocking disabled` を表示する。
-
-詳細は [docs/spec/agent-permissions.md](docs/spec/agent-permissions.md) を参照。
+Claude の `/sandbox` の Dependencies タブに不足が出ていなければ導入できている。
+仕組みは [WSL2 での抜け穴 (seccomp フィルタ)](docs/spec/agent-permissions.md#wsl2-での抜け穴-seccomp-フィルタ) を参照。
 
 ## 基本的な使用方法
 
