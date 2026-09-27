@@ -76,11 +76,8 @@ case $- in
 *) return ;;
 esac
 
-if [ ! -e "$HOME"/.bash_it ]; then
-    git clone --depth=1 https://github.com/Bash-it/bash-it.git "$HOME"/.bash_it
-fi
-
 # Path to the bash it configuration
+# clone は chezmoi apply が行う (home/.chezmoiexternal.toml.tmpl)
 export BASH_IT="$HOME/.bash_it"
 
 # Lock and Load a custom theme file.
@@ -155,8 +152,10 @@ export SCM_CHECK=true
 # export BASH_IT_RELOAD_LEGACY=1
 
 # Load Bash It
-# shellcheck source=/dev/null
-source "$BASH_IT"/bash_it.sh
+if [ -f "$BASH_IT"/bash_it.sh ]; then
+    # shellcheck source=/dev/null
+    source "$BASH_IT"/bash_it.sh
+fi
 
 #---------------#
 # common config #

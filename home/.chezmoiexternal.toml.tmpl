@@ -1,0 +1,39 @@
+{{- /* see docs/spec/structure.md#シェルプラグインの取得 */ -}}
+{{- if ne .chezmoi.os "windows" }}
+{{-   $home := .chezmoi.homeDir }}
+# 既に在るパスは宣言しない。宣言すると既存の clone へ git pull が走り、
+# 失敗 (detached HEAD など) すると apply が毎回止まる
+{{-   if not (stat (joinPath $home ".z")) }}
+
+[".z"]
+    type = "git-repo"
+    url = "https://github.com/rupa/z.git"
+    clone.args = ["--depth", "1"]
+{{-   end }}
+{{-   if not (stat (joinPath $home ".zinit/bin")) }}
+
+[".zinit/bin"]
+    type = "git-repo"
+    url = "https://github.com/zdharma-continuum/zinit.git"
+{{-   end }}
+{{-   if not (stat (joinPath $home ".bash_it")) }}
+
+[".bash_it"]
+    type = "git-repo"
+    url = "https://github.com/Bash-it/bash-it.git"
+    clone.args = ["--depth", "1"]
+{{-   end }}
+{{-   if not (stat (joinPath $home ".tmux/plugins/tpm")) }}
+
+[".tmux/plugins/tpm"]
+    type = "git-repo"
+    url = "https://github.com/tmux-plugins/tpm.git"
+    clone.args = ["--depth", "1"]
+{{-   end }}
+{{-   if not (stat (joinPath $home ".vim/colors/iceberg.vim")) }}
+
+[".vim/colors/iceberg.vim"]
+    type = "file"
+    url = "https://raw.githubusercontent.com/cocopon/iceberg.vim/master/colors/iceberg.vim"
+{{-   end }}
+{{- end }}

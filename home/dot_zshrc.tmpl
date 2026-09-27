@@ -39,20 +39,17 @@ fi
 # Plugin manager #
 #----------------#
 
-# Added by Zinit's installer
-if [[ ! -f $HOME/.zinit/bin/zinit.zsh ]]; then
-    print -P "%F{33}▓▒░ %F{220}Installing DHARMA Initiative Plugin Manager (zdharma/zinit)…%f"
-    command mkdir -p "$HOME/.zinit" && command chmod g-rwX "$HOME/.zinit"
-    command git clone https://github.com/zdharma-continuum/zinit "$HOME/.zinit/bin" && \
-        print -P "%F{33}▓▒░ %F{34}Installation successful.%f%b" || \
-        print -P "%F{160}▓▒░ The clone has failed.%f%b"
+# zinit 本体の clone は chezmoi apply が行う (home/.chezmoiexternal.toml.tmpl)
+if [[ -f $HOME/.zinit/bin/zinit.zsh ]]; then
+    # shellcheck source=/dev/null
+    source "$HOME/.zinit/bin/zinit.zsh"
+    autoload -Uz _zinit
+    (( ${+_comps} )) && _comps[zinit]=_zinit
+else
+    print -P "%F{160}zinit が無いためプラグインを読み込みません (chezmoi apply で導入されます)%f"
+    # 以降の zinit 呼び出しを何もしない関数に置き換え、シェルを使える状態に保つ
+    function zinit() { : }
 fi
-
-# shellcheck source=/dev/null
-source "$HOME/.zinit/bin/zinit.zsh"
-autoload -Uz _zinit
-(( ${+_comps} )) && _comps[zinit]=_zinit
-# End of Zinit's installer chunk
 
 #------------#
 # completion #

@@ -1,8 +1,9 @@
-"""`.chezmoiignore.tmpl` と `.chezmoi.toml.tmpl` の描画結果を検証する。
+"""`.chezmoiignore.tmpl` / `.chezmoi.toml.tmpl` / `.chezmoiexternal.toml.tmpl` の
+描画結果を検証する。
 
-どちらも chezmoi が apply の最初に読むファイルで、壊れると apply 全体が
-止まる。環境差 (Bitwarden のセッション、system Python のバージョン) で
-分岐する箇所を、ここで条件ごとに固定する。
+いずれも chezmoi が apply の最初に読むファイルで、壊れると apply 全体が
+止まる。環境差 (Bitwarden のセッション、system Python のバージョン、
+既に clone 済みのプラグイン) で分岐する箇所を、ここで条件ごとに固定する。
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import os
 import shutil
 import stat
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -19,6 +21,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 IGNORE_TEMPLATE = ROOT / "home" / ".chezmoiignore.tmpl"
 CONFIG_TEMPLATE = ROOT / "home" / ".chezmoi.toml.tmpl"
+EXTERNAL_TEMPLATE = ROOT / "home" / ".chezmoiexternal.toml.tmpl"
 BITWARDEN_TARGETS = (".config/git/user", ".config/sops/age/keys.txt")
 
 
@@ -27,6 +30,26 @@ def chezmoi_bin() -> str:
     if chezmoi is None:
         pytest.skip("chezmoi is not installed")
     return chezmoi
+
+
+def execute_with_context(template_path: Path, context: dict, env: dict[str, str]) -> str:
+    """``.chezmoi`` を ``context`` に差し替えてテンプレートを描画する。"""
+    template = (
+        "{{ with " + json.dumps(json.dumps(context)) + " | fromJson }}\n"
+        + template_path.read_text(encoding="utf-8")
+        + "\n{{ end }}"
+    )
+    result = subprocess.run(
+        [chezmoi_bin(), "--source", str(ROOT), "execute-template"],
+        input=template,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
 
 
 def render(
@@ -40,27 +63,13 @@ def render(
             "kernel": {"osrelease": "Linux"},
         }
     }
-    template = (
-        "{{ with " + json.dumps(json.dumps(context)) + " | fromJson }}\n"
-        + IGNORE_TEMPLATE.read_text(encoding="utf-8")
-        + "\n{{ end }}"
-    )
     env = dict(os.environ)
     if bw_session:
         env["BW_SESSION"] = bw_session
     else:
         env.pop("BW_SESSION", None)
-    result = subprocess.run(
-        [chezmoi_bin(), "--source", str(ROOT), "execute-template"],
-        input=template,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-        env=env,
-    )
-    assert result.returncode == 0, result.stderr
-    return {line.strip() for line in result.stdout.splitlines()}
+    rendered = execute_with_context(IGNORE_TEMPLATE, context, env)
+    return {line.strip() for line in rendered.splitlines()}
 
 
 @pytest.mark.parametrize("target", BITWARDEN_TARGETS)
@@ -112,6 +121,66 @@ def test_ocs_launcher_is_linux_only(tmp_path, os_name, ignored):
     """ocs は bwrap で OpenCode を囲うので Ubuntu / WSL 専用 (CHG-0004)。"""
     rendered = render(home=str(tmp_path), os_name=os_name)
     assert (".local/bin/ocs" in rendered) is ignored
+
+
+SHELL_PLUGINS = {
+    ".z": ("git-repo", "https://github.com/rupa/z.git"),
+    ".zinit/bin": ("git-repo", "https://github.com/zdharma-continuum/zinit.git"),
+    ".bash_it": ("git-repo", "https://github.com/Bash-it/bash-it.git"),
+    ".tmux/plugins/tpm": ("git-repo", "https://github.com/tmux-plugins/tpm.git"),
+    ".vim/colors/iceberg.vim": (
+        "file",
+        "https://raw.githubusercontent.com/cocopon/iceberg.vim/master/colors/iceberg.vim",
+    ),
+}
+SHELL_RC_FILES = (
+    "home/dot_config/shell/shellrc.sh.tmpl",
+    "home/dot_zshrc.tmpl",
+    "home/dot_bashrc",
+)
+
+
+def render_external(*, home: Path, os_name: str = "linux") -> dict:
+    context = {"chezmoi": {"os": os_name, "homeDir": str(home)}}
+    return tomllib.loads(execute_with_context(EXTERNAL_TEMPLATE, context, dict(os.environ)))
+
+
+@pytest.mark.parametrize("os_name", ["linux", "darwin"])
+def test_shell_plugins_are_cloned_by_apply(tmp_path, os_name):
+    """シェル起動時に clone していたものを apply 側で取得する。"""
+    externals = render_external(home=tmp_path, os_name=os_name)
+    assert set(externals) == set(SHELL_PLUGINS)
+    for target, (kind, url) in SHELL_PLUGINS.items():
+        assert externals[target]["type"] == kind
+        assert externals[target]["url"] == url
+
+
+def test_shell_plugins_are_not_fetched_on_windows(tmp_path):
+    """Windows native には zsh / bash / tmux の rc を配らない。"""
+    assert render_external(home=tmp_path, os_name="windows") == {}
+
+
+@pytest.mark.parametrize("target", list(SHELL_PLUGINS))
+def test_existing_plugin_paths_are_left_alone(tmp_path, target):
+    """既に在るパスは宣言しない。
+
+    git-repo は既存ディレクトリに初回 apply で git pull を走らせ、
+    失敗 (bash-it update 後の detached HEAD など) すると apply が毎回止まる。
+    ファイルがあれば chezmoi はそれを消した上で pull に失敗する
+    (rupa/z 既定のデータファイル ~/.z が消える)。
+    """
+    path = tmp_path / target
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
+    externals = render_external(home=tmp_path)
+    assert target not in externals
+    assert set(externals) == set(SHELL_PLUGINS) - {target}
+
+
+@pytest.mark.parametrize("rc_file", SHELL_RC_FILES)
+def test_shell_rc_does_not_clone(rc_file):
+    """シェルの起動をネットワークと書き込み失敗に依存させない。"""
+    assert "git clone" not in (ROOT / rc_file).read_text(encoding="utf-8")
 
 
 def render_config(*, path_dir: Path | None = None) -> str:

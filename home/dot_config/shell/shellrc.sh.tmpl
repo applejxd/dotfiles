@@ -43,32 +43,16 @@ fi
 {{- end }}
 
 #---------#
-# Install #
+# Plugins #
 #---------#
 
-# z (rupa/z)
+# z (rupa/z)。clone は chezmoi apply が行う (home/.chezmoiexternal.toml.tmpl)
 # `command -v z` は無関係な z コマンドでも真になるため、z.sh の有無で判定する
 Z_DIR="${HOME}/.z"
-if [ ! -e "$Z_DIR" ]; then
-    git clone --depth 1 https://github.com/rupa/z.git "$Z_DIR"
-fi
 export _Z_DATA="${Z_DIR}/.z"
 if [ -r "${Z_DIR}/z.sh" ]; then
     # shellcheck source=/dev/null
     source "${Z_DIR}/z.sh"
-fi
-
-# iceberg theme for vim
-if [[ ! -f "${HOME}/.vim/colors/iceberg.vim" ]]; then
-    temp_dir="${HOME}/.vim/.tmp_iceberg"
-    mkdir -p "${HOME}/.vim/colors" &&
-    git clone --depth 1 --quiet https://github.com/cocopon/iceberg.vim.git "$temp_dir" 2>/dev/null &&
-    cp "$temp_dir/colors/iceberg.vim" "${HOME}/.vim/colors/iceberg.vim" 2>/dev/null
-    rm -rf "$temp_dir" 2>/dev/null || true
-fi 2>/dev/null || true
-
-if [[ ! -e "${HOME}/.tmux/plugins/tpm" ]]; then
-    git clone --depth 1 --quiet https://github.com/tmux-plugins/tpm "${HOME}/.tmux/plugins/tpm" 2>/dev/null
 fi
 
 #-----------------#
