@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -32,14 +33,30 @@ pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="ocs は Linux �
 from agents_common import load_common  # noqa: E402
 
 LAUNCHER = ROOT / "home" / "dot_local" / "bin" / "executable_ocs"
+LIB = ROOT / "home" / "dot_local" / "share" / "ocs"
+MODULES = ("common", "boundary", "check", "backup", "session", "config", "cli")
 COMMON = load_common()
 
 
-def _launcher() -> dict:
-    """ランチャーの関数だけ取り出す (main は動かさない)。"""
+def _entry() -> dict:
+    """入口の定義だけ取り出す (main は動かさない)。"""
     namespace: dict = {"__name__": "probe"}
     exec(compile(LAUNCHER.read_text(encoding="utf-8"), "launcher", "exec"), namespace)
     return namespace
+
+
+def _launcher() -> SimpleNamespace:
+    """ランチャーの本体を source state から読み込む。配備先 (~/.local/share/ocs) は読まない。
+
+    入口と同じ ``load`` を使い、テストごとに読み直す (monkeypatch を持ち越さない)。
+    source state へ ``__pycache__`` を作らないよう、読み込みの間だけ書き出しを止める。
+    """
+    saved, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    try:
+        _entry()["load"](LIB)
+    finally:
+        sys.dont_write_bytecode = saved
+    return SimpleNamespace(**{name: sys.modules[f"ocs_lib.{name}"] for name in MODULES})
 
 
 def _sandbox(tmp_path: Path, **overrides) -> dict:
@@ -80,7 +97,7 @@ def test_managed_keys_are_replaced_every_time(tmp_path):
     launcher = _launcher()
     sandbox = _sandbox(tmp_path)
     project = _project(tmp_path)
-    launcher["write_isolated_config"](sandbox, project)
+    launcher.config.write_isolated_config(sandbox, project)
 
     target = Path(sandbox["config_dir"]) / "opencode.json"
     tampered = json.loads(target.read_text(encoding="utf-8"))
@@ -88,7 +105,7 @@ def test_managed_keys_are_replaced_every_time(tmp_path):
     tampered["snapshots"] = False
     target.write_text(json.dumps(tampered), encoding="utf-8")
 
-    launcher["write_isolated_config"](sandbox, project)
+    launcher.config.write_isolated_config(sandbox, project)
     after = json.loads(target.read_text(encoding="utf-8"))
     assert after["permissions"] == sandbox["permissions"], "permissions が戻っていない"
     assert after["snapshots"] is True, "snapshots が戻っていない"
@@ -102,7 +119,7 @@ def test_unmanaged_keys_survive(tmp_path):
     launcher = _launcher()
     sandbox = _sandbox(tmp_path)
     project = _project(tmp_path)
-    launcher["write_isolated_config"](sandbox, project)
+    launcher.config.write_isolated_config(sandbox, project)
 
     target = Path(sandbox["config_dir"]) / "opencode.json"
     config = json.loads(target.read_text(encoding="utf-8"))
@@ -110,7 +127,7 @@ def test_unmanaged_keys_survive(tmp_path):
     config["username"] = "alice"
     target.write_text(json.dumps(config), encoding="utf-8")
 
-    launcher["write_isolated_config"](sandbox, project)
+    launcher.config.write_isolated_config(sandbox, project)
     after = json.loads(target.read_text(encoding="utf-8"))
     assert after.get("model") == "github-copilot/claude-sonnet-5", "model が消えた"
     assert after.get("username") == "alice", "宣言外のキーが消えた"
@@ -125,7 +142,7 @@ def test_broken_config_is_rebuilt(tmp_path):
     config_dir.mkdir(parents=True)
     (config_dir / "opencode.json").write_text("{これは JSON ではない", encoding="utf-8")
 
-    launcher["write_isolated_config"](sandbox, project)
+    launcher.config.write_isolated_config(sandbox, project)
     after = json.loads((config_dir / "opencode.json").read_text(encoding="utf-8"))
     assert after["permissions"] == sandbox["permissions"]
 
@@ -144,13 +161,13 @@ def test_default_model_only_on_first_write(tmp_path):
     def current_model() -> str:
         return json.loads(target.read_text(encoding="utf-8"))["model"]
 
-    launcher["write_isolated_config"](sandbox, project)
+    launcher.config.write_isolated_config(sandbox, project)
     assert current_model() == "github-copilot/claude-opus-5"
 
     config = json.loads(target.read_text(encoding="utf-8"))
     config["model"] = "github-copilot/claude-sonnet-5"
     target.write_text(json.dumps(config), encoding="utf-8")
-    launcher["write_isolated_config"](sandbox, project)
+    launcher.config.write_isolated_config(sandbox, project)
     assert current_model() == "github-copilot/claude-sonnet-5"
 
 
@@ -170,7 +187,7 @@ def test_model_preference_order_wins(tmp_path):
     project = _project(tmp_path)
     # bedrock の資格情報は無く、copilot だけある状況
     _seed_db(Path(project["db"]), integration="github-copilot")
-    assert launcher["pick_model"](sandbox, project) == "github-copilot/claude-opus-5"
+    assert launcher.config.pick_model(sandbox, project) == "github-copilot/claude-opus-5"
 
 
 def test_model_is_absent_without_credentials(tmp_path):
@@ -182,7 +199,7 @@ def test_model_is_absent_without_credentials(tmp_path):
     )
     project = _project(tmp_path)
     _seed_db(Path(project["db"]), integration="github-copilot")
-    assert launcher["pick_model"](sandbox, project) is None
+    assert launcher.config.pick_model(sandbox, project) is None
 
 
 def _base_sandbox() -> dict:
@@ -220,7 +237,7 @@ def test_launch_directory_is_always_writable(tmp_path):
     launcher = _launcher()
     where = tmp_path / "undeclared" / "deep"
     where.mkdir(parents=True)
-    filesystem = launcher["build_boundary"](_base_sandbox(), where)["filesystem"]
+    filesystem = launcher.boundary.build_boundary(_base_sandbox(), where)["filesystem"]
     assert str(where) in filesystem["allowWrite"]
     # R1: ワークスペースは allowRead にも完全一致で入れる
     assert str(where) in filesystem["allowRead"]
@@ -239,7 +256,7 @@ def test_workspace_that_cancels_deny_read_is_rejected(where):
     """
     launcher = _launcher()
     with pytest.raises(SystemExit):
-        launcher["reject_unsafe_workspace"](_base_sandbox(), Path(where))
+        launcher.boundary.reject_unsafe_workspace(_base_sandbox(), Path(where))
 
 
 @pytest.mark.parametrize(
@@ -250,7 +267,7 @@ def test_workspace_that_cancels_deny_read_is_rejected(where):
 def test_workspace_below_deny_read_is_allowed(where):
     """子孫での起動は安全なので通す。/tmp/x は /tmp の deny を壊さない。"""
     launcher = _launcher()
-    launcher["reject_unsafe_workspace"](_base_sandbox(), Path(where))
+    launcher.boundary.reject_unsafe_workspace(_base_sandbox(), Path(where))
 
 
 def test_unsafe_workspace_is_rejected_before_boundary_is_built(tmp_path, monkeypatch):
@@ -260,9 +277,9 @@ def test_unsafe_workspace_is_rejected_before_boundary_is_built(tmp_path, monkeyp
     """
     launcher = _launcher()
     built = []
-    monkeypatch.setitem(launcher, "build_boundary", lambda *a: built.append(a))
+    monkeypatch.setattr(launcher.boundary, "build_boundary", lambda *a: built.append(a))
     with pytest.raises(SystemExit):
-        launcher["reject_unsafe_workspace"](_base_sandbox(), Path("/home/u"))
+        launcher.boundary.reject_unsafe_workspace(_base_sandbox(), Path("/home/u"))
     assert built == []
 
 
@@ -270,7 +287,7 @@ def test_no_request_means_no_extras(tmp_path):
     """要求が無ければ追加はゼロ。共通分だけで動く。"""
     launcher = _launcher()
     (tmp_path / "gamma").mkdir()
-    boundary = launcher["build_boundary"](_base_sandbox(), tmp_path / "gamma")
+    boundary = launcher.boundary.build_boundary(_base_sandbox(), tmp_path / "gamma")
     assert boundary["filesystem"]["allowRead"] == [
         str(tmp_path / "gamma"),
         "/opt/shared",
@@ -289,11 +306,12 @@ def test_request_adds_only_to_its_own_workspace(tmp_path):
         'read = ["/mnt/d/alpha"]\nnetwork_allow = ["api.alpha.test"]\n',
     )
 
-    got = launcher["build_boundary"](_base_sandbox(), alpha, launcher["read_request"](alpha))
+    build, read = launcher.boundary.build_boundary, launcher.boundary.read_request
+    got = build(_base_sandbox(), alpha, read(alpha))
     assert "/mnt/d/alpha" in got["filesystem"]["allowRead"]
     assert "api.alpha.test" in got["network"]["allowedDomains"]
 
-    other = launcher["build_boundary"](_base_sandbox(), beta, launcher["read_request"](beta))
+    other = build(_base_sandbox(), beta, read(beta))
     assert "/mnt/d/alpha" not in other["filesystem"]["allowRead"]
     assert "api.alpha.test" not in other["network"]["allowedDomains"]
 
@@ -308,7 +326,7 @@ def test_request_is_not_inherited_by_subdirectories(tmp_path):
     inner = outer / "pkg"
     inner.mkdir(parents=True)
     _request(outer, 'read = ["/outer"]\n')
-    allow_read = launcher["build_boundary"](_base_sandbox(), inner)["filesystem"][
+    allow_read = launcher.boundary.build_boundary(_base_sandbox(), inner)["filesystem"][
         "allowRead"
     ]
     assert "/outer" not in allow_read
@@ -323,8 +341,8 @@ def test_request_paths_are_resolved(tmp_path):
     ws = tmp_path / "proj"
     ws.mkdir()
     _request(ws, 'read = ["~/datasets", "sub/dir"]\n')
-    allow_read = launcher["build_boundary"](
-        _base_sandbox(), ws, launcher["read_request"](ws)
+    allow_read = launcher.boundary.build_boundary(
+        _base_sandbox(), ws, launcher.boundary.read_request(ws)
     )["filesystem"]["allowRead"]
     assert str(Path.home() / "datasets") in allow_read
     assert str(ws / "sub/dir") in allow_read
@@ -336,7 +354,7 @@ def test_protected_paths_are_workspace_relative(tmp_path):
     launcher = _launcher()
     where = tmp_path / "gamma"
     where.mkdir()
-    deny_write = launcher["build_boundary"](_base_sandbox(), where)["filesystem"][
+    deny_write = launcher.boundary.build_boundary(_base_sandbox(), where)["filesystem"][
         "denyWrite"
     ]
     assert str(where / ".opencode") in deny_write
@@ -351,10 +369,10 @@ def test_unapproved_request_refuses_to_start(tmp_path, monkeypatch):
     ws = tmp_path / "proj"
     ws.mkdir()
     _request(ws, 'read = ["/mnt/d/alpha"]\n')
-    monkeypatch.setitem(launcher, "TRUST", tmp_path / "trusted.json")
-    monkeypatch.setattr(launcher["sys"].stdin, "isatty", lambda: False)
+    monkeypatch.setattr(launcher.boundary, "TRUST", tmp_path / "trusted.json")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     with pytest.raises(SystemExit):
-        launcher["ensure_trusted"](ws, False, launcher["read_request"](ws))
+        launcher.boundary.ensure_trusted(ws, False, launcher.boundary.read_request(ws))
 
 
 def test_approval_is_recorded_outside_the_workspace(tmp_path, monkeypatch):
@@ -364,13 +382,13 @@ def test_approval_is_recorded_outside_the_workspace(tmp_path, monkeypatch):
     ws.mkdir()
     _request(ws, 'read = ["/mnt/d/alpha"]\n')
     trust = tmp_path / "state" / "trusted.json"
-    monkeypatch.setitem(launcher, "TRUST", trust)
+    monkeypatch.setattr(launcher.boundary, "TRUST", trust)
 
-    launcher["ensure_trusted"](ws, True, launcher["read_request"](ws))  # --trust
+    launcher.boundary.ensure_trusted(ws, True, launcher.boundary.read_request(ws))  # --trust
     assert ws not in trust.parents, "承認の記録がワークスペースの中にある"
     # 2 回目は尋ねずに通る (端末が無くても落ちない)
-    monkeypatch.setattr(launcher["sys"].stdin, "isatty", lambda: False)
-    launcher["ensure_trusted"](ws, False, launcher["read_request"](ws))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    launcher.boundary.ensure_trusted(ws, False, launcher.boundary.read_request(ws))
 
 
 def test_changed_request_needs_reapproval(tmp_path, monkeypatch):
@@ -379,13 +397,13 @@ def test_changed_request_needs_reapproval(tmp_path, monkeypatch):
     ws = tmp_path / "proj"
     ws.mkdir()
     _request(ws, 'read = ["/mnt/d/alpha"]\n')
-    monkeypatch.setitem(launcher, "TRUST", tmp_path / "trusted.json")
-    launcher["ensure_trusted"](ws, True, launcher["read_request"](ws))
+    monkeypatch.setattr(launcher.boundary, "TRUST", tmp_path / "trusted.json")
+    launcher.boundary.ensure_trusted(ws, True, launcher.boundary.read_request(ws))
 
     _request(ws, 'read = ["/mnt/d/alpha", "/home/u/.ssh"]\n')
-    monkeypatch.setattr(launcher["sys"].stdin, "isatty", lambda: False)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     with pytest.raises(SystemExit):
-        launcher["ensure_trusted"](ws, False, launcher["read_request"](ws))
+        launcher.boundary.ensure_trusted(ws, False, launcher.boundary.read_request(ws))
 
 
 def test_unknown_keys_in_request_refuse_to_start(tmp_path):
@@ -395,7 +413,7 @@ def test_unknown_keys_in_request_refuse_to_start(tmp_path):
     ws.mkdir()
     _request(ws, 'read = ["/mnt/d/alpha"]\nallow_all = true\n')
     with pytest.raises(SystemExit):
-        launcher["read_request"](ws)
+        launcher.boundary.read_request(ws)
 
 
 def test_approval_prompt_shows_what_opens(tmp_path):
@@ -404,7 +422,7 @@ def test_approval_prompt_shows_what_opens(tmp_path):
     ws = tmp_path / "proj"
     ws.mkdir()
     _request(ws, 'read = ["/mnt/d/alpha"]\nnetwork_allow = ["api.alpha.test"]\n')
-    text = launcher["describe_request"](ws, launcher["read_request"](ws))
+    text = launcher.boundary.describe_request(ws, launcher.boundary.read_request(ws))
     assert "/mnt/d/alpha" in text
     assert "api.alpha.test" in text
     assert str(ws / ".opencode" / "sandbox.toml") in text
@@ -415,7 +433,7 @@ def test_system_prompt_is_written(tmp_path):
     launcher = _launcher()
     sandbox = _sandbox(tmp_path)
     project = _project(tmp_path)
-    launcher["write_isolated_config"](sandbox, project)
+    launcher.config.write_isolated_config(sandbox, project)
     agents = Path(sandbox["config_dir"]) / "AGENTS.md"
     assert agents.is_file(), "AGENTS.md が書かれていない"
     assert agents.read_text(encoding="utf-8").strip(), "AGENTS.md が空"
@@ -439,7 +457,7 @@ def test_emptied_managed_keys_leave_no_residue(tmp_path):
     target = config_dir / "opencode.json"
     agents = config_dir / "AGENTS.md"
 
-    launcher["write_isolated_config"](full, project)
+    launcher.config.write_isolated_config(full, project)
     config = json.loads(target.read_text(encoding="utf-8"))
     assert config["plugins"] == ["/opt/plugin.js"]
     assert config["experimental"]["policies"] == [{"statement": "x"}]
@@ -454,7 +472,7 @@ def test_emptied_managed_keys_leave_no_residue(tmp_path):
         k: v for k, v in full.items() if k not in ("policies", "plugins", "system_prompt")
     }
     for stage, sandbox in (("空", emptied), ("未指定", unspecified)):
-        launcher["write_isolated_config"](sandbox, project)
+        launcher.config.write_isolated_config(sandbox, project)
         after = json.loads(target.read_text(encoding="utf-8"))
         assert "plugins" not in after, f"{stage}: plugins が残った"
         assert after.get("experimental") == {"other": True}, (
@@ -471,8 +489,8 @@ def test_experimental_is_dropped_when_only_policies_were_in_it(tmp_path):
     launcher = _launcher()
     project = _project(tmp_path)
     sandbox = _sandbox(tmp_path, policies=[{"statement": "x"}])
-    launcher["write_isolated_config"](sandbox, project)
-    launcher["write_isolated_config"]({**sandbox, "policies": []}, project)
+    launcher.config.write_isolated_config(sandbox, project)
+    launcher.config.write_isolated_config({**sandbox, "policies": []}, project)
     target = Path(sandbox["config_dir"]) / "opencode.json"
     assert "experimental" not in json.loads(target.read_text(encoding="utf-8"))
 
@@ -487,15 +505,15 @@ def test_passthrough_reaches_opencode():
     `ocs --continue` が素の起動になっていた回帰。
     """
     launcher = _launcher()
-    got = launcher["inner_command"](["--continue"])
+    got = launcher.cli.inner_command(["--continue"])
     assert got.endswith("--standalone --continue"), got
-    assert "--session ses_x" in launcher["inner_command"](["--session", "ses_x"])
+    assert "--session ses_x" in launcher.cli.inner_command(["--session", "ses_x"])
 
 
 def test_passthrough_is_quoted():
     """コマンド文字列へ入れる以上、引用符はこちらで付ける。"""
     launcher = _launcher()
-    got = launcher["inner_command"](["--prompt", "a; rm -rf /"])
+    got = launcher.cli.inner_command(["--prompt", "a; rm -rf /"])
     assert "'a; rm -rf /'" in got, got
 
 
@@ -526,7 +544,7 @@ def test_worktree_shares_the_main_git_dir(tmp_path):
     """
     launcher = _launcher()
     common, wt = _worktree(tmp_path)
-    filesystem = launcher["build_boundary"](_base_sandbox(), wt)["filesystem"]
+    filesystem = launcher.boundary.build_boundary(_base_sandbox(), wt)["filesystem"]
     assert str(common) in filesystem["allowWrite"], "共有 .git が書けない"
 
 
@@ -537,7 +555,7 @@ def test_worktree_git_hooks_and_config_stay_protected(tmp_path):
     """
     launcher = _launcher()
     common, wt = _worktree(tmp_path)
-    deny_write = launcher["build_boundary"](_base_sandbox(), wt)["filesystem"]["denyWrite"]
+    deny_write = launcher.boundary.build_boundary(_base_sandbox(), wt)["filesystem"]["denyWrite"]
     assert str(common / "hooks") in deny_write
     assert str(common / "config") in deny_write
 
@@ -548,7 +566,7 @@ def test_plain_repository_adds_nothing(tmp_path):
     repo = tmp_path / "plain"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
-    assert launcher["git_common_dir"](repo) is None
+    assert launcher.boundary.git_common_dir(repo) is None
 
 
 # --- 境界チェックの再利用 ----------------------------------------------------
@@ -561,8 +579,8 @@ def test_check_digest_changes_with_the_boundary(tmp_path, monkeypatch):
     """
     launcher = _launcher()
     sandbox = {"runtime_path": str(tmp_path / "srt.js")}
-    one = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a"]}}, [])
-    two = launcher["check_digest"](sandbox, {"filesystem": {"allowWrite": ["/a", "/b"]}}, [])
+    one = launcher.check.check_digest(sandbox, {"filesystem": {"allowWrite": ["/a"]}}, [])
+    two = launcher.check.check_digest(sandbox, {"filesystem": {"allowWrite": ["/a", "/b"]}}, [])
     assert one != two, "境界を広げても digest が変わっていない"
 
 
@@ -571,8 +589,8 @@ def test_check_digest_changes_when_a_hidden_target_appears(tmp_path):
     launcher = _launcher()
     sandbox = {"runtime_path": str(tmp_path / "srt.js")}
     boundary = {"filesystem": {"allowWrite": ["/a"]}}
-    before = launcher["check_digest"](sandbox, boundary, [])
-    after = launcher["check_digest"](sandbox, boundary, ["/home/u/.ssh"])
+    before = launcher.check.check_digest(sandbox, boundary, [])
+    after = launcher.check.check_digest(sandbox, boundary, ["/home/u/.ssh"])
     assert before != after, "検査対象が増えても digest が変わっていない"
 
 
@@ -588,7 +606,7 @@ def test_handoff_reads_the_isolated_db_and_writes_the_host_db(tmp_path, monkeypa
     (ws / ".opencode-sandbox").mkdir(parents=True)
     db = ws / ".opencode-sandbox" / "opencode.db"
     db.write_bytes(b"x")
-    monkeypatch.setitem(launcher, "HOME", tmp_path / "home")
+    monkeypatch.setattr(launcher.session, "HOME", tmp_path / "home")
 
     calls: list[dict] = []
 
@@ -598,9 +616,9 @@ def test_handoff_reads_the_isolated_db_and_writes_the_host_db(tmp_path, monkeypa
             Path(kw["stdout"].name).write_text("{}", encoding="utf-8")
         return subprocess.CompletedProcess(cmd, 0)
 
-    monkeypatch.setitem(launcher, "subprocess", subprocess)
+    monkeypatch.setattr(launcher.session, "subprocess", subprocess)
     monkeypatch.setattr(subprocess, "run", fake_run)
-    launcher["handoff_session"](ws, "ses_x")
+    launcher.session.handoff_session(ws, "ses_x")
 
     export, import_ = calls
     assert "export" in export["cmd"] and "--standalone" in export["cmd"]
@@ -622,7 +640,7 @@ def test_handoff_staging_is_outside_the_workspace(tmp_path, monkeypatch):
     (ws / ".opencode-sandbox").mkdir(parents=True)
     (ws / ".opencode-sandbox" / "opencode.db").write_bytes(b"x")
     home = tmp_path / "home"
-    monkeypatch.setitem(launcher, "HOME", home)
+    monkeypatch.setattr(launcher.session, "HOME", home)
 
     seen: list[Path] = []
 
@@ -634,7 +652,7 @@ def test_handoff_staging_is_outside_the_workspace(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(cmd, 0)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    launcher["handoff_session"](ws, "ses_x")
+    launcher.session.handoff_session(ws, "ses_x")
 
     assert seen, "書き出しが走っていない"
     assert ws not in seen[0].parents, f"ワークスペース内に置いた: {seen[0]}"
@@ -664,9 +682,9 @@ def test_seed_db_never_copies_host_conversations(tmp_path, monkeypatch):
     con.commit()
     con.close()
 
-    monkeypatch.setitem(launcher, "HOME", home)
+    monkeypatch.setattr(launcher.session, "HOME", home)
     out = tmp_path / "ws" / ".opencode-sandbox" / "opencode.db"
-    launcher["seed_db"](out)
+    launcher.session.seed_db(out)
 
     got = sqlite3.connect(f"file:{out}?mode=ro", uri=True)
     counts = {
@@ -703,9 +721,9 @@ def test_seed_db_does_not_leave_a_half_built_db(tmp_path, monkeypatch):
     con.commit()
     con.close()
 
-    monkeypatch.setitem(launcher, "HOME", home)
+    monkeypatch.setattr(launcher.session, "HOME", home)
     out = tmp_path / "ws" / "opencode.db"
-    launcher["seed_db"](out)
+    launcher.session.seed_db(out)
 
     leftovers = list(out.parent.glob("*.building"))
     assert not leftovers, f"作業用ファイルが残っている: {leftovers}"
@@ -718,11 +736,11 @@ def test_boundary_check_is_fail_closed():
     ファイル消失が「検査を飛ばして起動」に化けていた。保護が消えても
     誰も気づかない形なので、**存在しないときは die** にする。
     """
-    body = LAUNCHER.read_text(encoding="utf-8")
-    assert "if not args.skip_check and CHECK.is_file():" not in body, (
+    body = (LIB / "cli.py").read_text(encoding="utf-8")
+    assert "if not args.skip_check and check.CHECK.is_file():" not in body, (
         "fail-open の条件が残っている"
     )
-    assert "if not CHECK.is_file():" in body, "検査スクリプトの不在を弾いていない"
+    assert "if not check.CHECK.is_file():" in body, "検査スクリプトの不在を弾いていない"
 
 
 def test_boundary_file_lives_outside_the_workspace():
@@ -734,7 +752,7 @@ def test_boundary_file_lives_outside_the_workspace():
     隔離できない）。
     """
     launcher = _launcher()
-    boundaries = launcher["BOUNDARIES"]
+    boundaries = launcher.cli.BOUNDARIES
     assert ".local/state/opencode-sandbox" in str(boundaries), (
         f"境界の置き場が状態領域の外: {boundaries}"
     )
@@ -748,8 +766,8 @@ def test_prune_boundaries_drops_only_stale_files(tmp_path, monkeypatch):
     捨てるが、並行して動いているセッションの分を消してはいけない。
     """
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BOUNDARIES", tmp_path)
-    monkeypatch.setitem(launcher, "BOUNDARY_MAX_AGE_SECONDS", 3600)
+    monkeypatch.setattr(launcher.cli, "BOUNDARIES", tmp_path)
+    monkeypatch.setattr(launcher.cli, "BOUNDARY_MAX_AGE_SECONDS", 3600)
 
     stale = tmp_path / "opencode-boundary-old.json"
     fresh = tmp_path / "opencode-boundary-new.json"
@@ -758,7 +776,7 @@ def test_prune_boundaries_drops_only_stale_files(tmp_path, monkeypatch):
         p.write_text("{}", encoding="utf-8")
     os.utime(stale, (0, time.time() - 7200))
 
-    launcher["prune_boundaries"]()
+    launcher.cli.prune_boundaries()
 
     assert not stale.exists(), "古い残骸が残っている"
     assert fresh.exists(), "稼働中のものを消した"
@@ -768,15 +786,15 @@ def test_prune_boundaries_drops_only_stale_files(tmp_path, monkeypatch):
 def test_check_is_reused_only_while_fresh(tmp_path, monkeypatch):
     """同じ入力の合格は使い回すが、期限を過ぎたら再検査する。"""
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "CHECKED", tmp_path / "checked.json")
-    assert launcher["check_is_fresh"]("d1") is False, "記録が無いのに合格にした"
+    monkeypatch.setattr(launcher.check, "CHECKED", tmp_path / "checked.json")
+    assert launcher.check.check_is_fresh("d1") is False, "記録が無いのに合格にした"
 
-    launcher["save_check"]("d1")
-    assert launcher["check_is_fresh"]("d1") is True
-    assert launcher["check_is_fresh"]("d2") is False, "別の入力で合格にした"
+    launcher.check.save_check("d1")
+    assert launcher.check.check_is_fresh("d1") is True
+    assert launcher.check.check_is_fresh("d2") is False, "別の入力で合格にした"
 
-    monkeypatch.setitem(launcher, "CHECK_TTL_SECONDS", 0)
-    assert launcher["check_is_fresh"]("d1") is False, "期限を過ぎても合格にした"
+    monkeypatch.setattr(launcher.check, "CHECK_TTL_SECONDS", 0)
+    assert launcher.check.check_is_fresh("d1") is False, "期限を過ぎても合格にした"
 
 
 # --- 通常版から引き継ぐ設定 --------------------------------------------------
@@ -789,8 +807,8 @@ def test_ui_keys_are_inherited_but_never_overwritten(tmp_path, monkeypatch):
     host.write_text(
         json.dumps({"theme": "dark", "model": "p/host"}), encoding="utf-8"
     )
-    monkeypatch.setitem(launcher, "HOST_CONFIG", host)
-    got = launcher["inherit_ui"]({"model": "p/chosen"})
+    monkeypatch.setattr(launcher.config, "HOST_CONFIG", host)
+    got = launcher.config.inherit_ui({"model": "p/chosen"})
     assert got["theme"] == "dark", "テーマが引き継がれていない"
     assert got["model"] == "p/chosen", "隔離版の選択が上書きされた"
 
@@ -815,8 +833,8 @@ def test_security_keys_are_never_inherited(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
-    monkeypatch.setitem(launcher, "HOST_CONFIG", host)
-    got = launcher["inherit_ui"]({})
+    monkeypatch.setattr(launcher.config, "HOST_CONFIG", host)
+    got = launcher.config.inherit_ui({})
     assert got == {}, f"引き継いではいけないキーが入った: {sorted(got)}"
 
 
@@ -850,8 +868,8 @@ def _repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _backups(launcher: dict) -> list[Path]:
-    return sorted(launcher["BACKUPS"].rglob("*.tgz"))
+def _backups(launcher: SimpleNamespace) -> list[Path]:
+    return sorted(launcher.backup.BACKUPS.rglob("*.tgz"))
 
 
 def test_backup_never_touches_the_worktree(tmp_path, monkeypatch):
@@ -860,12 +878,12 @@ def test_backup_never_touches_the_worktree(tmp_path, monkeypatch):
     再開のたびに変更が消えるなら、退避ではなく破壊になる。
     """
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
     repo = _repo(tmp_path)
     (repo / "a.txt").write_text("changed\n", encoding="utf-8")
     (repo / "b.txt").write_text("untracked\n", encoding="utf-8")
 
-    launcher["backup_worktree"](repo, False)
+    launcher.backup.backup_worktree(repo, False)
 
     assert (repo / "a.txt").read_text(encoding="utf-8") == "changed\n", "変更が巻き戻った"
     assert (repo / "b.txt").is_file(), "未追跡ファイルが消えた"
@@ -874,8 +892,8 @@ def test_backup_never_touches_the_worktree(tmp_path, monkeypatch):
 def test_backup_is_skipped_when_nothing_is_uncommitted(tmp_path, monkeypatch):
     """未コミットの変更が無ければ退避しない。"""
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
-    launcher["backup_worktree"](_repo(tmp_path), False)
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
+    launcher.backup.backup_worktree(_repo(tmp_path), False)
     assert _backups(launcher) == []
 
 
@@ -885,16 +903,16 @@ def test_identical_content_is_not_backed_up_twice(tmp_path, monkeypatch):
     同じ内容なら同じ tree SHA になるので作り直さない。
     """
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
     repo = _repo(tmp_path)
     (repo / "a.txt").write_text("changed\n", encoding="utf-8")
 
-    launcher["backup_worktree"](repo, False)
-    launcher["backup_worktree"](repo, False)
+    launcher.backup.backup_worktree(repo, False)
+    launcher.backup.backup_worktree(repo, False)
     assert len(_backups(launcher)) == 1, "同じ内容で 2 つ作られた"
 
     (repo / "a.txt").write_text("changed again\n", encoding="utf-8")
-    launcher["backup_worktree"](repo, False)
+    launcher.backup.backup_worktree(repo, False)
     assert len(_backups(launcher)) == 2, "内容が変わったのに退避されていない"
 
 
@@ -903,13 +921,13 @@ def test_backup_excludes_ignored_files(tmp_path, monkeypatch):
     import tarfile
 
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
     repo = _repo(tmp_path)
     (repo / ".gitignore").write_text("heavy/\n", encoding="utf-8")
     (repo / "heavy").mkdir()
     (repo / "heavy" / "db.bin").write_text("x" * 1000, encoding="utf-8")
 
-    launcher["backup_worktree"](repo, False)
+    launcher.backup.backup_worktree(repo, False)
     with tarfile.open(_backups(launcher)[0]) as archive:
         names = archive.getnames()
     assert "heavy/db.bin" not in names, f"無視されるはずのものが入った: {names}"
@@ -921,11 +939,11 @@ def test_backup_is_restorable(tmp_path, monkeypatch):
     import tarfile
 
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
     repo = _repo(tmp_path)
     (repo / "a.txt").write_text("precious\n", encoding="utf-8")
 
-    launcher["backup_worktree"](repo, False)
+    launcher.backup.backup_worktree(repo, False)
     out = tmp_path / "restored"
     with tarfile.open(_backups(launcher)[0]) as archive:
         archive.extractall(out, filter="data")
@@ -935,12 +953,12 @@ def test_backup_is_restorable(tmp_path, monkeypatch):
 def test_old_backups_are_pruned(tmp_path, monkeypatch):
     """世代数で頭を押さえること。"""
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
-    monkeypatch.setitem(launcher, "BACKUP_KEEP", 3)
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
+    monkeypatch.setattr(launcher.backup, "BACKUP_KEEP", 3)
     repo = _repo(tmp_path)
     for i in range(6):
         (repo / "a.txt").write_text(f"rev {i}\n", encoding="utf-8")
-        launcher["backup_worktree"](repo, False)
+        launcher.backup.backup_worktree(repo, False)
     assert len(_backups(launcher)) == 3
 
 
@@ -951,14 +969,14 @@ def test_oversized_worktree_is_measured_before_hashing(tmp_path, monkeypatch):
     時間を使う（実測で追跡対象だけ 84 GB のリポジトリがあった）。
     """
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
-    monkeypatch.setitem(launcher, "BACKUP_MAX_SOURCE_BYTES", 1024)
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
+    monkeypatch.setattr(launcher.backup, "BACKUP_MAX_SOURCE_BYTES", 1024)
     repo = _repo(tmp_path)
     (repo / "big.bin").write_text("x" * 4096, encoding="utf-8")
 
     before = _git_object_count(repo)
     with pytest.raises(SystemExit):
-        launcher["backup_worktree"](repo, False)
+        launcher.backup.backup_worktree(repo, False)
     assert _backups(launcher) == [], "断ったのに退避が残っている"
     assert _git_object_count(repo) == before, "断る前に .git へ書き込んでいる"
 
@@ -984,12 +1002,12 @@ def test_total_size_is_capped_across_projects(tmp_path, monkeypatch):
     """
     launcher = _launcher()
     store = tmp_path / "store"
-    monkeypatch.setitem(launcher, "BACKUPS", store)
-    monkeypatch.setitem(launcher, "BACKUP_TOTAL_MAX_BYTES", 1)  # 実質 1 件だけ残る
+    monkeypatch.setattr(launcher.backup, "BACKUPS", store)
+    monkeypatch.setattr(launcher.backup, "BACKUP_TOTAL_MAX_BYTES", 1)  # 実質 1 件だけ残る
     for name in ("one", "two", "three"):
         repo = _repo(tmp_path / name)
         (repo / "a.txt").write_text(f"{name}\n", encoding="utf-8")
-        launcher["backup_worktree"](repo, False)
+        launcher.backup.backup_worktree(repo, False)
     assert len(_backups(launcher)) <= 1, "全体の上限が効いていない"
 
 
@@ -997,17 +1015,17 @@ def test_expired_backups_are_dropped(tmp_path, monkeypatch):
     """触らなくなったプロジェクトの分を期限で捨てること。"""
     launcher = _launcher()
     store = tmp_path / "store"
-    monkeypatch.setitem(launcher, "BACKUPS", store)
+    monkeypatch.setattr(launcher.backup, "BACKUPS", store)
     stale = store / "abandoned-000000000000"
     stale.mkdir(parents=True)
     old = stale / "20200101T000000+0000-deadbeefcafe.tgz"
     old.write_bytes(b"old")
-    ancient = time.time() - (launcher["BACKUP_MAX_AGE_DAYS"] + 1) * 86400
+    ancient = time.time() - (launcher.backup.BACKUP_MAX_AGE_DAYS + 1) * 86400
     os.utime(old, (ancient, ancient))
 
     repo = _repo(tmp_path)
     (repo / "a.txt").write_text("fresh\n", encoding="utf-8")
-    launcher["backup_worktree"](repo, False)
+    launcher.backup.backup_worktree(repo, False)
 
     assert not old.exists(), "期限切れの退避が残っている"
     assert not stale.exists(), "空になった置き場が残っている"
@@ -1022,12 +1040,12 @@ def test_launch_is_refused_when_the_backup_fails(tmp_path, monkeypatch):
     blocked = tmp_path / "blocked"
     blocked.mkdir()
     blocked.chmod(0o500)
-    monkeypatch.setitem(launcher, "BACKUPS", blocked)
+    monkeypatch.setattr(launcher.backup, "BACKUPS", blocked)
     repo = _repo(tmp_path)
     (repo / "a.txt").write_text("changed\n", encoding="utf-8")
     try:
         with pytest.raises(SystemExit):
-            launcher["backup_worktree"](repo, False)
+            launcher.backup.backup_worktree(repo, False)
     finally:
         blocked.chmod(0o700)
 
@@ -1039,8 +1057,8 @@ def test_backup_location_is_outside_the_workspace(tmp_path, monkeypatch):
     """
     launcher = _launcher()
     repo = _repo(tmp_path)
-    assert repo not in launcher["BACKUPS"].parents, "退避先がワークスペースの中にある"
-    assert str(launcher["BACKUPS"]).startswith(str(Path.home() / ".local/state"))
+    assert repo not in launcher.backup.BACKUPS.parents, "退避先がワークスペースの中にある"
+    assert str(launcher.backup.BACKUPS).startswith(str(Path.home() / ".local/state"))
 
 
 def test_backup_is_scoped_to_the_launch_directory(tmp_path, monkeypatch):
@@ -1051,13 +1069,13 @@ def test_backup_is_scoped_to_the_launch_directory(tmp_path, monkeypatch):
     import tarfile
 
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
     repo = _repo(tmp_path)
     pkg = repo / "pkg"
     pkg.mkdir()
     (pkg / "inner.txt").write_text("work\n", encoding="utf-8")
 
-    launcher["backup_worktree"](pkg, False)
+    launcher.backup.backup_worktree(pkg, False)
 
     with tarfile.open(_backups(launcher)[0]) as archive:
         names = archive.getnames()
@@ -1071,7 +1089,7 @@ def test_untracked_only_directory_does_not_block_launch(tmp_path, monkeypatch):
     Git リポジトリでない場所や、中身が全て .gitignore の場所が当たる。
     """
     launcher = _launcher()
-    monkeypatch.setitem(launcher, "BACKUPS", tmp_path / "store")
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
     repo = _repo(tmp_path)
     (repo / ".gitignore").write_text("skip/\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
@@ -1082,7 +1100,7 @@ def test_untracked_only_directory_does_not_block_launch(tmp_path, monkeypatch):
     skipped.mkdir()
     (skipped / "junk.txt").write_text("junk\n", encoding="utf-8")
 
-    launcher["backup_worktree"](skipped, False)  # 例外を出さないこと
+    launcher.backup.backup_worktree(skipped, False)  # 例外を出さないこと
     assert _backups(launcher) == []
 
 
@@ -1102,7 +1120,7 @@ def _check_project(workspace: Path, protected: list[str]) -> dict:
 
 
 def _run_check_script(
-    tmp_path: Path, launcher: dict, protected: list[str], hidden: dict
+    tmp_path: Path, launcher: SimpleNamespace, protected: list[str], hidden: dict
 ) -> subprocess.CompletedProcess:
     """検査スクリプトを境界なしで走らせる。環境はランチャーが組んだものを使う。
 
@@ -1121,7 +1139,7 @@ def _run_check_script(
         "PATH": f"{fakebin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
         "XDG_DATA_HOME": str(ws / "data"),
     }
-    env = launcher["check_environment"](_check_project(ws, protected), base, hidden)
+    env = launcher.check.check_environment(_check_project(ws, protected), base, hidden)
     env["BOUNDARY_CURL"] = str(curl)
     return subprocess.run(
         ["/bin/sh", str(CHECK_SCRIPT)],
@@ -1242,7 +1260,7 @@ def test_path_with_newline_is_refused(tmp_path):
     """★区切りが改行なので、改行を含むパスは渡さずに止める。"""
     launcher = _launcher()
     with pytest.raises(SystemExit):
-        launcher["check_environment"](
+        launcher.check.check_environment(
             _check_project(tmp_path, ["/w/a\nb"]), {}, {"present": [], "absent": []}
         )
 
@@ -1255,10 +1273,10 @@ def test_hidden_targets_are_split_by_host_presence(tmp_path, monkeypatch):
     launcher = _launcher()
     home = tmp_path / "home"
     (home / ".ssh").mkdir(parents=True)
-    monkeypatch.setitem(launcher, "HOME", home)
-    monkeypatch.setitem(launcher, "_is_wsl", lambda: False)
-    got = launcher["hidden_targets"]()
-    canary = home / launcher["CANARY_REL"]
+    monkeypatch.setattr(launcher.check, "HOME", home)
+    monkeypatch.setattr(launcher.check, "_is_wsl", lambda: False)
+    got = launcher.check.hidden_targets()
+    canary = home / launcher.check.CANARY_REL
     assert got["present"] == [str(canary), str(home / ".ssh")]
     assert str(home / ".git-credentials") in got["absent"]
     assert str(home / ".config/gh") in got["absent"]
@@ -1272,7 +1290,7 @@ def test_check_is_invoked_with_absolute_quoted_shell(tmp_path, monkeypatch):
     """
     launcher = _launcher()
     check = tmp_path / "bin dir" / "ocs-boundary-check"
-    monkeypatch.setitem(launcher, "CHECK", check)
+    monkeypatch.setattr(launcher.check, "CHECK", check)
     seen: list[list[str]] = []
 
     def fake_run(cmd, **kw):
@@ -1280,7 +1298,7 @@ def test_check_is_invoked_with_absolute_quoted_shell(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(cmd, 0)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    launcher["run_check"](
+    launcher.check.run_check(
         "/usr/bin/node",
         tmp_path / "srt.js",
         str(tmp_path / "b.json"),
@@ -1296,10 +1314,10 @@ def test_canary_is_always_checked_even_without_host_secrets(tmp_path, monkeypatc
     launcher = _launcher()
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setitem(launcher, "HOME", home)
-    monkeypatch.setitem(launcher, "_is_wsl", lambda: False)
-    got = launcher["hidden_targets"]()
-    canary = home / launcher["CANARY_REL"]
+    monkeypatch.setattr(launcher.check, "HOME", home)
+    monkeypatch.setattr(launcher.check, "_is_wsl", lambda: False)
+    got = launcher.check.hidden_targets()
+    canary = home / launcher.check.CANARY_REL
     assert got["present"] == [str(canary)]
     assert canary.is_file()
     assert canary.stat().st_mode & 0o777 == 0o600
@@ -1310,7 +1328,7 @@ def test_canary_must_not_be_readable_inside_the_boundary():
     sandbox = gen.opencode_sandbox(COMMON) or {}
     base = sandbox.get("base", {})
     opened = [*base.get("read", []), *base.get("write", [])]
-    canary = str(Path.home() / _launcher()["CANARY_REL"])
+    canary = str(Path.home() / _launcher().check.CANARY_REL)
     assert not any(canary == p or canary.startswith(p.rstrip("/") + "/") for p in opened)
 
 
@@ -1329,15 +1347,15 @@ def test_srt_tools_in_a_writable_area_stop_the_launch(tmp_path, inside):
     env = {"PATH": str(bindir)}
     if inside:
         with pytest.raises(SystemExit):
-            launcher["check_srt_tools"](env, config)
+            launcher.check.check_srt_tools(env, config)
     else:
-        launcher["check_srt_tools"](env, config)
+        launcher.check.check_srt_tools(env, config)
 
 
 def test_inner_env_marks_the_isolated_session(tmp_path):
     """guide plugin はこの印で隔離版を見分け、表示されない説明の生成を止める。"""
     launcher = _launcher()
-    env = launcher["inner_env"](_sandbox(tmp_path), _project(tmp_path))
+    env = launcher.cli.inner_env(_sandbox(tmp_path), _project(tmp_path))
     assert env["OCS_ISOLATED"] == "1"
 
 
@@ -1348,7 +1366,7 @@ def test_check_does_not_take_curl_from_the_inherited_path(tmp_path):
     (BOUNDARY_CURL) は、ランチャーが利用者の環境から通さない。
     """
     launcher = _launcher()
-    env = launcher["check_environment"](
+    env = launcher.check.check_environment(
         _check_project(tmp_path, []),
         {"PATH": "/evil:/usr/bin", "BOUNDARY_CURL": "/evil/curl"},
         {"present": [], "absent": []},
@@ -1362,3 +1380,103 @@ def test_check_does_not_take_curl_from_the_inherited_path(tmp_path):
     ]
     assert lines[1] == "PATH=/usr/bin:/bin", "set -eu の直後で PATH を固定する"
     assert not [line for line in lines if re.search(r"(^|[\s;(])curl\s", line)]
+
+
+# --- 本体の読み込み (信頼の鎖) ------------------------------------------------
+
+
+def _impostor(root: Path) -> Path:
+    """sys.path・PYTHONPATH・cwd に置く偽の ``ocs_lib``。読まれたら印を出す。"""
+    package = root / "ocs_lib"
+    package.mkdir(parents=True)
+    for name in ("__init__", *MODULES):
+        (package / f"{name}.py").write_text(
+            'print("IMPOSTOR")\ndef main():\n    return 0\n', encoding="utf-8"
+        )
+    return root
+
+
+def test_library_path_is_absolute_under_home():
+    """★本体は配備先の絶対パスから読む。スクリプトの場所や cwd から導かない。"""
+    assert _entry()["LIB"] == Path.home() / ".local/share/ocs"
+
+
+def test_modules_come_only_from_the_given_directory(tmp_path, monkeypatch):
+    """★sys.path・cwd・先に居座った ``sys.modules`` の偽物を拾わないこと。"""
+    evil = _impostor(tmp_path / "evil")
+    monkeypatch.syspath_prepend(str(evil))
+    monkeypatch.chdir(evil)
+    monkeypatch.setitem(sys.modules, "ocs_lib.common", SimpleNamespace(HOME=tmp_path))
+
+    _launcher()
+
+    loaded = {n: m for n, m in sys.modules.items() if n.split(".")[0] == "ocs_lib"}
+    assert set(loaded) == {"ocs_lib", *(f"ocs_lib.{n}" for n in MODULES)}
+    for name, module in loaded.items():
+        assert Path(module.__file__).parent == LIB, f"{name} を {module.__file__} から読んだ"
+
+
+def _run_entry(home: Path, cwd: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(LAUNCHER), *args],
+        cwd=cwd,
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(cwd)},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+        timeout=60,
+    )
+
+
+def test_entry_ignores_pythonpath_and_cwd(tmp_path):
+    """★PYTHONPATH と cwd に偽の本体があっても、配備先の本体だけを動かすこと。"""
+    evil = _impostor(tmp_path / "evil")
+    home = tmp_path / "home"
+    (home / ".local/share").mkdir(parents=True)
+    (home / ".local/share/ocs").symlink_to(LIB)
+
+    done = _run_entry(home, evil, "--help")
+
+    assert done.returncode == 0, done.stderr
+    assert "IMPOSTOR" not in done.stdout + done.stderr
+    assert "OpenCode を OS のアクセス制御で囲って起動する" in done.stdout
+    assert not list(LIB.glob("__pycache__")), "配備先へ __pycache__ を作った"
+
+
+def test_entry_refuses_without_the_library(tmp_path):
+    """★本体が無ければ起動しない。PYTHONPATH の偽物へ落ちないこと。"""
+    evil = _impostor(tmp_path / "evil")
+    home = tmp_path / "home"
+    home.mkdir()
+
+    done = _run_entry(home, evil)
+
+    assert done.returncode == 1
+    assert "IMPOSTOR" not in done.stdout + done.stderr
+    assert "起動しない" in done.stderr
+
+
+def _covers(entries: list[str], target: str) -> bool:
+    target = target.rstrip("/")
+    return any(target == e.rstrip("/") or target.startswith(e.rstrip("/") + "/") for e in entries)
+
+
+@pytest.mark.parametrize("deployed", ["~/.local/bin/ocs", "~/.local/share/ocs"])
+def test_launcher_code_is_not_writable_from_agent_sandboxes(deployed):
+    """★ocs が読むコードは、どの sandbox の書き込み範囲にも入れない。"""
+    sandbox = COMMON["sandbox"]
+    boundary = COMMON["opencode"]["sandbox"]
+    for key, entries in (
+        ("[sandbox] claude_write_allow", sandbox.get("claude_write_allow", [])),
+        ("[sandbox] copilot_write_allow", sandbox.get("copilot_write_allow", [])),
+        ("[opencode.sandbox] write", boundary.get("write", [])),
+    ):
+        assert not _covers(entries, deployed), f"{key} が {deployed} を書き込み可能にしている"
+
+
+@pytest.mark.parametrize("source", ["home/dot_local/bin", "home/dot_local/share/ocs"])
+def test_launcher_source_is_protected_inside_the_boundary(source):
+    """★ocs の source state は境界の内側から書き換えられないこと (denyWrite)。"""
+    protected = COMMON["opencode"]["sandbox"]["protected"]
+    assert _covers(protected, source), f"{source} が protected に無い"

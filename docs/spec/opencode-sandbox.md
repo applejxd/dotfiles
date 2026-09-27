@@ -39,7 +39,7 @@ flowchart TD
 
     subgraph host["ホスト（境界の外）"]
         RULES["~/.config/opencode/guide-plugin/rules.json<br>境界の素材"]
-        OCS["~/.local/bin/ocs<br>ランチャー"]
+        OCS["~/.local/bin/ocs + ~/.local/share/ocs/<br>ランチャー"]
         STATE["~/.local/state/opencode-sandbox/<br>承認・合格・退避"]
         CFG["~/.config/opencode-sandbox/<br>隔離版の設定"]
     end
@@ -155,7 +155,8 @@ R3 の裏返しとして、**`denyRead` の項目そのもの、またはその�
 
 - `home/dot_config/agents`（permission / hook / 境界の単一ソース）
 - `home/dot_config/opencode/guide-plugin`（生成される判定表）
-- `home/dot_local/bin`（ランチャー本体）
+- `home/dot_local/bin`（ランチャーの入口と境界チェック）
+- `home/dot_local/share/ocs`（ランチャーの本体。[構成](#ランチャーの構成)）
 - `scripts/agents`（生成器）
 - `home/dot_config/mise`（`srt` の版を決める）
 - `.opencode`（**まだ無くても塞ぐ**。置かれると自動ロードされる）
@@ -360,6 +361,51 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
   `0600` でも別セッションを隔離できない
 - 内側へ渡す環境変数から資格情報を落とす
   （`GH_TOKEN` / `SSH_AUTH_SOCK` / `AWS_*` など）
+- **ランチャーが読み込むコードは、入口と同じだけ保護する。** 本体を別ファイルへ
+  分けた分だけ鎖が延びるので、置き場・読み込み方・配布先を入口に揃える（下記）
+
+### ランチャーの構成
+
+入口は本体を読み込んで `cli.main()` を呼ぶだけ。責務ごとの本体は
+`~/.local/share/ocs/` に置く。
+
+> `~/.local/lib` にしないのは、リポジトリの `.gitignore` の `lib/` に source state が
+> 巻き込まれるため。私的な Python モジュールを `share` に置くのは Debian の
+> `/usr/share/<パッケージ>/` と同じ形。
+
+| 配備先 | 責務 |
+| --- | --- |
+| `~/.local/bin/ocs` | 入口。本体の読み込み |
+| `~/.local/share/ocs/cli.py` | 引数の解釈と起動の順序（`main`）、内側の環境変数とコマンド、`node` の解決、境界定義の置き場 |
+| `~/.local/share/ocs/boundary.py` | 境界の組み立て、起動ディレクトリの制限、追加許可の承認 |
+| `~/.local/share/ocs/check.py` | [境界チェック](#境界チェック)の準備・実行・合格の再利用 |
+| `~/.local/share/ocs/backup.py` | [起動前の退避](#起動前の退避) |
+| `~/.local/share/ocs/session.py` | [隔離用 DB](#隔離用-db) の用意と[セッションの引き継ぎ](#セッションの引き継ぎ) |
+| `~/.local/share/ocs/config.py` | [隔離版の設定の書き出し](#隔離版の設定の書き出し方) |
+| `~/.local/share/ocs/common.py` | 共有の定数と失敗の扱い |
+| `~/.local/bin/ocs-boundary-check` | 境界の内側で走る検査スクリプト |
+
+読み込み方。
+
+- 入口は `~/.local/share/ocs`（`Path.home()` からの絶対パス）をパッケージ
+  `ocs_lib` として読み込む。下位モジュールはそのパッケージの `__path__`
+  だけから探すので、**`sys.path`・`PYTHONPATH`・カレントディレクトリを見ない**
+- 先に `sys.modules` に `ocs_lib` があれば捨ててから読む
+- **本体が無ければ起動しない**（他の場所の同名モジュールへ落ちない）
+- `__pycache__` を書かない。配備先の中身を source state と揃える
+
+保護。本体は入口と同じか、それより強く守られている。
+
+| 経路 | `~/.local/bin/ocs` | `~/.local/share/ocs/` |
+| --- | --- | --- |
+| `ocs` の境界の内側 | 読めるだけ（`[opencode.sandbox] read`） | 見えない（`deny_read` の `~`） |
+| Claude Code の sandbox | 書けない（`claude_write_allow` に無い） | 同左 |
+| Copilot CLI の sandbox | 書けない（`copilot_write_allow` に無い） | 同左 |
+| source state | `protected` の `home/dot_local/bin` | `protected` の `home/dot_local/share/ocs` |
+| 配布先 | Linux のみ（`home/.chezmoiignore.tmpl`） | 同左 |
+
+> 固定しているのは**本体の読み込み**だけ。入口の `python3` は `PATH` から選ばれ、
+> 標準ライブラリの import は `PYTHONPATH` の影響を受ける（分割前から同じ）。
 
 ## 版の扱い（未固定）
 
