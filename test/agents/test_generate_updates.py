@@ -18,7 +18,6 @@ COMMON = load_common()
 def test_common_disables_native_auto_updates():
     assert COMMON["claude"]["auto_update"] is False
     assert COMMON["copilot"]["auto_update"] is False
-    assert "autoUpdate" in gen.COPILOT_MANAGED_KEYS
     assert gen.merge_claude_settings({}, COMMON)["env"]["DISABLE_AUTOUPDATER"] == "1"
     assert gen.merge_copilot_settings({}, COMMON)["autoUpdate"] is False
 

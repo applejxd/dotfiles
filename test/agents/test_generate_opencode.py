@@ -804,6 +804,100 @@ def test_cli_json_is_not_registered_twice():
     assert cli["plugins"].count(gen.opencode_guide_plugin_path()) == 1
 
 
+# guide plugin の各役割を 1 つだけ有効にした common。
+# index.js はどれか 1 つでも有効なら要り、tui.ts は説明の toast (ask_description) にだけ要る。
+# see docs/spec/agent-permissions.md#plugin-層-guide-plugin
+GUIDE_FEATURES = {
+    "guide": {"opencode": {"shell": {"guide": [{"pattern": "^cat ", "message": "read へ"}]}}},
+    "read_filter": {"file": {"read_deny_globs": ["**/.env"]}},
+    "redact": {
+        "opencode": {"redact": {"enabled": True, "rule": [{"name": "k", "pattern": "AKIA"}]}}
+    },
+    "ask_description": {
+        "opencode": {"ask_description": {"enabled": True, "models": ["p/m"]}}
+    },
+}
+
+
+def test_guide_plugin_is_not_registered_without_any_role():
+    config = gen.merge_opencode_config({}, {})
+    cli = gen.merge_opencode_cli({}, {})
+    assert gen.opencode_guide_plugin_path() not in config["plugins"]
+    assert "plugins" not in cli
+
+
+@pytest.mark.parametrize("feature", sorted(GUIDE_FEATURES))
+def test_guide_plugin_is_registered_for_each_role(feature):
+    """どの役割を 1 つだけ有効にしても index.js は読まれる (redact だけでも伏字化が要る)。"""
+    common = GUIDE_FEATURES[feature]
+    assert gen.opencode_guide_plugin_path() in gen.merge_opencode_config({}, common)["plugins"]
+
+
+@pytest.mark.parametrize("feature", sorted(GUIDE_FEATURES))
+def test_tui_plugin_is_registered_only_for_the_toast(feature):
+    """tui.ts の役割は説明の toast だけ。他の役割で cli.json へ載せても何もしない。"""
+    plugins = gen.merge_opencode_cli({}, GUIDE_FEATURES[feature]).get("plugins") or []
+    registered = gen.opencode_guide_plugin_path() in plugins
+    assert registered is (feature == "ask_description")
+
+
+def test_tui_plugin_is_unregistered_when_the_toast_is_disabled():
+    common = copy.deepcopy(COMMON)
+    common["opencode"]["ask_description"]["enabled"] = False
+    existing = {"plugins": ["opencode-acme", gen.opencode_guide_plugin_path()]}
+    assert gen.merge_opencode_cli(existing, common)["plugins"] == ["opencode-acme"]
+
+
+def _tui_toasts(work: Path, rules: dict | None) -> list[dict]:
+    """tui.ts を node で読み込み、説明付きの ``permission.asked`` で出た toast を返す。"""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
+    src = (ROOT / "home/dot_config/opencode/guide-plugin/tui.ts").read_text("utf-8")
+    (work / "tui.mjs").write_text(src, "utf-8")
+    if rules is not None:
+        (work / "rules.json").write_text(json.dumps(rules), "utf-8")
+    (work / "run.mjs").write_text(
+        "import plugin from './tui.mjs'\n"
+        "const toasts = []\n"
+        "const handlers = []\n"
+        "const api = {\n"
+        "  data: { on: (_name, fn) => handlers.push(fn) },\n"
+        "  ui: { toast: { show: (t) => toasts.push(t) } },\n"
+        "}\n"
+        "plugin.setup(api)\n"
+        "for (const fn of handlers) fn({ data: { message: 'x' } })\n"
+        "console.log(JSON.stringify(toasts))\n",
+        "utf-8",
+    )
+    done = subprocess.run(
+        [node, str(work / "run.mjs")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    return json.loads(done.stdout)
+
+
+def test_tui_toast_duration_comes_from_common(tmp_path):
+    """表示時間は ``[opencode.ask_description] duration_ms`` に従う (tui.ts に固定しない)。"""
+    common = copy.deepcopy(COMMON)
+    common["opencode"]["ask_description"]["duration_ms"] = 12345
+    toasts = _tui_toasts(tmp_path, gen.build_opencode_guide({}, common))
+    assert [t["duration"] for t in toasts] == [12345]
+
+
+@pytest.mark.parametrize("rules", [None, {"guide": []}])
+def test_tui_toast_falls_back_when_duration_is_unavailable(tmp_path, rules):
+    """rules.json が読めなくても toast は出す。既定値は generate.py と揃える。"""
+    toasts = _tui_toasts(tmp_path, rules)
+    default = gen.opencode_ask_description(
+        {"opencode": {"ask_description": {"enabled": True, "models": ["p/m"]}}}
+    )["duration_ms"]
+    assert [t["duration"] for t in toasts] == [default]
+
+
 # キーバインドは cli.json 側にしか無い。opencode.json へ書いても読まれず、
 # 誤配置に気付けないので出力先を固定する。
 def test_keybinds_go_to_cli_json_only():
@@ -834,6 +928,14 @@ def test_keybinds_are_left_alone_when_undeclared():
     existing = {"keybinds": {"app.debug": "ctrl+g"}}
     cli = gen.merge_opencode_cli(existing, {"opencode": {}})
     assert cli["keybinds"] == {"app.debug": "ctrl+g"}
+
+
+def test_keybinds_declared_empty_clear_the_existing_table():
+    """空テーブルでも宣言は宣言。未宣言 (触らない) と取り違えると残骸が残る。"""
+    existing = {"keybinds": {"app.debug": "ctrl+g"}}
+    cli = gen.merge_opencode_cli(existing, {"opencode": {"keybinds": {}}})
+    assert cli["keybinds"] == {}
+    assert gen.build_opencode_keybinds({"opencode": {}}) is None
 
 
 @pytest.mark.parametrize(

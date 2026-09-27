@@ -320,20 +320,11 @@ def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     for glob in file_.get("write_ask_globs", []):
         ask.append(f"Edit({glob})")
 
-    # 順序を安定化 (重複除去しつつ元順序を保持)
-    def uniq(seq: list[str]) -> list[str]:
-        seen: set[str] = set()
-        out: list[str] = []
-        for x in seq:
-            if x not in seen:
-                seen.add(x)
-                out.append(x)
-        return out
-
-    return {"allow": uniq(allow), "ask": uniq(ask), "deny": uniq(deny)}
+    return {"allow": _uniq(allow), "ask": _uniq(ask), "deny": _uniq(deny)}
 
 
 def _uniq(seq: list[str]) -> list[str]:
+    """重複を除き、最初に現れた順を保つ。"""
     seen: set[str] = set()
     out: list[str] = []
     for x in seq:
@@ -475,13 +466,13 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
     上に追加される OS レベルの防御としてのみ働かせる。
 
     ネットワークは ``[web] allow_domains`` (WebFetch 用のドキュメントサイト) と
-    ``[sandbox] network_allow`` (shell が実際に通信するCDN等) を合算して
+    ``[sandbox] shell_network_allow`` (shell が実際に通信するCDN等) を合算して
     ``sandbox.network.allowedDomains`` に渡す。
     Claude は ``WebFetch(domain:...)`` の許可ルールからも sandbox の
     allowlist を組み立てるため前者は実質二重になるが、permission 側の記法が
     変わっても sandbox の許可が崩れないよう明示しておく。
 
-    ``[sandbox] network_strict`` が真なら ``strictAllowlist`` を立てて
+    ``[sandbox] claude_network_strict`` が真なら ``strictAllowlist`` を立てて
     許可外ドメインを **拒否** する (Claude Code v2.1.219 以降が必要)。
     これを立てないと許可外は拒否ではなく **承認プロンプト** になる。
     Copilot にはドメイン単位の制御が無いため (``allowOutbound`` の on/off
@@ -489,7 +480,7 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
     """
     sandbox = common.get("sandbox", {})
     deny = list(sandbox.get("deny", []))
-    write_deny_extra = list(sandbox.get("claude_write_deny", []))
+    claude_write_deny = list(sandbox.get("claude_write_deny", []))
     web = common.get("web", {})
 
     network: dict[str, Any] = {
@@ -510,7 +501,7 @@ def build_claude_sandbox(common: dict[str, Any]) -> dict[str, Any]:
             # deny は穴の内側でも効く (より具体的なパスが勝つ)。
             "denyRead": _uniq(["~/", *deny]),
             "allowRead": _uniq(list(sandbox.get("claude_read_allow", []))),
-            "denyWrite": _uniq(deny + write_deny_extra),
+            "denyWrite": _uniq(deny + claude_write_deny),
             "allowWrite": _uniq(list(sandbox.get("claude_write_allow", []))),
         },
         "network": network,
@@ -807,21 +798,6 @@ def merge_copilot_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[
 # ---------------------------------------------------------------------------
 # Copilot settings target (一部キーのみ置換し、他は温存)
 # ---------------------------------------------------------------------------
-
-# generate.py が管理するキー一覧 (これら以外は触らない)
-COPILOT_MANAGED_KEYS = {
-    "allowedUrls",
-    "autoUpdate",
-    "deniedUrls",
-    "includeCoAuthoredBy",
-    "trustedFolders",
-    # enabledPlugins は丸ごとではなく common.toml に書いたキーだけ
-    "enabledPlugins",
-    # sandbox は丸ごとではなく enabled と
-    # userPolicy.filesystem.deniedPaths のみ (下記 build_copilot_sandbox)
-    "sandbox",
-}
-
 
 def build_copilot_sandbox(
     existing_sandbox: Any, common: dict[str, Any]
@@ -1397,7 +1373,8 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     # そのままモデルの文脈へ入るのを防ぐ）。境界はワークスペースの中を守らない。
     # ★段階 5 で当初案（`grep` / `glob` の無効化と誘導の削除）は撤回した。
     #   消すと `read` / `edit` の deny が空振りする。
-    if opencode_guide_rules(common) or opencode_redact(common):
+    # ocs は cli.json を渡さないので TUI 側は読まれない (tui=False)。
+    if opencode_guide_server_needed(common, tui=False):
         out["plugins"] = [opencode_guide_plugin_path()]
     # 隔離版でも圧縮は起きる。checkpoint plugin を載せないと、境界の内側でだけ
     # 文脈が失われる。読むのは plugin 本体とスキルの CLI だけで、書き込みは
@@ -1480,13 +1457,34 @@ def opencode_guide_plugin_path() -> str:
     return os.path.expanduser(OPENCODE_GUIDE_PLUGIN)
 
 
+def opencode_guide_server_needed(common: dict[str, Any], *, tui: bool) -> bool:
+    """サーバ側の guide plugin (``index.js``) を読み込むか。
+
+    ``index.js`` の役割 (誘導・``grep`` / ``glob`` の結果フィルタ・伏字化・
+    説明の生成) が 1 つでも有効なら要る。説明は TUI 側の toast でしか
+    見えないので、``tui`` が偽 (TUI plugin が読まれない隔離版) なら数えない。
+    see docs/spec/agent-permissions.md#plugin-層-guide-plugin
+    """
+    return bool(
+        opencode_guide_rules(common)
+        or opencode_read_deny_regexes(common)
+        or opencode_redact(common)
+        or (tui and opencode_guide_tui_needed(common))
+    )
+
+
+def opencode_guide_tui_needed(common: dict[str, Any]) -> bool:
+    """TUI 側の guide plugin (``tui.ts``) を読み込むか。役割は説明の toast だけ。"""
+    return opencode_ask_description(common) is not None
+
+
 def merge_opencode_plugins(existing_plugins: Any, common: dict[str, Any]) -> list[Any]:
     """``plugins`` を更新する (宣言外のエントリは残す)。"""
     path = opencode_guide_plugin_path()
     checkpoint = opencode_checkpoint_plugin_path()
     known = (path, OPENCODE_GUIDE_PLUGIN, checkpoint, OPENCODE_CHECKPOINT_PLUGIN)
     out = [p for p in (existing_plugins or []) if p not in known]
-    if opencode_guide_rules(common) or opencode_ask_description(common):
+    if opencode_guide_server_needed(common, tui=True):
         out.append(path)
     # checkpoint plugin は常に読み込む。common.toml に切り替えは置かない
     # (圧縮は設定と無関係に起きるため)。
@@ -1567,16 +1565,17 @@ def _opencode_keybind_value(command: str, binding: Any) -> Any:
     raise ValueError(f"{where} は文字列・リスト・テーブル・false のどれかで書く")
 
 
-def build_opencode_keybinds(common: dict[str, Any]) -> dict[str, Any]:
+def build_opencode_keybinds(common: dict[str, Any]) -> dict[str, Any] | None:
     """``[opencode.keybinds]`` を検査して ``cli.json`` の ``keybinds`` にする。
 
     キーバインドは **``cli.json`` 側にしか無い**。``opencode.json`` へ書いても
     読まれないので、誤配置に気づけない。
+    未宣言は None、空テーブルは ``{}`` (既存を空で置き換える) と区別する。
     see docs/spec/agent-permissions.md 「キーバインド」
     """
     keybinds = common.get("opencode", {}).get("keybinds")
     if keybinds is None:
-        return {}
+        return None
     if not isinstance(keybinds, dict):
         raise ValueError("[opencode.keybinds] はテーブルで書く")
 
@@ -1602,13 +1601,13 @@ def merge_opencode_cli(existing: dict[str, Any], common: dict[str, Any]) -> dict
     """
     out = dict(existing)
     keybinds = build_opencode_keybinds(common)
-    if keybinds:
+    if keybinds is not None:
         # 宣言したら keybinds テーブルごと common.toml 側の持ち物にする。
         # 1 件消したときに配備先へ残らないようにするため。
         out["keybinds"] = keybinds
     path = opencode_guide_plugin_path()
     plugins = [p for p in (out.get("plugins") or []) if p not in (path, OPENCODE_GUIDE_PLUGIN)]
-    if opencode_guide_rules(common) or opencode_ask_description(common):
+    if opencode_guide_tui_needed(common):
         plugins.append(path)
     if plugins:
         out["plugins"] = plugins
@@ -1695,7 +1694,7 @@ def load_common(path: str) -> dict[str, Any]:
 #   ~/.config/agents/local.toml   (AGENTS_LOCAL_CONFIG で差し替え可)
 #
 # chezmoi は管理下に無いファイルを消さないので、apply しても残る。
-# また ~/.config/agents は [sandbox] write_deny_extra に入っており
+# また ~/.config/agents は [sandbox] claude_write_deny に入っており
 # sandbox 内のコマンドからは書けないので、エージェント自身がここに
 # 許可を書き足して自分の権限を広げることはできない。
 LOCAL_OVERLAY_ENV = "AGENTS_LOCAL_CONFIG"

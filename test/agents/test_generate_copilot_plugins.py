@@ -64,5 +64,41 @@ def test_merge_copilot_settings_without_declaration_leaves_key_untouched():
     assert merged["enabledPlugins"] == {"keep@me": True}
 
 
-def test_enabled_plugins_is_declared_managed():
-    assert "enabledPlugins" in gen.COPILOT_MANAGED_KEYS
+# merge_copilot_settings が書き換えてよいキー。これ以外は CLI や他の経路が
+# 書いた値として温存する。増やすときは生成処理とこの一覧を一緒に直す。
+COPILOT_MANAGED = {
+    "allowedUrls",
+    "autoUpdate",
+    "deniedUrls",
+    "defaultPermissionMode",
+    "enabledPlugins",
+    "experimental",
+    "includeCoAuthoredBy",
+    "sandbox",
+    "trustedFolders",
+}
+
+FULL_COPILOT_COMMON = {
+    "web": {"allow_domains": ["example.com"], "deny_domains": ["evil.test"]},
+    "copilot": {
+        "auto_update": False,
+        "trusted_folders": ["/work"],
+        "include_co_authored_by": False,
+        "default_permission_mode": "assisted",
+        "experimental": True,
+        "enabled_plugins": {"a@m": True},
+    },
+}
+
+
+def test_copilot_settings_touch_only_the_managed_keys():
+    """全部宣言しても、書き換わるのは管理キーだけ。"""
+    existing = {key: {"sentinel": True} for key in COPILOT_MANAGED}
+    existing.update({"theme": "dark", "loggedInUsers": [], "model": "x"})
+    merged = gen.merge_copilot_settings(existing, FULL_COPILOT_COMMON)
+    changed = {k for k in set(existing) | set(merged) if existing.get(k) != merged.get(k)}
+    assert changed == COPILOT_MANAGED
+
+
+def test_copilot_settings_generate_only_the_managed_keys():
+    assert set(gen.merge_copilot_settings({}, FULL_COPILOT_COMMON)) == COPILOT_MANAGED

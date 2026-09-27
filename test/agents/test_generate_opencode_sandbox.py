@@ -272,6 +272,35 @@ def test_isolated_loads_guide_plugin_for_redaction():
         assert not any(path.startswith(p) for p in base["write"]), f"{path} を境界内から書ける"
 
 
+# guide plugin の役割を 1 つだけ有効にした隔離版。通常版と同じ判定関数を通す。
+# ★ask_description は数えない。ocs は cli.json を渡さず tui.ts が読まれないので、
+#   説明を生成しても表示されない。
+# see docs/spec/agent-permissions.md#plugin-層-guide-plugin
+ISOLATED_GUIDE_ROLES = {
+    "guide": ({"opencode": {"shell": {"guide": [{"pattern": "^cat ", "message": "m"}]}}}, True),
+    "read_filter": ({"file": {"read_deny_globs": ["**/.env"]}}, True),
+    "redact": ({"opencode": {"redact": {"enabled": True, "rule": []}}}, True),
+    "ask_description": (
+        {"opencode": {"ask_description": {"enabled": True, "models": ["p/m"]}}},
+        False,
+    ),
+}
+
+
+@pytest.mark.parametrize("role", sorted(ISOLATED_GUIDE_ROLES))
+def test_isolated_guide_plugin_follows_the_shared_condition(tmp_path, role):
+    runtime = tmp_path / "srt"
+    runtime.write_text("", "utf-8")
+    common, expected = ISOLATED_GUIDE_ROLES[role]
+    common = {**common, "opencode": {
+        **common.get("opencode", {}),
+        "sandbox": {"enabled": True, "runtime_path": str(runtime)},
+    }}
+    out = gen.opencode_sandbox(common)
+    assert (gen.opencode_guide_plugin_path() in out["plugins"]) is expected
+    assert out["plugins"][-1] == gen.opencode_checkpoint_plugin_path()
+
+
 def test_boundary_check_handles_nonexistent_protected_paths():
     """★保護対象は存在するとは限らない。
 
