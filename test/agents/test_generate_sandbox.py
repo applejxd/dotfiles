@@ -35,6 +35,12 @@ SANDBOX_KEYS = (
 # common.toml 側の健全性
 # ---------------------------------------------------------------------------
 
+
+def sandbox_path(path: str) -> str:
+    """Copilot の sandbox に出る形。Windows では OS の形式 (\\ 区切り) に揃う。"""
+    return gen._expand_sandbox_paths([path])[0]
+
+
 def test_sandbox_section_exists():
     assert "sandbox" in COMMON
     for key in SANDBOX_KEYS:
@@ -265,9 +271,9 @@ def test_both_clis_share_the_same_deny_source():
     # deny は共通。Copilot 側は wildcard を落とすだけの関係であること。
     claude = set(gen.build_claude_sandbox(COMMON)["filesystem"]["denyRead"])
     copilot = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    home = str(Path.home())
+    home = sandbox_path("~")
     for path in copilot["deniedPaths"]:
-        assert path.replace(home, "~", 1) in claude, (
+        assert path.replace(home, "~", 1).replace("\\", "/") in claude, (
             f"Copilot で deny しているのに Claude 側に無い: {path}"
         )
 
@@ -670,8 +676,8 @@ def test_copilot_sandbox_reads_only_the_copilot_keys():
         }
     }
     fs = gen.build_copilot_sandbox(None, common)["userPolicy"]["filesystem"]
-    assert fs["readonlyPaths"] == ["/copilot-ro"]
-    assert fs["readwritePaths"] == ["/copilot-rw"]
+    assert fs["readonlyPaths"] == [sandbox_path("/copilot-ro")]
+    assert fs["readwritePaths"] == [sandbox_path("/copilot-rw")]
 
     claude_fs = gen.build_claude_sandbox(common)["filesystem"]
     assert claude_fs["allowRead"] == ["/claude-only-ro"]
@@ -703,8 +709,8 @@ def test_copilot_parent_child_paths_are_allowed_to_coexist():
         }
     }
     fs = gen.build_copilot_sandbox(None, common)["userPolicy"]["filesystem"]
-    assert fs["readonlyPaths"] == [gen.expand_user("~/.local")]
-    assert fs["readwritePaths"] == [gen.expand_user("~/.local/state")]
+    assert fs["readonlyPaths"] == [sandbox_path("~/.local")]
+    assert fs["readwritePaths"] == [sandbox_path("~/.local/state")]
 
 
 def test_real_common_toml_has_no_copilot_allow_overlap():
@@ -717,8 +723,8 @@ def test_copilot_sandbox_grants_uv_paths_so_uv_run_works():
     # uv が動かないとこのリポジトリの検証コマンドが一切通らない。
     # interpreter は ~/.local 配下、キャッシュは ~/.cache 配下で賄う。
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    assert gen.expand_user("~/.cache") in fs["readwritePaths"]
-    assert gen.expand_user("~/.local") in fs["readonlyPaths"]
+    assert sandbox_path("~/.cache") in fs["readwritePaths"]
+    assert sandbox_path("~/.local") in fs["readonlyPaths"]
 
 
 def test_uvx_tool_dir_is_writable_for_both_clis():
@@ -727,7 +733,7 @@ def test_uvx_tool_dir_is_writable_for_both_clis():
     # ~/.local は RO なので、より具体的なパスとして write に足す必要がある。
     tool_dir = "~/.local/share/uv/tools"
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    assert gen.expand_user(tool_dir) in fs["readwritePaths"]
+    assert sandbox_path(tool_dir) in fs["readwritePaths"]
     assert tool_dir in gen.build_claude_sandbox(COMMON)["filesystem"]["allowWrite"]
 
 
@@ -736,7 +742,7 @@ def test_mise_install_dir_stays_read_only():
     # write を与えると以後のコマンドを乗っ取れる。uv/tools は PATH に
     # 載らないので扱いが違う (上のテスト)。
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    assert gen.expand_user("~/.local/share/mise") not in fs["readwritePaths"]
+    assert sandbox_path("~/.local/share/mise") not in fs["readwritePaths"]
 
 
 def test_chezmoi_state_is_writable_for_both_clis():
@@ -745,7 +751,7 @@ def test_chezmoi_state_is_writable_for_both_clis():
     # ~/.config は RO なので、より具体的なパスとして write に足す必要がある。
     state_dir = "~/.config/chezmoi"
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    assert gen.expand_user(state_dir) in fs["readwritePaths"]
+    assert sandbox_path(state_dir) in fs["readwritePaths"]
     assert state_dir in gen.build_claude_sandbox(COMMON)["filesystem"]["allowWrite"]
 
 
@@ -754,7 +760,7 @@ def test_chezmoi_age_key_is_denied_inside_the_writable_state_dir():
     # 遮断されること。許可を広げたときに鍵まで開く事故を防ぐ。
     key = "~/.config/chezmoi/" + "key" + ".txt"
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    assert gen.expand_user(key) in fs["deniedPaths"]
+    assert sandbox_path(key) in fs["deniedPaths"]
     assert key in gen.build_claude_sandbox(COMMON)["filesystem"]["denyRead"]
 
 
@@ -763,7 +769,7 @@ def test_copilot_sandbox_grants_the_mise_toolchain():
     # bind-mount は symlink を辿った実体を貼るため、PATH 上の <tool>/latest/bin
     # だけを貼ると latest 自体が消える。親ごと許可すれば素通しになる。
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
-    assert gen.expand_user("~/.local") in fs["readonlyPaths"]
+    assert sandbox_path("~/.local") in fs["readonlyPaths"]
 
 
 def test_copilot_dev_tool_access_is_disabled():
@@ -788,6 +794,7 @@ def test_mise_installs_is_never_writable():
         assert not path.endswith("/.local"), "~/.local 全体に write を与えている"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Unix のシステムパス。Windows の許可リストは未整理")
 def test_copilot_sandbox_grants_system_build_paths():
     fs = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
     for path in ("/usr/include", "/usr/local", "/usr/src", "/opt"):
@@ -819,7 +826,7 @@ def test_copilot_allow_lists_merge_instead_of_replacing():
     existing = {
         "userPolicy": {
             "filesystem": {
-                "readonlyPaths": ["/manual/ro", gen.expand_user("~/dup")],
+                "readonlyPaths": ["/manual/ro", sandbox_path("~/dup")],
                 "readwritePaths": ["/manual/rw"],
             }
         }
@@ -827,7 +834,7 @@ def test_copilot_allow_lists_merge_instead_of_replacing():
     fs = gen.build_copilot_sandbox(existing, common)["userPolicy"]["filesystem"]
     assert "/manual/ro" in fs["readonlyPaths"]
     assert "/manual/rw" in fs["readwritePaths"]
-    assert fs["readonlyPaths"].count(gen.expand_user("~/dup")) == 1
+    assert fs["readonlyPaths"].count(sandbox_path("~/dup")) == 1
 
 
 def test_copilot_allow_lists_drop_wildcards():
@@ -839,7 +846,7 @@ def test_copilot_allow_lists_drop_wildcards():
         }
     }
     fs = gen.build_copilot_sandbox(None, common)["userPolicy"]["filesystem"]
-    assert fs["readonlyPaths"] == [gen.expand_user("~/ok")]
+    assert fs["readonlyPaths"] == [sandbox_path("~/ok")]
     assert fs.get("readwritePaths", []) == []
 
 
@@ -977,3 +984,16 @@ def test_perms_merge_handles_a_missing_or_empty_file():
 def test_perms_merge_preserves_unknown_top_level_keys():
     existing = {"locations": {}, "someFutureKey": {"a": 1}}
     assert gen.merge_copilot_perms(existing, SHARED).get("someFutureKey") == {"a": 1}
+
+
+def test_windows_existing_mixed_paths_are_not_duplicated(monkeypatch):
+    """Windows では既存の混ざった形 (以前の版の出力) も揃えてから合算する。"""
+    monkeypatch.setattr(gen.os, "name", "nt")
+    monkeypatch.setattr(gen, "expand_user", lambda p: p.replace("~", "C:\\Users\\x", 1))
+    common = {"sandbox": {"deny": ["~/.ssh"], "copilot_read_allow": ["~/.local"]}}
+    existing = {"userPolicy": {"filesystem": {"readonlyPaths": ["C:\\Users\\x/.local"]}}}
+
+    fs = gen.build_copilot_sandbox(existing, common)["userPolicy"]["filesystem"]
+
+    assert fs["readonlyPaths"] == ["C:\\Users\\x\\.local"]
+    assert fs["deniedPaths"] == ["C:\\Users\\x\\.ssh"]

@@ -142,7 +142,8 @@ def test_wrapper_accepts_common_checked_out_with_crlf():
     lines = wrapper.decode("utf-8").splitlines(keepends=True)
     common_line = next(i for i, line in enumerate(lines) if line.startswith("COMMON = "))
     common = json.loads(lines[common_line].removeprefix("COMMON = "))
-    lines[common_line] = "COMMON = " + json.dumps(common.replace("\n", "\r\n")) + "\n"
+    crlf = common.replace("\r\n", "\n").replace("\n", "\r\n")
+    lines[common_line] = "COMMON = " + json.dumps(crlf) + "\n"
     result = run_wrapper("".join(lines).encode("utf-8"), b"{}")
 
     assert result.returncode == 0, result.stderr.decode(errors="replace")

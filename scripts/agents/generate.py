@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import ntpath
 import os
 import platform
 import re
@@ -348,10 +349,18 @@ def _expand_sandbox_paths(paths: list[str]) -> list[str]:
     Windows では ``C:\\Users\\x/.ssh`` と区切りが混ざるので、OS の形式へ揃える
     (Copilot の設定例は ``C:\\Users\\...``)。see docs/spec/agent-permissions.md#windows-での扱い
     """
-    out = [expand_user(path) for path in paths if "*" not in path and "?" not in path]
-    if os.name == "nt":
-        out = [os.path.normpath(path) for path in out]
-    return out
+    return [
+        _os_path(expand_user(path))
+        for path in paths
+        if "*" not in path and "?" not in path
+    ]
+
+
+def _os_path(path: Any) -> Any:
+    """Windows では区切りを OS の形式へ揃える。それ以外の OS と文字列以外はそのまま。"""
+    if os.name == "nt" and isinstance(path, str):
+        return ntpath.normpath(path)
+    return path
 
 
 # ``[sandbox]`` で使えるキー。命名は **共有 = 無印 / CLI 固有 = CLI 名の接頭辞**
@@ -880,7 +889,8 @@ def build_copilot_sandbox(
         if not extra and key not in filesystem:
             continue
         current = filesystem.get(key)
-        current = list(current) if isinstance(current, list) else []
+        # 以前の版が書いた C:\Users\x/.local のような形も揃えてから合算する (重複させない)
+        current = [_os_path(p) for p in current] if isinstance(current, list) else []
         filesystem[key] = _uniq(current + extra)
 
     user_policy["filesystem"] = filesystem
