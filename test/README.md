@@ -181,7 +181,8 @@ gh workflow run e2e -f service=raspi2204 -f mode=update   # 手元から起動�
 同じ理由で、WSL2 上の Docker では**どのサービスも WSL 扱い**になる。
 `.chezmoiignore.tmpl` はカーネル名に `microsoft` が含まれるかで WSL を見分けるため、
 `120_wsl.sh` などが走る。WSL ではない Linux の経路は、素の Linux ホストの Docker か
-実機で見る。
+実機、または GitHub Actions で見る。たとえば `110_native/`（VS Code など）は
+WSL と Raspberry Pi では除外されるので、手元の Docker では一度も走らない。
 
 ### systemd は無い
 
@@ -262,6 +263,13 @@ see [外部ツールとの共存](../docs/spec/agent-permissions.md#外部ツー
 Pi 以外の経路を検証していた（i3 が入り zram-tools が入らないことで発覚）。
 init を省く `update` 以外（`dryrun` / `place` / `apply`）はすべて影響を受けていた。
 注入と確認を init の後へ移し、順序を `test/test_raspi_detection.py` で検査する。
+
+### 解決済み: 素の Linux で `111_microsoft.sh` が `Unable to locate package` で止まる
+
+GitHub Actions の `arm2404` で発覚。111 は `apt-get update` をせずに前提パッケージ
+（wget / gpg）を入れていたので、パッケージ一覧が空の機械では失敗していた。
+一覧を更新する 121 より先に走る。`110_native/` は WSL と Pi では除外されるので、
+手元の Docker では見えなかった。先に `apt-get update` するようにした。
 
 ### 解決済み: Codex のトップレベルのキーが直前のテーブルに入る
 
