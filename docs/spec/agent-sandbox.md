@@ -595,7 +595,7 @@ disabled.` を出す。
 | `check_gh_api_*` | GitHub API の意味解釈が必要 |
 
 逆に `check_http_dangerous_output` (`curl` でシェル起動ファイルを上書き) は
-下記の Protected paths と `denyWrite` で**完全に冗長**になっている。
+[残る非対称](#残る非対称) の Protected paths と `denyWrite` で**完全に冗長**になっている。
 
 ## このマシンだけで許可を足す (chezmoi 管理に影響を与えない)
 
@@ -717,7 +717,8 @@ Copilot の `readonlyPaths` / `readwritePaths` は、`generate.py` が既存の�
 
 > [!NOTE]
 > どの方法でも **symlink は許可の手段にならない**。プロジェクト配下に
-> `/data1` へのリンクを張っても、許可は実パスに与える必要がある (後述)。
+> `/data1` へのリンクを張っても、許可は実パスに与える必要がある
+> ([symlink の扱い](#symlink-の扱い))。
 
 ### まとめ: どれを使うか
 

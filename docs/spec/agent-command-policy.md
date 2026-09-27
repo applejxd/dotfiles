@@ -83,6 +83,14 @@ curl URL -o a.sh && chmod +x a.sh && ./a.sh
 以前あった部分一致の判定は `git -C sub show HEAD -- config/app.yml` のような
 読み取りまで deny する誤検知しか生まなかったため廃止した。
 
+評価順は **deny → ask → allow**。より具体的なパターンを deny に置けば、
+一般形を ask にできる。
+
+```toml
+ask  = ["git reset"]          # index を戻すだけなら承認で実行
+deny = ["git reset --hard"]   # 作業ツリーを壊す形だけ拒否
+```
+
 ## 読み取りと書き込みを区別する
 
 パスが引数に現れるだけでは書き込みではない。`_write_targets()` が
@@ -156,8 +164,8 @@ MCP へトークンを渡すときは設定ファイルに直書きせず、環�
 出力先は `_SECRET_SINK_COMMANDS` (echo / printf / cat / tee / base64 / head /
 sed / awk / jq など、stdin を stdout へ通すフィルタを含む) と
 `_SECRET_EGRESS_COMMANDS` (curl / wget / nc / ssh / scp / rsync / mail / aws など) の
-2 つに分けて持つ。`nc` は ask リストにあり Copilot では自動承認されるため、
-hook 側の deny が実質唯一の防御になる。
+2 つに分けて持つ。`nc` は ask リストにあり Copilot では自動承認される
+（[Copilot CLI は hook の `ask` を自動承認する](#copilot-cli-は-hook-の-ask-を自動承認する)）ため、hook 側の deny が実質唯一の防御になる。
 
 `sh -c '...'` のようにコードを引数で渡す形は、中身を取り出して同じ判定を
 再帰的に適用する (深さ 2 まで)。これにより「子シェルが展開する秘密」は捕捉しつつ、
@@ -177,14 +185,6 @@ heredoc の本文は、実行される形 (`bash <<'EOF'` / `python3 - <<'PY'`) 
 検査する。`cat <<'EOF' > note.md` のようにファイルへ書くだけの本文は
 検査対象から外すので、ドキュメントにコマンド例を書いても誤検知しない。
 
-評価順は **deny → ask → allow**。より具体的なパターンを deny に置けば、
-一般形を ask にできる。
-
-```toml
-ask  = ["git reset"]          # index を戻すだけなら承認で実行
-deny = ["git reset --hard"]   # 作業ツリーを壊す形だけ拒否
-```
-
 ## deny と ask の使い分け
 
 | 分類 | 例 | 置き場所 |
@@ -201,6 +201,28 @@ deny = ["git reset --hard"]   # 作業ツリーを壊す形だけ拒否
 | サブコマンドで分ける | `systemctl status` は許可、`systemctl enable` は `deny` | 用途ごとに列挙 |
 | 自動承認 | `git status`, `grep -n`, `uv sync` | `allow` |
 | GitHub 読み取り | `gh pr list`, `gh issue view`, `gh search code`, REST GET | **未掲載** |
+
+判断基準:
+
+- **取り返しがつくか**: lockfile や git、再 pull で戻せるなら `ask` で十分
+- **外部に出るか**: リモートや外部ホストへ情報が出るものは `deny`
+  (`git push` / `gh pr merge` / `ssh` / `telnet`)
+- **摩擦があるか**: そもそも使わないコマンドを緩めても利益が無い。
+  DB クライアントは触る機会が無いので `deny` のまま置いている
+
+## Copilot CLI は hook の `ask` を自動承認する
+
+**Copilot CLI 1.0.53 以降は hook の `ask` が機能しない**。TUI が permission
+dialog を数十 ms 表示しただけで自動承認する既知バグ
+([github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590), OPEN)
+があるため。実測では hook 由来の permission 90 件のうち 79 件が
+`outcome=auto_approved` / `source=assisted_approval` で中央値 58ms (min 6ms /
+max 99ms) に解決され、人間が応答した 11 件は中央値 23.5 秒だった。
+1.0.84-2 でも `git config --get user.name` が確認無しで実行された。
+`deny` はこのバグの影響を受けず正常にブロックする。
+
+したがって Copilot では、`ask` に載せたものは**止まらない**前提で考える。
+止めたいものは `deny` に置くか、hook の deny チェックで捕まえる。
 
 ## `rm` の承認範囲
 
@@ -302,7 +324,7 @@ workspace 免除との違いは 2 点だけ。
 混ぜない)。常時読み込まれる個人用カスタム指示に書くと毎ターン
 コンテキストを消費するため、**止めた時点のメッセージで誘導する**方を採った。
 
-なお `ask` は Copilot CLI では自動承認されるため、この緩和が実際に効くのは
+なお `ask` は Copilot CLI では自動承認される（[Copilot CLI は hook の `ask` を自動承認する](#copilot-cli-は-hook-の-ask-を自動承認する)）ため、この緩和が実際に効くのは
 Claude Code だけである。逆に言うと、deny へ上げた 2 つは
 **Copilot でこれまで素通りしていた**ものを止めるようになった。
 
@@ -316,11 +338,25 @@ Claude Code だけである。逆に言うと、deny へ上げた 2 つは
 | **LLM 判定** | **`auto`**（classifier という別モデルが審査） | **`assisted`**（LLM safety check） |
 | 全許可 | `bypassPermissions` | `allow-all` |
 
+モードは `common.toml` から両 CLI へ生成している。
+
+```toml
+[claude]
+default_permission_mode = "auto"
+
+[copilot]
+default_permission_mode = "assisted"
+experimental = true          # assisted は experimental な auto-approval に依存
+```
+
+Copilot の設定キーの権威ある一覧は Web ドキュメントではなく
+`copilot help config` にある。
+
 **`ask` に載せるとこのモードに到達しない。**
 Claude Code は「explicit ask rule に一致するツールは、`bypassPermissions` を含む
 どのモードでも自動承認しない」と明記している。hook が返す `ask` も同様に
 プロンプトを最低保証する。**ただしこれが成立するのは Claude Code だけで、
-Copilot CLI では hook の `ask` が自動承認される**（後述の `git commit` の説明を参照）。
+Copilot CLI では hook の `ask` が自動承認される**（[Copilot CLI は hook の `ask` を自動承認する](#copilot-cli-は-hook-の-ask-を自動承認する)）。
 
 したがって「LLM の判断に任せたい」コマンドは、`allow` ではなく
 **どのリストにも載せない**のが正しい。`allow` に入れると手動モードでも
@@ -362,13 +398,7 @@ GraphQL は読み取り query でも HTTP POST を使うので、method では�
 しないのは、Claude Code の native permission も Codex の rules も `&&` の後半を
 再評価しないためで、単独実行にすれば CLI 側の強制もコミットに効く。
 
-なお **Copilot CLI 1.0.53 以降は hook の `ask` が機能しない**。TUI が permission
-dialog を数十 ms 表示しただけで自動承認する既知バグ
-([github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590), OPEN)
-があるため。実測では hook 由来の permission 90 件のうち 79 件が
-`outcome=auto_approved` / `source=assisted_approval` で中央値 58ms (min 6ms /
-max 99ms) に解決され、人間が応答した 11 件は中央値 23.5 秒だった。
-`deny` はこのバグの影響を受けず正常にブロックする。
+なお Copilot CLI では hook の `ask` が機能しない（[Copilot CLI は hook の `ask` を自動承認する](#copilot-cli-は-hook-の-ask-を自動承認する)）。
 
 このため skill 側では CLI を判別せず、どの CLI でも同じ文面で明示確認する。
 skill は呼び出したときしか読まれないため、Copilot 側は常時読み込まれる
@@ -432,29 +462,7 @@ HTTP method と payload option は hook が transfer ごとに解析するため
 deny 層に例外を設けないのは、curl 関連の deny が見ているのが「通信先」ではないため。
 `check_http_dangerous_output` は**ローカルへの書き込み先**を、`check_pipe_to_shell` は**取得内容の実行**を、
 `check_curl_file_send` は**秘密の持ち出し**を見ており、宛先がループバックでもリスクは消えない。
-加えて Copilot CLI では ask が自動承認される（後述）ため、deny が実質唯一機能している層でもある。
-
-モードは `common.toml` から両 CLI へ生成している。
-
-```toml
-[claude]
-default_permission_mode = "auto"
-
-[copilot]
-default_permission_mode = "assisted"
-experimental = true          # assisted は experimental な auto-approval に依存
-```
-
-Copilot の設定キーの権威ある一覧は Web ドキュメントではなく
-`copilot help config` にある。
-
-判断基準:
-
-- **取り返しがつくか**: lockfile や git、再 pull で戻せるなら `ask` で十分
-- **外部に出るか**: リモートや外部ホストへ情報が出るものは `deny`
-  (`git push` / `gh pr merge` / `ssh` / `telnet`)
-- **摩擦があるか**: そもそも使わないコマンドを緩めても利益が無い。
-  DB クライアントは触る機会が無いので `deny` のまま置いている
+加えて Copilot CLI では ask が自動承認される（[Copilot CLI は hook の `ask` を自動承認する](#copilot-cli-は-hook-の-ask-を自動承認する)）ため、deny が実質唯一機能している層でもある。
 
 ## `allow` の粒度に注意
 
@@ -469,8 +477,7 @@ hook は permission 層とは独立に走るので、**仕様どおりなら** `
    `uv` / `mise` / `docker` が allow の先頭トークンなので Copilot では
    事前承認され、hook にも該当ルールが無い）
 2. `ask` が実際に止まること。現状 Copilot は hook の `ask` を自動承認する
-   既知バグがあり (github/copilot-cli#3590, OPEN)、実測 (1.0.84-2) でも
-   `git config --get user.name` が確認無しで実行された
+   （[Copilot CLI は hook の `ask` を自動承認する](#copilot-cli-は-hook-の-ask-を自動承認する)）
 
 | hook の判定 | Claude | Copilot (仕様) | Copilot (現状) |
 | --- | --- | --- | --- |

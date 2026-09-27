@@ -48,7 +48,7 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 
 | 環境 | 主な導入経路 |
 | --- | --- |
-| Windows native | Winget、Scoop、Chocolatey、mise（gh / Herdr / AI CLI）、PowerShell |
+| Windows native | Winget、Scoop、Chocolatey、mise（gh / Herdr）、AI CLI の公式手段（[AI CLI の導入](#ai-cli-の導入)）、PowerShell |
 | Ubuntu | apt、mise |
 | WSL | Windows連携設定、apt、mise |
 | Raspberry Pi（64bit / ヘッドレス） | apt、mise（GUI・VS Code・ソースビルドを除く） |

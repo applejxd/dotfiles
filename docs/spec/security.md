@@ -175,6 +175,15 @@ permission 規則のうち**ワークスペース内を対象とするものは�
 ~/.local/state/opencode-sandbox/trusted.json  ← 承認（マシンごと・境界の外）
 ```
 
+要求できるキーは `read` / `write` / `network_allow` の 3 つ。
+
+```toml
+# <プロジェクト>/.opencode/sandbox.toml
+read = ["/mnt/d/datasets/example"]
+write = ["/mnt/d/outputs/example"]
+network_allow = ["api.example.com"]
+```
+
 | 場面 | 動き |
 | --- | --- |
 | 初回 | 要求内容を表示し、**承認するまで起動しない** |

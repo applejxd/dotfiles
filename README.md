@@ -123,14 +123,7 @@ opencode    # 素の OpenCode（境界なし）
 - 起動のたびに作業ツリーを境界の外へ退避する。復元とセッションの持ち出し
   （`ocs --handoff`）は [OpenCode 隔離起動](docs/spec/opencode-sandbox.md) を参照
 - 起動ディレクトリの外を開けたいときは、プロジェクトに要求ファイルを置き、
-  初回起動時に承認する（[要求と承認](docs/spec/security.md#追加の許可は要求と承認に分ける)）
-
-```toml
-# <プロジェクト>/.opencode/sandbox.toml
-read = ["/mnt/d/datasets/example"]
-write = ["/mnt/d/outputs/example"]
-network_allow = ["api.example.com"]
-```
+  初回起動時に承認する（書き方は[要求と承認](docs/spec/security.md#追加の許可は要求と承認に分ける)）
 
 ## 安全上の注意
 
