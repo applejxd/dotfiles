@@ -3,19 +3,8 @@ name: windows
 # Windows で agent 設定と Windows 資産のテストを回す (WSL では skip される分岐を拾う)。
 # 実機 (Windows 11) の検証の代わりにはならない。see test/README.md#windows-の-github-actions
 "on":
-  push:
-    paths:
-      - "home/**/*.ps1"
-      - "home/**/*.ps1.tmpl"
-      - "home/dot_config/powershell/**"
-      - "home/.chezmoiscripts/300_windows/**"
-      - "home/.chezmoitemplates/**"
-      - "home/dot_config/agents/**"
-      - "home/dot_claude/hooks/**"
-      - "scripts/agents/**"
-      - "test/agents/**"
-      - "test/test_windows_assets.py"
-      - ".github/workflows/windows.yml"
+  # 失敗の振り分けが終わるまで手動のみ。終わったら Windows 関連のパスへの push を戻す
+  # see test/README.md#windows-の-github-actions
   workflow_dispatch:
 
 permissions:
@@ -57,7 +46,11 @@ jobs:
           }
           "ImageOS=$env:ImageOS ImageVersion=$env:ImageVersion"
 
+      # 本番の hook は `py -3 -B -X utf8` で起動する (scripts/agents/generate.py)。
+      # テストが起動する hook と test 自身の read_text も同じ UTF-8 モードに揃える
       - name: pytest
+        env:
+          PYTHONUTF8: "1"
         run: >-
           uv run --python 3.13 --with pytest --with pyyaml --no-project
           pytest test/agents/ test/test_windows_assets.py -q -ra

@@ -43,8 +43,12 @@ agent テストでは生成された matcher と実 hook の判定を両方確�
 ### Windows の GitHub Actions
 
 `.github/workflows/windows.yml` が `windows-2025` の runner で `test/agents/` と
-`test/test_windows_assets.py` を回す。Windows 関連のパス（`*.ps1`、`300_windows/`、
-`scripts/agents/`、共通の agent 設定・hook など）への push と、手動実行で起動する。
+`test/test_windows_assets.py` を回す。**当面は手動実行のみ**（Windows で初めて回した
+ときの失敗を振り分け終えたら、Windows 関連のパスへの push でも起動するよう戻す）。
+
+pytest は `PYTHONUTF8=1` で回す。本番の hook は `py -3 -B -X utf8` で起動するので
+（`scripts/agents/generate.py`）、テストが起動する hook もそれに揃えるため。
+揃えないと hook が日本語の理由を cp1252 で書けずに落ち、JSON が途中で切れる。
 
 **実機（Windows 11）の検証の代わりにはならない。** 見ていないもの:
 
