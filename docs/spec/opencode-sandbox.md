@@ -225,6 +225,10 @@ OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continu
 > 許可リストで持つこと。`permissions` や `plugins` を引き継げるようにすると、
 > 境界の外の設定で内側の緩和を決められてしまう。
 
+内側の環境には `OCS_ISOLATED=1` を渡す。guide plugin はこれで隔離版を見分け、
+確認画面の説明の生成だけを止める（隔離版は `tui.ts` を読まず、作っても
+表示されないため）。偽装されても説明が出なくなるだけで、判定には効かない。
+
 ## 起動前の退避
 
 境界は**ワークスペースの中を守らない**。未コミットの変更は `snapshot` でも
@@ -289,6 +293,14 @@ tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree
 - **隠す対象はホストに在るものだけで判定する。** `ocs` が境界の外で存在を
   確かめ、在るものを `BOUNDARY_HIDDEN`、無いものを `BOUNDARY_HIDDEN_ABSENT`
   （`SKIP` と表示）で渡す。在る対象の一覧も合格のハッシュに入れる
+- **目印を必ず 1 件検査する。** `~/.ssh` などが 1 つも無い機械でも隔離を
+  確かめられるよう、`ocs` が `~/.local/state/opencode-sandbox/boundary-canary`
+  をホストに置き、見えないことを確かめる。read / write に載せてはいけない
+- **検査スクリプトは PATH を `/usr/bin:/bin` に固定し、`curl` を絶対パスで呼ぶ。**
+  作業領域の PATH にある偽物で合格を装わせない。試験用の `BOUNDARY_CURL` は
+  `ocs` が利用者の環境から取り除く
+- **`srt` が PATH から拾う道具（`bwrap` / `socat` / `rg`）が、境界の内側から
+  書ける場所にあれば起動しない。** 偽の `bwrap` で境界そのものを弱められるため
 - **パスは改行区切りの環境変数で渡す**（`BOUNDARY_HIDDEN` / `BOUNDARY_PROTECTED`）。
   空白や glob 文字を含むパスを割らないため。改行を含むパスでは起動しない
 - **保護対象が通常ファイルのときは追記（`>>`）で書き込み可否を見る。**

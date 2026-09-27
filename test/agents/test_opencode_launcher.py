@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -1121,6 +1122,7 @@ def _run_check_script(
         "XDG_DATA_HOME": str(ws / "data"),
     }
     env = launcher["check_environment"](_check_project(ws, protected), base, hidden)
+    env["BOUNDARY_CURL"] = str(curl)
     return subprocess.run(
         ["/bin/sh", str(CHECK_SCRIPT)],
         env=env,
@@ -1254,7 +1256,8 @@ def test_hidden_targets_are_split_by_host_presence(tmp_path, monkeypatch):
     monkeypatch.setitem(launcher, "HOME", home)
     monkeypatch.setitem(launcher, "_is_wsl", lambda: False)
     got = launcher["hidden_targets"]()
-    assert got["present"] == [str(home / ".ssh")]
+    canary = home / launcher["CANARY_REL"]
+    assert got["present"] == [str(canary), str(home / ".ssh")]
     assert str(home / ".git-credentials") in got["absent"]
     assert str(home / ".config/gh") in got["absent"]
     assert not any(p.startswith("/mnt/c") for p in got["present"] + got["absent"])
@@ -1284,3 +1287,76 @@ def test_check_is_invoked_with_absolute_quoted_shell(tmp_path, monkeypatch):
         {"present": [], "absent": []},
     )
     assert seen[0][-1] == f"/bin/sh '{check}'", seen[0]
+
+
+def test_canary_is_always_checked_even_without_host_secrets(tmp_path, monkeypatch):
+    """★~/.ssh などが 1 つも無い機械でも、目印の分だけは本当に検査する。"""
+    launcher = _launcher()
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setitem(launcher, "HOME", home)
+    monkeypatch.setitem(launcher, "_is_wsl", lambda: False)
+    got = launcher["hidden_targets"]()
+    canary = home / launcher["CANARY_REL"]
+    assert got["present"] == [str(canary)]
+    assert canary.is_file()
+    assert canary.stat().st_mode & 0o777 == 0o600
+
+
+def test_canary_must_not_be_readable_inside_the_boundary():
+    """目印は read にも write にも載せない (載ると必ず「見えている」で止まる)。"""
+    sandbox = gen.opencode_sandbox(COMMON) or {}
+    base = sandbox.get("base", {})
+    opened = [*base.get("read", []), *base.get("write", [])]
+    canary = str(Path.home() / _launcher()["CANARY_REL"])
+    assert not any(canary == p or canary.startswith(p.rstrip("/") + "/") for p in opened)
+
+
+@pytest.mark.parametrize("inside", [True, False])
+def test_srt_tools_in_a_writable_area_stop_the_launch(tmp_path, inside):
+    """★PATH にワークスペースがあると、偽の bwrap / rg で境界を弱められる。"""
+    launcher = _launcher()
+    ws = tmp_path / "ws"
+    outside = tmp_path / "sys"
+    bindir = (ws if inside else outside) / "bin"
+    bindir.mkdir(parents=True)
+    fake = bindir / "bwrap"
+    fake.write_text("#!/bin/sh\n", encoding="utf-8")
+    fake.chmod(0o755)
+    config = {"filesystem": {"allowWrite": [str(ws)]}}
+    env = {"PATH": str(bindir)}
+    if inside:
+        with pytest.raises(SystemExit):
+            launcher["check_srt_tools"](env, config)
+    else:
+        launcher["check_srt_tools"](env, config)
+
+
+def test_inner_env_marks_the_isolated_session(tmp_path):
+    """guide plugin はこの印で隔離版を見分け、表示されない説明の生成を止める。"""
+    launcher = _launcher()
+    env = launcher["inner_env"](_sandbox(tmp_path), _project(tmp_path))
+    assert env["OCS_ISOLATED"] == "1"
+
+
+def test_check_does_not_take_curl_from_the_inherited_path(tmp_path):
+    """★検査スクリプトは PATH を固定し、curl を絶対パスで呼ぶ。
+
+    作業領域の PATH にある偽の curl で合格を装わせない。試験用の差し替え口
+    (BOUNDARY_CURL) は、ランチャーが利用者の環境から通さない。
+    """
+    launcher = _launcher()
+    env = launcher["check_environment"](
+        _check_project(tmp_path, []),
+        {"PATH": "/evil:/usr/bin", "BOUNDARY_CURL": "/evil/curl"},
+        {"present": [], "absent": []},
+    )
+    assert "BOUNDARY_CURL" not in env
+
+    lines = [
+        line.strip()
+        for line in CHECK_SCRIPT.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    assert lines[1] == "PATH=/usr/bin:/bin", "set -eu の直後で PATH を固定する"
+    assert not [line for line in lines if re.search(r"(^|[\s;(])curl\s", line)]

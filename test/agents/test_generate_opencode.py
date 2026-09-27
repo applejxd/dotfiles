@@ -398,6 +398,32 @@ def _load_guide_js(work: Path, rules: dict, *, windows: bool = False):
     return call
 
 
+@pytest.mark.parametrize(("isolated", "expected"), [(False, True), (True, False)])
+def test_isolated_session_does_not_build_the_describer(tmp_path, isolated, expected):
+    """隔離版 (OCS_ISOLATED=1) は tui.ts を読まないので、説明を作っても表示されない。"""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
+    src = (ROOT / "home/dot_config/opencode/guide-plugin/index.js").read_text("utf-8")
+    (tmp_path / "mod.mjs").write_text(src + "\nexport { describer }\n", "utf-8")
+    rules = gen.build_opencode_guide({}, COMMON)
+    assert rules.get("ask_description"), "前提: 説明の生成が有効"
+    (tmp_path / "rules.json").write_text(json.dumps(rules), "utf-8")
+    (tmp_path / "run.mjs").write_text(
+        "import { describer } from './mod.mjs'\n"
+        "console.log(JSON.stringify(describer({}) !== null))\n",
+        "utf-8",
+    )
+    env = {k: v for k, v in os.environ.items() if k != "OCS_ISOLATED"}
+    if isolated:
+        env["OCS_ISOLATED"] = "1"
+    done = subprocess.run(
+        [node, str(tmp_path / "run.mjs")],
+        capture_output=True, text=True, encoding="utf-8", env=env, check=True,
+    )
+    assert json.loads(done.stdout) is expected
+
+
 @pytest.fixture(scope="module")
 def guide_js(tmp_path_factory):
     work = tmp_path_factory.mktemp("guide-js")

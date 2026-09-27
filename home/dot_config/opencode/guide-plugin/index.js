@@ -17,6 +17,11 @@ const compiled = (rules.guide ?? []).map((r) => ({
 
 const ask = rules.ask_description ?? null
 
+// 隔離版 (ocs) は tui.ts を読まないので、説明を作っても表示されない。
+// ocs が境界の内側へ渡す印で見分け、生成だけ止める。
+// see docs/spec/opencode-sandbox.md#隔離版の設定の書き出し方
+const ISOLATED = process.env.OCS_ISOLATED === "1"
+
 // 誘導を素通りさせるエージェント (permission = "allow" の逃げ道)。
 // effect で見分けると静的 allow を含む呼び出しまで素通りするので名前で見る。
 // see docs/research/opencode/permission/hook-order.md
@@ -131,7 +136,7 @@ const PROMPT = [
 ].join("\n")
 
 function describer(ctx) {
-  if (!ask) return null
+  if (!ask || ISOLATED) return null
   const cache = new Map()
   const dead = new Set()
   let catalog = null
