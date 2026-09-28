@@ -60,17 +60,21 @@ def inner_env(sandbox: dict, project: dict) -> dict[str, str]:
     return env
 
 
-def inner_command(passthrough: list[str]) -> str:
+def inner_command(passthrough: list[str], path: str) -> str:
     """境界の内側で走らせるコマンド文字列を組み立てる。
 
     ★``srt -c`` はコマンド文字列を 1 個しか取らない。追加の引数を後ろへ
       並べても srt の位置引数になり、**エラーも出さずに捨てられる**
       (``ocs --continue`` が素の起動になっていた)。渡したい引数は
       必ずこの文字列の中に入れる。
+    ★srt には固定した PATH を渡す (:func:`check.srt_env`)。内側の opencode
+      には利用者の ``path`` をここで戻す。
 
     ``-c`` は「エスケープしない sh -c」なので、こちらで引用符を付ける。
     """
-    return shlex.join([str(OPENCODE), "--standalone", *passthrough])
+    return shlex.join(
+        ["/usr/bin/env", f"PATH={path}", str(OPENCODE), "--standalone", *passthrough]
+    )
 
 
 def resolve_node() -> str:
@@ -187,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
     Path(project["data_home"]).mkdir(parents=True, exist_ok=True)
     config.write_isolated_config(sandbox, project)
     session.seed_db(Path(project["db"]))
+    project["config"]["ripgrep"] = {"command": check.resolve_ripgrep(project["config"])}
 
     # 境界の設定は**ワークスペースの外**へ置く (srt は外側で読む)。
     # 内側からは deny_read の ~ 配下で見えないため、読む前の改竄ができない。
@@ -201,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     os.chmod(boundary_file, 0o600)
 
     env = inner_env(sandbox, project)
-    check.check_srt_tools(env, project["config"])
+    host_env = check.srt_env(env)
     hidden = check.hidden_targets()
     digest = check.check_digest(sandbox, project["config"], hidden["present"])
     try:
@@ -225,8 +230,15 @@ def main(argv: list[str] | None = None) -> int:
 
         os.execve(
             node,
-            [node, str(runtime), "-s", boundary_file, "-c", inner_command(passthrough)],
-            env,
+            [
+                node,
+                str(runtime),
+                "-s",
+                boundary_file,
+                "-c",
+                inner_command(passthrough, env.get("PATH", check.SRT_PATH)),
+            ],
+            host_env,
         )
     finally:
         # execve が成功するとここは走らない (その場合 srt が読み終えている)

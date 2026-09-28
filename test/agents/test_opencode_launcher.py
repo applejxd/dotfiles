@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -439,11 +440,13 @@ def test_system_prompt_is_written(tmp_path):
     assert agents.read_text(encoding="utf-8").strip(), "AGENTS.md が空"
 
 
-def test_emptied_managed_keys_leave_no_residue(tmp_path):
-    """★管理キーは空になったら取り除くこと (値あり → 空 → 未指定)。
+@pytest.mark.parametrize("stage", ["空", "未指定"])
+def test_emptied_managed_keys_leave_no_residue(tmp_path, stage):
+    """★管理キーは空または未指定になったら取り除くこと。
 
     空のとき既存を残すと、生成側で外した plugin・policy・説明が隔離版に居座る。
-    管理外のキーと利用者が選んだモデルは、どの段階でも残す。
+    管理外のキーと利用者が選んだモデルは残す。
+    どちらの段階も**値がある状態から**始める (続けて当てると 2 つ目は素通りする)。
     """
     launcher = _launcher()
     project = _project(tmp_path)
@@ -467,21 +470,21 @@ def test_emptied_managed_keys_leave_no_residue(tmp_path):
     config["experimental"]["other"] = True
     target.write_text(json.dumps(config), encoding="utf-8")
 
-    emptied = {**full, "policies": [], "plugins": [], "system_prompt": ""}
-    unspecified = {
-        k: v for k, v in full.items() if k not in ("policies", "plugins", "system_prompt")
-    }
-    for stage, sandbox in (("空", emptied), ("未指定", unspecified)):
-        launcher.config.write_isolated_config(sandbox, project)
-        after = json.loads(target.read_text(encoding="utf-8"))
-        assert "plugins" not in after, f"{stage}: plugins が残った"
-        assert after.get("experimental") == {"other": True}, (
-            f"{stage}: policies が残ったか、管理外の experimental が消えた"
-        )
-        assert not agents.exists(), f"{stage}: AGENTS.md が残った"
-        assert after["model"] == "github-copilot/claude-sonnet-5", f"{stage}: model が消えた"
-        assert after["username"] == "alice", f"{stage}: 宣言外のキーが消えた"
-        assert after["permissions"] == full["permissions"]
+    managed = ("policies", "plugins", "system_prompt")
+    if stage == "空":
+        sandbox = {**full, "policies": [], "plugins": [], "system_prompt": ""}
+    else:
+        sandbox = {k: v for k, v in full.items() if k not in managed}
+    launcher.config.write_isolated_config(sandbox, project)
+    after = json.loads(target.read_text(encoding="utf-8"))
+    assert "plugins" not in after, "plugins が残った"
+    assert after.get("experimental") == {"other": True}, (
+        "policies が残ったか、管理外の experimental が消えた"
+    )
+    assert not agents.exists(), "AGENTS.md が残った"
+    assert after["model"] == "github-copilot/claude-sonnet-5", "model が消えた"
+    assert after["username"] == "alice", "宣言外のキーが消えた"
+    assert after["permissions"] == full["permissions"]
 
 
 def test_experimental_is_dropped_when_only_policies_were_in_it(tmp_path):
@@ -505,16 +508,17 @@ def test_passthrough_reaches_opencode():
     `ocs --continue` が素の起動になっていた回帰。
     """
     launcher = _launcher()
-    got = launcher.cli.inner_command(["--continue"])
+    got = launcher.cli.inner_command(["--continue"], "/usr/bin")
     assert got.endswith("--standalone --continue"), got
-    assert "--session ses_x" in launcher.cli.inner_command(["--session", "ses_x"])
+    assert "--session ses_x" in launcher.cli.inner_command(["--session", "ses_x"], "/usr/bin")
 
 
 def test_passthrough_is_quoted():
     """コマンド文字列へ入れる以上、引用符はこちらで付ける。"""
     launcher = _launcher()
-    got = launcher.cli.inner_command(["--prompt", "a; rm -rf /"])
+    got = launcher.cli.inner_command(["--prompt", "a; rm -rf /"], "/a b:/usr/bin")
     assert "'a; rm -rf /'" in got, got
+    assert "'PATH=/a b:/usr/bin'" in got, got
 
 
 # --- git worktree ------------------------------------------------------------
@@ -1323,33 +1327,157 @@ def test_canary_is_always_checked_even_without_host_secrets(tmp_path, monkeypatc
     assert canary.stat().st_mode & 0o777 == 0o600
 
 
-def test_canary_must_not_be_readable_inside_the_boundary():
-    """目印は read にも write にも載せない (載ると必ず「見えている」で止まる)。"""
-    sandbox = gen.opencode_sandbox(COMMON) or {}
-    base = sandbox.get("base", {})
-    opened = [*base.get("read", []), *base.get("write", [])]
+def test_canary_must_not_be_readable_inside_the_boundary(tmp_path):
+    """目印は read にも write にも載せない (載ると必ず「見えている」で止まる)。
+
+    ★srt の無い機械でも生成結果が空にならないよう、runtime だけダミーに差し替える。
+    """
+    runtime = tmp_path / "srt"
+    runtime.write_text("", "utf-8")
+    common = {
+        **COMMON,
+        "opencode": {
+            **COMMON["opencode"],
+            "sandbox": {**COMMON["opencode"]["sandbox"], "runtime_path": str(runtime)},
+        },
+    }
+    sandbox = gen.opencode_sandbox(common)
+    assert sandbox is not None, "境界の設定が生成されない"
+    base = sandbox["base"]
+    opened = [*base["read"], *base["write"]]
+    assert opened, "許可のリストが空で、検査になっていない"
     canary = str(Path.home() / _launcher().check.CANARY_REL)
     assert not any(canary == p or canary.startswith(p.rstrip("/") + "/") for p in opened)
 
 
-@pytest.mark.parametrize("inside", [True, False])
-def test_srt_tools_in_a_writable_area_stop_the_launch(tmp_path, inside):
-    """★PATH にワークスペースがあると、偽の bwrap / rg で境界を弱められる。"""
+def test_srt_runs_with_a_fixed_path():
+    """★srt は境界の外で PATH から which / bwrap / socat を起動する。
+
+    利用者の PATH のまま渡すと、先頭の書き込める場所の偽物がホストで動く。
+    PATH 以外は変えない。
+    """
+    launcher = _launcher()
+    got = launcher.check.srt_env({"PATH": "/evil:/usr/bin", "HOME": "/h"})
+    assert got == {"PATH": "/usr/bin:/bin", "HOME": "/h"}
+
+
+def test_check_runs_srt_with_a_fixed_path(tmp_path, monkeypatch):
+    """★境界チェックで srt を起動するときも PATH を固定する。"""
+    launcher = _launcher()
+    seen: list[dict] = []
+
+    def fake_run(cmd, **kw):
+        seen.append(kw["env"])
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    launcher.check.run_check(
+        "/usr/bin/node",
+        tmp_path / "srt.js",
+        str(tmp_path / "b.json"),
+        _check_project(tmp_path, []),
+        {"PATH": str(tmp_path / "evil")},
+        {"present": [], "absent": []},
+    )
+    assert seen[0]["PATH"] == "/usr/bin:/bin"
+
+
+def test_launch_fixes_srt_path_but_keeps_the_users_path_inside(tmp_path, monkeypatch):
+    """★srt には固定の PATH を、内側の opencode には利用者の PATH を渡す。
+
+    境界の内側で mise の道具を使えるよう、利用者の PATH はコマンド文字列で戻す。
+    rg は srt が境界の外で走らせるので、実体の絶対パスを境界の設定に入れる。
+    """
     launcher = _launcher()
     ws = tmp_path / "ws"
-    outside = tmp_path / "sys"
-    bindir = (ws if inside else outside) / "bin"
-    bindir.mkdir(parents=True)
-    fake = bindir / "bwrap"
-    fake.write_text("#!/bin/sh\n", encoding="utf-8")
-    fake.chmod(0o755)
+    ws.mkdir()
+    monkeypatch.chdir(ws)
+    runtime = tmp_path / "srt.js"
+    runtime.write_text("", "utf-8")
+    opencode = tmp_path / "opencode"
+    opencode.write_text("", "utf-8")
+    sandbox = {
+        "runtime_path": str(runtime),
+        "config_dir": str(tmp_path / "config"),
+        "base": {
+            "read": [],
+            "write": [],
+            "deny_read": [],
+            "protected": [],
+            "network": {"allowedDomains": [], "deniedDomains": []},
+        },
+        "paths": {"data_home": ".d/data", "db": ".d/opencode.db"},
+    }
+    monkeypatch.setattr(launcher.boundary, "load_boundary", lambda: sandbox)
+    monkeypatch.setattr(launcher.cli, "OPENCODE", opencode)
+    monkeypatch.setattr(launcher.cli, "resolve_node", lambda: "/usr/bin/node")
+    monkeypatch.setattr(launcher.cli, "BOUNDARIES", tmp_path / "boundaries")
+    monkeypatch.setattr(launcher.backup, "backup_worktree", lambda *a: None)
+    monkeypatch.setattr(launcher.config, "write_isolated_config", lambda *a: None)
+    monkeypatch.setattr(launcher.session, "seed_db", lambda *a: None)
+    monkeypatch.setattr(launcher.check, "resolve_ripgrep", lambda config: "/opt/rg/rg")
+    monkeypatch.setattr(
+        launcher.check, "hidden_targets", lambda: {"present": [], "absent": []}
+    )
+    user_path = f"{ws / 'bin'}:/usr/bin"
+    monkeypatch.setenv("PATH", user_path)
+    seen: dict = {}
+
+    def fake_execve(path, argv, env):
+        seen.update(argv=argv, env=env, boundary=json.loads(Path(argv[3]).read_text("utf-8")))
+        raise SystemExit(0)
+
+    monkeypatch.setattr(os, "execve", fake_execve)
+    with pytest.raises(SystemExit):
+        launcher.cli.main(["--skip-check", "--no-backup"])
+
+    assert seen["env"]["PATH"] == "/usr/bin:/bin", "srt が利用者の PATH で動く"
+    inner = shlex.split(seen["argv"][-1])
+    assert inner[:3] == ["/usr/bin/env", f"PATH={user_path}", str(opencode)], inner
+    assert seen["boundary"]["ripgrep"] == {"command": "/opt/rg/rg"}
+
+
+def _fake_rg(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/bin/sh\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+def test_ripgrep_is_taken_from_mise_installs_not_path(tmp_path, monkeypatch):
+    """★rg は PATH からも shim からも探さない。新しい版の実体を選ぶ。"""
+    launcher = _launcher()
+    installs = tmp_path / "installs"
+    _fake_rg(installs / "9.0.0" / "rg-9" / "rg")
+    newest = _fake_rg(installs / "14.1.1" / "ripgrep-14.1.1" / "rg")
+    (installs / "latest").symlink_to("9.0.0")
+    monkeypatch.setattr(launcher.check, "RIPGREP_INSTALLS", installs)
+    monkeypatch.setattr(launcher.check, "RIPGREP_SYSTEM", tmp_path / "none")
+    config = {"filesystem": {"allowWrite": [str(tmp_path / "ws")]}}
+    assert launcher.check.resolve_ripgrep(config) == str(newest)
+
+
+def test_ripgrep_in_a_writable_area_stops_the_launch(tmp_path, monkeypatch):
+    """★境界の内側から書き換えられる rg を srt に渡さない (symlink も実体で比べる)。"""
+    launcher = _launcher()
+    ws = tmp_path / "ws"
+    real = _fake_rg(ws / "bin" / "rg")
+    system = tmp_path / "usr" / "rg"
+    system.parent.mkdir()
+    system.symlink_to(real)
+    monkeypatch.setattr(launcher.check, "RIPGREP_INSTALLS", tmp_path / "none")
+    monkeypatch.setattr(launcher.check, "RIPGREP_SYSTEM", system)
     config = {"filesystem": {"allowWrite": [str(ws)]}}
-    env = {"PATH": str(bindir)}
-    if inside:
-        with pytest.raises(SystemExit):
-            launcher.check.check_srt_tools(env, config)
-    else:
-        launcher.check.check_srt_tools(env, config)
+    with pytest.raises(SystemExit):
+        launcher.check.resolve_ripgrep(config)
+
+
+def test_missing_ripgrep_stops_the_launch(tmp_path, monkeypatch):
+    launcher = _launcher()
+    monkeypatch.setattr(launcher.check, "RIPGREP_INSTALLS", tmp_path / "none")
+    monkeypatch.setattr(launcher.check, "RIPGREP_SYSTEM", tmp_path / "none" / "rg")
+    with pytest.raises(SystemExit):
+        launcher.check.resolve_ripgrep({"filesystem": {"allowWrite": []}})
 
 
 def test_inner_env_marks_the_isolated_session(tmp_path):
@@ -1490,6 +1618,50 @@ def test_launcher_state_is_denied_to_agent_sandboxes():
     copilot = gen.build_copilot_sandbox(None, COMMON)["userPolicy"]["filesystem"]
     assert os.path.expanduser(STATE_DIR) in copilot["deniedPaths"]
     assert f"{STATE_DIR}/**" in COMMON["file"]["write_deny_globs"]
+
+
+def test_launcher_state_exists_before_agents_start():
+    """★Copilot はセッション開始時に無いパスの deny を捨て、途中で作られても効かせない。
+
+    ocs を初めて起動する前に Copilot が作ると、そのセッションでは記録を書ける。
+    chezmoi が apply で先に作っておく (0700)。
+    """
+    assert (ROOT / "home/dot_local/state/private_opencode-sandbox/.keep").is_file()
+
+
+STATE_CLEANUP = ROOT / "home/.chezmoiscripts/100_linux/run_once_after_127_ocs_state.sh"
+
+
+def test_records_made_before_the_deny_are_discarded(tmp_path):
+    """★保護が効く前に作られた承認と合格は信頼せず 1 回だけ捨てる。退避は残す。"""
+    state = tmp_path / ".local/state/opencode-sandbox"
+    (state / "backups").mkdir(parents=True)
+    for name in ("trusted.json", "checked.json", "boundary-canary"):
+        (state / name).write_text("{}", encoding="utf-8")
+    (state / "boundaries").symlink_to(tmp_path)
+    done = subprocess.run(
+        ["/bin/sh", str(STATE_CLEANUP)],
+        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    assert sorted(p.name for p in state.iterdir()) == ["backups", "boundary-canary"]
+    assert "捨てた" in done.stdout
+
+
+def test_state_cleanup_is_quiet_without_state(tmp_path):
+    done = subprocess.run(
+        ["/bin/sh", str(STATE_CLEANUP)],
+        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert (done.returncode, done.stdout) == (0, "")
 
 
 @pytest.mark.parametrize("source", ["home/dot_local/bin", "home/dot_local/share/ocs"])

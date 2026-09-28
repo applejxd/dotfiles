@@ -185,7 +185,7 @@ flowchart LR
 
 | 置き場 | 中身 | なぜそこか |
 | --- | --- | --- |
-| `~/.local/state/opencode-sandbox/` | 承認・合格・退避 | 内側から書けると自分で承認・自分で合格にできる |
+| `~/.local/state/opencode-sandbox/` | 承認・合格・退避 | 内側から書けると自分で承認・自分で合格にできる。chezmoi が apply で先に作る（[信頼の鎖](#信頼の鎖)） |
 | `~/.config/opencode-sandbox/` | 隔離版の `opencode.json`・`AGENTS.md` | 緩和設定を内側から広げられないようにする。書き手は常に外 |
 | `<起動ディレクトリ>/.opencode-sandbox/` | 隔離用 DB・snapshot | **`XDG_DATA_HOME` を永続領域へ向けないと snapshot が境界終了時に消える**（捕捉は成功したように見える） |
 
@@ -301,8 +301,6 @@ tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree
 - **検査スクリプトは PATH を `/usr/bin:/bin` に固定し、`curl` を絶対パスで呼ぶ。**
   作業領域の PATH にある偽物で合格を装わせない。試験用の `BOUNDARY_CURL` は
   `ocs` が利用者の環境から取り除く
-- **`srt` が PATH から拾う道具（`bwrap` / `socat` / `rg`）が、境界の内側から
-  書ける場所にあれば起動しない。** 偽の `bwrap` で境界そのものを弱められるため
 - **パスは改行区切りの環境変数で渡す**（`BOUNDARY_HIDDEN` / `BOUNDARY_PROTECTED`）。
   空白や glob 文字を含むパスを割らないため。改行を含むパスでは起動しない
 - **保護対象が通常ファイルのときは追記（`>>`）で書き込み可否を見る。**
@@ -349,6 +347,21 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 ランチャーは**境界が張られる前にホストで動く**。したがって次を守る。
 
 - 実体を絶対パスで呼ぶ（`node` / `git` の差し替えを防ぐ）
+- **`srt` には PATH を `/usr/bin:/bin` に固定して渡す。** `srt` は境界を張る前に
+  ホストで `which` を PATH から起動し（Node 版の `whichSync`）、`bwrap` / `socat` /
+  `bash` / `rg` も PATH で探す。利用者の PATH のままだと、先頭の書き込める場所
+  （mise の `_.path`、`node_modules/.bin` など）に置いた偽の `which` が**ホストで動く**。
+  - 内側の OpenCode には利用者の PATH が要る（mise の道具）。`srt` は自分の環境を
+    そのまま子へ渡すので、コマンド文字列を `/usr/bin/env PATH=<利用者の PATH> opencode …`
+    にして内側でだけ戻す。**内側の PATH が境界の外で使われることはない**
+  - `rg` は `/usr/bin` に無い。`ocs` が `~/.local/share/mise/installs/ripgrep/<版>/` の
+    実体（symlink でないもの）か `/usr/bin/rg` を選び、symlink を解いた絶対パスを
+    境界の定義の `ripgrep.command` に入れる。実体が `allowWrite` の中なら起動しない
+  - 以前は PATH 上の `bwrap` / `socat` / `rg` を解決して `allowWrite` と比べていた。
+    `which` そのものを守れず、検査の後に symlink や PATH 上のディレクトリを
+    差し替えられると実行されるものが変わるので、PATH の固定に置き換えた
+  - PATH 以外の環境変数（`NODE_OPTIONS` など）は、まだ利用者の環境をそのまま `srt`
+    へ渡している
 - **mise の shim を経由しない。** shim は mise 本体への symlink で、呼ぶたびに
   版解決とネットワーク確認が走り停止しうる。加えて mise はワークスペース内の
   設定を読むので、**境界を張る前に可変な入力へ依存する**ことになる
@@ -369,6 +382,14 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
   入っているので、`[sandbox] deny` と `[file] write_deny_globs` で名指しして塞ぐ。
   塞がないと、ocs の外で動くエージェントが `trusted.json` や `checked.json` を
   書き換え、承認や境界チェックの合格を偽造できる
+  - **Copilot は、セッション開始時に無いパスの deny を捨て、途中で作られても
+    効かせない**（[実測](agent-sandbox.md#実測した既定の許可範囲-wsl2-chezmoi-リポジトリを-cwd-として-sandbox-policy)）。`ocs` を初めて起動する前はこの
+    ディレクトリが無いので、chezmoi が apply で先に作る
+    （`home/dot_local/state/private_opencode-sandbox/.keep`、`0700`、Linux のみ）
+  - 作る前の版で使っていたマシンの記録は、保護が効く前に書かれえたので信頼しない。
+    `run_once_after_127_ocs_state.sh` が `trusted.json`・`checked.json` と直下の
+    symlink を 1 回だけ捨てる。次の起動で承認と境界チェックをやり直す。
+    退避（`backups/`）は捨てないので、**復元する前に作成日時と中身を確かめる**
 
 ### ランチャーの構成
 
@@ -384,7 +405,7 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 | `~/.local/bin/ocs` | 入口。本体の読み込み |
 | `~/.local/share/ocs/cli.py` | 引数の解釈と起動の順序（`main`）、内側の環境変数とコマンド、`node` の解決、境界定義の置き場 |
 | `~/.local/share/ocs/boundary.py` | 境界の組み立て、起動ディレクトリの制限、追加許可の承認 |
-| `~/.local/share/ocs/check.py` | [境界チェック](#境界チェック)の準備・実行・合格の再利用 |
+| `~/.local/share/ocs/check.py` | [境界チェック](#境界チェック)の準備・実行・合格の再利用、`srt` へ渡す PATH と `rg` の実体 |
 | `~/.local/share/ocs/backup.py` | [起動前の退避](#起動前の退避) |
 | `~/.local/share/ocs/session.py` | [隔離用 DB](#隔離用-db) の用意と[セッションの引き継ぎ](#セッションの引き継ぎ) |
 | `~/.local/share/ocs/config.py` | [隔離版の設定の書き出し](#隔離版の設定の書き出し方) |

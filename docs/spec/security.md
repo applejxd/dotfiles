@@ -160,8 +160,8 @@ network_allow = ["api.example.com"]
 >
 > 承認の記録は**境界の外**に置く。内側から書けるならエージェントが
 > 自分で自分を承認できる。ocs の外で動く Claude / Copilot の sandbox からも
-> 書けないよう、`[sandbox] deny` で名指しして塞いでいる
-> （[信頼の鎖](opencode-sandbox.md#信頼の鎖)）。
+> 書けないよう、`[sandbox] deny` で名指しして塞ぎ、Copilot が deny を捨てないよう
+> chezmoi がディレクトリを先に作る（[信頼の鎖](opencode-sandbox.md#信頼の鎖)）。
 
 承認画面には `~` や相対パスを**展開した後の形**を出す。承認の対象は
 「何が開くか」であって、書かれた文字列ではない。

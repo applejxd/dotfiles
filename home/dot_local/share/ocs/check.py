@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import shlex
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -18,8 +17,12 @@ HIDDEN_HOME_TARGETS = (".ssh", ".git-credentials", ".config/gh")
 # 境界チェックが必ず 1 件は本当に検査できるよう、ocs 自身が置く目印。
 # ~ は deny_read なので、read に載せない限り内側からは見えない。
 CANARY_REL = ".local/state/opencode-sandbox/boundary-canary"
-# srt が PATH から探して境界を組み立てる道具。
-SRT_TOOLS = ("bwrap", "socat", "rg")
+# srt は境界を張る前に which / bwrap / socat / bash を PATH から探して動かす。
+# see docs/spec/opencode-sandbox.md#信頼の鎖
+SRT_PATH = "/usr/bin:/bin"
+# srt が境界の外で走らせる rg。SRT_PATH に無いので実体を絶対パスで渡す。
+RIPGREP_INSTALLS = HOME / ".local/share/mise/installs/ripgrep"
+RIPGREP_SYSTEM = Path("/usr/bin/rg")
 WSL_HIDDEN_TARGETS = ("/mnt/c/Users", "/mnt/c/Windows")
 CHECKED = HOME / ".local/state/opencode-sandbox/checked.json"
 # 合格の再利用期間。★短くする方向にしか動かさないこと。
@@ -104,23 +107,43 @@ def ensure_canary() -> None:
         die(f"境界チェックの目印を作れない: {canary} ({e})")
 
 
-def check_srt_tools(env: dict, config: dict) -> None:
-    """srt が PATH から拾う道具が、境界の内側から書き換えられる場所に無いか確かめる。
+def srt_env(env: dict) -> dict:
+    """srt へ渡す環境変数。PATH だけを :data:`SRT_PATH` に固定する。
 
-    ★PATH にワークスペース (mise の ``_.path`` や ``node_modules/.bin`` など) が
-      入っていると、偽の bwrap / rg で境界そのものを弱められる。
+    ★srt は境界の外で PATH から ``which`` を起動する。利用者の PATH のまま
+      渡すと、先頭の書き込める場所に置いた偽の ``which`` がホストで動く。
+      内側へ渡す PATH は :func:`cli.inner_command` が別に戻す。
     """
+    return {**env, "PATH": SRT_PATH}
+
+
+def resolve_ripgrep(config: dict) -> str:
+    """srt が境界の外で走らせる rg の実体を返す。**PATH から探さない。**
+
+    mise の shim は mise 本体で、ワークスペースの設定を読む (:func:`cli.resolve_node`)。
+    ★実体が境界の内側から書き換えられる場所にあれば起動しない。
+    """
+    candidates = []
+    if RIPGREP_INSTALLS.is_dir():
+        versions = sorted(
+            (d for d in RIPGREP_INSTALLS.iterdir() if d.is_dir() and not d.is_symlink()),
+            key=lambda d: [int(x) if x.isdigit() else -1 for x in d.name.split(".")],
+            reverse=True,
+        )
+        for version in versions:
+            candidates += sorted(p for p in version.glob("**/rg") if not p.is_symlink())
+    candidates.append(RIPGREP_SYSTEM)
+    found = next((p for p in candidates if p.is_file() and os.access(p, os.X_OK)), None)
+    if found is None:
+        die("rg の実体が見つからない", "mise install ripgrep で入れる")
+    real = Path(found).resolve()
     writable = [Path(p).resolve() for p in config["filesystem"]["allowWrite"]]
-    for name in SRT_TOOLS:
-        found = shutil.which(name, path=env.get("PATH", ""))
-        if not found:
-            continue
-        real = Path(found).resolve()
-        if any(real == w or w in real.parents for w in writable):
-            die(
-                f"{name} が境界の内側から書き換えられる場所にある: {real}",
-                "PATH からワークスペースや書き込み可能な領域を外して起動し直す。",
-            )
+    if any(real == w or w in real.parents for w in writable):
+        die(
+            f"rg が境界の内側から書き換えられる場所にある: {real}",
+            "追加の write 許可から rg の置き場を外して起動し直す。",
+        )
+    return str(real)
 
 
 def _is_wsl() -> bool:
@@ -168,7 +191,7 @@ def run_check(
     node: str, runtime: Path, boundary: str, project: dict, env: dict, hidden: dict
 ) -> None:
     """境界チェックを 1 回走らせる。不合格なら**起動しない**。"""
-    check_env = check_environment(project, env, hidden)
+    check_env = srt_env(check_environment(project, env, hidden))
     # ★パイプへ通さないこと。終了コードが置き換わり失敗を取りこぼす。
     # ★止まったら起動しない。判定できない ≠ 合格。
     try:

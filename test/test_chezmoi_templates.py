@@ -145,6 +145,8 @@ def test_ocs_launcher_is_linux_only(tmp_path, os_name, ignored):
         ".local/bin/ocs-boundary-check",
         ".local/share/ocs",
         ".local/share/ocs/**",
+        ".local/state/opencode-sandbox",
+        ".local/state/opencode-sandbox/**",
     )
     for target in targets:
         assert (target in rendered) is ignored, target
