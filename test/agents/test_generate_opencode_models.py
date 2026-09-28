@@ -160,17 +160,100 @@ def test_other_policies_and_experimental_keys_survive():
 # エージェントごとの割り当て
 # ---------------------------------------------------------------------------
 
-def test_no_agent_models_until_assigned():
-    assert "agents" not in generated(PERSONAL)
+def test_declared_subagents_get_their_tier_models():
+    agents = generated(PERSONAL)["agents"]
+    assert agents["commit"]["model"] == "github-copilot/claude-opus-5.5#medium"
+    assert agents["review"]["model"] == "github-copilot/gpt-6-astra"
+    work = generated(WORK)["agents"]
+    assert work["commit"]["model"].startswith("amazon-bedrock/global.anthropic.claude-haiku")
+    assert work["review"]["model"] == "amazon-bedrock/global.openai.gpt-6-sol"
+
+
+def test_assigned_agents_are_subagents():
+    """★主エージェントは選んでもモデルが変わらない (実測)。割り当ては子エージェントに限る。"""
+    agents = generated(PERSONAL)["agents"]
+    for name in PERSONAL["opencode"]["model"]["agents"]:
+        assert agents[name].get("mode") == "subagent", name
+
+
+# ---------------------------------------------------------------------------
+# V2 形式のエージェント定義 ([opencode.agents])
+# ---------------------------------------------------------------------------
+
+def rules_of(agent: str) -> list[dict]:
+    return generated(PERSONAL)["agents"][agent]["permissions"]
+
+
+def test_commit_agent_cannot_commit_or_edit():
+    """承認とコミットは、ユーザーとやり取りできる親が行う。"""
+    rules = rules_of("commit")
+    assert {"action": "shell", "resource": "git commit *", "effect": "deny"} in rules
+    assert {"action": "edit", "resource": "*", "effect": "deny"} in rules
+    assert {"action": "question", "resource": "*", "effect": "deny"} in rules
+
+
+def test_review_agent_only_reads():
+    """★git diff / git status も外部コマンドを実行しうるので shell は丸ごと塞ぐ。"""
+    rules = rules_of("review")
+    for action in ("edit", "shell", "subagent"):
+        assert {"action": action, "resource": "*", "effect": "deny"} in rules
+
+
+def test_v2_agents_do_not_leak_into_the_v1_key():
+    config = generated(PERSONAL)
+    assert not {"commit", "review"} & set(config["agent"])
+
+
+def test_v2_agent_definitions_keep_unmanaged_keys():
+    existing = {
+        "agents": {"review": {"color": "#123456", "system": "old"}, "mine": {"mode": "all"}}
+    }
+    out = generated(PERSONAL, existing)["agents"]
+    assert out["review"]["color"] == "#123456"
+    assert out["review"]["system"] != "old", "宣言したキーは差し替える"
+    assert out["mine"] == {"mode": "all"}
+    assert generated(PERSONAL, generated(PERSONAL)) == generated(PERSONAL), "冪等"
+
+
+def test_system_prompt_is_trimmed():
+    system = generated(PERSONAL)["agents"]["commit"]["system"]
+    assert system == system.strip()
+
+
+@pytest.mark.parametrize(
+    ("patch", "message"),
+    [
+        ({"model": "x/y"}, "model"),
+        ({"permission": "allow"}, "permission"),
+        ({"description": ""}, "description"),
+        ({"permissions": [{"action": "shell", "resource": "*"}]}, "effect"),
+        ({"permissions": [{"action": "shell", "resource": "*", "effect": "block"}]}, "effect"),
+    ],
+    ids=["model", "v1-key", "no-description", "missing-effect", "bad-effect"],
+)
+def test_invalid_v2_agent_stops_apply(patch, message):
+    common = copy.deepcopy(PERSONAL)
+    common["opencode"]["agents"]["review"].update(patch)
+    with pytest.raises(ValueError) as excinfo:
+        generated(common)
+    assert message in str(excinfo.value)
+
+
+def test_v2_agent_cannot_shadow_a_v1_agent():
+    common = copy.deepcopy(PERSONAL)
+    common["opencode"]["agents"]["bypass"] = {"description": "x"}
+    with pytest.raises(ValueError, match="重複"):
+        generated(common)
 
 
 def test_assignment_goes_to_v2_agents_with_variant():
     """★V1 の agent キーでは #variant 付きの指定が黙って無視される (実測)。"""
-    out = generated(with_agents(WORK, {"explore": "light", "plan": "heavy"}))
-    assert out["agents"] == {
-        "explore": {"model": "amazon-bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"},
-        "plan": {"model": "amazon-bedrock/global.anthropic.claude-opus-5-5#high"},
+    agents = generated(with_agents(WORK, {"explore": "light", "plan": "heavy"}))["agents"]
+    assert agents["explore"] == {
+        "model": "amazon-bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
     }
+    assert agents["plan"] == {"model": "amazon-bedrock/global.anthropic.claude-opus-5-5#high"}
+    out = generated(with_agents(WORK, {"explore": "light", "plan": "heavy"}))
     assert "explore" not in out["agent"] and "plan" not in out["agent"]
 
 

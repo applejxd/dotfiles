@@ -641,6 +641,40 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
 （`[sandbox] deny`）、AWS の資格情報の環境変数も落とすため（`ocs` の `inner_env`）。
 `[provider.amazon-bedrock] network_allow` は用意してあるが、`providers` には入れていない。
 
+### 子エージェント
+
+`[opencode.agents.<id>]` に V2 形式でエージェントを定義し、`opencode.json` の
+`agents` へ出す。モデルは書かず、[`[opencode.model.agents]`](#モデルの割り当て) で
+階層を割り当てる（PC ごとのプロバイダで ID が変わるため）。
+
+| ID | 階層 | 役割 | 権限で塞ぐもの |
+| --- | --- | --- | --- |
+| `commit` | `light` | 変更を論理単位に分け、パスを指定してステージし、メッセージ案を返す | 編集・`git commit`・質問・子エージェントの起動 |
+| `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
+
+- **`commit` はコミットしない。** 子エージェントはユーザーとやり取りできないので、
+  commit スキルの「やり取りできない文脈では案を返して終わる」に従わせる。
+  承認とコミットは親が行う。狙いは、差分を読む重い作業を安いモデルへ移し、
+  親の文脈を節約すること
+- **`review` は shell を開けない。** `git diff` / `git status` も外部の diff
+  ドライバや fsmonitor を通じてコードを実行しうる
+  （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）。
+  差分は親が依頼文に含めて渡す
+- 書けるキーは `description`（必須）/ `mode` / `system` / `permissions` / `steps` /
+  `hidden` / `color` / `disabled`。`model` と V1 形式のキー（`permission` など）は
+  `apply` を止める。V1 の `[opencode.agent]` と同じ ID も止める
+- `system` は組み込みの基底プロンプトを**置き換える**（公式）。`AGENTS.md` や
+  スキルの一覧は引き続き足される
+- `permissions` は全体の規則の後ろに付き、後勝ちで効く。全体で `ask` の
+  `git commit *` も、`commit` の中では `deny` になる
+- 宣言したキーだけを差し替え、他のキーと他のエージェントは残す
+- 隔離起動（`ocs`）には渡らない（通常版から引き継ぐのは見た目のキーと `model` だけ）
+- **`commit` はシェルのたびに承認が要る。** `git status` / `git diff` / `git add` は
+  既定の `ask` のまま（allow にしない理由は上の `review` と同じ）。
+  `opencode run --auto` のような無人の実行では、子セッションの確認に答える人が
+  いないので止まる（[実機確認](../research/opencode/commit-review-agents.md)）。
+  TUI で確認が表に出るかは未確認
+
 ### 後勝ちの照合
 
 OpenCode は **最後に一致した規則が勝つ**。Claude の deny > ask > allow とは

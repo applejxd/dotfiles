@@ -1385,6 +1385,64 @@ def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+# [opencode.agents.<id>] に書けるキー。model は [opencode.model.agents] が持つ。
+OPENCODE_AGENT_KEYS = frozenset(
+    {"description", "mode", "system", "permissions", "steps", "hidden", "color", "disabled"}
+)
+OPENCODE_PERMISSION_EFFECTS = frozenset({"allow", "ask", "deny"})
+
+
+def opencode_v2_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """``[opencode.agents]`` (V2 形式のエージェント定義) を検査して返す。
+
+    V1 の ``[opencode.agent]`` と同じ ID は禁止する (両方に書いたときの結合順は未確認)。
+    ``model`` はここでは受けない。PC ごとのプロバイダで変わるので階層で割り当てる。
+    see docs/spec/agent-config-generation.md#子エージェント
+    """
+    opencode = common.get("opencode", {})
+    declared = opencode.get("agents") or {}
+    v1 = set(opencode.get("agent") or {})
+    out: dict[str, dict[str, Any]] = {}
+    for name, agent in declared.items():
+        section = f"opencode.agents.{name}"
+        if name in v1:
+            raise ValueError(f"[{section}] は [opencode.agent.{name}] と重複している")
+        if "model" in agent:
+            raise ValueError(
+                f"[{section}] に model は書けない。[opencode.model.agents] で階層を割り当てる"
+            )
+        _reject_unknown(section, set(agent), OPENCODE_AGENT_KEYS)
+        if not agent.get("description"):
+            raise ValueError(f"[{section}] は description が要る (モデルが起動先を選ぶ手がかり)")
+        for rule in agent.get("permissions") or []:
+            if set(rule) != {"action", "resource", "effect"}:
+                raise ValueError(
+                    f"[{section}] の permissions は action / resource / effect だけで書く: {rule}"
+                )
+            if rule["effect"] not in OPENCODE_PERMISSION_EFFECTS:
+                raise ValueError(f"[{section}] の effect が不正: {rule}")
+        entry = dict(agent)
+        if "system" in entry:
+            entry["system"] = str(entry["system"]).strip()
+        out[str(name)] = entry
+    return out
+
+
+def merge_opencode_v2_agents(existing: Any, common: dict[str, Any]) -> dict[str, Any]:
+    """V2 の ``agents`` に、宣言したエージェントの定義を書く。
+
+    宣言したキーだけを差し替え、他のエージェント・キー (``model`` など) は残す。
+    """
+    out = {
+        name: dict(entry)
+        for name, entry in (existing if isinstance(existing, dict) else {}).items()
+        if isinstance(entry, dict)
+    }
+    for name, agent in opencode_v2_agents(common).items():
+        out[name] = {**out.get(name, {}), **agent}
+    return out
+
+
 def merge_opencode_agent_models(existing: Any, models: dict[str, Any]) -> dict[str, Any]:
     """V2 の ``agents.<id>.model`` を割り当てどおりにする。
 
@@ -1576,14 +1634,11 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
     agent = merge_opencode_agents(existing.get("agent"), common)
     if agent:
         out["agent"] = agent
+    agents = merge_opencode_v2_agents(existing.get("agents"), common)
     models = opencode_models(common)
     if models:
         out["model"] = models["model"]
-        agents = merge_opencode_agent_models(existing.get("agents"), models)
-        if agents:
-            out["agents"] = agents
-        else:
-            out.pop("agents", None)
+        agents = merge_opencode_agent_models(agents, models)
         providers = merge_opencode_providers(existing.get("providers"), common, models)
         if providers:
             out["providers"] = providers
@@ -1592,6 +1647,10 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
         out["experimental"] = merge_opencode_provider_policies(
             existing.get("experimental"), models
         )
+    if agents:
+        out["agents"] = agents
+    else:
+        out.pop("agents", None)
     out["skills"] = merge_opencode_skills(existing.get("skills"))
     out["mcp"] = merge_opencode_mcp(existing.get("mcp"), common)
     return out

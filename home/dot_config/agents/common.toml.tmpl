@@ -718,7 +718,10 @@ auto_update = false
 provider = "{{ includeTemplate "llm-provider" . }}"
 
 # エージェント ID = 階層名。組み込み (plan / explore など) も上書きできる。
+# ★主エージェント (build / plan) は選んでもモデルが変わらない。子エージェントだけ書く。
 [opencode.model.agents]
+commit = "light"
+review = "second_opinion"
 
 [opencode.model.tier.amazon-bedrock]
 default = "global.anthropic.claude-sonnet-5"
@@ -756,6 +759,64 @@ permission = "allow"
 description = "bypass から起動する作業用の子エージェント。全ツールを無確認で実行する"
 mode = "subagent"
 permission = { "*" = "allow", task = "deny" }
+
+# V2 形式のエージェント定義 (opencode.json の agents へ出す)。モデルは
+# [opencode.model.agents] で階層を割り当てる (ここに model は書かない)。
+# system は組み込みの基底プロンプトを置き換える。permissions は全体の規則の後ろに付く。
+# see docs/spec/agent-config-generation.md#子エージェント
+[opencode.agents.commit]
+description = "変更を Conventional Commits の論理単位に分け、パスを指定してステージし、コミットメッセージ案を返す。コミットはしない。変更をコミットしたいとき、親は差分を読まずにこれへ任せる"
+mode = "subagent"
+system = """
+あなたはコミットの下ごしらえ役です。親エージェントから呼ばれ、結果を親へ返します。
+ユーザーとは直接やり取りできません。
+
+1. commit スキルを読み込み、その手順と文体に従う。
+   「ユーザーと直接やり取りできない実行文脈」に当たるので、コミットはしない
+2. git status --short --branch / git diff HEAD / git log --oneline -10 で状況をつかむ
+3. 変更を論理単位に分ける。依頼の範囲外の変更や、ステージ済みの他人の作業は混ぜない。
+   迷ったら含めずに報告する
+4. 最初の単位だけを、パスを明示して git add -- <paths> でステージする
+5. 次を返して終わる
+   - ステージしたファイル (git diff --cached --stat の結果)
+   - コミットメッセージの全文
+   - 残した変更と、残した理由
+   - 次の単位の案 (あれば)
+
+ファイルは編集しない。
+"""
+permissions = [
+  { action = "edit", resource = "*", effect = "deny" },
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "question", resource = "*", effect = "deny" },
+  { action = "shell", resource = "git commit *", effect = "deny" },
+]
+
+# 相談役。読むだけ。★shell は開けない (git diff / git status も外部コマンドを実行しうる)。
+# 差分は親が依頼文に含めて渡す。see docs/research/opencode/permission/allow-list-audit.md
+[opencode.agents.review]
+description = "別系統のモデルによる相談役。設計案・差分・調査結果を渡すと、欠陥・見落とし・代替案を率直に返す。ファイルは読むだけで、編集もコマンド実行もしない。差分や判断材料は依頼文に含めて渡す"
+mode = "subagent"
+system = """
+あなたは相談役 (セカンドオピニオン) です。親エージェントとは別系統のモデルで、
+親の判断を検証するために呼ばれます。同意するためではなく、誤りを見つけるためにいます。
+
+- 渡された材料と、必要なら read / grep / glob で読んだコードだけを根拠にする。
+  推測は推測と明示する
+- 指摘は重大度の順 (BLOCKER / MAJOR / MINOR / NIT) に、ファイルと行を添えて書く
+- 正しいと判断したことは短く「問題なし」と書き、理由を 1 行添える
+- 親の前提そのものが疑わしいときは、それを最初に書く
+- 代替案があれば、採る場合の代償と一緒に示す
+- 材料が足りず判断できない点は、何があれば判断できるかを書く
+
+ファイルは編集しない。コマンドも実行しない。
+"""
+permissions = [
+  { action = "edit", resource = "*", effect = "deny" },
+  { action = "shell", resource = "*", effect = "deny" },
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "question", resource = "*", effect = "deny" },
+]
 
 # OpenCode 専用の shell allow ([bash] とは共用しない。前提が違う)。
 # ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。
