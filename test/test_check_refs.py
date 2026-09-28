@@ -93,3 +93,47 @@ def test_baseline_shows_only_new_problems(tmp_path):
 def test_outside_a_git_repository_is_a_usage_error(tmp_path):
     result = run(tmp_path)
     assert result.returncode == 2
+
+
+def test_save_creates_missing_parent_directory(tmp_path):
+    """控えの置き場 (.tmp/ など) が無いリポジトリでも --save が通る。"""
+    repo = make_repo(tmp_path, GOOD)
+    saved = repo / ".tmp" / "nested" / "refs-before.txt"
+    result = run(repo, "--save", str(saved))
+    assert result.returncode == 0, result.stderr
+    assert saved.is_file()
+    assert run(repo, "--baseline", str(saved)).returncode == 0
+
+
+def test_baseline_file_inside_the_repository_is_not_scanned(tmp_path):
+    """控えが git の管理外でなくても、控えに書かれたパスを新しい切れと数えない。"""
+    files = dict(GOOD)
+    files["src/x.py"] += "# see docs/b.md#無い見出し\n"
+    repo = make_repo(tmp_path, files)
+    saved = repo / "refs-before.txt"
+    assert run(repo, "--save", str(saved)).returncode == 1
+    result = run(repo, "--baseline", str(saved))
+    assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "# see sdd-docs/references/adr-template.md\n",
+        "# see ~/.claude/skills/sdd-docs/SKILL.md\n",
+        "# see my.docs/x.md\n",
+        "# see sdd-docs/b.md 「無い見出し」\n",
+    ],
+    ids=[
+        "ハイフン付きのディレクトリ名",
+        "ホーム配下のスキル",
+        "ドット付きの名前",
+        "見出し名の参照",
+    ],
+)
+def test_docs_inside_another_path_is_not_a_reference(tmp_path, text):
+    """パスの途中に現れる `docs/` を、リポジトリの docs/ への参照と取り違えない。"""
+    files = dict(GOOD)
+    files["src/y.py"] = text
+    result = run(make_repo(tmp_path, files))
+    assert result.returncode == 0, result.stdout

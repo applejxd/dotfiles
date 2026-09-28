@@ -7,10 +7,15 @@ allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 # sdd-docs スキル
 
 セッションを跨いで残す知識を `docs/` へ移す。**判断が要る作業**なので、
-文脈を失いかけているなら先に `checkpoint` スキル（A1）を終える。
+文脈を失いかけているなら、先に今の文脈を引き継げる形で残す（下の注記）。
 
-> **A1 とは別物。** A1 はセッション内で失う文脈を `.tmp/` へ退避するもので、
-> 圧縮フックが自動で行う。ここから先は**人が判断して `docs/` へ書く**作業。
+> **A1 とは別物。** A1 はセッション内で失う文脈を退避する作業で、
+> ここから先は**人が判断して `docs/` へ書く**作業。
+> A1 の手段は CLI で違う。OpenCode では `checkpoint` スキルが `.tmp/` の
+> セッション別ファイルへ書き、圧縮フックが自動でも保存する（`checkpoint` と
+> そのフックは OpenCode 専用）。他の CLI では、その環境に実在する引き継ぎの方法
+> （対象のリポジトリの `AGENTS.md` の指示など）を確かめて使う。無ければ
+> ユーザーに尋ねる。
 > 分離の理由は、このスキルの配布元（applejxd/dotfiles）の ADR-0009
 > 「save-before-documenting」。対象のリポジトリの ADR ではない。
 
@@ -40,7 +45,10 @@ S="<このスキルのディレクトリ>/scripts"   # 例: ~/.claude/skills/sdd
 uv run --no-project python "$S/check_refs.py" --save .tmp/refs-before.txt
 ```
 
-控えは git の管理外の場所に置く。uv が無ければ `python3` で直接実行してよい
+控えは commit しない。`--save` は置き場のディレクトリが無ければ作る。
+`.tmp/` が git に無視されているか（`git check-ignore -q .tmp/refs-before.txt`）を
+確かめ、無視されていなければリポジトリの外の一時ディレクトリへ置き、「仕上げ」の
+`--baseline` にも同じパスを渡す。uv が無ければ `python3` で直接実行してよい
 （Windows は `py -3 -X utf8`）。
 
 ## 共通の原則
@@ -195,11 +203,12 @@ uv run --no-project python "$S/check_refs.py" --baseline .tmp/refs-before.txt
 - 未検証を不合格として書く／期待を確認済みとして書く
 - 子エージェントに本体の作業ツリーの `docs/` を直接書かせる・索引を書かせる
 - 前提の構成が無いリポジトリで、尋ねずに `docs/` の構成を作る
-- 文脈が逼迫しているのに、`checkpoint`（A1）より先にここへ着手する
+- 文脈が逼迫しているのに、A1（OpenCode なら `checkpoint`）より先にここへ着手する
 
 ## 参照
 
-- 復帰記録の保存: `checkpoint` スキル（A1。`.tmp/` のセッション別ファイル）
+- 復帰記録の保存: OpenCode では `checkpoint` スキル（A1。`.tmp/` のセッション別
+  ファイル）。他の CLI では環境の引き継ぎの方法
 - 雛形: このスキルの `references/`
   （`adr-template.md` / `change-template.md` / `research-template.md`）
 - 検査: このスキルの `scripts/`（`lint_docs.py` / `check_refs.py`）

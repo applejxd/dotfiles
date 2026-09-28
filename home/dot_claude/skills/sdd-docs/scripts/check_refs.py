@@ -37,8 +37,9 @@ EXIT_USAGE = 2
 
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".pptx", ".lock", ".db"}
 LINK = re.compile(r"\]\(([^)\s]+)\)")
-PATH_REF = re.compile(r"(?<![\w/.])(docs/[\w./-]+?\.md)(#[^\s)`'\"」、。,]+)?")
-NAME_REF = re.compile(r"(docs/[\w./-]+?\.md)\s*「([^」]+)」")
+# 前の文字の否定は、`sdd-docs/references/...` の途中から `docs/...` を拾わせないため
+PATH_REF = re.compile(r"(?<![\w/.-])(docs/[\w./-]+?\.md)(#[^\s)`'\"」、。,]+)?")
+NAME_REF = re.compile(r"(?<![\w/.-])(docs/[\w./-]+?\.md)\s*「([^」]+)」")
 
 
 def slug(text: str) -> str:
@@ -90,11 +91,13 @@ def check_target(root: Path, source: Path, dest: Path, anchor: str | None, label
     return None
 
 
-def find_problems(root: Path) -> list[str]:
+def find_problems(root: Path, skip: frozenset[Path] = frozenset()) -> list[str]:
     problems: set[str] = set()
     for rel in tracked_files(root):
         source = root / rel
         if not source.is_file() or source.suffix.lower() in SKIP_SUFFIXES:
+            continue
+        if source.resolve() in skip:
             continue
         try:
             text = source.read_text(encoding="utf-8")
@@ -153,8 +156,11 @@ def main(argv: list[str] | None = None) -> int:
         print("error: git リポジトリの中で実行するか --root を渡す", file=sys.stderr)
         return EXIT_USAGE
 
-    problems = find_problems(root.resolve())
+    # 控え自体が git の管理外でなくても、控えに書いたパスを参照として数えない
+    skip = frozenset(Path(p).resolve() for p in (args.save, args.baseline) if p)
+    problems = find_problems(root.resolve(), skip)
     if args.save:
+        Path(args.save).parent.mkdir(parents=True, exist_ok=True)
         Path(args.save).write_text("".join(f"{p}\n" for p in problems), encoding="utf-8")
     if args.baseline:
         known = set(Path(args.baseline).read_text(encoding="utf-8").splitlines())

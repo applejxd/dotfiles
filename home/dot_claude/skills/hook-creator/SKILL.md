@@ -60,9 +60,15 @@ test -f "$(chezmoi source-path 2>/dev/null)/dot_config/agents/common.toml.tmpl" 
   && echo managed || echo unmanaged
 ```
 
-- **managed**: 登録は `common.toml` の `[[hooks]]` だけに書く。生成先
-  (`~/.claude/settings.json` / `~/.copilot/hooks/*.json`) を直接編集しても次の
-  `chezmoi apply` で上書きされる。手順は「chezmoi 管理下に置く流儀」節
+- **managed**: 登録は `common.toml` の `[[hooks]]` だけに書く。生成先を直接
+  編集した分は次の `chezmoi apply` で次のように扱われる。手順は「chezmoi 管理下に
+  置く流儀」節
+  - `~/.claude/settings.json` の `hooks`: `[[hooks]]` の `script`（と撤去済みを載せる
+    `[retired_hooks] scripts`）に載ったスクリプトを `~/.claude/hooks/` から起動するエントリは
+    作り直される。それ以外（Orca などの外部ツールや、`[[hooks]]` に無い
+    自作スクリプトの分）は保たれる
+  - `~/.copilot/hooks/from-claude.json`: 丸ごと作り直される。同じディレクトリの
+    別の `*.json`（Orca の `orca.json` など）には触れない
 - **unmanaged**: 生成先へ直接登録する。判断フロー 5 と配置表のとおり
 
 ## 前提確認 (1 メッセージにまとめて質問)
