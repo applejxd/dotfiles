@@ -433,7 +433,9 @@ Fence は mise の github backend で**版とチェックサムを固定**して
 （`home/dot_config/mise/config.toml.tmpl`、[構成](structure.md#github-backend-で版を固定している-fence)）。
 `ocs` は `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence` を呼ぶ。
 
-- 実体が無ければ `rules.json` に境界の設定が出ず、`ocs` は起動を断る
+- 境界の設定は実体の有無に関係なく `rules.json` に出す。実体が無ければ `ocs` が起動を断る
+  （実体があるときだけ出す形では、Fence を入れる `125_mise.sh` が設定の生成より後に走るので、
+  初回の apply が 2 回要った）
 - 更新するときは、版とチェックサムを上げ、`ocs --check` で
   **「拒否すべきものが拒否される」**ことを確かめる。変更履歴も読む
   （新しい許可キーの既定値が緩い方向でも、チェック項目に無ければ合格する）

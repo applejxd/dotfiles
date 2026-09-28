@@ -1141,15 +1141,15 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     ランチャー (``ocs``) が起動ディレクトリと合わせて Fence の設定を組み立てる。
     ここでは共通の許可リストだけを出す。
 
-    **``runtime_path`` の実体があるときだけ返す。** 無いマシンでは設定を出さず、
-    ランチャーは起動を断る。``seccomp_apply_path`` と同じ作り。
+    **Fence の有無に関係なく返す。** 実体が無いときはランチャーが起動を断る
+    (設定の生成を mise の導入より後に回すと、初回の apply が 2 回要る)。
     see docs/spec/opencode-sandbox.md#境界の中身
     """
     cfg = common.get("opencode", {}).get("sandbox")
     if not cfg or not cfg.get("enabled"):
         return None
     runtime = expand_user(str(cfg.get("runtime_path", "")))
-    if not runtime or not Path(runtime).is_file():
+    if not runtime:
         return None
 
     sandbox_cfg = common.get("sandbox", {})

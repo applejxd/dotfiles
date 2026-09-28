@@ -200,13 +200,32 @@ def test_sandbox_output_shape(tmp_path):
     assert any(out["config_dir"].startswith(p) for p in base["read"]), "config_dir が読めない"
 
 
-def test_no_output_without_fence(tmp_path):
-    """Fence の実体が無い機械では境界の設定を出さない (ランチャーが起動を断る)。"""
+def test_output_without_fence(tmp_path):
+    """Fence の実体が無くても境界の設定を出す (ランチャーが起動を断る)。
+
+    実体があるときだけ出すと、Fence を入れる 125_mise.sh が設定の生成より後に走るので、
+    初回の apply が 2 回要る。
+    """
+    missing = tmp_path / "missing"
     common = {
         **COMMON,
         "opencode": {
             **COMMON["opencode"],
-            "sandbox": {**SANDBOX, "runtime_path": str(tmp_path / "missing")},
+            "sandbox": {**SANDBOX, "runtime_path": str(missing)},
+        },
+    }
+    out = gen.opencode_sandbox(common)
+    assert out is not None
+    assert out["runtime_path"] == str(missing)
+
+
+def test_no_output_when_disabled(tmp_path):
+    """enabled=false なら境界の設定を出さない。"""
+    common = {
+        **COMMON,
+        "opencode": {
+            **COMMON["opencode"],
+            "sandbox": {**SANDBOX, "enabled": False},
         },
     }
     assert gen.opencode_sandbox(common) is None

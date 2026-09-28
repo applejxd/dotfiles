@@ -1022,8 +1022,8 @@ pattern = '''(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client
 
 # OpenCode を丸ごと OS のアクセス制御で囲う (隔離起動 ocs)。
 # ランチャーが Fence で境界を張ってから opencode --standalone を起動する。
-# ★generate.py は runtime_path の実体があるときだけ設定を出力する。無いマシンでは
-#   ランチャーは起動を断る。
+# ★generate.py は Fence の有無に関係なく設定を出力する。実体が無いマシンでは
+#   ランチャーが起動を断る。
 # see docs/spec/opencode-sandbox.md
 [opencode.sandbox]
 enabled = true

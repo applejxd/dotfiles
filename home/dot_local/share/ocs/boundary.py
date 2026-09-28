@@ -29,7 +29,7 @@ def load_boundary() -> dict:
     if not sandbox:
         die(
             "境界の設定が出力されていない",
-            "Fence が入っていないか enabled=false。mise install で入れて chezmoi apply する",
+            "[opencode.sandbox] が enabled=false。chezmoi apply で生成する",
         )
     for key in ("runtime_path", "base", "config_dir"):
         if not sandbox.get(key):

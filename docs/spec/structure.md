@@ -286,8 +286,8 @@ seccomp フィルタは手で `npm install -g` する必要はありません。
   に写します（`linux-x64` と `linux-arm64`）。mise は落とした tar.gz の sha256 を照合し、
   違えば導入を止めます
 - `ocs` は `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence` を
-  絶対パスで呼びます（`[opencode.sandbox] runtime_path`）。実体が無いと境界の設定が
-  生成されず、`ocs` は起動を断ります。初回は mise の導入後にもう一度 `chezmoi apply` します
+  絶対パスで呼びます（`[opencode.sandbox] runtime_path`）。境界の設定は実体の有無に
+  関係なく生成され、実体が無ければ `ocs` が起動を断ります（`mise install` で入れる）
 - Claude Code の sandbox は引き続き `npm:@anthropic-ai/sandbox-runtime` を使います
 
 ## AI CLI の導入
