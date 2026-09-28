@@ -3,13 +3,7 @@ AI CLI (Claude Code / Copilot CLI / OpenCode V2) を各社公式のインスト�
 呼び出し側は 100_linux / 200_mac の run_onchange_after_ スクリプト。
 共有するのは本体だけで、呼び出し側が shebang と set -eu を置く。
 */ -}}
-# 導入に失敗した回の印。失敗のたびに書き直し、更新時刻をここへ埋め込むので、
-# 次の apply で中身が変わって走り直す (run_onchange_ は exit 0 だと記録されるため)。
-# 中身は埋め込まない。~/.local/state はエージェントの sandbox から書けるので、
-# 埋め込むと改行を仕込まれたときにここへコードが入る。時刻だけなら再導入が走るだけ
-# see docs/spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す
-# retry-marker: {{ with stat (joinPath .chezmoi.homeDir ".local/state/dotfiles/agent-cli-failed") }}{{ .modTime }}{{ else }}none{{ end }}
-retry_marker="${HOME}/.local/state/dotfiles/agent-cli-failed"
+{{ template "retry-marker.sh.tmpl" (dict "homeDir" .chezmoi.homeDir "name" "agent-cli-failed") }}
 
 # 既に入っているものは触らない。更新は README の手順 (手動) に従う。
 # 公式インストーラーはどれも導入先が PATH にあるかを確認する。特に Copilot CLI は
@@ -103,8 +97,7 @@ if [ -n "${failed_clis}" ]; then
     # ここで非ゼロを返すと apply 全体が止まり、後続のスクリプトまで巻き添えに
     # なる。外部インストーラーの一時的な不調で dotfiles の適用を止めたくないので
     # 警告に留め、印を書き直して次の apply で走り直させる。
-    mkdir -p "${retry_marker%/*}"
-    printf '%s\n' "${failed_clis}" > "${retry_marker}"
+    mark_for_retry "${failed_clis}"
     cat >&2 <<EOF
 
 ⚠️  導入できなかった CLI:${failed_clis}

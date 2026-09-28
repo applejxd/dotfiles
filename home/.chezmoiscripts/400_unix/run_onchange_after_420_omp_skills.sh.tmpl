@@ -5,6 +5,9 @@ set -euo pipefail
 # omp が後から入ったら 1 回走り直すための印 (run_onchange_ は中身が変わらないと再実行されない)
 # omp: {{ if or (stat (joinPath .chezmoi.homeDir ".local/bin/omp")) (lookPath "omp") }}present{{ else }}absent{{ end }}
 
+# omp の設定を読めなかった回も exit 0 で抜けるので、印で次の apply に走り直させる
+{{ template "retry-marker.sh.tmpl" (dict "homeDir" .chezmoi.homeDir "name" "omp-skills-failed") }}
+
 # omp (oh-my-pi) は ~/.claude を設定探索ルートに含むが、**他ツールの
 # ユーザ領域 skills の読み込みは opt-in** で、既定は無効。
 #   skills.enableClaudeUser = false
@@ -33,7 +36,8 @@ target="${HOME}/.claude/skills"
 # ★`omp config get --json` は配列ではなく {"key":…, "value":[…]} を返す。
 #   配列として読むと必ず解析に失敗し、毎回「未登録」と判定してしまう。
 if ! current="$("$omp_path" config get skills.customDirectories --json 2>/dev/null)"; then
-    echo "警告: omp の skills.customDirectories を取得できないので登録を飛ばします" >&2
+    echo "警告: omp の skills.customDirectories を取得できないので登録を飛ばします (次の chezmoi apply で走り直します)" >&2
+    mark_for_retry "config get skills.customDirectories"
     exit 0
 fi
 if ! next="$(TARGET="$target" CURRENT="$current" python3 - <<'PY'
@@ -59,7 +63,8 @@ else:
     print(json.dumps([*current, target]))
 PY
 )"; then
-    echo "警告: omp の skills.customDirectories を解釈できないので登録を飛ばします" >&2
+    echo "警告: omp の skills.customDirectories を解釈できないので登録を飛ばします (次の chezmoi apply で走り直します)" >&2
+    mark_for_retry "parse skills.customDirectories"
     exit 0
 fi
 

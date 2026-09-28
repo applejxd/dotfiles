@@ -4,6 +4,9 @@
 2. omp の設定取得に失敗すると空配列とみなし、既存の登録を上書きしていた
 3. omp が後から入っても run_onchange_ の中身が変わらず、設定が一度も入らなかった
 4. macOS のスクリプトが sudo のパスワードを変数に持ち回り、Homebrew を入れる前に brew を使っていた
+5. omp の設定の取得に失敗した回も成功として記録され、omp が直っても走り直さなかった
+6. Homebrew の取得に失敗しても 205 が成功として記録され、次の apply で走り直さなかった
+7. 再実行の印をエージェントが書ける場所に置き、symlink を追って書いていた
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ import re
 import shutil
 import subprocess
 import time
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -23,6 +27,51 @@ HOME = ROOT / "home"
 SCRIPTS = HOME / ".chezmoiscripts" / "400_unix"
 OMP_SKILLS = SCRIPTS / "run_onchange_after_420_omp_skills.sh.tmpl"
 OMP_CLAUDE_ASSETS = SCRIPTS / "run_onchange_after_430_omp_claude_assets.sh.tmpl"
+AGENT_CLI = HOME / ".chezmoiscripts" / "100_linux" / "run_onchange_after_126_agent_cli.sh.tmpl"
+COMMON = HOME / "dot_config" / "agents" / "common.toml.tmpl"
+RETRY_DIR = ".local/share/dotfiles/retry"
+RETRY_MARKERS = {
+    "agent-cli-failed": AGENT_CLI,
+    "omp-skills-failed": OMP_SKILLS,
+    "omp-claude-assets-failed": OMP_CLAUDE_ASSETS,
+}
+OMP_MARKERS = {OMP_SKILLS: "omp-skills-failed", OMP_CLAUDE_ASSETS: "omp-claude-assets-failed"}
+
+
+def render_with_context(
+    path: Path,
+    *,
+    home: Path | str = "/test-home",
+    os_name: str = "linux",
+    path_dir: Path | None = None,
+) -> str:
+    """``.chezmoi`` を明示の context に差し替えて描画する。
+
+    ``path_dir`` を渡すと PATH をそのディレクトリだけにし、``lookPath`` の結果を決める。
+    """
+    chezmoi = shutil.which("chezmoi")
+    if chezmoi is None:
+        pytest.skip("chezmoi が無い")
+    context = {"chezmoi": {"os": os_name, "username": "applejxd", "homeDir": str(home)}}
+    template = (
+        "{{ with " + json.dumps(json.dumps(context)) + " | fromJson }}\n"
+        + path.read_text(encoding="utf-8-sig")
+        + "\n{{ end }}"
+    )
+    env = dict(os.environ)
+    if path_dir is not None:
+        env["PATH"] = str(path_dir)
+    result = subprocess.run(
+        [chezmoi, "--source", str(ROOT), "execute-template"],
+        input=template,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout.lstrip("\n")
 
 SELF_URL = re.compile(
     r"(?:raw\.githubusercontent\.com/applejxd/dotfiles"
@@ -115,18 +164,20 @@ fi
 """
 
 
-def run_with_fake_omp(tmp_path: Path, script: Path, get_output: str):
-    """偽の omp を `~/.local/bin/omp` に置いてスクリプトを走らせる。"""
+def run_with_fake_omp(tmp_path: Path, script: Path, get_output: str, *, home: Path | None = None):
+    """偽の omp を `~/.local/bin/omp` に置き、描画したスクリプトを走らせる。"""
     if os.name == "nt":
         pytest.skip("Unix 向けスクリプト")
     if shutil.which("bash") is None or shutil.which("python3") is None:
         pytest.skip("bash / python3 が無い")
-    home = tmp_path / "home"
+    home = home or tmp_path / "home"
     bin_dir = home / ".local" / "bin"
-    bin_dir.mkdir(parents=True)
+    bin_dir.mkdir(parents=True, exist_ok=True)
     omp = bin_dir / "omp"
     omp.write_text(FAKE_OMP, encoding="utf-8")
     omp.chmod(0o755)
+    rendered = tmp_path / script.name.removesuffix(".tmpl")
+    rendered.write_text(render_with_context(script, home=home), encoding="utf-8")
     log = tmp_path / "omp.log"
     log.touch()
     env = {
@@ -136,7 +187,7 @@ def run_with_fake_omp(tmp_path: Path, script: Path, get_output: str):
         "OMP_GET": get_output,
     }
     result = subprocess.run(
-        ["bash", str(script)],
+        ["bash", str(rendered)],
         env=env,
         capture_output=True,
         text=True,
@@ -240,35 +291,134 @@ def test_omp_claude_assets_skips_when_enabled(tmp_path, existing):
 
 @pytest.mark.parametrize("script", [OMP_SKILLS, OMP_CLAUDE_ASSETS], ids=lambda p: p.name[:30])
 def test_omp_scripts_rerun_once_omp_appears(tmp_path, script):
-    """omp の有無で描画結果が変わること。変わらないと後から入れた omp を拾えない。"""
-    chezmoi = shutil.which("chezmoi")
-    if chezmoi is None:
-        pytest.skip("chezmoi が無い")
+    """omp の有無で描画結果が変わること。変わらないと後から入れた omp を拾えない。
+
+    `.chezmoi.homeDir` は context で渡し、PATH は空のディレクトリにして
+    `lookPath` が手元の omp を拾わないようにする (Windows でも同じ条件で描画できる)。
+    """
     home = tmp_path / "home"
     home.mkdir()
+    empty_path = tmp_path / "empty-path"
+    empty_path.mkdir()
 
-    def render() -> str:
-        env = {**os.environ, "HOME": str(home), "PATH": "/usr/bin:/bin"}
-        result = subprocess.run(
-            [chezmoi, "--source", str(ROOT), "execute-template"],
-            input=script.read_text(encoding="utf-8"),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            env=env,
-            check=True,
-        )
-        return result.stdout
-
-    absent = render()
+    absent = render_with_context(script, home=home, path_dir=empty_path)
     omp = home / ".local" / "bin" / "omp"
     omp.parent.mkdir(parents=True)
     omp.write_text("#!/bin/sh\n", encoding="utf-8")
     omp.chmod(0o755)
-    present = render()
+    present = render_with_context(script, home=home, path_dir=empty_path)
 
     assert "# omp: absent" in absent
     assert "# omp: present" in present
+
+
+# ---------------------------------------------------------------------------
+# 事故 5: omp の設定の取得に失敗した回が成功として記録され、走り直さない
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("output", ["fail", "not json"])
+@pytest.mark.parametrize("script", [OMP_SKILLS, OMP_CLAUDE_ASSETS], ids=["420", "430"])
+def test_omp_broken_config_leaves_a_marker_for_the_next_apply(tmp_path, script, output):
+    """★run_onchange_ は exit 0 だと記録され、omp の present / absent も変わらない。
+
+    取得・解析に失敗した回は印を書き直し、その更新時刻で次の apply の中身を変える。
+    """
+    home = tmp_path / "home"
+    assert "# retry-marker: none" in render_with_context(script, home=home)
+
+    result, _, sets = run_with_fake_omp(tmp_path, script, output, home=home)
+
+    assert result.returncode == 0, result.stderr
+    assert sets == {}
+    marker = home / RETRY_DIR / OMP_MARKERS[script]
+    assert marker.is_file()
+    assert "次の chezmoi apply" in result.stderr
+    rerendered = render_with_context(script, home=home)
+    assert f"# retry-marker: {int(marker.stat().st_mtime)}" in rerendered
+
+
+@pytest.mark.parametrize("script", [OMP_SKILLS, OMP_CLAUDE_ASSETS], ids=["420", "430"])
+def test_omp_success_does_not_touch_the_marker(tmp_path, script):
+    """成功した回は印に触れない。触れると次の apply でまた走り直す。"""
+    home = tmp_path / "home"
+    marker = home / RETRY_DIR / OMP_MARKERS[script]
+    marker.parent.mkdir(parents=True)
+    marker.write_text("x\n", encoding="utf-8")
+    os.utime(marker, (1_000_000_000, 1_000_000_000))
+    registered = {
+        OMP_SKILLS: value_json("skills.customDirectories", [str(home / ".claude" / "skills")]),
+        OMP_CLAUDE_ASSETS: value_json("enabledProviders", ["claude"]),
+    }[script]
+
+    result, _, _ = run_with_fake_omp(tmp_path, script, registered, home=home)
+
+    assert result.returncode == 0, result.stderr
+    assert int(marker.stat().st_mtime) == 1_000_000_000
+
+
+# ---------------------------------------------------------------------------
+# 事故 7: 再実行の印をエージェントが書ける場所に置き、symlink を追って書いていた
+# ---------------------------------------------------------------------------
+
+
+def _expand(path: str, home: str) -> str:
+    return home + path[1:] if path.startswith("~/") else path
+
+
+def test_retry_markers_are_outside_every_agent_write_allow():
+    """★印は apply (ホスト) が書く。エージェントの sandbox から書けると、印を
+    ~/.bashrc などへの symlink に差し替えてホストに中身を書き潰させられる。"""
+    home = "/test-home"
+    common = tomllib.loads(render_with_context(COMMON, home=home))
+    sandbox = common["sandbox"]
+    writable = [
+        *sandbox["claude_write_allow"],
+        *sandbox["copilot_write_allow"],
+        *common["opencode"]["sandbox"]["write"],
+    ]
+    for name, script in RETRY_MARKERS.items():
+        rendered = render_with_context(script, home=home)
+        assert f'retry_marker="${{HOME}}/{RETRY_DIR}/{name}"' in rendered, script.name
+        marker = f"{home}/{RETRY_DIR}/{name}"
+        for allowed in writable:
+            allowed = _expand(allowed, home).rstrip("/")
+            assert marker != allowed and not marker.startswith(allowed + "/"), (
+                f"{name} が write 許可 {allowed} の内側にある"
+            )
+
+
+def test_the_omp_marker_content_is_never_embedded(tmp_path):
+    """時刻だけを埋め込む。中身を埋め込むと改行を仕込まれたときにコードが入る。"""
+    home = tmp_path / "home"
+    marker = home / RETRY_DIR / OMP_MARKERS[OMP_SKILLS]
+    marker.parent.mkdir(parents=True)
+    marker.write_text("x\necho INJECTED\n", encoding="utf-8")
+    assert "INJECTED" not in render_with_context(OMP_SKILLS, home=home)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+@pytest.mark.parametrize("kind", ["symlink", "dangling-symlink"])
+def test_the_marker_is_replaced_without_following_a_symlink(tmp_path, kind):
+    """印が symlink になっていても、その先 (~/.bashrc など) を書き換えない。"""
+    home = tmp_path / "home"
+    victim = home / ".bashrc"
+    victim.parent.mkdir(parents=True)
+    if kind == "symlink":
+        victim.write_text("keep me\n", encoding="utf-8")
+    marker = home / RETRY_DIR / OMP_MARKERS[OMP_SKILLS]
+    marker.parent.mkdir(parents=True)
+    marker.symlink_to(victim)
+
+    result, _, _ = run_with_fake_omp(tmp_path, OMP_SKILLS, "fail", home=home)
+
+    assert result.returncode == 0, result.stderr
+    assert not marker.is_symlink()
+    assert marker.is_file()
+    if kind == "symlink":
+        assert victim.read_text(encoding="utf-8") == "keep me\n"
+    else:
+        assert not victim.exists()
 
 
 MAC_SCRIPTS = HOME / ".chezmoiscripts" / "200_mac"
@@ -295,6 +445,52 @@ def test_homebrew_is_installed_before_any_mac_script_uses_brew():
     assert users
     for user in users:
         assert installer.name < user.name, f"{user.name} が {installer.name} より先に走る"
+
+
+HOMEBREW = MAC_SCRIPTS / "run_once_after_205_homebrew.sh.tmpl"
+
+
+def run_homebrew(tmp_path: Path, *, curl_ok: bool) -> subprocess.CompletedProcess:
+    """curl / sudo / uname を差し替えて 205 を走らせる。brew は入らない。"""
+    if os.name == "nt":
+        pytest.skip("Unix のスクリプト")
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash が無い")
+    if Path("/opt/homebrew/bin/brew").exists():
+        pytest.skip("このマシンに Homebrew が入っている")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    stubs = {
+        "sudo": "exit 0",
+        "uname": "echo arm64",
+        # 取得に成功しても、中身は brew を置かないインストーラー
+        "curl": "echo 'echo installer ran'" if curl_ok else "exit 22",
+    }
+    for name, body in stubs.items():
+        stub = bindir / name
+        stub.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+        stub.chmod(0o755)
+    script = tmp_path / "205.sh"
+    script.write_text(render_with_context(HOMEBREW, os_name="darwin"), encoding="utf-8")
+    return subprocess.run(
+        [bash, str(script)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PATH": f"{bindir}:/usr/bin:/bin"},
+        check=False,
+        timeout=30,
+    )
+
+
+@pytest.mark.parametrize("curl_ok", [False, True], ids=["取得失敗", "brew が入らない"])
+def test_homebrew_failure_is_not_recorded_as_success(tmp_path, curl_ok):
+    """★`bash -c "$(curl …)"` は curl が失敗しても `bash -c ""` として成功し、
+    `eval "$(brew shellenv)"` も brew が無いと `eval ""` で成功する。
+    0 で終わると run_once_ が記録され、次の apply で走り直さない。"""
+    result = run_homebrew(tmp_path, curl_ok=curl_ok)
+    assert result.returncode != 0, result.stdout + result.stderr
 
 
 def run_keepalive(

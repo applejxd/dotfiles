@@ -162,7 +162,7 @@ def run_agent_cli_installer(script: str, home: Path, tmp_path: Path, fail_url: s
         pytest.skip("bash is not available")
     stub_bin = tmp_path / "stub-bin"
     stub_bin.mkdir()
-    for tool in ("bash", "sh", "rm", "ls", "cat", "mkdir"):
+    for tool in ("bash", "sh", "rm", "ls", "cat", "mkdir", "mktemp", "mv"):
         found = shutil.which(tool)
         if found:
             (stub_bin / tool).symlink_to(found)
@@ -220,7 +220,7 @@ def test_one_failed_installer_does_not_block_the_others(tmp_path: Path):
     assert "rate_limit" in result.stderr
 
 
-RETRY_MARKER = ".local/state/dotfiles/agent-cli-failed"
+RETRY_MARKER = ".local/share/dotfiles/retry/agent-cli-failed"
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
@@ -264,14 +264,34 @@ def test_a_successful_install_does_not_touch_the_marker(tmp_path: Path):
 
 
 def test_the_marker_content_is_never_embedded(tmp_path: Path):
-    """★~/.local/state はエージェントの sandbox から書ける。中身を埋め込むと
-    改行を仕込まれたときにホストで走るスクリプトへコードが入る。時刻だけを使う。"""
+    """★中身を埋め込むと、改行を仕込まれたときにホストで走るスクリプトへコードが
+    入る。時刻だけを使う。"""
     home = tmp_path / "home"
     marker = home / RETRY_MARKER
     marker.parent.mkdir(parents=True)
     marker.write_text("x\necho INJECTED\n", encoding="utf-8")
     script = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux", home=home)
     assert "INJECTED" not in script
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
+def test_a_failed_install_does_not_write_through_a_symlinked_marker(tmp_path: Path):
+    """★印を ~/.bashrc への symlink に差し替えられても、その中身を書き潰さない。"""
+    home = tmp_path / "home"
+    victim = home / ".bashrc"
+    victim.parent.mkdir(parents=True)
+    victim.write_text("keep me\n", encoding="utf-8")
+    marker = home / RETRY_MARKER
+    marker.parent.mkdir(parents=True)
+    marker.symlink_to(victim)
+    script = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux", home=home)
+
+    result, _ = run_agent_cli_installer(script, home, tmp_path, fail_url="omp.sh/install")
+
+    assert result.returncode == 0, result.stderr
+    assert victim.read_text(encoding="utf-8") == "keep me\n"
+    assert not marker.is_symlink()
+    assert marker.read_text(encoding="utf-8").strip() == "omp"
 
 
 def make_executable(path: Path, exit_code: int = 0) -> None:

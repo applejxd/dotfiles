@@ -1,0 +1,27 @@
+{{- /*
+失敗した回に印を書き直し、その更新時刻を呼び出し側のスクリプトへ埋め込む。
+次の apply で中身が変わって走り直す (run_onchange_ は exit 0 だと記録されるため)。
+呼び出し側は (dict "homeDir" .chezmoi.homeDir "name" "<印のファイル名>") を渡す。
+see docs/spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す
+*/ -}}
+# 置き場はどのエージェントの sandbox からも書けない場所にする。中身は埋め込まない
+# retry-marker: {{ with stat (joinPath .homeDir ".local/share/dotfiles/retry" .name) }}{{ .modTime }}{{ else }}none{{ end }}
+retry_marker="${HOME}/.local/share/dotfiles/retry/{{ .name }}"
+
+# 既存の印が symlink でも追わない。同じディレクトリの一時ファイルを mv で差し替える
+mark_for_retry() {
+    retry_dir="${retry_marker%/*}"
+    mkdir -p "${retry_dir}"
+    retry_tmp="$(mktemp "${retry_dir}/.retry.XXXXXX")"
+    printf '%s\n' "$1" >"${retry_tmp}"
+    # mv は宛先がディレクトリ (への symlink) だとその中へ移すので、先に消す
+    if [ -L "${retry_marker}" ] || [ -f "${retry_marker}" ]; then
+        rm -f "${retry_marker}"
+    fi
+    if [ -e "${retry_marker}" ]; then
+        rm -f "${retry_tmp}"
+        echo "⚠️  再実行の印を置けません (ファイル以外があります): ${retry_marker}" >&2
+        return 0
+    fi
+    mv -f "${retry_tmp}" "${retry_marker}"
+}

@@ -15,7 +15,15 @@ if [[ ! -x "$brew_path" ]]; then
     # 公式の無人導入。NONINTERACTIVE は尋ねないので、sudo の認証を先に取っておく
     # see https://docs.brew.sh/Installation#unattended-installation
     start_sudo_keepalive
-    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    # 代入で受ける: `bash -c "$(curl …)"` だと curl の失敗が `bash -c ""` の成功に化ける
+    installer="$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    NONINTERACTIVE=1 /bin/bash -c "$installer"
 fi
 
-eval "$("$brew_path" shellenv)"
+if [[ ! -x "$brew_path" ]]; then
+    echo "❌ Homebrew を導入できませんでした (${brew_path} がありません)" >&2
+    exit 1
+fi
+
+brew_env="$("$brew_path" shellenv)"
+eval "$brew_env"

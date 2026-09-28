@@ -187,8 +187,21 @@ def test_shell_plugins_are_not_fetched_on_windows(tmp_path):
     assert render_external(home=tmp_path, os_name="windows") == {}
 
 
-@pytest.mark.parametrize("target", list(SHELL_PLUGINS))
-def test_existing_plugin_paths_are_left_alone(tmp_path, target):
+EXISTING_PLUGIN_CASES = [
+    # 既存の clone。宣言すると初回 apply で git pull が走る
+    *(
+        pytest.param(target, "dir", id=f"{target}-clone")
+        for target, (kind, _) in SHELL_PLUGINS.items()
+        if kind == "git-repo"
+    ),
+    # rupa/z 既定のデータファイル ~/.z。宣言すると chezmoi が消してから pull に失敗する
+    pytest.param(".z", "file", id=".z-data-file"),
+    pytest.param(".vim/colors/iceberg.vim", "file", id="iceberg.vim"),
+]
+
+
+@pytest.mark.parametrize(("target", "kind"), EXISTING_PLUGIN_CASES)
+def test_existing_plugin_paths_are_left_alone(tmp_path, target, kind):
     """既に在るパスは宣言しない。
 
     git-repo は既存ディレクトリに初回 apply で git pull を走らせ、
@@ -197,8 +210,11 @@ def test_existing_plugin_paths_are_left_alone(tmp_path, target):
     (rupa/z 既定のデータファイル ~/.z が消える)。
     """
     path = tmp_path / target
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("", encoding="utf-8")
+    if kind == "dir":
+        (path / ".git").mkdir(parents=True)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
     externals = render_external(home=tmp_path)
     assert target not in externals
     assert set(externals) == set(SHELL_PLUGINS) - {target}

@@ -5,6 +5,9 @@ set -euo pipefail
 # omp が後から入ったら 1 回走り直すための印 (run_onchange_ は中身が変わらないと再実行されない)
 # omp: {{ if or (stat (joinPath .chezmoi.homeDir ".local/bin/omp")) (lookPath "omp") }}present{{ else }}absent{{ end }}
 
+# omp の設定を読めなかった回も exit 0 で抜けるので、印で次の apply に走り直させる
+{{ template "retry-marker.sh.tmpl" (dict "homeDir" .chezmoi.homeDir "name" "omp-claude-assets-failed") }}
+
 # omp (oh-my-pi) から、このリポジトリが既に持っている Claude 側の資産を使う。
 #
 # ★`enabledProviders` の既定は空で、**他ツールのユーザ領域は 1 つも読まれない**。
@@ -34,7 +37,8 @@ fi
 #   配列として読むと必ず解析に失敗し、毎回「未登録」と判定してしまう。
 # 取得・解析に失敗したら書き戻さない (空配列扱いにすると既存の登録を消す)。
 if ! current="$("$omp_path" config get enabledProviders --json 2>/dev/null)"; then
-    echo "警告: omp の enabledProviders を取得できないので Claude 資産の接続を飛ばします" >&2
+    echo "警告: omp の enabledProviders を取得できないので Claude 資産の接続を飛ばします (次の chezmoi apply で走り直します)" >&2
+    mark_for_retry "config get enabledProviders"
     exit 0
 fi
 if ! next="$(CURRENT="$current" python3 - <<'PY'
@@ -64,7 +68,8 @@ else:
     print(json.dumps([*current, "claude"]))
 PY
 )"; then
-    echo "警告: omp の enabledProviders を解釈できないので Claude 資産の接続を飛ばします" >&2
+    echo "警告: omp の enabledProviders を解釈できないので Claude 資産の接続を飛ばします (次の chezmoi apply で走り直します)" >&2
+    mark_for_retry "parse enabledProviders"
     exit 0
 fi
 

@@ -31,11 +31,25 @@ chezmoi status --include=scripts
   - `100_linux/125_mise`（`mise install` の一部が失敗したとき。
     [ツール 1 個の失敗で apply を止めない](structure.md#ツール-1-個の失敗で-apply-を止めない)）
 
-`100_linux/126_agent_cli` / `200_mac/226_agent_cli`（AI CLI の導入）は例外で、
-失敗したら `~/.local/state/dotfiles/agent-cli-failed` を書き直す。スクリプトには
-この印の**更新時刻だけ**を埋め込むので、次の apply で中身が変わって走り直す
-（中身を埋め込まないのは、この場所がエージェントの sandbox から書けるため）。
-成功した回は印に触れないので、その後は走り直さない。
+`100_linux/126_agent_cli` / `200_mac/226_agent_cli`（AI CLI の導入）と
+`400_unix/420_omp_skills` / `400_unix/430_omp_claude_assets`（omp の設定の取得・解析に
+失敗したとき）は例外で、失敗したら `~/.local/share/dotfiles/retry/` の下の印を書き直す
+（順に `agent-cli-failed` / `omp-skills-failed` / `omp-claude-assets-failed`）。
+スクリプトにはこの印の**更新時刻だけ**を埋め込むので、次の apply で中身が変わって走り直す。
+成功した回は印に触れないので、その後は走り直さない。仕組みは
+`home/.chezmoitemplates/retry-marker.sh.tmpl` にある。
+
+印は apply（ホスト）が書くので、置き場はどのエージェントの sandbox からも書けない
+場所にする。`~/.local/state` は Claude Code / Copilot CLI の sandbox から書ける
+（[agent-sandbox.md](agent-sandbox.md)）ので使わない。書けると、印を `~/.bashrc` への
+symlink に差し替えてホストの apply に中身を書き潰させられる。
+同じ理由で、印は同じディレクトリの一時ファイルから `mv` で差し替え、既存の symlink を
+追わない。中身を埋め込まないのは、書き換えられたときにスクリプトへコードが入らないため。
+OS の境界を持たない実行（ocs を通さない OpenCode、omp）からは、この置き場でも守れない。
+
+> [!NOTE]
+> 以前の置き場 `~/.local/state/dotfiles/agent-cli-failed` はもう読まない。残っていても
+> 害は無く、消してよい。
 
 **対処**: 1 本だけ走らせ直すなら、テンプレートを描画して直接実行する。
 chezmoi の記録には触らない。
@@ -502,11 +516,13 @@ curl -s https://api.github.com/rate_limit
 60 リクエスト/時で、超えると 403 を返す。
 
 `agent-cli-install.sh.tmpl` は CLI ごとに失敗を受け止めるので、1 つ 403 でも残りは入り、
-**`chezmoi apply` 自体は成功する**。その代わりスクリプトも成功として記録されるので、
-**時間をおいて `chezmoi apply` しても走り直さない**
-（[スクリプトを走らせ直す](#スクリプトを走らせ直す)）。
+**`chezmoi apply` 自体は成功する**。失敗した回は再実行の印を書き直すので、
+**次の `chezmoi apply` で、入っていない CLI だけを導入し直す**
+（[スクリプトを走らせ直す](#スクリプトを走らせ直す)）。レート制限が戻る前に apply すると
+また失敗するが、そのたびに印が書き直されるので、戻った後の apply で入る。
 
-**対処**: `remaining` が 0 なら 1 時間ほどで戻る。戻ってから、失敗した CLI だけを手で入れる。
+**対処**: `remaining` が 0 なら 1 時間ほどで戻る。戻ってから `chezmoi apply` するか、
+失敗した CLI だけを手で入れる。
 
 ```bash
 curl -fsSL https://omp.sh/install | sh
