@@ -81,6 +81,51 @@ def test_run_hook_accepts_clean_silence(tmp_path):
     assert run_hook("git status", hook=hook) == (None, "")
 
 
+def _decision_hook_body(decision: str, tail: str) -> str:
+    """正しい形の決定 JSON を出したあと ``tail`` を実行する偽 hook の本文。"""
+    payload = {
+        "permissionDecision": decision,
+        "permissionDecisionReason": "fake",
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": "fake",
+        },
+    }
+    return (
+        "import json, sys\n"
+        "sys.stdin.read()\n"
+        f"sys.stdout.write({json.dumps(payload)!r})\n"
+        "sys.stdout.flush()\n"
+        f"{tail}\n"
+    )
+
+
+@pytest.mark.parametrize("decision", ["deny", "ask"])
+@pytest.mark.parametrize(
+    ("label", "tail"),
+    [
+        ("exit 1", "sys.exit(1)"),
+        ("例外", "raise RuntimeError('boom')"),
+        ("Traceback を出して exit 0", "sys.stderr.write('Traceback (most recent call last):\\n')"),
+    ],
+)
+def test_run_hook_rejects_decision_from_a_crash(tmp_path, decision, label, tail):
+    """正しい JSON を出しても異常終了した hook の判定は受け付けないこと.
+
+    Claude は exit 0 以外だと stdout を読まないので、実機ではこの判定は効かない。
+    """
+    hook = _fake_hook(tmp_path, _decision_hook_body(decision, tail))
+    with pytest.raises(AssertionError):
+        run_hook("git status", hook=hook)
+
+
+@pytest.mark.parametrize("decision", ["deny", "ask"])
+def test_run_hook_accepts_decision_from_a_clean_exit(tmp_path, decision):
+    hook = _fake_hook(tmp_path, _decision_hook_body(decision, "sys.exit(0)"))
+    assert run_hook("git status", hook=hook) == (decision, "fake")
+
+
 # ---------------------------------------------------------------------------
 # common.toml の整合性
 # ---------------------------------------------------------------------------

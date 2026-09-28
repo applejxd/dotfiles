@@ -83,19 +83,19 @@ def run_hook(
     """Run the hook and return (decision, reason).
 
     decision is None when the hook stayed silent (the command is allowed).
-    A silent exit is only accepted when it is a clean one: CLIs treat a
-    crashed hook as "no decision", so a crash must fail the test instead of
-    passing as an allow.
+    Any result is only accepted from a clean exit (exit 0, no Traceback):
+    CLIs treat a crashed hook as "no decision", and Claude ignores stdout
+    unless the exit code is 0, so a crash must fail the test even when it
+    printed a well-formed decision first.
     """
     proc = run_hook_raw(command, cwd=cwd, hook=hook)
+    assert proc.returncode == 0, (
+        f"hook が異常終了した (rc={proc.returncode}): "
+        f"stdout={proc.stdout[-300:]!r} stderr={proc.stderr[-500:]}"
+    )
+    assert "Traceback" not in proc.stderr, f"hook が例外を出した: {proc.stderr[-500:]}"
     out = proc.stdout.strip()
     if not out:
-        assert proc.returncode == 0, (
-            f"hook が無出力で異常終了した (rc={proc.returncode}): {proc.stderr[-500:]}"
-        )
-        assert "Traceback" not in proc.stderr, (
-            f"hook が無出力で例外を出した: {proc.stderr[-500:]}"
-        )
         return None, proc.stderr.strip()
     data = json.loads(out)
     # Copilot 形式と Claude 形式の両方に同じ決定が入っているはず

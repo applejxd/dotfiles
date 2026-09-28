@@ -25,8 +25,9 @@ def run_hook(
 ) -> str | None:
     """Run the hook as a subprocess and return the permissionDecision.
 
-    Returns None when the hook stayed silent (= allowed); a silent exit is only
-    accepted when it is clean, so a crash is not mistaken for an allow.
+    Returns None when the hook stayed silent (= allowed). Any result is only
+    accepted from a clean exit (exit 0, no Traceback), so a crash is neither
+    mistaken for an allow nor for the decision it printed before crashing.
     AGENTS_CONFIG_DIR points the hook at the repository copy of
     command_policy.py so the result does not depend on what is currently
     deployed to ~/.config.
@@ -47,10 +48,10 @@ def run_hook(
         timeout=30,
         env=env,
     )
+    assert proc.returncode == 0, (proc.returncode, proc.stdout, proc.stderr)
+    assert "Traceback" not in proc.stderr, proc.stderr
     out = proc.stdout.strip()
     if not out:
-        assert proc.returncode == 0, proc.stderr
-        assert "Traceback" not in proc.stderr, proc.stderr
         return None
     data = json.loads(out)
     assert data["permissionDecision"] == data["hookSpecificOutput"]["permissionDecision"]
@@ -65,15 +66,30 @@ def run_path(tool_name: str, path: str) -> str | None:
     return run_hook(tool_name, {"path": path, "file_path": path})
 
 
+_DENY_JSON = (
+    '{"permissionDecision": "deny", "permissionDecisionReason": "fake",'
+    ' "hookSpecificOutput": {"hookEventName": "PreToolUse",'
+    ' "permissionDecision": "deny", "permissionDecisionReason": "fake"}}'
+)
+
+
 @pytest.mark.parametrize(
     "body",
     [
         "import sys\nsys.exit(1)\n",
         "import sys\nsys.stderr.write('Traceback (most recent call last):\\n')\n",
+        f"import sys\nsys.stdout.write({_DENY_JSON!r})\nsys.exit(1)\n",
+        (
+            f"import sys\nsys.stdout.write({_DENY_JSON!r})\n"
+            "sys.stderr.write('Traceback (most recent call last):\\n')\n"
+        ),
+    ],
+    ids=[
+        "無出力で exit 1", "無出力で Traceback", "deny を出して exit 1", "deny を出して Traceback",
     ],
 )
-def test_run_hook_rejects_silent_crash(tmp_path, body):
-    """無出力でクラッシュした hook を「許可」と取り違えないこと (ヘルパーの回帰)."""
+def test_run_hook_rejects_crash(tmp_path, body):
+    """クラッシュした hook の結果を判定として取り違えないこと (ヘルパーの回帰)."""
     hook = tmp_path / "fake_hook.py"
     hook.write_text(body, encoding="utf-8")
     with pytest.raises(AssertionError):

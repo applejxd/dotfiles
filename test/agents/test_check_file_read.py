@@ -36,8 +36,8 @@ def run_hook(
 ) -> dict:
     """hook を実プロセスで起動し、出力 JSON を返す (無出力なら空 dict)。
 
-    無出力は exit 0 かつ Traceback なしのときだけ受け付ける (クラッシュを許可と
-    取り違えない)。
+    出力の有無に関わらず exit 0 かつ Traceback なしのときだけ受け付ける
+    (クラッシュを許可とも、クラッシュ前に出した判定とも取り違えない)。
     """
     env = dict(os.environ)
     env["AGENTS_CONFIG_DIR"] = str(config_dir or COMMON_PATH.parent)
@@ -57,9 +57,9 @@ def run_hook(
         env=env,
     )
     assert proc.returncode == 0, f"hook が異常終了: {proc.stderr}"
+    assert "Traceback" not in proc.stderr, f"hook が例外を出した: {proc.stderr}"
     out = proc.stdout.strip()
     if not out:
-        assert "Traceback" not in proc.stderr, f"hook が無出力で例外を出した: {proc.stderr}"
         return {}
     return json.loads(out)
 
@@ -68,15 +68,30 @@ def is_denied(result: dict) -> bool:
     return result.get("permissionDecision") == "deny"
 
 
+_DENY_JSON = (
+    '{"permissionDecision": "deny", "permissionDecisionReason": "fake",'
+    ' "hookSpecificOutput": {"hookEventName": "PreToolUse",'
+    ' "permissionDecision": "deny", "permissionDecisionReason": "fake"}}'
+)
+
+
 @pytest.mark.parametrize(
     "body",
     [
         "import sys\nsys.exit(1)\n",
         "import sys\nsys.stderr.write('Traceback (most recent call last):\\n')\n",
+        f"import sys\nsys.stdout.write({_DENY_JSON!r})\nsys.exit(1)\n",
+        (
+            f"import sys\nsys.stdout.write({_DENY_JSON!r})\n"
+            "sys.stderr.write('Traceback (most recent call last):\\n')\n"
+        ),
+    ],
+    ids=[
+        "無出力で exit 1", "無出力で Traceback", "deny を出して exit 1", "deny を出して Traceback",
     ],
 )
-def test_run_hook_rejects_silent_crash(tmp_path, body):
-    """無出力でクラッシュした hook を「許可」と取り違えないこと (ヘルパーの回帰)."""
+def test_run_hook_rejects_crash(tmp_path, body):
+    """クラッシュした hook の結果を判定として取り違えないこと (ヘルパーの回帰)."""
     hook = tmp_path / "fake_hook.py"
     hook.write_text(body, encoding="utf-8")
     with pytest.raises(AssertionError):
@@ -206,6 +221,7 @@ def test_policy_dir_falls_back_to_xdg_config_home(tmp_path):
             env=env,
         )
         assert proc.returncode == 0, proc.stderr
+        assert "Traceback" not in proc.stderr, proc.stderr
         assert bool(proc.stdout.strip()) is denied, (path, proc.stdout, proc.stderr)
 
 

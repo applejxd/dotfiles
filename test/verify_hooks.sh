@@ -77,17 +77,23 @@ for command, want in CASES:
         ["python3", HOOK], input=payload, capture_output=True, text=True, timeout=30
     )
     stdout = proc.stdout.strip()
-    broken = False
-    if not stdout:
-        broken = proc.returncode != 0 or "Traceback" in proc.stderr
-        got = f"crash(rc={proc.returncode})" if broken else "pass"
+    # Claude は exit 0 以外だと stdout を読まないので、出力があっても異常終了は壊れている
+    broken = proc.returncode != 0 or "Traceback" in proc.stderr
+    if broken:
+        got = f"crash(rc={proc.returncode})"
+    elif not stdout:
+        got = "pass"
     else:
         try:
             output = json.loads(stdout)
         except json.JSONDecodeError:
             output = None
-        if isinstance(output, dict):
-            got = output.get("hookSpecificOutput", {}).get("permissionDecision", "pass")
+        nested = output.get("hookSpecificOutput") if isinstance(output, dict) else None
+        if isinstance(nested, dict) and "permissionDecision" in nested:
+            got = nested["permissionDecision"]
+            if output.get("permissionDecision") != got:
+                broken = True
+                got = f"mismatch({output.get('permissionDecision')}/{got})"
         else:
             broken = True
             got = "invalid-json"
