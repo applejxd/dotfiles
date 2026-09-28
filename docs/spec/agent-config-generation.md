@@ -368,6 +368,8 @@ permission = { "*" = "allow", task = "deny" }   # task は V2 の subagent
 - 「Always allow」で保存した承認は、設定の deny を上書きしない
 - `bypass` と同じく、秘密ファイルの読み取り禁止も外れる。誘導の plugin も
   エージェント名で素通りさせる（下の plugin 層）
+- 隔離起動（`ocs`）でも、全体の deny と guide plugin の検査の両方が効く
+  （[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
 
 実測（全体の deny だけで build からは `Permission denied: subagent`、bypass からは
 起動できる、子からの入れ子は不可。build に個別の `task = "allow"` があると全体の deny は
@@ -689,8 +691,11 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
 
 #### 隔離起動（`ocs`）
 
-`ocs` の既定モデルは `[opencode.sandbox] model_preference` が決め、ここの割り当ては
-使わない（通常版から引き継ぐのは `model` だけ）。**Bedrock は `ocs` では使えない**
+`ocs` の既定モデルは `[opencode.sandbox] model_preference` が決め、ここの `default` は
+使わない（通常版から引き継ぐのは `model` だけ）。エージェントごとの割り当ては、この PC の
+プロバイダが `[opencode.sandbox] providers` にあるときだけ隔離版にも出す
+（[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）。
+**Bedrock は `ocs` では使えない**
 （コードから判断。実機では未確認）。境界の内側から `~/.aws` が読めず
 （開けていない）、AWS の資格情報の環境変数も落とすため（`ocs` の `inner_env`）。
 `[provider.amazon-bedrock] network_allow` は用意してあるが、`providers` には入れていない。
@@ -722,7 +727,8 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
 - `permissions` は全体の規則の後ろに付き、後勝ちで効く。全体で `ask` の
   `git commit *` も、`commit` の中では `deny` になる
 - 宣言したキーだけを差し替え、他のキーと他のエージェントは残す
-- 隔離起動（`ocs`）には渡らない（通常版から引き継ぐのは見た目のキーと `model` だけ）
+- 隔離起動（`ocs`）にも同じ定義が出る。通常版の `opencode.json` からは引き継がず、
+  `common.toml` から作る（[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
 - **`commit` はシェルのたびに承認が要る。** `git status` / `git diff` / `git add` は
   既定の `ask` のまま（allow にしない理由は上の `review` と同じ）。
   `opencode run --auto` のような無人の実行では、子セッションの確認に答える人が

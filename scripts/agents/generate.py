@@ -1205,6 +1205,7 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     policies = opencode_sandbox_policies(common)
     if policies:
         out["policies"] = policies
+    out.update(opencode_sandbox_agents(common, cfg.get("providers") or []))
     prompt = cfg.get("system_prompt")
     if prompt:
         out["system_prompt"] = str(prompt).strip()
@@ -1215,6 +1216,32 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
             for p in preference
             if p.get("provider") and p.get("model")
         ]
+    return out
+
+
+def opencode_sandbox_agents(common: dict[str, Any], reachable: list[str]) -> dict[str, Any]:
+    """隔離版のエージェント・コマンド。通常版の ``opencode.json`` と同じ関数で作る。
+
+    **通常版の ``opencode.json`` からは引き継がない**（空の既存に対して組む）。
+    モデルの割り当てと接続設定は、この PC のプロバイダが境界の内から届くときだけ出す。
+    see docs/spec/opencode-sandbox.md#エージェントとコマンド
+    """
+    out: dict[str, Any] = {}
+    agent = merge_opencode_agents({}, common)
+    if agent:
+        out["agent"] = agent
+    agents = merge_opencode_v2_agents({}, common)
+    models = opencode_models(common)
+    if models and models["provider"] in reachable:
+        agents = merge_opencode_agent_models(agents, models)
+        providers = merge_opencode_providers({}, common, models)
+        if providers:
+            out["providers"] = providers
+    if agents:
+        out["agents"] = agents
+    commands = merge_opencode_commands({}, common)
+    if commands:
+        out["commands"] = commands
     return out
 
 

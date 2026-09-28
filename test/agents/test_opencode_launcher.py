@@ -83,6 +83,9 @@ def _sandbox(tmp_path: Path, **overrides) -> dict:
         "plugins": base.get("plugins", []),
         "system_prompt": base.get("system_prompt", "境界の説明"),
         "model_preference": base.get("model_preference", []),
+        "agent": base.get("agent", {}),
+        "agents": base.get("agents", {}),
+        "commands": base.get("commands", {}),
         **overrides,
     }
 
@@ -530,6 +533,9 @@ def test_emptied_managed_keys_leave_no_residue(tmp_path, stage):
         policies=[{"statement": "x"}],
         plugins=["/opt/plugin.js"],
         system_prompt="境界の説明",
+        agent={"bypass": {"permission": "allow"}},
+        agents={"commit": {"description": "c"}},
+        commands={"fleet": {"template": "t"}},
     )
     config_dir = Path(full["config_dir"])
     target = config_dir / "opencode.json"
@@ -539,20 +545,26 @@ def test_emptied_managed_keys_leave_no_residue(tmp_path, stage):
     config = json.loads(target.read_text(encoding="utf-8"))
     assert config["plugins"] == ["/opt/plugin.js"]
     assert config["experimental"]["policies"] == [{"statement": "x"}]
+    assert config["agent"] == {"bypass": {"permission": "allow"}}
     assert agents.is_file()
     config["model"] = "github-copilot/claude-sonnet-5"
     config["username"] = "alice"
     config["experimental"]["other"] = True
     target.write_text(json.dumps(config), encoding="utf-8")
 
-    managed = ("policies", "plugins", "system_prompt")
+    managed = ("policies", "plugins", "system_prompt", "agent", "agents", "commands")
     if stage == "空":
-        sandbox = {**full, "policies": [], "plugins": [], "system_prompt": ""}
+        sandbox = {
+            **full, "policies": [], "plugins": [], "system_prompt": "",
+            "agent": {}, "agents": {}, "commands": {},
+        }
     else:
         sandbox = {k: v for k, v in full.items() if k not in managed}
     launcher.config.write_isolated_config(sandbox, project)
     after = json.loads(target.read_text(encoding="utf-8"))
     assert "plugins" not in after, "plugins が残った"
+    for key in ("agent", "agents", "commands"):
+        assert key not in after, f"{key} が残った"
     assert after.get("experimental") == {"other": True}, (
         "policies が残ったか、管理外の experimental が消えた"
     )
@@ -571,6 +583,101 @@ def test_experimental_is_dropped_when_only_policies_were_in_it(tmp_path):
     launcher.config.write_isolated_config({**sandbox, "policies": []}, project)
     target = Path(sandbox["config_dir"]) / "opencode.json"
     assert "experimental" not in json.loads(target.read_text(encoding="utf-8"))
+
+
+def test_common_agents_and_commands_are_written(tmp_path):
+    """★common.toml のエージェント・コマンドが隔離版の設定に入ること (CHG-0010)。"""
+    launcher = _launcher()
+    sandbox = _sandbox(tmp_path)
+    project = _project(tmp_path)
+    launcher.config.write_isolated_config(sandbox, project)
+    config = json.loads(
+        (Path(sandbox["config_dir"]) / "opencode.json").read_text(encoding="utf-8")
+    )
+    assert config["agent"]["bypass"]["permission"] == "allow"
+    assert "bypass-worker" in config["agent"]
+    assert {"commit", "review", "fleet-worker"} <= set(config["agents"])
+    assert "fleet" in config["commands"]
+
+
+def test_agents_outside_common_are_dropped(tmp_path):
+    """★隔離版のエージェント・コマンドは common.toml の宣言で丸ごと差し替えること。
+
+    隔離版の設定は境界の内から書けないので、残るのは外で足したものか、
+    common.toml から外した古い定義だけ。後者が残ると、外したはずの
+    全部 allow のエージェントが隔離版に居座る。
+    """
+    launcher = _launcher()
+    sandbox = _sandbox(tmp_path)
+    project = _project(tmp_path)
+    launcher.config.write_isolated_config(sandbox, project)
+
+    target = Path(sandbox["config_dir"]) / "opencode.json"
+    config = json.loads(target.read_text(encoding="utf-8"))
+    config["agent"]["stale"] = {"permission": "allow", "mode": "all"}
+    config["agent"]["bypass"]["mode"] = "all"
+    config["agents"]["stale"] = {"description": "x"}
+    config["commands"]["stale"] = {"template": "x"}
+    target.write_text(json.dumps(config), encoding="utf-8")
+
+    launcher.config.write_isolated_config(sandbox, project)
+    after = json.loads(target.read_text(encoding="utf-8"))
+    assert after["agent"] == sandbox["agent"], "agent が宣言どおりに戻っていない"
+    assert after["agents"] == sandbox["agents"], "agents が宣言どおりに戻っていない"
+    assert after["commands"] == sandbox["commands"], "commands が宣言どおりに戻っていない"
+
+
+def test_host_agents_are_not_carried_into_the_isolated_config(tmp_path, monkeypatch):
+    """通常版の opencode.json で手で足したエージェント・コマンドは入らないこと。"""
+    launcher = _launcher()
+    host = tmp_path / "host.json"
+    host.write_text(
+        json.dumps(
+            {
+                "agent": {"handmade": {"permission": "allow"}},
+                "agents": {"handmade": {"description": "x"}},
+                "commands": {"handmade": {"template": "x"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(launcher.config, "HOST_CONFIG", host)
+    sandbox = _sandbox(tmp_path)
+    launcher.config.write_isolated_config(sandbox, _project(tmp_path))
+    config = json.loads(
+        (Path(sandbox["config_dir"]) / "opencode.json").read_text(encoding="utf-8")
+    )
+    for key in ("agent", "agents", "commands"):
+        assert "handmade" not in config[key], f"通常版の {key} が入った"
+
+
+def test_provider_settings_keep_other_keys(tmp_path):
+    """接続設定は宣言したプロバイダの settings だけを差し替え、他は残すこと。"""
+    launcher = _launcher()
+    project = _project(tmp_path)
+    declared = {"amazon-bedrock": {"settings": {"profile": "default", "region": "us-east-1"}}}
+    sandbox = _sandbox(tmp_path, providers=declared)
+    target = Path(sandbox["config_dir"]) / "opencode.json"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "amazon-bedrock": {"baseURL": "https://x", "settings": {"region": "old"}},
+                    "custom": {"baseURL": "https://y"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    launcher.config.write_isolated_config(sandbox, project)
+    after = json.loads(target.read_text(encoding="utf-8"))["providers"]
+    assert after["amazon-bedrock"]["settings"] == declared["amazon-bedrock"]["settings"]
+    assert after["amazon-bedrock"]["baseURL"] == "https://x"
+    assert after["custom"] == {"baseURL": "https://y"}
+
+    launcher.config.write_isolated_config({**sandbox, "providers": {}}, project)
+    assert json.loads(target.read_text(encoding="utf-8"))["providers"] == after
 
 
 # --- git worktree ------------------------------------------------------------
@@ -716,6 +823,9 @@ def test_security_keys_are_never_inherited(tmp_path, monkeypatch):
                 "plugins": ["evil"],
                 "mcp": {"x": {}},
                 "agent": {"a": {}},
+                "agents": {"a": {}},
+                "commands": {"a": {}},
+                "providers": {"a": {}},
                 "experimental": {"policies": []},
                 "tools": {"bash": True},
             }

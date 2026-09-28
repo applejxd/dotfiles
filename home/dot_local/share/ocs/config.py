@@ -10,9 +10,13 @@ from .common import HOME
 
 HOST_CONFIG = HOME / ".config/opencode/opencode.json"
 # 通常版から引き継ぐキー。★見た目と操作感だけ。許可リストで持つこと。
-#   permissions / plugins / mcp / agent / experimental / tools を足すと、
+#   permissions / plugins / mcp / experimental / tools を足すと、
 #   通常版の設定から隔離版の緩和を決められるようになる (境界の意味が消える)。
+#   agent / agents / commands は通常版からは引き継がず、common.toml から出す。
 INHERIT_KEYS = ("theme", "keybinds", "username", "layout", "model", "small_model")
+# common.toml のエージェント・コマンド。宣言外のエントリも残さず丸ごと差し替える。
+# see docs/spec/opencode-sandbox.md#エージェントとコマンド
+REPLACED_KEYS = ("agent", "agents", "commands")
 
 
 def inherit_ui(config: dict) -> dict:
@@ -33,6 +37,22 @@ def inherit_ui(config: dict) -> dict:
         if key in host and key not in config:
             config[key] = host[key]
     return config
+
+
+def merge_providers(existing: object, declared: object) -> dict:
+    """宣言したプロバイダの ``settings`` だけを差し替える (他のキー・プロバイダは残す)。
+
+    通常版の ``merge_opencode_providers`` と同じ方針。接続設定は緩和に関わらない。
+    """
+    out = dict(existing) if isinstance(existing, dict) else {}
+    for name, entry in (declared if isinstance(declared, dict) else {}).items():
+        current = out.get(name)
+        current = dict(current) if isinstance(current, dict) else {}
+        settings = current.get("settings")
+        settings = dict(settings) if isinstance(settings, dict) else {}
+        current["settings"] = {**settings, **(entry.get("settings") or {})}
+        out[name] = current
+    return out
 
 
 def write_isolated_config(sandbox: dict, project: dict) -> None:
@@ -91,6 +111,14 @@ def write_isolated_config(sandbox: dict, project: dict) -> None:
         config["plugins"] = plugins
     else:
         config.pop("plugins", None)
+    for key in REPLACED_KEYS:
+        if sandbox.get(key):
+            config[key] = sandbox[key]
+        else:
+            config.pop(key, None)
+    providers = merge_providers(existing.get("providers"), sandbox.get("providers"))
+    if providers:
+        config["providers"] = providers
     # 既定モデルは初回だけ置く。以降は利用者が TUI で変えた値を尊重する。
     model = pick_model(sandbox, project)
     if model and "model" not in config:

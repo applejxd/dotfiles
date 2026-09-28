@@ -388,3 +388,121 @@ def test_system_prompt_mentions_enoent():
     """境界は見えないので、ENOENT の意味を伝えること。"""
     prompt = SANDBOX.get("system_prompt", "")
     assert "ENOENT" in prompt, "ENOENT の説明が無い (誤診の原因)"
+
+
+# ---------------------------------------------------------------------------
+# エージェント・コマンド (CHG-0010)
+# ---------------------------------------------------------------------------
+
+def _with_provider(tmp_path: Path, provider: str) -> dict:
+    """この PC のプロバイダだけを差し替えた common で、隔離版の素材を作る。"""
+    runtime = tmp_path / "fence"
+    runtime.write_text("", "utf-8")
+    opencode = COMMON["opencode"]
+    common = {
+        **COMMON,
+        "opencode": {
+            **opencode,
+            "model": {**opencode["model"], "provider": provider},
+            "sandbox": {**SANDBOX, "runtime_path": str(runtime)},
+        },
+    }
+    out = gen.opencode_sandbox(common)
+    assert out is not None
+    return out
+
+
+def test_isolated_gets_the_same_agents_and_commands_as_common(tmp_path):
+    """★common.toml のエージェント・コマンドが、通常版と同じ関数で隔離版にも出ること。"""
+    out = _out(tmp_path)
+    assert out["agent"] == gen.merge_opencode_agents({}, COMMON)
+    assert {"bypass", "bypass-worker"} <= set(out["agent"])
+    assert out["agent"]["bypass"]["permission"] == "allow"
+    assert set(out["agents"]) == set(gen.opencode_v2_agents(COMMON))
+    for name, agent in gen.opencode_v2_agents(COMMON).items():
+        for key, value in agent.items():
+            assert out["agents"][name][key] == value, f"agents.{name}.{key} が違う"
+    assert out["commands"] == gen.merge_opencode_commands({}, COMMON)
+    assert "fleet" in out["commands"]
+
+
+def test_isolated_agents_are_not_taken_from_the_normal_config():
+    """通常版の opencode.json (手で足したエージェント) を素材にしないこと。
+
+    生成器は rules.json の既存しか受け取らない。既存の ``sandbox`` 節に何が
+    残っていても、common.toml から作り直す。
+    """
+    stale = {"sandbox": {
+        "agent": {"handmade": {"permission": "allow"}},
+        "agents": {"handmade": {"description": "x"}},
+        "commands": {"handmade": {"template": "x"}},
+    }}
+    out = gen.build_opencode_guide(stale, COMMON)["sandbox"]
+    for key in ("agent", "agents", "commands"):
+        assert "handmade" not in out[key], f"{key} に宣言外のエントリが入った"
+
+
+def test_isolated_assigns_models_when_the_provider_is_reachable(tmp_path):
+    out = _with_provider(tmp_path, "github-copilot")
+    models = gen.opencode_models(
+        {**COMMON, "opencode": {**COMMON["opencode"], "model": {
+            **COMMON["opencode"]["model"], "provider": "github-copilot",
+        }}}
+    )
+    assert models is not None
+    for name, model in models["agents"].items():
+        assert out["agents"][name]["model"] == model
+    assert "providers" not in out, "Copilot に接続設定は無い"
+
+
+def test_isolated_skips_models_of_an_unreachable_provider(tmp_path):
+    """★境界の内から届かないプロバイダのモデルを子エージェントに割り当てないこと。
+
+    Bedrock は ``ocs`` では使えない。割り当てると子エージェントが応答しない。
+    割り当てが無ければ親のモデルで動く。
+    see docs/spec/agent-config-generation.md#隔離起動ocs
+    """
+    assert "amazon-bedrock" not in SANDBOX.get("providers", [])
+    out = _with_provider(tmp_path, "amazon-bedrock")
+    for name, agent in out["agents"].items():
+        assert "model" not in agent, f"agents.{name} に届かないモデルがある"
+    assert "providers" not in out, "届かないプロバイダの接続設定が出た"
+
+
+def test_isolated_writes_provider_settings_when_reachable(tmp_path):
+    """接続設定が要るプロバイダが届くなら、通常版と同じ設定を出す。"""
+    runtime = tmp_path / "fence"
+    runtime.write_text("", "utf-8")
+    opencode = COMMON["opencode"]
+    common = {
+        **COMMON,
+        "opencode": {
+            **opencode,
+            "model": {**opencode["model"], "provider": "amazon-bedrock"},
+            "sandbox": {
+                **SANDBOX,
+                "runtime_path": str(runtime),
+                "providers": [*SANDBOX["providers"], "amazon-bedrock"],
+            },
+        },
+    }
+    out = gen.opencode_sandbox(common)
+    assert out is not None
+    assert out["providers"]["amazon-bedrock"]["settings"]["profile"] == "default"
+    assert all("model" in out["agents"][n] for n in opencode["model"]["agents"])
+
+
+def test_isolated_denies_the_guarded_subagent_outside_bypass(tmp_path):
+    """★隔離版でも ``bypass-worker`` は ``bypass`` からだけ起動できること。
+
+    全体の deny (permissions) と、guide plugin の起動元の検査 (rules.json の
+    guarded_subagents / bypass_agents) の両方が隔離版に効く。
+    """
+    out = _out(tmp_path)
+    assert {"action": "subagent", "resource": "bypass-worker", "effect": "deny"} in (
+        out["permissions"]
+    )
+    rules = gen.build_opencode_guide({}, COMMON)
+    assert "bypass-worker" in rules["guarded_subagents"]
+    assert "bypass" in rules["bypass_agents"]
+    assert gen.opencode_guide_plugin_path() in out["plugins"]

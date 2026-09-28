@@ -264,6 +264,8 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 - 緩和に関わるキー（`permissions` / `snapshots` / `policies` / `plugins`）は
   **毎回差し替える**。生成側が空なら取り除く（`AGENTS.md` も同じ）。
   `permissions` だけは空でも `[]` を書く（消すと OpenCode の既定に戻るため）
+- `common.toml` のエージェントとコマンド（`agent` / `agents` / `commands`）も**毎回丸ごと
+  差し替える**（下記）
 - それ以外のキーは**残す**。丸ごと上書きすると TUI で選んだ値が毎回消える
 - 通常版の設定からは**見た目・操作感のキーだけ**引き継ぐ
   （`theme` / `keybinds` / `username` / `layout` / `model` / `small_model`）
@@ -271,6 +273,48 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 
 > 許可リストで持つこと。`permissions` や `plugins` を引き継げるようにすると、
 > 境界の外の設定で内側の緩和を決められてしまう。
+
+#### エージェントとコマンド
+
+`common.toml` の `[opencode.agent]`（`bypass`・`bypass-worker`）・`[opencode.agents]`
+（`commit`・`review`・`fleet-worker`）・`[opencode.commands]`（`/fleet`）を、隔離版にも
+出す（[CHG-0010](../change/0010-ocs-agents.md)）。境界の目的をうっかりの防止に絞ったので
+（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)）、境界の中で `bypass` を使ってよい。
+
+| キー | 中身 | 既存の扱い |
+| --- | --- | --- |
+| `agent` / `agents` / `commands` | 通常版の `opencode.json` と同じ関数（`merge_opencode_agents` など）で、空の既存に対して組んだもの | **丸ごと差し替える**。宣言が空なら取り除く |
+| `agents.<id>.model` | `[opencode.model.agents]` の割り当て。この PC のプロバイダが `[opencode.sandbox] providers` にあるときだけ | 同上 |
+| `providers.<id>.settings` | 同じ条件で、`[provider.<id>]` の `profile` / `region` | 宣言したプロバイダの `settings` だけ差し替え、他は残す |
+
+- **通常版の `opencode.json` からは引き継がない。** 手で足したエージェントまで入り、
+  単一ソースが崩れるため。`generate.py` が `rules.json` の `sandbox` 節へ出し、
+  `ocs` がそれを書く
+- **宣言外のエントリも残さない**（通常版の `merge_opencode_agents` は残す）。隔離版の設定は
+  境界の内から書けないので、TUI の操作で足されるものは無い。残るのは `common.toml` から
+  外した古い定義か外で手書きしたものだけで、前者が全部 allow のエージェントだと、
+  外したはずの緩和が隔離版に居座る。エージェントの権限は緩和に関わるキーとして扱う
+- **届かないプロバイダのモデルは割り当てない。** Bedrock は `ocs` では使えない
+  （[モデルの割り当て](agent-config-generation.md#隔離起動ocs)）ので、Bedrock の PC では
+  子エージェントは親のモデルで動く。接続設定も同じ理由で出さない
+- `bypass-worker` を `bypass` 以外から起動させない仕組み（全体の `subagent` の deny と
+  guide plugin の起動元の検査）は、隔離版でもそのまま効く
+  （[bypass から呼べる子エージェント](agent-config-generation.md#bypass-から呼べる子エージェント)）
+- `bypass` の中でも `experimental.policies`（`git push` / `chezmoi apply` など）は止まる
+  （実機で確認）。一方で秘密ファイルの読み取りの deny も、guide plugin の伏字化と
+  `grep` / `glob` の結果フィルタも外れる（plugin は `bypass_agents` を素通りさせる）。
+  ホームの秘密は境界が隠すが、**ワークスペースの中の秘密（`.env` など）は `bypass` から
+  そのまま読める**（コードから判断。実機では未確認）
+- プロバイダの `provider.use` の policy（通常版がこの PC のプロバイダ以外を塞ぐもの）は
+  隔離版には出さない。隔離版で使えるプロバイダは通信先の許可（`[opencode.sandbox] providers`）
+  が決め、既定モデルも `model_preference` で選ぶため。通常版と同じ policy を置くと、
+  Bedrock の PC では `ocs` のモデルがすべて塞がる
+
+実機での確認（一時の設定・DB と Fence の境界の中。[CHG-0010](../change/0010-ocs-agents.md) の実装・検証）:
+`config.get` で `agents` / `commands` が正規化後も見える、`--agent bypass` で `ask` の
+コマンドが確認なしに通り `git push` は policy で止まる、`bypass` から `bypass-worker` を
+起動できる、`build` からは `Permission denied: subagent`、`subagent` を個別に allow した
+エージェントからは guide plugin が止める、`review` の子セッションが割り当てのモデルで動く。
 
 内側の環境には `OCS_ISOLATED=1` を渡す。guide plugin はこれで隔離起動を見分け、
 確認画面の説明の生成だけを止める（隔離起動では `tui.ts` を読まず、作っても
