@@ -1,0 +1,18 @@
+{{- /*
+AI CLI が使うモデルのプロバイダ。単一ソース。
+"amazon-bedrock" か "github-copilot" を返す。
+
+使う側:
+    {{ $provider := includeTemplate "llm-provider" . }}
+
+chezmoi.toml の [data] ではなくここに置くのは、chezmoi update が
+chezmoi init を呼ばないため。判定の根拠は
+docs/spec/agent-config-generation.md#モデルの割り当て が正本。
+*/ -}}
+{{- if and (hasKey . "llm_provider") .llm_provider -}}
+{{-   .llm_provider -}}
+{{- else if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+github-copilot
+{{- else -}}
+amazon-bedrock
+{{- end -}}

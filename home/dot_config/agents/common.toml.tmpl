@@ -634,6 +634,13 @@ network_allow = ["api.anthropic.com"]
 [provider.openai]
 network_allow = ["api.openai.com"]
 
+# ★profile が無いと Bedrock が有効にならない。network_allow は region と揃える。
+# see docs/spec/agent-config-generation.md#モデルの割り当て
+[provider.amazon-bedrock]
+profile = "default"
+region = "us-east-1"
+network_allow = ["bedrock-runtime.us-east-1.amazonaws.com"]
+
 # ---------------------------------------------------------------------------
 # Claude 固有
 # ---------------------------------------------------------------------------
@@ -702,6 +709,33 @@ approvals = [
 # インストーラーで導入し、更新は `opencode upgrade` を明示的に実行する。
 auto_update = false
 
+# 既定モデルとエージェントごとの割り当て。PC ごとのプロバイダは
+# .chezmoitemplates/llm-provider が決め、ほかのプロバイダは policies で塞ぐ。
+# ★ID は実在を確認してから書く (公式のモデル一覧か TUI の /models)。
+#   default には #variant を付けられない。
+# see docs/spec/agent-config-generation.md#モデルの割り当て
+[opencode.model]
+provider = "{{ includeTemplate "llm-provider" . }}"
+
+# エージェント ID = 階層名。組み込み (plan / explore など) も上書きできる。
+# ★主エージェント (build / plan) は選んでもモデルが変わらない。子エージェントだけ書く。
+[opencode.model.agents]
+commit = "light"
+review = "second_opinion"
+fleet-worker = "light"
+
+[opencode.model.tier.amazon-bedrock]
+default = "global.anthropic.claude-sonnet-5"
+light = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+heavy = "global.anthropic.claude-opus-5-5#high"
+second_opinion = "global.openai.gpt-6-sol"
+
+[opencode.model.tier.github-copilot]
+default = "claude-opus-5.5"
+light = "claude-opus-5.5#medium"
+heavy = "claude-opus-5.5#xhigh"
+second_opinion = "gpt-6-astra"
+
 # ★[web] は OpenCode へ渡さない。webfetch の resource は「URL 全体」で、
 #   `*` が `/` も跨ぐため `*://*.example.com/*` が
 #   `https://evil.test/x.example.com/y` にも当たる。ドメイン許可を正しく
@@ -727,6 +761,126 @@ permission = "allow"
 description = "bypass から起動する作業用の子エージェント。全ツールを無確認で実行する"
 mode = "subagent"
 permission = { "*" = "allow", task = "deny" }
+
+# V2 形式のエージェント定義 (opencode.json の agents へ出す)。モデルは
+# [opencode.model.agents] で階層を割り当てる (ここに model は書かない)。
+# system は組み込みの基底プロンプトを置き換える。permissions は全体の規則の後ろに付く。
+# see docs/spec/agent-config-generation.md#子エージェント
+[opencode.agents.commit]
+description = "変更を Conventional Commits の論理単位に分け、パスを指定してステージし、コミットメッセージ案を返す。コミットはしない。変更をコミットしたいとき、親は差分を読まずにこれへ任せる"
+mode = "subagent"
+system = """
+あなたはコミットの下ごしらえ役です。親エージェントから呼ばれ、結果を親へ返します。
+ユーザーとは直接やり取りできません。
+
+1. commit スキルを読み込み、その手順と文体に従う。
+   「ユーザーと直接やり取りできない実行文脈」に当たるので、コミットはしない
+2. git status --short --branch / git diff HEAD / git log --oneline -10 で状況をつかむ
+3. 変更を論理単位に分ける。依頼の範囲外の変更や、ステージ済みの他人の作業は混ぜない。
+   迷ったら含めずに報告する
+4. 最初の単位だけを、パスを明示して git add -- <paths> でステージする
+5. 次を返して終わる
+   - ステージしたファイル (git diff --cached --stat の結果)
+   - コミットメッセージの全文
+   - 残した変更と、残した理由
+   - 次の単位の案 (あれば)
+
+ファイルは編集しない。
+"""
+permissions = [
+  { action = "edit", resource = "*", effect = "deny" },
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "question", resource = "*", effect = "deny" },
+  { action = "shell", resource = "git commit *", effect = "deny" },
+]
+
+# 相談役。読むだけ。★shell は開けない (git diff / git status も外部コマンドを実行しうる)。
+# 差分は親が依頼文に含めて渡す。see docs/research/opencode/permission/allow-list-audit.md
+[opencode.agents.review]
+description = "別系統のモデルによる相談役。設計案・差分・調査結果を渡すと、欠陥・見落とし・代替案を率直に返す。ファイルは読むだけで、編集もコマンド実行もしない。差分や判断材料は依頼文に含めて渡す"
+mode = "subagent"
+system = """
+あなたは相談役 (セカンドオピニオン) です。親エージェントとは別系統のモデルで、
+親の判断を検証するために呼ばれます。同意するためではなく、誤りを見つけるためにいます。
+
+- 渡された材料と、必要なら read / grep / glob で読んだコードだけを根拠にする。
+  推測は推測と明示する
+- 指摘は重大度の順 (BLOCKER / MAJOR / MINOR / NIT) に、ファイルと行を添えて書く
+- 正しいと判断したことは短く「問題なし」と書き、理由を 1 行添える
+- 親の前提そのものが疑わしいときは、それを最初に書く
+- 代替案があれば、採る場合の代償と一緒に示す
+- 材料が足りず判断できない点は、何があれば判断できるかを書く
+
+ファイルは編集しない。コマンドも実行しない。
+"""
+permissions = [
+  { action = "edit", resource = "*", effect = "deny" },
+  { action = "shell", resource = "*", effect = "deny" },
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "question", resource = "*", effect = "deny" },
+]
+
+# /fleet の作業役。編集とシェルは全体の規則のまま (承認制)。同じ作業ツリーを共有するので
+# 担当ファイルは親が割り当てる。see docs/spec/agent-config-generation.md#並列作業fleet
+[opencode.agents.fleet-worker]
+description = "/fleet の作業役。親が割り当てた 1 つの作業を、指定された担当ファイルの範囲で実装し、確認して結果を返す。コミットはしない。/fleet 以外から直接使わない"
+mode = "subagent"
+system = """
+あなたは並列作業の作業役です。取りまとめ役 (親エージェント) から 1 つの作業を渡され、
+結果を親へ返します。ほかの作業役が同じ作業ツリーで同時に動いています。
+ユーザーとは直接やり取りできません。
+
+- 担当ファイルとして渡されたものだけを編集する。担当外の変更が必要だと分かったら、
+  編集せずに理由と必要な変更を報告する
+- 完了条件と確認方法が渡されたら、それに従って確かめる。確かめられなかったら、
+  そう書く (推測で成功と書かない)
+- git の操作 (add / commit / stash / checkout / reset など) はしない。
+  作業ツリーはほかの作業役と共有している
+- 次を返して終わる
+  - 変更したファイルと、変更の要点
+  - 実行した確認と、その結果
+  - 残った問題・判断が要る点・担当外で必要な変更
+"""
+permissions = [
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "question", resource = "*", effect = "deny" },
+  { action = "shell", resource = "git add *", effect = "deny" },
+  { action = "shell", resource = "git commit *", effect = "deny" },
+  { action = "shell", resource = "git stash *", effect = "deny" },
+  { action = "shell", resource = "git checkout *", effect = "deny" },
+  { action = "shell", resource = "git switch *", effect = "deny" },
+  { action = "shell", resource = "git restore *", effect = "deny" },
+  { action = "shell", resource = "git reset *", effect = "deny" },
+]
+
+# スラッシュコマンド (opencode.json の commands へ出す)。template の `$ARGUMENTS` は
+# 引数に置き換わる。★「!」+ バッククォートはシェルとして権限の確認なしに実行されるので書かない。
+[opencode.commands.fleet]
+description = "依頼を並列に動かせる作業に分け、fleet-worker を同時に起動して進める"
+subagent = false
+template = """
+次の依頼を、並列に動かせる小さな作業に分けて進めてください。あなたは取りまとめ役です。
+
+依頼:
+$ARGUMENTS
+
+手順:
+
+1. 必要なら先にコードを読み、依頼を作業に分ける。各作業について、目的・担当ファイル・
+   完了条件・確認方法を決める。担当ファイルは作業どうしで重ねない
+2. 作業の依存関係を決め、同時に動かせる組 (波) に分ける。1 つの波は 4 件まで。
+   分ける価値が無い小さな依頼なら、分けずに自分で進める
+3. 作業の一覧・波・担当ファイルを示してから始める
+4. 波ごとに、各作業を 1 回の応答の中で subagent ツールを並べて fleet-worker に渡す
+   (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。
+   調査だけの作業は explore、第三者の検証は review に任せてよい。
+   依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を
+   すべて書く (子エージェントはこの会話を見られない)
+5. 結果を読み、失敗・担当外の変更・報告された問題があれば、直すか作業を切り直してから
+   次の波へ進む
+6. 最後に全体の差分を読み、リポジトリで定められた検証を実行し、作業ごとの結果・
+   検証の結果・残った問題をまとめて報告する。コミットはしない
+"""
 
 # OpenCode 専用の shell allow ([bash] とは共用しない。前提が違う)。
 # ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。

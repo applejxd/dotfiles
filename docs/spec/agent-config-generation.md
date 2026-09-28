@@ -598,6 +598,168 @@ service.restart
 `cli.json` が読まれないと**キーバインドは丸ごと既定に戻る**ので、
 `app.exit` が `ctrl+c` を握ったままになり Ctrl+C で終了する。
 
+### モデルの割り当て
+
+PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・エージェントごとのモデル・
+接続設定・他のプロバイダの禁止を `opencode.json` へ出す。
+
+#### プロバイダの判定
+
+`.chezmoitemplates/llm-provider` が `apply` のたびに決める。
+
+| 条件（上から順に評価） | プロバイダ |
+| --- | --- |
+| `chezmoi.toml` の `[data]` に `llm_provider` がある | その値 |
+| ユーザー名が `applejxd`（`DOMAIN\applejxd` も含む、大小無視） | `github-copilot`（私用） |
+| それ以外 | `amazon-bedrock`（業務用） |
+
+判定の前提は「私用 PC のユーザーは `applejxd`、業務 PC は別名で AWS CLI にログイン
+している」こと。どちらでもない PC では OpenCode を使わない。
+
+- **gh のログイン状態は見ない。** 業務 PC でも `gh auth login` していることがあり、
+  見分けに使えない。OpenCode の Copilot 接続も `gh` とは別で、`/connect` が要る
+- **`~/.aws` の有無も見ない。** 私用 PC にも `~/.aws` ディレクトリだけ存在する
+  ことがある（この PC で確認）
+- `[data]` ではなくテンプレートで判定するのは、`chezmoi update` が `init` を
+  呼ばないため（[CHG-0008](../change/closed/0008-raspi-branching.md)）。
+  `[data]` の `llm_provider` は判定を覆したいときの逃げ道
+
+#### 階層
+
+`[opencode.model.tier.<プロバイダ>]` に**階層名 → モデル ID** を書き、エージェントは
+階層名で指す。PC が変わってもエージェントの割り当てを書き直さずに済む。
+
+| 階層 | Copilot | Bedrock |
+| --- | --- | --- |
+| `default` | `claude-opus-5.5` | `global.anthropic.claude-sonnet-5` |
+| `light` | `claude-opus-5.5#medium` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| `heavy` | `claude-opus-5.5#xhigh` | `global.anthropic.claude-opus-5-5#high` |
+| `second_opinion` | `gpt-6-astra` | `global.openai.gpt-6-sol` |
+
+```toml
+[opencode.model.agents]
+explore = "light"      # 例。2026-09-28 時点では割り当ては空
+```
+
+- **どのプロバイダにも同じ階層名をそろえる**（`test_every_provider_defines_the_same_tiers`）
+- ID は [models.dev](https://models.dev) の一覧か TUI の `/models` で実在を確かめてから
+  書く。Bedrock の `global.` はクロスリージョン推論プロファイル
+- **`default` に `#variant` は付けられない。** 既定の `model` はバリアントを
+  保持しない（公式）。付けると `apply` を止める
+  - Copilot の `default` を「Opus 5.5 の high」にしたかったが、手段が無かった。
+    モデル単位の `settings.reasoningEffort`・別名モデル・`context` hook の
+    どれで入れても、効くのは 1 回目の呼び出しだけで、ツール結果を受けた 2 回目
+    以降（`/v1/messages`）では推論の強さが送られない
+    （[実測 記録 E2](../research/opencode/agent-models.md#記録-e2--2026-09-28-既定モデルに推論の強さを持たせられるか)）
+  - そのため Copilot の `default` はバリアントなし（強さは Copilot 側の既定。
+    どの強さかは未確認）。high で動かしたいセッションは TUI でバリアントを選ぶ
+- 未知の階層・プロバイダ、`[opencode.agent]`（V1 形式）にあるエージェントへの
+  割り当ても `apply` を止める。後者は V1 の `agent` と V2 の `agents` に同じ ID が
+  並んだときの結合順を確かめていないため
+
+#### 生成されるもの
+
+| キー | 中身 | 残すもの |
+| --- | --- | --- |
+| `model` | `default` 階層 | — （毎回書く） |
+| `agents.<id>.model` | 割り当てた階層 | 割り当てを外したとき、値が階層のモデルなら消す。手で書いた別のモデル・他のキーは残す |
+| `providers.<id>.settings` | `[provider.<id>]` の `profile` / `region` | 他のキー（`baseURL` など）と他のプロバイダ |
+| `experimental.policies` | `provider.use` を `*` で deny、この PC のプロバイダだけ allow | `provider.use` 以外の文と、`experimental` の他のキー |
+
+- **V1 形式の `agent` ではなく V2 形式の `agents` に書く。** `agent` だと
+  `#variant` 付きの指定が黙って無視され、親のモデルで動く
+  （[実測](../research/opencode/agent-models.md)）
+- **policies はグローバル設定がプロジェクト設定に勝つ**ので、リポジトリの
+  `.opencode/opencode.json` から別のプロバイダを有効にされない
+  （[policies の優先順位](../research/opencode/permission/gaps.md#他の経路2026-09-23-追加実測)）
+- Bedrock は `profile` か認証の環境変数が無いと**有効にならない**（region だけでは
+  足りない。公式）。常駐サービスへシェルの `AWS_REGION` が渡る保証も無いので、
+  `profile = "default"` と `region = "us-east-1"` を設定に書く
+
+#### 効かない使い方
+
+**主エージェント（`build` / `plan` など）の `model` は、エージェントを選んだだけでは
+使われない。** セッションのモデルは別に保存されていて、`--agent plan` で起動しても
+既定モデルのまま動く（[実測](../research/opencode/agent-models.md)。公式の記述どおり）。
+子エージェント（`explore` など）の `model` は効く。
+
+主エージェントを重いモデルで動かしたいときは、`agent:` を指定したスラッシュコマンドを
+経由させる（公式ではコマンドで選んだエージェントの `model` が呼び出し時のモデルに勝つ。
+未実測）。
+
+#### 隔離起動（`ocs`）
+
+`ocs` の既定モデルは `[opencode.sandbox] model_preference` が決め、ここの割り当ては
+使わない（通常版から引き継ぐのは `model` だけ）。**Bedrock は `ocs` では使えない**
+（コードから判断。実機では未確認）。境界の内側から `~/.aws` が読めず
+（`[sandbox] deny`）、AWS の資格情報の環境変数も落とすため（`ocs` の `inner_env`）。
+`[provider.amazon-bedrock] network_allow` は用意してあるが、`providers` には入れていない。
+
+### 子エージェント
+
+`[opencode.agents.<id>]` に V2 形式でエージェントを定義し、`opencode.json` の
+`agents` へ出す。モデルは書かず、[`[opencode.model.agents]`](#モデルの割り当て) で
+階層を割り当てる（PC ごとのプロバイダで ID が変わるため）。
+
+| ID | 階層 | 役割 | 権限で塞ぐもの |
+| --- | --- | --- | --- |
+| `commit` | `light` | 変更を論理単位に分け、パスを指定してステージし、メッセージ案を返す | 編集・`git commit`・質問・子エージェントの起動 |
+| `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
+
+- **`commit` はコミットしない。** 子エージェントはユーザーとやり取りできないので、
+  commit スキルの「やり取りできない文脈では案を返して終わる」に従わせる。
+  承認とコミットは親が行う。狙いは、差分を読む重い作業を安いモデルへ移し、
+  親の文脈を節約すること
+- **`review` は shell を開けない。** `git diff` / `git status` も外部の diff
+  ドライバや fsmonitor を通じてコードを実行しうる
+  （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）。
+  差分は親が依頼文に含めて渡す
+- 書けるキーは `description`（必須）/ `mode` / `system` / `permissions` / `steps` /
+  `hidden` / `color` / `disabled`。`model` と V1 形式のキー（`permission` など）は
+  `apply` を止める。V1 の `[opencode.agent]` と同じ ID も止める
+- `system` は組み込みの基底プロンプトを**置き換える**（公式）。`AGENTS.md` や
+  スキルの一覧は引き続き足される
+- `permissions` は全体の規則の後ろに付き、後勝ちで効く。全体で `ask` の
+  `git commit *` も、`commit` の中では `deny` になる
+- 宣言したキーだけを差し替え、他のキーと他のエージェントは残す
+- 隔離起動（`ocs`）には渡らない（通常版から引き継ぐのは見た目のキーと `model` だけ）
+- **`commit` はシェルのたびに承認が要る。** `git status` / `git diff` / `git add` は
+  既定の `ask` のまま（allow にしない理由は上の `review` と同じ）。
+  `opencode run --auto` のような無人の実行では、子セッションの確認に答える人が
+  いないので止まる（[実機確認](../research/opencode/commit-review-agents.md)）。
+  TUI で確認が表に出るかは未確認
+
+### 並列作業（`/fleet`）
+
+Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる作業に分け、
+作業役の子エージェントを同時に起動して進める。仕組みは専用の機能ではなく、
+**コマンドの指示文と、1 回の応答で `subagent` ツールを並べて呼ぶこと**で組んでいる
+（Copilot の `/fleet` も取りまとめはプロンプトによる）。並べて呼んだ子は同時に走り、
+全部が終わってから結果がそろって返るので、波の区切りが仕組みとして保たれる
+（[実機確認](../research/opencode/fleet.md)）。
+
+| 部品 | 置き場 | 中身 |
+| --- | --- | --- |
+| `/fleet` | `[opencode.commands.fleet]` → `opencode.json` の `commands` | 取りまとめの手順（分解 → 依存関係と担当ファイル → 波ごとに並べて起動 → 結果を確かめて次の波 → 検証してまとめる） |
+| `fleet-worker` | `[opencode.agents.fleet-worker]`、階層 `light` | 割り当てられた 1 つの作業を、担当ファイルの範囲で実装して確かめ、結果を返す |
+
+- **取りまとめは今のセッションで動かす（`subagent = false`）。** 子エージェントは
+  さらに子を起動できない（既定の入れ子は 1 段）。子にすると作業役を起動できない
+- **作業役は同じ作業ツリーを共有する。** 衝突は、親が担当ファイルを重ねずに
+  割り当てることで避ける。作業役には git の状態を変える操作（`add` / `commit` /
+  `stash` / `checkout` / `switch` / `restore` / `reset`）を権限で禁じる
+- **編集とシェルは全体の規則のまま（承認制）。** 作業役のシェルは確認が出る。
+  無人の実行（`opencode run --auto`）では子セッションの確認に答えられず止まる
+  （[commit エージェントの実機確認](../research/opencode/commit-review-agents.md)）
+- 1 つの波は 4 件までと指示している。子エージェントごとにモデルを呼ぶので、
+  利用枠の消費は作業役の数だけ増える
+- コマンドは、コマンド用のディレクトリではなく設定の `commands` に出す。
+  スキルでは `~/.config/opencode/skills` が実際には走査されなかった実測があり
+  （[文脈の引き継ぎ](checkpoint.md)）、同じ置き場の扱いを当てにしない
+- `[opencode.commands.<name>]` に書けるキーは `template`（必須）/ `description` /
+  `agent` / `subagent`。**`template` に「`!` + バッククォート」は書けない**
+  （展開時にシェルとして権限の確認なしに実行されるため。`apply` を止める）
+
 ### 後勝ちの照合
 
 OpenCode は **最後に一致した規則が勝つ**。Claude の deny > ask > allow とは
