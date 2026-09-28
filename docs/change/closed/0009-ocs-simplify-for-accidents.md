@@ -1,15 +1,20 @@
 # CHG-0009: ocs をうっかりの防止に必要な分まで簡素にする
 
-- **状態**: In progress
+- **状態**: Done
 - **更新日**: 2026-09-29
+- **終了日**: 2026-09-29
 - **基準**: `62efd96`（OpenCode `v2.0.14` / `@anthropic-ai/sandbox-runtime` `0.0.76`）
+
+> **この文書は当時の記録。** 現在の仕様は [opencode-sandbox](../../spec/opencode-sandbox.md)。
+> 採用したもの・見送ったもの・反映先・移管した未完事項は「終了結果」にまとめた。
+> 「未解決点」と「次の調査・実験」は、配備の前（2026-09-29 の実装時点）の記録。
 
 ## 目的と非目的
 
 `ocs` は、OpenCode を `srt`（OS の境界を張る道具。bubblewrap・seccomp・通信の proxy）で
-包んで起動するランチャー（[仕様](../spec/opencode-sandbox.md)）。
+包んで起動するランチャー（[仕様](../../spec/opencode-sandbox.md)）。
 
-**目的**: [ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) で境界の目的を
+**目的**: [ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md) で境界の目的を
 「エージェントのうっかり（外部への誤送信、ワークスペース外の破壊、秘密の誤読）を防ぐ」に
 絞った。その目的に要らない上乗せを外し、使い勝手を Claude Code の sandbox に近づける。
 中でも次の 3 つの不便を解消する。
@@ -21,16 +26,16 @@
 **非目的**:
 
 - 悪意あるワークスペースやプロンプトインジェクションへの耐性（ADR-0012 の「保証しないもの」）
-- `ocs` をハーネス非依存にすること（[CHG-0007](0007-harness-profiles.md) の段 3）
+- `ocs` をハーネス非依存にすること（[CHG-0007](../0007-harness-profiles.md) の段 3）
 - 改名（CHG-0007 の段 4）
 
 ## 実施計画
 
 | 段 | 解決したいこと | 内容 | 状態 |
 | --- | --- | --- | --- |
-| 0 | `srt` の癖（一部だけの `denyRead` が効かない、無い名前への `/dev/null` のマウント、`TMPDIR`）を避けたい | 境界の道具を `srt` から Fence（bubblewrap + Landlock + seccomp とドメイン単位のプロキシ）へ替えられるか、評価基準の必須の項目で試す。段 2 以降の形がこの結果で変わる | 完了（Fence に替えた。読み取りは `defaultDenyRead` で読める場所を並べる形。worktree `loop/fence` で実装） |
+| 0 | `srt` の癖（一部だけの `denyRead` が効かない、無い名前への `/dev/null` のマウント、`TMPDIR`）を避けたい | 境界の道具を `srt` から Fence（bubblewrap + Landlock + seccomp とドメイン単位のプロキシ）へ替えられるか、評価基準の必須の項目で試す。段 2 以降の形がこの結果で変わる | 完了（Fence に替えた。読み取りは `defaultDenyRead` で読める場所を並べる形。`c752f69` / `e4c525b`） |
 | 1 | 履歴を分けたくない | ホストの DB を境界の内外で共有できるかを、一時の DB で確かめる | 完了（通った） |
-| 2 | 同上 | DB を共有し、`--handoff` / `--list-sessions` と隔離用 DB の用意を消す。今ある隔離セッションを先に移す | 完了（worktree `loop/fence` で実装・実機確認。未コミット） |
+| 2 | 同上 | DB を共有し、`--handoff` / `--list-sessions` と隔離用 DB の用意を消す。今ある隔離セッションを先に移す | 完了（`e4c525b`。本物の `ocs` で確認） |
 | 3 | 起動時の承認の確認をなくしたい | `.opencode/sandbox.toml` の承認の記録（`trusted.json`・`--trust`）をやめ、追加する書き込み先と通信先を表示するだけにする | 完了（同上） |
 | 4 | 起動時の検査の待ちをなくしたい | 境界チェックを `ocs --check` の手動実行にする。自動で走らせるなら、境界の定義か `srt` が変わったときだけ | 完了（同上。手動のみ） |
 | 5 | 起動ディレクトリの外を読みたい | 秘密を含まない作業用の親ディレクトリを `allowRead` で開ける。秘密の目印が読めないままかを確かめる | 完了（同上。`work_read`） |
@@ -46,7 +51,7 @@
   Fence が文書上は解消している（読み取りは `--ro-bind / /` の後に `denyRead` を `--tmpfs` で隠す、
   内側で `TMPDIR` を直す）。コンテナや microVM の方式は、道具の二重管理と設定・履歴の分離が
   戻るので合わない。Landlock だけの方式（nono・landrun）は、広く許した中の一部を隠せない
-- **段 0 の実験で、Fence は 11 項目中 10 項目を満たした**（[Fence の調査](../research/opencode/permission/fence.md)）。
+- **段 0 の実験で、Fence は 11 項目中 10 項目を満たした**（[Fence の調査](../../research/opencode/permission/fence.md)）。
   一部だけの `denyRead`・R1・snapshot の置き物・`TMPDIR` の問題は消えた。満たさなかったのは
   「まだ存在しないパスへの `denyWrite`」で、起動前に作っておけば避けられる。代わりに起動が約 0.8 秒遅く、
   起動ごとに `TMPDIR` へ残骸が 1 個残る。`ocs` 本体は約 50〜60 行減る見込み
@@ -58,7 +63,7 @@
   そこへ入れ直していた（このリポジトリで 796 MB）。Ruby の入れ直しでは、`gem` の shim が自分を
   呼び続ける連鎖になり、9/23 から `gem sources` が 846 個入れ子で残っていた（止めて片付け済み）。
   段 2 で `XDG_DATA_HOME` の上書きをやめれば起きなくなる
-- **段 1 は通った**（[DB の共有の調査](../research/opencode/shared-db.md)）。一時の DB で、
+- **段 1 は通った**（[DB の共有の調査](../../research/opencode/shared-db.md)）。一時の DB で、
   境界の内外からの同時書き込み（146 件、`integrity_check` は `ok`）、内側のセッションの外での
   再開、内側の snapshot からの外での `/undo` がどれも動いた。境界の内側から書けるように
   する範囲は `XDG_DATA_HOME/opencode/` 全体（DB・WAL・SHM・snapshot・shell の出力・ログ）。
@@ -70,7 +75,7 @@
 - ADR-0012 に合わない過去の修正（ホストで動く `git` / `opencode` の固め、各エージェントへの
   deny の差し込み）は、コミット前に取り下げ済み（`58c4dfb`〜`62efd96` の組み直し）
 - 段 5 には制約がある。`srt` 0.0.76 では `~/.ssh` のような一部だけを拒否する `denyRead` が
-  黙って無視される（[sandbox-runtime の調査](../research/opencode/permission/sandbox-runtime.md) 3 章）。
+  黙って無視される（[sandbox-runtime の調査](../../research/opencode/permission/sandbox-runtime.md) 3 章）。
   「全部読めて秘密だけ拒否」にはできず、「広く拒否して必要な所を開ける」形のまま、
   開ける範囲を広げる
 
@@ -80,6 +85,8 @@
   見つけ、内側の `XDG_STATE_HOME` を内側の `/tmp` へ向けた
 
 ## 未解決点
+
+> 2026-09-29 の配備前の時点。配備と本物の `ocs` での確認は「実装・検証」の「配備後」で済んだ。
 
 - **配備**: 利用者が `mise install`（Fence）と `chezmoi apply` をするまで、実機の `ocs` は
   旧版のまま。mise の github backend が `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence`
@@ -102,6 +109,8 @@
   掃除する。Fence は mise の github backend で版とチェックサムを固定した
 
 ## 次の調査・実験
+
+> 2026-09-29 の配備前の時点。1〜3 は済んだ（隔離セッションは試験用の 4 件だけで、移さなかった）。4・5 は「終了結果」で移管した。
 
 worktree `loop/fence` の変更をコミットして配備する前後の作業。
 
@@ -174,7 +183,7 @@ ADR-0012 の「決定の確認方法」をそのまま使う。
 
 一時の DB を「ホストの DB」に見立て、`opencode serve`（常駐サービスの代わり）と `srt` の
 内側の `opencode --standalone` で共有した。結果と方法は
-[DB の共有の調査](../research/opencode/shared-db.md) の記録 E1。
+[DB の共有の調査](../../research/opencode/shared-db.md) の記録 E1。
 
 | 確認 | 結果 |
 | --- | --- |
@@ -189,7 +198,7 @@ worktree `loop/fence`（基準 `39ac692`）で実装し、実機（WSL2、Fence 
 確かめた。**配備済みの `ocs` は使わず**、worktree のコードを読み込んで境界の設定と起動の
 引数を組み立てる試験用のスクリプトで、Fence に包んだ（`XDG_DATA_HOME` などは一時
 ディレクトリへ向け、DB は資格情報の行だけを写した一時 DB。終了後に削除）。
-観測の詳細は [Fence の調査](../research/opencode/permission/fence.md) の記録 E2。
+観測の詳細は [Fence の調査](../../research/opencode/permission/fence.md) の記録 E2。
 
 | 必須の項目 | 結果 |
 | --- | --- |
@@ -207,6 +216,17 @@ worktree `loop/fence`（基準 `39ac692`）で実装し、実機（WSL2、Fence 
 
 望ましい項目: `ocs` の本体（`~/.local/share/ocs/*.py`）は 1300 行から 945 行に減った。
 起動時の確認と検査の待ちは無くなった（境界チェックは `ocs --check` だけ）。
+
+### 配備後（2026-09-29）
+
+`e4c525b` を push し、利用者が `chezmoi apply` と `mise install` で配備した。
+
+- 初回の apply では `rules.json` に境界の設定が出なかった。`rules.json` はファイルとして先に
+  作られ、Fence を入れる `125_mise.sh` はその後に走るため。境界の設定を Fence の有無に関係なく
+  出すように直した（実体が無ければ `ocs` が起動を断る）
+- 本物の `ocs` で `ocs --check` が合格した
+- 本物の `ocs` と常駐サービス・実 DB で、利用者が次の 4 点を確かめた: `~/src` が読める、
+  `~/.ssh` が見えない、`/undo` が効く、終了後に外の `opencode -s <ID>` で再開できる
 
 ### 段 6 の検討（2026-09-29）
 
@@ -233,7 +253,45 @@ worktree `loop/fence`（基準 `39ac692`）で実装し、実機（WSL2、Fence 
 - **2026-09-29**: 利用者の判断で Fence に替える（`defaultDenyRead` の形）。隔離用のデータ領域が原因の mise の暴走を見つけて片付けた
 - **2026-09-29**: 段 0 の実験で Fence は必須の項目を概ね満たした。実験中に、外側の serve へ送った `session.synthetic` でホストのエージェントが動く事故があった（書き込みは実験用ディレクトリだけ）
 - **2026-09-29**: 段 0・2〜5 を worktree で実装し、必須の項目を実機で確かめた。段 6 は検討だけ（寄せられる）
+- **2026-09-29**: 配備し、本物の `ocs` で必須の項目を確かめて終了した。初回の apply で境界の設定が出ない問題を直した
 
 ## 終了結果
 
-<!-- Done / Abandoned にするとき記入 -->
+**採用・配備済み。** `ocs` の境界を Fence に替え、履歴を通常の起動と共有し、承認と起動時の検査をやめた。
+評価基準の必須の項目は、試験用のスクリプトと本物の `ocs` の両方で満たした。
+
+### 採用したもの
+
+- 境界の道具は Fence 0.1.67（mise の github backend で版とチェックサムを固定）。読み取りは
+  `defaultDenyRead` で広く拒否し、道具の置き場と `work_read`（`~/src`・`~/worktrees`・`~/papers`・
+  `~/.local/share/chezmoi`）を開ける
+- DB と `XDG_DATA_HOME` をホストと共有する。`--handoff`・`--list-sessions`・隔離用 DB の用意を削除
+- `.opencode/sandbox.toml` は確認なしで適用し、足す分を表示する。境界チェックは `ocs --check` の手動だけ
+- 境界の設定は Fence の有無に関係なく `rules.json` に出す（初回の apply を 1 回で済ませる）
+
+### 撤回・見送りしたもの
+
+| 項目 | いつ | 理由 |
+| --- | --- | --- |
+| `srt` のまま続ける | 2026-09-29 | 一部だけの `denyRead`・R1・`/dev/null` の置き物・`TMPDIR` の癖が使い勝手を落としていた。Claude Code 用には残す |
+| NVIDIA OpenShell・Docker Sandboxes・各種コンテナ | 2026-09-29 | 道具の二重管理と、設定・履歴の分離が戻る |
+| nono・landrun（Landlock だけ） | 2026-09-29 | 広く許した中の一部を隠せない |
+| Fence の「全部読めて名指しで隠す」形 | 2026-09-29 | 新しい秘密の置き場が既定で見える |
+| 隔離用 DB を残し、外で再開するコマンドだけ足す | 2026-09-29 | 段 1 で DB の共有が通った。共有で DB の破損が実際に起きたら再検討 |
+| 既存の隔離セッションの移送 | 2026-09-29 | 試験用の 4 件だけだった。古い `.opencode-sandbox/` は残り、`OPENCODE_DB=<パス> opencode --standalone` で開ける |
+
+### 反映先
+
+- 仕様: [opencode-sandbox](../../spec/opencode-sandbox.md)、[構成](../../spec/structure.md)、[セキュリティ](../../spec/security.md)
+- 方針: [ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md)
+- 実装: `c752f69`（docs）、`e4c525b`（`ocs`・生成・mise・テスト）と、境界の設定を常に出す修正
+- 観測: [Fence の調査](../../research/opencode/permission/fence.md)、[DB の共有の調査](../../research/opencode/shared-db.md)
+
+### 移管した未完事項
+
+| 内容 | 移管先 |
+| --- | --- |
+| 段 6: 隔離版の設定の書き出しを `chezmoi apply` 時の生成へ寄せる（検討は「実装・検証」の「段 6 の検討」） | 未起票 |
+| 同じセッションを境界の内と外で同時に開いたときの挙動（仕様では運用で避けると書いた） | 未起票 |
+| 常駐サービスが古い版のまま新しい版が DB を移行したとき（推測。仕様では更新後に再起動すると書いた） | 未起票 |
+| Fence を Landlock が使えないカーネルで動かしたとき | 未起票 |

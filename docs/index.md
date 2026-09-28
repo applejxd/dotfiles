@@ -73,7 +73,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 権限 / hook / MCP の生成 | `common.toml` から各 AI CLI へ生成して利用している | 2026-09-19（最終レビュー） | [エージェント権限仕様](spec/agent-permissions.md) |
 | 秘密情報の管理 | sops + age と Bitwarden で利用している | 2026-09-19（最終レビュー） | [セキュリティ](spec/security.md) |
 | 圧縮を跨ぐ引き継ぎ | OpenCode V2 のみ。実機の自動圧縮で確かめた。Claude / Copilot 向けの圧縮 hook は撤去 | 2026-09-25 | [CHG-0001](change/closed/0001-compaction-context-handover.md) |
-| OpenCode の隔離起動（`ocs`） | Ubuntu / WSL で通常起動と併用。境界の道具を Fence に替え、履歴を通常起動と共有する。境界チェックは `ocs --check` で手動 | 2026-09-29 | [CHG-0009](change/0009-ocs-simplify-for-accidents.md) |
+| OpenCode の隔離起動（`ocs`） | Ubuntu / WSL で通常起動と併用。境界の道具を Fence に替え、履歴を通常起動と共有する。境界チェックは `ocs --check` で手動 | 2026-09-29 | [CHG-0009](change/closed/0009-ocs-simplify-for-accidents.md) |
 | Claude Code | 使えない（OAuth 期限切れ）。棚上げ中 | 2026-09-25 | [判断待ち・障害](#判断待ち障害) |
 
 ## 活動中

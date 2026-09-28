@@ -101,7 +101,7 @@ Bitwarden Secrets Manager の `bws` は使用しない。
 ## AI エージェントの実行境界（Ubuntu / WSL）
 
 OpenCode を OS のアクセス制御（[Fence](https://github.com/fencesandbox/fence)）で囲って起動する
-（[CHG-0004](../change/closed/0004-opencode-sandbox.md)、[CHG-0009](../change/0009-ocs-simplify-for-accidents.md)）。
+（[CHG-0004](../change/closed/0004-opencode-sandbox.md)、[CHG-0009](../change/closed/0009-ocs-simplify-for-accidents.md)）。
 通常起動（`opencode`）と**併用**する段階。構成・起動順序・境界の組み立て規則は
 [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)。ここでは
 **何を守り、何を守らないか**を書く。境界の目的は**エージェントのうっかり**

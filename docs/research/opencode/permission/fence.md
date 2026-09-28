@@ -1,6 +1,6 @@
 # Fence は srt の代わりに OpenCode を包めるか
 
-<!-- 現在の総合判断は docs/change/0009-ocs-simplify-for-accidents.md の候補比較表が正本。
+<!-- 現在の総合判断は docs/change/closed/0009-ocs-simplify-for-accidents.md の候補比較表が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
 ## 記録 E1 — 2026-09-29
@@ -14,7 +14,7 @@
 
 `ocs`（OpenCode を境界で包むランチャー。[仕様](../../../spec/opencode-sandbox.md)）の境界の道具を
 `srt` から Fence に替えると、`srt` の癖（一部だけの `denyRead` が効かない、規則 R1、無い名前への
-`/dev/null` のマウント、`TMPDIR`）が消え、[CHG-0009](../../../change/0009-ocs-simplify-for-accidents.md)
+`/dev/null` のマウント、`TMPDIR`）が消え、[CHG-0009](../../../change/closed/0009-ocs-simplify-for-accidents.md)
 の評価基準の必須の項目を満たせるか。
 
 ### 事前の予想
@@ -105,7 +105,7 @@ serve は停止し、一時パスワードも削除した。**モデルを呼び
 
 ### 問い
 
-[CHG-0009](../../../change/0009-ocs-simplify-for-accidents.md) の段 0・2〜5 で書いた `ocs` の
+[CHG-0009](../../../change/closed/0009-ocs-simplify-for-accidents.md) の段 0・2〜5 で書いた `ocs` の
 コード（`defaultDenyRead`・作業用の親ディレクトリ・DB の共有・保護対象の事前作成）が
 組み立てる Fence の設定で、評価基準の必須の項目が満たせるか。
 

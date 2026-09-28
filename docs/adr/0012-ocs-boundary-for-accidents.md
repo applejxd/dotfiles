@@ -5,7 +5,7 @@
 - **決定者**: applejxd
 
 > **ステータスの変更（2026-09-29）**: Proposed → Accepted。利用者が内容を確認して同意した。
-> 実装は [CHG-0009](../change/0009-ocs-simplify-for-accidents.md) で進める。
+> 実装は [CHG-0009](../change/closed/0009-ocs-simplify-for-accidents.md) で進める。
 
 ## コンテキスト
 

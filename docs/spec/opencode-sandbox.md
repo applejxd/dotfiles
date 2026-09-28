@@ -7,7 +7,7 @@ OpenCode を OS のアクセス制御で囲って起動する仕組みの構成�
   （目的は**エージェントのうっかりの防止**。悪意あるワークスペースやプロンプト
   インジェクションへの耐性は非目的）と [セキュリティ](security.md#ai-エージェントの実行境界ubuntu--wsl)
 - 経緯と候補比較は [CHG-0004](../change/closed/0004-opencode-sandbox.md)（作った経緯）と
-  [CHG-0009](../change/0009-ocs-simplify-for-accidents.md)（Fence への切り替えと簡素化）
+  [CHG-0009](../change/closed/0009-ocs-simplify-for-accidents.md)（Fence への切り替えと簡素化）
 - ここは**現在の構成**だけを書く
 
 ```bash

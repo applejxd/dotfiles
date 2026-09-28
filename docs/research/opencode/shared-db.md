@@ -5,7 +5,7 @@
 > E1 のセッション数は期待値と一致していたが、同じ方法を繰り返さない。
 > Fence に替えた `ocs` の組み立てでも、外での再開と `/undo` は通った（Fence の調査の記録 E2）。
 
-<!-- 現在の総合判断は docs/change/0009-ocs-simplify-for-accidents.md の候補比較表が正本。
+<!-- 現在の総合判断は docs/change/closed/0009-ocs-simplify-for-accidents.md の候補比較表が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
 ## 記録 E1 — 2026-09-29
@@ -21,7 +21,7 @@
 `ocs`（OpenCode を `srt` の境界で包むランチャー。[仕様](../../spec/opencode-sandbox.md)）は、
 ワークスペースごとの隔離用 DB を使っている。これをやめ、ホストの DB とデータディレクトリを
 境界の内側と外側（常駐サービス）で共有したとき、次が成り立つか
-（[CHG-0009](../../change/0009-ocs-simplify-for-accidents.md) の段 1）。
+（[CHG-0009](../../change/closed/0009-ocs-simplify-for-accidents.md) の段 1）。
 
 1. 内外から同時に書いても DB が壊れないか
 2. 内側で作ったセッションを外で再開できるか
