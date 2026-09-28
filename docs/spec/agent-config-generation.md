@@ -692,7 +692,7 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
 `ocs` の既定モデルは `[opencode.sandbox] model_preference` が決め、ここの割り当ては
 使わない（通常版から引き継ぐのは `model` だけ）。**Bedrock は `ocs` では使えない**
 （コードから判断。実機では未確認）。境界の内側から `~/.aws` が読めず
-（`[sandbox] deny`）、AWS の資格情報の環境変数も落とすため（`ocs` の `inner_env`）。
+（開けていない）、AWS の資格情報の環境変数も落とすため（`ocs` の `inner_env`）。
 `[provider.amazon-bedrock] network_allow` は用意してあるが、`providers` には入れていない。
 
 ### 子エージェント

@@ -96,3 +96,60 @@ serve は停止し、一時パスワードも削除した。**モデルを呼び
 
 - 実験のスクリプト・設定・ログはリポジトリに入れていない（`.tmp/opencode/chg9-fence/`）
 - Fence: <https://github.com/fencesandbox/fence>（リポジトリの `configuration.md`・`linux-bwrap-mount-sequence.md`・`security-model.md`）
+
+## 記録 E2 — 2026-09-29
+
+- **対象バージョン**: Fence `v0.1.67`（E1 と同じ実体）/ OpenCode `v2.0.14`
+- **環境**: WSL2（カーネル 6.6）/ worktree `loop/fence`（基準 `39ac692`）
+- **実施**: 子エージェント。配備済みの `ocs` は使っていない
+
+### 問い
+
+[CHG-0009](../../../change/0009-ocs-simplify-for-accidents.md) の段 0・2〜5 で書いた `ocs` の
+コード（`defaultDenyRead`・作業用の親ディレクトリ・DB の共有・保護対象の事前作成）が
+組み立てる Fence の設定で、評価基準の必須の項目が満たせるか。
+
+### 方法・条件
+
+- worktree の `ocs` の本体を読み込み、`build_boundary`・`inner_env`・`inner_command`・
+  `write_boundary`・`main` をそのまま使う試験用のスクリプトで、Fence に包んで実行した
+- `XDG_DATA_HOME`・`XDG_STATE_HOME`・`XDG_CACHE_HOME`・隔離版の設定ディレクトリ・
+  境界の定義と Fence の `TMPDIR` は実験用ディレクトリへ向けた。`OPENCODE_CONFIG` は外した
+- DB は実 DB から資格情報と `migration` の行だけを写した一時 DB（終了後に削除）。
+  外側の操作は `opencode ... --standalone`（`session.synthetic` は使っていない）
+- 秘密の場所は中身を読まず、エントリの数・種別・開けるかだけを見た
+
+### 結果
+
+| 項目 | 結果 |
+| --- | --- |
+| 秘密 | `~/.ssh`・`~/.gnupg`・`~/.aws`・`~/.config/gh`・`~/.config/sops/age`・`~/.local/state/opencode`・`~/.local/state/opencode-sandbox` は存在しない。`~/.git-credentials`・`service.json`（`~/.local/state/opencode` と `~/.config/opencode`）・目印は開けない。開けた `~/.config/chezmoi` の中の `key.txt` は文字デバイス（`/dev/null`）。`/run/user` は空 |
+| WSL の `/mnt/c` | `defaultDenyRead` では `/mnt/c` も `/mnt/c/Users` も存在しない（E1 の「stat は通る」は通常の形のとき） |
+| 通信 | `github.com` 200、`api.githubcopilot.com` 404（届いている）、`example.com`・`www.google.com` は拒否（rc 56）。`.opencode/sandbox.toml` の `network_allow` で足すと `example.com` 200 |
+| 外への書き込み | `~`・`~/.bashrc`・`~/.config/opencode` は `EACCES`、`~/src`・`~/.local/share/chezmoi` は `EROFS`、`~/.local/state` 配下は存在しない。`/tmp`・`/dev/shm` は内側だけ、`/var/tmp` は存在しない |
+| 読み取り | `~/src`（13 件）・`~/worktrees`・`~/papers`・chezmoi の README が読める。`~/.gitconfig` の include 先の利用者名が見える |
+| 保護対象 | 起動前に作った空の `.opencode` へ書けない。worktree の共有 `.git` の `hooks`・`config` と main 側のファイルは書けず、commit は通る |
+| OpenCode | 内側の `run --standalone` がモデル経由で `a.txt` を編集。`git status` は `M a.txt` だけ。外の `session list` に出て、外の `run -s <ID>` で内側の合言葉に答えた。外の `api --standalone session.revert.stage` / `session.revert.commit` で `a.txt` が戻った。`integrity_check` は `ok` |
+| TUI | `script` 越しに描画され、既定モデル（Claude Opus 5）が選ばれた |
+| 境界チェック | 新しい検査スクリプトが合格（実在する `~/.local/state/opencode/service.json` も「読めない」）。対照として `deny_read` を空にし目印の置き場を開けると、目印と `key.txt` を「開ける」で不合格にした。旧版のスクリプトでは `key.txt` を「見えている」、`XDG_DATA_HOME` を「作業領域の外」と誤って不合格にした |
+| 残骸 | 古い `fence-seccomp/*.bpf` は次の起動で消え、新しい 1 個だけ残った |
+| 起動時間 | `true` の実行で 0.52〜1.25 秒（試験用のスクリプトの起動を含む） |
+
+**実装中に見つけたこと**: `~/.local/state` を開けないと、opencode は起動時に
+`XDG_STATE_HOME/opencode` を作れず `EROFS` で止まる（`srt` では `~` が tmpfs で、書き込みが
+消えるだけだった）。`ocs` は内側の `XDG_STATE_HOME` を内側の `/tmp/xdg-state` へ向けた。
+
+### 考察
+
+- 評価基準の必須の項目は、実装した `ocs` の組み立てでも全部通った
+- `defaultDenyRead` の形では、E1 で残っていた WSL の `/mnt/c` の stat も通らない
+- 共有 DB と内側の snapshot は、Fence でも外から再開と `/undo` ができた
+
+### 次の問い
+
+- 本物の常駐サービスと実 DB での再開と `/undo`（配備後）
+- 同じセッションを内と外で同時に開いたとき
+
+### 参照
+
+- 試験用のスクリプトとログはリポジトリに入れていない（`.tmp/opencode/chg9-impl/`）

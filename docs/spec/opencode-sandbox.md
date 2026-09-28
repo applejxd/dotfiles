@@ -1,27 +1,32 @@
 # OpenCode 隔離起動（`ocs`）のアーキテクチャ
 
 OpenCode を OS のアクセス制御で囲って起動する仕組みの構成を書く。
-**対象は Ubuntu / WSL のみ**（macOS / Windows は bwrap が無いので非対応）。
+**対象は Ubuntu / WSL のみ**（macOS / Windows は bubblewrap が無いので非対応）。
 
-- 何を守り何を守らないか、受容しているリスクは
-  [セキュリティ](security.md#ai-エージェントの実行境界ubuntu--wsl)
-- そこへ至った経緯と候補比較は [CHG-0004](../change/closed/0004-opencode-sandbox.md)
+- 何を守り何を守らないかは [ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)
+  （目的は**エージェントのうっかりの防止**。悪意あるワークスペースやプロンプト
+  インジェクションへの耐性は非目的）と [セキュリティ](security.md#ai-エージェントの実行境界ubuntu--wsl)
+- 経緯と候補比較は [CHG-0004](../change/closed/0004-opencode-sandbox.md)（作った経緯）と
+  [CHG-0009](../change/0009-ocs-simplify-for-accidents.md)（Fence への切り替えと簡素化）
 - ここは**現在の構成**だけを書く
 
 ```bash
-ocs         # 隔離起動（境界の内側で起動する）
-opencode    # 通常起動（境界なし）
+ocs          # 隔離起動（境界の内側で起動する）
+ocs --check  # 起動せず、この起動ディレクトリの境界を内側から検査する
+opencode     # 通常起動（境界なし）
 ```
 
 ## 中心にある考え方
 
-- **包む単位はプロセス全体**。`opencode --standalone` ごと `srt` の内側へ入れる
+- **包む単位はプロセス全体**。`opencode --standalone` ごと [Fence](https://github.com/fencesandbox/fence)
+  （bubblewrap・Landlock・seccomp とドメイン単位のプロキシ）の内側へ入れる
 - コマンド文字列を検査しない。判定は「効果が境界の外に出るか」だけ
 - **境界を張れないときは起動しない。** 通常起動へ落とすなら境界ではない
 - **守るのは「境界の外」であって「境界の中」ではない。** 起動ディレクトリ以下は
-  無条件に読み書きできる。**モデル API の資格情報も内側にある**（下記の
-  [決めた例外](#既知の制約)）。境界内で動くものは、エージェント自身も
-  依存パッケージも同じ権限を持つ
+  無条件に読み書きできる。**モデル API の資格情報も内側にある**（DB の中。
+  [既知の制約](#既知の制約)）
+- **履歴は通常起動と共有する。** DB とデータディレクトリ（`XDG_DATA_HOME/opencode`）を
+  境界の内外で同じものにする。内側で作ったセッションは外の `opencode -s <ID>` で再開できる
 
 > **なぜ shell だけでは足りないか。** OpenCode はプロジェクト設定から
 > permission を上書きでき、`.opencode/plugins/` は自動ロードされ、`mcp` は
@@ -40,23 +45,25 @@ flowchart TD
     subgraph host["ホスト（境界の外）"]
         RULES["~/.config/opencode/guide-plugin/rules.json<br>境界の素材"]
         OCS["~/.local/bin/ocs + ~/.local/share/ocs/<br>ランチャー"]
-        STATE["~/.local/state/opencode-sandbox/<br>承認・合格・退避"]
+        STATE["~/.local/state/opencode-sandbox/<br>境界の定義・Fence の TMPDIR・退避"]
         CFG["~/.config/opencode-sandbox/<br>隔離版の設定"]
     end
 
     subgraph inside["境界の内側"]
-        SRT["srt<br>bwrap + proxy + seccomp"]
+        FENCE["Fence<br>bwrap + Landlock + seccomp + proxy"]
         OC["opencode --standalone"]
         WS["起動ディレクトリ<br>読み書き可"]
+        DATA["XDG_DATA_HOME/opencode<br>DB・snapshot（ホストと共有）"]
     end
 
     COMMON --> GEN --> RULES
     RULES --> OCS
-    OCS -- "読む" --> STATE
+    OCS -- "起動ごとに書き出す" --> STATE
     OCS -- "起動ごとに書き出す" --> CFG
-    OCS -- "境界を張って exec" --> SRT
-    SRT --> OC
+    OCS -- "--settings を渡して exec" --> FENCE
+    FENCE --> OC
     OC --> WS
+    OC --> DATA
     CFG -. "allowRead のみ" .-> OC
     STATE -. "見えない" .-x OC
 ```
@@ -65,8 +72,8 @@ flowchart TD
 
 - **設定の実体は境界の外**にあり、内側からは読めても書けない。
   ソース（このリポジトリ）は内側で編集できるが、**自分で有効化はできない**
-- **承認・合格・退避はさらに外**（`~/.local/state`）に置く。
-  内側から書けるなら、エージェントが自分で自分を承認できてしまう
+  （[保護対象](#保護対象denywrite)）
+- **境界の定義と退避はさらに外**（`~/.local/state`）に置く。内側からは見えない
 
 ## 起動シーケンス
 
@@ -74,146 +81,183 @@ flowchart TD
 flowchart TD
     START(["ocs 実行"]) --> LOAD["rules.json から境界の素材を読む"]
     LOAD -->|"無い / sandbox 無効"| STOP1["起動しない"]
-    LOAD --> BIN["srt・opencode の実在を確認"]
-    BIN --> NODE["node の実体を解決<br>mise shim は使わない"]
-    NODE --> WSDIR["起動ディレクトリ = cwd"]
-    WSDIR --> TRUST{".opencode/sandbox.toml<br>の要求は承認済みか"}
-    TRUST -->|"未承認"| ASK["要求内容を表示して確認"]
-    ASK -->|"拒否 / 対話不可"| STOP2["起動しない"]
-    ASK -->|"承認"| BUILD
-    TRUST -->|"承認済み"| BUILD["境界の設定を組み立てる"]
+    LOAD --> BIN["Fence・opencode の実在を確認"]
+    BIN --> WSDIR["起動ディレクトリ = cwd"]
+    WSDIR -->|"~・/・/tmp・/mnt とその祖先"| STOP2["起動しない"]
+    WSDIR --> REQ[".opencode/sandbox.toml を読み<br>足す分を表示する"]
+    REQ --> BUILD["境界の設定を組み立てる<br>無い保護対象は空のディレクトリを作る"]
+    BUILD -->|"--check"| CHECK["境界の内側で検査して終わる"]
     BUILD --> BACKUP{"作業ツリーを<br>退避できるか"}
     BACKUP -->|"大きすぎる / 失敗"| STOP3["起動しない<br>--no-backup で続行可"]
-    BACKUP -->|"退避済み / 不要"| WRITE["隔離版の設定を書き出す<br>隔離用 DB を用意する"]
-    WRITE --> CHECK{"境界チェック<br>前回の合格は有効か"}
-    CHECK -->|"有効"| EXEC
-    CHECK -->|"要検査"| RUN["内側で挙動を確かめる"]
-    RUN -->|"不合格 / 時間切れ"| STOP4["起動しない"]
-    RUN -->|"合格"| EXEC["execve: srt -s 境界 -c opencode --standalone"]
+    BACKUP -->|"退避済み / 不要"| WRITE["隔離版の設定を書き出す<br>境界の定義を状態領域へ書く"]
+    WRITE --> EXEC["execve: fence --settings 境界 -- env … opencode --standalone"]
 ```
 
 順序で効いている点。
 
-- **承認は境界を組み立てる前**。逆にすると、未承認の要求で境界を張ってから
-  尋ねることになる
+- **起動ディレクトリの制限は境界を組み立てる前**。広すぎる場所で境界を一度作ってから
+  捨てることにしない
 - **退避は境界を張る前**。ホスト側で行うので、内側からは改竄できない
-- **チェックが判定できなければ止める。** 判定不能は合格ではない
+- 起動時に確認や検査で待たない。境界チェックは `ocs --check` で手動で走らせる
+  （[境界チェック](#境界チェック)）
 
 ## 境界の中身
 
-`srt` へ渡す設定は、共通の素材 + 起動ディレクトリから毎回組み立てる。
+Fence へ渡す設定（`fence.json` の形）は、共通の素材 + 起動ディレクトリから毎回組み立てる。
+素材は `common.toml.tmpl` の `[opencode.sandbox]`。
 
 | 区分 | 内容 |
 | --- | --- |
-| `allowWrite` | **起動ディレクトリ以下**、`~/.cache`、worktree の共有 `.git` |
-| `allowRead` | 起動ディレクトリ、`~/.opencode`、`~/.local/share/mise`、`~/.local/bin`、`~/.config/opencode/{guide-plugin,checkpoint-plugin,skills}`（`~/.config/opencode` 全体は開けない。R4）、`~/.config/{opencode-sandbox,shell,mise,chezmoi}`、`~/.claude/skills`、`~/.agents/skills` |
-| `denyRead` | `~`、`/mnt`、`/tmp`、`/var/tmp`、`/dev/shm` |
-| `denyWrite` | 起動ディレクトリ内の保護対象、worktree の `.git/{hooks,config}` |
+| `defaultDenyRead` | `true`。読み取りは既定で拒否し、下の `allowRead` と書き込み先だけを開ける |
+| `allowRead` | 起動ディレクトリ、`read`（道具の置き場: `~/.opencode`、`~/.local/share/mise`、`~/.local/bin`、`~/.config/opencode/{guide-plugin,checkpoint-plugin,skills}`、`~/.config/{opencode-sandbox,shell,mise,chezmoi,git}`、`~/.gitconfig`、`~/.claude/skills`、`~/.agents/skills`）、`work_read`（作業用の親ディレクトリ: `~/src`・`~/worktrees`・`~/papers`・`~/.local/share/chezmoi`） |
+| `allowWrite` | 起動ディレクトリ、`write`（`~/.cache`）、`XDG_DATA_HOME/opencode`、worktree の共有 `.git` |
+| `denyRead` | 開けた場所の内側にある秘密（`deny_read` と `[sandbox] deny` のうち glob でないもの） |
+| `denyWrite` | [保護対象](#保護対象denywrite)、worktree の共有 `.git` の `hooks` と `config` |
 | `network` | 通信を許可したドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../change/0007-harness-profiles.md)） |
+| `allowPty` | `true`。TUI のリサイズを内側へ伝える |
 
 ### 組み立ての規則
 
-`srt` の挙動から実測で確定した規則。破ると**黙って壊れる**。
+- **無いパスは渡さない。** `read`・`work_read`・`write` は起動時に在るものだけを使う。
+  機械ごとに `~/papers` などが無くてよい
+- **読める場所を並べる形にする。** 「全部読めて秘密だけ名指しで隠す」形では、
+  新しくできた秘密の置き場が既定で見える。`work_read` には秘密を置かない場所だけを書き、
+  **中に紛れた秘密は読める**ことを受け入れる（ADR-0012）
+- **`~/.config/opencode` は丸ごと開けない。** `service.json`（常駐サービスの接続情報）が
+  ある。要る plugin とスキルだけを開ける
+- **`denyRead` は、ホーム配下なら開けた場所の内側にあるものだけを渡す。**
+  開けていない場所は元から見えない。ホームの外（`/run/user` など、Fence が既定で
+  見せる場所）は在れば渡す。例: `~/.config/chezmoi` を開けているので
+  `~/.config/chezmoi/key.txt`（age の秘密鍵）は `/dev/null` で隠れる
+- **Fence が既定で読ませる場所がある。** `/usr`・`/etc`・`/opt`・`/run` などのシステムの
+  パスと、`~/.local/bin`・`~/.cargo/bin`・`~/.rustup`・`~/.nvm` などの道具の置き場。
+  `/run/user`（常駐サービスや agent のソケット）は `deny_read` で隠す
+- **`~/.bashrc`・`.gitconfig` などは Fence が読み込み専用にする。** 開けていないものは
+  `/dev/null` で潰され、名前だけ見える
+- **`/tmp` は内側だけの tmpfs。** 書けるがホストへは反映されず、終了時に消える
+- **Fence には必ず `--settings` を渡す。** 省くとカレントディレクトリとその親から
+  `fence.json` を探すので、リポジトリが境界を決められてしまう
 
-- **R1: `allowWrite` の祖先を `allowRead` に書かない。** 書くと `allowWrite` が
-  無効になる。起動ディレクトリ自身は完全一致なので、両方へ入れてよい
-- **R2: `read` にも `write` にも無い領域への書き込みは「成功したように見えて
-  消える」。** エラーが出ないので気づけない。触りうる場所は必ずどちらかに載せる
-- **R3: `denyRead` は許可領域の内側にしか効かない。** 広く塞いでから `read` で
-  戻す形にする（`denyRead: ~` → `allowRead` で個別に開ける）
-- **R4: 開ける範囲は必要な深さまで絞る。** R3 の裏返しとして、広く開けた中の
-  一部を deny で塞ぎ直すことはできない。`~/.config/opencode` を丸ごと開けて
-  `service.json`（常駐サービスの資格情報）まで読めていた（実測）。
-  **plugin が要るなら `guide-plugin` だけを開ける**
-
-> **`denyRead: ~` は WSL の Windows 側を守らない。** 実測で `/mnt/c/Users` まで
-> 読めていたので `/mnt` を明示的に塞いでいる。`/mnt/d` などを使うときは
-> `.opencode/sandbox.toml` で狙い撃ちする（symlink 越しでも届く）。
+> WSL の `/mnt/c` は `defaultDenyRead` で見えない（存在も分からない）。
+> `/mnt/d` などを使うときは `.opencode/sandbox.toml` で開ける
+> （[プロジェクトごとの追加](#プロジェクトごとの追加)）。
 
 ### 起動ディレクトリの制限
 
-R3 の裏返しとして、**`denyRead` の項目そのもの、またはその祖先では起動しない**。
-起動ディレクトリは無条件に `allowRead` へ入るため、そこで起動するとその deny が
-丸ごと無効になる。`cd ~ && ocs` でホーム全体が読み書きでき、`~/.ssh` まで
-見えていた（実測）。
-
-判定は `deny_read` から導く。ハードコードした一覧は持たない。
+起動ディレクトリは無条件に書ける。**`unsafe_workspace` の項目そのもの、またはその
+祖先では起動しない**（`~`・`/mnt`・`/tmp`・`/var/tmp`・`/dev/shm`）。
 
 | 起動ディレクトリ | 判定 | 理由 |
 | --- | --- | --- |
-| `~`、`/home`、`/` | **拒否** | `denyRead: ~` を打ち消す |
-| `/tmp`、`/mnt` | **拒否** | 同上 |
-| `~/work/repo`、`/tmp/scratch` | 許可 | 子孫なので deny を壊さない |
-
-拒否は**境界を組み立てる前**に行う。逆にすると、打ち消された境界を一度作ってから
-捨てることになる。
+| `~`、`/home`、`/` | **拒否** | ホーム全体が書ける |
+| `/tmp`、`/mnt` | **拒否** | ホストの `/tmp` や Windows 側が書ける |
+| `~/work/repo`、`/tmp/scratch` | 許可 | 子孫なので書ける範囲がそこに留まる |
 
 ### 保護対象（`denyWrite`）
 
 「次回の隔離起動で、実行コード・境界設定・緩和設定の選択を決める入力一式」。
-ファイル名の列挙ではなく**信頼の鎖から導出する**。
+ファイル名の列挙ではなく**信頼の鎖から導出する**。起動ディレクトリ相対で書く
+（`[opencode.sandbox] protected`）。
 
 - `home/dot_config/agents`（permission / hook / 境界の単一ソース）
 - `home/dot_config/opencode/guide-plugin`（生成される判定表）
 - `home/dot_local/bin`（ランチャーの入口と境界チェック）
 - `home/dot_local/share/ocs`（ランチャーの本体。[構成](#ランチャーの構成)）
 - `scripts/agents`（生成器）
-- `home/dot_config/mise`（`srt` の版を決める）
-- `.opencode`（**まだ無くても塞ぐ**。置かれると自動ロードされる）
+- `home/dot_config/mise`（Fence の版を決める）
+- `.opencode`（置かれると自動ロードされる）
+
+**Fence の `denyWrite` はまだ無いパスに効かない**（[実測](../research/opencode/permission/fence.md)の 4'）。
+そこで `ocs` は、無い保護対象のうち**親が在るものを空のディレクトリとして先に作ってから**
+塞ぐ。`.opencode` は起動ディレクトリに必ず作られる（空のディレクトリは `git status` に
+出ない）。親が無いもの（このリポジトリ以外での `home/dot_config/agents` など）は、
+その起動ディレクトリでは守る意味が無いので渡さない。塞いだディレクトリは
+マウントポイントなので、内側から消したり名前を変えたりもできない。
 
 > 変更できる生成器から保護対象を次回上書きできるなら、その保護は迂回されている。
 > これらを編集するときは**境界の外**で行う。
+
+### プロジェクトごとの追加
+
+`<起動ディレクトリ>/.opencode/sandbox.toml` に書くと、その起動ディレクトリでだけ足す。
+宣言がリポジトリと一緒に移動し、パスがマシン依存にならない。
+
+```toml
+read = ["/mnt/d/datasets/example"]
+write = ["/mnt/d/outputs/example"]
+network_allow = ["api.example.com"]
+```
+
+- **確認なしで適用し、起動時に足す分を表示する。** 承認の記録は持たない
+- 知らないキー・文字列の配列でない値があれば起動しない
+- `~` は展開し、相対パスは起動ディレクトリ基準にする
+- 親ディレクトリの宣言は子に効かない（起動ディレクトリのものだけを見る）
+- `.opencode` は保護対象なので、内側から宣言を書き換えることはできない
 
 ## 状態の置き場
 
 ```mermaid
 flowchart LR
-    subgraph outside["境界の外（内側から触れない）"]
-        TRUSTED["trusted.json<br>追加許可の承認"]
-        CHECKED["checked.json<br>境界チェックの合格"]
+    subgraph outside["境界の外（内側から見えない）"]
+        BOUNDARIES["boundaries/<br>Fence へ渡す境界の定義"]
+        TMP["tmp/<br>Fence のホスト側の TMPDIR"]
         BACKUPS["backups/<br>起動前の退避"]
-        BOUNDARIES["boundaries/<br>srt へ渡す境界の定義"]
+        CANARY["boundary-canary<br>境界チェックの目印"]
     end
     subgraph readonly["境界の外（内側から読めるだけ）"]
         SBCFG["~/.config/opencode-sandbox/<br>opencode.json / AGENTS.md"]
     end
-    subgraph writable["起動ディレクトリの中（内側から書ける）"]
-        DB[".opencode-sandbox/opencode.db"]
-        DATA[".opencode-sandbox/data<br>snapshot の保存先"]
+    subgraph shared["ホストと共有（内側から書ける）"]
+        DATA["XDG_DATA_HOME/opencode/<br>DB・snapshot・shell の出力・ログ"]
     end
 ```
 
 | 置き場 | 中身 | なぜそこか |
 | --- | --- | --- |
-| `~/.local/state/opencode-sandbox/` | 承認・合格・退避 | 内側から書けると自分で承認・自分で合格にできる。chezmoi が apply で先に作る（[信頼の鎖](#信頼の鎖)） |
+| `~/.local/state/opencode-sandbox/` | 境界の定義・Fence の TMPDIR・退避・目印 | 内側から書き換えられない場所。chezmoi が apply で先に作る（[信頼の鎖](#信頼の鎖)） |
 | `~/.config/opencode-sandbox/` | 隔離版の `opencode.json`・`AGENTS.md` | 緩和設定を内側から広げられないようにする。書き手は常に外 |
-| `<起動ディレクトリ>/.opencode-sandbox/` | 隔離用 DB・snapshot | **`XDG_DATA_HOME` を永続領域へ向けないと snapshot が境界終了時に消える**（捕捉は成功したように見える） |
+| `XDG_DATA_HOME/opencode/` | DB・snapshot・shell の出力・ログ | 通常起動と共有する（下記） |
 
-### 隔離用 DB
+- **境界の定義は起動ごとに書き、24 時間より古いものを次の起動で捨てる。**
+  `execve` で置き換わるので自分では消せない
+- **Fence のホスト側の `TMPDIR` は `tmp/` に固定する。** Fence は起動ごとに
+  `fence-seccomp/*.bpf` を残すので、10 分より古いものを次の起動で捨てる。
+  プロキシのソケットもここに作られ、Fence が終了時に消す
+- 内側の `TMPDIR` は `/tmp`（内側の tmpfs）に戻す。ホスト側の値のままだと、
+  内側から見えない場所を指したまま書けない
 
-- `--standalone` は専用サーバを意味するが**専用 DB は意味しない**
-- 共有すると他プロジェクトの会話が境界内へ入る（外部由来テキストの持ち込み）
-- **スキーマだけ写し、資格情報と `migration` の行だけを入れる**
-  （`migration` を消すとスキーマ管理が壊れる）
-- **ホストの DB を複製しない。** 複製してから消す方式だと、削除前の全会話が
-  ワークスペース内に存在する時間帯ができる（対処前後の大きさは
-  [CHG-0004](../change/closed/0004-opencode-sandbox.md#2-の実測対処前後)）
-- 書き途中は `.building` に作って `rename` する。中断したものを
-  `db.exists()` が拾うと、**不完全な DB を恒久的に再利用**してしまう
+### DB の共有
 
-> **既に作られた DB は作り直されない**（`db.exists()` で飛ばす）。旧方式で
-> 作ったものを新方式にするには `.opencode-sandbox/opencode.db` を消す。
-> 中のセッションも消えるので、必要なら先に `session export` する。
+内側で `XDG_DATA_HOME` と `OPENCODE_DB` を上書きしない。`ocs` は外側で
+`XDG_DATA_HOME/opencode`（未設定なら `~/.local/share/opencode`）を解決し、
+`allowWrite` に入れる。利用者の環境の `OPENCODE_DB` は**落とす**（残ると常駐サービスと
+別の DB を使い、履歴が分かれる）。
 
-境界の外から隔離起動のセッションを開くときは、**`--standalone` も要る**。
+- 同時書き込み・外での再開・外からの `/undo` は実測で通った
+  （[DB の共有の調査](../research/opencode/shared-db.md)、CHG-0009 の実装・検証）
+- **`~/.local/state/opencode/` は開けない。** 常駐サービスの接続情報 `service.json` がある。
+  opencode は起動時にそこへディレクトリを作るので、内側の `XDG_STATE_HOME` は
+  `/tmp/xdg-state`（内側の tmpfs）へ向ける。内側で選んだモデルと入力履歴は残らない
+- **同じセッションを境界の内と外で同時に開かない**（同時の操作は未検証）
+- OpenCode を更新したら常駐サービスも再起動する。古い版の常駐サービスと新しい版の
+  内側が同じ DB を使うと、スキーマの移行で壊れうる（推測）
 
-```bash
-OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continue
-```
+### セッションの引き継ぎ
 
-> 付けないとバックグラウンドサービス（ホスト DB）へ問い合わせるので
-> `OPENCODE_DB` が効かない。
-> **再開先は通常版の設定になる**（permission も伏字化も効かない）。
+DB を共有しているので、内側で作ったセッションは OpenCode が終了時に表示する
+`opencode -s <ID>` で**そのまま**外から再開できる。移送の操作は無い。
+
+> 以前の `ocs` は起動ディレクトリごとの隔離用 DB（`<起動ディレクトリ>/.opencode-sandbox/`）を
+> 使っていた。`ocs` はこれを消さない。中の古いセッションは次で開ける（`--standalone` が要る）。
+>
+> ```bash
+> OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone
+> ```
+>
+> 要らなければ `.opencode-sandbox/` ごと消してよい。`.opencode-sandbox/data/mise` は、
+> 境界の内側の mise が導入済みの道具を見つけられずに入れ直したもので、消してよい。
+> 以前の承認と合格の記録（`~/.local/state/opencode-sandbox/trusted.json`・`checked.json`）も
+> 使われないので消してよい。
 
 ### 隔離版の設定の書き出し方
 
@@ -223,6 +267,7 @@ OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continu
 - それ以外のキーは**残す**。丸ごと上書きすると TUI で選んだ値が毎回消える
 - 通常版の設定からは**見た目・操作感のキーだけ**引き継ぐ
   （`theme` / `keybinds` / `username` / `layout` / `model` / `small_model`）
+- 既定モデルは初回だけ、`model_preference` の順で DB に資格情報がある provider を選ぶ
 
 > 許可リストで持つこと。`permissions` や `plugins` を引き継げるようにすると、
 > 境界の外の設定で内側の緩和を決められてしまう。
@@ -248,7 +293,7 @@ flowchart LR
 
 - **作業ツリーには触らない。** `git stash` とは別物で、一時 index に `add` して
   tree を書くだけ。再開時に変更が巻き戻ることはない
-- **`.gitignore` が効く。** 隔離用 DB やキャッシュは入らない。
+- **`.gitignore` が効く。** キャッシュなどは入らない。
   裏を返すと、**無視されているファイル（`.env` など）は保護されない**
 - **同じ内容なら同じ tree SHA** になるので、中断と再開を繰り返しても溜まらない
 - **大きさは `git add` の前に測る。** 作ってから間引くと、巨大なリポジトリで
@@ -274,131 +319,71 @@ tar xzf ~/.local/state/opencode-sandbox/backups/<リポジトリ>/<日時>-<tree
 
 ## 境界チェック
 
-起動前に、境界の内側で**挙動を**確かめる。
+`ocs --check` で、その起動ディレクトリの境界を張り、内側で**挙動を**確かめる。
+起動はしない。終了コードは 0 が合格。起動時には走らせない（待ちをなくすため）。
+Fence や境界の素材を変えたとき、OpenCode や Fence を更新したときに走らせる。
 
-- ホストの秘密（`~/.ssh` 等）が見えないこと
-- WSL なら `/mnt/c` が見えないこと
-- 作業領域へ書けること
-- `XDG_DATA_HOME` が永続領域を指していること
+- ホストの秘密（`~/.ssh`・`~/.git-credentials`・`~/.config/gh`・`~/.config/chezmoi/key.txt`）、
+  常駐サービスの接続情報（`XDG_STATE_HOME/opencode/service.json`）、目印が**読めない**こと
+- WSL なら `/mnt/c/Users`・`/mnt/c/Windows` が**読めない**こと
+- 作業領域と `XDG_DATA_HOME/opencode` へ書けること
 - 保護対象へ書けない／作れないこと
 - 許可外ドメインへ出られないこと（**許可済みドメインを対照に使う**）
 
 判定の作法。
 
-- **値を根拠にしない。** `/proc/self/status` の `Seccomp:2` は親環境由来でも
-  同じ値になる
-- **エラーコード単独でも判定しない。** `ECONNREFUSED` は「待ち受けていない
-  だけ」かもしれない
-- **proxy の起動を待つ。** 生成直後は待ち受けておらず、待たずに「到達しない」と
-  判定すると**穴が開いていても合格になる**
-- 合格は**判定に効く入力のハッシュ**（境界設定・`srt`・`opencode`・検査script）と
-  24 時間の期限つきで再利用する。`--recheck` でやり直す
-- **検査スクリプトが無ければ起動しない。** 配備の失敗やファイル消失が
-  「検査を飛ばして起動」に化けると、保護が消えても気づけない。
-  省くときは `--skip-check` を明示する
-- **隠す対象はホストに在るものだけで判定する。** `ocs` が境界の外で存在を
-  確かめ、在るものを `BOUNDARY_HIDDEN`、無いものを `BOUNDARY_HIDDEN_ABSENT`
-  （`SKIP` と表示）で渡す。在る対象の一覧も合格のハッシュに入れる
-- **目印を必ず 1 件検査する。** `~/.ssh` などが 1 つも無い機械でも隔離を
-  確かめられるよう、`ocs` が `~/.local/state/opencode-sandbox/boundary-canary`
-  をホストに置き、見えないことを確かめる。read / write に載せてはいけない
+- **在るかではなく読めるかで判定する。** WSL の `/mnt/c` は、Landlock で読めなくても
+  stat は通ることがある。ディレクトリは中身が 1 件でも見えれば、通常ファイルは
+  開ければ不合格。隠した結果の空の tmpfs と `/dev/null` は「読めない」に数える。
+  中身は読まない
+- **エラーコード単独で判定しない。** `ECONNREFUSED` は「待ち受けていないだけ」かもしれない
+- **隠す対象はホストに在るものだけで判定する。** `ocs` が境界の外で存在を確かめ、
+  在るものを `BOUNDARY_HIDDEN`、無いものを `BOUNDARY_HIDDEN_ABSENT`（`SKIP` と表示）で渡す
+- **目印を必ず 1 件検査する。** `~/.ssh` などが 1 つも無い機械でも隔離を確かめられるよう、
+  `ocs` が `~/.local/state/opencode-sandbox/boundary-canary` をホストに置く。
+  read / write に載せてはいけない
 - **検査スクリプトは PATH を `/usr/bin:/bin` に固定し、`curl` を絶対パスで呼ぶ。**
-  作業領域の PATH にある偽物で合格を装わせない。試験用の `BOUNDARY_CURL` は
-  `ocs` が利用者の環境から取り除く
+  試験用の `BOUNDARY_CURL` は `ocs` が利用者の環境から取り除く
 - **パスは改行区切りの環境変数で渡す**（`BOUNDARY_HIDDEN` / `BOUNDARY_PROTECTED`）。
-  空白や glob 文字を含むパスを割らないため。改行を含むパスでは起動しない
+  空白や glob 文字を含むパスを割らないため。改行を含むパスでは検査しない
 - **保護対象が通常ファイルのときは追記（`>>`）で書き込み可否を見る。**
   `mkdir` の失敗を合格と読むと、書けるのに合格する。`>` は中身を切り詰めるので使わない
+- **検査スクリプトが無ければ不合格。** 判定できないことを合格にしない
 
 ## コマンドとフラグ
 
-`ocs` が解釈しない引数は、そのまま OpenCode へ渡る（`ocs --continue` など）。
+`ocs` が解釈しない引数は、そのまま OpenCode へ渡る（`ocs --continue`、`ocs -s <ID>` など）。
+Fence へは引数を並べて渡すので、引用の心配は無い。
 
 | フラグ | 用途 |
 | --- | --- |
 | `--no-backup` | 起動前の退避をしない |
-| `--recheck` | 前回の合格を使わず境界チェックをやり直す |
-| `--trust` | `.opencode/sandbox.toml` の要求を確認せず承認する（自動化用） |
-| `--skip-check` | 境界チェックを省く。**検査スクリプトが無いときの逃げ道**（起動を断られたときのエラーがこれを案内する） |
-| `--list-sessions` | 隔離用 DB のセッションを並べる |
-| `--handoff <ID>` | 隔離セッションをホストの DB へ移す。以後 `opencode -s <ID>` で再開できる |
-
-### セッションの引き継ぎ
-
-境界の内側で作ったセッションは隔離用 DB にあり、**そのままでは外から開けない**
-（`OPENCODE_DB` と `--standalone` の両方が要る）。移送すると、OpenCode が
-終了時に表示する `opencode -s <ID>` が**そのまま動く**。
-
-```bash
-ocs --list-sessions            # ID を選ぶ
-ocs --handoff ses_xxxxxxxx     # ホストの DB へ移す
-opencode -s ses_xxxxxxxx       # 境界の外で再開
-```
-
-- `session import` は **ID を保つ**（実測）。DB を共有する必要はない
-- 書き出す JSON は**ワークスペースの外**へ置く。境界内から書ける場所だと、
-  取り込む前に内容を差し替えられる
-- 取り込みは `OPENCODE_DB` を落とし、`--standalone` も**付けない**。
-  付けないことで常駐サービス（＝ホストの DB）へ届く
-- **移送は複製**で、隔離用 DB からは消えない
-
-> **`srt -c` はコマンド文字列を 1 個しか取らない。** 後ろへ並べた引数は
-> `srt` の位置引数になり、**エラーも出さずに捨てられる**。渡したい引数は
-> 必ずコマンド文字列の中へ入れる。
+| `--check` | 起動せず、境界を内側から検査する（[境界チェック](#境界チェック)） |
 
 ## 信頼の鎖
 
-ランチャーは**境界が張られる前にホストで動く**。したがって次を守る。
+ランチャーは**境界が張られる前にホストで動く**。ADR-0012 で、ワークスペースが
+ホストで動く処理を騙すことは非目的にした。そのうえで、誤動作を防ぐために次を守る。
 
-- 実体を絶対パスで呼ぶ（`node` / `git` の差し替えを防ぐ）
-- **`srt` には PATH を `/usr/bin:/bin` に固定して渡す。** `srt` は境界を張る前に
-  ホストで `which` を PATH から起動し（Node 版の `whichSync`）、`bwrap` / `socat` /
-  `bash` / `rg` も PATH で探す。利用者の PATH のままだと、先頭の書き込める場所
-  （mise の `_.path`、`node_modules/.bin` など）に置いた偽の `which` が**ホストで動く**。
-  - 内側の OpenCode には利用者の PATH が要る（mise の道具）。`srt` は自分の環境を
-    そのまま子へ渡すので、コマンド文字列を `/usr/bin/env PATH=<利用者の PATH> opencode …`
-    にして内側でだけ戻す。**内側の PATH が境界の外で使われることはない**
-  - `rg` は `/usr/bin` に無い。`ocs` が `~/.local/share/mise/installs/ripgrep/<版>/` の
-    実体（symlink でないもの）か `/usr/bin/rg` を選び、symlink を解いた絶対パスを
-    境界の定義の `ripgrep.command` に入れる。実体が `allowWrite` の中なら起動しない
-  - 以前は PATH 上の `bwrap` / `socat` / `rg` を解決して `allowWrite` と比べていた。
-    `which` そのものを守れず、検査の後に symlink や PATH 上のディレクトリを
-    差し替えられると実行されるものが変わるので、PATH の固定に置き換えた
-  - `srt` は `rg` もホストで、自分の環境を継承させて起動する（`srt` 0.0.76 の
-    `dist/utils/ripgrep.js`）。利用者の `rg` の設定ファイルの `--pre` などがホストで
-    コマンドを起動したり検索結果を変えたりしないよう、境界の定義の `ripgrep.args` で
-    `--no-config` を渡す
-  - PATH 以外の環境変数（`NODE_OPTIONS` など）は利用者の環境をそのまま `srt` へ渡す。
-    ワークスペースが仕込んだ値でホストの処理が動くことは対象外
-    （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的）
-- **mise の shim を経由しない。** shim は mise 本体への symlink で、呼ぶたびに
-  版解決とネットワーク確認が走り停止しうる。加えて mise はワークスペース内の
-  設定を読むので、**境界を張る前に可変な入力へ依存する**ことになる
-- ワークスペース内のコード（mise タスク・シェル設定）を経由しない
-- 境界の設定は `denyWrite` で保護された生成ファイルだけを読む
-- **ワークスペース内の入力は一度だけ読む。** `.opencode/sandbox.toml` を
-  承認時と適用時で読み直すと、間に書き換えられたとき
-  **承認していない許可が境界へ入る**。読んだ結果を両方へ渡す
-- 境界の定義は**ワークスペースの外**（`boundaries/`）へ書く。`allowWrite`
-  領域に置くと `srt` が読む前に内側から書き換えられる。同一 UID では
-  `0600` でも別セッションを隔離できない
-- 内側へ渡す環境変数から資格情報を落とす
-  （`GH_TOKEN` / `SSH_AUTH_SOCK` / `AWS_*` など）
+- 実体を絶対パスで呼ぶ（Fence・`opencode`・`/usr/bin/git`）
+- **Fence には PATH を `/usr/bin:/bin` に固定して渡す。** Fence は境界を張る前に
+  `bwrap` / `socat` / `bash` を PATH から探して動かす。内側の opencode には、
+  コマンドを `/usr/bin/env PATH=<利用者の PATH> TMPDIR=/tmp XDG_STATE_HOME=/tmp/xdg-state opencode …`
+  にして利用者の PATH を戻す（mise の道具が要る）
+- 境界の設定は `denyWrite` で保護された生成ファイル（`rules.json`）だけから組む
+- 境界の定義は**ワークスペースの外**（`boundaries/`）へ書く。内側から書ける場所に置くと、
+  Fence が読む前に書き換えられる
+- 内側へ渡す環境変数から資格情報を落とす（`GH_TOKEN` / `SSH_AUTH_SOCK` / `AWS_*` など）。
+  `OPENCODE_CONFIG` と `OPENCODE_DB` も落とす
 - **ランチャーが読み込むコードは、入口と同じだけ保護する。** 本体を別ファイルへ
   分けた分だけ鎖が延びるので、置き場・読み込み方・配布先を入口に揃える（下記）
-- **承認と合格の記録（`~/.local/state/opencode-sandbox/`）は、ほかの CLI からも
-  書けなくする。** `~/.local/state` は Claude / Copilot の sandbox の書き込みの許可に
-  入っているので、`[sandbox] deny` と `[file] write_deny_globs` で名指しして塞ぐ。
-  塞がないと、ocs の外で動くエージェントが `trusted.json` や `checked.json` を
-  書き換え、承認や境界チェックの合格を偽造できる
+- **状態領域（`~/.local/state/opencode-sandbox/`）は、ほかの CLI からも書けなくする。**
+  `~/.local/state` は Claude / Copilot の sandbox の書き込みの許可に入っているので、
+  `[sandbox] deny` と `[file] write_deny_globs` で名指しして塞ぐ
   - **Copilot は、セッション開始時に無いパスの deny を捨て、途中で作られても
     効かせない**（[実測](agent-sandbox.md#実測した既定の許可範囲-wsl2-chezmoi-リポジトリを-cwd-として-sandbox-policy)）。`ocs` を初めて起動する前はこの
     ディレクトリが無いので、chezmoi が apply で先に作る
     （`home/dot_local/state/private_opencode-sandbox/.keep`、`0700`、Linux のみ）
-  - 作る前の版で使っていたマシンの記録は、保護が効く前に書かれえたので信頼しない。
-    `run_once_after_127_ocs_state.sh` が `trusted.json`・`checked.json` と直下の
-    symlink を 1 回だけ捨てる。次の起動で承認と境界チェックをやり直す。
-    退避（`backups/`）は捨てないので、**復元する前に作成日時と中身を確かめる**
 
 ### ランチャーの構成
 
@@ -412,11 +397,10 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 | 配備先 | 責務 |
 | --- | --- |
 | `~/.local/bin/ocs` | 入口。本体の読み込み |
-| `~/.local/share/ocs/cli.py` | 引数の解釈と起動の順序（`main`）、内側の環境変数とコマンド、`node` の解決、境界定義の置き場 |
-| `~/.local/share/ocs/boundary.py` | 境界の組み立て、起動ディレクトリの制限、追加許可の承認 |
-| `~/.local/share/ocs/check.py` | [境界チェック](#境界チェック)の準備・実行・合格の再利用、`srt` へ渡す PATH と `rg` の実体 |
+| `~/.local/share/ocs/cli.py` | 引数の解釈と起動の順序（`main`）、内側の環境変数とコマンド、状態領域の書き出しと掃除 |
+| `~/.local/share/ocs/boundary.py` | 境界の組み立て、起動ディレクトリの制限、保護対象の用意、プロジェクトごとの追加 |
+| `~/.local/share/ocs/check.py` | [境界チェック](#境界チェック)の準備と実行、Fence へ渡す PATH と TMPDIR |
 | `~/.local/share/ocs/backup.py` | [起動前の退避](#起動前の退避) |
-| `~/.local/share/ocs/session.py` | [隔離用 DB](#隔離用-db) の用意と[セッションの引き継ぎ](#セッションの引き継ぎ) |
 | `~/.local/share/ocs/config.py` | [隔離版の設定の書き出し](#隔離版の設定の書き出し方) |
 | `~/.local/share/ocs/common.py` | 共有の定数と失敗の扱い |
 | `~/.local/bin/ocs-boundary-check` | 境界の内側で走る検査スクリプト |
@@ -434,7 +418,7 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 
 | 経路 | `~/.local/bin/ocs` | `~/.local/share/ocs/` |
 | --- | --- | --- |
-| `ocs` の境界の内側 | 読めるだけ（`[opencode.sandbox] read`） | 見えない（`deny_read` の `~`） |
+| `ocs` の境界の内側 | 読めるだけ（`[opencode.sandbox] read`） | 見えない（`defaultDenyRead`） |
 | Claude Code の sandbox | 書けない（`claude_write_allow` に無い） | 同左 |
 | Copilot CLI の sandbox | 書けない（`copilot_write_allow` に無い） | 同左 |
 | source state | `protected` の `home/dot_local/bin` | `protected` の `home/dot_local/share/ocs` |
@@ -443,40 +427,18 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 > 固定しているのは**本体の読み込み**だけ。入口の `python3` は `PATH` から選ばれ、
 > 標準ライブラリの import は `PYTHONPATH` の影響を受ける（分割前から同じ）。
 
-## 版の扱い（未固定）
+## 版の扱い
 
-`srt` は **research preview** であり、README が明記している。
+Fence は mise の github backend で**版とチェックサムを固定**して入れる
+（`home/dot_config/mise/config.toml.tmpl`、[構成](structure.md#github-backend-で版を固定している-fence)）。
+`ocs` は `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence` を呼ぶ。
 
-> As this is an early research preview, APIs and configuration formats may evolve.
-
-一方、導入は浮動指定のまま。**Claude Code と同じ実体を共有している**ので、
-更新は両方へ同時に効く。
-
-```toml
-# home/dot_config/mise/config.toml.tmpl
-"npm:@anthropic-ai/sandbox-runtime" = "latest"
-```
-
-| 依存の仕方 | 対象 | 設定フォーマット変更の影響 |
-| --- | --- | --- |
-| CLI + 設定 JSON | **`ocs`** | 境界の組み立てが通らなくなりうる |
-| `vendor/seccomp/apply-seccomp` のみ | Claude Code | パスが変われば seccomp が無効化される |
-
-**現状は「固定せず、起動時チェックで検知する」を選んでいる。**
-境界チェックは挙動で判定し、判定できなければ起動しないので、
-壊れた場合は**起動を断る形で気づける**（fail-closed）。
-
-- 更新時は「正常なコマンドが通る」ではなく
-  **「拒否すべきものが拒否される」**ことを確かめる
-  （deny・直接通信・Unix socket・cwd 違い・並行実行）
-- `--recheck` で前回の合格を捨てて検査し直す
-- 版を固定する場合は `latest` を実際の版へ置き換える。
-  そのとき `seccomp_apply_path` も同じ版を指す必要がある
+- 実体が無ければ `rules.json` に境界の設定が出ず、`ocs` は起動を断る
+- 更新するときは、版とチェックサムを上げ、`ocs --check` で
+  **「拒否すべきものが拒否される」**ことを確かめる。変更履歴も読む
+  （新しい許可キーの既定値が緩い方向でも、チェック項目に無ければ合格する）
+- Claude Code の sandbox は引き続き `srt`（`@anthropic-ai/sandbox-runtime`）を使う
   （[エージェント権限仕様](agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ)）
-
-> **検知できるのは「境界が壊れたこと」までで、「設定の意味が変わったこと」は
-> 検知できない。** 例えば新しい許可キーが増え、既定値が緩い方向であっても、
-> チェック項目に無ければ合格する。更新時は変更履歴も読むこと。
 
 ## 既知の制約
 
@@ -484,12 +446,13 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 | --- | --- |
 | セッション中に境界を変えられない | bwrap の名前空間はプロセス起動時に作られる。`/add-dir` 相当は無い |
 | コマンド単位の逃げ道が無い | プロセス単位で包む以上、`dangerouslyDisableSandbox` 相当は作れない |
-| 履歴・設定が通常起動と分かれる | DB を分けているため。セッションの移送は `ocs --handoff`（[引き継ぎ](#セッションの引き継ぎ)） |
+| 設定が通常起動と分かれる | 隔離版の設定は `~/.config/opencode-sandbox`。履歴（DB）は共有する |
 | 境界はエージェントから見えない | `ENOENT` を「存在しない」と誤診する。`AGENTS.md` で明示的に伝えている |
-| `read` が既定で拒否 | Claude Code は既定で全許可。参照したい場所は個別に開ける必要がある |
-| **資格情報は境界内にある**（決めた例外） | 隔離用 DB が `credential` を引き継ぎ、その DB はワークスペース内にある。**平文で取り出せる**（実測）。引き継がないとモデルへ繋げないため、[明示的な例外として受け入れた](../change/closed/0004-opencode-sandbox.md#決定-明示的な例外として受け入れる2026-09-24)。見落としではない |
-
-> 未対処の欠陥と簡素化の選択肢は
-> [CHG-0004 の外部レビュー節](../change/closed/0004-opencode-sandbox.md#外部レビュー2026-09-23-未対処の欠陥と簡素化の選択肢)にまとめてある。
+| 起動が約 0.8 秒遅い | Fence の機能の検出など（[実測](../research/opencode/permission/fence.md)） |
+| 起動ディレクトリに `.opencode/` が作られる | 保護対象を塞ぐため。空のディレクトリで、`git status` には出ない |
+| **資格情報は境界内にある**（決めた例外） | 共有する DB が `credential` を持ち、内側から**平文で取り出せる**。無いとモデルへ繋げないため、[明示的な例外として受け入れた](../change/closed/0004-opencode-sandbox.md#決定-明示的な例外として受け入れる2026-09-24)。見落としではない |
+| 他のプロジェクトの会話が読める | DB を共有するため。ADR-0012 で保証しないと決めた |
+| 開けた作業用ディレクトリの中の秘密は読める | `work_read` は秘密を置かない場所だけにする |
+| 起動ディレクトリがリポジトリの下位ディレクトリだと、そのリポジトリの `.git` が書ける | worktree と同じ扱いで共有 `.git` を開けるため（`hooks` と `config` は除く） |
 
 [仕様一覧へ戻る](index.md)

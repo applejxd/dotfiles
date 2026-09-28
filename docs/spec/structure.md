@@ -221,7 +221,7 @@ mise の実体または shim が選ばれることを確認してください。
 
 | 環境 | mise の一括導入 | 後続の設定 |
 | --- | --- | --- |
-| Linux / WSL | OS 依存パッケージの後、`100_linux/125_mise` | `100_linux/126_agent_cli` → `100_linux/127_ocs_state` → `100_linux/140_herdr_integration` → `400_unix/410_claude_mcp` |
+| Linux / WSL | OS 依存パッケージの後、`100_linux/125_mise` | `100_linux/126_agent_cli` → `100_linux/140_herdr_integration` → `400_unix/410_claude_mcp` |
 | macOS | Homebrew の後、`200_mac/225_mise` | `200_mac/226_agent_cli` → `400_unix/410_claude_mcp` |
 | Windows | `310_winget` で mise を導入し、設定配備後に `310_packages/313_mise` | `310_packages/314_agent_cli` → `343_herdr_integration` |
 
@@ -275,6 +275,20 @@ user scope に未登録のものだけを対象にし、既存のカスタム設
 seccomp フィルタは手で `npm install -g` する必要はありません。導入先が実在する
 ときだけ `~/.claude/settings.json` に設定が出るため、初回は mise の導入後に
 もう一度 `chezmoi apply` します。
+
+### github backend で版を固定している Fence
+
+`github:fencesandbox/fence` は OpenCode の隔離起動（`ocs`）が境界を張る道具です
+（[OpenCode 隔離起動](opencode-sandbox.md)）。Linux / WSL だけに入れます。
+
+- **版とチェックサムを固定しています。** 0.1.x で開発元が 1 社のため、`latest` で
+  追わず、上げるときは Releases の `checksums.txt` の値を `platforms.<os>-<arch>.checksum`
+  に写します（`linux-x64` と `linux-arm64`）。mise は落とした tar.gz の sha256 を照合し、
+  違えば導入を止めます
+- `ocs` は `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence` を
+  絶対パスで呼びます（`[opencode.sandbox] runtime_path`）。実体が無いと境界の設定が
+  生成されず、`ocs` は起動を断ります。初回は mise の導入後にもう一度 `chezmoi apply` します
+- Claude Code の sandbox は引き続き `npm:@anthropic-ai/sandbox-runtime` を使います
 
 ## AI CLI の導入
 

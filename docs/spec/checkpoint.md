@@ -88,7 +88,8 @@ hook 層は 2026-09-25 に撤去し、OpenCode plugin へ寄せた（旧構成�
 
 ### 境界の内側から読めること
 
-`ocs` の `read` は `~/.config/opencode` を**丸ごとは開けない**（R4）。
+`ocs` の `read` は `~/.config/opencode` を**丸ごとは開けない**（`service.json` があるため。
+[組み立ての規則](opencode-sandbox.md#組み立ての規則)）。
 次の 2 つを名指しで開けている。**これが無いと境界内でだけ checkpoint が
 動かない。**
 

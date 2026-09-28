@@ -46,7 +46,7 @@
 | --- | --- | --- | --- | --- | --- |
 | [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | 段 2（常用）に着手。`enabledProviders = ["claude"]` の効果は常用の初回に判定する。使って決まった設定の回収（段 2.5）を計画へ追加 | 段 2 の冒頭で `/criticalthink`（chezmoi が配る唯一の Claude コマンド）がスラッシュコマンドに出るか | 2026-09-28 |
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる**。`ocs` のモジュール分割（2026-09-28）はハーネス層の切り出しではない | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-28 |
-| [0009](0009-ocs-simplify-for-accidents.md) | `ocs` をうっかりの防止に必要な分まで簡素にする（ADR-0012） | In progress | 段 0 で Fence（`defaultDenyRead`）に替えると決めた。存在しないパスへの `denyWrite` と `TMPDIR` の残骸の対策が要る | 段 2 と合わせて `ocs` を Fence に替える実装 | 2026-09-29 |
+| [0009](0009-ocs-simplify-for-accidents.md) | `ocs` をうっかりの防止に必要な分まで簡素にする（ADR-0012） | In progress | 段 0・2〜5 を worktree で実装し、必須の項目を実機で確かめた（未配備）。段 6 は検討だけ | 旧 `ocs --handoff` で隔離セッションを移してから配備し、本物の `ocs` で `--check` と再開・`/undo` を確かめる | 2026-09-29 |
 
 ## 保留
 

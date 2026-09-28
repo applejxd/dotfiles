@@ -28,7 +28,7 @@
 | [設定の生成と所有権](agent-config-generation.md) | `common.toml` の構成と編集ルール、生成先と所有権、MCP、OpenCode の設定、hook の単一ソース化 |
 | [コマンド・ファイルの判定](agent-command-policy.md) | 照合規則、allow / ask / deny の使い分けと例外、bash 検査ルールの足し方、CLI 差 |
 | [sandbox (Claude Code / Copilot CLI)](agent-sandbox.md) | sandbox 層・ネットワーク層・seccomp、マシン固有の許可 (`local.toml`) |
-| [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) | `ocs` の構成、起動順序、境界の組み立て規則、状態の置き場、起動前の退避 |
+| [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) | `ocs` の構成、起動順序、Fence の境界の組み立て規則、DB の共有、起動前の退避、境界チェック（`ocs --check`） |
 | [文脈の引き継ぎ](checkpoint.md) | 圧縮を跨いで作業文脈を保つ checkpoint の保存先・記録の形・plugin・失敗時の動作 |
 | [トラブルシューティング](troubleshooting.md) | 症状 → 対象 OS・CLI → 対応先の索引 |
 | [トラブルシューティング: 導入と適用](troubleshooting-bootstrap.md) | スクリプトの再実行、Python・Bitwarden・mise・APT・AI CLI の導入で起きる障害 |

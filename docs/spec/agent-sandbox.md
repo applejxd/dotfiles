@@ -57,8 +57,8 @@ Claude と Copilot で既定が逆なので、分けて書く。
 
 | 経路 | 明示の deny（両 CLI） | Claude の明示の allow | Copilot の明示の allow | `ocs`（OpenCode） |
 | --- | --- | --- | --- | --- |
-| `/mnt`（WSL の Windows 側） | なし | なし（既定で読める） | なし | `deny_read` で遮断 |
-| `/tmp` `/var/tmp` `/dev/shm` | なし | なし（既定で読める。ホストと共有） | なし（`$TMPDIR` は既定で read-write） | `deny_read` で遮断（専用 tmpfs になる） |
+| `/mnt`（WSL の Windows 側） | なし | なし（既定で読める） | なし | 開けていないので見えない（`defaultDenyRead`） |
+| `/tmp` `/var/tmp` `/dev/shm` | なし | なし（既定で読める。ホストと共有） | なし（`$TMPDIR` は既定で read-write） | `/tmp` と `/dev/shm` は専用の tmpfs、`/var/tmp` は見えない |
 
 実測の状況:
 
@@ -71,9 +71,10 @@ Claude と Copilot で既定が逆なので、分けて書く。
   ```
 
   sandbox 内から実際に読めるかは Claude では
-  **未検証**。OpenCode 側では実測で `/mnt/c/Users` まで読めることを確認して塞いだ
+  **未検証**。OpenCode 側では `srt` のころに実測で `/mnt/c/Users` まで読めることを確認して塞いだ
   （[CHG-0004](../change/closed/0004-opencode-sandbox.md)、
   [調査記録 21 節](../research/opencode/permission/sandbox-runtime.md)）。
+  今の `ocs`（Fence）は読める場所を並べる形なので、`/mnt` は開けない限り見えない。
   **Claude には同じ対処を入れていない**
 - **Copilot**: `copilot_*` の許可を足す前の `/sandbox policy`（2026-09-13）では、
   `/mnt` は `/mnt/wsl/resolv.conf` だけが read-only、一時領域は `$TMPDIR` だけが
@@ -572,10 +573,10 @@ disabled.` を出す。
 > [!NOTE]
 > **版は固定していない。** `sandbox-runtime` は research preview で、
 > README が「API と設定フォーマットは変わりうる」と明記している。
-> `latest` 経由なので Claude と OpenCode (`ocs`) へ同時に効く。
-> 判断の記録と更新時の検証手順は
-> [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md#版の扱い未固定)。
-> Claude 側は `applyPath` が実在しなくなると**設定が出力されず自動検出へ戻る**
+> `latest` 経由で Claude に効く（OpenCode の `ocs` は Fence に替えた。
+> [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md#版の扱い)）。
+> 更新時は「拒否すべきものが拒否される」ことを確かめる（deny・直接通信・
+> Unix socket・cwd 違い・並行実行）。Claude 側は `applyPath` が実在しなくなると**設定が出力されず自動検出へ戻る**
 > ため、seccomp が黙って無効化されうる。
 
 ### sandbox に移せないネットワーク系チェック

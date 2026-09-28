@@ -122,10 +122,13 @@ opencode    # 通常起動（境界なし）
 
 - **作業対象のディレクトリで起動する。** その配下が読み書き可能になる。
   `~` や `/tmp` そのものでは起動を断る
-- 起動のたびに作業ツリーを境界の外へ退避する。復元とセッションの持ち出し
-  （`ocs --handoff`）は [OpenCode 隔離起動](docs/spec/opencode-sandbox.md) を参照
-- 起動ディレクトリの外を開けたいときは、プロジェクトに要求ファイルを置き、
-  初回起動時に承認する（書き方は[要求と承認](docs/spec/security.md#追加の許可は要求と承認に分ける)）
+- 境界は Fence（mise が入れる）で張る。入っていなければ `mise install` の後に
+  `chezmoi apply` する。境界を確かめるときは `ocs --check`
+- 履歴は通常起動と共有する。内側のセッションは外の `opencode -s <ID>` で再開できる。
+  起動のたびに作業ツリーを境界の外へ退避する（復元は
+  [OpenCode 隔離起動](docs/spec/opencode-sandbox.md) を参照）
+- 起動ディレクトリの外を開けたいときは、プロジェクトに `.opencode/sandbox.toml` を置く
+  （書き方は[プロジェクトごとの追加](docs/spec/opencode-sandbox.md#プロジェクトごとの追加)）
 
 ## 安全上の注意
 

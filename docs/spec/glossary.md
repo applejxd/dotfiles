@@ -14,17 +14,20 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
   上の境界とは別の意味（[ADR-0007](../adr/0007-filesystem-guard-boundary.md)）
 - **sandbox**: Claude Code / Copilot CLI に組み込みの sandbox 機能。`common.toml` の
   `[sandbox]` が設定する（[sandbox (Claude Code / Copilot CLI)](agent-sandbox.md)）
-- **sandbox runtime（`srt`）**: `@anthropic-ai/sandbox-runtime`。隔離起動が境界を張るのに
-  使う道具。Claude Code は同じパッケージの seccomp フィルタだけを使う
-- **隔離起動（`ocs`）**: OpenCode のプロセス全体を `srt` の境界の内側で起動すること。
+- **sandbox runtime（`srt`）**: `@anthropic-ai/sandbox-runtime`。Claude Code は同じ
+  パッケージの seccomp フィルタだけを使う。以前は隔離起動も境界を張るのに使っていた
+- **Fence**: bubblewrap・Landlock・seccomp とドメイン単位のプロキシで境界を張る道具
+  （[fencesandbox/fence](https://github.com/fencesandbox/fence)）。隔離起動が使う
+- **隔離起動（`ocs`）**: OpenCode のプロセス全体を Fence の境界の内側で起動すること。
   Ubuntu / WSL のみ（[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)）。
   旧称: 隔離版 OpenCode、境界版
 - **通常起動（`opencode`）**: 境界なしで OpenCode を起動すること。
   旧称: 素の OpenCode、通常版
 - **通常版の設定 / 隔離版の設定**: 通常起動が読む `~/.config/opencode/` と、隔離起動の
   たびに `ocs` が書き出す `~/.config/opencode-sandbox/`。「版」は設定を指すときだけ使う
-- **隔離用 DB**: 隔離起動のセッションを持つ `<起動ディレクトリ>/.opencode-sandbox/opencode.db`。
-  旧称: 隔離 DB
+- **隔離用 DB**: 以前の隔離起動がセッションを持っていた
+  `<起動ディレクトリ>/.opencode-sandbox/opencode.db`。今は DB を通常起動と共有する
+  （[セッションの引き継ぎ](opencode-sandbox.md#セッションの引き継ぎ)）。旧称: 隔離 DB
 
 ## 生成と配置
 

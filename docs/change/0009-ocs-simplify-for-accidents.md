@@ -28,13 +28,13 @@
 
 | 段 | 解決したいこと | 内容 | 状態 |
 | --- | --- | --- | --- |
-| 0 | `srt` の癖（一部だけの `denyRead` が効かない、無い名前への `/dev/null` のマウント、`TMPDIR`）を避けたい | 境界の道具を `srt` から Fence（bubblewrap + Landlock + seccomp とドメイン単位のプロキシ）へ替えられるか、評価基準の必須の項目で試す。段 2 以降の形がこの結果で変わる | 完了（Fence に替える。読み取りは `defaultDenyRead` で読める場所を並べる形） |
+| 0 | `srt` の癖（一部だけの `denyRead` が効かない、無い名前への `/dev/null` のマウント、`TMPDIR`）を避けたい | 境界の道具を `srt` から Fence（bubblewrap + Landlock + seccomp とドメイン単位のプロキシ）へ替えられるか、評価基準の必須の項目で試す。段 2 以降の形がこの結果で変わる | 完了（Fence に替えた。読み取りは `defaultDenyRead` で読める場所を並べる形。worktree `loop/fence` で実装） |
 | 1 | 履歴を分けたくない | ホストの DB を境界の内外で共有できるかを、一時の DB で確かめる | 完了（通った） |
-| 2 | 同上 | DB を共有し、`--handoff` / `--list-sessions` と隔離用 DB の用意を消す。今ある隔離セッションを先に移す | 未着手（次に着手） |
-| 3 | 起動時の承認の確認をなくしたい | `.opencode/sandbox.toml` の承認の記録（`trusted.json`・`--trust`）をやめ、追加する書き込み先と通信先を表示するだけにする | 未着手 |
-| 4 | 起動時の検査の待ちをなくしたい | 境界チェックを `ocs --check` の手動実行にする。自動で走らせるなら、境界の定義か `srt` が変わったときだけ | 未着手 |
-| 5 | 起動ディレクトリの外を読みたい | 秘密を含まない作業用の親ディレクトリを `allowRead` で開ける。秘密の目印が読めないままかを確かめる | 未着手 |
-| 6 | 保守の手間を減らしたい | 隔離版の設定の毎回の書き出しを、`chezmoi apply` 時の生成へ寄せられるか検討する | 未着手 |
+| 2 | 同上 | DB を共有し、`--handoff` / `--list-sessions` と隔離用 DB の用意を消す。今ある隔離セッションを先に移す | 完了（worktree `loop/fence` で実装・実機確認。未コミット） |
+| 3 | 起動時の承認の確認をなくしたい | `.opencode/sandbox.toml` の承認の記録（`trusted.json`・`--trust`）をやめ、追加する書き込み先と通信先を表示するだけにする | 完了（同上） |
+| 4 | 起動時の検査の待ちをなくしたい | 境界チェックを `ocs --check` の手動実行にする。自動で走らせるなら、境界の定義か `srt` が変わったときだけ | 完了（同上。手動のみ） |
+| 5 | 起動ディレクトリの外を読みたい | 秘密を含まない作業用の親ディレクトリを `allowRead` で開ける。秘密の目印が読めないままかを確かめる | 完了（同上。`work_read`） |
+| 6 | 保守の手間を減らしたい | 隔離版の設定の毎回の書き出しを、`chezmoi apply` 時の生成へ寄せられるか検討する | 検討済み（寄せられる。実装は未着手。下の「段 6 の検討」） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -74,39 +74,47 @@
   「全部読めて秘密だけ拒否」にはできず、「広く拒否して必要な所を開ける」形のまま、
   開ける範囲を広げる
 
+- **段 0・2〜5 を worktree `loop/fence` で実装した（2026-09-29、未コミット・未配備）。**
+  実機の Fence 0.1.67 で評価基準の必須の項目が全部通った（下の「実装・検証」）。
+  実装中に、`~/.local/state` を開けないと opencode が起動時に `EROFS` で止まることを
+  見つけ、内側の `XDG_STATE_HOME` を内側の `/tmp` へ向けた
+
 ## 未解決点
 
+- **配備**: 利用者が `mise install`（Fence）と `chezmoi apply` をするまで、実機の `ocs` は
+  旧版のまま。mise の github backend が `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence`
+  に入れることは、他の backend の命名と tar.gz の中身からの推測で、未確認
+  （違えば `rules.json` に境界が出ず、`ocs` は起動を断る）
+- **本物の常駐サービスとの組み合わせ**: 一時 DB での再開と `/undo` は通ったが、実 DB と
+  本物の常駐サービスでは未確認（下の段 2 の項目と同じ）
+- 起動ディレクトリがリポジトリの下位ディレクトリのとき、そのリポジトリの共有 `.git` が
+  書ける（worktree と同じ扱い。`srt` のころから同じ）。うっかりで `.git` を壊しうるが、
+  commit には要る。仕様の「既知の制約」に書いた
 - **段 2**: 同じセッションを境界の内と外で同時に開いて操作したとき（未検証）。
-  運用で避ける（同じ ID を内外で同時に開かない）ことで足りるかを、段 2 の実機確認で見る
-- **段 2**: 本物の `ocs` と本物の常駐サービスの組み合わせ（未検証）
-- **段 1 で見つけた 2 つの不具合**をどの段で扱うか。snapshot の件は `/undo` が効かない
-  （評価基準の「snapshot から戻せる」に直結する）ので、段 2 に含める
-- **段 5**: 開ける場所は利用者が決めた（2026-09-29）: `~/src`・`~/worktrees`・`~/papers`・
-  `~/.local/share/chezmoi`。どこに書くか（`common.toml` か、push されない
-  `~/.config/agents/local.toml` か）は、機械ごとに違うかどうかで決める。
-  その中に秘密が紛れていても読めることは受け入れる（ADR-0012）
-- **段 5**: Fence に替えるので、R1（`srt` の癖）には縛られない（段 0 で実測）
-- **段 0 の残り**: まだ存在しないパスへの `denyWrite` が効かない（起動前に作っておく）。
-  `TMPDIR` の残骸の掃除。Fence の版の固定とチェックサム付きの配布（mise の github バックエンド）
-- 段 2 で共有にした場合、常駐サービスが古い版のまま新しい版が DB の形を移行すると
-  壊れうる（推測）。OpenCode を更新したら常駐サービスを再起動する運用で足りるか
+  運用で避ける（同じ ID を内外で同時に開かない）と仕様に書いた
+- 常駐サービスが古い版のまま新しい版が DB の形を移行すると壊れうる（推測）。
+  OpenCode を更新したら常駐サービスを再起動する運用と仕様に書いた
+- **段 5 の置き場**: 4 つの作業用ディレクトリは `common.toml` の `work_read` に置いた。
+  無いものは起動時に落とすので、機械ごとに違っても `local.toml` は要らない
+- 解決済み: 段 1 で見つけた 2 つの不具合（`srt` の `/dev/null` の置き物、`TMPDIR`）は
+  Fence で起きない（記録 E2 で `git status` は `M a.txt` だけ）。存在しないパスへの
+  `denyWrite` は起動前に空のディレクトリを作って塞いだ。`TMPDIR` の残骸は次の起動で
+  掃除する。Fence は mise の github backend で版とチェックサムを固定した
 
 ## 次の調査・実験
 
-段 2 の実装（子エージェントに worktree で任せる）。
+worktree `loop/fence` の変更をコミットして配備する前後の作業。
 
-1. 今ある隔離セッション（`.opencode-sandbox/opencode.db`。このリポジトリにも実在）を、
-   今の `ocs --handoff` でホストの DB へ移す。移し終えるまで `--handoff` を消さない
-2. 境界の定義: `XDG_DATA_HOME/opencode` を `allowRead` と `allowWrite` へ。
-   `~/.local/state/opencode` は開けない
-3. 内側の環境: `XDG_DATA_HOME` と `OPENCODE_DB` の上書きをやめる。利用者の環境の
-   `OPENCODE_DB` も落とす（残ると常駐サービスと別の DB を使う）
-4. 消す: `seed_db`、`--handoff`、`--list-sessions`、境界の設定の `data_home` / `db`
-5. 境界チェック: 「`XDG_DATA_HOME` が作業領域の中」を、「`XDG_DATA_HOME/opencode` へ
-   書ける」「`~/.local/state/opencode/service.json` が見えない」に置き換える
-6. snapshot が取れない件: 起動時に、`srt` が `/dev/null` をマウントする名前のうち ignore
-   されていないものを知らせる（あるいは spec に「ignore が要る」と書く）
-7. 本物の `ocs` と常駐サービスで、外での再開と `/undo` を確かめる
+1. **配備の前に**、残したい隔離セッション（`.opencode-sandbox/opencode.db`。このリポジトリにも
+   実在）を、配備済みの旧 `ocs --handoff <ID>` でホストの DB へ移す。新しい `ocs` には
+   `--handoff` が無い。移し忘れても `OPENCODE_DB=<パス> opencode --standalone` で開ける
+   （仕様「セッションの引き継ぎ」）
+2. 配備: `mise install`（Fence）→ `chezmoi apply`。`rules.json` に `sandbox` 節が出て、
+   `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence` が在ることを確かめる
+3. 本物の `ocs` で `ocs --check` が合格し、本物の常駐サービスで外での再開と `/undo` が
+   通ることを確かめる
+4. 同じセッションを内と外で同時に開いたときの挙動（未検証。運用で避ける）
+5. 段 6（隔離版の設定の生成を `generate.py` へ寄せる）を実装するか決める
 
 ## 評価基準
 
@@ -154,10 +162,11 @@ ADR-0012 の「決定の確認方法」をそのまま使う。
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `docs/spec/opencode-sandbox.md`「隔離用 DB」「セッションの引き継ぎ」 | 隔離用 DB と移送 → 段 2 の結果による | 段 1 | 未適用 |
-| 同「状態の置き場」の承認（`trusted.json`） | 承認を記録 → 表示だけ | 段 3 | 未適用 |
-| 同「境界チェック」 | 24 時間ごとに自動 → 手動（`ocs --check`） | 段 4 | 未適用 |
-| 同「境界の中身」の `allowRead` | 個別に開ける → 作業用の親ディレクトリも開ける | 段 5 | 未適用 |
+| `docs/spec/opencode-sandbox.md` 全体 | `srt` と R1〜R4 → Fence（`defaultDenyRead`）の規則 | 段 0 | 適用済み（worktree） |
+| 同「隔離用 DB」「セッションの引き継ぎ」 | 隔離用 DB と移送 → DB の共有 | 段 1・2 | 適用済み（worktree） |
+| 同「状態の置き場」の承認（`trusted.json`） | 承認を記録 → 表示だけ | 段 3 | 適用済み（worktree） |
+| 同「境界チェック」 | 24 時間ごとに自動 → 手動（`ocs --check`） | 段 4 | 適用済み（worktree） |
+| 同「境界の中身」の `allowRead` | 個別に開ける → 作業用の親ディレクトリも開ける | 段 5 | 適用済み（worktree） |
 
 ## 実装・検証
 
@@ -174,6 +183,48 @@ ADR-0012 の「決定の確認方法」をそのまま使う。
 | 外からの `/undo` | 内側の編集を外の `revert.stage` / `revert.commit` で戻せた |
 | 書き込みの例外 | `XDG_DATA_HOME/opencode/` 全体。`~/.local/state/opencode/` は不要 |
 
+### 段 0・2〜5（2026-09-29）
+
+worktree `loop/fence`（基準 `39ac692`）で実装し、実機（WSL2、Fence 0.1.67、OpenCode v2.0.14）で
+確かめた。**配備済みの `ocs` は使わず**、worktree のコードを読み込んで境界の設定と起動の
+引数を組み立てる試験用のスクリプトで、Fence に包んだ（`XDG_DATA_HOME` などは一時
+ディレクトリへ向け、DB は資格情報の行だけを写した一時 DB。終了後に削除）。
+観測の詳細は [Fence の調査](../research/opencode/permission/fence.md) の記録 E2。
+
+| 必須の項目 | 結果 |
+| --- | --- |
+| 秘密の目印が読めない | 通った。`~/.ssh`・`~/.gnupg`・`~/.aws`・`~/.config/gh`・`~/.config/sops/age`・`~/.local/state/opencode` は存在しない、`~/.git-credentials`・`service.json`（2 か所）・目印は開けない。開けた `~/.config/chezmoi` の中の `key.txt` は `/dev/null`。`/run/user` は空。WSL の `/mnt/c` は存在しない |
+| 許可していないドメインへ出られない | 通った。`github.com` は 200、`api.githubcopilot.com` は 404（届いている）、`example.com`・`www.google.com` は拒否。`.opencode/sandbox.toml` で足した `example.com` だけは 200 |
+| 起動ディレクトリの外へ書けない | 通った。`~`・`~/.bashrc`・`~/.config/opencode` は `EACCES`、`~/src`・`~/.local/share/chezmoi` は `EROFS`、`~/.local/state` は存在しない。`/tmp` は書けるがホストへ反映されない |
+| 普段の作業 | 通った。`~/src`（13 件）・`~/worktrees`・`~/papers`・chezmoi の README が読める。linked worktree で commit でき、共有 `.git` の `hooks`・`config` と main 側のファイルは書けない。`~/.gitconfig` 経由の利用者名が見える |
+| 内側のセッションを外で再開し、snapshot から戻せる | 通った。内側の `opencode run --standalone` がモデル経由で `a.txt` を編集（`git status` は `M a.txt` だけ）、外の `session list` に出て、外の `run -s <ID>` で内側の合言葉に答えた。外の `opencode api --standalone session.revert.stage` / `session.revert.commit` で `a.txt` が戻った。`integrity_check` は `ok` |
+| `test/agents/` が全件通る | 通った（`test/` 全体で 2466 passed, 11 skipped） |
+
+そのほか確かめたこと: `ocs --check` 相当の処理が合格（読めるかでの判定・データ
+ディレクトリへの書き込みを含む）、TUI が `script` 越しに描画され、既定モデル
+（Claude Opus 5）が選ばれた、Fence の `fence-seccomp/*.bpf` の古いものが次の起動で
+消えた、`/dev/shm` は内側だけ、`/var/tmp` は見えない。
+
+望ましい項目: `ocs` の本体（`~/.local/share/ocs/*.py`）は 1300 行から 945 行に減った。
+起動時の確認と検査の待ちは無くなった（境界チェックは `ocs --check` だけ）。
+
+### 段 6 の検討（2026-09-29）
+
+隔離版の設定（`~/.config/opencode-sandbox/opencode.json`・`AGENTS.md`）の毎回の書き出し
+（`ocs` の `config.py`、約 130 行）は、**`chezmoi apply` 時の生成（`generate.py`）へ寄せられる。**
+
+- 差し替えるキー（`permissions`・`snapshots`・`policies`・`plugins`）と `AGENTS.md` は、
+  どれも `common.toml` だけから決まる。`generate.py` は既に `rules.json` の `sandbox` 節で
+  同じ値を作っているので、書き先を増やすだけで済む
+- 利用者が TUI で選んだキーを残す処理は、通常版の `opencode.json` の生成
+  （`merge_opencode_config`）と同じ形で書ける
+- 失うもの: (1) 既定モデルの選択が、起動時の DB の資格情報ではなく apply 時のものになる。
+  (2) 通常版から見た目のキーを引き継ぐのが apply 時だけになる。(3) 設定が外から
+  書き換えられても次の起動では戻らない（ただし `~/.config/opencode-sandbox` は境界の
+  内側から書けないので、守りの差は小さい）
+- 寄せると `ocs` から `config.py` が消え、起動時の処理が境界の組み立てと退避だけになる。
+  実装は別の段で行う（この段では変えていない）
+
 ## 重要な更新
 
 - **2026-09-29**: 起票。ADR-0012 を Accepted にしたのに合わせ、実装を追う案件として起こした
@@ -181,6 +232,7 @@ ADR-0012 の「決定の確認方法」をそのまま使う。
 - **2026-09-29**: 利用者の依頼で境界の道具そのものを見直し、段 0（Fence との比較）を足した
 - **2026-09-29**: 利用者の判断で Fence に替える（`defaultDenyRead` の形）。隔離用のデータ領域が原因の mise の暴走を見つけて片付けた
 - **2026-09-29**: 段 0 の実験で Fence は必須の項目を概ね満たした。実験中に、外側の serve へ送った `session.synthetic` でホストのエージェントが動く事故があった（書き込みは実験用ディレクトリだけ）
+- **2026-09-29**: 段 0・2〜5 を worktree で実装し、必須の項目を実機で確かめた。段 6 は検討だけ（寄せられる）
 
 ## 終了結果
 

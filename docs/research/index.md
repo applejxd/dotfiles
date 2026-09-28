@@ -89,7 +89,7 @@
 | [permission適用範囲の穴](opencode/permission/gaps.md) | grep/globがread denyを迂回する実測、カスタムツールのバイパス、プロジェクト設定がグローバルに勝つ（policiesだけは勝てない・plugin/mcpは実行される）、read ツールは deny を守る、grep/glob を tools で無効化できる（採らなかった） |
 | [設計を縛る制約の総覧](opencode/permission/constraints.md) | CHG-0002の判断の根拠を1枚にまとめたもの。制約13項目、境界が無いこと、sandboxを採用しないとした当時の理由（CHG-0004 で覆った）、誘導対象の選定計測 |
 | [Anthropic Sandbox Runtime の適用可否](opencode/permission/sandbox-runtime.md) | 2026-09-22〜24 の 26 節。srtは汎用、denyReadは許可領域の内側にしか効かない、認証情報を落とすだけでgit push/ghが止まる、ドメイン制限とseccompの実測、opencode --standalone ごと包む構成の成立（19節）、境界の外に残る経路、隔離用DBと配備時の癖 |
-| [Fence は srt の代わりに OpenCode を包めるか](opencode/permission/fence.md) | 11 項目の実測で一部だけの `denyRead`・R1・snapshot の置き物・`TMPDIR` の問題が消えた、存在しないパスへの `denyWrite` は効かない、起動が約 0.8 秒遅い、`session.synthetic` でホストのエージェントが動いた事故 |
+| [Fence は srt の代わりに OpenCode を包めるか](opencode/permission/fence.md) | 11 項目の実測で一部だけの `denyRead`・R1・snapshot の置き物・`TMPDIR` の問題が消えた、存在しないパスへの `denyWrite` は効かない、起動が約 0.8 秒遅い、`session.synthetic` でホストのエージェントが動いた事故。E2: 実装した `ocs` の組み立てで必須の項目が全部通った、`~/.local/state` を開けないと opencode が `EROFS` で止まる |
 | [shell allowの費用対効果とpluginゲート](opencode/permission/shell-allow-and-plugin-gate.md) | 実履歴1,247セグメントでのallow被覆率、静的パターンのクォート/変数回避、ask→allow引き上げの実測（allow 7 件の案は同日の監査で 5 件に） |
 | [allowリスト監査](opencode/permission/allow-list-audit.md) | git diff/statusの任意コード実行、sed -n の危険性、リダイレクトが resource に残る実証、allowとaskの等価性 |
 | [出力フィルタと子エージェント](opencode/permission/output-filter-and-subagents.md) | execute.afterでshell出力を伏字化できる実証、符号化ですり抜ける限界、continue_loop_on_deny、子エージェントも共通permissionに従う |
