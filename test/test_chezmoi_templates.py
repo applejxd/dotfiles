@@ -114,6 +114,26 @@ def test_opencode_config_is_deployed_on_windows(tmp_path, target):
     assert target in rendered
 
 
+def test_git_user_and_ignore_are_deployed_on_windows(tmp_path):
+    """★~/.gitconfig が [include] で読む ~/.config/git/ を Windows でも配る。
+
+    Windows は .config/* を丸ごと除外しているので、戻さないと user.name / email と
+    global ignore が無いままになる (b414b54 で [user] を分けたときの退行)。
+    """
+    rendered = render(home=str(tmp_path), os_name="windows", bw_session="session")
+    assert "!.config/git/" in rendered
+    # /** で戻すと Bitwarden 由来の user を毎回描画してしまう
+    assert "!.config/git/**" not in rendered
+
+
+def test_git_user_is_still_rendered_once_on_windows(tmp_path):
+    """Windows でも、BW_SESSION が無い間と展開済みの後は user を描画しない。"""
+    assert ".config/git/user" in render(home=str(tmp_path), os_name="windows")
+    (tmp_path / ".config" / "git").mkdir(parents=True)
+    (tmp_path / ".config" / "git" / "user").write_text("x", encoding="utf-8")
+    assert ".config/git/user" in render(home=str(tmp_path), os_name="windows", bw_session="s")
+
+
 @pytest.mark.parametrize(
     ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", True)]
 )

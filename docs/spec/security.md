@@ -24,11 +24,18 @@ sops (age) に置き、リポジトリにはそれを引くテンプレートと
 | プロジェクトの API キー | 各プロジェクトの `.env.json`（sops で暗号化してコミット） | ファイルには出さない。mise がプロジェクト内でだけ環境変数に載せる |
 | sudo パスワード | どこにも保存しない | macOS のスクリプトが実行時に尋ねる（`home/.chezmoitemplates/get_sudo_password.sh.tmpl`） |
 
-Bitwarden 由来の 2 ファイルを展開するのは、ユーザ名が `applejxd` の
-Ubuntu / WSL / macOS だけ。それ以外のユーザでは `.chezmoiignore.tmpl` が外す。
-**Windows native ではどちらも展開しない。** `.config/*` を丸ごと除外しており、
-`.config/git/` を戻していないため（`bw` 自体は Winget で入る）。
-`.gitconfig` の `[include]` 先が無いだけなので `apply` は失敗しない。
+Bitwarden 由来のファイルを展開するのは、ユーザ名が `applejxd` の機械だけ。
+それ以外のユーザでは `.chezmoiignore.tmpl` が外す。
+
+- Git の user 情報は Ubuntu / WSL / macOS / Windows native で展開する
+  （`bw` は Windows では Winget で入る）
+- age 秘密鍵は Ubuntu / WSL / macOS だけ。Windows native では `.config/*` の除外に
+  入ったままにしている（Windows で sops を使っていないため）
+
+Windows は `.config/*` を丸ごと除外しているので、`.chezmoiignore.tmpl` は
+`!.config/git/` で**ディレクトリだけ**を戻している。`!.config/git/**` で中身まで
+戻すと、「一度だけ展開する」除外が打ち消され、`apply` のたびに Bitwarden を引く
+（`!` の取り消しはすべての除外より優先される）。
 
 ### 脅威と守らないもの
 

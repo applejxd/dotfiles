@@ -37,7 +37,7 @@ Windows では **Python 3.11 以上**が必要（`py -3` で最新の Python 3 �
 
 Bitwarden CLI (`bw`) は事前インストール不要で、1 回目の `apply` 中に入る。
 Bitwarden 由来のファイル（Git の user 情報、sops の age 鍵）は 2 回目で入る。
-対象は個人用ユーザの Ubuntu / WSL / macOS で、Windows native はフェーズ 1 だけでよい
+対象は個人用ユーザの機械で、Windows native で入るのは Git の user 情報だけ
 （[Bitwarden 連携](docs/spec/security.md#bitwarden連携)）。
 
 ```bash
@@ -47,7 +47,7 @@ chezmoi apply             # bw を含むツール一式がここで入る
 
 # フェーズ 2: セッションを渡して Bitwarden 由来のファイルを反映
 bw login
-export BW_SESSION="$(bw unlock --raw)"
+export BW_SESSION="$(bw unlock --raw)"   # PowerShell: $env:BW_SESSION = bw unlock --raw
 chezmoi init applejxd     # bw がある状態で設定を作り直す (bitwarden.unlock="auto")
 chezmoi apply
 ```
