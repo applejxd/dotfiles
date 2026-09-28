@@ -549,3 +549,11 @@ def test_keepalive_stops_the_script_when_authentication_fails(tmp_path):
     assert result.returncode != 0
     assert calls == ["-v"]
     assert result.stdout.strip() == ""
+
+
+def test_mise_self_update_does_not_wait_for_a_prompt():
+    """mise self-update は確認を対話で尋ねる。--yes が無いと apply が入力待ちで止まる。"""
+    for script in sorted((HOME / ".chezmoiscripts").rglob("*mise*")):
+        for line in script.read_text(encoding="utf-8-sig").splitlines():
+            if "mise self-update" in line and not line.lstrip().startswith("#"):
+                assert "--yes" in line or "-y" in line.split(), f"{script.name}: {line.strip()}"

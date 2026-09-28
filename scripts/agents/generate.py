@@ -144,8 +144,10 @@ def _os_path(path: Any) -> Any:
     return path
 
 
-# ``[sandbox]`` で使えるキー。命名は **共有 = 無印 / CLI 固有 = CLI 名の接頭辞**
-# で統一する ([[hooks]] の claude_event / copilot_event と同じ規則)。
+# ``[sandbox]`` で使えるキー。新しいキーは **共有 = 無印 / CLI 固有 = CLI 名の接頭辞**
+# で付ける ([[hooks]] の claude_event / copilot_event と同じ規則)。無印でも
+# seccomp_apply_path と shell_network_allow は既存の例外で、Copilot へは渡らない。
+# see docs/spec/glossary.md
 SHARED_SANDBOX_KEYS = frozenset({"deny", "seccomp_apply_path", "shell_network_allow"})
 CLAUDE_SANDBOX_KEYS = frozenset({
     "claude_read_allow",

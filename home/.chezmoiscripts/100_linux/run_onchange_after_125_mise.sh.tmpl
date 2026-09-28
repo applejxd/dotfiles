@@ -32,7 +32,8 @@ if ! type python >/dev/null 2>&1; then
         libyaml-dev
 fi
 
-mise self-update
+# --yes: 確認を対話で尋ねるので、付けないと apply が入力待ちで止まる
+mise self-update --yes
 
 # ツール 1 個の失敗で apply 全体を巻き添えにしない
 # (docs/spec/structure.md#ツール-1-個の失敗で-apply-を止めない)

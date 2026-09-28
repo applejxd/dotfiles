@@ -850,6 +850,8 @@ Claude との差で特に重要なもの:
   そのセッション中は deny が効かない。次のセッションからは効く。
   `$HOME` が既定で未許可であるため実害は小さいが、ルールが効いているか
   どうかは **Notes 節を必ず確認する**こと。
+  後から作られると困るもの（`~/.local/state/opencode-sandbox`）は、
+  chezmoi が apply で先に作っておく（[信頼の鎖](opencode-sandbox.md#信頼の鎖)）。
 - `/sandbox policy` は cwd ごとに解決されるため、確認したいディレクトリで
   実行すること。
 

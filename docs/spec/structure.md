@@ -221,7 +221,7 @@ mise の実体または shim が選ばれることを確認してください。
 
 | 環境 | mise の一括導入 | 後続の設定 |
 | --- | --- | --- |
-| Linux / WSL | OS 依存パッケージの後、`100_linux/125_mise` | `100_linux/126_agent_cli` → `100_linux/140_herdr_integration` → `400_unix/410_claude_mcp` |
+| Linux / WSL | OS 依存パッケージの後、`100_linux/125_mise` | `100_linux/126_agent_cli` → `100_linux/127_ocs_state` → `100_linux/140_herdr_integration` → `400_unix/410_claude_mcp` |
 | macOS | Homebrew の後、`200_mac/225_mise` | `200_mac/226_agent_cli` → `400_unix/410_claude_mcp` |
 | Windows | `310_winget` で mise を導入し、設定配備後に `310_packages/313_mise` | `310_packages/314_agent_cli` → `343_herdr_integration` |
 
@@ -305,6 +305,9 @@ Claude Code も導入します。Linux / WSL / macOS では加えて oh-my-pi (`
 スクリプトは `run_onchange_after_` で、**既に PATH 上にある CLI には触りません**。
 ただし mise の shim（`~/.local/share/mise/shims/` 配下）は導入済みと数えません。
 CLI を足したときだけ内容が変わって再実行され、その CLI だけが入ります。
+例外として、導入に失敗した回は再実行の印（`~/.local/share/dotfiles/retry/agent-cli-failed`）を
+書き直すので、次の apply でも走り直して入っていないものだけを導入します
+（[スクリプトを走らせ直す](troubleshooting-bootstrap.md#スクリプトを走らせ直す)）。
 毎回ダウンロードしないので apply が遅くなりません。
 
 ### インストーラーに副作用を持たせない
