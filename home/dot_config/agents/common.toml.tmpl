@@ -634,6 +634,13 @@ network_allow = ["api.anthropic.com"]
 [provider.openai]
 network_allow = ["api.openai.com"]
 
+# ★profile が無いと Bedrock が有効にならない。network_allow は region と揃える。
+# see docs/spec/agent-config-generation.md#モデルの割り当て
+[provider.amazon-bedrock]
+profile = "default"
+region = "us-east-1"
+network_allow = ["bedrock-runtime.us-east-1.amazonaws.com"]
+
 # ---------------------------------------------------------------------------
 # Claude 固有
 # ---------------------------------------------------------------------------
@@ -701,6 +708,29 @@ approvals = [
 # opencode.json の update へ反映 ("disable" / "notify")。本体は公式
 # インストーラーで導入し、更新は `opencode upgrade` を明示的に実行する。
 auto_update = false
+
+# 既定モデルとエージェントごとの割り当て。PC ごとのプロバイダは
+# .chezmoitemplates/llm-provider が決め、ほかのプロバイダは policies で塞ぐ。
+# ★ID は実在を確認してから書く (公式のモデル一覧か TUI の /models)。
+#   default には #variant を付けられない (OpenCode が保持しない)。
+# see docs/spec/agent-config-generation.md#モデルの割り当て
+[opencode.model]
+provider = "{{ includeTemplate "llm-provider" . }}"
+
+# エージェント ID = 階層名。組み込み (plan / explore など) も上書きできる。
+[opencode.model.agents]
+
+[opencode.model.tier.amazon-bedrock]
+default = "global.anthropic.claude-sonnet-5"
+light = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+heavy = "global.anthropic.claude-opus-5-5#high"
+second_opinion = "global.openai.gpt-6-sol"
+
+[opencode.model.tier.github-copilot]
+default = "claude-sonnet-5"
+light = "claude-haiku-4.5"
+heavy = "claude-opus-5.5#high"
+second_opinion = "gpt-6-sol"
 
 # ★[web] は OpenCode へ渡さない。webfetch の resource は「URL 全体」で、
 #   `*` が `/` も跨ぐため `*://*.example.com/*` が

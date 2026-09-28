@@ -36,6 +36,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
 | コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/agent-command-policy.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-config-generation.md#mcp-サーバ) |
+| OpenCode のモデル・プロバイダ（Copilot / Bedrock）を PC ごとに変える | [モデルの割り当て](spec/agent-config-generation.md#モデルの割り当て) |
 | OpenCode のプラグインを検討する | [プラグイン生態系の棚卸し](research/opencode/plugin/ecosystem.md) |
 
 ### 安全性

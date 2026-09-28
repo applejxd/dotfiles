@@ -1332,6 +1332,116 @@ def merge_opencode_agents(existing_agent: Any, common: dict[str, Any]) -> dict[s
     return out
 
 
+# [provider.*] のうち OpenCode の ``providers.<id>.settings`` へ写すキー。
+OPENCODE_PROVIDER_SETTINGS = ("profile", "region")
+
+
+def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
+    """``[opencode.model]`` を、この PC のプロバイダでのモデル参照へ解決する。
+
+    階層名 (``default`` / ``light`` など) を ``provider/model[#variant]`` に直す。
+    未知のプロバイダ・階層は ``apply`` を止める。黙って落とすと、存在しない
+    モデルを指したまま「応答が来ない」形でしか現れない。
+    see docs/spec/agent-config-generation.md#モデルの割り当て
+    """
+    cfg = common.get("opencode", {}).get("model")
+    if not cfg:
+        return None
+    provider = str(cfg.get("provider", ""))
+    all_tiers = cfg.get("tier") or {}
+    tiers = all_tiers.get(provider)
+    if not tiers:
+        known = ", ".join(sorted(all_tiers)) or "(なし)"
+        raise SystemExit(f"opencode.model.tier.{provider} が無い。定義済み: {known}")
+
+    def ref(tier: str) -> str:
+        if tier not in tiers:
+            raise SystemExit(
+                f"opencode.model.tier.{provider} に {tier!r} が無い。定義済み: "
+                + ", ".join(sorted(tiers))
+            )
+        return f"{provider}/{tiers[tier]}"
+
+    default = ref("default")
+    if "#" in default:
+        raise SystemExit(
+            f"opencode.model の default に #variant は付けられない: {default}"
+        )
+    assigned = {str(a): ref(str(t)) for a, t in (cfg.get("agents") or {}).items()}
+    # V1 の agent と V2 の agents に同じ ID を書いたときの結合順は未確認
+    both = sorted(set(assigned) & set(common.get("opencode", {}).get("agent") or {}))
+    if both:
+        raise SystemExit(
+            "opencode.model.agents に [opencode.agent] のエージェントは書けない: "
+            + ", ".join(both)
+        )
+    return {
+        "provider": provider,
+        "model": default,
+        "agents": assigned,
+        # 割り当てを外したときに消してよい値 (どのプロバイダの階層でも)
+        "managed": {f"{p}/{m}" for p, ts in all_tiers.items() for m in ts.values()},
+    }
+
+
+def merge_opencode_agent_models(existing: Any, models: dict[str, Any]) -> dict[str, Any]:
+    """V2 の ``agents.<id>.model`` を割り当てどおりにする。
+
+    V1 の ``agent`` キーへは書かない。``#variant`` 付きの指定が黙って無視され、
+    親のモデルで動く (実測)。
+    割り当てから外したエージェントは、値が階層のモデルのときだけ消す
+    (手で書いた別のモデルは残す)。空になったエントリは消す。
+    see docs/spec/agent-config-generation.md#モデルの割り当て
+    """
+    source = existing if isinstance(existing, dict) else {}
+    out = {name: dict(entry) for name, entry in source.items() if isinstance(entry, dict)}
+    for name, entry in out.items():
+        if name not in models["agents"] and entry.get("model") in models["managed"]:
+            del entry["model"]
+    for name, model in models["agents"].items():
+        out.setdefault(name, {})["model"] = model
+    return {name: entry for name, entry in out.items() if entry}
+
+
+def merge_opencode_providers(
+    existing: Any, common: dict[str, Any], models: dict[str, Any]
+) -> dict[str, Any]:
+    """この PC のプロバイダの接続設定を ``providers.<id>.settings`` へ書く。
+
+    宣言外のプロバイダ・キーは残す。Bedrock は ``profile`` が無いと有効に
+    ならない (region だけでは足りない) ので、``[provider.*]`` から写す。
+    """
+    out = dict(existing) if isinstance(existing, dict) else {}
+    provider = models["provider"]
+    declared = (common.get("provider") or {}).get(provider) or {}
+    settings = {k: declared[k] for k in OPENCODE_PROVIDER_SETTINGS if k in declared}
+    if settings:
+        entry = dict(out.get(provider) or {})
+        entry["settings"] = {**(entry.get("settings") or {}), **settings}
+        out[provider] = entry
+    return out
+
+
+def merge_opencode_provider_policies(existing: Any, models: dict[str, Any]) -> dict[str, Any]:
+    """``experimental.policies`` で、この PC のプロバイダ以外を使えなくする。
+
+    policies はグローバル設定がプロジェクト設定に勝つので、リポジトリ側から
+    別のプロバイダを有効にされない。``provider.use`` の文だけを差し替え、
+    ほかの文と ``experimental`` のほかのキーは残す。後勝ちなので末尾に置く。
+    """
+    out = dict(existing) if isinstance(existing, dict) else {}
+    kept = [
+        s for s in (out.get("policies") or [])
+        if not (isinstance(s, dict) and s.get("action") == "provider.use")
+    ]
+    out["policies"] = [
+        *kept,
+        {"action": "provider.use", "resource": "*", "effect": "deny"},
+        {"action": "provider.use", "resource": models["provider"], "effect": "allow"},
+    ]
+    return out
+
+
 def merge_opencode_mcp(existing_mcp: Any, common: dict[str, Any]) -> dict[str, Any]:
     """``mcp.servers`` を更新する (common.toml に無いサーバは残す)。
 
@@ -1465,6 +1575,20 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
     agent = merge_opencode_agents(existing.get("agent"), common)
     if agent:
         out["agent"] = agent
+    models = opencode_models(common)
+    if models:
+        out["model"] = models["model"]
+        agents = merge_opencode_agent_models(existing.get("agents"), models)
+        if agents:
+            out["agents"] = agents
+        else:
+            out.pop("agents", None)
+        providers = merge_opencode_providers(existing.get("providers"), common, models)
+        if providers:
+            out["providers"] = providers
+        out["experimental"] = merge_opencode_provider_policies(
+            existing.get("experimental"), models
+        )
     out["skills"] = merge_opencode_skills(existing.get("skills"))
     out["mcp"] = merge_opencode_mcp(existing.get("mcp"), common)
     return out

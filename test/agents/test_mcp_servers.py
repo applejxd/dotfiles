@@ -467,6 +467,8 @@ def codex_source(tmp_path_factory):
     """
     root = tmp_path_factory.mktemp("codex-src")
     (root / ".chezmoiroot").write_text("home\n", encoding="utf-8")
+    # common.toml.tmpl が includeTemplate で共有テンプレートを読む
+    shutil.copytree(ROOT / "home/.chezmoitemplates", root / "home/.chezmoitemplates")
     target = root / "home/dot_config/agents"
     target.mkdir(parents=True)
     target.joinpath("common.toml.tmpl").write_text(

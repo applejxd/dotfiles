@@ -92,11 +92,11 @@ def test_rules_use_only_the_three_required_fields():
 
 
 def test_unmanaged_keys_survive():
-    existing = {"model": "anthropic/claude-sonnet-4-5", "theme": "custom"}
+    existing = {"small_model": "anthropic/claude-haiku-4-5", "theme": "custom"}
     before = copy.deepcopy(existing)
     merged = gen.merge_opencode_config(existing, COMMON)
 
-    assert merged["model"] == before["model"]
+    assert merged["small_model"] == before["small_model"]
     assert merged["theme"] == before["theme"]
     assert existing == before, "入力を破壊しない"
     assert gen.merge_opencode_config(merged, COMMON) == merged

@@ -544,6 +544,96 @@ service.restart
 `cli.json` が読まれないと**キーバインドは丸ごと既定に戻る**ので、
 `app.exit` が `ctrl+c` を握ったままになり Ctrl+C で終了する。
 
+### モデルの割り当て
+
+PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・エージェントごとのモデル・
+接続設定・他のプロバイダの禁止を `opencode.json` へ出す。
+
+#### プロバイダの判定
+
+`.chezmoitemplates/llm-provider` が `apply` のたびに決める。
+
+| 条件（上から順に評価） | プロバイダ |
+| --- | --- |
+| `chezmoi.toml` の `[data]` に `llm_provider` がある | その値 |
+| ユーザー名が `applejxd`（`DOMAIN\applejxd` も含む、大小無視） | `github-copilot`（私用） |
+| それ以外 | `amazon-bedrock`（業務用） |
+
+判定の前提は「私用 PC のユーザーは `applejxd`、業務 PC は別名で AWS CLI にログイン
+している」こと。どちらでもない PC では OpenCode を使わない。
+
+- **gh のログイン状態は見ない。** 業務 PC でも `gh auth login` していることがあり、
+  見分けに使えない。OpenCode の Copilot 接続も `gh` とは別で、`/connect` が要る
+- **`~/.aws` の有無も見ない。** 私用 PC にも `~/.aws` ディレクトリだけ存在する
+  ことがある（この PC で確認）
+- `[data]` ではなくテンプレートで判定するのは、`chezmoi update` が `init` を
+  呼ばないため（[CHG-0008](../change/closed/0008-raspi-branching.md)）。
+  `[data]` の `llm_provider` は判定を覆したいときの逃げ道
+
+#### 階層
+
+`[opencode.model.tier.<プロバイダ>]` に**階層名 → モデル ID** を書き、エージェントは
+階層名で指す。PC が変わってもエージェントの割り当てを書き直さずに済む。
+
+| 階層 | Copilot | Bedrock |
+| --- | --- | --- |
+| `default` | `claude-sonnet-5` | `global.anthropic.claude-sonnet-5` |
+| `light` | `claude-haiku-4.5` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| `heavy` | `claude-opus-5.5#high` | `global.anthropic.claude-opus-5-5#high` |
+| `second_opinion` | `gpt-6-sol` | `global.openai.gpt-6-sol` |
+
+```toml
+[opencode.model.agents]
+explore = "light"      # 例。2026-09-28 時点では割り当ては空
+```
+
+- **どのプロバイダにも同じ階層名をそろえる**（`test_every_provider_defines_the_same_tiers`）
+- ID は [models.dev](https://models.dev) の一覧か TUI の `/models` で実在を確かめてから
+  書く。Bedrock の `global.` はクロスリージョン推論プロファイル
+- **`default` に `#variant` は付けられない。** 既定の `model` はバリアントを
+  保持しない（公式）。付けると `apply` を止める
+- 未知の階層・プロバイダ、`[opencode.agent]`（V1 形式）にあるエージェントへの
+  割り当ても `apply` を止める。後者は V1 の `agent` と V2 の `agents` に同じ ID が
+  並んだときの結合順を確かめていないため
+
+#### 生成されるもの
+
+| キー | 中身 | 残すもの |
+| --- | --- | --- |
+| `model` | `default` 階層 | — （毎回書く） |
+| `agents.<id>.model` | 割り当てた階層 | 割り当てを外したとき、値が階層のモデルなら消す。手で書いた別のモデル・他のキーは残す |
+| `providers.<id>.settings` | `[provider.<id>]` の `profile` / `region` | 他のキー（`baseURL` など）と他のプロバイダ |
+| `experimental.policies` | `provider.use` を `*` で deny、この PC のプロバイダだけ allow | `provider.use` 以外の文と、`experimental` の他のキー |
+
+- **V1 形式の `agent` ではなく V2 形式の `agents` に書く。** `agent` だと
+  `#variant` 付きの指定が黙って無視され、親のモデルで動く
+  （[実測](../research/opencode/agent-models.md)）
+- **policies はグローバル設定がプロジェクト設定に勝つ**ので、リポジトリの
+  `.opencode/opencode.json` から別のプロバイダを有効にされない
+  （[policies の優先順位](../research/opencode/permission/gaps.md#他の経路2026-09-23-追加実測)）
+- Bedrock は `profile` か認証の環境変数が無いと**有効にならない**（region だけでは
+  足りない。公式）。常駐サービスへシェルの `AWS_REGION` が渡る保証も無いので、
+  `profile = "default"` と `region = "us-east-1"` を設定に書く
+
+#### 効かない使い方
+
+**主エージェント（`build` / `plan` など）の `model` は、エージェントを選んだだけでは
+使われない。** セッションのモデルは別に保存されていて、`--agent plan` で起動しても
+既定モデルのまま動く（[実測](../research/opencode/agent-models.md)。公式の記述どおり）。
+子エージェント（`explore` など）の `model` は効く。
+
+主エージェントを重いモデルで動かしたいときは、`agent:` を指定したスラッシュコマンドを
+経由させる（公式ではコマンドで選んだエージェントの `model` が呼び出し時のモデルに勝つ。
+未実測）。
+
+#### 隔離起動（`ocs`）
+
+`ocs` の既定モデルは `[opencode.sandbox] model_preference` が決め、ここの割り当ては
+使わない（通常版から引き継ぐのは `model` だけ）。**Bedrock は `ocs` では使えない**
+（コードから判断。実機では未確認）。境界の内側から `~/.aws` が読めず
+（`[sandbox] deny`）、AWS の資格情報の環境変数も落とすため（`ocs` の `inner_env`）。
+`[provider.amazon-bedrock] network_allow` は用意してあるが、`providers` には入れていない。
+
 ### 後勝ちの照合
 
 OpenCode は **最後に一致した規則が勝つ**。Claude の deny > ask > allow とは
