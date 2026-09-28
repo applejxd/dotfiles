@@ -11,7 +11,8 @@ allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 
 > **A1 とは別物。** A1 はセッション内で失う文脈を `.tmp/` へ退避するもので、
 > 圧縮フックが自動で行う。ここから先は**人が判断して `docs/` へ書く**作業。
-> 分離の理由は ADR-0009（`docs/adr/0009-save-before-documenting.md`）。
+> 分離の理由は、このスキルの配布元（applejxd/dotfiles）の ADR-0009
+> 「save-before-documenting」。対象のリポジトリの ADR ではない。
 
 | 相 | 対象 | いつ |
 | --- | --- | --- |
@@ -21,7 +22,26 @@ allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 **頼まれたことだけをやる。** 「ADR を作って」なら ADR と `docs/adr/index.md`
 だけ。案件整理やダッシュボード更新まで広げない。
 
-**子エージェントに `docs/` を書かせない。** 親が確認して書く。
+## 始める前に: 対象のリポジトリを確かめる
+
+このスキルは次の構成を前提にする。**無ければ作り始めず、作るかどうかを尋ねる。**
+
+- `docs/index.md`（入口）
+- `docs/change/` `docs/adr/` `docs/research/` `docs/spec/` と、それぞれの `index.md`
+
+各 `index.md` の冒頭に規約（状態の既定値、記録の単位など）があれば、そちらが
+正本。この文書と食い違ったら規約に従う。検証のコマンドも、対象のリポジトリの
+`AGENTS.md` などに表があればそれに従う（下の「仕上げ」）。
+
+作業の前に、参照の切れの控えを取っておく（「仕上げ」で比べる）。
+
+```bash
+S="<このスキルのディレクトリ>/scripts"   # 例: ~/.claude/skills/sdd-docs/scripts
+uv run --no-project python "$S/check_refs.py" --save .tmp/refs-before.txt
+```
+
+控えは git の管理外の場所に置く。uv が無ければ `python3` で直接実行してよい
+（Windows は `py -3 -X utf8`）。
 
 ## 共通の原則
 
@@ -85,7 +105,8 @@ allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 5. 索引の行を「活動中」から「終了」へ移し、リンクを `closed/` 付きにする
 6. 他ファイルの `see docs/change/NNNN-...` も `closed/` 付きへ直す
 
-手順の根拠は ADR-0011（`docs/adr/0011-close-change-records-into-subdirectory.md`）。
+手順の根拠は、配布元（applejxd/dotfiles）の ADR-0011
+「close-change-records-into-subdirectory」。
 
 ## B: 文書化
 
@@ -110,10 +131,15 @@ allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 
 ### `docs/research/` — 実測の記録
 
-- **1 記録 = 1 回の調査。** 観測日と一次情報の URL を必ず書く
+- **1 記録 = 1 つの問い。** 同じ問いの測り直し・掘り下げは、同じファイルへ
+  日付の付いた節として足してよい。問いが変わったら新しい記録にする。
+  観測日と一次情報の URL を必ず書く
 - 雛形は `references/research-template.md`
-- **過去の節を書き換えない・消さない。** 訂正は**新しい記録**として追加し、
-  どの記録のどこを訂正したのかを明記する
+- **過去の節を書き換えない・消さない。** 訂正・撤回は新しい節として足し、
+  元の節の冒頭に訂正先への案内を置く。記録は割らず、見出しの文言も変えない
+  （案件・仕様・コードが節番号と見出しで参照している）
+- 後の観測や現行の仕様と食い違ったら、ファイルの冒頭に
+  `> **後続の観測**: …` / `> **現行の仕様**: …` の案内を付ける
 - 実行したコマンドと出力を載せる。推測は「推測」と明示する
 - 陳腐化しても消さない。「いつ時点か」が分かれば価値がある
 
@@ -127,28 +153,53 @@ allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 
 ### 索引
 
-- 文書を足したら、**その category の `index.md` と `docs/index.md`** を更新する
-- 索引の検査（`scripts/lint_docs.py`）が未掲載を落とす
+- 文書を足したら、**その category の `index.md` の一覧**に載せる。
+  索引の検査（`scripts/lint_docs.py`）が未掲載を落とす
+- `docs/index.md` は目的から辿る入口。読者が目的から探す文書のときだけ足す
+  （索引の検査は `docs/index.md` への掲載を求めない）
+- 見出しを変えたり文書を分けたりしたら、参照している側（他の文書・コードの
+  コメント）を張り替える。切れたかどうかは `scripts/check_refs.py` で確かめる
+
+## 子エージェントに分担させるとき
+
+大きな整理は、担当する文書が重ならないように分けて子エージェントに任せてよい。
+次を守る。
+
+- **子は別の git worktree で書く。** 本体の作業ツリーを触らせない。コミットもさせない
+- **索引（各 `index.md` の一覧と `docs/index.md`）は親だけが書く。** 子には
+  掲載する行の案を報告させる
+- 担当外の文書から張られたリンクが切れるなら、子には編集させず、
+  「旧: ファイル#アンカー → 新: ファイル#アンカー」の対応表を報告させる
+- 子に「中身をコードと照合し、照合できなければ直さず報告する」ことを約束させる
+- 子にも作業前の控え（`check_refs.py --save`）を渡し、`--baseline` で新しい切れが
+  無いことを確かめさせる
+- 親は取り込む前に差分を読み、全員の分を当ててから、対応表で張り替え、
+  索引を足し、「仕上げ」の検査を通す
+- 全体にまたがる整理（用語の統一など）は、分担を取り込んだ後に 1 本で行う
 
 ## 仕上げ
 
 ```bash
-mise exec -- python3 scripts/lint_docs.py
-uv run pre-commit run --all-files
+S="<このスキルのディレクトリ>/scripts"
+uv run --no-project python "$S/lint_docs.py" --docs docs
+uv run --no-project python "$S/check_refs.py" --baseline .tmp/refs-before.txt
 ```
 
-どちらも出力を根拠として示す。実行していないチェックの結果を書かない。
+対象のリポジトリに検証の表（`AGENTS.md` など）や pre-commit があれば、それも回す。
+どれも出力を根拠として示す。実行していないチェックの結果を書かない。
 
 ## やってはいけないこと
 
 - `research/` の過去の節を書き換える・消す
 - 終了した案件を削除する（`closed/` へ移す）
 - 未検証を不合格として書く／期待を確認済みとして書く
-- 子エージェントに `docs/` を書かせる
+- 子エージェントに本体の作業ツリーの `docs/` を直接書かせる・索引を書かせる
+- 前提の構成が無いリポジトリで、尋ねずに `docs/` の構成を作る
 - 文脈が逼迫しているのに、`checkpoint`（A1）より先にここへ着手する
 
 ## 参照
 
 - 復帰記録の保存: `checkpoint` スキル（A1。`.tmp/` のセッション別ファイル）
-- 雛形: `~/.claude/skills/sdd-docs/references/`
+- 雛形: このスキルの `references/`
   （`adr-template.md` / `change-template.md` / `research-template.md`）
+- 検査: このスキルの `scripts/`（`lint_docs.py` / `check_refs.py`）

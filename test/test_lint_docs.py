@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = ROOT / "scripts" / "lint_docs.py"
+SCRIPT_PATH = ROOT / "home" / "dot_claude" / "skills" / "sdd-docs" / "scripts" / "lint_docs.py"
 
 
 def load_module():

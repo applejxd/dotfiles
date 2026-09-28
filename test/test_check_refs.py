@@ -1,0 +1,95 @@
+"""sdd-docs スキルの check_refs.py (docs への参照の切れの検査) の挙動を確かめる。"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "home" / "dot_claude" / "skills" / "sdd-docs" / "scripts" / "check_refs.py"
+
+
+def make_repo(tmp_path: Path, files: dict[str, str]) -> Path:
+    repo = tmp_path / "repo"
+    for rel, text in files.items():
+        path = repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    return repo
+
+
+def run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    # tmp_path がこのリポジトリの中にあっても、外側の repo を拾わせない
+    env = {**os.environ, "GIT_CEILING_DIRECTORIES": str(repo.parent)}
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        check=False,
+    )
+
+
+GOOD = {
+    "docs/a.md": "# A\n\n## 手順の説明\n\n[b](b.md#見出し-b)\n",
+    "docs/b.md": "# B\n\n## 見出し B\n",
+    "src/x.py": "# see docs/a.md#手順の説明\n# see docs/b.md 「見出し B」\n",
+}
+
+
+def test_valid_references_pass(tmp_path):
+    result = run(make_repo(tmp_path, GOOD))
+    assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize(
+    ("rel", "text", "expected"),
+    [
+        ("docs/a.md", "[x](missing.md)\n", "ファイルが無い"),
+        ("docs/a.md", "[x](b.md#無い見出し)\n", "見出しが無い"),
+        ("src/x.py", "# see docs/b.md#無い見出し\n", "見出しが無い"),
+        ("src/x.py", "# see docs/b.md 「無い見出し」\n", "名前の見出しが無い"),
+    ],
+    ids=["リンク先のファイル", "リンク先の見出し", "コメントのアンカー", "コメントの見出し名"],
+)
+def test_broken_references_are_reported(tmp_path, rel, text, expected):
+    files = dict(GOOD)
+    files[rel] = files.get(rel, "") + text
+    result = run(make_repo(tmp_path, files))
+    assert result.returncode == 1
+    assert expected in result.stdout
+
+
+def test_headings_in_code_blocks_are_not_anchors(tmp_path):
+    files = dict(GOOD)
+    files["docs/b.md"] = "# B\n\n```text\n## 見出し B\n```\n"
+    result = run(make_repo(tmp_path, files))
+    assert "見出しが無い" in result.stdout
+
+
+def test_baseline_shows_only_new_problems(tmp_path):
+    """作業前に控えた問題は出さず、作業で新たに切れた参照だけを出す。"""
+    files = dict(GOOD)
+    files["docs/a.md"] += "[old](gone.md)\n"
+    repo = make_repo(tmp_path, files)
+    baseline = tmp_path / "before.txt"
+    assert run(repo, "--save", str(baseline)).returncode == 1
+
+    assert run(repo, "--baseline", str(baseline)).returncode == 0
+    (repo / "docs" / "b.md").write_text("# B\n\n## 名前を変えた\n", encoding="utf-8")
+    result = run(repo, "--baseline", str(baseline))
+    assert result.returncode == 1
+    assert "gone.md" not in result.stdout
+    assert "見出し-b" in result.stdout
+
+
+def test_outside_a_git_repository_is_a_usage_error(tmp_path):
+    result = run(tmp_path)
+    assert result.returncode == 2
