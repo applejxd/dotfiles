@@ -20,8 +20,8 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 | OpenCode の実機試験 | `mise run opencode:probe -- '<prompt>'`（実 DB を汚さない） |
 | 展開結果 | `chezmoi diff`（sandbox 内では不可。下記） |
 
-`*.tmpl` は `identify` がタグを付けず `check-toml` / ruff / shellcheck が素通りする。
-`lint_templates.py` が描画してから振り分けるので、テンプレートを編集したら実行する。
+`*.tmpl` は pre-commit の linter が素通りするので、テンプレートを編集したら
+`lint_templates.py` も実行する（[理由と対象](docs/spec/development.md#テンプレートの検査)）。
 
 `chezmoi diff` は **sandbox 内では無意味**。`~/` が deny-by-default で不可視のため、
 展開先が空に見えて全て「new file」になる。sandbox 外のシェルで実行する。
@@ -30,16 +30,11 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 ### Windows 実機での検証
 
-次を触ったら **Windows の PowerShell で**検証する。WSL / Linux では実行できない
-（`pywinpty` が依存解決の時点で失敗する）。
-
-- `home/**/*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`
-- `home/.chezmoiscripts/300_windows/`
-- Windows 向けの hook 起動コマンド生成（`scripts/agents/hooks.py`）
-
-対話テストは `os.name != "nt"` で全件 skip する。WSL で「27 passed / 4 skipped」を
-見ても **Windows 側は未検証**。実機で回せない場合はそう明記する。
-手順と拾える範囲は [開発ガイド](docs/spec/development.md#windows-実機での検証)。
+`*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`、`home/.chezmoiscripts/300_windows/`、
+`scripts/agents/hooks.py`（Windows 向けの hook 起動コマンド生成）を触ったら
+**Windows の PowerShell で**検証する。WSL では対話テストが skip されるだけなので、
+通っても **Windows 側は未検証**。実機で回せない場合はそう明記する
+（[手順と拾える範囲](docs/spec/development.md#windows-実機での検証)）。
 
 ## このリポジトリ固有の約束
 
@@ -71,8 +66,8 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 - 秘密情報はソースに書かず `SUDO_PASSWORD` / Bitwarden / sops + age を使う
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない
 - コミットメッセージは Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）
-- 運用手順やコマンドを追加したら `README.md` と `docs/` の該当ファイル・`index.md` を
-  更新する
+- 運用手順やコマンドを追加したら `docs/` の該当ファイルと `index.md` を更新する。
+  `README.md` は導入・更新など入口の手順が変わるときだけ更新する
 - **`README.md` は「最短で動かす」ためだけに保つ。** 各項目は数行 + `docs/` への
   リンクに留め、背景・一覧表・失敗談・仕組みの説明は `docs/` へ逃がす。
   同じ手順を README と `docs/` の両方に書かない

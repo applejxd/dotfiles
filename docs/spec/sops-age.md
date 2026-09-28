@@ -6,51 +6,28 @@ API キーを平文の `.env` に置かず、暗号化したまま Git 管理す
 プロジェクトへ移動すると mise が自動的に復号・ロードし、
 普段は通常どおりコマンドを実行できる構成にする。
 
-## 役割分担
-
-| ツール | 役割 |
-| --- | --- |
-| SOPS + age | API キーの暗号化 |
-| mise | プロジェクト入退場時の自動ロード・アンロード |
-| Bitwarden Password Manager | age 秘密鍵の保管 |
-| chezmoi | 新しい環境で age 秘密鍵を Bitwarden から復元 |
-
-Bitwarden Secrets Manager の `bws` は使用しない。
+この文書は手順だけを書く。何を守るか・なぜこの方式か・各ツールの役割は
+[セキュリティ](security.md#秘密情報の管理) が正本。
 
 ## このリポジトリでの配置
 
-| 項目 | 値 |
+| 項目 | 場所 |
 | --- | --- |
-| Bitwarden の項目名 | `SOPS age identity personal`（Secure Note） |
-| chezmoi のソース | `home/dot_config/sops/age/private_keys.txt.tmpl` |
-| 展開先 | `~/.config/sops/age/keys.txt`（`private_` 属性により mode 600） |
+| 鍵を展開するテンプレート | `home/dot_config/sops/age/private_keys.txt.tmpl` |
+| 展開の条件（個人用ユーザ・`BW_SESSION`・一度だけ） | `home/.chezmoiignore.tmpl` |
 | mise の鍵パス設定 | `home/dot_config/mise/config.toml.tmpl` の `sops.age_key_file` |
 | Bitwarden 自動アンロック | `home/.chezmoi.toml.tmpl` の `bitwarden.unlock = "auto"` |
 
 `.chezmoiroot=home` 構成のため、リポジトリ上のパスは `home/` 配下になる。
-
-## 設計判断（なぜこの配置なのか）
-
-- **SOPS 用 age 秘密鍵そのものを、同じ age 鍵で chezmoi 暗号化してはいけない。**
-  復号に必要な鍵が暗号化ファイル内にある循環状態になる。
-  そのため chezmoi の Bitwarden テンプレートから生成する
-- **鍵は `private_` 接頭辞で配置する。** chezmoi が秘密ファイルとして扱い、
-  パーミッションが 600 になる
-- **`.chezmoiignore` で「一度だけ展開」にする。** 毎回 Bitwarden を引くと
-  `chezmoi diff` がマスターパスワードを要求して日常操作が止まる
-- **`BW_SESSION` が無い間は展開自体を無視する。** セッションが無いと chezmoi が
-  `bw unlock` を走らせ、未ログインの環境では `You are not logged in.` で
-  `chezmoi apply` 全体が止まる。無視して次回に回すほうが安全
-- **Bitwarden Item 名が一意でない場合は Item UUID を指定する。**
-  名前解決に失敗するとテンプレート評価が落ちる
-- **`bitwarden.unlock = "auto"` を使う。** `BW_SESSION` が無いときだけ
-  chezmoi が `bw unlock` を実行し、処理終了時に Vault を再ロックする
-- **エージェントからの読み出しは hook で拒否する。** `~/.config/sops/age/**` と
-  `keys.txt` をガード対象にしている（[エージェント権限仕様](agent-permissions.md)）
+テンプレートは Bitwarden の Secure Note `SOPS age identity personal` のノートを
+そのまま `~/.config/sops/age/keys.txt` へ書き出す。項目名を変えるときは
+テンプレートと `test/bw-stub.sh` も合わせて変える。
 
 ## 1. 前提ツール
 
-次のコマンドを利用可能にする。
+Ubuntu / WSL / macOS では `mise`・`sops`・`bw` が `chezmoi apply` で入る（`bw` は個人用ユーザのみ）。
+**`age`（`age-keygen`）は dotfiles では入れない。** 鍵を作る・確かめるマシンでだけ
+別途入れる（`sudo apt install age`、`brew install age` など）。
 
 ```bash
 bw --version
@@ -65,7 +42,9 @@ zsh で mise を有効化していない場合は `~/.zshrc` に次を追加す�
 eval "$(mise activate zsh)"
 ```
 
-## 2. age 秘密鍵を作成する（初回のみ）
+## 2. age 秘密鍵を作成する（最初の 1 台だけ）
+
+Bitwarden に鍵が既にあるなら作らない。[8. 新しい PC・WSL 環境で復旧する](#8-新しい-pcwsl-環境で復旧する) へ進む。
 
 ```bash
 mkdir -p ~/.config/sops/age
@@ -73,27 +52,22 @@ age-keygen -o ~/.config/sops/age/keys.txt
 chmod 600 ~/.config/sops/age/keys.txt
 ```
 
-表示された `age1...` 形式の公開鍵を控える。
+表示された `age1...` 形式の公開鍵を控える。後から出すときは
+`age-keygen -y ~/.config/sops/age/keys.txt`（公開鍵だけを出力する）。
 
-mise へ秘密鍵の場所を設定する。
+mise の鍵パスは `home/dot_config/mise/config.toml.tmpl` で設定済み。dotfiles を
+使わない環境だけ `mise settings set sops.age_key_file ~/.config/sops/age/keys.txt` を実行する。
 
-```bash
-mise settings set sops.age_key_file ~/.config/sops/age/keys.txt
-```
-
-> このリポジトリでは `home/dot_config/mise/config.toml.tmpl` に
-> 設定済みなので、`chezmoi apply` していれば実行不要。
-
-## 3. 秘密鍵を Bitwarden へバックアップする（初回のみ）
+## 3. 秘密鍵を Bitwarden へバックアップする（最初の 1 台だけ）
 
 通常の Bitwarden Password Manager で Secure Note を作成する。
 
-- 名前: `SOPS age identity personal`
+- 名前: `SOPS age identity personal`（同じ名前の項目を他に作らない）
 - ノート: `AGE-SECRET-KEY-1...` で始まる秘密鍵の行
 
 秘密鍵は `~/.config/sops/age/keys.txt` からコピーする。
 
-CLI からバックアップを検証する場合は、保存した秘密鍵から公開鍵を再計算する。
+保存した鍵が正しいかは、公開鍵を再計算して比べる。秘密鍵は画面に出さない。
 
 ```bash
 BW_SESSION="$(bw unlock --raw)" \
@@ -101,14 +75,6 @@ BW_SESSION="$(bw unlock --raw)" \
 ```
 
 出力された `age1...` が手順 2 で控えた公開鍵と一致すればよい。
-
-### chezmoi の復元テンプレート
-
-`home/dot_config/sops/age/private_keys.txt.tmpl` の内容は次の 1 行。
-
-```text
-{{ (bitwarden "item" "SOPS age identity personal").notes }}
-```
 
 ## 4. 各プロジェクトを設定する
 
@@ -156,6 +122,7 @@ sops .env.json
 ```
 
 保存後、値は SOPS によって暗号化される。
+mise の SOPS 連携は現時点で experimental 扱いで、対応形式は JSON・YAML・TOML。
 
 ## 5. mise 設定を信頼する（プロジェクト初回のみ）
 
@@ -194,6 +161,8 @@ terraform plan
 ```
 
 特別な実行ラッパーは不要。プロジェクト外へ移動すると mise が環境変数を外す。
+プロジェクト内で起動した AI CLI にも API キーが渡る点に注意する
+（[脅威と守らないもの](security.md#脅威と守らないもの)）。
 
 Secret の追加・更新は次のコマンドで行う。
 
@@ -203,89 +172,79 @@ sops .env.json
 
 ## 8. 新しい PC・WSL 環境で復旧する
 
-このリポジトリは [README](../../README.md) の 2 フェーズ bootstrap を使う。
-フェーズ1では `bw` が必要なテンプレートをスキップしてツールを導入し、
-フェーズ2でBitwardenをアンロックして秘密情報を反映する。
+PC 全体の導入は [README の 2 フェーズ bootstrap](../../README.md#初期化と適用2-フェーズ-bootstrap)
+に従う。フェーズ 2 の `chezmoi apply` で鍵も展開される。鍵に固有の条件は次のとおり。
+
+- ユーザ名が `applejxd` の Ubuntu / WSL / macOS でだけ展開する。
+  Windows native では展開しない
+- `BW_SESSION` が無い `apply` では展開しない
+- `~/.config/sops/age/keys.txt` が既にあると、Bitwarden の値で上書きしない。
+  入れ替えるときはファイルを消してから、`BW_SESSION` を設定して `chezmoi apply` する
+- Bitwarden の項目を別の端末で作った・直した直後は、先に `bw sync` する
+
+展開できたかは公開鍵で確かめる。
 
 ```bash
-# フェーズ1: bwを含むツールを導入
-chezmoi init --apply git@github.com:applejxd/dotfiles.git
-
-# フェーズ2（POSIX shell）: Bitwarden連携を有効化して再適用
-bw login
-export BW_SESSION="$(bw unlock --raw)"
-chezmoi init applejxd
-chezmoi apply
-```
-
-Windows PowerShellではフェーズ2を次のように実行する。
-
-```powershell
-bw login
-$env:BW_SESSION = bw unlock --raw
-chezmoi init applejxd
-chezmoi apply
-```
-
-Unix / WSL では、chezmoi が Bitwarden のアンロックを要求し、
-`~/.config/sops/age/keys.txt` を生成する。Windows nativeではsops鍵を配備せず、
-Bitwarden由来のgitconfig設定だけを反映する。
-
-mise 側の鍵パス設定が dotfiles に含まれていない場合だけ次を実行する。
-
-```bash
-mise settings set sops.age_key_file ~/.config/sops/age/keys.txt
+ls -l ~/.config/sops/age/keys.txt              # 存在し、-rw------- であること
+age-keygen -y ~/.config/sops/age/keys.txt      # .sops.yaml の age1... と一致すること
 ```
 
 各プロジェクトでは初回のみ `mise trust` を実行する。
 
 ## トラブルシューティング
 
-### 鍵が見つからない
+### 鍵が展開されない
+
+上から順に確かめる。どれも秘密鍵そのものは表示しない。
 
 ```bash
-# Bitwarden の項目を確認
-bw list items --search "SOPS age"
+ls -l ~/.config/sops/age/keys.txt   # 既にあれば apply は触らない（上書きしない）
+echo "${BW_SESSION:+set}"           # set と出なければセッションが無い
+bw status                           # "status":"unlocked" であること
 ```
 
-テンプレートの展開を確認する場合、出力に秘密が含まれるので画面に注意する。
+`chezmoi apply` の途中で `bw` が入った場合は案内が出る
+（Linux の `run_onchange_after_125_mise.sh.tmpl`）。そのとおり
+`bw login` → `export BW_SESSION="$(bw unlock --raw)"` → `chezmoi apply` を行う。
+
+項目名で引けないときは、同名の項目が複数あるか、項目が無い。ID と名前だけを出して確かめる
+（`bw list items` や `bw get item` をそのまま実行すると、ノートの秘密鍵まで表示される）。
 
 ```bash
-chezmoi execute-template '{{ (bitwarden "item" "SOPS age identity personal").notes }}'
+bw list items --search "SOPS age identity personal" \
+  | python3 -c 'import json, sys; [print(i["id"], i["name"]) for i in json.load(sys.stdin)]'
 ```
 
-### `chezmoi diff` がマスターパスワードを要求する
+1 行だけ出れば正しい。
 
-鍵がまだ展開されていない状態。`chezmoi apply` を一度実行すると、
-以降は `.chezmoiignore` によりテンプレート評価がスキップされる。
+### 鍵はあるが復号できない
+
+鍵ファイルの公開鍵と、暗号化に使った公開鍵を比べる。
+
+```bash
+age-keygen -y ~/.config/sops/age/keys.txt
+grep 'age:' .sops.yaml
+```
+
+一致しない場合は別の鍵で暗号化されている。Bitwarden 側の鍵とも比べるときは
+[手順 3](#3-秘密鍵を-bitwarden-へバックアップする最初の-1-台だけ) の検証コマンドを使う。
+chezmoi の Bitwarden 関数を通した値まで確かめたいときも、公開鍵に変換してから出す。
+
+```bash
+chezmoi execute-template '{{ (bitwarden "item" "SOPS age identity personal").notes }}' \
+  | age-keygen -y -
+```
+
+> パイプを外すと**秘密鍵がそのまま端末に出る。** 画面共有・録画・AI エージェントの
+> セッション中には外さない。
 
 ### 権限エラー
 
-`private_` 接頭辞により 600 で作成されるが、手動で直す場合は次のとおり。
+`private_` 接頭辞により 600 で作成されるが、手動で作った場合などは次で直す。
 
 ```bash
 chmod 600 ~/.config/sops/age/keys.txt
 ```
-
-## 注意点
-
-- プロジェクト内で起動した子プロセスは、ロードされた API キーを継承する。
-  **Codex や Claude Code をプロジェクト内で起動すると、それらにも API キーが渡る**
-- この構成は Git への誤コミットや平文 `.env` の放置を防ぐが、
-  侵害済み PC を隔離する仕組みではない
-- API プロバイダ側でも、プロジェクトごとに API キーと利用上限を分ける
-- mise の SOPS 連携は現時点で experimental 扱いで、対応形式は JSON・YAML・TOML
-
-## 補足: 廃止した仕組み
-
-以前は chezmoi 本体の age 暗号化（`~/.config/chezmoi/key.txt` と
-`.chezmoi.toml.tmpl` の `encryption = "age"`）も設定していた。
-`chezmoi add --encrypt` したファイルを復号するためのものだったが、
-暗号化ファイルを一度も運用しておらず、Bitwarden テンプレート方式
-（`{{ (bitwarden ...) }}` を直接書く形）と機能が重複していたため廃止した。
-
-既存マシンに `~/.config/chezmoi/key.txt` が残っている場合、
-`chezmoi apply` では削除されないので、不要であれば手動で削除する。
 
 ## 公式資料
 

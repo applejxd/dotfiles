@@ -1,80 +1,70 @@
-# 開発者向けドキュメント
+# 開発ガイド
 
-## 開発環境のセットアップ
+このリポジトリを変更するときの準備と検証の手順。
+各検証のコマンドは [AGENTS.md の検証表](../../AGENTS.md#検証)、テストの種類と入口は
+[test/README.md](../../test/README.md)、Docker ハーネスと GitHub Actions の仕組みは
+[テストと検証の仕組み](testing.md) にある。dotfiles の編集・反映の手順は
+[README の「設定ファイルの編集」](../../README.md#設定ファイルの編集)。
 
-### pre-commitの設定（新規環境）
+## 環境の準備
 
-このリポジトリを新しい環境でクローンした後、以下の手順でpre-commit環境を構築できます。
-
-#### 1. miseによるツールのインストール
+クローンした直後に一度だけ行う。
 
 ```bash
-# miseがインストール済みの場合
+# mise がインストール済みの場合
 mise trust
 mise install
 
-# miseが未インストールの場合（chezmoi適用で自動インストール）
+# mise が未インストールの場合（chezmoi apply が導入する）
 chezmoi apply
-```
 
-#### 2. Python環境の構築
-
-```bash
-# miseがuvを提供し、uvがpyproject.tomlに従ってPython 3.13以上を選択・取得
+# mise が uv を提供し、uv が pyproject.toml に従って Python 3.13 以上を選ぶ
 uv sync                    # 依存関係のインストール
-uv run pre-commit install  # pre-commitフックの設定
+uv run pre-commit install  # pre-commit フックの設定
 ```
+
+版は `mise.toml` と `uv.lock` で固定している。以後は `git commit` のたびに
+pre-commit が走る。
 
 Windows native と WSL で同じ worktree を共有する場合、mise が
 `UV_PROJECT_ENVIRONMENT` を切り替え、Windows は `.venv-windows`、
-Unix は `.venv` を使用します。OS の異なる Python 仮想環境を上書きしません。
+Unix は `.venv` を使う。OS の異なる Python 仮想環境を上書きしない。
 
-#### 3. 手動実行とテスト
-
-```bash
-# 全ファイルに対してpre-commitチェック実行
-uv run pre-commit run --all-files
-
-# 個別ツールの実行例
-mise exec gitleaks -- detect --source .
-git ls-files '*.sh' | xargs mise exec shellcheck -- shellcheck
-
-# chezmoi テンプレートを描画して検査
-mise exec -- python3 scripts/lint_templates.py
-
-# agent設定・hook
-uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q
-
-# Windows 資産（静的）と chezmoi の展開範囲
-uv run --with pytest --no-project pytest test/test_windows_assets.py -q
-uv run --with pytest --no-project pytest test/test_chezmoi_templates.py -q
-
-# docs の索引整合
-mise exec -- python3 scripts/lint_docs.py
-
-# OpenCode の実機試験（実 DB を汚さない）
-mise run opencode:probe -- '<prompt>'
-```
-
-テストの種類と入口の一覧は [test/README.md](../../test/README.md)。
-
-##### gitleaks はプレビルドを使う
+### gitleaks はプレビルドを使う
 
 pre-commit の gitleaks フックは、公式リポジトリ（`language: golang`）ではなく
-`mise exec -- gitleaks` を呼ぶローカルフックにしています。版は `mise.toml` の
-`gitleaks = "8.28.0"` が正本です。
+`mise exec -- gitleaks` を呼ぶローカルフックにしている。版は `mise.toml` の
+`gitleaks` が正本。
 
 公式フックは、初回にフック環境を作るとき Go のツールチェーンを落として
-gitleaks を**ソースからビルド**します。Raspberry Pi 4（RAM 3.7GB、swap 0）では
-このビルドでメモリが尽き、SSH も応答しなくなって電源の抜き差しが要りました
-（2026-09-26）。mise なら GitHub Releases のバイナリを落とすだけで済みます。
-フックの id は `gitleaks` のままなので、`SKIP=gitleaks` はそのまま使えます。
+gitleaks を**ソースからビルド**する。Raspberry Pi 4（RAM 3.7GB、swap 0）では
+このビルドでメモリが尽き、SSH も応答しなくなって電源の抜き差しが要った
+（2026-09-26）。mise なら GitHub Releases のバイナリを落とすだけで済む。
+フックの id は `gitleaks` のままなので、`SKIP=gitleaks` はそのまま使える。
 
-##### テンプレートの検査
+## 変更の種類ごとの検証
+
+「検証表の行」は [AGENTS.md の検証表](../../AGENTS.md#検証) の行で、
+コマンドはそちらにある。
+
+| 変更したもの | 検証表の行 | 補足 |
+| --- | --- | --- |
+| すべて | 全体（lint / secret scan） | コミット時にも自動で走る |
+| `*.tmpl` | テンプレート（描画して検査） | [テンプレートの検査](#テンプレートの検査) |
+| `.chezmoiignore.tmpl` / `.chezmoi.toml.tmpl` / `.chezmoiexternal.toml.tmpl` | chezmoi の展開範囲 | apply の最初に読まれ、壊れると apply 全体が止まる |
+| `home/dot_config/agents/`、`scripts/agents/`、hook、スキル | agent 設定・hook | |
+| `*.sh` | シェルスクリプト | `*.sh.tmpl` はテンプレートの検査が拾う |
+| `*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`、`300_windows/` | Windows 資産（静的） | 加えて [Windows 実機での検証](#windows-実機での検証) |
+| `docs/` | docs の索引整合 | |
+| OpenCode の起動・権限 | OpenCode の実機試験 | 実 DB を汚さない |
+| `home/` 全般 | 展開結果（`chezmoi diff`） | エージェントの sandbox の外で実行する |
+| `.chezmoiscripts/`、`.chezmoi.toml.tmpl`、`.chezmoitemplates/` | — | [Docker での初回導入の検証](#新しい機械での初回導入を-docker-で検証する) |
+
+### テンプレートの検査
 
 `identify` は `*.tmpl` に一切タグを付けないため、`check-toml` / ruff /
-shellcheck はテンプレートを素通りする（この穴は sh 14 / py 8 / toml 4 の
-ファイルに空いていた）。`scripts/lint_templates.py` は
+shellcheck はテンプレートを素通りする（導入時点で sh 14 / py 8 / toml 4 の
+ファイルが素通りしていた）。`scripts/lint_templates.py` は
 `chezmoi execute-template` で描画し、**描画後の拡張子**で既存の linter へ
 振り分ける。
 
@@ -84,6 +74,7 @@ shellcheck はテンプレートを素通りする（この穴は sh 14 / py 8 /
 | --- | --- |
 | OS | `home/.chezmoiscripts/` のディレクトリ規約（`100_linux/` なら linux だけ） |
 | username | `.chezmoi.username` を参照するファイルだけ `applejxd` と別ユーザの 2 通り |
+| Raspberry Pi | `is-raspi` / `is_raspi` を参照するファイルだけ、判定なしと Pi 扱いの 2 通り |
 
 `--skip-secrets` を付けるので Bitwarden は呼ばれない。秘密を使うテンプレートは
 chezmoi が `skip template` を返し、検査対象から外れる。
@@ -92,10 +83,19 @@ chezmoi が `skip template` を返し、検査対象から外れる。
 
 - `.ps1.tmpl` — PSScriptAnalyzer（pwsh 本体）が要る
 - `.zsh.tmpl` — shellcheck が zsh をサポートしない
-- `home/.chezmoitemplates/**` — 単体では描画できない（`test_modifier_wrappers.py` が担保）
-- `.chezmoi.toml.tmpl` — `execute-template --init` が要る
+- `home/.chezmoitemplates/**` — 単体では描画できない（modify script の共通ラッパーは
+  `test/agents/test_modifier_wrappers.py` が呼び出し側ごと検査する）
+- `.chezmoi.toml.tmpl` — `execute-template --init` が要る（`test_chezmoi_templates.py` が検査する）
+- `.chezmoiignore.tmpl` — 描画結果に対応する linter が無い（同上）
 
-##### Windows 実機での検証
+### 新しい機械での初回導入を Docker で検証する
+
+素の Ubuntu コンテナで `chezmoi init` / `apply` が人手なしで通るかを
+`mise run e2e` で試す。毎回は回さず、上の表の最終行のようなきっかけで回す。
+サービス・モード・回すきっかけ・判定の読み方は
+[テストと検証の仕組み](testing.md#docker-での-cold-start-検証) が正本。
+
+## Windows 実機での検証
 
 次を変更したら **Windows の PowerShell で**検証する。WSL / Linux では実行できない。
 
@@ -120,8 +120,8 @@ Windows PowerShell 5.1 の ConPTY セッションで読み込み、プロンプ�
 | GitHub Actions（`windows.yml`） | 静的と agent 設定のテスト。対話は回さない（[範囲](testing.md#windows-の-github-actions)） |
 | WSL / Linux | 静的のみ（`uv run --with pytest --no-project pytest test/test_windows_assets.py -q`） |
 
-対話テストは `os.name != "nt"` で全件 skip するため、WSL で
-「27 passed / 4 skipped」を見ても Windows 側は未検証である。静的テストが拾えるのは
+対話テストは `os.name != "nt"` で全件 skip するため、WSL で失敗が 0 件でも
+Windows 側は未検証である。静的テストが拾えるのは
 UTF-8 BOM、winget の記法、プロファイルの字面までで、次は拾えない。
 
 - 起動エラーと OnIdle ジョブのエラー（どちらもコンソールに出ない）
@@ -132,52 +132,31 @@ UTF-8 BOM、winget の記法、プロファイルの字面までで、次は拾�
 
 実機で回せない場合は「Windows 未検証」と明記する。
 
-##### 新しい機械での初回導入を Docker で検証する
+## スクリプトを追加するとき
 
-素の Ubuntu コンテナで `chezmoi init` / `apply` が人手なしで通るかを試す。
-毎回は回さず、`.chezmoiscripts/` や `.chezmoi.toml.tmpl` を触ったときに回す。
+1. `home/.chezmoiscripts/` の OS 別ディレクトリにスクリプトを追加する
+2. 既存の番号体系に合わせて、実行順を表す 3 桁の番号をファイル名に付ける
+   （規約は [自動実行スクリプト](structure.md#自動実行スクリプト)）
+3. OS 分岐・chezmoi データ・秘密情報が要るときだけ `.tmpl` を付ける
 
-```bash
-mise run e2e                        # ubuntu2404 で dry-run（数十秒）
-mise run e2e -- ubuntu2204 apply    # 22.04 で cold start（十数分）
-APPLY_TIMEOUT=5400 mise run e2e -- raspi2204 apply  # arm64 (QEMU) で cold start
-```
+### テンプレート変数
 
-実行ごとのログと結果の一覧は `.tmp/e2e/` に残る。月 1 回は GitHub Actions でも
-回る（手動でも起動できる）。サービス・モード・判定の読み方は
-[テストと検証の仕組み](testing.md#docker-での-cold-start-検証)。
+よく使う chezmoi の組み込み変数:
 
-#### 4. 継続的な使用
+- `{{ .chezmoi.os }}` - OS名 (`windows` / `linux` / `darwin`)
+- `{{ .chezmoi.homeDir }}` - ホームディレクトリパス
+- `{{ .chezmoi.sourceDir }}` - ソースディレクトリパス
 
-```bash
-# 通常のgit操作でpre-commitが自動実行
-git add .
-git commit -m "commit message"  # pre-commitが自動実行される
+### sudo パスワード
 
-# 手動でのチェック
-uv run pre-commit run --all-files
-```
-
-#### 環境管理のメリット
-
-- **統一された環境管理**: mise → uv → pre-commitの一貫したツールチェーン
-- **新規環境での簡単セットアップ**: `mise trust && mise install && uv sync && uv run pre-commit install`
-- **バージョン固定**: mise.tomlとuv.lockによる再現可能な環境
-- **段階的導入**: 既存環境に影響せず新規環境から適用可能
-
-## カスタマイズ
-
-### パスワード管理
-
-パスワードは以下の方法で設定できます：
+sudo パスワードはテンプレート変数へ保存しない。macOS のスクリプト
+（`home/.chezmoiscripts/200_mac/`）が共有テンプレート `get_sudo_password.sh.tmpl` を
+読み込み、得たパスワードを `sudo -S` へ渡す。`.chezmoi.toml.tmpl` には入力を求める
+処理が無いので、`chezmoi init` で尋ねられることはない。
 
 1. **環境変数**: `export SUDO_PASSWORD="your_password"`
 2. **対話的入力**: 初回実行時にプロンプトで入力
 3. **スキップ**: Enter キーでスキップ（手動入力が必要な場合あり）
-
-### 設定ファイルの編集
-
-編集・反映・確認の手順は [README の「設定ファイルの編集」](../../README.md#設定ファイルの編集)。
 
 ### スクリプトの無効化
 
@@ -187,22 +166,5 @@ uv run pre-commit run --all-files
 chezmoi apply --exclude=scripts
 ```
 
-恒久的に無効化する場合は、対象ファイルの `run_` 属性を外すか削除します。
-`.tmpl` は実行属性ではないため、拡張子だけを外しても無効化されません。
-
-## テンプレート変数
-
-利用可能な chezmoi テンプレート変数：
-
-- `{{ .chezmoi.os }}` - OS名 (`windows` / `linux` / `darwin`)
-- `{{ .chezmoi.homeDir }}` - ホームディレクトリパス
-- `{{ .chezmoi.sourceDir }}` - ソースディレクトリパス
-
-sudoパスワードはテンプレート変数へ保存せず、`SUDO_PASSWORD` または
-`get_sudo_password.sh.tmpl` を介して取得します。
-
-## 新しいスクリプトの追加
-
-1. `home/.chezmoiscripts/` にスクリプトを追加
-2. 実行順序を考慮してファイル名の番号を設定
-3. 必要に応じて `.tmpl` 拡張子を付けてテンプレート機能を使用
+恒久的に無効化する場合は、対象ファイルの `run_` 属性を外すか削除する。
+`.tmpl` は実行属性ではないため、拡張子だけを外しても無効化されない。

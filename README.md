@@ -36,21 +36,23 @@ Windows では **Python 3.11 以上**が必要（`py -3` で最新の Python 3 �
 ### 初期化と適用（2 フェーズ bootstrap）
 
 Bitwarden CLI (`bw`) は事前インストール不要で、1 回目の `apply` 中に入る。
-bw が要るテンプレートは 2 回目で反映される
+Bitwarden 由来のファイル（Git の user 情報、sops の age 鍵）は 2 回目で入る。
+対象は個人用ユーザの Ubuntu / WSL / macOS で、Windows native はフェーズ 1 だけでよい
 （[Bitwarden 連携](docs/spec/security.md#bitwarden連携)）。
 
 ```bash
 # フェーズ 1: bw 不在のまま初期化・適用
-chezmoi init applejxd     # bw 不在ガードにより bitwarden 関連はスキップされる
+chezmoi init applejxd     # Bitwarden 由来のファイルはスキップされる
 chezmoi apply             # bw を含むツール一式がここで入る
 
-# フェーズ 2: bw が使えるようになったので Bitwarden 連携を有効化
+# フェーズ 2: セッションを渡して Bitwarden 由来のファイルを反映
 bw login
-# PowerShell: $env:BW_SESSION = bw unlock --raw
-# POSIX shell: export BW_SESSION="$(bw unlock --raw)"
-chezmoi init applejxd     # .chezmoi.toml を bw 有り状態で再生成 (bitwarden.unlock="auto")
-chezmoi apply             # gitconfig user セクション、Unix では sops age 鍵も反映
+export BW_SESSION="$(bw unlock --raw)"
+chezmoi init applejxd     # bw がある状態で設定を作り直す (bitwarden.unlock="auto")
+chezmoi apply
 ```
+
+鍵の復旧条件と確認方法は [Secret管理セットアップ](docs/spec/sops-age.md#8-新しい-pcwsl-環境で復旧する)。
 
 依存関係スクリプトを飛ばす方法は [スクリプトの無効化](docs/spec/development.md#スクリプトの無効化)。
 
