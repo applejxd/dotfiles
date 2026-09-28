@@ -112,7 +112,7 @@ def write_isolated_config(sandbox: dict, project: dict) -> None:
 def pick_model(sandbox: dict, project: dict) -> str | None:
     """宣言した優先順で、使える provider の最初のモデルを選ぶ。
 
-    使えるかどうかは隔離用 DB の ``credential`` に資格情報があるかで見る。
+    使えるかどうかは OpenCode の DB の ``credential`` に資格情報があるかで見る。
     無い provider を既定にすると起動しても応答が来ない。
     """
     preferences = sandbox.get("model_preference") or []

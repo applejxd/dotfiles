@@ -70,6 +70,18 @@ sops = "latest"
 yt-dlp = "latest"
 {{- end }}
 
+{{- if eq .chezmoi.os "linux" }}
+
+# OpenCode の隔離起動 (ocs) の境界。版とチェックサムを固定する
+# (docs/spec/structure.md#mise-による-cli-管理)
+[tools."github:fencesandbox/fence"]
+version = "0.1.67"
+
+[tools."github:fencesandbox/fence".platforms]
+linux-x64 = { asset_pattern = "fence_*_Linux_x86_64.tar.gz", checksum = "sha256:cfe2af18c6feaf0269e524c8904de2bb14a1503054e59ebf584a902096bad2c7" }
+linux-arm64 = { asset_pattern = "fence_*_Linux_arm64.tar.gz", checksum = "sha256:db22029e7f6b770112a95002f3ff06f5467086bc6463053f861fb97ef57b2a70" }
+{{- end }}
+
 [settings]
 # for task runner
 experimental = true

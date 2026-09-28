@@ -1,4 +1,4 @@
-"""隔離版 OpenCode (CHG-0004) の設定生成に関するテスト。
+"""隔離版 OpenCode (ocs) の設定生成に関するテスト。
 
 Run with: ``uv run --with pytest --no-project pytest test/agents/`` or
 ``python3 -m pytest test/agents/``.
@@ -6,7 +6,7 @@ Run with: ``uv run --with pytest --no-project pytest test/agents/`` or
 ★ここで守りたいのは「緩和が隔離版だけに閉じ込められていること」と
   「境界が守らないものを permission から捨てていないこと」。
   後者を誤って捨てると、保護が静かに消える。
-see docs/change/closed/0004-opencode-sandbox.md
+see docs/spec/opencode-sandbox.md
 """
 
 from __future__ import annotations
@@ -26,6 +26,19 @@ COMMON = load_common()
 SANDBOX = COMMON.get("opencode", {}).get("sandbox", {})
 
 
+def _out(tmp_path: Path) -> dict:
+    """Fence の無い機械でも生成結果を得るため、runtime だけダミーに差し替える。"""
+    runtime = tmp_path / "fence"
+    runtime.write_text("", "utf-8")
+    common = {
+        **COMMON,
+        "opencode": {**COMMON["opencode"], "sandbox": {**SANDBOX, "runtime_path": str(runtime)}},
+    }
+    out = gen.opencode_sandbox(common)
+    assert out is not None, "境界の設定が生成されない"
+    return out
+
+
 # ---------------------------------------------------------------------------
 # common.toml 側の構造
 # ---------------------------------------------------------------------------
@@ -37,33 +50,35 @@ def test_sandbox_bare_keys_not_swallowed_by_subtable():
     ``protected`` が ``[opencode.sandbox.permissions]`` に落ちると
     ``denyWrite`` が空になり、保護が黙って消える (実際に一度作り込んだ)。
     """
-    for key in ("runtime_path", "protected", "deny_read", "config_dir"):
+    for key in (
+        "runtime_path", "read", "work_read", "protected", "deny_read", "unsafe_workspace",
+        "config_dir",
+    ):
         assert key in SANDBOX, f"[opencode.sandbox].{key} が無い (サブテーブルに吸われた?)"
     for key in ("permissions", "policies"):
         assert isinstance(SANDBOX.get(key), dict), f"[opencode.sandbox.{key}] が無い"
 
 
-def test_deny_read_covers_windows_and_tmp():
-    """``denyRead: ~`` は WSL の Windows 側とホストの /tmp を守らない。"""
-    deny = SANDBOX.get("deny_read", [])
-    for required in ("/mnt", "/tmp"):
-        assert required in deny, f"deny_read に {required} が無い"
+def test_unsafe_workspace_covers_home_windows_and_tmp():
+    """起動ディレクトリは書けるので、ホーム・WSL の Windows 側・/tmp では起動しない。"""
+    unsafe = SANDBOX.get("unsafe_workspace", [])
+    for required in ("~", "/mnt", "/tmp"):
+        assert required in unsafe, f"unsafe_workspace に {required} が無い"
 
 
-def test_global_opencode_config_is_not_opened_wholesale():
+def test_runtime_is_fence():
+    """境界の道具は Fence (CHG-0009 段 0)。srt は Claude Code だけが使う。"""
+    assert SANDBOX["runtime_path"].endswith("/github-fencesandbox-fence/latest/fence")
+
+
+def test_global_opencode_config_is_not_opened_wholesale(tmp_path):
     """★``~/.config/opencode`` を丸ごと開けないこと。
 
     境界内で要るのは plugin の実体だけで、隔離版の設定は ``config_dir``
     (``~/.config/opencode-sandbox``) 側にある。丸ごと開けると
     ``service.json`` (常駐サービスの認証情報) まで読めてしまう。
-    通信路は ``allowLocalBinding = false`` が塞いでいるが、防御が 1 枚になる。
-
-    ★deny を足すのではなく**開ける範囲を狭める**。R3 で ``allowRead`` は
-      ``denyRead`` に勝つため、名指しの deny は効かない。
     """
-    out = gen.opencode_sandbox(COMMON)
-    if out is None:
-        return
+    out = _out(tmp_path)
     read = out["base"]["read"]
     home = str(Path.home())
     assert f"{home}/.config/opencode" not in read, "global config を丸ごと開けている"
@@ -81,13 +96,14 @@ def test_config_dir_is_outside_any_workspace():
     assert config_dir.startswith(f"{home}/.config/"), "config_dir が ~/.config の外にある"
 
 
-def test_data_home_is_inside_workspace():
-    """snapshot の保存先が永続領域であること。
+def test_isolated_db_keys_are_gone():
+    """★DB はホストと共有する。隔離用 DB とデータ領域の差し替えは持たない (CHG-0009 段 2)。
 
-    既定のままだと境界内では隠れて消える領域に書かれ、捕捉は成功したように
-    見えるのに復元できない。
+    ``XDG_DATA_HOME`` を起動ディレクトリへ向けると、境界の内側の mise が導入済みの
+    道具を見つけられず入れ直していた。
     """
-    assert SANDBOX.get("data_home"), "data_home が無い (安全網が消える)"
+    for key in ("data_home", "db"):
+        assert key not in SANDBOX, f"[opencode.sandbox].{key} が残っている"
 
 
 # ---------------------------------------------------------------------------
@@ -170,29 +186,38 @@ def test_policies_cover_apply_and_push():
 # 出力全体
 # ---------------------------------------------------------------------------
 
-def test_sandbox_output_shape():
-    out = gen.opencode_sandbox(COMMON)
-    if out is None:  # srt が無いマシンでは出力しない (macOS / Windows / 初回前)
-        return
-    for key in ("runtime_path", "base", "paths", "config_dir", "permissions"):
+def test_sandbox_output_shape(tmp_path):
+    out = _out(tmp_path)
+    for key in ("runtime_path", "base", "config_dir", "permissions"):
         assert key in out, f"{key} が出力に無い"
-    for key in ("read", "write", "deny_read", "protected", "network"):
+    assert "paths" not in out, "隔離用 DB の置き場が残っている"
+    for key in (
+        "read", "work_read", "write", "deny_read", "unsafe_workspace", "protected", "network",
+    ):
         assert key in out["base"], f"base に {key} が無い"
-    for key in ("data_home", "db"):
-        assert key in out["paths"], f"paths に {key} が無い"
     base = out["base"]
     assert out["config_dir"] not in base["write"], "config_dir が書ける"
     assert any(out["config_dir"].startswith(p) for p in base["read"]), "config_dir が読めない"
 
 
-def test_model_provider_domain_allowed():
+def test_no_output_without_fence(tmp_path):
+    """Fence の実体が無い機械では境界の設定を出さない (ランチャーが起動を断る)。"""
+    common = {
+        **COMMON,
+        "opencode": {
+            **COMMON["opencode"],
+            "sandbox": {**SANDBOX, "runtime_path": str(tmp_path / "missing")},
+        },
+    }
+    assert gen.opencode_sandbox(common) is None
+
+
+def test_model_provider_domain_allowed(tmp_path):
     """★モデル提供元が無いと proxy が CONNECT を 403 で落とす。
 
     症状が「応答が来ない」になり原因が見えにくいので、生成で固定する。
     """
-    out = gen.opencode_sandbox(COMMON)
-    if out is None:
-        return
+    out = _out(tmp_path)
     domains = out["base"]["network"]["allowedDomains"]
     assert "api.githubcopilot.com" in domains, "モデル提供元が許可リストに無い"
 
@@ -235,35 +260,27 @@ def test_protected_includes_workspace_plugin_dir():
     """★``.opencode/plugins`` は置かれると自動ロードされる。
 
     境界内で動くのでホストへは出られないが、permission 評価と同じプロセス
-    なのでツール層の規則を自ら無効化できる。**まだ存在しなくても**塞ぐ。
+    なのでツール層の規則を自ら無効化できる。**まだ存在しなくても**塞ぐ
+    (ランチャーが空のディレクトリを先に作る)。
     """
     assert ".opencode" in SANDBOX.get("protected", []), "protected に .opencode が無い"
 
 
-def test_protected_paths_are_not_filtered_by_existence():
-    """★存在しないパスも denyWrite へ渡すこと。
+def test_protected_paths_are_not_filtered_by_existence(tmp_path):
+    """★生成の時点では存在で絞らない。
 
-    srt は存在しないパスにも denyWrite を効かせ、作成そのものを阻止する
-    (実測)。存在フィルタを掛けると「まだ無いから守らない」という最も
-    守りたい場面で保護が外れる。
+    ワークスペースは起動ディレクトリなので、有無は起動時にしか分からない。
+    ランチャーが起動ディレクトリと合わせ、無いものを作るか落とす。
     """
-    out = gen.opencode_sandbox(COMMON)
-    if out is None:
-        return
-    # 素材のまま (ワークスペース相対) で渡り、ランチャーが起動ディレクトリと
-    # 組み合わせる。存在フィルタを掛けないこと。
+    out = _out(tmp_path)
     assert set(out["base"]["protected"]) == set(SANDBOX.get("protected", []))
 
 
-def test_isolated_loads_guide_plugin_for_redaction():
+def test_isolated_loads_guide_plugin_for_redaction(tmp_path):
     """境界はワークスペースの中を守らないので、伏字化が要る。
 
-    ★段階 5 で、境界内では無意味な層 (誘導・結果フィルタ・パス参照の伏字化)
-      を削り、内容の形の伏字化だけを残す予定。
     """
-    out = gen.opencode_sandbox(COMMON)
-    if out is None:
-        return
+    out = _out(tmp_path)
     plugins = out.get("plugins") or []
     assert plugins, "隔離版に plugin が無い (伏字化が効かない)"
     base = out["base"]
@@ -289,7 +306,7 @@ ISOLATED_GUIDE_ROLES = {
 
 @pytest.mark.parametrize("role", sorted(ISOLATED_GUIDE_ROLES))
 def test_isolated_guide_plugin_follows_the_shared_condition(tmp_path, role):
-    runtime = tmp_path / "srt"
+    runtime = tmp_path / "fence"
     runtime.write_text("", "utf-8")
     common, expected = ISOLATED_GUIDE_ROLES[role]
     common = {**common, "opencode": {
@@ -304,9 +321,8 @@ def test_isolated_guide_plugin_follows_the_shared_condition(tmp_path, role):
 def test_boundary_check_handles_nonexistent_protected_paths():
     """★保護対象は存在するとは限らない。
 
-    srt は存在しないパスにも denyWrite を効かせ、作成そのものを阻止する。
     存在を前提にすると「検査できない」と誤判定し、境界は正常なのに
-    起動できなくなる (実地で踏んだ)。
+    合格できなくなる (実地で踏んだ)。無ければ「作れないこと」を確かめる。
     """
     check = ROOT / "home" / "dot_local" / "bin" / "executable_ocs-boundary-check"
     body = check.read_text(encoding="utf-8")
@@ -330,26 +346,19 @@ def test_boundary_check_detects_writable_regular_file():
     assert '( : > "$p" )' not in body, "保護対象を切り詰める書き方が入っている"
 
 
-def test_protected_paths_may_not_exist_on_host():
-    """宣言した保護対象のうち、ホストに無いものがあっても構わない。
-
-    ``.opencode`` は「作られたら困る」対象なので、存在しない状態が正常。
-    """
-    out = gen.opencode_sandbox(COMMON)
-    if out is None:
-        return
+def test_protected_paths_may_not_exist_on_host(tmp_path):
+    """宣言した保護対象のうち、ホストに無いものがあっても構わない。"""
+    out = _out(tmp_path)
     assert ".opencode" in out["base"]["protected"], ".opencode が保護対象から消えた"
 
 
-def test_model_preference_is_declared():
+def test_model_preference_is_declared(tmp_path):
     """既定モデルを宣言しておく。無いと初回に何が選ばれるか環境依存になる。
 
     ★provider ID とモデル ID は実在を確認してから書くこと。無いものを書くと
       起動しても応答が来ない。
     """
-    out = gen.opencode_sandbox(COMMON)
-    if out is None:
-        return
+    out = _out(tmp_path)
     preference = out.get("model_preference") or []
     assert preference, "model_preference が無い"
     for entry in preference:

@@ -1136,24 +1136,14 @@ def provider_domains(common: dict[str, Any], names: Any) -> list[str]:
 
 
 def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
-    """OpenCode を丸ごと囲う境界の**素材** (CHG-0004 段階 2・4)。
+    """OpenCode を丸ごと囲う境界の**素材**。
 
-    ランチャーが ``srt -s <組み立てた設定> -c "opencode --standalone"`` で使う。
+    ランチャー (``ocs``) が起動ディレクトリと合わせて Fence の設定を組み立てる。
+    ここでは共通の許可リストだけを出す。
 
-    **ワークスペースは起動ディレクトリ**。事前に確定しないので、ここでは
-    共通の許可リストと、プロジェクト固有の追加分だけを出す。組み立ては
-    ランチャーが行う。
-
-    **``runtime_path`` の実体があるときだけ返す。** 無いマシン (macOS /
-    Windows / 初回 apply 前) では設定を出さず、ランチャーは起動を断る。
-    ``seccomp_apply_path`` と同じ作り。
-
-    癖が 2 つある。どちらも黙って壊れるので注意する。
-    see docs/research/opencode/permission/sandbox-runtime.md
-
-    - R1: ``allowRead`` に ``allowWrite`` の祖先を載せると書き込みが無効化される。
-      ワークスペースは両方へ完全一致で入れる (ランチャーがそうする)。
-    - R2: どちらにも載らない領域への書き込みは「成功したように見えて消える」。
+    **``runtime_path`` の実体があるときだけ返す。** 無いマシンでは設定を出さず、
+    ランチャーは起動を断る。``seccomp_apply_path`` と同じ作り。
+    see docs/spec/opencode-sandbox.md#境界の中身
     """
     cfg = common.get("opencode", {}).get("sandbox")
     if not cfg or not cfg.get("enabled"):
@@ -1164,18 +1154,23 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
 
     sandbox_cfg = common.get("sandbox", {})
     web = common.get("web", {})
+
+    def paths(key: str) -> list[str]:
+        return _uniq([expand_user(str(p)) for p in cfg.get(key) or []])
+
+    # 共有の秘密の一覧 ([sandbox] deny) も隠す。glob は Fence へ渡さない。
+    shared_secrets = [
+        expand_user(str(p)) for p in sandbox_cfg.get("deny", []) if "*" not in str(p)
+    ]
     out: dict[str, Any] = {
         "runtime_path": runtime,
         "base": {
-            "read": _uniq([expand_user(str(p)) for p in cfg.get("read") or []]),
-            "write": _uniq([expand_user(str(p)) for p in cfg.get("write") or []]),
-            "deny_read": _uniq(
-                [expand_user(str(p)) for p in cfg.get("deny_read") or ["~"]]
-            ),
-            # 保護対象はワークスペース相対のまま渡す。ランチャーが起動
-            # ディレクトリと組み合わせる。
-            # ★存在しないパスも含める。srt は存在しないパスにも denyWrite を
-            #   効かせ、作成そのものを阻止する（実測）。
+            "read": paths("read"),
+            "work_read": paths("work_read"),
+            "write": paths("write"),
+            "deny_read": _uniq([*paths("deny_read"), *shared_secrets]),
+            "unsafe_workspace": paths("unsafe_workspace"),
+            # ワークスペース相対のまま渡す。ランチャーが起動ディレクトリと合わせる。
             "protected": [str(p) for p in cfg.get("protected") or []],
             "network": {
                 "allowedDomains": _uniq(
@@ -1188,14 +1183,6 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
                 "allowLocalBinding": False,
             },
         },
-        # ワークスペース相対。安全網と DB は起動ディレクトリごとに分かれる。
-        "paths": {
-            key: str(cfg[key]) for key in ("data_home", "db") if cfg.get(key)
-        },
-        # ★プロジェクト個別の追加許可はここに持たない。
-        #   <起動ディレクトリ>/.opencode/sandbox.toml が「要求」し、ランチャーが
-        #   人の承認を取って初めて効く。複数 PC で宣言を持ち回れるようにするため。
-        #   see docs/change/closed/0004-opencode-sandbox.md
     }
     # 隔離版の設定ディレクトリは**ワークスペースの外**。内側からは allowRead
     # だけなので、緩和設定を自分で広げられない。ランチャーが起動のたびに

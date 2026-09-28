@@ -864,15 +864,24 @@ def test_skills_not_declared_in_common_are_kept():
     assert gen.opencode_skills_path() in merged
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="ocs の境界は Linux 専用 (CHG-0004)")
-def test_checkpoint_plugin_is_readable_inside_the_boundary():
+@pytest.mark.skipif(sys.platform != "linux", reason="ocs の境界は Linux 専用")
+def test_checkpoint_plugin_is_readable_inside_the_boundary(tmp_path):
     """★隔離版でも圧縮は起きる。
 
-    ``ocs`` は ``~/.config/opencode`` を丸ごとは開けない (R4: ``service.json``
-    が読めてしまうため)。plugin 本体とスキルの CLI を名指しで開けていないと、
-    **境界の内側でだけ** checkpoint が動かない。
+    ``ocs`` は ``~/.config/opencode`` を丸ごとは開けない (``service.json`` がある)。
+    plugin 本体とスキルの CLI を名指しで開けていないと、**境界の内側でだけ**
+    checkpoint が動かない。
     """
-    sandbox = gen.opencode_sandbox(COMMON)
+    runtime = tmp_path / "fence"
+    runtime.write_text("", "utf-8")
+    common = {
+        **COMMON,
+        "opencode": {
+            **COMMON["opencode"],
+            "sandbox": {**COMMON["opencode"]["sandbox"], "runtime_path": str(runtime)},
+        },
+    }
+    sandbox = gen.opencode_sandbox(common)
     assert gen.opencode_checkpoint_plugin_path() in sandbox["plugins"]
 
     readable = sandbox["base"]["read"]

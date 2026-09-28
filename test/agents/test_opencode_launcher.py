@@ -1,20 +1,17 @@
-"""ランチャーの設定書き出しに関するテスト。
+"""隔離起動 ``ocs`` のランチャーに関するテスト。
 
 Run with: ``uv run --with pytest --no-project pytest test/agents/`` or
 ``python3 -m pytest test/agents/``.
 
-★守りたいのは「緩和に関わるキーは毎回差し替わる」ことと
-  「それ以外のキーは残る」ことの両立。
-  丸ごと上書きすると、TUI で選んだモデルが毎回消える (実際に出したバグ)。
-see docs/change/closed/0004-opencode-sandbox.md
+see docs/spec/opencode-sandbox.md
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
-import shlex
 import sqlite3
 import subprocess
 import sys
@@ -29,14 +26,30 @@ sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
 
-# ocs は bwrap で囲うので Ubuntu / WSL 専用 (CHG-0004)。他の OS には配らない
+# ocs は bwrap で囲うので Ubuntu / WSL 専用。他の OS には配らない
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="ocs は Linux 専用")
 from agents_common import load_common  # noqa: E402
 
 LAUNCHER = ROOT / "home" / "dot_local" / "bin" / "executable_ocs"
 LIB = ROOT / "home" / "dot_local" / "share" / "ocs"
-MODULES = ("common", "boundary", "check", "backup", "session", "config", "cli")
+MODULES = ("common", "boundary", "check", "backup", "config", "cli")
 COMMON = load_common()
+
+
+def _generated(tmp_path: Path) -> dict:
+    """Fence の無い機械でも生成結果を得るため、runtime だけダミーに差し替える。"""
+    runtime = tmp_path / "fence"
+    runtime.write_text("", "utf-8")
+    common = {
+        **COMMON,
+        "opencode": {
+            **COMMON["opencode"],
+            "sandbox": {**COMMON["opencode"]["sandbox"], "runtime_path": str(runtime)},
+        },
+    }
+    sandbox = gen.opencode_sandbox(common)
+    assert sandbox is not None, "境界の設定が生成されない"
+    return sandbox
 
 
 def _entry() -> dict:
@@ -61,12 +74,11 @@ def _launcher() -> SimpleNamespace:
 
 
 def _sandbox(tmp_path: Path, **overrides) -> dict:
-    """境界の設定に、書き出し先だけ差し替えたものを返す。"""
-    base = gen.opencode_sandbox(COMMON) or {}
-    fallback = [{"action": "shell", "resource": "*", "effect": "allow"}]
+    """隔離版の設定の素材に、書き出し先だけ差し替えたものを返す。"""
+    base = _generated(tmp_path)
     return {
         "config_dir": str(tmp_path / "config"),
-        "permissions": base.get("permissions", fallback),
+        "permissions": base["permissions"],
         "policies": base.get("policies", []),
         "plugins": base.get("plugins", []),
         "system_prompt": base.get("system_prompt", "境界の説明"),
@@ -79,7 +91,7 @@ def _project(tmp_path: Path) -> dict:
     """cwd で選ばれるプロジェクト 1 つ分。"""
     return {
         "workspace": str(tmp_path / "ws"),
-        "data_home": str(tmp_path / "ws" / ".opencode-sandbox" / "data"),
+        "data_dir": str(tmp_path / "data" / "opencode"),
         "db": str(tmp_path / "opencode.db"),
         "config": {"network": {"allowedDomains": []}, "filesystem": {"denyWrite": []}},
     }
@@ -203,22 +215,24 @@ def test_model_is_absent_without_credentials(tmp_path):
     assert launcher.config.pick_model(sandbox, project) is None
 
 
-def _base_sandbox() -> dict:
+def _base_sandbox(tmp_path: Path, **base) -> dict:
+    """境界の素材。パスは tmp_path の下に作る (無いパスは境界へ渡らないため)。"""
+    shared = tmp_path / "shared"
+    shared.mkdir(exist_ok=True)
     return {
         "base": {
-            "read": ["/opt/shared"],
+            "read": [str(shared)],
+            "work_read": [],
             "write": [],
-            "deny_read": ["/home/u", "/mnt", "/tmp"],
+            "deny_read": [],
+            "unsafe_workspace": ["/home/u", "/mnt", "/tmp"],
             "protected": [".opencode"],
             "network": {
                 "allowedDomains": ["github.com"],
                 "deniedDomains": [],
                 "allowLocalBinding": False,
             },
-        },
-        "paths": {
-            "data_home": ".opencode-sandbox/data",
-            "db": ".opencode-sandbox/opencode.db",
+            **base,
         },
     }
 
@@ -231,67 +245,155 @@ def _request(workspace: Path, body: str) -> Path:
 
 
 def test_launch_directory_is_always_writable(tmp_path):
-    """★起動ディレクトリ以下は無条件に許可する。
-
-    どこで起動するかは利用者の責務。要求は追加の許可が要るときだけ。
-    """
+    """★起動ディレクトリ以下は無条件に書ける。読み取りも開ける。"""
     launcher = _launcher()
     where = tmp_path / "undeclared" / "deep"
     where.mkdir(parents=True)
-    filesystem = launcher.boundary.build_boundary(_base_sandbox(), where)["filesystem"]
+    filesystem = launcher.boundary.build_boundary(_base_sandbox(tmp_path), where)["filesystem"]
     assert str(where) in filesystem["allowWrite"]
-    # R1: ワークスペースは allowRead にも完全一致で入れる
     assert str(where) in filesystem["allowRead"]
+
+
+def test_reads_are_denied_by_default(tmp_path):
+    """★読み取りは既定で拒否し、並べた所だけを開ける。
+
+    名指しで隠す形では、新しくできた秘密の置き場が既定で見える。
+    """
+    launcher = _launcher()
+    (tmp_path / "ws").mkdir()
+    filesystem = launcher.boundary.build_boundary(
+        _base_sandbox(tmp_path), tmp_path / "ws"
+    )["filesystem"]
+    assert filesystem["defaultDenyRead"] is True
+
+
+def test_missing_paths_are_not_passed_to_fence(tmp_path):
+    """無いパスは Fence へ渡さない (機械ごとに無い作業用ディレクトリがあってよい)。"""
+    launcher = _launcher()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (tmp_path / "src").mkdir()
+    sandbox = _base_sandbox(
+        tmp_path,
+        work_read=[str(tmp_path / "src"), str(tmp_path / "papers")],
+        write=[str(tmp_path / "cache")],
+    )
+    filesystem = launcher.boundary.build_boundary(sandbox, ws)["filesystem"]
+    assert str(tmp_path / "src") in filesystem["allowRead"], "作業用の親ディレクトリが読めない"
+    assert str(tmp_path / "papers") not in filesystem["allowRead"]
+    assert str(tmp_path / "cache") not in filesystem["allowWrite"]
+
+
+def test_data_dir_is_shared_but_state_is_not(tmp_path):
+    """★DB を共有するので XDG_DATA_HOME/opencode は読み書きできる。
+
+    ``~/.local/state/opencode`` (常駐サービスの接続情報) は開けない。
+    """
+    launcher = _launcher()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    data = tmp_path / "share" / "opencode"
+    data.mkdir(parents=True)
+    filesystem = launcher.boundary.build_boundary(
+        _base_sandbox(tmp_path), ws, None, data
+    )["filesystem"]
+    assert str(data) in filesystem["allowWrite"]
+    opened = " ".join(filesystem["allowRead"] + filesystem["allowWrite"])
+    assert ".local/state/opencode" not in opened
+
+
+def test_generated_read_list_does_not_open_opencode_state(tmp_path):
+    """★生成された素材も ``~/.local/state`` と ``~/.config/opencode`` を丸ごとは開けない。"""
+    base = _generated(tmp_path)["base"]
+    home = str(Path.home())
+    opened = [*base["read"], *base["work_read"], *base["write"]]
+    assert f"{home}/.config/opencode" not in opened, "service.json まで読める"
+    assert not any(p.startswith(f"{home}/.local/state") for p in opened)
+
+
+def test_work_roots_are_declared(tmp_path):
+    """利用者が決めた作業用の親ディレクトリを読めるようにする (CHG-0009 段 5)。"""
+    work = _generated(tmp_path)["base"]["work_read"]
+    home = str(Path.home())
+    for rel in ("src", "worktrees", "papers", ".local/share/chezmoi"):
+        assert f"{home}/{rel}" in work, f"~/{rel} が work_read に無い"
+
+
+def test_secrets_inside_opened_dirs_are_hidden(tmp_path, monkeypatch):
+    """★開けた場所の内側の秘密は denyRead で隠す。開けていない所は元から見えない。"""
+    launcher = _launcher()
+    home = tmp_path / "home"
+    chezmoi = home / ".config/chezmoi"
+    chezmoi.mkdir(parents=True)
+    (chezmoi / "key.txt").write_text("x", encoding="utf-8")
+    (home / ".ssh").mkdir()
+    run_user = tmp_path / "run" / "user"
+    run_user.mkdir(parents=True)
+    monkeypatch.setattr(launcher.boundary, "HOME", home)
+    ws = home / "ws"
+    ws.mkdir()
+    sandbox = _base_sandbox(
+        tmp_path,
+        read=[str(chezmoi)],
+        deny_read=[
+            str(chezmoi / "key.txt"),
+            str(home / ".ssh"),
+            str(home / ".gnupg"),
+            str(run_user),
+        ],
+    )
+    deny = launcher.boundary.build_boundary(sandbox, ws)["filesystem"]["denyRead"]
+    assert str(chezmoi / "key.txt") in deny, "開けた場所の内側の秘密が隠れていない"
+    assert str(home / ".ssh") not in deny, "開けていない場所を Fence へ渡している"
+    assert str(home / ".gnupg") not in deny, "無い場所を Fence へ渡している"
+    assert str(run_user) in deny, "ホームの外の既定で見える場所が隠れていない"
+
+
+def test_shared_secret_list_reaches_the_boundary(tmp_path):
+    """★[sandbox] deny の秘密 (glob 以外) は隔離起動でも隠す対象になる。"""
+    deny = _generated(tmp_path)["base"]["deny_read"]
+    home = str(Path.home())
+    assert f"{home}/.config/chezmoi/key.txt" in deny
+    assert f"{home}/.ssh" in deny
+    assert not [p for p in deny if "*" in p], "glob を Fence へ渡している"
 
 
 @pytest.mark.parametrize(
     "where",
     ["/home/u", "/home", "/", "/tmp", "/mnt"],
-    ids=["deny_read そのもの", "その祖先", "ルート", "/tmp", "/mnt"],
+    ids=["unsafe_workspace そのもの", "その祖先", "ルート", "/tmp", "/mnt"],
 )
-def test_workspace_that_cancels_deny_read_is_rejected(where):
-    """★deny_read を打ち消す場所では起動しない。
-
-    R3 で allowRead が denyRead に勝つため、deny_read の項目そのものか
-    その祖先で起動すると、その deny が丸ごと無効になる。
-    """
+def test_too_broad_workspace_is_rejected(tmp_path, where):
+    """★起動ディレクトリは書けるので、ホームや /tmp では起動しない。"""
     launcher = _launcher()
     with pytest.raises(SystemExit):
-        launcher.boundary.reject_unsafe_workspace(_base_sandbox(), Path(where))
+        launcher.boundary.reject_unsafe_workspace(_base_sandbox(tmp_path), Path(where))
 
 
 @pytest.mark.parametrize(
     "where",
     ["/home/u/work/repo", "/tmp/scratch", "/opt/shared/x"],
-    ids=["ホーム配下", "/tmp 配下", "deny_read の外"],
+    ids=["ホーム配下", "/tmp 配下", "対象の外"],
 )
-def test_workspace_below_deny_read_is_allowed(where):
-    """子孫での起動は安全なので通す。/tmp/x は /tmp の deny を壊さない。"""
+def test_workspace_below_unsafe_roots_is_allowed(tmp_path, where):
     launcher = _launcher()
-    launcher.boundary.reject_unsafe_workspace(_base_sandbox(), Path(where))
+    launcher.boundary.reject_unsafe_workspace(_base_sandbox(tmp_path), Path(where))
 
 
-def test_unsafe_workspace_is_rejected_before_boundary_is_built(tmp_path, monkeypatch):
-    """★拒否は境界を組み立てる前に起きること。
-
-    順序が逆だと、打ち消された境界を一度作ってから捨てることになる。
-    """
-    launcher = _launcher()
-    built = []
-    monkeypatch.setattr(launcher.boundary, "build_boundary", lambda *a: built.append(a))
-    with pytest.raises(SystemExit):
-        launcher.boundary.reject_unsafe_workspace(_base_sandbox(), Path("/home/u"))
-    assert built == []
+def test_generated_unsafe_workspace_covers_home_and_tmp(tmp_path):
+    unsafe = _generated(tmp_path)["base"]["unsafe_workspace"]
+    for required in (str(Path.home()), "/mnt", "/tmp"):
+        assert required in unsafe, f"unsafe_workspace に {required} が無い"
 
 
 def test_no_request_means_no_extras(tmp_path):
     """要求が無ければ追加はゼロ。共通分だけで動く。"""
     launcher = _launcher()
     (tmp_path / "gamma").mkdir()
-    boundary = launcher.boundary.build_boundary(_base_sandbox(), tmp_path / "gamma")
+    boundary = launcher.boundary.build_boundary(_base_sandbox(tmp_path), tmp_path / "gamma")
     assert boundary["filesystem"]["allowRead"] == [
         str(tmp_path / "gamma"),
-        "/opt/shared",
+        str(tmp_path / "shared"),
     ]
     assert boundary["network"]["allowedDomains"] == ["github.com"]
 
@@ -302,113 +404,63 @@ def test_request_adds_only_to_its_own_workspace(tmp_path):
     alpha, beta = tmp_path / "alpha", tmp_path / "beta"
     alpha.mkdir()
     beta.mkdir()
-    _request(
-        alpha,
-        'read = ["/mnt/d/alpha"]\nnetwork_allow = ["api.alpha.test"]\n',
-    )
+    data = tmp_path / "d" / "alpha"
+    data.mkdir(parents=True)
+    _request(alpha, f'read = ["{data}"]\nnetwork_allow = ["api.alpha.test"]\n')
 
     build, read = launcher.boundary.build_boundary, launcher.boundary.read_request
-    got = build(_base_sandbox(), alpha, read(alpha))
-    assert "/mnt/d/alpha" in got["filesystem"]["allowRead"]
+    got = build(_base_sandbox(tmp_path), alpha, read(alpha))
+    assert str(data) in got["filesystem"]["allowRead"]
     assert "api.alpha.test" in got["network"]["allowedDomains"]
 
-    other = build(_base_sandbox(), beta, read(beta))
-    assert "/mnt/d/alpha" not in other["filesystem"]["allowRead"]
+    other = build(_base_sandbox(tmp_path), beta, read(beta))
+    assert str(data) not in other["filesystem"]["allowRead"]
     assert "api.alpha.test" not in other["network"]["allowedDomains"]
 
 
-def test_request_is_not_inherited_by_subdirectories(tmp_path):
-    """★親の要求で子を動かさない。
+def test_request_is_applied_without_approval(tmp_path, monkeypatch, capsys):
+    """★要求は確認なしで適用し、足した分を起動時に表示する (承認の記録は持たない)。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    out = tmp_path / "out"
+    out.mkdir()
+    _request(ws, f'write = ["{out}"]\nnetwork_allow = ["api.alpha.test"]\n')
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    request = launcher.boundary.read_request(ws)
+    launcher.boundary.announce_request(request)
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, request)
+    assert str(out) in got["filesystem"]["allowWrite"]
+    shown = capsys.readouterr().err
+    assert str(out) in shown and "api.alpha.test" in shown
+    assert str(ws / ".opencode" / "sandbox.toml") in shown
+    assert not hasattr(launcher.boundary, "ensure_trusted"), "承認の仕組みが残っている"
 
-    起動ディレクトリが境界なので、要求もその場のものだけを見る。
-    """
+
+def test_request_is_not_inherited_by_subdirectories(tmp_path):
+    """★親の要求で子を動かさない。要求はその場のものだけを見る。"""
     launcher = _launcher()
     outer = tmp_path / "repo"
     inner = outer / "pkg"
     inner.mkdir(parents=True)
-    _request(outer, 'read = ["/outer"]\n')
-    allow_read = launcher.boundary.build_boundary(_base_sandbox(), inner)["filesystem"][
-        "allowRead"
-    ]
-    assert "/outer" not in allow_read
+    _request(outer, f'read = ["{tmp_path}"]\n')
+    assert launcher.boundary.read_request(inner) is None
 
 
 def test_request_paths_are_resolved(tmp_path):
-    """``~`` と相対パスは展開してから境界へ渡す。
-
-    人が承認するのは「何が開くか」なので、書かれた文字列のままにしない。
-    """
+    """``~`` と相対パスは展開してから境界へ渡す。"""
     launcher = _launcher()
     ws = tmp_path / "proj"
     ws.mkdir()
-    _request(ws, 'read = ["~/datasets", "sub/dir"]\n')
-    allow_read = launcher.boundary.build_boundary(
-        _base_sandbox(), ws, launcher.boundary.read_request(ws)
-    )["filesystem"]["allowRead"]
-    assert str(Path.home() / "datasets") in allow_read
-    assert str(ws / "sub/dir") in allow_read
-    assert "~/datasets" not in allow_read
-
-
-def test_protected_paths_are_workspace_relative(tmp_path):
-    """保護対象は起動ディレクトリと組み合わせる。"""
-    launcher = _launcher()
-    where = tmp_path / "gamma"
-    where.mkdir()
-    deny_write = launcher.boundary.build_boundary(_base_sandbox(), where)["filesystem"][
-        "denyWrite"
+    _request(ws, 'read = ["~/datasets", "sub/dir", "../other"]\n')
+    extras = launcher.boundary.read_request(ws)["extras"]["read"]
+    assert extras == [
+        str(Path.home() / "datasets"), str(ws / "sub/dir"), str(tmp_path / "other")
     ]
-    assert str(where / ".opencode") in deny_write
-
-
-def test_unapproved_request_refuses_to_start(tmp_path, monkeypatch):
-    """★承認していない要求では起動しない。
-
-    リポジトリは「要求」できるが「付与」はできない。
-    """
-    launcher = _launcher()
-    ws = tmp_path / "proj"
-    ws.mkdir()
-    _request(ws, 'read = ["/mnt/d/alpha"]\n')
-    monkeypatch.setattr(launcher.boundary, "TRUST", tmp_path / "trusted.json")
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-    with pytest.raises(SystemExit):
-        launcher.boundary.ensure_trusted(ws, False, launcher.boundary.read_request(ws))
-
-
-def test_approval_is_recorded_outside_the_workspace(tmp_path, monkeypatch):
-    """承認の記録は境界の外に置く。内側から書けると自分で承認できる。"""
-    launcher = _launcher()
-    ws = tmp_path / "proj"
-    ws.mkdir()
-    _request(ws, 'read = ["/mnt/d/alpha"]\n')
-    trust = tmp_path / "state" / "trusted.json"
-    monkeypatch.setattr(launcher.boundary, "TRUST", trust)
-
-    launcher.boundary.ensure_trusted(ws, True, launcher.boundary.read_request(ws))  # --trust
-    assert ws not in trust.parents, "承認の記録がワークスペースの中にある"
-    # 2 回目は尋ねずに通る (端末が無くても落ちない)
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-    launcher.boundary.ensure_trusted(ws, False, launcher.boundary.read_request(ws))
-
-
-def test_changed_request_needs_reapproval(tmp_path, monkeypatch):
-    """★要求が変わったら承認をやり直す。"""
-    launcher = _launcher()
-    ws = tmp_path / "proj"
-    ws.mkdir()
-    _request(ws, 'read = ["/mnt/d/alpha"]\n')
-    monkeypatch.setattr(launcher.boundary, "TRUST", tmp_path / "trusted.json")
-    launcher.boundary.ensure_trusted(ws, True, launcher.boundary.read_request(ws))
-
-    _request(ws, 'read = ["/mnt/d/alpha", "/home/u/.ssh"]\n')
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-    with pytest.raises(SystemExit):
-        launcher.boundary.ensure_trusted(ws, False, launcher.boundary.read_request(ws))
 
 
 def test_unknown_keys_in_request_refuse_to_start(tmp_path):
-    """知らない項目は黙って無視しない。読み違えたまま承認させない。"""
+    """知らない項目は黙って無視しない。"""
     launcher = _launcher()
     ws = tmp_path / "proj"
     ws.mkdir()
@@ -417,17 +469,40 @@ def test_unknown_keys_in_request_refuse_to_start(tmp_path):
         launcher.boundary.read_request(ws)
 
 
-def test_approval_prompt_shows_what_opens(tmp_path):
-    """承認画面に、実際に開くものが出ること。"""
+def test_request_values_must_be_string_lists(tmp_path):
     launcher = _launcher()
     ws = tmp_path / "proj"
     ws.mkdir()
-    _request(ws, 'read = ["/mnt/d/alpha"]\nnetwork_allow = ["api.alpha.test"]\n')
-    text = launcher.boundary.describe_request(ws, launcher.boundary.read_request(ws))
-    assert "/mnt/d/alpha" in text
-    assert "api.alpha.test" in text
-    assert str(ws / ".opencode" / "sandbox.toml") in text
+    _request(ws, 'write = "/mnt/d/out"\n')
+    with pytest.raises(SystemExit):
+        launcher.boundary.read_request(ws)
 
+
+def test_protected_paths_are_workspace_relative(tmp_path):
+    """保護対象は起動ディレクトリと組み合わせる。"""
+    launcher = _launcher()
+    where = tmp_path / "gamma"
+    where.mkdir()
+    deny_write = launcher.boundary.build_boundary(_base_sandbox(tmp_path), where)[
+        "filesystem"
+    ]["denyWrite"]
+    assert str(where / ".opencode") in deny_write
+
+
+def test_missing_protected_dir_is_created_before_launch(tmp_path):
+    """★Fence の denyWrite は無いパスに効かない。無い ``.opencode`` は先に作って塞ぐ。
+
+    親が無いもの (別のリポジトリの ``home/dot_config/agents`` など) は作らず、渡さない。
+    """
+    launcher = _launcher()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    sandbox = _base_sandbox(tmp_path, protected=[".opencode", "home/dot_config/agents"])
+    deny_write = launcher.boundary.build_boundary(sandbox, ws)["filesystem"]["denyWrite"]
+    assert (ws / ".opencode").is_dir(), ".opencode を作っていない"
+    assert str(ws / ".opencode") in deny_write
+    assert not (ws / "home").exists(), "親の無い保護対象まで作った"
+    assert str(ws / "home/dot_config/agents") not in deny_write
 
 
 def test_system_prompt_is_written(tmp_path):
@@ -498,29 +573,6 @@ def test_experimental_is_dropped_when_only_policies_were_in_it(tmp_path):
     assert "experimental" not in json.loads(target.read_text(encoding="utf-8"))
 
 
-# --- 渡した引数が opencode まで届くこと -------------------------------------
-
-
-def test_passthrough_reaches_opencode():
-    """★srt の -c はコマンド文字列を 1 個しか取らない。
-
-    後ろへ並べた引数は srt の位置引数になり **エラーも出さずに捨てられる**。
-    `ocs --continue` が素の起動になっていた回帰。
-    """
-    launcher = _launcher()
-    got = launcher.cli.inner_command(["--continue"], "/usr/bin")
-    assert got.endswith("--standalone --continue"), got
-    assert "--session ses_x" in launcher.cli.inner_command(["--session", "ses_x"], "/usr/bin")
-
-
-def test_passthrough_is_quoted():
-    """コマンド文字列へ入れる以上、引用符はこちらで付ける。"""
-    launcher = _launcher()
-    got = launcher.cli.inner_command(["--prompt", "a; rm -rf /"], "/a b:/usr/bin")
-    assert "'a; rm -rf /'" in got, got
-    assert "'PATH=/a b:/usr/bin'" in got, got
-
-
 # --- git worktree ------------------------------------------------------------
 
 
@@ -548,7 +600,7 @@ def test_worktree_shares_the_main_git_dir(tmp_path):
     """
     launcher = _launcher()
     common, wt = _worktree(tmp_path)
-    filesystem = launcher.boundary.build_boundary(_base_sandbox(), wt)["filesystem"]
+    filesystem = launcher.boundary.build_boundary(_base_sandbox(tmp_path), wt)["filesystem"]
     assert str(common) in filesystem["allowWrite"], "共有 .git が書けない"
 
 
@@ -559,7 +611,9 @@ def test_worktree_git_hooks_and_config_stay_protected(tmp_path):
     """
     launcher = _launcher()
     common, wt = _worktree(tmp_path)
-    deny_write = launcher.boundary.build_boundary(_base_sandbox(), wt)["filesystem"]["denyWrite"]
+    deny_write = launcher.boundary.build_boundary(_base_sandbox(tmp_path), wt)["filesystem"][
+        "denyWrite"
+    ]
     assert str(common / "hooks") in deny_write
     assert str(common / "config") in deny_write
 
@@ -584,232 +638,52 @@ def test_git_common_dir_ignores_git_env(tmp_path, monkeypatch):
     assert launcher.boundary.git_common_dir(repo) is None
 
 
-# --- 境界チェックの再利用 ----------------------------------------------------
-
-
-def test_check_digest_changes_with_the_boundary(tmp_path, monkeypatch):
-    """★境界が変われば再検査になること。
-
-    ここに混ぜ忘れた入力は「変わっても古い合格が使われる」ことになる。
-    """
-    launcher = _launcher()
-    sandbox = {"runtime_path": str(tmp_path / "srt.js")}
-    one = launcher.check.check_digest(sandbox, {"filesystem": {"allowWrite": ["/a"]}}, [])
-    two = launcher.check.check_digest(sandbox, {"filesystem": {"allowWrite": ["/a", "/b"]}}, [])
-    assert one != two, "境界を広げても digest が変わっていない"
-
-
-def test_check_digest_changes_when_a_hidden_target_appears(tmp_path):
-    """★後からホストに現れた秘密を、古い合格で素通りさせないこと。"""
-    launcher = _launcher()
-    sandbox = {"runtime_path": str(tmp_path / "srt.js")}
-    boundary = {"filesystem": {"allowWrite": ["/a"]}}
-    before = launcher.check.check_digest(sandbox, boundary, [])
-    after = launcher.check.check_digest(sandbox, boundary, ["/home/u/.ssh"])
-    assert before != after, "検査対象が増えても digest が変わっていない"
-
-
-def test_handoff_reads_the_isolated_db_and_writes_the_host_db(tmp_path, monkeypatch):
-    """★移送は「隔離用 DB から読み、ホストの DB へ書く」こと。
-
-    取り込み側に ``OPENCODE_DB`` が残っていると隔離用 DB へ書き戻すことに
-    なり、境界の外から再開できない。``--standalone`` を付けないことで
-    常駐サービス（ホスト DB）へ届かせる。
-    """
-    launcher = _launcher()
-    ws = tmp_path / "proj"
-    (ws / ".opencode-sandbox").mkdir(parents=True)
-    db = ws / ".opencode-sandbox" / "opencode.db"
-    db.write_bytes(b"x")
-    monkeypatch.setattr(launcher.session, "HOME", tmp_path / "home")
-
-    calls: list[dict] = []
-
-    def fake_run(cmd, **kw):
-        calls.append({"cmd": cmd, "env": kw.get("env") or {}})
-        if "export" in cmd:
-            Path(kw["stdout"].name).write_text("{}", encoding="utf-8")
-        return subprocess.CompletedProcess(cmd, 0)
-
-    monkeypatch.setattr(launcher.session, "subprocess", subprocess)
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    launcher.session.handoff_session(ws, "ses_x")
-
-    export, import_ = calls
-    assert "export" in export["cmd"] and "--standalone" in export["cmd"]
-    assert export["env"]["OPENCODE_DB"] == str(db), "隔離用 DB から読んでいない"
-
-    assert "import" in import_["cmd"]
-    assert "OPENCODE_DB" not in import_["env"], "取り込み側に OPENCODE_DB が残っている"
-    assert "--standalone" not in import_["cmd"], "常駐サービス(ホスト DB)へ届かない"
-    assert str(ws) in import_["cmd"], "--directory にワークスペースを渡していない"
-
-
-def test_handoff_staging_is_outside_the_workspace(tmp_path, monkeypatch):
-    """★書き出す JSON をワークスペース内に置かないこと。
-
-    境界内から書ける場所に置くと、取り込む前に内容を差し替えられる。
-    """
-    launcher = _launcher()
-    ws = tmp_path / "proj"
-    (ws / ".opencode-sandbox").mkdir(parents=True)
-    (ws / ".opencode-sandbox" / "opencode.db").write_bytes(b"x")
-    home = tmp_path / "home"
-    monkeypatch.setattr(launcher.session, "HOME", home)
-
-    seen: list[Path] = []
-
-    def fake_run(cmd, **kw):
-        if "export" in cmd:
-            path = Path(kw["stdout"].name)
-            seen.append(path)
-            path.write_text("{}", encoding="utf-8")
-        return subprocess.CompletedProcess(cmd, 0)
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    launcher.session.handoff_session(ws, "ses_x")
-
-    assert seen, "書き出しが走っていない"
-    assert ws not in seen[0].parents, f"ワークスペース内に置いた: {seen[0]}"
-    assert str(home) in str(seen[0]), "状態領域の外に置いた"
-
-
-def test_seed_db_never_copies_host_conversations(tmp_path, monkeypatch):
-    """★ホストの会話をワークスペースへ**一度も書かない**こと。
-
-    以前は ``src.backup(dst)`` で丸ごと写してから要らないテーブルを
-    削除していた。削除前の全会話がワークスペース内に存在する時間帯があり、
-    同じワークスペースで別セッションが動いていれば読めた。
-    """
-    launcher = _launcher()
-    home = tmp_path / "home"
-    source = home / ".local/share/opencode/opencode.db"
-    source.parent.mkdir(parents=True)
-    con = sqlite3.connect(str(source))
-    con.execute("create table credential (id text, integration_id text)")
-    con.execute("create table migration (id integer)")
-    con.execute("create table session_v2 (id text, title text)")
-    con.execute("create table session_message (id text, body text)")
-    con.execute("insert into credential values ('c1', 'github-copilot')")
-    con.execute("insert into migration values (1)")
-    con.execute("insert into session_v2 values ('s1', 'ホストの会話')")
-    con.execute("insert into session_message values ('m1', '秘密の本文')")
-    con.commit()
-    con.close()
-
-    monkeypatch.setattr(launcher.session, "HOME", home)
-    out = tmp_path / "ws" / ".opencode-sandbox" / "opencode.db"
-    launcher.session.seed_db(out)
-
-    got = sqlite3.connect(f"file:{out}?mode=ro", uri=True)
-    counts = {
-        name: got.execute(f'select count(*) from "{name}"').fetchone()[0]
-        for (name,) in got.execute(
-            "select name from sqlite_master where type='table'"
-            " and name not like 'sqlite_%'"
-        )
-    }
-    got.close()
-
-    assert counts["credential"] == 1, "資格情報が引き継がれていない"
-    assert counts["migration"] == 1, "migration が無いと OpenCode が壊れる"
-    assert counts["session_v2"] == 0, "ホストの会話が入っている"
-    assert counts["session_message"] == 0, "ホストのメッセージが入っている"
-    # ★スキーマは残す。テーブルごと消すと OpenCode が作り直せない。
-    assert "session_v2" in counts, "スキーマまで落としている"
-    # 削除済みデータが空きページに残っていないこと (本文が生で出ないこと)
-    assert b"\xe7\xa7\x98\xe5\xaf\x86" not in out.read_bytes(), "本文がファイルに残っている"
-
-
-def test_seed_db_does_not_leave_a_half_built_db(tmp_path, monkeypatch):
-    """★書き途中を ``db.exists()`` に拾わせないこと。
-
-    途中で落ちたものが残ると、次回は初期化を飛ばして**不完全な DB を
-    恒久的に再利用**する。別名で作ってから rename する。
-    """
-    launcher = _launcher()
-    home = tmp_path / "home"
-    source = home / ".local/share/opencode/opencode.db"
-    source.parent.mkdir(parents=True)
-    con = sqlite3.connect(str(source))
-    con.execute("create table credential (id text)")
-    con.commit()
-    con.close()
-
-    monkeypatch.setattr(launcher.session, "HOME", home)
-    out = tmp_path / "ws" / "opencode.db"
-    launcher.session.seed_db(out)
-
-    leftovers = list(out.parent.glob("*.building"))
-    assert not leftovers, f"作業用ファイルが残っている: {leftovers}"
-
-
-def test_boundary_check_is_fail_closed():
-    """★検査スクリプトが無ければ起動しないこと。
-
-    以前は ``if not args.skip_check and CHECK.is_file():`` で、配備の失敗や
-    ファイル消失が「検査を飛ばして起動」に化けていた。保護が消えても
-    誰も気づかない形なので、**存在しないときは die** にする。
-    """
-    body = (LIB / "cli.py").read_text(encoding="utf-8")
-    assert "if not args.skip_check and check.CHECK.is_file():" not in body, (
-        "fail-open の条件が残っている"
-    )
-    assert "if not check.CHECK.is_file():" in body, "検査スクリプトの不在を弾いていない"
+# --- 境界の定義と残骸 ---------------------------------------------------------
 
 
 def test_boundary_file_lives_outside_the_workspace():
-    """★境界の定義をワークスペース内に置かないこと。
+    """★境界の定義と Fence の TMPDIR をワークスペース内に置かないこと。
 
-    tempfile の既定は TMPDIR に従い、このリポジトリでは TMPDIR が
-    ワークスペース内を指す。そこは allowWrite 領域なので、srt が読む前に
-    **内側から書き換えられる**（同一 UID では 0600 でも別セッションを
-    隔離できない）。
+    内側から書ける場所だと、Fence が読む前に書き換えられる。
     """
     launcher = _launcher()
-    boundaries = launcher.cli.BOUNDARIES
-    assert ".local/state/opencode-sandbox" in str(boundaries), (
-        f"境界の置き場が状態領域の外: {boundaries}"
-    )
-    assert "/.tmp" not in str(boundaries), "TMPDIR 配下に置いている"
+    for path in (launcher.cli.BOUNDARIES, launcher.cli.FENCE_TMP):
+        assert ".local/state/opencode-sandbox" in str(path), f"状態領域の外: {path}"
+        assert "/.tmp" not in str(path), "TMPDIR 配下に置いている"
 
 
-def test_prune_boundaries_drops_only_stale_files(tmp_path, monkeypatch):
+def test_prune_drops_only_stale_files(tmp_path, monkeypatch):
     """★残骸だけ捨て、稼働中のものは残すこと。
 
-    execve で finally が走らないため自分では消せない。次の起動が前回の分を
-    捨てるが、並行して動いているセッションの分を消してはいけない。
+    execve で finally が走らないため自分では消せない。次の起動が前回の分を捨てる。
+    Fence は起動ごとに seccomp のフィルタを TMPDIR に残す。
     """
     launcher = _launcher()
-    monkeypatch.setattr(launcher.cli, "BOUNDARIES", tmp_path)
+    boundaries = tmp_path / "boundaries"
+    seccomp = tmp_path / "tmp" / "fence-seccomp"
+    boundaries.mkdir()
+    seccomp.mkdir(parents=True)
+    monkeypatch.setattr(launcher.cli, "BOUNDARIES", boundaries)
+    monkeypatch.setattr(launcher.cli, "FENCE_TMP", tmp_path / "tmp")
     monkeypatch.setattr(launcher.cli, "BOUNDARY_MAX_AGE_SECONDS", 3600)
+    monkeypatch.setattr(launcher.cli, "SECCOMP_MAX_AGE_SECONDS", 60)
 
-    stale = tmp_path / "opencode-boundary-old.json"
-    fresh = tmp_path / "opencode-boundary-new.json"
-    other = tmp_path / "checked.json"
-    for p in (stale, fresh, other):
+    stale = boundaries / "opencode-boundary-old.json"
+    fresh = boundaries / "opencode-boundary-new.json"
+    other = boundaries / "checked.json"
+    old_bpf = seccomp / "fence-seccomp-1.bpf"
+    new_bpf = seccomp / "fence-seccomp-2.bpf"
+    for p in (stale, fresh, other, old_bpf, new_bpf):
         p.write_text("{}", encoding="utf-8")
     os.utime(stale, (0, time.time() - 7200))
+    os.utime(old_bpf, (0, time.time() - 120))
 
-    launcher.cli.prune_boundaries()
+    launcher.cli.prune_leftovers()
 
-    assert not stale.exists(), "古い残骸が残っている"
-    assert fresh.exists(), "稼働中のものを消した"
+    assert not stale.exists(), "古い境界の定義が残っている"
+    assert not old_bpf.exists(), "古い seccomp のフィルタが残っている"
+    assert fresh.exists() and new_bpf.exists(), "稼働中のものを消した"
     assert other.exists(), "対象外のファイルを消した"
-
-
-def test_check_is_reused_only_while_fresh(tmp_path, monkeypatch):
-    """同じ入力の合格は使い回すが、期限を過ぎたら再検査する。"""
-    launcher = _launcher()
-    monkeypatch.setattr(launcher.check, "CHECKED", tmp_path / "checked.json")
-    assert launcher.check.check_is_fresh("d1") is False, "記録が無いのに合格にした"
-
-    launcher.check.save_check("d1")
-    assert launcher.check.check_is_fresh("d1") is True
-    assert launcher.check.check_is_fresh("d2") is False, "別の入力で合格にした"
-
-    monkeypatch.setattr(launcher.check, "CHECK_TTL_SECONDS", 0)
-    assert launcher.check.check_is_fresh("d1") is False, "期限を過ぎても合格にした"
 
 
 # --- 通常版から引き継ぐ設定 --------------------------------------------------
@@ -853,15 +727,12 @@ def test_security_keys_are_never_inherited(tmp_path, monkeypatch):
     assert got == {}, f"引き継いではいけないキーが入った: {sorted(got)}"
 
 
-def test_skill_roots_are_readable_inside_the_boundary():
-    """★skill 置き場が read に載っていること。
-
-    deny_read の ~ に埋もれると skill が 1 つも読めなくなる (実測)。
-    """
-    read = (gen.opencode_sandbox(COMMON) or {}).get("base", {}).get("read", [])
+def test_skill_roots_are_readable_inside_the_boundary(tmp_path):
+    """★skill 置き場と git の利用者設定が read に載っていること。"""
+    read = _generated(tmp_path)["base"]["read"]
     joined = " ".join(read)
-    assert ".claude/skills" in joined, "~/.claude/skills が読めない"
-    assert ".agents/skills" in joined, "~/.agents/skills が読めない"
+    for needle in (".claude/skills", ".agents/skills", ".gitconfig", ".config/git"):
+        assert needle in joined, f"{needle} が読めない"
 
 
 # --- 起動前の退避 ------------------------------------------------------------
@@ -1209,7 +1080,7 @@ def test_backup_git_does_not_inherit_git_env(monkeypatch):
     }
 
 
-# --- 境界チェックへの受け渡し ------------------------------------------------
+# --- 境界チェック -------------------------------------------------------------
 
 CHECK_SCRIPT = ROOT / "home" / "dot_local" / "bin" / "executable_ocs-boundary-check"
 
@@ -1217,6 +1088,7 @@ CHECK_SCRIPT = ROOT / "home" / "dot_local" / "bin" / "executable_ocs-boundary-ch
 def _check_project(workspace: Path, protected: list[str]) -> dict:
     return {
         "workspace": str(workspace),
+        "data_dir": str(workspace / "data"),
         "config": {
             "network": {"allowedDomains": ["allowed.test"]},
             "filesystem": {"denyWrite": protected},
@@ -1240,10 +1112,7 @@ def _run_check_script(
         '#!/bin/sh\ncase "$*" in *allowed.test*) exit 0 ;; esac\nexit 7\n', encoding="utf-8"
     )
     curl.chmod(0o755)
-    base = {
-        "PATH": f"{fakebin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
-        "XDG_DATA_HOME": str(ws / "data"),
-    }
+    base = {"PATH": f"{fakebin}:{os.environ.get('PATH', '/usr/bin:/bin')}"}
     env = launcher.check.check_environment(_check_project(ws, protected), base, hidden)
     env["BOUNDARY_CURL"] = str(curl)
     return subprocess.run(
@@ -1260,8 +1129,6 @@ def _run_check_script(
 def test_protected_paths_with_spaces_and_globs_reach_the_check_intact(tmp_path):
     """★空白や glob 文字を含む保護対象を、分割も展開もせずに検査すること。
 
-    以前は空白で連結して未引用で展開していたので、``a b`` は ``a`` と ``b``
-    に割れ、``c*`` は作業領域のファイル名へ化けて、本来の対象を検査しなかった。
     境界なしで走らせるので、全て「書けてしまう」が正しい結果になる。
     """
     launcher = _launcher()
@@ -1290,27 +1157,47 @@ def test_protected_paths_with_spaces_and_globs_reach_the_check_intact(tmp_path):
 
 
 def test_hidden_paths_with_spaces_reach_the_check_intact(tmp_path):
-    """★見えてはいけない対象も、空白で割らずに検査すること。"""
+    """★読めてはいけない対象も、空白で割らずに検査すること。"""
     launcher = _launcher()
     visible = tmp_path / "secret dir"
     visible.mkdir()
+    (visible / "id").write_text("x", encoding="utf-8")
     gone = tmp_path / "gone dir"
     done = _run_check_script(
         tmp_path, launcher, [], {"present": [str(visible)], "absent": [str(gone)]}
     )
-    assert f"★NG  {visible} が見えている\n" in done.stdout, done.stdout
+    assert f"★NG  {visible} の中が見えている\n" in done.stdout, done.stdout
     assert f"SKIP {gone} はホストに無いので検査しない\n" in done.stdout, done.stdout
     assert done.returncode == 1
 
 
-def test_check_script_reports_every_failure_before_exiting(tmp_path):
-    """★``set -eu`` を入れても集計が途中で切れないこと。
+def test_hidden_check_judges_by_readability(tmp_path):
+    """★在るかではなく読めるかで判定する (WSL の /mnt/c は stat だけ通る)。
 
-    NG が複数あっても全て並び、最後の判定まで届くこと。
+    隠した結果の空のディレクトリと /dev/null は合格、読めるファイルは不合格。
     """
+    launcher = _launcher()
+    emptied = tmp_path / "masked dir"
+    emptied.mkdir()
+    readable = tmp_path / "key.txt"
+    readable.write_text("x", encoding="utf-8")
+    done = _run_check_script(
+        tmp_path,
+        launcher,
+        [],
+        {"present": [str(emptied), "/dev/null", str(readable)], "absent": []},
+    )
+    assert f"OK   {emptied} は読めない\n" in done.stdout, done.stdout
+    assert "OK   /dev/null は読めない\n" in done.stdout, done.stdout
+    assert f"★NG  {readable} を開ける\n" in done.stdout, done.stdout
+
+
+def test_check_script_reports_every_failure_before_exiting(tmp_path):
+    """★``set -eu`` を入れても集計が途中で切れないこと。"""
     launcher = _launcher()
     visible = tmp_path / "secret"
     visible.mkdir()
+    (visible / "id").write_text("x", encoding="utf-8")
     writable = tmp_path / "ws" / "protected dir"
     writable.mkdir(parents=True)
     done = _run_check_script(
@@ -1341,7 +1228,24 @@ def test_check_script_passes_when_nothing_leaks(tmp_path):
     finally:
         locked.chmod(0o700)
     assert "境界チェック: 合格" in done.stdout, done.stdout + done.stderr
+    data = tmp_path / "ws" / "data"
+    assert f"OK   {data} へ書ける" in done.stdout, "データディレクトリを検査していない"
     assert done.returncode == 0
+
+
+def test_check_script_fails_when_the_data_dir_is_not_writable(tmp_path):
+    """★DB と snapshot の置き場へ書けなければ不合格 (共有の DB が使えない)。"""
+    launcher = _launcher()
+    data = tmp_path / "ws" / "data"
+    data.mkdir(parents=True)
+    data.chmod(0o500)
+    try:
+        done = _run_check_script(tmp_path, launcher, [], {"present": [], "absent": []})
+    finally:
+        data.chmod(0o700)
+    if os.geteuid() != 0:
+        assert f"★NG  {data} へ書けない" in done.stdout, done.stdout
+        assert done.returncode == 1
 
 
 def test_check_script_refuses_without_the_path_lists(tmp_path):
@@ -1371,47 +1275,25 @@ def test_path_with_newline_is_refused(tmp_path):
 
 
 def test_hidden_targets_are_split_by_host_presence(tmp_path, monkeypatch):
-    """★ホストに無いものは「見えない」を合格の根拠にしない。
-
-    在ると分かっているものだけを検査に回し、無いものは SKIP として示す。
-    """
+    """★ホストに無いものは「読めない」を合格の根拠にしない。"""
     launcher = _launcher()
     home = tmp_path / "home"
     (home / ".ssh").mkdir(parents=True)
+    state = tmp_path / "state"
+    (state / "opencode").mkdir(parents=True)
+    (state / "opencode" / "service.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(launcher.check, "HOME", home)
+    monkeypatch.setenv("XDG_STATE_HOME", str(state))
     monkeypatch.setattr(launcher.check, "_is_wsl", lambda: False)
     got = launcher.check.hidden_targets()
     canary = home / launcher.check.CANARY_REL
-    assert got["present"] == [str(canary), str(home / ".ssh")]
+    assert got["present"] == [
+        str(canary),
+        str(home / ".ssh"),
+        str(state / "opencode" / "service.json"),
+    ]
     assert str(home / ".git-credentials") in got["absent"]
-    assert str(home / ".config/gh") in got["absent"]
     assert not any(p.startswith("/mnt/c") for p in got["present"] + got["absent"])
-
-
-def test_check_is_invoked_with_absolute_quoted_shell(tmp_path, monkeypatch):
-    """★検査は ``/bin/sh`` を絶対パスで呼び、スクリプトのパスは引用する。
-
-    ``srt -c`` は引用しない ``sh -c`` なので、空白入りのパスは割れる。
-    """
-    launcher = _launcher()
-    check = tmp_path / "bin dir" / "ocs-boundary-check"
-    monkeypatch.setattr(launcher.check, "CHECK", check)
-    seen: list[list[str]] = []
-
-    def fake_run(cmd, **kw):
-        seen.append(cmd)
-        return subprocess.CompletedProcess(cmd, 0)
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    launcher.check.run_check(
-        "/usr/bin/node",
-        tmp_path / "srt.js",
-        str(tmp_path / "b.json"),
-        _check_project(tmp_path, []),
-        {},
-        {"present": [], "absent": []},
-    )
-    assert seen[0][-1] == f"/bin/sh '{check}'", seen[0]
 
 
 def test_canary_is_always_checked_even_without_host_secrets(tmp_path, monkeypatch):
@@ -1420,6 +1302,7 @@ def test_canary_is_always_checked_even_without_host_secrets(tmp_path, monkeypatc
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(launcher.check, "HOME", home)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.setattr(launcher.check, "_is_wsl", lambda: False)
     got = launcher.check.hidden_targets()
     canary = home / launcher.check.CANARY_REL
@@ -1429,188 +1312,16 @@ def test_canary_is_always_checked_even_without_host_secrets(tmp_path, monkeypatc
 
 
 def test_canary_must_not_be_readable_inside_the_boundary(tmp_path):
-    """目印は read にも write にも載せない (載ると必ず「見えている」で止まる)。
-
-    ★srt の無い機械でも生成結果が空にならないよう、runtime だけダミーに差し替える。
-    """
-    runtime = tmp_path / "srt"
-    runtime.write_text("", "utf-8")
-    common = {
-        **COMMON,
-        "opencode": {
-            **COMMON["opencode"],
-            "sandbox": {**COMMON["opencode"]["sandbox"], "runtime_path": str(runtime)},
-        },
-    }
-    sandbox = gen.opencode_sandbox(common)
-    assert sandbox is not None, "境界の設定が生成されない"
-    base = sandbox["base"]
-    opened = [*base["read"], *base["write"]]
+    """目印は read にも write にも載せない (載ると必ず「読める」で止まる)。"""
+    base = _generated(tmp_path)["base"]
+    opened = [*base["read"], *base["work_read"], *base["write"]]
     assert opened, "許可のリストが空で、検査になっていない"
     canary = str(Path.home() / _launcher().check.CANARY_REL)
     assert not any(canary == p or canary.startswith(p.rstrip("/") + "/") for p in opened)
 
 
-def test_srt_runs_with_a_fixed_path():
-    """★srt は境界の外で PATH から which / bwrap / socat を起動する。
-
-    利用者の PATH のまま渡すと、先頭の書き込める場所の偽物がホストで動く。
-    PATH 以外は変えない。
-    """
-    launcher = _launcher()
-    got = launcher.check.srt_env({"PATH": "/evil:/usr/bin", "HOME": "/h"})
-    assert got == {"PATH": "/usr/bin:/bin", "HOME": "/h"}
-
-
-def test_check_runs_srt_with_a_fixed_path(tmp_path, monkeypatch):
-    """★境界チェックで srt を起動するときも PATH を固定する。"""
-    launcher = _launcher()
-    seen: list[dict] = []
-
-    def fake_run(cmd, **kw):
-        seen.append(kw["env"])
-        return subprocess.CompletedProcess(cmd, 0)
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    launcher.check.run_check(
-        "/usr/bin/node",
-        tmp_path / "srt.js",
-        str(tmp_path / "b.json"),
-        _check_project(tmp_path, []),
-        {"PATH": str(tmp_path / "evil")},
-        {"present": [], "absent": []},
-    )
-    assert seen[0]["PATH"] == "/usr/bin:/bin"
-
-
-def _launch(tmp_path: Path, monkeypatch, env: dict[str, str]) -> dict:
-    """``ocs`` を起動し、``execve`` に渡る引数と環境を返す (srt は動かさない)。"""
-    launcher = _launcher()
-    ws = tmp_path / "ws"
-    ws.mkdir()
-    monkeypatch.chdir(ws)
-    runtime = tmp_path / "srt.js"
-    runtime.write_text("", "utf-8")
-    opencode = tmp_path / "opencode"
-    opencode.write_text("", "utf-8")
-    sandbox = {
-        "runtime_path": str(runtime),
-        "config_dir": str(tmp_path / "config"),
-        "base": {
-            "read": [],
-            "write": [],
-            "deny_read": [],
-            "protected": [],
-            "network": {"allowedDomains": [], "deniedDomains": []},
-        },
-        "paths": {"data_home": ".d/data", "db": ".d/opencode.db"},
-    }
-    monkeypatch.setattr(launcher.boundary, "load_boundary", lambda: sandbox)
-    monkeypatch.setattr(launcher.cli, "OPENCODE", opencode)
-    monkeypatch.setattr(launcher.cli, "resolve_node", lambda: "/usr/bin/node")
-    monkeypatch.setattr(launcher.cli, "BOUNDARIES", tmp_path / "boundaries")
-    monkeypatch.setattr(launcher.backup, "backup_worktree", lambda *a: None)
-    monkeypatch.setattr(launcher.config, "write_isolated_config", lambda *a: None)
-    monkeypatch.setattr(launcher.session, "seed_db", lambda *a: None)
-    monkeypatch.setattr(launcher.check, "resolve_ripgrep", lambda config: "/opt/rg/rg")
-    monkeypatch.setattr(
-        launcher.check, "hidden_targets", lambda: {"present": [], "absent": []}
-    )
-    for key, value in env.items():
-        monkeypatch.setenv(key, value)
-    seen: dict = {"opencode": str(opencode)}
-
-    def fake_execve(path, argv, env):
-        seen.update(argv=argv, env=env, boundary=json.loads(Path(argv[3]).read_text("utf-8")))
-        raise SystemExit(0)
-
-    monkeypatch.setattr(os, "execve", fake_execve)
-    with pytest.raises(SystemExit):
-        launcher.cli.main(["--skip-check", "--no-backup"])
-    return seen
-
-
-def test_launch_fixes_srt_path_but_keeps_the_users_path_inside(tmp_path, monkeypatch):
-    """★srt には固定の PATH を、内側の opencode には利用者の PATH を渡す。
-
-    境界の内側で mise の道具を使えるよう、利用者の PATH はコマンド文字列で戻す。
-    rg は srt が境界の外で走らせるので、実体の絶対パスを境界の設定に入れる。
-    """
-    user_path = f"{tmp_path / 'ws' / 'bin'}:/usr/bin"
-    seen = _launch(tmp_path, monkeypatch, {"PATH": user_path})
-
-    assert seen["env"]["PATH"] == "/usr/bin:/bin", "srt が利用者の PATH で動く"
-    inner = shlex.split(seen["argv"][-1])
-    assert inner[:3] == ["/usr/bin/env", f"PATH={user_path}", seen["opencode"]], inner
-    assert seen["boundary"]["ripgrep"]["command"] == "/opt/rg/rg"
-
-
-def test_ripgrep_on_the_host_reads_no_config_file(tmp_path, monkeypatch):
-    """★srt はホストで rg を動かす。rg の設定ファイルは --pre などで外部コマンドを起動できる。
-
-    境界の定義で --no-config を渡す。
-    """
-    seen = _launch(tmp_path, monkeypatch, {"PATH": "/usr/bin"})
-
-    assert seen["boundary"]["ripgrep"] == {"command": "/opt/rg/rg", "args": ["--no-config"]}
-
-
-def _fake_rg(path: Path) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("#!/bin/sh\n", encoding="utf-8")
-    path.chmod(0o755)
-    return path
-
-
-def test_ripgrep_is_taken_from_mise_installs_not_path(tmp_path, monkeypatch):
-    """★rg は PATH からも shim からも探さない。新しい版の実体を選ぶ。"""
-    launcher = _launcher()
-    installs = tmp_path / "installs"
-    _fake_rg(installs / "9.0.0" / "rg-9" / "rg")
-    newest = _fake_rg(installs / "14.1.1" / "ripgrep-14.1.1" / "rg")
-    (installs / "latest").symlink_to("9.0.0")
-    monkeypatch.setattr(launcher.check, "RIPGREP_INSTALLS", installs)
-    monkeypatch.setattr(launcher.check, "RIPGREP_SYSTEM", tmp_path / "none")
-    config = {"filesystem": {"allowWrite": [str(tmp_path / "ws")]}}
-    assert launcher.check.resolve_ripgrep(config) == str(newest)
-
-
-def test_ripgrep_in_a_writable_area_stops_the_launch(tmp_path, monkeypatch):
-    """★境界の内側から書き換えられる rg を srt に渡さない (symlink も実体で比べる)。"""
-    launcher = _launcher()
-    ws = tmp_path / "ws"
-    real = _fake_rg(ws / "bin" / "rg")
-    system = tmp_path / "usr" / "rg"
-    system.parent.mkdir()
-    system.symlink_to(real)
-    monkeypatch.setattr(launcher.check, "RIPGREP_INSTALLS", tmp_path / "none")
-    monkeypatch.setattr(launcher.check, "RIPGREP_SYSTEM", system)
-    config = {"filesystem": {"allowWrite": [str(ws)]}}
-    with pytest.raises(SystemExit):
-        launcher.check.resolve_ripgrep(config)
-
-
-def test_missing_ripgrep_stops_the_launch(tmp_path, monkeypatch):
-    launcher = _launcher()
-    monkeypatch.setattr(launcher.check, "RIPGREP_INSTALLS", tmp_path / "none")
-    monkeypatch.setattr(launcher.check, "RIPGREP_SYSTEM", tmp_path / "none" / "rg")
-    with pytest.raises(SystemExit):
-        launcher.check.resolve_ripgrep({"filesystem": {"allowWrite": []}})
-
-
-def test_inner_env_marks_the_isolated_session(tmp_path):
-    """guide plugin はこの印で隔離版を見分け、表示されない説明の生成を止める。"""
-    launcher = _launcher()
-    env = launcher.cli.inner_env(_sandbox(tmp_path), _project(tmp_path))
-    assert env["OCS_ISOLATED"] == "1"
-
-
 def test_check_does_not_take_curl_from_the_inherited_path(tmp_path):
-    """★検査スクリプトは PATH を固定し、curl を絶対パスで呼ぶ。
-
-    作業領域の PATH にある偽の curl で合格を装わせない。試験用の差し替え口
-    (BOUNDARY_CURL) は、ランチャーが利用者の環境から通さない。
-    """
+    """★検査スクリプトは PATH を固定し、curl を絶対パスで呼ぶ。"""
     launcher = _launcher()
     env = launcher.check.check_environment(
         _check_project(tmp_path, []),
@@ -1626,6 +1337,188 @@ def test_check_does_not_take_curl_from_the_inherited_path(tmp_path):
     ]
     assert lines[1] == "PATH=/usr/bin:/bin", "set -eu の直後で PATH を固定する"
     assert not [line for line in lines if re.search(r"(^|[\s;(])curl\s", line)]
+
+
+# --- 起動 ---------------------------------------------------------------------
+
+
+def _launch(
+    tmp_path: Path, monkeypatch, env: dict[str, str], argv: list[str] | None = None
+) -> dict:
+    """``ocs`` を起動し、``execve`` (または境界チェック) に渡る引数と環境を返す。"""
+    launcher = _launcher()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.chdir(ws)
+    runtime = tmp_path / "fence"
+    runtime.write_text("", "utf-8")
+    opencode = tmp_path / "opencode"
+    opencode.write_text("", "utf-8")
+    sandbox = {
+        "runtime_path": str(runtime),
+        "config_dir": str(tmp_path / "config"),
+        **_base_sandbox(tmp_path, unsafe_workspace=[]),
+    }
+    monkeypatch.setattr(launcher.boundary, "load_boundary", lambda: sandbox)
+    monkeypatch.setattr(launcher.cli, "OPENCODE", opencode)
+    monkeypatch.setattr(launcher.cli, "BOUNDARIES", tmp_path / "state" / "boundaries")
+    monkeypatch.setattr(launcher.cli, "FENCE_TMP", tmp_path / "state" / "tmp")
+    monkeypatch.setattr(launcher.backup, "backup_worktree", lambda *a: None)
+    monkeypatch.setattr(launcher.config, "write_isolated_config", lambda *a: None)
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    seen: dict = {"opencode": str(opencode), "runtime": str(runtime), "ws": ws}
+
+    def fake_execve(path, argv, env):
+        seen.update(
+            path=path, argv=argv, env=env, boundary=json.loads(Path(argv[2]).read_text("utf-8"))
+        )
+        raise SystemExit(0)
+
+    def fake_check(runtime, boundary, project, env, tmpdir):
+        seen.update(check=(runtime, boundary, project, env, tmpdir))
+        return 3
+
+    monkeypatch.setattr(os, "execve", fake_execve)
+    monkeypatch.setattr(launcher.check, "run_check", fake_check)
+    with contextlib.suppress(SystemExit):
+        seen["returned"] = launcher.cli.main(argv if argv is not None else ["--no-backup"])
+    return seen
+
+
+def test_launch_runs_opencode_inside_fence(tmp_path, monkeypatch):
+    """★Fence へは ``--settings`` を必ず渡す (省くとカレントの fence.json を読む)。
+
+    引数は 1 本の文字列にせず並べて渡す。``ocs --continue`` が opencode に届くこと。
+    """
+    seen = _launch(tmp_path, monkeypatch, {"PATH": "/usr/bin"}, ["--no-backup", "--continue"])
+    argv = seen["argv"]
+    assert seen["path"] == seen["runtime"]
+    assert argv[:2] == [seen["runtime"], "--settings"]
+    assert argv[3] == "--"
+    assert argv[-3:] == [seen["opencode"], "--standalone", "--continue"]
+    assert Path(argv[2]).parent == tmp_path / "state" / "boundaries"
+
+
+def test_launch_fixes_the_host_path_but_keeps_the_users_path_inside(tmp_path, monkeypatch):
+    """★Fence には固定の PATH と状態領域の TMPDIR を、内側の opencode には利用者の PATH と
+    ``/tmp`` を渡す。
+
+    Fence は境界を張る前に bwrap / socat / bash を PATH から探す。内側の TMPDIR が
+    見えない場所のままだと書けない。
+    """
+    user_path = f"{tmp_path / 'ws' / 'bin'}:/usr/bin"
+    seen = _launch(tmp_path, monkeypatch, {"PATH": user_path, "TMPDIR": "/somewhere"})
+    assert seen["env"]["PATH"] == "/usr/bin:/bin", "Fence が利用者の PATH で動く"
+    assert seen["env"]["TMPDIR"] == str(tmp_path / "state" / "tmp")
+    inner = seen["argv"][4:]
+    assert inner[:3] == ["/usr/bin/env", f"PATH={user_path}", "TMPDIR=/tmp"]
+    assert inner[4] == seen["opencode"]
+
+
+def test_inner_state_home_is_writable_scratch(tmp_path, monkeypatch):
+    """★``~/.local/state`` は開けない。opencode は起動時にそこへディレクトリを作るので、
+    内側の ``XDG_STATE_HOME`` を内側の ``/tmp`` (終了時に消える) へ向ける (実測で EROFS)。
+
+    常駐サービスの接続情報 (``service.json``) は見えないまま。
+    """
+    seen = _launch(tmp_path, monkeypatch, {"PATH": "/usr/bin"})
+    assert "XDG_STATE_HOME=/tmp/xdg-state" in seen["argv"][4:9]
+    opened = seen["boundary"]["filesystem"]["allowRead"] + seen["boundary"]["filesystem"][
+        "allowWrite"
+    ]
+    assert not [p for p in opened if "/.local/state" in p]
+
+
+def test_launch_shares_the_host_db(tmp_path, monkeypatch):
+    """★XDG_DATA_HOME と OPENCODE_DB を上書きしない。利用者の OPENCODE_DB は落とす。
+
+    OPENCODE_DB が残ると常駐サービスと別の DB を使い、履歴が分かれる。
+    """
+    seen = _launch(
+        tmp_path, monkeypatch, {"PATH": "/usr/bin", "OPENCODE_DB": "/elsewhere/x.db"}
+    )
+    env = seen["env"]
+    assert "OPENCODE_DB" not in env
+    assert env["XDG_DATA_HOME"] == str(tmp_path / "share")
+    data = tmp_path / "share" / "opencode"
+    assert data.is_dir(), "データディレクトリを用意していない"
+    assert str(data) in seen["boundary"]["filesystem"]["allowWrite"]
+    assert env["OCS_ISOLATED"] == "1"
+    assert env["OPENCODE_CONFIG_DIR"] == str(tmp_path / "config")
+
+
+def test_launch_drops_credentials_from_the_environment(tmp_path, monkeypatch):
+    seen = _launch(
+        tmp_path, monkeypatch, {"PATH": "/usr/bin", "GH_TOKEN": "t", "SSH_AUTH_SOCK": "/s"}
+    )
+    assert "GH_TOKEN" not in seen["env"] and "SSH_AUTH_SOCK" not in seen["env"]
+
+
+def test_check_is_manual_and_does_not_launch(tmp_path, monkeypatch):
+    """★境界チェックは ``ocs --check`` で手動実行する。起動時には走らせない。"""
+    seen = _launch(tmp_path, monkeypatch, {"PATH": "/usr/bin"})
+    assert "check" not in seen, "起動時に境界チェックが走った"
+
+    other = tmp_path / "second"
+    other.mkdir()
+    seen = _launch(other, monkeypatch, {"PATH": "/usr/bin"}, ["--check"])
+    assert "argv" not in seen, "--check で opencode を起動した"
+    assert seen["returned"] == 3, "検査の終了コードを返していない"
+    runtime, _boundary, project, _env, tmpdir = seen["check"]
+    assert runtime == Path(seen["runtime"])
+    assert project["data_dir"] == str(other / "share" / "opencode")
+    assert tmpdir == other / "state" / "tmp", "Fence の TMPDIR を状態領域にしていない"
+
+
+def test_removed_flags_are_gone():
+    """承認・自動の境界チェック・隔離用 DB の操作のフラグは無い (CHG-0009)。"""
+    body = (LIB / "cli.py").read_text(encoding="utf-8")
+    for flag in ("--trust", "--recheck", "--skip-check", "--handoff", "--list-sessions"):
+        assert f'"{flag}"' not in body, f"{flag} が残っている"
+    assert not (LIB / "session.py").exists(), "隔離用 DB の処理が残っている"
+
+
+def test_check_invokes_fence_with_settings(tmp_path, monkeypatch):
+    """★境界チェックも Fence に ``--settings`` と固定の PATH を渡して走らせる。"""
+    launcher = _launcher()
+    check = tmp_path / "bin dir" / "ocs-boundary-check"
+    check.parent.mkdir()
+    check.write_text("", encoding="utf-8")
+    monkeypatch.setattr(launcher.check, "CHECK", check)
+    monkeypatch.setattr(
+        launcher.check, "hidden_targets", lambda: {"present": [], "absent": []}
+    )
+    seen: list = []
+
+    def fake_run(cmd, **kw):
+        seen.append((cmd, kw["env"]))
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    got = launcher.check.run_check(
+        tmp_path / "fence",
+        str(tmp_path / "b.json"),
+        _check_project(tmp_path, []),
+        {"PATH": str(tmp_path / "evil")},
+        tmp_path / "tmp",
+    )
+    cmd, env = seen[0]
+    assert got == 1
+    assert cmd == [str(tmp_path / "fence"), "--settings", str(tmp_path / "b.json"), "--",
+                   "/bin/sh", str(check)]
+    assert env["PATH"] == "/usr/bin:/bin"
+    assert env["TMPDIR"] == str(tmp_path / "tmp")
+
+
+def test_missing_check_script_is_refused(tmp_path, monkeypatch):
+    launcher = _launcher()
+    monkeypatch.setattr(launcher.check, "CHECK", tmp_path / "none")
+    with pytest.raises(SystemExit):
+        launcher.check.run_check(
+            tmp_path / "fence", "b.json", _check_project(tmp_path, []), {}, tmp_path
+        )
 
 
 # --- 本体の読み込み (信頼の鎖) ------------------------------------------------
@@ -1725,11 +1618,7 @@ STATE_DIR = "~/.local/state/opencode-sandbox"
 
 
 def test_launcher_state_is_denied_to_agent_sandboxes():
-    """★承認 (trusted.json) と合格 (checked.json) の記録は ocs の外の CLI からも書けない。
-
-    ~/.local/state は Claude / Copilot の write 許可に入っているので、名指しの
-    deny が無いと、ocs の外で動くエージェントが承認や合格を偽造できる。
-    """
+    """★ocs の状態 (退避・境界の定義) は ocs の外の CLI からも書けない。"""
     assert _covers(COMMON["sandbox"]["deny"], STATE_DIR)
     claude = gen.build_claude_sandbox(COMMON)["filesystem"]
     assert _covers(claude["denyWrite"], STATE_DIR)
@@ -1741,45 +1630,9 @@ def test_launcher_state_is_denied_to_agent_sandboxes():
 def test_launcher_state_exists_before_agents_start():
     """★Copilot はセッション開始時に無いパスの deny を捨て、途中で作られても効かせない。
 
-    ocs を初めて起動する前に Copilot が作ると、そのセッションでは記録を書ける。
     chezmoi が apply で先に作っておく (0700)。
     """
     assert (ROOT / "home/dot_local/state/private_opencode-sandbox/.keep").is_file()
-
-
-STATE_CLEANUP = ROOT / "home/.chezmoiscripts/100_linux/run_once_after_127_ocs_state.sh"
-
-
-def test_records_made_before_the_deny_are_discarded(tmp_path):
-    """★保護が効く前に作られた承認と合格は信頼せず 1 回だけ捨てる。退避は残す。"""
-    state = tmp_path / ".local/state/opencode-sandbox"
-    (state / "backups").mkdir(parents=True)
-    for name in ("trusted.json", "checked.json", "boundary-canary"):
-        (state / name).write_text("{}", encoding="utf-8")
-    (state / "boundaries").symlink_to(tmp_path)
-    done = subprocess.run(
-        ["/bin/sh", str(STATE_CLEANUP)],
-        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-    assert done.returncode == 0, done.stderr
-    assert sorted(p.name for p in state.iterdir()) == ["backups", "boundary-canary"]
-    assert "捨てた" in done.stdout
-
-
-def test_state_cleanup_is_quiet_without_state(tmp_path):
-    done = subprocess.run(
-        ["/bin/sh", str(STATE_CLEANUP)],
-        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-    assert (done.returncode, done.stdout) == (0, "")
 
 
 @pytest.mark.parametrize("source", ["home/dot_local/bin", "home/dot_local/share/ocs"])

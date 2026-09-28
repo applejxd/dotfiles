@@ -1,16 +1,9 @@
 #!/bin/sh
-# 境界の実在を「挙動」で確かめる (CHG-0004 段階 2)。
-# ランチャーが opencode を起動する前に、境界の内側で 1 回走らせる。
+# 境界の実在を「挙動」で確かめる。`ocs --check` が境界の内側で 1 回走らせる。
 #
-# ★値を根拠にしない。/proc/self/status の Seccomp:2 は「何らかの filter が
-#   付いている」ことしか示さず、親環境由来のものでも同じ値になる。
-# ★エラーコード単独でも判定しない。ECONNREFUSED は「待ち受けていないだけ」、
-#   EACCES は「元からの権限」かもしれない。逆に ENOENT は、対象を隠す方式では
-#   正しい隔離結果になる。
-# ★判別できなければ止める。判定できない ≠ 合格。
-#
-# 終了コード 0 = 合格 / 1 = 不合格 (ランチャーは起動を中止する)
-# see docs/change/closed/0004-opencode-sandbox.md
+# ★値を根拠にしない。エラーコード単独でも判定しない。判別できなければ不合格。
+# 終了コード 0 = 合格 / 1 = 不合格
+# see docs/spec/opencode-sandbox.md#境界チェック
 #
 # ★失敗は fail に集計して最後に返す。set -e で途中終了させてよいのは
 #   検査と無関係な後始末だけなので、それらには `|| :` を付ける。
@@ -22,6 +15,7 @@ export PATH
 CURL="${BOUNDARY_CURL:-/usr/bin/curl}"
 
 WS="${BOUNDARY_WORKSPACE:?BOUNDARY_WORKSPACE が未設定}"
+DATA="${BOUNDARY_DATA_DIR:?BOUNDARY_DATA_DIR が未設定}"
 # パスの列は改行区切り (空白・glob 文字を含むパスを壊さない)。ランチャーが組む。
 HIDDEN="${BOUNDARY_HIDDEN?BOUNDARY_HIDDEN が未設定}"
 HIDDEN_ABSENT="${BOUNDARY_HIDDEN_ABSENT:-}"
@@ -33,13 +27,25 @@ ok()   { printf '  OK   %s\n' "$1"; }
 bad()  { printf '  ★NG  %s\n' "$1"; fail=1; }
 skip() { printf '  SKIP %s\n' "$1"; }
 
-# 「隠されている」を合格とする確認。BOUNDARY_HIDDEN はランチャーが
-# 境界の外でホストに在ると確かめたものだけ。
+# 「読めない」を合格とする確認。BOUNDARY_HIDDEN はランチャーが境界の外で
+# ホストに在ると確かめたものだけ。
+# ★在るかではなく読めるかで見る。WSL の /mnt/c は Landlock で読めなくても stat は通る。
+#   隠した結果の空の tmpfs と /dev/null は「読めない」に数える。中身は読まない。
 hidden() { # $1=パス
-  if [ -e "$1" ]; then bad "$1 が見えている"; else ok "$1 は見えない"; fi
+  if [ -d "$1" ]; then
+    if [ -n "$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+      bad "$1 の中が見えている"
+    else
+      ok "$1 は読めない"
+    fi
+  elif [ -f "$1" ] && ( : < "$1" ) 2>/dev/null; then
+    bad "$1 を開ける"
+  else
+    ok "$1 は読めない"
+  fi
 }
 
-# --- 1. ホストの秘密 / Windows 側 (WSL) ---
+# --- 1. ホストの秘密 / 常駐サービスの接続情報 / Windows 側 (WSL) ---
 IFS=$nl
 set -f
 for p in $HIDDEN; do hidden "$p"; done
@@ -47,34 +53,17 @@ for p in $HIDDEN_ABSENT; do skip "$p はホストに無いので検査しない"
 unset IFS
 set +f
 
-# --- 2. 作業領域は書ける (書けないと作業にならない) ---
-probe="$WS/.boundary-probe.$$"
-if ( : > "$probe" ) 2>/dev/null; then
-  rm -f "$probe" || :; ok "作業領域へ書ける"
-else
-  bad "作業領域へ書けない"
-fi
+# --- 2. 作業領域と OpenCode のデータディレクトリへ書ける ---
+for d in "$WS" "$DATA"; do
+  probe="$d/.boundary-probe.$$"
+  if ( : > "$probe" ) 2>/dev/null; then
+    rm -f "$probe" || :; ok "$d へ書ける"
+  else
+    bad "$d へ書けない"
+  fi
+done
 
-# --- 3. 安全網の保存先が永続領域を指していること ---
-# ★内側からは「書けた」ことしか分からない。実体が残るかは隔離の終了後に
-#   ランチャー側が確かめる。ここでは指し先だけを検査する。
-case "${XDG_DATA_HOME:-}" in
-  "") bad "XDG_DATA_HOME が未設定 (snapshot が境界終了時に消える)" ;;
-  "$WS"/*)
-    if ( : > "$XDG_DATA_HOME/.writable.$$" ) 2>/dev/null; then
-      rm -f "$XDG_DATA_HOME/.writable.$$" || :; ok "XDG_DATA_HOME は作業領域の中で書ける"
-    else
-      bad "XDG_DATA_HOME ($XDG_DATA_HOME) へ書けない"
-    fi
-    ;;
-  *) bad "XDG_DATA_HOME が作業領域の外 ($XDG_DATA_HOME)" ;;
-esac
-
-# --- 4. 保護対象を変更できないこと ---
-# ★存在するとは限らない。srt は存在しないパスにも denyWrite を効かせ、
-#   **作成そのものを阻止する**。存在を前提にすると、まだ無いものを
-#   「検査できない」と誤判定する (実地で踏んだ)。
-#   どちらの場合も「書けないこと」を確かめる形に揃える。
+# --- 3. 保護対象を変更できないこと ---
 IFS=$nl
 set -f
 for p in $PROTECTED; do
@@ -87,9 +76,8 @@ for p in $PROTECTED; do
       ok "保護対象へ書けない: $p"
     fi
   elif [ -e "$p" ]; then
-    # ★通常ファイルとして存在する場合。ここを mkdir で判定すると
-    #   「既に在るので作れない」を合格と読んでしまい、**書けるのに合格**する。
-    #   追記で開けるかを見る。`>>` なので中身は変えない (`>` は切り詰める)。
+    # ★通常ファイルは追記で開けるかを見る。mkdir の失敗を合格と読むと、
+    #   書けるのに合格する。`>>` なので中身は変えない (`>` は切り詰める)。
     if ( : >> "$p" ) 2>/dev/null; then
       bad "保護対象へ書けてしまう: $p"
     else
@@ -105,11 +93,9 @@ done
 unset IFS
 set +f
 
-# --- 5. 許可外ドメインへ出られないこと ---
-# ★到達できない理由を区別する。許可済みドメインが引けることを対照に使い、
-#   「ネットワーク自体が死んでいるだけ」を合格にしない。
-# ★proxy の起動を待つ。srt の proxy (localhost:3128) は境界の生成直後には
-#   まだ待ち受けていないことがあり、1 回目の要求は rc=7 で落ちる (実地で踏んだ)。
+# --- 4. 許可外ドメインへ出られないこと ---
+# ★許可済みドメインが通ることを対照に使い、「ネットワーク自体が死んでいるだけ」を
+#   合格にしない。プロキシの待ち受けが遅れることがあるので対照は数回試す。
 if [ -x "$CURL" ]; then
   control=no
   i=0
@@ -135,6 +121,6 @@ fi
 if [ "$fail" -eq 0 ]; then
   printf '境界チェック: 合格\n'
 else
-  printf '境界チェック: 不合格 (起動を中止する)\n'
+  printf '境界チェック: 不合格\n'
 fi
 exit "$fail"

@@ -7,19 +7,13 @@ from pathlib import Path
 
 HOME = Path.home()
 OPENCODE = HOME / ".opencode/bin/opencode"
+# ocs の状態 (境界の定義・Fence の TMPDIR・退避・目印)。境界の内側から見えない。
+STATE = HOME / ".local/state/opencode-sandbox"
 
 
 def die(message: str, hint: str = "") -> None:
-    fail("境界を張れないので起動しない", message, hint)
-
-
-def fail(context: str, message: str, hint: str = "") -> None:
-    """失敗して止める。``context`` で**何ができなかったか**を言い分ける。
-
-    ★管理用の操作 (``--handoff`` など) は境界を張らない。そこで
-      「起動しない」と言うと、利用者が原因を取り違える。
-    """
-    print(f"{context}: {message}", file=sys.stderr)
+    """失敗して止める。境界を張れないなら起動しない。"""
+    print(f"境界を張れないので起動しない: {message}", file=sys.stderr)
     if hint:
         print(f"  {hint}", file=sys.stderr)
     raise SystemExit(1)
