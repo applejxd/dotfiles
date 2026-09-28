@@ -6,7 +6,7 @@
 
 | 種類 | 入口 | 詳細 |
 | --- | --- | --- |
-| Python のテスト（`test/agents/`、`test/test_*.py`） | [AGENTS.md の検証表](../AGENTS.md#検証) | [開発ガイド](../docs/spec/development.md#3-手動実行とテスト) |
+| Python のテスト（`test/agents/`、`test/test_*.py`） | [AGENTS.md の検証表](../AGENTS.md#検証) | [開発ガイド](../docs/spec/development.md#変更の種類ごとの検証) |
 | Windows / PowerShell（対話テストを含む） | 下の「Windows / PowerShell」 | [Windows / PowerShell のテスト](../docs/spec/testing.md#windows--powershell-のテスト) |
 | 新しい機械での cold start（Docker） | `mise run e2e -- [service] [mode]` | [Docker での cold start 検証](../docs/spec/testing.md#docker-での-cold-start-検証) |
 | hook の配備と判定（Docker） | 下の「hook の配備と判定」 | — |

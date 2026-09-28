@@ -13,8 +13,8 @@ OpenCode の隔離起動 (`ocs`) は [OpenCode 隔離起動のアーキテクチ
 > ホスト側の前提条件になる。Linux の bubblewrap backend は `bwrap` /
 > `slirp4netns` / `unshare` / `nsenter` / `iptables` などを probe し、1 つでも
 > 欠けると**起動を拒否して全ツールが失敗する**。症状と一覧は
-> [トラブルシューティング](troubleshooting.md) の
-> 「9. Linux で sandbox がコマンドを 1 つも実行できない」を参照。
+> [Linux で sandbox がコマンドを 1 つも実行できない](troubleshooting-agents.md#linux-で-sandbox-がコマンドを-1-つも実行できない)
+> を参照。
 
 ### なぜ既定が逆なのに揃えるのか
 
@@ -159,8 +159,9 @@ Claude の `denyRead` は `~/` 配下しか塞いでいないため。
 #### Step 6. 根拠を書き、テストで固定する
 
 `common.toml.tmpl` のコメントには **その値を足す/消すときの制約** と参照先
-(`see docs/spec/agent-sandbox.md 「<見出し>」`) だけを残す。**実測値**と
-**何が壊れたか**はこの文書の該当節へ書く ([コメントの書き分け](agent-config-generation.md#コメントの書き分け))。
+(`see docs/spec/agent-sandbox.md 「<見出し>」`) だけを残す。制約と短い理由は
+この文書の該当節へ、**実測値**と**何が壊れたかの経過**は `docs/research/` へ書いて
+該当節からリンクする ([コメントの書き分け](agent-config-generation.md#コメントの書き分け))。
 `test/agents/test_generate_sandbox.py` に、そのパスが期待どおりの権限で
 生成されることと、**write を与えていない**ことを固定する。
 
@@ -185,23 +186,10 @@ Copilot の filesystem は deny-by-default なので、このリストが
    read-only が潰す (`github/copilot-cli#4846`)。しかも `/sandbox policy` は
    Read-write と表示するので、**表示からは気付けない**
 
-実測 (Copilot CLI 1.0.84-5、dev-tool access が ON だった頃):
-
-| パス | 実効権限 | 結果 |
-| --- | --- | --- |
-| `~/.cache/uv` | read-only (RW 指定しても) | `uv run` が lock を作れず EROFS |
-| `~/.local/share/uv/python` | 不可視 | `.venv/bin/python` の実体を辿れない |
-| `/usr/include` | 不可視 | C/C++/cgo のビルドが `fatal error: stdlib.h` で落ちる |
-| `/usr/local` 配下 | 不可視 | ローカル導入のヘッダ・ライブラリ・CUDA を参照できない |
-
-自動付与の粒度は直感と一致しなかった。実測 (Ubuntu) では
-**ライブラリは見えるのにヘッダが見えない**。
-
-```text
-見える  : /usr/lib (136) /usr/lib/x86_64-linux-gnu (2864) /usr/bin (3083)
-          /usr/share (336) /usr/libexec (135) /etc (277) 各種 pkgconfig
-見えない: /usr/include /usr/local/* /usr/src /opt /sys /var/lib
-```
+自動付与が有効だった間は、`~/.cache/uv` が read-only のまま (`uv run` が EROFS)、
+`~/.local/share/uv/python` と `/usr/include`・`/usr/local` が不可視だった。
+**ライブラリは見えるのにヘッダが見えない**ように、粒度が直感と一致しない
+(実測は [開発ツール自動許可の実効権限](../research/agents/copilot-dev-tool-access-grants.md))。
 
 現在のリストは `claude_read_allow` とほぼ同じ内容に、ホーム外を足した形になる。
 
@@ -285,15 +273,8 @@ findmnt -T ~/.cache/uv -o TARGET,SOURCE,OPTIONS
 bind-mount** する。公式の意図は
 "a command needs to run `git`, not modify it" で、実行ファイルの置き場を
 改竄から守るもの。**保護されるのは PATH に載っているディレクトリそのもの**で、
-その親は関係ない。
-
-| パス | 権限 | PATH に載っているか |
-| --- | --- | --- |
-| `~/.local/share/mise` | rw | ✗ |
-| `~/.local/share/mise/installs` | rw | ✗ |
-| `.../npm-markdownlint-cli2/0.22.1` | rw | ✗ |
-| `.../npm-markdownlint-cli2/0.22.1/bin` | **r- (EROFS)** | ○ |
-| `.../node/24.5.0/bin` | **r- (EROFS)** | ○ |
+その親は関係ない (mise なら `installs/<tool>/<版>` は rw、その下の `bin` だけが
+RO。[実測](../research/agents/copilot-dev-tool-access-grants.md#3-path-上のディレクトリは-read-only))。
 
 このため `mise install --force` は、使用中のツールの `bin/` を消そうとして
 `Read-only file system (os error 30)` で失敗する。sandbox の外で
@@ -320,9 +301,9 @@ PATH          : .../node/latest/bin             ← 解決できない
 同じ現象は `/bin` `/lib` `/sbin` でも起きている。
 
 **対処は親ディレクトリごと許可すること。** 親を許可した領域は bind-mount では
-なく素通しになり、中の symlink はリンクのまま見える。実測でも
-`/usr/local` を許可した後は `cuda -> /etc/alternatives/cuda` が
-symlink として見えている。`copilot_read_allow` が
+なく素通しになり、中の symlink はリンクのまま見える
+([実測](../research/agents/copilot-dev-tool-access-grants.md#4-mise-の-latest-symlink-が消える))。
+`copilot_read_allow` が
 `~/.local/share/mise/installs` ではなく **`~/.local` ごと** 許可しているのは
 この理由による。
 
@@ -448,17 +429,9 @@ glob 記法とは **書式が異なる**:
 
 Claude の Linux sandbox は **deny 対象の各パスに `/dev/null` を bind-mount
 する**実装。そのため `~/**/*secret*` のような名前マッチを deny に書くと
-展開結果の数だけ mount が必要になる。実測 (この環境の `$HOME`):
-
-| パターン | 展開数 |
-| --- | ---: |
-| `~/**/*secret*` | 1316 |
-| `~/**/*credential*` | 1103 |
-| `~/**/*.pem` | 473 |
-| `~/**/*password*` | 285 |
-| **deny 全体** | **3239** |
-
-コマンド 1 回ごとに 3239 個の bind-mount は実用に耐えない。さらに deny 対象が
+展開結果の数だけ mount が必要になる。この環境の `$HOME` では deny 全体が
+数千件に展開され、コマンド 1 回ごとの mount として実用に耐えなかった
+([展開数の実測](../research/agents/claude-deny-glob-expansion.md))。さらに deny 対象が
 **symlink を経由すると bwrap のセットアップごと失敗**し、全 sandbox コマンドが
 動かなくなる既知の不具合がある ([anthropics/claude-code#45451][cc-45451])。
 whitelist なら deny は `~/` の 1 本で済み、どちらの問題も起きない。
@@ -821,18 +794,13 @@ Claude との差で特に重要なもの:
 
 ### 実測した既定の許可範囲 (WSL2, chezmoi リポジトリを cwd として `/sandbox policy`)
 
-```text
-System (read-only):  /etc /usr/bin /usr/lib /usr/lib32 /usr/lib64 /usr/libexec
-                     /usr/sbin /usr/share /run/NetworkManager /run/systemd/resolve
-                     /mnt/wsl/resolv.conf
-System (read-write): $TMPDIR
-Working directory:   <cwd> (read-write)
-Current session:     ~/.copilot/session-state/<id>/files (read-write)
-Copilot home:        ~/.copilot/logs (read-only)
-Personal skill roots: ~/.agents/skills ~/.claude/skills (read-only)
-Network:             Outbound allowed / Local network blocked
-Dev-tool access:     Detected tools: python (パスはレポートに出力されない)
-```
+`copilot_*` の許可を足す前の Copilot が既定で何を許すかを、`/sandbox policy` で
+見たもの。表示そのものは
+[既定の許可範囲の実測](../research/agents/copilot-sandbox-default-policy.md) にある
+(当時は `allowDevToolAccess = true`。現在は `false` で許可も足してあるので、
+同じ表示にはならない)。
+既定で許可されるのはシステム領域 (read-only)、`$TMPDIR`・cwd・セッション領域
+(read-write)、`~/.copilot/logs` と skill 置き場 (read-only) だけだった。
 
 ここから分かること:
 
@@ -852,10 +820,9 @@ Dev-tool access:     Detected tools: python (パスはレポートに出力さ�
   sandbox の一時領域もリポジトリ内に収まる。
 - 設定変更は **セッション開始時に読まれる**。`chezmoi apply` 後は
   Copilot を起動し直さないと `/sandbox policy` に反映されない。
-- **存在しないパスの deny ルールは黙って無効化される**。実測では
-  `~/.netrc` / `~/.npmrc` / `~/.pypirc` が未作成だったため
-  設定した 10 件のうち 7 件しか enforce されず、残りは Notes 節に
-  `does not exist; it is not enforced by the OS sandbox` と出た。
+- **存在しないパスの deny ルールは黙って無効化される**。未作成の
+  `~/.netrc` などは enforce されず、Notes 節に
+  `does not exist; it is not enforced by the OS sandbox` と出る。
   → 後からファイルが作られても (例: `npm login` が `~/.npmrc` を作る)
   そのセッション中は deny が効かない。次のセッションからは効く。
   `$HOME` が既定で未許可であるため実害は小さいが、ルールが効いているか

@@ -60,7 +60,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 | 案件 | 状態 | 現在の見立て・最大の未解決点 | 次の確認 |
 | --- | --- | --- | --- |
-| [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。段 2（常用）に着手。使って決まった設定の回収は段 2.5 | 段 2 の冒頭で `/mcp list` ではなくスラッシュコマンドを見る |
+| [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。段 2（常用）に着手。使って決まった設定の回収は段 2.5 | 段 2 の冒頭で `/criticalthink` がスラッシュコマンドに出るかを見る |
 | [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み | 段 2（共有ランタイムとハーネスの節分け） |
 
 ## 判断待ち・障害
@@ -122,7 +122,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | テストの種類と Docker ハーネスの契約を知る | [テストと検証の仕組み](spec/testing.md) |
 | Windows 資産を実機で検証する | [Windows 実機での検証](spec/development.md#windows-実機での検証) |
 | 新しい機械での初回導入を Docker で検証する | [Docker での検証](spec/development.md#新しい機械での初回導入を-docker-で検証する) |
-| Bitwarden / sops の仕組みを知る | [セキュリティ](spec/security.md) |
+| 何を守り、なぜ Bitwarden / sops なのかを知る | [セキュリティ](spec/security.md) |
 | sops + age を導入・復旧する | [Secret管理セットアップ](spec/sops-age.md) |
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
 | `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
@@ -136,6 +136,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-config-generation.md#mcp-サーバ) |
 | sandbox で何ができるか調べる | [sandbox機能の包括調査](research/agents/sandbox-capabilities.md) |
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |
+| `run_once_` / `run_onchange_` を走らせ直す | [スクリプトを走らせ直す](spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す) |
 | いま何を探索しているか知る | [探索・変更案件](change/index.md) |
 | 設計理由を確認する | [ADR一覧](adr/index.md) |
 | 技術調査の結果を確認する | [調査記録一覧](research/index.md) |

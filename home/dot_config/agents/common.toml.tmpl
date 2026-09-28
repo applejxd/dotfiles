@@ -247,7 +247,8 @@ deny = [
 ]
 
 [file]
-# ★キー名の `claude_` は歴史的なもので、現在は Claude と OpenCode が読む。
+# ★接頭辞の無い 4 キーは Claude と OpenCode が読む。`claude_read_allow` だけは
+#   Claude 固有 (OpenCode へは出さない)。
 #   Copilot の permissions-config.json にはファイル規則が無いので渡らない
 #   (等価な保護は [sandbox] deny と check_file_read.py が担う)。
 #   OpenCode へは read / edit の permission rule として出る。

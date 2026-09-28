@@ -393,7 +393,7 @@ sandbox ではなく `~/.copilot/permissions-config.json` の
 加えて iptables は **nft バックエンド**が要り (legacy は `/run/xtables.lock` に
 root が必要)、`nf_conntrack` 未ロードは `Invalid argument` としか出ない。
 
-→ [トラブルシューティング](../../spec/troubleshooting.md) の項目 9 に対処を記載。
+→ [Linux で sandbox がコマンドを 1 つも実行できない（Copilot CLI）](../../spec/troubleshooting-agents.md#copilot-cli) に対処を記載。
 
 ## 4. 何が sandbox の中で動くのか
 

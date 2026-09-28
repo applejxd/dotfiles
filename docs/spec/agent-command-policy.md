@@ -215,10 +215,11 @@ heredoc の本文は、実行される形 (`bash <<'EOF'` / `python3 - <<'PY'`) 
 **Copilot CLI 1.0.53 以降は hook の `ask` が機能しない**。TUI が permission
 dialog を数十 ms 表示しただけで自動承認する既知バグ
 ([github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590), OPEN)
-があるため。実測では hook 由来の permission 90 件のうち 79 件が
-`outcome=auto_approved` / `source=assisted_approval` で中央値 58ms (min 6ms /
-max 99ms) に解決され、人間が応答した 11 件は中央値 23.5 秒だった。
-1.0.84-2 でも `git config --get user.name` が確認無しで実行された。
+があるため。セッションの記録では hook 由来の permission が
+`outcome=auto_approved` / `source=assisted_approval` で解決される。
+件数・所要時間の実測と切り分け手順は
+[ハーネス比較](../research/agents/harness-comparison.md#copilot-cli-では-hook-の-ask-が自動承認される2026-08-27-実測)
+にある。1.0.84-2 でも `git config --get user.name` が確認無しで実行された。
 `deny` はこのバグの影響を受けず正常にブロックする。
 
 したがって Copilot では、`ask` に載せたものは**止まらない**前提で考える。

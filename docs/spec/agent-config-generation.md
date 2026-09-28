@@ -94,14 +94,16 @@ TOML として読めること・必須の deny リストが空でないこと・
 ### コメントの書き分け
 
 `common.toml.tmpl` には **その行を編集するときに要る注記** だけを置く。
-仕組み・判断基準・既知の不具合・実測値は `docs/spec/agent-*.md`
-([入口](agent-permissions.md#文書の構成)と分割先) が正本で、ファイル側からは
+仕組み・判断基準・既知の不具合は `docs/spec/agent-*.md`
+([入口](agent-permissions.md#文書の構成)と分割先)、実測値と経過は
+`docs/research/` が正本で、ファイル側からは
 `see docs/spec/<文書>.md 「<見出し>」` で参照する。
 
 | 置き場所 | 内容 | 例 |
 | --- | --- | --- |
 | `common.toml.tmpl` | その値を足す/消すときの制約 | 「`~/.cache` を read に書くと write が潰れる」 |
-| `docs/spec/agent-*.md` | なぜその方式か、実測値、upstream の不具合 | bind-mount が 3239 件に展開される測定 |
+| `docs/spec/agent-*.md` | なぜその方式か、upstream の不具合 | 名前マッチの deny は展開数だけ bind-mount が要る |
+| `docs/research/` | 実測値、何が壊れたかの経過 | bind-mount が 3239 件に展開された測定 |
 
 経緯をファイル側に書くと、設定 386 行に対してコメントが 500 行を超えて
 「値を探すのが難しいファイル」になる。実際そうなっていたので分離した。
@@ -472,7 +474,6 @@ TUI のキーバインドは **`cli.json` 側にしか無い**。`opencode.json`
 [opencode.keybinds]
 "app.exit" = "ctrl+d"
 "session.interrupt" = "ctrl+c,escape"
-"permission.mode" = "<leader>p"
 "service.restart" = "<leader>v"
 ```
 
@@ -586,7 +587,7 @@ Orca は `~/.claude/settings.json` と `~/.gemini/settings.json` の `hooks` へ
 以前はディレクトリで判定していたので、apply のたびに herdr の hook を消し、
 直後の `run_after_140_herdr_integration` が足し直していた。2 回 apply しても
 `settings.json` が安定せず、その間は hook が無い状態になる
-（Docker の `update` モードで発覚）。
+（[Docker の検証で発覚](../research/testing/docker-cold-start-fixes.md#6-2-回目の-apply-でも-claudesettingsjson-の差分が消えない2026-09-27)）。
 
 `[retired_hooks].scripts` は撤去した hook の名前で、`settings.json` に残った
 古い登録を消すためにある。一覧は git 履歴から作った

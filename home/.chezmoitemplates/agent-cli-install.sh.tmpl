@@ -21,7 +21,7 @@ export PATH
 #     さらに mise registry の opencode は aqua:anomalyco/opencode (V1 系) で、
 #     生成する設定は V2 スキーマなので configuration invalid になる
 #
-# see docs/spec/troubleshooting.md
+# see docs/spec/troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う
 mise_root="${HOME}/.local/share/mise"
 
 # shim 名と installs 名は一致しない (claude-code の shim は claude) ので別に消す。
@@ -94,7 +94,7 @@ ensure_cli 'oh-my-pi' omp install_omp
 if [ -n "${failed_clis}" ]; then
     # ここで非ゼロを返すと apply 全体が止まり、後続のスクリプトまで巻き添えに
     # なる。外部インストーラーの一時的な不調で dotfiles の適用を止めたくないので
-    # 警告に留める。再実行の手順は docs/spec/troubleshooting.md にもある。
+    # 警告に留める。再実行の手順は docs/spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す にある。
     cat >&2 <<EOF
 
 ⚠️  導入できなかった CLI:${failed_clis}

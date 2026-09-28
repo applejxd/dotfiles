@@ -82,10 +82,11 @@ x64 と arm64 しか受け付けず、`armv7l` を検出すると明示的に終
 値が書かれるのは `chezmoi init` のときだけです。普段の運用は `chezmoi update`
 （`git pull` + `apply`）が中心で、**これは `init` を呼びません**。
 
-`init` を都度実行すれば `[data]` 方式でも成立します。ただし実機ではそれを忘れ、
-判定が生成されないまま全分岐が「非 raspi」に倒れました。`apply` は
-`config file template has changed, run chezmoi init to regenerate config file`
-と警告しますが、**大量の出力に埋もれて見逃します**。
+`init` を都度実行すれば `[data]` 方式でも成立します。ただし忘れると判定が
+生成されず、全分岐が「非 raspi」に倒れます。`apply` の警告
+（`config file template has changed, run chezmoi init to regenerate config file`）は
+**大量の出力に埋もれて見逃します**（実機で見逃した経過は
+[CHG-0008](../change/closed/0008-raspi-branching.md#判定を-data-から-includetemplate-へ移した2-周目の教訓)）。
 
 手順で守らせる設計をやめ、`includeTemplate` で `apply` のたびに評価する形に
 しました。`init` を実行してもしなくても同じ結果になります。
@@ -93,8 +94,8 @@ x64 と arm64 しか受け付けず、`armv7l` を検出すると明示的に終
 データで上書きもできます。`is_raspi` を渡すと検出より優先されるので、
 テスト（`lint_templates.py` の raspi 軸）と手動での強制に使えます。
 
-**`/etc/rpi-issue` だけでは足りません。** 実機は Ubuntu 22.04 for Raspberry Pi で、
-このファイルは Raspberry Pi OS 専用のため存在しませんでした。
+**`/etc/rpi-issue` だけでは足りません。** このファイルは Raspberry Pi OS 専用で、
+Ubuntu for Raspberry Pi には存在しません（実機がそうでした）。
 64bit の Raspberry Pi OS は `/etc/os-release` が `ID=debian` になるので、
 os-release でも判定できません（`raspbian` は 32bit 版のみ）。
 
@@ -119,9 +120,10 @@ os-release でも判定できません（`raspbian` は 32bit 版のみ）。
 `ruby` と `gem:tmuxinator` は Raspberry Pi でも宣言します。mise は既定で
 `jdx/ruby` のプレビルド版を落とし、**Linux arm64 (glibc) 向けも用意されています**。
 
-実機で ruby のソースビルドが 956 秒かけて失敗したのは、`all_compile = true` が
-**全言語で**プリコンパイル済みバイナリを禁じていたためです。この設定を
-`[settings.python] compile` へ絞ったことで、ruby はプレビルドに戻ります。
+ruby がソースビルドへ落ちるのは、`all_compile = true` が**全言語で**
+プリコンパイル済みバイナリを禁じるためです（実機でビルドが失敗した経過は
+[CHG-0008](../change/closed/0008-raspi-branching.md#ruby-のソースビルドが実機で失敗した--原因は-all_compile-だった)）。
+この設定を `[settings.python] compile` へ絞ったことで、ruby はプレビルドに戻ります。
 
 Raspberry Pi では加えて `[settings.ruby] compile = false` を宣言します。
 mise の既定は「プレビルドが無ければ `ruby-build` へフォールバック」で、
@@ -134,9 +136,9 @@ Pi でそこに入ると十数分かけてから失敗します。`false` にす
 
 ### ツール 1 個の失敗で apply を止めない
 
-`125_mise` は `mise install` が失敗しても**警告に留めます**。実機では ruby の
-ビルドが落ちただけでスクリプトが非ゼロを返し、後続の `126_agent_cli` /
-`140_herdr_integration` / `400_unix` が丸ごと走らなくなりました。
+`125_mise` は `mise install` が失敗しても**警告に留めます**。非ゼロで抜けると、
+ツール 1 個の失敗で後続の `126_agent_cli` / `140_herdr_integration` / `400_unix` が
+丸ごと走らなくなるためです（実機で ruby が落ちたときに起きました）。
 未導入のものは `mise ls --missing` で確認できます。
 
 ### メモリが尽きても SSH できるようにする
@@ -144,8 +146,8 @@ Pi でそこに入ると十数分かけてから失敗します。`false` にす
 Raspberry Pi 4（RAM 3.7GB、SD カード）は swap が 0 だと、メモリが尽きても
 OOM キラーがなかなか動きません。その間カーネルはプログラムのコードを追い出しては
 SD から読み直すため、**sshd も応答しなくなり、電源を抜くしかなくなります**
-（2026-09-26 に実機で発生。pre-commit が gitleaks を Go でソースビルドしている
-最中に 12 分以上ログが途絶えた）。`121_ubuntu` が Raspberry Pi でだけ次を入れます。
+（[実機で起きた経過](../research/testing/raspi-oom-ssh-freeze.md)）。
+`121_ubuntu` が Raspberry Pi でだけ次を入れます。
 
 | 設定 | 値 | 理由 |
 | --- | --- | --- |
@@ -335,7 +337,7 @@ Unix（Linux / WSL / macOS）では、`126_agent_cli` / `226_agent_cli` が実�
 mise の残骸を自動で削除します。対象は shim の `claude` / `copilot` / `opencode` / `omp` と、
 `installs/` の `claude` / `claude-code` / `copilot` / `opencode` / `omp` です
 （shim が公式版より先に PATH で見つかり、起動を横取りするため。経緯は
-[トラブルシューティング](troubleshooting.md) の「13. AI CLI が mise に…」）。
+[AI CLI が mise に global default version を指定しろと言う](troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う)）。
 
 Windows の `314_agent_cli` は削除しません。mise が入れた `claude-code` / `copilot` が
 残っていれば、次で確認してから手で片付けてください。
@@ -364,9 +366,9 @@ Pi のフォークで、LSP 統合・DAP・subagent を持ちます。起動は 
 
 | 設定 | 繋がるもの |
 | --- | --- |
-| `skills.customDirectories` | `~/.claude/skills` の自作 skills 16 個 |
+| `skills.customDirectories` | `~/.claude/skills` の自作 skills 15 個 |
 | `enabledProviders: [claude]` | `~/.claude.json` の MCP サーバ定義、`~/.claude/commands` |
-| `commands.enableClaudeUser` | `/ask` `/commit` `/criticalthink` `/onboarding` |
+| `commands.enableClaudeUser` | `~/.claude/commands` の `/criticalthink`（chezmoi が配るのはこれだけ） |
 
 あわせて `bashInterceptor.enabled` を有効にし、`cat` / `grep` / `sed -i` などを
 `read` / `grep` / `edit` へ誘導します（他の CLI と挙動を揃えるため）。
@@ -531,7 +533,9 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply` �
 - **起動経路でcmdletを使わない**: `Microsoft.PowerShell.Management`
   （`Test-Path`、`Join-Path`）、`Microsoft.PowerShell.Utility`
   （`New-Object`、`Set-Alias`）、`Get-Command` のコマンド探索は、初回呼び出しに
-  それぞれ0.25秒前後かかります。対話ブロックより前は同等の.NET APIで書きます。
+  それぞれモジュールの読み込みが乗り、起動が目に見えて遅くなります
+  （[計測](../research/shell/powershell-profile-startup.md)）。対話ブロックより前は
+  同等の.NET APIで書きます。
   `pbcopy` はエイリアスから関数へ変えたため、`$input` で明示的にパイプライン
   入力を渡します。
 - **init出力をキャッシュする**: `mise activate` の外部プロセス起動を避けるため、
@@ -546,12 +550,9 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply` �
 - **PATHを冪等に更新する**: `mise activate` は毎回PATHの先頭へ追加するため、
   追加後に重複を畳みます。
 
-計測（このリポジトリのWindows機、中央値）:
-
-| 起動 | プロファイルあり | `-NoProfile` |
-| --- | --- | --- |
-| `pwsh` | 510 ms | 312 ms |
-| `powershell` | 359 ms | 182 ms |
+この構成にしたときの起動時間の計測は
+[PowerShell プロファイルの起動時間](../research/shell/powershell-profile-startup.md)
+にあります。
 
 ## 個人用カスタム指示
 
