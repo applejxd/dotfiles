@@ -337,26 +337,48 @@ permission = { "*" = "allow", task = "deny" }   # task は V2 の subagent
 ```
 
 - `generate.py` は、全部 allow（`permission = "allow"` か `"*" = "allow"`）で
-  サブエージェントとして使えるエージェントごとに、全体の `permissions` の**最後**へ
-  `{ action: "subagent", resource: "<名前>", effect: "deny" }` を足す
-  （`opencode_subagent_guards`）
+  サブエージェントとして使えるエージェント（`mode` が `subagent` / `all`）ごとに、
+  全体の `permissions` の**最後**へ `{ action: "subagent", resource: "<名前>", effect: "deny" }`
+  を足す（`opencode_subagent_guards`）。数える対象は `common.toml` の宣言だけで、
+  `rules.json` の `guarded_subagents` にも同じ名前を出す（`opencode_guarded_subagents`）
 - エージェントの規則は全体の規則の後ろに付き、最後に一致した規則が勝つ。
-  `bypass` の `*` の allow だけがこの deny を上書きする
+  `bypass` の `*` の allow はこの deny を上書きする
+- **全体の deny だけでは足りない。** `common.toml` に無いエージェント（手で足した
+  `build` の上書きや別名のもの）の `permission` は `merge_opencode_agents` が残す。
+  そこに `task = "allow"` などがあると、同じ理屈で deny が上書きされる。
+  こうした個別の上書きは利用者の責任で、`generate.py` は各エージェントへ deny を
+  差し込まない（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的）。
+  下の guide plugin の検査は、上書きされた後の effect でも止める
+- guide plugin でも起動元を検査する（二重の検査）。`rules.json` の
+  `guarded_subagents` に名前を出し、`permission.evaluate` の `action` が `subagent`、
+  `resources` がこの一覧に当たり、`agent` が `bypass_agents` に無ければ effect を
+  `deny` にする。`agent` が載らない場合も deny（安全側）。`common.toml` に無い
+  全部 allow のエージェントも `bypass_agents` に入らないので止まる。
+  plugin は一覧が空でなければ登録される（`opencode_guide_server_needed`）。
+  プロジェクトの `opencode.json` のように `generate.py` が触らない設定は、こちらだけが守る。
+  `rules.json` が読めないときの扱いは[下](#rulesjson-が使えないとき)
+- 設定の deny に当たった呼び出しは hook が発火しないので、plugin は deny を
+  緩める側には回らない（[Bypass モードの調査 5 章](../research/opencode/permission/bypass-agent.md#5-plugin-は-bypass-を貫通する段階-2-の前提)）
+- `bypass` は `mode = "primary"` を明示する。`mode` を宣言しないと既存設定の
+  `mode`（`all` / `subagent`）が残り、`bypass` を子として起動できてしまう
+  （`build` → `bypass` → `bypass-worker`）。全部 allow のエージェントは `common.toml` で
+  `mode` を必ず宣言する（`test_all_allow_agents_in_common_declare_their_mode`）
 - `bypass-worker` 自身は `task = "deny"` なので、さらに子を起動できない
   （入れ子にならない）
 - 「Always allow」で保存した承認は、設定の deny を上書きしない
 - `bypass` と同じく、秘密ファイルの読み取り禁止も外れる。誘導の plugin も
   エージェント名で素通りさせる（下の plugin 層）
 
-実測（build からは `Permission denied: subagent`、bypass からは起動できる、
-子からの入れ子は不可）は
+実測（全体の deny だけで build からは `Permission denied: subagent`、bypass からは
+起動できる、子からの入れ子は不可。build に個別の `task = "allow"` があると全体の deny は
+上書きされ、plugin の deny でも、個別の規則の最後に置いた deny でも止まる）は
 [Bypass モードの調査 6 章](../research/opencode/permission/bypass-agent.md#6-bypass-からだけ呼べる子エージェント2026-09-28)。
 
 ### plugin 層 (`guide-plugin`)
 
 `~/.config/opencode/guide-plugin/` に置く。判定表は `common.toml` の
 `[[opencode.shell.guide]]`・`[opencode.redact]`・`[opencode.ask_description]`・
-`[file] read_deny_globs` から `rules.json` として生成し、plugin は読むだけにする。
+`[file] read_deny_globs`・`[opencode.agent]` から `rules.json` として生成し、plugin は読むだけにする。
 `index.js` はこのどれかが有効なら、`tui.ts` は `ask_description` が有効な
 ときだけ登録する（`generate.py` の `opencode_guide_server_needed` /
 `opencode_guide_tui_needed`）。
@@ -366,6 +388,7 @@ permission = { "*" = "allow", task = "deny" }   # task は V2 の subagent
 | 誘導（deny + 代替案）と説明の生成 | `index.js` | `opencode.json` の `plugins` |
 | `grep` / `glob` の結果フィルタ | `index.js` | 同上 |
 | shell 出力の伏字化 | `index.js` | 同上 |
+| 全部 allow の子エージェントの起動元の検査（[上](#bypass-から呼べる子エージェント)） | `index.js` | 同上 |
 | 確認画面への説明表示（toast） | `tui.ts` | **`cli.json` の `plugins`** |
 
 隔離起動（`ocs`）は `cli.json` を渡さないので `tui.ts` は読まれない。
@@ -395,6 +418,37 @@ plugin が守る規約は 2 つ。
 `bypass` は**誘導も結果フィルタも両方**素通りする。規則ごとに効かせ分ける
 ことも技術的には可能だが採らない。誘導が誤爆したときの逃げ道を残すほうが
 重要で、`bypass` は「秘密を読むために一時的に全部外す」用途も兼ねるため。
+
+#### `rules.json` が使えないとき
+
+plugin のロード（モジュールの評価と `setup`）が例外で失敗すると、OpenCode は
+plugin 無しで続ける（fail-open。[plugin API の実測 6 章](../research/opencode/plugin/api-probe.md#6-失敗時の挙動最重要)）。
+そのため `index.js` は `rules.json` の読み込みと正規表現のコンパイルを節ごとに
+例外から切り離し、ロード自体は必ず通す。壊れた節は `console.error` に記録し、
+節ごとに次のように倒す。hook の中の例外は fail-closed なので、そちらは切り離さない。
+
+| 壊れたもの | 扱い | 理由 |
+| --- | --- | --- |
+| ファイルが無い・JSON でない・オブジェクトでない | 下の全部の節が「壊れた」扱い | — |
+| `guarded_subagents` / `bypass_agents` が無い・文字列の配列でない | 子エージェントの起動元を検査しない（止めずに警告） | 一覧が無いと守る子も `bypass` も分からない。全部止めると普段の作業ごと止まる（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)） |
+| `read_deny` が無い・`null`・文字列の配列でない・正規表現にできない | `grep` / `glob` の結果を伏せ、理由を本文に残す | この 2 つには plugin が唯一の保護 |
+| `guide` | 誘導しない（確認は静的な規則どおり出る） | 誘導は代替案の案内で、境界ではない |
+| `redact` | 伏字化しない | 伏字化は安全網で、境界ではない |
+
+- **`read_deny` の明示的な `[]` だけは有効な空**として扱い、結果を濾さずに通す。
+  `generate.py` は `read_deny` を必ず出すので、欠落や `null` は壊れた `rules.json` の印になる
+  （`test_malformed_read_deny_withholds_results` / `test_empty_read_deny_keeps_results`）
+- 一覧が読めない間、`bypass-worker` を止めるのは全体の deny だけになる。個別に
+  `task = "allow"` などを持つエージェントからは起動できる
+- **直した `rules.json` は再起動するまで読まれない。** `index.js` はモジュールの評価時に
+  一度だけ読むので、`chezmoi apply` で作り直しても、常駐サービスの中では壊れた扱いが続く。
+  `chezmoi apply` の後に `opencode service restart` を実行する
+  （[下](#shell-出力の伏字化)の、サーバ側 plugin の更新と同じ）。隔離起動（`ocs`）は
+  `--standalone` の専用サーバなので、そのセッションを起動し直す。自動の読み直しは足さない
+- 古い形（`guarded_subagents` が無い）の `rules.json` も同じく一覧が無い扱いになる
+- 試験は `test_generate_opencode.py` の `test_plugin_leaves_subagents_alone_when_rules_are_unusable`
+  など。一覧が読めないときに全部 deny していた版の実機の結果は
+  [Bypass モードの調査 6 章](../research/opencode/permission/bypass-agent.md#plugin-の起動元の検査と-rulesjson-が壊れたとき2026-09-29)
 
 #### `grep` / `glob` の結果フィルタ
 

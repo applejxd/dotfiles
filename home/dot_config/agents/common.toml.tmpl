@@ -711,17 +711,18 @@ auto_update = false
 #   実在しない名前を deny したまま気付けなくなる。
 # see docs/spec/agent-config-generation.md 「OpenCode へ渡さないもの」
 
-# OpenCode のカスタムエージェント (V1 の「モード」に相当。mode は非推奨)。
+# OpenCode のカスタムエージェント (V1 の「モード」に相当。トップレベルの mode は非推奨)。
 # permission = "allow" は全 action / 全 resource の allow へ展開される (実測)。
 # ★bypass は permission 層を丸ごと無効にする。秘密ファイルの read deny も外れる。
+# ★mode は消さない。消すと既存設定の mode が残り、all / subagent ならモデルが bypass を起動できる。
 # see docs/research/opencode/permission/bypass-agent.md
 [opencode.agent.bypass]
 description = "全ツールを無確認で実行する (permission を全て allow で上書き)"
+mode = "primary"
 permission = "allow"
 
-# bypass からだけ呼べる子エージェント。全部 allow だが、さらに子は起動できない
-# (task は V2 の subagent)。ほかのエージェントからの起動は generate.py が全体の
-# permission で deny する。see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+# bypass からだけ呼べる子エージェント (task は V2 の subagent)。
+# see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
 [opencode.agent.bypass-worker]
 description = "bypass から起動する作業用の子エージェント。全ツールを無確認で実行する"
 mode = "subagent"

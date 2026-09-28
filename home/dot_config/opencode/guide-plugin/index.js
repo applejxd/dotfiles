@@ -4,18 +4,46 @@ import { readFileSync } from "node:fs"
 // ディレクトリ名を plugin / plugins にしてはいけない。その 2 つは
 // 設定ディレクトリ直下で自動探索され、明示指定と二重にロードされる。
 // see docs/research/opencode/plugin/loading.md
-const rules = JSON.parse(
-  readFileSync(new URL("./rules.json", import.meta.url), "utf8"),
-)
+// ★ここから setup までで例外を投げないこと。ロードに失敗すると起動元の検査ごと消える。
+// see docs/spec/agent-config-generation.md#rulesjson-が使えないとき
+function loadRules() {
+  try {
+    const r = JSON.parse(readFileSync(new URL("./rules.json", import.meta.url), "utf8"))
+    if (r && typeof r === "object" && !Array.isArray(r)) return r
+    console.error("[guide] rules.json がオブジェクトでない")
+  } catch (err) {
+    console.error(`[guide] rules.json を読めない: ${err}`)
+  }
+  return null
+}
 
-const compiled = (rules.guide ?? []).map((r) => ({
-  re: new RegExp(r.pattern),
-  // 除外条件。pattern に当たっても unless に当たれば見送る。
-  unless: r.unless ? new RegExp(r.unless) : null,
-  message: r.message,
-}))
+const rules = loadRules()
 
-const ask = rules.ask_description ?? null
+// 壊れた節は null を返す。rules.json ごと読めないときも null。
+function section(name, build) {
+  if (!rules) return null
+  try {
+    return build(rules)
+  } catch (err) {
+    console.error(`[guide] rules.json の ${name} を使えない: ${err}`)
+    return null
+  }
+}
+
+const names = (v) =>
+  Array.isArray(v) && v.every((x) => typeof x === "string") ? new Set(v) : null
+
+const compiled =
+  section("guide", (r) =>
+    (r.guide ?? []).map((g) => ({
+      re: new RegExp(g.pattern),
+      // 除外条件。pattern に当たっても unless に当たれば見送る。
+      unless: g.unless ? new RegExp(g.unless) : null,
+      message: g.message,
+    })),
+  ) ?? []
+
+const ask = rules?.ask_description ?? null
 
 // 隔離版 (ocs) は tui.ts を読まないので、説明を作っても表示されない。
 // ocs が境界の内側へ渡す印で見分け、生成だけ止める。
@@ -25,7 +53,28 @@ const ISOLATED = process.env.OCS_ISOLATED === "1"
 // 誘導を素通りさせるエージェント (permission = "allow" の逃げ道)。
 // effect で見分けると静的 allow を含む呼び出しまで素通りするので名前で見る。
 // see docs/research/opencode/permission/hook-order.md
-const bypass = new Set(rules.bypass_agents ?? [])
+const bypassNames = names(rules?.bypass_agents)
+const bypass = bypassNames ?? new Set()
+
+// bypass からだけ起動させる子エージェント。
+// see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+const guarded = names(rules?.guarded_subagents)
+const guardKnown = bypassNames !== null && guarded !== null
+if (rules && !guardKnown) {
+  console.error("[guide] rules.json の bypass_agents / guarded_subagents を使えない")
+}
+
+function guardSubagent(e) {
+  if (e.effect === "deny") return
+  // 一覧が読めないときは止めない (see docs/spec/agent-config-generation.md#rulesjson-が使えないとき)
+  if (!guardKnown) return
+  const resources = e.resources ?? []
+  if (bypass.has(e.agent)) return
+  const hit = resources.find((r) => guarded.has(r))
+  if (!hit) return
+  e.effect = "deny"
+  e.message = `${hit} は bypass エージェントからだけ起動できます。`
+}
 
 // grep / glob は read の deny を迂回するので、結果を自分で濾す。
 // パターンは read の deny glob から生成している (単一ソース)。
@@ -35,10 +84,15 @@ const bypass = new Set(rules.bypass_agents ?? [])
 const WINDOWS = process.platform === "win32"
 const toSlash = (path) => path.replace(/\\/g, "/")
 const pathRegExp = (p) => new RegExp(p, WINDOWS ? "i" : "")
-const readDeny = (rules.read_deny ?? []).map(pathRegExp)
+// null は「組めなかった」。結果を伏せる (see docs/spec/agent-config-generation.md#rulesjson-が使えないとき)
+// 欠落・null も壊れた扱い。明示的な [] だけが有効な空。
+const readDeny = section("read_deny", (r) => {
+  if (!names(r.read_deny)) throw new Error("文字列の配列でない")
+  return r.read_deny.map(pathRegExp)
+})
 const denied = (path) => {
   const p = toSlash(path)
-  return readDeny.some((re) => re.test(p))
+  return (readDeny ?? []).some((re) => re.test(p))
 }
 
 // grep の塊の見出し。POSIX の絶対パス、ドライブ付き (C:\ / C:/)、UNC (\\server) を認める
@@ -93,16 +147,16 @@ function filterGlob(text) {
 //   ファイルへ [伏字:…] が書き込まれる。
 // see docs/research/opencode/permission/output-filter-and-subagents.md
 // g は replace 用。replace は lastIndex を戻すので .test と違い安全。
-const redactRules = (rules.redact?.rule ?? []).map((r) => ({
-  name: r.name,
-  re: new RegExp(r.pattern, "gi"),
-}))
-const denyPath = (rules.redact?.deny_path ?? []).map(pathRegExp)
 // 保護パス名を「文章として」書いたときの誤爆を外す (git commit -m など)。
-// /g を付けないこと。lastIndex が残って .test() が交互に false を返す。
-const denyPathUnless = rules.redact?.deny_path_unless
-  ? new RegExp(rules.redact.deny_path_unless)
-  : null
+// unless は /g を付けないこと。lastIndex が残って .test() が交互に false を返す。
+const redaction = section("redact", (r) => ({
+  rules: (r.redact?.rule ?? []).map((x) => ({ name: x.name, re: new RegExp(x.pattern, "gi") })),
+  denyPath: (r.redact?.deny_path ?? []).map(pathRegExp),
+  denyPathUnless: r.redact?.deny_path_unless ? new RegExp(r.redact.deny_path_unless) : null,
+}))
+const redactRules = redaction?.rules ?? []
+const denyPath = redaction?.denyPath ?? []
+const denyPathUnless = redaction?.denyPathUnless ?? null
 
 function redact(text) {
   let out = text
@@ -196,6 +250,7 @@ export default {
     })
 
     await ctx.permission.hook("evaluate", async (e) => {
+      if (e.action === "subagent") return guardSubagent(e)
       if (e.action !== "shell") return
       // 規約 1: bypass エージェントには触らない (全部止めたいときの逃げ道)。
       // effect ではなく agent 名で見る。effect で見ると cd x && git log の
@@ -235,6 +290,7 @@ export default {
       }
       if (e.tool !== "grep" && e.tool !== "glob") return
       if (bypass.has(e.agent)) return
+      if (readDeny === null) return withhold(e)
       if (!readDeny.length) return
 
       const content = e.result?.content
@@ -262,6 +318,25 @@ export default {
 
 // 本体は result.content[].text。result.output は文字列ではない。
 // see docs/research/opencode/permission/output-filter-and-subagents.md
+function withhold(e) {
+  const content = e.result?.content
+  if (!Array.isArray(content)) return
+  let first = true
+  for (const part of content) {
+    if (!part || typeof part.text !== "string") continue
+    part.text = first
+      ? "[伏字] rules.json の read_deny を使えないため、結果を伏せました。chezmoi apply で作り直し、opencode service restart で読み直してください。"
+      : ""
+    first = false
+  }
+  const meta = e.result?.metadata
+  if (meta && typeof meta === "object") {
+    for (const key of ["matches", "count", "total"]) {
+      if (typeof meta[key] === "number") meta[key] = 0
+    }
+  }
+}
+
 function redactShell(e, command) {
   const content = e.result?.content
   if (!Array.isArray(content)) return

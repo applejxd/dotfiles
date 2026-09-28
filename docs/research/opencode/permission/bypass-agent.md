@@ -146,10 +146,24 @@ Agent bypass cannot run as a subagent
 
 > **`mode = "all"` や `"subagent"` を足した瞬間に穴が開く。**
 > モデルが自力で全保護を外せるようになるため、テストで固定する。
+>
+> 2026-09-29 から `mode = "primary"` を明示している。宣言しないと既存設定の `mode` が
+> 残るため（[仕様](../../../spec/agent-config-generation.md#bypass-から呼べる子エージェント)）。
 
 なお `subagent` action には permission 規則が **1 件も無く既定 allow**。
 `general` / `explore` は自由に起動できるが、これらは**グローバルの
 permission に従う**ので脱出経路にはならない（[出力フィルタと子エージェント](output-filter-and-subagents.md)）。
+
+> **後続の判断（2026-09-29）**: 利用者が `agent.general.permission = "allow"` のように
+> 全部 allow へ上書きすると、`mode` を書かなくても子として起動できるまま全部 allow になる。
+> 生成側はこれも起動元を絞る対象に数える
+> （[仕様](../../../spec/agent-config-generation.md#bypass-から呼べる子エージェント)）。
+> 上書き後も `mode` が `subagent` のまま残ることは、実機のエージェント一覧では**未確認**
+> （`opencode api agent.list --standalone` は組み込みを含めて空を返した）。
+>
+> **注記（2026-09-29）**: [ADR-0012](../../../adr/0012-ocs-boundary-for-accidents.md) の方針変更で、
+> 生成側が利用者の上書き（組み込みの `general` / `explore` を含む）を数えて起動元を絞る処理は
+> 取り下げた。数えるのは `common.toml` の宣言だけ。
 
 ## 5. plugin は bypass を貫通する（段階 2 の前提）
 
@@ -234,6 +248,122 @@ V1 の `task` は V2 の `subagent` へ置き換わる。既存の `bypass` と�
 手で書いた設定と、`generate.py` が生成した設定の両方で同じ結果だった。
 エージェントの規則は全体の規則の後ろに付き、最後に一致した規則が勝つという
 [公式の説明](https://opencode.ai/v2/docs/permissions/)どおり。
+
+### 個別の allow は全体の deny を上書きする（2026-09-28）
+
+- **対象バージョン**: `opencode v2.0.14`、モデル `github-copilot/claude-haiku-4.5`、`opencode_probe`（`--auto`）
+- **方法**: 上の設定に、`build` の個別の `permission = { task = "allow" }` を足した
+
+| guide plugin | 呼び出し元 | 結果 |
+| --- | --- | --- |
+| 無し（対照） | `build` | 起動でき、子が `WORKER_OK` と返した |
+| 有り | `build` | `bypass-worker は bypass エージェントからだけ起動できます。` |
+| 有り | `bypass` | 起動でき、子が `WORKER_OK` と返した |
+
+全体の最後の `{subagent, bypass-worker, deny}` は、`build` の `{subagent, *, allow}` に
+上書きされる（エージェントの規則が後ろに付くため）。plugin の `permission.evaluate` の
+deny は、`subagent` の起動も止められる。
+
+### 個別の規則の最後に置く書き方（2026-09-29）
+
+- **対象バージョン**: `opencode v2.0.14`
+- **方法**: `OPENCODE_CONFIG_DIR` に一時的な設定を置き、`opencode api config.get --standalone`
+  の正規化後を見た。★Orca の端末では `OPENCODE_CONFIG` が実設定を指しているので、
+  `env -u OPENCODE_CONFIG` で外してから比べる（外さないと実設定も結合される。
+  [試験の隔離 7 章](../test-isolation.md#7-opencode_config_dir-は-global-config-を置き換えるupstream-の不具合)）
+
+V1 のマップは**キーの順に**規則へ展開される。`task` と `subagent` はどちらも `subagent` に
+なり、両方あれば両方が順に並ぶ。
+
+| `agent.build` の入力 | 正規化後の `subagent` の規則（順） |
+| --- | --- |
+| `permission = { task = "allow" }` | `*` allow |
+| `permission = { task = { "*" = "allow", "bypass-worker" = "deny" } }` | `*` allow → `bypass-worker` deny |
+| `permission = { task = { "bypass-worker" = "deny", "*" = "allow" } }` | `bypass-worker` deny → `*` allow（**負ける**） |
+| `permission = { task = "allow", subagent = { "bypass-worker" = "deny" } }` | `*` allow → `bypass-worker` deny |
+| `permission = { task = "allow", subagent = "ask" }` | `*` allow → `*` ask |
+| `permission = { subagent = "ask", "*" = "allow" }` | `subagent` の `*` ask → **全 action** の `*` allow |
+| `permission = "ask"` | 全 action の `*` ask（`{ "*" = "ask" }` と同じ） |
+| `tools = { task = true }` | `*` allow（`permission` とキーの順に関係なく**前**に並ぶ） |
+| `permission = [ … ]`（配列） | エージェントごと消える |
+
+設定ファイルの間・キーの間の結合も見た。
+
+| 入力 | 正規化後 |
+| --- | --- |
+| `agent.build` と `agents.build`（V2）の両方 | `agents.build` が**丸ごと置き換える**（`agent.build` の `description` なども消える） |
+| `agent.a` と `agents.b` | 両方残る |
+| 全体の V1 `permission = { task = "allow" }` と V2 `permissions` | V1 の方が**前**に並ぶ |
+| `agent.bypass.mode = "primary"` | そのまま `mode: "primary"` |
+
+`generate.py` の出力（既存の `build` を上の形ごとに与えたもの）を同じ方法で読ませると、
+どの形でも `subagent` の規則の最後が `bypass-worker` deny になり、既存の
+`agent.bypass.mode = "all"` は `primary` に上書きされていた。
+
+### plugin の起動元の検査と `rules.json` が壊れたとき（2026-09-29）
+
+- **対象バージョン**: `opencode v2.0.14`、モデル `github-copilot/claude-haiku-4.5`、`opencode_probe`（`--auto`、
+  `env -u OPENCODE_CONFIG`）
+- **方法**: 子として `bypass-worker` を名指しで 1 回起動させた。モデルには一覧に無くても
+  呼ぶよう指示した（個別の deny があると、`build` の起動できる子の一覧から `bypass-worker` が
+  消え、モデルが呼ぼうとしない）
+
+| 設定 | 呼び出し元 | 結果 |
+| --- | --- | --- |
+| `generate.py` の出力（plugin 無し、`build` に `task = "allow"`） | `build` | `Permission denied: subagent` |
+| 同上 | `bypass` | 起動でき、`WORKER_OK` |
+| 個別の deny を外し plugin 有り、`guide` に不正な正規表現 `(` | `build` | `bypass-worker は bypass エージェントからだけ起動できます。` |
+| 同上 | `bypass` | 起動でき、`WORKER_OK` |
+| 個別の deny を外し plugin 有り、`rules.json` が JSON でない | `build` | `rules.json を読めないため bypass-worker の起動を止めました。…` |
+| 同上 | `bypass` | 同じ文言で止まる |
+| 同上、plugin は修正前の `index.js`（対照） | `build` | 起動でき、`WORKER_OK`（plugin のロードに失敗して素通り） |
+
+修正前の `index.js` は `rules.json` の読み込みをモジュールの先頭で行っていたので、
+壊れていると plugin ごとロードに失敗し、起動元の検査も消えていた
+（[plugin API の実測 6 章](../plugin/api-probe.md#6-失敗時の挙動最重要)の fail-open）。
+
+この時点の `index.js` は、一覧が無いときも `general` / `explore` の起動だけは通していた。
+全部 allow に上書きされていても見分けられないため、後に例外を外した
+（[仕様](../../../spec/agent-config-generation.md#rulesjson-が使えないとき)）。
+
+> **注記（2026-09-29）**: [ADR-0012](../../../adr/0012-ocs-boundary-for-accidents.md) の方針変更で、
+> 一覧が読めないときに子エージェントの起動を全部 deny する処理は取り下げた。今は起動元を
+> 検査せず、読み込み時に警告するだけ。上の表の「個別の deny」を生成側が差し込む処理も取り下げた。
+
+### V2 の同名のエージェント（2026-09-29）
+
+- **対象バージョン**: `opencode v2.0.14`
+- **方法**: 上と同じく `env -u OPENCODE_CONFIG` と一時的な `OPENCODE_CONFIG_DIR` /
+  `OPENCODE_DB` で `opencode api config.get --standalone` の正規化後を見た
+
+V2 の `agents.<名前>` は同名の V1 の `agent.<名前>` を丸ごと置き換える（上の表）。
+`agent.bypass = { mode = "primary", permission = "allow" }` と
+`agents.bypass = { mode = "all", model = "x/y" }` を並べると、正規化後は
+`agents.bypass = { mode: "all", model: {…} }` で、**`permissions` も消える**。
+
+V1 の `permission` のキーと V2 の `action` の対応（キーの順に並ぶ。値がマップなら
+そのキーが `resource` になる）:
+
+| V1 のキー | V2 の `action` |
+| --- | --- |
+| `*` / `read` / `edit` / `webfetch` / `shell` / `subagent` | 同じ名前 |
+| `bash` | `shell` |
+| `task` | `subagent` |
+
+- V2 の `agents.<名前>` の中に V1 の書き方の `permission` を置くと、黙って消える
+- V2 の `model` は `"x/y"` の文字列が `{ providerID, model }` へ直る
+- `description` / `mode` はそのまま残る
+
+`generate.py` が既存の `agents.bypass = { mode = "all", model = "x/y", permissions = [* ask] }` と
+`agents.bypass-worker = { steps = 3 }` に宣言を書いた出力を読ませると、正規化後は
+`agents.bypass` が `mode: "primary"`・`permissions: [* allow]`・`model` を保ったまま、
+`agents.bypass-worker` が `mode: "subagent"`・`permissions: [* allow, subagent * deny]`・
+`steps: 3` になった。同じ出力で、全部 allow に上書きした V1 の `agent.general`（`mode` 無し）は
+全体の `{subagent, general, deny}` と `build` の個別の deny の対象に入っていた。
+
+> **注記（2026-09-29）**: [ADR-0012](../../../adr/0012-ocs-boundary-for-accidents.md) の方針変更で、
+> 生成側の各エージェントへの deny の差し込み・V2 の `agents` への反映・一覧が読めないときの
+> 全 deny は取り下げた。上の記録は取り下げる前の実装の実測として残す。
 
 ## 再確認すべき情報源
 

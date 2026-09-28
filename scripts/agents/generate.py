@@ -988,6 +988,20 @@ def _grants_everything(agent: dict[str, Any]) -> bool:
     return isinstance(permission, dict) and permission.get("*") == "allow"
 
 
+def opencode_guarded_subagents(common: dict[str, Any]) -> list[str]:
+    """bypass からだけ起動させる子エージェント名 (全部 allow で子として使えるもの)。
+
+    ``opencode.json`` の全体の deny と ``rules.json`` の ``guarded_subagents`` の元。
+    see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+    """
+    agents = common.get("opencode", {}).get("agent") or {}
+    return [
+        name
+        for name, agent in sorted(agents.items())
+        if _grants_everything(agent) and agent.get("mode") in ("subagent", "all")
+    ]
+
+
 def opencode_subagent_guards(common: dict[str, Any]) -> list[dict[str, str]]:
     """全部 allow のサブエージェントを、同じく全部 allow のエージェント以外から呼ばせない。
 
@@ -996,11 +1010,9 @@ def opencode_subagent_guards(common: dict[str, Any]) -> list[dict[str, str]]:
     (``bypass``) の中でだけこの deny が上書きされる (実測)。
     see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
     """
-    agents = common.get("opencode", {}).get("agent") or {}
     return [
         {"action": "subagent", "resource": name, "effect": "deny"}
-        for name, agent in sorted(agents.items())
-        if _grants_everything(agent) and agent.get("mode") in ("subagent", "all")
+        for name in opencode_guarded_subagents(common)
     ]
 
 
@@ -1223,6 +1235,7 @@ def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> d
     out: dict[str, Any] = {
         "guide": opencode_guide_rules(common),
         "bypass_agents": opencode_bypass_agents(common),
+        "guarded_subagents": opencode_guarded_subagents(common),
         "read_deny": opencode_read_deny_regexes(common),
     }
     ask = opencode_ask_description(common)
@@ -1284,14 +1297,16 @@ def opencode_guide_server_needed(common: dict[str, Any], *, tui: bool) -> bool:
     """サーバ側の guide plugin (``index.js``) を読み込むか。
 
     ``index.js`` の役割 (誘導・``grep`` / ``glob`` の結果フィルタ・伏字化・
-    説明の生成) が 1 つでも有効なら要る。説明は TUI 側の toast でしか
-    見えないので、``tui`` が偽 (TUI plugin が読まれない隔離版) なら数えない。
+    子エージェントの起動元の検査・説明の生成) が 1 つでも有効なら要る。説明は
+    TUI 側の toast でしか見えないので、``tui`` が偽 (TUI plugin が読まれない
+    隔離版) なら数えない。
     see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
     """
     return bool(
         opencode_guide_rules(common)
         or opencode_read_deny_regexes(common)
         or opencode_redact(common)
+        or opencode_guarded_subagents(common)
         or (tui and opencode_guide_tui_needed(common))
     )
 

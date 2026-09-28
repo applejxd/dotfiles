@@ -247,6 +247,46 @@ def test_only_bypass_can_launch_the_bypass_worker():
 def test_subagent_guard_covers_only_all_allow_subagents(agent, guarded):
     common = {"opencode": {"agent": {"x": agent}}}
     assert bool(gen.opencode_subagent_guards(common)) is guarded
+    assert (gen.build_opencode_guide({}, common)["guarded_subagents"] == ["x"]) is guarded
+
+
+def test_guarded_subagents_are_named_in_the_rules():
+    """plugin が起動元を検査する子の一覧。全体の deny と同じ名前を出す。"""
+    guide = gen.build_opencode_guide({}, COMMON)
+    assert guide["guarded_subagents"] == ["bypass-worker"]
+    denied = [r["resource"] for r in gen.opencode_subagent_guards(COMMON)]
+    assert guide["guarded_subagents"] == denied
+
+
+@pytest.mark.parametrize("mode", ["all", "subagent"])
+def test_bypass_stays_primary_over_existing_mode(mode):
+    """★bypass を子として起動できると、モデルが自分で全部の保護を外せる。
+
+    既存設定の ``mode`` は common.toml が宣言しないと残るので、``primary`` を明示して上書きする。
+    """
+    existing = {"agent": {"bypass": {"mode": mode}}}
+    merged = gen.merge_opencode_config(existing, COMMON)
+    assert merged["agent"]["bypass"]["mode"] == "primary"
+    guards = [r for r in merged["permissions"] if r["action"] == "subagent"]
+    assert {"action": "subagent", "resource": "bypass", "effect": "deny"} not in guards
+
+
+def test_all_allow_agents_in_common_declare_their_mode():
+    """全部 allow のエージェントは mode を必ず宣言する。
+
+    宣言しないと既存設定の mode が残り、子として起動できるかを common.toml だけで決められない。
+    """
+    for name, agent in COMMON["opencode"]["agent"].items():
+        if gen._grants_everything(agent):
+            assert agent.get("mode") in ("primary", "subagent", "all"), name
+
+
+def test_guide_plugin_is_registered_for_guarded_subagents_alone():
+    """子の起動元の検査だけでも index.js が要る (隔離版も同じ)。"""
+    common = {"opencode": {"agent": {"w": {"permission": "allow", "mode": "subagent"}}}}
+    assert gen.opencode_guide_server_needed(common, tui=True)
+    assert gen.opencode_guide_server_needed(common, tui=False)
+    assert gen.opencode_guide_plugin_path() in gen.merge_opencode_config({}, common)["plugins"]
 
 
 # 誘導の素通り判定はエージェント名で行う。effect で見ると静的 allow を含む
@@ -466,6 +506,180 @@ def test_isolated_session_does_not_build_the_describer(tmp_path, isolated, expec
 def guide_js(tmp_path_factory):
     work = tmp_path_factory.mktemp("guide-js")
     return _load_guide_js(work, gen.build_opencode_guide({}, COMMON))
+
+
+def _run_hooks(work: Path, rules: dict | str | None, calls: list[list]) -> list[dict]:
+    """plugin の ``setup`` を偽の ctx で走らせ、``[hook 名, event]`` を順に渡して event を返す。
+
+    ``rules`` が文字列ならそのまま ``rules.json`` に書き、None なら置かない。
+    """
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
+    src = (ROOT / "home/dot_config/opencode/guide-plugin/index.js").read_text("utf-8")
+    (work / "mod.mjs").write_text(src, "utf-8")
+    if rules is not None:
+        text = rules if isinstance(rules, str) else json.dumps(rules)
+        (work / "rules.json").write_text(text, "utf-8")
+    (work / "run.mjs").write_text(
+        "import plugin from './mod.mjs'\n"
+        "const hooks = {}\n"
+        "const hook = (name, fn) => { hooks[name] = fn }\n"
+        "await plugin.setup({ tool: { hook }, permission: { hook } })\n"
+        "const out = []\n"
+        "for (const [name, e] of JSON.parse(process.argv[2])) {\n"
+        "  await hooks[name](e)\n"
+        "  out.push(e)\n"
+        "}\n"
+        "console.log(JSON.stringify(out))\n",
+        "utf-8",
+    )
+    env = {k: v for k, v in os.environ.items() if k != "OCS_ISOLATED"}
+    done = subprocess.run(
+        [node, str(work / "run.mjs"), json.dumps(calls)],
+        capture_output=True, text=True, encoding="utf-8", env=env, check=True,
+    )
+    return json.loads(done.stdout)
+
+
+def _evaluate(work: Path, rules: dict | str | None, events: list[dict]) -> list[dict]:
+    """``permission.evaluate`` へ events を順に渡し、effect と message を返す。"""
+    out = _run_hooks(work, rules, [["evaluate", e] for e in events])
+    return [{"effect": e["effect"], "message": e.get("message")} for e in out]
+
+
+def _launch(agent: str | None, child: str, effect: str) -> dict:
+    event = {"action": "subagent", "resources": [child], "effect": effect}
+    if agent is not None:
+        event["agent"] = agent
+    return event
+
+
+# ★全体の deny はエージェント個別の allow (task = "allow" など) に上書きされる。
+# そのとき OpenCode が plugin へ渡す effect は allow になるので、allow / ask の両方で見る。
+@pytest.mark.parametrize("effect", ["allow", "ask"])
+@pytest.mark.parametrize("agent", ["build", "mine", None], ids=["build", "手で足した", "名前無し"])
+def test_plugin_denies_the_bypass_worker_outside_bypass(tmp_path, agent, effect):
+    rules = gen.build_opencode_guide({}, COMMON)
+    [out] = _evaluate(tmp_path, rules, [_launch(agent, "bypass-worker", effect)])
+    assert out["effect"] == "deny"
+    assert "bypass-worker" in out["message"]
+
+
+def test_plugin_lets_bypass_launch_the_bypass_worker(tmp_path):
+    rules = gen.build_opencode_guide({}, COMMON)
+    [out] = _evaluate(tmp_path, rules, [_launch("bypass", "bypass-worker", "allow")])
+    assert out == {"effect": "allow", "message": None}
+
+
+@pytest.mark.parametrize("effect", ["allow", "ask"])
+def test_plugin_leaves_other_subagents_alone(tmp_path, effect):
+    rules = gen.build_opencode_guide({}, COMMON)
+    [out] = _evaluate(tmp_path, rules, [_launch("build", "explore", effect)])
+    assert out == {"effect": effect, "message": None}
+
+
+def _without(key: str) -> dict:
+    rules = gen.build_opencode_guide({}, COMMON)
+    del rules[key]
+    return rules
+
+
+def _broken_guide() -> dict:
+    rules = gen.build_opencode_guide({}, COMMON)
+    rules["guide"] = [{"pattern": "(", "message": "壊れた正規表現"}]
+    return rules
+
+
+# ★plugin のロードに失敗すると起動元の検査ごと消える (上流は fail-open)。
+# see docs/spec/agent-config-generation.md#rulesjson-が使えないとき
+@pytest.mark.parametrize(
+    "rules",
+    [None, "{not json", "[]", _without("guarded_subagents"), _without("bypass_agents")],
+    ids=["無い", "JSON でない", "配列", "guarded_subagents が無い", "bypass_agents が無い"],
+)
+def test_plugin_leaves_subagents_alone_when_rules_are_unusable(tmp_path, rules):
+    """一覧が読めなくても plugin はロードでき、起動の effect は変えない (止めずに警告する)。"""
+    events = [
+        _launch("build", "bypass-worker", "allow"),
+        _launch("bypass", "bypass-worker", "allow"),
+        _launch("build", "explore", "ask"),
+    ]
+    out = _evaluate(tmp_path, rules, events)
+    assert out == [{"effect": e["effect"], "message": None} for e in events]
+
+
+def test_broken_guide_rules_do_not_take_the_subagent_guard_down(tmp_path):
+    out = _evaluate(
+        tmp_path,
+        _broken_guide(),
+        [_launch("build", "bypass-worker", "allow"), _launch("bypass", "bypass-worker", "allow")],
+    )
+    assert [o["effect"] for o in out] == ["deny", "allow"]
+
+
+def _grep(agent: str = "build") -> dict:
+    text = "Found 1 matches\n/home/u/proj/README.md:\n  Line 1: ok"
+    return {"tool": "grep", "agent": agent, "result": {"content": [{"type": "text", "text": text}]}}
+
+
+def _glob(agent: str = "build") -> dict:
+    text = "/home/u/proj/README.md"
+    return {"tool": "glob", "agent": agent, "result": {"content": [{"type": "text", "text": text}]}}
+
+
+_MISSING = object()
+
+
+def _with_read_deny(value) -> dict:
+    rules = gen.build_opencode_guide({}, COMMON)
+    if value is _MISSING:
+        del rules["read_deny"]
+    else:
+        rules["read_deny"] = value
+    return rules
+
+
+@pytest.mark.parametrize("tool", [_grep, _glob], ids=["grep", "glob"])
+@pytest.mark.parametrize(
+    "value",
+    [_MISSING, None, "(?:^|/)\\.env$", {"x": 1}, [1], [None], ["(?:^|/)\\.env$", 2]],
+    ids=["無い", "null", "文字列", "オブジェクト", "数値の要素", "null の要素", "混在"],
+)
+def test_malformed_read_deny_withholds_results(tmp_path, tool, value):
+    """★生成側は read_deny を必ず出す。形が違えば壊れた rules として結果を伏せる。"""
+    [e] = _run_hooks(tmp_path, _with_read_deny(value), [["execute.after", tool()]])
+    text = e["result"]["content"][0]["text"]
+    assert "README.md" not in text
+    assert "rules.json" in text
+    assert "opencode service restart" in text
+
+
+@pytest.mark.parametrize("tool", [_grep, _glob], ids=["grep", "glob"])
+def test_empty_read_deny_keeps_results(tmp_path, tool):
+    """明示的な空の配列は「濾すものが無い」で、壊れた扱いにしない。"""
+    [e] = _run_hooks(tmp_path, _with_read_deny([]), [["execute.after", tool()]])
+    assert "README.md" in e["result"]["content"][0]["text"]
+
+
+def test_grep_results_are_withheld_when_the_read_filter_is_broken(tmp_path):
+    """結果フィルタは grep / glob で唯一の保護なので、組めなければ結果を伏せる。"""
+    rules = gen.build_opencode_guide({}, COMMON)
+    rules["read_deny"] = ["("]
+    [e] = _run_hooks(tmp_path, rules, [["execute.after", _grep()]])
+    text = e["result"]["content"][0]["text"]
+    assert "README.md" not in text
+    assert "rules.json" in text
+
+
+@pytest.mark.parametrize(
+    "rules", [_broken_guide(), None], ids=["誘導が壊れている", "rules.json が無い"]
+)
+def test_unrelated_broken_sections_leave_the_read_filter_alone(tmp_path, rules):
+    """誘導が壊れても結果フィルタは組める。rules.json ごと読めなければ結果を伏せる。"""
+    [e] = _run_hooks(tmp_path, rules, [["execute.after", _grep()]])
+    kept = "README.md" in e["result"]["content"][0]["text"]
+    assert kept is (rules is not None)
 
 
 WINDOWS_HOME = "C:\\Users\\tester"
