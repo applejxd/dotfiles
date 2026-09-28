@@ -63,7 +63,8 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
     消すと壊れる理由の 1 文
   - `docs/` へ移すもの: 背景・比較・代替案・実測値・失敗談・「なぜ他の方法を
     採らなかったか」
-- 秘密情報はソースに書かず `SUDO_PASSWORD` / Bitwarden / sops + age を使う
+- 秘密情報はソースに書かず Bitwarden / sops + age を使う。sudo のパスワードは保存せず、
+  スクリプトが実行時に端末で尋ねる（[sudo パスワード](docs/spec/development.md#sudo-パスワード)）
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない
 - コミットメッセージは Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）
 - 運用手順やコマンドを追加したら `docs/` の該当ファイルと `index.md` を更新する。

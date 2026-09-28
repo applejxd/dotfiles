@@ -1,0 +1,21 @@
+# sudo の認証を 1 回だけ取り、スクリプトが終わるまで切らさない。
+# パスワードは sudo 自身が端末で尋ねる (変数にも環境変数にも持たない)。
+# see docs/spec/development.md#sudo-パスワード
+start_sudo_keepalive() {
+    if [ -n "${sudo_keepalive_pid:-}" ]; then
+        return 0
+    fi
+    echo "このスクリプトはシステムの設定に sudo を使います。" >&2
+    sudo -v
+    # 長い導入の間に認証の期限 (macOS の既定は 5 分) が切れないよう延長し続ける。
+    # 標準入出力は切り離す (出力をパイプで受けたとき apply の終わりを待たせない)
+    (
+        while kill -0 "$$" 2>/dev/null; do
+            sudo -n true 2>/dev/null || exit 0
+            sleep 50
+        done
+    ) </dev/null >/dev/null 2>&1 &
+    sudo_keepalive_pid=$!
+    # 呼び出し側で EXIT の trap を上書きしないこと (上書きしても親の終了で自分で止まる)
+    trap 'kill "$sudo_keepalive_pid" 2>/dev/null || :' EXIT
+}

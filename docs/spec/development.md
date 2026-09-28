@@ -149,14 +149,19 @@ UTF-8 BOM、winget の記法、プロファイルの字面までで、次は拾�
 
 ### sudo パスワード
 
-sudo パスワードはテンプレート変数へ保存しない。macOS のスクリプト
-（`home/.chezmoiscripts/200_mac/`）が共有テンプレート `get_sudo_password.sh.tmpl` を
-読み込み、得たパスワードを `sudo -S` へ渡す。`.chezmoi.toml.tmpl` には入力を求める
-処理が無いので、`chezmoi init` で尋ねられることはない。
+sudo のパスワードはどこにも保存せず、スクリプトが実行時に端末で尋ねる。
+`.chezmoi.toml.tmpl` には入力を求める処理が無いので、`chezmoi init` では尋ねられない。
 
-1. **環境変数**: `export SUDO_PASSWORD="your_password"`
-2. **対話的入力**: 初回実行時にプロンプトで入力
-3. **スキップ**: Enter キーでスキップ（手動入力が必要な場合あり）
+| OS | 取り方 |
+| --- | --- |
+| macOS（`200_mac/` の 205 / 210 / 250） | 共有テンプレート `sudo-keepalive.sh.tmpl` の `start_sudo_keepalive` が `sudo -v` で 1 回尋ね、スクリプトが終わるまで裏で認証を延長する（macOS の既定の期限は 5 分）。205 は Homebrew を入れるときだけ呼ぶ |
+| Linux | 各スクリプトの先頭の `sudo -v` が端末で尋ねる |
+
+どちらも、パスワードは sudo 自身が尋ね、スクリプトの変数には持たない。Homebrew は
+公式の無人導入（`NONINTERACTIVE=1`）で入れ、パスワードを送り込まない。
+
+**環境変数からは読まない。** `export SUDO_PASSWORD=...` は効かないうえ、そのシェルから
+起動した AI CLI などの子プロセスへパスワードが引き継がれるので使わない。
 
 ### スクリプトの無効化
 

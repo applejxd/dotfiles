@@ -22,7 +22,7 @@ sops (age) に置き、リポジトリにはそれを引くテンプレートと
 | Git の `user.name` / `user.email` | Bitwarden の Login 項目 `gitconfig`（Username と、カスタムフィールド `email`） | `~/.config/git/user` |
 | sops 用の age 秘密鍵 | Bitwarden の Secure Note `SOPS age identity personal`（ノートに鍵の行） | `~/.config/sops/age/keys.txt`（mode 600） |
 | プロジェクトの API キー | 各プロジェクトの `.env.json`（sops で暗号化してコミット） | ファイルには出さない。mise がプロジェクト内でだけ環境変数に載せる |
-| sudo パスワード | どこにも保存しない | macOS のスクリプトが実行時に尋ねる（`home/.chezmoitemplates/get_sudo_password.sh.tmpl`） |
+| sudo パスワード | どこにも保存しない | スクリプトの `sudo -v` が実行時に尋ねる（macOS は `home/.chezmoitemplates/sudo-keepalive.sh.tmpl`。変数に持たない） |
 
 Bitwarden 由来のファイルを展開するのは、ユーザ名が `applejxd` の機械だけ。
 それ以外のユーザでは `.chezmoiignore.tmpl` が外す。

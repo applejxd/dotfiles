@@ -3,6 +3,7 @@
 1. リポジトリ自身への raw URL が実在しないパスを指し、初回導入が 404 で止まった
 2. omp の設定取得に失敗すると空配列とみなし、既存の登録を上書きしていた
 3. omp が後から入っても run_onchange_ の中身が変わらず、設定が一度も入らなかった
+4. macOS のスクリプトが sudo のパスワードを変数に持ち回り、Homebrew を入れる前に brew を使っていた
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -267,3 +269,87 @@ def test_omp_scripts_rerun_once_omp_appears(tmp_path, script):
 
     assert "# omp: absent" in absent
     assert "# omp: present" in present
+
+
+MAC_SCRIPTS = HOME / ".chezmoiscripts" / "200_mac"
+KEEPALIVE = HOME / ".chezmoitemplates" / "sudo-keepalive.sh.tmpl"
+
+
+@pytest.mark.parametrize("script", sorted(MAC_SCRIPTS.glob("*.tmpl")), ids=lambda p: p.name)
+def test_mac_scripts_do_not_carry_the_sudo_password(script):
+    """パスワードは sudo 自身に尋ねさせ、変数やパイプで持ち回らない。"""
+    text = script.read_text(encoding="utf-8")
+    for pattern in ("$password", "${password}", "sudo -S", "expect ", "get_sudo_password"):
+        assert pattern not in text, f"{script.name} に {pattern} が残っている"
+
+
+def test_homebrew_is_installed_before_any_mac_script_uses_brew():
+    """210 は冒頭で brew を使う。導入が後だと新しい Mac の初回の apply で失敗する。"""
+    scripts = sorted(MAC_SCRIPTS.glob("*.tmpl"))
+    installer = next(p for p in scripts if "Homebrew/install" in p.read_text(encoding="utf-8"))
+    users = [
+        p
+        for p in scripts
+        if p != installer and re.search(r"\bbrew\b", p.read_text(encoding="utf-8"))
+    ]
+    assert users
+    for user in users:
+        assert installer.name < user.name, f"{user.name} が {installer.name} より先に走る"
+
+
+def run_keepalive(
+    tmp_path: Path, *, sudo_ok: bool
+) -> tuple[subprocess.CompletedProcess, list[str]]:
+    """偽の sudo を置き、keepalive を 2 回呼んでから終わるスクリプトを走らせる。"""
+    if shutil.which("bash") is None:
+        pytest.skip("bash が無い")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    log = tmp_path / "sudo.log"
+    sudo = bindir / "sudo"
+    rc = 0 if sudo_ok else 1
+    sudo.write_text(f'#!/bin/sh\necho "$*" >> "{log}"\nexit {rc}\n', encoding="utf-8")
+    sudo.chmod(0o755)
+    script = tmp_path / "run.sh"
+    script.write_text(
+        "set -euo pipefail\n"
+        + KEEPALIVE.read_text(encoding="utf-8")
+        + '\nstart_sudo_keepalive\nstart_sudo_keepalive\necho "$sudo_keepalive_pid"\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PATH": f"{bindir}:/usr/bin:/bin"}
+    result = subprocess.run(
+        [shutil.which("bash"), str(script)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        check=False,
+        timeout=30,
+    )
+    calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    return result, calls
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_keepalive_asks_once_and_stops_with_the_script(tmp_path):
+    result, calls = run_keepalive(tmp_path, sudo_ok=True)
+    assert result.returncode == 0, result.stderr
+    assert calls.count("-v") == 1, calls
+    pid = int(result.stdout.strip())
+    for _ in range(50):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("親が終わっても延長のループが残っている")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_keepalive_stops_the_script_when_authentication_fails(tmp_path):
+    result, calls = run_keepalive(tmp_path, sudo_ok=False)
+    assert result.returncode != 0
+    assert calls == ["-v"]
+    assert result.stdout.strip() == ""

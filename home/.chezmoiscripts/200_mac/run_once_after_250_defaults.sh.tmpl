@@ -2,10 +2,11 @@
 
 set -euo pipefail
 
-{{ template "get_sudo_password.sh.tmpl" . }}
+{{ template "sudo-keepalive.sh.tmpl" . }}
+start_sudo_keepalive
 
 # 起動時の音をミュート
-echo "$password" | sudo -S nvram StartupMute=%01
+sudo nvram StartupMute=%01
 
 #----------#
 # defaults #
@@ -60,4 +61,4 @@ killall Dock
 # defaults write com.apple.SoftwareUpdate ScheduleFrequency -int 1
 
 # 「ファイアウォールをオンにする」
-echo "$password" | sudo -S defaults write /Library/Preferences/com.apple.alf globalstate -int 1
+sudo defaults write /Library/Preferences/com.apple.alf globalstate -int 1

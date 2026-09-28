@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-{{ template "get_sudo_password.sh.tmpl" . }}
+{{ template "sudo-keepalive.sh.tmpl" . }}
+start_sudo_keepalive
 
 echo "Starting macOS system setup..." >&2
 
@@ -30,13 +31,13 @@ if [[ $(uname -m) == arm64 ]]; then
     # GUI apps
     brew bundle --file={{ joinPath .chezmoi.workingTree "scripts" "osx" "brew_mas_cask.rb" | quote }}
 
-    # Password required GUI apps
-    echo "$password" | brew install avast-security
+    # sudo が要る GUI アプリ (認証は冒頭の start_sudo_keepalive で取得済み)
+    brew install avast-security
     # Needs Rosetta2
-    echo "$password" | brew install google-japanese-ime
-    echo "$password" | brew install karabiner-elements
-    echo "$password" | brew install xquartz
-    echo "$password" | brew install qlvideo
+    brew install google-japanese-ime
+    brew install karabiner-elements
+    brew install xquartz
+    brew install qlvideo
 fi
 
 #--------#
@@ -63,6 +64,6 @@ fi
 if [[ ! -e /usr/local/texlive ]]; then
     brew install mactex
     eval "$(/usr/libexec/path_helper)"
-    echo "$password" | sudo -S tlmgr update --self --all
-    echo "$password" | sudo -S tlmgr paper a4
+    sudo tlmgr update --self --all
+    sudo tlmgr paper a4
 fi

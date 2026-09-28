@@ -74,22 +74,21 @@ chezmoi apply
 
 ## sudo のパスワードで止まる
 
-**対象**: macOS の `200_mac/210_osx` / `220_homebrew` / `250_defaults`。
-`get_sudo_password.sh.tmpl` を通して sudo のパスワードを得る。Linux のスクリプトは
-`sudo -v` で端末から尋ねる。
+**対象**: macOS の `200_mac/205_homebrew` / `210_osx` / `250_defaults` と、Linux の
+`sudo -v` を使うスクリプト。
 
 **症状**: `chezmoi apply` がパスワードの入力待ちで止まる、または認証に失敗して
 スクリプトが止まる。
 
-**対処**: macOS は環境変数で渡す。取得の順序は
-[開発ガイド](development.md#sudo-パスワード)を参照。
+**原因**: パスワードは `sudo -v` が端末で尋ねる。端末につながっていない実行や、
+入力を誤ったときに止まる。環境変数では渡せない
+（[sudo パスワード](development.md#sudo-パスワード)）。
 
-```bash
-export SUDO_PASSWORD="your_password"
-chezmoi apply
-```
+**対処**: 対話できる端末で `chezmoi apply` を実行し、尋ねられたら入力する。
+失敗したスクリプトは記録されないので、次の apply でもう一度走る。
 
-失敗したスクリプトは記録されないので、この apply でもう一度走る。
+**成功の確認**: 同じ apply で macOS / Linux のスクリプトが最後まで進み、
+`chezmoi status --include=scripts` に残らない。
 
 ## Unix で tomllib が無いと言われて apply が止まる
 

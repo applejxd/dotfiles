@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# 210 以降が brew を使うので、200_mac の中で最初に走らせる。
+{{ template "sudo-keepalive.sh.tmpl" . }}
+
+if [[ $(uname -m) == arm64 ]]; then
+    brew_path="/opt/homebrew/bin/brew"
+else
+    brew_path="/usr/local/bin/brew"
+fi
+
+if [[ ! -x "$brew_path" ]]; then
+    # 公式の無人導入。NONINTERACTIVE は尋ねないので、sudo の認証を先に取っておく
+    # see https://docs.brew.sh/Installation#unattended-installation
+    start_sudo_keepalive
+    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+eval "$("$brew_path" shellenv)"
