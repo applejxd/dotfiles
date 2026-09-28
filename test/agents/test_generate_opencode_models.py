@@ -246,6 +246,72 @@ def test_v2_agent_cannot_shadow_a_v1_agent():
         generated(common)
 
 
+# ---------------------------------------------------------------------------
+# 並列作業 (/fleet)
+# ---------------------------------------------------------------------------
+
+def test_fleet_worker_uses_the_light_tier():
+    agents = generated(PERSONAL)["agents"]
+    assert agents["fleet-worker"]["model"] == "github-copilot/claude-opus-5.5#medium"
+    assert agents["fleet-worker"]["mode"] == "subagent"
+
+
+def test_fleet_worker_keeps_the_global_shell_rules():
+    """★承認制のまま。shell を丸ごと allow にする規則を持たない。"""
+    rules = rules_of("fleet-worker")
+    allows = [r for r in rules if r["action"] in ("shell", "edit", "*") and r["effect"] == "allow"]
+    assert not allows
+
+
+@pytest.mark.parametrize("command", ["add", "commit", "stash", "checkout", "restore", "reset"])
+def test_fleet_worker_cannot_touch_the_shared_git_state(command):
+    """作業ツリーをほかの作業役と共有しているので、git の状態を変えさせない。"""
+    rules = rules_of("fleet-worker")
+    assert {"action": "shell", "resource": f"git {command} *", "effect": "deny"} in rules
+
+
+def test_fleet_command_runs_in_the_current_session():
+    """★子エージェントは子を起動できない。取りまとめ役は今のセッションで動かす。"""
+    fleet = generated(PERSONAL)["commands"]["fleet"]
+    assert fleet["subagent"] is False
+    assert "$ARGUMENTS" in fleet["template"]
+    assert "fleet-worker" in fleet["template"]
+
+
+def test_fleet_command_names_only_defined_agents():
+    template = generated(PERSONAL)["commands"]["fleet"]["template"]
+    agents = set(generated(PERSONAL)["agents"]) | {"explore", "general", "build", "plan"}
+    for name in ("fleet-worker", "explore", "review"):
+        if name in template:
+            assert name in agents, name
+
+
+def test_unmanaged_commands_survive():
+    existing = {"commands": {"mine": {"template": "x"}, "fleet": {"model": "p/m"}}}
+    out = generated(PERSONAL, existing)["commands"]
+    assert out["mine"] == {"template": "x"}
+    assert out["fleet"]["model"] == "p/m", "宣言していないキーは残す"
+    assert generated(PERSONAL, generated(PERSONAL)) == generated(PERSONAL), "冪等"
+
+
+@pytest.mark.parametrize(
+    ("patch", "message"),
+    [
+        ({"template": "Review:\n!`git diff`"}, "シェル"),
+        ({"template": ""}, "template"),
+        ({"model": "p/m"}, "model"),
+        ({"subagent": "yes"}, "subagent"),
+    ],
+    ids=["shell-block", "empty", "model", "subagent-type"],
+)
+def test_invalid_command_stops_apply(patch, message):
+    common = copy.deepcopy(PERSONAL)
+    common["opencode"]["commands"]["fleet"].update(patch)
+    with pytest.raises(ValueError) as excinfo:
+        generated(common)
+    assert message in str(excinfo.value)
+
+
 def test_assignment_goes_to_v2_agents_with_variant():
     """★V1 の agent キーでは #variant 付きの指定が黙って無視される (実測)。"""
     agents = generated(with_agents(WORK, {"explore": "light", "plan": "heavy"}))["agents"]

@@ -675,6 +675,37 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
   いないので止まる（[実機確認](../research/opencode/commit-review-agents.md)）。
   TUI で確認が表に出るかは未確認
 
+### 並列作業（`/fleet`）
+
+Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる作業に分け、
+作業役の子エージェントを同時に起動して進める。仕組みは専用の機能ではなく、
+**コマンドの指示文と、1 回の応答で `subagent` ツールを並べて呼ぶこと**で組んでいる
+（Copilot の `/fleet` も取りまとめはプロンプトによる）。並べて呼んだ子は同時に走り、
+全部が終わってから結果がそろって返るので、波の区切りが仕組みとして保たれる
+（[実機確認](../research/opencode/fleet.md)）。
+
+| 部品 | 置き場 | 中身 |
+| --- | --- | --- |
+| `/fleet` | `[opencode.commands.fleet]` → `opencode.json` の `commands` | 取りまとめの手順（分解 → 依存関係と担当ファイル → 波ごとに並べて起動 → 結果を確かめて次の波 → 検証してまとめる） |
+| `fleet-worker` | `[opencode.agents.fleet-worker]`、階層 `light` | 割り当てられた 1 つの作業を、担当ファイルの範囲で実装して確かめ、結果を返す |
+
+- **取りまとめは今のセッションで動かす（`subagent = false`）。** 子エージェントは
+  さらに子を起動できない（既定の入れ子は 1 段）。子にすると作業役を起動できない
+- **作業役は同じ作業ツリーを共有する。** 衝突は、親が担当ファイルを重ねずに
+  割り当てることで避ける。作業役には git の状態を変える操作（`add` / `commit` /
+  `stash` / `checkout` / `switch` / `restore` / `reset`）を権限で禁じる
+- **編集とシェルは全体の規則のまま（承認制）。** 作業役のシェルは確認が出る。
+  無人の実行（`opencode run --auto`）では子セッションの確認に答えられず止まる
+  （[commit エージェントの実機確認](../research/opencode/commit-review-agents.md)）
+- 1 つの波は 4 件までと指示している。子エージェントごとにモデルを呼ぶので、
+  利用枠の消費は作業役の数だけ増える
+- コマンドは、コマンド用のディレクトリではなく設定の `commands` に出す。
+  スキルでは `~/.config/opencode/skills` が実際には走査されなかった実測があり
+  （[文脈の引き継ぎ](checkpoint.md)）、同じ置き場の扱いを当てにしない
+- `[opencode.commands.<name>]` に書けるキーは `template`（必須）/ `description` /
+  `agent` / `subagent`。**`template` に「`!` + バッククォート」は書けない**
+  （展開時にシェルとして権限の確認なしに実行されるため。`apply` を止める）
+
 ### 後勝ちの照合
 
 OpenCode は **最後に一致した規則が勝つ**。Claude の deny > ask > allow とは

@@ -1443,6 +1443,46 @@ def merge_opencode_v2_agents(existing: Any, common: dict[str, Any]) -> dict[str,
     return out
 
 
+# [opencode.commands.<name>] に書けるキー。model は PC ごとに変わるので受けない。
+OPENCODE_COMMAND_KEYS = frozenset({"template", "description", "agent", "subagent"})
+# template の中でシェルとして実行される記法 (権限の確認を通らない)
+OPENCODE_COMMAND_SHELL_BLOCK = re.compile(r"!`")
+
+
+def opencode_commands(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """``[opencode.commands]`` を検査して返す。
+
+    ``!`` + バッククォートはコマンドの展開時にシェルとして実行され、権限の確認を
+    通らない (公式)。引数を混ぜると任意コードの入口になるので、書かせない。
+    see docs/spec/agent-config-generation.md#並列作業fleet
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for name, command in (common.get("opencode", {}).get("commands") or {}).items():
+        section = f"opencode.commands.{name}"
+        _reject_unknown(section, set(command), OPENCODE_COMMAND_KEYS)
+        template = str(command.get("template") or "").strip()
+        if not template:
+            raise ValueError(f"[{section}] は template が要る")
+        if OPENCODE_COMMAND_SHELL_BLOCK.search(template):
+            raise ValueError(f"[{section}] の template にシェルの埋め込み (!`...`) は書けない")
+        if "subagent" in command and not isinstance(command["subagent"], bool):
+            raise ValueError(f"[{section}] の subagent は true / false で書く")
+        out[str(name)] = {**command, "template": template}
+    return out
+
+
+def merge_opencode_commands(existing: Any, common: dict[str, Any]) -> dict[str, Any]:
+    """``commands`` に宣言したコマンドを書く (他のコマンド・キーは残す)。"""
+    out = {
+        name: dict(entry)
+        for name, entry in (existing if isinstance(existing, dict) else {}).items()
+        if isinstance(entry, dict)
+    }
+    for name, command in opencode_commands(common).items():
+        out[name] = {**out.get(name, {}), **command}
+    return out
+
+
 def merge_opencode_agent_models(existing: Any, models: dict[str, Any]) -> dict[str, Any]:
     """V2 の ``agents.<id>.model`` を割り当てどおりにする。
 
@@ -1651,6 +1691,11 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
         out["agents"] = agents
     else:
         out.pop("agents", None)
+    commands = merge_opencode_commands(existing.get("commands"), common)
+    if commands:
+        out["commands"] = commands
+    else:
+        out.pop("commands", None)
     out["skills"] = merge_opencode_skills(existing.get("skills"))
     out["mcp"] = merge_opencode_mcp(existing.get("mcp"), common)
     return out

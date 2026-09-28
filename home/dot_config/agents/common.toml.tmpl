@@ -722,6 +722,7 @@ provider = "{{ includeTemplate "llm-provider" . }}"
 [opencode.model.agents]
 commit = "light"
 review = "second_opinion"
+fleet-worker = "light"
 
 [opencode.model.tier.amazon-bedrock]
 default = "global.anthropic.claude-sonnet-5"
@@ -817,6 +818,68 @@ permissions = [
   { action = "subagent", resource = "*", effect = "deny" },
   { action = "question", resource = "*", effect = "deny" },
 ]
+
+# /fleet の作業役。編集とシェルは全体の規則のまま (承認制)。同じ作業ツリーを共有するので
+# 担当ファイルは親が割り当てる。see docs/spec/agent-config-generation.md#並列作業fleet
+[opencode.agents.fleet-worker]
+description = "/fleet の作業役。親が割り当てた 1 つの作業を、指定された担当ファイルの範囲で実装し、確認して結果を返す。コミットはしない。/fleet 以外から直接使わない"
+mode = "subagent"
+system = """
+あなたは並列作業の作業役です。取りまとめ役 (親エージェント) から 1 つの作業を渡され、
+結果を親へ返します。ほかの作業役が同じ作業ツリーで同時に動いています。
+ユーザーとは直接やり取りできません。
+
+- 担当ファイルとして渡されたものだけを編集する。担当外の変更が必要だと分かったら、
+  編集せずに理由と必要な変更を報告する
+- 完了条件と確認方法が渡されたら、それに従って確かめる。確かめられなかったら、
+  そう書く (推測で成功と書かない)
+- git の操作 (add / commit / stash / checkout / reset など) はしない。
+  作業ツリーはほかの作業役と共有している
+- 次を返して終わる
+  - 変更したファイルと、変更の要点
+  - 実行した確認と、その結果
+  - 残った問題・判断が要る点・担当外で必要な変更
+"""
+permissions = [
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "question", resource = "*", effect = "deny" },
+  { action = "shell", resource = "git add *", effect = "deny" },
+  { action = "shell", resource = "git commit *", effect = "deny" },
+  { action = "shell", resource = "git stash *", effect = "deny" },
+  { action = "shell", resource = "git checkout *", effect = "deny" },
+  { action = "shell", resource = "git switch *", effect = "deny" },
+  { action = "shell", resource = "git restore *", effect = "deny" },
+  { action = "shell", resource = "git reset *", effect = "deny" },
+]
+
+# スラッシュコマンド (opencode.json の commands へ出す)。template の `$ARGUMENTS` は
+# 引数に置き換わる。★「!」+ バッククォートはシェルとして権限の確認なしに実行されるので書かない。
+[opencode.commands.fleet]
+description = "依頼を並列に動かせる作業に分け、fleet-worker を同時に起動して進める"
+subagent = false
+template = """
+次の依頼を、並列に動かせる小さな作業に分けて進めてください。あなたは取りまとめ役です。
+
+依頼:
+$ARGUMENTS
+
+手順:
+
+1. 必要なら先にコードを読み、依頼を作業に分ける。各作業について、目的・担当ファイル・
+   完了条件・確認方法を決める。担当ファイルは作業どうしで重ねない
+2. 作業の依存関係を決め、同時に動かせる組 (波) に分ける。1 つの波は 4 件まで。
+   分ける価値が無い小さな依頼なら、分けずに自分で進める
+3. 作業の一覧・波・担当ファイルを示してから始める
+4. 波ごとに、各作業を 1 回の応答の中で subagent ツールを並べて fleet-worker に渡す
+   (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。
+   調査だけの作業は explore、第三者の検証は review に任せてよい。
+   依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を
+   すべて書く (子エージェントはこの会話を見られない)
+5. 結果を読み、失敗・担当外の変更・報告された問題があれば、直すか作業を切り直してから
+   次の波へ進む
+6. 最後に全体の差分を読み、リポジトリで定められた検証を実行し、作業ごとの結果・
+   検証の結果・残った問題をまとめて報告する。コミットはしない
+"""
 
 # OpenCode 専用の shell allow ([bash] とは共用しない。前提が違う)。
 # ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。
