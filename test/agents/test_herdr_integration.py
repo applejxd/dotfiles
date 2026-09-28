@@ -162,7 +162,7 @@ def run_agent_cli_installer(script: str, home: Path, tmp_path: Path, fail_url: s
         pytest.skip("bash is not available")
     stub_bin = tmp_path / "stub-bin"
     stub_bin.mkdir()
-    for tool in ("bash", "sh", "rm", "ls", "cat", "mkdir", "mktemp", "mv"):
+    for tool in ("bash", "sh", "rm", "ls", "cat", "mkdir", "mktemp", "mv", "date", "touch"):
         found = shutil.which(tool)
         if found:
             (stub_bin / tool).symlink_to(found)

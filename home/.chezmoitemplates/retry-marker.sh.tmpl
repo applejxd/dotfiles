@@ -4,24 +4,66 @@
 呼び出し側は (dict "homeDir" .chezmoi.homeDir "name" "<印のファイル名>") を渡す。
 see docs/spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す
 */ -}}
+{{- $retryPrev := "none" }}
+{{- with stat (joinPath .homeDir ".local/share/dotfiles/retry" .name) }}{{ $retryPrev = .modTime }}{{ end -}}
 # 置き場はどのエージェントの sandbox からも書けない場所にする。中身は埋め込まない
-# retry-marker: {{ with stat (joinPath .homeDir ".local/share/dotfiles/retry" .name) }}{{ .modTime }}{{ else }}none{{ end }}
+# retry-marker: {{ $retryPrev }}
+retry_prev="{{ $retryPrev }}"
 retry_marker="${HOME}/.local/share/dotfiles/retry/{{ .name }}"
 
-# 既存の印が symlink でも追わない。同じディレクトリの一時ファイルを mv で差し替える
+# 印を置けないときはスクリプトごと非ゼロで終わる (記録させず、次の apply で走り直させる)
+retry_fail() {
+    echo "⚠️  再実行の印を置けません ($1): ${retry_marker}" >&2
+    echo "    失敗の内容: ${retry_reason}" >&2
+    echo "    次の chezmoi apply で走り直すよう、このスクリプトを失敗として終えます" >&2
+    exit 1
+}
+
+# GNU は -d @秒、BSD (macOS) は -t しか秒の指定を受けない
+retry_touch() {
+    if ! touch -h -d "@$1" "${retry_marker}" 2>/dev/null; then
+        TZ=UTC0 touch -h -t "$(date -u -r "$1" +%Y%m%d%H%M.%S)" "${retry_marker}"
+    fi
+}
+
+# 印とその親の経路の symlink は追わない。印は同じディレクトリの一時ファイルを mv で差し替える
 mark_for_retry() {
+    retry_reason="$1"
     retry_dir="${retry_marker%/*}"
-    mkdir -p "${retry_dir}"
-    retry_tmp="$(mktemp "${retry_dir}/.retry.XXXXXX")"
-    printf '%s\n' "$1" >"${retry_tmp}"
+    retry_path="${HOME}"
+    retry_ifs="${IFS}"
+    IFS=/
+    # shellcheck disable=SC2086 # / で区切るために分割する
+    for retry_part in ${retry_dir#"${HOME}/"}; do
+        IFS="${retry_ifs}"
+        retry_path="${retry_path}/${retry_part}"
+        if [ -L "${retry_path}" ]; then
+            retry_fail "親の経路が symlink です: ${retry_path}"
+        fi
+        if [ ! -e "${retry_path}" ]; then
+            mkdir "${retry_path}" || retry_fail "ディレクトリを作れません: ${retry_path}"
+        fi
+        if [ ! -d "${retry_path}" ]; then
+            retry_fail "親の経路がディレクトリではありません: ${retry_path}"
+        fi
+    done
+    IFS="${retry_ifs}"
     # mv は宛先がディレクトリ (への symlink) だとその中へ移すので、先に消す
     if [ -L "${retry_marker}" ] || [ -f "${retry_marker}" ]; then
         rm -f "${retry_marker}"
     fi
     if [ -e "${retry_marker}" ]; then
-        rm -f "${retry_tmp}"
-        echo "⚠️  再実行の印を置けません (ファイル以外があります): ${retry_marker}" >&2
-        return 0
+        retry_fail "ファイル以外があります"
     fi
+    # .modTime は秒単位なので、前回と同じ秒に書くと描画が変わらない。書く前の時刻で比べる
+    retry_now=""
+    if [ "${retry_prev}" != none ]; then
+        retry_now="$(date +%s)"
+    fi
+    retry_tmp="$(mktemp "${retry_dir}/.retry.XXXXXX")"
+    printf '%s\n' "${retry_reason}" >"${retry_tmp}"
     mv -f "${retry_tmp}" "${retry_marker}"
+    if [ -n "${retry_now}" ] && [ "${retry_now}" -le "${retry_prev}" ]; then
+        retry_touch "$((retry_prev + 1))"
+    fi
 }

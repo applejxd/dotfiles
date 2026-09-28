@@ -7,6 +7,8 @@
 5. omp の設定の取得に失敗した回も成功として記録され、omp が直っても走り直さなかった
 6. Homebrew の取得に失敗しても 205 が成功として記録され、次の apply で走り直さなかった
 7. 再実行の印をエージェントが書ける場所に置き、symlink を追って書いていた
+8. 再実行の印が前回と同じ秒だと描画が変わらず、親の経路の symlink を追い、
+   印を置けなくても成功として記録されていた
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -164,8 +167,19 @@ fi
 """
 
 
-def run_with_fake_omp(tmp_path: Path, script: Path, get_output: str, *, home: Path | None = None):
-    """偽の omp を `~/.local/bin/omp` に置き、描画したスクリプトを走らせる。"""
+def run_with_fake_omp(
+    tmp_path: Path,
+    script: Path,
+    get_output: str,
+    *,
+    home: Path | None = None,
+    path_prefix: Path | None = None,
+    extra_env: dict[str, str] | None = None,
+):
+    """偽の omp を `~/.local/bin/omp` に置き、描画したスクリプトを走らせる。
+
+    ``path_prefix`` は PATH の先頭に足すディレクトリ (コマンドを差し替えるため)。
+    """
     if os.name == "nt":
         pytest.skip("Unix 向けスクリプト")
     if shutil.which("bash") is None or shutil.which("python3") is None:
@@ -185,7 +199,10 @@ def run_with_fake_omp(tmp_path: Path, script: Path, get_output: str, *, home: Pa
         "HOME": str(home),
         "OMP_LOG": str(log),
         "OMP_GET": get_output,
+        **(extra_env or {}),
     }
+    if path_prefix is not None:
+        env["PATH"] = f"{path_prefix}{os.pathsep}{env['PATH']}"
     result = subprocess.run(
         ["bash", str(rendered)],
         env=env,
@@ -421,6 +438,209 @@ def test_the_marker_is_replaced_without_following_a_symlink(tmp_path, kind):
         assert not victim.exists()
 
 
+FROZEN_DATE = """#!/bin/sh
+if [ "$#" -eq 1 ] && [ "$1" = +%s ]; then
+    echo {now}
+    exit 0
+fi
+exec {date} "$@"
+"""
+
+
+def _frozen_date(tmp_path: Path, now: int) -> Path:
+    """``date +%s`` だけを ``now`` に固定し、ほかの引数は本物の date へ渡す stub を置く。"""
+    date = shutil.which("date")
+    if date is None:
+        pytest.skip("date が無い")
+    prefix = tmp_path / "frozen-bin"
+    prefix.mkdir()
+    fake = prefix / "date"
+    fake.write_text(
+        FROZEN_DATE.replace("{now}", str(now)).replace("{date}", shlex.quote(date)),
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    frozen = subprocess.run(
+        [str(fake), "+%s"], capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout.strip()
+    assert frozen == str(now)
+    return fake
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_a_failure_in_the_same_second_still_changes_the_script(tmp_path):
+    """★.modTime は秒単位。前回の印と同じ秒にまた失敗すると描画が変わらず、
+    その回が記録されて以後は走らない。書き直した印は前回 + 1 秒にする。
+
+    実時間の秒の境目に頼らず、``date +%s`` を印の時刻に固定して同じ秒を作る。
+    印の時刻は過去に置くので、補正しなければ書き直した印は実時間になり前回 + 1 にならない。
+    """
+    previous = 1_000_000_000
+    home = tmp_path / "home"
+    marker = home / RETRY_DIR / OMP_MARKERS[OMP_SKILLS]
+    marker.parent.mkdir(parents=True)
+    marker.write_text("x\n", encoding="utf-8")
+    os.utime(marker, (previous, previous))
+    prefix = _frozen_date(tmp_path, previous).parent
+
+    result, _, _ = run_with_fake_omp(tmp_path, OMP_SKILLS, "fail", home=home, path_prefix=prefix)
+
+    assert result.returncode == 0, result.stderr
+    assert int(marker.stat().st_mtime) == previous + 1
+    assert marker.read_text(encoding="utf-8") == "config get skills.customDirectories\n"
+    rerendered = render_with_context(OMP_SKILLS, home=home)
+    assert f"# retry-marker: {previous}\n" not in rerendered
+    assert f"# retry-marker: {previous + 1}\n" in rerendered
+
+
+FAKE_BSD_TOUCH = """#!/bin/sh
+for arg in "$@"; do
+    [ "$arg" = -d ] && { echo "touch: out of range or illegal time specification" >&2; exit 1; }
+done
+exec {touch} "$@"
+"""
+FAKE_BSD_DATE = """#!/bin/sh
+if [ "$1" = -u ] && [ "$2" = -r ]; then
+    exec {date} -u -d "@$3" "$4"
+fi
+exec {date} "$@"
+"""
+
+
+def _is_gnu_date(date: str) -> bool:
+    """GNU の date は ``--version`` に応じる。BSD (macOS) の date は不正なオプションで落ちる。"""
+    try:
+        result = subprocess.run(
+            [date, "--version"], capture_output=True, text=True, encoding="utf-8", check=False
+        )
+    except OSError:
+        return False
+    return result.returncode == 0 and "GNU" in result.stdout
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        ('echo "date (GNU coreutils) 9.4"', True),
+        ('echo "date: illegal option -- -" >&2; exit 1', False),
+        ('echo "BusyBox v1.36"', False),
+    ],
+    ids=["gnu", "bsd", "other"],
+)
+def test_the_simulated_bsd_case_runs_only_on_gnu_date(tmp_path, version, expected):
+    """模擬の date は GNU の -d @秒 に頼る。BSD の date では模擬せずネイティブで見る。"""
+    fake = tmp_path / "date"
+    fake.write_text(f"#!/bin/sh\n{version}\n", encoding="utf-8")
+    fake.chmod(0o755)
+    assert _is_gnu_date(str(fake)) is expected
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+@pytest.mark.parametrize("flavor", ["native", "simulated-bsd"])
+def test_a_marker_not_older_than_now_is_moved_past_the_previous_second(tmp_path, flavor):
+    """前回の印が今と同じ秒以降なら、前回 + 1 秒に進める。
+
+    native はその環境の touch / date をそのまま使う (macOS なら BSD 版を実際に通る)。
+    simulated-bsd は macOS の touch (-d に @秒を受けない) と date (-r 秒) を GNU の上で模す。
+    模擬は GNU の date が要るので、GNU でなければ skip する (native が BSD を見る)。
+    TZ をずらし、-t の時刻がローカル時刻で解釈されてずれないことも見る。
+
+    実時間に頼らず、``date +%s`` を印の時刻より前に固定して「印が今より未来」を作る。
+    印の時刻は過去に置くので、補正しなければ書き直した印は実時間になり前回 + 1 にならない。
+    """
+    home = tmp_path / "home"
+    marker = home / RETRY_DIR / OMP_MARKERS[OMP_SKILLS]
+    marker.parent.mkdir(parents=True)
+    marker.write_text("x\n", encoding="utf-8")
+    previous = 1_000_000_000
+    os.utime(marker, (previous, previous))
+    if flavor == "simulated-bsd":
+        touch, date = shutil.which("touch"), shutil.which("date")
+        if touch is None or date is None:
+            pytest.skip("touch / date が無い")
+        if not _is_gnu_date(date):
+            pytest.skip("GNU の date が無い (BSD は native のケースで検証する)")
+    frozen = _frozen_date(tmp_path, previous - 100)
+    prefix = frozen.parent
+    if flavor == "simulated-bsd":
+        prefix = tmp_path / "bsd-bin"
+        prefix.mkdir()
+        # 模擬の date は -u -r を GNU の -d @秒へ変換し、それ以外は固定した date へ渡す
+        for name, body in (("touch", FAKE_BSD_TOUCH), ("date", FAKE_BSD_DATE)):
+            fake = prefix / name
+            fake.write_text(
+                body.replace("{touch}", shlex.quote(touch)).replace(
+                    "{date}", shlex.quote(str(frozen))
+                ),
+                encoding="utf-8",
+            )
+            fake.chmod(0o755)
+        converted = subprocess.run(
+            [str(prefix / "date"), "-u", "-r", str(previous + 1), "+%Y%m%d%H%M.%S"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        ).stdout.strip()
+        assert converted == "200109090146.41"
+        frozen_now = subprocess.run(
+            [str(prefix / "date"), "+%s"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        ).stdout.strip()
+        assert frozen_now == str(previous - 100)
+
+    result, _, _ = run_with_fake_omp(
+        tmp_path, OMP_SKILLS, "fail", home=home, path_prefix=prefix, extra_env={"TZ": "JST-9"}
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert int(marker.stat().st_mtime) == previous + 1
+    assert marker.read_text(encoding="utf-8") == "config get skills.customDirectories\n"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+@pytest.mark.parametrize("link", [".local", ".local/share", ".local/share/dotfiles", RETRY_DIR])
+def test_the_marker_is_not_written_through_a_symlinked_parent(tmp_path, link):
+    """★親の経路が symlink だと、その先 (~/.bashrc のあるディレクトリなど) に書く。
+    書かずに非ゼロで終わる。"""
+    home = tmp_path / "home"
+    elsewhere = tmp_path / "elsewhere"
+    victim = elsewhere / Path(RETRY_DIR).relative_to(link) / OMP_MARKERS[OMP_SKILLS]
+    victim.parent.mkdir(parents=True)
+    victim.write_text("keep me\n", encoding="utf-8")
+    (home / link).parent.mkdir(parents=True, exist_ok=True)
+    (home / link).symlink_to(elsewhere, target_is_directory=True)
+
+    result, _, sets = run_with_fake_omp(tmp_path, OMP_SKILLS, "fail", home=home)
+
+    assert result.returncode != 0
+    assert sets == {}
+    assert "symlink" in result.stderr
+    assert victim.read_text(encoding="utf-8") == "keep me\n"
+    assert list(victim.parent.iterdir()) == [victim]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_an_unwritable_marker_fails_the_script(tmp_path):
+    """★印を置けないまま 0 で終わると成功として記録され、次の apply でも走らない。
+    非ゼロで終わり、記録させない。"""
+    home = tmp_path / "home"
+    marker = home / RETRY_DIR / OMP_MARKERS[OMP_SKILLS]
+    marker.mkdir(parents=True)
+
+    result, _, _ = run_with_fake_omp(tmp_path, OMP_SKILLS, "fail", home=home)
+
+    assert result.returncode != 0
+    assert "再実行の印を置けません" in result.stderr
+    assert "config get skills.customDirectories" in result.stderr
+    assert list(marker.iterdir()) == []
+    assert list(marker.parent.iterdir()) == [marker]
+
+
 MAC_SCRIPTS = HOME / ".chezmoiscripts" / "200_mac"
 KEEPALIVE = HOME / ".chezmoitemplates" / "sudo-keepalive.sh.tmpl"
 
@@ -504,7 +724,9 @@ def run_keepalive(
     log = tmp_path / "sudo.log"
     sudo = bindir / "sudo"
     rc = 0 if sudo_ok else 1
-    sudo.write_text(f'#!/bin/sh\necho "$*" >> "{log}"\nexit {rc}\n', encoding="utf-8")
+    sudo.write_text(
+        f'#!/bin/sh\necho "$*" >> {shlex.quote(str(log))}\nexit {rc}\n', encoding="utf-8"
+    )
     sudo.chmod(0o755)
     script = tmp_path / "run.sh"
     script.write_text(
