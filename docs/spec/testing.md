@@ -276,7 +276,7 @@ OVERALL STATUS: FAILED
 
 次は**リポジトリの不具合ではない**。合否ではなく「未判定」として扱う。
 
-| 症状 | 実体 |
+| 症状 | 原因 |
 | --- | --- |
 | `no space left on device` | tmpfs の上限。`$HOME` 使用率 95% 以上なら UNDETERMINED にする |
 | apply が上限（`APPLY_TIMEOUT`、既定 15 分）で打ち切り | 回線速度か arm64 のエミュレーション。実測で mise の取得が 23〜145 kB/s まで落ちた |

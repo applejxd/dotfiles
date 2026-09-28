@@ -331,7 +331,7 @@ Claude Code だけである。逆に言うと、deny へ上げた 2 つは
 
 ## 「未掲載」という 4 つ目の選択肢
 
-両 CLI には LLM が安全性を判定するモードがある。
+Claude Code と Copilot CLI には LLM が安全性を判定するモードがある。
 
 | | Claude Code | Copilot CLI |
 | --- | --- | --- |
@@ -618,7 +618,7 @@ Python を書く場合は、内容に合うモジュールへ
 | `policy.py` | `common.toml` の deny / ask 照合 |
 | `_shared.py` | 共通ユーティリティ (正規化・パス判定) |
 
-★`__init__.py` のリストは**順序に意味がある**。先に一致したものがユーザーへ
+**`__init__.py` のリストは順序に意味がある。** 先に一致したものがユーザーへ
 のメッセージを決めるため、具体的な代替案を出せるルールを汎用のものより前に
 置く。`check_policy_loaded` が先頭なのは fail-closed のため。
 

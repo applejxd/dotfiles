@@ -28,7 +28,7 @@ home/dot_claude/hooks/
     executable_check_bash.py                 入出力とループのみ (fail-closed)
     lib/policy_loader.py                     command_policy の import と設定ディレクトリの解決
     lib/bashrules/                           bash コマンド検査ルールの本体
-        __init__.py                          DENY / ASK の登録簿 (★評価順の正本)
+        __init__.py                          DENY / ASK の登録簿 (評価順の正本)
         tables.toml                          検査に使うデータ (Python 不要で編集可)
         tables.py                            tables.toml の読み込み
         _shared.py                           共通ユーティリティ・ポリシー層の参照
@@ -82,7 +82,7 @@ test/agents/
 (`include` は描画しない。`includeTemplate` は `.chezmoitemplates/` に無ければ
 source directory を探すので、配備用のテンプレートをそのまま共有できる)。
 
-**配備済みファイルは使えない**。modify\_ が動く時点では `~/.config/agents/common.toml`
+**配置先のファイルは使えない**。modify\_ が動く時点では `~/.config/agents/common.toml`
 がまだ更新されておらず、`chezmoi diff` や部分適用でも当てにできない。
 
 素の TOML ではなくなるため `check-toml` は効かない (ファイル名が `.toml` で
@@ -184,7 +184,7 @@ Gemini CLI と Antigravity は使わないため対象外。既存の定義は�
 `ddgs` は元から対象外のため。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない
 ので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
 
-**生成先を絞るには `clis` を書く。** 省略すると 4 つ全部に入る。`ddgs` は
+**入れる CLI を絞るには `clis` を書く。** 省略すると 4 つ全部に入る。`ddgs` は
 `clis = ["claude"]` にしてあり、Claude Code にだけ入る（Copilot は内蔵の
 web 検索があり、OpenCode / Codex では使わない）。書ける値は `claude` /
 `copilot` / `opencode` / `codex` で、それ以外を書くと apply が止まる。
@@ -262,7 +262,7 @@ OpenCode のワイルドカードは `*` (**`/` を含む** 0 文字以上) と 
 | `**/*.pem` | `*.pem` のみ | `*` が `/` を跨ぐので入れ子側を含む |
 | `.env` | `.env` | `**` が無いものはそのまま |
 
-`test_generate_opencode.py` が変換表と「生成物に `**` が残らないこと」を固定する。
+`test_generate_opencode.py` が変換表と「出力に `**` が残らないこと」を固定する。
 
 ### 整形 (formatter)
 
@@ -308,7 +308,7 @@ hook 版との違いが 2 つある。
 | `[file] claude_read_allow` | OpenCode は allow が既定 (`{action:"*", resource:"*", effect:"allow"}`)。同義の規則が増えるだけ |
 | `[claude] mcp_deny` | Claude の `mcp__<server>__<tool>` と OpenCode の `<server>_<tool>` は別体系。機械変換すると実在しない名前を deny したまま気付けない |
 | `[[hooks]]` | Claude の hook 契約とは別物。OpenCode 側は plugin で書く |
-| `[sandbox]` | 通常起動に sandbox が無い (`claude_write_deny` の意図だけ `[file]` 側へ写している)。隔離起動 `ocs` は `[opencode.sandbox]` と `[sandbox] shell_network_allow` を使う ([隔離版 OpenCode](opencode-sandbox.md)) |
+| `[sandbox]` | 通常起動に sandbox が無い (`claude_write_deny` の意図だけ `[file]` 側へ写している)。隔離起動 `ocs` は `[opencode.sandbox]` と `[sandbox] shell_network_allow` を使う ([OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)) |
 
 ### 既定は `ask`
 
@@ -341,8 +341,8 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 | shell 出力の伏字化 | `index.js` | 同上 |
 | 確認画面への説明表示（toast） | `tui.ts` | **`cli.json` の `plugins`** |
 
-隔離版（`ocs`）は `cli.json` を渡さないので `tui.ts` は読まれない。
-説明の生成だけでは隔離版に `index.js` を載せない。
+隔離起動（`ocs`）は `cli.json` を渡さないので `tui.ts` は読まれない。
+説明の生成だけでは隔離版の設定に `index.js` を載せない。
 
 **登録先が分かれるのは仕様。** `opencode.json` に書いたディレクトリからは
 TUI 側が読まれない。どちらも**絶対パスのディレクトリ**でないと解決されず、
@@ -436,7 +436,7 @@ TUI 側は CLI プロセスなので再起動は不要。
 `stat -c %Y /proc/<pid>` は**起動時刻ではない**。どちらも偽の「再起動済み」を
 返す（[hook の呼ばれ方](../research/opencode/permission/hook-order.md)）。
 
-効いているかは配備済みの規則を 1 つ叩けば分かる。
+効いているかは適用した規則を 1 つ叩けば分かる。
 
 ```sh
 head -1 README.md   # 誘導が生きていれば permission.rejected が返る
@@ -530,7 +530,7 @@ ask に置く)。
 
 ## hooks の単一ソース化
 
-`[[hooks]]` に 1 度書けば、両 CLI の設定ファイルへ展開される。
+`[[hooks]]` に 1 度書けば、Claude Code と Copilot CLI の設定ファイルへ展開される。
 
 | 生成先 | 生成方法 | 使うフィールド |
 | --- | --- | --- |
@@ -623,7 +623,7 @@ herdr 自身が `run_after_140` / `343` で毎回導入し直す今の方式の�
 | `~/.copilot/hooks/orca.json` | 専用ファイルを新規作成 | `from-claude.json` のみ生成 |
 | `~/.codex/config.toml` | 書き込み無し | `chezmoi-managed:start/end`（トップレベルのキー）と `chezmoi-managed:tables:start/end`（テーブル）のマーカー間のみ |
 
-Orca 本体が生成する実体 (`~/.orca/`, `~/.orca-wsl/`, `~/.orca-relay/`,
+Orca 本体が作るファイル (`~/.orca/`, `~/.orca-wsl/`, `~/.orca-relay/`,
 `~/.local/share/orca/`, `~/.local/bin/orca-ide`, `~/orca/`) と、`npx skills` が
 管理する skill ストア (`~/.agents/`) は chezmoi では追跡しない。
 マシン固有のパスやバージョンを埋め込んでおり、Orca 自身が更新機構を持つため。

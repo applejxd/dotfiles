@@ -65,7 +65,7 @@
 | [Claude の deny の展開数](agents/claude-deny-glob-expansion.md) | 名前マッチの deny が 3239 件の bind-mount に展開された測定、whitelist 化の根拠 |
 | [Copilot の開発ツール自動許可の実効権限](agents/copilot-dev-tool-access-grants.md) | dev-tool access ON 時の取りこぼし・RO 上書き、ヘッダが見えない粒度、PATH の bin が RO、mise の latest が消える |
 | [Copilot sandbox の既定の許可範囲](agents/copilot-sandbox-default-policy.md) | `/sandbox policy` の表示、$HOME は未許可、存在しないパスの deny 10 件中 3 件が効かない |
-| [compaction 関連の hook 仕様](agents/compaction-hooks.md) | 記録 E1–E7。圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測（両 CLI の hook は 2026-09-25 に撤去） |
+| [compaction 関連の hook 仕様](agents/compaction-hooks.md) | 記録 E1–E7。圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測（Claude / Copilot の hook は 2026-09-25 に撤去） |
 
 ### OpenCode 全般
 

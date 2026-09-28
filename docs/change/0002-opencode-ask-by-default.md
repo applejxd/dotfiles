@@ -312,16 +312,16 @@ local hook を起動するため、**その設定を書き換えれば任意コ�
 
 ## 現在地
 
-> **2026-09-28 にコードと照合した。** 段階 1〜3 の成果は配備されたまま動いている。
+> **2026-09-28 にコードと照合した。** 段階 1〜3 の成果は適用されたまま動いている。
 
 - `[opencode.shell] allow` は 5 件（`git log` / `wc` / `grep -n` / `uv pip list` /
   `docker ps`）のまま。段階 4a を見送ったので増やしていない
 - 誘導規則（`[[opencode.shell.guide]]`）は `cd`、`cat` / `head` / `tail`、`sed -n`、
   allow の書き込み形（4a の副産物）、ヒアドキュメントの `write` への誘導が入っている
 - 段階 5（`verify` ツール）は未実装
-- Ubuntu / WSL では、既定 ask の通常版と並べて、OS 境界の中で動く隔離版 `ocs` を
-  使える（[CHG-0004](closed/0004-opencode-sandbox.md)）。この案件は通常版の
-  permission を扱う
+- Ubuntu / WSL では、既定 ask の通常起動（`opencode`）と並べて、OS が強制する境界の中で動く
+  隔離起動（`ocs`）を使える（[CHG-0004](closed/0004-opencode-sandbox.md)）。この案件は
+  通常起動の permission を扱う
 
 ## 未解決点
 

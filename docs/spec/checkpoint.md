@@ -10,7 +10,7 @@
 > [CHG-0001](../change/closed/0001-compaction-context-handover.md)。
 
 設計判断の理由は [ADR-0009](../adr/0009-save-before-documenting.md)、
-両 CLI のイベント仕様は
+Claude Code / Copilot CLI のイベント仕様は
 [compaction 関連の hook 仕様](../research/agents/compaction-hooks.md) を参照。
 
 ## 構成
@@ -21,10 +21,10 @@
 | 層 | 実体 | 役割 |
 | --- | --- | --- |
 | 指示ファイル | `home/dot_config/opencode/AGENTS.md.tmpl` | 恒久ルール。「文脈の引き継ぎ」節（OpenCode にだけ置く） |
-| スキル | `home/dot_config/opencode/skills/checkpoint/` | A1 と復帰の手順・雛形・CLI の単一ソース |
+| スキル | `home/dot_config/opencode/skills/checkpoint/` | 復帰記録（A1）と復帰の手順・雛形・CLI の単一ソース |
 | plugin | `home/dot_config/opencode/checkpoint-plugin/` | 圧縮直前の記録と直後の復帰注入 |
 
-`docs/` への文書化（A2 / B）は **`sdd-docs` スキル**が持つ。分離の理由は
+`docs/` への文書化（案件の更新（A2）と恒久的な文書化（B））は **`sdd-docs` スキル**が持つ。分離の理由は
 [スキルを A1 と A2/B に分けた](#スキルを-a1-と-a2b-に分けた)。
 
 ### plugin が担うこと
@@ -281,11 +281,11 @@ uv run --no-project python "$CP" read --session "<セッションID>"
 
 ## 現在の状態と制限
 
-- **スキルは手動起動でも使える。** 「checkpoint して」で A1（実行状態の保存）が走る。
+- **スキルは手動起動でも使える。** 「checkpoint して」で復帰記録（A1）の保存が走る。
   再開時は `read` で自分の記録を読む（SKILL.md の「復帰」節）
-- **A2（案件の更新）と B（`docs/` への文書化）は `sdd-docs` スキルが持つ。**
+- **案件の更新（A2）と恒久的な文書化（B）は `sdd-docs` スキルが持つ。**
   文脈が逼迫しているなら A1 を先に終える
-- **OpenCode の実機で、圧縮 → 記録の生成 → ユーザの手番への注入を通しで確認済み**
+- **OpenCode の実機で、圧縮 → 記録の生成 → ユーザの手番への注入を通しで確かめた**
   （[CHG-0001](../change/closed/0001-compaction-context-handover.md)「通しの実測」）
 - **保存名の変更（完全な ID + ヘッダ照合）と `write` 失敗時の退避は、
   テスト（`test/agents/test_checkpoint*.py`）だけで確認している。** 実機の圧縮では

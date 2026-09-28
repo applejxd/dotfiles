@@ -9,15 +9,15 @@ OpenCode を OS のアクセス制御で囲って起動する仕組みの構成�
 - ここは**現在の構成**だけを書く
 
 ```bash
-ocs         # 境界の内側で起動する
-opencode    # 素の OpenCode（境界なし）
+ocs         # 隔離起動（境界の内側で起動する）
+opencode    # 通常起動（境界なし）
 ```
 
 ## 中心にある考え方
 
 - **包む単位はプロセス全体**。`opencode --standalone` ごと `srt` の内側へ入れる
 - コマンド文字列を検査しない。判定は「効果が境界の外に出るか」だけ
-- **境界を張れないときは起動しない。** 素の OpenCode へ落とすなら境界ではない
+- **境界を張れないときは起動しない。** 通常起動へ落とすなら境界ではない
 - **守るのは「境界の外」であって「境界の中」ではない。** 起動ディレクトリ以下は
   無条件に読み書きできる。**モデル API の資格情報も内側にある**（下記の
   [決めた例外](#既知の制約)）。境界内で動くものは、エージェント自身も
@@ -109,7 +109,7 @@ flowchart TD
 | `allowRead` | 起動ディレクトリ、`~/.opencode`、`~/.local/share/mise`、`~/.local/bin`、`~/.config/opencode/{guide-plugin,checkpoint-plugin,skills}`（`~/.config/opencode` 全体は開けない。R4）、`~/.config/{opencode-sandbox,shell,mise,chezmoi}`、`~/.claude/skills`、`~/.agents/skills` |
 | `denyRead` | `~`、`/mnt`、`/tmp`、`/var/tmp`、`/dev/shm` |
 | `denyWrite` | 起動ディレクトリ内の保護対象、worktree の `.git/{hooks,config}` |
-| `network` | 許可ドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../change/0007-harness-profiles.md)） |
+| `network` | 通信を許可したドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../change/0007-harness-profiles.md)） |
 
 ### 組み立ての規則
 
@@ -123,7 +123,7 @@ flowchart TD
   戻す形にする（`denyRead: ~` → `allowRead` で個別に開ける）
 - **R4: 開ける範囲は必要な深さまで絞る。** R3 の裏返しとして、広く開けた中の
   一部を deny で塞ぎ直すことはできない。`~/.config/opencode` を丸ごと開けて
-  `service.json`（常駐サービスの認証情報）まで読めていた（実測）。
+  `service.json`（常駐サービスの資格情報）まで読めていた（実測）。
   **plugin が要るなら `guide-plugin` だけを開ける**
 
 > **`denyRead: ~` は WSL の Windows 側を守らない。** 実測で `/mnt/c/Users` まで
@@ -205,7 +205,7 @@ flowchart LR
 > 作ったものを新方式にするには `.opencode-sandbox/opencode.db` を消す。
 > 中のセッションも消えるので、必要なら先に `session export` する。
 
-境界の外から隔離版のセッションを開くときは、**`--standalone` も要る**。
+境界の外から隔離起動のセッションを開くときは、**`--standalone` も要る**。
 
 ```bash
 OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continue
@@ -221,14 +221,14 @@ OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continu
   **毎回差し替える**。生成側が空なら取り除く（`AGENTS.md` も同じ）。
   `permissions` だけは空でも `[]` を書く（消すと OpenCode の既定に戻るため）
 - それ以外のキーは**残す**。丸ごと上書きすると TUI で選んだ値が毎回消える
-- 通常版からは**見た目・操作感のキーだけ**引き継ぐ
+- 通常版の設定からは**見た目・操作感のキーだけ**引き継ぐ
   （`theme` / `keybinds` / `username` / `layout` / `model` / `small_model`）
 
 > 許可リストで持つこと。`permissions` や `plugins` を引き継げるようにすると、
 > 境界の外の設定で内側の緩和を決められてしまう。
 
-内側の環境には `OCS_ISOLATED=1` を渡す。guide plugin はこれで隔離版を見分け、
-確認画面の説明の生成だけを止める（隔離版は `tui.ts` を読まず、作っても
+内側の環境には `OCS_ISOLATED=1` を渡す。guide plugin はこれで隔離起動を見分け、
+確認画面の説明の生成だけを止める（隔離起動では `tui.ts` を読まず、作っても
 表示されないため）。偽装されても説明が出なくなるだけで、判定には効かない。
 
 ## 起動前の退避
@@ -353,7 +353,7 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
   版解決とネットワーク確認が走り停止しうる。加えて mise はワークスペース内の
   設定を読むので、**境界を張る前に可変な入力へ依存する**ことになる
 - ワークスペース内のコード（mise タスク・シェル設定）を経由しない
-- 境界の設定は `denyWrite` で保護された生成物だけを読む
+- 境界の設定は `denyWrite` で保護された生成ファイルだけを読む
 - **ワークスペース内の入力は一度だけ読む。** `.opencode/sandbox.toml` を
   承認時と適用時で読み直すと、間に書き換えられたとき
   **承認していない許可が境界へ入る**。読んだ結果を両方へ渡す
@@ -365,7 +365,7 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 - **ランチャーが読み込むコードは、入口と同じだけ保護する。** 本体を別ファイルへ
   分けた分だけ鎖が延びるので、置き場・読み込み方・配布先を入口に揃える（下記）
 - **承認と合格の記録（`~/.local/state/opencode-sandbox/`）は、ほかの CLI からも
-  書けなくする。** `~/.local/state` は Claude / Copilot の sandbox の write 許可に
+  書けなくする。** `~/.local/state` は Claude / Copilot の sandbox の書き込みの許可に
   入っているので、`[sandbox] deny` と `[file] write_deny_globs` で名指しして塞ぐ。
   塞がないと、ocs の外で動くエージェントが `trusted.json` や `checked.json` を
   書き換え、承認や境界チェックの合格を偽造できる
@@ -454,10 +454,10 @@ opencode -s ses_xxxxxxxx       # 境界の外で再開
 | --- | --- |
 | セッション中に境界を変えられない | bwrap の名前空間はプロセス起動時に作られる。`/add-dir` 相当は無い |
 | コマンド単位の逃げ道が無い | プロセス単位で包む以上、`dangerouslyDisableSandbox` 相当は作れない |
-| 履歴・設定が通常版と分かれる | DB を分けているため。セッションの移送は `ocs --handoff`（[引き継ぎ](#セッションの引き継ぎ)） |
+| 履歴・設定が通常起動と分かれる | DB を分けているため。セッションの移送は `ocs --handoff`（[引き継ぎ](#セッションの引き継ぎ)） |
 | 境界はエージェントから見えない | `ENOENT` を「存在しない」と誤診する。`AGENTS.md` で明示的に伝えている |
 | `read` が既定で拒否 | Claude Code は既定で全許可。参照したい場所は個別に開ける必要がある |
-| **資格情報は境界内にある**（決めた例外） | 隔離 DB が `credential` を引き継ぎ、その DB はワークスペース内にある。**平文で取り出せる**（実測）。引き継がないとモデルへ繋げないため、[明示的な例外として受け入れた](../change/closed/0004-opencode-sandbox.md#決定-明示的な例外として受け入れる2026-09-24)。見落としではない |
+| **資格情報は境界内にある**（決めた例外） | 隔離用 DB が `credential` を引き継ぎ、その DB はワークスペース内にある。**平文で取り出せる**（実測）。引き継がないとモデルへ繋げないため、[明示的な例外として受け入れた](../change/closed/0004-opencode-sandbox.md#決定-明示的な例外として受け入れる2026-09-24)。見落としではない |
 
 > 未対処の欠陥と簡素化の選択肢は
 > [CHG-0004 の外部レビュー節](../change/closed/0004-opencode-sandbox.md#外部レビュー2026-09-23-未対処の欠陥と簡素化の選択肢)にまとめてある。

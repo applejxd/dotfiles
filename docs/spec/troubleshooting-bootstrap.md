@@ -244,7 +244,7 @@ winget install --id Bitwarden.CLI --exact
 `BW_SESSION` が無い間、または展開先が既にある間は `~/.config/git/user` と
 `~/.config/sops/age/keys.txt` を無視する。Bitwarden を使わないマシンならそのままで
 構わない。age 鍵が無い・sops で復号できない場合は
-[Secret管理セットアップ](sops-age.md#鍵が展開されない)を参照。
+[秘密情報の管理セットアップ](sops-age.md#鍵が展開されない)を参照。
 
 **成功の確認**: テンプレート関数が値を返し、2 つのファイルが展開される。
 

@@ -108,7 +108,7 @@ chezmoi apply
 uv run --with pytest --with pywinpty --no-project pytest test\test_windows_assets.py test\test_powershell_interactive.py -q
 ```
 
-`test_powershell_interactive.py` は**配備済みの実プロファイル**を PowerShell 7 と
+`test_powershell_interactive.py` は**適用済みの実プロファイル**を PowerShell 7 と
 Windows PowerShell 5.1 の ConPTY セッションで読み込み、プロンプト到達後の状態を
 検査する。だから先に `chezmoi apply` が要る。`pywinpty` はその ConPTY を Python から
 扱うための依存で、Rust ビルドの Windows 専用パッケージ。WSL / Linux では

@@ -6,7 +6,7 @@ chezmoi を使用した個人用 dotfiles 管理リポジトリ。Windows/Ubuntu
 
 - **クロスプラットフォーム対応**: Windows/Ubuntu/WSL/macOS で動作
 - **自動セットアップ**: OS固有の依存関係を自動インストール
-- **セキュアな設定管理**: Bitwarden 連携と sops (age) による機密情報保護
+- **セキュアな設定管理**: Bitwarden 連携と sops (age) による秘密情報の保護
 
 ## クイックスタート
 
@@ -52,7 +52,7 @@ chezmoi init applejxd     # bw がある状態で設定を作り直す (bitwarde
 chezmoi apply
 ```
 
-鍵の復旧条件と確認方法は [Secret管理セットアップ](docs/spec/sops-age.md#8-新しい-pcwsl-環境で復旧する)。
+鍵の復旧条件と確認方法は [秘密情報の管理セットアップ](docs/spec/sops-age.md#8-新しい-pcwsl-環境で復旧する)。
 
 依存関係スクリプトを飛ばす方法は [スクリプトの無効化](docs/spec/development.md#スクリプトの無効化)。
 
@@ -116,8 +116,8 @@ chezmoi apply
 ### 隔離版 OpenCode（Ubuntu / WSL）
 
 ```bash
-ocs         # 境界の内側で起動する
-opencode    # 素の OpenCode（境界なし）
+ocs         # 隔離起動（境界の内側で起動する）
+opencode    # 通常起動（境界なし）
 ```
 
 - **作業対象のディレクトリで起動する。** その配下が読み書き可能になる。
@@ -132,7 +132,7 @@ opencode    # 素の OpenCode（境界なし）
 - **`chezmoi apply` は境界の外で、人間が実行する。** `chezmoi diff` を最初の審査に
   使わない（テンプレートが外部コマンドを実行する。
   [`chezmoi apply` は人間が行う](docs/spec/security.md#chezmoi-apply-は人間が行う)）
-- 境界が守るもの・守らないものは
+- 境界（OS が強制するアクセス境界）が守るもの・守らないものは
   [何を守り、何を守らないか](docs/spec/security.md#何を守り何を守らないか)
 - **`omp`（oh-my-pi、試用中）は permission 機構を持たない。** 対象リポジトリ直下で
   起動し、開始前に作業を区切ってコミットする

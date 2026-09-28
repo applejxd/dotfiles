@@ -68,11 +68,11 @@ sandbox は無い。強制に使えるのは permission リストと plugin の 
 
 Ubuntu / WSL では OpenCode を丸ごと OS のアクセス制御で囲う**隔離起動 (`ocs`)**
 も併用している。その境界と permission の違いは
-[隔離版 OpenCode](opencode-sandbox.md) が正本。
+[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) が正本。
 
 | 層 | OpenCode (通常起動) での状態 |
 | --- | --- |
-| 0. sandbox | **無い**。OS レベルの強制は効かない（[検討して不採用](../change/0002-opencode-ask-by-default.md)。隔離起動 `ocs` は別。[隔離版 OpenCode](opencode-sandbox.md)） |
+| 0. sandbox | **無い**。OS レベルの強制は効かない（[検討して不採用](../change/0002-opencode-ask-by-default.md)。隔離起動 `ocs` は別。[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)） |
 | 1. permission リスト | `opencode.json` の `permissions`。**既定は `ask`** |
 | 2. hook | plugin の `permission.evaluate` / `tool.execute.*`（`guide-plugin`） |
 
@@ -87,7 +87,7 @@ PostToolUse 系の hook (`format-file.sh` / `markdownlint.sh`) だけは、CLI �
 **`ask_hook_owned` を除外しない**: Claude では `rm` のような「hook が承認要否
 まで判定する」コマンドを静的 `ask` から外す (静的 ask を出すと hook の
 exemption がどのモードでも無効化されるため)。OpenCode には委譲先が無いので、
-外すと素通りになる。そのため素の `ask` として出す。`rm` は毎回確認になる。
+外すと素通りになる。そのため静的な `ask` として出す。`rm` は毎回確認になる。
 
 **deny の最終防衛線が permission リストしかない**: Claude では hook と sandbox
 が同じ deny を別経路で強制するが、OpenCode では `permissions` が落ちれば
@@ -95,7 +95,7 @@ exemption がどのモードでも無効化されるため)。OpenCode には委
 `[sandbox] claude_write_deny` に入れて、エージェントが自分の deny を
 書き換えられないようにしてある。
 
-**`~/.config/opencode/service.json` は秘密扱い**: background service の
+**`~/.config/opencode/service.json` は秘密情報として扱う**: background service の
 認証 password が平文で入る。`[sandbox] deny` と読み取り deny の両方に入れる。
 
 glob の変換・formatter・plugin・キーバインド・照合順などの詳細は
@@ -186,7 +186,7 @@ echo '{"tool_input":{"path":"/path/to/foo.py"}}' | bash ~/.claude/hooks/format-f
    上書きされるので直接編集しない
 3. このマシンだけの項目は chezmoi 管理外の `~/.config/agents/local.toml` へ書く
    ([このマシンだけで許可を足す](agent-sandbox.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない))
-4. `chezmoi apply` で両 CLI 設定が再生成される
+4. `chezmoi apply` で各 AI CLI の設定が再生成される
 
 なお初回 apply 時、Claude Code が未起動なら `~/.claude/settings.json` は存在しない。
 chezmoi modify_ スクリプトは空 stdin を受けると空オブジェクトとして扱い、common.toml
@@ -201,5 +201,5 @@ chezmoi modify_ スクリプトは空 stdin を受けると空オブジェクト
 | `~/.config/agents/command_policy.py` が読めない・壊れている | hook が fail-closed で全 bash を拒否する。`~/.config/agents/__pycache__/` を削除して `chezmoi apply` をやり直す |
 | common.toml の編集が反映されない | `chezmoi diff` で差分を確認 → `chezmoi apply` |
 | `chezmoi diff` が全て「new file」になる | **AI CLI の sandbox 内で実行している**。`~/` が不可視で展開先が空に見えるため。sandbox 外のシェルで実行する |
-| `chezmoi` が `chezmoistate.boltdb: read-only file system` で落ちる | `~/.config/chezmoi` が write 許可に入っているか確認 (`copilot_write_allow` / `claude_write_allow`) |
-| `uvx` が `os error 30 at ".../uv/tools/.tmpXXXX"` で落ちる | `~/.local/share/uv/tools` が write 許可に入っているか確認 |
+| `chezmoi` が `chezmoistate.boltdb: read-only file system` で落ちる | `~/.config/chezmoi` が書き込みの許可に入っているか確認 (`copilot_write_allow` / `claude_write_allow`) |
+| `uvx` が `os error 30 at ".../uv/tools/.tmpXXXX"` で落ちる | `~/.local/share/uv/tools` が書き込みの許可に入っているか確認 |

@@ -3,7 +3,7 @@
 - **状態**: Paused
 - **更新日**: 2026-09-28
 - **基準**: `common.toml.tmpl` 1242 行 / `generate.py` 1736 行。生成先は
-  Claude・Copilot・OpenCode 通常版・OpenCode 境界版の 4 ハーネス
+  Claude・Copilot・OpenCode の通常起動・OpenCode の隔離起動（`ocs`）の 4 ハーネス
 
 > **2026-09-25 に保留へ移した。** A1（改名）は完了、A3 は消滅、A4 は保留。
 > **残るのは A2（固有設定の native 分離）だけ。**

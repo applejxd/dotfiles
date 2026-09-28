@@ -51,14 +51,14 @@
 
 | # | 目的 | 保留理由 | 再開条件 | 更新日 |
 | --- | --- | --- | --- | --- |
-| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | 段階 0〜3 は完了、4a / 4b は見送り、6 は決着。残る段階 5（`verify` ツール）が第一サポートの決定待ち。段階 3 までは配備済みで動いている | CHG-0006 が第一サポートを決めたとき（「決めない」と決めた場合も含む） | 2026-09-28 |
-| [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | A1 完了 / A3 消滅 / A4 保留。残る A2 は第一サポートが変われば対象も変わるため、先に動かすと手戻りになる | 同上。なお A2 の前提である ADR-0007 規則 3 との矛盾と、A1 で取り残した `[file]` 節のコメントは、CHG-0006 と独立に片付けられる | 2026-09-28 |
+| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | 段階 0〜3 は完了、4a / 4b は見送り、6 は決着。残る段階 5（`verify` ツール）が第一サポートの決定待ち。段階 3 までは適用済みで動いている | CHG-0006 が第一サポートを決めたとき（「決めない」と決めた場合も含む） | 2026-09-28 |
+| [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | 段階 A1 完了 / A3 消滅 / A4 保留（checkpoint の A1 / A2 とは別の、この案件の段階番号）。残る A2 は第一サポートが変われば対象も変わるため、先に動かすと手戻りになる | 同上。なお A2 の前提である ADR-0007 規則 3 との矛盾と、A1 で取り残した `[file]` 節のコメントは、CHG-0006 と独立に片付けられる | 2026-09-28 |
 
 ## 終了
 
 | # | 目的 | 結果 | 終了日 | 現行仕様 / ADR |
 | --- | --- | --- | --- | --- |
-| [0008](closed/0008-raspi-branching.md) | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える | 採用・配備済み（実機 3 周目で apply が 45 秒で完走。判定は `.chezmoitemplates/is-raspi` で `chezmoi update` だけで効く。`[data] is_raspi` の方式は撤回） | 2026-09-26 | [プロジェクト構造](../spec/structure.md#raspberry-pi) |
-| [0001](closed/0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | 採用・配備済み（圧縮要約そのものを checkpoint にした。Claude / Copilot の hook は撤去） | 2026-09-25 | [checkpoint](../spec/checkpoint.md) / [ADR-0009](../adr/0009-save-before-documenting.md) |
-| [0004](closed/0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | 採用・配備済み（通常版と併用。既定を `ocs` にする案は撤回） | 2026-09-24 | [opencode-sandbox](../spec/opencode-sandbox.md) |
-| [0003](closed/0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | 採用・配備済み | 2026-09-22 | [agent-config-generation](../spec/agent-config-generation.md#確認画面に出るコマンドの説明) |
+| [0008](closed/0008-raspi-branching.md) | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える | 採用・適用済み（実機 3 周目で apply が 45 秒で完走。判定は `.chezmoitemplates/is-raspi` で `chezmoi update` だけで効く。`[data] is_raspi` の方式は撤回） | 2026-09-26 | [プロジェクト構造](../spec/structure.md#raspberry-pi) |
+| [0001](closed/0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | 採用・適用済み（圧縮要約そのものを checkpoint にした。Claude / Copilot の hook は撤去） | 2026-09-25 | [checkpoint](../spec/checkpoint.md) / [ADR-0009](../adr/0009-save-before-documenting.md) |
+| [0004](closed/0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | 採用・適用済み（通常起動と併用。既定を `ocs` にする案は撤回） | 2026-09-24 | [opencode-sandbox](../spec/opencode-sandbox.md) |
+| [0003](closed/0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | 採用・適用済み | 2026-09-22 | [agent-config-generation](../spec/agent-config-generation.md#確認画面に出るコマンドの説明) |

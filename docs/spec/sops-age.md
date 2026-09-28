@@ -131,7 +131,7 @@ mise trust
 mise env --redacted
 ```
 
-Secret 値が `[redacted]` と表示されれば設定完了。
+秘密情報の値が `[redacted]` と表示されれば設定完了。
 
 ## 6. Git へコミットする
 
@@ -151,7 +151,7 @@ git commit -m "Add encrypted project secrets"
 
 ## 7. 日常操作
 
-プロジェクトへ移動すると mise が Secret を自動ロードする。
+プロジェクトへ移動すると mise が秘密情報を自動ロードする。
 
 ```bash
 cd project
@@ -164,7 +164,7 @@ terraform plan
 プロジェクト内で起動した AI CLI にも API キーが渡る点に注意する
 （[脅威と守らないもの](security.md#脅威と守らないもの)）。
 
-Secret の追加・更新は次のコマンドで行う。
+秘密情報の追加・更新は次のコマンドで行う。
 
 ```bash
 sops .env.json

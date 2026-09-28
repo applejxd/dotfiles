@@ -279,7 +279,7 @@ seccomp フィルタは手で `npm install -g` する必要はありません。
 ## AI CLI の導入
 
 Claude Code / Copilot CLI / OpenCode V2 は**各社公式のインストーラー**で導入します。
-実体は `home/.chezmoitemplates/agent-cli-install.sh.tmpl`（Unix 共通の本体）と、
+導入処理の本体は `home/.chezmoitemplates/agent-cli-install.sh.tmpl`（Unix 共通）と、
 それを `template` で取り込む OS 別スクリプトです。
 
 | OS | スクリプト | Claude Code | Copilot CLI | OpenCode V2 |
@@ -585,7 +585,7 @@ OpenCode V2 が global 指示として読むのは `~/.config/opencode/AGENTS.md
   CLI 別の表を参照）。
 - **テンプレート内で分岐しない**: 固有の節は該当ファイルへ直接書き足します。
   `{{ if }}` を使わないので、テストは `includeTemplate` を展開するだけで
-  実体を再現できます（`test_personal_instructions_share_one_source`）。
+  出力内容を再現できます（`test_personal_instructions_share_one_source`）。
 - **リポジトリ直下の `AGENTS.md` は対象外**: 適用範囲（このリポジトリのみ）も
   内容（リポジトリ固有の約束）も別系統です。判断の経緯は
   [ADR-0006](../adr/0006-instructions-to-mechanisms.md) にあります。

@@ -70,7 +70,7 @@ Claude の allowRead に /mnt・/tmp 系: なし
 - 意図的に開けているのであれば、その旨をここに書いて確定させる
 - 意図していないなら `[sandbox] deny` に `/mnt` `/tmp` `/var/tmp` `/dev/shm`
   を足す。**ただし `deny` は Copilot の `deniedPaths` にも流れる**ので、
-  両 CLI への影響を確かめてから入れる
+  Claude と Copilot の両方への影響を確かめてから入れる
 - `/tmp` を塞ぐと専用の空 tmpfs になり、ホストとのファイル受け渡しが切れる
 
 ### キー名の規則
@@ -80,21 +80,21 @@ Claude の allowRead に /mnt・/tmp 系: なし
 
 | キー | 効く CLI | 用途 |
 | --- | --- | --- |
-| `[sandbox] deny` | 両方 | whitelist の内側でも遮断する秘密情報 (read/write 両方) |
+| `[sandbox] deny` | Claude・Copilot | whitelist の内側でも遮断する秘密情報 (read/write 両方) |
 | `[sandbox] seccomp_apply_path` | Claude | seccomp の適用バイナリ |
 | `[sandbox] claude_read_allow` | Claude | whitelist に開ける読み取りの穴 |
 | `[sandbox] claude_write_allow` | Claude | cwd + temp 以外に書き込みを許す場所 |
 | `[sandbox] claude_write_deny` | Claude | read は許すが write を禁止する対象。`deny` に**追加**される |
-| `[sandbox] shell_network_allow` | Claude・隔離版 OpenCode | shell が実際に通信する先 (CDN 等) |
+| `[sandbox] shell_network_allow` | Claude・OpenCode の隔離起動 (`ocs`) | shell が実際に通信する先 (CDN 等) |
 | `[sandbox] claude_network_strict` | Claude | 許可外ドメインを拒否する (v2.1.219+) |
 | `[sandbox] copilot_read_allow` | Copilot | Copilot が読める場所 (whitelist の本体) |
 | `[sandbox] copilot_write_allow` | Copilot | 同上の書き込み |
-| `[sandbox] copilot_allow_dev_tool_access` | Copilot | 開発ツールの自動許可。`false` 固定 |
+| `[sandbox] copilot_allow_dev_tool_access` | Copilot | 開発ツール自動許可 (開発ツールの置き場へ sandbox の読み書きの許可を自動で足す)。`false` 固定 |
 | `[file] claude_read_allow` | Claude | `Read()` の allow |
 | `[file] read_ask_globs` / `write_ask_globs` / `read_deny_globs` / `write_deny_globs` | Claude・OpenCode (Copilot は `read_deny_globs` のみ) | Claude の `Read()` / `Edit()`、OpenCode の `read` / `edit` の ask / deny。Copilot は `check_file_read.py` が view へ適用 |
-| `[bash] allow` / `ask` / `deny` | 両方 | ただし粒度が違う |
+| `[bash] allow` / `ask` / `deny` | Claude・Copilot | ただし粒度が違う |
 
-無印は「両 CLI に効く」を意味する。**片方にしか渡らない設定を無印で足しては
+無印は「Claude と Copilot の両方に効く」を意味する。**片方にしか渡らない設定を無印で足しては
 いけない。** 実際、`copilot_*` が生まれる前の `read_allow` / `write_allow` は
 名前の上ではただの許可に見えて Claude にしか効いておらず、Copilot 側で
 `uv run` が動かない原因になっていた。
@@ -167,7 +167,7 @@ Claude の `denyRead` は `~/` 配下しか塞いでいないため。
 
 > [!IMPORTANT]
 > **禁止 (deny) をこの手順で足さないこと。** CLI 固有キーは許可の補償専用で、
-> 禁止を置くと片方だけ無防備になる。遮断は `[sandbox] deny` (両 CLI) か
+> 禁止を置くと片方だけ無防備になる。遮断は `[sandbox] deny` (Claude・Copilot 共通) か
 > hook で行う。境界は [ADR-0007](../adr/0007-filesystem-guard-boundary.md)。
 
 ### Copilot が読み書きできる場所 (`copilot_read_allow` / `copilot_write_allow`)
@@ -318,8 +318,8 @@ PATH          : .../node/latest/bin             ← 解決できない
 
 | 表現したいもの | 置き場所 | 効く CLI |
 | --- | --- | --- |
-| 絶対パス・ワイルドカード無しの遮断 | `[sandbox] deny` | 両方 (OS レベル) |
-| glob / cwd 相対 / 意味論を含む遮断 | hook | 両方 |
+| 絶対パス・ワイルドカード無しの遮断 | `[sandbox] deny` | Claude・Copilot (OS レベル) |
+| glob / cwd 相対 / 意味論を含む遮断 | hook | Claude・Copilot |
 | CLI ごとに書き方が違う**許可** | `claude_*` / `copilot_*` | 片方ずつ |
 
 規則は 1 つだけ覚えればよい。
@@ -368,7 +368,7 @@ Copilot からは読める**状態だった。現在は `check_file_read.py` が
 **空の tmpfs として見える** (エントリ数 0) ので、`ls` は成功するが中身は
 一切取れない。
 
-両 CLI とも **whitelist (deny-by-default)** で揃えてある。Copilot は元から
+Claude・Copilot とも **whitelist (deny-by-default)** で揃えてある。Copilot は元から
 その方式で、Claude は `denyRead` に `~/` を置き `allowRead` で穴を開けることで
 同じ形にしている (公式ドキュメントに構成例あり)。書き込み側は両者とも元から
 whitelist (cwd + セッション temp + 明示許可のみ)。
@@ -380,7 +380,7 @@ glob 記法とは **書式が異なる**:
   相対 (ただし **user 設定 `~/.claude/settings.json` では無印/`./` は
   `~/.claude` 基準になる**)。ホーム全体に効かせたいパターンは必ず `~/` を
   明示すること。
-- `deny` (両 CLI 共通): whitelist の内側でも遮断する秘密情報。read/write 両方。
+- `deny` (Claude・Copilot 共通): whitelist の内側でも遮断する秘密情報。read/write 両方。
   公式に "Rules that you configure are always kept" とあり自動付与に勝つ。
 - `claude_read_allow` (Claude のみ): whitelist に開ける読み取りの穴。
   ツールチェーン (`~/.local` `~/.cache` `~/.cargo` 等) と skill 置き場のみ。
@@ -417,7 +417,7 @@ glob 記法とは **書式が異なる**:
 > そのため `claude_read_allow` にも `~/src` のような他リポジトリや、
 > AI CLI の設定ディレクトリ全体 (`~/.claude` 等) を入れない
 > (`test_read_allow_does_not_open_other_repositories` 他で固定)。
-> 作業中のプロジェクトは cwd として自動許可されるので不要。
+> 作業中のプロジェクトは cwd として自動で読み書きが許可されるので不要。
 > 別ディレクトリが要るときは `claude --add-dir <path>`、恒久的に必要なら
 > `~/.config/agents/local.toml` を使う。
 
@@ -457,7 +457,7 @@ sandbox は `sandbox.enabled = true` のみを設定し、`autoAllowBashIfSandbo
 
 ## ネットワーク層 (`[web]` → `sandbox.network`)
 
-ファイル層と違い、**ネットワークは両 CLI で足並みを揃えられない**。
+ファイル層と違い、**ネットワークは Claude と Copilot で足並みを揃えられない**。
 
 | | Claude | Copilot |
 | --- | --- | --- |
