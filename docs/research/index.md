@@ -80,6 +80,7 @@
 | [OpenCode V2のエージェントごとのモデル指定](opencode/agent-models.md) | 子エージェントの model は効く、V1 の agent キーは #variant を黙って無視する、主エージェントは --agent で選んでもモデルが変わらない |
 | [OpenCode V2のcommit / reviewエージェントの実機確認](opencode/commit-review-agents.md) | 割り当てたモデルで起動する、git commit の deny は --auto でも効く、--auto は子セッションの確認を自動承認せず止まる（推測） |
 | [OpenCode V2でCopilot CLIの/fleet相当を組む](opencode/fleet.md) | コマンドと作業役の子エージェントだけで動く、並べて呼んだ子は同時に走る、background は使われなかった |
+| [OpenCode の DB を srt の境界の内外で共有できるか](opencode/shared-db.md) | 同時書き込み・外での再開・外からの `/undo` が通った、書き込みの例外は `XDG_DATA_HOME/opencode` 全体、ignore が無いと snapshot が取れない、`TMPDIR` が見えないと通信が止まる |
 
 ### OpenCode の permission
 

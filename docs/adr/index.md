@@ -66,4 +66,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0009](0009-save-before-documenting.md) | コンテキスト圧縮に備えて、保存と文書化を分ける | Accepted | 2026-09-19 | 前提の一部が CHG-0001 で覆ったことを注記（決定は不変） |
 | [0010](0010-exploratory-spec-driven-docs.md) | docs を「段階」ではなく「情報の役割」で分け、案件を中心に置く | Accepted | 2026-09-19 | 終了案件の置き場を ADR-0011 で改定 |
 | [0011](0011-close-change-records-into-subdirectory.md) | 終了した案件を `change/closed/` へ移す | Accepted | 2026-09-22 | — |
-| [0012](0012-ocs-boundary-for-accidents.md) | ocs の境界の目的を「エージェントのうっかりを防ぐ」に絞る | Proposed | 2026-09-29 | — |
+| [0012](0012-ocs-boundary-for-accidents.md) | ocs の境界の目的を「エージェントのうっかりを防ぐ」に絞る | Accepted | 2026-09-29 | — |
