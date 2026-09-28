@@ -3,6 +3,14 @@ AI CLI (Claude Code / Copilot CLI / OpenCode V2) を各社公式のインスト�
 呼び出し側は 100_linux / 200_mac の run_onchange_after_ スクリプト。
 共有するのは本体だけで、呼び出し側が shebang と set -eu を置く。
 */ -}}
+# 導入に失敗した回の印。失敗のたびに書き直し、更新時刻をここへ埋め込むので、
+# 次の apply で中身が変わって走り直す (run_onchange_ は exit 0 だと記録されるため)。
+# 中身は埋め込まない。~/.local/state はエージェントの sandbox から書けるので、
+# 埋め込むと改行を仕込まれたときにここへコードが入る。時刻だけなら再導入が走るだけ
+# see docs/spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す
+# retry-marker: {{ with stat (joinPath .chezmoi.homeDir ".local/state/dotfiles/agent-cli-failed") }}{{ .modTime }}{{ else }}none{{ end }}
+retry_marker="${HOME}/.local/state/dotfiles/agent-cli-failed"
+
 # 既に入っているものは触らない。更新は README の手順 (手動) に従う。
 # 公式インストーラーはどれも導入先が PATH にあるかを確認する。特に Copilot CLI は
 # 見つからないと rc ファイル追記の可否を /dev/tty から対話で聞くため、
@@ -88,20 +96,22 @@ ensure_cli 'OpenCode V2' opencode install_opencode
 #   保護は「どこで起動するか」と git の使い方に依存する。
 #   see docs/change/0006-pi-harness-trial.md
 # 設定は ~/.omp/agent/ だが、omp は ~/.claude も config root として読むため
-# 既存の skills (16 個) は追加設定なしで見える。
+# 既存の skills は追加設定なしで見える。
 ensure_cli 'oh-my-pi' omp install_omp
 
 if [ -n "${failed_clis}" ]; then
     # ここで非ゼロを返すと apply 全体が止まり、後続のスクリプトまで巻き添えに
     # なる。外部インストーラーの一時的な不調で dotfiles の適用を止めたくないので
-    # 警告に留める。再実行の手順は docs/spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す にある。
+    # 警告に留め、印を書き直して次の apply で走り直させる。
+    mkdir -p "${retry_marker%/*}"
+    printf '%s\n' "${failed_clis}" > "${retry_marker}"
     cat >&2 <<EOF
 
 ⚠️  導入できなかった CLI:${failed_clis}
     GitHub API のレート制限 (未認証で 60 回/時) に当たると 403 で失敗する。
     残量は次で見られる:
       curl -s https://api.github.com/rate_limit
-    時間をおいて chezmoi apply を再実行するか、手で入れる:
+    次の chezmoi apply で入っていないものだけを導入し直す。すぐに入れるなら手で入れる:
       curl -fsSL https://claude.ai/install.sh | bash
       curl -fsSL https://gh.io/copilot-install | bash
       curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path

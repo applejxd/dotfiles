@@ -162,7 +162,7 @@ def run_agent_cli_installer(script: str, home: Path, tmp_path: Path, fail_url: s
         pytest.skip("bash is not available")
     stub_bin = tmp_path / "stub-bin"
     stub_bin.mkdir()
-    for tool in ("bash", "sh", "rm", "ls", "cat"):
+    for tool in ("bash", "sh", "rm", "ls", "cat", "mkdir"):
         found = shutil.which(tool)
         if found:
             (stub_bin / tool).symlink_to(found)
@@ -218,6 +218,60 @@ def test_one_failed_installer_does_not_block_the_others(tmp_path: Path):
     # 黙って成功したことにしない
     assert "omp" in result.stderr
     assert "rate_limit" in result.stderr
+
+
+RETRY_MARKER = ".local/state/dotfiles/agent-cli-failed"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
+def test_a_failed_install_leaves_a_marker_for_the_next_apply(tmp_path: Path):
+    """★run_onchange_ は exit 0 だと記録され、中身が変わるまで走り直さない。
+
+    失敗したら印を書き直し、その更新時刻をテンプレートへ埋め込んで次の apply で
+    走り直させる。以前は「時間をおいて chezmoi apply」と案内していたが走らなかった。
+    """
+    home = tmp_path / "home"
+    home.mkdir()
+    script = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux", home=home)
+    assert "# retry-marker: none" in script
+
+    result, _ = run_agent_cli_installer(script, home, tmp_path, fail_url="omp.sh/install")
+
+    assert result.returncode == 0, result.stderr
+    marker = home / RETRY_MARKER
+    assert marker.read_text(encoding="utf-8").strip() == "omp"
+    assert "次の chezmoi apply" in result.stderr
+    assert "時間をおいて" not in result.stderr
+    rerendered = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux", home=home)
+    assert f"# retry-marker: {int(marker.stat().st_mtime)}" in rerendered
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix 専用のスクリプト")
+def test_a_successful_install_does_not_touch_the_marker(tmp_path: Path):
+    """成功した回は印に触れない。触れると次の apply でまた走り直す。"""
+    home = tmp_path / "home"
+    marker = home / RETRY_MARKER
+    marker.parent.mkdir(parents=True)
+    marker.write_text("omp\n", encoding="utf-8")
+    os.utime(marker, (1_000_000_000, 1_000_000_000))
+    script = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux", home=home)
+    assert "# retry-marker: 1000000000" in script
+
+    result, _ = run_agent_cli_installer(script, home, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert int(marker.stat().st_mtime) == 1_000_000_000
+
+
+def test_the_marker_content_is_never_embedded(tmp_path: Path):
+    """★~/.local/state はエージェントの sandbox から書ける。中身を埋め込むと
+    改行を仕込まれたときにホストで走るスクリプトへコードが入る。時刻だけを使う。"""
+    home = tmp_path / "home"
+    marker = home / RETRY_MARKER
+    marker.parent.mkdir(parents=True)
+    marker.write_text("x\necho INJECTED\n", encoding="utf-8")
+    script = render_template(AGENT_CLI_SCRIPTS["linux"], os_name="linux", home=home)
+    assert "INJECTED" not in script
 
 
 def make_executable(path: Path, exit_code: int = 0) -> None:

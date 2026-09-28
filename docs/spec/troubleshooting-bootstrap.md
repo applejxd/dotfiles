@@ -30,7 +30,12 @@ chezmoi status --include=scripts
   - `100_linux/110_native/112_vscode_extensions`（`code` が無いとき）
   - `100_linux/125_mise`（`mise install` の一部が失敗したとき。
     [ツール 1 個の失敗で apply を止めない](structure.md#ツール-1-個の失敗で-apply-を止めない)）
-  - `100_linux/126_agent_cli` / `200_mac/226_agent_cli`（CLI の導入に失敗したとき）
+
+`100_linux/126_agent_cli` / `200_mac/226_agent_cli`（AI CLI の導入）は例外で、
+失敗したら `~/.local/state/dotfiles/agent-cli-failed` を書き直す。スクリプトには
+この印の**更新時刻だけ**を埋め込むので、次の apply で中身が変わって走り直す
+（中身を埋め込まないのは、この場所がエージェントの sandbox から書けるため）。
+成功した回は印に触れないので、その後は走り直さない。
 
 **対処**: 1 本だけ走らせ直すなら、テンプレートを描画して直接実行する。
 chezmoi の記録には触らない。
