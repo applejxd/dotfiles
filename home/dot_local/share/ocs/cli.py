@@ -191,7 +191,10 @@ def main(argv: list[str] | None = None) -> int:
     Path(project["data_home"]).mkdir(parents=True, exist_ok=True)
     config.write_isolated_config(sandbox, project)
     session.seed_db(Path(project["db"]))
-    project["config"]["ripgrep"] = {"command": check.resolve_ripgrep(project["config"])}
+    project["config"]["ripgrep"] = {
+        "command": check.resolve_ripgrep(project["config"]),
+        "args": list(check.RIPGREP_ARGS),
+    }
 
     # 境界の設定は**ワークスペースの外**へ置く (srt は外側で読む)。
     # 内側からは deny_read の ~ 配下で見えないため、読む前の改竄ができない。

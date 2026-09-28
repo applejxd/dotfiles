@@ -23,6 +23,8 @@ SRT_PATH = "/usr/bin:/bin"
 # srt が境界の外で走らせる rg。SRT_PATH に無いので実体を絶対パスで渡す。
 RIPGREP_INSTALLS = HOME / ".local/share/mise/installs/ripgrep"
 RIPGREP_SYSTEM = Path("/usr/bin/rg")
+# srt が rg の引数の前に足すもの (境界の定義の ripgrep.args)
+RIPGREP_ARGS = ("--no-config",)
 WSL_HIDDEN_TARGETS = ("/mnt/c/Users", "/mnt/c/Windows")
 CHECKED = HOME / ".local/state/opencode-sandbox/checked.json"
 # 合格の再利用期間。★短くする方向にしか動かさないこと。

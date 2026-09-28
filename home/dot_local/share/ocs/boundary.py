@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import backup
 from .common import HOME, _now, die
 
 RULES = HOME / ".config/opencode/guide-plugin/rules.json"
@@ -64,7 +65,8 @@ def git_common_dir(workspace: Path) -> Path | None:
     起動ディレクトリ以下しか開いていないと **``git status`` すら通らない**
     (``fatal: not a git repository``。実測)。
 
-    ★ここは境界の外で走る。``/usr/bin/git`` を絶対パスで呼ぶ。
+    ★ここは境界の外で走る。``/usr/bin/git`` を絶対パスで呼び、利用者の ``GIT_*`` を落とす
+      (``GIT_DIR`` を通すと、別のリポジトリが書けるようになる)。
     """
     done = subprocess.run(
         ["/usr/bin/git", "-C", str(workspace), "rev-parse", "--path-format=absolute",
@@ -72,6 +74,7 @@ def git_common_dir(workspace: Path) -> Path | None:
         capture_output=True,
         text=True,
         check=False,
+        env=backup.git_env(),
     )
     if done.returncode != 0:
         return None

@@ -573,6 +573,17 @@ def test_plain_repository_adds_nothing(tmp_path):
     assert launcher.boundary.git_common_dir(repo) is None
 
 
+def test_git_common_dir_ignores_git_env(tmp_path, monkeypatch):
+    """★GIT_DIR などを利用者の環境から通すと、別のリポジトリが allowWrite に入る。"""
+    launcher = _launcher()
+    other = tmp_path / "other"
+    subprocess.run(["git", "init", "-q", str(other)], check=True, capture_output=True)
+    repo = tmp_path / "plain"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    assert launcher.boundary.git_common_dir(repo) is None
+
+
 # --- 境界チェックの再利用 ----------------------------------------------------
 
 
@@ -1108,6 +1119,96 @@ def test_untracked_only_directory_does_not_block_launch(tmp_path, monkeypatch):
     assert _backups(launcher) == []
 
 
+def _extract(launcher: SimpleNamespace, out: Path) -> Path:
+    import tarfile
+
+    (archive_path,) = _backups(launcher)
+    with tarfile.open(archive_path) as archive:
+        archive.extractall(out, filter="data")
+    return out
+
+
+def test_backup_matches_the_worktree(tmp_path, monkeypatch):
+    """退避は ``git add -A`` と同じ中身になること (削除・実行権・symlink)。
+
+    ★symlink は辿らない。辿った先の中身をワークスペースの .git へ取り込むと、
+      境界の内側から読める。
+    """
+    launcher = _launcher()
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
+    repo = _repo(tmp_path)
+    secret = tmp_path / "outside"
+    secret.mkdir()
+    (secret / "f.txt").write_text("secret\n", encoding="utf-8")
+    (repo / "d").mkdir()
+    (repo / "d" / "f.txt").write_text("tracked\n", encoding="utf-8")
+    (repo / "gone.txt").write_text("gone\n", encoding="utf-8")
+    (repo / "run.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    for args in (("add", "-A"), ("commit", "-qm", "more")):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+    (repo / "gone.txt").unlink()
+    (repo / "run.sh").chmod(0o755)
+    (repo / "d" / "f.txt").unlink()
+    (repo / "d").rmdir()
+    (repo / "d").symlink_to(secret)
+    (repo / "link").symlink_to(secret / "f.txt")
+    (repo / "new dir").mkdir()
+    (repo / "new dir" / "n.txt").write_text("new\n", encoding="utf-8")
+
+    launcher.backup.backup_worktree(repo, False)
+
+    import tarfile
+
+    (archive_path,) = _backups(launcher)
+    with tarfile.open(archive_path) as archive:
+        members = {m.name: m for m in archive.getmembers() if not m.isdir()}
+        new = archive.extractfile(members["new dir/n.txt"]).read()
+    assert sorted(members) == ["a.txt", "d", "link", "new dir/n.txt", "run.sh"], members
+    assert members["d"].issym() and members["d"].linkname == str(secret)
+    assert members["link"].issym() and members["link"].linkname == str(secret / "f.txt")
+    assert new == b"new\n"
+    assert members["run.sh"].mode & 0o111, "実行権が落ちた"
+    assert not members["a.txt"].mode & 0o111
+    blobs = subprocess.run(
+        ["git", "-C", str(repo), "cat-file", "--batch-all-objects", "--batch"],
+        check=True,
+        capture_output=True,
+    ).stdout
+    assert b"secret\n" not in blobs, "symlink の先を .git へ取り込んだ"
+
+
+def test_backup_works_before_the_first_commit(tmp_path, monkeypatch):
+    """コミットが 1 つも無いリポジトリでも退避できること (一時 index は空で始まる)。"""
+    launcher = _launcher()
+    monkeypatch.setattr(launcher.backup, "BACKUPS", tmp_path / "store")
+    repo = tmp_path / "fresh"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+    (repo / "a.txt").write_text("first\n", encoding="utf-8")
+
+    launcher.backup.backup_worktree(repo, False)
+
+    out = _extract(launcher, tmp_path / "restored")
+    assert (out / "a.txt").read_text(encoding="utf-8") == "first\n"
+
+
+def test_backup_git_does_not_inherit_git_env(monkeypatch):
+    """★利用者の環境の GIT_DIR などは、退避の対象のリポジトリを差し替える。"""
+    launcher = _launcher()
+    for key, value in {
+        "GIT_DIR": "./elsewhere",
+        "GIT_WORK_TREE": "./elsewhere",
+        "GIT_INDEX_FILE": "./index",
+    }.items():
+        monkeypatch.setenv(key, value)
+    assert not [k for k in launcher.backup.git_env() if k.startswith("GIT_")]
+    index = Path("/tmp/ocs-index")
+    assert launcher.backup.git_env(index) == {
+        **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+        "GIT_INDEX_FILE": str(index),
+    }
+
+
 # --- 境界チェックへの受け渡し ------------------------------------------------
 
 CHECK_SCRIPT = ROOT / "home" / "dot_local" / "bin" / "executable_ocs-boundary-check"
@@ -1382,12 +1483,8 @@ def test_check_runs_srt_with_a_fixed_path(tmp_path, monkeypatch):
     assert seen[0]["PATH"] == "/usr/bin:/bin"
 
 
-def test_launch_fixes_srt_path_but_keeps_the_users_path_inside(tmp_path, monkeypatch):
-    """★srt には固定の PATH を、内側の opencode には利用者の PATH を渡す。
-
-    境界の内側で mise の道具を使えるよう、利用者の PATH はコマンド文字列で戻す。
-    rg は srt が境界の外で走らせるので、実体の絶対パスを境界の設定に入れる。
-    """
+def _launch(tmp_path: Path, monkeypatch, env: dict[str, str]) -> dict:
+    """``ocs`` を起動し、``execve`` に渡る引数と環境を返す (srt は動かさない)。"""
     launcher = _launcher()
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -1419,9 +1516,9 @@ def test_launch_fixes_srt_path_but_keeps_the_users_path_inside(tmp_path, monkeyp
     monkeypatch.setattr(
         launcher.check, "hidden_targets", lambda: {"present": [], "absent": []}
     )
-    user_path = f"{ws / 'bin'}:/usr/bin"
-    monkeypatch.setenv("PATH", user_path)
-    seen: dict = {}
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    seen: dict = {"opencode": str(opencode)}
 
     def fake_execve(path, argv, env):
         seen.update(argv=argv, env=env, boundary=json.loads(Path(argv[3]).read_text("utf-8")))
@@ -1430,11 +1527,32 @@ def test_launch_fixes_srt_path_but_keeps_the_users_path_inside(tmp_path, monkeyp
     monkeypatch.setattr(os, "execve", fake_execve)
     with pytest.raises(SystemExit):
         launcher.cli.main(["--skip-check", "--no-backup"])
+    return seen
+
+
+def test_launch_fixes_srt_path_but_keeps_the_users_path_inside(tmp_path, monkeypatch):
+    """★srt には固定の PATH を、内側の opencode には利用者の PATH を渡す。
+
+    境界の内側で mise の道具を使えるよう、利用者の PATH はコマンド文字列で戻す。
+    rg は srt が境界の外で走らせるので、実体の絶対パスを境界の設定に入れる。
+    """
+    user_path = f"{tmp_path / 'ws' / 'bin'}:/usr/bin"
+    seen = _launch(tmp_path, monkeypatch, {"PATH": user_path})
 
     assert seen["env"]["PATH"] == "/usr/bin:/bin", "srt が利用者の PATH で動く"
     inner = shlex.split(seen["argv"][-1])
-    assert inner[:3] == ["/usr/bin/env", f"PATH={user_path}", str(opencode)], inner
-    assert seen["boundary"]["ripgrep"] == {"command": "/opt/rg/rg"}
+    assert inner[:3] == ["/usr/bin/env", f"PATH={user_path}", seen["opencode"]], inner
+    assert seen["boundary"]["ripgrep"]["command"] == "/opt/rg/rg"
+
+
+def test_ripgrep_on_the_host_reads_no_config_file(tmp_path, monkeypatch):
+    """★srt はホストで rg を動かす。rg の設定ファイルは --pre などで外部コマンドを起動できる。
+
+    境界の定義で --no-config を渡す。
+    """
+    seen = _launch(tmp_path, monkeypatch, {"PATH": "/usr/bin"})
+
+    assert seen["boundary"]["ripgrep"] == {"command": "/opt/rg/rg", "args": ["--no-config"]}
 
 
 def _fake_rg(path: Path) -> Path:

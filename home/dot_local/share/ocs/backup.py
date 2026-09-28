@@ -26,17 +26,22 @@ BACKUP_MAX_AGE_DAYS = 30  # 触らなくなったプロジェクトの分を捨�
 BACKUP_MAX_SOURCE_BYTES = 256 * 1024 * 1024
 
 
-def _git(workspace: Path, *args: str, index: Path | None = None):
-    """境界の外で git を動かす。★実体を絶対パスで呼ぶ (PATH 差し替え対策)。"""
-    env = dict(os.environ)
+def git_env(index: Path | None = None) -> dict[str, str]:
+    """境界の外で動かす git の環境。利用者の ``GIT_*`` (``GIT_DIR`` など) を落とす。"""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     if index is not None:
         env["GIT_INDEX_FILE"] = str(index)
+    return env
+
+
+def _git(workspace: Path, *args: str, index: Path | None = None):
+    """境界の外で git を動かす。★実体を絶対パスで呼ぶ (PATH 差し替え対策)。"""
     return subprocess.run(
         ["/usr/bin/git", "-C", str(workspace), *args],
         capture_output=True,
         text=True,
         check=False,
-        env=env,
+        env=git_env(index),
     )
 
 
@@ -98,10 +103,11 @@ def stage_worktree(toplevel: Path, rel: Path, index: Path) -> str | None:
     # ★plumbing は **toplevel から** 走らせる。サブディレクトリから走らせると
     #   index に載るパスの基準がずれ、親のファイルが tree から落ちる (実測)。
     head = _git(toplevel, "rev-parse", "--verify", "HEAD^{tree}")
-    if head.returncode == 0:
-        read = _git(toplevel, "read-tree", head.stdout.strip(), index=index)
-        if read.returncode != 0:
-            die(f"作業ツリーを退避できない (read-tree): {read.stderr.strip()}")
+    # 一時 index は空のファイルで、git はそのままでは読めない。コミットが無ければ空で初期化する
+    base = head.stdout.strip() if head.returncode == 0 else "--empty"
+    read = _git(toplevel, "read-tree", base, index=index)
+    if read.returncode != 0:
+        die(f"作業ツリーを退避できない (read-tree): {read.stderr.strip()}")
     added = _git(toplevel, "add", "-A", "--", rel.as_posix(), index=index)
     if added.returncode != 0:
         die(f"作業ツリーを退避できない (add): {added.stderr.strip()}")

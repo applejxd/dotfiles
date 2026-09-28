@@ -172,6 +172,10 @@ network_allow = ["api.example.com"]
 - ローカルの Git 履歴も失いうる（`.git` は書き込み可能領域の中）
 - 信頼済みリモートへ push 済みの内容は、**ローカルの破壊だけでは**失われない
   （復旧にはリモート側の保持と可用性が要る）
+- `ocs` は境界を張る前にホストで `srt`・`git`・`opencode` を動かし、`srt` の PATH と
+  `git` の `GIT_*` を除いて、環境変数（`NODE_OPTIONS` など）は利用者の環境のまま渡す。
+  精査していないワークスペースがそれらを騙すことは対象外
+  （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的）
 
 snapshot（`/undo`）は**日常の取り消し機能**であって保全ではない。復旧データ
 自身が同じ shell から消せるうえ、捕捉は best effort。
