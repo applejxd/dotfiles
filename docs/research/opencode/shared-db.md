@@ -1,5 +1,9 @@
 # OpenCode の DB を srt の境界の内外で共有できるか
 
+> **後続の観測**: 記録 E1 の書き込みの負荷に使った `session.synthetic` は、外側の serve では既定モデルの
+> エージェントを境界の外で動かしうる（[Fence の調査](permission/fence.md) の「実験中の事故」）。
+> E1 のセッション数は期待値と一致していたが、同じ方法を繰り返さない。
+
 <!-- 現在の総合判断は docs/change/0009-ocs-simplify-for-accidents.md の候補比較表が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
