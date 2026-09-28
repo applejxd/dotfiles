@@ -1,5 +1,15 @@
 # OpenCode V2 のカスタムエージェント（Bypass モード）とキーバインド
 
+> **後続の観測**: 1 章の「キーバインドは V2 では不可」は `opencode.json` についての
+> 観測。TUI のキーバインドは `cli.json` の `keybinds` で効く
+> （2026-09-22、[キーバインド](../keybinds.md)）。5 章の「`e.effect === "allow"` なら
+> 素通り」は、`cd x && git log` のように静的 allow を含む呼び出しまで誘導を
+> 素通りさせたため、エージェント名で見分ける方式へ改めた
+> （[hook の呼ばれ方 5 章](hook-order.md#5-evaluate-のイベントに-agent-が載る)）。
+>
+> **現行の仕様**: [キーバインド](../../../spec/agent-config-generation.md#キーバインド)、
+> [plugin 層](../../../spec/agent-config-generation.md#plugin-層-guide-plugin)
+>
 > **調査日: 2026-09-21**
 > **対象: `opencode v2.0.10`**
 >

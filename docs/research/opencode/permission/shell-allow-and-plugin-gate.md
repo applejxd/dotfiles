@@ -1,5 +1,12 @@
 # OpenCode V2 の shell allow の費用対効果と plugin ゲート（P1-3）
 
+> **後続の観測**: 1 章の「allow は読み取り専用 7 件」のうち `git diff` /
+> `git status` は、同日の監査で `.git/config` 経由の任意コード実行があると分かり
+> 外した（[allow リスト監査](allow-list-audit.md)）。
+>
+> **現行の仕様**: [既定は `ask`](../../../spec/agent-config-generation.md#既定は-ask)
+> （shell の allow は 5 件）
+>
 > **調査日: 2026-09-21**
 > **対象: `opencode v2.0.10`**
 >

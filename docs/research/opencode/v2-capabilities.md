@@ -1,5 +1,16 @@
 # OpenCode V2 の仕様（乗り換え再評価用）
 
+> **後続の観測**: §0・§1 の「見送り」「OS レベル sandbox は必須ではない」は
+> 2026-09-20 時点の判断。2026-09-21 から OpenCode V2 を配備し
+> （[CHG-0002](../../change/0002-opencode-ask-by-default.md)）、Ubuntu / WSL では
+> OS の境界 `ocs` を保護の主役にした
+> （[CHG-0004](../../change/closed/0004-opencode-sandbox.md)）。§9 の「`--auto` に
+> 相当する CLI フラグは無い」に反し、2.0.10 の `opencode run --auto` は動く
+> （[ask と並列バッチ](ask-and-parallel-batch.md)）。
+>
+> **現行の仕様**: [OpenCode V2 の設定](../../spec/agent-config-generation.md#opencode-v2-の設定)、
+> [OpenCode 隔離起動のアーキテクチャ](../../spec/opencode-sandbox.md)
+>
 > **調査日: 2026-09-20**
 > **対象: `@opencode/cli` 2.0.10（V2）/ 比較対象 `opencode-ai` 1.18.31（V1）**
 >

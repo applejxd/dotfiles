@@ -1,5 +1,16 @@
 # OpenCode の permission 設計を縛る制約（実測の総覧）
 
+> **後続の観測**: 2 章の「プロセスごと隔離は成立するが採用しない」は、2026-09-22 に
+> 起票した [CHG-0004](../../../change/closed/0004-opencode-sandbox.md) で覆った。Ubuntu / WSL
+> では `srt` で `opencode --standalone` ごと包む隔離起動 `ocs` を採用した
+> （[srt の適用可否 19 節](sandbox-runtime.md#19-実行主体ごと包む案は成立するp0-1-の訂正)）。
+> 同章の表にある「`chezmoi` が snap 版で動かない」は、chezmoi を snap から外して
+> 解消した。permission と plugin が境界でないという結論は、通常起動の
+> `opencode` については今も有効。
+>
+> **現行の仕様**: [OpenCode 隔離起動のアーキテクチャ](../../../spec/opencode-sandbox.md)、
+> [OpenCode V2 の扱い](../../../spec/agent-permissions.md#opencode-v2-の扱い)
+>
 > **調査日: 2026-09-20 〜 2026-09-22 / 対象: `opencode v2.0.10` 〜 `v2.0.12`**
 >
 > [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の判断は

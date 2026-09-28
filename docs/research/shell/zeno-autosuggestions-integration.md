@@ -1,5 +1,12 @@
 # zeno.zsh × zsh-autosuggestions 連携メモ
 
+> **観測日**: 2026-05-12（初出 `7a908c5`）。2026-05-13 に対策を改めた際、本文を
+> 書き換えている（`2001af1`。改める前の対策は `git show 7a908c5`）。
+>
+> **対応箇所の注記**: 下の「`home/dot_config/shell/zeno.zsh` で対応済み」は初出時の
+> 記述。2026-05-13 以降、対策は `home/dot_zshrc.tmpl` の zsh-autosuggestions の
+> `atload` にあり、`zeno.zsh` は配列を触らない（3 章末尾）。
+>
 > 対象: [yuki-yano/zeno.zsh](https://github.com/yuki-yano/zeno.zsh) と
 > [zsh-users/zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions)
 > を同時に使う場合に必要な追加設定の調査記録。

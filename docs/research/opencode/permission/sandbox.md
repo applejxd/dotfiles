@@ -1,5 +1,16 @@
 # OpenCode V2 に sandbox はあるか（調査と代替手段）
 
+> **後続の観測**: 5 章の「OpenCode のプロセスごと隔離する」方式は `srt` で成立し、
+> Ubuntu / WSL では隔離起動 `ocs` として採用した
+> （[srt の適用可否 19 節](sandbox-runtime.md#19-実行主体ごと包む案は成立するp0-1-の訂正)、
+> [CHG-0004](../../../change/closed/0004-opencode-sandbox.md)）。`shell` 差し替えの案は
+> 採らなかった。6 章の snap の問題は、chezmoi を snap から外して解消した
+> （[CHG-0004 段階 1](../../../change/closed/0004-opencode-sandbox.md#段階-1-chezmoi-を-snap-から外す完了)）。
+>
+> **現行の仕様**: [OpenCode 隔離起動のアーキテクチャ](../../../spec/opencode-sandbox.md)。
+> 通常起動の `opencode` には今も境界が無い
+> （[OpenCode V2 の扱い](../../../spec/agent-permissions.md#opencode-v2-の扱い)）
+>
 > **調査日: 2026-09-22**
 > **対象: `opencode v2.0.10` / `bwrap 0.9.0` / Ubuntu 24.04**
 >

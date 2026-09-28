@@ -1,5 +1,15 @@
 # OpenCode V2 plugin API の実測（permission hook / fail-open）
 
+> **後続の観測**: cwd は `shell.hook("create.before")` を使わなくても、
+> `tool.execute.before` の `input.workdir` で取れる（[相関と承認要求](correlation.md)）。
+>
+> **参照先の注記**: 0 章が指す
+> [エージェント権限仕様の「OpenCode V2 の扱い」](../../../spec/agent-permissions.md#opencode-v2-の扱い)
+> は、2026-09-21 時点では hook 層を「無い。`check_bash.py` 相当の意味解析は動かない」と
+> 書いていた。現在の同節は hook 層に `guide-plugin` を置いている。
+>
+> **現行の仕様**: [plugin 層](../../../spec/agent-config-generation.md#plugin-層-guide-plugin)
+>
 > **調査日: 2026-09-21**
 > **対象: `opencode v2.0.10`（`@opencode/plugin` 2.0.11 世代）**
 >

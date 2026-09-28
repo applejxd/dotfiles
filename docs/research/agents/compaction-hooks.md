@@ -3,6 +3,11 @@
 <!-- 現在の総合判断は docs/change/closed/0001-compaction-context-handover.md の
      候補比較表が正本。ここは「いつ何を観測したか」を積む場所 -->
 
+> **現行の仕様**: 本記録を踏まえて配備した Claude Code / Copilot CLI の圧縮まわりの
+> hook（`PreCompact` / `SessionStart` / `postToolUse`）は 2026-09-25 に撤去した。圧縮を跨ぐ引き継ぎは OpenCode V2 の plugin だけが担う
+> （[文脈の引き継ぎ](../../spec/checkpoint.md#plugin-が担うこと)）。
+> 各 CLI の hook の仕様の観測としては、観測日時点で有効。
+
 context compaction を跨いで作業文脈を保つために、両 CLI の hook で何ができて
 何ができないかを調べた記録。
 

@@ -1,5 +1,12 @@
 # OpenCode プラグイン生態系の棚卸し
 
+> **参照先の注記**: 0 章が「[エージェント権限仕様](../../../spec/agent-permissions.md#opencode-v2-の扱い)
+> が挙げた 3 つの選択肢」と書く記述は、現在の同節に無い。コミット済みの版にも
+> 見当たらない（`git log -S` で確認）。2026-09-21 時点の同節は「OpenCode には
+> hook も sandbox も無く、permission 層だけで表現する」とだけ書いていた。
+> 3 つの内訳は記録に残っていない。自作した結果が現行の
+> [plugin 層](../../../spec/agent-config-generation.md#plugin-層-guide-plugin)。
+>
 > **調査日: 2026-09-21**
 > **対象: この環境に導入済みの `opencode v2.0.10`（V2）**
 >
