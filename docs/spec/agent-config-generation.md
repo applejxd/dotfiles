@@ -562,7 +562,7 @@ ask に置く)。
 | 生成先 | 生成方法 | 使うフィールド |
 | --- | --- | --- |
 | `~/.claude/settings.json` の `hooks` | `modify_settings.json.py.tmpl` → `--target claude-settings` | `claude_event` / `claude_matcher` / `timeout_sec` |
-| `~/.copilot/hooks/from-claude.json` | `from-claude.json.tmpl` の `output` → `--target copilot-hooks` | `copilot_event` / `copilot_matcher` / `timeout_sec` |
+| `~/.copilot/hooks/from-claude.json` | `home/dot_copilot/hooks/modify_from-claude.json.py.tmpl` → `--target copilot-hooks` | `copilot_event` / `copilot_matcher` / `timeout_sec` |
 
 - hook スクリプトの実体は `~/.claude/hooks/` に 1 つだけ置き、Copilot からも
   同じファイルを呼ぶ

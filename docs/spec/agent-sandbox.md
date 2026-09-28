@@ -46,26 +46,44 @@ Copilot 側も `copilot_read_allow` で同じものを列挙する。以前は
 
 ### ホーム外の経路は塞いでいない（契約と実装の不一致）
 
-`deny` / `claude_read_allow` が扱うのは **`~/` 配下だけ**。ホーム外は
-sandbox runtime の既定（読みは全許可）のまま残る。
+`deny` / `claude_read_allow` が扱うのは **`~/` 配下だけ**。ホーム外の扱いは
+Claude と Copilot で既定が逆なので、分けて書く。
 
-| 経路 | Claude / Copilot | `ocs`（OpenCode） |
-| --- | --- | --- |
-| `/mnt`（WSL の Windows 側） | **塞いでいない** | `deny_read` で遮断 |
-| `/tmp` `/var/tmp` `/dev/shm` | **塞いでいない**（ホストと共有） | `deny_read` で遮断（専用 tmpfs になる） |
+- **Claude**: `denyRead: ["~/"]` の外は sandbox runtime の既定（読みは全許可）の
+  まま残る
+- **Copilot**: 全体が whitelist なので、ホーム外も明示の許可が無ければ見えない
+  （下の「どちらの CLI で不足しているのかを切り分ける」）。`copilot_read_allow` が
+  ホーム外に開けているのは `/usr/include` `/usr/local` `/usr/src` `/opt` だけ
 
-`denyRead: ["~/"]` は Windows 側を守らない。OpenCode 側では実測で
-`/mnt/c/Users` まで読めることを確認して塞いだ
-（[CHG-0004](../change/closed/0004-opencode-sandbox.md)、
-[調査記録 21 節](../research/opencode/permission/sandbox-runtime.md)）。
-**Claude / Copilot 側には同じ対処を入れていない。**
+| 経路 | 明示の deny（両 CLI） | Claude の明示の allow | Copilot の明示の allow | `ocs`（OpenCode） |
+| --- | --- | --- | --- | --- |
+| `/mnt`（WSL の Windows 側） | なし | なし（既定で読める） | なし | `deny_read` で遮断 |
+| `/tmp` `/var/tmp` `/dev/shm` | なし | なし（既定で読める。ホストと共有） | なし（`$TMPDIR` は既定で read-write） | `deny_read` で遮断（専用 tmpfs になる） |
 
-判定（2026-09-23 時点、`~/.claude/settings.json` を実測）:
+実測の状況:
 
-```text
-Claude の denyRead に /mnt・/tmp 系: なし
-Claude の allowRead に /mnt・/tmp 系: なし
-```
+- **Claude**: 設定の実測（2026-09-23、`~/.claude/settings.json`）では、
+  `/mnt` `/tmp` 系への指定は無い。
+
+  ```text
+  Claude の denyRead に /mnt・/tmp 系: なし
+  Claude の allowRead に /mnt・/tmp 系: なし
+  ```
+
+  sandbox 内から実際に読めるかは Claude では
+  **未検証**。OpenCode 側では実測で `/mnt/c/Users` まで読めることを確認して塞いだ
+  （[CHG-0004](../change/closed/0004-opencode-sandbox.md)、
+  [調査記録 21 節](../research/opencode/permission/sandbox-runtime.md)）。
+  **Claude には同じ対処を入れていない**
+- **Copilot**: `copilot_*` の許可を足す前の `/sandbox policy`（2026-09-13）では、
+  `/mnt` は `/mnt/wsl/resolv.conf` だけが read-only、一時領域は `$TMPDIR` だけが
+  read-write で、`/tmp` `/var/tmp` `/dev/shm` は一覧に無かった
+  （[既定の許可範囲の実測](../research/agents/copilot-sandbox-default-policy.md)）。
+  このリポジトリでは `TMPDIR` をリポジトリ直下の `.tmp` に向けている。
+  現在の設定（`allowDevToolAccess = false` と `copilot_*` の許可）での表示と、
+  `TMPDIR` が `/tmp` のままのマシンでの扱いは**未検証**
+
+未決の点と、決めるときの注意:
 
 - 意図的に開けているのであれば、その旨をここに書いて確定させる
 - 意図していないなら `[sandbox] deny` に `/mnt` `/tmp` `/var/tmp` `/dev/shm`
@@ -94,8 +112,13 @@ Claude の allowRead に /mnt・/tmp 系: なし
 | `[file] read_ask_globs` / `write_ask_globs` / `read_deny_globs` / `write_deny_globs` | Claude・OpenCode (Copilot は `read_deny_globs` のみ) | Claude の `Read()` / `Edit()`、OpenCode の `read` / `edit` の ask / deny。Copilot は `check_file_read.py` が view へ適用 |
 | `[bash] allow` / `ask` / `deny` | Claude・Copilot | ただし粒度が違う |
 
-無印は「Claude と Copilot の両方に効く」を意味する。**片方にしか渡らない設定を無印で足しては
-いけない。** 実際、`copilot_*` が生まれる前の `read_allow` / `write_allow` は
+**新しく足すキー**では、無印は「Claude と Copilot の両方に効く」を意味する。
+**片方にしか渡らない設定を無印で足してはいけない。** `[sandbox]` の既存の
+`seccomp_apply_path`（Claude のみ）と `shell_network_allow`（Claude と `ocs`）は
+無印でも Copilot に効かない例外で、上の表の「効く CLI」列が正しい。`[file]` の
+無印の `*_globs` も Claude と OpenCode 向けで、Copilot には `read_deny_globs` だけが
+渡る。
+実際、`copilot_*` が生まれる前の `read_allow` / `write_allow` は
 名前の上ではただの許可に見えて Claude にしか効いておらず、Copilot 側で
 `uv run` が動かない原因になっていた。
 
@@ -499,7 +522,7 @@ Claude の `sandbox.network.allowedDomains` になり、`deny_domains` は
 到達できる。結果としてネットワークは Claude (会社用・厳しめ) と
 Copilot (家用・緩め) で非対称なままになるが、これは運用方針とは一致している。
 
-### 認証情報を sandbox 側で落とす (`sandbox.credentials`)
+### 資格情報を sandbox 側で落とす (`sandbox.credentials`)
 
 Claude Code v2.1.187 以降では `sandbox.credentials` で、sandbox 内の
 環境変数を unset する (`deny`) か、値を伏せたままツールを動かす (`mask`)

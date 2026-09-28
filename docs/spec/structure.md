@@ -445,10 +445,15 @@ Herdr のユーザーデータ・設定は削除しません。
 
 ## シェルプラグインの取得
 
-シェルの rc が読み込むプラグインは、起動時ではなく `chezmoi apply` が
-`home/.chezmoiexternal.toml.tmpl` で取得します。rc は存在するときだけ読み込み、
-無くてもシェルは起動します（zinit が無い場合は案内を 1 行出し、`zinit` を
-何もしない関数にします）。
+シェルの rc が読み込むプラグインのうち、下の表の 5 項目は起動時ではなく
+`chezmoi apply` が `home/.chezmoiexternal.toml.tmpl` で取得します。rc は存在する
+ときだけ読み込み、無くてもシェルは起動します（zinit が無い場合は案内を 1 行出し、
+`zinit` を何もしない関数にします）。
+
+zinit が管理するプラグイン（`yuki-yano/zeno.zsh`、`zsh-users/zsh-completions`、
+`Aloxaf/fzf-tab` など）は apply では取得しません。`home/dot_zshrc.tmpl` の
+`zinit light` / `zinit snippet` に任せており、zinit が起動時に未取得のものを
+取得します。
 
 | 取得先 | 取得元 | 種類 |
 | --- | --- | --- |
@@ -564,7 +569,7 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply` �
 | `home/.chezmoitemplates/agent-instructions.md` | 4 CLI 共通の本文（応答・停止と報告・検証） |
 | `home/dot_claude/CLAUDE.md.tmpl` | `~/.claude/CLAUDE.md`。共通本文のみ |
 | `home/dot_codex/AGENTS.md.tmpl` | `~/.codex/AGENTS.md`。共通本文のみ |
-| `home/dot_config/opencode/AGENTS.md.tmpl` | `~/.config/opencode/AGENTS.md`。共通本文のみ |
+| `home/dot_config/opencode/AGENTS.md.tmpl` | `~/.config/opencode/AGENTS.md`。共通本文 + 文脈の引き継ぎ節（`checkpoint` スキルが OpenCode 専用のため） |
 | `home/dot_copilot/copilot-instructions.md.tmpl` | `~/.copilot/copilot-instructions.md`。共通本文 + コミット節 |
 
 OpenCode V2 が global 指示として読むのは `~/.config/opencode/AGENTS.md` だけで、

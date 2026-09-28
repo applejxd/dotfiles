@@ -38,8 +38,10 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
 
 - **CLI 名を先に書く。** 「両 CLI」「両方」は、直前に CLI 名を挙げた文や表の中でだけ使う。
   節をそれで書き始めない
-- **無印キー**: `[sandbox]` で接頭辞の無いキーは、Claude Code と Copilot CLI の両方に効く。
-  片方にしか効かないキーは `claude_` / `copilot_` を付ける
+- **無印キー**: `[sandbox]` で接頭辞の無いキー。**新しく足すキー**は、Claude Code と
+  Copilot CLI の両方に効くときだけ無印にし、片方にしか効かないなら `claude_` / `copilot_`
+  を付ける。既存の `seccomp_apply_path`（Claude のみ）と `shell_network_allow`
+  （Claude と隔離起動）は既存の例外で、無印でも Copilot には効かない
   （[キー名の規則](agent-sandbox.md#キー名の規則)）
 
 ## 許可の種類

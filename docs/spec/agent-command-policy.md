@@ -106,7 +106,7 @@ deny = ["git reset --hard"]   # 作業ツリーを壊す形だけ拒否
 `cp evil ~/.bashrc` は deny になる。
 ただしインラインコード (`python3 -c "open('~/.bashrc','a')..."`) は読み書きの
 区別が静的に付かないため、起動ファイルのパスを参照している時点で deny する。
-`/etc` も同様に、読み取り自体が機密な `shadow` / `sudoers` は常に deny、
+`/etc` も同様に、読み取り自体が秘密情報に触れる `shadow` / `sudoers` は常に deny、
 world-readable な `passwd` / `group` は書き込み先のときだけ deny とする。
 
 ## センシティブパスの判定を 2 段に分ける
@@ -363,11 +363,14 @@ Copilot CLI では hook の `ask` が自動承認される**（[Copilot CLI は 
 **どのリストにも載せない**のが正しい。`allow` に入れると手動モードでも
 無条件に通ってしまい、かえって緩くなる。
 
-| 状態 | Claude auto | Copilot assisted |
-| --- | --- | --- |
-| `allow` | 無条件実行 | 無条件実行 |
-| `ask` | プロンプト | プロンプト |
-| **未掲載** | **classifier が判断** | **safety check が判断** |
+| 状態 | Claude auto | Copilot assisted（仕様） | Copilot assisted（現状） |
+| --- | --- | --- | --- |
+| `allow` | 無条件実行 | 無条件実行 | 無条件実行 |
+| `ask` | プロンプト | プロンプト | **自動承認** (#3590) |
+| **未掲載** | **classifier が判断** | **safety check が判断** | **safety check が判断** |
+
+Copilot の `ask` は hook だけが返す（`permissions-config.json` は allow 専用）。
+その `ask` が現状は自動承認されるため、Copilot で確実に止まるのは `deny` だけ。
 
 未掲載にしても hook の個別 deny チェックは効く。
 `uvx ruff format .` は通るが `uvx pip install x` は deny、
@@ -473,12 +476,14 @@ Copilot CLI へは `allow` の **先頭トークン (コマンド名)** だけ�
 hook は permission 層とは独立に走るので、**仕様どおりなら** `ask` / `deny` が
 引数の粒度を補い、粗粒度化の実害は無い。ただし前提が 2 つある。
 
-1. `ask` に載っていること。載っていなければ hook も沈黙する
-   （例: `uv pip install` / `mise use -g` / `docker run --privileged` は
-   `uv` / `mise` / `docker` が allow の先頭トークンなので Copilot では
-   事前承認され、hook にも該当ルールが無い）
+1. hook か `ask` / `deny` に該当する規則があること。無ければ hook も沈黙する
+   （例: `uv pip install` は `uv` が allow の先頭トークン（`uv sync` など）なので
+   Copilot では事前承認され、hook にも該当ルールが無い。対して `mise use -g` は
+   `check_global_env_mutation` が ask を、`docker run --privileged` は
+   `check_docker_host_escape` が deny を返す）
 2. `ask` が実際に止まること。現状 Copilot は hook の `ask` を自動承認する
-   （[Copilot CLI は hook の `ask` を自動承認する](#copilot-cli-は-hook-の-ask-を自動承認する)）
+   （[Copilot CLI は hook の `ask` を自動承認する](#copilot-cli-は-hook-の-ask-を自動承認する)）。
+   上の `mise use -g` も Copilot では現状止まらない
 
 | hook の判定 | Claude | Copilot (仕様) | Copilot (現状) |
 | --- | --- | --- | --- |
@@ -498,7 +503,7 @@ Copilot ではそのコマンドが丸ごと無防備になる。
 | --- | --- | --- |
 | プロジェクト内で完結 | **未掲載** (LLM 判定に委ねる)。`uv sync` / `cmake --build` / `gcc` は `allow` | `uv add` / `uv remove` / `uv pip install` / `uv sync` / `mise install` / `mise use` (ローカル) / `cmake --build` / `gcc -o build/x` |
 | ホームやシステムに残る | `ask` | `uv tool install` / `uv python install` / `mise use -g` / `mise settings set` / `cmake --install` / `gcc -o /usr/local/bin/x` |
-| 外部に見える / 認証情報が残る | `ask` | `docker login` / `docker push` / `gh pr create` |
+| 外部に見える / 資格情報が残る | `ask` | `docker login` / `docker push` / `gh pr create` |
 | ツール自身を置き換える | `deny` | `uv self update` / `mise self-update` / `mise implode` / `rustup self update` / `chezmoi upgrade` / `npm install -g` |
 | root 相当を得られる | `deny` | `sudo` / `docker run --privileged` / `docker run -v /:/host` |
 
