@@ -18,21 +18,51 @@ dotfiles は「なぜその形なのか」が失われやすい。
 - ステータスは `Proposed` / `Accepted` / `Deprecated` / `Superseded by ADR-NNNN`
 - 決定を覆す場合は既存 ADR を書き換えず、新しい ADR を起こして
   古い方を `Superseded by` にする
+- 決定の一部だけを改める場合（部分改定）は、下の「部分改定の書き方」に従う
 - テンプレートは `~/.claude/skills/sdd-docs/references/adr-template.md`
   （作成・更新は `sdd-docs` スキルが担う）
 
+### 部分改定の書き方
+
+決定のうち 1 つの規則だけを改め、残りは有効のまま、ということがよくある。
+そのとき全体を `Superseded by` にすると、有効な決定まで無効に見える。
+**ステータスは `Accepted` のまま残し、旧 ADR の冒頭で改定を案内する。**
+
+- **旧 ADR の本文は書き換えない。** 決定当時の記述と根拠をそのまま残す
+- **旧 ADR の冒頭（メタデータの直後）に改定の案内を置く。** 本文から読み
+  始めた人が、古い規則を現行と誤読しないようにするため。案内には次を書く
+  - いつ（日付）
+  - どの範囲を改めたか（規則の番号・節の名前）
+  - 後継へのリンク（新しい ADR、または同じ文書の追記節）
+  - 改めていない範囲は有効であること
+- **決定を 1 つでも変えるなら新しい ADR を起こす。** 同じ文書の追記で
+  済ませてよいのは、決定を変えない補足（実現方法・実測・但し書き）だけ
+- 決定は変えないが本文が現状と食い違うもの（キーの改名、後から覆った前提）も
+  同じ場所に注記する
+- 後継の ADR 側にも、どの ADR のどこを改めたかを書く（「関連 ADR」で足りる）
+- この索引の「部分改定・注記」列にも 1 行で書く
+
+```text
+> **部分改定（YYYY-MM-DD）**: <改めた範囲> を <後継 ADR へのリンク> で改めた。
+> それ以外の決定は有効。以下の本文は決定当時のまま残している。
+```
+
+> [ADR-0001](0001-external-tool-config-coexistence.md) は、この規約を定める前
+> （2026-09-27）に同じ文書の追記で規則 1 を反転させている。書き直さず、
+> 冒頭の案内で追記節を指す形にした。
+
 ## 一覧
 
-| # | タイトル | ステータス | 日付 |
-| --- | --- | --- | --- |
-| [0001](0001-external-tool-config-coexistence.md) | 外部ツールが書き込む設定領域と chezmoi の共存 | Accepted | 2026-08-30 |
-| [0002](0002-loopback-http-approval-scope.md) | ループバック宛 HTTP リクエストの承認緩和範囲 | Accepted | 2026-09-01 |
-| [0003](0003-require-python-311-for-agent-configuration.md) | agent 設定生成に Python 3.11 以上を要求する | Accepted | 2026-09-01 |
-| [0004](0004-hook-check-semantic-axis.md) | hook の判定軸を表層構文から副作用の性質へ移す | Accepted | 2026-09-01 |
-| [0005](0005-agent-runtime-config-as-secret.md) | エージェント CLI のランタイム設定を秘密として扱う | Accepted | 2026-09-03 |
-| [0006](0006-instructions-to-mechanisms.md) | エージェントへの指示を減らし、強制は機構へ寄せる | Accepted | 2026-09-14 |
-| [0007](0007-filesystem-guard-boundary.md) | filesystem ガードの機構を「両 CLI が強制できるか」で分ける | Accepted | 2026-09-14 |
-| [0008](0008-explicit-dev-tool-grants.md) | Copilot の開発ツール自動許可を切り、必要な範囲を明示する | Accepted | 2026-09-14 |
-| [0009](0009-save-before-documenting.md) | コンテキスト圧縮に備えて、保存と文書化を分ける | Accepted | 2026-09-19 |
-| [0010](0010-exploratory-spec-driven-docs.md) | docs を「段階」ではなく「情報の役割」で分け、案件を中心に置く | Accepted | 2026-09-19 |
-| [0011](0011-close-change-records-into-subdirectory.md) | 終了した案件を `change/closed/` へ移す | Accepted | 2026-09-22 |
+| # | タイトル | ステータス | 日付 | 部分改定・注記 |
+| --- | --- | --- | --- | --- |
+| [0001](0001-external-tool-config-coexistence.md) | 外部ツールが書き込む設定領域と chezmoi の共存 | Accepted | 2026-08-30 | 規則 1 を 2026-09-27 の追記で改定 |
+| [0002](0002-loopback-http-approval-scope.md) | ループバック宛 HTTP リクエストの承認緩和範囲 | Accepted | 2026-09-01 | — |
+| [0003](0003-require-python-311-for-agent-configuration.md) | agent 設定生成に Python 3.11 以上を要求する | Accepted | 2026-09-01 | 規則 3 の実現方法を 2026-09-26 の追記で補足（決定は不変） |
+| [0004](0004-hook-check-semantic-axis.md) | hook の判定軸を表層構文から副作用の性質へ移す | Accepted | 2026-09-01 | — |
+| [0005](0005-agent-runtime-config-as-secret.md) | エージェント CLI のランタイム設定を秘密として扱う | Accepted | 2026-09-03 | — |
+| [0006](0006-instructions-to-mechanisms.md) | エージェントへの指示を減らし、強制は機構へ寄せる | Accepted | 2026-09-14 | — |
+| [0007](0007-filesystem-guard-boundary.md) | filesystem ガードの機構を「両 CLI が強制できるか」で分ける | Accepted | 2026-09-14 | `copilot_*` の位置付けを ADR-0008 で改定。キー名の変更を注記 |
+| [0008](0008-explicit-dev-tool-grants.md) | Copilot の開発ツール自動許可を切り、必要な範囲を明示する | Accepted | 2026-09-14 | — |
+| [0009](0009-save-before-documenting.md) | コンテキスト圧縮に備えて、保存と文書化を分ける | Accepted | 2026-09-19 | 前提の一部が CHG-0001 で覆ったことを注記（決定は不変） |
+| [0010](0010-exploratory-spec-driven-docs.md) | docs を「段階」ではなく「情報の役割」で分け、案件を中心に置く | Accepted | 2026-09-19 | 終了案件の置き場を ADR-0011 で改定 |
+| [0011](0011-close-change-records-into-subdirectory.md) | 終了した案件を `change/closed/` へ移す | Accepted | 2026-09-22 | — |

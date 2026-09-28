@@ -1,7 +1,7 @@
 # CHG-0008: Raspberry Pi（64bit / ヘッドレス）を導入対象に加える
 
 - **状態**: Done
-- **更新日**: 2026-09-26
+- **更新日**: 2026-09-28（終了結果の整理と時点の注記のみ。記録の内容は終了日のまま）
 - **終了日**: 2026-09-26
 - **基準**: 導入対象は Windows / Ubuntu / WSL / macOS の 4 つ。Linux の分岐は
   WSL / native の 2 値のみで、アーキテクチャ軸と GUI 有無の軸が無い
@@ -12,7 +12,9 @@
 > 実機で 3 周した記録を含む。1 周目は ruby のビルドで停止、2 周目は
 > `chezmoi init` 未実行で分岐が発動せず、3 周目で完走した。
 > **途中で撤回した判断（ruby を Pi から外す / GitHub CLI の APT 鍵を
-> 自動更新する）もそのまま残している。**
+> 自動更新する / 判定を `[data] is_raspi` に置く）もそのまま残している。**
+> 最終的な形と撤回したものの一覧は「終了結果」にある。本文の「現在地」は
+> 各節の見出しにある時点の記録で、最初の「参照側の書き方」は撤回した方式。
 
 ## 目的と非目的
 
@@ -37,13 +39,18 @@
 | 1 | 網羅調査（arm64 資産の実在確認、破綻箇所の特定） | **完了**（2026-09-25） |
 | 2 | 既存バグの修正（WSL ガードの不一致） | **完了**（2026-09-25） |
 | 3 | `all_compile` を python 限定へ絞る | **完了**（2026-09-25） |
-| 4 | `is_raspi` の導入と分岐の実装 | **完了**（2026-09-25） |
+| 4 | `is_raspi` の導入と分岐の実装 | **完了**（2026-09-25。判定の置き場は段 6 で差し替えた） |
 | 5 | 実機の Raspberry Pi で apply を完走させる | **完了**（2026-09-26。3 周目で達成） |
 | 6 | 判定を `chezmoi update` だけで効く形にする | **完了**（2026-09-26） |
 
 ## 現在地
 
 ### 参照側の書き方
+
+> **2026-09-25 時点の方式。2026-09-26 に撤回した。** 現行は
+> `home/.chezmoitemplates/is-raspi` を `includeTemplate` で毎回評価する
+> （この節の後の「判定を `[data]` から `includeTemplate` へ移した」）。
+> `.chezmoi.toml.tmpl` はもう `is_raspi` を出さない。
 
 `.chezmoi.toml.tmpl` が `[data] is_raspi = true` を出し、参照側は
 `{{- if and (hasKey . "is_raspi") .is_raspi }}` の形で書く。
@@ -217,7 +224,8 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
 | `.chezmoiignore.tmpl` | `190_wsl.sh` → `120_wsl.sh` | ターゲット名の不一致で WSL ガードが死んでいた | **完了** |
-| `.chezmoi.toml.tmpl` | （なし）→ `[data] is_raspi` | 判定を 1 箇所に集める。`/proc/device-tree/model` + osrelease + `/etc/rpi-issue` の OR | **完了**（2026-09-26 に判定を修正） |
+| `.chezmoi.toml.tmpl` | （なし）→ `[data] is_raspi` | 判定を 1 箇所に集める。`/proc/device-tree/model` + osrelease + `/etc/rpi-issue` の OR | **撤回**（2026-09-26。`chezmoi update` が `init` を呼ばず判定が生成されなかった。次行へ差し替え、`[data]` からは外した） |
+| `.chezmoitemplates/is-raspi` | （なし）→ 判定を共有テンプレートに置き、参照側が `includeTemplate` で毎回評価する | `apply` のたびに評価されるので `init` に依存しない。`is_raspi` をデータで渡せば検出より優先（lint の raspi 軸と手動の強制用） | **完了**（2026-09-26。3 周目の実機で `true` を確認） |
 | `.chezmoiignore.tmpl` | （なし）→ raspi で GUI 資産と `110_native/` を無視 | 画面が無い機械に VS Code と i3 / polybar を入れない | **完了** |
 | `mise/config.toml.tmpl` | `all_compile` → `[settings.python] compile` | 目的は Tkinter だけ。node / ruby のソースビルドは副作用 | **完了** |
 | 同上 | raspi では `python.compile` も `pipx:nvitop` も出さない | 画面が無いので Tkinter が不要。nvitop は NVIDIA GPU 前提 | **完了** |
@@ -276,6 +284,49 @@ AI CLI の導入で既に採っている「警告に留める」方式へ揃え�
 
 **採用・配備済み。** 2026-09-26 の 3 周目で、実機（Ubuntu 22.04 / aarch64 /
 Raspberry Pi）の `chezmoi update` が 45 秒で完走し、raspi 分岐が全て発動した。
+
+### 採用したもの
+
+- **判定**: `home/.chezmoitemplates/is-raspi` を参照側が
+  `includeTemplate` で毎回評価する。手がかりは `/proc/device-tree/model` /
+  kernel osrelease の `raspi`・`-rpi-` / `/etc/rpi-issue` の OR。
+  `is_raspi` をデータで渡せば検出より優先する
+- **分岐**: raspi では GUI 資産・`110_native/`・VS Code・ClamAV・`python.compile`・
+  `pipx:nvitop` を外し、zram-tools / earlyoom を入れ、ruby はプレビルドだけを使う
+  （`[settings.ruby] compile = false`）
+- **raspi と独立に直したもの**: WSL ガードの名前違い（`190_wsl.sh` → `120_wsl.sh`）、
+  `all_compile` を `[settings.python] compile` へ縮小、`mise install` の失敗を警告に
+  留める、VS Code の APT ソースの二重登録
+
+### 撤回・見送りしたもの
+
+| 項目 | いつ | 理由 |
+| --- | --- | --- |
+| 判定を `.chezmoi.toml.tmpl` の `[data] is_raspi` に置く | 2026-09-26 | `chezmoi update` は `init` を呼ばず、判定が生成されないまま全分岐が「非 raspi」に倒れた（2 周目） |
+| Pi で `ruby` / `gem:tmuxinator` を外す | 2026-09-26 | 裏を取らずに書いた誤り。arm64 のプレビルドは実在し、原因は `all_compile` だった |
+| GitHub CLI の APT 鍵を自動更新する | 2026-09-26 | `121_ubuntu` は gh の APT 登録・鍵に触らない方針（テストが守っている） |
+| 32bit（armhf）対応 | 起票時 | AI CLI 4 本とも arch 判定で拒否する。分岐では解決しない |
+| Pi 固有設定の chezmoi 管理 | 起票時 | `scripts/raspi/` のままにする |
+
+### 反映先
+
+- 仕様: [プロジェクト構造](../../spec/structure.md#raspberry-pi)「Raspberry Pi」
+  「mise の settings」、GitHub CLI の警告は
+  [トラブルシューティング](../../spec/troubleshooting.md)
+- 実装: `home/.chezmoitemplates/is-raspi`、`home/.chezmoiignore.tmpl`、
+  `home/dot_config/mise/config.toml.tmpl`、
+  `home/.chezmoiscripts/100_linux/run_once_after_121_ubuntu.sh.tmpl`、
+  `scripts/lint_templates.py` の raspi 軸、`scripts/raspi/uninstall_gui.sh`
+- 一般化した約束: `AGENTS.md`「`chezmoi init` を前提にした設計にしない」
+
+### 移管した未完事項
+
+| 内容 | 移管先 |
+| --- | --- |
+| `rust` / `go` がプレビルドで入ったかの個別確認 | 未起票（導入自体は `mise all tools are installed` で成立） |
+| `LC_ALL=ja_JP.UTF-8` の影響 | 未起票（3 周目のログに警告なし。問題が出たら対処） |
+| `.chezmoi.toml.tmpl` は `lint_templates.py` の対象外 | [開発ガイド](../../spec/development.md)（`execute-template --init` で確かめる） |
+| 32bit（armhf） | 対象外として [プロジェクト構造](../../spec/structure.md#raspberry-pi) に明記 |
 
 ### 判定が効いた証拠
 

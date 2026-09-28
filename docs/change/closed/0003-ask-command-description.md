@@ -1,12 +1,14 @@
 # CHG-0003: 確認画面で長いコマンドを判断可能にする
 
 - **状態**: Done
-- **更新日**: 2026-09-22
+- **更新日**: 2026-09-28（終了結果の整理と時点の注記のみ。記録の内容は終了日のまま）
 - **終了日**: 2026-09-22
 - **基準**: OpenCode V2（`v2.0.12`）
 
 > **この文書は当時の記録。** 現在の仕様は
 > [agent-config-generation](../../spec/agent-config-generation.md#確認画面に出るコマンドの説明)「確認画面に出るコマンドの説明」。
+>
+> 採用したもの・撤回したもの・反映先・移管した未完事項は「終了結果」にまとめた。
 
 ## 目的と非目的
 
@@ -44,6 +46,9 @@
 
 ### まだ分からないこと
 
+> 起票時点（2026-09-22）の論点。1 つ目は `cli.json` で読ませる形で解決し、
+> 残りの扱いは「終了結果」の「移管した未完事項」にある。
+
 - `opencode.json` の `plugins` に**絶対パスで指定したディレクトリ**から
   `tui.ts` が読まれるか。実証したのはプロジェクト直下
   （`<project>/.opencode/plugins/<name>/`）の自動探索経路だけ
@@ -80,6 +85,8 @@
 
 ## 次の調査・実験
 
+> 終了時点の扱いは「終了結果」の「移管した未完事項」が正本。P3 は終了時に決着した。
+
 | # | 減らしたい不確実性 | 方法 |
 | --- | --- | --- |
 | P2 | 生成の遅延が許容範囲か | 実運用で数日使って判断する（Haiku で平均 1.1 秒） |
@@ -94,14 +101,19 @@
 
 ## 仕様への変更案
 
+> **2026-09-28 に実装と突き合わせて「適用結果」を更新した。** 終了時に
+> 「未着手」のまま更新し忘れていた。6 件とも実装されている
+> （`[opencode.ask_description]`、`guide-plugin/tui.ts`、`modify_cli.json.py.tmpl`、
+> `test_generate_opencode.py` の `ask_description` の検査）。
+
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `common.toml.tmpl` | （なし）→ `[opencode.ask_description]` を新設 | 単一ソースから出す。モデル候補・閾値・表示秒数を宣言する | 未着手 |
-| `generate.py` | `rules.json` に `guide` のみ → `ask_description` も出す | plugin は設定を持たず読むだけにする | 未着手 |
-| `guide-plugin/index.js` | 誘導のみ → 説明の生成と `message` への格納を追加 | 生成はサーバ側 plugin でしかできない | 未着手 |
-| `guide-plugin/tui.ts` | （なし）→ `permission.asked` を購読して toast 表示 | 表示は TUI 側 plugin でしかできない | 未着手 |
-| `~/.config/opencode/cli.json` | （なし）→ `plugins` に guide-plugin を登録 | **TUI plugin は `cli.json` からしか読まれない**（実測） | 未着手 |
-| `test_generate_opencode.py` | （なし）→ 設定の生成と既定値を固定するテスト | 閾値やモデル候補が黙って変わらないようにする | 未着手 |
+| `common.toml.tmpl` | （なし）→ `[opencode.ask_description]` を新設 | 単一ソースから出す。モデル候補・閾値・表示秒数を宣言する | **完了** |
+| `generate.py` | `rules.json` に `guide` のみ → `ask_description` も出す | plugin は設定を持たず読むだけにする | **完了** |
+| `guide-plugin/index.js` | 誘導のみ → 説明の生成と `message` への格納を追加 | 生成はサーバ側 plugin でしかできない | **完了** |
+| `guide-plugin/tui.ts` | （なし）→ `permission.asked` を購読して toast 表示 | 表示は TUI 側 plugin でしかできない | **完了** |
+| `~/.config/opencode/cli.json` | （なし）→ `plugins` に guide-plugin を登録 | **TUI plugin は `cli.json` からしか読まれない**（実測） | **完了**（Orca の overlay 下では `OPENCODE_CLI_CONFIG_CONTENT` で流し込む。「終了結果」の P3） |
+| `test_generate_opencode.py` | （なし）→ 設定の生成と既定値を固定するテスト | 閾値やモデル候補が黙って変わらないようにする | **完了** |
 
 ## 実装・検証
 
@@ -252,6 +264,15 @@ plugin のロード可否を目視なしで判定できる
 
 望ましい条件も満たした。コマンド単位のキャッシュを持ち、`⚠` は
 破壊的操作・外部送信・秘密への接触にだけ付く（4 種類 × 2 回で 8/8 一致）。
+
+### 撤回・見送りしたもの
+
+| 項目 | いつ | 理由 |
+| --- | --- | --- |
+| 権限ダイアログの枠内に説明を出す | 2026-09-22 | 構造的に不可能（`permBash` が `input.command` しか描画しない） |
+| `command` に説明を混ぜる / 独自ダイアログで置き換える | 2026-09-22 | 実行される文字列が変わる。確認が二重に出る |
+| `opencode.json` の `plugins` で TUI plugin を登録する | 2026-09-22 | TUI plugin が読まれない（P1）。`cli.json` へ切り替えた |
+| `app_bottom` スロットへの固定表示 | 保留 | `api.slots` が 2.0.12 に無い（移管した未完事項へ） |
 
 ### 反映先
 

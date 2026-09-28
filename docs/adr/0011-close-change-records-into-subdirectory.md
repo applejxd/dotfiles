@@ -96,3 +96,8 @@ ADR-0010 は `Superseded by` にしない。
 ### 中立的な結果
 
 - 番号空間は変わらない。`closed/` 配下も同じ連番を共有する
+
+## 関連 ADR
+
+- [ADR-0010](0010-exploratory-spec-driven-docs.md): 本 ADR が部分改定した決定。
+  改めたのは「終了した案件を同じパスに残す」の 1 点だけ

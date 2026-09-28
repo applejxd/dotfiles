@@ -4,6 +4,17 @@
 - **日付**: 2026-09-14
 - **決定者**: applejxd
 
+> **部分改定（2026-09-14）**: 「機構の境界」の表で `copilot_*` を「片方の自動付与を
+> 再現する許可（補償）」としていた位置付けは、[ADR-0008](0008-explicit-dev-tool-grants.md)
+> で改めた。Copilot の自動付与を切ったので、`copilot_read_allow` /
+> `copilot_write_allow` は Copilot が読み書きできる範囲の全体を決める主たる許可リストになった。
+> 「CLI 固有キーに禁止を置かない」（規則 3）とその他の決定は有効。
+>
+> **注記（2026-09-23）**: 本文の `[file] claude_*_globs` と
+> `[sandbox] claude_network_allow` は、キー名が変わった（決定は不変）。
+> 対応は[後日の更新（2026-09-23）](#後日の更新2026-09-23)にある。
+> 以下の本文は決定当時のまま残している。
+
 ## コンテキスト
 
 ファイルアクセスの防御は 3 層ある ([エージェント権限仕様](../spec/agent-permissions.md))。
@@ -176,6 +187,8 @@ claude_network_allow     → shell_network_allow   ([sandbox]。Claude と OpenC
 
 ## 関連 ADR
 
+- [ADR-0008](0008-explicit-dev-tool-grants.md): `copilot_*` の位置付けを
+  「補償」から「主たる許可リスト」へ改めた（部分改定）
 - [ADR-0006](0006-instructions-to-mechanisms.md): 指示ではなく機構で強制する
   という方針。本 ADR はその機構をどう選ぶかの基準を定めたもの
 - [ADR-0004](0004-hook-check-semantic-axis.md): hook の判定軸と実行コストの実測
