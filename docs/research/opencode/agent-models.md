@@ -17,6 +17,8 @@
 - 主エージェントを選んでも、セッションのモデルは変わらない（公式の記述どおり）
 - V1 の `agent` と V2 の `agents` は 1 つのファイルに併存できた
   （`agent.bypass` と `agents.explore` を同時に置いて、両方効いた）
+- **既定の `model` に推論の強さを持たせる設定上の手段は無い**（記録 E2）。
+  Copilot の Claude は 2 回目以降の呼び出しで、明示したバリアントしか送らない
 
 ## 記録 E1 — 2026-09-28
 
@@ -94,3 +96,74 @@ $ opencode run --standalone --agent plan 'Reply with exactly: OK'   # agents.pla
 > Otherwise, the selected command agent's configured model overrides the model active at invocation.
 
 出典: <https://opencode.ai/v2/docs/commands/>
+
+## 記録 E2 — 2026-09-28: 既定モデルに推論の強さを持たせられるか
+
+- **対象バージョン**: opencode v2.0.14
+- **環境**: WSL2 Ubuntu / 基準コミット `2df5da7`
+
+### 問い
+
+既定の `model` はバリアントを保持しない（公式）。Copilot の `claude-opus-5.5` を
+既定にしたまま、推論の強さを `high` にできるか。
+
+### 事前の予想
+
+カタログのバリアント `high` の中身は `settings.reasoningEffort: "high"` なので、
+同じ設定をモデル単位に書けばバリアントなしの呼び出しでも `high` になる。
+
+### 方法・条件
+
+- 記録 E1 と同じ試験環境。試験用の設定ディレクトリに、送信直前のリクエスト本文を
+  記録する plugin（`http.request` hook）を置いた
+- 依頼はツールを 1 回使わせるもの（`Use the glob tool to find *.md files in docs/adr,
+  then reply DONE.`）。モデル呼び出しが 2 回起きる
+- カタログのバリアント定義は、plugin から `ctx.model.list()` で読んだ
+
+### 結果
+
+**Copilot の Claude は、1 回目と 2 回目で送信先と形が変わる。**
+
+| 呼び出し | 送信先 | 推論の強さの載り方 |
+| --- | --- | --- |
+| 1 回目 | `api.githubcopilot.com/chat/completions` | `reasoning_effort` |
+| 2 回目以降 | `api.enterprise.githubcopilot.com/v1/messages` | `output_config.effort` |
+
+カタログのバリアント定義（`ctx.model.list()`）:
+
+```text
+claude-opus-5.5  package: aisdk:@ai-sdk/github-copilot
+   {"id": "high", "settings": {"reasoningEffort": "high"}}   (low / medium / xhigh / max も同形)
+```
+
+指定の仕方ごとの送信内容:
+
+| 指定 | 1 回目 `reasoning_effort` | 2 回目 `output_config` |
+| --- | --- | --- |
+| 何もしない | なし | なし |
+| `--model ...claude-opus-5.5#high` | `high` | `{"effort": "high"}` |
+| 子エージェントの `model` に `#medium` | —（`/v1/messages` のみ） | `{"effort": "medium"}` |
+| モデル単位の `settings.reasoningEffort = "high"` | `high` | **なし** |
+| 別名モデル（`modelID = claude-opus-5.5`、`settings.reasoningEffort = "high"`） | `high` | **なし** |
+| モデルに `id = "default"` のバリアントを定義 | なし | なし |
+| `context` hook で `options.reasoningEffort = "high"` | `high` | **なし** |
+| 既定の `model` を消し、`agents.build.model` に `#high` | 使われず最新の `gpt-6-luna` へ落ちた | — |
+
+バリアントを付けない呼び出しは、hook の中で `variant: "default"` として見える。
+
+### 考察
+
+- 予想は外れた。**2 回目以降の経路は、バリアントを明示したときにしか推論の強さを
+  送らない。** 設定値・別名・hook のどれで入れても 1 回目にしか効かない
+- したがって v2.0.14 では、既定の `model` を「Opus 5.5 の high」にする設定上の手段は
+  見つからなかった。推論の強さを確実に指定できるのは、バリアントを付けて選んだ
+  セッション・子エージェント・コマンドだけ
+- モデル単位の設定で入れると「最初の 1 回だけ high、あとは指定なし」になる。
+  気づけない劣化なので採らない
+
+### 次の問い
+
+- plugin からセッションのモデルをバリアント付きに切り替える
+  （`ctx.session.switchModel`）と、2 回目以降にも効くか。未実施
+- 指定なしのとき、Copilot 側がどの強さで動くか。未確認
+- `/v1/messages` へ切り替わる条件。未確認

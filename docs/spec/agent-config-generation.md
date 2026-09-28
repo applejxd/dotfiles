@@ -577,10 +577,10 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 
 | 階層 | Copilot | Bedrock |
 | --- | --- | --- |
-| `default` | `claude-sonnet-5` | `global.anthropic.claude-sonnet-5` |
-| `light` | `claude-haiku-4.5` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
-| `heavy` | `claude-opus-5.5#high` | `global.anthropic.claude-opus-5-5#high` |
-| `second_opinion` | `gpt-6-sol` | `global.openai.gpt-6-sol` |
+| `default` | `claude-opus-5.5` | `global.anthropic.claude-sonnet-5` |
+| `light` | `claude-opus-5.5#medium` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| `heavy` | `claude-opus-5.5#xhigh` | `global.anthropic.claude-opus-5-5#high` |
+| `second_opinion` | `gpt-6-astra` | `global.openai.gpt-6-sol` |
 
 ```toml
 [opencode.model.agents]
@@ -592,6 +592,13 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
   書く。Bedrock の `global.` はクロスリージョン推論プロファイル
 - **`default` に `#variant` は付けられない。** 既定の `model` はバリアントを
   保持しない（公式）。付けると `apply` を止める
+  - Copilot の `default` を「Opus 5.5 の high」にしたかったが、手段が無かった。
+    モデル単位の `settings.reasoningEffort`・別名モデル・`context` hook の
+    どれで入れても、効くのは 1 回目の呼び出しだけで、ツール結果を受けた 2 回目
+    以降（`/v1/messages`）では推論の強さが送られない
+    （[実測 記録 E2](../research/opencode/agent-models.md#記録-e2--2026-09-28-既定モデルに推論の強さを持たせられるか)）
+  - そのため Copilot の `default` はバリアントなし（強さは Copilot 側の既定。
+    どの強さかは未確認）。high で動かしたいセッションは TUI でバリアントを選ぶ
 - 未知の階層・プロバイダ、`[opencode.agent]`（V1 形式）にあるエージェントへの
   割り当ても `apply` を止める。後者は V1 の `agent` と V2 の `agents` に同じ ID が
   並んだときの結合順を確かめていないため

@@ -1364,6 +1364,7 @@ def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
 
     default = ref("default")
     if "#" in default:
+        # see docs/research/opencode/agent-models.md 記録 E2
         raise SystemExit(
             f"opencode.model の default に #variant は付けられない: {default}"
         )
@@ -1586,6 +1587,8 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
         providers = merge_opencode_providers(existing.get("providers"), common, models)
         if providers:
             out["providers"] = providers
+        else:
+            out.pop("providers", None)
         out["experimental"] = merge_opencode_provider_policies(
             existing.get("experimental"), models
         )

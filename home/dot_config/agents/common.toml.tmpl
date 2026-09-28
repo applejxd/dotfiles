@@ -712,7 +712,7 @@ auto_update = false
 # 既定モデルとエージェントごとの割り当て。PC ごとのプロバイダは
 # .chezmoitemplates/llm-provider が決め、ほかのプロバイダは policies で塞ぐ。
 # ★ID は実在を確認してから書く (公式のモデル一覧か TUI の /models)。
-#   default には #variant を付けられない (OpenCode が保持しない)。
+#   default には #variant を付けられない。
 # see docs/spec/agent-config-generation.md#モデルの割り当て
 [opencode.model]
 provider = "{{ includeTemplate "llm-provider" . }}"
@@ -727,10 +727,10 @@ heavy = "global.anthropic.claude-opus-5-5#high"
 second_opinion = "global.openai.gpt-6-sol"
 
 [opencode.model.tier.github-copilot]
-default = "claude-sonnet-5"
-light = "claude-haiku-4.5"
-heavy = "claude-opus-5.5#high"
-second_opinion = "gpt-6-sol"
+default = "claude-opus-5.5"
+light = "claude-opus-5.5#medium"
+heavy = "claude-opus-5.5#xhigh"
+second_opinion = "gpt-6-astra"
 
 # ★[web] は OpenCode へ渡さない。webfetch の resource は「URL 全体」で、
 #   `*` が `/` も跨ぐため `*://*.example.com/*` が

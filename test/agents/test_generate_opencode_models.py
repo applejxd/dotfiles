@@ -87,9 +87,16 @@ def test_common_toml_carries_the_detected_provider():
 # 既定モデルと接続設定
 # ---------------------------------------------------------------------------
 
-def test_default_model_is_sonnet_on_each_provider():
-    assert generated(PERSONAL)["model"] == "github-copilot/claude-sonnet-5"
+def test_default_model_on_each_provider():
+    assert generated(PERSONAL)["model"] == "github-copilot/claude-opus-5.5"
     assert generated(WORK)["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5"
+
+
+def test_copilot_tiers_share_one_model_by_variant():
+    tiers = PERSONAL["opencode"]["model"]["tier"]["github-copilot"]
+    assert tiers["light"] == "claude-opus-5.5#medium"
+    assert tiers["heavy"] == "claude-opus-5.5#xhigh"
+    assert tiers["second_opinion"] == "gpt-6-astra"
 
 
 def test_every_provider_defines_the_same_tiers():
@@ -190,7 +197,7 @@ def test_switching_provider_rewrites_assigned_models():
         (lambda c: c["opencode"]["model"].update(provider="openai"), "openai"),
         (
             lambda c: c["opencode"]["model"]["tier"]["github-copilot"].update(
-                default="claude-sonnet-5#high"
+                default="claude-opus-5.5#high"
             ),
             "#variant",
         ),
