@@ -93,8 +93,10 @@ export async function onCompaction(ctx, e, cwd) {
   if (BUSY.has(e.sessionID)) return
   BUSY.add(e.sessionID)
   try {
-    // 前回の圧縮の印を持ち越さない。今回保存できたときだけ置き直す。
+    // 前回の圧縮の印を持ち越さない。注入待ちの印も含む。今回保存できたときだけ置き直す。
+    // see docs/spec/checkpoint.md#plugin-が担うこと
     await ctx.storage.remove(savedKey(e.sessionID))
+    await ctx.storage.remove(key(e.sessionID))
     // ★generate は会話履歴が見えている (実測)。材料を詰め直す必要は無い。
     // ★空文字が返ることがある (実測)。lint に通らない生成と合わせて 1 度だけ引き直す。
     let body = ""

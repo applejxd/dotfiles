@@ -124,9 +124,23 @@ const cases = {
     await plugin.onContext(ctx, event, cwd)
     return dump(ctx, event)
   },
-  // 失敗や無関係なイベントでは置かない。
+  // 前の圧縮の印が注入待ちのまま次の圧縮が生成に失敗しても、前の記録を入れない。
+  "failed-compaction-drops-a-pending-record": async () => {
+    const ctx = makeCtx([ended], [BODY])
+    await plugin.onCompaction(ctx, { sessionID: session }, cwd)
+    await plugin.watchCompaction(ctx)
+    const mid = { sessionID: session, system: [], messages: [{ role: "assistant" }] }
+    await plugin.onContext(ctx, mid, cwd)
+    await plugin.onCompaction(ctx, { sessionID: session }, cwd)
+    await plugin.watchCompaction(ctx)
+    const event = { sessionID: session, system: [], messages: [{ role: "user" }] }
+    await plugin.onContext(ctx, event, cwd)
+    return { ...dump(ctx, event), midTurn: mid.system.map((s) => String(s.text)) }
+  },
+  // 失敗や無関係なイベントでは、保存済みの印があっても注入の印に変えない。
   "watch-others": async () => {
     const ctx = makeCtx([failed, { type: "session.usage.updated", data: { sessionID: session } }])
+    await ctx.storage.set(plugin.savedKey(session), { at: "x" })
     await plugin.watchCompaction(ctx)
     return dump(ctx)
   },
@@ -355,8 +369,27 @@ def test_failed_or_unrelated_events_set_nothing(call):
     上流の ``execute`` は "Nothing to compact yet" の門番を prepare より前に
     置いていて、そこでは ``Failed`` を publish して返る。``Ended`` は成功経路
     でしか出ない。ここを取り違えると欠陥 A が戻る。
+
+    保存済みの印を置いてから流す。印が無いと種別を見なくても何も起きず、
+    種別の判定を消しても通ってしまう。
     """
-    assert call("watch-others")["keys"] == []
+    assert call("watch-others")["keys"] == [f"saved:{SESSION}"]
+
+
+def test_a_failed_compaction_drops_the_pending_record(call):
+    """★注入待ちの印を次の圧縮に持ち越さない。
+
+    圧縮 A の印は内部の継続要求では消えない。同じ手番で圧縮 B が生成に失敗
+    すると、B の終了では何も置かれず、A の印だけが残って次の要求へ A の記録を
+    入れてしまう。
+    """
+    result = call("failed-compaction-drops-a-pending-record")
+
+    assert len(result["midTurn"]) == 1
+    assert GENERATED in result["midTurn"][0]
+    assert result["generateCalls"] == 3
+    assert result["system"] == []
+    assert result["keys"] == []
 
 
 def test_events_without_a_session_are_ignored(call):

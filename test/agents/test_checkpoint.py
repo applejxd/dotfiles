@@ -282,8 +282,19 @@ def test_structure_lint_reports_duplicated_heading(cp):
     [
         "本文中に ## Evidence と書いただけ\n",
         "```text\n## Evidence\n```\n",
+        "~~~text\n## Evidence\n~~~\n",
+        "````text\n```\n## Evidence\n```\n````\n",
+        "```text\n~~~\n## Evidence\n```\n",
+        "    ## Evidence\n",
     ],
-    ids=["文中", "コードブロック"],
+    ids=[
+        "文中",
+        "コードブロック",
+        "チルダ",
+        "長いフェンスの中の短いフェンス",
+        "種類の違うフェンス",
+        "インデント",
+    ],
 )
 def test_structure_lint_counts_only_real_headings(cp, stray: str):
     """行頭の見出しだけを数える。文中やコードブロックの文字列は見出しではない。"""
@@ -547,6 +558,27 @@ def test_headings_only_skips_budget_and_fences(cp):
 )
 def test_headings_only_still_checks_headings(cp, broken: str):
     assert cp.lint(broken, headings_only=True)[0] != []
+
+
+@pytest.mark.parametrize("fence", ["```", "~~~", "````"])
+def test_a_fenced_generation_is_rejected_by_the_cli(fence: str):
+    """★生成全体をフェンスで包んだ本文は、plugin の受け入れ判定で落ちる。
+
+    以前は ``` だけをフェンスとして扱い、``~~~markdown`` で包んだ本文が通っていた。
+    """
+    header, marker, body = valid_checkpoint().partition("-->\n")
+    wrapped = f"{header}{marker}{fence}markdown\n{body}{fence}\n"
+    done = run_cli(["lint", "-", "--headings-only"], stdin=wrapped)
+    assert done.returncode == 1
+    assert "見出しが無い" in done.stderr
+
+
+def test_short_fences_inside_a_long_fence_do_not_close_it(cp):
+    """長いフェンスの中の短いフェンスで閉じたと見なさない。"""
+    inner = "````\n" + "```\n" + "line\n" * 20 + "```\n" + "````\n"
+    text = valid_checkpoint().replace("## Evidence\n", f"## Evidence\n{inner}")
+    errors, _ = cp.lint(text)
+    assert any("コードブロック" in e and "22 行" in e for e in errors)
 
 
 def test_cli_write_keeps_previous_generation(tmp_path: Path):

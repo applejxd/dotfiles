@@ -74,6 +74,8 @@ MAX_FENCE_LINES = 12
 
 HEADER_RE = re.compile(r"<!--\s*checkpoint:\s*v1(?P<body>.*?)-->", re.DOTALL)
 
+FENCE_OPEN_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+
 
 def _run_git(args: list[str], cwd: Path) -> str | None:
     """git を実行して stdout を返す。失敗したら None。"""
@@ -260,17 +262,50 @@ def split_machine(text: str) -> tuple[str, str]:
     return text[:index], text[index:]
 
 
+def _lines(body: str) -> list[tuple[int, str, str]]:
+    """行を (行番号, 行, 種別) で返す。種別は text / open / close / code。
+
+    フェンスの開閉は CommonMark に従う (文字と長さを見る。行頭 4 桁以上は開閉ではない)。
+    """
+    found: list[tuple[int, str, str]] = []
+    fence = ""
+    for number, raw in enumerate(body.splitlines(), start=1):
+        line = raw.expandtabs(4)
+        if fence:
+            stripped = line.strip()
+            closes = (
+                len(line) - len(line.lstrip(" ")) <= 3
+                and stripped.startswith(fence)
+                and stripped == fence[0] * len(stripped)
+            )
+            found.append((number, line, "close" if closes else "code"))
+            if closes:
+                fence = ""
+            continue
+        match = FENCE_OPEN_RE.match(line)
+        if match and not (match["fence"][0] == "`" and "`" in match["info"]):
+            fence = match["fence"]
+            found.append((number, line, "open"))
+            continue
+        found.append((number, line, "text"))
+    return found
+
+
+def _heading(line: str) -> str | None:
+    """``## `` の見出しなら整えた見出しを返す。行頭 4 桁以上はインデントのコードブロック。"""
+    if len(line) - len(line.lstrip(" ")) > 3:
+        return None
+    stripped = line.strip()
+    return stripped if stripped.startswith("## ") else None
+
+
 def _headings(body: str) -> list[tuple[int, str]]:
     """``## `` で始まる見出し行を (行番号, 見出し) で返す。コードブロックの中は数えない。"""
     found: list[tuple[int, str]] = []
-    fence = False
-    for number, line in enumerate(body.splitlines(), start=1):
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            fence = not fence
-            continue
-        if not fence and stripped.startswith("## "):
-            found.append((number, stripped))
+    for number, line, kind in _lines(body):
+        heading = _heading(line) if kind == "text" else None
+        if heading:
+            found.append((number, heading))
     return found
 
 
@@ -278,28 +313,21 @@ def _fence_violations(body: str) -> list[str]:
     """``## Refs`` 以外にある長いフェンスを探す。"""
     problems: list[str] = []
     section = ""
-    fence: str | None = None
     fence_start = 0
     fence_section = ""
-    for number, line in enumerate(body.splitlines(), start=1):
-        stripped = line.strip()
-        if fence is None and stripped.startswith("```"):
-            fence = "```"
+    for number, line, kind in _lines(body):
+        if kind == "open":
             fence_start = number
             fence_section = section
-            continue
-        if fence is not None:
-            if stripped.startswith(fence):
-                length = number - fence_start - 1
-                if length > MAX_FENCE_LINES and fence_section != "## Refs":
-                    problems.append(
-                        f"{fence_start} 行目のコードブロックが {length} 行 "
-                        f"(上限 {MAX_FENCE_LINES} 行、`## Refs` 以外)"
-                    )
-                fence = None
-            continue
-        if stripped.startswith("## "):
-            section = stripped
+        elif kind == "close":
+            length = number - fence_start - 1
+            if length > MAX_FENCE_LINES and fence_section != "## Refs":
+                problems.append(
+                    f"{fence_start} 行目のコードブロックが {length} 行 "
+                    f"(上限 {MAX_FENCE_LINES} 行、`## Refs` 以外)"
+                )
+        elif kind == "text":
+            section = _heading(line) or section
     return problems
 
 
