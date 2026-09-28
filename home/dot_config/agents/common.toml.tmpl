@@ -718,6 +718,14 @@ auto_update = false
 description = "全ツールを無確認で実行する (permission を全て allow で上書き)"
 permission = "allow"
 
+# bypass からだけ呼べる子エージェント。全部 allow だが、さらに子は起動できない
+# (task は V2 の subagent)。ほかのエージェントからの起動は generate.py が全体の
+# permission で deny する。see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+[opencode.agent.bypass-worker]
+description = "bypass から起動する作業用の子エージェント。全ツールを無確認で実行する"
+mode = "subagent"
+permission = { "*" = "allow", task = "deny" }
+
 # OpenCode 専用の shell allow ([bash] とは共用しない。前提が違う)。
 # ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。
 # ★リダイレクトは resource に残ったまま前方一致するので、載せたコマンドは

@@ -207,9 +207,46 @@ def test_agents_not_declared_in_common_are_kept():
     assert "bypass" in merged
 
 
-def test_bypass_is_the_only_agent_from_common():
+def test_only_the_bypass_agents_come_from_common():
     """権限を緩めるエージェントが黙って増えないようにする。"""
-    assert set(generated()["agent"]) == {"bypass"}
+    assert set(generated()["agent"]) == {"bypass", "bypass-worker"}
+
+
+def test_bypass_worker_cannot_launch_further_subagents():
+    """bypass から呼ぶ子。全部 allow だが、子からさらに子は起動できない (task = subagent)。"""
+    agent = generated()["agent"]["bypass-worker"]
+    assert agent["mode"] == "subagent"
+    assert agent["permission"] == {"*": "allow", "task": "deny"}
+
+
+def test_only_bypass_can_launch_the_bypass_worker():
+    """★全体の permission で起動を deny し、bypass の ``*`` allow だけがそれを上書きする。
+
+    エージェントの規則は全体の後ろに付き、最後に一致した規則が勝つ (実測。
+    build からは Permission denied、bypass からは起動できた)。
+    """
+    rules = generated()["permissions"]
+    guard = {"action": "subagent", "resource": "bypass-worker", "effect": "deny"}
+    assert guard in rules
+    # primary の bypass 自体は、ほかから子として呼ばれることが無いので塞がない
+    assert {"action": "subagent", "resource": "bypass", "effect": "deny"} not in rules
+    assert rules.index(guard) == len(rules) - 1, "全体の規則の最後に置く"
+
+
+@pytest.mark.parametrize(
+    ("agent", "guarded"),
+    [
+        ({"permission": "allow", "mode": "subagent"}, True),
+        ({"permission": {"*": "allow"}, "mode": "all"}, True),
+        ({"permission": "allow"}, False),
+        ({"permission": {"*": "ask"}, "mode": "subagent"}, False),
+        ({"mode": "subagent"}, False),
+    ],
+    ids=["全許可の子", "全許可の両用", "全許可の primary", "全許可でない子", "権限を触らない子"],
+)
+def test_subagent_guard_covers_only_all_allow_subagents(agent, guarded):
+    common = {"opencode": {"agent": {"x": agent}}}
+    assert bool(gen.opencode_subagent_guards(common)) is guarded
 
 
 # 誘導の素通り判定はエージェント名で行う。effect で見ると静的 allow を含む
@@ -340,7 +377,7 @@ def test_glob_to_regex_keeps_slash_boundaries(glob, matches, misses):
 
 
 def test_bypass_agents_are_named_in_the_rules():
-    assert gen.build_opencode_guide({}, COMMON)["bypass_agents"] == ["bypass"]
+    assert gen.build_opencode_guide({}, COMMON)["bypass_agents"] == ["bypass", "bypass-worker"]
 
 
 def test_only_all_allow_agents_are_treated_as_bypass():
@@ -348,12 +385,13 @@ def test_only_all_allow_agents_are_treated_as_bypass():
         "opencode": {
             "agent": {
                 "loose": {"permission": "allow"},
+                "worker": {"permission": {"*": "allow", "task": "deny"}},
                 "tight": {"permission": "ask"},
                 "plain": {"description": "権限を触らない"},
             }
         }
     }
-    assert gen.build_opencode_guide({}, common)["bypass_agents"] == ["loose"]
+    assert gen.build_opencode_guide({}, common)["bypass_agents"] == ["loose", "worker"]
 
 
 # --- shell 出力の伏字化 (段階 2-C) ----------------------------------------

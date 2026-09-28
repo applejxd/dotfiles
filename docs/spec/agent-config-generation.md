@@ -325,6 +325,33 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 リダイレクトを分割せず resource に残すので、`wc -l f.txt > path` が `wc *`
 に前方一致する。allow は最小に保つ以外の守り方が無い。
 
+### bypass から呼べる子エージェント
+
+`bypass` のセッションから、同じく全部 allow の子エージェント `bypass-worker` を
+サブエージェントとして起動できる。**ほかのエージェント（`build` など）からは起動できない。**
+
+```toml
+[opencode.agent.bypass-worker]
+mode = "subagent"
+permission = { "*" = "allow", task = "deny" }   # task は V2 の subagent
+```
+
+- `generate.py` は、全部 allow（`permission = "allow"` か `"*" = "allow"`）で
+  サブエージェントとして使えるエージェントごとに、全体の `permissions` の**最後**へ
+  `{ action: "subagent", resource: "<名前>", effect: "deny" }` を足す
+  （`opencode_subagent_guards`）
+- エージェントの規則は全体の規則の後ろに付き、最後に一致した規則が勝つ。
+  `bypass` の `*` の allow だけがこの deny を上書きする
+- `bypass-worker` 自身は `task = "deny"` なので、さらに子を起動できない
+  （入れ子にならない）
+- 「Always allow」で保存した承認は、設定の deny を上書きしない
+- `bypass` と同じく、秘密ファイルの読み取り禁止も外れる。誘導の plugin も
+  エージェント名で素通りさせる（下の plugin 層）
+
+実測（build からは `Permission denied: subagent`、bypass からは起動できる、
+子からの入れ子は不可）は
+[Bypass モードの調査 6 章](../research/opencode/permission/bypass-agent.md#6-bypass-からだけ呼べる子エージェント2026-09-28)。
+
 ### plugin 層 (`guide-plugin`)
 
 `~/.config/opencode/guide-plugin/` に置く。判定表は `common.toml` の
@@ -358,7 +385,7 @@ plugin が守る規約は 2 つ。
 - **`bypass` エージェントには触らない。** 全部止めたいときの逃げ道を壊さない。
   判定は**エージェント名**で行う（`permission.evaluate` に `agent` が載ることを
   実測。[hook の呼ばれ方](../research/opencode/permission/hook-order.md)）。
-  名前は `permission = "allow"` を持つエージェントから生成するので、
+  名前は permission が全部 allow（`"allow"` か `"*" = "allow"`）のエージェントから生成するので、
   `common.toml` が単一ソースのまま保たれる
 - **`effect` では見分けない。** `allow` で判定すると
   `cd x && git log`（`git log` が静的 allow）のように、allow を含む呼び出しまで

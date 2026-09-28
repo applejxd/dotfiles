@@ -202,6 +202,39 @@ opencode run --auto --agent bypass 'echo ZAPTEST'   → ZAPTEST（exit 0）
 なので、そもそも global の deny 規則に当たらない（`pip --version` で実測済み）。
 plugin だけが上の規約で明示的に譲る形になる。
 
+## 6. bypass からだけ呼べる子エージェント（2026-09-28）
+
+- **対象バージョン**: `opencode v2.0.14`、モデル `github-copilot/claude-haiku-4.5`
+- **方法**: 一時的な設定ディレクトリを `OPENCODE_CONFIG_DIR` で渡し、
+  `mise run opencode:probe`（実 DB を汚さない）で `--agent` と `--auto` を付けて実行した
+
+### 問い
+
+`bypass` のセッションからだけ、全部 allow の子エージェントを起動できるようにできるか。
+
+### 設定の書き方（`opencode api config.get --standalone` で正規化後を確認）
+
+| 入力 | 正規化後の `agents.bypass-worker.permissions` |
+| --- | --- |
+| `agent.bypass-worker.permission = { "*": "allow", "task": "deny" }`（V1 のマップ） | `[{*, *, allow}, {subagent, *, deny}]` |
+| `agents.bypass-worker.permissions = [...]`（V2 の配列） | 同じ |
+
+V1 の `task` は V2 の `subagent` へ置き換わる。既存の `bypass` と同じ V1 の書き方で足りる。
+
+### 結果
+
+全体の `permissions` の最後に `{subagent, bypass-worker, deny}` を置いた設定で:
+
+| 呼び出し元 | 結果 |
+| --- | --- |
+| `build`（`--auto`） | `Permission denied: subagent` |
+| `bypass` | 起動でき、子が `WORKER_OK` と返した |
+| `bypass` から起動した子（さらに `explore` を起動させた） | 子の側では `subagent` ツールが使えるツールの一覧に無かった |
+
+手で書いた設定と、`generate.py` が生成した設定の両方で同じ結果だった。
+エージェントの規則は全体の規則の後ろに付き、最後に一致した規則が勝つという
+[公式の説明](https://opencode.ai/v2/docs/permissions/)どおり。
+
 ## 再確認すべき情報源
 
 - V2 にキーバインド設定の経路があるか（**未確認**）

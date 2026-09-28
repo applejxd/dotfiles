@@ -919,6 +919,7 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
             resources += opencode_path_patterns(glob)
         rules += opencode_rules(action, effect, resources)
 
+    rules += opencode_subagent_guards(common)
     return rules
 
 
@@ -970,7 +971,35 @@ def opencode_bypass_agents(common: dict[str, Any]) -> list[str]:
     see docs/research/opencode/permission/hook-order.md
     """
     agents = common.get("opencode", {}).get("agent") or {}
-    return sorted(n for n, a in agents.items() if a.get("permission") == "allow")
+    return sorted(n for n, a in agents.items() if _grants_everything(a))
+
+
+def _grants_everything(agent: dict[str, Any]) -> bool:
+    """permission が「全 action・全 resource の allow」から始まるエージェントか。
+
+    ``"allow"`` の文字列と、``{"*" = "allow", ...}`` のマップの両方を数える
+    (どちらも OpenCode が ``{action:"*", resource:"*", effect:"allow"}`` へ展開する)。
+    """
+    permission = agent.get("permission")
+    if permission == "allow":
+        return True
+    return isinstance(permission, dict) and permission.get("*") == "allow"
+
+
+def opencode_subagent_guards(common: dict[str, Any]) -> list[dict[str, str]]:
+    """全部 allow のサブエージェントを、同じく全部 allow のエージェント以外から呼ばせない。
+
+    全体の permission で起動を deny する。エージェントごとの規則は全体の規則の
+    後ろに付き、最後に一致した規則が勝つので、``*`` を allow にしたエージェント
+    (``bypass``) の中でだけこの deny が上書きされる (実測)。
+    see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+    """
+    agents = common.get("opencode", {}).get("agent") or {}
+    return [
+        {"action": "subagent", "resource": name, "effect": "deny"}
+        for name, agent in sorted(agents.items())
+        if _grants_everything(agent) and agent.get("mode") in ("subagent", "all")
+    ]
 
 
 def glob_to_regex(glob: str) -> str:
