@@ -767,31 +767,51 @@ permission = { "*" = "allow", task = "deny" }
 # system は組み込みの基底プロンプトを置き換える。permissions は全体の規則の後ろに付く。
 # see docs/spec/agent-config-generation.md#子エージェント
 [opencode.agents.commit]
-description = "変更を Conventional Commits の論理単位に分け、パスを指定してステージし、コミットメッセージ案を返す。コミットはしない。変更をコミットしたいとき、親は差分を読まずにこれへ任せる"
+description = "変更を論理単位に分けてステージし、単位ごとにコミットする。git commit のたびにユーザーの確認が出る。親は差分を読まずにこれへ任せる"
 mode = "subagent"
 system = """
-あなたはコミットの下ごしらえ役です。親エージェントから呼ばれ、結果を親へ返します。
-ユーザーとは直接やり取りできません。
+あなたはコミット係です。親から呼ばれ、変更をコミットして結果を返します。
 
-1. commit スキルを読み込み、その手順と文体に従う。
-   「ユーザーと直接やり取りできない実行文脈」に当たるので、コミットはしない
-2. git status --short --branch / git diff HEAD / git log --oneline -10 で状況をつかむ
-3. 変更を論理単位に分ける。依頼の範囲外の変更や、ステージ済みの他人の作業は混ぜない。
-   迷ったら含めずに報告する
-4. 最初の単位だけを、パスを明示して git add -- <paths> でステージする
-5. 次を返して終わる
-   - ステージしたファイル (git diff --cached --stat の結果)
-   - コミットメッセージの全文
-   - 残した変更と、残した理由
-   - 次の単位の案 (あれば)
+- 最初に skill ツールで commit スキルを読み込む。分け方・メッセージの書式・手順はそれに従う
+- この指示は、git commit の権限の確認を承認の場と定める (スキルの手順 4 の冒頭に当たる)。
+  git commit を実行するたびにユーザーへ確認が出て、それが承認になる。メッセージを示して
+  承認を求める返答は書かず、確認付きで git commit を実行する
+- ファイルは read / glob / grep ツールで読む。shell で cat / ls / find / echo などを使わない
+- メッセージは git commit -m '<件名>' -m '<本文>' のように -m を重ねる。本文の改行は引用符の
+  中に書く。ヒアドキュメントと -F は使わない (編集できないので、それを勧める誘導に従えない)
+- コマンドは 1 回に 1 つ。; や && でつなげず、リダイレクトや 2>&1 を付けない
+- 確認が拒否されたら、それ以降はコミットしない。コミットしたもの・しなかったもの (ステージ
+  内容とメッセージの全文)・残りの単位の案を返して終わる
+- hook がファイルを直してコミットが失敗したら、同じパスを add し直して 1 回だけやり直す
 
 ファイルは編集しない。
 """
+# ★後勝ち。状態を変える git の deny → allow → その例外の deny → git commit の ask → commit の deny。
+# see docs/spec/agent-config-generation.md#commit-の権限
 permissions = [
   { action = "edit", resource = "*", effect = "deny" },
   { action = "subagent", resource = "*", effect = "deny" },
   { action = "question", resource = "*", effect = "deny" },
-  { action = "shell", resource = "git commit *", effect = "deny" },
+  { action = "shell", resource = "git checkout *", effect = "deny" },
+  { action = "shell", resource = "git reset *", effect = "deny" },
+  { action = "shell", resource = "git stash *", effect = "deny" },
+  { action = "shell", resource = "git clean *", effect = "deny" },
+  { action = "shell", resource = "git status *", effect = "allow" },
+  { action = "shell", resource = "git diff *", effect = "allow" },
+  { action = "shell", resource = "git log *", effect = "allow" },
+  { action = "shell", resource = "git branch --show-current", effect = "allow" },
+  { action = "shell", resource = "git add -- *", effect = "allow" },
+  { action = "shell", resource = "git restore --staged -- *", effect = "allow" },
+  { action = "shell", resource = "*>*", effect = "deny" },
+  { action = "shell", resource = "*--output*", effect = "deny" },
+  { action = "shell", resource = "git commit *", effect = "ask" },
+  { action = "shell", resource = "* --no-verify*", effect = "deny" },
+  { action = "shell", resource = "git commit -n*", effect = "deny" },
+  { action = "shell", resource = "git commit -a*", effect = "deny" },
+  { action = "shell", resource = "git commit --all*", effect = "deny" },
+  { action = "shell", resource = "git commit --amend*", effect = "deny" },
+  { action = "shell", resource = "git commit * --amend*", effect = "deny" },
+  { action = "shell", resource = "git -* commit *", effect = "deny" },
 ]
 
 # 相談役。読むだけ。★shell は開けない (git diff / git status も外部コマンドを実行しうる)。

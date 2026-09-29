@@ -384,7 +384,10 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
   （`[opencode.sandbox.permissions] default_shell_effect`）で、`rm` や `git commit` などの
   `ask` も捨てている（`drop_shell`）。エージェントの `permissions` は後勝ちでそのまま効くので、
   `commit` や `fleet-worker` の git 操作の deny は残るが、それ以外は個別の deny / ask に
-  当たらなければ確認なしで通る（`commit` の `git status` / `git diff` / `git add` も）
+  当たらなければ確認なしで通る（`commit` では `git add -A` / `git switch` / `git rm` なども）。
+  **`commit` の `git commit` だけは、エージェント側の `ask` で確認が出る**（全体から捨てた
+  `ask` をエージェントの規則が戻す。オプションを前に置いた `git -c … commit` はエージェントの
+  `deny` で止まる。[`commit` の権限](agent-config-generation.md#commit-の権限)）
 - `bypass-worker` を `bypass` 以外から起動させない仕組み（全体の `subagent` の deny と
   guide plugin の起動元の検査）は、隔離版でもそのまま効く
   （[bypass から呼べる子エージェント](agent-config-generation.md#bypass-から呼べる子エージェント)）

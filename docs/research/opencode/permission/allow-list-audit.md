@@ -6,6 +6,14 @@
 > [CHG-0002](../../../change/0002-opencode-ask-by-default.md) 段階 1 の allow を
 > 確定させるための監査。`github-copilot/gpt-6-astra` へレビューを依頼し、
 > 指摘を実測で検証した。
+>
+> **後続の観測**: 3 章の `git diff` / `git status` の経路は、外部コマンドを止めるオプション
+> （`-c core.fsmonitor=false`・`--no-ext-diff --no-textconv`・`-c core.hooksPath=/dev/null`）で
+> 塞げることを確かめ、その形だけを子エージェント `commit` で `allow` にした。
+> 全体の allow は変えていない（[commit / review エージェントの実機確認](../commit-review-agents.md)の記録 E2）。
+> その後、子エージェント `commit` では接頭辞をやめ、素の `git status` / `git diff` を `allow` にした
+> （コミットで hook を走らせる時点でリポジトリの設定は信頼しているため。同じ文書の記録 E4）。
+> 全体の allow は、引き続き変えていない。
 
 ## 0. 結論
 

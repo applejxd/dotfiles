@@ -708,12 +708,14 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
 
 | ID | 階層 | 役割 | 権限で塞ぐもの |
 | --- | --- | --- | --- |
-| `commit` | `light` | 変更を論理単位に分け、パスを指定してステージし、メッセージ案を返す | 編集・`git commit`・質問・子エージェントの起動 |
+| `commit` | `light` | 変更を論理単位に分け、パスを指定してステージし、単位ごとにコミットする。`git commit` のたびに確認が出る | 編集・質問・子エージェントの起動・作業ツリーを戻す git・リダイレクトと `--output`・`git commit` の検証の回避や `-a` / `--amend`（下記） |
 | `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
 
-- **`commit` はコミットしない。** 子エージェントはユーザーとやり取りできないので、
-  commit スキルの「やり取りできない文脈では案を返して終わる」に従わせる。
-  承認とコミットは親が行う。狙いは、差分を読む重い作業を安いモデルへ移し、
+- **`commit` は `git commit` の確認を承認の場にしてコミットする。** 質問のツールは
+  使えないが、`git commit *` を `ask` にしているので、コミットのたびに確認が出る。
+  commit スキルの「コミット前の承認」はこの確認で満たす（`system` がそう定め、スキルの
+  手順 4 がその上書きを認める）。確認が拒否されたらそれ以降はコミットせず、ステージ内容・
+  メッセージ・残りの単位の案を返して終わる。狙いは、差分を読む重い作業を安いモデルへ移し、
   親の文脈を節約すること
 - **`review` は shell を開けない。** `git diff` / `git status` も外部の diff
   ドライバや fsmonitor を通じてコードを実行しうる
@@ -724,18 +726,80 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
   `apply` を止める。V1 の `[opencode.agent]` と同じ ID も止める
 - `system` は組み込みの基底プロンプトを**置き換える**（公式）。`AGENTS.md` や
   スキルの一覧は引き続き足される
-- `permissions` は全体の規則の後ろに付き、後勝ちで効く。全体で `ask` の
-  `git commit *` も、`commit` の中では `deny` になる
+- `permissions` は全体の規則の後ろに付き、後勝ちで効く。効果は `allow` / `ask` / `deny`。
+  隔離版で全体から捨てた `git commit` の `ask` も、`commit` の中では戻る
 - 宣言したキーだけを差し替え、他のキーと他のエージェントは残す
 - 隔離起動（`ocs`）にも同じ定義が出る。通常版の `opencode.json` からは引き継がず、
   `common.toml` から作る（[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
-- **通常起動では、`commit` はシェルのたびに承認が要る。** `git status` / `git diff` /
-  `git add` は既定の `ask` のまま（allow にしない理由は上の `review` と同じ）。
-  `opencode run --auto` のような無人の実行では、子セッションの確認に答える人が
-  いないので止まる（[実機確認](../research/opencode/commit-review-agents.md)）。
-  TUI で確認が表に出るかは未確認。隔離起動（`ocs`）はシェルの既定が `allow` なので、
-  `git status` / `git diff` / `git add` では確認が出ない。個別の deny / ask に当たる操作は除く
-  （[隔離版のエージェントとコマンド](opencode-sandbox.md#エージェントとコマンド)）
+
+#### `commit` の権限
+
+素の `git status` / `git diff` / `git log` とパス指定のステージだけを `allow` にし、
+`git commit` 本体は `ask` にする。目的は**うっかりの防止**で、意図的な迂回への耐性は求めない。
+通常起動でも隔離起動（`ocs`）でも同じ規則が効く（[実機確認](../research/opencode/commit-review-agents.md)の記録 E2 / E4）。
+
+| 順 | 効果 | 規則 | 理由 |
+| --- | --- | --- | --- |
+| 1 | `deny` | `edit` / `subagent` / `question` の `*` | 編集・子エージェントの起動・質問をさせない |
+| 1 | `deny` | `git checkout *` / `git reset *` / `git stash *` / `git clean *` | 作業ツリーと index を戻させない |
+| 2 | `allow` | `git status *`・`git diff *`・`git log *`・`git branch --show-current` | 状況の把握。commit スキルが教える形そのまま |
+| 2 | `allow` | `git add -- *` | `--` の後ろはパスだけになる |
+| 2 | `allow` | `git restore --staged -- *` | ステージの取り消し。作業ツリーは戻さない |
+| 3 | `deny` | `*>*`・`*--output*` | allow の形に付けたファイルへの書き出し |
+| 4 | `ask` | `git commit *` | 承認の場。3 の `deny` より後ろなので、メッセージに `>` を含んでも確認に回る |
+| 5 | `deny` | `* --no-verify*`・`git commit -n*`・`git commit -a*`・`git commit --all*`・`git commit --amend*`・`git commit * --amend*`・`git -* commit *` | 検証の回避・無関係な変更の混入・既存コミットの書き換え・オプションを前に置いた形 |
+
+- **作法はスキル、実行環境の仕組みはエージェントが持つ。** 分け方・メッセージの書式・
+  コマンドの形は commit スキルに従わせ、`system` には OpenCode の中でだけ要ること
+  （確認が承認の場になること・read / glob / grep ツールで読むこと・`-m` を重ねてヒアドキュメントと
+  `-F` を使わないこと・連結とリダイレクトをしないこと・拒否と hook の失敗での止まり方）だけを書く。
+  allow の形はスキルが教える素の形に合わせてあり、`test_skill_forms_are_allowed_or_asked_in_the_commit_agent`
+  が固定している
+- **スキルの承認の原則は変えない。** 既定は「提示して承認を得る」のまま（Copilot は hook の
+  `ask` を自動承認するので、環境の確認を当てにしない）。呼び出し元の指示が `git commit` の
+  確認を承認の場と定めたときだけ、それに従う（手順 4 の冒頭）。この上書きを手順 4 の後ろに
+  置いた版では、`claude-haiku-4.5` は提示して返るだけでコミットしなかった（記録 E4）
+- **`claude-haiku-4.5` では書式が崩れやすい。** コミットまでは 9/10 で進むが、本文の
+  `- Motivation:` / `- Change:` / `- Impact:` は 17 件中 2 件にとどまった（記録 E4。Bedrock の PC の
+  `light` は同系統の `claude-haiku-4-5`）。未対策
+- **全体の規則は変えない。** 全体の `allow` から `git diff` / `git status` を外した判断
+  （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）はそのままで、
+  素の形を確認なしで通すのは `commit` の中だけ。`git add -A` / `git add .` / `git switch` /
+  `git rm` はエージェントの規則に当たらず全体の規則に落ちる（通常起動は `ask`、隔離起動は `allow`）。
+  `git restore`（`--staged --` 以外）と `git push` は全体の `deny` で止まる
+- **接頭辞（`git -c core.fsmonitor=false -c core.hooksPath=/dev/null` と `--no-ext-diff --no-textconv`）は
+  付けない。** 以前はこの接頭辞の形だけを allow にしていた（記録 E2 / E3）。やめた理由:
+  - 接頭辞が止めるリポジトリの設定（fsmonitor・外部 diff・textconv・index の更新で走る hook）は
+    `.git/config` か `~/.gitconfig` にしか書けず、clone では運ばれない
+  - エージェントによる `.git/config` の書き換えは別に塞いである（通常起動は `edit` の `deny`、
+    隔離起動は境界）
+  - `git commit` では確認の後にリポジトリの hook を走らせており、コミットの時点でその設定は
+    既に信頼している
+  - 接頭辞はモデルの取り違え（記録 E3）を生み、スキルの形とも合わない
+- **受け入れたこと**: `commit` の中では、`git status` / `git diff` がリポジトリの設定の
+  fsmonitor・外部 diff・textconv・`post-index-change` hook を確認なしで起動しうる。
+  `git diff --no-index` でリポジトリの外のファイルを読むこともできる
+- `git -* commit *` の `deny` は隔離起動のために要る。隔離版の全体の規則はシェルの既定が
+  `allow` なので、これが無いと `git -c core.hooksPath=/dev/null commit …` が確認も hook も
+  無しで通る
+- `git restore *` の `deny` はエージェントに置かない。置くと後ろの `restore --staged -- *` の
+  `allow` と順序で競うだけで、素の `git restore` は全体の `deny` で止まる
+- `--amend` は `deny` にした。直前のコミットは利用者のものかもしれず、hook の失敗で
+  やり直すときも新しいコミットで足りる
+- **残る穴**:
+  - clean フィルタ（`filter.<driver>.clean`）は `diff` / `add` で走り、`status` でも index の
+    更新時に走りうる（接頭辞を付けていたときも止めるオプションは無かった）
+  - `git add -- .` はパス指定の形なので `allow` に当たり、まとめてステージできる。
+    確認に出るのは `git commit` のメッセージだけなので、混入はスキルの指示と確認の目視に頼る
+  - 静的な照合なので、引用符や変数で書き換えた形（`g"it" commit` など）は照合を
+    すり抜ける（[静的パターンの回避](../research/opencode/permission/shell-allow-and-plugin-gate.md)）
+  - 確認で「常に許可」を選ぶと `git commit *` がプロジェクトに保存され、以後は
+    確認なしでコミットする（保存した承認は `ask` を `allow` に変えるが、`deny` は
+    上書きしない。実測）
+  - メッセージの中に空白に続けて `--no-verify` や `--amend` を書いたコミットも `deny` になる
+- **無人の実行では `git commit` で止まる。** `opencode run --auto` は子セッションの
+  確認を自動承認しないので、`commit` は allow の形の操作を終えたところで確認を待ち続ける
+  （記録 E2）。TUI で子セッションの確認が表に出るかは未確認
 
 ### 並列作業（`/fleet`）
 

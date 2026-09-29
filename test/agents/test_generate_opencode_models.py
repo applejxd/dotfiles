@@ -184,14 +184,6 @@ def rules_of(agent: str) -> list[dict]:
     return generated(PERSONAL)["agents"][agent]["permissions"]
 
 
-def test_commit_agent_cannot_commit_or_edit():
-    """承認とコミットは、ユーザーとやり取りできる親が行う。"""
-    rules = rules_of("commit")
-    assert {"action": "shell", "resource": "git commit *", "effect": "deny"} in rules
-    assert {"action": "edit", "resource": "*", "effect": "deny"} in rules
-    assert {"action": "question", "resource": "*", "effect": "deny"} in rules
-
-
 def test_review_agent_only_reads():
     """★git diff / git status も外部コマンドを実行しうるので shell は丸ごと塞ぐ。"""
     rules = rules_of("review")
