@@ -24,7 +24,7 @@
 | [テストと検証の仕組み](testing.md) | Docker ハーネスのモード・環境変数・判定の契約、GitHub Actions で見ている範囲、既知の未達 |
 | [セキュリティ](security.md) | 秘密情報の保護対象・脅威と、Bitwarden / sops の方式の理由 |
 | [秘密情報の管理セットアップ（sops + age）](sops-age.md) | age 鍵の作成・バックアップ、プロジェクト設定、鍵の復旧手順 |
-| [エージェント権限仕様](agent-permissions.md) | AI CLI の permission / hook / sandbox の入口。CLI ごとの適用範囲、3 層の概要、動作確認・導入・トラブルシュート |
+| [エージェント権限仕様](agent-permissions.md) | AI CLI の permission / hook / sandbox の入口。CLI ごとの適用範囲、3 層の概要、OpenCode の保存した承認の確認とリセット（`oc-utils`）、動作確認・導入・トラブルシュート |
 | [設定の生成と所有権](agent-config-generation.md) | `common.toml` の構成と編集ルール、生成先と所有権、MCP、OpenCode の設定、hook の単一ソース化 |
 | [コマンド・ファイルの判定](agent-command-policy.md) | 照合規則、allow / ask / deny の使い分けと例外、bash 検査ルールの足し方、CLI 差 |
 | [sandbox (Claude Code / Copilot CLI)](agent-sandbox.md) | sandbox 層・ネットワーク層・seccomp、マシン固有の許可 (`local.toml`) |

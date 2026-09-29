@@ -139,6 +139,36 @@ shell のコマンド中の `\` 区切りのパスも候補にする。生成側
 `~` を展開した形を `/` 区切りに揃える。permission の read の deny は OpenCode 自身が
 `/` に揃えて照合するので、この問題は無い。
 
+## 保存した承認の確認とリセット
+
+OpenCode V2 の確認で「常に許可」を選ぶと、その承認は**プロジェクトごとに DB へ保存**され、
+以後は同じ操作が確認なしで通る。`opencode.json` の permission には現れず、公式には
+CLI も TUI の画面も無い（API だけ。公式の [Approvals](https://opencode.ai/v2/docs/permissions/)）。
+確認とリセットは `oc-utils approvals`（`home/dot_local/bin/executable_oc-utils`）で行う。
+
+```bash
+oc-utils approvals                  # 全プロジェクトの一覧（= approvals list）
+oc-utils approvals --project .      # カレントディレクトリのプロジェクトだけ
+oc-utils approvals --json           # 機械可読
+oc-utils approvals reset            # 消す対象を表示するだけ（dry-run）
+oc-utils approvals reset --yes      # 消したあと取り直して 0 件を確かめる
+```
+
+- **git commit の確認で「常に許可」を選ぶと、以後コミットの確認が出なくなる。**
+  `bash *`・`/usr/bin/git *`・`external_directory:/*` のような広い承認は選ばず、
+  「今回だけ許可」で答える。溜まったら `reset` で消す
+- 既定は全プロジェクト。`--project` は ID か worktree のパスを取り、繰り返せる。
+  git のプロジェクトは下位のディレクトリ（別の worktree の中を含む）からも引ける
+- `reset --yes` は消したあと件数を取り直し、0 件でないか 1 件でも消せなければ
+  終了コード 1 で終わる。入力待ちの確認は無い（`--yes` の有無だけで決まる）
+- 中では `opencode api` の `project.list` / `permission.saved.list` /
+  `permission.saved.remove` を呼ぶ。`permission.saved.list` は `projectID` を
+  付けないと空を返すので、全プロジェクトを回している
+- 既定は常駐サービスへ繋ぐ。`--standalone` / `--server URL` は `opencode api` へ
+  そのまま渡す。`--standalone` は `OPENCODE_DB` を複製へ向けた試験用で、呼び出しの
+  たびにサーバーを立てるため遅い（80 件の `reset --yes` で約 90 秒。2026-09-29、v2.0.14）
+- 配るのは Linux（Ubuntu / WSL）だけ。他の OS では試していない
+
 ## 動作確認手順
 
 ### unit test
@@ -203,3 +233,4 @@ chezmoi modify_ スクリプトは空 stdin を受けると空オブジェクト
 | `chezmoi diff` が全て「new file」になる | **AI CLI の sandbox 内で実行している**。`~/` が不可視で展開先が空に見えるため。sandbox 外のシェルで実行する |
 | `chezmoi` が `chezmoistate.boltdb: read-only file system` で落ちる | `~/.config/chezmoi` が書き込みの許可に入っているか確認 (`copilot_write_allow` / `claude_write_allow`) |
 | `uvx` が `os error 30 at ".../uv/tools/.tmpXXXX"` で落ちる | `~/.local/share/uv/tools` が書き込みの許可に入っているか確認 |
+| OpenCode が `ask` のはずの操作を確認なしで実行する | 「常に許可」が保存されている。`oc-utils approvals` で確かめ、`reset --yes` で消す（[保存した承認の確認とリセット](#保存した承認の確認とリセット)） |

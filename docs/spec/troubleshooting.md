@@ -38,5 +38,6 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | hook が起動しない | Windows の Copilot CLI | [Windows で Copilot の hook が起動しない](troubleshooting-agents.md#windows-で-copilot-の-hook-が起動しない) |
 | `Failed to load 1 skill.` | Claude Code / Copilot CLI | [CLI 起動時に Failed to load 1 skill と出る](troubleshooting-agents.md#cli-起動時に-failed-to-load-1-skill-と出る) |
 | `~/.copilot/skills` が作られない | Windows の Copilot CLI | [Windows で .copilot/skills のリンクが作られない](troubleshooting-agents.md#windows-で-copilotskills-のリンクが作られない) |
+| `ask` のはずの操作を確認なしで実行する | OpenCode | [保存した承認の確認とリセット](agent-permissions.md#保存した承認の確認とリセット) |
 
 [仕様・運用一覧へ戻る](index.md)

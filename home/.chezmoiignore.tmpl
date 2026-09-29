@@ -70,6 +70,9 @@ Documents/**
 .local/share/ocs/**
 .local/state/opencode-sandbox
 .local/state/opencode-sandbox/**
+# OpenCode の運用の小道具。Linux 以外では試していない
+# see docs/spec/agent-permissions.md#保存した承認の確認とリセット
+.local/bin/oc-utils
 {{- end }}
 
 {{- if eq .chezmoi.os "linux" }}

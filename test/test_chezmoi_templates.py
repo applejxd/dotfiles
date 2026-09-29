@@ -152,6 +152,15 @@ def test_ocs_launcher_is_linux_only(tmp_path, os_name, ignored):
         assert (target in rendered) is ignored, target
 
 
+@pytest.mark.parametrize(
+    ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", True)]
+)
+def test_oc_utils_is_linux_only(tmp_path, os_name, ignored):
+    """oc-utils は Linux (Ubuntu / WSL) でしか試していないので他へ配らない。"""
+    rendered = render(home=str(tmp_path), os_name=os_name)
+    assert (".local/bin/oc-utils" in rendered) is ignored
+
+
 SHELL_PLUGINS = {
     ".z": ("git-repo", "https://github.com/rupa/z.git"),
     ".zinit/bin": ("git-repo", "https://github.com/zdharma-continuum/zinit.git"),

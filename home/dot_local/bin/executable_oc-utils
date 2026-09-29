@@ -1,0 +1,312 @@
+#!/usr/bin/env python3
+"""OpenCode の運用の小道具 ``oc-utils``。
+
+サブコマンドは ``build_parser`` に足す。OpenCode への問い合わせは ``Api`` だけが行う。
+see docs/spec/agent-permissions.md#保存した承認の確認とリセット
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+# サービスに繋がらないとき opencode api は内部の timeout まで待つ
+API_TIMEOUT_SECONDS = 120
+
+
+class OcUtilsError(Exception):
+    """利用者へ理由を示して非ゼロで終わる失敗。"""
+
+
+class Api:
+    """``opencode api`` の呼び出しと応答の JSON の解釈。"""
+
+    def __init__(self, *, standalone: bool = False, server: str | None = None):
+        self.connection: list[str] = []
+        if standalone:
+            self.connection.append("--standalone")
+        if server:
+            self.connection += ["--server", server]
+        self._opencode: str | None = None
+
+    def _binary(self) -> str:
+        if self._opencode is None:
+            found = shutil.which("opencode")
+            if found is None:
+                raise OcUtilsError("opencode が PATH に無い")
+            self._opencode = found
+        return self._opencode
+
+    def call(self, *args: str) -> Any:
+        """応答の JSON を返す。本文が空 (204 など) なら ``None``。"""
+        command = [self._binary(), "api", *self.connection, *args]
+        shown = " ".join(["opencode", "api", *self.connection, *args])
+        try:
+            done = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=API_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise OcUtilsError(f"{API_TIMEOUT_SECONDS} 秒で応答が無い: {shown}") from error
+        except OSError as error:
+            raise OcUtilsError(f"opencode を起動できない: {error}") from error
+        if done.returncode != 0:
+            reason = _first_line(done.stderr) or _first_line(done.stdout) or "理由の出力なし"
+            raise OcUtilsError(f"失敗 (終了コード {done.returncode}): {shown}\n  {reason}")
+        if not done.stdout.strip():
+            return None
+        try:
+            return json.loads(done.stdout)
+        except json.JSONDecodeError as error:
+            raise OcUtilsError(f"応答が JSON として読めない: {shown}\n  {error}") from error
+
+    def projects(self) -> list[dict]:
+        data = self.call("project.list")
+        if not isinstance(data, list) or not all(
+            isinstance(p, dict) and isinstance(p.get("id"), str) for p in data
+        ):
+            raise OcUtilsError("project.list の応答が想定の形 (id を持つ要素の配列) でない")
+        return data
+
+    def saved_approvals(self, project_id: str) -> list[dict]:
+        # projectID を付けないと空が返る
+        data = self.call("permission.saved.list", "--param", f"projectID={project_id}")
+        items = data.get("data") if isinstance(data, dict) else None
+        if not isinstance(items, list) or not all(
+            isinstance(i, dict) and isinstance(i.get("id"), str) for i in items
+        ):
+            raise OcUtilsError(
+                f"permission.saved.list の応答が想定の形 ({{data: [...]}}) でない: {project_id}"
+            )
+        return items
+
+    def remove_saved_approval(self, approval_id: str) -> None:
+        self.call("permission.saved.remove", "--param", f"id={approval_id}")
+
+
+def _first_line(text: str) -> str:
+    return next((line.strip() for line in text.splitlines() if line.strip()), "")
+
+
+@dataclass
+class ProjectApprovals:
+    id: str
+    path: str | None
+    approvals: list[dict] = field(default_factory=list)
+
+    def to_json(self) -> dict:
+        return {
+            "id": self.id,
+            "path": self.path,
+            "count": len(self.approvals),
+            "approvals": [
+                {"id": a["id"], "action": a.get("action"), "resource": a.get("resource")}
+                for a in self.approvals
+            ],
+        }
+
+
+def _project_paths(project: dict) -> list[str]:
+    paths = [project.get("canonical"), project.get("worktree")]
+    paths += [s for s in project.get("sandboxes") or [] if isinstance(s, str)]
+    return [p for p in paths if isinstance(p, str) and p]
+
+
+def select_projects(projects: list[dict], wanted: list[str] | None) -> list[dict]:
+    """``--project`` の ID かパスに当たるプロジェクト。指定が無ければ全部。
+
+    パスは worktree と一致するものを採る。無ければ、そのパスを含む git の
+    プロジェクトのうち最も深いものを採る。
+    """
+    if not wanted:
+        return projects
+    chosen: list[dict] = []
+    for value in wanted:
+        match = next((p for p in projects if p["id"] == value), None)
+        if match is None:
+            match = _project_by_path(projects, Path(value).expanduser().resolve())
+        if match is None:
+            known = ", ".join(f"{p['id']} ({_display_path(p)})" for p in projects) or "なし"
+            raise OcUtilsError(f"プロジェクトが見つからない: {value}\n  既知のもの: {known}")
+        if match not in chosen:
+            chosen.append(match)
+    return chosen
+
+
+def _project_by_path(projects: list[dict], target: Path) -> dict | None:
+    best: tuple[int, dict] | None = None
+    for project in projects:
+        for raw in _project_paths(project):
+            root = Path(raw).resolve()
+            if root == target:
+                return project
+            if project.get("vcs") and target.is_relative_to(root):
+                depth = len(root.parts)
+                if best is None or depth > best[0]:
+                    best = (depth, project)
+    return best[1] if best else None
+
+
+def _display_path(project: dict) -> str:
+    paths = _project_paths(project)
+    return paths[0] if paths else "パス不明"
+
+
+def collect(api: Api, projects: list[dict]) -> list[ProjectApprovals]:
+    result = []
+    for project in projects:
+        paths = _project_paths(project)
+        approvals = sorted(
+            api.saved_approvals(project["id"]),
+            key=lambda a: (str(a.get("action")), str(a.get("resource"))),
+        )
+        result.append(ProjectApprovals(project["id"], paths[0] if paths else None, approvals))
+    return result
+
+
+def render(entries: list[ProjectApprovals]) -> str:
+    lines = []
+    width = max((len(str(a.get("action"))) for e in entries for a in e.approvals), default=0)
+    for entry in entries:
+        where = f" {entry.path}" if entry.path else ""
+        lines.append(f"{entry.id}{where}: {len(entry.approvals)} 件")
+        for approval in entry.approvals:
+            lines.append(f"  {approval.get('action')!s:<{width}}  {approval.get('resource')}")
+    total = sum(len(e.approvals) for e in entries)
+    lines.append(f"合計 {total} 件 ({len(entries)} プロジェクト)")
+    return "\n".join(lines)
+
+
+def cmd_approvals_list(api: Api, args: argparse.Namespace) -> int:
+    entries = collect(api, select_projects(api.projects(), args.project))
+    if args.json:
+        print(json.dumps({"projects": [e.to_json() for e in entries]}, ensure_ascii=False))
+    else:
+        print(render(entries))
+    return 0
+
+
+def cmd_approvals_reset(api: Api, args: argparse.Namespace) -> int:
+    projects = select_projects(api.projects(), args.project)
+    entries = collect(api, projects)
+    total = sum(len(e.approvals) for e in entries)
+    report: dict[str, Any] = {
+        "dry_run": not args.yes,
+        "projects": [e.to_json() for e in entries],
+    }
+    if not args.json:
+        print(render(entries))
+    if not args.yes:
+        if args.json:
+            print(json.dumps(report, ensure_ascii=False))
+        else:
+            print("dry-run: 何も消していない。消すには --yes を付ける")
+        return 0
+
+    failures: list[str] = []
+    deleted = 0
+    for entry in entries:
+        for approval in entry.approvals:
+            try:
+                api.remove_saved_approval(approval["id"])
+                deleted += 1
+            except OcUtilsError as error:
+                failures.append(str(error))
+    remaining = sum(len(e.approvals) for e in collect(api, projects))
+    report |= {"deleted": deleted, "remaining": remaining, "failures": failures}
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False))
+    else:
+        print(f"{deleted}/{total} 件を消した。取り直した残りは {remaining} 件")
+    for failure in failures:
+        print(f"oc-utils: 消せなかった: {failure}", file=sys.stderr)
+    if remaining or failures:
+        print(f"oc-utils: 消し残りがある ({remaining} 件)", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _add_connection(parser: argparse.ArgumentParser, *, top: bool) -> None:
+    # 下位のパーサでは既定値を置かない (上位で指定した値を上書きさせない)
+    group = parser.add_argument_group("接続先 (opencode api へ渡す)")
+    group.add_argument(
+        "--standalone",
+        action="store_true",
+        default=False if top else argparse.SUPPRESS,
+        help="常駐サービスでなく専用のサーバーを立てる (OPENCODE_DB を差し替えた試験用)",
+    )
+    group.add_argument(
+        "--server",
+        metavar="URL",
+        default=None if top else argparse.SUPPRESS,
+        help="このサーバーへ繋ぐ",
+    )
+
+
+def _add_approvals_options(parser: argparse.ArgumentParser, *, top: bool) -> None:
+    parser.add_argument(
+        "--project",
+        action="append",
+        metavar="ID|PATH",
+        default=None if top else argparse.SUPPRESS,
+        help="プロジェクトの ID か worktree のパス (繰り返し可。既定は全プロジェクト)",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False if top else argparse.SUPPRESS,
+        help="JSON で出す",
+    )
+    _add_connection(parser, top=False)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="oc-utils", description="OpenCode の運用の小道具")
+    _add_connection(parser, top=True)
+    commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
+
+    approvals = commands.add_parser(
+        "approvals",
+        help="保存した承認 (「常に許可」) の一覧とリセット",
+        description="保存した承認 (「常に許可」) の一覧とリセット。既定は list",
+    )
+    _add_approvals_options(approvals, top=True)
+    approvals.set_defaults(handler=cmd_approvals_list)
+    actions = approvals.add_subparsers(dest="action", metavar="ACTION")
+    listing = actions.add_parser("list", help="全プロジェクトの保存した承認を表示する (既定)")
+    _add_approvals_options(listing, top=False)
+    listing.set_defaults(handler=cmd_approvals_list)
+    reset = actions.add_parser(
+        "reset", help="保存した承認を消す。--yes が無ければ対象を表示するだけ"
+    )
+    _add_approvals_options(reset, top=False)
+    reset.add_argument("--yes", action="store_true", help="実際に消す")
+    reset.set_defaults(handler=cmd_approvals_reset)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.standalone and args.server:
+        parser.error("--standalone と --server は同時に使えない")
+    api = Api(standalone=args.standalone, server=args.server)
+    try:
+        return args.handler(api, args)
+    except OcUtilsError as error:
+        print(f"oc-utils: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

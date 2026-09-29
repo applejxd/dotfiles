@@ -47,6 +47,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 何を守り、なぜ Bitwarden / sops なのかを知る | [セキュリティ](spec/security.md) |
 | Claude Code / Copilot CLI の sandbox で読めない・書けない | [sandbox (Claude Code / Copilot CLI)](spec/agent-sandbox.md) |
 | OpenCode の権限がなぜ他と違うか知る | [OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い) |
+| OpenCode の「常に許可」で保存した承認を確認・リセットする（`oc-utils`） | [保存した承認の確認とリセット](spec/agent-permissions.md#保存した承認の確認とリセット) |
 | OpenCode を境界の内側で起動する仕組み（隔離起動 `ocs`）を知る | [OpenCode 隔離起動のアーキテクチャ](spec/opencode-sandbox.md) |
 | 隔離起動の境界内で読めない・書けない原因を調べる | [境界の組み立ての規則](spec/opencode-sandbox.md#組み立ての規則) |
 | sandbox で何ができるか調べる | [sandbox機能の包括調査](research/agents/sandbox-capabilities.md) |
