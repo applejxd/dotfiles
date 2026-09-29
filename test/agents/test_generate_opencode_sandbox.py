@@ -52,7 +52,7 @@ def test_sandbox_bare_keys_not_swallowed_by_subtable():
     """
     for key in (
         "runtime_path", "read", "work_read", "protected", "deny_read", "unsafe_workspace",
-        "config_dir",
+        "control_dirs", "config_dir",
     ):
         assert key in SANDBOX, f"[opencode.sandbox].{key} が無い (サブテーブルに吸われた?)"
     for key in ("permissions", "policies"):
@@ -64,6 +64,32 @@ def test_unsafe_workspace_covers_home_windows_and_tmp():
     unsafe = SANDBOX.get("unsafe_workspace", [])
     for required in ("~", "/mnt", "/tmp"):
         assert required in unsafe, f"unsafe_workspace に {required} が無い"
+
+
+def test_control_dirs_cover_deployed_launcher_and_config(tmp_path):
+    """★配備済みの制御ファイルの置き場は ``control_dirs`` に置き、``~`` を展開して出す。
+
+    ``unsafe_workspace`` (祖先だけを拒否) では子孫での起動が通るので、そちらに置かない。
+    """
+    home = gen.expand_user("~")
+    control = _out(tmp_path)["base"]["control_dirs"]
+    for rel in (
+        ".local/share/ocs", ".local/bin", ".config/opencode", ".config/opencode-sandbox",
+        ".config/agents", ".local/state/opencode-sandbox",
+    ):
+        assert f"{home}/{rel}" in control, f"control_dirs に ~/{rel} が無い"
+        assert f"~/{rel}" not in SANDBOX.get("unsafe_workspace", [])
+    assert gen.expand_user(str(SANDBOX["config_dir"])) in control, "隔離版の設定が守られていない"
+
+
+def test_common_write_does_not_overlap_control_dirs(tmp_path):
+    """共通の ``write`` は置き場と重ならない (重なる ``write`` は宣言側では拒否している)。"""
+    base = _out(tmp_path)["base"]
+    for write in base["write"]:
+        for control in base["control_dirs"]:
+            w, c = Path(write), Path(control)
+            overlap = w.is_relative_to(c) or c.is_relative_to(w)
+            assert not overlap, f"{write} が {control} と重なる"
 
 
 def test_runtime_is_fence():
@@ -192,7 +218,8 @@ def test_sandbox_output_shape(tmp_path):
         assert key in out, f"{key} が出力に無い"
     assert "paths" not in out, "隔離用 DB の置き場が残っている"
     for key in (
-        "read", "work_read", "write", "deny_read", "unsafe_workspace", "protected", "network",
+        "read", "work_read", "write", "deny_read", "unsafe_workspace", "control_dirs",
+        "protected", "network",
     ):
         assert key in out["base"], f"base に {key} が無い"
     base = out["base"]

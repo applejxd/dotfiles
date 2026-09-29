@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import contextlib
+import gzip
 import hashlib
 import os
 import subprocess
 import sys
 import tempfile
 import time
+import zlib
 from pathlib import Path
 
 from .common import HOME, _now, die
 
 # 起動前の退避先。★境界の内側から触れない場所に置くこと。
-#   内側からの書き込みは成功したように見えてホストへ届かない (R2。実測済み)。
 BACKUPS = HOME / ".local/state/opencode-sandbox/backups"
 # 退避の上限。★緩める方向は容量に直結する。
 BACKUP_KEEP = 5  # 起動ディレクトリごとの世代数
@@ -24,6 +26,9 @@ BACKUP_MAX_AGE_DAYS = 30  # 触らなくなったプロジェクトの分を捨�
 #   作ってから間引く設計だと、巨大なリポジトリで .git を肥大させたうえに
 #   時間を使ってしまう (実測: 追跡対象だけで 84 GB のリポジトリがあった)。
 BACKUP_MAX_SOURCE_BYTES = 256 * 1024 * 1024
+# 書きかけ (.*.partial) はこれより古ければ残骸として片付ける。
+# ★短くすると同時起動の書き込み途中を消す
+BACKUP_PARTIAL_STALE_SECONDS = 3600
 
 
 def git_env(index: Path | None = None) -> dict[str, str]:
@@ -133,32 +138,53 @@ def _narrow(toplevel: Path, tree: str, rel: Path) -> str | None:
     return found.stdout.strip() if found.returncode == 0 else None
 
 
-def _prune(paths, keep: int | None, max_bytes: int) -> None:
-    """新しい順に残し、件数か合計サイズを超えた分を落とす。"""
+def _prune(paths, keep: int | None, max_bytes: int, pinned: Path | None = None) -> None:
+    """新しい順に残し、件数か合計サイズを超えた分を落とす。``pinned`` は先頭に数える。"""
     files = sorted(
         (p for p in paths if p.is_file()),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
+        key=lambda p: (p != pinned, -p.stat().st_mtime),
     )
+    kept = 0
     total = 0
-    for position, path in enumerate(files):
-        total += path.stat().st_size
-        if (keep is not None and position >= keep) or total > max_bytes:
+    for path in files:
+        size = path.stat().st_size
+        if (keep is not None and kept >= keep) or total + size > max_bytes:
             path.unlink(missing_ok=True)
+            continue
+        kept += 1
+        total += size
 
 
-def prune_backups(directory: Path) -> None:
-    """古い退避を落とす。★ここを緩めると容量に直結する。
+def _is_complete(path: Path) -> bool:
+    """gzip を末尾 (CRC と長さ) まで読めるか。途中で切れた退避と空のファイルを見分ける。"""
+    total = 0
+    try:
+        with gzip.open(path, "rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                total += len(chunk)
+    except (OSError, EOFError, zlib.error):
+        return False
+    # 空のファイルは gzip として例外なく EOF になる。git archive の tar は空にならない
+    return total > 0
+
+
+def prune_backups(directory: Path, current: Path) -> None:
+    """古い退避を落とす。今回の退避 ``current`` は残す。★ここを緩めると容量に直結する。
 
     起動ディレクトリごとの上限だけでは、**プロジェクトが増えるほど全体が
     青天井になる**。全体の合計と期限も併せて押さえる。
     """
+    stale = time.time() - BACKUP_PARTIAL_STALE_SECONDS
+    for path in BACKUPS.rglob(".*.partial"):
+        with contextlib.suppress(FileNotFoundError):
+            if path.is_file() and path.stat().st_mtime < stale:
+                path.unlink(missing_ok=True)
     cutoff = time.time() - BACKUP_MAX_AGE_DAYS * 86400
     for path in BACKUPS.rglob("*.tgz"):
         if path.is_file() and path.stat().st_mtime < cutoff:
             path.unlink(missing_ok=True)
-    _prune(directory.glob("*.tgz"), BACKUP_KEEP, BACKUP_MAX_BYTES)
-    _prune(BACKUPS.rglob("*.tgz"), None, BACKUP_TOTAL_MAX_BYTES)
+    _prune(directory.glob("*.tgz"), BACKUP_KEEP, BACKUP_MAX_BYTES, current)
+    _prune(BACKUPS.rglob("*.tgz"), None, BACKUP_TOTAL_MAX_BYTES, current)
     # 空になった置き場を片付ける (触らなくなったプロジェクトの分)
     for child in sorted(BACKUPS.glob("*")):
         if child.is_dir() and not any(child.iterdir()):
@@ -166,16 +192,9 @@ def prune_backups(directory: Path) -> None:
 
 
 def backup_worktree(workspace: Path, skip: bool) -> None:
-    """起動前に作業ツリーを境界の外へ退避する。
+    """起動前に作業ツリーを境界の外へ退避する。**退避できなかったら起動しない。**
 
-    境界はワークスペースの**中**を守らない。未コミットの変更は snapshot でも
-    git でも戻せないことがあるので、起動のたびに複製を外へ出しておく。
-
-    ★退避先は境界の内側から触れない (``~/.local/state`` は allowRead にも
-      allowWrite にも無い)。
-    ★同じ内容なら同じ tree SHA になるので、変化が無い限り増えない。
-    ★**退避できなかったら起動しない。** 「退避したつもり」で作業を始めるのが
-      一番危ない。
+    see docs/spec/opencode-sandbox.md#起動前の退避
     """
     if skip:
         return
@@ -216,23 +235,55 @@ def backup_worktree(workspace: Path, skip: bool) -> None:
             "退避せずに起動すると、壊した未コミットの変更は戻せない。"
             "承知のうえで進むなら --no-backup",
         )
-    # ★内容が同じなら作り直さない。中断と再開を繰り返しても溜まらない。
-    if any(directory.glob(f"*-{tree[:12]}.tgz")):
-        return
+    # ★内容が同じなら作り直さない。途中で切れたものは作り直す
+    #   see docs/spec/opencode-sandbox.md#起動前の退避
+    for existing in directory.glob(f"*-{tree[:12]}.tgz"):
+        if _is_complete(existing):
+            return
+        existing.unlink(missing_ok=True)
 
     stamp = _now().replace(":", "").replace("-", "")
     target = directory / f"{stamp}-{tree[:12]}.tgz"
-    done = _git(toplevel, "archive", "--format=tar.gz", "-o", str(target), tree)
-    if done.returncode != 0 or not target.is_file():
-        target.unlink(missing_ok=True)
+    # ★確定名へ直接書かない。一時名は *.tgz に当たらない名前にし、同じ置き場で os.replace() する
+    try:
+        fd, name = tempfile.mkstemp(dir=directory, prefix=f".{target.name}.", suffix=".partial")
+    except OSError as exc:
         die(
-            f"作業ツリーを退避できない: {done.stderr.strip()}",
+            f"退避先に書けない: {exc}",
             "退避せずに起動すると、壊した未コミットの変更は戻せない。"
             "承知のうえで進むなら --no-backup",
         )
+    os.close(fd)
+    partial = Path(name)
     try:
-        target.chmod(0o600)
-        prune_backups(directory)
-    except OSError as exc:
-        die(f"退避の後始末に失敗した: {exc}")
+        done = _git(toplevel, "archive", "--format=tar.gz", "-o", str(partial), tree)
+        if done.returncode != 0 or not partial.is_file():
+            die(
+                f"作業ツリーを退避できない: {done.stderr.strip()}",
+                "退避せずに起動すると、壊した未コミットの変更は戻せない。"
+                "承知のうえで進むなら --no-backup",
+            )
+        try:
+            partial.chmod(0o600)
+            size = partial.stat().st_size
+            limit = min(BACKUP_MAX_BYTES, BACKUP_TOTAL_MAX_BYTES)
+            if size > limit:
+                # ★間引く前に断る。間引くと今回の分ごと既存の世代まで消える
+                die(
+                    f"退避が上限を超える ({size} > {limit} バイト): {workspace}",
+                    "既存の退避は残してある。"
+                    "承知のうえで退避せず起動するなら --no-backup",
+                )
+            os.replace(partial, target)
+            prune_backups(directory, target)
+        except OSError as exc:
+            die(f"退避の後始末に失敗した: {exc}")
+    finally:
+        partial.unlink(missing_ok=True)
+    if not target.is_file():
+        die(
+            f"間引きの後に今回の退避が残っていない: {target}",
+            "退避せずに起動すると、壊した未コミットの変更は戻せない。"
+            "承知のうえで進むなら --no-backup",
+        )
     print(f"作業ツリーを退避した: {target}", file=sys.stderr)

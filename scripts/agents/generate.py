@@ -1141,8 +1141,7 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     ランチャー (``ocs``) が起動ディレクトリと合わせて Fence の設定を組み立てる。
     ここでは共通の許可リストだけを出す。
 
-    **Fence の有無に関係なく返す。** 実体が無いときはランチャーが起動を断る
-    (設定の生成を mise の導入より後に回すと、初回の apply が 2 回要る)。
+    **Fence の有無に関係なく返す。** 実体が無いときはランチャーが起動を断る。
     see docs/spec/opencode-sandbox.md#境界の中身
     """
     cfg = common.get("opencode", {}).get("sandbox")
@@ -1170,7 +1169,8 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
             "write": paths("write"),
             "deny_read": _uniq([*paths("deny_read"), *shared_secrets]),
             "unsafe_workspace": paths("unsafe_workspace"),
-            # ワークスペース相対のまま渡す。ランチャーが起動ディレクトリと合わせる。
+            "control_dirs": paths("control_dirs"),
+            # 相対のまま渡す。ランチャーが起動ディレクトリとリポジトリの根に合わせる。
             "protected": [str(p) for p in cfg.get("protected") or []],
             "network": {
                 "allowedDomains": _uniq(

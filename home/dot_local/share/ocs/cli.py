@@ -146,13 +146,18 @@ def main(argv: list[str] | None = None) -> int:
     if not OPENCODE.is_file():
         die(f"opencode が無い: {OPENCODE}")
 
-    # ★起動ディレクトリ以下は無条件に書ける。境界を組み立てる前に広すぎる場所を弾く。
+    # ★起動ディレクトリ以下は無条件に書ける。境界を組み立てる前に広すぎる場所・制御ファイルの
+    #   置き場・保護対象の中を弾く。
     workspace = Path.cwd().resolve()
     boundary.reject_unsafe_workspace(sandbox, workspace)
     request = boundary.read_request(workspace)
+    boundary.reject_control_dirs(sandbox, workspace, request)
+    boundary.reject_protected_workspace(sandbox, workspace, request)
     boundary.announce_request(request)
     data_dir = opencode_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
+    # 境界は無いパスを落とすので、初回に allowRead から抜けないよう組む前に作る
+    Path(sandbox["config_dir"]).mkdir(parents=True, exist_ok=True)
     project = {
         "workspace": str(workspace),
         "data_dir": str(data_dir),

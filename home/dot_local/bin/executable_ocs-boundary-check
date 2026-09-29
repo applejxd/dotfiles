@@ -20,6 +20,8 @@ DATA="${BOUNDARY_DATA_DIR:?BOUNDARY_DATA_DIR が未設定}"
 HIDDEN="${BOUNDARY_HIDDEN?BOUNDARY_HIDDEN が未設定}"
 HIDDEN_ABSENT="${BOUNDARY_HIDDEN_ABSENT:-}"
 PROTECTED="${BOUNDARY_PROTECTED?BOUNDARY_PROTECTED が未設定}"
+# 空 = 許可外の検査先が残っていない (ネットワークの拒否だけ SKIP)
+DENIED_HOST="${BOUNDARY_DENIED_HOST?BOUNDARY_DENIED_HOST が未設定}"
 nl='
 '
 fail=0
@@ -33,7 +35,8 @@ skip() { printf '  SKIP %s\n' "$1"; }
 #   隠した結果の空の tmpfs と /dev/null は「読めない」に数える。中身は読まない。
 hidden() { # $1=パス
   if [ -d "$1" ]; then
-    if [ -n "$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    # -H: 開始点が symlink でも参照先の中身を見る (無いと空に見えて合格する)
+    if [ -n "$(find -H "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
       bad "$1 の中が見えている"
     else
       ok "$1 は読めない"
@@ -96,7 +99,9 @@ set +f
 # --- 4. 許可外ドメインへ出られないこと ---
 # ★許可済みドメインが通ることを対照に使い、「ネットワーク自体が死んでいるだけ」を
 #   合格にしない。プロキシの待ち受けが遅れることがあるので対照は数回試す。
-if [ -x "$CURL" ]; then
+if [ -z "$DENIED_HOST" ]; then
+  skip "許可外ドメインの検査先が全て許可されているので検査しない"
+elif [ -x "$CURL" ]; then
   control=no
   i=0
   while [ "$i" -lt 15 ]; do
@@ -109,8 +114,8 @@ if [ -x "$CURL" ]; then
   done
   if [ "$control" != yes ]; then
     bad "許可済みドメイン (${BOUNDARY_ALLOWED_HOST:-github.com}) へ到達できず、拒否か不通かを判別できない"
-  elif "$CURL" -s -m 10 -o /dev/null "https://${BOUNDARY_DENIED_HOST:-example.com}" 2>/dev/null; then
-    bad "許可外ドメイン (${BOUNDARY_DENIED_HOST:-example.com}) へ到達した"
+  elif "$CURL" -s -m 10 -o /dev/null "https://$DENIED_HOST" 2>/dev/null; then
+    bad "許可外ドメイン ($DENIED_HOST) へ到達した"
   else
     ok "許可外ドメインへ到達しない (許可済みは通る)"
   fi

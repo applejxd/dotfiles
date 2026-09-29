@@ -23,17 +23,22 @@ def load_boundary() -> dict:
     if not RULES.is_file():
         die(f"{RULES} が無い", "chezmoi apply で生成する")
     try:
-        sandbox = json.loads(RULES.read_text(encoding="utf-8")).get("sandbox")
-    except json.JSONDecodeError as e:
+        rules = json.loads(RULES.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
         die(f"{RULES} を読めない: {e}")
+    sandbox = rules.get("sandbox") if isinstance(rules, dict) else None
     if not sandbox:
         die(
             "境界の設定が出力されていない",
             "[opencode.sandbox] が enabled=false。chezmoi apply で生成する",
         )
+    if not isinstance(sandbox, dict):
+        die(f"{RULES} の sandbox が object でない")
     for key in ("runtime_path", "base", "config_dir"):
         if not sandbox.get(key):
             die(f"境界の設定に {key} が無い")
+    if not isinstance(sandbox["base"], dict):
+        die(f"{RULES} の sandbox.base が object でない")
     return sandbox
 
 
@@ -69,20 +74,106 @@ def git_common_dir(workspace: Path) -> Path | None:
     return common
 
 
+def _real(path: Path) -> Path:
+    """在る所まで symlink を解いた実体。"""
+    try:
+        return path.resolve()
+    except (OSError, RuntimeError):  # symlink の循環など
+        return path
+
+
+def _normalized(raw: str) -> list[Path]:
+    """書いたままの形と実体の両方。``workspace`` は実体なので、symlink 越しでも比べられる。"""
+    path = Path(os.path.normpath(Path(raw).expanduser()))
+    return _uniq_paths([path, _real(path)])
+
+
 def reject_unsafe_workspace(sandbox: dict, workspace: Path) -> None:
     """書き込みを許すと広すぎる起動ディレクトリを拒否する。
 
     起動ディレクトリは無条件に書ける。``unsafe_workspace`` の項目そのものか、その祖先で
     起動すると、ホーム全体や ``/tmp``・``/mnt`` が書けてしまう。子孫での起動は許す。
+    ``workspace`` は実体パスで渡すこと。
     """
     for raw in sandbox["base"].get("unsafe_workspace", []):
-        target = Path(raw)
-        if workspace == target or target.is_relative_to(workspace):
+        for target in _normalized(raw):
+            if target.is_relative_to(workspace):
+                die(
+                    f"広すぎる場所で起動しようとした: {workspace}",
+                    f"ここで起動すると {target} 以下が書き込み可能になる。"
+                    "作業対象のディレクトリへ cd してから起動する。",
+                )
+
+
+def _overlaps(a: Path, b: Path) -> bool:
+    return a.is_relative_to(b) or b.is_relative_to(a)
+
+
+def reject_control_dirs(sandbox: dict, workspace: Path, request: dict | None = None) -> None:
+    """配備済みの制御ファイルの置き場と重なる起動ディレクトリと ``write`` を拒否する。
+
+    そのもの・祖先・子孫のどれで起動しても置き場の中が書けてしまう。
+    ``workspace`` は実体パスで渡すこと。
+    see docs/spec/opencode-sandbox.md#起動ディレクトリの制限
+    """
+    targets = _uniq_paths(
+        [t for raw in sandbox["base"].get("control_dirs", []) for t in _normalized(raw)]
+    )
+    for target in targets:
+        if _overlaps(workspace, target):
             die(
-                f"広すぎる場所で起動しようとした: {workspace}",
-                f"ここで起動すると {target} 以下が書き込み可能になる。"
-                "作業対象のディレクトリへ cd してから起動する。",
+                f"ocs の制御ファイルの置き場と重なる場所で起動しようとした: {workspace}",
+                f"ここで起動すると {target} (次回の境界を決めるファイル) が書き込み可能になる。"
+                "ここの編集は ocs を使わずに行う。",
             )
+    for raw in project_extras(request)["write"]:
+        for path in _normalized(raw):
+            for target in targets:
+                if _overlaps(path, target):
+                    die(
+                        f"ocs の制御ファイルの置き場と重なる場所を書ける場所に足そうとした: {raw}",
+                        f"{target} は書き込み可能にできない。{request['path']} の write から外し、"
+                        "ここの編集は ocs を使わずに行う。",
+                    )
+
+
+def protected_candidates(sandbox: dict, workspace: Path) -> list[Path]:
+    """保護対象を、起動ディレクトリとリポジトリの根の両方を基準に解決する (実体パスで返す)。
+
+    see docs/spec/opencode-sandbox.md#保護対象denywrite
+    """
+    roots = [workspace]
+    top = backup.git_toplevel(workspace)
+    if top is not None:
+        roots.append(top.resolve())
+    rels = sandbox["base"].get("protected", [])
+    return _uniq_paths([_real(root / rel) for root in roots for rel in rels])
+
+
+def reject_protected_workspace(
+    sandbox: dict, workspace: Path, request: dict | None = None
+) -> None:
+    """保護対象の中での起動と、保護対象の中を ``write`` に足す宣言を拒否する。
+
+    see docs/spec/opencode-sandbox.md#保護対象denywrite
+    """
+    targets = protected_candidates(sandbox, workspace)
+    for target in targets:
+        if workspace.is_relative_to(target):
+            die(
+                f"保護対象の中で起動しようとした: {workspace}",
+                f"ここで起動すると {target} が書き込み可能になる。"
+                "ここの編集は ocs を使わずに行う。",
+            )
+    for raw in project_extras(request)["write"]:
+        real = _real(Path(raw))
+        for target in targets:
+            if real.is_relative_to(target):
+                die(
+                    f"保護対象の中を書ける場所に足そうとした: {raw}",
+                    f"{target} は書き込みから外せない。{request['path']} の write から外し、"
+                    "ここの編集は ocs を使わずに行う。",
+                )
 
 
 def _within(path: str, roots: list[str]) -> bool:
@@ -127,22 +218,35 @@ def build_boundary(
     write = [str(workspace), *base.get("write", []), *extras.get("write", [])]
     if data_dir is not None:
         write.append(str(data_dir))
-    protected = [str(workspace / rel) for rel in base.get("protected", [])]
+    extra_protected = []
     common = git_common_dir(workspace)
     if common:
         # commit に共有 .git への書き込みが要る。hooks と config はホストで動くので塞ぐ。
         write.append(str(common))
-        protected += [str(common / "hooks"), str(common / "config")]
+        extra_protected = [str(common / "hooks"), str(common / "config")]
     read = [*base.get("read", []), *base.get("work_read", []), *extras.get("read", [])]
     allow_write = _existing(write)
     allow_read = _existing([str(workspace), *read])
     opened = [*allow_read, *allow_write]
+    # 書ける場所の外にある保護対象は元から書けないので渡さない (作りもしない)。
+    # 書ける場所も実体で比べる (symlink 越しに許した場所の中の保護対象を落とさない)
+    write_real = [str(_real(Path(p))) for p in allow_write]
+    protected = [
+        *(str(p) for p in protected_candidates(sandbox, workspace) if _within(str(p), write_real)),
+        *extra_protected,
+    ]
     # ホーム配下の秘密は開けた場所の内側にあるときだけ隠す (それ以外は元から見えない)。
     # ホームの外 (/run/user など) は Fence が既定で見せるので、在れば隠す。
-    deny_read = [
-        p for p in _existing(base.get("deny_read", []))
-        if not _within(p, [str(HOME)]) or _within(p, opened)
-    ]
+    # 実体でも比べ、実体で渡す (ホームが symlink だと起動ディレクトリは実体になる)
+    opened_real = [str(_real(Path(p))) for p in opened]
+    home_real = [str(_real(HOME))]
+    deny_read = _uniq([
+        str(_real(Path(p))) for p in _existing(base.get("deny_read", []))
+        if not _within(p, [str(HOME)])
+        or not _within(str(_real(Path(p))), home_real)
+        or _within(p, opened)
+        or _within(str(_real(Path(p))), opened_real)
+    ])
     network = dict(base["network"])
     if extras.get("network_allow"):
         network["allowedDomains"] = _uniq(
@@ -167,6 +271,10 @@ def _uniq(values: list[str]) -> list[str]:
     for value in values:
         seen.setdefault(value, None)
     return list(seen)
+
+
+def _uniq_paths(values: list[Path]) -> list[Path]:
+    return [Path(v) for v in _uniq([str(v) for v in values])]
 
 
 def _resolve_requested(value: str, workspace: Path) -> str:
@@ -195,7 +303,7 @@ def read_request(workspace: Path) -> dict | None:
         die(f"{path} に知らない項目がある: {', '.join(unknown)}")
     extras: dict[str, list[str]] = {}
     for key in REQUEST_KEYS:
-        values = data.get(key) or []
+        values = data.get(key, [])
         if not isinstance(values, list) or any(not isinstance(v, str) for v in values):
             die(f"{path} の {key} は文字列の配列でなければならない")
         extras[key] = [

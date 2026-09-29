@@ -5,6 +5,7 @@ see docs/spec/opencode-sandbox.md#境界チェック
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import subprocess
 from pathlib import Path
@@ -18,6 +19,8 @@ HIDDEN_HOME_TARGETS = (".ssh", ".git-credentials", ".config/gh", ".config/chezmo
 # read にも write にも載せないこと。
 CANARY_REL = ".local/state/opencode-sandbox/boundary-canary"
 WSL_HIDDEN_TARGETS = ("/mnt/c/Users", "/mnt/c/Windows")
+# 許可外ドメインの検査先の候補 (IANA の予約ドメイン。HTTPS で応答する)
+DENIED_CANDIDATES = ("example.com", "example.net", "example.org")
 # Fence は境界を張る前に bwrap / socat / bash を PATH から探して動かす。
 # see docs/spec/opencode-sandbox.md#信頼の鎖
 HOST_PATH = "/usr/bin:/bin"
@@ -104,8 +107,28 @@ def check_environment(project: dict, env: dict, hidden: dict[str, list[str]]) ->
         "BOUNDARY_ALLOWED_HOST": next(
             (d for d in allowed if not d.startswith("*")), "github.com"
         ),
-        "BOUNDARY_DENIED_HOST": "example.com",
+        "BOUNDARY_DENIED_HOST": denied_probe(allowed),
     }
+
+
+def denied_probe(allowed: list[str]) -> str:
+    """拒否を確かめる通信先。許可に当たらない候補の先頭で、残らなければ空 (検査しない)。"""
+    return next((h for h in DENIED_CANDIDATES if not _may_be_allowed(h, allowed)), "")
+
+
+def _may_be_allowed(host: str, allowed: list[str]) -> bool:
+    """★安全側に判定する。``*.x`` は Fence では ``x`` 自体を含まないが、ここでは含める。"""
+    for pattern in allowed:
+        p = pattern.strip().lower().rstrip(".")
+        if p.startswith("*."):
+            if host == p[2:] or host.endswith(p[1:]):
+                return True
+        elif "*" in p:
+            if fnmatch.fnmatchcase(host, p):
+                return True
+        elif host == p:
+            return True
+    return False
 
 
 def run_check(
