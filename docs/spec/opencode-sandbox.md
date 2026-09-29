@@ -361,7 +361,7 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 
 `common.toml` の `[opencode.agent]`（`bypass`・`bypass-worker`）・`[opencode.agents]`
 （`commit`・`review`・`fleet-worker`）・`[opencode.commands]`（`/fleet`）を、隔離版にも
-出す（[CHG-0010](../change/0010-ocs-agents.md)）。境界の目的をうっかりの防止に絞ったので
+出す（[CHG-0010](../change/closed/0010-ocs-agents.md)）。境界の目的をうっかりの防止に絞ったので
 （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)）、境界の中で `bypass` を使ってよい。
 
 | キー | 中身 | 既存の扱い |
@@ -399,7 +399,7 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
   Bedrock の PC では `ocs` のモデルがすべて塞がる
 
 一時の設定・DB と Fence の境界の中で、定義が出ることと `bypass` / `bypass-worker` の
-起動の制限が効くことを確かめた（[CHG-0010](../change/0010-ocs-agents.md) の実装・検証）。
+起動の制限が効くことを確かめた（[CHG-0010](../change/closed/0010-ocs-agents.md) の実装・検証）。
 
 内側の環境には `OCS_ISOLATED=1` を渡す。guide plugin はこれで隔離起動を見分け、
 確認画面の説明の生成だけを止める（隔離起動では `tui.ts` を読まず、作っても

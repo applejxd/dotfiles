@@ -46,7 +46,6 @@
 | --- | --- | --- | --- | --- | --- |
 | [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | 段 2（常用）に着手。`enabledProviders = ["claude"]` の効果は常用の初回に判定する。使って決まった設定の回収（段 2.5）を計画へ追加 | 段 2 の冒頭で `/criticalthink`（chezmoi が配る唯一の Claude コマンド）がスラッシュコマンドに出るか | 2026-09-28 |
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる**。`ocs` のモジュール分割（2026-09-28）はハーネス層の切り出しではない | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-28 |
-| [0010](0010-ocs-agents.md) | `ocs` の中でも `common.toml` のエージェントとコマンドを使う | In progress | 段 1 を実装し push 済み。Fence 化からの差分をレビューループ（5 ラウンド）で直した（未配備）。本物の `ocs` では未確認 | 配備の後、本物の `ocs` で `bypass`・`bypass-worker`・`/fleet` と `ocs --check` を確かめる | 2026-09-29 |
 
 ## 保留
 
@@ -60,6 +59,7 @@
 | # | 目的 | 結果 | 終了日 | 現行仕様 / ADR |
 | --- | --- | --- | --- | --- |
 | [0008](closed/0008-raspi-branching.md) | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える | 採用・適用済み（実機 3 周目で apply が 45 秒で完走。判定は `.chezmoitemplates/is-raspi` で `chezmoi update` だけで効く。`[data] is_raspi` の方式は撤回） | 2026-09-26 | [プロジェクト構造](../spec/structure.md#raspberry-pi) |
+| [0010](closed/0010-ocs-agents.md) | `ocs` の中でも `common.toml` のエージェントとコマンドを使う | 採用・配備済み（隔離版の設定にエージェントとコマンドを出した。Fence 化からの差分もレビューループで直した） | 2026-09-29 | [opencode-sandbox](../spec/opencode-sandbox.md) / [ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) |
 | [0009](closed/0009-ocs-simplify-for-accidents.md) | `ocs` をうっかりの防止に必要な分まで簡素にする（ADR-0012） | 採用・配備済み（境界を Fence に替え、履歴を通常の起動と共有し、承認と起動時の検査をやめた。段 6 は未起票で移管） | 2026-09-29 | [opencode-sandbox](../spec/opencode-sandbox.md) / [ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) |
 | [0001](closed/0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | 採用・適用済み（圧縮要約そのものを checkpoint にした。Claude / Copilot の hook は撤去） | 2026-09-25 | [checkpoint](../spec/checkpoint.md) / [ADR-0009](../adr/0009-save-before-documenting.md) |
 | [0004](closed/0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | 採用・適用済み（通常起動と併用。既定を `ocs` にする案は撤回） | 2026-09-24 | [opencode-sandbox](../spec/opencode-sandbox.md) |
