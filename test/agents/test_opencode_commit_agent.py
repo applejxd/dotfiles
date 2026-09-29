@@ -238,6 +238,15 @@ def test_system_prompt_names_the_approval_and_defers_to_the_skill():
     for path in (SKILL, CODEX_SKILL):
         text = re.sub(r"\n\s*", "", path.read_text("utf-8"))
         assert OVERRIDE in text, path
+        assert "承認済み" in text and "一字も変えずに使う" in text, path
+
+
+def test_approved_message_is_used_verbatim():
+    """利用者が全文を承認したメッセージは書き直させない (確認画面では切れて読めないことがある)。"""
+    assert "一字も変えずに使う" in agent()["system"]
+    assert "そのまま使う" in agent()["description"]
+    skill = re.sub(r"\n\s*", "", SKILL.read_text("utf-8"))
+    assert "任せる前にメッセージ全文をユーザーに示して承認を得て" in skill
 
 
 def test_system_prompt_steers_reads_and_messages_away_from_the_shell():
