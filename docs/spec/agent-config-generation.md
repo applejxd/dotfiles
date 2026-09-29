@@ -729,11 +729,13 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
 - 宣言したキーだけを差し替え、他のキーと他のエージェントは残す
 - 隔離起動（`ocs`）にも同じ定義が出る。通常版の `opencode.json` からは引き継がず、
   `common.toml` から作る（[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
-- **`commit` はシェルのたびに承認が要る。** `git status` / `git diff` / `git add` は
-  既定の `ask` のまま（allow にしない理由は上の `review` と同じ）。
+- **通常起動では、`commit` はシェルのたびに承認が要る。** `git status` / `git diff` /
+  `git add` は既定の `ask` のまま（allow にしない理由は上の `review` と同じ）。
   `opencode run --auto` のような無人の実行では、子セッションの確認に答える人が
   いないので止まる（[実機確認](../research/opencode/commit-review-agents.md)）。
-  TUI で確認が表に出るかは未確認
+  TUI で確認が表に出るかは未確認。隔離起動（`ocs`）はシェルの既定が `allow` なので、
+  `git status` / `git diff` / `git add` では確認が出ない。個別の deny / ask に当たる操作は除く
+  （[隔離版のエージェントとコマンド](opencode-sandbox.md#エージェントとコマンド)）
 
 ### 並列作業（`/fleet`）
 
@@ -754,9 +756,11 @@ Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる�
 - **作業役は同じ作業ツリーを共有する。** 衝突は、親が担当ファイルを重ねずに
   割り当てることで避ける。作業役には git の状態を変える操作（`add` / `commit` /
   `stash` / `checkout` / `switch` / `restore` / `reset`）を権限で禁じる
-- **編集とシェルは全体の規則のまま（承認制）。** 作業役のシェルは確認が出る。
+- **編集とシェルは全体の規則のまま。** 通常起動では作業役のシェルは確認が出る。
   無人の実行（`opencode run --auto`）では子セッションの確認に答えられず止まる
-  （[commit エージェントの実機確認](../research/opencode/commit-review-agents.md)）
+  （[commit エージェントの実機確認](../research/opencode/commit-review-agents.md)）。
+  隔離起動（`ocs`）はシェルの既定が `allow` なので、個別の deny / ask に当たる操作以外は
+  確認が出ない（[隔離版のエージェントとコマンド](opencode-sandbox.md#エージェントとコマンド)）
 - 1 つの波は 4 件までと指示している。子エージェントごとにモデルを呼ぶので、
   利用枠の消費は作業役の数だけ増える
 - コマンドは、コマンド用のディレクトリではなく設定の `commands` に出す。

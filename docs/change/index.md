@@ -46,7 +46,7 @@
 | --- | --- | --- | --- | --- | --- |
 | [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | 段 2（常用）に着手。`enabledProviders = ["claude"]` の効果は常用の初回に判定する。使って決まった設定の回収（段 2.5）を計画へ追加 | 段 2 の冒頭で `/criticalthink`（chezmoi が配る唯一の Claude コマンド）がスラッシュコマンドに出るか | 2026-09-28 |
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる**。`ocs` のモジュール分割（2026-09-28）はハーネス層の切り出しではない | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-28 |
-| [0010](0010-ocs-agents.md) | `ocs` の中でも `common.toml` のエージェントとコマンドを使う | In progress | 段 1 を実装し、一時の環境で必須の項目を確かめた。本物の `ocs` では未確認 | 配備後に本物の `ocs` で `bypass`・`bypass-worker`・`/fleet` を確かめる | 2026-09-29 |
+| [0010](0010-ocs-agents.md) | `ocs` の中でも `common.toml` のエージェントとコマンドを使う | In progress | 段 1 を実装し push 済み。Fence 化からの差分をレビューループ（5 ラウンド）で直した（未配備）。本物の `ocs` では未確認 | 配備の後、本物の `ocs` で `bypass`・`bypass-worker`・`/fleet` と `ocs --check` を確かめる | 2026-09-29 |
 
 ## 保留
 

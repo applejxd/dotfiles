@@ -131,7 +131,7 @@ serve は停止し、一時パスワードも削除した。**モデルを呼び
 | 保護対象 | 起動前に作った空の `.opencode` へ書けない。worktree の共有 `.git` の `hooks`・`config` と main 側のファイルは書けず、commit は通る |
 | OpenCode | 内側の `run --standalone` がモデル経由で `a.txt` を編集。`git status` は `M a.txt` だけ。外の `session list` に出て、外の `run -s <ID>` で内側の合言葉に答えた。外の `api --standalone session.revert.stage` / `session.revert.commit` で `a.txt` が戻った。`integrity_check` は `ok` |
 | TUI | `script` 越しに描画され、既定モデル（Claude Opus 5）が選ばれた |
-| 境界チェック | 新しい検査スクリプトが合格（実在する `~/.local/state/opencode/service.json` も「読めない」）。対照として `deny_read` を空にし目印の置き場を開けると、目印と `key.txt` を「開ける」で不合格にした。旧版のスクリプトでは `key.txt` を「見えている」、`XDG_DATA_HOME` を「作業領域の外」と誤って不合格にした |
+| 境界チェック | 新しい検査スクリプトが合格（データディレクトリへの書き込みを含む。実在する `~/.local/state/opencode/service.json` も「読めない」）。対照として `deny_read` を空にし目印の置き場を開けると、目印と `key.txt` を「開ける」で不合格にした。旧版のスクリプトでは `key.txt` を「見えている」、`XDG_DATA_HOME` を「作業領域の外」と誤って不合格にした |
 | 残骸 | 古い `fence-seccomp/*.bpf` は次の起動で消え、新しい 1 個だけ残った |
 | 起動時間 | `true` の実行で 0.52〜1.25 秒（試験用のスクリプトの起動を含む） |
 

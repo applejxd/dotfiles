@@ -198,21 +198,20 @@ worktree `loop/fence`（基準 `39ac692`）で実装し、実機（WSL2、Fence 
 確かめた。**配備済みの `ocs` は使わず**、worktree のコードを読み込んで境界の設定と起動の
 引数を組み立てる試験用のスクリプトで、Fence に包んだ（`XDG_DATA_HOME` などは一時
 ディレクトリへ向け、DB は資格情報の行だけを写した一時 DB。終了後に削除）。
-観測の詳細は [Fence の調査](../../research/opencode/permission/fence.md) の記録 E2。
+観測の詳細（パス・応答・エラーの内訳）は
+[Fence の調査の記録 E2](../../research/opencode/permission/fence.md#記録-e2--2026-09-29) の「結果」。
 
-| 必須の項目 | 結果 |
-| --- | --- |
-| 秘密の目印が読めない | 通った。`~/.ssh`・`~/.gnupg`・`~/.aws`・`~/.config/gh`・`~/.config/sops/age`・`~/.local/state/opencode` は存在しない、`~/.git-credentials`・`service.json`（2 か所）・目印は開けない。開けた `~/.config/chezmoi` の中の `key.txt` は `/dev/null`。`/run/user` は空。WSL の `/mnt/c` は存在しない |
-| 許可していないドメインへ出られない | 通った。`github.com` は 200、`api.githubcopilot.com` は 404（届いている）、`example.com`・`www.google.com` は拒否。`.opencode/sandbox.toml` で足した `example.com` だけは 200 |
-| 起動ディレクトリの外へ書けない | 通った。`~`・`~/.bashrc`・`~/.config/opencode` は `EACCES`、`~/src`・`~/.local/share/chezmoi` は `EROFS`、`~/.local/state` は存在しない。`/tmp` は書けるがホストへ反映されない |
-| 普段の作業 | 通った。`~/src`（13 件）・`~/worktrees`・`~/papers`・chezmoi の README が読める。linked worktree で commit でき、共有 `.git` の `hooks`・`config` と main 側のファイルは書けない。`~/.gitconfig` 経由の利用者名が見える |
-| 内側のセッションを外で再開し、snapshot から戻せる | 通った。内側の `opencode run --standalone` がモデル経由で `a.txt` を編集（`git status` は `M a.txt` だけ）、外の `session list` に出て、外の `run -s <ID>` で内側の合言葉に答えた。外の `opencode api --standalone session.revert.stage` / `session.revert.commit` で `a.txt` が戻った。`integrity_check` は `ok` |
-| `test/agents/` が全件通る | 通った（`test/` 全体で 2466 passed, 11 skipped） |
+| 必須の項目 | 結果 | 記録 E2 の該当行 |
+| --- | --- | --- |
+| 秘密の目印が読めない | 通った | 秘密・WSL の `/mnt/c` |
+| 許可していないドメインへ出られない | 通った | 通信 |
+| 起動ディレクトリの外へ書けない | 通った | 外への書き込み |
+| 普段の作業 | 通った | 読み取り・保護対象 |
+| 内側のセッションを外で再開し、snapshot から戻せる | 通った | OpenCode |
+| `test/agents/` が全件通る | 通った（`test/` 全体で 2466 passed, 11 skipped） | — |
 
-そのほか確かめたこと: `ocs --check` 相当の処理が合格（読めるかでの判定・データ
-ディレクトリへの書き込みを含む）、TUI が `script` 越しに描画され、既定モデル
-（Claude Opus 5）が選ばれた、Fence の `fence-seccomp/*.bpf` の古いものが次の起動で
-消えた、`/dev/shm` は内側だけ、`/var/tmp` は見えない。
+そのほか、`ocs --check` 相当の処理・TUI の起動・Fence の残骸の掃除も確かめた
+（記録 E2 の「境界チェック」「TUI」「残骸」）。
 
 望ましい項目: `ocs` の本体（`~/.local/share/ocs/*.py`）は 1300 行から 945 行に減った。
 起動時の確認と検査の待ちは無くなった（境界チェックは `ocs --check` だけ）。
