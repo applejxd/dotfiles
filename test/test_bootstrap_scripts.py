@@ -276,7 +276,7 @@ def test_omp_skills_skips_when_registered(tmp_path):
 
 
 def test_omp_claude_assets_registers_when_unset(tmp_path):
-    """未設定なら claude ソースを登録し、真偽値の初期値も置く。"""
+    """未設定なら claude ソースを登録し、設定の初期値も置く。"""
     result, _, sets = run_with_fake_omp(
         tmp_path, OMP_CLAUDE_ASSETS, value_json("enabledProviders", [])
     )
@@ -284,6 +284,7 @@ def test_omp_claude_assets_registers_when_unset(tmp_path):
     assert json.loads(sets["enabledProviders"]) == ["claude"]
     assert sets["commands.enableClaudeUser"] == "true"
     assert sets["bashInterceptor.enabled"] == "true"
+    assert sets["personality"] == "friendly"
 
 
 def test_omp_claude_assets_keeps_existing_entries(tmp_path):

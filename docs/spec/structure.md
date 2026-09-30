@@ -390,7 +390,8 @@ Pi のフォークで、LSP 統合・DAP・subagent を持ちます。起動は 
 
 あわせて `bashInterceptor.enabled` を有効にし、`cat` / `grep` / `sed -i` などを
 `read` / `grep` / `edit` へ誘導します（他の CLI と挙動を揃えるため）。
-**真偽値の 2 つは初回のみ設定**し、以後 `omp config set` や `/settings` で
+応答の人柄は `personality` を `friendly`（既定は `default`）にします。
+**これら 3 つの初期値は初回のみ設定**し、以後 `omp config set` や `/settings` で
 変えた値は上書きしません（`~/.omp/agent/.chezmoi-seeded` で管理）。
 
 > **permission 機構を持たない設計です。** Pi 系は安全性より利便性を取る方針で、

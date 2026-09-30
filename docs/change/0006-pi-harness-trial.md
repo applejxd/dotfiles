@@ -449,6 +449,8 @@ omp の `~/.omp/agent/config.yml` とは**別物なので共有させない**
 - **2026-09-28**: 現在地をコードと照合した。導入済みの設定の現行仕様は spec の
   「oh-my-pi（`omp`）の設定」へリンクし、この案件は判断の記録に寄せた。
   `enabledProviders` の判定に使うコマンドは、source state にある `/criticalthink` に絞った
+- **2026-09-30**: 常用で決まった設定を 1 つ回収した（段 2.5 の先行分）。`personality` を `friendly` にし、
+  既存の真偽値と同じく初回だけ置く（`run_onchange_after_430_omp_claude_assets`）
 
 ## 終了結果
 
