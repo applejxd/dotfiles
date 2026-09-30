@@ -448,6 +448,7 @@ Herdr 管理の hook entry だけを追加・更新します。現在の状態�
 `~/.claude/skills/herdr/SKILL.md` に配置します。Copilot CLI は
 `~/.copilot/skills` の symlink / junction を通じて同じスキルを参照します。
 `chezmoi apply` のたびに再生成されるため、Herdr 本体の更新後もスキルが追従します。
+生成物なので source state には取り込まず、`.chezmoiignore` で `chezmoi add` の対象からも外しています。
 
 herdr が Claude の `settings.json` に足す hook（`~/.claude/hooks/herdr-agent-state.sh`）は、
 chezmoi 側の生成処理が外部の hook として残します。仕組みは

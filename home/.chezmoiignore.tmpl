@@ -163,7 +163,7 @@ orca/**
 .agents/**
 
 # powerpoint-studio スキルが実行時に作る成果物。
-# スキール本体 (SKILL.md / scripts / assets / references / lock ファイル) は
+# スキル本体 (SKILL.md / scripts / assets / references / lock ファイル) は
 # chezmoi の配布対象だが、以下は実行のたびに再生成されるため追跡しない。
 # ここに列挙しておくと `chezmoi add` も警告を出して取り込みを拒否する。
 #
@@ -188,3 +188,8 @@ orca/**
 .claude/skills/powerpoint-studio/evals/blind/**
 .claude/skills/powerpoint-studio/evals/final-verification
 .claude/skills/powerpoint-studio/evals/final-verification/**
+
+# herdr の skill は run_after の herdr_integration が `herdr --skill` から毎回生成する。
+# 取り込むと版が固定されて本体の更新に追従しなくなる。see docs/spec/structure.md
+.claude/skills/herdr
+.claude/skills/herdr/**
