@@ -55,3 +55,6 @@
 
 # 2026-09: marimo skill のビルド雛形を Python 版に統一した。
 .claude/skills/ipynb-to-marimo-pages/references/build-site-example.sh
+
+# 2026-10: github-issue skill を gh 統一の github-operations へ改名した。
+.claude/skills/github-issue

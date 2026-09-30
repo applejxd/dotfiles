@@ -183,6 +183,9 @@ Gemini CLI と Antigravity は使わないため対象外。既存の定義は�
 **applejxd では `[[mcp]]` が 0 件になる。** `deepwiki` は 2026-09-25 に外し、
 `ddgs` は元から対象外のため。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない
 ので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
+deepwiki の代わりの OSS 調査は `oss-research` スキル（インストール済みの実体・配布物・
+版を固定したソースに直接当たる）、GitHub の操作は github MCP を使わず
+`github-operations` スキル（gh CLI）が担う。
 
 **入れる CLI を絞るには `clis` を書く。** 省略すると 4 つ全部に入る。`ddgs` は
 `clis = ["claude"]` にしてあり、Claude Code にだけ入る（Copilot は内蔵の

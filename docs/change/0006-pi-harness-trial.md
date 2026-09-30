@@ -353,7 +353,7 @@ omp の設定の読み取り（`omp config get --json`）に失敗したとき�
 | `task.isolation.enabled` / `worktree.*` | subagent の隔離バックエンドの実体が未確認（「現在地」の「まだ分からないこと」）。段 2 の前に作り込まない |
 | `memory.backend` / `autolearn.enabled` | 外部サービスや追加モデルが要る。素の使い勝手を測る前に入れると、何が効いたか分からなくなる |
 | `find.enabled` | `auto` のままで足りる。`on` は `judge` ロールが TypeSafe の native モデルに解決できるときだけ働き、`TYPESAFE_API_KEY` が要る |
-| `github.enabled` | 内蔵 GitHub ツール。`github-issue` skill と繋がる見込みはあるが、**認証経路が未確認**（`gh` の資格情報を使うのか独自なのか読めなかった） |
+| `github.enabled` | 内蔵 GitHub ツール。`github-issue` skill（現 `github-operations`）と繋がる見込みはあるが、**認証経路が未確認**（`gh` の資格情報を使うのか独自なのか読めなかった） |
 | `enabledProviders` に `*` | 7 ソースを同時に開くと、採用された定義の出所が追えない |
 
 ### 好みで決まるもの（実装しない。使ってみて決める）

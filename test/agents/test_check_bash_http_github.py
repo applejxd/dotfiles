@@ -9,10 +9,11 @@ Run with: ``uv run --with pytest --with pyyaml --no-project pytest test/agents/ 
 from __future__ import annotations
 
 import pytest
+import yaml
 from check_bash_hook import COMMON, ROOT, gen, policy, run_hook
 
-GITHUB_ISSUE_SKILL_PATH = (
-    ROOT / "home" / "dot_claude" / "skills" / "github-issue" / "SKILL.md"
+GITHUB_OPERATIONS_SKILL_PATH = (
+    ROOT / "home" / "dot_claude" / "skills" / "github-operations" / "SKILL.md"
 )
 READ_ONLY_GH_COMMANDS = [
     "gh auth status",
@@ -449,11 +450,16 @@ def test_copilot_permissions_do_not_broadly_allow_gh():
     assert "gh" not in command_ids
 
 
-def test_github_issue_skill_does_not_explicitly_allow_direct_gh():
-    frontmatter = GITHUB_ISSUE_SKILL_PATH.read_text(encoding="utf-8").split("---", 2)[1]
-    assert "Bash(gh " not in frontmatter
-    assert "mcp__github__*" in frontmatter
-    assert "Bash(*resolve-project.sh*)" in frontmatter
+def test_github_operations_skill_does_not_widen_gh_allowlist():
+    """スキルの宣言 (allowed-tools) の検査。hook の強制力の検査ではない.
+
+    スキルが allowed-tools を宣言しない (裸の Bash / `*` / MCP を含め、自動許可を
+    一切足さない) ことだけを確かめる。実際の判定は permission / hook が別に行う。
+    """
+    frontmatter = yaml.safe_load(
+        GITHUB_OPERATIONS_SKILL_PATH.read_text(encoding="utf-8").split("---", 2)[1]
+    )
+    assert "allowed-tools" not in frontmatter
 
 
 def test_gh_global_options_do_not_bypass_existing_deny():
