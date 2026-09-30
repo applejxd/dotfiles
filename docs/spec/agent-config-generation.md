@@ -392,11 +392,14 @@ permission = { "*" = "allow", task = "deny" }   # task は V2 の subagent
 | shell 出力の伏字化 | `index.js` | 同上 |
 | 全部 allow の子エージェントの起動元の検査（[上](#bypass-から呼べる子エージェント)） | `index.js` | 同上 |
 | 確認画面への説明表示（toast） | `tui.ts` | **`cli.json` の `plugins`** |
+| `git commit` の件名と本文の表示（[下](#git-commit-の件名と本文)） | `tui.ts` と `commit-message.js` | 同上 |
 
-隔離起動（`ocs`）は `cli.json` を渡さないので `tui.ts` は読まれない。
+`2.0.14` では `opencode.json` の `plugins` に書いたディレクトリからも `tui.ts` が
+読まれる（`cli.json` 無しで実測。[ask 画面の調査 12 章](../research/opencode/plugin/ask-description.md#12-v2014-の再確認確認画面のすぐ上に出せる2026-09-30)）。
+隔離起動（`ocs`）は `cli.json` を渡さないが、`index.js` を載せていれば `tui.ts` も読まれる。
 説明の生成だけでは隔離版の設定に `index.js` を載せない。
 
-**登録先が分かれるのは仕様。** `opencode.json` に書いたディレクトリからは
+**登録先が分かれるのは仕様（2.0.12）。** `opencode.json` に書いたディレクトリからは
 TUI 側が読まれない。どちらも**絶対パスのディレクトリ**でないと解決されず、
 `~` も単一ファイルも黙って無視される。
 
@@ -546,6 +549,52 @@ toast の表示時間は `duration_ms`（既定 20000）で、`tui.ts` が `rule
 
 モデル呼び出しが失敗・タイムアウトしても**確認は通常どおり出る**
 （説明が付かないだけ）。
+
+#### `git commit` の件名と本文
+
+`git commit` の確認ではモデルを呼ばず、コマンドから抜き出した件名と本文を
+**確認画面のすぐ上**（TUI のスロット `session.composer.top`）に出す。確認画面は
+コマンドを数行で切るので、長いコミットメッセージは本文の途中までしか見えない。
+全画面（`ctrl+f`）にしにくいスマホからでも件名を読めるようにする。
+
+```toml
+[opencode.ask_description.commit]
+enabled = true
+line_width = 72   # 本文 1 行の桁数の上限（全角は 2 桁）
+max_lines = 8     # 本文の行数の上限
+```
+
+```text
+feat(opencode): git commit の確認に件名と本文を抜き出して出す   ← 件名（切らない）
+- Motivation: git commit の確認画面はコマンドを数行し…          ← 本文（1 行ずつ切る）
+- Change: guide plugin がコマンドから件名と本文を抜き…
+引数: --allow-empty                                            ← -m 以外の引数
+┃  △ Permission required
+┃  $ git commit --allow-empty -m 'feat(opencode): …
+```
+
+- 件名は 1 つ目の `-m` の 1 行目、本文はそれ以降（`-m` の間の空行は詰める）。
+  件名は切らずに折り返す。本文の各行は `line_width` と端末の幅の狭いほうで切る
+  （折り返すと狭い画面で行数が倍になり、確認画面のボタンを押し出す）
+- `-m` 以外の引数（パス指定やオプション）も 1 行で出す。何がコミットされるかに関わる
+- 表示は本体の確認画面と同じ要求を選ぶ（自分と子のセッションの保留の先頭。子の
+  セッションを開いているときは出さない）。`commit` エージェントは子で動くが、確認は
+  親の画面に出る
+- **抜き出せない形は従来のモデルの説明へ倒す。** 引用符の外の `;` `&&` `|` `>` 改行
+  （別のコマンドが続き、確認画面で切れた部分に隠れうる）、`$` や `` ` ``（実行時に
+  展開される）、`-F` / `-C` / `--fixup` など `-m` 以外からメッセージを取るもの、
+  `FOO=1 git commit` や `git -c … commit`
+- `index.js` は抜き出せる `git commit` ではモデルを呼ばない（`tui.ts` と同じ
+  `commit-message.js` で判定する）。`commit-message.js` を読めなくても `index.js` の
+  ロードは通し、従来どおり説明を作る
+- スロットの無い版（`2.0.12`）では、同じ内容を toast で出す
+- 抜き出しは sh の単語分割の一部を真似たもので、**判定器ではない**。確認画面の
+  生コマンドが一次情報であることは変わらない
+- 隔離起動（`ocs`）でも出る。モデルを呼ばないので、説明の生成を止める
+  `OCS_ISOLATED` の対象にしない（`OCS_ISOLATED=1` と隔離版と同じ形の設定で確認。
+  境界の中での表示は未確認）
+- 試験は `test/agents/test_guide_commit_preview.py`。実機の画面（45 桁と 100 桁）は
+  [ask 画面の調査 12 章](../research/opencode/plugin/ask-description.md#12-v2014-の再確認確認画面のすぐ上に出せる2026-09-30)
 
 ### キーバインド
 

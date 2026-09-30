@@ -955,12 +955,21 @@ def opencode_ask_description(common: dict[str, Any]) -> dict[str, Any] | None:
     models = [str(m) for m in cfg.get("models") or []]
     if not models:
         raise SystemExit("opencode.ask_description は models が 1 件以上要る")
-    return {
+    out: dict[str, Any] = {
         "min_command_length": int(cfg.get("min_command_length", 60)),
         "duration_ms": int(cfg.get("duration_ms", 20000)),
         "timeout_ms": int(cfg.get("timeout_ms", 5000)),
         "models": models,
     }
+    # git commit はモデルを呼ばず、コマンドから抜き出した件名と本文を出す。
+    # see docs/spec/agent-config-generation.md#git-commit-の件名と本文
+    commit = cfg.get("commit") or {}
+    if commit.get("enabled", True):
+        out["commit"] = {
+            "line_width": int(commit.get("line_width", 72)),
+            "max_lines": int(commit.get("max_lines", 8)),
+        }
+    return out
 
 
 def opencode_bypass_agents(common: dict[str, Any]) -> list[str]:

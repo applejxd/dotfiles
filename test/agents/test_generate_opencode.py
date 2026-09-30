@@ -440,6 +440,11 @@ def test_only_all_allow_agents_are_treated_as_bypass():
 # see docs/research/opencode/permission/output-filter-and-subagents.md
 
 
+def _copy_guide_helpers(work: Path) -> None:
+    """index.js / tui.ts が相対 import する同じディレクトリのモジュールを写す。"""
+    shutil.copy(ROOT / "home/dot_config/opencode/guide-plugin/commit-message.js", work)
+
+
 def _load_guide_js(work: Path, rules: dict, *, windows: bool = False):
     """guide plugin を node で読み込み、内部の関数を呼べるようにする。
 
@@ -450,6 +455,7 @@ def _load_guide_js(work: Path, rules: dict, *, windows: bool = False):
     if not node:
         pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
     src = (ROOT / "home/dot_config/opencode/guide-plugin/index.js").read_text("utf-8")
+    _copy_guide_helpers(work)
     prelude = (
         'Object.defineProperty(process, "platform", { value: "win32" })\n' if windows else ""
     )
@@ -478,11 +484,12 @@ def _load_guide_js(work: Path, rules: dict, *, windows: bool = False):
 
 @pytest.mark.parametrize(("isolated", "expected"), [(False, True), (True, False)])
 def test_isolated_session_does_not_build_the_describer(tmp_path, isolated, expected):
-    """隔離版 (OCS_ISOLATED=1) は tui.ts を読まないので、説明を作っても表示されない。"""
+    """隔離版 (OCS_ISOLATED=1) は説明の生成 (モデルの呼び出し) を止める。"""
     node = shutil.which("node")
     if not node:
         pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
     src = (ROOT / "home/dot_config/opencode/guide-plugin/index.js").read_text("utf-8")
+    _copy_guide_helpers(tmp_path)
     (tmp_path / "mod.mjs").write_text(src + "\nexport { describer }\n", "utf-8")
     rules = gen.build_opencode_guide({}, COMMON)
     assert rules.get("ask_description"), "前提: 説明の生成が有効"
@@ -517,6 +524,7 @@ def _run_hooks(work: Path, rules: dict | str | None, calls: list[list]) -> list[
     if not node:
         pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
     src = (ROOT / "home/dot_config/opencode/guide-plugin/index.js").read_text("utf-8")
+    _copy_guide_helpers(work)
     (work / "mod.mjs").write_text(src, "utf-8")
     if rules is not None:
         text = rules if isinstance(rules, str) else json.dumps(rules)
@@ -801,6 +809,7 @@ def test_guide_plugin_directory_name_is_not_auto_discovered():
 def test_guide_plugin_files_exist():
     source = ROOT / "home/dot_config/opencode/guide-plugin"
     assert (source / "index.js").is_file()
+    assert (source / "commit-message.js").is_file()
     assert (source / "modify_rules.json.py.tmpl").is_file()
 
 
@@ -1142,6 +1151,19 @@ def _tui_toasts(work: Path, rules: dict | None) -> list[dict]:
         pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
     src = (ROOT / "home/dot_config/opencode/guide-plugin/tui.ts").read_text("utf-8")
     (work / "tui.mjs").write_text(src, "utf-8")
+    _copy_guide_helpers(work)
+    # @opentui/solid は本体が解決する。toast だけを見るので中身は空でよい。
+    stub = work / "node_modules/@opentui/solid"
+    stub.mkdir(parents=True, exist_ok=True)
+    (stub / "package.json").write_text(
+        '{"name":"@opentui/solid","type":"module","main":"index.js"}', "utf-8"
+    )
+    (stub / "index.js").write_text(
+        "export const createElement = () => ({})\n"
+        "export const setProp = () => {}\n"
+        "export const insert = () => {}\n",
+        "utf-8",
+    )
     if rules is not None:
         (work / "rules.json").write_text(json.dumps(rules), "utf-8")
     (work / "run.mjs").write_text(

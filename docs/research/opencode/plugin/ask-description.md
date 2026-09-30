@@ -384,6 +384,114 @@ models = [
 Haiku で 4 種類 × 2 回を測り直し、**8/8 で期待どおり**になった
 （無害 4 件に `⚠` なし、破壊・外部送信 4 件に `⚠` あり）。
 
+## 12. v2.0.14 の再確認：確認画面のすぐ上に出せる（2026-09-30）
+
+> **対象: `opencode v2.0.14`**（最新は `2.0.20`。未確認）
+>
+> `git commit` の確認で長いコミットメッセージが途中で切れ、スマホ（Orca）からは
+> 全画面（`ctrl+f`）にしにくい。toast より読みやすい場所に出せるかを調べ直した。
+
+### 結論
+
+| 項目 | 2.0.12（4・8 章） | 2.0.14（実測） |
+| --- | --- | --- |
+| スロット | `api.slots` が無い | **`api.ui.slot` がある** |
+| 確認画面のすぐ上 | — | **`session.composer.top`** |
+| JSX 無しでの描画 | — | `@opentui/solid` の静的 import で可能 |
+| TUI 側の登録先 | `cli.json` だけ | **`opencode.json` の `plugins` でも読まれる** |
+| 呼ばれる関数 | `setup`（複数回） | `setup`（1 回。終了時に後始末が呼ばれる） |
+| `permission.asked` の `message` | 載る | 載る（toast は従来どおり出た） |
+
+公式（<https://opencode.ai/v2/docs/build/plugins/cli/>）の Slots 節の置き場は
+`app` / `home.footer` / `home.footer.status` / `prompt.footer` / `prompt.footer.status` /
+`prompt.footer.file` / `session.composer.top` / `sidebar.content` / `sidebar.footer`。
+`app_bottom` は無くなった。
+
+### `session.composer.top` は確認画面の直前に描かれる
+
+同梱のセッション画面のコードで、`session.composer.top` のスロットは入力欄を
+置き換える確認画面（保留の先頭 1 件）の**直前の兄弟**として描かれる。
+確認画面の対象は次のとおりで、plugin 側も同じ選び方をすれば表示が食い違わない。
+
+```text
+子のセッションを開いている        → 出さない
+それ以外 → [自分, ...family の子].flatMap(permission.list) の先頭
+（autoaccept のときは空）
+```
+
+`api.data.session.permission.list` / `family` / `get` は Solid の追跡対象で、
+スロットの中で読めば保留の増減で描き直される（承認すると消えることを実測）。
+
+### 描画の制約
+
+- **文字列をそのまま返すと TUI ごと落ちる**（エラー報告画面になる）。要素が要る
+- `.tsx` の JSX は本体が変換する。`.ts` でも `@opentui/solid` の
+  `createElement` / `insert` / `setProp` を**静的 import** すれば組める
+- **動的 `import()` では `@opentui/solid` / `solid-js` / `@opencode/plugin` を解決できない**
+  （`Cannot find package`）。静的 import なら解決される
+- `text` 要素の中の改行はそのまま複数行になる。色は `api.theme.text.base` /
+  `api.theme.text.muted`、太字は `attributes: 1`
+- `api.renderer.width` で端末の桁数が取れる
+
+### TUI 側は `opencode.json` の登録からも読まれる
+
+`cli.json` を置かずに `opencode.json` の `plugins` だけへ guide plugin を書いた
+設定（隔離版と同じ形）で、ログに `role=cli` の `stage=setup plugin=guide-tui` が出て、
+スロットにも表示された。4・8 章の「`cli.json` に書かないと読まれない」は 2.0.12 の話。
+**隔離起動（`ocs`）でも `tui.ts` が読まれる**ことになる（境界の中では未確認）。
+
+### 実測の画面
+
+隔離した一時の環境（`XDG_CONFIG_HOME` / `XDG_DATA_HOME` / `XDG_STATE_HOME` /
+`OPENCODE_CONFIG_DIR` を一時ディレクトリへ、`OPENCODE_DB` は実 DB の複製、
+`--standalone`）で TUI を擬似端末に載せ、`pyte` で画面を再構成した。
+モデルは `github-copilot/claude-haiku-4.5`。
+
+45 桁 × 30 行（スマホ相当）:
+
+```text
+  feat(opencode): git commit
+  の確認に件名と本文を抜き出して出す
+  - Motivation: git commit の確認画面は…
+  - Change: guide plugin がコマンドから…
+  - Impact: git commit 以外の説明は従来…
+  引数: --allow-empty
+  ┃
+  ┃  △ Permission required
+  ┃
+  ┃  $ git commit --allow-empty -m
+  ┃  'feat(opencode): git commit
+  ┃  の確認に件名と本文を抜き出して出す'
+  ┃  -m '- Motivation: git commit
+  ┃  の確認画面はコマンドを数行しか出さ
+  ┃  ず、
+  ┃
+  ┃   Allow once   Always allow   Reject
+```
+
+確認画面の本体は 6 行で切れ、`Change` 以降は見えない。スロットには全部の行が出る。
+本文を固定の 40 桁で切っていた版では、45 桁の画面で各行が 2 行に折り返した
+（左右の余白で使えるのは約 41 桁）。端末の幅から余白を引いた桁数でも切るようにした。
+
+| 確認したこと | 結果 |
+| --- | --- |
+| 100 桁 × 40 行 | 件名 1 行、本文は 72 桁で切って 1 行ずつ |
+| 承認後 | スロットの表示が消える |
+| 子エージェント（`subagent` で起動した子が `git commit`） | 親の画面の確認の上に出る |
+| `OCS_ISOLATED=1`、`cli.json` 無し | 出る |
+| 長い `find … \| xargs …` の確認 | 従来どおりモデルの説明の toast が出て、スロットは空 |
+| `git commit` の確認で toast | 出ない（モデルを呼んでいない） |
+
+### 試験環境の注意
+
+- `script` は `$SHELL`（zsh）経由でコマンドを起動するので、`.zshenv` が
+  `OPENCODE_CONFIG` などを入れ直し、**実環境の設定が読まれる**。`SHELL=/bin/sh` にするか、
+  擬似端末を自分で開く（今回は Python の `pty` を使った）
+- `XDG_DATA_HOME` を差し替えないと、試験の作業ディレクトリの snapshot が実環境の
+  `~/.local/share/opencode/snapshot/` に作られる。`OPENCODE_DB` を複製しておけば
+  `XDG_DATA_HOME` を差し替えてもモデルは引けた（[試験環境の隔離方法](../test-isolation.md)
+  3 章の制約は DB を差し替えたことによるもの）
+
 ## 再確認すべき情報源
 
 - <https://opencode.ai/v2/docs/build/plugins/cli>（CLI plugin の API）

@@ -1300,6 +1300,14 @@ models = [
   "github-copilot/gpt-5.4-mini",
 ]
 
+# git commit はモデルを呼ばず、コマンドから抜き出した件名と本文を出す。
+# line_width は本文 1 行の桁数の上限 (全角は 2 桁。端末が狭ければ縮める)、max_lines は行数の上限。
+# see docs/spec/agent-config-generation.md#git-commit-の件名と本文
+[opencode.ask_description.commit]
+enabled = true
+line_width = 72
+max_lines = 8
+
 # 編集後の整形。Claude / Copilot では PostToolUse hook (format-file.sh /
 # markdownlint.sh) がやっていることを、OpenCode では組み込み機能が担う。
 #

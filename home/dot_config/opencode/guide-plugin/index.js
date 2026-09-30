@@ -45,8 +45,18 @@ const compiled =
 
 const ask = rules?.ask_description ?? null
 
-// 隔離版 (ocs) は tui.ts を読まないので、説明を作っても表示されない。
-// ocs が境界の内側へ渡す印で見分け、生成だけ止める。
+// 読めなくても他の役割は続ける (静的 import だとロードごと失敗する)。
+let commitPreview = null
+if (ask?.commit) {
+  try {
+    ;({ commitPreview } = await import("./commit-message.js"))
+  } catch (err) {
+    console.error(`[guide] commit-message.js を読めない: ${err}`)
+  }
+}
+
+// 隔離版 (ocs) ではモデルでの説明の生成だけを止める (git commit の件名と本文は止めない)。
+// ocs が境界の内側へ渡す印で見分ける。
 // see docs/spec/opencode-sandbox.md#隔離版の設定の書き出し方
 const ISOLATED = process.env.OCS_ISOLATED === "1"
 
@@ -272,6 +282,8 @@ export default {
       // allow は確認が出ないので生成しない (費用と遅延が無駄になる)。
       // 生成に失敗しても message を空のままにして確認は通常どおり出す。
       if (e.effect === "allow") return
+      // git commit は tui.ts がコマンドから抜き出した件名と本文を出すので、モデルを呼ばない。
+      if (commitPreview && commitPreview(cmd, ask.commit)) return
       if (!describe || cmd.length < ask.min_command_length) return
       const text = await describe(cmd)
       if (text) e.message = text
