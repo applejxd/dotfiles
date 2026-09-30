@@ -293,6 +293,27 @@ def test_fleet_worker_keeps_the_global_shell_rules():
     assert not allows
 
 
+def test_fleet_worker_system_covers_callers_scratch_files_and_reads():
+    """呼び出し元への影響・一時ファイルの置き場・道具での読み書きを指示し、報告に含めさせる。
+
+    see docs/research/opencode/fleet-worker-instructions.md
+    """
+    system = generated(PERSONAL)["agents"]["fleet-worker"]["system"]
+    assert system == system.strip()
+    flat = "".join(line.strip() for line in system.splitlines())
+    assert "呼び出し元を探して読み" in flat
+    assert "- 呼び出し元への影響" in system, "報告の項目"
+    assert "作業ツリーの .tmp/ の下" in flat
+    assert "作業ツリーの外" in flat
+    assert "read / glob / grep ツール" in flat
+    assert "渡された形のまま単独で実行する" in flat
+
+
+def test_fleet_command_acts_on_reported_caller_impact():
+    template = generated(PERSONAL)["commands"]["fleet"]["template"]
+    assert "呼び出し元への影響" in template
+
+
 @pytest.mark.parametrize("command", ["add", "commit", "stash", "checkout", "restore", "reset"])
 def test_fleet_worker_cannot_touch_the_shared_git_state(command):
     """作業ツリーをほかの作業役と共有しているので、git の状態を変えさせない。"""

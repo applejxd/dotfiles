@@ -81,6 +81,7 @@
 | [OpenCode V2のcommit / reviewエージェントの実機確認](opencode/commit-review-agents.md) | 割り当てたモデルで起動する、--auto は子セッションの確認を自動承認せず止まる（推測）。外部コマンドを止めた git の allow と git commit の ask の実機（E2）、下ごしらえ 10 回の試行錯誤の計測（E3: opus は allow の形の外に出ない、haiku はコミットせずに返る）、接頭辞をやめ素の形を allow にした版（E4: haiku は上書きを手順 4 の冒頭に置いて 9/10 がコミット、書式はスキル任せだと崩れる）、Copilot の Sonnet で Bedrock の Sonnet を近似した計測（E5: 10/10 がコミット、書式は 14 件すべてそろう、`cd` の誘導と連結の確認は増える）、Copilot の Sonnet 5.5 の計測（E6: opus と同等の 10/10・書式で速く、承認済みの全文を一字も変えずに使う。Copilot の commit を切り替え） |
 | [OpenCode V2でCopilot CLIの/fleet相当を組む](opencode/fleet.md) | コマンドと作業役の子エージェントだけで動く、並べて呼んだ子は同時に走る、background は使われなかった |
 | [OpenCode の階層に当てるモデルと effort](opencode/tier-models.md) | 2026-09-30。worker（`fleet-worker`）は opus / sonnet 5.5 の low〜high で合格率に差が無く sonnet が速い、haiku 4.5 は難しめの課題で 0/4・担当外の編集あり、routine（`commit`）は sonnet 5.5 の effort で差が無い。worker を Sonnet 5.5 に切り替えた |
+| [/fleet の作業役への指示を足した前後](opencode/fleet-worker-instructions.md) | 呼び出し元への影響を確かめさせると担当外の罠に触れた報告が 0/2 → 2/2（opus 1/1）、合格率は不変、誘導は 14 → 1 回、確認は `pytest` が大半で 19 → 18 回 |
 | [OpenCode の DB を srt の境界の内外で共有できるか](opencode/shared-db.md) | 同時書き込み・外での再開・外からの `/undo` が通った、書き込みの例外は `XDG_DATA_HOME/opencode` 全体、ignore が無いと snapshot が取れない、`TMPDIR` が見えないと通信が止まる |
 
 ### OpenCode の permission
