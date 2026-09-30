@@ -4,6 +4,19 @@ $ErrorActionPreference = 'Stop'
 # mise config: {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}
 
 $homeDir = {{ .chezmoi.homeDir | toJson }}
+
+# 310_winget は導入済みなら更新しない。古い mise の registry には新しいツールが無い
+# (docs/spec/structure.md#windows-の-mise-の更新)
+if (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue) {
+  & winget upgrade --id jdx.mise --exact --silent --disable-interactivity `
+      --accept-package-agreements --accept-source-agreements
+  # 0x8A15002B: 更新なし / 0x8A150014: winget 以外で導入
+  $noUpgrade = @(0, -1978335189, -1978335212)
+  if ($noUpgrade -notcontains $LASTEXITCODE) {
+    throw "winget upgrade jdx.mise failed with exit code $LASTEXITCODE"
+  }
+}
+
 $miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
 if (-not $miseCommand) {
   $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')

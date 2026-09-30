@@ -230,6 +230,16 @@ mise の実体または shim が選ばれることを確認してください。
 mise の各スクリプトは `run_onchange_after_` とし、設定テンプレートのハッシュを
 含めます。ツール宣言が変われば一括導入が再実行されます。
 
+### Windows の mise の更新
+
+Windows の `313_mise` は `mise install` の前に `winget upgrade --id jdx.mise` を
+実行します。`310_winget` は導入済みのパッケージを更新しないため、初回に入れた
+古い mise が残り続け、その版の registry に無いツール（例: 2026.3.17 時点の
+`herdr`）で `mise install` が `not found in mise tool registry` で失敗したためです。
+
+winget の終了コードのうち、更新が無い（`0x8A15002B`）と winget 以外で導入された
+（`0x8A150014`）は成功として扱い、`mise install` へ進みます。
+
 ### chezmoi 本体
 
 README の公式インストーラ（`get.chezmoi.io`、Windows は winget）は初回の
