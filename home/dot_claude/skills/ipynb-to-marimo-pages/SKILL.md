@@ -1,12 +1,13 @@
 ---
 name: ipynb-to-marimo-pages
-description: "Jupyter notebook (.ipynb) を marimo notebook へ移行し、セル分割とMarkdown解説を整え、HTML化してGitHub Pagesへ公開する。「ipynbをmarimoにして」「marimoノートブックを公開したい」「ノートブックのセルを整理して」「解説セルを整備して」「marimo の数式が正しく表示されない」と言われたときに使う。marimo以外のノートブック運用（nbconvert、Quarto、Jupyter Book）には使わない。"
-context: fork
-agent: general-purpose
+description: "Jupyter notebook (.ipynb) を marimo notebook へ移行し、セル分割とMarkdown解説を整え、HTML化してGitHub Pagesへ公開する。「ipynbをmarimoにして」「marimoノートブックを公開したい」「marimo ノートブックのセルを整理して」「marimo の解説セルを整備して」「marimo の数式が正しく表示されない」と言われたときに使う。marimo以外のノートブック運用（nbconvert、Quarto、Jupyter Book）には使わない。"
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # ipynb → marimo → GitHub Pages 移行スキル
+
+> **fork しない（`context: fork` を付けない）。** 作業前の確認と有料 API 実行の合意でユーザーとやり取りするため。
+> see docs/research/opencode/skill-frontmatter.md
 
 Jupyter notebook を marimo notebook へ移行し、学習・共有に耐える形へ整理して
 静的HTMLとして公開するまでの手順。2つのリポジトリでの実施結果を基にしている
@@ -24,7 +25,7 @@ Jupyter notebook を marimo notebook へ移行し、学習・共有に耐える�
 | 4 | HTML化（ノートブックを実際に実行する） |
 | 5 | GitHub Pages で公開 |
 
-**「解説セルを整備して」のようにフェーズ3だけを求められることが多い。**
+**「marimo の解説セルを整備して」のようにフェーズ3だけを求められることが多い。**
 その場合は全フェーズを実行せず、該当フェーズだけを行う。
 
 数十冊を一括で扱う場合は、原本の1対1検査・自動検出ビルド・生成物の鮮度検査が
@@ -227,12 +228,8 @@ stdout だけでなく**生成された HTML 本体も検査する**。正規表
 raw 文字列内の `\\(` は「バックスラッシュ + 括弧」になり永久にマッチしない
 （実際に踏んだ。`references/pitfalls.md` の11節）。
 
-ビルドスクリプトの雛形は2種類ある。
-
-| 雛形 | 用途 |
-| --- | --- |
-| `references/build-site-example.sh` | 数冊規模。一覧を手で持つ |
-| `references/build-site-example.py` | 自動検出・manifest 付き。冊数が多い場合 |
+ビルドスクリプトの雛形は `references/build-site-example.py`（自動検出・
+3種類のマーカー検査・manifest 生成つき）。規模を問わずこれを使う。
 
 `--sandbox` は、ノートブックが PEP 723 のインライン依存を持たない場合は
 付けてはならない（隔離環境で依存を解決できず失敗する）。
@@ -344,8 +341,7 @@ python3 ~/.claude/skills/ipynb-to-marimo-pages/scripts/check-display-math.py not
 | `references/pitfalls.md` | 実際に踏んだ落とし穴と対処 |
 | `references/markdown-templates.md` | Markdownセルの記述テンプレート |
 | `references/large-scale-migration.md` | 数十冊規模の移行・ビルド基盤の運用 |
-| `references/build-site-example.sh` | HTML化スクリプトの雛形（数冊規模） |
-| `references/build-site-example.py` | 自動検出・manifest 付きビルドの雛形 |
+| `references/build-site-example.py` | 自動検出・検査・manifest 付きビルドの雛形 |
 | `references/pages-workflow-example.yml` | Pages デプロイのワークフロー例 |
 | `scripts/verify-code-cells-unchanged.py` | コードセル不変の検証 |
 | `scripts/audit-markdown-coverage.py` | Markdown解説の網羅状況の集計 |

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """marimo notebook を自動検出して実行・HTML化し、index と manifest を書き出す雛形。
 
-`build-site-example.sh` は notebook の一覧を手で持つ小規模向け。冊数が増えたら
-こちらを使う。要点は次の3つ。
+規模を問わず、この雛形を使う（一覧の手管理と検査の二重実装を避けるため、
+シェル版は置かない）。`marimo export html` は notebook を実際に実行するので、
+環境変数が要るなら注入する仕組み（mise + SOPS など）経由で起動する。要点は次の3つ。
 
 1. `notebooks/` を再帰的に走査し、AST で marimo notebook を判定する（一覧を
    手動管理しない）

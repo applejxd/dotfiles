@@ -52,3 +52,6 @@
 
 # 2026-09: onboarding skill の check-agents.sh を廃止し、read ツールで読むようにした。
 .claude/skills/onboarding/scripts
+
+# 2026-09: marimo skill のビルド雛形を Python 版に統一した。
+.claude/skills/ipynb-to-marimo-pages/references/build-site-example.sh
