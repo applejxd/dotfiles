@@ -1,12 +1,13 @@
 ---
 name: hook-creator
 description: "AI coding CLI（Claude Code / Copilot CLI）の hook を作成・検証・移植する。対象は settings.json の hooks 節や ~/.copilot/hooks/*.json に登録し、PreToolUse / PostToolUse / Stop / SessionStart などのイベントで LLM のツール実行やセッションに介入する hook のみ。「PreToolUse で Bash の実行をブロックしたい」「Stop hook を書きたい」「Claude Code の hook を Copilot CLI でも動かしたい」「エージェントのツール実行に介入したい」「AI CLI の hook が発火しない」等で使う。Git hooks（pre-commit / pre-push / commit-msg / .git/hooks / husky / lefthook / lint-staged）、React や Vue の hooks、pytest の hook、webhook、GitHub Actions には使わない。単に「hook」とだけ言われて対象が判別できない場合も、AI CLI の hook だと確認できるまで使わない。"
-context: fork
-agent: general-purpose
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # hook-creator skill
+
+> **fork しない（`context: fork` / `agent` を付けない）。** 質問と適用前の確認でユーザーとやり取りするため。
+> see docs/research/opencode/skill-frontmatter.md
 
 Claude Code / Copilot CLI 双方で動く hook を作成・検証するための skill。
 今回の hook 移植プロジェクトで得た知見 (仕様差、出力規約、落とし穴) を
@@ -165,7 +166,10 @@ bash ~/.claude/skills/hook-creator/scripts/verify-hook.sh \
 
 - `=== exit code ===` で 0/2/その他
 - `=== stdout (parsed) ===` で JSON とその decision フィールド抽出
-- `=== verdict ===` で「両ツール対応か」「Claude 専用か」「no-op か」を判定
+- `=== verdict ===` は **出力形式の静的検査**。stdout が空でなければ JSON として
+  妥当かを見て、不正 (debug 出力の混入など) なら検証失敗として非ゼロで終了する。
+  jq / python3 が無く検査できない場合はその旨を表示する。
+  各 CLI が実機で受理することまでは判定しない
 
 ### 例: ユーザの hook 設定全体を検査
 
@@ -191,8 +195,8 @@ JSON 形式エラー、参照スクリプトの不在、matcher の anchored 規
 `references/pitfalls.md` の特に致命的な 4 項目:
 
 1. **exit 2 単独では Copilot で block されない**: 何の警告もなく素通り
-2. **並列 hook で空 stdout が deny を上書き** (Copilot): 自作 hook で
-   「該当しないなら何も出さず即 sys.exit(0)」を徹底
+2. **並列 hook で deny が効かない場合がある** (Copilot、原因は未確定):
+   安全側の回避策は `references/pitfalls.md` 2 を参照
 3. **Copilot の PostToolUse は LLM に出力を渡さない**: 警告メッセージは
    CLI UI に表示されるだけで agent は知らない
 4. **`${CLAUDE_SKILL_DIR}` / `${COPILOT_SKILL_DIR}` は Copilot で展開されない**
@@ -221,9 +225,9 @@ hook 関連ファイルを以下の場所で管理する:
    (`claude_event` / `claude_matcher` / `copilot_event` / `copilot_matcher` /
    `runner` / `timeout_sec`)
 3. `chezmoi diff` で確認 → `chezmoi apply`
-4. `scripts/verify-hook.sh` で動作確認
-5. Conventional Commits でコミット
-   (例: `feat(hooks): add <name> for <purpose>`)
+4. `scripts/verify-hook.sh` で動作確認し、検証結果と差分をユーザーに示して終える
+
+コミットは明示的に頼まれたときだけ、commit スキルに任せる。
 
 ## ポリシー
 

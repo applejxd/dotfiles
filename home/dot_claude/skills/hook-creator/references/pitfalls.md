@@ -12,25 +12,30 @@ hook 作成・移植時に踏みがちな問題。今回の実装プロジェク
 **対策**: `references/decision-output.md` の規約 B (stdout JSON + exit 0) を使う。
 `templates/agent_compat.py` の `emit_pretool_deny` は両対応で出力する。
 
-## 2. 並列 hook で空 stdout が deny を上書きする (Copilot)
+## 2. 並列 hook で deny が効かないケース (Copilot、原因は未確定)
 
-設定で同じイベントに複数 hook を登録すると並列実行される。1 つの hook が
-deny の JSON を出力しても、別 hook が空 stdout で終わると **deny が消える**
-ケースを実機で観測。
+設定で同じイベントに複数 hook を登録すると並列実行される。
+
+**観測した事実**: deny の JSON を出す hook と、debug 用に stdout へ書く hook
+(下の 3 つ目) を同じイベントに登録した構成で、deny が効かなかったケースがあった。
 
 ```json
 "PreToolUse": [
   { "bash": "python check_bash.py" },   // deny を返す
   { "bash": "python redirect-tmp.py" }, // 該当しない時は何も出さず exit 0
-  { "bash": "echo 'debug'; cat - > /dev/null" }  // ← 空 stdout で上書き
+  { "bash": "echo 'debug'; cat - > /dev/null" }  // stdout に debug を出す
 ]
 ```
 
-**対策**:
+**未確定**: 効かなかった原因が「空 stdout」か「debug 文字列の混入」か「hook の
+完了順」かは切り分けていない。再現条件も未確認。
 
-- 自作 hook で「該当しないなら何も出さず即 `sys.exit(0)`」を徹底する
-  (stdout に何も書かない)
-- debug 用の payload キャプチャ hook は stdout に書かず stderr / file に書く
+**安全側の回避策** (原因が何であれ害がない):
+
+- hook の stdout には、判断を伝える JSON 以外を書かない。debug 出力は stderr /
+  file へ出す (pitfalls 12 も参照)
+- deny の効き目が要る hook は、同じイベントに並べる hook を最小限にし、
+  実機で deny が効くことを確認する。確認できていなければ「未確認」と明記する
 
 ## 3. Copilot の PostToolUse は LLM に出力を渡さない
 

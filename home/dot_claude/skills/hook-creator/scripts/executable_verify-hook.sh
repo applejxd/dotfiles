@@ -56,46 +56,99 @@ echo "=== stdout (raw) ==="
 cat "$STDOUT_TMP"
 echo
 echo "=== stdout (parsed) ==="
-if [ -s "$STDOUT_TMP" ] && command -v jq >/dev/null 2>&1; then
-    if jq . "$STDOUT_TMP" 2>/dev/null; then
-        echo
-        # 主要な decision フィールドを抽出
-        DECISION=$(jq -r '
-            .permissionDecision //
-            .hookSpecificOutput.permissionDecision //
-            .decision //
-            empty
-        ' "$STDOUT_TMP" 2>/dev/null)
-        REASON=$(jq -r '
-            .permissionDecisionReason //
-            .hookSpecificOutput.permissionDecisionReason //
-            .reason //
-            .additionalContext //
-            empty
-        ' "$STDOUT_TMP" 2>/dev/null)
-        if [ -n "$DECISION" ]; then
-            echo "=== detected decision ==="
-            echo "  decision: $DECISION"
-            [ -n "$REASON" ] && echo "  reason  : $REASON"
-        fi
-    else
-        echo "(stdout is not valid JSON)"
+JSON_STATE=empty   # empty | valid | invalid | unchecked
+# 契約: stdout は単一の JSON object 1 個だけ (複数文書・配列・スカラーは invalid)。
+# jq 版と python3 版で同じ判定・同じ抽出規則にする (null / false は「無し」扱い)。
+show_decision() {
+    if [ -n "$1" ]; then
+        echo "=== detected decision ==="
+        echo "  decision: $1"
+        [ -n "$2" ] && echo "  reason  : $2"
     fi
+    return 0
+}
+if [ -s "$STDOUT_TMP" ] && command -v jq >/dev/null 2>&1; then
+    if jq -s -e 'length == 1 and (.[0] | type) == "object"' "$STDOUT_TMP" >/dev/null 2>&1; then
+        JSON_STATE=valid
+        jq . "$STDOUT_TMP" || true
+        echo
+        JQ_DEF='def g(o; k): if (o | type) == "object" then o[k] else null end;'
+        DECISION=$(jq -r "$JQ_DEF"'
+            (g(.; "permissionDecision") // g(g(.; "hookSpecificOutput"); "permissionDecision") // g(.; "decision") // empty)
+            | if type == "string" then . else tojson end' "$STDOUT_TMP" 2>/dev/null) || DECISION=""
+        REASON=$(jq -r "$JQ_DEF"'
+            (g(.; "permissionDecisionReason") // g(g(.; "hookSpecificOutput"); "permissionDecisionReason") // g(.; "reason") // g(.; "additionalContext") // empty)
+            | if type == "string" then . else tojson end' "$STDOUT_TMP" 2>/dev/null) || REASON=""
+        show_decision "$DECISION" "$REASON"
+    else
+        JSON_STATE=invalid
+        echo "(stdout is not a single valid JSON object)"
+    fi
+elif [ -s "$STDOUT_TMP" ] && command -v python3 >/dev/null 2>&1; then
+    if python3 - "$STDOUT_TMP" <<'PY' 2>/dev/null
+import json, sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = json.loads(f.read())
+if not isinstance(data, dict):
+    sys.exit(3)
+
+
+def g(o, k):
+    return o.get(k) if isinstance(o, dict) else None
+
+
+def first(*vals):
+    for v in vals:
+        if v is not None and v is not False:
+            return v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+    return ""
+
+
+hso = g(data, "hookSpecificOutput")
+decision = first(g(data, "permissionDecision"), g(hso, "permissionDecision"), g(data, "decision"))
+reason = first(g(data, "permissionDecisionReason"), g(hso, "permissionDecisionReason"),
+               g(data, "reason"), g(data, "additionalContext"))
+print(json.dumps(data, indent=2, ensure_ascii=False))
+print()
+# 表示は jq 版の show_decision と同じ書式 (行数による受け渡しはしない)
+if decision:
+    print("=== detected decision ===")
+    print("  decision: " + decision)
+    if reason:
+        print("  reason  : " + reason)
+PY
+    then
+        JSON_STATE=valid
+    else
+        JSON_STATE=invalid
+        echo "(stdout is not a single valid JSON object)"
+    fi
+elif [ -s "$STDOUT_TMP" ]; then
+    JSON_STATE=unchecked
+    echo "(stdout not checked: neither jq nor python3 is installed)"
 else
-    echo "(empty stdout or jq not installed)"
+    echo "(empty stdout)"
 fi
 echo
 echo "=== stderr ==="
 cat "$STDERR_TMP"
 echo
 echo "=== verdict ==="
-if [ "$EXIT_CODE" -eq 0 ] && [ -s "$STDOUT_TMP" ]; then
-    echo "exit 0 + stdout JSON → both Claude Code and Copilot CLI accept this"
+echo "(static check of the output format only; not a guarantee that either CLI accepts it)"
+if [ "$JSON_STATE" = invalid ]; then
+    echo "FAIL: stdout is not a single JSON object (debug output mixed in?). Write debug to stderr."
+    [ "$EXIT_CODE" -ne 0 ] && exit "$EXIT_CODE"
+    exit 1
+fi
+if [ "$EXIT_CODE" -eq 0 ] && [ "$JSON_STATE" = valid ]; then
+    echo "exit 0 + valid JSON on stdout → output format looks well-formed"
+elif [ "$EXIT_CODE" -eq 0 ] && [ "$JSON_STATE" = unchecked ]; then
+    echo "exit 0 + non-empty stdout → JSON validity not checked"
 elif [ "$EXIT_CODE" -eq 2 ]; then
     echo "exit 2 → Claude Code blocks; Copilot CLI ignores stderr (needs JSON in stdout to block)"
-elif [ "$EXIT_CODE" -eq 0 ] && [ ! -s "$STDOUT_TMP" ]; then
-    echo "exit 0 + empty stdout → no-op (allow). Watch out: empty stdout in a parallel"
-    echo "hook may override a deny from another hook in Copilot CLI."
+elif [ "$EXIT_CODE" -eq 0 ]; then
+    echo "exit 0 + empty stdout → no-op (allow)"
 else
     echo "exit $EXIT_CODE → non-blocking error. Both tools log this without affecting the tool call."
 fi
