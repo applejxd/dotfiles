@@ -194,13 +194,28 @@ def test_allow_has_no_arbitrary_code_execution(command: str):
 def test_bypass_agent_is_declared():
     """全ツールを無確認で実行するカスタムエージェント。
 
-    ``permission = "allow"`` は OpenCode が
-    ``{action:"*", resource:"*", effect:"allow"}`` へ展開する (実測)。
+    ``{"*": "allow", ...}`` は OpenCode が
+    ``{action:"*", resource:"*", effect:"allow"}`` を先頭に展開する (実測)。
     V1 の ``mode`` は非推奨なので ``agent`` で出す。
     """
     agent = generated()["agent"]["bypass"]
-    assert agent["permission"] == "allow"
+    assert agent["permission"]["*"] == "allow"
+    assert gen._grants_everything(agent)
     assert agent["description"]
+
+
+def test_bypass_cannot_launch_approval_based_workers():
+    """★承認制の子は bypass の中でも確認で止まる。bypass 用の作業役へ寄せる。
+
+    実測で拒否され、subagent ツールの一覧からも消える。
+    see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+    """
+    task = generated()["agent"]["bypass"]["permission"]["task"]
+    assert task["*"] == "allow"
+    assert task["general"] == "deny"
+    assert task["fleet-worker"] == "deny"
+    for name in ("bypass-worker", "bypass-fleet-worker", "explore", "review", "commit"):
+        assert task.get(name, task["*"]) == "allow", name
 
 
 def test_agents_not_declared_in_common_are_kept():
@@ -257,9 +272,27 @@ def test_subagent_guard_covers_only_all_allow_subagents(agent, guarded):
 def test_guarded_subagents_are_named_in_the_rules():
     """plugin が起動元を検査する子の一覧。全体の deny と同じ名前を出す。"""
     guide = gen.build_opencode_guide({}, COMMON)
-    assert guide["guarded_subagents"] == ["bypass-worker"]
+    assert guide["guarded_subagents"] == ["bypass-fleet-worker", "bypass-worker"]
     denied = [r["resource"] for r in gen.opencode_subagent_guards(COMMON)]
     assert guide["guarded_subagents"] == denied
+
+
+@pytest.mark.parametrize(
+    ("rules", "guarded"),
+    [
+        ([gen.ALLOW_EVERYTHING, {"action": "shell", "resource": "x", "effect": "deny"}], True),
+        ([{"action": "shell", "resource": "x", "effect": "deny"}, gen.ALLOW_EVERYTHING], False),
+        ([{"action": "*", "resource": "*", "effect": "ask"}], False),
+        ([], False),
+    ],
+    ids=["先頭が全許可", "全許可が先頭でない", "全 ask", "規則なし"],
+)
+def test_v2_agents_starting_with_allow_everything_are_guarded(rules, guarded):
+    """V2 の ``permissions`` も、先頭が全許可なら bypass からだけ起動できる子として扱う。"""
+    agent = {"description": "x", "mode": "subagent", "permissions": rules}
+    common = {"opencode": {"agents": {"x": agent}}}
+    assert (gen.opencode_guarded_subagents(common) == ["x"]) is guarded
+    assert (gen.opencode_bypass_agents(common) == ["x"]) is guarded
 
 
 @pytest.mark.parametrize("mode", ["all", "subagent"])
@@ -421,7 +454,11 @@ def test_glob_to_regex_keeps_slash_boundaries(glob, matches, misses):
 
 
 def test_bypass_agents_are_named_in_the_rules():
-    assert gen.build_opencode_guide({}, COMMON)["bypass_agents"] == ["bypass", "bypass-worker"]
+    assert gen.build_opencode_guide({}, COMMON)["bypass_agents"] == [
+        "bypass",
+        "bypass-fleet-worker",
+        "bypass-worker",
+    ]
 
 
 def test_only_all_allow_agents_are_treated_as_bypass():

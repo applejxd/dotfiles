@@ -993,9 +993,9 @@ def test_common_agents_and_commands_are_written(tmp_path):
     config = json.loads(
         (Path(sandbox["config_dir"]) / "opencode.json").read_text(encoding="utf-8")
     )
-    assert config["agent"]["bypass"]["permission"] == "allow"
+    assert config["agent"]["bypass"]["permission"]["*"] == "allow"
     assert "bypass-worker" in config["agent"]
-    assert {"commit", "review", "fleet-worker"} <= set(config["agents"])
+    assert {"commit", "review", "fleet-worker", "bypass-fleet-worker"} <= set(config["agents"])
     assert "fleet" in config["commands"]
 
 

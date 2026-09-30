@@ -1067,20 +1067,32 @@ def opencode_bypass_agents(common: dict[str, Any]) -> list[str]:
     ``permission.evaluate`` に ``agent`` が載ることを実測したので名前で見る。
     see docs/research/opencode/permission/hook-order.md
     """
-    agents = common.get("opencode", {}).get("agent") or {}
-    return sorted(n for n, a in agents.items() if _grants_everything(a))
+    return sorted(n for n, a in _declared_agents(common).items() if _grants_everything(a))
+
+
+def _declared_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """V1 の ``[opencode.agent]`` と V2 の ``[opencode.agents]`` を合わせた宣言。"""
+    opencode = common.get("opencode", {})
+    return {**(opencode.get("agents") or {}), **(opencode.get("agent") or {})}
+
+
+ALLOW_EVERYTHING = {"action": "*", "resource": "*", "effect": "allow"}
 
 
 def _grants_everything(agent: dict[str, Any]) -> bool:
     """permission が「全 action・全 resource の allow」から始まるエージェントか。
 
-    ``"allow"`` の文字列と、``{"*" = "allow", ...}`` のマップの両方を数える
-    (どちらも OpenCode が ``{action:"*", resource:"*", effect:"allow"}`` へ展開する)。
+    V1 の ``"allow"`` の文字列と ``{"*" = "allow", ...}`` のマップ (どちらも OpenCode が
+    ``{action:"*", resource:"*", effect:"allow"}`` へ展開する)、V2 の ``permissions`` の
+    先頭がその規則のものを数える。
     """
     permission = agent.get("permission")
     if permission == "allow":
         return True
-    return isinstance(permission, dict) and permission.get("*") == "allow"
+    if isinstance(permission, dict) and permission.get("*") == "allow":
+        return True
+    rules = agent.get("permissions") or []
+    return bool(rules) and rules[0] == ALLOW_EVERYTHING
 
 
 def opencode_guarded_subagents(common: dict[str, Any]) -> list[str]:
@@ -1089,10 +1101,9 @@ def opencode_guarded_subagents(common: dict[str, Any]) -> list[str]:
     ``opencode.json`` の全体の deny と ``rules.json`` の ``guarded_subagents`` の元。
     see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
     """
-    agents = common.get("opencode", {}).get("agent") or {}
     return [
         name
-        for name, agent in sorted(agents.items())
+        for name, agent in sorted(_declared_agents(common).items())
         if _grants_everything(agent) and agent.get("mode") in ("subagent", "all")
     ]
 
@@ -1510,8 +1521,19 @@ def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # [opencode.agents.<id>] に書けるキー。model は [opencode.model.agents] が持つ。
+# system_from は生成時だけのキー (別のエージェントの system を写す)。
 OPENCODE_AGENT_KEYS = frozenset(
-    {"description", "mode", "system", "permissions", "steps", "hidden", "color", "disabled"}
+    {
+        "description",
+        "mode",
+        "system",
+        "system_from",
+        "permissions",
+        "steps",
+        "hidden",
+        "color",
+        "disabled",
+    }
 )
 OPENCODE_PERMISSION_EFFECTS = frozenset({"allow", "ask", "deny"})
 
@@ -1546,6 +1568,17 @@ def opencode_v2_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
             if rule["effect"] not in OPENCODE_PERMISSION_EFFECTS:
                 raise ValueError(f"[{section}] の effect が不正: {rule}")
         entry = dict(agent)
+        source = entry.pop("system_from", None)
+        if source is not None:
+            if "system" in entry:
+                raise ValueError(f"[{section}] は system と system_from を両方は書けない")
+            base = declared.get(source)
+            if not base or "system" not in base or "system_from" in base:
+                raise ValueError(
+                    f"[{section}] の system_from は system を直接持つ"
+                    f" [opencode.agents] を指す: {source!r}"
+                )
+            entry["system"] = base["system"]
         if "system" in entry:
             entry["system"] = str(entry["system"]).strip()
         out[str(name)] = entry

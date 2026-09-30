@@ -448,7 +448,7 @@ def test_isolated_gets_the_same_agents_and_commands_as_common(tmp_path):
     out = _out(tmp_path)
     assert out["agent"] == gen.merge_opencode_agents({}, COMMON)
     assert {"bypass", "bypass-worker"} <= set(out["agent"])
-    assert out["agent"]["bypass"]["permission"] == "allow"
+    assert gen._grants_everything(out["agent"]["bypass"])
     assert set(out["agents"]) == set(gen.opencode_v2_agents(COMMON))
     for name, agent in gen.opencode_v2_agents(COMMON).items():
         for key, value in agent.items():

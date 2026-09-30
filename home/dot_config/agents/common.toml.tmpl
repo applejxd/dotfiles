@@ -723,6 +723,7 @@ provider = "{{ includeTemplate "llm-provider" . }}"
 commit = "routine"
 review = "second_opinion"
 fleet-worker = "worker"
+bypass-fleet-worker = "worker"
 
 # 階層名は用途 (default / routine / worker / deep / second_opinion)。
 # see docs/spec/agent-config-generation.md#階層
@@ -757,7 +758,9 @@ second_opinion = "gpt-6-astra"
 [opencode.agent.bypass]
 description = "全ツールを無確認で実行する (permission を全て allow で上書き)"
 mode = "primary"
-permission = "allow"
+# 承認制の子は確認で止まるので呼ばせない (代わりに bypass-worker / bypass-fleet-worker)。
+# see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+permission = { "*" = "allow", task = { "*" = "allow", general = "deny", fleet-worker = "deny" } }
 
 # bypass からだけ呼べる子エージェント (task は V2 の subagent)。
 # see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
@@ -888,10 +891,31 @@ permissions = [
   { action = "shell", resource = "git reset *", effect = "deny" },
 ]
 
+# bypass の /fleet の作業役。指示と禁止は fleet-worker と同じで、ほかは全部 allow。
+# ★先頭の全 allow が「bypass からだけ起動できる」印 (外すと build からも起動できる)。
+# ★fleet-worker の deny を足したらここにも足す (テストが突き合わせる)。
+# see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+[opencode.agents.bypass-fleet-worker]
+description = "bypass の /fleet の作業役。親が割り当てた 1 つの作業を、指定された担当ファイルの範囲で実装し、確認して結果を返す。全ツールを無確認で実行する。コミットはしない。/fleet 以外から直接使わない"
+mode = "subagent"
+system_from = "fleet-worker"
+permissions = [
+  { action = "*", resource = "*", effect = "allow" },
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "question", resource = "*", effect = "deny" },
+  { action = "shell", resource = "git add *", effect = "deny" },
+  { action = "shell", resource = "git commit *", effect = "deny" },
+  { action = "shell", resource = "git stash *", effect = "deny" },
+  { action = "shell", resource = "git checkout *", effect = "deny" },
+  { action = "shell", resource = "git switch *", effect = "deny" },
+  { action = "shell", resource = "git restore *", effect = "deny" },
+  { action = "shell", resource = "git reset *", effect = "deny" },
+]
+
 # スラッシュコマンド (opencode.json の commands へ出す)。template の `$ARGUMENTS` は
 # 引数に置き換わる。★「!」+ バッククォートはシェルとして権限の確認なしに実行されるので書かない。
 [opencode.commands.fleet]
-description = "依頼を並列に動かせる作業に分け、fleet-worker を同時に起動して進める"
+description = "依頼を並列に動かせる作業に分け、作業役 (fleet-worker / bypass-fleet-worker) を同時に起動して進める"
 subagent = false
 template = """
 次の依頼を、並列に動かせる小さな作業に分けて進めてください。あなたは取りまとめ役です。
@@ -906,8 +930,10 @@ $ARGUMENTS
 2. 作業の依存関係を決め、同時に動かせる組 (波) に分ける。1 つの波は 4 件まで。
    分ける価値が無い小さな依頼なら、分けずに自分で進める
 3. 作業の一覧・波・担当ファイルを示してから始める
-4. 波ごとに、各作業を 1 回の応答の中で subagent ツールを並べて fleet-worker に渡す
+4. 波ごとに、各作業を 1 回の応答の中で subagent ツールを並べて作業役に渡す
    (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。
+   作業役は、subagent ツールに bypass-fleet-worker が載っていればそれ、無ければ
+   fleet-worker を使う (呼べるのはどちらか一方だけ)。
    調査だけの作業は explore、第三者の検証は review に任せてよい。
    依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を
    すべて書く (子エージェントはこの会話を見られない)

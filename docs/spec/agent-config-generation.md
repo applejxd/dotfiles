@@ -420,20 +420,55 @@ subcommands = ["paths", "lint", "read"]
 
 ### bypass から呼べる子エージェント
 
-`bypass` のセッションから、同じく全部 allow の子エージェント `bypass-worker` を
-サブエージェントとして起動できる。**ほかのエージェント（`build` など）からは起動できない。**
+`bypass` のセッションから、同じく全部 allow の子エージェント `bypass-worker`（汎用）と
+`bypass-fleet-worker`（`/fleet` の作業役）をサブエージェントとして起動できる。
+**ほかのエージェント（`build` など）からは起動できない。** 逆に `bypass` からは、
+承認制の子のうち役割が重なる `general` と `fleet-worker` を起動できない。
 
 ```toml
+[opencode.agent.bypass]
+permission = { "*" = "allow", task = { "*" = "allow", general = "deny", fleet-worker = "deny" } }
+
 [opencode.agent.bypass-worker]
 mode = "subagent"
 permission = { "*" = "allow", task = "deny" }   # task は V2 の subagent
+
+[opencode.agents.bypass-fleet-worker]
+mode = "subagent"
+system_from = "fleet-worker"
+permissions = [
+  { action = "*", resource = "*", effect = "allow" },   # 先頭の全 allow が「bypass 専用」の印
+  { action = "subagent", resource = "*", effect = "deny" },
+  # ... fleet-worker と同じ deny (git の状態を変える操作・question)
+]
 ```
 
-- `generate.py` は、全部 allow（`permission = "allow"` か `"*" = "allow"`）で
+| 呼び出し元 | 起動できる子 |
+| --- | --- |
+| `bypass` | `bypass-worker`・`bypass-fleet-worker`・`explore`・`review`・`commit` |
+| `build` など | `general`・`fleet-worker`・`explore`・`review`・`commit` |
+
+- **`bypass` から承認制の子を外す理由。** `general` / `fleet-worker` は `bypass` から
+  起動しても自分の規則で動くので、編集やシェルのたびに確認が出て無確認の前提が崩れる。
+  モデルは説明の広い `general` を選びがちでもある。`explore` / `review` は読むだけで
+  確認がほぼ出ず、`commit` は確認付きでコミットしたいときの経路として残す
+- **deny した子は `subagent` ツールの一覧から消える**（実測）。`/fleet` の指示文は
+  「一覧に `bypass-fleet-worker` があればそれ、無ければ `fleet-worker`」で使い分けさせる
+- `bypass-fleet-worker` は、`/fleet` の作業役を `bypass` でも無確認で動かすためのもの。
+  `system` は `system_from` で `fleet-worker` から写し（`generate.py` が生成時に展開し、
+  `opencode.json` には `system` だけを出す。写し元は `system` を直接持つ
+  `[opencode.agents]` に限る）、deny は `fleet-worker` と同じものを全 allow の後ろに並べる
+  （最後に一致した規則が勝つ）。deny がそろっているかは
+  `test_bypass_fleet_worker_keeps_every_fleet_worker_deny` が突き合わせる
+- `generate.py` は、全部 allow で
   サブエージェントとして使えるエージェント（`mode` が `subagent` / `all`）ごとに、
   全体の `permissions` の**最後**へ `{ action: "subagent", resource: "<名前>", effect: "deny" }`
-  を足す（`opencode_subagent_guards`）。数える対象は `common.toml` の宣言だけで、
-  `rules.json` の `guarded_subagents` にも同じ名前を出す（`opencode_guarded_subagents`）
+  を足す（`opencode_subagent_guards`）。全部 allow とは、V1 の `permission` が `"allow"` か
+  `"*" = "allow"` を含むマップ、または V2 の `permissions` の**先頭**が
+  `{ action = "*", resource = "*", effect = "allow" }` のもの（`_grants_everything`）。
+  数える対象は `common.toml` の `[opencode.agent]` と `[opencode.agents]` の宣言だけで、
+  `rules.json` の `guarded_subagents` にも同じ名前を出す（`opencode_guarded_subagents`）。
+  全部 allow のエージェントは `bypass_agents` にも入り、誘導の plugin を素通りする
 - エージェントの規則は全体の規則の後ろに付き、最後に一致した規則が勝つ。
   `bypass` の `*` の allow はこの deny を上書きする
 - **全体の deny だけでは足りない。** `common.toml` に無いエージェント（手で足した
@@ -456,7 +491,7 @@ permission = { "*" = "allow", task = "deny" }   # task は V2 の subagent
   `mode`（`all` / `subagent`）が残り、`bypass` を子として起動できてしまう
   （`build` → `bypass` → `bypass-worker`）。全部 allow のエージェントは `common.toml` で
   `mode` を必ず宣言する（`test_all_allow_agents_in_common_declare_their_mode`）
-- `bypass-worker` 自身は `task = "deny"` なので、さらに子を起動できない
+- `bypass-worker` / `bypass-fleet-worker` 自身は子の起動が deny なので、さらに子を起動できない
   （入れ子にならない）
 - 「Always allow」で保存した承認は、設定の deny を上書きしない
 - `bypass` と同じく、秘密ファイルの読み取り禁止も外れる。誘導の plugin も
@@ -468,12 +503,14 @@ permission = { "*" = "allow", task = "deny" }   # task は V2 の subagent
 起動できる、子からの入れ子は不可。build に個別の `task = "allow"` があると全体の deny は
 上書きされ、plugin の deny でも、個別の規則の最後に置いた deny でも止まる）は
 [Bypass モードの調査 6 章](../research/opencode/permission/bypass-agent.md#6-bypass-からだけ呼べる子エージェント2026-09-28)。
+`bypass` から `general` / `fleet-worker` を外した構成と `bypass-fleet-worker` の実測は
+同じ調査の [7 章](../research/opencode/permission/bypass-agent.md#7-bypass-の子の入れ替え2026-09-30)。
 
 ### plugin 層 (`guide-plugin`)
 
 `~/.config/opencode/guide-plugin/` に置く。判定表は `common.toml` の
 `[[opencode.shell.guide]]`・`[opencode.redact]`・`[opencode.ask_description]`・
-`[file] read_deny_globs`・`[opencode.agent]` から `rules.json` として生成し、plugin は読むだけにする。
+`[file] read_deny_globs`・`[opencode.agent]`・`[opencode.agents]` から `rules.json` として生成し、plugin は読むだけにする。
 `index.js` はこのどれかが有効なら、`tui.ts` は `ask_description` が有効な
 ときだけ登録する（`generate.py` の `opencode_guide_server_needed` /
 `opencode_guide_tui_needed`）。
@@ -1007,7 +1044,11 @@ Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる�
 | --- | --- | --- |
 | `/fleet` | `[opencode.commands.fleet]` → `opencode.json` の `commands` | 取りまとめの手順（分解 → 依存関係と担当ファイル → 波ごとに並べて起動 → 結果を確かめて次の波 → 検証してまとめる） |
 | `fleet-worker` | `[opencode.agents.fleet-worker]`、階層 `worker` | 割り当てられた 1 つの作業を、担当ファイルの範囲で実装して確かめ、結果を返す |
+| `bypass-fleet-worker` | `[opencode.agents.bypass-fleet-worker]`、階層 `worker` | `bypass` での作業役。指示と deny は `fleet-worker` と同じで、ほかは無確認（[bypass から呼べる子エージェント](#bypass-から呼べる子エージェント)） |
 
+- **作業役は呼び出し元で決まる。** `bypass` からは `bypass-fleet-worker` だけ、
+  ほかからは `fleet-worker` だけが `subagent` ツールの一覧に載る。指示文は一覧を見て
+  使い分けさせる
 - **取りまとめは今のセッションで動かす（`subagent = false`）。** 子エージェントは
   さらに子を起動できない（既定の入れ子は 1 段）。子にすると作業役を起動できない
 - **作業役は同じ作業ツリーを共有する。** 衝突は、親が担当ファイルを重ねずに

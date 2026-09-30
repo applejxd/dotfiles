@@ -365,6 +365,42 @@ V1 の `permission` のキーと V2 の `action` の対応（キーの順に並�
 > 生成側の各エージェントへの deny の差し込み・V2 の `agents` への反映・一覧が読めないときの
 > 全 deny は取り下げた。上の記録は取り下げる前の実装の実測として残す。
 
+## 7. bypass の子の入れ替え（2026-09-30）
+
+- **環境**: WSL2 Ubuntu / OpenCode v2.0.14 / `mise run opencode:probe`（`opencode run --standalone`、
+  親のモデル `github-copilot/claude-opus-5`）
+- **問い**: `bypass` から承認制の `general` / `fleet-worker` を外し、全部 allow の V2 エージェント
+  `bypass-fleet-worker` を `bypass` だけから起動できるか。deny した子は一覧から消えるか
+
+### 書き方ごとの拒否（最小の設定）
+
+`bp1`〜`bp3`（primary）から `general` を起動させた。3 つとも `Permission denied: subagent`。
+
+| 名前 | 書き方 |
+| --- | --- |
+| `bp1` | V1 `permission = { "*" = "allow", task = { "*" = "allow", general = "deny" } }` |
+| `bp2` | V1 `permission = { "*" = "allow", subagent = { "*" = "allow", general = "deny" } }` |
+| `bp3` | V2 `permissions = [{* * allow}, {subagent general deny}]` |
+
+V2 の子 `pw`（`permissions = [{* * allow}, {subagent * deny}, {shell "git status" deny}]`、
+全体に `{subagent pw deny}`）は、`bypass` から起動でき、`echo ok` は確認なしで成功、
+`git status` は `Permission denied: shell`。`build` からの起動は `Permission denied: subagent`。
+
+### 生成した設定での確認
+
+作業ツリーの `common.toml` から `generate.py --target opencode-config` で作った
+`opencode.json` を `OPENCODE_PROBE_CONFIG` に置いた。
+
+| 親 | `subagent` ツールの一覧 | 起動の結果 |
+| --- | --- | --- |
+| `bypass` | `bypass-fleet-worker`・`bypass-worker`・`commit`・`explore`・`review` | `general` / `fleet-worker` は `Permission denied: subagent`。`bypass-fleet-worker` は起動でき、`git stash list` は `Permission denied: shell` |
+| `build` | `commit`・`explore`・`fleet-worker`・`general`・`review` | `bypass-fleet-worker` は `Permission denied: subagent` |
+
+**deny した子は一覧から消える。** 初回の試験で一覧に全部の子が載り、`bypass` の
+入れ子の deny も効かなかったのは、Orca の端末が設定する `OPENCODE_CONFIG`
+（実環境の `opencode.json`）が試験用の設定に重なり、`bypass` の `permission = "allow"` が
+勝ったため。`opencode_probe.sh` は `OPENCODE_PROBE_CONFIG` を使うとき `OPENCODE_CONFIG` を外す。
+
 ## 再確認すべき情報源
 
 - V2 にキーバインド設定の経路があるか（**未確認**）

@@ -278,6 +278,29 @@ def test_v2_agent_cannot_shadow_a_v1_agent():
         generated(common)
 
 
+def test_system_from_copies_the_system_and_is_not_emitted():
+    agents = generated(PERSONAL)["agents"]
+    assert agents["bypass-fleet-worker"]["system"] == agents["fleet-worker"]["system"]
+    assert all("system_from" not in a for a in agents.values())
+
+
+@pytest.mark.parametrize(
+    ("patch", "message"),
+    [
+        ({"system_from": "nope"}, "system_from"),
+        ({"system_from": "fleet-worker", "system": "x"}, "両方"),
+        ({"system_from": "bypass-fleet-worker"}, "system_from"),
+    ],
+    ids=["未知", "system と併記", "system_from を持つものを指す"],
+)
+def test_invalid_system_from_stops_apply(patch, message):
+    common = copy.deepcopy(PERSONAL)
+    common["opencode"]["agents"]["review"].pop("system", None)
+    common["opencode"]["agents"]["review"].update(patch)
+    with pytest.raises(ValueError, match=message):
+        generated(common)
+
+
 # ---------------------------------------------------------------------------
 # 並列作業 (/fleet)
 # ---------------------------------------------------------------------------
@@ -321,6 +344,27 @@ def test_fleet_worker_cannot_touch_the_shared_git_state(command):
     assert {"action": "shell", "resource": f"git {command} *", "effect": "deny"} in rules
 
 
+def test_bypass_fleet_worker_keeps_every_fleet_worker_deny():
+    """★bypass の作業役は全部 allow の後に fleet-worker と同じ deny を持つ。
+
+    最後に一致した規則が勝つので、deny は全 allow より後ろに置く。
+    """
+    rules = rules_of("bypass-fleet-worker")
+    assert rules[0] == {"action": "*", "resource": "*", "effect": "allow"}
+    denies = [r for r in rules_of("fleet-worker") if r["effect"] == "deny"]
+    assert denies == [r for r in rules[1:] if r["effect"] == "deny"]
+    assert all(r["effect"] == "deny" for r in rules[1:])
+    assert generated(PERSONAL)["agents"]["bypass-fleet-worker"]["mode"] == "subagent"
+    assert PERSONAL["opencode"]["model"]["agents"]["bypass-fleet-worker"] == "worker"
+
+
+def test_fleet_command_names_both_workers():
+    """呼び出し元で呼べる作業役が違う (bypass は bypass-fleet-worker、ほかは fleet-worker)。"""
+    template = generated(PERSONAL)["commands"]["fleet"]["template"]
+    assert "bypass-fleet-worker" in template
+    assert "fleet-worker を使う" in "".join(line.strip() for line in template.splitlines())
+
+
 def test_fleet_command_runs_in_the_current_session():
     """★子エージェントは子を起動できない。取りまとめ役は今のセッションで動かす。"""
     fleet = generated(PERSONAL)["commands"]["fleet"]
@@ -332,7 +376,7 @@ def test_fleet_command_runs_in_the_current_session():
 def test_fleet_command_names_only_defined_agents():
     template = generated(PERSONAL)["commands"]["fleet"]["template"]
     agents = set(generated(PERSONAL)["agents"]) | {"explore", "general", "build", "plan"}
-    for name in ("fleet-worker", "explore", "review"):
+    for name in ("fleet-worker", "bypass-fleet-worker", "explore", "review"):
         if name in template:
             assert name in agents, name
 
