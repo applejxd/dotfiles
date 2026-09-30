@@ -1,0 +1,7 @@
+# 出力は $EVAL_OUT (既定 .tmp/model-eval/) に出す。誤ってここへ出たときに記録と資格情報入りの DB を入れない
+runs/
+cfg/
+assets/
+seed.db*
+sessions.json
+events.ndjson

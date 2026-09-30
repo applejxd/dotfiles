@@ -1,0 +1,31 @@
+作業ディレクトリ: {WS}
+
+目的: 新しいモジュール `src/tk/semver.py` に、SemVer 2.0.0 の版の解析・比較と、範囲の判定を実装する。
+
+仕様:
+
+1. `parse(text: str) -> Version`
+   - `Version` は `major`・`minor`・`patch`（int）・`prerelease`（識別子の tuple。数字だけの識別子は int、それ以外は str）・`build`（str の tuple）を持つ不変のオブジェクト
+   - 形式は `MAJOR.MINOR.PATCH`、その後ろに任意で `-<prerelease>`、さらに任意で `+<build>`。識別子は `[0-9A-Za-z-]` の 1 文字以上で `.` 区切り
+   - 数字だけの識別子（MAJOR・MINOR・PATCH と prerelease の数字識別子）は先頭の 0 を許さない（`0` 自体は可）。build の識別子は先頭の 0 を許す
+   - 前後の空白や `v` 接頭辞は許さない。それ以外の不正な形はすべて ValueError（例: `"1.2"`・`"01.2.3"`・`"1.2.3-"`・`"1.2.3-01"`・`"1.2.3+"`・`"1.2.3-a..b"`・`"v1.2.3"`）
+2. `compare(a: str, b: str) -> int`（-1 / 0 / 1）: SemVer 2.0.0 §11 の優先順位
+   - MAJOR・MINOR・PATCH を数値で比べる。build は無視する（`1.0.0+a` と `1.0.0+b` は 0）
+   - 同じ MAJOR.MINOR.PATCH なら、prerelease がある方が低い
+   - prerelease の識別子を左から比べる。数字どうしは数値で、英数字どうしは ASCII の辞書順で、数字は英数字より低い。すべて等しければ識別子の少ない方が低い
+   - 例: `1.0.0-alpha < 1.0.0-alpha.1 < 1.0.0-alpha.beta < 1.0.0-beta < 1.0.0-beta.2 < 1.0.0-beta.11 < 1.0.0-rc.1 < 1.0.0`
+3. `satisfies(version: str, spec: str) -> bool`
+   - `spec` は `||` で区切った比較の組の OR。組は空白で区切った比較の AND。区切りの前後の空白は何個でもよい
+   - 比較: `>=V`・`>V`・`<=V`・`<V`・`=V`・`V`（`=V` と同じ）。演算子と版の間に空白は入れない。V は 1. の形の完全な版（prerelease 可）
+   - `^V`: MAJOR が 0 でなければ `>=V <(MAJOR+1).0.0`。`^0.Y.Z`（Y が 0 でない）は `>=V <0.(Y+1).0`。`^0.0.Z` は `>=V <0.0.(Z+1)`
+   - `~V`: `>=V <MAJOR.(MINOR+1).0`
+   - `V1 - V2`（ハイフンの前後に空白が 1 つ以上）: `>=V1 <=V2`。組の中でほかの比較と並べない
+   - `*`: どの版にも当たる（ただし次の prerelease の規則は効く）
+   - prerelease の規則: `version` に prerelease があるときは、比較を満たしたうえで、同じ組の中に「同じ MAJOR.MINOR.PATCH で prerelease を持つ版」を書いた比較（`^`・`~`・ハイフンで書いたものは、書いた側の版で判定）が 1 つ以上あるときだけ真。例: `satisfies("1.2.4-beta", ">=1.2.3")` は偽、`satisfies("1.2.4-beta", ">=1.2.4-alpha")` は真、`satisfies("1.2.4-beta", ">=1.2.3-alpha <2.0.0")` は偽
+   - `version` が不正、`spec` が空・不正（未知の演算子、不完全な版、空の組など）は ValueError
+
+担当ファイル: `src/tk/semver.py`（新規）、`tests/test_semver.py`（新規）
+触ってはいけないファイル: 上の 2 つ以外のすべて
+
+完了条件: 仕様を満たす実装があり、`tests/test_semver.py` に仕様の各項目を確かめるテストがあり、全テストが通る。
+確認方法: 作業ディレクトリで `.venv/bin/python -m pytest -q` を実行する。

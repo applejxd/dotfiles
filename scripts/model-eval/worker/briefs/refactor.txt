@@ -1,0 +1,15 @@
+作業ディレクトリ: {WS}
+
+目的: `src/tk/report.py` の重複を整理する（リファクタリング。振る舞いは変えない）。今は `render_table`・`render_totals`・`render_markdown` の 3 つが、列幅の計算と行の整形を同じように書いている。
+
+やること:
+- 列幅の計算を `_column_widths(headers, rows) -> list[int]` にまとめる。各列の幅は、見出しと全行のそのセルを `str()` にした長さの最大値
+- 行の整形を `_format_row(cells, widths) -> str` にまとめる。戻り値は `" | ".join(str(c).ljust(w) for c, w in zip(cells, widths))` と同じ文字列（末尾の空白は削らない。削るかどうかは呼び出し側で決める）
+- 3 つの公開関数は、列幅の計算と、見出し行・データ行・合計行の整形を必ずこの 2 つの helper を通して行う。公開関数の中に `ljust` や列幅を求める `max(` を残さない
+- 3 つの公開関数の名前・引数・出力は 1 文字も変えない
+
+担当ファイル: `src/tk/report.py`
+触ってはいけないファイル: `src/tk/report.py` 以外のすべて（テストも含む）
+
+完了条件: 上をすべて満たし、既存のテストが変更なしで通る。
+確認方法: 作業ディレクトリで `.venv/bin/python -m pytest -q` を実行する。

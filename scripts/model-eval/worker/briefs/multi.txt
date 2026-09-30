@@ -1,0 +1,15 @@
+作業ディレクトリ: {WS}
+
+目的: API クライアントにタイムアウトの設定を足し、設定・クライアント・CLI・README を通して使えるようにする。
+
+仕様:
+- `src/tk/config.py`: `Config` に `timeout: float = 30.0` を `retries` の後ろに足す。`load_config()` は `"timeout"` を読み、無ければ 30.0。`int` か `float` を受け付けて `float` にそろえる（`5` → `5.0`）。`bool`・文字列などの型や、0 以下の値は ValueError
+- `src/tk/client.py`: `Client.post()` は `transport.send()` を呼ぶたびに、キーワード引数 `timeout=self.config.timeout` を渡す（再試行のときも）
+- `src/tk/cli.py`: `post` サブコマンドに `--timeout`（秒。小数可）を足す。指定されたらその値を、無ければ既定の 30.0 を使う。`load_config()` を通して `Config` に渡す
+- `README.md` の「Configuration」の一覧に、`timeout` の行（既定値と単位）を足す
+
+担当ファイル: `src/tk/config.py`、`src/tk/client.py`、`src/tk/cli.py`、`README.md`、`tests/test_config.py`、`tests/test_client.py`
+触ってはいけないファイル: 上の 6 つ以外のすべて（`src/tk/transport.py` も含む）
+
+完了条件: 上をすべて満たし、`tests/test_config.py` と `tests/test_client.py` に、既定値・型の検査・`transport.send()` へ渡る値を確かめるテストが足されていて、全テストが通る。
+確認方法: 作業ディレクトリで `.venv/bin/python -m pytest -q` を実行する。

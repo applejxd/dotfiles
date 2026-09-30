@@ -1,0 +1,68 @@
+diff --git a/src/tk/report.py b/src/tk/report.py
+index f9da6f7..58ec8a4 100644
+--- a/src/tk/report.py
++++ b/src/tk/report.py
+@@ -1,15 +1,23 @@
+ """Plain-text and Markdown tables for the dashboard."""
+
+
+-def render_table(headers: list[str], rows: list[list]) -> str:
++def _column_widths(headers, rows):
+     widths = [len(str(h)) for h in headers]
+     for row in rows:
+         for i, cell in enumerate(row):
+             widths[i] = max(widths[i], len(str(cell)))
+-    lines = [" | ".join(str(h).ljust(widths[i]) for i, h in enumerate(headers)).rstrip()]
++    return widths
++
++
++def _format_row(cells, widths):
++    return " | ".join(str(c).ljust(w) for c, w in zip(cells, widths))
++
++
++def render_table(headers: list[str], rows: list[list]) -> str:
++    widths = _column_widths(headers, rows)
++    lines = [_format_row(headers, widths).rstrip()]
+     lines.append("-+-".join("-" * w for w in widths))
+-    for row in rows:
+-        lines.append(" | ".join(str(c).ljust(widths[i]) for i, c in enumerate(row)).rstrip())
++    lines += [_format_row(row, widths).rstrip() for row in rows]
+     return "\n".join(lines)
+
+
+@@ -21,28 +29,18 @@ def render_totals(headers: list[str], rows: list[list], label: str = "Total") ->
+             totals.append(sum(values))
+         else:
+             totals.append("")
+-    all_rows = [*rows, totals]
+-    widths = [len(str(h)) for h in headers]
+-    for row in all_rows:
+-        for i, cell in enumerate(row):
+-            widths[i] = max(widths[i], len(str(cell)))
+-    lines = [" | ".join(str(h).ljust(widths[i]) for i, h in enumerate(headers)).rstrip()]
++    widths = _column_widths(headers, [*rows, totals])
++    lines = [_format_row(headers, widths).rstrip()]
+     lines.append("-+-".join("-" * w for w in widths))
+-    for row in rows:
+-        lines.append(" | ".join(str(c).ljust(widths[i]) for i, c in enumerate(row)).rstrip())
++    lines += [_format_row(row, widths).rstrip() for row in rows]
+     lines.append("=+=".join("=" * w for w in widths))
+-    lines.append(" | ".join(str(c).ljust(widths[i]) for i, c in enumerate(totals)).rstrip())
++    lines.append(_format_row(totals, widths).rstrip())
+     return "\n".join(lines)
+
+
+ def render_markdown(headers: list[str], rows: list[list]) -> str:
+-    widths = [len(str(h)) for h in headers]
+-    for row in rows:
+-        for i, cell in enumerate(row):
+-            widths[i] = max(widths[i], len(str(cell)))
+-    widths = [max(w, 3) for w in widths]
+-    lines = ["| " + " | ".join(str(h).ljust(widths[i]) for i, h in enumerate(headers)) + " |"]
++    widths = [max(w, 3) for w in _column_widths(headers, rows)]
++    lines = ["| " + _format_row(headers, widths) + " |"]
+     lines.append("| " + " | ".join("-" * w for w in widths) + " |")
+-    for row in rows:
+-        lines.append("| " + " | ".join(str(c).ljust(widths[i]) for i, c in enumerate(row)) + " |")
++    lines += ["| " + _format_row(row, widths) + " |" for row in rows]
+     return "\n".join(lines)

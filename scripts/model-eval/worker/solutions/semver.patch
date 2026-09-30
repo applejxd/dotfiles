@@ -1,0 +1,123 @@
+diff --git a/src/tk/semver.py b/src/tk/semver.py
+new file mode 100644
+index 0000000..93f3941
+--- /dev/null
++++ b/src/tk/semver.py
+@@ -0,0 +1,109 @@
++"""semver の模範解答 (隠しテストの検証用)。"""
++
++from __future__ import annotations
++
++import re
++from dataclasses import dataclass
++
++_NUM = r"(?:0|[1-9]\d*)"
++_PRE_ID = rf"(?:{_NUM}|\d*[A-Za-z-][0-9A-Za-z-]*)"
++_RE = re.compile(
++    rf"^({_NUM})\.({_NUM})\.({_NUM})(?:-({_PRE_ID}(?:\.{_PRE_ID})*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
++)
++
++
++@dataclass(frozen=True)
++class Version:
++    major: int
++    minor: int
++    patch: int
++    prerelease: tuple = ()
++    build: tuple = ()
++
++
++def parse(text: str) -> Version:
++    if not isinstance(text, str):
++        raise ValueError(text)
++    m = _RE.match(text)
++    if not m:
++        raise ValueError(f"invalid version: {text!r}")
++    pre = tuple(int(p) if p.isdigit() else p for p in m.group(4).split(".")) if m.group(4) else ()
++    build = tuple(m.group(5).split(".")) if m.group(5) else ()
++    return Version(int(m.group(1)), int(m.group(2)), int(m.group(3)), pre, build)
++
++
++def _cmp(a: Version, b: Version) -> int:
++    ka, kb = (a.major, a.minor, a.patch), (b.major, b.minor, b.patch)
++    if ka != kb:
++        return -1 if ka < kb else 1
++    if not a.prerelease and not b.prerelease:
++        return 0
++    if not a.prerelease:
++        return 1
++    if not b.prerelease:
++        return -1
++    for x, y in zip(a.prerelease, b.prerelease):
++        if x == y:
++            continue
++        xi, yi = isinstance(x, int), isinstance(y, int)
++        if xi and not yi:
++            return -1
++        if yi and not xi:
++            return 1
++        return -1 if x < y else 1
++    la, lb = len(a.prerelease), len(b.prerelease)
++    return (la > lb) - (la < lb)
++
++
++def compare(a: str, b: str) -> int:
++    return _cmp(parse(a), parse(b))
++
++
++def _set(text: str):
++    toks = text.split()
++    if not toks:
++        raise ValueError("empty comparator set")
++    comps = []  # (op, Version)
++    written = []
++    if len(toks) == 3 and toks[1] == "-":
++        lo, hi = parse(toks[0]), parse(toks[2])
++        return [(">=", lo), ("<=", hi)], [lo, hi]
++    for t in toks:
++        if t == "*":
++            continue
++        m = re.match(r"^(>=|<=|>|<|=|\^|~)?(.*)$", t)
++        op, v = m.group(1) or "=", parse(m.group(2))
++        written.append(v)
++        if op == "^":
++            if v.major:
++                up = Version(v.major + 1, 0, 0)
++            elif v.minor:
++                up = Version(0, v.minor + 1, 0)
++            else:
++                up = Version(0, 0, v.patch + 1)
++            comps += [(">=", v), ("<", up)]
++        elif op == "~":
++            comps += [(">=", v), ("<", Version(v.major, v.minor + 1, 0))]
++        else:
++            comps.append((op, v))
++    return comps, written
++
++
++def satisfies(version: str, spec: str) -> bool:
++    v = parse(version)
++    if not isinstance(spec, str) or not spec.strip():
++        raise ValueError("empty spec")
++    sets = [_set(part) for part in spec.split("||")]
++    for comps, written in sets:
++        ok = True
++        for op, w in comps:
++            c = _cmp(v, w)
++            ok = ok and {">=": c >= 0, ">": c > 0, "<=": c <= 0, "<": c < 0, "=": c == 0}[op]
++        if not ok:
++            continue
++        if v.prerelease and not any(
++            w.prerelease and (w.major, w.minor, w.patch) == (v.major, v.minor, v.patch) for w in written
++        ):
++            continue
++        return True
++    return False
+diff --git a/tests/test_semver.py b/tests/test_semver.py
+new file mode 100644
+index 0000000..201975f
+--- /dev/null
++++ b/tests/test_semver.py
+@@ -0,0 +1,2 @@
++def test_placeholder():
++    pass

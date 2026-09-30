@@ -130,6 +130,7 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
   使い捨ての Python パッケージで課題 7 種類（機能追加・バグ修正・リファクタリング・テストの追加・
   複数ファイルにまたがる変更と、難しめの 2 種類）。採点は作業役に見せない隠しテストで行う。
   隠しテストは、模範解答で全件が通り、元のリポジトリで落ちることを確かめてから使う
+  （`scripts/model-eval/worker/selftest.py`）
 
 ### 測る項目
 
@@ -153,11 +154,10 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 
 ### 道具の置き場
 
-計測の道具（設定の生成・実行・採点・集計のスクリプト、作業用リポジトリの作り方、課題の依頼文、
-隠しテスト、計装した plugin）は、**git に入っていない `.tmp/` の下にあり、消えることがある。**
-2026-09-30 時点では、`routine` と `worker` の分が `.tmp/opencode/tiers/`、作業役への指示の計測の分が
-`.tmp/opencode/fleet/` にある。リポジトリに入れるかは決めていない。
-消えていたら、記録の「方法・条件」から作り直す。
+計測の道具（設定の生成・隔離実行・採点・集計のスクリプト、作業用リポジトリの作り方、課題の依頼文・
+隠しテスト・模範解答、計装した plugin）は [`scripts/model-eval/`](../../scripts/model-eval/README.md) にある。
+回し方はその README。実行記録は `.tmp/model-eval/` に出て、git に入らない。
+2026-09-30 までの記録は、同じ道具の元になった `.tmp/opencode/` の下の版で測った。
 
 ## 決め方の目安
 

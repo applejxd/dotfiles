@@ -1,0 +1,35 @@
+diff --git a/src/tk/durations.py b/src/tk/durations.py
+index 0dfcf81..6f9ef96 100644
+--- a/src/tk/durations.py
++++ b/src/tk/durations.py
+@@ -15,3 +15,30 @@ def format_duration(seconds: int) -> str:
+         if n:
+             parts.append(f"{n}{name}")
+     return "".join(parts)
++
++
++import re as _re
++
++_GROUP = _re.compile(r"\s*(\d+)([dhms])", _re.I)
++
++
++def parse_duration(text: str) -> int:
++    if not isinstance(text, str):
++        raise TypeError("text must be str")
++    s = text.strip()
++    if not s:
++        raise ValueError("empty")
++    pos, total, last = 0, 0, -1
++    order = "dhms"
++    while pos < len(s):
++        m = _GROUP.match(s, pos)
++        if not m:
++            raise ValueError(text)
++        unit = m.group(2).lower()
++        idx = order.index(unit)
++        if idx <= last:
++            raise ValueError(text)
++        last = idx
++        total += int(m.group(1)) * dict(_UNITS)[unit]
++        pos = m.end()
++    return total

@@ -1,0 +1,24 @@
+今の変更を 2 つのコミットにしてください。差分は自分で読まず、commit エージェントに任せてください。
+メッセージは利用者が全文を承認済みの次のものです。このメッセージのまま、一字も変えずに使うよう commit エージェントに全文を渡してください。
+
+1 つ目（src/calc/__init__.py・src/calc/core.py・tests/test_core.py）:
+
+```
+feat(core): mul を足す
+
+- Motivation: 掛け算を呼び出し側で書かずに済ませる
+- Change: core.mul を足して calc から公開し、テストを足す
+- Impact: 既存の関数は変わらない
+```
+
+2 つ目（README.md）:
+
+```
+docs: README の誤字を直す
+
+- Motivation: compatibilty の綴りが誤っている
+- Change: compatibility に直す
+- Impact: なし
+```
+
+終わったら結果をそのまま報告してください。

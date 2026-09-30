@@ -1,0 +1,17 @@
+作業ディレクトリ: {WS}
+
+目的: `src/tk/durations.py` に、`format_duration()` の逆変換 `parse_duration(text: str) -> int`（秒数を返す）を足す。
+
+仕様:
+- `<0 以上の整数><単位>` の組を 1 つ以上並べた文字列を受け付ける。単位は `d`（86400 秒）・`h`・`m`・`s`。例: `"1h30m"` → 5400、`"45s"` → 45、`"2d"` → 172800、`"1d2h3m4s"` → 93784、`"0s"` → 0
+- 単位の大文字も受け付ける（`"1H30M"` → 5400）。前後の空白は無視し、組と組の間の空白も許す（`" 1h 30m "` → 5400）
+- 各単位は 1 回まで、`d`・`h`・`m`・`s` の順でなければならない（`"30m1h"` や `"1h1h"` は ValueError）
+- 空文字列・空白だけ・単位の無い数（`"90"`）・未知の単位（`"1w"`）・負の数（`"-1h"`）・小数（`"1.5h"`）・組の間の余計な記号（`"1h,30m"`）は ValueError
+- `str` でない引数は TypeError
+- 0 以上のすべての整数 n で `parse_duration(format_duration(n)) == n`
+
+担当ファイル: `src/tk/durations.py`、`tests/test_durations.py`
+触ってはいけないファイル: 上の 2 つ以外のすべて
+
+完了条件: 仕様を満たす `parse_duration` があり、`tests/test_durations.py` に仕様の各項目を確かめるテストが足されていて、全テストが通る。
+確認方法: 作業ディレクトリで `.venv/bin/python -m pytest -q` を実行する。

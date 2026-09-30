@@ -1,0 +1,35 @@
+diff --git a/tests/test_money.py b/tests/test_money.py
+new file mode 100644
+index 0000000..c5d9ca4
+--- /dev/null
++++ b/tests/test_money.py
+@@ -0,0 +1,29 @@
++from decimal import Decimal
++
++import pytest
++
++from tk.money import format_money, parse_money, to_cents
++
++
++@pytest.mark.parametrize(("v", "c"), [("0.005", 1), ("0.015", 2), ("-0.005", -1), ("0.004", 0)])
++def test_to_cents(v, c):
++    assert to_cents(Decimal(v)) == c
++
++
++def test_format():
++    assert format_money(Decimal("1234567")) == "$1,234,567.00"
++    assert format_money(Decimal("-1234.5")) == "-$1,234.50"
++    assert format_money(Decimal("0.05")) == "$0.05"
++
++
++def test_parse():
++    assert parse_money("$1,234.5") == Decimal("1234.5")
++    assert parse_money("1234.5") == Decimal("1234.5")
++    assert parse_money("-$3") == Decimal("-3")
++    assert parse_money("  $7  ") == Decimal("7")
++
++
++@pytest.mark.parametrize("t", ["", "abc", "1,23", "$-3"])
++def test_parse_invalid(t):
++    with pytest.raises(ValueError):
++        parse_money(t)

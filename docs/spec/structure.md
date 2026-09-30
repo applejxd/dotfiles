@@ -16,6 +16,7 @@
 │   ├── dot_config/            # `~/.config/` 配下へ展開する設定
 │   └── dot_local/bin/         # `~/.local/bin/` へ展開する手元のコマンド（`ocs`、`oc-utils`）
 ├── scripts/                   # 個別用途の導入・生成・検証・保守用スクリプト
+│   └── model-eval/            # OpenCode の階層に当てるモデルの計測（model-lineup-review.md）
 ├── test/                      # pytest・コンテナ検証
 ├── mise.toml                  # 開発ツールとタスク
 └── pyproject.toml             # Python依存とlint設定

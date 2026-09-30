@@ -97,5 +97,8 @@ repos:
         exclude: ^home/dot_codex/modify_config\.toml$
       - id: end-of-file-fixer
         name: Fix end of files
+        # 模範解答のパッチは空の文脈行が要る
+        exclude: ^scripts/model-eval/worker/solutions/.*\.patch$
       - id: trailing-whitespace
         name: Trim trailing whitespace
+        exclude: ^scripts/model-eval/worker/solutions/.*\.patch$

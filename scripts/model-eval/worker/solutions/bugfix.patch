@@ -1,0 +1,34 @@
+diff --git a/src/tk/paginate.py b/src/tk/paginate.py
+index 04a79da..909b2a0 100644
+--- a/src/tk/paginate.py
++++ b/src/tk/paginate.py
+@@ -5,7 +5,7 @@ def page_count(total: int, per_page: int) -> int:
+     """Number of pages needed for ``total`` items (0 items -> 0 pages)."""
+     if per_page < 1:
+         raise ValueError("per_page must be >= 1")
+-    return total // per_page + 1
++    return -(-total // per_page)
+
+
+ def paginate(items: list, page: int, per_page: int) -> list:
+@@ -14,13 +14,15 @@ def paginate(items: list, page: int, per_page: int) -> list:
+         raise ValueError("page must be >= 1")
+     if per_page < 1:
+         raise ValueError("per_page must be >= 1")
+-    start = page * per_page
++    start = (page - 1) * per_page
+     return items[start : start + per_page]
+
+
+ def page_window(current: int, total_pages: int, size: int = 5) -> list[int]:
+     """Page numbers to show around ``current`` (at most ``size``, within 1..total_pages)."""
+-    half = size // 2
+-    start = max(1, current - half)
+-    end = min(total_pages, start + size)
+-    return list(range(start, end))
++    if total_pages <= 0:
++        return []
++    size = min(size, total_pages)
++    start = current - size // 2
++    start = max(1, min(start, total_pages - size + 1))
++    return list(range(start, start + size))

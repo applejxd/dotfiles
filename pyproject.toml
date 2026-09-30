@@ -22,6 +22,9 @@ extend-exclude = [
   "home/AppData",
   "home/.chezmoitemplates/modify_json.py.tmpl",
   "home/dot_config/gdb",
+  # 計測の課題 (作業役が読む) と隠しテスト。直すと前の計測と条件が変わる
+  "scripts/model-eval/worker/base",
+  "scripts/model-eval/worker/hidden",
 ]
 # 既存コードの実測に合わせる (最長 109 桁、100 桁超は 7 行だけ)。
 # 既定の 88 桁にすると 74 行の折り返しが必要になり、変更が本題からずれる。
