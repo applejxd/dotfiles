@@ -10,7 +10,8 @@ compaction を跨いで作業文脈を失わないようにするため、セッ
     paths   保存先を解決して JSON で返す
     read    自分の記録を読む (ヘッダの session が一致しなければ exit 1)
     lint    checkpoint を検査する (--structure で構造のみ)
-    write   stdin の内容を checkpoint へアトミックに書く
+    write   stdin (または --input-file) を検査してから checkpoint へアトミックに書く
+            (空・構造不正は拒否)
     snapshot 機械節だけを書く (plugin が圧縮の直前に呼ぶ)
 
 exit code:
@@ -611,7 +612,31 @@ def _cmd_read(args: argparse.Namespace) -> int:
 
 def _cmd_write(args: argparse.Namespace) -> int:
     target = Path(args.path)
-    text = sys.stdin.read()
+    if args.input_file:
+        source = Path(args.input_file)
+        try:
+            text = source.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"error: --input-file を読めない: {source} ({exc})", file=sys.stderr)
+            return EXIT_USAGE
+    elif sys.stdin.isatty():
+        print(
+            "error: 本文が無い (`--input-file <パス>` か stdin で渡す)",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+    else:
+        text = sys.stdin.read()
+    if not text.strip():
+        print("error: 本文が空。既存の checkpoint は変更しない", file=sys.stderr)
+        return EXIT_FAIL
+    # 壊れた本文で既存を置き換えない。予算・フェンスは lint で直すので見ない
+    errors, _ = lint(text, session=args.session, headings_only=True)
+    if errors:
+        for error in errors:
+            print(f"error: {error}", file=sys.stderr)
+        print("error: 構造が不正。既存の checkpoint は変更しない", file=sys.stderr)
+        return EXIT_FAIL
     if args.keep_prev and target.exists():
         atomic_write(Path(args.keep_prev), target.read_text(encoding="utf-8"))
     atomic_write(target, text)
@@ -667,9 +692,11 @@ def build_parser() -> argparse.ArgumentParser:
     read.add_argument("--cwd", help="起点ディレクトリ (既定は現在地)")
     read.set_defaults(func=_cmd_read)
 
-    write = sub.add_parser("write", help="stdin の内容をアトミックに書く")
+    write = sub.add_parser("write", help="本文を検査してアトミックに書く (stdin か --input-file)")
     write.add_argument("path", help="checkpoint のパス")
+    write.add_argument("--input-file", help="stdin の代わりに UTF-8 で読む本文のパス")
     write.add_argument("--keep-prev", help="直前の世代を残すパス")
+    write.add_argument("--session", help="ヘッダの session と照合するセッション ID")
     write.set_defaults(func=_cmd_write)
 
     snapshot = sub.add_parser(

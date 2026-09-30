@@ -274,8 +274,10 @@ CP=~/.config/opencode/skills/checkpoint/scripts/checkpoint.py
 # 保存先を解決する（固定パスを自分で組み立てない）
 uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-ignored
 
-# 書く
-uv run --no-project python "$CP" write <checkpoint パス> --keep-prev <prev パス>
+# 書く（本文は --input-file で渡す。OS に依存しない。空入力・6 節の欠けは拒否して既存を残す。
+# --session を付けるとヘッダの session も突き合わせる。--input-file を省くと stdin から読む
+# （plugin 用。端末の stdin は拒否）
+uv run --no-project python "$CP" write <checkpoint パス> --keep-prev <prev パス> --session "<セッションID>" --input-file <本文のファイル>
 
 # 構造と持ち主を検査する
 uv run --no-project python "$CP" lint <checkpoint パス> --structure --session "<セッションID>"

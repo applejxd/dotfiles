@@ -1,6 +1,6 @@
 ---
 name: checkpoint
-description: "コンテキスト圧縮を跨いで作業文脈を失わないよう、復帰用の記録を .tmp のセッション別ファイルへ保存する。「checkpoint して」「引き継ぎを作って」「文脈を保存して」と言われたとき、逼迫を促されたとき、手動で圧縮する前に使う。docs/ への文書化（案件更新・ADR・調査記録・仕様）は sdd-docs スキルが担うので、そちらには使わない。"
+description: "同一セッションのコンテキスト圧縮に備えた復帰用の記録の保存（.tmp のセッション別ファイル）と、圧縮後・作業再開時の保存済みの記録からの復帰を行う。「checkpoint して」「文脈を保存して」「保存した記録から再開して」と言われたとき、逼迫を促されたとき、手動で圧縮する前に使う。別エージェント・別 worktree への作業の委譲（handoff）や、docs/ への文書化（案件更新・ADR・調査記録・仕様。sdd-docs スキルの領分）には使わない。"
 allowed-tools: Read, Edit, Bash, Glob, Grep
 ---
 
@@ -18,9 +18,10 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 | 言われ方 | やること |
 | --- | --- |
 | 「checkpoint して」/ 逼迫の促し | **A1 だけ** |
-| 「引き継ぎを作って」/「文脈を保存して」 | A1 |
+| 「文脈を保存して」 | A1 |
 | 「案件を更新して」/「docs に反映して」/「ADR を作って」 | **`sdd-docs` スキル**（A2 / B）。逼迫しているなら A1 を先に |
-| 「現状を教えて」/ 作業の再開 | **復帰**。読むだけ。書かない |
+| 「保存した記録から再開して」/ 圧縮後・作業の再開 | **復帰**。読むだけ。書かない |
+| 別エージェント・別 worktree への引き継ぎ・委譲 | **このスキルではない**（`orca-cli` 等）。同一セッションの記録は他者へ渡す用ではない |
 
 **子エージェントの中では何もしない。** 親の記録は親だけが書く。
 
@@ -42,11 +43,17 @@ OpenCode は `paths` / `lint` / `read` をこの形だけ確認なしに通す�
 3. `references/checkpoint-template.md` の 6 節を埋める。
    ヘッダの `session` に 1 が返した `session` を**そのまま**書き、
    `covered_through` に 2 の境界を書く（`session` が違うと復帰時に読まれない）
-4. 書く:
+4. 本文を `<checkpoint パス>` と同じ `.tmp/` の下の一時ファイル（例 `.tmp/cp-body.md`）へ
+   Write ツールで書き、`--input-file` で渡す（シェルのリダイレクトを使わないので
+   Windows でも同じ）:
 
    ```bash
-   python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py write <checkpoint パス> --keep-prev <prev パス>
+   python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py write <checkpoint パス> --keep-prev <prev パス> --session "<セッションID>" --input-file .tmp/cp-body.md
    ```
+
+   空・空白だけの本文、6 節が欠ける・重複する・順序が違う本文、ヘッダの `session` が
+   違う本文は非ゼロで終了し、既存の記録は変わらない（予算超過は次の lint で直す）。
+   書けたら一時ファイルは消す
 
 5. 通るまで直す:
 
@@ -57,7 +64,7 @@ OpenCode は `paths` / `lint` / `read` をこの形だけ確認なしに通す�
 ## 復帰
 
 圧縮の直後は plugin が自分の記録を自動で注入する。注入が無いとき
-（手動で再開するとき・「現状を教えて」）だけ次を行う。
+（手動で再開するとき・保存した記録から再開するとき）だけ次を行う。
 
 ```bash
 python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py read --session "<セッションID>"

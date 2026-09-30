@@ -604,11 +604,153 @@ def test_cli_write_keeps_previous_generation(tmp_path: Path):
     target = tmp_path / "checkpoint.md"
     prev = tmp_path / "checkpoint.prev.md"
 
-    run_cli(["write", str(target)], stdin="第 1 世代")
-    run_cli(["write", str(target), "--keep-prev", str(prev)], stdin="第 2 世代")
+    first = valid_checkpoint(boundary="msg-1")
+    second = valid_checkpoint(boundary="msg-2")
 
-    assert target.read_text(encoding="utf-8") == "第 2 世代"
-    assert prev.read_text(encoding="utf-8") == "第 1 世代"
+    assert run_cli(["write", str(target)], stdin=first).returncode == 0
+    done = run_cli(["write", str(target), "--keep-prev", str(prev)], stdin=second)
+    assert done.returncode == 0, done.stderr
+
+    assert target.read_text(encoding="utf-8") == second
+    assert prev.read_text(encoding="utf-8") == first
+
+
+@pytest.mark.parametrize("stdin", ["", " \n\t\n"], ids=["空", "空白のみ"])
+def test_cli_write_rejects_empty_input_and_keeps_the_record(tmp_path: Path, stdin: str):
+    target = tmp_path / "checkpoint.md"
+    prev = tmp_path / "checkpoint.prev.md"
+    good = valid_checkpoint()
+    target.write_text(good, encoding="utf-8")
+
+    done = run_cli(["write", str(target), "--keep-prev", str(prev)], stdin=stdin)
+
+    assert done.returncode != 0
+    assert "空" in done.stderr
+    assert target.read_text(encoding="utf-8") == good
+    assert not prev.exists()
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        "# Checkpoint\n\n本文だけ\n",
+        valid_checkpoint().replace("## Evidence\n", "本文中に ## Evidence\n"),
+        valid_checkpoint() + "\n## Refs\n- 重複\n",
+    ],
+    ids=["見出し無し", "見出し欠け", "重複"],
+)
+def test_cli_write_rejects_a_broken_structure_and_keeps_the_record(
+    tmp_path: Path, broken: str
+):
+    target = tmp_path / "checkpoint.md"
+    prev = tmp_path / "checkpoint.prev.md"
+    good = valid_checkpoint()
+    target.write_text(good, encoding="utf-8")
+
+    done = run_cli(["write", str(target), "--keep-prev", str(prev)], stdin=broken)
+
+    assert done.returncode != 0
+    assert "error:" in done.stderr
+    assert target.read_text(encoding="utf-8") == good
+    assert not prev.exists()
+
+
+def test_cli_write_checks_the_owner_only_when_the_session_is_given(tmp_path: Path):
+    target = tmp_path / "checkpoint.md"
+    good = valid_checkpoint(session="abc12345")
+    target.write_text(good, encoding="utf-8")
+    other = valid_checkpoint(boundary="msg-2", session="zzz99999")
+
+    done = run_cli(["write", str(target), "--session", "abc12345"], stdin=other)
+    assert done.returncode != 0
+    assert target.read_text(encoding="utf-8") == good
+
+    assert run_cli(["write", str(target)], stdin=other).returncode == 0
+    assert target.read_text(encoding="utf-8") == other
+
+
+def test_cli_write_reads_the_body_from_input_file(tmp_path: Path):
+    target = tmp_path / "checkpoint.md"
+    prev = tmp_path / "checkpoint.prev.md"
+    first = valid_checkpoint(boundary="msg-1")
+    second = valid_checkpoint(boundary="msg-2") + "日本語 ✓\n"
+    target.write_text(first, encoding="utf-8")
+    body = tmp_path / "body.md"
+    body.write_text(second, encoding="utf-8")
+
+    done = run_cli(
+        ["write", str(target), "--keep-prev", str(prev), "--input-file", str(body)],
+        stdin="",
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert target.read_text(encoding="utf-8") == second
+    assert prev.read_text(encoding="utf-8") == first
+
+
+def test_cli_write_input_file_wins_over_stdin(tmp_path: Path):
+    target = tmp_path / "checkpoint.md"
+    body = tmp_path / "body.md"
+    good = valid_checkpoint()
+    body.write_text(good, encoding="utf-8")
+
+    done = run_cli(["write", str(target), "--input-file", str(body)], stdin="broken")
+
+    assert done.returncode == 0, done.stderr
+    assert target.read_text(encoding="utf-8") == good
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "",
+        " \n\t\n",
+        "# Checkpoint\n\n本文だけ\n",
+        valid_checkpoint(session="zzz99999"),
+    ],
+    ids=["空", "空白のみ", "構造不正", "持ち主違い"],
+)
+def test_cli_write_rejects_a_bad_input_file_and_keeps_the_record(
+    tmp_path: Path, content: str
+):
+    target = tmp_path / "checkpoint.md"
+    prev = tmp_path / "checkpoint.prev.md"
+    good = valid_checkpoint(session="abc12345")
+    target.write_text(good, encoding="utf-8")
+    body = tmp_path / "body.md"
+    body.write_text(content, encoding="utf-8")
+
+    done = run_cli(
+        [
+            "write", str(target), "--keep-prev", str(prev),
+            "--session", "abc12345", "--input-file", str(body),
+        ]
+    )
+
+    assert done.returncode != 0
+    assert "error:" in done.stderr
+    assert target.read_text(encoding="utf-8") == good
+    assert not prev.exists()
+
+
+def test_cli_write_rejects_a_missing_input_file_and_keeps_the_record(tmp_path: Path):
+    target = tmp_path / "checkpoint.md"
+    good = valid_checkpoint()
+    target.write_text(good, encoding="utf-8")
+
+    done = run_cli(["write", str(target), "--input-file", str(tmp_path / "nope.md")])
+
+    assert done.returncode != 0
+    assert "--input-file" in done.stderr
+    assert target.read_text(encoding="utf-8") == good
+
+
+def test_cli_write_accepts_a_generation_over_budget(tmp_path: Path):
+    """予算超過は lint で直す。保存は止めない (plugin の受け入れ判定と同じ)。"""
+    target = tmp_path / "checkpoint.md"
+    text = valid_checkpoint().replace("- 完了: X", "- " + "z" * 2500)
+    assert run_cli(["write", str(target)], stdin=text).returncode == 0
+    assert target.read_text(encoding="utf-8") == text
 
 
 # ---------------------------------------------------------------------------
