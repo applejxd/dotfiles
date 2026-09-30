@@ -89,7 +89,7 @@ def test_common_toml_carries_the_detected_provider():
 
 def test_default_model_on_each_provider():
     assert generated(PERSONAL)["model"] == "github-copilot/claude-opus-5.5"
-    assert generated(WORK)["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5"
+    assert generated(WORK)["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5-5"
 
 
 def test_copilot_tiers_share_one_model_by_variant():
@@ -162,11 +162,22 @@ def test_other_policies_and_experimental_keys_survive():
 
 def test_declared_subagents_get_their_tier_models():
     agents = generated(PERSONAL)["agents"]
-    assert agents["commit"]["model"] == "github-copilot/claude-opus-5.5#medium"
+    assert agents["commit"]["model"] == "github-copilot/claude-sonnet-5.5#medium"
     assert agents["review"]["model"] == "github-copilot/gpt-6-astra"
     work = generated(WORK)["agents"]
-    assert work["commit"]["model"].startswith("amazon-bedrock/global.anthropic.claude-haiku")
+    assert work["commit"]["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5-5"
     assert work["review"]["model"] == "amazon-bedrock/global.openai.gpt-6-sol"
+
+
+def test_commit_uses_sonnet_on_both_providers():
+    """haiku ではメッセージの書式が崩れる (記録 E4 / E5)。Copilot は Sonnet 5.5 (記録 E6)。"""
+    assert PERSONAL["opencode"]["model"]["agents"]["commit"] == "standard"
+    assert generated(PERSONAL)["agents"]["commit"]["model"] == (
+        "github-copilot/claude-sonnet-5.5#medium"
+    )
+    assert generated(WORK)["agents"]["fleet-worker"]["model"] == (
+        "amazon-bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
+    ), "fleet-worker は light のまま"
 
 
 def test_assigned_agents_are_subagents():

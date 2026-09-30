@@ -720,19 +720,21 @@ provider = "{{ includeTemplate "llm-provider" . }}"
 # エージェント ID = 階層名。組み込み (plan / explore など) も上書きできる。
 # ★主エージェント (build / plan) は選んでもモデルが変わらない。子エージェントだけ書く。
 [opencode.model.agents]
-commit = "light"
+commit = "standard"
 review = "second_opinion"
 fleet-worker = "light"
 
 [opencode.model.tier.amazon-bedrock]
-default = "global.anthropic.claude-sonnet-5"
+default = "global.anthropic.claude-sonnet-5-5"
 light = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+standard = "global.anthropic.claude-sonnet-5-5"
 heavy = "global.anthropic.claude-opus-5-5#high"
 second_opinion = "global.openai.gpt-6-sol"
 
 [opencode.model.tier.github-copilot]
 default = "claude-opus-5.5"
 light = "claude-opus-5.5#medium"
+standard = "claude-sonnet-5.5#medium"
 heavy = "claude-opus-5.5#xhigh"
 second_opinion = "gpt-6-astra"
 
@@ -781,7 +783,8 @@ system = """
 - ファイルは read / glob / grep ツールで読む。shell で cat / ls / find / echo などを使わない
 - メッセージは git commit -m '<件名>' -m '<本文>' のように -m を重ねる。本文の改行は引用符の
   中に書く。ヒアドキュメントと -F は使わない (編集できないので、それを勧める誘導に従えない)
-- コマンドは 1 回に 1 つ。; や && でつなげず、リダイレクトや 2>&1 を付けない
+- コマンドは 1 回に 1 つ。; や && でつなげず、リダイレクトや 2>&1 を付けない。コミット後の
+  確かめも 1 つずつ実行する。作業ディレクトリは cd ではなく shell ツールの workdir で指定する
 - 確認が拒否されたら、それ以降はコミットしない。コミットしたもの・しなかったもの (ステージ
   内容とメッセージの全文)・残りの単位の案を返して終わる
 - hook がファイルを直してコミットが失敗したら、同じパスを add し直して 1 回だけやり直す

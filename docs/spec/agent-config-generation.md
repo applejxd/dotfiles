@@ -633,14 +633,27 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 
 | 階層 | Copilot | Bedrock |
 | --- | --- | --- |
-| `default` | `claude-opus-5.5` | `global.anthropic.claude-sonnet-5` |
+| `default` | `claude-opus-5.5` | `global.anthropic.claude-sonnet-5-5` |
 | `light` | `claude-opus-5.5#medium` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| `standard` | `claude-sonnet-5.5#medium` | `global.anthropic.claude-sonnet-5-5` |
 | `heavy` | `claude-opus-5.5#xhigh` | `global.anthropic.claude-opus-5-5#high` |
 | `second_opinion` | `gpt-6-astra` | `global.openai.gpt-6-sol` |
 
+割り当て（`[opencode.model.agents]`）は `commit = "standard"`・`review = "second_opinion"`・
+`fleet-worker = "light"`。
+
+- **`standard` は、`light` の Bedrock（`claude-haiku-4-5`）では足りない子エージェント用。**
+  `commit` を haiku で動かすとメッセージの書式が崩れ、`claude-sonnet-5` ではそろった
+  （[記録 E4 / E5](../research/opencode/commit-review-agents.md)）。両プロバイダとも Sonnet 5.5 にした。
+  Copilot の `claude-sonnet-5.5#medium` は `claude-opus-5.5#medium` と同等にコミット・書式がそろい、
+  速く単価も半分で、`claude-sonnet-5` より `git commit` 以外の確認が少なかった（記録 E6）
+  - `default` を割り当てなかったのは、Copilot の `default` はバリアントが付けられず
+    （下記）`light` と推論の強さが変わるのと、既定モデルを変えたときに子エージェントまで
+    変わらないようにするため。Bedrock では今は `default` と同じ ID
+
 ```toml
 [opencode.model.agents]
-explore = "light"      # 例。2026-09-28 時点では割り当ては空
+explore = "light"      # 例
 ```
 
 - **どのプロバイダにも同じ階層名をそろえる**（`test_every_provider_defines_the_same_tiers`）
@@ -708,7 +721,7 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
 
 | ID | 階層 | 役割 | 権限で塞ぐもの |
 | --- | --- | --- | --- |
-| `commit` | `light` | 変更を論理単位に分け、パスを指定してステージし、単位ごとにコミットする。`git commit` のたびに確認が出る | 編集・質問・子エージェントの起動・作業ツリーを戻す git・リダイレクトと `--output`・`git commit` の検証の回避や `-a` / `--amend`（下記） |
+| `commit` | `standard` | 変更を論理単位に分け、パスを指定してステージし、単位ごとにコミットする。`git commit` のたびに確認が出る | 編集・質問・子エージェントの起動・作業ツリーを戻す git・リダイレクトと `--output`・`git commit` の検証の回避や `-a` / `--amend`（下記） |
 | `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
 
 - **`commit` は `git commit` の確認を承認の場にしてコミットする。** 質問のツールは
@@ -764,9 +777,16 @@ explore = "light"      # 例。2026-09-28 時点では割り当ては空
   承認を得て、承認済みの全文を渡す。`commit` は渡された全文を一字も変えずに使い、確認画面では
   件名の一致だけを見ればよい。渡されなかった単位だけ、スキルに従って自分で作る
   （スキルの手順 4 とエージェントの `system` に同じ趣旨がある）
-- **`claude-haiku-4.5` では書式が崩れやすい。** コミットまでは 9/10 で進むが、本文の
-  `- Motivation:` / `- Change:` / `- Impact:` は 17 件中 2 件にとどまった（記録 E4。Bedrock の PC の
-  `light` は同系統の `claude-haiku-4-5`）。未対策
+- **`claude-haiku-4.5` では書式が崩れやすいので、`commit` には使わない。** コミットまでは 9/10 で
+  進むが、本文の `- Motivation:` / `- Change:` / `- Impact:` は 17 件中 2 件にとどまった（記録 E4）。
+  `standard` 階層の Sonnet を当てる。Copilot の PC は `claude-sonnet-5.5#medium` で、10/10 がコミットし、
+  3 行は 16 件中 15 件、`git commit` 以外の確認と誘導は 0 回。承認済みの全文を渡した 3 回は
+  4 件とも一字も変わらなかった（記録 E6）。Bedrock の PC も `claude-sonnet-5-5` にした（Copilot の
+  Sonnet 5.5 で近似した判断で、Bedrock 上では未確認）。1 世代前の `claude-sonnet-5` では 10/10 がコミットし、
+  3 行は 14 件中 14 件そろった（記録 E5 / E6）。
+  `claude-sonnet-5` では、`system` に「確かめも 1 つずつ」「`cd` ではなく `workdir`」を足した後、`cd … &&` の誘導は
+  1 回の依頼あたり 1.7 回から 0 回、`git status --short; echo ---; git log …` のような連結による
+  `git commit` 以外の確認は 0.8 回から 0.3 回に減った（記録 E6）
 - **全体の規則は変えない。** 全体の `allow` から `git diff` / `git status` を外した判断
   （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）はそのままで、
   素の形を確認なしで通すのは `commit` の中だけ。`git add -A` / `git add .` / `git switch` /
