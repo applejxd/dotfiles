@@ -1,6 +1,6 @@
 ---
 name: cuda-version-migration
-description: "CUDA 11.x 時代に書かれた PyTorch の CUDA 拡張を CUDA 12.x / 13.x へ移行し、ビルドと数値検証まで通す。「CUDA 12 でビルドできない」「CUDA 13 に上げたい」「unsupported gpu architecture 'compute_37'」「no kernel image is available for execution on the device」「undefined symbol: _ZNK3c10...」「THC/THC.h が無い」「AT_CHECK が未定義」と言われたときに使う。torch を新しくするだけの作業や、CUDA バージョンを変えない依存整理（uv-migration スキルの領分）には使わない。"
+description: "CUDA 11.x 時代に書かれた PyTorch の CUDA 拡張を CUDA 12.x / 13.x へ移行し、ビルドと数値検証まで通す。PyTorch CUDA 拡張の toolkit 更新が目的のとき、または更新が原因だと確認できたときに使う。「CUDA 12 でビルドできない」「CUDA 13 に上げたい」「unsupported gpu architecture 'compute_37'」「no kernel image is available for execution on the device」「undefined symbol: _ZNK3c10...」「THC/THC.h が無い」「AT_CHECK が未定義」は、toolkit 更新が原因と確認できた場合だけ該当する（torch の版ずれや依存の不整合が原因なら使わない）。torch を新しくするだけの作業や、CUDA バージョンを変えない依存整理（uv-migration スキルの領分）には使わない。"
 ---
 
 # CUDA version migration
@@ -11,13 +11,15 @@ CUDA 11 前提の PyTorch 拡張を CUDA 12.x / 13.x で動かす。ビルドを
 
 依存管理そのもの（conda からの脱却、`no-build-isolation` の使い分け）は
 `uv-migration` スキルの領分。こちらは「CUDA のバージョンを上げると何が壊れるか」
-だけを扱う。
+だけを扱う。両方を使うときは、先に決めた torch / toolkit の版の組を両スキル共通の
+入力にし、どちらも無断で変えない。
 
 ## 完了条件
 
-1. 対象の toolkit で `.so` が生成される
+1. 対象の toolkit で `.so` が生成された（**ビルドログで確認**。現在の nvcc では証明できない）
 2. `.so` が **実行するマシンの SM 向けコード**を含む（`cuobjdump` で確認）
 3. `.so` が **ランタイムの torch と同じ ABI** でリンクされている
+   （import できる = 今リンクが解決する。ビルド時の torch が同じ版かはビルドログで確認）
 4. 全カーネルが純 PyTorch 参照実装と数値一致する
 5. 上位モジュールで forward / backward が通り、学習が収束する
 
@@ -94,8 +96,10 @@ E  void furthest_point_sampling_kernel_wrapper(...) at L:228 in .../sampling_gpu
 
 ### 4. ビルドする
 
-ビルド環境の作り方は `uv-migration` スキルに従う。CUDA の版を変える移行で
-追加になる注意は 2 点だけ。
+ビルド環境は、既存の依存管理（pip / conda / uv など）を維持するのを既定とする。
+uv への移行が必要なときだけ `uv-migration` スキルを併用する。
+**ビルドログを保存し、torch の版・toolkit の版・`TORCH_CUDA_ARCH_LIST` を記録する**
+（手順 5 の検証で使う）。CUDA の版を変える移行で追加になる注意は 2 点だけ。
 
 - **ビルド時の torch とランタイムの torch を一致させる**。ずれると
   `undefined symbol: _ZNK3c1010TensorImpl15incref_pyobjectEv` のような
@@ -110,13 +114,28 @@ E  void furthest_point_sampling_kernel_wrapper(...) at L:228 in .../sampling_gpu
 **(a) 由来の検証** — `scripts/check_cuda_build.py` が機械的に見る。
 
 ```bash
-uv run python ~/.claude/skills/cuda-version-migration/scripts/check_cuda_build.py pointnet2_ops._ext
+uv run python ~/.claude/skills/cuda-version-migration/scripts/check_cuda_build.py pointnet2_ops._ext \
+  --built-torch 2.10.0 --built-cuda 12.8 --target-sm "8.6;9.0+PTX"
 ```
 
-- `.so` が site-packages にある（`torch_extensions/` なら JIT に落ちている）
-- ランタイム torch と同じ ABI（import できる = リンクが解決した）
-- `nvcc` の major と `torch.version.cuda` の major が一致
-- fatbin に**このマシンの SM 向け SASS か、JIT 可能な PTX** がある
+`--built-*` と `--target-sm` にはビルドログに記録した値を渡す。`--built-cuda`
+（ビルドに使った toolkit）は現在の `nvcc` と照合し、torch の CUDA 版とは
+major 一致だけを要求する（minor 差は許す。`references/version-matrix.md`）。
+`--target-sm` は記録した各 SM の SASS と、`+PTX` を付けた SM の PTX が
+fatbin にあるかを個別に確かめる（このマシンで動くかの検査とは別）。
+
+終了コード: `0` = 全検査が実行され合格、`1` = 失敗、`2` = 未検証
+（nvcc / cuobjdump / GPU が無い、またはビルド記録が未指定）。**2 は合格ではない**。
+CUDA や GPU の無い環境では 2 になり、実機で再実行が要る。
+
+結果は次の 2 つに分けて読む。
+
+- **現在の状態**（スクリプトが直接確かめる）: `.so` が site-packages にある
+  （`torch_extensions/` なら JIT に落ちている）、import できる（= 今リンクが解決する）、
+  `nvcc` の major と `torch.version.cuda` の major が一致、fatbin に**このマシンの SM
+  向け SASS か JIT 可能な PTX** がある
+- **ビルド時の依存**（ビルドログの記録との照合でのみ確かめる）: その `.so` を
+  どの toolkit / torch / 対象 SM でビルドしたか。記録が無ければ未証明
 
 **(b) 数値の検証** — カーネルごとに純 PyTorch の参照実装と突き合わせる。
 書き方は `references/testing-cuda-ops.md`。要点は「参照実装は `torch` の

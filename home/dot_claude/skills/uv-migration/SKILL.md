@@ -12,7 +12,8 @@ conda / pip / シェルインストーラで管理されたプロジェクトを
 
 移行が終わった状態とは、次を全て満たすことをいう。
 
-- `conda` / `environment.yml` / `requirements.txt` / `install.sh` が不要
+- 廃止と決めた `conda` / `environment.yml` / `requirements.txt` / `install.sh` が不要
+  （互換のために残すものは理由を書いて残してよい）
 - クローン直後に `mise run sync`（= `uv sync` を規定回数）だけで環境が揃う
 - `pip install` を人手で打つ手順がドキュメントに残っていない
 - `uv.lock` がコミットされ、CUDA 拡張を含めてバージョンが固定されている
@@ -36,10 +37,13 @@ conda / pip / シェルインストーラで管理されたプロジェクトを
 | README / INSTALL.md | torch と CUDA の組み合わせ、対応 Python |
 | `import` 文 | 実際に使われている拡張（宣言だけで未使用のものを見分ける） |
 
-**宣言されているが未使用の依存を落とす**。実際に `import` されているかを
-必ず確認する。例: BUFFER-X の `cpp_wrappers/`（`grid_subsampling`,
-`radius_neighbors`）は `compile_wrappers.sh` でビルドされるが、どの Python
-モジュールからも import されていないため移行対象から外せる。
+**宣言されているが未使用の依存を落とすのは、使用箇所を調べてから。**
+`import` 文が無いだけでは判断しない。CLI（`console_scripts` / `python -m`）、
+プラグイン（entry point）、動的 import（`importlib` / 文字列指定）、CI、設定ファイル、
+シェルスクリプトからの使用も `grep` で確認する。全部に無いときだけ外し、
+判断の根拠を記録する。例: BUFFER-X の `cpp_wrappers/`（`grid_subsampling`,
+`radius_neighbors`）は `compile_wrappers.sh` でビルドされるが、上記のどこからも
+使われていないと確認できたため移行対象から外した。
 
 **入手元の許可範囲**: PyPI 以外（git ソース、直 URL wheel、flat index）を
 `pyproject.toml` に書いてよいのは、**元リポジトリの手順に記載がある URL に
@@ -93,21 +97,35 @@ NVIDIA が公式に定めているのは `PATH`（必須）と `LD_LIBRARY_PATH`
 
 ### 6. 検証する
 
-`scripts/verify_migration.py` が機械的に確認できる部分を見る。
+`scripts/verify_migration.py` が機械的に確認できる部分を見る。案件の種類を
+`--profile` で指定する（`general` = 一般の Python、`torch-cpu`、`torch-cuda`）。
+独自の拡張があれば `--expect-module` で期待するモジュール名を渡す。
 
 ```bash
-uv run python ~/.claude/skills/uv-migration/scripts/verify_migration.py <PROJECT_DIR>
+uv run python ~/.claude/skills/uv-migration/scripts/verify_migration.py <PROJECT_DIR> \
+  --profile torch-cuda --expect-module pointnet2_ops._ext \
+  --retire 'requirements*.txt' --retire 'install*.sh' \
+  --keep 'requirements-docs.txt:Read the Docs が参照する'
 ```
 
-- レガシーファイル（`environment.yml`, `requirements*.txt`, `install*.sh`）が消えている
+- 廃止すると決めたファイル（`--retire`。省略時は `environment.yml`,
+  `requirements*.txt`, `install*.sh` など）が消えている。互換のために残すものは
+  `--keep パス:理由` で除外する（理由は必須）
 - torch が `explicit = true` のインデックス経由で解決されている
 - `uv.lock` が最新（`uv lock --check`）
-- コンパイル済み拡張の `.so` が実在する
-- `torch.cuda.is_available()` が `True`
+- `torch-cpu` / `torch-cuda`: torch が import できる（失敗は FAIL）。
+  `torch-cuda` はさらに `torch.cuda.is_available()` が `True`
+- `--expect-module`: 指定モジュールが `ExtensionFileLoader` で読まれ、拡張子が
+  `importlib.machinery.EXTENSION_SUFFIXES` のいずれかで、環境の purelib / platlib
+  配下にある（JIT キャッシュや、`PYTHONPATH` 経由の環境外のビルドディレクトリは
+  FAIL）。editable 配置など環境外を許すときは `--extension-dir DIR` で明示する。
+  その場合は合格でも「JIT 由来でないこと」は未証明として note に出る
 
 これに加えて手で確認する。
 
-- `.venv` を消してから `uv sync --locked` で再現できること
+- `.venv` を消してから、利用者に案内する同期手順（`mise run sync` など）を
+  そのまま実行して再現できること。手順が 2 段階 `uv sync` なら、その中の
+  各 `uv sync` に `--locked` を付けて lock 検証を効かせる
 - 拡張が **実際に CUDA カーネルを持っている**こと（import が通るだけでは
   不十分。`references/cuda-extensions.md` の「静かに壊れる」を参照）
 - リポジトリの smoke test / demo が GPU 上で走ること
@@ -116,9 +134,11 @@ uv run python ~/.claude/skills/uv-migration/scripts/verify_migration.py <PROJECT
 
 ### 7. 後始末
 
-移行が通ってから、置き換えられた成果物を消す。**検証の前に消さない。**
+移行が通ってから、置き換えると決めた成果物を消す。**検証の前に消さない。**
+互換のために残すもの（他ツールが参照する `requirements.txt` など）は、
+理由を書いて残してよい。
 
-- `environment.yml`, `requirements*.txt`, `install*.sh`
+- 廃止と決めた `environment.yml`, `requirements*.txt`, `install*.sh`
 - README / INSTALL.md の conda・pip 手順を `mise run sync` に差し替え、
   「apt で入れるもの」と「`uv sync` で入るもの」を分けて書く
 - CUDA 関連のエラー（`cannot find -lcuda` など）を Troubleshooting に残す
@@ -139,3 +159,4 @@ uv run python ~/.claude/skills/uv-migration/scripts/verify_migration.py <PROJECT
   リポジトリ（conda + install.sh 型、pip + requirements.txt 型）の完全な
   pyproject.toml と、そこで踏んだ問題
 - `scripts/verify_migration.py` — 移行結果の自動チェック
+  （`--profile` / `--expect-module` / `--retire` / `--keep`）

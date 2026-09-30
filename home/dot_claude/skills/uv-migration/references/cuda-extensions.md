@@ -220,7 +220,10 @@ os.environ["TORCH_CUDA_ARCH_LIST"] = "5.0;6.0;6.1;6.2;7.0;7.5;8.0;8.6;8.9;9.0"
 - **ビルドが非常に長くなる**（アーキテクチャの数だけコード生成する）
 - **新しい nvcc で失敗する**。CUDA 13 は sm_50 / 60 / 70 世代を削除したので、
   上のリストは `nvcc fatal: Unsupported gpu architecture 'compute_50'` に
-  なる。**この種のパッケージは CUDA 12.x の toolkit でビルドすること。**
+  なる。**ソースを変えずに CUDA 12 を維持する場合の回避策**は、CUDA 12.x の
+  toolkit でビルドすること。CUDA 13 が目標なら、このスキルではなく
+  `cuda-version-migration` スキルでソース側（アーキ一覧など）を直す。
+  目標の torch / toolkit の版は、このスキルの都合で無断に変えない。
 
 複数の CUDA を入れている環境では `CUDA_HOME` で明示的に選ぶ。
 `nvcc --version` が返すのは `/usr/local/cuda` が指す先であって、torch が

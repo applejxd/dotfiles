@@ -107,7 +107,8 @@ autocast のディスパッチで先に落ちることが多い。
 ## 4. 由来を検証する（数値以外）
 
 ```bash
-uv run python .github/skills/cuda-version-migration/scripts/check_cuda_build.py pointnet2_ops._ext
+uv run python ~/.claude/skills/cuda-version-migration/scripts/check_cuda_build.py pointnet2_ops._ext \
+  --built-torch 2.10.0 --built-cuda 12.8 --target-sm "8.6;9.0+PTX"
 ```
 
 pytest に組み込む場合の要点は 4 つ。
@@ -117,7 +118,9 @@ pytest に組み込む場合の要点は 4 つ。
 - `nvcc --version` の major と `torch.version.cuda` の major が一致すること
 - `cuobjdump --list-elf` の SASS に、このマシンの SM が含まれること。
   無い場合でも `--list-ptx` に**それ以下の** PTX があれば JIT で動く
-- 拡張を import できること（＝ ABI が合っている）
+- 拡張を import できること（＝ 今リンクが解決する。ビルド時の torch / toolkit /
+  対象 SM の一致はビルドログの記録で確かめる）
+- 終了コード 2（未検証）を合格として扱わないこと
 
 ## 5. テストが本当に効くか確かめる
 
