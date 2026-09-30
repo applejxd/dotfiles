@@ -1,7 +1,7 @@
 # 典型ワークフロー
 
 > github MCP と gh CLI を組み合わせた典型的なエンドツーエンド手順。
-> 各手順は **dry-run → ユーザー承認 → 実行** を徹底する。
+> 各手順は **dry-run → ユーザー承認 → 実行** を徹底する（fork しないので会話内で直接確認できる）。
 
 ## 1. issue を作って Project に入れて Status を In Progress にする
 
@@ -79,8 +79,9 @@
 
 ### 手順
 
-1. **project / field 解決** (CLI) — `Iteration` field の `configuration.iterations[]` から、
-   `startDate <= today < startDate + duration` を満たす iteration を抽出
+1. **project / field 解決** (CLI) — 出力の `fields.Iteration.iterations[]`
+   （`id` / `title` / `startDate` / `duration`（日数））から、
+   `startDate <= today < startDate + duration 日` を満たす iteration を選ぶ
 2. **issue を project に追加** (CLI) — 既登録なら skip
 3. **Iteration field を更新** (CLI)
 

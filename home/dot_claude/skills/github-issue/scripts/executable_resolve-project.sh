@@ -15,7 +15,7 @@
 #         "id": "PVTSSF_xxx" | "PVTIF_xxx" | ...,
 #         "type": "ProjectV2SingleSelectField" | "ProjectV2IterationField" | ...,
 #         "options":    { "<option name>": "<option id>" }     # single_select only
-#         "iterations": { "<iteration title>": "<iteration id>" }  # iteration only
+#         "iterations": [ { "id", "title", "startDate", "duration" } ]  # iteration only (duration は日数)
 #       }
 #     }
 #   }
@@ -45,7 +45,8 @@ jq -n \
   def opt_map(f):
     (f.options // []) | map({ key: .name, value: .id }) | from_entries;
   def iter_map(f):
-    (f.configuration.iterations // []) | map({ key: .title, value: .id }) | from_entries;
+    (f.configuration.iterations // [])
+    | map({ id: .id, title: .title, startDate: .startDate, duration: .duration });
   {
     project_id: $project.id,
     owner: $owner,

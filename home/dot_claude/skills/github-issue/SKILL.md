@@ -1,12 +1,13 @@
 ---
 name: github-issue
 description: "GitHub issue の CRUD・コメント・ラベル・assignee 操作と、GitHub Projects v2 のカスタムフィールド更新を行う。「issue 作って」「issue を Project に入れて」「Project のステータスを In Progress にして」等で使う。標準操作は github MCP、Projects v2 は gh CLI を使い分ける。"
-context: fork
-agent: general-purpose
 allowed-tools: mcp__github__*, Bash(*resolve-project.sh*), Bash(*add-issue-to-project.sh*), Bash(*set-project-field.sh*)
 ---
 
 # github-issue skill
+
+> **fork しない（`context: fork` / `agent` を付けない）。** 不足情報の質問・実行前の承認・
+> 親会話の参照が要るため。see docs/research/opencode/skill-frontmatter.md
 
 GitHub issue の標準操作は **github MCP** で、GitHub Projects v2 のカスタム
 フィールド操作は **gh CLI** で行う。両者の役割分担を明確にし、典型的な
@@ -27,13 +28,14 @@ GitHub issue の標準操作は **github MCP** で、GitHub Projects v2 のカ�
 
 ## 前提確認（1 メッセージにまとめて質問）
 
-ユーザー指示から下記が不足している場合のみ、まとめて確認する:
+操作に必要な項目のうち、ユーザー指示から不足しているものだけをまとめて確認する:
 
 1. **対象リポジトリ**: `owner/repo`
-2. **対象 Project**: owner（user / org）+ project number（`gh project list --owner OWNER` で取得可能）
-3. **対象 issue**: number または URL（作成系の場合は title / body の素材）
-4. **目的とする操作**: 例「Status を In Progress にして、Iteration を current sprint にする」
-5. **破壊的操作の許容**: クローズ / item-delete / item-archive を伴うか
+2. **対象 issue**: number または URL（作成系の場合は title / body の素材）
+3. **目的とする操作**: 例「Status を In Progress にして、Iteration を current sprint にする」
+4. **破壊的操作の許容**: クローズ / item-delete / item-archive を伴うか
+5. **Projects 操作のときだけ**: 対象 Project（owner（user / org）+ project number。
+   `gh project list --owner OWNER` で取得可能）、対象 field、対象 item
 
 会話の文脈で答えが既に明らかな項目は再確認しない。
 
@@ -90,7 +92,9 @@ Copilot からも同じパス（`~/.copilot/skills/github-issue/scripts/` の sy
     "Iteration": {
       "id": "PVTIF_xxx",
       "type": "ProjectV2IterationField",
-      "iterations": { "Sprint 12": "..." }
+      "iterations": [
+        { "id": "...", "title": "Sprint 12", "startDate": "2026-09-28", "duration": 14 }
+      ]
     },
     "Priority": {
       "id": "PVTSSF_xxx",
@@ -110,7 +114,8 @@ Copilot からも同じパス（`~/.copilot/skills/github-issue/scripts/` の sy
   <project-id> <issue-url>
 ```
 
-既に登録済みの場合は冪等に既存 itemId を返す。
+出力は `{ "item_id": "PVTI_xxx" }`。既に登録済みの場合も冪等に既存 itemId を返す
+（新規追加か既存かは区別されない）。
 
 ### Step 3: カスタムフィールド更新
 
