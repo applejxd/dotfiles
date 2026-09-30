@@ -82,6 +82,58 @@ def test_missing_hook_is_reported(monkeypatch, tmp_path):
     assert preflight.main(["uv sync"]) == preflight.EXIT_UNAVAILABLE
 
 
+def _fake_hook(monkeypatch, tmp_path, body):
+    hook = tmp_path / "fake_hook.py"
+    hook.write_text(body, encoding="utf-8")
+    monkeypatch.setattr(preflight, "HOOK_PATH", hook)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "import nope_missing_module\n",
+        "import sys; sys.exit(1)\n",
+        "import sys; print('{\"permissionDecision\": \"allow\"}'); sys.exit(2)\n",
+        "print('not json')\n",
+        "print('{\"foo\": 1}')\n",
+        "print('[1]')\n",
+        "print('{\"permissionDecision\": \"maybe\"}')\n",
+    ],
+    ids=[
+        "import-error",
+        "nonzero-exit",
+        "nonzero-with-allow",
+        "invalid-json",
+        "missing-key",
+        "not-object",
+        "unknown-verdict",
+    ],
+)
+def test_broken_hook_is_unavailable(monkeypatch, tmp_path, body):
+    """hook の異常終了・不正出力を allow にしない (fail-closed)."""
+    _fake_hook(monkeypatch, tmp_path, body)
+    with pytest.raises(RuntimeError):
+        preflight.decide("uv sync", str(ROOT))
+    assert preflight.main(["uv sync"]) == preflight.EXIT_UNAVAILABLE
+
+
+def test_hook_timeout_is_unavailable(monkeypatch, tmp_path):
+    _fake_hook(monkeypatch, tmp_path, "import time; time.sleep(5)\n")
+    real_run = preflight.subprocess.run
+
+    def short_run(*args, **kwargs):
+        kwargs["timeout"] = 0.5
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(preflight.subprocess, "run", short_run)
+    assert preflight.main(["uv sync"]) == preflight.EXIT_UNAVAILABLE
+
+
+def test_silent_clean_exit_is_allowed(monkeypatch, tmp_path):
+    _fake_hook(monkeypatch, tmp_path, "pass\n")
+    assert preflight.decide("uv sync", str(ROOT)) == ("allow", "")
+
+
 def test_scratch_deletion_is_allowed():
     """away-shift が使う work/ 配下の削除は事前判定でも通る."""
     verdict, _ = preflight.decide(
