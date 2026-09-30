@@ -91,6 +91,8 @@ Failed to authenticate: OAuth session expired and could not be refreshed
 静的（スキーマに無い）と動的（合言葉が見えた）の両方で一致した。
 
 したがって OpenCode 上では `explain` / `learn` は期待どおり動く。
+（`explain` は 2026-09-30 に廃止した。モデルが素で書ける要約で、説明文が曖昧で誤発動しやすく、
+checkpoint / commit / sdd-docs と役割が重なっていたため）
 `away-shift` / `review-loop` / `checkpoint` の「付けてはいけない」という注記も、
 OpenCode に限れば無害な記述にすぎない。
 

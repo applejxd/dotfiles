@@ -25,10 +25,9 @@
 ## 実行手順
 
 ```bash
-# 1. フォーマット（最も安全）
-clang-format -i **/*.cpp **/*.h
-# 再帰的に適用する場合
-find . -name '*.cpp' -o -name '*.h' | xargs clang-format -i
+# 1. フォーマット（最も安全）。git 管理下のファイルだけを対象にする
+#    (build/ や依存の生成物に触れない。空白入りのパスにも対応)
+git ls-files -z '*.cpp' '*.h' | xargs -0 clang-format -i
 
 # 2. clang-tidy（compile_commands.json が必要）
 #    CMake で生成する場合:

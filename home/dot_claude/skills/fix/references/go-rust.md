@@ -48,7 +48,7 @@ cargo clippy
 ### よく使うオプション
 
 ```bash
-# ステージ済み変更のみ対象
+# 自動修正 (未コミットの変更があると止まる。--allow-dirty で解除)
 cargo clippy --fix
 
 # 特定の lint を指定

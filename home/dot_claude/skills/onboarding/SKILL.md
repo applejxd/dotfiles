@@ -1,19 +1,20 @@
 ---
 name: onboarding
-description: "AGENTS.md を対話的に作成・最適化する。「AGENTS.md を作って／整理して」と言われたときに使う。"
-context: fork
-agent: general-purpose
-allowed-tools: Edit(AGENTS.md), Bash(*check-agents.sh*)
+description: "リポジトリを調査し、質問を通して AGENTS.md を新規作成・整理・陳腐化箇所の更新をする。「AGENTS.md を作って」「AGENTS.md を整理して／見直して」と言われたときに使う。会話で分かった知見の追記は learn スキル、docs/ の仕様・調査記録は sdd-docs スキルの領分なので使わない。"
+allowed-tools: Read, Edit(AGENTS.md)
 ---
 
 # AGENTS.md Onboarding Skill
 
+> **fork しない（`context: fork` を付けない）。** 質問と承認でユーザーとやり取りするため。
+> see docs/research/opencode/skill-frontmatter.md
+
 このスキルは **AGENTS.md 一本化運用** を前提に、既存プロジェクトの指示ファイルを安全に再構築する。
 
-## 既存 AGENTS.md（自動読込）
+## 既存 AGENTS.md
 
-`${CLAUDE_SKILL_DIR}/scripts/check-agents.sh` を実行して既存の AGENTS.md の内容を取得する。
-ファイルが存在しない場合は `(既存 AGENTS.md なし)` と表示される。
+手順「引数」で確定した対象ディレクトリの `AGENTS.md` を read ツールで読む。
+無ければ「既存 AGENTS.md なし」として扱う（読めない・権限が無いときは無しと扱わずに報告する）。
 
 ## 実行ルール（必須）
 
@@ -94,7 +95,6 @@ allowed-tools: Edit(AGENTS.md), Bash(*check-agents.sh*)
 
 ## 参照ファイル
 
-- スクリプト: `${CLAUDE_SKILL_DIR}/scripts/check-agents.sh`
 - テンプレート: `${CLAUDE_SKILL_DIR}/references/agents-template.md`
 - チェックリスト: `${CLAUDE_SKILL_DIR}/references/review-checklist.md`
 

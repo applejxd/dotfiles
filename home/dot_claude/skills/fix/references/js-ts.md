@@ -20,7 +20,7 @@ npm run lint -- --fix
 # 2. Prettier フォーマット（設定がある場合）
 npx prettier --write .
 
-# 3. TypeScript 型チェック（tsconfig.json がある場合）
+# 3. TypeScript 型チェック（tsconfig.json がある場合。型エラーは直さず報告だけ）
 npx tsc --noEmit
 
 # 4. 残存エラー確認

@@ -46,3 +46,9 @@
 # 対になる境界チェックも ocs-boundary-check へ揃えた。
 .local/bin/opencode-sandboxed
 .local/bin/opencode-boundary-check
+
+# 2026-09: explain skill を廃止した (see docs/research/opencode/skill-frontmatter.md)。
+.claude/skills/explain
+
+# 2026-09: onboarding skill の check-agents.sh を廃止し、read ツールで読むようにした。
+.claude/skills/onboarding/scripts
