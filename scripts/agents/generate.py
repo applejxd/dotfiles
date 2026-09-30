@@ -1463,7 +1463,7 @@ OPENCODE_PROVIDER_SETTINGS = ("profile", "region")
 def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
     """``[opencode.model]`` を、この PC のプロバイダでのモデル参照へ解決する。
 
-    階層名 (``default`` / ``light`` など) を ``provider/model[#variant]`` に直す。
+    階層名 (``default`` / ``worker`` など) を ``provider/model[#variant]`` に直す。
     未知のプロバイダ・階層は ``apply`` を止める。黙って落とすと、存在しない
     モデルを指したまま「応答が来ない」形でしか現れない。
     see docs/spec/agent-config-generation.md#モデルの割り当て

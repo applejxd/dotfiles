@@ -92,10 +92,13 @@ def test_default_model_on_each_provider():
     assert generated(WORK)["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5-5"
 
 
-def test_copilot_tiers_share_one_model_by_variant():
+TIER_NAMES = {"default", "routine", "worker", "deep", "second_opinion"}
+
+
+def test_copilot_tiers_pick_effort_by_variant():
     tiers = PERSONAL["opencode"]["model"]["tier"]["github-copilot"]
-    assert tiers["light"] == "claude-opus-5.5#medium"
-    assert tiers["heavy"] == "claude-opus-5.5#xhigh"
+    assert tiers["worker"] == "claude-sonnet-5.5#medium"
+    assert tiers["deep"] == "claude-opus-5.5#xhigh"
     assert tiers["second_opinion"] == "gpt-6-astra"
 
 
@@ -103,8 +106,17 @@ def test_every_provider_defines_the_same_tiers():
     """階層名だけで割り当てるので、どの PC でも同じ階層が引けること。"""
     tiers = PERSONAL["opencode"]["model"]["tier"]
     names = {provider: set(models) for provider, models in tiers.items()}
-    assert len(set(map(frozenset, names.values()))) == 1, names
-    assert {"default", "light", "heavy"} <= next(iter(names.values()))
+    assert set(map(frozenset, names.values())) == {frozenset(TIER_NAMES)}, names
+
+
+@pytest.mark.parametrize("common", [PERSONAL, WORK], ids=["personal", "work"])
+def test_tiers_are_named_by_purpose(common):
+    """改名前の大小の名前 (light / standard / heavy) を定義にも割り当てにも残さない。"""
+    model = common["opencode"]["model"]
+    old = {"light", "standard", "heavy"}
+    for provider, tiers in model["tier"].items():
+        assert not old & set(tiers), provider
+    assert not old & set(model["agents"].values())
 
 
 def test_bedrock_gets_profile_and_region():
@@ -165,19 +177,36 @@ def test_declared_subagents_get_their_tier_models():
     assert agents["commit"]["model"] == "github-copilot/claude-sonnet-5.5#medium"
     assert agents["review"]["model"] == "github-copilot/gpt-6-astra"
     work = generated(WORK)["agents"]
-    assert work["commit"]["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5-5"
+    assert work["commit"]["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5-5#low"
     assert work["review"]["model"] == "amazon-bedrock/global.openai.gpt-6-sol"
 
 
-def test_commit_uses_sonnet_on_both_providers():
-    """haiku ではメッセージの書式が崩れる (記録 E4 / E5)。Copilot は Sonnet 5.5 (記録 E6)。"""
-    assert PERSONAL["opencode"]["model"]["agents"]["commit"] == "standard"
-    assert generated(PERSONAL)["agents"]["commit"]["model"] == (
-        "github-copilot/claude-sonnet-5.5#medium"
-    )
-    assert generated(WORK)["agents"]["fleet-worker"]["model"] == (
-        "amazon-bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
-    ), "fleet-worker は light のまま"
+@pytest.mark.parametrize(
+    ("common", "commit", "worker"),
+    [
+        (
+            PERSONAL,
+            "github-copilot/claude-sonnet-5.5#medium",
+            "github-copilot/claude-sonnet-5.5#medium",
+        ),
+        (
+            WORK,
+            "amazon-bedrock/global.anthropic.claude-sonnet-5-5#low",
+            "amazon-bedrock/global.anthropic.claude-sonnet-5-5#medium",
+        ),
+    ],
+    ids=["personal", "work"],
+)
+def test_commit_and_fleet_worker_use_sonnet(common, commit, worker):
+    """commit は haiku では書式が崩れる (commit-review-agents 記録 E4-E6)。
+    fleet-worker は haiku では難しめの課題を落とし、opus と sonnet 5.5 は差が無い
+    (docs/research/opencode/tier-models.md)。
+    """
+    assert common["opencode"]["model"]["agents"]["commit"] == "routine"
+    assert common["opencode"]["model"]["agents"]["fleet-worker"] == "worker"
+    agents = generated(common)["agents"]
+    assert agents["commit"]["model"] == commit
+    assert agents["fleet-worker"]["model"] == worker
 
 
 def test_assigned_agents_are_subagents():
@@ -253,10 +282,8 @@ def test_v2_agent_cannot_shadow_a_v1_agent():
 # 並列作業 (/fleet)
 # ---------------------------------------------------------------------------
 
-def test_fleet_worker_uses_the_light_tier():
-    agents = generated(PERSONAL)["agents"]
-    assert agents["fleet-worker"]["model"] == "github-copilot/claude-opus-5.5#medium"
-    assert agents["fleet-worker"]["mode"] == "subagent"
+def test_fleet_worker_is_a_subagent():
+    assert generated(PERSONAL)["agents"]["fleet-worker"]["mode"] == "subagent"
 
 
 def test_fleet_worker_keeps_the_global_shell_rules():
@@ -317,17 +344,16 @@ def test_invalid_command_stops_apply(patch, message):
 
 def test_assignment_goes_to_v2_agents_with_variant():
     """★V1 の agent キーでは #variant 付きの指定が黙って無視される (実測)。"""
-    agents = generated(with_agents(WORK, {"explore": "light", "plan": "heavy"}))["agents"]
-    assert agents["explore"] == {
-        "model": "amazon-bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0"
-    }
+    out = generated(with_agents(WORK, {"explore": "worker", "plan": "deep"}))
+    agents = out["agents"]
+    sonnet = "amazon-bedrock/global.anthropic.claude-sonnet-5-5#medium"
+    assert agents["explore"] == {"model": sonnet}
     assert agents["plan"] == {"model": "amazon-bedrock/global.anthropic.claude-opus-5-5#high"}
-    out = generated(with_agents(WORK, {"explore": "light", "plan": "heavy"}))
     assert "explore" not in out["agent"] and "plan" not in out["agent"]
 
 
 def test_unassigning_removes_only_managed_models():
-    assigned = generated(with_agents(PERSONAL, {"explore": "light", "plan": "heavy"}))
+    assigned = generated(with_agents(PERSONAL, {"explore": "worker", "plan": "deep"}))
     assigned["agents"]["plan"]["color"] = "#ff6b6b"
     assigned["agents"]["mine"] = {"model": "github-copilot/gpt-5-mini"}
     out = generated(PERSONAL, assigned)["agents"]
@@ -337,8 +363,8 @@ def test_unassigning_removes_only_managed_models():
 
 
 def test_switching_provider_rewrites_assigned_models():
-    personal = generated(with_agents(PERSONAL, {"explore": "light"}))
-    work = generated(with_agents(WORK, {"explore": "light"}), personal)
+    personal = generated(with_agents(PERSONAL, {"explore": "worker"}))
+    work = generated(with_agents(WORK, {"explore": "worker"}), personal)
     assert work["agents"]["explore"]["model"].startswith("amazon-bedrock/")
 
 
@@ -353,9 +379,20 @@ def test_switching_provider_rewrites_assigned_models():
             ),
             "#variant",
         ),
-        (lambda c: c["opencode"]["model"].update(agents={"bypass": "heavy"}), "bypass"),
+        (lambda c: c["opencode"]["model"].update(agents={"bypass": "deep"}), "bypass"),
+        (lambda c: c["opencode"]["model"]["agents"].update(commit="standard"), "standard"),
+        (lambda c: c["opencode"]["model"]["agents"].update({"fleet-worker": "light"}), "light"),
+        (lambda c: c["opencode"]["model"].update(agents={"explore": "heavy"}), "heavy"),
     ],
-    ids=["unknown-tier", "unknown-provider", "default-variant", "v1-agent"],
+    ids=[
+        "unknown-tier",
+        "unknown-provider",
+        "default-variant",
+        "v1-agent",
+        "old-standard",
+        "old-light",
+        "old-heavy",
+    ],
 )
 def test_invalid_model_config_stops_apply(mutate, message):
     common = copy.deepcopy(PERSONAL)

@@ -4,6 +4,9 @@
      ここは「いつ何を観測したか」を積む場所 -->
 
 > **現行の仕様**: [子エージェント](../../spec/agent-config-generation.md#子エージェント)
+>
+> 階層名は 2026-09-30 に用途の名前へ改めた（`light` → `worker`、`standard` → `routine`、
+> `heavy` → `deep`）。本文の名前は当時のもの（[階層](../../spec/agent-config-generation.md#階層)）
 
 ## 結論
 

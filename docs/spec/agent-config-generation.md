@@ -772,30 +772,52 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 
 `[opencode.model.tier.<プロバイダ>]` に**階層名 → モデル ID** を書き、エージェントは
 階層名で指す。PC が変わってもエージェントの割り当てを書き直さずに済む。
+**階層名はモデルの大小ではなく用途で付ける。** どのモデルを当てるかは計測で変わるが、
+エージェントがどの用途かは変わらないので、当てるモデルを変えても名前と割り当てはそのまま使える。
 
-| 階層 | Copilot | Bedrock |
-| --- | --- | --- |
-| `default` | `claude-opus-5.5` | `global.anthropic.claude-sonnet-5-5` |
-| `light` | `claude-opus-5.5#medium` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
-| `standard` | `claude-sonnet-5.5#medium` | `global.anthropic.claude-sonnet-5-5` |
-| `heavy` | `claude-opus-5.5#xhigh` | `global.anthropic.claude-opus-5-5#high` |
-| `second_opinion` | `gpt-6-astra` | `global.openai.gpt-6-sol` |
+| 階層 | 用途 | Copilot | Bedrock |
+| --- | --- | --- | --- |
+| `default` | 主エージェントの既定 | `claude-opus-5.5` | `global.anthropic.claude-sonnet-5-5` |
+| `routine` | 決まった形の短い作業 | `claude-sonnet-5.5#medium` | `global.anthropic.claude-sonnet-5-5#low` |
+| `worker` | 実装などを任せる作業役 | `claude-sonnet-5.5#medium` | `global.anthropic.claude-sonnet-5-5#medium` |
+| `deep` | 難しい判断・設計 | `claude-opus-5.5#xhigh` | `global.anthropic.claude-opus-5-5#high` |
+| `second_opinion` | 別系統のモデルでの確かめ | `gpt-6-astra` | `global.openai.gpt-6-sol` |
 
-割り当て（`[opencode.model.agents]`）は `commit = "standard"`・`review = "second_opinion"`・
-`fleet-worker = "light"`。
+割り当て（`[opencode.model.agents]`）は `commit = "routine"`・`review = "second_opinion"`・
+`fleet-worker = "worker"`。
 
-- **`standard` は、`light` の Bedrock（`claude-haiku-4-5`）では足りない子エージェント用。**
-  `commit` を haiku で動かすとメッセージの書式が崩れ、`claude-sonnet-5` ではそろった
-  （[記録 E4 / E5](../research/opencode/commit-review-agents.md)）。両プロバイダとも Sonnet 5.5 にした。
+- **`routine` と `worker` は今は同じモデルだが、分けておく。** 名前は用途なので、
+  どちらかの計測結果が変わったときに片方だけ差し替えられる
+- **`routine`（`commit`）は Sonnet 5.5。** `commit` を haiku で動かすとメッセージの書式が崩れ、
+  `claude-sonnet-5` ではそろった（[記録 E4 / E5](../research/opencode/commit-review-agents.md)）。
   Copilot の `claude-sonnet-5.5#medium` は `claude-opus-5.5#medium` と同等にコミット・書式がそろい、
-  速く単価も半分で、`claude-sonnet-5` より `git commit` 以外の確認が少なかった（記録 E6）
-  - `default` を割り当てなかったのは、Copilot の `default` はバリアントが付けられず
-    （下記）`light` と推論の強さが変わるのと、既定モデルを変えたときに子エージェントまで
-    変わらないようにするため。Bedrock では今は `default` と同じ ID
+  速く単価も半分で、`claude-sonnet-5` より `git commit` 以外の確認が少なかった（記録 E6）。
+  effort を low / high にしても、コミット・書式・確認に差は無かった
+  （[階層のモデルの計測](../research/opencode/tier-models.md)）
+- **`worker`（`fleet-worker`）も Sonnet 5.5。** 小さな実装・バグ修正・リファクタリングなどの
+  課題では、`claude-opus-5.5` と `claude-sonnet-5.5` の low / medium / high の合格率に差が無く、
+  sonnet の medium は opus の medium の約 2/3 の時間で終わった。`claude-haiku-4.5` は
+  難しめの課題で 0/4、担当外にファイルを残し、手数が多いぶん Bedrock の単価での試算も
+  sonnet 5.5 より高かった（[階層のモデルの計測](../research/opencode/tier-models.md)）。
+  Bedrock の値は Copilot で近似した判断で、Bedrock 上では未確認
+- **effort はプロバイダの予算で分ける。** Copilot（使い放題）は質と待ち時間で選び、`routine` も
+  `worker` も `medium`。Bedrock（予算が有限）は、effort で差が出なかった `routine` を `low` にして
+  費用を削り、`worker` は `medium`。公開のベンチマークでも、effort の差は難しいコーディングの課題で
+  1 段あたり 1〜3 ポイント程度（[階層のモデルの計測](../research/opencode/tier-models.md)の追記）。
+  Bedrock の Sonnet 5.5 に effort を付けられることは、利用者が確かめた
+- **`deep` は計測していない。** 良し悪しを機械的に採点できる課題を作れないため、
+  opus の上位の effort のまま
+- **Bedrock の `default` は Sonnet 5.5 のまま（再考の候補あり）。** 上位モデルを低い effort で
+  使うほうが、仕事 1 件あたりの費用で得になる場合がある（公式の資料）ので、Opus 5.5 の `low` を
+  候補として記録した。同じ条件での比較が無く、主エージェントに effort を付けられるかも未確認
+  （[階層のモデルの計測](../research/opencode/tier-models.md)の追記）
+- `default` を割り当てに使わないのは、Copilot の `default` はバリアントが付けられず
+  （下記）ほかの階層と推論の強さが変わるのと、既定モデルを変えたときに子エージェントまで
+  変わらないようにするため。Bedrock では今は `routine` / `worker` と同じモデルで、effort だけが違う
 
 ```toml
 [opencode.model.agents]
-explore = "light"      # 例
+explore = "worker"      # 例
 ```
 
 - **どのプロバイダにも同じ階層名をそろえる**（`test_every_provider_defines_the_same_tiers`）
@@ -813,6 +835,8 @@ explore = "light"      # 例
 - 未知の階層・プロバイダ、`[opencode.agent]`（V1 形式）にあるエージェントへの
   割り当ても `apply` を止める。後者は V1 の `agent` と V2 の `agents` に同じ ID が
   並んだときの結合順を確かめていないため
+  - 改名前の階層名（`light` / `standard` / `heavy`）で割り当てても、未知の階層として止まる。
+    エラーには定義済みの階層名が並ぶ
 
 #### 生成されるもの
 
@@ -863,7 +887,7 @@ explore = "light"      # 例
 
 | ID | 階層 | 役割 | 権限で塞ぐもの |
 | --- | --- | --- | --- |
-| `commit` | `standard` | 変更を論理単位に分け、パスを指定してステージし、単位ごとにコミットする。`git commit` のたびに確認が出る | 編集・質問・子エージェントの起動・作業ツリーを戻す git・リダイレクトと `--output`・`git commit` の検証の回避や `-a` / `--amend`（下記） |
+| `commit` | `routine` | 変更を論理単位に分け、パスを指定してステージし、単位ごとにコミットする。`git commit` のたびに確認が出る | 編集・質問・子エージェントの起動・作業ツリーを戻す git・リダイレクトと `--output`・`git commit` の検証の回避や `-a` / `--amend`（下記） |
 | `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
 
 - **`commit` は `git commit` の確認を承認の場にしてコミットする。** 質問のツールは
@@ -921,7 +945,7 @@ explore = "light"      # 例
   （スキルの手順 4 とエージェントの `system` に同じ趣旨がある）
 - **`claude-haiku-4.5` では書式が崩れやすいので、`commit` には使わない。** コミットまでは 9/10 で
   進むが、本文の `- Motivation:` / `- Change:` / `- Impact:` は 17 件中 2 件にとどまった（記録 E4）。
-  `standard` 階層の Sonnet を当てる。Copilot の PC は `claude-sonnet-5.5#medium` で、10/10 がコミットし、
+  `routine` 階層の Sonnet を当てる。Copilot の PC は `claude-sonnet-5.5#medium` で、10/10 がコミットし、
   3 行は 16 件中 15 件、`git commit` 以外の確認と誘導は 0 回。承認済みの全文を渡した 3 回は
   4 件とも一字も変わらなかった（記録 E6）。Bedrock の PC も `claude-sonnet-5-5` にした（Copilot の
   Sonnet 5.5 で近似した判断で、Bedrock 上では未確認）。1 世代前の `claude-sonnet-5` では 10/10 がコミットし、
@@ -980,7 +1004,7 @@ Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる�
 | 部品 | 置き場 | 中身 |
 | --- | --- | --- |
 | `/fleet` | `[opencode.commands.fleet]` → `opencode.json` の `commands` | 取りまとめの手順（分解 → 依存関係と担当ファイル → 波ごとに並べて起動 → 結果を確かめて次の波 → 検証してまとめる） |
-| `fleet-worker` | `[opencode.agents.fleet-worker]`、階層 `light` | 割り当てられた 1 つの作業を、担当ファイルの範囲で実装して確かめ、結果を返す |
+| `fleet-worker` | `[opencode.agents.fleet-worker]`、階層 `worker` | 割り当てられた 1 つの作業を、担当ファイルの範囲で実装して確かめ、結果を返す |
 
 - **取りまとめは今のセッションで動かす（`subagent = false`）。** 子エージェントは
   さらに子を起動できない（既定の入れ子は 1 段）。子にすると作業役を起動できない

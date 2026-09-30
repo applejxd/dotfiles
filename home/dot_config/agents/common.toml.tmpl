@@ -720,22 +720,24 @@ provider = "{{ includeTemplate "llm-provider" . }}"
 # エージェント ID = 階層名。組み込み (plan / explore など) も上書きできる。
 # ★主エージェント (build / plan) は選んでもモデルが変わらない。子エージェントだけ書く。
 [opencode.model.agents]
-commit = "standard"
+commit = "routine"
 review = "second_opinion"
-fleet-worker = "light"
+fleet-worker = "worker"
 
+# 階層名は用途 (default / routine / worker / deep / second_opinion)。
+# see docs/spec/agent-config-generation.md#階層
 [opencode.model.tier.amazon-bedrock]
 default = "global.anthropic.claude-sonnet-5-5"
-light = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-standard = "global.anthropic.claude-sonnet-5-5"
-heavy = "global.anthropic.claude-opus-5-5#high"
+routine = "global.anthropic.claude-sonnet-5-5#low"
+worker = "global.anthropic.claude-sonnet-5-5#medium"
+deep = "global.anthropic.claude-opus-5-5#high"
 second_opinion = "global.openai.gpt-6-sol"
 
 [opencode.model.tier.github-copilot]
 default = "claude-opus-5.5"
-light = "claude-opus-5.5#medium"
-standard = "claude-sonnet-5.5#medium"
-heavy = "claude-opus-5.5#xhigh"
+routine = "claude-sonnet-5.5#medium"
+worker = "claude-sonnet-5.5#medium"
+deep = "claude-opus-5.5#xhigh"
 second_opinion = "gpt-6-astra"
 
 # ★[web] は OpenCode へ渡さない。webfetch の resource は「URL 全体」で、
