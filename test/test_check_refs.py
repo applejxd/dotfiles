@@ -137,3 +137,34 @@ def test_docs_inside_another_path_is_not_a_reference(tmp_path, text):
     files["src/y.py"] = text
     result = run(make_repo(tmp_path, files))
     assert result.returncode == 0, result.stdout
+
+
+def test_git_does_not_run_the_repository_fsmonitor(tmp_path):
+    """.git/config の core.fsmonitor を起動しない。
+
+    OpenCode はこのスクリプトを確認なしに実行させる。リポジトリの設定から
+    任意コマンドを起動できると、確認を経ない実行の入口になる。
+    see docs/spec/agent-config-generation.md#スキルのスクリプト
+    """
+    repo = make_repo(tmp_path, GOOD)
+    mark = tmp_path / "fsmonitor-ran"
+    subprocess.run(
+        ["git", "config", "core.fsmonitor", f"touch '{mark}'; false"], cwd=repo, check=True
+    )
+    (repo / "untracked.txt").write_text("x\n", encoding="utf-8")
+    assert run(repo).returncode == 0
+    assert not mark.exists()
+
+
+def test_save_and_baseline_default_to_the_repository_tmp(tmp_path):
+    """パスを省くとルートの .tmp/refs-before.txt を使う。
+
+    OpenCode はこの形だけを確認なしに通す (書き込み先を引数で決められない)。
+    """
+    files = dict(GOOD)
+    files["src/x.py"] += "# see docs/b.md#無い見出し\n"
+    repo = make_repo(tmp_path, files)
+    assert run(repo, "--save").returncode == 1
+    assert (repo / ".tmp" / "refs-before.txt").is_file()
+    result = run(repo, "--baseline")
+    assert result.returncode == 0, result.stdout

@@ -1045,6 +1045,37 @@ pattern = '\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'
 name = "代入された秘密"
 pattern = '''(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)["']?\s*[=:]\s*)("[^"\n]{6,}"|'[^'\n]{6,}'|[A-Za-z0-9_\-+/=.]{16,})'''
 
+# 作業ツリーの外でも external_directory の確認なしに読める場所 (スキルの置き場)。
+# [opencode.sandbox] work_read も足される。edit は確認のまま。
+# see docs/spec/agent-config-generation.md#作業ツリーの外の読み取り
+[opencode.external_read]
+paths = [
+  "~/.claude/skills",
+  "~/.agents/skills",
+  "~/.config/opencode/skills",
+]
+
+# 確認なしに実行してよいスキルのスクリプト。[opencode.external_read] paths の中に限る。
+# ★引数で書き込み先や実行するものを決められる形は載せない (exact で引数を固定する)。
+# ★runner に `uv run --no-project python` を足さないこと。作業ツリーの
+#   .python-version に書かれた実行ファイルを起動する (実測)。
+# see docs/spec/agent-config-generation.md#スキルのスクリプト
+[opencode.skill_scripts]
+runners = { py = ["python3"], sh = ["bash"] }
+
+[[opencode.skill_scripts.allow]]
+script = "~/.claude/skills/sdd-docs/scripts/lint_docs.py"
+
+[[opencode.skill_scripts.allow]]
+script = "~/.claude/skills/sdd-docs/scripts/check_refs.py"
+# --save は引数のパスへ書く。既定の置き場を使う形だけを完全一致で通す
+exact = ["--save", "--baseline"]
+
+[[opencode.skill_scripts.allow]]
+script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
+# write は標準入力を引数のパスへ書くので載せない
+subcommands = ["paths", "lint", "read"]
+
 # OpenCode を丸ごと OS のアクセス制御で囲う (隔離起動 ocs)。
 # ランチャーが Fence で境界を張ってから opencode --standalone を起動する。
 # ★generate.py は Fence の有無に関係なく設定を出力する。実体が無いマシンでは
@@ -1225,6 +1256,7 @@ drop_shell = [
 # 境界が隠すので捨てる read/edit 規則 (パスの先頭一致)。
 # ★ワークスペース相対の glob (*secret* など) は **捨てない**。
 #   境界の外の話ではなく、shell から届く。
+# ★[opencode.external_read] で開けた場所への edit の ask は捨てない。
 drop_path_prefixes = [
   "~/",
   "$HOME/",

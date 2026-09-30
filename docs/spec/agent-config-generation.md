@@ -314,7 +314,7 @@ hook 版との違いが 2 つある。
 
 `permissions` の先頭に `{action:"shell", resource:"*", effect:"ask"}` を置き、
 **未掲載のコマンドが無条件に通らないようにしてある**。shell の `allow` は
-`[opencode.shell]` に書いた 5 件だけで、`[bash]` とは共用しない
+`[opencode.shell]` に書いた 5 件と、下のスキルのスクリプトだけで、`[bash]` とは共用しない
 （`[bash]` は 3 CLI 共通のため、触ると効果の切り分けができなくなる）。
 
 allow の基準は副作用なし・冪等・**任意コード実行を含まない**こと。
@@ -324,6 +324,99 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 **allow に載せたコマンドは任意ファイル書き込みの手段にもなる。** scanner が
 リダイレクトを分割せず resource に残すので、`wc -l f.txt > path` が `wc *`
 に前方一致する。allow は最小に保つ以外の守り方が無い。
+
+スキルのスクリプトの allow は `[opencode.skill_scripts]` から出す
+（[スキルのスクリプト](#スキルのスクリプト)）。
+
+### 作業ツリーの外の読み取り
+
+作業ツリーの外のパスを `read` / `grep` / `glob` / `edit` で触ると、OpenCode は
+その前に `external_directory`（resource は触ったファイルのディレクトリ + `/*`）を
+確かめる。既定は `ask` なので、スキルの参照ファイルや隣のリポジトリを読むたびに
+確認が出ていた。shell の作業ディレクトリ（`workdir`）が外にあるときも同じ確認が立つ。
+
+次の場所だけ `external_directory` を `allow` にする。
+
+| 出所 | 場所 |
+| --- | --- |
+| `[opencode.external_read] paths` | スキルの置き場（`~/.claude/skills`・`~/.agents/skills`・`~/.config/opencode/skills`） |
+| `[opencode.sandbox] work_read` | 隔離版が読める作業場所（`~/src`・`~/worktrees`・`~/papers`・`~/.local/share/chezmoi`） |
+
+作業場所は隔離版の `work_read` をそのまま使い、二重に並べない
+（`opencode_external_read_dirs`）。
+
+- **同じ場所の `edit` は `ask` に戻す。** `external_directory` は read と edit の
+  両方の前段なので、allow だけ置くと既定の `{*, *, allow}` で作業ツリーの外へ
+  確認なしに書ける
+- **`read` の allow は足さない。** `read` は既定で allow なので要らず、足すと
+  OpenCode の既定の `*.env` の `ask` を上書きしてしまう
+- 規則は `[file]` 由来の read / edit の規則より**前**に置く。秘密のパスの deny
+  （`read_deny_globs` / `write_deny_globs`）が後勝ちで効き続ける
+- 作業ツリーの中のパスは resource が相対パスになるので、`~/.local/share/chezmoi/*`
+  の `edit` の `ask` は、このリポジトリで作業するときの編集には当たらない
+  （絶対パスで渡しても相対に直る。実測）
+- 隔離版（`ocs`）も既定は `ask` なので同じ規則を出す。`~/` 始まりの read / edit の
+  規則は隔離版では捨てるが、この `edit` の `ask` だけは残す
+  （捨てると、以前は `external_directory` の確認が止めていた edit が確認なしになる）
+
+実測は [作業ツリーの外の読み取りとスキルのスクリプト](../research/opencode/permission/external-read-and-skill-scripts.md)。
+
+### スキルのスクリプト
+
+スキルが手順に書いたスクリプト（`sdd-docs` の `lint_docs.py` など）は shell の
+既定の `ask` に当たり、呼ぶたびに確認が出ていた。`external_directory` の確認は
+出ない（shell は引数に書いた外のパスから外部ディレクトリを推定しなかった。
+`ls <外のパス>` でも同じ。実測）。
+`[opencode.skill_scripts] allow` に載せたスクリプトだけを allow にする
+（`opencode_skill_script_rules`）。
+
+```toml
+[opencode.skill_scripts]
+runners = { py = ["python3"], sh = ["bash"] }
+
+[[opencode.skill_scripts.allow]]
+script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
+subcommands = ["paths", "lint", "read"]
+```
+
+| 書き方 | 生成する規則 |
+| --- | --- |
+| `script` だけ | `<runner> <script> *` を allow、`<runner> <script> *>*` と `*<*` を deny |
+| `subcommands` | 上の `<script>` の後ろにサブコマンドを足した形を、サブコマンドごとに出す |
+| `exact` | `<runner> <script> <引数>` を**完全一致**で allow（`*` を付けない） |
+
+- **スキルの置き場の中に限る。** `script` が `[opencode.external_read] paths` の外か
+  `..` を含むと `generate.py` が `apply` を止める。拡張子に対応する `runners` が
+  無いときも止める
+- shell の resource は生のコマンド文字列で `~` を展開しない。`~/` の形と、展開した
+  絶対パスの形の両方を出す。引用符で囲んだパスや、パスを変数に入れた形
+  （`S=…; python3 "$S/x.py"`）には当たらず、確認が出る。スキル側は
+  `python3 <パス>` とそのまま書く（`sdd-docs` / `checkpoint` の `SKILL.md`。
+  `test_skill_docs_call_their_scripts_in_the_allowed_form` が固定する）
+- **リダイレクトは deny。** 前方一致の allow はリダイレクトを含む形にも当たり、
+  `wc *` と同じく任意書き込みの手段になる。`2>&1` も止まる（止まったら付けずに
+  呼び直せばよい）
+- **runner に `uv run --no-project python` を使わない。** 作業ツリーの
+  `.python-version` に実行ファイルのパスが書いてあると、それを起動する（実測）。
+  `python3` は `PATH` の python を使い、作業ツリーの設定を読まない
+- **引数で書き込み先や実行するものを決められる形は載せない。** 引数の中身は
+  静的な照合では検査できない。`--save <パス>` を `ask` で外そうとしても、
+  `'--'save`・`$X`・argparse の省略形（`--sa`）で当たらなくなる（実測）。
+  `check_refs.py` は `--save` / `--baseline` のパスを省けるようにし
+  （既定はリポジトリのルートの `.tmp/refs-before.txt`）、その形だけを `exact` で
+  通す。`checkpoint.py` の `write`（標準入力を引数のパスへ書く）は載せない
+- **スクリプトがリポジトリの設定からコマンドを起動しないこと。** `git ls-files` や
+  `git check-ignore` は `.git/config` の `core.fsmonitor` を起動する（実測。
+  `git status` / `git diff` を shell の allow に載せない理由と同じ）。
+  `check_refs.py` と `checkpoint.py` は git を `-c core.fsmonitor=false` 付きで呼ぶ
+- コマンド置換（`$(…)` / `` `…` ``）は scanner が中のコマンドを別の resource として
+  取り出し、それぞれ照合する。中身が allow でなければ全体が確認になる（実測）。
+  変数代入を前に付けた形（`FOO=1 python3 …`）は resource に代入が残り、当たらない
+- 隔離版は shell の既定が `allow` なので、この規則を出さない（残すとリダイレクトの
+  deny で拒否が増えるだけ）
+- 載せてよいかの判断は、引数で書き込み先・実行するもの・送り先を決められないか、
+  リポジトリの設定（`.git/config`・`.python-version` など）からコマンドを起動しないか。
+  足すときは `test_skill_script_allow_is_not_widened_silently` も更新する
 
 ### bypass から呼べる子エージェント
 

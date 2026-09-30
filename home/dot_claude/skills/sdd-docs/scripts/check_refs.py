@@ -12,6 +12,8 @@ Markdown のリンクだけでなく、コードのコメントなどに書い�
     # ... 文書を編集する ...
     python3 check_refs.py --baseline before.txt
 
+パスを省くと、リポジトリのルートの ``.tmp/refs-before.txt`` を使う。
+
 見出しのアンカーは GitHub の規則に近い変換で作る (完全には一致しない)。
 
 exit code:
@@ -30,6 +32,12 @@ import sys
 import unicodedata
 from functools import cache
 from pathlib import Path
+
+# OpenCode が確認なしに実行するので、リポジトリの設定からコマンドを起動させない。
+# see docs/spec/agent-config-generation.md#スキルのスクリプト
+GIT = ["git", "-c", "core.fsmonitor=false"]
+# --save / --baseline のパスを省いたときの控え (リポジトリのルートから)
+DEFAULT_BASELINE = Path(".tmp") / "refs-before.txt"
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -72,7 +80,7 @@ def headings(path: Path) -> tuple[frozenset[str], tuple[str, ...]]:
 
 def tracked_files(root: Path) -> list[str]:
     done = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        [*GIT, "ls-files", "--cached", "--others", "--exclude-standard"],
         cwd=root,
         capture_output=True,
         text=True,
@@ -134,7 +142,7 @@ def find_problems(root: Path, skip: frozenset[Path] = frozenset()) -> list[str]:
 
 def git_root(start: Path) -> Path | None:
     done = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
+        [*GIT, "rev-parse", "--show-toplevel"],
         cwd=start,
         capture_output=True,
         text=True,
@@ -147,14 +155,23 @@ def git_root(start: Path) -> Path | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="docs への参照の切れを検査する")
     parser.add_argument("--root", help="リポジトリのルート (既定: 現在地の git のルート)")
-    parser.add_argument("--save", help="今の結果をこのファイルへ保存する")
-    parser.add_argument("--baseline", help="このファイルに無い問題だけを出す")
+    # パスを省く形は OpenCode が確認なしに通す (書き込み先を引数で決められない)。
+    # see docs/spec/agent-config-generation.md#スキルのスクリプト
+    parser.add_argument(
+        "--save", nargs="?", const="", help="今の結果をこのファイルへ保存する"
+    )
+    parser.add_argument(
+        "--baseline", nargs="?", const="", help="このファイルに無い問題だけを出す"
+    )
     args = parser.parse_args(argv)
 
     root = Path(args.root) if args.root else git_root(Path.cwd())
     if root is None or not root.is_dir():
         print("error: git リポジトリの中で実行するか --root を渡す", file=sys.stderr)
         return EXIT_USAGE
+    for name in ("save", "baseline"):
+        if getattr(args, name) == "":
+            setattr(args, name, str(root / DEFAULT_BASELINE))
 
     # 控え自体が git の管理外でなくても、控えに書いたパスを参照として数えない
     skip = frozenset(Path(p).resolve() for p in (args.save, args.baseline) if p)

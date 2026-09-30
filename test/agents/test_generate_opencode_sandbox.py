@@ -174,10 +174,15 @@ def test_isolated_keeps_host_executed_code():
 
 
 def test_isolated_drops_unreachable_host_paths():
-    """境界が到達させないホスト絶対パスは捨てること。"""
+    """境界が到達させないホスト絶対パスは捨てること。
+
+    開けた場所 (work_read など) への edit の ask は到達できるので残す。
+    """
+    opened = {f"{d}/*" for d in gen.opencode_external_read_dirs(COMMON)}
     dropped = [
         r for r in _isolated()
         if r["action"] in ("read", "edit") and r["resource"].startswith(("~/", "/etc/", "/home/"))
+        and not (r["action"] == "edit" and r["resource"] in opened)
     ]
     assert not dropped, f"到達できない規則が残っている: {dropped[:3]}"
 

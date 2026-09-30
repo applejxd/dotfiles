@@ -830,6 +830,74 @@ def opencode_rules(action: str, effect: str, resources: list[str]) -> list[dict[
     ]
 
 
+def opencode_external_read_dirs(common: dict[str, Any]) -> list[str]:
+    """作業ツリーの外でも確認なしに読める場所 (``~`` のまま返す)。
+
+    ``[opencode.external_read] paths`` に隔離版の ``work_read`` を足す。
+    隔離版で読める作業場所を、通常版でも同じ一覧から開ける (二重に並べない)。
+    """
+    opencode = common.get("opencode", {})
+    dirs = [
+        *opencode.get("external_read", {}).get("paths", []),
+        *opencode.get("sandbox", {}).get("work_read", []),
+    ]
+    return _uniq([str(d).rstrip("/") for d in dirs])
+
+
+def opencode_external_read_rules(common: dict[str, Any]) -> list[dict[str, str]]:
+    """``external_directory`` を allow にし、同じ場所の ``edit`` は ask に戻す。
+
+    ``external_directory`` は read と edit の**両方**の前段なので、allow だけだと
+    既定 allow の edit が確認なしに通る。read は既定で allow なので足さない
+    (足すと既定の ``*.env`` の ask を上書きする)。``~`` は OpenCode が展開する。
+    see docs/spec/agent-config-generation.md#作業ツリーの外の読み取り
+    """
+    dirs = [f"{d}/*" for d in opencode_external_read_dirs(common)]
+    return opencode_rules("external_directory", "allow", dirs) + opencode_rules(
+        "edit", "ask", dirs
+    )
+
+
+def opencode_skill_script_rules(common: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """スキルのスクリプトを確認なしに実行させる shell 規則 (allow, deny)。
+
+    shell の resource は生のコマンド文字列で ``~`` を展開しないので、``~/`` と
+    展開した形の両方を出す。``exact`` は引数ごと完全一致で通す (前方一致の
+    ``*`` を付けない)。前方一致の形はリダイレクト (``>`` / ``<``) が任意書き込みの
+    手段になるので、allow の後ろで deny にする。
+    see docs/spec/agent-config-generation.md#スキルのスクリプト
+    """
+    cfg = common.get("opencode", {}).get("skill_scripts", {})
+    runners = cfg.get("runners", {})
+    roots = tuple(
+        expand_user(d).replace("\\", "/") + "/"
+        for d in common.get("opencode", {}).get("external_read", {}).get("paths", [])
+    )
+    allow: list[str] = []
+    deny: list[str] = []
+    for entry in cfg.get("allow", []):
+        script = str(entry.get("script", ""))
+        where = f"[opencode.skill_scripts] の {script!r}"
+        if ".." in script.split("/") or not expand_user(script).replace("\\", "/").startswith(
+            roots
+        ):
+            raise ValueError(f"{where} が [opencode.external_read] paths の中に無い")
+        suffix = script.rsplit(".", 1)[-1] if "." in script else ""
+        if not runners.get(suffix):
+            raise ValueError(f"{where} の拡張子に対応する runners が無い")
+        exact = entry.get("exact") or []
+        if exact and entry.get("subcommands"):
+            raise ValueError(f"{where} は exact と subcommands を併用できない")
+        for runner in runners[suffix]:
+            for path in _home_variants(script):
+                allow += [f"{runner} {path} {args}" for args in exact]
+                for sub in [] if exact else entry.get("subcommands") or [""]:
+                    head = f"{runner} {path}" + (f" {sub}" if sub else "")
+                    allow.append(f"{head} *")
+                    deny += [f"{head} *>*", f"{head} *<*"]
+    return allow, deny
+
+
 def build_opencode_sandbox_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     """隔離版の ``permissions`` を、通常版の宣言から導出する。
 
@@ -845,6 +913,14 @@ def build_opencode_sandbox_permissions(common: dict[str, Any]) -> list[dict[str,
     drop_shell = [re.compile(p) for p in cfg.get("drop_shell", [])]
     drop_prefixes = tuple(cfg.get("drop_path_prefixes", []))
     default_effect = str(cfg.get("default_shell_effect", "ask"))
+    # 既定が allow なら、スキルのスクリプトの規則は拒否 (リダイレクトの deny) を増やすだけ
+    skill_rules = (
+        {r for group in opencode_skill_script_rules(common) for r in group}
+        if default_effect == "allow"
+        else set()
+    )
+    # 開けた場所への edit の確認は残す (以前は external_directory の確認が止めていた)
+    opened = {f"{d}/*" for d in opencode_external_read_dirs(common)}
 
     out: list[dict[str, str]] = []
     for rule in build_opencode_permissions(common):
@@ -854,9 +930,13 @@ def build_opencode_sandbox_permissions(common: dict[str, Any]) -> list[dict[str,
                 # 既定の反転。境界内なので列挙をやめる
                 out.append({**rule, "effect": default_effect})
                 continue
-            if any(p.match(resource) for p in drop_shell):
+            if any(p.match(resource) for p in drop_shell) or resource in skill_rules:
                 continue
-        elif action in ("read", "edit") and resource.startswith(drop_prefixes):
+        elif (
+            action in ("read", "edit")
+            and resource.startswith(drop_prefixes)
+            and not (action == "edit" and resource in opened)
+        ):
             continue
         out.append(rule)
     return out
@@ -905,10 +985,16 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     shell_allow = common.get("opencode", {}).get("shell", {}).get("allow", [])
 
     rules: list[dict[str, str]] = [{"action": "shell", "resource": "*", "effect": "ask"}]
+    skill_allow, skill_deny = opencode_skill_script_rules(common)
 
     rules += opencode_rules("shell", "allow", [f"{cmd} *" for cmd in shell_allow])
+    rules += opencode_rules("shell", "allow", skill_allow)
     rules += opencode_rules("shell", "ask", [f"{cmd} *" for cmd in bash.get("ask", [])])
+    rules += opencode_rules("shell", "deny", skill_deny)
     rules += opencode_rules("shell", "deny", [f"{cmd} *" for cmd in bash.get("deny", [])])
+
+    # read / edit の ask・deny より前に置く (秘密の deny を後勝ちで効かせる)
+    rules += opencode_external_read_rules(common)
 
     for action, key, effect in (
         ("read", "read_ask_globs", "ask"),

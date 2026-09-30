@@ -96,6 +96,7 @@
 | [カスタムエージェント(Bypass)とキーバインド](opencode/permission/bypass-agent.md) | opencode.jsonのkeybindsが除去される実証（cli.json では効く）、modeではなくagentで実装する、permission="allow"の展開、bypassが外す防御の範囲 |
 | [sandboxはあるか](opencode/permission/sandbox.md) | 組み込みsandboxが無いことの確認、shell差し替えでbwrapを被せる実測とその限界、プロセスごと隔離の実証、常駐サービス経由の脱出、snapが動かない、採用時の検討事項 |
 | [hookの呼ばれ方とactionの種類](opencode/permission/hook-order.md) | execute.beforeが評価より前に走る実測、external_directoryが別actionで立つ、誘導のdenyは確認を出さない、evaluateにagentが載る、差し替えが評価へ波及する、配備と計装の手順 |
+| [作業ツリーの外の読み取りとスキルのスクリプト](opencode/permission/external-read-and-skill-scripts.md) | スキルのスクリプトで出ていたのは shell の ask だけ、引数のパスから external_directory は立たない、開けた場所の edit と秘密の deny、コマンド置換は別 resource・引用符は残る、git が fsmonitor を起動、`uv run --no-project` が `.python-version` の実行ファイルを起動 |
 | [段階2配備後の被覆率](opencode/permission/stage2-coverage.md) | 実履歴1,031呼び出しでの実測、秘密へ触れた15件を3層が全件受け止める、誘導後も87%が確認、伏字化の誤爆0.3%、内容の形とパス判定は両方要る |
 
 ### OpenCode の plugin

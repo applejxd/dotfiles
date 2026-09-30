@@ -100,6 +100,9 @@ exemption がどのモードでも無効化されるため)。OpenCode には委
 
 glob の変換・formatter・plugin・キーバインド・照合順などの詳細は
 [OpenCode V2 の設定](agent-config-generation.md#opencode-v2-の設定) にある。
+作業ツリーの外で確認なしに読める場所と、確認なしに実行できるスキルのスクリプトも
+そこに書いた（[作業ツリーの外の読み取り](agent-config-generation.md#作業ツリーの外の読み取り)・
+[スキルのスクリプト](agent-config-generation.md#スキルのスクリプト)）。
 
 ### Codex CLI / Gemini CLI の扱い
 

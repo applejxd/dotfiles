@@ -460,6 +460,25 @@ def test_ensure_ignored_adds_exclude_entry(cp, git_repo: Path):
         assert done.returncode == 0, f"{key} が無視されていない"
 
 
+def test_git_does_not_run_the_repository_fsmonitor(git_repo: Path):
+    """.git/config の core.fsmonitor を起動しない。
+
+    OpenCode は paths / lint / read を確認なしに実行させる。リポジトリの設定から
+    任意コマンドを起動できると、確認を経ない実行の入口になる。
+    see docs/spec/agent-config-generation.md#スキルのスクリプト
+    """
+    mark = git_repo / "fsmonitor-ran"
+    subprocess.run(
+        ["git", "config", "core.fsmonitor", f"touch '{mark}'; false"], cwd=git_repo, check=True
+    )
+    for args in (
+        ["paths", "--session", "session-x", "--cwd", str(git_repo), "--ensure-ignored"],
+        ["read", "--session", "session-x", "--cwd", str(git_repo)],
+    ):
+        run_cli(args)
+        assert not mark.exists(), args
+
+
 def test_ensure_ignored_is_idempotent(cp, git_repo: Path):
     paths = cp.resolve_paths("session-x", git_repo)
     cp.ensure_ignored(paths)

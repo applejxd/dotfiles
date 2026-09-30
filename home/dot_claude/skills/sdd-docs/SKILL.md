@@ -41,15 +41,18 @@ allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 作業の前に、参照の切れの控えを取っておく（「仕上げ」で比べる）。
 
 ```bash
-S="<このスキルのディレクトリ>/scripts"   # 例: ~/.claude/skills/sdd-docs/scripts
-uv run --no-project python "$S/check_refs.py" --save .tmp/refs-before.txt
+python3 ~/.claude/skills/sdd-docs/scripts/check_refs.py --save
 ```
 
-控えは commit しない。`--save` は置き場のディレクトリが無ければ作る。
-`.tmp/` が git に無視されているか（`git check-ignore -q .tmp/refs-before.txt`）を
-確かめ、無視されていなければリポジトリの外の一時ディレクトリへ置き、「仕上げ」の
-`--baseline` にも同じパスを渡す。uv が無ければ `python3` で直接実行してよい
-（Windows は `py -3 -X utf8`）。
+控えはリポジトリのルートの `.tmp/refs-before.txt` に置かれる（置き場のディレクトリが
+無ければ作る）。commit しない。`.tmp/` が git に無視されているか
+（`git check-ignore -q .tmp/refs-before.txt`）を確かめ、無視されていなければ
+リポジトリの外の一時ディレクトリのパスを `--save <パス>` で渡し、「仕上げ」の
+`--baseline` にも同じパスを渡す。
+
+スクリプトは `python3 <パス>` でそのまま呼ぶ（パスを変数に入れない・`uv run` を
+挟まない。OpenCode はこの形だけを確認なしに通す）。スキルを別の場所に置いたときは
+パスを読み替え、Windows では `python3` を `py -3 -X utf8` に置き換える。
 
 ## 共通の原則
 
@@ -188,9 +191,8 @@ uv run --no-project python "$S/check_refs.py" --save .tmp/refs-before.txt
 ## 仕上げ
 
 ```bash
-S="<このスキルのディレクトリ>/scripts"
-uv run --no-project python "$S/lint_docs.py" --docs docs
-uv run --no-project python "$S/check_refs.py" --baseline .tmp/refs-before.txt
+python3 ~/.claude/skills/sdd-docs/scripts/lint_docs.py --docs docs
+python3 ~/.claude/skills/sdd-docs/scripts/check_refs.py --baseline
 ```
 
 対象のリポジトリに検証の表（`AGENTS.md` など）や pre-commit があれば、それも回す。

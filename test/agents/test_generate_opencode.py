@@ -154,16 +154,20 @@ def test_shell_allow_comes_from_the_opencode_section():
 
     ``[bash] allow`` は Claude / Copilot と共有しており、未掲載を classifier
     へ委ねる前提で組まれている。OpenCode は既定 ask なので前提が違う。
+    スキルのスクリプトの allow は ``[opencode.skill_scripts]`` から足す。
     """
     expected = [f"{cmd} *" for cmd in COMMON["opencode"]["shell"]["allow"]]
+    expected += gen.opencode_skill_script_rules(COMMON)[0]
     assert rules("shell", "allow") == expected
 
 
 def test_shell_ask_and_deny_still_come_from_bash():
+    skill = {r for group in gen.opencode_skill_script_rules(COMMON) for r in group}
     for effect in ("ask", "deny"):
         expected = [f"{cmd} *" for cmd in COMMON["bash"][effect]]
-        # 先頭の catch-all (既定 ask) は [bash] 由来ではないので外す
-        assert [r for r in rules("shell", effect) if r != "*"] == expected
+        # 先頭の catch-all (既定 ask) とスキルのスクリプトの例外は [bash] 由来ではないので外す
+        found = [r for r in rules("shell", effect) if r != "*" and r not in skill]
+        assert found == expected
 
 
 # 実行するコードを呼び出し側が決められるもの。allow に載ると、そのコマンドが
@@ -1332,8 +1336,10 @@ def test_allow_is_not_widened_silently():
 
     ここを更新するときは docs/change/0002-opencode-ask-by-default.md の
     「段階 1 の詳細」と、その根拠になった実測も一緒に見直すこと。
+    スキルのスクリプトは test_opencode_external_read.py が固定する。
     """
-    assert rules("shell", "allow") == [
+    skill = set(gen.opencode_skill_script_rules(COMMON)[0])
+    assert [r for r in rules("shell", "allow") if r not in skill] == [
         "git log *",
         "wc *",
         "grep -n *",

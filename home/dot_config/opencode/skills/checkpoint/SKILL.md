@@ -27,9 +27,12 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 ## A1: 実行状態の保存
 
 ```bash
-CP=~/.config/opencode/skills/checkpoint/scripts/checkpoint.py
-uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-ignored
+python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py paths --session "<セッションID>" --ensure-ignored
 ```
+
+CLI は `python3 <パス>` でそのまま呼ぶ（パスを変数に入れない・`uv run` を挟まない。
+OpenCode は `paths` / `lint` / `read` をこの形だけ確認なしに通す）。Windows では
+`python3` を `py -3 -X utf8` に置き換える。
 
 1. 上で保存先を解決する。**固定パスを自分で組み立てない**
    （保存先はセッション別。別セッションの記録を読む事故を防ぐ）
@@ -42,13 +45,13 @@ uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-
 4. 書く:
 
    ```bash
-   uv run --no-project python "$CP" write <checkpoint パス> --keep-prev <prev パス>
+   python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py write <checkpoint パス> --keep-prev <prev パス>
    ```
 
 5. 通るまで直す:
 
    ```bash
-   uv run --no-project python "$CP" lint <checkpoint パス> --structure --session "<セッションID>"
+   python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py lint <checkpoint パス> --structure --session "<セッションID>"
    ```
 
 ## 復帰
@@ -57,7 +60,7 @@ uv run --no-project python "$CP" paths --session "<セッションID>" --ensure-
 （手動で再開するとき・「現状を教えて」）だけ次を行う。
 
 ```bash
-uv run --no-project python "$CP" read --session "<セッションID>"
+python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py read --session "<セッションID>"
 ```
 
 1. `read` は `paths` と同じ規則でセッション別のパスを解決し、自分の記録を出す。

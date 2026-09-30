@@ -408,6 +408,11 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
   **`commit` の `git commit` だけは、エージェント側の `ask` で確認が出る**（全体から捨てた
   `ask` をエージェントの規則が戻す。オプションを前に置いた `git -c … commit` はエージェントの
   `deny` で止まる。[`commit` の権限](agent-config-generation.md#commit-の権限)）
+- **作業ツリーの外の読み取りは、通常版と同じく確認なし。** `external_directory` の `allow`
+  （スキルの置き場と `work_read`）は隔離版にも出し、同じ場所への edit の `ask` も残す
+  （[作業ツリーの外の読み取り](agent-config-generation.md#作業ツリーの外の読み取り)）。
+  スキルのスクリプト用の規則は出さない。隔離版の shell は既定が `allow` なので、出しても
+  拒否が増えるだけ（[スキルのスクリプト](agent-config-generation.md#スキルのスクリプト)）
 - `bypass-worker` を `bypass` 以外から起動させない仕組み（全体の `subagent` の deny と
   guide plugin の起動元の検査）は、隔離版でもそのまま効く
   （[bypass から呼べる子エージェント](agent-config-generation.md#bypass-から呼べる子エージェント)）

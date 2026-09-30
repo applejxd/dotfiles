@@ -77,11 +77,16 @@ HEADER_RE = re.compile(r"<!--\s*checkpoint:\s*v1(?P<body>.*?)-->", re.DOTALL)
 FENCE_OPEN_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 
 
+# OpenCode が確認なしに実行するので、リポジトリの設定からコマンドを起動させない。
+# see docs/spec/agent-config-generation.md#スキルのスクリプト
+GIT = ["git", "-c", "core.fsmonitor=false"]
+
+
 def _run_git(args: list[str], cwd: Path) -> str | None:
     """git を実行して stdout を返す。失敗したら None。"""
     try:
         done = subprocess.run(
-            ["git", *args],
+            [*GIT, *args],
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -165,7 +170,7 @@ def _check_ignore(root: Path, target: str) -> bool | None:
     """target が git に無視されるか。判定できなければ None。"""
     try:
         done = subprocess.run(
-            ["git", "check-ignore", "-q", target],
+            [*GIT, "check-ignore", "-q", target],
             cwd=root,
             capture_output=True,
             check=False,
