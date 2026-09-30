@@ -53,6 +53,8 @@ PY
 export OPENCODE_DB="${SEED_DB}"
 if [ -n "${OPENCODE_PROBE_CONFIG:-}" ]; then
   export OPENCODE_CONFIG_DIR="${OPENCODE_PROBE_CONFIG}"
+  # 残すと実環境の opencode.json が試験用の設定に重なる (Orca の端末で設定される)
+  unset OPENCODE_CONFIG
 else
   unset OPENCODE_CONFIG_DIR
 fi

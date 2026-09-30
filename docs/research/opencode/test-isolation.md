@@ -52,6 +52,12 @@ OPENCODE_DB
 
 `OPENCODE_DB` があるので、セッション DB も分離できる可能性がある（**未検証**）。
 
+**`OPENCODE_CONFIG` が残っていると、`OPENCODE_CONFIG_DIR` の設定に実環境の
+`opencode.json` が重なる。** Orca の端末では `shellenv.sh` が `OPENCODE_CONFIG` を設定するので
+（下の 7 章）、試験用の設定が同名のエージェントで上書きされる（2026-09-30 実測。
+[bypass の子の入れ替え](permission/bypass-agent.md#7-bypass-の子の入れ替え2026-09-30)）。
+`opencode_probe.sh` は `OPENCODE_PROBE_CONFIG` を使うとき `OPENCODE_CONFIG` を外す。
+
 ### `HOME` の差し替えは使えない
 
 `HOME` を差し替えると provider 認証が壊れ、モデル呼び出しの前に落ちる。
