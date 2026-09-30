@@ -1,12 +1,13 @@
 ---
 name: commit
 description: "Conventional Commits 形式のメッセージ作成と Git コミットを行う。「コミットして」「commit メッセージを作って」「変更をコミット」と言われたら必ず使う。"
-context: fork
-agent: general-purpose
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*)
 ---
 
 # Git コミットスキル
+
+> **fork しない（`context: fork` を付けない）。** 承認でユーザーとやり取りするため。
+> see docs/research/opencode/skill-frontmatter.md
 
 CLI 非依存。実行環境が hook / permission / rules による確認を持つかに関わらず、
 このスキル自身が commit 直前に承認を得る。環境判別による分岐はしない
@@ -17,7 +18,8 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
 補助スクリプトは使わず、以下のコマンドを直接実行する:
 
 - `git status --short --branch` — 変更ファイルとブランチ
-- `git diff HEAD` — ステージ済み・未ステージの差分
+- `git diff HEAD` — HEAD からの差分の概観
+- `git diff --cached` / `git diff` — index と作業ツリーの差分（別々に見る。手順 3）
 - `git branch --show-current` — 現在のブランチ
 - `git log --oneline -10` — 直近コミット履歴
 
@@ -28,7 +30,15 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
 1. 上記コンテキストから **Conventional Commits** 形式のメッセージを作成する。
    詳細は `references/conventional-commits-spec.md` を参照する。
 2. メッセージ作成だけを依頼された場合は、対象ファイルとメッセージを提示して終了する。
-3. コミットを依頼された場合は、対象ファイルをパスで明示してステージする。
+3. コミットを依頼された場合は、add の前に `git diff --cached` (index) と `git diff`
+   (作業ツリー) の両方を確認する。次のいずれかなら、解除も add もせず止めて、
+   利用者に対象を尋ねる（尋ねられない実行文脈では、その旨を呼び出し元に返して終了する）。
+   - 対象外のステージ済み変更、または対象外の変更が対象ファイルに混在している
+   - 対象ファイルの index と作業ツリーの両方に差分がある（部分ステージ。
+     ファイル単位の add は index の内容を作業ツリーで上書きして失う）
+
+   `git diff HEAD` だけでは index の内容が見えないので、判断に使わない。
+   問題なければ、対象ファイルをパスで明示してステージする。
    ステージは取り消せるので、この時点では承認を求めない。
 
    ```bash
@@ -54,7 +64,9 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
    コミットを子エージェントなどへ任せるときは、任せる前にメッセージ全文を
    ユーザーに示して承認を得て、承認済みの全文を渡す（確認画面ではメッセージが
    切れて読めないことがある）。承認済みの全文を渡された側は、一字も変えずに使う。
-5. 承認後にコミットする。`git add` と `&&` で連結せず、単独のコマンドとして
+5. 承認後、コミット直前に `git diff --cached --name-only` と `git diff --cached` が
+   承認した対象・内容と一致することを確認する。食い違えばコミットせず報告する。
+   一致したらコミットする。`git add` と `&&` で連結せず、単独のコマンドとして
    実行する。環境側の確認機構はコマンド単位で働くため、連結すると
    コミット単体の確認が効かないことがある。
 
