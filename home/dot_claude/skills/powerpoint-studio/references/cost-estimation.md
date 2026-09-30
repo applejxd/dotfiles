@@ -38,7 +38,7 @@ cache、推定費用を確認する。スキルから同じ対話セッション
 claude -p "Research and freeze the deck plan" \
   --output-format json > research-result.json
 
-uv run scripts/extract_claude_code_usage.py research-result.json \
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/extract_claude_code_usage.py" research-result.json \
   --output research-usage.json
 ```
 

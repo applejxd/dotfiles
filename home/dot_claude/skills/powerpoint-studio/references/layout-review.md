@@ -102,7 +102,7 @@ Part番号と技法名を別行にするなど、意味に沿った折り返し�
 最終表示の可読性は原寸レビューで判断し、格納ptだけから推定しない。
 
 ```bash
-uv run scripts/audit_layout_groups.py deck.pptx \
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/audit_layout_groups.py" deck.pptx \
   --plan deck-plan.json --output layout-groups-report.json
 ```
 

@@ -39,9 +39,9 @@
 文字の実測高さに上下paddingを加えた高さを確保する。
 
 ```bash
-uv run scripts/render_diagram.py process.layout.json \
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/render_diagram.py" process.layout.json \
   --output process.svg --report process.geometry.json
-uv run scripts/audit_diagram_geometry.py process.layout.json
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/audit_diagram_geometry.py" process.layout.json
 ```
 
 検査不合格時は非ゼロ終了し、SVGを正常な成果物として更新しない。

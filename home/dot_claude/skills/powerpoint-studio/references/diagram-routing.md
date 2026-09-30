@@ -65,7 +65,7 @@
 ## Complexity score
 
 ```bash
-uv run scripts/choose_diagram_renderer.py diagram-spec.json
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/choose_diagram_renderer.py" diagram-spec.json
 ```
 
 - 0〜3: native
@@ -130,7 +130,7 @@ Graphvizの自動配置で戻り線が主経路を横切る場合は、次の順
 ```
 
 ```bash
-uv run scripts/audit_diagram_topology.py diagram-spec.json
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/audit_diagram_topology.py" diagram-spec.json
 ```
 
 この監査は入口、主経路、分岐ラベル、到達可能性、戻り線の外周指定を確認する。

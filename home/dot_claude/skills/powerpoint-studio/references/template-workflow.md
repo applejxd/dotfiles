@@ -3,7 +3,7 @@
 ## 1. Inventory
 
 ```bash
-uv run scripts/inspect_template.py template.pptx --output template-inventory.json
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/inspect_template.py" template.pptx --output template-inventory.json
 ```
 
 確認するもの:

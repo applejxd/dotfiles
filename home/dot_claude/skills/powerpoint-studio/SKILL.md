@@ -1,6 +1,6 @@
 ---
 name: powerpoint-studio
-description: "高品質な PowerPoint（.pptx）の新規作成・大幅改稿に必ず使う。テンプレート指定、既存資料への内容充填、経営報告、提案書、研究発表、実験結果、製品デモ、スクリーンショット中心のスライド、図解・チャートを含むデッキが対象。「パワポを作って」「スライドをデザインして」「テンプレートに収めて」「図や実験結果を見やすく貼って」「文字だけにしないで」「プレゼン資料を磨いて」で使う。Always use for creating or substantially redesigning an editable PowerPoint, slide deck, pitch deck, research presentation, template-based deck, screenshot demo, or data-driven presentation. 単なる .pptx のテキスト抽出や軽微な一語置換には使わない。"
+description: "編集可能な PowerPoint（.pptx）の新規作成・大幅改稿・テンプレートへの内容充填に使う。「パワポを作って」「PowerPoint 資料で図や実験結果を見やすく貼って」「スライドをデザインして」「テンプレートに収めて」で使う。Use to create, substantially redesign, or fill a template with an editable .pptx deck. .pptx のテキスト抽出や軽微な一語置換には使わない。"
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch, WebSearch, Task
 ---
 
@@ -9,32 +9,37 @@ allowed-tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch, WebSearch, Task
 見た目のよいページを偶然作るのではなく、**構成設計、テンプレート適合、視覚化、
 機械検査、レンダリング、独立レビュー**を一つの閉ループにする。
 
+## 場所の定義
+
+- **スキルの展開先** `SKILL_DIR`: この `SKILL.md` があるディレクトリ
+  （通常 `~/.claude/skills/powerpoint-studio`）。`scripts/`・`assets/`・`references/`・
+  `pyproject.toml`・`package.json` と依存（`.venv`・`node_modules`）はここにある。
+- **作業ディレクトリ** `WORK_DIR`: 利用者のプロジェクト内の成果物置き場。
+  `deck-plan.json`・`.js`・`.pptx`・画像・`./.tmp/` の QA 出力はここに置く。
+
+`SKILL_DIR` は `SKILL.md` を読み込んだパスから決め、`WORK_DIR` をカレントにして実行する。
+Python スクリプトは次の形で呼ぶ。入出力のパスは `WORK_DIR` 基準（カレント基準）で明示する。
+
+```bash
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/<名前>.py" <引数>
+```
+
+以降の `<名前>.py` の例はこの形の省略で、`references/` の `uv run scripts/...` も同様に読み替える。
+
+JavaScript（PptxGenJS）は初回だけ `npm ci --prefix "$SKILL_DIR"` で依存を用意する。
+デッキのソースは `WORK_DIR` に置き、helper は展開先の絶対パスで読み込む
+（helper の依存は helper 自身の位置から解決される）。
+
+```bash
+SKILL_DIR="$SKILL_DIR" NODE_PATH="$SKILL_DIR/node_modules" node deck.js
+```
+
 ## 品質契約
 
-最終成果物は次をすべて満たすまで完成ではない。
-
-1. **キャンバス外へのはみ出し 0 件**
-2. **意図しない重なり 0 件**
-3. **推定テキストオーバーフロー 0 件**
-4. **壊れた画像・低解像度の主要画像 0 件**
-5. **本文スライドの文字だけページ 0 件**
-6. **プレースホルダー残存 0 件**
-7. **テンプレート指定時はマスター、レイアウト、余白、書体、配色を維持**
-8. **全ページを PNG 化し、一覧と原寸の両方で目視確認**
-9. **独立したレビューで actionable finding が 0 件**
-10. **原典ベースの資料は、主張・引用・図・実装名を出典へ追跡できる**
-11. **時間指定のある発表は、話者ノートとチェックポイントから所要時間を再現できる**
-12. **ラベル、バッジ、タグの文字が背景図形の内側に完全に収まる**
-13. **新規デッキは surface と base / main / accent の色役割を定義し、背景色を統一する**
-14. **長い発表はタイトル、目次、本文、最後のまとめという構造を持つ**
-15. **各ページは一つの claim に収束し、overviewを含め情報単位の上限を超えない**
-16. **レビュー資料は原典の構築順と具体名を追跡でき、一般論へ要約しすぎない**
-17. **ユーザー指定がなければ装飾的なヘッダーとフッターを付けず、ページ番号だけを全ページへ表示する**
-18. **書体と文字サイズを役割別の体系へ固定し、図解ツールで生成した文字も同じ体系へ合わせる**
-19. **作図警告を残さず、図内部の実座標と最終配置寸法を検査する。経路の宣言や画像枠の正常だけで合格にしない**
-20. **全体レイアウトの見直しでは、余白・整列・主従・改行を原寸で確認し、改善が必要なページだけを変更する**
-
-判定基準の詳細は `references/quality-standard.md` を読む。
+最終成果物は `references/quality-standard.md` の Hard gates（描画・テキスト・画像・
+テンプレート・出典・時間・図・色・構造などの合格条件）と Visual review gates を満たすまで
+完成ではない。閾値と判定基準はすべてそこを正本とし、本文では重複して書かない。
+全ページの PNG を一覧と原寸の両方で目視確認することも含む。
 
 ## 必須ワークフロー
 
@@ -68,7 +73,7 @@ PowerPoint を触る前に、`references/deck-plan-schema.md` に従う構成案
 - `optional_cut_seconds`: 遅延時に削れる時間
 
 ```bash
-uv run scripts/validate_plan.py deck-plan.json
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/validate_plan.py" deck-plan.json
 ```
 
 ページタイトルを章名だけにしない。「結果」「背景」ではなく、結論をタイトルにする。
@@ -95,7 +100,7 @@ Why / What / How / Proof / Operate / Actionへ分類する。
 標準対象は Claude Code + Amazon Bedrock とし、Copilot CLIの金額換算は明示要求時だけ行う。
 
 ```bash
-uv run scripts/estimate_cost.py cost-checkpoint-input.json \
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/estimate_cost.py" cost-checkpoint-input.json \
   --output cost-checkpoint.json
 ```
 
@@ -123,7 +128,7 @@ Graphviz の警告、特に `bounding boxes ... touch` や `falling back` を解
 テンプレート指定時は、最初に次を実行する。
 
 ```bash
-uv run scripts/inspect_template.py template.pptx --output template-inventory.json
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/inspect_template.py" template.pptx --output template-inventory.json
 ```
 
 `references/template-workflow.md` を読み、利用するレイアウトと各プレースホルダーの
@@ -146,7 +151,7 @@ uv run scripts/inspect_template.py template.pptx --output template-inventory.jso
 配置を見直す。読ませる主要語を注釈サイズへ縮めて、広いカードの余白を残さない。
 
 ```bash
-uv run scripts/frame_screenshot.py input.png output.png \
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/frame_screenshot.py" input.png output.png \
   --canvas 1600x1000 --caption "Evaluation dashboard" \
   --callouts callouts.json
 ```
@@ -162,14 +167,14 @@ const {
   safeOuterShadow,
   warnIfSlideHasOverlaps,
   warnIfSlideElementsOutOfBounds,
-} = require("./pptxgenjs_helpers");
+} = require(`${process.env.SKILL_DIR}/assets/pptxgenjs_helpers`);
 ```
 
 - 単純な棒・折れ線・円グラフは PowerPoint ネイティブチャートにする。
 - 複雑な図は SVG、写真・スクリーンショットは高解像度 PNG/JPEG にする。
 - 外部作図へ切り替えた場合も、Graphviz/D2/Mermaid/PlantUMLのソースを納品する。
 - `fit` / `autoFit` に丸投げせず、内容を短くし、必要ならページを分ける。
-- 文字サイズの最小値は原則、タイトル 30pt、本文 18pt、注釈 11pt。
+- 文字サイズの下限は `references/quality-standard.md` に従う。
 - Unicode の `•` を使わず、箇条書き API を使う。
 - すべての主要画像に代替テキストを付ける。
 - 意図的な重なりには、ソースコード上で短い理由コメントを残す。
@@ -178,8 +183,8 @@ const {
   必要なら正規化した別ファイルを最終成果物にする。
 
 ```bash
-uv run scripts/validate_ooxml.py deck.pptx
-uv run scripts/normalize_ooxml.py deck.pptx deck-normalized.pptx
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/validate_ooxml.py" deck.pptx
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/normalize_ooxml.py" deck.pptx deck-normalized.pptx
 ```
 
 Apache-2.0 の helper API は `references/pptxgenjs-helpers.md` を参照する。
@@ -187,7 +192,7 @@ Apache-2.0 の helper API は `references/pptxgenjs-helpers.md` を参照する�
 ### 6. 一回で終わらせず品質ゲートを回す
 
 ```bash
-uv run scripts/validate_deck.py deck.pptx \
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/validate_deck.py" deck.pptx \
   --plan deck-plan.json \
   --source deck.js \
   --template template.pptx \
@@ -209,8 +214,11 @@ uv run scripts/validate_deck.py deck.pptx \
    表現の見直しでは、画像化された図の文字と話者ノートも対象にする。
    「予算」の単位や、反復・終了の関係を訳語だけで曖昧にしない。
 3. 内容を作ったエージェントとは別のレビュアーに、PPTX と PNG を渡して評価させる。
-4. 指摘を一般化してソースまたはスキルへ反映し、再生成する。
-5. **一巡のレビューで新しい actionable finding が 0 件になるまで繰り返す。**
+4. 指摘は資料のソース（`.js`・`deck-plan.json`・素材）だけへ反映し、再生成する。
+   スキル自体の変更はしない。スキルへの改善案は報告で提案するに留める
+   （書き換えは別途利用者の承認が要る）。
+5. ラウンド上限・停滞・完了の条件と、止めたときの報告は
+   `references/quality-standard.md` に従う。
 
 レビュー観点は `references/review-rubric.md` を使う。
 
@@ -234,16 +242,9 @@ uv run scripts/validate_deck.py deck.pptx \
 - 3〜5 ページごとに、証拠・図解・大きな数値など視覚リズムを変える。
 - 変化の目的を説明できない同一構図の反復を避ける。Before/Afterや段階改善では、
   比較可能性のため同じ構図を意図的に反復してよい。
-- 1 ページ 1 主張。複数の独立主張は分ける。
-- overviewも一つのメッセージとして扱える。ただし「全体を詳しく読む」のではなく、
-  認識させる構造・領域・比較軸を一つに定める。
-- 通常ページは情報単位5個、overviewは7個を初期上限とする。超える場合は分割するか、
-  読ませない詳細をリンク先・配布資料・付録へ移す。
-- 小さな章名、現在位置バー、ブランド帯を習慣で上端へ置かない。章やPartは本文タイトルへ
-  統合する。ユーザーが指定したテンプレートやブランド規定に必要な場合だけ例外とする。
-- 共通出典、ファイルパス、制作方式、機密区分を下端へ常設しない。必要な引用は図の近くに
-  自然な出典として置く。法務・ブランド上の必須フッターはユーザー指定として扱う。
-- ページ番号は省略せず、すべてのページの右下など一定位置へ表示する。
+- 1 ページ 1 主張。複数の独立主張は分ける。情報単位の上限は
+  `references/quality-standard.md` と `references/one-message-density.md` に従う。
+- ヘッダー・フッター・ページ番号の扱いは `references/quality-standard.md` の Chrome に従う。
 - 長い説明型発表で最後に表示するページはまとめにする。まとめの最終項目や口頭の
   終わりを、判断、行動、問いへ接続してよい。
 - ページ間の因果が説明できないページは削除または移動する。

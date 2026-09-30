@@ -50,7 +50,7 @@
 埋め込む前に SVG の viewBox、外部参照、ラベル境界を検査する。
 
 ```bash
-uv run scripts/validate_svg.py assets/method.svg --output ./.tmp/svg-report.json
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/validate_svg.py" assets/method.svg --output ./.tmp/svg-report.json
 ```
 
 GraphvizのSVGはグループ変換の内側で負の座標を使うことがある。

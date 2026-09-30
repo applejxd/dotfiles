@@ -27,7 +27,7 @@
 ```
 
 ```bash
-uv run scripts/validate_style.py deck.pptx --policy style-policy.json
+uv run --project "$SKILL_DIR" "$SKILL_DIR/scripts/validate_style.py" deck.pptx --policy style-policy.json
 ```
 
 ## Background
