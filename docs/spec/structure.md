@@ -136,6 +136,22 @@ Pi でそこに入ると十数分かけてから失敗します。`false` にす
 使う限り不要ですが、x86 / WSL がソースビルドへ落ちたときの保険です
 （`psych` 拡張のビルドに要ります）。
 
+### clang が C++ の標準ヘッダを見つけられるようにする
+
+`121_ubuntu` は build tools の後で、`/usr/lib/gcc/<triplet>/` にある**最も新しい
+gcc の版**に合わせて `libstdc++-<版>-dev` を入れます（apt に無い版なら飛ばします）。
+
+clang（`clang-tidy` も）は、C++ の標準ヘッダを探すときに最も新しい gcc の版の
+ディレクトリを選びます。そのディレクトリは `libgcc-<版>-dev` だけでも作られ、
+別のパッケージ（例: `libgccjit0`）がそれを引き込むことがあります。その版の
+`libstdc++-<版>-dev` が無いと、`#include <cstdio>` すら `file not found` になります。
+
+2026-10-01 に WSL（Ubuntu 24.04）で観測しました。`libgcc-14-dev` があり
+`libstdc++-14-dev` が無い状態で、Ubuntu の clang 18 も同じエラーを出しました。
+版を決め打ちしないのは、Ubuntu の版ごとに gcc の版が違うためです。
+
+`clang-tidy` は OpenCode の編集直後の lint で C/C++ に使います。
+
 ### ツール 1 個の失敗で apply を止めない
 
 `125_mise` は `mise install` が失敗しても**警告に留めます**。非ゼロで抜けると、
@@ -219,6 +235,10 @@ Ubuntu の `121_ubuntu` では GitHub CLI 用の APT リポジトリ・鍵の登
 mise の実体または shim が選ばれることを確認してください。
 
 AWS CLI（`aws-cli`、aqua の `aws/aws-cli`）は Unix で `applejxd` 以外のユーザーにだけ宣言します。
+
+`ruff` と `oxlint` は Unix で宣言します。どちらも OpenCode の編集直後の lint に使い、
+`ruff` は Claude Code / Copilot CLI の `format-file.sh` と OpenCode 組み込みの整形
+（`.py`）も使います。宣言する前は PATH に無く、どちらの整形も黙って何もしていませんでした。
 
 ツールごとの導入コマンドは持たず、設定配備後にホームディレクトリを基準として
 **引数なしの `mise install`** を実行します。
