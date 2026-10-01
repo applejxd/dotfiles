@@ -810,6 +810,7 @@ permissions = [
   { action = "shell", resource = "git diff *", effect = "allow" },
   { action = "shell", resource = "git log *", effect = "allow" },
   { action = "shell", resource = "git branch --show-current", effect = "allow" },
+  { action = "shell", resource = "git rev-parse --show-toplevel", effect = "allow" },
   { action = "shell", resource = "git add -- *", effect = "allow" },
   { action = "shell", resource = "git restore --staged -- *", effect = "allow" },
   { action = "shell", resource = "*>*", effect = "deny" },

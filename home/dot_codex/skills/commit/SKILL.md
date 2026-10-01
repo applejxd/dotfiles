@@ -12,6 +12,7 @@ description: "Conventional Commits 形式のメッセージ作成と Git コミ�
 - `git status --short --branch`
 - `git diff HEAD`
 - `git branch --show-current`
+- `git rev-parse --show-toplevel`
 - `git log --oneline -10`
 
 差分を論理単位に分け、ユーザーの変更や無関係な変更を混ぜない。
@@ -30,8 +31,8 @@ description: "Conventional Commits 形式のメッセージ作成と Git コミ�
    git add -- <対象ファイル...>
    ```
 
-6. **コミット前の承認**: ステージ内容 (`git status --short`) とコミットメッセージ
-   全文を提示してユーザーの承認を得る。目的はメッセージの確認で、承認が
+6. **コミット前の承認**: ステージ内容とコミットメッセージ全文を
+   [承認時の提示](#承認時の提示)の形で提示してユーザーの承認を得る。目的はメッセージの確認で、承認が
    得られなければコミットせず、指摘に沿って直して再提示する。
    ただし、呼び出し元の指示が `git commit` の権限の確認を承認の場と定めているときは、
    それに従い確認付きでコミットを実行する（提示して承認を求める返答で止まらない）。
@@ -44,6 +45,31 @@ description: "Conventional Commits 形式のメッセージ作成と Git コミ�
    ```
 
 8. コミット後に `git status --short` と `git log -1 --oneline` で結果を確認する。
+
+## 承認時の提示
+
+コミット 1 件につき 1 ブロックを、次の形で並べる。リポジトリが 1 つでも省略しない。
+複数のリポジトリにまたがるときは、リポジトリごとにまとめ、先頭に
+`計 <N> コミット / <M> リポジトリ` の 1 行を置く。
+
+````markdown
+### [<n>/<N>] <リポジトリ名> @ <ブランチ>
+
+- リポジトリ: `<リポジトリ名>`（`<ルートの絶対パス>`）
+- ブランチ: `<ブランチ>` → `<upstream>`（<ahead / behind。無ければ「差分なし」>）
+- 対象（<件数> 件）:
+  - `<状態> <パス>`
+
+```text
+<コミットメッセージ全文>
+```
+````
+
+- リポジトリ名はルートのディレクトリ名。ルートは `git rev-parse --show-toplevel` で確かめる
+- ブランチと upstream・ahead / behind は `git status --short --branch` の 1 行目から取る。
+  upstream が無ければ「upstream なし」、detached HEAD なら `(detached <短縮 SHA>)` と書く
+- 対象はステージ済みの `git status --short` の行をそのまま並べる。多いときは
+  `git diff --cached --stat` の要約に替えてよい
 
 ## 禁止
 

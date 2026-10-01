@@ -1,7 +1,7 @@
 ---
 name: commit
 description: "Conventional Commits 形式のメッセージ作成と Git コミットを行う。「コミットして」「commit メッセージを作って」「変更をコミット」と言われたら必ず使う。"
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse --show-toplevel), Bash(git add:*), Bash(git commit:*)
 ---
 
 # Git コミットスキル
@@ -21,6 +21,7 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
 - `git diff HEAD` — HEAD からの差分の概観
 - `git diff --cached` / `git diff` — index と作業ツリーの差分（別々に見る。手順 3）
 - `git branch --show-current` — 現在のブランチ
+- `git rev-parse --show-toplevel` — リポジトリのルート（承認時の提示に使う）
 - `git log --oneline -10` — 直近コミット履歴
 
 差分を論理単位に分け、ユーザーの変更や無関係な変更を混ぜない。
@@ -53,8 +54,8 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
    返答で止まらない）。以下の提示と返却はせずに 5 へ進み、確認が拒否されたら
    それ以降はコミットしない。
 
-   それ以外では、ステージ内容 (`git status --short`、必要なら
-   `git diff --cached --stat`) とコミットメッセージ全文を提示し、
+   それ以外では、ステージ内容とコミットメッセージ全文を
+   [承認時の提示](#承認時の提示)の形で提示し、
    ユーザーの承認を得る。これが唯一の確認点で、目的はメッセージの確認である。
    承認が得られない場合はコミットせず、指摘に沿ってメッセージや対象ファイルを
    直して再提示する。ステージは勝手に取り消さない。
@@ -62,7 +63,7 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
    メッセージを呼び出し元に返して終了する。
 
    コミットを子エージェントなどへ任せるときは、任せる前にメッセージ全文を
-   ユーザーに示して承認を得て、承認済みの全文を渡す（確認画面ではメッセージが
+   ユーザーに示して承認を得て（提示は同じ形にする）、承認済みの全文を渡す（確認画面ではメッセージが
    切れて読めないことがある）。承認済みの全文を渡された側は、一字も変えずに使う。
 5. 承認後、コミット直前に `git diff --cached --name-only` と `git diff --cached` が
    承認した対象・内容と一致することを確認する。食い違えばコミットせず報告する。
@@ -95,6 +96,32 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
 - Change: <what>
 - Impact: <effect>  # 数値を書くのは測定済みのときのみ
 ```
+
+## 承認時の提示
+
+コミット 1 件につき 1 ブロックを、次の形で並べる。リポジトリが 1 つでも省略しない。
+複数のリポジトリにまたがるときは、リポジトリごとにまとめ、先頭に
+`計 <N> コミット / <M> リポジトリ` の 1 行を置く。
+
+````markdown
+### [<n>/<N>] <リポジトリ名> @ <ブランチ>
+
+- リポジトリ: `<リポジトリ名>`（`<ルートの絶対パス>`）
+- ブランチ: `<ブランチ>` → `<upstream>`（<ahead / behind。無ければ「差分なし」>）
+- 対象（<件数> 件）:
+  - `<状態> <パス>`
+
+```text
+<コミットメッセージ全文>
+```
+````
+
+- リポジトリ名はルートのディレクトリ名。ルートは `git rev-parse --show-toplevel` で確かめる
+- ブランチと upstream・ahead / behind は `git status --short --branch` の 1 行目から取る。
+  upstream が無ければ「upstream なし」、detached HEAD なら `(detached <短縮 SHA>)` と書く
+- 対象はステージ済みの `git status --short` の行をそのまま並べる。多いときは
+  `git diff --cached --stat` の要約に替えてよい
+- 呼び出し元へ返すとき（手順 4 で直接やり取りできない場合、確認が拒否された場合）も同じ形にする
 
 ## ポリシー
 

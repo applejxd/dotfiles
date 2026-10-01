@@ -963,7 +963,7 @@ explore = "worker"      # 例
 | --- | --- | --- | --- |
 | 1 | `deny` | `edit` / `subagent` / `question` の `*` | 編集・子エージェントの起動・質問をさせない |
 | 1 | `deny` | `git checkout *` / `git reset *` / `git stash *` / `git clean *` | 作業ツリーと index を戻させない |
-| 2 | `allow` | `git status *`・`git diff *`・`git log *`・`git branch --show-current` | 状況の把握。commit スキルが教える形そのまま |
+| 2 | `allow` | `git status *`・`git diff *`・`git log *`・`git branch --show-current`・`git rev-parse --show-toplevel` | 状況の把握。commit スキルが教える形そのまま（ルートは承認時の提示でリポジトリ名に使う） |
 | 2 | `allow` | `git add -- *` | `--` の後ろはパスだけになる |
 | 2 | `allow` | `git restore --staged -- *` | ステージの取り消し。作業ツリーは戻さない |
 | 3 | `deny` | `*>*`・`*--output*` | allow の形に付けたファイルへの書き出し |

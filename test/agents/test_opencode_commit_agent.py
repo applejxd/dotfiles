@@ -84,6 +84,7 @@ COMMON_CASES = {
         "git log --oneline -10",
         "git log -1 --oneline",
         "git branch --show-current",
+        "git rev-parse --show-toplevel",
         'git add -- a.txt "sub dir/c.txt"',
         'git restore --staged -- "sub dir/c.txt"',
     ],
