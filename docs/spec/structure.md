@@ -218,6 +218,8 @@ Ubuntu の `121_ubuntu` では GitHub CLI 用の APT リポジトリ・鍵の登
 移行後は `mise which gh` と `command -v gh` / `Get-Command gh` を比較し、
 mise の実体または shim が選ばれることを確認してください。
 
+AWS CLI（`aws-cli`、aqua の `aws/aws-cli`）は Unix で `applejxd` 以外のユーザーにだけ宣言します。
+
 ツールごとの導入コマンドは持たず、設定配備後にホームディレクトリを基準として
 **引数なしの `mise install`** を実行します。
 

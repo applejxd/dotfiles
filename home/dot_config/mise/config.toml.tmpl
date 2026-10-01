@@ -68,6 +68,8 @@ sops = "latest"
 # (docs/spec/agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ)
 "npm:@anthropic-ai/sandbox-runtime" = "latest"
 yt-dlp = "latest"
+{{- else }}
+aws-cli = "latest"
 {{- end }}
 
 {{- if eq .chezmoi.os "linux" }}
