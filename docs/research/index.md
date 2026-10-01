@@ -83,6 +83,7 @@
 | [OpenCode の階層に当てるモデルと effort](opencode/tier-models.md) | 2026-09-30。worker（`fleet-worker`）は opus / sonnet 5.5 の low〜high で合格率に差が無く sonnet が速い、haiku 4.5 は難しめの課題で 0/4・担当外の編集あり、routine（`commit`）は sonnet 5.5 の effort で差が無い。worker を Sonnet 5.5 に切り替えた |
 | [/fleet の作業役への指示を足した前後](opencode/fleet-worker-instructions.md) | 呼び出し元への影響を確かめさせると担当外の罠に触れた報告が 0/2 → 2/2（opus 1/1）、合格率は不変、誘導は 14 → 1 回、確認は `pytest` が大半で 19 → 18 回 |
 | [OpenCode の DB を srt の境界の内外で共有できるか](opencode/shared-db.md) | 同時書き込み・外での再開・外からの `/undo` が通った、書き込みの例外は `XDG_DATA_HOME/opencode` 全体、ignore が無いと snapshot が取れない、`TMPDIR` が見えないと通信が止まる |
+| [OpenCode V2 は LSP を使えるか](opencode/lsp-support.md) | 2026-10-01。v2.0.14〜v2.0.21 は `lsp` 設定を受理・保持するだけで言語サーバを起動せず診断も出さない（公式の移行ガイド・ソース・バイナリで確認）。実装は V1 にだけある。#50916 は未回答 |
 
 ### OpenCode の permission
 
