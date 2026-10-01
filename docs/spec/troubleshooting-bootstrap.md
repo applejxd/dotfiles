@@ -403,17 +403,31 @@ grep -rl 'cli\.github\.com' /etc/apt/sources.list.d/
 既存の APT 登録・鍵・認証設定は自動削除しない方針のため
 （[mise による CLI 管理](structure.md#mise-による-cli-管理)）。
 
+2026-10-01 に WSL で確かめた例では、手元の鍵（`23F3D4EA75716059`）が
+2026-09-06 に失効しており、配布元の鍵ファイルには新しい鍵 `5612B36462313325` が
+加わっていた。鍵の状態は次で見られる（2 列目の `e` が失効）。
+
+```bash
+gpg --show-keys --with-colons <登録の signed-by= が指す鍵ファイル> | grep -E '^(pub|sub)'
+```
+
 **対処**: どちらかを手で選ぶ。`gh` は mise から入るので、消しても困らない。
+mise 版は PATH で APT 版（`/usr/bin/gh`）より前にあり、git の認証ヘルパー
+（`!gh auth git-credential`）もパス無しで呼ぶので、APT 版を消しても影響しない。
 
 ```bash
 # A) もう使わないので消す（mise 版の gh はそのまま使える）
+sudo apt-get remove gh   # APT 版が入っているときだけ
 sudo rm /etc/apt/sources.list.d/github-cli.list
 sudo apt-get update
 
 # B) APT 版の gh を使い続けるので鍵だけ入れ直す
+#    書き込み先は登録の signed-by= に合わせる（/etc/apt/keyrings/ のことも
+#    /usr/share/keyrings/ のこともある）
+keyring="$(grep -o 'signed-by=[^] ]*' /etc/apt/sources.list.d/github-cli.list | cut -d= -f2)"
 wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg |
-  sudo tee /usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null
-sudo chmod 0644 /usr/share/keyrings/githubcli-archive-keyring.gpg
+  sudo tee "$keyring" >/dev/null
+sudo chmod 0644 "$keyring"
 sudo apt-get update
 ```
 
