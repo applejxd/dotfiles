@@ -155,6 +155,17 @@ Claude の既存 `env` はこのキーだけを上書きし、それ以外の環
 明示的に `claude update` などを実行します。
 導入順と更新手順は [AI CLI の導入](structure.md#ai-cli-の導入)を参照。
 
+## Copilot CLI の既定モデル
+
+`[copilot] model` を `~/.copilot/settings.json` の `model` へ書きます。
+apply のたびに上書きするため、TUI の `/model` で変えた既定値は次の apply で
+戻ります。一時的に変えるときは `--model` を使います。キーが無ければ既存値に
+触れません。
+
+ID は `copilot help config` の候補一覧に無くても、API 側にあれば通ります
+（1.0.87 で `claude-opus-5.5` は一覧に無いが `--model` で応答した）。書く前に
+`copilot --model <ID> -p 'Reply with exactly: OK'` で確認します。
+
 ## MCP サーバ
 
 MCP サーバの定義も `common.toml` の `[[mcp]]` が単一ソース。同じサーバを
@@ -800,6 +811,15 @@ Windows 以外では `.chezmoiignore.tmpl` がこのファイルを外し、Open
 - 反映には Windows 側で `opencode service restart` が要る
 - 使えるキーは OpenCode の `opencode service set` と同じ
   `hostname` / `port` / `password` / `cors` / `env`。ここでは `port` だけを受け付ける
+- `port` が無いときの既定は 49374（`0xc0de`。`latest` チャンネル。上流
+  `packages/cli/src/services/service-config.ts` の `defaultPort()`）。4097 / 4098 は
+  どこかで `service set` された値
+- **設定ファイルの場所は `OPENCODE_CONFIG_DIR` に従う。** Orca のセッションでは
+  `~/.orca-relay/opencode-overlays/<hash>/service.json` が読まれ、
+  `~/.config/opencode/service.json` は使われない。Orca 内で `opencode service set` を
+  試すとそちらが書き換わる（2026-10-02、検証のつもりで `XDG_CONFIG_HOME` だけ
+  差し替えて `set port 4098` を実行し、WSL 側も 4098 になって Windows と衝突した。
+  `opencode service unset port` で戻した）
 
 ### モデルの割り当て
 
