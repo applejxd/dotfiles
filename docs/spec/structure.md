@@ -612,6 +612,40 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply` �
 [PowerShell プロファイルの起動時間](../research/shell/powershell-profile-startup.md)
 にあります。
 
+## Windows Terminal
+
+`settings.json`（Store 版の `%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\`）は
+GUI で設定を変えるたびに Windows Terminal が書き換えるため、ファイル全体は管理しません。
+次の 2 つが既存の内容に足すだけの変更をします。
+
+| パス | 役割 |
+| --- | --- |
+| `home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/modify_settings.json.py` | LANG2 キー（`vk(26)`）を何もしない操作に割り当てる |
+| `home/.chezmoiscripts/300_windows/run_after_341_terminal.py.tmpl` | `config/windows/terminal.json` の配色と `profiles.defaults` を反映する |
+
+### LANG2 キーの割り当て
+
+Google 日本語入力 + PowerShell（PSReadLine）で、LANG2（英数、`VK_IME_OFF` = 0x1A）を
+押すと `@` が入力される不具合があります
+（[PSReadLine#2206](https://github.com/PowerShell/PSReadLine/issues/2206)）。
+Windows Terminal 側でこのキーを `adjustOpacity`（`opacity: 0`、`relative: true`）に
+割り当て、PowerShell へ渡さないようにします。IME オフ自体はそのまま効きます。
+
+- **新形式**（トップレベルに `keybindings` 配列がある）: `actions` に
+  `id: User.ignoreImeOff` の操作、`keybindings` に `vk(26)` の割り当てを足します。
+- **旧形式**: `actions` に `keys: vk(26)` を持つ操作を足します。
+- 足すのは無いものだけなので、何度 apply しても結果は変わりません。
+- `vk(26)` が別の操作（`id: null` の解除を含む）に割り当て済みなら、変更せず
+  `warning: Windows Terminal: ...` を表示します。
+- JSONC（コメント・末尾カンマ）のまま読み、配列の末尾へ文字列として挿入します。
+  コメント・キーの順序・インデント・改行コード・BOM は変えません。
+  JSON としてどうしても読めないときは、警告して元の内容をそのまま返します。
+- 非 Store 版（`%LOCALAPPDATA%\Microsoft\Windows Terminal\settings.json`）は対象外です。
+- `run_after_341` は `json.load` で読み、変更があればコメントを落として書き直します。
+  コメント入りの `settings.json` では 341 が失敗します。
+
+検証は `test/test_windows_terminal_settings.py` です。
+
 ## 個人用カスタム指示
 
 全リポジトリで常時読み込まれる指示は、CLI ごとに読む先のファイル名が違います。
