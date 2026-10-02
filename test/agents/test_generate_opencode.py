@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from unittest import mock
 
@@ -51,6 +52,7 @@ def rules(action: str, effect: str, config: dict | None = None) -> list[str]:
 # 配線 (chezmoi 側)
 # ---------------------------------------------------------------------------
 
+
 def test_target_is_registered_and_wired():
     assert gen.TARGETS["opencode-config"] is gen.merge_opencode_config
     source = MODIFIER.read_text(encoding="utf-8")
@@ -76,6 +78,7 @@ def test_global_instructions_reuse_the_shared_template():
 # ---------------------------------------------------------------------------
 # 形 (公式スキーマ)
 # ---------------------------------------------------------------------------
+
 
 def test_schema_and_update_policy():
     config = generated()
@@ -105,6 +108,7 @@ def test_unmanaged_keys_survive():
 # ---------------------------------------------------------------------------
 # 後勝ち (OpenCode 固有の照合規則)
 # ---------------------------------------------------------------------------
+
 
 def test_default_is_ask_and_the_catch_all_comes_first():
     """未掲載のコマンドを無条件許可にしない。
@@ -148,6 +152,7 @@ def test_specific_deny_comes_after_the_general_ask(general: str, specific: str):
 # ---------------------------------------------------------------------------
 # shell
 # ---------------------------------------------------------------------------
+
 
 def test_shell_allow_comes_from_the_opencode_section():
     """allow だけ ``[opencode.shell]`` から取る (``[bash]`` と共有しない)。
@@ -497,9 +502,7 @@ def _load_guide_js(work: Path, rules: dict, *, windows: bool = False):
         pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
     src = (ROOT / "home/dot_config/opencode/guide-plugin/index.js").read_text("utf-8")
     _copy_guide_helpers(work)
-    prelude = (
-        'Object.defineProperty(process, "platform", { value: "win32" })\n' if windows else ""
-    )
+    prelude = 'Object.defineProperty(process, "platform", { value: "win32" })\n' if windows else ""
     exports = "\nexport { redact, deniedPathIn, filterGrep, filterGlob }\n"
     (work / "mod.mjs").write_text(prelude + src + exports, "utf-8")
     (work / "rules.json").write_text(json.dumps(rules), "utf-8")
@@ -545,7 +548,11 @@ def test_isolated_session_does_not_build_the_describer(tmp_path, isolated, expec
         env["OCS_ISOLATED"] = "1"
     done = subprocess.run(
         [node, str(tmp_path / "run.mjs")],
-        capture_output=True, text=True, encoding="utf-8", env=env, check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        check=True,
     )
     assert json.loads(done.stdout) is expected
 
@@ -586,7 +593,11 @@ def _run_hooks(work: Path, rules: dict | str | None, calls: list[list]) -> list[
     env = {k: v for k, v in os.environ.items() if k != "OCS_ISOLATED"}
     done = subprocess.run(
         [node, str(work / "run.mjs"), json.dumps(calls)],
-        capture_output=True, text=True, encoding="utf-8", env=env, check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        check=True,
     )
     return json.loads(done.stdout)
 
@@ -796,16 +807,12 @@ ALLOWED_COMMANDS = [
 
 
 def test_commands_touching_protected_paths_are_detected(guide_js):
-    for cmd, hit in zip(
-        DENIED_COMMANDS, guide_js("deniedPathIn", DENIED_COMMANDS), strict=True
-    ):
+    for cmd, hit in zip(DENIED_COMMANDS, guide_js("deniedPathIn", DENIED_COMMANDS), strict=True):
         assert hit, cmd
 
 
 def test_ordinary_commands_are_not_detected(guide_js):
-    for cmd, hit in zip(
-        ALLOWED_COMMANDS, guide_js("deniedPathIn", ALLOWED_COMMANDS), strict=True
-    ):
+    for cmd, hit in zip(ALLOWED_COMMANDS, guide_js("deniedPathIn", ALLOWED_COMMANDS), strict=True):
         assert hit is None, f"{cmd} -> {hit}"
 
 
@@ -1141,6 +1148,66 @@ def test_cli_json_is_not_registered_twice():
     assert cli["plugins"].count(gen.opencode_guide_plugin_path()) == 1
 
 
+# Windows と WSL の常駐サービスが同じポートだと 127.0.0.1 で衝突し、
+# 後から起動した側が「Timed out waiting for the background service」で止まる。
+# see docs/spec/agent-config-generation.md#常駐サービスのポート
+SERVICE_MODIFIER = ROOT / "home/dot_config/opencode/modify_private_service.json.py.tmpl"
+
+
+def test_service_target_is_registered_and_wired():
+    assert gen.TARGETS["opencode-service"] is gen.merge_opencode_service
+    source = SERVICE_MODIFIER.read_text(encoding="utf-8")
+    assert '"target" "opencode-service"' in source
+
+
+def test_service_sets_only_the_port_and_keeps_the_password():
+    existing = {"password": "secret", "hostname": "127.0.0.1"}
+    common = {"opencode": {"service": {"port": 4098}}}
+    assert gen.merge_opencode_service(existing, common) == {
+        "password": "secret",
+        "hostname": "127.0.0.1",
+        "port": 4098,
+    }
+
+
+def test_service_is_left_alone_without_a_declaration():
+    existing = {"password": "secret", "port": 4097}
+    assert gen.merge_opencode_service(existing, COMMON) == existing
+
+
+@pytest.mark.parametrize("port", [0, 65536, "4098", True])
+def test_service_rejects_an_invalid_port(port):
+    with pytest.raises(ValueError, match="port"):
+        gen.merge_opencode_service({}, {"opencode": {"service": {"port": port}}})
+
+
+def test_service_rejects_unknown_keys():
+    with pytest.raises(ValueError, match="未知のキー"):
+        gen.merge_opencode_service({}, {"opencode": {"service": {"prot": 4098}}})
+
+
+def test_service_port_differs_from_wsl_only_on_windows():
+    chezmoi = shutil.which("chezmoi")
+    if chezmoi is None:
+        pytest.skip("chezmoi is not installed")
+    context = json.dumps(json.dumps({"chezmoi": {"os": "windows", "username": "applejxd"}}))
+    template = (
+        f"{{{{ with {context} | fromJson }}}}"
+        '{{ includeTemplate "dot_config/agents/common.toml.tmpl" . }}{{ end }}'
+    )
+    result = subprocess.run(
+        [chezmoi, "--source", str(ROOT), "execute-template", template],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    windows = tomllib.loads(result.stdout)
+    assert windows["opencode"]["service"]["port"] == 4098
+    assert "service" not in COMMON["opencode"]
+
+
 # guide plugin の各役割を 1 つだけ有効にした common。
 # index.js はどれか 1 つでも有効なら要り、tui.ts は説明の toast (ask_description) にだけ要る。
 # see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
@@ -1150,9 +1217,7 @@ GUIDE_FEATURES = {
     "redact": {
         "opencode": {"redact": {"enabled": True, "rule": [{"name": "k", "pattern": "AKIA"}]}}
     },
-    "ask_description": {
-        "opencode": {"ask_description": {"enabled": True, "models": ["p/m"]}}
-    },
+    "ask_description": {"opencode": {"ask_description": {"enabled": True, "models": ["p/m"]}}},
 }
 
 
@@ -1305,8 +1370,14 @@ def test_keybind_id_is_rejected_when_not_an_id(command):
 
 @pytest.mark.parametrize(
     "binding",
-    ["ctrl+d", "ctrl+c,escape", ["ctrl+c", "escape"], False, "none",
-     {"key": "ctrl+v", "preventDefault": False}],
+    [
+        "ctrl+d",
+        "ctrl+c,escape",
+        ["ctrl+c", "escape"],
+        False,
+        "none",
+        {"key": "ctrl+v", "preventDefault": False},
+    ],
 )
 def test_keybind_value_is_accepted_when_documented(binding):
     """公式 Keybinds ガイドが挙げている書き方をすべて通す。"""
@@ -1388,9 +1459,7 @@ def test_allow_is_not_widened_silently():
 # `.git/config` へ書けると diff.<name>.command / core.fsmonitor に任意コマンドを
 # 仕込めて、git diff / git status が実行手段になる (実測)。
 # see docs/research/opencode/permission/allow-list-audit.md
-@pytest.mark.parametrize(
-    "resource", ["*/.git/config", "*/.git/hooks/*", "~/.gitconfig"]
-)
+@pytest.mark.parametrize("resource", ["*/.git/config", "*/.git/hooks/*", "~/.gitconfig"])
 def test_git_config_is_write_denied(resource: str):
     assert resource in rules("edit", "deny")
 
@@ -1398,9 +1467,7 @@ def test_git_config_is_write_denied(resource: str):
 # プロジェクト側の設定に書いた permission はグローバルの deny に勝つ (実測)。
 # 書けるとエージェントが自分で権限を広げられる。
 # see docs/research/opencode/permission/gaps.md
-@pytest.mark.parametrize(
-    "resource", ["*/.opencode/opencode.json", "*/.opencode/opencode.jsonc"]
-)
+@pytest.mark.parametrize("resource", ["*/.opencode/opencode.json", "*/.opencode/opencode.jsonc"])
 def test_project_config_is_write_denied(resource: str):
     assert resource in rules("edit", "deny")
 
@@ -1425,8 +1492,7 @@ def test_bash_allow_is_untouched_so_other_clis_do_not_move():
     bash_allow = COMMON["bash"]["allow"]
     for command in ARBITRARY_CODE_EXECUTION:
         assert any(cmd.startswith(command) for cmd in bash_allow), (
-            f"{command} が [bash] allow から消えている。"
-            "OpenCode 側だけを絞るのが段階 1 の前提"
+            f"{command} が [bash] allow から消えている。OpenCode 側だけを絞るのが段階 1 の前提"
         )
 
 
@@ -1465,6 +1531,7 @@ def test_hook_owned_ask_is_still_emitted():
 # ---------------------------------------------------------------------------
 # glob の記法差
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     ("glob", "expected"),
@@ -1510,6 +1577,7 @@ def test_allow_side_file_globs_are_not_emitted():
 # ---------------------------------------------------------------------------
 # 整形 (formatter)
 # ---------------------------------------------------------------------------
+
 
 def test_formatter_is_generated_from_common():
     """PostToolUse hook (format-file.sh / markdownlint.sh) の代替。"""
@@ -1591,6 +1659,7 @@ def test_disabling_a_custom_entry_needs_nothing_else():
 # 自分の設定を書き換えられないこと
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "path", ["~/.config/opencode/opencode.json", "~/.config/opencode/service.json"]
 )
@@ -1608,6 +1677,7 @@ def test_service_credentials_are_not_readable():
 # ---------------------------------------------------------------------------
 # OpenCode へ渡さないもの (意図的な非対称)
 # ---------------------------------------------------------------------------
+
 
 def test_web_domains_are_not_translated_into_webfetch_rules():
     """ドメイン許可は OpenCode の資源表現 (URL) では正しく書けない。
@@ -1630,6 +1700,7 @@ def test_claude_mcp_deny_names_are_not_copied():
 # MCP
 # ---------------------------------------------------------------------------
 
+
 def opencode_entry(server: dict) -> dict:
     if server["transport"] == "http":
         return {"type": "remote", "url": server["url"]}
@@ -1641,8 +1712,7 @@ def test_mcp_servers_come_from_common(username: str):
     common = load_common(username)
     merged = gen.merge_opencode_config({}, common)
     assert merged["mcp"]["servers"] == {
-        name: opencode_entry(server)
-        for name, server in gen.mcp_servers(common, "opencode")
+        name: opencode_entry(server) for name, server in gen.mcp_servers(common, "opencode")
     }
 
 

@@ -75,6 +75,12 @@ Documents/**
 .local/bin/oc-utils
 {{- end }}
 
+{{- if ne .chezmoi.os "windows" }}
+# 常駐サービスのポートを Windows だけ WSL からずらす。ほかでは OpenCode に任せる
+# see docs/spec/agent-config-generation.md#常駐サービスのポート
+.config/opencode/service.json
+{{- end }}
+
 {{- if eq .chezmoi.os "linux" }}
 {{-   if (.chezmoi.kernel.osrelease | lower | contains "microsoft") }}
 .chezmoiscripts/100_linux/110_native/

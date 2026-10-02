@@ -52,6 +52,7 @@ home/dot_gemini/
     modify_settings.json.py.tmpl             ~/.gemini/settings.json を更新
 home/dot_config/opencode/
     modify_opencode.json.py.tmpl             ~/.config/opencode/opencode.json を更新
+    modify_private_service.json.py.tmpl      ~/.config/opencode/service.json の port だけ更新 (Windows のみ)
     AGENTS.md.tmpl                           global 指示 (共有テンプレートを include)
 test/agents/
     agents_common.py                         描画した common.toml をテストへ渡す
@@ -782,6 +783,24 @@ service.restart
 `cli.json` が読まれないと**キーバインドは丸ごと既定に戻る**ので、
 `app.exit` が `ctrl+c` を握ったままになり Ctrl+C で終了する。
 
+### 常駐サービスのポート
+
+Windows の常駐サービスだけ `port = 4098` にする（`common.toml` の `[opencode.service]`。
+Windows で描画したときだけ現れる）。`merge_opencode_service()` が
+`~/.config/opencode/service.json` の `port` だけを書き、`password` などは残す。
+Windows 以外では `.chezmoiignore.tmpl` がこのファイルを外し、OpenCode に任せる。
+
+**理由**: 2026-10-02 に WSL と Windows の OpenCode（v2.0.14）がどちらも 127.0.0.1 の
+4097 番を常駐サービスに使っていた。WSL と Windows が localhost を共有する構成では、
+先に起きた側がポートを握り、もう一方は `Managed service port 4097 ... is already in use`
+を繰り返したのち `Timed out waiting for the background service to start` で止まる
+（Windows 側の `opencode.exe serve --service` が親の終了後も残っていた）。
+
+- `service.json` は秘密情報（`password` が平文）。生成側は `port` 以外を読み書きしない
+- 反映には Windows 側で `opencode service restart` が要る
+- 使えるキーは OpenCode の `opencode service set` と同じ
+  `hostname` / `port` / `password` / `cors` / `env`。ここでは `port` だけを受け付ける
+
 ### モデルの割り当て
 
 PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・エージェントごとのモデル・
@@ -929,15 +948,20 @@ explore = "worker"      # 例
 
 | ID | 階層 | 役割 | 権限で塞ぐもの |
 | --- | --- | --- | --- |
-| `commit` | `routine` | 変更を論理単位に分け、パスを指定してステージし、単位ごとにコミットする。`git commit` のたびに確認が出る | 編集・質問・子エージェントの起動・作業ツリーを戻す git・リダイレクトと `--output`・`git commit` の検証の回避や `-a` / `--amend`（下記） |
+| `commit` | `routine` | 変更を論理単位に分け、パスを指定してステージし、単位ごとにコミットする。`git commit` は権限の確認（`ask`）を通す | 編集・質問・子エージェントの起動・作業ツリーを戻す git・リダイレクトと `--output`・`git commit` の検証の回避や `-a` / `--amend`（下記） |
 | `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
 
 - **`commit` は `git commit` の確認を承認の場にしてコミットする。** 質問のツールは
-  使えないが、`git commit *` を `ask` にしているので、コミットのたびに確認が出る。
+  使えないが、`git commit *` を `ask` にしているので、コミットの前に確認が出る
+  （確認で「常に許可」を選んだプロジェクトでは出ない。下記）。
   commit スキルの「コミット前の承認」はこの確認で満たす（`system` がそう定め、スキルの
   手順 4 がその上書きを認める）。確認が拒否されたらそれ以降はコミットせず、ステージ内容・
   メッセージ・残りの単位の案を返して終わる。狙いは、差分を読む重い作業を安いモデルへ移し、
   親の文脈を節約すること
+- **`commit` には確認画面が見えない。** ツール結果に承認の痕跡が残らないため、`system` で
+  確認の有無を推測して報告することを禁じている。また shell は 1 回の応答で 1 つだけ呼ばせる。
+  同じ応答に並べた呼び出しは前の完了を待たずに走り、コミット後の確かめがコミットの途中で
+  走った（[記録 E7](../research/opencode/commit-review-agents.md#記録-e7--2026-10-02)）
 - **`review` は shell を開けない。** `git diff` / `git status` も外部の diff
   ドライバや fsmonitor を通じてコードを実行しうる
   （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）。

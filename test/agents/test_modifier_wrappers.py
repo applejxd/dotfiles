@@ -24,10 +24,7 @@ MODIFIERS = {
         ".copilot/settings.json",
         "copilot-settings",
     ),
-    ROOT
-    / "home"
-    / "dot_copilot"
-    / "modify_private_permissions-config.json.py.tmpl": (
+    ROOT / "home" / "dot_copilot" / "modify_private_permissions-config.json.py.tmpl": (
         ".copilot/permissions-config.json",
         "copilot-perms",
     ),
@@ -43,10 +40,14 @@ MODIFIERS = {
         ".config/opencode/opencode.json",
         "opencode-config",
     ),
+    ROOT / "home" / "dot_config" / "opencode" / "modify_private_service.json.py.tmpl": (
+        ".config/opencode/service.json",
+        "opencode-service",
+    ),
 }
-COPILOT_HOOKS = (
-    ROOT / "home" / "dot_copilot" / "hooks" / "modify_from-claude.json.py.tmpl"
-)
+# .chezmoiignore.tmpl が Windows 以外で外すもの
+WINDOWS_ONLY = {".config/opencode/service.json"}
+COPILOT_HOOKS = ROOT / "home" / "dot_copilot" / "hooks" / "modify_from-claude.json.py.tmpl"
 CHEZMOI_CONFIG = ROOT / "home" / ".chezmoi.toml.tmpl"
 
 
@@ -108,7 +109,8 @@ def test_modifier_targets_keep_json_names():
     assert result.returncode == 0, result.stderr
     managed = {line.replace("\\", "/") for line in result.stdout.splitlines()}
     for target, _ in MODIFIERS.values():
-        assert target in managed
+        if target not in WINDOWS_ONLY or os.name == "nt":
+            assert target in managed
         assert f"{target}.py" not in managed
 
 
@@ -273,9 +275,7 @@ def run_wrapper_without_tomllib(
 
 def test_wrapper_finds_another_python_when_tomllib_is_missing(tmp_path: Path):
     """3.10 以下で動かされても、PATH に 3.11 以上があれば生成は成功する。"""
-    wrapper = render_modifier(
-        ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl"
-    )
+    wrapper = render_modifier(ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl")
 
     result = run_wrapper_without_tomllib(wrapper, b"{}", tmp_path=tmp_path)
 
@@ -293,9 +293,7 @@ def test_wrapper_falls_back_to_the_current_python_when_none_is_found(tmp_path: P
     empty_path.mkdir()
     empty_home = tmp_path / "empty-home"
     empty_home.mkdir()
-    wrapper = render_modifier(
-        ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl"
-    )
+    wrapper = render_modifier(ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl")
 
     result = run_wrapper_without_tomllib(
         wrapper,
@@ -330,9 +328,7 @@ def test_wrapper_finds_toolchain_python_outside_path(tmp_path: Path, layout: str
     installed.symlink_to(sys.executable)
     empty_path = tmp_path / "empty-bin"
     empty_path.mkdir()
-    wrapper = render_modifier(
-        ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl"
-    )
+    wrapper = render_modifier(ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl")
 
     result = run_wrapper_without_tomllib(
         wrapper,

@@ -47,6 +47,7 @@ from hooks import expand_user, merge_claude_hooks, merge_copilot_hooks
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def first_token(pattern: str) -> str:
     """Extract the first command name from a bash pattern.
 
@@ -62,6 +63,7 @@ def first_token(pattern: str) -> str:
 # ---------------------------------------------------------------------------
 # Claude target
 # ---------------------------------------------------------------------------
+
 
 def build_claude_permissions(common: dict[str, Any]) -> dict[str, list[str]]:
     # bash.allow / ask / deny は素のトークン列 (例: "git push") で書かれているので
@@ -130,11 +132,7 @@ def _expand_sandbox_paths(paths: list[str]) -> list[str]:
     Windows では ``C:\\Users\\x/.ssh`` と区切りが混ざるので、OS の形式へ揃える
     (Copilot の設定例は ``C:\\Users\\...``)。see docs/spec/agent-permissions.md#windows-での扱い
     """
-    return [
-        _os_path(expand_user(path))
-        for path in paths
-        if "*" not in path and "?" not in path
-    ]
+    return [_os_path(expand_user(path)) for path in paths if "*" not in path and "?" not in path]
 
 
 def _os_path(path: Any) -> Any:
@@ -149,17 +147,21 @@ def _os_path(path: Any) -> Any:
 # seccomp_apply_path と shell_network_allow は既存の例外で、Copilot へは渡らない。
 # see docs/spec/glossary.md
 SHARED_SANDBOX_KEYS = frozenset({"deny", "seccomp_apply_path", "shell_network_allow"})
-CLAUDE_SANDBOX_KEYS = frozenset({
-    "claude_read_allow",
-    "claude_write_allow",
-    "claude_write_deny",
-    "claude_network_strict",
-})
-COPILOT_SANDBOX_KEYS = frozenset({
-    "copilot_read_allow",
-    "copilot_write_allow",
-    "copilot_allow_dev_tool_access",
-})
+CLAUDE_SANDBOX_KEYS = frozenset(
+    {
+        "claude_read_allow",
+        "claude_write_allow",
+        "claude_write_deny",
+        "claude_network_strict",
+    }
+)
+COPILOT_SANDBOX_KEYS = frozenset(
+    {
+        "copilot_read_allow",
+        "copilot_write_allow",
+        "copilot_allow_dev_tool_access",
+    }
+)
 KNOWN_SANDBOX_KEYS = SHARED_SANDBOX_KEYS | CLAUDE_SANDBOX_KEYS | COPILOT_SANDBOX_KEYS
 
 # ``[file]`` の deny / ask glob は **Claude 専用ではない**。
@@ -168,13 +170,15 @@ KNOWN_SANDBOX_KEYS = SHARED_SANDBOX_KEYS | CLAUDE_SANDBOX_KEYS | COPILOT_SANDBOX
 #   - Copilot  : check_file_read.py が同じリストを view ツールへ適用する
 # そのため接頭辞を付けない (ADR-0007「共有 = 無印」)。
 # ``claude_read_allow`` だけは Claude 固有の補償なので接頭辞を残す。
-KNOWN_FILE_KEYS = frozenset({
-    "claude_read_allow",
-    "read_ask_globs",
-    "write_ask_globs",
-    "read_deny_globs",
-    "write_deny_globs",
-})
+KNOWN_FILE_KEYS = frozenset(
+    {
+        "claude_read_allow",
+        "read_ask_globs",
+        "write_ask_globs",
+        "read_deny_globs",
+        "write_deny_globs",
+    }
+)
 
 
 def _reject_unknown(section: str, present: set[str], known: frozenset[str]) -> None:
@@ -328,6 +332,7 @@ def merge_claude_settings(existing: dict[str, Any], common: dict[str, Any]) -> d
 # Copilot perms target
 # ---------------------------------------------------------------------------
 
+
 def build_copilot_locations(common: dict[str, Any]) -> dict[str, Any]:
     bash = common.get("bash", {})
     copilot = common.get("copilot", {})
@@ -465,9 +470,7 @@ def merge_gemini_settings(existing: dict[str, Any], _common: dict[str, Any]) -> 
 # Claude Code はサーバ名に使える文字を「英数字・ハイフン・アンダースコア」に
 # 限っている。Codex 側では id がそのまま TOML のキー (`[mcp_servers.<id>]`) に
 # なるため、ここを外れた名前は生成物を壊す。
-MCP_ID_CHARS = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
-)
+MCP_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
 # transport ごとの必須キー。両方の形のキーを持つ定義は生成先で曖昧になるので、
 # ここに無いキーは (typo も含めて) 弾く。
 MCP_TRANSPORT_KEYS = {
@@ -480,9 +483,7 @@ MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis"}
 MCP_CLIS = {"claude", "copilot", "opencode", "codex"}
 
 
-def mcp_servers(
-    common: dict[str, Any], cli: str | None = None
-) -> list[tuple[str, dict[str, Any]]]:
+def mcp_servers(common: dict[str, Any], cli: str | None = None) -> list[tuple[str, dict[str, Any]]]:
     """``[[mcp]]`` を (名前, 定義) の宣言順リストにして返す。
 
     ユーザ・OS による出し分けは common.toml 側の chezmoi テンプレートが
@@ -500,8 +501,7 @@ def mcp_servers(
         name = server.get("id", "")
         if not name or set(name) - MCP_ID_CHARS:
             raise ValueError(
-                f"[[mcp]] の id が不正: {name!r} "
-                "(英数字・ハイフン・アンダースコアのみ)"
+                f"[[mcp]] の id が不正: {name!r} (英数字・ハイフン・アンダースコアのみ)"
             )
         if name in seen:
             raise ValueError(f"[[mcp]] の id が重複している: {name}")
@@ -591,9 +591,8 @@ def merge_copilot_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[
 # Copilot settings target (一部キーのみ置換し、他は温存)
 # ---------------------------------------------------------------------------
 
-def build_copilot_sandbox(
-    existing_sandbox: Any, common: dict[str, Any]
-) -> dict[str, Any]:
+
+def build_copilot_sandbox(existing_sandbox: Any, common: dict[str, Any]) -> dict[str, Any]:
     """settings.json の sandbox キーを組み立てる。
 
     Copilot の sandbox は **deny-by-default のホワイトリスト**。既定の許可は
@@ -719,12 +718,36 @@ OPENCODE_FORMATTER_KEYS = frozenset({"disabled", "command", "environment", "exte
 # 組み込み formatter の名前。ここに載っている名前は ``command`` /
 # ``extensions`` を省いても組み込みの値を継承するが、載っていない名前は
 # 両方揃っていないと **OpenCode が黙って無視する** ので生成時に弾く。
-OPENCODE_BUILTIN_FORMATTERS = frozenset({
-    "gofmt", "mix", "oxfmt", "prettier", "biome", "zig", "clang-format",
-    "ktlint", "ruff", "air", "uv", "rubocop", "standardrb", "htmlbeautifier",
-    "dart", "ocamlformat", "terraform", "latexindent", "gleam", "shfmt",
-    "nixfmt", "rustfmt", "pint", "ormolu", "cljfmt", "dfmt",
-})
+OPENCODE_BUILTIN_FORMATTERS = frozenset(
+    {
+        "gofmt",
+        "mix",
+        "oxfmt",
+        "prettier",
+        "biome",
+        "zig",
+        "clang-format",
+        "ktlint",
+        "ruff",
+        "air",
+        "uv",
+        "rubocop",
+        "standardrb",
+        "htmlbeautifier",
+        "dart",
+        "ocamlformat",
+        "terraform",
+        "latexindent",
+        "gleam",
+        "shfmt",
+        "nixfmt",
+        "rustfmt",
+        "pint",
+        "ormolu",
+        "cljfmt",
+        "dfmt",
+    }
+)
 
 # キーバインドの ID。公式一覧は ``leader`` 以外すべてドット区切り。
 # 一覧そのものは持たない (OpenCode の版で増減するため)。綴り崩れだけ弾く。
@@ -825,8 +848,7 @@ def opencode_path_patterns(pattern: str) -> list[str]:
 
 def opencode_rules(action: str, effect: str, resources: list[str]) -> list[dict[str, str]]:
     return [
-        {"action": action, "resource": resource, "effect": effect}
-        for resource in _uniq(resources)
+        {"action": action, "resource": resource, "effect": effect} for resource in _uniq(resources)
     ]
 
 
@@ -853,9 +875,7 @@ def opencode_external_read_rules(common: dict[str, Any]) -> list[dict[str, str]]
     see docs/spec/agent-config-generation.md#作業ツリーの外の読み取り
     """
     dirs = [f"{d}/*" for d in opencode_external_read_dirs(common)]
-    return opencode_rules("external_directory", "allow", dirs) + opencode_rules(
-        "edit", "ask", dirs
-    )
+    return opencode_rules("external_directory", "allow", dirs) + opencode_rules("edit", "ask", dirs)
 
 
 def opencode_skill_script_rules(common: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -951,8 +971,7 @@ def opencode_sandbox_policies(common: dict[str, Any]) -> list[dict[str, str]]:
     """
     cfg = common.get("opencode", {}).get("sandbox", {}).get("policies", {})
     return [
-        {"action": "permission", "resource": str(r), "effect": "deny"}
-        for r in cfg.get("deny", [])
+        {"action": "permission", "resource": str(r), "effect": "deny"} for r in cfg.get("deny", [])
     ]
 
 
@@ -1264,9 +1283,7 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
         return _uniq([expand_user(str(p)) for p in cfg.get(key) or []])
 
     # 共有の秘密の一覧 ([sandbox] deny) も隠す。glob は Fence へ渡さない。
-    shared_secrets = [
-        expand_user(str(p)) for p in sandbox_cfg.get("deny", []) if "*" not in str(p)
-    ]
+    shared_secrets = [expand_user(str(p)) for p in sandbox_cfg.get("deny", []) if "*" not in str(p)]
     out: dict[str, Any] = {
         "runtime_path": runtime,
         "base": {
@@ -1500,16 +1517,13 @@ def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
     default = ref("default")
     if "#" in default:
         # see docs/research/opencode/agent-models.md 記録 E2
-        raise SystemExit(
-            f"opencode.model の default に #variant は付けられない: {default}"
-        )
+        raise SystemExit(f"opencode.model の default に #variant は付けられない: {default}")
     assigned = {str(a): ref(str(t)) for a, t in (cfg.get("agents") or {}).items()}
     # V1 の agent と V2 の agents に同じ ID を書いたときの結合順は未確認
     both = sorted(set(assigned) & set(common.get("opencode", {}).get("agent") or {}))
     if both:
         raise SystemExit(
-            "opencode.model.agents に [opencode.agent] のエージェントは書けない: "
-            + ", ".join(both)
+            "opencode.model.agents に [opencode.agent] のエージェントは書けない: " + ", ".join(both)
         )
     return {
         "provider": provider,
@@ -1687,7 +1701,8 @@ def merge_opencode_provider_policies(existing: Any, models: dict[str, Any]) -> d
     """
     out = dict(existing) if isinstance(existing, dict) else {}
     kept = [
-        s for s in (out.get("policies") or [])
+        s
+        for s in (out.get("policies") or [])
         if not (isinstance(s, dict) and s.get("action") == "provider.use")
     ]
     out["policies"] = [
@@ -1744,9 +1759,7 @@ def _opencode_keybind_value(command: str, binding: Any) -> Any:
             raise ValueError(f"{where} のリストは空でない文字列だけで書く")
         return binding
     if isinstance(binding, dict):
-        _reject_unknown(
-            f"opencode.keybinds.{command}", set(binding), OPENCODE_KEYBIND_OBJECT_KEYS
-        )
+        _reject_unknown(f"opencode.keybinds.{command}", set(binding), OPENCODE_KEYBIND_OBJECT_KEYS)
         key = binding.get("key")
         if not isinstance(key, str) or not key:
             raise ValueError(f"{where} はテーブルで書くなら key が要る")
@@ -1805,6 +1818,23 @@ def merge_opencode_cli(existing: dict[str, Any], common: dict[str, Any]) -> dict
     return out
 
 
+def merge_opencode_service(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.config/opencode/service.json`` (常駐サービスの設定) の ``port`` だけを揃える。
+
+    ``password`` などは OpenCode が書くので触らない。
+    see docs/spec/agent-config-generation.md#常駐サービスのポート
+    """
+    out = dict(existing)
+    service = (common.get("opencode") or {}).get("service") or {}
+    _reject_unknown("opencode.service", set(service), frozenset({"port"}))
+    if "port" in service:
+        port = service["port"]
+        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+            raise ValueError(f"[opencode.service] port は 1〜65535 の整数にする: {port!r}")
+        out["port"] = port
+    return out
+
+
 def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """``~/.config/opencode/opencode.json`` (global config) を更新する。
 
@@ -1841,9 +1871,7 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
             out["providers"] = providers
         else:
             out.pop("providers", None)
-        out["experimental"] = merge_opencode_provider_policies(
-            existing.get("experimental"), models
-        )
+        out["experimental"] = merge_opencode_provider_policies(existing.get("experimental"), models)
     if agents:
         out["agents"] = agents
     else:
@@ -1872,6 +1900,7 @@ TARGETS = {
     "opencode-cli": merge_opencode_cli,
     "opencode-config": merge_opencode_config,
     "opencode-guide": build_opencode_guide,
+    "opencode-service": merge_opencode_service,
 }
 
 # 既存内容を一切参照しない (完全生成の) ターゲット。
@@ -1949,16 +1978,16 @@ def load_local_overlay(path: Path | None = None) -> dict[str, Any]:
         return {}
 
 
-def _merge_local_sandbox(
-    merged: dict[str, Any], local_sandbox: dict[str, Any]
-) -> None:
+def _merge_local_sandbox(merged: dict[str, Any], local_sandbox: dict[str, Any]) -> None:
     """local.toml の ``[sandbox]`` を追記する (既存エントリは消さない)。"""
     ignored = sorted(set(local_sandbox) - set(LOCAL_SANDBOX_KEYS))
     if ignored:
         print(
             "warning: local.toml の [sandbox] で追記できないキーを無視しました: "
             + ", ".join(ignored)
-            + " (使えるキー: " + ", ".join(LOCAL_SANDBOX_KEYS) + ")",
+            + " (使えるキー: "
+            + ", ".join(LOCAL_SANDBOX_KEYS)
+            + ")",
             file=sys.stderr,
         )
     sandbox = dict(merged.get("sandbox") or {})
@@ -1996,8 +2025,11 @@ def _merge_local_locations(merged: dict[str, Any], local_locations: list[Any]) -
         if ignored:
             print(
                 "warning: local.toml の [[copilot.locations]] で追記できない"
-                "キーを無視しました: " + ", ".join(ignored)
-                + " (使えるキー: " + ", ".join(LOCAL_LOCATION_KEYS) + ")",
+                "キーを無視しました: "
+                + ", ".join(ignored)
+                + " (使えるキー: "
+                + ", ".join(LOCAL_LOCATION_KEYS)
+                + ")",
                 file=sys.stderr,
             )
         path = entry["path"]
@@ -2023,9 +2055,7 @@ def _merge_local_locations(merged: dict[str, Any], local_locations: list[Any]) -
     merged["copilot"] = copilot
 
 
-def apply_local_overlay(
-    common: dict[str, Any], local: dict[str, Any]
-) -> dict[str, Any]:
+def apply_local_overlay(common: dict[str, Any], local: dict[str, Any]) -> dict[str, Any]:
     """ローカル上書きを common へ追記する (既存エントリは消さない)。"""
     local_sandbox = local.get("sandbox") or {}
     local_locations = (local.get("copilot") or {}).get("locations") or []

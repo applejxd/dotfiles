@@ -35,7 +35,9 @@ def chezmoi_bin() -> str:
 def execute_with_context(template_path: Path, context: dict, env: dict[str, str]) -> str:
     """``.chezmoi`` を ``context`` に差し替えてテンプレートを描画する。"""
     template = (
-        "{{ with " + json.dumps(json.dumps(context)) + " | fromJson }}\n"
+        "{{ with "
+        + json.dumps(json.dumps(context))
+        + " | fromJson }}\n"
         + template_path.read_text(encoding="utf-8")
         + "\n{{ end }}"
     )
@@ -159,6 +161,15 @@ def test_oc_utils_is_linux_only(tmp_path, os_name, ignored):
     """oc-utils は Linux (Ubuntu / WSL) でしか試していないので他へ配らない。"""
     rendered = render(home=str(tmp_path), os_name=os_name)
     assert (".local/bin/oc-utils" in rendered) is ignored
+
+
+@pytest.mark.parametrize(
+    ("os_name", "ignored"), [("linux", True), ("windows", False), ("darwin", True)]
+)
+def test_opencode_service_port_is_managed_on_windows_only(tmp_path, os_name, ignored):
+    """Windows の常駐サービスだけポートを WSL からずらす。ほかは OpenCode に任せる。"""
+    rendered = render(home=str(tmp_path), os_name=os_name)
+    assert (".config/opencode/service.json" in rendered) is ignored
 
 
 SHELL_PLUGINS = {

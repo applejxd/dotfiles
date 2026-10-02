@@ -250,6 +250,26 @@ def test_approved_message_is_used_verbatim():
     assert "任せる前にメッセージ全文をユーザーに示して承認を得て" in skill
 
 
+def test_system_prompt_keeps_shell_calls_sequential():
+    """shell を同じ応答に並べない指示を保持する (commit と確かめが同時に走った)。
+
+    see docs/research/opencode/commit-review-agents.md の記録 E7
+    """
+    assert (
+        "shell は 1 回の応答で 1 つだけ呼び、完了結果を受け取ってから次を呼ぶ" in agent()["system"]
+    )
+
+
+def test_system_prompt_forbids_guessing_the_approval():
+    """確認の有無を推測しない指示を保持する。子からは確認画面が見えず、「常に許可」で確認が出ないこともある。
+
+    see docs/research/opencode/commit-review-agents.md の記録 E2 / E7
+    """
+    system = agent()["system"]
+    assert "確認画面の表示やユーザーの承認操作の有無を推測しない" in system
+    assert "実行するたびにユーザーへ確認が出" not in system
+
+
 def test_system_prompt_steers_reads_and_messages_away_from_the_shell():
     """読むのは read / glob / grep ツール、メッセージは -m を重ねる。"""
     system = agent()["system"]
