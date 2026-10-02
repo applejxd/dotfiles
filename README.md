@@ -147,6 +147,32 @@ opencode    # 通常起動（境界なし）
 目的別には [目的から探す](docs/index.md#目的から探す) から参照できます。
 テストの入口は [test/README.md](test/README.md)。
 
+## FAQ
+
+### Q. `chezmoi apply` / `chezmoi update` が途中で止まった
+
+A. [トラブルシューティング](docs/spec/troubleshooting.md) で症状から探す。
+
+### Q. AI CLI の設定（OpenCode のモデル・プロバイダを含む）を手で変えたい
+
+A. 生成された設定ファイルは直接編集せず、次のどちらかで変える。
+
+- 全マシン共通: `home/dot_config/agents/common.toml.tmpl` を編集する
+  （[設定の生成と所有権](docs/spec/agent-config-generation.md)）
+- このマシンだけ: プロバイダは `chezmoi.toml` の `[data]` に `llm_provider` を書く
+  （[プロバイダの判定](docs/spec/agent-config-generation.md#プロバイダの判定)）。
+  sandbox の許可は `~/.config/agents/local.toml` に足す
+  （[このマシンだけで許可を足す](docs/spec/agent-sandbox.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない)）
+
+### Q. Bedrock だとハーネスで Web 検索ができない
+
+A. [AgentCore Web Search](docs/spec/agent-config-generation.md#agentcore-web-search) を参照。
+
+### Q. OpenCode で確認されるはずの操作が確認なしで実行される
+
+A. 以前「常に許可」した承認が残っている。
+[保存した承認の確認とリセット](docs/spec/agent-permissions.md#保存した承認の確認とリセット) を参照。
+
 ## ライセンス
 
 MIT License
