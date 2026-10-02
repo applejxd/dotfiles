@@ -672,6 +672,8 @@ def merge_copilot_settings(existing: dict[str, Any], common: dict[str, Any]) -> 
     out = dict(existing)
     if "auto_update" in copilot:
         out["autoUpdate"] = bool(copilot["auto_update"])
+    if copilot.get("model"):
+        out["model"] = copilot["model"]
     out["allowedUrls"] = list(web.get("allow_domains", []))
     deny = list(web.get("deny_domains", []))
     if deny:

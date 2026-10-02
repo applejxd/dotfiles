@@ -74,6 +74,7 @@ COPILOT_MANAGED = {
     "enabledPlugins",
     "experimental",
     "includeCoAuthoredBy",
+    "model",
     "sandbox",
     "trustedFolders",
 }
@@ -82,6 +83,7 @@ FULL_COPILOT_COMMON = {
     "web": {"allow_domains": ["example.com"], "deny_domains": ["evil.test"]},
     "copilot": {
         "auto_update": False,
+        "model": "m",
         "trusted_folders": ["/work"],
         "include_co_authored_by": False,
         "default_permission_mode": "assisted",
@@ -94,7 +96,7 @@ FULL_COPILOT_COMMON = {
 def test_copilot_settings_touch_only_the_managed_keys():
     """全部宣言しても、書き換わるのは管理キーだけ。"""
     existing = {key: {"sentinel": True} for key in COPILOT_MANAGED}
-    existing.update({"theme": "dark", "loggedInUsers": [], "model": "x"})
+    existing.update({"theme": "dark", "loggedInUsers": []})
     merged = gen.merge_copilot_settings(existing, FULL_COPILOT_COMMON)
     changed = {k for k in set(existing) | set(merged) if existing.get(k) != merged.get(k)}
     assert changed == COPILOT_MANAGED
@@ -102,3 +104,8 @@ def test_copilot_settings_touch_only_the_managed_keys():
 
 def test_copilot_settings_generate_only_the_managed_keys():
     assert set(gen.merge_copilot_settings({}, FULL_COPILOT_COMMON)) == COPILOT_MANAGED
+
+
+def test_copilot_model_without_declaration_keeps_existing():
+    merged = gen.merge_copilot_settings({"model": "x"}, {"copilot": {}})
+    assert merged["model"] == "x"
