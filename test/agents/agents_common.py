@@ -31,7 +31,9 @@ def render_common(username: str | None = None) -> str:
         pytest.skip("chezmoi is not installed", allow_module_level=True)
     template = INCLUDE
     if username is not None:
-        context = json.dumps(json.dumps({"chezmoi": {"username": username}}))
+        context = json.dumps(
+            json.dumps({"chezmoi": {"username": username, "homeDir": "/test-home"}})
+        )
         template = f"{{{{ with {context} | fromJson }}}}{INCLUDE}{{{{ end }}}}"
     result = subprocess.run(
         [chezmoi, "--source", str(ROOT), "execute-template", template],

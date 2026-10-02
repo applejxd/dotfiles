@@ -711,6 +711,11 @@ approvals = [
 # opencode.json の update へ反映 ("disable" / "notify")。本体は公式
 # インストーラーで導入し、更新は `opencode upgrade` を明示的に実行する。
 auto_update = false
+{{- if eq (includeTemplate "llm-provider" .) "amazon-bedrock" }}
+
+# opencode.json の websearch へ反映。検索は [[mcp]] の agentcore-websearch に一本化する。
+websearch = false
+{{- end }}
 
 {{- if and (hasKey .chezmoi "os") (eq .chezmoi.os "windows") }}
 
@@ -1421,18 +1426,22 @@ extensions = [".md", ".markdown"]
 #   各 CLI 側で設定する (ADR-0005)。
 # see docs/spec/agent-config-generation.md 「MCP サーバ」
 # ★deepwiki は索引が古く、実ソースと食い違う説明を返すため 2026-09-25 に外した。
-{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
+{{- if eq (includeTemplate "llm-provider" .) "amazon-bedrock" }}
 
-# DuckDuckGo 検索。applejxd は Copilot CLI 内蔵の web 検索を使うので入れない。
-# ★`--from ddgs[mcp]` が要る。素の `uvx ddgs mcp` は
-#   "Error: MCP dependencies not installed" で起動しない (実測)。
+# Bedrock では Claude Code 内蔵の WebSearch が使えないので AgentCore Web Search で補う。
+# Gateway の URL は環境変数 AGENTCORE_GATEWAY_URL から読む (ラッパーが渡す)。
+# see docs/spec/agent-config-generation.md#agentcore-web-search
 [[mcp]]
-id = "ddgs"
-purpose = "DuckDuckGo で web 検索する"
-clis = ["claude"]
+id = "agentcore-websearch"
+purpose = "Bedrock AgentCore Web Search で web 検索する"
+clis = ["claude", "opencode"]
 transport = "stdio"
-command = "uvx"
-args = ["--from", "ddgs[mcp]", "ddgs", "mcp"]
+command = "uv"
+args = [
+  "run", "--no-project", "--quiet",
+  '{{ .chezmoi.homeDir }}/.config/agents/agentcore_websearch_mcp.py',
+  "--service", "bedrock-agentcore", "--region", "us-east-1", "--disable-telemetry",
+]
 {{- end }}
 
 # ---------------------------------------------------------------------------

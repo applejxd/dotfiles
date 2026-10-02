@@ -26,7 +26,7 @@ def render_script(username):
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
         pytest.skip("chezmoi is not installed")
-    context = json.dumps(json.dumps({"chezmoi": {"username": username}}))
+    context = json.dumps(json.dumps({"chezmoi": {"username": username, "homeDir": "/test-home"}}))
     result = subprocess.run(
         [chezmoi, "--source", str(ROOT), "execute-template"],
         input=f"{{{{ with {context} | fromJson }}}}\n"

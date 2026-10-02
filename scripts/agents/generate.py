@@ -1851,6 +1851,10 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
     opencode = common.get("opencode", {})
     if "auto_update" in opencode:
         out["update"] = "notify" if opencode["auto_update"] else "disable"
+    if "websearch" in opencode:
+        if opencode["websearch"] is not False:
+            raise ValueError("[opencode] websearch は false だけ書ける (検索先の選択は TUI で行う)")
+        out["websearch"] = False
 
     formatter = build_opencode_formatter(common)
     if formatter is not None:

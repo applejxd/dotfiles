@@ -172,14 +172,18 @@ MCP サーバの定義も `common.toml` の `[[mcp]]` が単一ソース。同�
 CLI ごとに書くと、URL を変えたときに片方だけ古いまま残る。
 
 ```toml
-{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
+{{- if eq (includeTemplate "llm-provider" .) "amazon-bedrock" }}
 [[mcp]]
-id = "ddgs"
-purpose = "DuckDuckGo で web 検索する"
-clis = ["claude"]
+id = "agentcore-websearch"
+purpose = "Bedrock AgentCore Web Search で web 検索する"
+clis = ["claude", "opencode"]
 transport = "stdio"
-command = "uvx"
-args = ["--from", "ddgs[mcp]", "ddgs", "mcp"]
+command = "uv"
+args = [
+  "run", "--no-project", "--quiet",
+  '{{ .chezmoi.homeDir }}/.config/agents/agentcore_websearch_mcp.py',
+  "--service", "bedrock-agentcore", "--region", "us-east-1", "--disable-telemetry",
+]
 {{- end }}
 ```
 
@@ -192,19 +196,19 @@ args = ["--from", "ddgs[mcp]", "ddgs", "mcp"]
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
 
-**applejxd では `[[mcp]]` が 0 件になる。** `deepwiki` は 2026-09-25 に外し、
-`ddgs` は元から対象外のため。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない
+**Copilot の PC（applejxd）では `[[mcp]]` が 0 件になる。** `deepwiki` は 2026-09-25 に外し、
+`agentcore-websearch` は Bedrock の PC だけに出すため。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない
 ので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
 deepwiki の代わりの OSS 調査は `oss-research` スキル（インストール済みの実体・配布物・
 版を固定したソースに直接当たる）、GitHub の操作は github MCP を使わず
 `github-operations` スキル（gh CLI）が担う。
 
-**入れる CLI を絞るには `clis` を書く。** 省略すると 4 つ全部に入る。`ddgs` は
-`clis = ["claude"]` にしてあり、Claude Code にだけ入る（Copilot は内蔵の
-web 検索があり、OpenCode / Codex では使わない）。書ける値は `claude` /
+**入れる CLI を絞るには `clis` を書く。** 省略すると 4 つ全部に入る。
+`agentcore-websearch` は `clis = ["claude", "opencode"]` にしてある（Copilot は内蔵の
+web 検索があり、Codex は使わない）。書ける値は `claude` /
 `copilot` / `opencode` / `codex` で、それ以外を書くと apply が止まる。
 
-その結果、**Copilot / OpenCode / Codex 向けのサーバは現在 0 件**である。
+その結果、**Copilot / Codex 向けのサーバは現在 0 件**である。
 Codex の重複宣言ガードは `[[mcp]]` が 1 つ以上ないと発火しないので、試験だけ
 合成したソースで確かめている。
 
@@ -238,7 +242,8 @@ TOML の重複宣言になり、Codex が設定ファイル全体を読めなく
 
 **ユーザ・OS による出し分け**: `common.toml` 側のテンプレートに書く。生成側
 3 つは展開後の表だけを見るので、条件の解釈は 1 か所で済む。上の例では
-`applejxd` に `ddgs` を入れない (Copilot CLI 内蔵の web 検索を使うため)。
+`.chezmoitemplates/llm-provider` が `amazon-bedrock` を返す PC にだけ
+`agentcore-websearch` を出す（Copilot の PC は Copilot CLI 内蔵の web 検索を使う）。
 
 **transport**: `http` は `url`、`stdio` は `command` / `args` を書く。
 `stdio` のサーバは `uvx` から起動する形にしておくと、本体を別途入れずに済み、
@@ -255,6 +260,82 @@ TOML の重複宣言になり、Codex が設定ファイル全体を読めなく
 未対応の transport・重複 id・不正な id・transport に無いキー (typo) は
 `generate.py` が `apply` を止める。トークンは `common.toml` に書かず、
 環境変数参照として各 CLI 側で設定する。
+
+### AgentCore Web Search
+
+Bedrock の PC で web 検索を提供する MCP サーバ。Claude Code の内蔵 `WebSearch` は
+Anthropic 側のサーバ機能で、Bedrock 経由では使えない
+（[Claude Code on Amazon Bedrock](https://code.claude.com/docs/en/amazon-bedrock)）。
+OpenCode V2 の内蔵 `websearch` は Exa / Tavily などの別契約が要る。
+そこで、AWS 内で完結する AgentCore Web Search を両方に入れる
+（[公式ドキュメント](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-target-connector-web-search-tool.html)）。
+
+```text
+Claude Code / OpenCode
+  └─ stdio ─ ~/.config/agents/agentcore_websearch_mcp.py
+               └─ uvx mcp-proxy-for-aws-cli (手元の AWS 認証情報で SigV4 署名)
+                    └─ HTTPS ─ AgentCore Gateway ─ Web Search コネクタ
+```
+
+| 項目 | 決めたこと |
+| --- | --- |
+| 対象 | `llm-provider` が `amazon-bedrock` の PC。`clis = ["claude", "opencode"]` |
+| リージョン | `us-east-1`（`[provider.amazon-bedrock]` と揃える） |
+| Gateway の URL | アカウント固有なのでソースに書かず、環境変数 `AGENTCORE_GATEWAY_URL` から読む |
+| 認証 | AWS の既定の認証情報（`AWS_PROFILE` / `~/.aws`）。API キーは無い |
+| proxy の版 | `mcp-proxy-for-aws-cli` をラッパーの `PROXY` で固定。依存まで固定した CLI 用の配布物 |
+| OpenCode 内蔵の検索 | `[opencode] websearch = false` で消す（v2.0.14 で、設定するとツール一覧から消えることを確認） |
+
+**ラッパーを挟む理由**: proxy は Gateway の URL を位置引数でしか受け取らない。
+MCP の定義に URL を書かずに済ませるには、環境変数から読んで渡す層が要る。
+ラッパーは Python で書き、`uv run` から起動する（Windows に `python3` が無いため）。
+MCP クライアントは `~` を展開しないので、ラッパーのパスは `.chezmoi.homeDir` から絶対パスにする。
+
+**`ocs`（隔離版 OpenCode）では使えない。** Bedrock 自体が `ocs` から届かないのと同じ理由で、
+境界が `~/.aws` も Gateway のドメインも開けていない。
+
+#### AWS 側の準備（アカウントごとに 1 回）
+
+リポジトリには CloudFormation を置かない。AWS 公式のサンプル
+[aws-samples/sample-agentcore-websearch-agent-skill](https://github.com/aws-samples/sample-agentcore-websearch-agent-skill)
+の `cfn/agentcore-websearch.yaml` で、次の 3 つをまとめて作れる。
+
+| リソース | 中身 |
+| --- | --- |
+| Gateway | 受け付けの認証は `AWS_IAM` |
+| Target | `connectorId: "web-search"` のコネクタ |
+| サービスロール | Gateway が引き受ける。`bedrock-agentcore:InvokeWebSearch` を持つ |
+
+```bash
+aws cloudformation deploy --region us-east-1 --stack-name agentcore-websearch \
+  --template-file cfn/agentcore-websearch.yaml --capabilities CAPABILITY_IAM
+aws cloudformation describe-stacks --region us-east-1 --stack-name agentcore-websearch \
+  --query "Stacks[0].Outputs[?OutputKey=='GatewayUrl'].OutputValue" --output text
+```
+
+サンプルは本番向けではないと明記している。使う前に権限の範囲を見直す。
+使う人の IAM には、作った Gateway の ARN に対する
+`bedrock-agentcore:InvokeGateway` を付ける。
+
+#### 業務 PC での設定
+
+1. 上で得た URL をシェルの初期化ファイル（リポジトリ管理外）に書く:
+   `export AGENTCORE_GATEWAY_URL='https://<gateway-id>.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp'`。
+   Windows はユーザー環境変数に設定する
+2. `chezmoi apply` で Claude Code へ登録し、OpenCode の設定を生成する
+3. 以前の `ddgs` は宣言から消しても登録が残るので、1 回だけ `claude mcp remove ddgs -s user` を実行する
+4. 確認: Claude Code の `/mcp` で `agentcore-websearch` が connected になり、`WebSearch` ツールが 1 つ見えること
+
+URL が未設定だとラッパーは理由を stderr に出して終了する（MCP クライアント側では接続失敗として見える）。
+
+#### 料金と制約
+
+- 検索 1,000 回あたり $7。Gateway の呼び出しなどは別に課金される
+  （[料金](https://aws.amazon.com/bedrock/agentcore/pricing)）
+- `query` は 200 文字以内、`maxResults` は 1〜25（既定 10）
+- 返るのは関連部分の抜粋・URL・タイトル・公開日。本文が要るときは `webfetch` と組み合わせる
+- 利用条件として、結果を表示するときは出典リンクを残す
+- Target 単位でドメインの許可・除外リストを強制できる（エージェント側から解除できない）
 
 ## OpenCode V2 の設定
 

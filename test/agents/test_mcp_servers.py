@@ -29,8 +29,8 @@ import generate as gen  # noqa: E402
 from agents_common import load_common, render_common  # noqa: E402
 
 COMMON = load_common()
-# applejxd は MCP を 1 つも持たない (deepwiki を外し、ddgs は元から対象外)。
-# サーバの中身を確かめる試験は、必ず 1 つ以上ある tester 側で行う。
+# applejxd (Copilot) は MCP を 1 つも持たない (deepwiki を外し、検索は Copilot 内蔵)。
+# サーバの中身を確かめる試験は、必ず 1 つ以上ある tester (Bedrock) 側で行う。
 TESTER = load_common("tester")
 CLAUDE_SCRIPT = ROOT / "home/.chezmoiscripts/400_unix/run_onchange_after_410_claude_mcp.sh.tmpl"
 CLAUDE_WINDOWS_SCRIPT = (
@@ -97,6 +97,7 @@ def servers_for(username, cli=None):
 # common.toml 側の健全性
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("username", USERS)
 def test_rendered_common_is_valid_toml(username):
     """テンプレート化で check-toml が効かなくなる分をここで担保する。"""
@@ -127,23 +128,44 @@ def test_common_declares_mcp_servers():
 
 
 def test_declared_servers_pass_validation():
-    assert [name for name, _ in gen.mcp_servers(TESTER)] == [
-        s["id"] for s in TESTER["mcp"]
-    ]
+    assert [name for name, _ in gen.mcp_servers(TESTER)] == [s["id"] for s in TESTER["mcp"]]
 
 
-def test_ddgs_goes_to_claude_only():
-    """★applejxd 以外でも `ddgs` は Claude Code にだけ入る。
+def test_agentcore_websearch_goes_to_claude_and_opencode():
+    """★Bedrock の PC では AgentCore Web Search が Claude Code と OpenCode に入る。
 
-    Copilot は内蔵の web 検索があり、OpenCode / Codex では使わない。
-    `clis` を外すと 4 つ全部に入ってしまう。
+    どちらも Bedrock 経由では内蔵の検索が無い (OpenCode は別契約の検索先が要る)。
+    Copilot / Codex は使わないので入れない。
     """
-    ids = {
-        cli: [name for name, _ in gen.mcp_servers(TESTER, cli)]
-        for cli in sorted(gen.MCP_CLIS)
-    }
-    assert ids["claude"] == ["ddgs"]
-    assert ids["copilot"] == ids["opencode"] == ids["codex"] == []
+    ids = {cli: [name for name, _ in gen.mcp_servers(TESTER, cli)] for cli in sorted(gen.MCP_CLIS)}
+    assert ids["claude"] == ids["opencode"] == ["agentcore-websearch"]
+    assert ids["copilot"] == ids["codex"] == []
+
+
+def test_agentcore_websearch_runs_the_deployed_wrapper():
+    """ラッパーを絶対パスで指す (MCP クライアントは `~` を展開しない)。"""
+    (server,) = [s for s in TESTER["mcp"] if s["id"] == "agentcore-websearch"]
+    assert server["command"] == "uv"
+    assert "/test-home/.config/agents/agentcore_websearch_mcp.py" in server["args"]
+    assert (ROOT / "home/dot_config/agents/agentcore_websearch_mcp.py").is_file()
+    # Windows でも展開する (Claude の MCP 登録は Windows にもある)
+    ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8")
+    assert "!.config/agents/agentcore_websearch_mcp.py" in ignore
+
+
+def test_bedrock_disables_the_builtin_websearch():
+    """検索ツールを 1 本にする。Copilot の PC では OpenCode 内蔵の検索を残す。"""
+    personal = load_common("applejxd")
+    assert TESTER["opencode"]["websearch"] is False
+    assert "websearch" not in personal["opencode"]
+    assert gen.merge_opencode_config({}, TESTER)["websearch"] is False
+    assert "websearch" not in gen.merge_opencode_config({}, personal)
+
+
+@pytest.mark.parametrize("value", [True, {"provider": "exa"}, "false"])
+def test_websearch_accepts_only_false(value):
+    with pytest.raises(ValueError):
+        gen.merge_opencode_config({}, {"opencode": {"websearch": value}})
 
 
 def test_clis_filters_only_the_servers_that_declare_it():
@@ -194,12 +216,13 @@ def test_duplicate_id_stops_generation():
 # ユーザによる出し分け (common.toml のテンプレート側)
 # ---------------------------------------------------------------------------
 
+
 def test_personal_only_server_is_filtered_in_the_source():
     personal = {name for name, _ in servers_for("applejxd")}
     other = {name for name, _ in servers_for("tester")}
 
     assert personal < other, "applejxd だけ減る想定"
-    assert "ddgs" in other - personal
+    assert "agentcore-websearch" in other - personal
 
 
 @pytest.mark.parametrize("username", ["applejxd", "APPLEJXD", "CORP\\applejxd"])
@@ -212,6 +235,7 @@ def test_exclusion_covers_case_and_domain_forms(username):
 # ---------------------------------------------------------------------------
 # Copilot 生成 (~/.copilot/mcp-config.json)
 # ---------------------------------------------------------------------------
+
 
 def copilot_entry(server):
     if server["transport"] == "http":
@@ -275,9 +299,7 @@ def test_copilot_mcp_keeps_servers_and_fields_it_does_not_own():
 def test_copilot_mcp_drops_keys_of_the_previous_transport():
     """http から stdio へ変えたとき、url と headers を残さない。"""
     existing = {
-        "mcpServers": {
-            "x": {"type": "http", "url": "https://old.example.com/mcp", "headers": {}}
-        }
+        "mcpServers": {"x": {"type": "http", "url": "https://old.example.com/mcp", "headers": {}}}
     }
     merged = gen.merge_copilot_mcp(existing, {"mcp": [STDIO]})
     assert merged["mcpServers"]["x"] == copilot_entry(STDIO)
@@ -292,6 +314,7 @@ def test_copilot_mcp_target_is_registered():
 # ---------------------------------------------------------------------------
 # Codex 生成 (~/.codex/config.toml の mcp_servers)
 # ---------------------------------------------------------------------------
+
 
 def codex_entry(server):
     if server["transport"] == "http":
@@ -355,8 +378,7 @@ def test_codex_config_is_stable_from_the_first_apply(existing):
 USER_ROOT = 'model = "o3"\n'
 # ab28fee までの形式。管理ブロック 1 つにテーブルまで入り、ユーザ部分は後ろ
 SINGLE_BLOCK = (
-    '# chezmoi-managed:start\nstale = true\n[windows]\nsandbox = "x"\n'
-    "# chezmoi-managed:end\n\n"
+    '# chezmoi-managed:start\nstale = true\n[windows]\nsandbox = "x"\n# chezmoi-managed:end\n\n'
 )
 
 
@@ -392,15 +414,14 @@ def test_codex_config_keeps_user_root_keys_at_the_root(existing):
 # Claude 登録スクリプト (~/.claude.json は管理外なので CLI 経由)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("username", USERS)
 def test_claude_script_embeds_only_this_users_servers(username):
     rendered = render(CLAUDE_SCRIPT, username=username)
     assert "mcp add-json -s user" in rendered
 
     embedded = json.loads(rendered.split("json.loads(r'''", 1)[1].split("''')", 1)[0])
-    assert [server["id"] for server in embedded] == [
-        name for name, _ in servers_for(username)
-    ]
+    assert [server["id"] for server in embedded] == [name for name, _ in servers_for(username)]
 
 
 def test_windows_claude_script_covers_the_same_servers():
@@ -415,9 +436,7 @@ def test_windows_claude_script_covers_the_same_servers():
     assert "which claude" not in rendered
     assert "'.local\\bin\\claude.exe'" in rendered
     embedded = json.loads(rendered.split("@'", 1)[1].split("'@", 1)[0])
-    assert [server["id"] for server in embedded] == [
-        name for name, _ in servers_for("tester")
-    ]
+    assert [server["id"] for server in embedded] == [name for name, _ in servers_for("tester")]
     # 自動変数 $args と衝突する名前を使っていないこと
     assert "$args" not in rendered
     assert "$serverArgs" in rendered
@@ -437,6 +456,7 @@ def test_windows_claude_script_is_skipped_without_claude():
 # 単一ソース性
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("path", [CLAUDE_SCRIPT, CODEX_CONFIG, COPILOT_MODIFIER])
 def test_cli_sources_do_not_hardcode_servers(path):
     """各 CLI 側のソースに定義を書かない (書くと 3 つが静かに食い違う)。"""
@@ -454,7 +474,7 @@ def test_cli_sources_do_not_filter_by_user():
         source = path.read_text(encoding="utf-8")
         assert "exclude_users" not in source
         assert "applejxd" not in source, f"{path.name} にユーザ名が書かれている"
-    assert "applejxd" in TEMPLATE.read_text(encoding="utf-8")
+    assert 'includeTemplate "llm-provider"' in TEMPLATE.read_text(encoding="utf-8")
 
 
 @pytest.fixture(scope="module")

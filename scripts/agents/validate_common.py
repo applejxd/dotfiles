@@ -44,7 +44,9 @@ def render(source: Path, username: str) -> str:
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
         raise SystemExit("chezmoi が見つかりません (描画できないので検査できません)")
-    context = json.dumps(json.dumps({"chezmoi": {"username": username}}))
+    context = json.dumps(
+        json.dumps({"chezmoi": {"username": username, "homeDir": "/validate-home"}})
+    )
     result = subprocess.run(
         [
             chezmoi,
