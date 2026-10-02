@@ -1,7 +1,7 @@
 ---
 name: commit
 description: "Conventional Commits 形式のメッセージ作成と Git コミットを行う。「コミットして」「commit メッセージを作って」「変更をコミット」と言われたら必ず使う。"
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse --show-toplevel), Bash(git add:*), Bash(git commit:*)
+allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse --show-toplevel), Bash(git add:*), Bash(git commit:*)
 ---
 
 # Git コミットスキル
@@ -85,7 +85,11 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
 
 ## スタイル規範
 
-- **出力言語**: 既定は **英語**。ユーザーが日本語で問いかけた場合は日本語で出力
+- **出力言語**: 次の順で決める。会話や依頼文の言語では決めない
+  1. ユーザー（または呼び出し元）が言語を明示したらそれに従う
+  2. リポジトリのルート直下の `README*`（`README.md` など）に、ひらがな・カタカナ・漢字が
+     1 文字でも含まれていれば **日本語**。ファイル読み取りツールか grep ツールで確かめる
+  3. それ以外（README が無い場合を含む）は **英語**
 - **必要十分・非誇張**: 事実のみ（何を・なぜ・影響）。誇張・曖昧語を避ける
 - 件名は命令形・**72文字以内**・文末ピリオドなし
 - **定量主張の条件**:
