@@ -87,7 +87,10 @@ _DENY_JSON = (
         ),
     ],
     ids=[
-        "無出力で exit 1", "無出力で Traceback", "deny を出して exit 1", "deny を出して Traceback",
+        "無出力で exit 1",
+        "無出力で Traceback",
+        "deny を出して exit 1",
+        "deny を出して Traceback",
     ],
 )
 def test_run_hook_rejects_crash(tmp_path, body):
@@ -101,6 +104,7 @@ def test_run_hook_rejects_crash(tmp_path, body):
 # ---------------------------------------------------------------------------
 # glob マッチャ (Claude の Read() permission と同じ記法)
 # ---------------------------------------------------------------------------
+
 
 def test_double_star_crosses_directories():
     assert policy.matches_any_glob("a/b/c/server.pem", ["**/*.pem"])
@@ -122,8 +126,7 @@ def test_backslash_paths_are_normalized():
 
 def test_home_paths_match_tilde_globs():
     home = os.path.expanduser("~")
-    assert policy.matches_any_glob(f"{home}/.copilot/settings.json",
-                                   ["~/.copilot/settings.json"])
+    assert policy.matches_any_glob(f"{home}/.copilot/settings.json", ["~/.copilot/settings.json"])
 
 
 def test_returns_the_matching_glob():
@@ -183,9 +186,7 @@ def test_non_read_tools_are_ignored(tool):
 def test_missing_path_is_ignored():
     env = dict(os.environ)
     env["AGENTS_CONFIG_DIR"] = str(AGENTS_DIR)
-    payload = json.dumps(
-        {"hook_event_name": "PreToolUse", "tool_name": "view", "tool_input": {}}
-    )
+    payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "view", "tool_input": {}})
     proc = subprocess.run(
         [sys.executable, "-B", str(HOOK)],
         input=payload,
@@ -228,6 +229,7 @@ def test_policy_dir_falls_back_to_xdg_config_home(tmp_path):
 # ---------------------------------------------------------------------------
 # 設定との結び付き
 # ---------------------------------------------------------------------------
+
 
 def test_hook_is_registered_for_copilot_only():
     hooks = {h["id"]: h for h in COMMON["hooks"]}
@@ -276,6 +278,124 @@ def test_hooks_never_use_permission_request_event():
 
 def test_hook_reads_the_same_list_as_claude_permissions():
     # ルールが 2 箇所に分かれると片方だけ古くなる。同じキーを見ていること。
-    assert policy.load_read_deny_globs(str(COMMON_PATH)) == (
-        COMMON["file"]["read_deny_globs"]
+    assert policy.load_read_deny_globs(str(COMMON_PATH)) == (COMMON["file"]["read_deny_globs"])
+
+
+# ---------------------------------------------------------------------------
+# deny の例外 (.env.example など。対の deny にだけ効く)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path", [".env.example", "app/.env.sample", "/home/u/app/.env.template", "a/b/.env.example"]
+)
+def test_dotenv_samples_are_readable(path):
+    assert not is_denied(run_hook("view", path)), path
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".env",
+        ".env.local",
+        "app/.env.production",
+        "app/.env.example.bak",
+        # 例外は `.env.*` の deny にだけ効く。ほかの deny に当たるものは deny のまま
+        ".ssh/.env.example",
+        "/home/u/.ssh/.env.example",
+        "app/secrets/.env.example",
+        "app/.env.secret.example",
+    ],
+)
+def test_dotenv_secrets_and_other_denies_stay_denied(path):
+    assert is_denied(run_hook("view", path)), path
+
+
+def test_exception_only_lifts_its_paired_deny():
+    globs = ["**/.env.*", "**/.ssh/**"]
+    exceptions = [{"deny": "**/.env.*", "except": ["**/.env.example"]}]
+    assert policy.matches_read_deny("a/.env.example", globs, exceptions) is None
+    assert policy.matches_read_deny("a/.env.local", globs, exceptions) == "**/.env.*"
+    assert policy.matches_read_deny("a/.ssh/.env.example", globs, exceptions) == "**/.ssh/**"
+    assert policy.matches_read_deny("a/.env.example", globs) == "**/.env.*"
+
+
+def test_hook_reads_the_exceptions_from_the_same_file():
+    assert policy.load_read_deny_exceptions(str(COMMON_PATH)) == COMMON["file"]["deny_exceptions"]
+
+
+def _copy_policy(tmp_path: Path, body: str) -> Path:
+    """command_policy.py を置いた設定ディレクトリを作る (無いと「読み込めない」で拒否される)。"""
+    shutil.copy(AGENTS_DIR / "command_policy.py", tmp_path / "command_policy.py")
+    (tmp_path / "common.toml").write_text(
+        '[file]\nread_deny_globs = ["**/.env.*"]\n' + body, encoding="utf-8"
+    )
+    return tmp_path
+
+
+def test_exception_config_control_is_allowed(tmp_path):
+    """対照: 正常な例外の定義なら `.env.example` は読め、`.env.local` は拒否される。"""
+    config = _copy_policy(
+        tmp_path,
+        '[[file.deny_exceptions]]\ndeny = "**/.env.*"\nexcept = ["**/.env.example"]\n',
+    )
+    assert not is_denied(run_hook("view", "app/.env.example", config_dir=config))
+    assert is_denied(run_hook("view", "app/.env.local", config_dir=config))
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "deny_exceptions = 1\n",
+        'deny_exceptions = [{ deny = "**/.env.*" }]\n',
+        'deny_exceptions = [{ deny = "**/.env.*", except = "x" }]\n',
+    ],
+    ids=["配列でない", "except が無い", "except が文字列"],
+)
+def test_malformed_exceptions_fail_closed(tmp_path, body):
+    """例外の定義が壊れていたら、読み取りは (例外の対象でも) 拒否する。理由は解釈の失敗。"""
+    config = _copy_policy(tmp_path, body)
+    result = run_hook("view", "app/.env.example", config_dir=config)
+    assert is_denied(result)
+    assert "ポリシー定義を解釈できませんでした" in result["permissionDecisionReason"]
+
+
+# ---------------------------------------------------------------------------
+# Windows は大小文字を区別しない (deny も例外も)
+# ---------------------------------------------------------------------------
+
+_WIN_GLOBS = COMMON["file"]["read_deny_globs"]
+_WIN_EXCEPTIONS = COMMON["file"]["deny_exceptions"]
+
+
+@pytest.mark.parametrize(
+    ("path", "denied"),
+    [
+        (r"C:\repo\.SSH\.env.example", True),
+        (r"C:\repo\.ENV.PRODUCTION", True),
+        (r"C:\repo\.env.example", False),
+        (r"C:\repo\.ENV.EXAMPLE", False),
+        (r"C:\repo\.Env.Sample", False),
+        (r"C:\repo\.env.example.bak", True),
+        (r"C:\repo\Secrets\.env.example", True),
+    ],
+)
+def test_windows_matching_ignores_case(monkeypatch, path, denied):
+    monkeypatch.setattr(policy, "_is_windows", lambda: True)
+    got = policy.matches_read_deny(path, _WIN_GLOBS, _WIN_EXCEPTIONS)
+    assert (got is not None) is denied, (path, got)
+
+
+def test_posix_matching_stays_case_sensitive(monkeypatch):
+    monkeypatch.setattr(policy, "_is_windows", lambda: False)
+    assert policy.matches_read_deny("a/.SSH/x", _WIN_GLOBS, _WIN_EXCEPTIONS) is None
+    assert policy.matches_read_deny("a/.ENV.local", _WIN_GLOBS, _WIN_EXCEPTIONS) is None
+    assert policy.matches_read_deny("a/.env.local", _WIN_GLOBS, _WIN_EXCEPTIONS)
+
+
+def test_windows_home_prefix_ignores_case(monkeypatch):
+    monkeypatch.setattr(policy, "_is_windows", lambda: True)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: "C:\\Users\\Tester")
+    assert policy.matches_any_glob(
+        "c:/users/tester/.copilot/settings.json", ["~/.copilot/settings.json"]
     )

@@ -58,6 +58,7 @@ def default_common_path() -> str:
 # Configuration loader
 # ---------------------------------------------------------------------------
 
+
 def _load_str_list(section: str, key: str, path: str | None) -> list[str]:
     """Return ``[<section>] <key>`` from common.toml, or an empty list if missing.
 
@@ -111,6 +112,39 @@ def load_read_deny_globs(path: str | None = None) -> list[str]:
     return _load_str_list("file", "read_deny_globs", path)
 
 
+def load_read_deny_exceptions(path: str | None = None) -> list[dict[str, object]]:
+    """Return ``[[file.deny_exceptions]]`` (deny の glob とその例外の対)。
+
+    例外は対の ``deny`` にだけ効く (``.env.*`` の例外 ``.env.example`` が
+    ``.ssh/**`` の中の同名ファイルを許さないように)。形が不正なら ``TypeError`` を
+    投げ、hook が fail-closed で拒否できるようにする。
+    """
+    p = Path(path if path is not None else default_common_path())
+    if not p.exists():
+        return []
+    with p.open("rb") as f:
+        table = tomllib.load(f).get("file", {})
+    if not isinstance(table, dict):
+        raise TypeError("[file] セクションがテーブルではありません")
+    value = table.get("deny_exceptions", [])
+    if not isinstance(value, list):
+        raise TypeError("[[file.deny_exceptions]] が配列ではありません")
+    out: list[dict[str, object]] = []
+    for entry in value:
+        deny = entry.get("deny") if isinstance(entry, dict) else None
+        globs = entry.get("except") if isinstance(entry, dict) else None
+        if (
+            not isinstance(deny, str)
+            or not isinstance(globs, list)
+            or not all(isinstance(g, str) for g in globs)
+        ):
+            raise TypeError(
+                "[[file.deny_exceptions]] は deny (文字列) と except (文字列の配列) が要ります"
+            )
+        out.append({"deny": deny, "except": list(globs)})
+    return out
+
+
 # ---------------------------------------------------------------------------
 # glob 照合 (permission の Read()/Edit() と同じ記法)
 # ---------------------------------------------------------------------------
@@ -119,7 +153,7 @@ def load_read_deny_globs(path: str | None = None) -> list[str]:
 
 
 @lru_cache(maxsize=256)
-def glob_to_regex(glob: str) -> re.Pattern[str]:
+def glob_to_regex(glob: str, ignore_case: bool = False) -> re.Pattern[str]:
     """Compile a permission-style glob into an anchored regex."""
     out: list[str] = []
     i = 0
@@ -136,27 +170,54 @@ def glob_to_regex(glob: str) -> re.Pattern[str]:
         else:
             out.append(re.escape(glob[i]))
             i += 1
-    return re.compile("^" + "".join(out) + "$")
+    return re.compile("^" + "".join(out) + "$", re.IGNORECASE if ignore_case else 0)
+
+
+def _is_windows() -> bool:
+    """Windows のファイルシステムは大小文字を区別しない (guide-plugin の pathRegExp と揃える)。"""
+    return os.name == "nt"
 
 
 def matches_any_glob(path: str, globs: Sequence[str]) -> str | None:
     """Return the first glob matching ``path``, or ``None``.
 
-    パスは区切りを ``/`` に揃えてから照合する (Windows 対策)。
+    パスは区切りを ``/`` に揃えてから照合する。Windows では大小文字も区別しない。
     """
     if not path:
         return None
+    ignore_case = _is_windows()
     normalized = path.replace("\\", "/")
     while normalized.startswith("./"):
         normalized = normalized[2:]
     candidates = [normalized]
     home = os.path.expanduser("~").replace("\\", "/")
-    if home and normalized.startswith(home + "/"):
-        candidates.append("~/" + normalized[len(home) + 1:])
+    check = (lambda s: s.lower()) if ignore_case else (lambda s: s)
+    if home and check(normalized).startswith(check(home) + "/"):
+        candidates.append("~/" + normalized[len(home) + 1 :])
     for glob in globs:
-        pattern = glob_to_regex(glob)
+        pattern = glob_to_regex(glob, ignore_case)
         if any(pattern.match(c) for c in candidates):
             return glob
+    return None
+
+
+def matches_read_deny(
+    path: str, globs: Sequence[str], exceptions: Sequence[dict[str, object]] = ()
+) -> str | None:
+    """``read_deny_globs`` に当たる最初の glob を返す。ただし例外は対の deny にだけ効く。
+
+    ``deny`` が ``glob`` と同じ文字列の例外に当たったとき、その glob は見送って次を見る
+    (後ろの別の deny に当たれば deny のまま)。
+    """
+    for glob in globs:
+        if not matches_any_glob(path, [glob]):
+            continue
+        if any(
+            e["deny"] == glob and matches_any_glob(path, e["except"])  # type: ignore[arg-type]
+            for e in exceptions
+        ):
+            continue
+        return glob
     return None
 
 
@@ -329,11 +390,27 @@ _FIND_EXEC_FLAGS = {"-exec", "-execdir", "-ok", "-okdir"}
 # シェルを起動して文字列を実行するもの。-c の引数を再帰的に評価する。
 # script / su も -c で文字列を渡せるのでここに含める。
 _SHELL_BINS = {
-    "sh", "bash", "zsh", "dash", "ksh", "fish", "ash",
-    "script", "su", "busybox",
+    "sh",
+    "bash",
+    "zsh",
+    "dash",
+    "ksh",
+    "fish",
+    "ash",
+    "script",
+    "su",
+    "busybox",
 }
 _NON_EXECUTING_PREFIX_BINS = {
-    "cat", "echo", "find", "grep", "rg", "sed", "awk", "gawk", "printf",
+    "cat",
+    "echo",
+    "find",
+    "grep",
+    "rg",
+    "sed",
+    "awk",
+    "gawk",
+    "printf",
 }
 
 # 文字列をそのままコードとして実行するもの
@@ -446,14 +523,14 @@ def _strip_grouping(segment: str) -> str:
         # 先頭の制御構文キーワードを剥がす (`then git push` -> `git push`)
         m = _CONTROL_KEYWORD_RE.match(seg)
         if m:
-            seg = seg[m.end():].strip()
+            seg = seg[m.end() :].strip()
             changed = True
         # `case x in x) CMD` のラベル部分を剥がす。
         # 通常のコマンドを削らないよう、`) ` で終わるラベルか
         # `<語> in ` の形に限定する
         m = _CASE_LABEL_RE.match(seg)
         if m:
-            seg = seg[m.end():].strip()
+            seg = seg[m.end() :].strip()
             changed = True
         # `! git push` の否定
         if seg.startswith("!"):
@@ -611,9 +688,7 @@ _PROC_SUBST_RE = re.compile(r"[<>]\(([^()]*)\)")
 # シェル関数定義 `f(){ git push; }` (後ろに呼び出しが続く形も許容)
 _FUNC_DEF_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{(.*?)\}", re.S)
 # alias 定義 `alias gp='git push'`
-_ALIAS_DEF_RE = re.compile(
-    r"alias\s+[A-Za-z_][A-Za-z0-9_]*=(?:'([^']*)'|\"([^\"]*)\"|(\S+))"
-)
+_ALIAS_DEF_RE = re.compile(r"alias\s+[A-Za-z_][A-Za-z0-9_]*=(?:'([^']*)'|\"([^\"]*)\"|(\S+))")
 # 変数代入 `p=push` (後で `git $p` の展開に使う)
 _VAR_ASSIGN_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)=([^\s;&|]+)")
 # 変数参照 `$p` / `${p}`
@@ -674,6 +749,7 @@ def _expand_indirect_code(segment: str, full_command: str = "") -> list[str]:
     if full_command and _VAR_REF_RE.search(segment):
         assignments = dict(_VAR_ASSIGN_RE.findall(full_command))
         if assignments:
+
             def _sub(m: re.Match[str]) -> str:
                 return assignments.get(m.group(1), m.group(0))
 
@@ -826,7 +902,7 @@ def _expand_embedded_commands(segment: str) -> list[str]:
         for i, token in enumerate(tokens):
             if token in _FIND_EXEC_FLAGS and i + 1 < len(tokens):
                 rest = []
-                for t in tokens[i + 1:]:
+                for t in tokens[i + 1 :]:
                     # shlex がエスケープを外すので `;` `\;` `+` のいずれも来る
                     if t in (";", "\\;", "+", "\\+", "\\"):
                         break
@@ -838,8 +914,19 @@ def _expand_embedded_commands(segment: str) -> list[str]:
     if head in ("screen", "tmux", "at", "batch", "entr", "watchexec"):
         # フラグとサブコマンドを読み飛ばし、残りをコマンドとみなす
         rest = [t for t in tokens[1:] if not t.startswith("-")]
-        if head == "tmux" and rest and rest[0] in (
-            "new-session", "new", "new-window", "neww", "send-keys", "run-shell", "run",
+        if (
+            head == "tmux"
+            and rest
+            and rest[0]
+            in (
+                "new-session",
+                "new",
+                "new-window",
+                "neww",
+                "send-keys",
+                "run-shell",
+                "run",
+            )
         ):
             rest = rest[1:]
         if rest:
@@ -867,7 +954,7 @@ def _expand_embedded_commands(segment: str) -> list[str]:
     # `--` の後ろが実コマンドになるもの
     if "--" in tokens[1:]:
         idx = tokens.index("--", 1)
-        rest = tokens[idx + 1:]
+        rest = tokens[idx + 1 :]
         if rest:
             out.append(" ".join(rest))
 
@@ -960,7 +1047,7 @@ def _expand_shell_invocation(segment: str) -> list[str] | None:
         if token.startswith("-") and not token.startswith("--") and "c" in token:
             if i + 1 < len(tokens):
                 # クォートが外れて複数トークンに割れている場合は繋ぎ直す
-                return [" ".join(tokens[i + 1:])]
+                return [" ".join(tokens[i + 1 :])]
             return None
     return None
 
@@ -978,10 +1065,10 @@ def _expand_nested_shell_invocations(segment: str) -> list[str]:
         head = _basename(token)
         if head not in _SHELL_BINS and not _SHELL_VAR_RE.match(token):
             continue
-        for j, flag in enumerate(tokens[i + 1:], start=i + 1):
+        for j, flag in enumerate(tokens[i + 1 :], start=i + 1):
             if flag.startswith("-") and not flag.startswith("--") and "c" in flag:
                 if j + 1 < len(tokens):
-                    out.append(" ".join(tokens[j + 1:]))
+                    out.append(" ".join(tokens[j + 1 :]))
                 break
     return out
 
@@ -1080,6 +1167,7 @@ def normalize(command: str, _depth: int = 0) -> list[str]:
 # Matching
 # ---------------------------------------------------------------------------
 
+
 def _pattern_matches(segment: str, pattern: str) -> bool:
     """Return True if ``segment`` should be blocked by ``pattern``.
 
@@ -1120,6 +1208,7 @@ def find_match(command: str, patterns: Iterable[str]) -> str | None:
 # ---------------------------------------------------------------------------
 # CLI for quick inspection / hook integration
 # ---------------------------------------------------------------------------
+
 
 def _main(argv: list[str] | None = None) -> int:
     import argparse

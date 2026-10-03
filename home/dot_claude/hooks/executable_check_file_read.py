@@ -14,9 +14,12 @@ Copilot からは読めてしまう。ここを埋めるのがこの hook。
 
 判定は Claude の permission と **同じリスト** (``common.toml`` の
 ``[file] read_deny_globs``) を読むので、ルールは 1 箇所に書けばよい。
+Claude と違い、``[[file.deny_exceptions]]`` (``.env.example`` など) の例外も読む。
+例外は対の deny の glob にだけ効く。
 
 fail-closed: ポリシーを読めない場合は素通りさせず deny する。
 """
+
 from __future__ import annotations
 
 import sys
@@ -62,6 +65,7 @@ def main() -> None:
 
     try:
         globs = _policy.load_read_deny_globs()
+        exceptions = _policy.load_read_deny_exceptions()
     except Exception as exc:
         emit_pretool_deny(
             f"ポリシー定義を解釈できませんでした ({exc})。\n"
@@ -77,7 +81,7 @@ def main() -> None:
         )
         return
 
-    matched = _policy.matches_any_glob(path, globs)
+    matched = _policy.matches_read_deny(path, globs, exceptions)
     if matched:
         emit_pretool_deny(
             f"`{path}` はセンシティブなファイルとして読み取りが禁止されています "
