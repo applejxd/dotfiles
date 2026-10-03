@@ -504,16 +504,30 @@ Herdr のユーザーデータ・設定は削除しません。
 
 | ファイル | 読まれる起動 | 置いてよいもの |
 | --- | --- | --- |
-| `.zshenv` / `.bash_profile` / `~/.config/shell/shellenv.sh` | 全シェル | PATH と環境変数だけ |
-| `.bashrc` のガード前 | 全 bash | `mise activate` と ROS の `setup.bash`（PATH のため） |
+| `.zshenv` | 全 zsh（対話・非対話を問わない） | PATH と環境変数だけ（例外は表の下） |
+| `.bash_profile` | login bash（非対話の login を含む。`bash -lc` など） | PATH と環境変数だけ |
+| `~/.config/shell/shellenv.sh` | `.zshenv` と `.bash_profile` から読まれる（素の `bash -c` や非 login の bash は読まない） | PATH と環境変数だけ |
+| `.bashrc` のガード前 | 対話 bash と、`.bash_profile` から読まれる login bash（素の `bash -c` は読まない） | `mise activate` と ROS の `setup.bash`（PATH のため） |
 | `.zshrc`（先頭の `[[ -o interactive ]] \|\| return 0` の後）、`.bashrc` のガード後、`shellrc.sh` | 対話シェル | alias・関数・キー設定・補完・プラグイン・出力 |
+
+`.zshenv` には環境変数のほかに例外が 1 つある。リポジトリ内にいる間 `TMPDIR` を
+そのリポジトリの `.tmp` に向けるため、関数を 1 つ定義して `mkdir -p` を実行する
+（出力はしない）。
+
+`shellenv.sh` は mise の shims（`${MISE_DATA_DIR:-~/.local/share/mise}/shims`）を、
+存在するときだけ PATH の先頭へ 1 回置く（継承した PATH に既にあれば先頭へ移す。venv の
+`bin` が PATH にあればその直後）。非対話でも cwd の `mise.toml` の版で解決される。
+版の再現性が要る操作（lint・ビルドなど）は shim ではなく `mise exec` を使う。
+実測は[調査記録](../research/shell/mise-shims-resolution.md)。
 
 `.zshrc` の冒頭は `/etc/zsh/zshrc` の読み込みも含む（`.zshenv` の `no_global_rcs`
 で自動では読まれないため、対話のときだけ読む）。
 
 方針:
 
-1. 全シェル共通 env には alias・関数・出力・キー設定を置かない。
+1. 非対話でも読まれる起動ファイル（表の `.zshenv` / `.bash_profile` /
+   `shellenv.sh`、`.bashrc` のガード前）には alias・関数・出力・キー設定を置かない
+   （`TMPDIR` の例外を除く）。
 2. 対話判定は zsh の `[[ -o interactive ]]`、bash の `$-` で行う。TTY の有無は
    表示用の補助にとどめ、環境変数を並べて「人間か」を推測する判定は採らない。
 3. 標準コマンドの意味を変える alias（`cat=bat`、`ls=eza`、`diff=colordiff`、
@@ -623,7 +637,13 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply` �
   `.chezmoitemplates/` 配下は他ファイルへ埋め込むため対象外です。
 - **対話時と非対話時を分ける**: `profile.ps1` はAllHostsプロファイルのため、
   エージェントやスクリプトからの起動でも毎回読み込まれます。プロンプト
-  （oh-my-posh）、キーバインド、モジュール読み込みは対話時だけ実行します。
+  （oh-my-posh）、キーバインド、モジュール読み込み、関数（`open` や
+  `commands/*.ps1`）は対話時だけ定義・実行します。docker の `dclean` などは
+  hookがコマンド名しか見ないため、非対話で定義すると権限規則を素通りします。
+  cmdletの既定エンコーディング（`*:Encoding`）は非対話でも `utf8` にします。
+  外すと5.1の既定（`Out-File` はUTF-16LE、`Set-Content` はANSI）に戻るためです。
+  5.1では `utf8` がBOM付きになりますが、こちらを許容します。
+  Consoleのエンコーディングは非対話でも設定し、失敗は無視します。
   判定はstdioのリダイレクトに加え、起動引数（`-Command` / `-File` /
   `-EncodedCommand` / `-NonInteractive`。ただし `-NoExit` があれば対話）も見ます。
 - **起動経路でcmdletを使わない**: `Microsoft.PowerShell.Management`

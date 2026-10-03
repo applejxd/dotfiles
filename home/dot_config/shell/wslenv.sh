@@ -19,9 +19,14 @@ else
     if [[ -f "$_win_user_cache" ]]; then
         _win_user=$(<"$_win_user_cache")
     else
-        mkdir -p "$HOME/.cache"
-        _win_user=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r')
-        echo "$_win_user" > "$_win_user_cache"
+        _win_user=""
+        if command -v cmd.exe >/dev/null 2>&1; then
+            _win_user=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null </dev/null | tr -d '\r') || _win_user=""
+        fi
+        # 空値はキャッシュしない (interop 無効時に以後ずっと探さなくなる)
+        if [[ -n "$_win_user" ]] && mkdir -p "$HOME/.cache" 2>/dev/null; then
+            echo "$_win_user" >"$_win_user_cache" 2>/dev/null || true
+        fi
     fi
     _vscode_path="/mnt/c/Users/${_win_user}/AppData/Local/Programs/Microsoft VS Code"
     if [[ -n "$_win_user" ]] && [[ -d "$_vscode_path" ]]; then
@@ -46,13 +51,23 @@ export LIBGL_ALWAYS_INDIRECT=0
 # use default value if DISPLAY is set (e.g. SSH X11Forwarding)
 if [[ -z "$DISPLAY" ]]; then
     # for VcXsrv
-    if [[ "$(uname -r)" == *WSL2 ]]; then
-        # for WSL2
-        DISPLAY=$(grep nameserver </etc/resolv.conf | awk '{print $2}'):0.0
+    read -r _osrelease </proc/sys/kernel/osrelease 2>/dev/null || _osrelease=""
+    if [[ "$_osrelease" == *WSL2 ]]; then
+        # for WSL2 (外部プロセスを起こさず resolv.conf の最初の nameserver を読む)
+        _ns=""
+        while read -r _key _val _; do
+            if [[ "$_key" == nameserver ]]; then
+                _ns="$_val"
+                break
+            fi
+        done </etc/resolv.conf
+        DISPLAY="${_ns}:0.0"
+        unset _ns _key _val
     else
         # for WSL1
         DISPLAY=:0.0
     fi
+    unset _osrelease
     export DISPLAY
 fi
 
@@ -65,11 +80,7 @@ export GTK_IM_MODULE=fcitx
 export QT_IM_MODULE=fcitx
 export XMODIFIERS=@im=fcitx
 export DefaultIMModule=fcitx
-
-if [[ "$SHLVL" = 1 ]]; then
-    (fcitx-autostart >/dev/null 2>&1 &)
-    xset -r 49 >/dev/null 2>&1
-fi
+# fcitx-autostart / xset は対話シェルだけ (shellrc.sh.tmpl)
 
 #-----#
 # dev #

@@ -21,6 +21,12 @@ function open() {
         fi
     fi
 }
+
+# fcitx / キーリピート設定 (wslenv.sh から移動。起動は対話の最上位シェルだけ)
+if [[ "$SHLVL" = 1 ]]; then
+    (fcitx-autostart >/dev/null 2>&1 &)
+    xset -r 49 >/dev/null 2>&1
+fi
 {{-   else }}
 alias pbcopy='xsel --clipboard --input'
 alias pbpaste='xsel --clipboard --output'

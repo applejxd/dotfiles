@@ -10,12 +10,16 @@
 # Microsoft.PowerShell.{Management,Utility} と Get-Command を使わない。
 # いずれも初回呼び出しで 0.25 秒前後かかり、起動時間を支配するため。
 
-# エンコーディングを US-ASCII から変更
+# 子プロセス出力の読み書きは非対話でも UTF-8 に揃える。
+# *:Encoding も非対話で要る (外すと 5.1 の既定 UTF-16LE / ANSI に戻る)。
 # see https://dattesar.com/powershell-utf8/
 $PSDefaultParameterValues['*:Encoding'] = 'utf8'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-[Console]::InputEncoding = $utf8NoBom
-[Console]::OutputEncoding = $utf8NoBom
+# 端末の無い起動では Console への代入が例外になる host がある
+try {
+  [Console]::InputEncoding = $utf8NoBom
+  [Console]::OutputEncoding = $utf8NoBom
+} catch {}
 $OutputEncoding = $utf8NoBom
 
 {{ includeTemplate "powershell/git-config-env.ps1" }}
@@ -98,28 +102,6 @@ Add-EnvPathEntry "$env:LocalAppData\Programs\oh-my-posh\bin"
 
 Remove-DuplicateEnvPathEntry
 
-#--------------------#
-# alias / 補助コマンド #
-#--------------------#
-
-# Set-Alias は Microsoft.PowerShell.Utility の読み込みを伴うため関数で代用する。
-# pbcopy はパイプライン入力が本体なので $input で明示的に渡す
-# (エイリアスと違い、関数は既定では標準入力を子プロセスへ引き継がない)。
-function open { explorer.exe @args }
-function pbcopy { $input | clip.exe }
-function pbpaste { Get-Clipboard @args }
-function relogin { & (Get-Process -Id $PID).Path -NoExit }
-function explorer-restart { Stop-Process -Name explorer -Force; Start-Process explorer }
-
-# `chezmoi cd` that keeps the current shell session
-function ccd { Set-Location (chezmoi source-path) }
-
-# 定義するだけならコマンドの有無を調べる必要はなく、Get-Command の探索も避けられる
-. "$PSScriptRoot/commands/wsl.ps1"
-. "$PSScriptRoot/commands/pwgen.ps1"
-. "$PSScriptRoot/commands/docker.ps1"
-. "$PSScriptRoot/commands/fzf.ps1"
-
 # see https://github.com/junegunn/fzf/wiki/Windows
 $env:FZF_DEFAULT_OPTS = '--reverse --border'
 
@@ -163,6 +145,24 @@ if (
 ) {
   return
 }
+
+# Set-Alias は Microsoft.PowerShell.Utility の読み込みを伴うため関数で代用する。
+# pbcopy はパイプライン入力が本体なので $input で明示的に渡す
+# (エイリアスと違い、関数は既定では標準入力を子プロセスへ引き継がない)。
+function open { explorer.exe @args }
+function pbcopy { $input | clip.exe }
+function pbpaste { Get-Clipboard @args }
+function relogin { & (Get-Process -Id $PID).Path -NoExit }
+function explorer-restart { Stop-Process -Name explorer -Force; Start-Process explorer }
+
+# `chezmoi cd` that keeps the current shell session
+function ccd { Set-Location (chezmoi source-path) }
+
+# 定義するだけならコマンドの有無を調べる必要はなく、Get-Command の探索も避けられる
+. "$PSScriptRoot/commands/wsl.ps1"
+. "$PSScriptRoot/commands/pwgen.ps1"
+. "$PSScriptRoot/commands/docker.ps1"
+. "$PSScriptRoot/commands/fzf.ps1"
 
 # テーマ
 $poshTheme = if ($env:POSH_THEMES_PATH) {

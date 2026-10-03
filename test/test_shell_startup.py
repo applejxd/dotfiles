@@ -244,3 +244,139 @@ def test_zpack_failure_leaves_no_temp_file(zpack, tmp_path):
     done = zpack("src", "out.tar.zst", ZPACK_LEVEL="1", PATH=f"{fake}:{os.environ['PATH']}")
     assert done.returncode != 0
     assert sorted(p.name for p in zpack.work.iterdir()) == ["src"]
+
+
+# ---- ROS setup の選び方 ----
+
+
+def _ros_func(path: Path) -> str:
+    m = re.search(r"^__ros_pick\(\) \{.*?^\}\n", path.read_text(encoding="utf-8"), re.S | re.M)
+    assert m, f"__ros_pick が {path} に無い"
+    return m.group(0)
+
+
+_ROS_SHELLS = {
+    "bash": ("bash", ROOT / "home" / "dot_bashrc", "printf '%s\\n' \"$_ros_setup\""),
+    "zsh": (
+        "zsh",
+        ROOT / "home" / "dot_zshrc.d" / "20_external_envs.zsh",
+        'print -r -- "$_ros_setup"',
+    ),
+}
+
+
+@pytest.fixture(params=list(_ROS_SHELLS))
+def ros(request, home, tmp_path):
+    """偽の ROS ルートで __ros_pick を呼び、選ばれた setup の「ルートからの相対パス」を返す。"""
+    shell, path, show = _ROS_SHELLS[request.param]
+    exe = _zsh() if shell == "zsh" else shell
+    root = tmp_path / "ros"
+    root.mkdir()
+
+    def pick(**extra: str) -> str:
+        script = _ros_func(path) + f'\n__ros_pick "$1"\n{show}\n'
+        done = run([exe, "-c", script, "x", str(root)], home, **extra)
+        assert done.returncode == 0 and done.stderr == "", done.stderr
+        return done.stdout.strip().removeprefix(f"{root}/")
+
+    def make(*names: str) -> None:
+        for n in names:
+            (root / n).mkdir()
+            (root / n / f"setup.{shell}").write_text("", encoding="utf-8")
+
+    pick.make = make
+    pick.root = root
+    pick.shell = shell
+    return pick
+
+
+def test_ros_empty_root_selects_nothing(ros):
+    assert ros() == ""
+
+
+def test_ros_single_distro_is_selected(ros):
+    ros.make("humble")
+    assert ros() == f"humble/setup.{ros.shell}"
+
+
+def test_ros_multiple_without_distro_selects_nothing(ros):
+    ros.make("humble", "jazzy")
+    assert ros() == ""
+
+
+def test_ros_distro_is_preferred(ros):
+    ros.make("humble", "jazzy")
+    assert ros(ROS_DISTRO="humble") == f"humble/setup.{ros.shell}"
+
+
+def test_ros_unknown_distro_falls_back_to_single(ros):
+    ros.make("humble")
+    assert ros(ROS_DISTRO="nope") == f"humble/setup.{ros.shell}"
+
+
+def test_ros_dir_without_setup_is_ignored(ros):
+    (ros.root / "empty").mkdir()
+    assert ros() == ""
+
+
+def test_bashrc_leaves_no_ros_residue(home):
+    """/opt/ros が無い・あっても非対話で、変数・関数・出力を残さない。"""
+    script = (
+        "source ~/.bashrc; declare -F __ros_pick; compgen -v | grep -x -e ros_dir -e _ros_setup"
+    )
+    done = run(["bash", "--noprofile", "--norc", "-c", script], home)
+    assert done.stdout == "" and done.stderr == ""
+
+
+# ---- mise の shims (非対話でも mise のツールを cwd の版で解決させる) ----
+
+_SHELLS = {
+    "zsh": lambda: [_zsh(), "-c", 'print -r -- "$PATH"'],
+    "login-bash": lambda: ["bash", "-lc", 'printf "%s\\n" "$PATH"'],
+}
+
+
+@pytest.fixture(params=list(_SHELLS))
+def shims_path(request, home, tmp_path):
+    """MISE_DATA_DIR を一時ディレクトリへ向け、起動後の PATH 要素のリストを返す関数を渡す。"""
+    data = tmp_path / "mise-data"
+
+    def path_of(
+        *, make: bool = True, path: str = "/usr/bin:/bin", **extra: str
+    ) -> tuple[str, list[str]]:
+        if make:
+            (data / "shims").mkdir(parents=True, exist_ok=True)
+        done = run(_SHELLS[request.param](), home, MISE_DATA_DIR=str(data), PATH=path, **extra)
+        assert done.returncode == 0, done.stderr
+        return str(data / "shims"), done.stdout.strip().split(":")
+
+    return path_of
+
+
+def test_shims_are_first_and_unique(shims_path):
+    shims, entries = shims_path()
+    assert entries[0] == shims
+    assert entries.count(shims) == 1
+
+
+def test_shims_inherited_in_path_are_moved_to_front_without_duplicates(shims_path, tmp_path):
+    shims = str(tmp_path / "mise-data" / "shims")
+    inherited = f"/opt/x:{shims}:/usr/bin:{shims}:{shims}:/bin"
+    _, entries = shims_path(path=inherited)
+    assert entries[0] == shims
+    assert entries.count(shims) == 1
+    assert entries.index("/opt/x") < entries.index("/usr/bin")  # 他の要素の順序は保つ
+
+
+def test_venv_bin_stays_ahead_of_shims(shims_path, tmp_path):
+    shims = str(tmp_path / "mise-data" / "shims")
+    venv = str(tmp_path / "venv")
+    _, entries = shims_path(path=f"{venv}/bin:/usr/bin:{shims}", VIRTUAL_ENV=venv)
+    assert entries.index(f"{venv}/bin") < entries.index(shims)
+    assert entries.index(shims) < entries.index("/usr/bin")
+    assert entries.count(shims) == 1
+
+
+def test_no_shims_dir_leaves_path_alone(shims_path, tmp_path):
+    shims, entries = shims_path(make=False)
+    assert shims not in entries

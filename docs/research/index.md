@@ -66,6 +66,8 @@
 | [Copilot の開発ツール自動許可の実効権限](agents/copilot-dev-tool-access-grants.md) | dev-tool access ON 時の取りこぼし・RO 上書き、ヘッダが見えない粒度、PATH の bin が RO、mise の latest が消える |
 | [Copilot sandbox の既定の許可範囲](agents/copilot-sandbox-default-policy.md) | `/sandbox policy` の表示、$HOME は未許可、存在しないパスの deny 10 件中 3 件が効かない |
 | [compaction 関連の hook 仕様](agents/compaction-hooks.md) | 記録 E1–E7。圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測（Claude / Copilot の hook は 2026-09-25 に撤去） |
+| [エージェントの git 入力待ちを防ぐ環境変数](agents/noninteractive-git-env.md) | 2026-10-03。OpenCode V2 の `ctx.shell.hook("create.before")` で子シェルの環境を `??=` で足せる実測、ocs は `inner_env` に足せる、`GIT_TERMINAL_PROMPT=0` は TTY があるときだけ効く、`GIT_EDITOR=false` で `rebase -i` が即失敗（`git commit` と分岐した merge は権限で測れず） |
+| [秘密ファイル一覧のずれと直下以外の `.env`](agents/secret-file-lists.md) | 2026-10-03。hook の `tables.toml` にあって `read_deny_globs` に無かった資格情報・履歴 15 件、`.env` が `**/` 無しで直下以外は ask 止まりだった実測と、`**/` 化後の deny |
 
 ### OpenCode 全般
 
@@ -99,6 +101,7 @@
 | [カスタムエージェント(Bypass)とキーバインド](opencode/permission/bypass-agent.md) | opencode.jsonのkeybindsが除去される実証（cli.json では効く）、modeではなくagentで実装する、permission="allow"の展開、bypassが外す防御の範囲、bypass からだけ呼べる子と承認制の子の除外（deny した子は一覧から消える） |
 | [sandboxはあるか](opencode/permission/sandbox.md) | 組み込みsandboxが無いことの確認、shell差し替えでbwrapを被せる実測とその限界、プロセスごと隔離の実証、常駐サービス経由の脱出、snapが動かない、採用時の検討事項 |
 | [hookの呼ばれ方とactionの種類](opencode/permission/hook-order.md) | execute.beforeが評価より前に走る実測、external_directoryが別actionで立つ、誘導のdenyは確認を出さない、evaluateにagentが載る、差し替えが評価へ波及する、配備と計装の手順 |
+| [静的 deny の pip を execute.before で説明付きに止める](opencode/permission/early-guard.md) | execute.before が静的 deny より先に走り、例外のメッセージ（uv への誘導）がモデルへ届く。plugin 無し・rules.json 破損では静的 deny が止める。ocs 相当・`--auto` でも止まり bypass は通す。誤検知（`uv pip`・`echo`・`git commit -m`）なし、並列の他呼び出しは動く |
 | [作業ツリーの外の読み取りとスキルのスクリプト](opencode/permission/external-read-and-skill-scripts.md) | スキルのスクリプトで出ていたのは shell の ask だけ、引数のパスから external_directory は立たない、開けた場所の edit と秘密の deny、コマンド置換は別 resource・引用符は残る、git が fsmonitor を起動、`uv run --no-project` が `.python-version` の実行ファイルを起動 |
 | [段階2配備後の被覆率](opencode/permission/stage2-coverage.md) | 実履歴1,031呼び出しでの実測、秘密へ触れた15件を3層が全件受け止める、誘導後も87%が確認、伏字化の誤爆0.3%、内容の形とパス判定は両方要る |
 
@@ -124,6 +127,7 @@
 | 文書 | 内容 |
 | --- | --- |
 | [PowerShell プロファイルの起動時間](shell/powershell-profile-startup.md) | pwsh 1420→510 ms などの中央値、cmdlet の初回呼び出しの遅さ、oh-my-posh キャッシュを外した後は未計測 |
+| [非対話シェルで mise の shims を使う](shell/mise-shims-resolution.md) | 2026-10-03。shims を先頭側に置くと cwd の `mise.toml` に従う、`activate` 済み PATH の継承は版が固定される、未 trust はエラー終了で待たない、venv が先なら venv が勝つ、shim は約 40 ms/回 |
 | [zenoとzsh-autosuggestionsの連携](shell/zeno-autosuggestions-integration.md) | 2026-05-12〜13。widget競合の原因、ロード順、回避策 |
 
 [ドキュメント一覧へ戻る](../index.md)
