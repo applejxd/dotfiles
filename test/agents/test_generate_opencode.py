@@ -967,7 +967,7 @@ def test_guide_rules_are_generated():
     rules_json = gen.build_opencode_guide({}, COMMON)["guide"]
     assert rules_json, "誘導規則が 1 件も無い"
     for rule in rules_json:
-        assert set(rule) <= {"pattern", "message", "unless"}
+        assert set(rule) <= {"pattern", "message", "unless", "early"}
         re.compile(rule["pattern"])
         if "unless" in rule:
             re.compile(rule["unless"])

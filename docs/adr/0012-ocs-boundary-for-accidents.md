@@ -6,6 +6,10 @@
 
 > **ステータスの変更（2026-09-29）**: Proposed → Accepted。利用者が内容を確認して同意した。
 > 実装は [CHG-0009](../change/closed/0009-ocs-simplify-for-accidents.md) で進める。
+>
+> **部分改定（2026-10-03）**: 「境界の内側では rm 等を確認しない」のうち、危険な `rm` / `find` の
+> 具体例と `pip` を [ADR-0013](0013-opencode-shell-guard-inside-ocs.md) で止める形に改めた。
+> それ以外の決定は有効。以下の本文は決定当時のまま残している。
 
 ## コンテキスト
 

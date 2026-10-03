@@ -650,6 +650,24 @@ plugin が守る規約は 2 つ。
 ことも技術的には可能だが採らない。誘導が誤爆したときの逃げ道を残すほうが
 重要で、`bypass` は「秘密を読むために一時的に全部外す」用途も兼ねるため。
 
+#### shell ツールの環境変数（git を入力待ちにさせない）
+
+`index.js` は `shell.create.before` で、シェルツールの子プロセスへ次を**未設定のときだけ**
+（`??=`）入れる。人の対話シェルには届かない。
+
+| 変数 | 防ぐもの |
+| --- | --- |
+| `GIT_TERMINAL_PROMPT=0` | TTY が付く経路での資格情報の入力待ち |
+| `GIT_EDITOR=false` | `-m` 無しの `git commit`・`rebase -i` などのエディタ起動待ち |
+| `GCM_INTERACTIVE=never` | Git Credential Manager の対話（GCM が無ければ無害） |
+
+- 値は `index.js` の `NONINTERACTIVE_ENV` 1 か所。`ocs` の `inner_env` には足さない
+  （隔離版の内側も同じ `index.js` を読む）。空文字は設定済みとして残す
+- 入れないもの: `GIT_SSH_COMMAND`（git 設定の SSH 指定と衝突）、`EDITOR=true`（成功の偽装）、
+  `GIT_SEQUENCE_EDITOR`
+- plugin のロード失敗（fail-open）や `rules.json` が全部無効で `index.js` を載せない設定では効かない
+- 実測は [E1](../research/agents/noninteractive-git-env.md)。試験は `test_guide_shell_env.py`
+
 #### `rules.json` が使えないとき
 
 plugin のロード（モジュールの評価と `setup`）が例外で失敗すると、OpenCode は

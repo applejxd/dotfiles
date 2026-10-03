@@ -40,6 +40,7 @@ const compiled =
       // 除外条件。pattern に当たっても unless に当たれば見送る。
       unless: g.unless ? new RegExp(g.unless) : null,
       message: g.message,
+      early: g.early === true,
     })),
   ) ?? []
 
@@ -249,14 +250,43 @@ function describer(ctx) {
   }
 }
 
+// シェルツールの子プロセスへ、未設定のときだけ入れる (git を入力待ちにさせない)。
+// 人の対話シェルには届かない。see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
+const NONINTERACTIVE_ENV = {
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_EDITOR: "false",
+  GCM_INTERACTIVE: "never",
+}
+
 export default {
   id: "guide",
   async setup(ctx) {
     const raw = new Map()
     const describe = describer(ctx)
 
+    // ★ここで投げるとロードごと失敗する。API が無い版では何もしない。
+    try {
+      await ctx.shell?.hook("create.before", (e) => {
+        if (!e.env) return
+        for (const [k, v] of Object.entries(NONINTERACTIVE_ENV)) e.env[k] ??= v
+      })
+    } catch (err) {
+      console.error(`[guide] shell フックを登録できない: ${err}`)
+    }
+
     await ctx.tool.hook("execute.before", (e) => {
-      if (e.tool === "shell") raw.set(e.id, e.input?.command ?? "")
+      if (e.tool !== "shell") return
+      const command = e.input?.command ?? ""
+      raw.set(e.id, command)
+      // early 規則は静的 deny の前に例外で止める (静的 deny は evaluate に届かず説明を付けられない)。
+      // see docs/research/opencode/permission/early-guard.md
+      if (bypass.has(e.agent)) return
+      for (const rule of compiled) {
+        if (!rule.early || !rule.re.test(command)) continue
+        if (rule.unless && rule.unless.test(command)) continue
+        raw.delete(e.id)
+        throw new Error(rule.message)
+      }
     })
 
     await ctx.permission.hook("evaluate", async (e) => {

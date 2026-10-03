@@ -1032,8 +1032,10 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     return rules
 
 
-def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, str]]:
+def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
     """誘導 plugin が読む判定表 (``rules.json``)。
+
+    ``early = true`` の規則は ``tool.execute.before`` でも判定する (静的 deny の前に止める)。
 
     ``unless`` は任意。``pattern`` に当たっても ``unless`` に当たれば見送る。
     除外条件を ``pattern`` へ畳み込むと読めない正規表現になるため分けている。
@@ -1047,6 +1049,8 @@ def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, str]]:
         unless = rule.get("unless")
         if unless:
             entry["unless"] = unless
+        if rule.get("early") is True:
+            entry["early"] = True
         out.append(entry)
     return out
 

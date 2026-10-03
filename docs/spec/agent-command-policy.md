@@ -142,6 +142,18 @@ world-readable な `passwd` / `group` は書き込み先のときだけ deny と
 MCP へトークンを渡すときは設定ファイルに直書きせず、環境変数や
 `gh auth token` のような外部の資格情報ストアを経由させる。
 
+## 秘密ファイル一覧の対応
+
+Bash hook の `bashrules/tables.toml`（`credential_paths` / `history_basenames`）に
+あるファイルは、`[file] read_deny_globs` にも置く。置かないと Read ツール・
+OpenCode の read・Copilot の `check_file_read.py` から読める。対応は
+`test/agents/test_secret_lists_in_sync.py` が固定するので、`tables.toml` へ足したら
+`read_deny_globs` にも足す。
+
+`.env` は `**/.env`（deny）・`**/.env.*`（ask）と書く。`**/` が無いと OpenCode の
+resource は直下にしか当たらず、`app/.env` は OpenCode 既定の ask 止まりになる
+（実測: [秘密ファイル一覧のずれ](../research/agents/secret-file-lists.md)）。
+
 ## 秘密の環境変数
 
 `check_secret_env_echo` は、値が**出力先へ流れる**ときだけ deny する。
@@ -290,6 +302,45 @@ deny 側は `check_rm_root_guard` が担う。作業ディレクトリ全体と 
 ブレース展開も対象にする。
 `.` は `find . -delete` のような探索起点としては正当なので、
 判定は `rm` 側にだけ置き `_is_catastrophic_rm_target` には入れない。
+
+## OpenCode の pip 誘導と rm の誘導
+
+OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生のコマンド文字列への
+正規表現で deny と誘導文を返す。Claude / Copilot の hook（上の `check_rm_root_guard`
+など）とは別実装で、**止める具体例だけ**に限る（決定は
+[ADR-0013](../adr/0013-opencode-shell-guard-inside-ocs.md)）。
+
+> [!WARNING]
+> **うっかり防止であり、完全な保護ではない。** 正規表現は変数・サブシェル・
+> `sudo` / `command` 等の前置・スクリプト経由・別名を見ない。bypass エージェントは対象外で、
+> `rules.json` が読めないと効かない。止めたいときの本命は境界（ocs）と退避である。
+
+| 規則 | 止める例 | 止めない例 |
+| --- | --- | --- |
+| pip | `pip install x`, `pip3 ...`, `python -m pip ...`, `python3 -mpip ...`, `uv run python -m pip ...` | `uv pip install x`, `poetry add`, `pipenv install`, `echo "pip install"` |
+| `.git` | `rm -rf .git`, `rm -rf .git/objects`, `rm f sub/.git/HEAD` | `rm .gitignore`, `rm -rf .github`, `git rm file` |
+| `~` / `$HOME` / `/` | `rm -rf ~`, `~/`, `$HOME`, `"$HOME"`, `/`, `/*` | `rm -rf ~/.cache/x`, `rm -rf /tmp/x` |
+| 作業ディレクトリ全体 | 再帰フラグ付きの `.` / `..` / `*` / `./` / `.*` | `rm -rf .tmp/x`, `./build`, `node_modules`, `build/*`, `rm -f *.pyc` |
+| `find` | `/` `~` `$HOME` `.git` を起点にした `-delete` / `-exec rm` | `find . -name '*.pyc' -delete`, `find .tmp -delete`, `find /tmp/x -delete` |
+
+- pip の誘導先は目的で分ける（依存追加は `uv add`、環境への導入は `uv pip install` / `uv sync`、
+  単発 CLI は `uvx`）。poetry / pipenv は止めない
+- 規則は行頭・`;` `&` `|` 改行の直後のコマンドにだけ当てる。引用中の文（`echo "rm -rf ."`）や
+  `grep -r 'rm -rf' .` は止めない。`git commit -m` の本文は既存規則と同じ `unless` で外す
+  （`-m` の後ろの `;` 以降に書いた文章は素通りする。承知の穴）
+- **ocs の内側にも効く。** `ocs` が捨てるのは permission（`drop_shell`）で guide 規則ではなく、
+  同じ `rules.json` を plugin が読む。permission を捨てて既定 allow にした設定でも、
+  上の例が deny されることを実機（`opencode:probe`）で確認した
+- **静的 deny の pip にも前段で誘導文を付ける。** 通常版の `pip` / `pip3` は共通 deny
+  （`[bash]` の deny から生成）で、静的 deny の呼び出しは plugin の `evaluate` に届かず、
+  そのままだと `Permission denied: shell` のみになる。そこで pip の規則に `early = true` を付け、
+  plugin が `tool.execute.before`（permission より前に走る）で同じ `pattern` / `unless` を判定し、
+  当たれば例外を投げて `message` をモデルへ届ける。静的 deny は変えないので、plugin が無い・
+  `rules.json` が壊れているときは従来どおり静的 deny が止める。bypass エージェントは止めない。
+  実機で確認した（[記録](../research/opencode/permission/early-guard.md)）。前段で止めるのは
+  `early` を付けた規則だけで、他の規則は従来どおり `evaluate` で判定する
+- 検査は `test/agents/test_guide_pip_rm.py`（止める例と止めない例の両方を、生成した
+  `rules.json` を plugin に通して判定する）と、前段の停止を見る `test/agents/test_guide_early_pip.py`
 
 ## 使い捨てディレクトリ (`./.tmp`) の削除
 
