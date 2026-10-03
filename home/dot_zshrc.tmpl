@@ -1,6 +1,16 @@
 #!/bin/zsh
 # .zshenv>.zprofile>.zshrc>.zlogin
 
+[[ -o interactive ]] || return 0
+
+# /etc/zsh/zshrc は no_global_rcs (.zshenv) で自動読込されないためここで読む
+if [[ -e /etc/zsh/zshrc ]]; then
+    # skip_global_compinit=1: システム側の compinit を抑制し手動で明示的に実行
+    # (fpath が不完全な状態で実行され .zcompdump が壊れたシンボリックリンクをスキャンするため)
+    skip_global_compinit=1
+    source /etc/zsh/zshrc
+fi
+
 # Emacs mode
 bindkey -e
 

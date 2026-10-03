@@ -496,6 +496,44 @@ PowerShell なら `Get-Command herdr` を確認し、mise の実体または shi
 削除するか、mise の shim が先に見つかるよう PATH を整理します。
 Herdr のユーザーデータ・設定は削除しません。
 
+## シェルの起動契約
+
+シェルの主な利用者は AI エージェントである。OpenCode は `/usr/bin/zsh` を
+非対話・非 TTY で起動し、`.zshenv` だけが読まれる。そのため、どのファイルが
+どの起動形態で読まれるかを次のとおり固定する。
+
+| ファイル | 読まれる起動 | 置いてよいもの |
+| --- | --- | --- |
+| `.zshenv` / `.bash_profile` / `~/.config/shell/shellenv.sh` | 全シェル | PATH と環境変数だけ |
+| `.bashrc` のガード前 | 全 bash | `mise activate` と ROS の `setup.bash`（PATH のため） |
+| `.zshrc`（先頭の `[[ -o interactive ]] \|\| return 0` の後）、`.bashrc` のガード後、`shellrc.sh` | 対話シェル | alias・関数・キー設定・補完・プラグイン・出力 |
+
+`.zshrc` の冒頭は `/etc/zsh/zshrc` の読み込みも含む（`.zshenv` の `no_global_rcs`
+で自動では読まれないため、対話のときだけ読む）。
+
+方針:
+
+1. 全シェル共通 env には alias・関数・出力・キー設定を置かない。
+2. 対話判定は zsh の `[[ -o interactive ]]`、bash の `$-` で行う。TTY の有無は
+   表示用の補助にとどめ、環境変数を並べて「人間か」を推測する判定は採らない。
+3. 標準コマンドの意味を変える alias（`cat=bat`、`ls=eza`、`diff=colordiff`、
+   `vi` / `vim` / `agent` など）は対話 rc（`shellrc.sh`）だけに置く。
+4. 呼び出し元が明示した `LC_ALL` / `LANG` / `EDITOR` / `VISUAL` は上書きしない。
+   未設定のときだけ既定値を決める。自動実行は入力待ちで止まらないようにするが、
+   `EDITOR=true` のように成功を偽装する値は採らない。
+5. 関数内の失敗は `exit` ではなく `return` で抜ける（`ccd` / `jcd` / `cdf`）。
+   `zpack` は既存の出力先を上書きせず、一時ファイル経由で成功したときだけ移す。
+
+参考にした記事（tellme.tokyo の AI-first dotfiles）のうち、Nix 化・`rm` を `gomi`
+に差し替える alias・`is_human` による人間判定は採らない。それぞれ、導入物の管理を
+mise に統一している方針と合わない、標準コマンドの意味を変えない方針（3）と
+合わない、判定を環境変数の列挙に頼るため（2）である。
+
+検査は `test/test_shell_startup.py`（非対話 zsh / login bash の alias・環境変数・
+出力、`.zshrc` の早期 return、`shellenv.sh` 単体、`zpack`）。一時 HOME に描画結果を
+置いて実行し、zinit・mise・fzf・ネットワークは使わない。実機の対話シェルの
+起動（プロンプトまで）は検査しない。
+
 ## シェルプラグインの取得
 
 シェルの rc が読み込むプラグインのうち、下の表の 5 項目は起動時ではなく

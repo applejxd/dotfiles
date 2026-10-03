@@ -19,7 +19,7 @@
 
 | 文書 | 内容 |
 | --- | --- |
-| [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoiスクリプトの順序、対応OS、chezmoi 本体の導入、gh / Herdrのmise管理、AI CLIの公式インストーラーでの導入、oh-my-pi の設定、個人用カスタム指示の共有 |
+| [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoiスクリプトの順序、対応OS、chezmoi 本体の導入、gh / Herdrのmise管理、AI CLIの公式インストーラーでの導入、oh-my-pi の設定、シェルの起動契約、個人用カスタム指示の共有 |
 | [開発ガイド](development.md) | 環境の準備、変更の種類ごとの検証、Windows 実機での検証、スクリプトの追加 |
 | [テストと検証の仕組み](testing.md) | Docker ハーネスのモード・環境変数・判定の契約、GitHub Actions で見ている範囲、既知の未達 |
 | [セキュリティ](security.md) | 秘密情報の保護対象・脅威と、Bitwarden / sops の方式の理由 |

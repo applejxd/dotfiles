@@ -5,13 +5,6 @@
 # see http://karur4n.hatenablog.com/entry/2016/01/18/100000
 setopt no_global_rcs
 
-if [[ -e /etc/zsh/zshrc ]]; then
-    # skip_global_compinit=1: システム側の compinit を抑制し手動で明示的に実行
-    # (fpath が不完全な状態で実行され .zcompdump が壊れたシンボリックリンクをスキャンするため)
-    skip_global_compinit=1
-    source /etc/zsh/zshrc
-fi
-
 #-----------------------#
 # Environment variables #
 #-----------------------#
