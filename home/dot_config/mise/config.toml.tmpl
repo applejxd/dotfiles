@@ -21,6 +21,9 @@ bat = "latest"
 eza = "latest"
 jj ="latest"
 ripgrep = "latest"
+{{- if eq .chezmoi.os "darwin" }}
+jq = "latest" # hook (dot_claude/hooks/lib/agent_compat.sh) が使う。Linux は apt、Windows は winget
+{{- end }}
 "aqua:dylanaraps/neofetch" = "latest"
 
 # TUI
