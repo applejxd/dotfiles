@@ -7,6 +7,12 @@
 > 素通りさせたため、エージェント名で見分ける方式へ改めた
 > （[hook の呼ばれ方 5 章](hook-order.md#5-evaluate-のイベントに-agent-が載る)）。
 >
+> **後続の観測（2026-10-03）**: `bypass` は「permission 層を丸ごと無効にする」ものでは
+> なくなった。全 allow を外し、plugin が `ask` だけを `allow` に書き換える方式が
+> 成立し（[実測](bypass-ask-upgrade.md)）、採用した
+> （[ADR-0014](../../../adr/0014-bypass-as-ask-upgrade.md)）。以下の本文（特に 0・5 章の
+> 「全 allow」「plugin を貫通する」「誘導を素通りする」）は決定当時のまま残している。
+>
 > **現行の仕様**: [キーバインド](../../../spec/agent-config-generation.md#キーバインド)、
 > [plugin 層](../../../spec/agent-config-generation.md#plugin-層-guide-plugin)
 >

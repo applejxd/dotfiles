@@ -87,6 +87,7 @@ def test_read_allow_has_no_wildcards():
 # build_claude_sandbox() — whitelist (deny-by-default)
 # ---------------------------------------------------------------------------
 
+
 def test_build_claude_sandbox_enabled():
     assert gen.build_claude_sandbox(COMMON)["enabled"] is True
 
@@ -94,9 +95,7 @@ def test_build_claude_sandbox_enabled():
 def test_claude_deny_read_starts_with_home_to_be_whitelist():
     # ホーム全体を塞いでから allowRead で穴を開ける構成であること。
     fs = gen.build_claude_sandbox(COMMON)["filesystem"]
-    assert fs["denyRead"][0] == "~/", (
-        "denyRead の先頭が '~/' でない = whitelist になっていない"
-    )
+    assert fs["denyRead"][0] == "~/", "denyRead の先頭が '~/' でない = whitelist になっていない"
 
 
 def test_claude_deny_read_contains_common_deny():
@@ -157,6 +156,7 @@ def test_build_claude_sandbox_empty_section():
 # ---------------------------------------------------------------------------
 # merge_claude_settings() への統合
 # ---------------------------------------------------------------------------
+
 
 def test_merge_claude_settings_includes_sandbox():
     merged = gen.merge_claude_settings({}, COMMON)
@@ -267,6 +267,7 @@ def test_merge_copilot_settings_includes_sandbox():
 # 両 CLI の整合 (whitelist モデルで揃っていること)
 # ---------------------------------------------------------------------------
 
+
 def test_both_clis_share_the_same_deny_source():
     # deny は共通。Copilot 側は wildcard を落とすだけの関係であること。
     claude = set(gen.build_claude_sandbox(COMMON)["filesystem"]["denyRead"])
@@ -281,6 +282,7 @@ def test_both_clis_share_the_same_deny_source():
 # ---------------------------------------------------------------------------
 # ローカル上書き (~/.config/agents/local.toml) — chezmoi 管理外
 # ---------------------------------------------------------------------------
+
 
 def _write_local(tmp_path: Path, body: str) -> Path:
     p = tmp_path / "local.toml"
@@ -336,9 +338,7 @@ def test_local_overlay_does_not_mutate_shared_common(tmp_path):
 
 def test_local_overlay_ignores_unknown_keys(tmp_path):
     # 想定外のキーで権限を広げられないこと (許可キーは LOCAL_SANDBOX_KEYS のみ)。
-    p = _write_local(
-        tmp_path, '[sandbox]\nenabled = false\ncopilot_deny_paths = ["/x"]\n'
-    )
+    p = _write_local(tmp_path, '[sandbox]\nenabled = false\ncopilot_deny_paths = ["/x"]\n')
     merged = gen.apply_local_overlay(COMMON, gen.load_local_overlay(p))
     assert "enabled" not in merged["sandbox"]
     assert "copilot_deny_paths" not in merged["sandbox"]
@@ -406,6 +406,7 @@ def test_secret_config_dirs_are_denied_even_though_config_is_allowed():
 # sandbox.network (Claude のみ)
 # ---------------------------------------------------------------------------
 
+
 def test_claude_sandbox_network_mirrors_web_allow_domains():
     network = gen.build_claude_sandbox(COMMON)["network"]
     # [web] の分は先頭に、[sandbox] shell_network_allow の分が後ろに続く
@@ -415,9 +416,7 @@ def test_claude_sandbox_network_mirrors_web_allow_domains():
 
 def test_claude_sandbox_network_omits_empty_denied_domains():
     # 空の deniedDomains を書くと意味が無いので出さない。
-    network = gen.build_claude_sandbox({"web": {"allow_domains": ["a.example"]}})[
-        "network"
-    ]
+    network = gen.build_claude_sandbox({"web": {"allow_domains": ["a.example"]}})["network"]
     assert "deniedDomains" not in network
 
 
@@ -435,8 +434,7 @@ def test_web_wildcards_are_sandbox_compatible():
         if "*" not in domain:
             continue
         assert domain == "*" or domain.startswith("*."), (
-            f"'{domain}' の wildcard は sandbox に効かない。"
-            "先頭の '*.' か単独の '*' だけが有効。"
+            f"'{domain}' の wildcard は sandbox に効かない。先頭の '*.' か単独の '*' だけが有効。"
         )
 
 
@@ -488,6 +486,7 @@ def test_network_allow_has_no_wildcards():
 # mise は独自ディレクトリへ隔離するため、公式の代替手段である
 # sandbox.seccomp.applyPath でパスを直接指す。
 
+
 def test_seccomp_arch_maps_known_machines():
     assert gen.seccomp_arch("x86_64") == "x64"
     assert gen.seccomp_arch("amd64") == "x64"
@@ -530,9 +529,7 @@ def test_build_seccomp_config_uses_existing_binary(tmp_path):
     binary.parent.mkdir(parents=True)
     binary.write_text("#!/bin/sh\n", encoding="utf-8")
     common = {"sandbox": {"seccomp_apply_path": str(tmp_path / "{arch}" / "apply-seccomp")}}
-    assert gen.build_seccomp_config(common, machine="x86_64") == {
-        "applyPath": str(binary)
-    }
+    assert gen.build_seccomp_config(common, machine="x86_64") == {"applyPath": str(binary)}
 
 
 def test_claude_sandbox_omits_seccomp_when_unavailable(tmp_path):
@@ -546,6 +543,7 @@ def test_claude_sandbox_omits_seccomp_when_unavailable(tmp_path):
 # ---------------------------------------------------------------------------
 # キー命名の規則
 # ---------------------------------------------------------------------------
+
 
 def test_sandbox_keys_are_known():
     unknown = set(COMMON["sandbox"]) - gen.KNOWN_SANDBOX_KEYS
@@ -589,11 +587,11 @@ def test_file_section_keys_follow_the_sharing_based_convention():
     """
     for key in COMMON["file"]:
         if key.startswith("claude_"):
-            assert key == "claude_read_allow", (
-                f"[file] の {key} は複数 CLI へ届くので接頭辞を外す"
-            )
+            assert key == "claude_read_allow", f"[file] の {key} は複数 CLI へ届くので接頭辞を外す"
         else:
-            assert key.endswith("_globs"), f"[file] に想定外の無印キー: {key}"
+            assert key.endswith("_globs") or key == "deny_exceptions", (
+                f"[file] に想定外の無印キー: {key}"
+            )
 
 
 def test_file_deny_globs_have_no_cli_prefix():
@@ -659,6 +657,7 @@ def test_absolute_sandbox_paths_stay_outside_home():
 # ---------------------------------------------------------------------------
 # Copilot の許可リスト
 # ---------------------------------------------------------------------------
+
 
 def test_copilot_sandbox_reads_only_the_copilot_keys():
     # 生成側が claude_* を誤って流用していないこと。
@@ -861,23 +860,27 @@ def test_copilot_allow_lists_absent_when_unconfigured():
 # local.toml の [[copilot.locations]]
 # ---------------------------------------------------------------------------
 
+
 def test_local_overlay_adds_a_new_location():
     common = {"copilot": {"locations": [{"path": "~/shared"}]}}
-    local = {"copilot": {"locations": [
-        {"path": "~/src/proj", "allowed_directories": ["/data1"]}]}}
+    local = {"copilot": {"locations": [{"path": "~/src/proj", "allowed_directories": ["/data1"]}]}}
     merged = gen.apply_local_overlay(common, local)
-    assert [loc["path"] for loc in merged["copilot"]["locations"]] == [
-        "~/shared", "~/src/proj"]
+    assert [loc["path"] for loc in merged["copilot"]["locations"]] == ["~/shared", "~/src/proj"]
 
 
 def test_local_overlay_merges_into_an_existing_location():
-    common = {"copilot": {"locations": [{
-        "path": "~/src/proj",
-        "approvals": [{"kind": "write"}],
-        "allowed_directories": ["/shared"],
-    }]}}
-    local = {"copilot": {"locations": [
-        {"path": "~/src/proj", "allowed_directories": ["/data1"]}]}}
+    common = {
+        "copilot": {
+            "locations": [
+                {
+                    "path": "~/src/proj",
+                    "approvals": [{"kind": "write"}],
+                    "allowed_directories": ["/shared"],
+                }
+            ]
+        }
+    }
+    local = {"copilot": {"locations": [{"path": "~/src/proj", "allowed_directories": ["/data1"]}]}}
     entry = gen.apply_local_overlay(common, local)["copilot"]["locations"][0]
     assert entry["allowed_directories"] == ["/shared", "/data1"]
     assert entry["approvals"] == [{"kind": "write"}]
@@ -886,21 +889,22 @@ def test_local_overlay_merges_into_an_existing_location():
 def test_local_overlay_does_not_mutate_shared_config():
     common = {"copilot": {"locations": [{"path": "~/src/proj"}]}}
     before = copy.deepcopy(common)
-    gen.apply_local_overlay(common, {"copilot": {"locations": [
-        {"path": "~/src/proj", "allowed_directories": ["/data1"]}]}})
+    gen.apply_local_overlay(
+        common,
+        {"copilot": {"locations": [{"path": "~/src/proj", "allowed_directories": ["/data1"]}]}},
+    )
     assert common == before
 
 
 def test_local_overlay_warns_about_location_without_path(capsys):
-    gen.apply_local_overlay(
-        {}, {"copilot": {"locations": [{"allowed_directories": ["/data1"]}]}})
+    gen.apply_local_overlay({}, {"copilot": {"locations": [{"allowed_directories": ["/data1"]}]}})
     assert "path" in capsys.readouterr().err
 
 
 def test_local_overlay_warns_about_unknown_location_keys(capsys):
     gen.apply_local_overlay(
-        {}, {"copilot": {"locations": [
-            {"path": "~/p", "denied_directories": ["/x"]}]}})
+        {}, {"copilot": {"locations": [{"path": "~/p", "denied_directories": ["/x"]}]}}
+    )
     assert "denied_directories" in capsys.readouterr().err
 
 
@@ -908,13 +912,19 @@ def test_local_overlay_warns_about_unknown_location_keys(capsys):
 # プロジェクト単位の追加許可 (allowed_directories)
 # ---------------------------------------------------------------------------
 
+
 def test_allowed_directories_are_scoped_to_one_location(tmp_path):
     data = tmp_path / "data1"
     data.mkdir()
-    common = {"bash": {"allow": []}, "copilot": {"locations": [
-        {"path": str(tmp_path / "proj"), "allowed_directories": [str(data)]},
-        {"path": str(tmp_path / "other")},
-    ]}}
+    common = {
+        "bash": {"allow": []},
+        "copilot": {
+            "locations": [
+                {"path": str(tmp_path / "proj"), "allowed_directories": [str(data)]},
+                {"path": str(tmp_path / "other")},
+            ]
+        },
+    }
     locations = gen.build_copilot_locations(common)["locations"]
     assert locations[str(tmp_path / "proj")]["allowed_directories"] == [str(data)]
     assert "allowed_directories" not in locations[str(tmp_path / "other")]
@@ -923,10 +933,17 @@ def test_allowed_directories_are_scoped_to_one_location(tmp_path):
 def test_allowed_directories_drop_paths_that_do_not_exist(tmp_path):
     real = tmp_path / "real"
     real.mkdir()
-    common = {"bash": {"allow": []}, "copilot": {"locations": [{
-        "path": str(tmp_path / "proj"),
-        "allowed_directories": [str(real), str(tmp_path / "missing")],
-    }]}}
+    common = {
+        "bash": {"allow": []},
+        "copilot": {
+            "locations": [
+                {
+                    "path": str(tmp_path / "proj"),
+                    "allowed_directories": [str(real), str(tmp_path / "missing")],
+                }
+            ]
+        },
+    }
     locations = gen.build_copilot_locations(common)["locations"]
     assert locations[str(tmp_path / "proj")]["allowed_directories"] == [str(real)]
 
@@ -949,20 +966,28 @@ SHARED = {
 
 
 def test_perms_merge_keeps_locations_the_cli_saved():
-    existing = {"locations": {"/other": {
-        "tool_approvals": [{"kind": "write"}],
-        "allowed_directories": ["/data1/other"],
-    }}}
+    existing = {
+        "locations": {
+            "/other": {
+                "tool_approvals": [{"kind": "write"}],
+                "allowed_directories": ["/data1/other"],
+            }
+        }
+    }
     out = gen.merge_copilot_perms(existing, SHARED)
     assert "/other" in out["locations"]
     assert out["locations"]["/other"]["allowed_directories"] == ["/data1/other"]
 
 
 def test_perms_merge_unions_approvals_in_the_same_location():
-    existing = {"locations": {"/repo": {
-        "tool_approvals": [{"kind": "commands", "commandIdentifiers": ["pytest"]}],
-        "allowed_directories": ["/data1"],
-    }}}
+    existing = {
+        "locations": {
+            "/repo": {
+                "tool_approvals": [{"kind": "commands", "commandIdentifiers": ["pytest"]}],
+                "allowed_directories": ["/data1"],
+            }
+        }
+    }
     out = gen.merge_copilot_perms(existing, SHARED)
     approvals = out["locations"]["/repo"]["tool_approvals"]
     assert {"kind": "commands", "commandIdentifiers": ["pytest"]} in approvals

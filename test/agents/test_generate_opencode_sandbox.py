@@ -43,6 +43,7 @@ def _out(tmp_path: Path) -> dict:
 # common.toml 側の構造
 # ---------------------------------------------------------------------------
 
+
 def test_sandbox_bare_keys_not_swallowed_by_subtable():
     """★ベアキーがサブテーブルに吸われていないこと。
 
@@ -51,8 +52,14 @@ def test_sandbox_bare_keys_not_swallowed_by_subtable():
     ``denyWrite`` が空になり、保護が黙って消える (実際に一度作り込んだ)。
     """
     for key in (
-        "runtime_path", "read", "work_read", "protected", "deny_read", "unsafe_workspace",
-        "control_dirs", "config_dir",
+        "runtime_path",
+        "read",
+        "work_read",
+        "protected",
+        "deny_read",
+        "unsafe_workspace",
+        "control_dirs",
+        "config_dir",
     ):
         assert key in SANDBOX, f"[opencode.sandbox].{key} が無い (サブテーブルに吸われた?)"
     for key in ("permissions", "policies"):
@@ -74,8 +81,12 @@ def test_control_dirs_cover_deployed_launcher_and_config(tmp_path):
     home = gen.expand_user("~")
     control = _out(tmp_path)["base"]["control_dirs"]
     for rel in (
-        ".local/share/ocs", ".local/bin", ".config/opencode", ".config/opencode-sandbox",
-        ".config/agents", ".local/state/opencode-sandbox",
+        ".local/share/ocs",
+        ".local/bin",
+        ".config/opencode",
+        ".config/opencode-sandbox",
+        ".config/agents",
+        ".local/state/opencode-sandbox",
     ):
         assert f"{home}/{rel}" in control, f"control_dirs に ~/{rel} が無い"
         assert f"~/{rel}" not in SANDBOX.get("unsafe_workspace", [])
@@ -136,6 +147,7 @@ def test_isolated_db_keys_are_gone():
 # 隔離版の permission
 # ---------------------------------------------------------------------------
 
+
 def _isolated() -> list[dict[str, str]]:
     return gen.build_opencode_sandbox_permissions(COMMON)
 
@@ -149,7 +161,8 @@ def test_isolated_flips_default_shell_to_allow():
 def test_normal_variant_keeps_ask_default():
     """★緩和が通常版へ波及していないこと。"""
     rules = [
-        r for r in gen.build_opencode_permissions(COMMON)
+        r
+        for r in gen.build_opencode_permissions(COMMON)
         if r["action"] == "shell" and r["resource"] == "*"
     ]
     assert rules[0]["effect"] == "ask", "通常版の既定まで緩んでいる"
@@ -176,13 +189,17 @@ def test_isolated_keeps_host_executed_code():
 def test_isolated_drops_unreachable_host_paths():
     """境界が到達させないホスト絶対パスは捨てること。
 
-    開けた場所 (work_read など) への edit の ask は到達できるので残す。
+    開けた場所 (work_read など) への edit の ask (例外と交差するものを含む) は到達できるので残す。
     """
-    opened = {f"{d}/*" for d in gen.opencode_external_read_dirs(COMMON)}
+    opened = tuple(f"{d}/" for d in gen.opencode_external_read_dirs(COMMON))
     dropped = [
-        r for r in _isolated()
-        if r["action"] in ("read", "edit") and r["resource"].startswith(("~/", "/etc/", "/home/"))
-        and not (r["action"] == "edit" and r["resource"] in opened)
+        r
+        for r in _isolated()
+        if r["action"] in ("read", "edit")
+        and r["resource"].startswith(("~/", "/etc/", "/home/"))
+        and not (
+            r["action"] == "edit" and r["effect"] == "ask" and r["resource"].startswith(opened)
+        )
     ]
     assert not dropped, f"到達できない規則が残っている: {dropped[:3]}"
 
@@ -197,6 +214,7 @@ def test_isolated_is_smaller_but_not_empty():
 # ---------------------------------------------------------------------------
 # policies
 # ---------------------------------------------------------------------------
+
 
 def test_policies_are_permission_denies():
     policies = gen.opencode_sandbox_policies(COMMON)
@@ -217,14 +235,21 @@ def test_policies_cover_apply_and_push():
 # 出力全体
 # ---------------------------------------------------------------------------
 
+
 def test_sandbox_output_shape(tmp_path):
     out = _out(tmp_path)
     for key in ("runtime_path", "base", "config_dir", "permissions"):
         assert key in out, f"{key} が出力に無い"
     assert "paths" not in out, "隔離用 DB の置き場が残っている"
     for key in (
-        "read", "work_read", "write", "deny_read", "unsafe_workspace", "control_dirs",
-        "protected", "network",
+        "read",
+        "work_read",
+        "write",
+        "deny_read",
+        "unsafe_workspace",
+        "control_dirs",
+        "protected",
+        "network",
     ):
         assert key in out["base"], f"base に {key} が無い"
     base = out["base"]
@@ -328,9 +353,7 @@ def test_protected_paths_are_not_filtered_by_existence(tmp_path):
 
 
 def test_isolated_loads_guide_plugin_for_redaction(tmp_path):
-    """境界はワークスペースの中を守らないので、伏字化が要る。
-
-    """
+    """境界はワークスペースの中を守らないので、伏字化が要る。"""
     out = _out(tmp_path)
     plugins = out.get("plugins") or []
     assert plugins, "隔離版に plugin が無い (伏字化が効かない)"
@@ -359,10 +382,13 @@ def test_isolated_guide_plugin_follows_the_shared_condition(tmp_path, role):
     runtime = tmp_path / "fence"
     runtime.write_text("", "utf-8")
     common, expected = ISOLATED_GUIDE_ROLES[role]
-    common = {**common, "opencode": {
-        **common.get("opencode", {}),
-        "sandbox": {"enabled": True, "runtime_path": str(runtime)},
-    }}
+    common = {
+        **common,
+        "opencode": {
+            **common.get("opencode", {}),
+            "sandbox": {"enabled": True, "runtime_path": str(runtime)},
+        },
+    }
     out = gen.opencode_sandbox(common)
     assert (gen.opencode_guide_plugin_path() in out["plugins"]) is expected
     assert out["plugins"][-1] == gen.opencode_checkpoint_plugin_path()
@@ -425,6 +451,7 @@ def test_system_prompt_mentions_enoent():
 # エージェント・コマンド (CHG-0010)
 # ---------------------------------------------------------------------------
 
+
 def _with_provider(tmp_path: Path, provider: str) -> dict:
     """この PC のプロバイダだけを差し替えた common で、隔離版の素材を作る。"""
     runtime = tmp_path / "fence"
@@ -448,7 +475,12 @@ def test_isolated_gets_the_same_agents_and_commands_as_common(tmp_path):
     out = _out(tmp_path)
     assert out["agent"] == gen.merge_opencode_agents({}, COMMON)
     assert {"bypass", "bypass-worker"} <= set(out["agent"])
-    assert gen._grants_everything(out["agent"]["bypass"])
+    assert "*" not in out["agent"]["bypass"]["permission"]
+    assert not any(
+        rule["action"] == "*" and rule["effect"] == "allow"
+        for agent in out["agents"].values()
+        for rule in agent.get("permissions", [])
+    )
     assert set(out["agents"]) == set(gen.opencode_v2_agents(COMMON))
     for name, agent in gen.opencode_v2_agents(COMMON).items():
         for key, value in agent.items():
@@ -463,11 +495,13 @@ def test_isolated_agents_are_not_taken_from_the_normal_config():
     生成器は rules.json の既存しか受け取らない。既存の ``sandbox`` 節に何が
     残っていても、common.toml から作り直す。
     """
-    stale = {"sandbox": {
-        "agent": {"handmade": {"permission": "allow"}},
-        "agents": {"handmade": {"description": "x"}},
-        "commands": {"handmade": {"template": "x"}},
-    }}
+    stale = {
+        "sandbox": {
+            "agent": {"handmade": {"permission": "allow"}},
+            "agents": {"handmade": {"description": "x"}},
+            "commands": {"handmade": {"template": "x"}},
+        }
+    }
     out = gen.build_opencode_guide(stale, COMMON)["sandbox"]
     for key in ("agent", "agents", "commands"):
         assert "handmade" not in out[key], f"{key} に宣言外のエントリが入った"
@@ -476,9 +510,16 @@ def test_isolated_agents_are_not_taken_from_the_normal_config():
 def test_isolated_assigns_models_when_the_provider_is_reachable(tmp_path):
     out = _with_provider(tmp_path, "github-copilot")
     models = gen.opencode_models(
-        {**COMMON, "opencode": {**COMMON["opencode"], "model": {
-            **COMMON["opencode"]["model"], "provider": "github-copilot",
-        }}}
+        {
+            **COMMON,
+            "opencode": {
+                **COMMON["opencode"],
+                "model": {
+                    **COMMON["opencode"]["model"],
+                    "provider": "github-copilot",
+                },
+            },
+        }
     )
     assert models is not None
     for name, model in models["agents"].items():

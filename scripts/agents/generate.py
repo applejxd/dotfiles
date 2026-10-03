@@ -177,6 +177,7 @@ KNOWN_FILE_KEYS = frozenset(
         "write_ask_globs",
         "read_deny_globs",
         "write_deny_globs",
+        "deny_exceptions",
     }
 )
 
@@ -941,8 +942,9 @@ def build_opencode_sandbox_permissions(common: dict[str, Any]) -> list[dict[str,
         if default_effect == "allow"
         else set()
     )
-    # 開けた場所への edit の確認は残す (以前は external_directory の確認が止めていた)
-    opened = {f"{d}/*" for d in opencode_external_read_dirs(common)}
+    # 開けた場所への edit の確認は残す (以前は external_directory の確認が止めていた)。
+    # deny の例外と交差する ask (`<dir>/*/.env.example` など) も同じ理由で残す
+    opened = tuple(f"{d}/" for d in opencode_external_read_dirs(common))
 
     out: list[dict[str, str]] = []
     for rule in build_opencode_permissions(common):
@@ -957,7 +959,7 @@ def build_opencode_sandbox_permissions(common: dict[str, Any]) -> list[dict[str,
         elif (
             action in ("read", "edit")
             and resource.startswith(drop_prefixes)
-            and not (action == "edit" and resource in opened)
+            and not (action == "edit" and rule["effect"] == "ask" and resource.startswith(opened))
         ):
             continue
         out.append(rule)
@@ -1020,16 +1022,104 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     for action, key, effect in (
         ("read", "read_ask_globs", "ask"),
         ("edit", "write_ask_globs", "ask"),
-        ("read", "read_deny_globs", "deny"),
-        ("edit", "write_deny_globs", "deny"),
     ):
         resources: list[str] = []
         for glob in file_.get(key, []):
             resources += opencode_path_patterns(glob)
         rules += opencode_rules(action, effect, resources)
 
+    # deny。例外のある glob を先頭に出し、その直後に例外の allow を置く。後勝ちなので、
+    # 例外は対の deny にだけ勝ち、後ろの deny (.ssh/** や *secret* など) には負ける。
+    # 例外の allow は、それより前の ask (作業ツリー外の edit の確認など) も潰すので、
+    # ask と例外の交差を ask として直後に戻す
+    exceptions = file_deny_exceptions(common)
+    for action, key in (("read", "read_deny_globs"), ("edit", "write_deny_globs")):
+        globs = [str(g) for g in file_.get(key, [])]
+        paired = [e for e in exceptions if e["deny"] in globs]
+        asked = [r["resource"] for r in rules if r["action"] == action and r["effect"] == "ask"]
+        for entry in paired:
+            rules += opencode_rules(action, "deny", opencode_path_patterns(entry["deny"]))
+            allow: list[str] = []
+            for glob in entry["except"]:
+                allow += opencode_path_patterns(glob)
+            rules += opencode_rules(action, "allow", allow)
+            rules += opencode_rules(
+                action,
+                "ask",
+                [i for a in asked for e in _uniq(allow) for i in wildcard_intersection(a, e)],
+            )
+        resources: list[str] = []
+        for glob in globs:
+            if any(glob == e["deny"] for e in paired):
+                continue
+            resources += opencode_path_patterns(glob)
+        rules += opencode_rules(action, "deny", resources)
+
     rules += opencode_subagent_guards(common)
     return rules
+
+
+def wildcard_intersection(a: str, b: str) -> list[str]:
+    """OpenCode の 2 つの resource パターン (``*`` は ``/`` を含む 0 文字以上) の交差。
+
+    扱えるのは ``*`` が 0 個か 1 個のパターンだけ (``?`` と複数の ``*`` は ``ValueError``)。
+    交差を作れないものを黙って落とすと、ask が allow に化けるので止める。
+    返すのは「両方に当たる文字列」の集合を表すパターン (空なら交差なし)。
+    """
+    for p in (a, b):
+        if "?" in p or p.count("*") > 1:
+            raise ValueError(f"resource の交差を作れないパターン: {p!r}")
+
+    def matches(pattern: str, value: str) -> bool:
+        head, star, tail = pattern.partition("*")
+        if not star:
+            return value == pattern
+        return (
+            len(value) >= len(head) + len(tail) and value.startswith(head) and value.endswith(tail)
+        )
+
+    if "*" not in a:
+        return [a] if matches(b, a) else []
+    if "*" not in b:
+        return [b] if matches(a, b) else []
+    (p1, _, s1), (p2, _, s2) = a.partition("*"), b.partition("*")
+    if not (p1.startswith(p2) or p2.startswith(p1)) or not (s1.endswith(s2) or s2.endswith(s1)):
+        return []
+    prefix, suffix = max(p1, p2, key=len), max(s1, s2, key=len)
+    out = [f"{prefix}*{suffix}"]
+    # prefix と suffix が重なる短い文字列 (`D/*` ∩ `*/L` の `D/L` など)
+    for k in range(1, min(len(prefix), len(suffix)) + 1):
+        merged = prefix + suffix[k:]
+        if prefix.endswith(suffix[:k]) and matches(a, merged) and matches(b, merged):
+            out.append(merged)
+    return out
+
+
+def file_deny_exceptions(common: dict[str, Any]) -> list[dict[str, Any]]:
+    """``[[file.deny_exceptions]]`` を検査して返す (deny の glob とその例外の対)。
+
+    ``deny`` は ``read_deny_globs`` か ``write_deny_globs`` の項目と同じ文字列でなければならない
+    (対の相手が無い例外は黙って効かないので、生成を止める)。
+    """
+    file_ = common.get("file", {})
+    known = {str(g) for k in ("read_deny_globs", "write_deny_globs") for g in file_.get(k, [])}
+    out: list[dict[str, Any]] = []
+    for entry in file_.get("deny_exceptions") or []:
+        deny, globs = entry.get("deny"), entry.get("except")
+        if (
+            set(entry) != {"deny", "except"}
+            or not isinstance(deny, str)
+            or not isinstance(globs, list)
+            or not globs
+            or not all(isinstance(g, str) for g in globs)
+        ):
+            raise ValueError(
+                f"[[file.deny_exceptions]] は deny (文字列) と except (文字列の配列): {entry}"
+            )
+        if deny not in known:
+            raise ValueError(f"[[file.deny_exceptions]] の deny が deny の一覧に無い: {deny}")
+        out.append({"deny": deny, "except": [str(g) for g in globs]})
+    return out
 
 
 def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1084,15 +1174,13 @@ def opencode_ask_description(common: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def opencode_bypass_agents(common: dict[str, Any]) -> list[str]:
-    """誘導を素通りさせるエージェント名。
+    """bypass 扱いのエージェント名 (``bypass = true`` の印があるもの)。
 
-    ``permission = "allow"`` を持つものが「全部止めたいときの逃げ道」。
-    以前は ``e.effect == "allow"`` で見分けていたが、それだと静的 allow を
-    含む呼び出しまで誘導が素通りしてしまう（``cd x && git log`` など）。
+    通常と同じ permission のまま、guide-plugin が ``ask`` を ``allow`` に引き上げる対象。
     ``permission.evaluate`` に ``agent`` が載ることを実測したので名前で見る。
-    see docs/research/opencode/permission/hook-order.md
+    see docs/adr/0014-bypass-as-ask-upgrade.md
     """
-    return sorted(n for n, a in _declared_agents(common).items() if _grants_everything(a))
+    return sorted(n for n, a in _declared_agents(common).items() if _is_bypass(a))
 
 
 def _declared_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -1101,27 +1189,13 @@ def _declared_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {**(opencode.get("agents") or {}), **(opencode.get("agent") or {})}
 
 
-ALLOW_EVERYTHING = {"action": "*", "resource": "*", "effect": "allow"}
-
-
-def _grants_everything(agent: dict[str, Any]) -> bool:
-    """permission が「全 action・全 resource の allow」から始まるエージェントか。
-
-    V1 の ``"allow"`` の文字列と ``{"*" = "allow", ...}`` のマップ (どちらも OpenCode が
-    ``{action:"*", resource:"*", effect:"allow"}`` へ展開する)、V2 の ``permissions`` の
-    先頭がその規則のものを数える。
-    """
-    permission = agent.get("permission")
-    if permission == "allow":
-        return True
-    if isinstance(permission, dict) and permission.get("*") == "allow":
-        return True
-    rules = agent.get("permissions") or []
-    return bool(rules) and rules[0] == ALLOW_EVERYTHING
+def _is_bypass(agent: dict[str, Any]) -> bool:
+    """``bypass = true`` の印があるか (``true`` 以外の値は印と認めない)。"""
+    return agent.get("bypass") is True
 
 
 def opencode_guarded_subagents(common: dict[str, Any]) -> list[str]:
-    """bypass からだけ起動させる子エージェント名 (全部 allow で子として使えるもの)。
+    """bypass からだけ起動させる子エージェント名 (bypass の印があり、子として使えるもの)。
 
     ``opencode.json`` の全体の deny と ``rules.json`` の ``guarded_subagents`` の元。
     see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
@@ -1129,16 +1203,16 @@ def opencode_guarded_subagents(common: dict[str, Any]) -> list[str]:
     return [
         name
         for name, agent in sorted(_declared_agents(common).items())
-        if _grants_everything(agent) and agent.get("mode") in ("subagent", "all")
+        if _is_bypass(agent) and agent.get("mode") in ("subagent", "all")
     ]
 
 
 def opencode_subagent_guards(common: dict[str, Any]) -> list[dict[str, str]]:
-    """全部 allow のサブエージェントを、同じく全部 allow のエージェント以外から呼ばせない。
+    """bypass の子エージェントを、bypass 以外から呼ばせない。
 
     全体の permission で起動を deny する。エージェントごとの規則は全体の規則の
-    後ろに付き、最後に一致した規則が勝つので、``*`` を allow にしたエージェント
-    (``bypass``) の中でだけこの deny が上書きされる (実測)。
+    後ろに付き、最後に一致した規則が勝つので、``task`` の ``*`` を allow にした
+    エージェント (``bypass``) の中でだけこの deny が上書きされる (実測)。
     see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
     """
     return [
@@ -1198,6 +1272,23 @@ def opencode_read_deny_regexes(common: dict[str, Any]) -> list[str]:
     """
     globs = common.get("file", {}).get("read_deny_globs") or []
     return [glob_to_regex(v) for g in globs for v in _home_variants(str(g))]
+
+
+def opencode_read_deny_except_rules(common: dict[str, Any]) -> list[dict[str, list[str]]]:
+    """``[[file.deny_exceptions]]`` の正規表現版 (``rules.json`` の ``read_deny_except``)。
+
+    ``deny`` は ``read_deny`` と同じ変換の結果なので、plugin は文字列の一致で
+    「例外の対の deny」を見分ける。例外は対の deny にだけ効き、ほかの deny に当たれば伏せる。
+    """
+    read = {str(g) for g in common.get("file", {}).get("read_deny_globs") or []}
+    return [
+        {
+            "deny": [glob_to_regex(v) for v in _home_variants(e["deny"])],
+            "except": [glob_to_regex(v) for g in e["except"] for v in _home_variants(g)],
+        }
+        for e in file_deny_exceptions(common)
+        if e["deny"] in read
+    ]
 
 
 def opencode_deny_path_regexes(common: dict[str, Any]) -> list[str]:
@@ -1380,6 +1471,7 @@ def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> d
         "bypass_agents": opencode_bypass_agents(common),
         "guarded_subagents": opencode_guarded_subagents(common),
         "read_deny": opencode_read_deny_regexes(common),
+        "read_deny_except": opencode_read_deny_except_rules(common),
     }
     ask = opencode_ask_description(common)
     if ask:
@@ -1485,7 +1577,8 @@ def merge_opencode_agents(existing_agent: Any, common: dict[str, Any]) -> dict[s
     out = dict(existing_agent) if isinstance(existing_agent, dict) else {}
     for name, agent in (common.get("opencode", {}).get("agent") or {}).items():
         entry = dict(out.get(name) or {})
-        entry.update(agent)
+        # bypass は生成側の印。OpenCode の設定には出さない
+        entry.update({k: v for k, v in agent.items() if k != "bypass"})
         out[name] = entry
     return out
 
@@ -1541,13 +1634,15 @@ def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # [opencode.agents.<id>] に書けるキー。model は [opencode.model.agents] が持つ。
-# system_from は生成時だけのキー (別のエージェントの system を写す)。
+# system_from / bypass は生成時だけのキー (system_from は別のエージェントの system を写し、
+# bypass は guide-plugin の ask→allow の対象にする。opencode.json には出さない)。
 OPENCODE_AGENT_KEYS = frozenset(
     {
         "description",
         "mode",
         "system",
         "system_from",
+        "bypass",
         "permissions",
         "steps",
         "hidden",
@@ -1588,6 +1683,9 @@ def opencode_v2_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
             if rule["effect"] not in OPENCODE_PERMISSION_EFFECTS:
                 raise ValueError(f"[{section}] の effect が不正: {rule}")
         entry = dict(agent)
+        if "bypass" in entry and not isinstance(entry["bypass"], bool):
+            raise ValueError(f"[{section}] の bypass は true / false で書く")
+        entry.pop("bypass", None)
         source = entry.pop("system_from", None)
         if source is not None:
             if "system" in entry:

@@ -134,7 +134,16 @@ def test_effects_are_ordered_allow_then_ask_then_deny():
     order = {"allow": 0, "ask": 1, "deny": 2}
     for action in ("shell", "read", "edit"):
         found = [r for r in generated()["permissions"] if r["action"] == action]
-        if action == "shell":
+        # deny の例外 (allow) は対の deny の直後に置くのが正しい (別のテストで固定)。
+        # 例外と交差する ask (作業ツリー外の edit の確認) も、その直後に戻してある
+        if action != "shell":
+            first_deny = next(i for i, r in enumerate(found) if r["effect"] == "deny")
+            found = [
+                r
+                for i, r in enumerate(found)
+                if r["effect"] != "allow" and not (r["effect"] == "ask" and i > first_deny)
+            ]
+        else:
             found = found[1:]
         seen = [order[r["effect"]] for r in found]
         assert seen == sorted(seen), f"{action} の effect 並びが崩れている"
@@ -197,16 +206,29 @@ def test_allow_has_no_arbitrary_code_execution(command: str):
 
 
 def test_bypass_agent_is_declared():
-    """全ツールを無確認で実行するカスタムエージェント。
+    """通常と同じ permission のまま、guide-plugin が ask を allow にするエージェント。
 
-    ``{"*": "allow", ...}`` は OpenCode が
-    ``{action:"*", resource:"*", effect:"allow"}`` を先頭に展開する (実測)。
-    V1 の ``mode`` は非推奨なので ``agent`` で出す。
+    ``"*" = "allow"`` を置くと、deny の後ろに付いて静的 deny まで上書きするので置かない。
+    V1 の ``mode`` は非推奨なので ``agent`` で出す。``bypass`` の印は opencode.json に出さない。
+    see docs/adr/0014-bypass-as-ask-upgrade.md
     """
     agent = generated()["agent"]["bypass"]
-    assert agent["permission"]["*"] == "allow"
-    assert gen._grants_everything(agent)
+    assert "*" not in agent["permission"]
+    assert "bypass" not in agent
     assert agent["description"]
+
+
+def test_bypass_agents_have_no_allow_everything():
+    """★bypass 系の生成物に全 allow が無い (あると通常で deny のものまで通る)。"""
+    config = generated()
+    for name, agent in config["agent"].items():
+        permission = agent["permission"]
+        assert permission != "allow" and "*" not in permission, name
+    for name, agent in config["agents"].items():
+        for rule in agent.get("permissions", []):
+            assert not (rule["action"] == "*" and rule["effect"] == "allow"), name
+            assert "bypass" not in agent, name
+    assert generated()["agents"]["bypass-fleet-worker"]["permissions"][0]["effect"] == "deny"
 
 
 def test_bypass_cannot_launch_approval_based_workers():
@@ -237,14 +259,14 @@ def test_only_the_bypass_agents_come_from_common():
 
 
 def test_bypass_worker_cannot_launch_further_subagents():
-    """bypass から呼ぶ子。全部 allow だが、子からさらに子は起動できない (task = subagent)。"""
+    """bypass から呼ぶ子。ask は allow になるが、子からさらに子は起動できない (task = subagent)。"""
     agent = generated()["agent"]["bypass-worker"]
     assert agent["mode"] == "subagent"
-    assert agent["permission"] == {"*": "allow", "task": "deny"}
+    assert agent["permission"] == {"task": "deny"}
 
 
 def test_only_bypass_can_launch_the_bypass_worker():
-    """★全体の permission で起動を deny し、bypass の ``*`` allow だけがそれを上書きする。
+    """★全体の permission で起動を deny し、bypass の task ``*`` allow だけがそれを上書きする。
 
     エージェントの規則は全体の後ろに付き、最後に一致した規則が勝つ (実測。
     build からは Permission denied、bypass からは起動できた)。
@@ -260,15 +282,30 @@ def test_only_bypass_can_launch_the_bypass_worker():
 @pytest.mark.parametrize(
     ("agent", "guarded"),
     [
-        ({"permission": "allow", "mode": "subagent"}, True),
-        ({"permission": {"*": "allow"}, "mode": "all"}, True),
-        ({"permission": "allow"}, False),
-        ({"permission": {"*": "ask"}, "mode": "subagent"}, False),
+        ({"bypass": True, "mode": "subagent"}, True),
+        ({"bypass": True, "mode": "all"}, True),
+        ({"bypass": True}, False),
+        ({"bypass": True, "mode": "primary"}, False),
+        ({"bypass": False, "mode": "subagent"}, False),
+        ({"bypass": "yes", "mode": "subagent"}, False),
+        # 全 allow を書いても印ではない (自動判定はしない)
+        ({"permission": "allow", "mode": "subagent"}, False),
+        ({"permission": {"*": "allow"}, "mode": "all"}, False),
         ({"mode": "subagent"}, False),
     ],
-    ids=["全許可の子", "全許可の両用", "全許可の primary", "全許可でない子", "権限を触らない子"],
+    ids=[
+        "印のある子",
+        "印のある両用",
+        "印のある mode 無し",
+        "印のある primary",
+        "印が偽",
+        "印が真偽値でない",
+        "全 allow だけの子",
+        "全 allow だけの両用",
+        "印の無い子",
+    ],
 )
-def test_subagent_guard_covers_only_all_allow_subagents(agent, guarded):
+def test_subagent_guard_covers_only_marked_subagents(agent, guarded):
     common = {"opencode": {"agent": {"x": agent}}}
     assert bool(gen.opencode_subagent_guards(common)) is guarded
     assert (gen.build_opencode_guide({}, common)["guarded_subagents"] == ["x"]) is guarded
@@ -283,26 +320,30 @@ def test_guarded_subagents_are_named_in_the_rules():
 
 
 @pytest.mark.parametrize(
-    ("rules", "guarded"),
-    [
-        ([gen.ALLOW_EVERYTHING, {"action": "shell", "resource": "x", "effect": "deny"}], True),
-        ([{"action": "shell", "resource": "x", "effect": "deny"}, gen.ALLOW_EVERYTHING], False),
-        ([{"action": "*", "resource": "*", "effect": "ask"}], False),
-        ([], False),
-    ],
-    ids=["先頭が全許可", "全許可が先頭でない", "全 ask", "規則なし"],
+    ("bypass", "mark"),
+    [(True, True), (False, False), (None, False)],
+    ids=["印あり", "印が偽", "印なし"],
 )
-def test_v2_agents_starting_with_allow_everything_are_guarded(rules, guarded):
-    """V2 の ``permissions`` も、先頭が全許可なら bypass からだけ起動できる子として扱う。"""
-    agent = {"description": "x", "mode": "subagent", "permissions": rules}
+def test_v2_agents_are_marked_by_bypass_only(bypass, mark):
+    """V2 の ``agents`` も印だけで見分ける。印は opencode.json の agents に出ない。"""
+    agent = {"description": "x", "mode": "subagent"}
+    if bypass is not None:
+        agent["bypass"] = bypass
     common = {"opencode": {"agents": {"x": agent}}}
-    assert (gen.opencode_guarded_subagents(common) == ["x"]) is guarded
-    assert (gen.opencode_bypass_agents(common) == ["x"]) is guarded
+    assert (gen.opencode_guarded_subagents(common) == ["x"]) is mark
+    assert (gen.opencode_bypass_agents(common) == ["x"]) is mark
+    assert "bypass" not in gen.merge_opencode_v2_agents({}, common)["x"]
+
+
+def test_v2_bypass_mark_must_be_a_boolean():
+    common = {"opencode": {"agents": {"x": {"description": "x", "bypass": "yes"}}}}
+    with pytest.raises(ValueError, match="bypass"):
+        gen.opencode_v2_agents(common)
 
 
 @pytest.mark.parametrize("mode", ["all", "subagent"])
 def test_bypass_stays_primary_over_existing_mode(mode):
-    """★bypass を子として起動できると、モデルが自分で全部の保護を外せる。
+    """★bypass を子として起動できると、モデルが自分で ask の確認を外せる。
 
     既存設定の ``mode`` は common.toml が宣言しないと残るので、``primary`` を明示して上書きする。
     """
@@ -313,27 +354,25 @@ def test_bypass_stays_primary_over_existing_mode(mode):
     assert {"action": "subagent", "resource": "bypass", "effect": "deny"} not in guards
 
 
-def test_all_allow_agents_in_common_declare_their_mode():
-    """全部 allow のエージェントは mode を必ず宣言する。
+def test_bypass_agents_in_common_declare_their_mode():
+    """bypass のエージェントは mode を必ず宣言する。
 
     宣言しないと既存設定の mode が残り、子として起動できるかを common.toml だけで決められない。
     """
-    for name, agent in COMMON["opencode"]["agent"].items():
-        if gen._grants_everything(agent):
+    declared = {**COMMON["opencode"]["agent"], **COMMON["opencode"]["agents"]}
+    for name, agent in declared.items():
+        if agent.get("bypass") is True:
             assert agent.get("mode") in ("primary", "subagent", "all"), name
 
 
 def test_guide_plugin_is_registered_for_guarded_subagents_alone():
     """子の起動元の検査だけでも index.js が要る (隔離版も同じ)。"""
-    common = {"opencode": {"agent": {"w": {"permission": "allow", "mode": "subagent"}}}}
+    common = {"opencode": {"agent": {"w": {"bypass": True, "mode": "subagent"}}}}
     assert gen.opencode_guide_server_needed(common, tui=True)
     assert gen.opencode_guide_server_needed(common, tui=False)
     assert gen.opencode_guide_plugin_path() in gen.merge_opencode_config({}, common)["plugins"]
 
 
-# 誘導の素通り判定はエージェント名で行う。effect で見ると静的 allow を含む
-# 呼び出し (cd x && git log) まで素通りする。
-# see docs/research/opencode/permission/hook-order.md
 # grep / glob は read の deny を迂回するので、結果を plugin 側で濾す。
 # 判定パターンは read の deny glob から生成して単一ソースを保つ。
 # see docs/research/opencode/permission/gaps.md
@@ -466,18 +505,26 @@ def test_bypass_agents_are_named_in_the_rules():
     ]
 
 
-def test_only_all_allow_agents_are_treated_as_bypass():
+def test_only_marked_agents_are_treated_as_bypass():
+    """全 allow でも印が無ければ bypass 扱いにしない (印は ``bypass = true`` だけ)。"""
     common = {
         "opencode": {
             "agent": {
                 "loose": {"permission": "allow"},
-                "worker": {"permission": {"*": "allow", "task": "deny"}},
+                "worker": {"bypass": True, "permission": {"task": "deny"}},
                 "tight": {"permission": "ask"},
                 "plain": {"description": "権限を触らない"},
             }
         }
     }
-    assert gen.build_opencode_guide({}, common)["bypass_agents"] == ["loose", "worker"]
+    assert gen.build_opencode_guide({}, common)["bypass_agents"] == ["worker"]
+
+
+def test_bypass_mark_is_not_written_to_opencode_json():
+    config = generated()
+    for name in ("bypass", "bypass-worker"):
+        assert "bypass" not in config["agent"][name]
+    assert "bypass" not in config["agents"]["bypass-fleet-worker"]
 
 
 # --- shell 出力の伏字化 (段階 2-C) ----------------------------------------
@@ -740,6 +787,87 @@ def test_unrelated_broken_sections_leave_the_read_filter_alone(tmp_path, rules):
     [e] = _run_hooks(tmp_path, rules, [["execute.after", _grep()]])
     kept = "README.md" in e["result"]["content"][0]["text"]
     assert kept is (rules is not None)
+
+
+def _result(tool: str, agent: str, text: str, id_: str = "1") -> dict:
+    return {"tool": tool, "agent": agent, "id": id_, "result": {"content": [{"text": text}]}}
+
+
+@pytest.mark.parametrize("agent", ["build", "bypass", "bypass-worker", "bypass-fleet-worker"])
+def test_read_filter_applies_to_bypass_agents_too(tmp_path, agent):
+    """★bypass でも grep / glob の結果から保護対象を落とす (素通りさせない)。"""
+    grep = "Found 2 matches\n/home/u/p/.env:\n  Line 1: SECRET=x\n/home/u/p/a.py:\n  Line 2: ok"
+    glob = "/home/u/p/.env.local\n/home/u/p/a.py"
+    rules = gen.build_opencode_guide({}, COMMON)
+    out = _run_hooks(
+        tmp_path,
+        rules,
+        [
+            ["execute.after", _result("grep", agent, grep)],
+            ["execute.after", _result("glob", agent, glob)],
+        ],
+    )
+    grep_text = out[0]["result"]["content"][0]["text"]
+    glob_text = out[1]["result"]["content"][0]["text"]
+    assert "SECRET" not in grep_text and "a.py" in grep_text
+    assert ".env" not in glob_text and "a.py" in glob_text
+
+
+def test_read_filter_keeps_dotenv_examples(tmp_path):
+    """``.env.example`` などは `.env.*` の deny の例外。別の deny に当たるものは伏せる。"""
+    glob = "\n".join(
+        [
+            "/home/u/p/.env.example",
+            "/home/u/p/.env.local",
+            "/home/u/.ssh/.env.example",
+            "/home/u/p/secrets/.env.sample",
+        ]
+    )
+    rules = gen.build_opencode_guide({}, COMMON)
+    [out] = _run_hooks(tmp_path, rules, [["execute.after", _result("glob", "bypass", glob)]])
+    assert out["result"]["content"][0]["text"].strip() == "/home/u/p/.env.example"
+
+
+@pytest.mark.parametrize("agent", ["build", "bypass"])
+def test_shell_output_is_redacted_for_bypass_too(tmp_path, agent):
+    """★bypass でも shell 出力の伏字化 (秘密の形・保護パスを触ったコマンドの出力) が効く。"""
+    rules = gen.build_opencode_guide({}, COMMON)
+    before = {"tool": "shell", "agent": agent, "id": "1", "input": {"command": "env"}}
+    out = _run_hooks(
+        tmp_path,
+        rules,
+        [
+            ["execute.before", before],
+            ["execute.after", _result("shell", agent, "GITHUB_TOKEN=abcdefghijklmnopqrstuvwx")],
+            [
+                "execute.before",
+                {**before, "id": "2", "input": {"command": "sed p ~/.aws/credentials"}},
+            ],
+            ["execute.after", _result("shell", agent, "line", "2")],
+        ],
+    )
+    assert "[伏字:" in out[1]["result"]["content"][0]["text"]
+    assert "保護対象のパス" in out[3]["result"]["content"][0]["text"]
+
+
+def test_shell_output_for_dotenv_example_is_not_withheld(tmp_path):
+    rules = gen.build_opencode_guide({}, COMMON)
+    cases = [
+        ("wc -l app/.env.example", "3 .env.example", True),
+        ("wc -l ~/.ssh/.env.example", "3 .env.example", False),
+        ("wc -l app/.env.local", "3 .env.local", False),
+    ]
+    calls = []
+    for i, (cmd, text, _) in enumerate(cases):
+        before = {"tool": "shell", "agent": "bypass", "id": str(i), "input": {"command": cmd}}
+        calls += [
+            ["execute.before", before],
+            ["execute.after", _result("shell", "bypass", text, str(i))],
+        ]
+    out = _run_hooks(tmp_path, rules, calls)
+    for i, (cmd, text, kept) in enumerate(cases):
+        got = out[2 * i + 1]["result"]["content"][0]["text"]
+        assert (got == text) is kept, cmd
 
 
 WINDOWS_HOME = "C:\\Users\\tester"
@@ -1569,9 +1697,88 @@ def test_every_file_deny_glob_is_converted(key: str):
 
 
 def test_allow_side_file_globs_are_not_emitted():
-    """OpenCode は allow が既定なので、allow の写しを増やさない。"""
-    assert rules("read", "allow") == []
-    assert rules("edit", "allow") == []
+    """OpenCode は allow が既定なので、allow の写しを増やさない。
+
+    出す allow は ``[[file.deny_exceptions]]`` の例外だけ (read / edit とも同じ)。
+    """
+    expected = [
+        p
+        for e in COMMON["file"]["deny_exceptions"]
+        for g in e["except"]
+        for p in gen.opencode_path_patterns(g)
+    ]
+    assert rules("read", "allow") == expected
+    assert rules("edit", "allow") == expected
+
+
+def test_deny_exceptions_sit_right_after_their_paired_deny():
+    """★後勝ちなので、例外の allow は対の deny の直後、ほかの deny より前に置く。
+
+    前だと対の deny に負け、後ろ (全 deny の後) だと `.ssh/**` などの deny まで上書きする。
+    """
+    for action in ("read", "edit"):
+        found = [r for r in generated()["permissions"] if r["action"] == action]
+        for entry in COMMON["file"]["deny_exceptions"]:
+            deny = gen.opencode_path_patterns(entry["deny"])
+            allow = [p for g in entry["except"] for p in gen.opencode_path_patterns(g)]
+            at = [r["resource"] for r in found if r["effect"] != "ask"]
+            start = at.index(deny[0])
+            assert at[start : start + len(deny) + len(allow)] == deny + allow, action
+            # 例外の allow より後ろは deny だけ (別の deny が例外の後に勝つ)
+            tail = [r for r in found if r["effect"] != "ask"][start + len(deny) + len(allow) :]
+            assert tail and all(r["effect"] == "deny" for r in tail), action
+
+
+def _last_match(action: str, path: str) -> str | None:
+    import fnmatch
+
+    result = None
+    for rule in generated()["permissions"]:
+        if rule["action"] == action and fnmatch.fnmatchcase(path, rule["resource"]):
+            result = rule["effect"]
+    return result
+
+
+@pytest.mark.parametrize(
+    ("path", "effect"),
+    [
+        ("/p/.env", "deny"),
+        ("/p/.env.local", "deny"),
+        ("/p/app/.env.local", "deny"),
+        ("/p/.env.production", "deny"),
+        (".env.local", "deny"),
+        ("/p/.env.example", "allow"),
+        ("/p/app/.env.example", "allow"),
+        ("/p/.env.sample", "allow"),
+        ("/p/.env.template", "allow"),
+        (".env.example", "allow"),
+        ("/p/.env.example.bak", "deny"),
+        # 例外は `.env.*` の deny にだけ効く。別の deny に当たるものは deny のまま
+        ("/home/u/.ssh/.env.example", "deny"),
+        (".ssh/.env.example", "deny"),
+        ("/p/secrets/.env.example", "deny"),
+        ("/p/.gnupg/.env.sample", "deny"),
+        ("/p/.env.secret.example", "deny"),
+    ],
+)
+@pytest.mark.parametrize("action", ["read", "edit"])
+def test_dotenv_variants_are_denied_except_examples(action, path, effect):
+    """OpenCode の後勝ちで評価して、`.env.*` は deny、サンプルだけ allow になる。"""
+    assert _last_match(action, path) == effect
+
+
+def test_deny_exception_must_name_an_existing_deny():
+    common = copy.deepcopy(COMMON)
+    common["file"]["deny_exceptions"].append({"deny": "**/nothing", "except": ["**/x"]})
+    with pytest.raises(ValueError, match="deny の一覧に無い"):
+        gen.build_opencode_permissions(common)
+
+
+def test_deny_exceptions_reach_the_rules_json():
+    guide = gen.build_opencode_guide({}, COMMON)
+    [entry] = guide["read_deny_except"]
+    assert set(entry["deny"]) <= set(guide["read_deny"])
+    assert set(entry["deny"]) <= set(guide["redact"]["deny_path"])
 
 
 # ---------------------------------------------------------------------------

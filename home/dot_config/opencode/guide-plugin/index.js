@@ -61,9 +61,10 @@ if (ask?.commit) {
 // see docs/spec/opencode-sandbox.md#隔離版の設定の書き出し方
 const ISOLATED = process.env.OCS_ISOLATED === "1"
 
-// 誘導を素通りさせるエージェント (permission = "allow" の逃げ道)。
-// effect で見分けると静的 allow を含む呼び出しまで素通りするので名前で見る。
-// see docs/research/opencode/permission/hook-order.md
+// bypass 扱いのエージェント。通常と同じ permission のまま、evaluate の最後で
+// ask を allow に引き上げる (deny と誘導は通常どおり効く)。名前は rules.json の
+// bypass_agents。読めない・壊れているときは空にして、引き上げない (ask のまま = 安全側)。
+// see docs/adr/0014-bypass-as-ask-upgrade.md
 const bypassNames = names(rules?.bypass_agents)
 const bypass = bypassNames ?? new Set()
 
@@ -74,6 +75,8 @@ const guardKnown = bypassNames !== null && guarded !== null
 if (rules && !guardKnown) {
   console.error("[guide] rules.json の bypass_agents / guarded_subagents を使えない")
 }
+
+const upgradesAsk = (e) => e.effect === "ask" && bypass.has(e.agent)
 
 function guardSubagent(e) {
   if (e.effect === "deny") return
@@ -95,16 +98,27 @@ function guardSubagent(e) {
 const WINDOWS = process.platform === "win32"
 const toSlash = (path) => path.replace(/\\/g, "/")
 const pathRegExp = (p) => new RegExp(p, WINDOWS ? "i" : "")
+// deny の正規表現。元の文字列を src に持つ (例外の対の deny を文字列で見分けるため)
+const tagged = (src) => Object.assign(pathRegExp(src), { src })
 // null は「組めなかった」。結果を伏せる (see docs/spec/agent-config-generation.md#rulesjson-が使えないとき)
 // 欠落・null も壊れた扱い。明示的な [] だけが有効な空。
 const readDeny = section("read_deny", (r) => {
   if (!names(r.read_deny)) throw new Error("文字列の配列でない")
-  return r.read_deny.map(pathRegExp)
+  return r.read_deny.map(tagged)
 })
-const denied = (path) => {
-  const p = toSlash(path)
-  return (readDeny ?? []).some((re) => re.test(p))
-}
+// deny の例外 (.env.example など)。例外は対の deny (read_deny の同じ文字列) にだけ効き、
+// ほかの deny に当たれば伏せる。読めなければ空 = 例外なし (厳しい側)
+const readDenyExcept =
+  section("read_deny_except", (r) =>
+    (r.read_deny_except ?? []).map((x) => {
+      if (!names(x.deny) || !names(x.except)) throw new Error("deny / except が文字列の配列でない")
+      return { deny: x.deny, except: x.except.map(pathRegExp) }
+    }),
+  ) ?? []
+const excused = (re, p) =>
+  readDenyExcept.some((x) => x.deny.includes(re.src) && x.except.some((e) => e.test(p)))
+const hitsDeny = (list, p) => list.some((re) => re.test(p) && !excused(re, p))
+const denied = (path) => hitsDeny(readDeny ?? [], toSlash(path))
 
 // grep の塊の見出し。POSIX の絶対パス、ドライブ付き (C:\ / C:/)、UNC (\\server) を認める
 const GREP_HEAD = /^((?:\/|[A-Za-z]:[\\/]|\\\\).*):$/
@@ -162,7 +176,7 @@ function filterGlob(text) {
 // unless は /g を付けないこと。lastIndex が残って .test() が交互に false を返す。
 const redaction = section("redact", (r) => ({
   rules: (r.redact?.rule ?? []).map((x) => ({ name: x.name, re: new RegExp(x.pattern, "gi") })),
-  denyPath: (r.redact?.deny_path ?? []).map(pathRegExp),
+  denyPath: (r.redact?.deny_path ?? []).map(tagged),
   denyPathUnless: r.redact?.deny_path_unless ? new RegExp(r.redact.deny_path_unless) : null,
 }))
 const redactRules = redaction?.rules ?? []
@@ -184,7 +198,7 @@ function deniedPathIn(command) {
     if (!token) continue
     if (!/[/\\]/.test(token) && !token.startsWith("~") && !token.startsWith(".")) continue
     const p = toSlash(token)
-    if (denyPath.some((re) => re.test(p))) return token
+    if (hitsDeny(denyPath, p)) return token
   }
   return null
 }
@@ -280,7 +294,6 @@ export default {
       raw.set(e.id, command)
       // early 規則は静的 deny の前に例外で止める (静的 deny は evaluate に届かず説明を付けられない)。
       // see docs/research/opencode/permission/early-guard.md
-      if (bypass.has(e.agent)) return
       for (const rule of compiled) {
         if (!rule.early || !rule.re.test(command)) continue
         if (rule.unless && rule.unless.test(command)) continue
@@ -290,12 +303,13 @@ export default {
     })
 
     await ctx.permission.hook("evaluate", async (e) => {
-      if (e.action === "subagent") return guardSubagent(e)
-      if (e.action !== "shell") return
-      // 規約 1: bypass エージェントには触らない (全部止めたいときの逃げ道)。
-      // effect ではなく agent 名で見る。effect で見ると cd x && git log の
-      // ように静的 allow を含む呼び出しまで誘導が素通りする。
-      if (bypass.has(e.agent)) return
+      if (e.action === "subagent") guardSubagent(e)
+      else if (e.action === "shell") await guideShell(e)
+      // 最後に bypass の ask を allow にする。deny (誘導を含む) は上で決まったまま。
+      if (upgradesAsk(e)) e.effect = "allow"
+    })
+
+    async function guideShell(e) {
       if (e.effect === "deny") return
 
       // scanner は変数代入を落とすので、生のコマンドを使う。
@@ -309,29 +323,25 @@ export default {
       }
 
       // 説明は deny の後。止めるものに説明は要らない。
-      // allow は確認が出ないので生成しない (費用と遅延が無駄になる)。
+      // allow は確認が出ないので生成しない (費用と遅延が無駄になる)。bypass の ask も allow になる。
       // 生成に失敗しても message を空のままにして確認は通常どおり出す。
-      if (e.effect === "allow") return
+      if (e.effect === "allow" || upgradesAsk(e)) return
       // git commit は tui.ts がコマンドから抜き出した件名と本文を出すので、モデルを呼ばない。
       if (commitPreview && commitPreview(cmd, ask.commit)) return
       if (!describe || cmd.length < ask.min_command_length) return
       const text = await describe(cmd)
       if (text) e.message = text
-    })
+    }
 
     // grep / glob の結果から保護対象を落とす。permission の read deny は
-    // これらのツールに効かないので、ここが唯一の保護になる。
-    // agent が載らない場合は bypass.has(undefined) が false になり、
-    // 保護が効いたままになる (安全側)。
+    // これらのツールに効かないので、ここが唯一の保護になる。bypass でも同じに効く。
     await ctx.tool.hook("execute.after", (e) => {
       if (e.tool === "shell") {
         const command = raw.get(e.id) ?? ""
         raw.delete(e.id)
-        if (bypass.has(e.agent)) return
         return redactShell(e, command)
       }
       if (e.tool !== "grep" && e.tool !== "glob") return
-      if (bypass.has(e.agent)) return
       if (readDeny === null) return withhold(e)
       if (!readDeny.length) return
 

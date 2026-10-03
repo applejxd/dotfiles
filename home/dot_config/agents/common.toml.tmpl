@@ -263,14 +263,11 @@ claude_read_allow = [
 ]
 
 # Claude / OpenCode に反映: Read(...) を ask に追加
-read_ask_globs = [
-  "**/.env.*",
-]
+read_ask_globs = []
 
 # Claude / OpenCode に反映: Edit(...) を ask に追加
 # (書き込み系 permission rule は Edit(path) に統一。Write(path) は v2.1.210 で deprecated)
 write_ask_globs = [
-  "**/.env.*",
   "mise.toml",
 ]
 
@@ -308,6 +305,7 @@ read_deny_globs = [
   "**/*credential*",
   "**/*password*",
   "**/.env",
+  "**/.env.*",
   # CLI の資格情報とシェル履歴。bashrules/tables.toml の credential_paths /
   # history_basenames と対応 (test_secret_lists_in_sync.py が固定)
   "**/.config/gh/hosts.yml",
@@ -367,6 +365,7 @@ write_deny_globs = [
   "**/*credential*",
   "**/*password*",
   "**/.env",
+  "**/.env.*",
   "~/.copilot/settings.json",
   "~/.copilot/config.json",
   "~/.claude.json",
@@ -389,6 +388,12 @@ write_deny_globs = [
   "**/.git/hooks/**",
   "~/.gitconfig",
 ]
+
+# deny の例外 (仕組みと CLI ごとの差は docs/spec/agent-config-generation.md#deny-の例外envexample-など)
+# ★TOML の都合で、[file] の他のキーより後ろに置く。
+[[file.deny_exceptions]]
+deny = "**/.env.*"
+except = ["**/.env.example", "**/.env.sample", "**/.env.template"]
 
 # ---------------------------------------------------------------------------
 # Web 系
@@ -783,23 +788,26 @@ second_opinion = "gpt-6-astra"
 # see docs/spec/agent-config-generation.md 「OpenCode へ渡さないもの」
 
 # OpenCode のカスタムエージェント (V1 の「モード」に相当。トップレベルの mode は非推奨)。
-# permission = "allow" は全 action / 全 resource の allow へ展開される (実測)。
-# ★bypass は permission 層を丸ごと無効にする。秘密ファイルの read deny も外れる。
+# ★bypass = true は generate.py が読む印で opencode.json には出ない。印のあるエージェントは
+#   通常と同じ permission のまま、guide-plugin が ask を allow にする (deny はそのまま効く)。
+#   ここに "*" = "allow" を書かない (deny の後ろに付いて静的 deny を上書きする)。
 # ★mode は消さない。消すと既存設定の mode が残り、all / subagent ならモデルが bypass を起動できる。
-# see docs/research/opencode/permission/bypass-agent.md
+# see docs/adr/0014-bypass-as-ask-upgrade.md
 [opencode.agent.bypass]
-description = "全ツールを無確認で実行する (permission を全て allow で上書き)"
+description = "通常の確認 (ask) を無確認で通す。deny と誘導は通常どおり効く"
 mode = "primary"
+bypass = true
 # 承認制の子は確認で止まるので呼ばせない (代わりに bypass-worker / bypass-fleet-worker)。
 # see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
-permission = { "*" = "allow", task = { "*" = "allow", general = "deny", fleet-worker = "deny" } }
+permission = { task = { "*" = "allow", general = "deny", fleet-worker = "deny" } }
 
 # bypass からだけ呼べる子エージェント (task は V2 の subagent)。
 # see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
 [opencode.agent.bypass-worker]
-description = "bypass から起動する作業用の子エージェント。全ツールを無確認で実行する"
+description = "bypass から起動する作業用の子エージェント。通常の確認 (ask) を無確認で通す"
 mode = "subagent"
-permission = { "*" = "allow", task = "deny" }
+bypass = true
+permission = { task = "deny" }
 
 # V2 形式のエージェント定義 (opencode.json の agents へ出す)。モデルは
 # [opencode.model.agents] で階層を割り当てる (ここに model は書かない)。
@@ -926,16 +934,16 @@ permissions = [
   { action = "shell", resource = "git reset *", effect = "deny" },
 ]
 
-# bypass の /fleet の作業役。指示と禁止は fleet-worker と同じで、ほかは全部 allow。
-# ★先頭の全 allow が「bypass からだけ起動できる」印 (外すと build からも起動できる)。
+# bypass の /fleet の作業役。指示と禁止は fleet-worker と同じで、ほかは通常の確認を無確認で通す。
+# ★bypass = true が「bypass からだけ起動できる」印 (外すと build からも起動できる)。
 # ★fleet-worker の deny を足したらここにも足す (テストが突き合わせる)。
 # see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
 [opencode.agents.bypass-fleet-worker]
-description = "bypass の /fleet の作業役。親が割り当てた 1 つの作業を、指定された担当ファイルの範囲で実装し、確認して結果を返す。全ツールを無確認で実行する。コミットはしない。/fleet 以外から直接使わない"
+description = "bypass の /fleet の作業役。親が割り当てた 1 つの作業を、指定された担当ファイルの範囲で実装し、確認して結果を返す。通常の確認 (ask) を無確認で通す。コミットはしない。/fleet 以外から直接使わない"
 mode = "subagent"
+bypass = true
 system_from = "fleet-worker"
 permissions = [
-  { action = "*", resource = "*", effect = "allow" },
   { action = "subagent", resource = "*", effect = "deny" },
   { action = "question", resource = "*", effect = "deny" },
   { action = "shell", resource = "git add *", effect = "deny" },

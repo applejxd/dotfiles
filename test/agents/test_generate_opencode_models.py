@@ -59,6 +59,7 @@ def render_provider(context: dict) -> str:
 # プロバイダの判定
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     ("username", "provider"),
     [
@@ -86,6 +87,7 @@ def test_common_toml_carries_the_detected_provider():
 # ---------------------------------------------------------------------------
 # 既定モデルと接続設定
 # ---------------------------------------------------------------------------
+
 
 def test_default_model_on_each_provider():
     assert generated(PERSONAL)["model"] == "github-copilot/claude-opus-5.5"
@@ -146,6 +148,7 @@ def test_unmanaged_provider_settings_survive():
 # policies
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("common", [PERSONAL, WORK], ids=["personal", "work"])
 def test_only_the_detected_provider_is_usable(common):
     provider = common["opencode"]["model"]["provider"]
@@ -171,6 +174,7 @@ def test_other_policies_and_experimental_keys_survive():
 # ---------------------------------------------------------------------------
 # エージェントごとの割り当て
 # ---------------------------------------------------------------------------
+
 
 def test_declared_subagents_get_their_tier_models():
     agents = generated(PERSONAL)["agents"]
@@ -219,6 +223,7 @@ def test_assigned_agents_are_subagents():
 # ---------------------------------------------------------------------------
 # V2 形式のエージェント定義 ([opencode.agents])
 # ---------------------------------------------------------------------------
+
 
 def rules_of(agent: str) -> list[dict]:
     return generated(PERSONAL)["agents"][agent]["permissions"]
@@ -305,6 +310,7 @@ def test_invalid_system_from_stops_apply(patch, message):
 # 並列作業 (/fleet)
 # ---------------------------------------------------------------------------
 
+
 def test_fleet_worker_is_a_subagent():
     assert generated(PERSONAL)["agents"]["fleet-worker"]["mode"] == "subagent"
 
@@ -345,15 +351,16 @@ def test_fleet_worker_cannot_touch_the_shared_git_state(command):
 
 
 def test_bypass_fleet_worker_keeps_every_fleet_worker_deny():
-    """★bypass の作業役は全部 allow の後に fleet-worker と同じ deny を持つ。
+    """★bypass の作業役は fleet-worker と同じ deny を全部持ち、全 allow は持たない。
 
-    最後に一致した規則が勝つので、deny は全 allow より後ろに置く。
+    全 allow があると、通常で deny のものまで通ってしまう。bypass の印は出力に出ない。
     """
     rules = rules_of("bypass-fleet-worker")
-    assert rules[0] == {"action": "*", "resource": "*", "effect": "allow"}
-    denies = [r for r in rules_of("fleet-worker") if r["effect"] == "deny"]
-    assert denies == [r for r in rules[1:] if r["effect"] == "deny"]
-    assert all(r["effect"] == "deny" for r in rules[1:])
+    assert not any(r["action"] == "*" and r["effect"] == "allow" for r in rules)
+    assert all(r["effect"] == "deny" for r in rules)
+    assert rules == [r for r in rules_of("fleet-worker") if r["effect"] == "deny"]
+    assert PERSONAL["opencode"]["agents"]["bypass-fleet-worker"]["bypass"] is True
+    assert "bypass" not in generated(PERSONAL)["agents"]["bypass-fleet-worker"]
     assert generated(PERSONAL)["agents"]["bypass-fleet-worker"]["mode"] == "subagent"
     assert PERSONAL["opencode"]["model"]["agents"]["bypass-fleet-worker"] == "worker"
 

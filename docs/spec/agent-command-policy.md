@@ -150,9 +150,15 @@ OpenCode の read・Copilot の `check_file_read.py` から読める。対応は
 `test/agents/test_secret_lists_in_sync.py` が固定するので、`tables.toml` へ足したら
 `read_deny_globs` にも足す。
 
-`.env` は `**/.env`（deny）・`**/.env.*`（ask）と書く。`**/` が無いと OpenCode の
+`.env` は `**/.env`・`**/.env.*`（どちらも deny）と書く。`**/` が無いと OpenCode の
 resource は直下にしか当たらず、`app/.env` は OpenCode 既定の ask 止まりになる
 （実測: [秘密ファイル一覧のずれ](../research/agents/secret-file-lists.md)）。
+`.env.*` は以前 ask だったが、bypass が ask を allow にするので deny へ上げた
+（[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。サンプルの `.env.example` /
+`.env.sample` / `.env.template` は `[[file.deny_exceptions]]` で、対の `**/.env.*` にだけ
+例外にする（OpenCode と Copilot。Claude は deny 優先で例外を書けず deny のまま。
+[仕組み](agent-config-generation.md#deny-の例外envexample-など)）。
+Bash hook 側（`sensitive.py`）は `.env.*`（`.env.local` 以外）をサンプル扱いにしており、変えていない。
 
 ## 秘密の環境変数
 
@@ -312,7 +318,8 @@ OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生の�
 
 > [!WARNING]
 > **うっかり防止であり、完全な保護ではない。** 正規表現は変数・サブシェル・
-> `sudo` / `command` 等の前置・スクリプト経由・別名を見ない。bypass エージェントは対象外で、
+> `sudo` / `command` 等の前置・スクリプト経由・別名を見ない。bypass エージェントにも同じに効く
+> （[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）が、
 > `rules.json` が読めないと効かない。止めたいときの本命は境界（ocs）と退避である。
 
 | 規則 | 止める例 | 止めない例 |
@@ -336,7 +343,8 @@ OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生の�
   そのままだと `Permission denied: shell` のみになる。そこで pip の規則に `early = true` を付け、
   plugin が `tool.execute.before`（permission より前に走る）で同じ `pattern` / `unless` を判定し、
   当たれば例外を投げて `message` をモデルへ届ける。静的 deny は変えないので、plugin が無い・
-  `rules.json` が壊れているときは従来どおり静的 deny が止める。bypass エージェントは止めない。
+  `rules.json` が壊れているときは従来どおり静的 deny が止める。bypass エージェントにも効く
+  （[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。
   実機で確認した（[記録](../research/opencode/permission/early-guard.md)）。前段で止めるのは
   `early` を付けた規則だけで、他の規則は従来どおり `evaluate` で判定する
 - 検査は `test/agents/test_guide_pip_rm.py`（止める例と止めない例の両方を、生成した

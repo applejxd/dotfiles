@@ -67,4 +67,5 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0010](0010-exploratory-spec-driven-docs.md) | docs を「段階」ではなく「情報の役割」で分け、案件を中心に置く | Accepted | 2026-09-19 | 終了案件の置き場を ADR-0011 で改定 |
 | [0011](0011-close-change-records-into-subdirectory.md) | 終了した案件を `change/closed/` へ移す | Accepted | 2026-09-22 | — |
 | [0012](0012-ocs-boundary-for-accidents.md) | ocs の境界の目的を「エージェントのうっかりを防ぐ」に絞る | Accepted | 2026-09-29 | 危険な `rm` / `find` と `pip` の扱いを ADR-0013 で改定 |
-| [0013](0013-opencode-shell-guard-inside-ocs.md) | OpenCode の危険な rm と pip を ocs の中でも止める | Accepted | 2026-10-03 | ADR-0012 を部分改定。2026-10-03 注記: 通常版の pip にも前段（`execute.before`）で誘導文を付けた |
+| [0013](0013-opencode-shell-guard-inside-ocs.md) | OpenCode の危険な rm と pip を ocs の中でも止める | Accepted | 2026-10-03 | ADR-0012 を部分改定。2026-10-03 注記: 通常版の pip にも前段（`execute.before`）で誘導文を付けた。「bypass は対象外」を ADR-0014 で改定 |
+| [0014](0014-bypass-as-ask-upgrade.md) | OpenCode の bypass を「ask を allow にするだけ」に再定義する | Accepted | 2026-10-03 | CHG-0002 の「誘導を bypass にも効かせる: 見送り」を採用に転じる。ADR-0013 の bypass 対象外を改定 |

@@ -360,6 +360,28 @@ OpenCode のワイルドカードは `*` (**`/` を含む** 0 文字以上) と 
 
 `test_generate_opencode.py` が変換表と「出力に `**` が残らないこと」を固定する。
 
+#### deny の例外（`.env.example` など）
+
+`.env.*` は deny（read / edit とも。`.env` と同じ）にし、サンプルの `.env.example` /
+`.env.sample` / `.env.template` だけを `[[file.deny_exceptions]]` で例外にする。
+**例外は対の deny glob とセットで宣言する**（`deny` に `read_deny_globs` /
+`write_deny_globs` の項目と同じ文字列、`except` に例外の glob）。例外は**その deny にだけ**
+効き、`.ssh/**` や `*secret*` など別の deny に当たるパスは、例外に当たっても deny のまま
+（`~/.ssh/.env.example` は deny、`app/.env.example` は allow、`app/.env.local` は deny）。
+`deny` が deny の一覧に無いと生成を止める（対の相手が無い例外は黙って効かないため）。
+
+| CLI | 例外の表現 |
+| --- | --- |
+| OpenCode | 例外のある deny を deny の先頭に出し、**その直後**に例外の allow を置く。後勝ちなので、後ろの別の deny が例外に勝つ（`test_deny_exceptions_sit_right_after_their_paired_deny` / `test_dotenv_variants_are_denied_except_examples`）。例外の allow はそれより前の ask（作業ツリー外の edit の確認など）も潰すので、**ask と例外の交差を ask として直後に戻す**（`~/.claude/skills/*` の ask と `*/.env.example` から `~/.claude/skills/*/.env.example` など。`wildcard_intersection`。`*` が 2 個以上・`?` を含むなど交差を作れない形は生成を止める）。隔離版（`ocs`）の規則の整理でも、開けた場所の edit の ask として残す |
+| OpenCode の guide plugin | `rules.json` の `read_deny_except`（`{deny: [正規表現], except: [正規表現]}`）。`grep` / `glob` の結果フィルタと shell 出力の伏字化は、**対の deny に当たったときだけ**例外を適用し、ほかの deny に当たれば伏せる。壊れていれば例外なし（厳しい側） |
+| Copilot | `check_file_read.py` が `command_policy.matches_read_deny` で同じ意味に判定する。Windows では deny も例外も大小文字を区別せずに照合する（guide plugin の `pathRegExp` と同じ。POSIX は区別する）。例外の定義が壊れていれば hook が拒否する（fail-closed） |
+| Claude | **表現できない**。deny 優先で例外を書けないので `.env.example` なども deny のまま（`**/.env.*`）。例外の定義は読まない |
+
+- Bash hook（`bashrules/sensitive.py`）は `.env.<接尾辞>`（`.env.local` 以外）を元から
+  サンプル扱いにしていて、`cat .env.example` は止まらない。変更していない
+- `bypass` は `ask` を `allow` にするので、`ask` のままだと `.env.local` などが
+  通ってしまう。`.env.*` を deny にした理由（[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）
+
 ### 整形 (formatter)
 
 `format-file.sh` / `markdownlint.sh` は PostToolUse hook なので OpenCode では
@@ -444,8 +466,8 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 - **同じ場所の `edit` は `ask` に戻す。** `external_directory` は read と edit の
   両方の前段なので、allow だけ置くと既定の `{*, *, allow}` で作業ツリーの外へ
   確認なしに書ける
-- **`read` の allow は足さない。** `read` は既定で allow なので要らず、足すと
-  OpenCode の既定の `*.env` の `ask` を上書きしてしまう
+- **`read` の allow は足さない**（deny の例外を除く。[上](#deny-の例外envexample-など)）。
+  `read` は既定で allow なので要らず、足すと OpenCode の既定の `*.env` の `ask` を上書きしてしまう
 - 規則は `[file]` 由来の read / edit の規則より**前**に置く。秘密のパスの deny
   （`read_deny_globs` / `write_deny_globs`）が後勝ちで効き続ける
 - 作業ツリーの中のパスは resource が相対パスになるので、`~/.local/share/chezmoi/*`
@@ -516,24 +538,34 @@ subcommands = ["paths", "lint", "read"]
 
 ### bypass から呼べる子エージェント
 
-`bypass` のセッションから、同じく全部 allow の子エージェント `bypass-worker`（汎用）と
+`bypass` は「通常と同じ permission のまま、確認（`ask`）だけを plugin が `allow` にする」
+エージェント（[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。`common.toml` で
+`bypass = true` と明示したものが対象で、`permission` に全 allow（`"*" = "allow"`）は
+**書かない**（書くと deny の後ろに付いて静的 deny まで上書きする）。`bypass` の印は
+生成時だけのキーで、`opencode.json` には出ない（V1 の `[opencode.agent]` でも
+V2 の `[opencode.agents]` でも同じ）。
+
+`bypass` のセッションから、同じく `bypass = true` の子エージェント `bypass-worker`（汎用）と
 `bypass-fleet-worker`（`/fleet` の作業役）をサブエージェントとして起動できる。
 **ほかのエージェント（`build` など）からは起動できない。** 逆に `bypass` からは、
 承認制の子のうち役割が重なる `general` と `fleet-worker` を起動できない。
 
 ```toml
 [opencode.agent.bypass]
-permission = { "*" = "allow", task = { "*" = "allow", general = "deny", fleet-worker = "deny" } }
+mode = "primary"
+bypass = true
+permission = { task = { "*" = "allow", general = "deny", fleet-worker = "deny" } }
 
 [opencode.agent.bypass-worker]
 mode = "subagent"
-permission = { "*" = "allow", task = "deny" }   # task は V2 の subagent
+bypass = true
+permission = { task = "deny" }   # task は V2 の subagent
 
 [opencode.agents.bypass-fleet-worker]
 mode = "subagent"
+bypass = true
 system_from = "fleet-worker"
 permissions = [
-  { action = "*", resource = "*", effect = "allow" },   # 先頭の全 allow が「bypass 専用」の印
   { action = "subagent", resource = "*", effect = "deny" },
   # ... fleet-worker と同じ deny (git の状態を変える操作・question)
 ]
@@ -553,20 +585,19 @@ permissions = [
 - `bypass-fleet-worker` は、`/fleet` の作業役を `bypass` でも無確認で動かすためのもの。
   `system` は `system_from` で `fleet-worker` から写し（`generate.py` が生成時に展開し、
   `opencode.json` には `system` だけを出す。写し元は `system` を直接持つ
-  `[opencode.agents]` に限る）、deny は `fleet-worker` と同じものを全 allow の後ろに並べる
-  （最後に一致した規則が勝つ）。deny がそろっているかは
-  `test_bypass_fleet_worker_keeps_every_fleet_worker_deny` が突き合わせる
-- `generate.py` は、全部 allow で
-  サブエージェントとして使えるエージェント（`mode` が `subagent` / `all`）ごとに、
-  全体の `permissions` の**最後**へ `{ action: "subagent", resource: "<名前>", effect: "deny" }`
-  を足す（`opencode_subagent_guards`）。全部 allow とは、V1 の `permission` が `"allow"` か
-  `"*" = "allow"` を含むマップ、または V2 の `permissions` の**先頭**が
-  `{ action = "*", resource = "*", effect = "allow" }` のもの（`_grants_everything`）。
-  数える対象は `common.toml` の `[opencode.agent]` と `[opencode.agents]` の宣言だけで、
-  `rules.json` の `guarded_subagents` にも同じ名前を出す（`opencode_guarded_subagents`）。
-  全部 allow のエージェントは `bypass_agents` にも入り、誘導の plugin を素通りする
+  `[opencode.agents]` に限る）、deny は `fleet-worker` と同じものを並べる。deny が
+  そろっているかは `test_bypass_fleet_worker_keeps_every_fleet_worker_deny` が突き合わせる
+- `generate.py` は、`bypass = true` でサブエージェントとして使えるエージェント
+  （`mode` が `subagent` / `all`）ごとに、全体の `permissions` の**最後**へ
+  `{ action: "subagent", resource: "<名前>", effect: "deny" }` を足す
+  （`opencode_subagent_guards`）。印は真偽値の `true` だけを認め、自動判定はしない
+  （全 allow を書いても印にならない）。数える対象は `common.toml` の `[opencode.agent]` と
+  `[opencode.agents]` の宣言だけで、`rules.json` の `guarded_subagents` にも同じ名前を出す
+  （`opencode_guarded_subagents`）。印のあるエージェントは `bypass_agents` にも入る
+  （plugin が `ask` を `allow` にする対象）
 - エージェントの規則は全体の規則の後ろに付き、最後に一致した規則が勝つ。
-  `bypass` の `*` の allow はこの deny を上書きする
+  `bypass` の `task` の `*` の allow はこの deny を上書きする
+  （全 allow を外しても成立する。[実測](../research/opencode/permission/bypass-ask-upgrade.md)の 5）
 - **全体の deny だけでは足りない。** `common.toml` に無いエージェント（手で足した
   `build` の上書きや別名のもの）の `permission` は `merge_opencode_agents` が残す。
   そこに `task = "allow"` などがあると、同じ理屈で deny が上書きされる。
@@ -576,8 +607,8 @@ permissions = [
 - guide plugin でも起動元を検査する（二重の検査）。`rules.json` の
   `guarded_subagents` に名前を出し、`permission.evaluate` の `action` が `subagent`、
   `resources` がこの一覧に当たり、`agent` が `bypass_agents` に無ければ effect を
-  `deny` にする。`agent` が載らない場合も deny（安全側）。`common.toml` に無い
-  全部 allow のエージェントも `bypass_agents` に入らないので止まる。
+  `deny` にする。`agent` が載らない場合も deny（安全側）。`common.toml` で
+  印を付けていないエージェントも `bypass_agents` に入らないので止まる。
   plugin は一覧が空でなければ登録される（`opencode_guide_server_needed`）。
   プロジェクトの `opencode.json` のように `generate.py` が触らない設定は、こちらだけが守る。
   `rules.json` が読めないときの扱いは[下](#rulesjson-が使えないとき)
@@ -585,13 +616,13 @@ permissions = [
   緩める側には回らない（[Bypass モードの調査 5 章](../research/opencode/permission/bypass-agent.md#5-plugin-は-bypass-を貫通する段階-2-の前提)）
 - `bypass` は `mode = "primary"` を明示する。`mode` を宣言しないと既存設定の
   `mode`（`all` / `subagent`）が残り、`bypass` を子として起動できてしまう
-  （`build` → `bypass` → `bypass-worker`）。全部 allow のエージェントは `common.toml` で
-  `mode` を必ず宣言する（`test_all_allow_agents_in_common_declare_their_mode`）
+  （`build` → `bypass` → `bypass-worker`）。`bypass = true` のエージェントは `common.toml` で
+  `mode` を必ず宣言する（`test_bypass_agents_in_common_declare_their_mode`）
 - `bypass-worker` / `bypass-fleet-worker` 自身は子の起動が deny なので、さらに子を起動できない
   （入れ子にならない）
 - 「Always allow」で保存した承認は、設定の deny を上書きしない
-- `bypass` と同じく、秘密ファイルの読み取り禁止も外れる。誘導の plugin も
-  エージェント名で素通りさせる（下の plugin 層）
+- `bypass` でも**静的 deny は効く**。秘密ファイルの read / edit の deny・`pip` の deny は
+  外れない。誘導・結果フィルタ・伏字化も通常と同じに効く（下の plugin 層）
 - 隔離起動（`ocs`）でも、全体の deny と guide plugin の検査の両方が効く
   （[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
 
@@ -601,6 +632,7 @@ permissions = [
 [Bypass モードの調査 6 章](../research/opencode/permission/bypass-agent.md#6-bypass-からだけ呼べる子エージェント2026-09-28)。
 `bypass` から `general` / `fleet-worker` を外した構成と `bypass-fleet-worker` の実測は
 同じ調査の [7 章](../research/opencode/permission/bypass-agent.md#7-bypass-の子の入れ替え2026-09-30)。
+全 allow を外した構成の実測は [ask→allow の調査](../research/opencode/permission/bypass-ask-upgrade.md)。
 
 ### plugin 層 (`guide-plugin`)
 
@@ -616,7 +648,7 @@ permissions = [
 | 誘導（deny + 代替案）と説明の生成 | `index.js` | `opencode.json` の `plugins` |
 | `grep` / `glob` の結果フィルタ | `index.js` | 同上 |
 | shell 出力の伏字化 | `index.js` | 同上 |
-| 全部 allow の子エージェントの起動元の検査（[上](#bypass-から呼べる子エージェント)） | `index.js` | 同上 |
+| bypass の子エージェントの起動元の検査（[上](#bypass-から呼べる子エージェント)）と `ask` → `allow` | `index.js` | 同上 |
 | 確認画面への説明表示（toast） | `tui.ts` | **`cli.json` の `plugins`** |
 | `git commit` の件名と本文の表示（[下](#git-commit-の件名と本文)） | `tui.ts` と `commit-message.js` | 同上 |
 
@@ -634,21 +666,28 @@ overlay を指すためで、パス指定の環境変数は存在しない。`sh
 `OPENCODE_CLI_CONFIG_CONTENT` へ本文を流し込んで補う。TUI plugin と
 [キーバインド](#キーバインド)の両方がこれに依存する。
 
-plugin が守る規約は 2 つ。
+plugin が守る規約は次のとおり。
 
-- **`bypass` エージェントには触らない。** 全部止めたいときの逃げ道を壊さない。
+- **`bypass` は ask を allow にするだけ。** `permission.evaluate` の**最後**で、
+  `rules.json` の `bypass_agents` に載ったエージェントの `ask` を `allow` に書き換える
+  （[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。誘導で `deny` にしたものは
+  `deny` のまま、静的 deny は `evaluate` に届かないのでそのまま止まる。
+  `bypass_agents` が読めない・壊れているときは書き換えず `ask` のまま（安全側）。
+  説明（`ask_description`）は `allow` になるものには生成しない。
   判定は**エージェント名**で行う（`permission.evaluate` に `agent` が載ることを
   実測。[hook の呼ばれ方](../research/opencode/permission/hook-order.md)）。
-  名前は permission が全部 allow（`"allow"` か `"*" = "allow"`）のエージェントから生成するので、
-  `common.toml` が単一ソースのまま保たれる
+  名前は `common.toml` の `bypass = true` から生成するので単一ソースが保たれる。
+  `commit` など別の名前の子の `ask` は書き換えない
+- **`bypass` にも誘導・前段停止（early）・`grep` / `glob` の結果フィルタ・shell 出力の
+  伏字化を同じに効かせる。** 素通りさせる判定は持たない。誤爆は誘導規則側を直す。
+  子エージェントの起動制限（`guardSubagent`）だけは `bypass_agents` を見る
 - **`effect` では見分けない。** `allow` で判定すると
   `cd x && git log`（`git log` が静的 allow）のように、allow を含む呼び出しまで
   誘導が素通りする
-- **リダイレクトを含むコマンドは `allow` へ引き上げない**
+- **リダイレクトを含むコマンドは `allow` へ引き上げない**（`bypass` 以外）
 
-`bypass` は**誘導も結果フィルタも両方**素通りする。規則ごとに効かせ分ける
-ことも技術的には可能だが採らない。誘導が誤爆したときの逃げ道を残すほうが
-重要で、`bypass` は「秘密を読むために一時的に全部外す」用途も兼ねるため。
+「秘密を読むために一時的に全部外す」逃げ道は OpenCode の中には残さない。
+そのときは Copilot CLI を使うか、利用者自身がコマンドを実行する。
 
 #### shell ツールの環境変数（git を入力待ちにさせない）
 
@@ -679,7 +718,8 @@ plugin 無しで続ける（fail-open。[plugin API の実測 6 章](../research
 | 壊れたもの | 扱い | 理由 |
 | --- | --- | --- |
 | ファイルが無い・JSON でない・オブジェクトでない | 下の全部の節が「壊れた」扱い | — |
-| `guarded_subagents` / `bypass_agents` が無い・文字列の配列でない | 子エージェントの起動元を検査しない（止めずに警告） | 一覧が無いと守る子も `bypass` も分からない。全部止めると普段の作業ごと止まる（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)） |
+| `bypass_agents` が無い・文字列の配列でない | `bypass` の `ask` を `allow` にせず `ask` のまま。子エージェントの起動元も検査しない（止めずに警告） | 一覧が無いと `bypass` も守る子との関係も分からない。`ask` のままなら確認が出るだけで安全側。全部止めると普段の作業ごと止まる（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)） |
+| `guarded_subagents` が無い・文字列の配列でない（`bypass_agents` は正常） | 子エージェントの起動元を検査しない（止めずに警告）。`bypass` の `ask` → `allow` は続ける | 起動元の検査と `ask` の引き上げは別の機能。子の一覧だけの破損で `bypass` 全体を止めない |
 | `read_deny` が無い・`null`・文字列の配列でない・正規表現にできない | `grep` / `glob` の結果を伏せ、理由を本文に残す | この 2 つには plugin が唯一の保護 |
 | `guide` | 誘導しない（確認は静的な規則どおり出る） | 誘導は代替案の案内で、境界ではない |
 | `redact` | 伏字化しない | 伏字化は安全網で、境界ではない |

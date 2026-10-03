@@ -35,13 +35,14 @@ opencode     # 通常起動（境界なし）
 
 ## 通常起動と `ocs` の使い分け
 
-分けるのは**境界を張るかどうか**で、エージェントではない。`bypass`（permission を全部 `allow` に
-するエージェント）はどちらでも使えるが、外れるものが違う。
+分けるのは**境界を張るかどうか**で、エージェントではない。`bypass`（通常と同じ permission のまま、
+確認（`ask`）だけを guide plugin が `allow` にするエージェント。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）は
+どちらでも使えるが、外れるものが違う。
 
 | | 通常の `opencode` | `ocs` |
 | --- | --- | --- |
 | OS の境界 | なし | Fence |
-| `bypass` で外れるもの | permission の確認（ホストの権限で何でもできる） | permission の確認だけ。境界の外の秘密は見えず、`git push` などは policy で止まる |
+| `bypass` で外れるもの | permission の確認（`ask`）だけ。静的 deny（秘密ファイル・`pip` など）と誘導は効く | 同じく確認だけ。境界の外の秘密は見えず、`git push` などは policy で止まる |
 | 向く作業 | 詰まったときの復旧、制御ファイルの編集、`chezmoi apply` | ふだんの作業を確認なしで進める |
 
 制御ファイルの置き場や保護対象の中では、`ocs` は起動を断る（[起動ディレクトリの制限](#起動ディレクトリの制限)）。
@@ -417,10 +418,10 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
   guide plugin の起動元の検査）は、隔離版でもそのまま効く
   （[bypass から呼べる子エージェント](agent-config-generation.md#bypass-から呼べる子エージェント)）
 - `bypass` の中でも `experimental.policies`（`git push` / `chezmoi apply` など）は止まる
-  （実機で確認）。一方で秘密ファイルの読み取りの deny も、guide plugin の伏字化と
-  `grep` / `glob` の結果フィルタも外れる（plugin は `bypass_agents` を素通りさせる）。
-  ホームの秘密は境界が隠すが、**ワークスペースの中の秘密（`.env` など）は `bypass` から
-  そのまま読める**（コードから判断。実機では未確認）
+  （実機で確認）。秘密ファイルの読み取りの deny も、guide plugin の誘導・伏字化・
+  `grep` / `glob` の結果フィルタも `bypass` に効く（`bypass` が緩めるのは `ask` → `allow` だけ。
+  [ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。ワークスペースの中の `.env` / `.env.*` も
+  deny で読めない（`.env.example` などのサンプルは例外）
 - プロバイダの `provider.use` の policy（通常版がこの PC のプロバイダ以外を塞ぐもの）は
   隔離版には出さない。隔離版で使えるプロバイダは通信先の許可（`[opencode.sandbox] providers`）
   が決め、既定モデルも `model_preference` で選ぶため。通常版と同じ policy を置くと、

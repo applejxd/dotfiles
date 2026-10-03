@@ -66,6 +66,7 @@ def home(path: str) -> str:
 # 作業ツリーの外の読み取り
 # ---------------------------------------------------------------------------
 
+
 def test_external_read_opens_skill_dirs_and_work_read():
     """スキルの置き場と、隔離版の work_read を同じ一覧から開ける (二重に並べない)。"""
     expected = [
@@ -92,8 +93,15 @@ def test_external_read_keeps_edit_behind_a_confirmation():
 
 
 def test_read_is_not_allowed_explicitly():
-    """read の allow を足すと、OpenCode の既定の ``*.env`` の ask を上書きする。"""
-    assert not [r for r in normal() if r["action"] == "read" and r["effect"] == "allow"]
+    """read の allow は deny の例外 (``.env.example`` など) だけ。それ以外は足さない。"""
+    allowed = {r["resource"] for r in normal() if r["action"] == "read" and r["effect"] == "allow"}
+    expected = {
+        p
+        for e in COMMON["file"]["deny_exceptions"]
+        for g in e["except"]
+        for p in gen.opencode_path_patterns(g)
+    }
+    assert allowed == expected
 
 
 @pytest.mark.parametrize(
@@ -131,6 +139,50 @@ def test_isolated_opens_the_same_dirs():
     for d in gen.opencode_external_read_dirs(COMMON):
         assert effect("external_directory", home(d) + "/proj/*", perms) == "allow", d
         assert effect("edit", home(d) + "/proj/a.txt", perms) == "ask", d
+
+
+# deny の例外 (.env.example など) は、`.env.*` の deny で潰されたものを戻すだけにする。
+# 作業ツリーの外の edit の確認 (ask) や、別の deny に勝ってはいけない。
+@pytest.mark.parametrize("build", [normal, isolated], ids=["通常版", "隔離版"])
+@pytest.mark.parametrize(
+    ("action", "path", "expected"),
+    [
+        ("edit", "app/.env.example", "allow"),
+        ("read", "app/.env.example", "allow"),
+        ("edit", "app/.env.local", "deny"),
+        ("edit", "~/.claude/skills/foo/.env.example", "ask"),
+        ("edit", "~/.claude/skills/.env.example", "ask"),
+        ("edit", "~/.claude/skills/foo/bar/.env.template", "ask"),
+        ("read", "~/.claude/skills/foo/.env.example", "allow"),
+        ("edit", "~/.claude/skills/foo/.env.local", "deny"),
+        ("edit", "~/.ssh/.env.example", "deny"),
+        ("read", "~/.ssh/.env.example", "deny"),
+        ("edit", "~/.claude/skills/foo/.ssh/.env.example", "deny"),
+    ],
+)
+def test_deny_exceptions_do_not_override_external_edit_asks(build, action, path, expected):
+    assert effect(action, home(path), build()) == expected, path
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "expected"),
+    [
+        ("~/s/*", "*/.env.example", {"~/s/*/.env.example", "~/s/.env.example"}),
+        ("~/s/*", ".env.example", set()),
+        ("mise.toml", "*/.env.example", set()),
+        ("mise.toml", "*mise.toml", {"mise.toml"}),
+        ("a/*", "b/*", set()),
+        ("a/*", "a/b/*", {"a/b/*"}),
+    ],
+)
+def test_wildcard_intersection(a, b, expected):
+    assert set(gen.wildcard_intersection(a, b)) == expected
+
+
+@pytest.mark.parametrize(("a", "b"), [("a/?", "*/x"), ("a/*/b/*", "*/x"), ("*/x", "a/**")])
+def test_wildcard_intersection_refuses_shapes_it_cannot_cross(a, b):
+    with pytest.raises(ValueError, match="交差"):
+        gen.wildcard_intersection(a, b)
 
 
 # ---------------------------------------------------------------------------

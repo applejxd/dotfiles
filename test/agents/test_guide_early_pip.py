@@ -107,15 +107,14 @@ def test_only_early_rules_are_checked_early(tmp_path):
     assert out == [{"thrown": None}] * 2
 
 
-def test_bypass_agents_and_other_tools_are_not_stopped(tmp_path):
+def test_bypass_agents_are_stopped_like_the_others(tmp_path):
+    """bypass でも前段で止める。止まるのは shell だけで、ほかのツールは通す。"""
     names = gen.opencode_bypass_agents(COMMON)
-    if not names:
-        pytest.skip("bypass agent が定義されていない")
-    out = _run(
-        tmp_path,
-        [("pip install x", names[0], "shell"), ("pip install x", "build", "grep")],
-    )
-    assert out == [{"thrown": None}] * 2
+    assert names, "前提: bypass agent が定義されている"
+    for name in names:
+        out = _run(tmp_path, [("pip install x", name, "shell"), ("pip install x", name, "grep")])
+        assert out[0]["thrown"] and "uv add" in out[0]["thrown"], name
+        assert out[1] == {"thrown": None}, name
 
 
 def test_unreadable_rules_do_nothing_so_static_deny_decides(tmp_path):

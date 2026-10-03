@@ -35,6 +35,7 @@
 | 1d | PowerShell の補助関数を対話判定の後ろへ。Console 設定の失敗を無視する。既定文字コード（`*:Encoding`）は 5.1 の退行を避けるため非対話でも維持 | 2 | 実装済み（Windows 実機は未検証） |
 | 2b | OpenCode の拒否規則: pip 系を止めて uv へ誘導（Q4）、危険な `rm` を止める（Q5） | 3 | 実装済み（guide 規則・実機確認済み。[ADR-0013](../adr/0013-opencode-shell-guard-inside-ocs.md)。通常版の pip の静的 deny にも `execute.before` で誘導文を付けた。[実測](../research/opencode/permission/early-guard.md)） |
 | 3a | git の環境変数を AI CLI の起動側で入れる（Q2、Q3）。OpenCode は `guide-plugin` の `shell.create.before` で実装済み（Claude Code / Copilot CLI は未着手） | 3 | 進行中 |
+| 4 | OpenCode の `bypass` を「ask を allow にするだけ」に再定義し、誘導・結果フィルタ・伏字化を `bypass` にも効かせる。`.env.*` を deny に上げる（Q6） | 4 | 完了（実装・実機確認済み。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)、[実測](../research/opencode/permission/bypass-ask-upgrade.md)） |
 
 状態: 未着手 / 進行中 / 調査中 / 完了 / 保留 / 見送り
 
@@ -52,6 +53,7 @@
 | Q3 エディタ | 自動実行のときだけ `GIT_EDITOR=false`。既存の指定は残す。`GIT_SEQUENCE_EDITOR` は別判断。`EDITOR=true` は採らない |
 | Q4 pip | OpenCode で `pip` / `pip3` / `python -m pip` を止めて uv へ誘導する。poetry / pipenv は止めない。`ocs` の中にも効かせる（安全境界ではなく uv を使う運用の取り決めのため）。既存の pip の deny は、静的 deny の呼び出しが plugin の `evaluate` に届かず説明が出ないため、`execute.before`（`home/dot_config/opencode/guide-plugin/index.js`）で先に止めて説明を返す（2026-10-03 実測）。既存の deny は外さない |
 | Q5 危険な `rm` | OpenCode で、止めたい具体例（`.git` の直接削除、`~` や `/` の指定、作業ディレクトリ全体など）に限って止める。`ocs` の中にも効かせる。「うっかり防止であり完全な保護ではない」と明記する。[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)（`ocs` の中では `rm` などを確認しない）の部分変更として記録する |
+| Q6 `bypass` の意味 | 全 allow をやめ、通常と同じ permission のまま plugin が `ask` だけを `allow` にする。通常で deny のものは `bypass` でも deny。誘導（pip・`rm` など）・`grep` / `glob` の結果フィルタ・伏字化・前段停止は `bypass` にも効かせる（[CHG-0002](0002-opencode-ask-by-default.md) の「誘導を bypass にも効かせる: 見送り」を採用に転じる）。逃げ道は Copilot CLI と利用者自身の実行。`bypass` 扱いは `bypass = true` で明示。`.env.*` は ask から deny へ（`.env.example` / `.sample` / `.template` は OpenCode と Copilot だけ例外。Claude は deny のまま）。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md) |
 
 ## 未解決点
 
@@ -103,3 +105,6 @@
 - 2026-10-03 — 波 1〜3 を実装。残りは未解決点の 3 件（Claude / Copilot への環境変数、
   通常版 pip の誘導文、Windows 実機での検証）
 - 2026-10-03 — 通常版 pip の誘導文を、静的 deny を残したまま plugin の前段停止で解決
+- 2026-10-03 — 作業 4（Q6）。`bypass` を「ask を allow にするだけ」へ再定義し、`.env.*` を deny へ上げた。
+  `.env.*` の deny は全 CLI に効くが、`.env.example` などの例外は OpenCode と Copilot だけ（Claude は deny 優先で例外を書けず deny のまま）。ocs の隔離版も同じ生成関数なので同じ扱い
+- 2026-10-03 — 例外の置き場所を修正。全 deny の後ろに allow を置くと `~/.ssh/.env.example` まで通る退行があったため、例外を対の deny とセットで宣言し（`[[file.deny_exceptions]]`）、OpenCode は対の deny の直後に allow を置く形に改めた。Copilot の `check_file_read.py` も同じ意味の例外に対応した

@@ -43,13 +43,18 @@ console.log(JSON.stringify(out))
 """
 
 
-def _run(tmp_path: Path, cases: list[tuple[str, str, str]]) -> list[dict]:
+def _run(
+    tmp_path: Path, cases: list[tuple[str, str, str]], rules_text: str | bool | None = True
+) -> list[dict]:
+    """``rules_text``: True なら生成した rules.json、None なら置かない、文字列ならそのまま書く。"""
     node = shutil.which("node")
     if not node:
         pytest.skip("node が無い (mise.toml の [tools] に宣言してある)")
     shutil.copy(PLUGIN / "index.js", tmp_path / "index.js")
-    rules = gen.build_opencode_guide({}, COMMON)
-    (tmp_path / "rules.json").write_text(json.dumps(rules), "utf-8")
+    if rules_text is True:
+        rules_text = json.dumps(gen.build_opencode_guide({}, COMMON))
+    if rules_text is not None:
+        (tmp_path / "rules.json").write_text(rules_text, "utf-8")
     (tmp_path / "run.mjs").write_text(SCRIPT, "utf-8")
     done = subprocess.run(
         [node, str(tmp_path / "run.mjs"), json.dumps(cases)],
@@ -167,11 +172,61 @@ def test_static_deny_is_never_overridden_by_the_plugin(tmp_path):
     assert out == [{"effect": "deny", "message": None}] * 2
 
 
-def test_bypass_agents_are_not_guided(tmp_path):
+def test_bypass_agents_are_guided_like_the_others(tmp_path):
+    """bypass でも誘導は効き、deny のまま (誘導で止めたものは ask→allow に上げない)。"""
     names = gen.opencode_bypass_agents(COMMON)
-    if not names:
-        pytest.skip("bypass agent が定義されていない")
-    out = _run(tmp_path, [("rm -rf .git", "allow", names[0])])
+    assert names, "前提: bypass agent が定義されている"
+    for name in names:
+        out = _run(tmp_path, [("rm -rf .git", "ask", name), ("rm -rf .git", "allow", name)])
+        assert [o["effect"] for o in out] == ["deny", "deny"], name
+        assert all(".git" in o["message"] for o in out), name
+
+
+def test_bypass_agents_get_ask_upgraded_to_allow(tmp_path):
+    """誘導に当たらない ask は allow になる。bypass 以外は ask のまま。説明も付けない。"""
+    out = _run(
+        tmp_path,
+        [
+            ("touch x", "ask", "bypass"),
+            ("touch x", "ask", "bypass-worker"),
+            ("touch x", "ask", "bypass-fleet-worker"),
+            ("touch x", "ask", "build"),
+            ("touch x", "ask", "commit"),
+            ("touch x", "deny", "bypass"),
+            ("ls", "allow", "bypass"),
+        ],
+    )
+    assert [o["effect"] for o in out] == [
+        "allow",
+        "allow",
+        "allow",
+        "ask",
+        "ask",
+        "deny",
+        "allow",
+    ]
+    assert all(o["message"] is None for o in out)
+
+
+@pytest.mark.parametrize("broken", ["{ broken", "[]", None, '{"bypass_agents": "bypass"}'])
+def test_ask_stays_ask_when_bypass_agents_are_unusable(tmp_path, broken):
+    """rules.json が読めない・bypass_agents が壊れているときは ask のまま (安全側)。"""
+    out = _run(tmp_path, [("touch x", "ask", "bypass")], rules_text=broken)
+    assert out == [{"effect": "ask", "message": None}]
+
+
+def test_bypass_agents_missing_from_rules_keep_ask(tmp_path):
+    rules = gen.build_opencode_guide({}, COMMON)
+    del rules["bypass_agents"]
+    out = _run(tmp_path, [("touch x", "ask", "bypass")], rules_text=json.dumps(rules))
+    assert out == [{"effect": "ask", "message": None}]
+
+
+def test_broken_guarded_subagents_do_not_stop_the_ask_upgrade(tmp_path):
+    """子の一覧 (起動元の検査) が壊れても、bypass_agents が正常なら ask→allow は続ける。"""
+    rules = gen.build_opencode_guide({}, COMMON)
+    rules["guarded_subagents"] = "bypass-worker"
+    out = _run(tmp_path, [("touch x", "ask", "bypass")], rules_text=json.dumps(rules))
     assert out == [{"effect": "allow", "message": None}]
 
 

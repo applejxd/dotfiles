@@ -88,7 +88,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | --- | --- | --- |
 | [CHG-0006](change/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。段 2（常用）に着手。使って決まった設定の回収は段 2.5 |
 | [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み。次は段 2（共有ランタイムとハーネスの節分け） |
-| [CHG-0011](change/0011-agent-first-shell.md) | In progress | シェルの主な利用者を AI エージェントとして残課題を整える。波 1〜3 は実装済み。通常版 pip の誘導文は前段停止で解決。残りは Claude / Copilot への git 環境変数、Windows 実機での検証 |
+| [CHG-0011](change/0011-agent-first-shell.md) | In progress | シェルの主な利用者を AI エージェントとして残課題を整える。波 1〜3 は実装済み。通常版 pip の誘導文は前段停止で解決。bypass を ask→allow に再定義（ADR-0014）。残りは Claude / Copilot への git 環境変数、Windows 実機での検証 |
 
 ## 判断待ち・障害
 

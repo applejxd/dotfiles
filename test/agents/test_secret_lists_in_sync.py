@@ -3,7 +3,8 @@
 Bash hook (bashrules/tables.toml の credential_paths / history_basenames) が
 守るファイルは、``[file] read_deny_globs`` (Claude の Read / OpenCode の read /
 Copilot の check_file_read.py) でも守る。片方にしか無いと、Read ツール側で
-読めてしまう。.env は直下以外でも deny / ask になること。
+読めてしまう。.env は直下以外でも deny になること (``.env.*`` も deny。サンプルの
+``.env.example`` などは ``[[file.deny_exceptions]]`` で、対の ``**/.env.*`` にだけ例外にする)。
 
 Run with: ``uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q``
 """
@@ -33,8 +34,16 @@ HISTORY_SAMPLES = [f"~/{name}" for name in SENSITIVE["history_basenames"]]
 
 def _opencode_resources(key: str) -> set[str]:
     out: set[str] = set()
-    for glob in COMMON["file"][key]:
+    for glob in COMMON["file"].get(key, []):
         out |= set(gen.opencode_path_patterns(glob))
+    return out
+
+
+def _opencode_resources_of_exceptions() -> set[str]:
+    out: set[str] = set()
+    for entry in COMMON["file"]["deny_exceptions"]:
+        for glob in entry["except"]:
+            out |= set(gen.opencode_path_patterns(glob))
     return out
 
 
@@ -63,7 +72,17 @@ def test_dotenv_is_denied_at_any_depth(path):
 
 
 @pytest.mark.parametrize("path", [".env.local", "app/.env.production", "/home/u/app/.env.dev"])
-def test_dotenv_variants_ask_at_any_depth(path):
-    assert _opencode_hits(path, _opencode_resources("read_ask_globs")), path
-    assert _opencode_hits(path, _opencode_resources("write_ask_globs")), path
-    assert _matches_any(path.lstrip("/"), COMMON["file"]["read_ask_globs"]), path
+def test_dotenv_variants_are_denied_at_any_depth(path):
+    """``.env.*`` は ask でなく deny (bypass の ask→allow で通らないようにする)。"""
+    assert _opencode_hits(path, _opencode_resources("read_deny_globs")), path
+    assert _opencode_hits(path, _opencode_resources("write_deny_globs")), path
+    assert _matches_any(path.lstrip("/"), COMMON["file"]["read_deny_globs"]), path
+    assert _matches_any(path.lstrip("/"), COMMON["file"]["write_deny_globs"]), path
+    assert not _opencode_hits(path, _opencode_resources("read_ask_globs")), path
+    assert not _opencode_hits(path, _opencode_resources("write_ask_globs")), path
+
+
+@pytest.mark.parametrize("path", [".env.example", "app/.env.sample", "/home/u/app/.env.template"])
+def test_dotenv_samples_are_exempt_for_opencode(path):
+    """サンプルは通常のファイル。OpenCode は deny の後ろの allow で例外にする。"""
+    assert _opencode_hits(path, _opencode_resources_of_exceptions()), path

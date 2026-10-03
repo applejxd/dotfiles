@@ -75,9 +75,7 @@ def _launcher() -> SimpleNamespace:
     launcher = SimpleNamespace(**{name: sys.modules[f"ocs_lib.{name}"] for name in MODULES})
     if _IMPL_GIT_HOME is not None:
         real = launcher.backup.git_env
-        launcher.backup.git_env = lambda index=None: _isolated_git_env(
-            real(index), _IMPL_GIT_HOME
-        )
+        launcher.backup.git_env = lambda index=None: _isolated_git_env(real(index), _IMPL_GIT_HOME)
     return launcher
 
 
@@ -305,9 +303,9 @@ def test_reads_are_denied_by_default(tmp_path):
     """
     launcher = _launcher()
     (tmp_path / "ws").mkdir()
-    filesystem = launcher.boundary.build_boundary(
-        _base_sandbox(tmp_path), tmp_path / "ws"
-    )["filesystem"]
+    filesystem = launcher.boundary.build_boundary(_base_sandbox(tmp_path), tmp_path / "ws")[
+        "filesystem"
+    ]
     assert filesystem["defaultDenyRead"] is True
 
 
@@ -338,9 +336,9 @@ def test_data_dir_is_shared_but_state_is_not(tmp_path):
     ws.mkdir()
     data = tmp_path / "share" / "opencode"
     data.mkdir(parents=True)
-    filesystem = launcher.boundary.build_boundary(
-        _base_sandbox(tmp_path), ws, None, data
-    )["filesystem"]
+    filesystem = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, None, data)[
+        "filesystem"
+    ]
     assert str(data) in filesystem["allowWrite"]
     opened = " ".join(filesystem["allowRead"] + filesystem["allowWrite"])
     assert ".local/state/opencode" not in opened
@@ -502,7 +500,10 @@ def _control_home(tmp_path: Path) -> tuple[Path, dict]:
     """
     home = tmp_path.resolve() / "home"
     for rel in (
-        ".config/opencode/guide-plugin", ".local/share/ocs", ".local/share/chezmoi", "src/repo",
+        ".config/opencode/guide-plugin",
+        ".local/share/ocs",
+        ".local/share/chezmoi",
+        "src/repo",
     ):
         (home / rel).mkdir(parents=True)
     sandbox = _base_sandbox(
@@ -650,9 +651,7 @@ def test_request_paths_are_resolved(tmp_path):
     ws.mkdir()
     _request(ws, 'read = ["~/datasets", "sub/dir", "../other"]\n')
     extras = launcher.boundary.read_request(ws)["extras"]["read"]
-    assert extras == [
-        str(Path.home() / "datasets"), str(ws / "sub/dir"), str(tmp_path / "other")
-    ]
+    assert extras == [str(Path.home() / "datasets"), str(ws / "sub/dir"), str(tmp_path / "other")]
 
 
 def test_unknown_keys_in_request_refuse_to_start(tmp_path):
@@ -701,9 +700,9 @@ def test_protected_paths_are_workspace_relative(tmp_path):
     launcher = _launcher()
     where = tmp_path / "gamma"
     where.mkdir()
-    deny_write = launcher.boundary.build_boundary(_base_sandbox(tmp_path), where)[
-        "filesystem"
-    ]["denyWrite"]
+    deny_write = launcher.boundary.build_boundary(_base_sandbox(tmp_path), where)["filesystem"][
+        "denyWrite"
+    ]
     assert str(where / ".opencode") in deny_write
 
 
@@ -724,7 +723,10 @@ def test_missing_protected_dir_is_created_before_launch(tmp_path):
 
 
 REPO_PROTECTED = [
-    ".opencode", "home/dot_config/agents", "home/dot_local/share/ocs", "scripts/agents"
+    ".opencode",
+    "home/dot_config/agents",
+    "home/dot_local/share/ocs",
+    "scripts/agents",
 ]
 
 
@@ -839,8 +841,13 @@ def test_symlinked_protected_dir_is_blocked_at_its_real_path(tmp_path, where):
         "../lib/ocs/cli.py",
         "../home/dot_local/share/ocs/cli.py",
     ],
-    ids=["保護対象の中のファイル", "保護対象そのもの", "symlink の保護対象", "その実体の中",
-         "symlink 経由でその中"],
+    ids=[
+        "保護対象の中のファイル",
+        "保護対象そのもの",
+        "symlink の保護対象",
+        "その実体の中",
+        "symlink 経由でその中",
+    ],
 )
 def test_requested_write_inside_a_protected_dir_is_refused(tmp_path, write):
     """★``write`` に保護対象の中を足す宣言は拒否する (塞ぐと書けず、塞がないと守れない)。
@@ -886,7 +893,8 @@ def test_launch_inside_a_protected_dir_is_refused(tmp_path, rel):
 
 
 @pytest.mark.parametrize(
-    "rel", ["lib/ocs", "home/dot_local/share/ocs", "lib/ocs/sub"],
+    "rel",
+    ["lib/ocs", "home/dot_local/share/ocs", "lib/ocs/sub"],
     ids=["実体", "symlink 経由", "実体の中"],
 )
 def test_launch_inside_a_symlinked_protected_dir_is_refused(tmp_path, rel):
@@ -954,8 +962,13 @@ def test_emptied_managed_keys_leave_no_residue(tmp_path, stage):
     managed = ("policies", "plugins", "system_prompt", "agent", "agents", "commands")
     if stage == "空":
         sandbox = {
-            **full, "policies": [], "plugins": [], "system_prompt": "",
-            "agent": {}, "agents": {}, "commands": {},
+            **full,
+            "policies": [],
+            "plugins": [],
+            "system_prompt": "",
+            "agent": {},
+            "agents": {},
+            "commands": {},
         }
     else:
         sandbox = {k: v for k, v in full.items() if k not in managed}
@@ -990,10 +1003,10 @@ def test_common_agents_and_commands_are_written(tmp_path):
     sandbox = _sandbox(tmp_path)
     project = _project(tmp_path)
     launcher.config.write_isolated_config(sandbox, project)
-    config = json.loads(
-        (Path(sandbox["config_dir"]) / "opencode.json").read_text(encoding="utf-8")
-    )
-    assert config["agent"]["bypass"]["permission"]["*"] == "allow"
+    config = json.loads((Path(sandbox["config_dir"]) / "opencode.json").read_text(encoding="utf-8"))
+    # 全 allow は持たない (bypass の ask は plugin が allow にする)。task の起動許可は残る
+    assert "*" not in config["agent"]["bypass"]["permission"]
+    assert config["agent"]["bypass"]["permission"]["task"]["*"] == "allow"
     assert "bypass-worker" in config["agent"]
     assert {"commit", "review", "fleet-worker", "bypass-fleet-worker"} <= set(config["agents"])
     assert "fleet" in config["commands"]
@@ -1043,9 +1056,7 @@ def test_host_agents_are_not_carried_into_the_isolated_config(tmp_path, monkeypa
     monkeypatch.setattr(launcher.config, "HOST_CONFIG", host)
     sandbox = _sandbox(tmp_path)
     launcher.config.write_isolated_config(sandbox, _project(tmp_path))
-    config = json.loads(
-        (Path(sandbox["config_dir"]) / "opencode.json").read_text(encoding="utf-8")
-    )
+    config = json.loads((Path(sandbox["config_dir"]) / "opencode.json").read_text(encoding="utf-8"))
     for key in ("agent", "agents", "commands"):
         assert "handmade" not in config[key], f"通常版の {key} が入った"
 
@@ -1208,9 +1219,7 @@ def test_ui_keys_are_inherited_but_never_overwritten(tmp_path, monkeypatch):
     """見た目・操作感は引き継ぎ、隔離版で選んだ値は残す。"""
     launcher = _launcher()
     host = tmp_path / "host.json"
-    host.write_text(
-        json.dumps({"theme": "dark", "model": "p/host"}), encoding="utf-8"
-    )
+    host.write_text(json.dumps({"theme": "dark", "model": "p/host"}), encoding="utf-8")
     monkeypatch.setattr(launcher.config, "HOST_CONFIG", host)
     got = launcher.config.inherit_ui({"model": "p/chosen"})
     assert got["theme"] == "dark", "テーマが引き継がれていない"
@@ -2036,9 +2045,7 @@ def _network_check_environment(launcher: SimpleNamespace, allowed: list[str]) ->
         pytest.param(["github.com", "example.com"], "example.net", id="exact"),
         pytest.param(["github.com", "EXAMPLE.COM."], "example.net", id="case-and-dot"),
         pytest.param(["github.com", "*.example.com"], "example.net", id="wildcard"),
-        pytest.param(
-            ["github.com", "example.com", "*.example.net"], "example.org", id="two-taken"
-        ),
+        pytest.param(["github.com", "example.com", "*.example.net"], "example.org", id="two-taken"),
     ],
 )
 def test_denied_probe_avoids_the_allowed_domains(allowed, denied):
@@ -2321,9 +2328,9 @@ def test_inner_state_home_is_writable_scratch(tmp_path, monkeypatch):
     """
     seen = _launch(tmp_path, monkeypatch, {"PATH": "/usr/bin"})
     assert "XDG_STATE_HOME=/tmp/xdg-state" in seen["argv"][4:9]
-    opened = seen["boundary"]["filesystem"]["allowRead"] + seen["boundary"]["filesystem"][
-        "allowWrite"
-    ]
+    opened = (
+        seen["boundary"]["filesystem"]["allowRead"] + seen["boundary"]["filesystem"]["allowWrite"]
+    )
     assert not [p for p in opened if "/.local/state" in p]
 
 
@@ -2332,9 +2339,7 @@ def test_launch_shares_the_host_db(tmp_path, monkeypatch):
 
     OPENCODE_DB が残ると常駐サービスと別の DB を使い、履歴が分かれる。
     """
-    seen = _launch(
-        tmp_path, monkeypatch, {"PATH": "/usr/bin", "OPENCODE_DB": "/elsewhere/x.db"}
-    )
+    seen = _launch(tmp_path, monkeypatch, {"PATH": "/usr/bin", "OPENCODE_DB": "/elsewhere/x.db"})
     env = seen["env"]
     assert "OPENCODE_DB" not in env
     assert env["XDG_DATA_HOME"] == str(tmp_path / "share")
@@ -2607,8 +2612,11 @@ def _control_write_here(tmp_path: Path, sandbox: dict) -> None:
     "refuse",
     [_unsafe_here, _protected_here, _protected_write_here, _control_here, _control_write_here],
     ids=[
-        "unsafe_workspace", "保護対象の中", "保護対象の中への write",
-        "制御ファイルの置き場の中", "制御ファイルの置き場と重なる write",
+        "unsafe_workspace",
+        "保護対象の中",
+        "保護対象の中への write",
+        "制御ファイルの置き場の中",
+        "制御ファイルの置き場と重なる write",
     ],
 )
 @pytest.mark.parametrize("argv", [["--no-backup"], ["--check"]])
@@ -2638,9 +2646,7 @@ def test_check_invokes_fence_with_settings(tmp_path, monkeypatch):
     check.parent.mkdir()
     check.write_text("", encoding="utf-8")
     monkeypatch.setattr(launcher.check, "CHECK", check)
-    monkeypatch.setattr(
-        launcher.check, "hidden_targets", lambda: {"present": [], "absent": []}
-    )
+    monkeypatch.setattr(launcher.check, "hidden_targets", lambda: {"present": [], "absent": []})
     seen: list = []
 
     def fake_run(cmd, **kw):
@@ -2657,8 +2663,14 @@ def test_check_invokes_fence_with_settings(tmp_path, monkeypatch):
     )
     cmd, env = seen[0]
     assert got == 1
-    assert cmd == [str(tmp_path / "fence"), "--settings", str(tmp_path / "b.json"), "--",
-                   "/bin/sh", str(check)]
+    assert cmd == [
+        str(tmp_path / "fence"),
+        "--settings",
+        str(tmp_path / "b.json"),
+        "--",
+        "/bin/sh",
+        str(check),
+    ]
     assert env["PATH"] == "/usr/bin:/bin"
     assert env["TMPDIR"] == str(tmp_path / "tmp")
 
