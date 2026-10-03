@@ -56,9 +56,41 @@ V2 は config の静的 deny に当たると plugin の `permission.evaluate` �
 - 前段は `permission` を通らないので、`ask` の確認や `evaluate` の `message` 経路は使わない。
   誘導のための停止はエラー扱いでモデルへ返る
 
+> [!NOTE]
+> 上の実装の節の「bypass エージェントでなければ」と c3（bypass で止まらない）は、
+> [ADR-0014](../../../adr/0014-bypass-as-ask-upgrade.md) より前の記録。現在の `index.js` は
+> エージェントで分けず、bypass にも同じに効く（[下の追記](#追記-deny-全体への拡張2026-10-03)）。
+
 ## 検査
 
 `test/agents/test_guide_early_pip.py`（生成した `rules.json` を実際の plugin に通す。止める例・
 止めない例・bypass・読めない `rules.json`）。
+
+## 追記: deny 全体への拡張（2026-10-03）
+
+pip 以外の `[bash] deny` 全項目へ広げた（設計は
+[spec](../../../spec/agent-command-policy.md#opencode-の-deny-の説明前段停止)）。
+
+- **方法**: `generate.py` の生成物（`opencode.json` と `rules.json`）と、作業ツリーの `index.js` を
+  `.tmp/` に置き（`plugins` を絶対パスで差し替え）、`OPENCODE_PROBE_CONFIG` で渡した（記録後に削除）。
+  モデル `github-copilot/claude-opus-5`、`.tmp/` のダミーのリポジトリ
+- **観測**:
+
+| 項 | コマンド（エージェント） | 結果 |
+| --- | --- | --- |
+| A | `npm install -g cowsay`（build） | `mise use -g npm:<package>` を示す説明で止まった（実行されない） |
+| B1 | `git push origin main`（build、ダミーのリポジトリ） | 共通の B の説明で止まった |
+| B2 | `sudo true`（build） | 同上 |
+| bypass | `npm install -g cowsay`（`--agent bypass`） | A の説明で止まった |
+| 止めない | `git config --get user.name`（`--auto`） | 実行された（`applejxd`）。`--auto` 無しでは ask の自動拒否で、前段では止まらない |
+| 保守側 | `git config --global user.name "x"`（引用符あり）→ モデルが `--global --get` に変えて実行 | 前者は引用符で前段を見送る。後者は前段で A の説明が付いた（`git config --global *` が静的 deny なので、`--global` 付きの読み取りも止まる） |
+| 静的 | `ls \| sudo true`（plugin 無しの設定） | `Permission denied: shell`。**scanner は `\|` の後ろのセグメントも静的 deny にかける**（前段の区切りに `\|` を含める根拠） |
+
+- 隔離版（ocs）の扱い（`OCS_ISOLATED`）と `commit` エージェントの `git restore --staged --` は、
+  実機ではなく plugin（node）の試験で確認した（`test/agents/test_guide_deny_early.py`）。
+  実機の ocs・`commit` エージェントは未確認
+- `git config --global --get x` が静的 deny に当たるのは既存の挙動（`git config --global *`）。
+  `common.toml.tmpl` の deny 欄の「読み取りは allow 側にあるので通る」は、`--global` を付けない
+  形にしか当てはまらない（説明文はそれに合わせた）
 
 [調査記録一覧へ戻る](../../index.md)

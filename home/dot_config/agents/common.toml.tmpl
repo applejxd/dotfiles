@@ -141,7 +141,8 @@ deny = [
   "git reset --hard",
   "git rebase",
   # core.hooksPath の書き換えで hook 自体を無効化できる。
-  # 読み取り (--get / --list) は allow 側にあるので通る
+  # 読み取り (--get / --list) は allow 側にあるので通る。ただし --global / --system を
+  # 付けた読み取りは下の deny に当たる
   "git config --global",
   "git config --system",
   "git config --local",
@@ -245,6 +246,121 @@ deny = [
   "az storage blob upload",
   "gh release upload",
 ]
+
+# OpenCode だけ。deny の全項目を 3 つのどれかに分類し、静的 deny の前に説明付きで止める。
+# 分類に漏れ・重複・deny に無い項目があると生成が止まる。deny を足したら必ずここにも足す。
+# ★deny の一覧自体は変えない (plugin が壊れても静的 deny が止める)。
+# see docs/spec/agent-command-policy.md#opencode-の-deny-の説明前段停止
+[bash.deny_guide]
+# 代替が無いもの (利用者に頼む)。迷ったらここ
+user_message = "この操作はエージェントには許可されていません。迂回せず、実行してほしいコマンドと理由を利用者に示してください。"
+user_only = [
+  "sudo",
+  "git push",
+  "git reset --hard",
+  "git rebase",
+  "git filter-branch",
+  "git update-ref -d",
+  "git reflog expire",
+  "git stash clear",
+  "git stash drop",
+  "git worktree remove",
+  "git checkout --",
+  "git restore",
+  "crontab",
+  "at",
+  "batch",
+  "systemctl enable",
+  "systemctl disable",
+  "systemctl mask",
+  "systemctl start",
+  "systemctl stop",
+  "systemctl restart",
+  "systemctl daemon-reload",
+  "systemd-run",
+  "mkfs",
+  "mkfs.ext4",
+  "mkfs.xfs",
+  "fdisk",
+  "parted",
+  "wipefs",
+  "socat",
+  "ncat",
+  "telnet",
+  "ssh",
+  "psql",
+  "mysql",
+  "mongod",
+  "mongosh",
+  "redis-cli",
+  "gh pr merge",
+  "gh release create",
+  "gh repo delete",
+  "gh gist create",
+  "gh secret set",
+  "gh secret list",
+  "gh auth token",
+  "bw get",
+  "bw list",
+  "bw export",
+  "op read",
+  "op item get",
+  "vault read",
+  "vault kv get",
+  "chezmoi secret",
+  "git remote add",
+  "git remote set-url",
+  "scp",
+  "rsync",
+  "sftp",
+  "aws s3 cp",
+  "aws s3 sync",
+  "gsutil cp",
+  "az storage blob upload",
+  "gh release upload",
+]
+# 個別の guide 規則 ([[opencode.shell.guide]] の early = true) が前段で止めるもの。ここで二重にしない
+elsewhere = ["pip", "pip3"]
+
+# 代わりの手段があるもの。message に代替を書く
+[[bash.deny_guide.alternative]]
+commands = ["npm install -g"]
+message = "npm install -g は許可されていません。グローバルに入れる CLI は mise で入れてください。chezmoi 管理の環境では、ソースの home/dot_config/mise/config.toml.tmpl の [tools] に `\"npm:<package>\" = \"latest\"` を追記して `chezmoi apply` します (`mise use -g` は次回の apply で失われうる)。chezmoi 管理でない環境なら `mise use -g npm:<package>` です。プロジェクトの依存なら -g 無しの `npm install <package>` を使ってください。"
+
+[[bash.deny_guide.alternative]]
+commands = ["uv self update", "chezmoi upgrade"]
+message = "ツール自身の更新は許可されていません。導入元のパッケージマネージャ (mise / winget など) で更新してください。導入元が分からなければ、更新してほしいツールを利用者に示してください。"
+
+[[bash.deny_guide.alternative]]
+commands = ["rustup self update"]
+message = "rustup 自体の更新は許可されていません。利用者に依頼してください。toolchain の更新は `rustup update` を使えます。"
+
+[[bash.deny_guide.alternative]]
+commands = [
+  "git config --global",
+  "git config --system",
+  "git config --local",
+  "git config core.hooksPath",
+  "git config --unset",
+  "git config --add",
+  "git config --replace-all",
+  "git config --edit",
+]
+message = "git config の書き込みは許可されていません。ユーザー設定は chezmoi 管理の home/dot_gitconfig.tmpl を編集して `chezmoi apply` で反映してください。リポジトリ単位の設定は、変更内容を利用者に示して依頼してください。読み取りは `--global` などを付けず `git config --get <key>` / `git config --list` の形で使えます。"
+
+[[bash.deny_guide.alternative]]
+commands = [
+  "docker system prune",
+  "docker volume prune",
+  "docker image prune",
+  "docker container prune",
+  "docker network prune",
+]
+message = "docker の prune は許可されていません。消す対象を指定して `docker rm <container>` / `docker rmi <image>` を使ってください (確認が出ます)。ボリュームとネットワークの削除は利用者に依頼してください。"
+
+[[bash.deny_guide.alternative]]
+commands = ["npm cache clean", "yarn cache clean", "pnpm store prune"]
+message = "キャッシュの削除は許可されていません (再取得に時間がかかります)。不具合の原因がキャッシュだと判断できるときだけ、実行してほしいコマンドと理由を利用者に示してください。"
 
 [file]
 # ★接頭辞の無い 4 キーは Claude と OpenCode が読む。`claude_read_allow` だけは

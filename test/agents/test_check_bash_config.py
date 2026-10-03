@@ -134,9 +134,10 @@ def test_bash_has_exactly_three_lists():
     """人が書く policy は allow / ask / deny の 3 つだけ (critical_* は廃止)。
 
     ``ask_hook_owned`` は policy そのものではなく、ask のうち hook が承認要否まで
-    判定するものを指す注記なので別枠。
+    判定するものを指す注記なので別枠。``deny_guide`` は OpenCode が deny に説明を付けるための
+    分類で、policy ではない (``test_guide_deny_early.py``)。
     """
-    assert sorted(COMMON["bash"]) == ["allow", "ask", "ask_hook_owned", "deny"]
+    assert sorted(COMMON["bash"]) == ["allow", "ask", "ask_hook_owned", "deny", "deny_guide"]
 
 
 def test_lists_are_not_empty():

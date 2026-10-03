@@ -637,7 +637,7 @@ permissions = [
 ### plugin 層 (`guide-plugin`)
 
 `~/.config/opencode/guide-plugin/` に置く。判定表は `common.toml` の
-`[[opencode.shell.guide]]`・`[opencode.redact]`・`[opencode.ask_description]`・
+`[[opencode.shell.guide]]`・`[bash.deny_guide]`・`[opencode.redact]`・`[opencode.ask_description]`・
 `[file] read_deny_globs`・`[opencode.agent]`・`[opencode.agents]` から `rules.json` として生成し、plugin は読むだけにする。
 `index.js` はこのどれかが有効なら、`tui.ts` は `ask_description` が有効な
 ときだけ登録する（`generate.py` の `opencode_guide_server_needed` /
@@ -646,6 +646,7 @@ permissions = [
 | 役割 | 実体 | 登録先 |
 | --- | --- | --- |
 | 誘導（deny + 代替案）と説明の生成 | `index.js` | `opencode.json` の `plugins` |
+| 静的 deny の説明（前段停止。`deny_guide`。[詳細](agent-command-policy.md#opencode-の-deny-の説明前段停止)） | `index.js` | 同上 |
 | `grep` / `glob` の結果フィルタ | `index.js` | 同上 |
 | shell 出力の伏字化 | `index.js` | 同上 |
 | bypass の子エージェントの起動元の検査（[上](#bypass-から呼べる子エージェント)）と `ask` → `allow` | `index.js` | 同上 |

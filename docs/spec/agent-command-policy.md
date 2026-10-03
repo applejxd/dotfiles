@@ -350,6 +350,76 @@ OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生の�
 - 検査は `test/agents/test_guide_pip_rm.py`（止める例と止めない例の両方を、生成した
   `rules.json` を plugin に通して判定する）と、前段の停止を見る `test/agents/test_guide_early_pip.py`
 
+## OpenCode の deny の説明（前段停止）
+
+V2 は静的 deny に当たると plugin の `evaluate` を呼ばず、モデルへは `Permission denied: shell` だけが
+返る（理由も代替も伝わらない）。pip で実証した前段停止（上、
+[記録](../research/opencode/permission/early-guard.md)）を `[bash] deny` の全項目へ広げ、
+**説明文を返す**。静的 deny は一切変えない（plugin が壊れても静的 deny が止める）。bypass エージェントにも
+同じに効く（[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。
+
+### 分類（正本は `common.toml.tmpl` の `[bash.deny_guide]`）
+
+deny の**全項目**が次のどれか 1 つに属さなければ、`generate.py` が生成を止める（漏れ・重複・
+deny に無い項目・`elsewhere` を止める early 規則が無い、のいずれも）。deny を足したら分類も足す。
+
+| 分類 | 宣言 | 説明文の中身 | 項目 |
+| --- | --- | --- | --- |
+| A 代わりの手段がある | `[[bash.deny_guide.alternative]]`（`commands` + `message`） | 代替の手段 | `npm install -g`（→ chezmoi のソースの `home/dot_config/mise/config.toml.tmpl` へ追記して `chezmoi apply`。chezmoi 管理外なら `mise use -g npm:<pkg>`。`mise use -g` だけでは次回の apply で失われうる）、`uv self update` / `chezmoi upgrade`（→ 導入元のパッケージマネージャで更新。mise か winget かは OS で違うので特定しない）、`rustup self update`（→ 利用者に依頼）、`git config` の書き込み系 8 件（→ `home/dot_gitconfig.tmpl` を編集して `chezmoi apply`）、`docker * prune` 5 件（→ 対象を指定した `docker rm` / `docker rmi`。どちらも ask）、`npm cache clean` / `yarn cache clean` / `pnpm store prune`（→ 必要なら利用者に依頼） |
+| B 利用者に頼む | `user_only`（共通の `user_message`） | 迂回せず、実行してほしいコマンドと理由を利用者に示す | 上記以外の全部（`sudo`、`git push` / `reset --hard` / `rebase` / `filter-branch` など、`crontab` / `at` / `batch`、`systemctl` 系、`mkfs` 系、`socat` / `ncat` / `telnet` / `ssh`、DB クライアント、`gh` のリモート操作、秘密ストア、`scp` / `rsync` など）。迷ったらここ |
+| 別規則 | `elsewhere` | — | `pip` / `pip3`（[上](#opencode-の-pip-誘導と-rm-の誘導)の `early = true` の guide 規則が止める。二重にしない） |
+
+`generate.py`（`opencode_deny_guide_rules`）が分類から `rules.json` の `deny_guide`（`pattern` /
+`unless` / `message`）を作り、`index.js` が `tool.execute.before` で当てる。evaluate 側の `guide` には
+混ぜない（混ぜると、隔離版やエージェントの allow など**静的 deny に無い場面**でも止めてしまう）。
+Claude / Copilot の生成物は変わらない。
+
+### 前段で止めるのは静的 deny の部分集合だけ
+
+OpenCode の静的照合は、scanner が分割した各セグメントに `cmd` / `cmd *` のワイルドカードを当てる
+（[分割の観測](../research/opencode/permission/allow-list-audit.md)）。前段は生のコマンド文字列への
+正規表現なので、一致集合がずれうる。そこで**確実に部分集合になる保守的な形**にしている。
+
+- **セグメント先頭だけ**: 行頭と `&&` `||` `;` `|` 改行の直後で、コマンド名（`git push` などは単一の空白でつなぐ）
+  の後ろが単一の空白・区切り・末尾のときだけ当てる。`at` が `atop` / `at<TAB>x` / `cat` に、`ssh` が
+  `ssh-keygen` に、`mkfs` が `mkfs.btrfs` に当たらない（静的な `cmd *` も当たらない形）
+- **引用符（`'` `"`）・バッククォート・括弧（`$(` を含む）・`#`・`\`・ヒアドキュメント（`<<`）・
+  単語としての `{` を含むコマンドは前段で止めない。** 区切り文字が引用符の中やコメント・ヒアドキュメントの本文・
+  継続行にあると、scanner の分割と食い違う。その場合は静的 deny が（説明なしで）止める。
+  例: `git config --global user.name "x"` は説明が付かない
+- **エージェントの規則が静的 deny を覆す項目は、そのエージェントでは止めない**（`except_agents`。
+  エージェントの規則は全体の規則の後ろに付いて後勝ち。例: `commit` の
+  `git restore --staged -- *` allow）。V2 の `permissions` と V1 の `permission`
+  （`bash` / `shell` / `*` キー、文字列も）の両方から算出し、読めない形は覆すものとして扱う
+- **対象は生成器が permission を把握しているエージェントだけ**（`rules.json` の `deny_guide_agents`。
+  宣言済み + 組み込みの `build` / `plan` / `general` / `explore`）。宣言外のエージェント（利用者が
+  `opencode.json` に直接書いたもの）や `agent` が分からないとき、隠しエージェント（`title` など）は止めない
+- **`rules.json` の形が不正なら節ごと無効にする。** `deny_guide` は各項目の `pattern` / `unless` /
+  `message`（非空文字列）、`not_isolated`（真偽値）、`except_agents`（文字列配列）、`deny_guide_agents`
+  （文字列配列）を検証し、1 件でも不正（全一致に近い `pattern` を含む）なら全体を止めない（静的 deny に任せる）。
+  `guide` 節も同じ検証をする（`pattern` 欠落が `new RegExp(undefined)` で全一致になり、全 shell を止める穴があった）
+- **通常版と隔離版（ocs）で、それぞれの最終的な静的 deny から決める。** `rules.json` は両者で共有
+  なので、ocs が `drop_shell` で捨てた項目には `not_isolated` を付け、plugin が `OCS_ISOLATED` で見分けて
+  ocs では止めない（`sudo`・`systemctl`・`git config --global` / `--system`・`npm install -g`・
+  `docker * prune` など。`git push` や `git config --local` は ocs でも残るので止める）
+- 部分集合の性質は `test/agents/test_guide_deny_early.py` が固定する。静的照合を模擬し
+  （分割 + 後勝ちの `cmd` / `cmd *`）、deny の全項目 × 34 の形（引用符・コメント・継続行・ヒアドキュメント・
+  置換など）+ 止めてはいけない例を、通常版・ocs × 4 エージェントで plugin に通して「前段で止まる ⇒ 静的にも deny」を検査する
+
+実機での観測は [early-guard の追記](../research/opencode/permission/early-guard.md#追記-deny-全体への拡張2026-10-03)。
+
+**既知の限界**（静的 deny の部分集合を保てない場面。静的 deny は変えないので安全側には倒れるが、
+説明が付かないか、まれに過剰に止まる）:
+
+- プロジェクト設定（`.opencode/opencode.json` など）や利用者が `opencode.json` に直接書いた
+  permission での上書きは、plugin が実効設定を取得できないため考慮しない。plugin の `ctx` に
+  設定を返す API は文書化されておらず（`opencode api config.get` は CLI 側）、使っていない。
+  宣言外のエージェントは対象外にして被害を狭めるが、組み込み（`build` など）を利用者が上書きした場合は
+  検知できない。[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的
+  「利用者自身の明示的な上書き」と同じ扱い
+- 引用符などを含むコマンドには説明が付かない（上記）
+bypass-fleet-worker 固有の deny（`git add` / `commit` など）は対象外。
+
 ## 使い捨てディレクトリ (`./.tmp`) の削除
 
 `redirect-tmp.py` が `/tmp` の代わりに誘導する `./.tmp` は「いつ消えてもよい」

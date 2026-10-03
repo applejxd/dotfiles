@@ -36,6 +36,7 @@
 | 2b | OpenCode の拒否規則: pip 系を止めて uv へ誘導（Q4）、危険な `rm` を止める（Q5） | 3 | 実装済み（guide 規則・実機確認済み。[ADR-0013](../adr/0013-opencode-shell-guard-inside-ocs.md)。通常版の pip の静的 deny にも `execute.before` で誘導文を付けた。[実測](../research/opencode/permission/early-guard.md)） |
 | 3a | git の環境変数を AI CLI の起動側で入れる（Q2、Q3）。OpenCode は `guide-plugin` の `shell.create.before` で実装済み（Claude Code / Copilot CLI は未着手） | 3 | 進行中 |
 | 4 | OpenCode の `bypass` を「ask を allow にするだけ」に再定義し、誘導・結果フィルタ・伏字化を `bypass` にも効かせる。`.env.*` を deny に上げる（Q6） | 4 | 完了（実装・実機確認済み。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)、[実測](../research/opencode/permission/bypass-ask-upgrade.md)） |
+| 5 | pip で実証した前段停止を `[bash] deny` の残り全項目へ広げ、説明文を返す（Q7）。A 代わりの手段がある（`npm install -g`・`uv self update` / `chezmoi upgrade`・`git config` の書き込み・`docker * prune`・キャッシュ削除など）と B 利用者に頼む（それ以外。迷ったら B）に全項目を分類し、`[bash.deny_guide]` を正本にする | 5 | 実装済み（実機は A・B・bypass・止めない例を確認。ocs と `commit` エージェントは plugin の試験のみ。[仕様](../spec/agent-command-policy.md#opencode-の-deny-の説明前段停止)、[実測](../research/opencode/permission/early-guard.md#追記-deny-全体への拡張2026-10-03)） |
 
 状態: 未着手 / 進行中 / 調査中 / 完了 / 保留 / 見送り
 
@@ -54,6 +55,7 @@
 | Q4 pip | OpenCode で `pip` / `pip3` / `python -m pip` を止めて uv へ誘導する。poetry / pipenv は止めない。`ocs` の中にも効かせる（安全境界ではなく uv を使う運用の取り決めのため）。既存の pip の deny は、静的 deny の呼び出しが plugin の `evaluate` に届かず説明が出ないため、`execute.before`（`home/dot_config/opencode/guide-plugin/index.js`）で先に止めて説明を返す（2026-10-03 実測）。既存の deny は外さない |
 | Q5 危険な `rm` | OpenCode で、止めたい具体例（`.git` の直接削除、`~` や `/` の指定、作業ディレクトリ全体など）に限って止める。`ocs` の中にも効かせる。「うっかり防止であり完全な保護ではない」と明記する。[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)（`ocs` の中では `rm` などを確認しない）の部分変更として記録する |
 | Q6 `bypass` の意味 | 全 allow をやめ、通常と同じ permission のまま plugin が `ask` だけを `allow` にする。通常で deny のものは `bypass` でも deny。誘導（pip・`rm` など）・`grep` / `glob` の結果フィルタ・伏字化・前段停止は `bypass` にも効かせる（[CHG-0002](0002-opencode-ask-by-default.md) の「誘導を bypass にも効かせる: 見送り」を採用に転じる）。逃げ道は Copilot CLI と利用者自身の実行。`bypass` 扱いは `bypass = true` で明示。`.env.*` は ask から deny へ（`.env.example` / `.sample` / `.template` は OpenCode と Copilot だけ例外。Claude は deny のまま）。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md) |
+| Q7 静的 deny の説明 | pip の前段停止を `[bash] deny` の全項目へ広げ、説明文を返す。静的 deny は一切変えない。説明文の正本は `[bash.deny_guide]`（A 代替あり / B 利用者に頼む / 別規則。全項目が属さないと生成を止める）。前段は静的 deny の部分集合だけ（セグメント先頭・語境界のみ。引用符・括弧・`#`・`\`・ヒアドキュメントを含むコマンドは静的 deny に任せる）。通常版と ocs で最終の静的 deny から決め、ocs で捨てた項目は ocs で止めない。エージェントの規則が覆す項目（`commit` の `git restore --staged --`）はそのエージェントで止めない。bypass にも同じに効かせる。bypass-fleet-worker 固有の deny は対象外 |
 
 ## 未解決点
 
@@ -107,4 +109,10 @@
 - 2026-10-03 — 通常版 pip の誘導文を、静的 deny を残したまま plugin の前段停止で解決
 - 2026-10-03 — 作業 4（Q6）。`bypass` を「ask を allow にするだけ」へ再定義し、`.env.*` を deny へ上げた。
   `.env.*` の deny は全 CLI に効くが、`.env.example` などの例外は OpenCode と Copilot だけ（Claude は deny 優先で例外を書けず deny のまま）。ocs の隔離版も同じ生成関数なので同じ扱い
-- 2026-10-03 — 例外の置き場所を修正。全 deny の後ろに allow を置くと `~/.ssh/.env.example` まで通る退行があったため、例外を対の deny とセットで宣言し（`[[file.deny_exceptions]]`）、OpenCode は対の deny の直後に allow を置く形に改めた。Copilot の `check_file_read.py` も同じ意味の例外に対応した
+- 2026-10-03 — 作業 5（Q7）。前段停止を pip 以外の deny 全項目へ広げた（`[bash.deny_guide]`）。
+  設計の要は「静的 deny の部分集合」で、`commit` エージェントの `git restore --staged --`（静的 deny を覆す allow）を
+  設計中に見つけて `except_agents` で除いた。`git config --global --get` も静的 deny（既存の挙動）。
+  部分集合の性質は `test/agents/test_guide_deny_early.py` が固定する
+- 2026-10-03 — 作業 5 のレビュー反映。前段の対象を「生成器が permission を把握しているエージェント」に絞り
+  （V1 の `permission` も算出に含める）、`rules.json` の不正な形（`pattern` 欠落など）は節ごと無効にする。
+  `guide` 節にも同じ穴があったので直した。プロジェクト設定による上書きは既知の限界として spec に明記- 2026-10-03 — 例外の置き場所を修正。全 deny の後ろに allow を置くと `~/.ssh/.env.example` まで通る退行があったため、例外を対の deny とセットで宣言し（`[[file.deny_exceptions]]`）、OpenCode は対の deny の直後に allow を置く形に改めた。Copilot の `check_file_read.py` も同じ意味の例外に対応した

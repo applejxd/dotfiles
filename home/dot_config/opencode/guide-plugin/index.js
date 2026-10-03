@@ -33,9 +33,26 @@ function section(name, build) {
 const names = (v) =>
   Array.isArray(v) && v.every((x) => typeof x === "string") ? new Set(v) : null
 
+const text = (v) => typeof v === "string" && v.length > 0
+const optionalText = (v) => v === undefined || text(v)
+const optionalBool = (v) => v === undefined || typeof v === "boolean"
+const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v)
+
+// ★欠けた pattern は new RegExp(undefined) で全一致になり、全 shell を止めうる。
+// 1 件でも不正なら節ごと無効にする (静的 deny と他の節に任せる)。
+function checked(list, valid, what) {
+  if (!Array.isArray(list)) throw new Error(`${what} が配列でない`)
+  for (const g of list) if (!isObject(g) || !valid(g)) throw new Error(`${what} に不正な項目`)
+  return list
+}
+
 const compiled =
   section("guide", (r) =>
-    (r.guide ?? []).map((g) => ({
+    checked(
+      r.guide ?? [],
+      (g) => text(g.pattern) && text(g.message) && optionalText(g.unless) && optionalBool(g.early),
+      "guide",
+    ).map((g) => ({
       re: new RegExp(g.pattern),
       // 除外条件。pattern に当たっても unless に当たれば見送る。
       unless: g.unless ? new RegExp(g.unless) : null,
@@ -43,6 +60,41 @@ const compiled =
       early: g.early === true,
     })),
   ) ?? []
+
+// 静的 deny の項目ごとの説明。execute.before だけで使う。
+// ★前段は静的 deny の部分集合に限る。仕組みは docs/spec/agent-command-policy.md#opencode-の-deny-の説明前段停止
+const denyGuideAgents = section("deny_guide_agents", (r) => {
+  if (r.deny_guide === undefined) return new Set()
+  const agents = names(r.deny_guide_agents)
+  if (!agents) throw new Error("文字列の配列でない")
+  return agents
+})
+const denyGuide =
+  denyGuideAgents === null
+    ? []
+    : (section("deny_guide", (r) =>
+        checked(
+          r.deny_guide ?? [],
+          (g) =>
+            text(g.pattern) &&
+            text(g.unless) &&
+            text(g.message) &&
+            optionalBool(g.not_isolated) &&
+            (g.except_agents === undefined || names(g.except_agents) !== null),
+          "deny_guide",
+        ).map((g) => {
+          const re = new RegExp(g.pattern)
+          // 空や無条件に当たる pattern は全 shell を止める
+          if (re.test("") || re.test("ls")) throw new Error("全一致に近い pattern")
+          return {
+            re,
+            unless: new RegExp(g.unless),
+            message: g.message,
+            notIsolated: g.not_isolated === true,
+            exceptAgents: g.except_agents === undefined ? null : names(g.except_agents),
+          }
+        }),
+      ) ?? [])
 
 const ask = rules?.ask_description ?? null
 
@@ -296,6 +348,17 @@ export default {
       // see docs/research/opencode/permission/early-guard.md
       for (const rule of compiled) {
         if (!rule.early || !rule.re.test(command)) continue
+        if (rule.unless && rule.unless.test(command)) continue
+        raw.delete(e.id)
+        throw new Error(rule.message)
+      }
+      for (const rule of denyGuide) {
+        if (rule.notIsolated && ISOLATED) continue
+        // 生成器が permission を把握しているエージェントだけ (宣言外・不明は静的 deny に任せる)
+        if (!denyGuideAgents.has(e.agent)) continue
+        const ex = rule.exceptAgents
+        if (ex && ex.has(e.agent)) continue
+        if (!rule.re.test(command)) continue
         if (rule.unless && rule.unless.test(command)) continue
         raw.delete(e.id)
         throw new Error(rule.message)

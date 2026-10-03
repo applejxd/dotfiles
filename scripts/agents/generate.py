@@ -1145,6 +1145,170 @@ def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+# 前段停止の「セグメント先頭」と語境界 (単一の空白・区切り・末尾)。
+# 引用符・括弧・``#``・``\``・``<<``・単語の ``{`` を含むコマンドは前段で止めない。
+# see docs/spec/agent-command-policy.md#opencode-の-deny-の説明前段停止
+DENY_GUIDE_SEGMENT_START = r"(^|&&|\|\||[;|\n])[ \t]*"
+DENY_GUIDE_COMMAND_END = r"(?= |$|[;|\n]|&&)"
+DENY_GUIDE_UNLESS = r"""['"`\\#()]|<<|(^|[\s;&|])\{(\s|$)"""
+
+# 全体の規則だけで動き、``permission`` を組み込みの既定のまま使う組み込みエージェント。
+# 利用者が opencode.json で上書きしていても生成器は知らない (既知の限界)。
+OPENCODE_BUILTIN_SHELL_AGENTS = ("build", "plan", "general", "explore")
+
+
+def _regex_escape(token: str) -> str:
+    return re.sub(r"([.*+?^${}()|\[\]\\])", r"\\\1", token)
+
+
+def _static_shell_denies(rules: list[dict[str, str]]) -> set[str]:
+    return {r["resource"] for r in rules if r["action"] == "shell" and r["effect"] == "deny"}
+
+
+def _agent_shell_overrides(agent: dict[str, Any]) -> list[str]:
+    """エージェントの規則のうち、全体の shell deny を覆しうる (deny 以外の) resource。
+
+    V2 の ``permissions`` (リスト) と V1 の ``permission`` (文字列または表。キーは
+    ``bash`` / ``shell`` / ``*``) の両方を見る。読めない形は ``*`` (全部を覆す) とする。
+    """
+    out: list[str] = []
+    for rule in agent.get("permissions") or []:
+        if rule.get("action") in ("shell", "*") and rule.get("effect") != "deny":
+            out.append(str(rule.get("resource", "*")))
+    legacy = agent.get("permission")
+    if isinstance(legacy, str):
+        legacy = {"*": legacy}
+    for key, value in (legacy if isinstance(legacy, dict) else {}).items():
+        if key not in ("bash", "shell", "*"):
+            continue
+        if isinstance(value, str):
+            value = {"*": value}
+        if not isinstance(value, dict):
+            out.append("*")
+            continue
+        out += [str(res) for res, eff in value.items() if eff != "deny"]
+    return out
+
+
+def opencode_deny_guide_agents(common: dict[str, Any]) -> list[str]:
+    """前段停止を効かせるエージェント (permission を生成器が把握しているものだけ)。
+
+    宣言済み (V1 / V2) + 組み込み。宣言外 (利用者が opencode.json に直接書いたもの) は含めず、
+    plugin は見送って静的 deny に任せる。
+    """
+    return sorted({*_declared_agents(common), *OPENCODE_BUILTIN_SHELL_AGENTS})
+
+
+def _deny_guide_exempt_agents(common: dict[str, Any], command: str) -> list[str]:
+    """``command`` の静的 deny を、エージェントの規則 (後勝ち) で覆しうる宣言済みエージェント。
+
+    交差を作れない形は覆しうるものとして扱う (止めない側に倒す)。
+    """
+    opencode = common.get("opencode", {})
+    out: list[str] = []
+    for source in ("agents", "agent"):
+        for name, agent in (opencode.get(source) or {}).items():
+            for resource in _agent_shell_overrides(agent):
+                try:
+                    hit = any(wildcard_intersection(p, resource) for p in (command, f"{command} *"))
+                except ValueError:
+                    hit = True
+                if hit:
+                    out.append(str(name))
+                    break
+    return sorted(set(out))
+
+
+def opencode_deny_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
+    """``[bash.deny_guide]`` から ``rules.json`` の ``deny_guide`` (前段の停止規則) を作る。
+
+    全 deny が分類のどれか 1 つに属さないと生成を止める。通常版と隔離版の最終の静的 deny から
+    決め、隔離版で捨てた項目に ``not_isolated``、覆しうるエージェントに ``except_agents`` を付ける。
+    see docs/spec/agent-command-policy.md#opencode-の-deny-の説明前段停止
+    """
+    bash = common.get("bash", {})
+    cfg = bash.get("deny_guide")
+    if not cfg:
+        return []
+    deny = [str(c) for c in bash.get("deny", [])]
+    unknown_keys = set(cfg) - {"user_message", "user_only", "elsewhere", "alternative"}
+    if unknown_keys:
+        raise SystemExit(f"[bash.deny_guide] の未知のキー: {sorted(unknown_keys)}")
+
+    groups: list[tuple[str, list[str]]] = []
+    user_only = [str(c) for c in cfg.get("user_only") or []]
+    if user_only:
+        message = str(cfg.get("user_message") or "")
+        if not message:
+            raise SystemExit("[bash.deny_guide] は user_only に user_message が要る")
+        groups.append((message, user_only))
+    for entry in cfg.get("alternative") or []:
+        commands = [str(c) for c in entry.get("commands") or []]
+        message = str(entry.get("message") or "")
+        if not commands or not message:
+            raise SystemExit(
+                f"[[bash.deny_guide.alternative]] は commands と message が要る: {entry}"
+            )
+        groups.append((message, commands))
+    elsewhere = [str(c) for c in cfg.get("elsewhere") or []]
+
+    classified = [c for _, commands in groups for c in commands] + elsewhere
+    dup = sorted({c for c in classified if classified.count(c) > 1})
+    if dup:
+        raise SystemExit(f"[bash.deny_guide] で複数の分類に属する項目: {dup}")
+    missing = [c for c in deny if c not in classified]
+    if missing:
+        raise SystemExit(f"[bash] deny に対して [bash.deny_guide] の分類が無い項目: {missing}")
+    extra = [c for c in classified if c not in deny]
+    if extra:
+        raise SystemExit(f"[bash.deny_guide] にあって [bash] deny に無い項目: {extra}")
+
+    # elsewhere は個別の early 規則が実際に止めること (二重にしない代わりに、外れたら気付く)
+    early = [r for r in opencode_guide_rules(common) if r.get("early")]
+    for c in elsewhere:
+        probe = f"{c} x"
+        if not any(
+            re.search(r["pattern"], probe)
+            and not (r.get("unless") and re.search(r["unless"], probe))
+            for r in early
+        ):
+            raise SystemExit(
+                f"[bash.deny_guide] elsewhere の {c!r} を止める early の guide 規則が無い"
+            )
+
+    normal = _static_shell_denies(build_opencode_permissions(common))
+    isolated = (
+        _static_shell_denies(build_opencode_sandbox_permissions(common))
+        if common.get("opencode", {}).get("sandbox")
+        else normal
+    )
+
+    # 同じ説明・同じ印の項目を 1 つの規則にまとめる (宣言の順を保つ)
+    merged: dict[tuple[str, bool, tuple[str, ...]], list[str]] = {}
+    for message, commands in groups:
+        for command in commands:
+            resource = f"{command} *"
+            if resource not in normal:
+                continue
+            exempt = tuple(_deny_guide_exempt_agents(common, command))
+            merged.setdefault((message, resource not in isolated, exempt), []).append(command)
+
+    out: list[dict[str, Any]] = []
+    for (message, not_isolated, exempt), commands in merged.items():
+        names = "|".join(" ".join(_regex_escape(t) for t in c.split(" ")) for c in commands)
+        entry: dict[str, Any] = {
+            "pattern": f"{DENY_GUIDE_SEGMENT_START}(?:{names}){DENY_GUIDE_COMMAND_END}",
+            "unless": DENY_GUIDE_UNLESS,
+            "message": message,
+        }
+        if not_isolated:
+            entry["not_isolated"] = True
+        if exempt:
+            entry["except_agents"] = list(exempt)
+        out.append(entry)
+    return out
+
+
 def opencode_ask_description(common: dict[str, Any]) -> dict[str, Any] | None:
     """確認画面に出す説明の設定 (``rules.json`` の ``ask_description``)。
 
@@ -1468,6 +1632,8 @@ def opencode_sandbox_agents(common: dict[str, Any], reachable: list[str]) -> dic
 def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
         "guide": opencode_guide_rules(common),
+        "deny_guide": opencode_deny_guide_rules(common),
+        "deny_guide_agents": opencode_deny_guide_agents(common),
         "bypass_agents": opencode_bypass_agents(common),
         "guarded_subagents": opencode_guarded_subagents(common),
         "read_deny": opencode_read_deny_regexes(common),
@@ -1539,6 +1705,7 @@ def opencode_guide_server_needed(common: dict[str, Any], *, tui: bool) -> bool:
     """
     return bool(
         opencode_guide_rules(common)
+        or opencode_deny_guide_rules(common)
         or opencode_read_deny_regexes(common)
         or opencode_redact(common)
         or opencode_guarded_subagents(common)
