@@ -102,10 +102,91 @@ cp932 で出力されて `UnicodeDecodeError` になった。`ensure_ascii=False
 
 ### 確かめられなかったこと
 
-- PowerShell 7（pwsh が無い）。7.3+ は `$PSNativeCommandArgumentPassing` により⑤の挙動が異なる
+- PowerShell 7（この時点では無いと思っていた。後の記録 E2 で確認した）
 - 人が開いた対話シェル（TTY あり）でのプロファイル全体（`open` などの定義、oh-my-posh のテーマ、PSReadLine、
   OnIdle の読み込み）と、`copilot` 関数がパイプ無しのとき TTY の標準入力を保つこと
 - 本物の Copilot CLI が `[agent_env]` の 3 変数を自分のシェルツールの子（git）へ引き継ぐこと
   （`--version` を通しただけ）
 - Windows Terminal・コンソールホストを介した起動、`-NoExit` 付きの対話判定
 - `*.ps1` の他の資産（`run_after_*` など）
+
+## 記録 E2 — 2026-10-05（PowerShell 7）
+
+- **対象**: PowerShell 7.6.3（`C:\Program Files\PowerShell\7\pwsh.exe`。WSL の PATH には無いのでフルパスで呼んだ）。
+  `$PSNativeCommandArgumentPassing` は `Windows`（既定）。基準コミット bd822f8、Copilot CLI 1.0.84（WinGet）
+- **方法**: E1 と同じ。偽 `copilot.exe` は pwsh 7 の `Add-Type` に `-OutputAssembly` が無いため
+  `powershell.exe`（5.1）でコンパイルし、実行だけ pwsh 7 で行った。`-NoProfile -ExecutionPolicy Bypass` で起動
+
+### 結果
+
+| # | 確認 | pwsh 7.6.3 | 5.1（E1）との差 |
+| --- | --- | --- | --- |
+| ① | 未設定 → 子へ既定値 | **1 回目だけ**入る。2 回目以降は入らない（下記） | **差あり（不具合）** |
+| ② | 値あり（`GIT_EDITOR=vim`）はそのまま | 維持される | 同じ |
+| ③ | 終了後に親で戻る | **戻らない**。未設定ではなく空文字になる（下記） | **差あり（不具合）** |
+| ④ | 終了コード | `FAKE_EXIT=7` → `$LASTEXITCODE`=7 | 同じ |
+| ⑤ | `"`・空文字・末尾 `\` の引数 | **そのまま届く**: `say "hi"`、空文字、`C:\Program Files\x\`（7 個全部。直呼びでも同じ） | 7 では直る |
+| ⑥ | パイプ入力 | `STDIN_DATA=[hello pipe]`。パイプ無しの stdin は直呼びと同じ | 同じ |
+| ⑦ | 非ゼロ終了（3）・未処理例外・パイプ元の `throw` | 終了コード・例外は透過するが、変数は戻らない（③ と同じ） | ③ と同じ差 |
+| — | copilot が無いとき | `copilot: command not found`（`Write-Error`） | 同じ |
+| — | 本物 | `copilot --version` → `GitHub Copilot CLI 1.0.84-8.`、終了コード 0。終了後に `GIT_EDITOR` が未設定に戻らない | 5.1 は戻る |
+
+#### ①③ の原因（本体の不具合）
+
+`finally` の `[Environment]::SetEnvironmentVariable($name, $null)` が、pwsh 7 では `$null` を空文字として渡し、
+変数を**削除せず空文字で残す**。5.1 は `$null` のまま渡すので削除される。
+
+| 呼び方 | pwsh 7.6.3 | 5.1 |
+| --- | --- | --- |
+| `SetEnvironmentVariable('X', $null)` | `GetEnv` が `""`、`Test-Path env:X` が True、子（`cmd /c set X`）にも `X=` が見える | 削除される |
+| `SetEnvironmentVariable('X', [NullString]::Value)` | 削除される | 削除される |
+| `Remove-Item env:X` / `$env:X = $null` | 削除される | 削除される |
+| `SetEnvironmentVariable('X', '')` | 空文字で残る | 削除される |
+
+結果として pwsh 7 では、`copilot` を 1 回呼ぶと親シェルに `GCM_INTERACTIVE` / `GIT_EDITOR` /
+`GIT_TERMINAL_PROMPT` が空文字で残り、2 回目は「未設定ではない」と判定されて既定値が入らない
+（関数を続けて 2 回呼ぶと、1 回目の子は `GIT_EDITOR=false`、2 回目の子は `GIT_EDITOR=` の空文字）。
+残った空文字を git がどう扱うかは未確認だが、少なくとも既定値（`GIT_TERMINAL_PROMPT=0` など）は 2 回目から効かない。
+修正案: `finally` を `[Environment]::SetEnvironmentVariable($name, [NullString]::Value)` か
+`Remove-Item "env:$name"` にする。前者は 5.1 / 7 のどちらでも削除されることを上の表で確認した。
+`test_copilot_function_sets_agent_env_and_restores_it` は文字列 `SetEnvironmentVariable($name, $null)` を
+assert しているため、直すときはテストも合わせる。
+→ 前者で修正済み。結果は[修正後の再確認](#修正後の再確認)。
+
+#### プロファイルの対話判定（非対話 `-NoProfile -Command`）
+
+- 関数 `open` / `copilot` / `dclean` / `pbcopy` / `ccd` は定義されない（`Get-Command` に出たのは PATH 上の `copilot.exe` のみ。
+  `-CommandType Function` は空）。5.1 と同じ
+- エラー・警告なし。mise のキャッシュ（`PowerShellProfileCache`）の更新日時は変わらなかった
+- `*:Encoding` = `utf8`、`[Console]::InputEncoding` = `utf-8`
+- 読み込み時間（`Measure-Command { . profile.ps1 }`）: 4 回で 162 / 153 / 151 / 145 ms、別の 1 回は 129 ms。
+  5.1（125〜144 ms）と同程度か少し遅い
+
+### 確かめられなかったこと
+
+- 人が開いた対話シェルでのプロファイル全体と、TTY の標準入力（E1 と同じ。この実験は非 TTY の起動）
+- 本物の Copilot CLI が `[agent_env]` を子へ引き継ぐこと（`--version` のみ）
+- 空文字で残った変数を git が実際にどう扱うか（修正により残らなくなったので、確かめる必要は薄い）
+
+## 修正後の再確認
+
+- **日付 / 版**: 2026-10-05、Windows PowerShell 5.1.26100.8972 と pwsh 7.6.3、Copilot CLI 1.0.84。基準コミット bc02c9a
+- **変更**: `profile.ps1.tmpl` の `finally` が `[Environment]::SetEnvironmentVariable($name, [NullString]::Value)` になった
+- **方法**: 修正後のテンプレートを `chezmoi --source home execute-template` で描画し、`copilot` 関数だけを
+  切り出して E1 / E2 と同じ偽 `copilot.exe`（3 変数を表示）で実行した。描画結果に `NullString` を含むことを確認してから使った。
+  `-NoProfile -ExecutionPolicy Bypass -File` で起動し、親の状態は `Test-Path env:<名前>` で見た。
+  一時ファイルは `%TEMP%\cztest` に置き、終了後に削除。Windows の設定は変えていない
+
+| # | 確認 | 5.1 | pwsh 7 |
+| --- | --- | --- | --- |
+| ① | 未設定で 2 回続けて呼ぶ | 2 回とも `never` / `false` / `0` が子に入る | 同じ（E2 では 2 回目が空文字だった） |
+| ③ | 各呼び出しの後 | 3 変数とも `Test-Path env:` が False | 同じ（E2 では True） |
+| ⑦a | 非ゼロ終了（3） | `LASTEXITCODE=3`、3 変数は False | 同じ |
+| ⑦b | 偽 copilot の未処理例外 | `LASTEXITCODE=-532462766`、3 変数は False | 同じ |
+| ⑦c | パイプ元の `throw`（`-ErrorAction Stop`） | 捕捉され、3 変数は False | 同じ |
+| — | 失敗の後の呼び出し | 既定値が再び入る | 同じ |
+| — | 値あり（`GIT_EDITOR=vim`） | 子も親も `vim` のまま | 同じ |
+| 本物 | `copilot --version`（関数経由） | `GitHub Copilot CLI 1.0.84-8.`、終了コード 0、3 変数は False | 同じ |
+
+E2 で見つけた不具合（pwsh 7 で変数が空文字のまま残る）は解消した。5.1 でも退行はない。
+確かめられなかったこと（人が開いた対話シェル、本物の Copilot CLI が子の git へ 3 変数を引き継ぐこと）は E2 のまま残る。

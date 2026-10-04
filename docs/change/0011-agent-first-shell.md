@@ -70,9 +70,13 @@
 - 1d: Windows 実機での検証。**実機で回せなければ未検証と明記する**
   （WSL では対話テストが skip されるだけ）。2026-10-05 に Windows PowerShell 5.1 と Windows の
   Python 3.12 で `copilot` 関数（環境変数・終了コード・finally・パイプ）、非対話のプロファイル、
-  読み取り判定の大小文字を確認し不具合なし（[実測](../research/shell/windows-powershell-live-check.md)）。
-  残り: PowerShell 7、人が開いた対話シェル（TTY の標準入力・`open` 等の定義）、本物の Copilot CLI
-  での 3 変数の引き継ぎ。5.1 は引数の `"`・空文字・末尾 `\` がネイティブ呼び出しで欠ける（関数起因ではない）
+  読み取り判定の大小文字を確認（[実測](../research/shell/windows-powershell-live-check.md)）。
+  **PowerShell 7.6.3 では `copilot` 関数の `finally` が変数を削除せず空文字で残す不具合を実測**
+  （`SetEnvironmentVariable($name, $null)` が 7 では空文字になる。2 回目から既定値が入らない）が、
+  `[NullString]::Value` への修正後に 5.1 / 7 の両方で解消を再実測した
+  （[修正後の再確認](../research/shell/windows-powershell-live-check.md#修正後の再確認)）。
+  5.1 は引数の `"`・空文字・末尾 `\` がネイティブ呼び出しで欠ける（関数起因ではなく、7 では直る）。
+  残り: 人が開いた対話シェル（TTY の標準入力・`open` 等の定義）、本物の Copilot CLI での 3 変数の引き継ぎ
 
 ## 評価基準
 
