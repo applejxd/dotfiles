@@ -12,13 +12,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = (
-    ROOT
-    / "home/dot_claude/skills/github-operations/scripts/executable_resolve-project.sh"
-)
+SCRIPT = ROOT / "home/dot_claude/skills/github-operations/scripts/executable_resolve-project.sh"
 
 pytestmark = pytest.mark.skipif(
-    shutil.which("jq") is None or shutil.which("bash") is None, reason="jq/bash required"
+    os.name == "nt" or shutil.which("jq") is None or shutil.which("bash") is None,
+    reason="Unix 専用 (偽 gh は sh スクリプト) / jq・bash が必要",
 )
 
 PROJECT = {"id": "PVT_1", "number": 3}
@@ -33,9 +31,7 @@ ITER = {
     "name": "Sprint",
     "type": "ProjectV2IterationField",
     "configuration": {
-        "iterations": [
-            {"id": "i1", "title": "S1", "startDate": "2026-01-01", "duration": 14}
-        ]
+        "iterations": [{"id": "i1", "title": "S1", "startDate": "2026-01-01", "duration": 14}]
     },
 }
 TEXT = {"id": "PVTF_1", "name": "Note", "type": "ProjectV2Field"}
