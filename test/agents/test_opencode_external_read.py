@@ -41,8 +41,12 @@ def _matches(pattern: str, value: str, *, action: str) -> bool:
 
     shell の末尾 `` *`` は引数なしにも当たる。``~`` は shell 以外だけ展開する。
     """
+    # OpenCode の Wildcard.match は両辺の ``\`` を ``/`` に揃えてから照合する
+    # (Windows の ``C:\Users\x/.claude`` のような混在を同じ形にする)
+    pattern = pattern.replace("\\", "/")
+    value = value.replace("\\", "/")
     if action != "shell" and pattern.startswith("~/"):
-        pattern = HOME + pattern[1:]
+        pattern = HOME.replace("\\", "/") + pattern[1:]
     if action == "shell" and pattern.endswith(" *") and value == pattern[:-2]:
         return True
     body = "".join(".*" if c == "*" else "." if c == "?" else re.escape(c) for c in pattern)
@@ -228,6 +232,25 @@ CP = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 )
 def test_skill_scripts(command: str, expected: str):
     assert effect("shell", command) == expected
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("python3 C:\\Users\\x/.claude/skills/sdd-docs/scripts/lint_docs.py --docs docs", "allow"),
+        ("python3 C:\\Users\\x\\.claude\\skills\\sdd-docs\\scripts\\lint_docs.py", "allow"),
+        ("python3 C:/Users/x/.claude/skills/sdd-docs/scripts/lint_docs.py", "allow"),
+        ("python3 ~/.claude/skills/sdd-docs/scripts/lint_docs.py", "allow"),
+        ("python3 C:\\Users\\x\\.claude\\skills\\sdd-docs\\scripts\\lint_docs.py > a", "deny"),
+        ("python3 C:\\Users\\x\\.claude\\skills\\evil.py", "ask"),
+        ("python3 C:\\Users\\x\\.ssh\\evil.py", "ask"),
+    ],
+)
+def test_skill_scripts_windows_shapes(monkeypatch, command: str, expected: str):
+    """Windows の混在区切りでも、skills 配下の載せたスクリプトだけが通る。"""
+    monkeypatch.setattr(gen, "expand_user", lambda p: p.replace("~", "C:\\Users\\x", 1))
+    perms = gen.build_opencode_permissions(COMMON)
+    assert effect("shell", command, perms) == expected
 
 
 def test_skill_script_allow_is_not_widened_silently():
