@@ -46,11 +46,7 @@ def test_zero_byte_windows_targets_use_empty_attribute():
 
 def test_vscode_installer_does_not_hide_extension_failures():
     script = (
-        ROOT
-        / "home"
-        / ".chezmoiscripts"
-        / "300_windows"
-        / "run_once_after_340_vscode.ps1"
+        ROOT / "home" / ".chezmoiscripts" / "300_windows" / "run_once_after_340_vscode.ps1"
     ).read_text(encoding="utf-8-sig")
 
     assert "$LASTEXITCODE -ne 0" in script
@@ -84,9 +80,9 @@ def test_elevated_windows_scripts_propagate_child_failures():
 
 
 def test_pwgen_uses_cryptographic_randomness():
-    script = (
-        ROOT / "home/dot_config/powershell/commands/pwgen.ps1"
-    ).read_text(encoding="utf-8-sig")
+    script = (ROOT / "home/dot_config/powershell/commands/pwgen.ps1").read_text(
+        encoding="utf-8-sig"
+    )
 
     assert "RandomNumberGenerator" in script
     assert "Get-Random" not in script
@@ -113,9 +109,9 @@ PROFILE_LOADER_INCLUDE = '{{ includeTemplate "powershell/profile-loader.ps1" . |
 
 def test_profile_loaders_only_dot_source_the_shared_profile():
     """Documents 配下はローダーに保ち、実体は ~/.config/powershell に置く。"""
-    template = (
-        ROOT / "home/.chezmoitemplates/powershell/profile-loader.ps1"
-    ).read_text(encoding="utf-8")
+    template = (ROOT / "home/.chezmoitemplates/powershell/profile-loader.ps1").read_text(
+        encoding="utf-8"
+    )
     # PowerShell の $HOME は HOMEDRIVE+HOMEPATH 由来で、ドメイン参加機では
     # chezmoi の ~ (%USERPROFILE%) と一致しないことがある
     assert "$HOME" not in strip_comments(template)
@@ -129,9 +125,7 @@ def test_profile_loaders_only_dot_source_the_shared_profile():
 
 
 def test_powershell_profile_activates_mise():
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
 
     assert "activate pwsh --shims" in profile
     assert "$LASTEXITCODE -ne 0" in profile
@@ -148,9 +142,7 @@ def strip_comments(script: str) -> str:
     行内の ``#`` では切らない。文字列や正規表現に ``#`` を含むコード行を
     黙って読み飛ばし、検査が無効化されるのを避けるため。
     """
-    return "\n".join(
-        "" if line.lstrip().startswith("#") else line for line in script.splitlines()
-    )
+    return "\n".join("" if line.lstrip().startswith("#") else line for line in script.splitlines())
 
 
 def split_at_interactive_guard(profile: str) -> tuple[str, str]:
@@ -163,9 +155,7 @@ def split_at_interactive_guard(profile: str) -> tuple[str, str]:
 
 def test_powershell_profile_skips_interactive_setup_when_not_interactive():
     """AllHosts プロファイルは非対話起動でも読まれるため、対話部分を分離する。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
 
     # stdio のリダイレクトに加えて、起動引数でも非対話を判定する
     assert "[Console]::IsInputRedirected" in profile
@@ -181,12 +171,10 @@ def test_powershell_profile_skips_interactive_setup_when_not_interactive():
 
 def test_powershell_profile_avoids_slow_cmdlets_before_the_interactive_guard():
     """Management / Utility の初回読み込みと Get-Command の探索は各 0.25 秒かかる。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
-    template = (
-        ROOT / "home/.chezmoitemplates/powershell/git-config-env.ps1"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+    template = (ROOT / "home/.chezmoitemplates/powershell/git-config-env.ps1").read_text(
+        encoding="utf-8-sig"
+    )
     cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
     head = strip_comments(split_at_interactive_guard(profile)[0] + template + cache)
 
@@ -196,9 +184,7 @@ def test_powershell_profile_avoids_slow_cmdlets_before_the_interactive_guard():
 
 def test_init_cache_is_dot_sourced_at_the_top_level():
     """関数の中で dot-source すると、定義がその関数のスコープに閉じてしまう。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
     head = split_at_interactive_guard(profile)[0]
 
     dot_source = re.search(r'^\. "\$PSScriptRoot/cache\.ps1"$', head, re.MULTILINE)
@@ -218,9 +204,7 @@ def test_powershell_init_cache_returns_before_running_command_discovery():
 
 def test_powershell_init_cache_is_written_with_a_bom():
     """Windows PowerShell 5.1 は BOM の無い .ps1 を ANSI として読むため。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
     cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
 
     assert "$utf8WithBom = [System.Text.UTF8Encoding]::new($true)" in cache
@@ -257,9 +241,7 @@ def test_oh_my_posh_init_is_not_cached():
     test_powershell_interactive.py::test_deployed_profile_in_interactive_terminal
     がレンダリング結果で検証する。
     """
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
     cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
 
     assert "POSH_SESSION_ID" not in profile + cache
@@ -270,9 +252,7 @@ def test_oh_my_posh_init_is_not_cached():
 
 def test_cached_init_scripts_have_a_direct_fallback():
     """キャッシュ本体が掴まれていても dot-source は失敗する。退避経路を持つ。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
 
     assert "Cached mise activation failed; running mise directly" in profile
     # Invoke-Expression は空文字を受け付けない (ValidateNotNullOrEmpty)
@@ -288,18 +268,14 @@ def test_cached_init_scripts_have_a_direct_fallback():
 
 def test_startup_detection_covers_positional_script_arguments():
     """`pwsh script.ps1` は -File が現れないため、位置引数も見る必要がある。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
 
     assert "$argument.EndsWith('.ps1', [StringComparison]::OrdinalIgnoreCase)" in profile
 
 
 def test_powershell_path_updates_are_idempotent():
     """mise の activate は毎回 PATH を先頭へ足すため、重複の除去が必要。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
 
     assert "function Add-EnvPathEntry" in profile
     assert "function Remove-DuplicateEnvPathEntry" in profile
@@ -308,11 +284,51 @@ def test_powershell_path_updates_are_idempotent():
 
 def test_pbcopy_forwards_pipeline_input():
     """エイリアスと違い、関数は標準入力を子プロセスへ引き継がない。"""
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
 
     assert "function pbcopy { $input | clip.exe }" in profile
+
+
+def test_copilot_function_sets_agent_env_and_restores_it():
+    """git が入力待ちにならない既定値を、未設定のときだけ入れて終了後に戻す。"""
+    import shutil
+    import subprocess
+
+    import pytest
+
+    chezmoi = shutil.which("chezmoi")
+    if chezmoi is None:
+        pytest.skip("chezmoi が無い")
+    source = ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
+    raw = source.read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf"), "UTF-8 BOM が無い"
+
+    rendered = subprocess.run(
+        [chezmoi, "--source", str(ROOT / "home"), "execute-template"],
+        input=raw.decode("utf-8-sig"),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout
+
+    # [agent_env] は値が単純な文字列なので、テンプレート記法を含まない先頭付近から読む
+    common = (ROOT / "home/dot_config/agents/common.toml.tmpl").read_text(encoding="utf-8")
+    section = common.split("[agent_env]\n", 1)[1].split("\n[", 1)[0]
+    agent_env = dict(re.findall(r'^(\w+) = "([^"]*)"$', section, re.MULTILINE))
+    assert agent_env, "[agent_env] が読めない"
+
+    head, tail = rendered.split(INTERACTIVE_GUARD, 1)
+    assert "function copilot" not in head, "対話判定より前に置かない"
+    function = tail.split("function copilot {", 1)[1].split("\n}\n", 1)[0]
+    for name, value in agent_env.items():
+        assert f"'{name}' = '{value}'" in function
+    assert "Get-Command copilot -CommandType Application" in function
+    # 未設定のものだけを入れ、入れたものだけを finally で消す
+    assert "$null -eq [Environment]::GetEnvironmentVariable($name)" in function
+    finally_body = function.split("} finally {", 1)[1]
+    assert "SetEnvironmentVariable($name, $null)" in finally_body
+    assert "$MyInvocation.ExpectingInput" in function
 
 
 def test_powershell_init_cache_is_keyed_on_the_executable():
@@ -326,12 +342,8 @@ def test_powershell_init_cache_is_keyed_on_the_executable():
 
 def test_fzf_key_handlers_are_registered_from_a_single_place():
     """OnIdle の登録はプロファイル側 1 箇所に集約する。"""
-    fzf = (
-        ROOT / "home/dot_config/powershell/commands/fzf.ps1"
-    ).read_text(encoding="utf-8-sig")
-    profile = (
-        ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    ).read_text(encoding="utf-8-sig")
+    fzf = (ROOT / "home/dot_config/powershell/commands/fzf.ps1").read_text(encoding="utf-8-sig")
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
     cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
 
     assert "Register-EngineEvent" not in fzf
@@ -371,9 +383,9 @@ def test_shared_git_config_sanitizer_uses_dotnet_apis_only():
     test_powershell_interactive.py::test_git_config_environment_is_sanitized
     が、配備済みプロファイルを実際に起動して 5.1 / 7 の両方で検証する。
     """
-    template = (
-        ROOT / "home/.chezmoitemplates/powershell/git-config-env.ps1"
-    ).read_text(encoding="utf-8-sig")
+    template = (ROOT / "home/.chezmoitemplates/powershell/git-config-env.ps1").read_text(
+        encoding="utf-8-sig"
+    )
 
     assert "Env:GIT_CONFIG" not in template
     assert "Get-ChildItem Env:" not in strip_comments(template)
@@ -385,11 +397,7 @@ def test_shared_git_config_sanitizer_uses_dotnet_apis_only():
 
 def test_windows_terminal_settings_are_replaced_atomically():
     script = (
-        ROOT
-        / "home"
-        / ".chezmoiscripts"
-        / "300_windows"
-        / "run_after_341_terminal.py.tmpl"
+        ROOT / "home" / ".chezmoiscripts" / "300_windows" / "run_after_341_terminal.py.tmpl"
     ).read_text(encoding="utf-8-sig")
 
     assert "NamedTemporaryFile" in script

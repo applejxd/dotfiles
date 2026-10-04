@@ -246,6 +246,139 @@ def test_zpack_failure_leaves_no_temp_file(zpack, tmp_path):
     assert sorted(p.name for p in zpack.work.iterdir()) == ["src"]
 
 
+# ---- copilot 起動関数 (既定値の正本は common.toml.tmpl の [agent_env]) ----
+
+_AGENT_ENV = {
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_EDITOR": "false",
+    "GCM_INTERACTIVE": "never",
+}
+_FAKE_COPILOT = """#!/bin/sh
+for v in GIT_TERMINAL_PROMPT GIT_EDITOR GCM_INTERACTIVE; do
+    eval "if [ -n \\"\\${$v+x}\\" ]; then echo \\"$v=[\\$$v]\\"; else echo \\"$v=<unset>\\"; fi"
+done
+exit "${FAKE_EXIT:-0}"
+"""
+_FAKE_COPILOT = _FAKE_COPILOT.replace(
+    'exit "${FAKE_EXIT:-0}"',
+    'for a in "$@"; do echo "arg=[$a]"; done\n'
+    'if [ -n "${FAKE_STDIN:-}" ]; then echo "stdin=[$(cat)]"; fi\n'
+    'exit "${FAKE_EXIT:-0}"',
+)
+
+
+@pytest.fixture(params=["bash", "zsh"])
+def copilot_call(request, home, tmp_path, monkeypatch):
+    """偽の copilot を PATH に置き、一時 HOME の対話シェルで script を実行する関数を返す。"""
+    for var in _AGENT_ENV:
+        monkeypatch.delenv(var, raising=False)
+    fake = tmp_path / "fakebin"
+    fake.mkdir()
+    (fake / "copilot").write_text(_FAKE_COPILOT, encoding="utf-8")
+    (fake / "copilot").chmod(0o755)
+    exe = _zsh() if request.param == "zsh" else "bash"
+
+    def call(script: str, **extra: str) -> subprocess.CompletedProcess[str]:
+        path = f"{fake}:{os.environ['PATH']}"
+        return run([exe, "-ic", script], home, PATH=path, **extra)
+
+    return call
+
+
+def _seen(done: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    return dict(line.split("=", 1) for line in done.stdout.splitlines() if "=" in line)
+
+
+def test_copilot_function_sets_defaults_when_unset(copilot_call):
+    done = copilot_call("copilot")
+    assert done.returncode == 0, done.stderr
+    assert _seen(done) == {k: f"[{v}]" for k, v in _AGENT_ENV.items()}
+
+
+def test_copilot_function_keeps_explicit_value(copilot_call):
+    seen = _seen(copilot_call("copilot", GIT_EDITOR="vim"))
+    assert seen["GIT_EDITOR"] == "[vim]"
+    assert seen["GIT_TERMINAL_PROMPT"] == "[0]"
+
+
+def test_copilot_function_keeps_empty_value(copilot_call):
+    assert _seen(copilot_call("copilot", GIT_TERMINAL_PROMPT=""))["GIT_TERMINAL_PROMPT"] == "[]"
+
+
+def test_copilot_function_does_not_leak_into_parent_shell(copilot_call):
+    done = copilot_call('copilot >/dev/null; echo "after=${GIT_EDITOR-unset}"')
+    assert "after=unset" in done.stdout.splitlines()
+
+
+def test_copilot_function_passes_exit_status(copilot_call):
+    assert copilot_call("copilot", FAKE_EXIT="7").returncode == 7
+
+
+def test_agent_alias_goes_through_copilot_function(copilot_call):
+    if "copilot" not in copilot_call("alias agent").stdout:
+        pytest.skip("agent alias が copilot を指さない (applejxd 以外)")
+    assert _seen(copilot_call("agent"))["GIT_EDITOR"] == "[false]"
+
+
+def test_copilot_function_passes_arguments_verbatim(copilot_call):
+    done = copilot_call("""copilot 'a b' 'q"x' '$HOME' '*' "it's" ''""")
+    args = [ln for ln in done.stdout.splitlines() if ln.startswith("arg=")]
+    assert args == ["arg=[a b]", 'arg=[q"x]', "arg=[$HOME]", "arg=[*]", "arg=[it's]", "arg=[]"]
+
+
+def test_copilot_function_passes_stdin(copilot_call):
+    done = copilot_call("echo hello | copilot", FAKE_STDIN="1")
+    assert "stdin=[hello]" in done.stdout.splitlines()
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_copilot_function_quotes_special_default_values(shell, tmp_path):
+    """既定値に引用符・$・*・空白・バックスラッシュを含んでも、描画後の関数がそのまま渡す。"""
+    value = 'it\'s $HOME *  \\n "q" `x`'
+    src = (SHELL_DIR / "shellrc.sh.tmpl").read_text(encoding="utf-8")
+    old = '{{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml }}'
+    assert old in src
+    literal = value.replace("\\", "\\\\").replace('"', '\\"')
+    new = '{{- $common := dict "agent_env" (dict "GIT_EDITOR" "' + literal + '") }}'
+    chezmoi = shutil.which("chezmoi")
+    if chezmoi is None:
+        pytest.skip("chezmoi is not installed")
+    done = subprocess.run(
+        [chezmoi, "--source", str(ROOT), "execute-template"],
+        input=src.replace(old, new),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    func = re.search(r"^function copilot\(\) \{\n.*?^\}\n", done.stdout, re.S | re.M)
+    assert func, "copilot が描画結果に無い"
+    fake = tmp_path / "fakebin"
+    fake.mkdir()
+    (fake / "copilot").write_text('#!/bin/sh\nprintf "%s" "$GIT_EDITOR"\n', encoding="utf-8")
+    (fake / "copilot").chmod(0o755)
+    exe = _zsh() if shell == "zsh" else "bash"
+    env = {k: v for k, v in os.environ.items() if k != "GIT_EDITOR"}
+    env["PATH"] = f"{fake}:{env['PATH']}"
+    out = subprocess.run(
+        [exe, "-c", func.group(0) + "\ncopilot"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+        env=env,
+        cwd=tmp_path,
+        timeout=30,
+    )
+    assert out.stdout == value, out.stderr
+
+
+def test_noninteractive_shells_do_not_define_copilot_function(home):
+    assert "function" not in run([_zsh(), "-c", "whence -w copilot"], home).stdout
+    assert run(["bash", "-lc", "type -t copilot"], home).stdout.strip() != "function"
+
+
 # ---- ROS setup の選び方 ----
 
 

@@ -158,6 +158,42 @@ function explorer-restart { Stop-Process -Name explorer -Force; Start-Process ex
 # `chezmoi cd` that keeps the current shell session
 function ccd { Set-Location (chezmoi source-path) }
 
+{{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml }}
+
+# Copilot CLI のシェルへ [agent_env] の既定値を渡す。入れた分は finally で戻す。
+# see docs/spec/structure.md と docs/spec/agent-config-generation.md#shell-ツールの環境変数
+function copilot {
+  $realCopilot = @(Get-Command copilot -CommandType Application -ErrorAction Ignore)[0]
+  if (-not $realCopilot) {
+    Write-Error 'copilot: command not found'
+    return
+  }
+  $agentEnv = @{
+{{- range $name, $value := $common.agent_env }}
+    '{{ $name | replace "'" "''" }}' = '{{ $value | toString | replace "'" "''" }}'
+{{- end }}
+  }
+  $changed = @()
+  try {
+    foreach ($name in $agentEnv.Keys) {
+      if ($null -eq [Environment]::GetEnvironmentVariable($name)) {
+        [Environment]::SetEnvironmentVariable($name, $agentEnv[$name])
+        $changed += $name
+      }
+    }
+    # パイプ入力が無いときに空の入力を流すと、対話 UI の標準入力が閉じてしまう
+    if ($MyInvocation.ExpectingInput) {
+      $input | & $realCopilot.Path @args
+    } else {
+      & $realCopilot.Path @args
+    }
+  } finally {
+    foreach ($name in $changed) {
+      [Environment]::SetEnvironmentVariable($name, $null)
+    }
+  }
+}
+
 # 定義するだけならコマンドの有無を調べる必要はなく、Get-Command の探索も避けられる
 . "$PSScriptRoot/commands/wsl.ps1"
 . "$PSScriptRoot/commands/pwgen.ps1"

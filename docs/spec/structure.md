@@ -520,6 +520,11 @@ Herdr のユーザーデータ・設定は削除しません。
 版の再現性が要る操作（lint・ビルドなど）は shim ではなく `mise exec` を使う。
 実測は[調査記録](../research/shell/mise-shims-resolution.md)。
 
+Copilot CLI がツールとして起動するシェルへ渡す git の既定値（入力待ちにしない）は、
+対話側の `shellrc.sh` にある `copilot()` 関数が、未設定の変数だけをコマンド前置きの
+代入で入れる（空文字は空のまま、呼び出し元の環境は変えない）。値の正本は
+`common.toml.tmpl` の `[agent_env]`（[詳細](agent-config-generation.md#shell-ツールの環境変数)）。
+
 `.zshrc` の冒頭は `/etc/zsh/zshrc` の読み込みも含む（`.zshenv` の `no_global_rcs`
 で自動では読まれないため、対話のときだけ読む）。
 
@@ -646,6 +651,12 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply` �
   Consoleのエンコーディングは非対話でも設定し、失敗は無視します。
   判定はstdioのリダイレクトに加え、起動引数（`-Command` / `-File` /
   `-EncodedCommand` / `-NonInteractive`。ただし `-NoExit` があれば対話）も見ます。
+- **`copilot` 関数**: 対話ブロックに置き、`common.toml.tmpl` の `[agent_env]` の値を
+  未設定のものだけ環境変数へ入れてから本物の `copilot` を起動し、`finally` で入れた分だけ
+  消します。PowerShellの環境変数はプロセス全体なので、Copilotの実行中は親の環境も
+  変わります。Windowsは空文字の変数を保持できないため、親から空で渡された値は残し、
+  シェル内で空を代入した変数は未設定と同じ扱いになります
+  （[shell ツールの環境変数](agent-config-generation.md#shell-ツールの環境変数)）。
 - **起動経路でcmdletを使わない**: `Microsoft.PowerShell.Management`
   （`Test-Path`、`Join-Path`）、`Microsoft.PowerShell.Utility`
   （`New-Object`、`Set-Alias`）、`Get-Command` のコマンド探索は、初回呼び出しに
