@@ -68,7 +68,11 @@
   誘導文が出なかったが、静的 deny は変えずに plugin の `tool.execute.before` で止めて
   説明を返す形にした（[実測](../research/opencode/permission/early-guard.md)）
 - 1d: Windows 実機での検証。**実機で回せなければ未検証と明記する**
-  （WSL では対話テストが skip されるだけ）
+  （WSL では対話テストが skip されるだけ）。2026-10-05 に Windows PowerShell 5.1 と Windows の
+  Python 3.12 で `copilot` 関数（環境変数・終了コード・finally・パイプ）、非対話のプロファイル、
+  読み取り判定の大小文字を確認し不具合なし（[実測](../research/shell/windows-powershell-live-check.md)）。
+  残り: PowerShell 7、人が開いた対話シェル（TTY の標準入力・`open` 等の定義）、本物の Copilot CLI
+  での 3 変数の引き継ぎ。5.1 は引数の `"`・空文字・末尾 `\` がネイティブ呼び出しで欠ける（関数起因ではない）
 
 ## 評価基準
 
