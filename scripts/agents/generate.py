@@ -1629,8 +1629,29 @@ def opencode_sandbox_agents(common: dict[str, Any], reachable: list[str]) -> dic
     return out
 
 
+AGENT_ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+
+
+def agent_env(common: dict[str, Any]) -> dict[str, str]:
+    """``[agent_env]``: AI CLI のシェルへ未設定のときだけ入れる環境変数。
+
+    ``rules.json`` の ``agent_env`` になる。
+    キーは環境変数名、値は文字列 (空文字可)。不正なら生成を止める。
+    """
+    table = common.get("agent_env", {})
+    if not isinstance(table, dict):
+        raise SystemExit("[agent_env] は表でなければならない")
+    for key, value in table.items():
+        if not AGENT_ENV_NAME.fullmatch(key):
+            raise SystemExit(f"[agent_env] のキーが環境変数名として不正: {key!r}")
+        if not isinstance(value, str) or "\0" in value:
+            raise SystemExit(f"[agent_env] の値は NUL を含まない文字列: {key} = {value!r}")
+    return dict(table)
+
+
 def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
+        "agent_env": agent_env(common),
         "guide": opencode_guide_rules(common),
         "deny_guide": opencode_deny_guide_rules(common),
         "deny_guide_agents": opencode_deny_guide_agents(common),

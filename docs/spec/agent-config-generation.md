@@ -690,10 +690,10 @@ plugin が守る規約は次のとおり。
 「秘密を読むために一時的に全部外す」逃げ道は OpenCode の中には残さない。
 そのときは Copilot CLI を使うか、利用者自身がコマンドを実行する。
 
-#### shell ツールの環境変数（git を入力待ちにさせない）
+#### shell ツールの環境変数
 
-`index.js` は `shell.create.before` で、シェルツールの子プロセスへ次を**未設定のときだけ**
-（`??=`）入れる。人の対話シェルには届かない。
+値の正本は `common.toml` の `[agent_env]`（`GIT_TERMINAL_PROMPT` / `GIT_EDITOR` / `GCM_INTERACTIVE`）。
+AI CLI のシェルへ**未設定のときだけ**入れる。空文字を明示した変数は設定済みとして空のまま残す。
 
 | 変数 | 防ぐもの |
 | --- | --- |
@@ -701,11 +701,20 @@ plugin が守る規約は次のとおり。
 | `GIT_EDITOR=false` | `-m` 無しの `git commit`・`rebase -i` などのエディタ起動待ち |
 | `GCM_INTERACTIVE=never` | Git Credential Manager の対話（GCM が無ければ無害） |
 
-- 値は `index.js` の `NONINTERACTIVE_ENV` 1 か所。`ocs` の `inner_env` には足さない
-  （隔離版の内側も同じ `index.js` を読む）。空文字は設定済みとして残す
+配り先:
+
+| CLI | 方法 |
+| --- | --- |
+| OpenCode | 生成器が `rules.json` の `agent_env` に出し、`index.js` が `shell.create.before` で `??=` により入れる。`ocs` の `inner_env` には足さない（隔離版の内側も同じ `index.js` を読む） |
+| Copilot CLI | 起動関数（shellrc / PowerShell。Windows は `try/finally` の関数）が `[agent_env]` をテンプレートで直接読む |
+| Claude Code | 保留。再開時に `CLAUDE_ENV_FILE` と比較する（`settings.json` の `env` は上書きで不適） |
+
+- 生成器は、キーが `^[A-Z_][A-Z0-9_]*$` でない・値が文字列でないとき生成を止める。
+  `[agent_env]` が無ければ空の辞書を出す。`index.js` は `agent_env` が文字列の辞書でなければ何も入れない
+- 起動関数で入れた値は、AI CLI の `!` で人が実行したコマンドにも入る（許容）
 - 入れないもの: `GIT_SSH_COMMAND`（git 設定の SSH 指定と衝突）、`EDITOR=true`（成功の偽装）、
   `GIT_SEQUENCE_EDITOR`
-- plugin のロード失敗（fail-open）や `rules.json` が全部無効で `index.js` を載せない設定では効かない
+- plugin のロード失敗（fail-open）や `rules.json` が全部無効で `index.js` を載せない設定では OpenCode 側は効かない
 - 実測は [E1](../research/agents/noninteractive-git-env.md)。試験は `test_guide_shell_env.py`
 
 #### `rules.json` が使えないとき

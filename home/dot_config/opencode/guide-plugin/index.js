@@ -316,13 +316,16 @@ function describer(ctx) {
   }
 }
 
-// シェルツールの子プロセスへ、未設定のときだけ入れる (git を入力待ちにさせない)。
-// 人の対話シェルには届かない。see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
-const NONINTERACTIVE_ENV = {
-  GIT_TERMINAL_PROMPT: "0",
-  GIT_EDITOR: "false",
-  GCM_INTERACTIVE: "never",
-}
+// シェルツールの子プロセスへ、未設定のときだけ入れる値 (git を入力待ちにさせない)。
+// see docs/spec/agent-config-generation.md#shell-ツールの環境変数
+const agentEnv = section("agent_env", (r) => {
+  if (!isObject(r.agent_env)) throw new Error("agent_env が表でない")
+  const entries = Object.entries(r.agent_env)
+  const valid = ([k, v]) =>
+    /^[A-Z_][A-Z0-9_]*$/.test(k) && typeof v === "string" && !v.includes("\0")
+  if (!entries.every(valid)) throw new Error("agent_env に不正な名前か値")
+  return entries
+}) ?? []
 
 export default {
   id: "guide",
@@ -334,7 +337,7 @@ export default {
     try {
       await ctx.shell?.hook("create.before", (e) => {
         if (!e.env) return
-        for (const [k, v] of Object.entries(NONINTERACTIVE_ENV)) e.env[k] ??= v
+        for (const [k, v] of agentEnv) e.env[k] ??= v
       })
     } catch (err) {
       console.error(`[guide] shell フックを登録できない: ${err}`)
