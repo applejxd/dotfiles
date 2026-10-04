@@ -67,6 +67,7 @@
 | [Copilot sandbox の既定の許可範囲](agents/copilot-sandbox-default-policy.md) | `/sandbox policy` の表示、$HOME は未許可、存在しないパスの deny 10 件中 3 件が効かない |
 | [compaction 関連の hook 仕様](agents/compaction-hooks.md) | 記録 E1–E7。圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測（Claude / Copilot の hook は 2026-09-25 に撤去） |
 | [エージェントの git 入力待ちを防ぐ環境変数](agents/noninteractive-git-env.md) | 2026-10-03。OpenCode V2 の `ctx.shell.hook("create.before")` で子シェルの環境を `??=` で足せる実測、ocs は `inner_env` に足せる、`GIT_TERMINAL_PROMPT=0` は TTY があるときだけ効く、`GIT_EDITOR=false` で `rebase -i` が即失敗（`git commit` と分岐した merge は権限で測れず） |
+| [Claude / Copilot で git 入力待ち防止の環境変数を入れられるか](agents/noninteractive-git-env-claude-copilot.md) | 2026-10-04。Claude の `settings.json` の `env` はシェルの値を上書きするので「未設定時のみ」に不適（公式）、`CLAUDE_ENV_FILE` は実機未検証。Copilot は環境変数の設定が無く `preToolUse` の `modifiedArgs` は効くが狭い allow で実行が拒否された（実測）、起動ラッパーは未設定→既定・既設定→維持を実測。推奨は起動ラッパー |
 | [秘密ファイル一覧のずれと直下以外の `.env`](agents/secret-file-lists.md) | 2026-10-03。hook の `tables.toml` にあって `read_deny_globs` に無かった資格情報・履歴 15 件、`.env` が `**/` 無しで直下以外は ask 止まりだった実測と、`**/` 化後の deny |
 
 ### OpenCode 全般

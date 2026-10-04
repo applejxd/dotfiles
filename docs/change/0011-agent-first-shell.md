@@ -34,7 +34,7 @@
 | 1c | 秘密ファイル一覧（hook の `tables.toml` と `common.toml.tmpl` の `read_deny_globs`）をそろえ、直下以外の `.env` の保護を実測する | 2 | 完了（一覧をそろえ `.env` を `**/` 化。[調査記録](../research/agents/secret-file-lists.md)） |
 | 1d | PowerShell の補助関数を対話判定の後ろへ。Console 設定の失敗を無視する。既定文字コード（`*:Encoding`）は 5.1 の退行を避けるため非対話でも維持 | 2 | 実装済み（Windows 実機は未検証） |
 | 2b | OpenCode の拒否規則: pip 系を止めて uv へ誘導（Q4）、危険な `rm` を止める（Q5） | 3 | 実装済み（guide 規則・実機確認済み。[ADR-0013](../adr/0013-opencode-shell-guard-inside-ocs.md)。通常版の pip の静的 deny にも `execute.before` で誘導文を付けた。[実測](../research/opencode/permission/early-guard.md)） |
-| 3a | git の環境変数を AI CLI の起動側で入れる（Q2、Q3）。OpenCode は `guide-plugin` の `shell.create.before` で実装済み（Claude Code / Copilot CLI は未着手） | 3 | 進行中 |
+| 3a | git の環境変数を AI CLI の起動側で入れる（Q2、Q3）。値の正本は `[agent_env]`。OpenCode は `guide-plugin`（`rules.json` の `agent_env`）で実装済み、Copilot は起動関数（Windows は `try/finally` の関数）、Claude Code は保留（再開時に `CLAUDE_ENV_FILE` と比較） | 3 | 進行中 |
 | 4 | OpenCode の `bypass` を「ask を allow にするだけ」に再定義し、誘導・結果フィルタ・伏字化を `bypass` にも効かせる。`.env.*` を deny に上げる（Q6） | 4 | 完了（実装・実機確認済み。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)、[実測](../research/opencode/permission/bypass-ask-upgrade.md)） |
 | 5 | pip で実証した前段停止を `[bash] deny` の残り全項目へ広げ、説明文を返す（Q7）。A 代わりの手段がある（`npm install -g`・`uv self update` / `chezmoi upgrade`・`git config` の書き込み・`docker * prune`・キャッシュ削除など）と B 利用者に頼む（それ以外。迷ったら B）に全項目を分類し、`[bash.deny_guide]` を正本にする | 5 | 実装済み（実機は A・B・bypass・止めない例を確認。ocs と `commit` エージェントは plugin の試験のみ。[仕様](../spec/agent-command-policy.md#opencode-の-deny-の説明前段停止)、[実測](../research/opencode/permission/early-guard.md#追記-deny-全体への拡張2026-10-03)） |
 
@@ -50,7 +50,7 @@
 | 問い | 決定 |
 | --- | --- |
 | Q1 mise を非対話で使う | `shellenv.sh` で shims を PATH に足す。版の再現性が要る操作は `mise exec`。shims を他の PATH より前に置けば cwd の版に従う（実測済み） |
-| Q2 git が入力を求めない | AI CLI の起動側（`ocs` など）で、変数ごとに未設定のときだけ入れる。`GIT_TERMINAL_PROMPT=0` は入れる。`GCM_INTERACTIVE=never` は Git Credential Manager のある環境で候補。`GIT_SSH_COMMAND` は git 設定の SSH 指定と衝突しうるので一律には入れない。OpenCode は `guide-plugin` の `shell.create.before` で入れる（実測済み） |
+| Q2 git が入力を求めない | AI CLI の起動側（`ocs` など）で、変数ごとに未設定のときだけ入れる。`GIT_TERMINAL_PROMPT=0` は入れる。`GCM_INTERACTIVE=never` は Git Credential Manager のある環境で候補。`GIT_SSH_COMMAND` は git 設定の SSH 指定と衝突しうるので一律には入れない。OpenCode は `guide-plugin` の `shell.create.before` で入れる（実測済み）。値の正本は `common.toml` の `[agent_env]`（空文字を明示した変数は残す）。Copilot は起動関数で入れ、`!` で人が実行したコマンドにも入るのは許容。Claude Code は保留（再開時に `CLAUDE_ENV_FILE` と比較） |
 | Q3 エディタ | 自動実行のときだけ `GIT_EDITOR=false`。既存の指定は残す。`GIT_SEQUENCE_EDITOR` は別判断。`EDITOR=true` は採らない |
 | Q4 pip | OpenCode で `pip` / `pip3` / `python -m pip` を止めて uv へ誘導する。poetry / pipenv は止めない。`ocs` の中にも効かせる（安全境界ではなく uv を使う運用の取り決めのため）。既存の pip の deny は、静的 deny の呼び出しが plugin の `evaluate` に届かず説明が出ないため、`execute.before`（`home/dot_config/opencode/guide-plugin/index.js`）で先に止めて説明を返す（2026-10-03 実測）。既存の deny は外さない |
 | Q5 危険な `rm` | OpenCode で、止めたい具体例（`.git` の直接削除、`~` や `/` の指定、作業ディレクトリ全体など）に限って止める。`ocs` の中にも効かせる。「うっかり防止であり完全な保護ではない」と明記する。[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)（`ocs` の中では `rm` などを確認しない）の部分変更として記録する |
@@ -60,7 +60,10 @@
 ## 未解決点
 
 - Q2 / Q3: Claude Code（`settings.json` の `env`）と Copilot CLI で同じ変数を
-  未設定時のみ入れられるか（未調査）
+  未設定時のみ入れられるか（調査済み・2026-10-04、[調査記録](../research/agents/noninteractive-git-env-claude-copilot.md)）。
+  Claude の `env` は上書きで不適、Copilot の `modifiedArgs` は権限判定と干渉（実測）。決定: Copilot は `shellrc` / PowerShell の起動関数
+  （Windows は `try/finally` の関数）で `[agent_env]` を入れる。`!` で人が実行したコマンドにも入るのは許容。
+  Claude は保留で、再開時に `CLAUDE_ENV_FILE` と比較する。Windows 実機は未検証
 - Q4（解決済み・2026-10-03）: 通常版の `pip` / `pip3` は静的 deny で plugin の `evaluate` に届かず
   誘導文が出なかったが、静的 deny は変えずに plugin の `tool.execute.before` で止めて
   説明を返す形にした（[実測](../research/opencode/permission/early-guard.md)）
@@ -115,4 +118,8 @@
   部分集合の性質は `test/agents/test_guide_deny_early.py` が固定する
 - 2026-10-03 — 作業 5 のレビュー反映。前段の対象を「生成器が permission を把握しているエージェント」に絞り
   （V1 の `permission` も算出に含める）、`rules.json` の不正な形（`pattern` 欠落など）は節ごと無効にする。
-  `guide` 節にも同じ穴があったので直した。プロジェクト設定による上書きは既知の限界として spec に明記- 2026-10-03 — 例外の置き場所を修正。全 deny の後ろに allow を置くと `~/.ssh/.env.example` まで通る退行があったため、例外を対の deny とセットで宣言し（`[[file.deny_exceptions]]`）、OpenCode は対の deny の直後に allow を置く形に改めた。Copilot の `check_file_read.py` も同じ意味の例外に対応した
+  `guide` 節にも同じ穴があったので直した。プロジェクト設定による上書きは既知の限界として spec に明記
+- 2026-10-03 — 例外の置き場所を修正。全 deny の後ろに allow を置くと `~/.ssh/.env.example` まで通る退行があったため、例外を対の deny とセットで宣言し（`[[file.deny_exceptions]]`）、OpenCode は対の deny の直後に allow を置く形に改めた。Copilot の `check_file_read.py` も同じ意味の例外に対応した
+- 2026-10-04 — Q2 / Q3 の決定。値の正本を `common.toml` の `[agent_env]` とし、OpenCode は `rules.json` 経由、
+  Copilot は起動関数（Windows は `try/finally` の関数）で配る。`!` で人が実行したコマンドにも入るのは許容。
+  Claude は保留（再開時に `CLAUDE_ENV_FILE` と比較）
