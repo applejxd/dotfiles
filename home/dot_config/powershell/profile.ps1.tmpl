@@ -189,7 +189,8 @@ function copilot {
     }
   } finally {
     foreach ($name in $changed) {
-      [Environment]::SetEnvironmentVariable($name, $null)
+      # pwsh 7 は $null を空文字として渡し、変数が消えずに残る
+      [Environment]::SetEnvironmentVariable($name, [NullString]::Value)
     }
   }
 }

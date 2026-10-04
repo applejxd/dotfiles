@@ -327,7 +327,7 @@ def test_copilot_function_sets_agent_env_and_restores_it():
     # 未設定のものだけを入れ、入れたものだけを finally で消す
     assert "$null -eq [Environment]::GetEnvironmentVariable($name)" in function
     finally_body = function.split("} finally {", 1)[1]
-    assert "SetEnvironmentVariable($name, $null)" in finally_body
+    assert "SetEnvironmentVariable($name, [NullString]::Value)" in finally_body
     assert "$MyInvocation.ExpectingInput" in function
 
 
