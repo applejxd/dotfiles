@@ -1300,7 +1300,9 @@ def test_service_sets_only_the_port_and_keeps_the_password():
 
 def test_service_is_left_alone_without_a_declaration():
     existing = {"password": "secret", "port": 4097}
-    assert gen.merge_opencode_service(existing, COMMON) == existing
+    common = copy.deepcopy(COMMON)
+    common["opencode"].pop("service", None)  # Windows 描画では宣言が入る
+    assert gen.merge_opencode_service(existing, common) == existing
 
 
 @pytest.mark.parametrize("port", [0, 65536, "4098", True])
@@ -1314,11 +1316,12 @@ def test_service_rejects_unknown_keys():
         gen.merge_opencode_service({}, {"opencode": {"service": {"prot": 4098}}})
 
 
-def test_service_port_differs_from_wsl_only_on_windows():
+def _render_common_for_os(os_name: str) -> dict:
+    """OS を明示して common.toml を描画する (実行 OS に依存しない)。"""
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
         pytest.skip("chezmoi is not installed")
-    context = json.dumps(json.dumps({"chezmoi": {"os": "windows", "username": "applejxd"}}))
+    context = json.dumps(json.dumps({"chezmoi": {"os": os_name, "username": "applejxd"}}))
     template = (
         f"{{{{ with {context} | fromJson }}}}"
         '{{ includeTemplate "dot_config/agents/common.toml.tmpl" . }}{{ end }}'
@@ -1331,9 +1334,12 @@ def test_service_port_differs_from_wsl_only_on_windows():
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    windows = tomllib.loads(result.stdout)
-    assert windows["opencode"]["service"]["port"] == 4098
-    assert "service" not in COMMON["opencode"]
+    return tomllib.loads(result.stdout)
+
+
+def test_service_port_differs_from_wsl_only_on_windows():
+    assert _render_common_for_os("windows")["opencode"]["service"]["port"] == 4098
+    assert "service" not in _render_common_for_os("linux")["opencode"]
 
 
 # guide plugin の各役割を 1 つだけ有効にした common。
