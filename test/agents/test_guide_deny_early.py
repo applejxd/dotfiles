@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
-from agents_common import load_common  # noqa: E402
+from agents_common import load_common, node_env  # noqa: E402
 
 COMMON = load_common()
 PLUGIN = ROOT / "home/dot_config/opencode/guide-plugin"
@@ -156,9 +156,7 @@ def _run(
     )
     (tmp_path / "run.mjs").write_text(SCRIPT, "utf-8")
     (tmp_path / "cases.json").write_text(json.dumps(cases), "utf-8")
-    env = {"PATH": ""}
-    if isolated:
-        env["OCS_ISOLATED"] = "1"
+    env = node_env(OCS_ISOLATED="1") if isolated else node_env()
     done = subprocess.run(
         [node, str(tmp_path / "run.mjs"), str(tmp_path / "cases.json")],
         capture_output=True,

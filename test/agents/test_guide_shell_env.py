@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from agents_common import node_env
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = ROOT / "home/dot_config/opencode/guide-plugin"
@@ -43,7 +44,7 @@ def _call(tmp_path: Path, env: dict) -> dict:
         text=True,
         encoding="utf-8",
         check=True,
-        env={"PATH": ""},
+        env=node_env(),
     )
     return json.loads(done.stdout)
 

@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
-from agents_common import load_common  # noqa: E402
+from agents_common import load_common, node_env  # noqa: E402
 
 COMMON = load_common()
 PLUGIN = ROOT / "home/dot_config/opencode/guide-plugin"
@@ -62,7 +62,7 @@ def _run(
         text=True,
         encoding="utf-8",
         check=True,
-        env={"PATH": ""},
+        env=node_env(),
     )
     return json.loads(done.stdout)
 

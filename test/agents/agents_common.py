@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import atexit
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -21,6 +22,18 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE_DIR = ROOT / "home" / "dot_config" / "agents"
 TEMPLATE = ROOT / "home" / "dot_config" / "agents" / "common.toml.tmpl"
 INCLUDE = '{{ includeTemplate "dot_config/agents/common.toml.tmpl" . }}'
+
+# Windows の node は SYSTEMROOT などが無いと起動直後に abort する (exit 134)
+_WINDOWS_NODE_ENV = ("SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE")
+
+
+def node_env(**extra: str) -> dict[str, str]:
+    """PATH を空にして node を動かす env。plugin が外部コマンドに頼らないことを保つ。"""
+    env = {"PATH": ""}
+    if os.name == "nt":
+        env.update({k: os.environ[k] for k in _WINDOWS_NODE_ENV if k in os.environ})
+    env.update(extra)
+    return env
 
 
 @cache
