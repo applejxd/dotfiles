@@ -548,17 +548,20 @@ def _strip_env_assignments(segment: str) -> str:
 
 
 def _normalize_leading_path(segment: str) -> str:
-    """``/usr/bin/git push`` -> ``git push``"""
+    """``/usr/bin/git push`` -> ``git push``
+
+    引用・エスケープした先頭 (``\\rm`` / ``"r"m`` / ``'git'``) もシェルと同じく外す。
+    """
     try:
         tokens = shlex.split(segment)
     except ValueError:
         tokens = segment.split()
-    if not tokens:
+    if not tokens or any(c.isspace() for c in tokens[0]):
         return segment
     head = _basename(tokens[0])
-    if head == tokens[0]:
-        return segment
     rest = segment.split(None, 1)
+    if head == rest[0]:
+        return segment
     return f"{head} {rest[1]}" if len(rest) > 1 else head
 
 

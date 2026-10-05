@@ -72,6 +72,7 @@ SECRET_PATHS = [
 # credential 系 glob の具体性
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("path", LEGIT_PATHS)
 def test_legit_files_are_not_denied(path):
     """`**/*key*` のような部分一致 glob による誤検知が無いこと."""
@@ -113,6 +114,7 @@ def test_age_key_globs_cover_both_systems():
 # センシティブパス判定: 確実な証拠と語彙ヒューリスティックを分ける
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -141,6 +143,13 @@ def test_age_key_globs_cover_both_systems():
         "timeout 30 make test",
         "env FOO=1 npm run build",
         "make test 2>&1 | tail -20",
+        # 検索語をオプションで渡す形・値を取るオプションで誤検知しない
+        "grep -rn -e TODO src",
+        "grep -A3 -e password src/app.py",
+        "awk -F: '{print $1}' /etc/group",
+        "cp a.txt b.txt 2>/dev/null",
+        "echo x >&2",
+        "\\ls -la",
     ],
 )
 def test_ordinary_development_commands_are_not_blocked(command):
@@ -159,6 +168,19 @@ def test_ordinary_development_commands_are_not_blocked(command):
         "cat secrets/prod.yaml",
         # 書き込み先が起動ファイル
         "cp evil ~/.bashrc",
+        # 末尾のリダイレクトを書き込み先と取り違えない
+        "cp evil ~/.bashrc 2>&1",
+        "mv k ~/.ssh/authorized_keys 2>/dev/null",
+        "ln -sf x ~/.gitconfig >/dev/null",
+        "cp evil ~/.bashrc > /dev/null",
+        # `>& file` は `&> file` と同じく書き込み
+        "echo x >& ~/.bashrc",
+        # 検索語をオプションで渡すと、残りの引数はすべてパス
+        "grep -e. .env",
+        "grep -rh --regexp=. ~/.ssh",
+        "grep -ie x .env",
+        "rg --files ~/.ssh",
+        "sed -e p .env",
         "tee -a ~/.zshrc < payload",
         "sed -i 's/x/y/' ~/.bash_profile",
         "rm ~/.bashrc",
@@ -232,6 +254,7 @@ def test_round3_false_positives(command):
 # ---------------------------------------------------------------------------
 # 秘密ファイルの読み出し・持ち出し
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "command",
@@ -355,6 +378,7 @@ def test_age_key_files_are_denied(command):
 # エージェントの実行時設定
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -387,6 +411,7 @@ def test_agent_settings_are_not_denied(command):
 # ---------------------------------------------------------------------------
 # パス表記の揺れ (難読化・cd 経由の相対参照・Windows 表記)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "command",
@@ -450,6 +475,7 @@ def test_windows_native_guard_paths_are_denied(command):
 # 秘密の環境変数: 出力先へ流れるときだけ止める
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -473,15 +499,18 @@ def test_windows_native_guard_paths_are_denied(command):
         'head -c 200 <<< "$GITHUB_TOKEN"',
         'xxd <<< "$AWS_SECRET_ACCESS_KEY"',
         'sed -n p <<< "$GITHUB_TOKEN"',
-        'jq -n --arg t "$GITHUB_TOKEN" \'$t\'',
+        "jq -n --arg t \"$GITHUB_TOKEN\" '$t'",
         # シングルクォートの中は子シェルが展開する
         "sh -c 'echo $GITHUB_TOKEN'",
         "bash -c 'printf %s $AWS_SECRET_ACCESS_KEY'",
+        # 二重引用符の中のアポストロフィは単引用符の対にならない
+        'echo "Don\'t" $GITHUB_TOKEN "won\'t"',
+        'echo "it\'s $GITHUB_TOKEN"',
         # シェルの $VAR 展開を経由しない読み出し
-        'python3 -c "import os;print(os.environ[\'GITHUB_TOKEN\'])"',
+        "python3 -c \"import os;print(os.environ['GITHUB_TOKEN'])\"",
         "node -e 'console.log(process.env.GITHUB_TOKEN)'",
         "perl -e 'print $ENV{GITHUB_TOKEN}'",
-        'awk \'BEGIN{print ENVIRON["GITHUB_TOKEN"]}\'',
+        "awk 'BEGIN{print ENVIRON[\"GITHUB_TOKEN\"]}'",
     ],
 )
 def test_secret_env_to_output_sink_is_denied(command):
@@ -504,6 +533,8 @@ def test_secret_env_to_output_sink_is_denied(command):
         "bash -c 'rg \"\\$GITHUB_TOKEN\" .'",
         "rg '\\$GITHUB_TOKEN' .",
         "echo 'set $API_TOKEN in CI'",
+        # 単引用符の中の二重引用符は引用ではない
+        "echo 'say \"$API_TOKEN\" here'",
     ],
 )
 def test_secret_env_passed_to_process_is_allowed(command):

@@ -3,6 +3,7 @@
 curl のオプションは短縮・連結・``--long=value`` と形が多いため、ここだけ
 本格的なトークン解析を持つ。フラグ名の一覧は ``tables.toml`` にある。
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -14,6 +15,7 @@ from urllib.parse import urlsplit
 from . import tables
 from ._shared import (
     _FETCH_COMMAND_RE,
+    REDIRECT_TARGET_RE,
     _basename,
     _normalize,
     _payload_source,
@@ -52,9 +54,7 @@ _WGET_CONFIG_FLAGS = tables.as_set("http", "wget_config_flags")
 _NON_EXECUTING_HTTP_PREFIXES = tables.as_set("http", "non_executing_http_prefixes")
 
 
-def _resolve_http_long_option(
-    token: str, options: set[str]
-) -> tuple[str, bool]:
+def _resolve_http_long_option(token: str, options: set[str]) -> tuple[str, bool]:
     """Resolve an unambiguous curl/wget long-option prefix."""
     if not token.startswith("--"):
         return token, False
@@ -88,9 +88,7 @@ def _new_http_call(tool: str) -> dict[str, object]:
     }
 
 
-def _apply_curl_no_value_flags(
-    call: dict[str, object], flags: str
-) -> None:
+def _apply_curl_no_value_flags(call: dict[str, object], flags: str) -> None:
     """Apply request/output semantics from curl short flags without values."""
     if "I" in flags:
         call["method"] = "HEAD"
@@ -106,19 +104,37 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
     """Parse one curl command, including transfers separated by ``--next``."""
     calls: list[dict[str, object]] = []
     call = _new_http_call("curl")
-    args = tokens[command_index + 1:]
+    args = tokens[command_index + 1 :]
     i = 0
     while i < len(args):
         token = args[i]
         token, ambiguous_prefix = _resolve_http_long_option(
             token,
             {
-                "--request", "--data", "--data-ascii", "--data-binary",
-                "--data-raw", "--data-urlencode", "--json", "--form",
-                "--form-string", "--upload-file", "--output", "--dump-header",
-                "--cookie-jar", "--stderr", "--trace", "--trace-ascii",
-                "--config", "--get", "--head", "--next", "--output-dir",
-                "--remote-name", "--remote-name-all", "--url",
+                "--request",
+                "--data",
+                "--data-ascii",
+                "--data-binary",
+                "--data-raw",
+                "--data-urlencode",
+                "--json",
+                "--form",
+                "--form-string",
+                "--upload-file",
+                "--output",
+                "--dump-header",
+                "--cookie-jar",
+                "--stderr",
+                "--trace",
+                "--trace-ascii",
+                "--config",
+                "--get",
+                "--head",
+                "--next",
+                "--output-dir",
+                "--remote-name",
+                "--remote-name-all",
+                "--url",
             }
             # 短縮形で書かれても localhost 例外の無効化を取りこぼさない
             | {flag for flag in _CURL_LOCAL_BLOCKING_FLAGS if flag.startswith("--")},
@@ -148,8 +164,13 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
                 value = args[i + 1]
                 i += 1
             kind = {
-                "X": "-X", "d": "-d", "F": "-F", "T": "-T",
-                "o": "-o", "D": "-D", "c": "-c",
+                "X": "-X",
+                "d": "-d",
+                "F": "-F",
+                "T": "-T",
+                "o": "-o",
+                "D": "-D",
+                "c": "-c",
             }[option]
             if kind == "-X":
                 call["method"] = value
@@ -187,14 +208,23 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
         matched_kind: str | None = None
         matched_value: str | None = None
         for short, long in (
-            ("-d", "--data"), (None, "--data-ascii"),
-            (None, "--data-binary"), (None, "--data-raw"),
-            (None, "--data-urlencode"), (None, "--json"),
-            ("-F", "--form"), (None, "--form-string"),
-            ("-T", "--upload-file"), ("-o", "--output"),
-            ("-D", "--dump-header"), ("-c", "--cookie-jar"),
-            (None, "--stderr"), (None, "--trace"), (None, "--trace-ascii"),
-            (None, "--output-dir"), (None, "--url"),
+            ("-d", "--data"),
+            (None, "--data-ascii"),
+            (None, "--data-binary"),
+            (None, "--data-raw"),
+            (None, "--data-urlencode"),
+            (None, "--json"),
+            ("-F", "--form"),
+            (None, "--form-string"),
+            ("-T", "--upload-file"),
+            ("-o", "--output"),
+            ("-D", "--dump-header"),
+            ("-c", "--cookie-jar"),
+            (None, "--stderr"),
+            (None, "--trace"),
+            (None, "--trace-ascii"),
+            (None, "--output-dir"),
+            (None, "--url"),
         ):
             value, next_i = _take_option_value(args, i, token, short, long)
             if next_i != i:
@@ -219,10 +249,7 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
             i = next_i
             continue
 
-        if any(
-            token == flag or token.startswith(f"{flag}=")
-            for flag in _CURL_CONFIG_FLAGS
-        ):
+        if any(token == flag or token.startswith(f"{flag}=") for flag in _CURL_CONFIG_FLAGS):
             call["ambiguous"] = True
             if token in _CURL_CONFIG_FLAGS and "=" not in token:
                 i += 2
@@ -232,7 +259,8 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
 
         value_flag = next(
             (
-                flag for flag in _CURL_VALUE_FLAGS
+                flag
+                for flag in _CURL_VALUE_FLAGS
                 if (
                     token == flag
                     or token.startswith(f"{flag}=")
@@ -249,8 +277,7 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
                 call["ambiguous"] = True
             continue
         short_value_flags = {
-            flag[1] for flag in _CURL_VALUE_FLAGS
-            if len(flag) == 2 and flag.startswith("-")
+            flag[1] for flag in _CURL_VALUE_FLAGS if len(flag) == 2 and flag.startswith("-")
         }
         value_cluster = re.fullmatch(
             rf"-([fFsSLIikvVqgGNnO]*)([{''.join(sorted(short_value_flags))}])(.*)",
@@ -288,15 +315,21 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
 def _parse_wget_tokens(tokens: list[str], command_index: int) -> list[dict[str, object]]:
     """Parse one wget command into its request-relevant fields."""
     call = _new_http_call("wget")
-    args = tokens[command_index + 1:]
+    args = tokens[command_index + 1 :]
     i = 0
     while i < len(args):
         token = args[i]
         token, ambiguous_prefix = _resolve_http_long_option(
             token,
             {
-                "--method", "--post-data", "--post-file", "--body-data",
-                "--body-file", "--output-document", "--execute", "--config",
+                "--method",
+                "--post-data",
+                "--post-file",
+                "--body-data",
+                "--body-file",
+                "--output-document",
+                "--execute",
+                "--config",
                 "--directory-prefix",
             },
         )
@@ -329,8 +362,10 @@ def _parse_wget_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
         matched_kind: str | None = None
         matched_value: str | None = None
         for short, long in (
-            (None, "--post-data"), (None, "--post-file"),
-            (None, "--body-data"), (None, "--body-file"),
+            (None, "--post-data"),
+            (None, "--post-file"),
+            (None, "--body-data"),
+            (None, "--body-file"),
             ("-O", "--output-document"),
             ("-P", "--directory-prefix"),
         ):
@@ -354,10 +389,7 @@ def _parse_wget_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
             i = next_i
             continue
 
-        if any(
-            token == flag or token.startswith(f"{flag}=")
-            for flag in _WGET_CONFIG_FLAGS
-        ):
+        if any(token == flag or token.startswith(f"{flag}=") for flag in _WGET_CONFIG_FLAGS):
             call["ambiguous"] = True
             if token in _WGET_CONFIG_FLAGS and "=" not in token:
                 i += 2
@@ -373,12 +405,18 @@ def _parse_wget_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
 # localhost であっても特権的な制御 API が動くポート。
 # ここへの mutation は localhost 例外の対象外にする。
 _UNSAFE_LOCAL_PORTS = {
-    2375, 2376, 4243,        # Docker daemon
-    2379, 2380,              # etcd
-    6443, 8443,              # Kubernetes API server
-    10250, 10255, 10256,     # kubelet
-    6379,                    # Redis
-    11211,                   # memcached
+    2375,
+    2376,
+    4243,  # Docker daemon
+    2379,
+    2380,  # etcd
+    6443,
+    8443,  # Kubernetes API server
+    10250,
+    10255,
+    10256,  # kubelet
+    6379,  # Redis
+    11211,  # memcached
 }
 
 
@@ -435,9 +473,7 @@ def _is_local_url(url: str) -> bool:
         return False
 
 
-def _parse_http_tokens(
-    tokens: list[str], command_index: int
-) -> list[dict[str, object]]:
+def _parse_http_tokens(tokens: list[str], command_index: int) -> list[dict[str, object]]:
     tool = _basename(tokens[command_index])
     if tool == "curl":
         return _parse_curl_tokens(tokens, command_index)
@@ -457,15 +493,9 @@ def _http_transfer_calls(cmd: str) -> list[dict[str, object]]:
         except ValueError:
             raw_tokens = []
         command_index = None
-        if (
-            raw_tokens
-            and _basename(raw_tokens[0]) not in _NON_EXECUTING_HTTP_PREFIXES
-        ):
+        if raw_tokens and _basename(raw_tokens[0]) not in _NON_EXECUTING_HTTP_PREFIXES:
             command_index = next(
-                (
-                    i for i, token in enumerate(raw_tokens)
-                    if _basename(token) in {"curl", "wget"}
-                ),
+                (i for i, token in enumerate(raw_tokens) if _basename(token) in {"curl", "wget"}),
                 None,
             )
         if command_index is not None:
@@ -500,9 +530,7 @@ def check_curl_file_send(cmd: str) -> str | None:
         sources = call["payload_sources"]
         if not isinstance(sources, list):
             continue
-        reads_stdin = any(
-            source in {"-", "/dev/stdin"} for source in sources
-        )
+        reads_stdin = any(source in {"-", "/dev/stdin"} for source in sources)
         for source in sources:
             if not isinstance(source, str) or source == "-":
                 continue
@@ -510,8 +538,7 @@ def check_curl_file_send(cmd: str) -> str | None:
             if matched:
                 tool = call["tool"]
                 return (
-                    f"{tool} でセンシティブなファイルを送信しようとしています "
-                    f"(パターン: {matched})"
+                    f"{tool} でセンシティブなファイルを送信しようとしています (パターン: {matched})"
                 )
         if reads_stdin:
             for match in re.finditer(r"(?<!<)<(?!<)\s*([^\s;&|]+)", cmd):
@@ -528,10 +555,22 @@ def check_curl_file_send(cmd: str) -> str | None:
 def check_http_dangerous_output(cmd: str) -> str | None:
     """Block curl/wget output that overwrites startup or authentication files."""
     targets = (
-        ".bashrc", ".bash_profile", ".bash_login", ".zshrc", ".zshenv",
-        ".zprofile", ".profile", ".login", ".cshrc", ".kshrc",
-        "authorized_keys", "known_hosts", ".ssh/config", ".netrc",
-        "crontab", ".gitconfig",
+        ".bashrc",
+        ".bash_profile",
+        ".bash_login",
+        ".zshrc",
+        ".zshenv",
+        ".zprofile",
+        ".profile",
+        ".login",
+        ".cshrc",
+        ".kshrc",
+        "authorized_keys",
+        "known_hosts",
+        ".ssh/config",
+        ".netrc",
+        "crontab",
+        ".gitconfig",
     )
     for call in _http_transfer_calls(cmd):
         output_targets = call["output_targets"]
@@ -559,10 +598,7 @@ def check_http_dangerous_output(cmd: str) -> str | None:
             if not isinstance(output, str):
                 continue
             cleaned = output.strip("'\"")
-            if any(
-                cleaned.endswith(target) or f"/{target}" in cleaned
-                for target in targets
-            ):
+            if any(cleaned.endswith(target) or f"/{target}" in cleaned for target in targets):
                 return (
                     f"`{call['tool']}` が起動・認証設定ファイル `{output}` を"
                     "上書きしようとしています。"
@@ -638,9 +674,7 @@ def _fetched_output_paths(cmd: str) -> set[str]:
                     _add(output)
         urls = call["urls"] if isinstance(call["urls"], list) else []
         # `curl -O` と、出力先を指定しない `wget` は URL の basename に保存する
-        derives_name = call["remote_name"] is True or (
-            call["tool"] == "wget" and not outputs
-        )
+        derives_name = call["remote_name"] is True or (call["tool"] == "wget" and not outputs)
         if derives_name:
             for url in urls:
                 if not isinstance(url, str):
@@ -654,7 +688,7 @@ def _fetched_output_paths(cmd: str) -> set[str]:
         for segment in _policy.split_command_segments(cmd):
             if not _FETCH_COMMAND_RE.search(segment):
                 continue
-            for m in re.finditer(r"[0-9]*>{1,2}\|?\s*([^\s&][^\s;&|)<>]*)", segment):
+            for m in REDIRECT_TARGET_RE.finditer(segment):
                 _add(m.group(1))
 
     return set(paths) | {os.path.basename(p) for p in paths}

@@ -20,6 +20,7 @@ from check_bash_hook import COMMON_PATH, HOOK, HOOK_PATH, ROOT, run_hook
 # workspace 内外の rm
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -115,6 +116,9 @@ def test_rm_without_cwd_falls_back_to_ask():
         "echo ../../secret | xargs rm -rf",
         # 展開で解決できない
         "rm -rf $(echo .git)",
+        # 免除は rm だけに効く。後ろのセグメントの ask は残す
+        "rm .tmp/x && git clean -fdx",
+        "rm .tmp/x; git push --dry-run",
     ],
 )
 def test_rm_exemption_is_fail_closed(command):
@@ -138,6 +142,7 @@ def test_find_deletion_asks(command):
 # ---------------------------------------------------------------------------
 # scratch (./.tmp) の削除
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "command",
@@ -206,6 +211,7 @@ def test_rm_ask_reason_shows_the_exempt_form_for_scratch(tmp_path):
 # symlink で workspace の外へ抜ける形
 # ---------------------------------------------------------------------------
 
+
 def test_scratch_symlink_escape_is_not_exempt(tmp_path):
     """`.tmp/<link>` が外を指す symlink なら scratch 免除を与えない."""
     workspace = tmp_path / "ws"
@@ -213,9 +219,7 @@ def test_scratch_symlink_escape_is_not_exempt(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
     (workspace / ".tmp" / "escape").symlink_to(outside)
-    decision, reason = run_hook(
-        f"rm -rf {workspace}/.tmp/escape", cwd=str(workspace)
-    )
+    decision, reason = run_hook(f"rm -rf {workspace}/.tmp/escape", cwd=str(workspace))
     assert decision == "ask", f"-> {decision} ({reason})"
 
 
@@ -274,6 +278,7 @@ def test_symlinked_workspace_is_still_exempt(tmp_path):
 # workspace ルートと .git の保護
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "command",
     ["rm -rf ./*", "rm -rf .", "rm -rf ./", "rm -rf *", "rm -rf **"],
@@ -318,6 +323,7 @@ def test_git_directory_rm_is_denied_through_expansion(command):
 # deny のままであるべきケース (root guard)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -334,6 +340,10 @@ def test_git_directory_rm_is_denied_through_expansion(command):
         "rm -rf /home/someone",
         "rm -rf --no-preserve-root /tmp/x",
         "rm -fr /",
+        # 引用・エスケープした先頭もシェルは rm として実行する
+        "\\rm -rf ~",
+        '"r"m -rf ~',
+        "'rm' -rf /",
     ],
 )
 def test_catastrophic_rm_targets_are_denied(command):
@@ -414,6 +424,7 @@ def test_is_catastrophic_rm_target(token, expected):
 # ---------------------------------------------------------------------------
 # ガード設定 (hook・permission 設定) の改変とデバイス破壊
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "command",

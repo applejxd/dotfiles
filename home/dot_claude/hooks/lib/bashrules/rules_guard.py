@@ -3,6 +3,7 @@
 hook や settings.json の改変、シェル起動ファイルへの追記、権限昇格、
 グローバルな環境変数の書き換えなどを扱う。
 """
+
 from __future__ import annotations
 
 import os
@@ -11,6 +12,7 @@ import shlex
 
 from . import tables
 from ._shared import (
+    REDIRECT_TARGET_RE,
     _basename,
     _normalize_guard_path,
     _segments,
@@ -26,16 +28,24 @@ def check_guard_tampering(cmd: str) -> str | None:
     コマンドによる変更 (`rm` / `chmod` など) に加え、リダイレクトによる
     上書き (`> ~/.claude/settings.json`) も検出する。
     """
-    targets = ("/.claude/hooks", "/.claude/settings.json", "/.copilot/hooks",
-               "/.copilot/permissions-config.json", "/.config/agents",
-               "/.git/config", "/.git/hooks", ".git/config", ".git/hooks")
+    targets = (
+        "/.claude/hooks",
+        "/.claude/settings.json",
+        "/.copilot/hooks",
+        "/.copilot/permissions-config.json",
+        "/.config/agents",
+        "/.git/config",
+        "/.git/hooks",
+        ".git/config",
+        ".git/hooks",
+    )
 
     def _hits(token: str) -> bool:
         expanded = _normalize_guard_path(token)
         return any(t in expanded for t in targets)
 
     # リダイレクト先がガード設定なら、どのコマンドでも上書きになる
-    for m in re.finditer(r"[0-9]*>{1,2}\|?\s*([^\s&][^\s;&|)<>]*)", cmd):
+    for m in REDIRECT_TARGET_RE.finditer(cmd):
         if _hits(m.group(1)):
             return (
                 f"エージェントのガード設定 (`{m.group(1)}`) を上書きしようとしています。\n"
@@ -67,9 +77,7 @@ def check_guard_tampering(cmd: str) -> str | None:
                 )
 
     # 環境変数の差し替えで hook の読み込み先やモジュール解決を乗っ取る形
-    for m in re.finditer(
-        r"\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK[A-Z_]*)=(\S*)", cmd
-    ):
+    for m in re.finditer(r"\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK[A-Z_]*)=(\S*)", cmd):
         name, value = m.group(1), m.group(2)
         if name == "PYTHONPATH":
             expanded = value.strip("'\"").replace("~", os.path.expanduser("~"), 1)
@@ -87,8 +95,20 @@ def check_guard_tampering(cmd: str) -> str | None:
         )
 
     mutating = {
-        "rm", "rmdir", "unlink", "mv", "cp", "chmod", "chown", "truncate",
-        "shred", "ln", "sed", "tee", "dd", "install",
+        "rm",
+        "rmdir",
+        "unlink",
+        "mv",
+        "cp",
+        "chmod",
+        "chown",
+        "truncate",
+        "shred",
+        "ln",
+        "sed",
+        "tee",
+        "dd",
+        "install",
     }
     # chezmoi は破壊的サブコマンドのときだけ対象にする (diff / status は無害)
     chezmoi_mutating = {"forget", "destroy", "remove", "unmanage"}
@@ -120,10 +140,22 @@ def check_shell_startup_write(cmd: str) -> str | None:
     (`cp ~/.bashrc ./backup/` のように起動ファイルを複製元にする形は通す)。
     """
     targets = (
-        ".bashrc", ".bash_profile", ".bash_login", ".zshrc", ".zshenv",
-        ".zprofile", ".profile", ".login", ".cshrc", ".kshrc",
-        "authorized_keys", "known_hosts", ".ssh/config", ".netrc",
-        "crontab", ".gitconfig",
+        ".bashrc",
+        ".bash_profile",
+        ".bash_login",
+        ".zshrc",
+        ".zshenv",
+        ".zprofile",
+        ".profile",
+        ".login",
+        ".cshrc",
+        ".kshrc",
+        "authorized_keys",
+        "known_hosts",
+        ".ssh/config",
+        ".netrc",
+        "crontab",
+        ".gitconfig",
     )
 
     def _hits(token: str) -> str | None:
@@ -180,8 +212,16 @@ def check_privilege_escalation(cmd: str) -> str | None:
                         f"`chmod {token}` は setuid/setgid を付与する操作です。\n"
                         "権限昇格に繋がるため許可されていません。"
                     )
-        if head in {"usermod", "useradd", "adduser", "groupadd", "passwd",
-                    "chpasswd", "visudo", "gpasswd"}:
+        if head in {
+            "usermod",
+            "useradd",
+            "adduser",
+            "groupadd",
+            "passwd",
+            "chpasswd",
+            "visudo",
+            "gpasswd",
+        }:
             return (
                 f"`{head}` はアカウント・認証設定を変更する操作です。\n"
                 "権限昇格に繋がるため許可されていません。"
@@ -193,10 +233,7 @@ def check_privilege_escalation(cmd: str) -> str | None:
             "認証設定ファイル (/etc/shadow, /etc/sudoers) を操作しようとしています。\n"
             "権限昇格に繋がるため許可されていません。"
         )
-    if any(
-        re.search(r"/etc/(?:passwd|group)", target)
-        for target in _write_targets(cmd)
-    ):
+    if any(re.search(r"/etc/(?:passwd|group)", target) for target in _write_targets(cmd)):
         return (
             "アカウント設定ファイル (/etc 配下) を書き換えようとしています。\n"
             "権限昇格に繋がるため許可されていません。"
@@ -259,9 +296,7 @@ def check_tool_self_update(cmd: str) -> str | None:
             tokens = segment.split()
         if not tokens or _basename(tokens[0].strip("'\"")) != "mise":
             continue
-        subcommands = tuple(
-            t.strip("'\"") for t in tokens[1:] if not t.startswith("-")
-        )
+        subcommands = tuple(t.strip("'\"") for t in tokens[1:] if not t.startswith("-"))
         for prefix, why in _MISE_FATAL_SUBCOMMANDS.items():
             if subcommands[: len(prefix)] == prefix:
                 return (
@@ -332,11 +367,25 @@ def check_git_config_write(cmd: str) -> str | None:
     トークン完全一致のポリシー照合では拾えない。
     """
     dangerous = (
-        "alias.", "core.hookspath", "core.editor", "core.pager",
-        "core.sshcommand", "core.fsmonitor", "credential.", "url.",
-        "filter.", "diff.external", "difftool.", "mergetool.", "pager.",
-        "include.path", "includeif.", "sequence.editor", "gpg.program",
-        "ssh.variant", "protocol.",
+        "alias.",
+        "core.hookspath",
+        "core.editor",
+        "core.pager",
+        "core.sshcommand",
+        "core.fsmonitor",
+        "credential.",
+        "url.",
+        "filter.",
+        "diff.external",
+        "difftool.",
+        "mergetool.",
+        "pager.",
+        "include.path",
+        "includeif.",
+        "sequence.editor",
+        "gpg.program",
+        "ssh.variant",
+        "protocol.",
     )
     for segment in _segments(cmd):
         tokens = segment.split()

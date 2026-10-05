@@ -4,6 +4,7 @@
 ときに編集するのは **このファイルではなく common.toml** のほう。
 ``check_policy_loaded`` は設定を読めなかったときに fail-closed で拒否する。
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -112,9 +113,13 @@ def check_policy_ask(cmd: str) -> str | None:
     patterns = _ask_patterns()
     matched = _policy.find_match(cmd, patterns)
     if matched:
-        exemption = _ASK_EXEMPTIONS.get(matched.split()[0])
+        head = matched.split()[0]
+        exemption = _ASK_EXEMPTIONS.get(head)
         if exemption is not None and exemption(cmd):
-            return None
+            # 免除は当たった種類 (rm) だけに効かせる。他のセグメントの ask は残す
+            matched = _policy.find_match(cmd, [p for p in patterns if p.split()[0] != head])
+            if not matched:
+                return None
         hint = _rm_ask_hint(cmd) if matched.split()[0] == "rm" else ""
         return (
             f"`{matched}` は承認が必要な操作です (common.toml の [bash] ask)。\n"

@@ -8,6 +8,7 @@
 - ``command_policy`` (common.toml を読む層) への参照 ``_policy``
 - PreToolUse payload の cwd (``payload_cwd`` / ``set_payload_cwd``)
 """
+
 from __future__ import annotations
 
 import os
@@ -88,11 +89,36 @@ _WRITE_DEST_LAST_COMMANDS = tables.as_set("_shared", "write_dest_last_commands")
 _WRITE_ALL_ARGS_COMMANDS = tables.as_set("_shared", "write_all_args_commands")
 
 
+# リダイレクトの書き込み先。`>| path` (noclobber 上書き) と `>& path` (= `&> path`) も拾う。
+# `>&2` / `>&-` の fd 複製・クローズは対象外
+REDIRECT_TARGET_RE = re.compile(
+    r"[0-9]*(?:>{1,2}\|?|>&(?!\s*(?:\d+|-)(?=$|[\s;&|)])))\s*([^\s&][^\s;&|)<>]*)"
+)
+
+# 引数として扱わないリダイレクトのトークン (`2>/dev/null`、`>`、`2>` (`2>&1` の & で切れた残り))
+_REDIRECT_TOKEN_RE = re.compile(r"^[0-9]*(?:>{1,2}\|?|>&|&>{1,2}|<{1,3})(.*)$")
+
+
+def _without_redirections(tokens: list[str]) -> list[str]:
+    """リダイレクトの演算子と、空白で離れたその対象を取り除く。"""
+    out: list[str] = []
+    skip = False
+    for token in tokens:
+        if skip:
+            skip = False
+            continue
+        m = _REDIRECT_TOKEN_RE.match(token)
+        if m:
+            skip = not m.group(1)
+            continue
+        out.append(token)
+    return out
+
+
 def _write_targets(cmd: str) -> list[str]:
     """コマンドが書き込み・変更しようとしているトークンを返す。"""
     targets: list[str] = []
-    # `>| path` (noclobber 上書き) も拾う。`>&2` の fd 複製は対象外
-    for m in re.finditer(r"[0-9]*>{1,2}\|?\s*([^\s&][^\s;&|)<>]*)", cmd):
+    for m in REDIRECT_TARGET_RE.finditer(cmd):
         targets.append(m.group(1))
     for segment in _segments(cmd):
         tokens = segment.split()
@@ -102,7 +128,7 @@ def _write_targets(cmd: str) -> list[str]:
         for token in tokens[1:]:
             if token.startswith("of="):
                 targets.append(token[3:])
-        args = [t for t in tokens[1:] if not t.startswith("-")]
+        args = [t for t in _without_redirections(tokens[1:]) if not t.startswith("-")]
         if not args:
             continue
         if head == "sed":
@@ -127,9 +153,9 @@ def _take_option_value(
 ) -> tuple[str | None, int]:
     """Return an attached/separate option value and the next index."""
     if token.startswith(f"{long}="):
-        return token[len(long) + 1:], index + 1
+        return token[len(long) + 1 :], index + 1
     if short and token.startswith(short) and token != short:
-        return token[len(short):], index + 1
+        return token[len(short) :], index + 1
     if token == long or (short and token == short):
         if index + 1 >= len(args):
             return None, index + 1
@@ -156,9 +182,9 @@ def _payload_source(kind: str, value: str) -> str | None:
 def _option_value(token: str, short: str, long: str) -> str | None:
     """Return an attached option value, or None when the token does not match."""
     if token.startswith(f"{long}="):
-        return token[len(long) + 1:]
+        return token[len(long) + 1 :]
     if token.startswith(short) and token != short:
-        return token[len(short):]
+        return token[len(short) :]
     return None
 
 
@@ -357,9 +383,7 @@ def _workspace_root() -> str | None:
 
 def _changes_base_dir(cmd: str) -> bool:
     """`cd` / `pushd` などで基点が変わるか。変わると相対パスを解決できない。"""
-    return bool(
-        re.search(r"""(?:^|[\s;&|("'\\])(?:cd|pushd|popd|chdir)(?![\w-])""", cmd)
-    )
+    return bool(re.search(r"""(?:^|[\s;&|("'\\])(?:cd|pushd|popd|chdir)(?![\w-])""", cmd))
 
 
 def _resolves_into_scratch(token: str, workspace: str) -> bool:

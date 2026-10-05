@@ -3,6 +3,7 @@
 ★守る対象のファイル名・ディレクトリ・環境変数名は ``tables.toml`` にある。
 ファイルを足したいだけなら TOML 側を編集すればよい。
 """
+
 from __future__ import annotations
 
 import os
@@ -16,6 +17,7 @@ from ._shared import (
     _SHELL_CODE_ARG_FLAGS,
     _STDIN_CODE_INTERPRETERS,
     _STDIN_CODE_SHELLS,
+    REDIRECT_TARGET_RE,
     _basename,
     _cmd_name,
     _looks_like_path,
@@ -141,8 +143,19 @@ def is_sensitive_path(text: str, *, heuristic: bool = True) -> str | None:
         # 末尾は書き込み先。読み取り元だけを見る
         args = args[:-1]
     skip_pattern_arg = head in _PATTERN_FIRST_COMMANDS
+    skip_next = False
     for token in args:
+        if skip_next:
+            # -e / -f の値 (検索語・スクリプト・検索語のファイル)
+            skip_next = False
+            continue
         if token.startswith("-"):
+            if skip_pattern_arg:
+                given, separate = _pattern_option(head, token)
+                if given:
+                    # 検索語をオプションで渡すと、非フラグ引数はすべてパスになる
+                    skip_pattern_arg = False
+                    skip_next = separate
             continue
         if skip_pattern_arg:
             # 最初の非フラグ引数は検索語なので飛ばす
@@ -152,6 +165,47 @@ def is_sensitive_path(text: str, *, heuristic: bool = True) -> str | None:
         if reason:
             return reason
     return None
+
+
+# 検索語 (スクリプト) をオプションで渡すときの短い文字・長いオプションと、短いオプションの束で
+# 後ろを値として取る文字 (-A3 / -m1 / awk の -F: など。ここで束の解釈をやめる)。
+# 意味がコマンドで違う (ack の -f は一覧、ag の -f は symlink、grep の -F は値なし) ので、
+# コマンドごとに持つ
+_GREP_PATTERN_OPTIONS = ("ef", ("--regexp", "--file"), "ABCDdm")
+_AWK_PATTERN_OPTIONS = ("f", ("--file",), "Fv")
+_PATTERN_OPTIONS = {
+    "grep": _GREP_PATTERN_OPTIONS,
+    "egrep": _GREP_PATTERN_OPTIONS,
+    "fgrep": _GREP_PATTERN_OPTIONS,
+    "rg": ("ef", ("--regexp", "--file"), "ABCMmgtTdj"),
+    "sed": ("ef", ("--expression", "--file"), "l"),
+    "awk": _AWK_PATTERN_OPTIONS,
+    "mawk": _AWK_PATTERN_OPTIONS,
+    "gawk": ("ef", ("--file", "--source"), "Fv"),
+    "ack": ("g", (), "ABCm"),
+    "ag": ("g", (), "ABCGm"),
+}
+# 検索語を取らなくなるオプション (値なし)
+_NO_PATTERN_FLAGS = {"rg": ("--files",), "ack": ("-f",)}
+
+
+def _pattern_option(head: str, token: str) -> tuple[bool, bool]:
+    """検索語 (スクリプト) をオプションで渡しているか、値が次のトークンか。"""
+    if token in _NO_PATTERN_FLAGS.get(head, ()):
+        return True, False
+    shorts, longs, valued = _PATTERN_OPTIONS.get(head, ("", (), ""))
+    if token in longs:
+        return True, True
+    if any(token.startswith(f"{opt}=") for opt in longs):
+        return True, False
+    if token.startswith("--") or token == "-":
+        return False, False
+    for i, ch in enumerate(token[1:], start=1):
+        if ch in shorts:
+            return True, i == len(token) - 1
+        if ch.isdigit() or ch in valued:
+            break
+    return False, False
 
 
 _SECRET_SINK_COMMANDS = tables.as_set("sensitive", "secret_sink_commands")
@@ -180,6 +234,32 @@ def check_git_add_sensitive(cmd: str) -> str | None:
     return None
 
 
+def _drop_single_quoted(text: str) -> str:
+    """二重引用符の外にある単引用符の範囲を取り除く (シェルが展開しない部分)。
+
+    二重引用符の中の ``'`` (``"Don't"``) は引用ではないので対にしない。
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    in_double = False
+    while i < n:
+        ch = text[i]
+        if ch == "\\" and i + 1 < n:
+            out.append(text[i : i + 2])
+            i += 2
+            continue
+        if ch == "'" and not in_double:
+            end = text.find("'", i + 1)
+            if end != -1:
+                i = end + 1
+                continue
+        if ch == '"':
+            in_double = not in_double
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def check_secret_env_echo(cmd: str) -> str | None:
     """センシティブな環境変数の値を出力先へ流していないか。
 
@@ -193,24 +273,21 @@ def check_secret_env_echo(cmd: str) -> str | None:
     通常の開発操作なので対象外にする。
     シングルクォート内はシェルが展開しないので対象から外す。
     """
+
     def _sensitive_names(text: str, *, honour_quotes: bool = True) -> list[str]:
         # `sh -c 'echo $TOKEN'` は子シェルが展開するので、コード引数を持つ
         # セグメントではシングルクォートを剥がさずに見る。
         # `\$TOKEN` のようにエスケープされた形はリテラルなので除外する
-        scanned = re.sub(r"'[^']*'", "", text) if honour_quotes else text
+        scanned = _drop_single_quoted(text) if honour_quotes else text
         return [
             m.group(1)
-            for m in re.finditer(
-                r"(?<!\\)\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", scanned
-            )
+            for m in re.finditer(r"(?<!\\)\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", scanned)
             if _SENSITIVE_ENV_RE.search(m.group(1))
         ]
 
     def _code_argument(tokens: list[str]) -> str | None:
         """`sh -c CODE` / `python -c CODE` のコード引数を返す。"""
-        if _cmd_name(tokens[0]) not in (
-            _STDIN_CODE_SHELLS | _STDIN_CODE_INTERPRETERS
-        ):
+        if _cmd_name(tokens[0]) not in (_STDIN_CODE_SHELLS | _STDIN_CODE_INTERPRETERS):
             return None
         flags = _SHELL_CODE_ARG_FLAGS | _INTERPRETER_CODE_ARG_FLAGS
         for i, token in enumerate(tokens[1:], start=1):
@@ -255,7 +332,7 @@ def check_secret_env_echo(cmd: str) -> str | None:
         return hit
     # リダイレクトでファイルへ書き出す形 (`printf %s "$TOKEN" > f` など)
     if _write_targets(cmd):
-        for m in re.finditer(r"[0-9]*>{1,2}\|?\s*[^\s&][^\s;&|)<>]*", cmd):
+        for m in REDIRECT_TARGET_RE.finditer(cmd):
             prefix = cmd[: m.start()]
             names = _sensitive_names(prefix)
             if names:
