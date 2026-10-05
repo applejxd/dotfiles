@@ -54,8 +54,6 @@ chezmoi apply
 
 鍵の復旧条件と確認方法は [秘密情報の管理セットアップ](docs/spec/sops-age.md#8-新しい-pcwsl-環境で復旧する)。
 
-依存関係スクリプトを飛ばす方法は [スクリプトの無効化](docs/spec/development.md#スクリプトの無効化)。
-
 `apply` で入るツール（gh、Herdr、AI CLI、oh-my-pi、Claude Code の seccomp フィルタ）と
 その更新方法は [プロジェクト構造](docs/spec/structure.md) を参照。
 
@@ -152,6 +150,17 @@ opencode    # 通常起動（境界なし）
 ### Q. `chezmoi apply` / `chezmoi update` が途中で止まった
 
 A. [トラブルシューティング](docs/spec/troubleshooting.md) で症状から探す。
+
+### Q. 依存関係のスクリプトを飛ばして設定ファイルだけ反映したい
+
+A. `chezmoi apply --exclude=scripts` を使う
+（[スクリプトの無効化](docs/spec/development.md#スクリプトの無効化)）。
+zinit などの external は除外されない。
+
+### Q. 「zinit が無いためプラグインを読み込みません」と出る
+
+A. `chezmoi apply --refresh-externals` を実行する
+（[external が取得されない](docs/spec/troubleshooting-bootstrap.md#apply-しても-zinit-などの-external-が取得されない)）。
 
 ### Q. AI CLI の設定（OpenCode のモデル・プロバイダを含む）を手で変えたい
 

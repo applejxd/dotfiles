@@ -104,6 +104,45 @@ chezmoi apply
 `run_onchange_` の記録を消した場合は、消す前に `chezmoi status --include=scripts` に
 出なかったスクリプトが `R` で出る。
 
+## apply しても zinit などの external が取得されない
+
+**対象**: Linux / WSL / macOS。`home/.chezmoiexternal.toml.tmpl` の git-repo
+（`~/.zinit/bin`、`~/.z`、`~/.bash_it`、`~/.tmux/plugins/tpm`）。
+
+**症状**: zsh の起動時に「zinit が無いためプラグインを読み込みません」と出る。
+`chezmoi apply` しても `~/.zinit` が空のディレクトリとして作られるだけで、
+`~/.zinit/bin/zinit.zsh` ができない。
+
+**確認**: 取得先が無いのに、clone 済みの記録が残っていないか見る。
+
+```bash
+ls ~/.zinit/bin/zinit.zsh
+chezmoi state get-bucket --bucket=gitRepoExternalState
+```
+
+**原因**: chezmoi は git-repo external を clone すると、その記録を
+`gitRepoExternalState` バケットに残す。`refreshPeriod` を指定していない場合、
+記録があれば取得先が実在するかを見ずに clone を飛ばす（chezmoi 2.72 の
+`TargetStateModifyDirWithCmd.SkipApply`）。一度 clone した後で取得先を消すと、
+親ディレクトリ（`~/.zinit`）だけが作られて中身が空のままになる。
+`--exclude scripts` は external を除外しないので関係ない。
+
+**対処**: 記録を無視して取得させる。
+
+```bash
+chezmoi apply --refresh-externals
+```
+
+取得先が既にある項目は宣言されない（[シェルプラグインの取得](structure.md#シェルプラグインの取得)）
+ので、取得済みのものに `git pull` は走らない。記録だけを消してもよい。
+
+```bash
+chezmoi state delete --bucket=gitRepoExternalState --key="$HOME/.zinit/bin"
+chezmoi apply
+```
+
+**成功の確認**: `ls ~/.zinit/bin/zinit.zsh` が通り、新しい zsh で案内が出ない。
+
 ## sudo のパスワードで止まる
 
 **対象**: macOS の `200_mac/205_homebrew` / `210_osx` / `250_defaults` と、Linux の

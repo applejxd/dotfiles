@@ -589,7 +589,9 @@ git-repo external には次の挙動があり、既に clone 済みの機械を�
 
 このため chezmoi は取得後の更新をしません。更新は各ツールに任せます
 （zinit は `mise run dotfiles-update`、bash-it は `bash-it update`、tpm は tmux の
-prefix + U）。取り直すときはパスを消してから `chezmoi apply` します。
+prefix + U）。取り直すときはパスを消してから `chezmoi apply --refresh-externals` します
+（`--refresh-externals` が無いと clone 済みの記録で飛ばされる。
+[external が取得されない](troubleshooting-bootstrap.md#apply-しても-zinit-などの-external-が取得されない)）。
 新しい機械では apply に git とネットワークが要り、取得に失敗すると apply が
 エラーになります。
 
