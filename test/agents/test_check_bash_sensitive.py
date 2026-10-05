@@ -150,6 +150,9 @@ def test_age_key_globs_cover_both_systems():
         "cp a.txt b.txt 2>/dev/null",
         "echo x >&2",
         "\\ls -la",
+        # 末尾のリダイレクトをコピー先と取り違えない (コピー先は判定しない)
+        "cp .env.example .env 2>/dev/null",
+        "cp .env.example .env > /dev/null 2>&1",
     ],
 )
 def test_ordinary_development_commands_are_not_blocked(command):
@@ -181,6 +184,11 @@ def test_ordinary_development_commands_are_not_blocked(command):
         "grep -ie x .env",
         "rg --files ~/.ssh",
         "sed -e p .env",
+        # 入力リダイレクトの対象も読み取り
+        "cat < .env",
+        "wc -l < ~/.aws/credentials",
+        # 引用で空白を含むパス
+        'cat "dir with space/.env"',
         "tee -a ~/.zshrc < payload",
         "sed -i 's/x/y/' ~/.bash_profile",
         "rm ~/.bashrc",

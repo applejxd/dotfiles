@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import re
 
-from . import tables
+from . import shellparse, tables
 from ._shared import (
     _INTERPRETER_CODE_ARG_FLAGS,
     _SENSITIVE_ENV_RE,
@@ -133,15 +133,46 @@ def is_sensitive_path(text: str, *, heuristic: bool = True) -> str | None:
 
     ``cp .env.example .env`` のように「サンプルから作る」形は正当なので、
     cp / mv の最終引数 (コピー先) は判定対象から外す。
+    ``shellparse`` で単純コマンドに分け、コマンドごとに判定する。
+    see docs/change/0012-bash-hook-shared-parser.md
     """
-    tokens = text.split()
-    if not tokens:
-        return None
-    head = _basename(tokens[0].strip("'\""))
-    args = tokens[1:]
+    for command in shellparse.parse(text):
+        reason = _sensitive_argument(command, heuristic=heuristic)
+        if reason:
+            return reason
+    return None
+
+
+def _pieces(value: str) -> list[str]:
+    """空白を含む引数 (``python3 -c "..."`` のコード) は断片も見る。"""
+    return value.split() if any(c.isspace() for c in value) else [value]
+
+
+def _sensitive_argument(command: shellparse.Command, *, heuristic: bool) -> str | None:
+    argv = command.argv
+    candidates: list[str] = []
+    if argv:
+        candidates = _path_arguments(_basename(argv[0]), list(argv[1:]))
+    # リダイレクトの対象 (`cat < .env`)。ヒアドキュメントの区切り語は対象ではない
+    candidates += [
+        r.target.value
+        for r in command.redirects
+        if r.target is not None and r.op not in ("<<", "<<-")
+    ]
+    for candidate in candidates:
+        for piece in _pieces(candidate):
+            reason = _is_sensitive_token(piece, heuristic=heuristic)
+            if reason:
+                return reason
+    return None
+
+
+def _path_arguments(head: str, args: list[str]) -> list[str]:
+    """パスとして扱う引数 (フラグ・検索語・コピー先を除いたもの)。"""
     if head in _DEST_LAST_COMMANDS and len(args) >= 2:
         # 末尾は書き込み先。読み取り元だけを見る
         args = args[:-1]
+    out: list[str] = []
     skip_pattern_arg = head in _PATTERN_FIRST_COMMANDS
     skip_next = False
     for token in args:
@@ -161,10 +192,8 @@ def is_sensitive_path(text: str, *, heuristic: bool = True) -> str | None:
             # 最初の非フラグ引数は検索語なので飛ばす
             skip_pattern_arg = False
             continue
-        reason = _is_sensitive_token(token, heuristic=heuristic)
-        if reason:
-            return reason
-    return None
+        out.append(token)
+    return out
 
 
 # 検索語 (スクリプト) をオプションで渡すときの短い文字・長いオプションと、短いオプションの束で
