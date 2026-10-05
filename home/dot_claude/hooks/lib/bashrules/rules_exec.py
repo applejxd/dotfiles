@@ -3,6 +3,7 @@
 ``curl | sh`` / ``python -c`` / ``base64 -d | sh`` / リバースシェルなど、
 「取得したものや文字列をそのまま実行する」パターンを扱う。
 """
+
 from __future__ import annotations
 
 import os
@@ -88,9 +89,7 @@ _SUBST_HEAD_RE = re.compile(r"^[\"']?(?:\$\(|`)")
 _PROC_SUBST_RE = re.compile(r"[<>]\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
 
 
-def _strip_exec_wrappers(
-    tokens: list[str], *, keep: frozenset[str] = frozenset()
-) -> list[str]:
+def _strip_exec_wrappers(tokens: list[str], *, keep: frozenset[str] = frozenset()) -> list[str]:
     """`env` / `timeout 5` / `nohup` などのラッパーを剥がしたトークン列を返す。
 
     ``keep`` に挙げたラッパーは剥がさない。`xargs` は stdin の扱いそのものが
@@ -111,17 +110,15 @@ def _strip_exec_wrappers(
             split_string = None
             if token in {"-S", "--split-string"} and i + 1 < len(tokens):
                 split_string = tokens[i + 1]
-                rest = tokens[i + 2:]
+                rest = tokens[i + 2 :]
             elif token.startswith("--split-string="):
                 split_string = token.split("=", 1)[1]
-                rest = tokens[i + 1:]
+                rest = tokens[i + 1 :]
             elif token.startswith("-S") and len(token) > 2:
                 split_string = token[2:]
-                rest = tokens[i + 1:]
+                rest = tokens[i + 1 :]
             if split_string is not None:
-                return _strip_exec_wrappers(
-                    split_string.strip("'\"").split() + rest, keep=keep
-                )
+                return _strip_exec_wrappers(split_string.strip("'\"").split() + rest, keep=keep)
             if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", token):
                 i += 1
                 continue
@@ -141,9 +138,7 @@ def _strip_exec_wrappers(
 def _executable_head_tokens(part: str) -> list[str]:
     """パイプ右辺などから、実際に起動されるコマンドのトークン列を得る。"""
     tokens = [t.strip("'\"").strip("(){}") for t in part.strip().split()]
-    return _strip_exec_wrappers(
-        [t for t in tokens if t], keep=frozenset({"xargs"})
-    )
+    return _strip_exec_wrappers([t for t in tokens if t], keep=frozenset({"xargs"}))
 
 
 def _reads_stdin_as_code(tokens: list[str]) -> bool:
@@ -160,15 +155,13 @@ def _reads_stdin_as_code(tokens: list[str]) -> bool:
         rest = tokens[1:]
         # `-I{}` は stdin の内容を後続の引数へ埋め込むので、引数の有無を
         # 問わずコードとして扱う
-        replaces = any(
-            token.startswith(("-I", "-i", "--replace")) for token in rest
-        )
+        replaces = any(token.startswith(("-I", "-i", "--replace")) for token in rest)
         for i, token in enumerate(rest):
             name = _cmd_name(token)
             if name in _STDIN_CODE_SHELLS or name in _STDIN_CODE_INTERPRETERS:
                 if replaces:
                     return True
-                after = rest[i + 1:]
+                after = rest[i + 1 :]
                 return not any(not a.startswith("-") for a in after)
         return False
     is_shell = head in _STDIN_CODE_SHELLS
@@ -202,6 +195,7 @@ def check_pipe_to_shell(cmd: str) -> str | None:
     スクリプトを持つインタプリタへ**データ**を流す形は対象外にする
     (コード自体は check_interpreter_inline_code が別途検査する)。
     """
+
     def _blocked(detail: str) -> str:
         return (
             f"取得した内容をそのままコードとして実行しようとしています ({detail})。\n"
@@ -224,16 +218,17 @@ def check_pipe_to_shell(cmd: str) -> str | None:
     if _policy is None:
         return None
 
-    # コマンド置換・プロセス置換で取得したものを実行系に渡す形
+    # コマンド置換・プロセス置換で取得したものを実行系に渡す形。
+    # 引用付き heredoc の本文はシェルが展開しないため置換ではない。split_heredoc_body が
+    # 組み立てた行と一致するセグメントだけを、記録した回数まで見送る (本文と同じ文字列を
+    # 別のセグメントに書いても見送らない)
+    pending = [f"python3 -c {literal}" for literal in _LITERAL_HEREDOC_BODIES]
     for segment in _policy.split_command_segments(cmd):
+        if segment.strip() in pending:
+            pending.remove(segment.strip())
+            continue
         bodies = list(_policy.extract_command_substitutions(segment))
         bodies.extend(m.group(1) for m in _PROC_SUBST_RE.finditer(segment))
-        # 引用付き heredoc の本文はシェルが展開しないため置換ではない
-        bodies = [
-            body
-            for body in bodies
-            if not any(body in literal for literal in _LITERAL_HEREDOC_BODIES)
-        ]
         if not any(_FETCH_COMMAND_RE.search(body) for body in bodies):
             continue
         tokens = segment.strip().split()
@@ -253,11 +248,10 @@ def check_pipe_to_shell(cmd: str) -> str | None:
     # 取得先へ保存したファイルを、同じコマンドの中で実行する形
     saved = _fetched_output_paths(cmd)
     if saved:
+
         def _is_saved(token: str) -> bool:
             cleaned = token.strip("'\"")
-            return bool(cleaned) and (
-                cleaned in saved or os.path.basename(cleaned) in saved
-            )
+            return bool(cleaned) and (cleaned in saved or os.path.basename(cleaned) in saved)
 
         for segment in _segments(cmd):
             tokens = _strip_exec_wrappers(segment.split())
@@ -296,7 +290,7 @@ def _inline_code_head(segment: str) -> str | None:
         candidate = _cmd_name(token)
         if candidate not in _INLINE_CODE_BINS:
             continue
-        rest = tokens[i + 1:]
+        rest = tokens[i + 1 :]
         if any(t in _INLINE_CODE_FLAGS for t in rest):
             return candidate
         # awk 系はプログラムを位置引数で受け取る (`-f` はファイル指定)
@@ -324,9 +318,7 @@ def check_interpreter_inline_code(cmd: str) -> str | None:
         # コード片にセンシティブなパスや外部実行が含まれていないか
         reason = is_sensitive_path(segment)
         if reason:
-            return (
-                f"`{head}` のインラインコードがセンシティブなパスを参照しています ({reason})。"
-            )
+            return f"`{head}` のインラインコードがセンシティブなパスを参照しています ({reason})。"
         if _INLINE_EXEC_RE.search(segment):
             return (
                 f"`{head}` のインラインコードから外部コマンドを実行しようとしています。\n"
@@ -395,8 +387,11 @@ def check_encoded_command(cmd: str) -> str | None:
             "内容を検査できないため許可されていません。"
             "デコード結果をファイルに書き出して確認してから実行してください。"
         )
-    if re.search(r"printf\s+['\"][^'\"]*\\x[0-9a-fA-F]{2}[^'\"]*['\"]\s*\|\s*"
-                 rf"(?:{shells})", cmd):
+    if re.search(
+        r"printf\s+['\"][^'\"]*\\x[0-9a-fA-F]{2}[^'\"]*['\"]\s*\|\s*"
+        rf"(?:{shells})",
+        cmd,
+    ):
         return (
             "エスケープ列で組み立てたコマンドをシェルに渡そうとしています。\n"
             "内容を検査できないため許可されていません。"
