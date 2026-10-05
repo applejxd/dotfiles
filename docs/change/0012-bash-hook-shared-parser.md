@@ -176,6 +176,15 @@
   `python3 -m 'pip' install x` / `pip install x 2>&1`。追加後の
   `test_check_bash_sensitive.py` と `test_check_bash_shell.py` → 661 passed, 7 skipped
 
+段 7・`sensitive.py` と `rules_guard.py`（2026-10-06）:
+
+- `check_git_add_sensitive` / `check_history_access` / `check_guard_tampering`（変更系コマンドの
+  引数）/ `check_privilege_escalation` / `check_git_config_write` を `_commands` の上に書き直した
+- 移行直後（テスト追加前）の `pytest test/agents/ -q` → 3101 passed, 7 skipped
+- `test_check_bash_sensitive.py` に止める例を追加: `chmod 'u+s' /bin/bash 2>/dev/null` /
+  `git add ".env"` / `git add .env 2>&1` / `git config 'alias.p' push` /
+  `cp x ~/.claude/settings.json 2>/dev/null` / `history 2>/dev/null`。追加後 → 258 passed, 7 skipped
+
 ## 重要な更新
 
 - 2026-10-05: 起票。穴 8 件の修正（`e779562`〜`59c6f9b`）で、原因が解釈の分散にあると判断した

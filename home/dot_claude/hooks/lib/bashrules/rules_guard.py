@@ -13,6 +13,7 @@ import shlex
 from . import tables
 from ._shared import (
     _basename,
+    _commands,
     _normalize_guard_path,
     _redirect_write_targets,
     _segments,
@@ -112,8 +113,8 @@ def check_guard_tampering(cmd: str) -> str | None:
     }
     # chezmoi は破壊的サブコマンドのときだけ対象にする (diff / status は無害)
     chezmoi_mutating = {"forget", "destroy", "remove", "unmanage"}
-    for segment in _segments(cmd):
-        tokens = segment.split()
+    for command in _commands(cmd):
+        tokens = list(command.argv)
         if not tokens:
             continue
         head = _basename(tokens[0])
@@ -197,8 +198,8 @@ def check_shell_startup_write(cmd: str) -> str | None:
 
 def check_privilege_escalation(cmd: str) -> str | None:
     """setuid 付与やアカウント/認証設定の変更を検出する。"""
-    for segment in _segments(cmd):
-        tokens = segment.split()
+    for command in _commands(cmd):
+        tokens = list(command.argv)
         if not tokens:
             continue
         head = _basename(tokens[0])
@@ -387,8 +388,8 @@ def check_git_config_write(cmd: str) -> str | None:
         "ssh.variant",
         "protocol.",
     )
-    for segment in _segments(cmd):
-        tokens = segment.split()
+    for command in _commands(cmd):
+        tokens = list(command.argv)
         if len(tokens) < 3:
             continue
         if _basename(tokens[0]) != "git" or tokens[1] != "config":

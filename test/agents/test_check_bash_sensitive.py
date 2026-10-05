@@ -213,6 +213,13 @@ def test_ordinary_development_commands_are_not_blocked(command):
         "chmod 6755 /bin/bash",
         "chmod u+s /bin/bash",
         "chmod 4755 /bin/bash",
+        # 引用した語や末尾のリダイレクトで判定を外さない (段 7)
+        "chmod 'u+s' /bin/bash 2>/dev/null",
+        'git add ".env"',
+        "git add .env 2>&1",
+        "git config 'alias.p' push",
+        "cp x ~/.claude/settings.json 2>/dev/null",
+        "history 2>/dev/null",
         # リダイレクト先の直後に区切り記号が続く形
         "echo evil >> ~/.zshrc; echo done",
         "echo evil >>~/.profile;true",

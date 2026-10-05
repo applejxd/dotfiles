@@ -245,13 +245,13 @@ _SECRET_EGRESS_COMMANDS = tables.as_set("sensitive", "secret_egress_commands")
 
 def check_git_add_sensitive(cmd: str) -> str | None:
     """`git add .env` のようにセンシティブファイルをバージョン管理に載せていないか"""
-    for segment in _segments(cmd):
-        tokens = segment.split()
-        if len(tokens) < 3:
+    for command in _commands(cmd):
+        argv = command.argv
+        if len(argv) < 3:
             continue
-        if _basename(tokens[0]) != "git" or tokens[1] not in ("add", "stage"):
+        if _basename(argv[0]) != "git" or argv[1] not in ("add", "stage"):
             continue
-        for token in tokens[2:]:
+        for token in argv[2:]:
             if token.startswith("-"):
                 continue
             reason = _is_sensitive_token(token)
@@ -362,11 +362,9 @@ def check_secret_env_echo(cmd: str) -> str | None:
 
 def check_history_access(cmd: str) -> str | None:
     """`history` でシェル履歴を読み出していないか (過去の秘密が残っている)。"""
-    for segment in _segments(cmd):
-        tokens = segment.split()
-        if not tokens:
-            continue
-        if _basename(tokens[0]) in ("history", "fc"):
+    for command in _commands(cmd):
+        argv = command.argv
+        if argv and _basename(argv[0]) in ("history", "fc"):
             return (
                 "シェル履歴には過去に入力した秘密が残っている可能性があるため、"
                 "参照は許可されていません。"
