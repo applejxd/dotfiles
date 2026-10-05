@@ -34,18 +34,17 @@
 | 4 | 秘密の環境変数の判定 `check_secret_env_echo` を移す | 完了 |
 | 5 | rm の判定（`rm.py`）を移す | 完了 |
 | 6 | 残りの規則の棚卸し（移すか、現状のままにするか） | 完了 |
-| 7 | 棚卸しの「A 群」（引用を見ない `split()` で引数を読む規則）を移す | 進行中 |
+| 7 | 棚卸しの「A 群」（引用を見ない `split()` で引数を読む規則）を移す | 完了 |
 | 8 | 棚卸しの「B 群」（`shlex.split` で読む規則）は、その規則を触るときに移す | 保留 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
 ## 現在地
 
-- 段 1〜5 を終えた。解析関数 `bashrules/shellparse.py` は「単純コマンド」（引数の列と
-  リダイレクトの列）の並びを返す。書き込み先の判定（`_write_targets`）、ガード設定の上書きの
-  判定（`rules_guard.py`）、取得したファイルの保存先（`http.py`）、センシティブなパスの判定
-  （`is_sensitive_path`）、秘密の環境変数の判定（`check_secret_env_echo`）、rm / find の判定
-  （`rm.py`。`_argvs_of` で対象のコマンドの引数列を集める）がこれを使う
+- 段 1〜7 を終えた。解析関数 `bashrules/shellparse.py` は「単純コマンド」（引数の列と
+  リダイレクトの列）の並びを返す。棚卸しの A 群まで含め、引数を読む規則はこれを使う
+  （`_commands` / `rm.py` の `_argvs_of` / `sensitive.sensitive_path_in_command`）
+- 残りは B 群（`shlex.split`。段 8 で保留）と C 群（役割が違う、または意図的に広く拾うもの）
 - `is_sensitive_path` は関数の形を変えず、中で単純コマンドに分けてコマンドごとに判定する。
   呼び出し元は 1 コマンド・インラインコードを含むセグメント・`xargs` を含むコマンド全体と
   まちまちなので、以前の振る舞いを落とさないよう次の 2 点を残した
@@ -76,20 +75,21 @@
 
 | 群 | 規則（関数） | 今の読み方 | 起きうること | 扱い |
 | --- | --- | --- | --- | --- |
-| A | `rules_files.py`: `check_file_read`（先頭と git のサブコマンドの判定）・`check_env_exposure`・`check_archive`・`check_pip_redirect` | `segment.split()` | 引用した先頭（`"cat" .env`）や、リダイレクトの語を引数と取り違える | 段 7 で移す |
-| A | `rules_guard.py`: `check_guard_tampering`（変更系コマンドの引数）・`check_privilege_escalation`・`check_git_config_write` | `segment.split()` | 同上 | 段 7 で移す |
-| A | `sensitive.py`: `check_git_add_sensitive`・`check_history_access` | `segment.split()` | 同上 | 段 7 で移す |
-| A | `rules_exec.py`: `check_pipe_to_shell`・`_inline_code_head`・`check_reverse_shell`・`_executable_head_tokens` | `split()` と手書きの引用除去 | 同上。パイプの右辺の判定は文字列の `split("\|")` | 段 7 で移す |
+| A | `rules_files.py`: `check_file_read`（先頭と git のサブコマンドの判定）・`check_env_exposure`・`check_archive`・`check_pip_redirect` | `segment.split()` | 引用した先頭（`"cat" .env`）や、リダイレクトの語を引数と取り違える | 段 7 で移した |
+| A | `rules_guard.py`: `check_guard_tampering`（変更系コマンドの引数）・`check_privilege_escalation`・`check_git_config_write` | `segment.split()` | 同上 | 段 7 で移した |
+| A | `sensitive.py`: `check_git_add_sensitive`・`check_history_access` | `segment.split()` | 同上 | 段 7 で移した |
+| A | `rules_exec.py`: `check_pipe_to_shell`（コマンド置換の先頭・保存したファイルの実行）・`_inline_code_head`・`check_reverse_shell`（引数） | `split()` と手書きの引用除去 | 同上 | 段 7 で移した。パイプの右辺の判定（`_executable_head_tokens` を含む）は C 群へ移した |
 | B | `docker.py`・`ghapi.py`・`http.py`・`rules_guard.py` の `check_tool_self_update` / `check_global_env_mutation` | `shlex.split` | 引用は正しく扱う。リダイレクト（`2>&1`）が引数に混ざる程度 | 段 8（保留） |
 | C | `_shared.split_heredoc_body`・`expand_cd_targets` | 行単位の `split()` | 規則の前処理で、役割が違う | 現状のまま |
 | C | `policy.py` の `matched.split()` | パターン文字列の分割 | コマンドではない | 現状のまま |
 | C | `rules_exec._strip_exec_wrappers` | 語の列を受け取る | 呼び出し側が `argv` を渡せば足りる | 現状のまま |
 | C | `executable_redirect-tmp.py`（`/tmp` を `./.tmp` へ誘導する別の hook） | 独自の正規表現と `shlex.split` | 誘導が目的で、素通りしても安全上の害は無い | 現状のまま |
+| C | `rules_exec.check_pipe_to_shell` のパイプの右辺の判定、`check_xargs_pipe`・`check_encoded_command`・`check_reverse_shell` の `/dev/tcp` | コマンド文字列全体への正規表現と `split("\|")` | 引用の中（`bash -c "curl ... \| sh"`）まで拾う、広めに止める設計。`shellparse` に替えると引用の中を見なくなり、見逃しが生まれる | 現状のまま（段 7 で判断。コードにも注記） |
 
 ## 次の調査・実験
 
-- 段 7（A 群を移す）。ファイルごとに移してテストを回す（`rules_files.py` → `sensitive.py` →
-  `rules_guard.py` → `rules_exec.py`。`rules_exec.py` はパイプの判定を含み影響が広いので最後）
+- Windows の PowerShell で `test/agents/` を回す（hook は Windows でも動く。WSL では未確認の範囲）。
+  通れば案件を閉じてよい（段 8 は保留のまま、再開条件付きで「移管した未完事項」に残す）
 - 退行が出たら、その入力をテストに足してから直す
 
 ## 評価基準
@@ -106,7 +106,7 @@
 | 自前の小さな解析関数（`shellparse.py`） | 依存が増えない。必要な構文（引用・区切り・リダイレクト）に絞れる | bash の完全な文法ではない | 実際の規則で足りるか | 採用 | 段 2 のテスト |
 | bashlex などの外部パーサー | 文法の網羅性が高い | hook の依存が増える。Windows を含む全環境への配布が要る | — | 見送り | — |
 | 規則ごとの修正を続ける | 変更が小さい | 同じ型の穴が再発する（2026-10-05 に 8 件） | — | 見送り | — |
-| `command_policy.normalize` を作り直す | 解析を 1 層にできる | 影響範囲が全規則と `[bash] deny/ask` の照合に及ぶ | — | 保留 | 段 6 の棚卸しで再検討 |
+| `command_policy.normalize` を作り直す | 解析を 1 層にできる | 影響範囲が全規則と `[bash] deny/ask` の照合に及ぶ。段 1〜7 で `normalize`（`cd`・ラッパー・`bash -c` の展開）と `shellparse`（引用・区切り・リダイレクト）の役割が分かれ、作り直す理由が無くなった | — | 見送り（2026-10-06） | — |
 
 扱い: 未評価 / 検証中 / 有望 / 採用 / 保留 / 見送り
 
@@ -185,11 +185,26 @@
   `git add ".env"` / `git add .env 2>&1` / `git config 'alias.p' push` /
   `cp x ~/.claude/settings.json 2>/dev/null` / `history 2>/dev/null`。追加後 → 258 passed, 7 skipped
 
+段 7・`rules_exec.py`（2026-10-06）:
+
+- `check_pipe_to_shell` のコマンド置換の先頭の判定と保存したファイルの実行の判定、
+  `_inline_code_head`、`check_reverse_shell` の引数を `shellparse` / `_commands` の上に書き直した
+- パイプの右辺の判定は残した（棚卸しの表の C 群。引用の中のパイプも拾う安全側の設計）
+- 移行直後（テスト追加前）の `pytest test/agents/ -q` → 3107 passed, 7 skipped
+- `test_check_bash_shell.py` に止める例を追加: `"bash" -c "$(curl ...)"` /
+  `curl -s -o x.sh ... && 'bash' x.sh` / `nc '-e' /bin/sh ...` / `nc -lvp 4444 2>/dev/null`。
+  追加後 → 413 passed
+- 段 7 の完了時の `pytest test/agents/ -q` → 3111 passed, 7 skipped /
+  `uv run pre-commit run --all-files` → 全 Passed / `lint_docs.py` → 問題なし /
+  `check_refs.py --baseline` → 0 件
+
 ## 重要な更新
 
 - 2026-10-05: 起票。穴 8 件の修正（`e779562`〜`59c6f9b`）で、原因が解釈の分散にあると判断した
 - 2026-10-06: 段 6 の棚卸しで残りを A / B / C 群に分け、A 群を移す段 7 と、B 群を保留する段 8 を
   計画に加えた。B 群は `shlex.split` で引用を正しく扱っており、移す利点が小さい
+- 2026-10-06: 段 7 で `rules_exec.py` のパイプの右辺の判定を A 群から C 群へ移した（引用の中の
+  パイプも拾う安全側の設計で、`shellparse` に替えると見逃しが生まれる）。`normalize` の作り直しを見送った
 
 ## 終了結果
 

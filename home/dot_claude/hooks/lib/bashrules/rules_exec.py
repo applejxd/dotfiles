@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import re
 
-from . import tables
+from . import shellparse, tables
 from ._shared import (
     _FETCH_COMMAND_RE,
     _INTERPRETER_CODE_ARG_FLAGS,
@@ -21,6 +21,7 @@ from ._shared import (
     FILE_READ_COMMANDS,
     _basename,
     _cmd_name,
+    _commands,
     _policy,
     _segments,
 )
@@ -207,6 +208,8 @@ def check_pipe_to_shell(cmd: str) -> str | None:
     # パイプの右辺が stdin をコードとして読む形。
     # `bash -c "curl ... | sh"` のように引用符の中にある形や、
     # `curl ... |\n bash` の行継続、`| env bash` のようなラッパーも拾う。
+    # ★引用を無視して文字列全体を `|` で切るのは意図的 (引用の中のパイプも拾う安全側)。
+    #   shellparse に替えると引用の中を見なくなる。see docs/change/0012-bash-hook-shared-parser.md
     joined = re.sub(r"\\\s*\n", " ", cmd)
     joined = re.sub(r"\|\s*\n\s*", "| ", joined)
     for chunk in re.split(r"[\n;]+", joined):
@@ -231,30 +234,30 @@ def check_pipe_to_shell(cmd: str) -> str | None:
         bodies.extend(m.group(1) for m in _PROC_SUBST_RE.finditer(segment))
         if not any(_FETCH_COMMAND_RE.search(body) for body in bodies):
             continue
-        tokens = segment.strip().split()
-        if not tokens:
-            continue
-        if _SUBST_HEAD_RE.match(tokens[0]):
-            return _blocked("コマンド置換・プロセス置換")
-        # `env bash -c ...` / `timeout 5 sh -c ...` のようにラッパーで
-        # 前置されても head を見失わないようにする
-        stripped = _strip_exec_wrappers(tokens)
-        if not stripped:
-            continue
-        head = _cmd_name(stripped[0])
-        if head in _STDIN_CODE_SHELLS or head in _STDIN_CODE_INTERPRETERS:
-            return _blocked("コマンド置換・プロセス置換")
+        for command in shellparse.parse(segment):
+            tokens = list(command.argv)
+            if not tokens:
+                continue
+            if _SUBST_HEAD_RE.match(tokens[0]):
+                return _blocked("コマンド置換・プロセス置換")
+            # `env bash -c ...` / `timeout 5 sh -c ...` のようにラッパーで
+            # 前置されても head を見失わないようにする
+            stripped = _strip_exec_wrappers(tokens)
+            if not stripped:
+                continue
+            head = _cmd_name(stripped[0])
+            if head in _STDIN_CODE_SHELLS or head in _STDIN_CODE_INTERPRETERS:
+                return _blocked("コマンド置換・プロセス置換")
 
     # 取得先へ保存したファイルを、同じコマンドの中で実行する形
     saved = _fetched_output_paths(cmd)
     if saved:
 
         def _is_saved(token: str) -> bool:
-            cleaned = token.strip("'\"")
-            return bool(cleaned) and (cleaned in saved or os.path.basename(cleaned) in saved)
+            return bool(token) and (token in saved or os.path.basename(token) in saved)
 
-        for segment in _segments(cmd):
-            tokens = _strip_exec_wrappers(segment.split())
+        for command in _commands(cmd):
+            tokens = _strip_exec_wrappers(list(command.argv))
             if not tokens:
                 continue
             # `./install.sh` のように保存したファイルを直接起動する形
@@ -284,23 +287,27 @@ def _is_inline_code_segment(segment: str) -> bool:
 
 
 def _inline_code_head(segment: str) -> str | None:
-    """インラインコードを実行するインタプリタ名を返す (無ければ None)。"""
-    tokens = segment.split()
-    for i, token in enumerate(tokens):
-        candidate = _cmd_name(token)
-        if candidate not in _INLINE_CODE_BINS:
-            continue
-        rest = tokens[i + 1 :]
-        if any(t in _INLINE_CODE_FLAGS for t in rest):
-            return candidate
-        # awk 系はプログラムを位置引数で受け取る (`-f` はファイル指定)
-        if (
-            candidate in _AWK_BINS
-            and not any(t == "-f" or t.startswith(("-f", "--file")) for t in rest)
-            and any(not t.startswith("-") for t in rest)
-        ):
-            return candidate
-        return None
+    """インラインコードを実行するインタプリタ名を返す (無ければ None)。
+
+    先頭に限らず探す (`uv run python -c ...` のようにランナー経由の形があるため)。
+    """
+    for command in shellparse.parse(segment):
+        tokens = command.argv
+        for i, token in enumerate(tokens):
+            candidate = _cmd_name(token)
+            if candidate not in _INLINE_CODE_BINS:
+                continue
+            rest = tokens[i + 1 :]
+            if any(t in _INLINE_CODE_FLAGS for t in rest):
+                return candidate
+            # awk 系はプログラムを位置引数で受け取る (`-f` はファイル指定)
+            if (
+                candidate in _AWK_BINS
+                and not any(t == "-f" or t.startswith(("-f", "--file")) for t in rest)
+                and any(not t.startswith("-") for t in rest)
+            ):
+                return candidate
+            break
     return None
 
 
@@ -353,8 +360,8 @@ def check_reverse_shell(cmd: str) -> str | None:
     listeners = {"nc", "netcat", "ncat", "socat", "telnet"}
     exec_flags = ("-e", "-c", "--exec", "--sh-exec", "--lua-exec")
     listen_flags = ("-l", "-lp", "-lvp", "--listen", "-L")
-    for segment in _segments(cmd):
-        tokens = segment.split()
+    for command in _commands(cmd):
+        tokens = command.argv
         if not tokens:
             continue
         head = _basename(tokens[0])
