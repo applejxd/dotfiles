@@ -23,6 +23,9 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 `*.tmpl` は pre-commit の linter が素通りするので、テンプレートを編集したら
 `lint_templates.py` も実行する（[理由と対象](docs/spec/development.md#テンプレートの検査)）。
 
+`pre-commit run --all-files` は git に未登録の新規ファイルを検査しない。ファイルを
+新しく足したら `uv run pre-commit run --files <パス>` でも回す（コミット時に初めて落ちる）。
+
 `chezmoi diff` は **sandbox 内では無意味**。`~/` が deny-by-default で不可視のため、
 展開先が空に見えて全て「new file」になる。sandbox 外のシェルで実行する。
 
