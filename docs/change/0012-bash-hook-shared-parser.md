@@ -33,7 +33,9 @@
 | 3 | センシティブなパスの判定 `is_sensitive_path` を移す | 完了 |
 | 4 | 秘密の環境変数の判定 `check_secret_env_echo` を移す | 完了 |
 | 5 | rm の判定（`rm.py`）を移す | 完了 |
-| 6 | 残りの規則の棚卸し（移すか、現状のままにするか） | 未着手 |
+| 6 | 残りの規則の棚卸し（移すか、現状のままにするか） | 完了 |
+| 7 | 棚卸しの「A 群」（引用を見ない `split()` で引数を読む規則）を移す | 未着手 |
+| 8 | 棚卸しの「B 群」（`shlex.split` で読む規則）は、その規則を触るときに移す | 保留 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -66,12 +68,28 @@
 ## 未解決点
 
 - Windows の PowerShell での実機確認（hook は Windows でも動く）
-- 段 6 でどこまで移すか。移す利点が薄い規則（正規表現で十分なもの）は現状のままにしてよい
+- 段 8（B 群）は保留。再開条件: B 群の規則に穴が見つかったとき、または規則を別の理由で書き換えるとき
+
+### 段 6 の棚卸し（2026-10-06）
+
+`home/dot_claude/hooks/` の `split()` / `shlex.split` / 手書きの引用除去を grep で洗い出し、3 群に分けた。
+
+| 群 | 規則（関数） | 今の読み方 | 起きうること | 扱い |
+| --- | --- | --- | --- | --- |
+| A | `rules_files.py`: `check_file_read`（先頭と git のサブコマンドの判定）・`check_env_exposure`・`check_archive`・`check_pip_redirect` | `segment.split()` | 引用した先頭（`"cat" .env`）や、リダイレクトの語を引数と取り違える | 段 7 で移す |
+| A | `rules_guard.py`: `check_guard_tampering`（変更系コマンドの引数）・`check_privilege_escalation`・`check_git_config_write` | `segment.split()` | 同上 | 段 7 で移す |
+| A | `sensitive.py`: `check_git_add_sensitive`・`check_history_access` | `segment.split()` | 同上 | 段 7 で移す |
+| A | `rules_exec.py`: `check_pipe_to_shell`・`_inline_code_head`・`check_reverse_shell`・`_executable_head_tokens` | `split()` と手書きの引用除去 | 同上。パイプの右辺の判定は文字列の `split("\|")` | 段 7 で移す |
+| B | `docker.py`・`ghapi.py`・`http.py`・`rules_guard.py` の `check_tool_self_update` / `check_global_env_mutation` | `shlex.split` | 引用は正しく扱う。リダイレクト（`2>&1`）が引数に混ざる程度 | 段 8（保留） |
+| C | `_shared.split_heredoc_body`・`expand_cd_targets` | 行単位の `split()` | 規則の前処理で、役割が違う | 現状のまま |
+| C | `policy.py` の `matched.split()` | パターン文字列の分割 | コマンドではない | 現状のまま |
+| C | `rules_exec._strip_exec_wrappers` | 語の列を受け取る | 呼び出し側が `argv` を渡せば足りる | 現状のまま |
+| C | `executable_redirect-tmp.py`（`/tmp` を `./.tmp` へ誘導する別の hook） | 独自の正規表現と `shlex.split` | 誘導が目的で、素通りしても安全上の害は無い | 現状のまま |
 
 ## 次の調査・実験
 
-- 段 6（残りの規則の棚卸し）。`segment.split()` / `shlex.split` / コマンド全体への正規表現が
-  残っている規則を一覧にし、移すか現状のままにするかを決める
+- 段 7（A 群を移す）。ファイルごとに移してテストを回す（`rules_files.py` → `sensitive.py` →
+  `rules_guard.py` → `rules_exec.py`。`rules_exec.py` はパイプの判定を含み影響が広いので最後）
 - 退行が出たら、その入力をテストに足してから直す
 
 ## 評価基準
@@ -150,6 +168,8 @@
 ## 重要な更新
 
 - 2026-10-05: 起票。穴 8 件の修正（`e779562`〜`59c6f9b`）で、原因が解釈の分散にあると判断した
+- 2026-10-06: 段 6 の棚卸しで残りを A / B / C 群に分け、A 群を移す段 7 と、B 群を保留する段 8 を
+  計画に加えた。B 群は `shlex.split` で引用を正しく扱っており、移す利点が小さい
 
 ## 終了結果
 
