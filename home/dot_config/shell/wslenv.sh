@@ -4,16 +4,25 @@
 # system #
 #--------#
 
-# Windows System
-export PATH="/mnt/c/Windows${PATH:+:${PATH}}" # for explorer.exe
-export PATH="/mnt/c/Windows/System32:$PATH"   # for clip.exe
+# 入れ子のシェルで読み直しても重複させない
+_wsl_path_prepend() {
+    case ":${PATH}:" in
+    *":$1:"*) ;;
+    *) export PATH="$1${PATH:+:${PATH}}" ;;
+    esac
+}
 
-# Powershell
-export PATH="/mnt/c/Windows/System32/WindowsPowerShell/v1.0:$PATH"
+# Windows System
+_wsl_path_prepend "/mnt/c/Windows"          # for explorer.exe
+_wsl_path_prepend "/mnt/c/Windows/System32" # for clip.exe
+
+# Powershell (5.1 は常にある。7 は winget で入れたときだけ)
+_wsl_path_prepend "/mnt/c/Windows/System32/WindowsPowerShell/v1.0"
+[[ -d "/mnt/c/Program Files/PowerShell/7" ]] && _wsl_path_prepend "/mnt/c/Program Files/PowerShell/7"
 
 # VSCode (for system installation, fallback to user installation)
 if [[ -d "/mnt/c/Progra~1/Microsoft VS Code" ]]; then
-    export PATH="/mnt/c/Progra~1/Microsoft VS Code/bin:$PATH"
+    _wsl_path_prepend "/mnt/c/Progra~1/Microsoft VS Code/bin"
 else
     _win_user_cache="$HOME/.cache/win_user"
     if [[ -f "$_win_user_cache" ]]; then
@@ -30,13 +39,16 @@ else
     fi
     _vscode_path="/mnt/c/Users/${_win_user}/AppData/Local/Programs/Microsoft VS Code"
     if [[ -n "$_win_user" ]] && [[ -d "$_vscode_path" ]]; then
-        export PATH="$_vscode_path/bin:$PATH"
+        _wsl_path_prepend "$_vscode_path/bin"
     fi
     unset _win_user _vscode_path
 fi
 
 # for GPU drivers
-export LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+case ":${LD_LIBRARY_PATH:-}:" in
+*":/usr/lib/wsl/lib:"*) ;;
+*) export LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" ;;
+esac
 
 # Browser
 export BROWSER="wslview"
@@ -89,6 +101,9 @@ export DefaultIMModule=fcitx
 # Java
 if [[ -e /usr/lib/jvm/java-11-openjdk-amd64 ]]; then
     export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-    export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+    _wsl_path_prepend /usr/lib/jvm/java-11-openjdk-amd64/bin
     export CLASSPATH=.:/usr/lib/jvm/java-11-openjdk-amd64/lib
 fi
+
+# 共通 env には関数を残さない (docs/spec/structure.md の起動契約)
+unset -f _wsl_path_prepend
