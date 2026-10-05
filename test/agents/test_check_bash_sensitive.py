@@ -514,6 +514,8 @@ def test_windows_native_guard_paths_are_denied(command):
         # 二重引用符の中のアポストロフィは単引用符の対にならない
         'echo "Don\'t" $GITHUB_TOKEN "won\'t"',
         'echo "it\'s $GITHUB_TOKEN"',
+        # here-string の中身をファイルへ書き出す
+        'cat <<< "$GITHUB_TOKEN" > out.txt',
         # シェルの $VAR 展開を経由しない読み出し
         "python3 -c \"import os;print(os.environ['GITHUB_TOKEN'])\"",
         "node -e 'console.log(process.env.GITHUB_TOKEN)'",
@@ -543,6 +545,8 @@ def test_secret_env_to_output_sink_is_denied(command):
         "echo 'set $API_TOKEN in CI'",
         # 単引用符の中の二重引用符は引用ではない
         "echo 'say \"$API_TOKEN\" here'",
+        # 書き込み先のパスに変数名が入っているだけ (値は出力しない)
+        'echo ok > "$TOKEN_FILE"',
     ],
 )
 def test_secret_env_passed_to_process_is_allowed(command):

@@ -47,7 +47,7 @@
 | [0006](0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試す | In progress | 段 2（常用）に着手。`enabledProviders = ["claude"]` の効果は常用の初回に判定する。使って決まった設定の回収（段 2.5）を計画へ追加 | 段 2 の冒頭で `/criticalthink`（chezmoi が配る唯一の Claude コマンド）がスラッシュコマンドに出るか | 2026-09-28 |
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる**。`ocs` のモジュール分割（2026-09-28）はハーネス層の切り出しではない | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-28 |
 | [0011](0011-agent-first-shell.md) | AI エージェントがシェルの主な利用者である前提へ整える | In progress | Claude Code / Copilot CLI に git の環境変数を入れられるか未調査。Windows 実機で未検証 | ocs の実機と `commit` エージェントで deny の前段停止（pip 以外へ拡張済み）を確かめる | 2026-10-03 |
-| [0012](0012-bash-hook-shared-parser.md) | bash 検査 hook のコマンド解析を 1 か所に集める | In progress | 段 6（残りの規則）をどこまで移すか。Windows 実機で未検証 | 段 4（秘密の環境変数の判定）を移す | 2026-10-05 |
+| [0012](0012-bash-hook-shared-parser.md) | bash 検査 hook のコマンド解析を 1 か所に集める | In progress | 段 6（残りの規則）をどこまで移すか。Windows 実機で未検証 | 段 5（rm の判定）を移す | 2026-10-06 |
 
 ## 保留
 

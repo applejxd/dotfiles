@@ -1,7 +1,7 @@
 # CHG-0012: bash 検査 hook のコマンド解析を 1 か所に集める
 
 - **状態**: In progress
-- **更新日**: 2026-10-05
+- **更新日**: 2026-10-06
 - **基準**: `59c6f9b`（全体除外・トークン誤認の穴 8 件を個別に塞いだ直後）
 
 ## 目的と非目的
@@ -31,7 +31,7 @@
 | 1 | 共通の解析関数 `shellparse.parse` を作る（標準ライブラリだけ） | 完了 |
 | 2 | 書き込み先の判定 `_write_targets` を移す | 完了 |
 | 3 | センシティブなパスの判定 `is_sensitive_path` を移す | 完了 |
-| 4 | 秘密の環境変数の判定 `check_secret_env_echo` を移す | 未着手 |
+| 4 | 秘密の環境変数の判定 `check_secret_env_echo` を移す | 完了 |
 | 5 | rm の判定（`rm.py`）を移す | 未着手 |
 | 6 | 残りの規則の棚卸し（移すか、現状のままにするか） | 未着手 |
 
@@ -39,21 +39,25 @@
 
 ## 現在地
 
-- 段 1〜3 を終えた。解析関数 `bashrules/shellparse.py` は「単純コマンド」（引数の列と
+- 段 1〜4 を終えた。解析関数 `bashrules/shellparse.py` は「単純コマンド」（引数の列と
   リダイレクトの列）の並びを返す。書き込み先の判定（`_write_targets`）、ガード設定の上書きの
   判定（`rules_guard.py`）、取得したファイルの保存先（`http.py`）、センシティブなパスの判定
-  （`is_sensitive_path`）がこれを使う
+  （`is_sensitive_path`）、秘密の環境変数の判定（`check_secret_env_echo`）がこれを使う
 - `is_sensitive_path` は関数の形を変えず、中で単純コマンドに分けてコマンドごとに判定する。
   呼び出し元は 1 コマンド・インラインコードを含むセグメント・`xargs` を含むコマンド全体と
   まちまちなので、以前の振る舞いを落とさないよう次の 2 点を残した
   - 空白を含む引数（`python3 -c "..."` のコード）は空白で区切った断片も調べる
   - リダイレクトの対象（`cat < .env`）も調べる（以前は `split()` で引数に見えていた）
+- `check_secret_env_echo` は `Word.expandable`（単引用符と `$'...'` の中身を除いた語）で
+  変数の参照を数える。読み込み側のリダイレクト（`<<< "$TOKEN"`）は参照に含め、書き込み先
+  （`> "$TOKEN_FILE"`）はパスなので含めない
 - 解析はセグメントの分割と引用の解釈だけを担う。`cd` の除去や `bash -c` の展開は
   これまでどおり `normalize` が担い、解析は `_segments()`（正規化済み + 元の文字列）の各要素に当てる
 - ヒアドキュメントの本文は読み飛ばさない。実行されない本文は `check_bash.py` が規則の前に
   `split_heredoc_body` で取り除き、実行される本文（`bash <<EOF`）は行として残す。解析が本文を
   読み飛ばすと、後者の検査が漏れる
-- `_shared.REDIRECT_TARGET_RE`（正規表現）は、まだ移していない `sensitive.py`（段 4）だけが使う
+- bashrules 内のリダイレクトの正規表現（`REDIRECT_TARGET_RE`）は段 4 で消した。別の hook
+  （`executable_redirect-tmp.py`、`/tmp` を `./.tmp` へ誘導する）は独自の正規表現を持つ（段 6 の対象）
 
 ## 未解決点
 
@@ -62,10 +66,8 @@
 
 ## 次の調査・実験
 
-- 段 4（`check_secret_env_echo`）を移す。`_drop_single_quoted`（単引用符の除去）と、
-  `REDIRECT_TARGET_RE` による「リダイレクトより前に秘密の変数があるか」の判定を、
-  `Word.raw`（引用を残した語）とリダイレクトの列の上に載せ替える。移し終えたら
-  `REDIRECT_TARGET_RE` を消す
+- 段 5（rm の判定。`rm.py`）を移す。`_rm_is_workspace_local` などが元の文字列を
+  `split()` / `shlex.split` で読んでいる箇所を `Command.argv` に載せ替える
 - 退行が出たら、その入力をテストに足してから直す
 
 ## 評価基準
@@ -93,6 +95,7 @@
 | `bashrules/shellparse.py` | 無し → 単純コマンドとリダイレクトへの解析 | 規則ごとの手書きの解釈が穴の原因 | 段 1 で適用 |
 | `bashrules/_shared.py` の `_write_targets` | 正規表現 + `split()` → `shellparse.parse` | 2026-10-05 の穴（末尾の `2>&1`、`>& file`） | 段 2 で適用 |
 | `bashrules/sensitive.py` の `is_sensitive_path` | `split()` → `shellparse.parse` のコマンドごと | 引用・リダイレクトの取り違え（`grep -e. .env` など） | 段 3 で適用 |
+| `bashrules/sensitive.py` の `check_secret_env_echo` | 手書きの単引用符除去 + `REDIRECT_TARGET_RE` → `Word.expandable` とリダイレクトの列 | 二重引用符の中の `'` の取り違え（`"Don't"`） | 段 4 で適用 |
 
 ## 実装・検証
 
@@ -117,6 +120,16 @@
 - `uv run pre-commit run --all-files` → 全 Passed
 - 注意: `pre-commit run --all-files` は git に未登録の新規ファイルを検査しない。段 1 の
   `shellparse.py` の ruff の指摘はコミット時に初めて出た
+
+段 4（2026-10-06）:
+
+- `shellparse.Word.expandable` を追加し、`sensitive.py` の `_drop_single_quoted` を移した。
+  `_shared.REDIRECT_TARGET_RE` を削除
+- テストを追加: `test_shellparse.py` に `expandable` の 7 件、`test_check_bash_sensitive.py` に
+  止める例 `cat <<< "$GITHUB_TOKEN" > out.txt`、通す例 `echo ok > "$TOKEN_FILE"`
+- 移行直後（テスト追加前）の `pytest test/agents/ -q` → 3084 passed, 7 skipped
+- テスト追加後の `pytest test/agents/ -q` → 3093 passed, 7 skipped
+- `uv run pre-commit run --all-files` → 全 Passed / `lint_docs.py` → 問題なし
 
 ## 重要な更新
 

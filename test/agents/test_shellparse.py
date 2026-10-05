@@ -102,6 +102,23 @@ def test_fd_digits_need_an_operator():
     assert cmd.redirects == ()
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("$TOKEN", "$TOKEN"),
+        ("'$TOKEN'", ""),
+        ('"$TOKEN"', '"$TOKEN"'),
+        ('"Don\'t"', '"Don\'t"'),
+        ("'a'$TOKEN'b'", "$TOKEN"),
+        ("\\$TOKEN", "\\$TOKEN"),
+        ("$'x$TOKEN'", "$"),
+    ],
+)
+def test_expandable_drops_only_single_quoted_spans(raw, expected):
+    (cmd,) = shellparse.parse(f"echo {raw}")
+    assert cmd.words[1].expandable == expected
+
+
 def test_heredoc_body_is_not_skipped():
     """実行されない本文は split_heredoc_body が先に取り除く。ここで読み飛ばすと
     ``bash <<EOF`` の本文 (実行される) の検査が漏れる。"""

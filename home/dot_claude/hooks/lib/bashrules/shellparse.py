@@ -22,6 +22,37 @@ class Word:
     raw: str
     value: str
 
+    @property
+    def expandable(self) -> str:
+        """シェルが ``$`` を展開する部分だけを残した ``raw``。
+
+        単引用符と ``$'...'`` の中身を除く (二重引用符の中の ``'`` は引用ではない)。
+        エスケープ (``\\$X``) は残すので、呼び出し側は ``\\$`` を展開しない形として扱う。
+        """
+        return _drop_single_quoted(self.raw)
+
+
+def _drop_single_quoted(raw: str) -> str:
+    out: list[str] = []
+    i, n = 0, len(raw)
+    in_double = False
+    while i < n:
+        ch = raw[i]
+        if ch == "\\" and i + 1 < n:
+            out.append(raw[i : i + 2])
+            i += 2
+            continue
+        if ch == "'" and not in_double:
+            end = raw.find("'", i + 1)
+            if end != -1:
+                i = end + 1
+                continue
+        if ch == '"':
+            in_double = not in_double
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
 
 @dataclass(frozen=True)
 class Redirect:

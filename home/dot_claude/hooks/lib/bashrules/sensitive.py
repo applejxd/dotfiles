@@ -17,13 +17,12 @@ from ._shared import (
     _SHELL_CODE_ARG_FLAGS,
     _STDIN_CODE_INTERPRETERS,
     _STDIN_CODE_SHELLS,
-    REDIRECT_TARGET_RE,
     _basename,
     _cmd_name,
+    _commands,
     _looks_like_path,
     _normalize_guard_path,
     _segments,
-    _write_targets,
 )
 
 _SENSITIVE_BASENAMES = tables.as_set("sensitive", "sensitive_basenames")
@@ -263,30 +262,28 @@ def check_git_add_sensitive(cmd: str) -> str | None:
     return None
 
 
-def _drop_single_quoted(text: str) -> str:
-    """二重引用符の外にある単引用符の範囲を取り除く (シェルが展開しない部分)。
+_ENV_REF_RE = re.compile(r"(?<!\\)\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?")
 
-    二重引用符の中の ``'`` (``"Don't"``) は引用ではないので対にしない。
+
+def _secret_names(text: str) -> list[str]:
+    """``text`` が参照するセンシティブな環境変数の名前。``\\$X`` (エスケープ) は除く。"""
+    return [m.group(1) for m in _ENV_REF_RE.finditer(text) if _SENSITIVE_ENV_RE.search(m.group(1))]
+
+
+def _command_secret_names(command: shellparse.Command, *, honour_quotes: bool) -> list[str]:
+    """単純コマンドの引数と、読み込み側のリダイレクト (``<<< "$TOKEN"``) が参照する名前。
+
+    ``honour_quotes`` が偽なら単引用符の中も見る (``sh -c '...'`` は子シェルが展開する)。
+    書き込み先 (``> "$TOKEN_FILE"``) はパスなので含めない。
     """
-    out: list[str] = []
-    i, n = 0, len(text)
-    in_double = False
-    while i < n:
-        ch = text[i]
-        if ch == "\\" and i + 1 < n:
-            out.append(text[i : i + 2])
-            i += 2
-            continue
-        if ch == "'" and not in_double:
-            end = text.find("'", i + 1)
-            if end != -1:
-                i = end + 1
-                continue
-        if ch == '"':
-            in_double = not in_double
-        out.append(ch)
-        i += 1
-    return "".join(out)
+    words = list(command.words) + [
+        r.target for r in command.redirects if r.target is not None and not r.writes
+    ]
+    return [
+        name
+        for word in words
+        for name in _secret_names(word.expandable if honour_quotes else word.raw)
+    ]
 
 
 def check_secret_env_echo(cmd: str) -> str | None:
@@ -303,72 +300,62 @@ def check_secret_env_echo(cmd: str) -> str | None:
     シングルクォート内はシェルが展開しないので対象から外す。
     """
 
-    def _sensitive_names(text: str, *, honour_quotes: bool = True) -> list[str]:
-        # `sh -c 'echo $TOKEN'` は子シェルが展開するので、コード引数を持つ
-        # セグメントではシングルクォートを剥がさずに見る。
-        # `\$TOKEN` のようにエスケープされた形はリテラルなので除外する
-        scanned = _drop_single_quoted(text) if honour_quotes else text
-        return [
-            m.group(1)
-            for m in re.finditer(r"(?<!\\)\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", scanned)
-            if _SENSITIVE_ENV_RE.search(m.group(1))
-        ]
-
-    def _code_argument(tokens: list[str]) -> str | None:
+    def _code_argument(argv: tuple[str, ...]) -> str | None:
         """`sh -c CODE` / `python -c CODE` のコード引数を返す。"""
-        if _cmd_name(tokens[0]) not in (_STDIN_CODE_SHELLS | _STDIN_CODE_INTERPRETERS):
+        if _cmd_name(argv[0]) not in (_STDIN_CODE_SHELLS | _STDIN_CODE_INTERPRETERS):
             return None
         flags = _SHELL_CODE_ARG_FLAGS | _INTERPRETER_CODE_ARG_FLAGS
-        for i, token in enumerate(tokens[1:], start=1):
-            if token in flags and i + 1 < len(tokens):
-                return tokens[i + 1].strip("'\"")
+        for i, token in enumerate(argv[1:], start=1):
+            if token in flags and i + 1 < len(argv):
+                return argv[i + 1]
         return None
 
     def _scan(text: str, *, honour_quotes: bool, depth: int = 0) -> str | None:
         for segment in _segments(text):
-            tokens = segment.split()
-            if not tokens:
-                continue
-            names = _sensitive_names(segment, honour_quotes=honour_quotes)
-            if not names:
-                continue
-            head = _basename(tokens[0])
-            if head in _SECRET_SINK_COMMANDS:
-                return (
-                    f"センシティブな環境変数 `${names[0]}` を出力しようとしています。\n"
-                    f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
-                    "値を画面やファイルに出さない形で扱ってください。"
-                )
-            if head in _SECRET_EGRESS_COMMANDS:
-                return (
-                    f"センシティブな環境変数 `${names[0]}` を外部へ送信しようと"
-                    f"しています。\n実行しようとしているコマンド: {cmd.strip()[:200]}\n"
-                    "値を外部に出さない形で扱ってください。"
-                )
-            # `sh -c '...'` はコード引数を展開して同じ判定を続ける
-            if depth < 2:
-                inner = _code_argument(tokens)
-                if inner:
-                    hit = _scan(inner, honour_quotes=False, depth=depth + 1)
-                    if hit:
-                        return hit
+            for command in shellparse.parse(segment):
+                argv = command.argv
+                if not argv:
+                    continue
+                names = _command_secret_names(command, honour_quotes=honour_quotes)
+                if not names:
+                    continue
+                head = _basename(argv[0])
+                if head in _SECRET_SINK_COMMANDS:
+                    return (
+                        f"センシティブな環境変数 `${names[0]}` を出力しようとしています。\n"
+                        f"実行しようとしているコマンド: {cmd.strip()[:200]}\n"
+                        "値を画面やファイルに出さない形で扱ってください。"
+                    )
+                if head in _SECRET_EGRESS_COMMANDS:
+                    return (
+                        f"センシティブな環境変数 `${names[0]}` を外部へ送信しようと"
+                        f"しています。\n実行しようとしているコマンド: {cmd.strip()[:200]}\n"
+                        "値を外部に出さない形で扱ってください。"
+                    )
+                # `sh -c '...'` はコード引数を展開して同じ判定を続ける
+                if depth < 2:
+                    inner = _code_argument(argv)
+                    if inner:
+                        hit = _scan(inner, honour_quotes=False, depth=depth + 1)
+                        if hit:
+                            return hit
         return None
 
-    if not _sensitive_names(cmd, honour_quotes=False):
+    if not _secret_names(cmd):
         return None
     hit = _scan(cmd, honour_quotes=True)
     if hit:
         return hit
     # リダイレクトでファイルへ書き出す形 (`printf %s "$TOKEN" > f` など)
-    if _write_targets(cmd):
-        for m in REDIRECT_TARGET_RE.finditer(cmd):
-            prefix = cmd[: m.start()]
-            names = _sensitive_names(prefix)
-            if names:
-                return (
-                    f"センシティブな環境変数 `${names[0]}` をファイルへ書き出そうと"
-                    f"しています。\n実行しようとしているコマンド: {cmd.strip()[:200]}"
-                )
+    for command in _commands(cmd):
+        if not any(r.writes for r in command.redirects):
+            continue
+        names = _command_secret_names(command, honour_quotes=True)
+        if names:
+            return (
+                f"センシティブな環境変数 `${names[0]}` をファイルへ書き出そうと"
+                f"しています。\n実行しようとしているコマンド: {cmd.strip()[:200]}"
+            )
     return None
 
 

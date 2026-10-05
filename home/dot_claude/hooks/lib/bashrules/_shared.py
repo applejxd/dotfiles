@@ -89,15 +89,6 @@ _WRITE_DEST_LAST_COMMANDS = tables.as_set("_shared", "write_dest_last_commands")
 _WRITE_ALL_ARGS_COMMANDS = tables.as_set("_shared", "write_all_args_commands")
 
 
-# リダイレクトの書き込み先。`>| path` (noclobber 上書き) と `>& path` (= `&> path`) も拾う。
-# `>&2` / `>&-` の fd 複製・クローズは対象外。
-# ★新しい規則は shellparse.parse を使う。これは移行前の規則 (sensitive.py) のために残している
-# see docs/change/0012-bash-hook-shared-parser.md
-REDIRECT_TARGET_RE = re.compile(
-    r"[0-9]*(?:>{1,2}\|?|>&(?!\s*(?:\d+|-)(?=$|[\s;&|)])))\s*([^\s&][^\s;&|)<>]*)"
-)
-
-
 def _commands(cmd: str) -> list[shellparse.Command]:
     """正規化済みのセグメントと元の文字列を、単純コマンドへ分けたもの。"""
     return [command for segment in _segments(cmd) for command in shellparse.parse(segment)]
