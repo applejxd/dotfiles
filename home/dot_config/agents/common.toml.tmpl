@@ -1156,12 +1156,12 @@ message = "sed -n でファイルを読まないでください。read ツール
 #   **無確認で通る**。これは 4a を検討する過程で見つけた**既存の穴**。
 # ★guide 規則は effect が allow でも走る (plugin は deny のときだけ手前で
 #   抜ける)。so allow を維持したまま、書き込み形だけここで deny できる。
-# ★unless は stderr の付け替えと /dev/null を外す。これらは書き込みではない。
+# ★fd の付け替え (2>&1 / >&-) と /dev/null は書き込みではないので、> ごとに先読みで外す。
+#   unless で外すとコマンド全体に当たり、`wc f 2>&1 > ~/.bashrc` が素通りする。
 # ★対象は [opencode.shell] allow と揃えること。allow を増やすならここも足す。
 # see docs/change/0002-opencode-ask-by-default.md 「段階 4a」
 [[opencode.shell.guide]]
-pattern = '(^|&&|\|\||;|\n)\s*(wc|grep\s+-n|git\s+log|uv\s+pip\s+list|docker\s+ps)\b[^\n]*>'
-unless = '2>&1|>&\s*\d|>\s*/dev/null'
+pattern = '(^|&&|\|\||;|\n)\s*(wc|grep\s+-n|git\s+log|uv\s+pip\s+list|docker\s+ps)\b[^\n]*>(?!&\s*(\d+|-)(?=$|[\s;|&)])|>?\s*/dev/null(?=$|[\s;|&)]))'
 message = "allow されたコマンドの出力をリダイレクトで書き込まないでください。ファイルを作る・書き換えるときは write / edit ツールを使ってください。"
 
 # ヒアドキュメントを write ツールへ寄せる。目的は確認 1 回あたりの負担で、

@@ -1540,14 +1540,36 @@ def test_redirect_guard_covers_every_allowed_command():
         if "リダイレクト" in g["message"] and "allow" in g["message"]
     ]
     assert len(guards) == 1, "リダイレクトの歯止めが 1 件でない"
+    assert "unless" not in guards[0], (
+        "unless はコマンド全体に当たり、本物の書き込みと併記すると素通りする"
+    )
     pattern = re.compile(guards[0]["pattern"])
-    unless = re.compile(guards[0]["unless"])
 
     for command in COMMON["opencode"]["shell"]["allow"]:
         probe = f"{command} > /home/u/.bashrc"
-        assert pattern.search(probe) and not unless.search(probe), (
-            f"allow の {command!r} が書き込み形で素通りする"
-        )
+        assert pattern.search(probe), f"allow の {command!r} が書き込み形で素通りする"
+
+
+def test_redirect_guard_is_not_bypassed_by_harmless_redirects():
+    """無害なリダイレクトを併記しても、本物の書き込みは止まること。"""
+    guards = [
+        g
+        for g in gen.opencode_guide_rules(COMMON)
+        if "リダイレクト" in g["message"] and "allow" in g["message"]
+    ]
+    pattern = re.compile(guards[0]["pattern"])
+
+    for probe in (
+        "wc f 2>&1 > /home/u/.bashrc",
+        "git log >/dev/null > /home/u/.bashrc",
+        "git log >&2 >> /home/u/.bashrc",
+        "git log 2>/dev/null 2> /home/u/.bashrc",
+        "git log >/dev/nullx",
+        "git log >&1x",
+        "git log &> /home/u/.bashrc",
+        "git log >| /home/u/.bashrc",
+    ):
+        assert pattern.search(probe), f"{probe!r} が素通りする"
 
 
 def test_redirect_guard_lets_through_reads_and_stderr():
@@ -1561,16 +1583,17 @@ def test_redirect_guard_lets_through_reads_and_stderr():
         if "リダイレクト" in g["message"] and "allow" in g["message"]
     ]
     pattern = re.compile(guards[0]["pattern"])
-    unless = re.compile(guards[0]["unless"])
 
     for probe in (
         "git log --oneline -5",
         "git log 2>&1 | head",
         "wc -l a.txt 2>/dev/null",
+        "wc -l a.txt >>/dev/null 2>&1",
+        "git log >&2",
+        "git log 2>&-",
         "git log | wc -l",
     ):
-        blocked = bool(pattern.search(probe)) and not unless.search(probe)
-        assert not blocked, f"{probe!r} を止めてしまう"
+        assert not pattern.search(probe), f"{probe!r} を止めてしまう"
 
 
 def test_allow_is_not_widened_silently():
