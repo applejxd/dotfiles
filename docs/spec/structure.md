@@ -520,6 +520,14 @@ Herdr のユーザーデータ・設定は削除しません。
 版の再現性が要る操作（lint・ビルドなど）は shim ではなく `mise exec` を使う。
 実測は[調査記録](../research/shell/mise-shims-resolution.md)。
 
+WSL では `shellenv.sh` が `wslenv.sh` を読み、Windows 側のディレクトリ（`Windows` /
+`System32`、PowerShell 5.1、PowerShell 7（`C:\Program Files\PowerShell\7` があるとき
+だけ）、VS Code、Java）を PATH の先頭へ足す。`/etc/wsl.conf` の
+`appendWindowsPath=false` で Windows の PATH は引き継がないため、`pwsh.exe` なども
+ここで足したものしか名前で呼べない。入れ子のシェルで読み直しても重複しないよう、
+PATH と `LD_LIBRARY_PATH`（`/usr/lib/wsl/lib`）は既にあれば足さない。足すための
+補助関数は読み終えたら `unset -f` で消す（方針 1）。
+
 Copilot CLI がツールとして起動するシェルへ渡す git の既定値（入力待ちにしない）は、
 対話側の `shellrc.sh` にある `copilot()` 関数が、未設定の変数だけをコマンド前置きの
 代入で入れる（空文字は空のまま、呼び出し元の環境は変えない）。値の正本は
@@ -594,6 +602,17 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
 [external が取得されない](troubleshooting-bootstrap.md#apply-しても-zinit-などの-external-が取得されない)）。
 新しい機械では apply に git とネットワークが要り、取得に失敗すると apply が
 エラーになります。
+
+### zinit の遅延読み込みの順序
+
+`home/dot_zshrc.tmpl` は重いプラグインを `wait` ice で遅延読み込みし、
+`wait'0a'` → `'0b'` → `'0c'` の順に読み込ませます。
+
+- 末尾の文字に使えるのは `a` / `b` / `c` か、何も付けないかだけ。新しい zinit は
+  それ以外（`wait'0e'` など）に「`wait ice received invalid suffix letter`」と警告する
+- 同じ文字のプラグインは書いた順に読み込まれる。4 段目以降が要るときは文字を
+  増やさず、同じ文字の中で並べる（ohmyzsh の `lib/git.zsh` や docker 関連は
+  `'0c'` で fzf-tab の後に置いている）
 
 ### fzf の関数
 
