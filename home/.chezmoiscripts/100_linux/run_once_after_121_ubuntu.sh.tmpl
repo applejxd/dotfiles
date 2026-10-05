@@ -66,10 +66,20 @@ sudo apt install -y \
     make cmake gcc g++ clang clang-tidy libclang-dev pkg-config build-essential \
     libyaml-dev
 
-# clang が選ぶ最新の gcc に合わせる (docs/spec/structure.md#clang-が-c-の標準ヘッダを見つけられるようにする)
-gcc_latest="$(find "/usr/lib/gcc/$(gcc -dumpmachine)" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort -V | tail -n 1)"
-if apt-cache show "libstdc++-${gcc_latest}-dev" >/dev/null 2>&1; then
-    sudo apt-get install -y "libstdc++-${gcc_latest}-dev"
+# clang が選ぶ gcc の版に合わせる (docs/spec/structure.md#clang-が-c-の標準ヘッダを見つけられるようにする)
+if ! clang_info="$(LC_ALL=C /usr/bin/clang -x c++ -E -v /dev/null -o /dev/null 2>&1)"; then
+    printf '%s\n' "$clang_info" >&2
+    exit 1
+fi
+gcc_version="$(printf '%s\n' "$clang_info" | sed -n 's|^Selected GCC installation: .*/||p')"
+if [[ ! "$gcc_version" =~ ^([0-9]+)(\.[0-9]+)*$ ]]; then
+    printf 'clang が選んだ gcc の版を判定できません: %s\n%s\n' "$gcc_version" "$clang_info" >&2
+    exit 1
+fi
+sudo apt-get install -y "libstdc++-${BASH_REMATCH[1]}-dev"
+if ! printf '#include <cstdio>\n' | LC_ALL=C /usr/bin/clang -x c++ -fsyntax-only -; then
+    echo "clang が C++ の標準ヘッダを見つけられません" >&2
+    exit 1
 fi
 
 # sandbox tools

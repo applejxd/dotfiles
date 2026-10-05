@@ -138,8 +138,18 @@ Pi でそこに入ると十数分かけてから失敗します。`false` にす
 
 ### clang が C++ の標準ヘッダを見つけられるようにする
 
-`121_ubuntu` は build tools の後で、`/usr/lib/gcc/<triplet>/` にある**最も新しい
-gcc の版**に合わせて `libstdc++-<版>-dev` を入れます（apt に無い版なら飛ばします）。
+`121_ubuntu` は build tools の後で、**clang が選ぶ gcc の版**に合わせて
+`libstdc++-<版>-dev` を入れます。版は `/usr/bin/clang -x c++ -E -v` の
+`Selected GCC installation:` 行から取り（`14.2.0` のような形なら先頭の `14`）、
+入れた後に `#include <cstdio>` が通ることを確かめます。版が判定できない・
+パッケージが無い・確認が通らないときはエラーで止めます（黙って飛ばすと
+`run_once_` が成功として記録され、やり直されないため）。
+
+gcc の triplet から `/usr/lib/gcc/<triplet>/` の最新版を推測する方式は採りません。
+clang の選択と一致する保証が無く、conda の gcc が PATH の先にあると
+`gcc -dumpmachine` が `x86_64-conda-linux-gnu` を返して存在しないディレクトリを
+探すためです（2026-10-05 に観測）。`/usr/bin/clang` を明示するのも、conda などの
+clang ではなく apt の clang を直すためです。
 
 clang（`clang-tidy` も）は、C++ の標準ヘッダを探すときに最も新しい gcc の版の
 ディレクトリを選びます。そのディレクトリは `libgcc-<版>-dev` だけでも作られ、
