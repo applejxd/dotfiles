@@ -1,18 +1,19 @@
 """ファイルの読み取り・持ち出し・書き込み先に関するルール。"""
+
 from __future__ import annotations
 
 import re
 
-from . import tables
+from . import shellparse, tables
 from ._shared import (
     _SENSITIVE_ENV_RE,
     FILE_READ_COMMANDS,
     _basename,
+    _commands,
     _normalize,
     _policy,
-    _segments,
 )
-from .sensitive import is_sensitive_path
+from .sensitive import sensitive_path_in_command
 
 _GIT_FILE_SUBCOMMANDS = tables.as_set("rules_files", "git_file_subcommands")
 
@@ -29,34 +30,35 @@ _BARE_ONLY_DUMP_BINS = tables.as_set("rules_files", "bare_only_dump_bins")
 ARCHIVE_COMMANDS = tables.as_list("rules_files", "archive_commands")
 
 
+def _command_text(command: shellparse.Command) -> str:
+    """メッセージに出すためのコマンド (書かれたままの語を空白で結ぶ)。"""
+    return " ".join(w.raw for w in command.words)
+
+
 def check_file_read(cmd: str) -> str | None:
     """ファイル読み込み・複製コマンドがセンシティブパスを対象にしていないか。
 
     `git diff <path>` のように、許可済みコマンドでも引数がセンシティブなら止める。
     """
-    for segment in _segments(cmd):
-        tokens = segment.split()
-        if not tokens:
+    for command in _commands(cmd):
+        argv = command.argv
+        if not argv:
             continue
-        head = _basename(tokens[0])
-        if head == "git" and len(tokens) > 2 and tokens[1] in _GIT_FILE_SUBCOMMANDS:
-            matched = is_sensitive_path(" ".join(tokens[1:]))
+        head = _basename(argv[0])
+        if head == "git" and len(argv) > 2 and argv[1] in _GIT_FILE_SUBCOMMANDS:
+            # `git diff` を `diff` のコマンドとして判定する (サブコマンドを先頭に据える)
+            sub = shellparse.Command(command.words[1:], command.redirects)
+            matched = sensitive_path_in_command(sub)
             if matched:
                 return (
-                    f"`git {tokens[1]}` がセンシティブなパスを対象にしています "
-                    f"(パターン: {matched})"
+                    f"`git {argv[1]}` がセンシティブなパスを対象にしています (パターン: {matched})"
                 )
             continue
         if head not in FILE_READ_COMMANDS:
             continue
-        matched = is_sensitive_path(
-            segment, heuristic=head not in _LISTING_COMMANDS
-        )
+        matched = sensitive_path_in_command(command, heuristic=head not in _LISTING_COMMANDS)
         if matched:
-            return (
-                f"`{head}` がセンシティブなパスを対象にしています "
-                f"(パターン: {matched})"
-            )
+            return f"`{head}` がセンシティブなパスを対象にしています (パターン: {matched})"
     return None
 
 
@@ -67,45 +69,41 @@ def check_env_exposure(cmd: str) -> str | None:
     個別参照や `env | grep -i key` のような絞り込みも拒否する。
     `env FOO=1 cmd` は normalize がラッパーとして剥がすのでここには来ない。
     """
-    for segment in _segments(cmd):
-        tokens = segment.split()
-        if not tokens:
+    for command in _commands(cmd):
+        argv = command.argv
+        if not argv:
             continue
-        head = _basename(tokens[0])
+        head = _basename(argv[0])
         if head not in ENV_EXPOSURE_BINS:
             continue
-        args = [t for t in tokens[1:] if not t.startswith("-")]
-        if not args and not (head in _BARE_ONLY_DUMP_BINS and len(tokens) > 1):
+        text = _command_text(command)
+        args = [t for t in argv[1:] if not t.startswith("-")]
+        if not args and not (head in _BARE_ONLY_DUMP_BINS and len(argv) > 1):
             return (
-                f"環境変数を全件出力するコマンドは許可されていません: `{segment.strip()}`\n"
+                f"環境変数を全件出力するコマンドは許可されていません: `{text}`\n"
                 "特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"
             )
         if any(_SENSITIVE_ENV_RE.search(a) for a in args):
-            return (
-                f"センシティブな環境変数を出力しようとしています: `{segment.strip()}`"
-            )
+            return f"センシティブな環境変数を出力しようとしています: `{text}`"
     # `env | grep -i key` のように絞り込む形
     if re.search(r"\b(?:env|printenv)\b\s*(?:\||$)", cmd) and _SENSITIVE_ENV_RE.search(cmd):
-        return (
-            f"環境変数からセンシティブな値を抽出しようとしています: `{cmd.strip()[:200]}`"
-        )
+        return f"環境変数からセンシティブな値を抽出しようとしています: `{cmd.strip()[:200]}`"
     return None
 
 
 def check_archive(cmd: str) -> str | None:
     """アーカイブコマンドがセンシティブパスを含んでいないか"""
-    for segment in _segments(cmd):
-        tokens = segment.split()
-        if not tokens:
+    for command in _commands(cmd):
+        argv = command.argv
+        if not argv:
             continue
-        head = _basename(tokens[0])
+        head = _basename(argv[0])
         if head not in ARCHIVE_COMMANDS:
             continue
-        matched = is_sensitive_path(segment)
+        matched = sensitive_path_in_command(command)
         if matched:
             return (
-                f"`{head}` でセンシティブなパスをアーカイブしようとしています "
-                f"(パターン: {matched})"
+                f"`{head}` でセンシティブなパスをアーカイブしようとしています (パターン: {matched})"
             )
     return None
 
@@ -155,13 +153,12 @@ def check_pip_redirect(cmd: str) -> str | None:
       * ``uvx pip install x``        (ランナー経由)
       * ``uv pip install x`` は許可 (uv のサブコマンドであり pip 本体ではない)
     """
-    segments = (
-        _normalize(cmd) if _policy is not None else [cmd]
-    )
-    for segment in segments:
-        tokens = segment.split()
+    segments = _normalize(cmd) if _policy is not None else [cmd]
+    for command in (c for segment in segments for c in shellparse.parse(segment)):
+        tokens = list(command.argv)
         if not tokens:
             continue
+        segment = " ".join(tokens)
         head = _basename(tokens[0])
         if _PIP_BIN_RE.match(head):
             return (

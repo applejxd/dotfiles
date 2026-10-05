@@ -136,7 +136,7 @@ def is_sensitive_path(text: str, *, heuristic: bool = True) -> str | None:
     see docs/change/0012-bash-hook-shared-parser.md
     """
     for command in shellparse.parse(text):
-        reason = _sensitive_argument(command, heuristic=heuristic)
+        reason = sensitive_path_in_command(command, heuristic=heuristic)
         if reason:
             return reason
     return None
@@ -147,7 +147,8 @@ def _pieces(value: str) -> list[str]:
     return value.split() if any(c.isspace() for c in value) else [value]
 
 
-def _sensitive_argument(command: shellparse.Command, *, heuristic: bool) -> str | None:
+def sensitive_path_in_command(command: shellparse.Command, *, heuristic: bool = True) -> str | None:
+    """解析済みの単純コマンドの引数とリダイレクトの対象に、センシティブなパスがあれば理由を返す。"""
     argv = command.argv
     candidates: list[str] = []
     if argv:

@@ -189,6 +189,10 @@ def test_ordinary_development_commands_are_not_blocked(command):
         "wc -l < ~/.aws/credentials",
         # 引用で空白を含むパス
         'cat "dir with space/.env"',
+        # 引用した先頭や末尾のリダイレクトで判定を外さない (段 7)
+        '"cat" .env',
+        "git diff .env 2>&1",
+        "tar czf out.tgz ~/.ssh 2>/dev/null",
         "tee -a ~/.zshrc < payload",
         "sed -i 's/x/y/' ~/.bash_profile",
         "rm ~/.bashrc",

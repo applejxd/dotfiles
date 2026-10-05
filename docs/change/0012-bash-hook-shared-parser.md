@@ -34,7 +34,7 @@
 | 4 | 秘密の環境変数の判定 `check_secret_env_echo` を移す | 完了 |
 | 5 | rm の判定（`rm.py`）を移す | 完了 |
 | 6 | 残りの規則の棚卸し（移すか、現状のままにするか） | 完了 |
-| 7 | 棚卸しの「A 群」（引用を見ない `split()` で引数を読む規則）を移す | 未着手 |
+| 7 | 棚卸しの「A 群」（引用を見ない `split()` で引数を読む規則）を移す | 進行中 |
 | 8 | 棚卸しの「B 群」（`shlex.split` で読む規則）は、その規則を触るときに移す | 保留 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -164,6 +164,17 @@
   `rm -rf / > /dev/null 2>&1` / `find ~ -delete 2>/dev/null`
 - テスト追加後の `pytest test/agents/ -q` → 3096 passed, 7 skipped
 - `uv run pre-commit run --all-files` → 全 Passed / `lint_docs.py` → 問題なし
+
+段 7・`rules_files.py`（2026-10-06）:
+
+- `check_file_read` / `check_env_exposure` / `check_archive` / `check_pip_redirect` を
+  `_commands`（`check_pip_redirect` は正規化済みのセグメントだけを `shellparse.parse`）の上に
+  書き直した。`git diff <path>` は文字列に戻さず、サブコマンドを先頭に据えた `Command` を作って
+  判定する（`sensitive.sensitive_path_in_command` を公開した）
+- 移行直後（テスト追加前）の `pytest test/agents/ -q` → 3096 passed, 7 skipped
+- テストを追加: `"cat" .env` / `git diff .env 2>&1` / `tar czf out.tgz ~/.ssh 2>/dev/null` /
+  `python3 -m 'pip' install x` / `pip install x 2>&1`。追加後の
+  `test_check_bash_sensitive.py` と `test_check_bash_shell.py` → 661 passed, 7 skipped
 
 ## 重要な更新
 

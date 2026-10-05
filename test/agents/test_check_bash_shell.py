@@ -648,6 +648,9 @@ def test_pip_is_denied_everywhere(command):
         "uvx pip install x",
         "python3 -mpip install x",
         "python -m  pip install x",
+        # 引用した語や末尾のリダイレクトで判定を外さない (段 7)
+        "python3 -m 'pip' install x",
+        "pip install x 2>&1",
     ],
 )
 def test_indirect_pip_is_denied(command):
