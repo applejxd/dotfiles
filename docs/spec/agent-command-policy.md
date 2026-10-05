@@ -333,8 +333,12 @@ OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生の�
 - pip の誘導先は目的で分ける（依存追加は `uv add`、環境への導入は `uv pip install` / `uv sync`、
   単発 CLI は `uvx`）。poetry / pipenv は止めない
 - 規則は行頭・`;` `&` `|` 改行の直後のコマンドにだけ当てる。引用中の文（`echo "rm -rf ."`）や
-  `grep -r 'rm -rf' .` は止めない。`git commit -m` の本文は既存規則と同じ `unless` で外す
-  （`-m` の後ろの `;` 以降に書いた文章は素通りする。承知の穴）
+  `grep -r 'rm -rf' .` は止めない。`$(rm …)` のように `(` の直後のものも当たらない（承知の穴）
+- `git commit -m` / `gh … --body` の本文は `unless` で外す。外すのはコマンド全体が git / gh の
+  1 コマンドだけのとき（区切り・`$`・バッククォート・括弧・リダイレクトを引用の外に含まない。
+  引用内の `$(cat <<'EOF' … EOF)` は認める）に限る。以前の `unless` はコマンドのどこかに
+  `git … -m` があれば全体を見送り、`git commit -m x && rm -rf ~` が素通りしていた。
+  heredoc の誘導と伏字化（`deny_path_unless`）は全体に当てる形のまま（承知の割り切り）
 - **ocs の内側にも効く。** `ocs` が捨てるのは permission（`drop_shell`）で guide 規則ではなく、
   同じ `rules.json` を plugin が読む。permission を捨てて既定 allow にした設定でも、
   上の例が deny されることを実機（`opencode:probe`）で確認した

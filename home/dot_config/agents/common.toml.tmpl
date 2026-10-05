@@ -1195,32 +1195,33 @@ message = "ヒアドキュメントでスクリプトを渡さないでくださ
 # see docs/research/opencode/permission/early-guard.md
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n])[ \t]*((uv[ \t]+run|mise[ \t]+exec[ \t]+--)[ \t]+)?(pip3?(\.\d+)?|python[0-9.]*[ \t]+-m[ \t]*pip3?(\.\d+)?)([ \t]|$)'''
-unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+unless = '''^\s*(git|gh)\s(?=[^\n]*\s-{1,2}(m|am|message|body|title)[\s=])(?:[^;&|\n'"`$()<>\\]|\\[^\n]|'[^']*'|"(?:[^"\\`$]|\\.|\$\(cat <<-?'(\w+)'\n[\s\S]*?\n\3\n\s*\))*")*$'''
 early = true
 message = "pip は使わないでください。依存の追加は `uv add <pkg>` (pyproject.toml と uv.lock を更新)、環境への導入は `uv pip install <pkg>` か `uv sync`、単発の CLI は `uvx <tool>` を使ってください。"
 
 # 危険な rm / find の「うっかり防止」。止める具体例だけを正規表現で限る。完全な保護ではない。
 # ★ocs の中でも効く (ADR-0012 の部分変更)。通常の掃除 (.tmp/ や build の削除) は止めない。
-# ★prose (git commit -m の本文) は上と同じ unless で外す。
+# ★prose (git commit -m の本文) は上の pip と同じ unless で外す。unless はコマンドが
+#   git / gh の 1 コマンドだけのときに限る (連結・置換を含めると見送らない)。
 # see docs/spec/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n])[ \t]*rm[ \t]+([^\s;&|]+[ \t]+)*["']?(\./)?([^\s;&|"']*/)?\.git(/[^\s;&|"']*)?["']?(?=[\s;&|]|$)'''
-unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+unless = '''^\s*(git|gh)\s(?=[^\n]*\s-{1,2}(m|am|message|body|title)[\s=])(?:[^;&|\n'"`$()<>\\]|\\[^\n]|'[^']*'|"(?:[^"\\`$]|\\.|\$\(cat <<-?'(\w+)'\n[\s\S]*?\n\3\n\s*\))*")*$'''
 message = ".git (リポジトリの履歴) を rm で直接消さないでください。履歴の整理は git のコマンドで行い、消す必要があるときは利用者に依頼してください。"
 
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n])[ \t]*rm[ \t]+([^\s;&|]+[ \t]+)*["']?((~|\$HOME|\$\{HOME\})/?\*?|/\*?)["']?(?=[\s;&|]|$)'''
-unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+unless = '''^\s*(git|gh)\s(?=[^\n]*\s-{1,2}(m|am|message|body|title)[\s=])(?:[^;&|\n'"`$()<>\\]|\\[^\n]|'[^']*'|"(?:[^"\\`$]|\\.|\$\(cat <<-?'(\w+)'\n[\s\S]*?\n\3\n\s*\))*")*$'''
 message = "~ / $HOME / / を rm の対象にしないでください。消すものを具体的なパスで指定してください。"
 
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n])[ \t]*rm[ \t]+([^\s;&|]+[ \t]+)*(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)[ \t]+([^\s;&|]+[ \t]+)*["']?(\.{1,2}/?|\./\*|\*|\.\*)["']?(?=[\s;&|]|$)'''
-unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+unless = '''^\s*(git|gh)\s(?=[^\n]*\s-{1,2}(m|am|message|body|title)[\s=])(?:[^;&|\n'"`$()<>\\]|\\[^\n]|'[^']*'|"(?:[^"\\`$]|\\.|\$\(cat <<-?'(\w+)'\n[\s\S]*?\n\3\n\s*\))*")*$'''
 message = "作業ディレクトリ全体 (. / .. / *) を再帰的に消さないでください。消すものを具体的なパスで指定してください (例: rm -rf .tmp/foo)。"
 
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n])[ \t]*find[ \t]+(-[HLP][ \t]+)*["']?(/|~/?|\$HOME/?|\$\{HOME\}/?|(\./)?\.git(/[^\s;&|"']*)?)["']?(?=[ \t])[^\n;&|]*[ \t](-delete|-exec(dir)?[ \t]+rm)\b'''
-unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+unless = '''^\s*(git|gh)\s(?=[^\n]*\s-{1,2}(m|am|message|body|title)[\s=])(?:[^;&|\n'"`$()<>\\]|\\[^\n]|'[^']*'|"(?:[^"\\`$]|\\.|\$\(cat <<-?'(\w+)'\n[\s\S]*?\n\3\n\s*\))*")*$'''
 message = "/ ~ .git を起点にした find の -delete / -exec rm はしないでください。起点を消す範囲の具体的なディレクトリに絞ってください。"
 
 # shell 出力の伏字化。誘導と結果フィルタを抜けて shell を通ったものへの安全網。

@@ -97,6 +97,13 @@ BLOCKED = [
     ("find $HOME -delete", "find"),
     ("find .git -delete", "find"),
     ("find / -name '*.log' -exec rm -f {} ;", "find"),
+    # git / gh のメッセージ指定を前に付けても、連結・置換の側は止める
+    ("git commit -m x && rm -rf ~", "$HOME"),
+    ("git commit -m x; rm -rf .", "作業ディレクトリ"),
+    ("git commit -m x\nrm -rf ~", "$HOME"),
+    ("git commit -m 'a' && find / -delete", "find"),
+    ("git commit -m x && pip install x", "uv add"),
+    ("git commit -m \"$(cat <<'EOF'\nx\nEOF\n)\" && rm -rf ~", "$HOME"),
 ]
 
 # 止めてはいけない例 (誤検知チェック)
@@ -144,6 +151,8 @@ ALLOWED = [
     'echo "rm -rf /"',
     "git commit -m 'docs: rm -rf . と pip install を止める'",
     'git commit -m "x; rm -rf ."',
+    "git commit -m \"$(cat <<'EOF'\nfix: x\n\nrm -rf ~ を止める\nEOF\n)\"",
+    'gh pr create --title x --body "a; find / -delete を止める"',
 ]
 
 
