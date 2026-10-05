@@ -130,7 +130,7 @@ zinit light zsh-users/zsh-autosuggestions
 # nocompletions を付けないと zinit が ohmyzsh 配下の _* を全て
 # ~/.zinit/completions/ へリンクしてしまい、未ロードのプラグイン用補完が
 # fpath に混ざる (例: zsh-z 用の _z が `_z:39: command not found: zshz` を出す)。
-zinit ice wait'0e' lucid blockf nocompletions pick"lib/git.zsh"
+zinit ice wait'0c' lucid blockf nocompletions pick"lib/git.zsh"
 zinit light ohmyzsh/ohmyzsh
 
 #------#
@@ -145,16 +145,16 @@ zinit light sindresorhus/pure
 #--------#
 
 if command -v docker >/dev/null 2>&1; then
-    zinit ice wait'0e' lucid
+    zinit ice wait'0c' lucid
     zinit light felixr/docker-zsh-completion
 
-    zinit ice wait'0e' lucid pick"docker-fzf.zsh"
+    zinit ice wait'0c' lucid pick"docker-fzf.zsh"
     zinit load mnowotnik/docker-fzf-completion
 
-    zinit ice wait'0e' lucid pick'docker-fzf'
+    zinit ice wait'0c' lucid pick'docker-fzf'
     zinit load MartinRamm/fzf-docker
 
-    zinit ice wait'0e' lucid as"program" pick"dfimage.bash"
+    zinit ice wait'0c' lucid as"program" pick"dfimage.bash"
     zinit load RyodoTanaka/.bash_extend
 fi
 
