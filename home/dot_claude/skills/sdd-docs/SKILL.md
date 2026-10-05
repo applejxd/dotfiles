@@ -51,8 +51,9 @@ python3 ~/.claude/skills/sdd-docs/scripts/check_refs.py --save
 `--baseline` にも同じパスを渡す。
 
 スクリプトは `python3 <パス>` でそのまま呼ぶ（パスを変数に入れない・`uv run` を
-挟まない。OpenCode はこの形だけを確認なしに通す）。スキルを別の場所に置いたときは
-パスを読み替え、Windows では `python3` を `py -3 -X utf8` に置き換える。
+挟まない・リダイレクトや `2>&1` を付けない。OpenCode はこの形だけを確認なしに通す）。
+スキルを別の場所に置いたときはパスを読み替え、Windows では `python3` を
+`py -3 -X utf8` に置き換える。
 
 ## 共通の原則
 

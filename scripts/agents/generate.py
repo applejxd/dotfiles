@@ -890,6 +890,13 @@ def opencode_skill_script_rules(common: dict[str, Any]) -> tuple[list[str], list
     手段になるので、allow の後ろで deny にする。
     see docs/spec/agent-config-generation.md#スキルのスクリプト
     """
+    allow, heads = _skill_script_allow_and_heads(common)
+    deny = [r for head in heads for r in (f"{head} *>*", f"{head} *<*")]
+    return allow, deny
+
+
+def _skill_script_allow_and_heads(common: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """スキルのスクリプトの allow と、前方一致で通す形の先頭 (リダイレクトを deny する対象)。"""
     cfg = common.get("opencode", {}).get("skill_scripts", {})
     runners = cfg.get("runners", {})
     roots = tuple(
@@ -897,7 +904,7 @@ def opencode_skill_script_rules(common: dict[str, Any]) -> tuple[list[str], list
         for d in common.get("opencode", {}).get("external_read", {}).get("paths", [])
     )
     allow: list[str] = []
-    deny: list[str] = []
+    heads: list[str] = []
     for entry in cfg.get("allow", []):
         script = str(entry.get("script", ""))
         where = f"[opencode.skill_scripts] の {script!r}"
@@ -917,8 +924,8 @@ def opencode_skill_script_rules(common: dict[str, Any]) -> tuple[list[str], list
                 for sub in [] if exact else entry.get("subcommands") or [""]:
                     head = f"{runner} {path}" + (f" {sub}" if sub else "")
                     allow.append(f"{head} *")
-                    deny += [f"{head} *>*", f"{head} *<*"]
-    return allow, deny
+                    heads.append(head)
+    return allow, heads
 
 
 def build_opencode_sandbox_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
@@ -1220,6 +1227,60 @@ def _deny_guide_exempt_agents(common: dict[str, Any], command: str) -> list[str]
 
 
 def opencode_deny_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
+    """``rules.json`` の ``deny_guide`` (静的 deny を説明付きで止める前段の規則)。"""
+    return _bash_deny_guide_rules(common) + _skill_script_deny_guide_rules(common)
+
+
+# 前方一致の先頭の後ろで、セグメントを越えずに > / < へ届く形。
+# & の手前で打ち切る (2>&1 は > が先に来るので当たる。&> は静的 deny に任せる)。
+SKILL_REDIRECT_TAIL = r" [^;|&\n]*[<>]"
+
+
+def _skill_script_deny_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
+    """スキルのスクリプトのリダイレクトの静的 deny に説明を付ける。
+
+    静的 deny (``{head} *>*`` / ``{head} *<*``) と同じ範囲だけを止める。``exact`` と
+    ``subcommands`` に無い形は静的 deny に無いので対象にしない。
+    see docs/spec/agent-config-generation.md#スキルのスクリプト
+    """
+    _, heads = _skill_script_allow_and_heads(common)
+    if not heads:
+        return []
+    message = str(common.get("opencode", {}).get("skill_scripts", {}).get("redirect_message") or "")
+    if not message:
+        raise SystemExit("[opencode.skill_scripts] は redirect_message が要る")
+
+    normal = _static_shell_denies(build_opencode_permissions(common))
+    isolated = (
+        _static_shell_denies(build_opencode_sandbox_permissions(common))
+        if common.get("opencode", {}).get("sandbox")
+        else normal
+    )
+    merged: dict[tuple[bool, tuple[str, ...]], list[str]] = {}
+    for head in heads:
+        resource = f"{head} *>*"
+        if resource not in normal:
+            continue
+        exempt = tuple(_deny_guide_exempt_agents(common, head))
+        merged.setdefault((resource not in isolated, exempt), []).append(head)
+
+    out: list[dict[str, Any]] = []
+    for (not_isolated, exempt), group in merged.items():
+        names = "|".join(_regex_escape(h) for h in group)
+        entry: dict[str, Any] = {
+            "pattern": f"{DENY_GUIDE_SEGMENT_START}(?:{names}){SKILL_REDIRECT_TAIL}",
+            "unless": DENY_GUIDE_UNLESS,
+            "message": message,
+        }
+        if not_isolated:
+            entry["not_isolated"] = True
+        if exempt:
+            entry["except_agents"] = list(exempt)
+        out.append(entry)
+    return out
+
+
+def _bash_deny_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
     """``[bash.deny_guide]`` から ``rules.json`` の ``deny_guide`` (前段の停止規則) を作る。
 
     全 deny が分類のどれか 1 つに属さないと生成を止める。通常版と隔離版の最終の静的 deny から

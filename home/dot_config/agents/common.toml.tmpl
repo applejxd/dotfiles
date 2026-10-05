@@ -1303,6 +1303,7 @@ paths = [
 # see docs/spec/agent-config-generation.md#スキルのスクリプト
 [opencode.skill_scripts]
 runners = { py = ["python3"], sh = ["bash"] }
+redirect_message = "スキルのスクリプトにはリダイレクト (> / >> / < / 2>&1 など) を付けずに呼んでください。stdout も stderr もそのまま返ります。ファイルへ書くときは write ツールを使ってください。"
 
 [[opencode.skill_scripts.allow]]
 script = "~/.claude/skills/sdd-docs/scripts/lint_docs.py"

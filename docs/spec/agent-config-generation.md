@@ -513,10 +513,16 @@ subcommands = ["paths", "lint", "read"]
   `test_skill_docs_call_their_scripts_in_the_allowed_form` が固定する）
 - **リダイレクトは deny。** 前方一致の allow はリダイレクトを含む形にも当たり、
   `wc *` と同じく任意書き込みの手段になる。`2>&1` も止まる（止まったら付けずに
-  呼び直せばよい）
+  呼び直せばよい）。静的 deny のままだとモデルには `Permission denied: shell` しか
+  返らないので、同じ範囲を `deny_guide` にも出し、`redirect_message` の説明付きで
+  前段で止める（[前段停止](agent-command-policy.md#opencode-の-deny-の説明前段停止)）。
+  前段は静的 deny より広く止めない: `exact` の形・`subcommands` に無い形・引用符付き・
+  `&` を挟む形（`&>`）は前段で見送り、静的 deny か確認に任せる
 - **runner に `uv run --no-project python` を使わない。** 作業ツリーの
   `.python-version` に実行ファイルのパスが書いてあると、それを起動する（実測）。
-  `python3` は `PATH` の python を使い、作業ツリーの設定を読まない
+  `python3` は uv の設定探索を通らないが、`PATH` の解決（mise の shim・venv）で
+  作業ツリーに従う余地はある（OpenCode の shell での解決先は未確認）。
+  `--no-config` や Python の明示で避けられた実測もあり、uv 一般が危険という意味ではない
 - **引数で書き込み先や実行するものを決められる形は載せない。** 引数の中身は
   静的な照合では検査できない。`--save <パス>` を `ask` で外そうとしても、
   `'--'save`・`$X`・argparse の省略形（`--sa`）で当たらなくなる（実測）。

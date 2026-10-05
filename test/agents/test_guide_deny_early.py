@@ -538,6 +538,85 @@ def test_v1_exempt_agent_is_not_stopped_by_the_plugin(tmp_path):
     assert out[0] is None and out[1]
 
 
+# --- スキルのスクリプトのリダイレクト ------------------------------------------
+
+SKILL_HEADS = gen._skill_script_allow_and_heads(COMMON)[1]
+SKILL_MESSAGE = COMMON["opencode"]["skill_scripts"]["redirect_message"]
+LINT_DOCS = "python3 ~/.claude/skills/sdd-docs/scripts/lint_docs.py"
+CHECKPOINT = "python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
+CHECK_REFS = "python3 ~/.claude/skills/sdd-docs/scripts/check_refs.py"
+
+SKILL_STOP = [
+    f"{LINT_DOCS} 2>&1",
+    f"{LINT_DOCS} > out.txt",
+    f"{LINT_DOCS} >> out.txt",
+    f"{LINT_DOCS} < in.txt",
+    f"{LINT_DOCS} >/dev/null",
+    f"{LINT_DOCS} 2>&1 | tail -5",
+    f"ls && {LINT_DOCS} > out.txt",
+    f"{CHECKPOINT} read --session s 2>&1",
+    f"{CHECKPOINT} lint x > out.txt",
+    LINT_DOCS.replace("~", gen.expand_user("~")) + " > out.txt",
+]
+SKILL_PASS = [
+    LINT_DOCS,
+    f"{LINT_DOCS} | tail -5",
+    f"{LINT_DOCS}; echo a > out.txt",
+    f"{LINT_DOCS} && echo a > out.txt",
+    f"{LINT_DOCS}.bak > out.txt",
+    f'python3 "{LINT_DOCS[8:]}" > out.txt',
+    f"{CHECKPOINT} write x > out.txt",
+    f"{CHECKPOINT} lint 'a b' > out.txt",
+    f"{CHECK_REFS} --save > out.txt",
+    f"{CHECK_REFS} --save",
+]
+
+
+def test_skill_redirect_rules_are_generated():
+    rules = [
+        r
+        for r in gen.build_opencode_guide({}, COMMON)["deny_guide"]
+        if r["message"] == SKILL_MESSAGE
+    ]
+    assert rules
+    for head in SKILL_HEADS:
+        assert any(re.search(r["pattern"], f"{head} > x") for r in rules), head
+
+
+def test_skill_redirect_rules_need_a_message():
+    common = copy.deepcopy(COMMON)
+    del common["opencode"]["skill_scripts"]["redirect_message"]
+    with pytest.raises(SystemExit, match="redirect_message"):
+        gen.build_opencode_guide({}, common)
+
+
+def test_skill_redirect_rules_survive_without_bash_deny_guide():
+    common = copy.deepcopy(COMMON)
+    del common["bash"]["deny_guide"]
+    rules = gen.build_opencode_guide({}, common)["deny_guide"]
+    assert rules and all(r["message"] == SKILL_MESSAGE for r in rules)
+
+
+@pytest.mark.parametrize("agent", ["build", "bypass", "fleet-worker"])
+def test_skill_redirects_are_explained(tmp_path, agent):
+    cases = [(c, agent, "shell") for c in SKILL_STOP + SKILL_PASS]
+    out = _run(tmp_path, cases)
+    static = static_for(agent, False)
+    for cmd, got in zip(SKILL_STOP, out[: len(SKILL_STOP)], strict=True):
+        assert static.denies(cmd), f"静的 deny に無い例を置いた: {cmd!r}"
+        assert got == SKILL_MESSAGE, f"{cmd!r}: {got!r}"
+    for cmd, got in zip(SKILL_PASS, out[len(SKILL_STOP) :], strict=True):
+        assert got is None, f"{cmd!r} を前段で止めた: {got!r}"
+
+
+def test_skill_redirects_are_not_stopped_in_ocs(tmp_path):
+    """隔離版は既定 allow でスキルの静的 deny を捨てる。前段も止めない。"""
+    out = _run(tmp_path, [(c, "build", "shell") for c in SKILL_STOP], isolated=True)
+    static = static_for("build", True)
+    for cmd, got in zip(SKILL_STOP, out, strict=True):
+        assert got is None or static.denies(cmd), f"{cmd!r} を隔離版で止めた: {got!r}"
+
+
 # --- 部分集合の性質 ----------------------------------------------------------
 
 SHAPES = [
@@ -632,7 +711,7 @@ def _corpus() -> list[str]:
     for cmd in CLASSIFIED:
         for shape in SHAPES:
             seen[shape.format(c=cmd)] = None
-    for cmd in EXTRA:
+    for cmd in EXTRA + SKILL_STOP + SKILL_PASS:
         seen[cmd] = None
     return list(seen)
 

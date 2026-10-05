@@ -31,9 +31,9 @@ allowed-tools: Read, Edit, Bash, Glob, Grep
 python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py paths --session "<セッションID>" --ensure-ignored
 ```
 
-CLI は `python3 <パス>` でそのまま呼ぶ（パスを変数に入れない・`uv run` を挟まない。
-OpenCode は `paths` / `lint` / `read` をこの形だけ確認なしに通す）。Windows では
-`python3` を `py -3 -X utf8` に置き換える。
+CLI は `python3 <パス>` でそのまま呼ぶ（パスを変数に入れない・`uv run` を挟まない・
+リダイレクトや `2>&1` を付けない。OpenCode は `paths` / `lint` / `read` をこの形だけ
+確認なしに通す）。Windows では `python3` を `py -3 -X utf8` に置き換える。
 
 1. 上で保存先を解決する。**固定パスを自分で組み立てない**
    （保存先はセッション別。別セッションの記録を読む事故を防ぐ）

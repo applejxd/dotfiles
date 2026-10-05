@@ -374,6 +374,10 @@ deny に無い項目・`elsewhere` を止める early 規則が無い、のい�
 混ぜない（混ぜると、隔離版やエージェントの allow など**静的 deny に無い場面**でも止めてしまう）。
 Claude / Copilot の生成物は変わらない。
 
+スキルのスクリプトのリダイレクトの静的 deny（`[opencode.skill_scripts]`）も同じ `deny_guide` に出す
+（説明は `redirect_message`。範囲は [スキルのスクリプト](agent-config-generation.md#スキルのスクリプト)）。
+`[bash.deny_guide]` が無くても生成する。
+
 ### 前段で止めるのは静的 deny の部分集合だけ
 
 OpenCode の静的照合は、scanner が分割した各セグメントに `cmd` / `cmd *` のワイルドカードを当てる
