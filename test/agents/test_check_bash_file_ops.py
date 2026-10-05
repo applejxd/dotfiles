@@ -344,6 +344,10 @@ def test_git_directory_rm_is_denied_through_expansion(command):
         "\\rm -rf ~",
         '"r"m -rf ~',
         "'rm' -rf /",
+        # 末尾のリダイレクトを対象と取り違えて見逃さない
+        "rm -rf ~ 2>/dev/null",
+        "rm -rf / > /dev/null 2>&1",
+        "find ~ -delete 2>/dev/null",
     ],
 )
 def test_catastrophic_rm_targets_are_denied(command):

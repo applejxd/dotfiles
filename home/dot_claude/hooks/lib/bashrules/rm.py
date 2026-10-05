@@ -3,11 +3,13 @@
 壊滅的な対象 (ルート・ホーム・workspace 全体・.git 配下) は deny、workspace
 内と確証できるものは承認を省く。その「確証できるか」の判定が中心。
 """
+
 from __future__ import annotations
 
 import fnmatch
 import os
 import re
+from collections.abc import Callable
 
 from . import tables
 from ._shared import (
@@ -15,12 +17,11 @@ from ._shared import (
     _basename,
     _canonical_rm_target,
     _changes_base_dir,
+    _commands,
     _is_find_placeholder,
-    _normalize,
     _policy,
     _realpath_stays_inside,
     _resolves_into_scratch,
-    _segments,
     _workspace_root,
     payload_cwd,
 )
@@ -30,7 +31,7 @@ _FIND_DANGEROUS_EXEC_RE = re.compile(
     r"\bfind\b.+?"
     r"(?:"
     r"-exec\s+(?:rm|unlink|shred|rmdir)\b"  # -exec rm/unlink/shred/rmdir
-    r"|-delete\b"                            # -delete フラグ
+    r"|-delete\b"  # -delete フラグ
     r")",
     re.IGNORECASE | re.DOTALL,
 )
@@ -49,11 +50,8 @@ def check_find_dangerous(cmd: str) -> str | None:
     if _find_targets_scratch_only(cmd):
         return None
     # find の探索起点が壊滅的なら deny (check_rm_root_guard 相当の扱い)
-    for segment in _segments(cmd):
-        tokens = segment.split()
-        if not tokens or _basename(tokens[0]) != "find":
-            continue
-        for token in tokens[1:]:
+    for argv in _argvs_of(cmd, _is_find):
+        for token in argv[1:]:
             if token.startswith("-"):
                 break
             if _is_catastrophic_rm_target(token):
@@ -69,11 +67,8 @@ def check_find_root_guard(cmd: str) -> str | None:
     """`find ~ -delete` のように壊滅的な範囲を一括削除していないか。"""
     if not _FIND_DANGEROUS_EXEC_RE.search(cmd):
         return None
-    for segment in _segments(cmd):
-        tokens = segment.split()
-        if not tokens or _basename(tokens[0]) != "find":
-            continue
-        for token in tokens[1:]:
+    for argv in _argvs_of(cmd, _is_find):
+        for token in argv[1:]:
             if token.startswith("-"):
                 break
             if _is_catastrophic_rm_target(token):
@@ -112,6 +107,29 @@ _HOME_DIR_RE = re.compile(r"^/(?:home|Users)/[^/]+$")
 
 
 _RM_BIN_RE = re.compile(r"^(?:/\S*/)?(?:rm|rmdir|unlink)$")
+
+
+def _is_rm(head: str) -> bool:
+    return bool(_RM_BIN_RE.match(_basename(head)))
+
+
+def _is_find(head: str) -> bool:
+    return _basename(head) == "find"
+
+
+def _argvs_of(cmd: str, is_target: Callable[[str], bool]) -> list[list[str]]:
+    """正規化済みのセグメントと元の文字列から、``is_target`` のコマンドの引数列を集める。
+
+    ``shellparse`` の値 (引用・エスケープを外した語) を使い、リダイレクトは引数に含めない。
+    ``timeout 5 rm x`` のような実行ラッパーは外す。
+    see docs/change/0012-bash-hook-shared-parser.md
+    """
+    out: list[list[str]] = []
+    for command in _commands(cmd):
+        argv = _strip_exec_wrappers(list(command.argv))
+        if argv and is_target(argv[0]):
+            out.append(argv)
+    return out
 
 
 def _is_catastrophic_rm_target(token: str) -> bool:
@@ -176,15 +194,11 @@ def _rm_is_workspace_local(cmd: str) -> bool:
         return False
 
     saw_target = False
-    for segment in _segments(cmd):
-        tokens = _strip_exec_wrappers(segment.strip().split())
-        if not tokens or not _RM_BIN_RE.match(_basename(tokens[0].strip("'\""))):
-            continue
-        targets = [t for t in tokens[1:] if not t.startswith("-")]
+    for argv in _argvs_of(cmd, _is_rm):
+        targets = [t for t in argv[1:] if not t.startswith("-")]
         if not targets:
             return False
-        for raw in targets:
-            token = raw.strip("'\"")
+        for token in targets:
             if not token:
                 return False
             # 展開・ブレース展開は静的に解決できない
@@ -196,10 +210,7 @@ def _rm_is_workspace_local(cmd: str) -> bool:
             if ".." in components:
                 return False
             # `.g*t` のように glob がドットディレクトリへ届く形は読めない
-            if any(
-                c.startswith(".") and any(g in c for g in "*?[")
-                for c in components
-            ):
+            if any(c.startswith(".") and any(g in c for g in "*?[") for c in components):
                 return False
             # `*` だけのようなトークンは範囲が読めない
             if not re.search(r"[^*?/.\[\]]", token):
@@ -231,18 +242,14 @@ def _rm_targets_scratch_only(cmd: str) -> bool:
 
     saw_target = False
     find_scratch_only: bool | None = None
-    for segment in _segments(cmd):
-        tokens = _strip_exec_wrappers(segment.strip().split())
-        if not tokens or not _RM_BIN_RE.match(_basename(tokens[0].strip("'\""))):
-            continue
-        targets = [t for t in tokens[1:] if not t.startswith("-")]
+    for argv in _argvs_of(cmd, _is_rm):
+        targets = [t for t in argv[1:] if not t.startswith("-")]
         if not targets:
             return False
         # `find ... -exec rm {} +` 展開形の終端記号は削除対象ではない
-        if any(_is_find_placeholder(t.strip("'\"")) for t in targets):
-            targets = [t for t in targets if t.strip("'\"") not in ("+", ";", "\\;")]
-        for raw in targets:
-            token = raw.strip("'\"")
+        if any(_is_find_placeholder(t) for t in targets):
+            targets = [t for t in targets if t not in ("+", ";", "\\;")]
+        for token in targets:
             if _is_find_placeholder(token):
                 # `find ./.tmp -exec rm {} +` を normalize が `rm {}` に展開した形。
                 # 実際の対象は find の探索起点なので、そちらで判定する
@@ -273,11 +280,8 @@ def _find_targets_scratch_only(cmd: str) -> bool:
         return False
 
     saw_root = False
-    for segment in _segments(cmd):
-        tokens = segment.strip().split()
-        if not tokens or _basename(tokens[0].strip("'\"")) != "find":
-            continue
-        rest = tokens[1:]
+    for argv in _argvs_of(cmd, _is_find):
+        rest = argv[1:]
         roots: list[str] = []
         for token in rest:
             if token.startswith("-"):
@@ -287,7 +291,7 @@ def _find_targets_scratch_only(cmd: str) -> bool:
             # 起点の省略は cwd 全体が対象になる
             return False
         for root in roots:
-            if not _resolves_into_scratch(root.strip("'\""), workspace):
+            if not _resolves_into_scratch(root, workspace):
                 return False
             saw_root = True
         for index, token in enumerate(rest):
@@ -296,7 +300,7 @@ def _find_targets_scratch_only(cmd: str) -> bool:
             # `-exec <cmd> [args...] ;|+` の args を見る
             cursor = index + 2
             while cursor < len(rest) and rest[cursor] not in (";", "\\;", "+"):
-                if rest[cursor].strip("'\"") != "{}":
+                if rest[cursor] != "{}":
                     return False
                 cursor += 1
     return saw_root
@@ -312,25 +316,20 @@ def check_rm_root_guard(cmd: str) -> str | None:
     `cd /elsewhere && rm -rf /` や `sh -c "rm -rf ~"` のような回避を防ぐため、
     ポリシー照合と同じ normalize を通してから各セグメントを検査する。
     normalize は shlex を通るため ``${HOME}`` の波括弧が落ちることがある。
-    元の文字列も併せて検査して取りこぼさないようにする。
+    元の文字列も併せて検査して取りこぼさないようにする (``_argvs_of`` が両方を見る)。
     """
-    segments = list(_normalize(cmd)) if _policy is not None else []
-    segments.append(cmd)
-    for segment in segments:
-        tokens = segment.split()
-        if not tokens or not _RM_BIN_RE.match(_basename(tokens[0])):
-            continue
-        if any(t == "--no-preserve-root" for t in tokens):
+    for argv in _argvs_of(cmd, _is_rm):
+        if "--no-preserve-root" in argv:
             return (
                 "`rm --no-preserve-root` は許可されていません。\n"
                 "ルートディレクトリの削除は承認の対象外です。"
             )
-        for token in tokens[1:]:
+        for token in argv[1:]:
             if token.startswith("-"):
                 continue
             # workspace ルートの一括削除。`find . -delete` のような探索起点とは
             # 意味が違うので、rm 側でだけ判定する
-            if token.strip().strip("'\"") in _WORKSPACE_ROOT_TOKENS:
+            if token.strip() in _WORKSPACE_ROOT_TOKENS:
                 return (
                     f"`rm` が作業ディレクトリ全体 (`{token}`) を対象にしています。\n"
                     "git 管理外のファイルまで失われるため承認の対象外です。\n"

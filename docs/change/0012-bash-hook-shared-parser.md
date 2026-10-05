@@ -32,17 +32,18 @@
 | 2 | 書き込み先の判定 `_write_targets` を移す | 完了 |
 | 3 | センシティブなパスの判定 `is_sensitive_path` を移す | 完了 |
 | 4 | 秘密の環境変数の判定 `check_secret_env_echo` を移す | 完了 |
-| 5 | rm の判定（`rm.py`）を移す | 未着手 |
+| 5 | rm の判定（`rm.py`）を移す | 完了 |
 | 6 | 残りの規則の棚卸し（移すか、現状のままにするか） | 未着手 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
 ## 現在地
 
-- 段 1〜4 を終えた。解析関数 `bashrules/shellparse.py` は「単純コマンド」（引数の列と
+- 段 1〜5 を終えた。解析関数 `bashrules/shellparse.py` は「単純コマンド」（引数の列と
   リダイレクトの列）の並びを返す。書き込み先の判定（`_write_targets`）、ガード設定の上書きの
   判定（`rules_guard.py`）、取得したファイルの保存先（`http.py`）、センシティブなパスの判定
-  （`is_sensitive_path`）、秘密の環境変数の判定（`check_secret_env_echo`）がこれを使う
+  （`is_sensitive_path`）、秘密の環境変数の判定（`check_secret_env_echo`）、rm / find の判定
+  （`rm.py`。`_argvs_of` で対象のコマンドの引数列を集める）がこれを使う
 - `is_sensitive_path` は関数の形を変えず、中で単純コマンドに分けてコマンドごとに判定する。
   呼び出し元は 1 コマンド・インラインコードを含むセグメント・`xargs` を含むコマンド全体と
   まちまちなので、以前の振る舞いを落とさないよう次の 2 点を残した
@@ -58,6 +59,9 @@
   読み飛ばすと、後者の検査が漏れる
 - bashrules 内のリダイレクトの正規表現（`REDIRECT_TARGET_RE`）は段 4 で消した。別の hook
   （`executable_redirect-tmp.py`、`/tmp` を `./.tmp` へ誘導する）は独自の正規表現を持つ（段 6 の対象）
+- `normalize` は語を空白で結び直し、空白を含む語にしか引用符を付け直さない。もとは引用されていた
+  `;` などを解析し直すと区切りとして扱うことがある。元の文字列も併せて解析するので、引用どおりの
+  読み方も必ず調べる（`_segments()` が両方を返す）
 
 ## 未解決点
 
@@ -66,8 +70,8 @@
 
 ## 次の調査・実験
 
-- 段 5（rm の判定。`rm.py`）を移す。`_rm_is_workspace_local` などが元の文字列を
-  `split()` / `shlex.split` で読んでいる箇所を `Command.argv` に載せ替える
+- 段 6（残りの規則の棚卸し）。`segment.split()` / `shlex.split` / コマンド全体への正規表現が
+  残っている規則を一覧にし、移すか現状のままにするかを決める
 - 退行が出たら、その入力をテストに足してから直す
 
 ## 評価基準
@@ -96,6 +100,7 @@
 | `bashrules/_shared.py` の `_write_targets` | 正規表現 + `split()` → `shellparse.parse` | 2026-10-05 の穴（末尾の `2>&1`、`>& file`） | 段 2 で適用 |
 | `bashrules/sensitive.py` の `is_sensitive_path` | `split()` → `shellparse.parse` のコマンドごと | 引用・リダイレクトの取り違え（`grep -e. .env` など） | 段 3 で適用 |
 | `bashrules/sensitive.py` の `check_secret_env_echo` | 手書きの単引用符除去 + `REDIRECT_TARGET_RE` → `Word.expandable` とリダイレクトの列 | 二重引用符の中の `'` の取り違え（`"Don't"`） | 段 4 で適用 |
+| `bashrules/rm.py`（rm / find の判定 6 関数） | `segment.split()` と手書きの引用除去 → `_argvs_of`（`shellparse` の値） | 引用・リダイレクトの取り違え（`\rm`、末尾の `2>/dev/null`） | 段 5 で適用 |
 
 ## 実装・検証
 
@@ -129,6 +134,17 @@
   止める例 `cat <<< "$GITHUB_TOKEN" > out.txt`、通す例 `echo ok > "$TOKEN_FILE"`
 - 移行直後（テスト追加前）の `pytest test/agents/ -q` → 3084 passed, 7 skipped
 - テスト追加後の `pytest test/agents/ -q` → 3093 passed, 7 skipped
+- `uv run pre-commit run --all-files` → 全 Passed / `lint_docs.py` → 問題なし
+
+段 5（2026-10-06）:
+
+- `rm.py` の 6 関数（`check_find_dangerous` / `check_find_root_guard` / `_rm_is_workspace_local` /
+  `_rm_targets_scratch_only` / `_find_targets_scratch_only` / `check_rm_root_guard`）を
+  `_argvs_of` の上に書き直した。手書きの `strip("'\"")` が消えた
+- 移行直後（テスト追加前）の `pytest test/agents/ -q` → 3093 passed, 7 skipped
+- `test_check_bash_file_ops.py` に止める例を追加: `rm -rf ~ 2>/dev/null` /
+  `rm -rf / > /dev/null 2>&1` / `find ~ -delete 2>/dev/null`
+- テスト追加後の `pytest test/agents/ -q` → 3096 passed, 7 skipped
 - `uv run pre-commit run --all-files` → 全 Passed / `lint_docs.py` → 問題なし
 
 ## 重要な更新
