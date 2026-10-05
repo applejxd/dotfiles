@@ -17,7 +17,7 @@ from functools import lru_cache
 
 from policy_loader import load_policy
 
-from . import tables
+from . import shellparse, tables
 
 # 失敗しても例外にしない。拒否は policy.check_policy_loaded が行う
 _POLICY_IMPORT = load_policy()
@@ -90,50 +90,46 @@ _WRITE_ALL_ARGS_COMMANDS = tables.as_set("_shared", "write_all_args_commands")
 
 
 # リダイレクトの書き込み先。`>| path` (noclobber 上書き) と `>& path` (= `&> path`) も拾う。
-# `>&2` / `>&-` の fd 複製・クローズは対象外
+# `>&2` / `>&-` の fd 複製・クローズは対象外。
+# ★新しい規則は shellparse.parse を使う。これは移行前の規則 (sensitive.py) のために残している
+# see docs/change/0012-bash-hook-shared-parser.md
 REDIRECT_TARGET_RE = re.compile(
     r"[0-9]*(?:>{1,2}\|?|>&(?!\s*(?:\d+|-)(?=$|[\s;&|)])))\s*([^\s&][^\s;&|)<>]*)"
 )
 
-# 引数として扱わないリダイレクトのトークン (`2>/dev/null`、`>`、`2>` (`2>&1` の & で切れた残り))
-_REDIRECT_TOKEN_RE = re.compile(r"^[0-9]*(?:>{1,2}\|?|>&|&>{1,2}|<{1,3})(.*)$")
+
+def _commands(cmd: str) -> list[shellparse.Command]:
+    """正規化済みのセグメントと元の文字列を、単純コマンドへ分けたもの。"""
+    return [command for segment in _segments(cmd) for command in shellparse.parse(segment)]
 
 
-def _without_redirections(tokens: list[str]) -> list[str]:
-    """リダイレクトの演算子と、空白で離れたその対象を取り除く。"""
-    out: list[str] = []
-    skip = False
-    for token in tokens:
-        if skip:
-            skip = False
-            continue
-        m = _REDIRECT_TOKEN_RE.match(token)
-        if m:
-            skip = not m.group(1)
-            continue
-        out.append(token)
-    return out
+def _redirect_write_targets(cmd: str) -> list[str]:
+    """リダイレクトで書き込む先 (``> f`` / ``>> f`` / ``&> f`` / ``>& f`` など)。"""
+    return [
+        r.target.value
+        for command in _commands(cmd)
+        for r in command.redirects
+        if r.writes and r.target is not None
+    ]
 
 
 def _write_targets(cmd: str) -> list[str]:
     """コマンドが書き込み・変更しようとしているトークンを返す。"""
-    targets: list[str] = []
-    for m in REDIRECT_TARGET_RE.finditer(cmd):
-        targets.append(m.group(1))
-    for segment in _segments(cmd):
-        tokens = segment.split()
-        if not tokens:
+    targets = _redirect_write_targets(cmd)
+    for command in _commands(cmd):
+        argv = command.argv
+        if not argv:
             continue
-        head = _basename(tokens[0])
-        for token in tokens[1:]:
+        head = _basename(argv[0])
+        for token in argv[1:]:
             if token.startswith("of="):
                 targets.append(token[3:])
-        args = [t for t in _without_redirections(tokens[1:]) if not t.startswith("-")]
+        args = [t for t in argv[1:] if not t.startswith("-")]
         if not args:
             continue
         if head == "sed":
             # in-place 指定が無ければ読み取りのみ
-            if any(t.startswith("-i") for t in tokens[1:]):
+            if any(t.startswith("-i") for t in argv[1:]):
                 targets.extend(args)
         elif head in _WRITE_DEST_LAST_COMMANDS:
             targets.append(args[-1])

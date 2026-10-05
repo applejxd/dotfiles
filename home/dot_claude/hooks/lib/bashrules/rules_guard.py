@@ -12,9 +12,9 @@ import shlex
 
 from . import tables
 from ._shared import (
-    REDIRECT_TARGET_RE,
     _basename,
     _normalize_guard_path,
+    _redirect_write_targets,
     _segments,
     _workspace_root,
     _write_targets,
@@ -45,10 +45,10 @@ def check_guard_tampering(cmd: str) -> str | None:
         return any(t in expanded for t in targets)
 
     # リダイレクト先がガード設定なら、どのコマンドでも上書きになる
-    for m in REDIRECT_TARGET_RE.finditer(cmd):
-        if _hits(m.group(1)):
+    for target in _redirect_write_targets(cmd):
+        if _hits(target):
             return (
-                f"エージェントのガード設定 (`{m.group(1)}`) を上書きしようとしています。\n"
+                f"エージェントのガード設定 (`{target}`) を上書きしようとしています。\n"
                 "hook や permission の無効化に繋がるため許可されていません。"
             )
 

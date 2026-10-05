@@ -12,10 +12,9 @@ import re
 import shlex
 from urllib.parse import urlsplit
 
-from . import tables
+from . import shellparse, tables
 from ._shared import (
     _FETCH_COMMAND_RE,
-    REDIRECT_TARGET_RE,
     _basename,
     _normalize,
     _payload_source,
@@ -688,7 +687,9 @@ def _fetched_output_paths(cmd: str) -> set[str]:
         for segment in _policy.split_command_segments(cmd):
             if not _FETCH_COMMAND_RE.search(segment):
                 continue
-            for m in REDIRECT_TARGET_RE.finditer(segment):
-                _add(m.group(1))
+            for command in shellparse.parse(segment):
+                for r in command.redirects:
+                    if r.writes and r.target is not None:
+                        _add(r.target.value)
 
     return set(paths) | {os.path.basename(p) for p in paths}
