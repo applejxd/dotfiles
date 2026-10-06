@@ -1,6 +1,6 @@
 # CHG-0014: コミットの表示と実行を決定的なスクリプトに任せる
 
-- **状態**: Exploring
+- **状態**: In progress
 - **更新日**: 2026-10-06
 - **基準**: `f152254`
 
@@ -31,8 +31,8 @@
 | --- | --- | --- |
 | 0 | 表示だけの試作で、スクリプトの出力が TUI の会話に全文出るかを確かめる | 完了（出るが畳まれ、開くと Orca のキーボードが出る） |
 | 0b | 返答の文章に書いた計画を、ツール実行の直前にプラグインで確かめられるかを確かめる | 完了（確かめられる） |
-| 1 | 最小版の実行用スクリプト（スナップショット・計画の保存・表示・実行） | 未着手 |
-| 2 | 子エージェントと親の手順（`/commit` も検討）、表示していない計画の実行をプラグインで止める | 未着手 |
+| 1 | 最小版の実行用スクリプト（スナップショット・計画の保存・表示・実行） | 完了（実機未確認） |
+| 2 | 子エージェントと親の手順、表示していない計画の実行をプラグインで止める | 完了（実機未確認） |
 | 3 | 実機で通常起動・bypass・隔離起動（`ocs`）を確かめ、CHG-0013 の仕組みを置き換える | 未着手 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -74,7 +74,8 @@
 
 ## 次の調査・実験
 
-- 段 1 の最小版を作る: 通常のブランチ・ファイル単位・空の index だけを対象にし、merge 中などは拒否する
+- 段 3: `chezmoi apply` の後、`scripts/opencode_probe.sh --auto` で「コミットして」を頼み、子が snapshot → save、
+  親が show → コードブロック → apply の順に動くかを確かめる。続けて利用者の TUI（通常起動と bypass）で見る
 
 ## 評価基準
 
@@ -97,7 +98,14 @@
 
 ## 仕様への変更案
 
-（段 1 以降で記入）
+| 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
+| --- | --- | --- | --- |
+| `home/dot_claude/skills/commit/scripts/commit_plan.py` | 無し → snapshot / save / show / apply | 表示と実行をモデルに頼らない | 段 1 で適用 |
+| guide plugin の `commit-plan.js` と `index.js` | 無し → apply の前に、同じターンの show の全文が返答のコードブロックにあるかを照合 | 段 0b | 段 2 で適用 |
+| `[opencode.agents.commit]` | 計画を返し親が書き写してコミット → snapshot と save で計画を保存し ID を返す | 段 0b・CHG-0013 の実機 | 段 2 で適用 |
+| `[opencode.skill_scripts]` と `generate.py` | allow だけ → `ask = ["apply"]`（隔離起動でも捨てない）。エージェントの shell 規則の `~/` を展開した形も並べる | apply の確認を残す | 段 2 で適用 |
+| commit スキル（Claude） | 子に計画、親が書き写して `git add && git commit` → 子に保存させ、親は show → コードブロック → apply | 同上 | 段 2 で適用 |
+| `docs/spec/agent-config-generation.md` の `commit` の節 | CHG-0013 の流れ → 本案の流れ | — | 段 2 で適用 |
 
 ## 実装・検証
 
@@ -147,6 +155,22 @@
   - 計画は ```` ```text ```` のコードブロックの中に書かせ、照合もコードブロックの中身で行う
     （Markdown の解釈による書き換えを避ける）
   - 止めたときに利用者へ尋ねる動きは、依頼と矛盾するときには妥当。通常の「コミットして」では矛盾しない
+
+段 1・2（2026-10-06）:
+
+- 実行用スクリプト `commit_plan.py`、前段の確かめ `commit-plan.js`、`commit` エージェント・スキル・生成器を
+  仕様への変更案のとおりに実装した。ツールの記録は `{type: "tool", name: "shell", state: {status, input:
+  {command}, content: [{type: "text", text}]}}` の形で、同じターンの show の出力を `context` から読めた
+  （試験用プラグインで確認）
+- 試験: `test_commit_plan.py`（19 件。一時の git リポジトリで、全体の流れ・二重実行・計画の後の変更・
+  ステージ済み・HEAD の移動・計画の改ざん・不正な計画・merge 中・hook の失敗）、`test_guide_commit_plan.py`
+  （20 件。照合の成否・ターンの範囲・別 ID・未完了・書き換え・index.js の組み込みと読めないときの停止）、
+  `test_opencode_commit_agent.py` を書き直した（子の snapshot / save の許可、親の apply の ask が通常起動と
+  隔離起動の両方で効くこと）
+- `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` → 3123 passed, 7 skipped
+- `uv run pre-commit run --all-files` → 全 Passed（新規ファイルは `--files` でも Passed）/
+  `lint_templates.py` → 問題なし
+- 実機は未確認（`chezmoi apply` が要る）
 
 ## 重要な更新
 

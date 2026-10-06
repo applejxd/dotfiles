@@ -177,6 +177,7 @@ def test_shell_allow_comes_from_the_opencode_section():
 
 def test_shell_ask_and_deny_still_come_from_bash():
     skill = {r for group in gen.opencode_skill_script_rules(COMMON) for r in group}
+    skill |= set(gen.opencode_skill_script_asks(COMMON))
     for effect in ("ask", "deny"):
         expected = [f"{cmd} *" for cmd in COMMON["bash"][effect]]
         # 先頭の catch-all (既定 ask) とスキルのスクリプトの例外は [bash] 由来ではないので外す

@@ -140,7 +140,7 @@ def test_planner_rules_are_deny_all_then_reads_then_output_denies():
     effects = [r["effect"] for r in shell[1:]]
     first_deny = effects.index("deny")
     assert all(e == "allow" for e in effects[:first_deny])
-    assert {r["resource"] for r in shell[1 + first_deny :]} == {"*>*", "*--output*"}
+    assert {r["resource"] for r in shell[1 + first_deny :]} == {"*>*", "*<*", "*--output*"}
     assert "ask" not in effects
 
 
@@ -239,19 +239,38 @@ def test_skill_forms_split_between_planner_and_parent():
     assert evaluate(normal_global(), "git commit -m a.txt -m a.txt") == "ask"
 
 
-def test_description_tells_the_parent_to_show_and_commit():
-    """親から見える説明に、計画を表示して自分でコミットすること・確認が承認の場であることを書く。"""
+def test_description_tells_the_parent_the_three_steps():
+    """親から見える説明に、show → 全文をコードブロックで書く → apply の 3 手を書く (CHG-0014)。"""
     description = agent()["description"]
     assert "ステージもコミットもしない" in description
-    assert "commit スキルの手順 4〜6 に従う" in description
-    assert "計画の全文を必ず返答に表示してから" in description
-    assert "件名だけに縮めない" in description
-    assert "git add -- <パス> && git commit -m '<件名>' -m '<本文>' を 1 回の shell で実行" in (
-        description
-    )
-    assert "その確認が承認の場" in description
-    assert "git status --short" in description
-    assert "完了を待って 1 つずつ実行する" in description
+    assert "commit_plan.py show <ID>" in description
+    assert "一字一句変えずに ```text のコードブロック 1 つで返答の文章に書く" in description
+    assert "commit_plan.py apply <ID>" in description
+    assert "guide plugin が apply を止める (利用者の拒否ではない)" in description
+    assert "1 つずつ実行する" in description
+
+
+SCRIPT_PATH = "~/.claude/skills/commit/scripts/commit_plan.py"
+
+
+@pytest.mark.parametrize("home", ["~/", None])
+def test_planner_can_snapshot_and_save_but_not_apply(home, tmp_path):
+    path = SCRIPT_PATH if home else SCRIPT_PATH.replace("~/", gen.expand_user("~/"))
+    for base in (normal_global(), ocs_config(tmp_path)["permissions"]):
+        rules = agent_rules(base)
+        assert evaluate(rules, f"python3 {path} snapshot") == "allow"
+        assert evaluate(rules, f"python3 {path} save 20261006-1 '{{\"units\": []}}'") == "allow"
+        assert evaluate(rules, f"python3 {path} apply 20261006-1") == "deny"
+        assert evaluate(rules, f"python3 {path} save x '{{}}' > out") == "deny"
+
+
+@pytest.mark.parametrize("home", ["~/", None])
+def test_parent_apply_asks_and_show_is_free(home, tmp_path):
+    """apply は通常起動でも隔離起動でも確認。show は確認なし (隔離起動は既定 allow)。"""
+    path = SCRIPT_PATH if home else SCRIPT_PATH.replace("~/", gen.expand_user("~/"))
+    for base in (normal_global(), ocs_config(tmp_path)["permissions"]):
+        assert evaluate(base, f"python3 {path} apply 20261006-1") == "ask"
+        assert evaluate(base, f"python3 {path} show 20261006-1") == "allow"
 
 
 def test_parent_chained_commit_asks_once(tmp_path):
@@ -261,26 +280,26 @@ def test_parent_chained_commit_asks_once(tmp_path):
         assert evaluate(base, "git add -- a.txt") in ("ask", "allow")
 
 
-def test_system_prompt_returns_a_plan_and_defers_to_the_skill():
+def test_system_prompt_saves_a_plan_and_defers_to_the_skill():
     system = agent()["system"]
     assert "commit スキル" in system
-    assert "手順 2" in system
+    assert "commit_plan.py snapshot" in system
+    assert "commit_plan.py save <ID> '<JSON>'" in system
+    assert "\\u0027" in system and "\\u003e" in system
     assert "ファイル単位" in system
-    assert "全文を省略せずに書く" in system
     assert "git add / git commit などで状態を変えない" in system
 
 
-def test_skills_allow_the_override_and_planning():
+def test_skills_describe_the_planned_flow():
     for path in (SKILL, CODEX_SKILL):
         text = re.sub(r"\n\s*", "", path.read_text("utf-8"))
         assert OVERRIDE in text, path
         assert "子エージェントとして計画だけを求められた場合を含む" in text, path
         assert "ステージもコミットもしない" in text, path
     skill = re.sub(r"\n\s*", "", SKILL.read_text("utf-8"))
-    assert "子には計画（手順 2）だけを作らせ" in skill
-    assert "自分の返答に必ず表示する" in skill
-    assert "表示を省いたり件名だけに縮めたりしてコミットしない" in skill
-    assert "3 以降を自分で行う" in skill
+    assert "commit_plan.py show <ID>" in skill
+    assert "一字一句変えずに ```text のコードブロック 1 つで" in skill
+    assert "commit_plan.py apply <ID>" in skill
 
 
 def test_system_prompt_keeps_shell_calls_sequential():

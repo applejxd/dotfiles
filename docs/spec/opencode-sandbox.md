@@ -406,9 +406,9 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
   `ask` も捨てている（`drop_shell`）。エージェントの `permissions` は後勝ちでそのまま効くので、
   `commit`（読むだけ）や `fleet-worker` の git 操作の deny は残るが、それ以外は個別の deny / ask に
   当たらなければ確認なしで通る。
-  **`git commit` の `ask` は捨てない**（コミットは親が行い、その確認が承認の場になるため。
-  [CHG-0013](../change/0013-commit-agent-as-planner.md)）。オプションを前に置いた `git -c … commit` は
-  `ask` に当たらないので、guide 規則で止める（[`commit` の権限](agent-config-generation.md#commit-の権限)）
+  **`git commit` の `ask` と、コミット計画の `apply` の `ask` は捨てない**（[CHG-0014](../change/0014-deterministic-commit-runner.md)）。
+  オプションを前に置いた `git -c … commit` は `ask` に当たらないので、guide 規則で止める
+  （[`commit` の権限](agent-config-generation.md#commit-の権限)）
 - **作業ツリーの外の読み取りは、通常版と同じく確認なし。** `external_directory` の `allow`
   （スキルの置き場と `work_read`）は隔離版にも出し、同じ場所への edit の `ask` も残す
   （[作業ツリーの外の読み取り](agent-config-generation.md#作業ツリーの外の読み取り)）。

@@ -278,12 +278,16 @@ def test_ocs_marks_only_the_rules_ocs_drops():
 
 
 def test_no_declared_agent_overrides_a_deny_today():
-    """今の宣言で静的 deny を覆すエージェントは無い (commit は読むだけになった。CHG-0013)。
+    """静的 deny を覆しうるのは、commit の計画用スクリプトの allow だけ (CHG-0014)。
 
+    commit は snapshot / save を allow で持ち、スキルのスクリプトのリダイレクトの前段停止と
+    重なるので対象外になる (commit 自身の `*>*` deny が後ろで止める)。
     覆すエージェントを対象外にする仕組みは test_v1_agent_permissions_* が確かめる。
     """
     rules = gen.build_opencode_guide({}, COMMON)["deny_guide"]
-    assert not [r for r in rules if r.get("except_agents")]
+    exempt = [r for r in rules if r.get("except_agents")]
+    assert all(r["message"] == SKILL_MESSAGE and r["except_agents"] == ["commit"] for r in exempt)
+    assert not [r for r in rules if r["message"] != SKILL_MESSAGE and r.get("except_agents")]
 
 
 def test_claude_and_copilot_generation_is_unchanged_by_deny_guide():
