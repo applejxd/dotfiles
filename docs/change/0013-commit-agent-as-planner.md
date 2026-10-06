@@ -32,7 +32,7 @@
 | 2 | 隔離起動（`ocs`）でも親の `git commit` に確認を出す（`drop_shell` から外す） | 完了 |
 | 3 | オプションを前に置いた `git -c … commit` を guide 規則で止める（隔離起動の穴） | 完了 |
 | 4 | commit スキルと仕様・試験を新しい流れに合わせる | 完了 |
-| 5 | 実機（`mise run opencode:probe`）で、子が計画だけを返し、親が表示してコミットするか確かめる | 進行中（1 回目で親の `git add` の確認の扱いが未決と判明。段 6 の後に再確認） |
+| 5 | 実機（`mise run opencode:probe`）で、子が計画だけを返し、親が表示してコミットするか確かめる | 進行中（2 回目で流れは確認。TUI での確認画面の表示の目視が残る） |
 | 6 | 親は `git add -- <パス> && git commit …` を 1 回で実行し、確認画面の件名と本文の抜き出しをこの連結形に対応させる | 完了（実機での表示は段 5 の 2 回目で確かめる） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -66,10 +66,8 @@
 
 ## 次の調査・実験
 
-- 段 5 の 2 回目: `chezmoi apply` の後、同じ作業用リポジトリ（`setup.sh` で作り直す）で
-  `opencode_probe.sh --auto --format json` を実行し、親が `git status --short` → 連結形 1 回 →
-  `git status --short` の順で動くかを確かめる。確認画面の表示は `--auto` では見えないので、
-  TUI で 1 回コミットして目視する
+- 段 5 の残り: TUI で作業用リポジトリ（`setup.sh` で作り直す）を開いて「コミットして」と頼み、確認画面の
+  すぐ上に件名・本文・`追加: …` が出るかを目視する。出れば案件を閉じる
 
 ## 評価基準
 
@@ -149,6 +147,18 @@
 - 試験: `test_guide_commit_preview.py`（連結形の抜き出し・`&&` を含むメッセージ・抜き出さない連結・
   配列の入力・TUI の表示）、`test_opencode_commit_agent.py`（説明の文言・連結形の判定）
 - `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` → 3080 passed, 7 skipped
+
+段 5・2 回目（2026-10-06、段 6 の `apply` 後）:
+
+- 方法は 1 回目と同じ（`setup.sh` で作り直し、`opencode_probe.sh --auto --format json`、親は
+  `github-copilot/claude-opus-5`、同じ依頼文）
+- 子: 計画だけを返した。今回は `src/calc.py` と `README.md` を 2 単位に分け、順序（1 → 2）も添えた。
+  本文の 3 行は 2 件ともそろった
+- 親: 計画を表示 → `git status --short`（「計画外の変更はありません」）→ 単位ごとに
+  `git add -- <パス> && git commit -m … -m …` を 1 回ずつ（計 2 回）→ `git status --short && git log --oneline -2`。
+  メッセージは子の全文と一字も変わらなかった。最後の確かめを `&&` で連結したが、読み取り同士で
+  実害は無い
+- 確認画面の表示（件名・本文・`追加:`）は `--auto` では見えないため、TUI の目視は利用者に依頼中
 
 ## 重要な更新
 

@@ -48,7 +48,7 @@
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる**。`ocs` のモジュール分割（2026-09-28）はハーネス層の切り出しではない | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-28 |
 | [0011](0011-agent-first-shell.md) | AI エージェントがシェルの主な利用者である前提へ整える | In progress | Claude Code / Copilot CLI に git の環境変数を入れられるか未調査。Windows 実機で未検証 | ocs の実機と `commit` エージェントで deny の前段停止（pip 以外へ拡張済み）を確かめる | 2026-10-03 |
 | [0012](0012-bash-hook-shared-parser.md) | bash 検査 hook のコマンド解析を 1 か所に集める | In progress | Windows 実機で未検証。B 群（`shlex.split` の規則）は保留 | Windows の PowerShell で `test/agents/` を回し、通れば閉じる | 2026-10-06 |
-| [0013](0013-commit-agent-as-planner.md) | commit エージェントを計画役にし、コミットは親が行う | In progress | 親のモデルがエージェントの説明に従って自分でコミットするか（実機未確認） | `chezmoi apply` の後、`opencode:probe` で段 5 を確かめる | 2026-10-06 |
+| [0013](0013-commit-agent-as-planner.md) | commit エージェントを計画役にし、コミットは親が行う | In progress | 確認画面の連結形の表示（TUI の目視が未了） | TUI で 1 回コミットして、件名・本文・`追加:` の表示を目視する | 2026-10-06 |
 
 ## 保留
 
