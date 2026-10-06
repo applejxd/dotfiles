@@ -1,7 +1,7 @@
 # CHG-0011: AI エージェントがシェルの主な利用者である前提へ整える
 
 - **状態**: In progress
-- **更新日**: 2026-10-03
+- **更新日**: 2026-10-07
 - **基準**: ecaf230（起動ファイルの対話 / 非対話の分離。
   [シェルの起動契約](../spec/structure.md#シェルの起動契約)と
   `test/test_shell_startup.py`）
@@ -34,9 +34,9 @@
 | 1c | 秘密ファイル一覧（hook の `tables.toml` と `common.toml.tmpl` の `read_deny_globs`）をそろえ、直下以外の `.env` の保護を実測する | 2 | 完了（一覧をそろえ `.env` を `**/` 化。[調査記録](../research/agents/secret-file-lists.md)） |
 | 1d | PowerShell の補助関数を対話判定の後ろへ。Console 設定の失敗を無視する。既定文字コード（`*:Encoding`）は 5.1 の退行を避けるため非対話でも維持 | 2 | 実装済み（Windows 実機は未検証） |
 | 2b | OpenCode の拒否規則: pip 系を止めて uv へ誘導（Q4）、危険な `rm` を止める（Q5） | 3 | 実装済み（guide 規則・実機確認済み。[ADR-0013](../adr/0013-opencode-shell-guard-inside-ocs.md)。通常版の pip の静的 deny にも `execute.before` で誘導文を付けた。[実測](../research/opencode/permission/early-guard.md)） |
-| 3a | git の環境変数を AI CLI の起動側で入れる（Q2、Q3）。値の正本は `[agent_env]`。OpenCode は `guide-plugin`（`rules.json` の `agent_env`）で実装済み、Copilot は起動関数（Windows は `try/finally` の関数）、Claude Code は保留（再開時に `CLAUDE_ENV_FILE` と比較） | 3 | 進行中 |
+| 3a | git の環境変数を AI CLI の起動側で入れる（Q2、Q3）。値の正本は `[agent_env]`。OpenCode は `guide-plugin`（`rules.json` の `agent_env`）で実装済み、Copilot は起動関数（Windows は `try/finally` の関数）、Claude Code は保留（再開時に `CLAUDE_ENV_FILE` と比較） | 3 | 進行中（OpenCode・Copilot は実装済み。Copilot の関数は Windows PowerShell 5.1 / 7 で実測。Claude Code が保留） |
 | 4 | OpenCode の `bypass` を「ask を allow にするだけ」に再定義し、誘導・結果フィルタ・伏字化を `bypass` にも効かせる。`.env.*` を deny に上げる（Q6） | 4 | 完了（実装・実機確認済み。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)、[実測](../research/opencode/permission/bypass-ask-upgrade.md)） |
-| 5 | pip で実証した前段停止を `[bash] deny` の残り全項目へ広げ、説明文を返す（Q7）。A 代わりの手段がある（`npm install -g`・`uv self update` / `chezmoi upgrade`・`git config` の書き込み・`docker * prune`・キャッシュ削除など）と B 利用者に頼む（それ以外。迷ったら B）に全項目を分類し、`[bash.deny_guide]` を正本にする | 5 | 実装済み（実機は A・B・bypass・止めない例を確認。ocs と `commit` エージェントは plugin の試験のみ。[仕様](../spec/agent-command-policy.md#opencode-の-deny-の説明前段停止)、[実測](../research/opencode/permission/early-guard.md#追記-deny-全体への拡張2026-10-03)） |
+| 5 | pip で実証した前段停止を `[bash] deny` の残り全項目へ広げ、説明文を返す（Q7）。A 代わりの手段がある（`npm install -g`・`uv self update` / `chezmoi upgrade`・`git config` の書き込み・`docker * prune`・キャッシュ削除など）と B 利用者に頼む（それ以外。迷ったら B）に全項目を分類し、`[bash.deny_guide]` を正本にする | 5 | 実装済み（実機は A・B・bypass・止めない例を確認。ocs と `commit` エージェントは plugin の試験のみ。[仕様](../spec/agent-command-policy.md#opencode-の-deny-の説明前段停止)、[実測](../research/opencode/permission/early-guard.md#追記-deny-全体への拡張2026-10-03)）。2026-10-05 にスキルのスクリプトへのリダイレクトの deny にも広げた |
 
 状態: 未着手 / 進行中 / 調査中 / 完了 / 保留 / 見送り
 
@@ -55,7 +55,7 @@
 | Q4 pip | OpenCode で `pip` / `pip3` / `python -m pip` を止めて uv へ誘導する。poetry / pipenv は止めない。`ocs` の中にも効かせる（安全境界ではなく uv を使う運用の取り決めのため）。既存の pip の deny は、静的 deny の呼び出しが plugin の `evaluate` に届かず説明が出ないため、`execute.before`（`home/dot_config/opencode/guide-plugin/index.js`）で先に止めて説明を返す（2026-10-03 実測）。既存の deny は外さない |
 | Q5 危険な `rm` | OpenCode で、止めたい具体例（`.git` の直接削除、`~` や `/` の指定、作業ディレクトリ全体など）に限って止める。`ocs` の中にも効かせる。「うっかり防止であり完全な保護ではない」と明記する。[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)（`ocs` の中では `rm` などを確認しない）の部分変更として記録する |
 | Q6 `bypass` の意味 | 全 allow をやめ、通常と同じ permission のまま plugin が `ask` だけを `allow` にする。通常で deny のものは `bypass` でも deny。誘導（pip・`rm` など）・`grep` / `glob` の結果フィルタ・伏字化・前段停止は `bypass` にも効かせる（[CHG-0002](0002-opencode-ask-by-default.md) の「誘導を bypass にも効かせる: 見送り」を採用に転じる）。逃げ道は Copilot CLI と利用者自身の実行。`bypass` 扱いは `bypass = true` で明示。`.env.*` は ask から deny へ（`.env.example` / `.sample` / `.template` は OpenCode と Copilot だけ例外。Claude は deny のまま）。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md) |
-| Q7 静的 deny の説明 | pip の前段停止を `[bash] deny` の全項目へ広げ、説明文を返す。静的 deny は一切変えない。説明文の正本は `[bash.deny_guide]`（A 代替あり / B 利用者に頼む / 別規則。全項目が属さないと生成を止める）。前段は静的 deny の部分集合だけ（セグメント先頭・語境界のみ。引用符・括弧・`#`・`\`・ヒアドキュメントを含むコマンドは静的 deny に任せる）。通常版と ocs で最終の静的 deny から決め、ocs で捨てた項目は ocs で止めない。エージェントの規則が覆す項目（`commit` の `git restore --staged --`）はそのエージェントで止めない。bypass にも同じに効かせる。bypass-fleet-worker 固有の deny は対象外 |
+| Q7 静的 deny の説明 | pip の前段停止を `[bash] deny` の全項目へ広げ、説明文を返す。静的 deny は一切変えない。説明文の正本は `[bash.deny_guide]`（A 代替あり / B 利用者に頼む / 別規則。全項目が属さないと生成を止める）。前段は静的 deny の部分集合だけ（セグメント先頭・語境界のみ。引用符・括弧・`#`・`\`・ヒアドキュメントを含むコマンドは静的 deny に任せる）。通常版と ocs で最終の静的 deny から決め、ocs で捨てた項目は ocs で止めない。エージェントの規則が覆す項目（`commit` の `git restore --staged --`。2026-10-07 時点では該当なし。`commit` は読み取りだけの計画役になった）はそのエージェントで止めない。bypass にも同じに効かせる。bypass-fleet-worker 固有の deny は対象外 |
 
 ## 未解決点
 
@@ -131,3 +131,12 @@
 - 2026-10-04 — Q2 / Q3 の決定。値の正本を `common.toml` の `[agent_env]` とし、OpenCode は `rules.json` 経由、
   Copilot は起動関数（Windows は `try/finally` の関数）で配る。`!` で人が実行したコマンドにも入るのは許容。
   Claude は保留（再開時に `CLAUDE_ENV_FILE` と比較）
+- 2026-10-04 — 3a の Copilot 側を実装した。`shellrc` の `copilot()` は `${VAR-既定}` で未設定のときだけ渡し、
+  PowerShell の関数は未設定のものだけ設定して `finally` で戻す（`bd822f8`）。既定値の一覧は `[agent_env]` に集約した（`0e743e5`）
+- 2026-10-05 — 1d / 3a を Windows 実機（PowerShell 5.1 / 7.6.3）で確かめた。7 で `finally` が変数を空文字で残す
+  不具合を見つけ、`[NullString]::Value` に直して両方で再実測した（`0d91d80`。[実測](../research/shell/windows-powershell-live-check.md)）
+- 2026-10-05 — 作業 5 の前段停止を、スキルのスクリプトへのリダイレクトの deny にも広げた（`5db7ccb`）。
+  あわせて 2b の guide 規則（pip・`.git`・`~`・作業ディレクトリ・`find`）の `unless` がコマンド全体に当たり、
+  `git commit -m x && rm -rf ~` を通していた穴を塞いだ（`f1773ac`。原因の整理は [CHG-0012](0012-bash-hook-shared-parser.md)）
+- 2026-10-07 — Q7 の例外に挙げた `commit` の `git restore --staged --` は、`commit` が読み取りだけの計画役になり
+  該当しなくなった（[CHG-0015](closed/0015-commit-planner-with-chat-approval.md)）。`except_agents` の仕組みは残っている

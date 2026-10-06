@@ -1,7 +1,7 @@
 # CHG-0002: OpenCode の permission を既定 ask にする
 
 - **状態**: Paused
-- **更新日**: 2026-09-28
+- **更新日**: 2026-10-07
 - **基準**: OpenCode V2（`v2.0.12`）
 
 > **2026-09-25 に保留へ移した。** 段階 0〜3 は完了、4a / 4b は見送り、
@@ -398,6 +398,11 @@ local hook を起動するため、**その設定を書き換えれば任意コ�
 | AGENTS.md の検証コマンド表 | 5 コマンドの手打ち → `verify` ツール 1 個 | コンテキストコストが 3 倍違う | **保留**（段階 5） |
 
 ## 重要な更新
+
+**2026-10-07 — 上の 2026-09-29 の `commit` の権限は、その後取り下げた。** `commit` は差分を読んで計画を返すだけの子になり、
+`git add` / `git restore --staged` / `git commit` の規則は持たない（読み取りの `git status` / `git diff` / `git log` などだけ allow）。
+ステージとコミットは親が行う（[CHG-0013〜0015](closed/0015-commit-planner-with-chat-approval.md)、
+[コミットの確認](../spec/agent-config-generation.md#コミットの確認)）。
 
 **2026-09-29 — 子エージェント `commit` だけ、素の git の読み取りとパス指定のステージを allow にした。**
 `git status` / `git diff` / `git log` / `git add -- …` / `git restore --staged -- …` を allow、`git commit` を ask にした

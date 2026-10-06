@@ -1,7 +1,7 @@
 # CHG-0006: Pi / oh-my-pi を利便性の軸で試す
 
 - **状態**: In progress
-- **更新日**: 2026-09-28
+- **更新日**: 2026-09-30
 - **基準**: 未導入の状態から開始。既存は Claude Code / Copilot CLI / OpenCode V2
 
 ## 目的と非目的
