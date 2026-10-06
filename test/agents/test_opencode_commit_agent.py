@@ -243,7 +243,9 @@ def test_description_tells_the_parent_to_show_and_commit():
     """親から見える説明に、計画を表示して自分でコミットすること・確認が承認の場であることを書く。"""
     description = agent()["description"]
     assert "ステージもコミットもしない" in description
-    assert "そのまま利用者に表示" in description
+    assert "commit スキルの手順 4〜6 に従う" in description
+    assert "計画の全文を必ず返答に表示してから" in description
+    assert "件名だけに縮めない" in description
     assert "git add -- <パス> && git commit -m '<件名>' -m '<本文>' を 1 回の shell で実行" in (
         description
     )
@@ -276,6 +278,8 @@ def test_skills_allow_the_override_and_planning():
         assert "ステージもコミットもしない" in text, path
     skill = re.sub(r"\n\s*", "", SKILL.read_text("utf-8"))
     assert "子には計画（手順 2）だけを作らせ" in skill
+    assert "自分の返答に必ず表示する" in skill
+    assert "表示を省いたり件名だけに縮めたりしてコミットしない" in skill
     assert "3 以降を自分で行う" in skill
 
 
