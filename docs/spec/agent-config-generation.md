@@ -1155,7 +1155,8 @@ explore = "worker"      # 例
 
 コミットは「判断はモデル、表示と実行はスクリプト」で行う（[CHG-0014](../change/0014-deterministic-commit-runner.md)）。
 スクリプトは `~/.claude/skills/commit/scripts/commit_plan.py`（標準ライブラリだけ。計画は
-`<git の共通ディレクトリ>/commit-plan/<ID>/` に置き、作業ツリーを汚さない）。
+`<git の共通ディレクトリ>/commit-plan/<ID>/` に置き、作業ツリーを汚さない。7 日より古い計画は `snapshot` の
+たびに消す。消すのは計画 ID の形をした名前のディレクトリだけ）。
 
 **流れ**:
 

@@ -9,8 +9,10 @@ Run with: ``uv run --with pytest --with pyyaml --no-project pytest test/agents/ 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -213,3 +215,22 @@ def test_hook_failure_stops_and_reports(repo):
 def test_usage_errors():
     assert run(Path.cwd(), "apply").returncode == 2
     assert run(Path.cwd(), "unknown", "x").returncode == 2
+
+
+def test_old_plans_are_pruned_on_snapshot(repo):
+    base = Path(git(repo, "rev-parse", "--absolute-git-dir").strip()) / "commit-plan"
+    old = base / "20200101-000000-aaaaaa"
+    recent = base / "20261005-000000-bbbbbb"
+    other = base / "keep-me"
+    for d in (old, recent, other):
+        d.mkdir(parents=True)
+        (d / "snapshot.json").write_text("{}")
+    stale = time.time() - 8 * 24 * 60 * 60
+    for d in (old, other):
+        os.utime(d, (stale, stale))
+    out = run(repo, "snapshot")
+    assert out.returncode == 0, out.stderr
+    assert "1 件消しました" in out.stdout
+    assert not old.exists()
+    assert recent.exists(), "7 日以内は残す"
+    assert other.exists(), "計画 ID の形でない名前には触れない"

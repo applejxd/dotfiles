@@ -171,6 +171,8 @@
 - `uv run pre-commit run --all-files` → 全 Passed（新規ファイルは `--files` でも Passed）/
   `lint_templates.py` → 問題なし
 - 実機は未確認（`chezmoi apply` が要る）
+- 追記（2026-10-06）: 古い計画が `.git/commit-plan/` に溜まるので、`snapshot` のたびに 7 日より古い計画を消す
+  ようにした（計画 ID の形をした名前のディレクトリだけ。試験 `test_old_plans_are_pruned_on_snapshot`）
 
 ## 重要な更新
 

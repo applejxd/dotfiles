@@ -7,6 +7,7 @@
 
 計画の JSON: {"units": [{"paths": ["相対パス", ...], "message": "件名\\n\\n本文"}]}
 置き場は <git の共通ディレクトリ>/commit-plan/<ID>/ (作業ツリーを汚さない)。
+7 日より古い計画は snapshot が消す。
 標準ライブラリだけで動かす。
 see docs/change/0014-deterministic-commit-runner.md
 """
@@ -16,7 +17,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
+import shutil
 import subprocess
 import sys
 import time
@@ -24,6 +27,9 @@ from pathlib import Path
 
 MAX_MESSAGE = 10_000
 MAX_UNITS = 50
+# これより古い計画は snapshot のたびに消す (実行済みかどうかを問わない)
+KEEP_SECONDS = 7 * 24 * 60 * 60
+PLAN_ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 # 進行中の操作。どれかがあれば計画も実行もしない
 IN_PROGRESS = (
     "MERGE_HEAD",
@@ -135,7 +141,7 @@ def changed_files() -> dict[str, str]:
 
 
 def plan_dir(plan_id: str) -> Path:
-    if not plan_id.replace("-", "").isalnum():
+    if not PLAN_ID.match(plan_id):
         raise PlanError(f"計画 ID の形が違います: {plan_id!r}")
     path = state_dir() / plan_id
     if not (path / "snapshot.json").exists():
@@ -156,12 +162,31 @@ def write_new(path: Path, text: str) -> None:
 # --- snapshot -----------------------------------------------------------------
 
 
+def prune_old_plans(base: Path, now: float) -> int:
+    """KEEP_SECONDS より古い計画を消す。計画 ID の形をした実ディレクトリだけを対象にする。"""
+    if not base.is_dir():
+        return 0
+    removed = 0
+    for entry in base.iterdir():
+        if not PLAN_ID.match(entry.name) or entry.is_symlink() or not entry.is_dir():
+            continue
+        try:
+            age = now - entry.stat().st_mtime
+        except OSError:
+            continue
+        if age > KEEP_SECONDS:
+            shutil.rmtree(entry, ignore_errors=True)
+            removed += 1
+    return removed
+
+
 def cmd_snapshot() -> int:
     require_clean_state()
     root = repo_root()
     files = changed_files()
     if not files:
         raise PlanError("コミットする変更がありません")
+    removed = prune_old_plans(state_dir(), time.time())
     plan_id = time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(3)
     path = state_dir() / plan_id
     path.mkdir(parents=True)
@@ -180,6 +205,8 @@ def cmd_snapshot() -> int:
     print(f"変更 ({len(files)} 件):")
     for rel, code in files.items():
         print(f"  {code} {rel}")
+    if removed:
+        print(f"（7 日より古い計画を {removed} 件消しました）")
     return 0
 
 
