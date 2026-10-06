@@ -86,7 +86,7 @@ def preview(tmp_path_factory):
     work = _plugin_dir(tmp_path_factory.mktemp("commit-preview"), None)
     opts = _rules()["ask_description"]["commit"]
 
-    def call(command: str, **override):
+    def call(command, **override):
         return _run(
             work,
             "import { commitPreview } from './commit-message.js'\n"
@@ -133,6 +133,7 @@ def test_subject_is_the_first_message_and_body_the_rest(preview):
         "subject": "feat(opencode): 件名",
         "body": ["- Motivation: 理由", "- Change: 変更", "- Impact: 影響"],
         "extra": None,
+        "added": None,
     }
 
 
@@ -201,6 +202,59 @@ def test_other_arguments_are_shown(preview):
 def test_unsafe_or_other_forms_are_not_extracted(preview, command):
     """連結・展開・リダイレクト・別の取り方は抜き出さない (実際と食い違うか、残りが隠れる)。"""
     assert preview(command) is None
+
+
+# --- `git add -- <パス> && git commit …` の連結形 (CHG-0013) -----------------
+
+
+def test_add_then_commit_shows_the_paths(preview):
+    """親は add と commit を 1 回で実行する。追加するパスも何がコミットされるかに関わるので出す。"""
+    out = preview(
+        "git add -- src/calc.py 'docs/a b.md' && git commit -m 'feat: 件名' -m '- Change: x'"
+    )
+    assert out["subject"] == "feat: 件名"
+    assert out["body"] == ["- Change: x"]
+    assert out["added"] == "追加: src/calc.py docs/a b.md"
+    assert out["extra"] is None
+
+
+def test_plain_commit_has_no_added_line(preview):
+    assert preview("git commit -m s")["added"] is None
+
+
+def test_ampersands_inside_the_message_do_not_split(preview):
+    out = preview("git add -- a.txt && git commit -m 'fix: a && b' -m '- Change: x && y'")
+    assert out["subject"] == "fix: a && b"
+    assert out["body"] == ["- Change: x && y"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git add -- a.txt && git commit -m s && git push",
+        "git add a.txt && git commit -m s",
+        "git add -A && git commit -m s",
+        "git add -- && git commit -m s",
+        "git add -- a.txt; git commit -m s",
+        "git add -- a.txt && rm -rf /",
+        "rm -rf / && git commit -m s",
+        "git add -- $HOME && git commit -m s",
+        "git add -- a.txt && git commit -m s | tee log",
+        "git add -- a.txt && git -c x=y commit -m s",
+    ],
+)
+def test_other_chains_are_not_extracted(preview, command):
+    """抜き出すのは `git add -- <パス…> && git commit …` の 2 つだけ。"""
+    assert preview(command) is None
+
+
+def test_resources_array_is_accepted(preview):
+    """tui.ts は scanner が分けた resources をそのまま渡す。"""
+    out = preview(["git add -- a.txt", "git commit -m 's' -m 'b'"])
+    assert out["subject"] == "s"
+    assert out["added"] == "追加: a.txt"
+    assert preview(["git status", "git commit -m s"]) is None
+    assert preview(["git add -- a", "git commit -m s", "git push"]) is None
 
 
 # --- サーバ側 (index.js): git commit ではモデルを呼ばない ------------------
@@ -331,8 +385,17 @@ def _perm(command: str, session: str = "ses_child") -> dict:
     return {"id": "per_1", "sessionID": session, "action": "shell", "resources": [command]}
 
 
-def _tui(work: Path, rules: dict | None, *, slot=True, view="ses_root", pending=None,
-         info=None, event=None, width=None) -> dict:
+def _tui(
+    work: Path,
+    rules: dict | None,
+    *,
+    slot=True,
+    view="ses_root",
+    pending=None,
+    info=None,
+    event=None,
+    width=None,
+) -> dict:
     _plugin_dir(work, rules)
     sessions = {
         "info": info or {"ses_root": {}, "ses_child": {"parentID": "ses_root"}},
@@ -353,6 +416,18 @@ def test_commit_message_is_shown_right_above_the_permission_dialog(tmp_path):
     subject, props = out["styled"][0]
     assert subject == "feat(opencode): 件名"
     assert props["fg"] == "base"
+
+
+def test_add_then_commit_is_shown_above_the_dialog(tmp_path):
+    """親の連結形は resources が 2 つになる。件名・本文・追加するパスを出す (CHG-0013)。"""
+    perm = {
+        "id": "per_1",
+        "sessionID": "ses_root",
+        "action": "shell",
+        "resources": ["git add -- src/calc.py", "git commit -m 'feat: 件名' -m '- Change: x'"],
+    }
+    out = _tui(tmp_path, _rules(), pending={"ses_root": [perm]})
+    assert out["rendered"] == [["feat: 件名", "- Change: x", "追加: src/calc.py"]]
 
 
 def test_body_lines_fit_a_narrow_terminal(tmp_path):
@@ -406,7 +481,8 @@ def test_model_description_toast_is_unchanged(tmp_path):
 def test_commit_preview_disabled_keeps_the_old_behaviour(tmp_path):
     common = copy.deepcopy(COMMON)
     common["opencode"]["ask_description"]["commit"]["enabled"] = False
-    out = _tui(tmp_path, _rules(common), pending={"ses_child": [_perm(COMMIT)]},
-               event=_perm(COMMIT))
+    out = _tui(
+        tmp_path, _rules(common), pending={"ses_child": [_perm(COMMIT)]}, event=_perm(COMMIT)
+    )
     assert out["slots"] == []
     assert out["toasts"] == []

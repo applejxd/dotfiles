@@ -32,7 +32,8 @@
 | 2 | 隔離起動（`ocs`）でも親の `git commit` に確認を出す（`drop_shell` から外す） | 完了 |
 | 3 | オプションを前に置いた `git -c … commit` を guide 規則で止める（隔離起動の穴） | 完了 |
 | 4 | commit スキルと仕様・試験を新しい流れに合わせる | 完了 |
-| 5 | 実機（`mise run opencode:probe`）で、子が計画だけを返し、親が表示してコミットするか確かめる | 未着手 |
+| 5 | 実機（`mise run opencode:probe`）で、子が計画だけを返し、親が表示してコミットするか確かめる | 進行中（1 回目で親の `git add` の確認の扱いが未決と判明。段 6 の後に再確認） |
+| 6 | 親は `git add -- <パス> && git commit …` を 1 回で実行し、確認画面の件名と本文の抜き出しをこの連結形に対応させる | 完了（実機での表示は段 5 の 2 回目で確かめる） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -53,6 +54,9 @@
 
 ## 未解決点
 
+- **親の `git add -- <パス>` が通常起動で確認（`ask`）になる**（段 5 の 1 回目で判明）。2026-10-06 に
+  利用者が「連結形を表示対応」を選んだ: 親は `git add -- <パス> && git commit -m … -m …` を 1 回で
+  実行し、確認画面の件名と本文の抜き出しをこの形にも対応させる（段 6）。全体の allow は広げない
 - 親が「`git commit` の確認を承認の場にしてよい」と知る手段は、`commit` エージェントの説明
   （親から見える）と、スキルの手順 4 の上書き規定に頼る。親のモデルがこれに従うかは段 5 で確かめる
 - guide 規則による `git -c … commit` の誘導は、コミットメッセージの中に同じ形の文字列があると誤って
@@ -62,9 +66,10 @@
 
 ## 次の調査・実験
 
-- 段 5: `chezmoi apply` の後、`mise run opencode:probe` で、小さな変更を「コミットして」と頼み、
-  子が計画だけを返すこと、親が全文を表示してから `git add` / `git commit` すること、確認が 1 回で
-  あることを確かめる
+- 段 5 の 2 回目: `chezmoi apply` の後、同じ作業用リポジトリ（`setup.sh` で作り直す）で
+  `opencode_probe.sh --auto --format json` を実行し、親が `git status --short` → 連結形 1 回 →
+  `git status --short` の順で動くかを確かめる。確認画面の表示は `--auto` では見えないので、
+  TUI で 1 回コミットして目視する
 
 ## 評価基準
 
@@ -115,6 +120,35 @@
 - `uv run pre-commit run --all-files` → 全 Passed（新規の案件ファイルは `--files` でも実行して Passed）/
   `lint_templates.py` → 問題なし / `lint_docs.py` → 問題なし / `check_refs.py --baseline` → 0 件
 - 実機（段 5）は未確認。`chezmoi apply` もまだ
+
+段 5・1 回目（2026-10-06）:
+
+- 方法: `.tmp/opencode/chg0013/setup.sh` で作業用リポジトリを作り（`src/calc.py` に関数を追加、
+  `README.md` は機能の説明の更新と誤字の修正が同居）、`apply` 済みの設定のまま
+  `scripts/opencode_probe.sh --auto --format json` をそのリポジトリで実行した。親のモデルは
+  `github-copilot/claude-opus-5`（probe の既定）。依頼文は「今の変更をコミットしてください。
+  差分は自分で読まず、commit エージェントに任せてください。push はしないでください。」
+- 子（`commit`）: 計画だけを返した（ステージもコミットもしなかった）。README の中を分けられない
+  ことを書き、1 単位にまとめた。メッセージは日本語で 3 行の本文がそろった
+- 親: 計画を返答に表示した後、`git add -- src/calc.py README.md && git commit -m … -m …` を
+  **1 回の shell 呼び出しに連結**して実行し、コミットした（`--auto` なので確認は自動承認）。
+  コミット前の `git status` の確かめと、コミット後の `git status --short` はしなかった。
+  commit スキルは読み込まなかった
+- 全体の規則の判定（生成した設定に試験の照合を当てた）: `git add -- a.txt` は通常起動で `ask`、
+  隔離起動で `allow`。`git commit -m x` は両方で `ask`。つまり親が `git add` と `git commit` を
+  分けて実行すると、通常起動では**確認が単位ごとに 2 回**出る。連結すると 1 回の呼び出しに
+  なるが、確認画面に件名と本文を抜き出して出す仕組みは `&&` を含む形を扱わず、モデルの説明に倒れる
+
+段 6（2026-10-06）:
+
+- `guide-plugin/commit-message.js`: `git add -- <パス…> && git commit …` の 2 つの連結だけを抜き出し、
+  追加するパスを `追加: …` で出す。入力は生のコマンド（`index.js`）と `resources` の配列（`tui.ts`）の両方
+- `guide-plugin/tui.ts`: 確認要求の `resources` を配列のまま渡し、`追加:` の行も表示する
+- `common.toml.tmpl` の `commit` の `description` を、連結形を 1 回で実行し、前後に `git status --short`
+  で確かめる手順に書き換えた。commit スキル（Claude）の手順 5 に、連結を定められたときの例外を足した
+- 試験: `test_guide_commit_preview.py`（連結形の抜き出し・`&&` を含むメッセージ・抜き出さない連結・
+  配列の入力・TUI の表示）、`test_opencode_commit_agent.py`（説明の文言・連結形の判定）
+- `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` → 3080 passed, 7 skipped
 
 ## 重要な更新
 

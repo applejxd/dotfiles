@@ -244,7 +244,18 @@ def test_description_tells_the_parent_to_show_and_commit():
     description = agent()["description"]
     assert "ステージもコミットもしない" in description
     assert "そのまま利用者に表示" in description
-    assert "git commit の権限の確認が承認の場" in description
+    assert "git add -- <パス> && git commit -m '<件名>' -m '<本文>' を 1 回の shell で実行" in (
+        description
+    )
+    assert "その確認が承認の場" in description
+    assert "git status --short" in description
+
+
+def test_parent_chained_commit_asks_once(tmp_path):
+    """連結形は 1 回の呼び出し。git commit の区切りが ask (git add は通常で ask、隔離で allow)。"""
+    for base in (normal_global(), ocs_config(tmp_path)["permissions"]):
+        assert evaluate(base, "git commit -m 'feat: x' -m '- Change: y'") == "ask"
+        assert evaluate(base, "git add -- a.txt") in ("ask", "allow")
 
 
 def test_system_prompt_returns_a_plan_and_defers_to_the_skill():

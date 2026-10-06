@@ -36,8 +36,8 @@ function pendingCommit(session, sessionID, opts) {
   if (session.get(sessionID)?.parentID) return null
   const ids = [sessionID, ...(session.family(sessionID) ?? []).filter((id) => id !== sessionID)]
   const first = ids.flatMap((id) => session.permission.list(id) ?? [])[0]
-  if (first?.action !== "shell" || first.resources?.length !== 1) return null
-  return commitPreview(first.resources[0], opts)
+  if (first?.action !== "shell" || !first.resources?.length) return null
+  return commitPreview(first.resources, opts)
 }
 
 function text(content, fg, attributes) {
@@ -67,13 +67,19 @@ function renderCommit(api, opts, input) {
       text(preview.subject || "(件名なし)", api.theme?.text?.base, BOLD),
       ...preview.body.map((line) => text(line, muted)),
       ...(preview.extra ? [text(preview.extra, muted)] : []),
+      ...(preview.added ? [text(preview.added, muted)] : []),
     ]
   })
   return box
 }
 
 function commitToast(preview) {
-  return [preview.subject, ...preview.body, ...(preview.extra ? [preview.extra] : [])].join("\n")
+  return [
+    preview.subject,
+    ...preview.body,
+    ...(preview.extra ? [preview.extra] : []),
+    ...(preview.added ? [preview.added] : []),
+  ].join("\n")
 }
 
 function attach(api) {
@@ -98,8 +104,8 @@ function attach(api) {
       const data = event?.data
       // スロットの無い版では、抜き出した件名と本文を toast で出す。
       const preview =
-        commit && !slotted && data?.resources?.length === 1
-          ? commitPreview(data.resources[0], commit)
+        commit && !slotted && data?.resources?.length
+          ? commitPreview(data.resources, commit)
           : null
       if (preview) {
         api.ui.toast.show({
