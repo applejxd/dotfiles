@@ -156,7 +156,7 @@ function relogin { & (Get-Process -Id $PID).Path -NoExit }
 function explorer-restart { Stop-Process -Name explorer -Force; Start-Process explorer }
 
 # `chezmoi cd` that keeps the current shell session
-function ccd { Set-Location (chezmoi source-path) }
+function ccd { Set-Location {{ .chezmoi.workingTree | squote }} }
 
 {{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml }}
 

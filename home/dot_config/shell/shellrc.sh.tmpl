@@ -139,7 +139,7 @@ fi
 # `chezmoi cd` that keeps the current shell session
 if command -v "chezmoi" >/dev/null 2>&1; then
     function ccd() {
-        cd "$(chezmoi source-path)" || return
+        cd {{ .chezmoi.workingTree | squote }} || return
     }
 fi
 
