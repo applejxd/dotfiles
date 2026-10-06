@@ -19,6 +19,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | GitHub CLI を mise で導入・更新する | [mise による CLI 管理](spec/structure.md#mise-による-cli-管理) |
 | Claude Code / Copilot CLI / OpenCode を導入・更新する | [AI CLI の導入](spec/structure.md#ai-cli-の導入) |
 | シェルの起動ファイルに何を置いてよいか知る | [シェルの起動契約](spec/structure.md#シェルの起動契約) |
+| C++ の 1 ファイルを debug / release で実行する（`runcpp`） | [C++ の単一ファイル実行](spec/structure.md#c-の単一ファイル実行runcpp) |
 | zsh プラグインの遅延読み込みの順序を変える | [zinit の遅延読み込みの順序](spec/structure.md#zinit-の遅延読み込みの順序) |
 | oh-my-pi（omp）を使う | [oh-my-pi の設定](spec/structure.md#oh-my-piompの設定) |
 | sops + age を導入・復旧する | [秘密情報の管理セットアップ（sops + age）](spec/sops-age.md) |

@@ -61,6 +61,7 @@ def home(tmp_path: Path) -> Path:
             env_files[name] = SHELL_DIR / name
     for name, src in env_files.items():
         (shell / name).write_text(render(src), encoding="utf-8")
+    shutil.copytree(SHELL_DIR / "functions", shell / "functions")
     for name, src in {
         ".zshenv": ROOT / "home" / "dot_zshenv",
         ".zshrc": ROOT / "home" / "dot_zshrc.tmpl",
@@ -189,33 +190,42 @@ def test_shellrc_defines_agent_alias(home):
     assert "alias agent=" in done.stdout, done.stderr
 
 
+_SPLIT = "extract zpack zunpack runcpp"
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_shellrc_loads_split_functions(home, shell):
+    """functions/ に切り出した関数が shellrc.sh から読み込まれる。"""
+    if shell == "zsh":
+        argv = [_zsh(), "-f", "-c", 'source "$HOME/.config/shell/shellrc.sh"; whence -w ' + _SPLIT]
+    else:
+        argv = [
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            f'source "$HOME/.config/shell/shellrc.sh"; type -t {_SPLIT}',
+        ]
+    done = run(argv, home)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.count("function") == len(_SPLIT.split()), done.stdout
+
+
 # ---- zpack ----
 
 
-def _zpack_script(home: Path) -> str:
-    text = (home / ".config" / "shell" / "shellrc.sh").read_text(encoding="utf-8")
-    m = re.search(r"^function zpack\(\) \{\n.*?^\}\n", text, re.S | re.M)
-    assert m, "zpack が見つからない"
-    return m.group(0)
-
-
 @pytest.fixture
-def zpack(home, tmp_path):
+def zpack(tmp_path):
     if shutil.which("zstd") is None or shutil.which("tar") is None:
         pytest.skip("zstd / tar が無い")
     work = tmp_path / "work"
     work.mkdir()
     (work / "src").mkdir()
     (work / "src" / "f.txt").write_text("hello", encoding="utf-8")
+    script = f'source "{SHELL_DIR / "functions" / "archive.sh"}"\nzpack "$@"\n'
 
     def call(*args: str, **extra: str) -> subprocess.CompletedProcess[str]:
-        script = _zpack_script(home) + '\nzpack "$@"\n'
-        return run(
-            ["bash", "-c", script, "bash", *args],
-            work,
-            HOME=str(home),
-            **extra,
-        )
+        return run(["bash", "-c", script, "bash", *args], work, **extra)
 
     call.work = work
     return call
@@ -244,6 +254,99 @@ def test_zpack_failure_leaves_no_temp_file(zpack, tmp_path):
     done = zpack("src", "out.tar.zst", ZPACK_LEVEL="1", PATH=f"{fake}:{os.environ['PATH']}")
     assert done.returncode != 0
     assert sorted(p.name for p in zpack.work.iterdir()) == ["src"]
+
+
+# ---- runcpp ----
+
+_OOB_CPP = """#include <bits/stdc++.h>
+int main(int argc, char** argv) {
+    std::vector<int> v(3);
+    int i;
+    std::cin >> i;
+#ifdef LOCAL
+    std::cout << "LOCAL ";
+#endif
+#ifdef ONLINE_JUDGE
+    std::cout << "OJ ";
+#endif
+    std::cout << v[i] << " argc=" << argc << (argc > 1 ? argv[1] : "") << std::endl;
+}
+"""
+
+
+@pytest.fixture(params=["bash", "zsh"])
+def runcpp(request, tmp_path):
+    if shutil.which("g++") is None:
+        pytest.skip("g++ が無い")
+    exe = _zsh() if request.param == "zsh" else "bash"
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "a.cpp").write_text(_OOB_CPP, encoding="utf-8")
+    script = f'source "{SHELL_DIR / "functions" / "cpp.sh"}"\nrun_stdin=$1; shift\n'
+    script += 'printf "%s\\n" "$run_stdin" | runcpp "$@"\n'
+
+    def call(stdin: str, *args: str, **extra: str) -> subprocess.CompletedProcess[str]:
+        argv = [exe, "-f"] if exe != "bash" else [exe, "--noprofile", "--norc"]
+        return run(
+            [*argv, "-c", script, "sh", stdin, *args],
+            work,
+            XDG_CACHE_HOME=str(tmp_path / "cache"),
+            **extra,
+        )
+
+    call.work = work
+    call.cache = tmp_path / "cache" / "runcpp"
+    return call
+
+
+def test_runcpp_release_runs_judge_like(runcpp):
+    done = runcpp("1", "a.cpp", "-r")  # オプションはソースの後ろでもよい
+    assert done.returncode == 0, done.stderr
+    assert done.stdout == "OJ 0 argc=1\n"
+    assert sorted(p.name for p in runcpp.cache.iterdir()) == ["a-release"]
+    assert sorted(p.name for p in runcpp.work.iterdir()) == ["a.cpp"]
+
+
+def test_runcpp_debug_is_default_and_detects_out_of_bounds(runcpp):
+    done = runcpp("1", "a.cpp")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout == "LOCAL 0 argc=1\n"
+    done = runcpp("5", "a.cpp")
+    assert done.returncode != 0
+    assert "out-of-bounds" in done.stderr
+
+
+def test_runcpp_mode_from_env(runcpp):
+    done = runcpp("1", "a.cpp", RUNCPP_MODE="release")
+    assert done.stdout.startswith("OJ "), done.stderr
+
+
+def test_runcpp_passes_args_after_double_dash(runcpp):
+    done = runcpp("1", "-r", "a.cpp", "foo", "--", "-x")
+    assert done.stdout == "OJ 0 argc=3foo\n", done.stderr
+
+
+def test_runcpp_compile_failure_does_not_run_stale_binary(runcpp):
+    assert runcpp("1", "-r", "a.cpp").returncode == 0
+    (runcpp.work / "a.cpp").write_text("int main() { return x; }\n", encoding="utf-8")
+    done = runcpp("1", "-r", "a.cpp")
+    assert done.returncode != 0
+    assert done.stdout == ""
+
+
+@pytest.mark.parametrize(
+    ("args", "env", "message"),
+    [
+        (("a.cpp", "-x"), {}, "unknown option"),
+        (("a.cpp",), {"RUNCPP_MODE": "bogus"}, "invalid mode"),
+        (("missing.cpp",), {}, "No such file"),
+        ((), {}, "Usage"),
+    ],
+)
+def test_runcpp_rejects_bad_input(runcpp, args, env, message):
+    done = runcpp("1", *args, **env)
+    assert done.returncode != 0
+    assert message in done.stderr
 
 
 # ---- copilot 起動関数 (既定値の正本は common.toml.tmpl の [agent_env]) ----
