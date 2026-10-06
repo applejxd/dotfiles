@@ -665,6 +665,73 @@ a.cpp -- foo                   # プログラムに引数を渡す
 検査は `test/test_shell_startup.py`（bash / zsh の両方で、release の実行、debug での
 範囲外アクセスの検出、`--` 以降の引数、コンパイル失敗時に実行しないこと、不正な入力）。
 
+## コーディング試験の練習用 VS Code（code-exam）
+
+HackerRank 以外の問題（AtCoder や手元の問題集）を、本番に近い条件で解くための関数。
+`applejxd` のときだけ `shellrc.sh` に定義する。当日の `~/coding-test/YYYY-MM-DD/` を作り、
+拡張を切った専用プロファイル `coding-test` の VS Code で開く。
+
+```sh
+code --disable-extensions --profile coding-test ~/coding-test/YYYY-MM-DD
+```
+
+プロファイルは初回の起動で空のものが作られる。拡張もプロファイルごとなので、WSL では
+初回に「リモート ウィンドウを開くには、拡張機能 'WSL' が必要です」と出て接続できない。
+通知の「インストールして再度読み込む」では入らなかった（`--disable-extensions` 下のため
+と思われる）。Windows 側の `chezmoi apply` が
+`300_windows/run_after_347_vscode_coding_test.ps1.tmpl` で WSL 拡張をこのプロファイルへ
+入れるので、初回は `code-exam` で一度開いてプロファイルを作り、Windows で
+`chezmoi apply` してから開き直す。手で入れるなら Windows の PowerShell で次を実行する。
+
+```powershell
+code --profile coding-test --install-extension ms-vscode-remote.remote-wsl
+```
+
+このスクリプトは `applejxd` のときだけ中身を持つ。VS Code の CLI は存在しない
+プロファイルを扱えない（`Profile 'coding-test' not found.`）ため、`storage.json` の
+`userDataProfiles` にプロファイルが無いうちは何もしない。プロファイルを作った後の
+apply で拾えるよう `run_onchange` ではなく `run_after` にしている。入れる設定は
+WSL 拡張だけで、AI 機能のオフ（右下のメニューか `settings.json`）とフォルダーの
+信頼は手で行う。
+
+制限モードになったら親フォルダーの `~/coding-test` を信頼する。
+
+設定は chezmoi で管理しないので、
+初回だけ、そのウィンドウでコマンドパレットの **Preferences: Open User Settings (JSON)**
+を開いて次を書く。補完をどこまで切るかは本番のエディタの設定に合わせる。
+
+```jsonc
+{
+    "chat.disableAIFeatures": true,
+    "editor.inlineSuggest.enabled": false,
+    "editor.quickSuggestions": { "other": false, "comments": false, "strings": false },
+    "editor.parameterHints.enabled": false
+}
+```
+
+ビルドと実行は統合ターミナルの `runcpp` で行う（HackerRank の Run Code の代わり）。
+
+設計:
+
+- HackerRank 本番では外部エディタからの貼り付けやタブの切り替えが記録されるため、
+  本番は HackerRank のエディタで解く。この関数は練習専用
+  （[Test Integrity](https://support.hackerrank.com/articles/1079706165-proctoring-hackerrank-tests)）
+- `--user-data-dir` で設定ごと分ける案は採らない。WSL の `code` は
+  remote CLI を経由し、`user-data-dir` を Windows 側へ渡さずに捨てる
+  （VS Code の `src/vs/server/node/server.cli.ts` の `isSupportedForCmd`）。
+  `Code.exe` を直接呼べば回避できるが、VS Code の内部の起動手順に依存する。
+  `--profile` は WSL からも渡る
+- `--disable-extensions` でも、WSL への接続に使う拡張（resolver）は有効のまま残る
+  （`extensionEnablementService.ts` の `_isDisabledInEnv`）。ただし例外になるのは
+  プロファイルに入っている拡張だけなので、上の初回手順が要る。厳密には
+  「接続用以外の拡張を無効化」である
+- WSL 側の Machine 設定（`~/.vscode-server/data/Machine/settings.json`）は
+  ふだんの VS Code と共有する
+
+検査は `test/test_shell_startup.py`（bash / zsh の両方で、偽の `code` に渡る引数と
+作業ディレクトリの作成、`applejxd` 以外では定義されないこと）。実際に VS Code が開くかは
+検査しない。
+
 ## シェルプラグインの取得
 
 シェルの rc が読み込むプラグインのうち、下の表の 5 項目は起動時ではなく

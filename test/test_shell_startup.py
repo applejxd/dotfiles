@@ -349,6 +349,51 @@ def test_runcpp_rejects_bad_input(runcpp, args, env, message):
     assert message in done.stderr
 
 
+# ---- code-exam (applejxd のときだけ定義する) ----
+
+_FAKE_CODE = '#!/bin/sh\nfor a in "$@"; do echo "arg=[$a]"; done\n'
+
+
+def _source_shellrc(shell: str, script: str) -> list[str]:
+    if shell == "zsh":
+        return [_zsh(), "-f", "-c", f'source "$HOME/.config/shell/shellrc.sh"; {script}']
+    return [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        f'source "$HOME/.config/shell/shellrc.sh"; {script}',
+    ]
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_code_exam_opens_dated_dir_with_profile(home, tmp_path, shell):
+    if "code-exam()" not in (home / ".config" / "shell" / "shellrc.sh").read_text(encoding="utf-8"):
+        pytest.skip("code-exam は applejxd のときだけ定義する")
+    fake = tmp_path / "fakebin"
+    fake.mkdir()
+    (fake / "code").write_text(_FAKE_CODE, encoding="utf-8")
+    (fake / "code").chmod(0o755)
+    done = run(_source_shellrc(shell, "code-exam"), home, PATH=f"{fake}:{os.environ['PATH']}")
+    assert done.returncode == 0, done.stderr
+    args = [ln[5:-1] for ln in done.stdout.splitlines() if ln.startswith("arg=[")]
+    assert args[:3] == ["--disable-extensions", "--profile", "coding-test"]
+    assert len(args) == 4 and re.fullmatch(
+        rf"{re.escape(str(home))}/coding-test/\d{{4}}-\d{{2}}-\d{{2}}", args[3]
+    )
+    assert Path(args[3]).is_dir()
+
+
+def test_code_exam_is_not_defined_for_other_users(tmp_path):
+    source = SHELL_DIR / "shellrc.sh.tmpl"
+    other = tmp_path / "shellrc.sh.tmpl"
+    other.write_text(
+        source.read_text(encoding="utf-8").replace(".chezmoi.username", '"someone"'),
+        encoding="utf-8",
+    )
+    assert "code-exam" not in render(other)
+
+
 # ---- copilot 起動関数 (既定値の正本は common.toml.tmpl の [agent_env]) ----
 
 _AGENT_ENV = {

@@ -1,0 +1,33 @@
+﻿{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# code-exam 用の coding-test プロファイルへ WSL 拡張を入れる。
+# CLI は存在しないプロファイルを扱えない (code-exam の初回起動で作られる) ので、無いうちは何もしない。
+# see docs/spec/structure.md#コーディング試験の練習用-vs-codecode-exam
+$profileName = 'coding-test'
+$extension = 'ms-vscode-remote.remote-wsl'
+
+$codeCommand = Get-Command code -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $codeCommand) { return }
+
+$storagePath = Join-Path $env:APPDATA 'Code\User\globalStorage\storage.json'
+if (-not (Test-Path -LiteralPath $storagePath -PathType Leaf)) { return }
+$storage = Get-Content -Raw -Encoding UTF8 -LiteralPath $storagePath | ConvertFrom-Json
+$profileNames = @()
+if ($storage.PSObject.Properties.Name -contains 'userDataProfiles' -and $storage.userDataProfiles) {
+  $profileNames = @($storage.userDataProfiles | ForEach-Object { $_.name })
+}
+if ($profileNames -notcontains $profileName) { return }
+
+$installed = @(& $codeCommand.Path --profile $profileName --list-extensions)
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to list extensions of the $profileName profile (exit code $LASTEXITCODE)"
+}
+if ($installed -contains $extension) { return }
+
+& $codeCommand.Path --profile $profileName --install-extension $extension
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to install $extension into the $profileName profile (exit code $LASTEXITCODE)"
+}
+{{- end -}}

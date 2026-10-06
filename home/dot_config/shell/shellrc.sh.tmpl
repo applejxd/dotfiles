@@ -65,6 +65,18 @@ alias agent='copilot'
 alias agent='claude'
 {{- end }}
 
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
+
+# コーディング試験の練習用。初回のプロファイル設定は
+# see docs/spec/structure.md#コーディング試験の練習用-vs-codecode-exam
+function code-exam() {
+    local dir
+    dir="${HOME}/coding-test/$(date +%F)"
+    mkdir -p "$dir" || return
+    code --disable-extensions --profile coding-test "$dir"
+}
+{{- end }}
+
 # Copilot CLI の既定値 (未設定のときだけ入れる)。正本は common.toml.tmpl の [agent_env]
 # see docs/spec/structure.md#シェルの起動契約
 {{- $common := includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml }}
