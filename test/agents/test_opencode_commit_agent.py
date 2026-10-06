@@ -249,6 +249,7 @@ def test_description_tells_the_parent_to_show_and_commit():
     )
     assert "その確認が承認の場" in description
     assert "git status --short" in description
+    assert "完了を待って 1 つずつ実行する" in description
 
 
 def test_parent_chained_commit_asks_once(tmp_path):
