@@ -13,10 +13,6 @@
 # normalize + policy matcher で、critical_deny という名前が実態と合わなくなった)
 .config/agents/critical_deny.py
 
-# commit skill の補助スクリプト廃止。読み取り専用 git コマンドを直接実行する。
-# scripts/ には他に何も無いのでディレクトリごと消す。
-.claude/skills/commit/scripts
-
 # 2026-09: ターン終了時に ADR 更新を促す Stop hook を廃止。
 .claude/hooks/update-adr-on-stop.py
 
