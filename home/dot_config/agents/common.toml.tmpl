@@ -883,7 +883,6 @@ provider = "{{ includeTemplate "llm-provider" . }}"
 # エージェント ID = 階層名。組み込み (plan / explore など) も上書きできる。
 # ★主エージェント (build / plan) は選んでもモデルが変わらない。子エージェントだけ書く。
 [opencode.model.agents]
-commit = "routine"
 review = "second_opinion"
 fleet-worker = "worker"
 bypass-fleet-worker = "worker"
@@ -939,51 +938,9 @@ permission = { task = "deny" }
 # [opencode.model.agents] で階層を割り当てる (ここに model は書かない)。
 # system は組み込みの基底プロンプトを置き換える。permissions は全体の規則の後ろに付く。
 # see docs/spec/agent-config-generation.md#子エージェント
-[opencode.agents.commit]
-description = "変更を読み、論理単位ごとの対象ファイルとコミットメッセージを決めて、コミットの計画として保存し、計画 ID を返す。ステージもコミットもしない。親は差分を読まずにこれへ任せ、返った ID で次の 3 つを 1 つずつ実行する: (1) python3 ~/.claude/skills/commit/scripts/commit_plan.py show <ID> を実行する (2) その出力を一字一句変えずに ```text のコードブロック 1 つで返答の文章に書く (利用者が会話の中で全文を読むため。操作は求めない) (3) python3 ~/.claude/skills/commit/scripts/commit_plan.py apply <ID> を実行する (確認はこの 1 回で全単位。スクリプトが状態を確かめてから単位ごとにコミットする)。(2) を省くと guide plugin が apply を止める (利用者の拒否ではない)。apply が止まったら理由を利用者に伝え、必要なら計画を頼み直す"
-mode = "subagent"
-system = """
-あなたはコミットの計画係です。親から呼ばれ、変更を読んで計画を保存し、計画 ID を返します。
-表示・ステージ・コミットは親とスクリプトが行います。
-
-1. 最初に skill ツールで commit スキルを読み込む。分け方・メッセージの書式はそれに従う
-2. python3 ~/.claude/skills/commit/scripts/commit_plan.py snapshot を実行し、計画 ID と変更の一覧を得る。
-   止まったら (ステージ済みの変更・merge 中など) その理由をそのまま親に返して終わる
-3. git diff などで変更を読み、ファイル単位で論理単位に分ける。同じファイルの中は分けない
-   (必要なら単位をまとめ、そのことを親への返答に書く)。コミットしない変更は計画に入れない
-4. python3 ~/.claude/skills/commit/scripts/commit_plan.py save <ID> '<JSON>' で計画を保存する。
-   JSON は {"units": [{"paths": ["相対パス", ...], "message": "件名\\n\\n- Motivation: …\\n- Change: …\\n- Impact: …"}]}。
-   パスは snapshot の一覧のとおりに書く。JSON の文字列の中では ' を \\u0027、< を \\u003c、
-   > を \\u003e と書く (シェルの引用と、リダイレクトの禁止に当たらないため)。保存は 1 回だけで、
-   失敗したら理由を直して snapshot からやり直す
-5. 親には計画 ID と、単位ごとの件名だけを短く返す (全文は親が show で出す)
-
-- ファイルは read / glob / grep ツールで読む。shell で cat / ls / find / echo などを使わない
-- shell は 1 回の応答で 1 つだけ呼び、完了結果を受け取ってから次を呼ぶ。1 回の呼び出しは
-  1 コマンドとし、; や && でつなげず、リダイレクトや 2>&1 を付けない。作業ディレクトリは
-  cd ではなく shell ツールの workdir で指定する
-
-ファイルは編集しない。git add / git commit などで状態を変えない。
-"""
-# ★読むだけ + 計画の記録と保存。shell は全体を deny してから許す形だけ allow し、書き出しを deny する (後勝ち)。
-# ~/ の形は generate.py が展開した形も並べる。
-# see docs/spec/agent-config-generation.md#commit-の権限
-permissions = [
-  { action = "edit", resource = "*", effect = "deny" },
-  { action = "subagent", resource = "*", effect = "deny" },
-  { action = "question", resource = "*", effect = "deny" },
-  { action = "shell", resource = "*", effect = "deny" },
-  { action = "shell", resource = "git status *", effect = "allow" },
-  { action = "shell", resource = "git diff *", effect = "allow" },
-  { action = "shell", resource = "git log *", effect = "allow" },
-  { action = "shell", resource = "git branch --show-current", effect = "allow" },
-  { action = "shell", resource = "git rev-parse --show-toplevel", effect = "allow" },
-  { action = "shell", resource = "python3 ~/.claude/skills/commit/scripts/commit_plan.py snapshot", effect = "allow" },
-  { action = "shell", resource = "python3 ~/.claude/skills/commit/scripts/commit_plan.py save *", effect = "allow" },
-  { action = "shell", resource = "*>*", effect = "deny" },
-  { action = "shell", resource = "*<*", effect = "deny" },
-  { action = "shell", resource = "*--output*", effect = "deny" },
-]
+# 廃止したエージェント。既存の opencode.json から消す (宣言をやめただけでは残る)。
+[opencode.retired]
+agents = ["commit"]
 
 # 相談役。読むだけ。★shell は開けない (git diff / git status も外部コマンドを実行しうる)。
 # 差分は親が依頼文に含めて渡す。see docs/research/opencode/permission/allow-list-audit.md
@@ -1158,8 +1115,8 @@ message = "allow されたコマンドの出力をリダイレクトで書き込
 
 # git commit の前にオプションを置いた形 (`git -c core.hooksPath=/dev/null commit`) を止める。
 # ★隔離起動はシェルの既定が allow なので、`git commit *` の ask に当たらない形は確認も hook も
-#   無しで通る。コミットは親が行う (CHG-0013) ので、全体の規則で塞ぐ。
-# see docs/spec/agent-config-generation.md#commit-の権限
+#   無しで通る。コミットは親が自分で行うので、全体の規則で塞ぐ。
+# see docs/spec/agent-config-generation.md#コミットの確認
 [[opencode.shell.guide]]
 pattern = '(^|&&|\|\||;|\n)\s*git(\s+-\S+(\s+[^-\s]\S*)?)+\s+commit(\s|$)'
 message = "git commit の前にオプションを置かないでください。`git commit -m '<件名>' -m '<本文>'` の形で実行してください (確認と hook を通すため)。"
@@ -1318,14 +1275,6 @@ exact = ["--save", "--baseline"]
 script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 # write は標準入力を引数のパスへ書くので載せない
 subcommands = ["paths", "lint", "read"]
-
-# コミットの計画を固定・表示・実行する。apply だけは確認 (隔離起動でも残す)。
-# ★apply の前に guide plugin が「同じターンで show の全文を返答に書いたか」を照合する。
-# see docs/change/0014-deterministic-commit-runner.md
-[[opencode.skill_scripts.allow]]
-script = "~/.claude/skills/commit/scripts/commit_plan.py"
-subcommands = ["snapshot", "save", "show"]
-ask = ["apply"]
 
 # OpenCode を丸ごと OS のアクセス制御で囲う (隔離起動 ocs)。
 # ランチャーが Fence で境界を張ってから opencode --standalone を起動する。
@@ -1501,7 +1450,8 @@ drop_shell = [
   '^(git log|wc|grep -n|uv pip list|docker ps)\b',
   # ★確認をやめ snapshot による復旧で扱う
   '^(rm|mv|cp|truncate|shred|find)\b',
-  # ★git commit は捨てない。コミットは親が行い、その確認が承認の場になる (CHG-0013)
+  # ★git commit は捨てない (会話での承認に加えて実行時の確認を残す)
+  # see docs/spec/agent-config-generation.md#コミットの確認
 ]
 
 # 境界が隠すので捨てる read/edit 規則 (パスの先頭一致)。

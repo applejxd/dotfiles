@@ -13,6 +13,11 @@
 # normalize + policy matcher で、critical_deny という名前が実態と合わなくなった)
 .config/agents/critical_deny.py
 
+# 2026-10: コミット計画のスクリプトと apply の照合を廃止 (CHG-0014)。
+# scripts/ には他に何も無いのでディレクトリごと消す。
+.claude/skills/commit/scripts
+.config/opencode/guide-plugin/commit-plan.js
+
 # 2026-09: ターン終了時に ADR 更新を促す Stop hook を廃止。
 .claude/hooks/update-adr-on-stop.py
 

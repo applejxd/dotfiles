@@ -108,18 +108,6 @@ if (ask?.commit) {
   }
 }
 
-// コミット計画の apply の前段の確かめ。読めなければ apply を止める (全文を確かめられないため)。
-// see docs/change/0014-deterministic-commit-runner.md
-let checkApply = (command) =>
-  /commit_plan\.py['"]?\s+apply\b/.test(command)
-    ? "commit-plan.js を読めないため、コミット計画の apply を止めます。"
-    : null
-try {
-  ;({ checkApply } = await import("./commit-plan.js"))
-} catch (err) {
-  console.error(`[guide] commit-plan.js を読めない: ${err}`)
-}
-
 // 隔離版 (ocs) ではモデルでの説明の生成だけを止める (git commit の件名と本文は止めない)。
 // ocs が境界の内側へ渡す印で見分ける。
 // see docs/spec/opencode-sandbox.md#隔離版の設定の書き出し方
@@ -355,25 +343,10 @@ export default {
       console.error(`[guide] shell フックを登録できない: ${err}`)
     }
 
-    await ctx.tool.hook("execute.before", async (e) => {
+    await ctx.tool.hook("execute.before", (e) => {
       if (e.tool !== "shell") return
       const command = e.input?.command ?? ""
       raw.set(e.id, command)
-      // コミット計画の apply は、同じターンで全文を返答に書いたときだけ通す
-      if (/commit_plan\.py['"]?\s+apply\b/.test(command)) {
-        let messages
-        try {
-          messages = await ctx.session.context({ sessionID: e.sessionID })
-        } catch (err) {
-          raw.delete(e.id)
-          throw new Error(`会話の記録を読めないため、コミット計画の apply を止めます: ${err}`)
-        }
-        const reason = checkApply(command, messages)
-        if (reason) {
-          raw.delete(e.id)
-          throw new Error(reason)
-        }
-      }
       // early 規則は静的 deny の前に例外で止める (静的 deny は evaluate に届かず説明を付けられない)。
       // see docs/research/opencode/permission/early-guard.md
       for (const rule of compiled) {

@@ -928,29 +928,6 @@ def _skill_script_allow_and_heads(common: dict[str, Any]) -> tuple[list[str], li
     return allow, heads
 
 
-def opencode_skill_script_asks(common: dict[str, Any]) -> list[str]:
-    """スキルのスクリプトのうち、確認 (ask) を通すサブコマンド (``ask = [...]``)。
-
-    隔離版はシェルの既定が allow なので、確認を残すには明示の ask が要る。
-    ``allow`` の規則と違い、隔離版でも捨てない。
-    see docs/change/0014-deterministic-commit-runner.md
-    """
-    cfg = common.get("opencode", {}).get("skill_scripts", {})
-    runners = cfg.get("runners", {})
-    out: list[str] = []
-    for entry in cfg.get("allow", []):
-        script = str(entry.get("script", ""))
-        asks = entry.get("ask") or []
-        overlap = set(asks) & set(entry.get("subcommands") or [])
-        if overlap or (asks and entry.get("exact")):
-            raise ValueError(f"[opencode.skill_scripts] の {script!r} は ask と allow が重なる")
-        suffix = script.rsplit(".", 1)[-1] if "." in script else ""
-        for runner in runners.get(suffix, []):
-            for path in _home_variants(script):
-                out += [f"{runner} {path} {sub} *" for sub in asks]
-    return out
-
-
 def build_opencode_sandbox_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     """隔離版の ``permissions`` を、通常版の宣言から導出する。
 
@@ -1043,7 +1020,6 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     rules += opencode_rules("shell", "allow", [f"{cmd} *" for cmd in shell_allow])
     rules += opencode_rules("shell", "allow", skill_allow)
     rules += opencode_rules("shell", "ask", [f"{cmd} *" for cmd in bash.get("ask", [])])
-    rules += opencode_rules("shell", "ask", opencode_skill_script_asks(common))
     rules += opencode_rules("shell", "deny", skill_deny)
     rules += opencode_rules("shell", "deny", [f"{cmd} *" for cmd in bash.get("deny", [])])
 
@@ -1926,22 +1902,6 @@ OPENCODE_AGENT_KEYS = frozenset(
 OPENCODE_PERMISSION_EFFECTS = frozenset({"allow", "ask", "deny"})
 
 
-def _expand_home_in_shell_rules(rules: list[dict[str, str]]) -> list[dict[str, str]]:
-    """shell の resource に書いた `` ~/`` を、展開した形の規則でも並べる。
-
-    shell の resource は生のコマンド文字列で ``~`` を展開しない。モデルは ``~/`` と
-    絶対パスのどちらでも書くので、両方に当てる (スキルのスクリプトの規則と同じ扱い)。
-    """
-    home = expand_user("~/").replace("\\", "/")
-    out: list[dict[str, str]] = []
-    for rule in rules:
-        out.append(rule)
-        resource = str(rule["resource"])
-        if rule["action"] == "shell" and " ~/" in resource:
-            out.append({**rule, "resource": resource.replace(" ~/", f" {home}")})
-    return out
-
-
 def opencode_v2_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """``[opencode.agents]`` (V2 形式のエージェント定義) を検査して返す。
 
@@ -1972,8 +1932,6 @@ def opencode_v2_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
             if rule["effect"] not in OPENCODE_PERMISSION_EFFECTS:
                 raise ValueError(f"[{section}] の effect が不正: {rule}")
         entry = dict(agent)
-        if entry.get("permissions"):
-            entry["permissions"] = _expand_home_in_shell_rules(entry["permissions"])
         if "bypass" in entry and not isinstance(entry["bypass"], bool):
             raise ValueError(f"[{section}] の bypass は true / false で書く")
         entry.pop("bypass", None)
@@ -1998,13 +1956,20 @@ def merge_opencode_v2_agents(existing: Any, common: dict[str, Any]) -> dict[str,
     """V2 の ``agents`` に、宣言したエージェントの定義を書く。
 
     宣言したキーだけを差し替え、他のエージェント・キー (``model`` など) は残す。
+    ``[opencode.retired] agents`` に書いた廃止済みのエージェントは消す。
     """
+    declared = opencode_v2_agents(common)
+    retired = set(common.get("opencode", {}).get("retired", {}).get("agents") or [])
+    if retired & set(declared):
+        raise ValueError(
+            f"[opencode.retired] agents が宣言と重なる: {sorted(retired & set(declared))}"
+        )
     out = {
         name: dict(entry)
         for name, entry in (existing if isinstance(existing, dict) else {}).items()
-        if isinstance(entry, dict)
+        if isinstance(entry, dict) and name not in retired
     }
-    for name, agent in opencode_v2_agents(common).items():
+    for name, agent in declared.items():
         out[name] = {**out.get(name, {}), **agent}
     return out
 

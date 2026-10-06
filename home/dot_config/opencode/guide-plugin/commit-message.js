@@ -104,7 +104,7 @@ function splitAnd(command) {
 // 単純な `git commit …` か、`git add -- <パス…> && git commit …` の 2 つだけを抜き出す。
 // 入力は生のコマンド (index.js) か、scanner が分けた resources (tui.ts)。
 // ★それ以外の連結は抜き出さない (残りが確認画面で隠れる)。
-// see docs/change/0013-commit-agent-as-planner.md
+// see docs/change/closed/0013-commit-agent-as-planner.md
 function parseCommand(input) {
   const segments = Array.isArray(input) ? input : typeof input === "string" ? splitAnd(input) : null
   if (!segments || segments.length < 1 || segments.length > 2) return null

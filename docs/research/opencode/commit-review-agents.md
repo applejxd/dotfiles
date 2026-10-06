@@ -370,7 +370,7 @@ index の stat 情報が古い（内容を変えずに `touch` した）状態�
 - 権限: 接頭辞付きの `allow` と、その形の例外の `deny`（`--no-index`・`--ext-diff`・`--textconv`・
   まとめてのステージ）をやめた。`git switch` / `git rm` / `git restore` / `git push` の `deny` も
   エージェントからは外した（全体の規則に落ちる）。規則は
-  [`commit` の権限](../../spec/agent-config-generation.md#commit-の権限)
+  [`commit` の権限](../../spec/agent-config-generation.md#コミットの確認)
 - `system`: コマンドの形を教えるのをやめ、分け方・書式・手順は commit スキルに従わせる。
   残したのは、確認が承認の場であること・read / glob / grep ツールで読むこと・`-m` を重ねること・
   連結とリダイレクトをしないこと・拒否と hook の失敗での止まり方

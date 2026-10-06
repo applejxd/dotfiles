@@ -407,7 +407,7 @@ def _tui(
 
 
 def test_commit_message_is_shown_right_above_the_permission_dialog(tmp_path):
-    """子 (commit エージェント) の確認も親の画面に出るので、親の表示で件名と本文を出す。"""
+    """子エージェントの確認も親の画面に出るので、親の表示で件名と本文を出す。"""
     out = _tui(tmp_path, _rules(), pending={"ses_child": [_perm(COMMIT)]})
     assert out["slots"] == ["session.composer.top"]
     assert out["rendered"] == [

@@ -278,16 +278,12 @@ def test_ocs_marks_only_the_rules_ocs_drops():
 
 
 def test_no_declared_agent_overrides_a_deny_today():
-    """静的 deny を覆しうるのは、commit の計画用スクリプトの allow だけ (CHG-0014)。
+    """今の宣言で静的 deny を覆すエージェントは無い。
 
-    commit は snapshot / save を allow で持ち、スキルのスクリプトのリダイレクトの前段停止と
-    重なるので対象外になる (commit 自身の `*>*` deny が後ろで止める)。
     覆すエージェントを対象外にする仕組みは test_v1_agent_permissions_* が確かめる。
     """
     rules = gen.build_opencode_guide({}, COMMON)["deny_guide"]
-    exempt = [r for r in rules if r.get("except_agents")]
-    assert all(r["message"] == SKILL_MESSAGE and r["except_agents"] == ["commit"] for r in exempt)
-    assert not [r for r in rules if r["message"] != SKILL_MESSAGE and r.get("except_agents")]
+    assert not [r for r in rules if r.get("except_agents")]
 
 
 def test_claude_and_copilot_generation_is_unchanged_by_deny_guide():
@@ -373,18 +369,10 @@ def test_ocs_stops_only_what_ocs_still_denies(tmp_path):
     assert [bool(x) for x in ocs] == [True, True, False, False, False, False, False]
 
 
-def test_commit_agent_is_stopped_like_the_others(tmp_path):
-    """commit は読むだけになり、git restore も他と同じく前段で止まる (CHG-0013)。"""
-    cases = [
-        ("git restore --staged -- a.txt", "commit", "shell"),
-        ("git restore a.txt", "commit", "shell"),
-        ("git restore a.txt", "build", "shell"),
-        ("git push", "commit", "shell"),
-        ("git restore a.txt", None, "shell"),  # agent が分からなければ止めない
-    ]
-    out = _run(tmp_path, cases)
-    assert out[:4] == [USER_MESSAGE] * 4
-    assert out[4] is None
+def test_unknown_agent_is_not_stopped(tmp_path):
+    """agent が分からなければ止めない (静的 deny に任せる)。"""
+    cases = [("git restore a.txt", "build", "shell"), ("git restore a.txt", None, "shell")]
+    assert _run(tmp_path, cases) == [USER_MESSAGE, None]
 
 
 def test_unreadable_rules_stop_nothing(tmp_path):
@@ -475,7 +463,6 @@ def test_agent_list_has_declared_and_builtin_agents():
         "plan",
         "general",
         "explore",
-        "commit",
         "review",
         "fleet-worker",
         "bypass",
@@ -717,7 +704,7 @@ def _corpus() -> list[str]:
     return list(seen)
 
 
-PROPERTY_AGENTS = ["build", "commit", "fleet-worker", "review"]
+PROPERTY_AGENTS = ["build", "fleet-worker", "review"]
 
 
 @pytest.fixture(scope="module")

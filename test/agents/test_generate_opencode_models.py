@@ -178,39 +178,40 @@ def test_other_policies_and_experimental_keys_survive():
 
 def test_declared_subagents_get_their_tier_models():
     agents = generated(PERSONAL)["agents"]
-    assert agents["commit"]["model"] == "github-copilot/claude-sonnet-5.5#medium"
     assert agents["review"]["model"] == "github-copilot/gpt-6-astra"
     work = generated(WORK)["agents"]
-    assert work["commit"]["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5-5#low"
     assert work["review"]["model"] == "amazon-bedrock/global.openai.gpt-6-sol"
 
 
 @pytest.mark.parametrize(
-    ("common", "commit", "worker"),
+    ("common", "worker"),
     [
-        (
-            PERSONAL,
-            "github-copilot/claude-sonnet-5.5#medium",
-            "github-copilot/claude-sonnet-5.5#medium",
-        ),
-        (
-            WORK,
-            "amazon-bedrock/global.anthropic.claude-sonnet-5-5#low",
-            "amazon-bedrock/global.anthropic.claude-sonnet-5-5#medium",
-        ),
+        (PERSONAL, "github-copilot/claude-sonnet-5.5#medium"),
+        (WORK, "amazon-bedrock/global.anthropic.claude-sonnet-5-5#medium"),
     ],
     ids=["personal", "work"],
 )
-def test_commit_and_fleet_worker_use_sonnet(common, commit, worker):
-    """commit は haiku では書式が崩れる (commit-review-agents 記録 E4-E6)。
-    fleet-worker は haiku では難しめの課題を落とし、opus と sonnet 5.5 は差が無い
+def test_fleet_worker_uses_sonnet(common, worker):
+    """fleet-worker は haiku では難しめの課題を落とし、opus と sonnet 5.5 は差が無い
     (docs/research/opencode/tier-models.md)。
     """
-    assert common["opencode"]["model"]["agents"]["commit"] == "routine"
     assert common["opencode"]["model"]["agents"]["fleet-worker"] == "worker"
-    agents = generated(common)["agents"]
-    assert agents["commit"]["model"] == commit
-    assert agents["fleet-worker"]["model"] == worker
+    assert generated(common)["agents"]["fleet-worker"]["model"] == worker
+
+
+def test_retired_agents_are_removed_from_existing_config():
+    """宣言をやめたエージェントは既存の opencode.json に残るので、廃止の一覧で消す。"""
+    existing = {"agents": {"commit": {"description": "old"}, "mine": {"mode": "all"}}}
+    out = generated(PERSONAL, existing)["agents"]
+    assert "commit" not in out
+    assert out["mine"] == {"mode": "all"}
+
+
+def test_retired_agent_cannot_also_be_declared():
+    common = copy.deepcopy(PERSONAL)
+    common["opencode"]["retired"] = {"agents": ["review"]}
+    with pytest.raises(ValueError, match="retired"):
+        generated(common)
 
 
 def test_assigned_agents_are_subagents():
@@ -238,7 +239,7 @@ def test_review_agent_only_reads():
 
 def test_v2_agents_do_not_leak_into_the_v1_key():
     config = generated(PERSONAL)
-    assert not {"commit", "review"} & set(config["agent"])
+    assert "review" not in config["agent"]
 
 
 def test_v2_agent_definitions_keep_unmanaged_keys():
@@ -253,7 +254,7 @@ def test_v2_agent_definitions_keep_unmanaged_keys():
 
 
 def test_system_prompt_is_trimmed():
-    system = generated(PERSONAL)["agents"]["commit"]["system"]
+    system = generated(PERSONAL)["agents"]["review"]["system"]
     assert system == system.strip()
 
 

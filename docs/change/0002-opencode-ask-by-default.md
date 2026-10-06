@@ -404,7 +404,7 @@ local hook を起動するため、**その設定を書き換えれば任意コ�
 （ocs でも確認が出る）。全体の allow から `git diff` / `git status` を外した判断（段階 4a の監査）は変えていない。
 外部コマンドを止める接頭辞（`-c core.fsmonitor=false -c core.hooksPath=/dev/null` など）を付けた形だけを
 allow にする案も試したが、止める対象の設定は clone で運ばれず、モデルの取り違えを生むのでやめた
-（[commit の権限](../spec/agent-config-generation.md#commit-の権限)、
+（[commit の権限](../spec/agent-config-generation.md#コミットの確認)、
 [記録 E2〜E4](../research/opencode/commit-review-agents.md)）。
 
 **2026-09-28 — 現在地をコードと照合し、「仕様への変更案」の適用結果を直した。**

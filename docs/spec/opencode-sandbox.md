@@ -381,7 +381,7 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 #### エージェントとコマンド
 
 `common.toml` の `[opencode.agent]`（`bypass`・`bypass-worker`）・`[opencode.agents]`
-（`commit`・`review`・`fleet-worker`）・`[opencode.commands]`（`/fleet`）を、隔離版にも
+（`review`・`fleet-worker`）・`[opencode.commands]`（`/fleet`）を、隔離版にも
 出す（[CHG-0010](../change/closed/0010-ocs-agents.md)）。境界の目的をうっかりの防止に絞ったので
 （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)）、境界の中で `bypass` を使ってよい。
 
@@ -404,11 +404,11 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 - **シェルの確認は通常起動より少ない。** 隔離版の全体の規則はシェルの既定が `allow`
   （`[opencode.sandbox.permissions] default_shell_effect`）で、`rm` などの
   `ask` も捨てている（`drop_shell`）。エージェントの `permissions` は後勝ちでそのまま効くので、
-  `commit`（読むだけ）や `fleet-worker` の git 操作の deny は残るが、それ以外は個別の deny / ask に
+  `fleet-worker` の git 操作の deny は残るが、それ以外は個別の deny / ask に
   当たらなければ確認なしで通る。
-  **`git commit` の `ask` と、コミット計画の `apply` の `ask` は捨てない**（[CHG-0014](../change/0014-deterministic-commit-runner.md)）。
+  **`git commit` の `ask` は捨てない**（会話での承認に加えて、実行時の確認を残す）。
   オプションを前に置いた `git -c … commit` は `ask` に当たらないので、guide 規則で止める
-  （[`commit` の権限](agent-config-generation.md#commit-の権限)）
+  （[コミットの確認](agent-config-generation.md#コミットの確認)）
 - **作業ツリーの外の読み取りは、通常版と同じく確認なし。** `external_directory` の `allow`
   （スキルの置き場と `work_read`）は隔離版にも出し、同じ場所への edit の `ask` も残す
   （[作業ツリーの外の読み取り](agent-config-generation.md#作業ツリーの外の読み取り)）。

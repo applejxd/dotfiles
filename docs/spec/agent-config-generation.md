@@ -579,13 +579,13 @@ permissions = [
 
 | 呼び出し元 | 起動できる子 |
 | --- | --- |
-| `bypass` | `bypass-worker`・`bypass-fleet-worker`・`explore`・`review`・`commit` |
-| `build` など | `general`・`fleet-worker`・`explore`・`review`・`commit` |
+| `bypass` | `bypass-worker`・`bypass-fleet-worker`・`explore`・`review` |
+| `build` など | `general`・`fleet-worker`・`explore`・`review` |
 
 - **`bypass` から承認制の子を外す理由。** `general` / `fleet-worker` は `bypass` から
   起動しても自分の規則で動くので、編集やシェルのたびに確認が出て無確認の前提が崩れる。
   モデルは説明の広い `general` を選びがちでもある。`explore` / `review` は読むだけで
-  確認がほぼ出ず、`commit` は読むだけの計画役（コミットは呼び出し元が行う）
+  確認がほぼ出ない
 - **deny した子は `subagent` ツールの一覧から消える**（実測）。`/fleet` の指示文は
   「一覧に `bypass-fleet-worker` があればそれ、無ければ `fleet-worker`」で使い分けさせる
 - `bypass-fleet-worker` は、`/fleet` の作業役を `bypass` でも無確認で動かすためのもの。
@@ -684,7 +684,7 @@ plugin が守る規約は次のとおり。
   判定は**エージェント名**で行う（`permission.evaluate` に `agent` が載ることを
   実測。[hook の呼ばれ方](../research/opencode/permission/hook-order.md)）。
   名前は `common.toml` の `bypass = true` から生成するので単一ソースが保たれる。
-  `commit` など別の名前の子の `ask` は書き換えない
+  `fleet-worker` など別の名前の子の `ask` は書き換えない
 - **`bypass` にも誘導・前段停止（early）・`grep` / `glob` の結果フィルタ・shell 出力の
   伏字化を同じに効かせる。** 素通りさせる判定は持たない。誤爆は誘導規則側を直す。
   子エージェントの起動制限（`guardSubagent`）だけは `bypass_agents` を見る
@@ -877,14 +877,14 @@ feat(opencode): git commit の確認に件名と本文を抜き出して出す  
   件名は切らずに折り返す。本文の各行は `line_width` と端末の幅の狭いほうで切る
   （折り返すと狭い画面で行数が倍になり、確認画面のボタンを押し出す）
 - `-m` 以外の引数（パス指定やオプション）も 1 行で出す。何がコミットされるかに関わる
-- **`git add -- <パス…> && git commit …` の連結形も抜き出す。** 親がステージとコミットを
-  1 回の呼び出しで行う形（確認が 1 回で済む。[`commit` の権限](#commit-の権限)）。追加するパスを
+- **`git add -- <パス…> && git commit …` の連結形も抜き出す。** commit スキルは分けて実行するが、
+  モデルが連結形で書いたときも表示できるようにしている。追加するパスを
   `追加: …` の 1 行で出す。scanner が分けた `resources` は 2 つになるので、`tui.ts` は配列のまま、
   `index.js` は生のコマンドを渡す。連結は引用符の外の `&&` で分け、前が `git add -- <パス 1 つ以上>`、
-  後ろが単純な `git commit …` のときだけ抜き出す（[CHG-0013](../change/0013-commit-agent-as-planner.md)）
+  後ろが単純な `git commit …` のときだけ抜き出す（[CHG-0013](../change/closed/0013-commit-agent-as-planner.md)）
 - 表示は本体の確認画面と同じ要求を選ぶ（自分と子のセッションの保留の先頭。子の
   セッションを開いているときは出さない）。コミットは親が行うので、確認は親の画面に出る
-  （[`commit` の権限](#commit-の権限)）
+  （[コミットの確認](#コミットの確認)）
 - **抜き出せない形は従来のモデルの説明へ倒す。** 上の連結形を除く引用符の外の `;` `&&` `|` `>`
   改行（別のコマンドが続き、確認画面で切れた部分に隠れうる）、`$` や `` ` ``（実行時に
   展開される）、`-F` / `-C` / `--fixup` など `-m` 以外からメッセージを取るもの、
@@ -1024,12 +1024,12 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 | `deep` | 難しい判断・設計 | `claude-opus-5.5#xhigh` | `global.anthropic.claude-opus-5-5#high` |
 | `second_opinion` | 別系統のモデルでの確かめ | `gpt-6-astra` | `global.openai.gpt-6-sol` |
 
-割り当て（`[opencode.model.agents]`）は `commit = "routine"`・`review = "second_opinion"`・
-`fleet-worker = "worker"`。
+割り当て（`[opencode.model.agents]`）は `review = "second_opinion"`・`fleet-worker = "worker"`。
+`routine` は今は割り当て先が無い（`commit` エージェントを廃止した。[コミットの確認](#コミットの確認)）。
 
 - **`routine` と `worker` は今は同じモデルだが、分けておく。** 名前は用途なので、
   どちらかの計測結果が変わったときに片方だけ差し替えられる
-- **`routine`（`commit`）は Sonnet 5.5。** `commit` を haiku で動かすとメッセージの書式が崩れ、
+- **`routine` は Sonnet 5.5。** 廃止した `commit` エージェントでの測定。`commit` を haiku で動かすとメッセージの書式が崩れ、
   `claude-sonnet-5` ではそろった（[記録 E4 / E5](../research/opencode/commit-review-agents.md)）。
   Copilot の `claude-sonnet-5.5#medium` は `claude-opus-5.5#medium` と同等にコミット・書式がそろい、
   速く単価も半分で、`claude-sonnet-5` より `git commit` 以外の確認が少なかった（記録 E6）。
@@ -1128,14 +1128,8 @@ explore = "worker"      # 例
 
 | ID | 階層 | 役割 | 権限で塞ぐもの |
 | --- | --- | --- | --- |
-| `commit` | `routine` | 変更を読み、ファイル単位の論理単位ごとに対象とメッセージを決めて計画として保存し、計画 ID を返す。表示とコミットは親とスクリプトが行う | 編集・質問・子エージェントの起動・読み取りと計画の記録・保存以外の shell（下記） |
 | `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
 
-- **判断はモデル、表示と実行はスクリプト。** 子は差分を読む重い作業を安いモデルで肩代わりし、
-  計画を `commit_plan.py` で保存する。親はその全文を返答に書き、`apply` の確認 1 回でスクリプトが
-  コミットする（[`commit` の権限](#commit-の権限)、[CHG-0014](../change/0014-deterministic-commit-runner.md)）。
-  以前は親がモデルとして計画を書き写してコミットしていたが、表示を飛ばすことがあった
-  （[CHG-0013](../change/0013-commit-agent-as-planner.md)）
 - **`review` は shell を開けない。** `git diff` / `git status` も外部の diff
   ドライバや fsmonitor を通じてコードを実行しうる
   （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）。
@@ -1146,74 +1140,39 @@ explore = "worker"      # 例
 - `system` は組み込みの基底プロンプトを**置き換える**（公式）。`AGENTS.md` や
   スキルの一覧は引き続き足される
 - `permissions` は全体の規則の後ろに付き、後勝ちで効く。効果は `allow` / `ask` / `deny`。
-  shell の resource に書いた `~/` は、`generate.py` が展開した絶対パスの形も並べる
-- 宣言したキーだけを差し替え、他のキーと他のエージェントは残す
+  隔離版で全体から捨てた `ask` も、エージェントの規則で戻せる
+- 宣言したキーだけを差し替え、他のキーと他のエージェントは残す。廃止したエージェントは
+  `[opencode.retired] agents` に書くと、既存の `opencode.json` から消す（宣言をやめただけでは残る）
 - 隔離起動（`ocs`）にも同じ定義が出る。通常版の `opencode.json` からは引き継がず、
   `common.toml` から作る（[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
 
-#### `commit` の権限
+### コミットの確認
 
-コミットは「判断はモデル、表示と実行はスクリプト」で行う（[CHG-0014](../change/0014-deterministic-commit-runner.md)）。
-スクリプトは `~/.claude/skills/commit/scripts/commit_plan.py`（標準ライブラリだけ。計画は
-`<git の共通ディレクトリ>/commit-plan/<ID>/` に置き、作業ツリーを汚さない。7 日より古い計画は `snapshot` の
-たびに消す。消すのは計画 ID の形をした名前のディレクトリだけ）。
+コミットは親（主エージェント）が commit スキルに従って行う。コミット用の子エージェントは置かない。
+スキルの既定どおり、対象とメッセージ全文を返答の文章に示して**会話で利用者の承認を待ち**、承認されたら
+`git add -- <パス>` と `git commit -m '<件名>' -m '<本文>'` を別々に実行する。全文の表示は承認の前提なので
+抜けにくい。そのうえで `git commit` には実行時の確認も残る（下表）。承認の操作は通常起動と `ocs` で 2 回
+（会話と確認画面）、`bypass` で 1 回（会話）。
 
-**流れ**:
-
-1. 子（`commit`）が `commit_plan.py snapshot` で状態（HEAD・ブランチ・変更ファイルの中身の指紋）を記録し、
-   計画 ID を得る。ステージ済みの変更・merge 中などは止める
-2. 子が差分を読み、ファイル単位の論理単位ごとに対象とメッセージを決め、`commit_plan.py save <ID> '<JSON>'` で
-   保存する（1 回だけ。JSON の文字列の中の `'` `<` `>` は `\u0027` `\u003c` `\u003e` と書く）。親には ID を返す
-3. 親が `commit_plan.py show <ID>` を実行し、その出力を一字一句変えずに ```` ```text ```` のコードブロック 1 つで
-   返答の文章に書く。アシスタントの文章は TUI で畳まれないので、利用者はタップせずに全文を読める
-4. 親が `commit_plan.py apply <ID>` を実行する。**承認はこの確認 1 回で全単位**（bypass は 0 回）。
-   スクリプトが HEAD・ブランチ・対象ファイルの中身が snapshot と同じか、ステージが空かを確かめ、単位ごとに
-   `git add` → ステージした内容が計画と一致するかの確かめ → `git commit` を行う。ずれ・hook の失敗で止まり、
-   そこまでの結果を返す（巻き戻さない）。実行済みの計画は再実行できない
-
-**apply の前段の確かめ**（guide plugin の `commit-plan.js`。`tool.execute.before`）: 同じターン（最後の利用者の
-発言より後）に `show <ID>` の完了した出力があり、それと同じ全文（行末の空白と前後の空行は無視）が返答の
-文章のコードブロックにあるときだけ通す。無ければ、理由と手順（利用者の拒否ではないこと）を返して止める。
-`ctx.session.context` が読めない・`commit-plan.js` を読めないときも止める（全文を確かめられないため）。
-照合をターンに限るのは、前のターンの文章で通らないため。コードブロックに限るのは、モデルが書き写すときに
-Markdown を意識して書き換えることがあるため（実機で `[1/1]` が `1/1` になった。CHG-0014 の段 0b）
-
-**子の権限**（後勝ち）:
-
-| 順 | 効果 | 規則 | 理由 |
-| --- | --- | --- | --- |
-| 1 | `deny` | `edit` / `subagent` / `question` の `*` | 編集・子エージェントの起動・質問をさせない |
-| 1 | `deny` | shell の `*` | 許す形以外をさせない。隔離起動はシェルの既定が `allow` なので、列挙ではなく全体で塞ぐ |
-| 2 | `allow` | `git status *`・`git diff *`・`git log *`・`git branch --show-current`・`git rev-parse --show-toplevel` | 状況の把握 |
-| 2 | `allow` | `commit_plan.py snapshot`・`commit_plan.py save *`（`~/` と展開した形） | 計画の記録と保存。`show` と `apply` は許さない |
-| 3 | `deny` | `*>*`・`*<*`・`*--output*` | ファイルへの書き出し |
-
-**全体の規則**（親）: `[opencode.skill_scripts]` で `snapshot` / `save` / `show` を確認なし、`apply` を `ask`
-（`ask = ["apply"]`）にする。`ask` は隔離起動でも捨てない（`opencode_skill_script_asks`）。
-
-| 起動の仕方 | `apply` の確認 | 前段の確かめ |
+| 起動の仕方 | 確認 | 仕組み |
 | --- | --- | --- |
-| 通常起動 | 出る | 効く |
-| `bypass` | 出ない（`ask` を `allow` に引き上げる） | 効く |
-| 隔離起動（`ocs`） | 出る | 効く |
+| 通常起動 | 出る | 全体の `git commit *` の `ask`（`[bash] ask`） |
+| `bypass` | 出ない | `ask` を `allow` に引き上げる。利用者が確認を省くと選んだ起動 |
+| 隔離起動（`ocs`） | 出る | `drop_shell` で `git commit` の `ask` を捨てない |
 
-- `git commit` の `ask` は残す（親が素の `git commit` を使う場合のため）。隔離起動でも捨てない。オプションを前に
-  置いた `git -c … commit` は guide 規則で止める（`git commit *` の `ask` に当たらず、隔離起動では確認なしで通るため）
-- **全体の規則は変えない。** 全体の `allow` から `git diff` / `git status` を外した判断
-  （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）はそのままで、
-  素の形を確認なしで通すのは `commit` の中だけ。`commit_plan.py` の `snapshot` / `save` / `show` も git を
-  呼ぶが、範囲は `commit` が既に持つ読み取りと同じ（リポジトリの設定の fsmonitor などは起動しうる）
-- **接頭辞（`git -c core.fsmonitor=false -c core.hooksPath=/dev/null` など）は付けない。** 以前はこの接頭辞の形
-  だけを allow にしていた（記録 E2 / E3）。リポジトリの設定は clone では運ばれず、`.git/config` の書き換えは
-  別に塞いであり、接頭辞はモデルの取り違えを生んだ
-- **モデルは `routine` 階層の Sonnet。** 書式の測定（記録 E4〜E6）は子がコミットまで行っていた旧方式でのもの。
-  計画役になってからは未測定
-- **割り切り**: ファイル単位まで（同じファイルの中は分けない）。途中の単位で失敗しても巻き戻さない。
-  中身を書き換える pre-commit hook は止められない（コミット後にメッセージの食い違いだけを報告する）。
-  ステージ済みの変更があると計画を作れない
-- **残る穴**: 静的な照合なので、引用符や変数で書き換えた形は照合をすり抜ける
-  （[静的パターンの回避](../research/opencode/permission/shell-allow-and-plugin-gate.md)）。
-  `apply` の確認で「常に許可」を選ぶと、以後は確認なしで実行される（前段の確かめは残る）
+- **オプションを前に置いた `git -c … commit` は guide 規則で止める。** 隔離起動はシェルの既定が
+  `allow` なので、`git commit *` の `ask` に当たらない形は確認も hook も無しで通る。
+  guide 規則は素の形への書き直しを促して止める。コミットメッセージの中に同じ形の
+  文字列があると誤って止める（承知の割り切り）
+- **確認画面には件名と本文を抜き出して出す**（[`git commit` の件名と本文](#git-commit-の件名と本文)）
+- **子エージェントに任せる仕組みは取りやめた。** 子にコミットまでさせる方式は確認画面が子から見えず、
+  子に計画だけを作らせて親が書き写す方式（[CHG-0013](../change/closed/0013-commit-agent-as-planner.md)）は
+  親が表示を飛ばすことがあり、計画をスクリプトで固定して照合する方式
+  （[CHG-0014](../change/closed/0014-deterministic-commit-runner.md)）は部品が多く、実機の TUI で照合が
+  止まった。コミットは push 前なら直せるので、仕組みで守る範囲に見合わないと判断した（2026-10-07、利用者の選択）
+- **残る穴**: 静的な照合なので、引用符や変数で書き換えた形（`g"it" commit` など）は照合を
+  すり抜ける（[静的パターンの回避](../research/opencode/permission/shell-allow-and-plugin-gate.md)）。
+  確認で「常に許可」を選ぶと `git commit *` がプロジェクトに保存され、以後は確認なしでコミットする
 
 ### 並列作業（`/fleet`）
 

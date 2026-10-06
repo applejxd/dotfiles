@@ -195,7 +195,6 @@ def test_wildcard_intersection_refuses_shapes_it_cannot_cross(a, b):
 
 SDD = "~/.claude/skills/sdd-docs/scripts"
 CP = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
-PLAN = "~/.claude/skills/commit/scripts/commit_plan.py"
 
 
 @pytest.mark.parametrize(
@@ -261,8 +260,6 @@ def test_skill_script_allow_is_not_widened_silently():
     リポジトリの設定からコマンドを起動しないかを確かめる (see 冒頭の docs)。
     """
     allow, _ = gen.opencode_skill_script_rules(COMMON)
-    # commit_plan.py は git の共通ディレクトリの commit-plan/<ID>/ だけに書く (ID は英数字と -)。
-    # git を通すのは commit エージェントが既に allow で持つ status / diff と同じ範囲 (CHG-0014)
     assert [r for r in allow if r.startswith(("python3 ~/", "bash ~/"))] == [
         f"python3 {SDD}/lint_docs.py *",
         f"python3 {SDD}/check_refs.py --save",
@@ -270,12 +267,6 @@ def test_skill_script_allow_is_not_widened_silently():
         f"python3 {CP} paths *",
         f"python3 {CP} lint *",
         f"python3 {CP} read *",
-        f"python3 {PLAN} snapshot *",
-        f"python3 {PLAN} save *",
-        f"python3 {PLAN} show *",
-    ]
-    assert [r for r in gen.opencode_skill_script_asks(COMMON) if r.startswith("python3 ~/")] == [
-        f"python3 {PLAN} apply *",
     ]
 
 

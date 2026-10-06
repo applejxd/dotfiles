@@ -7,6 +7,10 @@ OpenCode の階層 `routine`（`commit`）と `worker`（`fleet-worker`）に当
 [commit / review エージェントの実機確認](../../docs/research/opencode/commit-review-agents.md)（記録 E3〜E6）・
 [作業役への指示の計測](../../docs/research/opencode/fleet-worker-instructions.md)にある。
 
+> **`routine/` は今は動かない。** 前提の `commit` エージェントを 2026-10-07 に廃止した
+> （[コミットの確認](../../docs/spec/agent-config-generation.md#コミットの確認)）。下の `routine` の例は
+> 旧版用の手順として残している。`routine` に割り当て先ができたら課題を作り直す。
+
 ```text
 scripts/model-eval/
 ├── gen_config.py      # 計測用の設定を作る（階層・エージェントのモデルを差し替える）
