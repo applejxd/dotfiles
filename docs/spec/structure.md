@@ -226,6 +226,20 @@ Raspberry Pi 固有のシステム設定（memlock など）は chezmoi では�
 `scripts/raspi/` に置いたまま手動で実行します。
 詳細は [CHG-0008](../change/closed/0008-raspi-branching.md) を参照。
 
+### WSL
+
+`/etc/wsl.conf` は `100_linux/run_once_after_120_wsl.sh.tmpl` が丸ごと書き出します
+（内容を変えると次の `apply` で再実行され、sudo を求めます）。反映には Windows 側で
+`wsl --shutdown` が要ります。
+
+`[automount] mountFsTab = false` で、`/etc/fstab` の処理を WSL の init ではなく
+systemd（`systemd=true`）に任せます。WSL の init は起動直後に `mount -a` を一度だけ
+実行するため、Tailscale の名前など起動直後に解決できないホストへの CIFS マウントが
+`Processing /etc/fstab with mount -a failed.` で失敗します。systemd は CIFS を
+ネットワーク FS として扱い、ネットワークの起動後にマウントするので、同じ行が
+そのままマウントされます（NAS への CIFS マウントで確認済み）。
+`/etc/fstab` 自体は chezmoi では管理しません。
+
 ## mise による CLI 管理
 
 本体の宣言は `home/dot_config/mise/config.toml.tmpl` に集約します。

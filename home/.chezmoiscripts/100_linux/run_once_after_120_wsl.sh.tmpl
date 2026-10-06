@@ -12,6 +12,8 @@ sudo tee /etc/wsl.conf > /dev/null << 'EOF'
 [automount]
 options = "metadata"
 enabled = true
+# see docs/spec/structure.md#wsl
+mountFsTab = false
 
 [interop]
 enabled = true
