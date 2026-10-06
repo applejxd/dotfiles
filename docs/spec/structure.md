@@ -560,6 +560,11 @@ Copilot CLI がツールとして起動するシェルへ渡す git の既定値
    `EDITOR=true` のように成功を偽装する値は採らない。
 5. 関数内の失敗は `exit` ではなく `return` で抜ける（`ccd` / `jcd` / `cdf`）。
    `zpack` は既存の出力先を上書きせず、一時ファイル経由で成功したときだけ移す。
+6. 大きい関数は `~/.config/shell/functions/` に分け、`shellrc.sh` の末尾で読み込む
+   （`archive.sh`: `extract` / `zpack` / `zunpack`、`cpp.sh`: `runcpp`）。
+   テンプレート機能が要らないので素の `.sh` にし、pre-commit の shellcheck を効かせる。
+   読み込み元が `shellrc.sh` だけなので、対話シェル専用であることは変わらない。
+   小さい関数は `shellrc.sh` に残す。zsh の `autoload` は bash で使えないので採らない。
 
 参考にした記事（tellme.tokyo の AI-first dotfiles）のうち、Nix 化・`rm` を `gomi`
 に差し替える alias・`is_human` による人間判定は採らない。それぞれ、導入物の管理を
@@ -567,9 +572,84 @@ mise に統一している方針と合わない、標準コマンドの意味を
 合わない、判定を環境変数の列挙に頼るため（2）である。
 
 検査は `test/test_shell_startup.py`（非対話 zsh / login bash の alias・環境変数・
-出力、`.zshrc` の早期 return、`shellenv.sh` 単体、`zpack`）。一時 HOME に描画結果を
+出力、`.zshrc` の早期 return、`shellenv.sh` 単体、`functions/` の読み込み、`zpack`、
+`runcpp`）。一時 HOME に描画結果を
 置いて実行し、zinit・mise・fzf・ネットワークは使わない。実機の対話シェルの
 起動（プロンプトまで）は検査しない。
+
+## C++ の単一ファイル実行（runcpp）
+
+コーディング試験・競技プログラミングの問題を解くための関数（`functions/cpp.sh`）。
+1 ファイルをコンパイルして実行する。zsh では suffix alias（`60_suffix_alias.zsh.tmpl`）で
+`.c` / `.cc` / `.cpp` を打つと呼ばれる。
+
+```text
+runcpp [オプション] <src.cpp> [オプション] [-- プログラム引数...]
+```
+
+| オプション | 意味 |
+| --- | --- |
+| `-d` / `--debug` | 間違いを見つけるモード（既定） |
+| `-r` / `--release` | 提出環境に近いモード。速度の確認用 |
+| `-c` / `--compile-only` | コンパイルだけ（警告の確認） |
+| `-t` / `--time` | 実行時間を表示 |
+| `--std=STD` | 言語規格（既定 `gnu++20`） |
+
+| 環境変数 | 意味 |
+| --- | --- |
+| `RUNCPP_MODE` | オプションが無いときのモード（`debug` / `release`） |
+| `RUNCPP_CXX` | コンパイラ（既定 `g++`。macOS では最新の `g++-N`） |
+| `RUNCPP_STD` | `--std` の既定値 |
+| `RUNCPP_FLAGS` | 追加フラグ（例 `-I$HOME/ac-library`）。空白で分割する |
+
+suffix alias での使い方:
+
+```zsh
+a.cpp < in1.txt                # debug
+a.cpp -r -t < big.txt          # release で時間計測
+RUNCPP_MODE=release a.cpp      # 環境変数でも切り替えられる
+a.cpp -- foo                   # プログラムに引数を渡す
+```
+
+設計:
+
+- `--` より前は位置を問わず runcpp のオプションとして読む。suffix alias では
+  `a.cpp -r` が `runcpp a.cpp -r` に展開されるため、ソースの後ろにも書けないと
+  モードを切り替えられない。`--` の前に置いたオプションでない語もプログラム引数になる
+- suffix alias はコマンド位置の語にしか効かない。`./a.cpp` ではなく `a.cpp` と打つ
+- バイナリは `${XDG_CACHE_HOME:-~/.cache}/runcpp/<名前>-<モード>` に置く。
+  作業ディレクトリを汚さず、debug と release を取り違えない。
+  コンパイルに失敗したら実行しない（古いバイナリを動かさない）
+- 実行はサブシェルで `ulimit -s 1048576`（1GiB。ハード上限が低ければその値）にする。
+  深い再帰の DFS が手元だけでスタックオーバーフローするのを防ぐ
+
+モードごとのフラグ:
+
+| | debug | release |
+| --- | --- | --- |
+| 最適化 | `-O0 -g -fno-omit-frame-pointer` | `-O2` |
+| 警告 | `-Wall -Wextra -Wshadow -Wformat=2 -Wfloat-equal -Wcast-qual`。gcc では `-Wduplicated-cond -Wlogical-op` も | `-Wall -Wextra` |
+| 実行時検査 | `-fsanitize=address,undefined -fno-sanitize-recover=all` | なし |
+| STL の検査 | `-D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC`（libstdc++）、`-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG`（libc++） | なし |
+| マクロ | `-DLOCAL` | `-DONLINE_JUDGE` |
+
+- `-Wconversion` は `int` と `size_t` の比較などで警告が大量に出るので入れない。
+  `-Wpedantic` は `__int128` や可変長配列でも警告が出るので入れない。
+  必要なら `RUNCPP_FLAGS` で足す
+- release でも `NDEBUG` は付けない。AtCoder などのジャッジでも `assert` は有効なため
+- `ulimit -s unlimited` にしない。スタックの上限を無制限にすると Linux がメモリ配置を
+  旧方式（mmap を低位アドレスから割り当てる）に切り替え、ASan のシャドウ領域と重なって
+  起動時に `Shadow memory range interleaves with an existing memory mapping` で
+  落ちることがある（2026-10-06 に Ubuntu 24.04 / g++ 13.3 で観測）
+- `-t` の分岐ではサブシェル内で `exec` しない。bash の `time ( exec cmd )` は
+  時間を表示しない（同日に bash 5.2 で観測）
+- macOS の `g++` は Apple clang で、`bits/stdc++.h` が無く `_GLIBCXX_DEBUG` も効かない。
+  そのため Homebrew の `g++-N`（`brew "gcc"`）を探して使う。Apple Silicon の
+  Homebrew gcc は sanitizer を使えない可能性があり、その場合は
+  `RUNCPP_CXX=clang++` に切り替える（`bits/stdc++.h` は使えなくなる）。macOS 実機では未検証
+
+検査は `test/test_shell_startup.py`（bash / zsh の両方で、release の実行、debug での
+範囲外アクセスの検出、`--` 以降の引数、コンパイル失敗時に実行しないこと、不正な入力）。
 
 ## シェルプラグインの取得
 
