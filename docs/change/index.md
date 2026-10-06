@@ -49,7 +49,7 @@
 | [0011](0011-agent-first-shell.md) | AI エージェントがシェルの主な利用者である前提へ整える | In progress | Claude Code / Copilot CLI に git の環境変数を入れられるか未調査。Windows 実機で未検証 | ocs の実機と `commit` エージェントで deny の前段停止（pip 以外へ拡張済み）を確かめる | 2026-10-03 |
 | [0012](0012-bash-hook-shared-parser.md) | bash 検査 hook のコマンド解析を 1 か所に集める | In progress | Windows 実機で未検証。B 群（`shlex.split` の規則）は保留 | Windows の PowerShell で `test/agents/` を回し、通れば閉じる | 2026-10-06 |
 | [0013](0013-commit-agent-as-planner.md) | commit エージェントを計画役にし、コミットは親が行う | In progress | 親が計画を表示しないことがある（実機）。CHG-0014 で置き換える予定 | CHG-0014 の段 3 で置き換えて閉じる | 2026-10-06 |
-| [0014](0014-deterministic-commit-runner.md) | コミットの表示と実行を決定的なスクリプトに任せる | In progress | 実機で親が show → コードブロック → apply の順に動くか（未確認） | `chezmoi apply` の後に段 3 の実機確認 | 2026-10-06 |
+| [0014](0014-deterministic-commit-runner.md) | コミットの表示と実行を決定的なスクリプトに任せる | In progress | 利用者の TUI と隔離起動での動き（`--auto` は成功） | TUI（通常起動・bypass）と `ocs` で「コミットして」を試す | 2026-10-07 |
 
 ## 保留
 

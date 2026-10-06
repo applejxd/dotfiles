@@ -33,7 +33,7 @@
 | 0b | 返答の文章に書いた計画を、ツール実行の直前にプラグインで確かめられるかを確かめる | 完了（確かめられる） |
 | 1 | 最小版の実行用スクリプト（スナップショット・計画の保存・表示・実行） | 完了（実機未確認） |
 | 2 | 子エージェントと親の手順、表示していない計画の実行をプラグインで止める | 完了（実機未確認） |
-| 3 | 実機で通常起動・bypass・隔離起動（`ocs`）を確かめ、CHG-0013 の仕組みを置き換える | 未着手 |
+| 3 | 実機で通常起動・bypass・隔離起動（`ocs`）を確かめ、CHG-0013 の仕組みを置き換える | 進行中（`--auto` は成功。TUI の確認待ち） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -74,8 +74,8 @@
 
 ## 次の調査・実験
 
-- 段 3: `chezmoi apply` の後、`scripts/opencode_probe.sh --auto` で「コミットして」を頼み、子が snapshot → save、
-  親が show → コードブロック → apply の順に動くかを確かめる。続けて利用者の TUI（通常起動と bypass）で見る
+- 段 3 の残り: 利用者の TUI（通常起動と bypass）で「コミットして」を頼み、全文がタップなしで会話に出ること・
+  確認が通常起動で 1 回、bypass で 0 回であることを見る。隔離起動（`ocs`）でも 1 回確かめる
 
 ## 評価基準
 
@@ -173,6 +173,18 @@
 - 実機は未確認（`chezmoi apply` が要る）
 - 追記（2026-10-06）: 古い計画が `.git/commit-plan/` に溜まるので、`snapshot` のたびに 7 日より古い計画を消す
   ようにした（計画 ID の形をした名前のディレクトリだけ。試験 `test_old_plans_are_pruned_on_snapshot`）
+- 追記（2026-10-06）: 以前廃止した `.claude/skills/commit/scripts` を消す指定が `.chezmoiremove` に残っており、
+  同名を作り直したため chezmoi が inconsistent state になった（`test_modifier_targets_keep_json_names` が検出）。
+  指定を外した（`f3f0d5b`）
+
+段 3・`--auto`（2026-10-07。`chezmoi apply` 後の配備のまま、`.tmp/opencode/chg0013/setup.sh` の作業用リポジトリで
+`scripts/opencode_probe.sh --auto --format json`、親は `github-copilot/claude-opus-5`、依頼は「今の変更をコミットして
+ください。差分は自分で読まず、commit エージェントに任せてください。push はしないでください。」）:
+
+- 子: snapshot → save を行い、計画 ID と件名だけを返した（README と calc.py を 1 単位にまとめた理由も添えた）
+- 親: `show <ID>` → その出力を一字一句同じ ```` ```text ```` ブロックで返答に書く → `apply <ID>` の順に、
+  1 回で通った（前段の確かめで止まらなかった）。apply の出力は `[1/1] 7f0530c …` と「残りの変更: なし」
+- コミットのメッセージは計画の全文と同じだった（`git log -1 --format=%B`）
 
 ## 重要な更新
 
