@@ -1149,7 +1149,7 @@ explore = "worker"      # 例
 ### コミットの確認
 
 差分を読む作業は安いモデルの子（`commit`）に任せ、**承認は会話で行う**
-（[CHG-0015](../change/0015-commit-planner-with-chat-approval.md)）。
+（[CHG-0015](../change/closed/0015-commit-planner-with-chat-approval.md)）。
 
 1. 親が `commit` を呼ぶ。子は commit スキルの手順 2 として差分を読み、ファイル単位の論理単位ごとに
    対象のパスとメッセージ全文（計画）を返す。ステージもコミットもしない

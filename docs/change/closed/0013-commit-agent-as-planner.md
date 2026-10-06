@@ -1,7 +1,7 @@
 # CHG-0013: commit エージェントを計画役にし、コミットは親が行う
 
 > この文書は当時の記録。計画役の `commit` エージェントは後に廃止した（[終了結果](#終了結果)）。
-> 後続: [CHG-0015](../0015-commit-planner-with-chat-approval.md) で、承認を会話にして計画役を戻した。
+> 後続: [CHG-0015](0015-commit-planner-with-chat-approval.md) で、承認を会話にして計画役を戻した。
 > 現在の仕様は [`spec/agent-config-generation.md` のコミットの確認](../../spec/agent-config-generation.md#コミットの確認)。
 > 「現在地」「未解決点」などは 2026-10-06 時点のまま。
 

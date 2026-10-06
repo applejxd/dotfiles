@@ -1,7 +1,7 @@
 # CHG-0014: コミットの表示と実行を決定的なスクリプトに任せる
 
 > この文書は当時の記録。本案は採用せず取り下げた（[終了結果](#終了結果)）。
-> 後続: 計画役の `commit` は [CHG-0015](../0015-commit-planner-with-chat-approval.md) で、承認を会話にして戻した。
+> 後続: 計画役の `commit` は [CHG-0015](0015-commit-planner-with-chat-approval.md) で、承認を会話にして戻した。
 > 現在の仕様は [`spec/agent-config-generation.md` のコミットの確認](../../spec/agent-config-generation.md#コミットの確認)。
 > 「現在地」「次の調査・実験」などは 2026-10-07 時点のまま。
 
