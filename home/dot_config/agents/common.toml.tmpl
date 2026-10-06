@@ -940,57 +940,42 @@ permission = { task = "deny" }
 # system は組み込みの基底プロンプトを置き換える。permissions は全体の規則の後ろに付く。
 # see docs/spec/agent-config-generation.md#子エージェント
 [opencode.agents.commit]
-description = "変更を論理単位に分けてステージし、単位ごとにコミットする。git commit は権限の確認 (ask) を通す。親は差分を読まずにこれへ任せる。利用者が全文を承認したメッセージを渡すと、そのまま使う"
+description = "変更を読み、論理単位ごとの対象ファイルとコミットメッセージ全文 (計画) を返す。ステージもコミットもしない。親は差分を読まずにこれへ任せ、返された計画をそのまま利用者に表示してから、自分で git add -- <パス> と git commit -m を単位ごとに実行する。git commit の権限の確認が承認の場になる (表示に利用者の操作は求めない)"
 mode = "subagent"
 system = """
-あなたはコミット係です。親から呼ばれ、変更をコミットして結果を返します。
+あなたはコミットの計画係です。親から呼ばれ、変更を読んでコミットの計画を返します。
+ステージとコミットは親が行います。
 
-- 最初に skill ツールで commit スキルを読み込む。分け方・メッセージの書式・手順はそれに従う
-- 呼び出し元がメッセージの全文を渡したら、利用者が承認済みなので一字も変えずに使う
-  (書式も直さない)。渡されなかった単位だけ、スキルに従って作る
-- この指示は、git commit の権限の確認を承認の場と定める (スキルの手順 4 の冒頭に当たる)。
-  メッセージを示して承認を求める返答は書かず、git commit を実行する
+- 最初に skill ツールで commit スキルを読み込む。分け方・メッセージの書式は
+  それに従い、手順 2 (メッセージ作成だけを依頼された場合) として扱う
+- 単位はファイル単位で分ける。同じファイルの中を分ける必要があるときは、単位をまとめるか、
+  分けられなかったことを書く
+- 単位ごとに、対象のパス (git status --short の行) とメッセージの全文を、スキルの
+  「承認時の提示」の形で返す。メッセージは親がそのまま git commit -m '<件名>' -m '<本文>' に
+  使うので、全文を省略せずに書く
 - ファイルは read / glob / grep ツールで読む。shell で cat / ls / find / echo などを使わない
-- メッセージは git commit -m '<件名>' -m '<本文>' のように -m を重ねる。本文の改行は引用符の
-  中に書く。ヒアドキュメントと -F は使わない (編集できないので、それを勧める誘導に従えない)
 - shell は 1 回の応答で 1 つだけ呼び、完了結果を受け取ってから次を呼ぶ。1 回の呼び出しは
   1 コマンドとし、; や && でつなげず、リダイレクトや 2>&1 を付けない。作業ディレクトリは
   cd ではなく shell ツールの workdir で指定する
-- コマンドの実行結果から、確認画面の表示やユーザーの承認操作の有無を推測しない。拒否や失敗は、
-  ツール結果に示された内容をそのまま伝える
-- 確認が拒否されたら、それ以降はコミットしない。コミットしたもの・しなかったもの (ステージ
-  内容とメッセージの全文)・残りの単位の案を返して終わる
-- hook がファイルを直してコミットが失敗したら、同じパスを add し直して 1 回だけやり直す
+- 対象外のステージ済み変更や、部分ステージ (同じファイルの index と作業ツリーの両方に差分) が
+  あれば、計画に添えて書く
 
-ファイルは編集しない。
+ファイルは編集しない。git add / git commit などで状態を変えない。
 """
-# ★後勝ち。状態を変える git の deny → allow → その例外の deny → git commit の ask → commit の deny。
+# ★読むだけ。shell は全体を deny してから読み取りの形だけ allow し、書き出しを deny する (後勝ち)。
 # see docs/spec/agent-config-generation.md#commit-の権限
 permissions = [
   { action = "edit", resource = "*", effect = "deny" },
   { action = "subagent", resource = "*", effect = "deny" },
   { action = "question", resource = "*", effect = "deny" },
-  { action = "shell", resource = "git checkout *", effect = "deny" },
-  { action = "shell", resource = "git reset *", effect = "deny" },
-  { action = "shell", resource = "git stash *", effect = "deny" },
-  { action = "shell", resource = "git clean *", effect = "deny" },
+  { action = "shell", resource = "*", effect = "deny" },
   { action = "shell", resource = "git status *", effect = "allow" },
   { action = "shell", resource = "git diff *", effect = "allow" },
   { action = "shell", resource = "git log *", effect = "allow" },
   { action = "shell", resource = "git branch --show-current", effect = "allow" },
   { action = "shell", resource = "git rev-parse --show-toplevel", effect = "allow" },
-  { action = "shell", resource = "git add -- *", effect = "allow" },
-  { action = "shell", resource = "git restore --staged -- *", effect = "allow" },
   { action = "shell", resource = "*>*", effect = "deny" },
   { action = "shell", resource = "*--output*", effect = "deny" },
-  { action = "shell", resource = "git commit *", effect = "ask" },
-  { action = "shell", resource = "* --no-verify*", effect = "deny" },
-  { action = "shell", resource = "git commit -n*", effect = "deny" },
-  { action = "shell", resource = "git commit -a*", effect = "deny" },
-  { action = "shell", resource = "git commit --all*", effect = "deny" },
-  { action = "shell", resource = "git commit --amend*", effect = "deny" },
-  { action = "shell", resource = "git commit * --amend*", effect = "deny" },
-  { action = "shell", resource = "git -* commit *", effect = "deny" },
 ]
 
 # 相談役。読むだけ。★shell は開けない (git diff / git status も外部コマンドを実行しうる)。
@@ -1163,6 +1148,14 @@ message = "sed -n でファイルを読まないでください。read ツール
 [[opencode.shell.guide]]
 pattern = '(^|&&|\|\||;|\n)\s*(wc|grep\s+-n|git\s+log|uv\s+pip\s+list|docker\s+ps)\b[^\n]*>(?!&\s*(\d+|-)(?=$|[\s;|&)])|>?\s*/dev/null(?=$|[\s;|&)]))'
 message = "allow されたコマンドの出力をリダイレクトで書き込まないでください。ファイルを作る・書き換えるときは write / edit ツールを使ってください。"
+
+# git commit の前にオプションを置いた形 (`git -c core.hooksPath=/dev/null commit`) を止める。
+# ★隔離起動はシェルの既定が allow なので、`git commit *` の ask に当たらない形は確認も hook も
+#   無しで通る。コミットは親が行う (CHG-0013) ので、全体の規則で塞ぐ。
+# see docs/spec/agent-config-generation.md#commit-の権限
+[[opencode.shell.guide]]
+pattern = '(^|&&|\|\||;|\n)\s*git(\s+-\S+(\s+[^-\s]\S*)?)+\s+commit(\s|$)'
+message = "git commit の前にオプションを置かないでください。`git commit -m '<件名>' -m '<本文>'` の形で実行してください (確認と hook を通すため)。"
 
 # ヒアドキュメントを write ツールへ寄せる。目的は確認 1 回あたりの負担で、
 # 実履歴ではヒアドキュメント付きが 177 件 (16.9%)・中央値 1,012 字だった。
@@ -1493,7 +1486,7 @@ drop_shell = [
   '^(git log|wc|grep -n|uv pip list|docker ps)\b',
   # ★確認をやめ snapshot による復旧で扱う
   '^(rm|mv|cp|truncate|shred|find)\b',
-  '^git commit\b',
+  # ★git commit は捨てない。コミットは親が行い、その確認が承認の場になる (CHG-0013)
 ]
 
 # 境界が隠すので捨てる read/edit 規則 (パスの先頭一致)。

@@ -277,13 +277,13 @@ def test_ocs_marks_only_the_rules_ocs_drops():
     assert any(f"{c} *" in ocs for c in CLASSIFIED)
 
 
-def test_agents_that_override_a_deny_are_exempt():
-    """エージェントの規則 (後勝ち) が静的 deny を覆す項目は、そのエージェントでは止めない。"""
+def test_no_declared_agent_overrides_a_deny_today():
+    """今の宣言で静的 deny を覆すエージェントは無い (commit は読むだけになった。CHG-0013)。
+
+    覆すエージェントを対象外にする仕組みは test_v1_agent_permissions_* が確かめる。
+    """
     rules = gen.build_opencode_guide({}, COMMON)["deny_guide"]
-    (rule,) = [r for r in rules if re.search(r["pattern"], "git restore x")]
-    assert rule["except_agents"] == ["commit"]
-    others = [r for r in rules if r is not rule]
-    assert not [r for r in others if "commit" in r.get("except_agents", [])]
+    assert not [r for r in rules if r.get("except_agents")]
 
 
 def test_claude_and_copilot_generation_is_unchanged_by_deny_guide():
@@ -369,20 +369,17 @@ def test_ocs_stops_only_what_ocs_still_denies(tmp_path):
     assert [bool(x) for x in ocs] == [True, True, False, False, False, False, False]
 
 
-def test_commit_agent_can_still_restore_staged(tmp_path):
-    """commit エージェントは ``git restore --staged -- *`` を allow で持つ。前段で止めない。"""
+def test_commit_agent_is_stopped_like_the_others(tmp_path):
+    """commit は読むだけになり、git restore も他と同じく前段で止まる (CHG-0013)。"""
     cases = [
         ("git restore --staged -- a.txt", "commit", "shell"),
-        ("git restore a.txt", "commit", "shell"),  # 同じ項目なので agent 単位で見送る
+        ("git restore a.txt", "commit", "shell"),
         ("git restore a.txt", "build", "shell"),
         ("git push", "commit", "shell"),
         ("git restore a.txt", None, "shell"),  # agent が分からなければ止めない
     ]
     out = _run(tmp_path, cases)
-    assert out[0] is None
-    assert out[1] is None
-    assert out[2] == USER_MESSAGE
-    assert out[3] == USER_MESSAGE
+    assert out[:4] == [USER_MESSAGE] * 4
     assert out[4] is None
 
 

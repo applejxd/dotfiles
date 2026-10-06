@@ -585,7 +585,7 @@ permissions = [
 - **`bypass` から承認制の子を外す理由。** `general` / `fleet-worker` は `bypass` から
   起動しても自分の規則で動くので、編集やシェルのたびに確認が出て無確認の前提が崩れる。
   モデルは説明の広い `general` を選びがちでもある。`explore` / `review` は読むだけで
-  確認がほぼ出ず、`commit` は確認付きでコミットしたいときの経路として残す
+  確認がほぼ出ず、`commit` は読むだけの計画役（コミットは呼び出し元が行う）
 - **deny した子は `subagent` ツールの一覧から消える**（実測）。`/fleet` の指示文は
   「一覧に `bypass-fleet-worker` があればそれ、無ければ `fleet-worker`」で使い分けさせる
 - `bypass-fleet-worker` は、`/fleet` の作業役を `bypass` でも無確認で動かすためのもの。
@@ -878,8 +878,8 @@ feat(opencode): git commit の確認に件名と本文を抜き出して出す  
   （折り返すと狭い画面で行数が倍になり、確認画面のボタンを押し出す）
 - `-m` 以外の引数（パス指定やオプション）も 1 行で出す。何がコミットされるかに関わる
 - 表示は本体の確認画面と同じ要求を選ぶ（自分と子のセッションの保留の先頭。子の
-  セッションを開いているときは出さない）。`commit` エージェントは子で動くが、確認は
-  親の画面に出る
+  セッションを開いているときは出さない）。コミットは親が行うので、確認は親の画面に出る
+  （[`commit` の権限](#commit-の権限)）
 - **抜き出せない形は従来のモデルの説明へ倒す。** 引用符の外の `;` `&&` `|` `>` 改行
   （別のコマンドが続き、確認画面で切れた部分に隠れうる）、`$` や `` ` ``（実行時に
   展開される）、`-F` / `-C` / `--fixup` など `-m` 以外からメッセージを取るもの、
@@ -1123,20 +1123,14 @@ explore = "worker"      # 例
 
 | ID | 階層 | 役割 | 権限で塞ぐもの |
 | --- | --- | --- | --- |
-| `commit` | `routine` | 変更を論理単位に分け、パスを指定してステージし、単位ごとにコミットする。`git commit` は権限の確認（`ask`）を通す | 編集・質問・子エージェントの起動・作業ツリーを戻す git・リダイレクトと `--output`・`git commit` の検証の回避や `-a` / `--amend`（下記） |
+| `commit` | `routine` | 変更を読み、ファイル単位の論理単位ごとに対象とメッセージ全文（計画）を返す。ステージとコミットは親が行う | 編集・質問・子エージェントの起動・読み取り以外の shell（下記） |
 | `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
 
-- **`commit` は `git commit` の確認を承認の場にしてコミットする。** 質問のツールは
-  使えないが、`git commit *` を `ask` にしているので、コミットの前に確認が出る
-  （確認で「常に許可」を選んだプロジェクトでは出ない。下記）。
-  commit スキルの「コミット前の承認」はこの確認で満たす（`system` がそう定め、スキルの
-  手順 4 がその上書きを認める）。確認が拒否されたらそれ以降はコミットせず、ステージ内容・
-  メッセージ・残りの単位の案を返して終わる。狙いは、差分を読む重い作業を安いモデルへ移し、
-  親の文脈を節約すること
-- **`commit` には確認画面が見えない。** ツール結果に承認の痕跡が残らないため、`system` で
-  確認の有無を推測して報告することを禁じている。また shell は 1 回の応答で 1 つだけ呼ばせる。
-  同じ応答に並べた呼び出しは前の完了を待たずに走り、コミット後の確かめがコミットの途中で
-  走った（[記録 E7](../research/opencode/commit-review-agents.md#記録-e7--2026-10-02)）
+- **`commit` は計画だけを返し、コミットは親が行う。** 子は差分を読む重い作業を安いモデルで
+  肩代わりし、親の文脈を節約する。親は計画を表示してから `git add` / `git commit` を実行し、
+  `git commit` の確認が承認の場になる（[`commit` の権限](#commit-の権限)）。以前は子がコミットまで
+  行い確認画面を承認の場にしていたが、確認画面ではメッセージが切れて読めず、子からは確認画面が
+  見えなかった（[CHG-0013](../change/0013-commit-agent-as-planner.md)）
 - **`review` は shell を開けない。** `git diff` / `git status` も外部の diff
   ドライバや fsmonitor を通じてコードを実行しうる
   （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）。
@@ -1154,84 +1148,79 @@ explore = "worker"      # 例
 
 #### `commit` の権限
 
-素の `git status` / `git diff` / `git log` とパス指定のステージだけを `allow` にし、
-`git commit` 本体は `ask` にする。目的は**うっかりの防止**で、意図的な迂回への耐性は求めない。
-通常起動でも隔離起動（`ocs`）でも同じ規則が効く（[実機確認](../research/opencode/commit-review-agents.md)の記録 E2 / E4）。
+`commit` は**読むだけの計画役**で、ステージもコミットもしない（[CHG-0013](../change/0013-commit-agent-as-planner.md)）。
+shell は全体を `deny` にしてから、素の `git status` / `git diff` / `git log` などの読み取りだけを
+`allow` にする。目的は**うっかりの防止**で、意図的な迂回への耐性は求めない。
+通常起動でも隔離起動（`ocs`）でも同じ規則が効く。
 
 | 順 | 効果 | 規則 | 理由 |
 | --- | --- | --- | --- |
 | 1 | `deny` | `edit` / `subagent` / `question` の `*` | 編集・子エージェントの起動・質問をさせない |
-| 1 | `deny` | `git checkout *` / `git reset *` / `git stash *` / `git clean *` | 作業ツリーと index を戻させない |
+| 1 | `deny` | shell の `*` | ステージ・コミット・作業ツリーを戻す操作を含め、読み取り以外をさせない。隔離起動はシェルの既定が `allow` なので、列挙ではなく全体で塞ぐ |
 | 2 | `allow` | `git status *`・`git diff *`・`git log *`・`git branch --show-current`・`git rev-parse --show-toplevel` | 状況の把握。commit スキルが教える形そのまま（ルートは承認時の提示でリポジトリ名に使う） |
-| 2 | `allow` | `git add -- *` | `--` の後ろはパスだけになる |
-| 2 | `allow` | `git restore --staged -- *` | ステージの取り消し。作業ツリーは戻さない |
 | 3 | `deny` | `*>*`・`*--output*` | allow の形に付けたファイルへの書き出し |
-| 4 | `ask` | `git commit *` | 承認の場。3 の `deny` より後ろなので、メッセージに `>` を含んでも確認に回る |
-| 5 | `deny` | `* --no-verify*`・`git commit -n*`・`git commit -a*`・`git commit --all*`・`git commit --amend*`・`git commit * --amend*`・`git -* commit *` | 検証の回避・無関係な変更の混入・既存コミットの書き換え・オプションを前に置いた形 |
 
+**コミットの流れ**（親と子の分担）:
+
+- 子（`commit`）は commit スキルの手順 2（メッセージ作成だけ）として、ファイル単位の論理単位ごとに
+  対象のパスとメッセージ全文を「承認時の提示」の形で返す。同じファイルの中を分ける必要があれば、
+  単位をまとめるか、その旨を書く
+- 親は返された計画をそのまま返答に表示する（プレビュー。利用者の操作は求めない）。単位ごとに
+  `git status` で計画外の変更が混ざっていないかを確かめ、`git add -- <パス>` →
+  `git commit -m '<件名>' -m '<本文>'` を自分で実行する。**承認は親の `git commit` の確認画面の
+  1 回**（件名と本文を抜き出して出す。[`git commit` の件名と本文](#git-commit-の件名と本文)）。
+  pre-commit で失敗したら親が直してやり直す
+- 親がこの流れを知る手段は、`commit` の `description`（親の `subagent` ツールの一覧に出る）と、
+  スキルの手順 4 の上書き規定（「呼び出し元の指示やエージェントの説明が `git commit` の確認を
+  承認の場と定めているとき」）。スキルの既定の「提示して承認を得る」は変えない（Copilot は hook の
+  `ask` を自動承認するので、環境の確認を当てにしない）。`commit` エージェントは OpenCode 専用なので、
+  Claude Code / Copilot CLI の振る舞いは変わらない
+
+**親の `git commit` の確認**:
+
+| 起動の仕方 | 確認 | 仕組み |
+| --- | --- | --- |
+| 通常起動 | 出る | 全体の `git commit *` の `ask`（`[bash] ask`） |
+| `bypass` | 出ない | `ask` を `allow` に引き上げる。利用者が確認を省くと選んだ起動 |
+| 隔離起動（`ocs`） | 出る | `drop_shell` で `git commit` の `ask` を捨てない |
+
+- **オプションを前に置いた `git -c … commit` は guide 規則で止める。** 隔離起動はシェルの既定が
+  `allow` なので、`git commit *` の `ask` に当たらない形は確認も hook も無しで通る
+  （`git -c core.hooksPath=/dev/null commit …` など）。以前は `commit` エージェントの `deny` が
+  塞いでいた。guide 規則は素の形への書き直しを促して止める。コミットメッセージの中に同じ形の
+  文字列があると誤って止める（承知の割り切り）
 - **作法はスキル、実行環境の仕組みはエージェントが持つ。** 分け方・メッセージの書式・
   コマンドの形は commit スキルに従わせ、`system` には OpenCode の中でだけ要ること
-  （確認が承認の場になること・read / glob / grep ツールで読むこと・`-m` を重ねてヒアドキュメントと
-  `-F` を使わないこと・連結とリダイレクトをしないこと・拒否と hook の失敗での止まり方）だけを書く。
-  allow の形はスキルが教える素の形に合わせてあり、`test_skill_forms_are_allowed_or_asked_in_the_commit_agent`
-  が固定している
-- **スキルの承認の原則は変えない。** 既定は「提示して承認を得る」のまま（Copilot は hook の
-  `ask` を自動承認するので、環境の確認を当てにしない）。呼び出し元の指示が `git commit` の
-  確認を承認の場と定めたときだけ、それに従う（手順 4 の冒頭）。この上書きを手順 4 の後ろに
-  置いた版では、`claude-haiku-4.5` は提示して返るだけでコミットしなかった（記録 E4）
-- **メッセージは、任せる前に利用者へ全文を見せる。** 確認画面はメッセージが長いと途中で切れ、
-  スマホなどでは全画面（`ctrl+f`）にしにくい。親は任せる前にメッセージ全文を利用者に示して
-  承認を得て、承認済みの全文を渡す。`commit` は渡された全文を一字も変えずに使い、確認画面では
-  件名の一致だけを見ればよい。渡されなかった単位だけ、スキルに従って自分で作る
-  （スキルの手順 4 とエージェントの `system` に同じ趣旨がある）
-- **`claude-haiku-4.5` では書式が崩れやすいので、`commit` には使わない。** コミットまでは 9/10 で
-  進むが、本文の `- Motivation:` / `- Change:` / `- Impact:` は 17 件中 2 件にとどまった（記録 E4）。
-  `routine` 階層の Sonnet を当てる。Copilot の PC は `claude-sonnet-5.5#medium` で、10/10 がコミットし、
-  3 行は 16 件中 15 件、`git commit` 以外の確認と誘導は 0 回。承認済みの全文を渡した 3 回は
-  4 件とも一字も変わらなかった（記録 E6）。Bedrock の PC も `claude-sonnet-5-5` にした（Copilot の
-  Sonnet 5.5 で近似した判断で、Bedrock 上では未確認）。1 世代前の `claude-sonnet-5` では 10/10 がコミットし、
-  3 行は 14 件中 14 件そろった（記録 E5 / E6）。
-  `claude-sonnet-5` では、`system` に「確かめも 1 つずつ」「`cd` ではなく `workdir`」を足した後、`cd … &&` の誘導は
-  1 回の依頼あたり 1.7 回から 0 回、`git status --short; echo ---; git log …` のような連結による
-  `git commit` 以外の確認は 0.8 回から 0.3 回に減った（記録 E6）
+  （計画だけを返すこと・ファイル単位で分けること・read / glob / grep ツールで読むこと・
+  連結とリダイレクトをしないこと）だけを書く。読み取りの形はスキルが教える素の形に合わせてあり、
+  `test_skill_forms_split_between_planner_and_parent` が固定している
+- **モデルは `routine` 階層の Sonnet。** 次の測定は、子がコミットまで行っていた旧方式でのもの
+  （記録 E4〜E6）。計画役になってからは未測定。`claude-haiku-4.5` は本文の `- Motivation:` /
+  `- Change:` / `- Impact:` が 17 件中 2 件にとどまり（記録 E4）、`claude-sonnet-5.5#medium` は
+  16 件中 15 件、`claude-sonnet-5` は 14 件中 14 件そろった（記録 E5 / E6）。Bedrock の PC も
+  `claude-sonnet-5-5` にした（Copilot の Sonnet 5.5 で近似した判断で、Bedrock 上では未確認）
 - **全体の規則は変えない。** 全体の `allow` から `git diff` / `git status` を外した判断
   （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）はそのままで、
-  素の形を確認なしで通すのは `commit` の中だけ。`git add -A` / `git add .` / `git switch` /
-  `git rm` はエージェントの規則に当たらず全体の規則に落ちる（通常起動は `ask`、隔離起動は `allow`）。
-  `git restore`（`--staged --` 以外）と `git push` は全体の `deny` で止まる
+  素の形を確認なしで通すのは `commit` の中だけ
 - **接頭辞（`git -c core.fsmonitor=false -c core.hooksPath=/dev/null` と `--no-ext-diff --no-textconv`）は
   付けない。** 以前はこの接頭辞の形だけを allow にしていた（記録 E2 / E3）。やめた理由:
   - 接頭辞が止めるリポジトリの設定（fsmonitor・外部 diff・textconv・index の更新で走る hook）は
     `.git/config` か `~/.gitconfig` にしか書けず、clone では運ばれない
   - エージェントによる `.git/config` の書き換えは別に塞いである（通常起動は `edit` の `deny`、
     隔離起動は境界）
-  - `git commit` では確認の後にリポジトリの hook を走らせており、コミットの時点でその設定は
-    既に信頼している
   - 接頭辞はモデルの取り違え（記録 E3）を生み、スキルの形とも合わない
 - **受け入れたこと**: `commit` の中では、`git status` / `git diff` がリポジトリの設定の
   fsmonitor・外部 diff・textconv・`post-index-change` hook を確認なしで起動しうる。
   `git diff --no-index` でリポジトリの外のファイルを読むこともできる
-- `git -* commit *` の `deny` は隔離起動のために要る。隔離版の全体の規則はシェルの既定が
-  `allow` なので、これが無いと `git -c core.hooksPath=/dev/null commit …` が確認も hook も
-  無しで通る
-- `git restore *` の `deny` はエージェントに置かない。置くと後ろの `restore --staged -- *` の
-  `allow` と順序で競うだけで、素の `git restore` は全体の `deny` で止まる
-- `--amend` は `deny` にした。直前のコミットは利用者のものかもしれず、hook の失敗で
-  やり直すときも新しいコミットで足りる
 - **残る穴**:
-  - clean フィルタ（`filter.<driver>.clean`）は `diff` / `add` で走り、`status` でも index の
+  - clean フィルタ（`filter.<driver>.clean`）は `diff` で走り、`status` でも index の
     更新時に走りうる（接頭辞を付けていたときも止めるオプションは無かった）
-  - `git add -- .` はパス指定の形なので `allow` に当たり、まとめてステージできる。
-    確認に出るのは `git commit` のメッセージだけなので、混入はスキルの指示と確認の目視に頼る
   - 静的な照合なので、引用符や変数で書き換えた形（`g"it" commit` など）は照合を
     すり抜ける（[静的パターンの回避](../research/opencode/permission/shell-allow-and-plugin-gate.md)）
-  - 確認で「常に許可」を選ぶと `git commit *` がプロジェクトに保存され、以後は
+  - 親の確認で「常に許可」を選ぶと `git commit *` がプロジェクトに保存され、以後は
     確認なしでコミットする（保存した承認は `ask` を `allow` に変えるが、`deny` は
     上書きしない。実測）
-  - メッセージの中に空白に続けて `--no-verify` や `--amend` を書いたコミットも `deny` になる
-- **無人の実行では `git commit` で止まる。** `opencode run --auto` は子セッションの
-  確認を自動承認しないので、`commit` は allow の形の操作を終えたところで確認を待ち続ける
-  （記録 E2）。TUI で子セッションの確認が表に出るかは未確認
+- **親が計画に従ってコミットするかは未確認**（CHG-0013 の段 5）
 
 ### 並列作業（`/fleet`）
 

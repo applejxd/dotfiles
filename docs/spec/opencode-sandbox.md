@@ -402,13 +402,13 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
   （[モデルの割り当て](agent-config-generation.md#隔離起動ocs)）ので、Bedrock の PC では
   子エージェントは親のモデルで動く。接続設定も同じ理由で出さない
 - **シェルの確認は通常起動より少ない。** 隔離版の全体の規則はシェルの既定が `allow`
-  （`[opencode.sandbox.permissions] default_shell_effect`）で、`rm` や `git commit` などの
+  （`[opencode.sandbox.permissions] default_shell_effect`）で、`rm` などの
   `ask` も捨てている（`drop_shell`）。エージェントの `permissions` は後勝ちでそのまま効くので、
-  `commit` や `fleet-worker` の git 操作の deny は残るが、それ以外は個別の deny / ask に
-  当たらなければ確認なしで通る（`commit` では `git add -A` / `git switch` / `git rm` なども）。
-  **`commit` の `git commit` だけは、エージェント側の `ask` で確認が出る**（全体から捨てた
-  `ask` をエージェントの規則が戻す。オプションを前に置いた `git -c … commit` はエージェントの
-  `deny` で止まる。[`commit` の権限](agent-config-generation.md#commit-の権限)）
+  `commit`（読むだけ）や `fleet-worker` の git 操作の deny は残るが、それ以外は個別の deny / ask に
+  当たらなければ確認なしで通る。
+  **`git commit` の `ask` は捨てない**（コミットは親が行い、その確認が承認の場になるため。
+  [CHG-0013](../change/0013-commit-agent-as-planner.md)）。オプションを前に置いた `git -c … commit` は
+  `ask` に当たらないので、guide 規則で止める（[`commit` の権限](agent-config-generation.md#commit-の権限)）
 - **作業ツリーの外の読み取りは、通常版と同じく確認なし。** `external_directory` の `allow`
   （スキルの置き場と `work_read`）は隔離版にも出し、同じ場所への edit の `ask` も残す
   （[作業ツリーの外の読み取り](agent-config-generation.md#作業ツリーの外の読み取り)）。
