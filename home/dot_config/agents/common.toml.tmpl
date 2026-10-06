@@ -883,6 +883,7 @@ provider = "{{ includeTemplate "llm-provider" . }}"
 # エージェント ID = 階層名。組み込み (plan / explore など) も上書きできる。
 # ★主エージェント (build / plan) は選んでもモデルが変わらない。子エージェントだけ書く。
 [opencode.model.agents]
+commit = "routine"
 review = "second_opinion"
 fleet-worker = "worker"
 bypass-fleet-worker = "worker"
@@ -938,9 +939,44 @@ permission = { task = "deny" }
 # [opencode.model.agents] で階層を割り当てる (ここに model は書かない)。
 # system は組み込みの基底プロンプトを置き換える。permissions は全体の規則の後ろに付く。
 # see docs/spec/agent-config-generation.md#子エージェント
-# 廃止したエージェント。既存の opencode.json から消す (宣言をやめただけでは残る)。
-[opencode.retired]
-agents = ["commit"]
+[opencode.agents.commit]
+description = "変更を読み、論理単位ごとの対象ファイルとコミットメッセージ全文 (計画) を返す。ステージもコミットもしない。親は差分を読まずにこれへ任せる。返された計画の全文 (対象とメッセージ) を commit スキルの承認時の提示の形で返答に示し、利用者の承認を待って返答を終える (件名だけに縮めない。承認前にステージやコミットをしない)。承認されたら commit スキルの手順 3〜6 に従い、差分は読み直さずに単位ごとに git add -- <パス> と git commit -m '<件名>' -m '<本文>' を別々に実行する。shell は同じ応答に並べず、完了を待って 1 つずつ実行する (並べると .git/index.lock で失敗する)"
+mode = "subagent"
+system = """
+あなたはコミットの計画係です。親から呼ばれ、変更を読んでコミットの計画を返します。
+利用者への提示・ステージ・コミットは親が行います。
+
+- 最初に skill ツールで commit スキルを読み込む。分け方・メッセージの書式は
+  それに従い、手順 2 (メッセージ作成だけを依頼された場合) として扱う
+- 単位はファイル単位で分ける。同じファイルの中を分ける必要があるときは、単位をまとめるか、
+  分けられなかったことを書く
+- 単位ごとに、対象のパス (git status --short の行) とメッセージの全文を、スキルの
+  「承認時の提示」の形で返す。親はそれをそのまま利用者に示し、git commit -m '<件名>' -m '<本文>' に
+  使うので、全文を省略せずに書く
+- ファイルは read / glob / grep ツールで読む。shell で cat / ls / find / echo などを使わない
+- shell は 1 回の応答で 1 つだけ呼び、完了結果を受け取ってから次を呼ぶ。1 回の呼び出しは
+  1 コマンドとし、; や && でつなげず、リダイレクトや 2>&1 を付けない。作業ディレクトリは
+  cd ではなく shell ツールの workdir で指定する
+- 対象外のステージ済み変更や、部分ステージ (同じファイルの index と作業ツリーの両方に差分) が
+  あれば、計画に添えて書く
+
+ファイルは編集しない。git add / git commit などで状態を変えない。
+"""
+# ★読むだけ。shell は全体を deny してから読み取りの形だけ allow し、書き出しを deny する (後勝ち)。
+# see docs/spec/agent-config-generation.md#コミットの確認
+permissions = [
+  { action = "edit", resource = "*", effect = "deny" },
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "question", resource = "*", effect = "deny" },
+  { action = "shell", resource = "*", effect = "deny" },
+  { action = "shell", resource = "git status *", effect = "allow" },
+  { action = "shell", resource = "git diff *", effect = "allow" },
+  { action = "shell", resource = "git log *", effect = "allow" },
+  { action = "shell", resource = "git branch --show-current", effect = "allow" },
+  { action = "shell", resource = "git rev-parse --show-toplevel", effect = "allow" },
+  { action = "shell", resource = "*>*", effect = "deny" },
+  { action = "shell", resource = "*--output*", effect = "deny" },
+]
 
 # 相談役。読むだけ。★shell は開けない (git diff / git status も外部コマンドを実行しうる)。
 # 差分は親が依頼文に含めて渡す。see docs/research/opencode/permission/allow-list-audit.md

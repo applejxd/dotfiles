@@ -397,7 +397,7 @@ OpenCode の静的照合は、scanner が分割した各セグメントに `cmd`
   例: `git config --global user.name "x"` は説明が付かない
 - **エージェントの規則が静的 deny を覆す項目は、そのエージェントでは止めない**（`except_agents`。
   エージェントの規則は全体の規則の後ろに付いて後勝ち。今の宣言には該当するエージェントが無い。
-  以前は廃止した `commit` の `git restore --staged -- *` allow が該当した）。V2 の `permissions` と V1 の `permission`
+  以前は `commit` がコミットまで行い、`git restore --staged -- *` の allow が該当した）。V2 の `permissions` と V1 の `permission`
   （`bash` / `shell` / `*` キー、文字列も）の両方から算出し、読めない形は覆すものとして扱う
 - **対象は生成器が permission を把握しているエージェントだけ**（`rules.json` の `deny_guide_agents`。
   宣言済み + 組み込みの `build` / `plan` / `general` / `explore`）。宣言外のエージェント（利用者が

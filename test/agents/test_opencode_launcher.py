@@ -1008,8 +1008,7 @@ def test_common_agents_and_commands_are_written(tmp_path):
     assert "*" not in config["agent"]["bypass"]["permission"]
     assert config["agent"]["bypass"]["permission"]["task"]["*"] == "allow"
     assert "bypass-worker" in config["agent"]
-    assert {"review", "fleet-worker", "bypass-fleet-worker"} <= set(config["agents"])
-    assert "commit" not in config["agents"]
+    assert {"commit", "review", "fleet-worker", "bypass-fleet-worker"} <= set(config["agents"])
     assert "fleet" in config["commands"]
 
 

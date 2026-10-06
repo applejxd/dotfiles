@@ -579,13 +579,13 @@ permissions = [
 
 | 呼び出し元 | 起動できる子 |
 | --- | --- |
-| `bypass` | `bypass-worker`・`bypass-fleet-worker`・`explore`・`review` |
-| `build` など | `general`・`fleet-worker`・`explore`・`review` |
+| `bypass` | `bypass-worker`・`bypass-fleet-worker`・`explore`・`review`・`commit` |
+| `build` など | `general`・`fleet-worker`・`explore`・`review`・`commit` |
 
 - **`bypass` から承認制の子を外す理由。** `general` / `fleet-worker` は `bypass` から
   起動しても自分の規則で動くので、編集やシェルのたびに確認が出て無確認の前提が崩れる。
   モデルは説明の広い `general` を選びがちでもある。`explore` / `review` は読むだけで
-  確認がほぼ出ない
+  確認がほぼ出ず、`commit` は読むだけの計画役（コミットは呼び出し元が行う）
 - **deny した子は `subagent` ツールの一覧から消える**（実測）。`/fleet` の指示文は
   「一覧に `bypass-fleet-worker` があればそれ、無ければ `fleet-worker`」で使い分けさせる
 - `bypass-fleet-worker` は、`/fleet` の作業役を `bypass` でも無確認で動かすためのもの。
@@ -684,7 +684,7 @@ plugin が守る規約は次のとおり。
   判定は**エージェント名**で行う（`permission.evaluate` に `agent` が載ることを
   実測。[hook の呼ばれ方](../research/opencode/permission/hook-order.md)）。
   名前は `common.toml` の `bypass = true` から生成するので単一ソースが保たれる。
-  `fleet-worker` など別の名前の子の `ask` は書き換えない
+  `commit` など別の名前の子の `ask` は書き換えない
 - **`bypass` にも誘導・前段停止（early）・`grep` / `glob` の結果フィルタ・shell 出力の
   伏字化を同じに効かせる。** 素通りさせる判定は持たない。誤爆は誘導規則側を直す。
   子エージェントの起動制限（`guardSubagent`）だけは `bypass_agents` を見る
@@ -1024,12 +1024,12 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 | `deep` | 難しい判断・設計 | `claude-opus-5.5#xhigh` | `global.anthropic.claude-opus-5-5#high` |
 | `second_opinion` | 別系統のモデルでの確かめ | `gpt-6-astra` | `global.openai.gpt-6-sol` |
 
-割り当て（`[opencode.model.agents]`）は `review = "second_opinion"`・`fleet-worker = "worker"`。
-`routine` は今は割り当て先が無い（`commit` エージェントを廃止した。[コミットの確認](#コミットの確認)）。
+割り当て（`[opencode.model.agents]`）は `commit = "routine"`・`review = "second_opinion"`・
+`fleet-worker = "worker"`。
 
 - **`routine` と `worker` は今は同じモデルだが、分けておく。** 名前は用途なので、
   どちらかの計測結果が変わったときに片方だけ差し替えられる
-- **`routine` は Sonnet 5.5。** 廃止した `commit` エージェントでの測定。`commit` を haiku で動かすとメッセージの書式が崩れ、
+- **`routine`（`commit`）は Sonnet 5.5。** 子がコミットまで行っていた頃の測定。`commit` を haiku で動かすとメッセージの書式が崩れ、
   `claude-sonnet-5` ではそろった（[記録 E4 / E5](../research/opencode/commit-review-agents.md)）。
   Copilot の `claude-sonnet-5.5#medium` は `claude-opus-5.5#medium` と同等にコミット・書式がそろい、
   速く単価も半分で、`claude-sonnet-5` より `git commit` 以外の確認が少なかった（記録 E6）。
@@ -1128,6 +1128,7 @@ explore = "worker"      # 例
 
 | ID | 階層 | 役割 | 権限で塞ぐもの |
 | --- | --- | --- | --- |
+| `commit` | `routine` | 変更を読み、ファイル単位の論理単位ごとに対象とメッセージ全文（計画）を返す。提示・ステージ・コミットは親が行う | 編集・質問・子エージェントの起動・読み取り以外の shell（[コミットの確認](#コミットの確認)） |
 | `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
 
 - **`review` は shell を開けない。** `git diff` / `git status` も外部の diff
@@ -1141,18 +1142,44 @@ explore = "worker"      # 例
   スキルの一覧は引き続き足される
 - `permissions` は全体の規則の後ろに付き、後勝ちで効く。効果は `allow` / `ask` / `deny`。
   隔離版で全体から捨てた `ask` も、エージェントの規則で戻せる
-- 宣言したキーだけを差し替え、他のキーと他のエージェントは残す。廃止したエージェントは
-  `[opencode.retired] agents` に書くと、既存の `opencode.json` から消す（宣言をやめただけでは残る）
+- 宣言したキーだけを差し替え、他のキーと他のエージェントは残す
 - 隔離起動（`ocs`）にも同じ定義が出る。通常版の `opencode.json` からは引き継がず、
   `common.toml` から作る（[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
 
 ### コミットの確認
 
-コミットは親（主エージェント）が commit スキルに従って行う。コミット用の子エージェントは置かない。
-スキルの既定どおり、対象とメッセージ全文を返答の文章に示して**会話で利用者の承認を待ち**、承認されたら
-`git add -- <パス>` と `git commit -m '<件名>' -m '<本文>'` を別々に実行する。全文の表示は承認の前提なので
-抜けにくい。そのうえで `git commit` には実行時の確認も残る（下表）。承認の操作は通常起動と `ocs` で 2 回
-（会話と確認画面）、`bypass` で 1 回（会話）。
+差分を読む作業は安いモデルの子（`commit`）に任せ、**承認は会話で行う**
+（[CHG-0015](../change/0015-commit-planner-with-chat-approval.md)）。
+
+1. 親が `commit` を呼ぶ。子は commit スキルの手順 2 として差分を読み、ファイル単位の論理単位ごとに
+   対象のパスとメッセージ全文（計画）を返す。ステージもコミットもしない
+2. 親は計画の全文をスキルの「承認時の提示」の形で返答に示し、**利用者の承認を待って返答を終える**
+3. 承認されたら、親がスキルの手順 3〜6 で単位ごとに `git add -- <パス>` と `git commit -m '<件名>' -m '<本文>'` を
+   別々に実行する。差分は読み直さず、`git status --short` と `git diff --cached --name-only` で対象を確かめる
+
+- **承認の場を会話にする理由。** 確認画面を承認の場にすると、親が全文を示さずに先へ進めた
+  （[CHG-0013](../change/closed/0013-commit-agent-as-planner.md)）。会話で承認を求める形では、全文を示さないと
+  承認を求められないので、抜けがあっても利用者の目に見える。照合の仕組みは置かない
+  （[CHG-0014](../change/closed/0014-deterministic-commit-runner.md) は部品が多く、TUI で照合が止まった）
+- 親がこの流れを知る手段は、`commit` の `description`（親の `subagent` ツールの一覧に出る）と commit スキル。
+  スキルの手順 4 の既定（提示して承認を得る）をそのまま使い、上書きの指示は出さない
+- 承認の操作は、通常起動と `ocs` で 2 回（会話と `git commit` の確認画面）、`bypass` で 1 回（会話）
+
+**子の権限**（後勝ち）:
+
+| 順 | 効果 | 規則 | 理由 |
+| --- | --- | --- | --- |
+| 1 | `deny` | `edit` / `subagent` / `question` の `*` | 編集・子エージェントの起動・質問をさせない |
+| 1 | `deny` | shell の `*` | 読み取り以外をさせない。隔離起動はシェルの既定が `allow` なので、列挙ではなく全体で塞ぐ |
+| 2 | `allow` | `git status *`・`git diff *`・`git log *`・`git branch --show-current`・`git rev-parse --show-toplevel` | 状況の把握。commit スキルが教える形そのまま |
+| 3 | `deny` | `*>*`・`*--output*` | allow の形に付けたファイルへの書き出し |
+
+- **全体の規則は変えない。** 全体の `allow` から `git diff` / `git status` を外した判断
+  （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）はそのままで、素の形を確認なしで
+  通すのは `commit` の中だけ。`commit` の中では、リポジトリの設定の fsmonitor・外部 diff・textconv が
+  確認なしで起動しうる（clone では運ばれず、`.git/config` の書き換えは別に塞いである）
+
+**親の `git commit` の確認**（安全網）:
 
 | 起動の仕方 | 確認 | 仕組み |
 | --- | --- | --- |
@@ -1162,16 +1189,11 @@ explore = "worker"      # 例
 
 - **オプションを前に置いた `git -c … commit` は guide 規則で止める。** 隔離起動はシェルの既定が
   `allow` なので、`git commit *` の `ask` に当たらない形は確認も hook も無しで通る。
-  guide 規則は素の形への書き直しを促して止める。コミットメッセージの中に同じ形の
-  文字列があると誤って止める（承知の割り切り）
+  コミットメッセージの中に同じ形の文字列があると誤って止める（承知の割り切り）
 - **確認画面には件名と本文を抜き出して出す**（[`git commit` の件名と本文](#git-commit-の件名と本文)）
-- **子エージェントに任せる仕組みは取りやめた。** 子にコミットまでさせる方式は確認画面が子から見えず、
-  子に計画だけを作らせて親が書き写す方式（[CHG-0013](../change/closed/0013-commit-agent-as-planner.md)）は
-  親が表示を飛ばすことがあり、計画をスクリプトで固定して照合する方式
-  （[CHG-0014](../change/closed/0014-deterministic-commit-runner.md)）は部品が多く、実機の TUI で照合が
-  止まった。コミットは push 前なら直せるので、仕組みで守る範囲に見合わないと判断した（2026-10-07、利用者の選択）
-- **残る穴**: 静的な照合なので、引用符や変数で書き換えた形（`g"it" commit` など）は照合を
-  すり抜ける（[静的パターンの回避](../research/opencode/permission/shell-allow-and-plugin-gate.md)）。
+- **残る穴**: 親が承認を待たずにコミットへ進むと、`bypass` では止まらない。静的な照合なので、
+  引用符や変数で書き換えた形（`g"it" commit` など）はすり抜ける
+  （[静的パターンの回避](../research/opencode/permission/shell-allow-and-plugin-gate.md)）。
   確認で「常に許可」を選ぶと `git commit *` がプロジェクトに保存され、以後は確認なしでコミットする
 
 ### 並列作業（`/fleet`）

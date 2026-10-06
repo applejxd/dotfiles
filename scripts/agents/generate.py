@@ -1956,20 +1956,13 @@ def merge_opencode_v2_agents(existing: Any, common: dict[str, Any]) -> dict[str,
     """V2 の ``agents`` に、宣言したエージェントの定義を書く。
 
     宣言したキーだけを差し替え、他のエージェント・キー (``model`` など) は残す。
-    ``[opencode.retired] agents`` に書いた廃止済みのエージェントは消す。
     """
-    declared = opencode_v2_agents(common)
-    retired = set(common.get("opencode", {}).get("retired", {}).get("agents") or [])
-    if retired & set(declared):
-        raise ValueError(
-            f"[opencode.retired] agents が宣言と重なる: {sorted(retired & set(declared))}"
-        )
     out = {
         name: dict(entry)
         for name, entry in (existing if isinstance(existing, dict) else {}).items()
-        if isinstance(entry, dict) and name not in retired
+        if isinstance(entry, dict)
     }
-    for name, agent in declared.items():
+    for name, agent in opencode_v2_agents(common).items():
         out[name] = {**out.get(name, {}), **agent}
     return out
 

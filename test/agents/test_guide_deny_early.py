@@ -278,7 +278,7 @@ def test_ocs_marks_only_the_rules_ocs_drops():
 
 
 def test_no_declared_agent_overrides_a_deny_today():
-    """今の宣言で静的 deny を覆すエージェントは無い。
+    """今の宣言で静的 deny を覆すエージェントは無い (commit は読むだけになった。CHG-0013)。
 
     覆すエージェントを対象外にする仕組みは test_v1_agent_permissions_* が確かめる。
     """
@@ -369,10 +369,18 @@ def test_ocs_stops_only_what_ocs_still_denies(tmp_path):
     assert [bool(x) for x in ocs] == [True, True, False, False, False, False, False]
 
 
-def test_unknown_agent_is_not_stopped(tmp_path):
-    """agent が分からなければ止めない (静的 deny に任せる)。"""
-    cases = [("git restore a.txt", "build", "shell"), ("git restore a.txt", None, "shell")]
-    assert _run(tmp_path, cases) == [USER_MESSAGE, None]
+def test_commit_agent_is_stopped_like_the_others(tmp_path):
+    """commit は読むだけになり、git restore も他と同じく前段で止まる (CHG-0013)。"""
+    cases = [
+        ("git restore --staged -- a.txt", "commit", "shell"),
+        ("git restore a.txt", "commit", "shell"),
+        ("git restore a.txt", "build", "shell"),
+        ("git push", "commit", "shell"),
+        ("git restore a.txt", None, "shell"),  # agent が分からなければ止めない
+    ]
+    out = _run(tmp_path, cases)
+    assert out[:4] == [USER_MESSAGE] * 4
+    assert out[4] is None
 
 
 def test_unreadable_rules_stop_nothing(tmp_path):
@@ -463,6 +471,7 @@ def test_agent_list_has_declared_and_builtin_agents():
         "plan",
         "general",
         "explore",
+        "commit",
         "review",
         "fleet-worker",
         "bypass",
@@ -704,7 +713,7 @@ def _corpus() -> list[str]:
     return list(seen)
 
 
-PROPERTY_AGENTS = ["build", "fleet-worker", "review"]
+PROPERTY_AGENTS = ["build", "commit", "fleet-worker", "review"]
 
 
 @pytest.fixture(scope="module")

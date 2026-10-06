@@ -98,7 +98,7 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 公開の数字で候補を絞ったら、`routine` と `worker` はこのリポジトリの使い方で測る。
 方法の詳細は記録の「方法・条件」にある。ここではその要点だけを示す。
 
-- `routine`（廃止した `commit` エージェント。今は割り当て先が無い）: [commit / review エージェントの実機確認](../research/opencode/commit-review-agents.md)の
+- `routine`（`commit`）: [commit / review エージェントの実機確認](../research/opencode/commit-review-agents.md)の
   記録 E3 で作り、記録 E4〜E6 でも使った方法
 - `worker`（`fleet-worker`）: [階層のモデルの計測](../research/opencode/tier-models.md#記録-e1--2026-09-30)の方法と、
   それを流用した[作業役への指示の計測](../research/opencode/fleet-worker-instructions.md)
@@ -125,9 +125,9 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 
 - `routine`: 親の `build` に「差分は自分で読まず `commit` に任せる」と頼む。作業用リポジトリの
   変更は 5 種類（複数の論理単位・範囲外の個人メモ・削除・理由の要る破壊的な変更・未追跡の
-  ディレクトリ）。**2026-10-07 に `commit` エージェントを廃止した
-  （[コミットの確認](agent-config-generation.md#コミットの確認)）。`scripts/model-eval/routine/` は
-  そのままでは動かない。`routine` に割り当て先ができたら、その用途で課題を作り直す**
+  ディレクトリ）。**2026-10-07 に `commit` は計画だけを返す役になり、承認は会話、コミットは親が行う
+  （[コミットの確認](agent-config-generation.md#コミットの確認)）。`scripts/model-eval/routine/` の採点は
+  子がコミットまで行う旧方式が前提で、そのままでは測れない。次の見直しの前に作り直す**
 - `worker`: 親の `build` から、依頼文を一字も変えずに `fleet-worker` へ渡させる（`/fleet` と同じ経路）。
   使い捨ての Python パッケージで課題 7 種類（機能追加・バグ修正・リファクタリング・テストの追加・
   複数ファイルにまたがる変更と、難しめの 2 種類）。採点は作業役に見せない隠しテストで行う。

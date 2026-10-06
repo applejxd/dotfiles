@@ -48,6 +48,7 @@
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる**。`ocs` のモジュール分割（2026-09-28）はハーネス層の切り出しではない | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-28 |
 | [0011](0011-agent-first-shell.md) | AI エージェントがシェルの主な利用者である前提へ整える | In progress | Claude Code / Copilot CLI に git の環境変数を入れられるか未調査。Windows 実機で未検証 | ocs の実機で deny の前段停止（pip 以外へ拡張済み）を確かめる | 2026-10-03 |
 | [0012](0012-bash-hook-shared-parser.md) | bash 検査 hook のコマンド解析を 1 か所に集める | In progress | Windows 実機で未検証。B 群（`shlex.split` の規則）は保留 | Windows の PowerShell で `test/agents/` を回し、通れば閉じる | 2026-10-06 |
+| [0015](0015-commit-planner-with-chat-approval.md) | 計画役の子にメッセージ案を作らせ、承認は会話で行う | In progress | 親が全文を示して承認を待って止まるか（実機未確認） | `--auto` で承認待ちで止まるかを見て、TUI で承認後のコミットまで試す | 2026-10-07 |
 
 ## 保留
 

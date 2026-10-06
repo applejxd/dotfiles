@@ -7,9 +7,9 @@ OpenCode の階層 `routine`（`commit`）と `worker`（`fleet-worker`）に当
 [commit / review エージェントの実機確認](../../docs/research/opencode/commit-review-agents.md)（記録 E3〜E6）・
 [作業役への指示の計測](../../docs/research/opencode/fleet-worker-instructions.md)にある。
 
-> **`routine/` は今は動かない。** 前提の `commit` エージェントを 2026-10-07 に廃止した
-> （[コミットの確認](../../docs/spec/agent-config-generation.md#コミットの確認)）。下の `routine` の例は
-> 旧版用の手順として残している。`routine` に割り当て先ができたら課題を作り直す。
+> **`routine/` の採点は今の `commit` に合わない。** `commit` は 2026-10-07 から計画だけを返す役で、
+> コミットは親が会話での承認の後に行う（[コミットの確認](../../docs/spec/agent-config-generation.md#コミットの確認)）。
+> 下の `routine` の例は、子がコミットまで行っていた旧版用の手順として残している。
 
 ```text
 scripts/model-eval/

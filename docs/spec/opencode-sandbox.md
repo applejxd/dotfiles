@@ -381,7 +381,7 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 #### エージェントとコマンド
 
 `common.toml` の `[opencode.agent]`（`bypass`・`bypass-worker`）・`[opencode.agents]`
-（`review`・`fleet-worker`）・`[opencode.commands]`（`/fleet`）を、隔離版にも
+（`commit`・`review`・`fleet-worker`）・`[opencode.commands]`（`/fleet`）を、隔離版にも
 出す（[CHG-0010](../change/closed/0010-ocs-agents.md)）。境界の目的をうっかりの防止に絞ったので
 （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)）、境界の中で `bypass` を使ってよい。
 
@@ -404,7 +404,7 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 - **シェルの確認は通常起動より少ない。** 隔離版の全体の規則はシェルの既定が `allow`
   （`[opencode.sandbox.permissions] default_shell_effect`）で、`rm` などの
   `ask` も捨てている（`drop_shell`）。エージェントの `permissions` は後勝ちでそのまま効くので、
-  `fleet-worker` の git 操作の deny は残るが、それ以外は個別の deny / ask に
+  `commit`（読むだけ）や `fleet-worker` の git 操作の deny は残るが、それ以外は個別の deny / ask に
   当たらなければ確認なしで通る。
   **`git commit` の `ask` は捨てない**（会話での承認に加えて、実行時の確認を残す）。
   オプションを前に置いた `git -c … commit` は `ask` に当たらないので、guide 規則で止める
