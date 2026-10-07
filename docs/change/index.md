@@ -48,6 +48,7 @@
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる**。`ocs` のモジュール分割（2026-09-28）はハーネス層の切り出しではない | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-28 |
 | [0011](0011-agent-first-shell.md) | AI エージェントがシェルの主な利用者である前提へ整える | In progress | Claude Code へ git の環境変数を入れる方法が保留（`CLAUDE_ENV_FILE` と比較）。Windows は人が開いた対話シェルと本物の Copilot CLI での引き継ぎが未確認 | ocs の実機で deny の前段停止（pip 以外へ拡張済み）を確かめる | 2026-10-07 |
 | [0012](0012-bash-hook-shared-parser.md) | bash 検査 hook のコマンド解析を 1 か所に集める | In progress | Windows 実機で未検証。B 群（`shlex.split` の規則）は保留 | Windows の PowerShell で `test/agents/` を回し、通れば閉じる | 2026-10-06 |
+| [0017](0017-builtin-agent-restrictions.md) | 組み込みの `explore` / `plan` の制限が全体の設定に上書きされる問題を直し、`bypass` から起動する子を確認なしで動かせる範囲に整える | Planned | 元に戻す手順（生成器は配備済みのキーを残す）。`agents.plan` の宣言の副作用。`bypass` の子に残る `external_directory` の確認（段 7） | 元に戻す手順を決めてから段 1（`explore` に 4 つの deny） | 2026-10-08 |
 
 ## 保留
 
@@ -55,6 +56,7 @@
 | --- | --- | --- | --- | --- |
 | [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | 段階 0〜3 は完了、4a / 4b は見送り、6 は決着。残る段階 5（`verify` ツール）が第一サポートの決定待ち。段階 3 までは適用済みで動いている | CHG-0006 が第一サポートを決めたとき（「決めない」と決めた場合も含む） | 2026-10-07 |
 | [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | 段階 A1 完了 / A3 消滅 / A4 保留（checkpoint の A1 / A2 とは別の、この案件の段階番号）。残る A2 は第一サポートが変われば対象も変わるため、先に動かすと手戻りになる | 同上。なお A2 の前提である ADR-0007 規則 3 との矛盾と、A1 で取り残した `[file]` 節のコメントは、CHG-0006 と独立に片付けられる | 2026-09-28 |
+| [0016](0016-away-shift-opencode.md) | away-shift を OpenCode 向けに最適化し、運用（深層学習ジョブの調査・再開、会社 PC での利用）を見直す | 着手前。applejxd 限定の棚卸しを先に進めるため積んだ | 利用者が着手を指示したとき | 2026-10-08 |
 
 ## 終了
 

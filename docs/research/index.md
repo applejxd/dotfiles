@@ -106,6 +106,7 @@
 | [bypass を ask→allow だけに再定義できるか](opencode/permission/bypass-ask-upgrade.md) | bypass から `"*" = "allow"` を外し evaluate で ask を allow に書き換える plugin 方式の実測。shell・外部ディレクトリ・`.env.*` の ask が通り、静的 deny（pip・秘密・.ssh）と子エージェントの起動制限は残り、ask を持つ子は化けず、plugin を外すと ask に戻る。V2 配列版も同結果。ADR-0014 で採用し、実際の生成物での実測を追記 |
 | [作業ツリーの外の読み取りとスキルのスクリプト](opencode/permission/external-read-and-skill-scripts.md) | スキルのスクリプトで出ていたのは shell の ask だけ、引数のパスから external_directory は立たない、開けた場所の edit と秘密の deny、コマンド置換は別 resource・引用符は残る、git が fsmonitor を起動、`uv run --no-project` が `.python-version` の実行ファイルを起動 |
 | [段階2配備後の被覆率](opencode/permission/stage2-coverage.md) | 実履歴1,031呼び出しでの実測、秘密へ触れた15件を3層が全件受け止める、誘導後も87%が確認、伏字化の誤爆0.3%、内容の形とパス判定は両方要る |
+| [組み込みエージェントの制限の上書き](opencode/permission/builtin-agent-override.md) | 全体の permissions が explore / plan などの組み込みの制限を上書きする（公式の仕様）。explore が shell で確認を出し `.env.example` を実際に書けた、`agents.explore` の deny でツールが一覧から消え確認ゼロ、API で取り出した実効規則の評価で plan の edit が漏れる |
 
 ### OpenCode の plugin
 
