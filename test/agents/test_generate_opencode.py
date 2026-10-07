@@ -238,11 +238,231 @@ def test_bypass_cannot_launch_approval_based_workers():
     see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
     """
     task = generated()["agent"]["bypass"]["permission"]["task"]
-    assert task["*"] == "allow"
-    assert task["general"] == "deny"
-    assert task["fleet-worker"] == "deny"
-    for name in ("bypass-worker", "bypass-fleet-worker", "explore", "review", "commit"):
-        assert task.get(name, task["*"]) == "allow", name
+    for name in ("general", "fleet-worker", "unknown-agent"):
+        assert task.get(name, task["*"]) == "deny", name
+    for name in BYPASS_CHILDREN:
+        assert task[name] == "allow", name
+
+
+# ---------------------------------------------------------------------------
+# 組み込みエージェントの制限と bypass の子 (CHG-0017)
+# ---------------------------------------------------------------------------
+
+# bypass が起動できる子。bypass_agents / guarded_subagents とは役割が違うので一致させない
+BYPASS_CHILDREN = {"bypass-worker", "bypass-fleet-worker", "explore", "review", "commit"}
+PLAN_DECLARED = [
+    {"action": "edit", "resource": "*", "effect": "deny"},
+    {"action": "edit", "resource": "~/.opencode/plan/*", "effect": "allow"},
+    {"action": "subagent", "resource": "*", "effect": "deny"},
+    {"action": "subagent", "resource": "explore", "effect": "allow"},
+    {"action": "subagent", "resource": "review", "effect": "allow"},
+    {"action": "shell", "resource": "*", "effect": "ask"},
+]
+
+
+@pytest.fixture(
+    params=[("applejxd", False), ("applejxd", True), ("worker", False), ("worker", True)],
+    ids=["私用-通常", "私用-ocs", "会社用-通常", "会社用-ocs"],
+)
+def flavor(request, tmp_path) -> dict:
+    """私用 / 会社用 (Bedrock) と、通常版 / 隔離版 (ocs) の生成物。
+
+    どちらも ``permissions`` (全体の規則)・``agent``・``agents`` を持つ。
+    """
+    username, isolated = request.param
+    common = load_common(username)
+    if not isolated:
+        return generated(common)
+    runtime = tmp_path / "fence"
+    runtime.write_text("", "utf-8")
+    sandbox = common["opencode"]["sandbox"]
+    common["opencode"]["sandbox"] = {**sandbox, "runtime_path": str(runtime)}
+    out = gen.opencode_sandbox(common)
+    assert out is not None
+    return out
+
+
+def _edit_allows(config: dict) -> list[str]:
+    return [
+        r["resource"]
+        for r in config["permissions"]
+        if r["action"] == "edit" and r["effect"] == "allow"
+    ]
+
+
+def test_explore_ends_with_the_four_denies(flavor):
+    """★全体の規則が組み込みの拒否を上書きするので、explore の末尾で並べ直す。
+
+    全体には ``.env.example`` などの edit の allow がある (前提)。explore の規則は全体の
+    後ろに付くので、最後の edit の規則が ``*`` の deny ならどのパスも書けない。
+    """
+    for name in (".env.example", ".env.sample", ".env.template"):
+        assert name in _edit_allows(flavor), f"前提: 全体に {name} の allow がある"
+    agent = flavor["agents"]["explore"]
+    assert agent["mode"] == "subagent"
+    assert "system" not in agent, "組み込みのプロンプトを使う"
+    assert agent["permissions"][-4:] == [
+        {"action": action, "resource": "*", "effect": "deny"}
+        for action in ("edit", "shell", "subagent", "question")
+    ]
+    edit = [r for r in flavor["permissions"] + agent["permissions"] if r["action"] == "edit"]
+    assert edit[-1] == {"action": "edit", "resource": "*", "effect": "deny"}
+
+
+def test_plan_restates_the_global_denies_after_its_rules(flavor):
+    """★plan の規則の後ろに、全体の edit / shell の deny を同じ順で並べ直す。
+
+    通常版と ocs は、それぞれの全体の規則から写す。
+    """
+    agent = flavor["agents"]["plan"]
+    assert agent["mode"] == "primary"
+    assert "system" not in agent and "restate_global_deny" not in agent
+    rules = agent["permissions"]
+    assert rules[: len(PLAN_DECLARED)] == PLAN_DECLARED
+    tail = rules[len(PLAN_DECLARED) :]
+    expected = [
+        r
+        for r in flavor["permissions"]
+        if r["action"] in ("edit", "shell") and r["effect"] == "deny"
+    ]
+    assert tail == expected
+    assert {r["action"] for r in tail} == {"edit", "shell"}
+
+
+@pytest.mark.parametrize("resource", [".env", "*/.env", "*.key", "secrets/*", "*/secrets/*"])
+def test_plan_keeps_secret_edit_denies_after_the_plan_dir_allow(flavor, resource):
+    """★計画ディレクトリの allow が、その中の秘密ファイルの形の deny を上書きしないこと。"""
+    rules = flavor["agents"]["plan"]["permissions"]
+    allow = rules.index({"action": "edit", "resource": "~/.opencode/plan/*", "effect": "allow"})
+    deny = {"action": "edit", "resource": resource, "effect": "deny"}
+    assert deny in flavor["permissions"], "前提: 全体の edit deny"
+    assert deny in rules[allow + 1 :]
+
+
+def test_plan_shell_does_not_inherit_global_allows(flavor):
+    """★全体で allow の shell (``git log *`` など) は、plan では確認になる。deny は deny のまま。"""
+    shell = [r for r in flavor["agents"]["plan"]["permissions"] if r["action"] == "shell"]
+    assert shell[0] == {"action": "shell", "resource": "*", "effect": "ask"}
+    assert all(r["effect"] == "deny" for r in shell[1:])
+    global_deny = [
+        r for r in flavor["permissions"] if r["action"] == "shell" and r["effect"] == "deny"
+    ]
+    assert shell[1:] == global_deny
+    assert {"action": "shell", "resource": "git push *", "effect": "deny"} in shell
+
+
+def test_plan_can_launch_only_explore_and_review(flavor):
+    subagent = [r for r in flavor["agents"]["plan"]["permissions"] if r["action"] == "subagent"]
+    assert subagent[0] == {"action": "subagent", "resource": "*", "effect": "deny"}
+    assert [r["resource"] for r in subagent if r["effect"] == "allow"] == ["explore", "review"]
+    assert all(
+        r["effect"] == "deny" for r in subagent if r["resource"] not in ("explore", "review")
+    )
+
+
+def test_bypass_children_are_an_allow_list(flavor):
+    """★bypass の子の起動規則は、全部禁止してから 5 つだけ許可する。"""
+    task = flavor["agent"]["bypass"]["permission"]["task"]
+    assert next(iter(task.items())) == ("*", "deny"), "先頭が全部禁止"
+    assert {name for name, effect in task.items() if effect == "allow"} == BYPASS_CHILDREN
+    assert set(task) == {"*", *BYPASS_CHILDREN}
+
+
+def test_bypass_task_replaces_a_stale_allow():
+    """既存の opencode.json に古い ``*`` の allow や追加の allow があっても置き換わる。"""
+    existing = {
+        "agent": {
+            "bypass": {
+                "permission": {"task": {"*": "allow", "general": "allow", "mine": "allow"}},
+                "color": "#123456",
+            }
+        }
+    }
+    out = gen.merge_opencode_config(existing, COMMON)["agent"]["bypass"]
+    assert out["permission"] == generated()["agent"]["bypass"]["permission"]
+    assert out["color"] == "#123456", "宣言していないキーは残す"
+
+
+@pytest.mark.parametrize("username", ["applejxd", "worker"])
+def test_bypass_children_and_the_bypass_sets_differ(username):
+    """bypass が起動できる子・bypass_agents・guarded_subagents は役割が違う。それぞれ固定する。"""
+    common = load_common(username)
+    task = generated(common)["agent"]["bypass"]["permission"]["task"]
+    guide = gen.build_opencode_guide({}, common)
+    assert {name for name, effect in task.items() if effect == "allow"} == BYPASS_CHILDREN
+    assert guide["bypass_agents"] == ["bypass", "bypass-fleet-worker", "bypass-worker"]
+    assert guide["guarded_subagents"] == ["bypass-fleet-worker", "bypass-worker"]
+
+
+def test_handwritten_plan_keeps_undeclared_keys():
+    """手書きの定義 (V2 の system / hidden、V1 の agent.plan) は宣言したキーだけ上書きする。"""
+    existing = {
+        "agents": {
+            "plan": {
+                "system": "手書き",
+                "hidden": True,
+                "permissions": [{"action": "*", "resource": "*", "effect": "allow"}],
+            },
+            "explore": {"system": "手書き", "permissions": []},
+        },
+        "agent": {"plan": {"permission": {"edit": "allow"}}},
+    }
+    out = gen.merge_opencode_config(existing, COMMON)
+    fresh = generated()
+    for name in ("plan", "explore"):
+        assert out["agents"][name]["permissions"] == fresh["agents"][name]["permissions"]
+        assert out["agents"][name]["system"] == "手書き"
+    assert out["agents"]["plan"]["hidden"] is True
+    assert out["agent"]["plan"] == {"permission": {"edit": "allow"}}
+
+
+def test_restate_global_deny_copies_only_the_named_denies():
+    common = {
+        "bash": {"deny": ["sudo"], "ask": ["git commit"]},
+        "file": {"write_deny_globs": ["**/.env"]},
+        "opencode": {
+            "shell": {"allow": ["git log"]},
+            "agents": {
+                "x": {
+                    "description": "x",
+                    "permissions": [{"action": "shell", "resource": "*", "effect": "allow"}],
+                    "restate_global_deny": ["shell"],
+                }
+            },
+        },
+    }
+    rules = gen.merge_opencode_v2_agents({}, common)["x"]["permissions"]
+    assert rules == [
+        {"action": "shell", "resource": "*", "effect": "allow"},
+        {"action": "shell", "resource": "sudo *", "effect": "deny"},
+    ]
+    # 写し元を渡すと、それから写す (隔離版の全体の規則)
+    given = [{"action": "shell", "resource": "y *", "effect": "deny"}]
+    rules = gen.merge_opencode_v2_agents({}, common, given)["x"]["permissions"]
+    assert rules[-1] == given[0]
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [(["question"], "未知の action"), ("shell", "配列"), ([1], "配列")],
+    ids=["未知の action", "文字列", "文字列でない要素"],
+)
+def test_restate_global_deny_rejects_invalid_values(value, message):
+    common = {"opencode": {"agents": {"x": {"description": "x", "restate_global_deny": value}}}}
+    with pytest.raises(ValueError, match=message):
+        gen.opencode_v2_agents(common)
+
+
+def test_restate_global_deny_is_v2_only():
+    common = {"opencode": {"agent": {"x": {"restate_global_deny": ["shell"]}}}}
+    with pytest.raises(ValueError, match="restate_global_deny"):
+        gen.merge_opencode_agents({}, common)
+
+
+def test_plan_is_not_exempt_from_the_early_deny():
+    """plan の ``shell * ask`` は、後ろへ並べ直した deny に負けるので前段停止の例外にしない。"""
+    for entry in gen.build_opencode_guide({}, COMMON)["deny_guide"]:
+        assert "plan" not in entry.get("except_agents", []), entry["pattern"]
 
 
 def test_agents_not_declared_in_common_are_kept():

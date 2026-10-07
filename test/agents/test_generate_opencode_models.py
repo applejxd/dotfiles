@@ -372,6 +372,16 @@ def test_fleet_command_names_both_workers():
     assert "fleet-worker を使う" in "".join(line.strip() for line in template.splitlines())
 
 
+def test_fleet_command_stops_at_the_plan_without_workers():
+    """作業役を呼べないエージェント (plan) では計画で止め、拒否された作業を shell に回さない。"""
+    template = "".join(
+        line.strip() for line in generated(PERSONAL)["commands"]["fleet"]["template"].splitlines()
+    )
+    assert "どちらも載っていないとき" in template
+    assert "肩代わりしない" in template
+    assert "Git の履歴やコマンドの実行が要る調査は作業役" in template
+
+
 def test_fleet_command_runs_in_the_current_session():
     """★子エージェントは子を起動できない。取りまとめ役は今のセッションで動かす。"""
     fleet = generated(PERSONAL)["commands"]["fleet"]
@@ -416,28 +426,28 @@ def test_invalid_command_stops_apply(patch, message):
 
 def test_assignment_goes_to_v2_agents_with_variant():
     """★V1 の agent キーでは #variant 付きの指定が黙って無視される (実測)。"""
-    out = generated(with_agents(WORK, {"explore": "worker", "plan": "deep"}))
+    out = generated(with_agents(WORK, {"general": "worker", "build": "deep"}))
     agents = out["agents"]
     sonnet = "amazon-bedrock/global.anthropic.claude-sonnet-5-5#medium"
-    assert agents["explore"] == {"model": sonnet}
-    assert agents["plan"] == {"model": "amazon-bedrock/global.anthropic.claude-opus-5-5#high"}
-    assert "explore" not in out["agent"] and "plan" not in out["agent"]
+    assert agents["general"] == {"model": sonnet}
+    assert agents["build"] == {"model": "amazon-bedrock/global.anthropic.claude-opus-5-5#high"}
+    assert "general" not in out["agent"] and "build" not in out["agent"]
 
 
 def test_unassigning_removes_only_managed_models():
-    assigned = generated(with_agents(PERSONAL, {"explore": "worker", "plan": "deep"}))
-    assigned["agents"]["plan"]["color"] = "#ff6b6b"
+    assigned = generated(with_agents(PERSONAL, {"general": "worker", "build": "deep"}))
+    assigned["agents"]["build"]["color"] = "#ff6b6b"
     assigned["agents"]["mine"] = {"model": "github-copilot/gpt-5-mini"}
     out = generated(PERSONAL, assigned)["agents"]
-    assert "explore" not in out, "model しか無いエントリは消す"
-    assert out["plan"] == {"color": "#ff6b6b"}
+    assert "general" not in out, "model しか無いエントリは消す"
+    assert out["build"] == {"color": "#ff6b6b"}
     assert out["mine"] == {"model": "github-copilot/gpt-5-mini"}, "手で書いたモデルは残す"
 
 
 def test_switching_provider_rewrites_assigned_models():
-    personal = generated(with_agents(PERSONAL, {"explore": "worker"}))
-    work = generated(with_agents(WORK, {"explore": "worker"}), personal)
-    assert work["agents"]["explore"]["model"].startswith("amazon-bedrock/")
+    personal = generated(with_agents(PERSONAL, {"general": "worker"}))
+    work = generated(with_agents(WORK, {"general": "worker"}), personal)
+    assert work["agents"]["general"]["model"].startswith("amazon-bedrock/")
 
 
 @pytest.mark.parametrize(

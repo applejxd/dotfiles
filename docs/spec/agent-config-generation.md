@@ -553,14 +553,16 @@ V2 の `[opencode.agents]` でも同じ）。
 
 `bypass` のセッションから、同じく `bypass = true` の子エージェント `bypass-worker`（汎用）と
 `bypass-fleet-worker`（`/fleet` の作業役）をサブエージェントとして起動できる。
-**ほかのエージェント（`build` など）からは起動できない。** 逆に `bypass` からは、
-承認制の子のうち役割が重なる `general` と `fleet-worker` を起動できない。
+**ほかのエージェント（`build` など）からは起動できない。** 逆に `bypass` が起動できる子は
+**許可リスト**（`bypass-worker`・`bypass-fleet-worker`・`explore`・`review`・`commit`）に
+限る。承認制の `general` / `fleet-worker` と、一覧に無い子（今後足す子、作業先のリポジトリや
+plugin が定義する子）は起動できない。
 
 ```toml
 [opencode.agent.bypass]
 mode = "primary"
 bypass = true
-permission = { task = { "*" = "allow", general = "deny", fleet-worker = "deny" } }
+permission = { task = { "*" = "deny", bypass-worker = "allow", bypass-fleet-worker = "allow", explore = "allow", review = "allow", commit = "allow" } }
 
 [opencode.agent.bypass-worker]
 mode = "subagent"
@@ -580,12 +582,24 @@ permissions = [
 | 呼び出し元 | 起動できる子 |
 | --- | --- |
 | `bypass` | `bypass-worker`・`bypass-fleet-worker`・`explore`・`review`・`commit` |
-| `build` など | `general`・`fleet-worker`・`explore`・`review`・`commit` |
+| `build` | `general`・`fleet-worker`・`explore`・`review`・`commit`・一覧に無い子 |
+| `plan` | `explore`・`review`（[子エージェント](#子エージェント)） |
 
-- **`bypass` から承認制の子を外す理由。** `general` / `fleet-worker` は `bypass` から
-  起動しても自分の規則で動くので、編集やシェルのたびに確認が出て無確認の前提が崩れる。
-  モデルは説明の広い `general` を選びがちでもある。`explore` / `review` は読むだけで
-  確認がほぼ出ず、`commit` は読むだけの計画役（コミットは呼び出し元が行う）
+- **許可リストにする理由。** 子は親が `bypass` でも自分の規則で動き、確認が自動で通るのは
+  `bypass_agents` に載ったものだけ。承認制の子や一覧に無い子を起動すると、編集やシェルの
+  たびに確認が出て無確認の前提が崩れる（2026-10-08 に、修正前の `explore` を並べて起動して
+  確認が大量に出た）。モデルは説明の広い `general` を選びがちでもある。子を足すときは
+  一覧も見直す（一覧の更新が、確認なしで動けるかを見直す機会になる）
+- **許可した子にも確認は残りうる。** `explore` / `review` / `commit` は `bypass_agents` に
+  無いので、開けていない作業ツリーの外を読むとき（`external_directory`）の確認は自動で
+  通らない（[CHG-0017](../change/0017-builtin-agent-restrictions.md) の段 7 で扱う）。
+  `commit` は読むだけの計画役（コミットは呼び出し元が行う）
+- **守れるのは自分の設定の下での事故まで。** 作業先のリポジトリの設定は公式の仕様で
+  グローバルに勝つので、`bypass` の規則や、許可した名前の子の中身を上書きされると防げない
+- **3 つの一覧は一致させない。** `bypass` が起動できる子（この許可リスト）、確認を自動で
+  許可にする `bypass_agents`、`bypass` 以外から起動させない `guarded_subagents` は役割が違い、
+  テストもそれぞれの期待値を固定する。`explore` などに `bypass = true` を付けて許可リストを
+  組み立てると、`build` から呼べなくなり、起動元に関係なく確認が自動で通る別の仕様になる
 - **deny した子は `subagent` ツールの一覧から消える**（実測）。`/fleet` の指示文は
   「一覧に `bypass-fleet-worker` があればそれ、無ければ `fleet-worker`」で使い分けさせる
 - `bypass-fleet-worker` は、`/fleet` の作業役を `bypass` でも無確認で動かすためのもの。
@@ -602,8 +616,8 @@ permissions = [
   （`opencode_guarded_subagents`）。印のあるエージェントは `bypass_agents` にも入る
   （plugin が `ask` を `allow` にする対象）
 - エージェントの規則は全体の規則の後ろに付き、最後に一致した規則が勝つ。
-  `bypass` の `task` の `*` の allow はこの deny を上書きする
-  （全 allow を外しても成立する。[実測](../research/opencode/permission/bypass-ask-upgrade.md)の 5）
+  `bypass` の `task` の個別の allow はこの deny を上書きする
+  （[実測](../research/opencode/permission/bypass-ask-upgrade.md)の 5 は `*` の allow で確かめた）
 - **全体の deny だけでは足りない。** `common.toml` に無いエージェント（手で足した
   `build` の上書きや別名のもの）の `permission` は `merge_opencode_agents` が残す。
   そこに `task = "allow"` などがあると、同じ理屈で deny が上書きされる。
@@ -1130,14 +1144,39 @@ explore = "worker"      # 例
 | --- | --- | --- | --- |
 | `commit` | `routine` | 変更を読み、ファイル単位の論理単位ごとに対象とメッセージ全文（計画）を返す。提示・ステージ・コミットは親が行う | 編集・質問・子エージェントの起動・読み取り以外の shell（[コミットの確認](#コミットの確認)） |
 | `review` | `second_opinion` | 別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する | 編集・shell・質問・子エージェントの起動 |
+| `explore` | なし（組み込み） | 組み込みの探索役。今あるファイルを read / glob / grep / webfetch / websearch で探す。Git の履歴やコマンドが要る調査は親へ返す | 編集・shell・質問・子エージェントの起動 |
+| `plan` | なし（組み込みの主エージェント） | 組み込みの計画役 | 計画ファイル（`~/.opencode/plan/*`）以外の編集。子は `explore` / `review` だけ。shell は deny を除いて確認（全体の allow を引き継がない） |
 
+- **組み込みの `explore` / `plan` も宣言して制限を並べ直す。** OpenCode の規則は「基底 →
+  組み込みエージェントの追加方針 → 全体の `permissions` → エージェントの `permissions`」の順に
+  連結され、最後に一致したものが勝つ。全体の規則（`build` 向けの `.env.example` などの例外の
+  allow、作業ツリーの外の edit の確認、`shell * ask` と shell の allow）が、組み込みの制限を
+  上書きする。宣言しないと、`explore` は shell で確認を出し `.env.example` を書け、`plan` は
+  `.env.example` を確認なしに書けて `general` 経由で編集できた
+  （[調査記録](../research/opencode/permission/builtin-agent-override.md)、
+  [CHG-0017](../change/0017-builtin-agent-restrictions.md)）。`system` は書かず、組み込みの
+  プロンプトを使う（plan モードの指示は利用者のメッセージに付いて渡され、宣言しても残る）
+- **組み込みの方針を丸ごと写さない。** 足すのは deny と最小の allow だけ。`explore` の組み込みの
+  `read *` の allow や `.env` の ask まで写すと、全体の秘密ファイルの deny を緩める
+- **`restate_global_deny`**: エージェントに allow や ask を足すと、全体の deny より後ろに付くので
+  全体の deny を上書きする（`plan` の計画ファイルの allow が、計画ディレクトリの中の `.env` などを
+  許してしまう）。`restate_global_deny = ["edit", "shell"]` のように action 名を書くと、
+  `generate.py` が全体の `permissions` のうちその action の deny を、全体での順のまま、
+  エージェントの `permissions` の後ろへ写す。生成時だけのキーで `opencode.json` には出ない。
+  書けるのは `[opencode.agents]` だけで、action は `read` / `edit` / `shell` / `subagent`。
+  隔離版は隔離版の全体規則から写す
+- `restate_global_deny` に `shell` を含むエージェントは、deny の前段停止の例外
+  （`except_agents`）にしない。`plan` の `shell * ask` を理由に例外が付くと、前段停止が
+  効かなくなる
+- **元に戻すとき**は、宣言を消すだけでは配備済みの `opencode.json` に残る（下の「宣言したキー
+  だけを差し替え」）。手順は [CHG-0017 の「実装・検証」](../change/0017-builtin-agent-restrictions.md#実装検証)
 - **`review` は shell を開けない。** `git diff` / `git status` も外部の diff
   ドライバや fsmonitor を通じてコードを実行しうる
   （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）。
   差分は親が依頼文に含めて渡す
 - 書けるキーは `description`（必須）/ `mode` / `system` / `permissions` / `steps` /
-  `hidden` / `color` / `disabled`。`model` と V1 形式のキー（`permission` など）は
-  `apply` を止める。V1 の `[opencode.agent]` と同じ ID も止める
+  `hidden` / `color` / `disabled`、生成時だけのキーとして `restate_global_deny`。`model` と
+  V1 形式のキー（`permission` など）は `apply` を止める。V1 の `[opencode.agent]` と同じ ID も止める
 - `system` は組み込みの基底プロンプトを**置き換える**（公式）。`AGENTS.md` や
   スキルの一覧は引き続き足される
 - `permissions` は全体の規則の後ろに付き、後勝ちで効く。効果は `allow` / `ask` / `deny`。
@@ -1223,8 +1262,14 @@ Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる�
 | `bypass-fleet-worker` | `[opencode.agents.bypass-fleet-worker]`、階層 `worker` | `bypass` での作業役。指示と deny は `fleet-worker` と同じで、ほかは無確認（[bypass から呼べる子エージェント](#bypass-から呼べる子エージェント)） |
 
 - **作業役は呼び出し元で決まる。** `bypass` からは `bypass-fleet-worker` だけ、
-  ほかからは `fleet-worker` だけが `subagent` ツールの一覧に載る。指示文は一覧を見て
-  使い分けさせる
+  `build` からは `fleet-worker` だけが `subagent` ツールの一覧に載る。指示文は一覧を見て
+  使い分けさせる。どちらも載らない `plan` では、調査だけなら `explore` / `review` に分担し、
+  実装を含むなら計画を示して止め、作業役を呼べるエージェントへの切り替えを利用者に頼む
+  （拒否された作業を親の shell で肩代わりしない）
+- **確認なしで進めたいときは `bypass` の上で使う。** `build` の上の `/fleet` は作業役が
+  承認制なので確認が出る（[CHG-0017](../change/0017-builtin-agent-restrictions.md) で対象外とした）
+- 調査の振り分けは、今あるファイルの探索を `explore`、Git の履歴やコマンドが要る調査を
+  作業役、第三者の検証を `review` にする（`explore` は shell を使えない）
 - **取りまとめは今のセッションで動かす（`subagent = false`）。** 子エージェントは
   さらに子を起動できない（既定の入れ子は 1 段）。子にすると作業役を起動できない
 - **作業役は同じ作業ツリーを共有する。** 衝突は、親が担当ファイルを重ねずに

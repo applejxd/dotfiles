@@ -923,9 +923,10 @@ second_opinion = "gpt-6-astra"
 description = "通常の確認 (ask) を無確認で通す。deny と誘導は通常どおり効く"
 mode = "primary"
 bypass = true
-# 承認制の子は確認で止まるので呼ばせない (代わりに bypass-worker / bypass-fleet-worker)。
+# 起動できる子の許可リスト。一覧に無い子 (承認制の general / fleet-worker、リポジトリや
+# plugin が足す子) は確認で止まるので呼ばせない。子を足すときはここも見直す。
 # see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
-permission = { task = { "*" = "allow", general = "deny", fleet-worker = "deny" } }
+permission = { task = { "*" = "deny", bypass-worker = "allow", bypass-fleet-worker = "allow", explore = "allow", review = "allow", commit = "allow" } }
 
 # bypass からだけ呼べる子エージェント (task は V2 の subagent)。
 # see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
@@ -1003,6 +1004,34 @@ permissions = [
   { action = "subagent", resource = "*", effect = "deny" },
   { action = "question", resource = "*", effect = "deny" },
 ]
+
+# 組み込みの探索役。system は書かない (組み込みのプロンプトを使う)。全体の規則が組み込みの
+# 拒否を上書きするので、拒否をここで並べ直す。see docs/spec/agent-config-generation.md#子エージェント
+[opencode.agents.explore]
+description = "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). When calling this agent, specify the desired thoroughness level: \"quick\" for basic searches, \"medium\" for moderate exploration, or \"very thorough\" for comprehensive analysis across multiple locations and naming conventions. 読み取り専用（read / glob / grep / webfetch / websearch）。Git の履歴やコマンドの実行が要る調査は親へ返す。"
+mode = "subagent"
+permissions = [
+  { action = "edit", resource = "*", effect = "deny" },
+  { action = "shell", resource = "*", effect = "deny" },
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "question", resource = "*", effect = "deny" },
+]
+
+# 組み込みの計画役。system は書かない。★restate_global_deny は生成時だけのキーで、全体の
+# edit / shell の deny をこの後ろへ写す (計画ファイルの allow で秘密の deny を緩めないため)。
+# see docs/spec/agent-config-generation.md#子エージェント
+[opencode.agents.plan]
+description = "Read-only agent for exploring the codebase and planning work before implementation."
+mode = "primary"
+permissions = [
+  { action = "edit", resource = "*", effect = "deny" },
+  { action = "edit", resource = "~/.opencode/plan/*", effect = "allow" },
+  { action = "subagent", resource = "*", effect = "deny" },
+  { action = "subagent", resource = "explore", effect = "allow" },
+  { action = "subagent", resource = "review", effect = "allow" },
+  { action = "shell", resource = "*", effect = "ask" },
+]
+restate_global_deny = ["edit", "shell"]
 
 # /fleet の作業役。編集とシェルは全体の規則のまま (承認制)。同じ作業ツリーを共有するので
 # 担当ファイルは親が割り当てる。see docs/spec/agent-config-generation.md#並列作業fleet
@@ -1088,7 +1117,11 @@ $ARGUMENTS
    (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。
    作業役は、subagent ツールに bypass-fleet-worker が載っていればそれ、無ければ
    fleet-worker を使う (呼べるのはどちらか一方だけ)。
-   調査だけの作業は explore、第三者の検証は review に任せてよい。
+   どちらも載っていないとき (plan など) は、調査だけの依頼なら explore と review に
+   分担し、実装を含む依頼なら計画を示すところで止めて、作業役を呼べるエージェントへの
+   切り替えを利用者に頼む。拒否された作業を自分の shell で肩代わりしない。
+   今あるファイルの探索は explore、Git の履歴やコマンドの実行が要る調査は作業役、
+   第三者の検証は review に任せてよい。
    依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を
    すべて書く (子エージェントはこの会話を見られない)
 5. 結果を読み、失敗・担当外の変更・報告された問題 (呼び出し元への影響を含む) があれば、

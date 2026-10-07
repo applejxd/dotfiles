@@ -481,8 +481,10 @@ def test_isolated_gets_the_same_agents_and_commands_as_common(tmp_path):
         for agent in out["agents"].values()
         for rule in agent.get("permissions", [])
     )
-    assert set(out["agents"]) == set(gen.opencode_v2_agents(COMMON))
-    for name, agent in gen.opencode_v2_agents(COMMON).items():
+    # restate_global_deny は隔離版の全体の規則から写す
+    expected = gen.opencode_v2_agents(COMMON, gen.build_opencode_sandbox_permissions(COMMON))
+    assert set(out["agents"]) == set(expected)
+    for name, agent in expected.items():
         for key, value in agent.items():
             assert out["agents"][name][key] == value, f"agents.{name}.{key} が違う"
     assert out["commands"] == gen.merge_opencode_commands({}, COMMON)

@@ -1004,11 +1004,21 @@ def test_common_agents_and_commands_are_written(tmp_path):
     project = _project(tmp_path)
     launcher.config.write_isolated_config(sandbox, project)
     config = json.loads((Path(sandbox["config_dir"]) / "opencode.json").read_text(encoding="utf-8"))
-    # 全 allow は持たない (bypass の ask は plugin が allow にする)。task の起動許可は残る
+    # 全 allow は持たない (bypass の ask は plugin が allow にする)。子の起動は許可リスト
     assert "*" not in config["agent"]["bypass"]["permission"]
-    assert config["agent"]["bypass"]["permission"]["task"]["*"] == "allow"
+    task = config["agent"]["bypass"]["permission"]["task"]
+    assert task["*"] == "deny"
+    assert {name for name, effect in task.items() if effect == "allow"} == {
+        "bypass-worker",
+        "bypass-fleet-worker",
+        "explore",
+        "review",
+        "commit",
+    }
     assert "bypass-worker" in config["agent"]
-    assert {"commit", "review", "fleet-worker", "bypass-fleet-worker"} <= set(config["agents"])
+    assert {"commit", "review", "fleet-worker", "bypass-fleet-worker", "explore", "plan"} <= set(
+        config["agents"]
+    )
     assert "fleet" in config["commands"]
 
 

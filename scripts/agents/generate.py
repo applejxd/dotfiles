@@ -1215,6 +1215,9 @@ def _deny_guide_exempt_agents(common: dict[str, Any], command: str) -> list[str]
     out: list[str] = []
     for source in ("agents", "agent"):
         for name, agent in (opencode.get(source) or {}).items():
+            # 全体の shell deny を後ろへ並べ直すエージェントは、自分の規則では覆せない
+            if "shell" in (agent.get("restate_global_deny") or []):
+                continue
             for resource in _agent_shell_overrides(agent):
                 try:
                     hit = any(wildcard_intersection(p, resource) for p in (command, f"{command} *"))
@@ -1675,7 +1678,7 @@ def opencode_sandbox_agents(common: dict[str, Any], reachable: list[str]) -> dic
     agent = merge_opencode_agents({}, common)
     if agent:
         out["agent"] = agent
-    agents = merge_opencode_v2_agents({}, common)
+    agents = merge_opencode_v2_agents({}, common, build_opencode_sandbox_permissions(common))
     models = opencode_models(common)
     if models and models["provider"] in reachable:
         agents = merge_opencode_agent_models(agents, models)
@@ -1825,6 +1828,11 @@ def merge_opencode_agents(existing_agent: Any, common: dict[str, Any]) -> dict[s
     """
     out = dict(existing_agent) if isinstance(existing_agent, dict) else {}
     for name, agent in (common.get("opencode", {}).get("agent") or {}).items():
+        if "restate_global_deny" in agent:
+            raise ValueError(
+                f"[opencode.agent.{name}] に restate_global_deny は書けない"
+                " ([opencode.agents] で書く)"
+            )
         entry = dict(out.get(name) or {})
         # bypass は生成側の印。OpenCode の設定には出さない
         entry.update({k: v for k, v in agent.items() if k != "bypass"})
@@ -1883,8 +1891,9 @@ def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
 
 
 # [opencode.agents.<id>] に書けるキー。model は [opencode.model.agents] が持つ。
-# system_from / bypass は生成時だけのキー (system_from は別のエージェントの system を写し、
-# bypass は guide-plugin の ask→allow の対象にする。opencode.json には出さない)。
+# system_from / bypass / restate_global_deny は生成時だけのキー (system_from は別のエージェントの
+# system を写し、bypass は guide-plugin の ask→allow の対象にし、restate_global_deny は全体の
+# deny を permissions の後ろへ写す。opencode.json には出さない)。
 OPENCODE_AGENT_KEYS = frozenset(
     {
         "description",
@@ -1892,6 +1901,7 @@ OPENCODE_AGENT_KEYS = frozenset(
         "system",
         "system_from",
         "bypass",
+        "restate_global_deny",
         "permissions",
         "steps",
         "hidden",
@@ -1900,13 +1910,48 @@ OPENCODE_AGENT_KEYS = frozenset(
     }
 )
 OPENCODE_PERMISSION_EFFECTS = frozenset({"allow", "ask", "deny"})
+# restate_global_deny に書ける action (全体の permissions が deny を持つもの)
+OPENCODE_RESTATE_ACTIONS = frozenset({"read", "edit", "shell", "subagent"})
 
 
-def opencode_v2_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _restate_actions(section: str, agent: dict[str, Any]) -> list[str]:
+    """``restate_global_deny`` を検査して返す (無ければ空)。"""
+    actions = agent.get("restate_global_deny", [])
+    if not isinstance(actions, list) or not all(isinstance(a, str) for a in actions):
+        raise ValueError(f"[{section}] の restate_global_deny は action 名の配列で書く")
+    unknown = sorted(set(actions) - OPENCODE_RESTATE_ACTIONS)
+    if unknown:
+        raise ValueError(
+            f"[{section}] の restate_global_deny に未知の action: {unknown}"
+            f" (対応: {', '.join(sorted(OPENCODE_RESTATE_ACTIONS))})"
+        )
+    return actions
+
+
+def restated_global_denies(
+    actions: list[str], global_rules: list[dict[str, str]]
+) -> list[dict[str, str]]:
+    """全体の規則のうち、``actions`` の deny を元の順のまま写す。
+
+    エージェントの規則は全体の後ろに付き後勝ちなので、エージェントの allow / ask が
+    全体の deny (秘密ファイルや危険なコマンド) を上書きする。後ろに並べ直して deny に戻す。
+    see docs/spec/agent-config-generation.md#子エージェント
+    """
+    return [
+        dict(rule)
+        for rule in global_rules
+        if rule["action"] in actions and rule["effect"] == "deny"
+    ]
+
+
+def opencode_v2_agents(
+    common: dict[str, Any], global_rules: list[dict[str, str]] | None = None
+) -> dict[str, dict[str, Any]]:
     """``[opencode.agents]`` (V2 形式のエージェント定義) を検査して返す。
 
     V1 の ``[opencode.agent]`` と同じ ID は禁止する (両方に書いたときの結合順は未確認)。
     ``model`` はここでは受けない。PC ごとのプロバイダで変わるので階層で割り当てる。
+    ``global_rules`` は ``restate_global_deny`` の写し元 (省略時は通常版の全体の規則)。
     see docs/spec/agent-config-generation.md#子エージェント
     """
     opencode = common.get("opencode", {})
@@ -1935,6 +1980,15 @@ def opencode_v2_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
         if "bypass" in entry and not isinstance(entry["bypass"], bool):
             raise ValueError(f"[{section}] の bypass は true / false で書く")
         entry.pop("bypass", None)
+        restate = _restate_actions(section, entry)
+        entry.pop("restate_global_deny", None)
+        if restate:
+            if global_rules is None:
+                global_rules = build_opencode_permissions(common)
+            entry["permissions"] = [
+                *(entry.get("permissions") or []),
+                *restated_global_denies(restate, global_rules),
+            ]
         source = entry.pop("system_from", None)
         if source is not None:
             if "system" in entry:
@@ -1952,7 +2006,9 @@ def opencode_v2_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def merge_opencode_v2_agents(existing: Any, common: dict[str, Any]) -> dict[str, Any]:
+def merge_opencode_v2_agents(
+    existing: Any, common: dict[str, Any], global_rules: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
     """V2 の ``agents`` に、宣言したエージェントの定義を書く。
 
     宣言したキーだけを差し替え、他のエージェント・キー (``model`` など) は残す。
@@ -1962,7 +2018,7 @@ def merge_opencode_v2_agents(existing: Any, common: dict[str, Any]) -> dict[str,
         for name, entry in (existing if isinstance(existing, dict) else {}).items()
         if isinstance(entry, dict)
     }
-    for name, agent in opencode_v2_agents(common).items():
+    for name, agent in opencode_v2_agents(common, global_rules).items():
         out[name] = {**out.get(name, {}), **agent}
     return out
 

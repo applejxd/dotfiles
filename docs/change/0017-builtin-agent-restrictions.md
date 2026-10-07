@@ -1,6 +1,6 @@
 # CHG-0017: 組み込みエージェント（explore / plan）の制限が全体の設定に上書きされる問題を直す
 
-- **状態**: Planned
+- **状態**: In progress
 - **更新日**: 2026-10-08
 - **基準**: OpenCode v2.0.22、コミット f890912、WSL2 (Ubuntu)
 
@@ -47,11 +47,11 @@ question を拒否）は変えない。
 | 段 | 内容 | 状態 |
 | --- | --- | --- |
 | 0 | 原因の調査と方針のレビュー | 完了 |
-| 1 | `explore` に edit / shell / subagent / question の deny を足す | 未着手 |
-| 2 | `plan` を (c′) にする（edit は計画ファイル以外を拒否し、その後ろに秘密ファイルの deny を並べ直す。子は `explore` と `review` だけ。shell の静的な規則は deny を除いて確認）。エージェントごとの shell 既定を生成する仕組みを足す | 未着手 |
-| 3 | `bypass` の子の起動規則を許可リストにする（全部禁止して 5 つだけ許可） | 未着手 |
-| 4 | `/fleet` の指示文を直す（`plan` では計画までで止める。自動で判断させるのは `bypass` の上の `/fleet` に限ると明記）。docs を直す | 未着手 |
-| 5 | 全体の `git log --output` の穴を実機で確かめ、書き込めれば deny を足す（別コミット） | 未着手 |
+| 1 | `explore` に edit / shell / subagent / question の deny を足す | 完了（未 apply） |
+| 2 | `plan` を (c′) にする（edit は計画ファイル以外を拒否し、その後ろに秘密ファイルの deny を並べ直す。子は `explore` と `review` だけ。shell の静的な規則は deny を除いて確認）。エージェントごとの shell 既定を生成する仕組みを足す | 完了（未 apply） |
+| 3 | `bypass` の子の起動規則を許可リストにする（全部禁止して 5 つだけ許可） | 完了（未 apply） |
+| 4 | `/fleet` の指示文を直す（`plan` では計画までで止める。自動で判断させるのは `bypass` の上の `/fleet` に限ると明記）。docs を直す | 完了（未 apply） |
+| 5 | 全体の `git log --output` を guide 規則で止める（別コミット。確認なしに書けることは実測済み） | 未着手 |
 | 6 | `chezmoi apply` 後、本物のサービスの API と probe で受入条件を確かめる | 未着手 |
 | 7 | `bypass` から起動した読むだけの子に残る確認を、自動で判断させる方法を決めて入れる | 未着手 |
 | 8 | 段 7 の後の再検証（`bypass` と、そうでない主エージェントの対照。plugin が無いときに確認へ戻ること） | 未着手 |
@@ -78,24 +78,38 @@ question を拒否）は変えない。
 - `agents.explore` に deny を足すと、ツールの一覧から消え、確認ゼロで探索を終えた（実測）
 - `bypass` の子の起動規則は「全部許可して `general` / `fleet-worker` を禁止」で、一覧に
   無い子も起動できる（実効規則の評価。「呼び出し関係」を参照）
+- 段 1〜4 の前提の調査を 3 つ終えた（2026-10-08）
+  - 元に戻す手順: 宣言を消しても配備済みのキーは残る（試作で確認）。撤去したキーを書く欄
+    （`[opencode.retired.agents]`）を、元に戻すときに足す方式に決めた（「実装・検証」を参照）
+  - `git log --output=<パス>` は、`build` で確認なしに書けた（作業ツリーの外にも）。
+    段 5 は guide 規則（`[[opencode.shell.guide]]`。正規表現で前段で止め、説明を返す既存の
+    仕組み）で止める（[調査記録 E2](../research/opencode/permission/builtin-agent-override.md#記録-e2--2026-10-08)）
+  - `agents.plan` を試験用の設定で宣言すると、組み込みの規則と plan モードの指示は保たれ、
+    宣言した規則が末尾に足されるだけだった。子は `explore` / `review` だけになり、計画
+    ディレクトリの中の秘密ファイルも拒否された。試験用の設定で別ポートのサーバを起動すれば、
+    モデルに頼らずに実効規則を取り出せる（同 E2）
+- 段 1〜4 を実装した（2026-10-08。未 apply）。plan の deny の並べ直しは、生成時だけのキー
+  `restate_global_deny`（全体の指定した action の deny をエージェントの規則の後ろへ写す）で
+  行う。仕様は [子エージェント](../spec/agent-config-generation.md#子エージェント)。生成物の並びは
+  E2 の試験用設定と action ごとには同じだが、全体の並びは違う（試験用は秘密ファイルの deny を
+  計画ディレクトリの allow の直後に挟み、生成物は末尾にまとめる）。段 6 で実効規則を確かめる
 
 ## 未解決点
 
-- `plan` の edit の漏れを、モデルの判断に頼らずに確かめる方法（段 6 で API の実効規則を
-  確かめるのを代わりにする予定）
-- `agents.plan` を宣言したときに、組み込みの system プロンプトや `hidden` が保たれるか。
-  ほかのマシンの `opencode.json` に手書きの `plan` / `explore` の定義があると、宣言しない
-  キーはそのまま残る（生成器は宣言したキーだけ上書きする）
-- 元に戻す手順。`common.toml` から宣言を消して apply しても、生成器は配備済みの
-  `opencode.json` のキーを残すので戻らない。利用者の手書きの定義を丸ごと消さずに、
-  この案件で足したキーだけを外す方法を段 1 の前に決める
+- `plan` の edit の漏れを、モデルの判断に頼らずに確かめる方法は、試験用の設定で別ポートの
+  サーバを起動して API から取り出す形にした（E2）。実際に書き込ませたときの拒否は未確認
+- `agents.plan` で `description` を変えたとき、`prompt` / `system` を書いたときに、組み込みの
+  プロンプトが保たれるかは未確認（今回は組み込みと同じ説明だけを書く）。ほかのマシンの
+  `opencode.json` に手書きの `plan` / `explore` の定義があると、宣言したキーは上書きされて
+  元に戻せない。このマシンには無いことを確かめた。ほかのマシンは apply の前に確かめる
 - `plan` の shell の確認が、実際に毎回人の確認になるか。「常に許可」で保存した承認は
   project 単位の allow になる（[V2 の機能調査](../research/opencode/v2-capabilities.md#既定ポリシー)）。
   `plan` で保存した承認がどう効くかは実機で確かめる
 - `title` / `summary` も全体の規則で拒否が上書きされている。ツールを実行する経路が
   あるかは未確認。**再開条件**: 段 6 の後に確かめる
-- 全体の `git log *` の allow で、`git log --output=<パス>` が確認なしに書けるか
-  （静的レビューの指摘。未実施）
+- 全体の `git log *` の allow 以外にも、引数で書ける形が小さく残る（`checkpoint.py paths *` の
+  `--cwd` で別のリポジトリの `info/exclude` へ固定の内容を追記できる、`uv pip list *` の
+  `--cache-dir`）。影響が小さいので今回は扱わない。**再開条件**: allow を足すか見直すとき
 - `bypass` から起動した読むだけの子（`explore` / `review` / `commit`）に残る確認の扱い。
   段 1 の後も、開けていない作業ツリーの外を読むとき（`external_directory`）の確認が残り、
   自動では通らない。段 7 で次のどちらかに決める
@@ -113,10 +127,8 @@ question を拒否）は変えない。
 
 ## 次の調査・実験
 
-- 段 1 の前に、元に戻す手順を決める（「未解決点」を参照）
-- 段 2 の前に、`agents.plan` を足した試験用の設定で、`plan` のツールの一覧と、
-  子エージェントの一覧（`explore` と `review` だけになるか）を確かめる
-- 段 5 の前に、`git log --output=.tmp/x` が確認なしに書けるかを probe で確かめる
+- 段 6 で、試験用でなく本物の設定に apply した後、別ポートのサーバ（E2 の方法）と probe で
+  受入条件を確かめる
 
 ## 評価基準
 
@@ -257,7 +269,7 @@ flowchart LR
 | 論点 | 現状 | 方針 |
 | --- | --- | --- |
 | `bypass` 自身への影響 | `explore` / `plan` の修正は `bypass` の規則を変えない。`plan` と `bypass` は別の主エージェントで交差しない | 変更なし |
-| 書き込みの穴（`git log --output` など） | `bypass` では確認も自動で通るので、確認止まりの穴は `bypass` では塞がっていない | 守るなら deny で書く（段 5）。確認で止める作りにしない |
+| 書き込みの穴（`git log --output` など） | `bypass` では確認も自動で通るので、確認止まりの穴は `bypass` では塞がっていない | 拒否で止める（段 5 の guide 規則）。確認で止める作りにしない |
 | `bypass` から起動できる子 | 全部許可して `general` / `fleet-worker` を禁止 | 許可リストにする（「bypass が起動できる子の決め方」と段 3） |
 | 読むだけの調査の振り分け | 今回は `explore` が確認を出したので `bypass-worker` で代えた。`bypass-worker` は編集もでき、確認も出ない | 段 1 の後は `explore` を使う。`bypass-worker` は編集が要る作業に使う |
 | 子に残る確認 | 下の「`bypass` から起動できる子の実効規則」のとおり、`explore` / `review` / `commit` の確認は自動で通らない | 段 7 で無くす方向で選ぶ |
@@ -292,13 +304,29 @@ flowchart LR
 | `common.toml.tmpl` の `bypass` | 子の起動規則が全部許可 → 全部禁止して 5 つだけ許可 | 一覧に無い子は確認が自動で通らず、事故が再発する（レビュー） | 未適用 |
 | `common.toml.tmpl` の `/fleet` | 作業役が無い場合の分岐なし → `plan` では計画までで止める。自動で判断させるのは `bypass` の上に限ると明記 | `plan` から作業役を起動できなくなる。利用者の方針で `build` の上の `/fleet` は対象外 | 未適用 |
 | `agent-config-generation.md` | 「`explore` / `review` は読むだけで確認がほぼ出ない」 → 全体の規則が組み込みの制限を上書きすることと、修正後の扱い、許可リスト | 今回の実測で、`explore` は確認を出し、書き込めた | 未適用 |
-| 全体の shell | `git log *` の allow のみ → `--output` の deny を足す（実測で書けた場合） | `git log --output=<パス>` で確認なしに書ける疑いがある（静的レビュー。`commit` には既に `*--output*` の deny がある） | 未確認 |
+| 全体の shell | `git log *` の allow のみ → `git log` の `--output` を guide 規則で止める | `build` で `git log -1 --output=<パス>` が確認なしにファイルを作った（E2）。`*--output*` を全体で deny すると `git commit -m` の本文や正当な `--output` まで止まるので、`git log` で始まる部分だけに当てる guide 規則にする。guide 規則は `bypass` でも止まる | 未適用 |
 
 ## 実装・検証
 
 段 0 の実測は[調査記録](../research/opencode/permission/builtin-agent-override.md)にある。
-試験用の設定は `.tmp/opencode/probe-config/`、実効規則の取り出しと評価の
-スクリプトは `.tmp/opencode/`（いずれもコミットしない）。
+試験用の設定は `.tmp/opencode/probe-config/` と `.tmp/opencode/plan-config/`、実効規則の
+取り出しと評価のスクリプトは `.tmp/opencode/`（いずれもコミットしない）。
+
+**元に戻す手順（2026-10-08 に決定）。** 生成器は配備済みの `opencode.json` の
+エージェントのうち、宣言したキーだけを上書きし、ほかは残す。宣言を消しても、前に書いた
+キーは残る（試作の `.tmp/opencode/rollback/experiment.py` で確認）。
+
+- `agents.explore` / `agents.plan`: 元に戻すコミットで宣言を消し、撤去したキーを書く欄
+  `[opencode.retired.agents]`（例: `explore = ["description", "mode", "permissions"]`）を
+  足す。生成器は書かれたキーだけを消し、空になったエントリは消す。欄と処理は元に戻すとき
+  に入れる（前例: `[opencode.retired]` と `[retired_hooks]`）。試作
+  （`.tmp/opencode/rollback/prototype_retire.py`）では、一度も足さなかった場合と同じ出力に
+  戻った
+- `agent.bypass.permission`: 宣言を以前の値に戻せば、キーごと置き換わって戻る。
+  `permission` のキー自体を消すと残るので、消さない
+- `ocs`: 毎回、空の設定から作り直すので、宣言を消せば消える
+- どの方法でも、段 1〜3 の apply で上書きされた手書きの `description` / `permissions` は
+  取り戻せない。apply の前に、各マシンの `opencode.json` に手書きの定義が無いかを確かめる
 
 ## 重要な更新
 
@@ -315,3 +343,8 @@ flowchart LR
 - 2026-10-08: `bypass` の子の起動規則を許可リストにする案をレビューを経て採用し、段 3 に
   した。保証するのは自分の設定の下での事故の防止までで、作業先のリポジトリによる上書きは
   対象外とした。呼び出し関係の図を足した
+- 2026-10-08: 段 1〜4 の前提の調査を 3 つ終えた（元に戻す手順、`git log --output` の実測、
+  `agents.plan` の試験用設定での検証）。`git log --output` は確認なしに書けたので、段 5 は
+  guide 規則で止めると決めた
+- 2026-10-08: 段 1〜4 を実装した。新しい生成時だけのキー `restate_global_deny` を足し、
+  それを持つエージェントは deny の前段停止の例外にしないようにした

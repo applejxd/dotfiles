@@ -3,6 +3,9 @@
 <!-- 現在の総合判断は docs/change/0017-builtin-agent-restrictions.md が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
+> **後続の観測**: E1 の「全体の規則は配列の中に 2 回現れる」は、`OPENCODE_CONFIG` による
+> 上書き用設定が重なったためと見られる（[記録 E2](#記録-e2--2026-10-08) の結果 3）。
+
 ## 記録 E1 — 2026-10-07〜08
 
 - **対象バージョン**: OpenCode v2.0.22
@@ -164,3 +167,133 @@ mise run opencode:probe -- --agent plan 'Sanctioned permission-system test reque
 > A custom subagent uses its own permissions, not a subset of its parent's permissions.
 
 出典: <https://opencode.ai/v2/docs/permissions/>（Defaults / Agents 節。2026-10-08 取得）
+
+## 記録 E2 — 2026-10-08
+
+- **対象バージョン**: OpenCode v2.0.22、git 2.43.0
+- **環境**: WSL2 (Ubuntu)、基準コミット 9121bf7、モデル `github-copilot/claude-opus-5`
+
+### 問い
+
+E1 の「次の問い」のうち 3 つ。
+
+1. `plan` の実効規則を、モデルの判断に頼らずに確かめられるか。`agents.plan` を宣言
+   しても、組み込みの規則・プロンプト・`hidden` は保たれるか
+2. `git log --output=<パス>` が、全体の `git log *` の allow で確認なしに書けるか
+3. （E1 の「全体の規則が 2 回現れる」の原因）
+
+### 事前の予想
+
+1 は探索的。2 は書けると予想した（静的レビューの指摘）。
+
+### 方法・条件
+
+**1.** 実際の設定を `.tmp/opencode/plan-config/` へ写し、`agents.plan` を足した。規則は
+次の並び（170 件）。
+
+1. `edit * deny`、`edit ~/.opencode/plan/* allow`
+2. 全体の edit の deny 65 件を写す
+3. `subagent * deny`、`subagent explore allow`、`subagent review allow`
+4. `shell * ask`
+5. 全体の shell の deny 101 件を写す
+
+対照として、宣言しない元の設定（`.tmp/opencode/plan-config-ctl/`）も用意した。
+モデルにツールの一覧などを自己申告させたうえで、モデルに頼らずに実効規則を取り出すため、
+試験用の設定で別ポートのサーバを起動した（実 DB は probe が作った `seed.db` の写しを使う）。
+
+```console
+$ env -u OPENCODE_CONFIG OPENCODE_CONFIG_DIR=$PWD/.tmp/opencode/plan-config OPENCODE_DB=$PWD/.tmp/opencode/plan-config-work/serve.db \
+    timeout 900 opencode serve --hostname 127.0.0.1 --port 47391
+server listening on http://127.0.0.1:47391
+server password <表示されたパスワード>
+$ OPENCODE_PASSWORD=<表示されたパスワード> opencode api --server http://127.0.0.1:47391 \
+    get '/api/agent/plan?location[directory]=/home/applejxd/.local/share/chezmoi'
+```
+
+**2.** 素の git と、実機（`build`、`--auto` なし）の probe で試した。比較のため同じ probe で
+`touch` も実行させた。
+
+```console
+mise run opencode:probe -- '... (1) git log -1 --output=.tmp/opencode/gitlog-output/y.txt  (2) touch .tmp/opencode/gitlog-output/z.txt ...'
+mise run opencode:probe -- '... git log -1 --output=/tmp/opencode/gitlog-output-probe-w.txt ...'
+mise run opencode:probe -- '... FOO=1 git log -1 --oneline ...'
+```
+
+### 結果
+
+**1. `plan` の宣言。**
+
+- 起動直後の最初の `/api/agent/plan` は `AgentNotFoundError`（HTTP 404）を返した（2 回の
+  起動の両方で再現）。対照のサーバでも、1 回目の一覧は組み込みの 7 エージェント・各 9〜24 件
+  の規則だけで、2 回目から 13 エージェント・各 366 件以上になった。設定を読み終える前に
+  応答していると推測する。**1 回目の結果は捨て、件数がそろってから採る**
+- 取り出した `plan` の規則は 540 件。添字 0〜12 は基底と組み込みの `plan`（対照と同一）、
+  13〜368 は全体の規則（対照と同一）、369〜538 は宣言した 170 件が連続して並び、539 は
+  全エージェントの末尾に付く `browser * deny`。`~` は展開されていた
+- `plan` 以外のエージェントの規則は、宣言の有無で変わらなかった
+- `description` / `mode` / `hidden` / `name` は対照と同じ（`hidden: false`）
+- モデルの自己申告では、ツールの一覧は宣言の有無で同じ（edit と write は計画ファイルの
+  allow があるので残る。組み込みでも同じ）。子エージェントの一覧は、宣言ありで
+  `explore` と `review` だけ、対照で `commit` / `explore` / `fleet-worker` / `general` /
+  `review`
+- plan モードの指示は system 本体でなく、利用者のメッセージに付く `<system-reminder>` で
+  渡され、宣言の後も同じ文面で残った（API は system プロンプトを返さないので、プロンプトが
+  保たれる根拠はモデルの自己申告だけ）
+
+> You are in Plan mode. ... Do not modify any other files or ask a subagent to do so.
+
+実効規則の評価（E1 と同じ照合。効果@添字）:
+
+| 操作 | `plan`（宣言あり） | `build`（参考） |
+| --- | --- | --- |
+| edit `.tmp/x.txt`、`mise.toml`、`~/src/...` | deny@369 | allow / ask |
+| edit `.env.example` / `.env.sample` / `.env.template` | deny@371・372 | allow |
+| edit `~/.opencode/plan/p.md` | allow@370 | allow |
+| edit 計画ディレクトリ内の `.env` / `a.key` / `secrets/x.md` | deny@418 / 396 / 414 | deny |
+| subagent `general` / `fleet-worker` / `commit` / 未知の名前 | deny@434 | allow |
+| subagent `explore` / `review` | allow@435・436 | allow |
+| shell `git log` / `wc` / `check_refs.py --save` | ask@437 | allow |
+| shell `git push` / `sudo` | deny@455 / 454 | deny |
+
+**2. `git log --output`。確認なしに書けた。**
+
+- 素の git で `git log -1 --output=<f>`、`git log -1 -p --output=<f>`、`git log -1 --output <f>`
+  （空白区切り）はファイルを作った。短縮形の `--outp=` は `unrecognized argument` で失敗した
+- 実機の `build` で、`git log -1 --output=.tmp/opencode/gitlog-output/y.txt` は確認なしに
+  実行され、ファイルができた。同じ実行の `touch` は `auto-rejecting` で拒否された
+- 作業ツリーの外（`/tmp/opencode/gitlog-output-probe-w.txt`）にも、外部ディレクトリの
+  確認なしに書けた（`--output=` に付いたパスはパスとして扱われないと推測する）
+- 前に変数を付けた `FOO=1 git log -1 --oneline` は allow に当たらず、確認になった
+- 全体の shell の allow（`opencode.json` の 17 件）を静的に点検した。内容と書き込み先の
+  両方を引数で決めて書けるのは `git log` だけだった。`checkpoint.py paths *` の `--cwd` は
+  別のリポジトリの `info/exclude` へ固定の内容（`.tmp/`）を追記でき、`uv pip list *` は
+  `--cache-dir` でキャッシュを作れる（どちらも影響は小さい）
+- 全体の permissions に `--output` を止める規則は無い。`*--output*` の deny は
+  `agents.commit` だけにある
+
+作ったファイルはすべて消した。
+
+**3. 全体の規則が 2 回現れる原因。** `OPENCODE_CONFIG` を外してサーバを起動すると、
+全体の規則は 1 回だけ現れた。E1 で 2 回現れたのは、Orca（作業ツリーと端末を管理する
+アプリ）が端末に設定する `OPENCODE_CONFIG` の上書き用設定と、通常の設定が重なったためと
+見られる（`opencode debug config` の出所の一覧で確認。このコマンドは稼働中のサービスの
+内容を返す）。
+
+### 考察
+
+- `agents.plan` を宣言しても、組み込みの規則と plan モードの指示は保たれ、宣言した規則が
+  末尾に足されるだけだった。並べ直した全体の deny で、計画ディレクトリの中の秘密ファイルも
+  拒否できる
+- 試験用の設定で別ポートのサーバを起動すれば、モデルに頼らずに実効規則を取り出せる。
+  起動直後の応答を捨てる必要がある
+- `git log --output` は、全体の allow にある「内容と書き込み先を引数で決めて書ける」唯一の
+  経路だった
+
+### 次の問い
+
+- 実際に書き込ませたときの拒否と、`plan` の shell の確認が実際に出ること
+- `description` を変えたとき、`prompt` / `system` を書いたときに、組み込みのプロンプトや
+  plan モードの指示が保たれるか
+- `ocs` と、Orca の上書き用設定が重なる条件での結果
+- 保存した承認（「常に許可」）が `plan` の shell の確認にどう効くか
+- `title` / `summary` にツールを実行する経路があるか（未着手）
