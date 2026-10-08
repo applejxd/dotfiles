@@ -156,6 +156,34 @@ def test_bash_decisions(command, decision, source):
     assert (response["decision"], response["source"]) == (decision, source), response["reason"]
 
 
+@pytest.mark.parametrize(
+    ("command", "guide"),
+    [
+        ("cat README.md", "read-cat-head-tail"),
+        ("cd docs && head -5 index.md", "read-cat-head-tail"),
+        ("sed -n 1,5p README.md", "read-sed-n"),
+        ("cat > out.txt <<'EOF'\nx\nEOF", "write-cat-tee-heredoc"),
+        ("python3 - <<'PY'\nprint(1)\nPY", "write-heredoc-script"),
+    ],
+)
+def test_guides_deny_with_their_message(command, guide):
+    response = bash(command, bypass=True)
+    assert (response["decision"], response.get("guide")) == ("deny", guide)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat README.md | wc -l",
+        "tail -f log.txt",
+        "git commit -m 'cat > f <<EOF の例'",
+        "echo 'a << b'",
+    ],
+)
+def test_guide_exclusions(command):
+    assert "guide" not in bash(command)
+
+
 def test_reader_cannot_use_bash_but_common_deny_comes_first():
     assert bash("ls", role="reader")["decision"] == "deny"
     assert bash("ls", role="reader")["source"] == "rule"
@@ -343,6 +371,9 @@ def test_decide_matches_check_bash_on_the_hook_test_corpus():
         got = bash(command)
         if expected in ("deny", "ask"):
             ok = got["decision"] == expected and got["source"] in ("rule", "check")
+        elif got.get("guide"):
+            # 誘導は pi だけの deny (read / write ツールへの案内)。hook には無い
+            ok = got["decision"] == "deny" and got["source"] == "rule"
         else:
             # hook が何も返さないものは、判定器も規則・意味解析では止めない
             ok = got["source"] in ("default", "rule") and got["decision"] in ("allow", "ask")

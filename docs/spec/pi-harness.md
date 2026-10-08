@@ -111,10 +111,10 @@ Windows には配らない（`.chezmoiignore.tmpl` の `.config/*`）。
 - 子エージェント: 入れ子にならない・読み取り役に bash を出さない・子の ask が `blocked` で返る・
   bypass を継ぐ・役割の `shell_deny` が bypass でも効く・`commit` が確認なしで git を読む
 - MCP: ハーネスから登録され、実装役では確認になる
+- 誘導: `cat` が read ツールへの案内で止まる
 
 ## 未対応
 
-- 誘導（`[[opencode.shell.guide]]`）（CHG-0020 の段 2c）
 - 子エージェントの階層のモデルは、Copilot で確かめただけ。Bedrock のモデル ID が pi でそのまま通るかは未確認
 - 起動の入口・設定の配布（段 3）、境界（段 4）
 - 判定 1 回に 0.1 秒ほどかかる（Python の起動）。`tool_call` と `execute()` で同じ入力なら 1 回にしている

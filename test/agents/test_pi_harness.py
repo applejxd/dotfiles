@@ -267,3 +267,10 @@ def test_mcp_servers_are_registered_by_the_harness_and_judged(env):
     # 実装役では MCP のツールは既定の扱い (確認)。UI の無い起動では拒否になる
     assert "isError=true :: not approved:" in proc.stdout, proc.stdout
     assert "mcp-raw-secret" not in proc.stdout
+
+
+def test_guides_point_to_the_tool_to_use(env):
+    (env["proj"] / "f.txt").write_text("x\n", encoding="utf-8")
+    proc = run_pi(env, bash_call("cat f.txt"), PI_HARNESS_BYPASS="1")
+    assert "isError=true" in proc.stdout, proc.stdout
+    assert "read ツールを使ってください" in proc.stdout

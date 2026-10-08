@@ -346,7 +346,7 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 
 ### pi と共有する節
 
-次の 4 つは `[pi]` が正本で、pi のハーネスの判定器と OpenCode の生成の両方が読む（移行の計画は
+次の 5 つは `[pi]` が正本で、pi のハーネスの判定器と OpenCode の生成の両方が読む（移行の計画は
 [CHG-0020](../change/0020-pi-migration.md)）。
 
 | `[pi]` の節 | 中身 | OpenCode での位置 |
@@ -355,11 +355,14 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 | `[pi.redact]` | shell 出力の伏字化（[shell 出力の伏字化](#shell-出力の伏字化)） | `[opencode.redact]` |
 | `[pi.external_read]` | 作業ツリーの外で確認なしに読める場所（[作業ツリーの外の読み取り](#作業ツリーの外の読み取り)） | `[opencode.external_read]` |
 | `[pi.skill_scripts]` | 確認なしに実行できるスキルのスクリプト（[スキルのスクリプト](#スキルのスクリプト)） | `[opencode.skill_scripts]` |
+| `[[pi.guide]]` | 誘導（[判定 API の誘導](pi-decide.md#誘導)） | `[[opencode.shell.guide]]` の `pi = "<id>"` の位置 |
 
 - `generate.py` は `common.toml` を読んだ直後（`load_common`）に、`[pi]` の値を OpenCode の位置へ写す
   （`resolve_pi_shared`）。OpenCode の生成の処理は写した後の位置を読むので、出力は写す前と同じ
 - **OpenCode 側に同じキーを書くと生成を止める。** 2 か所に書くとどちらが効くか分からなくなる
 - OpenCode を撤去するとき（CHG-0020 の段 6）に、写す処理ごと消す
+- `[[pi.guide]]` は、OpenCode 側の一覧の `pi = "<id>"` を中身に置き換える（並びの位置は OpenCode 側が決める）。
+  無い id や、`pi` と一緒に他のキーを書いたものは生成を止める
 - 試験は `test_pi_shared.py`。描画した `common.toml` の `[opencode]` に 4 つが残っていないことも固定する
 
 ### glob の記法差

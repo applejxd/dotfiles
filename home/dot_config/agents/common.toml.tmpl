@@ -967,6 +967,52 @@ script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 # write は標準入力を引数のパスへ書くので載せない
 subcommands = ["paths", "lint", "read"]
 
+# 誘導 (deny と案内)。pi の判定器と OpenCode の guide plugin の両方が使う。
+# id で OpenCode の [[opencode.shell.guide]] の並びへ差し込む (pi = "<id>")。
+# pattern / unless は Python と JavaScript の両方で同じ意味になる正規表現だけを書く。
+# see docs/spec/pi-decide.md#誘導
+
+# 読み取りを read ツールへ寄せる。目的は確認回数ではなく保護で、
+# shell 経由では read の deny が効かないため。
+# ★パイプ・リダイレクトを含む形は除外する。read で代替できないので
+#   deny すると作業が止まるだけになる。head -c / tail -f も同様。
+[[pi.guide]]
+id = "read-cat-head-tail"
+pattern = '(^|&&|;|\n)\s*(cat|head|tail)\s'
+unless = '[|<>]|\s-{1,2}(c|f|bytes|follow)\b'
+message = "cat / head / tail でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。"
+
+[[pi.guide]]
+id = "read-sed-n"
+pattern = '(^|&&|;|\n)\s*sed\s+-n\s'
+unless = '[|<>]'
+message = "sed -n でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。"
+
+# ヒアドキュメントを write ツールへ寄せる。目的は確認 1 回あたりの負担で、
+# 実履歴ではヒアドキュメント付きが 177 件 (16.9%)・中央値 1,012 字だった。
+# 読めない長文を形式的に承認するより、1 行の確認 + 差分で見せるほうがよい。
+# 保護にもなる: `python3 - <<PY` で書く経路には edit の deny が効かない。
+# ★`<<<` (here-string) は 1 行なので対象外。`[^<]` で除いている。
+# ★末尾に改行を要求する。これが無いと `echo 'a << b'` のようなクォート内の
+#   `<<` まで当たる。本物のヒアドキュメントは必ず本文と終端行が続く。
+# ★unless は git / gh のメッセージ指定を外す。ヒアドキュメントの例を
+#   コミットメッセージに書いただけで deny される誤爆を実地で踏んだ。
+#   連結 (`git commit -m x && cat > f <<EOF`) は素通りする。伏字化の
+#   deny_path_unless と同じ割り切り。
+# ★実履歴ではヒアドキュメント行にパイプが続く例が 0 件。代替は塞がらない。
+# see docs/change/closed/0002-opencode-ask-by-default.md 「段階 3」
+[[pi.guide]]
+id = "write-cat-tee-heredoc"
+pattern = '(^|&&|;|\n)\s*(cat\s*>>?\s*\S+|tee\s+(-a\s+)?\S+)\s*<<'
+unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+message = "cat > file や tee でファイルを作らないでください。write ツールを使ってください (差分が見えるうえ、edit の permission が効きます)。"
+
+[[pi.guide]]
+id = "write-heredoc-script"
+pattern = '''(^|[^<])<<-?\s*["']?\w+["']?[^\n]*\n'''
+unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+message = "ヒアドキュメントでスクリプトを渡さないでください。write ツールでファイルに書いてから実行してください (確認画面が 1 行になり、中身は差分で見えます)。"
+
 # pi の判定器の役割 (プロファイル)。判定器の `role` に名前を渡す。pi だけが読む。
 # tools に無いツールは deny。default は、どの規則にも当たらない操作の扱い。
 # ★評価の順番は判定器のコードに固定してある (この並びに意味は無い)。
@@ -1364,19 +1410,12 @@ $ARGUMENTS
 pattern = '(^|&&|\|\||;|\n)\s*cd\s'
 message = "cd は使わないでください。shell ツールの workdir 引数でディレクトリを指定できます。"
 
-# 読み取りを read ツールへ寄せる。目的は確認回数ではなく保護で、
-# shell 経由では read の deny が効かないため。
-# ★パイプ・リダイレクトを含む形は除外する。read で代替できないので
-#   deny すると作業が止まるだけになる。head -c / tail -f も同様。
+# 読み取りを read ツールへ寄せる誘導の本体は [[pi.guide]]。ここは並びの位置だけを決める。
 [[opencode.shell.guide]]
-pattern = '(^|&&|;|\n)\s*(cat|head|tail)\s'
-unless = '[|<>]|\s-{1,2}(c|f|bytes|follow)\b'
-message = "cat / head / tail でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。"
+pi = "read-cat-head-tail"
 
 [[opencode.shell.guide]]
-pattern = '(^|&&|;|\n)\s*sed\s+-n\s'
-unless = '[|<>]'
-message = "sed -n でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。"
+pi = "read-sed-n"
 
 # allow に載っているコマンドの「書き込み形」を塞ぐ (CHG-0002 段階 4a の副産物)。
 # ★allow は **前方一致**で、リダイレクトは resource に残る。つまり
@@ -1409,28 +1448,12 @@ message = "git log の --output でファイルへ書き込まないでくださ
 pattern = '(^|&&|\|\||;|\n)\s*git(\s+-\S+(\s+[^-\s]\S*)?)+\s+commit(\s|$)'
 message = "git commit の前にオプションを置かないでください。`git commit -m '<件名>' -m '<本文>'` の形で実行してください (確認と hook を通すため)。"
 
-# ヒアドキュメントを write ツールへ寄せる。目的は確認 1 回あたりの負担で、
-# 実履歴ではヒアドキュメント付きが 177 件 (16.9%)・中央値 1,012 字だった。
-# 読めない長文を形式的に承認するより、1 行の確認 + 差分で見せるほうがよい。
-# 保護にもなる: `python3 - <<PY` で書く経路には edit の deny が効かない。
-# ★`<<<` (here-string) は 1 行なので対象外。`[^<]` で除いている。
-# ★末尾に改行を要求する。これが無いと `echo 'a << b'` のようなクォート内の
-#   `<<` まで当たる。本物のヒアドキュメントは必ず本文と終端行が続く。
-# ★unless は git / gh のメッセージ指定を外す。ヒアドキュメントの例を
-#   コミットメッセージに書いただけで deny される誤爆を実地で踏んだ。
-#   連結 (`git commit -m x && cat > f <<EOF`) は素通りする。伏字化の
-#   deny_path_unless と同じ割り切り。
-# ★実履歴ではヒアドキュメント行にパイプが続く例が 0 件。代替は塞がらない。
-# see docs/change/closed/0002-opencode-ask-by-default.md 「段階 3」
+# ヒアドキュメントを write ツールへ寄せる誘導の本体は [[pi.guide]]。ここは並びの位置だけを決める。
 [[opencode.shell.guide]]
-pattern = '(^|&&|;|\n)\s*(cat\s*>>?\s*\S+|tee\s+(-a\s+)?\S+)\s*<<'
-unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
-message = "cat > file や tee でファイルを作らないでください。write ツールを使ってください (差分が見えるうえ、edit の permission が効きます)。"
+pi = "write-cat-tee-heredoc"
 
 [[opencode.shell.guide]]
-pattern = '''(^|[^<])<<-?\s*["']?\w+["']?[^\n]*\n'''
-unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
-message = "ヒアドキュメントでスクリプトを渡さないでください。write ツールでファイルに書いてから実行してください (確認画面が 1 行になり、中身は差分で見えます)。"
+pi = "write-heredoc-script"
 
 # pip を uv へ誘導する (CHG-0011 2b)。pip / pip3 は共通 deny が先に止めるが、early = true で
 # plugin の execute.before が先に止めて message を返す。

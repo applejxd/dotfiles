@@ -59,7 +59,8 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
      symlink を解いた実体の 3 つで照合する。ディレクトリを渡す `grep` / `find` / `ls` は、中のファイルの形でも照合する
 2. **役割のツール**。役割の `tools` に無いツールは deny（末尾が `*` の項目は前方一致）
 3. **役割の確認と許可**
-   - `bash`: 役割の `shell_deny` に当たれば deny（bypass でも外れない）。次に `check_bash.py` の ask 側（`[bash] ask` と意味解析）。
+   - `bash`: [誘導](#誘導)に当たれば、案内を理由にした deny（bypass でも外れない）。
+     次に役割の `shell_deny` に当たれば deny（bypass でも外れない）。次に `check_bash.py` の ask 側（`[bash] ask` と意味解析）。
      当たらず、全部の区切りが `[pi.shell] allow`（役割に `shell_allow` があればそちら）に当たれば allow。
      `>` `<` `` ` `` `$(` `--output` を含む形は allow にしない。`[pi.skill_scripts]` の宣言どおりの形も allow
    - 読み取り: `[file] read_ask_globs` は ask。作業ツリーの中と `[pi.external_read]` の中は allow。それ以外の外は ask
@@ -70,6 +71,32 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 
 `rm` の承認の免除（`ask_hook_owned`）は、hook と同じく `[bash] ask` から外れる。判定器ではその先の
 既定（実装役は ask）に落ちるので、作業ツリーの中の `rm` も確認になる（今の OpenCode と同じ）。
+
+## 誘導
+
+`[[pi.guide]]` に当たる bash のコマンドは、より適したツールへの案内を理由にして deny する（応答の `guide` に id）。
+今は 4 件で、すべて読み書きを pi のツールへ寄せるもの。
+
+| id | 止める形 | 案内 |
+| --- | --- | --- |
+| `read-cat-head-tail` | `cat` / `head` / `tail` での読み取り（パイプ・リダイレクト・`-c` / `-f` は除く） | read ツール |
+| `read-sed-n` | `sed -n` での読み取り | read ツール |
+| `write-cat-tee-heredoc` | `cat >` / `tee` とヒアドキュメントでのファイル作成 | write ツール |
+| `write-heredoc-script` | ヒアドキュメントでスクリプトを渡す形 | write ツールで書いてから実行 |
+
+- OpenCode の guide plugin も同じ `[[pi.guide]]` を使う。`[[opencode.shell.guide]]` の `pi = "<id>"` が、
+  並びのどこに差し込むかを決める（[pi と共有する節](agent-config-generation.md#pi-と共有する節)）
+- 正規表現は Python（判定器）と JavaScript（guide plugin）の両方で同じ意味になるものだけを書く。
+  `test_pi_shared.py` が代表のコマンドで両方の結果を突き合わせる
+- OpenCode の誘導のうち、次は pi には入れていない（判定器のほかの規則で足りる）
+
+| OpenCode の誘導 | pi で入れない理由 |
+| --- | --- |
+| `cd` を `workdir` へ | pi の bash に `workdir` 引数が無い。判定器は `cd … &&` を外して照合する |
+| allow したコマンドの書き込み形（リダイレクト）・`git log --output` | 判定器は `>` や `--output` を含む形を allow にしない（既定の確認になる） |
+| `git -c … commit` | 判定器は `git` の前置きのオプションを外して `[bash] ask` の `git commit` に当てる |
+| `pip` を `uv` へ | 意味解析の `check_pip_redirect` が案内付きで止める |
+| `rm` の `.git` / `~` / `/` / 作業ディレクトリ全体、`find` の `-delete` / `-exec rm` | 意味解析の `check_rm_root_guard` / `check_find_root_guard` が止める |
 
 ## 役割
 
@@ -100,6 +127,5 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 
 - `[pi.external_read]` だけを開けている。OpenCode が開けている `[opencode.sandbox] work_read`（`~/src` など）は
   まだ読まないので、隣のリポジトリを読むと確認になる
-- `[[opencode.shell.guide]]`（誘導）はまだ判定に入れていない（CHG-0020 の「未解決点」）
 - `boundary` を判定に使っていない
 - 1 回の判定ごとに Python を起動する（hook と同じ）。呼び出しの多いハーネスで遅さが問題になるかは未計測

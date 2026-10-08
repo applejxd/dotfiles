@@ -219,7 +219,41 @@ def resolve_pi_shared(common: dict[str, Any]) -> dict[str, Any]:
                 f"[opencode.{'.'.join(dst)}] は書けない ([pi.{'.'.join(src)}] が正本)"
             )
         parent[dst[-1]] = copy.deepcopy(value)
+    _resolve_pi_guides(pi, opencode)
     return out
+
+
+PI_GUIDE_KEYS = frozenset({"id", "pattern", "unless", "message", "early"})
+
+
+def _resolve_pi_guides(pi: dict[str, Any], opencode: dict[str, Any]) -> None:
+    """``[[opencode.shell.guide]]`` の ``pi = "<id>"`` を ``[[pi.guide]]`` の中身に置き換える。
+
+    並びの位置は OpenCode 側の一覧が決め、中身は ``[pi.guide]`` が持つ (同じ値を 2 か所に書かない)。
+    """
+    guides: dict[str, dict[str, Any]] = {}
+    for guide in pi.get("guide") or []:
+        if not isinstance(guide, dict) or not isinstance(guide.get("id"), str):
+            raise SystemExit("[[pi.guide]] は id (文字列) が要る")
+        _reject_unknown(f"pi.guide.{guide['id']}", set(guide), PI_GUIDE_KEYS)
+        if guide["id"] in guides:
+            raise SystemExit(f"[[pi.guide]] の id が重複している: {guide['id']}")
+        guides[guide["id"]] = {k: v for k, v in guide.items() if k != "id"}
+    shell = opencode.get("shell")
+    if not isinstance(shell, dict):
+        return
+    resolved = []
+    for entry in shell.get("guide") or []:
+        ref = entry.get("pi") if isinstance(entry, dict) else None
+        if ref is None:
+            resolved.append(entry)
+            continue
+        if set(entry) != {"pi"}:
+            raise SystemExit(f"[[opencode.shell.guide]] の pi = {ref!r} には他のキーを書けない")
+        if ref not in guides:
+            raise SystemExit(f"[[opencode.shell.guide]] の pi = {ref!r} が [[pi.guide]] に無い")
+        resolved.append(copy.deepcopy(guides[ref]))
+    shell["guide"] = resolved
 
 
 def _reject_unknown(section: str, present: set[str], known: frozenset[str]) -> None:

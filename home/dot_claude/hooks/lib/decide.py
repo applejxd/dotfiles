@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import shlex
 import tomllib
 from pathlib import Path
@@ -104,6 +105,21 @@ def _bash_ask(cmd: str) -> dict[str, Any] | None:
     return None
 
 
+def _guide(cmd: str, pi: dict[str, Any]) -> dict[str, Any] | None:
+    """``[[pi.guide]]`` (誘導) に当たれば、案内を理由にした deny。bypass でも外れない。
+
+    正規表現は Python と JavaScript で同じ意味になるものだけを書く約束
+    (OpenCode の guide plugin と共有)。
+    """
+    for guide in pi.get("guide") or []:
+        pattern, unless = guide.get("pattern"), guide.get("unless")
+        if not isinstance(pattern, str) or not isinstance(guide.get("message"), str):
+            raise ValueError(f"[[pi.guide]] {guide.get('id')!r} に pattern と message が要ります")
+        if re.search(pattern, cmd) and not (unless and re.search(unless, cmd)):
+            return _response("deny", guide["message"], "rule", guide=guide.get("id"))
+    return None
+
+
 def _all_segments_allowed(cmd: str, patterns: list[str], policy: Any) -> str | None:
     """全セグメントが allow の一覧に当たれば、当たった最初のパターンを返す。"""
     if not patterns or any(t in cmd for t in _UNSAFE_FOR_ALLOW):
@@ -173,6 +189,9 @@ def _decide_bash(
     deny = _bash_common_deny(cmd)
     if deny:
         return deny, None
+    guide = _guide(cmd, pi)
+    if guide:
+        return None, guide
     # 役割だけの禁止。共通の禁止ではないが、bypass では外れない (bypass は ask だけを変える)
     role_deny = policy.find_match(cmd, [str(c) for c in profile.get("shell_deny") or []])
     if role_deny:
