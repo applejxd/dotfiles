@@ -53,7 +53,7 @@ question を拒否）は変えない。
 | 4 | `/fleet` の指示文を直す（`plan` では計画までで止める。自動で判断させるのは `bypass` の上の `/fleet` に限ると明記）。docs を直す | 完了（未 apply） |
 | 5 | 全体の `git log --output` を guide 規則で止める（別コミット。確認なしに書けることは実測済み） | 完了 |
 | 6 | `chezmoi apply` 後、本物のサービスの API と probe で受入条件を確かめる | 完了（`ocs` は生成物の確認まで。実際の `ocs` の起動は未確認） |
-| 7 | `bypass` から起動した読むだけの子に残る確認を、自動で判断させる方法を決めて入れる | 未着手 |
+| 7 | `bypass` から起動した読むだけの子に残る確認を、自動で判断させる方法を決めて入れる | 完了（未 apply。[ADR-0015](../adr/0015-bypass-child-external-read.md)） |
 | 8 | 段 7 の後の再検証（`bypass` と、そうでない主エージェントの対照。plugin が無いときに確認へ戻ること） | 未着手 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -129,16 +129,13 @@ question を拒否）は変えない。
 - 全体の `git log *` の allow 以外にも、引数で書ける形が小さく残る（`checkpoint.py paths *` の
   `--cwd` で別のリポジトリの `info/exclude` へ固定の内容を追記できる、`uv pip list *` の
   `--cache-dir`）。影響が小さいので今回は扱わない。**再開条件**: allow を足すか見直すとき
-- `bypass` から起動した読むだけの子（`explore` / `review` / `commit`）に残る確認の扱い。
-  段 1 の後も、開けていない作業ツリーの外を読むとき（`external_directory`）の確認が残り、
-  自動では通らない。段 7 で次のどちらかに決める
-  - 親が `bypass` のとき、子の確認も plugin が自動で許可にする。`permission.evaluate`
-    から親セッションのエージェントを辿れるかは未確認。子の再開時や、親のエージェントが
-    変わったときの扱いも決める必要がある。全部の子に効くので対象が広がる
-  - `bypass` 専用の読むだけの子（`bypass-explore` など）を足す。自作のエージェントは
-    基底の「全部許可」から始まるので、4 つの deny だけでは組み込みの `explore` と同じ
-    （MCP や Code Mode も使えない）にならない。権限を別に設計して確かめる必要があり、
-    定義の二重管理になる。`build` から起動させない仕組みも要る
+- `bypass` から起動した読むだけの子に残る確認は、段 7 で、親が `bypass` のときに作業ツリーの
+  外の読み取り（`read` / `grep` / `glob` 由来の `external_directory`）の確認だけを plugin が
+  省く形にした（[ADR-0015](../adr/0015-bypass-child-external-read.md)）。残るのは次のもの
+  - `production.env` のような読み取りの確認と、shell 由来の `external_directory`
+    （`commit` の外部のリポジトリでの git を確認なしにしないため、意図して残す）
+  - 実機で確かめたのは `explore` の `read` だけ。`grep` / `glob`、`review` / `commit`、
+    子の再開・fork、対話の画面（TUI）、`ocs` は未確認（段 8）
 - 共有の skill `review-loop` は、OpenCode に無い子（`code-review` / `security-review`）を
   名指ししている（既存の不整合）。段 3 の後はリポジトリがその名前の子を持っていても
   `bypass` からは呼べない。OpenCode では `review` を使い、差分の取得とコマンドでの検証は
@@ -372,3 +369,8 @@ flowchart LR
   （OS の sandbox が書き込み先を限るため）
 - 2026-10-08: 段 1〜5 を apply し、段 6 を終えた。残りは段 7（`bypass` から起動した読むだけの子に
   残る確認）と段 8（その後の再検証）
+- 2026-10-08: 段 7 を実装した。親のセッションを `ctx.session.get` で辿れることを実測し
+  （[調査記録 E3](../research/opencode/permission/builtin-agent-override.md#記録-e3--2026-10-08)）、
+  案 A をレビューを経て採用した。レビューの指摘で、自動で許可するのを `read` / `grep` / `glob`
+  由来の `external_directory` に限り（`commit` の shell 由来を外す）、子の一覧を起動の許可リスト
+  から導出せず `[opencode.bypass_children]` に明示した。決定は ADR-0015 に記録した

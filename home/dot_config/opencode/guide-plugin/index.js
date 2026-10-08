@@ -130,6 +130,35 @@ if (rules && !guardKnown) {
 
 const upgradesAsk = (e) => e.effect === "ask" && bypass.has(e.agent)
 
+// 親 (1 段だけ) が bypass のとき、作業ツリーの外を読む確認 (read / grep / glob) を
+// allow にする子。読めない・空なら、この引き上げだけをしない (ask のまま)。
+// see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+const bypassChildren = names(rules?.bypass_child_agents) ?? new Set()
+if (rules && !names(rules.bypass_child_agents)) {
+  console.error("[guide] rules.json の bypass_child_agents を使えない")
+}
+const READ_TOOLS = new Set(["read", "grep", "glob"])
+
+const mayUpgradeChildRead = (e, readCalls) =>
+  e.effect === "ask" &&
+  bypassChildren.has(e.agent) &&
+  e.action === "external_directory" &&
+  readCalls.has(e.source?.id)
+
+// ★キャッシュしない (親のエージェントは途中で変わりうる)。祖先は遡らない。
+async function parentIsBypass(ctx, e) {
+  try {
+    if (!e.sessionID || typeof ctx.session?.get !== "function") return false
+    const child = await ctx.session.get({ sessionID: e.sessionID })
+    if (child?.agent !== e.agent || !child.parentID) return false
+    const parent = await ctx.session.get({ sessionID: child.parentID })
+    return typeof parent?.agent === "string" && bypass.has(parent.agent)
+  } catch (err) {
+    console.error(`[guide] 親セッションを引けない: ${err}`)
+    return false
+  }
+}
+
 function guardSubagent(e) {
   if (e.effect === "deny") return
   // 一覧が読めないときは止めない (see docs/spec/agent-config-generation.md#rulesjson-が使えないとき)
@@ -331,6 +360,8 @@ export default {
   id: "guide",
   async setup(ctx) {
     const raw = new Map()
+    // read / grep / glob の呼び出し id。evaluate の source.id と突き合わせる。
+    const readCalls = new Set()
     const describe = describer(ctx)
 
     // ★ここで投げるとロードごと失敗する。API が無い版では何もしない。
@@ -344,6 +375,7 @@ export default {
     }
 
     await ctx.tool.hook("execute.before", (e) => {
+      if (READ_TOOLS.has(e.tool) && text(e.id)) readCalls.add(e.id)
       if (e.tool !== "shell") return
       const command = e.input?.command ?? ""
       raw.set(e.id, command)
@@ -373,6 +405,7 @@ export default {
       else if (e.action === "shell") await guideShell(e)
       // 最後に bypass の ask を allow にする。deny (誘導を含む) は上で決まったまま。
       if (upgradesAsk(e)) e.effect = "allow"
+      if (mayUpgradeChildRead(e, readCalls) && (await parentIsBypass(ctx, e))) e.effect = "allow"
     })
 
     async function guideShell(e) {
@@ -402,6 +435,7 @@ export default {
     // grep / glob の結果から保護対象を落とす。permission の read deny は
     // これらのツールに効かないので、ここが唯一の保護になる。bypass でも同じに効く。
     await ctx.tool.hook("execute.after", (e) => {
+      readCalls.delete(e.id)
       if (e.tool === "shell") {
         const command = raw.get(e.id) ?? ""
         raw.delete(e.id)

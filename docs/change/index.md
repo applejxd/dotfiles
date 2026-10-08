@@ -48,7 +48,7 @@
 | [0007](0007-harness-profiles.md) | 境界をハーネス非依存にする（3 層プロファイル） | In progress | 段 3（汎用化）の動機が CHG-0006 の結論で弱まった。**段 2 は取りかかれる**。`ocs` のモジュール分割（2026-09-28）はハーネス層の切り出しではない | 段 2（共有ランタイムとハーネスの節分け） | 2026-09-28 |
 | [0011](0011-agent-first-shell.md) | AI エージェントがシェルの主な利用者である前提へ整える | In progress | Claude Code へ git の環境変数を入れる方法が保留（`CLAUDE_ENV_FILE` と比較）。Windows は人が開いた対話シェルと本物の Copilot CLI での引き継ぎが未確認 | ocs の実機で deny の前段停止（pip 以外へ拡張済み）を確かめる | 2026-10-07 |
 | [0012](0012-bash-hook-shared-parser.md) | bash 検査 hook のコマンド解析を 1 か所に集める | In progress | Windows 実機で未検証。B 群（`shlex.split` の規則）は保留 | Windows の PowerShell で `test/agents/` を回し、通れば閉じる | 2026-10-06 |
-| [0017](0017-builtin-agent-restrictions.md) | 組み込みの `explore` / `plan` の制限が全体の設定に上書きされる問題を直し、`bypass` から起動する子を確認なしで動かせる範囲に整える | In progress | `bypass` の子に残る `external_directory` の確認（段 7）。`plan` の shell の確認に保存した承認がどう効くか | 段 1〜6 完了（apply 済み）。段 7（`bypass` の子に残る確認の扱い）と段 8（再検証） | 2026-10-08 |
+| [0017](0017-builtin-agent-restrictions.md) | 組み込みの `explore` / `plan` の制限が全体の設定に上書きされる問題を直し、`bypass` から起動する子を確認なしで動かせる範囲に整える | In progress | `bypass` の子に残る確認のうち、作業ツリーの外の読み取り以外（`production.env` などと shell 由来）は意図して残す。`plan` の shell の確認に保存した承認がどう効くか | 段 1〜6 完了（apply 済み）。段 7 は実装済み（未 apply、ADR-0015）。段 8（再検証） | 2026-10-08 |
 
 ## 保留
 

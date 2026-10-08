@@ -936,6 +936,12 @@ mode = "subagent"
 bypass = true
 permission = { task = "deny" }
 
+# 親が bypass のとき、作業ツリーの外を読む確認 (read / grep / glob) を plugin が allow にする子。
+# bypass の task の allow の部分集合で、bypass = true のエージェントは書けない (generate.py が検査)。
+# see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+[opencode.bypass_children]
+agents = ["explore", "review", "commit"]
+
 # V2 形式のエージェント定義 (opencode.json の agents へ出す)。モデルは
 # [opencode.model.agents] で階層を割り当てる (ここに model は書かない)。
 # system は組み込みの基底プロンプトを置き換える。permissions は全体の規則の後ろに付く。

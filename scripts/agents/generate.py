@@ -1435,6 +1435,44 @@ def opencode_guarded_subagents(common: dict[str, Any]) -> list[str]:
     ]
 
 
+WILDCARD = re.compile(r"[*?\[\]]")
+
+
+def _bypass_launchable(common: dict[str, Any]) -> set[str]:
+    """bypass 扱いのエージェントが名指しで起動を許可している子 (V1 の task / V2 の subagent)。"""
+    out: set[str] = set()
+    for agent in _declared_agents(common).values():
+        if not _is_bypass(agent):
+            continue
+        task = (agent.get("permission") or {}).get("task")
+        if isinstance(task, dict):
+            out.update(n for n, effect in task.items() if effect == "allow")
+        for rule in agent.get("permissions") or []:
+            if rule.get("action") == "subagent" and rule.get("effect") == "allow":
+                out.add(str(rule.get("resource")))
+    return {n for n in out if not WILDCARD.search(n)}
+
+
+def opencode_bypass_child_agents(common: dict[str, Any]) -> list[str]:
+    """親が bypass のとき、作業ツリーの外を読む確認を plugin が allow にする子
+    (``[opencode.bypass_children] agents``)。``rules.json`` の ``bypass_child_agents``。
+
+    bypass の起動許可リストからは導出せず、明示した一覧を検査する。
+    see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+    """
+    declared = (common.get("opencode", {}).get("bypass_children") or {}).get("agents", [])
+    where = "[opencode.bypass_children] agents"
+    if not isinstance(declared, list) or not all(isinstance(n, str) and n for n in declared):
+        raise ValueError(f"{where} は空でない文字列の配列にする")
+    if wild := [n for n in declared if WILDCARD.search(n)]:
+        raise ValueError(f"{where} にワイルドカードは書けない: {wild}")
+    if loose := sorted(set(declared) - _bypass_launchable(common)):
+        raise ValueError(f"{where} が bypass の起動を許可した子に無い: {loose}")
+    if both := sorted(set(declared) & set(opencode_bypass_agents(common))):
+        raise ValueError(f"{where} と bypass = true のエージェントが重なる: {both}")
+    return sorted(set(declared))
+
+
 def opencode_subagent_guards(common: dict[str, Any]) -> list[dict[str, str]]:
     """bypass の子エージェントを、bypass 以外から呼ばせない。
 
@@ -1721,6 +1759,7 @@ def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> d
         "deny_guide_agents": opencode_deny_guide_agents(common),
         "bypass_agents": opencode_bypass_agents(common),
         "guarded_subagents": opencode_guarded_subagents(common),
+        "bypass_child_agents": opencode_bypass_child_agents(common),
         "read_deny": opencode_read_deny_regexes(common),
         "read_deny_except": opencode_read_deny_except_rules(common),
     }
@@ -1783,7 +1822,8 @@ def opencode_guide_server_needed(common: dict[str, Any], *, tui: bool) -> bool:
     """サーバ側の guide plugin (``index.js``) を読み込むか。
 
     ``index.js`` の役割 (誘導・``grep`` / ``glob`` の結果フィルタ・伏字化・
-    子エージェントの起動元の検査・説明の生成) が 1 つでも有効なら要る。説明は
+    子エージェントの起動元の検査・bypass の子の読み取りの確認の引き上げ・説明の生成) が
+    1 つでも有効なら要る。説明は
     TUI 側の toast でしか見えないので、``tui`` が偽 (TUI plugin が読まれない
     隔離版) なら数えない。
     see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
@@ -1794,6 +1834,7 @@ def opencode_guide_server_needed(common: dict[str, Any], *, tui: bool) -> bool:
         or opencode_read_deny_regexes(common)
         or opencode_redact(common)
         or opencode_guarded_subagents(common)
+        or opencode_bypass_child_agents(common)
         or (tui and opencode_guide_tui_needed(common))
     )
 

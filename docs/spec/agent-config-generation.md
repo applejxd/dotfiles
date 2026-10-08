@@ -590,14 +590,36 @@ permissions = [
   たびに確認が出て無確認の前提が崩れる（2026-10-08 に、修正前の `explore` を並べて起動して
   確認が大量に出た）。モデルは説明の広い `general` を選びがちでもある。子を足すときは
   一覧も見直す（一覧の更新が、確認なしで動けるかを見直す機会になる）
-- **許可した子にも確認は残りうる。** `explore` / `review` / `commit` は `bypass_agents` に
-  無いので、開けていない作業ツリーの外を読むとき（`external_directory`）の確認は自動で
-  通らない（[CHG-0017](../change/0017-builtin-agent-restrictions.md) の段 7 で扱う）。
-  `commit` は読むだけの計画役（コミットは呼び出し元が行う）
+- **許可した子の作業ツリーの外の読み取りは、親が `bypass` なら確認を省く。**
+  `explore` / `review` / `commit` は `bypass_agents` に無いので、自分の規則では確認が自動で
+  通らない。guide plugin は、次の条件を**全部**満たすときだけ、その確認を `allow` にする
+  （[CHG-0017](../change/0017-builtin-agent-restrictions.md) の段 7）
+  1. 効果が `ask`
+  2. 評価しているエージェントが `rules.json` の `bypass_child_agents` に完全一致で含まれる
+  3. action が `external_directory`
+  4. その確認が `read` / `grep` / `glob` ツールから出たもの。`execute.before` でこの 3 つの
+     呼び出しの ID を覚え、`evaluate` の `source.id` と突き合わせる（`execute.after` で忘れる）。
+     shell（`workdir` など）や edit から出た確認は対象にしない。`commit` は `git status` /
+     `git diff` を allow しているので、shell まで含めると外部のリポジトリで git が確認なしに動く
+  5. `ctx.session.get` で引いたセッションのエージェントが、評価しているエージェントと一致する
+  6. その `parentID` を 1 段だけ引き、親の**今の**エージェントが `bypass_agents` に入っている
+
+  条件 1〜4 に当たらなければセッションを引かない。親を引けない（`parentID` が無い・取得の
+  失敗や例外・エージェントが無い）ときは `ask` のまま。キャッシュせず、祖先は遡らない。
+  判定は親の今のエージェントで行うので、途中で親を `build` に切り替えれば確認に戻り、逆に
+  `build` から `bypass` に切り替えると、`build` が起動していた子にも効く。開けていない
+  作業ツリーの外を読む確認だけを省くもので、`production.env` のような読み取りの `ask` は残る
+- **自動で確認を省く子の一覧は別に持つ。** `[opencode.bypass_children] agents` に明示し、
+  起動の許可リストからは導出しない（「起動してよい」と「確認を省いてよい」は別の権限で、
+  導出すると編集できる子を起動の一覧に足しただけで確認まで省かれる）。`generate.py` は、
+  空でない文字列の配列であること・ワイルドカードを含まないこと・`bypass` が名指しで起動を
+  許可した子に含まれること・`bypass_agents` と重ならないことを検査し、違反は `apply` を止める
+- `commit` は読むだけの計画役（コミットは呼び出し元が行う）
 - **守れるのは自分の設定の下での事故まで。** 作業先のリポジトリの設定は公式の仕様で
   グローバルに勝つので、`bypass` の規則や、許可した名前の子の中身を上書きされると防げない
-- **3 つの一覧は一致させない。** `bypass` が起動できる子（この許可リスト）、確認を自動で
-  許可にする `bypass_agents`、`bypass` 以外から起動させない `guarded_subagents` は役割が違い、
+- **4 つの一覧は一致させない。** `bypass` が起動できる子（この許可リスト）、確認を自動で
+  許可にする `bypass_agents`、`bypass` 以外から起動させない `guarded_subagents`、親が
+  `bypass` のときに作業ツリーの外の読み取りの確認を省く `bypass_child_agents` は役割が違い、
   テストもそれぞれの期待値を固定する。`explore` などに `bypass = true` を付けて許可リストを
   組み立てると、`build` から呼べなくなり、起動元に関係なく確認が自動で通る別の仕様になる
 - **deny した子は `subagent` ツールの一覧から消える**（実測）。`/fleet` の指示文は
@@ -658,7 +680,7 @@ permissions = [
 
 `~/.config/opencode/guide-plugin/` に置く。判定表は `common.toml` の
 `[[opencode.shell.guide]]`・`[bash.deny_guide]`・`[opencode.redact]`・`[opencode.ask_description]`・
-`[file] read_deny_globs`・`[opencode.agent]`・`[opencode.agents]` から `rules.json` として生成し、plugin は読むだけにする。
+`[file] read_deny_globs`・`[opencode.agent]`・`[opencode.agents]`・`[opencode.bypass_children]` から `rules.json` として生成し、plugin は読むだけにする。
 `index.js` はこのどれかが有効なら、`tui.ts` は `ask_description` が有効な
 ときだけ登録する（`generate.py` の `opencode_guide_server_needed` /
 `opencode_guide_tui_needed`）。
@@ -671,6 +693,7 @@ permissions = [
 | `grep` / `glob` の結果フィルタ | `index.js` | 同上 |
 | shell 出力の伏字化 | `index.js` | 同上 |
 | bypass の子エージェントの起動元の検査（[上](#bypass-から呼べる子エージェント)）と `ask` → `allow` | `index.js` | 同上 |
+| 親が `bypass` の読むだけの子の、作業ツリーの外の読み取りの `ask` → `allow`（[上](#bypass-から呼べる子エージェント)） | `index.js` | 同上 |
 | 確認画面への説明表示（toast） | `tui.ts` | **`cli.json` の `plugins`** |
 | `git commit` の件名と本文の表示（[下](#git-commit-の件名と本文)） | `tui.ts` と `commit-message.js` | 同上 |
 
@@ -699,7 +722,8 @@ plugin が守る規約は次のとおり。
   判定は**エージェント名**で行う（`permission.evaluate` に `agent` が載ることを
   実測。[hook の呼ばれ方](../research/opencode/permission/hook-order.md)）。
   名前は `common.toml` の `bypass = true` から生成するので単一ソースが保たれる。
-  `commit` など別の名前の子の `ask` は書き換えない
+  `commit` など別の名前の子の `ask` は書き換えない。例外は、親が `bypass` のときの
+  `bypass_child_agents` の作業ツリーの外の読み取り（[上](#bypass-から呼べる子エージェント)）
 - **`bypass` にも誘導・前段停止（early）・`grep` / `glob` の結果フィルタ・shell 出力の
   伏字化を同じに効かせる。** 素通りさせる判定は持たない。誤爆は誘導規則側を直す。
   子エージェントの起動制限（`guardSubagent`）だけは `bypass_agents` を見る
@@ -745,12 +769,15 @@ plugin 無しで続ける（fail-open。[plugin API の実測 6 章](../research
 そのため `index.js` は `rules.json` の読み込みと正規表現のコンパイルを節ごとに
 例外から切り離し、ロード自体は必ず通す。壊れた節は `console.error` に記録し、
 節ごとに次のように倒す。hook の中の例外は fail-closed なので、そちらは切り離さない。
+例外は親のセッションを引く処理（`bypass_child_agents` の判定）で、権限を足すための照会なので、
+失敗したら例外を投げずに `ask` のままにする。受け止める範囲はこの照会だけに限る。
 
 | 壊れたもの | 扱い | 理由 |
 | --- | --- | --- |
 | ファイルが無い・JSON でない・オブジェクトでない | 下の全部の節が「壊れた」扱い | — |
 | `bypass_agents` が無い・文字列の配列でない | `bypass` の `ask` を `allow` にせず `ask` のまま。子エージェントの起動元も検査しない（止めずに警告） | 一覧が無いと `bypass` も守る子との関係も分からない。`ask` のままなら確認が出るだけで安全側。全部止めると普段の作業ごと止まる（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)） |
 | `guarded_subagents` が無い・文字列の配列でない（`bypass_agents` は正常） | 子エージェントの起動元を検査しない（止めずに警告）。`bypass` の `ask` → `allow` は続ける | 起動元の検査と `ask` の引き上げは別の機能。子の一覧だけの破損で `bypass` 全体を止めない |
+| `bypass_child_agents` が無い・`null`・文字列の配列でない・空 | 親が `bypass` の子の作業ツリーの外の読み取りを引き上げない（`ask` のまま。壊れていれば警告）。ほかの節は今までどおり | 権限を足す機能なので、分からなければ足さない |
 | `read_deny` が無い・`null`・文字列の配列でない・正規表現にできない | `grep` / `glob` の結果を伏せ、理由を本文に残す | この 2 つには plugin が唯一の保護 |
 | `guide` | 誘導しない（確認は静的な規則どおり出る） | 誘導は代替案の案内で、境界ではない |
 | `redact` | 伏字化しない | 伏字化は安全網で、境界ではない |

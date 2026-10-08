@@ -297,3 +297,58 @@ mise run opencode:probe -- '... FOO=1 git log -1 --oneline ...'
 - `ocs` と、Orca の上書き用設定が重なる条件での結果
 - 保存した承認（「常に許可」）が `plan` の shell の確認にどう効くか
 - `title` / `summary` にツールを実行する経路があるか（未着手）
+
+## 記録 E3 — 2026-10-08
+
+- **対象バージョン**: OpenCode v2.0.22
+- **環境**: WSL2 (Ubuntu)、基準コミット b03caea、モデル `github-copilot/claude-opus-5`
+
+### 問い
+
+`bypass` から起動した子の確認を plugin が自動で許可にするために、`permission.evaluate` から
+親のセッションのエージェントを辿れるか。
+
+### 事前の予想
+
+探索的。`evaluate` の入力に親の ID が無ければ辿れないと考えた。
+
+### 方法・条件
+
+- `evaluate` の入力と、公式の plugin の docs（<https://opencode.ai/v2/docs/build/plugins> の
+  Permissions と Sessions）、稼働中のサービスの `/openapi.json` の `Session.Info` を確かめた
+- 実際の設定を `.tmp/opencode/stage7/cfg/` へ写し、写した guide plugin の `evaluate` に、
+  `sessionID` から `parentID` を辿ってログに書く処理を足した（`plugins` は写した側の絶対パス）
+- `OPENCODE_PROBE_CONFIG=$PWD/.tmp/opencode/stage7/cfg mise run opencode:probe -- --agent bypass '<explore に /etc/hostname を read させる>'`
+  を、計装だけ・自動許可の試作入り・途中で親のエージェントを切り替える、の 3 通りで実行した
+- 実装後（CHG-0017 の段 7）、生成した `rules.json` と本番の plugin を同じ方法で写し、
+  `--agent bypass` と `--agent build` で同じ読み取りを試した
+
+### 結果
+
+- `evaluate` の入力は `sessionID` / `agent` / `action` / `resources` / `metadata` / `source` /
+  `effect` の 7 つで、親のセッションの ID は無い。公式の docs の定義も同じ
+- `ctx.session.get({ sessionID })` は `Session.Info` を直接返し、`parentID` と `agent` を
+  含んでいた（どちらも任意のフィールド）。1〜2 ms
+- 計装だけ: `explore` の `external_directory ['/etc/*']` は `ask` のままで自動拒否された。
+  辿った連鎖は `explore`（`parentID` あり）→ `bypass`（`parentID` なし）
+- 試作入り: 同じ確認が `ask` → `allow` になり、続く `read` も通って内容が返った
+- 親を `ctx.session.switchAgent` で `build` に切り替えると、次の評価で親は `build` になり、
+  確認は `ask` のままだった。`Session.Info.agent` は作成時の値でなく、評価の時点の値である
+- `read` の `execute.before` の呼び出し ID は、続く `external_directory` と `read` の
+  `evaluate` の `source.id` と同じで、`execute.before` が先に来た
+- 実装後: `--agent bypass` では確認なしに読めて（`ask` → `allow`）、`--agent build` では
+  `permission requested: external_directory (/etc/*); auto-rejecting` だった
+- 計装を足したときに構文を壊し、plugin が読まれなかった回が 1 回あった。`node --check` は
+  通り、`opencode.log` の `failed to load plugin … errors building` と `bun build` で分かった
+
+### 考察
+
+- 親は `ctx.session.get` で 1 段ずつ辿れる。判定は親の今のエージェントになる
+- `execute.before` の ID と `source.id` を突き合わせれば、確認を起こしたツールを見分けられる
+- plugin の構文の確かめには `node --check` では足りず、`bun build` が要る
+
+### 次の問い
+
+- `grep` / `glob` と、`review` / `commit` での実機の動き
+- 子を再開したとき・fork したセッションの `parentID`
+- 対話の画面（TUI）と `ocs` での動き
