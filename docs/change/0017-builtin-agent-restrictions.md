@@ -51,8 +51,8 @@ question を拒否）は変えない。
 | 2 | `plan` を (c′) にする（edit は計画ファイル以外を拒否し、その後ろに秘密ファイルの deny を並べ直す。子は `explore` と `review` だけ。shell の静的な規則は deny を除いて確認）。エージェントごとの shell 既定を生成する仕組みを足す | 完了（未 apply） |
 | 3 | `bypass` の子の起動規則を許可リストにする（全部禁止して 5 つだけ許可） | 完了（未 apply） |
 | 4 | `/fleet` の指示文を直す（`plan` では計画までで止める。自動で判断させるのは `bypass` の上の `/fleet` に限ると明記）。docs を直す | 完了（未 apply） |
-| 5 | 全体の `git log --output` を guide 規則で止める（別コミット。確認なしに書けることは実測済み） | 完了（未 apply） |
-| 6 | `chezmoi apply` 後、本物のサービスの API と probe で受入条件を確かめる | 進行中（段 1〜4 は確認済み。段 5 と `ocs` が残る） |
+| 5 | 全体の `git log --output` を guide 規則で止める（別コミット。確認なしに書けることは実測済み） | 完了 |
+| 6 | `chezmoi apply` 後、本物のサービスの API と probe で受入条件を確かめる | 完了（`ocs` は生成物の確認まで。実際の `ocs` の起動は未確認） |
 | 7 | `bypass` から起動した読むだけの子に残る確認を、自動で判断させる方法を決めて入れる | 未着手 |
 | 8 | 段 7 の後の再検証（`bypass` と、そうでない主エージェントの対照。plugin が無いときに確認へ戻ること） | 未着手 |
 
@@ -103,8 +103,15 @@ question を拒否）は変えない。
   `git push` / `sudo` は deny、子は `explore` / `review` だけ。`bypass` の子は許可リストの 5 つ
   だけで、`fleet-worker` と一覧に無い名前は deny。`build` は変わらない。実機の probe では、
   `build` から起動した `explore` のツールが `glob` / `grep` / `read` / `webfetch` / `websearch`
-  だけになり、確認は 1 回も出ず、`.env.example` は作られなかった。`ocs` と、段 5 の apply 後の
-  確認は未実施
+  だけになり、確認は 1 回も出ず、`.env.example` は作られなかった
+- 段 5 を apply して確かめた（2026-10-08）。実機の probe で、`build` の
+  `git log -1 --output=<パス>` は guide 規則の説明（「git log の --output でファイルへ書き込まないで
+  ください。…」）で拒否され、ファイルは作られなかった。同じ実行の `git log -1 --oneline` は通った
+- `ocs` は、apply で生成された隔離版の定義（`rules.json` の `sandbox`）を確かめた。全体の shell の
+  既定が allow の下で、`explore` は 4 つの deny、`plan` は 114 件（後ろに写した shell の規則は
+  deny だけ）、`bypass` の子は許可リストの 5 つ、`git log --output` の guide 規則も入っていた。
+  隔離版の `~/.config/opencode-sandbox/opencode.json` は `ocs` の起動時に `agent` / `agents` /
+  `commands` を差し替えて書き出すので、次の起動で反映される。実際に `ocs` を起動しての確認はしていない
 
 ## 未解決点
 
@@ -363,3 +370,5 @@ flowchart LR
 - 2026-10-08: 段 5 を実装した。`git log --output` を guide 規則で止め、allow を足すときの
   点検対象に「引数でファイルへ書けるオプション」を加えた。Claude / Copilot には足さない
   （OS の sandbox が書き込み先を限るため）
+- 2026-10-08: 段 1〜5 を apply し、段 6 を終えた。残りは段 7（`bypass` から起動した読むだけの子に
+  残る確認）と段 8（その後の再検証）
