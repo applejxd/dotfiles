@@ -1,7 +1,7 @@
 # 秘密ファイルの禁止を `experimental.policies` へ移せるか
 
 全体の `permissions` に置いた秘密ファイルの read / edit の deny とその例外を、OpenCode の
-`experimental.policies` へ移したときの効き方の実測。[CHG-0018](../../../change/0018-opencode-policy-role-split.md)
+`experimental.policies` へ移したときの効き方の実測。[CHG-0018](../../../change/closed/0018-opencode-policy-role-split.md)
 の段 1。
 
 ## 記録 E1 — 2026-10-08

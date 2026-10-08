@@ -1222,7 +1222,7 @@ explore = "worker"      # 例
 
 `opencode.json` は OpenCode 自身や利用者も書くので、生成器は自分の持ち物だけを置き換え、
 宣言から外したものは持ち物の範囲で消す（所有の規則。状態ファイルは持たない）。
-比べた方式と実測は [CHG-0018](../change/0018-opencode-policy-role-split.md) と
+比べた方式と実測は [CHG-0018](../change/closed/0018-opencode-policy-role-split.md) と
 [調査記録](../research/opencode/agent-config-ownership.md)。
 
 | 対象 | 生成器の持ち物 | 残すもの |

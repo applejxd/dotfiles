@@ -49,8 +49,7 @@
 | [0011](0011-agent-first-shell.md) | AI エージェントがシェルの主な利用者である前提へ整える | In progress | Claude Code へ git の環境変数を入れる方法が保留（`CLAUDE_ENV_FILE` と比較）。Windows は人が開いた対話シェルと本物の Copilot CLI での引き継ぎが未確認 | ocs の実機で deny の前段停止（pip 以外へ拡張済み）を確かめる | 2026-10-07 |
 | [0012](0012-bash-hook-shared-parser.md) | bash 検査 hook のコマンド解析を 1 か所に集める | In progress | Windows 実機で未検証。B 群（`shlex.split` の規則）は保留 | Windows の PowerShell で `test/agents/` を回し、通れば閉じる | 2026-10-06 |
 | [0017](0017-builtin-agent-restrictions.md) | 組み込みの `explore` / `plan` の制限が全体の設定に上書きされる問題を直し、`bypass` から起動する子を確認なしで動かせる範囲に整える | In progress | `bypass` の子に残る確認のうち、作業ツリーの外の読み取り以外（`production.env` などと shell 由来）は意図して残す。`plan` の shell の確認に保存した承認がどう効くか | 段 1〜8 完了（apply 済み、ADR-0015）。残りは未解決点 | 2026-10-08 |
-| [0018](0018-opencode-policy-role-split.md) | OpenCode の権限を「共通の禁止」と「役割ごとの権限」に分けて生成する | Exploring | shell の deny を policy にしたときの guide の早期停止。Orca の上書き用の設定が重なる起動での実効 | 段 4（所有の規則 P を実装済み・未 apply。次は宣言と生成の変更 S）。撤去は所有の規則、`plan` のサンプルの緩みは受け入れに決定 | 2026-10-09 |
-| [0019](0019-pi-harness-port-evaluation.md) | OpenCode のハーネスを pi で作り直す価値があるかを判断する（実装の量は問わず、複雑さと保守性で比べる） | In progress | **移行すると決めた**（段 5）。移行しても pi の内部の挙動に頼る点が 4 つ残る（偽のモデルの試験で検出できる）。CHG-0018 の扱いは未定 | 移行の案件を起票して閉じる | 2026-10-08 |
+| [0020](0020-pi-migration.md) | OpenCode のハーネスを pi へ移す（判定 API・ハーネス・配布・境界・ハーネス以外の機能・切り替え） | Planned | Claude Code / Copilot CLI と判定器を共有するか。Windows・Orca の扱い。pi の内部の挙動に頼る 4 点を試験で検出する | 段 1 の前に `common.toml` を棚卸しし、判定 API の入力を決める | 2026-10-09 |
 
 ## 保留
 
@@ -64,6 +63,8 @@
 
 | # | 目的 | 結果 | 終了日 | 現行仕様 / ADR |
 | --- | --- | --- | --- | --- |
+| [0019](closed/0019-pi-harness-port-evaluation.md) | OpenCode のハーネスを pi で作り直す価値があるかを判断する | 採用（移行する。構成はツールを自分で持つハーネス。試作で BLOCKER と段 4 の項目がすべて合格。移行は CHG-0020） | 2026-10-09 | [CHG-0020](0020-pi-migration.md) / [試作の記録](../research/agents/pi-harness-spike.md) |
+| [0018](closed/0018-opencode-policy-role-split.md) | OpenCode の権限を「共通の禁止」と「役割ごとの権限」に分けて生成する | 一部採用（所有の規則 P のみ。S と段 5 は pi への移行で見送り、プロファイルの設計は CHG-0020 へ） | 2026-10-09 | [agent-config-generation](../spec/agent-config-generation.md#配置済みの設定の所有) |
 | [0015](closed/0015-commit-planner-with-chat-approval.md) | 計画役の子にメッセージ案を作らせ、承認は会話で行う | 採用・配備済み（`--auto` と利用者の TUI で、全文を示して承認を待ち、承認後にコミットした） | 2026-10-07 | [コミットの確認](../spec/agent-config-generation.md#コミットの確認) |
 | [0014](closed/0014-deterministic-commit-runner.md) | コミットの表示と実行を決定的なスクリプトに任せる | 見送り（`--auto` では通ったが、利用者の TUI で照合が止まった。部品の多さに見合わないとして取り下げ、親が commit スキルでコミットする形に戻した） | 2026-10-07 | [コミットの確認](../spec/agent-config-generation.md#コミットの確認) |
 | [0013](closed/0013-commit-agent-as-planner.md) | commit エージェントを計画役にし、コミットは親が行う | 一部採用（隔離起動でも `git commit` を確認・`git -c … commit` の停止・確認画面の連結形の表示は残した。計画役の `commit` エージェントは廃止） | 2026-10-07 | [コミットの確認](../spec/agent-config-generation.md#コミットの確認) |

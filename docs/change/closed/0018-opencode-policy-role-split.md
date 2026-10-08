@@ -1,16 +1,20 @@
 # CHG-0018: OpenCode の権限を「共通の禁止」と「役割ごとの権限」に分けて生成する
 
-- **状態**: Exploring
-- **更新日**: 2026-10-08
+> この文書は当時の記録。現在の仕様は [`spec/agent-config-generation.md` の配置済みの設定の所有](../../spec/agent-config-generation.md#配置済みの設定の所有)。
+> 役割ごとのプロファイルの設計は [CHG-0020](../0020-pi-migration.md)（pi への移行）に引き継いだ。
+
+- **状態**: Done
+- **更新日**: 2026-10-09
+- **終了日**: 2026-10-09
 - **基準**: OpenCode v2.0.22、コミット e22b365、WSL2 (Ubuntu)
 
 ## 目的と非目的
 
-[CHG-0017](0017-builtin-agent-restrictions.md) では、組み込みエージェント（`explore` / `plan`）の
+[CHG-0017](../0017-builtin-agent-restrictions.md) では、組み込みエージェント（`explore` / `plan`）の
 制限が全体の `permissions` に上書きされる穴を、個別の deny や写し直しで 1 つずつ塞いだ。
 穴が個別に出続ける原因は構造にある。OpenCode の規則は「全エージェント共通の基底 →
 組み込みの追加方針 → 全体の `permissions` → エージェントの `permissions`」の順に連結され、
-最後に一致したものが勝つ（[調査記録](../research/opencode/permission/builtin-agent-override.md)）。
+最後に一致したものが勝つ（[調査記録](../../research/opencode/permission/builtin-agent-override.md)）。
 全体の `permissions` には `build` 向けの allow / ask を置いているので、同じ規則が `build` には
 制限として、`explore` には緩和として働く。
 
@@ -47,8 +51,8 @@
 | 1 | 最小の試作: 秘密ファイルの deny とその例外を policy にした試験用の設定で、受入条件のうち秘密ファイルに関わるものを確かめる | 完了 |
 | 2 | 全エージェント（組み込み・自作・作業役・`bypass` 系）を棚卸しし、全体の allow / ask をどこへ移すかを決める | 完了（守り方は対策 3） |
 | 3 | 配置済みのキーを撤去する方法と、手書きの定義の扱いを決める | 完了（所有の規則） |
-| 4 | 生成器を変え、テストを「規則の並び」でなく不変条件で固定する | 進行中（所有の規則 P を実装済み・未 apply。次は宣言と生成の変更 S） |
-| 5 | apply して実機で受入条件を確かめ、CHG-0017 の補修のうち不要になったものを外す | 未着手 |
+| 4 | 生成器を変え、テストを「規則の並び」でなく不変条件で固定する | P（所有の規則）は完了。S（宣言と生成の変更）は見送り（pi へ移行するため） |
+| 5 | apply して実機で受入条件を確かめ、CHG-0017 の補修のうち不要になったものを外す | 見送り（pi へ移行するため） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -63,7 +67,7 @@
 - policy は実験的な機能で、正しくない書き方の規則は警告だけ出して捨てられる
 - policy にはエージェントで分ける条件が無い。`bypass-worker` を起動する deny のように、
   一部のエージェントからは解除したい deny は policy に移せない
-- 段 1 を終えた（2026-10-08、[調査記録](../research/opencode/permission/policies.md)）。秘密ファイルの
+- 段 1 を終えた（2026-10-08、[調査記録](../../research/opencode/permission/policies.md)）。秘密ファイルの
   read / edit の deny 155 件と例外を policy へ移した試験用の設定で、受入条件のうち秘密ファイルに
   関わるものは実機ですべて満たした
   - `build` の判定は対照と全件一致し、`.env.example` を今までどおり扱えた
@@ -74,7 +78,7 @@
   - `explore` の 4 つの deny は外せなかった。全体の `shell * ask` や `git log *` の allow が
     流れ込む。全体の allow / ask をエージェント別へ移す段 2 が前提になる
   - 正しくない statement は警告付きで捨てられ、余分なキーは黙って通る。生成器で形を検査する
-- 段 2 を終えた（2026-10-08、[調査記録 E2](../research/opencode/permission/policies.md#記録-e2--2026-10-08)）。
+- 段 2 を終えた（2026-10-08、[調査記録 E2](../../research/opencode/permission/policies.md#記録-e2--2026-10-08)）。
   全体の `permissions` を `bypass-worker` / `bypass-fleet-worker` の起動 deny 2 件だけにし、
   shell の deny 101 件と秘密ファイルの禁止を policy へ、残りの allow / ask を次のプロファイル
   （役割ごとの規則の束。生成器の中の呼び名）へ移した試作で、969 件の操作を今の設定と比べた
@@ -127,7 +131,7 @@
   `provider.use` の statement を生成器が持ち、宣言した ID と既知の組み込みでは生成器が書けるキーの
   うち宣言していないものと逆の形式のエントリを消す。状態ファイルは持たない。段 4 より前の別の
   コミットに入れれば、段 4 だけを元に戻して元の JSON に戻ることを試作で確かめた
-  （[調査記録](../research/opencode/agent-config-ownership.md)）。比べた方式は次のとおり
+  （[調査記録](../../research/opencode/agent-config-ownership.md)）。比べた方式は次のとおり
   - 撤去するキーを書く欄（`[opencode.retired.agents]`）: 安全だが、今回は消すものの形が多く、
     書き漏らすと黙って残る
   - 前回の書き出しを状態ファイルに記録: `chezmoi diff` でも生成が動くので外へ書けず、元に戻すと
@@ -187,7 +191,7 @@
     上書きする）ので、V2 の宣言の `description` 必須の検査を組み込みには外す
   - `experimental.policies` を、`models` の有無に関係なく書く
   - V1 の宣言は空にするが、V1 を扱う処理は元に戻すときに備えて残す
-  - P は実装した（2026-10-08、[配置済みの設定の所有](../spec/agent-config-generation.md#配置済みの設定の所有)）。
+  - P は実装した（2026-10-08、[配置済みの設定の所有](../../spec/agent-config-generation.md#配置済みの設定の所有)）。
     設計に無かった追加が 2 つある
     - 逆の形式の V2 のエントリにある `model` のうち、値が階層のモデルのものは生成器の持ち物として
       消す（既存のモデルの整理と同じ考え方）。これが無いと、段 4 で V2 に移した `bypass` 系に
@@ -246,5 +250,43 @@
   `plan` の計画ディレクトリの中のサンプルの緩みは受け入れると決めた（利用者の判断）
 - 2026-10-08: 段 4 の P（所有の規則）を実装した。今の宣言では、私用・会社用、モデルの指定の
   有無のどれでも P の直前の生成器と出力が一致し、この PC の実際の `opencode.json` にも一致した
+- 2026-10-09: P をコミットした（d5f012c）。[CHG-0019](0019-pi-harness-port-evaluation.md) で pi へ移行すると
+  決めたので、S と段 5 は見送って閉じた（利用者の判断）。`chezmoi diff ~/.config/opencode` は空で、
+  P の apply で配置済みの設定は変わらない
 
 ## 終了結果
+
+一部採用・知見あり。所有の規則（P）だけを採用し、権限の構造の作り替え（S）と実機の確認（段 5）は、
+pi へ移行すると決めたので見送った。2026-10-09 の時点の「現在地」「未解決点」「次の調査・実験」は
+S を前提にした記録で、この結論で置き換わる。
+
+### 採用したもの
+
+- 所有の規則（P、d5f012c）: 宣言したエージェントと既知の組み込みで、生成器が書けるキーのうち宣言して
+  いないものと逆の形式の定義を消す。逆の形式に生成器が書かないキーが残っていたら止める。
+  `experimental.policies` の `permission` / `provider.use` の statement を毎回置き換える。未宣言の ID への
+  モデルだけの割り当てを止める
+- `common.toml.tmpl` の `bypass` の `mode` の注記を、所有の規則の下の理由に直した
+
+### 撤回・見送りしたもの
+
+| 項目 | いつ | 理由 |
+| --- | --- | --- |
+| S: 共通の禁止を policy へ、全体の allow / ask をプロファイルへ移す生成器の変更 | 2026-10-09 | pi へ移行するので、OpenCode を使う期間にしか効かない。数百行とテスト 9 本の書き換え、Orca の重なりの実機試験が要り、見合わない |
+| 段 5: apply と実機の受入条件の確認、CHG-0017 の補修の撤去 | 2026-10-09 | S を見送ったため |
+| 候補 A / C / D / E | 段 2 まで | 「候補比較」のとおり |
+
+### 反映先
+
+- 仕様: `spec/agent-config-generation.md` の「配置済みの設定の所有」
+- 実装: `scripts/agents/generate.py`（`own_opencode_agents` など）、
+  `test/agents/test_generate_opencode_ownership.py`
+- 観測: `research/opencode/permission/policies.md`（段 1・2）、`research/opencode/agent-config-ownership.md`（段 3）
+
+### 移管した未完事項
+
+| 内容 | 移管先 |
+| --- | --- |
+| 「共通の禁止」と「役割ごとのプロファイル」の設計、プロファイルを必ず当てる対策 3、段 2 の棚卸し | [CHG-0020](../0020-pi-migration.md) の段 1（判定 API） |
+| `test_clean_output_matches_the_generator_before`（P の直前の生成器と出力を比べる）の撤去 | CHG-0020 の段 6（OpenCode の生成の撤去と一緒に消える） |
+| OpenCode の穴の残り（CHG-0017 の未解決点） | CHG-0017 のまま。移行の間は補修までで止める |

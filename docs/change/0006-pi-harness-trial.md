@@ -391,7 +391,7 @@ omp の設定の読み取り（`omp config get --json`）に失敗したとき�
 
 > **2026-10-08 訂正: pi v1.1.0 は MCP に対応している**（`docs/mcp.md`。`~/.pi/agent/mcp.json`、
 > 拡張からの `pi.registerMcpServer`）。以下は 2026-09-24 時点の読みとして残す
-> （[CHG-0019](0019-pi-harness-port-evaluation.md)）。
+> （[CHG-0019](closed/0019-pi-harness-port-evaluation.md)）。
 
 **`packages/coding-agent/docs/` の 39 ファイル全てに `MCP` の記述が 1 件も無い。**
 `settings.md` にも MCP の項目が無い。拡張（TypeScript）で自作する余地は
@@ -457,7 +457,7 @@ omp の `~/.omp/agent/config.yml` とは**別物なので共有させない**
   既存の真偽値と同じく初回だけ置く（`run_onchange_after_430_omp_claude_assets`）
 
 - **2026-10-08**: pi v1.1.0 で MCP に対応していると分かり、「Pi は MCP を持たない」を訂正した。
-  OpenCode のハーネスを pi で作り直す価値の検討は [CHG-0019](0019-pi-harness-port-evaluation.md) に分けた
+  OpenCode のハーネスを pi で作り直す価値の検討は [CHG-0019](closed/0019-pi-harness-port-evaluation.md) に分けた
 
 ## 終了結果
 

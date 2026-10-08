@@ -2,7 +2,7 @@
 
 生成器が配置済みの `~/.config/opencode/opencode.json` に書くとき、宣言から外したキーが残るか。
 同じ ID のエージェントを V1 の `agent` と V2 の `agents` の両方に書いたとき、OpenCode がどう
-合成するか。[CHG-0018](../../change/0018-opencode-policy-role-split.md) の段 3。
+合成するか。[CHG-0018](../../change/closed/0018-opencode-policy-role-split.md) の段 3。
 
 ## 記録 E1 — 2026-10-08
 

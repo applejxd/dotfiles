@@ -917,7 +917,7 @@ second_opinion = "gpt-6-astra"
 # ★bypass = true は generate.py が読む印で opencode.json には出ない。印のあるエージェントは
 #   通常と同じ permission のまま、guide-plugin が ask を allow にする (deny はそのまま効く)。
 #   ここに "*" = "allow" を書かない (deny の後ろに付いて静的 deny を上書きする)。
-# ★mode は消さない。消すと既存設定の mode が残り、all / subagent ならモデルが bypass を起動できる。
+# ★mode は消さない。消すと OpenCode の既定の mode になり、all / subagent ならモデルが bypass を起動できる。
 # see docs/adr/0014-bypass-as-ask-upgrade.md
 [opencode.agent.bypass]
 description = "通常の確認 (ask) を無確認で通す。deny と誘導は通常どおり効く"

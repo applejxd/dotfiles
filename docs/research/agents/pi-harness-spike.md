@@ -1,6 +1,6 @@
 # pi のハーネスが読み込み失敗・入力の書き換え・判定器の異常で許可側へ倒れないか
 
-<!-- 現在の総合判断は docs/change/0019-pi-harness-port-evaluation.md の候補比較表が正本。
+<!-- 現在の総合判断は docs/change/0020-pi-migration.md が正本（判断の経緯は docs/change/closed/0019-pi-harness-port-evaluation.md）。
      ここは「いつ何を観測したか」を積む場所 -->
 
 ## 記録 E1 — 2026-10-08
@@ -20,7 +20,7 @@
 
 ### 問い
 
-[CHG-0019](../../change/0019-pi-harness-port-evaluation.md) の候補 C2（組み込みのツールを無効にし、
+[CHG-0019](../../change/closed/0019-pi-harness-port-evaluation.md) の候補 C2（組み込みのツールを無効にし、
 ツールはハーネスの拡張だけが登録する構成）で、レビューの BLOCKER 3 件を構造で塞げるか。
 
 1. 判定の拡張が `/reload` で抜けたとき、判定なしでツールが動かないか
@@ -120,7 +120,7 @@ bash: isError=true :: not approved: unlisted: touch .../unlisted
 - ツールを別名にしたとき、実際のモデルが迷わず使えるか。圧縮の要約が読み書きしたファイルを
   拾えるか
 - TUI で `/reload` の読み込み失敗が利用者に見えるか
-- [CHG-0019](../../change/0019-pi-harness-port-evaluation.md) の段 4 の試験（並列の ask、
+- [CHG-0019](../../change/closed/0019-pi-harness-port-evaluation.md) の段 4 の試験（並列の ask、
   MCP・codemode・子プロセスの経路、伏字化の経路、Fence）
 
 ### 参照

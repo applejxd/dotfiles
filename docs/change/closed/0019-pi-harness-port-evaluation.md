@@ -1,7 +1,10 @@
 # CHG-0019: OpenCode のハーネスを pi で作り直す価値があるかを判断する
 
-- **状態**: In progress
-- **更新日**: 2026-10-08
+> この文書は当時の記録。移行の計画と現在地は [CHG-0020](../0020-pi-migration.md)。
+
+- **状態**: Done
+- **更新日**: 2026-10-09
+- **終了日**: 2026-10-09
 - **基準**: pi v1.1.0（`~/.pi/agent/install/releases/1.1.0`）、OpenCode v2.0.22、コミット d6ea76f、WSL2 (Ubuntu)
 
 ## 目的と非目的
@@ -9,7 +12,7 @@
 このリポジトリが OpenCode のために持っているハーネスを、pi（earendil-works/pi）の上で作り直すと、
 **複雑なロジックが減って保守しやすくなるか**を判断する。ハーネスとは、permission の生成、
 guide plugin、checkpoint plugin、子エージェント、`ocs`（OpenCode を Fence で囲って起動する
-ランチャー。[仕様](../spec/opencode-sandbox.md)）を指す。
+ランチャー。[仕様](../../spec/opencode-sandbox.md)）を指す。
 
 判断の前提（利用者の指定、2026-10-08）:
 
@@ -25,7 +28,7 @@ guide plugin、checkpoint plugin、子エージェント、`ocs`（OpenCode を 
 
 非目的:
 
-- 利便性の軸での pi / oh-my-pi の評価（[CHG-0006](0006-pi-harness-trial.md) が持つ）
+- 利便性の軸での pi / oh-my-pi の評価（[CHG-0006](../0006-pi-harness-trial.md) が持つ）
 - 移行の実施。この案件は判断までで、移行するなら別の案件を起こす
 - Claude Code / Copilot CLI の設定を変えること
 
@@ -50,7 +53,7 @@ guide plugin、checkpoint plugin、子エージェント、`ocs`（OpenCode を 
 
 **移行する価値はある、と判断する材料がそろった。** 段 4 で試した項目（並列の ask・伏字化の経路・
 codemode と MCP・子エージェント・Fence）はすべて合格し、移行を見送る理由は見つかっていない
-（[試作の記録](../research/agents/pi-harness-spike.md)の E1〜E4）。決めるのは利用者（段 5）。
+（[試作の記録](../../research/agents/pi-harness-spike.md)の E1〜E4）。決めるのは利用者（段 5）。
 
 CHG-0018 を終えた OpenCode（候補 B）と比べると、差は次のとおり。
 
@@ -85,7 +88,7 @@ CHG-0018 を終えた OpenCode（候補 B）と比べると、差は次のとお
 ### 見立て（2026-10-08、段 3 の後）
 
 **段 3 の試作で、候補 C2 は BLOCKER の 3 件を構造で塞げた。ただし「ツールを組み込みに無い名前で
-登録する」ことが条件になる**（[試作の記録](../research/agents/pi-harness-spike.md)）。
+登録する」ことが条件になる**（[試作の記録](../../research/agents/pi-harness-spike.md)）。
 
 - 組み込みと同じ名前（`bash` / `read`）で登録すると、`/reload` でハーネスが抜けたときに
   組み込みのツールが同じ名前で戻り、判定なしで実行した。`-nbt` でも防げない。別名
@@ -130,7 +133,7 @@ OpenCode の最大の複雑さの源（後勝ちの連結）をかなり減ら�
    `cli.json`）。Orca では `cli.json` が読まれない。常駐サービスの再起動とポートの衝突。
    plugin の読み込みに失敗すると plugin 無しで続く
 4. **エージェントの関係を後から推測している。** bypass の子かどうかを `parentID` で親を引いて
-   判定し、一覧が 4 つある（[bypass から呼べる子エージェント](../spec/agent-config-generation.md#bypass-から呼べる子エージェント)）
+   判定し、一覧が 4 つある（[bypass から呼べる子エージェント](../../spec/agent-config-generation.md#bypass-から呼べる子エージェント)）
 5. **プロジェクトの設定がグローバルに勝ち、`.opencode/plugins/` は自動で読まれる。**
    `ocs` でプロセスごと囲う理由の 1 つ
 6. **保存した承認の DB、variant の癖、圧縮の hook の印の状態管理**
@@ -150,7 +153,7 @@ OpenCode の最大の複雑さの源（後勝ちの連結）をかなり減ら�
 | 作業ツリーの外の読み取り（`external_directory`） | パスで判定するコード | 単純化。ただし cwd・`..`・symlink・未作成のパス・大小文字を、ツールのパス解決とそろえる必要がある（指摘 9） |
 | `grep` / `glob` の結果フィルタ、shell 出力の伏字化 | `tool_result` で加工する | **同程度ではなく、出力の経路ごとに要る**。`tool_result` の例外は処理を止めず生の出力が残る。途中経過の出力と、長い出力の退避ファイルは加工されない（指摘 8） |
 | formatter | edit / write の後に `format-file.sh` を呼ぶ | Markdown が欠ける（今の `markdownlint` 相当が無い）。編集の順番待ちの外で走るので競合しうる（指摘 12） |
-| MCP | pi 1.1.0 は `mcp.json` で対応する（`docs/mcp.md`） | 単純。[CHG-0006](0006-pi-harness-trial.md) の「Pi は MCP を持たない」は古い |
+| MCP | pi 1.1.0 は `mcp.json` で対応する（`docs/mcp.md`） | 単純。[CHG-0006](../0006-pi-harness-trial.md) の「Pi は MCP を持たない」は古い |
 | プロジェクトの設定がグローバルに勝つ問題 | project trust を承認したときだけ、プロジェクトの拡張・設定・MCP を読む | 一部が消える。ただし「ユーザの拡張で常に拒否」はできない。CLI の `--approve` が先に効き、拡張の中では最初に答えたものが決める。`sessionDir` と `AGENTS.md` は拒否しても読まれる（指摘 5）。ランチャーで `--no-approve` を固定する |
 
 ### Python の判定器の共有について
@@ -189,7 +192,7 @@ allow より広い。
      ツールの `execute()` の中で行う。`tool_call` での判定は前段の案内にとどめる（未確認）
   3. 判定器の契約 → 「Python の判定器の共有について」の判定 API を作る
 - ツールを別名にしたとき、skill が `bash` / `read` を名指しする箇所で迷わないか。小さな課題では
-  4 モデルとも迷わず使い、圧縮のファイルの一覧もハーネスで補えた（[試作の記録](../research/agents/pi-harness-spike.md)
+  4 モデルとも迷わず使い、圧縮のファイルの一覧もハーネスで補えた（[試作の記録](../../research/agents/pi-harness-spike.md)
   の E2）。skill を使う長い作業では未確認
 - TUI で `/reload` の読み込み失敗が利用者に見えるか（`-p` では出力に現れなかった）
 - `--no-extensions` がプロジェクトの拡張も止めるか（`docs/cli.md` は「discovered, configured, and
@@ -199,7 +202,7 @@ allow より広い。
 - 子プロセスで ask が出たとき、拒否を「承認待ちで未完了」として親へ返せるか。例の subagent は
   終了コードと `stopReason` で成否を決めるので、拒否された子が普通に終わると成功扱いになりうる
 - 確認待ちの間に並列のツールがファイルを変える問題は、1 つの返答の中では起きない（pi が確認を全部
-  済ませてから並列に実行する。[試作の記録](../research/agents/pi-harness-spike.md)の E3）。codemode の中で
+  済ませてから並列に実行する。[試作の記録](../../research/agents/pi-harness-spike.md)の E3）。codemode の中で
   並べた呼び出しでは、確認の間も先に承認した呼び出しが動く
 - 長い出力の退避ファイルは、ハーネスが `execute()` から返る前に伏字で書き直す。書き直すまでの短い間に
   別のツールが読めるか（未確認）
@@ -209,7 +212,7 @@ allow より広い。
 ## 次の調査・実験
 
 段 3 は完了した。試作は `scripts/pi-harness-spike/`（`run.sh` で回る。モデルは偽物で通信しない）。
-段 3 で確かめたのは次の 3 つ（結果は[試作の記録](../research/agents/pi-harness-spike.md)）。
+段 3 で確かめたのは次の 3 つ（結果は[試作の記録](../../research/agents/pi-harness-spike.md)）。
 
 | 試験 | 合格条件 |
 | --- | --- |
@@ -262,7 +265,7 @@ allow より広い。
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| [CHG-0006](0006-pi-harness-trial.md) の「Pi は MCP を持たない」 | MCP の記述が 0 件 → pi 1.1.0 は `mcp.json` で対応 | `docs/mcp.md`、`docs/extensions.md` の `registerMcpServer` | 完了（CHG-0006 に追記） |
+| [CHG-0006](../0006-pi-harness-trial.md) の「Pi は MCP を持たない」 | MCP の記述が 0 件 → pi 1.1.0 は `mcp.json` で対応 | `docs/mcp.md`、`docs/extensions.md` の `registerMcpServer` | 完了（CHG-0006 に追記） |
 
 ## 実装・検証
 
@@ -285,7 +288,7 @@ allow より広い。
 - **2026-10-08**: 段 3 の試作（`scripts/pi-harness-spike/`）を回した。**予想が 1 つ外れた。**
   `-nbt` だけでは、`/reload` でハーネスが抜けると組み込みの `bash` が同じ名前で戻り、判定なしで
   実行した。ツールを別名で登録するとツールが 0 個になり、BLOCKER 1 を塞げた。入力の書き換えと
-  判定器の異常は予想どおり拒否できた。C2 の条件に「ツールは別名」を足した（[試作の記録](../research/agents/pi-harness-spike.md)）
+  判定器の異常は予想どおり拒否できた。C2 の条件に「ツールは別名」を足した（[試作の記録](../../research/agents/pi-harness-spike.md)）
 - **2026-10-08**: 段 4 の最初の試験。別名のツールを Copilot の Sonnet 5.5 / Opus 5.5 / GPT-6 Astra / Haiku 5.5 で
   使い、小さなバグの修正と圧縮を 1 周させた。どれも迷わず使った。既定の圧縮は別名のツールの
   ファイルを拾わないので、ハーネスが `session_before_compact` で足すようにした（E2）
@@ -300,7 +303,41 @@ allow より広い。
   試験のスクリプトの誤りで本物の agent 置き場に空のファイルを作ったので、消して元に戻した。
   移行の判断（段 5）は利用者に委ねる
 - **2026-10-08**: 利用者が**移行する**と決めた（段 5）。CHG-0018 の扱いは、今の状態を説明したうえで決める
+- **2026-10-09**: CHG-0018 は所有の規則（P）までで閉じると決めた（利用者の判断）。移行の案件 CHG-0020 を
+  起票して閉じた
 
 ## 終了結果
 
-<!-- Done / Abandoned にするとき記入 -->
+採用。OpenCode のハーネスを pi へ移す。構成は候補 C2（ツールを自分で持つハーネス）で、
+判断の材料は「現在地」の「見立て（2026-10-08、段 4 の後）」と[試作の記録](../../research/agents/pi-harness-spike.md)の E1〜E4。
+
+### 採用したもの
+
+- 候補 C2: `pi -nbt -ne -e <ハーネス>`、ツールは組み込みに無い名前、最終の判定は `execute()` の中、
+  確認は 1 件ずつ、伏字化は `content`・`structuredContent`・`details`、子エージェントは同じハーネスの子の pi、
+  Fence では境界用の agent 置き場を起動ごとに書き出す
+- 偽のモデル（faux）で通信なしに回す試作（`scripts/pi-harness-spike/`）
+
+### 撤回・見送りしたもの
+
+| 項目 | いつ | 理由 |
+| --- | --- | --- |
+| 段 1 の結論「シンプルにできる」（無条件） | 段 2 | Astra のレビューで BLOCKER 3 件が見つかった |
+| C1: 汎用の判定拡張を載せるだけの構成 | 段 2 | 入力の書き換え・`/reload` の失敗・確認の重なりを塞げない |
+| `check_bash.py` をそのまま pi の判定器にすること | 段 2 | 何も返さないのは「Claude に任せる」で、許可ではない |
+| `-nbt` だけでハーネスの抜けを防ぐこと | 段 3 | `/reload` で組み込みが同じ名前で戻った |
+| 本物の `~/.pi/agent` を境界に入れること | 段 4 | `denyWrite` は無いパスに効かず、内側で作られた拡張を外の pi が読む |
+| D（SDK）・E（OpenCode の plugin から共通の判定 API） | 段 5 | 未評価のまま。C2 で足りた |
+
+### 反映先
+
+- 観測: `research/agents/pi-harness-spike.md`（E1〜E4）
+- 実装: `scripts/pi-harness-spike/`（試作。本番の実装は CHG-0020）
+- 訂正: CHG-0006 の「Pi は MCP を持たない」
+
+### 移管した未完事項
+
+| 内容 | 移管先 |
+| --- | --- |
+| 移行の実装（判定 API・ハーネス・配布・境界・ハーネス以外の機能・切り替え） | [CHG-0020](../0020-pi-migration.md) |
+| 「未解決点」（Windows・Orca・認証の写し・ツールの名前・子の拒否の渡し方）と、pi の内部の挙動に頼る 4 点 | CHG-0020 の「未解決点」と「現在地」 |
