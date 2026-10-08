@@ -107,6 +107,7 @@
 | [作業ツリーの外の読み取りとスキルのスクリプト](opencode/permission/external-read-and-skill-scripts.md) | スキルのスクリプトで出ていたのは shell の ask だけ、引数のパスから external_directory は立たない、開けた場所の edit と秘密の deny、コマンド置換は別 resource・引用符は残る、git が fsmonitor を起動、`uv run --no-project` が `.python-version` の実行ファイルを起動 |
 | [段階2配備後の被覆率](opencode/permission/stage2-coverage.md) | 実履歴1,031呼び出しでの実測、秘密へ触れた15件を3層が全件受け止める、誘導後も87%が確認、伏字化の誤爆0.3%、内容の形とパス判定は両方要る |
 | [組み込みエージェントの制限の上書き](opencode/permission/builtin-agent-override.md) | 全体の permissions が explore / plan などの組み込みの制限を上書きする（公式の仕様）。explore が shell で確認を出し `.env.example` を実際に書けた、`agents.explore` の deny でツールが一覧から消え確認ゼロ、API で取り出した実効規則の評価で plan の edit が漏れる。E2: 試験用の設定で別ポートのサーバを起動すれば実効規則をモデルに頼らず取り出せる（起動直後は 404）、`agents.plan` の宣言で組み込みの規則と plan モードの指示が保たれる、`git log --output` が `build` で確認なしに書けた。E3: `evaluate` に親の ID は無いが `ctx.session.get` で親の今のエージェントを辿れる、`execute.before` の ID と `source.id` が一致する、親が bypass の子の外部の読み取りを自動で許可できた |
+| [秘密ファイルの禁止を policies へ移せるか](opencode/permission/policies.md) | 2026-10-08。`experimental.policies` の deny はエージェントの allow・ask・保存した承認・plugin の有無に負けず通常起動で効く、例外の allow は権限を与えない、`plan` の edit の写し直しを置き換えられる、`explore` の 4 つの deny は全体の allow / ask を移さない限り外せない、正しくない statement は警告付きで捨てられ余分なキーは黙って通る |
 
 ### OpenCode の plugin
 
