@@ -5,8 +5,7 @@ pi のハーネスが、ツールの呼び出しを実行してよいかを問�
 hook（`check_bash.py` / `check_file_read.py`）と同じ `bashrules` と `command_policy.py` を使う。
 hook の出力は変えない（`check_bash.py` はこの判定器を使わない）。
 
-移行の計画と経緯は [CHG-0020](../change/0020-pi-migration.md)。pi のハーネス（呼び出し側）は
-まだ作っていない（CHG-0020 の段 2）。
+移行の計画と経緯は [CHG-0020](../change/0020-pi-migration.md)。呼び出し側は [pi のハーネス](pi-harness.md)。
 
 ## 置き場
 

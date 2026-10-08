@@ -36,7 +36,10 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | 1a | `[pi]` を正本にする。`[opencode.shell] allow`・`redact`・`external_read`・`skill_scripts` を `[pi]` へ移し、OpenCode へは `generate.py` が写す。OpenCode の出力は変えない | 完了 |
 | 1b | 判定 API `decide()` を作る。応答に `source` を入れ、異常は deny | 完了（[判定 API](../spec/pi-decide.md)） |
 | 1c | `decide()` が今の `check_bash.py` と同じ入力で同じ deny / ask を返すことを試験で固定する | 完了（1041 件で一致） |
-| 2 | **ハーネス拡張**。試作（`scripts/pi-harness-spike/`）を本番の形にする: ツールは組み込みに無い名前、`execute()` で再判定、確認は 1 件ずつ、伏字化は `content`・`structuredContent`・`details`、圧縮のファイルの一覧の補い、子エージェント、MCP はハーネスから登録 | 未着手 |
+| 2 | **ハーネス拡張**。試作（`scripts/pi-harness-spike/`）を本番の形にする: ツールは組み込みに無い名前、`execute()` で再判定、確認は 1 件ずつ、伏字化は `content`・`structuredContent`・`details`、圧縮のファイルの一覧の補い、子エージェント、MCP はハーネスから登録 | 進行中（2a 完了） |
+| 2a | ハーネスの核: 別名のツール、判定 API の呼び出し（`execute()` で最終の判定）、確認の順番待ち、伏字化、圧縮のファイルの一覧、`[agent_env]`、`rules.json` の生成、偽のモデルの試験 | 完了（[pi のハーネス](../spec/pi-harness.md)） |
+| 2b | 子エージェント（役割と bypass の受け渡し、子の拒否を構造化して返す）と、MCP をハーネスから登録 | 未着手 |
+| 2c | 誘導（`[[opencode.shell.guide]]` の 13 件）の仕分けと判定器への取り込み | 未着手 |
 | 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 未着手 |
 | 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 未着手 |
 | 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 未着手 |
@@ -53,6 +56,10 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 - **判定器は Claude Code / Copilot CLI と共有する。** hook の出力は変えない（「判定 API の入力（案）」）
 - **`[pi]` を正本にし、OpenCode の値は `generate.py` で作る。** 段 6 で消すのが OpenCode 側になる
+
+2a を終えた（2026-10-09）。ハーネスの本体は `~/.config/pi/harness/`（[pi のハーネス](../spec/pi-harness.md)）。
+偽のモデルの試験 13 件が通り、実際のモデル（Copilot の Sonnet 5.5）でも読み取り・`git log`・確認の拒否が
+期待どおりに動いた。判定 1 回は 0.1 秒ほど（Python の起動）で、`tool_call` と `execute()` で同じ入力なら 1 回にした。
 
 段 1 を終えた（2026-10-09）。判定 API は [判定 API](../spec/pi-decide.md) が正本。
 `check_bash.py` の試験に出てくる 1041 件のコマンドで、hook の deny / ask と判定器の decision が一致した
@@ -180,7 +187,8 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 - **判定器に入れていないもの。** 誘導（`[[opencode.shell.guide]]`）、境界の中の既定（`boundary`）、
   `[opencode.sandbox] work_read` の読み取りの許可。段 2（誘導）と段 4（境界・`work_read`）で入れる
-- **判定 1 回ごとの Python の起動。** hook と同じ作り。ハーネスで遅さが問題になるかは段 2 で計る
+- **判定 1 回ごとの Python の起動（0.1 秒ほど）。** 1 つの呼び出しで 1 回にした。長い作業で気になるかは
+  常用で見る。気になれば判定器を常駐させる（複雑さが増すので、まずは測る）
 - **`[[opencode.shell.guide]]` を `[pi]` へ移すか。** 正規表現は JavaScript の方言で書いてあり、1 件ずつの
   仕分け（「OpenCode 専用の節」）が済むまで OpenCode 側に残す
 - **`[[opencode.shell.guide]]` の 13 件の仕分け。** 「OpenCode 専用の節」の表の方針で、1 件ずつ決める
@@ -198,8 +206,8 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 次の調査・実験
 
-- 段 2 の入口: 試作のハーネス（`scripts/pi-harness-spike/harness/`）の `policy.py` 呼び出しを
-  `~/.claude/hooks/decide.py` に差し替え、判定 1 回の時間を計る
+- 2b: 子エージェントの役割（今の OpenCode の `commit` / `review` / `explore` / `fleet-worker` 相当）を
+  どこに宣言するか（`[pi.profiles]` に足すか、役割の別の表を作るか）を決める
 - 試作のスクリプト（`run.sh`・`paths-run.sh`・`child-run.sh`・`fence-run.sh`）を、段 2 で `test/` の
   回帰試験へ移す方法を決める（pi が無い環境では skip する）
 
@@ -230,6 +238,8 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-09**: 2a を終えた。試作のハーネスを本番の形にし、`~/.config/pi/harness/` に配る。
+  判定 1 回は 0.1 秒ほどで、`tool_call` と `execute()` で同じ入力なら判定を使い回すようにした
 - **2026-10-09**: 段 1 を終えた。`decide()` を `~/.claude/hooks/` に置き（判定の中身の `bashrules` が
   そこにある）、役割を `[pi.profiles]` に足した。`check_bash.py` の試験の 1041 件で hook と判定が一致した
 - **2026-10-09**: 利用者が、判定器を Claude / Copilot と共有すること、`[pi]` を正本にすることを決めた。

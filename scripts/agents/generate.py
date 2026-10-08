@@ -1791,6 +1791,24 @@ def agent_env(common: dict[str, Any]) -> dict[str, str]:
     return dict(table)
 
 
+def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """pi のハーネスが読む ``~/.config/pi/harness/rules.json``。
+
+    判定そのものは判定 API (``decide.py``) が ``common.toml`` を直接読むので、ここには
+    ハーネスが自分で使うもの (伏字化・シェルへ入れる環境変数・判定器の場所) だけを置く。
+    伏字化の正規表現は OpenCode の guide plugin と同じ JavaScript の方言。
+    see docs/spec/pi-harness.md
+    """
+    redact = opencode_redact(common)
+    if not redact:
+        raise SystemExit("[pi.redact] が無いか無効 (pi のハーネスは伏字化を前提にする)")
+    return {
+        "decide": expand_user("~/.claude/hooks/decide.py"),
+        "agent_env": agent_env(common),
+        "redact": redact,
+    }
+
+
 def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
         "agent_env": agent_env(common),
@@ -2562,12 +2580,13 @@ TARGETS = {
     "opencode-config": merge_opencode_config,
     "opencode-guide": build_opencode_guide,
     "opencode-service": merge_opencode_service,
+    "pi-harness": build_pi_harness,
 }
 
 # 既存内容を一切参照しない (完全生成の) ターゲット。
 # 既存ファイルが壊れた JSON でも作り直せるよう、読み込み自体を省く。
 # 省かないと、壊れたファイルを直すための apply がパースで失敗して詰む。
-FULL_GENERATION_TARGETS = {"copilot-hooks", "opencode-guide"}
+FULL_GENERATION_TARGETS = {"copilot-hooks", "opencode-guide", "pi-harness"}
 
 
 def load_existing(path: str | None) -> dict[str, Any]:

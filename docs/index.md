@@ -37,6 +37,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 新しい機械での初回導入を Docker で検証する | [Docker での検証](spec/development.md#新しい機械での初回導入を-docker-で検証する) |
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
 | pi のハーネスの判定器（`decide`）を変える | [判定 API](spec/pi-decide.md) |
+| pi のハーネスを起動する・変える | [pi のハーネス](spec/pi-harness.md) |
 | `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
 | コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/agent-command-policy.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-config-generation.md#mcp-サーバ) |
