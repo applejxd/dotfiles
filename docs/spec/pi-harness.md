@@ -5,24 +5,54 @@ OpenCode のハーネス（permission の生成・guide plugin）の後継で、
 [CHG-0020](../change/0020-pi-migration.md)、設計の根拠になった試作の観測は
 [pi のハーネスの試作](../research/agents/pi-harness-spike.md)（E1〜E4）。
 
-**起動の入口はまだ配っていない**（CHG-0020 の段 3）。今は手で次のように起動する。
+## 起動
 
 ```bash
-pi -nbt -ne -e builtin:mcp -e ~/.config/pi/harness
+pis                 # 実装役で起動する
+pis --bypass        # 確認 (ask) を確認なしで通す。deny と誘導は効く
+pis --role reader   # 役割を選ぶ ([pi.profiles] の名前)
+pis -c              # pi の引数はそのまま渡る (例: 直前のセッションを続ける)
 ```
 
+`pis`（`~/.local/bin/pis`）は次の形で pi を起動する。素の `pi` はハーネス無しで動くので、普段使いの切り替え
+（CHG-0020 の段 6）までは `pis` を使う。
+
+```bash
+pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
+```
+
+- `--no-approve`: 作業先の `.pi/`（MCP・設定・skills）を読まない（project trust を拒否する）。
+  `AGENTS.md` は読む
 - `-nbt`（`--no-builtin-tools`）: 組み込みのツールを使わない。ツールはハーネスが登録したものだけになる
 - `-ne`（`--no-extensions`）: ほかの拡張を読まない。判定の後に入力を書き換える拡張を入れないため
 - `-e builtin:mcp`: `-ne` で外れる組み込みの MCP 対応だけを戻す。サーバはハーネスが登録する（[MCP](#mcp)）
+- ハーネス（`index.ts` と `rules.json`）が無い、または `~/.pi/agent/mcp.json` にサーバがあるときは起動しない
+- 子エージェントの印（`PI_HARNESS_CHILD`）など、外から入った内部の環境変数は外す
+
+Windows には配らない（pi・ハーネス・`pis` は Unix だけ）。
+
+## pi の設定
+
+`~/.pi/agent/settings.json` のうち次のキーだけを `generate.py --target pi-settings` が持つ（所有の規則。
+宣言から外したキーは消す）。ほかのキー（pi 自身が書く `lastChangelogVersion` や、`/settings` で変えた
+ほかの設定）は残す。素の `pi` もこの設定を読む。
+
+| キー | 出所 |
+| --- | --- |
+| `defaultProvider` / `defaultModel` | `[opencode.model]` の `default` 階層（[モデルの割り当て](agent-config-generation.md#モデルの割り当て)） |
+| `defaultThinkingLevel` / `skills` / `enabledModels` | `[pi.settings]`（書いたものだけ） |
+
+今は `defaultThinkingLevel = "high"`、`skills = ["~/.claude/skills"]`。`~/.agents/skills` は pi が元から読む。
 
 ## 置き場
 
 | 実体 | 配置先 | 役割 |
 | --- | --- | --- |
 | `home/dot_config/pi/harness/index.ts` | `~/.config/pi/harness/index.ts` | 拡張の本体 |
-| `home/dot_config/pi/harness/modify_rules.json.py.tmpl` | `~/.config/pi/harness/rules.json` | `generate.py --target pi-harness` が作る。判定器の場所・伏字化の規則・シェルへ入れる環境変数 |
-
-Windows には配らない（`.chezmoiignore.tmpl` の `.config/*`）。
+| `home/dot_config/pi/harness/modify_rules.json.py.tmpl` | `~/.config/pi/harness/rules.json` | `generate.py --target pi-harness` が作る。判定器の場所・伏字化の規則・シェルへ入れる環境変数・子エージェント・MCP・役割ごとのツール |
+| `home/dot_local/bin/executable_pis` | `~/.local/bin/pis` | 起動の入口（[起動](#起動)） |
+| `home/dot_pi/agent/modify_settings.json.py.tmpl` | `~/.pi/agent/settings.json` | `generate.py --target pi-settings` が持ち物のキーだけを書く（[pi の設定](#pi-の設定)） |
+| `home/.chezmoitemplates/agent-cli-install.sh.tmpl` の `install_pi` | `~/.pi/agent/install`・`~/bin/pi` | pi 本体を公式インストーラーで入れる（[AI CLI の導入](structure.md#ai-cli-の導入)） |
 
 ## 環境変数
 
@@ -116,5 +146,5 @@ Windows には配らない（`.chezmoiignore.tmpl` の `.config/*`）。
 ## 未対応
 
 - 子エージェントの階層のモデルは、Copilot で確かめただけ。Bedrock のモデル ID が pi でそのまま通るかは未確認
-- 起動の入口・設定の配布（段 3）、境界（段 4）
+- 境界（段 4）
 - 判定 1 回に 0.1 秒ほどかかる（Python の起動）。`tool_call` と `execute()` で同じ入力なら 1 回にしている

@@ -126,3 +126,32 @@ def test_pi_guides_mean_the_same_in_python_and_javascript():
         for p in probes
     ]
     assert py == js
+
+
+# ─── ~/.pi/agent/settings.json ──────────────────────────────────────
+
+
+@USERS
+def test_pi_settings_owns_only_its_keys(username):
+    common = load_common(username)
+    existing = {
+        "lastChangelogVersion": "1.1.0",
+        "defaultModel": "old",
+        "enabledModels": ["stale"],
+        "theme": "dark",
+    }
+    out = gen.merge_pi_settings(existing, common)
+    assert out["lastChangelogVersion"] == "1.1.0" and out["theme"] == "dark"
+    tiers = common["opencode"]["model"]["tier"][common["opencode"]["model"]["provider"]]
+    assert out["defaultProvider"] == common["opencode"]["model"]["provider"]
+    assert out["defaultModel"] == tiers["default"]
+    assert out["skills"] == ["~/.claude/skills"]
+    # 持ち物のうち宣言していないものは消す
+    assert "enabledModels" not in out
+
+
+def test_pi_settings_rejects_unknown_keys():
+    common = load_common()
+    common["pi"]["settings"]["theme"] = "dark"
+    with pytest.raises(ValueError, match=r"pi\.settings"):
+        gen.merge_pi_settings({}, common)

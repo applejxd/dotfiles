@@ -58,7 +58,7 @@ chezmoi apply
 その更新方法は [プロジェクト構造](docs/spec/structure.md) を参照。
 
 - [mise による CLI 管理](docs/spec/structure.md#mise-による-cli-管理)（gh、seccomp フィルタ）
-- [AI CLI の導入](docs/spec/structure.md#ai-cli-の導入)（Claude Code / Copilot CLI / OpenCode V2、oh-my-pi）
+- [AI CLI の導入](docs/spec/structure.md#ai-cli-の導入)（Claude Code / Copilot CLI / OpenCode V2、oh-my-pi、pi）
 - [Herdr の管理](docs/spec/structure.md#herdr-の管理)
 
 ### Raspberry Pi (64bit / ヘッドレス)

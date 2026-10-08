@@ -274,3 +274,59 @@ def test_guides_point_to_the_tool_to_use(env):
     proc = run_pi(env, bash_call("cat f.txt"), PI_HARNESS_BYPASS="1")
     assert "isError=true" in proc.stdout, proc.stdout
     assert "read ツールを使ってください" in proc.stdout
+
+
+# ─── 起動の入口 (pis) ───────────────────────────────────────────────
+
+PIS = ROOT / "home" / "dot_local" / "bin" / "executable_pis"
+
+
+@pytest.fixture
+def pis_env(env, tmp_path):
+    """pis が読む ~/.config/pi/harness を、一時的な HOME の下に置く。"""
+    home = tmp_path / "home"
+    shutil.copytree(env["harness"], home / ".config" / "pi" / "harness")
+    return {**env, "home": home, "env": {**env["env"], "HOME": str(home)}}
+
+
+def run_pis(pis_env, *pis_args, calls=(), **env_extra):
+    faux = str(FIXTURES / "faux.ts")
+    args = [str(PIS), *pis_args, "--model", "faux/spike", "-e", faux, "-p", "go"]
+    return subprocess.run(
+        ["bash", *args],
+        cwd=pis_env["proj"],
+        env={**pis_env["env"], "FAUX_TOOL_CALLS": json.dumps(list(calls)), **env_extra},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=180,
+    )
+
+
+def test_pis_starts_pi_with_the_harness(pis_env):
+    proc = run_pis(pis_env, calls=bash_call("touch made-by-pi"), PI_HARNESS_CHILD="1")
+    assert proc.returncode == 0, proc.stderr
+    assert "guarded_task" in lines(proc)[0], "子の印を外して起動していない"
+    assert "isError=true :: not approved:" in proc.stdout
+
+
+def test_pis_bypass_and_role(pis_env):
+    run_pis(pis_env, "--bypass", calls=bash_call("touch made-by-pi"))
+    assert (pis_env["proj"] / "made-by-pi").exists()
+    proc = run_pis(pis_env, "--role", "reader")
+    assert lines(proc)[0] == 'TOOLS=["guarded_find","guarded_grep","guarded_ls","guarded_read"]'
+
+
+def test_pis_refuses_without_the_harness(pis_env):
+    shutil.rmtree(pis_env["home"] / ".config" / "pi" / "harness")
+    proc = run_pis(pis_env)
+    assert proc.returncode == 1 and "ハーネスが無い" in proc.stderr
+
+
+def test_pis_refuses_servers_in_the_agent_mcp_json(pis_env):
+    agent = Path(pis_env["env"]["PI_CODING_AGENT_DIR"])
+    (agent / "mcp.json").write_text('{"mcpServers": {"x": {"command": "true"}}}', encoding="utf-8")
+    proc = run_pis(pis_env)
+    assert proc.returncode == 1 and "mcp.json" in proc.stderr
+    (agent / "mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
+    assert run_pis(pis_env).returncode == 0

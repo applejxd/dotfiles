@@ -1013,6 +1013,13 @@ pattern = '''(^|[^<])<<-?\s*["']?\w+["']?[^\n]*\n'''
 unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
 message = "ヒアドキュメントでスクリプトを渡さないでください。write ツールでファイルに書いてから実行してください (確認画面が 1 行になり、中身は差分で見えます)。"
 
+# ~/.pi/agent/settings.json へ出す設定。ここに書いたキーは生成器の持ち物で、消すと settings.json からも消える。
+# 書けるキー: defaultThinkingLevel / skills / enabledModels。既定のモデルは [opencode.model] の default 階層。
+# see docs/spec/pi-harness.md#pi-の設定
+[pi.settings]
+defaultThinkingLevel = "high"
+skills = ["~/.claude/skills"]
+
 # pi の判定器の役割 (プロファイル)。判定器の `role` に名前を渡す。pi だけが読む。
 # tools に無いツールは deny。default は、どの規則にも当たらない操作の扱い。
 # ★評価の順番は判定器のコードに固定してある (この並びに意味は無い)。

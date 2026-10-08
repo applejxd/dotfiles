@@ -1850,6 +1850,32 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
     }
 
 
+# ~/.pi/agent/settings.json のうち生成器が持つキー。宣言から外すと消す (所有の規則)。
+# defaultProvider / defaultModel は [opencode.model] の default 階層から作る。
+PI_SETTINGS_KEYS = frozenset({"defaultThinkingLevel", "skills", "enabledModels"})
+PI_SETTINGS_OWNED = PI_SETTINGS_KEYS | {"defaultProvider", "defaultModel"}
+
+
+def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.pi/agent/settings.json`` の生成器の持ち物だけを差し替える。
+
+    pi 自身が書くキー (``lastChangelogVersion`` など) と、利用者が ``/settings`` で変えた
+    持ち物以外のキーは残す。
+    see docs/spec/pi-harness.md#pi-の設定
+    """
+    declared = (common.get("pi") or {}).get("settings") or {}
+    if not isinstance(declared, dict):
+        raise SystemExit("[pi.settings] は表でなければならない")
+    _reject_unknown("pi.settings", set(declared), PI_SETTINGS_KEYS)
+    out = {k: v for k, v in existing.items() if k not in PI_SETTINGS_OWNED}
+    ref = pi_model_ref(common, "default")
+    provider, _, model = ref.partition("/")
+    out["defaultProvider"] = provider
+    out["defaultModel"] = model
+    out.update(copy.deepcopy(declared))
+    return out
+
+
 PI_AGENT_KEYS = frozenset({"profile", "description", "system", "tier", "inherit_bypass"})
 
 
@@ -2690,6 +2716,7 @@ TARGETS = {
     "opencode-guide": build_opencode_guide,
     "opencode-service": merge_opencode_service,
     "pi-harness": build_pi_harness,
+    "pi-settings": merge_pi_settings,
 }
 
 # 既存内容を一切参照しない (完全生成の) ターゲット。

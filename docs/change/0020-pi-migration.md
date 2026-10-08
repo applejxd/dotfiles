@@ -40,7 +40,7 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | 2a | ハーネスの核: 別名のツール、判定 API の呼び出し（`execute()` で最終の判定）、確認の順番待ち、伏字化、圧縮のファイルの一覧、`[agent_env]`、`rules.json` の生成、偽のモデルの試験 | 完了（[pi のハーネス](../spec/pi-harness.md)） |
 | 2b | 子エージェント（役割と bypass の受け渡し、子の拒否を構造化して返す）と、MCP をハーネスから登録 | 完了（[子エージェント](../spec/pi-harness.md#子エージェント)・[MCP](../spec/pi-harness.md#mcp)） |
 | 2c | 誘導（`[[opencode.shell.guide]]` の 13 件）の仕分けと判定器への取り込み | 完了（4 件を `[[pi.guide]]` へ。[誘導](../spec/pi-decide.md#誘導)） |
-| 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 未着手 |
+| 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 完了（起動は `pis`、[起動](../spec/pi-harness.md#起動)・[pi の設定](../spec/pi-harness.md#pi-の設定)） |
 | 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 未着手 |
 | 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 未着手 |
 | 6 | **切り替えと撤去**。普段使いを pi にし、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs を撤去する。CHG-0017 を閉じ、保留中の CHG-0005（命名の整理）を再開できる状態にする | 未着手 |
@@ -56,6 +56,11 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 - **判定器は Claude Code / Copilot CLI と共有する。** hook の出力は変えない（「判定 API の入力（案）」）
 - **`[pi]` を正本にし、OpenCode の値は `generate.py` で作る。** 段 6 で消すのが OpenCode 側になる
+
+段 3 を終えた（2026-10-09）。利用者の判断で、起動の入口は別名のコマンド `pis` にし（素の `pi` は段 6 まで
+そのまま）、`~/.pi/agent/settings.json` は生成器の持ち物のキー（既定のモデル・思考の強さ・skills の置き場）だけを
+差し替える。pi 本体は `agent-cli-install` が公式インストーラーで入れる（mise の Node.js が前提）。`pis` は
+`--no-approve` で作業先の `.pi/` を読まず、`~/.pi/agent/mcp.json` にサーバがあれば起動しない。
 
 段 2 を終えた（2026-10-09）。2c で OpenCode の誘導 13 件を仕分け、読み書きを pi のツールへ寄せる 4 件を
 `[[pi.guide]]` へ移した（OpenCode も `pi = "<id>"` で同じものを使う）。残る 9 件は、判定器の意味解析や allow の
@@ -210,12 +215,11 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 - **子エージェントの拒否の渡し方。** 試作は文言（`not approved:`）で見分けた。本番は構造化して渡す
 - **モデルの階層の置き場。** 子エージェントは `[opencode.model.tier.*]` から引いている（`#variant` を
   `:variant` に読み替え）。`[pi]` を正本にする方針に合わせて移すか。Bedrock のモデル ID が pi で通るかは未確認
-- **主エージェントのモデル。** 親の既定モデルと思考の強さ（今の OpenCode の `default` 階層）を pi の設定へ出すのは段 3
 
 ## 次の調査・実験
 
-- 段 3 の入口: 起動の入口（`-nbt -ne -e builtin:mcp -e ~/.config/pi/harness` と環境変数）をどう配るか
-  （シェルの関数・ラッパースクリプト・`settings.json` のどれか）と、主エージェントのモデルの設定を決める
+- 段 4 の入口: `ocs` の境界の組み立て（`home/dot_local/share/ocs/`）のうち、pi に使い回せる部分と OpenCode に
+  固有の部分（`--standalone`・DB の共有・隔離版の設定の書き出し）を分ける
 - 試作のスクリプト（`run.sh`・`paths-run.sh`・`child-run.sh`・`fence-run.sh`）を、段 2 で `test/` の
   回帰試験へ移す方法を決める（pi が無い環境では skip する）
 
@@ -246,6 +250,8 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-09**: 段 3 を終えた。起動は `pis`（素の `pi` は段 6 まで残す）、`settings.json` は持ち物のキーだけ。
+  `pis` は `--no-approve` を付け、`~/.pi/agent/mcp.json` にサーバがあれば起動しない
 - **2026-10-09**: 段 2 を終えた（2c）。誘導 13 件のうち 4 件を `[[pi.guide]]` へ移し、判定器と OpenCode の
   両方が使う形にした。残る 9 件は判定器のほかの規則で足りる
 - **2026-10-09**: 2b を終えた（案 A。役割は `[pi.profiles]`、子エージェントは `[pi.agents]`）。

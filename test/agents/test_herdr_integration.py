@@ -121,6 +121,7 @@ def test_unix_agent_cli_installer_uses_official_sources(os_name):
     assert "https://opencode.ai/v2/install" in source
     # oh-my-pi は試用中 (CHG-0006)。Unix のみで、Windows へは広げない
     assert "https://omp.sh/install" in source
+    assert "https://pi.dev/install.sh" in source
     # インストーラーに chezmoi 管理の rc ファイルを書き換えさせない
     assert "--no-modify-path" in source
     # Copilot の対話プロンプト (PATH 未登録時の rc 追記確認) に入らせない
@@ -143,9 +144,9 @@ def test_unix_agent_cli_installer_ignores_stale_mise_shims(os_name):
     """
     source = render_template(AGENT_CLI_SCRIPTS[os_name], os_name=os_name)
 
-    # 4 種とも ensure_cli を通す。判定と導入の分岐はそこ 1 箇所だけにある
-    assert source.count("\nensure_cli ") == 4
-    for command_name in ("claude", "copilot", "opencode", "omp"):
+    # 5 種とも ensure_cli を通す。判定と導入の分岐はそこ 1 箇所だけにある
+    assert source.count("\nensure_cli ") == 5
+    for command_name in ("claude", "copilot", "opencode", "omp", "pi"):
         assert f" {command_name} install_{command_name}\n" in source
     # その ensure_cli が shim を除外する
     assert 'if is_installed "${command_name}"' in source
@@ -176,6 +177,10 @@ def run_agent_cli_installer(script: str, home: Path, tmp_path: Path, fail_url: s
         encoding="utf-8",
     )
     curl.chmod(0o755)
+    # pi のインストーラーは Node.js が無いと端末で聞くので、install_pi は node を確かめる
+    node = stub_bin / "node"
+    node.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    node.chmod(0o755)
     rendered = tmp_path / "install.sh"
     rendered.write_text(script, encoding="utf-8")
 
@@ -340,6 +345,7 @@ def test_official_cli_is_not_reinstalled_when_shims_shadow_it(tmp_path: Path):
     for cli in ("claude", "copilot", "omp"):
         make_executable(home / ".local/bin" / cli)
     make_executable(home / ".opencode/bin/opencode")
+    make_executable(home / "bin/pi")
 
     result, called = run_agent_cli_installer(script, home, tmp_path)
 

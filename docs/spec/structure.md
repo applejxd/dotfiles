@@ -371,8 +371,10 @@ Windows で手段が分かれるのは公式側の制約です。
 
 導入範囲は mise 版から変えていません。Linux / WSL / macOS は 3 つとも、
 Windows は Copilot CLI と OpenCode V2 を導入し、`applejxd` 以外では
-Claude Code も導入します。Linux / WSL / macOS では加えて oh-my-pi (`omp`) も
-公式インストーラーで入れます。
+Claude Code も導入します。Linux / WSL / macOS では加えて oh-my-pi (`omp`) と
+pi（`pi.dev/install.sh`）も公式インストーラーで入れます。pi は mise の Node.js が入っていないと
+入れません（インストーラーが Node.js の導入を端末で聞くため。次の apply で走り直す）。
+pi はハーネス付きの `pis` で起動する（[pi のハーネス](pi-harness.md#起動)）。
 
 スクリプトは `run_onchange_after_` で、**既に PATH 上にある CLI には触りません**。
 ただし mise の shim（`~/.local/share/mise/shims/` 配下）は導入済みと数えません。

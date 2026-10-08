@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# pi をハーネス付きで起動する。
+# usage: pis [--bypass] [--role <役割>] [--] [pi の引数...]
+# see docs/spec/pi-harness.md#起動
+set -eu
+
+harness="${HOME}/.config/pi/harness"
+agent_dir="${PI_CODING_AGENT_DIR:-${HOME}/.pi/agent}"
+bypass=""
+role="implementer"
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --bypass) bypass=1; shift ;;
+        --role)
+            [ "$#" -ge 2 ] || { echo "pis: --role に役割の名前が要る" >&2; exit 2; }
+            role="$2"; shift 2 ;;
+        --) shift; break ;;
+        *) break ;;
+    esac
+done
+
+if [ ! -f "${harness}/index.ts" ] || [ ! -f "${harness}/rules.json" ]; then
+    echo "pis: ハーネスが無い (${harness})。chezmoi apply で配る" >&2
+    exit 1
+fi
+
+# ~/.pi/agent/mcp.json のサーバはハーネスと関係なく繋がり、ハーネスが抜けても判定なしで残る
+if [ -f "${agent_dir}/mcp.json" ] && python3 - "${agent_dir}/mcp.json" <<'PY'
+import json, sys
+try:
+    servers = json.load(open(sys.argv[1], encoding="utf-8")).get("mcpServers")
+except (OSError, ValueError, AttributeError):
+    sys.exit(0)  # 読めないなら止める側
+sys.exit(0 if servers else 1)
+PY
+then
+    echo "pis: ${agent_dir}/mcp.json にサーバがある。MCP は common.toml の [[mcp]] (clis に pi) に書く" >&2
+    exit 1
+fi
+
+export PI_HARNESS_ROLE="${role}"
+export PI_HARNESS_BYPASS="${bypass}"
+unset PI_HARNESS_CHILD PI_HARNESS_TEST_CHILD_EXT PI_HARNESS_BOUNDARY
+# --no-approve: 作業先の .pi/ (MCP・設定・skills) を読まない。拡張は -ne で読まない
+exec pi --no-approve -nbt -ne -e builtin:mcp -e "${harness}" "$@"

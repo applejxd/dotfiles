@@ -1,5 +1,5 @@
 {{- /*
-AI CLI (Claude Code / Copilot CLI / OpenCode V2) を各社公式のインストーラーで導入する。
+AI CLI (Claude Code / Copilot CLI / OpenCode V2 / oh-my-pi / pi) を各社公式のインストーラーで導入する。
 呼び出し側は 100_linux / 200_mac の run_onchange_after_ スクリプト。
 共有するのは本体だけで、呼び出し側が shebang と set -eu を置く。
 */ -}}
@@ -9,7 +9,7 @@ AI CLI (Claude Code / Copilot CLI / OpenCode V2) を各社公式のインスト�
 # 公式インストーラーはどれも導入先が PATH にあるかを確認する。特に Copilot CLI は
 # 見つからないと rc ファイル追記の可否を /dev/tty から対話で聞くため、
 # chezmoi apply が止まらないよう先に通しておく。
-PATH="${HOME}/.local/bin:${HOME}/.opencode/bin:${PATH}"
+PATH="${HOME}/.local/bin:${HOME}/.opencode/bin:${HOME}/bin:${PATH}"
 export PATH
 
 # AI CLI を mise 管理から公式インストーラーへ移したとき、mise の shim と
@@ -59,6 +59,15 @@ install_copilot() { curl -fsSL https://gh.io/copilot-install | bash; }
 # chezmoi 管理のシェル設定と衝突する。PATH は shellenv.sh 側で通している。
 install_opencode() { curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path; }
 install_omp() { curl -fsSL https://omp.sh/install | sh; }
+# Node.js が無いとインストーラーが /dev/tty で導入の可否を聞くので、mise の node が無ければ失敗にする
+# (次の apply で走り直す)。標準出力を端末から外すのは、最後の「Start pi now? [Y/n]」を出させないため
+install_pi() {
+    (
+        PATH="${PATH}:${mise_root}/shims"
+        command -v node >/dev/null 2>&1 || { echo "node が無い (mise の node が入った後に入れる)" >&2; exit 1; }
+        curl -fsSL https://pi.dev/install.sh | sh | cat
+    )
+}
 
 # 1 つの導入失敗で残り全部を巻き添えにしない。呼び出し側は set -euo pipefail だが、
 # if の条件に置いた失敗では errexit が働かないので、ここで取りこぼしを集める。
@@ -92,6 +101,9 @@ ensure_cli 'OpenCode V2' opencode install_opencode
 # 設定は ~/.omp/agent/ だが、omp は ~/.claude も config root として読むため
 # 既存の skills は追加設定なしで見える。
 ensure_cli 'oh-my-pi' omp install_omp
+# pi。OpenCode のハーネスの移行先 (起動は pis。see docs/spec/pi-harness.md)。
+# 本体は ~/.pi/agent/install、入口は ~/bin/pi。更新は pi update
+ensure_cli 'pi' pi install_pi
 
 if [ -n "${failed_clis}" ]; then
     # ここで非ゼロを返すと apply 全体が止まり、後続のスクリプトまで巻き添えに
@@ -109,6 +121,7 @@ if [ -n "${failed_clis}" ]; then
       curl -fsSL https://gh.io/copilot-install | bash
       curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path
       curl -fsSL https://omp.sh/install | sh
+      curl -fsSL https://pi.dev/install.sh | sh
 EOF
     echo "⚠️  完了：一部の AI CLI が入っていません"
 else

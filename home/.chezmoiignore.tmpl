@@ -40,6 +40,11 @@
 .zshrc
 # Windows は権限不要の directory junction をスクリプトで作成
 .copilot/skills
+# pi は Unix だけで導入する (ハーネスと pis も Unix だけ)
+# see docs/spec/pi-harness.md
+.pi/
+.pi/**
+.local/bin/pis
 {{- else }}
 # windows のみで導入
 .chezmoiscripts/300_windows/
