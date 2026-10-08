@@ -90,4 +90,5 @@ V1 と V2 の併用:
 ### 次の問い
 
 - グローバルの V1 定義とプロジェクトの V2 定義のように、ファイルをまたいだ併用
-- 所有の規則を `generate.py` に実装したときのテスト
+- 所有の規則を `generate.py` に実装したときのテスト（2026-10-08 に
+  `test/agents/test_generate_opencode_ownership.py` で固定した）

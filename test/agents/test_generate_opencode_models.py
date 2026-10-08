@@ -160,13 +160,16 @@ def test_only_the_detected_provider_is_usable(common):
 
 
 def test_other_policies_and_experimental_keys_survive():
-    other = {"action": "permission", "resource": "shell:git push *", "effect": "deny"}
+    """生成器が持つのは ``permission`` / ``provider.use`` の statement だけ。"""
+    other = {"action": "mcp.use", "resource": "x", "effect": "deny"}
+    hand = {"action": "permission", "resource": "shell:git push *", "effect": "deny"}
     stale = {"action": "provider.use", "resource": "openai", "effect": "allow"}
-    existing = {"experimental": {"policies": [other, stale], "flag": True}}
+    existing = {"experimental": {"policies": [other, hand, stale], "flag": True}}
     out = generated(PERSONAL, existing)
     experimental = out["experimental"]
     assert experimental["flag"] is True
     assert other in experimental["policies"]
+    assert hand not in experimental["policies"], "手書きの permission の statement は消す"
     assert stale not in experimental["policies"], "古い provider.use を残さない"
     assert generated(PERSONAL, out) == out, "冪等"
 
@@ -243,10 +246,14 @@ def test_v2_agents_do_not_leak_into_the_v1_key():
 
 def test_v2_agent_definitions_keep_unmanaged_keys():
     existing = {
-        "agents": {"review": {"color": "#123456", "system": "old"}, "mine": {"mode": "all"}}
+        "agents": {
+            "review": {"color": "#123456", "system": "old", "request": {"x": 1}},
+            "mine": {"mode": "all"},
+        }
     }
     out = generated(PERSONAL, existing)["agents"]
-    assert out["review"]["color"] == "#123456"
+    assert "color" not in out["review"], "宣言していない生成器のキーは消す (所有の規則)"
+    assert out["review"]["request"] == {"x": 1}, "生成器が書かないキーは残す"
     assert out["review"]["system"] != "old", "宣言したキーは差し替える"
     assert out["mine"] == {"mode": "all"}
     assert generated(PERSONAL, generated(PERSONAL)) == generated(PERSONAL), "冪等"
@@ -436,11 +443,11 @@ def test_assignment_goes_to_v2_agents_with_variant():
 
 def test_unassigning_removes_only_managed_models():
     assigned = generated(with_agents(PERSONAL, {"general": "worker", "build": "deep"}))
-    assigned["agents"]["build"]["color"] = "#ff6b6b"
+    assigned["agents"]["build"]["request"] = {"x": 1}
     assigned["agents"]["mine"] = {"model": "github-copilot/gpt-5-mini"}
     out = generated(PERSONAL, assigned)["agents"]
     assert "general" not in out, "model しか無いエントリは消す"
-    assert out["build"] == {"color": "#ff6b6b"}
+    assert out["build"] == {"request": {"x": 1}}
     assert out["mine"] == {"model": "github-copilot/gpt-5-mini"}, "手で書いたモデルは残す"
 
 
@@ -465,6 +472,7 @@ def test_switching_provider_rewrites_assigned_models():
         (lambda c: c["opencode"]["model"]["agents"].update(commit="standard"), "standard"),
         (lambda c: c["opencode"]["model"]["agents"].update({"fleet-worker": "light"}), "light"),
         (lambda c: c["opencode"]["model"].update(agents={"explore": "heavy"}), "heavy"),
+        (lambda c: c["opencode"]["model"]["agents"].update(mine="worker"), "mine"),
     ],
     ids=[
         "unknown-tier",
@@ -474,6 +482,7 @@ def test_switching_provider_rewrites_assigned_models():
         "old-standard",
         "old-light",
         "old-heavy",
+        "undeclared-agent",
     ],
 )
 def test_invalid_model_config_stops_apply(mutate, message):

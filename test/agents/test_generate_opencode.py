@@ -375,12 +375,14 @@ def test_bypass_task_replaces_a_stale_allow():
             "bypass": {
                 "permission": {"task": {"*": "allow", "general": "allow", "mine": "allow"}},
                 "color": "#123456",
+                "temperature": 0.2,
             }
         }
     }
     out = gen.merge_opencode_config(existing, COMMON)["agent"]["bypass"]
     assert out["permission"] == generated()["agent"]["bypass"]["permission"]
-    assert out["color"] == "#123456", "宣言していないキーは残す"
+    assert "color" not in out, "宣言していない生成器のキーは消す (所有の規則)"
+    assert out["temperature"] == 0.2, "生成器が書かないキーは残す"
 
 
 @pytest.mark.parametrize("username", ["applejxd", "worker"])
@@ -394,13 +396,19 @@ def test_bypass_children_and_the_bypass_sets_differ(username):
     assert guide["guarded_subagents"] == ["bypass-fleet-worker", "bypass-worker"]
 
 
-def test_handwritten_plan_keeps_undeclared_keys():
-    """手書きの定義 (V2 の system / hidden、V1 の agent.plan) は宣言したキーだけ上書きする。"""
+def test_handwritten_builtin_definitions_follow_the_ownership_rule():
+    """組み込みの手書きの定義は、生成器が書けるキーだけ宣言どおりにする (所有の規則)。
+
+    V2 の ``system`` / ``hidden`` は宣言していないので消し、``request`` は残す。V2 で宣言した
+    ``plan`` の V1 の定義は、生成器が書けるキーだけなので丸ごと消す。
+    see docs/spec/agent-config-generation.md#配置済みの設定の所有
+    """
     existing = {
         "agents": {
             "plan": {
                 "system": "手書き",
                 "hidden": True,
+                "request": {"headers": {"x": "1"}},
                 "permissions": [{"action": "*", "resource": "*", "effect": "allow"}],
             },
             "explore": {"system": "手書き", "permissions": []},
@@ -409,11 +417,9 @@ def test_handwritten_plan_keeps_undeclared_keys():
     }
     out = gen.merge_opencode_config(existing, COMMON)
     fresh = generated()
-    for name in ("plan", "explore"):
-        assert out["agents"][name]["permissions"] == fresh["agents"][name]["permissions"]
-        assert out["agents"][name]["system"] == "手書き"
-    assert out["agents"]["plan"]["hidden"] is True
-    assert out["agent"]["plan"] == {"permission": {"edit": "allow"}}
+    assert out["agents"]["explore"] == fresh["agents"]["explore"]
+    assert out["agents"]["plan"] == {**fresh["agents"]["plan"], "request": {"headers": {"x": "1"}}}
+    assert "plan" not in out["agent"]
 
 
 def test_restate_global_deny_copies_only_the_named_denies():

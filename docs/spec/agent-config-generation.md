@@ -641,10 +641,11 @@ permissions = [
   `bypass` の `task` の個別の allow はこの deny を上書きする
   （[実測](../research/opencode/permission/bypass-ask-upgrade.md)の 5 は `*` の allow で確かめた）
 - **全体の deny だけでは足りない。** `common.toml` に無いエージェント（手で足した
-  `build` の上書きや別名のもの）の `permission` は `merge_opencode_agents` が残す。
+  別名のもの）の `permission` は残す（[所有の規則](#配置済みの設定の所有)で管理しない ID）。
   そこに `task = "allow"` などがあると、同じ理屈で deny が上書きされる。
   こうした個別の上書きは利用者の責任で、`generate.py` は各エージェントへ deny を
   差し込まない（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的）。
+  組み込み（`build` など）の手書きの `permission` は所有の規則で消える。
   下の guide plugin の検査は、上書きされた後の effect でも止める
 - guide plugin でも起動元を検査する（二重の検査）。`rules.json` の
   `guarded_subagents` に名前を出し、`permission.evaluate` の `action` が `subagent`、
@@ -656,8 +657,9 @@ permissions = [
   `rules.json` が読めないときの扱いは[下](#rulesjson-が使えないとき)
 - 設定の deny に当たった呼び出しは hook が発火しないので、plugin は deny を
   緩める側には回らない（[Bypass モードの調査 5 章](../research/opencode/permission/bypass-agent.md#5-plugin-は-bypass-を貫通する段階-2-の前提)）
-- `bypass` は `mode = "primary"` を明示する。`mode` を宣言しないと既存設定の
-  `mode`（`all` / `subagent`）が残り、`bypass` を子として起動できてしまう
+- `bypass` は `mode = "primary"` を明示する。`mode` を宣言しないと OpenCode の既定に任せる
+  ことになり（所有の規則より前は既存設定の `mode` が残った）、`all` / `subagent` なら `bypass` を
+  子として起動できてしまう
   （`build` → `bypass` → `bypass-worker`）。`bypass = true` のエージェントは `common.toml` で
   `mode` を必ず宣言する（`test_bypass_agents_in_common_declare_their_mode`）
 - `bypass-worker` / `bypass-fleet-worker` 自身は子の起動が deny なので、さらに子を起動できない
@@ -1120,6 +1122,8 @@ explore = "worker"      # 例
   並んだときの結合順を確かめていないため
   - 改名前の階層名（`light` / `standard` / `heavy`）で割り当てても、未知の階層として止まる。
     エラーには定義済みの階層名が並ぶ
+- `[opencode.agents]` で宣言していない、組み込みでもない ID への割り当ても `apply` を止める
+  （[所有の規則](#配置済みの設定の所有)）
 
 #### 生成されるもの
 
@@ -1128,7 +1132,7 @@ explore = "worker"      # 例
 | `model` | `default` 階層 | — （毎回書く） |
 | `agents.<id>.model` | 割り当てた階層 | 割り当てを外したとき、値が階層のモデルなら消す。手で書いた別のモデル・他のキーは残す |
 | `providers.<id>.settings` | `[provider.<id>]` の `profile` / `region` | 他のキー（`baseURL` など）と他のプロバイダ |
-| `experimental.policies` | `provider.use` を `*` で deny、この PC のプロバイダだけ allow | `provider.use` 以外の文と、`experimental` の他のキー |
+| `experimental.policies` | `provider.use` を `*` で deny、この PC のプロバイダだけ allow | `permission` / `provider.use` 以外の文と、`experimental` の他のキー（[所有の規則](#配置済みの設定の所有)） |
 
 - **V1 形式の `agent` ではなく V2 形式の `agents` に書く。** `agent` だと
   `#variant` 付きの指定が黙って無視され、親のモデルで動く
@@ -1196,8 +1200,8 @@ explore = "worker"      # 例
 - `restate_global_deny` に `shell` を含むエージェントは、deny の前段停止の例外
   （`except_agents`）にしない。`plan` の `shell * ask` を理由に例外が付くと、前段停止が
   効かなくなる
-- **元に戻すとき**は、宣言を消すだけでは配備済みの `opencode.json` に残る（下の「宣言したキー
-  だけを差し替え」）。手順は [CHG-0017 の「実装・検証」](../change/0017-builtin-agent-restrictions.md#実装検証)
+- **元に戻すとき**は、宣言を消すと[所有の規則](#配置済みの設定の所有)で配備済みの
+  `opencode.json` からも消える（組み込みと、宣言が残っている ID の場合。丸ごと消した自作の ID は残る）
 - **`review` は shell を開けない。** `git diff` / `git status` も外部の diff
   ドライバや fsmonitor を通じてコードを実行しうる
   （[allow リスト監査](../research/opencode/permission/allow-list-audit.md)）。
@@ -1209,9 +1213,45 @@ explore = "worker"      # 例
   スキルの一覧は引き続き足される
 - `permissions` は全体の規則の後ろに付き、後勝ちで効く。効果は `allow` / `ask` / `deny`。
   隔離版で全体から捨てた `ask` も、エージェントの規則で戻せる
-- 宣言したキーだけを差し替え、他のキーと他のエージェントは残す
+- 宣言したキーを差し替え、宣言から外したキーは[所有の規則](#配置済みの設定の所有)で消す。
+  生成器が書かないキー（`model` / `request` など）と、宣言も組み込みでもないエージェントは残す
 - 隔離起動（`ocs`）にも同じ定義が出る。通常版の `opencode.json` からは引き継がず、
   `common.toml` から作る（[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
+
+### 配置済みの設定の所有
+
+`opencode.json` は OpenCode 自身や利用者も書くので、生成器は自分の持ち物だけを置き換え、
+宣言から外したものは持ち物の範囲で消す（所有の規則。状態ファイルは持たない）。
+比べた方式と実測は [CHG-0018](../change/0018-opencode-policy-role-split.md) と
+[調査記録](../research/opencode/agent-config-ownership.md)。
+
+| 対象 | 生成器の持ち物 | 残すもの |
+| --- | --- | --- |
+| `permissions` | 全体（毎回置き換える） | — |
+| `experimental.policies` | action が `permission` / `provider.use` の statement（毎回置き換え、末尾に書く） | ほかの action の statement と `experimental` のほかのキー |
+| `agents.<id>`（V2） | 管理する ID の `description` / `mode` / `system` / `permissions` / `steps` / `hidden` / `color` / `disabled` | 生成器が書かないキー（`model` / `request` など）、管理しない ID |
+| `agent.<id>`（V1） | 管理する ID の `description` / `mode` / `permission` / `prompt` / `color` / `hidden` / `disable` / `maxSteps` / `steps` / `tools` | 同上 |
+
+- **管理する ID** は、`[opencode.agent]`（V1）と `[opencode.agents]`（V2）で宣言した ID と、
+  既知の組み込み（`build` / `plan` / `general` / `explore` / `compaction` / `title` / `summary`。
+  `generate.py` の `OPENCODE_BUILTIN_AGENTS`）。管理する ID では、持ち物のキーのうち今回
+  宣言していないものを消す。宣言していない組み込みは、持ち物のキーを全部消す
+- **宣言と逆の形式のエントリは消す。** V1 で宣言した ID の `agents.<id>`、V2 で宣言した ID の
+  `agent.<id>`。同じ ID が両方にあると V2 が丸ごと勝ち、V1 の定義が黙って捨てられるため。
+  中身が持ち物のキーだけ（V2 は割り当てを外した階層のモデルも含む）なら消し、それ以外の
+  キーが残っていれば**消さずに `apply` を止め**、どのキーをどこへ移すかをエラーに出す
+  （`model` は `[opencode.model.agents]` か、宣言した形式の側の `opencode.json` へ）
+- **`experimental.policies` は `[opencode.model]` の有無に関係なく整える。** 書くものが
+  無ければ持ち物の statement を消すだけで、`experimental` を新たに作らない
+- **宣言から丸ごと消した自作の ID は撤去しない**（管理する ID から外れる）。消すときは
+  `opencode.json` からも手で消す。割り当てた階層のモデルだけは[今までどおり](#生成されるもの)外れる
+- `[opencode.model.agents]` には、`[opencode.agents]` で宣言した ID と組み込みだけを書ける。
+  ほかの ID は `apply` を止める（モデルだけの定義は基底の全部許可で動くエージェントになる）
+- `[opencode.agent]`（V1）に書けるキーは上の V1 の持ち物と `bypass` だけで、ほかは `apply` を止める
+- **代償**: 管理する ID に手で書いた持ち物のキー（例: `plan.color`）と、手で書いた
+  `permission` の policy は消える。要るなら `common.toml` に書く
+- 試験は `test_generate_opencode_ownership.py`（手書きの設定・逆の形式・冪等・宣言を変えて
+  戻したときに元の JSON に戻ること）
 
 ### コミットの確認
 

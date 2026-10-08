@@ -1858,11 +1858,32 @@ def merge_opencode_plugins(existing_plugins: Any, common: dict[str, Any]) -> lis
     return out
 
 
+# OpenCode の組み込みエージェント。宣言していなくても所有の規則で管理する ID に含める。
+# see docs/spec/agent-config-generation.md#配置済みの設定の所有
+OPENCODE_BUILTIN_AGENTS = ("build", "plan", "general", "explore", "compaction", "title", "summary")
+
+# [opencode.agent.<id>] (V1) から opencode.json へ書けるキー。所有の規則で生成器の持ち物になる。
+OPENCODE_V1_AGENT_OWNED_KEYS = frozenset(
+    {
+        "description",
+        "mode",
+        "permission",
+        "prompt",
+        "color",
+        "hidden",
+        "disable",
+        "maxSteps",
+        "steps",
+        "tools",
+    }
+)
+
+
 def merge_opencode_agents(existing_agent: Any, common: dict[str, Any]) -> dict[str, Any]:
     """``agent`` を更新する (common.toml に無いエージェントは残す)。
 
     OpenCode 側が ``/agents`` などで同じファイルへ書くため、宣言した名前だけを
-    差し替える (``mcp`` と同じ方針)。
+    差し替える (``mcp`` と同じ方針)。宣言から外したキーの撤去は ``own_opencode_agents``。
 
     ``permission`` に ``"allow"`` のような文字列を置くと、OpenCode が
     ``{action:"*", resource:"*", effect:"allow"}`` へ展開する (実測)。
@@ -1874,6 +1895,9 @@ def merge_opencode_agents(existing_agent: Any, common: dict[str, Any]) -> dict[s
                 f"[opencode.agent.{name}] に restate_global_deny は書けない"
                 " ([opencode.agents] で書く)"
             )
+        _reject_unknown(
+            f"opencode.agent.{name}", set(agent), OPENCODE_V1_AGENT_OWNED_KEYS | {"bypass"}
+        )
         entry = dict(out.get(name) or {})
         # bypass は生成側の印。OpenCode の設定には出さない
         entry.update({k: v for k, v in agent.items() if k != "bypass"})
@@ -1916,11 +1940,21 @@ def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
         # see docs/research/opencode/agent-models.md 記録 E2
         raise SystemExit(f"opencode.model の default に #variant は付けられない: {default}")
     assigned = {str(a): ref(str(t)) for a, t in (cfg.get("agents") or {}).items()}
+    opencode = common.get("opencode", {})
     # V1 の agent と V2 の agents に同じ ID を書いたときの結合順は未確認
-    both = sorted(set(assigned) & set(common.get("opencode", {}).get("agent") or {}))
+    both = sorted(set(assigned) & set(opencode.get("agent") or {}))
     if both:
         raise SystemExit(
             "opencode.model.agents に [opencode.agent] のエージェントは書けない: " + ", ".join(both)
+        )
+    known = set(opencode.get("agents") or {}) | set(OPENCODE_BUILTIN_AGENTS)
+    undeclared = sorted(set(assigned) - known)
+    if undeclared:
+        # see docs/spec/agent-config-generation.md#配置済みの設定の所有
+        raise SystemExit(
+            "opencode.model.agents に、[opencode.agents] で宣言していない組み込み以外の"
+            " エージェントは書けない (モデルだけの定義は基底の全部許可で動く): "
+            + ", ".join(undeclared)
         )
     return {
         "provider": provider,
@@ -1951,6 +1985,10 @@ OPENCODE_AGENT_KEYS = frozenset(
     }
 )
 OPENCODE_PERMISSION_EFFECTS = frozenset({"allow", "ask", "deny"})
+# 生成時だけのキー (opencode.json に出さない)
+OPENCODE_AGENT_BUILD_KEYS = frozenset({"system_from", "bypass", "restate_global_deny"})
+# [opencode.agents.<id>] (V2) から opencode.json へ書けるキー。所有の規則で生成器の持ち物になる。
+OPENCODE_AGENT_OWNED_KEYS = OPENCODE_AGENT_KEYS - OPENCODE_AGENT_BUILD_KEYS
 # restate_global_deny に書ける action (全体の permissions が deny を持つもの)
 OPENCODE_RESTATE_ACTIONS = frozenset({"read", "edit", "shell", "subagent"})
 
@@ -2053,6 +2091,7 @@ def merge_opencode_v2_agents(
     """V2 の ``agents`` に、宣言したエージェントの定義を書く。
 
     宣言したキーだけを差し替え、他のエージェント・キー (``model`` など) は残す。
+    宣言から外したキーの撤去は ``own_opencode_agents``。
     """
     out = {
         name: dict(entry)
@@ -2062,6 +2101,100 @@ def merge_opencode_v2_agents(
     for name, agent in opencode_v2_agents(common, global_rules).items():
         out[name] = {**out.get(name, {}), **agent}
     return out
+
+
+def own_opencode_agents(
+    existing_agent: Any, existing_agents: Any, common: dict[str, Any], models: dict[str, Any] | None
+) -> tuple[Any, Any]:
+    """配置済みの ``agent`` (V1) / ``agents`` (V2) から、生成器の持ち物の古い値を消す。
+
+    管理する ID (V1 / V2 の宣言と組み込み) では、生成器が書けるキーのうち今回宣言して
+    いないものを消し、宣言と逆の形式のエントリを消す。逆の形式に生成器が書かないキーが
+    残っていたら、黙って消さずに生成を止める。``merge_opencode_agents`` /
+    ``merge_opencode_v2_agents`` の前に通す。
+    see docs/spec/agent-config-generation.md#配置済みの設定の所有
+    """
+    opencode = common.get("opencode", {})
+    declared_v1 = {
+        str(name): set(agent) - OPENCODE_AGENT_BUILD_KEYS
+        for name, agent in (opencode.get("agent") or {}).items()
+    }
+    declared_v2 = {name: set(entry) for name, entry in opencode_v2_agents(common).items()}
+    managed = set(declared_v1) | set(declared_v2) | set(OPENCODE_BUILTIN_AGENTS)
+    agent = _prune_owned_agents(
+        existing_agent,
+        managed=managed,
+        declared=declared_v1,
+        reverse=declared_v2,
+        owned=OPENCODE_V1_AGENT_OWNED_KEYS,
+        tier_models=set(),
+        v2=False,
+    )
+    agents = _prune_owned_agents(
+        existing_agents,
+        managed=managed,
+        declared=declared_v2,
+        reverse=declared_v1,
+        owned=OPENCODE_AGENT_OWNED_KEYS,
+        tier_models=models["managed"] if models else set(),
+        v2=True,
+    )
+    return agent, agents
+
+
+def _prune_owned_agents(
+    source: Any,
+    *,
+    managed: set[str],
+    declared: dict[str, set[str]],
+    reverse: dict[str, set[str]],
+    owned: frozenset[str],
+    tier_models: set[str],
+    v2: bool,
+) -> Any:
+    """``own_opencode_agents`` の片方の形式 (``v2`` が真なら ``agents``、偽なら ``agent``)。"""
+    if not isinstance(source, dict):
+        return source
+    out: dict[str, Any] = {}
+    for name, entry in source.items():
+        if name not in managed or not isinstance(entry, dict):
+            out[name] = entry
+            continue
+        if name in reverse:
+            # 割り当てを外した階層のモデルは、merge_opencode_agent_models と同じく生成器の持ち物
+            stray = sorted(
+                k
+                for k in entry
+                if k not in owned and not (k == "model" and entry[k] in tier_models)
+            )
+            if stray:
+                raise ValueError(_reverse_form_message(name, stray, v2=v2))
+            continue
+        kept = {k: v for k, v in entry.items() if k not in owned or k in declared.get(name, ())}
+        if kept or not entry:
+            out[name] = kept
+    return out
+
+
+def _reverse_form_message(name: str, keys: list[str], *, v2: bool) -> str:
+    found = ", ".join(keys)
+    if v2:
+        return (
+            f"opencode.json の agents.{name} (V2) に生成器が書かないキーがある: {found}。"
+            f"{name} は [opencode.agent.{name}] (V1) で宣言しているので、V2 の agents.{name} が"
+            "あると V1 の定義が丸ごと捨てられる。キーを opencode.json の"
+            f" agent.{name} へ移すか (#variant 付きの model は V1 では効かない)、エージェントを"
+            " [opencode.agents] へ移して model を [opencode.model.agents] で割り当ててから、"
+            f"agents.{name} を消す。see docs/spec/agent-config-generation.md#配置済みの設定の所有"
+        )
+    return (
+        f"opencode.json の agent.{name} (V1) に生成器が書かないキーがある: {found}。"
+        f"{name} は [opencode.agents.{name}] (V2) で宣言しているので、V1 の agent.{name} は"
+        "丸ごと捨てられている。model は [opencode.model.agents] で割り当てるか"
+        f" opencode.json の agents.{name}.model へ、ほかのキーは opencode.json の"
+        f" agents.{name} へ移してから、agent.{name} を消す。"
+        "see docs/spec/agent-config-generation.md#配置済みの設定の所有"
+    )
 
 
 # [opencode.commands.<name>] に書けるキー。model は PC ごとに変わるので受けない。
@@ -2142,24 +2275,45 @@ def merge_opencode_providers(
     return out
 
 
-def merge_opencode_provider_policies(existing: Any, models: dict[str, Any]) -> dict[str, Any]:
-    """``experimental.policies`` で、この PC のプロバイダ以外を使えなくする。
+# experimental.policies のうち生成器が持つ statement の action (毎回置き換える)。
+# see docs/spec/agent-config-generation.md#配置済みの設定の所有
+OPENCODE_OWNED_POLICY_ACTIONS = frozenset({"permission", "provider.use"})
+
+
+def opencode_provider_policies(models: dict[str, Any]) -> list[dict[str, str]]:
+    """この PC のプロバイダ以外を使えなくする ``experimental.policies`` の statement。
 
     policies はグローバル設定がプロジェクト設定に勝つので、リポジトリ側から
-    別のプロバイダを有効にされない。``provider.use`` の文だけを差し替え、
-    ほかの文と ``experimental`` のほかのキーは残す。後勝ちなので末尾に置く。
+    別のプロバイダを有効にされない。後勝ちなので allow を最後に置く。
     """
-    out = dict(existing) if isinstance(existing, dict) else {}
-    kept = [
-        s
-        for s in (out.get("policies") or [])
-        if not (isinstance(s, dict) and s.get("action") == "provider.use")
-    ]
-    out["policies"] = [
-        *kept,
+    return [
         {"action": "provider.use", "resource": "*", "effect": "deny"},
         {"action": "provider.use", "resource": models["provider"], "effect": "allow"},
     ]
+
+
+def merge_opencode_experimental(existing: Any, statements: list[dict[str, str]]) -> Any:
+    """``experimental.policies`` の生成器が持つ statement を ``statements`` に置き換える。
+
+    ほかの action の statement と ``experimental`` のほかのキーは残し、生成した
+    statement は末尾に置く。書くものが無ければ、生成器が持つ statement を消すだけで
+    ``experimental`` を新たに作らない。戻り値が None なら ``experimental`` を消す。
+    """
+    if not isinstance(existing, dict):
+        return {"policies": list(statements)} if statements else existing
+    out = dict(existing)
+    policies = out.get("policies") or []
+    kept = [
+        s
+        for s in policies
+        if not (isinstance(s, dict) and s.get("action") in OPENCODE_OWNED_POLICY_ACTIONS)
+    ]
+    if kept or statements:
+        out["policies"] = [*kept, *statements]
+    elif len(kept) != len(policies):
+        del out["policies"]
+        if not out:
+            return None
     return out
 
 
@@ -2291,6 +2445,8 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
     ``permissions`` は毎回置き換える。対話で「常に許可」した内容は
     project scope の saved approval として別に保存され、このファイルには
     入らないので、置き換えても手元の承認は失われない。
+    ``agent`` / ``agents`` / ``experimental.policies`` は所有の規則で古い値を消す。
+    see docs/spec/agent-config-generation.md#配置済みの設定の所有
     """
     out: dict[str, Any] = {"$schema": OPENCODE_SCHEMA}
     out.update(existing)
@@ -2312,11 +2468,17 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
     plugins = merge_opencode_plugins(existing.get("plugins"), common)
     if plugins:
         out["plugins"] = plugins
-    agent = merge_opencode_agents(existing.get("agent"), common)
+    models = opencode_models(common)
+    existing_agent, existing_agents = own_opencode_agents(
+        existing.get("agent"), existing.get("agents"), common, models
+    )
+    agent = merge_opencode_agents(existing_agent, common)
     if agent:
         out["agent"] = agent
-    agents = merge_opencode_v2_agents(existing.get("agents"), common)
-    models = opencode_models(common)
+    elif existing_agent != existing.get("agent"):
+        out.pop("agent", None)
+    agents = merge_opencode_v2_agents(existing_agents, common)
+    statements: list[dict[str, str]] = []
     if models:
         out["model"] = models["model"]
         agents = merge_opencode_agent_models(agents, models)
@@ -2325,7 +2487,12 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
             out["providers"] = providers
         else:
             out.pop("providers", None)
-        out["experimental"] = merge_opencode_provider_policies(existing.get("experimental"), models)
+        statements = opencode_provider_policies(models)
+    experimental = merge_opencode_experimental(existing.get("experimental"), statements)
+    if experimental is None:
+        out.pop("experimental", None)
+    else:
+        out["experimental"] = experimental
     if agents:
         out["agents"] = agents
     else:
