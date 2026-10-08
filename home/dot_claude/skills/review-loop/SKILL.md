@@ -15,7 +15,7 @@ allowed-tools: Read, Edit, Write, Bash, Grep, Glob, Task
 
 > **この skill は fork しない（`context: fork` を付けない）**
 >
-> この skill 自身がサブエージェント (`code-review`) を起動するため、
+> この skill 自身がレビュー役のサブエージェントを起動するため、
 > fork するとサブエージェントの入れ子になる。Claude Code は v2.1.172 より前で
 > 入れ子を禁止しており、それ以降も既定は無効なので、レビュー役の起動が黙って
 > 失敗して自作自演レビューに退化する。メインの会話で走らせること。
@@ -25,8 +25,22 @@ allowed-tools: Read, Edit, Write, Bash, Grep, Glob, Task
 | 状況 | 代わりに使うもの |
 | --- | --- |
 | linter の機械的な指摘を直したいだけ | `fix` skill |
-| 指摘一覧が欲しいだけ（修正は不要） | `code-review` サブエージェント単体 |
-| 脆弱性を探したい | `security-review` サブエージェント |
+| 指摘一覧が欲しいだけ（修正は不要） | レビュー役のサブエージェント単体 |
+| 脆弱性を探したい | Copilot CLI は `security-review` サブエージェント、Claude Code は `/security-review` コマンド、OpenCode は `review` に観点を指定して渡す |
+
+## レビュー役のサブエージェント
+
+CLI によって使える子が違う。
+
+| CLI | レビュー役 | 差分の取り方 |
+| --- | --- | --- |
+| Copilot CLI | `code-review`（組み込み） | レビュー役に `git diff` などを実行させてよい |
+| Claude Code | 組み込みに無い。`code-review` を定義していればそれを、無ければ `general-purpose` に「編集せず指摘だけを返す」と指示して使う | 同上 |
+| OpenCode | `review` | `review` は shell を使えない（読むだけ）。差分・未追跡ファイルの一覧は親が実行し、出力を依頼文に貼る |
+
+OpenCode に `code-review` / `security-review` は無い。作業先のリポジトリが同じ名前の子を
+定義していても、`bypass` からは起動できない（起動できる子は許可リストで決まっている）。
+テスト / lint の実行（手順 3-4）は、どの CLI でも本エージェントが行う。
 
 ## 手順
 
@@ -96,7 +110,7 @@ mkdir -p "./.tmp/review-loop/${RUN_ID}"
 
 #### 3-1. レビュー（サブエージェント）
 
-`code-review` サブエージェントを起動する。**前ラウンドの指摘を必ず渡す**。
+レビュー役のサブエージェント（「レビュー役のサブエージェント」の表）を起動する。**前ラウンドの指摘を必ず渡す**。
 渡さないと、直したはずの指摘が再掲されて「収束していない」と誤判定する。
 
 プロンプトに含めるもの:
