@@ -147,10 +147,9 @@ question を拒否）は変えない。
   - 段 8 で、3 つの子と read / grep / glob、shell 由来が確認に残ることを実機で確かめた。
     子の再開・fork、対話の画面（TUI）、実際に起動した `ocs` は未確認。**再開条件**:
     これらの場面で確認が出たとき
-- 共有の skill `review-loop` は、OpenCode に無い子（`code-review` / `security-review`）を
-  名指ししている（既存の不整合）。段 3 の後はリポジトリがその名前の子を持っていても
-  `bypass` からは呼べない。OpenCode では `review` を使い、差分の取得とコマンドでの検証は
-  親が担う旨を skill に書くか決める
+- 共有の skill `review-loop` が OpenCode に無い子（`code-review` / `security-review`）を名指し
+  していた件は、2026-10-08 に CLI ごとのレビュー役の表を skill に足して直した。OpenCode では
+  `review` を使い、差分の取得とコマンドでの検証は親が担う
 
 ## 次の調査・実験
 
@@ -387,3 +386,6 @@ flowchart LR
   から導出せず `[opencode.bypass_children]` に明示した。決定は ADR-0015 に記録した
 - 2026-10-08: 段 7 を apply し、段 8 の再検証を終えた。実施計画の段はすべて完了した。残りは
   「未解決点」の項目
+- 2026-10-08: 根本解決を別系統のモデルに相談し、構造の変更（共通の禁止を policy へ、役割ごとの
+  権限をエージェント別へ）は [CHG-0018](0018-opencode-policy-role-split.md) で扱うことにした。
+  この案件は今の設計の修理として続ける。`review-loop` の子の名指しを直した
