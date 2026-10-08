@@ -6,7 +6,7 @@
 > 隔離環境（`XDG_CONFIG_HOME` / `XDG_DATA_HOME` を差し替え + `--standalone`）
 > での実測。
 >
-> **本記録は [CHG-0002](../../change/0002-opencode-ask-by-default.md) の
+> **本記録は [CHG-0002](../../change/closed/0002-opencode-ask-by-default.md) の
 > 「現在地」節に書かれていた実測を、2026-09-21 に調査記録へ移設したもの。**
 > 観測日は移設日と同じ。内容は変更していない。
 >

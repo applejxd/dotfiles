@@ -362,7 +362,7 @@ guide 規則は effect が allow でも走るので、allow を保ったまま�
 
 | 規則 | 止める例 | 止めない例 |
 | --- | --- | --- |
-| リダイレクト（[CHG-0002 段階 4a](../change/0002-opencode-ask-by-default.md)） | `git log > ~/.bashrc`、`wc f 2>&1 > f` | `git log 2>&1 \| head`、`wc -l a 2>/dev/null` |
+| リダイレクト（[CHG-0002 段階 4a](../change/closed/0002-opencode-ask-by-default.md)） | `git log > ~/.bashrc`、`wc f 2>&1 > f` | `git log 2>&1 \| head`、`wc -l a 2>/dev/null` |
 | `git log --output`（[CHG-0017 段 5](../change/0017-builtin-agent-restrictions.md)） | `git log -1 --output=f`、`git log --output f`、`git log -p --output=f`、`ls && git log --output=f`（`;` `\|\|` `\|` `(` も） | `git log -1 --oneline`、`git log --stat`、`git log --output-indicator-new=+`、`git commit -m 'git log --output=x'`、`echo --output` |
 
 - **allow を足すときは、リダイレクトだけでなく引数でファイルへ書けるオプションも点検する。**

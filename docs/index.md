@@ -120,7 +120,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 - 2026-09-25 — 圧縮要約そのものを checkpoint にした
   — [CHG-0001](change/closed/0001-compaction-context-handover.md)
 - 2026-09-21 — OpenCode V2 の permission / MCP を `common.toml` から生成
-  — [CHG-0002](change/0002-opencode-ask-by-default.md)
+  — [CHG-0002](change/closed/0002-opencode-ask-by-default.md)
 - 2026-09-20 — Copilot でも圧縮直後に checkpoint を自動注入
   — [記録 E7](research/agents/compaction-hooks.md)
 - 2026-09-19 — `adr` スキルを `checkpoint` へ統合（役割の重複を解消）

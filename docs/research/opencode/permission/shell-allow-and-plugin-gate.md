@@ -13,7 +13,7 @@
 > 実履歴の集計は `~/.local/share/opencode/opencode.db` の複製から。
 > 挙動の実測は隔離環境（`XDG_CONFIG_HOME` / `XDG_DATA_HOME` を差し替え +
 > `--standalone`）で行った。実環境の `~/.config/opencode/` は無傷。
-> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の P1-3 を潰すための調査。
+> [CHG-0002](../../../change/closed/0002-opencode-ask-by-default.md) の P1-3 を潰すための調査。
 >
 > **訂正 (2026-09-21)**: 隔離手段の記述は誤り。OpenCode は config dir の
 > 決定に `XDG_CONFIG_HOME` を使わない（`OPENCODE_CONFIG_DIR` が正しい）。

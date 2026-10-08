@@ -1,6 +1,6 @@
 # CHG-0020: OpenCode のハーネスを pi へ移す
 
-- **状態**: Planned
+- **状態**: In progress
 - **更新日**: 2026-10-09
 - **基準**: pi 1.1.0、OpenCode v2.0.22、コミット d5f012c、WSL2 (Ubuntu)
 
@@ -36,8 +36,8 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | 2 | **ハーネス拡張**。試作（`scripts/pi-harness-spike/`）を本番の形にする: ツールは組み込みに無い名前、`execute()` で再判定、確認は 1 件ずつ、伏字化は `content`・`structuredContent`・`details`、圧縮のファイルの一覧の補い、子エージェント、MCP はハーネスから登録 | 未着手 |
 | 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 未着手 |
 | 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 未着手 |
-| 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows | 未着手 |
-| 6 | **切り替えと撤去**。普段使いを pi にし、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs を撤去する。CHG-0002 / 0005 / 0017 の扱いを決める | 未着手 |
+| 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 未着手 |
+| 6 | **切り替えと撤去**。普段使いを pi にし、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs を撤去する。CHG-0017 を閉じ、保留中の CHG-0005（命名の整理）を再開できる状態にする | 未着手 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -46,7 +46,8 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 ## 現在地
 
-起票した段階。実装には入っていない。
+段 1 の前の棚卸しを終えた（2026-10-09）。判定器を Claude Code / Copilot CLI と共有する案を立てた
+（「判定 API の入力（案）」）。実装には入っていない。
 
 ### 引き継ぐ前提（CHG-0019 の試作で確かめたこと）
 
@@ -77,11 +78,98 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
   読み取り役（`explore`・`plan`・`review`・`commit` 相当）、なし
 - 配置先の設定の所有の規則（生成器の持ち物の範囲を決め、古い値を消す）は、pi の設定の生成にも当てる
 
+### 段 1 の前の棚卸し（2026-10-09）
+
+`home/dot_config/agents/common.toml.tmpl`（d5f012c）のうち、OpenCode のハーネスが使っている節を
+pi でどう扱うかを分けた。件数は描画前のテンプレートを読んだもの。
+
+#### CLI 共通の節
+
+Claude Code / Copilot CLI と共有している節。pi でも入力にする。
+
+| 節 | 中身 | pi での扱い |
+| --- | --- | --- |
+| `[bash] deny`（85）・`ask`（23） | コマンドの先頭一致の禁止と確認 | **共通の禁止**と、実装役の確認。`command_policy.py` の正規化（`cd &&`・`git -C`・連結の分割）をそのまま使う |
+| `[bash] allow`（14） | Claude の自動承認 | **使わない**。pi は未掲載が確認になるので、allow は無確認の実行を意味する。`git diff` / `git status` は `.git/config` から任意コマンドを起動できるので、今の OpenCode と同じく別の狭い一覧にする |
+| `[bash] ask_hook_owned`（1: `rm`） | hook が承認要否を決める ask | 判定器の `rm` の免除（作業ツリーの中と確証できる削除）をそのまま使える。OpenCode のように素の ask に戻す必要が無い |
+| `[bash.deny_guide]`（user_only 63・elsewhere 2・alternative 6） | deny の理由と代替の説明 | 判定の理由として返す。今は OpenCode 専用だが、中身は CLI に依存しない |
+| `[file] read_deny_globs`（48）・`write_deny_globs`（41）・`deny_exceptions`（1） | 秘密のパスの読み書きの禁止と例外 | **共通の禁止**。`matches_read_deny` が例外まで扱える。`**` を OpenCode の記法へ変換する処理は要らない |
+| `[file] read_ask_globs`（0）・`write_ask_globs`（1） | パスの確認 | 実装役の確認 |
+| `[agent_env]` | git の入力待ちを防ぐ環境変数 | bash の起動前に入れる（試作の bash の `spawnHook` か環境の付け足し） |
+| `[[mcp]]`（1） | MCP サーバ | ハーネスから `registerMcpServer` で登録する（CHG-0019 E3） |
+| `[provider.*]` | モデルの通信先 | 境界の通信の許可 |
+| `[[hooks]]`（5） | Claude / Copilot の hook | `format-file.sh` / `markdownlint.sh` は edit / write の後に呼ぶ（段 5）。`redirect-tmp.py` は中身を見て決める。`check_bash.py` / `check_file_read.py` は判定器そのものなので呼ばない |
+
+#### 判定器の意味解析
+
+`home/dot_claude/hooks/lib/bashrules/`。Claude / Copilot の hook だけが使っている。
+
+- deny 側 27 項目（うち 2 つは設定の読み込みの確認と `[bash] deny` の照合。残る 25 が意味解析で、
+  `check_rm_root_guard`・`check_pipe_to_shell`・`check_secret_env_echo`・`check_guard_tampering` など）、
+  ask 側 6 項目（うち 1 つは `[bash] ask` の照合。残る 5 が `check_gh_api_mutation`・`check_curl_wget_mutation` など）
+- **OpenCode には届いていなかった。** plugin が JavaScript で、Python の判定器を呼べないため、
+  `[[opencode.shell.guide]]` の正規表現で一部を真似ていた（`pip` の誘導、`rm` の危険な形など）。
+  pi のハーネスは判定器を子プロセスで呼べるので、これらが全部効くようになる
+
+#### OpenCode 専用の節
+
+| 節 | pi での扱い |
+| --- | --- |
+| `[opencode.shell] allow`（5） | 実装役の無確認の一覧へ移す |
+| `[[opencode.shell.guide]]`（13） | 1 件ずつ見直す。判定器の意味解析と重なるもの（`pip`・`rm` の危険な形・`find -delete`）は捨てる。ツールへの誘導（`cat` / `head` / `tail` / `sed -n` → read、ヒアドキュメント → write）と、allow したコマンドの書き込み形の歯止めは残す。`cd` の誘導は pi の bash に `workdir` 引数が無いので文面を変えるか捨てる |
+| `[opencode.redact]`（規則 9） | そのまま使う。伏せる先に `structuredContent` と `details` を足す（CHG-0019 E3） |
+| `[opencode.external_read]`（3） | 実装役・読み取り役の作業ツリーの外の読み取りの許可 |
+| `[opencode.skill_scripts]`（3） | 実装役の無確認の一覧。リダイレクトの禁止もそのまま |
+| `[opencode.agent]` / `[opencode.agents]`（8）と `[opencode.bypass_children]` | 役割（ロール）の宣言へ移す。4 つの一覧のうち「bypass の子の外部読み取りだけ確認を省く」は、子が同じハーネスで判定するので要らなくなる見込み |
+| `[opencode.model.*]` | 階層をそのまま使い、役割に割り当てる（「未解決点」のモデルの階層） |
+| `[opencode.commands.fleet]` | 段 5 |
+| `[opencode.sandbox]` と `.permissions` / `.policies` | 段 4 の境界。境界の中の既定（shell の確認を外す）は、判定器へ「境界の中」を渡して分ける |
+| `[opencode.keybinds]`・`ask_description`・`formatter`・`service`・`auto_update`・`websearch` | 段 5 か不要（`service` は常駐サービスが無いので不要） |
+
+#### pi では要らなくなる処理
+
+glob の `**` の変換、後勝ちの並べ替え、`restate_global_deny`、deny の例外と
+ask の交差（`wildcard_intersection`）、`guarded_subagents` / `bypass_child_agents` の照会、`grep` / `glob` の
+結果フィルタ（ツールをハーネスが持つので判定の前に止められる）。
+
+### 判定 API の入力（案）
+
+**判定器は Claude Code / Copilot CLI と共有する（案）。** 共有するのは判定の中身
+（`command_policy.py` と `bashrules`）で、Claude / Copilot の hook の出力は変えない。
+
+- 新しい入口 `decide(request) -> response` を足す。pi のハーネスはこれを呼ぶ。`check_bash.py` は当面
+  そのままにし、載せ替えるなら別の案件にする（「目的と非目的」の非目的）
+- 応答に**どこで決まったか**（`source`: 規則・意味解析・既定）を入れる。Claude / Copilot は「既定」なら
+  何も返さない（今の契約）。pi は役割の既定（実装役なら ask）を使う。これで CHG-0019 のレビューの
+  BLOCKER 3（空の出力を allow と読む誤り）を構造で防ぐ
+- 異常（入力の不備・タイムアウト・例外）は deny を返す。ハーネスは、形の正しい応答以外を deny と読む
+
+```text
+request:  { tool, input, cwd, role, bypass, boundary }
+response: { decision: allow | ask | deny, reason, source: rule | check | default, guide? }
+```
+
+評価順はコードに固定する（設定の並びに意味を持たせない）。
+
+1. **共通の禁止**: `[bash] deny`・意味解析の deny・`[file]` の deny（例外を含む）。どの役割・bypass・境界でも外れない
+2. **役割のツール**: 役割に無いツールは deny（読み取り役の bash・edit など）
+3. **役割の確認と許可**: `[bash] ask`・意味解析の ask・`[file]` の ask・作業ツリーの外の edit・誘導（deny と案内）。
+   無確認の一覧（`[opencode.shell] allow` と skill のスクリプトの後継）に当たれば allow
+4. **既定**: 実装役は ask、読み取り役は deny
+5. **bypass**: 3・4 の ask だけを allow にする（今の ADR-0014 と同じ）
+6. **境界の中**: 今の `drop_shell` に当たる確認だけを外す
+
+`common.toml` には `[pi]` の節を足し、役割（プロファイル）・無確認の一覧・誘導・伏字化・外部の読み取り・
+skill のスクリプト・境界を置く。`[opencode.*]` から移すものは、段 6 で OpenCode を撤去するまで
+両方に置く（同じ値を 2 か所に書く期間ができる。生成器で片方から作れるなら作る）。
+
 ## 未解決点
 
-- **Claude Code / Copilot CLI と判定器を共有するか。** `check_bash.py` は「何も返さない＝Claude に任せる」
-  という契約で、そのままでは使えない（CHG-0019 の「Python の判定器の共有について」）。段 1 で、
-  共通の判定 API を作って hook をその上に載せ替えるか、pi 専用にするかを決める
+- **判定器を Claude Code / Copilot CLI と共有するか。** 案は「共有する。hook の出力は変えない」
+  （「判定 API の入力（案）」）。利用者の確認待ち
+- **`[pi]` と `[opencode.*]` に同じ値を置く期間の扱い。** 段 6 までは OpenCode も普段使いなので、
+  無確認の一覧・誘導・伏字化を両方に置くことになる。生成器でどちらかから作るか、片方を正本にするか
+- **`[[opencode.shell.guide]]` の 13 件の仕分け。** 「OpenCode 専用の節」の表の方針で、1 件ずつ決める
 - **Windows。** pi は Windows に対応しているが、ハーネス・判定器・境界を Windows で動かすかは未定
   （今の `ocs` も Ubuntu / WSL のみ）
 - **Orca。** Orca が起動する pi に、起動の入口（`-nbt -ne -e`）をどう渡すか
@@ -96,8 +184,8 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 ## 次の調査・実験
 
-- 段 1 の前に、今の `common.toml` の `[opencode.*]` と `[bash]` / `[file]` を棚卸しし、判定 API の入力
-  （規則の形）を決める
+- 判定器の共有の案が通ったら、段 1 で `decide()` を作り、今の `check_bash.py` と同じ入力で同じ deny / ask を
+  返すことを試験で固定する（Claude / Copilot の挙動を変えていないことの証拠）
 - 試作のスクリプト（`run.sh`・`paths-run.sh`・`child-run.sh`・`fence-run.sh`）を、段 2 で `test/` の
   回帰試験へ移す方法を決める（pi が無い環境では skip する）
 
@@ -128,6 +216,11 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 ## 重要な更新
 
+- **2026-10-09**: 第一サポートが決まったので、保留中の案件を整理した。CHG-0002 は段階 0〜3 の採用で閉じ、
+  段階 5 の `verify` ツールを段 5 へ移した。CHG-0005 の再開条件を「段 6 で OpenCode の節を撤去したあと」にした
+- **2026-10-09**: 段 1 の前の棚卸しをした。判定器の意味解析（deny 25 種・ask 5 種）は OpenCode に
+  届いておらず、pi では子プロセスで呼べるので全部効くと分かった。判定器を Claude / Copilot と共有し、
+  応答に「どこで決まったか」を入れる案を立てた
 - **2026-10-09**: 起票。CHG-0019 で利用者が移行すると決めた。CHG-0018 は所有の規則（P）までで閉じ、
   プロファイルの設計をこの案件に引き継いだ
 

@@ -110,7 +110,7 @@ pip 26.0.1 from ...  (exit 0)
 - `.git/config` の write deny
 
 つまり bypass 中は「エージェントがホスト権限で何でもできる」。
-[段階 1 の設計](../../../change/0002-opencode-ask-by-default.md)が前提にしている
+[段階 1 の設計](../../../change/closed/0002-opencode-ask-by-default.md)が前提にしている
 防御は 1 つも残らない。
 
 既定エージェントは変えていないので、**明示的に `--agent bypass` を

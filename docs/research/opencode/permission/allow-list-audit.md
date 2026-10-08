@@ -3,7 +3,7 @@
 > **調査日: 2026-09-21**
 > **対象: `opencode v2.0.10` / `git 2.43.0`**
 >
-> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) 段階 1 の allow を
+> [CHG-0002](../../../change/closed/0002-opencode-ask-by-default.md) 段階 1 の allow を
 > 確定させるための監査。`github-copilot/gpt-6-astra` へレビューを依頼し、
 > 指摘を実測で検証した。
 >

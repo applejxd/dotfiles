@@ -3,7 +3,7 @@
 > **調査日: 2026-09-21**
 > **対象: `opencode v2.0.10`**
 >
-> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) 段階 2 の誘導 plugin を
+> [CHG-0002](../../../change/closed/0002-opencode-ask-by-default.md) 段階 2 の誘導 plugin を
 > どこに置くかを決めるための実測。**公式ドキュメントと実装が食い違う。**
 
 ## 0. 結論

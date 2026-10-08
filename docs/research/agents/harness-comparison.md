@@ -1,7 +1,7 @@
 # エージェントハーネス比較（Claude Code / Copilot CLI / Codex CLI）
 
 > **後続の観測**: §10 の見送りの後、2026-09-21 から OpenCode V2 を chezmoi で
-> 配備して使っている（[CHG-0002](../../change/0002-opencode-ask-by-default.md)）。
+> 配備して使っている（[CHG-0002](../../change/closed/0002-opencode-ask-by-default.md)）。
 > §10 #4 の「OS レベル sandbox の対応物なし」は、Ubuntu / WSL では隔離起動 `ocs` で
 > 埋めた（[CHG-0004](../../change/closed/0004-opencode-sandbox.md)）。§10 が挙げる
 > Claude / Copilot の圧縮 hook（`test_compaction_restore_is_wired_on_both_clis`）は

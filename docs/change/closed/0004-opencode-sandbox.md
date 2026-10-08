@@ -4,7 +4,7 @@
 - **更新日**: 2026-09-28（終了結果の整理と時点の注記のみ。記録の内容は終了日のまま）
 - **終了日**: 2026-09-24
 - **基準**: OpenCode V2（`v2.0.12`）/ `@anthropic-ai/sandbox-runtime` v0.0.76
-- **対象 OS**: **Ubuntu / WSL のみ**（macOS と Windows は [CHG-0002](../0002-opencode-ask-by-default.md) の方針を維持）
+- **対象 OS**: **Ubuntu / WSL のみ**（macOS と Windows は [CHG-0002](0002-opencode-ask-by-default.md) の方針を維持）
 
 > **この文書は当時の記録。** 現在の仕様は
 > [opencode-sandbox](../../spec/opencode-sandbox.md)。
@@ -35,7 +35,7 @@
 
 ## 発端
 
-[CHG-0002](../0002-opencode-ask-by-default.md) は「境界は無い」という前提で
+[CHG-0002](0002-opencode-ask-by-default.md) は「境界は無い」という前提で
 plugin に安全網を積んできた。段階 3 まで配備した時点で次が見えた。
 
 | 観測 | 内容 |
@@ -973,7 +973,7 @@ fine-grained PAT、読み取り専用 deploy key、権限を絞った GitHub App
 - 誘導 5 件は境界内でも全て有効だと確定した
 - 段階 3 で読み込んだ `guide-plugin` は、**削らずそのまま使う**
 
-> [CHG-0002](../0002-opencode-ask-by-default.md) の保留分も、この判断に合わせて
+> [CHG-0002](0002-opencode-ask-by-default.md) の保留分も、この判断に合わせて
 > 見直す。「境界ができれば不要になる」としていたものの一部は、
 > **ワークスペース内では不要にならない**。
 
@@ -1336,7 +1336,7 @@ plugins    : ~/.config/opencode/guide-plugin  ← 必要なのはこの 1 つだ
 
 ## 保留にしたもの
 
-[CHG-0002](../0002-opencode-ask-by-default.md) 段階 4 以降のうち、次は**保留**する。
+[CHG-0002](0002-opencode-ask-by-default.md) 段階 4 以降のうち、次は**保留**する。
 境界ができれば不要になるか、作り直しになるため。
 
 | 保留するもの | 理由 |

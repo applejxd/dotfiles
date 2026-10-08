@@ -2,7 +2,7 @@
 
 > **調査日: 2026-09-22 / 対象: `opencode v2.0.12`**
 >
-> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) 段階 2 の
+> [CHG-0002](../../../change/closed/0002-opencode-ask-by-default.md) 段階 2 の
 > 配備後に、実際の効き方を実履歴で測った。「どれだけ確認が減るか」ではなく
 > 「**どれだけ秘密への経路を塞げたか**」が主題。
 

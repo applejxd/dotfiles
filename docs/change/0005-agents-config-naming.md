@@ -1,15 +1,17 @@
 # CHG-0005: `common.toml` の命名を実態に合わせ、固有設定を分離する
 
 - **状態**: Paused
-- **更新日**: 2026-09-28
+- **更新日**: 2026-10-09
 - **基準**: `common.toml.tmpl` 1242 行 / `generate.py` 1736 行。生成先は
   Claude・Copilot・OpenCode の通常起動・OpenCode の隔離起動（`ocs`）の 4 ハーネス
 
 > **2026-09-25 に保留へ移した。** A1（改名）は完了、A3 は消滅、A4 は保留。
 > **残るのは A2（固有設定の native 分離）だけ。**
 >
-> **再開条件**: [CHG-0006](0006-pi-harness-trial.md) が第一サポートを決めたとき。
-> 第一サポートが変われば整理の対象も変わるため、先に動かすと手戻りになる。
+> **再開条件**: [CHG-0020](0020-pi-migration.md)（pi への移行）の段 6 で OpenCode の節を撤去したあと。
+> 2026-10-09 に第一サポートが pi に決まった（[CHG-0019](closed/0019-pi-harness-port-evaluation.md)）。
+> CHG-0020 は `[pi]` の節を足し、段 6 で `[opencode.*]` を撤去するので、その前に A2 を進めると手戻りになる。
+> （当初の再開条件は「[CHG-0006](0006-pi-harness-trial.md) が第一サポートを決めたとき」）
 >
 > **A2 に入る前に決めることが 1 つある**（CHG-0006 と独立に片付けられる）。
 > `[sandbox] claude_write_deny` の 20 件が ADR-0007 の規則 3
@@ -225,6 +227,8 @@ OpenCode が読む」と書いている。A1 で共有の 4 キーから接頭�
 | コメントの嘘 2 件 | `shell_network_allow` に「この設定は Claude 専用」、`write_deny_globs` に「Claude のみ反映」。どちらも OpenCode にも届いており誤り。修正した |
 | 集合の配置誤り | `shell_network_allow` が `CLAUDE_SANDBOX_KEYS` に入っていた。`SHARED_SANDBOX_KEYS` へ移した（検査専用の集合なので挙動は不変） |
 | **ADR-0007 規則 3 違反が 1 件残存** | `[sandbox] claude_write_deny` は「CLI 固有キーに置かれた禁止」。規則 3 が禁じている形。**A2 で扱う** |
+
+- **2026-10-09**: 第一サポートが pi に決まった（CHG-0019）。再開条件を「CHG-0020 の段 6 で OpenCode の節を撤去したあと」に差し替えた
 
 ## 終了結果
 

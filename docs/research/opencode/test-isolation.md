@@ -9,7 +9,7 @@
 
 ## 0. 本書の用途
 
-[CHG-0002](../../change/0002-opencode-ask-by-default.md) 段階 1 の実機試験で、
+[CHG-0002](../../change/closed/0002-opencode-ask-by-default.md) 段階 1 の実機試験で、
 生成した global config が読まれていないことに気付いた。原因を特定し、
 正しい隔離手段と、過去の記録への影響範囲を確定する。
 

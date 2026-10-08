@@ -13,7 +13,7 @@
 >
 > **調査日: 2026-09-20 〜 2026-09-22 / 対象: `opencode v2.0.10` 〜 `v2.0.12`**
 >
-> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の判断は
+> [CHG-0002](../../../change/closed/0002-opencode-ask-by-default.md) の判断は
 > すべてここから出ている。案件側は計画だけを書き、根拠はこの文書と
 > 各調査記録が持つ。
 

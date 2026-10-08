@@ -263,7 +263,7 @@ B の観測は次のとおり。
 上表の `grep` 行だけ乖離が大きい（70 対 39）のは、現行 allow の
 `grep -n` と `find` が効いているため。
 
-このリポジトリは [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の段階 1 で、
+このリポジトリは [CHG-0002](../../../change/closed/0002-opencode-ask-by-default.md) の段階 1 で、
 任意コード実行を含む 7 件（`find` / `gcc` / `g++` / `cmake -S` / `cmake --build` /
 `uv sync` / `mise run`）を allow から落とす予定である。**落とすと `find` が
 ask に変わるため、`grep`/`glob` への移行で減る確認は 39 → 70 件に増える。**

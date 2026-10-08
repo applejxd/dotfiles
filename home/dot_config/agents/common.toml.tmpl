@@ -1155,7 +1155,7 @@ allow = [
 # (scanner は変数代入を落とすため e.resources は使わない)。
 # unless は任意の除外条件。pattern に当たっても unless に当たれば見送る。
 # ★deny にすること。ask では自動実行で素通りする。
-# see docs/change/0002-opencode-ask-by-default.md 「段階 2」
+# see docs/change/closed/0002-opencode-ask-by-default.md 「段階 2」
 [[opencode.shell.guide]]
 pattern = '(^|&&|\|\||;|\n)\s*cd\s'
 message = "cd は使わないでください。shell ツールの workdir 引数でディレクトリを指定できます。"
@@ -1184,7 +1184,7 @@ message = "sed -n でファイルを読まないでください。read ツール
 #   unless で外すとコマンド全体に当たり、`wc f 2>&1 > ~/.bashrc` が素通りする。
 # ★対象は [opencode.shell] allow と揃えること。allow を増やすならここも足し、
 #   引数でファイルへ書けるオプション (git log の --output など) も点検して下のように塞ぐ。
-# see docs/change/0002-opencode-ask-by-default.md 「段階 4a」
+# see docs/change/closed/0002-opencode-ask-by-default.md 「段階 4a」
 # see docs/spec/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形
 [[opencode.shell.guide]]
 pattern = '(^|&&|\|\||;|\n)\s*(wc|grep\s+-n|git\s+log|uv\s+pip\s+list|docker\s+ps)\b[^\n]*>(?!&\s*(\d+|-)(?=$|[\s;|&)])|>?\s*/dev/null(?=$|[\s;|&)]))'
@@ -1217,7 +1217,7 @@ message = "git commit の前にオプションを置かないでください。`
 #   連結 (`git commit -m x && cat > f <<EOF`) は素通りする。伏字化の
 #   deny_path_unless と同じ割り切り。
 # ★実履歴ではヒアドキュメント行にパイプが続く例が 0 件。代替は塞がらない。
-# see docs/change/0002-opencode-ask-by-default.md 「段階 3」
+# see docs/change/closed/0002-opencode-ask-by-default.md 「段階 3」
 [[opencode.shell.guide]]
 pattern = '(^|&&|;|\n)\s*(cat\s*>>?\s*\S+|tee\s+(-a\s+)?\S+)\s*<<'
 unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'

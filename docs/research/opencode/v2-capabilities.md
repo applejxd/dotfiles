@@ -2,7 +2,7 @@
 
 > **後続の観測**: §0・§1 の「見送り」「OS レベル sandbox は必須ではない」は
 > 2026-09-20 時点の判断。2026-09-21 から OpenCode V2 を配備し
-> （[CHG-0002](../../change/0002-opencode-ask-by-default.md)）、Ubuntu / WSL では
+> （[CHG-0002](../../change/closed/0002-opencode-ask-by-default.md)）、Ubuntu / WSL では
 > OS の境界 `ocs` を保護の主役にした
 > （[CHG-0004](../../change/closed/0004-opencode-sandbox.md)）。§9 の「`--auto` に
 > 相当する CLI フラグは無い」に反し、2.0.10 の `opencode run --auto` は動く

@@ -14,7 +14,7 @@
 > **調査日: 2026-09-22**
 > **対象: `opencode v2.0.10` / `bwrap 0.9.0` / Ubuntu 24.04**
 >
-> [CHG-0002](../../../change/0002-opencode-ask-by-default.md) の段階 2 で、
+> [CHG-0002](../../../change/closed/0002-opencode-ask-by-default.md) の段階 2 で、
 > permission 層も出力フィルタも**境界にならない**と分かったため
 > （[出力フィルタと子エージェント](output-filter-and-subagents.md)）、
 > OS レベルの隔離が使えるかを調べた。

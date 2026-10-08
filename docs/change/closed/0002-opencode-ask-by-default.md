@@ -1,14 +1,19 @@
 # CHG-0002: OpenCode の permission を既定 ask にする
 
-- **状態**: Paused
-- **更新日**: 2026-10-07
+> この文書は当時の記録。現在の仕様は [`spec/agent-config-generation.md` の既定は `ask`](../../spec/agent-config-generation.md#既定は-ask) と
+> [plugin 層](../../spec/agent-config-generation.md#plugin-層-guide-plugin)。
+> 残っていた段階 5（`verify` ツール）は [CHG-0020](../0020-pi-migration.md)（pi への移行）の段 5 へ移した。
+
+- **状態**: Done
+- **更新日**: 2026-10-09
+- **終了日**: 2026-10-09
 - **基準**: OpenCode V2（`v2.0.12`）
 
 > **2026-09-25 に保留へ移した。** 段階 0〜3 は完了、4a / 4b は見送り、
 > 6 は「何もしない」で決着した。**残るのは段階 5（`verify` ツール）だけ**で、
 > これは第一サポートの決定待ち。
 >
-> **再開条件**: [CHG-0006](0006-pi-harness-trial.md) が第一サポートを決めたとき
+> **再開条件**: [CHG-0006](../0006-pi-harness-trial.md) が第一サポートを決めたとき
 > （「決めない」と決めた場合も含む）。
 >
 > 段階 3 までは配備済みで、そのまま動いている。**保留は「止まっている」で
@@ -23,7 +28,7 @@
 
 - Claude Code / Copilot CLI の設計変更。対象は OpenCode V2 のみ
 - 確認画面の情報量を増やすこと。それは
-  [CHG-0003](closed/0003-ask-command-description.md) が扱う
+  [CHG-0003](0003-ask-command-description.md) が扱う
 
 **発端**: 従来の設計は「未掲載は LLM classifier に委ねる」前提だったが、
 **OpenCode に classifier は無い**。未掲載が「無条件許可」へ静かに退化し、
@@ -40,26 +45,26 @@
 | **3** | **確認 1 回あたりの負担を下げる** | **完了**（2026-09-22。実地で確認） |
 | **4a** | **少数の静的 allow**（読み取り専用コマンド） | **見送り**（2026-09-24。候補がほぼ全部、任意コード実行の経路だった） |
 | ~~4b~~ | ~~`always`（承認の永続化）~~ | **見送り**（2026-09-24。同じコマンドが 2 回以上出るのは延べ 6.6% で、溜まるものが少ない） |
-| 5 | `verify` ツール（検証コマンド表をツール 1 個に畳み、**確認の回数**を減らす） | **保留**（2026-09-24。OpenCode 固有の投資になり、第一サポートが未定） |
+| 5 | `verify` ツール（検証コマンド表をツール 1 個に畳み、**確認の回数**を減らす） | **移管**（2026-10-09。pi へ移行すると決まり、pi のハーネスのツールとして CHG-0020 の段 5 で扱う） |
 | 6 | 残りへの手当 | **「何もしない」で決着** |
 
 > **2026-09-22 — 段階 4 以降を保留した。**
 > 書き込み保護（write deny の 38 glob）が **shell のリダイレクトに一切効いて
 > いない**ことが判明し、列挙型の規則では権限境界を作れないと結論した。
 > 保護の主役を OS のアクセス制御へ移す
-> [CHG-0004](closed/0004-opencode-sandbox.md) を起票し、そちらの結果を待つ。
+> [CHG-0004](0004-opencode-sandbox.md) を起票し、そちらの結果を待つ。
 > 段階 3 までは配備済みで、そのまま動く。
 
 ### 計画の見直し（2026-09-24）
 
-[CHG-0004](closed/0004-opencode-sandbox.md) が完了し、待っていた前提が
+[CHG-0004](0004-opencode-sandbox.md) が完了し、待っていた前提が
 出揃った。ただし**そのまま再開はしない**。3 つに分けて扱う。
 
 | 旧 | 新しい扱い | 理由 |
 | --- | --- | --- |
 | 段階 4 の静的 allow | **4a として実施する** | 保留理由（列挙では境界を作れない）は**安全性の話**だった。読み取り専用コマンドの allow は**利便性の話**で、境界の有無と独立している（→ **2026-09-24 に見送り**。候補がほぼ全部、任意コード実行の経路だった） |
 | 段階 4 の `always` | **見送る** | 当時の実測で、完全一致で 2 回以上出るコマンドは 20 種・延べ 6.6% しかない。**溜まるものが少なく、永続化の仕組みを入れる価値が無い** |
-| 段階 5 の `verify` ツール | **保留を継続**（理由を差し替え） | OpenCode 固有のツールを作ることになる。[CHG-0006](0006-pi-harness-trial.md) で第一サポートを見直している最中に、片方へ投資するのは早い |
+| 段階 5 の `verify` ツール | **保留を継続**（理由を差し替え） | OpenCode 固有のツールを作ることになる。[CHG-0006](../0006-pi-harness-trial.md) で第一サポートを見直している最中に、片方へ投資するのは早い |
 
 **`verify` の保留理由が変わった点が重要。** 以前は「CHG-0004 の結果待ち」
 だったが、いまは「**どのハーネスに投資するか未定**」が理由。前者は解決
@@ -144,7 +149,7 @@ allow = ["git log", "wc", "grep -n", "uv pip list", "docker ps"]
 
 allow の基準は副作用なし・冪等・**任意コード実行を含まない**こと。
 当初あった `git diff` / `git status` は監査で基準を満たさないと判明し
-外した（[制約の総覧](../research/opencode/permission/constraints.md)）。
+外した（[制約の総覧](../../research/opencode/permission/constraints.md)）。
 
 結果は 224 → 225 rules、他 CLI の生成物はバイト単位で無差分。
 
@@ -162,7 +167,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 | 伏字化 | shell 出力を `execute.after` で書き換える | 安全網 |
 
 **誘導は確認削減の施策ではなく保護の一部。** 実装の詳細は
-[plugin 層](../spec/agent-config-generation.md#plugin-層-guide-plugin)が正本。
+[plugin 層](../../spec/agent-config-generation.md#plugin-層-guide-plugin)が正本。
 
 #### 成果（実履歴 1,031 呼び出し）
 
@@ -175,7 +180,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 | 伏字化の誤爆 | 3 件（0.3%） |
 
 得たものは「`deny` の効かない経路から効く経路へ 10.5% を移したこと」
-（[段階 2 の被覆率](../research/opencode/permission/stage2-coverage.md)）。
+（[段階 2 の被覆率](../../research/opencode/permission/stage2-coverage.md)）。
 
 ### 段階 3: 確認 1 回あたりの負担を下げる（完了）
 
@@ -244,7 +249,7 @@ write .tmp/x.py  →  python3 .tmp/x.py   ← 確認するのはこの 1 行
 **配備の確認方法を 2 つ誤っていた**（`stat -c %Y /proc/<pid>` と
 `pgrep -f`）。そのため誘導が一度も効いていない状態を「配備済み」と
 記録していた。手順は
-[hook の呼ばれ方](../research/opencode/permission/hook-order.md)に記録した。
+[hook の呼ばれ方](../../research/opencode/permission/hook-order.md)に記録した。
 
 ### 段階 4: 少数の静的 allow + `always` の運用（4a / 4b とも見送り）
 
@@ -285,14 +290,14 @@ verify(target: "all" | "agents" | "templates" | "docs" | "shell")
 **ツールを 5 個に分けない理由**: ツール定義は毎リクエストの固定費なので、
 `target` 引数で分岐する方が安い（5 個作るのと**コンテキストコストが 3 倍**違う）。
 `codemode` を既定のままにすれば固定費は 0 にできる
-（[ツールのコンテキストコスト](../research/opencode/tool-context-cost.md)）。
+（[ツールのコンテキストコスト](../../research/opencode/tool-context-cost.md)）。
 
 **自動承認はしない。** `verify(target:"all")` は `.pre-commit-config.yaml` の
 local hook を起動するため、**その設定を書き換えれば任意コマンドが動く**。
 確認自体は残し、ゲートは `tool.execute.before` で自作する。
 
 **保留の理由**: これは **OpenCode 固有のツール**になる。
-[CHG-0006](0006-pi-harness-trial.md) で第一サポートを見直している最中に、
+[CHG-0006](../0006-pi-harness-trial.md) で第一サポートを見直している最中に、
 片方のハーネスへ投資するのは早い。
 
 ### 段階 6: 残りへの手当（決着）
@@ -320,13 +325,13 @@ local hook を起動するため、**その設定を書き換えれば任意コ�
   allow の書き込み形（4a の副産物）、ヒアドキュメントの `write` への誘導が入っている
 - 段階 5（`verify` ツール）は未実装
 - Ubuntu / WSL では、既定 ask の通常起動（`opencode`）と並べて、OS が強制する境界の中で動く
-  隔離起動（`ocs`）を使える（[CHG-0004](closed/0004-opencode-sandbox.md)）。この案件は
+  隔離起動（`ocs`）を使える（[CHG-0004](0004-opencode-sandbox.md)）。この案件は
   通常起動の permission を扱う
 
 ## 未解決点
 
 - **段階 5（`verify` ツール）を作るか。** OpenCode 固有の投資になる。
-  **再開条件**: [CHG-0006](0006-pi-harness-trial.md) が第一サポートを決めたとき
+  **再開条件**: [CHG-0006](../0006-pi-harness-trial.md) が第一サポートを決めたとき
   （「決めない」と決めた場合も含む）
 - 「候補比較」の未評価 2 件（LLM classifier で `ask` → `deny`、`check_bash.py` への
   bridge）は未評価のまま。着手の予定は立てていない
@@ -349,12 +354,12 @@ local hook を起動するため、**その設定を書き換えれば任意コ�
 ## 設計の前提
 
 > **2026-09-22 時点の前提。** 1 つ目の「sandbox を採用しない」は、その後
-> [CHG-0004](closed/0004-opencode-sandbox.md) が覆した（Ubuntu / WSL で、隔離版 `ocs` を
+> [CHG-0004](0004-opencode-sandbox.md) が覆した（Ubuntu / WSL で、隔離版 `ocs` を
 > 通常版と併用する形で採用。2026-09-24 に終了）。通常版の OpenCode には境界が無い
 > ので、この案件の対象（通常版の permission）については前提のまま成り立つ。
 
 **すべての判断は実測から出ている。根拠は
-[制約の総覧](../research/opencode/permission/constraints.md)が持つ。**
+[制約の総覧](../../research/opencode/permission/constraints.md)が持つ。**
 計画に効いている要点だけ挙げる。
 
 - **境界は無い。** permission も plugin も安全網。sandbox は成立を確かめた
@@ -377,8 +382,8 @@ local hook を起動するため、**その設定を書き換えれば任意コ�
 | **LLM classifier（`ask` → `allow`）** | 対話では `allow` と `ask` は等価でないので、当初の見送り理由は崩れた。機構は実証済み（1 回 $0.0006 / 1.1 秒） | 長いスクリプト・間接呼び出し・実行時の状態まで判断が要る。**権限昇格を任せるほど信頼できない**。誤許可は誰も見ないまま走る | **見送り**（理由を差し替え） |
 | **LLM classifier（`ask` → `deny`）** | **deny だけが自動実行で意味を持つ**。静的パターンが破られる穴を意味で補える。誤検知は安全側 | 遅延が全コマンドに乗る。入力は攻撃者に操作されうる | **未評価** |
 | LLM による**承認の補助** | 要約は既に動いている（CHG-0003）。次点は**前回承認との差分提示** | — | **次点** |
-| sandbox（プロセスごと隔離） | 唯一の境界。難読化した持ち出しを止められる | 利点がほぼ否定された（[制約の総覧](../research/opencode/permission/constraints.md)） | **見送り**（2026-09-22。のちに [CHG-0004](closed/0004-opencode-sandbox.md) が隔離版 `ocs` として採用） |
-| 誘導を `bypass` にも効かせる | `cd` のような作法だけの規則は代替が必ずある | **誤爆したときの逃げ道が消える。** `bypass` は「秘密を読むために一時的に全部外す」用途も兼ねる | **見送り**（→ 2026-10-03 に `bypass` を「ask を allow にするだけ」へ再定義して採用。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)） |
+| sandbox（プロセスごと隔離） | 唯一の境界。難読化した持ち出しを止められる | 利点がほぼ否定された（[制約の総覧](../../research/opencode/permission/constraints.md)） | **見送り**（2026-09-22。のちに [CHG-0004](0004-opencode-sandbox.md) が隔離版 `ocs` として採用） |
+| 誘導を `bypass` にも効かせる | `cd` のような作法だけの規則は代替が必ずある | **誤爆したときの逃げ道が消える。** `bypass` は「秘密を読むために一時的に全部外す」用途も兼ねる | **見送り**（→ 2026-10-03 に `bypass` を「ask を allow にするだけ」へ再定義して採用。[ADR-0014](../../adr/0014-bypass-as-ask-upgrade.md)） |
 | `always` を主軸に据える | 標準機構で費用ゼロ。使いながら溜まる | **完全一致の繰り返しが 6.6% しかない**。溜まるものが少ない | **見送り**（当初は「段階 4 で限定採用」。2026-09-24 に 4b ごと見送り） |
 | session スコープの事前宣言 | セッション内で完結し永続化しない | **`ctx.permission.rules` が存在しない**（公式ドキュメントには記載あり） | **保留** |
 | `check_bash.py` への bridge | 既存の判定資産（4,913 行・1,782 テスト）を再利用できる | 承認エンジンにはせず、既知の危険の拒否・誘導のみに使う | **未評価** |
@@ -401,16 +406,16 @@ local hook を起動するため、**その設定を書き換えれば任意コ�
 
 **2026-10-07 — 上の 2026-09-29 の `commit` の権限は、その後取り下げた。** `commit` は差分を読んで計画を返すだけの子になり、
 `git add` / `git restore --staged` / `git commit` の規則は持たない（読み取りの `git status` / `git diff` / `git log` などだけ allow）。
-ステージとコミットは親が行う（[CHG-0013〜0015](closed/0015-commit-planner-with-chat-approval.md)、
-[コミットの確認](../spec/agent-config-generation.md#コミットの確認)）。
+ステージとコミットは親が行う（[CHG-0013〜0015](0015-commit-planner-with-chat-approval.md)、
+[コミットの確認](../../spec/agent-config-generation.md#コミットの確認)）。
 
 **2026-09-29 — 子エージェント `commit` だけ、素の git の読み取りとパス指定のステージを allow にした。**
 `git status` / `git diff` / `git log` / `git add -- …` / `git restore --staged -- …` を allow、`git commit` を ask にした
 （ocs でも確認が出る）。全体の allow から `git diff` / `git status` を外した判断（段階 4a の監査）は変えていない。
 外部コマンドを止める接頭辞（`-c core.fsmonitor=false -c core.hooksPath=/dev/null` など）を付けた形だけを
 allow にする案も試したが、止める対象の設定は clone で運ばれず、モデルの取り違えを生むのでやめた
-（[commit の権限](../spec/agent-config-generation.md#コミットの確認)、
-[記録 E2〜E4](../research/opencode/commit-review-agents.md)）。
+（[commit の権限](../../spec/agent-config-generation.md#コミットの確認)、
+[記録 E2〜E4](../../research/opencode/commit-review-agents.md)）。
 
 **2026-09-28 — 現在地をコードと照合し、「仕様への変更案」の適用結果を直した。**
 段階 3 の誘導が「着手中」、見送った 4a が「未着手」のまま残っていた。
@@ -454,4 +459,34 @@ allow にする案も試したが、止める対象の設定は clone で運ば�
 
 ## 終了結果
 
-<!-- Done / Abandoned にするとき記入 -->
+採用（段階 0〜3）。OpenCode の shell の既定を `ask` にし、読み取り経路の保護（誘導・結果フィルタ・伏字化）と
+確認 1 回あたりの負担を下げる手当てを配備した。残っていた段階 5 は、第一サポートが pi に決まったので
+CHG-0020 へ移して閉じた（2026-10-09）。冒頭の保留の注記と「現在地」「未解決点」は 2026-09-25 時点の記録。
+
+### 採用したもの
+
+- 段階 1: `[opencode.shell]` の新設と、shell の既定の `ask`
+- 段階 2: 読み取り経路の保護（`[[opencode.shell.guide]]` の誘導、`grep` / `glob` の結果フィルタ、shell 出力の伏字化）
+- 段階 3: 確認 1 回あたりの負担を下げる誘導（ヒアドキュメント → write など）
+
+### 撤回・見送りしたもの
+
+| 項目 | いつ | 理由 |
+| --- | --- | --- |
+| 4a: 少数の静的 allow | 2026-09-24 | 候補がほぼ全部、任意コード実行の経路だった |
+| 4b: `always`（承認の永続化） | 2026-09-24 | 同じコマンドが 2 回以上出るのは延べ 6.6% で、溜まるものが少ない |
+| 6: 残りへの手当 | 2026-09-24 | 「何もしない」で決着 |
+
+### 反映先
+
+- 仕様: `spec/agent-config-generation.md` の「既定は `ask`」「plugin 層（`guide-plugin`）」、`spec/agent-command-policy.md`
+- 実装: `home/dot_config/agents/common.toml.tmpl` の `[opencode.shell]` / `[opencode.redact]`、
+  `home/dot_config/opencode/guide-plugin/`
+- 観測: 本案件の各段階の節と `research/opencode/permission/`
+
+### 移管した未完事項
+
+| 内容 | 移管先 |
+| --- | --- |
+| 段階 5: `verify` ツール（検証コマンドをツール 1 個に畳み、確認の回数を減らす） | [CHG-0020](../0020-pi-migration.md) の段 5（pi のハーネスのツールとして） |
+| 誘導・伏字化の規則そのもの | CHG-0020 の段 1・2（pi の判定器とハーネスへ移す。「段 1 の前の棚卸し」） |

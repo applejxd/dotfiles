@@ -72,7 +72,7 @@ Ubuntu / WSL では OpenCode を丸ごと OS のアクセス制御で囲う**隔
 
 | 層 | OpenCode (通常起動) での状態 |
 | --- | --- |
-| 0. sandbox | **無い**。OS レベルの強制は効かない（[検討して不採用](../change/0002-opencode-ask-by-default.md)。隔離起動 `ocs` は別。[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)） |
+| 0. sandbox | **無い**。OS レベルの強制は効かない（[検討して不採用](../change/closed/0002-opencode-ask-by-default.md)。隔離起動 `ocs` は別。[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)） |
 | 1. permission リスト | `opencode.json` の `permissions`。**既定は `ask`** |
 | 2. hook | plugin の `permission.evaluate` / `tool.execute.*`（`guide-plugin`） |
 

@@ -18,7 +18,7 @@ OpenCode の `bypass` エージェントは、`permission = { "*" = "allow", …
 - 秘密ファイルの read deny・`pip` の deny・`.ssh` の edit deny まで外れる
 - 誘導（`[[opencode.shell.guide]]`）・`grep` / `glob` の結果フィルタ・shell 出力の伏字化も
   `bypass` では素通りにしていた
-  （[CHG-0002](../change/0002-opencode-ask-by-default.md) の「誘導を bypass にも効かせる」は
+  （[CHG-0002](../change/closed/0002-opencode-ask-by-default.md) の「誘導を bypass にも効かせる」は
   「誤爆したときの逃げ道が消える」ことを理由に見送った）
 
 使い方としては「確認の ask を毎回押したくない」が主で、「deny まで外したい」場面はほぼ無い。

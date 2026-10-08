@@ -55,14 +55,14 @@
 
 | # | 目的 | 保留理由 | 再開条件 | 更新日 |
 | --- | --- | --- | --- | --- |
-| [0002](0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | 段階 0〜3 は完了、4a / 4b は見送り、6 は決着。残る段階 5（`verify` ツール）が第一サポートの決定待ち。段階 3 までは適用済みで動いている | CHG-0006 が第一サポートを決めたとき（「決めない」と決めた場合も含む） | 2026-10-07 |
-| [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | 段階 A1 完了 / A3 消滅 / A4 保留（checkpoint の A1 / A2 とは別の、この案件の段階番号）。残る A2 は第一サポートが変われば対象も変わるため、先に動かすと手戻りになる | 同上。なお A2 の前提である ADR-0007 規則 3 との矛盾と、A1 で取り残した `[file]` 節のコメントは、CHG-0006 と独立に片付けられる | 2026-09-28 |
+| [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | 段階 A1 完了 / A3 消滅 / A4 保留（checkpoint の A1 / A2 とは別の、この案件の段階番号）。残る A2 は第一サポートが変われば対象も変わるため、先に動かすと手戻りになる | CHG-0020 の段 6 で OpenCode の節を撤去したあと（第一サポートが pi に決まった）。なお A2 の前提である ADR-0007 規則 3 との矛盾と、A1 で取り残した `[file]` 節のコメントは、それと独立に片付けられる | 2026-10-09 |
 | [0016](0016-away-shift-opencode.md) | away-shift を OpenCode 向けに最適化し、運用（深層学習ジョブの調査・再開、会社 PC での利用）を見直す | 着手前。applejxd 限定の棚卸しを先に進めるため積んだ | 利用者が着手を指示したとき | 2026-10-08 |
 
 ## 終了
 
 | # | 目的 | 結果 | 終了日 | 現行仕様 / ADR |
 | --- | --- | --- | --- | --- |
+| [0002](closed/0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | 採用（段階 0〜3。4a / 4b は見送り、6 は決着。段階 5 の `verify` ツールは pi へ移行するので CHG-0020 へ移管） | 2026-10-09 | [agent-config-generation](../spec/agent-config-generation.md#既定は-ask) |
 | [0019](closed/0019-pi-harness-port-evaluation.md) | OpenCode のハーネスを pi で作り直す価値があるかを判断する | 採用（移行する。構成はツールを自分で持つハーネス。試作で BLOCKER と段 4 の項目がすべて合格。移行は CHG-0020） | 2026-10-09 | [CHG-0020](0020-pi-migration.md) / [試作の記録](../research/agents/pi-harness-spike.md) |
 | [0018](closed/0018-opencode-policy-role-split.md) | OpenCode の権限を「共通の禁止」と「役割ごとの権限」に分けて生成する | 一部採用（所有の規則 P のみ。S と段 5 は pi への移行で見送り、プロファイルの設計は CHG-0020 へ） | 2026-10-09 | [agent-config-generation](../spec/agent-config-generation.md#配置済みの設定の所有) |
 | [0015](closed/0015-commit-planner-with-chat-approval.md) | 計画役の子にメッセージ案を作らせ、承認は会話で行う | 採用・配備済み（`--auto` と利用者の TUI で、全文を示して承認を待ち、承認後にコミットした） | 2026-10-07 | [コミットの確認](../spec/agent-config-generation.md#コミットの確認) |
