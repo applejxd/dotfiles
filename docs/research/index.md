@@ -62,6 +62,7 @@
 | --- | --- |
 | [エージェントハーネス比較](agents/harness-comparison.md) | Claude Code / Copilot CLI / Codex CLIの機能・強制層・設定差分、OpenCodeへの乗り換え評価（2026-09-19 時点の見送り。後に OpenCode を配備） |
 | [sandbox機能の包括調査](agents/sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
+| [pi のハーネスの試作](agents/pi-harness-spike.md) | 2026-10-08。E1: 組み込みと同じ名前のツールは `/reload` でハーネスが抜けると組み込みが戻り判定なしで実行（`-nbt` でも）、別名ならツール 0 個。`execute()` での再検査で入力の書き換えを拒否、判定器の異常 5 通りはすべて拒否。E2: 別名のツールを 4 モデルが迷わず使用、既定の圧縮は別名のファイル操作を拾わずハーネスで補う。E3: 並列の ask は codemode の中でだけ重なり先の確認が永久に止まる（順番待ちで解消）、bash の `details` に生の出力が残る（伏せて 0 件）、codemode・MCP もハーネスの判定を通る。E4: 子エージェントも同じハーネスで判定し子の ask を `blocked` で親へ返せる、Fence で包めるが pi は設定・認証の読み取りでも `.lock` を作るので agent 置き場は書ける必要がある |
 | [Claude の deny の展開数](agents/claude-deny-glob-expansion.md) | 名前マッチの deny が 3239 件の bind-mount に展開された測定、whitelist 化の根拠 |
 | [Copilot の開発ツール自動許可の実効権限](agents/copilot-dev-tool-access-grants.md) | dev-tool access ON 時の取りこぼし・RO 上書き、ヘッダが見えない粒度、PATH の bin が RO、mise の latest が消える |
 | [Copilot sandbox の既定の許可範囲](agents/copilot-sandbox-default-policy.md) | `/sandbox policy` の表示、$HOME は未許可、存在しないパスの deny 10 件中 3 件が効かない |

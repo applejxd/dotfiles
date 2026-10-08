@@ -50,6 +50,7 @@
 | [0012](0012-bash-hook-shared-parser.md) | bash 検査 hook のコマンド解析を 1 か所に集める | In progress | Windows 実機で未検証。B 群（`shlex.split` の規則）は保留 | Windows の PowerShell で `test/agents/` を回し、通れば閉じる | 2026-10-06 |
 | [0017](0017-builtin-agent-restrictions.md) | 組み込みの `explore` / `plan` の制限が全体の設定に上書きされる問題を直し、`bypass` から起動する子を確認なしで動かせる範囲に整える | In progress | `bypass` の子に残る確認のうち、作業ツリーの外の読み取り以外（`production.env` などと shell 由来）は意図して残す。`plan` の shell の確認に保存した承認がどう効くか | 段 1〜8 完了（apply 済み、ADR-0015）。残りは未解決点 | 2026-10-08 |
 | [0018](0018-opencode-policy-role-split.md) | OpenCode の権限を「共通の禁止」と「役割ごとの権限」に分けて生成する | Exploring | shell の deny を policy にしたときの guide の早期停止。Orca の上書き用の設定が重なる起動での実効 | 段 4（所有の規則 P を実装中）。撤去は所有の規則、`plan` のサンプルの緩みは受け入れに決定 | 2026-10-08 |
+| [0019](0019-pi-harness-port-evaluation.md) | OpenCode のハーネスを pi で作り直す価値があるかを判断する（実装の量は問わず、複雑さと保守性で比べる） | In progress | **移行すると決めた**（段 5）。移行しても pi の内部の挙動に頼る点が 4 つ残る（偽のモデルの試験で検出できる）。CHG-0018 の扱いは未定 | 移行の案件を起票して閉じる | 2026-10-08 |
 
 ## 保留
 
