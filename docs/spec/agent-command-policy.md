@@ -356,7 +356,7 @@ OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生の�
 
 ## OpenCode の allow したコマンドの書き込み形
 
-`[opencode.shell] allow` は前方一致なので、載せたコマンドの書き込み形も確認なしに通る。
+`[pi.shell] allow` は前方一致なので、載せたコマンドの書き込み形も確認なしに通る。
 guide 規則は effect が allow でも走るので、allow を保ったまま書き込み形だけを deny する
 （`common.toml.tmpl` の `[[opencode.shell.guide]]`）。
 
@@ -410,7 +410,7 @@ deny に無い項目・`elsewhere` を止める early 規則が無い、のい�
 混ぜない（混ぜると、隔離版やエージェントの allow など**静的 deny に無い場面**でも止めてしまう）。
 Claude / Copilot の生成物は変わらない。
 
-スキルのスクリプトのリダイレクトの静的 deny（`[opencode.skill_scripts]`）も同じ `deny_guide` に出す
+スキルのスクリプトのリダイレクトの静的 deny（`[pi.skill_scripts]`）も同じ `deny_guide` に出す
 （説明は `redirect_message`。範囲は [スキルのスクリプト](agent-config-generation.md#スキルのスクリプト)）。
 `[bash.deny_guide]` が無くても生成する。
 

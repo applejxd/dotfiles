@@ -59,9 +59,21 @@ def render_common(username: str | None = None) -> str:
     return result.stdout
 
 
-def load_common(username: str | None = None) -> dict:
-    """描画した common.toml を読む (呼び出し側が壊さないよう毎回読み直す)。"""
-    return tomllib.loads(render_common(username))
+def load_common(username: str | None = None, *, raw: bool = False) -> dict:
+    """描画した common.toml を読む (呼び出し側が壊さないよう毎回読み直す)。
+
+    ``generate.load_common`` と同じく、``[pi]`` の共有の節を OpenCode の位置へ写した形で返す。
+    ``raw=True`` なら写さない (描画したそのままの形)。
+    """
+    common = tomllib.loads(render_common(username))
+    if raw:
+        return common
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts" / "agents"))
+    import generate
+
+    return generate.resolve_pi_shared(common)
 
 
 @cache

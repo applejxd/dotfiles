@@ -343,6 +343,24 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 3 層との対応と Claude / Copilot との扱いの差は
 [OpenCode V2 の扱い](agent-permissions.md#opencode-v2-の扱い) を参照。
 
+### pi と共有する節
+
+次の 4 つは `[pi]` が正本で、pi のハーネスの判定器と OpenCode の生成の両方が読む（移行の計画は
+[CHG-0020](../change/0020-pi-migration.md)）。
+
+| `[pi]` の節 | 中身 | OpenCode での位置 |
+| --- | --- | --- |
+| `[pi.shell] allow` | 無確認で実行してよい shell コマンド（[既定は `ask`](#既定は-ask)） | `[opencode.shell] allow` |
+| `[pi.redact]` | shell 出力の伏字化（[shell 出力の伏字化](#shell-出力の伏字化)） | `[opencode.redact]` |
+| `[pi.external_read]` | 作業ツリーの外で確認なしに読める場所（[作業ツリーの外の読み取り](#作業ツリーの外の読み取り)） | `[opencode.external_read]` |
+| `[pi.skill_scripts]` | 確認なしに実行できるスキルのスクリプト（[スキルのスクリプト](#スキルのスクリプト)） | `[opencode.skill_scripts]` |
+
+- `generate.py` は `common.toml` を読んだ直後（`load_common`）に、`[pi]` の値を OpenCode の位置へ写す
+  （`resolve_pi_shared`）。OpenCode の生成の処理は写した後の位置を読むので、出力は写す前と同じ
+- **OpenCode 側に同じキーを書くと生成を止める。** 2 か所に書くとどちらが効くか分からなくなる
+- OpenCode を撤去するとき（CHG-0020 の段 6）に、写す処理ごと消す
+- 試験は `test_pi_shared.py`。描画した `common.toml` の `[opencode]` に 4 つが残っていないことも固定する
+
 ### glob の記法差
 
 OpenCode のワイルドカードは `*` (**`/` を含む** 0 文字以上) と `?` だけで、
@@ -432,7 +450,7 @@ hook 版との違いが 2 つある。
 
 `permissions` の先頭に `{action:"shell", resource:"*", effect:"ask"}` を置き、
 **未掲載のコマンドが無条件に通らないようにしてある**。shell の `allow` は
-`[opencode.shell]` に書いた 5 件と、下のスキルのスクリプトだけで、`[bash]` とは共用しない
+`[pi.shell] allow` に書いた 5 件と、下のスキルのスクリプトだけで、`[bash]` とは共用しない
 （`[bash]` は 3 CLI 共通のため、触ると効果の切り分けができなくなる）。
 
 allow の基準は副作用なし・冪等・**任意コード実行を含まない**こと。
@@ -443,7 +461,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 リダイレクトを分割せず resource に残すので、`wc -l f.txt > path` が `wc *`
 に前方一致する。allow は最小に保つ以外の守り方が無い。
 
-スキルのスクリプトの allow は `[opencode.skill_scripts]` から出す
+スキルのスクリプトの allow は `[pi.skill_scripts]` から出す
 （[スキルのスクリプト](#スキルのスクリプト)）。
 
 ### 作業ツリーの外の読み取り
@@ -457,7 +475,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 
 | 出所 | 場所 |
 | --- | --- |
-| `[opencode.external_read] paths` | スキルの置き場（`~/.claude/skills`・`~/.agents/skills`・`~/.config/opencode/skills`） |
+| `[pi.external_read] paths` | スキルの置き場（`~/.claude/skills`・`~/.agents/skills`・`~/.config/opencode/skills`） |
 | `[opencode.sandbox] work_read` | 隔離版が読める作業場所（`~/src`・`~/worktrees`・`~/papers`・`~/.local/share/chezmoi`） |
 
 作業場所は隔離版の `work_read` をそのまま使い、二重に並べない
@@ -485,14 +503,14 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 既定の `ask` に当たり、呼ぶたびに確認が出ていた。`external_directory` の確認は
 出ない（shell は引数に書いた外のパスから外部ディレクトリを推定しなかった。
 `ls <外のパス>` でも同じ。実測）。
-`[opencode.skill_scripts] allow` に載せたスクリプトだけを allow にする
+`[pi.skill_scripts] allow` に載せたスクリプトだけを allow にする
 （`opencode_skill_script_rules`）。
 
 ```toml
-[opencode.skill_scripts]
+[pi.skill_scripts]
 runners = { py = ["python3"], sh = ["bash"] }
 
-[[opencode.skill_scripts.allow]]
+[[pi.skill_scripts.allow]]
 script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 subcommands = ["paths", "lint", "read"]
 ```
@@ -503,7 +521,7 @@ subcommands = ["paths", "lint", "read"]
 | `subcommands` | 上の `<script>` の後ろにサブコマンドを足した形を、サブコマンドごとに出す |
 | `exact` | `<runner> <script> <引数>` を**完全一致**で allow（`*` を付けない） |
 
-- **スキルの置き場の中に限る。** `script` が `[opencode.external_read] paths` の外か
+- **スキルの置き場の中に限る。** `script` が `[pi.external_read] paths` の外か
   `..` を含むと `generate.py` が `apply` を止める。拡張子に対応する `runners` が
   無いときも止める
 - shell の resource は生のコマンド文字列で `~` を展開しない。`~/` の形と、展開した
@@ -681,7 +699,7 @@ permissions = [
 ### plugin 層 (`guide-plugin`)
 
 `~/.config/opencode/guide-plugin/` に置く。判定表は `common.toml` の
-`[[opencode.shell.guide]]`・`[bash.deny_guide]`・`[opencode.redact]`・`[opencode.ask_description]`・
+`[[opencode.shell.guide]]`・`[bash.deny_guide]`・`[pi.redact]`・`[opencode.ask_description]`・
 `[file] read_deny_globs`・`[opencode.agent]`・`[opencode.agents]`・`[opencode.bypass_children]` から `rules.json` として生成し、plugin は読むだけにする。
 `index.js` はこのどれかが有効なら、`tui.ts` は `ask_description` が有効な
 ときだけ登録する（`generate.py` の `opencode_guide_server_needed` /
@@ -830,7 +848,7 @@ shell 経由の読み取りは誘導（`cat` / `head` / `tail` / `sed -n` を `r
 
 | 手段 | 当てる先 | 効き方 |
 | --- | --- | --- |
-| 内容の形（`[[opencode.redact.rule]]`） | 出力本文 | 当たった範囲だけを `[伏字:名前]` に替える |
+| 内容の形（`[[pi.redact.rule]]`） | 出力本文 | 当たった範囲だけを `[伏字:名前]` に替える |
 | 参照したパス（`deny_path`） | コマンド文字列 | **出力全体**を伏せ、理由を本文に残す |
 
 - 内容の形は**大文字小文字を区別せず**当てる（`GITHUB_TOKEN` と

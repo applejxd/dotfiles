@@ -7,7 +7,7 @@
 #   ~/.copilot/hooks/from-claude.json    <- [[hooks]]
 #   ~/.copilot/mcp-config.json           <- [[mcp]]
 #   ~/.codex/config.toml の mcp_servers  <- [[mcp]]
-#   ~/.config/opencode/opencode.json     <- [bash] [file] [opencode] [[mcp]]
+#   ~/.config/opencode/opencode.json     <- [bash] [file] [pi] [opencode] [[mcp]]
 #
 # ★仕組み・判断基準・既知の不具合・実測値は docs/spec/agent-permissions.md が正本。
 #   値を足す前にそちらを読むこと。ここには「その行を編集するときに要る注記」
@@ -852,6 +852,122 @@ approvals = [
 ]
 
 # ---------------------------------------------------------------------------
+# pi と OpenCode が共有する節 ([pi] が正本)
+# ---------------------------------------------------------------------------
+# pi のハーネスの判定器が読む。OpenCode へは generate.py が同じ値を [opencode.*] の位置へ写す
+# (CHG-0020 の段 6 で OpenCode を撤去するまで)。[opencode.*] 側に同じキーを書くと生成が止まる。
+# see docs/spec/agent-config-generation.md#pi-と共有する節
+
+# 無確認で実行してよい shell コマンド ([bash] allow とは共用しない。前提が違う)。
+# ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。
+# ★リダイレクトは resource に残ったまま前方一致するので、載せたコマンドは
+#   すべて `> path` による任意書き込みの手段にもなる (実測)。
+# see docs/research/opencode/permission/allow-list-audit.md
+[pi.shell]
+allow = [
+  "git log",
+  "wc",
+  "grep -n",
+  "uv pip list",
+  "docker ps",
+]
+
+# shell 出力の伏字化。誘導と結果フィルタを抜けて shell を通ったものへの安全網。
+# ★境界ではない。base64 や tr で変換されるとすり抜ける (実測)。事故と素朴な
+#   プロンプトインジェクションを想定した層で、意図的な持ち出しは止まらない。
+# ★shell の出力にだけ掛ける。read / grep へ広げないこと。伏せた本文を元に
+#   edit されると、ファイルへ [伏字:…] がそのまま書き込まれる。
+# see docs/research/opencode/permission/output-filter-and-subagents.md
+[pi.redact]
+enabled = true
+# 保護対象のパスを参照したコマンドは、出力全体を伏せる。
+# 判定表は [file] read_deny_globs から生成する。
+# ★`**/*secret*` のような部分一致 glob は自動で除かれる。コマンドには
+#   docs/spec/secret-handling.md のような正当なパスも載るため。
+deny_path_output = true
+# 出力全体を伏せる判定の除外。pattern ではなくコマンド全体に当てる。
+# ★保護パス名を「文章として」書いたときの誤爆を外すためのもの。
+#   git commit -m '… ~/.claude.json …' で出力が丸ごと消えるのを防ぐ。
+# ★`git commit -m x && cat ~/.ssh/id_rsa` のような連結は素通りする。
+#   そこは誘導 (cat の deny) が受け持つ。伏字化は境界ではない。
+deny_path_unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+
+# 内容の形で伏せるもの。pattern は JavaScript の正規表現で、
+# **大文字小文字を区別せず**当てる (GITHUB_TOKEN と github_token を分けない)。
+# ★当たった範囲がそのまま置き換わる。値だけに当てること。前置きの語は
+#   後読み `(?<=…)` で外に出す。
+[[pi.redact.rule]]
+name = "秘密鍵"
+pattern = '-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----'
+
+[[pi.redact.rule]]
+name = "age 秘密鍵"
+pattern = 'AGE-SECRET-KEY-1[0-9A-Z]{50,}'
+
+[[pi.redact.rule]]
+name = "AWS アクセスキー"
+pattern = '\b(AKIA|ASIA)[0-9A-Z]{16}\b'
+
+[[pi.redact.rule]]
+name = "GitHub トークン"
+pattern = '\bgh[pousr]_[A-Za-z0-9]{30,}\b'
+
+[[pi.redact.rule]]
+name = "Slack トークン"
+pattern = '\bxox[abprs]-[A-Za-z0-9-]{10,}\b'
+
+[[pi.redact.rule]]
+name = "API キー"
+pattern = '\bsk-[A-Za-z0-9_-]{20,}\b'
+
+[[pi.redact.rule]]
+name = "Google API キー"
+pattern = '\bAIza[0-9A-Za-z_-]{35}\b'
+
+[[pi.redact.rule]]
+name = "JWT"
+pattern = '\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'
+
+# 代入の形。値が「不透明な長い文字列」か「引用符で囲まれたもの」のときだけ
+# 伏せる。★これを緩めると `const token = getToken()` のような**コード**まで
+# 伏字になり、shell 経由の grep が読めなくなる。
+[[pi.redact.rule]]
+name = "代入された秘密"
+pattern = '''(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)["']?\s*[=:]\s*)("[^"\n]{6,}"|'[^'\n]{6,}'|[A-Za-z0-9_\-+/=.]{16,})'''
+
+# 作業ツリーの外でも external_directory の確認なしに読める場所 (スキルの置き場)。
+# [opencode.sandbox] work_read も足される。edit は確認のまま。
+# see docs/spec/agent-config-generation.md#作業ツリーの外の読み取り
+[pi.external_read]
+paths = [
+  "~/.claude/skills",
+  "~/.agents/skills",
+  "~/.config/opencode/skills",
+]
+
+# 確認なしに実行してよいスキルのスクリプト。[pi.external_read] paths の中に限る。
+# ★引数で書き込み先や実行するものを決められる形は載せない (exact で引数を固定する)。
+# ★runner に `uv run --no-project python` を足さないこと。作業ツリーの
+#   .python-version に書かれた実行ファイルを起動する (実測)。
+# see docs/spec/agent-config-generation.md#スキルのスクリプト
+[pi.skill_scripts]
+runners = { py = ["python3"], sh = ["bash"] }
+redirect_message = "スキルのスクリプトにはリダイレクト (> / >> / < / 2>&1 など) を付けずに呼んでください。stdout も stderr もそのまま返ります。ファイルへ書くときは write ツールを使ってください。"
+
+[[pi.skill_scripts.allow]]
+script = "~/.claude/skills/sdd-docs/scripts/lint_docs.py"
+
+[[pi.skill_scripts.allow]]
+script = "~/.claude/skills/sdd-docs/scripts/check_refs.py"
+# --save は引数のパスへ書く。既定の置き場を使う形だけを完全一致で通す
+exact = ["--save", "--baseline"]
+
+[[pi.skill_scripts.allow]]
+script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
+# write は標準入力を引数のパスへ書くので載せない
+subcommands = ["paths", "lint", "read"]
+
+# ---------------------------------------------------------------------------
 # OpenCode 固有
 # ---------------------------------------------------------------------------
 [opencode]
@@ -1136,20 +1252,6 @@ $ARGUMENTS
    検証の結果・残った問題をまとめて報告する。コミットはしない
 """
 
-# OpenCode 専用の shell allow ([bash] とは共用しない。前提が違う)。
-# ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。
-# ★リダイレクトは resource に残ったまま前方一致するので、載せたコマンドは
-#   すべて `> path` による任意書き込みの手段にもなる (実測)。
-# see docs/research/opencode/permission/allow-list-audit.md
-[opencode.shell]
-allow = [
-  "git log",
-  "wc",
-  "grep -n",
-  "uv pip list",
-  "docker ps",
-]
-
 # 誘導。pattern に一致したら deny して message を返す。
 # pattern は JavaScript の正規表現で、生のコマンド全体に当てる
 # (scanner は変数代入を落とすため e.resources は使わない)。
@@ -1182,7 +1284,7 @@ message = "sed -n でファイルを読まないでください。read ツール
 #   抜ける)。so allow を維持したまま、書き込み形だけここで deny できる。
 # ★fd の付け替え (2>&1 / >&-) と /dev/null は書き込みではないので、> ごとに先読みで外す。
 #   unless で外すとコマンド全体に当たり、`wc f 2>&1 > ~/.bashrc` が素通りする。
-# ★対象は [opencode.shell] allow と揃えること。allow を増やすならここも足し、
+# ★対象は [pi.shell] allow と揃えること。allow を増やすならここも足し、
 #   引数でファイルへ書けるオプション (git log の --output など) も点検して下のように塞ぐ。
 # see docs/change/closed/0002-opencode-ask-by-default.md 「段階 4a」
 # see docs/spec/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形
@@ -1264,101 +1366,6 @@ message = "作業ディレクトリ全体 (. / .. / *) を再帰的に消さな�
 pattern = '''(^|[;&|\n])[ \t]*find[ \t]+(-[HLP][ \t]+)*["']?(/|~/?|\$HOME/?|\$\{HOME\}/?|(\./)?\.git(/[^\s;&|"']*)?)["']?(?=[ \t])[^\n;&|]*[ \t](-delete|-exec(dir)?[ \t]+rm)\b'''
 unless = '''^\s*(git|gh)\s(?=[^\n]*\s-{1,2}(m|am|message|body|title)[\s=])(?:[^;&|\n'"`$()<>\\]|\\[^\n]|'[^']*'|"(?:[^"\\`$]|\\.|\$\(cat <<-?'(\w+)'\n[\s\S]*?\n\3\n\s*\))*")*$'''
 message = "/ ~ .git を起点にした find の -delete / -exec rm はしないでください。起点を消す範囲の具体的なディレクトリに絞ってください。"
-
-# shell 出力の伏字化。誘導と結果フィルタを抜けて shell を通ったものへの安全網。
-# ★境界ではない。base64 や tr で変換されるとすり抜ける (実測)。事故と素朴な
-#   プロンプトインジェクションを想定した層で、意図的な持ち出しは止まらない。
-# ★shell の出力にだけ掛ける。read / grep へ広げないこと。伏せた本文を元に
-#   edit されると、ファイルへ [伏字:…] がそのまま書き込まれる。
-# see docs/research/opencode/permission/output-filter-and-subagents.md
-[opencode.redact]
-enabled = true
-# 保護対象のパスを参照したコマンドは、出力全体を伏せる。
-# 判定表は [file] read_deny_globs から生成する。
-# ★`**/*secret*` のような部分一致 glob は自動で除かれる。コマンドには
-#   docs/spec/secret-handling.md のような正当なパスも載るため。
-deny_path_output = true
-# 出力全体を伏せる判定の除外。pattern ではなくコマンド全体に当てる。
-# ★保護パス名を「文章として」書いたときの誤爆を外すためのもの。
-#   git commit -m '… ~/.claude.json …' で出力が丸ごと消えるのを防ぐ。
-# ★`git commit -m x && cat ~/.ssh/id_rsa` のような連結は素通りする。
-#   そこは誘導 (cat の deny) が受け持つ。伏字化は境界ではない。
-deny_path_unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
-
-# 内容の形で伏せるもの。pattern は JavaScript の正規表現で、
-# **大文字小文字を区別せず**当てる (GITHUB_TOKEN と github_token を分けない)。
-# ★当たった範囲がそのまま置き換わる。値だけに当てること。前置きの語は
-#   後読み `(?<=…)` で外に出す。
-[[opencode.redact.rule]]
-name = "秘密鍵"
-pattern = '-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----'
-
-[[opencode.redact.rule]]
-name = "age 秘密鍵"
-pattern = 'AGE-SECRET-KEY-1[0-9A-Z]{50,}'
-
-[[opencode.redact.rule]]
-name = "AWS アクセスキー"
-pattern = '\b(AKIA|ASIA)[0-9A-Z]{16}\b'
-
-[[opencode.redact.rule]]
-name = "GitHub トークン"
-pattern = '\bgh[pousr]_[A-Za-z0-9]{30,}\b'
-
-[[opencode.redact.rule]]
-name = "Slack トークン"
-pattern = '\bxox[abprs]-[A-Za-z0-9-]{10,}\b'
-
-[[opencode.redact.rule]]
-name = "API キー"
-pattern = '\bsk-[A-Za-z0-9_-]{20,}\b'
-
-[[opencode.redact.rule]]
-name = "Google API キー"
-pattern = '\bAIza[0-9A-Za-z_-]{35}\b'
-
-[[opencode.redact.rule]]
-name = "JWT"
-pattern = '\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'
-
-# 代入の形。値が「不透明な長い文字列」か「引用符で囲まれたもの」のときだけ
-# 伏せる。★これを緩めると `const token = getToken()` のような**コード**まで
-# 伏字になり、shell 経由の grep が読めなくなる。
-[[opencode.redact.rule]]
-name = "代入された秘密"
-pattern = '''(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)["']?\s*[=:]\s*)("[^"\n]{6,}"|'[^'\n]{6,}'|[A-Za-z0-9_\-+/=.]{16,})'''
-
-# 作業ツリーの外でも external_directory の確認なしに読める場所 (スキルの置き場)。
-# [opencode.sandbox] work_read も足される。edit は確認のまま。
-# see docs/spec/agent-config-generation.md#作業ツリーの外の読み取り
-[opencode.external_read]
-paths = [
-  "~/.claude/skills",
-  "~/.agents/skills",
-  "~/.config/opencode/skills",
-]
-
-# 確認なしに実行してよいスキルのスクリプト。[opencode.external_read] paths の中に限る。
-# ★引数で書き込み先や実行するものを決められる形は載せない (exact で引数を固定する)。
-# ★runner に `uv run --no-project python` を足さないこと。作業ツリーの
-#   .python-version に書かれた実行ファイルを起動する (実測)。
-# see docs/spec/agent-config-generation.md#スキルのスクリプト
-[opencode.skill_scripts]
-runners = { py = ["python3"], sh = ["bash"] }
-redirect_message = "スキルのスクリプトにはリダイレクト (> / >> / < / 2>&1 など) を付けずに呼んでください。stdout も stderr もそのまま返ります。ファイルへ書くときは write ツールを使ってください。"
-
-[[opencode.skill_scripts.allow]]
-script = "~/.claude/skills/sdd-docs/scripts/lint_docs.py"
-
-[[opencode.skill_scripts.allow]]
-script = "~/.claude/skills/sdd-docs/scripts/check_refs.py"
-# --save は引数のパスへ書く。既定の置き場を使う形だけを完全一致で通す
-exact = ["--save", "--baseline"]
-
-[[opencode.skill_scripts.allow]]
-script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
-# write は標準入力を引数のパスへ書くので載せない
-subcommands = ["paths", "lint", "read"]
 
 # OpenCode を丸ごと OS のアクセス制御で囲う (隔離起動 ocs)。
 # ランチャーが Fence で境界を張ってから opencode --standalone を起動する。
@@ -1541,7 +1548,7 @@ drop_shell = [
 # 境界が隠すので捨てる read/edit 規則 (パスの先頭一致)。
 # ★ワークスペース相対の glob (*secret* など) は **捨てない**。
 #   境界の外の話ではなく、shell から届く。
-# ★[opencode.external_read] で開けた場所への edit の ask は捨てない。
+# ★[pi.external_read] で開けた場所への edit の ask は捨てない。
 drop_path_prefixes = [
   "~/",
   "$HOME/",

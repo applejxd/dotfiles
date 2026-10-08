@@ -18,6 +18,7 @@ the existing settings.json are preserved.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import ntpath
 import os
@@ -180,6 +181,45 @@ KNOWN_FILE_KEYS = frozenset(
         "deny_exceptions",
     }
 )
+
+
+# [pi] が正本で、OpenCode へ写す節: [pi] のキー -> [opencode] の中の位置。
+# see docs/spec/agent-config-generation.md#pi-と共有する節
+PI_SHARED_TO_OPENCODE: dict[tuple[str, ...], tuple[str, ...]] = {
+    ("shell", "allow"): ("shell", "allow"),
+    ("redact",): ("redact",),
+    ("external_read",): ("external_read",),
+    ("skill_scripts",): ("skill_scripts",),
+}
+
+
+def resolve_pi_shared(common: dict[str, Any]) -> dict[str, Any]:
+    """``[pi]`` の共有の節を、OpenCode の生成が読む ``[opencode]`` の位置へ写す。
+
+    同じ値を 2 か所に書かないため、``[opencode]`` 側に同じキーがあれば止める
+    (どちらが効くか分からなくなる)。``[pi]`` が無ければそのまま返す
+    (テストが ``[opencode]`` に直接書いた入力を渡すため)。
+    """
+    pi = common.get("pi")
+    if not isinstance(pi, dict):
+        return common
+    out = copy.deepcopy(common)
+    opencode = out.setdefault("opencode", {})
+    for src, dst in PI_SHARED_TO_OPENCODE.items():
+        value: Any = pi
+        for key in src:
+            value = value.get(key) if isinstance(value, dict) else None
+        if value is None:
+            continue
+        parent = opencode
+        for key in dst[:-1]:
+            parent = parent.setdefault(key, {})
+        if dst[-1] in parent:
+            raise SystemExit(
+                f"[opencode.{'.'.join(dst)}] は書けない ([pi.{'.'.join(src)}] が正本)"
+            )
+        parent[dst[-1]] = copy.deepcopy(value)
+    return out
 
 
 def _reject_unknown(section: str, present: set[str], known: frozenset[str]) -> None:
@@ -858,7 +898,7 @@ def opencode_rules(action: str, effect: str, resources: list[str]) -> list[dict[
 def opencode_external_read_dirs(common: dict[str, Any]) -> list[str]:
     """作業ツリーの外でも確認なしに読める場所 (``~`` のまま返す)。
 
-    ``[opencode.external_read] paths`` に隔離版の ``work_read`` を足す。
+    ``[pi.external_read] paths`` に隔離版の ``work_read`` を足す。
     隔離版で読める作業場所を、通常版でも同じ一覧から開ける (二重に並べない)。
     """
     opencode = common.get("opencode", {})
@@ -907,11 +947,11 @@ def _skill_script_allow_and_heads(common: dict[str, Any]) -> tuple[list[str], li
     heads: list[str] = []
     for entry in cfg.get("allow", []):
         script = str(entry.get("script", ""))
-        where = f"[opencode.skill_scripts] の {script!r}"
+        where = f"[pi.skill_scripts] の {script!r}"
         if ".." in script.split("/") or not expand_user(script).replace("\\", "/").startswith(
             roots
         ):
-            raise ValueError(f"{where} が [opencode.external_read] paths の中に無い")
+            raise ValueError(f"{where} が [pi.external_read] paths の中に無い")
         suffix = script.rsplit(".", 1)[-1] if "." in script else ""
         if not runners.get(suffix):
             raise ValueError(f"{where} の拡張子に対応する runners が無い")
@@ -998,7 +1038,7 @@ def build_opencode_permissions(common: dict[str, Any]) -> list[dict[str, str]]:
     これが無いと、未掲載のコマンドは classifier ではなく無条件許可になる。
     OpenCode に classifier が無いため。
 
-    ``shell`` の allow だけ ``[opencode.shell]`` から取る。``[bash] allow`` は
+    ``shell`` の allow だけ ``[pi.shell] allow`` から取る。``[bash] allow`` は
     Claude / Copilot と共有しており、未掲載を classifier へ委ねる前提で
     組まれているため、既定 ask の OpenCode とは前提が違う。
 
@@ -1251,7 +1291,7 @@ def _skill_script_deny_guide_rules(common: dict[str, Any]) -> list[dict[str, Any
         return []
     message = str(common.get("opencode", {}).get("skill_scripts", {}).get("redirect_message") or "")
     if not message:
-        raise SystemExit("[opencode.skill_scripts] は redirect_message が要る")
+        raise SystemExit("[pi.skill_scripts] は redirect_message が要る")
 
     normal = _static_shell_denies(build_opencode_permissions(common))
     isolated = (
@@ -1589,7 +1629,7 @@ def opencode_redact(common: dict[str, Any]) -> dict[str, Any] | None:
     for rule in cfg.get("rule") or []:
         name, pattern = rule.get("name"), rule.get("pattern")
         if not name or not pattern:
-            raise SystemExit("opencode.redact.rule は name と pattern が要る")
+            raise SystemExit("pi.redact.rule は name と pattern が要る")
         rules.append({"name": str(name), "pattern": str(pattern)})
     out: dict[str, Any] = {"rule": rules}
     if cfg.get("deny_path_output"):
@@ -2546,7 +2586,7 @@ def load_existing(path: str | None) -> dict[str, Any]:
 
 def load_common(path: str) -> dict[str, Any]:
     with open(path, "rb") as f:
-        return tomllib.load(f)
+        return resolve_pi_shared(tomllib.load(f))
 
 
 # chezmoi 管理外のローカル上書き。存在しなければ無視する。

@@ -32,7 +32,10 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 | 段 | 内容 | 状態 |
 | --- | --- | --- |
-| 1 | **判定 API**。CLI に依存せず allow / ask / deny と理由を必ず返し、異常時は拒否する判定器を作る。規則は `common.toml` から生成し、「共通の禁止」と「役割ごとのプロファイル」に分ける（CHG-0018 の設計を引き継ぐ） | 未着手 |
+| 1 | **判定 API**。CLI に依存せず allow / ask / deny と理由を必ず返し、異常時は拒否する判定器を作る。規則は `common.toml` から生成し、「共通の禁止」と「役割ごとのプロファイル」に分ける（CHG-0018 の設計を引き継ぐ） | 進行中（1a 完了） |
+| 1a | `[pi]` を正本にする。`[opencode.shell] allow`・`redact`・`external_read`・`skill_scripts` を `[pi]` へ移し、OpenCode へは `generate.py` が写す。OpenCode の出力は変えない | 完了 |
+| 1b | 判定 API `decide()` を作る。応答に `source` を入れ、異常は deny | 未着手 |
+| 1c | `decide()` が今の `check_bash.py` と同じ入力で同じ deny / ask を返すことを試験で固定する | 未着手 |
 | 2 | **ハーネス拡張**。試作（`scripts/pi-harness-spike/`）を本番の形にする: ツールは組み込みに無い名前、`execute()` で再判定、確認は 1 件ずつ、伏字化は `content`・`structuredContent`・`details`、圧縮のファイルの一覧の補い、子エージェント、MCP はハーネスから登録 | 未着手 |
 | 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 未着手 |
 | 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 未着手 |
@@ -46,8 +49,14 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 ## 現在地
 
-段 1 の前の棚卸しを終えた（2026-10-09）。判定器を Claude Code / Copilot CLI と共有する案を立てた
-（「判定 API の入力（案）」）。実装には入っていない。
+段 1 を進めている。2026-10-09 に利用者が 2 つ決めた。
+
+- **判定器は Claude Code / Copilot CLI と共有する。** hook の出力は変えない（「判定 API の入力（案）」）
+- **`[pi]` を正本にし、OpenCode の値は `generate.py` で作る。** 段 6 で消すのが OpenCode 側になる
+
+1a（`[pi]` の正本化）を終えた。4 つの節を `[pi]` へ移し、`generate.py` の `load_common` で OpenCode の位置へ
+写す（[pi と共有する節](../spec/agent-config-generation.md#pi-と共有する節)）。2 つのユーザで、OpenCode・Claude・
+Copilot の生成の出力が移す前と一致した。
 
 ### 引き継ぐ前提（CHG-0019 の試作で確かめたこと）
 
@@ -165,10 +174,10 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 未解決点
 
-- **判定器を Claude Code / Copilot CLI と共有するか。** 案は「共有する。hook の出力は変えない」
-  （「判定 API の入力（案）」）。利用者の確認待ち
-- **`[pi]` と `[opencode.*]` に同じ値を置く期間の扱い。** 段 6 までは OpenCode も普段使いなので、
-  無確認の一覧・誘導・伏字化を両方に置くことになる。生成器でどちらかから作るか、片方を正本にするか
+- **`decide()` の置き場。** 判定の中身（`bashrules`）は `~/.claude/hooks/lib/` に、規則の読み込み
+  （`command_policy.py`）は `~/.config/agents/` にある。どちらに入口を置くか（1b で決める）
+- **`[[opencode.shell.guide]]` を `[pi]` へ移すか。** 正規表現は JavaScript の方言で書いてあり、1 件ずつの
+  仕分け（「OpenCode 専用の節」）が済むまで OpenCode 側に残す
 - **`[[opencode.shell.guide]]` の 13 件の仕分け。** 「OpenCode 専用の節」の表の方針で、1 件ずつ決める
 - **Windows。** pi は Windows に対応しているが、ハーネス・判定器・境界を Windows で動かすかは未定
   （今の `ocs` も Ubuntu / WSL のみ）
@@ -184,7 +193,7 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 次の調査・実験
 
-- 判定器の共有の案が通ったら、段 1 で `decide()` を作り、今の `check_bash.py` と同じ入力で同じ deny / ask を
+- 1b で `decide()` を作り、今の `check_bash.py` と同じ入力で同じ deny / ask を
   返すことを試験で固定する（Claude / Copilot の挙動を変えていないことの証拠）
 - 試作のスクリプト（`run.sh`・`paths-run.sh`・`child-run.sh`・`fence-run.sh`）を、段 2 で `test/` の
   回帰試験へ移す方法を決める（pi が無い環境では skip する）
@@ -216,6 +225,8 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-09**: 利用者が、判定器を Claude / Copilot と共有すること、`[pi]` を正本にすることを決めた。
+  1a として 4 つの節を `[pi]` へ移し、OpenCode へは `generate.py` で写す形にした（出力は不変）
 - **2026-10-09**: 第一サポートが決まったので、保留中の案件を整理した。CHG-0002 は段階 0〜3 の採用で閉じ、
   段階 5 の `verify` ツールを段 5 へ移した。CHG-0005 の再開条件を「段 6 で OpenCode の節を撤去したあと」にした
 - **2026-10-09**: 段 1 の前の棚卸しをした。判定器の意味解析（deny 25 種・ask 5 種）は OpenCode に
