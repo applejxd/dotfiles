@@ -18,6 +18,7 @@ Public API:
     default_common_path()                   -> str
     load_deny(common_toml_path=None)        -> list[str]
     load_ask(common_toml_path=None)         -> list[str]
+    load_file_globs(key, common_toml_path=None) -> list[str]
     split_command_segments(command_str)      -> list[str]
     normalize(command_str)                  -> list[str]
     find_match(command_str, patterns) -> str | None
@@ -110,6 +111,11 @@ def load_read_deny_globs(path: str | None = None) -> list[str]:
     このリストを読んで同じ判断を再現する。
     """
     return _load_str_list("file", "read_deny_globs", path)
+
+
+def load_file_globs(key: str, path: str | None = None) -> list[str]:
+    """Return ``[file] <key>`` (``read_deny_globs`` / ``write_deny_globs`` / ``*_ask_globs``)."""
+    return _load_str_list("file", key, path)
 
 
 def load_read_deny_exceptions(path: str | None = None) -> list[dict[str, object]]:

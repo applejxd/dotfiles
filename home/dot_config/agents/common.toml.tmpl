@@ -967,6 +967,18 @@ script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 # write は標準入力を引数のパスへ書くので載せない
 subcommands = ["paths", "lint", "read"]
 
+# pi の判定器の役割 (プロファイル)。判定器の `role` に名前を渡す。pi だけが読む。
+# tools に無いツールは deny。default は、どの規則にも当たらない操作の扱い。
+# ★評価の順番は判定器のコードに固定してある (この並びに意味は無い)。
+# see docs/spec/pi-decide.md
+[pi.profiles.implementer]
+tools = ["bash", "read", "edit", "write", "grep", "find", "ls"]
+default = "ask"
+
+[pi.profiles.reader]
+tools = ["read", "grep", "find", "ls"]
+default = "deny"
+
 # ---------------------------------------------------------------------------
 # OpenCode 固有
 # ---------------------------------------------------------------------------
