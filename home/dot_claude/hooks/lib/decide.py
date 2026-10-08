@@ -22,7 +22,9 @@ DECISIONS = ("allow", "ask", "deny")
 # 判定器が扱うツール。ハーネスは別名で登録しても、ここへは元の名前で渡す
 FILE_READ_TOOLS = ("read", "grep", "find", "ls")
 FILE_WRITE_TOOLS = ("edit", "write")
-KNOWN_TOOLS = ("bash", *FILE_READ_TOOLS, *FILE_WRITE_TOOLS)
+# 子エージェントの起動。子は同じハーネスと判定器で動くので、役割に入っていれば allow
+TASK_TOOL = "task"
+KNOWN_TOOLS = ("bash", *FILE_READ_TOOLS, *FILE_WRITE_TOOLS, TASK_TOOL)
 # 検査の上限。check_bash.py と同じ
 MAX_COMMAND_LEN = 10000
 # allow の一覧に当たっても、書き込みや実行時の展開の余地がある形は allow にしない
@@ -56,6 +58,12 @@ def _profile(pi: dict[str, Any], role: str) -> dict[str, Any]:
         raise ValueError(f"[pi.profiles.{role}] tools が文字列の配列ではありません")
     if default not in DECISIONS:
         raise ValueError(f"[pi.profiles.{role}] default が allow / ask / deny ではありません")
+    for key in ("shell_allow", "shell_deny"):
+        value = profile.get(key)
+        if value is not None and (
+            not isinstance(value, list) or not all(isinstance(c, str) for c in value)
+        ):
+            raise ValueError(f"[pi.profiles.{role}] {key} が文字列の配列ではありません")
     return profile
 
 
@@ -148,7 +156,7 @@ def _skill_script_allowed(cmd: str, pi: dict[str, Any]) -> str | None:
 
 
 def _decide_bash(
-    cmd: str, cwd: str, pi: dict[str, Any], policy: Any
+    cmd: str, cwd: str, pi: dict[str, Any], profile: dict[str, Any], policy: Any
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """(共通の禁止, 役割の確認と許可) を返す。"""
     from bashrules._shared import set_payload_cwd, split_heredoc_body
@@ -165,13 +173,20 @@ def _decide_bash(
     deny = _bash_common_deny(cmd)
     if deny:
         return deny, None
+    # 役割だけの禁止。共通の禁止ではないが、bypass では外れない (bypass は ask だけを変える)
+    role_deny = policy.find_match(cmd, [str(c) for c in profile.get("shell_deny") or []])
+    if role_deny:
+        return None, _response("deny", f"`{role_deny}` はこの役割の shell_deny にある", "rule")
     ask = _bash_ask(cmd)
     if ask:
         return None, ask
-    allow_list = [str(p) for p in ((pi.get("shell") or {}).get("allow") or [])]
-    matched = _all_segments_allowed(cmd, allow_list, policy)
+    # 役割が shell_allow を持てば、[pi.shell] allow の代わりにそれを使う
+    own = profile.get("shell_allow")
+    allow_list = own if own is not None else (pi.get("shell") or {}).get("allow") or []
+    where = "役割の shell_allow" if own is not None else "[pi.shell] allow"
+    matched = _all_segments_allowed(cmd, [str(p) for p in allow_list], policy)
     if matched:
-        return None, _response("allow", f"`{matched}` は [pi.shell] allow にある", "rule")
+        return None, _response("allow", f"`{matched}` は {where} にある", "rule")
     script = _skill_script_allowed(cmd, pi)
     if script:
         return None, _response("allow", f"`{script}` は [pi.skill_scripts] にある", "rule")
@@ -247,6 +262,11 @@ def _decide_file(
     return None, _response("ask", f"`{path}` は作業ツリーの外の読み取り", "rule")
 
 
+def _tool_in(tool: str, tools: list[str]) -> bool:
+    """役割の tools に入っているか。末尾が ``*`` の項目は前方一致 (``mcp__*`` など)。"""
+    return any(tool.startswith(t[:-1]) if t.endswith("*") else tool == t for t in tools)
+
+
 # ─── 入口 ───────────────────────────────────────────────────────────
 
 
@@ -299,19 +319,22 @@ def _decide(request: Any) -> dict[str, Any]:
         cmd = tool_input.get("command")
         if not isinstance(cmd, str) or not cmd:
             return _error("bash の command がありません")
-        common_deny, role_rule = _decide_bash(cmd, cwd, pi, policy)
+        common_deny, role_rule = _decide_bash(cmd, cwd, pi, profile, policy)
     elif tool in FILE_READ_TOOLS or tool in FILE_WRITE_TOOLS:
         path = tool_input.get("path", "." if tool in ("grep", "find", "ls") else None)
         if not isinstance(path, str) or not path:
             return _error(f"{tool} の path がありません")
         common_deny, role_rule = _decide_file(tool, path, cwd, pi, policy)
+    elif tool == TASK_TOOL:
+        reason = "子エージェントは同じハーネスと判定器で動く"
+        common_deny, role_rule = None, _response("allow", reason, "rule")
     else:
         common_deny, role_rule = None, None
     if common_deny:
         return common_deny
 
     # 2. 役割のツール
-    if tool not in profile["tools"]:
+    if not _tool_in(tool, profile["tools"]):
         return _response("deny", f"役割 {request['role']!r} は {tool} を使えない", "rule")
 
     # 3. 役割の確認と許可、4. 既定

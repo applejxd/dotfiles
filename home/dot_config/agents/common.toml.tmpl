@@ -971,13 +971,103 @@ subcommands = ["paths", "lint", "read"]
 # tools に無いツールは deny。default は、どの規則にも当たらない操作の扱い。
 # ★評価の順番は判定器のコードに固定してある (この並びに意味は無い)。
 # see docs/spec/pi-decide.md
+# shell_allow を書くと、その役割では [pi.shell] allow の代わりにそれを使う。
+# shell_deny はその役割だけの禁止 (bypass でも外れない)。
+# task は子エージェントの起動 ([pi.agents])。子は同じ判定器で動く。
+# 末尾が * の項目は前方一致。mcp__* は MCP のツール全部 (規則が無いので既定の扱いになる)。
 [pi.profiles.implementer]
-tools = ["bash", "read", "edit", "write", "grep", "find", "ls"]
+tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "mcp__*"]
 default = "ask"
 
 [pi.profiles.reader]
 tools = ["read", "grep", "find", "ls"]
 default = "deny"
+
+# コミットの計画役。読むだけで、git の状態の把握だけを確認なしで通す。
+# ★git status / git diff は .git/config 経由でコマンドを起動しうる。全体の [pi.shell] allow には載せない
+# see docs/spec/agent-config-generation.md#コミットの確認
+[pi.profiles.committer]
+tools = ["bash", "read", "grep", "find", "ls"]
+default = "deny"
+shell_allow = [
+  "git status",
+  "git diff",
+  "git log",
+  "git branch --show-current",
+  "git rev-parse --show-toplevel",
+]
+# 計画を返すだけなので、git の状態を変える操作は bypass でも通さない
+shell_deny = [
+  "git add",
+  "git commit",
+  "git stash",
+  "git checkout",
+  "git switch",
+  "git restore",
+  "git reset",
+]
+
+# 並列作業などの作業役。実装役と同じだが、git の状態を変える操作を禁じる (作業ツリーを共有するため)。
+[pi.profiles.worker]
+tools = ["bash", "read", "edit", "write", "grep", "find", "ls"]
+default = "ask"
+shell_deny = [
+  "git add",
+  "git commit",
+  "git stash",
+  "git checkout",
+  "git switch",
+  "git restore",
+  "git reset",
+]
+
+# 子エージェント。親の guarded_task ツールから起動する (子からさらに子は起動できない)。
+# profile は [pi.profiles] の名前、tier は [opencode.model.tier.*] の階層 (無ければ親と同じモデル)。
+# inherit_bypass = true なら、親が bypass のとき子も bypass で動く (ask を allow にする)。
+# ★ask に git commit などが残る役割 (committer) には付けない
+# see docs/spec/pi-harness.md#子エージェント
+[pi.agents.explore]
+profile = "reader"
+inherit_bypass = true
+description = "読み取り専用の探索役。今あるファイルを探して読み、要点を返す。shell は使えない"
+system = """
+あなたは読み取り専用の探索役です。親から依頼された調査を、ファイルを探して読むことで行い、
+見つけたことを根拠のパスと行とともに簡潔に返します。ファイルは編集しません。
+Git の履歴やコマンドの実行が要る調査は、できないことを書いて親へ返します。
+"""
+
+[pi.agents.review]
+profile = "reader"
+tier = "second_opinion"
+inherit_bypass = true
+description = "別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する。読むだけ。差分は依頼文に含めて渡す"
+system = """
+あなたはレビュー役です。依頼文の対象 (設計案・差分・調査結果) を読み、欠陥・見落とし・誤りを
+重大度 (BLOCKER / MAJOR / MINOR) と根拠付きで指摘します。修正はしません。確信が無いものは
+「未確認」と書きます。
+"""
+
+[pi.agents.commit]
+profile = "committer"
+tier = "routine"
+description = "変更を読み、論理単位ごとの対象ファイルとコミットメッセージ全文 (計画) を返す。ステージもコミットもしない"
+system = """
+あなたはコミットの計画係です。git status / git diff / git log で変更を読み、commit スキルの
+書式に従って、ファイル単位の論理単位ごとに対象のパスとメッセージの全文を返します。
+ステージもコミットもしません。shell は 1 回に 1 コマンドで、連結やリダイレクトを付けません。
+"""
+
+[pi.agents.worker]
+profile = "worker"
+tier = "worker"
+inherit_bypass = true
+description = "割り当てられた 1 つの作業を、指定された担当ファイルの範囲で実装して確かめ、結果を返す。コミットはしない"
+system = """
+あなたは作業役です。依頼された 1 つの作業を、担当ファイルの範囲で実装し、確認方法を実行して
+結果を返します。担当外のファイルは変えず、git の状態を変える操作 (add / commit / stash /
+checkout / switch / restore / reset) はしません。既存の振る舞いを変えたら呼び出し元を探して読み、
+影響を報告に書きます。
+"""
 
 # ---------------------------------------------------------------------------
 # OpenCode 固有
@@ -1683,7 +1773,7 @@ extensions = [".md", ".markdown"]
 [[mcp]]
 id = "agentcore-websearch"
 purpose = "Bedrock AgentCore Web Search で web 検索する"
-clis = ["claude", "opencode"]
+clis = ["claude", "opencode", "pi"]
 transport = "stdio"
 command = "uv"
 args = [

@@ -176,7 +176,7 @@ CLI ごとに書くと、URL を変えたときに片方だけ古いまま残る
 [[mcp]]
 id = "agentcore-websearch"
 purpose = "Bedrock AgentCore Web Search で web 検索する"
-clis = ["claude", "opencode"]
+clis = ["claude", "opencode", "pi"]
 transport = "stdio"
 command = "uv"
 args = [
@@ -193,6 +193,7 @@ args = [
 | OpenCode V2 | `~/.config/opencode/opencode.json` の `mcp.servers` | `generate.py --target opencode-config` |
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
+| pi | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。ハーネスが起動のたびに `registerMcpServer` で登録する（[pi のハーネス](pi-harness.md#mcp)） |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
 
@@ -203,10 +204,10 @@ deepwiki の代わりの OSS 調査は `oss-research` スキル（インスト�
 版を固定したソースに直接当たる）、GitHub の操作は github MCP を使わず
 `github-operations` スキル（gh CLI）が担う。
 
-**入れる CLI を絞るには `clis` を書く。** 省略すると 4 つ全部に入る。
-`agentcore-websearch` は `clis = ["claude", "opencode"]` にしてある（Copilot は内蔵の
+**入れる CLI を絞るには `clis` を書く。** 省略すると 5 つ全部に入る。
+`agentcore-websearch` は `clis = ["claude", "opencode", "pi"]` にしてある（Copilot は内蔵の
 web 検索があり、Codex は使わない）。書ける値は `claude` /
-`copilot` / `opencode` / `codex` で、それ以外を書くと apply が止まる。
+`copilot` / `opencode` / `codex` / `pi` で、それ以外を書くと apply が止まる。
 
 その結果、**Copilot / Codex 向けのサーバは現在 0 件**である。
 Codex の重複宣言ガードは `[[mcp]]` が 1 つ以上ないと発火しないので、試験だけ
@@ -279,7 +280,7 @@ Claude Code / OpenCode
 
 | 項目 | 決めたこと |
 | --- | --- |
-| 対象 | `llm-provider` が `amazon-bedrock` の PC。`clis = ["claude", "opencode"]` |
+| 対象 | `llm-provider` が `amazon-bedrock` の PC。`clis = ["claude", "opencode", "pi"]` |
 | リージョン | `us-east-1`（`[provider.amazon-bedrock]` と揃える） |
 | Gateway の URL | アカウント固有なのでソースに書かず、環境変数 `AGENTCORE_GATEWAY_URL` から読む |
 | 認証 | AWS の既定の認証情報（`AWS_PROFILE` / `~/.aws`）。API キーは無い |

@@ -37,6 +37,9 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
     rules = gen.build_pi_harness({}, load_common())
     rules["decide"] = str(DECIDE)
+    # 子エージェントも偽のモデルで動かす (階層のモデルは認証が要る)
+    for agent in rules["agents"].values():
+        agent["model"] = None
     (harness / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
     proj = tmp_path / "proj"
     proj.mkdir()
@@ -54,7 +57,8 @@ def env(tmp_path):
 
 
 def run_pi(env, calls, *messages, extra=(), mode="print", **env_extra):
-    args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", str(env["harness"])]
+    args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
+    args += ["-e", str(env["harness"])]
     args += [*extra, "-e", str(FIXTURES / "faux.ts")]
     if mode == "json":
         args += ["--mode", "json"]
@@ -84,7 +88,7 @@ def test_only_guarded_tools_are_declared(env):
     proc = run_pi(env, [])
     assert proc.returncode == 0, proc.stderr
     tools = json.loads(lines(proc)[0].removeprefix("TOOLS="))
-    names = ("bash", "edit", "find", "grep", "ls", "read", "write")
+    names = ("bash", "edit", "find", "grep", "ls", "read", "task", "write")
     assert tools == sorted(f"guarded_{t}" for t in names)
 
 
@@ -110,9 +114,15 @@ def test_bypass_runs_ask_but_not_deny(env):
     assert "isError=true" in proc.stdout
 
 
-def test_reader_role_cannot_use_bash(env):
+def test_reader_role_does_not_see_bash(env):
     proc = run_pi(env, bash_call("wc -c /dev/null"), PI_HARNESS_ROLE="reader")
-    assert "isError=true" in proc.stdout and "使えない" in proc.stdout
+    assert lines(proc)[0] == 'TOOLS=["guarded_find","guarded_grep","guarded_ls","guarded_read"]'
+    assert "Tool guarded_bash not found" in proc.stdout
+
+
+def test_unknown_role_registers_no_tools(env):
+    proc = run_pi(env, bash_call("wc -c /dev/null"), PI_HARNESS_ROLE="nobody")
+    assert lines(proc)[0] == "TOOLS=[]", proc.stdout
 
 
 def test_broken_decide_is_denied(env):
@@ -189,3 +199,71 @@ def test_output_of_commands_touching_protected_paths_is_withheld(env):
     proc = run_pi(env, bash_call("wc -c ~/.ssh/known_hosts"), PI_HARNESS_BYPASS="1")
     # wc は deny (秘密のパスの読み取り) で止まるか、通っても出力を伏せる
     assert "isError=true" in proc.stdout or "[伏字] 保護対象のパス" in proc.stdout, proc.stdout
+
+
+# ─── 子エージェント ─────────────────────────────────────────────────
+
+
+def run_child(env, agent, child_calls, **env_extra):
+    calls = [{"name": "guarded_task", "args": {"agent": agent, "task": "do it"}}]
+    return run_pi(
+        env,
+        calls,
+        FAUX_CHILD_TOOL_CALLS=json.dumps(child_calls),
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+        **env_extra,
+    )
+
+
+def test_child_cannot_start_another_child(env):
+    calls = [{"name": "guarded_task", "args": {"agent": "worker", "task": "x"}}]
+    proc = run_child(env, "worker", calls)
+    assert "completed" in proc.stdout, proc.stdout
+    assert "Tool guarded_task not found" in proc.stdout
+
+
+def test_reader_child_does_not_get_bash(env):
+    proc = run_child(env, "explore", bash_call("wc -c /dev/null"))
+    assert "Tool guarded_bash not found" in proc.stdout, proc.stdout
+
+
+def test_child_ask_is_returned_as_blocked(env):
+    proc = run_child(env, "worker", bash_call("touch by-child"))
+    assert "child worker: blocked" in proc.stdout, proc.stdout
+    assert "needs the user's approval" in proc.stdout
+    assert "isError=true" in proc.stdout
+    assert not (env["proj"] / "by-child").exists()
+
+
+def test_parent_bypass_reaches_only_children_that_inherit_it(env):
+    proc = run_child(env, "worker", bash_call("touch by-child"), PI_HARNESS_BYPASS="1")
+    assert "child worker: completed" in proc.stdout, proc.stdout
+    assert (env["proj"] / "by-child").exists()
+
+
+@pytest.mark.parametrize("agent", ["worker", "commit"])
+def test_child_role_denies_git_state_changes_even_with_bypass(env, agent):
+    proc = run_child(env, agent, bash_call("git add -- x"), PI_HARNESS_BYPASS="1")
+    assert "shell_deny" in proc.stdout, proc.stdout
+
+
+def test_commit_child_reads_git_without_confirmation(env):
+    subprocess.run(["git", "init", "-q"], cwd=env["proj"], check=True)
+    proc = run_child(env, "commit", bash_call("git status --short"))
+    assert "child commit: completed" in proc.stdout, proc.stdout
+    assert "tool error" not in proc.stdout
+
+
+# ─── MCP ────────────────────────────────────────────────────────────
+
+
+def test_mcp_servers_are_registered_by_the_harness_and_judged(env):
+    rules = json.loads((env["harness"] / "rules.json").read_text(encoding="utf-8"))
+    config = {"command": sys.executable, "args": [str(FIXTURES / "mcp_server.py")]}
+    rules["mcp"] = [{"name": "spike", "config": {**config, "exposure": "direct"}}]
+    (env["harness"] / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
+    proc = run_pi(env, [{"name": "mcp__spike__echo_secret", "args": {}}])
+    assert "mcp__spike__echo_secret" in lines(proc)[0], proc.stdout
+    # 実装役では MCP のツールは既定の扱い (確認)。UI の無い起動では拒否になる
+    assert "isError=true :: not approved:" in proc.stdout, proc.stdout
+    assert "mcp-raw-secret" not in proc.stdout

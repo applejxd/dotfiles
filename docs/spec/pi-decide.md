@@ -27,10 +27,10 @@ response: { decision: allow | ask | deny, reason, source: rule | check | default
 
 | キー | 中身 |
 | --- | --- |
-| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls`。ハーネスがツールを別名で登録していても、元の名前で渡す。ほかの名前（MCP など）は役割の `tools` に無いので deny |
+| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls` / `task`（子エージェントの起動）と MCP のツール（`mcp__…`）。ハーネスがツールを別名で登録していても、元の名前で渡す。役割の `tools` に無い名前は deny |
 | `input` | ツールの引数。`bash` は `command`、ファイルのツールは `path`（`grep` / `find` / `ls` は省略すると `.`） |
 | `cwd` | 作業ディレクトリの絶対パス。相対パスの解決と「作業ツリーの中か」の判定に使う |
-| `role` | `[pi.profiles]` の名前（`implementer` / `reader`） |
+| `role` | `[pi.profiles]` の名前（「役割」の表） |
 | `bypass` | 真なら ask を allow にする（deny は変えない） |
 | `boundary` | 境界（Fence）の内側か。**受け取るだけで、まだ判定に使っていない**（CHG-0020 の段 4） |
 
@@ -57,12 +57,14 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
    - ファイル: `[file] read_deny_globs`（`read` / `grep` / `find` / `ls`）と `write_deny_globs`（`edit` / `write`）。
      例外（`[[file.deny_exceptions]]`）は対の deny にだけ効く。パスは渡された形・`cwd` で解いた絶対パス・
      symlink を解いた実体の 3 つで照合する。ディレクトリを渡す `grep` / `find` / `ls` は、中のファイルの形でも照合する
-2. **役割のツール**。役割の `tools` に無いツールは deny
+2. **役割のツール**。役割の `tools` に無いツールは deny（末尾が `*` の項目は前方一致）
 3. **役割の確認と許可**
-   - `bash`: `check_bash.py` の ask 側（`[bash] ask` と意味解析）。当たらず、全部の区切りが `[pi.shell] allow` に当たれば allow。
+   - `bash`: 役割の `shell_deny` に当たれば deny（bypass でも外れない）。次に `check_bash.py` の ask 側（`[bash] ask` と意味解析）。
+     当たらず、全部の区切りが `[pi.shell] allow`（役割に `shell_allow` があればそちら）に当たれば allow。
      `>` `<` `` ` `` `$(` `--output` を含む形は allow にしない。`[pi.skill_scripts]` の宣言どおりの形も allow
    - 読み取り: `[file] read_ask_globs` は ask。作業ツリーの中と `[pi.external_read]` の中は allow。それ以外の外は ask
    - 書き込み: `[file] write_ask_globs` は ask。作業ツリーの外は ask。中は allow
+   - `task`: allow（子は同じハーネスと判定器で、子の役割で判定される）
 4. **既定**。役割の `default`（実装役は ask、読み取り役は deny）
 5. **bypass**。3・4 の ask だけを allow にする
 
@@ -71,17 +73,18 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 
 ## 役割
 
-```toml
-[pi.profiles.implementer]
-tools = ["bash", "read", "edit", "write", "grep", "find", "ls"]
-default = "ask"
+| 役割 | `tools` | `default` | ほか | 使うもの |
+| --- | --- | --- | --- | --- |
+| `implementer` | 7 つのツール・`task`・`mcp__*` | ask | — | 親（主エージェント） |
+| `reader` | read・grep・find・ls | deny | — | 子の `explore` / `review` |
+| `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |
+| `worker` | 7 つのツール | ask | `shell_deny` に git の状態を変える操作 | 子の `worker` |
 
-[pi.profiles.reader]
-tools = ["read", "grep", "find", "ls"]
-default = "deny"
-```
+`git status` / `git diff` は `.git/config` 経由でコマンドを起動しうるので、全体の `[pi.shell] allow` には載せず、
+`committer` の `shell_allow` だけに置く（今の OpenCode の `commit` と同じ）。
 
-`tools` が文字列の配列でない・`default` が allow / ask / deny でない・名前が無いときは、`source: error` の deny。
+`tools` が文字列の配列でない・`default` が allow / ask / deny でない・`shell_allow` / `shell_deny` が文字列の
+配列でない・名前が無いときは、`source: error` の deny。
 
 ## 試験
 

@@ -8,11 +8,12 @@ OpenCode のハーネス（permission の生成・guide plugin）の後継で、
 **起動の入口はまだ配っていない**（CHG-0020 の段 3）。今は手で次のように起動する。
 
 ```bash
-pi -nbt -ne -e ~/.config/pi/harness
+pi -nbt -ne -e builtin:mcp -e ~/.config/pi/harness
 ```
 
 - `-nbt`（`--no-builtin-tools`）: 組み込みのツールを使わない。ツールはハーネスが登録したものだけになる
 - `-ne`（`--no-extensions`）: ほかの拡張を読まない。判定の後に入力を書き換える拡張を入れないため
+- `-e builtin:mcp`: `-ne` で外れる組み込みの MCP 対応だけを戻す。サーバはハーネスが登録する（[MCP](#mcp)）
 
 ## 置き場
 
@@ -30,12 +31,14 @@ Windows には配らない（`.chezmoiignore.tmpl` の `.config/*`）。
 | `PI_HARNESS_ROLE` | `implementer` | 判定器へ渡す役割（`[pi.profiles]` の名前） |
 | `PI_HARNESS_BYPASS` | 無し | `1` なら判定器へ `bypass` を渡す（ask だけを allow にする） |
 | `PI_HARNESS_BOUNDARY` | 無し | `1` なら判定器へ `boundary` を渡す（判定器はまだ使っていない） |
+| `PI_HARNESS_CHILD` | 無し | `1` なら子エージェントとして動く（`guarded_task` を登録しない）。ハーネスが子を起動するときに付ける |
+| `PI_HARNESS_TEST_CHILD_EXT` | 無し | 試験だけが使う。子にも読ませる拡張（偽のモデル）のパス |
 
 ## しくみ
 
 | 項目 | 内容 | 理由 |
 | --- | --- | --- |
-| ツール | `guarded_bash` / `guarded_read` / `guarded_edit` / `guarded_write` / `guarded_grep` / `guarded_find` / `guarded_ls`。中身は pi の組み込みの定義 | **組み込みと同じ名前にしない。** `/reload` でハーネスが抜けると、直前に有効だったツールの名前が組み込みの定義に解決され、判定なしで動く（E1）。別名ならツールが 0 個になる |
+| ツール | `guarded_bash` / `guarded_read` / `guarded_edit` / `guarded_write` / `guarded_grep` / `guarded_find` / `guarded_ls`。中身は pi の組み込みの定義。**役割の `tools` に無いものは登録しない**（モデルに見せない。判定は判定器が別に行う）。役割が `rules.json` に無ければ何も登録しない | **組み込みと同じ名前にしない。** `/reload` でハーネスが抜けると、直前に有効だったツールの名前が組み込みの定義に解決され、判定なしで動く（E1）。別名ならツールが 0 個になる |
 | 判定 | `tool_call` で判定器を呼ぶ。deny は止め、ask は確認画面を出す（UI が無ければ拒否）。**最終の判定は各ツールの `execute()` の中**で行う | `tool_call` の後に別の拡張が入力を書き換えても止めるため（E1）。`execute()` は、`tool_call` のときと同じ入力なら判定を使い回し、違えば判定し直す |
 | 判定器の異常 | 起動できない・異常終了・タイムアウト（15 秒）・形の正しくない応答は deny | 空の応答を allow と読まない |
 | 確認 | 1 件ずつ順に出す | TUI の確認画面は 1 枠を共有し、後の確認が先の確認を置き換える。codemode の中で並べた呼び出しで、先の確認が永久に止まった（E3） |
@@ -45,6 +48,46 @@ Windows には配らない（`.chezmoiignore.tmpl` の `.config/*`）。
 | 圧縮 | `session_before_compact` で、`guarded_read` / `guarded_edit` / `guarded_write` が触ったファイルを圧縮のファイルの一覧に足す | pi の既定の圧縮は `read` / `edit` / `write` の名前でしか拾わない（E2） |
 | シェルの環境変数 | `[agent_env]` を、未設定のときだけ bash の環境へ入れる | git の入力待ちを防ぐ（[shell ツールの環境変数](agent-config-generation.md#shell-ツールの環境変数)） |
 | `rules.json` | 読めない・形が違うときは、拡張の読み込みごと失敗させる | 起動は止まり、`/reload` ではツールが無くなる（どちらも判定なしでは動かない） |
+
+## 子エージェント
+
+`[pi.agents.<名前>]` に宣言し、親の `guarded_task` ツール（引数 `agent` と `task`）で起動する。
+子は同じハーネスを付けた別の pi プロセス（`--mode json -p --no-session -nbt -ne -e builtin:mcp`
+の形）で、判定は子のハーネスが子の役割で行う。
+
+| キー | 意味 |
+| --- | --- |
+| `profile` | 子の役割（`[pi.profiles]` の名前）。`task` を持つ役割は使えない（入れ子にしない） |
+| `tier` | モデルの階層。今は `[opencode.model.tier.<プロバイダ>]` から引き、`#variant` を pi の思考の強さ（`:medium` など）に読み替える。無ければ親と同じモデル |
+| `inherit_bypass` | 真なら、親が bypass のとき子も bypass で動く。ask に `git commit` などが残る役割には付けない |
+| `description` / `system` | 親のツールの説明に出す説明と、子のシステムプロンプトに足す指示（`--append-system-prompt`） |
+
+今の宣言（`common.toml.tmpl`）:
+
+| 名前 | 役割 | 階層 | bypass を継ぐ | 今の OpenCode での相当 |
+| --- | --- | --- | --- | --- |
+| `explore` | `reader` | 親と同じ | 継ぐ | `explore` |
+| `review` | `reader` | `second_opinion` | 継ぐ | `review` |
+| `commit` | `committer` | `routine` | 継がない | `commit` |
+| `worker` | `worker` | `worker` | 継ぐ | `fleet-worker` / `bypass-fleet-worker` |
+
+- 子は会話を見られないので、親は必要なことを全部 `task` に書く
+- **子の結果**: 子の JSON のイベントから、承認されなかった呼び出し（理由が `not approved:` で始まる。
+  ハーネスが付ける）・ほかのツールのエラー・最後の返答を拾う。承認されなかった呼び出しがあれば
+  `blocked`（承認待ちで未完了）として、親のツールの結果をエラーにする。子は UI を持たないので、子の
+  ask は bypass を継がない限り `blocked` になる
+- 親を中断すると、子をプロセスグループごと止める
+- 子の返答の本文にも伏字化を掛ける
+- 起動の前に、親の判定器で `task` を判定する（`tool_call` と `execute()` の両方）
+
+## MCP
+
+`[[mcp]]` のうち `clis` に `pi` を含むものを、ハーネスが起動のたびに `registerMcpServer` で登録する。
+ハーネスが抜ければ登録も消える。MCP のツール（`mcp__<サーバ>__<ツール>`）は、実装役の `tools` の
+`mcp__*` に当たり、規則が無いので既定（確認）になる。読み取り役などには出ない。
+
+**`~/.pi/agent/mcp.json` には書かない。** そこのサーバはハーネスと関係なく繋がるので、ハーネスが
+抜けたときに判定なしで残る（`pi mcp add` はそこへ書く）。
 
 ## pi の内部の挙動に頼る点
 
@@ -65,9 +108,13 @@ Windows には配らない（`.chezmoiignore.tmpl` の `.config/*`）。
 - `/reload` でハーネスが抜けるとツールが 0 個になる（構文エラーと削除の 2 通り）
 - 判定の後に別の拡張（`test/agents/pi/mutator.ts`）が入力を書き換えても実行しない
 - 伏字化（JSON のイベント・退避ファイルに生の秘密が残らない）と、保護対象のパスを参照したコマンド
+- 子エージェント: 入れ子にならない・読み取り役に bash を出さない・子の ask が `blocked` で返る・
+  bypass を継ぐ・役割の `shell_deny` が bypass でも効く・`commit` が確認なしで git を読む
+- MCP: ハーネスから登録され、実装役では確認になる
 
 ## 未対応
 
-- 子エージェント・MCP・誘導（`[[opencode.shell.guide]]`）（CHG-0020 の段 2 の残り）
+- 誘導（`[[opencode.shell.guide]]`）（CHG-0020 の段 2c）
+- 子エージェントの階層のモデルは、Copilot で確かめただけ。Bedrock のモデル ID が pi でそのまま通るかは未確認
 - 起動の入口・設定の配布（段 3）、境界（段 4）
 - 判定 1 回に 0.1 秒ほどかかる（Python の起動）。`tool_call` と `execute()` で同じ入力なら 1 回にしている

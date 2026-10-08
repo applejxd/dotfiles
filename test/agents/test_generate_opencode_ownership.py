@@ -117,7 +117,19 @@ def test_clean_output_matches_the_generator_before(before, username, models):
     common = load_common(username)
     if not models:
         common = without_models(common)
-    assert generated(common) == before.merge_opencode_config({}, copy.deepcopy(common))
+    assert generated(common) == before.merge_opencode_config({}, _for_old_generator(common))
+
+
+def _for_old_generator(common: dict) -> dict:
+    """P の直前の生成器が知らない入力を外す。どれも OpenCode の出力には影響しない。
+
+    ``[[mcp]] clis`` の ``pi`` は後から足した生成先で、古い生成器は未知の値として止まる。
+    """
+    common = copy.deepcopy(common)
+    for server in common.get("mcp", []):
+        if "clis" in server:
+            server["clis"] = [c for c in server["clis"] if c != "pi"]
+    return common
 
 
 @USERS

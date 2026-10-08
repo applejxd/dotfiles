@@ -221,8 +221,37 @@ def test_reader_cannot_write_but_can_read():
 
 
 def test_unknown_tools_are_denied():
-    response = decide(req("mcp__x__y"))
+    response = decide(req("codemode"))
     assert (response["decision"], response["source"]) == ("deny", "rule")
+    assert decide(req("mcp__x__y", role="reader"))["decision"] == "deny"
+
+
+def test_prefix_entries_in_tools_match_mcp_tools():
+    # 実装役は mcp__* を持つ。規則が無いので既定 (確認)
+    response = decide(req("mcp__x__y"))
+    assert (response["decision"], response["source"]) == ("ask", "default")
+
+
+@pytest.mark.parametrize(
+    ("role", "command", "bypass", "decision"),
+    [
+        ("committer", "git status --short", False, "allow"),
+        ("committer", "git diff --stat", False, "allow"),
+        ("committer", "wc -l README.md", False, "deny"),
+        ("committer", "git commit -m x", True, "deny"),
+        ("worker", "git add -- a", True, "deny"),
+        ("worker", "cd x && git commit -m y", True, "deny"),
+        ("worker", "python3 t.py", True, "allow"),
+        ("implementer", "git add -- a", False, "ask"),
+    ],
+)
+def test_profile_shell_allow_and_deny(role, command, bypass, decision):
+    assert bash(command, role=role, bypass=bypass)["decision"] == decision
+
+
+def test_task_is_allowed_only_for_roles_that_have_it():
+    assert decide(req("task"))["decision"] == "allow"
+    assert decide(req("task", role="worker"))["decision"] == "deny"
 
 
 # ─── check_bash.py との等価 ─────────────────────────────────────────

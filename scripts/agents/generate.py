@@ -521,7 +521,7 @@ MCP_TRANSPORT_KEYS = {
 MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis"}
 
 # ``clis`` に書ける生成先。省略したら全部に入る。
-MCP_CLIS = {"claude", "copilot", "opencode", "codex"}
+MCP_CLIS = {"claude", "copilot", "opencode", "codex", "pi"}
 
 
 def mcp_servers(common: dict[str, Any], cli: str | None = None) -> list[tuple[str, dict[str, Any]]]:
@@ -1806,7 +1806,82 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
         "decide": expand_user("~/.claude/hooks/decide.py"),
         "agent_env": agent_env(common),
         "redact": redact,
+        "agents": pi_agents(common),
+        "mcp": pi_mcp_servers(common),
+        # 役割ごとに登録するツール。判定は判定器が行い、ここは「モデルに見せるか」だけ
+        "profile_tools": {
+            str(name): list(profile.get("tools") or [])
+            for name, profile in ((common.get("pi") or {}).get("profiles") or {}).items()
+        },
     }
+
+
+PI_AGENT_KEYS = frozenset({"profile", "description", "system", "tier", "inherit_bypass"})
+
+
+def pi_model_ref(common: dict[str, Any], tier: str) -> str:
+    """階層を pi の ``--model`` の形 (``provider/model[:thinking]``) にする。
+
+    階層の表は今は ``[opencode.model]`` にある。OpenCode の ``#variant`` は pi の思考の強さ
+    (``:low`` など) に読み替える。
+    """
+    cfg = common.get("opencode", {}).get("model") or {}
+    provider = str(cfg.get("provider", ""))
+    tiers = (cfg.get("tier") or {}).get(provider) or {}
+    if tier not in tiers:
+        raise SystemExit(
+            f"[pi.agents] の tier {tier!r} が opencode.model.tier.{provider} に無い。定義済み: "
+            + (", ".join(sorted(tiers)) or "(なし)")
+        )
+    model, _, variant = str(tiers[tier]).partition("#")
+    return f"{provider}/{model}" + (f":{variant}" if variant else "")
+
+
+def pi_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """``[pi.agents]`` を検査し、ハーネスが子エージェントを起動する形にする。"""
+    pi = common.get("pi") or {}
+    profiles = pi.get("profiles") or {}
+    out: dict[str, dict[str, Any]] = {}
+    for name, agent in (pi.get("agents") or {}).items():
+        where = f"[pi.agents.{name}]"
+        if not isinstance(agent, dict):
+            raise SystemExit(f"{where} は表でなければならない")
+        _reject_unknown(f"pi.agents.{name}", set(agent), PI_AGENT_KEYS)
+        if not MCP_ID_CHARS.issuperset(name):
+            raise SystemExit(f"{where} の名前は英数字・ハイフン・アンダースコアのみ")
+        profile = agent.get("profile")
+        if profile not in profiles:
+            raise SystemExit(f"{where} の profile {profile!r} が [pi.profiles] に無い")
+        if "task" in (profiles[profile].get("tools") or []):
+            # 子からさらに子を起動させない (ハーネスも子では task を登録しない)
+            raise SystemExit(f"{where} の profile {profile!r} は task を持つので子に使えない")
+        for key in ("description", "system"):
+            if not isinstance(agent.get(key), str) or not agent[key].strip():
+                raise SystemExit(f"{where} に {key} (空でない文字列) が要る")
+        inherit = agent.get("inherit_bypass", False)
+        if not isinstance(inherit, bool):
+            raise SystemExit(f"{where} の inherit_bypass は真偽値")
+        tier = agent.get("tier")
+        out[str(name)] = {
+            "profile": profile,
+            "description": agent["description"].strip(),
+            "system": agent["system"].strip(),
+            "model": pi_model_ref(common, str(tier)) if tier else None,
+            "inherit_bypass": inherit,
+        }
+    return out
+
+
+def pi_mcp_servers(common: dict[str, Any]) -> list[dict[str, Any]]:
+    """``[[mcp]]`` のうち pi へ出すもの。ハーネスが ``registerMcpServer`` で登録する。"""
+    out: list[dict[str, Any]] = []
+    for name, server in mcp_servers(common, "pi"):
+        if server["transport"] == "http":
+            config: dict[str, Any] = {"url": server["url"]}
+        else:
+            config = {"command": server["command"], "args": server["args"]}
+        out.append({"name": name, "config": config})
+    return out
 
 
 def build_opencode_guide(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:

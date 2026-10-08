@@ -11,10 +11,11 @@ import {
 	createReadToolDefinition,
 	createWriteToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Type } from "typebox";
 
 type Decision = { decision: "allow" | "ask" | "deny"; reason: string; source: string };
 
@@ -26,6 +27,10 @@ const TOOLS = ["bash", "read", "edit", "write", "grep", "find", "ls"] as const;
 const ROLE = process.env.PI_HARNESS_ROLE || "implementer";
 const BYPASS = process.env.PI_HARNESS_BYPASS === "1";
 const BOUNDARY = process.env.PI_HARNESS_BOUNDARY === "1";
+// 子エージェントとして起動されたか。子では guarded_task を登録しない (入れ子にしない)
+const CHILD = process.env.PI_HARNESS_CHILD === "1";
+// 承認されなかった呼び出しの理由の先頭。子の結果から「承認待ちで未完了」を見分けるのに使う
+const NOT_APPROVED = "not approved:";
 const DECIDE_TIMEOUT_MS = 15000;
 
 // rules.json が読めなければ読み込みごと失敗させる。起動は止まり、/reload ではツールが無くなる
@@ -135,7 +140,7 @@ export default function (pi: ExtensionAPI) {
 		if (d.decision === "ask") {
 			const ok =
 				ctx.hasUI && (await confirmInOrder(ctx, "実行してよいですか？", `${tool}: ${input}\n理由: ${d.reason}`));
-			if (!ok) return { block: true, reason: `not approved: ${d.reason}` };
+			if (!ok) return { block: true, reason: `${NOT_APPROVED} ${d.reason}` };
 			decided.set(event.toolCallId, { input, decision: d, approved: true });
 			return undefined;
 		}
@@ -167,7 +172,11 @@ export default function (pi: ExtensionAPI) {
 		find: createFindToolDefinition(cwd),
 		ls: createLsToolDefinition(cwd),
 	};
+	// 役割に無いツールは登録しない (モデルに見せない)。判定は判定器が別に行う。
+	// 役割が rules.json に無ければ何も登録しない
+	const roleTools: string[] = rules.profile_tools?.[ROLE] ?? [];
 	for (const tool of TOOLS) {
+		if (!roleTools.includes(tool)) continue;
 		const def = definitions[tool];
 		pi.registerTool({
 			...def,
@@ -196,6 +205,12 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
+	// MCP はハーネスから登録する。ハーネスが抜ければ登録も消える (spike の E3)
+	for (const server of rules.mcp ?? []) pi.registerMcpServer(server.name, server.config);
+
+	const agents: Record<string, any> = rules.agents ?? {};
+	if (!CHILD && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);
+
 	// 既定の圧縮は read / edit / write の名前でファイルの操作を拾うので、別名の分を足す。
 	// preparation は既定の要約にそのまま渡る (spike の E2)
 	pi.on("session_before_compact", async (event) => {
@@ -214,5 +229,95 @@ export default function (pi: ExtensionAPI) {
 			}
 		}
 		return undefined;
+	});
+}
+
+// ─── 子エージェント ─────────────────────────────────────────────────
+
+type ChildResult = { status: "completed" | "blocked" | "failed"; blocked: string[]; errors: string[]; answer: string };
+
+// 子の JSON のイベントから、承認されなかった呼び出し・ほかのツールのエラー・最後の返答を拾う
+export function readChild(stdout: string, code: number): ChildResult {
+	const blocked: string[] = [];
+	const errors: string[] = [];
+	let answer = "";
+	for (const line of stdout.split("\n")) {
+		let e: any;
+		try {
+			e = JSON.parse(line);
+		} catch {
+			continue;
+		}
+		if (e.type === "tool_execution_end" && e.isError) {
+			const text = (e.result?.content ?? []).map((c: any) => c.text ?? "").join("");
+			(text.startsWith(NOT_APPROVED) ? blocked : errors).push(`${e.toolName}: ${text.slice(0, 300)}`);
+		}
+		if (e.type === "message_end" && e.message?.role === "assistant") {
+			answer = (e.message.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("");
+		}
+	}
+	const status = code !== 0 ? "failed" : blocked.length > 0 ? "blocked" : "completed";
+	return { status, blocked, errors, answer };
+}
+
+function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
+	const names = Object.keys(agents);
+	const catalog = names.map((n) => `- ${n}: ${agents[n].description}`).join("\n");
+	pi.registerTool({
+		name: `${PREFIX}task`,
+		label: "task",
+		description:
+			"Run a task in a child agent. The child is a separate pi process with the same guard, and cannot see this conversation, " +
+			"so put everything it needs into `task`. Agents:\n" +
+			catalog,
+		parameters: Type.Object({
+			agent: Type.Union(names.map((n) => Type.Literal(n))),
+			task: Type.String({ description: "What the child should do, with all the context it needs" }),
+		}),
+		async execute(_toolCallId: string, params: any, signal: any, _onUpdate: any, ctx: any) {
+			const agent = agents[params.agent];
+			if (!agent) throw new Error(`unknown agent: ${params.agent}`);
+			// 最終の判定 (ほかのツールと同じく execute() でも確かめる)
+			const d = decide("task", params, ctx.cwd);
+			if (d.decision !== "allow") throw new Error(`実行前の判定で止めた: ${d.decision}: ${d.reason}`);
+			const args = ["--mode", "json", "-p", "--no-session", "-nbt", "-ne", "-e", HERE];
+			// 試験だけが使う (偽のモデルを子にも読ませる)
+			for (const ext of (process.env.PI_HARNESS_TEST_CHILD_EXT ?? "").split(",").filter(Boolean)) args.push("-e", ext);
+			const model = agent.model ?? `${ctx.model.provider}/${ctx.model.id}`;
+			args.push("--model", model, "--append-system-prompt", agent.system, params.task);
+			const env: Record<string, string | undefined> = {
+				...process.env,
+				PI_HARNESS_CHILD: "1",
+				PI_HARNESS_ROLE: agent.profile,
+				PI_HARNESS_BYPASS: BYPASS && agent.inherit_bypass ? "1" : "",
+			};
+			const child = spawn("pi", args, { cwd: ctx.cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+			const kill = () => {
+				try {
+					process.kill(-child.pid!, "SIGTERM");
+				} catch {}
+			};
+			signal?.addEventListener("abort", kill, { once: true });
+			let out = "";
+			child.stdout.on("data", (b: Buffer) => (out += b.toString()));
+			child.stderr.on("data", () => {});
+			const code: number = await new Promise((resolve) => child.on("close", (c: number | null) => resolve(c ?? -1)));
+			signal?.removeEventListener("abort", kill);
+			if (signal?.aborted) throw new Error("child aborted");
+			const r = readChild(out, code);
+			const text = [
+				`child ${params.agent}: ${r.status} (exit ${code})`,
+				...r.blocked.map((b) => `- needs the user's approval (not run): ${b}`),
+				...r.errors.map((b) => `- tool error: ${b}`),
+				"",
+				r.answer,
+			].join("\n");
+			// 子の出力にも伏字化を掛ける (子の bash の出力は子のハーネスが伏せているが、返答の本文は伏せていない)
+			return {
+				content: [{ type: "text", text: redactText(text) }],
+				details: { agent: params.agent, status: r.status, blocked: r.blocked.length, errors: r.errors.length },
+				isError: r.status !== "completed",
+			};
+		},
 	});
 }

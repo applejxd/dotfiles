@@ -17,7 +17,9 @@ export default async function (pi: ExtensionAPI) {
 	// pi-ai の faux は拡張から解決できる入口に無いので、同梱の実体を直接読む
 	const fauxPath = join(getPackageDir(), "..", "pi-ai", "dist", "providers", "faux.js");
 	const { createFauxCore, fauxAssistantMessage, fauxText, fauxToolCall } = await import(pathToFileURL(fauxPath).href);
-	const calls: Call[] = JSON.parse(process.env.FAUX_TOOL_CALLS ?? "[]");
+	// 子エージェントとして起動されたら、子用の呼び出しを使う
+	const source = process.env.PI_HARNESS_CHILD === "1" ? process.env.FAUX_CHILD_TOOL_CALLS : process.env.FAUX_TOOL_CALLS;
+	const calls: Call[] = JSON.parse(source ?? "[]");
 	const core = createFauxCore({ provider: "faux", models: [{ id: "spike" }] });
 	const step = (context: any) => {
 		const messages = context.messages;

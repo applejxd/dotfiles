@@ -36,9 +36,9 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | 1a | `[pi]` を正本にする。`[opencode.shell] allow`・`redact`・`external_read`・`skill_scripts` を `[pi]` へ移し、OpenCode へは `generate.py` が写す。OpenCode の出力は変えない | 完了 |
 | 1b | 判定 API `decide()` を作る。応答に `source` を入れ、異常は deny | 完了（[判定 API](../spec/pi-decide.md)） |
 | 1c | `decide()` が今の `check_bash.py` と同じ入力で同じ deny / ask を返すことを試験で固定する | 完了（1041 件で一致） |
-| 2 | **ハーネス拡張**。試作（`scripts/pi-harness-spike/`）を本番の形にする: ツールは組み込みに無い名前、`execute()` で再判定、確認は 1 件ずつ、伏字化は `content`・`structuredContent`・`details`、圧縮のファイルの一覧の補い、子エージェント、MCP はハーネスから登録 | 進行中（2a 完了） |
+| 2 | **ハーネス拡張**。試作（`scripts/pi-harness-spike/`）を本番の形にする: ツールは組み込みに無い名前、`execute()` で再判定、確認は 1 件ずつ、伏字化は `content`・`structuredContent`・`details`、圧縮のファイルの一覧の補い、子エージェント、MCP はハーネスから登録 | 進行中（2a・2b 完了） |
 | 2a | ハーネスの核: 別名のツール、判定 API の呼び出し（`execute()` で最終の判定）、確認の順番待ち、伏字化、圧縮のファイルの一覧、`[agent_env]`、`rules.json` の生成、偽のモデルの試験 | 完了（[pi のハーネス](../spec/pi-harness.md)） |
-| 2b | 子エージェント（役割と bypass の受け渡し、子の拒否を構造化して返す）と、MCP をハーネスから登録 | 未着手 |
+| 2b | 子エージェント（役割と bypass の受け渡し、子の拒否を構造化して返す）と、MCP をハーネスから登録 | 完了（[子エージェント](../spec/pi-harness.md#子エージェント)・[MCP](../spec/pi-harness.md#mcp)） |
 | 2c | 誘導（`[[opencode.shell.guide]]` の 13 件）の仕分けと判定器への取り込み | 未着手 |
 | 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 未着手 |
 | 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 未着手 |
@@ -56,6 +56,11 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 - **判定器は Claude Code / Copilot CLI と共有する。** hook の出力は変えない（「判定 API の入力（案）」）
 - **`[pi]` を正本にし、OpenCode の値は `generate.py` で作る。** 段 6 で消すのが OpenCode 側になる
+
+2b を終えた（2026-10-09）。利用者の判断（案 A）で、権限の範囲は `[pi.profiles]` に置き、子エージェントは
+`[pi.agents]` に役割・階層・指示を書く形にした。役割は `implementer` / `reader` / `committer` / `worker` の 4 つで、
+`committer` だけが `git status` / `git diff` を確認なしで通す。実際のモデルで、親（Sonnet 5.5）が `explore` を起動して
+結果を受け取れた。起動の形は `pi -nbt -ne -e builtin:mcp -e ~/.config/pi/harness` に変わった（MCP のため）。
 
 2a を終えた（2026-10-09）。ハーネスの本体は `~/.config/pi/harness/`（[pi のハーネス](../spec/pi-harness.md)）。
 偽のモデルの試験 13 件が通り、実際のモデル（Copilot の Sonnet 5.5）でも読み取り・`git log`・確認の拒否が
@@ -200,14 +205,14 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 - **ツールの名前。** 別名にしたとき、skill やシステムプロンプトの指針が `bash` / `read` を名指しする箇所を
   どう扱うか（小さな課題では 4 モデルとも迷わなかった）
 - **子エージェントの拒否の渡し方。** 試作は文言（`not approved:`）で見分けた。本番は構造化して渡す
-- **モデルの階層。** 今の `[opencode.model.tier.*]`（`default` / `routine` / `worker` / `deep` /
-  `second_opinion`）を、pi の `modelThinkingLevels` と子エージェントの `--model` / `--thinking` に
-  どう写すか
+- **モデルの階層の置き場。** 子エージェントは `[opencode.model.tier.*]` から引いている（`#variant` を
+  `:variant` に読み替え）。`[pi]` を正本にする方針に合わせて移すか。Bedrock のモデル ID が pi で通るかは未確認
+- **主エージェントのモデル。** 親の既定モデルと思考の強さ（今の OpenCode の `default` 階層）を pi の設定へ出すのは段 3
 
 ## 次の調査・実験
 
-- 2b: 子エージェントの役割（今の OpenCode の `commit` / `review` / `explore` / `fleet-worker` 相当）を
-  どこに宣言するか（`[pi.profiles]` に足すか、役割の別の表を作るか）を決める
+- 2c: `[[opencode.shell.guide]]` の 13 件を 1 件ずつ仕分ける（判定器と重なるものは捨て、ツールへの誘導は
+  判定器の deny と案内として入れる）
 - 試作のスクリプト（`run.sh`・`paths-run.sh`・`child-run.sh`・`fence-run.sh`）を、段 2 で `test/` の
   回帰試験へ移す方法を決める（pi が無い環境では skip する）
 
@@ -238,6 +243,9 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-09**: 2b を終えた（案 A。役割は `[pi.profiles]`、子エージェントは `[pi.agents]`）。
+  役割に無いツールはハーネスが登録しないようにした（読み取り役の子が bash を試して拒否されるのを避ける）。
+  MCP は `-ne` で組み込みの対応ごと外れるので、`-e builtin:mcp` を起動の形に足した
 - **2026-10-09**: 2a を終えた。試作のハーネスを本番の形にし、`~/.config/pi/harness/` に配る。
   判定 1 回は 0.1 秒ほどで、`tool_call` と `execute()` で同じ入力なら判定を使い回すようにした
 - **2026-10-09**: 段 1 を終えた。`decide()` を `~/.claude/hooks/` に置き（判定の中身の `bashrules` が
