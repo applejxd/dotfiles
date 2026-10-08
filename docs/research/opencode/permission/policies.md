@@ -6,6 +6,9 @@
 
 ## 記録 E1 — 2026-10-08
 
+> **後続の観測**: E1 の「`build` は全件一致」は read の `.env.sample` / `.env.template` を含んでいない。
+> 例外を policy に移すだけでは、この 2 つの read が ask に戻る（[E2](#記録-e2--2026-10-08)）。
+
 - **対象バージョン**: OpenCode v2.0.22
 - **環境**: WSL2 (Ubuntu)、基準コミット beae156、モデル `github-copilot/claude-opus-5`
 
@@ -102,3 +105,76 @@ allow、`mise.toml` の edit が ask になり、ツールの一覧にも shell 
 - 対話の画面（TUI）と、Orca の上書き用の設定（`OPENCODE_CONFIG`）が重なったときの合成
 - `ocs` の設定（`~/.config/opencode-sandbox/opencode.json`）にも秘密の policy を出すか
 - 実機の試験は各 1 回で、再現性は確かめていない
+
+## 記録 E2 — 2026-10-08
+
+- **対象バージョン**: OpenCode v2.0.22
+- **環境**: WSL2 (Ubuntu)、基準コミット 75c5f6e、モデル `github-copilot/claude-opus-5`
+
+### 問い
+
+全体の `permissions` の allow / ask をエージェント別の規則の束（プロファイル）へ移し、全体を
+deny だけにしたとき、各エージェントの判定は今と同じになるか。どのプロファイルも当てない
+エージェントはどうなるか。
+
+### 事前の予想
+
+`build` などは今と同じになり、組み込みの制限を持つ `explore` / `title` / `summary` は組み込み
+どおりに戻る。プロファイルの無い子は基底の全部許可になる。
+
+### 方法・条件
+
+- 実際の `~/.config/opencode/opencode.json` と E1 の対照（`cfg-ctl`）が `plugins` 以外で同じことを
+  確かめ、別ポートのサーバの `/api/agent` から全エージェントの実効規則を取った
+- 全体の規則 356 件を群に分け、試作（`.tmp/opencode/chg0018/stage2/cfg-b2/`）を作った
+  - 全体の `permissions` は `subagent` の `bypass-worker` / `bypass-fleet-worker` の deny 2 件だけ
+    （`bypass` が自分の規則で解除するので policy に移せない）
+  - shell の deny 101 件と、秘密ファイルの read / edit の deny と例外を policy へ
+  - 実装役のプロファイル（`shell * ask`、shell の allow と ask、開けた場所の外部アクセスの allow、
+    edit の ask、read の例外の allow）を `build` / `general` / `compaction` / 作業役 / `bypass` 系に、
+    読み取り役のプロファイル（外部アクセスの allow、read の例外の allow）を `explore` / `plan` /
+    `review` / `commit` に当てた。`title` / `summary` には何も当てない
+  - `explore` の 4 つの deny と `plan` の `restate_global_deny` を外した。例外と ask の重なりを
+    ask に戻す 42 件も外した。`bypass` / `bypass-worker` は V2 の `agents` へ移した
+  - 対照と試作の両方に、プロファイルを当てない試験用の子 `dummy-child` を足した
+- E1 の評価器で、969 件の操作を全エージェントについて対照と比べた。実機は
+  `opencode run --standalone` を 1 回回した
+
+### 結果
+
+- 全エージェントは 13（`build` / `plan` / `general` / `explore` / `title` / `summary` / `compaction` と、
+  自作の `bypass` / `bypass-worker` / `fleet-worker` / `bypass-fleet-worker` / `commit` / `review`）。
+  plugin や skill が足すエージェントは無かった
+- 今の設定では、組み込みの `* * deny` を持つ `title` / `summary` に、全体の allow / ask が流れ込んで
+  いた（shell が ask / allow、`.env.example` の edit が allow など）。組み込みの追加方針は公式の docs の
+  Defaults 節（<https://opencode.ai/v2/docs/permissions>）と一致し、`compaction` は基底のままだった
+- 試作と対照の比較
+
+  | 対象 | 結果 |
+  | --- | --- |
+  | `build` / `general` / `compaction` / `bypass` / `bypass-worker` / 作業役 2 つ / `commit` / `review` | 差 0 |
+  | `explore`（4 つの deny を外した） | 差 0。実機のツールの一覧は glob / grep / read / subagent / webfetch / websearch。subagent は評価上 deny だが一覧には残った |
+  | `title` / `summary` | 各 283 件が allow / ask から deny へ |
+  | `plan` | 計画ディレクトリの中の `.env.example` の edit が deny から allow へ（1 件） |
+  | `dummy-child` | 187 件が ask から allow へ、30 件が allow から ask へ。実機で shell の `touch` が確認なしに実行され、write も成功した。`git push --dry-run` は `Blocked by configuration policy` |
+
+- 最初の試作では、全エージェントで `.env.sample` / `.env.template` の read が allow から ask に
+  変わった（各 8 件）。基底の `read *.env.* ask` が残り、policy の allow は権限を与えないため。
+  プロファイルに read の例外の allow を足すと解消した
+- 試作の policy 258 件で、`opencode.log` に正規化の警告は出なかった
+
+### 考察
+
+- 全体の allow / ask をプロファイルへ移せば、`build` などの判定を保ったまま、組み込みの制限
+  （`explore` / `title` / `summary`）が素のまま効く
+- read の例外は、policy の allow とプロファイルの read の allow の両方に要る
+- プロファイルを当てない子は基底の全部許可になる。守れるのは policy の deny だけ
+- shell の deny を policy に移すと guide の `evaluate` の後に効く（`guide-plugin/index.js` の確認の
+  説明の生成が先に走る。コードを読んだだけ）
+
+### 次の問い
+
+- 実際の生成器で同じ出力を作れるか。Claude Code / Copilot CLI の生成結果が変わらないか
+- `compaction` / `title` / `summary` が実際にツールを呼ぶか
+- V1 の `agent` と V2 の `agents` を同じ ID で併用したときの合成
+- 実機は 1 回だけで、再現性は確かめていない
