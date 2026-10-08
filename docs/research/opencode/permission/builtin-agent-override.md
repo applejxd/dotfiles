@@ -340,6 +340,16 @@ mise run opencode:probe -- '... FOO=1 git log -1 --oneline ...'
   `permission requested: external_directory (/etc/*); auto-rejecting` だった
 - 計装を足したときに構文を壊し、plugin が読まれなかった回が 1 回あった。`node --check` は
   通り、`opencode.log` の `failed to load plugin … errors building` と `bun build` で分かった
+- apply と `opencode service restart` の後、実際の設定で probe を回した（`.tmp/opencode/stage8/`。
+  親に `subagent` だけを使わせ、子に作業ツリーの外を読ませた）
+  - `bypass` → `explore` の read（`/etc/hostname`）・grep（`/etc/hosts`）・glob（`/etc` の `host*`）、
+    `bypass` → `review` / `commit` の read は、どれも確認なしで通った
+  - `bypass` → `commit` で `workdir` を `/tmp` にした `git status` は
+    `permission requested: external_directory (/tmp/*); auto-rejecting` だった
+  - `build` → `explore` の read と grep は `external_directory (/etc/*)` で自動拒否された
+  - 親への指示に「`workdir` を `/tmp` にして」と書くと、親の `bypass` が利用者の指示（作業
+    ディレクトリの付け替えの禁止）を理由に子を起動しなかった。試験であることと期待結果を
+    明記して再実行した
 
 ### 考察
 
@@ -349,6 +359,5 @@ mise run opencode:probe -- '... FOO=1 git log -1 --oneline ...'
 
 ### 次の問い
 
-- `grep` / `glob` と、`review` / `commit` での実機の動き
 - 子を再開したとき・fork したセッションの `parentID`
 - 対話の画面（TUI）と `ocs` での動き

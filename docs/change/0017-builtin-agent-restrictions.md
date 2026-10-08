@@ -53,8 +53,8 @@ question を拒否）は変えない。
 | 4 | `/fleet` の指示文を直す（`plan` では計画までで止める。自動で判断させるのは `bypass` の上の `/fleet` に限ると明記）。docs を直す | 完了（未 apply） |
 | 5 | 全体の `git log --output` を guide 規則で止める（別コミット。確認なしに書けることは実測済み） | 完了 |
 | 6 | `chezmoi apply` 後、本物のサービスの API と probe で受入条件を確かめる | 完了（`ocs` は生成物の確認まで。実際の `ocs` の起動は未確認） |
-| 7 | `bypass` から起動した読むだけの子に残る確認を、自動で判断させる方法を決めて入れる | 完了（未 apply。[ADR-0015](../adr/0015-bypass-child-external-read.md)） |
-| 8 | 段 7 の後の再検証（`bypass` と、そうでない主エージェントの対照。plugin が無いときに確認へ戻ること） | 未着手 |
+| 7 | `bypass` から起動した読むだけの子に残る確認を、自動で判断させる方法を決めて入れる | 完了（[ADR-0015](../adr/0015-bypass-child-external-read.md)） |
+| 8 | 段 7 の後の再検証（`bypass` と、そうでない主エージェントの対照。plugin が無いときに確認へ戻ること） | 完了（plugin が無いとき・一覧が壊れたときはテストでの確認。実機は `ocs`・TUI・子の再開と fork が未確認） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -112,6 +112,16 @@ question を拒否）は変えない。
   deny だけ）、`bypass` の子は許可リストの 5 つ、`git log --output` の guide 規則も入っていた。
   隔離版の `~/.config/opencode-sandbox/opencode.json` は `ocs` の起動時に `agent` / `agents` /
   `commands` を差し替えて書き出すので、次の起動で反映される。実際に `ocs` を起動しての確認はしていない
+- 段 7 を apply し、段 8 の再検証をした（2026-10-08）。配備された `rules.json` に
+  `bypass_child_agents`（`commit` / `explore` / `review`）が出ていた。実際の設定での probe の結果は
+  次のとおり（[調査記録 E3](../research/opencode/permission/builtin-agent-override.md#記録-e3--2026-10-08)）
+
+  | 親 → 子 | 操作 | 結果 |
+  | --- | --- | --- |
+  | `bypass` → `explore` | `/etc/hostname` を read、`/etc/hosts` を grep、`/etc` で `host*` を glob | 3 つとも確認なしで通った |
+  | `bypass` → `review` / `commit` | `/etc/hostname` を read | 確認なしで通った |
+  | `bypass` → `commit` | `workdir` を `/tmp` にして `git status` | `external_directory (/tmp/*)` の確認になり、自動で拒否された |
+  | `build` → `explore` | 同じ read / grep | 確認になり、自動で拒否された |
 
 ## 未解決点
 
@@ -134,8 +144,9 @@ question を拒否）は変えない。
   省く形にした（[ADR-0015](../adr/0015-bypass-child-external-read.md)）。残るのは次のもの
   - `production.env` のような読み取りの確認と、shell 由来の `external_directory`
     （`commit` の外部のリポジトリでの git を確認なしにしないため、意図して残す）
-  - 実機で確かめたのは `explore` の `read` だけ。`grep` / `glob`、`review` / `commit`、
-    子の再開・fork、対話の画面（TUI）、`ocs` は未確認（段 8）
+  - 段 8 で、3 つの子と read / grep / glob、shell 由来が確認に残ることを実機で確かめた。
+    子の再開・fork、対話の画面（TUI）、実際に起動した `ocs` は未確認。**再開条件**:
+    これらの場面で確認が出たとき
 - 共有の skill `review-loop` は、OpenCode に無い子（`code-review` / `security-review`）を
   名指ししている（既存の不整合）。段 3 の後はリポジトリがその名前の子を持っていても
   `bypass` からは呼べない。OpenCode では `review` を使い、差分の取得とコマンドでの検証は
@@ -374,3 +385,5 @@ flowchart LR
   案 A をレビューを経て採用した。レビューの指摘で、自動で許可するのを `read` / `grep` / `glob`
   由来の `external_directory` に限り（`commit` の shell 由来を外す）、子の一覧を起動の許可リスト
   から導出せず `[opencode.bypass_children]` に明示した。決定は ADR-0015 に記録した
+- 2026-10-08: 段 7 を apply し、段 8 の再検証を終えた。実施計画の段はすべて完了した。残りは
+  「未解決点」の項目

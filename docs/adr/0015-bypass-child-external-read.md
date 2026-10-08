@@ -73,7 +73,8 @@
 - [x] node で plugin を読むテストで、条件の各組み合わせ・API の失敗・設定の異常を固定した
 - [x] 試験用の設定の実機で、`bypass` → `explore` の作業ツリーの外の read が確認なしで通り、
   `build` → `explore` では確認のままだった
-- [ ] 本物の設定に apply した後の実機（段 8）
+- [x] 本物の設定に apply した後の実機（CHG-0017 の段 8）。3 つの子の read / grep / glob が
+  確認なしで通り、`commit` の shell 由来と `build` から起動した子は確認のままだった
 
 ## 結果
 
