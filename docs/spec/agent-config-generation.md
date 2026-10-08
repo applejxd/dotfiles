@@ -666,6 +666,7 @@ permissions = [
 | 役割 | 実体 | 登録先 |
 | --- | --- | --- |
 | 誘導（deny + 代替案）と説明の生成 | `index.js` | `opencode.json` の `plugins` |
+| allow したコマンドの書き込み形の歯止め（リダイレクト・`git log --output`。[詳細](agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)） | `index.js` | 同上 |
 | 静的 deny の説明（前段停止。`deny_guide`。[詳細](agent-command-policy.md#opencode-の-deny-の説明前段停止)） | `index.js` | 同上 |
 | `grep` / `glob` の結果フィルタ | `index.js` | 同上 |
 | shell 出力の伏字化 | `index.js` | 同上 |

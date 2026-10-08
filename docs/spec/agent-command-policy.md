@@ -354,6 +354,38 @@ OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生の�
 - 検査は `test/agents/test_guide_pip_rm.py`（止める例と止めない例の両方を、生成した
   `rules.json` を plugin に通して判定する）と、前段の停止を見る `test/agents/test_guide_early_pip.py`
 
+## OpenCode の allow したコマンドの書き込み形
+
+`[opencode.shell] allow` は前方一致なので、載せたコマンドの書き込み形も確認なしに通る。
+guide 規則は effect が allow でも走るので、allow を保ったまま書き込み形だけを deny する
+（`common.toml.tmpl` の `[[opencode.shell.guide]]`）。
+
+| 規則 | 止める例 | 止めない例 |
+| --- | --- | --- |
+| リダイレクト（[CHG-0002 段階 4a](../change/0002-opencode-ask-by-default.md)） | `git log > ~/.bashrc`、`wc f 2>&1 > f` | `git log 2>&1 \| head`、`wc -l a 2>/dev/null` |
+| `git log --output`（[CHG-0017 段 5](../change/0017-builtin-agent-restrictions.md)） | `git log -1 --output=f`、`git log --output f`、`git log -p --output=f`、`ls && git log --output=f`（`;` `\|\|` `\|` `(` も） | `git log -1 --oneline`、`git log --stat`、`git log --output-indicator-new=+`、`git commit -m 'git log --output=x'`、`echo --output` |
+
+- **allow を足すときは、リダイレクトだけでなく引数でファイルへ書けるオプションも点検する。**
+  `git log --output=<パス>` は確認なしに、作業ツリーの外にも書けた
+  （[記録 E2](../research/opencode/permission/builtin-agent-override.md#記録-e2--2026-10-08)）。
+  点検の結果、内容と書き込み先の両方を引数で決めて書けるのは `git log` だけだった
+- `--output` の規則は `git log` で始まる部分（次の `;` `&` `|` 改行まで。引用の中は飛ばす）
+  だけに当てる。`*--output*` を全体で deny すると、コミットの本文や正当な `--output` まで止まる。
+  `unless` は使わない（コマンド全体に当たり、連結した後ろの書き込みまで見送るため）
+- 承知の穴: 引用の中の `;` の後ろの `git log --output`（`git commit -m "x; git log --output=y"`）は
+  誤って止める。`then` / `do` の直後、`git -c x=y log` / `git --no-pager log` のような前置きは
+  見ない（前置きの形は allow の `git log *` に当たらず確認になる）
+- `early` は付けない。穴は静的な allow なので `evaluate` に届く。bypass の ask→allow より前に
+  止まり、ocs（既定が allow）でも同じに効く
+- **Claude / Copilot には足さない。** どちらも OS の sandbox で shell の書き込みが作業ディレクトリと
+  許可した場所に限られ、起動ファイルなどは `claude_write_deny` / Copilot の deny-by-default で
+  塞がる（[sandbox](agent-sandbox.md)）。作業ディレクトリの中は、既定の権限モード
+  （Claude の `auto`、Copilot の `assisted`）で編集もできるので、`--output` で書けても新しい
+  権限にならない。OpenCode の通常版は shell に OS の境界が無いため、ここだけで塞ぐ。
+  ただし Claude で sandbox の外で実行させる形（unsandboxed コマンド）に `git log` の allow が
+  どう効くかは未確認
+- 検査は `test/agents/test_guide_git_log_output.py`（リダイレクトは `test_generate_opencode.py`）
+
 ## OpenCode の deny の説明（前段停止）
 
 V2 は静的 deny に当たると plugin の `evaluate` を呼ばず、モデルへは `Permission denied: shell` だけが

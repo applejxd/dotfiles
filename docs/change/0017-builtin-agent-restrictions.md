@@ -51,8 +51,8 @@ question を拒否）は変えない。
 | 2 | `plan` を (c′) にする（edit は計画ファイル以外を拒否し、その後ろに秘密ファイルの deny を並べ直す。子は `explore` と `review` だけ。shell の静的な規則は deny を除いて確認）。エージェントごとの shell 既定を生成する仕組みを足す | 完了（未 apply） |
 | 3 | `bypass` の子の起動規則を許可リストにする（全部禁止して 5 つだけ許可） | 完了（未 apply） |
 | 4 | `/fleet` の指示文を直す（`plan` では計画までで止める。自動で判断させるのは `bypass` の上の `/fleet` に限ると明記）。docs を直す | 完了（未 apply） |
-| 5 | 全体の `git log --output` を guide 規則で止める（別コミット。確認なしに書けることは実測済み） | 未着手 |
-| 6 | `chezmoi apply` 後、本物のサービスの API と probe で受入条件を確かめる | 未着手 |
+| 5 | 全体の `git log --output` を guide 規則で止める（別コミット。確認なしに書けることは実測済み） | 完了（未 apply） |
+| 6 | `chezmoi apply` 後、本物のサービスの API と probe で受入条件を確かめる | 進行中（段 1〜4 は確認済み。段 5 と `ocs` が残る） |
 | 7 | `bypass` から起動した読むだけの子に残る確認を、自動で判断させる方法を決めて入れる | 未着手 |
 | 8 | 段 7 の後の再検証（`bypass` と、そうでない主エージェントの対照。plugin が無いときに確認へ戻ること） | 未着手 |
 
@@ -93,6 +93,18 @@ question を拒否）は変えない。
   行う。仕様は [子エージェント](../spec/agent-config-generation.md#子エージェント)。生成物の並びは
   E2 の試験用設定と action ごとには同じだが、全体の並びは違う（試験用は秘密ファイルの deny を
   計画ディレクトリの allow の直後に挟み、生成物は末尾にまとめる）。段 6 で実効規則を確かめる
+- 段 5 を実装した（2026-10-08。未 apply）。`git log` で始まる部分の `--output` を guide 規則で
+  止める。Claude / Copilot は OS の sandbox が書き込み先を限るので足さない。範囲と止める例・
+  止めない例は [allow したコマンドの書き込み形](../spec/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)
+- 段 1〜4 を apply し、段 6 の確認をした（2026-10-08。段 5 は apply 前）。本物のサービスの
+  API で取り出した実効規則を調査用の照合で評価すると、`explore` は shell / edit / 子の起動 /
+  question がすべて deny（`.env.example` も）、`plan` は計画ファイル以外の edit が deny、計画
+  ディレクトリの中の `.env` / `a.key` / `secrets/x.md` も deny、shell は `git log` なども ask で
+  `git push` / `sudo` は deny、子は `explore` / `review` だけ。`bypass` の子は許可リストの 5 つ
+  だけで、`fleet-worker` と一覧に無い名前は deny。`build` は変わらない。実機の probe では、
+  `build` から起動した `explore` のツールが `glob` / `grep` / `read` / `webfetch` / `websearch`
+  だけになり、確認は 1 回も出ず、`.env.example` は作られなかった。`ocs` と、段 5 の apply 後の
+  確認は未実施
 
 ## 未解決点
 
@@ -304,7 +316,7 @@ flowchart LR
 | `common.toml.tmpl` の `bypass` | 子の起動規則が全部許可 → 全部禁止して 5 つだけ許可 | 一覧に無い子は確認が自動で通らず、事故が再発する（レビュー） | 未適用 |
 | `common.toml.tmpl` の `/fleet` | 作業役が無い場合の分岐なし → `plan` では計画までで止める。自動で判断させるのは `bypass` の上に限ると明記 | `plan` から作業役を起動できなくなる。利用者の方針で `build` の上の `/fleet` は対象外 | 未適用 |
 | `agent-config-generation.md` | 「`explore` / `review` は読むだけで確認がほぼ出ない」 → 全体の規則が組み込みの制限を上書きすることと、修正後の扱い、許可リスト | 今回の実測で、`explore` は確認を出し、書き込めた | 未適用 |
-| 全体の shell | `git log *` の allow のみ → `git log` の `--output` を guide 規則で止める | `build` で `git log -1 --output=<パス>` が確認なしにファイルを作った（E2）。`*--output*` を全体で deny すると `git commit -m` の本文や正当な `--output` まで止まるので、`git log` で始まる部分だけに当てる guide 規則にする。guide 規則は `bypass` でも止まる | 未適用 |
+| 全体の shell | `git log *` の allow のみ → `git log` の `--output` を guide 規則で止める | `build` で `git log -1 --output=<パス>` が確認なしにファイルを作った（E2）。`*--output*` を全体で deny すると `git commit -m` の本文や正当な `--output` まで止まるので、`git log` で始まる部分だけに当てる guide 規則にする。guide 規則は `bypass` でも止まる | 未適用（実装済み。[仕様](../spec/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)） |
 
 ## 実装・検証
 
@@ -348,3 +360,6 @@ flowchart LR
   guide 規則で止めると決めた
 - 2026-10-08: 段 1〜4 を実装した。新しい生成時だけのキー `restate_global_deny` を足し、
   それを持つエージェントは deny の前段停止の例外にしないようにした
+- 2026-10-08: 段 5 を実装した。`git log --output` を guide 規則で止め、allow を足すときの
+  点検対象に「引数でファイルへ書けるオプション」を加えた。Claude / Copilot には足さない
+  （OS の sandbox が書き込み先を限るため）
