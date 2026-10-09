@@ -1096,6 +1096,11 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 | `deep` | 難しい判断・設計 | `claude-sonnet-5.5#high` | `us.anthropic.claude-opus-5-5#high` |
 | `second_opinion` | 別系統のモデルでの確かめ | `gpt-6-astra` | `us.openai.gpt-6-sol` |
 
+Copilot は Opus と Astra が制限されたので（2026-10）、`default`・`deep` は Sonnet 5.5、`second_opinion` は OpenCode の階層では Astra のままで、
+pi の Copilot は `[pi.model.tier.github-copilot]` で Sol に上書きしている。`deep` の `xhigh` は Sonnet で通る確認が取れていないので `high` にした。Bedrock の階層は全部 `us.`
+（`global.` は使わない）。`us.` 無しの ID は `ask_description` の候補の最後のフォールバック
+（`amazon-bedrock/anthropic.claude-haiku-5-5`）だけで、推論プロファイルが無い環境で取りこぼさないための意図的なもの。
+
 割り当て（`[opencode.model.agents]`）は `commit = "routine"`・`review = "second_opinion"`・
 `fleet-worker = "worker"`。
 
