@@ -207,7 +207,7 @@ def test_default_model_only_on_first_write(tmp_path):
     launcher = _launcher()
     sandbox = _sandbox(
         tmp_path,
-        model_preference=[{"provider": "github-copilot", "model": "claude-opus-5"}],
+        model_preference=[{"provider": "github-copilot", "model": "claude-opus-5.5"}],
     )
     project = _project(tmp_path)
     _seed_db(Path(project["db"]))
@@ -217,7 +217,7 @@ def test_default_model_only_on_first_write(tmp_path):
         return json.loads(target.read_text(encoding="utf-8"))["model"]
 
     launcher.config.write_isolated_config(sandbox, project)
-    assert current_model() == "github-copilot/claude-opus-5"
+    assert current_model() == "github-copilot/claude-opus-5.5"
 
     config = json.loads(target.read_text(encoding="utf-8"))
     config["model"] = "github-copilot/claude-sonnet-5"
@@ -236,13 +236,13 @@ def test_model_preference_order_wins(tmp_path):
         tmp_path,
         model_preference=[
             {"provider": "amazon-bedrock", "model": "sonnet-5"},
-            {"provider": "github-copilot", "model": "claude-opus-5"},
+            {"provider": "github-copilot", "model": "claude-opus-5.5"},
         ],
     )
     project = _project(tmp_path)
     # bedrock の資格情報は無く、copilot だけある状況
     _seed_db(Path(project["db"]), integration="github-copilot")
-    assert launcher.config.pick_model(sandbox, project) == "github-copilot/claude-opus-5"
+    assert launcher.config.pick_model(sandbox, project) == "github-copilot/claude-opus-5.5"
 
 
 def test_model_is_absent_without_credentials(tmp_path):
