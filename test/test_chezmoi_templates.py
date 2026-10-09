@@ -116,22 +116,24 @@ def test_opencode_config_is_deployed_on_windows(tmp_path, target):
     assert target in rendered
 
 
-@pytest.mark.parametrize(
-    ("target", "ignored_on_windows"),
-    [
-        (".pi/", False),  # settings / keybindings / AGENTS.md は Windows にも配る
-        (".pi/agent/prompts/", True),  # /fleet はハーネス (Unix だけ) の guarded_task が要る
-        (".local/bin/pis", True),
-        (".config/pi/", False),  # .config/* で除外済み (ハーネスは Unix だけ)
-    ],
+# Windows の除外の書き方 (除外の行が出るか)。Linux には一切出ない
+WINDOWS_PI_IGNORES = (
+    ".pi/agent/prompts/",  # /fleet はハーネス (Unix だけ) の guarded_task が要る
+    ".local/bin/pis",
+    "!.config/pi/",  # 補助の拡張 (commit-confirm) のためにディレクトリを戻す
+    ".config/pi/harness/",  # 戻したうえでハーネスは改めて除外する
+    ".config/pi/harness/**",
 )
-def test_pi_settings_are_deployed_on_windows_but_not_the_harness(
-    tmp_path, target, ignored_on_windows
-):
+
+
+def test_pi_settings_and_the_commit_confirmation_are_deployed_on_windows(tmp_path):
     windows = render(home=str(tmp_path), os_name="windows")
     linux = render(home=str(tmp_path), os_name="linux")
-    assert (target in windows) is ignored_on_windows
-    assert target not in linux
+    for target in WINDOWS_PI_IGNORES:
+        assert target in windows, target
+        assert target not in linux, target
+    # settings / keybindings / AGENTS.md の .pi/ は Windows にも配る (丸ごとの除外は無い)
+    assert ".pi/" not in windows and ".pi/**" not in windows
     assert ".config/*" in windows
 
 

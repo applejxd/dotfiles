@@ -1865,7 +1865,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
 
 # ~/.pi/agent/settings.json のうち生成器が持つキー。宣言から外すと消す (所有の規則)。
 # defaultProvider / defaultModel は [opencode.model] の default 階層から作る。
-PI_SETTINGS_KEYS = frozenset({"defaultThinkingLevel", "skills", "enabledModels"})
+PI_SETTINGS_KEYS = frozenset({"defaultThinkingLevel", "skills", "enabledModels", "extensions"})
 PI_SETTINGS_OWNED = PI_SETTINGS_KEYS | {"defaultProvider", "defaultModel"}
 
 

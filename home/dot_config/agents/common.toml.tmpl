@@ -1028,11 +1028,13 @@ unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
 message = "ヒアドキュメントでスクリプトを渡さないでください。write ツールでファイルに書いてから実行してください (確認画面が 1 行になり、中身は差分で見えます)。"
 
 # ~/.pi/agent/settings.json へ出す設定。ここに書いたキーは生成器の持ち物で、消すと settings.json からも消える。
-# 書けるキー: defaultThinkingLevel / skills / enabledModels。既定のモデルは [opencode.model] の default 階層。
+# 書けるキー: defaultThinkingLevel / skills / enabledModels / extensions。既定のモデルは [opencode.model] の default 階層。
 # see docs/spec/pi-harness.md#pi-の設定
 [pi.settings]
 defaultThinkingLevel = "medium"
 skills = ["~/.claude/skills"]
+# 素の pi (Orca・Zed・Windows) 向けの補助。pis は -ne で外れる。see docs/spec/pi-harness.md#commit-の確認-素の-pi
+extensions = ["~/.config/pi/commit-confirm"]
 
 # pi が実際に受け付けるモデルは OpenCode の階層の表と違うことがある。ここにある階層だけ上書きする。
 # ★gpt-6-astra は pi の Copilot 経由で model_not_supported (2026-10 実測)。

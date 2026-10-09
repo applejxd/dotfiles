@@ -104,13 +104,14 @@ Fence に依る。Windows 版は未着手で、優先度は低い）。
 | --- | --- |
 | pi 本体 | `314_agent_cli.ps1` が `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`。公式の `install.ps1` は Node.js・Git Bash・PATH の確認を `Read-Host` で聞き、apply では答えられないので使わない。Node.js 22.19 以上が要る |
 | `~/.pi/agent/settings.json`・`keybindings.json`・`AGENTS.md` | Unix と同じ（`.chezmoiignore` で戻している） |
+| `~/.config/pi/commit-confirm` | Unix と同じ（[commit の確認](#commit-の確認-素の-pi)） |
 | `/fleet`（`prompts/`） | **配らない**。`guarded_task` はハーネスが登録するので、素の `pi` では働かない |
 | 子エージェント `task`（読み取り役だけ） | `~/.pi/agent/extensions/subagents/`（[下記](#windows-の子エージェント)） |
 
 - pi の `bash` ツールと `!` は Git Bash を使う（Git for Windows が要る。無ければ pi が探した場所を示す）。
   PowerShell をモデルに使わせるなら `defaultTools` を変える（[Run Pi on Windows](https://pi.dev/docs/latest/windows)）。
   今は管理していない
-- 素の `pi` なので、権限・秘密の保護は効かない（Orca・Zed と同じ。[位置づけ](#起動)）
+- 素の `pi` なので、権限・秘密の保護は効かない（Orca・Zed と同じ。[位置づけ](#起動)）。`git commit` の確認だけは補助の拡張が出す
 - **Windows ネイティブの `pi` は、信頼できる環境でだけ開く（ガードは付けない）。** 守りが要る作業は WSL の `pis` で行う。ハーネスの Windows 移植は見送り（[調査記録](../research/agents/pi-isolation-options.md)）
 - Windows 実機では未検証（WSL からは `chezmoi` の描画と静的な試験だけ）
 
@@ -146,6 +147,20 @@ OpenCode のハーネスにあった機能のうち、pi へ移したもの。�
 （`~/.config/opencode/guide-plugin/commit-message.js`）を取り込み、表示の幅と行数は
 `[opencode.ask_description.commit]` を使う。読み込めなくても出さないだけでハーネスは止めない。
 段 6 で OpenCode を外すときに、`commit-message.js` をハーネスの置き場へ移す。
+
+### commit の確認 (素の pi)
+
+素の `pi`（Orca・Zed・Windows）にはハーネスが無いので、`git commit` は確認なしで通る。その補助として、
+小さな拡張 `~/.config/pi/commit-confirm` を `settings.json` の `extensions`（`[pi.settings]`）から読ませる。
+
+- bash の `tool_call` で、**コマンドの先頭にある** `git commit`（`git -C dir commit`、`cd x && git commit` も）だけを
+  拾い、件名・本文・追加するパスを見せて確認する。拒否・時間切れ（TUI 以外は 5 分）・確認できる画面が無いときは止める
+- 件名・本文の取り出しは、ハーネスと同じ `commit-message.js`。読めなければ件名なしで確認だけ出す
+- **保護ではなく補助**。別名・`sh -c`・スクリプト越しの `git commit` は検出しない。`!git commit`（利用者が
+  手で打つ）も対象外
+- `pis` は `-ne` で外れるので、ハーネス自身の確認と二重にならない（試験済み）
+- Windows にも配る。`.chezmoiignore` は `.config/pi/` を戻したうえで `harness` を改めて除外する
+  （`!` は除外より先に効く。実物の `chezmoi` で確かめた）
 
 ### 整形
 
@@ -217,6 +232,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | 実体 | 配置先 | 役割 |
 | --- | --- | --- |
 | `home/dot_config/pi/harness/index.ts` | `~/.config/pi/harness/index.ts` | 拡張の本体 |
+| `home/dot_config/pi/commit-confirm/index.ts` | `~/.config/pi/commit-confirm/index.ts` | 素の pi の `git commit` の確認（[補助](#commit-の確認-素の-pi)）。`settings.json` の `extensions` から読む |
 | `home/dot_config/pi/harness/modify_rules.json.py.tmpl` | `~/.config/pi/harness/rules.json` | `generate.py --target pi-harness` が作る。判定器の場所・伏字化の規則・シェルへ入れる環境変数・子エージェント・MCP・役割ごとのツール |
 | `home/dot_local/bin/executable_pis` | `~/.local/bin/pis` | 起動の入口（[起動](#起動)） |
 | `home/dot_local/share/ocs/pi.py` | `~/.local/share/ocs/pi.py` | 境界の pi 用の部分（[境界](#境界)） |

@@ -22,6 +22,11 @@
 # PowerShell プロファイルの実体 (Documents 配下は 1 行のローダーのみ)
 !.config/powershell/
 !.config/powershell/**
+# pi の補助の拡張 (git commit の確認) だけ Windows にも配る。ハーネスは Unix だけ
+# ★! は ignore より先に効くので、ディレクトリだけ戻して harness を改めて除外する
+!.config/pi/
+.config/pi/harness/
+.config/pi/harness/**
 # OpenCode は 314 が Windows にも入れる。permission と guide plugin が無いと保護が無い
 # see docs/spec/agent-permissions.md#windows-での扱い
 !.config/opencode/
