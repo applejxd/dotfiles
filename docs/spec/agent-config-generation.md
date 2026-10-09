@@ -1084,7 +1084,7 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 
 | 階層 | 用途 | Copilot | Bedrock |
 | --- | --- | --- | --- |
-| `default` | 主エージェントの既定 | `claude-opus-5.5` | `global.anthropic.claude-sonnet-5-5` |
+| `default` | 主エージェントの既定 | `claude-opus-5.5` | `us.anthropic.claude-sonnet-5-5` |
 | `routine` | 決まった形の短い作業 | `claude-sonnet-5.5#medium` | `global.anthropic.claude-sonnet-5-5#low` |
 | `worker` | 実装などを任せる作業役 | `claude-sonnet-5.5#medium` | `global.anthropic.claude-sonnet-5-5#medium` |
 | `deep` | 難しい判断・設計 | `claude-opus-5.5#xhigh` | `global.anthropic.claude-opus-5-5#high` |

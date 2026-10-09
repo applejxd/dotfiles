@@ -91,7 +91,7 @@ def test_common_toml_carries_the_detected_provider():
 
 def test_default_model_on_each_provider():
     assert generated(PERSONAL)["model"] == "github-copilot/claude-opus-5.5"
-    assert generated(WORK)["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5-5"
+    assert generated(WORK)["model"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5"
 
 
 TIER_NAMES = {"default", "routine", "worker", "deep", "second_opinion"}
