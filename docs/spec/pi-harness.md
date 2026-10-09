@@ -138,7 +138,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | `defaultProvider` / `defaultModel` | `[opencode.model]` の `default` 階層（[モデルの割り当て](agent-config-generation.md#モデルの割り当て)） |
 | `defaultThinkingLevel` / `skills` / `enabledModels` | `[pi.settings]`（書いたものだけ） |
 
-今は `defaultThinkingLevel = "high"`、`skills = ["~/.claude/skills"]`。`~/.agents/skills` は pi が元から読む。
+今は `defaultThinkingLevel = "medium"`、`skills = ["~/.claude/skills"]`。`~/.agents/skills` は pi が元から読む。
 
 ## 置き場
 

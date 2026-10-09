@@ -82,7 +82,7 @@ py routine/analyze.py "medium=$EVAL_OUT/runs/routine/rs-medium-*" "low=$EVAL_OUT
 - 時間切れは `EVAL_TIMEOUT`（秒。routine 1200・worker 1800）
 - `--prices` は models.dev の `api.json`（`curl -so "$EVAL_OUT/models-dev.json" https://models.dev/api.json`）。
   渡すと、同じトークン数に `--price-provider`（既定 `amazon-bedrock`）の単価を掛けた試算の列を出す。
-  Copilot の ID は `global.anthropic.` を付けて読み替える（`--price-prefix`）
+  Copilot の ID は `us.anthropic.` を付けて読み替える（`--price-prefix`）
 - 表の各列の意味と数え方は [測る項目](../../docs/spec/model-lineup-review.md#測る項目)
 
 1 回の実行ディレクトリに残るもの: `ws/`（作業用リポジトリ）・`prompt.txt`・`events.ndjson`・
@@ -94,7 +94,7 @@ py routine/analyze.py "medium=$EVAL_OUT/runs/routine/rs-medium-*" "low=$EVAL_OUT
 - **課金される。** 1 本回して結果を確かめてから `batch.sh` を使う
 - プロバイダは common.toml の判定（ユーザ名）で決まる。`gen_config.py` の出力に出る
   `provider` が `amazon-bedrock` になっているかを見る。モデルは Bedrock の ID で書く
-  （例: `--tier worker='global.anthropic.claude-sonnet-5-5#low'`）。その ID に variant が付けられるかは、
+  （例: `--tier worker='us.anthropic.claude-sonnet-5-5#low'`）。その ID に variant が付けられるかは、
   1 本回して `err.log` と `sessions.json` のモデルで確かめる
 - AWS の資格情報は DB の外（`~/.aws` のプロファイル）から来るので、実 DB の `credential` が空なら
   `EVAL_ALLOW_NO_CREDENTIAL=1` を付ける

@@ -1017,7 +1017,7 @@ message = "ヒアドキュメントでスクリプトを渡さないでくださ
 # 書けるキー: defaultThinkingLevel / skills / enabledModels。既定のモデルは [opencode.model] の default 階層。
 # see docs/spec/pi-harness.md#pi-の設定
 [pi.settings]
-defaultThinkingLevel = "high"
+defaultThinkingLevel = "medium"
 skills = ["~/.claude/skills"]
 
 # pi を Fence で囲うときの追加分 (境界のそのほかのキーは [opencode.sandbox] を共有する。
@@ -1232,10 +1232,10 @@ bypass-fleet-worker = "worker"
 # see docs/spec/agent-config-generation.md#階層
 [opencode.model.tier.amazon-bedrock]
 default = "us.anthropic.claude-sonnet-5-5"
-routine = "global.anthropic.claude-sonnet-5-5#low"
-worker = "global.anthropic.claude-sonnet-5-5#medium"
-deep = "global.anthropic.claude-opus-5-5#high"
-second_opinion = "global.openai.gpt-6-sol"
+routine = "us.anthropic.claude-sonnet-5-5#low"
+worker = "us.anthropic.claude-sonnet-5-5#medium"
+deep = "us.anthropic.claude-opus-5-5#high"
+second_opinion = "us.openai.gpt-6-sol"
 
 [opencode.model.tier.github-copilot]
 default = "claude-opus-5.5"

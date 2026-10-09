@@ -133,7 +133,7 @@ def main() -> None:
     p.add_argument("--prices", type=Path,
                    help="models.dev の api.json。渡すと試算の列を出す")
     p.add_argument("--price-provider", default="amazon-bedrock")
-    p.add_argument("--price-prefix", default="global.anthropic.")
+    p.add_argument("--price-prefix", default="us.anthropic.")
     a = p.parse_args()
     prices = Prices(a.prices, a.price_provider, a.price_prefix)
     grouped = groups(a.specs, str(out_root() / "runs" / "routine" / "*"))

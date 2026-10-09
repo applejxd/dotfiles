@@ -184,8 +184,8 @@ def test_declared_subagents_get_their_tier_models():
     assert agents["commit"]["model"] == "github-copilot/claude-sonnet-5.5#medium"
     assert agents["review"]["model"] == "github-copilot/gpt-6-astra"
     work = generated(WORK)["agents"]
-    assert work["commit"]["model"] == "amazon-bedrock/global.anthropic.claude-sonnet-5-5#low"
-    assert work["review"]["model"] == "amazon-bedrock/global.openai.gpt-6-sol"
+    assert work["commit"]["model"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5#low"
+    assert work["review"]["model"] == "amazon-bedrock/us.openai.gpt-6-sol"
 
 
 @pytest.mark.parametrize(
@@ -198,8 +198,8 @@ def test_declared_subagents_get_their_tier_models():
         ),
         (
             WORK,
-            "amazon-bedrock/global.anthropic.claude-sonnet-5-5#low",
-            "amazon-bedrock/global.anthropic.claude-sonnet-5-5#medium",
+            "amazon-bedrock/us.anthropic.claude-sonnet-5-5#low",
+            "amazon-bedrock/us.anthropic.claude-sonnet-5-5#medium",
         ),
     ],
     ids=["personal", "work"],
@@ -435,9 +435,9 @@ def test_assignment_goes_to_v2_agents_with_variant():
     """★V1 の agent キーでは #variant 付きの指定が黙って無視される (実測)。"""
     out = generated(with_agents(WORK, {"general": "worker", "build": "deep"}))
     agents = out["agents"]
-    sonnet = "amazon-bedrock/global.anthropic.claude-sonnet-5-5#medium"
+    sonnet = "amazon-bedrock/us.anthropic.claude-sonnet-5-5#medium"
     assert agents["general"] == {"model": sonnet}
-    assert agents["build"] == {"model": "amazon-bedrock/global.anthropic.claude-opus-5-5#high"}
+    assert agents["build"] == {"model": "amazon-bedrock/us.anthropic.claude-opus-5-5#high"}
     assert "general" not in out["agent"] and "build" not in out["agent"]
 
 
