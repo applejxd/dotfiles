@@ -430,12 +430,15 @@ def test_agent_cli_installer_uses_official_windows_channels():
     assert "https://claude.ai/install.ps1" in script
     assert "winget install --id GitHub.Copilot --exact" in script
     assert "npm install -g '@opencode/cli'" in script
+    # pi の install.ps1 は Read-Host で確認を聞く (apply では答えられない) ので npm で入れる
+    assert "npm install -g --ignore-scripts '@earendil-works/pi-coding-agent'" in script
+    assert "pi.dev/install.ps1" not in script
     # install.sh は Windows を拒否するので使わない
     assert "claude.ai/install.sh" not in script
     # 既に入っている CLI は触らない
-    assert script.count("Test-CliInstalled '") == 3
+    assert script.count("Test-CliInstalled '") == 4
     # winget / npm の失敗を握り潰さない
-    assert script.count("$LASTEXITCODE -ne 0") == 2
+    assert script.count("$LASTEXITCODE -ne 0") == 3
 
 
 def test_chocolatey_setup_supports_v1_and_v2_listing():

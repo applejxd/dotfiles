@@ -116,6 +116,25 @@ def test_opencode_config_is_deployed_on_windows(tmp_path, target):
     assert target in rendered
 
 
+@pytest.mark.parametrize(
+    ("target", "ignored_on_windows"),
+    [
+        (".pi/", False),  # settings / keybindings / AGENTS.md は Windows にも配る
+        (".pi/agent/prompts/", True),  # /fleet はハーネス (Unix だけ) の guarded_task が要る
+        (".local/bin/pis", True),
+        (".config/pi/", False),  # .config/* で除外済み (ハーネスは Unix だけ)
+    ],
+)
+def test_pi_settings_are_deployed_on_windows_but_not_the_harness(
+    tmp_path, target, ignored_on_windows
+):
+    windows = render(home=str(tmp_path), os_name="windows")
+    linux = render(home=str(tmp_path), os_name="linux")
+    assert (target in windows) is ignored_on_windows
+    assert target not in linux
+    assert ".config/*" in windows
+
+
 def test_git_user_and_ignore_are_deployed_on_windows(tmp_path):
     """★~/.gitconfig が [include] で読む ~/.config/git/ を Windows でも配る。
 

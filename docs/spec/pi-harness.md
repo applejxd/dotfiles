@@ -34,7 +34,22 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - ハーネス（`index.ts` と `rules.json`）が無い、または `~/.pi/agent/mcp.json` にサーバがあるときは起動しない
 - 子エージェントの印（`PI_HARNESS_CHILD`）など、外から入った内部の環境変数は外す
 
-Windows には配らない（pi・ハーネス・`pis` は Unix だけ）。
+## Windows
+
+Windows（PowerShell）では**素の `pi` だけ**を使う。ハーネス・`pis`・境界は Unix だけ（判定器が bash の hook と
+Fence に依る。Windows 版は未着手で、優先度は低い）。
+
+| 配るもの | 方法 |
+| --- | --- |
+| pi 本体 | `314_agent_cli.ps1` が `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`。公式の `install.ps1` は Node.js・Git Bash・PATH の確認を `Read-Host` で聞き、apply では答えられないので使わない。Node.js 22.19 以上が要る |
+| `~/.pi/agent/settings.json`・`keybindings.json`・`AGENTS.md` | Unix と同じ（`.chezmoiignore` で戻している） |
+| `/fleet`（`prompts/`） | **配らない**。`guarded_task` はハーネスが登録するので、素の `pi` では働かない |
+
+- pi の `bash` ツールと `!` は Git Bash を使う（Git for Windows が要る。無ければ pi が探した場所を示す）。
+  PowerShell をモデルに使わせるなら `defaultTools` を変える（[Run Pi on Windows](https://pi.dev/docs/windows)）。
+  今は管理していない
+- 素の `pi` なので、権限・秘密の保護は効かない（Orca・Zed と同じ。[位置づけ](#起動)）
+- Windows 実機では未検証（WSL からは `chezmoi` の描画と静的な試験だけ）
 
 ## ハーネス以外の機能
 

@@ -40,10 +40,11 @@
 .zshrc
 # Windows は権限不要の directory junction をスクリプトで作成
 .copilot/skills
-# pi は Unix だけで導入する (ハーネスと pis も Unix だけ)
-# see docs/spec/pi-harness.md
-.pi/
-.pi/**
+# pi 本体と設定は Windows にも配る。ハーネス (.config/pi) と pis は Unix だけで、
+# ハーネス無しでは guarded_task が無く /fleet が働かないので prompts も配らない
+# see docs/spec/pi-harness.md#windows
+.pi/agent/prompts/
+.pi/agent/prompts/**
 .local/bin/pis
 {{- else }}
 # windows のみで導入
