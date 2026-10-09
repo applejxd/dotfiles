@@ -271,6 +271,15 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | `commit` | `committer` | `routine` | 継がない | `commit` |
 | `worker` | `worker` | `worker` | 継ぐ | `fleet-worker` / `bypass-fleet-worker` |
 
+`explore` に `tier` を付けていないのは、**確認した上での現状**（2026-10-09）。`tier` が無いと生成される `model` が
+`null` になり、ハーネスは親の現在のモデル（`ctx.model`）で子を起動する（`index.ts` の `agent.model ??`）。
+親が `default` のままなら Copilot は `claude-sonnet-5.5`、Bedrock は `us.anthropic.claude-sonnet-5-5` で、
+`/model` で親を変えると `explore` も追従する。
+
+- `routine` にする案: 読むだけの探索なので軽くてよいが、今の Copilot は `routine` も `default` も
+  `claude-sonnet-5.5` で差が出ない。差が出るのは Bedrock の `#low` だけ。**今は変えない**
+- 未確認: 子へ `settings.json` の `defaultThinkingLevel`（今は `medium`）が実際に効いているか
+
 - 子は会話を見られないので、親は必要なことを全部 `task` に書く
 - **子の結果**: 子の JSON のイベントから、承認されなかった呼び出し（理由が `not approved:` で始まる。
   ハーネスが付ける）・ほかのツールのエラー・最後の返答を拾う。承認されなかった呼び出しがあれば
