@@ -15,7 +15,7 @@ set -euo pipefail
 REAL_DB="${HOME}/.local/share/opencode/opencode.db"
 WORKDIR="${OPENCODE_PROBE_DIR:-/tmp/opencode/probe}"
 SEED_DB="${WORKDIR}/seed.db"
-MODEL="${OPENCODE_PROBE_MODEL:-github-copilot/claude-opus-5.5}"
+MODEL="${OPENCODE_PROBE_MODEL:-github-copilot/claude-sonnet-5.5}"
 
 if [ "$#" -eq 0 ]; then
   echo "usage: mise run opencode:probe -- '<prompt>'" >&2
