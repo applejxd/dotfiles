@@ -330,3 +330,28 @@ def test_pis_refuses_servers_in_the_agent_mcp_json(pis_env):
     assert proc.returncode == 1 and "mcp.json" in proc.stderr
     (agent / "mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
     assert run_pis(pis_env).returncode == 0
+
+
+def test_pis_boundary_hands_over_to_ocs(pis_env, tmp_path):
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    log = tmp_path / "ocs.log"
+    stub = stub_bin / "ocs"
+    script = (
+        "#!/bin/sh\n"
+        'echo "$*" > "$OCS_LOG"\n'
+        'echo "$PI_HARNESS_ROLE:$PI_HARNESS_BYPASS" >> "$OCS_LOG"\n'
+    )
+    stub.write_text(script, encoding="utf-8")
+    stub.chmod(0o755)
+    proc = subprocess.run(
+        ["bash", str(PIS), "--boundary", "--bypass", "--role", "reader", "-c"],
+        cwd=pis_env["proj"],
+        env={**pis_env["env"], "PATH": f"{stub_bin}:{os.environ['PATH']}", "OCS_LOG": str(log)},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert log.read_text(encoding="utf-8").splitlines() == ["--harness pi -c", "reader:1"]

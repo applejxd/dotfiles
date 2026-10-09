@@ -34,7 +34,7 @@ from agents_common import load_common  # noqa: E402
 
 LAUNCHER = ROOT / "home" / "dot_local" / "bin" / "executable_ocs"
 LIB = ROOT / "home" / "dot_local" / "share" / "ocs"
-MODULES = ("common", "boundary", "check", "backup", "config", "cli")
+MODULES = ("common", "boundary", "check", "backup", "config", "pi", "cli")
 COMMON = load_common()
 
 

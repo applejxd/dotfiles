@@ -1020,6 +1020,32 @@ message = "ヒアドキュメントでスクリプトを渡さないでくださ
 defaultThinkingLevel = "high"
 skills = ["~/.claude/skills"]
 
+# pi を Fence で囲うときの追加分 (境界のそのほかのキーは [opencode.sandbox] を共有する。
+# 段 6 で OpenCode を撤去するときに、共有キーをここへ移す)。pis --boundary が使う。
+# ★read の ~/.config/agents は判定器 (decide.py) が common.toml を読むために要る。書き込みは開けない。
+# ★protected は、dotfiles のリポジトリを作業ツリーにしたときに書き込みを塞ぐ相対パス。
+# see docs/spec/pi-harness.md#境界
+[pi.sandbox]
+read = [
+  "~/bin",
+  "~/.pi/agent/install",
+  "~/.pi/agent/bin",
+  "~/.config/pi/harness",
+  "~/.config/agents",
+  "~/.claude/hooks",
+]
+control_dirs = [
+  "~/.config/pi",
+  "~/.pi",
+  "~/.claude/hooks",
+  "~/.local/share/pi-sandbox",
+]
+protected = [
+  "home/dot_config/pi",
+  "home/dot_claude/hooks",
+  "home/dot_pi",
+]
+
 # pi の判定器の役割 (プロファイル)。判定器の `role` に名前を渡す。pi だけが読む。
 # tools に無いツールは deny。default は、どの規則にも当たらない操作の扱い。
 # ★評価の順番は判定器のコードに固定してある (この並びに意味は無い)。

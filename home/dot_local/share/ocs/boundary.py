@@ -19,13 +19,20 @@ REQUEST_REL = ".opencode/sandbox.toml"
 REQUEST_KEYS = ("read", "write", "network_allow")
 
 
-def load_boundary() -> dict:
-    if not RULES.is_file():
-        die(f"{RULES} が無い", "chezmoi apply で生成する")
+def load_boundary(
+    rules_path: Path | None = None, required: tuple[str, ...] = ("config_dir",)
+) -> dict:
+    """境界の素材 (``rules.json`` の ``sandbox``) を読む。pi は ``config_dir`` を持たない。
+
+    既定の ``RULES`` は呼び出しのときに引く (定義時に固定しない)。
+    """
+    rules_path = rules_path if rules_path is not None else RULES
+    if not rules_path.is_file():
+        die(f"{rules_path} が無い", "chezmoi apply で生成する")
     try:
-        rules = json.loads(RULES.read_text(encoding="utf-8"))
+        rules = json.loads(rules_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        die(f"{RULES} を読めない: {e}")
+        die(f"{rules_path} を読めない: {e}")
     sandbox = rules.get("sandbox") if isinstance(rules, dict) else None
     if not sandbox:
         die(
@@ -33,12 +40,12 @@ def load_boundary() -> dict:
             "[opencode.sandbox] が enabled=false。chezmoi apply で生成する",
         )
     if not isinstance(sandbox, dict):
-        die(f"{RULES} の sandbox が object でない")
-    for key in ("runtime_path", "base", "config_dir"):
+        die(f"{rules_path} の sandbox が object でない")
+    for key in ("runtime_path", "base", *required):
         if not sandbox.get(key):
             die(f"境界の設定に {key} が無い")
     if not isinstance(sandbox["base"], dict):
-        die(f"{RULES} の sandbox.base が object でない")
+        die(f"{rules_path} の sandbox.base が object でない")
     return sandbox
 
 

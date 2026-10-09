@@ -1842,6 +1842,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
         "redact": redact,
         "agents": pi_agents(common),
         "mcp": pi_mcp_servers(common),
+        "sandbox": pi_sandbox(common),
         # 役割ごとに登録するツール。判定は判定器が行い、ここは「モデルに見せるか」だけ
         "profile_tools": {
             str(name): list(profile.get("tools") or [])
@@ -1873,6 +1874,36 @@ def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[
     out["defaultProvider"] = provider
     out["defaultModel"] = model
     out.update(copy.deepcopy(declared))
+    return out
+
+
+PI_SANDBOX_KEYS = frozenset({"read", "write", "control_dirs", "protected", "network_allow"})
+
+
+def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
+    """pi を囲う境界の素材。``[opencode.sandbox]`` の共有キーに ``[pi.sandbox]`` の追加分を足す。
+
+    ランチャー (``ocs --harness pi``) が起動ディレクトリと合わせて Fence の設定を組み立てる。
+    OpenCode の境界が無効なら (共有キーが無いので) 出さない。
+    see docs/spec/pi-harness.md#境界
+    """
+    base = opencode_sandbox(common)
+    if base is None:
+        return None
+    extra = (common.get("pi") or {}).get("sandbox") or {}
+    if not isinstance(extra, dict):
+        raise SystemExit("[pi.sandbox] は表でなければならない")
+    _reject_unknown("pi.sandbox", set(extra), PI_SANDBOX_KEYS)
+    out = {"runtime_path": base["runtime_path"], "base": copy.deepcopy(base["base"])}
+    for key in ("read", "write", "control_dirs"):
+        added = [expand_user(str(p)) for p in extra.get(key) or []]
+        out["base"][key] = _uniq([*out["base"][key], *added])
+    # protected は相対のまま (ランチャーが起動ディレクトリとリポジトリの根に合わせる)
+    protected = [str(p) for p in extra.get("protected") or []]
+    out["base"]["protected"] = _uniq([*out["base"]["protected"], *protected])
+    if extra.get("network_allow"):
+        network = out["base"]["network"]
+        network["allowedDomains"] = _uniq([*network["allowedDomains"], *extra["network_allow"]])
     return out
 
 

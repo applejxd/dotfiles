@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # pi をハーネス付きで起動する。
-# usage: pis [--bypass] [--role <役割>] [--] [pi の引数...]
+# usage: pis [--bypass] [--boundary] [--role <役割>] [--] [pi の引数...]
 # see docs/spec/pi-harness.md#起動
 set -eu
 
 harness="${HOME}/.config/pi/harness"
 agent_dir="${PI_CODING_AGENT_DIR:-${HOME}/.pi/agent}"
 bypass=""
+boundary=""
 role="implementer"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --bypass) bypass=1; shift ;;
+        --boundary) boundary=1; shift ;;
         --role)
             [ "$#" -ge 2 ] || { echo "pis: --role に役割の名前が要る" >&2; exit 2; }
             role="$2"; shift 2 ;;
@@ -42,5 +44,9 @@ fi
 export PI_HARNESS_ROLE="${role}"
 export PI_HARNESS_BYPASS="${bypass}"
 unset PI_HARNESS_CHILD PI_HARNESS_TEST_CHILD_EXT PI_HARNESS_BOUNDARY
+# --boundary: Fence で囲って起動する (Ubuntu / WSL のみ)。ocs が同じ引数で pi を起動する
+if [ -n "${boundary}" ]; then
+    exec ocs --harness pi "$@"
+fi
 # --no-approve: 作業先の .pi/ (MCP・設定・skills) を読まない。拡張は -ne で読まない
 exec pi --no-approve -nbt -ne -e builtin:mcp -e "${harness}" "$@"

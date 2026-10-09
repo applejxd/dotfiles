@@ -602,6 +602,7 @@ Fence へは引数を並べて渡すので、引用の心配は無い。
 | `~/.local/share/ocs/check.py` | [境界チェック](#境界チェック)の準備と実行、Fence へ渡す PATH と TMPDIR |
 | `~/.local/share/ocs/backup.py` | [起動前の退避](#起動前の退避) |
 | `~/.local/share/ocs/config.py` | [隔離版の設定の書き出し](#隔離版の設定の書き出し方) |
+| `~/.local/share/ocs/pi.py` | pi を囲う部分（`--harness pi`）: 境界用の agent 置き場、起動コマンド、認証を本物へ戻す処理（[pi のハーネス](pi-harness.md#境界)） |
 | `~/.local/share/ocs/common.py` | 共有の定数と失敗の扱い |
 | `~/.local/bin/ocs-boundary-check` | 境界の内側で走る検査スクリプト |
 

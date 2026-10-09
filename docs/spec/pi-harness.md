@@ -11,6 +11,7 @@ OpenCode のハーネス（permission の生成・guide plugin）の後継で、
 pis                 # 実装役で起動する
 pis --bypass        # 確認 (ask) を確認なしで通す。deny と誘導は効く
 pis --role reader   # 役割を選ぶ ([pi.profiles] の名前)
+pis --boundary      # Fence で囲って起動する (Ubuntu / WSL のみ。境界を参照)
 pis -c              # pi の引数はそのまま渡る (例: 直前のセッションを続ける)
 ```
 
@@ -30,6 +31,26 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - 子エージェントの印（`PI_HARNESS_CHILD`）など、外から入った内部の環境変数は外す
 
 Windows には配らない（pi・ハーネス・`pis` は Unix だけ）。
+
+## 境界
+
+`pis --boundary` は、`ocs --harness pi` へ引き継いで pi を Fence で囲って起動する。境界の組み立て・危険な
+起動場所の拒否・起動前の退避・`--check` は OpenCode の隔離起動と共通（[OpenCode 隔離起動](opencode-sandbox.md)）。
+pi だけの部分は `~/.local/share/ocs/pi.py`。`--no-backup` / `--check` は `ocs` が解釈するので、pi には渡らない。
+
+| 項目 | 内容 | 理由 |
+| --- | --- | --- |
+| 設定の置き場 | 境界用の **agent 置き場**を起動ごとに `~/.local/share/pi-sandbox/agent-*` へ作り、`auth.json`・`models-store.json`・`settings.json` を写す。`settings.json`・`trust.json`・`mcp.json`・`extensions/` は書き込みを塞ぐ | pi は設定と認証を読むときにも隣へ `.lock` を作るので、置き場は書ける必要がある。本物の `~/.pi/agent` を入れると、内側で作られた拡張を外の通常の pi が読む（E4） |
+| セッション | `--session-dir` で本物の `~/.pi/agent/sessions/--<作業ディレクトリ>--` だけを開ける | 外の `pi -c` で再開できる（試験済み）。`--session-dir` は渡した場所へそのまま置くので、pi が使う置き場の名前をそろえる |
+| 認証 | 写しの中で更新された認証のうち、**有効期限が本物より新しいプロバイダの分だけ**を、終了後に本物へ戻す（pi と同じ `auth.json.lock` を取る。取れなければ戻さない） | OpenAI は OAuth（期限 47 分）で、更新のたびにリフレッシュトークンが入れ替わりうる。写しの中だけで更新すると、本物が失効する |
+| 後始末 | pi を子プロセスとして動かし、終了・SIGTERM・SIGHUP（端末を閉じた）のどれでも、認証を戻して置き場を消す。Ctrl-C は子が受ける | `execve` で置き換えると終了後の処理ができず、認証の写しが残る。SIGKILL や電源断では残るので、3 日たった置き場は次の起動が捨てる |
+| 判定器 | `PI_HARNESS_BOUNDARY=1` を渡す（判定器はまだ使っていない） | 境界の中の既定は段 5 で決める |
+| 設定の出所 | 共有のキーは `[opencode.sandbox]`、pi の追加分は `[pi.sandbox]`（読み取り: ハーネス・判定器・`~/.config/agents`・`~/.claude/hooks`・pi 本体） | 段 6 で OpenCode を撤去するとき、共有キーを `[pi.sandbox]` へ移す |
+| 作業先ごとの追加 | OpenCode と同じ `.opencode/sandbox.toml` | 名前は段 6 で決める |
+
+`~/.config/agents`（判定器が `common.toml` を読む）は読めるが書けない。内側から判定の規則を書き換えられない。
+OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに入っているので、pi からも読める
+（秘密を含まない道具の置き場）。
 
 ## pi の設定
 
@@ -51,6 +72,7 @@ Windows には配らない（pi・ハーネス・`pis` は Unix だけ）。
 | `home/dot_config/pi/harness/index.ts` | `~/.config/pi/harness/index.ts` | 拡張の本体 |
 | `home/dot_config/pi/harness/modify_rules.json.py.tmpl` | `~/.config/pi/harness/rules.json` | `generate.py --target pi-harness` が作る。判定器の場所・伏字化の規則・シェルへ入れる環境変数・子エージェント・MCP・役割ごとのツール |
 | `home/dot_local/bin/executable_pis` | `~/.local/bin/pis` | 起動の入口（[起動](#起動)） |
+| `home/dot_local/share/ocs/pi.py` | `~/.local/share/ocs/pi.py` | 境界の pi 用の部分（[境界](#境界)） |
 | `home/dot_pi/agent/modify_settings.json.py.tmpl` | `~/.pi/agent/settings.json` | `generate.py --target pi-settings` が持ち物のキーだけを書く（[pi の設定](#pi-の設定)） |
 | `home/.chezmoitemplates/agent-cli-install.sh.tmpl` の `install_pi` | `~/.pi/agent/install`・`~/bin/pi` | pi 本体を公式インストーラーで入れる（[AI CLI の導入](structure.md#ai-cli-の導入)） |
 
@@ -140,11 +162,13 @@ Windows には配らない（pi・ハーネス・`pis` は Unix だけ）。
 - 伏字化（JSON のイベント・退避ファイルに生の秘密が残らない）と、保護対象のパスを参照したコマンド
 - 子エージェント: 入れ子にならない・読み取り役に bash を出さない・子の ask が `blocked` で返る・
   bypass を継ぐ・役割の `shell_deny` が bypass でも効く・`commit` が確認なしで git を読む
-- MCP: ハーネスから登録され、実装役では確認になる
+- MCP: ハーネスから登録され、実装役では確認になる（`test_pi_harness.py`）
+- 境界（`test_pi_boundary.py`）: 生成・境界用の置き場・セッションの置き場・認証の戻し（新しい分だけ・ロック・壊れた写し）・
+  実際の Fence での境界チェック（Fence・bwrap・pi が無ければ skip）
 - 誘導: `cat` が read ツールへの案内で止まる
 
 ## 未対応
 
 - 子エージェントの階層のモデルは、Copilot で確かめただけ。Bedrock のモデル ID が pi でそのまま通るかは未確認
-- 境界（段 4）
+- 境界の中での判定の変え方（`boundary`。段 5）、Windows・macOS の境界
 - 判定 1 回に 0.1 秒ほどかかる（Python の起動）。`tool_call` と `execute()` で同じ入力なら 1 回にしている

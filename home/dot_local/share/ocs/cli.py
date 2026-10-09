@@ -17,7 +17,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from . import backup, boundary, check, config
+from . import backup, boundary, check, config, pi
 from .common import HOME, OPENCODE, STATE, die
 
 # 境界の設定を渡す場所。★ワークスペースの外に置くこと (内側から書き換えられない場所)。
@@ -118,6 +118,68 @@ def write_boundary(config_: dict) -> str:
     return boundary_file
 
 
+def run_pi(args: argparse.Namespace, passthrough: list[str]) -> int:
+    """pi を囲って起動する。OpenCode と違い、DB も設定の書き出しも要らない。
+
+    境界用の agent 置き場を起動ごとに作り (:mod:`pi`)、セッションの置き場だけを本物へ開ける。
+    see docs/spec/pi-harness.md#境界
+    """
+    pi.check_installed()
+    sandbox = boundary.load_boundary(pi.RULES, required=())
+    runtime = Path(sandbox["runtime_path"])
+    if not runtime.is_file():
+        die(f"Fence が無い: {runtime}", "mise install で入れる")
+
+    workspace = Path.cwd().resolve()
+    boundary.reject_unsafe_workspace(sandbox, workspace)
+    request = boundary.read_request(workspace)
+    boundary.reject_control_dirs(sandbox, workspace, request)
+    boundary.reject_protected_workspace(sandbox, workspace, request)
+    boundary.announce_request(request)
+
+    agent = pi.prepare_agent_dir()
+    sessions = pi.sessions_dir(workspace)
+    config_ = boundary.build_boundary(sandbox, workspace, request, agent)
+    # セッションの置き場だけを本物へ開け、境界用 agent 置き場の設定と拡張は書けなくする
+    config_["filesystem"]["allowWrite"].append(str(sessions))
+    config_["filesystem"]["allowRead"].append(str(sessions))
+    config_["filesystem"]["denyWrite"] += boundary.prepare_protected(pi.frozen_paths(agent))
+    project = {
+        "workspace": str(workspace),
+        "data_dir": str(agent),
+        "db": "",
+        "config": config_,
+    }
+    env = pi.inner_env(agent)
+
+    if args.check:
+        boundary_file = write_boundary(config_)
+        try:
+            return check.run_check(runtime, boundary_file, project, env, FENCE_TMP)
+        finally:
+            Path(boundary_file).unlink(missing_ok=True)
+            pi.cleanup(agent)
+
+    try:
+        backup.backup_worktree(workspace, args.no_backup)
+        boundary_file = write_boundary(config_)
+    except BaseException:
+        pi.cleanup(agent)
+        raise
+    argv = [
+        str(runtime),
+        "--settings",
+        boundary_file,
+        "--",
+        *pi.inner_command(passthrough, env.get("PATH", check.HOST_PATH), sessions),
+    ]
+    try:
+        # execve で置き換えない: 終了後に認証を本物へ戻し、写しを消すため (:func:`pi.run`)
+        return pi.run(argv, check.host_env(env, FENCE_TMP), agent)
+    finally:
+        Path(boundary_file).unlink(missing_ok=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -137,7 +199,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="起動せず、この起動ディレクトリの境界を内側から検査する",
     )
+    parser.add_argument(
+        "--harness",
+        choices=("opencode", "pi"),
+        default="opencode",
+        help="囲って起動するもの (pi は pis --boundary が使う)",
+    )
     args, passthrough = parser.parse_known_args(argv)
+    if args.harness == "pi":
+        return run_pi(args, passthrough)
 
     sandbox = boundary.load_boundary()
     runtime = Path(sandbox["runtime_path"])
