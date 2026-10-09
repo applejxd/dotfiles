@@ -32,6 +32,62 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 Windows には配らない（pi・ハーネス・`pis` は Unix だけ）。
 
+## ハーネス以外の機能
+
+OpenCode のハーネスにあった機能のうち、pi へ移したもの。仕分けと経緯は
+[CHG-0020](../change/0020-pi-migration.md#段-5-の仕分け2026-10-09)。
+
+### 圧縮（旧 checkpoint）
+
+`session_before_compact` で、圧縮の要約の依頼に**引き継ぎの指示**（Next Steps は手順と合格条件まで書く・
+略語を展開する・未作成の文書は「未作成」と書く・制約と却下済みの方針を残す）を足す。pi の要約はセッションに
+残り、`pi -c` で再開しても消えないので、外部ファイル・skill・注入の印は作らない。
+
+- `compact()` を `ctx.modelRegistry.streamSimple` 経由で呼ぶ。認証の解決結果の `baseUrl` をモデルへ反映する
+  （Copilot はトークンごとに違う。pi 自身も同じ。反映しないと 401 になった）
+- 失敗したら標準エラーへ理由を出して、pi の既定の圧縮に任せる（指示は補助で、圧縮は止めない）
+- 指示は履歴の要約にだけ入る。分割されたターンの前半の要約（`Turn Context`）には入らない（pi の仕様）
+- 別名のツールで触ったファイルは、これまでどおり要約のファイルの一覧に足す
+
+### `git commit` の確認
+
+`git commit -m …` の確認の本文に、件名・本文・追加するパスを出す。OpenCode の guide plugin と同じ純関数
+（`~/.config/opencode/guide-plugin/commit-message.js`）を取り込み、表示の幅と行数は
+`[opencode.ask_description.commit]` を使う。読み込めなくても出さないだけでハーネスは止めない。
+段 6 で OpenCode を外すときに、`commit-message.js` をハーネスの置き場へ移す。
+
+### 整形
+
+`guarded_edit` / `guarded_write` の後に、`[[hooks]]` の PostToolUse（`markdownlint.sh`・`format-file.sh`。
+Claude / Copilot と同じスクリプト）を宣言順に呼ぶ。ファイルの書き込みの順番待ち（`withFileMutationQueue`）の
+中で行う。整形は黙って済ませ、markdownlint が残した違反（hook が exit 2 で返す警告）だけを結果の末尾に足して
+モデルへ返す。失敗しても編集は成功のまま。
+
+### fleet
+
+`/fleet <依頼>`（`~/.pi/agent/prompts/fleet.md`）が、依頼を並列に動かせる作業に分け、`guarded_task`（`worker`）を
+1 回の応答に並べて起動させる。指示文は `[pi.commands.fleet]` から作る。pi は 1 つの返答に並んだ tool call を
+並列に実行する。`-ne` でもプロンプトテンプレートは読まれる（試験済み）。
+
+### キーバインド
+
+`~/.pi/agent/keybindings.json` は `[pi.keybinds]` の中身そのもの（ファイルごと生成器の持ち物）。今は
+`app.interrupt` に Ctrl+C を足し、`app.clear` を外し、Ctrl+D で終了する（今の OpenCode の設定と同じ操作）。
+
+### 共通の指示
+
+`~/.pi/agent/AGENTS.md` は、Claude Code・Codex・Copilot と同じ共通の指示（`agent-instructions.md`）。
+
+### Orca・Zed
+
+- **Orca**: Orca は pi を起動するとき、ステータス表示の拡張を `~/.pi/agent/extensions/orca-agent-status.ts` に
+  置く。`pis` は `-ne` で拡張を読まないので、Orca から起動したとき（`ORCA_AGENT_HOOK_PORT` がある）に限り、
+  Orca の印（`@orca-managed-pi-extension`）がある拡張だけを `-e` で足す。境界の内側は `~/.pi/agent` を読めない
+  ので使えない（状態表示は出ない）。Orca が `pi` と `pis` のどちらを起動するかは Orca 側の設定による
+- **Zed など RPC で起動するクライアント**: 確認は `extension_ui_request` として届き、応えないと永久に待つので、
+  TUI 以外では確認に 5 分の期限を付け、期限が来たら拒否する。クライアントが確認の要求（`confirm`）に
+  対応していなければ、ask になる操作は拒否される
+
 ## 境界
 
 `pis --boundary` は、`ocs --harness pi` へ引き継いで pi を Fence で囲って起動する。境界の組み立て・危険な
@@ -73,6 +129,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | `home/dot_config/pi/harness/modify_rules.json.py.tmpl` | `~/.config/pi/harness/rules.json` | `generate.py --target pi-harness` が作る。判定器の場所・伏字化の規則・シェルへ入れる環境変数・子エージェント・MCP・役割ごとのツール |
 | `home/dot_local/bin/executable_pis` | `~/.local/bin/pis` | 起動の入口（[起動](#起動)） |
 | `home/dot_local/share/ocs/pi.py` | `~/.local/share/ocs/pi.py` | 境界の pi 用の部分（[境界](#境界)） |
+| `home/dot_pi/agent/modify_keybindings.json.py.tmpl`・`AGENTS.md.tmpl`・`prompts/fleet.md.tmpl` | `~/.pi/agent/keybindings.json`・`AGENTS.md`・`prompts/fleet.md` | [ハーネス以外の機能](#ハーネス以外の機能) |
 | `home/dot_pi/agent/modify_settings.json.py.tmpl` | `~/.pi/agent/settings.json` | `generate.py --target pi-settings` が持ち物のキーだけを書く（[pi の設定](#pi-の設定)） |
 | `home/.chezmoitemplates/agent-cli-install.sh.tmpl` の `install_pi` | `~/.pi/agent/install`・`~/bin/pi` | pi 本体を公式インストーラーで入れる（[AI CLI の導入](structure.md#ai-cli-の導入)） |
 
@@ -166,6 +223,8 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 - 境界（`test_pi_boundary.py`）: 生成・境界用の置き場・セッションの置き場・認証の戻し（新しい分だけ・ロック・壊れた写し）・
   実際の Fence での境界チェック（Fence・bwrap・pi が無ければ skip）
 - 誘導: `cat` が read ツールへの案内で止まる
+- 圧縮（指示が履歴の要約の依頼に入る・ファイルの一覧）、`git commit` の確認の本文（RPC で確認の要求を受け取る。期限が付く）、
+  整形（ruff・markdownlint）、`/fleet` の展開、キーバインドと共通の指示の生成、Orca の拡張の読み込み条件
 
 ## 未対応
 

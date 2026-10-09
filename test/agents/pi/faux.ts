@@ -25,6 +25,15 @@ export default async function (pi: ExtensionAPI) {
 		const messages = context.messages;
 		const last = messages[messages.length - 1];
 		const tools = getCurrentTools(messages).map((t) => t.name).sort();
+		// 圧縮の要約の依頼 (pi の要約の system prompt)。ハーネスの指示が入っているかも返す
+		if (getCurrentSystemPrompt(messages).includes("context summarization assistant")) {
+			const instr = JSON.stringify(messages).includes("【圧縮の指示】") ? "yes" : "no";
+			return fauxAssistantMessage(fauxText(`SUMMARY INSTR=${instr}`));
+		}
+		// 利用者の発言をそのまま返す (プロンプトテンプレートの展開を見る)
+		if (process.env.FAUX_ECHO_USER === "1" && last?.role === "user") {
+			return fauxAssistantMessage(fauxText(`USER=${textOf(last.content)}`));
+		}
 		if (last?.role === "toolResult") {
 			const results = messages
 				.filter((m: any) => m.role === "toolResult")

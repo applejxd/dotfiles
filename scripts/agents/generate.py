@@ -1843,6 +1843,8 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
         "agents": pi_agents(common),
         "mcp": pi_mcp_servers(common),
         "sandbox": pi_sandbox(common),
+        "post_edit": pi_post_edit_hooks(common),
+        "commit_preview": pi_commit_preview(common),
         # 役割ごとに登録するツール。判定は判定器が行い、ここは「モデルに見せるか」だけ
         "profile_tools": {
             str(name): list(profile.get("tools") or [])
@@ -1875,6 +1877,50 @@ def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[
     out["defaultModel"] = model
     out.update(copy.deepcopy(declared))
     return out
+
+
+def pi_post_edit_hooks(common: dict[str, Any]) -> list[dict[str, str]]:
+    """``[[hooks]]`` のうち PostToolUse (編集の後) のもの。ハーネスが edit / write の後に呼ぶ。
+
+    整形 (``format-file.sh``) と markdownlint を、Claude / Copilot の hook と同じスクリプトで行う。
+    see docs/spec/pi-harness.md#整形
+    """
+    out = []
+    for hook in common.get("hooks") or []:
+        if hook.get("claude_event") != "PostToolUse":
+            continue
+        runner, script = str(hook.get("runner", "")), str(hook.get("script", ""))
+        if runner not in ("bash", "python3") or not script or "/" in script:
+            raise SystemExit(f"[[hooks]] {hook.get('id')} の runner / script が不正")
+        out.append({"id": str(hook["id"]), "runner": runner,
+                    "script": expand_user(f"~/.claude/hooks/{script}")})
+    return out
+
+
+def pi_commit_preview(common: dict[str, Any]) -> dict[str, int] | None:
+    """``git commit`` の確認に出す件名と本文の表示設定 (``[opencode.ask_description.commit]``)。"""
+    cfg = ((common.get("opencode") or {}).get("ask_description") or {}).get("commit") or {}
+    if not cfg.get("enabled"):
+        return None
+    return {"line_width": int(cfg.get("line_width", 72)), "max_lines": int(cfg.get("max_lines", 8))}
+
+
+def pi_keybindings(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.pi/agent/keybindings.json``。``[pi.keybinds]`` をそのまま出す (ファイルごと持ち物)。
+
+    値は 1 つのキー (文字列) か、キーの配列 (空なら割り当てを外す)。
+    see docs/spec/pi-harness.md#キーバインド
+    """
+    declared = (common.get("pi") or {}).get("keybinds") or {}
+    if not isinstance(declared, dict):
+        raise SystemExit("[pi.keybinds] は表でなければならない")
+    for action, keys in declared.items():
+        ok = isinstance(keys, str) or (
+            isinstance(keys, list) and all(isinstance(k, str) and k for k in keys)
+        )
+        if not ok or (isinstance(keys, str) and not keys):
+            raise SystemExit(f"[pi.keybinds] {action} は文字列か文字列の配列で書く")
+    return copy.deepcopy(declared)
 
 
 PI_SANDBOX_KEYS = frozenset({"read", "write", "control_dirs", "protected", "network_allow"})
@@ -2748,12 +2794,13 @@ TARGETS = {
     "opencode-service": merge_opencode_service,
     "pi-harness": build_pi_harness,
     "pi-settings": merge_pi_settings,
+    "pi-keybindings": pi_keybindings,
 }
 
 # 既存内容を一切参照しない (完全生成の) ターゲット。
 # 既存ファイルが壊れた JSON でも作り直せるよう、読み込み自体を省く。
 # 省かないと、壊れたファイルを直すための apply がパースで失敗して詰む。
-FULL_GENERATION_TARGETS = {"copilot-hooks", "opencode-guide", "pi-harness"}
+FULL_GENERATION_TARGETS = {"copilot-hooks", "opencode-guide", "pi-harness", "pi-keybindings"}
 
 
 def load_existing(path: str | None) -> dict[str, Any]:

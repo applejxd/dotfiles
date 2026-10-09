@@ -48,5 +48,13 @@ unset PI_HARNESS_CHILD PI_HARNESS_TEST_CHILD_EXT PI_HARNESS_BOUNDARY
 if [ -n "${boundary}" ]; then
     exec ocs --harness pi "$@"
 fi
+# Orca が置くステータス表示の拡張 (-ne で外れるので、Orca から起動したときだけ戻す)。
+# Orca の印がある (@orca-managed-pi-extension) ものだけ。境界の内側は ~/.pi/agent を読めないので使えない。
+orca_ext="${agent_dir}/extensions/orca-agent-status.ts"
+extra=()
+if [ -n "${ORCA_AGENT_HOOK_PORT:-}" ] && [ -f "${orca_ext}" ] \
+    && grep -q '@orca-managed-pi-extension' "${orca_ext}"; then
+    extra=(-e "${orca_ext}")
+fi
 # --no-approve: 作業先の .pi/ (MCP・設定・skills) を読まない。拡張は -ne で読まない
-exec pi --no-approve -nbt -ne -e builtin:mcp -e "${harness}" "$@"
+exec pi --no-approve -nbt -ne -e builtin:mcp ${extra[@]+"${extra[@]}"} -e "${harness}" "$@"

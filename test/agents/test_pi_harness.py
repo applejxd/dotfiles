@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,8 @@ PI = shutil.which("pi")
 pytestmark = pytest.mark.skipif(PI is None, reason="pi is not installed")
 
 HARNESS_SRC = ROOT / "home" / "dot_config" / "pi" / "harness" / "index.ts"
+GUIDE_SRC = ROOT / "home" / "dot_config" / "opencode" / "guide-plugin"
+COMMIT_MESSAGE_SRC = GUIDE_SRC / "commit-message.js"
 DECIDE = ROOT / "home" / "dot_claude" / "hooks" / "executable_decide.py"
 FIXTURES = Path(__file__).resolve().parent / "pi"
 SECRET = "abc123rawsecret"
@@ -32,9 +35,13 @@ SECRET = "abc123rawsecret"
 @pytest.fixture
 def env(tmp_path):
     """ハーネスの置き場 (rules.json 付き)・作業ツリー・使い捨ての agent 置き場を用意する。"""
-    harness = tmp_path / "harness"
-    harness.mkdir()
+    # 配備先と同じ並び (ハーネスは ../../opencode/guide-plugin/commit-message.js を取り込む)
+    harness = tmp_path / ".config" / "pi" / "harness"
+    harness.mkdir(parents=True)
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
+    guide = tmp_path / ".config" / "opencode" / "guide-plugin"
+    guide.mkdir(parents=True)
+    shutil.copy2(COMMIT_MESSAGE_SRC, guide / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
     rules["decide"] = str(DECIDE)
     # 子エージェントも偽のモデルで動かす (階層のモデルは認証が要る)
@@ -51,14 +58,15 @@ def env(tmp_path):
         "AGENTS_CONFIG_DIR": str(agents_config_dir()),
         "TMPDIR": str(tmp_path),
     }
-    for key in ("PI_HARNESS_ROLE", "PI_HARNESS_BYPASS", "PI_HARNESS_BOUNDARY"):
+    # 作業している環境の変数を持ち込まない (Orca の中で回すと ORCA_* が入っている)
+    for key in [k for k in base if k.startswith(("PI_HARNESS_", "ORCA_"))]:
         base.pop(key, None)
     return {"harness": harness, "proj": proj, "env": base, "tmp": tmp_path}
 
 
-def run_pi(env, calls, *messages, extra=(), mode="print", **env_extra):
-    args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
-    args += ["-e", str(env["harness"])]
+def run_pi(env, calls, *messages, extra=(), mode="print", session=False, **env_extra):
+    args = [PI, *(() if session else ("--no-session",)), "--model", "faux/spike"]
+    args += ["-nbt", "-ne", "-e", "builtin:mcp", "-e", str(env["harness"])]
     args += [*extra, "-e", str(FIXTURES / "faux.ts")]
     if mode == "json":
         args += ["--mode", "json"]
@@ -355,3 +363,208 @@ def test_pis_boundary_hands_over_to_ocs(pis_env, tmp_path):
     )
     assert proc.returncode == 0, proc.stderr
     assert log.read_text(encoding="utf-8").splitlines() == ["--harness pi -c", "reader:1"]
+
+
+# ─── 圧縮・commit の表示・整形・RPC ─────────────────────────────────
+
+
+def _session_entries(session_dir):
+    entries = []
+    for path in session_dir.rglob("*.jsonl"):
+        entries += [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    return entries
+
+
+def test_compaction_carries_the_handover_instructions_and_file_lists(env):
+    settings = env["proj"] / ".pi"
+    settings.mkdir()
+    small = '{"compaction": {"keepRecentTokens": 1}}'
+    (settings / "settings.json").write_text(small, encoding="utf-8")
+    (env["proj"] / "f.txt").write_text("x\n", encoding="utf-8")
+    sessions = env["tmp"] / "sessions"
+    calls = [{"name": "guarded_read", "args": {"path": "f.txt"}}]
+    proc = run_pi(
+        env,
+        calls,
+        "go",
+        "again",  # 履歴の要約 (指示が入る側) が空にならないよう、ターンを複数にする
+        "/spike-compact",
+        session=True,
+        extra=("--approve", "--session-dir", str(sessions), "-e", str(FIXTURES / "compact.ts")),
+    )
+    assert proc.returncode == 0, proc.stderr
+    compactions = [e for e in _session_entries(sessions) if e.get("type") == "compaction"]
+    assert compactions, proc.stdout + proc.stderr
+    entry = compactions[-1]
+    assert "INSTR=yes" in entry["summary"], f"圧縮の指示が要約の依頼に入っていない: {proc.stderr}"
+    details = entry.get("details") or {}
+    assert "f.txt" in json.dumps(details), "別名のツールで読んだファイルが一覧に無い"
+
+
+def _rpc(env, calls, answers, timeout=120):
+    """pi を RPC モードで動かし、確認の要求 (extension_ui_request) に answers の順に応える。"""
+    args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
+    args += ["-e", str(env["harness"]), "-e", str(FIXTURES / "faux.ts"), "--mode", "rpc"]
+    proc = subprocess.Popen(
+        args,
+        cwd=env["proj"],
+        env={**env["env"], "FAUX_TOOL_CALLS": json.dumps(calls)},
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    requests = []
+    proc.stdin.write(json.dumps({"type": "prompt", "message": "go"}) + "\n")
+    proc.stdin.flush()
+    deadline = time.time() + timeout
+    try:
+        for line in proc.stdout:
+            if time.time() > deadline:
+                break
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") == "extension_ui_request" and event.get("method") == "confirm":
+                requests.append(event)
+                answer = answers[len(requests) - 1] if len(requests) <= len(answers) else False
+                reply = {"type": "extension_ui_response", "id": event["id"], "confirmed": answer}
+                proc.stdin.write(json.dumps(reply) + "\n")
+                proc.stdin.flush()
+            if event.get("type") == "agent_end":
+                break
+    finally:
+        proc.kill()
+    return requests
+
+
+def test_git_commit_confirmation_shows_subject_and_body(env):
+    subprocess.run(["git", "init", "-q"], cwd=env["proj"], check=True)
+    command = "git commit -m 'feat: 件名です' -m '本文の 1 行目'"
+    requests = _rpc(env, bash_call(command), [False])
+    assert len(requests) == 1, requests
+    message = requests[0]["message"]
+    assert "件名: feat: 件名です" in message and "本文の 1 行目" in message
+    assert "理由:" in message
+    # RPC ではクライアントが応えないと永久に待つので、期限が付く
+    assert requests[0].get("timeout"), "確認に期限が付いていない"
+
+
+def test_approved_rpc_confirmation_runs_the_tool(env):
+    requests = _rpc(env, bash_call("touch made-via-rpc"), [True])
+    assert len(requests) == 1
+    assert (env["proj"] / "made-via-rpc").exists()
+
+
+@pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff is not installed")
+def test_python_files_are_formatted_after_a_write(env):
+    messy = "x   =   1\nprint( x )\n"
+    calls = [{"name": "guarded_write", "args": {"path": "m.py", "content": messy}}]
+    run_pi(env, calls)
+    assert (env["proj"] / "m.py").read_text(encoding="utf-8") == "x = 1\nprint(x)\n"
+
+
+@pytest.mark.skipif(shutil.which("markdownlint-cli2") is None, reason="markdownlint-cli2 無し")
+def test_markdownlint_warnings_reach_the_model(env):
+    body = "# Title\n\n```\ncode without a language\n```\n"
+    calls = [{"name": "guarded_write", "args": {"path": "d.md", "content": body}}]
+    proc = run_pi(env, calls)
+    assert "[markdownlint] issues remain" in proc.stdout, proc.stdout
+
+
+# ─── プロンプトテンプレート (/fleet)・キーバインド・共通の指示 ──────
+
+
+def _render(template: Path) -> str:
+    chezmoi = shutil.which("chezmoi")
+    if chezmoi is None:
+        pytest.skip("chezmoi is not installed")
+    done = subprocess.run(
+        [chezmoi, "--source", str(ROOT), "execute-template"],
+        input=template.read_text(encoding="utf-8"),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    return done.stdout
+
+
+def test_fleet_prompt_template_expands_under_no_extensions(env):
+    prompts = Path(env["env"]["PI_CODING_AGENT_DIR"]) / "prompts"
+    prompts.mkdir()
+    rendered = _render(ROOT / "home" / "dot_pi" / "agent" / "prompts" / "fleet.md.tmpl")
+    (prompts / "fleet.md").write_text(rendered, encoding="utf-8")
+    proc = run_pi(env, [], "/fleet README を直す", FAUX_ECHO_USER="1")
+    assert proc.returncode == 0, proc.stderr
+    # 引数が $ARGUMENTS に入り、テンプレート本文が利用者の発言として届く
+    assert "依頼:\nREADME を直す" in proc.stdout, proc.stdout
+    assert "guarded_task" in proc.stdout
+
+
+def test_shared_instructions_are_rendered_for_pi():
+    rendered = _render(ROOT / "home" / "dot_pi" / "agent" / "AGENTS.md.tmpl")
+    assert rendered.strip(), "共通の指示が空"
+    claude = _render(ROOT / "home" / "dot_claude" / "CLAUDE.md.tmpl")
+    assert rendered.strip() == claude.strip()
+
+
+def test_keybindings_are_generated_from_the_declaration():
+    out = gen.pi_keybindings({}, load_common())
+    assert out["app.interrupt"] == ["escape", "ctrl+c"] and out["app.clear"] == []
+    assert out == load_common()["pi"]["keybinds"]
+
+
+@pytest.mark.parametrize("bad", [{"app.exit": ""}, {"app.exit": [1]}, {"app.exit": None}])
+def test_bad_keybindings_stop_generation(bad):
+    common = load_common()
+    common["pi"]["keybinds"] = bad
+    with pytest.raises(SystemExit, match=r"pi\.keybinds"):
+        gen.pi_keybindings({}, common)
+
+
+# ─── Orca のステータス拡張 ──────────────────────────────────────────
+
+
+def _orca_extension(pis_env, probe, marker=True):
+    """Orca が置く拡張の代役。呼ばれたら印のファイルを書く。"""
+    agent = Path(pis_env["env"]["PI_CODING_AGENT_DIR"])
+    (agent / "extensions").mkdir(exist_ok=True)
+    head = "// @orca-managed-pi-extension\n" if marker else "// someone else\n"
+    body = (
+        head
+        + 'import { writeFileSync } from "node:fs";\n'
+        + "export default function (pi) {\n"
+        + '  pi.registerCommand("orca-probe", { description: "p", handler: async () => {\n'
+        + f'    writeFileSync("{probe}", "loaded");\n'
+        + "  } });\n}\n"
+    )
+    (agent / "extensions" / "orca-agent-status.ts").write_text(body, encoding="utf-8")
+
+
+def _run_pis_probe(pis_env, **env_extra):
+    faux = str(FIXTURES / "faux.ts")
+    return subprocess.run(
+        ["bash", str(PIS), "--model", "faux/spike", "-e", faux, "-p", "/orca-probe"],
+        cwd=pis_env["proj"],
+        env={**pis_env["env"], "FAUX_TOOL_CALLS": "[]", **env_extra},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+    )
+
+
+def test_pis_loads_orcas_status_extension_only_from_orca_with_its_marker(pis_env, tmp_path):
+    probe = tmp_path / "probe"
+    _orca_extension(pis_env, probe)
+    _run_pis_probe(pis_env)
+    assert not probe.exists(), "Orca の外で Orca の拡張を読んだ"
+    _run_pis_probe(pis_env, ORCA_AGENT_HOOK_PORT="1")
+    assert probe.exists(), "Orca の中で Orca の拡張を読んでいない"
+    probe.unlink()
+    _orca_extension(pis_env, probe, marker=False)
+    _run_pis_probe(pis_env, ORCA_AGENT_HOOK_PORT="1")
+    assert not probe.exists(), "印の無い拡張を読んだ"

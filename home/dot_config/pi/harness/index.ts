@@ -3,6 +3,7 @@
 // see docs/spec/pi-harness.md
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
+	compact,
 	createBashToolDefinition,
 	createEditToolDefinition,
 	createFindToolDefinition,
@@ -10,11 +11,12 @@ import {
 	createLsToolDefinition,
 	createReadToolDefinition,
 	createWriteToolDefinition,
+	withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 
 type Decision = { decision: "allow" | "ask" | "deny"; reason: string; source: string };
@@ -47,6 +49,43 @@ const DENY_PATH: RegExp[] = (rules.redact.deny_path ?? []).map((p: string) => ne
 // /g を付けない (.test の lastIndex が残る)
 const DENY_PATH_UNLESS = rules.redact.deny_path_unless ? new RegExp(rules.redact.deny_path_unless) : null;
 
+// ─── 確認画面の補助 ─────────────────────────────────────────────────
+
+// git commit の件名と本文を、確認画面へ出す。OpenCode の guide plugin と同じ純関数 (commit-message.js) を使う。
+// 飾りなので、読み込めなくてもハーネスは止めない (出さないだけ)。段 6 で OpenCode を外すときにここへ移す。
+let commitPreview: ((command: string, opts?: unknown) => any) | null = null;
+async function loadCommitPreview() {
+	if (!rules.commit_preview) return;
+	try {
+		const url = pathToFileURL(join(HERE, "..", "..", "opencode", "guide-plugin", "commit-message.js")).href;
+		commitPreview = (await import(url)).commitPreview;
+	} catch {}
+}
+
+function describeCall(tool: string, input: any): string {
+	let text = tool === "bash" ? String(input?.command ?? "") : `${tool}: ${JSON.stringify(input)}`;
+	const p = tool === "bash" && commitPreview ? commitPreview(text, rules.commit_preview) : null;
+	if (p) {
+		const lines = [`件名: ${p.subject}`, ...p.body.map((l: string) => `  ${l}`)];
+		if (p.extra) lines.push(p.extra);
+		if (p.added) lines.push(p.added);
+		text = `${text}\n\n${lines.join("\n")}`;
+	}
+	return text;
+}
+
+// ─── 圧縮の指示 ─────────────────────────────────────────────────────
+
+// pi の既定の要約 (Goal / Constraints / Progress / Key Decisions / Next Steps / Critical Context) に、
+// 引き継ぎで外すと復帰できなくなる点を足す (旧 checkpoint の雛形の要点)。
+const COMPACT_INSTRUCTIONS = [
+	"【圧縮の指示】この要約は、前任者の会話を持たない読み手が作業を再開するために使う。",
+	"- Next Steps は「何を」だけでなく「どうやって」まで書く (手順と合格条件)。",
+	"- 略語・独自の用語は展開するか、参照先 (パス・文書名) を示す。",
+	"- 未作成の文書を参照に挙げるときは「未作成」と明記する。",
+	"- 利用者が指定した制約と、却下済みの方針を 1 行ずつ残す。",
+].join("\n");
+
 // ─── 判定 ───────────────────────────────────────────────────────────
 
 export function decide(tool: string, input: unknown, cwd: string): Decision {
@@ -73,9 +112,12 @@ const decided = new Map<string, { input: string; decision: Decision; approved: b
 // 確認は 1 件ずつ出す。TUI の confirm は 1 枠を共有し、後の確認が先の確認を置き換える
 // (codemode の中で並べた呼び出しで先の確認が永久に止まった。spike の E3)
 let confirmQueue: Promise<unknown> = Promise.resolve();
+// TUI 以外 (RPC など) は、クライアントが確認に応えないと永久に待つので期限を付ける (期限が来たら拒否)
+const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 function confirmInOrder(ctx: any, title: string, body: string): Promise<boolean> {
+	const timeout = ctx.mode === "tui" ? undefined : CONFIRM_TIMEOUT_MS;
 	const run = confirmQueue.then(() =>
-		ctx.signal?.aborted ? false : ctx.ui.confirm(title, body, { signal: ctx.signal }),
+		ctx.signal?.aborted ? false : ctx.ui.confirm(title, body, { signal: ctx.signal, timeout }),
 	);
 	confirmQueue = run.catch(() => undefined);
 	return run.then((v: unknown) => v === true).catch(() => false);
@@ -131,7 +173,8 @@ function withheld(hit: string): any {
 
 // ─── 登録 ───────────────────────────────────────────────────────────
 
-export default function (pi: ExtensionAPI) {
+export default async function (pi: ExtensionAPI) {
+	await loadCommitPreview();
 	pi.on("tool_call", async (event, ctx) => {
 		const tool = baseName(event.toolName);
 		const d = decide(tool, event.input, ctx.cwd);
@@ -139,7 +182,8 @@ export default function (pi: ExtensionAPI) {
 		if (d.decision === "deny") return { block: true, reason: d.reason };
 		if (d.decision === "ask") {
 			const ok =
-				ctx.hasUI && (await confirmInOrder(ctx, "実行してよいですか？", `${tool}: ${input}\n理由: ${d.reason}`));
+				ctx.hasUI &&
+				(await confirmInOrder(ctx, "実行してよいですか？", `${describeCall(tool, event.input)}\n\n理由: ${d.reason}`));
 			if (!ok) return { block: true, reason: `${NOT_APPROVED} ${d.reason}` };
 			decided.set(event.toolCallId, { input, decision: d, approved: true });
 			return undefined;
@@ -191,6 +235,11 @@ export default function (pi: ExtensionAPI) {
 				if (d.decision === "deny" || (d.decision === "ask" && !approved)) {
 					throw new Error(`実行前の判定で止めた: ${d.decision}: ${d.reason}`);
 				}
+				// edit / write の後に整形する (Claude / Copilot の PostToolUse hook と同じスクリプト)
+				if (tool === "edit" || tool === "write") {
+					const result = await def.execute(toolCallId, params, signal, onUpdate, ctx);
+					return await formatAfterEdit(result, params?.path, ctx.cwd);
+				}
 				// read などに伏字化を掛けると、伏せた本文を元に edit されてファイルへ伏字が書き込まれる
 				if (tool !== "bash") return def.execute(toolCallId, params, signal, onUpdate, ctx);
 				const hit = deniedPathIn(String(params?.command ?? ""));
@@ -213,7 +262,7 @@ export default function (pi: ExtensionAPI) {
 
 	// 既定の圧縮は read / edit / write の名前でファイルの操作を拾うので、別名の分を足す。
 	// preparation は既定の要約にそのまま渡る (spike の E2)
-	pi.on("session_before_compact", async (event) => {
+	pi.on("session_before_compact", async (event, ctx) => {
 		const ops = event.preparation.fileOps;
 		const target: Record<string, Set<string>> = {
 			[`${PREFIX}read`]: ops.read,
@@ -228,7 +277,32 @@ export default function (pi: ExtensionAPI) {
 				if (set && typeof b.arguments?.path === "string") set.add(b.arguments.path);
 			}
 		}
-		return undefined;
+		// 要約には引き継ぎの指示を足す。失敗したら既定の圧縮に任せる (指示は補助で、圧縮は止めない)
+		try {
+			const model = ctx.model;
+			if (!model) throw new Error("ctx.model が無い");
+			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+			if (!auth.ok) throw new Error(`認証を解決できない: ${auth.error}`);
+			// 認証の解決結果の baseUrl をモデルへ反映する (Copilot はトークンごとに違う。pi 自身も同じ)
+			const requestModel = auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model;
+			const compaction = await compact(
+				event.preparation,
+				requestModel,
+				auth.apiKey,
+				auth.headers,
+				COMPACT_INSTRUCTIONS,
+				event.signal,
+				undefined,
+				// 拡張が登録した提供元も通るよう、pi の呼び出し経路を使う (既定はグローバルな提供元の表だけを引く)
+				(m: any, c: any, o: any) => ctx.modelRegistry.streamSimple(m, c, o),
+				auth.env,
+			);
+			return { compaction };
+		} catch (e) {
+			// 既定の圧縮に任せる。理由は残す (指示が効いていないことに気付けるように)
+			console.error(`[harness] 圧縮の指示を付けられなかったので既定の圧縮にする: ${(e as Error).message}`);
+			return undefined;
+		}
 	});
 }
 
@@ -320,4 +394,29 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			};
 		},
 	});
+}
+
+// ─── 編集の後の整形 ─────────────────────────────────────────────────
+
+// rules.json の post_edit (PostToolUse の hook) を宣言順に呼ぶ。整形は黙って済ませ、
+// markdownlint が残した違反だけを結果の末尾に足してモデルへ返す。失敗しても編集は成功のまま。
+async function formatAfterEdit(result: any, path: unknown, cwd: string): Promise<any> {
+	if (typeof path !== "string" || !rules.post_edit?.length) return result;
+	const abs = isAbsolute(path) ? path : resolve(cwd, path);
+	const warnings: string[] = [];
+	await withFileMutationQueue(abs, async () => {
+		for (const hook of rules.post_edit) {
+			const r = spawnSync(hook.runner, [hook.script], {
+				input: JSON.stringify({ tool_input: { path: abs } }),
+				encoding: "utf-8",
+				timeout: 30000,
+				cwd,
+			});
+			// exit 2 は「エージェントへ警告する」(hook_emit_posttool_warn)。stderr が警告の本文
+			if (r.status === 2 && r.stderr?.trim()) warnings.push(r.stderr.trim());
+		}
+	});
+	if (!warnings.length) return result;
+	const content = [...(result.content ?? []), { type: "text", text: `\n${redactText(warnings.join("\n"))}` }];
+	return { ...result, content };
 }

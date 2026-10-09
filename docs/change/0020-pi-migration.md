@@ -42,12 +42,12 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | 2c | 誘導（`[[opencode.shell.guide]]` の 13 件）の仕分けと判定器への取り込み | 完了（4 件を `[[pi.guide]]` へ。[誘導](../spec/pi-decide.md#誘導)） |
 | 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 完了（起動は `pis`、[起動](../spec/pi-harness.md#起動)・[pi の設定](../spec/pi-harness.md#pi-の設定)） |
 | 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 完了（`pis --boundary`。[境界](../spec/pi-harness.md#境界)） |
-| 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 進行中（仕分けは済。実装は 5a〜5e） |
-| 5a | checkpoint を圧縮の要約の指示に置き換える（`compact()` に雛形の要点を渡す） | 未着手 |
-| 5b | `git commit` の確認に件名・本文を出す（`commit-message.js` を取り込む） | 未着手 |
-| 5c | formatter（edit / write の後に既存の hook を呼ぶ） | 未着手 |
-| 5d | `/fleet`（プロンプトテンプレートの生成）・キーバインド・共通の指示（`AGENTS.md`）の配布 | 未着手 |
-| 5e | Orca・herdr の扱いを利用者に確認して決める | 未着手 |
+| 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 完了（5e の Orca・Zed の起動の入口だけ利用者に確認） |
+| 5a | checkpoint を圧縮の要約の指示に置き換える（`compact()` に雛形の要点を渡す） | 完了（実際のモデルでも確認） |
+| 5b | `git commit` の確認に件名・本文を出す（`commit-message.js` を取り込む） | 完了 |
+| 5c | formatter（edit / write の後に既存の hook を呼ぶ） | 完了 |
+| 5d | `/fleet`（プロンプトテンプレートの生成）・キーバインド・共通の指示（`AGENTS.md`）の配布 | 完了 |
+| 5e | Orca・Zed から起動するときの扱い（Orca の拡張を読む・RPC の確認の期限）。起動の入口を `pis` にする方法は利用者に確認 | 進行中 |
 | 6 | **切り替えと撤去**。普段使いを pi にし、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs を撤去する。CHG-0017 を閉じ、保留中の CHG-0005（命名の整理）を再開できる状態にする | 未着手 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -61,6 +61,12 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 - **判定器は Claude Code / Copilot CLI と共有する。** hook の出力は変えない（「判定 API の入力（案）」）
 - **`[pi]` を正本にし、OpenCode の値は `generate.py` で作る。** 段 6 で消すのが OpenCode 側になる
+
+段 5 の実装を終えた（2026-10-09）。圧縮の指示は `compact()` を `streamSimple` 経由で呼び、Copilot では認証の
+`baseUrl` を反映しないと 401 になることが実機で分かった（偽のモデルでは見えない）。実際のモデルで、要約に合格条件と
+「未作成」の扱いが入ることを確かめた。**利用者から、Orca と Zed から pi を開くことがほとんどと聞いた。**
+どちらも起動の入口が `pi` のままだとハーネスを通らない。Orca は `pis` が Orca の状態表示の拡張を読めるように
+した。Zed は RPC で起動されるので、確認に期限を付けた。起動の入口を `pis` にする方法を、利用者に確認する。
 
 段 4 を終えた（2026-10-09）。利用者の判断（推奨どおり）で、入口は `pis --boundary`、設定は共有キーを
 `[opencode.sandbox]` のまま読み、pi の追加分を `[pi.sandbox]` に置いた。実際の Fence で、境界チェックが合格し、
@@ -286,6 +292,9 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-09**: 段 5 の実装を終えた（5a〜5d）。圧縮の指示・commit の確認の本文・整形・`/fleet`・キーバインド・
+  共通の指示・Orca の拡張の読み込み。利用者が Orca と Zed から pi を開くと分かり、起動の入口の切り替えが段 6 の
+  最優先になった
 - **2026-10-09**: 段 4 を終えた。`pis --boundary` が `ocs --harness pi` へ引き継ぐ。認証の写しの問題
   （OAuth の更新が本物へ戻らない）に対し、子プロセスで動かして終了後に新しい認証だけを戻し、写しを消す形にした
 - **2026-10-09**: 段 3 を終えた。起動は `pis`（素の `pi` は段 6 まで残す）、`settings.json` は持ち物のキーだけ。

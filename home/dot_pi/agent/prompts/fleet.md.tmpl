@@ -1,0 +1,6 @@
+{{- $fleet := (includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml).pi.commands.fleet -}}
+---
+description: {{ $fleet.description | toJson }}
+argument-hint: {{ $fleet.argument_hint | toJson }}
+---
+{{ $fleet.template | trim }}
