@@ -42,7 +42,12 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | 2c | 誘導（`[[opencode.shell.guide]]` の 13 件）の仕分けと判定器への取り込み | 完了（4 件を `[[pi.guide]]` へ。[誘導](../spec/pi-decide.md#誘導)） |
 | 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 完了（起動は `pis`、[起動](../spec/pi-harness.md#起動)・[pi の設定](../spec/pi-harness.md#pi-の設定)） |
 | 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 完了（`pis --boundary`。[境界](../spec/pi-harness.md#境界)） |
-| 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 未着手 |
+| 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 進行中（仕分けは済。実装は 5a〜5e） |
+| 5a | checkpoint を圧縮の要約の指示に置き換える（`compact()` に雛形の要点を渡す） | 未着手 |
+| 5b | `git commit` の確認に件名・本文を出す（`commit-message.js` を取り込む） | 未着手 |
+| 5c | formatter（edit / write の後に既存の hook を呼ぶ） | 未着手 |
+| 5d | `/fleet`（プロンプトテンプレートの生成）・キーバインド・共通の指示（`AGENTS.md`）の配布 | 未着手 |
+| 5e | Orca・herdr の扱いを利用者に確認して決める | 未着手 |
 | 6 | **切り替えと撤去**。普段使いを pi にし、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs を撤去する。CHG-0017 を閉じ、保留中の CHG-0005（命名の整理）を再開できる状態にする | 未着手 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -172,6 +177,30 @@ Claude Code / Copilot CLI と共有している節。pi でも入力にする。
 glob の `**` の変換、後勝ちの並べ替え、`restate_global_deny`、deny の例外と
 ask の交差（`wildcard_intersection`）、`guarded_subagents` / `bypass_child_agents` の照会、`grep` / `glob` の
 結果フィルタ（ツールをハーネスが持つので判定の前に止められる）。
+
+### 段 5 の仕分け（2026-10-09）
+
+ハーネス以外の機能を、今の OpenCode での姿と pi の部品を確かめたうえで分けた（推奨。利用者の確認待ち）。
+
+| 機能 | 今の OpenCode | pi での扱い | 判断 |
+| --- | --- | --- | --- |
+| checkpoint（圧縮をまたぐ引き継ぎ） | plugin（214 行）・`checkpoint.py`・skill・`AGENTS.md` の節。圧縮の要約を 6 節の記録にして `.tmp/` へ保存し、圧縮後に注入する | pi の圧縮の要約はセッションに残り、再開しても消えない。`session_before_compact` で `compact()` に雛形の要点（「Next は手順まで書く」「略語を展開する」）を渡すだけにする。外部ファイル・skill・注入の印は作らない | **作り直す（小さく）**。要らなくなる: plugin・`checkpoint.py`・skill・`AGENTS.md` の節 |
+| モデルの階層と effort | `[opencode.model]`（`default` / `routine` / `worker` / `deep` / `second_opinion`） | 子エージェントは階層から引く（済）。親は `settings.json`（済）。階層の表を `[pi]` へ移すのは段 6 | **済 + 段 6** |
+| 確認画面の説明（`ask_description`） | 60 文字以上のコマンドで、安価なモデルが 1 行の説明を作り toast で出す | 作らない。確認画面は生のコマンドと、判定の理由（`reason`）を出す（済）。判定器の誘導と deny で確認の数が減っている | **要らなくなる** |
+| `git commit` の件名と本文の表示 | `commit-message.js`（216 行、純関数）を TUI の確認画面の上に出す | ハーネスが同じ `commit-message.js` を取り込み、確認画面の本文に件名・本文・追加するパスを出す。取り込めなければ出さない（飾りなので止めない） | **作る（小）** |
+| `/fleet`（並列作業） | コマンドの指示文と、作業役 `fleet-worker` / `bypass-fleet-worker` | 作業役は `[pi.agents.worker]` で済。指示文は pi のプロンプトテンプレート（`~/.pi/agent/prompts/fleet.md`）にし、`[opencode.commands.fleet]` から生成する。pi は 1 つの返答に並んだ tool call を並列に実行する | **作る（小）**。`-ne` でプロンプトテンプレートが読まれるかは未確認 |
+| キーバインド | `[opencode.keybinds]`（Ctrl+D で終了、Ctrl+C / Esc で中断、`service.restart`） | `~/.pi/agent/keybindings.json` の持ち物として生成する（`app.interrupt` に Ctrl+C を足し、`app.clear` を外す）。`service.restart` は常駐サービスが無いので要らない | **作る（小）** |
+| `verify` ツール（CHG-0002 の段階 5） | 未実装 | 作らない。検証コマンドを許可に載せると、リポジトリの設定（pre-commit の hook）を経由した任意コード実行を確認なしで通す。bypass なら確認は元から出ない | **見送り** |
+| formatter | `[opencode.formatter]`（markdownlint など） | `guarded_edit` / `guarded_write` の後に、既存の PostToolUse hook（`format-file.sh` / `markdownlint.sh`）を呼ぶ。整形は pi のファイル書き込みの順番待ちの中で行う | **作る（小）** |
+| 共通の指示（`AGENTS.md`） | `~/.config/opencode/AGENTS.md`（共通の指示 + OpenCode 固有の 2 節） | `~/.pi/agent/AGENTS.md` へ共通の指示だけを配る | **作る（小）** |
+| skills | `~/.config/opencode/skills`（checkpoint） | `[pi.settings] skills` に `~/.claude/skills` を入れた（済）。checkpoint の skill は作らない | **済** |
+| Orca・herdr | Orca の上書き設定を `shellenv.sh` で補う。herdr は Copilot / Claude の hook を登録 | pi 向けには要らない見込み。Orca や herdr から pi を起動するか、pi に herdr の連携があるかは未確認 | **未確認（利用者に確認）** |
+| Windows | OpenCode は Windows にも配る | pi・ハーネス・`pis`・境界は Unix だけ。Windows は OpenCode を外すまで使う | **段 6 で決める** |
+
+**段 6 で消えるもの（見込み）**: guide plugin（`index.js` 511 行・`commit-message.js` 216 行・`tui.ts` 140 行。
+`commit-message.js` はハーネスへ移す）、checkpoint plugin（214 行）・`checkpoint.py`・checkpoint の skill、
+`[opencode.*]` の約 25 の節、`generate.py` の OpenCode 専用の生成、`ocs` の OpenCode 部分、`oc-utils`、
+`shellenv.sh` の OpenCode の節。
 
 ### 判定 API の入力（案）
 
