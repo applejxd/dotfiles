@@ -28,6 +28,12 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 - 移行の途中で OpenCode のハーネスを改良すること。OpenCode の穴は CHG-0017 の補修までで止める
   （[CHG-0018](closed/0018-opencode-policy-role-split.md) は所有の規則までで閉じた）
 
+> **2026-10-09、利用者が方針を決めた。** Orca と Zed は素の `pi`（ハーネス無し）を呼ぶ形のまま変えない。
+> `pis`（ハーネス付き）は利用者が自分で起動するとき用で、**優先度を下げる**。段 1〜5 で作ったもの
+> （判定 API・ハーネス・`pis`・境界）は、いまの状態で止めて保守だけにする。素の `pi` が保護無しで動くことは、
+> [CHG-0006](0006-pi-harness-trial.md) の「利便性を取り、払う代償を明記する」という軸のとおり（保護が要る作業は
+> `pis` か `pis --boundary` で起動する）。段 6 は、この方針に合わせて内容を改める（下の計画表）。
+
 ## 実施計画
 
 | 段 | 内容 | 状態 |
@@ -42,13 +48,13 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | 2c | 誘導（`[[opencode.shell.guide]]` の 13 件）の仕分けと判定器への取り込み | 完了（4 件を `[[pi.guide]]` へ。[誘導](../spec/pi-decide.md#誘導)） |
 | 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 完了（起動は `pis`、[起動](../spec/pi-harness.md#起動)・[pi の設定](../spec/pi-harness.md#pi-の設定)） |
 | 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 完了（`pis --boundary`。[境界](../spec/pi-harness.md#境界)） |
-| 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 完了（5e の Orca・Zed の起動の入口だけ利用者に確認） |
+| 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 完了 |
 | 5a | checkpoint を圧縮の要約の指示に置き換える（`compact()` に雛形の要点を渡す） | 完了（実際のモデルでも確認） |
 | 5b | `git commit` の確認に件名・本文を出す（`commit-message.js` を取り込む） | 完了 |
 | 5c | formatter（edit / write の後に既存の hook を呼ぶ） | 完了 |
 | 5d | `/fleet`（プロンプトテンプレートの生成）・キーバインド・共通の指示（`AGENTS.md`）の配布 | 完了 |
-| 5e | Orca・Zed から起動するときの扱い（Orca の拡張を読む・RPC の確認の期限）。起動の入口を `pis` にする方法は利用者に確認 | 進行中 |
-| 6 | **切り替えと撤去**。普段使いを pi にし、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs を撤去する。CHG-0017 を閉じ、保留中の CHG-0005（命名の整理）を再開できる状態にする | 未着手 |
+| 5e | Orca・Zed から起動するときの扱い（Orca の拡張を読む・RPC の確認の期限）。起動の入口は、利用者の判断で素の `pi` のまま（`pis` は利用者の起動用） | 完了 |
+| 6 | **OpenCode の撤去**（任意。優先度低）。Orca・Zed は素の `pi` のままなので「切り替え」は要らない。残るのは、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs・Windows の導入を消すかどうかの判断。規模は、配布物 約 3,900 行、`generate.py` の OpenCode 関連 約 1,300 行、テスト 約 19,700 行、docs 約 9,700 行。CHG-0017 を閉じ、CHG-0005 を再開できる状態にする。Windows は pi のハーネスが無いので、OpenCode を残すか決める | 未着手（保留） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -292,6 +298,8 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-09**: 利用者が、Orca と Zed は素の `pi` のまま、`pis` は利用者の起動用で優先度を下げてよいと決めた。
+  段 5e を完了にし、段 6 を「OpenCode の撤去（任意）」に改めて保留にした
 - **2026-10-09**: 段 5 の実装を終えた（5a〜5d）。圧縮の指示・commit の確認の本文・整形・`/fleet`・キーバインド・
   共通の指示・Orca の拡張の読み込み。利用者が Orca と Zed から pi を開くと分かり、起動の入口の切り替えが段 6 の
   最優先になった

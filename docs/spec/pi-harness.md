@@ -5,6 +5,10 @@ OpenCode のハーネス（permission の生成・guide plugin）の後継で、
 [CHG-0020](../change/0020-pi-migration.md)、設計の根拠になった試作の観測は
 [pi のハーネスの試作](../research/agents/pi-harness-spike.md)（E1〜E4）。
 
+> **位置づけ**: ハーネスは `pis` で起動したときだけ効く。**Orca と Zed が呼ぶ素の `pi` は、ハーネス無しで動く**
+> （利用者の判断。保護が要る作業は `pis` か `pis --boundary` で起動する）。`pis` は利用者が自分で起動するとき用で、
+> 優先度は低い（[CHG-0020](../change/0020-pi-migration.md)）。
+
 ## 起動
 
 ```bash
