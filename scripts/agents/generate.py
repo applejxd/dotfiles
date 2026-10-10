@@ -1964,7 +1964,10 @@ def pi_model_ref(common: dict[str, Any], tier: str) -> str:
     """
     cfg = common.get("opencode", {}).get("model") or {}
     provider = str(cfg.get("provider", ""))
-    tiers = (cfg.get("tier") or {}).get(provider) or {}
+    tiers = dict((cfg.get("tier") or {}).get(provider) or {})
+    # pi が受け付けるモデルが違う階層は [pi.model.tier.<プロバイダ>] が上書きする
+    pi_tiers = (((common.get("pi") or {}).get("model") or {}).get("tier") or {}).get(provider) or {}
+    tiers.update(pi_tiers)
     if tier not in tiers:
         raise SystemExit(
             f"[pi.agents] の tier {tier!r} が opencode.model.tier.{provider} に無い。定義済み: "
@@ -2007,6 +2010,24 @@ def pi_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "inherit_bypass": inherit,
         }
     return out
+
+
+PI_SUBAGENT_TOOLS = frozenset({"read", "grep", "find", "ls"})
+
+
+def build_pi_subagents(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """ハーネス無しの素の pi (Windows) が読む子エージェントの宣言。
+
+    判定器が無いので、shell・編集のツールを持たない読み取り役 (read / grep / find / ls だけ) に限る。
+    see docs/spec/pi-harness.md#windows-の子エージェント
+    """
+    profiles = (common.get("pi") or {}).get("profiles") or {}
+    agents = {
+        name: {k: a[k] for k in ("description", "system", "model")}
+        for name, a in pi_agents(common).items()
+        if set(profiles[a["profile"]].get("tools") or []) <= PI_SUBAGENT_TOOLS
+    }
+    return {"agents": agents}
 
 
 def pi_mcp_servers(common: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2795,12 +2816,13 @@ TARGETS = {
     "pi-harness": build_pi_harness,
     "pi-settings": merge_pi_settings,
     "pi-keybindings": pi_keybindings,
+    "pi-subagents": build_pi_subagents,
 }
 
 # 既存内容を一切参照しない (完全生成の) ターゲット。
 # 既存ファイルが壊れた JSON でも作り直せるよう、読み込み自体を省く。
 # 省かないと、壊れたファイルを直すための apply がパースで失敗して詰む。
-FULL_GENERATION_TARGETS = {"copilot-hooks", "opencode-guide", "pi-harness", "pi-keybindings"}
+FULL_GENERATION_TARGETS = {"copilot-hooks", "opencode-guide", "pi-harness", "pi-keybindings", "pi-subagents"}
 
 
 def load_existing(path: str | None) -> dict[str, Any]:

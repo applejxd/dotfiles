@@ -58,6 +58,11 @@ AppData/**
 Documents/
 Documents/**
 {{- end }}
+{{- if ne .chezmoi.os "windows" }}
+# ハーネスが無い素の pi (Windows) 用の子エージェント拡張。Unix のハーネスは -ne で読まない
+.pi/agent/extensions/
+.pi/agent/extensions/**
+{{- end }}
 
 {{- if ne .chezmoi.os "darwin" }}
 # Mac OS X のみ

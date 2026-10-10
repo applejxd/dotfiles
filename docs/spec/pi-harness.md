@@ -44,12 +44,22 @@ Fence に依る。Windows 版は未着手で、優先度は低い）。
 | pi 本体 | `314_agent_cli.ps1` が `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`。公式の `install.ps1` は Node.js・Git Bash・PATH の確認を `Read-Host` で聞き、apply では答えられないので使わない。Node.js 22.19 以上が要る |
 | `~/.pi/agent/settings.json`・`keybindings.json`・`AGENTS.md` | Unix と同じ（`.chezmoiignore` で戻している） |
 | `/fleet`（`prompts/`） | **配らない**。`guarded_task` はハーネスが登録するので、素の `pi` では働かない |
+| 子エージェント `task`（読み取り役だけ） | `~/.pi/agent/extensions/subagents/`（[下記](#windows-の子エージェント)） |
 
 - pi の `bash` ツールと `!` は Git Bash を使う（Git for Windows が要る。無ければ pi が探した場所を示す）。
   PowerShell をモデルに使わせるなら `defaultTools` を変える（[Run Pi on Windows](https://pi.dev/docs/windows)）。
   今は管理していない
 - 素の `pi` なので、権限・秘密の保護は効かない（Orca・Zed と同じ。[位置づけ](#起動)）
 - Windows 実機では未検証（WSL からは `chezmoi` の描画と静的な試験だけ）
+
+### Windows の子エージェント
+
+ハーネスの無い素の `pi` でも、読み取り役の子エージェントだけは使える。判定器が無いので、shell・編集を持つ役割は出さない。
+
+- 拡張 `index.ts`（`task` ツール）と `agents.json`（`[pi.agents]` から生成。`generate.py --target pi-subagents`）を Windows にだけ配る（Unix は `.chezmoiignore` で除外）
+- 出すのは `read` `grep` `find` `ls` だけの役割（今は `explore` と `review`）。子は `node <実行中の pi の cli> --mode json -p --no-session -ne --tools read,grep,find,ls` で起動する（`pi.cmd` のシェルを通さない）
+- 判定器と伏字化が無いので、`read_deny_globs` の保護は効かない。子は読むだけで書けないが、秘密ファイルは読める
+- 子のモデルは `second_opinion` が `github-copilot/gpt-6-sol`。OpenCode の階層の `gpt-6-astra` は pi の Copilot 経由で `model_not_supported`（2026-10 実測）なので、`[pi.model.tier.github-copilot]` で上書きする（Unix のハーネスにも効く）
 
 ## ハーネス以外の機能
 

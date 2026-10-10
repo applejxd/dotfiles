@@ -1020,6 +1020,12 @@ message = "ヒアドキュメントでスクリプトを渡さないでくださ
 defaultThinkingLevel = "medium"
 skills = ["~/.claude/skills"]
 
+# pi が実際に受け付けるモデルは OpenCode の階層の表と違うことがある。ここにある階層だけ上書きする。
+# ★gpt-6-astra は pi の Copilot 経由で model_not_supported (2026-10 実測)。
+# see docs/spec/pi-harness.md#windows-の子エージェント
+[pi.model.tier.github-copilot]
+second_opinion = "gpt-6-sol"
+
 # pi を Fence で囲うときの追加分 (境界のそのほかのキーは [opencode.sandbox] を共有する。
 # 段 6 で OpenCode を撤去するときに、共有キーをここへ移す)。pis --boundary が使う。
 # ★read の ~/.config/agents は判定器 (decide.py) が common.toml を読むために要る。書き込みは開けない。
