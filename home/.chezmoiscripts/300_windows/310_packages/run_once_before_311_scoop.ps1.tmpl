@@ -12,8 +12,21 @@ $ErrorActionPreference = 'Stop'
 
 {{ includeTemplate "powershell/git-config-env.ps1" }}
 
-if (!(Get-Command scoop -ErrorAction Ignore)) {
-  Invoke-WebRequest -useb get.scoop.sh | Invoke-Expression
+$scoopRoot = Join-Path $env:USERPROFILE 'scoop'
+$scoopShims = Join-Path $scoopRoot 'shims'
+$scoopCommand = Join-Path $scoopShims 'scoop.ps1'
+
+if (-not (Test-Path -LiteralPath $scoopCommand)) {
+  Invoke-RestMethod https://get.scoop.sh | Invoke-Expression
+}
+
+# Scoop の PATH を現在のプロセスにも反映
+if (($env:PATH -split ';') -notcontains $scoopShims) {
+  $env:PATH = "$scoopShims;$env:PATH"
+}
+
+if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
+  throw "Scoop command not found: $scoopCommand"
 }
 
 $listOutput = @(scoop list 3>&1)
