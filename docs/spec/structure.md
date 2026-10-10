@@ -927,6 +927,9 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
   なお **`oh-my-posh init` はキャッシュしません**。oh-my-posh はテーマ設定を
   セッションIDに紐付けて登録するため、別セッションでIDを採番し直すと設定を
   引けず、既定のpowerlineテーマに戻ります。
+- **oh-my-posh のテーマ**: `POSH_THEMES_PATH` の `pure.omp.json` があればそれを、無ければ `~/.config/powershell/themes/pure.omp.json`
+  （同梱の複製）を使います。winget の MSIX 版（`ohmyposh.cli`）は `POSH_THEMES_PATH` を設定せず、
+  従来はテーマが見つからないまま既定のプロンプトで起動していました（2026-10 実測、31.7.0）。
 - **PATHを冪等に更新する**: `mise activate` は毎回PATHの先頭へ追加するため、
   追加後に重複を畳みます。
 

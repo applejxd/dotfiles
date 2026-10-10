@@ -201,11 +201,12 @@ function copilot {
 . "$PSScriptRoot/commands/docker.ps1"
 . "$PSScriptRoot/commands/fzf.ps1"
 
-# テーマ
-$poshTheme = if ($env:POSH_THEMES_PATH) {
+# テーマ。winget の MSIX 版 (ohmyposh.cli) は POSH_THEMES_PATH を設定しないので、同梱の複製を使う
+# see docs/spec/structure.md#powershellプロファイル
+$poshTheme = if ($env:POSH_THEMES_PATH -and [System.IO.File]::Exists([System.IO.Path]::Combine($env:POSH_THEMES_PATH, 'pure.omp.json'))) {
   [System.IO.Path]::Combine($env:POSH_THEMES_PATH, 'pure.omp.json')
 } else {
-  $null
+  [System.IO.Path]::Combine($PSScriptRoot, 'themes', 'pure.omp.json')
 }
 if ($poshTheme -and [System.IO.File]::Exists($poshTheme)) {
   # oh-my-posh はテーマ設定をセッション ID に紐付けて登録するため、init 出力は
