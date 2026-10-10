@@ -18,6 +18,7 @@ $settings = @(
   @{ Path = "$regRoot\Advanced";     Name = "Hidden";      Value = 1; Comment = "隠しファイル表示" }
   @{ Path = "$regRoot\CabinetState"; Name = "FullPath";    Value = 1; Comment = "タイトルバーにフルパス表示" }
   @{ Path = "$regRoot\Advanced";     Name = "LaunchTo";    Value = 1; Comment = "エクスプローラーの開始場所: PC" }
+  @{ Path = "$regRoot\Advanced";     Name = "NavPaneShowAllFolders"; Value = 1; Comment = "ナビゲーションペインにユーザーのホームを含む全フォルダーを表示" }
 )
 
 $needsRestart = $false
