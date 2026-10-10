@@ -26,7 +26,15 @@ foreach ($s in $settings) {
     $needsRestart = $true
     continue
   }
-  $currentValue = Get-ItemPropertyValue -LiteralPath $s.Path -Name $s.Name -ErrorAction SilentlyContinue
+  
+  $properties = Get-ItemProperty -LiteralPath $s.Path
+  $property = $properties.PSObject.Properties[$s.Name]
+  $currentValue = if ($null -ne $property) {
+    $property.Value
+  } else {
+    $null
+  }
+  
   if ($currentValue -ne $s.Value) {
     $needsRestart = $true
   }
