@@ -240,6 +240,65 @@ systemd（`systemd=true`）に任せます。WSL の init は起動直後に `mo
 そのままマウントされます（NAS への CIFS マウントで確認済み）。
 `/etc/fstab` 自体は chezmoi では管理しません。
 
+## 管理者権限の集約
+
+Windows で管理者権限が要る作業は `300_windows/310_packages/run_once_before_309_admin.ps1.tmpl` の 1 本に集約し、
+chezmoi スクリプト自身が出す UAC を 1 回にする。通常ユーザーで `chezmoi apply` を実行する設計は変えない。
+`310_winget` に残るパッケージは user scope で入る前提（[振り分け](#winget-パッケージの-user--machine-の振り分け)）。それでもインストーラーが UAC を出したら 309 へ移す。
+
+| 項目 | 内容 |
+| --- | --- |
+| 対象（許可リストのキー） | `Chocolatey`（winget 経由）・`chocolateygui`・`Keypirinha`・`WinSCP`（machine scope）・`VSCode`（machine scope）・`LongPaths`・`RDP`・machine 版しかない winget パッケージ（[下記](#winget-パッケージの-user--machine-の振り分け)） |
+| 流れ | 通常権限で不足を判定 → 不足があるときだけ UAC を 1 回 → 昇格子が不足分だけ実行 → 通常権限で再判定。導入済みなら UAC は出ない |
+| 失敗 | UAC キャンセル・昇格子の非ゼロ終了・再判定の残りはすべて非ゼロで止める。失敗した回は `run_once` に記録されないので、直して `chezmoi apply` をやり直せば 309 は再実行される。成功後に消えたものは自動では直さない（内容を変えるか `chezmoi state delete-bucket --bucket=scriptState` で再実行） |
+| 実行順 | 同じディレクトリで `309_admin` は `310_winget` より前（属性を除いた名前の昇順） |
+| ユーザーの作業 | `340_vscode`（拡張）・`315_keypirinha_extensions` は通常権限のまま。VS Code が無ければ 340 は失敗する |
+
+### 昇格の仕組み
+
+- 昇格子は `-File` ではなく `-EncodedCommand`（UTF-16LE の Base64）で起動する。ブートストラップが 309 を**一度だけ**
+  バイト列で読み、親が昇格前に計算した SHA-256 と照合し、一致したときだけそのメモリ上のテキストを実行する
+  （承認待ち〜読込の間の差し替えを検出する）。パスなどの埋め込みは `'` を `''` に置換したリテラルにする
+- 昇格子は許可リスト外・重複のキーを拒否する（終了コード 2）。ハッシュ不一致は終了コード 3
+- 昇格子のコンソールは閉じるので、メッセージは親が作る一時ログへ追記し、失敗時に親が表示する
+- 試験用の環境変数: `CHEZMOI_309_NO_UAC=1`（昇格せずに子を起動）、`CHEZMOI_309_FORCE_TARGETS=<csv>`（判定を上書き）
+
+### winget パッケージの user / machine の振り分け
+
+`winget show --id <ID> --exact --scope user|machine`（2026-10 実測）で、scope ごとに適用できるインストーラーがあるかを見て振り分けた。
+winget の既定は user scope なので、user 版があるものは UAC なしで入る。user 版が無いものは winget が UAC を出す。
+
+| 分類 | パッケージ | 扱い |
+| --- | --- | --- |
+| machine 版しかない（user 版なし） | Chrome・Google 日本語入力・7-Zip・Hack フォント・iTunes・Google Drive・Dropbox・Ditto・Tailscale・Steam・Wacom ドライバー | `309_admin` が `--scope machine` で導入（iTunes 以降は `applejxd` だけ） |
+| scope 未宣言の MSI | Python Launcher（`launcher.msi`） | `309_admin` が `--scope` なしで導入。付けると `No applicable installer` になる。MSI の既定が全ユーザーかは**未確認**（導入後に UAC が出るか・導入先で確かめる） |
+| 両 scope 対応 | PowerShell・fzf・jq・Obsidian・Oh My Posh・PowerToys・Git・Node.js・mise・Python 3.12・uv・Bitwarden（本体・CLI） | 既定（user）のまま `310_winget` |
+| user 版しかない | QuickLook・Spotify・Discord | `310_winget` |
+| scope 未宣言の NSIS | Orca | `310_winget`。Electron の NSIS は既定が per-user のはずだが**未確認**。UAC が出たら 309 へ移す |
+| Microsoft Store | Keyhac・iCloud・Kindle・Codex App | `310_winget`（Store 版はユーザー単位） |
+
+- 309 の導入判定は `winget list` の出力の ID 列に一致するか。これらは winget では user 版を入れられないので、入っていれば machine 版とみなす（Python Launcher は例外）。winget 以外の経路で入れた同名の user 版が残っていても「導入済み」とみなす（機能を満たすので許容。machine 版にしたいときは手でアンインストールして再実行）
+- 両 scope 対応のものを machine にする理由は個人 PC では無い。必要になった（ドライバー・IME・他ツールが system-wide を要求）ものだけ 309 へ移す
+
+### 保証しないこと
+
+- 昇格前に、元ユーザー権限の別プロセスが temp の 309 やソースを書き換える攻撃は防がない（信頼の起点が無い。
+  chezmoi 公式の昇格パターンと同じ前提）
+- 昇格先が別アカウントのとき、309 自身の処理は元ユーザー・昇格先のホームへ書かない。ただし呼び出す
+  `winget` / `choco` / インストーラーが昇格先に作るログ・状態・キャッシュは制御しない
+- 昇格先アカウントで `winget`（App Installer）が使えない場合は Chocolatey・WinSCP・VS Code を導入できず、
+  明示エラーで止まる（代替の導入経路は持たない）
+
+### 個別の判断
+
+- **VS Code**: machine 版でも user 版でも `Code.exe` があれば満たす（併存を許容。340 は `code` が使えればよい）
+- **WinSCP**: Keypirinha が system-wide を要求するので machine 版だけを満たすとみなす。user 版などが残って
+  winget が拒否した場合は失敗にし、`winget list --id WinSCP.WinSCP` で確認してアンインストールしてから再実行する
+- **RDP**: `applejxd` かつ Pro / Enterprise / Education 系の SKU のときだけ。`fDenyTSConnections=0`、NLA（`UserAuthentication=1`）、
+  `RemoteDesktop-UserMode-In-TCP` / `-UDP` を有効にして Profile を Domain・Private に限る（既定は Any で Public を含む）。
+  判定は `Get-NetFirewallRule -PolicyStore ActiveStore`（ポリシー適用後）。Shadow 規則・`Remote Desktop Users`・`TermService` は触らない。
+  設定後に実効状態が合わなければ失敗にする
+
 ## mise による CLI 管理
 
 本体の宣言は `home/dot_config/mise/config.toml.tmpl` に集約します。

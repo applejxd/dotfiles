@@ -6,22 +6,23 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# VS Code itself is installed by 310_packages/309_admin (machine-wide); this script only adds extensions.
 $codeCommand = Get-Command code -ErrorAction SilentlyContinue
 if (-not $codeCommand) {
-  # Install VS Code only when it is not available
-  & winget install Microsoft.VisualStudioCode --scope machine --silent --accept-package-agreements --accept-source-agreements --override "/silent /mergetasks=""addcontextmenufiles,addcontextmenufolders"""
-  if ($LASTEXITCODE -ne 0) {
-    throw "VS Code installation failed with exit code $LASTEXITCODE"
-  }
-
-  # Enable path to vscode command for the current session after installation
+  # PATH of this session may be stale after the admin step
   $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
-
   $codeCommand = Get-Command code -ErrorAction SilentlyContinue
-  if (-not $codeCommand) {
-    Write-Warning 'Unable to locate the code command. Skipping extension installation.'
-    return
+}
+if (-not $codeCommand) {
+  $candidates = @($env:ProgramFiles, $env:LOCALAPPDATA) | Where-Object { $_ } | ForEach-Object {
+    $root = if ($_ -eq $env:LOCALAPPDATA) { Join-Path $_ 'Programs\Microsoft VS Code' } else { Join-Path $_ 'Microsoft VS Code' }
+    Join-Path $root 'bin\code.cmd'
   }
+  $found = @($candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }) | Select-Object -First 1
+  if (-not $found) {
+    throw 'VS Code (code command) not found; rerun after the admin setup (309_admin) has installed it.'
+  }
+  $codeCommand = Get-Command $found -CommandType Application
 }
 
 # Collect currently installed extensions to avoid reinstalling.

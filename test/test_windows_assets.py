@@ -67,16 +67,50 @@ def test_vscode_installer_does_not_hide_extension_failures():
         assert disallowed_extension not in script
 
 
-def test_elevated_windows_scripts_propagate_child_failures():
-    source_paths = [
-        "home/.chezmoiscripts/300_windows/310_packages/run_once_before_312_choco.ps1",
-        "home/.chezmoiscripts/300_windows/320_regkey/run_once_after_320_system.ps1",
-    ]
+ADMIN_SCRIPT = (
+    ROOT / "home/.chezmoiscripts/300_windows/310_packages/run_once_before_309_admin.ps1.tmpl"
+)
 
-    for source_path in source_paths:
-        script = (ROOT / source_path).read_text(encoding="utf-8-sig")
-        assert "Start-Process -Wait -PassThru" in script
-        assert "$process.ExitCode -ne 0" in script
+
+def test_admin_steps_are_consolidated_into_one_elevation():
+    script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+
+    # 昇格はここ 1 か所。ほかの chezmoi スクリプトは自前で昇格しない
+    assert script.count("'RunAs'") == 1
+    for path in (ROOT / "home" / ".chezmoiscripts" / "300_windows").rglob("*"):
+        if path.is_file() and path != ADMIN_SCRIPT:
+            assert "RunAs" not in path.read_text(encoding="utf-8-sig").replace("Runas", "RunAs"), path
+    # 昇格子の終了を待ち、終了コードを検証する
+    assert "Wait         = $true" in script and "PassThru     = $true" in script
+    assert "$process.ExitCode -ne 0" in script
+    assert "UAC" in script
+    # 実行前に SHA-256 を照合し、メモリ上のテキストを実行する
+    assert "-EncodedCommand" in script and "SHA256" in script
+    assert "[Text.Encoding]::Unicode" in script
+    # 許可リストの外・重複は昇格子が拒否する
+    assert "exit 2" in script
+    for key in ("Chocolatey", "chocolateygui", "Keypirinha", "WinSCP", "VSCode", "LongPaths", "RDP"):
+        assert f"'{key}'" in script
+    # 昇格子はユーザープロファイルに書かない
+    assert "HKCU:" not in script and "$env:APPDATA" not in script
+
+
+def test_admin_setup_rdp_never_opens_public_profile():
+    script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+
+    assert "Set-NetFirewallRule -Name $name -Profile Domain, Private -Enabled True" in script
+    assert "-PolicyStore ActiveStore" in script
+    assert "($profileBits -band 4) -ne 0" in script
+    # Shadow 規則と Remote Desktop Users は触らない
+    assert "Shadow-In" not in script.replace("Shadow rule", "")
+    assert "Add-LocalGroupMember" not in script
+
+
+def test_admin_setup_explains_winscp_recovery():
+    script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+
+    assert "winget list --id WinSCP.WinSCP" in script
+    assert "rerun `chezmoi apply`" in script
 
 
 def test_pwgen_uses_cryptographic_randomness():
@@ -429,7 +463,7 @@ def test_agent_cli_installer_uses_official_windows_channels():
     # Windows では公式が手段を分ける: install.ps1 / winget / npm
     assert "https://claude.ai/install.ps1" in script
     assert "winget install --id GitHub.Copilot --exact" in script
-    assert "npm install -g '@opencode/cli'" in script
+    assert "--allow-scripts='@opencode/cli' '@opencode/cli'" in script
     # pi の install.ps1 は Read-Host で確認を聞く (apply では答えられない) ので npm で入れる
     assert "npm install -g --ignore-scripts '@earendil-works/pi-coding-agent'" in script
     assert "pi.dev/install.ps1" not in script
@@ -442,14 +476,10 @@ def test_agent_cli_installer_uses_official_windows_channels():
 
 
 def test_chocolatey_setup_supports_v1_and_v2_listing():
-    script = (
-        ROOT
-        / "home"
-        / ".chezmoiscripts"
-        / "300_windows"
-        / "310_packages"
-        / "run_once_before_312_choco.ps1"
-    ).read_text(encoding="utf-8-sig")
+    script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+
+    assert "winget install" in script and "Chocolatey.Chocolatey" in script
+    assert "community.chocolatey.org/install.ps1" not in script
 
     assert "$chocoVersion.Major -lt 2" in script
     assert "$listArgs += '--local-only'" in script
@@ -523,3 +553,37 @@ def test_subprocess_text_mode_specifies_encoding():
             if keywords & {"text", "universal_newlines"} and "encoding" not in keywords:
                 missing.append(f"{rel}:{node.lineno}")
     assert not missing, missing
+
+
+MACHINE_WINGET_IDS = [
+    "Google.Chrome",
+    "Google.JapaneseIME",
+    "7zip.7zip",
+    "SourceFoundry.HackFonts",
+    "Python.Launcher",
+    "Apple.iTunes",
+    "Google.GoogleDrive",
+    "Dropbox.Dropbox",
+    "Ditto.Ditto",
+    "Tailscale.Tailscale",
+    "Valve.Steam",
+    "Wacom.WacomTabletDriver",
+]
+
+
+def test_machine_only_winget_packages_are_installed_by_the_admin_step():
+    admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+    winget = (
+        ROOT / "home/.chezmoiscripts/300_windows/310_packages/run_once_before_310_winget.ps1.tmpl"
+    ).read_text(encoding="utf-8-sig")
+
+    for package_id in MACHINE_WINGET_IDS:
+        # UAC を出すものは 309 に 1 回だけ。310 に残すと個別に UAC が出る
+        assert f"Id = '{package_id}'" in admin, package_id
+        assert f"winst {package_id}" not in winget, package_id
+    # マニフェストが scope を宣言していない MSI に --scope を付けると 'No applicable installer' になる
+    assert "Id = 'Python.Launcher'; Scope = ''" in admin
+    # user scope で入る (UAC なし) ものは 310 に残す
+    for package_id in ("Git.Git", "OpenJS.NodeJS", "Microsoft.PowerToys", "Discord.Discord"):
+        assert f"winst {package_id}" in winget, package_id
+        assert package_id not in admin, package_id

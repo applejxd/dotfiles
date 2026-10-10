@@ -73,30 +73,25 @@ Function winst {
 
 # Tools
 winst Microsoft.PowerShell -CheckCommand pwsh
-winst Google.Chrome
-winst Google.JapaneseIME
-winst 7zip.7zip
 winst junegunn.fzf
 winst jqlang.jq
 winst Obsidian.Obsidian
 
 # Terminal
 winst JanDeDobbeleer.OhMyPosh
-winst SourceFoundry.HackFonts
 
 # Utilities
 winst Microsoft.PowerToys
 winst QL-Win.QuickLook
 # Keyhac v2
 winst 9P8H1PG6PRHH --source msstore
-# Keypirinha requires system-wide installation to detect profiles
-winst WinSCP.WinSCP --scope machine
+# Packages that only ship machine-wide installers (Chrome, IME, 7-Zip, fonts, Steam, Wacom, ...) and WinSCP are
+# installed by 309_admin so that UAC is shown once. see docs/spec/structure.md#winget-パッケージの-user--machine-の振り分け
 
 # Development
 winst Git.Git
 winst OpenJS.NodeJS
 winst jdx.mise -CheckCommand mise
-winst Python.Launcher # needed by chezmoi
 winst Python.Python.3.12  # needed by chezmoi
 winst astral-sh.uv
 
@@ -105,17 +100,12 @@ winst Bitwarden.Bitwarden
 winst Bitwarden.CLI
 # iCloud
 winst 9PKTQ5699M62 --source msstore
-winst Apple.iTunes
-winst Google.GoogleDrive
-winst Dropbox.Dropbox
-winst Ditto.Ditto
+winst StablyAI.Orca
 
 winst Spotify.Spotify
-winst Valve.Steam
 # Kindle
 winst 9P8JQ0JJSTLL --source msstore
 winst Discord.Discord
-winst Wacom.WacomTabletDriver
 
 # AI
 winst 9PLM9XGG6VKS  # Codex App
