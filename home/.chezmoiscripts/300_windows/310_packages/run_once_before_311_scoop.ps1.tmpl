@@ -1,18 +1,22 @@
-﻿<#
+
+<#
   .SYNOPSIS
     Install packages by scoop
   .DESCRIPTION
     Install Linux tools to user environments by scoop
 #>
 
-# Memo: Japanese comments cause new line error
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 {{ includeTemplate "powershell/git-config-env.ps1" }}
 
-$scoopRoot = Join-Path $env:USERPROFILE 'scoop'
+$scoopRoot = if ($env:SCOOP) {
+  $env:SCOOP
+} else {
+  Join-Path $env:USERPROFILE 'scoop'
+}
+
 $scoopShims = Join-Path $scoopRoot 'shims'
 $scoopCommand = Join-Path $scoopShims 'scoop.ps1'
 
@@ -20,7 +24,7 @@ if (-not (Test-Path -LiteralPath $scoopCommand)) {
   Invoke-RestMethod https://get.scoop.sh | Invoke-Expression
 }
 
-# Scoop の PATH を現在のプロセスにも反映
+# Add Scoop shims to the current process PATH
 if (($env:PATH -split ';') -notcontains $scoopShims) {
   $env:PATH = "$scoopShims;$env:PATH"
 }
@@ -29,35 +33,26 @@ if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
   throw "Scoop command not found: $scoopCommand"
 }
 
-$listOutput = @(scoop list 3>&1)
-$listExitCode = $LASTEXITCODE
-
-$noApps = @($listOutput | Where-Object {
-  $_ -is [System.Management.Automation.WarningRecord] -and
-  $_.Message -match "There aren't any apps installed"
-}).Count -gt 0
-
-if ($listExitCode -ne 0 -and -not ($listExitCode -eq 1 -and $noApps)) {
-  throw "Failed to list installed Scoop apps: $listExitCode"
-}
-
-$installedApps = @(
-  $listOutput |
-    Where-Object { $_ -isnot [System.Management.Automation.WarningRecord] } |
-    ForEach-Object { $_.Name }
-)
-
 function sinst {
-  param([Parameter(Mandatory, ValueFromRemainingArguments)][string[]]$PackageId)
+  param(
+    [Parameter(Mandatory, ValueFromRemainingArguments)]
+    [string[]]$PackageId
+  )
 
-  $missingApps = @($PackageId | Where-Object { $installedApps -notcontains $_ })
-  if ($missingApps.Count -eq 0) {
-    return
-  }
+  foreach ($id in $PackageId) {
+    $appPath = Join-Path $scoopRoot "apps\$id\current"
 
-  & scoop install @missingApps
-  if ($LASTEXITCODE -ne 0) {
-    throw "scoop install failed for $($missingApps -join ', '): $LASTEXITCODE"
+    if (Test-Path -LiteralPath $appPath) {
+      Write-Host "$id is already installed."
+      continue
+    }
+
+    Write-Host "Installing $id..."
+    & scoop install $id
+
+    if ($LASTEXITCODE -ne 0) {
+      throw "scoop install failed for ${id}: $LASTEXITCODE"
+    }
   }
 }
 
@@ -65,7 +60,8 @@ function sinst {
 # see https://github.com/bmatzelle/gow/wiki/executables_list
 sinst sudo gow
 
-# build tools
+# Build tools
 sinst mingw-winlibs
-# other tools
+
+# Other tools
 sinst ghq pdftk
