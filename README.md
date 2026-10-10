@@ -26,7 +26,8 @@ brew install chezmoi
 
 ```powershell
 # Windows (PowerShell)
-winget install Python.Python.3.12 twpayne.chezmoi --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
+winget install Python.Python.3.12 Git.Git twpayne.chezmoi --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
 Windows では **Python 3.11 以上**が必要（`py -3` で最新の Python 3 を選ぶ。
