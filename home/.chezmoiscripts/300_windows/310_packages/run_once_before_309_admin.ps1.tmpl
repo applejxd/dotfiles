@@ -45,9 +45,13 @@ $WingetMachinePackages = [ordered]@{
   'Tailscale'      = @{ Id = 'Tailscale.Tailscale'; Scope = 'machine' }
   'Steam'          = @{ Id = 'Valve.Steam'; Scope = 'machine' }
   'Wacom'          = @{ Id = 'Wacom.WacomTabletDriver'; Scope = 'machine' }
+  # sshd runs the default shell from a fixed path, so it needs the machine MSI (stable path). The MSIX under
+  # WindowsApps changes its path on every update and would lock out ssh logins. File = checked instead of winget list
+  # (the MSIX copy is also listed); Force installs the MSI next to the MSIX copy.
+  'PowerShellMsi'  = @{ Id = 'Microsoft.PowerShell'; Scope = 'machine'; InstallerType = 'wix'; Force = $true; File = 'PowerShell\7\pwsh.exe' }
 {{- end }}
 }
-$AllowedTargets = @('Chocolatey', 'chocolateygui', 'Keypirinha', 'WinSCP', 'VSCode', 'LongPaths', 'RDP', 'OpenSSHServer') + @($WingetMachinePackages.Keys)
+$AllowedTargets = @('Chocolatey', 'chocolateygui', 'Keypirinha', 'WinSCP', 'VSCode', 'LongPaths', 'RDP', 'OpenSSHServer', 'SshDefaultShell') + @($WingetMachinePackages.Keys)
 
 function Write-Step {
   param([string]$Message)
@@ -164,6 +168,18 @@ function Test-SshdConfigured {
   return ("$($rule.Enabled)" -eq 'True' -and $profileBits -ne 0 -and ($profileBits -band 4) -eq 0)
 }
 
+function Get-SshDefaultShellPath {
+  return (Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe')
+}
+
+function Test-SshDefaultShell {
+  $expected = Get-SshDefaultShellPath
+  $value = $null
+  # Get-ItemPropertyValue throws for a missing property even with -ErrorAction Ignore (Windows PowerShell 5.1)
+  try { $value = Get-ItemPropertyValue -LiteralPath 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -ErrorAction Stop } catch {}
+  return ($value -eq $expected -and (Test-Path -LiteralPath $expected -PathType Leaf))
+}
+
 function Get-Missing {
   $missing = @()
   $choco = Get-ChocoPath
@@ -181,12 +197,18 @@ function Get-Missing {
     # These packages have no user-scope installer, so any installed copy is the machine one.
     $wingetText = Get-WingetInstalledText
     foreach ($key in $WingetMachinePackages.Keys) {
+      $entry = $WingetMachinePackages[$key]
+      if ($entry.ContainsKey('File')) {
+        if (-not (Test-ProgramFilesFile $entry.File)) { $missing += $key }
+        continue
+      }
       if ($wingetText -notmatch ('(?m)\s{2,}' + [regex]::Escape($WingetMachinePackages[$key].Id) + '(\s{2,}|\s*$)')) { $missing += $key }
     }
   }
   if (-not (Test-LongPathsEnabled)) { $missing += 'LongPaths' }
   if ($RdpWanted -and (Test-RdpHostSupported) -and -not (Test-RdpConfigured)) { $missing += 'RDP' }
   if ($SshdWanted -and -not (Test-SshdConfigured)) { $missing += 'OpenSSHServer' }
+  if ($SshdWanted -and -not (Test-SshDefaultShell)) { $missing += 'SshDefaultShell' }
   return $missing
 }
 
@@ -246,6 +268,17 @@ function Enable-Sshd {
   }
 }
 
+function Enable-SshDefaultShell {
+  $path = Get-SshDefaultShellPath
+  # Never point sshd at a missing shell (every ssh login would fail)
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    throw "$path not found; install PowerShell 7 (MSI) first"
+  }
+  $key = 'HKLM:\SOFTWARE\OpenSSH'
+  if (-not (Test-Path -LiteralPath $key)) { New-Item -Path $key -Force | Out-Null }
+  New-ItemProperty -LiteralPath $key -Name DefaultShell -PropertyType String -Value $path -Force | Out-Null
+}
+
 function Install-Targets {
   param([string[]]$Wanted)
   $script:StepFailures = New-Object System.Collections.Generic.List[string]
@@ -295,12 +328,16 @@ function Install-Targets {
       Write-Step "Setting up $key..."
       $installArgs = @('--id', $pkg.Id, '--exact')
       if ($pkg.Scope) { $installArgs += @('--scope', $pkg.Scope) }
+      if ($pkg.ContainsKey('InstallerType')) { $installArgs += @('--installer-type', $pkg.InstallerType) }
+      if ($pkg.ContainsKey('Force') -and $pkg.Force) { $installArgs += '--force' }
       Invoke-WingetInstall $installArgs
     } catch {
       $script:StepFailures.Add("${key}: $($_.Exception.Message)")
       Write-Step "FAILED ${key}: $($_.Exception.Message)"
     }
   }
+  # After the packages: the default shell points at the MSI-installed pwsh
+  & $run 'SshDefaultShell' { if (-not (Test-SshDefaultShell)) { Enable-SshDefaultShell } }
 }
 
 # ---------------- elevated child entry ---------------- #

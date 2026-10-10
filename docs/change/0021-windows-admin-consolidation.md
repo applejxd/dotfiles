@@ -44,6 +44,7 @@
 | Python Launcher（`launcher.msi`、scope 未宣言）が既定で全ユーザーに入り UAC が出るかが未確認 | 段 6 で導入後に UAC の有無と導入先を見る。出なければ 310 へ戻す |
 | Orca（NSIS、scope 未宣言）が UAC を出すかが未確認 | 段 6 で UAC が出たら 309 へ移す |
 | 管理者グループの利用者の `administrators_authorized_keys` は 348 が追記する（指紋の記録で UAC を省く）。実機の UAC・所有者・StrictModes が未確認 | 段 6 で applejxd の鍵認証を試す。通らなければ所有者と ACL を見直す |
+| sshd の既定シェルを MSI 版の pwsh 7 にする処理（`winget install Microsoft.PowerShell --installer-type wix --scope machine --force`）が実機で未確認。MSIX 版と併存できるか、`--force` が効くか、ssh のログインで pwsh が起動するかを見る | 段 6 で UAC を通したあと、別のクライアントから `ssh` して確かめる。失敗したら `DefaultShell` は設定されない（cmd.exe のまま）ので、ログインはできる |
 | OpenSSH Server のパスワード認証は既定のまま | 利用者が `PasswordAuthentication no` を求めたとき |
 | Bitwarden の SSH 鍵項目の JSON が `sshKey.publicKey` を持つか。`bw` 2026.9.1 のバイナリの定義でだけ確認した | 利用者が実際の項目で試したとき |
 | 昇格先アカウントで `winget` が使えない場合は導入できず、明示エラーで止まる（代替の導入経路は持たない） | 別アカウントで昇格する運用が現実になったとき |

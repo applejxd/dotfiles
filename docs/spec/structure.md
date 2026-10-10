@@ -303,6 +303,12 @@ winget の既定は user scope なので、user 版があるものは UAC なし
   不足判定は「`sshd` サービスが自動起動かつ実行中」かつ「規則が ActiveStore で有効・Public を含まない」。`ssh-agent` は触らない。
   機能の追加は Windows Update へ接続できることが前提で、再起動が要ると警告を出す。パスワード認証・既定シェルは変えない
   （公開鍵の追加は [SSH 公開鍵の authorized_keys への追加](security.md#ssh-公開鍵の-authorized_keys-への追加)。管理者グループの利用者は未対応）
+- **sshd の既定シェル**: `applejxd` のとき、`HKLM\SOFTWARE\OpenSSH\DefaultShell` を `%ProgramFiles%\PowerShell\7\pwsh.exe` にする（未設定だと `cmd.exe`）。
+  MSIX 版の `pwsh` は `WindowsApps` の版つきのパスで、更新のたびに変わり、指していると ssh のログインが全部失敗する。そのため
+  `winget install Microsoft.PowerShell --installer-type wix --scope machine --force` で**固定パスの MSI 版**を別に入れる（MSIX 版と併存。`--force` が
+  導入済みの確認を飛ばす。この組み合わせは実機で未確認）。MSI 版が無いときは `DefaultShell` を設定しない（無いシェルを指さない）。
+  `DefaultShellCommandOption` は既定（`-c`）のまま。一発実行（`ssh host command`）は `pwsh -c` になり、プロファイルの対話判定が非対話と見なすため、
+  PATH・文字コード・git の環境変数までが入る（対話ブロックは入らない）
 
 ## mise による CLI 管理
 
@@ -941,6 +947,27 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
 この構成にしたときの起動時間の計測は
 [PowerShell プロファイルの起動時間](../research/shell/powershell-profile-startup.md)
 にあります。
+
+## 電源設定
+
+`300_windows/run_after_331_power.ps1` が、**毎回の `chezmoi apply`** で有効な電源プランへ値を明示的に設定する
+（既定値と同じ値も書く。Windows やほかのツールが戻しても次の apply で直る）。通常権限で動く。
+プランの新規作成・別プランへの切り替えはしない。ユーザーが別のプランへ切り替えたときは、そのプランには効かない（意図した操作として扱う）。
+
+| 設定 | AC（電源接続） | DC（バッテリー） |
+| --- | --- | --- |
+| スリープまでの時間（`STANDBYIDLE`） | なし（0） | 600 秒 |
+| 休止状態までの時間（`HIBERNATEIDLE`） | なし（0） | なし（0） |
+| 蓋を閉じたとき（`LIDACTION`） | 何もしない（0） | スリープ（1） |
+| 無人時のスリープ（`UNATTENDSLEEP`、隠し設定） | なし（0） | 触らない |
+
+- **無人時のスリープ**を止めるのは、ssh や RDP で使っている間に、`STANDBYIDLE` が 0 でも効くスリープを避けるため。GUID `7bc4a2f9-d8fc-4469-b07b-33eb785aaca0` で指定する
+- `LIDACTION` と `UNATTENDSLEEP` は任意の設定。蓋の無い機種や、存在しない設定は、失敗しても警告で続ける
+- 必須の `STANDBYIDLE` と `HIBERNATEIDLE` は、失敗すると apply を止める
+- ディスプレイの消灯（`monitor-timeout`）は設定しない
+- **グループポリシー**で電源設定が固定されている機械では、`powercfg` の値が上書きされる（未確認）
+- 実機の確認: 通常権限で 2 回実行し、2 回目も同じ値になること、`STANDBYIDLE` の AC が 0・DC が 600 になることを `powercfg /q` で確認した。
+  蓋と無人時のスリープは、この機にその設定が無く、値を読み取れなかった（デスクトップ機。ノート PC での挙動は未確認）
 
 ## Windows Terminal
 

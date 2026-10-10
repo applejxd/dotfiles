@@ -75,10 +75,12 @@ ADMIN_SCRIPT = (
 def test_admin_steps_are_consolidated_into_one_elevation():
     script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
 
-    # 昇格はここ 1 か所。ほかの chezmoi スクリプトは自前で昇格しない
+    # 昇格は 309 と、新しい鍵のときだけの 348 (指紋の記録で通常は出ない)。ほかの chezmoi スクリプトは自前で昇格しない
     assert script.count("'RunAs'") == 1
+    key_script = ROOT / "home/.chezmoiscripts/300_windows/run_after_348_authorized_keys.ps1.tmpl"
+    assert key_script.read_text(encoding="utf-8-sig").count("'RunAs'") == 1
     for path in (ROOT / "home" / ".chezmoiscripts" / "300_windows").rglob("*"):
-        if path.is_file() and path != ADMIN_SCRIPT:
+        if path.is_file() and path not in (ADMIN_SCRIPT, key_script):
             assert "RunAs" not in path.read_text(encoding="utf-8-sig").replace("Runas", "RunAs"), path
     # 昇格子の終了を待ち、終了コードを検証する
     assert "Wait         = $true" in script and "PassThru     = $true" in script
@@ -600,3 +602,33 @@ def test_admin_setup_enables_openssh_server_without_opening_public():
     assert "-PolicyStore ActiveStore" in script
     # applejxd の機械だけ
     assert "$SshdWanted = $true" in script and "$SshdWanted = $false" in script
+
+
+def test_admin_setup_points_sshd_at_a_stable_pwsh_path():
+    script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+
+    # MSIX の pwsh は更新のたびにパスが変わり、sshd のログインが全部失敗するので、固定パスの MSI を使う
+    assert "'PowerShellMsi'" in script
+    assert "InstallerType = 'wix'" in script and "Force = $true" in script
+    assert "'--installer-type'" in script and "'--force'" in script
+    assert "'SshDefaultShell'" in script
+    assert "-Name DefaultShell" in script
+    # 無いシェルを指さない (ログイン不能になる)
+    assert "not found; install PowerShell 7 (MSI) first" in script
+    # 一発実行でも既定の -c のまま使う (DefaultShellCommandOption は変えない)
+    assert "DefaultShellCommandOption" not in script
+
+
+def test_power_settings_are_applied_every_run_and_never_sleep_on_ac():
+    script = (ROOT / "home/.chezmoiscripts/300_windows/run_after_331_power.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    # 毎回明示的に当てる (run_once だと後から戻されても直らない)
+    assert not (ROOT / "home/.chezmoiscripts/300_windows/run_once_after_331_power.ps1").exists()
+    assert "Set-PowerValue SUB_SLEEP STANDBYIDLE -Ac 0 -Dc 600" in script
+    assert "Set-PowerValue SUB_SLEEP HIBERNATEIDLE -Ac 0 -Dc 0" in script
+    # AC は蓋を閉じても何もしない、バッテリーはスリープ
+    assert "Set-PowerValue SUB_BUTTONS LIDACTION -Ac 0 -Dc 1 -Optional" in script
+    assert "7bc4a2f9-d8fc-4469-b07b-33eb785aaca0 -Ac 0 -Optional" in script
+    assert "powercfg /setactive SCHEME_CURRENT" in script

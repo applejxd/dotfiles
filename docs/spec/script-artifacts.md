@@ -61,7 +61,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | `300_windows/run_after_345_powershell_profile.ps1.tmpl` | `MyDocuments` の実体の下の `PowerShell\profile.ps1`・`WindowsPowerShell\profile.ps1` | 生成物（OneDrive の既知フォルダー移動時だけ置く、BOM 付きのローダー） | 内容が違うときだけ上書き |
 | `300_windows/run_after_342_copilot_skills.ps1.tmpl` | `~\.copilot\skills`（Junction） | 生成物 | 正しければ維持。空ディレクトリや意図しないものは `rmdir` して作り直す（実体は消さない） |
 
-`320_regkey/` と `331_power` はレジストリと `powercfg` の設定だけで、ファイルを作らない。
+`320_regkey/` と `331_power`（毎回走る `run_after_`）はレジストリと `powercfg` の設定だけで、ファイルを作らない。
 
 ## 消す側（既存のキャッシュ・残骸を削除する）
 
