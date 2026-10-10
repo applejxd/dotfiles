@@ -587,3 +587,16 @@ def test_machine_only_winget_packages_are_installed_by_the_admin_step():
     for package_id in ("Git.Git", "OpenJS.NodeJS", "Microsoft.PowerToys", "Discord.Discord"):
         assert f"winst {package_id}" in winget, package_id
         assert package_id not in admin, package_id
+
+
+def test_admin_setup_enables_openssh_server_without_opening_public():
+    script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+
+    assert "'OpenSSHServer'" in script
+    assert "Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0'" in script
+    assert "Set-Service -Name sshd -StartupType Automatic" in script
+    # 既定の規則は Profile=Any (Public を含む) なので Domain / Private に絞る
+    assert "-Profile Domain, Private -Enabled True" in script
+    assert "-PolicyStore ActiveStore" in script
+    # applejxd の機械だけ
+    assert "$SshdWanted = $true" in script and "$SshdWanted = $false" in script

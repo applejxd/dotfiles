@@ -248,7 +248,7 @@ chezmoi スクリプト自身が出す UAC を 1 回にする。通常ユーザ�
 
 | 項目 | 内容 |
 | --- | --- |
-| 対象（許可リストのキー） | `Chocolatey`（winget 経由）・`chocolateygui`・`Keypirinha`・`WinSCP`（machine scope）・`VSCode`（machine scope）・`LongPaths`・`RDP`・machine 版しかない winget パッケージ（[下記](#winget-パッケージの-user--machine-の振り分け)） |
+| 対象（許可リストのキー） | `Chocolatey`（winget 経由）・`chocolateygui`・`Keypirinha`・`WinSCP`（machine scope）・`VSCode`（machine scope）・`LongPaths`・`RDP`・`OpenSSHServer`・machine 版しかない winget パッケージ（[下記](#winget-パッケージの-user--machine-の振り分け)） |
 | 流れ | 通常権限で不足を判定 → 不足があるときだけ UAC を 1 回 → 昇格子が不足分だけ実行 → 通常権限で再判定。導入済みなら UAC は出ない |
 | 失敗 | UAC キャンセル・昇格子の非ゼロ終了・再判定の残りはすべて非ゼロで止める。失敗した回は `run_once` に記録されないので、直して `chezmoi apply` をやり直せば 309 は再実行される。成功後に消えたものは自動では直さない（内容を変えるか `chezmoi state delete-bucket --bucket=scriptState` で再実行） |
 | 実行順 | 同じディレクトリで `309_admin` は `310_winget` より前（属性を除いた名前の昇順） |
@@ -298,6 +298,11 @@ winget の既定は user scope なので、user 版があるものは UAC なし
   `RemoteDesktop-UserMode-In-TCP` / `-UDP` を有効にして Profile を Domain・Private に限る（既定は Any で Public を含む）。
   判定は `Get-NetFirewallRule -PolicyStore ActiveStore`（ポリシー適用後）。Shadow 規則・`Remote Desktop Users`・`TermService` は触らない。
   設定後に実効状態が合わなければ失敗にする
+- **OpenSSH Server**: `applejxd` のときだけ（SKU は問わない）。Windows 機能 `OpenSSH.Server~~~~0.0.1.0` を追加し、`sshd` を自動起動にして起動する。
+  組み込みの規則 `OpenSSH-Server-In-TCP`（既定は Profile=Any で Public を含む）を Domain・Private に絞って有効にする。
+  不足判定は「`sshd` サービスが自動起動かつ実行中」かつ「規則が ActiveStore で有効・Public を含まない」。`ssh-agent` は触らない。
+  機能の追加は Windows Update へ接続できることが前提で、再起動が要ると警告を出す。パスワード認証・既定シェルは変えない
+  （公開鍵の追加は [SSH 公開鍵の authorized_keys への追加](security.md#ssh-公開鍵の-authorized_keys-への追加)。管理者グループの利用者は未対応）
 
 ## mise による CLI 管理
 
