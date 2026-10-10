@@ -1,7 +1,7 @@
 # CHG-0020: OpenCode のハーネスを pi へ移す
 
 - **状態**: In progress
-- **更新日**: 2026-10-09
+- **更新日**: 2026-10-10
 - **基準**: pi 1.1.0、OpenCode v2.0.22、コミット d5f012c、WSL2 (Ubuntu)
 
 ## 目的と非目的
@@ -207,7 +207,7 @@ ask の交差（`wildcard_intersection`）、`guarded_subagents` / `bypass_child
 | 共通の指示（`AGENTS.md`） | `~/.config/opencode/AGENTS.md`（共通の指示 + OpenCode 固有の 2 節） | `~/.pi/agent/AGENTS.md` へ共通の指示だけを配る | **作る（小）** |
 | skills | `~/.config/opencode/skills`（checkpoint） | `[pi.settings] skills` に `~/.claude/skills` を入れた（済）。checkpoint の skill は作らない | **済** |
 | Orca・herdr | Orca の上書き設定を `shellenv.sh` で補う。herdr は Copilot / Claude の hook を登録 | pi 向けには要らない見込み。Orca や herdr から pi を起動するか、pi に herdr の連携があるかは未確認 | **未確認（利用者に確認）** |
-| Windows | OpenCode は Windows にも配る | pi・ハーネス・`pis`・境界は Unix だけ。Windows は OpenCode を外すまで使う | **段 6 で決める** |
+| Windows | OpenCode は Windows にも配る | pi・ハーネス・`pis`・境界は Unix だけ。Windows は OpenCode を外すまで使う。素の `pi` には、読み取り専用の子エージェント（`explore` / `review`）の `task` 拡張だけを配った（2026-10-10。[Windows の子エージェント](../spec/pi-harness.md#windows-の子エージェント)） | **段 6 で決める**（子エージェントは済） |
 
 **段 6 で消えるもの（見込み）**: guide plugin（`index.js` 511 行・`commit-message.js` 216 行・`tui.ts` 140 行。
 `commit-message.js` はハーネスへ移す）、checkpoint plugin（214 行）・`checkpoint.py`・checkpoint の skill、
@@ -253,7 +253,8 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
   常用で見る。気になれば判定器を常駐させる（複雑さが増すので、まずは測る）
 - **`[[opencode.shell.guide]]` の 13 件の仕分け。** 「OpenCode 専用の節」の表の方針で、1 件ずつ決める
 - **Windows。** pi は Windows に対応しているが、ハーネス・判定器・境界を Windows で動かすかは未定
-  （今の `ocs` も Ubuntu / WSL のみ）
+  （今の `ocs` も Ubuntu / WSL のみ）。読み取り専用の子エージェントだけは、ハーネス無しで 2026-10-10 に配った
+  （子には判定・伏字化が掛からず、`read_deny_globs` の保護が効かない）。`commit` / `worker` の子は判定器が要るので未対応
 - **Orca。** Orca が起動する pi に、起動の入口（`-nbt -ne -e`）をどう渡すか
 - **認証の戻しの実機確認。** 戻す処理は単体試験で固定した（新しい分だけ・ロック・壊れた写し）が、実際に期限切れの
   トークンを境界の内側で更新させて確かめてはいない（期限が近いトークンがある機会に確かめる）
@@ -261,7 +262,9 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
   どう扱うか（小さな課題では 4 モデルとも迷わなかった）
 - **子エージェントの拒否の渡し方。** 試作は文言（`not approved:`）で見分けた。本番は構造化して渡す
 - **モデルの階層の置き場。** 子エージェントは `[opencode.model.tier.*]` から引いている（`#variant` を
-  `:variant` に読み替え）。`[pi]` を正本にする方針に合わせて移すか。Bedrock のモデル ID が pi で通るかは未確認
+  `:variant` に読み替え）。`[pi]` を正本にする方針に合わせて移すか。Bedrock のモデル ID が pi で通るかは未確認。
+  2026-10-10 に、pi で通らない階層だけを `[pi.model.tier.<プロバイダ>]` で上書きする口を足した
+  （`github-copilot` の `second_opinion` は `gpt-6-astra` が `model_not_supported` なので `gpt-6-sol`）
 
 ## 次の調査・実験
 
@@ -298,6 +301,10 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-10**: Windows の素の `pi` に、読み取り専用の子エージェント（`explore` / `review`）を配った
+  （`task` 拡張と、`[pi.agents]` から生成する `agents.json`）。判定器が Windows に無いので、`read` / `grep` / `find` / `ls`
+  だけの役割に限る。`gpt-6-astra` が pi の Copilot 経由で `model_not_supported` になるため、`[pi.model.tier.*]` の上書きの口を
+  足した。`gpt-6-sol` で `review` が動くことは確かめた（コミット c950274）。段 6 の「Windows の扱い」の前提は変えない
 - **2026-10-09**: 利用者が、Orca と Zed は素の `pi` のまま、`pis` は利用者の起動用で優先度を下げてよいと決めた。
   段 5e を完了にし、段 6 を「OpenCode の撤去（任意）」に改めて保留にした
 - **2026-10-09**: 段 5 の実装を終えた（5a〜5d）。圧縮の指示・commit の確認の本文・整形・`/fleet`・キーバインド・
