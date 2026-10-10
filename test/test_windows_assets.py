@@ -632,3 +632,10 @@ def test_power_settings_are_applied_every_run_and_never_sleep_on_ac():
     assert "Set-PowerValue SUB_BUTTONS LIDACTION -Ac 0 -Dc 1 -Optional" in script
     assert "7bc4a2f9-d8fc-4469-b07b-33eb785aaca0 -Ac 0 -Optional" in script
     assert "powercfg /setactive SCHEME_CURRENT" in script
+
+
+def test_powershell_path_expands_unexpanded_variables_for_ssh_sessions():
+    """sshd 経由のセッションは PATH の %VAR% を展開せず渡す。WindowsApps のエイリアスが引けなくなる。"""
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+
+    assert "[System.Environment]::ExpandEnvironmentVariables($_)" in profile

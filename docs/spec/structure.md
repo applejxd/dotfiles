@@ -943,6 +943,9 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
   従来はテーマが見つからないまま既定のプロンプトで起動していました（2026-10 実測、31.7.0）。
 - **PATHを冪等に更新する**: `mise activate` は毎回PATHの先頭へ追加するため、
   追加後に重複を畳みます。
+  あわせて未展開の `%VAR%`（例: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps`）を展開します。
+  ssh（`sshd`）経由のセッションは、ユーザー PATH の `%VAR%` を展開せずに渡し、MSIX 版 oh-my-posh の
+  エイリアス（`WindowsApps`）が見つからずテーマが出なかった（2026-10 実測。展開済みのパスを直接指せば実行できた）。
 
 この構成にしたときの起動時間の計測は
 [PowerShell プロファイルの起動時間](../research/shell/powershell-profile-startup.md)
