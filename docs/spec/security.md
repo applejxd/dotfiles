@@ -55,8 +55,12 @@ Windows は `.config/*` を丸ごと除外しているので、`.chezmoiignore.t
 - hostname は `chezmoi` の `.chezmoi.hostname`（最初の `.` まで）。FQDN で項目を作った場合は一致しない
 - 秘密鍵は読まない。`bw list items` の JSON は変数の中だけに置き、ファイルにもログにも出さない
 - Unix では `~/.ssh` を 700、`authorized_keys` を 600 にする。Windows は BOM なしの UTF-8 で追記する
-- **Windows で管理者グループの利用者**は、既定の `sshd_config` が `%ProgramData%\ssh\administrators_authorized_keys` を使い、
-  `~/.ssh/authorized_keys` を読まない。そちらへの追記は管理者権限と ACL が要るので未対応（実行時に注意を出す）
+- **Windows で管理者グループの利用者**は、既定の `sshd_config` が `%ProgramData%\ssh\administrators_authorized_keys` を使い `~/.ssh/authorized_keys` を読まない。
+  そのため `348` はそちらにも追記する。ACL は SYSTEM と Administrators のみ（sshd の StrictModes の要件）で通常権限は中身を読めないので、
+  処理済みの鍵の指紋（`SHA256:`、`ssh-keygen -l` と同じ形式）を `%ProgramData%\dotfiles\admin-authorized-keys.fp`（Users は読み取りのみ）に残し、
+  **指紋が新しいときだけ UAC を 1 回出す**（初回・鍵の差し替え。通常の apply は UAC なし）。昇格子は 309 と同じ SHA-256 照合つきのブートストラップで、
+  検証した 1 行だけを受け取り、ACL を絞ってから重複を判定して追記する。記録は UAC を省くための高速化で、実ファイルとの一致は見ない
+  （管理者側のファイルを消したときは `DOTFILES_RESYNC_ADMIN_KEY=1` で記録を無視して再同期する）。古い鍵は消さない
 - `bw` の SSH 鍵項目（種別 5）の JSON が `sshKey.publicKey` を持つことは、`bw` 2026.9.1 のバイナリ内の定義でのみ確認した。
   実際の項目での動作は未確認
 

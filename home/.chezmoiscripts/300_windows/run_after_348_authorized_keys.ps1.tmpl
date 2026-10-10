@@ -1,13 +1,103 @@
 ﻿{{- /*
-  hostname と同名の Bitwarden の SSH 鍵項目から公開鍵だけを取り出し、~/.ssh/authorized_keys へ追加する。
+  hostname と同名の Bitwarden の SSH 鍵項目から公開鍵だけを取り出し、authorized_keys へ追加する。
+  - 通常: ~/.ssh/authorized_keys
+  - 管理者グループの利用者: 既定の sshd は %ProgramData%\ssh\administrators_authorized_keys を使うので、そちらへも入れる。
+    ACL が SYSTEM と Administrators のみで通常権限は読めないため、処理済みの鍵の指紋を
+    %ProgramData%\dotfiles\admin-authorized-keys.fp (Users は読み取りのみ) に残し、新しい鍵のときだけ UAC を出す。
   applejxd の機械だけ。BW_SESSION が無い・bw が無い・項目が無い・曖昧なときは何もせず 0 で終わる。
   秘密鍵は読まず、ファイルにも出力にも出さない (bw の JSON は変数の中だけに置く)。
   Unix 版: .chezmoiscripts/400_unix/run_after_440_authorized_keys.sh.tmpl
   see docs/spec/security.md#ssh-公開鍵の-authorized_keys-への追加
 */ -}}
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+param([string]$AdminKeyLine = '', [string]$LogPath = '')
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$keyPattern = '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp[0-9]+|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/=]+'
+# 試験用: ProgramData の代わりに使う場所と、昇格せずに子を起動するフラグ
+$programData = if ($env:CHEZMOI_348_TEST_PROGRAMDATA) { $env:CHEZMOI_348_TEST_PROGRAMDATA } else { $env:ProgramData }
+$stateDir = Join-Path $programData 'dotfiles'
+$stateFile = Join-Path $stateDir 'admin-authorized-keys.fp'
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+function Write-Step {
+  param([string]$Message)
+  Write-Host $Message
+  if ($LogPath) { Add-Content -LiteralPath $LogPath -Value $Message -Encoding UTF8 }
+}
+
+function Get-KeyFingerprint {
+  # ssh-keygen -l と同じ形式 (SHA256:<base64 の末尾の = なし>)
+  param([Parameter(Mandatory)][string]$Blob)
+  $bytes = [Convert]::FromBase64String($Blob)
+  $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+  return 'SHA256:' + [Convert]::ToBase64String($hash).TrimEnd('=')
+}
+
+function Add-TextLine {
+  # BOM なしの UTF-8 で 1 行追記する。末尾に改行が無ければ足す
+  param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Line)
+  $text = if (Test-Path -LiteralPath $Path -PathType Leaf) { [IO.File]::ReadAllText($Path, $utf8NoBom) } else { '' }
+  if ($text.Length -gt 0 -and -not $text.EndsWith("`n")) { $text += "`n" }
+  [IO.File]::WriteAllText($Path, $text + $Line + "`n", $utf8NoBom)
+}
+
+function Set-RestrictedAcl {
+  # 継承を切り、SYSTEM と Administrators だけにする。-ReadByUsers なら Users に読み取りを足す
+  param([Parameter(Mandatory)][string]$Path, [switch]$ReadByUsers, [switch]$Container)
+  $inherit = if ($Container) { '(OI)(CI)' } else { '' }
+  $aclArgs = @($Path, '/inheritance:r', '/grant', "*S-1-5-18:${inherit}F", '/grant', "*S-1-5-32-544:${inherit}F")
+  if ($ReadByUsers) { $aclArgs += @('/grant', "*S-1-5-32-545:${inherit}RX") }
+  if ($env:CHEZMOI_348_TEST_PROGRAMDATA) { $aclArgs += @('/grant', "${env:USERNAME}:${inherit}F") }  # 試験用: 昇格しない子が自分で読めるように
+  & icacls.exe @aclArgs | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "icacls failed for ${Path}: $LASTEXITCODE" }
+}
+
+# ---------------- elevated child: administrators_authorized_keys ---------------- #
+
+if ($AdminKeyLine) {
+  try {
+    $parts = $AdminKeyLine -split ' '
+    if ($parts.Count -ne 3 -or $AdminKeyLine -notmatch $keyPattern -or $parts[1] -notmatch '^[A-Za-z0-9+/=]+$' -or
+        $parts[2] -notmatch '^[A-Za-z0-9._-]+$') { throw 'Rejected key line' }
+    $keyType = $parts[0]
+    $keyBlob = $parts[1]
+    $fingerprint = Get-KeyFingerprint -Blob $keyBlob
+
+    $sshDir = Join-Path $programData 'ssh'
+    if (-not (Test-Path -LiteralPath $sshDir -PathType Container)) {
+      throw "$sshDir not found (OpenSSH Server is not installed)"
+    }
+    $adminFile = Join-Path $sshDir 'administrators_authorized_keys'
+    if (-not (Test-Path -LiteralPath $adminFile -PathType Leaf)) { New-Item -ItemType File -Path $adminFile | Out-Null }
+    # 内容を書く前に ACL を絞る。sshd の StrictModes は他者が書ける状態を拒否する
+    Set-RestrictedAcl -Path $adminFile
+
+    $existing = @(Get-Content -LiteralPath $adminFile -Encoding UTF8 | Where-Object {
+      $f = ($_ -split '\s+')
+      $f.Count -ge 2 -and $f[0] -eq $keyType -and $f[1] -eq $keyBlob
+    })
+    if ($existing.Count -eq 0) {
+      Add-TextLine -Path $adminFile -Line $AdminKeyLine
+      Write-Step "administrators_authorized_keys: $fingerprint を追加した"
+    } else {
+      Write-Step "administrators_authorized_keys: $fingerprint は登録済み"
+    }
+
+    if (-not (Test-Path -LiteralPath $stateDir -PathType Container)) { New-Item -ItemType Directory -Path $stateDir | Out-Null }
+    Set-RestrictedAcl -Path $stateDir -ReadByUsers -Container
+    $known = @(if (Test-Path -LiteralPath $stateFile -PathType Leaf) { Get-Content -LiteralPath $stateFile -Encoding UTF8 })
+    if ($known -notcontains $fingerprint) { Add-TextLine -Path $stateFile -Line $fingerprint }
+  } catch {
+    Write-Step "FAILED: $($_.Exception.Message)"
+    exit 1
+  }
+  exit 0
+}
+
+# ---------------- normal entry (unelevated) ---------------- #
 
 $hostName = {{ .chezmoi.hostname | squote }}
 $authDir = Join-Path $HOME '.ssh'
@@ -43,13 +133,14 @@ $items = $null
 
 # 公開鍵の 1 行だけを受け付ける (鍵の種類 + base64。コメントは捨てて hostname を付ける)
 $pubkey = (($pubkey -split "`r?`n")[0]).Trim()
-$pattern = '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp[0-9]+|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/=]+'
-if ($pubkey -notmatch $pattern) { Skip '公開鍵を読めない (項目に publicKey が無いか形式が違う)' }
+if ($pubkey -notmatch $keyPattern) { Skip '公開鍵を読めない (項目に publicKey が無いか形式が違う)' }
 $parts = $pubkey -split ' '
 $keyType = $parts[0]
 $keyBlob = $parts[1]
 $line = "$keyType $keyBlob $hostName"
+try { $null = Get-KeyFingerprint -Blob $keyBlob } catch { Skip '公開鍵の base64 が不正' }
 
+# ---- ~/.ssh/authorized_keys ----
 if (-not (Test-Path -LiteralPath $authDir)) {
   New-Item -ItemType Directory -Path $authDir | Out-Null
 }
@@ -66,24 +157,76 @@ $present = @($existing | Where-Object {
 })
 if ($present.Count -gt 0) {
   Write-Host "authorized_keys: $hostName の鍵は登録済み"
+} else {
+  Add-TextLine -Path $authFile -Line $line
+  Write-Host "authorized_keys: $hostName の鍵を追加した"
+}
+
+# ---- 管理者グループの利用者: administrators_authorized_keys ----
+function Test-AdminAccount {
+  # UAC のフィルタ後のトークンでは IsInRole が偽になるので、ローカルグループのメンバーで見る
+  $me = [Security.Principal.WindowsIdentity]::GetCurrent().User
+  try {
+    foreach ($member in @(Get-LocalGroupMember -Group 'Administrators' -ErrorAction Stop)) {
+      if ($member.SID -eq $me) { return $true }
+    }
+  } catch {}
+  return $false
+}
+
+if (-not (Test-AdminAccount)) { exit 0 }
+
+$fingerprint = Get-KeyFingerprint -Blob $keyBlob
+# 記録は「UAC を省く」ための高速化。実ファイルとの一致は見ない (読めない)。強制するときは DOTFILES_RESYNC_ADMIN_KEY=1
+$resync = $env:DOTFILES_RESYNC_ADMIN_KEY -eq '1'
+$known = @(if (Test-Path -LiteralPath $stateFile -PathType Leaf) { Get-Content -LiteralPath $stateFile -Encoding UTF8 })
+if (-not $resync -and $known -contains $fingerprint) {
+  Write-Host "administrators_authorized_keys: $fingerprint は処理済み (記録あり)"
   exit 0
 }
 
-# BOM なしの UTF-8 で追記する (sshd は BOM 付きの先頭行を読めない)。末尾に改行が無ければ足す
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$text = if (Test-Path -LiteralPath $authFile -PathType Leaf) {
-  [System.IO.File]::ReadAllText($authFile, $utf8NoBom)
-} else {
-  ''
+if (-not $PSCommandPath) { throw 'Cannot locate this script to elevate' }
+function ConvertTo-PsLiteral {
+  param([Parameter(Mandatory)][string]$Value)
+  return "'" + $Value.Replace("'", "''") + "'"
 }
-if ($text.Length -gt 0 -and -not $text.EndsWith("`n")) { $text += "`n" }
-[System.IO.File]::WriteAllText($authFile, $text + $line + "`n", $utf8NoBom)
-Write-Host "authorized_keys: $hostName の鍵を追加した"
 
-# 既定の sshd_config は、管理者グループの利用者には %ProgramData%\ssh\administrators_authorized_keys を使い、
-# ~/.ssh/authorized_keys を読まない。ここでは管理者権限が要るそちらには書かない
-$adminSid = New-Object Security.Principal.SecurityIdentifier ([Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
-if ([Security.Principal.WindowsIdentity]::GetCurrent().Groups -contains $adminSid) {
-  Write-Host 'authorized_keys: 管理者グループの利用者は、既定の sshd では %ProgramData%\ssh\administrators_authorized_keys が使われる (未対応)'
+Write-Host "administrators_authorized_keys: $fingerprint を登録するため昇格する (UAC)"
+# 子はこのファイルを一度だけ読み、ここで計算した SHA-256 と照合してから、そのメモリ上のテキストを実行する
+$bytes = [IO.File]::ReadAllBytes($PSCommandPath)
+$hash = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', '')
+$log = Join-Path ([IO.Path]::GetTempPath()) ("chezmoi-348-{0}.log" -f [guid]::NewGuid().ToString('N'))
+New-Item -ItemType File -Path $log | Out-Null
+$bootstrap = @(
+  ('$b=[IO.File]::ReadAllBytes(' + (ConvertTo-PsLiteral $PSCommandPath) + ')'),
+  '$h=[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($b)).Replace(''-'','''')',
+  ('if($h -ne ' + (ConvertTo-PsLiteral $hash) + '){exit 3}'),
+  '$t=(New-Object Text.UTF8Encoding($false)).GetString($b).TrimStart([char]0xFEFF)',
+  ('& ([scriptblock]::Create($t)) -AdminKeyLine ' + (ConvertTo-PsLiteral $line) +
+      ' -LogPath ' + (ConvertTo-PsLiteral $log)),
+  'exit $LASTEXITCODE'
+) -join ';'
+$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
+$startArgs = @{
+  FilePath     = 'powershell.exe'
+  ArgumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded)
+  Wait         = $true
+  PassThru     = $true
 }
+if ($env:CHEZMOI_348_NO_UAC -ne '1') { $startArgs['Verb'] = 'RunAs' }  # 試験用
+try {
+  $process = Start-Process @startArgs
+} catch {
+  throw "Elevation was cancelled or failed (UAC); administrators_authorized_keys not updated: $($_.Exception.Message)"
+} finally {
+  $childLog = if (Test-Path -LiteralPath $log) { @(Get-Content -LiteralPath $log -Encoding UTF8) } else { @() }
+  Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue
+}
+if ($process.ExitCode -ne 0) {
+  $why = if ($process.ExitCode -eq 3) { ' (script changed before elevation, or the elevated account could not read it)' } else { '' }
+  throw ("Elevated administrators_authorized_keys update failed with exit code $($process.ExitCode)$why. " + ($childLog -join ' | '))
+}
+$known = @(if (Test-Path -LiteralPath $stateFile -PathType Leaf) { Get-Content -LiteralPath $stateFile -Encoding UTF8 })
+if ($known -notcontains $fingerprint) { throw "The elevated step did not record $fingerprint" }
+Write-Host "administrators_authorized_keys: $fingerprint を登録した"
 {{- end }}

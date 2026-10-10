@@ -11,10 +11,10 @@
 - 管理者権限が要る作業を、chezmoi スクリプト自身が出す UAC 1 回に集約する。通常ユーザーで `chezmoi apply` を実行する設計は保つ
 - 昇格先が別アカウントでも、ユーザー設定を別アカウントのホームに書き込まない
 - 初回導入・部分的な失敗からの再実行・導入済みの 3 つの場合で冪等に終わる
-- `applejxd` の機械では、RDP・OpenSSH Server・SSH 公開鍵の登録まで整える
+- `applejxd` の機械では、RDP・OpenSSH Server・SSH 公開鍵の登録まで整える（管理者グループの利用者は `administrators_authorized_keys` へ、新しい鍵のときだけ UAC を出して登録する）
 
 **非目的**: `310_winget` に残る個別パッケージのインストーラーが自分で出す UAC の制御（user scope で入る前提にした。
-[仕様](../spec/structure.md#winget-パッケージの-user--machine-の振り分け)）。管理者グループの利用者向けの `administrators_authorized_keys`。
+[仕様](../spec/structure.md#winget-パッケージの-user--machine-の振り分け)）。
 
 ## 実施計画
 
@@ -43,7 +43,7 @@
 | UAC 承認を含む通し実行（同一アカウント・別管理者アカウント・クリーン環境）が未検証 | 段 6。クリーンな Windows 実機を用意できたとき |
 | Python Launcher（`launcher.msi`、scope 未宣言）が既定で全ユーザーに入り UAC が出るかが未確認 | 段 6 で導入後に UAC の有無と導入先を見る。出なければ 310 へ戻す |
 | Orca（NSIS、scope 未宣言）が UAC を出すかが未確認 | 段 6 で UAC が出たら 309 へ移す |
-| 管理者グループの利用者は既定の `sshd_config` が `%ProgramData%\ssh\administrators_authorized_keys` を使うため、`authorized_keys` への追加だけでは鍵認証にならない | OpenSSH Server を有効にしたあと、applejxd で鍵認証を試して失敗したとき。管理者権限と ACL が要るので 309 の対象にする |
+| 管理者グループの利用者の `administrators_authorized_keys` は 348 が追記する（指紋の記録で UAC を省く）。実機の UAC・所有者・StrictModes が未確認 | 段 6 で applejxd の鍵認証を試す。通らなければ所有者と ACL を見直す |
 | OpenSSH Server のパスワード認証は既定のまま | 利用者が `PasswordAuthentication no` を求めたとき |
 | Bitwarden の SSH 鍵項目の JSON が `sshKey.publicKey` を持つか。`bw` 2026.9.1 のバイナリの定義でだけ確認した | 利用者が実際の項目で試したとき |
 | 昇格先アカウントで `winget` が使えない場合は導入できず、明示エラーで止まる（代替の導入経路は持たない） | 別アカウントで昇格する運用が現実になったとき |
