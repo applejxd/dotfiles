@@ -16,10 +16,23 @@ if (!(Get-Command scoop -ErrorAction Ignore)) {
   Invoke-WebRequest -useb get.scoop.sh | Invoke-Expression
 }
 
-$installedApps = @(scoop list | ForEach-Object { $_.Name })
-if ($LASTEXITCODE -ne 0) {
-  throw "Failed to list installed Scoop apps: $LASTEXITCODE"
+$listOutput = @(scoop list 3>&1)
+$listExitCode = $LASTEXITCODE
+
+$noApps = @($listOutput | Where-Object {
+  $_ -is [System.Management.Automation.WarningRecord] -and
+  $_.Message -match "There aren't any apps installed"
+}).Count -gt 0
+
+if ($listExitCode -ne 0 -and -not ($listExitCode -eq 1 -and $noApps)) {
+  throw "Failed to list installed Scoop apps: $listExitCode"
 }
+
+$installedApps = @(
+  $listOutput |
+    Where-Object { $_ -isnot [System.Management.Automation.WarningRecord] } |
+    ForEach-Object { $_.Name }
+)
 
 function sinst {
   param([Parameter(Mandatory, ValueFromRemainingArguments)][string[]]$PackageId)
