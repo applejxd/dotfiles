@@ -1,0 +1,89 @@
+﻿{{- /*
+  hostname と同名の Bitwarden の SSH 鍵項目から公開鍵だけを取り出し、~/.ssh/authorized_keys へ追加する。
+  applejxd の機械だけ。BW_SESSION が無い・bw が無い・項目が無い・曖昧なときは何もせず 0 で終わる。
+  秘密鍵は読まず、ファイルにも出力にも出さない (bw の JSON は変数の中だけに置く)。
+  Unix 版: .chezmoiscripts/400_unix/run_after_440_authorized_keys.sh.tmpl
+  see docs/spec/security.md#ssh-公開鍵の-authorized_keys-への追加
+*/ -}}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$hostName = {{ .chezmoi.hostname | squote }}
+$authDir = Join-Path $HOME '.ssh'
+$authFile = Join-Path $authDir 'authorized_keys'
+
+function Skip {
+  param([string]$Reason)
+  Write-Host "authorized_keys: $Reason (skip)"
+  exit 0
+}
+
+$bw = @(Get-Command bw -CommandType Application -ErrorAction SilentlyContinue)[0]
+if (-not $bw) { Skip 'bw が無い' }
+# 認証は求めない (apply を入力待ちにしない)。有効にするには:
+#   $env:BW_SESSION = (bw unlock --raw); chezmoi apply
+if (-not $env:BW_SESSION) { Skip 'BW_SESSION が無い (bw unlock 済みの環境で apply すると追加する)' }
+
+$json = & $bw.Path list items --search $hostName --nointeraction 2>$null
+if ($LASTEXITCODE -ne 0) { Skip 'bw から取得できない (ロック中か未ログイン)' }
+
+# type 5 = SSH key。名前が hostname と大文字小文字を無視して一致するものがちょうど 1 件のときだけ使う
+$items = @(($json | Out-String | ConvertFrom-Json) |
+    Where-Object { $_.type -eq 5 -and $_.name -ieq $hostName })
+$json = $null
+if ($items.Count -ne 1) {
+  $count = $items.Count
+  $items = $null
+  Skip "SSH 鍵の項目 '$hostName' が $count 件 (ちょうど 1 件のときだけ追加する)"
+}
+$sshKey = $items[0].PSObject.Properties['sshKey']
+$pubkey = if ($sshKey -and $sshKey.Value) { [string]$sshKey.Value.publicKey } else { '' }
+$items = $null
+
+# 公開鍵の 1 行だけを受け付ける (鍵の種類 + base64。コメントは捨てて hostname を付ける)
+$pubkey = (($pubkey -split "`r?`n")[0]).Trim()
+$pattern = '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp[0-9]+|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/=]+'
+if ($pubkey -notmatch $pattern) { Skip '公開鍵を読めない (項目に publicKey が無いか形式が違う)' }
+$parts = $pubkey -split ' '
+$keyType = $parts[0]
+$keyBlob = $parts[1]
+$line = "$keyType $keyBlob $hostName"
+
+if (-not (Test-Path -LiteralPath $authDir)) {
+  New-Item -ItemType Directory -Path $authDir | Out-Null
+}
+$existing = if (Test-Path -LiteralPath $authFile -PathType Leaf) {
+  @(Get-Content -LiteralPath $authFile -Encoding UTF8)
+} else {
+  @()
+}
+
+# 鍵の本体 (種類 + base64) が既にあれば何もしない。既存の行は書き換えない
+$present = @($existing | Where-Object {
+  $f = ($_ -split '\s+')
+  $f.Count -ge 2 -and $f[0] -eq $keyType -and $f[1] -eq $keyBlob
+})
+if ($present.Count -gt 0) {
+  Write-Host "authorized_keys: $hostName の鍵は登録済み"
+  exit 0
+}
+
+# BOM なしの UTF-8 で追記する (sshd は BOM 付きの先頭行を読めない)。末尾に改行が無ければ足す
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$text = if (Test-Path -LiteralPath $authFile -PathType Leaf) {
+  [System.IO.File]::ReadAllText($authFile, $utf8NoBom)
+} else {
+  ''
+}
+if ($text.Length -gt 0 -and -not $text.EndsWith("`n")) { $text += "`n" }
+[System.IO.File]::WriteAllText($authFile, $text + $line + "`n", $utf8NoBom)
+Write-Host "authorized_keys: $hostName の鍵を追加した"
+
+# 既定の sshd_config は、管理者グループの利用者には %ProgramData%\ssh\administrators_authorized_keys を使い、
+# ~/.ssh/authorized_keys を読まない。ここでは管理者権限が要るそちらには書かない
+$adminSid = New-Object Security.Principal.SecurityIdentifier ([Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
+if ([Security.Principal.WindowsIdentity]::GetCurrent().Groups -contains $adminSid) {
+  Write-Host 'authorized_keys: 管理者グループの利用者は、既定の sshd では %ProgramData%\ssh\administrators_authorized_keys が使われる (未対応)'
+}
+{{- end }}

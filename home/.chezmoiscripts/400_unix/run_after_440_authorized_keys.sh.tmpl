@@ -1,0 +1,67 @@
+{{- /*
+  hostname と同名の Bitwarden の SSH 鍵項目から公開鍵だけを取り出し、~/.ssh/authorized_keys へ追加する。
+  applejxd の機械だけ。BW_SESSION が無い・bw が無い・項目が無い・曖昧なときは何もせず 0 で終わる。
+  秘密鍵は読まず、ファイルにも出力にも出さない (bw の JSON は変数の中だけに置く)。
+  see docs/spec/security.md#ssh-公開鍵の-authorized_keys-への追加
+*/ -}}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+#!/bin/bash
+
+set -eu
+
+host={{ .chezmoi.hostname | quote }}
+auth_dir="${HOME}/.ssh"
+auth_file="${auth_dir}/authorized_keys"
+
+skip() {
+    echo "authorized_keys: $1 (skip)"
+    exit 0
+}
+
+command -v bw >/dev/null 2>&1 || skip "bw が無い"
+command -v jq >/dev/null 2>&1 || skip "jq が無い"
+# 認証は求めない (apply を入力待ちにしない)。有効にするには:
+#   export BW_SESSION="$(bw unlock --raw)" && chezmoi apply
+[[ -n "${BW_SESSION:-}" ]] || skip "BW_SESSION が無い (bw unlock 済みの環境で apply すると追加する)"
+
+items="$(bw list items --search "$host" --nointeraction 2>/dev/null)" || skip "bw から取得できない (ロック中か未ログイン)"
+
+# type 5 = SSH key。名前が hostname と大文字小文字を無視して一致するものがちょうど 1 件のときだけ使う
+count="$(printf '%s' "$items" | jq -r --arg h "$host" \
+    '[.[] | select(.type == 5 and ((.name | ascii_downcase) == ($h | ascii_downcase)))] | length')"
+if [[ "$count" != "1" ]]; then
+    unset items
+    skip "SSH 鍵の項目 '${host}' が ${count} 件 (ちょうど 1 件のときだけ追加する)"
+fi
+pubkey="$(printf '%s' "$items" | jq -r --arg h "$host" \
+    '[.[] | select(.type == 5 and ((.name | ascii_downcase) == ($h | ascii_downcase)))][0].sshKey.publicKey // empty')"
+unset items
+
+# 公開鍵の 1 行だけを受け付ける (鍵の種類 + base64。コメントは捨てて hostname を付ける)
+pubkey="$(printf '%s' "$pubkey" | head -n 1 | tr -d '\r')"
+if [[ ! "$pubkey" =~ ^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp[0-9]+|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)\ [A-Za-z0-9+/=]+ ]]; then
+    skip "公開鍵を読めない (項目に publicKey が無いか形式が違う)"
+fi
+key_type="$(printf '%s' "$pubkey" | cut -d' ' -f1)"
+key_blob="$(printf '%s' "$pubkey" | cut -d' ' -f2)"
+line="${key_type} ${key_blob} ${host}"
+
+umask 077
+mkdir -p "$auth_dir"
+chmod 700 "$auth_dir"
+touch "$auth_file"
+chmod 600 "$auth_file"
+
+# 鍵の本体 (種類 + base64) が既にあれば何もしない。既存の行は書き換えない
+if awk -v t="$key_type" -v b="$key_blob" '$1 == t && $2 == b { found = 1 } END { exit !found }' "$auth_file"; then
+    echo "authorized_keys: ${host} の鍵は登録済み"
+    exit 0
+fi
+
+# 末尾に改行が無ければ足してから追記する
+if [[ -s "$auth_file" && -n "$(tail -c 1 "$auth_file")" ]]; then
+    printf '\n' >>"$auth_file"
+fi
+printf '%s\n' "$line" >>"$auth_file"
+echo "authorized_keys: ${host} の鍵を追加した"
+{{- end }}

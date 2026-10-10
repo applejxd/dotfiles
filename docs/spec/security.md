@@ -37,6 +37,29 @@ Windows は `.config/*` を丸ごと除外しているので、`.chezmoiignore.t
 戻すと、「一度だけ展開する」除外が打ち消され、`apply` のたびに Bitwarden を引く
 （`!` の取り消しはすべての除外より優先される）。
 
+### SSH 公開鍵の authorized_keys への追加
+
+`applejxd` の機械で、`hostname` と同名の Bitwarden の **SSH 鍵項目**（種別 SSH key）があるとき、その
+**公開鍵だけ**を `~/.ssh/authorized_keys` へ追加する。スクリプトは
+`400_unix/run_after_440_authorized_keys.sh.tmpl`（Ubuntu / WSL / macOS）と
+`300_windows/run_after_348_authorized_keys.ps1.tmpl`（Windows）で、`apply` のたびに走る。
+
+| 条件 | 動作 |
+| --- | --- |
+| `bw` が無い・`BW_SESSION` が未設定・ロック中 | 何もしない（apply を入力待ちにしない）。有効にするには `export BW_SESSION="$(bw unlock --raw)" && chezmoi apply`（PowerShell は `$env:BW_SESSION = (bw unlock --raw)`） |
+| 項目の名前が hostname と（大文字小文字を無視して）一致する SSH 鍵が 0 件・2 件以上 | 何もしない。ちょうど 1 件のときだけ使う |
+| `publicKey` が無い・形式が違う | 何もしない（`ssh-ed25519` / `ssh-rsa` / `ecdsa-sha2-*` / `sk-*` の 1 行だけ受け付ける） |
+| 鍵の本体（種類 + base64）が既にある | 何もしない（コメントが違っても重複させない） |
+| それ以外 | 末尾へ `種類 base64 hostname` を追記する。既存の行は書き換えず、削除もしない |
+
+- hostname は `chezmoi` の `.chezmoi.hostname`（最初の `.` まで）。FQDN で項目を作った場合は一致しない
+- 秘密鍵は読まない。`bw list items` の JSON は変数の中だけに置き、ファイルにもログにも出さない
+- Unix では `~/.ssh` を 700、`authorized_keys` を 600 にする。Windows は BOM なしの UTF-8 で追記する
+- **Windows で管理者グループの利用者**は、既定の `sshd_config` が `%ProgramData%\ssh\administrators_authorized_keys` を使い、
+  `~/.ssh/authorized_keys` を読まない。そちらへの追記は管理者権限と ACL が要るので未対応（実行時に注意を出す）
+- `bw` の SSH 鍵項目（種別 5）の JSON が `sshKey.publicKey` を持つことは、`bw` 2026.9.1 のバイナリ内の定義でのみ確認した。
+  実際の項目での動作は未確認
+
 ### 脅威と守らないもの
 
 | 防ぐ | 防がない |
