@@ -972,6 +972,21 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
 - 実機の確認: 通常権限で 2 回実行し、2 回目も同じ値になること、`STANDBYIDLE` の AC が 0・DC が 600 になることを `powercfg /q` で確認した。
   蓋と無人時のスリープは、この機にその設定が無く、値を読み取れなかった（デスクトップ機。ノート PC での挙動は未確認）
 
+## 7-Zip の関連付け
+
+`300_windows/320_regkey/run_once_after_322_7zip.ps1` は、7-Zip を**既定アプリの一覧に選べる形で登録する**（`HKCU` のみ）。
+Windows 11 は、スクリプトから既定のアプリを設定させない（`UserChoice` は保護されており、書き込めない）。そのため、
+
+- `7-Zip.<ext>`（`7z` `zip` `rar` `lzh` `tar` `gz`）の ProgID に、ダブルクリックで解凍するコマンド（`7zG.exe x "%1" -o*`）とアイコンを置く
+- `.<ext>\OpenWithProgids` に登録して「このアプリで開く」の候補に出す
+- `RegisteredApplications` と `Capabilities` に「7-Zip (extract)」を登録して、設定 → アプリ → 既定のアプリに出す
+
+までを自動化する。**ダブルクリックで解凍させるには、設定で一度だけ「7-Zip (extract)」を既定に選ぶ必要がある**（手動）。
+
+- 実機（ビルド 26300）の `.zip` は、`UserChoice` が `CompressedFolder` のまま（2026-10-11 実測）。従来のスクリプトは ProgID のコマンドだけを書いており、
+  この機の 7-Zip は ProgID も `RegisteredApplications` も登録しないため、選ぶ手段が無く、事実上効いていなかった
+- 登録内容は 2 回目の実行で変化しない（値が揃っていれば何もしない）ことを実機で確かめた。設定画面に実際に出るかは、あなたの目視が要る（未確認）
+
 ## Windows Terminal
 
 `settings.json`（Store 版の `%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\`）は

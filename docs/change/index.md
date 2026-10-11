@@ -51,6 +51,7 @@
 | [0017](0017-builtin-agent-restrictions.md) | 組み込みの `explore` / `plan` の制限が全体の設定に上書きされる問題を直し、`bypass` から起動する子を確認なしで動かせる範囲に整える | In progress | `bypass` の子に残る確認のうち、作業ツリーの外の読み取り以外（`production.env` などと shell 由来）は意図して残す。`plan` の shell の確認に保存した承認がどう効くか | 段 1〜8 完了（apply 済み、ADR-0015）。残りは未解決点 | 2026-10-08 |
 | [0020](0020-pi-migration.md) | OpenCode のハーネスを pi へ移す（判定 API・ハーネス・配布・境界・ハーネス以外の機能・撤去） | In progress | 段 1〜5 は完了。Orca・Zed は素の `pi`、`pis` は利用者の起動用で優先度低（利用者の判断）。残りの段 6（OpenCode の撤去）は任意で保留。Windows は OpenCode を残すか未定 | 段 6 を進めるか判断する（進めるなら Windows の扱いを先に決める） | 2026-10-09 |
 | [0021](0021-windows-admin-consolidation.md) | Windows の chezmoi セットアップを整え、管理者権限の作業を 1 回の UAC に集約する | In progress | UAC 承認を含む通し実行が未検証（クリーンな Windows 実機が要る）。Python Launcher と Orca の UAC の有無が未確認。管理者グループの利用者の `administrators_authorized_keys` が未対応 | クリーンな Windows で `chezmoi apply` を通し、UAC が 1 回だけ出ることを確かめる | 2026-10-10 |
+| [0022](0022-windows11-settings-review.md) | Windows 11 の設定を見直し、古い設定の修正と体験の改善を入れる | In progress | 7-Zip の関連付けと Terminal の更新の方針が未決。広告・天気ウィジェットの抑止がビルド 26300 で通るか未確認。WSL と WSL 3 は保留 | 段 1〜3 から着手する | 2026-10-11 |
 
 ## 保留
 

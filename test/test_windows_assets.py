@@ -639,3 +639,18 @@ def test_powershell_path_expands_unexpanded_variables_for_ssh_sessions():
     profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
 
     assert "[System.Environment]::ExpandEnvironmentVariables($_)" in profile
+
+
+def test_7zip_registers_a_selectable_default_app_instead_of_setting_userchoice():
+    script = (ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_once_after_322_7zip.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    # UserChoice は保護されていて書けない。既定アプリの一覧に出る形 (ProgID + Capabilities) で登録する
+    assert "UserChoice" not in script.replace("UserChoice is protected", "")
+    assert "RegisteredApplications" in script
+    assert "OpenWithProgids" in script
+    assert "FileAssociations" in script
+    assert '7zG.exe" x "%1" -o*' in script
+    # 値が揃っていれば何もしない (冪等)
+    assert "$pending.Count -eq 0" in script
