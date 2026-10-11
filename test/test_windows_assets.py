@@ -649,3 +649,18 @@ def test_7zip_registers_a_selectable_default_app_instead_of_setting_userchoice()
     assert '7zG.exe" x "%1" -o*' in script
     # 値が揃っていれば何もしない (冪等)
     assert "$pending.Count -eq 0" in script
+
+
+def test_shell_defaults_set_execution_policy_and_default_terminal_in_hkcu_only():
+    script = (ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_once_after_323_shell_defaults.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    assert "HKLM:\SOFTWARE\Policies" in script  # Group Policy は読むだけ
+    assert "Set-ExecutionPolicy" not in script  # モジュールに依存せず HKCU へ直接書く
+    assert "'RemoteSigned', 'Unrestricted', 'Bypass'" in script  # 緩い設定は下げない
+    assert "{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}" in script
+    assert "{E12CFF52-A866-4C77-9A90-F570A7AA2C6B}" in script
+    # HKLM への書き込みは無い
+    assert "New-ItemProperty -LiteralPath $Key" in script
+    assert "Set-RegistryString HKLM" not in script

@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 1 | 7-Zip の関連付けが効かない（`.zip` の `UserChoice` が `CompressedFolder` のまま。実機で確認） | 既定アプリの一覧に出る形（ProgID + `Capabilities`）で登録し、設定で一度選んでもらう。実機の設定画面での表示が未確認 | 進行中 |
 | 2 | `341` が JSONC に弱く、`profiles.defaults` 全体を置き換える | LANG2 の `modify_` に統合し（JSONC のまま、管理するキーだけ更新）、341 と `config/windows/terminal.json` を廃止した | 完了 |
-| 3 | 新しいマシンで `ExecutionPolicy` を手で設定する必要がある（README の手順のみ）。Terminal が既定のターミナルアプリでない | `ExecutionPolicy`（CurrentUser = RemoteSigned）と既定のターミナルアプリを自動設定する | 未着手 |
+| 3 | 新しいマシンで `ExecutionPolicy` を手で設定する必要がある（README の手順のみ）。Terminal が既定のターミナルアプリでない | `ExecutionPolicy`（5.1、CurrentUser = RemoteSigned）と既定のターミナルアプリを `323_shell_defaults` で自動設定する | 完了 |
 | 4 | 広告・推奨・タスクバーの天気（ウィジェット）が邪魔 | レジストリ / ポリシーで抑止する。Windows 11 では `HKCU` への直接書き込みが拒否される項目があるため、実機で通るか確かめる | 未着手 |
 | 5 | scoop の `gow` が古い | `uutils-coreutils` などへの置き換えを検討する | 未着手 |
 | 6 | sudo | scoop 版と Windows 標準の `sudo.exe` の使い分けを決める | 未着手 |

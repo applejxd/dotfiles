@@ -987,6 +987,21 @@ Windows 11 は、スクリプトから既定のアプリを設定させない（
   この機の 7-Zip は ProgID も `RegisteredApplications` も登録しないため、選ぶ手段が無く、事実上効いていなかった
 - 登録内容は 2 回目の実行で変化しない（値が揃っていれば何もしない）ことを実機で確かめた。設定画面に実際に出るかは、あなたの目視が要る（未確認）
 
+## シェルの既定値
+
+`300_windows/320_regkey/run_once_after_323_shell_defaults.ps1` が、`HKCU` に次の 2 つを設定する（管理者権限は要らない）。
+
+| 設定 | 値 | 理由 |
+| --- | --- | --- |
+| Windows PowerShell 5.1 の実行ポリシー（CurrentUser） | `RemoteSigned` | 5.1 の既定は `Restricted` で、配布するプロファイル（`.ps1`）が読み込まれない。PowerShell 7 の既定は `RemoteSigned` なので対象外 |
+| 既定のターミナルアプリ（`HKCU\Console\%%Startup` の `DelegationConsole` / `DelegationTerminal`） | Windows Terminal | 「Windows に決定させる」でも通常は Windows Terminal になるが、明示して固定する |
+
+- 実行ポリシーは、`Unrestricted` / `Bypass` / `RemoteSigned` が設定済みなら**下げない**（利用者が選んだ緩い設定を残す）
+- **グループポリシー**（`...\Policies\Microsoft\Windows\PowerShell`）で固定されていれば、警告して何もしない
+- `Set-ExecutionPolicy` は使わず、レジストリへ直接書く（モジュールの読み込みに依存しないため）
+- 既定のターミナルは、Windows Terminal（`wt.exe`）がある機械だけ設定する
+- 検証: 一時キーに向けた複製で、1 回目に設定、2 回目は変更なし、`Bypass` は維持されることを確認した。実機の `HKCU` は、実行ポリシーが既に `RemoteSigned` で、既定のターミナルは未設定だった
+
 ## Windows Terminal
 
 `settings.json`（Store 版の `%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\`）は
