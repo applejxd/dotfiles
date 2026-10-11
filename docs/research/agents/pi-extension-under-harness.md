@@ -82,3 +82,48 @@ Windows で回した既存のハーネスの試験は、40 件中 30 件が通�
 
 - Unix（WSL2 / Ubuntu）での再現。この環境では、子エージェント・`pis`・境界の試験が回らない
 - 拡張を `pis` の既定の起動に足す場合の、審査と更新の手順
+
+## 記録 E6 — 2026-10-11
+
+- **対象バージョン・環境**: E5 と同じ（pi 1.1.0、Windows 11、偽のモデル）
+
+### 結論
+
+- **`pis`（`-nbt -ne -e builtin:mcp -e <ハーネス>`）では、`exposure` が `codemode`（既定）・`deferred` の MCP のツールは、モデルから呼べない。**
+  `codemode` も `tool_search` も宣言されず、呼ぶと `Tool codemode not found`・`Tool tool_search not found`・`Tool mcp__spike__echo_secret not found`。
+  `direct` にすると `TOOLS` に `mcp__spike__echo_secret` が出る
+- 生成器 `pi_mcp_servers`（`scripts/agents/generate.py`）は `exposure` を出さないので、`[[mcp]]` から配る MCP は、
+  `pis` では既定の `codemode` になり、呼べない可能性が高い（Bedrock の `agentcore-websearch` も該当。実機の `pis` では未確認）
+
+### 問い
+
+検索の入口を MCP にして `codemode` で絞る案（呼び出しの結果をスクリプトで集約し、モデルへは出力だけを返す）が、`pis` で成り立つか。
+
+### 事前の予想
+
+`codemode` が有効になれば成り立つと予想した。`-nbt` が `codemode` まで外すかは分からなかった（**予想できず**）。
+
+### 方法・条件
+
+E5 と同じ試験の仕組み。`rules.json` の `mcp` に、既存の `mcp_server.py` を、`exposure` なし・`codemode`・`deferred`・`direct` の 4 通りで登録し、
+`TOOLS=` の一覧と、`codemode`・`tool_search`・MCP のツールを呼んだ結果を見た（メッセージを 3 つにして、サーバが接続し終えた後も見た）。
+
+### 結果
+
+| exposure | `TOOLS` | 呼んだ結果 |
+| --- | --- | --- |
+| なし（既定）・`codemode`・`deferred` | `guarded_*` の 8 つだけ | `codemode`・`tool_search`・MCP のツールのどれも `Tool … not found` |
+| `direct` | `guarded_*` と `mcp__spike__echo_secret` | 呼べる（既存の試験どおり） |
+
+### 考察
+
+- `pis` で MCP を使うなら、`exposure = "direct"` が要る。すると MCP のツール定義が常駐し、コンテキストとキャッシュの面では
+  拡張のツールと同じ扱いになる（E5 の +36 トークンの見積もり）
+- `codemode` で絞る案は、**`pis` では今のところ成り立たない**。素の `pi`（Windows・Orca・Zed）では、組み込みのツールがあるので成り立つ見込み（未実測）
+- ハーネスが `codemode` を登録し、判定器が `codemode` を許す形にすれば成り立つ可能性はある（E3 は `codemode` の中の呼び出しが判定を通ることを観測している）。要検討
+
+### 次の問い
+
+- 生成器に `exposure` を出すか（`direct`）、ハーネスで `codemode` を使えるようにするか
+- 実機の `pis`（Unix）で、既存の `agentcore-websearch` が呼べないことの確認
+

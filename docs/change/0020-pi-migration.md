@@ -1,7 +1,7 @@
 # CHG-0020: OpenCode のハーネスを pi へ移す
 
 - **状態**: In progress
-- **更新日**: 2026-10-10
+- **更新日**: 2026-10-11
 - **基準**: pi 1.1.0、OpenCode v2.0.22、コミット d5f012c、WSL2 (Ubuntu)
 
 ## 目的と非目的
@@ -301,6 +301,11 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-11**: 拡張の方針を改めた（[ADR-0016](../adr/0016-pi-extensions-own-first.md)）。従来の「`-ne` で拡張を足さない」は、AI の提案を理解せずに承認したもので、
+  利用者の方針ではなかった。明示した `-e` の拡張が判定・伏字化を通ることを実測し（[E5](../research/agents/pi-extension-under-harness.md)、コミット a0f934d）、
+  「自作を基本とし、必要かつ自作が困難で十分に確認したものだけ外部の拡張を例外で導入する」に改めた。`-ne` は維持する（自動発見はしない）
+- **2026-10-11**: `pis` では `exposure` が既定の `codemode` の MCP のツールが呼べないことを実測した（[E6](../research/agents/pi-extension-under-harness.md#記録-e6--2026-10-11)）。
+  生成器が `exposure` を出していないため、`[[mcp]]` の配布は `pis` で呼べない可能性が高い。修正（`direct`）は未決
 - **2026-10-10**: Windows の素の `pi` に、読み取り専用の子エージェント（`explore` / `review`）を配った
   （`task` 拡張と、`[pi.agents]` から生成する `agents.json`）。判定器が Windows に無いので、`read` / `grep` / `find` / `ls`
   だけの役割に限る。`gpt-6-astra` が pi の Copilot 経由で `model_not_supported` になるため、`[pi.model.tier.*]` の上書きの口を

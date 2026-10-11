@@ -70,3 +70,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0013](0013-opencode-shell-guard-inside-ocs.md) | OpenCode の危険な rm と pip を ocs の中でも止める | Accepted | 2026-10-03 | ADR-0012 を部分改定。2026-10-03 注記: 通常版の pip にも前段（`execute.before`）で誘導文を付けた。「bypass は対象外」を ADR-0014 で改定 |
 | [0014](0014-bypass-as-ask-upgrade.md) | OpenCode の bypass を「ask を allow にするだけ」に再定義する | Accepted | 2026-10-03 | CHG-0002 の「誘導を bypass にも効かせる: 見送り」を採用に転じる。ADR-0013 の bypass 対象外を改定。「子の ask は対象外」を ADR-0015 で部分改定 |
 | [0015](0015-bypass-child-external-read.md) | OpenCode の bypass から起動した読むだけの子の、作業ツリーの外の読み取りの確認を省く | Accepted | 2026-10-08 | ADR-0014 を部分改定。CHG-0017 の段 7 |
+| [0016](0016-pi-extensions-own-first.md) | pi の拡張は自作を基本とし、外部の拡張は条件を満たす例外だけを導入する | Accepted | 2026-10-11 | 従来の「拡張を足さない」は AI の提案を理解せず承認したもので、利用者の方針ではなかった。明示の `-e` で足せることを実測した | 外部の拡張は、必要かつ自作が困難で、審査と版の固定と試験を済ませたものだけ |
