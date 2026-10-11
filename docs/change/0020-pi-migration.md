@@ -305,7 +305,8 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
   利用者の方針ではなかった。明示した `-e` の拡張が判定・伏字化を通ることを実測し（[E5](../research/agents/pi-extension-under-harness.md)、コミット a0f934d）、
   「自作を基本とし、必要かつ自作が困難で十分に確認したものだけ外部の拡張を例外で導入する」に改めた。`-ne` は維持する（自動発見はしない）
 - **2026-10-11**: `pis` では `exposure` が既定の `codemode` の MCP のツールが呼べないことを実測した（[E6](../research/agents/pi-extension-under-harness.md#記録-e6--2026-10-11)）。
-  生成器が `exposure` を出していないため、`[[mcp]]` の配布は `pis` で呼べない可能性が高い。修正（`direct`）は未決
+  生成器が `exposure` を出していなかったため、`[[mcp]]` の配布は `pis` で呼べない可能性が高かった。**2026-10-12 に修正した**: `[[mcp]]` の任意のキー `exposure`、省略時は pi へ `direct`。
+  `pis` では MCP のツールは既定の確認のまま（利用者が決めた）。実機の `pis` は未確認
 - **2026-10-10**: Windows の素の `pi` に、読み取り専用の子エージェント（`explore` / `review`）を配った
   （`task` 拡張と、`[pi.agents]` から生成する `agents.json`）。判定器が Windows に無いので、`read` / `grep` / `find` / `ls`
   だけの役割に限る。`gpt-6-astra` が pi の Copilot 経由で `model_not_supported` になるため、`[pi.model.tier.*]` の上書きの口を

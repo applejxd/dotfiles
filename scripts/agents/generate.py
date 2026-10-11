@@ -552,7 +552,11 @@ MCP_TRANSPORT_KEYS = {
     "http": {"url"},
     "stdio": {"command", "args"},
 }
-MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis"}
+MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis", "exposure"}
+# pi へ出す exposure (モデルへのツールの見せ方)。省略時は direct。pis は -ne で組み込みの codemode / tool_search を
+# 外すので、既定の codemode のままだとツールがモデルから呼べない (docs/research/agents/pi-extension-under-harness.md E6)。
+MCP_EXPOSURES = ("direct", "codemode", "deferred", "hidden")
+MCP_DEFAULT_EXPOSURE = "direct"
 
 # ``clis`` に書ける生成先。省略したら全部に入る。
 MCP_CLIS = {"claude", "copilot", "opencode", "codex", "pi"}
@@ -593,6 +597,12 @@ def mcp_servers(common: dict[str, Any], cli: str | None = None) -> list[tuple[st
             raise ValueError(
                 f"[[mcp]] {name} に {transport} では使わないキーがある: "
                 + ", ".join(sorted(unknown))
+            )
+
+        exposure = server.get("exposure")
+        if exposure is not None and exposure not in MCP_EXPOSURES:
+            raise ValueError(
+                f"[[mcp]] {name} の exposure が不正: {exposure!r} (対応: {', '.join(MCP_EXPOSURES)})"
             )
 
         targets = server.get("clis")
@@ -2032,12 +2042,14 @@ def build_pi_subagents(_existing: dict[str, Any], common: dict[str, Any]) -> dic
 
 def pi_mcp_servers(common: dict[str, Any]) -> list[dict[str, Any]]:
     """``[[mcp]]`` のうち pi へ出すもの。ハーネスが ``registerMcpServer`` で登録する。"""
+    exposures = {str(s.get("id")): s.get("exposure") for s in common.get("mcp", [])}
     out: list[dict[str, Any]] = []
     for name, server in mcp_servers(common, "pi"):
         if server["transport"] == "http":
             config: dict[str, Any] = {"url": server["url"]}
         else:
             config = {"command": server["command"], "args": server["args"]}
+        config["exposure"] = exposures.get(name) or MCP_DEFAULT_EXPOSURE
         out.append({"name": name, "config": config})
     return out
 

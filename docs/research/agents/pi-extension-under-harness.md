@@ -134,3 +134,11 @@ E5 と同じ試験の仕組み。`rules.json` の `mcp` に、既存の `mcp_ser
 - 生成器に `exposure` を出すか（`direct`）、ハーネスで `codemode` を使えるようにするか
 - 実機の `pis`（Unix）で、既存の `agentcore-websearch` が呼べないことの確認
 
+### 対応（2026-10-12）
+
+- `[[mcp]]` に任意のキー `exposure` を足し、**省略時は pi へ `direct` を出す**ようにした（`scripts/agents/generate.py` の `pi_mcp_servers`）。
+  他の CLI の定義には混ぜない
+- 試験（`test/agents/test_pi_harness_extensions.py`）: 生成した設定で MCP のツールが宣言され、`pis` では既定の確認になること、
+  `exposure` を出さない旧い設定では `Tool … not found` になること（欠陥の再現。pi が `codemode` を宣言する版になれば見直す）
+- 実機の `pis`（Unix）で、Bedrock の `agentcore-websearch` が呼べるかは未確認
+

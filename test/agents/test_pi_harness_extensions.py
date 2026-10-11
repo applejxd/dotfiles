@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 
-from agents_common import agents_config_dir
+import pytest
+from agents_common import ROOT, agents_config_dir
 from test_pi_harness import FIXTURES, SECRET, bash_call, env, run_pi  # noqa: F401
+
+sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 EXT = ("-e", str(FIXTURES / "ext_tool.ts"))
 CALL = [{"name": "ext_search", "args": {"query": "hello"}}]
@@ -81,3 +85,63 @@ def test_extension_cannot_replace_a_guarded_tool(env):
     assert proc.returncode != 0
     assert 'Tool "guarded_bash" conflicts' in proc.stderr, proc.stderr
     assert not pwned.exists()
+
+
+# ─── MCP の exposure (生成器 → ハーネス) ─────────────────────────────
+
+MCP_SERVER = FIXTURES / "mcp_server.py"
+
+
+def _common_with_mcp(**extra):
+    from agents_common import load_common
+
+    common = json.loads(json.dumps(load_common()))
+    common["mcp"] = [
+        {
+            "id": "spike",
+            "purpose": "試験",
+            "transport": "stdio",
+            "command": sys.executable,
+            "args": [str(MCP_SERVER)],
+            "clis": ["pi"],
+            **extra,
+        }
+    ]
+    return common
+
+
+def test_generated_mcp_config_defaults_to_direct_and_honours_exposure():
+    import generate as gen
+
+    servers = gen.pi_mcp_servers(_common_with_mcp())
+    assert servers[0]["config"]["exposure"] == "direct"
+    assert gen.pi_mcp_servers(_common_with_mcp(exposure="deferred"))[0]["config"]["exposure"] == "deferred"
+    # Claude / Copilot / OpenCode / Codex へ出す定義には exposure を混ぜない
+    assert all("exposure" not in entry for _, entry in gen.mcp_servers(_common_with_mcp(exposure="deferred")))
+    with pytest.raises(ValueError, match="exposure"):
+        gen.pi_mcp_servers(_common_with_mcp(exposure="codemod"))
+
+
+def test_mcp_tool_from_the_generated_config_is_declared_and_asked_under_the_harness(env):
+    """pis は -ne で codemode / tool_search を外す。生成器が direct を出さないと、MCP のツールは呼べない (E6)。"""
+    import generate as gen
+
+    rules = json.loads((env["harness"] / "rules.json").read_text(encoding="utf-8"))
+    rules["mcp"] = gen.pi_mcp_servers(_common_with_mcp())
+    (env["harness"] / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
+    proc = run_pi(env, [{"name": "mcp__spike__echo_secret", "args": {}}])
+
+    assert '"mcp__spike__echo_secret"' in proc.stdout.splitlines()[0], proc.stdout
+    # 実装役では MCP のツールは既定の確認。UI の無い起動では拒否になる (pis で ask)
+    assert "isError=true :: not approved:" in proc.stdout, proc.stdout
+    assert "mcp-raw-secret" not in proc.stdout
+
+
+def test_mcp_tool_without_exposure_is_unreachable_under_the_harness(env):
+    """欠陥の再現 (exposure を出さない旧い生成)。pi が codemode を宣言する版になれば、この試験を見直す。"""
+    rules = json.loads((env["harness"] / "rules.json").read_text(encoding="utf-8"))
+    rules["mcp"] = [{"name": "spike", "config": {"command": sys.executable, "args": [str(MCP_SERVER)]}}]
+    (env["harness"] / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
+    proc = run_pi(env, [{"name": "mcp__spike__echo_secret", "args": {}}])
+
+    assert "Tool mcp__spike__echo_secret not found" in proc.stdout, proc.stdout

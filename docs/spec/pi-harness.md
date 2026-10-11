@@ -260,11 +260,11 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 ## MCP
 
 > **`pis` では、`exposure` が `codemode`（既定）・`deferred` のサーバのツールは、モデルから呼べない。**
-> `-nbt` で組み込みのツールを外すので、`codemode` と `tool_search` が宣言されず、`Tool … not found` になる
-> （2026-10-11、偽のモデルで実測。`direct` なら宣言される）。原因は `-ne` が組み込みの拡張（`builtin:codemode`・`builtin:tool-search`）も外すこと。
-> 直し方は `exposure = "direct"`（+37 トークン）か、`-e builtin:codemode` を足す（+680 トークン）。生成器（`pi_mcp_servers`）は `exposure` を出していない
-> ので、現状の `[[mcp]]` は `pis` では呼べない可能性が高い。修正は未決
-> （[実測](../research/agents/pi-extension-under-harness.md#記録-e6--2026-10-11)）。
+> `-ne` が組み込みの拡張（`builtin:codemode`・`builtin:tool-search`）も外すため、`Tool … not found` になる
+> （2026-10-11、偽のモデルで実測。[E6](../research/agents/pi-extension-under-harness.md#記録-e6--2026-10-11)）。
+> **対策済み**: `[[mcp]]` の `exposure` を省略すると、生成器（`pi_mcp_servers`）が `direct` を出す
+> （[仕様](agent-config-generation.md#mcp-サーバ)）。`codemode` を使いたいときは `-e builtin:codemode` を足す（+680 トークン）。
+> 実機の `pis`（Unix）では未確認
 
 `[[mcp]]` のうち `clis` に `pi` を含むものを、ハーネスが起動のたびに `registerMcpServer` で登録する。
 ハーネスが抜ければ登録も消える。MCP のツール（`mcp__<サーバ>__<ツール>`）は、実装役の `tools` の

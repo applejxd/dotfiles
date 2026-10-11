@@ -197,6 +197,12 @@ args = [
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
 
+**`[[mcp]]` の任意のキー `exposure`（pi だけに効く）**: モデルへのツールの見せ方で、`direct` / `codemode` / `deferred` / `hidden`（不正な値は生成が止まる）。
+**省略すると pi には `direct` を出す。** pi 本体の既定は `codemode` だが、`pis` は `-ne` で組み込みの `codemode` / `tool_search` を外すので、
+既定のままだとツールがモデルから呼べない（[実測 E6](../research/agents/pi-extension-under-harness.md#記録-e6--2026-10-11)）。
+`direct` はツール定義が常駐する（1 ツールで数十トークン）ので、大きいサーバを足すときは、そのサーバだけ `deferred` などに変えて試す。
+他の CLI の定義には `exposure` を混ぜない。`pis` では MCP のツールは役割の既定（実装役は確認）になる。
+
 **Copilot の PC（applejxd）では `[[mcp]]` が 0 件になる。** `deepwiki` は 2026-09-25 に外し、
 `agentcore-websearch` は Bedrock の PC だけに出すため。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない
 ので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
