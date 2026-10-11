@@ -1,4 +1,4 @@
-"""Windows Terminal の settings.json へ LANG2 の無効化を足す modify_ を検証する。"""
+"""Windows Terminal の settings.json へ LANG2 の無効化と配色・外観を足す modify_ を検証する。"""
 
 from __future__ import annotations
 
@@ -199,3 +199,58 @@ def test_unparsable_input_passes_through():
     result = run_script(source)
     assert result.stdout == source
     assert b"warning" in result.stderr
+
+
+APPEARANCE_JSONC = """// user comment
+{
+    "profiles": {
+        "defaults": {
+            "font": { "weight": "bold", "size": 10 }, // keep me
+            "opacity": 80,
+        },
+        "list": [],
+    },
+    "schemes": [
+        { "name": "Mine", "background": "#000000" },
+    ],
+}
+"""
+
+
+def test_appearance_sets_only_managed_keys_and_keeps_comments():
+    after = wt.update_appearance(APPEARANCE_JSONC)
+    parsed = parse(after)
+    defaults = parsed["profiles"]["defaults"]
+
+    assert defaults["colorScheme"] == "Iceberg"
+    assert defaults["font"] == {"weight": "bold", "size": 12, "face": "Cica"}
+    assert defaults["opacity"] == 100 and defaults["useAcrylic"] is True
+    # ほかの設定とコメントは残る
+    assert parsed["profiles"]["list"] == []
+    assert "// user comment" in after and "// keep me" in after
+    assert [s["name"] for s in parsed["schemes"]] == ["Mine", "Iceberg"]
+    assert wt.update_appearance(after) == after
+
+
+def test_appearance_does_not_overwrite_an_existing_scheme():
+    text = '{ "schemes": [ { "name": "Iceberg", "background": "#123456" } ] }'
+    parsed = parse(wt.update_appearance(text))
+
+    assert parsed["schemes"] == [{"name": "Iceberg", "background": "#123456"}]
+
+
+def test_appearance_from_empty_input_creates_everything():
+    parsed = parse(wt.update_appearance(""))
+
+    assert parsed["profiles"]["defaults"]["font"] == {"face": "Cica", "size": 12}
+    assert [s["name"] for s in parsed["schemes"]] == ["Iceberg"]
+
+
+def test_appearance_is_applied_even_when_lang2_cannot_be_added():
+    source = (
+        b'{ "actions": [ { "command": "paste", "keys": "vk(26)" } ], "profiles": {} }'
+    )
+    result = run_script(source)
+
+    assert b"already bound" in result.stderr
+    assert b"Iceberg" in result.stdout

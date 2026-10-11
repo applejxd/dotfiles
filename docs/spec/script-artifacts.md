@@ -55,7 +55,6 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | 同上 | `%ProgramData%\ssh\administrators_authorized_keys`・`~\.ssh\authorized_keys` | 生成物（追記のみ） | 消すと鍵認証が効かなくなる。指紋の記録が残っていると管理者側は再作成されないので、記録とあわせて消す |
 | 同上・`310_packages/run_once_before_309_admin.ps1.tmpl` | `%TEMP%\chezmoi-348-<guid>.log`・`%TEMP%\chezmoi-309-<guid>.log` | 一時（昇格した子のログ） | 昇格するときだけ。`finally` で削除 |
 | `300_windows/run_after_343_herdr_integration.ps1.tmpl` | `~\.claude\skills\herdr\.<guid>.tmp`・同 `.bak` | 一時・バックアップ（`File.Replace` が作る） | 毎 apply。`finally` で削除。異常終了時だけ残りうる（推測） |
-| `300_windows/run_after_341_terminal.py.tmpl` | Windows Terminal の `LocalState\.settings.json.*.tmp` | 一時 | 差分があるとき。`os.replace` で本体へ。`finally` で削除 |
 | `300_windows/run_once_after_330_font.ps1` | `~\RictyDiminished-for-Powerline.ttf`・`~\Cica.zip`・`~\Cica\` | 一時（ダウンロードと展開先） | フォントが未導入のとき。使い終えたら削除。途中で失敗すると残りうる（`Remove-Item` が末尾にあるため。推測） |
 | `300_windows/310_packages/run_once_after_315_keypirinha_extensions.ps1` | `%APPDATA%\Keypirinha\InstalledPackages\*.keypirinha-package.download` と、成果の `*.keypirinha-package` | 一時・生成物 | 未導入のものだけ。`.download` は `Move-Item` で本体へ置き、`finally` で削除。既存ファイルは上書きしない |
 | `300_windows/run_after_345_powershell_profile.ps1.tmpl` | `MyDocuments` の実体の下の `PowerShell\profile.ps1`・`WindowsPowerShell\profile.ps1` | 生成物（OneDrive の既知フォルダー移動時だけ置く、BOM 付きのローダー） | 内容が違うときだけ上書き |

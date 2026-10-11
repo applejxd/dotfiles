@@ -991,12 +991,10 @@ Windows 11 は、スクリプトから既定のアプリを設定させない（
 
 `settings.json`（Store 版の `%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\`）は
 GUI で設定を変えるたびに Windows Terminal が書き換えるため、ファイル全体は管理しません。
-次の 2 つが既存の内容に足すだけの変更をします。
+`home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/modify_settings.json.py`（chezmoi の `modify_`）が、既存の内容に足すだけの変更をします。
 
-| パス | 役割 |
-| --- | --- |
-| `home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/modify_settings.json.py` | LANG2 キー（`vk(26)`）を何もしない操作に割り当てる |
-| `home/.chezmoiscripts/300_windows/run_after_341_terminal.py.tmpl` | `config/windows/terminal.json` の配色と `profiles.defaults` を反映する |
+- LANG2 キー（`vk(26)`）を何もしない操作に割り当てる（下記）
+- 配色と外観を揃える（下記）
 
 ### LANG2 キーの割り当て
 
@@ -1016,8 +1014,23 @@ Windows Terminal 側でこのキーを `adjustOpacity`（`opacity: 0`、`relativ
   コメント・キーの順序・インデント・改行コード・BOM は変えません。
   JSON としてどうしても読めないときは、警告して元の内容をそのまま返します。
 - 非 Store 版（`%LOCALAPPDATA%\Microsoft\Windows Terminal\settings.json`）は対象外です。
-- `run_after_341` は `json.load` で読み、変更があればコメントを落として書き直します。
-  コメント入りの `settings.json` では 341 が失敗します。
+
+### 配色と外観
+
+`profiles.defaults` の次のキーと、配色 `Iceberg` だけを揃えます。値は `modify_settings.json.py` の `APPEARANCE` と `SCHEME` が正本です。
+
+| キー | 値 |
+| --- | --- |
+| `colorScheme` | `Iceberg` |
+| `font.face` / `font.size` | `Cica` / 12 |
+| `opacity` / `useAcrylic` | 100 / `true` |
+
+- 無いキーは足し、値が違うキーだけ値を置き換えます。**ほかのキー（`font.weight` など）、コメント、書式は変えません**
+- `schemes` に `Iceberg` があれば、上書きしません（利用者が編集した配色を残すため）
+- 以前は `run_after_341_terminal.py.tmpl` が `json.load` で読み、`profiles.defaults` 全体を置き換えていました。コメント入りの `settings.json` では失敗し、
+  GUI で付けた既定設定も消えるため、LANG2 の `modify_` に統合して 341 と `config/windows/terminal.json` を廃止しました
+- LANG2 の割り当てを足せなかった（別の操作が割り当て済みなど）ときも、外観は揃えます
+- `useAcrylic: true` と `opacity: 100` の組み合わせは透明効果が出ない。好みで決める（未決）
 
 検証は `test/test_windows_terminal_settings.py` です。
 

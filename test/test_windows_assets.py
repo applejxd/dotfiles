@@ -431,15 +431,10 @@ def test_shared_git_config_sanitizer_uses_dotnet_apis_only():
     assert "'^GIT_CONFIG_(COUNT|KEY_\\d+|VALUE_\\d+)$'" in template
 
 
-def test_windows_terminal_settings_are_replaced_atomically():
-    script = (
-        ROOT / "home" / ".chezmoiscripts" / "300_windows" / "run_after_341_terminal.py.tmpl"
-    ).read_text(encoding="utf-8-sig")
-
-    assert "NamedTemporaryFile" in script
-    assert "os.replace(temp_path, target_path)" in script
-    assert "target_dict == original_dict" in script
-    assert 'if __name__ == "__main__":' in script
+def test_windows_terminal_settings_are_managed_only_by_the_modify_script():
+    """341 (json.load で読み直して書く) は廃止した。コメント入りの settings.json で失敗し、既定設定を消すため。"""
+    assert not (ROOT / "home/.chezmoiscripts/300_windows/run_after_341_terminal.py.tmpl").exists()
+    assert not (ROOT / "config/windows/terminal.json").exists()
 
 
 def test_standalone_windows_installers_use_supported_winget_detection():

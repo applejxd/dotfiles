@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Windows Terminal の settings.json に LANG2 (VK_IME_OFF) の無効化を 1 件だけ足す。
+# Windows Terminal の settings.json に、LANG2 (VK_IME_OFF) の無効化と配色・外観 (Iceberg / Cica) を足す。
 # see docs/spec/structure.md#windows-terminal
 from __future__ import annotations
 
@@ -243,20 +243,120 @@ def update(text: str) -> tuple[str, str | None]:
     return text, None
 
 
+# 外観。profiles.defaults の次のキーだけを揃え、ほかの設定には触れない
+APPEARANCE: list[tuple[list[str], Any]] = [
+    (["profiles", "defaults", "colorScheme"], "Iceberg"),
+    (["profiles", "defaults", "font", "face"], "Cica"),
+    (["profiles", "defaults", "font", "size"], 12),
+    (["profiles", "defaults", "opacity"], 100),
+    (["profiles", "defaults", "useAcrylic"], True),
+]
+# 配色。同じ名前の scheme が既にあれば上書きしない
+SCHEME = {
+    "background": "#161821",
+    "black": "#161821",
+    "blue": "#84A0C6",
+    "brightBlack": "#6B7089",
+    "brightBlue": "#91ACD1",
+    "brightCyan": "#95C4CE",
+    "brightGreen": "#C0CA8E",
+    "brightPurple": "#ADA0D3",
+    "brightRed": "#E98989",
+    "brightWhite": "#D2D4DE",
+    "brightYellow": "#E9B189",
+    "cursorColor": "#FFFFFF",
+    "cyan": "#89B8C2",
+    "foreground": "#C6C8D1",
+    "green": "#B4BE82",
+    "name": "Iceberg",
+    "purple": "#A093C7",
+    "red": "#E27878",
+    "selectionBackground": "#FFFFFF",
+    "white": "#C6C8D1",
+    "yellow": "#E2A478",
+}
+
+
+def _set_path(text: str, path: list[str], value: Any, unit: str, newline: str) -> str:
+    """``path`` の値を ``value`` に揃える。無ければ足し、違えば値だけを置き換える。"""
+    open_pos = _skip_ws(text, 0)
+    for depth, key in enumerate(path):
+        end, members = _scan_container(text, open_pos)
+        found = None
+        for start, value_start, value_end in members:
+            if _parse(text, start, _skip_string(text, start)) == key:
+                found = (value_start, value_end)
+        if found is None:
+            nested = value
+            for inner in reversed(path[depth + 1 :]):
+                nested = {inner: nested}
+            member = f"{json.dumps(key)}: " + _dumps(nested, unit)
+            return _insert(text, open_pos, end, members, member, unit, newline)
+        value_start, value_end = found
+        if depth == len(path) - 1:
+            if _parse(text, value_start, value_end) == value:
+                return text
+            return text[:value_start] + _dumps(value, unit) + text[value_end:]
+        if text[value_start] != "{":
+            raise JsoncError(f"{key!r} is not an object")
+        open_pos = value_start
+    return text
+
+
+def update_appearance(text: str) -> str:
+    """配色と profiles.defaults の外観を揃える。コメント・書式・ほかのキーは変えない。"""
+    newline = "\r\n" if "\r\n" in text else "\n"
+    if text.strip() == "":
+        text = "{" + newline + "}" + newline
+
+    root_open = _skip_ws(text, 0)
+    if root_open >= len(text) or text[root_open] != "{":
+        raise JsoncError("top level is not an object")
+    _, members = _scan_container(text, root_open)
+    unit = (_line_indent(text, members[0][0]) if members else "") or "    "
+
+    for path, value in APPEARANCE:
+        text = _set_path(text, path, value, unit, newline)
+
+    root_open = _skip_ws(text, 0)
+    root_end, members = _scan_container(text, root_open)
+    schemes_span = None
+    for start, value_start, value_end in members:
+        if _parse(text, start, _skip_string(text, start)) == "schemes":
+            schemes_span = (value_start, value_end)
+    if schemes_span is None:
+        member = '"schemes": ' + _dumps([SCHEME], unit)
+        return _insert(text, root_open, root_end, members, member, unit, newline)
+    schemes = _parse(text, *schemes_span)
+    if not isinstance(schemes, list):
+        raise JsoncError("'schemes' is not an array")
+    if any(isinstance(s, dict) and s.get("name") == SCHEME["name"] for s in schemes):
+        return text
+    _, items = _scan_container(text, schemes_span[0])
+    return _insert(
+        text, schemes_span[0], schemes_span[1], items, _dumps(SCHEME, unit), unit, newline
+    )
+
+
 def main() -> int:
     raw = sys.stdin.buffer.read().decode("utf-8")
     bom = BOM if raw.startswith(BOM) else ""
+    body = raw[len(bom) :]
     try:
-        updated, warning = update(raw[len(bom) :])
-    except (JsoncError, ValueError) as error:
-        updated, warning = raw[len(bom) :], f"cannot parse settings.json ({error})"
-    if warning:
+        updated, warning = update(body)
+        # LANG2 を足せなくても、外観は別に揃える
+        updated = update_appearance(updated if warning is None else body)
+    except (JsoncError, ValueError, TypeError) as error:
+        updated, warning = body, f"cannot parse settings.json ({error})"
+    if warning and updated == body:
         print(
             f"warning: Windows Terminal: {warning}; left settings.json unchanged",
             file=sys.stderr,
         )
         sys.stdout.buffer.write(raw.encode("utf-8"))
         return 0
+    if warning:
+        print(f"warning: Windows Terminal: {warning}", file=sys.stderr)
     sys.stdout.buffer.write((bom + updated).encode("utf-8"))
     return 0
 

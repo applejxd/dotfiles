@@ -40,7 +40,7 @@ function Add-EnvPathEntry {
 
 # mise の activate は毎回 PATH の先頭へ追加するため、入れ子のシェルで PATH が
 # 際限なく伸びる。追加後に一度だけ重複を畳み、先頭側の優先順位だけを残す。
-# 未展開の `%VAR%` も展開する (sshd 経由。see docs/spec/structure.md#PowerShellプロファイル)
+# 未展開の `%VAR%` も展開する (sshd 経由。see docs/spec/structure.md#powershellプロファイル)
 function Remove-DuplicateEnvPathEntry {
   $seen = [System.Collections.Generic.HashSet[string]]::new(
     [System.StringComparer]::OrdinalIgnoreCase
