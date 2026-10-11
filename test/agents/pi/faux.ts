@@ -2,7 +2,7 @@
 // see docs/spec/pi-harness.md
 import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { type ExtensionAPI, getPackageDir } from "@earendil-works/pi-coding-agent";
-import { rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,7 +15,13 @@ function textOf(content: unknown): string {
 
 export default async function (pi: ExtensionAPI) {
 	// pi-ai の faux は拡張から解決できる入口に無いので、同梱の実体を直接読む
-	const fauxPath = join(getPackageDir(), "..", "pi-ai", "dist", "providers", "faux.js");
+	// 並び (mise / Unix) か、npm の global (Windows) の入れ子の並びのどちらか
+	const piAi = [
+		join(getPackageDir(), "..", "pi-ai"),
+		join(getPackageDir(), "node_modules", "@earendil-works", "pi-ai"),
+	].find((dir) => existsSync(join(dir, "dist", "providers", "faux.js")));
+	if (!piAi) throw new Error("pi-ai の faux が見つからない");
+	const fauxPath = join(piAi, "dist", "providers", "faux.js");
 	const { createFauxCore, fauxAssistantMessage, fauxText, fauxToolCall } = await import(pathToFileURL(fauxPath).href);
 	// 子エージェントとして起動されたら、子用の呼び出しを使う
 	const source = process.env.PI_HARNESS_CHILD === "1" ? process.env.FAUX_CHILD_TOOL_CALLS : process.env.FAUX_TOOL_CALLS;

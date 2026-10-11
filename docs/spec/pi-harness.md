@@ -30,6 +30,8 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
   `AGENTS.md` は読む
 - `-nbt`（`--no-builtin-tools`）: 組み込みのツールを使わない。ツールはハーネスが登録したものだけになる
 - `-ne`（`--no-extensions`）: ほかの拡張を読まない。判定の後に入力を書き換える拡張を入れないため
+  - 明示した `-e` は `-ne` でも読まれる（Orca の拡張がその例）。足した拡張のツールも判定と伏字化を通り、同名ツールの差し替えは pi が止めるが、
+    **拡張の読み込み時の処理は囲えない**。足すのは自分で書いた、または審査した拡張に限る（[実測](../research/agents/pi-extension-under-harness.md)）
 - `-e builtin:mcp`: `-ne` で外れる組み込みの MCP 対応だけを戻す。サーバはハーネスが登録する（[MCP](#mcp)）
 - ハーネス（`index.ts` と `rules.json`）が無い、または `~/.pi/agent/mcp.json` にサーバがあるときは起動しない
 - 子エージェントの印（`PI_HARNESS_CHILD`）など、外から入った内部の環境変数は外す
