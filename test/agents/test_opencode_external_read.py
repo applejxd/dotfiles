@@ -195,6 +195,7 @@ def test_wildcard_intersection_refuses_shapes_it_cannot_cross(a, b):
 
 SDD = "~/.claude/skills/sdd-docs/scripts"
 CP = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
+WEB = "~/.claude/skills/web-search/scripts/websearch.py"
 
 
 @pytest.mark.parametrize(
@@ -267,6 +268,12 @@ def test_skill_script_allow_is_not_widened_silently():
         f"python3 {CP} paths *",
         f"python3 {CP} lint *",
         f"python3 {CP} read *",
+        # web-search: 引数で決められるのはクエリ・URL・件数・--json などだけで、書き込み先や実行するものは決められない。
+        # 書くのは固定の場所 (~/.cache/websearch) の結果と休止の状態だけ。sync-keys (bw を呼ぶ) は載せない
+        f"python3 {WEB} search *",
+        f"python3 {WEB} fetch *",
+        f"python3 {WEB} papers *",
+        f"python3 {WEB} status *",
     ]
 
 

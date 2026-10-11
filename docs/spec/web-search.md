@@ -1,7 +1,7 @@
 # Web 検索（`web-search` skill）
 
 pi など、内蔵の検索ツールが無い AI CLI のための Web 検索・ページ取得・論文検索。**skill + CLI** の形で、標準ライブラリだけの Python
-（`home/dot_claude/skills/web-search/scripts/websearch.py`）を、`uv run --no-project` で呼ぶ。
+（`home/dot_claude/skills/web-search/scripts/websearch.py`）を、`python3`（Windows は `uv run --no-project`）で呼ぶ。
 入口を skill + CLI にした理由と、MCP・拡張との比較は [入口の選び方](pi-harness.md#入口の選び方)、方針は
 [ADR-0016](../adr/0016-pi-extensions-own-first.md)。
 
@@ -14,7 +14,7 @@ pi など、内蔵の検索ツールが無い AI CLI のための Web 検索・�
 | `test/test_websearch.py` | 通信なしの試験（偽の HTTP・偽の名前解決） |
 
 ```bash
-uv run --no-project ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 8] [--json] [--no-cache]
+python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 8] [--json] [--no-cache]
 … fetch "https://…" [--max-chars 20000]
 … papers "クエリ" [-n 8] [--from-year 2024]
 … status
@@ -82,8 +82,24 @@ uv run --no-project ~/.claude/skills/web-search/scripts/websearch.py search "ク
 - 試験は 49 件（`uv run --with pytest --no-project pytest test/test_websearch.py`）
 - **有料プロバイダ（Brave・Exa・Tavily）は、鍵が無く実機では未確認**。API の形は各社の公式ドキュメントで確認した（`curl` で取得）。応答の解析は、試験用の応答で確かめている
 
+## `pis` の許可規則
+
+`[pi.skill_scripts]`（`common.toml.tmpl`）に `websearch.py` を、サブコマンド `search` / `fetch` / `papers` / `status` に絞って載せた。
+**`python3 ~/.claude/skills/web-search/scripts/websearch.py <サブコマンド> …` の形だけ**が確認なしで通る。判定器（`decide.py`）で確かめた結果:
+
+| 形 | 判定 |
+| --- | --- |
+| `… search "クエリ"` / `fetch` / `papers` / `status` | allow |
+| `… sync-keys`（`bw` を呼ぶ） | ask（載せない） |
+| 引数に `$(…)`・バッククォート、`;` でつないだ別コマンド、`>` のリダイレクト、変数に入れた呼び方、別のスクリプト | ask |
+| `… search x \| sh` | deny（パイプで実行する形） |
+
+- 既存の `[pi.skill_scripts]` の仕組みを使う（runner は `python3`。`uv run --no-project` は、作業ツリーの `.python-version` の実行ファイルを起動するので runner に足さない）。
+  そのため skill の呼び方は `python3 …`（Windows の素の pi は判定器が無く、`uv run --no-project` に替える）
+- 外へ出るのはクエリだけで、秘匿チェックが止める。`fetch` の取得先は SSRF 対策で公開アドレスに限る
+- 検査は `test/agents/test_decide.py::test_web_search_script_allows_only_its_read_only_subcommands`
+
 ## 未実装・未決
 
-- `pis` の許可規則（`uv run --no-project …/websearch.py` を、サブコマンドを絞って許可する）。それまでは確認になる
 - プロバイダの順位の実測比較（Brave と Exa）
 - 入力トークン・キャッシュヒットの実測（skill の説明だけが常駐するので小さい見込み）

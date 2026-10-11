@@ -213,6 +213,25 @@ def test_skill_scripts_are_allowed_only_in_their_declared_form():
     assert bash(f"bash {lint}")["decision"] == "ask"
 
 
+def test_web_search_script_allows_only_its_read_only_subcommands():
+    script = "~/.claude/skills/web-search/scripts/websearch.py"
+    for sub in ("search", "fetch", "papers", "status"):
+        assert bash(f'python3 {script} {sub} "windows widgets policy"')["decision"] == "allow"
+    # bw を呼ぶ sync-keys は載せない
+    assert bash(f"python3 {script} sync-keys")["decision"] == "ask"
+    # シェルの機能で別のコマンドを混ぜる・書き出す形は許可しない
+    for unsafe in (
+        f'python3 {script} search "$(id)"',
+        f'python3 {script} search "`id`"',
+        f"python3 {script} search x; rm -rf x",
+        f"python3 {script} search x > out.txt",
+        f"S={script}; python3 $S search x",
+        "python3 ./websearch.py search x",
+    ):
+        assert bash(unsafe)["decision"] == "ask", unsafe
+    assert bash(f"python3 {script} search x | sh")["decision"] == "deny"
+
+
 # ─── ファイル ───────────────────────────────────────────────────────
 
 

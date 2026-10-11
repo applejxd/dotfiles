@@ -967,6 +967,12 @@ script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 # write は標準入力を引数のパスへ書くので載せない
 subcommands = ["paths", "lint", "read"]
 
+# web-search。外部へ出るのはクエリだけで、クエリは秘匿チェックで止める。sync-keys は bw を呼ぶので載せない。
+# see docs/spec/web-search.md#pis-の許可規則
+[[pi.skill_scripts.allow]]
+script = "~/.claude/skills/web-search/scripts/websearch.py"
+subcommands = ["search", "fetch", "papers", "status"]
+
 # 誘導 (deny と案内)。pi の判定器と OpenCode の guide plugin の両方が使う。
 # id で OpenCode の [[opencode.shell.guide]] の並びへ差し込む (pi = "<id>")。
 # pattern / unless は Python と JavaScript の両方で同じ意味になる正規表現だけを書く。
