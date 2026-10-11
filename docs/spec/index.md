@@ -31,6 +31,7 @@
 | [コマンド・ファイルの判定](agent-command-policy.md) | 照合規則、allow / ask / deny の使い分けと例外、bash 検査ルールの足し方、CLI 差 |
 | [判定 API（`decide`）](pi-decide.md) | pi のハーネスが呼ぶ CLI 非依存の判定器。入力と応答、`source`、評価の順番、役割（`[pi.profiles]`）、`check_bash.py` との等価の試験 |
 | [pi のハーネス](pi-harness.md) | pi の拡張でツールを判定 API に通す仕組み。起動の形、別名のツール、`execute()` での最終の判定、確認の順番、伏字化、pi の内部の挙動に頼る点、試験 |
+| [Web 検索（web-search skill）](web-search.md) | skill + CLI の Web 検索・ページ取得・論文検索。検索の鎖（Brave → Exa → Tavily → DuckDuckGo）と次へ回す条件、鍵、クエリの秘匿チェックと取得の SSRF 対策、実測、未実装 |
 | [sandbox (Claude Code / Copilot CLI)](agent-sandbox.md) | sandbox 層・ネットワーク層・seccomp、マシン固有の許可 (`local.toml`) |
 | [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) | `ocs` の構成、起動順序、Fence の境界の組み立て規則、DB の共有、起動前の退避、境界チェック（`ocs --check`） |
 | [文脈の引き継ぎ](checkpoint.md) | 圧縮を跨いで作業文脈を保つ checkpoint の保存先・記録の形・plugin・失敗時の動作 |
