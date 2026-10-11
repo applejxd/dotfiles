@@ -987,6 +987,30 @@ Windows 11 は、スクリプトから既定のアプリを設定させない（
   この機の 7-Zip は ProgID も `RegisteredApplications` も登録しないため、選ぶ手段が無く、事実上効いていなかった
 - 登録内容は 2 回目の実行で変化しない（値が揃っていれば何もしない）ことを実機で確かめた。設定画面に実際に出るかは、あなたの目視が要る（未確認）
 
+## 広告と推奨の抑止
+
+Windows 11 の広告・推奨・おすすめ表示を止める。HKCU の値は `320_regkey/run_after_324_suggestions.ps1` が**毎回の apply**で当てる
+（機能更新で戻されることがあるため。値が 0 のものは書かないので軽い）。
+
+| 対象 | 設定（いずれも 0） |
+| --- | --- |
+| ロック画面・設定・スタートの提案、アプリの自動導入 | `ContentDeliveryManager` の `SubscribedContent-*Enabled`、`SystemPaneSuggestionsEnabled`、`SilentInstalledAppsEnabled`、`PreInstalledAppsEnabled` など 18 個 |
+| スタートのおすすめ・アカウント通知、OneDrive の案内 | `Explorer\Advanced` の `Start_IrisRecommendations`、`Start_AccountNotifications`、`ShowSyncProviderNotifications` |
+| 検索ボックスのハイライト | `SearchSettings\IsDynamicSearchBoxEnabled` |
+| 「デバイスの設定を完了しましょう」 | `UserProfileEngagement\ScoobeSystemSettingEnabled` |
+| 診断データに基づくおすすめ・広告 ID | `Privacy\TailoredExperiencesWithDiagnosticDataEnabled`、`AdvertisingInfo\Enabled` |
+| 言語リストの公開（1 = 拒否） | `Control Panel\International\User Profile\HttpAcceptLanguageOptOut` |
+
+- Windows が書き込みを拒む値は、警告して残りを続ける
+- **タスクバーの天気（ウィジェット）は、自動で止められない。** 次の 2 つを試し、どちらも拒否された（2026-10-11 実測、ビルド 26300）
+  - `HKCU\...\Explorer\Advanced\TaskbarDa = 0`: 「許可されていない操作」で拒否される（保護されたキー）
+  - `HKLM\SOFTWARE\Policies\Microsoft\Dsh\AllowNewsAndInterests = 0`（`309_admin` から管理者で）: 昇格した状態でも同じエラーで拒否され、apply が失敗した。
+    キーは既に存在し、値は無い。原因（ACL・保護）は未特定
+  - 手動: タスクバーを右クリック → タスクバーの設定 → ウィジェットをオフにする（一度だけ。設定は残る）
+  - 候補（未実施）: `MicrosoftWindows.Client.WebExperience` パッケージの削除（Windows の更新で戻る可能性があり、システムのコンポーネントを消すため、判断が要る）
+- 実機の確認: HKCU の値は 2 回の実行で書き込まれ、警告は出なかった（保護されたキーは無かった）
+- 抑止しないもの: タスクビューボタン、タスクバーの検索ボックスの形、Copilot のボタン（好みで決める）
+
 ## シェルの既定値
 
 `300_windows/320_regkey/run_once_after_323_shell_defaults.ps1` が、`HKCU` に次の 2 つを設定する（管理者権限は要らない）。

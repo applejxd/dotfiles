@@ -17,7 +17,7 @@
 | 1 | 7-Zip の関連付けが効かない（`.zip` の `UserChoice` が `CompressedFolder` のまま。実機で確認） | 既定アプリの一覧に出る形（ProgID + `Capabilities`）で登録し、設定で一度選んでもらう。実機の設定画面での表示が未確認 | 進行中 |
 | 2 | `341` が JSONC に弱く、`profiles.defaults` 全体を置き換える | LANG2 の `modify_` に統合し（JSONC のまま、管理するキーだけ更新）、341 と `config/windows/terminal.json` を廃止した | 完了 |
 | 3 | 新しいマシンで `ExecutionPolicy` を手で設定する必要がある（README の手順のみ）。Terminal が既定のターミナルアプリでない | `ExecutionPolicy`（5.1、CurrentUser = RemoteSigned）と既定のターミナルアプリを `323_shell_defaults` で自動設定する | 完了 |
-| 4 | 広告・推奨・タスクバーの天気（ウィジェット）が邪魔 | レジストリ / ポリシーで抑止する。Windows 11 では `HKCU` への直接書き込みが拒否される項目があるため、実機で通るか確かめる | 未着手 |
+| 4 | 広告・推奨・タスクバーの天気（ウィジェット）が邪魔 | 広告・推奨は `324_suggestions`（毎回）で止めた。ウィジェットは HKCU の `TaskbarDa` も HKLM のポリシー（昇格しても）も書き込みを拒否され、自動化できない（手動でオフにする） | 一部完了 |
 | 5 | scoop の `gow` が古い | `uutils-coreutils` などへの置き換えを検討する | 未着手 |
 | 6 | sudo | scoop 版と Windows 標準の `sudo.exe` の使い分けを決める | 未着手 |
 | 7 | 電源設定を適用後に読み取って確認できない | `powercfg /q` で検査する | 未着手 |
@@ -34,5 +34,5 @@
 
 ## 未解決点
 
-- 段 4 のレジストリが、ビルド 26300 で `HKCU` から書き込めるか（User Choice Protection Driver が、一部の Explorer 設定の書き込みを拒否する）
+- 段 4: ウィジェットの `Dsh` ポリシーが昇格しても書けない原因（ACL・保護）。`WebExperience` パッケージの削除を採るか
 - 段 6 の `sudo` の導入形式の比較（Windows 標準、scoop、winget）

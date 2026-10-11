@@ -664,3 +664,18 @@ def test_shell_defaults_set_execution_policy_and_default_terminal_in_hkcu_only()
     # HKLM への書き込みは無い
     assert "New-ItemProperty -LiteralPath $Key" in script
     assert "Set-RegistryString HKLM" not in script
+
+
+def test_suggestions_are_turned_off_every_apply():
+    hkcu = (ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_after_324_suggestions.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    # 更新で戻されるので毎回当てる。値が 0 なら何もしない。書けない値は警告して続ける
+    assert "SubscribedContent-338389Enabled" in hkcu and "SystemPaneSuggestionsEnabled" in hkcu
+    assert "Start_IrisRecommendations" in hkcu and "ShowSyncProviderNotifications" in hkcu
+    assert "if ($current -eq 0) { continue }" in hkcu
+    assert "Windows refused to write" in hkcu
+    # ウィジェットは HKCU (TaskbarDa) も HKLM のポリシーも書けなかったので、自動化しない
+    assert "TaskbarDa" not in hkcu.replace("(weather)", "")
+    assert "AllowNewsAndInterests" not in ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
