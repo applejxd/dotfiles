@@ -120,7 +120,14 @@ E5 と同じ試験の仕組み。`rules.json` の `mcp` に、既存の `mcp_ser
 - `pis` で MCP を使うなら、`exposure = "direct"` が要る。すると MCP のツール定義が常駐し、コンテキストとキャッシュの面では
   拡張のツールと同じ扱いになる（E5 の +36 トークンの見積もり）
 - `codemode` で絞る案は、**`pis` では今のところ成り立たない**。素の `pi`（Windows・Orca・Zed）では、組み込みのツールがあるので成り立つ見込み（未実測）
-- ハーネスが `codemode` を登録し、判定器が `codemode` を許す形にすれば成り立つ可能性はある（E3 は `codemode` の中の呼び出しが判定を通ることを観測している）。要検討
+- **原因は、`-ne` が組み込みの拡張も無効にすること。** 組み込みの拡張は `builtin:mcp`・`builtin:llama.cpp`・`builtin:codemode`・`builtin:tool-search` の名前を持つ
+  （pi の `settings.md`）。`pis` は `builtin:mcp` だけを戻しているので、`codemode` と `tool_search` が無い
+- **直し方は 2 つあり、どちらも実測で成り立った。**
+  - `exposure = "direct"`: ツールが宣言される。入力トークンは 2226 → 2263（+37、1 ツール、偽のモデルの見積もり）
+  - `-e builtin:codemode` を `pis` の起動に足し、`codemode` を役割の `tools` に足す: `codemode` が宣言され、スクリプトから MCP のツールを呼べた
+    （bypass で実行。UI の無い起動では `codemode` 自体が既定の確認になり拒否）。入力トークンは 2226 → **2906（+680）**。`codemode` の説明が大きい
+- したがって、**小さい MCP を 1 つ使うだけなら `direct` のほうが常駐のコストが小さい**。`codemode` が得になるのは、ツールが多い・結果が大きい・並列に呼びたいとき
+- `codemode` の中の MCP の呼び出しは、1 件ずつ判定を通る（E3）。`codemode` 自体の呼び出しも判定されるので、確認なしで通すなら規則が要る
 
 ### 次の問い
 
