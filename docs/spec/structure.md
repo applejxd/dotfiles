@@ -1002,12 +1002,22 @@ Windows 11 の広告・推奨・おすすめ表示を止める。HKCU の値は 
 | 言語リストの公開（1 = 拒否） | `Control Panel\International\User Profile\HttpAcceptLanguageOptOut` |
 
 - Windows が書き込みを拒む値は、警告して残りを続ける
-- **タスクバーの天気（ウィジェット）は、自動で止められない。** 次の 2 つを試し、どちらも拒否された（2026-10-11 実測、ビルド 26300）
-  - `HKCU\...\Explorer\Advanced\TaskbarDa = 0`: 「許可されていない操作」で拒否される（保護されたキー）
-  - `HKLM\SOFTWARE\Policies\Microsoft\Dsh\AllowNewsAndInterests = 0`（`309_admin` から管理者で）: 昇格した状態でも同じエラーで拒否され、apply が失敗した。
-    キーは既に存在し、値は無い。原因（ACL・保護）は未特定
-  - 手動: タスクバーを右クリック → タスクバーの設定 → ウィジェットをオフにする（一度だけ。設定は残る）
-  - 候補（未実施）: `MicrosoftWindows.Client.WebExperience` パッケージの削除（Windows の更新で戻る可能性があり、システムのコンポーネントを消すため、判断が要る）
+- **タスクバーの天気（ウィジェット）は、レジストリを直接書いても止められない。自動化もしない（手動）。** 実測（2026-10-11、ビルド 26300）:
+  - 対象の値は 2 つで、どちらも保護されており、次の書き込みがすべて拒否された:
+    `HKCU\...\Explorer\Advanced\TaskbarDa`（通常権限）と `HKLM\SOFTWARE\Policies\Microsoft\Dsh\AllowNewsAndInterests`（管理者・SYSTEM）
+  - 試した方法: `Set-ItemProperty` / `New-ItemProperty`、.NET の `Registry.SetValue`、`reg add`、`reg import`、**SYSTEM のスケジュールタスクでの `reg add`**
+    （HKCU は昇格なしで 4 方法、HKLM は管理者で 4 方法 + SYSTEM タスク。すべて「アクセスが拒否されました」）
+  - `Dsh` キー自体の ACL は普通（Administrators に FullControl）で、別名の値は書ける。**値名に対する保護**と見られる（公式資料に記載は無く、推測）
+  - **ローカルグループポリシー経由なら書ける（実測）。** `gpsvc`（ポリシーを適用する SYSTEM のサービス）が書くため。
+    `AllowNewsAndInterests` は Policy CSP の公式ポリシー（Pro・Windows 11 21H2 以降。値 0 でタスクバーを含むウィジェット全体を無効。
+    [Policy CSP - NewsAndInterests](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-newsandinterests)）
+  - **自動化しない理由:** 309（昇格子）に外部の `.exe`（LGPO）の取得と実行を足す必要があり、保守（配布物のハッシュ）と攻撃面が増えるのに対し、効果は 1 設定の一度きりだから
+  - **手動の手順（新しい機で 1 回）:** タスクバーを右クリック → タスクバーの設定 → ウィジェットをオフにする。
+    または、管理者の PowerShell で LGPO（`winget install Microsoft.SecurityComplianceToolkit.LGPO`）を使う:
+    `Set-Content widgets.txt -Encoding ASCII -Value 'Computer','SOFTWARE\Policies\Microsoft\Dsh','AllowNewsAndInterests','DWORD:0',''`、
+    `LGPO /t widgets.txt`、`gpupdate /target:computer /force`（戻すときは `DWORD:0` を `DELETE` にして同じ手順）。**全アカウントに効く**
+  - 自動化するなら（未実施の設計）: 昇格子が `LGPO.zip`（`download.microsoft.com/download/8/5/c/85c25433-a1b0-4ffa-9429-7e023e7da8d8/LGPO.zip`、SHA-256 `cb7159d1…cc55`、
+    Authenticode は Microsoft で有効）を管理者だけが書ける場所へ取得・検証して実行し、入力は固定内容にする。ユーザーが書ける場所の `.exe` は実行しない
 - 実機の確認: HKCU の値は 2 回の実行で書き込まれ、警告は出なかった（保護されたキーは無かった）
 - 抑止しないもの: タスクビューボタン、タスクバーの検索ボックスの形、Copilot のボタン（好みで決める）
 

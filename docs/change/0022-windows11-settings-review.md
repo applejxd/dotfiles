@@ -17,7 +17,7 @@
 | 1 | 7-Zip の関連付けが効かない（`.zip` の `UserChoice` が `CompressedFolder` のまま。実機で確認） | 既定アプリの一覧に出る形（ProgID + `Capabilities`）で登録し、設定で一度選んでもらう。実機の設定画面での表示が未確認 | 進行中 |
 | 2 | `341` が JSONC に弱く、`profiles.defaults` 全体を置き換える | LANG2 の `modify_` に統合し（JSONC のまま、管理するキーだけ更新）、341 と `config/windows/terminal.json` を廃止した | 完了 |
 | 3 | 新しいマシンで `ExecutionPolicy` を手で設定する必要がある（README の手順のみ）。Terminal が既定のターミナルアプリでない | `ExecutionPolicy`（5.1、CurrentUser = RemoteSigned）と既定のターミナルアプリを `323_shell_defaults` で自動設定する | 完了 |
-| 4 | 広告・推奨・タスクバーの天気（ウィジェット）が邪魔 | 広告・推奨は `324_suggestions`（毎回）で止めた。ウィジェットは HKCU の `TaskbarDa` も HKLM のポリシー（昇格しても）も書き込みを拒否され、自動化できない（手動でオフにする） | 一部完了 |
+| 4 | 広告・推奨・タスクバーの天気（ウィジェット）が邪魔 | 広告・推奨は `324_suggestions`（毎回）で止めた。ウィジェットはレジストリの直接書き込みが全方式で拒否される（保護された値）。ローカル GPO 経由なら止められ、この機は適用済みだが、自動化は見送り（手動の手順を docs に記録） | 完了（ウィジェットは見送り） |
 | 5 | scoop の `gow` が古い | `uutils-coreutils` などへの置き換えを検討する | 未着手 |
 | 6 | sudo | scoop 版と Windows 標準の `sudo.exe` の使い分けを決める | 未着手 |
 | 7 | 電源設定を適用後に読み取って確認できない | `powercfg /q` で検査する | 未着手 |
@@ -34,5 +34,5 @@
 
 ## 未解決点
 
-- 段 4: ウィジェットの `Dsh` ポリシーが昇格しても書けない原因（ACL・保護）。`WebExperience` パッケージの削除を採るか
+- 段 4: 新しい機でウィジェットを止める手間が増えたら、LGPO を使った自動化（`structure.md` の設計）を再検討する
 - 段 6 の `sudo` の導入形式の比較（Windows 標準、scoop、winget）
