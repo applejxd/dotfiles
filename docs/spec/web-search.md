@@ -55,7 +55,14 @@ uv run --no-project ~/.claude/skills/web-search/scripts/websearch.py search "ク
 
 - Bitwarden の項目は **Login 種別**、項目名は `websearch-brave` / `websearch-exa` / `websearch-tavily` / `websearch-openalex`、鍵は **Password 欄**
 - 鍵は出力・例外・ログに出さない（`status` は有無だけ、`--json` にも入れない。試験で確かめている）
-- 鍵ファイルの展開（`chezmoi apply` が Bitwarden から mode 600 で作る）は**未実装**。それまでは環境変数か `bw`（`BW_SESSION` つき）で使う
+- **鍵ファイルの作成**: `chezmoi apply` が、`applejxd` の機械で、`BW_SESSION` があるときだけ `websearch.py sync-keys` を呼ぶ
+  （`400_unix/run_after_441_websearch_keys.sh.tmpl`、`300_windows/run_after_349_websearch_keys.ps1.tmpl`）。Bitwarden の各項目を `bw get password` で引き、
+  `~/.config/agents/websearch-keys.json` に書く（POSIX は mode 600、Windows はプロファイルの ACL）。
+  - **既にある値は残す**。取れた名前だけ足す（項目が無い名前は飛ばす。無ければファイルも作らない）。取り直すときは `DOTFILES_RESYNC_WEBSEARCH_KEYS=1`（`--force`）
+  - `BW_SESSION`・`bw`・`uv` が無いときは何もせず 0 で終わる（`apply` を止めない・入力待ちにしない）。`chezmoi` のテンプレート関数 `bitwarden` は使わない
+    （項目が無いと apply が止まり、`.chezmoiignore` の「一度だけ展開」の仕組みが Windows の `agents` 配下では使いにくいため）
+  - `bw` は解決したパスで呼ぶ（Windows の npm 版は `bw.cmd`）。出力は ASCII の 1 行（鍵は出さない）
+  - 実測: Windows で、偽の `bw.cmd` を使い、1 回目に 2 件追加、2 回目は取れていない 2 件だけを引き、`--force` で 4 件すべてを引き直すことを確認した。実際の Bitwarden は未確認
 
 ## 安全策
 
@@ -77,7 +84,6 @@ uv run --no-project ~/.claude/skills/web-search/scripts/websearch.py search "ク
 
 ## 未実装・未決
 
-- 鍵ファイルの展開（Bitwarden → `~/.config/agents/websearch-keys.json`）
 - `pis` の許可規則（`uv run --no-project …/websearch.py` を、サブコマンドを絞って許可する）。それまでは確認になる
 - プロバイダの順位の実測比較（Brave と Exa）
 - 入力トークン・キャッシュヒットの実測（skill の説明だけが常駐するので小さい見込み）

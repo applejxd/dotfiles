@@ -105,10 +105,11 @@ def get_key(
             return value.strip()
     except (OSError, ValueError):
         pass
-    if env.get("BW_SESSION") and shutil.which("bw"):
+    bw = shutil.which("bw")  # Windows では bw.cmd (npm 版) のこともあるので、解決したパスで呼ぶ
+    if env.get("BW_SESSION") and bw:
         try:
             proc = run(
-                ["bw", "get", "password", BW_ITEM.format(name), "--nointeraction"],
+                [bw, "get", "password", BW_ITEM.format(name), "--nointeraction"],
                 capture_output=True,
                 text=True,
                 timeout=20,
@@ -684,6 +685,64 @@ def fetch_page(
     raise Blocked("リダイレクトが多すぎる")
 
 
+# ─── 鍵ファイルの作成 (Bitwarden → ~/.config/agents/websearch-keys.json) ────────
+
+KEY_NAMES = ("brave", "exa", "tavily", "openalex")
+
+
+def sync_keys(
+    env: dict[str, str] | None = None,
+    run: Callable[..., Any] = subprocess.run,
+    keys_file: Path | None = None,
+    force: bool = False,
+) -> tuple[list[str], list[str]]:
+    """Bitwarden の Login 項目 (websearch-<名前>) の Password を鍵ファイルへ書く。(追加した名前, 取れなかった名前) を返す。
+
+    既存の値は、force でなければ残す。bw が無い・ロック中・項目が無いときは、その名前を飛ばす (例外にしない)。
+    鍵は標準出力にも例外にも出さない。ファイルは所有者だけが読み書きできる (POSIX は mode 600)。
+    """
+    env = dict(os.environ) if env is None else env
+    path = keys_file or config_dir(env) / "websearch-keys.json"
+    try:
+        current = json.loads(path.read_text(encoding="utf-8"))
+        current = current if isinstance(current, dict) else {}
+    except (OSError, ValueError):
+        current = {}
+    added: list[str] = []
+    missing: list[str] = []
+    bw = shutil.which("bw")
+    if not env.get("BW_SESSION") or not bw:
+        return added, [n for n in KEY_NAMES if force or not current.get(n)]
+    for name in KEY_NAMES:
+        if current.get(name) and not force:
+            continue
+        try:
+            proc = run(
+                [bw, "get", "password", BW_ITEM.format(name), "--nointeraction"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=env,
+            )
+        except (OSError, subprocess.SubprocessError):
+            missing.append(name)
+            continue
+        value = proc.stdout.strip() if proc.returncode == 0 else ""
+        if value:
+            current[name] = value
+            added.append(name)
+        else:
+            missing.append(name)
+    if added:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(current, handle)
+        os.replace(tmp, path)
+    return added, missing
+
+
 # ─── 出力 ────────────────────────────────────────────────────────────────
 
 
@@ -800,6 +859,13 @@ def cmd_status(args: argparse.Namespace, deps: dict[str, Any]) -> int:
     return 0
 
 
+def cmd_sync_keys(args: argparse.Namespace, deps: dict[str, Any]) -> int:
+    added, missing = sync_keys(force=args.force, run=deps.get("run", subprocess.run), keys_file=deps.get("keys_file"))
+    # PowerShell のコンソール (cp932) でも崩れないよう ASCII で出す。鍵は表示しない
+    print(f"websearch-keys: added={added or 'none'} missing={missing or 'none'}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="websearch", description="Web 検索・取得・論文検索")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -818,6 +884,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--from-year", type=int)
     p.add_argument("--json", action="store_true")
     sub.add_parser("status", help="鍵の有無と休止中のプロバイダを表示する")
+    k = sub.add_parser("sync-keys", help="Bitwarden (websearch-<名前>) から鍵ファイルを作る (BW_SESSION が要る)")
+    k.add_argument("--force", action="store_true", help="既にある値も取り直す")
     return parser
 
 
@@ -840,7 +908,13 @@ def main(argv: list[str] | None = None, deps: dict[str, Any] | None = None) -> i
         "transport": default_transport,
     }
     base.update(deps or {})
-    handlers = {"search": cmd_search, "fetch": cmd_fetch, "papers": cmd_papers, "status": cmd_status}
+    handlers = {
+        "search": cmd_search,
+        "fetch": cmd_fetch,
+        "papers": cmd_papers,
+        "status": cmd_status,
+        "sync-keys": cmd_sync_keys,
+    }
     return handlers[args.command](args, base)
 
 

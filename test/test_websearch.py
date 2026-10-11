@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import socket
 import sys
 from pathlib import Path
@@ -200,7 +201,7 @@ def test_keys_come_from_env_then_file_then_bw(tmp_path, monkeypatch):
     assert ws.get_key("brave", env, keys_file, fake_run) == "from-env"
     assert ws.get_key("exa", env, keys_file, fake_run) == "file-exa"
     assert ws.get_key("tavily", env, keys_file, fake_run) == "from-bw"
-    assert calls == [["bw", "get", "password", "websearch-tavily", "--nointeraction"]]
+    assert calls == [["/bin/bw", "get", "password", "websearch-tavily", "--nointeraction"]]
     assert ws.get_key("tavily", {}, keys_file, fake_run) is None  # BW_SESSION が無ければ bw を呼ばない
     assert len(calls) == 1
 
@@ -422,3 +423,105 @@ def test_status_never_prints_a_key(tmp_path, capsys):
 
     assert "brave: 鍵あり" in out and "duckduckgo: 鍵なし (使う)" in out
     assert not any(v in out for v in KEYS.values())
+
+
+# ─── 鍵ファイルの作成 (sync-keys) ───────────────────────────────────
+
+
+class FakeBw:
+    def __init__(self, items):
+        self.items = items
+        self.calls = []
+
+    def __call__(self, cmd, **kw):
+        self.calls.append(cmd)
+        name = cmd[3]
+        value = self.items.get(name)
+
+        class P:
+            returncode = 0 if value else 1
+            stdout = (value or "") + "\n"
+
+        return P()
+
+
+@pytest.fixture
+def bw_ready(monkeypatch):
+    monkeypatch.setattr(ws.shutil, "which", lambda name: "/bin/bw")
+    return {"BW_SESSION": "s"}
+
+
+def test_sync_keys_writes_the_available_items_and_reports_the_rest(tmp_path, bw_ready, capsys):
+    keys = tmp_path / "websearch-keys.json"
+    bw = FakeBw({"websearch-brave": "secret-brave", "websearch-exa": "secret-exa"})
+    added, missing = ws.sync_keys(bw_ready, bw, keys)
+
+    assert added == ["brave", "exa"] and missing == ["tavily", "openalex"]
+    assert json.loads(keys.read_text(encoding="utf-8")) == {"brave": "secret-brave", "exa": "secret-exa"}
+    if ws.os.name != "nt":
+        assert keys.stat().st_mode & 0o777 == 0o600
+
+
+def test_sync_keys_keeps_existing_values_unless_forced(tmp_path, bw_ready):
+    keys = tmp_path / "websearch-keys.json"
+    keys.write_text(json.dumps({"brave": "old"}), encoding="utf-8")
+    bw = FakeBw({"websearch-brave": "new", "websearch-exa": "e"})
+
+    ws.sync_keys(bw_ready, bw, keys)
+    assert json.loads(keys.read_text(encoding="utf-8")) == {"brave": "old", "exa": "e"}
+    assert ["/bin/bw", "get", "password", "websearch-brave", "--nointeraction"] not in bw.calls  # 既にあれば bw を引かない
+
+    ws.sync_keys(bw_ready, bw, keys, force=True)
+    assert json.loads(keys.read_text(encoding="utf-8"))["brave"] == "new"
+
+
+def test_sync_keys_without_a_session_or_bw_does_nothing(tmp_path, monkeypatch):
+    keys = tmp_path / "websearch-keys.json"
+    bw = FakeBw({"websearch-brave": "x"})
+    monkeypatch.setattr(ws.shutil, "which", lambda name: "/bin/bw")
+    assert ws.sync_keys({}, bw, keys)[0] == []  # BW_SESSION なし
+    monkeypatch.setattr(ws.shutil, "which", lambda name: None)
+    assert ws.sync_keys({"BW_SESSION": "s"}, bw, keys)[0] == []  # bw なし
+    assert bw.calls == [] and not keys.exists()
+
+
+def test_sync_keys_creates_no_file_when_nothing_was_found(tmp_path, bw_ready):
+    keys = tmp_path / "websearch-keys.json"
+    assert ws.sync_keys(bw_ready, FakeBw({}), keys) == ([], list(ws.KEY_NAMES))
+    assert not keys.exists()
+
+
+def test_sync_keys_command_never_prints_a_key(tmp_path, bw_ready, monkeypatch, capsys):
+    keys = tmp_path / "websearch-keys.json"
+    bw = FakeBw({"websearch-brave": "top-secret-value"})
+    monkeypatch.setenv("BW_SESSION", "s")
+    assert ws.main(["sync-keys"], {"run": bw, "keys_file": keys, "cache_dir": tmp_path}) == 0
+    out = capsys.readouterr()
+
+    assert "top-secret-value" not in out.out + out.err and "added=['brave']" in out.out
+    assert json.loads(keys.read_text(encoding="utf-8"))["brave"] == "top-secret-value"
+
+
+# ─── chezmoi のスクリプト (鍵ファイルの作成) ───────────────────────────
+
+UNIX_KEYS_SCRIPT = ROOT / "home/.chezmoiscripts/400_unix/run_after_441_websearch_keys.sh.tmpl"
+WINDOWS_KEYS_SCRIPT = ROOT / "home/.chezmoiscripts/300_windows/run_after_349_websearch_keys.ps1.tmpl"
+
+
+@pytest.mark.parametrize("path", [UNIX_KEYS_SCRIPT, WINDOWS_KEYS_SCRIPT])
+def test_key_scripts_are_personal_and_never_stop_apply(path):
+    text = path.read_text(encoding="utf-8-sig")
+    backslash = chr(92)
+
+    assert "(^|" + backslash * 4 + ")applejxd$" in text  # applejxd の機械だけ (chezmoi のテンプレートでは \ を 4 つ書く)
+    assert "BW_SESSION" in text and "sync-keys" in text
+    assert "DOTFILES_RESYNC_WEBSEARCH_KEYS" in text
+    # 認証を求めて apply を入力待ちにしない (コメントの手順以外に bw unlock を実行しない)。失敗しても 0 で終わる
+    assert not [line for line in text.splitlines() if re.match(r"\s*(bw unlock|& bw|\$env:BW_SESSION\s*=)", line)]
+    assert "skip" in text.lower()
+    # 鍵そのものを書き出す処理が無い (書くのは websearch.py だけ)
+    assert "Set-Content" not in text and "Out-File" not in text and "bw get" not in text
+
+
+def test_windows_key_script_is_saved_with_a_bom():
+    assert WINDOWS_KEYS_SCRIPT.read_bytes().startswith(b"\xef\xbb\xbf")

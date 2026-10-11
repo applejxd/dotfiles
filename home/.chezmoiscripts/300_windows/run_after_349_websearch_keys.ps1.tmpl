@@ -1,0 +1,30 @@
+﻿{{- /*
+  Bitwarden の Login 項目 websearch-<名前> から、web-search skill の鍵ファイル (~/.config/agents/websearch-keys.json) を作る。
+  applejxd の機械だけ。BW_SESSION が無い・bw / uv が無い・項目が無いときは何もせず 0 で終わる (apply を止めない)。
+  鍵は出力に出さない。既にある値は残す。取り直すときは DOTFILES_RESYNC_WEBSEARCH_KEYS=1。
+  Unix 版: .chezmoiscripts/400_unix/run_after_441_websearch_keys.sh.tmpl
+  see docs/spec/web-search.md#鍵
+*/ -}}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+function Skip {
+  param([string]$Reason)
+  Write-Host "websearch-keys: $Reason (skip)"
+  exit 0
+}
+
+$script = Join-Path $HOME '.claude\skills\web-search\scripts\websearch.py'
+if (-not (Test-Path -LiteralPath $script -PathType Leaf)) { Skip 'websearch.py が無い' }
+if (-not (Get-Command bw -ErrorAction Ignore)) { Skip 'bw が無い' }
+if (-not (Get-Command uv -ErrorAction Ignore)) { Skip 'uv が無い' }
+# 認証は求めない (apply を入力待ちにしない)。有効にするには:
+#   $env:BW_SESSION = (bw unlock --raw); chezmoi apply
+if (-not $env:BW_SESSION) { Skip 'BW_SESSION が無い (bw unlock 済みの環境で apply すると鍵ファイルを作る)' }
+
+$arguments = @('run', '--no-project', $script, 'sync-keys')
+if ($env:DOTFILES_RESYNC_WEBSEARCH_KEYS -eq '1') { $arguments += '--force' }
+& uv @arguments
+if ($LASTEXITCODE -ne 0) { Skip '鍵ファイルを作れなかった' }
+{{- end }}
