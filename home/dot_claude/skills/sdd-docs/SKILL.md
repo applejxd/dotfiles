@@ -37,6 +37,10 @@ allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 `/sdd-docs` のように、**スキル名だけで、具体的な依頼（「ADR を作って」など）が無い**ときの動作。
 状態を機械で調べ、その結果で動作が決まる（先に調べずに書き始めない）。
 
+**実行前に OS を確かめ、インタプリタを選ぶ。** 以下のコマンド例は `python3` で書いてある。
+Windows（`$OS` が `Windows_NT`・パスが `C:\` 始まりなど）では `python3` が使えないので、
+`py -3 -X utf8` に読み替える（Linux / macOS / WSL はそのまま `python3`）。
+
 ```bash
 python3 ~/.claude/skills/sdd-docs/scripts/docs_state.py status
 ```
