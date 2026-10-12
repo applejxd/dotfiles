@@ -1090,10 +1090,10 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 
 | 階層 | 用途 | Copilot | Bedrock |
 | --- | --- | --- | --- |
-| `default` | 主エージェントの既定 | `claude-opus-5.5` | `us.anthropic.claude-sonnet-5-5` |
+| `default` | 主エージェントの既定 | `claude-sonnet-5.5` | `us.anthropic.claude-sonnet-5-5` |
 | `routine` | 決まった形の短い作業 | `claude-sonnet-5.5#medium` | `us.anthropic.claude-sonnet-5-5#low` |
 | `worker` | 実装などを任せる作業役 | `claude-sonnet-5.5#medium` | `us.anthropic.claude-sonnet-5-5#medium` |
-| `deep` | 難しい判断・設計 | `claude-opus-5.5#xhigh` | `us.anthropic.claude-opus-5-5#high` |
+| `deep` | 難しい判断・設計 | `claude-sonnet-5.5#high` | `us.anthropic.claude-opus-5-5#high` |
 | `second_opinion` | 別系統のモデルでの確かめ | `gpt-6-astra` | `us.openai.gpt-6-sol` |
 
 割り当て（`[opencode.model.agents]`）は `commit = "routine"`・`review = "second_opinion"`・

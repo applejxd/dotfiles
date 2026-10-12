@@ -90,7 +90,7 @@ def test_common_toml_carries_the_detected_provider():
 
 
 def test_default_model_on_each_provider():
-    assert generated(PERSONAL)["model"] == "github-copilot/claude-opus-5.5"
+    assert generated(PERSONAL)["model"] == "github-copilot/claude-sonnet-5.5"
     assert generated(WORK)["model"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5"
 
 
@@ -100,7 +100,7 @@ TIER_NAMES = {"default", "routine", "worker", "deep", "second_opinion"}
 def test_copilot_tiers_pick_effort_by_variant():
     tiers = PERSONAL["opencode"]["model"]["tier"]["github-copilot"]
     assert tiers["worker"] == "claude-sonnet-5.5#medium"
-    assert tiers["deep"] == "claude-opus-5.5#xhigh"
+    assert tiers["deep"] == "claude-sonnet-5.5#high"
     assert tiers["second_opinion"] == "gpt-6-astra"
 
 
