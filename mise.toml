@@ -21,6 +21,10 @@ run = "bash test/test.sh"
 description = "隔離環境で opencode を実行する（実 DB を汚さない）"
 run = "./scripts/opencode_probe.sh"
 
+[tasks."websearch:keys"]
+description = "web-search の API キーを Bitwarden から取り直す（BW_SESSION が無ければ bw unlock を求める）"
+run = "uv run --no-project {{ get_env(name='USERPROFILE', default=env.HOME) }}/.claude/skills/web-search/scripts/websearch.py sync-keys --force --unlock"
+
 [tasks.dotfiles-update]
 description = "Update zinit itself and all zinit-managed plugins (run after `chezmoi update` on other PCs)"
 run = [

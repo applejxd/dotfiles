@@ -429,20 +429,35 @@ def test_status_never_prints_a_key(tmp_path, capsys):
 
 
 class FakeBw:
-    def __init__(self, items):
+    def __init__(self, items, session="fake-session"):
         self.items = items
+        self.session = session
         self.calls = []
+        self.envs = []
 
     def __call__(self, cmd, **kw):
         self.calls.append(cmd)
-        name = cmd[3]
-        value = self.items.get(name)
+        self.envs.append(kw.get("env") or {})
+        sub = cmd[1]
 
         class P:
-            returncode = 0 if value else 1
-            stdout = (value or "") + "\n"
+            returncode = 0
+            stdout = ""
 
+        if sub == "sync":
+            return P()
+        if sub == "unlock":
+            P.returncode = 0 if self.session else 1
+            P.stdout = (self.session or "") + "\n"
+            return P()
+        value = self.items.get(cmd[3])
+        P.returncode = 0 if value else 1
+        P.stdout = (value or "") + "\n"
         return P()
+
+    @property
+    def subcommands(self):
+        return [c[1] for c in self.calls]
 
 
 @pytest.fixture
@@ -525,3 +540,70 @@ def test_key_scripts_are_personal_and_never_stop_apply(path):
 
 def test_windows_key_script_is_saved_with_a_bom():
     assert WINDOWS_KEYS_SCRIPT.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_sync_keys_syncs_the_vault_once_before_reading(tmp_path, bw_ready):
+    bw = FakeBw({"websearch-brave": "b"})
+    ws.sync_keys(bw_ready, bw, tmp_path / "k.json")
+
+    assert bw.subcommands[0] == "sync" and bw.subcommands.count("sync") == 1
+    assert bw.subcommands.count("get") == 4
+
+
+def test_sync_keys_with_all_keys_present_does_not_touch_bw(tmp_path, bw_ready):
+    keys = tmp_path / "k.json"
+    keys.write_text(json.dumps({n: "x" for n in ws.KEY_NAMES}), encoding="utf-8")
+    bw = FakeBw({})
+
+    assert ws.sync_keys(bw_ready, bw, keys) == ([], [])
+    assert bw.calls == []  # 同期もしない (apply のたびに bw を呼ばない)
+
+
+def test_sync_keys_can_unlock_when_there_is_no_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(ws.shutil, "which", lambda name: "/bin/bw")
+    keys = tmp_path / "k.json"
+    bw = FakeBw({"websearch-exa": "e"}, session="unlocked")
+    added, missing = ws.sync_keys({}, bw, keys, unlock=True)
+
+    assert bw.subcommands[:2] == ["unlock", "sync"]
+    assert bw.envs[1]["BW_SESSION"] == "unlocked"  # unlock で得たセッションを、以降の bw に渡す
+    assert added == ["exa"] and missing == ["brave", "tavily", "openalex"]
+
+
+def test_sync_keys_does_not_unlock_unless_asked_or_when_unlock_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(ws.shutil, "which", lambda name: "/bin/bw")
+    bw = FakeBw({"websearch-brave": "b"})
+    assert ws.sync_keys({}, bw, tmp_path / "k.json", unlock=False)[0] == [] and bw.calls == []
+
+    failing = FakeBw({"websearch-brave": "b"}, session="")
+    assert ws.sync_keys({}, failing, tmp_path / "k.json", unlock=True)[0] == []
+    assert failing.subcommands == ["unlock"]
+
+
+def test_sync_keys_prompts_to_unlock_only_with_the_flag(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("BW_SESSION", raising=False)
+    monkeypatch.setattr(ws.shutil, "which", lambda name: "/bin/bw")
+    keys = tmp_path / "k.json"
+    plain = FakeBw({"websearch-brave": "b"})
+    assert ws.main(["sync-keys"], {"run": plain, "keys_file": keys, "cache_dir": tmp_path}) == 0
+    assert plain.calls == [] and "--unlock" in capsys.readouterr().out  # 既定 (chezmoi apply) では求めない
+
+    asked = FakeBw({"websearch-brave": "b"})
+    assert ws.main(["sync-keys", "--unlock"], {"run": asked, "keys_file": keys, "cache_dir": tmp_path}) == 0
+    assert asked.subcommands[:2] == ["unlock", "sync"]
+    assert json.loads(keys.read_text(encoding="utf-8")) == {"brave": "b"}
+
+
+def test_search_provider_option_uses_only_that_provider_and_skips_the_cache(tmp_path, capsys):
+    http = FakeHttp({"api.exa.ai": [resp(body=EXA_OK)]})
+    deps = {"http": http, "key_for": KEYS.get, "cache_dir": tmp_path, "now": lambda: 1000.0, "sleep": lambda s: None}
+
+    assert ws.main(["search", "hello", "--provider", "exa"], deps) == 0
+    out = capsys.readouterr().out
+    assert "provider=exa" in out and http.hosts == ["api.exa.ai"]
+    assert not (tmp_path / "search").exists()  # 鍵の確認用なのでキャッシュしない
+
+    failing = FakeHttp({"api.exa.ai": [resp(401)]})
+    deps["http"] = failing
+    assert ws.main(["search", "hello", "--provider", "exa"], deps) == 3
+    assert failing.hosts == ["api.exa.ai"]  # 失敗しても、ほかのプロバイダへ回さない

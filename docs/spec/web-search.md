@@ -73,7 +73,23 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 
   - `BW_SESSION`・`bw`・`uv` が無いときは何もせず 0 で終わる（`apply` を止めない・入力待ちにしない）。`chezmoi` のテンプレート関数 `bitwarden` は使わない
     （項目が無いと apply が止まり、`.chezmoiignore` の「一度だけ展開」の仕組みが Windows の `agents` 配下では使いにくいため）
   - `bw` は解決したパスで呼ぶ（Windows の npm 版は `bw.cmd`）。出力は ASCII の 1 行（鍵は出さない）
-  - 実測: Windows で、偽の `bw.cmd` を使い、1 回目に 2 件追加、2 回目は取れていない 2 件だけを引き、`--force` で 4 件すべてを引き直すことを確認した。実際の Bitwarden は未確認
+  - 実測: Windows で、偽の `bw.cmd` で追加・維持・取り直しを確認し、実際の Bitwarden でも 4 件が取れた（2026-10-12）
+
+### 鍵の取り直し（対話で使う）
+
+鍵を変えたとき（Bitwarden の値を直したとき）は、1 つのコマンドで取り直せる。**`BW_SESSION` が無ければ `bw unlock` のマスターパスワードを求め、
+取りに行く前に `bw sync` も行う**（Vault が未同期だと、追加・変更した項目が見えないため）。
+
+```bash
+mise run websearch:keys      # このリポジトリで。= sync-keys --force --unlock
+python3 ~/.claude/skills/web-search/scripts/websearch.py sync-keys --force --unlock   # どこからでも (Windows は uv run --no-project)
+```
+
+- `--unlock` は対話で使う。`chezmoi apply` の呼び出し（441 / 349）は付けない（`BW_SESSION` が無ければ飛ばし、入力待ちにしない）。Windows では端末の判定が当てにならない
+  （`NUL` を端末と見なす）ので、自動判定ではなく明示のフラグにした
+- 鍵が全部ある（`--force` なし）ときは、`bw` を呼ばず、同期もしない
+- PowerShell では `変数=値 コマンド` の書き方ができない（`$env:変数 = '値'; コマンド`）。`DOTFILES_RESYNC_WEBSEARCH_KEYS=1 chezmoi apply` を使うなら、この書き方にする。上のコマンドなら環境変数は要らない
+- 鍵の確認: `search "クエリ" --provider exa`（鎖を使わず、そのプロバイダだけで検索する。キャッシュしない。`brave` / `exa` / `tavily` / `duckduckgo`）
 
 ## 安全策
 
@@ -91,7 +107,11 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 
 - `search`: 鍵がないので Brave・Exa・Tavily は飛ばされ、DuckDuckGo が答えた（関連する Microsoft Learn のページが出た）。同じクエリの 2 回目はキャッシュ（`(cache)`）
 - `papers`: 鍵なしで OpenAlex が答えた
 - 試験は 49 件（`uv run --with pytest --no-project pytest test/test_websearch.py`）
-- **有料プロバイダ（Brave・Exa・Tavily）は、鍵が無く実機では未確認**。API の形は各社の公式ドキュメントで確認した（`curl` で取得）。応答の解析は、試験用の応答で確かめている
+- **実際の鍵での確認（2026-10-12）**: `apply` が Bitwarden の 4 項目から鍵ファイルを作り（`added=['brave','exa','tavily','openalex']`）、
+  **Brave・Exa・Tavily・DuckDuckGo・OpenAlex の全てが実際の API で結果を返した**（鎖の先頭は Brave）。最初は Exa が HTTP 401（`INVALID_API_KEY`）で、
+  Bitwarden の項目の値（25 文字）が違っていた。値を直して取り直したら通った（36 文字）。401 は「auth」として次へ回り、そのプロバイダは 1 時間休止する
+- `fetch` は実際の文書サイト（`https://pi.dev/docs/latest/codemode` など）で動き、`search` の結果から公式の URL の形を見つけられた
+- **`added=none missing=[…]` になるときは、Vault が未同期**（実機で、アンロック済みでも項目が見えず、`bw sync` のあとに取れた）。`sync-keys` は取りに行く前に `bw sync` する
 
 ## `pis` の許可規則
 

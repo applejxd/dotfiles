@@ -695,10 +695,13 @@ def sync_keys(
     run: Callable[..., Any] = subprocess.run,
     keys_file: Path | None = None,
     force: bool = False,
+    unlock: bool = False,
 ) -> tuple[list[str], list[str]]:
     """Bitwarden の Login 項目 (websearch-<名前>) の Password を鍵ファイルへ書く。(追加した名前, 取れなかった名前) を返す。
 
     既存の値は、force でなければ残す。bw が無い・ロック中・項目が無いときは、その名前を飛ばす (例外にしない)。
+    取りに行く前に ``bw sync`` する (Vault が未同期だと、追加したばかりの項目が見えない)。
+    ``unlock`` なら、BW_SESSION が無いときに ``bw unlock --raw`` を呼ぶ (マスターパスワードは bw が端末で尋ねる)。
     鍵は標準出力にも例外にも出さない。ファイルは所有者だけが読み書きできる (POSIX は mode 600)。
     """
     env = dict(os.environ) if env is None else env
@@ -710,12 +713,29 @@ def sync_keys(
         current = {}
     added: list[str] = []
     missing: list[str] = []
+    wanted = [n for n in KEY_NAMES if force or not current.get(n)]
     bw = shutil.which("bw")
-    if not env.get("BW_SESSION") or not bw:
-        return added, [n for n in KEY_NAMES if force or not current.get(n)]
-    for name in KEY_NAMES:
-        if current.get(name) and not force:
-            continue
+    if not wanted:
+        return added, missing
+    if not bw:
+        return added, wanted
+    if not env.get("BW_SESSION"):
+        if not unlock:
+            return added, wanted
+        try:
+            # マスターパスワードは bw が端末 (stderr / tty) で尋ねる。stdout の鍵 (セッション) だけを受け取る
+            proc = run([bw, "unlock", "--raw"], stdout=subprocess.PIPE, text=True, timeout=300, env=env)
+        except (OSError, subprocess.SubprocessError):
+            return added, wanted
+        session = proc.stdout.strip() if proc.returncode == 0 else ""
+        if not session:
+            return added, wanted
+        env["BW_SESSION"] = session
+    try:
+        run([bw, "sync", "--nointeraction"], capture_output=True, text=True, timeout=120, env=env)
+    except (OSError, subprocess.SubprocessError):
+        pass  # 同期できなくても、取れる分は取る
+    for name in wanted:
         try:
             proc = run(
                 [bw, "get", "password", BW_ITEM.format(name), "--nointeraction"],
@@ -782,7 +802,8 @@ def cmd_search(args: argparse.Namespace, deps: dict[str, Any]) -> int:
     directory = deps["cache_dir"]
     key = cache_key("search", args.query, n)
     outcome: Outcome | None = None
-    if not args.no_cache:
+    no_cache = args.no_cache or bool(args.provider)
+    if not no_cache:
         hit = cache_get(directory, key, deps["now"])
         if hit:
             cached = [Result(**r) for r in hit["results"]]
@@ -796,11 +817,12 @@ def cmd_search(args: argparse.Namespace, deps: dict[str, Any]) -> int:
                 key_for=deps["key_for"],
                 state=State(directory, deps["now"]),
                 sleep=deps["sleep"],
+                chain=(args.provider,) if args.provider else CHAIN,
             )
         except ProviderError as error:
             print(f"検索を止めた: {error}", file=sys.stderr)
             return 2
-        if outcome.results and not args.no_cache:
+        if outcome.results and not no_cache:
             payload = {"provider": outcome.provider, "results": [r.__dict__ for r in outcome.results]}
             cache_put(directory, key, payload, deps["now"])
     print(json.dumps(to_json(outcome), ensure_ascii=False) if args.json else format_results("web_search", args.query, outcome))
@@ -860,9 +882,16 @@ def cmd_status(args: argparse.Namespace, deps: dict[str, Any]) -> int:
 
 
 def cmd_sync_keys(args: argparse.Namespace, deps: dict[str, Any]) -> int:
-    added, missing = sync_keys(force=args.force, run=deps.get("run", subprocess.run), keys_file=deps.get("keys_file"))
+    unlock = args.unlock
+    added, missing = sync_keys(
+        force=args.force, run=deps.get("run", subprocess.run), keys_file=deps.get("keys_file"), unlock=unlock
+    )
     # PowerShell のコンソール (cp932) でも崩れないよう ASCII で出す。鍵は表示しない
     print(f"websearch-keys: added={added or 'none'} missing={missing or 'none'}")
+    if missing and not (os.environ.get("BW_SESSION") or unlock):
+        print("hint: BW_SESSION が無い。--unlock を付けると bw unlock を求める (chezmoi apply では求めない)")
+    elif missing:
+        print("hint: Bitwarden に Login 項目 websearch-<名前> があるか確認する (Password 欄が鍵)")
     return 0
 
 
@@ -874,6 +903,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("-n", type=int, default=8)
     s.add_argument("--json", action="store_true")
     s.add_argument("--no-cache", action="store_true")
+    s.add_argument("--provider", choices=CHAIN, help="鎖を使わず、このプロバイダだけで検索する (鍵の確認用。キャッシュしない)")
     f = sub.add_parser("fetch", help="URL の本文を取得する (公開アドレスの http / https だけ)")
     f.add_argument("url")
     f.add_argument("--max-chars", type=int, default=FETCH_CHARS)
@@ -886,6 +916,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="鍵の有無と休止中のプロバイダを表示する")
     k = sub.add_parser("sync-keys", help="Bitwarden (websearch-<名前>) から鍵ファイルを作る (BW_SESSION が要る)")
     k.add_argument("--force", action="store_true", help="既にある値も取り直す")
+    k.add_argument("--unlock", action="store_true", help="BW_SESSION が無いとき、bw unlock を求める (対話で使う。apply では付けない)")
     return parser
 
 
