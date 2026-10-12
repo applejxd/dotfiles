@@ -679,3 +679,18 @@ def test_suggestions_are_turned_off_every_apply():
     # ウィジェットは HKCU (TaskbarDa) も HKLM のポリシーも書けなかったので、自動化しない
     assert "TaskbarDa" not in hkcu.replace("(weather)", "")
     assert "AllowNewsAndInterests" not in ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+
+
+def test_admin_setup_enables_the_builtin_sudo_safely_for_the_personal_machine_only():
+    script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+
+    assert "'Sudo'" in script
+    # applejxd のときだけ ($SudoWanted は applejxd のブロックで $true)
+    assert script.index("$SudoWanted = $true") < script.index("{{- else }}") < script.index("$SudoWanted = $false")
+    # 公式の手順で、既定の forceNewWindow (sudo のたびに UAC。normal / disableInput は選ばない)
+    assert "config --enable forceNewWindow" in script
+    assert "--enable normal" not in script and "--enable disableInput" not in script
+    # 24H2 より前 (sudo.exe が無い) とポリシーで無効に固定された機械は飛ばす。有効な方式は選び直さない
+    assert "Test-SudoSupported" in script and "Test-SudoAllowedByPolicy" in script
+    assert "[int]$value -ge 1" in script
+    assert "Microsoft\Windows\CurrentVersion\Sudo" in script

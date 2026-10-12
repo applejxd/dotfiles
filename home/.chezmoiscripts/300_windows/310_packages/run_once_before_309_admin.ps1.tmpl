@@ -23,9 +23,11 @@ $SshdRule = 'OpenSSH-Server-In-TCP'
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 $RdpWanted = $true
 $SshdWanted = $true
+$SudoWanted = $true
 {{- else }}
 $RdpWanted = $false
 $SshdWanted = $false
+$SudoWanted = $false
 {{- end }}
 
 # winget packages whose only installers are machine-wide (or scope-unspecified MSI), so winget raises UAC for them.
@@ -51,7 +53,7 @@ $WingetMachinePackages = [ordered]@{
   'PowerShellMsi'  = @{ Id = 'Microsoft.PowerShell'; Scope = 'machine'; InstallerType = 'wix'; Force = $true; File = 'PowerShell\7\pwsh.exe' }
 {{- end }}
 }
-$AllowedTargets = @('Chocolatey', 'chocolateygui', 'Keypirinha', 'WinSCP', 'VSCode', 'LongPaths', 'RDP', 'OpenSSHServer', 'SshDefaultShell') + @($WingetMachinePackages.Keys)
+$AllowedTargets = @('Chocolatey', 'chocolateygui', 'Keypirinha', 'WinSCP', 'VSCode', 'LongPaths', 'RDP', 'OpenSSHServer', 'SshDefaultShell', 'Sudo') + @($WingetMachinePackages.Keys)
 
 function Write-Step {
   param([string]$Message)
@@ -180,6 +182,33 @@ function Test-SshDefaultShell {
   return ($value -eq $expected -and (Test-Path -LiteralPath $expected -PathType Leaf))
 }
 
+function Test-SudoSupported {
+  # Windows 11 24H2 以降 (System32 に sudo.exe がある)
+  return (Test-Path -LiteralPath (Join-Path $env:SystemRoot 'System32\sudo.exe') -PathType Leaf)
+}
+
+function Test-SudoEnabled {
+  # 設定は HKLM\...\Sudo の Enabled (0 = 無効 / 1 = forceNewWindow / 2 = disableInput / 3 = normal)。有効な方式は選び直さない
+  $value = $null
+  try { $value = Get-ItemPropertyValue -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Sudo' -Name Enabled -ErrorAction Stop } catch {}
+  return ($null -ne $value -and [int]$value -ge 1)
+}
+
+function Test-SudoAllowedByPolicy {
+  # ポリシーの Enabled = 0 は sudo を無効に固定する。値が無ければ制限なし
+  try {
+    return ([int](Get-ItemPropertyValue -LiteralPath 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Sudo' -Name Enabled -ErrorAction Stop) -ge 1)
+  } catch {
+    return $true
+  }
+}
+
+function Enable-Sudo {
+  # 公式の手順 (sudo config --enable)。既定の forceNewWindow (新しい窓で実行。sudo のたびに UAC の確認が出る)
+  & (Join-Path $env:SystemRoot 'System32\sudo.exe') config --enable forceNewWindow
+  if ($LASTEXITCODE -ne 0) { throw "sudo config --enable forceNewWindow failed: $LASTEXITCODE" }
+}
+
 function Get-Missing {
   $missing = @()
   $choco = Get-ChocoPath
@@ -209,6 +238,7 @@ function Get-Missing {
   if ($RdpWanted -and (Test-RdpHostSupported) -and -not (Test-RdpConfigured)) { $missing += 'RDP' }
   if ($SshdWanted -and -not (Test-SshdConfigured)) { $missing += 'OpenSSHServer' }
   if ($SshdWanted -and -not (Test-SshDefaultShell)) { $missing += 'SshDefaultShell' }
+  if ($SudoWanted -and (Test-SudoSupported) -and (Test-SudoAllowedByPolicy) -and -not (Test-SudoEnabled)) { $missing += 'Sudo' }
   return $missing
 }
 
@@ -321,6 +351,7 @@ function Install-Targets {
   }
   & $run 'RDP' { if (-not (Test-RdpConfigured)) { Enable-Rdp } }
   & $run 'OpenSSHServer' { if (-not (Test-SshdConfigured)) { Enable-Sshd } }
+  & $run 'Sudo' { if (-not (Test-SudoEnabled)) { Enable-Sudo } }
   foreach ($key in $WingetMachinePackages.Keys) {
     if ($Wanted -notcontains $key) { continue }
     $pkg = $WingetMachinePackages[$key]

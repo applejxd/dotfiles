@@ -303,6 +303,12 @@ winget の既定は user scope なので、user 版があるものは UAC なし
   不足判定は「`sshd` サービスが自動起動かつ実行中」かつ「規則が ActiveStore で有効・Public を含まない」。`ssh-agent` は触らない。
   機能の追加は Windows Update へ接続できることが前提で、再起動が要ると警告を出す。パスワード認証・既定シェルは変えない
   （公開鍵の追加は [SSH 公開鍵の authorized_keys への追加](security.md#ssh-公開鍵の-authorized_keys-への追加)。管理者グループの利用者は未対応）
+- **標準の `sudo`**: `applejxd` のとき、`sudo config --enable forceNewWindow`（公式の手順）で有効にする（Windows 11 24H2 以降。`System32\sudo.exe` が無い機械と、ポリシー
+  `HKLM\SOFTWARE\Policies\Microsoft\Windows\Sudo\Enabled = 0` で無効に固定された機械は飛ばす）。判定は `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Sudo\Enabled` が 1 以上か
+  （0 = 無効 / 1 = forceNewWindow / 2 = disableInput / 3 = normal。`microsoft/sudo` のソースで確認）。**有効な方式は選び直さない**。
+  chezmoi 自身は `sudo` を使わない。対話で管理者のコマンドを打つための便利機能で、`forceNewWindow` は新しい窓で実行し、`sudo` のたびに UAC の確認が出る
+  （`normal` は、昇格していないプロセスが昇格したプロセスへ入力できる恐れがあると公式が警告しているので選ばない）。
+  scoop の `sudo`（2020 年の近似実装）は導入しない。実機で通常権限から、検出（未有効 → 次の apply で UAC）と、昇格なしの失敗の扱いを確かめた。UAC の承認を通した有効化は未確認
 - **sshd の既定シェル**: `applejxd` のとき、`HKLM\SOFTWARE\OpenSSH\DefaultShell` を `%ProgramFiles%\PowerShell\7\pwsh.exe` にする（未設定だと `cmd.exe`）。
   MSIX 版の `pwsh` は `WindowsApps` の版つきのパスで、更新のたびに変わり、指していると ssh のログインが全部失敗する。そのため
   `winget install Microsoft.PowerShell --installer-type wix --scope machine --force` で**固定パスの MSI 版**を別に入れる（MSIX 版と併存。`--force` が
