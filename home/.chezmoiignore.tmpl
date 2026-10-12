@@ -130,6 +130,13 @@ Documents/**
 .vscode-server/**
 {{- end }}
 
+# 業務用 (Bedrock) は検索を AgentCore の MCP に一本化する。web-search skill は私用 (github-copilot) だけに配る
+# see docs/spec/web-search.md#配る範囲
+{{- if eq (includeTemplate "llm-provider" .) "amazon-bedrock" }}
+.claude/skills/web-search/
+.claude/skills/web-search/**
+{{- end }}
+
 # Bitwarden 由来のファイルは一度のみ展開する
 # (毎回 Bitwarden を引くと chezmoi diff がマスターパスワードを要求するため)
 #

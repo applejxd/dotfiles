@@ -344,3 +344,15 @@ def test_interpreter_falls_back_to_shim_without_modern_python(tmp_path, availabl
 
     # 設定側と用意する側 (005) のパス一致は
     # test/agents/test_python_requirement.py が検査する (同じことを二度書かない)
+
+
+@pytest.mark.parametrize(
+    ("username", "ignored"),
+    [("applejxd", False), (r"DOMAIN\applejxd", False), ("worker", True)],
+)
+def test_web_search_skill_is_not_deployed_to_bedrock_users(tmp_path, username, ignored):
+    """業務用 (Bedrock) は検索を AgentCore に一本化する。web-search skill は私用だけに配る。"""
+    rendered = render(home=str(tmp_path), username=username)
+
+    assert (".claude/skills/web-search/" in rendered) is ignored
+    assert (".claude/skills/web-search/**" in rendered) is ignored

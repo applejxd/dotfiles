@@ -5,6 +5,17 @@ pi など、内蔵の検索ツールが無い AI CLI のための Web 検索・�
 入口を skill + CLI にした理由と、MCP・拡張との比較は [入口の選び方](pi-harness.md#入口の選び方)、方針は
 [ADR-0016](../adr/0016-pi-extensions-own-first.md)。
 
+## 配る範囲
+
+**私用（`llm-provider` が `github-copilot`、つまり `applejxd`）だけに配る。** 業務用（Bedrock）は、検索を
+[AgentCore Web Search の MCP](agent-config-generation.md#mcp-サーバ)に一本化する（業務機のクエリを AWS の外の検索へ出さず、手段が 2 つになってモデルが迷うのを避ける）。
+
+- skill の配布: `home/.chezmoiignore.tmpl` が、Bedrock のとき `.claude/skills/web-search/` を除く
+- `pis` の許可（`[pi.skill_scripts]`）: `common.toml.tmpl` が、`github-copilot` のときだけ出す
+- 鍵ファイルの作成（441 / 349）: `applejxd` の機械だけ
+- 判定は `llm-provider`（`chezmoi.toml` の `[data] llm_provider` があればそれを優先）。検査は `test/test_chezmoi_templates.py` と `test/agents/test_opencode_external_read.py`
+- 既に配られたファイルは、除外しても自動では消えない（chezmoi の除外は「管理しない」で、削除ではない）
+
 ## 構成
 
 | 場所 | 役割 |

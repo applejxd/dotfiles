@@ -277,6 +277,19 @@ def test_skill_script_allow_is_not_widened_silently():
     ]
 
 
+def test_web_search_script_is_allowed_only_for_the_personal_provider():
+    """業務用 (Bedrock) は検索を AgentCore に一本化する。skill も許可も私用 (github-copilot) だけ。"""
+    from agents_common import load_common
+
+    def scripts(common):
+        return [e["script"] for e in common["pi"]["skill_scripts"]["allow"]]
+
+    assert WEB in scripts(load_common("applejxd"))
+    assert WEB not in scripts(load_common("worker"))
+    allow, _ = gen.opencode_skill_script_rules(load_common("worker"))
+    assert not [r for r in allow if "web-search" in r]
+
+
 def test_skill_script_redirect_deny_follows_its_allow():
     """リダイレクトの deny は allow より後ろ (後勝ち)。"""
     resources = [r["resource"] for r in normal()]
