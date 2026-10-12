@@ -40,20 +40,20 @@ $WingetMachinePackages = [ordered]@{
   'HackFonts'      = @{ Id = 'SourceFoundry.HackFonts'; Scope = 'machine' }
   'PythonLauncher' = @{ Id = 'Python.Launcher'; Scope = '' }
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
-  'iTunes'         = @{ Id = 'Apple.iTunes'; Scope = 'machine' }
   'GoogleDrive'    = @{ Id = 'Google.GoogleDrive'; Scope = 'machine' }
   'Dropbox'        = @{ Id = 'Dropbox.Dropbox'; Scope = 'machine' }
   'Ditto'          = @{ Id = 'Ditto.Ditto'; Scope = 'machine' }
   'Tailscale'      = @{ Id = 'Tailscale.Tailscale'; Scope = 'machine' }
-  'Steam'          = @{ Id = 'Valve.Steam'; Scope = 'machine' }
-  'Wacom'          = @{ Id = 'Wacom.WacomTabletDriver'; Scope = 'machine' }
   # sshd runs the default shell from a fixed path, so it needs the machine MSI (stable path). The MSIX under
   # WindowsApps changes its path on every update and would lock out ssh logins. File = checked instead of winget list
   # (the MSIX copy is also listed); Force installs the MSI next to the MSIX copy.
   'PowerShellMsi'  = @{ Id = 'Microsoft.PowerShell'; Scope = 'machine'; InstallerType = 'wix'; Force = $true; File = 'PowerShell\7\pwsh.exe' }
 {{- if eq (lower .chezmoi.hostname) "heimdall-ufbs-010" }}
-  # Stream Deck 本体をつないでいる PC だけ (hostname で限定。machine 版の MSI しか無い)
+  # 機器・用途がこの PC 固有のものだけ (hostname で限定)。Stream Deck / Wacom は本体をつないだ PC、Steam はゲーム用、iTunes は iPhone の同期用
   'StreamDeck'     = @{ Id = 'Elgato.StreamDeck'; Scope = 'machine' }
+  'Wacom'          = @{ Id = 'Wacom.WacomTabletDriver'; Scope = 'machine' }
+  'Steam'          = @{ Id = 'Valve.Steam'; Scope = 'machine' }
+  'iTunes'         = @{ Id = 'Apple.iTunes'; Scope = 'machine' }
 {{- end }}
 {{- end }}
 }
