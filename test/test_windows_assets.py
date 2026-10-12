@@ -694,3 +694,15 @@ def test_admin_setup_enables_the_builtin_sudo_safely_for_the_personal_machine_on
     assert "Test-SudoSupported" in script and "Test-SudoAllowedByPolicy" in script
     assert "[int]$value -ge 1" in script
     assert "Microsoft\Windows\CurrentVersion\Sudo" in script
+
+
+def test_power_settings_are_read_back_and_a_mismatch_only_warns():
+    script = (ROOT / "home/.chezmoiscripts/300_windows/run_after_331_power.ps1").read_text(encoding="utf-8-sig")
+
+    # 設定した値を powercfg /q で読み取って確かめる (表示の言語に依らず、末尾の 2 つの 0x… を AC・DC とする)
+    assert "function Get-PowerValue" in script and "0x[0-9A-Fa-f]{8}" in script
+    assert "$script:Expected" in script
+    # 上書きされていても apply は止めない (警告だけ)。設定が無い機種の任意の項目は確かめない
+    assert "Write-Warning ('Power settings differ" in script
+    assert "if (-not $e.Optional)" in script
+    assert script.rindex("Write-Warning ('Power settings differ") > script.rindex("powercfg /setactive")
