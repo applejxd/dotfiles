@@ -58,7 +58,8 @@ function sinst {
 
 # Linux commands (gow = Gnu on Windows)
 # see https://github.com/bmatzelle/gow/wiki/executables_list
-sinst sudo gow
+# sudo は入れない (Windows 11 標準の sudo.exe を使う。scoop 版は 2020 年の近似実装)。see docs/change/0022-windows11-settings-review.md
+sinst gow
 
 # Build tools
 sinst mingw-winlibs
