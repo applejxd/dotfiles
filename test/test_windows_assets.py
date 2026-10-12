@@ -706,3 +706,19 @@ def test_power_settings_are_read_back_and_a_mismatch_only_warns():
     assert "Write-Warning ('Power settings differ" in script
     assert "if (-not $e.Optional)" in script
     assert script.rindex("Write-Warning ('Power settings differ") > script.rindex("powercfg /setactive")
+
+
+def test_stream_deck_is_installed_only_for_applejxd_on_the_named_host():
+    admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+    winget = (
+        ROOT / "home/.chezmoiscripts/300_windows/310_packages/run_once_before_310_winget.ps1.tmpl"
+    ).read_text(encoding="utf-8-sig")
+
+    entry = admin.index("'StreamDeck'")
+    user_gate = admin.rindex("regexMatch", 0, entry)
+    host_gate = admin.rindex("{{- if eq (lower .chezmoi.hostname)", 0, entry)
+    # applejxd の条件の内側で、さらに hostname で絞る (machine 版の MSI しか無いので 309 で入れる)
+    assert user_gate < host_gate < entry < admin.index("$AllowedTargets")
+    assert "{{- end }}" in admin[entry:admin.index("$AllowedTargets")]
+    assert "Id = 'Elgato.StreamDeck'; Scope = 'machine'" in admin
+    assert "Elgato.StreamDeck" not in winget

@@ -51,6 +51,10 @@ $WingetMachinePackages = [ordered]@{
   # WindowsApps changes its path on every update and would lock out ssh logins. File = checked instead of winget list
   # (the MSIX copy is also listed); Force installs the MSI next to the MSIX copy.
   'PowerShellMsi'  = @{ Id = 'Microsoft.PowerShell'; Scope = 'machine'; InstallerType = 'wix'; Force = $true; File = 'PowerShell\7\pwsh.exe' }
+{{- if eq (lower .chezmoi.hostname) "heimdall-ufbs-010" }}
+  # Stream Deck 本体をつないでいる PC だけ (hostname で限定。machine 版の MSI しか無い)
+  'StreamDeck'     = @{ Id = 'Elgato.StreamDeck'; Scope = 'machine' }
+{{- end }}
 {{- end }}
 }
 $AllowedTargets = @('Chocolatey', 'chocolateygui', 'Keypirinha', 'WinSCP', 'VSCode', 'LongPaths', 'RDP', 'OpenSSHServer', 'SshDefaultShell', 'Sudo') + @($WingetMachinePackages.Keys)

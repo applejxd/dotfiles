@@ -272,12 +272,23 @@ winget の既定は user scope なので、user 版があるものは UAC なし
 | --- | --- | --- |
 | machine 版しかない（user 版なし） | Chrome・Google 日本語入力・7-Zip・Hack フォント・iTunes・Google Drive・Dropbox・Ditto・Tailscale・Steam・Wacom ドライバー | `309_admin` が `--scope machine` で導入（iTunes 以降は `applejxd` だけ） |
 | scope 未宣言の MSI | Python Launcher（`launcher.msi`） | `309_admin` が `--scope` なしで導入。付けると `No applicable installer` になる。MSI の既定が全ユーザーかは**未確認**（導入後に UAC が出るか・導入先で確かめる） |
+| machine 版しかない・特定の PC だけ | Elgato Stream Deck（`wix` の MSI。user 版なし） | `309_admin` が `--scope machine` で導入。**applejxd かつ hostname が一致する PC だけ**（下の「hostname で限定するもの」） |
 | 両 scope 対応 | PowerShell・fzf・jq・Obsidian・Oh My Posh・PowerToys・Git・Node.js・mise・Python 3.12・uv・Bitwarden（本体・CLI） | 既定（user）のまま `310_winget` |
 | user 版しかない | QuickLook・Spotify・Discord | `310_winget` |
 | scope 未宣言の NSIS | Orca | `310_winget`。Electron の NSIS は既定が per-user のはずだが**未確認**。UAC が出たら 309 へ移す |
 | Microsoft Store | Keyhac・iCloud・Kindle・Codex App | `310_winget`（Store 版はユーザー単位） |
 
 - 309 の導入判定は `winget list` の出力の ID 列に一致するか。これらは winget では user 版を入れられないので、入っていれば machine 版とみなす（Python Launcher は例外）。winget 以外の経路で入れた同名の user 版が残っていても「導入済み」とみなす（機能を満たすので許容。machine 版にしたいときは手でアンインストールして再実行）
+### hostname で限定するもの
+
+ユーザー名（`applejxd`）だけでは足りず、**特定の PC にだけ要るもの**は、`.chezmoi.hostname` で限定する。
+`.chezmoi.hostname` は `chezmoi.toml` の `[data]` ではなく **`apply` のたびに評価される組み込みの値**なので、`init` を呼び直さなくても効く。
+
+- 書き方（`309_admin` の例）: `{{- if eq (lower .chezmoi.hostname) "heimdall-ufbs-010" }}`（`lower` は大文字小文字の違いを避けるため）
+- 現在の対象: **Stream Deck**（本体をつないだ PC だけ。`heimdall-ufbs-010`）
+- 他の PC にも入れるときは、`or (eq …) (eq …)` と並べるか、`has (lower .chezmoi.hostname) (list "…" "…")` にする
+- 実機で、この PC では `StreamDeck` が許可リストと導入対象に出て、hostname または user が違うと出ないことを描画で確かめた（`chezmoi execute-template`）
+
 - 両 scope 対応のものを machine にする理由は個人 PC では無い。必要になった（ドライバー・IME・他ツールが system-wide を要求）ものだけ 309 へ移す
 
 ### 保証しないこと
