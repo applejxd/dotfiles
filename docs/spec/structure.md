@@ -248,11 +248,22 @@ chezmoi スクリプト自身が出す UAC を 1 回にする。通常ユーザ�
 
 | 項目 | 内容 |
 | --- | --- |
-| 対象（許可リストのキー） | `Chocolatey`（winget 経由）・`chocolateygui`・`Keypirinha`・`WinSCP`（machine scope）・`VSCode`（machine scope）・`LongPaths`・`RDP`・`OpenSSHServer`・machine 版しかない winget パッケージ（[下記](#winget-パッケージの-user--machine-の振り分け)） |
+| 対象（許可リストのキー） | `Chocolatey`（winget 経由）・`chocolateygui`・`Keypirinha`・`WinSCP`（machine scope）・`VSCode`（machine scope）・`LongPaths`・`RDP`・`OpenSSHServer`・`SshDefaultShell`・`Sudo`・`WslPlatform`・machine 版しかない winget パッケージ（[下記](#winget-パッケージの-user--machine-の振り分け)） |
 | 流れ | 通常権限で不足を判定 → 不足があるときだけ UAC を 1 回 → 昇格子が不足分だけ実行 → 通常権限で再判定。導入済みなら UAC は出ない |
 | 失敗 | UAC キャンセル・昇格子の非ゼロ終了・再判定の残りはすべて非ゼロで止める。失敗した回は `run_once` に記録されないので、直して `chezmoi apply` をやり直せば 309 は再実行される。成功後に消えたものは自動では直さない（内容を変えるか `chezmoi state delete-bucket --bucket=scriptState` で再実行） |
 | 実行順 | 同じディレクトリで `309_admin` は `310_winget` より前（属性を除いた名前の昇順） |
 | ユーザーの作業 | `340_vscode`（拡張）・`315_keypirinha_extensions` は通常権限のまま。VS Code が無ければ 340 は失敗する |
+
+### WSL 本体（`WslPlatform`）
+
+applejxd の全 PC で、**WSL 本体だけ**を入れる。ディストロは入れない（置き場所の方針は [CHG-0022](../change/0022-windows11-settings-review.md) の保留）。
+
+- 判定は `wsl.exe --version` の終了コード（未導入だと inbox の `wsl.exe` が案内を出して 1 を返す）。導入済みなら何もしない
+- 導入は `wsl.exe --install --no-distribution`（Windows の機能 `VirtualMachinePlatform` と WSL のパッケージ）のあと `wsl.exe --update`。昇格子の出力は UTF-16 なので、符号化を合わせて失敗の理由をログに残す
+- **`VirtualMachinePlatform` の有効化には再起動が要る。** 導入した直後でも `wsl --version` は成功するので、309 は再起動の要否を判定できない。導入したときは「再起動が要る」とログに出す
+- 実測（2026-10-12、ビルド 26300）: 管理者の `cmd` で `wsl --install --no-distribution` を実行すると、`VirtualMachinePlatform` の有効化（要再起動）と WSL 3.0.1 の導入が済んだ。`wsl --version` は 3.0.1.0（カーネル 6.18.40.1）。
+  `wslc`（WSL containers）の CLI は、再起動後の確認が残っている。winget の `Microsoft.WSL` は 2.7.13 で遅れているため使わず、`wsl --update`（Store）で最新にする
+- 「WSL 3」は、WSL パッケージの版が 3.0 になったという意味で、新しい方式ではない（担当 PM は「WSL 3 というものは無い」と述べている）。3.0.1 は WSL containers（`wslc`）の一般提供（2026-09-29）
 
 ### 昇格の仕組み
 

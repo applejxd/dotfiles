@@ -24,10 +24,12 @@ $SshdRule = 'OpenSSH-Server-In-TCP'
 $RdpWanted = $true
 $SshdWanted = $true
 $SudoWanted = $true
+$WslWanted = $true
 {{- else }}
 $RdpWanted = $false
 $SshdWanted = $false
 $SudoWanted = $false
+$WslWanted = $false
 {{- end }}
 
 # winget packages whose only installers are machine-wide (or scope-unspecified MSI), so winget raises UAC for them.
@@ -57,7 +59,7 @@ $WingetMachinePackages = [ordered]@{
 {{- end }}
 {{- end }}
 }
-$AllowedTargets = @('Chocolatey', 'chocolateygui', 'Keypirinha', 'WinSCP', 'VSCode', 'LongPaths', 'RDP', 'OpenSSHServer', 'SshDefaultShell', 'Sudo') + @($WingetMachinePackages.Keys)
+$AllowedTargets = @('Chocolatey', 'chocolateygui', 'Keypirinha', 'WinSCP', 'VSCode', 'LongPaths', 'RDP', 'OpenSSHServer', 'SshDefaultShell', 'Sudo', 'WslPlatform') + @($WingetMachinePackages.Keys)
 
 function Write-Step {
   param([string]$Message)
@@ -213,6 +215,40 @@ function Enable-Sudo {
   if ($LASTEXITCODE -ne 0) { throw "sudo config --enable forceNewWindow failed: $LASTEXITCODE" }
 }
 
+function Test-WslInstalled {
+  # WSL 本体 (ディストロは問わない)。未導入だと、inbox の wsl.exe が案内を出して終了コード 1 を返す
+  try {
+    & wsl.exe --version 2>&1 | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  } catch {
+    return $false
+  }
+}
+
+function Invoke-WslCommand {
+  # wsl.exe は UTF-16 で出力する。受け取る側の符号化を合わせて、失敗の理由をログに残せるようにする
+  param([Parameter(Mandatory)][string[]]$WslArgs)
+  $previous = [Console]::OutputEncoding
+  try {
+    [Console]::OutputEncoding = [Text.Encoding]::Unicode
+    $text = (& wsl.exe @WslArgs 2>&1 | Out-String).Trim()
+  } finally {
+    [Console]::OutputEncoding = $previous
+  }
+  return @{ ExitCode = $LASTEXITCODE; Text = $text }
+}
+
+function Enable-Wsl {
+  # 機能の有効化と WSL 本体だけ。ディストロは入れない (入れる場所の方針は別。docs/change/0022 の保留)
+  $install = Invoke-WslCommand @('--install', '--no-distribution')
+  if ($install.ExitCode -ne 0) { throw "wsl --install --no-distribution failed: $($install.ExitCode) $($install.Text)" }
+  # 仮想マシン プラットフォームの有効化には再起動が要る。導入した直後でも wsl --version は成功する
+  if ($install.Text -match '(?i)restart|再起動') { Write-Step 'WSL: a restart is needed to finish enabling the Windows features' }
+  # 最新版 (WSL containers の wslc を含む 3.x) へ。失敗しても導入自体は済んでいる
+  $update = Invoke-WslCommand @('--update')
+  if ($update.ExitCode -ne 0) { Write-Step "WSL: wsl --update failed ($($update.ExitCode)); run it manually" }
+}
+
 function Get-Missing {
   $missing = @()
   $choco = Get-ChocoPath
@@ -243,6 +279,7 @@ function Get-Missing {
   if ($SshdWanted -and -not (Test-SshdConfigured)) { $missing += 'OpenSSHServer' }
   if ($SshdWanted -and -not (Test-SshDefaultShell)) { $missing += 'SshDefaultShell' }
   if ($SudoWanted -and (Test-SudoSupported) -and (Test-SudoAllowedByPolicy) -and -not (Test-SudoEnabled)) { $missing += 'Sudo' }
+  if ($WslWanted -and -not (Test-WslInstalled)) { $missing += 'WslPlatform' }
   return $missing
 }
 
@@ -356,6 +393,7 @@ function Install-Targets {
   & $run 'RDP' { if (-not (Test-RdpConfigured)) { Enable-Rdp } }
   & $run 'OpenSSHServer' { if (-not (Test-SshdConfigured)) { Enable-Sshd } }
   & $run 'Sudo' { if (-not (Test-SudoEnabled)) { Enable-Sudo } }
+  & $run 'WslPlatform' { if (-not (Test-WslInstalled)) { Enable-Wsl } }
   foreach ($key in $WingetMachinePackages.Keys) {
     if ($Wanted -notcontains $key) { continue }
     $pkg = $WingetMachinePackages[$key]

@@ -732,3 +732,20 @@ def test_device_and_usage_specific_packages_are_limited_to_the_named_host():
         assert f"'{key}'" in block and f"Id = '{package_id}'; Scope = 'machine'" in block, key
         assert admin.count(f"Id = '{package_id}'") == 1, key  # ほかの場所に重ねて書かない
         assert package_id not in winget, key
+
+
+def test_wsl_platform_is_installed_without_a_distribution_for_applejxd():
+    admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+    winget = (
+        ROOT / "home/.chezmoiscripts/300_windows/310_packages/run_once_before_310_winget.ps1.tmpl"
+    ).read_text(encoding="utf-8-sig")
+
+    assert "'WslPlatform'" in admin and "$WslWanted = $true" in admin and "$WslWanted = $false" in admin
+    # ディストロは入れない。判定は wsl --version の終了コード。最新へ更新する
+    assert "'--install', '--no-distribution'" in admin
+    assert "'--version'" in admin or "wsl.exe --version" in admin
+    assert "@('--update')" in admin
+    # winget の Microsoft.WSL は古い (2.7.13) ので使わない
+    assert "Microsoft.WSL" not in admin and "Microsoft.WSL" not in winget
+    # 再起動が要ることを出す (VirtualMachinePlatform)
+    assert "a restart is needed" in admin
