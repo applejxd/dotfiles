@@ -308,7 +308,7 @@ winget の既定は user scope なので、user 版があるものは UAC なし
   （0 = 無効 / 1 = forceNewWindow / 2 = disableInput / 3 = normal。`microsoft/sudo` のソースで確認）。**有効な方式は選び直さない**。
   chezmoi 自身は `sudo` を使わない。対話で管理者のコマンドを打つための便利機能で、`forceNewWindow` は新しい窓で実行し、`sudo` のたびに UAC の確認が出る
   （`normal` は、昇格していないプロセスが昇格したプロセスへ入力できる恐れがあると公式が警告しているので選ばない）。
-  scoop の `sudo`（2020 年の近似実装）は導入しない。実機で通常権限から、検出（未有効 → 次の apply で UAC）と、昇格なしの失敗の扱いを確かめた。UAC の承認を通した有効化は未確認
+  scoop の `sudo`（2020 年の近似実装）は導入しない。実機で、検出（未有効 → 次の apply で UAC）と昇格なしの失敗の扱いを確かめ、**UAC の承認を通した有効化も確認した**（2026-10-12。`Enabled` が 1、`sudo config` が forceNewWindow を示した）
 - **sshd の既定シェル**: `applejxd` のとき、`HKLM\SOFTWARE\OpenSSH\DefaultShell` を `%ProgramFiles%\PowerShell\7\pwsh.exe` にする（未設定だと `cmd.exe`）。
   MSIX 版の `pwsh` は `WindowsApps` の版つきのパスで、更新のたびに変わり、指していると ssh のログインが全部失敗する。そのため
   `winget install Microsoft.PowerShell --installer-type wix --scope machine --force` で**固定パスの MSI 版**を別に入れる（MSIX 版と併存。`--force` が

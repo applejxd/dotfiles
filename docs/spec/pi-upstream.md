@@ -13,7 +13,7 @@ pi（earendil-works/pi）の挙動のうち、このリポジトリが頼って�
 | --- | --- |
 | インストール済みの文書 | pi の npm パッケージの `docs/` ディレクトリ（Windows の npm global は `%APPDATA%\npm\node_modules\@earendil-works\pi-coding-agent\docs\`）。目次は `docs.json`、更新の記録は同じ階層の `CHANGELOG.md`。**入れている版に合う文書は、これ** |
 | ソースと文書（上流） | <https://github.com/earendil-works/pi>（`packages/coding-agent/docs/`） |
-| 利用者向けの文書 | <https://pi.dev>（Windows は <https://pi.dev/docs/windows>） |
+| 利用者向けの文書 | <https://pi.dev/docs/latest/文書名>（例: `codemode`・`mcp`・`extensions`・`cli`・`windows`。2026-10-12 に取得できることを確認）、更新の記録は <https://pi.dev/changelog>。`https://pi.dev/docs/windows`（版なし）は 404 |
 | 版 | `pi --version`、`~/.pi/agent/install/releases/<版>/`（公式インストーラー） |
 
 pi を更新したときの手順:
