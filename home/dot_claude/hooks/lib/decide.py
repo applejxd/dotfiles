@@ -25,7 +25,9 @@ FILE_READ_TOOLS = ("read", "grep", "find", "ls")
 FILE_WRITE_TOOLS = ("edit", "write")
 # 子エージェントの起動。子は同じハーネスと判定器で動くので、役割に入っていれば allow
 TASK_TOOL = "task"
-KNOWN_TOOLS = ("bash", *FILE_READ_TOOLS, *FILE_WRITE_TOOLS, TASK_TOOL)
+# 拡張 (extensions/todo) のタスクリスト。状態をメモリに持つだけで、ファイルも外部も触らない
+TODO_TOOL = "todo"
+KNOWN_TOOLS = ("bash", *FILE_READ_TOOLS, *FILE_WRITE_TOOLS, TASK_TOOL, TODO_TOOL)
 # 検査の上限。check_bash.py と同じ
 MAX_COMMAND_LEN = 10000
 # allow の一覧に当たっても、書き込みや実行時の展開の余地がある形は allow にしない
@@ -347,6 +349,8 @@ def _decide(request: Any) -> dict[str, Any]:
     elif tool == TASK_TOOL:
         reason = "子エージェントは同じハーネスと判定器で動く"
         common_deny, role_rule = None, _response("allow", reason, "rule")
+    elif tool == TODO_TOOL:
+        common_deny, role_rule = None, _response("allow", "タスクリストはメモリの状態だけを変える", "rule")
     else:
         common_deny, role_rule = None, None
     if common_deny:

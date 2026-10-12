@@ -75,6 +75,21 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 | --- | --- | --- | --- | --- | --- |
 | （無し） | | | | | |
 
+### 自作の拡張: todo / plan
+
+`~/.pi/agent/extensions/{todo,plan}/index.ts`（実体は `home/dot_pi/agent/extensions/`）。pi 同梱の例（`examples/extensions/todo.ts`・`plan-mode`）を参考に、必要な部分だけ自作した。全 OS に配る。
+
+| 拡張 | 中身 |
+| --- | --- |
+| `todo` | `todo` ツール（list / add / toggle / clear）と `/todos`。状態はツール結果の `details` に持つので、分岐・再開でその時点に戻る。フッターに進捗を出す |
+| `plan` | `/plan` で切り替え。計画中は **`edit` / `write` / `bash` / MCP などのツールを外し**、`read` / `grep` / `find` / `ls` / `todo` / `task` だけを残す（`guarded_` 付きも同じ）。計画の指示を毎ターン注入し、番号付きの手順で終わったら「実行する / 続ける / 直す」を尋ねる。「実行する」でツールを戻し、実行を依頼する |
+
+- `pis` は `-ne` なので、`-e` で明示して足す。素の `pi` は自動発見で読む
+- ハーネスの役割は、`implementer` の `tools` に `todo` を足してある（判定器は `todo` を allow）。`plan` はツールを登録しないので判定に関わらない
+- 計画中は shell が無いので、`git log` などの調査もできない。必要なら `/plan` を終えて調べる
+- `pis --boundary` は起動を `ocs` に任せるので、この拡張を足していない（未対応）
+- 実測: `todo` は実際のモデル（`claude-sonnet-5.5`）で add / toggle / list が通った。`plan` は読み込みまで（切り替えと確認画面は TUI でしか動かず、未確認）
+
 ## Windows
 
 Windows（PowerShell）では**素の `pi` だけ**を使う。ハーネス・`pis`・境界は Unix だけ（判定器が bash の hook と

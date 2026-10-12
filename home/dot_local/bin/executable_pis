@@ -56,5 +56,10 @@ if [ -n "${ORCA_AGENT_HOOK_PORT:-}" ] && [ -f "${orca_ext}" ] \
     && grep -q '@orca-managed-pi-extension' "${orca_ext}"; then
     extra=(-e "${orca_ext}")
 fi
+# 自作の拡張 (todo / plan)。-ne で自動発見は止めてあるので、ここで明示して足す
+for name in todo plan; do
+    ext="${agent_dir}/extensions/${name}/index.ts"
+    if [ -f "${ext}" ]; then extra+=(-e "${ext}"); fi
+done
 # --no-approve: 作業先の .pi/ (MCP・設定・skills) を読まない。拡張は -ne で読まない
 exec pi --no-approve -nbt -ne -e builtin:mcp ${extra[@]+"${extra[@]}"} -e "${harness}" "$@"
