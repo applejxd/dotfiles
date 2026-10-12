@@ -509,7 +509,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 
 ### スキルのスクリプト
 
-スキルが手順に書いたスクリプト（`sdd-docs` の `lint_docs.py` など）は shell の
+スキルが手順に書いたスクリプト（`sdd-docs` の `lint_docs.py` と、状態を読むだけの `docs_state.py status` など）は shell の
 既定の `ask` に当たり、呼ぶたびに確認が出ていた。`external_directory` の確認は
 出ない（shell は引数に書いた外のパスから外部ディレクトリを推定しなかった。
 `ls <外のパス>` でも同じ。実測）。

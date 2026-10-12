@@ -962,6 +962,11 @@ script = "~/.claude/skills/sdd-docs/scripts/check_refs.py"
 # --save は引数のパスへ書く。既定の置き場を使う形だけを完全一致で通す
 exact = ["--save", "--baseline"]
 
+# docs_state.py の status は読み取りだけ (git の読み取り)。scaffold は docs/ へ書くので載せない
+[[pi.skill_scripts.allow]]
+script = "~/.claude/skills/sdd-docs/scripts/docs_state.py"
+subcommands = ["status"]
+
 [[pi.skill_scripts.allow]]
 script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 # write は標準入力を引数のパスへ書くので載せない

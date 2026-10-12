@@ -208,6 +208,10 @@ def test_skill_scripts_are_allowed_only_in_their_declared_form():
     assert bash(f"python3 {refs} --save --baseline")["decision"] == "allow"
     assert bash(f"python3 {refs} --save other.txt")["decision"] == "ask"
     assert bash(f"python3 {checkpoint} read")["decision"] == "allow"
+    # docs_state.py は status (読み取り) だけ。scaffold は docs/ へ書くので確認を出す
+    docs_state = "~/.claude/skills/sdd-docs/scripts/docs_state.py"
+    assert bash(f"python3 {docs_state} status")["decision"] == "allow"
+    assert bash(f"python3 {docs_state} scaffold")["decision"] == "ask"
     assert bash(f"python3 {checkpoint} write x")["decision"] == "ask"
     assert bash(f"python3 {lint} > out.txt")["decision"] == "ask"
     assert bash(f"bash {lint}")["decision"] == "ask"
