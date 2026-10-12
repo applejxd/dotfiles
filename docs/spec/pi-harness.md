@@ -36,6 +36,8 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - ハーネス（`index.ts` と `rules.json`）が無い、または `~/.pi/agent/mcp.json` にサーバがあるときは起動しない
 - 子エージェントの印（`PI_HARNESS_CHILD`）など、外から入った内部の環境変数は外す
 
+> pi の公式仕様に頼る箇所と、実測して頼っている挙動の一覧は [pi の公式仕様と実測の棚卸し](pi-upstream.md)。pi を更新したときは、そこの手順で確かめる。
+
 ## 拡張の方針
 
 **拡張は自作を基本とする**（[ADR-0016](../adr/0016-pi-extensions-own-first.md)）。外部の拡張は、**どうしても必要で、自前実装が困難で、振る舞いを十分に確認したもの**だけを、
