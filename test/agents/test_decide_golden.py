@@ -21,8 +21,11 @@ GOLDEN = ROOT / "test" / "agents" / "golden" / "decide_golden.jsonl"
 SAMPLE_EVERY = 29
 
 
-def _exporter():
-    spec = importlib.util.spec_from_file_location("export_decide_golden", SCRIPT)
+def _exporter(name="export_decide_golden"):
+    script = (
+        ROOT / "scripts" / "agents" / f"{name}.py" if name != "export_decide_golden" else SCRIPT
+    )
+    spec = importlib.util.spec_from_file_location(name, script)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -59,3 +62,45 @@ def test_golden_covers_every_decision_and_source():
         ("deny", "rule"),
         ("deny", "error"),
     } <= pairs
+
+
+def test_policy_golden_matches_the_python_parts_on_a_sample():
+    """部品ごとの正解データ (``policy_golden.jsonl``) が、いまの Python 版と一致している (標本)。"""
+    import shlex
+
+    exporter = _exporter("export_policy_golden")  # hooks/lib を import のパスに足す
+    from bashrules import _shared
+
+    policy = exporter.policy
+    path = ROOT / "test" / "agents" / "golden" / "policy_golden.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) > 5000, "正解データが小さすぎる (書き出し直す)"
+    patterns = exporter._patterns()
+    mismatches = []
+    for index, line in enumerate(lines):
+        if index % SAMPLE_EVERY:
+            continue
+        entry = json.loads(line)
+        _shared._LITERAL_HEREDOC_BODIES.clear()
+        arg = entry["arg"]
+        if entry["fn"] == "shlex":
+            try:
+                got = {"tokens": shlex.split(arg)}
+            except ValueError as exc:
+                got = {"error": str(exc)}
+        elif entry["fn"] == "split":
+            got = policy.split_command_segments(arg)
+        elif entry["fn"] == "normalize":
+            got = policy.normalize(arg)
+        elif entry["fn"] == "subst":
+            got = policy.extract_command_substitutions(arg)
+        elif entry["fn"] == "funcs":
+            got = policy.extract_function_bodies(arg)
+        else:
+            got = policy.find_match(arg, patterns[entry["list"]])
+        if got != entry["out"]:
+            mismatches.append((index, entry["fn"], arg, entry["out"], got))
+    assert not mismatches, (
+        "部品の正解データが古い。`python scripts/agents/export_policy_golden.py` で書き出し直す: "
+        f"{mismatches[:3]}"
+    )

@@ -20,6 +20,7 @@ import pytest
 from agents_common import ROOT
 
 RUNNER = ROOT / "test" / "agents" / "pi" / "judge_golden.mjs"
+POLICY_RUNNER = ROOT / "test" / "agents" / "pi" / "policy_golden.mjs"
 
 
 def _node() -> str | None:
@@ -47,3 +48,18 @@ def test_ts_judge_matches_the_python_golden_outside_bash():
     assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-1000:]
     # 移植済みの区分が空でないこと (正解データの読み込みの失敗を見逃さない)
     assert "file " in proc.stdout and "invalid" in proc.stdout
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_ts_policy_parts_match_the_python_golden():
+    """shlex・分割・正規化・置換と関数の抽出・find_match が、Python 版と全件一致する。"""
+    proc = subprocess.run(
+        [_node(), str(POLICY_RUNNER)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=ROOT,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-1000:]
+    assert "normalize" in proc.stdout and "shlex" in proc.stdout

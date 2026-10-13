@@ -134,7 +134,7 @@ pi だけを使う前提で、判定器を TypeScript に移し、ハーネス�
 | --- | --- | --- |
 | C | `decide.py` の入口・役割・ファイルの判定・bypass | 移植済み（`home/dot_config/pi/harness/judge/decide.ts`） |
 | A（glob） | `command_policy.py` の設定の読み出しと glob 照合 | 移植済み（`judge/policy.ts`） |
-| A（正規化） | `command_policy.py` の `normalize` / `find_match`（`shlex` 相当を含む。約 900 行） | 未着手 |
+| A（正規化） | `command_policy.py` の `normalize` / `find_match`（`shlex` 相当を含む。約 900 行） | 移植済み（`judge/normalize.ts`、Python 互換の部品は `judge/pystr.ts`）。部品ごとの正解データと 9,199 件が全件一致 |
 | B | `bashrules/` の各検査（約 3,900 行）と `tables.toml` | 未着手 |
 | 生成 | `common.toml` を JSON にして配る（TS は TOML を読まない） | 試験用の `golden/common.json` だけ。配布の生成は未着手 |
 
@@ -148,8 +148,13 @@ Python 版の判定結果を正解として、TS 版との全件一致で進捗�
 - `test/agents/test_decide_golden.py`: 正解データが Python 版と一致していること（一定間隔の標本）
 - `test/agents/pi/judge_golden.mjs`: TS 版との差分。`node` の型除去で動く（22.18 以上）。`--bash` で bash も必須にする（移植の完了条件）
 - `test/agents/test_pi_judge_ts.py`: 上を pytest から呼ぶ。いまは bash 以外が全件一致であることを必須にしている
+- 部品ごとの正解データ: `scripts/agents/export_policy_golden.py` が、`shlex`・分割・正規化・置換と関数の抽出・`find_match`（deny / ask / allow の各一覧）の Python 版の出力を
+  `golden/policy_golden.jsonl`（9,199 件）に書く。`test/agents/pi/policy_golden.mjs` が TS 版と突き合わせる（食い違ったときに部品を特定できる）。
+  `test_pi_judge_ts.py` が全件一致を必須にし、`test_decide_golden.py` が正解データの鮮度を標本で見る
 
-実測（2026-10-13）: bash 以外（ファイル 1,081 件・そのほかのツール 16 件・不正な入力 6 件）は TS 版が初回から全件一致。bash は未移植（5,205 件が食い違い）。
+実測（2026-10-13）: 正規化の層（`shlex`・分割・正規化・照合）は、初回から部品ごとの正解データの 9,199 件が全件一致した
+（複数セグメントへの展開 323 件、`shlex` のエラー 11 件、deny / ask / allow に当たる 373 件を含む）。
+bash 以外（ファイル 1,081 件・そのほかのツール 16 件・不正な入力 6 件）は TS 版が初回から全件一致。bash は未移植（5,205 件が食い違い）。
 
 ### 判定が前の呼び出しに依存していた（修正済み）
 
@@ -166,10 +171,9 @@ Python 版の判定結果を正解として、TS 版との全件一致で進捗�
 
 ### 次
 
-1. `normalize` と `find_match`（層 A）: `shlex` 相当（POSIX の分割）を TS で書き、正規化の中間結果もデータ化して部品ごとに差分を取る
-2. `bashrules` の検査を、`DENY_CHECKS` → `PATH_CHECKS` → `ASK_CHECKS` の順に移す（`--bash` の食い違いを減らす）
-3. 配布: `common.toml` から判定用の JSON を生成し（OpenCode の `rules.json` と同じ形）、ハーネスが TS 版を読む。Python 版を外す
-4. 構文解析の堅牢化（tree-sitter など）は、挙動を合わせて移したあとの別の変更にする
+1. `bashrules` の検査を、`DENY_CHECKS` → `PATH_CHECKS` → `ASK_CHECKS` の順に移す（`--bash` の食い違いを減らす）
+2. 配布: `common.toml` から判定用の JSON を生成し（OpenCode の `rules.json` と同じ形）、ハーネスが TS 版を読む。Python 版を外す
+3. 構文解析の堅牢化（tree-sitter など）は、挙動を合わせて移したあとの別の変更にする
 
 ## 既知の制約
 
