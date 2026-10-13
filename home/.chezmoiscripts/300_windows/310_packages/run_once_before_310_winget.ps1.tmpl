@@ -83,8 +83,6 @@ winst JanDeDobbeleer.OhMyPosh
 # Utilities
 winst Microsoft.PowerToys
 winst QL-Win.QuickLook
-# Keyhac v2
-winst 9P8H1PG6PRHH --source msstore
 # Packages that only ship machine-wide installers (Chrome, IME, 7-Zip, fonts, Steam, Wacom, ...) and WinSCP are
 # installed by 309_admin so that UAC is shown once. see docs/spec/structure.md#winget-パッケージの-user--machine-の振り分け
 
@@ -98,6 +96,8 @@ winst astral-sh.uv
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 winst Bitwarden.Bitwarden
 winst Bitwarden.CLI
+# Keyhac v2 (msstore は会社で遅いため applejxd のみ)
+winst 9P8H1PG6PRHH --source msstore
 # iCloud
 winst 9PKTQ5699M62 --source msstore
 winst StablyAI.Orca
