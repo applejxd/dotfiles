@@ -77,7 +77,17 @@ def test_mise_config_keeps_platform_scope(os_name, username):
     assert "claude-code" not in tools
     assert not any(tool.endswith("opencode/cli") for tool in tools)
     if os_name == "windows":
-        assert config == {"tools": {"gh": "latest", "herdr": "latest"}}
+        # Windows でも node / uv / fzf / jq は mise が管理する (docs/spec/structure.md#windows-の-node-uv-fzf-jq)
+        assert config == {
+            "tools": {
+                "gh": "latest",
+                "herdr": "latest",
+                "node": "latest",
+                "uv": "latest",
+                "fzf": "latest",
+                "jq": "latest",
+            }
+        }
     else:
         assert tools["node"] == "latest"
         assert tools["uv"] == "latest"
