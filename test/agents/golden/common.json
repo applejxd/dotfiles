@@ -1,0 +1,1461 @@
+{
+ "agent_env": {
+  "GCM_INTERACTIVE": "never",
+  "GIT_EDITOR": "false",
+  "GIT_TERMINAL_PROMPT": "0"
+ },
+ "bash": {
+  "allow": [
+   "git diff",
+   "git status",
+   "git log",
+   "wc",
+   "grep -n",
+   "find",
+   "gcc",
+   "g++",
+   "cmake -S",
+   "cmake --build",
+   "uv pip list",
+   "uv sync",
+   "docker ps",
+   "mise run"
+  ],
+  "ask": [
+   "rm",
+   "git clean",
+   "git branch -D",
+   "git commit",
+   "git reset",
+   "docker rm",
+   "docker rmi",
+   "gh pr create",
+   "gh pr checkout",
+   "gh issue create",
+   "gh issue close",
+   "gh issue comment",
+   "pipx install",
+   "uv tool install",
+   "uv tool uninstall",
+   "uv tool upgrade",
+   "uv python install",
+   "uv python uninstall",
+   "cmake --install",
+   "docker login",
+   "docker push",
+   "nc",
+   "git config"
+  ],
+  "ask_hook_owned": [
+   "rm"
+  ],
+  "deny": [
+   "sudo",
+   "git push",
+   "git reset --hard",
+   "git rebase",
+   "git config --global",
+   "git config --system",
+   "git config --local",
+   "git config core.hooksPath",
+   "git config --unset",
+   "git config --add",
+   "git config --replace-all",
+   "git config --edit",
+   "git filter-branch",
+   "git update-ref -d",
+   "git reflog expire",
+   "git stash clear",
+   "git stash drop",
+   "git worktree remove",
+   "git checkout --",
+   "git restore",
+   "crontab",
+   "at",
+   "batch",
+   "systemctl enable",
+   "systemctl disable",
+   "systemctl mask",
+   "systemctl start",
+   "systemctl stop",
+   "systemctl restart",
+   "systemctl daemon-reload",
+   "systemd-run",
+   "mkfs",
+   "mkfs.ext4",
+   "mkfs.xfs",
+   "fdisk",
+   "parted",
+   "wipefs",
+   "socat",
+   "ncat",
+   "telnet",
+   "ssh",
+   "npm install -g",
+   "uv self update",
+   "rustup self update",
+   "chezmoi upgrade",
+   "pip",
+   "pip3",
+   "psql",
+   "mysql",
+   "mongod",
+   "mongosh",
+   "redis-cli",
+   "docker system prune",
+   "docker volume prune",
+   "docker image prune",
+   "docker container prune",
+   "docker network prune",
+   "npm cache clean",
+   "yarn cache clean",
+   "pnpm store prune",
+   "gh pr merge",
+   "gh release create",
+   "gh repo delete",
+   "gh gist create",
+   "gh secret set",
+   "gh secret list",
+   "gh auth token",
+   "bw get",
+   "bw list",
+   "bw export",
+   "op read",
+   "op item get",
+   "vault read",
+   "vault kv get",
+   "chezmoi secret",
+   "git remote add",
+   "git remote set-url",
+   "scp",
+   "rsync",
+   "sftp",
+   "aws s3 cp",
+   "aws s3 sync",
+   "gsutil cp",
+   "az storage blob upload",
+   "gh release upload"
+  ],
+  "deny_guide": {
+   "alternative": [
+    {
+     "commands": [
+      "npm install -g"
+     ],
+     "message": "npm install -g は許可されていません。グローバルに入れる CLI は mise で入れてください。chezmoi 管理の環境では、ソースの home/dot_config/mise/config.toml.tmpl の [tools] に `\"npm:<package>\" = \"latest\"` を追記して `chezmoi apply` します (`mise use -g` は次回の apply で失われうる)。chezmoi 管理でない環境なら `mise use -g npm:<package>` です。プロジェクトの依存なら -g 無しの `npm install <package>` を使ってください。"
+    },
+    {
+     "commands": [
+      "uv self update",
+      "chezmoi upgrade"
+     ],
+     "message": "ツール自身の更新は許可されていません。導入元のパッケージマネージャ (mise / winget など) で更新してください。導入元が分からなければ、更新してほしいツールを利用者に示してください。"
+    },
+    {
+     "commands": [
+      "rustup self update"
+     ],
+     "message": "rustup 自体の更新は許可されていません。利用者に依頼してください。toolchain の更新は `rustup update` を使えます。"
+    },
+    {
+     "commands": [
+      "git config --global",
+      "git config --system",
+      "git config --local",
+      "git config core.hooksPath",
+      "git config --unset",
+      "git config --add",
+      "git config --replace-all",
+      "git config --edit"
+     ],
+     "message": "git config の書き込みは許可されていません。ユーザー設定は chezmoi 管理の home/dot_gitconfig.tmpl を編集して `chezmoi apply` で反映してください。リポジトリ単位の設定は、変更内容を利用者に示して依頼してください。読み取りは `--global` などを付けず `git config --get <key>` / `git config --list` の形で使えます。"
+    },
+    {
+     "commands": [
+      "docker system prune",
+      "docker volume prune",
+      "docker image prune",
+      "docker container prune",
+      "docker network prune"
+     ],
+     "message": "docker の prune は許可されていません。消す対象を指定して `docker rm <container>` / `docker rmi <image>` を使ってください (確認が出ます)。ボリュームとネットワークの削除は利用者に依頼してください。"
+    },
+    {
+     "commands": [
+      "npm cache clean",
+      "yarn cache clean",
+      "pnpm store prune"
+     ],
+     "message": "キャッシュの削除は許可されていません (再取得に時間がかかります)。不具合の原因がキャッシュだと判断できるときだけ、実行してほしいコマンドと理由を利用者に示してください。"
+    }
+   ],
+   "elsewhere": [
+    "pip",
+    "pip3"
+   ],
+   "user_message": "この操作はエージェントには許可されていません。迂回せず、実行してほしいコマンドと理由を利用者に示してください。",
+   "user_only": [
+    "sudo",
+    "git push",
+    "git reset --hard",
+    "git rebase",
+    "git filter-branch",
+    "git update-ref -d",
+    "git reflog expire",
+    "git stash clear",
+    "git stash drop",
+    "git worktree remove",
+    "git checkout --",
+    "git restore",
+    "crontab",
+    "at",
+    "batch",
+    "systemctl enable",
+    "systemctl disable",
+    "systemctl mask",
+    "systemctl start",
+    "systemctl stop",
+    "systemctl restart",
+    "systemctl daemon-reload",
+    "systemd-run",
+    "mkfs",
+    "mkfs.ext4",
+    "mkfs.xfs",
+    "fdisk",
+    "parted",
+    "wipefs",
+    "socat",
+    "ncat",
+    "telnet",
+    "ssh",
+    "psql",
+    "mysql",
+    "mongod",
+    "mongosh",
+    "redis-cli",
+    "gh pr merge",
+    "gh release create",
+    "gh repo delete",
+    "gh gist create",
+    "gh secret set",
+    "gh secret list",
+    "gh auth token",
+    "bw get",
+    "bw list",
+    "bw export",
+    "op read",
+    "op item get",
+    "vault read",
+    "vault kv get",
+    "chezmoi secret",
+    "git remote add",
+    "git remote set-url",
+    "scp",
+    "rsync",
+    "sftp",
+    "aws s3 cp",
+    "aws s3 sync",
+    "gsutil cp",
+    "az storage blob upload",
+    "gh release upload"
+   ]
+  }
+ },
+ "claude": {
+  "auto_update": false,
+  "default_permission_mode": "auto",
+  "mcp_deny": [
+   "mcp__supabase__execute_sql"
+  ]
+ },
+ "copilot": {
+  "auto_update": false,
+  "default_permission_mode": "assisted",
+  "enabled_plugins": {
+   "document-skills@anthropic-agent-skills": true,
+   "example-skills@anthropic-agent-skills": false
+  },
+  "experimental": true,
+  "include_co_authored_by": false,
+  "locations": [
+   {
+    "approvals": [
+     {
+      "kind": "write"
+     }
+    ],
+    "path": "~/.local/share/chezmoi"
+   }
+  ],
+  "model": "claude-sonnet-5.5",
+  "trusted_folders": [
+   "~/.local/share/chezmoi",
+   "~/sandbox",
+   "~/src/my-agent-core",
+   "~/src/apple-agent-core"
+  ]
+ },
+ "file": {
+  "claude_read_allow": [
+   "README.md",
+   "pyproject.toml"
+  ],
+  "deny_exceptions": [
+   {
+    "deny": "**/.env.*",
+    "except": [
+     "**/.env.example",
+     "**/.env.sample",
+     "**/.env.template"
+    ]
+   }
+  ],
+  "read_ask_globs": [],
+  "read_deny_globs": [
+   "**/.ssh/**",
+   "**/.gnupg/**",
+   "**/sops/age/**",
+   "**/.aws/credentials",
+   "**/.netrc",
+   "**/.npmrc",
+   "**/.pypirc",
+   "**/id_rsa*",
+   "**/id_ed25519*",
+   "**/id_ecdsa*",
+   "**/id_dsa*",
+   "**/*.pem",
+   "**/*.key",
+   "**/*.p12",
+   "**/*.pfx",
+   "**/*.jks",
+   "**/*.keystore",
+   "**/key.txt",
+   "**/keys.txt",
+   "**/*_key",
+   "**/*.token",
+   "**/*_token",
+   "**/token.json",
+   "**/service-account*.json",
+   "**/secrets/**",
+   "**/*secret*",
+   "**/*credential*",
+   "**/*password*",
+   "**/.env",
+   "**/.env.*",
+   "**/.config/gh/hosts.yml",
+   "**/.docker/config.json",
+   "**/.git-credentials",
+   "**/.kube/config",
+   "**/.config/gcloud/credentials.db",
+   "**/.azure/msal_token_cache.json",
+   "**/.terraform.d/credentials.tfrc.json",
+   "**/.bash_history",
+   "**/.mysql_history",
+   "**/.node_repl_history",
+   "**/.psql_history",
+   "**/.python_history",
+   "**/.sh_history",
+   "**/.zsh_history",
+   "~/.copilot/settings.json",
+   "~/.copilot/config.json",
+   "~/.claude.json",
+   "~/.config/opencode/service.json"
+  ],
+  "write_ask_globs": [
+   "mise.toml"
+  ],
+  "write_deny_globs": [
+   "**/.ssh/**",
+   "**/.gnupg/**",
+   "**/sops/age/**",
+   "**/.aws/credentials",
+   "**/.netrc",
+   "**/.npmrc",
+   "**/.pypirc",
+   "**/id_rsa*",
+   "**/id_ed25519*",
+   "**/id_ecdsa*",
+   "**/id_dsa*",
+   "**/*.pem",
+   "**/*.key",
+   "**/*.p12",
+   "**/*.pfx",
+   "**/*.jks",
+   "**/*.keystore",
+   "**/key.txt",
+   "**/keys.txt",
+   "**/*_key",
+   "**/*.token",
+   "**/*_token",
+   "**/token.json",
+   "**/service-account*.json",
+   "**/secrets/**",
+   "**/*secret*",
+   "**/*credential*",
+   "**/*password*",
+   "**/.env",
+   "**/.env.*",
+   "~/.copilot/settings.json",
+   "~/.copilot/config.json",
+   "~/.claude.json",
+   "~/.config/opencode/opencode.json",
+   "~/.config/opencode/service.json",
+   "~/.local/state/opencode-sandbox/**",
+   "**/.opencode/opencode.json",
+   "**/.opencode/opencode.jsonc",
+   "**/.git/config",
+   "**/.git/hooks/**",
+   "~/.gitconfig"
+  ]
+ },
+ "hooks": [
+  {
+   "claude_event": "PreToolUse",
+   "claude_matcher": "Bash",
+   "copilot_event": "PreToolUse",
+   "copilot_matcher": "^(Bash|bash|powershell)$",
+   "id": "check_bash",
+   "purpose": "[bash] deny を両 CLI で、ask を Claude で強制する (permission リストの補完)",
+   "runner": "python3",
+   "script": "check_bash.py",
+   "timeout_sec": 30
+  },
+  {
+   "claude_event": "PreToolUse",
+   "claude_matcher": "Bash|Write|Edit",
+   "copilot_event": "PreToolUse",
+   "copilot_matcher": "^(Bash|bash|powershell|Write|create|Edit|edit)$",
+   "id": "redirect-tmp",
+   "purpose": "/tmp への書き込みを検出して ./.tmp へ誘導する (読み取り専用操作は許可)",
+   "runner": "python3",
+   "script": "redirect-tmp.py",
+   "timeout_sec": 30
+  },
+  {
+   "copilot_event": "PreToolUse",
+   "copilot_matcher": "^(Read|view)$",
+   "id": "check_file_read",
+   "purpose": "[file] read_deny_globs を Copilot のファイル読み取りにも適用する",
+   "runner": "python3",
+   "script": "check_file_read.py",
+   "timeout_sec": 30
+  },
+  {
+   "claude_event": "PostToolUse",
+   "claude_matcher": "Edit|Write",
+   "copilot_event": "PostToolUse",
+   "copilot_matcher": "^(Edit|Write|edit|create)$",
+   "id": "markdownlint",
+   "purpose": "Markdown 編集後に markdownlint --fix と残存違反の警告",
+   "runner": "bash",
+   "script": "markdownlint.sh",
+   "timeout_sec": 30
+  },
+  {
+   "claude_event": "PostToolUse",
+   "claude_matcher": "Edit|Write",
+   "copilot_event": "PostToolUse",
+   "copilot_matcher": "^(Edit|Write|edit|create)$",
+   "id": "format-file",
+   "purpose": "編集したファイルを拡張子に応じて整形 (ruff / clang-format / prettier)",
+   "runner": "bash",
+   "script": "format-file.sh",
+   "timeout_sec": 30
+  }
+ ],
+ "opencode": {
+  "agent": {
+   "bypass": {
+    "bypass": true,
+    "description": "通常の確認 (ask) を無確認で通す。deny と誘導は通常どおり効く",
+    "mode": "primary",
+    "permission": {
+     "task": {
+      "*": "deny",
+      "bypass-fleet-worker": "allow",
+      "bypass-worker": "allow",
+      "commit": "allow",
+      "explore": "allow",
+      "review": "allow"
+     }
+    }
+   },
+   "bypass-worker": {
+    "bypass": true,
+    "description": "bypass から起動する作業用の子エージェント。通常の確認 (ask) を無確認で通す",
+    "mode": "subagent",
+    "permission": {
+     "task": "deny"
+    }
+   }
+  },
+  "agents": {
+   "bypass-fleet-worker": {
+    "bypass": true,
+    "description": "bypass の /fleet の作業役。親が割り当てた 1 つの作業を、指定された担当ファイルの範囲で実装し、確認して結果を返す。通常の確認 (ask) を無確認で通す。コミットはしない。/fleet 以外から直接使わない",
+    "mode": "subagent",
+    "permissions": [
+     {
+      "action": "subagent",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "question",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git add *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git commit *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git stash *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git checkout *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git switch *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git restore *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git reset *"
+     }
+    ],
+    "system_from": "fleet-worker"
+   },
+   "commit": {
+    "description": "変更を読み、論理単位ごとの対象ファイルとコミットメッセージ全文 (計画) を返す。ステージもコミットもしない。呼ぶ前に、docs/change/ があるリポジトリでは commit スキルの「コミット前の docs 反映」を親が済ませる。親は差分を読まずにこれへ任せる。返された計画の全文 (対象とメッセージ) を commit スキルの承認時の提示の形で返答に示し、利用者の承認を待って返答を終える (件名だけに縮めない。承認前にステージやコミットをしない)。承認されたら commit スキルの手順 3〜6 に従い、差分は読み直さずに単位ごとに git add -- <パス> と git commit -m '<件名>' -m '<本文>' を別々に実行する。shell は同じ応答に並べず、完了を待って 1 つずつ実行する (並べると .git/index.lock で失敗する)",
+    "mode": "subagent",
+    "permissions": [
+     {
+      "action": "edit",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "subagent",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "question",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "shell",
+      "effect": "allow",
+      "resource": "git status *"
+     },
+     {
+      "action": "shell",
+      "effect": "allow",
+      "resource": "git diff *"
+     },
+     {
+      "action": "shell",
+      "effect": "allow",
+      "resource": "git log *"
+     },
+     {
+      "action": "shell",
+      "effect": "allow",
+      "resource": "git branch --show-current"
+     },
+     {
+      "action": "shell",
+      "effect": "allow",
+      "resource": "git rev-parse --show-toplevel"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "*>*"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "*--output*"
+     }
+    ],
+    "system": "あなたはコミットの計画係です。親から呼ばれ、変更を読んでコミットの計画を返します。\n利用者への提示・ステージ・コミットは親が行います。\n\n- 最初に skill ツールで commit スキルを読み込む。分け方・メッセージの書式は\n  それに従い、手順 2 (メッセージ作成だけを依頼された場合) として扱う\n- 単位はファイル単位で分ける。同じファイルの中を分ける必要があるときは、単位をまとめるか、\n  分けられなかったことを書く\n- 単位ごとに、対象のパス (git status --short の行) とメッセージの全文を、スキルの\n  「承認時の提示」の形で返す。親はそれをそのまま利用者に示し、git commit -m '<件名>' -m '<本文>' に\n  使うので、全文を省略せずに書く\n- ファイルは read / glob / grep ツールで読む。shell で cat / ls / find / echo などを使わない\n- shell は 1 回の応答で 1 つだけ呼び、完了結果を受け取ってから次を呼ぶ。1 回の呼び出しは\n  1 コマンドとし、; や && でつなげず、リダイレクトや 2>&1 を付けない。作業ディレクトリは\n  cd ではなく shell ツールの workdir で指定する\n- 対象外のステージ済み変更や、部分ステージ (同じファイルの index と作業ツリーの両方に差分) が\n  あれば、計画に添えて書く\n\nファイルは編集しない。git add / git commit などで状態を変えない。\n"
+   },
+   "explore": {
+    "description": "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). When calling this agent, specify the desired thoroughness level: \"quick\" for basic searches, \"medium\" for moderate exploration, or \"very thorough\" for comprehensive analysis across multiple locations and naming conventions. 読み取り専用（read / glob / grep / webfetch / websearch）。Git の履歴やコマンドの実行が要る調査は親へ返す。",
+    "mode": "subagent",
+    "permissions": [
+     {
+      "action": "edit",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "subagent",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "question",
+      "effect": "deny",
+      "resource": "*"
+     }
+    ]
+   },
+   "fleet-worker": {
+    "description": "/fleet の作業役。親が割り当てた 1 つの作業を、指定された担当ファイルの範囲で実装し、確認して結果を返す。コミットはしない。/fleet 以外から直接使わない",
+    "mode": "subagent",
+    "permissions": [
+     {
+      "action": "subagent",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "question",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git add *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git commit *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git stash *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git checkout *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git switch *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git restore *"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "git reset *"
+     }
+    ],
+    "system": "あなたは並列作業の作業役です。取りまとめ役 (親エージェント) から 1 つの作業を渡され、\n結果を親へ返します。ほかの作業役が同じ作業ツリーで同時に動いています。\nユーザーとは直接やり取りできません。\n\n- 担当ファイルとして渡されたものだけを編集する。担当外の変更が必要だと分かったら、\n  編集せずに理由と必要な変更を報告する\n- 既存の関数や振る舞いを変えたら、grep で呼び出し元を探して読み、その変更で壊れる所や、\n  直した誤りを前提にしている所 (誤りを打ち消す処理など) が無いか確かめる\n- 確かめ用・比較用のファイルは作らない (試すなら python -c など)。どうしても要るときは\n  作業ツリーの .tmp/ の下に作り、報告の前に消す。作業ツリーの外 ($TMPDIR や ../ も) へは書かない\n- ファイルは read / glob / grep ツールで読み、edit / write ツールで書く。shell の cat / head /\n  ls / ヒアドキュメント / リダイレクトで読み書きしない\n- 完了条件と確認方法が渡されたら、それに従って確かめる。確認方法のコマンドは渡された形の\n  まま単独で実行する (パイプや ; でつながない。作業ディレクトリは cd ではなく workdir で\n  指定する)。確かめられなかったら、そう書く (推測で成功と書かない)\n- git の操作 (add / commit / stash / checkout / reset など) はしない。\n  作業ツリーはほかの作業役と共有している\n- 次を返して終わる\n  - 変更したファイルと、変更の要点\n  - 実行した確認と、その結果\n  - 呼び出し元への影響 (確かめた範囲と、見つけたもの)\n  - 残った問題・判断が要る点・担当外で必要な変更\n"
+   },
+   "plan": {
+    "description": "Read-only agent for exploring the codebase and planning work before implementation.",
+    "mode": "primary",
+    "permissions": [
+     {
+      "action": "edit",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "edit",
+      "effect": "allow",
+      "resource": "~/.opencode/plan/*"
+     },
+     {
+      "action": "subagent",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "subagent",
+      "effect": "allow",
+      "resource": "explore"
+     },
+     {
+      "action": "subagent",
+      "effect": "allow",
+      "resource": "review"
+     },
+     {
+      "action": "shell",
+      "effect": "ask",
+      "resource": "*"
+     }
+    ],
+    "restate_global_deny": [
+     "edit",
+     "shell"
+    ]
+   },
+   "review": {
+    "description": "別系統のモデルによる相談役。設計案・差分・調査結果を渡すと、欠陥・見落とし・代替案を率直に返す。ファイルは読むだけで、編集もコマンド実行もしない。差分や判断材料は依頼文に含めて渡す",
+    "mode": "subagent",
+    "permissions": [
+     {
+      "action": "edit",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "shell",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "subagent",
+      "effect": "deny",
+      "resource": "*"
+     },
+     {
+      "action": "question",
+      "effect": "deny",
+      "resource": "*"
+     }
+    ],
+    "system": "あなたは相談役 (セカンドオピニオン) です。親エージェントとは別系統のモデルで、\n親の判断を検証するために呼ばれます。同意するためではなく、誤りを見つけるためにいます。\n\n- 渡された材料と、必要なら read / grep / glob で読んだコードだけを根拠にする。\n  推測は推測と明示する\n- 指摘は重大度の順 (BLOCKER / MAJOR / MINOR / NIT) に、ファイルと行を添えて書く\n- 正しいと判断したことは短く「問題なし」と書き、理由を 1 行添える\n- 親の前提そのものが疑わしいときは、それを最初に書く\n- 代替案があれば、採る場合の代償と一緒に示す\n- 材料が足りず判断できない点は、何があれば判断できるかを書く\n\nファイルは編集しない。コマンドも実行しない。\n"
+   }
+  },
+  "ask_description": {
+   "commit": {
+    "enabled": true,
+    "line_width": 72,
+    "max_lines": 8
+   },
+   "duration_ms": 20000,
+   "enabled": true,
+   "min_command_length": 60,
+   "models": [
+    "amazon-bedrock/us.anthropic.claude-haiku-5-5",
+    "amazon-bedrock/anthropic.claude-haiku-5-5",
+    "github-copilot/claude-haiku-4.5",
+    "github-copilot/gpt-5.4-mini"
+   ],
+   "timeout_ms": 5000
+  },
+  "auto_update": false,
+  "bypass_children": {
+   "agents": [
+    "explore",
+    "review",
+    "commit"
+   ]
+  },
+  "commands": {
+   "fleet": {
+    "description": "依頼を並列に動かせる作業に分け、作業役 (fleet-worker / bypass-fleet-worker) を同時に起動して進める",
+    "subagent": false,
+    "template": "次の依頼を、並列に動かせる小さな作業に分けて進めてください。あなたは取りまとめ役です。\n\n依頼:\n$ARGUMENTS\n\n手順:\n\n1. 必要なら先にコードを読み、依頼を作業に分ける。各作業について、目的・担当ファイル・\n   完了条件・確認方法を決める。担当ファイルは作業どうしで重ねない\n2. 作業の依存関係を決め、同時に動かせる組 (波) に分ける。1 つの波は 4 件まで。\n   分ける価値が無い小さな依頼なら、分けずに自分で進める\n3. 作業の一覧・波・担当ファイルを示してから始める\n4. 波ごとに、各作業を 1 回の応答の中で subagent ツールを並べて作業役に渡す\n   (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。\n   作業役は、subagent ツールに bypass-fleet-worker が載っていればそれ、無ければ\n   fleet-worker を使う (呼べるのはどちらか一方だけ)。\n   どちらも載っていないとき (plan など) は、調査だけの依頼なら explore と review に\n   分担し、実装を含む依頼なら計画を示すところで止めて、作業役を呼べるエージェントへの\n   切り替えを利用者に頼む。拒否された作業を自分の shell で肩代わりしない。\n   今あるファイルの探索は explore、Git の履歴やコマンドの実行が要る調査は作業役、\n   第三者の検証は review に任せてよい。\n   依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を\n   すべて書く (子エージェントはこの会話を見られない)\n5. 結果を読み、失敗・担当外の変更・報告された問題 (呼び出し元への影響を含む) があれば、\n   直すか作業を切り直してから次の波へ進む\n6. 最後に全体の差分を読み、リポジトリで定められた検証を実行し、作業ごとの結果・\n   検証の結果・残った問題をまとめて報告する。コミットはしない\n"
+   }
+  },
+  "formatter": {
+   "markdownlint": {
+    "command": [
+     "markdownlint-cli2",
+     "--fix",
+     "$FILE"
+    ],
+    "extensions": [
+     ".md",
+     ".markdown"
+    ]
+   }
+  },
+  "keybinds": {
+   "app.exit": "ctrl+d",
+   "service.restart": "<leader>v",
+   "session.interrupt": "ctrl+c,escape"
+  },
+  "model": {
+   "agents": {
+    "bypass-fleet-worker": "worker",
+    "commit": "routine",
+    "fleet-worker": "worker",
+    "review": "second_opinion"
+   },
+   "provider": "github-copilot",
+   "tier": {
+    "amazon-bedrock": {
+     "deep": "us.anthropic.claude-opus-5-5#high",
+     "default": "us.anthropic.claude-sonnet-5-5",
+     "routine": "us.anthropic.claude-sonnet-5-5#low",
+     "second_opinion": "us.openai.gpt-6-sol",
+     "worker": "us.anthropic.claude-sonnet-5-5#medium"
+    },
+    "github-copilot": {
+     "deep": "claude-sonnet-5.5#high",
+     "default": "claude-sonnet-5.5",
+     "routine": "claude-sonnet-5.5#medium",
+     "second_opinion": "gpt-6-astra",
+     "worker": "claude-sonnet-5.5#medium"
+    }
+   }
+  },
+  "sandbox": {
+   "config_dir": "~/.config/opencode-sandbox",
+   "control_dirs": [
+    "~/.local/share/ocs",
+    "~/.local/bin",
+    "~/.config/opencode",
+    "~/.config/opencode-sandbox",
+    "~/.config/agents",
+    "~/.local/state/opencode-sandbox"
+   ],
+   "deny_read": [
+    "/run/user"
+   ],
+   "enabled": true,
+   "model_preference": [
+    {
+     "model": "claude-sonnet-5.5",
+     "provider": "github-copilot"
+    }
+   ],
+   "network_allow": [
+    "opencode.ai",
+    "*.opencode.ai"
+   ],
+   "permissions": {
+    "default_shell_effect": "allow",
+    "drop_path_prefixes": [
+     "~/",
+     "$HOME/",
+     "/home/",
+     "/root/",
+     "/etc/",
+     "/var/",
+     "/usr/"
+    ],
+    "drop_shell": [
+     "^(sudo|systemctl|systemd-run|service|crontab|at|batch)\\b",
+     "^(mkfs[.a-z0-9]*|mount|umount|fdisk|parted|wipefs|dd)\\b",
+     "^git config --(global|system)",
+     "^(npm install -g|pipx install|uv tool (install|uninstall|upgrade))",
+     "^(uv python (install|uninstall)|rustup self|uv self|pip3? )",
+     "^(npm cache clean|yarn cache clean|pnpm store prune)",
+     "^docker (container|image|network|system|volume) prune",
+     "^cmake --install",
+     "^(git log|wc|grep -n|uv pip list|docker ps)\\b",
+     "^(rm|mv|cp|truncate|shred|find)\\b"
+    ]
+   },
+   "policies": {
+    "deny": [
+     "shell:git push *",
+     "shell:gh repo delete *",
+     "shell:chezmoi apply *",
+     "shell:chezmoi re-add *"
+    ]
+   },
+   "protected": [
+    "home/dot_config/agents",
+    "home/dot_config/opencode/guide-plugin",
+    "home/dot_local/bin",
+    "home/dot_local/share/ocs",
+    "scripts/agents",
+    "home/dot_config/mise",
+    ".opencode"
+   ],
+   "providers": [
+    "github-copilot",
+    "anthropic",
+    "openai"
+   ],
+   "read": [
+    "~/.opencode",
+    "~/.local/share/mise",
+    "~/.local/bin",
+    "~/.config/opencode/guide-plugin",
+    "~/.config/opencode/checkpoint-plugin",
+    "~/.config/opencode/skills",
+    "~/.config/opencode-sandbox",
+    "~/.config/shell",
+    "~/.config/mise",
+    "~/.config/chezmoi",
+    "~/.gitconfig",
+    "~/.config/git",
+    "~/.claude/skills",
+    "~/.agents/skills"
+   ],
+   "runtime_path": "~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence",
+   "system_prompt": "この環境は OS のアクセス制御で囲われています。次を前提に判断してください。\n\n1. ホスト HOME の大部分は隠されています。`ENOENT`（存在しない）は\n   ホスト上の不存在を意味しません。隠されているだけのことがあります。\n2. 成果の永続化先は、この作業ディレクトリです。他の永続化先や\n   読み取り専用の例外は、明示されたものに限られます。\n3. 一時領域への書き込みは、ホストの同名パスへの反映を意味しません。\n   隔離の終了時に破棄されます。\n4. 鍵の生成・認証設定・ホストへの展開（`chezmoi apply` など）は、\n   境界の外で行う操作です。ここでは行わず、必要なら利用者へ依頼してください。\n5. 内側の観測だけで「ホストへ反映できた」と報告しないでください。\n6. 拒否されたアクセスを、別パス・symlink・別ツールで回避しないでください。\n   回避せず、拒否された事実を報告してください。\n7. ホストで実行されるコード（`.chezmoiscripts/`・mise タスク・シェル起動設定・\n   Git hooks・ランチャー）を変更したときは、対象と**実行される契機**を\n   報告してください。\n",
+   "unsafe_workspace": [
+    "~",
+    "/mnt",
+    "/tmp",
+    "/var/tmp",
+    "/dev/shm"
+   ],
+   "work_read": [
+    "~/src",
+    "~/worktrees",
+    "~/papers",
+    "~/.local/share/chezmoi"
+   ],
+   "write": [
+    "~/.cache"
+   ]
+  },
+  "shell": {
+   "guide": [
+    {
+     "message": "cd は使わないでください。shell ツールの workdir 引数でディレクトリを指定できます。",
+     "pattern": "(^|&&|\\|\\||;|\\n)\\s*cd\\s"
+    },
+    {
+     "pi": "read-cat-head-tail"
+    },
+    {
+     "pi": "read-sed-n"
+    },
+    {
+     "message": "allow されたコマンドの出力をリダイレクトで書き込まないでください。ファイルを作る・書き換えるときは write / edit ツールを使ってください。",
+     "pattern": "(^|&&|\\|\\||;|\\n)\\s*(wc|grep\\s+-n|git\\s+log|uv\\s+pip\\s+list|docker\\s+ps)\\b[^\\n]*>(?!&\\s*(\\d+|-)(?=$|[\\s;|&)])|>?\\s*/dev/null(?=$|[\\s;|&)]))"
+    },
+    {
+     "message": "git log の --output でファイルへ書き込まないでください。ファイルを作るときは write ツールを使ってください。",
+     "pattern": "(^|[;&|\\n(`{])\\s*git[ \\t]+log(?=[ \\t]|\\\\\\n)(?:[^;&|\\n'\"\\\\]|\\\\[\\s\\S]|'[^']*'|\"(?:[^\"\\\\]|\\\\[\\s\\S])*\")*?(?:[ \\t]|\\\\\\n)['\"]?--output['\"]?(=|[ \\t])"
+    },
+    {
+     "message": "git commit の前にオプションを置かないでください。`git commit -m '<件名>' -m '<本文>'` の形で実行してください (確認と hook を通すため)。",
+     "pattern": "(^|&&|\\|\\||;|\\n)\\s*git(\\s+-\\S+(\\s+[^-\\s]\\S*)?)+\\s+commit(\\s|$)"
+    },
+    {
+     "pi": "write-cat-tee-heredoc"
+    },
+    {
+     "pi": "write-heredoc-script"
+    },
+    {
+     "early": true,
+     "message": "pip は使わないでください。依存の追加は `uv add <pkg>` (pyproject.toml と uv.lock を更新)、環境への導入は `uv pip install <pkg>` か `uv sync`、単発の CLI は `uvx <tool>` を使ってください。",
+     "pattern": "(^|[;&|\\n])[ \\t]*((uv[ \\t]+run|mise[ \\t]+exec[ \\t]+--)[ \\t]+)?(pip3?(\\.\\d+)?|python[0-9.]*[ \\t]+-m[ \\t]*pip3?(\\.\\d+)?)([ \\t]|$)",
+     "unless": "^\\s*(git|gh)\\s(?=[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=])(?:[^;&|\\n'\"`$()<>\\\\]|\\\\[^\\n]|'[^']*'|\"(?:[^\"\\\\`$]|\\\\.|\\$\\(cat <<-?'(\\w+)'\\n[\\s\\S]*?\\n\\3\\n\\s*\\))*\")*$"
+    },
+    {
+     "message": ".git (リポジトリの履歴) を rm で直接消さないでください。履歴の整理は git のコマンドで行い、消す必要があるときは利用者に依頼してください。",
+     "pattern": "(^|[;&|\\n])[ \\t]*rm[ \\t]+([^\\s;&|]+[ \\t]+)*[\"']?(\\./)?([^\\s;&|\"']*/)?\\.git(/[^\\s;&|\"']*)?[\"']?(?=[\\s;&|]|$)",
+     "unless": "^\\s*(git|gh)\\s(?=[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=])(?:[^;&|\\n'\"`$()<>\\\\]|\\\\[^\\n]|'[^']*'|\"(?:[^\"\\\\`$]|\\\\.|\\$\\(cat <<-?'(\\w+)'\\n[\\s\\S]*?\\n\\3\\n\\s*\\))*\")*$"
+    },
+    {
+     "message": "~ / $HOME / / を rm の対象にしないでください。消すものを具体的なパスで指定してください。",
+     "pattern": "(^|[;&|\\n])[ \\t]*rm[ \\t]+([^\\s;&|]+[ \\t]+)*[\"']?((~|\\$HOME|\\$\\{HOME\\})/?\\*?|/\\*?)[\"']?(?=[\\s;&|]|$)",
+     "unless": "^\\s*(git|gh)\\s(?=[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=])(?:[^;&|\\n'\"`$()<>\\\\]|\\\\[^\\n]|'[^']*'|\"(?:[^\"\\\\`$]|\\\\.|\\$\\(cat <<-?'(\\w+)'\\n[\\s\\S]*?\\n\\3\\n\\s*\\))*\")*$"
+    },
+    {
+     "message": "作業ディレクトリ全体 (. / .. / *) を再帰的に消さないでください。消すものを具体的なパスで指定してください (例: rm -rf .tmp/foo)。",
+     "pattern": "(^|[;&|\\n])[ \\t]*rm[ \\t]+([^\\s;&|]+[ \\t]+)*(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)[ \\t]+([^\\s;&|]+[ \\t]+)*[\"']?(\\.{1,2}/?|\\./\\*|\\*|\\.\\*)[\"']?(?=[\\s;&|]|$)",
+     "unless": "^\\s*(git|gh)\\s(?=[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=])(?:[^;&|\\n'\"`$()<>\\\\]|\\\\[^\\n]|'[^']*'|\"(?:[^\"\\\\`$]|\\\\.|\\$\\(cat <<-?'(\\w+)'\\n[\\s\\S]*?\\n\\3\\n\\s*\\))*\")*$"
+    },
+    {
+     "message": "/ ~ .git を起点にした find の -delete / -exec rm はしないでください。起点を消す範囲の具体的なディレクトリに絞ってください。",
+     "pattern": "(^|[;&|\\n])[ \\t]*find[ \\t]+(-[HLP][ \\t]+)*[\"']?(/|~/?|\\$HOME/?|\\$\\{HOME\\}/?|(\\./)?\\.git(/[^\\s;&|\"']*)?)[\"']?(?=[ \\t])[^\\n;&|]*[ \\t](-delete|-exec(dir)?[ \\t]+rm)\\b",
+     "unless": "^\\s*(git|gh)\\s(?=[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=])(?:[^;&|\\n'\"`$()<>\\\\]|\\\\[^\\n]|'[^']*'|\"(?:[^\"\\\\`$]|\\\\.|\\$\\(cat <<-?'(\\w+)'\\n[\\s\\S]*?\\n\\3\\n\\s*\\))*\")*$"
+    }
+   ]
+  }
+ },
+ "pi": {
+  "agents": {
+   "commit": {
+    "description": "変更を読み、論理単位ごとの対象ファイルとコミットメッセージ全文 (計画) を返す。ステージもコミットもしない",
+    "profile": "committer",
+    "system": "あなたはコミットの計画係です。git status / git diff / git log で変更を読み、commit スキルの\n書式に従って、ファイル単位の論理単位ごとに対象のパスとメッセージの全文を返します。\nステージもコミットもしません。shell は 1 回に 1 コマンドで、連結やリダイレクトを付けません。\n",
+    "tier": "routine"
+   },
+   "explore": {
+    "description": "読み取り専用の探索役。今あるファイルを探して読み、要点を返す。shell は使えない",
+    "inherit_bypass": true,
+    "profile": "reader",
+    "system": "あなたは読み取り専用の探索役です。親から依頼された調査を、ファイルを探して読むことで行い、\n見つけたことを根拠のパスと行とともに簡潔に返します。ファイルは編集しません。\nGit の履歴やコマンドの実行が要る調査は、できないことを書いて親へ返します。\n"
+   },
+   "review": {
+    "description": "別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する。読むだけ。差分は依頼文に含めて渡す",
+    "inherit_bypass": true,
+    "profile": "reader",
+    "system": "あなたはレビュー役です。依頼文の対象 (設計案・差分・調査結果) を読み、欠陥・見落とし・誤りを\n重大度 (BLOCKER / MAJOR / MINOR) と根拠付きで指摘します。修正はしません。確信が無いものは\n「未確認」と書きます。\n",
+    "tier": "second_opinion"
+   },
+   "worker": {
+    "description": "割り当てられた 1 つの作業を、指定された担当ファイルの範囲で実装して確かめ、結果を返す。コミットはしない",
+    "inherit_bypass": true,
+    "profile": "worker",
+    "system": "あなたは作業役です。依頼された 1 つの作業を、担当ファイルの範囲で実装し、確認方法を実行して\n結果を返します。担当外のファイルは変えず、git の状態を変える操作 (add / commit / stash /\ncheckout / switch / restore / reset) はしません。既存の振る舞いを変えたら呼び出し元を探して読み、\n影響を報告に書きます。\n",
+    "tier": "worker"
+   }
+  },
+  "commands": {
+   "fleet": {
+    "argument_hint": "<依頼>",
+    "description": "依頼を並列に動かせる作業に分け、作業役 (worker) を同時に起動して進める",
+    "template": "次の依頼を、並列に動かせる小さな作業に分けて進めてください。あなたは取りまとめ役です。\n\n依頼:\n$ARGUMENTS\n\n手順:\n\n1. 必要なら先にコードを読み、依頼を作業に分ける。各作業について、目的・担当ファイル・\n   完了条件・確認方法を決める。担当ファイルは作業どうしで重ねない\n2. 作業の依存関係を決め、同時に動かせる組 (波) に分ける。1 つの波は 4 件まで。\n   分ける価値が無い小さな依頼なら、分けずに自分で進める\n3. 作業の一覧・波・担当ファイルを示してから始める\n4. 波ごとに、各作業を 1 回の応答の中で guarded_task ツールを並べて、agent を worker にして渡す\n   (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。\n   今あるファイルの探索は explore、第三者の検証は review に任せてよい。\n   guarded_task が無い役割 (reader など) のときは、調査だけの依頼なら自分で読み、実装を含む依頼なら\n   計画を示すところで止めて、役割の切り替え (pis --role implementer) を利用者に頼む。\n   子の結果が blocked (承認待ちで未完了) なら、その操作を利用者に示して判断を仰ぐ。\n   拒否された作業を自分の shell で肩代わりしない。\n   依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を\n   すべて書く (子エージェントはこの会話を見られない)\n5. 結果を読み、失敗・担当外の変更・報告された問題 (呼び出し元への影響を含む) があれば、\n   直すか作業を切り直してから次の波へ進む\n6. 最後に全体の差分を読み、リポジトリで定められた検証を実行し、作業ごとの結果・\n   検証の結果・残った問題をまとめて報告する。コミットはしない\n"
+   }
+  },
+  "external_read": {
+   "paths": [
+    "~/.claude/skills",
+    "~/.agents/skills",
+    "~/.config/opencode/skills"
+   ]
+  },
+  "guide": [
+   {
+    "id": "read-cat-head-tail",
+    "message": "cat / head / tail でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。",
+    "pattern": "(^|&&|;|\\n)\\s*(cat|head|tail)\\s",
+    "unless": "[|<>]|\\s-{1,2}(c|f|bytes|follow)\\b"
+   },
+   {
+    "id": "read-sed-n",
+    "message": "sed -n でファイルを読まないでください。read ツールを使ってください (offset と limit で範囲を指定できます)。",
+    "pattern": "(^|&&|;|\\n)\\s*sed\\s+-n\\s",
+    "unless": "[|<>]"
+   },
+   {
+    "id": "write-cat-tee-heredoc",
+    "message": "cat > file や tee でファイルを作らないでください。write ツールを使ってください (差分が見えるうえ、edit の permission が効きます)。",
+    "pattern": "(^|&&|;|\\n)\\s*(cat\\s*>>?\\s*\\S+|tee\\s+(-a\\s+)?\\S+)\\s*<<",
+    "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
+   },
+   {
+    "id": "write-heredoc-script",
+    "message": "ヒアドキュメントでスクリプトを渡さないでください。write ツールでファイルに書いてから実行してください (確認画面が 1 行になり、中身は差分で見えます)。",
+    "pattern": "(^|[^<])<<-?\\s*[\"']?\\w+[\"']?[^\\n]*\\n",
+    "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
+   }
+  ],
+  "keybinds": {
+   "app.clear": [],
+   "app.exit": "ctrl+d",
+   "app.interrupt": [
+    "escape",
+    "ctrl+c"
+   ]
+  },
+  "model": {
+   "tier": {
+    "github-copilot": {
+     "second_opinion": "gpt-6-sol"
+    }
+   }
+  },
+  "profiles": {
+   "committer": {
+    "default": "deny",
+    "shell_allow": [
+     "git status",
+     "git diff",
+     "git log",
+     "git branch --show-current",
+     "git rev-parse --show-toplevel"
+    ],
+    "shell_deny": [
+     "git add",
+     "git commit",
+     "git stash",
+     "git checkout",
+     "git switch",
+     "git restore",
+     "git reset"
+    ],
+    "tools": [
+     "bash",
+     "read",
+     "grep",
+     "find",
+     "ls"
+    ]
+   },
+   "implementer": {
+    "default": "ask",
+    "tools": [
+     "bash",
+     "read",
+     "edit",
+     "write",
+     "grep",
+     "find",
+     "ls",
+     "task",
+     "todo",
+     "mcp__*"
+    ]
+   },
+   "reader": {
+    "default": "deny",
+    "tools": [
+     "read",
+     "grep",
+     "find",
+     "ls"
+    ]
+   },
+   "worker": {
+    "default": "ask",
+    "shell_deny": [
+     "git add",
+     "git commit",
+     "git stash",
+     "git checkout",
+     "git switch",
+     "git restore",
+     "git reset"
+    ],
+    "tools": [
+     "bash",
+     "read",
+     "edit",
+     "write",
+     "grep",
+     "find",
+     "ls"
+    ]
+   }
+  },
+  "redact": {
+   "deny_path_output": true,
+   "deny_path_unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]",
+   "enabled": true,
+   "rule": [
+    {
+     "name": "秘密鍵",
+     "pattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z ]*PRIVATE KEY-----"
+    },
+    {
+     "name": "age 秘密鍵",
+     "pattern": "AGE-SECRET-KEY-1[0-9A-Z]{50,}"
+    },
+    {
+     "name": "AWS アクセスキー",
+     "pattern": "\\b(AKIA|ASIA)[0-9A-Z]{16}\\b"
+    },
+    {
+     "name": "GitHub トークン",
+     "pattern": "\\bgh[pousr]_[A-Za-z0-9]{30,}\\b"
+    },
+    {
+     "name": "Slack トークン",
+     "pattern": "\\bxox[abprs]-[A-Za-z0-9-]{10,}\\b"
+    },
+    {
+     "name": "API キー",
+     "pattern": "\\bsk-[A-Za-z0-9_-]{20,}\\b"
+    },
+    {
+     "name": "Google API キー",
+     "pattern": "\\bAIza[0-9A-Za-z_-]{35}\\b"
+    },
+    {
+     "name": "JWT",
+     "pattern": "\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}"
+    },
+    {
+     "name": "代入された秘密",
+     "pattern": "(?<=(password|passwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)[\"']?\\s*[=:]\\s*)(\"[^\"\\n]{6,}\"|'[^'\\n]{6,}'|[A-Za-z0-9_\\-+/=.]{16,})"
+    }
+   ]
+  },
+  "sandbox": {
+   "control_dirs": [
+    "~/.config/pi",
+    "~/.pi",
+    "~/.claude/hooks",
+    "~/.local/share/pi-sandbox"
+   ],
+   "protected": [
+    "home/dot_config/pi",
+    "home/dot_claude/hooks",
+    "home/dot_pi"
+   ],
+   "read": [
+    "~/bin",
+    "~/.pi/agent/install",
+    "~/.pi/agent/bin",
+    "~/.config/pi/harness",
+    "~/.config/agents",
+    "~/.claude/hooks"
+   ]
+  },
+  "settings": {
+   "defaultThinkingLevel": "medium",
+   "extensions": [
+    "~/.config/pi/commit-confirm"
+   ],
+   "skills": [
+    "~/.claude/skills"
+   ]
+  },
+  "shell": {
+   "allow": [
+    "git log",
+    "wc",
+    "grep -n",
+    "uv pip list",
+    "docker ps"
+   ]
+  },
+  "skill_scripts": {
+   "allow": [
+    {
+     "script": "~/.claude/skills/sdd-docs/scripts/lint_docs.py"
+    },
+    {
+     "exact": [
+      "--save",
+      "--baseline"
+     ],
+     "script": "~/.claude/skills/sdd-docs/scripts/check_refs.py"
+    },
+    {
+     "script": "~/.claude/skills/sdd-docs/scripts/docs_state.py",
+     "subcommands": [
+      "status"
+     ]
+    },
+    {
+     "script": "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py",
+     "subcommands": [
+      "paths",
+      "lint",
+      "read"
+     ]
+    },
+    {
+     "script": "~/.claude/skills/web-search/scripts/websearch.py",
+     "subcommands": [
+      "search",
+      "fetch",
+      "papers",
+      "status"
+     ]
+    }
+   ],
+   "redirect_message": "スキルのスクリプトにはリダイレクト (> / >> / < / 2>&1 など) を付けずに呼んでください。stdout も stderr もそのまま返ります。ファイルへ書くときは write ツールを使ってください。",
+   "runners": {
+    "py": [
+     "python3"
+    ],
+    "sh": [
+     "bash"
+    ]
+   }
+  }
+ },
+ "provider": {
+  "amazon-bedrock": {
+   "network_allow": [
+    "bedrock-runtime.us-east-1.amazonaws.com"
+   ],
+   "profile": "default",
+   "region": "us-east-1"
+  },
+  "anthropic": {
+   "network_allow": [
+    "api.anthropic.com"
+   ]
+  },
+  "github-copilot": {
+   "network_allow": [
+    "api.githubcopilot.com",
+    "*.githubcopilot.com"
+   ]
+  },
+  "openai": {
+   "network_allow": [
+    "api.openai.com"
+   ]
+  }
+ },
+ "retired_hooks": {
+  "scripts": [
+   "block-dangerous-commands.sh",
+   "update-adr-on-stop.py",
+   "checkpoint_precompact.py",
+   "checkpoint_restore.py",
+   "checkpoint_restore_pending.py"
+  ]
+ },
+ "sandbox": {
+  "claude_network_strict": true,
+  "claude_read_allow": [
+   "~/.local",
+   "~/.cache",
+   "~/.cargo",
+   "~/.rustup",
+   "~/.nvm",
+   "~/.npm",
+   "~/go",
+   "~/.texlive",
+   "~/.config",
+   "~/.gitconfig",
+   "~/.claude/skills",
+   "~/.agents/skills"
+  ],
+  "claude_write_allow": [
+   "~/.cache",
+   "~/.npm",
+   "~/.cargo/registry",
+   "~/.local/share/mise",
+   "~/.local/state",
+   "~/.local/share/uv/tools",
+   "~/.config/chezmoi"
+  ],
+  "claude_write_deny": [
+   "~/.claude/hooks",
+   "~/.claude/settings.json",
+   "~/.claude/settings.local.json",
+   "~/.copilot/hooks",
+   "~/.copilot/permissions-config.json",
+   "~/.config/agents",
+   "~/.config/opencode",
+   "~/.bashrc",
+   "~/.bash_profile",
+   "~/.bash_login",
+   "~/.profile",
+   "~/.zshrc",
+   "~/.zshenv",
+   "~/.zprofile",
+   "~/.cshrc",
+   "~/.kshrc",
+   "~/.login",
+   "~/.ssh/authorized_keys",
+   "~/.ssh/known_hosts",
+   "~/.gitconfig"
+  ],
+  "copilot_allow_dev_tool_access": false,
+  "copilot_read_allow": [
+   "~/.local",
+   "~/.cargo",
+   "~/.rustup",
+   "~/.nvm",
+   "~/go",
+   "~/.texlive",
+   "~/.config",
+   "~/.gitconfig",
+   "/usr/include",
+   "/usr/local",
+   "/usr/src",
+   "/opt"
+  ],
+  "copilot_write_allow": [
+   "~/.cache",
+   "~/.npm",
+   "~/.cargo/registry",
+   "~/.local/state",
+   "~/.local/share/uv/tools",
+   "~/.config/chezmoi"
+  ],
+  "deny": [
+   "~/.ssh",
+   "~/.gnupg",
+   "~/.config/sops/age",
+   "~/.aws",
+   "~/.netrc",
+   "~/.npmrc",
+   "~/.pypirc",
+   "~/.docker/config.json",
+   "~/.git-credentials",
+   "~/.config/gh/hosts.yml",
+   "~/.config/Bitwarden CLI",
+   "~/.config/chezmoi/key.txt",
+   "~/.claude.json",
+   "~/.copilot/settings.json",
+   "~/.copilot/config.json",
+   "~/.config/opencode/service.json",
+   "~/.local/state/opencode-sandbox",
+   "~/.bash_history",
+   "~/.zsh_history",
+   "~/.python_history",
+   "~/.node_repl_history",
+   "~/**/.env",
+   "~/**/id_rsa*",
+   "~/**/id_ed25519*",
+   "~/**/id_ecdsa*",
+   "~/**/id_dsa*",
+   "~/**/service-account*.json"
+  ],
+  "seccomp_apply_path": "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/{arch}/apply-seccomp",
+  "shell_network_allow": [
+   "files.pythonhosted.org",
+   "codeload.github.com",
+   "crates.io",
+   "static.crates.io",
+   "index.crates.io",
+   "proxy.golang.org",
+   "sum.golang.org",
+   "deno.land",
+   "jsr.io",
+   "mise-versions.jdx.dev"
+  ]
+ },
+ "web": {
+  "allow_domains": [
+   "github.com",
+   "api.github.com",
+   "docs.github.com",
+   "raw.githubusercontent.com",
+   "*.githubusercontent.com",
+   "hub.docker.com",
+   "docs.docker.com",
+   "pypi.org",
+   "docs.python.org",
+   "packaging.python.org",
+   "npmjs.com",
+   "docs.npmjs.com",
+   "registry.npmjs.org",
+   "chezmoi.io",
+   "www.chezmoi.io",
+   "mise.jdx.dev",
+   "docs.astral.sh",
+   "docs.anthropic.com",
+   "docs.claude.com",
+   "claude.ai",
+   "modelcontextprotocol.io",
+   "pi.dev",
+   "omp.sh",
+   "arxiv.org",
+   "alphaxiv.org",
+   "stackoverflow.com",
+   "dev.to",
+   "qiita.com",
+   "zenn.dev",
+   "pre-commit.com"
+  ],
+  "deny_domains": []
+ }
+}

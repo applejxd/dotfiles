@@ -124,6 +124,53 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
   `check_bash.py` と判定器の両方に通し、hook の deny / ask と判定器の decision が一致し、hook が何も
   返さないものを判定器が規則や意味解析で止めないことを確かめる
 
+## TS 版への移植
+
+pi だけを使う前提で、判定器を TypeScript に移し、ハーネスのプロセスの中で動かす計画（`docs/change/0020-pi-migration.md`）。
+外部プロセスの起動をやめ、Windows の `python3` の壁と、判定のたびのプロセス起動の費用をなくす。
+**移植は途中**で、ハーネスはまだ Python 版（`decide.py`）を呼んでいる。
+
+| 層 | 中身 | 状態 |
+| --- | --- | --- |
+| C | `decide.py` の入口・役割・ファイルの判定・bypass | 移植済み（`home/dot_config/pi/harness/judge/decide.ts`） |
+| A（glob） | `command_policy.py` の設定の読み出しと glob 照合 | 移植済み（`judge/policy.ts`） |
+| A（正規化） | `command_policy.py` の `normalize` / `find_match`（`shlex` 相当を含む。約 900 行） | 未着手 |
+| B | `bashrules/` の各検査（約 3,900 行）と `tables.toml` | 未着手 |
+| 生成 | `common.toml` を JSON にして配る（TS は TOML を読まない） | 試験用の `golden/common.json` だけ。配布の生成は未着手 |
+
+### 差分試験（正解データ）
+
+Python 版の判定結果を正解として、TS 版との全件一致で進捗を測る。
+
+- `scripts/agents/export_decide_golden.py`: `test_check_bash_*.py` のコマンド × 役割 × bypass、ファイルツール × パス、そのほかのツール、不正な入力の 6,311 件を `decide()` に流し、
+  `test/agents/golden/decide_golden.jsonl`（応答）と `common.json`（描画した `common.toml` の JSON）に書く。パスは `${ROOT}` / `${HOME}` の記号で保存する。
+  規則や判定器を変えたら引数なしで書き出し直す。`--check` は全件を作り直して比べる（約 1 分）
+- `test/agents/test_decide_golden.py`: 正解データが Python 版と一致していること（一定間隔の標本）
+- `test/agents/pi/judge_golden.mjs`: TS 版との差分。`node` の型除去で動く（22.18 以上）。`--bash` で bash も必須にする（移植の完了条件）
+- `test/agents/test_pi_judge_ts.py`: 上を pytest から呼ぶ。いまは bash 以外が全件一致であることを必須にしている
+
+実測（2026-10-13）: bash 以外（ファイル 1,081 件・そのほかのツール 16 件・不正な入力 6 件）は TS 版が初回から全件一致。bash は未移植（5,205 件が食い違い）。
+
+### 判定が前の呼び出しに依存していた（修正済み）
+
+正解データを作る過程で、**同じ入力でも、同じプロセスで前に何を判定したかで結果が変わる**ことが分かった。
+`bashrules/_shared.py` の `_LITERAL_HEREDOC_BODIES`（引用付き heredoc の本文の記録）はモジュールのグローバルなリストで、
+`split_heredoc_body` が積み、`check_pipe_to_shell` が「記録と同じ本文のセグメントを見送る」ために読む。どこでも消さないので、
+`python3 - <<'PY'` の後に引用なしの `python3 - <<PY`（本文の `$(curl …)` が実行時に展開される）を判定すると、後者の検査が見送られた。
+
+- hook（1 コマンド 1 プロセス）と、ハーネスが呼ぶ `decide.py`（呼び出しごとに新しいプロセス）では起きない
+- 起きるのは、同じプロセスで続けて判定したとき（試験、将来の常駐化・TS 版）。**TS へ移すときにこのグローバルな記録を写してはいけない**（判定ごとの状態にする）
+- 対処: `decide()` が bash を判定する前にこの記録を空にする。試験 `test_decision_does_not_depend_on_earlier_calls` を足した。
+  `test_decide` の hook との等価試験のドライバも、コマンドごとに空にした（以前は hook 側も同じ汚染を受けていて、両方が同じ誤りで一致していた）
+- 正解データは、新しいプロセスで流した結果と一致することを標本（120 件）で確かめた
+
+### 次
+
+1. `normalize` と `find_match`（層 A）: `shlex` 相当（POSIX の分割）を TS で書き、正規化の中間結果もデータ化して部品ごとに差分を取る
+2. `bashrules` の検査を、`DENY_CHECKS` → `PATH_CHECKS` → `ASK_CHECKS` の順に移す（`--bash` の食い違いを減らす）
+3. 配布: `common.toml` から判定用の JSON を生成し（OpenCode の `rules.json` と同じ形）、ハーネスが TS 版を読む。Python 版を外す
+4. 構文解析の堅牢化（tree-sitter など）は、挙動を合わせて移したあとの別の変更にする
+
 ## 既知の制約
 
 - `[pi.external_read]` だけを開けている。OpenCode が開けている `[opencode.sandbox] work_read`（`~/src` など）は
