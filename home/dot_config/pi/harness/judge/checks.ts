@@ -16,6 +16,7 @@ import {
 } from "./rules_exec.ts";
 import { checkPolicyAsk, checkPolicyDeny, checkPolicyLoaded } from "./bashpolicy.ts";
 import { checkFindDangerous, checkFindRootGuard, checkRmRootGuard } from "./rm.ts";
+import { checkArchive, checkEnvExposure, checkFileRead, checkPipRedirect } from "./rules_files.ts";
 import { checkGitAddSensitive, checkHistoryAccess, checkSecretEnvEcho } from "./sensitive.ts";
 
 export type Check = (ctx: Ctx, cmd: string) => string | null;
@@ -38,4 +39,8 @@ export const CHECKS = new Map<string, Check>([
 	["check_policy_loaded", checkPolicyLoaded],
 	["check_policy_deny", checkPolicyDeny],
 	["check_policy_ask", checkPolicyAsk],
+	["check_file_read", checkFileRead],
+	["check_env_exposure", checkEnvExposure],
+	["check_archive", checkArchive],
+	["check_pip_redirect", checkPipRedirect],
 ]);

@@ -9448,6 +9448,599 @@
 {"arg": "rm -rf $PWD/.tmp/x", "fn": "http_calls", "ok": []}
 {"arg": "rm -rf $PWD/.tmp/x", "fn": "fetched_paths", "ok": []}
 {"arg": "rm -rf $PWD/.tmp/x", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf $PWD/.tmp/x\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
+{"arg": "cat .env", "fn": "heredoc", "literal": [], "out": "cat .env"}
+{"arg": "cat .env", "fn": "expand_cd", "out": ""}
+{"arg": "cat .env", "fn": "commands", "ok": [{"redirects": [], "words": [["cat", "cat"], [".env", ".env"]]}, {"redirects": [], "words": [["cat", "cat"], [".env", ".env"]]}]}
+{"arg": "cat .env", "fn": "write_targets", "ok": []}
+{"arg": "cat .env", "fn": "http_calls", "ok": []}
+{"arg": "cat .env", "fn": "fetched_paths", "ok": []}
+{"arg": "cat .env", "fn": "check", "name": "check_file_read", "ok": "`cat` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "cat ~/.ssh/id_rsa", "fn": "heredoc", "literal": [], "out": "cat ~/.ssh/id_rsa"}
+{"arg": "cat ~/.ssh/id_rsa", "fn": "expand_cd", "out": ""}
+{"arg": "cat ~/.ssh/id_rsa", "fn": "commands", "ok": [{"redirects": [], "words": [["cat", "cat"], ["~/.ssh/id_rsa", "~/.ssh/id_rsa"]]}, {"redirects": [], "words": [["cat", "cat"], ["~/.ssh/id_rsa", "~/.ssh/id_rsa"]]}]}
+{"arg": "cat ~/.ssh/id_rsa", "fn": "write_targets", "ok": []}
+{"arg": "cat ~/.ssh/id_rsa", "fn": "http_calls", "ok": []}
+{"arg": "cat ~/.ssh/id_rsa", "fn": "fetched_paths", "ok": []}
+{"arg": "cat ~/.ssh/id_rsa", "fn": "check", "name": "check_file_read", "ok": "`cat` がセンシティブなパスを対象にしています (パターン: id_rsa)"}
+{"arg": "cat .env.example", "fn": "heredoc", "literal": [], "out": "cat .env.example"}
+{"arg": "cat .env.example", "fn": "expand_cd", "out": ""}
+{"arg": "cat .env.example", "fn": "commands", "ok": [{"redirects": [], "words": [["cat", "cat"], [".env.example", ".env.example"]]}, {"redirects": [], "words": [["cat", "cat"], [".env.example", ".env.example"]]}]}
+{"arg": "cat .env.example", "fn": "write_targets", "ok": []}
+{"arg": "cat .env.example", "fn": "http_calls", "ok": []}
+{"arg": "cat .env.example", "fn": "fetched_paths", "ok": []}
+{"arg": "head -n 3 ~/.aws/credentials", "fn": "heredoc", "literal": [], "out": "head -n 3 ~/.aws/credentials"}
+{"arg": "head -n 3 ~/.aws/credentials", "fn": "expand_cd", "out": ""}
+{"arg": "head -n 3 ~/.aws/credentials", "fn": "commands", "ok": [{"redirects": [], "words": [["head", "head"], ["-n", "-n"], ["3", "3"], ["~/.aws/credentials", "~/.aws/credentials"]]}, {"redirects": [], "words": [["head", "head"], ["-n", "-n"], ["3", "3"], ["~/.aws/credentials", "~/.aws/credentials"]]}]}
+{"arg": "head -n 3 ~/.aws/credentials", "fn": "write_targets", "ok": []}
+{"arg": "head -n 3 ~/.aws/credentials", "fn": "http_calls", "ok": []}
+{"arg": "head -n 3 ~/.aws/credentials", "fn": "fetched_paths", "ok": []}
+{"arg": "head -n 3 ~/.aws/credentials", "fn": "check", "name": "check_file_read", "ok": "`head` がセンシティブなパスを対象にしています (パターン: credentials)"}
+{"arg": "tail -f secrets.json", "fn": "heredoc", "literal": [], "out": "tail -f secrets.json"}
+{"arg": "tail -f secrets.json", "fn": "expand_cd", "out": ""}
+{"arg": "tail -f secrets.json", "fn": "commands", "ok": [{"redirects": [], "words": [["tail", "tail"], ["-f", "-f"], ["secrets.json", "secrets.json"]]}, {"redirects": [], "words": [["tail", "tail"], ["-f", "-f"], ["secrets.json", "secrets.json"]]}]}
+{"arg": "tail -f secrets.json", "fn": "write_targets", "ok": []}
+{"arg": "tail -f secrets.json", "fn": "http_calls", "ok": []}
+{"arg": "tail -f secrets.json", "fn": "fetched_paths", "ok": []}
+{"arg": "grep password .env", "fn": "heredoc", "literal": [], "out": "grep password .env"}
+{"arg": "grep password .env", "fn": "expand_cd", "out": ""}
+{"arg": "grep password .env", "fn": "commands", "ok": [{"redirects": [], "words": [["grep", "grep"], ["password", "password"], [".env", ".env"]]}, {"redirects": [], "words": [["grep", "grep"], ["password", "password"], [".env", ".env"]]}]}
+{"arg": "grep password .env", "fn": "write_targets", "ok": []}
+{"arg": "grep password .env", "fn": "http_calls", "ok": []}
+{"arg": "grep password .env", "fn": "fetched_paths", "ok": []}
+{"arg": "grep password .env", "fn": "check", "name": "check_env_exposure", "ok": "環境変数からセンシティブな値を抽出しようとしています: `grep password .env`"}
+{"arg": "grep password .env", "fn": "check", "name": "check_file_read", "ok": "`grep` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "grep -r token .", "fn": "heredoc", "literal": [], "out": "grep -r token ."}
+{"arg": "grep -r token .", "fn": "expand_cd", "out": ""}
+{"arg": "grep -r token .", "fn": "commands", "ok": [{"redirects": [], "words": [["grep", "grep"], ["-r", "-r"], ["token", "token"], [".", "."]]}, {"redirects": [], "words": [["grep", "grep"], ["-r", "-r"], ["token", "token"], [".", "."]]}]}
+{"arg": "grep -r token .", "fn": "write_targets", "ok": []}
+{"arg": "grep -r token .", "fn": "http_calls", "ok": []}
+{"arg": "grep -r token .", "fn": "fetched_paths", "ok": []}
+{"arg": "less /etc/shadow", "fn": "heredoc", "literal": [], "out": "less /etc/shadow"}
+{"arg": "less /etc/shadow", "fn": "expand_cd", "out": ""}
+{"arg": "less /etc/shadow", "fn": "commands", "ok": [{"redirects": [], "words": [["less", "less"], ["/etc/shadow", "/etc/shadow"]]}, {"redirects": [], "words": [["less", "less"], ["/etc/shadow", "/etc/shadow"]]}]}
+{"arg": "less /etc/shadow", "fn": "write_targets", "ok": []}
+{"arg": "less /etc/shadow", "fn": "http_calls", "ok": []}
+{"arg": "less /etc/shadow", "fn": "fetched_paths", "ok": []}
+{"arg": "less /etc/shadow", "fn": "check", "name": "check_privilege_escalation", "ok": "認証設定ファイル (/etc/shadow, /etc/sudoers) を操作しようとしています。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "less /etc/shadow", "fn": "check", "name": "check_file_read", "ok": "`less` がセンシティブなパスを対象にしています (パターン: shadow)"}
+{"arg": "cp .env /tmp/x", "fn": "heredoc", "literal": [], "out": "cp .env /tmp/x"}
+{"arg": "cp .env /tmp/x", "fn": "expand_cd", "out": ""}
+{"arg": "cp .env /tmp/x", "fn": "commands", "ok": [{"redirects": [], "words": [["cp", "cp"], [".env", ".env"], ["/tmp/x", "/tmp/x"]]}, {"redirects": [], "words": [["cp", "cp"], [".env", ".env"], ["/tmp/x", "/tmp/x"]]}]}
+{"arg": "cp .env /tmp/x", "fn": "write_targets", "ok": ["/tmp/x", "/tmp/x"]}
+{"arg": "cp .env /tmp/x", "fn": "http_calls", "ok": []}
+{"arg": "cp .env /tmp/x", "fn": "fetched_paths", "ok": []}
+{"arg": "cp .env /tmp/x", "fn": "check", "name": "check_file_read", "ok": "`cp` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "cp a b", "fn": "heredoc", "literal": [], "out": "cp a b"}
+{"arg": "cp a b", "fn": "expand_cd", "out": ""}
+{"arg": "cp a b", "fn": "commands", "ok": [{"redirects": [], "words": [["cp", "cp"], ["a", "a"], ["b", "b"]]}, {"redirects": [], "words": [["cp", "cp"], ["a", "a"], ["b", "b"]]}]}
+{"arg": "cp a b", "fn": "write_targets", "ok": ["b", "b"]}
+{"arg": "cp a b", "fn": "http_calls", "ok": []}
+{"arg": "cp a b", "fn": "fetched_paths", "ok": []}
+{"arg": "mv .env x", "fn": "heredoc", "literal": [], "out": "mv .env x"}
+{"arg": "mv .env x", "fn": "expand_cd", "out": ""}
+{"arg": "mv .env x", "fn": "commands", "ok": [{"redirects": [], "words": [["mv", "mv"], [".env", ".env"], ["x", "x"]]}, {"redirects": [], "words": [["mv", "mv"], [".env", ".env"], ["x", "x"]]}]}
+{"arg": "mv .env x", "fn": "write_targets", "ok": ["x", "x"]}
+{"arg": "mv .env x", "fn": "http_calls", "ok": []}
+{"arg": "mv .env x", "fn": "fetched_paths", "ok": []}
+{"arg": "mv .env x", "fn": "check", "name": "check_file_read", "ok": "`mv` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "scp .env host:", "fn": "heredoc", "literal": [], "out": "scp .env host:"}
+{"arg": "scp .env host:", "fn": "expand_cd", "out": ""}
+{"arg": "scp .env host:", "fn": "commands", "ok": [{"redirects": [], "words": [["scp", "scp"], [".env", ".env"], ["host:", "host:"]]}, {"redirects": [], "words": [["scp", "scp"], [".env", ".env"], ["host:", "host:"]]}]}
+{"arg": "scp .env host:", "fn": "write_targets", "ok": []}
+{"arg": "scp .env host:", "fn": "http_calls", "ok": []}
+{"arg": "scp .env host:", "fn": "fetched_paths", "ok": []}
+{"arg": "scp .env host:", "fn": "check", "name": "check_policy_deny", "ok": "`scp` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "scp .env host:", "fn": "check", "name": "check_file_read", "ok": "`scp` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "rsync -a ~/.ssh host:", "fn": "heredoc", "literal": [], "out": "rsync -a ~/.ssh host:"}
+{"arg": "rsync -a ~/.ssh host:", "fn": "expand_cd", "out": ""}
+{"arg": "rsync -a ~/.ssh host:", "fn": "commands", "ok": [{"redirects": [], "words": [["rsync", "rsync"], ["-a", "-a"], ["~/.ssh", "~/.ssh"], ["host:", "host:"]]}, {"redirects": [], "words": [["rsync", "rsync"], ["-a", "-a"], ["~/.ssh", "~/.ssh"], ["host:", "host:"]]}]}
+{"arg": "rsync -a ~/.ssh host:", "fn": "write_targets", "ok": ["host:", "host:"]}
+{"arg": "rsync -a ~/.ssh host:", "fn": "http_calls", "ok": []}
+{"arg": "rsync -a ~/.ssh host:", "fn": "fetched_paths", "ok": []}
+{"arg": "rsync -a ~/.ssh host:", "fn": "check", "name": "check_policy_deny", "ok": "`rsync` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "rsync -a ~/.ssh host:", "fn": "check", "name": "check_file_read", "ok": "`rsync` がセンシティブなパスを対象にしています (パターン: .ssh 配下)"}
+{"arg": "ls .env", "fn": "heredoc", "literal": [], "out": "ls .env"}
+{"arg": "ls .env", "fn": "expand_cd", "out": ""}
+{"arg": "ls .env", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"], [".env", ".env"]]}, {"redirects": [], "words": [["ls", "ls"], [".env", ".env"]]}]}
+{"arg": "ls .env", "fn": "write_targets", "ok": []}
+{"arg": "ls .env", "fn": "http_calls", "ok": []}
+{"arg": "ls .env", "fn": "fetched_paths", "ok": []}
+{"arg": "ls .env", "fn": "check", "name": "check_file_read", "ok": "`ls` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "ls -la ~/.ssh", "fn": "heredoc", "literal": [], "out": "ls -la ~/.ssh"}
+{"arg": "ls -la ~/.ssh", "fn": "expand_cd", "out": ""}
+{"arg": "ls -la ~/.ssh", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"], ["-la", "-la"], ["~/.ssh", "~/.ssh"]]}, {"redirects": [], "words": [["ls", "ls"], ["-la", "-la"], ["~/.ssh", "~/.ssh"]]}]}
+{"arg": "ls -la ~/.ssh", "fn": "write_targets", "ok": []}
+{"arg": "ls -la ~/.ssh", "fn": "http_calls", "ok": []}
+{"arg": "ls -la ~/.ssh", "fn": "fetched_paths", "ok": []}
+{"arg": "ls -la ~/.ssh", "fn": "check", "name": "check_file_read", "ok": "`ls` がセンシティブなパスを対象にしています (パターン: .ssh 配下)"}
+{"arg": "ls", "fn": "heredoc", "literal": [], "out": "ls"}
+{"arg": "ls", "fn": "expand_cd", "out": ""}
+{"arg": "ls", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"]]}, {"redirects": [], "words": [["ls", "ls"]]}]}
+{"arg": "ls", "fn": "write_targets", "ok": []}
+{"arg": "ls", "fn": "http_calls", "ok": []}
+{"arg": "ls", "fn": "fetched_paths", "ok": []}
+{"arg": "ls ~/.aws", "fn": "heredoc", "literal": [], "out": "ls ~/.aws"}
+{"arg": "ls ~/.aws", "fn": "expand_cd", "out": ""}
+{"arg": "ls ~/.aws", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"], ["~/.aws", "~/.aws"]]}, {"redirects": [], "words": [["ls", "ls"], ["~/.aws", "~/.aws"]]}]}
+{"arg": "ls ~/.aws", "fn": "write_targets", "ok": []}
+{"arg": "ls ~/.aws", "fn": "http_calls", "ok": []}
+{"arg": "ls ~/.aws", "fn": "fetched_paths", "ok": []}
+{"arg": "ls ~/.aws", "fn": "check", "name": "check_file_read", "ok": "`ls` がセンシティブなパスを対象にしています (パターン: .aws 配下)"}
+{"arg": "git diff .env", "fn": "heredoc", "literal": [], "out": "git diff .env"}
+{"arg": "git diff .env", "fn": "expand_cd", "out": ""}
+{"arg": "git diff .env", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"], [".env", ".env"]]}, {"redirects": [], "words": [["git", "git"], ["diff", "diff"], [".env", ".env"]]}]}
+{"arg": "git diff .env", "fn": "write_targets", "ok": []}
+{"arg": "git diff .env", "fn": "http_calls", "ok": []}
+{"arg": "git diff .env", "fn": "fetched_paths", "ok": []}
+{"arg": "git diff .env", "fn": "check", "name": "check_file_read", "ok": "`git diff` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "git diff", "fn": "heredoc", "literal": [], "out": "git diff"}
+{"arg": "git diff", "fn": "expand_cd", "out": ""}
+{"arg": "git diff", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"]]}, {"redirects": [], "words": [["git", "git"], ["diff", "diff"]]}]}
+{"arg": "git diff", "fn": "write_targets", "ok": []}
+{"arg": "git diff", "fn": "http_calls", "ok": []}
+{"arg": "git diff", "fn": "fetched_paths", "ok": []}
+{"arg": "git show HEAD:.env", "fn": "heredoc", "literal": [], "out": "git show HEAD:.env"}
+{"arg": "git show HEAD:.env", "fn": "expand_cd", "out": ""}
+{"arg": "git show HEAD:.env", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["show", "show"], ["HEAD:.env", "HEAD:.env"]]}, {"redirects": [], "words": [["git", "git"], ["show", "show"], ["HEAD:.env", "HEAD:.env"]]}]}
+{"arg": "git show HEAD:.env", "fn": "write_targets", "ok": []}
+{"arg": "git show HEAD:.env", "fn": "http_calls", "ok": []}
+{"arg": "git show HEAD:.env", "fn": "fetched_paths", "ok": []}
+{"arg": "git log -p -- .env", "fn": "heredoc", "literal": [], "out": "git log -p -- .env"}
+{"arg": "git log -p -- .env", "fn": "expand_cd", "out": ""}
+{"arg": "git log -p -- .env", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"], ["--", "--"], [".env", ".env"]]}, {"redirects": [], "words": [[".env", ".env"]]}, {"redirects": [], "words": [[".env", ".env"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"], ["--", "--"], [".env", ".env"]]}]}
+{"arg": "git log -p -- .env", "fn": "write_targets", "ok": []}
+{"arg": "git log -p -- .env", "fn": "http_calls", "ok": []}
+{"arg": "git log -p -- .env", "fn": "fetched_paths", "ok": []}
+{"arg": "git log -p -- .env", "fn": "check", "name": "check_file_read", "ok": "`git log` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "git blame .env", "fn": "heredoc", "literal": [], "out": "git blame .env"}
+{"arg": "git blame .env", "fn": "expand_cd", "out": ""}
+{"arg": "git blame .env", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["blame", "blame"], [".env", ".env"]]}, {"redirects": [], "words": [["git", "git"], ["blame", "blame"], [".env", ".env"]]}]}
+{"arg": "git blame .env", "fn": "write_targets", "ok": []}
+{"arg": "git blame .env", "fn": "http_calls", "ok": []}
+{"arg": "git blame .env", "fn": "fetched_paths", "ok": []}
+{"arg": "git blame .env", "fn": "check", "name": "check_file_read", "ok": "`git blame` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "git status .env", "fn": "heredoc", "literal": [], "out": "git status .env"}
+{"arg": "git status .env", "fn": "expand_cd", "out": ""}
+{"arg": "git status .env", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["status", "status"], [".env", ".env"]]}, {"redirects": [], "words": [["git", "git"], ["status", "status"], [".env", ".env"]]}]}
+{"arg": "git status .env", "fn": "write_targets", "ok": []}
+{"arg": "git status .env", "fn": "http_calls", "ok": []}
+{"arg": "git status .env", "fn": "fetched_paths", "ok": []}
+{"arg": "git diff ~/.ssh/config", "fn": "heredoc", "literal": [], "out": "git diff ~/.ssh/config"}
+{"arg": "git diff ~/.ssh/config", "fn": "expand_cd", "out": ""}
+{"arg": "git diff ~/.ssh/config", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["~/.ssh/config", "~/.ssh/config"]]}, {"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["~/.ssh/config", "~/.ssh/config"]]}]}
+{"arg": "git diff ~/.ssh/config", "fn": "write_targets", "ok": []}
+{"arg": "git diff ~/.ssh/config", "fn": "http_calls", "ok": []}
+{"arg": "git diff ~/.ssh/config", "fn": "fetched_paths", "ok": []}
+{"arg": "git diff ~/.ssh/config", "fn": "check", "name": "check_file_read", "ok": "`git diff` がセンシティブなパスを対象にしています (パターン: .ssh 配下)"}
+{"arg": "git diff --cached secrets.yml", "fn": "heredoc", "literal": [], "out": "git diff --cached secrets.yml"}
+{"arg": "git diff --cached secrets.yml", "fn": "expand_cd", "out": ""}
+{"arg": "git diff --cached secrets.yml", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["--cached", "--cached"], ["secrets.yml", "secrets.yml"]]}, {"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["--cached", "--cached"], ["secrets.yml", "secrets.yml"]]}]}
+{"arg": "git diff --cached secrets.yml", "fn": "write_targets", "ok": []}
+{"arg": "git diff --cached secrets.yml", "fn": "http_calls", "ok": []}
+{"arg": "git diff --cached secrets.yml", "fn": "fetched_paths", "ok": []}
+{"arg": "diff .env .env.bak", "fn": "heredoc", "literal": [], "out": "diff .env .env.bak"}
+{"arg": "diff .env .env.bak", "fn": "expand_cd", "out": ""}
+{"arg": "diff .env .env.bak", "fn": "commands", "ok": [{"redirects": [], "words": [["diff", "diff"], [".env", ".env"], [".env.bak", ".env.bak"]]}, {"redirects": [], "words": [["diff", "diff"], [".env", ".env"], [".env.bak", ".env.bak"]]}]}
+{"arg": "diff .env .env.bak", "fn": "write_targets", "ok": []}
+{"arg": "diff .env .env.bak", "fn": "http_calls", "ok": []}
+{"arg": "diff .env .env.bak", "fn": "fetched_paths", "ok": []}
+{"arg": "diff .env .env.bak", "fn": "check", "name": "check_file_read", "ok": "`diff` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "env", "fn": "heredoc", "literal": [], "out": "env"}
+{"arg": "env", "fn": "expand_cd", "out": ""}
+{"arg": "env", "fn": "commands", "ok": [{"redirects": [], "words": [["env", "env"]]}, {"redirects": [], "words": [["env", "env"]]}]}
+{"arg": "env", "fn": "write_targets", "ok": []}
+{"arg": "env", "fn": "http_calls", "ok": []}
+{"arg": "env", "fn": "fetched_paths", "ok": []}
+{"arg": "env", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `env`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "printenv", "fn": "heredoc", "literal": [], "out": "printenv"}
+{"arg": "printenv", "fn": "expand_cd", "out": ""}
+{"arg": "printenv", "fn": "commands", "ok": [{"redirects": [], "words": [["printenv", "printenv"]]}, {"redirects": [], "words": [["printenv", "printenv"]]}]}
+{"arg": "printenv", "fn": "write_targets", "ok": []}
+{"arg": "printenv", "fn": "http_calls", "ok": []}
+{"arg": "printenv", "fn": "fetched_paths", "ok": []}
+{"arg": "printenv", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `printenv`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "printenv HOME", "fn": "heredoc", "literal": [], "out": "printenv HOME"}
+{"arg": "printenv HOME", "fn": "expand_cd", "out": ""}
+{"arg": "printenv HOME", "fn": "commands", "ok": [{"redirects": [], "words": [["printenv", "printenv"], ["HOME", "HOME"]]}, {"redirects": [], "words": [["printenv", "printenv"], ["HOME", "HOME"]]}]}
+{"arg": "printenv HOME", "fn": "write_targets", "ok": []}
+{"arg": "printenv HOME", "fn": "http_calls", "ok": []}
+{"arg": "printenv HOME", "fn": "fetched_paths", "ok": []}
+{"arg": "printenv AWS_SECRET_ACCESS_KEY", "fn": "heredoc", "literal": [], "out": "printenv AWS_SECRET_ACCESS_KEY"}
+{"arg": "printenv AWS_SECRET_ACCESS_KEY", "fn": "expand_cd", "out": ""}
+{"arg": "printenv AWS_SECRET_ACCESS_KEY", "fn": "commands", "ok": [{"redirects": [], "words": [["printenv", "printenv"], ["AWS_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"]]}, {"redirects": [], "words": [["printenv", "printenv"], ["AWS_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"]]}]}
+{"arg": "printenv AWS_SECRET_ACCESS_KEY", "fn": "write_targets", "ok": []}
+{"arg": "printenv AWS_SECRET_ACCESS_KEY", "fn": "http_calls", "ok": []}
+{"arg": "printenv AWS_SECRET_ACCESS_KEY", "fn": "fetched_paths", "ok": []}
+{"arg": "printenv AWS_SECRET_ACCESS_KEY", "fn": "check", "name": "check_env_exposure", "ok": "センシティブな環境変数を出力しようとしています: `printenv AWS_SECRET_ACCESS_KEY`"}
+{"arg": "printenv GITHUB_TOKEN PATH", "fn": "heredoc", "literal": [], "out": "printenv GITHUB_TOKEN PATH"}
+{"arg": "printenv GITHUB_TOKEN PATH", "fn": "expand_cd", "out": ""}
+{"arg": "printenv GITHUB_TOKEN PATH", "fn": "commands", "ok": [{"redirects": [], "words": [["printenv", "printenv"], ["GITHUB_TOKEN", "GITHUB_TOKEN"], ["PATH", "PATH"]]}, {"redirects": [], "words": [["printenv", "printenv"], ["GITHUB_TOKEN", "GITHUB_TOKEN"], ["PATH", "PATH"]]}]}
+{"arg": "printenv GITHUB_TOKEN PATH", "fn": "write_targets", "ok": []}
+{"arg": "printenv GITHUB_TOKEN PATH", "fn": "http_calls", "ok": []}
+{"arg": "printenv GITHUB_TOKEN PATH", "fn": "fetched_paths", "ok": []}
+{"arg": "printenv GITHUB_TOKEN PATH", "fn": "check", "name": "check_env_exposure", "ok": "センシティブな環境変数を出力しようとしています: `printenv GITHUB_TOKEN PATH`"}
+{"arg": "env -0", "fn": "heredoc", "literal": [], "out": "env -0"}
+{"arg": "env -0", "fn": "expand_cd", "out": ""}
+{"arg": "env -0", "fn": "commands", "ok": [{"redirects": [], "words": [["env", "env"], ["-0", "-0"]]}, {"redirects": [], "words": [["env", "env"], ["-0", "-0"]]}]}
+{"arg": "env -0", "fn": "write_targets", "ok": []}
+{"arg": "env -0", "fn": "http_calls", "ok": []}
+{"arg": "env -0", "fn": "fetched_paths", "ok": []}
+{"arg": "env -0", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `env -0`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "env | grep -i key", "fn": "heredoc", "literal": [], "out": "env | grep -i key"}
+{"arg": "env | grep -i key", "fn": "expand_cd", "out": ""}
+{"arg": "env | grep -i key", "fn": "commands", "ok": [{"redirects": [], "words": [["env", "env"]]}, {"redirects": [], "words": [["grep", "grep"], ["-i", "-i"], ["key", "key"]]}, {"redirects": [], "words": [["env", "env"]]}, {"redirects": [], "words": [["grep", "grep"], ["-i", "-i"], ["key", "key"]]}]}
+{"arg": "env | grep -i key", "fn": "write_targets", "ok": []}
+{"arg": "env | grep -i key", "fn": "http_calls", "ok": []}
+{"arg": "env | grep -i key", "fn": "fetched_paths", "ok": []}
+{"arg": "env | grep -i key", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `env`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "env | grep PATH", "fn": "heredoc", "literal": [], "out": "env | grep PATH"}
+{"arg": "env | grep PATH", "fn": "expand_cd", "out": ""}
+{"arg": "env | grep PATH", "fn": "commands", "ok": [{"redirects": [], "words": [["env", "env"]]}, {"redirects": [], "words": [["grep", "grep"], ["PATH", "PATH"]]}, {"redirects": [], "words": [["env", "env"]]}, {"redirects": [], "words": [["grep", "grep"], ["PATH", "PATH"]]}]}
+{"arg": "env | grep PATH", "fn": "write_targets", "ok": []}
+{"arg": "env | grep PATH", "fn": "http_calls", "ok": []}
+{"arg": "env | grep PATH", "fn": "fetched_paths", "ok": []}
+{"arg": "env | grep PATH", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `env`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "printenv | grep TOKEN", "fn": "heredoc", "literal": [], "out": "printenv | grep TOKEN"}
+{"arg": "printenv | grep TOKEN", "fn": "expand_cd", "out": ""}
+{"arg": "printenv | grep TOKEN", "fn": "commands", "ok": [{"redirects": [], "words": [["printenv", "printenv"]]}, {"redirects": [], "words": [["grep", "grep"], ["TOKEN", "TOKEN"]]}, {"redirects": [], "words": [["printenv", "printenv"]]}, {"redirects": [], "words": [["grep", "grep"], ["TOKEN", "TOKEN"]]}]}
+{"arg": "printenv | grep TOKEN", "fn": "write_targets", "ok": []}
+{"arg": "printenv | grep TOKEN", "fn": "http_calls", "ok": []}
+{"arg": "printenv | grep TOKEN", "fn": "fetched_paths", "ok": []}
+{"arg": "printenv | grep TOKEN", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `printenv`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "env | sort", "fn": "heredoc", "literal": [], "out": "env | sort"}
+{"arg": "env | sort", "fn": "expand_cd", "out": ""}
+{"arg": "env | sort", "fn": "commands", "ok": [{"redirects": [], "words": [["env", "env"]]}, {"redirects": [], "words": [["sort", "sort"]]}, {"redirects": [], "words": [["env", "env"]]}, {"redirects": [], "words": [["sort", "sort"]]}]}
+{"arg": "env | sort", "fn": "write_targets", "ok": []}
+{"arg": "env | sort", "fn": "http_calls", "ok": []}
+{"arg": "env | sort", "fn": "fetched_paths", "ok": []}
+{"arg": "env | sort", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `env`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "env FOO=1 ls", "fn": "heredoc", "literal": [], "out": "env FOO=1 ls"}
+{"arg": "env FOO=1 ls", "fn": "expand_cd", "out": ""}
+{"arg": "env FOO=1 ls", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"]]}, {"redirects": [], "words": [["env", "env"], ["FOO=1", "FOO=1"], ["ls", "ls"]]}]}
+{"arg": "env FOO=1 ls", "fn": "write_targets", "ok": []}
+{"arg": "env FOO=1 ls", "fn": "http_calls", "ok": []}
+{"arg": "env FOO=1 ls", "fn": "fetched_paths", "ok": []}
+{"arg": "export -p", "fn": "heredoc", "literal": [], "out": "export -p"}
+{"arg": "export -p", "fn": "expand_cd", "out": ""}
+{"arg": "export -p", "fn": "commands", "ok": [{"redirects": [], "words": [["export", "export"], ["-p", "-p"]]}, {"redirects": [], "words": [["export", "export"], ["-p", "-p"]]}]}
+{"arg": "export -p", "fn": "write_targets", "ok": []}
+{"arg": "export -p", "fn": "http_calls", "ok": []}
+{"arg": "export -p", "fn": "fetched_paths", "ok": []}
+{"arg": "export -p", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `export -p`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "export", "fn": "heredoc", "literal": [], "out": "export"}
+{"arg": "export", "fn": "expand_cd", "out": ""}
+{"arg": "export", "fn": "commands", "ok": [{"redirects": [], "words": [["export", "export"]]}, {"redirects": [], "words": [["export", "export"]]}]}
+{"arg": "export", "fn": "write_targets", "ok": []}
+{"arg": "export", "fn": "http_calls", "ok": []}
+{"arg": "export", "fn": "fetched_paths", "ok": []}
+{"arg": "export", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `export`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "set", "fn": "heredoc", "literal": [], "out": "set"}
+{"arg": "set", "fn": "expand_cd", "out": ""}
+{"arg": "set", "fn": "commands", "ok": [{"redirects": [], "words": [["set", "set"]]}, {"redirects": [], "words": [["set", "set"]]}]}
+{"arg": "set", "fn": "write_targets", "ok": []}
+{"arg": "set", "fn": "http_calls", "ok": []}
+{"arg": "set", "fn": "fetched_paths", "ok": []}
+{"arg": "set", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `set`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "declare -x", "fn": "heredoc", "literal": [], "out": "declare -x"}
+{"arg": "declare -x", "fn": "expand_cd", "out": ""}
+{"arg": "declare -x", "fn": "commands", "ok": [{"redirects": [], "words": [["declare", "declare"], ["-x", "-x"]]}, {"redirects": [], "words": [["declare", "declare"], ["-x", "-x"]]}]}
+{"arg": "declare -x", "fn": "write_targets", "ok": []}
+{"arg": "declare -x", "fn": "http_calls", "ok": []}
+{"arg": "declare -x", "fn": "fetched_paths", "ok": []}
+{"arg": "declare -x", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `declare -x`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "declare -p", "fn": "heredoc", "literal": [], "out": "declare -p"}
+{"arg": "declare -p", "fn": "expand_cd", "out": ""}
+{"arg": "declare -p", "fn": "commands", "ok": [{"redirects": [], "words": [["declare", "declare"], ["-p", "-p"]]}, {"redirects": [], "words": [["declare", "declare"], ["-p", "-p"]]}]}
+{"arg": "declare -p", "fn": "write_targets", "ok": []}
+{"arg": "declare -p", "fn": "http_calls", "ok": []}
+{"arg": "declare -p", "fn": "fetched_paths", "ok": []}
+{"arg": "declare -p", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `declare -p`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "set | grep SECRET", "fn": "heredoc", "literal": [], "out": "set | grep SECRET"}
+{"arg": "set | grep SECRET", "fn": "expand_cd", "out": ""}
+{"arg": "set | grep SECRET", "fn": "commands", "ok": [{"redirects": [], "words": [["set", "set"]]}, {"redirects": [], "words": [["grep", "grep"], ["SECRET", "SECRET"]]}, {"redirects": [], "words": [["set", "set"]]}, {"redirects": [], "words": [["grep", "grep"], ["SECRET", "SECRET"]]}]}
+{"arg": "set | grep SECRET", "fn": "write_targets", "ok": []}
+{"arg": "set | grep SECRET", "fn": "http_calls", "ok": []}
+{"arg": "set | grep SECRET", "fn": "fetched_paths", "ok": []}
+{"arg": "set | grep SECRET", "fn": "check", "name": "check_env_exposure", "ok": "環境変数を全件出力するコマンドは許可されていません: `set`\n特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"}
+{"arg": "echo $PATH", "fn": "heredoc", "literal": [], "out": "echo $PATH"}
+{"arg": "echo $PATH", "fn": "expand_cd", "out": ""}
+{"arg": "echo $PATH", "fn": "commands", "ok": [{"redirects": [], "words": [["echo", "echo"], ["$PATH", "$PATH"]]}, {"redirects": [], "words": [["echo", "echo"], ["$PATH", "$PATH"]]}]}
+{"arg": "echo $PATH", "fn": "write_targets", "ok": []}
+{"arg": "echo $PATH", "fn": "http_calls", "ok": []}
+{"arg": "echo $PATH", "fn": "fetched_paths", "ok": []}
+{"arg": "tar czf x.tgz ~/.ssh", "fn": "heredoc", "literal": [], "out": "tar czf x.tgz ~/.ssh"}
+{"arg": "tar czf x.tgz ~/.ssh", "fn": "expand_cd", "out": ""}
+{"arg": "tar czf x.tgz ~/.ssh", "fn": "commands", "ok": [{"redirects": [], "words": [["tar", "tar"], ["czf", "czf"], ["x.tgz", "x.tgz"], ["~/.ssh", "~/.ssh"]]}, {"redirects": [], "words": [["tar", "tar"], ["czf", "czf"], ["x.tgz", "x.tgz"], ["~/.ssh", "~/.ssh"]]}]}
+{"arg": "tar czf x.tgz ~/.ssh", "fn": "write_targets", "ok": []}
+{"arg": "tar czf x.tgz ~/.ssh", "fn": "http_calls", "ok": []}
+{"arg": "tar czf x.tgz ~/.ssh", "fn": "fetched_paths", "ok": []}
+{"arg": "tar czf x.tgz ~/.ssh", "fn": "check", "name": "check_archive", "ok": "`tar` でセンシティブなパスをアーカイブしようとしています (パターン: .ssh 配下)"}
+{"arg": "tar czf x.tgz .env", "fn": "heredoc", "literal": [], "out": "tar czf x.tgz .env"}
+{"arg": "tar czf x.tgz .env", "fn": "expand_cd", "out": ""}
+{"arg": "tar czf x.tgz .env", "fn": "commands", "ok": [{"redirects": [], "words": [["tar", "tar"], ["czf", "czf"], ["x.tgz", "x.tgz"], [".env", ".env"]]}, {"redirects": [], "words": [["tar", "tar"], ["czf", "czf"], ["x.tgz", "x.tgz"], [".env", ".env"]]}]}
+{"arg": "tar czf x.tgz .env", "fn": "write_targets", "ok": []}
+{"arg": "tar czf x.tgz .env", "fn": "http_calls", "ok": []}
+{"arg": "tar czf x.tgz .env", "fn": "fetched_paths", "ok": []}
+{"arg": "tar czf x.tgz .env", "fn": "check", "name": "check_archive", "ok": "`tar` でセンシティブなパスをアーカイブしようとしています (パターン: .env)"}
+{"arg": "tar czf x.tgz src", "fn": "heredoc", "literal": [], "out": "tar czf x.tgz src"}
+{"arg": "tar czf x.tgz src", "fn": "expand_cd", "out": ""}
+{"arg": "tar czf x.tgz src", "fn": "commands", "ok": [{"redirects": [], "words": [["tar", "tar"], ["czf", "czf"], ["x.tgz", "x.tgz"], ["src", "src"]]}, {"redirects": [], "words": [["tar", "tar"], ["czf", "czf"], ["x.tgz", "x.tgz"], ["src", "src"]]}]}
+{"arg": "tar czf x.tgz src", "fn": "write_targets", "ok": []}
+{"arg": "tar czf x.tgz src", "fn": "http_calls", "ok": []}
+{"arg": "tar czf x.tgz src", "fn": "fetched_paths", "ok": []}
+{"arg": "zip -r a.zip .env", "fn": "heredoc", "literal": [], "out": "zip -r a.zip .env"}
+{"arg": "zip -r a.zip .env", "fn": "expand_cd", "out": ""}
+{"arg": "zip -r a.zip .env", "fn": "commands", "ok": [{"redirects": [], "words": [["zip", "zip"], ["-r", "-r"], ["a.zip", "a.zip"], [".env", ".env"]]}, {"redirects": [], "words": [["zip", "zip"], ["-r", "-r"], ["a.zip", "a.zip"], [".env", ".env"]]}]}
+{"arg": "zip -r a.zip .env", "fn": "write_targets", "ok": []}
+{"arg": "zip -r a.zip .env", "fn": "http_calls", "ok": []}
+{"arg": "zip -r a.zip .env", "fn": "fetched_paths", "ok": []}
+{"arg": "zip -r a.zip .env", "fn": "check", "name": "check_archive", "ok": "`zip` でセンシティブなパスをアーカイブしようとしています (パターン: .env)"}
+{"arg": "zip a.zip x", "fn": "heredoc", "literal": [], "out": "zip a.zip x"}
+{"arg": "zip a.zip x", "fn": "expand_cd", "out": ""}
+{"arg": "zip a.zip x", "fn": "commands", "ok": [{"redirects": [], "words": [["zip", "zip"], ["a.zip", "a.zip"], ["x", "x"]]}, {"redirects": [], "words": [["zip", "zip"], ["a.zip", "a.zip"], ["x", "x"]]}]}
+{"arg": "zip a.zip x", "fn": "write_targets", "ok": []}
+{"arg": "zip a.zip x", "fn": "http_calls", "ok": []}
+{"arg": "zip a.zip x", "fn": "fetched_paths", "ok": []}
+{"arg": "7z a x.7z ~/.aws", "fn": "heredoc", "literal": [], "out": "7z a x.7z ~/.aws"}
+{"arg": "7z a x.7z ~/.aws", "fn": "expand_cd", "out": ""}
+{"arg": "7z a x.7z ~/.aws", "fn": "commands", "ok": [{"redirects": [], "words": [["7z", "7z"], ["a", "a"], ["x.7z", "x.7z"], ["~/.aws", "~/.aws"]]}, {"redirects": [], "words": [["7z", "7z"], ["a", "a"], ["x.7z", "x.7z"], ["~/.aws", "~/.aws"]]}]}
+{"arg": "7z a x.7z ~/.aws", "fn": "write_targets", "ok": []}
+{"arg": "7z a x.7z ~/.aws", "fn": "http_calls", "ok": []}
+{"arg": "7z a x.7z ~/.aws", "fn": "fetched_paths", "ok": []}
+{"arg": "7z a x.7z ~/.aws", "fn": "check", "name": "check_archive", "ok": "`7z` でセンシティブなパスをアーカイブしようとしています (パターン: .aws 配下)"}
+{"arg": "gzip .env", "fn": "heredoc", "literal": [], "out": "gzip .env"}
+{"arg": "gzip .env", "fn": "expand_cd", "out": ""}
+{"arg": "gzip .env", "fn": "commands", "ok": [{"redirects": [], "words": [["gzip", "gzip"], [".env", ".env"]]}, {"redirects": [], "words": [["gzip", "gzip"], [".env", ".env"]]}]}
+{"arg": "gzip .env", "fn": "write_targets", "ok": []}
+{"arg": "gzip .env", "fn": "http_calls", "ok": []}
+{"arg": "gzip .env", "fn": "fetched_paths", "ok": []}
+{"arg": "gzip .env", "fn": "check", "name": "check_archive", "ok": "`gzip` でセンシティブなパスをアーカイブしようとしています (パターン: .env)"}
+{"arg": "pip install x", "fn": "heredoc", "literal": [], "out": "pip install x"}
+{"arg": "pip install x", "fn": "expand_cd", "out": ""}
+{"arg": "pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["pip", "pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "pip install x", "fn": "write_targets", "ok": []}
+{"arg": "pip install x", "fn": "http_calls", "ok": []}
+{"arg": "pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "pip install x", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "pip install x", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "pip3 install x", "fn": "heredoc", "literal": [], "out": "pip3 install x"}
+{"arg": "pip3 install x", "fn": "expand_cd", "out": ""}
+{"arg": "pip3 install x", "fn": "commands", "ok": [{"redirects": [], "words": [["pip3", "pip3"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["pip3", "pip3"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "pip3 install x", "fn": "write_targets", "ok": []}
+{"arg": "pip3 install x", "fn": "http_calls", "ok": []}
+{"arg": "pip3 install x", "fn": "fetched_paths", "ok": []}
+{"arg": "pip3 install x", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "pip3 install x", "fn": "check", "name": "check_policy_deny", "ok": "`pip3` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "pip list", "fn": "heredoc", "literal": [], "out": "pip list"}
+{"arg": "pip list", "fn": "expand_cd", "out": ""}
+{"arg": "pip list", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"], ["list", "list"]]}, {"redirects": [], "words": [["pip", "pip"], ["list", "list"]]}]}
+{"arg": "pip list", "fn": "write_targets", "ok": []}
+{"arg": "pip list", "fn": "http_calls", "ok": []}
+{"arg": "pip list", "fn": "fetched_paths", "ok": []}
+{"arg": "pip list", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv pip list`"}
+{"arg": "pip list", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "pip show x", "fn": "heredoc", "literal": [], "out": "pip show x"}
+{"arg": "pip show x", "fn": "expand_cd", "out": ""}
+{"arg": "pip show x", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"], ["show", "show"], ["x", "x"]]}, {"redirects": [], "words": [["pip", "pip"], ["show", "show"], ["x", "x"]]}]}
+{"arg": "pip show x", "fn": "write_targets", "ok": []}
+{"arg": "pip show x", "fn": "http_calls", "ok": []}
+{"arg": "pip show x", "fn": "fetched_paths", "ok": []}
+{"arg": "pip show x", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv pip show <package>`"}
+{"arg": "pip show x", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "pip freeze", "fn": "heredoc", "literal": [], "out": "pip freeze"}
+{"arg": "pip freeze", "fn": "expand_cd", "out": ""}
+{"arg": "pip freeze", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"], ["freeze", "freeze"]]}, {"redirects": [], "words": [["pip", "pip"], ["freeze", "freeze"]]}]}
+{"arg": "pip freeze", "fn": "write_targets", "ok": []}
+{"arg": "pip freeze", "fn": "http_calls", "ok": []}
+{"arg": "pip freeze", "fn": "fetched_paths", "ok": []}
+{"arg": "pip freeze", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv pip freeze`"}
+{"arg": "pip freeze", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "pip uninstall x", "fn": "heredoc", "literal": [], "out": "pip uninstall x"}
+{"arg": "pip uninstall x", "fn": "expand_cd", "out": ""}
+{"arg": "pip uninstall x", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"], ["uninstall", "uninstall"], ["x", "x"]]}, {"redirects": [], "words": [["pip", "pip"], ["uninstall", "uninstall"], ["x", "x"]]}]}
+{"arg": "pip uninstall x", "fn": "write_targets", "ok": []}
+{"arg": "pip uninstall x", "fn": "http_calls", "ok": []}
+{"arg": "pip uninstall x", "fn": "fetched_paths", "ok": []}
+{"arg": "pip uninstall x", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv remove <package>`"}
+{"arg": "pip uninstall x", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "pip --version", "fn": "heredoc", "literal": [], "out": "pip --version"}
+{"arg": "pip --version", "fn": "expand_cd", "out": ""}
+{"arg": "pip --version", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"], ["--version", "--version"]]}, {"redirects": [], "words": [["pip", "pip"], ["--version", "--version"]]}]}
+{"arg": "pip --version", "fn": "write_targets", "ok": []}
+{"arg": "pip --version", "fn": "http_calls", "ok": []}
+{"arg": "pip --version", "fn": "fetched_paths", "ok": []}
+{"arg": "pip --version", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv <subcommand>` または `uvx <tool>`"}
+{"arg": "pip --version", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "/usr/bin/pip install x", "fn": "heredoc", "literal": [], "out": "/usr/bin/pip install x"}
+{"arg": "/usr/bin/pip install x", "fn": "expand_cd", "out": ""}
+{"arg": "/usr/bin/pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["/usr/bin/pip", "/usr/bin/pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "/usr/bin/pip install x", "fn": "write_targets", "ok": []}
+{"arg": "/usr/bin/pip install x", "fn": "http_calls", "ok": []}
+{"arg": "/usr/bin/pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "/usr/bin/pip install x", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "/usr/bin/pip install x", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "python3 -m pip install x", "fn": "heredoc", "literal": [], "out": "python3 -m pip install x"}
+{"arg": "python3 -m pip install x", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -m pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "python3 -m pip install x", "fn": "write_targets", "ok": []}
+{"arg": "python3 -m pip install x", "fn": "http_calls", "ok": []}
+{"arg": "python3 -m pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -m pip install x", "fn": "check", "name": "check_pip_redirect", "ok": "`python3 -m pip` は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "python -m pip list", "fn": "heredoc", "literal": [], "out": "python -m pip list"}
+{"arg": "python -m pip list", "fn": "expand_cd", "out": ""}
+{"arg": "python -m pip list", "fn": "commands", "ok": [{"redirects": [], "words": [["python", "python"], ["-m", "-m"], ["pip", "pip"], ["list", "list"]]}, {"redirects": [], "words": [["python", "python"], ["-m", "-m"], ["pip", "pip"], ["list", "list"]]}]}
+{"arg": "python -m pip list", "fn": "write_targets", "ok": []}
+{"arg": "python -m pip list", "fn": "http_calls", "ok": []}
+{"arg": "python -m pip list", "fn": "fetched_paths", "ok": []}
+{"arg": "python -m pip list", "fn": "check", "name": "check_pip_redirect", "ok": "`python -m pip` は禁止されています。uv / uvx を使用してください。\n代替: `uv pip list`"}
+{"arg": "python3 -mpip install x", "fn": "heredoc", "literal": [], "out": "python3 -mpip install x"}
+{"arg": "python3 -mpip install x", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -mpip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-mpip", "-mpip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["python3", "python3"], ["-mpip", "-mpip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "python3 -mpip install x", "fn": "write_targets", "ok": []}
+{"arg": "python3 -mpip install x", "fn": "http_calls", "ok": []}
+{"arg": "python3 -mpip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -mpip install x", "fn": "check", "name": "check_pip_redirect", "ok": "`python3 -m pip` は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "python3.12 -m pip freeze", "fn": "heredoc", "literal": [], "out": "python3.12 -m pip freeze"}
+{"arg": "python3.12 -m pip freeze", "fn": "expand_cd", "out": ""}
+{"arg": "python3.12 -m pip freeze", "fn": "commands", "ok": [{"redirects": [], "words": [["python3.12", "python3.12"], ["-m", "-m"], ["pip", "pip"], ["freeze", "freeze"]]}, {"redirects": [], "words": [["python3.12", "python3.12"], ["-m", "-m"], ["pip", "pip"], ["freeze", "freeze"]]}]}
+{"arg": "python3.12 -m pip freeze", "fn": "write_targets", "ok": []}
+{"arg": "python3.12 -m pip freeze", "fn": "http_calls", "ok": []}
+{"arg": "python3.12 -m pip freeze", "fn": "fetched_paths", "ok": []}
+{"arg": "python3.12 -m pip freeze", "fn": "check", "name": "check_pip_redirect", "ok": "`python3.12 -m pip` は禁止されています。uv / uvx を使用してください。\n代替: `uv pip freeze`"}
+{"arg": "python3 -m venv .venv", "fn": "heredoc", "literal": [], "out": "python3 -m venv .venv"}
+{"arg": "python3 -m venv .venv", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -m venv .venv", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["venv", "venv"], [".venv", ".venv"]]}, {"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["venv", "venv"], [".venv", ".venv"]]}]}
+{"arg": "python3 -m venv .venv", "fn": "write_targets", "ok": []}
+{"arg": "python3 -m venv .venv", "fn": "http_calls", "ok": []}
+{"arg": "python3 -m venv .venv", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -m pytest", "fn": "heredoc", "literal": [], "out": "python3 -m pytest"}
+{"arg": "python3 -m pytest", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -m pytest", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["pytest", "pytest"]]}, {"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["pytest", "pytest"]]}]}
+{"arg": "python3 -m pytest", "fn": "write_targets", "ok": []}
+{"arg": "python3 -m pytest", "fn": "http_calls", "ok": []}
+{"arg": "python3 -m pytest", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 script.py", "fn": "heredoc", "literal": [], "out": "python3 script.py"}
+{"arg": "python3 script.py", "fn": "expand_cd", "out": ""}
+{"arg": "python3 script.py", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["script.py", "script.py"]]}, {"redirects": [], "words": [["python3", "python3"], ["script.py", "script.py"]]}]}
+{"arg": "python3 script.py", "fn": "write_targets", "ok": []}
+{"arg": "python3 script.py", "fn": "http_calls", "ok": []}
+{"arg": "python3 script.py", "fn": "fetched_paths", "ok": []}
+{"arg": "uvx pip install x", "fn": "heredoc", "literal": [], "out": "uvx pip install x"}
+{"arg": "uvx pip install x", "fn": "expand_cd", "out": ""}
+{"arg": "uvx pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["uvx", "uvx"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["uvx", "uvx"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "uvx pip install x", "fn": "write_targets", "ok": []}
+{"arg": "uvx pip install x", "fn": "http_calls", "ok": []}
+{"arg": "uvx pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "uvx pip install x", "fn": "check", "name": "check_pip_redirect", "ok": "`uvx` 経由の pip 実行は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "uvx --from foo pip install x", "fn": "heredoc", "literal": [], "out": "uvx --from foo pip install x"}
+{"arg": "uvx --from foo pip install x", "fn": "expand_cd", "out": ""}
+{"arg": "uvx --from foo pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["uvx", "uvx"], ["--from", "--from"], ["foo", "foo"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["uvx", "uvx"], ["--from", "--from"], ["foo", "foo"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "uvx --from foo pip install x", "fn": "write_targets", "ok": []}
+{"arg": "uvx --from foo pip install x", "fn": "http_calls", "ok": []}
+{"arg": "uvx --from foo pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "uvx --from foo pip install x", "fn": "check", "name": "check_pip_redirect", "ok": "`uvx` 経由の pip 実行は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "uvx -p 3.12 pip install x", "fn": "heredoc", "literal": [], "out": "uvx -p 3.12 pip install x"}
+{"arg": "uvx -p 3.12 pip install x", "fn": "expand_cd", "out": ""}
+{"arg": "uvx -p 3.12 pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["uvx", "uvx"], ["-p", "-p"], ["3.12", "3.12"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["uvx", "uvx"], ["-p", "-p"], ["3.12", "3.12"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "uvx -p 3.12 pip install x", "fn": "write_targets", "ok": []}
+{"arg": "uvx -p 3.12 pip install x", "fn": "http_calls", "ok": []}
+{"arg": "uvx -p 3.12 pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "uvx -p 3.12 pip install x", "fn": "check", "name": "check_pip_redirect", "ok": "`uvx` 経由の pip 実行は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "pipx run pip show x", "fn": "heredoc", "literal": [], "out": "pipx run pip show x"}
+{"arg": "pipx run pip show x", "fn": "expand_cd", "out": ""}
+{"arg": "pipx run pip show x", "fn": "commands", "ok": [{"redirects": [], "words": [["pipx", "pipx"], ["run", "run"], ["pip", "pip"], ["show", "show"], ["x", "x"]]}, {"redirects": [], "words": [["pipx", "pipx"], ["run", "run"], ["pip", "pip"], ["show", "show"], ["x", "x"]]}]}
+{"arg": "pipx run pip show x", "fn": "write_targets", "ok": []}
+{"arg": "pipx run pip show x", "fn": "http_calls", "ok": []}
+{"arg": "pipx run pip show x", "fn": "fetched_paths", "ok": []}
+{"arg": "pipx run pip show x", "fn": "check", "name": "check_pip_redirect", "ok": "`pipx` 経由の pip 実行は禁止されています。uv / uvx を使用してください。\n代替: `uv pip show <package>`"}
+{"arg": "pipx run foo", "fn": "heredoc", "literal": [], "out": "pipx run foo"}
+{"arg": "pipx run foo", "fn": "expand_cd", "out": ""}
+{"arg": "pipx run foo", "fn": "commands", "ok": [{"redirects": [], "words": [["pipx", "pipx"], ["run", "run"], ["foo", "foo"]]}, {"redirects": [], "words": [["pipx", "pipx"], ["run", "run"], ["foo", "foo"]]}]}
+{"arg": "pipx run foo", "fn": "write_targets", "ok": []}
+{"arg": "pipx run foo", "fn": "http_calls", "ok": []}
+{"arg": "pipx run foo", "fn": "fetched_paths", "ok": []}
+{"arg": "pipx install pip", "fn": "heredoc", "literal": [], "out": "pipx install pip"}
+{"arg": "pipx install pip", "fn": "expand_cd", "out": ""}
+{"arg": "pipx install pip", "fn": "commands", "ok": [{"redirects": [], "words": [["pipx", "pipx"], ["install", "install"], ["pip", "pip"]]}, {"redirects": [], "words": [["pipx", "pipx"], ["install", "install"], ["pip", "pip"]]}]}
+{"arg": "pipx install pip", "fn": "write_targets", "ok": []}
+{"arg": "pipx install pip", "fn": "http_calls", "ok": []}
+{"arg": "pipx install pip", "fn": "fetched_paths", "ok": []}
+{"arg": "pipx install pip", "fn": "check", "name": "check_policy_ask", "ok": "`pipx install` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: pipx install pip\n内容を確認して問題なければ承認してください。"}
+{"arg": "uv pip install x", "fn": "heredoc", "literal": [], "out": "uv pip install x"}
+{"arg": "uv pip install x", "fn": "expand_cd", "out": ""}
+{"arg": "uv pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["uv", "uv"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["uv", "uv"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "uv pip install x", "fn": "write_targets", "ok": []}
+{"arg": "uv pip install x", "fn": "http_calls", "ok": []}
+{"arg": "uv pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "uv pip list", "fn": "heredoc", "literal": [], "out": "uv pip list"}
+{"arg": "uv pip list", "fn": "expand_cd", "out": ""}
+{"arg": "uv pip list", "fn": "commands", "ok": [{"redirects": [], "words": [["uv", "uv"], ["pip", "pip"], ["list", "list"]]}, {"redirects": [], "words": [["uv", "uv"], ["pip", "pip"], ["list", "list"]]}]}
+{"arg": "uv pip list", "fn": "write_targets", "ok": []}
+{"arg": "uv pip list", "fn": "http_calls", "ok": []}
+{"arg": "uv pip list", "fn": "fetched_paths", "ok": []}
+{"arg": "cd foo && pip install x", "fn": "heredoc", "literal": [], "out": "cd foo && pip install x"}
+{"arg": "cd foo && pip install x", "fn": "expand_cd", "out": "pip foo/install foo/x"}
+{"arg": "cd foo && pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["cd", "cd"], ["foo", "foo"]]}, {"redirects": [], "words": [["pip", "pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "cd foo && pip install x", "fn": "write_targets", "ok": []}
+{"arg": "cd foo && pip install x", "fn": "http_calls", "ok": []}
+{"arg": "cd foo && pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "cd foo && pip install x", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "cd foo && pip install x", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "sudo pip install x", "fn": "heredoc", "literal": [], "out": "sudo pip install x"}
+{"arg": "sudo pip install x", "fn": "expand_cd", "out": ""}
+{"arg": "sudo pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["sudo", "sudo"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["sudo", "sudo"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "sudo pip install x", "fn": "write_targets", "ok": []}
+{"arg": "sudo pip install x", "fn": "http_calls", "ok": []}
+{"arg": "sudo pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "sudo pip install x", "fn": "check", "name": "check_policy_deny", "ok": "`sudo` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "env pip install x", "fn": "heredoc", "literal": [], "out": "env pip install x"}
+{"arg": "env pip install x", "fn": "expand_cd", "out": ""}
+{"arg": "env pip install x", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["env", "env"], ["pip", "pip"], ["install", "install"], ["x", "x"]]}]}
+{"arg": "env pip install x", "fn": "write_targets", "ok": []}
+{"arg": "env pip install x", "fn": "http_calls", "ok": []}
+{"arg": "env pip install x", "fn": "fetched_paths", "ok": []}
+{"arg": "env pip install x", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "env pip install x", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "bash -c \"pip install x\"", "fn": "heredoc", "literal": [], "out": "bash -c \"pip install x\""}
+{"arg": "bash -c \"pip install x\"", "fn": "expand_cd", "out": ""}
+{"arg": "bash -c \"pip install x\"", "fn": "commands", "ok": [{"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"pip install x\"", "pip install x"]]}, {"redirects": [], "words": [["pip", "pip"], ["install", "install"], ["x", "x"]]}, {"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"pip install x\"", "pip install x"]]}]}
+{"arg": "bash -c \"pip install x\"", "fn": "write_targets", "ok": []}
+{"arg": "bash -c \"pip install x\"", "fn": "http_calls", "ok": []}
+{"arg": "bash -c \"pip install x\"", "fn": "fetched_paths", "ok": []}
+{"arg": "bash -c \"pip install x\"", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "bash -c \"pip install x\"", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "echo pip install", "fn": "heredoc", "literal": [], "out": "echo pip install"}
+{"arg": "echo pip install", "fn": "expand_cd", "out": ""}
+{"arg": "echo pip install", "fn": "commands", "ok": [{"redirects": [], "words": [["echo", "echo"], ["pip", "pip"], ["install", "install"]]}, {"redirects": [], "words": [["echo", "echo"], ["pip", "pip"], ["install", "install"]]}]}
+{"arg": "echo pip install", "fn": "write_targets", "ok": []}
+{"arg": "echo pip install", "fn": "http_calls", "ok": []}
+{"arg": "echo pip install", "fn": "fetched_paths", "ok": []}
+{"arg": "which pip", "fn": "heredoc", "literal": [], "out": "which pip"}
+{"arg": "which pip", "fn": "expand_cd", "out": ""}
+{"arg": "which pip", "fn": "commands", "ok": [{"redirects": [], "words": [["which", "which"], ["pip", "pip"]]}, {"redirects": [], "words": [["which", "which"], ["pip", "pip"]]}]}
+{"arg": "which pip", "fn": "write_targets", "ok": []}
+{"arg": "which pip", "fn": "http_calls", "ok": []}
+{"arg": "which pip", "fn": "fetched_paths", "ok": []}
+{"arg": "pip", "fn": "heredoc", "literal": [], "out": "pip"}
+{"arg": "pip", "fn": "expand_cd", "out": ""}
+{"arg": "pip", "fn": "commands", "ok": [{"redirects": [], "words": [["pip", "pip"]]}, {"redirects": [], "words": [["pip", "pip"]]}]}
+{"arg": "pip", "fn": "write_targets", "ok": []}
+{"arg": "pip", "fn": "http_calls", "ok": []}
+{"arg": "pip", "fn": "fetched_paths", "ok": []}
+{"arg": "pip", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv <subcommand>` または `uvx <tool>`"}
+{"arg": "pip", "fn": "check", "name": "check_policy_deny", "ok": "`pip` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "pip3.12 install", "fn": "heredoc", "literal": [], "out": "pip3.12 install"}
+{"arg": "pip3.12 install", "fn": "expand_cd", "out": ""}
+{"arg": "pip3.12 install", "fn": "commands", "ok": [{"redirects": [], "words": [["pip3.12", "pip3.12"], ["install", "install"]]}, {"redirects": [], "words": [["pip3.12", "pip3.12"], ["install", "install"]]}]}
+{"arg": "pip3.12 install", "fn": "write_targets", "ok": []}
+{"arg": "pip3.12 install", "fn": "http_calls", "ok": []}
+{"arg": "pip3.12 install", "fn": "fetched_paths", "ok": []}
+{"arg": "pip3.12 install", "fn": "check", "name": "check_pip_redirect", "ok": "pip の直接使用は禁止されています。uv / uvx を使用してください。\n代替: `uv add <package>` または `uvx <package>`"}
+{"arg": "python3 -m", "fn": "heredoc", "literal": [], "out": "python3 -m"}
+{"arg": "python3 -m", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -m", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-m", "-m"]]}, {"redirects": [], "words": [["python3", "python3"], ["-m", "-m"]]}]}
+{"arg": "python3 -m", "fn": "write_targets", "ok": []}
+{"arg": "python3 -m", "fn": "http_calls", "ok": []}
+{"arg": "python3 -m", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -m pip", "fn": "heredoc", "literal": [], "out": "python3 -m pip"}
+{"arg": "python3 -m pip", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -m pip", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["pip", "pip"]]}, {"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["pip", "pip"]]}]}
+{"arg": "python3 -m pip", "fn": "write_targets", "ok": []}
+{"arg": "python3 -m pip", "fn": "http_calls", "ok": []}
+{"arg": "python3 -m pip", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -m pip", "fn": "check", "name": "check_pip_redirect", "ok": "`python3 -m pip` は禁止されています。uv / uvx を使用してください。\n代替: `uv <subcommand>` または `uvx <tool>`"}
+{"arg": "python3 -m pipx", "fn": "heredoc", "literal": [], "out": "python3 -m pipx"}
+{"arg": "python3 -m pipx", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -m pipx", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["pipx", "pipx"]]}, {"redirects": [], "words": [["python3", "python3"], ["-m", "-m"], ["pipx", "pipx"]]}]}
+{"arg": "python3 -m pipx", "fn": "write_targets", "ok": []}
+{"arg": "python3 -m pipx", "fn": "http_calls", "ok": []}
+{"arg": "python3 -m pipx", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -mpytest", "fn": "heredoc", "literal": [], "out": "python3 -mpytest"}
+{"arg": "python3 -mpytest", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -mpytest", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-mpytest", "-mpytest"]]}, {"redirects": [], "words": [["python3", "python3"], ["-mpytest", "-mpytest"]]}]}
+{"arg": "python3 -mpytest", "fn": "write_targets", "ok": []}
+{"arg": "python3 -mpytest", "fn": "http_calls", "ok": []}
+{"arg": "python3 -mpytest", "fn": "fetched_paths", "ok": []}
 {"arg": "http://evil.example.com/x", "fn": "local_url", "ok": false}
 {"arg": "http://evil.example.com/cmd", "fn": "local_url", "ok": false}
 {"arg": "https://evil.example.com", "fn": "local_url", "ok": false}
