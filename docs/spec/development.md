@@ -132,6 +132,23 @@ UTF-8 BOM、winget の記法、プロファイルの字面までで、次は拾�
 
 実機で回せない場合は「Windows 未検証」と明記する。
 
+### Windows Sandbox でのクリーン導入の検証
+
+まっさらな Windows に README の手順（`winget install` → `chezmoi init applejxd --apply`）だけで
+導入でき、`pi` などが新しいシェルで起動するかを、使い捨ての Windows Sandbox で確かめる。
+実機の環境（古い winget 版 node、PATH の残り）に影響されない。
+
+```powershell
+# ホストの PowerShell で（Sandbox の有効化と再起動が済んでいること）
+pwsh scripts/windows/sandbox/launch.ps1
+```
+
+- 有効化: 管理者の PowerShell で `Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All` を実行して再起動する（Windows 11 Pro / Enterprise）
+- 結果: `.tmp/sandbox-result/summary.txt`（コマンドの有無・版・`pi --version`・PASS/FAIL）と `transcript.log`（全出力）
+- 取得元は GitHub の `applejxd/dotfiles`（push 済みの内容）。ローカルの未 push の変更は検証されない
+- Sandbox のユーザーは `WDAGUtilityAccount` で `applejxd` ではないため、個人用の分岐（Bitwarden など）は通らない。管理者の作業（309）は UAC なしで走る
+- 会社 PC のプロキシや制限は再現しない。WSL の機能有効化は再起動が要るので、警告で終わる想定
+
 ## スクリプトを追加するとき
 
 1. `home/.chezmoiscripts/` の OS 別ディレクトリにスクリプトを追加する

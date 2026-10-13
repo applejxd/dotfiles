@@ -35,6 +35,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 開発環境を準備して検証する | [開発ガイド](spec/development.md) |
 | テストの種類と Docker ハーネスの契約を知る | [テストと検証の仕組み](spec/testing.md) |
 | Windows 資産を実機で検証する | [Windows 実機での検証](spec/development.md#windows-実機での検証) |
+| まっさらな Windows への導入を Sandbox で検証する | [Windows Sandbox での検証](spec/development.md#windows-sandbox-でのクリーン導入の検証) |
 | 新しい機械での初回導入を Docker で検証する | [Docker での検証](spec/development.md#新しい機械での初回導入を-docker-で検証する) |
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
 | pi のハーネスの判定器（`decide`）を変える | [判定 API](spec/pi-decide.md) |
