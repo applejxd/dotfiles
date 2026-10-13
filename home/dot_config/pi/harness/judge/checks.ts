@@ -7,6 +7,13 @@
 // see docs/spec/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { checkCurlFileSend, checkCurlWgetMutation, checkHttpDangerousOutput } from "./http.ts";
+import {
+	checkEncodedCommand,
+	checkInterpreterInlineCode,
+	checkPipeToShell,
+	checkReverseShell,
+	checkXargsPipe,
+} from "./rules_exec.ts";
 import { checkGitAddSensitive, checkHistoryAccess, checkSecretEnvEcho } from "./sensitive.ts";
 
 export type Check = (ctx: Ctx, cmd: string) => string | null;
@@ -18,4 +25,9 @@ export const CHECKS = new Map<string, Check>([
 	["check_curl_file_send", checkCurlFileSend],
 	["check_curl_wget_mutation", checkCurlWgetMutation],
 	["check_http_dangerous_output", checkHttpDangerousOutput],
+	["check_xargs_pipe", checkXargsPipe],
+	["check_pipe_to_shell", checkPipeToShell],
+	["check_interpreter_inline_code", checkInterpreterInlineCode],
+	["check_reverse_shell", checkReverseShell],
+	["check_encoded_command", checkEncodedCommand],
 ]);
