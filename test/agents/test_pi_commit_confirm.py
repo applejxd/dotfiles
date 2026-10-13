@@ -1,6 +1,7 @@
-"""素の pi 向けの補助 (home/dot_config/pi/commit-confirm) の試験。
+"""素の pi 向けの補助 (home/dot_config/pi/commit-confirm) を、本物の pi と偽のモデルで動かす試験。
 
-settings.json の ``extensions`` から読ませ、本物の pi + 偽のモデルで確認の流れを見る。
+settings.json の ``extensions`` から読ませ、push の拒否・commit の確認・時間切れの退避を見る。
+解釈・表示・退避の細部は test_pi_commit_parse.py。
 see docs/spec/pi-harness.md#commit-の確認-素の-pi
 """
 
@@ -10,6 +11,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -20,20 +22,17 @@ PI = shutil.which("pi")
 pytestmark = pytest.mark.skipif(PI is None, reason="pi is not installed")
 
 EXT_SRC = ROOT / "home" / "dot_config" / "pi" / "commit-confirm"
-GUIDE_SRC = ROOT / "home" / "dot_config" / "opencode" / "guide-plugin"
 FIXTURES = Path(__file__).resolve().parent / "pi"
 HARNESS_SRC = ROOT / "home" / "dot_config" / "pi" / "harness" / "index.ts"
+TIMEOUT_MS = "1500"  # 時間切れの試験が長引かないよう縮める (本番は TUI 15 分・RPC 5 分)
 
 
 @pytest.fixture
 def env(tmp_path):
-    # 配備先と同じ並び (拡張は ../../opencode/guide-plugin/commit-message.js を取り込む)
     ext = tmp_path / ".config" / "pi" / "commit-confirm"
     ext.mkdir(parents=True)
-    shutil.copy2(EXT_SRC / "index.ts", ext / "index.ts")
-    guide = tmp_path / ".config" / "opencode" / "guide-plugin"
-    guide.mkdir(parents=True)
-    shutil.copy2(GUIDE_SRC / "commit-message.js", guide / "commit-message.js")
+    for src in EXT_SRC.glob("*.ts"):
+        shutil.copy2(src, ext / src.name)
     agent = tmp_path / "agent"
     agent.mkdir()
     (agent / "settings.json").write_text(json.dumps({"extensions": [str(ext)]}), encoding="utf-8")
@@ -45,8 +44,14 @@ def env(tmp_path):
         "GIT_COMMITTER_NAME": "t",
         "GIT_COMMITTER_EMAIL": "t@example.com",
     }
-    base = {**os.environ, **git_env, "PI_CODING_AGENT_DIR": str(agent), "TMPDIR": str(tmp_path)}
-    subprocess.run(["git", "init", "-q"], cwd=proj, check=True)
+    base = {
+        **os.environ,
+        **git_env,
+        "PI_CODING_AGENT_DIR": str(agent),
+        "TMPDIR": str(tmp_path),
+        "PI_COMMIT_CONFIRM_TIMEOUT_MS": TIMEOUT_MS,
+    }
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=proj, check=True)
     (proj / "a.txt").write_text("x\n", encoding="utf-8")
     subprocess.run(["git", "add", "a.txt"], cwd=proj, check=True)
     return {"proj": proj, "env": base, "tmp": tmp_path}
@@ -56,15 +61,26 @@ def bash_call(command):
     return [{"name": "bash", "args": {"command": command}}]
 
 
-def commits(env):
+def git_out(env, *args):
     done = subprocess.run(
-        ["git", "log", "--format=%s"],
+        ["git", *args],
         cwd=env["proj"],
         capture_output=True,
         text=True,
         encoding="utf-8",
+        check=False,
     )
-    return done.stdout.split()
+    return done.stdout
+
+
+def commits(env):
+    return git_out(env, "log", "--format=%s").splitlines()
+
+
+def pending_refs(env):
+    return git_out(
+        env, "for-each-ref", "--sort=refname", "--format=%(refname)", "refs/pi/pending/"
+    ).split()
 
 
 def _args(*extra, mode):
@@ -72,8 +88,14 @@ def _args(*extra, mode):
     return [PI, "--no-session", "--model", "faux/spike", *extra, "-e", faux, "--mode", mode]
 
 
-def _rpc(env, calls, answers, extra=()):
-    """RPC で動かし、確認の要求 (extension_ui_request) に answers の順に応える。"""
+class Rpc(list):
+    """確認の要求の一覧。raw は pi の出力全部 (ツールの結果の文章を探すのに使う)。"""
+
+    raw: str = ""
+
+
+def _rpc(env, calls, answers, extra=(), prompts=("go",)):
+    """RPC で動かし、確認の要求に answers の順に応える。None は応えない (時間切れを待つ)。"""
     proc = subprocess.Popen(
         _args(*extra, mode="rpc"),
         cwd=env["proj"],
@@ -84,12 +106,15 @@ def _rpc(env, calls, answers, extra=()):
         text=True,
         encoding="utf-8",
     )
-    requests = []
-    proc.stdin.write(json.dumps({"type": "prompt", "message": "go"}) + "\n")
+    result = Rpc()
+    lines = []
+    remaining = list(prompts)
+    proc.stdin.write(json.dumps({"type": "prompt", "message": remaining.pop(0)}) + "\n")
     proc.stdin.flush()
     deadline = time.time() + 120
     try:
         for line in proc.stdout:
+            lines.append(line)
             if time.time() > deadline:
                 break
             try:
@@ -97,38 +122,75 @@ def _rpc(env, calls, answers, extra=()):
             except ValueError:
                 continue
             if event.get("type") == "extension_ui_request" and event.get("method") == "confirm":
-                requests.append(event)
-                ok = answers[len(requests) - 1] if len(requests) <= len(answers) else False
-                reply = {"type": "extension_ui_response", "id": event["id"], "confirmed": ok}
-                proc.stdin.write(json.dumps(reply) + "\n")
-                proc.stdin.flush()
+                result.append(event)
+                answer = answers[len(result) - 1] if len(result) <= len(answers) else False
+                if answer is not None:
+                    reply = {
+                        "type": "extension_ui_response",
+                        "id": event["id"],
+                        "confirmed": answer,
+                    }
+                    proc.stdin.write(json.dumps(reply) + "\n")
+                    proc.stdin.flush()
             if event.get("type") == "agent_end":
-                break
+                if not remaining:
+                    break
+                proc.stdin.write(json.dumps({"type": "prompt", "message": remaining.pop(0)}) + "\n")
+                proc.stdin.flush()
     finally:
         proc.kill()
-    return requests
+    result.raw = "".join(lines)
+    return result
+
+
+def _print(env, command):
+    return subprocess.run(
+        [*_args(mode="text"), "-p", "go"],
+        cwd=env["proj"],
+        env={**env["env"], "FAUX_TOOL_CALLS": json.dumps(bash_call(command))},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+        check=False,
+    )
 
 
 COMMIT = "git commit -m 'feat: 件名です' -m '本文の 1 行目'"
+HEREDOC = "git commit -m \"$(cat <<'EOF'\nfeat: ヒアドキュメント\n\n本文 A\nEOF\n)\""
 
 
-def test_commit_confirmation_shows_subject_and_body(env):
+# ─── 確認 ────────────────────────────────────────────────────────────
+
+
+def test_commit_confirmation_is_structured_and_has_a_deadline(env):
     requests = _rpc(env, bash_call(COMMIT), [False])
     assert len(requests) == 1, requests
     message = requests[0]["message"]
-    assert "件名: feat: 件名です" in message and "本文の 1 行目" in message
-    assert requests[0].get("timeout"), "確認に期限が付いていない"
+    assert message.startswith("リポジトリ: (origin なし) ")
+    assert "\n\n対象:       1 ファイル  +1 −0\n  A a.txt (+1 −0)\n\nメッセージ:\n" in message
+    assert "  feat: 件名です\n  本文の 1 行目" in message
+    assert "git commit" not in message.split("応答が無ければ")[0], "生のコマンドを出している"
+    assert requests[0].get("timeout") == int(TIMEOUT_MS), "確認に期限が付いていない"
 
 
-def test_refusal_blocks_the_commit(env):
-    _rpc(env, bash_call(COMMIT), [False])
+def test_a_heredoc_message_is_shown_structured(env):
+    requests = _rpc(env, bash_call(HEREDOC), [False])
+    assert "メッセージ:\n  feat: ヒアドキュメント\n  本文 A" in requests[0]["message"]
+
+
+def test_refusal_blocks_the_commit_and_saves_nothing(env):
+    requests = _rpc(env, bash_call(COMMIT), [False])
     assert commits(env) == []
+    assert pending_refs(env) == [], requests.raw[-1500:]
+    assert "利用者が git commit を拒否した" in requests.raw
 
 
 def test_approval_runs_the_commit(env):
     requests = _rpc(env, bash_call(COMMIT), [True])
     assert len(requests) == 1
-    assert commits(env) == ["feat:", "件名です"]
+    assert commits(env) == ["feat: 件名です"]
+    assert pending_refs(env) == []
 
 
 @pytest.mark.parametrize(
@@ -140,40 +202,171 @@ def test_other_commands_pass_without_confirmation(env, command):
 
 @pytest.mark.parametrize(
     "command",
-    ["git -C . commit -m x", "cd . && git commit -m x", "git -c core.x=1 commit -m x"],
+    [
+        "git -C . commit -m x",
+        "cd . && git commit -m x",
+        "git -c core.x=1 commit -m x",
+        "git commit -m x | cat",
+    ],
 )
 def test_commit_variants_are_confirmed(env, command):
     assert len(_rpc(env, bash_call(command), [False])) == 1
 
 
-def test_without_a_screen_the_commit_is_blocked(env):
-    done = subprocess.run(
-        [*_args(mode="text"), "-p", "go"],
-        cwd=env["proj"],
-        env={**env["env"], "FAUX_TOOL_CALLS": json.dumps(bash_call(COMMIT))},
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=120,
+def test_an_unreadable_command_is_shown_raw_with_a_warning(env):
+    requests = _rpc(env, bash_call("git commit -m x | cat"), [False])
+    assert requests[0]["message"].startswith(
+        "解釈できない形のコマンドです。次がそのまま実行されます:"
     )
+
+
+# ─── push ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "command", ["git push origin main", "git commit -m x && git push", "git -C . push"]
+)
+def test_push_is_denied_without_asking(env, command):
+    requests = _rpc(env, bash_call(command), [True])
+    assert requests == [], "push は確認を出さずに拒否する"
+    assert "git push は完全手動" in requests.raw
+    assert commits(env) == [], "push と連結された commit も実行しない"
+
+
+def test_push_is_denied_without_a_screen_too(env):
+    done = _print(env, "git push origin main")
+    assert "git push は完全手動" in done.stdout + done.stderr
+
+
+# ─── 時間切れ・不在 ──────────────────────────────────────────────────
+
+
+def test_a_timeout_saves_the_commit_and_tells_the_model_to_continue(env):
+    before = git_out(env, "status", "--porcelain=v1")
+    requests = _rpc(env, bash_call(COMMIT), [None])
+    assert len(requests) == 1
+    assert commits(env) == [], "時間切れでコミットしてはいけない"
+    [ref] = pending_refs(env)
+    assert git_out(env, "log", "-1", "--format=%s", ref).strip() == "feat: 件名です"
+    assert git_out(env, "status", "--porcelain=v1") == before, (
+        "退避が作業ツリー・インデックスを変えた"
+    )
+    assert (
+        "git commit は実行していない: 確認が" in requests.raw and "時間切れになった" in requests.raw
+    )
+    assert (
+        ref in requests.raw
+        and "再試行しない" in requests.raw
+        and "保留したコミット" in requests.raw
+    )
+
+
+def test_after_a_timeout_later_commits_in_the_same_run_are_not_asked(env):
+    calls = bash_call(COMMIT) + bash_call("git add -- b.txt && git commit -m 'second'")
+    (env["proj"] / "b.txt").write_text("b\n", encoding="utf-8")
+    requests = _rpc(env, calls, [None, None])
+    assert len(requests) == 1, "不在と分かった後の確認を待った"
+    first, second = pending_refs(env)
+    assert git_out(env, "rev-parse", f"{second}^") == git_out(env, "rev-parse", first)
+    assert git_out(env, "diff", "--name-only", first, second).split() == ["b.txt"]
+    assert "不在のため確認せずに退避した" in requests.raw
+
+
+def test_a_new_user_input_ends_the_absence(env):
+    requests = _rpc(env, bash_call(COMMIT), [None, False], prompts=("go", "もう一度"))
+    assert len(requests) == 2, "利用者の入力の後も確認を出さなかった"
+
+
+def test_without_a_screen_the_commit_is_saved_not_run(env):
+    done = _print(env, COMMIT)
     assert commits(env) == [], done.stdout + done.stderr
+    assert len(pending_refs(env)) == 1
+    assert "確認できる画面が無い" in done.stdout + done.stderr
+
+
+def test_a_chained_commit_is_blocked_whole_and_saved_as_an_approximation(env):
+    """モデルがよく書く連結 (実機で確認)。全体を止め、最初の commit から近似して退避する。"""
+    requests = _rpc(env, bash_call("git commit -m 'feat: chained' && touch made-after"), [None])
+    assert commits(env) == [] and not (env["proj"] / "made-after").exists(), (
+        "連結した操作が実行された"
+    )
+    [ref] = pending_refs(env)
+    assert git_out(env, "log", "-1", "--format=%s", ref).strip() == "feat: chained"
+    assert "近似" in requests.raw and "commit と分けて実行し直す" in requests.raw
+
+
+def test_an_unreadable_commit_cannot_be_saved_but_still_does_not_run(env):
+    requests = _rpc(env, bash_call('git commit -m "fix: $MSG"'), [None])
+    assert commits(env) == [] and pending_refs(env) == []
+    assert "退避できなかった" in requests.raw
+
+
+# ─── TUI ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux が無い")
+def test_the_tui_shows_the_structure_and_a_countdown_then_saves_on_timeout(env):
+    session = f"cc-{os.getpid()}"
+    tmp = env["tmp"]
+    script = tmp / "start.sh"
+    exports = " ".join(
+        f"{k}={json.dumps(v)}"
+        for k, v in env["env"].items()
+        if k.startswith(("PI_", "GIT_", "TMPDIR"))
+    )
+    script.write_text(
+        f"cd {env['proj']}\nexport {exports} PI_COMMIT_CONFIRM_TIMEOUT_MS=6000\n"
+        f"export FAUX_TOOL_CALLS={json.dumps(json.dumps(bash_call(COMMIT)))}\n"
+        f"exec {PI} --no-session --model faux/spike -e {FIXTURES / 'faux.ts'}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["tmux", "new-session", "-d", "-s", session, "-x", "110", "-y", "36", f"bash {script}"],
+        check=True,
+    )
+    try:
+        time.sleep(3)
+        subprocess.run(["tmux", "send-keys", "-t", session, "go", "Enter"], check=True)
+        time.sleep(2.5)
+        screen = subprocess.run(
+            ["tmux", "capture-pane", "-t", session, "-p"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        ).stdout
+        assert (
+            "リポジトリ: (origin なし)" in screen and "対象:" in screen and "メッセージ:" in screen
+        ), screen
+        assert "feat: 件名です" in screen and "(" in screen and "s)" in screen, (
+            "残り時間が出ていない"
+        )
+        time.sleep(6)
+    finally:
+        subprocess.run(["tmux", "kill-session", "-t", session], check=False)
+    assert commits(env) == [] and len(pending_refs(env)) == 1
+
+
+# ─── ハーネスとの関係 ────────────────────────────────────────────────
 
 
 def test_the_harness_replaces_it_instead_of_doubling(env):
     """pis (-ne -e harness) では settings.json の extensions が外れ、確認は 1 回だけ。"""
-    tmp = env["tmp"]
-    harness = tmp / ".config" / "pi" / "harness"
-    harness.mkdir(parents=True)
-    shutil.copy2(HARNESS_SRC, harness / "index.ts")
-    # ハーネス側の確認が 1 回だけ出ること。ハーネスの規則は本物の生成物を使う
-    import sys
-
     sys.path.insert(0, str(ROOT / "scripts" / "agents"))
     import generate as gen
     from agents_common import agents_config_dir, load_common
 
+    harness = env["tmp"] / ".config" / "pi" / "harness"
+    harness.mkdir(parents=True)
+    shutil.copy2(HARNESS_SRC, harness / "index.ts")
+    shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
+    guide = env["tmp"] / ".config" / "opencode" / "guide-plugin"
+    guide.mkdir(parents=True)
+    shutil.copy2(
+        ROOT / "home" / "dot_config" / "opencode" / "guide-plugin" / "commit-message.js",
+        guide / "commit-message.js",
+    )
     rules = gen.build_pi_harness({}, load_common())
-    rules["decide"] = str(ROOT / "home" / "dot_claude" / "hooks" / "executable_decide.py")
     for agent in rules["agents"].values():
         agent["model"] = None
     (harness / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
@@ -181,3 +374,27 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     calls = [{"name": "guarded_bash", "args": {"command": COMMIT}}]
     requests = _rpc(env, calls, [False], extra=("-nbt", "-ne", "-e", str(harness)))
     assert len(requests) == 1, requests
+
+
+def test_a_commit_whose_structure_cannot_be_read_is_shown_raw_with_the_reason(env):
+    requests = _rpc(env, bash_call("git commit -F missing-message.txt"), [False])
+    assert requests[0]["message"].startswith(
+        "構造を取得できなかったので、生のコマンドを表示します。"
+    )
+    assert "git commit -F missing-message.txt" in requests[0]["message"]
+
+
+def test_a_later_confirmation_shows_the_state_before_the_earlier_commit_runs(env):
+    """並んだ 2 件目の表示は、1 件目の確認が済んだ後に組むが、1 件目のコミットはまだ入っていない。
+
+    pi は同じ応答の全呼び出しの tool_call を終えてから実行を始める (実行の終わりを待つと、
+    安全弁の時間まで止まる)。そのため 2 件目は、1 件目が入る前の状態 (a.txt も対象) を見せる。
+    既知の限界 (docs/spec/pi-harness.md#commit-の確認-素の-pi)。
+    """
+    (env["proj"] / "b.txt").write_text("b\n", encoding="utf-8")
+    calls = bash_call(COMMIT) + bash_call("git add -- b.txt && git commit -m 'second'")
+    requests = _rpc(env, calls, [True, False])
+    assert len(requests) == 2
+    assert "A a.txt" in requests[0]["message"]
+    assert "A a.txt" in requests[1]["message"], requests[1]["message"]
+    assert "A b.txt" in requests[1]["message"]

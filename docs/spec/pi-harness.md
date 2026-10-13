@@ -1,6 +1,6 @@
 # pi のハーネス
 
-pi（earendil-works/pi）の拡張として、ツールの実行を判定 API（[`decide`](pi-decide.md)）に通す仕組み。
+pi（earendil-works/pi）の拡張として、ツールの実行を判定器（TypeScript の `judge/`。[`decide`](pi-decide.md)）に通す仕組み。
 OpenCode のハーネス（permission の生成・guide plugin）の後継で、移行の計画と経緯は
 [CHG-0020](../change/0020-pi-migration.md)、設計の根拠になった試作の観測は
 [pi のハーネスの試作](../research/agents/pi-harness-spike.md)（E1〜E4）。
@@ -77,32 +77,32 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 ### 自作の拡張: todo / plan / btw
 
-`~/.pi/agent/extensions/{todo,plan,btw,agents}/index.ts`（実体は `home/dot_pi/agent/extensions/`）。pi 同梱の例（`examples/extensions/todo.ts`・`plan-mode`）を参考に、必要な部分だけ自作した。全 OS に配る。
+`~/.pi/agent/extensions/{todo,plan,btw,activity}/index.ts`（実体は `home/dot_pi/agent/extensions/`）。pi 同梱の例（`examples/extensions/todo.ts`・`plan-mode`）を参考に、必要な部分だけ自作した。全 OS に配る。
 
 | 拡張 | 中身 |
 | --- | --- |
 | `todo` | `todo` ツール（list / add / toggle / clear）と `/todos`。状態はツール結果の `details` に持つので、分岐・再開でその時点に戻る。フッターに進捗を出す |
 | `plan` | `/plan` で切り替え。計画中は **`edit` / `write` / `bash` / MCP などのツールを外し**、`read` / `grep` / `find` / `ls` / `todo` / `task` だけを残す（`guarded_` 付きも同じ）。計画の指示を毎ターン注入し、番号付きの手順で終わったら「実行する / 続ける / 直す」を尋ねる。「実行する」でツールを戻し、実行を依頼する |
 | `btw` | `/btw <質問>`。いまの会話（user / assistant の本文とツール呼び出しの要約。新しい側 6 万文字まで）を文脈に、**現在のモデル**がツールなしで答える。答えはオーバーレイに出すだけで、会話履歴にもモデルの文脈にも残さない。エージェントの応答中でも使える |
-| `agents` | `/agents`。いま動いている子エージェント（`task` / `guarded_task`）の一覧を、agent・model・経過時間・pid・task の冒頭で出す。子を起動する側（`subagents` とハーネス）が `globalThis.__piChildren` に登録し、終わると外す。一覧は動いている間だけで、履歴は持たない |
+| `activity` | 動いている子エージェント（`task` / `guarded_task`）とバックグラウンドジョブの数を、入力欄の下（フッター）に `🤖 2 subagents / ⚙️ 1 jobs` の形で常時出す（0 件の側は出さず、どちらも 0 なら消す）。1 秒ごとに数え直す。子は起動する側（`subagents` とハーネス）が `globalThis.__piChildren` に登録し、ジョブは `bg_run` が `globalThis.__piJobs` に登録する。ツールは `bg_run`（コマンドを切り離して起動し、ID とログのパスを返す）・`bg_log`（状態とログの末尾。ID なしで一覧）・`bg_kill`（プロセスの木ごと止める）。pi の終了時には動いているジョブも止める。一覧のコマンドは作らない（数だけ）。旧 `/agents` はこれに置き換えた |
 
 - `pis` は `-ne` なので、`-e` で明示して足す。素の `pi` は自動発見で読む
 - ハーネスの役割は、`implementer` の `tools` に `todo` を足してある（判定器は `todo` を allow）。`plan` はツールを登録しないので判定に関わらない
 - 計画中は shell が無いので、`git log` などの調査もできない。必要なら `/plan` を終えて調べる
 - `pis --boundary` は起動を `ocs` に任せるので、この拡張を足していない（未対応）
-- `agents` の実測: 実際に子（`task`、モデルは Copilot）を動かし、実行中は 1 件が登録され、終了後は 0 件に戻ることを確認した。表示は print モードで文字列を確認した（オーバーレイは TUI でしか出ず未確認）
+- `activity` の実測（Linux、偽の pi API でツールを直接動かした）: `bg_run` で ID を返し、`🤖 2 subagents / ⚙️ 1 jobs` が出る。`bg_log` が出力の末尾を返し、`bg_kill` でジョブが消えて通知が出て、子もジョブも 0 になると表示が消える。**未確認**: 実機の TUI でのフッター表示、ハーネス（`pis`）の下での `bg_run` の確認（拡張のツールなので既定で確認になる想定だが未実測）、Windows の `taskkill` での停止
+- `bg_run` のコマンドは、ハーネスの bash 判定器（`decide`）を通らない。拡張のツールとして役割の `tools` と既定の確認を通るだけなので、**確認の画面でコマンドの中身を見て承認する**。判定器は TS になった（`judge/`）ので、`bg_run` から bash の判定を呼ぶ形にできる（未実装）
 - `btw` は `ctx.modelRegistry.complete()` で別に 1 回呼ぶので、そのぶんのトークンは消費する（セッションの合計には入らない）
 - 実測: `btw` は print モードで、直前の会話の内容（合言葉）を踏まえて答え、セッションファイルの行数が増えないことを確認した（オーバーレイ表示は TUI でしか出ず未確認）。Git Bash では `/btw` が `C:/Program Files/Git/btw` に変換されるので、試すときは `MSYS_NO_PATHCONV=1`
 - 実測: `todo` は実際のモデル（`claude-sonnet-5.5`）で add / toggle / list が通った。`plan` は読み込みまで（切り替えと確認画面は TUI でしか動かず、未確認）
 
 ## Windows
 
-Windows（PowerShell）では**素の `pi` だけ**を使う。ハーネス・`pis`・境界は Unix だけ（判定器が bash の hook と
-Fence に依る。Windows 版は未着手で、優先度は低い）。
+Windows（PowerShell）では**素の `pi` だけ**を使う。ハーネス・`pis`・境界は Unix だけ（境界が Fence に依る。判定器は TS で動くが、ハーネスの Windows 版は未着手で、優先度は低い）。
 
 | 配るもの | 方法 |
 | --- | --- |
-| pi 本体 | `314_agent_cli.ps1` が `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`。公式の `install.ps1` は Node.js・Git Bash・PATH の確認を `Read-Host` で聞き、apply では答えられないので使わない。Node.js 22.19 以上が要る |
+| pi 本体 | mise の `aqua:earendil-works/pi`（バイナリ版。node 不要）。`313_mise` が入れ、`314_agent_cli.ps1` が旧 npm 版を外して起動を確かめる（[Windows の pi](structure.md#windows-の-pi)）。公式の `install.ps1` は `Read-Host` で確認を聞き、apply では答えられないので使わない |
 | `~/.pi/agent/settings.json`・`keybindings.json`・`AGENTS.md` | Unix と同じ（`.chezmoiignore` で戻している） |
 | `~/.config/pi/commit-confirm` | Unix と同じ（[commit の確認](#commit-の確認-素の-pi)） |
 | `/fleet`（`prompts/`） | **配らない**。`guarded_task` はハーネスが登録するので、素の `pi` では働かない |
@@ -120,7 +120,7 @@ Fence に依る。Windows 版は未着手で、優先度は低い）。
 ハーネスの無い素の `pi` でも、読み取り役の子エージェントだけは使える。判定器が無いので、shell・編集を持つ役割は出さない。
 
 - 拡張 `index.ts`（`task` ツール）と `agents.json`（`[pi.agents]` から生成。`generate.py --target pi-subagents`）を Windows にだけ配る（Unix は `.chezmoiignore` で除外）
-- 出すのは `read` `grep` `find` `ls` だけの役割（今は `explore` と `review`）。子は `node <実行中の pi の cli> --mode json -p --no-session -ne --tools read,grep,find,ls` で起動する（`pi.cmd` のシェルを通さない）
+- 出すのは `read` `grep` `find` `ls` だけの役割（今は `explore` と `review`）。子は `<実行中の pi>（node 版は node + cli.js、バイナリ版は pi.exe） --mode json -p --no-session -ne --tools read,grep,find,ls` で起動する（`pi.cmd` のシェルを通さない）
 - 判定器と伏字化が無いので、`read_deny_globs` の保護は効かない。子は読むだけで書けないが、秘密ファイルは読める
 - 子のモデルは `second_opinion` が `github-copilot/gpt-6-sol`。OpenCode の階層の `gpt-6-astra` は pi の Copilot 経由で `model_not_supported`（2026-10 実測）なので、`[pi.model.tier.github-copilot]` で上書きする（Unix のハーネスにも効く）
 
@@ -150,17 +150,92 @@ OpenCode のハーネスにあった機能のうち、pi へ移したもの。�
 
 ### commit の確認 (素の pi)
 
-素の `pi`（Orca・Zed・Windows）にはハーネスが無いので、`git commit` は確認なしで通る。その補助として、
+素の `pi`（Orca・Zed・Windows）にはハーネスが無いので、bash の git は素通りになる。その補助として、
 小さな拡張 `~/.config/pi/commit-confirm` を `settings.json` の `extensions`（`[pi.settings]`）から読ませる。
+**保護ではなく補助**で、別名・スクリプト越しの git は検出しない。`!git commit`（利用者が手で打つ）も対象外。
 
-- bash の `tool_call` で、**コマンドの先頭にある** `git commit`（`git -C dir commit`、`cd x && git commit` も）だけを
-  拾い、件名・本文・追加するパスを見せて確認する。拒否・時間切れ（TUI 以外は 5 分）・確認できる画面が無いときは止める
-- 件名・本文の取り出しは、ハーネスと同じ `commit-message.js`。読めなければ件名なしで確認だけ出す
-- **保護ではなく補助**。別名・`sh -c`・スクリプト越しの `git commit` は検出しない。`!git commit`（利用者が
-  手で打つ）も対象外
+| コマンド | 扱い |
+| --- | --- |
+| `git push`（`-C dir`・`sh -c '…'`・`commit && push` も） | **確認せずに拒否**する。push は完全手動。連結した commit も実行しない |
+| `git commit` | 構造にして見せて確認する（下） |
+| それ以外 | 何もしない |
+
+検出は、引用符の外のコマンドの先頭だけを見る小さな字句解析（`parse.ts`）。引用符の中の文字列
+（`echo "git commit"`）や `git commit-tree`・`git stash push` は拾わない。
+
+#### 確認の表示
+
+事実は git から取り、メッセージだけコマンドから読む（`describe.ts`）。生のコマンドは出さない。
+
+```text
+リポジトリ: https://github.com/applejxd/dotfiles.git
+ブランチ:   main  → origin/main (1 ahead, 0 behind)
+
+対象:       2 ファイル  +2 −1
+  M a.txt (+2 −0)
+  D c.txt (+0 −1)
+  (含まれない未ステージの変更: 2 ファイル)
+
+メッセージ:
+  feat(pi): 構造化表示を作る
+  - 本文…
+
+注意:
+  --no-verify: コミットの hook を飛ばす
+```
+
+- リポジトリは origin の URL（`https://user:token@…` の認証情報は出さない。origin が無ければパス）
+- 対象は、**実行したらコミットされる内容**を一時のインデックスに再現して数える。通常はインデックス、`-a` は
+  `add -u`、`add … &&` は追加後、`git commit <パス>` は土台にそのパスの今の内容を足したもの。`--amend` は
+  直前のコミットの親との差。HEAD・本物のインデックス・作業ツリーは変えない（`GIT_OPTIONAL_LOCKS=0`）
+- メッセージは `-m`（複数も）、`-F file`、`-F - <<'EOF'`、**`-m "$(cat <<'EOF' … EOF)"`**（エージェントの定番）を読む。
+  本文は 72 桁・8 行まで、件名は切らない
+- `--no-verify`・`--amend`・`-S`・`--allow-empty` は「注意」に出す。コミットする変更が無いときも書く
+- **読めない形は「読めない」と言う**。`VAR=値 git commit`・`sudo git commit`・連結（`&&` 以外・`add`/`cd` 以外が付く）・
+  パイプ・リダイレクト・`$VAR`・`$(…)`・`-e`（エディタ）・メッセージ無しは、
+  「解釈できない形のコマンドです。次がそのまま実行されます:」と生のコマンドを（12 行まで）見せる。
+  構造化の表示が、後ろに付いた操作を隠さないための規則
+- **並んだ commit の限界**: pi は同じ応答の全呼び出しの `tool_call` を終えてから実行を始めるので、2 件目の表示は、1 件目の確認が済んだ後に組むが、1 件目のコミットはまだ入っていない（2 件目は 1 件目の対象も含めて見せる）。実行の終わりを待つ案は、全呼び出しの確認が終わるまで実行が始まらないため、安全弁の時間まで止まって採れなかった
+- 確認で実行する `git add` は一時のインデックスに対してだけ動くが、`.gitattributes` の clean filter は走る
+  （`git commit` を承認すれば同じものが走る）。`core.fsmonitor` は切り、diff は `--no-ext-diff`
+
+#### 時間切れと退避
+
+確認が取れなかったとき（時間切れ・不在・画面なし）は、**コミットせず、内容を退避して作業を続けさせる**。
+
+- 期限は TUI が **15 分**（画面に残り秒が出る）、RPC など（Zed）が **5 分**。時間切れは拒否と同じ `false` で返るので、
+  経過時間で見分ける。利用者が拒否したときは退避しない（「拒否した。続け方を確認する」と返す）
+- 退避は、コミットの**オブジェクトだけ**を作り（`write-tree` → `commit-tree`）、`refs/pi/pending/<時刻>` に置く。
+  ブランチ・HEAD・インデックス・作業ツリーは動かない。hook は呼ばれず、`commit.gpgsign` に左右されない。
+  `user.name` が無い環境では代わりの身元を渡す
+- 直前の保留を親にして**鎖**にする（2 つ目の差分は 1 つ目からの増分）。その間に本物のコミットがあれば、HEAD から
+  始め直す。ref 名の順で先頭を選ぶ（`creatordate` は同じ秒で崩れる）
+- モデルには「コミットは実行していない。内容は `refs/pi/pending/…` に退避した。**再試行しない**。コミットが要らない
+  作業を続け、最後に『保留したコミット』として ref・件名・対象を報告する」と返す。実際のモデルで、`b.txt` を作り、
+  ref を報告し、`--no-verify` や plumbing での迂回をしないことを確かめた
+- **不在**: 時間切れの後は、利用者の入力（`input` イベント。拡張が起こしたものを除く）があるまで、次の確認で待たずに
+  退避する。1 回の応答に並んだ commit も、先の確認が時間切れなら後ろを待たない
+- **連結したコマンド**（`git commit … && 別の操作`。モデルがよく書く）はコマンド全体を止める。退避は最初の
+  `git commit` から**近似**する（今ステージされている内容と、そのメッセージ。連結の他の操作は再現しない）。
+  理由に「連結していた他の操作も実行していないので、commit と分けて実行し直す」と書く。変数入りのメッセージなど、
+  最初の commit も読めないものは退避できない（その旨を返す）
+- `--amend` は退避できない（直前のコミットの書き換えは HEAD の子として表せない）
+
+後から見る・取り込む:
+
+```sh
+git log --oneline refs/pi/pending/<名前>          # 保留したコミット (鎖の全体)
+git reset --soft refs/pi/pending/<最後の名前>     # HEAD だけ進める。作業ツリーは変わらない
+git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-ref -d   # 全部捨てる
+```
+
+試験の期限は `PI_COMMIT_CONFIRM_TIMEOUT_MS` で縮める（本番では使わない）。
+
 - `pis` は `-ne` で外れるので、ハーネス自身の確認と二重にならない（試験済み）
 - Windows にも配る。`.chezmoiignore` は `.config/pi/` を戻したうえで `harness` を改めて除外する
-  （`!` は除外より先に効く。実物の `chezmoi` で確かめた）
+  （`!` は除外より先に効く。実物の `chezmoi` で確かめた）。Windows 実機は未検証
+- 試験: `test_pi_commit_parse.py`（解釈・表示・退避。node で直接）、`test_pi_commit_confirm.py`
+  （pi + 偽のモデル。RPC・非対話・TMUX の TUI）
 
 ### 整形
 
@@ -233,7 +308,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | --- | --- | --- |
 | `home/dot_config/pi/harness/index.ts` | `~/.config/pi/harness/index.ts` | 拡張の本体 |
 | `home/dot_config/pi/commit-confirm/index.ts` | `~/.config/pi/commit-confirm/index.ts` | 素の pi の `git commit` の確認（[補助](#commit-の確認-素の-pi)）。`settings.json` の `extensions` から読む |
-| `home/dot_config/pi/harness/modify_rules.json.py.tmpl` | `~/.config/pi/harness/rules.json` | `generate.py --target pi-harness` が作る。判定器の場所・伏字化の規則・シェルへ入れる環境変数・子エージェント・MCP・役割ごとのツール |
+| `home/dot_config/pi/harness/modify_rules.json.py.tmpl` | `~/.config/pi/harness/rules.json` | `generate.py --target pi-harness` が作る。判定器の設定（`judge`: `common.toml` の `[bash]` / `[file]` / `[pi]` と `tables.toml`）・伏字化の規則・シェルへ入れる環境変数・子エージェント・MCP・役割ごとのツール |
 | `home/dot_local/bin/executable_pis` | `~/.local/bin/pis` | 起動の入口（[起動](#起動)） |
 | `home/dot_local/share/ocs/pi.py` | `~/.local/share/ocs/pi.py` | 境界の pi 用の部分（[境界](#境界)） |
 | `home/dot_pi/agent/modify_keybindings.json.py.tmpl`・`AGENTS.md.tmpl`・`prompts/fleet.md.tmpl` | `~/.pi/agent/keybindings.json`・`AGENTS.md`・`prompts/fleet.md` | [ハーネス以外の機能](#ハーネス以外の機能) |
@@ -256,7 +331,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | --- | --- | --- |
 | ツール | `guarded_bash` / `guarded_read` / `guarded_edit` / `guarded_write` / `guarded_grep` / `guarded_find` / `guarded_ls`。中身は pi の組み込みの定義。**役割の `tools` に無いものは登録しない**（モデルに見せない。判定は判定器が別に行う）。役割が `rules.json` に無ければ何も登録しない | **組み込みと同じ名前にしない。** `/reload` でハーネスが抜けると、直前に有効だったツールの名前が組み込みの定義に解決され、判定なしで動く（E1）。別名ならツールが 0 個になる |
 | 判定 | `tool_call` で判定器を呼ぶ。deny は止め、ask は確認画面を出す（UI が無ければ拒否）。**最終の判定は各ツールの `execute()` の中**で行う | `tool_call` の後に別の拡張が入力を書き換えても止めるため（E1）。`execute()` は、`tool_call` のときと同じ入力なら判定を使い回し、違えば判定し直す |
-| 判定器の異常 | 起動できない・異常終了・タイムアウト（15 秒）・形の正しくない応答は deny | 空の応答を allow と読まない |
+| 判定器の異常 | 設定が壊れて判定に失敗した・形の正しくない応答は deny（判定器は同じプロセスで動き、プロセスの起動に失敗することは無い） | 空の応答を allow と読まない |
 | 確認 | 1 件ずつ順に出す | TUI の確認画面は 1 枠を共有し、後の確認が先の確認を置き換える。codemode の中で並べた呼び出しで、先の確認が永久に止まった（E3） |
 | 伏字化 | `guarded_bash` の `execute()` の中で、途中経過・最終結果・長い出力の退避ファイルを伏せる。伏せるのは `content`・`structuredContent`・`details`。ハーネスが持たないツール（MCP など）は `tool_result` で、例外を投げずに結果ごと差し替える | `details` はモデルへ送られないが、セッションと画面に残る（`details.truncation.content` に生の出力。E3）。`tool_result` の例外は無視されて生の結果が残る |
 | 出力ごと伏せる | 保護対象のパス（`[file] read_deny_globs` から作る）を参照したコマンドは、出力を全部伏せる | OpenCode の guide plugin と同じ（[shell 出力の伏字化](agent-config-generation.md#shell-出力の伏字化)） |
