@@ -12,6 +12,15 @@ function Update-PathFromEnvironment {
       [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
 }
 
+function Use-MiseNode {
+  # npm は mise の node を使う。PATH 上の古い node (winget 版など) を避ける。
+  $mise = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
+  if (-not $mise) { throw 'mise not found (313_mise を先に実行してください)' }
+  $nodeDir = (& $mise.Path where node).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $nodeDir) { throw 'mise の node が未導入 (mise install を実行してください)' }
+  $env:Path = "$nodeDir;$env:Path"
+}
+
 function Test-CliInstalled {
   param([Parameter(Mandatory)][string]$Name)
 
@@ -50,9 +59,7 @@ if (Test-CliInstalled 'copilot') {
 if (Test-CliInstalled 'opencode') {
   Write-Host 'OpenCode V2 is already installed.'
 } else {
-  if (-not (Get-Command npm -CommandType Application -ErrorAction SilentlyContinue)) {
-    throw 'npm not found (winget の OpenJS.NodeJS を先に導入してください)'
-  }
+  Use-MiseNode
   Write-Host 'Installing OpenCode V2...'
   # postinstall が bin/opencode.exe を配置する。npm 11.x は未許可の install script を
   # 警告だけで飛ばすので、このパッケージ 1 つだけ許可する (全体設定は変えない)。
@@ -67,9 +74,7 @@ if (Test-CliInstalled 'opencode') {
 if (Test-CliInstalled 'pi') {
   Write-Host 'pi is already installed.'
 } else {
-  if (-not (Get-Command node -CommandType Application -ErrorAction SilentlyContinue)) {
-    throw 'node not found (winget の OpenJS.NodeJS を先に導入してください)'
-  }
+  Use-MiseNode
   $nodeVersion = [version] ((& node --version).TrimStart('v'))
   if ($nodeVersion -lt [version] '22.19.0') {
     throw "pi には Node.js 22.19 以上が要る (今は $nodeVersion)"

@@ -10,6 +10,13 @@ gh = "latest"
 {{- if or (eq .chezmoi.os "linux") (eq .chezmoi.os "windows") }}
 herdr = "latest"
 {{- end }}
+# Windows でも mise が管理する (docs/spec/structure.md#windows-の-node-uv-fzf-jq)
+node = "latest"
+uv = "latest"
+{{- if eq .chezmoi.os "windows" }}
+fzf = "latest"
+jq = "latest" # hook (dot_claude/hooks/lib/agent_compat.sh) が使う
+{{- end }}
 
 {{- if ne .chezmoi.os "windows" }}
 usage = "latest" # for mise completion
@@ -22,7 +29,7 @@ eza = "latest"
 jj ="latest"
 ripgrep = "latest"
 {{- if eq .chezmoi.os "darwin" }}
-jq = "latest" # hook (dot_claude/hooks/lib/agent_compat.sh) が使う。Linux は apt、Windows は winget
+jq = "latest" # hook (dot_claude/hooks/lib/agent_compat.sh) が使う。Linux は apt
 {{- end }}
 "aqua:dylanaraps/neofetch" = "latest"
 
@@ -46,8 +53,6 @@ hadolint = "latest"
 ruff = "latest"
 oxlint = "latest"
 python = "latest"
-uv = "latest"
-node = "latest"
 deno = "latest"
 
 # backends (keep the latest for building tools)

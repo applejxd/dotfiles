@@ -73,8 +73,6 @@ Function winst {
 
 # Tools
 winst Microsoft.PowerShell -CheckCommand pwsh
-winst junegunn.fzf
-winst jqlang.jq
 winst Obsidian.Obsidian
 
 # Terminal
@@ -88,10 +86,9 @@ winst QL-Win.QuickLook
 
 # Development
 winst Git.Git
-winst OpenJS.NodeJS
+# node / uv / fzf / jq は mise が管理する (313_mise)。mise 自体は bootstrap のため winget
 winst jdx.mise -CheckCommand mise
 winst Python.Python.3.12  # needed by chezmoi
-winst astral-sh.uv
 
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 winst Bitwarden.Bitwarden

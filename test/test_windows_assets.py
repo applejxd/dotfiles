@@ -19,7 +19,9 @@ def test_winget_installer_uses_supported_detection_and_package_ids():
     assert "winst Microsoft.PowerShell -CheckCommand pwsh" in script
     assert 'winst Craftware.Keyhac -CheckPath "$env:ProgramFiles\\keyhac\\keyhac.exe"' in script
     assert "winst jdx.mise -CheckCommand mise" in script
-    assert "winst astral-sh.uv" in script
+    # node / uv / fzf / jq は mise が管理する
+    for moved in ("OpenJS.NodeJS", "astral-sh.uv", "junegunn.fzf", "jqlang.jq"):
+        assert moved not in script, moved
     assert "winst Bitwarden.CLI" in script
     # プロファイルから参照していないモジュールは導入しない
     assert "posh-git" not in script
@@ -469,7 +471,9 @@ def test_agent_cli_installer_uses_official_windows_channels():
     # 既に入っている CLI は触らない
     assert script.count("Test-CliInstalled '") == 4
     # winget / npm の失敗を握り潰さない
-    assert script.count("$LASTEXITCODE -ne 0") == 3
+    assert script.count("$LASTEXITCODE -ne 0") == 4
+    # npm は mise の node で動かす (PATH 上の古い winget 版 node を避ける)
+    assert script.count("  Use-MiseNode") == 2
 
 
 def test_chocolatey_setup_supports_v1_and_v2_listing():
@@ -581,7 +585,7 @@ def test_machine_only_winget_packages_are_installed_by_the_admin_step():
     # マニフェストが scope を宣言していない MSI に --scope を付けると 'No applicable installer' になる
     assert "Id = 'Python.Launcher'; Scope = ''" in admin
     # user scope で入る (UAC なし) ものは 310 に残す
-    for package_id in ("Git.Git", "OpenJS.NodeJS", "Microsoft.PowerToys", "Discord.Discord"):
+    for package_id in ("Git.Git", "Microsoft.PowerToys", "Discord.Discord"):
         assert f"winst {package_id}" in winget, package_id
         assert package_id not in admin, package_id
 

@@ -260,6 +260,8 @@ applejxd の全 PC で、**WSL 本体だけ**を入れる。ディストロは�
 
 - 判定は `wsl.exe --version` の終了コード（未導入だと inbox の `wsl.exe` が案内を出して 1 を返す）。導入済みなら何もしない
 - 導入は `wsl.exe --install --no-distribution`（Windows の機能 `VirtualMachinePlatform` と WSL のパッケージ）のあと `wsl.exe --update`。昇格子の出力は UTF-16 なので、符号化を合わせて失敗の理由をログに残す
+- 判定は `wsl.exe --version` に加えて `vmcompute` サービスの有無も見る（`wsl.exe` だけ入って `VirtualMachinePlatform` が無いと distro 起動が `HCS_E_SERVICE_NOT_AVAILABLE` で失敗する）。導入時は `dism` で機能を明示的に有効化し、`hypervisorlaunchtype` が Off なら `auto` にする
+- 有効化直後は再起動するまで `vmcompute` が現れないので、導入後の再判定で `WslPlatform` が残っても失敗にせず「再起動して `mise run restore:wsl`」と警告する
 - **`VirtualMachinePlatform` の有効化には再起動が要る。** 導入した直後でも `wsl --version` は成功するので、309 は再起動の要否を判定できない。導入したときは「再起動が要る」とログに出す
 - 実測（2026-10-12、ビルド 26300）: 管理者の `cmd` で `wsl --install --no-distribution` を実行すると、`VirtualMachinePlatform` の有効化（要再起動）と WSL 3.0.1 の導入が済んだ。`wsl --version` は 3.0.1.0（カーネル 6.18.40.1）。
   `wslc`（WSL containers）の CLI は、再起動後の確認が残っている。winget の `Microsoft.WSL` は 2.7.13 で遅れているため使わず、`wsl --update`（Store）で最新にする
@@ -284,7 +286,7 @@ winget の既定は user scope なので、user 版があるものは UAC なし
 | machine 版しかない（user 版なし） | Chrome・Google 日本語入力・7-Zip・Hack フォント・Google Drive・Dropbox・Ditto・Tailscale | `309_admin` が `--scope machine` で導入（Google Drive 以降は `applejxd` だけ） |
 | scope 未宣言の MSI | Python Launcher（`launcher.msi`） | `309_admin` が `--scope` なしで導入。付けると `No applicable installer` になる。MSI の既定が全ユーザーかは**未確認**（導入後に UAC が出るか・導入先で確かめる） |
 | machine 版しかない・特定の PC だけ | Elgato Stream Deck（`wix` の MSI。user 版なし）・Wacom ドライバー・Steam・iTunes | `309_admin` が `--scope machine` で導入。**applejxd かつ hostname が一致する PC だけ**（下の「hostname で限定するもの」） |
-| 両 scope 対応 | PowerShell・fzf・jq・Obsidian・Oh My Posh・PowerToys・Git・Node.js・mise・Python 3.12・uv・Bitwarden（本体・CLI） | 既定（user）のまま `310_winget` |
+| 両 scope 対応 | PowerShell・Obsidian・Oh My Posh・PowerToys・Git・mise・Python 3.12・Bitwarden（本体・CLI） | 既定（user）のまま `310_winget` |
 | user 版しかない | QuickLook・Spotify・Discord | `310_winget` |
 | scope 未宣言の NSIS | Orca | `310_winget`。Electron の NSIS は既定が per-user のはずだが**未確認**。UAC が出たら 309 へ移す |
 | Microsoft Store | Keyhac・iCloud・Kindle・Codex App | `310_winget`（Store 版はユーザー単位） |
@@ -384,6 +386,16 @@ Windows の `313_mise` は `mise install` の前に `winget upgrade --id jdx.mis
 
 winget の終了コードのうち、更新が無い（`0x8A15002B`）と winget 以外で導入された
 （`0x8A150014`）は成功として扱い、`mise install` へ進みます。
+
+### Windows の node / uv / fzf / jq
+
+Windows でも `node` / `uv` / `fzf` / `jq` は mise が管理します（`310_winget` からは外しました）。
+winget 版 node は `run_once_` で初回の版のまま残り、PATH 上で mise 版より先に解決されて
+pi の導入（Node.js 22.19 以上が必要）が失敗したためです。`314_agent_cli` は `mise where node`
+の場所を PATH の先頭に置いてから npm を実行します。winget に残るのは mise 自体（bootstrap）、
+Git・Python 3.12（chezmoi が要る）、GUI アプリです。既に winget 版が入っている PC は
+`winget uninstall OpenJS.NodeJS astral-sh.uv junegunn.fzf jqlang.jq` で外せます。
+node の版を上げると npm の global パッケージは新しい node 側には無いので、`314` を再実行します。
 
 ### chezmoi 本体
 
