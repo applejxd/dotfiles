@@ -17,7 +17,9 @@ def test_winget_installer_uses_supported_detection_and_package_ids():
 
     assert "--output json" not in script
     assert "winst Microsoft.PowerShell -CheckCommand pwsh" in script
-    assert 'winst Craftware.Keyhac -CheckPath "$env:ProgramFiles\\keyhac\\keyhac.exe"' in script
+    # Keyhac v2 は msstore の ID で入れる (msstore は会社で遅いので applejxd のみ)
+    assert "winst 9P8H1PG6PRHH --source msstore" in script
+    assert 'applejxd$" .chezmoi.username' in script
     assert "winst jdx.mise -CheckCommand mise" in script
     # node / uv / fzf / jq は mise が管理する
     for moved in ("OpenJS.NodeJS", "astral-sh.uv", "junegunn.fzf", "jqlang.jq"):
@@ -510,7 +512,10 @@ def test_scoop_setup_skips_installed_apps_and_invalid_git_config():
 
     # プロファイルと同じ実装を共有し、片方だけ直る状態を避ける
     assert '{{ includeTemplate "powershell/git-config-env.ps1" }}' in script
-    assert "$missingApps.Count -eq 0" in script
+    # 入っているアプリは導入し直さない (sinst が apps/<id>/current の有無で見る)
+    assert 'Join-Path $scoopRoot "apps\\$id\\current"' in script
+    assert "is already installed." in script
+    assert "scoop install failed for" in script
 
 
 def test_powershell_sources_start_with_a_utf8_bom():
