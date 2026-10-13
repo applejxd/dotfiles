@@ -148,3 +148,48 @@ def test_mcp_tool_without_exposure_is_unreachable_under_the_harness(env):
     proc = run_pi(env, [{"name": "mcp__spike__echo_secret", "args": {}}])
 
     assert "Tool mcp__spike__echo_secret not found" in proc.stdout, proc.stdout
+
+
+ACTIVITY = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "activity" / "index.ts"
+
+
+def _bg(command):
+    return [{"name": "bg_run", "args": {"command": command}}]
+
+
+def test_bg_run_is_judged_like_bash_and_denied_commands_do_not_start(env):
+    """バックグラウンド実行も、bash と同じ deny を通らない (bypass でも)。"""
+    marker = env["tmp"] / "started"
+    command = f"touch {marker.as_posix()}; rm -rf ~"
+    for extra in ({}, {"PI_HARNESS_BYPASS": "1"}):
+        proc = run_pi(env, _bg(command), extra=("-e", str(ACTIVITY)), **extra)
+        assert "isError=true" in proc.stdout, proc.stdout
+        assert "壊滅的" in proc.stdout, proc.stdout
+        assert not marker.exists()
+
+
+def test_bg_run_starts_an_allowed_command_and_bg_log_and_bg_kill_are_allowed(env):
+    proc = run_pi(env, _bg("wc -c /dev/null"), extra=("-e", str(ACTIVITY)))
+    assert "isError=false" in proc.stdout, proc.stdout
+    proc = run_pi(
+        env,
+        [{"name": "bg_log", "args": {}}, {"name": "bg_kill", "args": {"id": "j999"}}],
+        extra=("-e", str(ACTIVITY)),
+    )
+    assert "not approved" not in proc.stdout, proc.stdout
+    assert "使えない" not in proc.stdout, proc.stdout
+
+
+def test_bg_run_asks_when_bash_would_ask(env):
+    """bash なら確認になるコマンドは、バックグラウンドでも確認になる (UI が無ければ拒否)。"""
+    marker = env["tmp"] / "started"
+    proc = run_pi(env, _bg(f"touch {marker.as_posix()}"), extra=("-e", str(ACTIVITY)))
+    assert "not approved:" in proc.stdout, proc.stdout
+    assert not marker.exists()
+
+
+def test_a_role_without_bash_cannot_use_the_background_tools(env):
+    calls = [*_bg("wc -c /dev/null"), {"name": "bg_log", "args": {}}]
+    proc = run_pi(env, calls, extra=("-e", str(ACTIVITY)), PI_HARNESS_ROLE="reader")
+    assert "は bash を使えない" in proc.stdout, proc.stdout
+    assert "は bg_log を使えない" in proc.stdout, proc.stdout

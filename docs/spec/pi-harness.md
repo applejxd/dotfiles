@@ -91,7 +91,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - 計画中は shell が無いので、`git log` などの調査もできない。必要なら `/plan` を終えて調べる
 - `pis --boundary` は起動を `ocs` に任せるので、この拡張を足していない（未対応）
 - `activity` の実測（Linux、偽の pi API でツールを直接動かした）: `bg_run` で ID を返し、`🤖 2 subagents / ⚙️ 1 jobs` が出る。`bg_log` が出力の末尾を返し、`bg_kill` でジョブが消えて通知が出て、子もジョブも 0 になると表示が消える。**未確認**: 実機の TUI でのフッター表示、ハーネス（`pis`）の下での `bg_run` の確認（拡張のツールなので既定で確認になる想定だが未実測）、Windows の `taskkill` での停止
-- `bg_run` のコマンドは、ハーネスの bash 判定器（`decide`）を通らない。拡張のツールとして役割の `tools` と既定の確認を通るだけなので、**確認の画面でコマンドの中身を見て承認する**。判定器は TS になった（`judge/`）ので、`bg_run` から bash の判定を呼ぶ形にできる（未実装）
+- **ハーネス（`pis`）の下では、`bg_run` のコマンドを bash と同じ判定（`decide`）に通す**。deny は止め（bypass でも外れない）、ask は確認画面を出し（画面に「バックグラウンドで実行」と出る）、役割の `shell_deny` / `shell_allow` と誘導も効く。役割が `bash` を持たなければ `bg_run` も使えない。`bg_log` / `bg_kill` はジョブの確認と停止だけなので、`bash` を持つ役割には allow。素の `pi` には判定の仕組みが無く、`bg_run` は判定なしで動く
 - `btw` は `ctx.modelRegistry.complete()` で別に 1 回呼ぶので、そのぶんのトークンは消費する（セッションの合計には入らない）
 - 実測: `btw` は print モードで、直前の会話の内容（合言葉）を踏まえて答え、セッションファイルの行数が増えないことを確認した（オーバーレイ表示は TUI でしか出ず未確認）。Git Bash では `/btw` が `C:/Program Files/Git/btw` に変換されるので、試すときは `MSYS_NO_PATHCONV=1`
 - 実測: `todo` は実際のモデル（`claude-sonnet-5.5`）で add / toggle / list が通った。`plan` は読み込みまで（切り替えと確認画面は TUI でしか動かず、未確認）

@@ -91,8 +91,27 @@ const COMPACT_INSTRUCTIONS = [
 
 // ─── 判定 ───────────────────────────────────────────────────────────
 
+// バックグラウンドジョブ (拡張 activity)。bg_run は起動するコマンドを bash と同じ判定に通す。
+// bg_log / bg_kill はジョブの確認と停止だけなので、bash を使える役割には allow にする
+const BG_RUN = "bg_run";
+const BG_OTHERS = ["bg_log", "bg_kill"];
+
 export function decide(tool: string, input: unknown, cwd: string): Decision {
-	const request = { tool, input, cwd, role: ROLE, bypass: BYPASS, boundary: BOUNDARY };
+	if (BG_OTHERS.includes(tool)) {
+		if ((rules.profile_tools?.[ROLE] ?? []).includes("bash")) {
+			return { decision: "allow", reason: "ジョブの確認と停止だけ (bash を使える役割)", source: "rule" };
+		}
+		return { decision: "deny", reason: `役割 ${JSON.stringify(ROLE)} は ${tool} を使えない`, source: "rule" };
+	}
+	const asBash = tool === BG_RUN;
+	const request = {
+		tool: asBash ? "bash" : tool,
+		input: asBash ? { command: (input as any)?.command } : input,
+		cwd,
+		role: ROLE,
+		bypass: BYPASS,
+		boundary: BOUNDARY,
+	};
 	// judge() は例外を投げず、異常は source: error の deny にする。念のため形も確かめる
 	try {
 		const out = judge(request, rules.judge.common) as Decision;
@@ -182,7 +201,7 @@ export default async function (pi: ExtensionAPI) {
 		if (d.decision === "ask") {
 			const ok =
 				ctx.hasUI &&
-				(await confirmInOrder(ctx, "実行してよいですか？", `${describeCall(tool, event.input)}\n\n理由: ${d.reason}`));
+				(await confirmInOrder(ctx, "実行してよいですか？", `${tool === BG_RUN ? "バックグラウンドで実行:\n" : ""}${describeCall(tool === BG_RUN ? "bash" : tool, event.input)}\n\n理由: ${d.reason}`));
 			if (!ok) return { block: true, reason: `${NOT_APPROVED} ${d.reason}` };
 			decided.set(event.toolCallId, { input, decision: d, approved: true });
 			return undefined;
