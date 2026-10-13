@@ -26,6 +26,8 @@ import {
 	checkShellStartupWrite,
 	checkToolSelfUpdate,
 } from "./rules_guard.ts";
+import { checkDockerHostEscape, checkDockerIsolation } from "./docker.ts";
+import { checkGhApiMutation, checkGhApiSensitiveInput, checkGhTokenExposure } from "./ghapi.ts";
 import { checkGitAddSensitive, checkHistoryAccess, checkSecretEnvEcho } from "./sensitive.ts";
 
 export type Check = (ctx: Ctx, cmd: string) => string | null;
@@ -59,4 +61,9 @@ export const CHECKS = new Map<string, Check>([
 	["check_global_env_mutation", checkGlobalEnvMutation],
 	["check_git_config_write", checkGitConfigWrite],
 	["check_block_device_write", checkBlockDeviceWrite],
+	["check_gh_token_exposure", checkGhTokenExposure],
+	["check_gh_api_sensitive_input", checkGhApiSensitiveInput],
+	["check_gh_api_mutation", checkGhApiMutation],
+	["check_docker_host_escape", checkDockerHostEscape],
+	["check_docker_isolation", checkDockerIsolation],
 ]);

@@ -22,6 +22,7 @@ const { newCtx } = await load("context.ts");
 const shared = await load("shared.ts");
 const { parse } = await load("shellparse.ts");
 const http = await load("http.ts");
+const ghapi = await load("ghapi.ts");
 const checksModule = existsSync(resolve(JUDGE, "checks.ts")) ? await load("checks.ts") : { CHECKS: new Map() };
 const CHECKS = checksModule.CHECKS;
 
@@ -153,6 +154,9 @@ for (const line of lines) {
 		var want = e.error ? { error: "*" } : { ok: e.ok };
 	} else if (e.fn === "http_calls") {
 		got = attempt(() => http.httpTransferCalls(ctx, e.arg).map(callJson));
+		var want = e.error ? { error: "*" } : { ok: e.ok };
+	} else if (e.fn === "gh_calls") {
+		got = attempt(() => ghapi.ghApiCalls(ctx, e.arg));
 		var want = e.error ? { error: "*" } : { ok: e.ok };
 	} else if (e.fn === "fetched_paths") {
 		got = attempt(() => [...http.fetchedOutputPaths(ctx, e.arg)].sort(cmpCodePoints));
