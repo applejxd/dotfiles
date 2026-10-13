@@ -177,8 +177,14 @@ def _decide_bash(
     cmd: str, cwd: str, pi: dict[str, Any], profile: dict[str, Any], policy: Any
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """(共通の禁止, 役割の確認と許可) を返す。"""
+    from bashrules import _shared
     from bashrules._shared import set_payload_cwd, split_heredoc_body
     from bashrules.policy import check_policy_loaded
+
+    # hook は 1 コマンド 1 プロセスだが、decide() は同じプロセスで何度も呼ばれうる。
+    # split_heredoc_body が積む「引用付き heredoc の本文」の記録を残すと、前の入力で
+    # 後の入力の check_pipe_to_shell が見送られる (判定が呼び出しの順に依存する)
+    _shared._LITERAL_HEREDOC_BODIES.clear()
 
     loaded = check_policy_loaded(cmd)
     if loaded:
@@ -350,7 +356,8 @@ def _decide(request: Any) -> dict[str, Any]:
         reason = "子エージェントは同じハーネスと判定器で動く"
         common_deny, role_rule = None, _response("allow", reason, "rule")
     elif tool == TODO_TOOL:
-        common_deny, role_rule = None, _response("allow", "タスクリストはメモリの状態だけを変える", "rule")
+        reason = "タスクリストはメモリの状態だけを変える"
+        common_deny, role_rule = None, _response("allow", reason, "rule")
     else:
         common_deny, role_rule = None, None
     if common_deny:
