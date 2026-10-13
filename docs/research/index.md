@@ -64,6 +64,7 @@
 | [sandbox機能の包括調査](agents/sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
 | [pi のハーネスの試作](agents/pi-harness-spike.md) | 2026-10-08。E1: 組み込みと同じ名前のツールは `/reload` でハーネスが抜けると組み込みが戻り判定なしで実行（`-nbt` でも）、別名ならツール 0 個。`execute()` での再検査で入力の書き換えを拒否、判定器の異常 5 通りはすべて拒否。E2: 別名のツールを 4 モデルが迷わず使用、既定の圧縮は別名のファイル操作を拾わずハーネスで補う。E3: 並列の ask は codemode の中でだけ重なり先の確認が永久に止まる（順番待ちで解消）、bash の `details` に生の出力が残る（伏せて 0 件）、codemode・MCP もハーネスの判定を通る。E4: 子エージェントも同じハーネスで判定し子の ask を `blocked` で親へ返せる、Fence で包めるが pi は設定・認証の読み取りでも `.lock` を作るので agent 置き場は書ける必要がある |
 | [ハーネス付きの pi への拡張の追加](agents/pi-extension-under-harness.md) | 2026-10-11。E5: 明示の `-e` の拡張は `-ne` でも読まれ、ツールは判定（役割の `tools`・既定の確認）と結果の伏字化を通る。同名ツールの差し替えは pi が起動を止める。ただし拡張の読み込み時の処理は囲えない。E6: `pis` では `exposure` が既定の `codemode` の MCP のツールは呼べない（`-nbt` で `codemode` が宣言されない）（Windows で実施。Unix は未実施） |
+| [pi をどこで・どこまで守って動かすか](agents/pi-isolation-options.md) | 2026-10-13。I1: pi 本体に承認機能は無く、公式は境界（隔離）を勧める。Windows の隔離手段の比較（Sandbox・Hyper-V・`wslc`・専用ユーザー）、`wsb` の CLI、Sandbox での導入検証の実測、ハーネスの Windows 移植を見送った理由。運用の判断: Windows ネイティブの `pi` は信頼できる環境でだけ、ガードなし |
 | [Claude の deny の展開数](agents/claude-deny-glob-expansion.md) | 名前マッチの deny が 3239 件の bind-mount に展開された測定、whitelist 化の根拠 |
 | [Copilot の開発ツール自動許可の実効権限](agents/copilot-dev-tool-access-grants.md) | dev-tool access ON 時の取りこぼし・RO 上書き、ヘッダが見えない粒度、PATH の bin が RO、mise の latest が消える |
 | [Copilot sandbox の既定の許可範囲](agents/copilot-sandbox-default-policy.md) | `/sandbox policy` の表示、$HOME は未許可、存在しないパスの deny 10 件中 3 件が効かない |
