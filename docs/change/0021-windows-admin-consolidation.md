@@ -97,6 +97,9 @@
 
 ## 重要な更新
 
+- **2026-10-13**: Windows の `node` / `uv` / `fzf` / `jq` を winget から mise 管理へ移した（winget の古い node が先に解決され、pi の導入が失敗したため）。`314_agent_cli` は mise の node で npm を動かし、`NPM_CONFIG_PREFIX=%APPDATA%
+pm` を固定して User PATH に保証する（mise の node は npm の global が版付きのフォルダに入り、PATH に出ず、版を上げると消える。Sandbox で確認）。WSL の機能有効化も直した（VirtualMachinePlatform を明示、再起動待ちは警告）
+- **2026-10-13**: Windows Sandbox でのクリーン導入の検証を作った（`scripts/windows/sandbox/`。[手順](../spec/development.md#windows-sandbox-でのクリーン導入の検証)）。実測: Sandbox に winget が無い、`msstore` が Rest API エラー、Python の導入に約 20 分、管理者での実行を拒むスクリプト（315）が失敗する。「会社の PC の再現」（古い node を先に置く）は、winget に古い版が無いので MSI で入れる形に直して再実行中。クリーン導入の通し実行は、pi の起動まで確認できた（Sandbox のユーザーは管理者で、実機の UAC は通っていない）
 - **2026-10-10**: 管理者権限の作業を `309_admin` に集約した（c950274・f517ee1・5fee8ef・aa954dc・a21d1aa）。
   winget の scope を実測して、machine 版しかない 11 件を移した。RDP と OpenSSH Server を applejxd の機械で有効にする処理を足した
 - **2026-10-10**: oh-my-posh を winget の MSIX 版（`ohmyposh.cli`）で入れると `POSH_THEMES_PATH` が設定されず、プロファイルがテーマを見つけないまま

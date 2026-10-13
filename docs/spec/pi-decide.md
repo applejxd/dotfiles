@@ -171,9 +171,24 @@ bash 以外（ファイル 1,081 件・そのほかのツール 16 件・不正�
 
 ### 次
 
-1. `bashrules` の検査を、`DENY_CHECKS` → `PATH_CHECKS` → `ASK_CHECKS` の順に移す（`--bash` の食い違いを減らす）
-2. 配布: `common.toml` から判定用の JSON を生成し（OpenCode の `rules.json` と同じ形）、ハーネスが TS 版を読む。Python 版を外す
-3. 構文解析の堅牢化（tree-sitter など）は、挙動を合わせて移したあとの別の変更にする
+層 B（`bashrules` の約 3,900 行）を、**検査関数ごとの正解データ**で 1 モジュールずつ移す。
+
+- 済み（書いたが正解データでの検証はこれから）: `judge/pathutil.ts`・`context.ts`（`Ctx`: 呼び出しごとの `payloadCwd` と `literalHeredocBodies`・表・設定）・
+  `shellparse.ts`・`shared.ts`（`_shared.py` の全体）
+- 先にやること:
+  1. `scripts/agents/export_checks_golden.py`（新規）: hook の試験のコマンドを `decide()` と同じ前処理（`split_heredoc_body`、`set_payload_cwd(<ROOT>)`、1 コマンドごとに状態を初期化）にかけ、
+     `DENY_CHECKS` / `PATH_CHECKS` / `ASK_CHECKS` の各関数の戻り値（理由の文字列か None）を、**None 以外だけ**を `golden/checks_golden.jsonl` に書く。
+     あわせて `split_heredoc_body`・`expand_cd_targets`・`shellparse.parse` の出力と、`tables.toml` を JSON にした `golden/tables.json` も書く
+  2. `test/agents/pi/checks_golden.mjs`（新規）: 移植済みの関数だけを、上と全件突き合わせる（部品ごとに一致を確かめながら進める）
+- 移す順番（依存の少ない順）: `shared.ts` と `shellparse.ts` の検証 → `policy`（`check_policy_loaded` / `deny` / `ask`。`rm.py` の `_rm_ask_exempt` / `_rm_ask_hint` に依存するので `rm.ts` と一緒）→
+  `rules_exec`（`check_pipe_to_shell` ほか）→ `rules_files` → `rules_guard` → `sensitive` → `http`（695 行）→ `ghapi` → `docker`
+- 注意（写してはいけない・揃える点）:
+  - Python のグローバルな記録（`_LITERAL_HEREDOC_BODIES`）は `ctx.literalHeredocBodies` にする（判定ごとに作り直す）
+  - 辞書は `Map` / `Set`（`constructor` などのコマンド名がプロトタイプに当たらないように）
+  - 正規表現は `pyRegex()`（`\s` `` `\w` を Python と同じ Unicode の範囲にする）。`str.split()` / `strip()` は `pystr.ts` の部品を使う
+  - `lru_cache` は `memo(ctx, …)`（同じ判定の中だけ）
+- 完了条件: `node test/agents/pi/judge_golden.mjs --bash` が全件一致 → `decide.ts` に `setBashDecider` で差し込む（`harness/index.ts` の `spawnSync("python3")` を関数呼び出しに替える）
+- その後: 配布（`common.toml` と `tables.toml` から判定用の JSON を生成し、ハーネスが読む）→ Python 版（`decide.py`）を外す → 構文解析の堅牢化は別の変更
 
 ## 既知の制約
 
