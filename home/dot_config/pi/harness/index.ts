@@ -1,4 +1,4 @@
-// pi のハーネス。組み込みのツールの代わりに guarded_* のツールを登録し、判定 API (decide.py) で
+// pi のハーネス。組み込みのツールの代わりに guarded_* のツールを登録し、判定器 (./judge) で
 // 実行してよいかを決める。起動は `pi -nbt -ne -e ~/.config/pi/harness`。
 // see docs/spec/pi-harness.md
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -18,6 +18,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
+import { makeBashDecider } from "./judge/bash.ts";
+import { decide as judge, setBashDecider } from "./judge/decide.ts";
 
 type Decision = { decision: "allow" | "ask" | "deny"; reason: string; source: string };
 
@@ -33,13 +35,14 @@ const BOUNDARY = process.env.PI_HARNESS_BOUNDARY === "1";
 const CHILD = process.env.PI_HARNESS_CHILD === "1";
 // 承認されなかった呼び出しの理由の先頭。子の結果から「承認待ちで未完了」を見分けるのに使う
 const NOT_APPROVED = "not approved:";
-const DECIDE_TIMEOUT_MS = 15000;
 
 // rules.json が読めなければ読み込みごと失敗させる。起動は止まり、/reload ではツールが無くなる
 const rules = JSON.parse(readFileSync(join(HERE, "rules.json"), "utf-8"));
-if (typeof rules.decide !== "string" || !rules.redact || !Array.isArray(rules.redact.rule)) {
-	throw new Error("rules.json に decide / redact が無い (chezmoi apply で作り直す)");
+if (!rules.judge?.common || !rules.judge?.tables || !rules.redact || !Array.isArray(rules.redact.rule)) {
+	throw new Error("rules.json に judge / redact が無い (chezmoi apply で作り直す)");
 }
+// 判定器は呼び出しごとに文脈を作り直す。ここで持つのは読み込んだ設定だけ
+setBashDecider(makeBashDecider(rules.judge.tables));
 const AGENT_ENV: Record<string, string> = rules.agent_env ?? {};
 const REDACT_RULES = rules.redact.rule.map((r: { name: string; pattern: string }) => ({
 	name: r.name,
@@ -90,19 +93,15 @@ const COMPACT_INSTRUCTIONS = [
 
 export function decide(tool: string, input: unknown, cwd: string): Decision {
 	const request = { tool, input, cwd, role: ROLE, bypass: BYPASS, boundary: BOUNDARY };
-	const r = spawnSync("python3", [rules.decide], {
-		input: JSON.stringify(request),
-		encoding: "utf-8",
-		timeout: DECIDE_TIMEOUT_MS,
-	});
-	if (r.error) return { decision: "deny", reason: `判定器を呼べない: ${r.error.message}`, source: "error" };
-	if (r.status !== 0) return { decision: "deny", reason: `判定器が異常終了した (${r.status})`, source: "error" };
+	// judge() は例外を投げず、異常は source: error の deny にする。念のため形も確かめる
 	try {
-		const out = JSON.parse(r.stdout);
+		const out = judge(request, rules.judge.common) as Decision;
 		if (["allow", "ask", "deny"].includes(out?.decision) && typeof out?.reason === "string") return out;
-	} catch {}
-	// 形の正しい応答以外は deny (空の応答を allow と読まない)
-	return { decision: "deny", reason: `判定器の応答が不正: ${JSON.stringify(String(r.stdout).slice(0, 120))}`, source: "error" };
+		return { decision: "deny", reason: `判定器の応答が不正: ${JSON.stringify(out).slice(0, 120)}`, source: "error" };
+	} catch (e) {
+		// 形の正しい応答以外は deny (空の応答を allow と読まない)
+		return { decision: "deny", reason: `判定器が失敗した: ${(e as Error).message}`, source: "error" };
+	}
 }
 
 // tool_call で判定した入力と結果。execute() で同じ入力なら判定を使い回す (判定 1 回 0.1 秒ほど)。

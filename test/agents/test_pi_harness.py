@@ -27,7 +27,6 @@ pytestmark = pytest.mark.skipif(PI is None, reason="pi is not installed")
 HARNESS_SRC = ROOT / "home" / "dot_config" / "pi" / "harness" / "index.ts"
 GUIDE_SRC = ROOT / "home" / "dot_config" / "opencode" / "guide-plugin"
 COMMIT_MESSAGE_SRC = GUIDE_SRC / "commit-message.js"
-DECIDE = ROOT / "home" / "dot_claude" / "hooks" / "executable_decide.py"
 FIXTURES = Path(__file__).resolve().parent / "pi"
 SECRET = "abc123rawsecret"
 
@@ -39,11 +38,11 @@ def env(tmp_path):
     harness = tmp_path / ".config" / "pi" / "harness"
     harness.mkdir(parents=True)
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
+    shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
     guide = tmp_path / ".config" / "opencode" / "guide-plugin"
     guide.mkdir(parents=True)
     shutil.copy2(COMMIT_MESSAGE_SRC, guide / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
-    rules["decide"] = str(DECIDE)
     # 子エージェントも偽のモデルで動かす (階層のモデルは認証が要る)
     for agent in rules["agents"].values():
         agent["model"] = None
@@ -133,9 +132,9 @@ def test_unknown_role_registers_no_tools(env):
     assert lines(proc)[0] == "TOOLS=[]", proc.stdout
 
 
-def test_broken_decide_is_denied(env):
+def test_broken_judge_settings_are_denied(env):
     rules = json.loads((env["harness"] / "rules.json").read_text(encoding="utf-8"))
-    rules["decide"] = str(env["tmp"] / "missing.py")
+    rules["judge"]["common"] = {}  # [pi] が無い設定は、判定が失敗して deny になる
     (env["harness"] / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
     proc = run_pi(env, bash_call("wc -c /dev/null"))
     assert "isError=true" in proc.stdout, proc.stdout

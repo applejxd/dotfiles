@@ -553,8 +553,9 @@ MCP_TRANSPORT_KEYS = {
     "stdio": {"command", "args"},
 }
 MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis", "exposure"}
-# pi へ出す exposure (モデルへのツールの見せ方)。省略時は direct。pis は -ne で組み込みの codemode / tool_search を
-# 外すので、既定の codemode のままだとツールがモデルから呼べない (docs/research/agents/pi-extension-under-harness.md E6)。
+# pi へ出す exposure (モデルへのツールの見せ方)。省略時は direct。pis は -ne で組み込みの
+# codemode / tool_search を外すので、既定の codemode のままだとツールがモデルから呼べない
+# (docs/research/agents/pi-extension-under-harness.md E6)。
 MCP_EXPOSURES = ("direct", "codemode", "deferred", "hidden")
 MCP_DEFAULT_EXPOSURE = "direct"
 
@@ -602,7 +603,8 @@ def mcp_servers(common: dict[str, Any], cli: str | None = None) -> list[tuple[st
         exposure = server.get("exposure")
         if exposure is not None and exposure not in MCP_EXPOSURES:
             raise ValueError(
-                f"[[mcp]] {name} の exposure が不正: {exposure!r} (対応: {', '.join(MCP_EXPOSURES)})"
+                f"[[mcp]] {name} の exposure が不正: {exposure!r} "
+                f"(対応: {', '.join(MCP_EXPOSURES)})"
             )
 
         targets = server.get("clis")
@@ -1835,11 +1837,34 @@ def agent_env(common: dict[str, Any]) -> dict[str, str]:
     return dict(table)
 
 
+JUDGE_COMMON_KEYS = ("bash", "file", "pi")
+BASHRULES_TABLES = Path(__file__).resolve().parents[2] / (
+    "home/dot_claude/hooks/lib/bashrules/tables.toml"
+)
+
+
+def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
+    """TS 版の判定器へ渡す設定 (判定器は TOML を読まないので JSON にして ``rules.json`` へ入れる)。
+
+    ``common`` は読んだままの ``[bash]`` / ``[file]`` / ``[pi]``
+    (``[pi]`` は ``resolve_pi_shared`` で変わらない)。
+    ``tables`` は検査関数が引く表 (``bashrules/tables.toml``)。
+    see docs/spec/pi-decide.md
+    """
+    with BASHRULES_TABLES.open("rb") as f:
+        tables = tomllib.load(f)
+    return {
+        "common": {key: common[key] for key in JUDGE_COMMON_KEYS if key in common},
+        "tables": tables,
+    }
+
+
 def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """pi のハーネスが読む ``~/.config/pi/harness/rules.json``。
 
-    判定そのものは判定 API (``decide.py``) が ``common.toml`` を直接読むので、ここには
-    ハーネスが自分で使うもの (伏字化・シェルへ入れる環境変数・判定器の場所) だけを置く。
+    判定そのもの (TS 版の判定器 ``judge/``) が読む設定 (``judge``: ``common.toml`` の
+    ``[bash]`` / ``[file]`` / ``[pi]`` と ``tables.toml``) と、ハーネスが自分で使うもの
+    (伏字化・シェルへ入れる環境変数) を置く。
     伏字化の正規表現は OpenCode の guide plugin と同じ JavaScript の方言。
     see docs/spec/pi-harness.md
     """
@@ -1847,7 +1872,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
     if not redact:
         raise SystemExit("[pi.redact] が無いか無効 (pi のハーネスは伏字化を前提にする)")
     return {
-        "decide": expand_user("~/.claude/hooks/decide.py"),
+        "judge": pi_judge_data(common),
         "agent_env": agent_env(common),
         "redact": redact,
         "agents": pi_agents(common),
@@ -2028,7 +2053,8 @@ PI_SUBAGENT_TOOLS = frozenset({"read", "grep", "find", "ls"})
 def build_pi_subagents(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """ハーネス無しの素の pi (Windows) が読む子エージェントの宣言。
 
-    判定器が無いので、shell・編集のツールを持たない読み取り役 (read / grep / find / ls だけ) に限る。
+    判定器が無いので、shell・編集のツールを持たない読み取り役
+    (read / grep / find / ls だけ) に限る。
     see docs/spec/pi-harness.md#windows-の子エージェント
     """
     profiles = (common.get("pi") or {}).get("profiles") or {}
@@ -2834,7 +2860,13 @@ TARGETS = {
 # 既存内容を一切参照しない (完全生成の) ターゲット。
 # 既存ファイルが壊れた JSON でも作り直せるよう、読み込み自体を省く。
 # 省かないと、壊れたファイルを直すための apply がパースで失敗して詰む。
-FULL_GENERATION_TARGETS = {"copilot-hooks", "opencode-guide", "pi-harness", "pi-keybindings", "pi-subagents"}
+FULL_GENERATION_TARGETS = {
+    "copilot-hooks",
+    "opencode-guide",
+    "pi-harness",
+    "pi-keybindings",
+    "pi-subagents",
+}
 
 
 def load_existing(path: str | None) -> dict[str, Any]:

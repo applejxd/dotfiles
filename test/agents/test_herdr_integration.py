@@ -77,7 +77,7 @@ def test_mise_config_keeps_platform_scope(os_name, username):
     assert "claude-code" not in tools
     assert not any(tool.endswith("opencode/cli") for tool in tools)
     if os_name == "windows":
-        # Windows でも node / uv / fzf / jq は mise が管理する (docs/spec/structure.md#windows-の-node-uv-fzf-jq)
+        # Windows でも node / uv / fzf / jq と pi 本体は mise が管理する (structure.md)
         assert config == {
             "tools": {
                 "gh": "latest",
@@ -86,6 +86,7 @@ def test_mise_config_keeps_platform_scope(os_name, username):
                 "uv": "latest",
                 "fzf": "latest",
                 "jq": "latest",
+                "aqua:earendil-works/pi": "1.2.0",
             }
         }
     else:
