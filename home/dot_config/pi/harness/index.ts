@@ -334,7 +334,7 @@ export function readChild(stdout: string, code: number): ChildResult {
 	return { status, blocked, errors, answer };
 }
 
-// 動いている子の一覧 (`/agents` 拡張が読む)。プロセス内で共有する
+// 動いている子の一覧 (`activity` 拡張が数えて表示する)。プロセス内で共有する
 type RunningChild = { agent: string; model: string; task: string; pid?: number; startedAt: number };
 const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, RunningChild>()) as Map<string, RunningChild>;
 

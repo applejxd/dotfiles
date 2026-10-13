@@ -56,8 +56,8 @@ if [ -n "${ORCA_AGENT_HOOK_PORT:-}" ] && [ -f "${orca_ext}" ] \
     && grep -q '@orca-managed-pi-extension' "${orca_ext}"; then
     extra=(-e "${orca_ext}")
 fi
-# 自作の拡張 (todo / plan / btw / agents)。-ne で自動発見は止めてあるので、ここで明示して足す
-for name in todo plan btw agents; do
+# 自作の拡張 (todo / plan / btw / activity)。-ne で自動発見は止めてあるので、ここで明示して足す
+for name in todo plan btw activity; do
     ext="${agent_dir}/extensions/${name}/index.ts"
     if [ -f "${ext}" ]; then extra+=(-e "${ext}"); fi
 done
