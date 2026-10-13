@@ -66,7 +66,7 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
    - 読み取り: `[file] read_ask_globs` は ask。作業ツリーの中と `[pi.external_read]` の中は allow。それ以外の外は ask
    - 書き込み: `[file] write_ask_globs` は ask。作業ツリーの外は ask。中は allow
    - `task`: allow（子は同じハーネスと判定器で、子の役割で判定される）
-   - `todo`: allow（メモリの状態だけを変える。拡張は[自作の拡張](pi-harness.md#自作の拡張-todo--plan)）
+   - `todo`: allow（メモリの状態だけを変える。拡張は[自作の拡張](pi-harness.md#自作の拡張-todo--plan--btw)）
 4. **既定**。役割の `default`（実装役は ask、読み取り役は deny）
 5. **bypass**。3・4 の ask だけを allow にする
 

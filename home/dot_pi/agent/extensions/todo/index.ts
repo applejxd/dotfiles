@@ -1,6 +1,6 @@
 // タスクリスト。`todo` ツールと `/todos` コマンド。状態はツール結果の details に持たせるので、
 // セッションの分岐や再開でも、その時点の状態に戻る。
-// see docs/spec/pi-harness.md#自作の拡張-todo--plan
+// see docs/spec/pi-harness.md#自作の拡張-todo--plan--btw
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
