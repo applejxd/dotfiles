@@ -6,6 +6,7 @@
 // node の型除去でそのまま動く書き方だけを使う。
 // see docs/spec/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
+import { checkCurlFileSend, checkCurlWgetMutation, checkHttpDangerousOutput } from "./http.ts";
 import { checkGitAddSensitive, checkHistoryAccess, checkSecretEnvEcho } from "./sensitive.ts";
 
 export type Check = (ctx: Ctx, cmd: string) => string | null;
@@ -14,4 +15,7 @@ export const CHECKS = new Map<string, Check>([
 	["check_git_add_sensitive", checkGitAddSensitive],
 	["check_history_access", checkHistoryAccess],
 	["check_secret_env_echo", checkSecretEnvEcho],
+	["check_curl_file_send", checkCurlFileSend],
+	["check_curl_wget_mutation", checkCurlWgetMutation],
+	["check_http_dangerous_output", checkHttpDangerousOutput],
 ]);

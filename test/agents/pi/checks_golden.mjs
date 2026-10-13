@@ -21,6 +21,7 @@ const load = (name) => import(pathToFileURL(resolve(JUDGE, name)).href);
 const { newCtx } = await load("context.ts");
 const shared = await load("shared.ts");
 const { parse } = await load("shellparse.ts");
+const http = await load("http.ts");
 const checksModule = existsSync(resolve(JUDGE, "checks.ts")) ? await load("checks.ts") : { CHECKS: new Map() };
 const CHECKS = checksModule.CHECKS;
 
@@ -44,6 +45,32 @@ const canon = (v) =>
 			? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 			: x,
 	);
+
+/** コードポイント順 (Python の sorted と同じ) に並べる。 */
+const cmpCodePoints = (a, b) => {
+	const x = Array.from(a);
+	const y = Array.from(b);
+	for (let i = 0; i < Math.min(x.length, y.length); i++) {
+		const d = x[i].codePointAt(0) - y[i].codePointAt(0);
+		if (d) return d;
+	}
+	return x.length - y.length;
+};
+
+/** TS の HttpCall を、Python 版の辞書の形 (snake_case) にする。 */
+const callJson = (c) => ({
+	tool: c.tool,
+	method: c.method,
+	body_kinds: c.bodyKinds,
+	payload_sources: c.payloadSources,
+	output_targets: c.outputTargets,
+	output_dir: c.outputDir,
+	remote_name: c.remoteName,
+	urls: c.urls,
+	get_mode: c.getMode,
+	ambiguous: c.ambiguous,
+	blocks_local: c.blocksLocal,
+});
 
 const commandJson = (c) => ({
 	words: c.words.map((w) => [w.raw, w.value]),
@@ -123,6 +150,15 @@ for (const line of lines) {
 		var want = e.error ? { error: "*" } : { ok: e.ok };
 	} else if (e.fn === "write_targets") {
 		got = attempt(() => shared.writeTargets(ctx, e.arg));
+		var want = e.error ? { error: "*" } : { ok: e.ok };
+	} else if (e.fn === "http_calls") {
+		got = attempt(() => http.httpTransferCalls(ctx, e.arg).map(callJson));
+		var want = e.error ? { error: "*" } : { ok: e.ok };
+	} else if (e.fn === "fetched_paths") {
+		got = attempt(() => [...http.fetchedOutputPaths(ctx, e.arg)].sort(cmpCodePoints));
+		var want = e.error ? { error: "*" } : { ok: e.ok };
+	} else if (e.fn === "local_url") {
+		got = attempt(() => http.isLocalUrl(ctx, e.arg));
 		var want = e.error ? { error: "*" } : { ok: e.ok };
 	} else if (e.fn === "check") {
 		key = `check:${e.name.split("@")[0]}`;
