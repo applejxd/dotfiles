@@ -360,6 +360,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     harness.mkdir(parents=True)
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
     shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
+    shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     guide = env["tmp"] / ".config" / "opencode" / "guide-plugin"
     guide.mkdir(parents=True)
     shutil.copy2(

@@ -19,6 +19,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
+import { createRedactor } from "./redact.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でハーネスが抜けたとき、組み込みが同じ名前で戻って
@@ -39,13 +40,8 @@ if (!rules.judge?.common || !rules.judge?.tables || !rules.redact || !Array.isAr
 	throw new Error("rules.json に judge / redact が無い (chezmoi apply で作り直す)");
 }
 const AGENT_ENV: Record<string, string> = rules.agent_env ?? {};
-const REDACT_RULES = rules.redact.rule.map((r: { name: string; pattern: string }) => ({
-	name: r.name,
-	re: new RegExp(r.pattern, "gi"),
-}));
-const DENY_PATH: RegExp[] = (rules.redact.deny_path ?? []).map((p: string) => new RegExp(p));
-// /g を付けない (.test の lastIndex が残る)
-const DENY_PATH_UNLESS = rules.redact.deny_path_unless ? new RegExp(rules.redact.deny_path_unless) : null;
+// 伏字化 (redact.ts。素の pi のガードと共有)
+const { redactText, redactResult, deniedPathIn, withheld } = createRedactor(rules.redact);
 
 // ─── 確認画面の補助 ─────────────────────────────────────────────────
 
@@ -120,50 +116,6 @@ function confirmInOrder(ctx: any, title: string, body: string): Promise<boolean>
 
 function baseName(toolName: string): string {
 	return toolName.startsWith(PREFIX) ? toolName.slice(PREFIX.length) : toolName;
-}
-
-// ─── 伏字化 ─────────────────────────────────────────────────────────
-
-function redactText(text: string): string {
-	let out = text;
-	// 置換文字列にせず関数で返す ($& などを解釈させない)
-	for (const r of REDACT_RULES) out = out.replace(r.re, () => `[伏字:${r.name}]`);
-	return out;
-}
-
-function redactValue(v: any): any {
-	if (typeof v === "string") return redactText(v);
-	if (Array.isArray(v)) return v.map(redactValue);
-	if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, redactValue(x)]));
-	return v;
-}
-
-// content・structuredContent・details の全部を伏せる。details はモデルへ送られないが、
-// セッション・イベント・画面に残る (bash の details.truncation.content に生の出力。spike の E3)
-function redactResult(r: any): any {
-	if (!r) return r;
-	return {
-		...r,
-		content: redactValue(r.content),
-		...(r.details !== undefined ? { details: redactValue(r.details) } : {}),
-		...(r.structuredContent !== undefined ? { structuredContent: redactValue(r.structuredContent) } : {}),
-	};
-}
-
-// コマンドが保護対象のパスを参照していれば、どこが秘密か分からないので出力ごと伏せる
-function deniedPathIn(command: string): string | null {
-	if (DENY_PATH_UNLESS?.test(command)) return null;
-	for (const token of command.split(/[\s;|&<>()"'`]+/)) {
-		if (!token || (!/[/\\]/.test(token) && !token.startsWith("~") && !token.startsWith("."))) continue;
-		const p = token.replace(/\\/g, "/");
-		if (DENY_PATH.some((re) => re.test(p))) return token;
-	}
-	return null;
-}
-
-function withheld(hit: string): any {
-	const text = `[伏字] 保護対象のパス (${hit}) を参照したため、このコマンドの出力を伏せました。`;
-	return { content: [{ type: "text", text }], details: undefined, structuredContent: { withheld: text } };
 }
 
 // ─── 登録 ───────────────────────────────────────────────────────────

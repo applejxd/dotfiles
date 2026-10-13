@@ -39,6 +39,7 @@ def env(tmp_path):
     harness.mkdir(parents=True)
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
     shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
+    shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     guide = tmp_path / ".config" / "opencode" / "guide-plugin"
     guide.mkdir(parents=True)
     shutil.copy2(COMMIT_MESSAGE_SRC, guide / "commit-message.js")

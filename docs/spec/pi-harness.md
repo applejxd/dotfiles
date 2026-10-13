@@ -240,7 +240,7 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 
 ### 素の pi のガード
 
-素の `pi` にも、ハーネスと同じ判定器で **deny だけ**を止める小さな拡張 `~/.config/pi/guard` を付ける（`settings.json` の `extensions`）。
+素の `pi` にも、ハーネスと同じ判定器で **deny だけ**を止め、結果を**伏字化**する小さな拡張 `~/.config/pi/guard` を付ける（`settings.json` の `extensions`）。
 ask の確認は出さない。応える人が居ない Orca・Zed でも止まらず、`rm -rf ~`・秘密ファイルの読み取り・`git push`・
 誘導（`cat` / `head` / `tail` は read ツールへ）が効く。
 
@@ -250,16 +250,20 @@ ask の確認は出さない。応える人が居ない Orca・Zed でも止ま�
 | 対象のツール | `bash` `read` `edit` `write` `grep` `find` `ls` と、`bg_run` / `bg_log` / `bg_kill`。他の拡張・MCP のツールは対象外（判定器は役割に無いツールを deny するので、そのまま通すと拡張が動かなくなる） |
 | 設定 | ハーネスと同じ `~/.config/pi/harness/rules.json` の `judge` と `judge/`（`common.toml` を編集して `chezmoi apply` すれば効く） |
 | 読めないとき | 対象のツールを**止める**（理由に「ガードの設定を読めない」）。黙って素通しにはしない |
+| 伏字化 | ハーネスと同じ `redact.ts`（`rules.json` の `redact`）を `tool_result` で掛ける。`bash` と、他の拡張・MCP のツールの結果が対象。`content`・`structuredContent`・`details` と、長い出力の退避ファイルを伏せる。`read` `edit` `write` `grep` `find` `ls` は伏せない（伏せた本文を元に edit されると、ファイルへ伏字が書き込まれる） |
+| 保護パスを参照するコマンド | `bash` のコマンドが保護対象のパス（`[file] read_deny_globs` から作る）を参照していれば、**実行しない**（ハーネスは実行して出力を伏せる。ガードは実行前に止められるので止める） |
+| 伏字化の設定を読めないとき | 対象のツールの結果を出さない（「伏字化に失敗」） |
 | `pis` | `-ne` で拡張が外れるので、二重にならない |
 | `git commit` | ask なので通す。確認は `commit-confirm` が出す |
 
 **保護ではなくガードレール**: `tool_call` だけで判定し、`execute()` の最終判定は無い（別の拡張が入力を書き換えても止められない）。
-拡張の読み込み時の処理と、利用者が手で打つ `!cmd` は囲えない。規則に無い操作は通る（deny の抜けがそのまま露出する）。
+拡張の読み込み時の処理と、利用者が手で打つ `!cmd` は囲えない。**実行中の途中経過（`tool_execution_update`）は伏せられない**
+（ハーネスは `execute()` を包んで伏せるが、ガードは結果の `tool_result` だけを伏せる。モデルへ渡る結果と、最終のイベント・退避ファイルは伏せる）。規則に無い操作は通る（deny の抜けがそのまま露出する）。
 deny は承認で外せないので、誤検知はその場で回避できない。Orca・Zed で観察して規則を直す。
 
 - Unix だけ。ハーネスの `judge/` と `rules.json` に依るので、Windows には配らない（`.chezmoiignore`・`[pi.settings]` の `extensions` を OS で分けている）。Windows 版はパスの扱い（`C:\…`）を確かめてから
-- 未実装: 出力の伏字化・役割の選択（素の `pi` では実装役に固定）。いずれも持ち込む予定
-- 試験: `test_pi_guard.py`（本物の pi と偽のモデル。deny が止まる・ask が通る・他の拡張は対象外・設定が壊れていれば止まる）
+- 未実装: 役割の選択（素の `pi` では実装役に固定）。持ち込む予定
+- 試験: `test_pi_guard.py`（本物の pi と偽のモデル。deny が止まる・ask が通る・他の拡張は対象外・設定が壊れていれば止まる・出力と退避ファイルの伏字化・read は伏せない）
 
 ### 整形
 
