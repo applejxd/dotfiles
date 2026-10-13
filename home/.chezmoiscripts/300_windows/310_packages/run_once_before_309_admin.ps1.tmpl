@@ -219,7 +219,9 @@ function Test-WslInstalled {
   # WSL 本体 (ディストロは問わない)。未導入だと、inbox の wsl.exe が案内を出して終了コード 1 を返す
   try {
     & wsl.exe --version 2>&1 | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    if ($LASTEXITCODE -ne 0) { return $false }
+    # wsl.exe 本体があっても VirtualMachinePlatform が無いと distro を起動できない (HCS_E_SERVICE_NOT_AVAILABLE)。vmcompute の有無で見る
+    return [bool](Get-Service -Name vmcompute -ErrorAction SilentlyContinue)
   } catch {
     return $false
   }
@@ -240,6 +242,12 @@ function Invoke-WslCommand {
 
 function Enable-Wsl {
   # 機能の有効化と WSL 本体だけ。ディストロは入れない (入れる場所の方針は別。docs/change/0022 の保留)
+  # wsl.exe が先に入っていると --install は機能を有効化しないことがあるので明示する (3010 = 要再起動)
+  & dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart | Out-Null
+  if ($LASTEXITCODE -notin 0, 3010) { throw "dism VirtualMachinePlatform failed: $LASTEXITCODE" }
+  if ((& bcdedit.exe /enum '{current}' 2>&1 | Out-String) -match 'hypervisorlaunchtype\s+Off') {
+    & bcdedit.exe /set hypervisorlaunchtype auto | Out-Null
+  }
   $install = Invoke-WslCommand @('--install', '--no-distribution')
   if ($install.ExitCode -ne 0) { throw "wsl --install --no-distribution failed: $($install.ExitCode) $($install.Text)" }
   # 仮想マシン プラットフォームの有効化には再起動が要る。導入した直後でも wsl --version は成功する
@@ -500,6 +508,11 @@ if (Test-IsElevated) {
 
 Update-PathFromEnvironment
 $still = @(Get-Missing)
+# 機能の有効化は再起動後に vmcompute が現れる。導入を試みた後は再起動待ちとして警告に留める (失敗なら Install-Targets が throw 済み)
+if ($still -contains 'WslPlatform' -and $missing -contains 'WslPlatform') {
+  Write-Warning 'WSL: restart Windows to finish enabling VirtualMachinePlatform, then run: mise run restore:wsl'
+  $still = @($still | Where-Object { $_ -ne 'WslPlatform' })
+}
 if ($still.Count -gt 0) {
   throw ("Still missing after admin setup: $($still -join ', ')." + (Get-FailureHint $still))
 }
