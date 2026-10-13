@@ -8,7 +8,7 @@ harness="${HOME}/.config/pi/harness"
 agent_dir="${PI_CODING_AGENT_DIR:-${HOME}/.pi/agent}"
 bypass=""
 boundary=""
-role="implementer"
+role=""   # 空なら [pi] default_role (ハーネスが rules.json から読む)
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -41,7 +41,7 @@ then
     exit 1
 fi
 
-export PI_HARNESS_ROLE="${role}"
+if [ -n "${role}" ]; then export PI_HARNESS_ROLE="${role}"; else unset PI_HARNESS_ROLE; fi
 export PI_HARNESS_BYPASS="${bypass}"
 unset PI_HARNESS_CHILD PI_HARNESS_TEST_CHILD_EXT PI_HARNESS_BOUNDARY
 # --boundary: Fence で囲って起動する (Ubuntu / WSL のみ)。ocs が同じ引数で pi を起動する

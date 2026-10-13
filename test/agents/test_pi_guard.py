@@ -231,3 +231,47 @@ def test_results_are_withheld_when_the_redaction_setting_is_missing(env):
     proc = _ext_result(env)
     assert "伏字化に失敗" in proc.stdout, proc.stdout
     assert SECRET not in proc.stdout
+
+
+# ─── 役割 ────────────────────────────────────────────────────────────
+
+
+def _set_default_role(env, role):
+    path = env["harness"] / "rules.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    rules["default_role"] = role
+    path.write_text(json.dumps(rules), encoding="utf-8")
+
+
+def test_the_role_comes_from_the_default_role_setting(env):
+    """役割は [pi] default_role で固定する。reader なら bash は使えない。"""
+    _set_default_role(env, "reader")
+    proc = run_pi(env, bash("wc -c /dev/null"))
+    assert "は bash を使えない" in proc.stdout, proc.stdout
+
+
+def test_an_unknown_default_role_blocks_the_judged_tools(env):
+    _set_default_role(env, "nobody")
+    marker = env["tmp"] / "started"
+    proc = run_pi(env, bash(f"touch {marker.as_posix()}"))
+    assert "ガードの設定を読めない" in proc.stdout, proc.stdout
+    assert not marker.exists()
+
+
+def test_there_is_no_runtime_switch_for_the_role(env):
+    """環境変数で役割を変えられない (素の pi では実行時に切り替えない)。"""
+    proc = run_pi(env, bash("wc -c /dev/null"), PI_HARNESS_ROLE="reader", PI_GUARD_ROLE="reader")
+    assert "isError=false" in proc.stdout, proc.stdout
+
+
+def test_the_generator_rejects_a_default_role_that_is_not_a_profile():
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts" / "agents"))
+    import generate as gen
+
+    common = load_common()
+    assert gen.build_pi_harness({}, common)["default_role"] == "implementer"
+    common["pi"]["default_role"] = "nobody"
+    with pytest.raises(SystemExit, match="default_role"):
+        gen.build_pi_harness({}, common)

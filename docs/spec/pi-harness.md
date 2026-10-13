@@ -15,7 +15,7 @@ OpenCode のハーネス（permission の生成・guide plugin）の後継で、
 ```bash
 pis                 # 実装役で起動する
 pis --bypass        # 確認 (ask) を確認なしで通す。deny と誘導は効く
-pis --role reader   # 役割を選ぶ ([pi.profiles] の名前)
+pis --role reader   # 役割を選ぶ ([pi.profiles] の名前。省略すると [pi] default_role)
 pis --boundary      # Fence で囲って起動する (Ubuntu / WSL のみ。境界を参照)
 pis -c              # pi の引数はそのまま渡る (例: 直前のセッションを続ける)
 ```
@@ -246,7 +246,7 @@ ask の確認は出さない。応える人が居ない Orca・Zed でも止ま�
 
 | 項目 | 内容 |
 | --- | --- |
-| 判定 | ハーネスと同じ `judge/`（`call.ts` の `createCallDecider`）。`bypass: true`（ask を allow にする。deny と誘導は効く）、役割は `implementer` 固定 |
+| 判定 | ハーネスと同じ `judge/`（`call.ts` の `createCallDecider`）。`bypass: true`（ask を allow にする。deny と誘導は効く）。役割は `[pi] default_role`（既定 `implementer`）で**固定**し、実行時には切り替えない（環境変数も効かない）。`[pi.profiles]` に無い名前なら読み込みに失敗し、対象のツールを止める |
 | 対象のツール | `bash` `read` `edit` `write` `grep` `find` `ls` と、`bg_run` / `bg_log` / `bg_kill`。他の拡張・MCP のツールは対象外（判定器は役割に無いツールを deny するので、そのまま通すと拡張が動かなくなる） |
 | 設定 | ハーネスと同じ `~/.config/pi/harness/rules.json` の `judge` と `judge/`（`common.toml` を編集して `chezmoi apply` すれば効く） |
 | 読めないとき | 対象のツールを**止める**（理由に「ガードの設定を読めない」）。黙って素通しにはしない |
@@ -262,7 +262,7 @@ ask の確認は出さない。応える人が居ない Orca・Zed でも止ま�
 deny は承認で外せないので、誤検知はその場で回避できない。Orca・Zed で観察して規則を直す。
 
 - Unix だけ。ハーネスの `judge/` と `rules.json` に依るので、Windows には配らない（`.chezmoiignore`・`[pi.settings]` の `extensions` を OS で分けている）。Windows 版はパスの扱い（`C:\…`）を確かめてから
-- 未実装: 役割の選択（素の `pi` では実装役に固定）。持ち込む予定
+- 役割の既定（`[pi] default_role`）は `pis` と共有する。`pis` だけ `--role` / `PI_HARNESS_ROLE` で上書きできる。ガードは、役割の `tools` に無いツールを隠せない（deny を返すだけで、ツールの宣言は残る）
 - 試験: `test_pi_guard.py`（本物の pi と偽のモデル。deny が止まる・ask が通る・他の拡張は対象外・設定が壊れていれば止まる・出力と退避ファイルの伏字化・read は伏せない）
 
 ### 整形
@@ -347,7 +347,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 
 | 変数 | 既定 | 意味 |
 | --- | --- | --- |
-| `PI_HARNESS_ROLE` | `implementer` | 判定器へ渡す役割（`[pi.profiles]` の名前） |
+| `PI_HARNESS_ROLE` | `[pi] default_role` | 判定器へ渡す役割（`[pi.profiles]` の名前） |
 | `PI_HARNESS_BYPASS` | 無し | `1` なら判定器へ `bypass` を渡す（ask だけを allow にする） |
 | `PI_HARNESS_BOUNDARY` | 無し | `1` なら判定器へ `boundary` を渡す（判定器はまだ使っていない） |
 | `PI_HARNESS_CHILD` | 無し | `1` なら子エージェントとして動く（`guarded_task` を登録しない）。ハーネスが子を起動するときに付ける |

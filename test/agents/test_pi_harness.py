@@ -128,6 +128,17 @@ def test_reader_role_does_not_see_bash(env):
     assert "Tool guarded_bash not found" in proc.stdout
 
 
+def test_the_default_role_comes_from_the_rules_and_the_environment_overrides_it(env):
+    path = env["harness"] / "rules.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    rules["default_role"] = "reader"
+    path.write_text(json.dumps(rules), encoding="utf-8")
+    proc = run_pi(env, bash_call("wc -c /dev/null"))
+    assert lines(proc)[0] == 'TOOLS=["guarded_find","guarded_grep","guarded_ls","guarded_read"]'
+    proc = run_pi(env, bash_call("wc -c /dev/null"), PI_HARNESS_ROLE="implementer")
+    assert "guarded_bash" in lines(proc)[0]
+
+
 def test_unknown_role_registers_no_tools(env):
     proc = run_pi(env, bash_call("wc -c /dev/null"), PI_HARNESS_ROLE="nobody")
     assert lines(proc)[0] == "TOOLS=[]", proc.stdout

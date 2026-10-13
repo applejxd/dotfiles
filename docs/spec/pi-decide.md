@@ -108,6 +108,9 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 | `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |
 | `worker` | 7 つのツール | ask | `shell_deny` に git の状態を変える操作 | 子の `worker` |
 
+**既定の役割**は `[pi] default_role`（`common.toml`。既定は `implementer`）。`pis` は `--role` / `PI_HARNESS_ROLE` で上書きでき、
+素の `pi` のガードは実行時に切り替えずこの値で固定する（`[pi.profiles]` に無い名前は、生成が止まり、ガードも読み込みに失敗する）。
+
 `git status` / `git diff` は `.git/config` 経由でコマンドを起動しうるので、全体の `[pi.shell] allow` には載せず、
 `committer` の `shell_allow` だけに置く（今の OpenCode の `commit` と同じ）。
 

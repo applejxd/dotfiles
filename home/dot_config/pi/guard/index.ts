@@ -16,7 +16,6 @@ import { createRedactor, type Redactor } from "../harness/redact.ts";
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 判定するのは、判定器が規則を持つ組み込みのツールと bg_run だけ。他の拡張・MCP のツールは対象外 (判定器は役割に無いものを deny する)
 const JUDGED = new Set(["bash", "read", "edit", "write", "grep", "find", "ls", "bg_run", "bg_log", "bg_kill"]);
-const ROLE = "implementer";
 // 出力を伏せない道具。read などを伏せると、伏せた本文を元に edit されてファイルへ伏字が書き込まれる
 const FILE_TOOLS = new Set(["read", "edit", "write", "grep", "find", "ls"]);
 
@@ -30,11 +29,16 @@ export default async function (pi: any) {
 		const rules = JSON.parse(readFileSync(join(HERE, "..", "harness", "rules.json"), "utf-8"));
 		if (!rules.judge?.common || !rules.judge?.tables) throw new Error("rules.json に judge が無い");
 		redactor = createRedactor(rules.redact);
+		// 役割は [pi] default_role で固定 (実行時には切り替えない)。無い名前なら読み込みの失敗にする
+		const role = rules.default_role;
+		if (typeof role !== "string" || !Object.hasOwn(rules.profile_tools ?? {}, role)) {
+			throw new Error(`rules.json の default_role が役割に無い: ${JSON.stringify(role)}`);
+		}
 		// bypass: ask だけを allow にする (deny は効く)
 		decide = createCallDecider({
 			judge: rules.judge,
 			profileTools: rules.profile_tools ?? {},
-			role: ROLE,
+			role,
 			bypass: true,
 			boundary: false,
 		});

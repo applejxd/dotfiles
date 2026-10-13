@@ -26,7 +26,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // 判定なしに動く (docs/research/agents/pi-harness-spike.md の E1)
 const PREFIX = "guarded_";
 const TOOLS = ["bash", "read", "edit", "write", "grep", "find", "ls"] as const;
-const ROLE = process.env.PI_HARNESS_ROLE || "implementer";
 const BYPASS = process.env.PI_HARNESS_BYPASS === "1";
 const BOUNDARY = process.env.PI_HARNESS_BOUNDARY === "1";
 // 子エージェントとして起動されたか。子では guarded_task を登録しない (入れ子にしない)
@@ -40,6 +39,10 @@ if (!rules.judge?.common || !rules.judge?.tables || !rules.redact || !Array.isAr
 	throw new Error("rules.json に judge / redact が無い (chezmoi apply で作り直す)");
 }
 const AGENT_ENV: Record<string, string> = rules.agent_env ?? {};
+// 役割。pis の --role / PI_HARNESS_ROLE が優先し、無ければ [pi] default_role
+if (typeof rules.default_role !== "string") throw new Error("rules.json に default_role が無い (chezmoi apply で作り直す)");
+const ROLE: string = process.env.PI_HARNESS_ROLE || rules.default_role;
+
 // 伏字化 (redact.ts。素の pi のガードと共有)
 const { redactText, redactResult, deniedPathIn, withheld } = createRedactor(rules.redact);
 

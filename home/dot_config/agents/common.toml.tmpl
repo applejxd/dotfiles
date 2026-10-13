@@ -858,6 +858,12 @@ approvals = [
 # (CHG-0020 の段 6 で OpenCode を撤去するまで)。[opencode.*] 側に同じキーを書くと生成が止まる。
 # see docs/spec/agent-config-generation.md#pi-と共有する節
 
+# 役割 ([pi.profiles] の名前) の既定。pis と素の pi のガードが使う。
+# pis は --role / PI_HARNESS_ROLE で上書きできる。ガードは実行時に切り替えない (この値で固定)。
+# see docs/spec/pi-decide.md#役割
+[pi]
+default_role = "implementer"
+
 # 無確認で実行してよい shell コマンド ([bash] allow とは共用しない。前提が違う)。
 # ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。
 # ★リダイレクトは resource に残ったまま前方一致するので、載せたコマンドは

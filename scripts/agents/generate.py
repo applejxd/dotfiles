@@ -1859,6 +1859,19 @@ def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def pi_default_role(common: dict[str, Any]) -> str:
+    """``[pi] default_role``。pis の既定の役割で、素の pi のガードの固定の役割。
+
+    ``[pi.profiles]`` に無い名前なら生成を止める (判定器は未知の役割を deny するので、
+    ここで止めないと全部のツールが止まる)。
+    """
+    pi = common.get("pi") or {}
+    role = pi.get("default_role")
+    if not isinstance(role, str) or role not in (pi.get("profiles") or {}):
+        raise SystemExit(f"[pi] default_role が [pi.profiles] に無い: {role!r}")
+    return role
+
+
 def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """pi のハーネスが読む ``~/.config/pi/harness/rules.json``。
 
@@ -1873,6 +1886,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
         raise SystemExit("[pi.redact] が無いか無効 (pi のハーネスは伏字化を前提にする)")
     return {
         "judge": pi_judge_data(common),
+        "default_role": pi_default_role(common),
         "agent_env": agent_env(common),
         "redact": redact,
         "agents": pi_agents(common),
