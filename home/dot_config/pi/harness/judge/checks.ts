@@ -1,0 +1,17 @@
+// bash 検査関数の登録簿 (bashrules/__init__.py の DENY_CHECKS / PATH_CHECKS / ASK_CHECKS の移植)。
+//
+// CHECKS は「名前 → 関数」の対応で、差分試験 (test/agents/pi/checks_golden.mjs) が名前で引く。
+// 名前は Python 版の関数名 (`check_xxx`) のまま使う。順序に意味がある並びは移植が揃ってから足す。
+//
+// node の型除去でそのまま動く書き方だけを使う。
+// see docs/spec/pi-decide.md#ts-版への移植
+import type { Ctx } from "./context.ts";
+import { checkGitAddSensitive, checkHistoryAccess, checkSecretEnvEcho } from "./sensitive.ts";
+
+export type Check = (ctx: Ctx, cmd: string) => string | null;
+
+export const CHECKS = new Map<string, Check>([
+	["check_git_add_sensitive", checkGitAddSensitive],
+	["check_history_access", checkHistoryAccess],
+	["check_secret_env_echo", checkSecretEnvEcho],
+]);

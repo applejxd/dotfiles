@@ -109,6 +109,11 @@ export function pyRegex(source: string, flags = ""): RegExp {
 		}
 		if (c === "[" && !inClass) inClass = true;
 		else if (c === "]" && inClass) inClass = false;
+		// Python の `$` は、複数行モードでなければ末尾か最後の改行の前に当たる
+		if (c === "$" && !inClass && !flags.includes("m")) {
+			out += "(?=\\n?$)";
+			continue;
+		}
 		out += c;
 	}
 	return new RegExp(out, flags.includes("u") ? flags : `${flags}u`);

@@ -64,18 +64,59 @@ const failures = {};
 const unported = new Set();
 let ctx = null;
 
+// PATH_CHECKS は cd 展開した形にも掛ける (正解データでは name@cd)
+const PATH_NAMES = new Set([
+	"check_file_read",
+	"check_guard_tampering",
+	"check_shell_startup_write",
+	"check_archive",
+	"check_curl_file_send",
+]);
+
+const record = (key, ok, e, want, got) => {
+	stats[key] ??= { pass: 0, fail: 0 };
+	if (ok) {
+		stats[key].pass++;
+	} else {
+		stats[key].fail++;
+		(failures[key] ??= []).push({ arg: e.arg, want, got });
+	}
+};
+
+// 正解データは None を書かない。記録の無い検査は None のはずなので、TS が理由を返したら誤検知として数える
+let cur = null;
+const flush = () => {
+	if (!cur) return;
+	for (const [name, check] of CHECKS) {
+		const key = `check:${name}`;
+		if (!cur.seen.has(name)) {
+			const got = attempt(() => check(cur.ctx, cur.text));
+			record(key, canon(got) === canon({ ok: null }), { arg: cur.text }, { ok: null }, got);
+		}
+		if (PATH_NAMES.has(name) && cur.cd && !cur.seen.has(`${name}@cd`)) {
+			const got = attempt(() => check(cur.ctx, cur.cd));
+			record(key, canon(got) === canon({ ok: null }), { arg: cur.cd }, { ok: null }, got);
+		}
+	}
+	cur = null;
+};
+
 const lines = readFileSync(resolve(GOLDEN, "checks_golden.jsonl"), "utf8").split("\n").filter(Boolean);
 for (const line of lines) {
 	const e = JSON.parse(line);
 	let key = e.fn;
 	let got;
 	if (e.fn === "heredoc") {
+		flush();
 		ctx = newCtx(tables, common, ROOT);
+		cur = { ctx, text: "", cd: "", seen: new Set() };
 		got = { out: shared.splitHeredocBody(ctx, e.arg), literal: [...ctx.literalHeredocBodies] };
 		got = mask(got);
 		var want = { out: e.out, literal: e.literal };
 	} else if (e.fn === "expand_cd") {
 		got = { out: shared.expandCdTargets(e.arg) };
+		cur.text = e.arg;
+		cur.cd = e.out;
 		var want = { out: e.out };
 	} else if (e.fn === "commands") {
 		got = attempt(() => shared.commands(ctx, e.arg).map(commandJson));
@@ -85,6 +126,7 @@ for (const line of lines) {
 		var want = e.error ? { error: "*" } : { ok: e.ok };
 	} else if (e.fn === "check") {
 		key = `check:${e.name.split("@")[0]}`;
+		cur.seen.add(e.name);
 		const check = CHECKS.get(e.name.split("@")[0]);
 		if (!check) {
 			unported.add(e.name.split("@")[0]);
@@ -106,6 +148,7 @@ for (const line of lines) {
 	}
 }
 
+flush();
 let bad = 0;
 for (const [key, s] of Object.entries(stats)) {
 	console.log(`${key.padEnd(34)} 一致 ${String(s.pass).padStart(5)} / 食い違い ${String(s.fail).padStart(5)}`);

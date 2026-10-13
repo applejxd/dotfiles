@@ -28,6 +28,9 @@ export const commands = (ctx: Ctx, cmd: string): Command[] =>
 
 // ─── パス判定のヘルパ ───────────────────────────────────────────────────
 
+/** `cmd.strip()[:200]` (理由の文面に入れるコマンドの先頭。コードポイントで数える)。 */
+export const clip200 = (cmd: string): string => Array.from(strip(cmd)).slice(0, 200).join("");
+
 /** `/bin/rm` -> `rm` */
 export const baseName = (token: string): string => basename(token);
 
@@ -127,7 +130,7 @@ export function payloadSource(ctx: Ctx, kind: string, value: string): string | n
 /** 添付されたオプションの値。一致しなければ null。 */
 export function optionValue(token: string, short: string, long: string): string | null {
 	if (token.startsWith(`${long}=`)) return token.slice(long.length + 1);
-	if (short && token.startsWith(short) && token !== short) return token.slice(short.length);
+	if (token.startsWith(short) && token !== short) return token.slice(short.length);
 	return null;
 }
 
