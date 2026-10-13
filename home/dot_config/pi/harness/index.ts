@@ -334,6 +334,10 @@ export function readChild(stdout: string, code: number): ChildResult {
 	return { status, blocked, errors, answer };
 }
 
+// 動いている子の一覧 (`/agents` 拡張が読む)。プロセス内で共有する
+type RunningChild = { agent: string; model: string; task: string; pid?: number; startedAt: number };
+const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, RunningChild>()) as Map<string, RunningChild>;
+
 function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 	const names = Object.keys(agents);
 	const catalog = names.map((n) => `- ${n}: ${agents[n].description}`).join("\n");
@@ -348,7 +352,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			agent: Type.Union(names.map((n) => Type.Literal(n))),
 			task: Type.String({ description: "What the child should do, with all the context it needs" }),
 		}),
-		async execute(_toolCallId: string, params: any, signal: any, _onUpdate: any, ctx: any) {
+		async execute(toolCallId: string, params: any, signal: any, _onUpdate: any, ctx: any) {
 			const agent = agents[params.agent];
 			if (!agent) throw new Error(`unknown agent: ${params.agent}`);
 			// 最終の判定 (ほかのツールと同じく execute() でも確かめる)
@@ -366,6 +370,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				PI_HARNESS_BYPASS: BYPASS && agent.inherit_bypass ? "1" : "",
 			};
 			const child = spawn("pi", args, { cwd: ctx.cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+			runningChildren.set(toolCallId, { agent: params.agent, model, task: params.task, pid: child.pid, startedAt: Date.now() });
 			const kill = () => {
 				try {
 					process.kill(-child.pid!, "SIGTERM");
@@ -376,6 +381,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			child.stdout.on("data", (b: Buffer) => (out += b.toString()));
 			child.stderr.on("data", () => {});
 			const code: number = await new Promise((resolve) => child.on("close", (c: number | null) => resolve(c ?? -1)));
+			runningChildren.delete(toolCallId);
 			signal?.removeEventListener("abort", kill);
 			if (signal?.aborted) throw new Error("child aborted");
 			const r = readChild(out, code);

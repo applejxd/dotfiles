@@ -77,18 +77,20 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 ### 自作の拡張: todo / plan / btw
 
-`~/.pi/agent/extensions/{todo,plan,btw}/index.ts`（実体は `home/dot_pi/agent/extensions/`）。pi 同梱の例（`examples/extensions/todo.ts`・`plan-mode`）を参考に、必要な部分だけ自作した。全 OS に配る。
+`~/.pi/agent/extensions/{todo,plan,btw,agents}/index.ts`（実体は `home/dot_pi/agent/extensions/`）。pi 同梱の例（`examples/extensions/todo.ts`・`plan-mode`）を参考に、必要な部分だけ自作した。全 OS に配る。
 
 | 拡張 | 中身 |
 | --- | --- |
 | `todo` | `todo` ツール（list / add / toggle / clear）と `/todos`。状態はツール結果の `details` に持つので、分岐・再開でその時点に戻る。フッターに進捗を出す |
 | `plan` | `/plan` で切り替え。計画中は **`edit` / `write` / `bash` / MCP などのツールを外し**、`read` / `grep` / `find` / `ls` / `todo` / `task` だけを残す（`guarded_` 付きも同じ）。計画の指示を毎ターン注入し、番号付きの手順で終わったら「実行する / 続ける / 直す」を尋ねる。「実行する」でツールを戻し、実行を依頼する |
 | `btw` | `/btw <質問>`。いまの会話（user / assistant の本文とツール呼び出しの要約。新しい側 6 万文字まで）を文脈に、**現在のモデル**がツールなしで答える。答えはオーバーレイに出すだけで、会話履歴にもモデルの文脈にも残さない。エージェントの応答中でも使える |
+| `agents` | `/agents`。いま動いている子エージェント（`task` / `guarded_task`）の一覧を、agent・model・経過時間・pid・task の冒頭で出す。子を起動する側（`subagents` とハーネス）が `globalThis.__piChildren` に登録し、終わると外す。一覧は動いている間だけで、履歴は持たない |
 
 - `pis` は `-ne` なので、`-e` で明示して足す。素の `pi` は自動発見で読む
 - ハーネスの役割は、`implementer` の `tools` に `todo` を足してある（判定器は `todo` を allow）。`plan` はツールを登録しないので判定に関わらない
 - 計画中は shell が無いので、`git log` などの調査もできない。必要なら `/plan` を終えて調べる
 - `pis --boundary` は起動を `ocs` に任せるので、この拡張を足していない（未対応）
+- `agents` の実測: 実際に子（`task`、モデルは Copilot）を動かし、実行中は 1 件が登録され、終了後は 0 件に戻ることを確認した。表示は print モードで文字列を確認した（オーバーレイは TUI でしか出ず未確認）
 - `btw` は `ctx.modelRegistry.complete()` で別に 1 回呼ぶので、そのぶんのトークンは消費する（セッションの合計には入らない）
 - 実測: `btw` は print モードで、直前の会話の内容（合言葉）を踏まえて答え、セッションファイルの行数が増えないことを確認した（オーバーレイ表示は TUI でしか出ず未確認）。Git Bash では `/btw` が `C:/Program Files/Git/btw` に変換されるので、試すときは `MSYS_NO_PATHCONV=1`
 - 実測: `todo` は実際のモデル（`claude-sonnet-5.5`）で add / toggle / list が通った。`plan` は読み込みまで（切り替えと確認画面は TUI でしか動かず、未確認）

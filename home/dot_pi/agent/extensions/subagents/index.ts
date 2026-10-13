@@ -28,6 +28,10 @@ function readAnswer(stdout: string): string {
 	return answer;
 }
 
+// 動いている子の一覧 (`/agents` 拡張が読む)。プロセス内で共有する
+type RunningChild = { agent: string; model: string; task: string; pid?: number; startedAt: number };
+const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, RunningChild>()) as Map<string, RunningChild>;
+
 export default function (pi: ExtensionAPI) {
 	// 子では登録しない (-ne で読まれないが、念のため入れ子を防ぐ)
 	if (process.env.PI_SUBAGENT_CHILD === "1") return;
@@ -47,7 +51,7 @@ export default function (pi: ExtensionAPI) {
 			agent: Type.Union(names.map((n) => Type.Literal(n))),
 			task: Type.String({ description: "What the child should do, with all the context it needs" }),
 		}),
-		async execute(_id: string, params: any, signal: any, _onUpdate: any, ctx: any) {
+		async execute(id: string, params: any, signal: any, _onUpdate: any, ctx: any) {
 			const agent = agents[params.agent];
 			if (!agent) throw new Error(`unknown agent: ${params.agent}`);
 			if (params.task.length > MAX_TASK) throw new Error(`task is too long (${params.task.length} > ${MAX_TASK})`);
@@ -64,6 +68,7 @@ export default function (pi: ExtensionAPI) {
 				stdio: ["ignore", "pipe", "pipe"],
 				windowsHide: true,
 			});
+			runningChildren.set(id, { agent: params.agent, model, task: params.task, pid: child.pid, startedAt: Date.now() });
 			const kill = () => {
 				if (process.platform === "win32") spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
 				else child.kill("SIGTERM");
@@ -78,6 +83,7 @@ export default function (pi: ExtensionAPI) {
 				child.on("error", () => resolve(-1));
 				child.on("close", (c: number | null) => resolve(c ?? -1));
 			});
+			runningChildren.delete(id);
 			clearTimeout(timer);
 			signal?.removeEventListener("abort", kill);
 			if (signal?.aborted) throw new Error("child aborted");
