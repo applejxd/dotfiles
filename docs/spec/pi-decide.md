@@ -169,31 +169,29 @@ bash 以外（ファイル 1,081 件・そのほかのツール 16 件・不正�
   `test_decide` の hook との等価試験のドライバも、コマンドごとに空にした（以前は hook 側も同じ汚染を受けていて、両方が同じ誤りで一致していた）
 - 正解データは、新しいプロセスで流した結果と一致することを標本（120 件）で確かめた
 
+### 状態
+
+層 B（`bashrules`）まで、**TS 版が Python 版の正解データと全件一致**している（`node test/agents/pi/judge_golden.mjs --bash`。
+bash 5,208・file 1,081・invalid 6・other 16）。検査関数 32 種は `checks_golden.mjs` でも個別に一致する。
+
+- 土台: `judge/pathutil.ts`・`context.ts`（`Ctx`）・`shellparse.ts`・`shared.ts`・`pystr.ts`・`normalize.ts`
+- 検査: `sensitive.ts`・`http.ts`・`rules_exec.ts`・`rm.ts`・`bashpolicy.ts`（policy）・`rules_files.ts`・`rules_guard.ts`・`ghapi.ts`・`docker.ts`
+- 登録簿と順序: `judge/checks.ts`（`CHECKS` と `DENY_NAMES` / `PATH_NAMES` / `ASK_NAMES`。順序は `bashrules/__init__.py` と同じ）
+- bash の組み立て: `judge/bash.ts`（`makeBashDecider(tables)`。誘導・役割の shell_deny / shell_allow・skill_scripts）。`decide.ts` の `setBashDecider` へ差し込む
+- 差分試験の約束:
+  - 正解データは `None` を書かないので、**記録の無いコマンドは `None` のはず**という照合もしている（TS が誤って理由を返す＝誤検知を拾う）
+  - 当たりが薄い検査は、手書きの入力（`export_checks_golden.py` の `EXTRA_*`）で厚くした。検査を足したら同じ流儀で入力を足す
+  - `urlsplit` / `ipaddress` は CPython 3.13.11 の実装に合わせた（ブラケット前後の文字を拒否する検査を含む）。Python を上げたら `local_url` の正解データで確かめる
+- 既知の差: `expandUser` は `~` と `~/` だけを展開する（Python は `~user` も解く）。正解データの範囲では差が出ていない
+
 ### 次
 
-層 B（`bashrules` の約 3,900 行）を、**検査関数ごとの正解データ**で 1 モジュールずつ移す。
-
-- 済み（正解データと全件一致。`node test/agents/pi/checks_golden.mjs`）:
-  - 土台: `judge/pathutil.ts`・`context.ts`（`Ctx`）・`shellparse.ts`・`shared.ts`（`heredoc`・`expand_cd`・`commands`・`write_targets`）
-  - `sensitive.ts`: `check_git_add_sensitive` / `check_history_access` / `check_secret_env_echo`
-  - `http.ts`: `check_curl_file_send` / `check_curl_wget_mutation` / `check_http_dangerous_output`。
-    curl / wget の解析（`http_calls`・`fetched_paths`）と、URL のループバック判定（`local_url`。`urlsplit` と
-    `ipaddress` は CPython 3.13.11 の実装に合わせた）
-- 登録簿: `judge/checks.ts` の `CHECKS`（名前 → 関数）。移した検査をここへ足すと、差分試験が自動で拾う
-- 差分試験の約束: 正解データは `None` を書かないので、**記録の無いコマンドは `None` のはず**という照合もしている
-  （TS が誤って理由を返す＝誤検知を拾う）。コーパスが薄い検査（当たりが数件）は、手書きの入力
-  （`export_checks_golden.py` の `EXTRA_HTTP` など）を足して厚くする
-- 残り（依存の順）: `rules_exec`（`_strip_exec_wrappers` を `rm` が使う）→ `rm`（`rules_exec` に依る）→
-  `policy`（`rm` の `_rm_ask_exempt` / `_rm_ask_hint` に依る）→ `rules_files` → `rules_guard` → `ghapi` → `docker`。
-  そのあと `decide.py` の bash の組み立て（`_bash_common_deny`・`_guide`・`_all_segments_allowed`・`_skill_script_allowed`）と、
-  `DENY_CHECKS` / `PATH_CHECKS` / `ASK_CHECKS` の順序を `checks.ts` へ移す
-- 注意（写してはいけない・揃える点）:
-  - Python のグローバルな記録（`_LITERAL_HEREDOC_BODIES`）は `ctx.literalHeredocBodies` にする（判定ごとに作り直す）
-  - 辞書は `Map` / `Set`（`constructor` などのコマンド名がプロトタイプに当たらないように）
-  - 正規表現は `pyRegex()`（`\s` `` `\w` を Python と同じ Unicode の範囲にする）。`str.split()` / `strip()` は `pystr.ts` の部品を使う
-  - `lru_cache` は `memo(ctx, …)`（同じ判定の中だけ）
-- 完了条件: `node test/agents/pi/judge_golden.mjs --bash` が全件一致 → `decide.ts` に `setBashDecider` で差し込む（`harness/index.ts` の `spawnSync("python3")` を関数呼び出しに替える）
-- その後: 配布（`common.toml` と `tables.toml` から判定用の JSON を生成し、ハーネスが読む）→ Python 版（`decide.py`）を外す → 構文解析の堅牢化は別の変更
+- 切り替え: `harness/index.ts` の `spawnSync("python3", [rules.decide], …)` を、`decide()` と `makeBashDecider()` の関数呼び出しに替える
+  （`common.toml` を JSON にしたものと `tables.json` をハーネスが読む。配布は下）
+- 配布: `common.toml` と `tables.toml` から判定用の JSON を生成し、`chezmoi apply` で置く（`rules.json` と同じ流れ）。
+  いまの正解データ側の JSON（`golden/common.json` / `golden/tables.json`）は試験用で、配布物とは別に作る
+- 撤去: Python 版（`decide.py`・`bashrules`）を外す。Claude / Copilot の hook 設定は ADR-0017 の段で消す
+- 構文解析の堅牢化（`shellparse` を正式な構文解析に替える）は別の変更。差分試験を残したまま進める
 
 ## 既知の制約
 
