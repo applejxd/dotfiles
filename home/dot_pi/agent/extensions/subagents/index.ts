@@ -32,6 +32,23 @@ function readAnswer(stdout: string): string {
 type RunningChild = { agent: string; model: string; task: string; pid?: number; startedAt: number };
 const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, RunningChild>()) as Map<string, RunningChild>;
 
+/**
+ * 子 pi の起動引数。
+ * バイナリ版 (bun 製) は process.argv[1] が仮想パス (`B:/~BUN/root/pi.exe` / `/$bunfs/...`) で
+ * CLI ファイルではない。これを渡すと子のプロンプトの先頭に混ざるので渡さない。
+ * 先頭が `-` のタスクは pi がオプションと解釈するので、前置きを付ける。
+ */
+export function childArgs(opts: { argv1?: string; bun: boolean; model: string; system: string; task: string }): string[] {
+	const virtual = opts.bun && /~BUN|\$bunfs/.test(opts.argv1 ?? "");
+	const script = !opts.argv1 || virtual ? [] : [opts.argv1];
+	const task = opts.task.startsWith("-") ? `Task: ${opts.task}` : opts.task;
+	return [
+		...script, "--mode", "json", "-p", "--no-session", "-ne",
+		"--tools", "read,grep,find,ls", "--model", opts.model,
+		"--append-system-prompt", opts.system, task,
+	];
+}
+
 export default function (pi: ExtensionAPI) {
 	// 子では登録しない (-ne で読まれないが、念のため入れ子を防ぐ)
 	if (process.env.PI_SUBAGENT_CHILD === "1") return;
@@ -56,12 +73,14 @@ export default function (pi: ExtensionAPI) {
 			if (!agent) throw new Error(`unknown agent: ${params.agent}`);
 			if (params.task.length > MAX_TASK) throw new Error(`task is too long (${params.task.length} > ${MAX_TASK})`);
 			const model = agent.model ?? `${ctx.model.provider}/${ctx.model.id}`;
-			// 実行中の pi と同じ cli を node で直接起動する (pi.cmd 経由のシェルを使わず、引数を壊さない)
-			const args = [
-				process.argv[1], "--mode", "json", "-p", "--no-session", "-ne",
-				"--tools", "read,grep,find,ls", "--model", model,
-				"--append-system-prompt", agent.system, params.task,
-			];
+			// 実行中の pi をそのまま直接起動する (node 版は node + cli.js、バイナリ版は pi.exe。シェルを使わず引数を壊さない)
+			const args = childArgs({
+				argv1: process.argv[1],
+				bun: Boolean((process.versions as { bun?: string }).bun),
+				model,
+				system: agent.system,
+				task: params.task,
+			});
 			const child = spawn(process.execPath, args, {
 				cwd: ctx.cwd,
 				env: { ...process.env, PI_SUBAGENT_CHILD: "1" },

@@ -498,6 +498,27 @@ sudo apt-get update
 
 **成功の確認**: `ls` に `vscode.sources` だけが残り、`apt-get update` が警告を出さない。
 
+## Windows で pi が起動しない（古い node が先に見つかる）
+
+`pi --version` が `SyntaxError` などで落ちる、または pi の導入（npm）が失敗する。
+Windows の PATH は Machine が User より先に解決されるので、winget や MSI で入れた古い node
+（Machine PATH）が、mise の新しい node より先に使われることが原因になる。npm 版の pi は Node.js 22.19 以上が要る。
+
+確認（pwsh）:
+
+```powershell
+where.exe node       # 先頭が C:\Program Files\nodejs\node.exe なら古い node が先
+node --version
+```
+
+対処:
+
+- 今の pi は mise のバイナリ版（node 不要）なので、`chezmoi apply` を実行すれば、旧 npm 版が外れて直る
+  （[Windows の pi](structure.md#windows-の-pi)）
+- cmd.exe などプロファイルを通らない起動では、古い node が先に使われる。pwsh から使うか、
+  管理者権限で古い node を外す（`winget uninstall OpenJS.NodeJS`）
+- opencode（npm 版）は node に依存する。同じ症状なら、上の `node --version` を確認する
+
 ## AI CLI が mise に global default version を指定しろと言う
 
 **対象**: Linux / WSL / macOS の `opencode` / `omp` / `claude` / `copilot`。

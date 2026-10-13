@@ -6,7 +6,7 @@
 
 [tools]
 gh = "latest"
-# AI CLI は mise で管理しない (docs/spec/structure.md#ai-cli-の導入)
+# AI CLI は mise で管理しない。例外は Windows の pi (docs/spec/structure.md#windows-の-pi)
 {{- if or (eq .chezmoi.os "linux") (eq .chezmoi.os "windows") }}
 herdr = "latest"
 {{- end }}
@@ -16,6 +16,7 @@ uv = "latest"
 {{- if eq .chezmoi.os "windows" }}
 fzf = "latest"
 jq = "latest" # hook (dot_claude/hooks/lib/agent_compat.sh) が使う
+"aqua:earendil-works/pi" = "1.2.0" # バイナリ版 (node 不要)。版は明示で固定する
 {{- end }}
 
 {{- if ne .chezmoi.os "windows" }}

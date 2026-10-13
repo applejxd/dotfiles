@@ -292,6 +292,7 @@ winget の既定は user scope なので、user 版があるものは UAC なし
 | Microsoft Store | Keyhac・iCloud・Kindle・Codex App | `310_winget`（Store 版はユーザー単位） |
 
 - 309 の導入判定は `winget list` の出力の ID 列に一致するか。これらは winget では user 版を入れられないので、入っていれば machine 版とみなす（Python Launcher は例外）。winget 以外の経路で入れた同名の user 版が残っていても「導入済み」とみなす（機能を満たすので許容。machine 版にしたいときは手でアンインストールして再実行）
+
 ### hostname で限定するもの
 
 ユーザー名（`applejxd`）だけでは足りず、**特定の PC にだけ要るもの**は、`.chezmoi.hostname` で限定する。
@@ -395,7 +396,7 @@ pi の導入（Node.js 22.19 以上が必要）が失敗したためです。`31
 の場所を PATH の先頭に置いてから npm を実行します。winget に残るのは mise 自体（bootstrap）、
 Git・Python 3.12（chezmoi が要る）、GUI アプリです。既に winget 版が入っている PC は
 `winget uninstall OpenJS.NodeJS astral-sh.uv junegunn.fzf jqlang.jq` で外せます。
-mise の node（zip 版）の npm の global prefix は node の版付きフォルダなので、そのままだと pi / opencode は PATH に出ず、版を上げると消えます（Sandbox で確認）。`314` は `NPM_CONFIG_PREFIX=%APPDATA%
+mise の node（zip 版）の npm の global prefix は node の版付きフォルダなので、そのままだと npm で入れる CLI（opencode）は PATH に出ず、版を上げると消えます（Sandbox で確認）。`314` は `NPM_CONFIG_PREFIX=%APPDATA%
 pm` を設定してから npm を実行し、そのフォルダを User PATH に保証します。
 
 ### chezmoi 本体
@@ -460,6 +461,25 @@ seccomp フィルタは手で `npm install -g` する必要はありません。
   関係なく生成され、実体が無ければ `ocs` が起動を断ります（`mise install` で入れる）
 - Claude Code の sandbox は引き続き `npm:@anthropic-ai/sandbox-runtime` を使います
 
+### Windows の pi
+
+Windows の pi は、mise の `aqua:earendil-works/pi`（ビルド済みバイナリ。bun 製、約 230 MB）で導入します。
+`config.toml.tmpl` に版を明示で固定し（`latest` は `minimum_release_age` で最新版が隠れる）、`313_mise` の
+`mise install` が入れます。`314_agent_cli` は、旧方式の npm 版が残っていれば `npm uninstall -g` で外し、
+`mise exec -- pi --version` で起動を確かめます。更新は版を書き換えて `chezmoi apply` です（`pi update` では更新しません）。
+
+- 選んだ理由: npm 版は node の解決順に左右される。Machine PATH に古い node があると、pi の導入も起動も失敗する
+  （Sandbox で再現）。バイナリ版は node を使わないので、この種の障害が起きない。WSL / Linux の `~/.pi/agent/bin/pi`
+  と同じバイナリでもある。公式の `install.ps1` は `Read-Host` で確認を聞き、apply では答えられない
+- 実測（Windows、隔離した mise 環境）: 導入は 3〜4 秒。起動は実体 0.45 秒、shim 経由 0.51 秒、npm 版 0.41 秒。
+  自作の `.ts` 拡張を読み、Copilot モデルで応答する。起動引数（複数行・引用符・`%` `$` `&` `|`・日本語）は、
+  実体も shim も欠けずに届く
+- バイナリ版は `process.argv[1]` が仮想パス（`B:/~BUN/root/pi.exe`）で、CLI ファイルではない。
+  `subagents` はこれを子の引数に渡さないようにした（`childArgs`、試験あり）
+- 未確認: 稼働中の `pi.exe` を更新できるか（ファイルロック）、Defender・会社の実行制限、全自作拡張のバイナリでの動作、
+  `mise use -g` での shim と旧 `pi.cmd` の PATH 競合（`314` が旧版を外すので起きない想定）
+- 旧 npm 版が残る PC は、`npm uninstall -g @earendil-works/pi-coding-agent` で外す（`314` が自動で行う）
+
 ## AI CLI の導入
 
 Claude Code / Copilot CLI / OpenCode V2 は**各社公式のインストーラー**で導入します。
@@ -484,7 +504,7 @@ Windows で手段が分かれるのは公式側の制約です。
 導入範囲は mise 版から変えていません。Linux / WSL / macOS は 3 つとも、
 Windows は Copilot CLI と OpenCode V2 を導入し、`applejxd` 以外では
 Claude Code も導入します。Linux / WSL / macOS では加えて oh-my-pi (`omp`) と
-pi（`pi.dev/install.sh`）も公式インストーラーで入れます。pi は mise の Node.js が入っていないと
+pi（`pi.dev/install.sh`）も公式インストーラーで入れます（Windows の pi は mise が入れる。[Windows の pi](#windows-の-pi)）。pi は mise の Node.js が入っていないと
 入れません（インストーラーが Node.js の導入を端末で聞くため。次の apply で走り直す）。
 pi はハーネス付きの `pis` で起動する（[pi のハーネス](pi-harness.md#起動)）。
 

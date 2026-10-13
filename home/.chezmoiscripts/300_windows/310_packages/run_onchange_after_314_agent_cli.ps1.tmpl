@@ -83,19 +83,18 @@ if (Test-CliInstalled 'opencode') {
   Update-PathFromEnvironment
 }
 
-# pi: 公式の install.ps1 は Node.js・Git Bash・PATH の確認を Read-Host で聞くので、
-# apply では答えられない。npm で入れる (Node.js 22.19 以上が要る。bash ツールは Git Bash を使う)。
-# see docs/spec/pi-harness.md#windows
-if (Test-CliInstalled 'pi') {
-  Write-Host 'pi is already installed.'
-} else {
+# pi: mise (aqua のバイナリ版。node 不要) が 313_mise で導入する。公式の install.ps1 は
+# Read-Host で確認を聞くので apply では使えず、npm 版は node の解決順に左右される。
+# ここでは PATH で競合する npm 版を外し、起動できることを確かめる。
+# see docs/spec/structure.md#windows-の-pi
+$npmPi = Join-Path $env:APPDATA 'npm\node_modules\@earendil-works\pi-coding-agent'
+if (Test-Path $npmPi) {
   Use-MiseNode
-  $nodeVersion = [version] ((& node --version).TrimStart('v'))
-  if ($nodeVersion -lt [version] '22.19.0') {
-    throw "pi には Node.js 22.19 以上が要る (今は $nodeVersion)"
-  }
-  Write-Host 'Installing pi...'
-  & npm install -g --ignore-scripts '@earendil-works/pi-coding-agent'
-  if ($LASTEXITCODE -ne 0) { throw "npm install -g @earendil-works/pi-coding-agent failed: $LASTEXITCODE" }
-  Update-PathFromEnvironment
+  Write-Host 'Removing npm-installed pi (replaced by the mise binary)...'
+  & npm uninstall -g '@earendil-works/pi-coding-agent'
+  if ($LASTEXITCODE -ne 0) { throw "npm uninstall -g @earendil-works/pi-coding-agent failed: $LASTEXITCODE" }
 }
+$mise = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
+if (-not $mise) { throw 'mise not found (313_mise を先に実行してください)' }
+& $mise.Path exec -- pi --version | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "mise の pi を起動できません: $LASTEXITCODE (mise install を確認してください)" }

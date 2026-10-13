@@ -77,13 +77,15 @@ ADMIN_SCRIPT = (
 def test_admin_steps_are_consolidated_into_one_elevation():
     script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
 
-    # 昇格は 309 と、新しい鍵のときだけの 348 (指紋の記録で通常は出ない)。ほかの chezmoi スクリプトは自前で昇格しない
+    # 昇格は 309 と、新しい鍵のときだけの 348 (指紋の記録で通常は出ない)。ほかの chezmoi スクリプトは自前で昇格しない  # noqa: E501
     assert script.count("'RunAs'") == 1
     key_script = ROOT / "home/.chezmoiscripts/300_windows/run_after_348_authorized_keys.ps1.tmpl"
     assert key_script.read_text(encoding="utf-8-sig").count("'RunAs'") == 1
     for path in (ROOT / "home" / ".chezmoiscripts" / "300_windows").rglob("*"):
         if path.is_file() and path not in (ADMIN_SCRIPT, key_script):
-            assert "RunAs" not in path.read_text(encoding="utf-8-sig").replace("Runas", "RunAs"), path
+            assert "RunAs" not in path.read_text(encoding="utf-8-sig").replace("Runas", "RunAs"), (
+                path
+            )
     # 昇格子の終了を待ち、終了コードを検証する
     assert "Wait         = $true" in script and "PassThru     = $true" in script
     assert "$process.ExitCode -ne 0" in script
@@ -93,7 +95,15 @@ def test_admin_steps_are_consolidated_into_one_elevation():
     assert "[Text.Encoding]::Unicode" in script
     # 許可リストの外・重複は昇格子が拒否する
     assert "exit 2" in script
-    for key in ("Chocolatey", "chocolateygui", "Keypirinha", "WinSCP", "VSCode", "LongPaths", "RDP"):
+    for key in (
+        "Chocolatey",
+        "chocolateygui",
+        "Keypirinha",
+        "WinSCP",
+        "VSCode",
+        "LongPaths",
+        "RDP",
+    ):
         assert f"'{key}'" in script
     # 昇格子はユーザープロファイルに書かない
     assert "HKCU:" not in script and "$env:APPDATA" not in script
@@ -434,7 +444,7 @@ def test_shared_git_config_sanitizer_uses_dotnet_apis_only():
 
 
 def test_windows_terminal_settings_are_managed_only_by_the_modify_script():
-    """341 (json.load で読み直して書く) は廃止した。コメント入りの settings.json で失敗し、既定設定を消すため。"""
+    """341 (json.load で読み直して書く) は廃止した。コメント入りの settings.json で失敗し、既定設定を消すため。"""  # noqa: E501
     assert not (ROOT / "home/.chezmoiscripts/300_windows/run_after_341_terminal.py.tmpl").exists()
     assert not (ROOT / "config/windows/terminal.json").exists()
 
@@ -463,15 +473,17 @@ def test_agent_cli_installer_uses_official_windows_channels():
     assert "https://claude.ai/install.ps1" in script
     assert "winget install --id GitHub.Copilot --exact" in script
     assert "--allow-scripts='@opencode/cli' '@opencode/cli'" in script
-    # pi の install.ps1 は Read-Host で確認を聞く (apply では答えられない) ので npm で入れる
-    assert "npm install -g --ignore-scripts '@earendil-works/pi-coding-agent'" in script
+    # pi は mise (aqua のバイナリ版。node 不要) が入れる。ここでは npm 版を外して起動を確かめる
+    assert "npm install -g --ignore-scripts '@earendil-works/pi-coding-agent'" not in script
+    assert "npm uninstall -g '@earendil-works/pi-coding-agent'" in script
+    assert "exec -- pi --version" in script
     assert "pi.dev/install.ps1" not in script
     # install.sh は Windows を拒否するので使わない
     assert "claude.ai/install.sh" not in script
     # 既に入っている CLI は触らない
-    assert script.count("Test-CliInstalled '") == 4
+    assert script.count("Test-CliInstalled '") == 3
     # winget / npm の失敗を握り潰さない
-    assert script.count("$LASTEXITCODE -ne 0") == 4
+    assert script.count("$LASTEXITCODE -ne 0") == 5
     # npm は mise の node で動かす (PATH 上の古い winget 版 node を避ける)
     assert script.count("  Use-MiseNode") == 2
 
@@ -582,7 +594,7 @@ def test_machine_only_winget_packages_are_installed_by_the_admin_step():
         # UAC を出すものは 309 に 1 回だけ。310 に残すと個別に UAC が出る
         assert f"Id = '{package_id}'" in admin, package_id
         assert f"winst {package_id}" not in winget, package_id
-    # マニフェストが scope を宣言していない MSI に --scope を付けると 'No applicable installer' になる
+    # マニフェストが scope を宣言していない MSI に --scope を付けると 'No applicable installer' になる  # noqa: E501
     assert "Id = 'Python.Launcher'; Scope = ''" in admin
     # user scope で入る (UAC なし) ものは 310 に残す
     for package_id in ("Git.Git", "Microsoft.PowerToys", "Discord.Discord"):
@@ -606,7 +618,7 @@ def test_admin_setup_enables_openssh_server_without_opening_public():
 def test_admin_setup_points_sshd_at_a_stable_pwsh_path():
     script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
 
-    # MSIX の pwsh は更新のたびにパスが変わり、sshd のログインが全部失敗するので、固定パスの MSI を使う
+    # MSIX の pwsh は更新のたびにパスが変わり、sshd のログインが全部失敗するので、固定パスの MSI を使う  # noqa: E501
     assert "'PowerShellMsi'" in script
     assert "InstallerType = 'wix'" in script and "Force = $true" in script
     assert "'--installer-type'" in script and "'--force'" in script
@@ -634,18 +646,18 @@ def test_power_settings_are_applied_every_run_and_never_sleep_on_ac():
 
 
 def test_powershell_path_expands_unexpanded_variables_for_ssh_sessions():
-    """sshd 経由のセッションは PATH の %VAR% を展開せず渡す。WindowsApps のエイリアスが引けなくなる。"""
+    """sshd 経由のセッションは PATH の %VAR% を展開せず渡す。WindowsApps のエイリアスが引けなくなる。"""  # noqa: E501
     profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
 
     assert "[System.Environment]::ExpandEnvironmentVariables($_)" in profile
 
 
 def test_7zip_registers_a_selectable_default_app_instead_of_setting_userchoice():
-    script = (ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_once_after_322_7zip.ps1").read_text(
-        encoding="utf-8-sig"
-    )
+    script = (
+        ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_once_after_322_7zip.ps1"
+    ).read_text(encoding="utf-8-sig")
 
-    # UserChoice は保護されていて書けない。既定アプリの一覧に出る形 (ProgID + Capabilities) で登録する
+    # UserChoice は保護されていて書けない。既定アプリの一覧に出る形 (ProgID + Capabilities) で登録する  # noqa: E501
     assert "UserChoice" not in script.replace("UserChoice is protected", "")
     assert "RegisteredApplications" in script
     assert "OpenWithProgids" in script
@@ -656,11 +668,11 @@ def test_7zip_registers_a_selectable_default_app_instead_of_setting_userchoice()
 
 
 def test_shell_defaults_set_execution_policy_and_default_terminal_in_hkcu_only():
-    script = (ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_once_after_323_shell_defaults.ps1").read_text(
-        encoding="utf-8-sig"
-    )
+    script = (
+        ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_once_after_323_shell_defaults.ps1"
+    ).read_text(encoding="utf-8-sig")
 
-    assert "HKLM:\SOFTWARE\Policies" in script  # Group Policy は読むだけ
+    assert r"HKLM:\SOFTWARE\Policies" in script  # Group Policy は読むだけ
     assert "Set-ExecutionPolicy" not in script  # モジュールに依存せず HKCU へ直接書く
     assert "'RemoteSigned', 'Unrestricted', 'Bypass'" in script  # 緩い設定は下げない
     assert "{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}" in script
@@ -671,9 +683,9 @@ def test_shell_defaults_set_execution_policy_and_default_terminal_in_hkcu_only()
 
 
 def test_suggestions_are_turned_off_every_apply():
-    hkcu = (ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_after_324_suggestions.ps1").read_text(
-        encoding="utf-8-sig"
-    )
+    hkcu = (
+        ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_after_324_suggestions.ps1"
+    ).read_text(encoding="utf-8-sig")
 
     # 更新で戻されるので毎回当てる。値が 0 なら何もしない。書けない値は警告して続ける
     assert "SubscribedContent-338389Enabled" in hkcu and "SystemPaneSuggestionsEnabled" in hkcu
@@ -690,26 +702,34 @@ def test_admin_setup_enables_the_builtin_sudo_safely_for_the_personal_machine_on
 
     assert "'Sudo'" in script
     # applejxd のときだけ ($SudoWanted は applejxd のブロックで $true)
-    assert script.index("$SudoWanted = $true") < script.index("{{- else }}") < script.index("$SudoWanted = $false")
+    assert (
+        script.index("$SudoWanted = $true")
+        < script.index("{{- else }}")
+        < script.index("$SudoWanted = $false")
+    )
     # 公式の手順で、既定の forceNewWindow (sudo のたびに UAC。normal / disableInput は選ばない)
     assert "config --enable forceNewWindow" in script
     assert "--enable normal" not in script and "--enable disableInput" not in script
-    # 24H2 より前 (sudo.exe が無い) とポリシーで無効に固定された機械は飛ばす。有効な方式は選び直さない
+    # 24H2 より前 (sudo.exe が無い) とポリシーで無効に固定された機械は飛ばす。有効な方式は選び直さない  # noqa: E501
     assert "Test-SudoSupported" in script and "Test-SudoAllowedByPolicy" in script
     assert "[int]$value -ge 1" in script
-    assert "Microsoft\Windows\CurrentVersion\Sudo" in script
+    assert r"Microsoft\Windows\CurrentVersion\Sudo" in script
 
 
 def test_power_settings_are_read_back_and_a_mismatch_only_warns():
-    script = (ROOT / "home/.chezmoiscripts/300_windows/run_after_331_power.ps1").read_text(encoding="utf-8-sig")
+    script = (ROOT / "home/.chezmoiscripts/300_windows/run_after_331_power.ps1").read_text(
+        encoding="utf-8-sig"
+    )
 
-    # 設定した値を powercfg /q で読み取って確かめる (表示の言語に依らず、末尾の 2 つの 0x… を AC・DC とする)
+    # 設定した値を powercfg /q で読み取って確かめる (表示の言語に依らず、末尾の 2 つの 0x… を AC・DC とする)  # noqa: E501
     assert "function Get-PowerValue" in script and "0x[0-9A-Fa-f]{8}" in script
     assert "$script:Expected" in script
     # 上書きされていても apply は止めない (警告だけ)。設定が無い機種の任意の項目は確かめない
     assert "Write-Warning ('Power settings differ" in script
     assert "if (-not $e.Optional)" in script
-    assert script.rindex("Write-Warning ('Power settings differ") > script.rindex("powercfg /setactive")
+    assert script.rindex("Write-Warning ('Power settings differ") > script.rindex(
+        "powercfg /setactive"
+    )
 
 
 HOST_LIMITED = {
@@ -744,7 +764,11 @@ def test_wsl_platform_is_installed_without_a_distribution_for_applejxd():
         ROOT / "home/.chezmoiscripts/300_windows/310_packages/run_once_before_310_winget.ps1.tmpl"
     ).read_text(encoding="utf-8-sig")
 
-    assert "'WslPlatform'" in admin and "$WslWanted = $true" in admin and "$WslWanted = $false" in admin
+    assert (
+        "'WslPlatform'" in admin
+        and "$WslWanted = $true" in admin
+        and "$WslWanted = $false" in admin
+    )
     # ディストロは入れない。判定は wsl --version の終了コード。最新へ更新する
     assert "'--install', '--no-distribution'" in admin
     assert "'--version'" in admin or "wsl.exe --version" in admin

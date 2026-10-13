@@ -27,7 +27,9 @@ def _node() -> str | None:
     node = shutil.which("node")
     if not node:
         return None
-    out = subprocess.run([node, "--version"], capture_output=True, text=True, check=False).stdout
+    out = subprocess.run(
+        [node, "--version"], capture_output=True, text=True, encoding="utf-8", check=False
+    ).stdout
     match = re.match(r"v(\d+)\.(\d+)", out.strip())
     if not match:
         return None
