@@ -11,7 +11,7 @@ import shutil
 import sys
 
 import pytest
-from agents_common import ROOT, agents_config_dir
+from agents_common import ROOT
 from test_pi_harness import FIXTURES, SECRET, bash_call, env, run_pi  # noqa: F401
 
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
@@ -20,16 +20,14 @@ EXT = ("-e", str(FIXTURES / "ext_tool.ts"))
 CALL = [{"name": "ext_search", "args": {"query": "hello"}}]
 
 
-def _config_listing(env, tool):
-    """役割 implementer の tools に ``tool`` を足した common.toml を置いた設定の置き場を返す。"""
-    dst = env["tmp"] / "cfg"
-    shutil.copytree(agents_config_dir(), dst)
-    path = dst / "common.toml"
-    text = path.read_text(encoding="utf-8")
-    old = 'tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "mcp__*"]'
-    assert old in text, "implementer の tools の行が変わった (この試験の前提を直す)"
-    path.write_text(text.replace(old, old[:-1] + f', "{tool}"]'), encoding="utf-8")
-    return str(dst)
+def _list_tool_in_role(env, tool):
+    """役割 implementer の tools に ``tool`` を足す (判定器の設定は rules.json の judge にある)."""
+    path = env["harness"] / "rules.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    tools = rules["judge"]["common"]["pi"]["profiles"]["implementer"]["tools"]
+    assert "mcp__*" in tools, "implementer の tools が変わった (この試験の前提を直す)"
+    tools.append(tool)
+    path.write_text(json.dumps(rules), encoding="utf-8")
 
 
 def test_extension_tool_is_denied_unless_the_role_lists_it(env):
@@ -49,8 +47,8 @@ def test_extension_tool_is_denied_unless_the_role_lists_it(env):
 
 def test_listed_extension_tool_is_asked_and_its_result_is_redacted(env):
     ran = env["tmp"] / "ran"
-    cfg = _config_listing(env, "ext_search")
-    common = dict(EXT_RAN_FILE=str(ran), EXT_SECRET=SECRET, AGENTS_CONFIG_DIR=cfg)
+    _list_tool_in_role(env, "ext_search")
+    common = dict(EXT_RAN_FILE=str(ran), EXT_SECRET=SECRET)
 
     # 役割に載せても、規則が無ければ既定の確認になる (UI の無い起動では拒否)
     proc = run_pi(env, CALL, extra=EXT, **common)
@@ -115,15 +113,18 @@ def test_generated_mcp_config_defaults_to_direct_and_honours_exposure():
 
     servers = gen.pi_mcp_servers(_common_with_mcp())
     assert servers[0]["config"]["exposure"] == "direct"
-    assert gen.pi_mcp_servers(_common_with_mcp(exposure="deferred"))[0]["config"]["exposure"] == "deferred"
+    servers = gen.pi_mcp_servers(_common_with_mcp(exposure="deferred"))
+    assert servers[0]["config"]["exposure"] == "deferred"
     # Claude / Copilot / OpenCode / Codex へ出す定義には exposure を混ぜない
-    assert all("exposure" not in entry for _, entry in gen.mcp_servers(_common_with_mcp(exposure="deferred")))
+    shared = gen.mcp_servers(_common_with_mcp(exposure="deferred"))
+    assert all("exposure" not in entry for _, entry in shared)
     with pytest.raises(ValueError, match="exposure"):
         gen.pi_mcp_servers(_common_with_mcp(exposure="codemod"))
 
 
 def test_mcp_tool_from_the_generated_config_is_declared_and_asked_under_the_harness(env):
-    """pis は -ne で codemode / tool_search を外す。生成器が direct を出さないと、MCP のツールは呼べない (E6)。"""
+    """pis は -ne で codemode / tool_search を外す。
+    生成器が direct を出さないと、MCP のツールは呼べない (E6)。"""
     import generate as gen
 
     rules = json.loads((env["harness"] / "rules.json").read_text(encoding="utf-8"))
@@ -138,9 +139,11 @@ def test_mcp_tool_from_the_generated_config_is_declared_and_asked_under_the_harn
 
 
 def test_mcp_tool_without_exposure_is_unreachable_under_the_harness(env):
-    """欠陥の再現 (exposure を出さない旧い生成)。pi が codemode を宣言する版になれば、この試験を見直す。"""
+    """欠陥の再現 (exposure を出さない旧い生成)。
+    pi が codemode を宣言する版になれば、この試験を見直す。"""
     rules = json.loads((env["harness"] / "rules.json").read_text(encoding="utf-8"))
-    rules["mcp"] = [{"name": "spike", "config": {"command": sys.executable, "args": [str(MCP_SERVER)]}}]
+    config = {"command": sys.executable, "args": [str(MCP_SERVER)]}
+    rules["mcp"] = [{"name": "spike", "config": config}]
     (env["harness"] / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
     proc = run_pi(env, [{"name": "mcp__spike__echo_secret", "args": {}}])
 

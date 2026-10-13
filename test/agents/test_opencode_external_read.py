@@ -265,11 +265,14 @@ def test_skill_script_allow_is_not_widened_silently():
         f"python3 {SDD}/lint_docs.py *",
         f"python3 {SDD}/check_refs.py --save",
         f"python3 {SDD}/check_refs.py --baseline",
+        # docs_state.py は status だけ (git の読み取り)。scaffold は docs/ へ書くので載せない
+        f"python3 {SDD}/docs_state.py status *",
         f"python3 {CP} paths *",
         f"python3 {CP} lint *",
         f"python3 {CP} read *",
-        # web-search: 引数で決められるのはクエリ・URL・件数・--json などだけで、書き込み先や実行するものは決められない。
-        # 書くのは固定の場所 (~/.cache/websearch) の結果と休止の状態だけ。sync-keys (bw を呼ぶ) は載せない
+        # web-search: 引数で決められるのはクエリ・URL・件数・--json などだけで、
+        # 書き込み先や実行するものは決められない。書くのは固定の場所 (~/.cache/websearch) の
+        # 結果と休止の状態だけ。sync-keys (bw を呼ぶ) は載せない
         f"python3 {WEB} search *",
         f"python3 {WEB} fetch *",
         f"python3 {WEB} papers *",
@@ -278,7 +281,8 @@ def test_skill_script_allow_is_not_widened_silently():
 
 
 def test_web_search_script_is_allowed_only_for_the_personal_provider():
-    """業務用 (Bedrock) は検索を AgentCore に一本化する。skill も許可も私用 (github-copilot) だけ。"""
+    """業務用 (Bedrock) は検索を AgentCore に一本化する。
+    skill も許可も私用 (github-copilot) だけ。"""
     from agents_common import load_common
 
     def scripts(common):

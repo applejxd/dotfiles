@@ -40,3 +40,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "PIE", "RUF"]
 # RUF001-003 は全角括弧などを「紛らわしい文字」として弾く。
 # このリポジトリはコメント・メッセージを日本語で書くので意図した文字。
 ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest の fixture を別ファイルから import して使う (引数名が再定義に見える)
+"test/agents/test_pi_harness_extensions.py" = ["F811"]
