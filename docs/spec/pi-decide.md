@@ -187,13 +187,6 @@ bash 以外（ファイル 1,081 件・そのほかのツール 16 件・不正�
   `policy`（`rm` の `_rm_ask_exempt` / `_rm_ask_hint` に依る）→ `rules_files` → `rules_guard` → `ghapi` → `docker`。
   そのあと `decide.py` の bash の組み立て（`_bash_common_deny`・`_guide`・`_all_segments_allowed`・`_skill_script_allowed`）と、
   `DENY_CHECKS` / `PATH_CHECKS` / `ASK_CHECKS` の順序を `checks.ts` へ移す
-- 先にやること:
-  1. `scripts/agents/export_checks_golden.py`（新規）: hook の試験のコマンドを `decide()` と同じ前処理（`split_heredoc_body`、`set_payload_cwd(<ROOT>)`、1 コマンドごとに状態を初期化）にかけ、
-     `DENY_CHECKS` / `PATH_CHECKS` / `ASK_CHECKS` の各関数の戻り値（理由の文字列か None）を、**None 以外だけ**を `golden/checks_golden.jsonl` に書く。
-     あわせて `split_heredoc_body`・`expand_cd_targets`・`shellparse.parse` の出力と、`tables.toml` を JSON にした `golden/tables.json` も書く
-  2. `test/agents/pi/checks_golden.mjs`（新規）: 移植済みの関数だけを、上と全件突き合わせる（部品ごとに一致を確かめながら進める）
-- 移す順番（依存の少ない順）: `shared.ts` と `shellparse.ts` の検証 → `policy`（`check_policy_loaded` / `deny` / `ask`。`rm.py` の `_rm_ask_exempt` / `_rm_ask_hint` に依存するので `rm.ts` と一緒）→
-  `rules_exec`（`check_pipe_to_shell` ほか）→ `rules_files` → `rules_guard` → `sensitive` → `http`（695 行）→ `ghapi` → `docker`
 - 注意（写してはいけない・揃える点）:
   - Python のグローバルな記録（`_LITERAL_HEREDOC_BODIES`）は `ctx.literalHeredocBodies` にする（判定ごとに作り直す）
   - 辞書は `Map` / `Set`（`constructor` などのコマンド名がプロトタイプに当たらないように）
