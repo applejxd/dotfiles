@@ -173,8 +173,20 @@ bash 以外（ファイル 1,081 件・そのほかのツール 16 件・不正�
 
 層 B（`bashrules` の約 3,900 行）を、**検査関数ごとの正解データ**で 1 モジュールずつ移す。
 
-- 済み（書いたが正解データでの検証はこれから）: `judge/pathutil.ts`・`context.ts`（`Ctx`: 呼び出しごとの `payloadCwd` と `literalHeredocBodies`・表・設定）・
-  `shellparse.ts`・`shared.ts`（`_shared.py` の全体）
+- 済み（正解データと全件一致。`node test/agents/pi/checks_golden.mjs`）:
+  - 土台: `judge/pathutil.ts`・`context.ts`（`Ctx`）・`shellparse.ts`・`shared.ts`（`heredoc`・`expand_cd`・`commands`・`write_targets`）
+  - `sensitive.ts`: `check_git_add_sensitive` / `check_history_access` / `check_secret_env_echo`
+  - `http.ts`: `check_curl_file_send` / `check_curl_wget_mutation` / `check_http_dangerous_output`。
+    curl / wget の解析（`http_calls`・`fetched_paths`）と、URL のループバック判定（`local_url`。`urlsplit` と
+    `ipaddress` は CPython 3.13.11 の実装に合わせた）
+- 登録簿: `judge/checks.ts` の `CHECKS`（名前 → 関数）。移した検査をここへ足すと、差分試験が自動で拾う
+- 差分試験の約束: 正解データは `None` を書かないので、**記録の無いコマンドは `None` のはず**という照合もしている
+  （TS が誤って理由を返す＝誤検知を拾う）。コーパスが薄い検査（当たりが数件）は、手書きの入力
+  （`export_checks_golden.py` の `EXTRA_HTTP` など）を足して厚くする
+- 残り（依存の順）: `rules_exec`（`_strip_exec_wrappers` を `rm` が使う）→ `rm`（`rules_exec` に依る）→
+  `policy`（`rm` の `_rm_ask_exempt` / `_rm_ask_hint` に依る）→ `rules_files` → `rules_guard` → `ghapi` → `docker`。
+  そのあと `decide.py` の bash の組み立て（`_bash_common_deny`・`_guide`・`_all_segments_allowed`・`_skill_script_allowed`）と、
+  `DENY_CHECKS` / `PATH_CHECKS` / `ASK_CHECKS` の順序を `checks.ts` へ移す
 - 先にやること:
   1. `scripts/agents/export_checks_golden.py`（新規）: hook の試験のコマンドを `decide()` と同じ前処理（`split_heredoc_body`、`set_payload_cwd(<ROOT>)`、1 コマンドごとに状態を初期化）にかけ、
      `DENY_CHECKS` / `PATH_CHECKS` / `ASK_CHECKS` の各関数の戻り値（理由の文字列か None）を、**None 以外だけ**を `golden/checks_golden.jsonl` に書く。
