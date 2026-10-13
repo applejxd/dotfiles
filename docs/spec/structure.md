@@ -395,7 +395,8 @@ pi の導入（Node.js 22.19 以上が必要）が失敗したためです。`31
 の場所を PATH の先頭に置いてから npm を実行します。winget に残るのは mise 自体（bootstrap）、
 Git・Python 3.12（chezmoi が要る）、GUI アプリです。既に winget 版が入っている PC は
 `winget uninstall OpenJS.NodeJS astral-sh.uv junegunn.fzf jqlang.jq` で外せます。
-node の版を上げると npm の global パッケージは新しい node 側には無いので、`314` を再実行します。
+mise の node（zip 版）の npm の global prefix は node の版付きフォルダなので、そのままだと pi / opencode は PATH に出ず、版を上げると消えます（Sandbox で確認）。`314` は `NPM_CONFIG_PREFIX=%APPDATA%
+pm` を設定してから npm を実行し、そのフォルダを User PATH に保証します。
 
 ### chezmoi 本体
 

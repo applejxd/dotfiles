@@ -11,6 +11,11 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Sandbox は同時に 1 つしか起動できず、起動済みだと新しい設定が反映されない
+if (Get-Process -Name WindowsSandboxRemoteSession, WindowsSandboxServer -ErrorAction SilentlyContinue) {
+  throw '起動中の Windows Sandbox があります。ウィンドウを閉じてから再実行してください。'
+}
+
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $result = Join-Path $repo '.tmp\sandbox-result'
 New-Item -ItemType Directory -Force -Path $result | Out-Null

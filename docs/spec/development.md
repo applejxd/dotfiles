@@ -147,6 +147,8 @@ pwsh scripts/windows/sandbox/launch.ps1
 - 結果: `.tmp/sandbox-result/summary.txt`（コマンドの有無・版・`pi --version`・PASS/FAIL）と `transcript.log`（全出力）
 - 取得元は GitHub の `applejxd/dotfiles`（push 済みの内容）。ローカルの未 push の変更は検証されない
 - Sandbox のユーザーは `WDAGUtilityAccount` で `applejxd` ではないため、個人用の分岐（Bitwarden など）は通らない。管理者の作業（309）は UAC なしで走る
+- 所要時間は約 1 時間。Python 3.12 のインストーラーだけで約 20 分かかる（固まっているわけではない）。途中経過は `chezmoi-apply.log`（UTF-16）と `winget-*.log` に随時出る。検証が終わると Sandbox は自動で終了する（起動中は `launch.ps1` が止める）
+- Sandbox では `msstore` ソースが Rest API エラーになるため、`guest.ps1` が外している
 - 会社 PC のプロキシや制限は再現しない。WSL の機能有効化は再起動が要るので、警告で終わる想定
 
 ## スクリプトを追加するとき

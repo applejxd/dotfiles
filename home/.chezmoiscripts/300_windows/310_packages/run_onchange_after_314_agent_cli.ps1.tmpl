@@ -19,6 +19,10 @@ function Use-MiseNode {
   $nodeDir = (& $mise.Path where node).Trim()
   if ($LASTEXITCODE -ne 0 -or -not $nodeDir) { throw 'mise の node が未導入 (mise install を実行してください)' }
   $env:Path = "$nodeDir;$env:Path"
+  # mise の node (zip 版) の global prefix は node の版付きフォルダ。版を上げると消え、PATH にも出ないので固定する
+  $npmPrefix = Join-Path $env:APPDATA 'npm'
+  New-Item -ItemType Directory -Force -Path $npmPrefix | Out-Null
+  $env:NPM_CONFIG_PREFIX = $npmPrefix
 }
 
 function Add-NpmGlobalToUserPath {
