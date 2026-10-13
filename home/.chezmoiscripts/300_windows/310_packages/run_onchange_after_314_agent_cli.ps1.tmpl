@@ -21,6 +21,15 @@ function Use-MiseNode {
   $env:Path = "$nodeDir;$env:Path"
 }
 
+function Add-NpmGlobalToUserPath {
+  # npm の global bin (pi / opencode)。Node.js の winget 版を外すと PATH から消えるので自前で保証する。
+  $npmBin = Join-Path $env:APPDATA 'npm'
+  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+  if (($userPath -split ';') -notcontains $npmBin) {
+    [Environment]::SetEnvironmentVariable('Path', "$userPath;$npmBin".TrimStart(';'), 'User')
+  }
+}
+
 function Test-CliInstalled {
   param([Parameter(Mandatory)][string]$Name)
 
@@ -53,6 +62,8 @@ if (Test-CliInstalled 'copilot') {
   if ($LASTEXITCODE -ne 0) { throw "winget install failed: $LASTEXITCODE" }
   Update-PathFromEnvironment
 }
+
+Add-NpmGlobalToUserPath
 
 # OpenCode V2: 公式が示す Windows 向けの唯一のパッケージ手段が npm。
 # (curl / PowerShell のインストーラーと Windows パッケージマネージャは未提供)
