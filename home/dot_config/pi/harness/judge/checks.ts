@@ -14,6 +14,8 @@ import {
 	checkReverseShell,
 	checkXargsPipe,
 } from "./rules_exec.ts";
+import { checkPolicyAsk, checkPolicyDeny, checkPolicyLoaded } from "./bashpolicy.ts";
+import { checkFindDangerous, checkFindRootGuard, checkRmRootGuard } from "./rm.ts";
 import { checkGitAddSensitive, checkHistoryAccess, checkSecretEnvEcho } from "./sensitive.ts";
 
 export type Check = (ctx: Ctx, cmd: string) => string | null;
@@ -30,4 +32,10 @@ export const CHECKS = new Map<string, Check>([
 	["check_interpreter_inline_code", checkInterpreterInlineCode],
 	["check_reverse_shell", checkReverseShell],
 	["check_encoded_command", checkEncodedCommand],
+	["check_find_dangerous", checkFindDangerous],
+	["check_find_root_guard", checkFindRootGuard],
+	["check_rm_root_guard", checkRmRootGuard],
+	["check_policy_loaded", checkPolicyLoaded],
+	["check_policy_deny", checkPolicyDeny],
+	["check_policy_ask", checkPolicyAsk],
 ]);
