@@ -7,6 +7,9 @@
     see docs/spec/development.md#windows-sandbox-でのクリーン導入の検証
 #>
 
+# -LegacyNode: 会社 PC の再現。古い winget 版 Node.js (Machine PATH) を先に入れてから導入する
+param([switch]$LegacyNode)
+
 $ErrorActionPreference = 'Continue'
 $ResultDir = 'C:\result'
 New-Item -ItemType Directory -Force -Path $ResultDir | Out-Null
@@ -67,11 +70,11 @@ Step 'winget: msstore を外す' {
 
 # 1 パッケージずつ、出力を結果フォルダの winget-<id>.log へ随時書きながら実行する。
 # 戻ってこないインストーラーで全体が止まらないよう、タイムアウトで打ち切って状況を記録する。
-function Install-WithWinget([string]$Id, [int]$TimeoutSec = 1800) {
+function Install-WithWinget([string]$Id, [int]$TimeoutSec = 1800, [string[]]$ExtraArgs = @()) {
   Write-Host "`n=== winget install $Id ==="
   $log = Join-Path $ResultDir ("winget-$Id.log")
   $arguments = @('install', '--id', $Id, '--exact', '--silent', '--disable-interactivity',
-      '--accept-package-agreements', '--accept-source-agreements', '--verbose-logs')
+      '--accept-package-agreements', '--accept-source-agreements', '--verbose-logs') + $ExtraArgs
   $process = Start-Process -FilePath winget -ArgumentList $arguments -PassThru -NoNewWindow `
       -RedirectStandardOutput $log -RedirectStandardError "$log.err"
   if (-not $process.WaitForExit($TimeoutSec * 1000)) {
@@ -86,6 +89,19 @@ function Install-WithWinget([string]$Id, [int]$TimeoutSec = 1800) {
     Write-Host "exit: $($process.ExitCode)"
   }
   Get-Content $log, "$log.err" -ErrorAction SilentlyContinue | Out-Host
+}
+
+if ($LegacyNode) {
+  # 古い Node.js を Machine PATH に置く。winget は古い版 (24.x より前) を公開していないので、
+  # nodejs.org の MSI (winget と同じインストーラー) を直接入れる。20.x は pi の要件 (22.19 以上) を満たさない
+  Write-Host "`n=== legacy node (MSI 20.18.0) ==="
+  $msi = Join-Path $env:TEMP 'node-legacy.msi'
+  $ProgressPreference = 'SilentlyContinue'
+  Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi' -OutFile $msi -UseBasicParsing
+  $p = Start-Process msiexec.exe -ArgumentList @('/i', $msi, '/qn', '/norestart') -Wait -PassThru
+  Write-Host "msiexec exit: $($p.ExitCode)"
+  Update-PathFromRegistry
+  Write-Host ("legacy node: " + (& cmd /c 'node --version 2>&1'))
 }
 
 Write-Host "`n=== README: winget install ==="
@@ -108,25 +124,32 @@ $report = foreach ($name in $commands) {
     Source  = ($found | Select-Object -First 1 -ExpandProperty Source)
   }
 }
-$versions = @{}
-foreach ($pair in @('node --version', 'pi --version')) {
-  $versions[$pair] = try { (& cmd /c "$pair 2>&1") -join ' ' } catch { $_.Exception.Message }
-}
-$withProfile = try {
-  & pwsh -NoLogo -Command 'pi --version 2>&1; $LASTEXITCODE' 2>&1 | Out-String
-} catch { $_.Exception.Message }
+# 実際に起動して判定する (見つかるだけでは足りない)。プロファイルなしの cmd と、プロファイルを読む pwsh の両方
+$cmdOut = (& cmd /c 'pi --version 2>&1') -join ' '
+$cmdCode = $LASTEXITCODE
+$pwshOut = (& pwsh -NoLogo -Command 'pi --version 2>&1; exit $LASTEXITCODE' 2>&1 | Out-String).Trim()
+$pwshCode = $LASTEXITCODE
+$pwshNode = (& pwsh -NoLogo -Command '(Get-Command node -ErrorAction SilentlyContinue).Source; node --version' 2>&1 | Out-String).Trim()
+$cmdNode = (& cmd /c 'where node 2>&1 & node --version 2>&1') -join ' | '
+$isVersion = { param($s) $s -match '^\s*(\d+\.){2}\d+\s*$' }
 
 # pi の実体の場所 (npm の global prefix がどこかを見る)
 $piFiles = @(Get-ChildItem -Path $env:USERPROFILE -Recurse -Filter 'pi.cmd' -ErrorAction SilentlyContinue | ForEach-Object FullName)
 $npmPrefix = try { & cmd /c 'mise exec node -- npm config get prefix 2>&1' } catch { $_.Exception.Message }
 
 $lines = @('# Sandbox 検証結果', '', ($report | Format-Table -AutoSize | Out-String))
-$lines += $versions.GetEnumerator() | ForEach-Object { "$($_.Key): $($_.Value)" }
-$lines += "pwsh (プロファイル読み込み) pi --version: $withProfile"
+$lines += "legacy node 先行: $LegacyNode"
+$lines += "pwsh (プロファイル読み込み): exit=$pwshCode out=[$pwshOut]"
+$lines += "pwsh の node: [$pwshNode]"
+$lines += "cmd.exe (プロファイルなし): exit=$cmdCode out=[$cmdOut]"
+$lines += "cmd.exe の node: [$cmdNode]"
 $lines += "User PATH に npm: " + (([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') -contains "$env:APPDATA\npm")
 $lines += "pi.cmd の場所: $($piFiles -join ', ')"
 $lines += "mise の node の npm prefix: $npmPrefix"
-$lines += "result: " + $(if (($report | Where-Object Command -eq 'pi').Found) { 'PASS (pi found)' } else { 'FAIL (pi not found)' })
+$pwshOk = ($pwshCode -eq 0) -and (& $isVersion $pwshOut)
+$cmdOk = ($cmdCode -eq 0) -and (& $isVersion $cmdOut)
+$lines += "cmd.exe: " + $(if ($cmdOk) { 'OK' } else { 'NG (参考。プロファイルなしでは node が PATH に無い)' })
+$lines += "result: " + $(if ($pwshOk) { 'PASS (pwsh で pi が起動した)' } else { 'FAIL (pwsh で pi が起動しない)' })
 $lines | Set-Content -Path (Join-Path $ResultDir 'summary.txt') -Encoding UTF8
 $lines | Write-Host
 
