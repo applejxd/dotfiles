@@ -1,0 +1,791 @@
+{
+ "_shared": {
+  "curl_form_flags": [
+   "--form",
+   "--form-string",
+   "-F"
+  ],
+  "curl_upload_flags": [
+   "--upload-file",
+   "-T"
+  ],
+  "file_read_commands": [
+   "grep",
+   "rg",
+   "ag",
+   "ack",
+   "cat",
+   "tac",
+   "head",
+   "tail",
+   "nl",
+   "sed",
+   "awk",
+   "less",
+   "more",
+   "sort",
+   "uniq",
+   "cut",
+   "column",
+   "strings",
+   "xxd",
+   "hexdump",
+   "jq",
+   "yq",
+   "base64",
+   "od",
+   "xxd",
+   "diff",
+   "vimdiff",
+   "vim",
+   "vi",
+   "nvim",
+   "emacs",
+   "nano",
+   "code",
+   "codium",
+   "subl",
+   "wc",
+   "file",
+   "stat",
+   "realpath",
+   "readlink",
+   "ls",
+   "tree",
+   "find",
+   "fd",
+   "cp",
+   "mv",
+   "install",
+   "rsync",
+   "scp",
+   "sftp",
+   "dd",
+   "tee",
+   "ln",
+   "shred",
+   "split",
+   "gpg",
+   "openssl"
+  ],
+  "heredoc_code_bins": [
+   "Rscript",
+   "node",
+   "osascript",
+   "perl",
+   "php",
+   "python",
+   "python2",
+   "python3",
+   "ruby"
+  ],
+  "heredoc_shell_bins": [
+   ".",
+   "ash",
+   "bash",
+   "csh",
+   "dash",
+   "env",
+   "eval",
+   "fish",
+   "ksh",
+   "sh",
+   "source",
+   "sudo",
+   "tcsh",
+   "zsh"
+  ],
+  "home_tokens": [
+   "$HOME",
+   "${HOME}",
+   "~"
+  ],
+  "interpreter_code_arg_flags": [
+   "--command",
+   "--eval",
+   "--print",
+   "-c",
+   "-e",
+   "-m",
+   "-p"
+  ],
+  "scratch_dir_names": [
+   ".tmp"
+  ],
+  "sensitive_suffixes": [
+   ".pem",
+   ".key",
+   ".p12",
+   ".pfx",
+   ".jks",
+   ".keystore",
+   ".ppk",
+   ".asc"
+  ],
+  "shell_code_arg_flags": [
+   "--command",
+   "-c"
+  ],
+  "stdin_code_interpreters": [
+   "node",
+   "perl",
+   "php",
+   "python",
+   "ruby"
+  ],
+  "stdin_code_shells": [
+   ".",
+   "ash",
+   "bash",
+   "csh",
+   "dash",
+   "eval",
+   "fish",
+   "ksh",
+   "script",
+   "sh",
+   "source",
+   "tcsh",
+   "zsh"
+  ],
+  "write_all_args_commands": [
+   "chgrp",
+   "chmod",
+   "chown",
+   "dd",
+   "mkdir",
+   "rm",
+   "rmdir",
+   "sed",
+   "shred",
+   "tee",
+   "touch",
+   "truncate",
+   "unlink"
+  ],
+  "write_dest_last_commands": [
+   "cp",
+   "install",
+   "ln",
+   "mv",
+   "rsync"
+  ]
+ },
+ "docker": {
+  "docker_cap_dangerous": [
+   "ALL",
+   "SYS_ADMIN",
+   "SYS_MODULE",
+   "SYS_PTRACE"
+  ],
+  "docker_fatal_mounts": [
+   "/",
+   "/etc",
+   "/root",
+   "/boot",
+   "/usr",
+   "/dev",
+   "/var/run/docker.sock",
+   "/run/docker.sock"
+  ],
+  "docker_mount_flags": [
+   "--mount",
+   "--volume",
+   "-v"
+  ],
+  "docker_namespace_opts": [
+   "--ipc",
+   "--net",
+   "--network",
+   "--pid",
+   "--userns",
+   "--uts"
+  ],
+  "docker_privileged_flags": [
+   "--privileged"
+  ],
+  "docker_run_subcommands": [
+   "create",
+   "run"
+  ]
+ },
+ "ghapi": {
+  "gh_api_input_flags": [
+   "--input"
+  ],
+  "gh_api_method_flags": [
+   "--method",
+   "-X"
+  ],
+  "gh_api_read_methods": [
+   "GET",
+   "HEAD"
+  ],
+  "gh_api_value_flags": [
+   "--cache",
+   "--header",
+   "--hostname",
+   "--jq",
+   "--preview",
+   "--template",
+   "-H",
+   "-p",
+   "-q",
+   "-t"
+  ]
+ },
+ "http": {
+  "curl_config_flags": [
+   "--config",
+   "-K"
+  ],
+  "curl_data_flags": [
+   "--data",
+   "--data-ascii",
+   "--data-binary",
+   "--data-raw",
+   "--data-urlencode",
+   "--json",
+   "-d"
+  ],
+  "curl_local_blocking_flags": [
+   "--abstract-unix-socket",
+   "--config",
+   "--connect-to",
+   "--dns-interface",
+   "--dns-servers",
+   "--interface",
+   "--location",
+   "--location-trusted",
+   "--preproxy",
+   "--proxy",
+   "--proxy1.0",
+   "--resolve",
+   "--socks4",
+   "--socks4a",
+   "--socks5",
+   "--socks5-hostname",
+   "--unix-socket",
+   "-K",
+   "-L",
+   "-x"
+  ],
+  "curl_output_flags": [
+   "--cookie-jar",
+   "--dump-header",
+   "--output",
+   "--stderr",
+   "--trace",
+   "--trace-ascii",
+   "-D",
+   "-c",
+   "-o"
+  ],
+  "curl_value_flags": [
+   "--abstract-unix-socket",
+   "--cert",
+   "--cert-type",
+   "--connect-timeout",
+   "--connect-to",
+   "--continue-at",
+   "--cookie",
+   "--dns-interface",
+   "--dns-ipv4-addr",
+   "--dns-ipv6-addr",
+   "--dns-servers",
+   "--dump-header",
+   "--header",
+   "--hostpubmd5",
+   "--hostpubsha256",
+   "--interface",
+   "--key",
+   "--key-type",
+   "--limit-rate",
+   "--local-port",
+   "--max-filesize",
+   "--max-time",
+   "--noproxy",
+   "--output-dir",
+   "--preproxy",
+   "--proxy",
+   "--proxy-header",
+   "--proxy-user",
+   "--proxy1.0",
+   "--quote",
+   "--range",
+   "--rate",
+   "--referer",
+   "--resolve",
+   "--retry",
+   "--retry-delay",
+   "--retry-max-time",
+   "--socks4",
+   "--socks4a",
+   "--socks5",
+   "--socks5-hostname",
+   "--speed-limit",
+   "--speed-time",
+   "--tls-max",
+   "--tls13-ciphers",
+   "--unix-socket",
+   "--url",
+   "--user",
+   "--user-agent",
+   "--write-out",
+   "-A",
+   "-C",
+   "-D",
+   "-E",
+   "-H",
+   "-Q",
+   "-Y",
+   "-b",
+   "-e",
+   "-m",
+   "-r",
+   "-u",
+   "-w",
+   "-x",
+   "-y"
+  ],
+  "http_read_methods": [
+   "GET",
+   "HEAD"
+  ],
+  "local_url_schemes": [
+   "http",
+   "https"
+  ],
+  "non_executing_http_prefixes": [
+   "awk",
+   "cat",
+   "echo",
+   "file",
+   "find",
+   "gawk",
+   "grep",
+   "ls",
+   "printf",
+   "rg",
+   "sed",
+   "stat",
+   "touch",
+   "wc"
+  ],
+  "wget_config_flags": [
+   "--config",
+   "--execute",
+   "-e"
+  ],
+  "wget_output_flags": [
+   "--output-document",
+   "-O"
+  ]
+ },
+ "rm": {
+  "catastrophic_dirs": [
+   "/",
+   "/Applications",
+   "/Library",
+   "/System",
+   "/Users",
+   "/Volumes",
+   "/bin",
+   "/boot",
+   "/dev",
+   "/etc",
+   "/home",
+   "/lib",
+   "/lib64",
+   "/opt",
+   "/proc",
+   "/root",
+   "/sbin",
+   "/srv",
+   "/sys",
+   "/usr",
+   "/var"
+  ],
+  "find_exec_flags": [
+   "-exec",
+   "-execdir",
+   "-ok",
+   "-okdir"
+  ],
+  "workspace_root_tokens": [
+   "*",
+   "**",
+   "*/",
+   ".",
+   "./",
+   "./*",
+   "./**",
+   "./*/"
+  ]
+ },
+ "rules_exec": {
+  "awk_bins": [
+   "awk",
+   "gawk",
+   "mawk"
+  ],
+  "inline_code_bins": [
+   "awk",
+   "gawk",
+   "mawk",
+   "node",
+   "perl",
+   "php",
+   "python",
+   "ruby"
+  ],
+  "inline_code_flags": [
+   "--eval",
+   "--print",
+   "-E",
+   "-c",
+   "-e",
+   "-p",
+   "-r"
+  ],
+  "stdin_code_flags": [
+   "-",
+   "/dev/fd/0",
+   "/dev/stdin",
+   "/proc/self/fd/0"
+  ],
+  "wrapper_numeric_arg": [
+   "ionice",
+   "nice",
+   "timeout"
+  ],
+  "wrapper_value_opts": {
+   "chronic": [],
+   "command": [],
+   "doas": [
+    "-C",
+    "-u"
+   ],
+   "env": [
+    "--chdir",
+    "--unset",
+    "-C",
+    "-u"
+   ],
+   "exec": [],
+   "ionice": [
+    "--class",
+    "--classdata",
+    "--pid",
+    "-c",
+    "-n",
+    "-p"
+   ],
+   "nice": [
+    "--adjustment",
+    "-n"
+   ],
+   "nohup": [],
+   "setsid": [],
+   "stdbuf": [
+    "--error",
+    "--input",
+    "--output",
+    "-e",
+    "-i",
+    "-o"
+   ],
+   "sudo": [
+    "--chdir",
+    "--close-from",
+    "--group",
+    "--prompt",
+    "--user",
+    "-C",
+    "-D",
+    "-g",
+    "-p",
+    "-u"
+   ],
+   "time": [],
+   "timeout": [
+    "--kill-after",
+    "--signal",
+    "-k",
+    "-s"
+   ],
+   "unbuffer": [],
+   "xargs": [
+    "--arg-file",
+    "--delimiter",
+    "--max-args",
+    "--max-chars",
+    "--max-procs",
+    "--replace",
+    "-E",
+    "-I",
+    "-L",
+    "-P",
+    "-a",
+    "-d",
+    "-i",
+    "-n",
+    "-s"
+   ]
+  }
+ },
+ "rules_files": {
+  "archive_commands": [
+   "tar",
+   "zip",
+   "gzip",
+   "bzip2",
+   "7z",
+   "xz"
+  ],
+  "bare_only_dump_bins": [
+   "set"
+  ],
+  "env_exposure_bins": [
+   "declare",
+   "env",
+   "export",
+   "printenv",
+   "set",
+   "typeset"
+  ],
+  "git_file_subcommands": [
+   "blame",
+   "cat-file",
+   "diff",
+   "grep",
+   "log",
+   "show"
+  ],
+  "listing_commands": [
+   "fd",
+   "find",
+   "ls",
+   "tree"
+  ],
+  "pip_runner_value_opts": [
+   "--constraint",
+   "--extra-index-url",
+   "--find-links",
+   "--from",
+   "--index",
+   "--index-url",
+   "--pip-args",
+   "--python",
+   "--refresh-package",
+   "--spec",
+   "--with",
+   "--with-editable",
+   "-f",
+   "-p"
+  ],
+  "pip_runners": [
+   "pipx",
+   "uvx"
+  ]
+ },
+ "rules_guard": {
+  "compiler_bins": [
+   "c++",
+   "cc",
+   "clang",
+   "clang++",
+   "g++",
+   "gcc"
+  ],
+  "mise_global_flags": [
+   "--global",
+   "-g"
+  ]
+ },
+ "sensitive": {
+  "credential_paths": [
+   "/.config/gh/hosts.yml",
+   "/.docker/config.json",
+   "/.git-credentials",
+   "/.kube/config",
+   "/.config/gcloud/credentials.db",
+   "/.azure/msal_token_cache.json",
+   "/.terraform.d/credentials.tfrc.json",
+   "/.copilot/config.json"
+  ],
+  "dest_last_commands": [
+   "cp",
+   "install",
+   "ln",
+   "mv",
+   "rsync",
+   "scp"
+  ],
+  "heuristic_sensitive_dirs": [
+   "secrets"
+  ],
+  "history_basenames": [
+   ".bash_history",
+   ".mysql_history",
+   ".node_repl_history",
+   ".psql_history",
+   ".python_history",
+   ".sh_history",
+   ".zsh_history"
+  ],
+  "pattern_first_commands": [
+   "ack",
+   "ag",
+   "awk",
+   "egrep",
+   "fgrep",
+   "gawk",
+   "grep",
+   "mawk",
+   "rg",
+   "sed"
+  ],
+  "secret_egress_commands": [
+   "aws",
+   "az",
+   "curl",
+   "ftp",
+   "gsutil",
+   "http",
+   "httpie",
+   "mail",
+   "mailx",
+   "nc",
+   "ncat",
+   "netcat",
+   "rsync",
+   "scp",
+   "sendmail",
+   "sftp",
+   "socat",
+   "ssh",
+   "telnet",
+   "wget",
+   "xh"
+  ],
+  "secret_sink_commands": [
+   "awk",
+   "banner",
+   "base64",
+   "cat",
+   "clip",
+   "column",
+   "cut",
+   "echo",
+   "fold",
+   "gawk",
+   "grep",
+   "head",
+   "hexdump",
+   "jq",
+   "less",
+   "logger",
+   "more",
+   "nl",
+   "od",
+   "pbcopy",
+   "print",
+   "printf",
+   "rev",
+   "rg",
+   "sed",
+   "sort",
+   "strings",
+   "tac",
+   "tail",
+   "tee",
+   "tr",
+   "uniq",
+   "wall",
+   "wl-copy",
+   "write",
+   "xclip",
+   "xsel",
+   "xxd",
+   "yq"
+  ],
+  "sensitive_abs_paths": [
+   "/etc/passwd",
+   "/etc/shadow",
+   "/etc/sudoers"
+  ],
+  "sensitive_basename_prefixes": [
+   "id_rsa",
+   "id_dsa",
+   "id_ecdsa",
+   "id_ed25519"
+  ],
+  "sensitive_basenames": [
+   ".claude.json",
+   ".env",
+   ".netrc",
+   ".npmrc",
+   ".pypirc",
+   "credentials",
+   "id_dsa",
+   "id_ecdsa",
+   "id_ed25519",
+   "id_rsa",
+   "key.txt",
+   "keys.txt",
+   "shadow"
+  ],
+  "sensitive_dirs": [
+   ".ssh",
+   ".gnupg",
+   ".aws",
+   ".config/gh",
+   ".config/sops",
+   "sops/age"
+  ],
+  "source_code_suffixes": [
+   ".py",
+   ".pyi",
+   ".go",
+   ".ts",
+   ".tsx",
+   ".js",
+   ".jsx",
+   ".mjs",
+   ".cjs",
+   ".rs",
+   ".rb",
+   ".java",
+   ".kt",
+   ".kts",
+   ".scala",
+   ".c",
+   ".h",
+   ".cc",
+   ".cpp",
+   ".hpp",
+   ".cs",
+   ".php",
+   ".swift",
+   ".ex",
+   ".exs",
+   ".erl",
+   ".hs",
+   ".lua",
+   ".pl",
+   ".pm",
+   ".dart",
+   ".vue",
+   ".svelte",
+   ".sql",
+   ".sh",
+   ".bash",
+   ".zsh",
+   ".fish",
+   ".ps1",
+   ".proto",
+   ".graphql"
+  ]
+ }
+}

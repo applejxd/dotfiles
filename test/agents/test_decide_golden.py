@@ -104,3 +104,14 @@ def test_policy_golden_matches_the_python_parts_on_a_sample():
         "部品の正解データが古い。`python scripts/agents/export_policy_golden.py` で書き出し直す: "
         f"{mismatches[:3]}"
     )
+
+
+def test_checks_golden_is_up_to_date():
+    """検査関数ごとの正解データ (checks_golden.jsonl / tables.json) が最新である。"""
+    exporter = _exporter("export_checks_golden")
+    text = "\n".join(exporter.build()) + "\n"
+    current = exporter.OUT.read_text(encoding="utf-8")
+    assert current == text, (
+        "検査関数の正解データが古い。`python scripts/agents/export_checks_golden.py` で書き出し直す"
+    )
+    assert exporter.TABLES_OUT.read_text(encoding="utf-8") == exporter.tables_json()

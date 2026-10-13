@@ -21,6 +21,7 @@ from agents_common import ROOT
 
 RUNNER = ROOT / "test" / "agents" / "pi" / "judge_golden.mjs"
 POLICY_RUNNER = ROOT / "test" / "agents" / "pi" / "policy_golden.mjs"
+CHECKS_RUNNER = ROOT / "test" / "agents" / "pi" / "checks_golden.mjs"
 
 
 def _node() -> str | None:
@@ -65,3 +66,18 @@ def test_ts_policy_parts_match_the_python_golden():
     )
     assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-1000:]
     assert "normalize" in proc.stdout and "shlex" in proc.stdout
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_ts_bashrules_parts_match_the_python_golden():
+    """heredoc の分離・cd 展開・コマンドの分割・書き込み先と、移植済みの検査関数が全件一致する。"""
+    proc = subprocess.run(
+        [_node(), str(CHECKS_RUNNER)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=ROOT,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-1000:]
+    assert "heredoc" in proc.stdout and "commands" in proc.stdout
