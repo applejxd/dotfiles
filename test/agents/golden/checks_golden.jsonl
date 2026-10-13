@@ -10041,6 +10041,914 @@
 {"arg": "python3 -mpytest", "fn": "write_targets", "ok": []}
 {"arg": "python3 -mpytest", "fn": "http_calls", "ok": []}
 {"arg": "python3 -mpytest", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > ~/.claude/settings.json", "fn": "heredoc", "literal": [], "out": "echo x > ~/.claude/settings.json"}
+{"arg": "echo x > ~/.claude/settings.json", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > ~/.claude/settings.json", "fn": "commands", "ok": [{"redirects": [["", ">", ["~/.claude/settings.json", "~/.claude/settings.json"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["~/.claude/settings.json", "~/.claude/settings.json"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > ~/.claude/settings.json", "fn": "write_targets", "ok": ["~/.claude/settings.json", "~/.claude/settings.json"]}
+{"arg": "echo x > ~/.claude/settings.json", "fn": "http_calls", "ok": []}
+{"arg": "echo x > ~/.claude/settings.json", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > ~/.claude/settings.json", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.claude/settings.json`) を上書きしようとしています。\nhook や permission の無効化に繋がるため許可されていません。"}
+{"arg": "echo x >> ~/.claude/hooks/a.py", "fn": "heredoc", "literal": [], "out": "echo x >> ~/.claude/hooks/a.py"}
+{"arg": "echo x >> ~/.claude/hooks/a.py", "fn": "expand_cd", "out": ""}
+{"arg": "echo x >> ~/.claude/hooks/a.py", "fn": "commands", "ok": [{"redirects": [["", ">>", ["~/.claude/hooks/a.py", "~/.claude/hooks/a.py"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">>", ["~/.claude/hooks/a.py", "~/.claude/hooks/a.py"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x >> ~/.claude/hooks/a.py", "fn": "write_targets", "ok": ["~/.claude/hooks/a.py", "~/.claude/hooks/a.py"]}
+{"arg": "echo x >> ~/.claude/hooks/a.py", "fn": "http_calls", "ok": []}
+{"arg": "echo x >> ~/.claude/hooks/a.py", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x >> ~/.claude/hooks/a.py", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.claude/hooks/a.py`) を上書きしようとしています。\nhook や permission の無効化に繋がるため許可されていません。"}
+{"arg": "tee ~/.config/agents/common.toml", "fn": "heredoc", "literal": [], "out": "tee ~/.config/agents/common.toml"}
+{"arg": "tee ~/.config/agents/common.toml", "fn": "expand_cd", "out": ""}
+{"arg": "tee ~/.config/agents/common.toml", "fn": "commands", "ok": [{"redirects": [], "words": [["tee", "tee"], ["~/.config/agents/common.toml", "~/.config/agents/common.toml"]]}, {"redirects": [], "words": [["tee", "tee"], ["~/.config/agents/common.toml", "~/.config/agents/common.toml"]]}]}
+{"arg": "tee ~/.config/agents/common.toml", "fn": "write_targets", "ok": ["~/.config/agents/common.toml", "~/.config/agents/common.toml"]}
+{"arg": "tee ~/.config/agents/common.toml", "fn": "http_calls", "ok": []}
+{"arg": "tee ~/.config/agents/common.toml", "fn": "fetched_paths", "ok": []}
+{"arg": "tee ~/.config/agents/common.toml", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.config/agents/common.toml`) を変更しようとしています。\nhook や permission の無効化に繋がるため許可されていません。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "cat x > .git/hooks/pre-commit", "fn": "heredoc", "literal": [], "out": "cat x > .git/hooks/pre-commit"}
+{"arg": "cat x > .git/hooks/pre-commit", "fn": "expand_cd", "out": ""}
+{"arg": "cat x > .git/hooks/pre-commit", "fn": "commands", "ok": [{"redirects": [["", ">", [".git/hooks/pre-commit", ".git/hooks/pre-commit"]]], "words": [["cat", "cat"], ["x", "x"]]}, {"redirects": [["", ">", [".git/hooks/pre-commit", ".git/hooks/pre-commit"]]], "words": [["cat", "cat"], ["x", "x"]]}]}
+{"arg": "cat x > .git/hooks/pre-commit", "fn": "write_targets", "ok": [".git/hooks/pre-commit", ".git/hooks/pre-commit"]}
+{"arg": "cat x > .git/hooks/pre-commit", "fn": "http_calls", "ok": []}
+{"arg": "cat x > .git/hooks/pre-commit", "fn": "fetched_paths", "ok": []}
+{"arg": "cat x > .git/hooks/pre-commit", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`.git/hooks/pre-commit`) を上書きしようとしています。\nhook や permission の無効化に繋がるため許可されていません。"}
+{"arg": "echo x > ~/.copilot/hooks/h.json", "fn": "heredoc", "literal": [], "out": "echo x > ~/.copilot/hooks/h.json"}
+{"arg": "echo x > ~/.copilot/hooks/h.json", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > ~/.copilot/hooks/h.json", "fn": "commands", "ok": [{"redirects": [["", ">", ["~/.copilot/hooks/h.json", "~/.copilot/hooks/h.json"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["~/.copilot/hooks/h.json", "~/.copilot/hooks/h.json"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > ~/.copilot/hooks/h.json", "fn": "write_targets", "ok": ["~/.copilot/hooks/h.json", "~/.copilot/hooks/h.json"]}
+{"arg": "echo x > ~/.copilot/hooks/h.json", "fn": "http_calls", "ok": []}
+{"arg": "echo x > ~/.copilot/hooks/h.json", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > ~/.copilot/hooks/h.json", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.copilot/hooks/h.json`) を上書きしようとしています。\nhook や permission の無効化に繋がるため許可されていません。"}
+{"arg": "echo x > .git/config", "fn": "heredoc", "literal": [], "out": "echo x > .git/config"}
+{"arg": "echo x > .git/config", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > .git/config", "fn": "commands", "ok": [{"redirects": [["", ">", [".git/config", ".git/config"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", [".git/config", ".git/config"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > .git/config", "fn": "write_targets", "ok": [".git/config", ".git/config"]}
+{"arg": "echo x > .git/config", "fn": "http_calls", "ok": []}
+{"arg": "echo x > .git/config", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > .git/config", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`.git/config`) を上書きしようとしています。\nhook や permission の無効化に繋がるため許可されていません。"}
+{"arg": "rm ~/.claude/hooks/a.py", "fn": "heredoc", "literal": [], "out": "rm ~/.claude/hooks/a.py"}
+{"arg": "rm ~/.claude/hooks/a.py", "fn": "expand_cd", "out": ""}
+{"arg": "rm ~/.claude/hooks/a.py", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["~/.claude/hooks/a.py", "~/.claude/hooks/a.py"]]}, {"redirects": [], "words": [["rm", "rm"], ["~/.claude/hooks/a.py", "~/.claude/hooks/a.py"]]}]}
+{"arg": "rm ~/.claude/hooks/a.py", "fn": "write_targets", "ok": ["~/.claude/hooks/a.py", "~/.claude/hooks/a.py"]}
+{"arg": "rm ~/.claude/hooks/a.py", "fn": "http_calls", "ok": []}
+{"arg": "rm ~/.claude/hooks/a.py", "fn": "fetched_paths", "ok": []}
+{"arg": "rm ~/.claude/hooks/a.py", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.claude/hooks/a.py`) を変更しようとしています。\nhook や permission の無効化に繋がるため許可されていません。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "rm ~/.claude/hooks/a.py", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm ~/.claude/hooks/a.py\n内容を確認して問題なければ承認してください。"}
+{"arg": "mv ~/.config/agents x", "fn": "heredoc", "literal": [], "out": "mv ~/.config/agents x"}
+{"arg": "mv ~/.config/agents x", "fn": "expand_cd", "out": ""}
+{"arg": "mv ~/.config/agents x", "fn": "commands", "ok": [{"redirects": [], "words": [["mv", "mv"], ["~/.config/agents", "~/.config/agents"], ["x", "x"]]}, {"redirects": [], "words": [["mv", "mv"], ["~/.config/agents", "~/.config/agents"], ["x", "x"]]}]}
+{"arg": "mv ~/.config/agents x", "fn": "write_targets", "ok": ["x", "x"]}
+{"arg": "mv ~/.config/agents x", "fn": "http_calls", "ok": []}
+{"arg": "mv ~/.config/agents x", "fn": "fetched_paths", "ok": []}
+{"arg": "mv ~/.config/agents x", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.config/agents`) を変更しようとしています。\nhook や permission の無効化に繋がるため許可されていません。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "cp x ~/.claude/settings.json", "fn": "heredoc", "literal": [], "out": "cp x ~/.claude/settings.json"}
+{"arg": "cp x ~/.claude/settings.json", "fn": "expand_cd", "out": ""}
+{"arg": "cp x ~/.claude/settings.json", "fn": "commands", "ok": [{"redirects": [], "words": [["cp", "cp"], ["x", "x"], ["~/.claude/settings.json", "~/.claude/settings.json"]]}, {"redirects": [], "words": [["cp", "cp"], ["x", "x"], ["~/.claude/settings.json", "~/.claude/settings.json"]]}]}
+{"arg": "cp x ~/.claude/settings.json", "fn": "write_targets", "ok": ["~/.claude/settings.json", "~/.claude/settings.json"]}
+{"arg": "cp x ~/.claude/settings.json", "fn": "http_calls", "ok": []}
+{"arg": "cp x ~/.claude/settings.json", "fn": "fetched_paths", "ok": []}
+{"arg": "cp x ~/.claude/settings.json", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.claude/settings.json`) を変更しようとしています。\nhook や permission の無効化に繋がるため許可されていません。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "chmod +x .git/hooks/pre-commit", "fn": "heredoc", "literal": [], "out": "chmod +x .git/hooks/pre-commit"}
+{"arg": "chmod +x .git/hooks/pre-commit", "fn": "expand_cd", "out": ""}
+{"arg": "chmod +x .git/hooks/pre-commit", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["+x", "+x"], [".git/hooks/pre-commit", ".git/hooks/pre-commit"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["+x", "+x"], [".git/hooks/pre-commit", ".git/hooks/pre-commit"]]}]}
+{"arg": "chmod +x .git/hooks/pre-commit", "fn": "write_targets", "ok": ["+x", ".git/hooks/pre-commit", "+x", ".git/hooks/pre-commit"]}
+{"arg": "chmod +x .git/hooks/pre-commit", "fn": "http_calls", "ok": []}
+{"arg": "chmod +x .git/hooks/pre-commit", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod +x .git/hooks/pre-commit", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`.git/hooks/pre-commit`) を変更しようとしています。\nhook や permission の無効化に繋がるため許可されていません。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "sed -i s/a/b/ ~/.claude/settings.json", "fn": "heredoc", "literal": [], "out": "sed -i s/a/b/ ~/.claude/settings.json"}
+{"arg": "sed -i s/a/b/ ~/.claude/settings.json", "fn": "expand_cd", "out": ""}
+{"arg": "sed -i s/a/b/ ~/.claude/settings.json", "fn": "commands", "ok": [{"redirects": [], "words": [["sed", "sed"], ["-i", "-i"], ["s/a/b/", "s/a/b/"], ["~/.claude/settings.json", "~/.claude/settings.json"]]}, {"redirects": [], "words": [["sed", "sed"], ["-i", "-i"], ["s/a/b/", "s/a/b/"], ["~/.claude/settings.json", "~/.claude/settings.json"]]}]}
+{"arg": "sed -i s/a/b/ ~/.claude/settings.json", "fn": "write_targets", "ok": ["s/a/b/", "~/.claude/settings.json", "s/a/b/", "~/.claude/settings.json"]}
+{"arg": "sed -i s/a/b/ ~/.claude/settings.json", "fn": "http_calls", "ok": []}
+{"arg": "sed -i s/a/b/ ~/.claude/settings.json", "fn": "fetched_paths", "ok": []}
+{"arg": "sed -i s/a/b/ ~/.claude/settings.json", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.claude/settings.json`) を変更しようとしています。\nhook や permission の無効化に繋がるため許可されていません。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "ln -sf /dev/null ~/.claude/hooks", "fn": "heredoc", "literal": [], "out": "ln -sf /dev/null ~/.claude/hooks"}
+{"arg": "ln -sf /dev/null ~/.claude/hooks", "fn": "expand_cd", "out": ""}
+{"arg": "ln -sf /dev/null ~/.claude/hooks", "fn": "commands", "ok": [{"redirects": [], "words": [["ln", "ln"], ["-sf", "-sf"], ["/dev/null", "/dev/null"], ["~/.claude/hooks", "~/.claude/hooks"]]}, {"redirects": [], "words": [["ln", "ln"], ["-sf", "-sf"], ["/dev/null", "/dev/null"], ["~/.claude/hooks", "~/.claude/hooks"]]}]}
+{"arg": "ln -sf /dev/null ~/.claude/hooks", "fn": "write_targets", "ok": ["~/.claude/hooks", "~/.claude/hooks"]}
+{"arg": "ln -sf /dev/null ~/.claude/hooks", "fn": "http_calls", "ok": []}
+{"arg": "ln -sf /dev/null ~/.claude/hooks", "fn": "fetched_paths", "ok": []}
+{"arg": "ln -sf /dev/null ~/.claude/hooks", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.claude/hooks`) を変更しようとしています。\nhook や permission の無効化に繋がるため許可されていません。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "cat ~/.claude/settings.json", "fn": "heredoc", "literal": [], "out": "cat ~/.claude/settings.json"}
+{"arg": "cat ~/.claude/settings.json", "fn": "expand_cd", "out": ""}
+{"arg": "cat ~/.claude/settings.json", "fn": "commands", "ok": [{"redirects": [], "words": [["cat", "cat"], ["~/.claude/settings.json", "~/.claude/settings.json"]]}, {"redirects": [], "words": [["cat", "cat"], ["~/.claude/settings.json", "~/.claude/settings.json"]]}]}
+{"arg": "cat ~/.claude/settings.json", "fn": "write_targets", "ok": []}
+{"arg": "cat ~/.claude/settings.json", "fn": "http_calls", "ok": []}
+{"arg": "cat ~/.claude/settings.json", "fn": "fetched_paths", "ok": []}
+{"arg": "ls ~/.config/agents", "fn": "heredoc", "literal": [], "out": "ls ~/.config/agents"}
+{"arg": "ls ~/.config/agents", "fn": "expand_cd", "out": ""}
+{"arg": "ls ~/.config/agents", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"], ["~/.config/agents", "~/.config/agents"]]}, {"redirects": [], "words": [["ls", "ls"], ["~/.config/agents", "~/.config/agents"]]}]}
+{"arg": "ls ~/.config/agents", "fn": "write_targets", "ok": []}
+{"arg": "ls ~/.config/agents", "fn": "http_calls", "ok": []}
+{"arg": "ls ~/.config/agents", "fn": "fetched_paths", "ok": []}
+{"arg": "chezmoi forget ~/.claude", "fn": "heredoc", "literal": [], "out": "chezmoi forget ~/.claude"}
+{"arg": "chezmoi forget ~/.claude", "fn": "expand_cd", "out": ""}
+{"arg": "chezmoi forget ~/.claude", "fn": "commands", "ok": [{"redirects": [], "words": [["chezmoi", "chezmoi"], ["forget", "forget"], ["~/.claude", "~/.claude"]]}, {"redirects": [], "words": [["chezmoi", "chezmoi"], ["forget", "forget"], ["~/.claude", "~/.claude"]]}]}
+{"arg": "chezmoi forget ~/.claude", "fn": "write_targets", "ok": []}
+{"arg": "chezmoi forget ~/.claude", "fn": "http_calls", "ok": []}
+{"arg": "chezmoi forget ~/.claude", "fn": "fetched_paths", "ok": []}
+{"arg": "chezmoi destroy x", "fn": "heredoc", "literal": [], "out": "chezmoi destroy x"}
+{"arg": "chezmoi destroy x", "fn": "expand_cd", "out": ""}
+{"arg": "chezmoi destroy x", "fn": "commands", "ok": [{"redirects": [], "words": [["chezmoi", "chezmoi"], ["destroy", "destroy"], ["x", "x"]]}, {"redirects": [], "words": [["chezmoi", "chezmoi"], ["destroy", "destroy"], ["x", "x"]]}]}
+{"arg": "chezmoi destroy x", "fn": "write_targets", "ok": []}
+{"arg": "chezmoi destroy x", "fn": "http_calls", "ok": []}
+{"arg": "chezmoi destroy x", "fn": "fetched_paths", "ok": []}
+{"arg": "chezmoi diff", "fn": "heredoc", "literal": [], "out": "chezmoi diff"}
+{"arg": "chezmoi diff", "fn": "expand_cd", "out": ""}
+{"arg": "chezmoi diff", "fn": "commands", "ok": [{"redirects": [], "words": [["chezmoi", "chezmoi"], ["diff", "diff"]]}, {"redirects": [], "words": [["chezmoi", "chezmoi"], ["diff", "diff"]]}]}
+{"arg": "chezmoi diff", "fn": "write_targets", "ok": []}
+{"arg": "chezmoi diff", "fn": "http_calls", "ok": []}
+{"arg": "chezmoi diff", "fn": "fetched_paths", "ok": []}
+{"arg": "chezmoi", "fn": "heredoc", "literal": [], "out": "chezmoi"}
+{"arg": "chezmoi", "fn": "expand_cd", "out": ""}
+{"arg": "chezmoi", "fn": "commands", "ok": [{"redirects": [], "words": [["chezmoi", "chezmoi"]]}, {"redirects": [], "words": [["chezmoi", "chezmoi"]]}]}
+{"arg": "chezmoi", "fn": "write_targets", "ok": []}
+{"arg": "chezmoi", "fn": "http_calls", "ok": []}
+{"arg": "chezmoi", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -c \"open('/home/x/.claude/settings.json','w')\"", "fn": "heredoc", "literal": [], "out": "python3 -c \"open('/home/x/.claude/settings.json','w')\""}
+{"arg": "python3 -c \"open('/home/x/.claude/settings.json','w')\"", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -c \"open('/home/x/.claude/settings.json','w')\"", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"open('/home/x/.claude/settings.json','w')\"", "open('/home/x/.claude/settings.json','w')"]]}, {"redirects": [], "words": [["settings.json,w", "settings.json,w"]]}, {"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"open('/home/x/.claude/settings.json','w')\"", "open('/home/x/.claude/settings.json','w')"]]}]}
+{"arg": "python3 -c \"open('/home/x/.claude/settings.json','w')\"", "fn": "write_targets", "ok": []}
+{"arg": "python3 -c \"open('/home/x/.claude/settings.json','w')\"", "fn": "http_calls", "ok": []}
+{"arg": "python3 -c \"open('/home/x/.claude/settings.json','w')\"", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -c \"open('/home/x/.claude/settings.json','w')\"", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`/home/x/.claude/settings.json`) を操作しようとしています。\nインラインコードは読み書きの区別が付かないため許可されていません。\n代替: 内容を見るだけなら `cat /home/x/.claude/settings.json` や `grep <pattern> /home/x/.claude/settings.json` を使ってください。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "python3 -c \"open('.git/config').read()\"", "fn": "heredoc", "literal": [], "out": "python3 -c \"open('.git/config').read()\""}
+{"arg": "python3 -c \"open('.git/config').read()\"", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -c \"open('.git/config').read()\"", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"open('.git/config').read()\"", "open('.git/config').read()"]]}, {"redirects": [], "words": [[".read", ".read"]]}, {"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"open('.git/config').read()\"", "open('.git/config').read()"]]}]}
+{"arg": "python3 -c \"open('.git/config').read()\"", "fn": "write_targets", "ok": []}
+{"arg": "python3 -c \"open('.git/config').read()\"", "fn": "http_calls", "ok": []}
+{"arg": "python3 -c \"open('.git/config').read()\"", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -c \"open('.git/config').read()\"", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`.git/config`) を操作しようとしています。\nインラインコードは読み書きの区別が付かないため許可されていません。\n代替: 内容を見るだけなら `cat .git/config` や `grep <pattern> .git/config` を使ってください。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "python3 -c \"print(1)\"", "fn": "heredoc", "literal": [], "out": "python3 -c \"print(1)\""}
+{"arg": "python3 -c \"print(1)\"", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -c \"print(1)\"", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"print(1)\"", "print(1)"]]}, {"redirects": [], "words": [["print", "print"]]}, {"redirects": [], "words": [["1", "1"]]}, {"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"print(1)\"", "print(1)"]]}]}
+{"arg": "python3 -c \"print(1)\"", "fn": "write_targets", "ok": []}
+{"arg": "python3 -c \"print(1)\"", "fn": "http_calls", "ok": []}
+{"arg": "python3 -c \"print(1)\"", "fn": "fetched_paths", "ok": []}
+{"arg": "echo \"a\"; ls ~/.config/agents; echo \"b\"", "fn": "heredoc", "literal": [], "out": "echo \"a\"; ls ~/.config/agents; echo \"b\""}
+{"arg": "echo \"a\"; ls ~/.config/agents; echo \"b\"", "fn": "expand_cd", "out": ""}
+{"arg": "echo \"a\"; ls ~/.config/agents; echo \"b\"", "fn": "commands", "ok": [{"redirects": [], "words": [["echo", "echo"], ["\"a\"", "a"]]}, {"redirects": [], "words": [["ls", "ls"], ["~/.config/agents", "~/.config/agents"]]}, {"redirects": [], "words": [["echo", "echo"], ["\"b\"", "b"]]}, {"redirects": [], "words": [["echo", "echo"], ["\"a\"", "a"]]}, {"redirects": [], "words": [["ls", "ls"], ["~/.config/agents", "~/.config/agents"]]}, {"redirects": [], "words": [["echo", "echo"], ["\"b\"", "b"]]}]}
+{"arg": "echo \"a\"; ls ~/.config/agents; echo \"b\"", "fn": "write_targets", "ok": []}
+{"arg": "echo \"a\"; ls ~/.config/agents; echo \"b\"", "fn": "http_calls", "ok": []}
+{"arg": "echo \"a\"; ls ~/.config/agents; echo \"b\"", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -c \"import os; os.remove('~/.copilot/hooks/x')\"", "fn": "heredoc", "literal": [], "out": "python3 -c \"import os; os.remove('~/.copilot/hooks/x')\""}
+{"arg": "python3 -c \"import os; os.remove('~/.copilot/hooks/x')\"", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -c \"import os; os.remove('~/.copilot/hooks/x')\"", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"import os; os.remove('~/.copilot/hooks/x')\"", "import os; os.remove('~/.copilot/hooks/x')"]]}, {"redirects": [], "words": [["import", "import"], ["os", "os"]]}, {"redirects": [], "words": [["x", "x"]]}, {"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"import os; os.remove('~/.copilot/hooks/x')\"", "import os; os.remove('~/.copilot/hooks/x')"]]}]}
+{"arg": "python3 -c \"import os; os.remove('~/.copilot/hooks/x')\"", "fn": "write_targets", "ok": []}
+{"arg": "python3 -c \"import os; os.remove('~/.copilot/hooks/x')\"", "fn": "http_calls", "ok": []}
+{"arg": "python3 -c \"import os; os.remove('~/.copilot/hooks/x')\"", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -c \"import os; os.remove('~/.copilot/hooks/x')\"", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.copilot/hooks/x`) を操作しようとしています。\nインラインコードは読み書きの区別が付かないため許可されていません。\n代替: 内容を見るだけなら `cat ~/.copilot/hooks/x` や `grep <pattern> ~/.copilot/hooks/x` を使ってください。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "AGENTS_CONFIG_DIR=/tmp/x ls", "fn": "heredoc", "literal": [], "out": "AGENTS_CONFIG_DIR=/tmp/x ls"}
+{"arg": "AGENTS_CONFIG_DIR=/tmp/x ls", "fn": "expand_cd", "out": ""}
+{"arg": "AGENTS_CONFIG_DIR=/tmp/x ls", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"]]}, {"redirects": [], "words": [["AGENTS_CONFIG_DIR=/tmp/x", "AGENTS_CONFIG_DIR=/tmp/x"], ["ls", "ls"]]}]}
+{"arg": "AGENTS_CONFIG_DIR=/tmp/x ls", "fn": "write_targets", "ok": []}
+{"arg": "AGENTS_CONFIG_DIR=/tmp/x ls", "fn": "http_calls", "ok": []}
+{"arg": "AGENTS_CONFIG_DIR=/tmp/x ls", "fn": "fetched_paths", "ok": []}
+{"arg": "AGENTS_CONFIG_DIR=/tmp/x ls", "fn": "check", "name": "check_guard_tampering", "ok": "`AGENTS_CONFIG_DIR` を差し替えて hook の設定読み込み先を変えようとしています。\nhook や permission の無効化に繋がるため許可されていません。"}
+{"arg": "CLAUDE_PLUGIN_HOOK_DIR=/x ls", "fn": "heredoc", "literal": [], "out": "CLAUDE_PLUGIN_HOOK_DIR=/x ls"}
+{"arg": "CLAUDE_PLUGIN_HOOK_DIR=/x ls", "fn": "expand_cd", "out": ""}
+{"arg": "CLAUDE_PLUGIN_HOOK_DIR=/x ls", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"]]}, {"redirects": [], "words": [["CLAUDE_PLUGIN_HOOK_DIR=/x", "CLAUDE_PLUGIN_HOOK_DIR=/x"], ["ls", "ls"]]}]}
+{"arg": "CLAUDE_PLUGIN_HOOK_DIR=/x ls", "fn": "write_targets", "ok": []}
+{"arg": "CLAUDE_PLUGIN_HOOK_DIR=/x ls", "fn": "http_calls", "ok": []}
+{"arg": "CLAUDE_PLUGIN_HOOK_DIR=/x ls", "fn": "fetched_paths", "ok": []}
+{"arg": "CLAUDE_PLUGIN_HOOK_DIR=/x ls", "fn": "check", "name": "check_guard_tampering", "ok": "`CLAUDE_PLUGIN_HOOK_DIR` を差し替えて hook の設定読み込み先を変えようとしています。\nhook や permission の無効化に繋がるため許可されていません。"}
+{"arg": "CLAUDE_HOOK=1 ls", "fn": "heredoc", "literal": [], "out": "CLAUDE_HOOK=1 ls"}
+{"arg": "CLAUDE_HOOK=1 ls", "fn": "expand_cd", "out": ""}
+{"arg": "CLAUDE_HOOK=1 ls", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"]]}, {"redirects": [], "words": [["CLAUDE_HOOK=1", "CLAUDE_HOOK=1"], ["ls", "ls"]]}]}
+{"arg": "CLAUDE_HOOK=1 ls", "fn": "write_targets", "ok": []}
+{"arg": "CLAUDE_HOOK=1 ls", "fn": "http_calls", "ok": []}
+{"arg": "CLAUDE_HOOK=1 ls", "fn": "fetched_paths", "ok": []}
+{"arg": "CLAUDE_HOOK=1 ls", "fn": "check", "name": "check_guard_tampering", "ok": "`CLAUDE_HOOK` を差し替えて hook の設定読み込み先を変えようとしています。\nhook や permission の無効化に繋がるため許可されていません。"}
+{"arg": "PYTHONPATH=/tmp python3 x.py", "fn": "heredoc", "literal": [], "out": "PYTHONPATH=/tmp python3 x.py"}
+{"arg": "PYTHONPATH=/tmp python3 x.py", "fn": "expand_cd", "out": ""}
+{"arg": "PYTHONPATH=/tmp python3 x.py", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["x.py", "x.py"]]}, {"redirects": [], "words": [["PYTHONPATH=/tmp", "PYTHONPATH=/tmp"], ["python3", "python3"], ["x.py", "x.py"]]}]}
+{"arg": "PYTHONPATH=/tmp python3 x.py", "fn": "write_targets", "ok": []}
+{"arg": "PYTHONPATH=/tmp python3 x.py", "fn": "http_calls", "ok": []}
+{"arg": "PYTHONPATH=/tmp python3 x.py", "fn": "fetched_paths", "ok": []}
+{"arg": "PYTHONPATH=/tmp python3 x.py", "fn": "check", "name": "check_guard_tampering", "ok": "`PYTHONPATH=/tmp` で hook のモジュール解決先を差し替えようとしています。\nリポジトリ外のパスの指定は許可されていません。"}
+{"arg": "PYTHONPATH=. python3 x.py", "fn": "heredoc", "literal": [], "out": "PYTHONPATH=. python3 x.py"}
+{"arg": "PYTHONPATH=. python3 x.py", "fn": "expand_cd", "out": ""}
+{"arg": "PYTHONPATH=. python3 x.py", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["x.py", "x.py"]]}, {"redirects": [], "words": [["PYTHONPATH=.", "PYTHONPATH=."], ["python3", "python3"], ["x.py", "x.py"]]}]}
+{"arg": "PYTHONPATH=. python3 x.py", "fn": "write_targets", "ok": []}
+{"arg": "PYTHONPATH=. python3 x.py", "fn": "http_calls", "ok": []}
+{"arg": "PYTHONPATH=. python3 x.py", "fn": "fetched_paths", "ok": []}
+{"arg": "PYTHONPATH=. python3 x.py", "fn": "check", "name": "check_guard_tampering", "ok": "`PYTHONPATH=.` で hook のモジュール解決先を差し替えようとしています。\nリポジトリ外のパスの指定は許可されていません。"}
+{"arg": "PYTHONPATH=src python3 x.py", "fn": "heredoc", "literal": [], "out": "PYTHONPATH=src python3 x.py"}
+{"arg": "PYTHONPATH=src python3 x.py", "fn": "expand_cd", "out": ""}
+{"arg": "PYTHONPATH=src python3 x.py", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["x.py", "x.py"]]}, {"redirects": [], "words": [["PYTHONPATH=src", "PYTHONPATH=src"], ["python3", "python3"], ["x.py", "x.py"]]}]}
+{"arg": "PYTHONPATH=src python3 x.py", "fn": "write_targets", "ok": []}
+{"arg": "PYTHONPATH=src python3 x.py", "fn": "http_calls", "ok": []}
+{"arg": "PYTHONPATH=src python3 x.py", "fn": "fetched_paths", "ok": []}
+{"arg": "PYTHONPATH=\"~/x\" python3 x.py", "fn": "heredoc", "literal": [], "out": "PYTHONPATH=\"~/x\" python3 x.py"}
+{"arg": "PYTHONPATH=\"~/x\" python3 x.py", "fn": "expand_cd", "out": ""}
+{"arg": "PYTHONPATH=\"~/x\" python3 x.py", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["x.py", "x.py"]]}, {"redirects": [], "words": [["PYTHONPATH=\"~/x\"", "PYTHONPATH=~/x"], ["python3", "python3"], ["x.py", "x.py"]]}]}
+{"arg": "PYTHONPATH=\"~/x\" python3 x.py", "fn": "write_targets", "ok": []}
+{"arg": "PYTHONPATH=\"~/x\" python3 x.py", "fn": "http_calls", "ok": []}
+{"arg": "PYTHONPATH=\"~/x\" python3 x.py", "fn": "fetched_paths", "ok": []}
+{"arg": "PYTHONPATH=\"~/x\" python3 x.py", "fn": "check", "name": "check_guard_tampering", "ok": "`PYTHONPATH=\"~/x\"` で hook のモジュール解決先を差し替えようとしています。\nリポジトリ外のパスの指定は許可されていません。"}
+{"arg": "PYTHONPATH=~ python3 x.py", "fn": "heredoc", "literal": [], "out": "PYTHONPATH=~ python3 x.py"}
+{"arg": "PYTHONPATH=~ python3 x.py", "fn": "expand_cd", "out": ""}
+{"arg": "PYTHONPATH=~ python3 x.py", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["x.py", "x.py"]]}, {"redirects": [], "words": [["PYTHONPATH=~", "PYTHONPATH=~"], ["python3", "python3"], ["x.py", "x.py"]]}]}
+{"arg": "PYTHONPATH=~ python3 x.py", "fn": "write_targets", "ok": []}
+{"arg": "PYTHONPATH=~ python3 x.py", "fn": "http_calls", "ok": []}
+{"arg": "PYTHONPATH=~ python3 x.py", "fn": "fetched_paths", "ok": []}
+{"arg": "PYTHONPATH=~ python3 x.py", "fn": "check", "name": "check_guard_tampering", "ok": "`PYTHONPATH=~` で hook のモジュール解決先を差し替えようとしています。\nリポジトリ外のパスの指定は許可されていません。"}
+{"arg": "PYTHONPATH=../x python3 x.py", "fn": "heredoc", "literal": [], "out": "PYTHONPATH=../x python3 x.py"}
+{"arg": "PYTHONPATH=../x python3 x.py", "fn": "expand_cd", "out": ""}
+{"arg": "PYTHONPATH=../x python3 x.py", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["x.py", "x.py"]]}, {"redirects": [], "words": [["PYTHONPATH=../x", "PYTHONPATH=../x"], ["python3", "python3"], ["x.py", "x.py"]]}]}
+{"arg": "PYTHONPATH=../x python3 x.py", "fn": "write_targets", "ok": []}
+{"arg": "PYTHONPATH=../x python3 x.py", "fn": "http_calls", "ok": []}
+{"arg": "PYTHONPATH=../x python3 x.py", "fn": "fetched_paths", "ok": []}
+{"arg": "PYTHONPATH=../x python3 x.py", "fn": "check", "name": "check_guard_tampering", "ok": "`PYTHONPATH=../x` で hook のモジュール解決先を差し替えようとしています。\nリポジトリ外のパスの指定は許可されていません。"}
+{"arg": "PYTHONPATH= python3 x.py", "fn": "heredoc", "literal": [], "out": "PYTHONPATH= python3 x.py"}
+{"arg": "PYTHONPATH= python3 x.py", "fn": "expand_cd", "out": ""}
+{"arg": "PYTHONPATH= python3 x.py", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["x.py", "x.py"]]}, {"redirects": [], "words": [["PYTHONPATH=", "PYTHONPATH="], ["python3", "python3"], ["x.py", "x.py"]]}]}
+{"arg": "PYTHONPATH= python3 x.py", "fn": "write_targets", "ok": []}
+{"arg": "PYTHONPATH= python3 x.py", "fn": "http_calls", "ok": []}
+{"arg": "PYTHONPATH= python3 x.py", "fn": "fetched_paths", "ok": []}
+{"arg": "PYTHONPATH= python3 x.py", "fn": "check", "name": "check_guard_tampering", "ok": "`PYTHONPATH=` で hook のモジュール解決先を差し替えようとしています。\nリポジトリ外のパスの指定は許可されていません。"}
+{"arg": "echo x > ~/.bashrc", "fn": "heredoc", "literal": [], "out": "echo x > ~/.bashrc"}
+{"arg": "echo x > ~/.bashrc", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > ~/.bashrc", "fn": "commands", "ok": [{"redirects": [["", ">", ["~/.bashrc", "~/.bashrc"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["~/.bashrc", "~/.bashrc"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > ~/.bashrc", "fn": "write_targets", "ok": ["~/.bashrc", "~/.bashrc"]}
+{"arg": "echo x > ~/.bashrc", "fn": "http_calls", "ok": []}
+{"arg": "echo x > ~/.bashrc", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > ~/.bashrc", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `~/.bashrc` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "echo x >> ~/.zshrc", "fn": "heredoc", "literal": [], "out": "echo x >> ~/.zshrc"}
+{"arg": "echo x >> ~/.zshrc", "fn": "expand_cd", "out": ""}
+{"arg": "echo x >> ~/.zshrc", "fn": "commands", "ok": [{"redirects": [["", ">>", ["~/.zshrc", "~/.zshrc"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">>", ["~/.zshrc", "~/.zshrc"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x >> ~/.zshrc", "fn": "write_targets", "ok": ["~/.zshrc", "~/.zshrc"]}
+{"arg": "echo x >> ~/.zshrc", "fn": "http_calls", "ok": []}
+{"arg": "echo x >> ~/.zshrc", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x >> ~/.zshrc", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `~/.zshrc` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "echo x > ~/.ssh/authorized_keys", "fn": "heredoc", "literal": [], "out": "echo x > ~/.ssh/authorized_keys"}
+{"arg": "echo x > ~/.ssh/authorized_keys", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > ~/.ssh/authorized_keys", "fn": "commands", "ok": [{"redirects": [["", ">", ["~/.ssh/authorized_keys", "~/.ssh/authorized_keys"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["~/.ssh/authorized_keys", "~/.ssh/authorized_keys"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > ~/.ssh/authorized_keys", "fn": "write_targets", "ok": ["~/.ssh/authorized_keys", "~/.ssh/authorized_keys"]}
+{"arg": "echo x > ~/.ssh/authorized_keys", "fn": "http_calls", "ok": []}
+{"arg": "echo x > ~/.ssh/authorized_keys", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > ~/.ssh/authorized_keys", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `~/.ssh/authorized_keys` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "echo x > ~/.ssh/config", "fn": "heredoc", "literal": [], "out": "echo x > ~/.ssh/config"}
+{"arg": "echo x > ~/.ssh/config", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > ~/.ssh/config", "fn": "commands", "ok": [{"redirects": [["", ">", ["~/.ssh/config", "~/.ssh/config"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["~/.ssh/config", "~/.ssh/config"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > ~/.ssh/config", "fn": "write_targets", "ok": ["~/.ssh/config", "~/.ssh/config"]}
+{"arg": "echo x > ~/.ssh/config", "fn": "http_calls", "ok": []}
+{"arg": "echo x > ~/.ssh/config", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > ~/.ssh/config", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `~/.ssh/config` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "echo x > \"$HOME/.profile\"", "fn": "heredoc", "literal": [], "out": "echo x > \"$HOME/.profile\""}
+{"arg": "echo x > \"$HOME/.profile\"", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > \"$HOME/.profile\"", "fn": "commands", "ok": [{"redirects": [["", ">", ["\"$HOME/.profile\"", "$HOME/.profile"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["\"$HOME/.profile\"", "$HOME/.profile"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > \"$HOME/.profile\"", "fn": "write_targets", "ok": ["$HOME/.profile", "$HOME/.profile"]}
+{"arg": "echo x > \"$HOME/.profile\"", "fn": "http_calls", "ok": []}
+{"arg": "echo x > \"$HOME/.profile\"", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > \"$HOME/.profile\"", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `$HOME/.profile` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "tee -a ~/.bash_profile", "fn": "heredoc", "literal": [], "out": "tee -a ~/.bash_profile"}
+{"arg": "tee -a ~/.bash_profile", "fn": "expand_cd", "out": ""}
+{"arg": "tee -a ~/.bash_profile", "fn": "commands", "ok": [{"redirects": [], "words": [["tee", "tee"], ["-a", "-a"], ["~/.bash_profile", "~/.bash_profile"]]}, {"redirects": [], "words": [["tee", "tee"], ["-a", "-a"], ["~/.bash_profile", "~/.bash_profile"]]}]}
+{"arg": "tee -a ~/.bash_profile", "fn": "write_targets", "ok": ["~/.bash_profile", "~/.bash_profile"]}
+{"arg": "tee -a ~/.bash_profile", "fn": "http_calls", "ok": []}
+{"arg": "tee -a ~/.bash_profile", "fn": "fetched_paths", "ok": []}
+{"arg": "tee -a ~/.bash_profile", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `~/.bash_profile` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "cp x ~/.gitconfig", "fn": "heredoc", "literal": [], "out": "cp x ~/.gitconfig"}
+{"arg": "cp x ~/.gitconfig", "fn": "expand_cd", "out": ""}
+{"arg": "cp x ~/.gitconfig", "fn": "commands", "ok": [{"redirects": [], "words": [["cp", "cp"], ["x", "x"], ["~/.gitconfig", "~/.gitconfig"]]}, {"redirects": [], "words": [["cp", "cp"], ["x", "x"], ["~/.gitconfig", "~/.gitconfig"]]}]}
+{"arg": "cp x ~/.gitconfig", "fn": "write_targets", "ok": ["~/.gitconfig", "~/.gitconfig"]}
+{"arg": "cp x ~/.gitconfig", "fn": "http_calls", "ok": []}
+{"arg": "cp x ~/.gitconfig", "fn": "fetched_paths", "ok": []}
+{"arg": "cp x ~/.gitconfig", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `~/.gitconfig` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "cp ~/.bashrc ./backup/", "fn": "heredoc", "literal": [], "out": "cp ~/.bashrc ./backup/"}
+{"arg": "cp ~/.bashrc ./backup/", "fn": "expand_cd", "out": ""}
+{"arg": "cp ~/.bashrc ./backup/", "fn": "commands", "ok": [{"redirects": [], "words": [["cp", "cp"], ["~/.bashrc", "~/.bashrc"], ["./backup/", "./backup/"]]}, {"redirects": [], "words": [["cp", "cp"], ["~/.bashrc", "~/.bashrc"], ["./backup/", "./backup/"]]}]}
+{"arg": "cp ~/.bashrc ./backup/", "fn": "write_targets", "ok": ["./backup/", "./backup/"]}
+{"arg": "cp ~/.bashrc ./backup/", "fn": "http_calls", "ok": []}
+{"arg": "cp ~/.bashrc ./backup/", "fn": "fetched_paths", "ok": []}
+{"arg": "cat ~/.bashrc", "fn": "heredoc", "literal": [], "out": "cat ~/.bashrc"}
+{"arg": "cat ~/.bashrc", "fn": "expand_cd", "out": ""}
+{"arg": "cat ~/.bashrc", "fn": "commands", "ok": [{"redirects": [], "words": [["cat", "cat"], ["~/.bashrc", "~/.bashrc"]]}, {"redirects": [], "words": [["cat", "cat"], ["~/.bashrc", "~/.bashrc"]]}]}
+{"arg": "cat ~/.bashrc", "fn": "write_targets", "ok": []}
+{"arg": "cat ~/.bashrc", "fn": "http_calls", "ok": []}
+{"arg": "cat ~/.bashrc", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > .bashrc/", "fn": "heredoc", "literal": [], "out": "echo x > .bashrc/"}
+{"arg": "echo x > .bashrc/", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > .bashrc/", "fn": "commands", "ok": [{"redirects": [["", ">", [".bashrc/", ".bashrc/"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", [".bashrc/", ".bashrc/"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > .bashrc/", "fn": "write_targets", "ok": [".bashrc/", ".bashrc/"]}
+{"arg": "echo x > .bashrc/", "fn": "http_calls", "ok": []}
+{"arg": "echo x > .bashrc/", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > .bashrc/", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `.bashrc/` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "echo x > notes/crontab", "fn": "heredoc", "literal": [], "out": "echo x > notes/crontab"}
+{"arg": "echo x > notes/crontab", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > notes/crontab", "fn": "commands", "ok": [{"redirects": [["", ">", ["notes/crontab", "notes/crontab"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["notes/crontab", "notes/crontab"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > notes/crontab", "fn": "write_targets", "ok": ["notes/crontab", "notes/crontab"]}
+{"arg": "echo x > notes/crontab", "fn": "http_calls", "ok": []}
+{"arg": "echo x > notes/crontab", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > notes/crontab", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `notes/crontab` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "echo x > crontabs", "fn": "heredoc", "literal": [], "out": "echo x > crontabs"}
+{"arg": "echo x > crontabs", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > crontabs", "fn": "commands", "ok": [{"redirects": [["", ">", ["crontabs", "crontabs"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["crontabs", "crontabs"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > crontabs", "fn": "write_targets", "ok": ["crontabs", "crontabs"]}
+{"arg": "echo x > crontabs", "fn": "http_calls", "ok": []}
+{"arg": "echo x > crontabs", "fn": "fetched_paths", "ok": []}
+{"arg": "sed -i s/a/b/ ~/.zshenv", "fn": "heredoc", "literal": [], "out": "sed -i s/a/b/ ~/.zshenv"}
+{"arg": "sed -i s/a/b/ ~/.zshenv", "fn": "expand_cd", "out": ""}
+{"arg": "sed -i s/a/b/ ~/.zshenv", "fn": "commands", "ok": [{"redirects": [], "words": [["sed", "sed"], ["-i", "-i"], ["s/a/b/", "s/a/b/"], ["~/.zshenv", "~/.zshenv"]]}, {"redirects": [], "words": [["sed", "sed"], ["-i", "-i"], ["s/a/b/", "s/a/b/"], ["~/.zshenv", "~/.zshenv"]]}]}
+{"arg": "sed -i s/a/b/ ~/.zshenv", "fn": "write_targets", "ok": ["s/a/b/", "~/.zshenv", "s/a/b/", "~/.zshenv"]}
+{"arg": "sed -i s/a/b/ ~/.zshenv", "fn": "http_calls", "ok": []}
+{"arg": "sed -i s/a/b/ ~/.zshenv", "fn": "fetched_paths", "ok": []}
+{"arg": "sed -i s/a/b/ ~/.zshenv", "fn": "check", "name": "check_shell_startup_write", "ok": "シェル起動ファイル `~/.zshenv` へ書き込もうとしています。\n以後のシェルで任意コードが走るため許可されていません。"}
+{"arg": "python3 -c \"open('/home/x/.bashrc','a')\"", "fn": "heredoc", "literal": [], "out": "python3 -c \"open('/home/x/.bashrc','a')\""}
+{"arg": "python3 -c \"open('/home/x/.bashrc','a')\"", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -c \"open('/home/x/.bashrc','a')\"", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"open('/home/x/.bashrc','a')\"", "open('/home/x/.bashrc','a')"]]}, {"redirects": [], "words": [[".bashrc,a", ".bashrc,a"]]}, {"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"open('/home/x/.bashrc','a')\"", "open('/home/x/.bashrc','a')"]]}]}
+{"arg": "python3 -c \"open('/home/x/.bashrc','a')\"", "fn": "write_targets", "ok": []}
+{"arg": "python3 -c \"open('/home/x/.bashrc','a')\"", "fn": "http_calls", "ok": []}
+{"arg": "python3 -c \"open('/home/x/.bashrc','a')\"", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -c \"open('/home/x/.bashrc','a')\"", "fn": "check", "name": "check_shell_startup_write", "ok": "インラインコードがシェル起動ファイル `/home/x/.bashrc` を参照しています。\n読み書きの区別が付かないため許可されていません。"}
+{"arg": "python3 -c \"print(users[0].login)\"", "fn": "heredoc", "literal": [], "out": "python3 -c \"print(users[0].login)\""}
+{"arg": "python3 -c \"print(users[0].login)\"", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -c \"print(users[0].login)\"", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"print(users[0].login)\"", "print(users[0].login)"]]}, {"redirects": [], "words": [["print", "print"]]}, {"redirects": [], "words": [["users[0].login", "users[0].login"]]}, {"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"print(users[0].login)\"", "print(users[0].login)"]]}]}
+{"arg": "python3 -c \"print(users[0].login)\"", "fn": "write_targets", "ok": []}
+{"arg": "python3 -c \"print(users[0].login)\"", "fn": "http_calls", "ok": []}
+{"arg": "python3 -c \"print(users[0].login)\"", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -c \"open('~/.netrc')\"", "fn": "heredoc", "literal": [], "out": "python3 -c \"open('~/.netrc')\""}
+{"arg": "python3 -c \"open('~/.netrc')\"", "fn": "expand_cd", "out": ""}
+{"arg": "python3 -c \"open('~/.netrc')\"", "fn": "commands", "ok": [{"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"open('~/.netrc')\"", "open('~/.netrc')"]]}, {"redirects": [], "words": [[".netrc", ".netrc"]]}, {"redirects": [], "words": [["python3", "python3"], ["-c", "-c"], ["\"open('~/.netrc')\"", "open('~/.netrc')"]]}]}
+{"arg": "python3 -c \"open('~/.netrc')\"", "fn": "write_targets", "ok": []}
+{"arg": "python3 -c \"open('~/.netrc')\"", "fn": "http_calls", "ok": []}
+{"arg": "python3 -c \"open('~/.netrc')\"", "fn": "fetched_paths", "ok": []}
+{"arg": "python3 -c \"open('~/.netrc')\"", "fn": "check", "name": "check_shell_startup_write", "ok": "インラインコードがシェル起動ファイル `~/.netrc` を参照しています。\n読み書きの区別が付かないため許可されていません。"}
+{"arg": "perl -e 'open(F,\">>~/.bashrc\")'", "fn": "heredoc", "literal": [], "out": "perl -e 'open(F,\">>~/.bashrc\")'"}
+{"arg": "perl -e 'open(F,\">>~/.bashrc\")'", "fn": "expand_cd", "out": ""}
+{"arg": "perl -e 'open(F,\">>~/.bashrc\")'", "fn": "commands", "ok": [{"redirects": [], "words": [["perl", "perl"], ["-e", "-e"], ["'open(F,\">>~/.bashrc\")'", "open(F,\">>~/.bashrc\")"]]}, {"redirects": [], "words": [[".bashrc", ".bashrc"]]}, {"redirects": [], "words": [["perl", "perl"], ["-e", "-e"], ["'open(F,\">>~/.bashrc\")'", "open(F,\">>~/.bashrc\")"]]}]}
+{"arg": "perl -e 'open(F,\">>~/.bashrc\")'", "fn": "write_targets", "ok": []}
+{"arg": "perl -e 'open(F,\">>~/.bashrc\")'", "fn": "http_calls", "ok": []}
+{"arg": "perl -e 'open(F,\">>~/.bashrc\")'", "fn": "fetched_paths", "ok": []}
+{"arg": "perl -e 'open(F,\">>~/.bashrc\")'", "fn": "check", "name": "check_shell_startup_write", "ok": "インラインコードがシェル起動ファイル `~/.bashrc` を参照しています。\n読み書きの区別が付かないため許可されていません。"}
+{"arg": "chmod u+s /bin/x", "fn": "heredoc", "literal": [], "out": "chmod u+s /bin/x"}
+{"arg": "chmod u+s /bin/x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod u+s /bin/x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["u+s", "u+s"], ["/bin/x", "/bin/x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["u+s", "u+s"], ["/bin/x", "/bin/x"]]}]}
+{"arg": "chmod u+s /bin/x", "fn": "write_targets", "ok": ["u+s", "/bin/x", "u+s", "/bin/x"]}
+{"arg": "chmod u+s /bin/x", "fn": "http_calls", "ok": []}
+{"arg": "chmod u+s /bin/x", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod u+s /bin/x", "fn": "check", "name": "check_privilege_escalation", "ok": "`chmod u+s` は setuid/setgid を付与する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "chmod +s x", "fn": "heredoc", "literal": [], "out": "chmod +s x"}
+{"arg": "chmod +s x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod +s x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["+s", "+s"], ["x", "x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["+s", "+s"], ["x", "x"]]}]}
+{"arg": "chmod +s x", "fn": "write_targets", "ok": ["+s", "x", "+s", "x"]}
+{"arg": "chmod +s x", "fn": "http_calls", "ok": []}
+{"arg": "chmod +s x", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod +s x", "fn": "check", "name": "check_privilege_escalation", "ok": "`chmod +s` は setuid/setgid を付与する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "chmod a+rs x", "fn": "heredoc", "literal": [], "out": "chmod a+rs x"}
+{"arg": "chmod a+rs x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod a+rs x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["a+rs", "a+rs"], ["x", "x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["a+rs", "a+rs"], ["x", "x"]]}]}
+{"arg": "chmod a+rs x", "fn": "write_targets", "ok": ["a+rs", "x", "a+rs", "x"]}
+{"arg": "chmod a+rs x", "fn": "http_calls", "ok": []}
+{"arg": "chmod a+rs x", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod a+rs x", "fn": "check", "name": "check_privilege_escalation", "ok": "`chmod a+rs` は setuid/setgid を付与する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "chmod 4755 x", "fn": "heredoc", "literal": [], "out": "chmod 4755 x"}
+{"arg": "chmod 4755 x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod 4755 x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["4755", "4755"], ["x", "x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["4755", "4755"], ["x", "x"]]}]}
+{"arg": "chmod 4755 x", "fn": "write_targets", "ok": ["4755", "x", "4755", "x"]}
+{"arg": "chmod 4755 x", "fn": "http_calls", "ok": []}
+{"arg": "chmod 4755 x", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod 4755 x", "fn": "check", "name": "check_privilege_escalation", "ok": "`chmod 4755` は setuid/setgid を付与する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "chmod 2755 x", "fn": "heredoc", "literal": [], "out": "chmod 2755 x"}
+{"arg": "chmod 2755 x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod 2755 x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["2755", "2755"], ["x", "x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["2755", "2755"], ["x", "x"]]}]}
+{"arg": "chmod 2755 x", "fn": "write_targets", "ok": ["2755", "x", "2755", "x"]}
+{"arg": "chmod 2755 x", "fn": "http_calls", "ok": []}
+{"arg": "chmod 2755 x", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod 2755 x", "fn": "check", "name": "check_privilege_escalation", "ok": "`chmod 2755` は setuid/setgid を付与する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "chmod 0755 x", "fn": "heredoc", "literal": [], "out": "chmod 0755 x"}
+{"arg": "chmod 0755 x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod 0755 x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["0755", "0755"], ["x", "x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["0755", "0755"], ["x", "x"]]}]}
+{"arg": "chmod 0755 x", "fn": "write_targets", "ok": ["0755", "x", "0755", "x"]}
+{"arg": "chmod 0755 x", "fn": "http_calls", "ok": []}
+{"arg": "chmod 0755 x", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod 755 x", "fn": "heredoc", "literal": [], "out": "chmod 755 x"}
+{"arg": "chmod 755 x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod 755 x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["755", "755"], ["x", "x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["755", "755"], ["x", "x"]]}]}
+{"arg": "chmod 755 x", "fn": "write_targets", "ok": ["755", "x", "755", "x"]}
+{"arg": "chmod 755 x", "fn": "http_calls", "ok": []}
+{"arg": "chmod 755 x", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod 6755 x", "fn": "heredoc", "literal": [], "out": "chmod 6755 x"}
+{"arg": "chmod 6755 x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod 6755 x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["6755", "6755"], ["x", "x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["6755", "6755"], ["x", "x"]]}]}
+{"arg": "chmod 6755 x", "fn": "write_targets", "ok": ["6755", "x", "6755", "x"]}
+{"arg": "chmod 6755 x", "fn": "http_calls", "ok": []}
+{"arg": "chmod 6755 x", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod 6755 x", "fn": "check", "name": "check_privilege_escalation", "ok": "`chmod 6755` は setuid/setgid を付与する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "chmod u+x x", "fn": "heredoc", "literal": [], "out": "chmod u+x x"}
+{"arg": "chmod u+x x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod u+x x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["u+x", "u+x"], ["x", "x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["u+x", "u+x"], ["x", "x"]]}]}
+{"arg": "chmod u+x x", "fn": "write_targets", "ok": ["u+x", "x", "u+x", "x"]}
+{"arg": "chmod u+x x", "fn": "http_calls", "ok": []}
+{"arg": "chmod u+x x", "fn": "fetched_paths", "ok": []}
+{"arg": "chmod 1777 x", "fn": "heredoc", "literal": [], "out": "chmod 1777 x"}
+{"arg": "chmod 1777 x", "fn": "expand_cd", "out": ""}
+{"arg": "chmod 1777 x", "fn": "commands", "ok": [{"redirects": [], "words": [["chmod", "chmod"], ["1777", "1777"], ["x", "x"]]}, {"redirects": [], "words": [["chmod", "chmod"], ["1777", "1777"], ["x", "x"]]}]}
+{"arg": "chmod 1777 x", "fn": "write_targets", "ok": ["1777", "x", "1777", "x"]}
+{"arg": "chmod 1777 x", "fn": "http_calls", "ok": []}
+{"arg": "chmod 1777 x", "fn": "fetched_paths", "ok": []}
+{"arg": "usermod -aG sudo me", "fn": "heredoc", "literal": [], "out": "usermod -aG sudo me"}
+{"arg": "usermod -aG sudo me", "fn": "expand_cd", "out": ""}
+{"arg": "usermod -aG sudo me", "fn": "commands", "ok": [{"redirects": [], "words": [["usermod", "usermod"], ["-aG", "-aG"], ["sudo", "sudo"], ["me", "me"]]}, {"redirects": [], "words": [["usermod", "usermod"], ["-aG", "-aG"], ["sudo", "sudo"], ["me", "me"]]}]}
+{"arg": "usermod -aG sudo me", "fn": "write_targets", "ok": []}
+{"arg": "usermod -aG sudo me", "fn": "http_calls", "ok": []}
+{"arg": "usermod -aG sudo me", "fn": "fetched_paths", "ok": []}
+{"arg": "usermod -aG sudo me", "fn": "check", "name": "check_privilege_escalation", "ok": "`usermod` はアカウント・認証設定を変更する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "useradd x", "fn": "heredoc", "literal": [], "out": "useradd x"}
+{"arg": "useradd x", "fn": "expand_cd", "out": ""}
+{"arg": "useradd x", "fn": "commands", "ok": [{"redirects": [], "words": [["useradd", "useradd"], ["x", "x"]]}, {"redirects": [], "words": [["useradd", "useradd"], ["x", "x"]]}]}
+{"arg": "useradd x", "fn": "write_targets", "ok": []}
+{"arg": "useradd x", "fn": "http_calls", "ok": []}
+{"arg": "useradd x", "fn": "fetched_paths", "ok": []}
+{"arg": "useradd x", "fn": "check", "name": "check_privilege_escalation", "ok": "`useradd` はアカウント・認証設定を変更する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "passwd", "fn": "heredoc", "literal": [], "out": "passwd"}
+{"arg": "passwd", "fn": "expand_cd", "out": ""}
+{"arg": "passwd", "fn": "commands", "ok": [{"redirects": [], "words": [["passwd", "passwd"]]}, {"redirects": [], "words": [["passwd", "passwd"]]}]}
+{"arg": "passwd", "fn": "write_targets", "ok": []}
+{"arg": "passwd", "fn": "http_calls", "ok": []}
+{"arg": "passwd", "fn": "fetched_paths", "ok": []}
+{"arg": "passwd", "fn": "check", "name": "check_privilege_escalation", "ok": "`passwd` はアカウント・認証設定を変更する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "visudo", "fn": "heredoc", "literal": [], "out": "visudo"}
+{"arg": "visudo", "fn": "expand_cd", "out": ""}
+{"arg": "visudo", "fn": "commands", "ok": [{"redirects": [], "words": [["visudo", "visudo"]]}, {"redirects": [], "words": [["visudo", "visudo"]]}]}
+{"arg": "visudo", "fn": "write_targets", "ok": []}
+{"arg": "visudo", "fn": "http_calls", "ok": []}
+{"arg": "visudo", "fn": "fetched_paths", "ok": []}
+{"arg": "visudo", "fn": "check", "name": "check_privilege_escalation", "ok": "`visudo` はアカウント・認証設定を変更する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "chpasswd", "fn": "heredoc", "literal": [], "out": "chpasswd"}
+{"arg": "chpasswd", "fn": "expand_cd", "out": ""}
+{"arg": "chpasswd", "fn": "commands", "ok": [{"redirects": [], "words": [["chpasswd", "chpasswd"]]}, {"redirects": [], "words": [["chpasswd", "chpasswd"]]}]}
+{"arg": "chpasswd", "fn": "write_targets", "ok": []}
+{"arg": "chpasswd", "fn": "http_calls", "ok": []}
+{"arg": "chpasswd", "fn": "fetched_paths", "ok": []}
+{"arg": "chpasswd", "fn": "check", "name": "check_privilege_escalation", "ok": "`chpasswd` はアカウント・認証設定を変更する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "gpasswd -a me sudo", "fn": "heredoc", "literal": [], "out": "gpasswd -a me sudo"}
+{"arg": "gpasswd -a me sudo", "fn": "expand_cd", "out": ""}
+{"arg": "gpasswd -a me sudo", "fn": "commands", "ok": [{"redirects": [], "words": [["gpasswd", "gpasswd"], ["-a", "-a"], ["me", "me"], ["sudo", "sudo"]]}, {"redirects": [], "words": [["gpasswd", "gpasswd"], ["-a", "-a"], ["me", "me"], ["sudo", "sudo"]]}]}
+{"arg": "gpasswd -a me sudo", "fn": "write_targets", "ok": []}
+{"arg": "gpasswd -a me sudo", "fn": "http_calls", "ok": []}
+{"arg": "gpasswd -a me sudo", "fn": "fetched_paths", "ok": []}
+{"arg": "gpasswd -a me sudo", "fn": "check", "name": "check_privilege_escalation", "ok": "`gpasswd` はアカウント・認証設定を変更する操作です。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "cat /etc/shadow", "fn": "heredoc", "literal": [], "out": "cat /etc/shadow"}
+{"arg": "cat /etc/shadow", "fn": "expand_cd", "out": ""}
+{"arg": "cat /etc/shadow", "fn": "commands", "ok": [{"redirects": [], "words": [["cat", "cat"], ["/etc/shadow", "/etc/shadow"]]}, {"redirects": [], "words": [["cat", "cat"], ["/etc/shadow", "/etc/shadow"]]}]}
+{"arg": "cat /etc/shadow", "fn": "write_targets", "ok": []}
+{"arg": "cat /etc/shadow", "fn": "http_calls", "ok": []}
+{"arg": "cat /etc/shadow", "fn": "fetched_paths", "ok": []}
+{"arg": "cat /etc/shadow", "fn": "check", "name": "check_privilege_escalation", "ok": "認証設定ファイル (/etc/shadow, /etc/sudoers) を操作しようとしています。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "cat /etc/shadow", "fn": "check", "name": "check_file_read", "ok": "`cat` がセンシティブなパスを対象にしています (パターン: shadow)"}
+{"arg": "cat /etc/sudoers", "fn": "heredoc", "literal": [], "out": "cat /etc/sudoers"}
+{"arg": "cat /etc/sudoers", "fn": "expand_cd", "out": ""}
+{"arg": "cat /etc/sudoers", "fn": "commands", "ok": [{"redirects": [], "words": [["cat", "cat"], ["/etc/sudoers", "/etc/sudoers"]]}, {"redirects": [], "words": [["cat", "cat"], ["/etc/sudoers", "/etc/sudoers"]]}]}
+{"arg": "cat /etc/sudoers", "fn": "write_targets", "ok": []}
+{"arg": "cat /etc/sudoers", "fn": "http_calls", "ok": []}
+{"arg": "cat /etc/sudoers", "fn": "fetched_paths", "ok": []}
+{"arg": "cat /etc/sudoers", "fn": "check", "name": "check_privilege_escalation", "ok": "認証設定ファイル (/etc/shadow, /etc/sudoers) を操作しようとしています。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "cat /etc/sudoers", "fn": "check", "name": "check_file_read", "ok": "`cat` がセンシティブなパスを対象にしています (パターン: /etc/sudoers)"}
+{"arg": "echo x > /etc/sudoers.d/x", "fn": "heredoc", "literal": [], "out": "echo x > /etc/sudoers.d/x"}
+{"arg": "echo x > /etc/sudoers.d/x", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > /etc/sudoers.d/x", "fn": "commands", "ok": [{"redirects": [["", ">", ["/etc/sudoers.d/x", "/etc/sudoers.d/x"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["/etc/sudoers.d/x", "/etc/sudoers.d/x"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > /etc/sudoers.d/x", "fn": "write_targets", "ok": ["/etc/sudoers.d/x", "/etc/sudoers.d/x"]}
+{"arg": "echo x > /etc/sudoers.d/x", "fn": "http_calls", "ok": []}
+{"arg": "echo x > /etc/sudoers.d/x", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > /etc/sudoers.d/x", "fn": "check", "name": "check_privilege_escalation", "ok": "認証設定ファイル (/etc/shadow, /etc/sudoers) を操作しようとしています。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "echo x >> /etc/passwd", "fn": "heredoc", "literal": [], "out": "echo x >> /etc/passwd"}
+{"arg": "echo x >> /etc/passwd", "fn": "expand_cd", "out": ""}
+{"arg": "echo x >> /etc/passwd", "fn": "commands", "ok": [{"redirects": [["", ">>", ["/etc/passwd", "/etc/passwd"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">>", ["/etc/passwd", "/etc/passwd"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x >> /etc/passwd", "fn": "write_targets", "ok": ["/etc/passwd", "/etc/passwd"]}
+{"arg": "echo x >> /etc/passwd", "fn": "http_calls", "ok": []}
+{"arg": "echo x >> /etc/passwd", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x >> /etc/passwd", "fn": "check", "name": "check_privilege_escalation", "ok": "アカウント設定ファイル (/etc 配下) を書き換えようとしています。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "cat /etc/passwd", "fn": "heredoc", "literal": [], "out": "cat /etc/passwd"}
+{"arg": "cat /etc/passwd", "fn": "expand_cd", "out": ""}
+{"arg": "cat /etc/passwd", "fn": "commands", "ok": [{"redirects": [], "words": [["cat", "cat"], ["/etc/passwd", "/etc/passwd"]]}, {"redirects": [], "words": [["cat", "cat"], ["/etc/passwd", "/etc/passwd"]]}]}
+{"arg": "cat /etc/passwd", "fn": "write_targets", "ok": []}
+{"arg": "cat /etc/passwd", "fn": "http_calls", "ok": []}
+{"arg": "cat /etc/passwd", "fn": "fetched_paths", "ok": []}
+{"arg": "cat /etc/passwd", "fn": "check", "name": "check_file_read", "ok": "`cat` がセンシティブなパスを対象にしています (パターン: /etc/passwd)"}
+{"arg": "echo x > /etc/group", "fn": "heredoc", "literal": [], "out": "echo x > /etc/group"}
+{"arg": "echo x > /etc/group", "fn": "expand_cd", "out": ""}
+{"arg": "echo x > /etc/group", "fn": "commands", "ok": [{"redirects": [["", ">", ["/etc/group", "/etc/group"]]], "words": [["echo", "echo"], ["x", "x"]]}, {"redirects": [["", ">", ["/etc/group", "/etc/group"]]], "words": [["echo", "echo"], ["x", "x"]]}]}
+{"arg": "echo x > /etc/group", "fn": "write_targets", "ok": ["/etc/group", "/etc/group"]}
+{"arg": "echo x > /etc/group", "fn": "http_calls", "ok": []}
+{"arg": "echo x > /etc/group", "fn": "fetched_paths", "ok": []}
+{"arg": "echo x > /etc/group", "fn": "check", "name": "check_privilege_escalation", "ok": "アカウント設定ファイル (/etc 配下) を書き換えようとしています。\n権限昇格に繋がるため許可されていません。"}
+{"arg": "cat /etc/group", "fn": "heredoc", "literal": [], "out": "cat /etc/group"}
+{"arg": "cat /etc/group", "fn": "expand_cd", "out": ""}
+{"arg": "cat /etc/group", "fn": "commands", "ok": [{"redirects": [], "words": [["cat", "cat"], ["/etc/group", "/etc/group"]]}, {"redirects": [], "words": [["cat", "cat"], ["/etc/group", "/etc/group"]]}]}
+{"arg": "cat /etc/group", "fn": "write_targets", "ok": []}
+{"arg": "cat /etc/group", "fn": "http_calls", "ok": []}
+{"arg": "cat /etc/group", "fn": "fetched_paths", "ok": []}
+{"arg": "mise self-update", "fn": "heredoc", "literal": [], "out": "mise self-update"}
+{"arg": "mise self-update", "fn": "expand_cd", "out": ""}
+{"arg": "mise self-update", "fn": "commands", "ok": [{"redirects": [], "words": [["self-update", "self-update"]]}, {"redirects": [], "words": [["mise", "mise"], ["self-update", "self-update"]]}]}
+{"arg": "mise self-update", "fn": "write_targets", "ok": []}
+{"arg": "mise self-update", "fn": "http_calls", "ok": []}
+{"arg": "mise self-update", "fn": "fetched_paths", "ok": []}
+{"arg": "mise self-update", "fn": "check", "name": "check_tool_self_update", "ok": "`mise self-update` はmise 自身を更新します。\n全プロジェクトに影響し元に戻しにくいため許可されていません。\n必要ならユーザー自身で実行してください。"}
+{"arg": "mise implode", "fn": "heredoc", "literal": [], "out": "mise implode"}
+{"arg": "mise implode", "fn": "expand_cd", "out": ""}
+{"arg": "mise implode", "fn": "commands", "ok": [{"redirects": [], "words": [["implode", "implode"]]}, {"redirects": [], "words": [["mise", "mise"], ["implode", "implode"]]}]}
+{"arg": "mise implode", "fn": "write_targets", "ok": []}
+{"arg": "mise implode", "fn": "http_calls", "ok": []}
+{"arg": "mise implode", "fn": "fetched_paths", "ok": []}
+{"arg": "mise implode", "fn": "check", "name": "check_tool_self_update", "ok": "`mise implode` はmise の導入物をすべて削除します。\n全プロジェクトに影響し元に戻しにくいため許可されていません。\n必要ならユーザー自身で実行してください。"}
+{"arg": "mise self-update --yes", "fn": "heredoc", "literal": [], "out": "mise self-update --yes"}
+{"arg": "mise self-update --yes", "fn": "expand_cd", "out": ""}
+{"arg": "mise self-update --yes", "fn": "commands", "ok": [{"redirects": [], "words": [["self-update", "self-update"], ["--yes", "--yes"]]}, {"redirects": [], "words": [["mise", "mise"], ["self-update", "self-update"], ["--yes", "--yes"]]}]}
+{"arg": "mise self-update --yes", "fn": "write_targets", "ok": []}
+{"arg": "mise self-update --yes", "fn": "http_calls", "ok": []}
+{"arg": "mise self-update --yes", "fn": "fetched_paths", "ok": []}
+{"arg": "mise self-update --yes", "fn": "check", "name": "check_tool_self_update", "ok": "`mise self-update` はmise 自身を更新します。\n全プロジェクトに影響し元に戻しにくいため許可されていません。\n必要ならユーザー自身で実行してください。"}
+{"arg": "mise install", "fn": "heredoc", "literal": [], "out": "mise install"}
+{"arg": "mise install", "fn": "expand_cd", "out": ""}
+{"arg": "mise install", "fn": "commands", "ok": [{"redirects": [], "words": [["install", "install"]]}, {"redirects": [], "words": [["mise", "mise"], ["install", "install"]]}]}
+{"arg": "mise install", "fn": "write_targets", "ok": []}
+{"arg": "mise install", "fn": "http_calls", "ok": []}
+{"arg": "mise install", "fn": "fetched_paths", "ok": []}
+{"arg": "mise use node", "fn": "heredoc", "literal": [], "out": "mise use node"}
+{"arg": "mise use node", "fn": "expand_cd", "out": ""}
+{"arg": "mise use node", "fn": "commands", "ok": [{"redirects": [], "words": [["use", "use"], ["node", "node"]]}, {"redirects": [], "words": [["mise", "mise"], ["use", "use"], ["node", "node"]]}]}
+{"arg": "mise use node", "fn": "write_targets", "ok": []}
+{"arg": "mise use node", "fn": "http_calls", "ok": []}
+{"arg": "mise use node", "fn": "fetched_paths", "ok": []}
+{"arg": "mise use -g node", "fn": "heredoc", "literal": [], "out": "mise use -g node"}
+{"arg": "mise use -g node", "fn": "expand_cd", "out": ""}
+{"arg": "mise use -g node", "fn": "commands", "ok": [{"redirects": [], "words": [["use", "use"], ["-g", "-g"], ["node", "node"]]}, {"redirects": [], "words": [["mise", "mise"], ["use", "use"], ["-g", "-g"], ["node", "node"]]}]}
+{"arg": "mise use -g node", "fn": "write_targets", "ok": []}
+{"arg": "mise use -g node", "fn": "http_calls", "ok": []}
+{"arg": "mise use -g node", "fn": "fetched_paths", "ok": []}
+{"arg": "mise use -g node", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise use -g` はホームのグローバル設定を書き換えます。\n実行しようとしているコマンド: mise use -g node\nプロジェクト内で済むなら `-g` を外してください。"}
+{"arg": "mise use --global node", "fn": "heredoc", "literal": [], "out": "mise use --global node"}
+{"arg": "mise use --global node", "fn": "expand_cd", "out": ""}
+{"arg": "mise use --global node", "fn": "commands", "ok": [{"redirects": [], "words": [["use", "use"], ["--global", "--global"], ["node", "node"]]}, {"redirects": [], "words": [["mise", "mise"], ["use", "use"], ["--global", "--global"], ["node", "node"]]}]}
+{"arg": "mise use --global node", "fn": "write_targets", "ok": []}
+{"arg": "mise use --global node", "fn": "http_calls", "ok": []}
+{"arg": "mise use --global node", "fn": "fetched_paths", "ok": []}
+{"arg": "mise use --global node", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise use -g` はホームのグローバル設定を書き換えます。\n実行しようとしているコマンド: mise use --global node\nプロジェクト内で済むなら `-g` を外してください。"}
+{"arg": "mise use node -g", "fn": "heredoc", "literal": [], "out": "mise use node -g"}
+{"arg": "mise use node -g", "fn": "expand_cd", "out": ""}
+{"arg": "mise use node -g", "fn": "commands", "ok": [{"redirects": [], "words": [["use", "use"], ["node", "node"], ["-g", "-g"]]}, {"redirects": [], "words": [["mise", "mise"], ["use", "use"], ["node", "node"], ["-g", "-g"]]}]}
+{"arg": "mise use node -g", "fn": "write_targets", "ok": []}
+{"arg": "mise use node -g", "fn": "http_calls", "ok": []}
+{"arg": "mise use node -g", "fn": "fetched_paths", "ok": []}
+{"arg": "mise use node -g", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise use -g` はホームのグローバル設定を書き換えます。\n実行しようとしているコマンド: mise use node -g\nプロジェクト内で済むなら `-g` を外してください。"}
+{"arg": "mise settings set x y", "fn": "heredoc", "literal": [], "out": "mise settings set x y"}
+{"arg": "mise settings set x y", "fn": "expand_cd", "out": ""}
+{"arg": "mise settings set x y", "fn": "commands", "ok": [{"redirects": [], "words": [["settings", "settings"], ["set", "set"], ["x", "x"], ["y", "y"]]}, {"redirects": [], "words": [["mise", "mise"], ["settings", "settings"], ["set", "set"], ["x", "x"], ["y", "y"]]}]}
+{"arg": "mise settings set x y", "fn": "write_targets", "ok": []}
+{"arg": "mise settings set x y", "fn": "http_calls", "ok": []}
+{"arg": "mise settings set x y", "fn": "fetched_paths", "ok": []}
+{"arg": "mise settings set x y", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise settings set` はmise の設定を書き換えます。\n実行しようとしているコマンド: mise settings set x y\n内容を確認して問題なければ承認してください。"}
+{"arg": "mise settings unset x", "fn": "heredoc", "literal": [], "out": "mise settings unset x"}
+{"arg": "mise settings unset x", "fn": "expand_cd", "out": ""}
+{"arg": "mise settings unset x", "fn": "commands", "ok": [{"redirects": [], "words": [["settings", "settings"], ["unset", "unset"], ["x", "x"]]}, {"redirects": [], "words": [["mise", "mise"], ["settings", "settings"], ["unset", "unset"], ["x", "x"]]}]}
+{"arg": "mise settings unset x", "fn": "write_targets", "ok": []}
+{"arg": "mise settings unset x", "fn": "http_calls", "ok": []}
+{"arg": "mise settings unset x", "fn": "fetched_paths", "ok": []}
+{"arg": "mise settings unset x", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise settings unset` はmise の設定を書き換えます。\n実行しようとしているコマンド: mise settings unset x\n内容を確認して問題なければ承認してください。"}
+{"arg": "mise settings add x y", "fn": "heredoc", "literal": [], "out": "mise settings add x y"}
+{"arg": "mise settings add x y", "fn": "expand_cd", "out": ""}
+{"arg": "mise settings add x y", "fn": "commands", "ok": [{"redirects": [], "words": [["settings", "settings"], ["add", "add"], ["x", "x"], ["y", "y"]]}, {"redirects": [], "words": [["mise", "mise"], ["settings", "settings"], ["add", "add"], ["x", "x"], ["y", "y"]]}]}
+{"arg": "mise settings add x y", "fn": "write_targets", "ok": []}
+{"arg": "mise settings add x y", "fn": "http_calls", "ok": []}
+{"arg": "mise settings add x y", "fn": "fetched_paths", "ok": []}
+{"arg": "mise settings add x y", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise settings add` はmise の設定を書き換えます。\n実行しようとしているコマンド: mise settings add x y\n内容を確認して問題なければ承認してください。"}
+{"arg": "mise settings", "fn": "heredoc", "literal": [], "out": "mise settings"}
+{"arg": "mise settings", "fn": "expand_cd", "out": ""}
+{"arg": "mise settings", "fn": "commands", "ok": [{"redirects": [], "words": [["settings", "settings"]]}, {"redirects": [], "words": [["mise", "mise"], ["settings", "settings"]]}]}
+{"arg": "mise settings", "fn": "write_targets", "ok": []}
+{"arg": "mise settings", "fn": "http_calls", "ok": []}
+{"arg": "mise settings", "fn": "fetched_paths", "ok": []}
+{"arg": "mise global node", "fn": "heredoc", "literal": [], "out": "mise global node"}
+{"arg": "mise global node", "fn": "expand_cd", "out": ""}
+{"arg": "mise global node", "fn": "commands", "ok": [{"redirects": [], "words": [["global", "global"], ["node", "node"]]}, {"redirects": [], "words": [["mise", "mise"], ["global", "global"], ["node", "node"]]}]}
+{"arg": "mise global node", "fn": "write_targets", "ok": []}
+{"arg": "mise global node", "fn": "http_calls", "ok": []}
+{"arg": "mise global node", "fn": "fetched_paths", "ok": []}
+{"arg": "mise global node", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise global` はホームのグローバル設定を書き換えます。\n実行しようとしているコマンド: mise global node\n内容を確認して問題なければ承認してください。"}
+{"arg": "mise global", "fn": "heredoc", "literal": [], "out": "mise global"}
+{"arg": "mise global", "fn": "expand_cd", "out": ""}
+{"arg": "mise global", "fn": "commands", "ok": [{"redirects": [], "words": [["global", "global"]]}, {"redirects": [], "words": [["mise", "mise"], ["global", "global"]]}]}
+{"arg": "mise global", "fn": "write_targets", "ok": []}
+{"arg": "mise global", "fn": "http_calls", "ok": []}
+{"arg": "mise global", "fn": "fetched_paths", "ok": []}
+{"arg": "mise global", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise global` はホームのグローバル設定を書き換えます。\n実行しようとしているコマンド: mise global\n内容を確認して問題なければ承認してください。"}
+{"arg": "\"mise\" use -g node", "fn": "heredoc", "literal": [], "out": "\"mise\" use -g node"}
+{"arg": "\"mise\" use -g node", "fn": "expand_cd", "out": ""}
+{"arg": "\"mise\" use -g node", "fn": "commands", "ok": [{"redirects": [], "words": [["use", "use"], ["-g", "-g"], ["node", "node"]]}, {"redirects": [], "words": [["\"mise\"", "mise"], ["use", "use"], ["-g", "-g"], ["node", "node"]]}]}
+{"arg": "\"mise\" use -g node", "fn": "write_targets", "ok": []}
+{"arg": "\"mise\" use -g node", "fn": "http_calls", "ok": []}
+{"arg": "\"mise\" use -g node", "fn": "fetched_paths", "ok": []}
+{"arg": "\"mise\" use -g node", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise use -g` はホームのグローバル設定を書き換えます。\n実行しようとしているコマンド: \"mise\" use -g node\nプロジェクト内で済むなら `-g` を外してください。"}
+{"arg": "/usr/bin/mise use -g node", "fn": "heredoc", "literal": [], "out": "/usr/bin/mise use -g node"}
+{"arg": "/usr/bin/mise use -g node", "fn": "expand_cd", "out": ""}
+{"arg": "/usr/bin/mise use -g node", "fn": "commands", "ok": [{"redirects": [], "words": [["use", "use"], ["-g", "-g"], ["node", "node"]]}, {"redirects": [], "words": [["/usr/bin/mise", "/usr/bin/mise"], ["use", "use"], ["-g", "-g"], ["node", "node"]]}]}
+{"arg": "/usr/bin/mise use -g node", "fn": "write_targets", "ok": []}
+{"arg": "/usr/bin/mise use -g node", "fn": "http_calls", "ok": []}
+{"arg": "/usr/bin/mise use -g node", "fn": "fetched_paths", "ok": []}
+{"arg": "/usr/bin/mise use -g node", "fn": "check", "name": "check_global_env_mutation", "ok": "`mise use -g` はホームのグローバル設定を書き換えます。\n実行しようとしているコマンド: /usr/bin/mise use -g node\nプロジェクト内で済むなら `-g` を外してください。"}
+{"arg": "mise", "fn": "heredoc", "literal": [], "out": "mise"}
+{"arg": "mise", "fn": "expand_cd", "out": ""}
+{"arg": "mise", "fn": "commands", "ok": [{"redirects": [], "words": [["mise", "mise"]]}, {"redirects": [], "words": [["mise", "mise"]]}]}
+{"arg": "mise", "fn": "write_targets", "ok": []}
+{"arg": "mise", "fn": "http_calls", "ok": []}
+{"arg": "mise", "fn": "fetched_paths", "ok": []}
+{"arg": "cmake --build . --target install", "fn": "heredoc", "literal": [], "out": "cmake --build . --target install"}
+{"arg": "cmake --build . --target install", "fn": "expand_cd", "out": ""}
+{"arg": "cmake --build . --target install", "fn": "commands", "ok": [{"redirects": [], "words": [["cmake", "cmake"], ["--build", "--build"], [".", "."], ["--target", "--target"], ["install", "install"]]}, {"redirects": [], "words": [["cmake", "cmake"], ["--build", "--build"], [".", "."], ["--target", "--target"], ["install", "install"]]}]}
+{"arg": "cmake --build . --target install", "fn": "write_targets", "ok": []}
+{"arg": "cmake --build . --target install", "fn": "http_calls", "ok": []}
+{"arg": "cmake --build . --target install", "fn": "fetched_paths", "ok": []}
+{"arg": "cmake --build . --target install", "fn": "check", "name": "check_global_env_mutation", "ok": "`cmake --build --target install` はビルド成果物をシステムへインストールします。\n実行しようとしているコマンド: cmake --build . --target install\nインストール先を確認して問題なければ承認してください。"}
+{"arg": "cmake --build . --target all", "fn": "heredoc", "literal": [], "out": "cmake --build . --target all"}
+{"arg": "cmake --build . --target all", "fn": "expand_cd", "out": ""}
+{"arg": "cmake --build . --target all", "fn": "commands", "ok": [{"redirects": [], "words": [["cmake", "cmake"], ["--build", "--build"], [".", "."], ["--target", "--target"], ["all", "all"]]}, {"redirects": [], "words": [["cmake", "cmake"], ["--build", "--build"], [".", "."], ["--target", "--target"], ["all", "all"]]}]}
+{"arg": "cmake --build . --target all", "fn": "write_targets", "ok": []}
+{"arg": "cmake --build . --target all", "fn": "http_calls", "ok": []}
+{"arg": "cmake --build . --target all", "fn": "fetched_paths", "ok": []}
+{"arg": "cmake --build . --target", "fn": "heredoc", "literal": [], "out": "cmake --build . --target"}
+{"arg": "cmake --build . --target", "fn": "expand_cd", "out": ""}
+{"arg": "cmake --build . --target", "fn": "commands", "ok": [{"redirects": [], "words": [["cmake", "cmake"], ["--build", "--build"], [".", "."], ["--target", "--target"]]}, {"redirects": [], "words": [["cmake", "cmake"], ["--build", "--build"], [".", "."], ["--target", "--target"]]}]}
+{"arg": "cmake --build . --target", "fn": "write_targets", "ok": []}
+{"arg": "cmake --build . --target", "fn": "http_calls", "ok": []}
+{"arg": "cmake --build . --target", "fn": "fetched_paths", "ok": []}
+{"arg": "cmake .", "fn": "heredoc", "literal": [], "out": "cmake ."}
+{"arg": "cmake .", "fn": "expand_cd", "out": ""}
+{"arg": "cmake .", "fn": "commands", "ok": [{"redirects": [], "words": [["cmake", "cmake"], [".", "."]]}, {"redirects": [], "words": [["cmake", "cmake"], [".", "."]]}]}
+{"arg": "cmake .", "fn": "write_targets", "ok": []}
+{"arg": "cmake .", "fn": "http_calls", "ok": []}
+{"arg": "cmake .", "fn": "fetched_paths", "ok": []}
+{"arg": "gcc -o /usr/local/bin/x x.c", "fn": "heredoc", "literal": [], "out": "gcc -o /usr/local/bin/x x.c"}
+{"arg": "gcc -o /usr/local/bin/x x.c", "fn": "expand_cd", "out": ""}
+{"arg": "gcc -o /usr/local/bin/x x.c", "fn": "commands", "ok": [{"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["/usr/local/bin/x", "/usr/local/bin/x"], ["x.c", "x.c"]]}, {"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["/usr/local/bin/x", "/usr/local/bin/x"], ["x.c", "x.c"]]}]}
+{"arg": "gcc -o /usr/local/bin/x x.c", "fn": "write_targets", "ok": []}
+{"arg": "gcc -o /usr/local/bin/x x.c", "fn": "http_calls", "ok": []}
+{"arg": "gcc -o /usr/local/bin/x x.c", "fn": "fetched_paths", "ok": []}
+{"arg": "gcc -o /usr/local/bin/x x.c", "fn": "check", "name": "check_global_env_mutation", "ok": "`gcc -o /usr/local/bin/x` はプロジェクトの外へ実行ファイルを書き出します。\n実行しようとしているコマンド: gcc -o /usr/local/bin/x x.c\n出力先を確認して問題なければ承認してください。"}
+{"arg": "gcc -o ./x x.c", "fn": "heredoc", "literal": [], "out": "gcc -o ./x x.c"}
+{"arg": "gcc -o ./x x.c", "fn": "expand_cd", "out": ""}
+{"arg": "gcc -o ./x x.c", "fn": "commands", "ok": [{"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["./x", "./x"], ["x.c", "x.c"]]}, {"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["./x", "./x"], ["x.c", "x.c"]]}]}
+{"arg": "gcc -o ./x x.c", "fn": "write_targets", "ok": []}
+{"arg": "gcc -o ./x x.c", "fn": "http_calls", "ok": []}
+{"arg": "gcc -o ./x x.c", "fn": "fetched_paths", "ok": []}
+{"arg": "gcc -o ~/x x.c", "fn": "heredoc", "literal": [], "out": "gcc -o ~/x x.c"}
+{"arg": "gcc -o ~/x x.c", "fn": "expand_cd", "out": ""}
+{"arg": "gcc -o ~/x x.c", "fn": "commands", "ok": [{"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["~/x", "~/x"], ["x.c", "x.c"]]}, {"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["~/x", "~/x"], ["x.c", "x.c"]]}]}
+{"arg": "gcc -o ~/x x.c", "fn": "write_targets", "ok": []}
+{"arg": "gcc -o ~/x x.c", "fn": "http_calls", "ok": []}
+{"arg": "gcc -o ~/x x.c", "fn": "fetched_paths", "ok": []}
+{"arg": "gcc -o ~/x x.c", "fn": "check", "name": "check_global_env_mutation", "ok": "`gcc -o ~/x` はプロジェクトの外へ実行ファイルを書き出します。\n実行しようとしているコマンド: gcc -o ~/x x.c\n出力先を確認して問題なければ承認してください。"}
+{"arg": "gcc -o ../x x.c", "fn": "heredoc", "literal": [], "out": "gcc -o ../x x.c"}
+{"arg": "gcc -o ../x x.c", "fn": "expand_cd", "out": ""}
+{"arg": "gcc -o ../x x.c", "fn": "commands", "ok": [{"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["../x", "../x"], ["x.c", "x.c"]]}, {"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["../x", "../x"], ["x.c", "x.c"]]}]}
+{"arg": "gcc -o ../x x.c", "fn": "write_targets", "ok": []}
+{"arg": "gcc -o ../x x.c", "fn": "http_calls", "ok": []}
+{"arg": "gcc -o ../x x.c", "fn": "fetched_paths", "ok": []}
+{"arg": "gcc -o ../x x.c", "fn": "check", "name": "check_global_env_mutation", "ok": "`gcc -o ../x` はプロジェクトの外へ実行ファイルを書き出します。\n実行しようとしているコマンド: gcc -o ../x x.c\n出力先を確認して問題なければ承認してください。"}
+{"arg": "gcc -o $HOME/x x.c", "fn": "heredoc", "literal": [], "out": "gcc -o $HOME/x x.c"}
+{"arg": "gcc -o $HOME/x x.c", "fn": "expand_cd", "out": ""}
+{"arg": "gcc -o $HOME/x x.c", "fn": "commands", "ok": [{"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["$HOME/x", "$HOME/x"], ["x.c", "x.c"]]}, {"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["$HOME/x", "$HOME/x"], ["x.c", "x.c"]]}]}
+{"arg": "gcc -o $HOME/x x.c", "fn": "write_targets", "ok": []}
+{"arg": "gcc -o $HOME/x x.c", "fn": "http_calls", "ok": []}
+{"arg": "gcc -o $HOME/x x.c", "fn": "fetched_paths", "ok": []}
+{"arg": "gcc -o /tmp/x x.c", "fn": "heredoc", "literal": [], "out": "gcc -o /tmp/x x.c"}
+{"arg": "gcc -o /tmp/x x.c", "fn": "expand_cd", "out": ""}
+{"arg": "gcc -o /tmp/x x.c", "fn": "commands", "ok": [{"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["/tmp/x", "/tmp/x"], ["x.c", "x.c"]]}, {"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"], ["/tmp/x", "/tmp/x"], ["x.c", "x.c"]]}]}
+{"arg": "gcc -o /tmp/x x.c", "fn": "write_targets", "ok": []}
+{"arg": "gcc -o /tmp/x x.c", "fn": "http_calls", "ok": []}
+{"arg": "gcc -o /tmp/x x.c", "fn": "fetched_paths", "ok": []}
+{"arg": "gcc -o /tmp/x x.c", "fn": "check", "name": "check_global_env_mutation", "ok": "`gcc -o /tmp/x` はプロジェクトの外へ実行ファイルを書き出します。\n実行しようとしているコマンド: gcc -o /tmp/x x.c\n出力先を確認して問題なければ承認してください。"}
+{"arg": "gcc -o", "fn": "heredoc", "literal": [], "out": "gcc -o"}
+{"arg": "gcc -o", "fn": "expand_cd", "out": ""}
+{"arg": "gcc -o", "fn": "commands", "ok": [{"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"]]}, {"redirects": [], "words": [["gcc", "gcc"], ["-o", "-o"]]}]}
+{"arg": "gcc -o", "fn": "write_targets", "ok": []}
+{"arg": "gcc -o", "fn": "http_calls", "ok": []}
+{"arg": "gcc -o", "fn": "fetched_paths", "ok": []}
+{"arg": "g++ -o /usr/bin/y y.cc", "fn": "heredoc", "literal": [], "out": "g++ -o /usr/bin/y y.cc"}
+{"arg": "g++ -o /usr/bin/y y.cc", "fn": "expand_cd", "out": ""}
+{"arg": "g++ -o /usr/bin/y y.cc", "fn": "commands", "ok": [{"redirects": [], "words": [["g++", "g++"], ["-o", "-o"], ["/usr/bin/y", "/usr/bin/y"], ["y.cc", "y.cc"]]}, {"redirects": [], "words": [["g++", "g++"], ["-o", "-o"], ["/usr/bin/y", "/usr/bin/y"], ["y.cc", "y.cc"]]}]}
+{"arg": "g++ -o /usr/bin/y y.cc", "fn": "write_targets", "ok": []}
+{"arg": "g++ -o /usr/bin/y y.cc", "fn": "http_calls", "ok": []}
+{"arg": "g++ -o /usr/bin/y y.cc", "fn": "fetched_paths", "ok": []}
+{"arg": "g++ -o /usr/bin/y y.cc", "fn": "check", "name": "check_global_env_mutation", "ok": "`g++ -o /usr/bin/y` はプロジェクトの外へ実行ファイルを書き出します。\n実行しようとしているコマンド: g++ -o /usr/bin/y y.cc\n出力先を確認して問題なければ承認してください。"}
+{"arg": "clang -o /x y.c", "fn": "heredoc", "literal": [], "out": "clang -o /x y.c"}
+{"arg": "clang -o /x y.c", "fn": "expand_cd", "out": ""}
+{"arg": "clang -o /x y.c", "fn": "commands", "ok": [{"redirects": [], "words": [["clang", "clang"], ["-o", "-o"], ["/x", "/x"], ["y.c", "y.c"]]}, {"redirects": [], "words": [["clang", "clang"], ["-o", "-o"], ["/x", "/x"], ["y.c", "y.c"]]}]}
+{"arg": "clang -o /x y.c", "fn": "write_targets", "ok": []}
+{"arg": "clang -o /x y.c", "fn": "http_calls", "ok": []}
+{"arg": "clang -o /x y.c", "fn": "fetched_paths", "ok": []}
+{"arg": "clang -o /x y.c", "fn": "check", "name": "check_global_env_mutation", "ok": "`clang -o /x` はプロジェクトの外へ実行ファイルを書き出します。\n実行しようとしているコマンド: clang -o /x y.c\n出力先を確認して問題なければ承認してください。"}
+{"arg": "cc -o x.out y.c", "fn": "heredoc", "literal": [], "out": "cc -o x.out y.c"}
+{"arg": "cc -o x.out y.c", "fn": "expand_cd", "out": ""}
+{"arg": "cc -o x.out y.c", "fn": "commands", "ok": [{"redirects": [], "words": [["cc", "cc"], ["-o", "-o"], ["x.out", "x.out"], ["y.c", "y.c"]]}, {"redirects": [], "words": [["cc", "cc"], ["-o", "-o"], ["x.out", "x.out"], ["y.c", "y.c"]]}]}
+{"arg": "cc -o x.out y.c", "fn": "write_targets", "ok": []}
+{"arg": "cc -o x.out y.c", "fn": "http_calls", "ok": []}
+{"arg": "cc -o x.out y.c", "fn": "fetched_paths", "ok": []}
+{"arg": "gcc x.c", "fn": "heredoc", "literal": [], "out": "gcc x.c"}
+{"arg": "gcc x.c", "fn": "expand_cd", "out": ""}
+{"arg": "gcc x.c", "fn": "commands", "ok": [{"redirects": [], "words": [["gcc", "gcc"], ["x.c", "x.c"]]}, {"redirects": [], "words": [["gcc", "gcc"], ["x.c", "x.c"]]}]}
+{"arg": "gcc x.c", "fn": "write_targets", "ok": []}
+{"arg": "gcc x.c", "fn": "http_calls", "ok": []}
+{"arg": "gcc x.c", "fn": "fetched_paths", "ok": []}
+{"arg": "git config alias.p push", "fn": "heredoc", "literal": [], "out": "git config alias.p push"}
+{"arg": "git config alias.p push", "fn": "expand_cd", "out": ""}
+{"arg": "git config alias.p push", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["alias.p", "alias.p"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["alias.p", "alias.p"], ["push", "push"]]}]}
+{"arg": "git config alias.p push", "fn": "write_targets", "ok": []}
+{"arg": "git config alias.p push", "fn": "http_calls", "ok": []}
+{"arg": "git config alias.p push", "fn": "fetched_paths", "ok": []}
+{"arg": "git config alias.p push", "fn": "check", "name": "check_git_config_write", "ok": "`git config alias.p` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config alias.p push", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config alias.p push\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config --global alias.p push", "fn": "heredoc", "literal": [], "out": "git config --global alias.p push"}
+{"arg": "git config --global alias.p push", "fn": "expand_cd", "out": ""}
+{"arg": "git config --global alias.p push", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["--global", "--global"], ["alias.p", "alias.p"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["--global", "--global"], ["alias.p", "alias.p"], ["push", "push"]]}]}
+{"arg": "git config --global alias.p push", "fn": "write_targets", "ok": []}
+{"arg": "git config --global alias.p push", "fn": "http_calls", "ok": []}
+{"arg": "git config --global alias.p push", "fn": "fetched_paths", "ok": []}
+{"arg": "git config --global alias.p push", "fn": "check", "name": "check_git_config_write", "ok": "`git config alias.p` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config --global alias.p push", "fn": "check", "name": "check_policy_deny", "ok": "`git config --global` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "git config --global alias.p push", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config --global alias.p push\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config core.hooksPath /x", "fn": "heredoc", "literal": [], "out": "git config core.hooksPath /x"}
+{"arg": "git config core.hooksPath /x", "fn": "expand_cd", "out": ""}
+{"arg": "git config core.hooksPath /x", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["core.hooksPath", "core.hooksPath"], ["/x", "/x"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["core.hooksPath", "core.hooksPath"], ["/x", "/x"]]}]}
+{"arg": "git config core.hooksPath /x", "fn": "write_targets", "ok": []}
+{"arg": "git config core.hooksPath /x", "fn": "http_calls", "ok": []}
+{"arg": "git config core.hooksPath /x", "fn": "fetched_paths", "ok": []}
+{"arg": "git config core.hooksPath /x", "fn": "check", "name": "check_git_config_write", "ok": "`git config core.hooksPath` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config core.hooksPath /x", "fn": "check", "name": "check_policy_deny", "ok": "`git config core.hooksPath` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "git config core.hooksPath /x", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config core.hooksPath /x\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config core.editor vim", "fn": "heredoc", "literal": [], "out": "git config core.editor vim"}
+{"arg": "git config core.editor vim", "fn": "expand_cd", "out": ""}
+{"arg": "git config core.editor vim", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["core.editor", "core.editor"], ["vim", "vim"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["core.editor", "core.editor"], ["vim", "vim"]]}]}
+{"arg": "git config core.editor vim", "fn": "write_targets", "ok": []}
+{"arg": "git config core.editor vim", "fn": "http_calls", "ok": []}
+{"arg": "git config core.editor vim", "fn": "fetched_paths", "ok": []}
+{"arg": "git config core.editor vim", "fn": "check", "name": "check_git_config_write", "ok": "`git config core.editor` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config core.editor vim", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config core.editor vim\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config core.pager less", "fn": "heredoc", "literal": [], "out": "git config core.pager less"}
+{"arg": "git config core.pager less", "fn": "expand_cd", "out": ""}
+{"arg": "git config core.pager less", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["core.pager", "core.pager"], ["less", "less"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["core.pager", "core.pager"], ["less", "less"]]}]}
+{"arg": "git config core.pager less", "fn": "write_targets", "ok": []}
+{"arg": "git config core.pager less", "fn": "http_calls", "ok": []}
+{"arg": "git config core.pager less", "fn": "fetched_paths", "ok": []}
+{"arg": "git config core.pager less", "fn": "check", "name": "check_git_config_write", "ok": "`git config core.pager` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config core.pager less", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config core.pager less\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config core.sshCommand x", "fn": "heredoc", "literal": [], "out": "git config core.sshCommand x"}
+{"arg": "git config core.sshCommand x", "fn": "expand_cd", "out": ""}
+{"arg": "git config core.sshCommand x", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["core.sshCommand", "core.sshCommand"], ["x", "x"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["core.sshCommand", "core.sshCommand"], ["x", "x"]]}]}
+{"arg": "git config core.sshCommand x", "fn": "write_targets", "ok": []}
+{"arg": "git config core.sshCommand x", "fn": "http_calls", "ok": []}
+{"arg": "git config core.sshCommand x", "fn": "fetched_paths", "ok": []}
+{"arg": "git config core.sshCommand x", "fn": "check", "name": "check_git_config_write", "ok": "`git config core.sshCommand` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config core.sshCommand x", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config core.sshCommand x\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config credential.helper store", "fn": "heredoc", "literal": [], "out": "git config credential.helper store"}
+{"arg": "git config credential.helper store", "fn": "expand_cd", "out": ""}
+{"arg": "git config credential.helper store", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["credential.helper", "credential.helper"], ["store", "store"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["credential.helper", "credential.helper"], ["store", "store"]]}]}
+{"arg": "git config credential.helper store", "fn": "write_targets", "ok": []}
+{"arg": "git config credential.helper store", "fn": "http_calls", "ok": []}
+{"arg": "git config credential.helper store", "fn": "fetched_paths", "ok": []}
+{"arg": "git config credential.helper store", "fn": "check", "name": "check_git_config_write", "ok": "`git config credential.helper` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config credential.helper store", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config credential.helper store\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config url.x.insteadOf y", "fn": "heredoc", "literal": [], "out": "git config url.x.insteadOf y"}
+{"arg": "git config url.x.insteadOf y", "fn": "expand_cd", "out": ""}
+{"arg": "git config url.x.insteadOf y", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["url.x.insteadOf", "url.x.insteadOf"], ["y", "y"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["url.x.insteadOf", "url.x.insteadOf"], ["y", "y"]]}]}
+{"arg": "git config url.x.insteadOf y", "fn": "write_targets", "ok": []}
+{"arg": "git config url.x.insteadOf y", "fn": "http_calls", "ok": []}
+{"arg": "git config url.x.insteadOf y", "fn": "fetched_paths", "ok": []}
+{"arg": "git config url.x.insteadOf y", "fn": "check", "name": "check_git_config_write", "ok": "`git config url.x.insteadOf` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config url.x.insteadOf y", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config url.x.insteadOf y\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config filter.x.clean y", "fn": "heredoc", "literal": [], "out": "git config filter.x.clean y"}
+{"arg": "git config filter.x.clean y", "fn": "expand_cd", "out": ""}
+{"arg": "git config filter.x.clean y", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["filter.x.clean", "filter.x.clean"], ["y", "y"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["filter.x.clean", "filter.x.clean"], ["y", "y"]]}]}
+{"arg": "git config filter.x.clean y", "fn": "write_targets", "ok": []}
+{"arg": "git config filter.x.clean y", "fn": "http_calls", "ok": []}
+{"arg": "git config filter.x.clean y", "fn": "fetched_paths", "ok": []}
+{"arg": "git config filter.x.clean y", "fn": "check", "name": "check_git_config_write", "ok": "`git config filter.x.clean` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config filter.x.clean y", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config filter.x.clean y\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config diff.external x", "fn": "heredoc", "literal": [], "out": "git config diff.external x"}
+{"arg": "git config diff.external x", "fn": "expand_cd", "out": ""}
+{"arg": "git config diff.external x", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["diff.external", "diff.external"], ["x", "x"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["diff.external", "diff.external"], ["x", "x"]]}]}
+{"arg": "git config diff.external x", "fn": "write_targets", "ok": []}
+{"arg": "git config diff.external x", "fn": "http_calls", "ok": []}
+{"arg": "git config diff.external x", "fn": "fetched_paths", "ok": []}
+{"arg": "git config diff.external x", "fn": "check", "name": "check_git_config_write", "ok": "`git config diff.external` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config diff.external x", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config diff.external x\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config include.path x", "fn": "heredoc", "literal": [], "out": "git config include.path x"}
+{"arg": "git config include.path x", "fn": "expand_cd", "out": ""}
+{"arg": "git config include.path x", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["include.path", "include.path"], ["x", "x"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["include.path", "include.path"], ["x", "x"]]}]}
+{"arg": "git config include.path x", "fn": "write_targets", "ok": []}
+{"arg": "git config include.path x", "fn": "http_calls", "ok": []}
+{"arg": "git config include.path x", "fn": "fetched_paths", "ok": []}
+{"arg": "git config include.path x", "fn": "check", "name": "check_git_config_write", "ok": "`git config include.path` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config include.path x", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config include.path x\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config includeIf.x.path y", "fn": "heredoc", "literal": [], "out": "git config includeIf.x.path y"}
+{"arg": "git config includeIf.x.path y", "fn": "expand_cd", "out": ""}
+{"arg": "git config includeIf.x.path y", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["includeIf.x.path", "includeIf.x.path"], ["y", "y"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["includeIf.x.path", "includeIf.x.path"], ["y", "y"]]}]}
+{"arg": "git config includeIf.x.path y", "fn": "write_targets", "ok": []}
+{"arg": "git config includeIf.x.path y", "fn": "http_calls", "ok": []}
+{"arg": "git config includeIf.x.path y", "fn": "fetched_paths", "ok": []}
+{"arg": "git config includeIf.x.path y", "fn": "check", "name": "check_git_config_write", "ok": "`git config includeIf.x.path` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config includeIf.x.path y", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config includeIf.x.path y\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config sequence.editor x", "fn": "heredoc", "literal": [], "out": "git config sequence.editor x"}
+{"arg": "git config sequence.editor x", "fn": "expand_cd", "out": ""}
+{"arg": "git config sequence.editor x", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["sequence.editor", "sequence.editor"], ["x", "x"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["sequence.editor", "sequence.editor"], ["x", "x"]]}]}
+{"arg": "git config sequence.editor x", "fn": "write_targets", "ok": []}
+{"arg": "git config sequence.editor x", "fn": "http_calls", "ok": []}
+{"arg": "git config sequence.editor x", "fn": "fetched_paths", "ok": []}
+{"arg": "git config sequence.editor x", "fn": "check", "name": "check_git_config_write", "ok": "`git config sequence.editor` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config sequence.editor x", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config sequence.editor x\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config gpg.program x", "fn": "heredoc", "literal": [], "out": "git config gpg.program x"}
+{"arg": "git config gpg.program x", "fn": "expand_cd", "out": ""}
+{"arg": "git config gpg.program x", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["gpg.program", "gpg.program"], ["x", "x"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["gpg.program", "gpg.program"], ["x", "x"]]}]}
+{"arg": "git config gpg.program x", "fn": "write_targets", "ok": []}
+{"arg": "git config gpg.program x", "fn": "http_calls", "ok": []}
+{"arg": "git config gpg.program x", "fn": "fetched_paths", "ok": []}
+{"arg": "git config gpg.program x", "fn": "check", "name": "check_git_config_write", "ok": "`git config gpg.program` は任意コマンドの実行や資格情報の取得に繋がる設定です。\nエージェント経由での変更は許可されていません。"}
+{"arg": "git config gpg.program x", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config gpg.program x\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config user.name x", "fn": "heredoc", "literal": [], "out": "git config user.name x"}
+{"arg": "git config user.name x", "fn": "expand_cd", "out": ""}
+{"arg": "git config user.name x", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["user.name", "user.name"], ["x", "x"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["user.name", "user.name"], ["x", "x"]]}]}
+{"arg": "git config user.name x", "fn": "write_targets", "ok": []}
+{"arg": "git config user.name x", "fn": "http_calls", "ok": []}
+{"arg": "git config user.name x", "fn": "fetched_paths", "ok": []}
+{"arg": "git config user.name x", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config user.name x\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config user.email", "fn": "heredoc", "literal": [], "out": "git config user.email"}
+{"arg": "git config user.email", "fn": "expand_cd", "out": ""}
+{"arg": "git config user.email", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["user.email", "user.email"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["user.email", "user.email"]]}]}
+{"arg": "git config user.email", "fn": "write_targets", "ok": []}
+{"arg": "git config user.email", "fn": "http_calls", "ok": []}
+{"arg": "git config user.email", "fn": "fetched_paths", "ok": []}
+{"arg": "git config user.email", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config user.email\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config alias.p", "fn": "heredoc", "literal": [], "out": "git config alias.p"}
+{"arg": "git config alias.p", "fn": "expand_cd", "out": ""}
+{"arg": "git config alias.p", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["alias.p", "alias.p"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["alias.p", "alias.p"]]}]}
+{"arg": "git config alias.p", "fn": "write_targets", "ok": []}
+{"arg": "git config alias.p", "fn": "http_calls", "ok": []}
+{"arg": "git config alias.p", "fn": "fetched_paths", "ok": []}
+{"arg": "git config alias.p", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config alias.p\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config --get alias.p", "fn": "heredoc", "literal": [], "out": "git config --get alias.p"}
+{"arg": "git config --get alias.p", "fn": "expand_cd", "out": ""}
+{"arg": "git config --get alias.p", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["--get", "--get"], ["alias.p", "alias.p"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["--get", "--get"], ["alias.p", "alias.p"]]}]}
+{"arg": "git config --get alias.p", "fn": "write_targets", "ok": []}
+{"arg": "git config --get alias.p", "fn": "http_calls", "ok": []}
+{"arg": "git config --get alias.p", "fn": "fetched_paths", "ok": []}
+{"arg": "git config --get alias.p", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config --get alias.p\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config --list", "fn": "heredoc", "literal": [], "out": "git config --list"}
+{"arg": "git config --list", "fn": "expand_cd", "out": ""}
+{"arg": "git config --list", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"], ["--list", "--list"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"], ["--list", "--list"]]}]}
+{"arg": "git config --list", "fn": "write_targets", "ok": []}
+{"arg": "git config --list", "fn": "http_calls", "ok": []}
+{"arg": "git config --list", "fn": "fetched_paths", "ok": []}
+{"arg": "git config --list", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config --list\n内容を確認して問題なければ承認してください。"}
+{"arg": "git config", "fn": "heredoc", "literal": [], "out": "git config"}
+{"arg": "git config", "fn": "expand_cd", "out": ""}
+{"arg": "git config", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["config", "config"]]}, {"redirects": [], "words": [["git", "git"], ["config", "config"]]}]}
+{"arg": "git config", "fn": "write_targets", "ok": []}
+{"arg": "git config", "fn": "http_calls", "ok": []}
+{"arg": "git config", "fn": "fetched_paths", "ok": []}
+{"arg": "git config", "fn": "check", "name": "check_policy_ask", "ok": "`git config` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git config\n内容を確認して問題なければ承認してください。"}
+{"arg": "dd if=/dev/zero of=/dev/sda", "fn": "heredoc", "literal": [], "out": "dd if=/dev/zero of=/dev/sda"}
+{"arg": "dd if=/dev/zero of=/dev/sda", "fn": "expand_cd", "out": ""}
+{"arg": "dd if=/dev/zero of=/dev/sda", "fn": "commands", "ok": [{"redirects": [], "words": [["dd", "dd"], ["if=/dev/zero", "if=/dev/zero"], ["of=/dev/sda", "of=/dev/sda"]]}, {"redirects": [], "words": [["dd", "dd"], ["if=/dev/zero", "if=/dev/zero"], ["of=/dev/sda", "of=/dev/sda"]]}]}
+{"arg": "dd if=/dev/zero of=/dev/sda", "fn": "write_targets", "ok": ["/dev/sda", "if=/dev/zero", "of=/dev/sda", "/dev/sda", "if=/dev/zero", "of=/dev/sda"]}
+{"arg": "dd if=/dev/zero of=/dev/sda", "fn": "http_calls", "ok": []}
+{"arg": "dd if=/dev/zero of=/dev/sda", "fn": "fetched_paths", "ok": []}
+{"arg": "dd if=/dev/zero of=/dev/sda", "fn": "check", "name": "check_block_device_write", "ok": "ブロックデバイス `/dev/sda` へ直接書き込もうとしています。\nディスクを破壊する操作は許可されていません。"}
+{"arg": "dd if=x of=/dev/null", "fn": "heredoc", "literal": [], "out": "dd if=x of=/dev/null"}
+{"arg": "dd if=x of=/dev/null", "fn": "expand_cd", "out": ""}
+{"arg": "dd if=x of=/dev/null", "fn": "commands", "ok": [{"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=/dev/null", "of=/dev/null"]]}, {"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=/dev/null", "of=/dev/null"]]}]}
+{"arg": "dd if=x of=/dev/null", "fn": "write_targets", "ok": ["/dev/null", "if=x", "of=/dev/null", "/dev/null", "if=x", "of=/dev/null"]}
+{"arg": "dd if=x of=/dev/null", "fn": "http_calls", "ok": []}
+{"arg": "dd if=x of=/dev/null", "fn": "fetched_paths", "ok": []}
+{"arg": "dd if=x of=/dev/stdout", "fn": "heredoc", "literal": [], "out": "dd if=x of=/dev/stdout"}
+{"arg": "dd if=x of=/dev/stdout", "fn": "expand_cd", "out": ""}
+{"arg": "dd if=x of=/dev/stdout", "fn": "commands", "ok": [{"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=/dev/stdout", "of=/dev/stdout"]]}, {"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=/dev/stdout", "of=/dev/stdout"]]}]}
+{"arg": "dd if=x of=/dev/stdout", "fn": "write_targets", "ok": ["/dev/stdout", "if=x", "of=/dev/stdout", "/dev/stdout", "if=x", "of=/dev/stdout"]}
+{"arg": "dd if=x of=/dev/stdout", "fn": "http_calls", "ok": []}
+{"arg": "dd if=x of=/dev/stdout", "fn": "fetched_paths", "ok": []}
+{"arg": "dd of=/dev/nvme0n1 if=x", "fn": "heredoc", "literal": [], "out": "dd of=/dev/nvme0n1 if=x"}
+{"arg": "dd of=/dev/nvme0n1 if=x", "fn": "expand_cd", "out": ""}
+{"arg": "dd of=/dev/nvme0n1 if=x", "fn": "commands", "ok": [{"redirects": [], "words": [["dd", "dd"], ["of=/dev/nvme0n1", "of=/dev/nvme0n1"], ["if=x", "if=x"]]}, {"redirects": [], "words": [["dd", "dd"], ["of=/dev/nvme0n1", "of=/dev/nvme0n1"], ["if=x", "if=x"]]}]}
+{"arg": "dd of=/dev/nvme0n1 if=x", "fn": "write_targets", "ok": ["/dev/nvme0n1", "of=/dev/nvme0n1", "if=x", "/dev/nvme0n1", "of=/dev/nvme0n1", "if=x"]}
+{"arg": "dd of=/dev/nvme0n1 if=x", "fn": "http_calls", "ok": []}
+{"arg": "dd of=/dev/nvme0n1 if=x", "fn": "fetched_paths", "ok": []}
+{"arg": "dd of=/dev/nvme0n1 if=x", "fn": "check", "name": "check_block_device_write", "ok": "ブロックデバイス `/dev/nvme0n1` へ直接書き込もうとしています。\nディスクを破壊する操作は許可されていません。"}
+{"arg": "dd if=x of=./out", "fn": "heredoc", "literal": [], "out": "dd if=x of=./out"}
+{"arg": "dd if=x of=./out", "fn": "expand_cd", "out": ""}
+{"arg": "dd if=x of=./out", "fn": "commands", "ok": [{"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=./out", "of=./out"]]}, {"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=./out", "of=./out"]]}]}
+{"arg": "dd if=x of=./out", "fn": "write_targets", "ok": ["./out", "if=x", "of=./out", "./out", "if=x", "of=./out"]}
+{"arg": "dd if=x of=./out", "fn": "http_calls", "ok": []}
+{"arg": "dd if=x of=./out", "fn": "fetched_paths", "ok": []}
+{"arg": "dd if=x of=/dev/tty", "fn": "heredoc", "literal": [], "out": "dd if=x of=/dev/tty"}
+{"arg": "dd if=x of=/dev/tty", "fn": "expand_cd", "out": ""}
+{"arg": "dd if=x of=/dev/tty", "fn": "commands", "ok": [{"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=/dev/tty", "of=/dev/tty"]]}, {"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=/dev/tty", "of=/dev/tty"]]}]}
+{"arg": "dd if=x of=/dev/tty", "fn": "write_targets", "ok": ["/dev/tty", "if=x", "of=/dev/tty", "/dev/tty", "if=x", "of=/dev/tty"]}
+{"arg": "dd if=x of=/dev/tty", "fn": "http_calls", "ok": []}
+{"arg": "dd if=x of=/dev/tty", "fn": "fetched_paths", "ok": []}
+{"arg": "dd if=x of=/dev/zero", "fn": "heredoc", "literal": [], "out": "dd if=x of=/dev/zero"}
+{"arg": "dd if=x of=/dev/zero", "fn": "expand_cd", "out": ""}
+{"arg": "dd if=x of=/dev/zero", "fn": "commands", "ok": [{"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=/dev/zero", "of=/dev/zero"]]}, {"redirects": [], "words": [["dd", "dd"], ["if=x", "if=x"], ["of=/dev/zero", "of=/dev/zero"]]}]}
+{"arg": "dd if=x of=/dev/zero", "fn": "write_targets", "ok": ["/dev/zero", "if=x", "of=/dev/zero", "/dev/zero", "if=x", "of=/dev/zero"]}
+{"arg": "dd if=x of=/dev/zero", "fn": "http_calls", "ok": []}
+{"arg": "dd if=x of=/dev/zero", "fn": "fetched_paths", "ok": []}
 {"arg": "http://evil.example.com/x", "fn": "local_url", "ok": false}
 {"arg": "http://evil.example.com/cmd", "fn": "local_url", "ok": false}
 {"arg": "https://evil.example.com", "fn": "local_url", "ok": false}

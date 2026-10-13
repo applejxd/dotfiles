@@ -17,6 +17,15 @@ import {
 import { checkPolicyAsk, checkPolicyDeny, checkPolicyLoaded } from "./bashpolicy.ts";
 import { checkFindDangerous, checkFindRootGuard, checkRmRootGuard } from "./rm.ts";
 import { checkArchive, checkEnvExposure, checkFileRead, checkPipRedirect } from "./rules_files.ts";
+import {
+	checkBlockDeviceWrite,
+	checkGitConfigWrite,
+	checkGlobalEnvMutation,
+	checkGuardTampering,
+	checkPrivilegeEscalation,
+	checkShellStartupWrite,
+	checkToolSelfUpdate,
+} from "./rules_guard.ts";
 import { checkGitAddSensitive, checkHistoryAccess, checkSecretEnvEcho } from "./sensitive.ts";
 
 export type Check = (ctx: Ctx, cmd: string) => string | null;
@@ -43,4 +52,11 @@ export const CHECKS = new Map<string, Check>([
 	["check_env_exposure", checkEnvExposure],
 	["check_archive", checkArchive],
 	["check_pip_redirect", checkPipRedirect],
+	["check_guard_tampering", checkGuardTampering],
+	["check_shell_startup_write", checkShellStartupWrite],
+	["check_privilege_escalation", checkPrivilegeEscalation],
+	["check_tool_self_update", checkToolSelfUpdate],
+	["check_global_env_mutation", checkGlobalEnvMutation],
+	["check_git_config_write", checkGitConfigWrite],
+	["check_block_device_write", checkBlockDeviceWrite],
 ]);
