@@ -17,7 +17,10 @@ const ROOT = resolve(HERE, "..", "..", "..");
 const GOLDEN = resolve(ROOT, "test", "agents", "golden");
 const HOME = homedir();
 
-const { decide } = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "judge", "decide.ts")).href);
+const JUDGE = resolve(ROOT, "home", "dot_config", "pi", "harness", "judge");
+const { decide, setBashDecider } = await import(pathToFileURL(resolve(JUDGE, "decide.ts")).href);
+const { makeBashDecider } = await import(pathToFileURL(resolve(JUDGE, "bash.ts")).href);
+setBashDecider(makeBashDecider(JSON.parse(readFileSync(resolve(GOLDEN, "tables.json"), "utf8"))));
 
 const args = new Set(process.argv.slice(2));
 const requireBash = args.has("--bash");

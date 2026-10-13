@@ -1,9 +1,7 @@
 """TS 版の判定器 (``home/dot_config/pi/harness/judge/``) が、正解データと一致すること。
 
 正解は Python 版の判定結果 (``golden/decide_golden.jsonl``)。
-移植の範囲 (bash 以外) は全件一致を必須にする。bash は移植の途中なので、いまは数だけを報告する
-(``node test/agents/pi/judge_golden.mjs --bash`` で全件を必須にできる)。
-移植が済んだら、ここを ``--bash`` に切り替える。
+bash を含む全件の一致を必須にする (``node test/agents/pi/judge_golden.mjs --bash``)。
 
 node の型除去 (strip-types) を使う。22.18 未満の node では実行できないので飛ばす。
 
@@ -39,9 +37,9 @@ def _node() -> str | None:
 
 
 @pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
-def test_ts_judge_matches_the_python_golden_outside_bash():
+def test_ts_judge_matches_the_python_golden():
     proc = subprocess.run(
-        [_node(), str(RUNNER)],
+        [_node(), str(RUNNER), "--bash"],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -49,8 +47,8 @@ def test_ts_judge_matches_the_python_golden_outside_bash():
         timeout=120,
     )
     assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-1000:]
-    # 移植済みの区分が空でないこと (正解データの読み込みの失敗を見逃さない)
-    assert "file " in proc.stdout and "invalid" in proc.stdout
+    # 区分が空でないこと (正解データの読み込みの失敗を見逃さない)
+    assert "bash " in proc.stdout and "file " in proc.stdout and "invalid" in proc.stdout
 
 
 @pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")

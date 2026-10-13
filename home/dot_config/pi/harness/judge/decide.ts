@@ -43,15 +43,16 @@ export type BashDecider = (
 	cwd: string,
 	pi: Record<string, any>,
 	profile: Record<string, any>,
+	common: Common,
 ) => { commonDeny: Response | null; roleRule: Response | null };
 
-const response = (decision: Decision, reason: string, source: string, extra: Record<string, unknown> = {}): Response => ({
+export const response = (decision: Decision, reason: string, source: string, extra: Record<string, unknown> = {}): Response => ({
 	decision,
 	reason,
 	source,
 	...extra,
 });
-const errorResponse = (reason: string): Response => response("deny", reason, "error");
+export const errorResponse = (reason: string): Response => response("deny", reason, "error");
 
 /** Python の repr(str) に近い表記 (応答の理由の一致のため)。 */
 const pyRepr = (s: string): string => {
@@ -231,7 +232,7 @@ function decideInner(request: unknown, common: Common): Response {
 		const cmd = toolInput.command;
 		if (typeof cmd !== "string" || !cmd) return errorResponse("bash の command がありません");
 		if (!bashDecider) throw new TypeErrorPy("bash の判定器は未移植");
-		({ commonDeny, roleRule } = bashDecider(cmd, cwd, pi, profile));
+		({ commonDeny, roleRule } = bashDecider(cmd, cwd, pi, profile, common));
 	} else if (FILE_READ_TOOLS.includes(tool) || FILE_WRITE_TOOLS.includes(tool)) {
 		const path = toolInput.path ?? (["grep", "find", "ls"].includes(tool) ? "." : undefined);
 		if (typeof path !== "string" || !path) return errorResponse(`${tool} の path がありません`);

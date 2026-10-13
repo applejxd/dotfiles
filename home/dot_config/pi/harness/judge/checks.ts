@@ -32,6 +32,57 @@ import { checkGitAddSensitive, checkHistoryAccess, checkSecretEnvEcho } from "./
 
 export type Check = (ctx: Ctx, cmd: string) => string | null;
 
+// 評価の順序には意味がある (先に当たったものが利用者への理由を決める。具体的な代替案を返せる検査を汎用の policy_deny より前に置く)。
+// DENY が先に評価され、ASK は deny に当たらなかったものだけが対象になる (`rm -rf /` は root guard が `[bash] ask` の rm より先)。
+export const DENY_NAMES: readonly string[] = [
+	"check_policy_loaded",
+	"check_rm_root_guard",
+	"check_pip_redirect",
+	"check_pipe_to_shell",
+	"check_interpreter_inline_code",
+	"check_git_add_sensitive",
+	"check_secret_env_echo",
+	"check_gh_token_exposure",
+	"check_gh_api_sensitive_input",
+	"check_history_access",
+	"check_guard_tampering",
+	"check_reverse_shell",
+	"check_shell_startup_write",
+	"check_http_dangerous_output",
+	"check_privilege_escalation",
+	"check_docker_host_escape",
+	"check_tool_self_update",
+	"check_encoded_command",
+	"check_git_config_write",
+	"check_block_device_write",
+	"check_find_root_guard",
+	"check_policy_deny",
+	"check_env_exposure",
+	"check_file_read",
+	"check_archive",
+	"check_curl_file_send",
+	"check_xargs_pipe",
+];
+
+// パスだけを見る検査。`cd` 展開版に対して二度目の適用をする
+export const PATH_NAMES: readonly string[] = [
+	"check_file_read",
+	"check_guard_tampering",
+	"check_shell_startup_write",
+	"check_archive",
+	"check_curl_file_send",
+];
+
+// 承認を求める検査 (利用者が許可すればそのまま実行される)
+export const ASK_NAMES: readonly string[] = [
+	"check_policy_ask",
+	"check_gh_api_mutation",
+	"check_curl_wget_mutation",
+	"check_find_dangerous",
+	"check_docker_isolation",
+	"check_global_env_mutation",
+];
+
 export const CHECKS = new Map<string, Check>([
 	["check_git_add_sensitive", checkGitAddSensitive],
 	["check_history_access", checkHistoryAccess],
