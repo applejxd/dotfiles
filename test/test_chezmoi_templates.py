@@ -123,6 +123,8 @@ WINDOWS_PI_IGNORES = (
     "!.config/pi/",  # 補助の拡張 (commit-confirm) のためにディレクトリを戻す
     ".config/pi/harness/",  # 戻したうえでハーネスは改めて除外する
     ".config/pi/harness/**",
+    ".config/pi/guard/",  # ガードはハーネスの判定器に依るので Unix だけ
+    ".config/pi/guard/**",
 )
 
 

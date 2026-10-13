@@ -7,7 +7,8 @@ OpenCode のハーネス（permission の生成・guide plugin）の後継で、
 
 > **位置づけ**: ハーネスは `pis` で起動したときだけ効く。**Orca と Zed が呼ぶ素の `pi` は、ハーネス無しで動く**
 > （利用者の判断。保護が要る作業は `pis` か `pis --boundary` で起動する）。`pis` は利用者が自分で起動するとき用で、
-> 優先度は低い（[CHG-0020](../change/0020-pi-migration.md)）。
+> 優先度は低い（[CHG-0020](../change/0020-pi-migration.md)）。素の `pi` にも、**deny だけを止める判定器**
+> （[素の pi のガード](#素の-pi-のガード)。Unix のみ）が付く。
 
 ## 起動
 
@@ -236,6 +237,29 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
   （`!` は除外より先に効く。実物の `chezmoi` で確かめた）。Windows 実機は未検証
 - 試験: `test_pi_commit_parse.py`（解釈・表示・退避。node で直接）、`test_pi_commit_confirm.py`
   （pi + 偽のモデル。RPC・非対話・TMUX の TUI）
+
+### 素の pi のガード
+
+素の `pi` にも、ハーネスと同じ判定器で **deny だけ**を止める小さな拡張 `~/.config/pi/guard` を付ける（`settings.json` の `extensions`）。
+ask の確認は出さない。応える人が居ない Orca・Zed でも止まらず、`rm -rf ~`・秘密ファイルの読み取り・`git push`・
+誘導（`cat` / `head` / `tail` は read ツールへ）が効く。
+
+| 項目 | 内容 |
+| --- | --- |
+| 判定 | ハーネスと同じ `judge/`（`call.ts` の `createCallDecider`）。`bypass: true`（ask を allow にする。deny と誘導は効く）、役割は `implementer` 固定 |
+| 対象のツール | `bash` `read` `edit` `write` `grep` `find` `ls` と、`bg_run` / `bg_log` / `bg_kill`。他の拡張・MCP のツールは対象外（判定器は役割に無いツールを deny するので、そのまま通すと拡張が動かなくなる） |
+| 設定 | ハーネスと同じ `~/.config/pi/harness/rules.json` の `judge` と `judge/`（`common.toml` を編集して `chezmoi apply` すれば効く） |
+| 読めないとき | 対象のツールを**止める**（理由に「ガードの設定を読めない」）。黙って素通しにはしない |
+| `pis` | `-ne` で拡張が外れるので、二重にならない |
+| `git commit` | ask なので通す。確認は `commit-confirm` が出す |
+
+**保護ではなくガードレール**: `tool_call` だけで判定し、`execute()` の最終判定は無い（別の拡張が入力を書き換えても止められない）。
+拡張の読み込み時の処理と、利用者が手で打つ `!cmd` は囲えない。規則に無い操作は通る（deny の抜けがそのまま露出する）。
+deny は承認で外せないので、誤検知はその場で回避できない。Orca・Zed で観察して規則を直す。
+
+- Unix だけ。ハーネスの `judge/` と `rules.json` に依るので、Windows には配らない（`.chezmoiignore`・`[pi.settings]` の `extensions` を OS で分けている）。Windows 版はパスの扱い（`C:\…`）を確かめてから
+- 未実装: 出力の伏字化・役割の選択（素の `pi` では実装役に固定）。いずれも持ち込む予定
+- 試験: `test_pi_guard.py`（本物の pi と偽のモデル。deny が止まる・ask が通る・他の拡張は対象外・設定が壊れていれば止まる）
 
 ### 整形
 

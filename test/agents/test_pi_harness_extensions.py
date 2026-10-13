@@ -162,7 +162,9 @@ def test_bg_run_is_judged_like_bash_and_denied_commands_do_not_start(env):
     marker = env["tmp"] / "started"
     command = f"touch {marker.as_posix()}; rm -rf ~"
     for extra in ({}, {"PI_HARNESS_BYPASS": "1"}):
-        proc = run_pi(env, _bg(command), extra=("-e", str(ACTIVITY)), **extra)
+        # HOME を使い捨てにする: 判定が働かなかったとき、`rm -rf ~` が本物のホームを消さないように
+        home = {"HOME": str(env["tmp"])}
+        proc = run_pi(env, _bg(command), extra=("-e", str(ACTIVITY)), **home, **extra)
         assert "isError=true" in proc.stdout, proc.stdout
         assert "壊滅的" in proc.stdout, proc.stdout
         assert not marker.exists()

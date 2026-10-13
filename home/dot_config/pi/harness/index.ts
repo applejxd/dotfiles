@@ -18,10 +18,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
-import { makeBashDecider } from "./judge/bash.ts";
-import { decide as judge, setBashDecider } from "./judge/decide.ts";
-
-type Decision = { decision: "allow" | "ask" | "deny"; reason: string; source: string };
+import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でハーネスが抜けたとき、組み込みが同じ名前で戻って
@@ -41,8 +38,6 @@ const rules = JSON.parse(readFileSync(join(HERE, "rules.json"), "utf-8"));
 if (!rules.judge?.common || !rules.judge?.tables || !rules.redact || !Array.isArray(rules.redact.rule)) {
 	throw new Error("rules.json に judge / redact が無い (chezmoi apply で作り直す)");
 }
-// 判定器は呼び出しごとに文脈を作り直す。ここで持つのは読み込んだ設定だけ
-setBashDecider(makeBashDecider(rules.judge.tables));
 const AGENT_ENV: Record<string, string> = rules.agent_env ?? {};
 const REDACT_RULES = rules.redact.rule.map((r: { name: string; pattern: string }) => ({
 	name: r.name,
@@ -91,36 +86,18 @@ const COMPACT_INSTRUCTIONS = [
 
 // ─── 判定 ───────────────────────────────────────────────────────────
 
-// バックグラウンドジョブ (拡張 activity)。bg_run は起動するコマンドを bash と同じ判定に通す。
-// bg_log / bg_kill はジョブの確認と停止だけなので、bash を使える役割には allow にする
-const BG_RUN = "bg_run";
-const BG_OTHERS = ["bg_log", "bg_kill"];
+// 判定器を呼ぶ口 (bg_run は bash と同じ判定、bg_log / bg_kill は allow。judge/call.ts)。
+// 判定器は呼び出しごとに文脈を作り直す。ここで持つのは読み込んだ設定だけ
+const callDecider = createCallDecider({
+	judge: rules.judge,
+	profileTools: rules.profile_tools ?? {},
+	role: ROLE,
+	bypass: BYPASS,
+	boundary: BOUNDARY,
+});
 
 export function decide(tool: string, input: unknown, cwd: string): Decision {
-	if (BG_OTHERS.includes(tool)) {
-		if ((rules.profile_tools?.[ROLE] ?? []).includes("bash")) {
-			return { decision: "allow", reason: "ジョブの確認と停止だけ (bash を使える役割)", source: "rule" };
-		}
-		return { decision: "deny", reason: `役割 ${JSON.stringify(ROLE)} は ${tool} を使えない`, source: "rule" };
-	}
-	const asBash = tool === BG_RUN;
-	const request = {
-		tool: asBash ? "bash" : tool,
-		input: asBash ? { command: (input as any)?.command } : input,
-		cwd,
-		role: ROLE,
-		bypass: BYPASS,
-		boundary: BOUNDARY,
-	};
-	// judge() は例外を投げず、異常は source: error の deny にする。念のため形も確かめる
-	try {
-		const out = judge(request, rules.judge.common) as Decision;
-		if (["allow", "ask", "deny"].includes(out?.decision) && typeof out?.reason === "string") return out;
-		return { decision: "deny", reason: `判定器の応答が不正: ${JSON.stringify(out).slice(0, 120)}`, source: "error" };
-	} catch (e) {
-		// 形の正しい応答以外は deny (空の応答を allow と読まない)
-		return { decision: "deny", reason: `判定器が失敗した: ${(e as Error).message}`, source: "error" };
-	}
+	return callDecider(tool, input, cwd);
 }
 
 // tool_call で判定した入力と結果。execute() で同じ入力なら判定を使い回す (判定 1 回 0.1 秒ほど)。
