@@ -865,6 +865,10 @@ approvals = [
 # see docs/spec/pi-decide.md#役割
 [pi]
 default_role = "implementer"
+# pis とサンドボックスの起動が -e で足す自作の拡張 (~/.pi/agent/extensions/<名前>/index.ts)。
+# 拡張はここへ足す 1 か所だけ。起動引数 (pis・pi.py) と [pi.sandbox] の読み取りの許可は、この一覧から生成する。
+# see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
+own_extensions = ["todo", "plan", "btw", "activity"]
 
 # 無確認で実行してよい shell コマンド ([bash] allow とは共用しない。前提が違う)。
 # ここに載せたものだけが無確認で実行される。任意コード実行を含むものは載せない。

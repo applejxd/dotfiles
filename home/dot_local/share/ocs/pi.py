@@ -120,6 +120,30 @@ def inner_env(agent: Path) -> dict[str, str]:
     return env
 
 
+def own_extensions(rules: Path | None = None) -> list[str]:
+    """``rules.json`` の ``extensions`` (``[pi] own_extensions`` から生成。``pis`` と同じ一覧)。"""
+    path = rules if rules is not None else RULES
+    try:
+        names = json.loads(path.read_text(encoding="utf-8"))["extensions"]
+    except (OSError, ValueError, KeyError):
+        die(f"{path} から拡張の一覧を読めない", "chezmoi apply で rules.json を配り直す")
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        die(f"{path} の extensions が文字列の配列でない", "chezmoi apply で rules.json を配り直す")
+    return names
+
+
+def extension_args(real: Path | None = None, names: list[str] | None = None) -> list[str]:
+    """``pis`` が足す自作の拡張の ``-e``。配られていないものは足さない。"""
+    real = real if real is not None else REAL_AGENT
+    names = names if names is not None else own_extensions()
+    args: list[str] = []
+    for name in names:
+        ext = real / "extensions" / name / "index.ts"
+        if ext.is_file():
+            args += ["-e", str(ext)]
+    return args
+
+
 def inner_command(passthrough: list[str], path: str, sessions: Path) -> list[str]:
     """境界の内側で走らせるコマンド。``pis`` と同じ形の引数に、セッションの置き場を足す。"""
     from .cli import INNER_STATE
@@ -135,6 +159,7 @@ def inner_command(passthrough: list[str], path: str, sessions: Path) -> list[str
         "-ne",
         "-e",
         "builtin:mcp",
+        *extension_args(),
         "-e",
         str(HARNESS),
         "--session-dir",

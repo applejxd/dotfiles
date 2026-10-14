@@ -1039,6 +1039,12 @@
     }
    }
   },
+  "own_extensions": [
+   "todo",
+   "plan",
+   "btw",
+   "activity"
+  ],
   "profiles": {
    "committer": {
     "default": "deny",

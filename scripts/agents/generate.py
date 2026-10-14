@@ -1869,6 +1869,22 @@ def pi_default_role(common: dict[str, Any]) -> str:
     return role
 
 
+def pi_own_extensions(common: dict[str, Any]) -> list[str]:
+    """``[pi] own_extensions``。pis とサンドボックスが ``-e`` で足す自作の拡張の名前。
+
+    名前は ``~/.pi/agent/extensions/<名前>/`` の 1 要素なので、区切りや ``..`` を含められない。
+    """
+    names = (common.get("pi") or {}).get("own_extensions")
+    if not isinstance(names, list):
+        raise SystemExit("[pi] own_extensions が無いか、配列でない")
+    for name in names:
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name):
+            raise SystemExit(f"[pi] own_extensions の名前が不正: {name!r}")
+    if len(set(names)) != len(names):
+        raise SystemExit("[pi] own_extensions に重複がある")
+    return list(names)
+
+
 def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """pi のフルガードが読む ``~/.config/pi/harness/rules.json``。
 
@@ -1884,6 +1900,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
     return {
         "judge": pi_judge_data(common),
         "default_role": pi_default_role(common),
+        "extensions": pi_own_extensions(common),
         "agent_env": agent_env(common),
         "redact": redact,
         "agents": pi_agents(common),
@@ -1989,6 +2006,9 @@ def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     out = {"runtime_path": base["runtime_path"], "base": copy.deepcopy(base["base"])}
     for key in ("read", "write", "control_dirs"):
         added = [expand_user(str(p)) for p in extra.get(key) or []]
+        if key == "read":
+            # 自作の拡張は、一覧 ([pi] own_extensions) から読み取りだけを開ける
+            added += [expand_user(f"~/.pi/agent/extensions/{n}") for n in pi_own_extensions(common)]
         out["base"][key] = _uniq([*out["base"][key], *added])
     # protected は相対のまま (ランチャーが起動ディレクトリとリポジトリの根に合わせる)
     protected = [str(p) for p in extra.get("protected") or []]

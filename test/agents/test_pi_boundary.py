@@ -152,10 +152,64 @@ def test_inner_command_and_environment(tmp_path, monkeypatch):
     assert env["PI_HARNESS_BOUNDARY"] == "1"
     assert env["PI_CODING_AGENT_DIR"] == str(tmp_path / "agent")
     assert env["PI_HARNESS_ROLE"] == "reader"
+    rules = tmp_path / "rules.json"
+    rules.write_text(json.dumps({"extensions": []}), encoding="utf-8")
+    monkeypatch.setattr(pi, "RULES", rules)
     command = pi.inner_command(["-c"], "/usr/bin", tmp_path / "sessions")
     for flag in ("--no-approve", "-nbt", "-ne", "builtin:mcp", str(pi.HARNESS), "--session-dir"):
         assert flag in command
     assert command[-1] == "-c"
+
+
+def test_inner_command_adds_only_the_extensions_that_exist(tmp_path):
+    pi = _ocs().pi
+    real = tmp_path / "real"
+    for name in ("todo", "btw", "orca-agent-status"):
+        (real / "extensions" / name).mkdir(parents=True)
+        (real / "extensions" / name / "index.ts").write_text("", encoding="utf-8")
+    # 一覧にあって未配布のもの (plan) と、一覧に無いもの (orca-agent-status) は足さない
+    args = pi.extension_args(real, ["todo", "plan", "btw"])
+    expected = ["-e", str(real / "extensions/todo/index.ts")]
+    expected += ["-e", str(real / "extensions/btw/index.ts")]
+    assert args == expected
+
+
+def test_own_extensions_come_from_rules_json(tmp_path):
+    pi = _ocs().pi
+    rules = tmp_path / "rules.json"
+    rules.write_text(json.dumps({"extensions": ["todo", "plan"]}), encoding="utf-8")
+    assert pi.own_extensions(rules) == ["todo", "plan"]
+
+
+@pytest.mark.parametrize("body", [None, "{}", '{"extensions": "todo"}', '{"extensions": [1]}'])
+def test_own_extensions_refuse_a_stale_or_broken_rules_json(tmp_path, body):
+    pi = _ocs().pi
+    rules = tmp_path / "rules.json"
+    if body is not None:
+        rules.write_text(body, encoding="utf-8")
+    with pytest.raises(SystemExit):
+        pi.own_extensions(rules)
+
+
+def test_the_extension_list_is_declared_once_and_drives_the_read_allowance():
+    """拡張を足すのは [pi] own_extensions の 1 か所。rules.json と読み取りの許可は生成される。"""
+    common = load_common()
+    names = gen.pi_own_extensions(common)
+    assert names and gen.build_pi_harness({}, common)["extensions"] == names
+    home = os.path.expanduser("~")
+    read = gen.pi_sandbox(common)["base"]["read"]
+    for name in names:
+        assert f"{home}/.pi/agent/extensions/{name}" in read
+    # [pi.sandbox] read に拡張を手で書いていない (二重の宣言にしない)
+    assert not [p for p in common["pi"]["sandbox"]["read"] if ".pi/agent/extensions" in p]
+
+
+@pytest.mark.parametrize("bad", [["../x"], ["a/b"], ["Todo"], [""], ["todo", "todo"], "todo"])
+def test_own_extensions_rejects_unsafe_names(bad):
+    common = load_common()
+    common["pi"]["own_extensions"] = bad
+    with pytest.raises(SystemExit):
+        gen.pi_own_extensions(common)
 
 
 # ─── 認証を本物へ戻す ───────────────────────────────────────────────

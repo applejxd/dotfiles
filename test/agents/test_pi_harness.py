@@ -342,6 +342,41 @@ def test_pis_refuses_without_the_harness(pis_env):
     assert proc.returncode == 1 and "フルガードが無い" in proc.stderr
 
 
+def _set_rules(pis_env, **changes):
+    path = pis_env["home"] / ".config" / "pi" / "harness" / "rules.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    for key, value in changes.items():
+        if value is None:
+            rules.pop(key, None)
+        else:
+            rules[key] = value
+    path.write_text(json.dumps(rules), encoding="utf-8")
+
+
+def test_pis_loads_exactly_the_own_extensions_listed_in_rules_json(pis_env):
+    agent = Path(pis_env["env"]["PI_CODING_AGENT_DIR"])
+    for name in ("own-demo", "unlisted"):
+        (agent / "extensions" / name).mkdir(parents=True)
+        shutil.copy2(FIXTURES / "ext_tool.ts", agent / "extensions" / name / "index.ts")
+    # 一覧にあって配られていないもの (missing) は足さず、一覧に無いもの (unlisted) は読まない
+    _set_rules(pis_env, extensions=["own-demo", "missing"])
+    marker = pis_env["tmp"] / "loaded"
+    proc = run_pis(pis_env, EXT_LOADED_FILE=str(marker))
+    assert proc.returncode == 0, proc.stderr
+    assert "ext_search" in lines(proc)[0] and marker.exists()
+    _set_rules(pis_env, extensions=[])
+    marker.unlink()
+    proc = run_pis(pis_env, EXT_LOADED_FILE=str(marker))
+    assert proc.returncode == 0, proc.stderr
+    assert "ext_search" not in lines(proc)[0] and not marker.exists()
+
+
+def test_pis_refuses_a_rules_json_without_the_extension_list(pis_env):
+    _set_rules(pis_env, extensions=None)
+    proc = run_pis(pis_env)
+    assert proc.returncode == 1 and "拡張の一覧" in proc.stderr
+
+
 def test_pis_refuses_servers_in_the_agent_mcp_json(pis_env):
     agent = Path(pis_env["env"]["PI_CODING_AGENT_DIR"])
     (agent / "mcp.json").write_text('{"mcpServers": {"x": {"command": "true"}}}', encoding="utf-8")

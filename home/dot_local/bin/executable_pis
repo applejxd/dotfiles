@@ -56,8 +56,17 @@ if [ -n "${ORCA_AGENT_HOOK_PORT:-}" ] && [ -f "${orca_ext}" ] \
     && grep -q '@orca-managed-pi-extension' "${orca_ext}"; then
     extra=(-e "${orca_ext}")
 fi
-# 自作の拡張 (todo / plan / btw / activity)。-ne で自動発見は止めてあるので、ここで明示して足す
-for name in todo plan btw activity; do
+# 自作の拡張 ([pi] own_extensions を rules.json へ生成したもの)。-ne で自動発見は止めてあるので、ここで明示して足す
+own_exts=$(python3 - "${harness}/rules.json" <<'PY'
+import json, sys
+try:
+    names = json.load(open(sys.argv[1], encoding="utf-8"))["extensions"]
+except (OSError, ValueError, KeyError):
+    sys.exit(1)
+print("\n".join(n for n in names if isinstance(n, str)))
+PY
+) || { echo "pis: ${harness}/rules.json から拡張の一覧を読めない。chezmoi apply で配り直す" >&2; exit 1; }
+for name in ${own_exts}; do
     ext="${agent_dir}/extensions/${name}/index.ts"
     if [ -f "${ext}" ]; then extra+=(-e "${ext}"); fi
 done
