@@ -1,74 +1,42 @@
-#!/usr/bin/env bash
-# pi をフルガード付きで起動する。
-# usage: pis [--bypass] [--boundary] [--role <役割>] [--] [pi の引数...]
-# see docs/spec/pi-guard.md#起動
-set -eu
+#!/usr/bin/env python3
+"""pi をフルガード付きで起動する ``pis`` の入口。
 
-harness="${HOME}/.config/pi/harness"
-agent_dir="${PI_CODING_AGENT_DIR:-${HOME}/.pi/agent}"
-bypass=""
-boundary=""
-role=""   # 空なら [pi] default_role (フルガードが rules.json から読む)
+usage: pis [--bypass] [--boundary] [--role <役割>] [--] [pi の引数...]
+本体は ``~/.local/share/ocs/pis.py``（隔離起動 ``ocs`` と同じ置き場）。ここから絶対パスで読み込み、
+**sys.path・PYTHONPATH・カレントディレクトリからは探さない**（``ocs`` の入口と同じ読み込み）。
+see docs/spec/pi-guard.md#起動
+"""
 
-while [ "$#" -gt 0 ]; do
-    case "$1" in
-        --bypass) bypass=1; shift ;;
-        --boundary) boundary=1; shift ;;
-        --role)
-            [ "$#" -ge 2 ] || { echo "pis: --role に役割の名前が要る" >&2; exit 2; }
-            role="$2"; shift 2 ;;
-        --) shift; break ;;
-        *) break ;;
-    esac
-done
+from __future__ import annotations
 
-if [ ! -f "${harness}/index.ts" ] || [ ! -f "${harness}/rules.json" ]; then
-    echo "pis: フルガードが無い (${harness})。chezmoi apply で配る" >&2
-    exit 1
-fi
+import importlib
+import importlib.util
+import sys
+from pathlib import Path
 
-# ~/.pi/agent/mcp.json のサーバはフルガードと関係なく繋がり、フルガードが抜けても判定なしで残る
-if [ -f "${agent_dir}/mcp.json" ] && python3 - "${agent_dir}/mcp.json" <<'PY'
-import json, sys
-try:
-    servers = json.load(open(sys.argv[1], encoding="utf-8")).get("mcpServers")
-except (OSError, ValueError, AttributeError):
-    sys.exit(0)  # 読めないなら止める側
-sys.exit(0 if servers else 1)
-PY
-then
-    echo "pis: ${agent_dir}/mcp.json にサーバがある。MCP は common.toml の [[mcp]] (clis に pi) に書く" >&2
-    exit 1
-fi
+LIB = Path.home() / ".local/share/ocs"
+PACKAGE = "ocs_lib"
 
-if [ -n "${role}" ]; then export PI_HARNESS_ROLE="${role}"; else unset PI_HARNESS_ROLE; fi
-export PI_HARNESS_BYPASS="${bypass}"
-unset PI_HARNESS_CHILD PI_HARNESS_TEST_CHILD_EXT PI_HARNESS_BOUNDARY
-# --boundary: Fence で囲って起動する (Ubuntu / WSL のみ)。ocs が同じ引数で pi を起動する
-if [ -n "${boundary}" ]; then
-    exec ocs --harness pi "$@"
-fi
-# Orca が置くステータス表示の拡張 (-ne で外れるので、Orca から起動したときだけ戻す)。
-# Orca の印がある (@orca-managed-pi-extension) ものだけ。境界の内側は ~/.pi/agent を読めないので使えない。
-orca_ext="${agent_dir}/extensions/orca-agent-status.ts"
-extra=()
-if [ -n "${ORCA_AGENT_HOOK_PORT:-}" ] && [ -f "${orca_ext}" ] \
-    && grep -q '@orca-managed-pi-extension' "${orca_ext}"; then
-    extra=(-e "${orca_ext}")
-fi
-# 自作の拡張 ([pi] own_extensions を rules.json へ生成したもの)。-ne で自動発見は止めてあるので、ここで明示して足す
-own_exts=$(python3 - "${harness}/rules.json" <<'PY'
-import json, sys
-try:
-    names = json.load(open(sys.argv[1], encoding="utf-8"))["extensions"]
-except (OSError, ValueError, KeyError):
-    sys.exit(1)
-print("\n".join(n for n in names if isinstance(n, str)))
-PY
-) || { echo "pis: ${harness}/rules.json から拡張の一覧を読めない。chezmoi apply で配り直す" >&2; exit 1; }
-for name in ${own_exts}; do
-    ext="${agent_dir}/extensions/${name}/index.ts"
-    if [ -f "${ext}" ]; then extra+=(-e "${ext}"); fi
-done
-# --no-approve: 作業先の .pi/ (MCP・設定・skills) を読まない。拡張は -ne で読まない
-exec pi --no-approve -nbt -ne -e builtin:mcp ${extra[@]+"${extra[@]}"} -e "${harness}" "$@"
+
+def load(lib: Path):
+    """``lib`` をパッケージとして読み込み、その ``pis`` を返す。"""
+    for name in [n for n in sys.modules if n == PACKAGE or n.startswith(PACKAGE + ".")]:
+        del sys.modules[name]
+    spec = importlib.util.spec_from_file_location(
+        PACKAGE, lib / "__init__.py", submodule_search_locations=[str(lib)]
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"{lib} を読み込めない")
+    package = importlib.util.module_from_spec(spec)
+    sys.modules[PACKAGE] = package
+    spec.loader.exec_module(package)
+    return importlib.import_module(f"{PACKAGE}.pis")
+
+
+if __name__ == "__main__":
+    # 配備先へ __pycache__ を作らない (chezmoi の管理対象と中身を揃える)
+    sys.dont_write_bytecode = True
+    if not (LIB / "pis.py").is_file():
+        print(f"pis: 本体が無い: {LIB}。chezmoi apply で配備する", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(load(LIB).main())

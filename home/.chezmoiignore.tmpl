@@ -85,10 +85,13 @@ Documents/**
 # see docs/change/closed/0004-opencode-sandbox.md
 .local/bin/ocs
 .local/bin/ocs-boundary-check
-.local/share/ocs
-.local/share/ocs/**
 .local/state/opencode-sandbox
 .local/state/opencode-sandbox/**
+{{- if eq .chezmoi.os "windows" }}
+# 本体 (ocs 用のライブラリ) は pis も読むので、pis を配る macOS にも置く
+.local/share/ocs
+.local/share/ocs/**
+{{- end }}
 # OpenCode の運用の小道具。Linux 以外では試していない
 # see docs/spec/agent-permissions.md#保存した承認の確認とリセット
 .local/bin/oc-utils

@@ -11,6 +11,7 @@ see docs/spec/pi-guard.md#サンドボックス
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import shutil
@@ -33,7 +34,7 @@ LIB = ROOT / "home" / "dot_local" / "share" / "ocs"
 LAUNCHER = ROOT / "home" / "dot_local" / "bin" / "executable_ocs"
 BOUNDARY_CHECK = ROOT / "home" / "dot_local" / "bin" / "executable_ocs-boundary-check"
 HARNESS_SRC = ROOT / "home" / "dot_config" / "pi" / "harness" / "index.ts"
-MODULES = ("common", "boundary", "check", "backup", "config", "pi", "cli")
+MODULES = ("common", "boundary", "check", "backup", "config", "pi", "cli", "pis")
 
 
 def _ocs() -> SimpleNamespace:
@@ -43,6 +44,7 @@ def _ocs() -> SimpleNamespace:
     saved, sys.dont_write_bytecode = sys.dont_write_bytecode, True
     try:
         namespace["load"](LIB)
+        importlib.import_module("ocs_lib.pis")  # ocs の cli は pis を読み込まない
     finally:
         sys.dont_write_bytecode = saved
     return SimpleNamespace(**{n: sys.modules[f"ocs_lib.{n}"] for n in MODULES})
@@ -210,6 +212,57 @@ def test_own_extensions_rejects_unsafe_names(bad):
     common["pi"]["own_extensions"] = bad
     with pytest.raises(SystemExit):
         gen.pi_own_extensions(common)
+
+
+def test_pis_boundary_hands_over_to_the_sandbox_launcher(monkeypatch):
+    """pis --boundary は、環境変数 (役割・bypass) を整えて、サンドボックスの起動へ引き継ぐ。"""
+    ocs = _ocs()
+    monkeypatch.setattr(ocs.pis, "check_installed", lambda: None)
+    monkeypatch.setattr(ocs.pis, "check_mcp_json", lambda _agent: None)
+    seen = {}
+
+    def fake_main(argv):
+        seen["argv"] = argv
+        seen["env"] = (os.environ.get("PI_HARNESS_ROLE"), os.environ.get("PI_HARNESS_BYPASS"))
+        return 7
+
+    monkeypatch.setattr(ocs.cli, "main", fake_main)
+    monkeypatch.setenv("PI_HARNESS_CHILD", "1")
+    code = ocs.pis.main(["--boundary", "--bypass", "--role", "reader", "-c"])
+    assert code == 7
+    assert seen["argv"] == ["--harness", "pi", "-c"]
+    assert seen["env"] == ("reader", "1")
+    assert "PI_HARNESS_CHILD" not in os.environ
+
+
+def test_pis_plain_command_shares_the_flags_and_the_extension_list(monkeypatch, tmp_path):
+    ocs = _ocs()
+    rules = tmp_path / "rules.json"
+    rules.write_text(json.dumps({"extensions": ["todo"]}), encoding="utf-8")
+    monkeypatch.setattr(ocs.pi, "RULES", rules)
+    agent = tmp_path / "agent"
+    (agent / "extensions" / "todo").mkdir(parents=True)
+    (agent / "extensions" / "todo" / "index.ts").write_text("", encoding="utf-8")
+    command = ocs.pis.plain_command(ocs.pis.parse(["--model", "x"]), agent)
+    assert command[0] == "pi"
+    assert tuple(command[1 : 1 + len(ocs.pi.BASE_FLAGS)]) == ocs.pi.BASE_FLAGS
+    assert ["-e", str(agent / "extensions/todo/index.ts")] == command[6:8]
+    assert command[-4:] == ["-e", str(ocs.pi.HARNESS), "--model", "x"]
+    # サンドボックスの内側の起動も、同じフラグと一覧から作る
+    inner = ocs.pi.inner_command([], "/usr/bin", tmp_path / "sessions")
+    start = inner.index(str(ocs.pi.PI)) + 1
+    assert tuple(inner[start : start + len(ocs.pi.BASE_FLAGS)]) == ocs.pi.BASE_FLAGS
+
+
+def test_pis_parse_takes_only_the_leading_options():
+    ocs = _ocs()
+    options = ocs.pis.parse(["--bypass", "--role", "reader", "--", "--bypass", "x"])
+    assert (options.bypass, options.boundary, options.role, options.rest) == (
+        True, False, "reader", ["--bypass", "x"],
+    )
+    assert ocs.pis.parse(["-c", "--bypass"]).rest == ["-c", "--bypass"]
+    with pytest.raises(SystemExit):
+        ocs.pis.parse(["--role"])
 
 
 # ─── 認証を本物へ戻す ───────────────────────────────────────────────

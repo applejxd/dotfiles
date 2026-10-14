@@ -37,6 +37,9 @@ COPY_FILES = ("auth.json", "models-store.json", "settings.json")
 # 内側から書き換えられたくないもの (pi が読むだけ)。無いと denyWrite が効かないので作っておく
 FROZEN_FILES = ("settings.json", "trust.json", "mcp.json")
 FROZEN_DIRS = ("extensions",)
+# pis の通常の起動とサンドボックスの内側で、同じ形にそろえる pi の起動フラグ
+# (作業先の .pi/ を読まない・組み込みのツールと拡張の自動発見を止める・MCP だけ戻す)
+BASE_FLAGS = ("--no-approve", "-nbt", "-ne", "-e", "builtin:mcp")
 # 境界の内側へ渡さない環境変数。子エージェントの印は自分で付け直す
 DROP_ENV = (
     "PI_CODING_AGENT_DIR",
@@ -154,11 +157,7 @@ def inner_command(passthrough: list[str], path: str, sessions: Path) -> list[str
         "TMPDIR=/tmp",
         f"XDG_STATE_HOME={INNER_STATE}",
         str(PI),
-        "--no-approve",
-        "-nbt",
-        "-ne",
-        "-e",
-        "builtin:mcp",
+        *BASE_FLAGS,
         *extension_args(),
         "-e",
         str(HARNESS),

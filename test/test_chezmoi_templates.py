@@ -168,12 +168,20 @@ def test_ocs_launcher_is_linux_only(tmp_path, os_name, ignored):
     targets = (
         ".local/bin/ocs",
         ".local/bin/ocs-boundary-check",
-        ".local/share/ocs",
-        ".local/share/ocs/**",
         ".local/state/opencode-sandbox",
         ".local/state/opencode-sandbox/**",
     )
     for target in targets:
+        assert (target in rendered) is ignored, target
+
+
+@pytest.mark.parametrize(
+    ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", False)]
+)
+def test_ocs_library_is_shared_with_pis(tmp_path, os_name, ignored):
+    """pis (Unix) が ocs の本体を読むので、macOS にも置く。Windows には pis が無いので置かない。"""
+    rendered = render(home=str(tmp_path), os_name=os_name)
+    for target in (".local/share/ocs", ".local/share/ocs/**"):
         assert (target in rendered) is ignored, target
 
 

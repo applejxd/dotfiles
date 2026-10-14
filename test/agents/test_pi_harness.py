@@ -298,6 +298,7 @@ def test_guides_point_to_the_tool_to_use(env):
 # ─── 起動の入口 (pis) ───────────────────────────────────────────────
 
 PIS = ROOT / "home" / "dot_local" / "bin" / "executable_pis"
+OCS_LIB = ROOT / "home" / "dot_local" / "share" / "ocs"
 
 
 @pytest.fixture
@@ -305,6 +306,9 @@ def pis_env(env, tmp_path):
     """pis が読む ~/.config/pi/harness を、一時的な HOME の下に置く。"""
     home = tmp_path / "home"
     shutil.copytree(env["harness"], home / ".config" / "pi" / "harness")
+    # pis は ~/.local/share/ocs の本体を読み込む (配備先と同じ置き場)
+    ignore = shutil.ignore_patterns("__pycache__")
+    shutil.copytree(OCS_LIB, home / ".local" / "share" / "ocs", ignore=ignore)
     return {**env, "home": home, "env": {**env["env"], "HOME": str(home)}}
 
 
@@ -312,7 +316,7 @@ def run_pis(pis_env, *pis_args, calls=(), **env_extra):
     faux = str(FIXTURES / "faux.ts")
     args = [str(PIS), *pis_args, "--model", "faux/spike", "-e", faux, "-p", "go"]
     return subprocess.run(
-        ["bash", *args],
+        [sys.executable, *args],
         cwd=pis_env["proj"],
         env={**pis_env["env"], "FAUX_TOOL_CALLS": json.dumps(list(calls)), **env_extra},
         capture_output=True,
@@ -384,31 +388,6 @@ def test_pis_refuses_servers_in_the_agent_mcp_json(pis_env):
     assert proc.returncode == 1 and "mcp.json" in proc.stderr
     (agent / "mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
     assert run_pis(pis_env).returncode == 0
-
-
-def test_pis_boundary_hands_over_to_ocs(pis_env, tmp_path):
-    stub_bin = tmp_path / "stub-bin"
-    stub_bin.mkdir()
-    log = tmp_path / "ocs.log"
-    stub = stub_bin / "ocs"
-    script = (
-        "#!/bin/sh\n"
-        'echo "$*" > "$OCS_LOG"\n'
-        'echo "$PI_HARNESS_ROLE:$PI_HARNESS_BYPASS" >> "$OCS_LOG"\n'
-    )
-    stub.write_text(script, encoding="utf-8")
-    stub.chmod(0o755)
-    proc = subprocess.run(
-        ["bash", str(PIS), "--boundary", "--bypass", "--role", "reader", "-c"],
-        cwd=pis_env["proj"],
-        env={**pis_env["env"], "PATH": f"{stub_bin}:{os.environ['PATH']}", "OCS_LOG": str(log)},
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert log.read_text(encoding="utf-8").splitlines() == ["--harness pi -c", "reader:1"]
 
 
 # ─── 圧縮・commit の表示・整形・RPC ─────────────────────────────────
@@ -593,7 +572,7 @@ def _orca_extension(pis_env, probe, marker=True):
 def _run_pis_probe(pis_env, **env_extra):
     faux = str(FIXTURES / "faux.ts")
     return subprocess.run(
-        ["bash", str(PIS), "--model", "faux/spike", "-e", faux, "-p", "/orca-probe"],
+        [sys.executable, str(PIS), "--model", "faux/spike", "-e", faux, "-p", "/orca-probe"],
         cwd=pis_env["proj"],
         env={**pis_env["env"], "FAUX_TOOL_CALLS": "[]", **env_extra},
         capture_output=True,
