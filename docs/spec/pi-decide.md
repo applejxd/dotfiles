@@ -193,7 +193,7 @@ bash 5,208・file 1,081・invalid 6・other 16）。検査関数 32 種は `chec
 bash は `setBashDecider(makeBashDecider(tables))` で差し込む。判定のたびに 0.1 秒ほどかかっていたプロセス起動が無くなった。
 
 - 設定の渡し方: `generate.py` の `build_pi_harness` が、`rules.json` の `judge` に
-  `common`（`common.toml` の `[bash]` / `[file]` / `[pi]`）と `tables`（`bashrules/tables.toml`）を JSON で入れる。
+  `common`（`common.toml` の `[bash]` / `[file]` / `[pi]`）と `tables`（`home/dot_config/pi/harness/judge/tables.toml`）を JSON で入れる。
   `chezmoi apply` のたびに作り直されるので、`common.toml` を編集して apply すれば TS の判定に届く
 - 失敗は deny: `judge` が無い・壊れていれば、起動時に失敗する（ツールが無くなる）か、判定が `source: error` の deny になる
 - 試験: `test_pi_harness.py` は実際の pi を TS の判定器で動かす（`judge/` を一緒に置く）。
@@ -204,7 +204,9 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。判定の�
 - 撤去: Python 版（`decide.py`・`bashrules` の検査・`command_policy.py` の判定部分）を外す。Claude / Copilot の hook 設定は ADR-0017 の段で消す。
   それまでは、Python 版が正解データの出力元（`scripts/agents/export_*_golden.py`）なので残す。
   撤去のときは正解データを固定の入力として残し、`--check` の鮮度検査を外す
-- `tables.toml` の置き場: いまは `home/dot_claude/hooks/lib/bashrules/` にある。Python 版を撤去するとき `home/dot_config/pi/harness/` へ移す
+- `tables.toml` の置き場（移設済み）: `home/dot_config/pi/harness/judge/tables.toml`。TS 版が `rules.json` 経由で読む。
+  Python 版の `tables.py` は、同じディレクトリ → リポジトリのソース → 配備先 `~/.config/pi/harness/judge/` の順に探す（Python 版を撤去するまでの橋渡し。
+  Windows は `harness/` を配らないので、Windows の Python の hook は表を読めず fail-closed で止まる）
 - 構文解析の堅牢化（`shellparse` を正式な構文解析に替える）は別の変更。差分試験を残したまま進める
 
 ## 既知の制約

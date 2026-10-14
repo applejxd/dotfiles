@@ -435,7 +435,7 @@ read_deny_globs = [
   # バックグラウンドジョブのログ (拡張 activity の bg_run)。生の出力が入るので read では読ませない。
   # 読むのは、結果を伏字化する bg_log だけ
   "**/pi-jobs/**",
-  # CLI の資格情報とシェル履歴。bashrules/tables.toml の credential_paths /
+  # CLI の資格情報とシェル履歴。pi/harness/judge/tables.toml の credential_paths /
   # history_basenames と対応 (test_secret_lists_in_sync.py が固定)
   "**/.config/gh/hosts.yml",
   "**/.docker/config.json",

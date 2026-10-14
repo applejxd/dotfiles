@@ -144,7 +144,7 @@ MCP へトークンを渡すときは設定ファイルに直書きせず、環�
 
 ## 秘密ファイル一覧の対応
 
-Bash hook の `bashrules/tables.toml`（`credential_paths` / `history_basenames`）に
+判定器の表 `home/dot_config/pi/harness/judge/tables.toml`（`credential_paths` / `history_basenames`）に
 あるファイルは、`[file] read_deny_globs` にも置く。置かないと Read ツール・
 OpenCode の read・Copilot の `check_file_read.py` から読める。対応は
 `test/agents/test_secret_lists_in_sync.py` が固定するので、`tables.toml` へ足したら
@@ -776,7 +776,7 @@ Claude には「許可した以外を拒否する」表現手段が無い。
 | やりたいこと | 編集する場所 | Python |
 | --- | --- | --- |
 | コマンド名の前方一致で許可 / 禁止 | `common.toml` の `[bash]` | 不要 |
-| 守る名前・検査するオプションを足す | `bashrules/tables.toml` | 不要 |
+| 守る名前・検査するオプションを足す | `pi/harness/judge/tables.toml`（TS 版と Python 版が共有） | 不要 |
 | 上記で表せない判定 | `bashrules/*.py` + `__init__.py` | 必要 |
 
 Python を書く場合は、内容に合うモジュールへ

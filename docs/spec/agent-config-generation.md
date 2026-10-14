@@ -29,8 +29,7 @@ home/dot_claude/hooks/
     lib/policy_loader.py                     command_policy の import と設定ディレクトリの解決
     lib/bashrules/                           bash コマンド検査ルールの本体
         __init__.py                          DENY / ASK の登録簿 (評価順の正本)
-        tables.toml                          検査に使うデータ (Python 不要で編集可)
-        tables.py                            tables.toml の読み込み
+        tables.py                            判定の表 (pi/harness/judge/tables.toml) の読み込み
         _shared.py                           共通ユーティリティ・ポリシー層の参照
         policy.py                            common.toml の deny / ask を照合
         sensitive.py  http.py  ghapi.py      関心事ごとの判定

@@ -1838,9 +1838,7 @@ def agent_env(common: dict[str, Any]) -> dict[str, str]:
 
 
 JUDGE_COMMON_KEYS = ("bash", "file", "pi")
-BASHRULES_TABLES = Path(__file__).resolve().parents[2] / (
-    "home/dot_claude/hooks/lib/bashrules/tables.toml"
-)
+JUDGE_TABLES = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/tables.toml"
 
 
 def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
@@ -1848,10 +1846,10 @@ def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
 
     ``common`` は読んだままの ``[bash]`` / ``[file]`` / ``[pi]``
     (``[pi]`` は ``resolve_pi_shared`` で変わらない)。
-    ``tables`` は検査関数が引く表 (``bashrules/tables.toml``)。
+    ``tables`` は検査関数が引く表 (``judge/tables.toml``)。
     see docs/spec/pi-decide.md
     """
-    with BASHRULES_TABLES.open("rb") as f:
+    with JUDGE_TABLES.open("rb") as f:
         tables = tomllib.load(f)
     return {
         "common": {key: common[key] for key in JUDGE_COMMON_KEYS if key in common},

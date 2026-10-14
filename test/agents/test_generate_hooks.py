@@ -648,6 +648,11 @@ def test_copilot_python_hooks_run_with_spaces_in_home(tmp_path, hook_id, command
     bashrules = HOOK_SRC_DIR / "lib" / "bashrules"
     if bashrules.is_dir():
         shutil.copytree(bashrules, hooks_dir / "lib" / "bashrules")
+    # 判定の表は配備先 (~/.config/pi/harness/judge/) にある。tables.py はそこを読む
+    judge = home / ".config" / "pi" / "harness" / "judge"
+    judge.mkdir(parents=True)
+    tables = ROOT / "home" / "dot_config" / "pi" / "harness" / "judge" / "tables.toml"
+    shutil.copyfile(tables, judge / "tables.toml")
     out = hk.build_copilot_hooks({"hooks": [hook]}, platform="posix")
     payload = {
         "hook_event_name": "PreToolUse",

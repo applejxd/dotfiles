@@ -932,7 +932,7 @@ def build() -> list[str]:
 
 
 def tables_json() -> str:
-    path = ROOT / "home" / "dot_claude" / "hooks" / "lib" / "bashrules" / "tables.toml"
+    path = ROOT / "home" / "dot_config" / "pi" / "harness" / "judge" / "tables.toml"
     with path.open("rb") as f:
         data = tomllib.load(f)
     return json.dumps(data, ensure_ascii=False, sort_keys=True, indent=1) + "\n"

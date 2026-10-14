@@ -1,6 +1,6 @@
 """秘密ファイルの一覧が hook と permission でずれないことを固定する。
 
-Bash hook (bashrules/tables.toml の credential_paths / history_basenames) が
+Bash hook (judge/tables.toml の credential_paths / history_basenames) が
 守るファイルは、``[file] read_deny_globs`` (Claude の Read / OpenCode の read /
 Copilot の check_file_read.py) でも守る。片方にしか無いと、Read ツール側で
 読めてしまう。.env は直下以外でも deny になること (``.env.*`` も deny。サンプルの
@@ -24,7 +24,7 @@ import generate as gen
 from test_check_bash_sensitive import _matches_any
 
 ROOT = Path(__file__).resolve().parents[2]
-TABLES = ROOT / "home" / "dot_claude" / "hooks" / "lib" / "bashrules" / "tables.toml"
+TABLES = ROOT / "home" / "dot_config" / "pi" / "harness" / "judge" / "tables.toml"
 SENSITIVE = tomllib.loads(TABLES.read_text(encoding="utf-8"))["sensitive"]
 
 # credential_paths は "/.kube/config" のように先頭が "/" の末尾一致用の断片

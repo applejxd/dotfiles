@@ -1,4 +1,4 @@
-"""bashrules/tables.toml (Python を書かずに編集できるデータ層) の振る舞い。
+"""judge/tables.toml (Python を書かずに編集できるデータ層) の振る舞い。
 
 利用者が TOML だけを編集したときに何が起きるかを確かめる。
 判定そのものの網羅は test_check_bash_*.py 側にある。
@@ -22,6 +22,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 HOOK_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_check_bash.py"
 BASHRULES_DIR = HOOK_PATH.parent / "lib" / "bashrules"
+TABLES_SRC = ROOT / "home" / "dot_config" / "pi" / "harness" / "judge" / "tables.toml"
 
 sys.path.insert(0, str(ROOT / "test" / "agents"))
 
@@ -78,8 +79,9 @@ def _run_with_tables(tmp_path: Path, command: str, mutate) -> tuple[str | None, 
     """
     hooks = tmp_path / "hooks"
     shutil.copytree(HOOK_PATH.parent, hooks, ignore=shutil.ignore_patterns("__pycache__"))
+    # 配備先と同じく、表は hook の隣に置く (tables.py は隣の表を最初に読む)
     tables = hooks / "lib" / "bashrules" / "tables.toml"
-    tables.write_text(mutate(tables.read_text(encoding="utf-8")), encoding="utf-8")
+    tables.write_text(mutate(TABLES_SRC.read_text(encoding="utf-8")), encoding="utf-8")
     return _run(hooks / HOOK_PATH.name, command)
 
 
@@ -163,7 +165,7 @@ def _table_loads() -> list[tuple[str, str, str]]:
 
 def test_every_table_key_is_loaded():
     """TOML に書いたキーはどこかで読まれること (編集しても効かない表を残さない)."""
-    with (BASHRULES_DIR / "tables.toml").open("rb") as fh:
+    with TABLES_SRC.open("rb") as fh:
         data = tomllib.load(fh)
     defined = {f"{section}.{key}" for section, body in data.items() for key in body}
     loaded = {key for _, _, key in _table_loads()}
@@ -172,10 +174,7 @@ def test_every_table_key_is_loaded():
 
 def test_every_loaded_table_is_used():
     """読み込んだ表の定数が判定に使われていること (定義だけのデッドコードを残さない)."""
-    sources = {
-        path.name: path.read_text(encoding="utf-8")
-        for path in BASHRULES_DIR.glob("*.py")
-    }
+    sources = {path.name: path.read_text(encoding="utf-8") for path in BASHRULES_DIR.glob("*.py")}
     unused = []
     for filename, name, key in _table_loads():
         pattern = re.compile(rf"\b{re.escape(name)}\b")
