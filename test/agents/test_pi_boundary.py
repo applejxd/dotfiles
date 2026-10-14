@@ -110,11 +110,31 @@ def test_agent_dir_copies_credentials_and_freezes_settings(tmp_path):
     # 本物の拡張は写さない。凍結する場所は空で作る (denyWrite は無いパスに効かない)
     assert list((agent / "extensions").iterdir()) == []
     assert (agent / "trust.json").exists() and (agent / "mcp.json").exists()
-    assert set(pi.frozen_paths(agent)) == {
-        str(agent / n) for n in ("settings.json", "trust.json", "mcp.json", "extensions")
-    }
+    frozen = ("settings.json", "trust.json", "mcp.json", "AGENTS.md", "keybindings.json")
+    expected = {str(agent / n) for n in (*frozen, "extensions", "prompts")}
+    assert set(pi.frozen_paths(agent)) == expected
     # 本物の置き場は触らない
     assert not (real / "trust.json").exists() and not (real / "mcp.json").exists()
+
+
+def test_agent_dir_carries_the_instructions_keybindings_and_prompts(tmp_path):
+    """共通の指示・キーバインド・/fleet は、内側でも同じに読めて、書き換えられない。"""
+    pi = _ocs().pi
+    real = tmp_path / "real"
+    (real / "prompts").mkdir(parents=True)
+    (real / "AGENTS.md").write_text("# 個人用カスタム指示\n", encoding="utf-8")
+    (real / "keybindings.json").write_text('{"a": 1}', encoding="utf-8")
+    (real / "prompts" / "fleet.md").write_text("fleet", encoding="utf-8")
+    agent = pi.prepare_agent_dir(real, tmp_path / "home")
+    assert (agent / "AGENTS.md").read_text(encoding="utf-8") == "# 個人用カスタム指示\n"
+    assert (agent / "keybindings.json").read_text(encoding="utf-8") == '{"a": 1}'
+    assert (agent / "prompts" / "fleet.md").read_text(encoding="utf-8") == "fleet"
+    for name in ("AGENTS.md", "keybindings.json", "prompts"):
+        assert str(agent / name) in pi.frozen_paths(agent)
+    # 本物に無いときも、書き込みを塞ぐ場所が空で在る (denyWrite は無いパスに効かない)
+    bare = pi.prepare_agent_dir(tmp_path / "none", tmp_path / "home2")
+    assert (bare / "AGENTS.md").read_text(encoding="utf-8") == ""
+    assert (bare / "prompts").is_dir() and (bare / "keybindings.json").exists()
 
 
 def test_old_agent_dirs_are_pruned_but_fresh_ones_stay(tmp_path):

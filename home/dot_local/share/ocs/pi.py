@@ -35,10 +35,13 @@ REAL_AGENT = HOME / ".pi/agent"
 AGENT_HOME = HOME / ".local/share/pi-sandbox"
 AGENT_MAX_AGE_SECONDS = 3 * 24 * 60 * 60
 # 本物から写すファイル。認証の写しは更新されても本物へ戻らない
-COPY_FILES = ("auth.json", "models-store.json", "settings.json")
+# AGENTS.md (共通の指示)・keybindings.json・prompts/ (/fleet) も写す。
+# 無いと、サンドボックスの中だけ指示やプロンプトが消える
+COPY_FILES = ("auth.json", "models-store.json", "settings.json", "AGENTS.md", "keybindings.json")
+COPY_DIRS = ("prompts",)
 # 内側から書き換えられたくないもの (pi が読むだけ)。無いと denyWrite が効かないので作っておく
-FROZEN_FILES = ("settings.json", "trust.json", "mcp.json")
-FROZEN_DIRS = ("extensions",)
+FROZEN_FILES = ("settings.json", "trust.json", "mcp.json", "AGENTS.md", "keybindings.json")
+FROZEN_DIRS = ("extensions", "prompts")
 # pis の通常の起動とサンドボックスの内側で、同じ形にそろえる pi の起動フラグ
 # (作業先の .pi/ を読まない・組み込みのツールと拡張の自動発見を止める・MCP だけ戻す)
 BASE_FLAGS = ("--no-approve", "-nbt", "-ne", "-e", "builtin:mcp")
@@ -102,9 +105,13 @@ def prepare_agent_dir(real: Path | None = None, home: Path | None = None) -> Pat
         source = real / name
         if source.is_file():
             shutil.copy2(source, agent / name)
+    for name in COPY_DIRS:
+        source = real / name
+        if source.is_dir():
+            shutil.copytree(source, agent / name, symlinks=True)
     for name in FROZEN_FILES:
         if not (agent / name).exists():
-            (agent / name).write_text("{}\n", encoding="utf-8")
+            (agent / name).write_text("" if name.endswith(".md") else "{}\n", encoding="utf-8")
     for name in FROZEN_DIRS:
         (agent / name).mkdir(exist_ok=True)
     return agent

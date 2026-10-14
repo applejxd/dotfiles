@@ -332,7 +332,7 @@ pi だけの部分は `~/.local/share/ocs/pi.py`。`--no-backup` / `--check` は
 
 | 項目 | 内容 | 理由 |
 | --- | --- | --- |
-| 設定の置き場 | サンドボックス用の **agent 置き場**を起動ごとに `~/.local/share/pi-sandbox/agent-*` へ作り、`auth.json`・`models-store.json`・`settings.json` を写す。`settings.json`・`trust.json`・`mcp.json`・`extensions/` は書き込みを塞ぐ | pi は設定と認証を読むときにも隣へ `.lock` を作るので、置き場は書ける必要がある。本物の `~/.pi/agent` を入れると、内側で作られた拡張を外の通常の pi が読む（E4） |
+| 設定の置き場 | サンドボックス用の **agent 置き場**を起動ごとに `~/.local/share/pi-sandbox/agent-*` へ作り、`auth.json`・`models-store.json`・`settings.json`・`AGENTS.md`（共通の指示）・`keybindings.json`・`prompts/`（`/fleet`）を写す（`AGENTS.md` などが無いと、サンドボックスの中だけ指示・プロンプトが消える。2026-10-15 に実機の試験で見つけた）。`settings.json`・`trust.json`・`mcp.json`・`AGENTS.md`・`keybindings.json`・`extensions/`・`prompts/` は書き込みを塞ぐ（本物に無いときは空で作る） | pi は設定と認証を読むときにも隣へ `.lock` を作るので、置き場は書ける必要がある。本物の `~/.pi/agent` を入れると、内側で作られた拡張を外の通常の pi が読む（E4） |
 | セッション | `--session-dir` で本物の `~/.pi/agent/sessions/--<作業ディレクトリ>--` だけを開ける | 外の `pi -c` で再開できる（試験済み）。`--session-dir` は渡した場所へそのまま置くので、pi が使う置き場の名前をそろえる |
 | 認証 | 写しの中で更新された認証のうち、**有効期限が本物より新しいプロバイダの分だけ**を、終了後に本物へ戻す（pi と同じ `auth.json.lock` を取る。取れなければ戻さない） | OpenAI は OAuth（期限 47 分）で、更新のたびにリフレッシュトークンが入れ替わりうる。写しの中だけで更新すると、本物が失効する |
 | 後始末 | pi を子プロセスとして動かし、終了・SIGTERM・SIGHUP（端末を閉じた）のどれでも、認証を戻して置き場を消す。Ctrl-C は子が受ける | `execve` で置き換えると終了後の処理ができず、認証の写しが残る。SIGKILL や電源断では残るので、3 日たった置き場は次の起動が捨てる |
