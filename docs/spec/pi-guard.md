@@ -356,6 +356,7 @@ pi だけの部分は `~/.local/share/ocs/pi.py`。`--no-backup` / `--check` は
   期待していなければ（変数が無ければ）、緩和は一切効かない
 - **許可の一覧**（`PI_HARNESS_ALLOWED`）は、起動時に実際に Fence へ渡した `allowRead` / `allowWrite`。判定器は、作業ツリーの外のパスをこれと照合する。
   実際の OS の許可とずれても、OS が拒否するだけで安全側（拒否の理由が判定器と OS で食い違う場合がある）
+- **内側へ渡さない環境変数**: 固定の一覧（`GH_TOKEN`・`SSH_AUTH_SOCK`・`AWS_*` など）に加え、名前に `TOKEN`・`SECRET`・`PASSWORD`・`PASSPHRASE` を含むものと `ORCA_PANE_KEY`（Orca が起動時に入れる資格情報）を、パターンで落とす（実機で `ORCA_AGENT_HOOK_TOKEN` が内側に見えたため。2026-10-15）。プロバイダの API キーを環境変数で渡す使い方（`*_API_KEY`）は、今は落とさない
 - 子エージェントは、同じ環境変数を引き継いだ同じ Fence の中で動き、子もカナリアで確かめる
 - **起動前の事前検査**（`ocs --check` と同じ検査。通信・保護対象・秘密の不可視）は、同じ設定・Fence の版・検査スクリプトで合格した記憶（`~/.local/state/opencode-sandbox/preflight/`、7 日）があれば省く。
   **合格だけを覚え**、落ちたら起動しない（`--no-sandbox` を案内）

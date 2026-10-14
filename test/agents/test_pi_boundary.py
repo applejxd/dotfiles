@@ -151,9 +151,16 @@ def test_inner_command_and_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("PI_HARNESS_ROLE", "reader")
     config_ = {"filesystem": {"allowRead": ["/a"], "allowWrite": ["/b"]}}
     monkeypatch.setenv("PI_HARNESS_ALLOWED", "outer")
+    for name in ("ORCA_AGENT_HOOK_TOKEN", "ORCA_PANE_KEY", "MY_SERVICE_SECRET", "db_password"):
+        monkeypatch.setenv(name, "x")
+    monkeypatch.setenv("ORCA_AGENT_HOOK_PORT", "1234")  # ポートは資格情報ではない
     monkeypatch.setattr(pi.check, "ensure_canary", lambda: None)
     env = pi.inner_env(tmp_path / "agent", config_)
     assert "GH_TOKEN" not in env and "PI_HARNESS_CHILD" not in env
+    # 名前から資格情報と分かるものは、固定の一覧に無くても渡さない
+    for name in ("ORCA_AGENT_HOOK_TOKEN", "ORCA_PANE_KEY", "MY_SERVICE_SECRET", "db_password"):
+        assert name not in env, name
+    assert env["ORCA_AGENT_HOOK_PORT"] == "1234"
     assert env["PI_HARNESS_BOUNDARY"] == "1"
     # 外から入った値は捨て、実際に開けた場所を渡す。カナリアは内側から見えない状態領域に置く
     assert json.loads(env["PI_HARNESS_ALLOWED"]) == {"read": ["/a"], "write": ["/b"]}

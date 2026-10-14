@@ -55,6 +55,15 @@ DROP_ENV = (
 )
 
 
+# 名前から資格情報と分かる環境変数は、固定の一覧 (cli.DROP_ENV) に無くても内側へ渡さない。
+# Orca が起動時に入れるもの (ORCA_AGENT_HOOK_TOKEN など) も、これで落ちる。
+SECRET_ENV = re.compile(r"TOKEN|SECRET|PASSWORD|PASSPHRASE|ORCA_PANE_KEY", re.IGNORECASE)
+
+
+def is_secret_env(name: str) -> bool:
+    return SECRET_ENV.search(name) is not None
+
+
 def check_installed() -> None:
     for path, hint in (
         (PI, "pi を入れる (chezmoi apply)"),
@@ -131,7 +140,11 @@ def inner_env(agent: Path, config_: dict) -> dict[str, str]:
 
     check.ensure_canary()
     fs = config_["filesystem"]
-    env = {k: v for k, v in os.environ.items() if k not in (*COMMON_DROP, *DROP_ENV)}
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in (*COMMON_DROP, *DROP_ENV) and not is_secret_env(k)
+    }
     env["PI_CODING_AGENT_DIR"] = str(agent)
     env["PI_HARNESS_BOUNDARY"] = "1"
     env["PI_HARNESS_ALLOWED"] = json.dumps(
