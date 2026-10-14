@@ -1037,6 +1037,17 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
 - 実機の確認: 通常権限で 2 回実行し、2 回目も同じ値になること、`STANDBYIDLE` の AC が 0・DC が 600 になることを `powercfg /q` で確認した。
   蓋と無人時のスリープは、この機にその設定が無く、値を読み取れなかった（デスクトップ機。ノート PC での挙動は未確認）
 
+## Tailscale の Unattended
+
+`300_windows/run_after_350_tailscale.ps1.tmpl`（`applejxd` のみ）が、**毎回の `chezmoi apply`** で
+`tailscale set --unattended` を実行する（冪等）。ログオン前・サインアウト後も接続が維持される。
+サービス自体は winget の導入（`309_admin`）で自動起動になる。
+
+- **初回のブラウザ認証は自動化しない**（対話が要るため）。未ログイン（`BackendState` が `Running` 以外）のときは
+  `tailscale up --unattended` を実行する旨を表示して 0 で終わる。認証キーは使わない
+- 認証後の次の apply から `set --unattended` が効く。未ログインのうちに `set` だけが通るかは**未確認**（スクリプトは未ログイン時に呼ばない）
+- Windows 実機での動作は**未検証**
+
 ## 7-Zip の関連付け
 
 `300_windows/320_regkey/run_once_after_322_7zip.ps1` は、7-Zip を**既定アプリの一覧に選べる形で登録する**（`HKCU` のみ）。
