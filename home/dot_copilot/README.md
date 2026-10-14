@@ -5,60 +5,10 @@
 - [設定ディレクトリ / settings.json 仕様](https://docs.github.com/ja/copilot/reference/copilot-cli-reference/cli-config-dir-reference#configuration-file-settings)
 - `includeCoAuthoredBy=false` を chezmoi で強制し、Copilot が作成するコミットへ共同著者 trailer を追加しない
 
-## Windows の hook 起動
+## hook
 
-`hooks/from-claude.json` は `common.toml` と `scripts/agents/generate.py` から
-生成する。Windows では `powershell` キー、Linux / macOS / WSL では `bash`
-キーを使う。`bash` キーだけの設定は Windows 用の起動指定にはならない。
-仕様は [GitHub Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference#command-hooks)
-を参照。
-
-Windows の Python hook は次の形式になる。パスは `$HOME` を使わず絶対パスを
-**単一引用符**で囲み、`-X utf8` で stdin / stdout の日本語 JSON を UTF-8 に固定する。
-
-```json
-{
-  "type": "command",
-  "powershell": "py -3 -B -X utf8 'C:\\Users\\example/.claude/hooks/check_bash.py'",
-  "timeoutSec": 30
-}
-```
-
-`$HOME` を使わないのは、PowerShell の `$HOME` が `HOMEDRIVE`+`HOMEPATH` 由来で、
-ホームをリダイレクトしたドメイン参加機では chezmoi の `~`（`%USERPROFILE%`）と
-一致しないため。パスは `chezmoi apply` の実行時に確定するので、生成結果は
-必ずそのマシンのホームを指す。単一引用符なのは、`powershell` の値が
-`-Command` へ渡される場合に二重引用符が外側の引用と衝突しうるため
-（単一引用符の中は展開も再解釈もされない。`'` は `''` へ二重化する）。
-
-更新したソースを Windows に取り込んだ後、PowerShell で対象設定だけを反映し、
-Copilot CLI を再起動する。
-
-```powershell
-chezmoi diff "$env:USERPROFILE\.copilot\hooks\from-claude.json"
-chezmoi apply --exclude=scripts "$env:USERPROFILE\.copilot\hooks\from-claude.json"
-```
-
-Python 3.11 以上 (`tomllib` が必要) を `py -3` で起動できることが前提。
-PostToolUse の `.sh` hook は引き続き `bash` が必要だが、PreToolUse の
-Python hook の起動には不要。
-
-まだ失敗する場合は、まず無害な入力で Python hook を直接起動し、
-標準エラーと終了コードを確認する (以下のコマンドは検査対象を実行しない)。
-
-```powershell
-py -3 --version
-'{"hook_event_name":"PreToolUse","tool_name":"bash","tool_input":{"command":"git status"}}' |
-    py -3 -B -X utf8 "$env:USERPROFILE\.claude\hooks\check_bash.py"
-$LASTEXITCODE
-'{"hook_event_name":"PreToolUse","tool_name":"create","tool_input":{"path":"/tmp/hook-probe.txt"}}' |
-    py -3 -B -X utf8 "$env:USERPROFILE\.claude\hooks\redirect-tmp.py"
-$LASTEXITCODE
-```
-
-前者は無出力・終了コード `0`、後者は `permissionDecision: deny` の JSON・
-終了コード `0` が期待値。単体では成功して CLI 内でのみ失敗する場合は、
-`copilot --log-level debug` で hook 起動ログを確認する。
+**撤去した**（2026-10、ADR-0017）。`hooks/from-claude.json` は生成しない（配備済みのものは `chezmoi apply` が消す）。
+判定は pi の判定器（`pi/harness/judge`）が持つ。
 
 ## `trustedFolders` が `chezmoi diff` に出続ける
 

@@ -25,7 +25,8 @@
 ## 決定
 
 1. **AI CLI は pi に一本化する。** Claude Code・Copilot CLI・OpenCode は、今後の保守・最適化の対象にしない。
-   OpenCode は段 6 で撤去する。Claude / Copilot の生成・hook の扱い（残すか畳むか）は、一本化の実際の運用を見て別に決める
+   OpenCode は段 6 で撤去する。Claude / Copilot の生成・hook の扱い（残すか畳むか）は、一本化の実際の運用を見て別に決める。
+   **更新（2026-10）**: Claude / Copilot への hook の登録は撤去した（`[[hooks]]` は pi の編集後の整形だけ。判定の hook は `retired_hooks` へ）。Python 版の判定器本体の撤去は、実機での観察の後に行う
 2. **判定器は TypeScript に移し、ハーネスのプロセスの中で関数として呼ぶ。** Python 版（`decide.py`）は、移植が全件一致するまで正解（オラクル）として残し、
    一致したら外す。**2026-10-09 の「Claude / Copilot と判定を共有する」は、この決定で覆る**（その前提が、一本化で消えるため）
 3. **移植は、挙動を変えずに写す。** Python 版の判定結果を正解データ（JSONL）にして、TS 版との全件一致を完了条件にする。

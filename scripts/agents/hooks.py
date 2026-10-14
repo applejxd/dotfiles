@@ -187,37 +187,3 @@ def build_claude_hooks(
         entry["hooks"] = [command]
         out.setdefault(event, []).append(entry)
     return out
-
-
-def build_copilot_hooks(
-    common: dict[str, Any],
-    *,
-    platform: str | None = None,
-) -> dict[str, Any]:
-    """Copilot CLI の ~/.copilot/hooks/*.json 用 hooks (フラット構造) を組み立てる。"""
-    hooks: dict[str, list[dict[str, Any]]] = {}
-    command_key = "powershell" if (platform or os.name) == "nt" else "bash"
-    for hook in common.get("hooks", []):
-        event = hook.get("copilot_event")
-        if not event:
-            continue
-        entry: dict[str, Any] = {}
-        matcher = hook.get("copilot_matcher")
-        if matcher:
-            entry["matcher"] = matcher
-        entry["type"] = "command"
-        entry[command_key] = hook_command(
-            hook,
-            launcher=command_key,
-            platform=platform,
-        )
-        timeout = hook.get("timeout_sec")
-        if timeout:
-            entry["timeoutSec"] = timeout
-        hooks.setdefault(event, []).append(entry)
-    return {"version": 1, "hooks": hooks}
-
-
-def merge_copilot_hooks(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
-    # hooks ファイルは完全な生成物なので既存内容は参照しない
-    return build_copilot_hooks(common)

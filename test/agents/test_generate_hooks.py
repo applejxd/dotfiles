@@ -8,10 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shlex
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -28,77 +25,112 @@ COMMON_PATH = agents_config_dir() / "common.toml"
 
 HOOK_SRC_DIR = ROOT / "home" / "dot_claude" / "hooks"
 
-# Claude Code 公式 docs の hook イベント一覧のうち、本リポジトリで使う可能性のあるもの。
-# ここに無い名前を common.toml に書いた場合はタイポとみなす。
-KNOWN_CLAUDE_EVENTS = {
-    "SessionStart",
-    "UserPromptSubmit",
-    "PreToolUse",
-    "PostToolUse",
-    "PostToolUseFailure",
-    "PostToolBatch",
-    "SubagentStop",
-    "Stop",
-    "PreCompact",
-    "SessionEnd",
-    "Notification",
-}
+# 撤去した hook の登録を模した入力 (生成・統合の関数そのものの試験用)。
+# common.toml の [[hooks]] には、いまは Claude / Copilot の登録が無い (ADR-0017)。
+# 古い登録が settings.json に残っていても、生成側が外せることを確かめるために形を残す。
+SAMPLE_HOOKS = [
+    {
+        "id": "check_bash",
+        "script": "check_bash.py",
+        "runner": "python3",
+        "claude_event": "PreToolUse",
+        "claude_matcher": "Bash",
+        "timeout_sec": 30,
+    },
+    {
+        "id": "redirect-tmp",
+        "script": "redirect-tmp.py",
+        "runner": "python3",
+        "claude_event": "PreToolUse",
+        "claude_matcher": "Bash|Write|Edit",
+        "timeout_sec": 30,
+    },
+    {
+        "id": "markdownlint",
+        "script": "markdownlint.sh",
+        "runner": "bash",
+        "claude_event": "PostToolUse",
+        "claude_matcher": "Edit|Write",
+        "timeout_sec": 30,
+    },
+    {
+        "id": "format-file",
+        "script": "format-file.sh",
+        "runner": "bash",
+        "claude_event": "PostToolUse",
+        "claude_matcher": "Edit|Write",
+        "timeout_sec": 30,
+    },
+]
+SAMPLE_RETIRED = [
+    "block-dangerous-commands.sh",
+    "update-adr-on-stop.py",
+    "checkpoint_precompact.py",
+    "checkpoint_restore.py",
+    "checkpoint_restore_pending.py",
+]
 
-# matcher をサポートしないイベント (設定しても silently ignored)
-CLAUDE_EVENTS_WITHOUT_MATCHER = {"UserPromptSubmit", "Stop"}
+LIVE = load_common()
+COMMON = {**LIVE, "hooks": SAMPLE_HOOKS, "retired_hooks": {"scripts": SAMPLE_RETIRED}}
 
 
+# ---------------------------------------------------------------------------
+# common.toml 側 (撤去後の状態)
+# ---------------------------------------------------------------------------
 
 
-COMMON = load_common()
+def test_no_hook_is_registered_for_claude_or_copilot():
+    """[[hooks]] は pi の編集後の整形だけ。Claude / Copilot へは何も登録しない (ADR-0017)。"""
+    assert LIVE["hooks"]
+    for hook in LIVE["hooks"]:
+        assert hook.get("post_edit") is True, hook["id"]
+        assert not [k for k in hook if k.startswith(("claude_", "copilot_"))], hook["id"]
+    assert hk.build_claude_hooks(LIVE) == {}
+
+
+def test_live_hooks_are_unique_and_their_scripts_exist():
+    ids = [h["id"] for h in LIVE["hooks"]]
+    assert len(ids) == len(set(ids))
+    for hook in LIVE["hooks"]:
+        assert hook.get("runner") in {"python3", "bash"}
+        src = HOOK_SRC_DIR / f"executable_{hook['script']}"
+        assert src.is_file(), f"hook script not found: {src}"
+
+
+def test_the_retired_judge_hooks_are_listed_so_stale_registrations_are_removed():
+    retired = set(LIVE["retired_hooks"]["scripts"])
+    assert {"check_bash.py", "redirect-tmp.py", "check_file_read.py"} <= retired
+    assert not retired & {h["script"] for h in LIVE["hooks"]}
+
+
+def test_stale_judge_hook_registrations_are_removed_from_an_existing_settings():
+    """以前の生成物が settings.json に残っていても、外部ツールの hook を残して外す。"""
+    old = hk.build_claude_hooks(COMMON)
+    foreign = {"matcher": "*", "hooks": [{"type": "command", "command": "other-tool hook"}]}
+    existing = {"hooks": {**old, "SessionStart": [foreign]}}
+    merged = gen.merge_claude_settings(existing, LIVE)
+    assert merged["hooks"] == {"SessionStart": [foreign]}
+
+
+def test_pi_post_edit_hooks_come_from_the_post_edit_flag():
+    out = gen.pi_post_edit_hooks(LIVE)
+    assert [h["id"] for h in out] == ["markdownlint", "format-file"]
+    assert (
+        gen.pi_post_edit_hooks({"hooks": [{"id": "x", "script": "x.sh", "runner": "bash"}]}) == []
+    )
+
+
+def test_the_copilot_hooks_target_is_gone():
+    assert "copilot-hooks" not in gen.TARGETS
+    assert not (ROOT / "home" / "dot_copilot" / "hooks").exists()
+    assert ".copilot/hooks/from-claude.json" in (ROOT / "home" / ".chezmoiremove").read_text(
+        encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
 # common.toml 側の健全性
 # ---------------------------------------------------------------------------
-
-def test_hooks_section_exists():
-    assert COMMON.get("hooks"), "common.toml に [[hooks]] が無い"
-
-
-def test_hook_ids_are_unique():
-    ids = [h["id"] for h in COMMON["hooks"]]
-    assert len(ids) == len(set(ids))
-
-
-def test_hook_scripts_exist_in_repo():
-    for hook in COMMON["hooks"]:
-        # chezmoi の executable_ 接頭辞を付けた実体があること
-        src = HOOK_SRC_DIR / f"executable_{hook['script']}"
-        assert src.is_file(), f"hook script not found: {src}"
-
-
-def test_hook_runner_is_known():
-    for hook in COMMON["hooks"]:
-        # 素の Ubuntu には `python` が無いので python3 を使う
-        assert hook.get("runner") in {"python3", "bash"}
-
-
-def test_windows_python_hooks_use_latest_python_3():
-    claude = hk.build_claude_hooks(COMMON, platform="nt")
-    copilot = hk.build_copilot_hooks(COMMON, platform="nt")
-
-    commands = [
-        cmd["command"]
-        for entries in claude.values()
-        for entry in entries
-        for cmd in entry["hooks"]
-    ]
-    commands.extend(
-        entry["powershell"]
-        for entries in copilot["hooks"].values()
-        for entry in entries
-    )
-    python_commands = [
-        command for command in commands if command.rstrip("\"'").endswith(".py")
-    ]
-    assert python_commands
-    assert all(command.startswith("py -3 -B -X utf8 ") for command in python_commands)
 
 
 def test_runtime_code_has_no_external_tomli_dependency():
@@ -112,28 +144,6 @@ def test_runtime_code_has_no_external_tomli_dependency():
         assert "import tomli" not in source
 
 
-def test_claude_events_are_known():
-    for hook in COMMON["hooks"]:
-        event = hook.get("claude_event")
-        if event:
-            assert event in KNOWN_CLAUDE_EVENTS, f"unknown claude event: {event}"
-
-
-def test_no_matcher_for_events_without_matcher_support():
-    for hook in COMMON["hooks"]:
-        if hook.get("claude_event") in CLAUDE_EVENTS_WITHOUT_MATCHER:
-            assert "claude_matcher" not in hook, (
-                f"{hook['id']}: {hook['claude_event']} は matcher 非対応"
-            )
-
-
-def test_multiedit_is_not_referenced():
-    # MultiEdit は Claude Code v2.0 系で削除済み
-    for hook in COMMON["hooks"]:
-        assert "MultiEdit" not in hook.get("claude_matcher", "")
-        assert "MultiEdit" not in hook.get("copilot_matcher", "")
-
-
 # ---------------------------------------------------------------------------
 # 外部ツール (Orca 等) の hook を模したフィクスチャ
 # ---------------------------------------------------------------------------
@@ -141,7 +151,7 @@ def test_multiedit_is_not_referenced():
 # Orca が ~/.claude/settings.json に注入する hook を模したコマンド
 FOREIGN_COMMAND = (
     'if [ -f "${HOME-}/.orca/agent-hooks/claude-hook.sh" ]; then '
-    '/bin/sh "${HOME-}/.orca/agent-hooks/claude-hook.sh"; else printf \'{}\\n\'; fi'
+    "/bin/sh \"${HOME-}/.orca/agent-hooks/claude-hook.sh\"; else printf '{}\\n'; fi"
 )
 MANAGED_DIR = hk.expand_user(hk.HOOKS_DIR)
 
@@ -158,13 +168,11 @@ def foreign_entry(matcher: str | None = None) -> dict:
 # Claude 出力
 # ---------------------------------------------------------------------------
 
+
 def test_claude_hooks_cover_every_declared_hook():
     hooks = hk.build_claude_hooks(COMMON)
     commands = [
-        cmd["command"]
-        for entries in hooks.values()
-        for entry in entries
-        for cmd in entry["hooks"]
+        cmd["command"] for entries in hooks.values() for entry in entries for cmd in entry["hooks"]
     ]
     for hook in COMMON["hooks"]:
         if hook.get("claude_event"):
@@ -313,9 +321,7 @@ def test_generation_is_stable_with_herdr_installer_in_between():
     def has_check_bash(settings: dict) -> bool:
         return any(
             entry.get("matcher") == "Bash"
-            and any(
-                cmd["command"].endswith('/check_bash.py"') for cmd in entry["hooks"]
-            )
+            and any(cmd["command"].endswith('/check_bash.py"') for cmd in entry["hooks"])
             for entry in settings["hooks"]["PreToolUse"]
         )
 
@@ -480,45 +486,6 @@ def test_unparseable_shapes_are_preserved_not_dropped():
 # Copilot 出力
 # ---------------------------------------------------------------------------
 
-def test_copilot_hooks_version():
-    out = hk.build_copilot_hooks(COMMON)
-    assert out["version"] == 1
-
-
-def test_copilot_matchers_are_anchored():
-    out = hk.build_copilot_hooks(COMMON)
-    for entries in out["hooks"].values():
-        for entry in entries:
-            matcher = entry.get("matcher")
-            if matcher is None:
-                continue
-            assert matcher.startswith("^") and matcher.endswith("$"), (
-                f"Copilot の matcher は anchored される。明示せよ: {matcher}"
-            )
-
-
-def test_copilot_unix_hook_uses_quoted_home_variable():
-    out = hk.build_copilot_hooks(COMMON, platform="posix")
-    for entries in out["hooks"].values():
-        for entry in entries:
-            assert '"$HOME/.claude/hooks/' in entry["bash"]
-            assert entry["bash"].endswith('"')
-
-
-def test_copilot_windows_hook_uses_absolute_path_in_single_quotes():
-    # PowerShell の $HOME は HOMEDRIVE+HOMEPATH 由来で chezmoi の ~ と一致しない
-    # ことがある (docs/spec/structure.md)。単一引用符は -Command 経由でも
-    # リテラルのまま残る。
-    out = hk.build_copilot_hooks(COMMON, platform="nt")
-    home = hk.expand_user(hk.HOOKS_DIR)
-    for entries in out["hooks"].values():
-        for entry in entries:
-            command = entry["powershell"]
-            assert "$HOME" not in command
-            assert f"'{home}/" in command
-            assert command.endswith("'")
-
-
 # ---------------------------------------------------------------------------
 # ホームに空白やアポストロフィがあっても 1 引数に収まること
 # ---------------------------------------------------------------------------
@@ -578,148 +545,6 @@ def test_managed_hook_detection_survives_quoting(weird_home):
         assert hk.is_managed_hook_command(command, SCRIPTS), command
 
 
-@pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
-def test_copilot_hook_entry_keys(platform, command_key):
-    """Copilot の登録に出るキーを固定する。
-
-    ``matcher`` は**省略されうる**。matcher を持たないイベント
-    (``PreCompact`` など) では出力されない。省略を許さないと、
-    そうしたイベントを登録できなくなる。
-    """
-    out = hk.build_copilot_hooks(COMMON, platform=platform)
-    required = {"type", command_key, "timeoutSec"}
-    for entries in out["hooks"].values():
-        for entry in entries:
-            assert required <= set(entry)
-            assert set(entry) - required <= {"matcher"}
-            assert entry["type"] == "command"
-            assert isinstance(entry["timeoutSec"], int)
-
-
-@pytest.mark.parametrize(
-    ("platform", "command_key", "python_runner"),
-    [("posix", "bash", "python3"), ("nt", "powershell", "py -3 -B -X utf8")],
-)
-def test_copilot_commands_preserve_hooks_and_metadata(platform, command_key, python_runner):
-    out = hk.build_copilot_hooks(COMMON, platform=platform)
-    declared = [hook for hook in COMMON["hooks"] if hook.get("copilot_event")]
-    assert sum(len(entries) for entries in out["hooks"].values()) == len(declared)
-    for hook in declared:
-        runner = python_runner if hook["runner"] == "python3" else hook["runner"]
-        if command_key == "powershell":
-            path = f"'{hk.expand_user(hk.HOOKS_DIR)}/{hook['script']}'"
-        else:
-            path = f'"$HOME/.claude/hooks/{hook["script"]}"'
-        expected = {
-            "type": "command",
-            command_key: f"{runner} {path}",
-            "timeoutSec": hook["timeout_sec"],
-        }
-        # matcher は省略されうる。matcher を持たないイベント (PreCompact など)
-        # では copilot_matcher を宣言しないので、出力にも現れない。
-        if "copilot_matcher" in hook:
-            expected["matcher"] = hook["copilot_matcher"]
-        assert expected in out["hooks"][hook["copilot_event"]]
-
-
-def test_copilot_defaults_to_host_platform():
-    assert hk.build_copilot_hooks(COMMON) == hk.build_copilot_hooks(COMMON, platform=os.name)
-
-
-@pytest.mark.skipif(os.name == "nt", reason="Unix shell execution test")
-@pytest.mark.parametrize(
-    ("hook_id", "command", "decision"),
-    [
-        ("check_bash", "git status", None),
-        ("check_bash", "git push", "deny"),
-        ("redirect-tmp", "cat /tmp/input.txt", None),
-        ("redirect-tmp", "echo hello > /tmp/output.txt", "deny"),
-    ],
-)
-def test_copilot_python_hooks_run_with_spaces_in_home(tmp_path, hook_id, command, decision):
-    home = tmp_path / "home with spaces"
-    hooks_dir = home / ".claude" / "hooks"
-    (hooks_dir / "lib").mkdir(parents=True)
-    hook = next(hook for hook in COMMON["hooks"] if hook["id"] == hook_id)
-    shutil.copyfile(HOOK_SRC_DIR / f"executable_{hook['script']}", hooks_dir / hook["script"])
-    for helper in ("agent_compat.py", "policy_loader.py"):
-        shutil.copyfile(HOOK_SRC_DIR / "lib" / helper, hooks_dir / "lib" / helper)
-    # check_bash.py は判定ルールを lib/bashrules/ に持つ (配備にも必要)
-    bashrules = HOOK_SRC_DIR / "lib" / "bashrules"
-    if bashrules.is_dir():
-        shutil.copytree(bashrules, hooks_dir / "lib" / "bashrules")
-    # 判定の表は配備先 (~/.config/pi/harness/judge/) にある。tables.py はそこを読む
-    judge = home / ".config" / "pi" / "harness" / "judge"
-    judge.mkdir(parents=True)
-    tables = ROOT / "home" / "dot_config" / "pi" / "harness" / "judge" / "tables.toml"
-    shutil.copyfile(tables, judge / "tables.toml")
-    out = hk.build_copilot_hooks({"hooks": [hook]}, platform="posix")
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "bash",
-        "tool_input": {"command": command},
-        "cwd": str(ROOT),
-    }
-    result = subprocess.run(
-        ["bash", "-c", out["hooks"]["PreToolUse"][0]["bash"]],
-        input=json.dumps(payload).encode("utf-8"),
-        capture_output=True,
-        timeout=30,
-        env={**os.environ, "HOME": str(home), "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent)},
-    )
-    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
-    assert result.stderr == b""
-    if decision is None:
-        assert result.stdout == b""
-    else:
-        assert json.loads(result.stdout.decode("utf-8"))["permissionDecision"] == decision
-
-
-@pytest.mark.parametrize(
-    ("hook_id", "command"),
-    [("check_bash", "git push"), ("redirect-tmp", "echo hello > /tmp/output.txt")],
-)
-@pytest.mark.parametrize("tool_name", ["bash", "powershell"])
-def test_windows_python_hook_invocation_emits_utf8(hook_id, command, tool_name):
-    hook = next(hook for hook in COMMON["hooks"] if hook["id"] == hook_id)
-    out = hk.build_copilot_hooks({"hooks": [hook]}, platform="nt")
-    invocation = shlex.split(out["hooks"]["PreToolUse"][0]["powershell"])
-    # PowerShell / py 自体は実行せず、生成した Python オプションと実スクリプトを検証。
-    assert invocation[:2] == ["py", "-3"]
-    assert re.fullmatch(out["hooks"]["PreToolUse"][0]["matcher"], tool_name)
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": tool_name,
-        "tool_input": {"command": command},
-        "cwd": str(ROOT),
-    }
-    env = {
-        **os.environ,
-        "AGENTS_CONFIG_DIR": str(COMMON_PATH.parent),
-        "LC_ALL": "C",
-        "PYTHONCOERCECLOCALE": "0",
-        "PYTHONUTF8": "0",
-    }
-    env.pop("PYTHONIOENCODING", None)
-    result = subprocess.run(
-        [sys.executable, *invocation[2:-1], str(HOOK_SRC_DIR / f"executable_{hook['script']}")],
-        input=json.dumps(payload).encode("utf-8"),
-        capture_output=True,
-        timeout=30,
-        env=env,
-    )
-    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
-    assert result.stderr == b""
-    output = json.loads(result.stdout.decode("utf-8"))
-    assert output["permissionDecision"] == "deny"
-    assert not output["permissionDecisionReason"].isascii()
-
-
-def test_copilot_hooks_ignore_existing_content():
-    out = hk.merge_copilot_hooks({"hooks": {"Stop": [{"bash": "stale"}]}}, COMMON)
-    assert out == hk.build_copilot_hooks(COMMON)
-
-
 def test_copilot_settings_disable_co_author_trailer():
     merged = gen.merge_copilot_settings({"includeCoAuthoredBy": True}, COMMON)
 
@@ -730,75 +555,10 @@ def test_copilot_settings_disable_co_author_trailer():
 # 両 CLI の整合性
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize(("platform", "command_key"), [("posix", "bash"), ("nt", "powershell")])
-def test_both_clis_reference_the_same_scripts(platform, command_key):
-    claude = hk.build_claude_hooks(COMMON, platform=platform)
-    copilot = hk.build_copilot_hooks(COMMON, platform=platform)
-
-    def scripts(commands):
-        return {c.rstrip("\"'").rsplit("/", 1)[-1] for c in commands}
-
-    claude_scripts = scripts(
-        cmd["command"]
-        for entries in claude.values()
-        for entry in entries
-        for cmd in entry["hooks"]
-    )
-    copilot_scripts = scripts(
-        entry[command_key] for entries in copilot["hooks"].values() for entry in entries
-    )
-    # ★片側だけに登録する hook は例外として明示する (ADR-0007)。
-    #   Claude に native な機構 (permission) がある場合、hook を足しても
-    #   防御は増えず実行コストだけが乗るため、あえて登録しない。
-    copilot_only = {"check_file_read.py"}
-    #   2026-09-25: checkpoint の 3 本を撤去したので claude_only は空になった。
-    #   checkpoint は OpenCode 専用になり、圧縮の捕捉と復帰注入は
-    #   checkpoint-plugin が session.hook で担う。
-    claude_only: set[str] = set()
-    assert copilot_scripts - claude_scripts == copilot_only
-    assert claude_scripts - copilot_scripts == claude_only
-
-
-def test_checkpoint_hooks_are_gone_from_both_clis():
-    """★checkpoint を hook で再実装しないこと。
-
-    2026-09-25 に OpenCode 専用へ寄せた。圧縮の捕捉は
-    ``session.hook("compaction")``、復帰注入は ``session.hook("context")``、
-    印の保存は ``ctx.storage`` で、**どれも Claude / Copilot に同等物が無い**。
-    hook 側へ戻すと、一番機能の薄い CLI に合わせた設計に引きずられる。
-
-    see docs/change/closed/0001-compaction-context-handover.md
-    """
-    assert not [h for h in COMMON["hooks"] if h["id"].startswith("checkpoint")]
-
-    for platform, key in (("posix", "bash"), ("nt", "powershell")):
-        claude = hk.build_claude_hooks(COMMON, platform=platform)
-        copilot = hk.build_copilot_hooks(COMMON, platform=platform)
-        commands = [
-            cmd["command"]
-            for entries in claude.values()
-            for entry in entries
-            for cmd in entry["hooks"]
-        ] + [entry[key] for entries in copilot["hooks"].values() for entry in entries]
-        assert not [c for c in commands if "checkpoint" in c]
-
-
-def test_copilot_only_hooks_are_declared_without_a_claude_event():
-    by_id = {h["id"]: h for h in COMMON["hooks"]}
-    entry = by_id["check_file_read"]
-    assert "claude_event" not in entry
-    assert entry["copilot_event"] == "PreToolUse"
-
-
-
-
-def test_generate_target_registry():
-    assert "copilot-hooks" in gen.TARGETS
-
-
 # ---------------------------------------------------------------------------
 # Gemini 出力 (hooks は Orca が書き込むので触らないこと)
 # ---------------------------------------------------------------------------
+
 
 def test_gemini_target_is_registered():
     assert "gemini-settings" in gen.TARGETS
@@ -849,3 +609,13 @@ def test_gemini_merge_does_not_mutate_input():
     existing = {"experimental": {"someFlag": True}}
     gen.merge_gemini_settings(existing, COMMON)
     assert existing == {"experimental": {"someFlag": True}}
+
+
+def test_windows_python_hooks_use_latest_python_3():
+    claude = hk.build_claude_hooks(COMMON, platform="nt")
+    commands = [
+        cmd["command"] for entries in claude.values() for entry in entries for cmd in entry["hooks"]
+    ]
+    python_commands = [c for c in commands if c.rstrip("\"'").endswith(".py")]
+    assert python_commands
+    assert all(c.startswith("py -3 -B -X utf8 ") for c in python_commands)

@@ -47,7 +47,6 @@ MODIFIERS = {
 }
 # .chezmoiignore.tmpl が Windows 以外で外すもの
 WINDOWS_ONLY = {".config/opencode/service.json"}
-COPILOT_HOOKS = ROOT / "home" / "dot_copilot" / "hooks" / "modify_from-claude.json.py.tmpl"
 CHEZMOI_CONFIG = ROOT / "home" / ".chezmoi.toml.tmpl"
 
 
@@ -114,23 +113,14 @@ def test_modifier_targets_keep_json_names():
         assert f"{target}.py" not in managed
 
 
-def test_copilot_hooks_modifier_renders_as_json():
-    # hooks ファイルは完全な生成物なので、既存内容があっても作り直す
-    result = run_wrapper(render_modifier(COPILOT_HOOKS), b'{"stale": true}')
-
-    assert result.returncode == 0, result.stderr.decode(errors="replace")
-    generated = json.loads(result.stdout)
-    assert generated["version"] == 1
-    assert "stale" not in generated
-
-
 def test_windows_templates_use_latest_python_3():
     config = CHEZMOI_CONFIG.read_text(encoding="utf-8")
 
     assert 'args = ["-3"]' in config
     # hooks の生成も modify_ 経由になったので、Windows の Python 選択は
     # [interpreters.py] が受け持つ (テンプレート側に py -3 を書かない)
-    assert "modify_json.py.tmpl" in COPILOT_HOOKS.read_text(encoding="utf-8")
+    claude = ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl"
+    assert "modify_json.py.tmpl" in claude.read_text(encoding="utf-8")
 
 
 def test_wrapper_accepts_common_checked_out_with_crlf():

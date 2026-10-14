@@ -231,27 +231,10 @@ def test_policy_dir_falls_back_to_xdg_config_home(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_hook_is_registered_for_copilot_only():
-    hooks = {h["id"]: h for h in COMMON["hooks"]}
-    entry = hooks["check_file_read"]
-    assert entry["copilot_event"] == "PreToolUse"
-    # Claude は同じリストから Read() deny permission を生成済みなので hook 不要。
-    # 付けると全ファイル読み取りにプロセス起動コストが乗るだけ。
-    assert "claude_event" not in entry, (
-        "Claude には permission があるので hook を付けない "
-        "(docs/adr/0007-filesystem-guard-boundary.md)"
-    )
-
-
-def test_hook_matcher_covers_read_tools():
-    hooks = {h["id"]: h for h in COMMON["hooks"]}
-    import re
-
-    matcher = re.compile(hooks["check_file_read"]["copilot_matcher"])
-    assert matcher.match("view")
-    assert matcher.match("Read")
-    assert not matcher.match("bash")
-    assert not matcher.match("edit")
+def test_the_hook_is_no_longer_registered_for_any_cli():
+    """Copilot への登録は撤去した (ADR-0017)。判定は TS の判定器 (pi/harness/judge) が持つ。"""
+    assert "check_file_read" not in {h["id"] for h in COMMON["hooks"]}
+    assert "check_file_read.py" in COMMON["retired_hooks"]["scripts"]
 
 
 def test_hooks_never_use_permission_request_event():

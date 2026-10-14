@@ -62,6 +62,13 @@ def before(tmp_path_factory):
         pytest.skip(f"{BEFORE_OWNERSHIP} が無い (浅い clone など): {result.stderr.strip()}")
     path = tmp_path_factory.mktemp("before") / "generate_before_ownership.py"
     path.write_text(result.stdout, encoding="utf-8")
+    # 古い generate.py は hooks.merge_copilot_hooks を取り込む。撤去済みなので、
+    # 取り込めるよう空の代わりを一時的に置く (比較するのは opencode.json だけ)
+    import hooks as hooks_module
+
+    shim = not hasattr(hooks_module, "merge_copilot_hooks")
+    if shim:
+        hooks_module.merge_copilot_hooks = lambda _existing, _common: {}
     saved = list(sys.path)
     try:
         spec = importlib.util.spec_from_file_location("generate_before_ownership", path)
@@ -70,6 +77,8 @@ def before(tmp_path_factory):
         spec.loader.exec_module(module)
     finally:
         sys.path[:] = saved
+        if shim:
+            del hooks_module.merge_copilot_hooks
     return module
 
 

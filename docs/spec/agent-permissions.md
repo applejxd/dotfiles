@@ -190,12 +190,8 @@ hook は `AGENTS_CONFIG_DIR` で agents 設定ディレクトリを差し替え�
 
 ```bash
 chezmoi diff ~/.claude/settings.json
-chezmoi diff ~/.copilot/hooks/from-claude.json
 chezmoi diff ~/.copilot/settings.json
 chezmoi diff ~/.copilot/permissions-config.json
-
-# 生成結果だけ見たいとき
-chezmoi cat ~/.copilot/hooks/from-claude.json
 ```
 
 ### apply 後の hook 動作確認
@@ -233,7 +229,6 @@ chezmoi modify_ スクリプトは空 stdin を受けると空オブジェクト
 | 症状 | 対応 |
 | --- | --- |
 | apply 後 Claude が `permissions` / `hooks` を読まない | Claude Code は起動時に settings.json を読むので再起動 |
-| Copilot CLI で hook の deny が効かない | `~/.copilot/hooks/from-claude.json` が apply されているか確認。`copilot --log-level debug` で hook がロードされているか確認 |
 | `~/.config/agents/command_policy.py` が読めない・壊れている | hook が fail-closed で全 bash を拒否する。`~/.config/agents/__pycache__/` を削除して `chezmoi apply` をやり直す |
 | common.toml の編集が反映されない | `chezmoi diff` で差分を確認 → `chezmoi apply` |
 | `chezmoi diff` が全て「new file」になる | **AI CLI の sandbox 内で実行している**。`~/` が不可視で展開先が空に見えるため。sandbox 外のシェルで実行する |

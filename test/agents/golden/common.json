@@ -411,53 +411,16 @@
  },
  "hooks": [
   {
-   "claude_event": "PreToolUse",
-   "claude_matcher": "Bash",
-   "copilot_event": "PreToolUse",
-   "copilot_matcher": "^(Bash|bash|powershell)$",
-   "id": "check_bash",
-   "purpose": "[bash] deny を両 CLI で、ask を Claude で強制する (permission リストの補完)",
-   "runner": "python3",
-   "script": "check_bash.py",
-   "timeout_sec": 30
-  },
-  {
-   "claude_event": "PreToolUse",
-   "claude_matcher": "Bash|Write|Edit",
-   "copilot_event": "PreToolUse",
-   "copilot_matcher": "^(Bash|bash|powershell|Write|create|Edit|edit)$",
-   "id": "redirect-tmp",
-   "purpose": "/tmp への書き込みを検出して ./.tmp へ誘導する (読み取り専用操作は許可)",
-   "runner": "python3",
-   "script": "redirect-tmp.py",
-   "timeout_sec": 30
-  },
-  {
-   "copilot_event": "PreToolUse",
-   "copilot_matcher": "^(Read|view)$",
-   "id": "check_file_read",
-   "purpose": "[file] read_deny_globs を Copilot のファイル読み取りにも適用する",
-   "runner": "python3",
-   "script": "check_file_read.py",
-   "timeout_sec": 30
-  },
-  {
-   "claude_event": "PostToolUse",
-   "claude_matcher": "Edit|Write",
-   "copilot_event": "PostToolUse",
-   "copilot_matcher": "^(Edit|Write|edit|create)$",
    "id": "markdownlint",
+   "post_edit": true,
    "purpose": "Markdown 編集後に markdownlint --fix と残存違反の警告",
    "runner": "bash",
    "script": "markdownlint.sh",
    "timeout_sec": 30
   },
   {
-   "claude_event": "PostToolUse",
-   "claude_matcher": "Edit|Write",
-   "copilot_event": "PostToolUse",
-   "copilot_matcher": "^(Edit|Write|edit|create)$",
    "id": "format-file",
+   "post_edit": true,
    "purpose": "編集したファイルを拡張子に応じて整形 (ruff / clang-format / prettier)",
    "runner": "bash",
    "script": "format-file.sh",
@@ -1310,7 +1273,10 @@
    "update-adr-on-stop.py",
    "checkpoint_precompact.py",
    "checkpoint_restore.py",
-   "checkpoint_restore_pending.py"
+   "checkpoint_restore_pending.py",
+   "check_bash.py",
+   "redirect-tmp.py",
+   "check_file_read.py"
   ]
  },
  "sandbox": {

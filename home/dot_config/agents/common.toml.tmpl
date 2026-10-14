@@ -1,10 +1,9 @@
 # AI CLI の permission / hook / sandbox / MCP の単一ソース。
 #
 # 生成先:
-#   ~/.claude/settings.json              <- [bash] [file] [web] [claude] [sandbox] [[hooks]]
+#   ~/.claude/settings.json              <- [bash] [file] [web] [claude] [sandbox]
 #   ~/.copilot/permissions-config.json   <- [bash.allow] [copilot.locations]
 #   ~/.copilot/settings.json             <- [web] [copilot] [sandbox]
-#   ~/.copilot/hooks/from-claude.json    <- [[hooks]]
 #   ~/.copilot/mcp-config.json           <- [[mcp]]
 #   ~/.codex/config.toml の mcp_servers  <- [[mcp]]
 #   ~/.config/opencode/opencode.json     <- [bash] [file] [pi] [opencode] [[mcp]]
@@ -1920,75 +1919,27 @@ args = [
 {{- end }}
 
 # ---------------------------------------------------------------------------
-# Hooks (Claude Code / Copilot CLI 共通の単一ソース)
+# Hooks (pi の編集後の整形)
 # ---------------------------------------------------------------------------
+# pi のハーネスが、edit / write の後に呼ぶスクリプト (整形と markdownlint)。
+# Claude Code / Copilot CLI の settings.json・~/.copilot/hooks への登録は撤去した
+# (pi 一本化。see docs/adr/0017-pi-only-and-ts-judge.md)。判定の hook (check_bash.py など) は
+# TS の判定器 (pi/harness/judge) へ移したので、下の retired_hooks へ移した。
 # フィールド:
 #   id            識別子 (生成物には出ない。テスト・レビュー用)
-#   script        ~/.claude/hooks/ 配下のファイル名 (両 CLI が同じ実体を共有)
+#   script        ~/.claude/hooks/ 配下のファイル名
 #   runner        "python3" / "bash" (素の Ubuntu に `python` は無い)
 #   purpose       用途メモ
-#   *_event       hook イベント名。空文字にするとその CLI には出力しない
-#   *_matcher     省略すると matcher キー自体を出力しない (= 全ツール)
-#   timeout_sec   Claude の timeout / Copilot の timeoutSec へ反映
-#
-# ★matcher は両 CLI で意味論が違うので共通化しない。
-#   Claude: tool 名の完全一致を `|` で OR 連結 (PascalCase のみ)
-#   Copilot: `^(?:pattern)$` として anchored。PascalCase も照合されるため両方書く
-# ★イベントは PreToolUse を使い permissionRequest は使わない
-#   (後者は後勝ちマージで、リポジトリ側の hook に決定を奪われる)。
-# see docs/spec/agent-permissions.md 「hook」
-
-[[hooks]]
-id = "check_bash"
-script = "check_bash.py"
-runner = "python3"
-purpose = "[bash] deny を両 CLI で、ask を Claude で強制する (permission リストの補完)"
-claude_event = "PreToolUse"
-claude_matcher = "Bash"
-copilot_event = "PreToolUse"
-copilot_matcher = "^(Bash|bash|powershell)$"
-timeout_sec = 30
-
-[[hooks]]
-id = "redirect-tmp"
-script = "redirect-tmp.py"
-runner = "python3"
-purpose = "/tmp への書き込みを検出して ./.tmp へ誘導する (読み取り専用操作は許可)"
-# スクリプトが処理する kind は bash / create / edit の 3 つだけなので matcher
-# もそれに合わせる (無駄な hook 起動を避ける)。view (Read) は常に許可なので
-# hook を呼ぶ必要が無く、matcher から除外している。
-claude_matcher = "Bash|Write|Edit"
-claude_event = "PreToolUse"
-copilot_event = "PreToolUse"
-copilot_matcher = "^(Bash|bash|powershell|Write|create|Edit|edit)$"
-timeout_sec = 30
-
-[[hooks]]
-id = "check_file_read"
-script = "check_file_read.py"
-runner = "python3"
-purpose = "[file] read_deny_globs を Copilot のファイル読み取りにも適用する"
-# ★Copilot 専用 (claude_event を書かない)。
-#   Claude は同じリストから Read() の deny permission を生成済みで、CLI 本体が
-#   評価するため hook は要らない。付けると全ファイル読み取りに Python の
-#   プロセス起動 (数十 ms) が乗るだけで、防御は増えない。
-#   一方 Copilot は permissions-config.json にファイル規則が無く、sandbox の
-#   deniedPaths も絶対パス限定・ワイルドカード非対応で cwd は自動許可される。
-#   つまりリポジトリ内の秘密ファイルを止める手段が hook しかない。
-#   詳細は docs/adr/0007-filesystem-guard-boundary.md
-copilot_event = "PreToolUse"
-copilot_matcher = "^(Read|view)$"
-timeout_sec = 30
+#   post_edit     true なら、pi のハーネスが edit / write の後に呼ぶ
+#   timeout_sec   秒
+# see docs/spec/pi-harness.md#整形
 
 [[hooks]]
 id = "markdownlint"
 script = "markdownlint.sh"
 runner = "bash"
 purpose = "Markdown 編集後に markdownlint --fix と残存違反の警告"
-claude_event = "PostToolUse"
-claude_matcher = "Edit|Write"
-copilot_event = "PostToolUse"
-copilot_matcher = "^(Edit|Write|edit|create)$"
+post_edit = true
 timeout_sec = 30
 
 [[hooks]]
@@ -1996,10 +1947,7 @@ id = "format-file"
 script = "format-file.sh"
 runner = "bash"
 purpose = "編集したファイルを拡張子に応じて整形 (ruff / clang-format / prettier)"
-claude_event = "PostToolUse"
-claude_matcher = "Edit|Write"
-copilot_event = "PostToolUse"
-copilot_matcher = "^(Edit|Write|edit|create)$"
+post_edit = true
 timeout_sec = 30
 
 # 撤去した hook のスクリプト名。hook を撤去したらここへ足すこと
@@ -2012,4 +1960,8 @@ scripts = [
     "checkpoint_precompact.py",
     "checkpoint_restore.py",
     "checkpoint_restore_pending.py",
+    # 判定の hook (Claude / Copilot)。判定は TS の判定器へ移した (ADR-0017)
+    "check_bash.py",
+    "redirect-tmp.py",
+    "check_file_read.py",
 ]

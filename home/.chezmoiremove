@@ -59,3 +59,7 @@
 
 # 2026-10: github-issue skill を gh 統一の github-operations へ改名した。
 .claude/skills/github-issue
+
+# 2026-10: Claude / Copilot への hook の登録を撤去した (pi 一本化。ADR-0017)。
+# Claude の settings.json の hooks は、retired_hooks に挙げたスクリプトの登録を生成側が外す。
+.copilot/hooks/from-claude.json

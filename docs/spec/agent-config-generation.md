@@ -41,7 +41,6 @@ home/dot_claude/hooks/
     executable_markdownlint.sh               Markdown の lint
     executable_format-file.sh                拡張子別のフォーマッタ実行
 home/dot_copilot/
-    hooks/modify_from-claude.json.py.tmpl    ~/.copilot/hooks/from-claude.json を生成
     modify_private_settings.json.py.tmpl     ~/.copilot/settings.json を更新
     modify_private_permissions-config.json.py.tmpl
     modify_mcp-config.json.py.tmpl           ~/.copilot/mcp-config.json を更新
@@ -1414,12 +1413,14 @@ ask に置く)。
 
 ## hooks の単一ソース化
 
-`[[hooks]]` に 1 度書けば、Claude Code と Copilot CLI の設定ファイルへ展開される。
+**Claude / Copilot への hook の登録は撤去した（2026-10、[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。**
+`[[hooks]]` は、pi のハーネスが edit / write の後に呼ぶスクリプト（`post_edit = true`。整形と markdownlint）だけを持つ。
+判定の hook（`check_bash.py`・`redirect-tmp.py`・`check_file_read.py`）は TS の判定器（`pi/harness/judge`）へ移し、`[retired_hooks].scripts` に載せた。
 
-| 生成先 | 生成方法 | 使うフィールド |
+| 生成先 | 生成方法 | 扱い |
 | --- | --- | --- |
-| `~/.claude/settings.json` の `hooks` | `modify_settings.json.py.tmpl` → `--target claude-settings` | `claude_event` / `claude_matcher` / `timeout_sec` |
-| `~/.copilot/hooks/from-claude.json` | `home/dot_copilot/hooks/modify_from-claude.json.py.tmpl` → `--target copilot-hooks` | `copilot_event` / `copilot_matcher` / `timeout_sec` |
+| `~/.claude/settings.json` の `hooks` | `modify_settings.json.py.tmpl` → `--target claude-settings` | 登録は空。`retired_hooks` に載せたスクリプトの古い登録を外し、外部ツール（Orca など）の hook は残す |
+| `~/.copilot/hooks/from-claude.json` | （撤去。`--target copilot-hooks` は無い） | 配備済みのファイルは `.chezmoiremove` で消す |
 
 - hook スクリプトの実体は `~/.claude/hooks/` に 1 つだけ置き、Copilot からも
   同じファイルを呼ぶ
@@ -1440,8 +1441,7 @@ ask に置く)。
   二重引用符が外側の引用と衝突しうるため。
   Windows の Python hook は bytecode を生成せず日本語 JSON を壊さない
   `py -3 -B -X utf8` で起動する。
-  反映・切り分け手順は [Windows の hook 起動](../../home/dot_copilot/README.md#windows-の-hook-起動)
-  を参照
+  （この節の Copilot の hooks 生成は撤去済み。Claude の hook の起動形式の記録として残す）
 - `hooks` キーは Orca などの**外部ツールも追記する共有領域**なので、apply では
   このリポジトリの hook スクリプトを起動しているエントリだけを差し替える (後述)
 - CLI UI で手動追加した hook も、このリポジトリのスクリプトを指していなければ

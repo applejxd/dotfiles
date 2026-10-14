@@ -6,7 +6,6 @@ Usage:
     generate.py --target copilot-perms --common PATH [--existing PATH]
     generate.py --target copilot-settings --common PATH [--existing PATH]
     generate.py --target copilot-mcp --common PATH [--existing PATH]
-    generate.py --target copilot-hooks --common PATH
     generate.py --target gemini-settings --common PATH [--existing PATH]
     generate.py --target opencode-config --common PATH [--existing PATH]
 
@@ -42,7 +41,7 @@ except ModuleNotFoundError as exc:  # Python 3.10 以下には tomllib が無い
 # PYTHONSAFEPATH / -P で起動されても隣のモジュールを import できるようにする
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from hooks import expand_user, merge_claude_hooks, merge_copilot_hooks
+from hooks import expand_user, merge_claude_hooks
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1927,14 +1926,14 @@ def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[
 
 
 def pi_post_edit_hooks(common: dict[str, Any]) -> list[dict[str, str]]:
-    """``[[hooks]]`` のうち PostToolUse (編集の後) のもの。ハーネスが edit / write の後に呼ぶ。
+    """``[[hooks]]`` のうち ``post_edit`` のもの。ハーネスが edit / write の後に呼ぶ。
 
     整形 (``format-file.sh``) と markdownlint を、Claude / Copilot の hook と同じスクリプトで行う。
     see docs/spec/pi-harness.md#整形
     """
     out = []
     for hook in common.get("hooks") or []:
-        if hook.get("claude_event") != "PostToolUse":
+        if not hook.get("post_edit"):
             continue
         runner, script = str(hook.get("runner", "")), str(hook.get("script", ""))
         if runner not in ("bash", "python3") or not script or "/" in script:
@@ -2854,7 +2853,6 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
 
 TARGETS = {
     "claude-settings": merge_claude_settings,
-    "copilot-hooks": merge_copilot_hooks,
     "copilot-mcp": merge_copilot_mcp,
     "copilot-perms": merge_copilot_perms,
     "copilot-settings": merge_copilot_settings,
@@ -2873,7 +2871,6 @@ TARGETS = {
 # 既存ファイルが壊れた JSON でも作り直せるよう、読み込み自体を省く。
 # 省かないと、壊れたファイルを直すための apply がパースで失敗して詰む。
 FULL_GENERATION_TARGETS = {
-    "copilot-hooks",
     "opencode-guide",
     "pi-harness",
     "pi-keybindings",

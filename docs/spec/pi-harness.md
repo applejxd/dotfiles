@@ -275,8 +275,7 @@ deny は承認で外せないので、誤検知はその場で回避できない
 
 ### 整形
 
-`guarded_edit` / `guarded_write` の後に、`[[hooks]]` の PostToolUse（`markdownlint.sh`・`format-file.sh`。
-Claude / Copilot と同じスクリプト）を宣言順に呼ぶ。ファイルの書き込みの順番待ち（`withFileMutationQueue`）の
+`guarded_edit` / `guarded_write` の後に、`[[hooks]]` の `post_edit`（`markdownlint.sh`・`format-file.sh`）を宣言順に呼ぶ。ファイルの書き込みの順番待ち（`withFileMutationQueue`）の
 中で行う。整形は黙って済ませ、markdownlint が残した違反（hook が exit 2 で返す警告）だけを結果の末尾に足して
 モデルへ返す。失敗しても編集は成功のまま。
 

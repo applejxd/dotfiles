@@ -212,9 +212,9 @@ hook 関連ファイルを以下の場所で管理する:
 | 共通ヘルパ | `home/dot_claude/hooks/lib/{agent_compat.py,agent_compat.sh,policy_loader.py}` | `~/.claude/hooks/lib/` |
 | Python hook 本体 | `home/dot_claude/hooks/executable_<name>.py` | `~/.claude/hooks/<name>.py` (実行属性付) |
 | Bash hook 本体 | `home/dot_claude/hooks/executable_<name>.sh` | `~/.claude/hooks/<name>.sh` (実行属性付) |
-| hook の登録情報 (両 CLI 共通) | `home/dot_config/agents/common.toml.tmpl` の `[[hooks]]` | 下 2 行へ自動展開 |
-| Claude 設定 | `home/dot_claude/modify_settings.json.py.tmpl` (生成) | `~/.claude/settings.json` の `hooks` 節 |
-| Copilot 設定 | `home/dot_copilot/hooks/modify_from-claude.json.py.tmpl` (生成) | `~/.copilot/hooks/from-claude.json` |
+| hook の登録情報 | `home/dot_config/agents/common.toml.tmpl` の `[[hooks]]`（**いまは pi の編集後の整形 (`post_edit`) だけ。Claude / Copilot への登録は撤去済み**。ADR-0017） | pi のハーネスが呼ぶ |
+| Claude 設定 | `home/dot_claude/modify_settings.json.py.tmpl` (生成) | `~/.claude/settings.json` の `hooks` 節（登録は空。`retired_hooks` の登録は外す） |
+| Copilot 設定 | （撤去済み。配備済みの `~/.copilot/hooks/from-claude.json` は `.chezmoiremove` で消す） | — |
 
 設定ファイルは `scripts/agents/generate.py` が `[[hooks]]` から生成する。
 

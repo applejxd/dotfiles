@@ -29,8 +29,8 @@
 3. `chezmoi diff` で確認 → `chezmoi apply`
 4. Claude Code を再起動（settings.json は起動時に読まれる）
 
-`[[hooks]]` は `~/.claude/settings.json` と `~/.copilot/hooks/from-claude.json`
-の両方に展開されるので、CLI ごとに二重管理しなくてよい。
+**Claude / Copilot への hook の登録は撤去した**（ADR-0017）。`[[hooks]]` は pi のハーネスが編集後に呼ぶ
+スクリプト（`post_edit = true`）だけで、`~/.claude/settings.json` には展開されない。
 詳細は [エージェント権限仕様](../../docs/spec/agent-permissions.md)。
 
 ## デフォルトのスラッシュコマンド

@@ -116,33 +116,8 @@ seccomp フィルタは mise の `npm:@anthropic-ai/sandbox-runtime` が入れ�
 
 ## Windows で Copilot の hook が起動しない
 
-**対象**: Windows の Copilot CLI。`~/.copilot/hooks/from-claude.json` から起動する
-Python hook。
-
-**症状**: hook が動かない、またはツールの実行が hook のエラーで止まる。
-
-**確認**: 生成済みの hook が `powershell` キーで `py -3` を呼んでいるか見てから、
-無害な入力で hook を直接起動する。手順と期待値は
-[Copilot CLI: Windows の hook 起動](../../home/dot_copilot/README.md#windows-の-hook-起動)が正本。
-
-```powershell
-Get-Content "$env:USERPROFILE\.copilot\hooks\from-claude.json"
-```
-
-**原因**: よくあるのは次の 2 つ。
-
-- `py -3` が 3.10 以下を選び、`tomllib` を import できない
-  （[Windows で tomllib や Python のエラーが出る](troubleshooting-bootstrap.md#windows-で-tomllib-や-python-のエラーが出る)）
-- 生成済みの設定が古い（`bash` キーだけで `powershell` キーが無い）
-
-**対処**: 設定を作り直して CLI を再起動する。
-
-```powershell
-chezmoi apply --exclude=scripts "$env:USERPROFILE\.copilot\hooks\from-claude.json"
-```
-
-**成功の確認**: 上の README の手順で、hook の直接起動が期待値（無出力・終了コード `0`
-など）を返す。
+**撤去した**（2026-10、[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。Copilot への hook の登録は生成しない。
+配備済みの `~/.copilot/hooks/from-claude.json` は `chezmoi apply` が消す。判定は pi の判定器が持つ。
 
 ## CLI 起動時に Failed to load 1 skill と出る
 
