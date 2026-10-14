@@ -1,7 +1,7 @@
 // 実行される git commit を、リポジトリ・ブランチ・対象ファイル・メッセージの構造にして文字にする。
 // 事実 (リポジトリ・ブランチ・ファイル) は git から取り、メッセージだけコマンドから読む。
 // ★git は読み取りだけ (一時のインデックスと GIT_OPTIONAL_LOCKS=0)。HEAD・本物のインデックス・作業ツリーは変えない。
-// see docs/spec/pi-harness.md#commit-の確認-素の-pi
+// see docs/spec/pi-guard.md#commit-の確認-素の-pi
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";

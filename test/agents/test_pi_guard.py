@@ -1,7 +1,7 @@
-"""素の pi 向けのガード (home/dot_config/pi/guard) を、本物の pi と偽のモデルで動かす試験。
+"""簡易ガード (home/dot_config/pi/guard) を、本物の pi と偽のモデルで動かす試験。
 
-settings.json の ``extensions`` から読ませる (ハーネスは使わない)。deny だけを止め、ask は通す。
-see docs/spec/pi-harness.md#素の-pi-のガード
+settings.json の ``extensions`` から読ませる (フルガードは使わない)。deny だけを止め、ask は通す。
+see docs/spec/pi-guard.md#簡易ガード
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ def test_an_allowed_command_runs(env):
 
 
 def test_ask_is_not_blocked_unlike_the_harness(env):
-    """ハーネスなら確認になる (UI が無ければ拒否) 操作が、ガードでは通る。確認は出さない。"""
+    """フルガードなら確認になる (UI が無ければ拒否) 操作が、簡易ガードでは通る。確認は出さない。"""
     marker = env["tmp"] / "made"
     proc = run_pi(env, bash(f"touch {marker.as_posix()}"))
     assert "isError=false" in proc.stdout, proc.stdout
@@ -152,7 +152,7 @@ def test_background_jobs_are_judged_like_bash(env):
 
 
 def test_the_guard_is_listed_on_unix_but_not_on_windows():
-    """ガードはハーネスの判定器に依るので、Windows の settings.json には載せない。"""
+    """簡易ガードはフルガードの判定器に依るので、Windows の settings.json には載せない。"""
     from test_herdr_integration import render_template
 
     path = ROOT / "home" / "dot_config" / "agents" / "common.toml.tmpl"

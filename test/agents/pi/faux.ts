@@ -1,5 +1,5 @@
 // 試験用。決まった tool call を返す偽のモデルと、/reload を起こすコマンド。
-// see docs/spec/pi-harness.md
+// see docs/spec/pi-guard.md
 import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { type ExtensionAPI, getPackageDir } from "@earendil-works/pi-coding-agent";
 import { existsSync, rmSync, writeFileSync } from "node:fs";
@@ -31,7 +31,7 @@ export default async function (pi: ExtensionAPI) {
 		const messages = context.messages;
 		const last = messages[messages.length - 1];
 		const tools = getCurrentTools(messages).map((t) => t.name).sort();
-		// 圧縮の要約の依頼 (pi の要約の system prompt)。ハーネスの指示が入っているかも返す
+		// 圧縮の要約の依頼 (pi の要約の system prompt)。フルガードの指示が入っているかも返す
 		if (getCurrentSystemPrompt(messages).includes("context summarization assistant")) {
 			const instr = JSON.stringify(messages).includes("【圧縮の指示】") ? "yes" : "no";
 			return fauxAssistantMessage(fauxText(`SUMMARY INSTR=${instr}`));

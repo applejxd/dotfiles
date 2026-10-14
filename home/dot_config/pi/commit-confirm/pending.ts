@@ -1,7 +1,7 @@
 // 確認が取れなかった git commit の内容を、HEAD・インデックス・作業ツリーに触れずに退避する。
 // コミットのオブジェクトだけを作り、refs/pi/pending/<時刻> に置く。直前の保留を親にして鎖にする。
 // 後から: git log refs/pi/pending/<名前> で見て、git reset --soft <名前> で HEAD だけ進められる (作業ツリーは変わらない)。
-// see docs/spec/pi-harness.md#時間切れと退避
+// see docs/spec/pi-guard.md#時間切れと退避
 import { git, readMessage, walk, wouldCommit } from "./describe.ts";
 import type { Analysis } from "./parse.ts";
 

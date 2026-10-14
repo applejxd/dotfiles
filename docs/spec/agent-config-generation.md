@@ -191,7 +191,7 @@ args = [
 | OpenCode V2 | `~/.config/opencode/opencode.json` の `mcp.servers` | `generate.py --target opencode-config` |
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
-| pi | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。ハーネスが起動のたびに `registerMcpServer` で登録する（[pi のハーネス](pi-harness.md#mcp)） |
+| pi | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](pi-guard.md#mcp)） |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
 
@@ -350,7 +350,7 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 
 ### pi と共有する節
 
-次の 5 つは `[pi]` が正本で、pi のハーネスの判定器と OpenCode の生成の両方が読む（移行の計画は
+次の 5 つは `[pi]` が正本で、pi のフルガードの判定器と OpenCode の生成の両方が読む（移行の計画は
 [CHG-0020](../change/0020-pi-migration.md)）。
 
 | `[pi]` の節 | 中身 | OpenCode での位置 |
@@ -1414,7 +1414,7 @@ ask に置く)。
 ## hooks の単一ソース化
 
 **Claude / Copilot への hook の登録は撤去した（2026-10、[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。**
-`[[hooks]]` は、pi のハーネスが edit / write の後に呼ぶスクリプト（`post_edit = true`。整形と markdownlint）だけを持つ。
+`[[hooks]]` は、pi のフルガードが edit / write の後に呼ぶスクリプト（`post_edit = true`。整形と markdownlint）だけを持つ。
 判定の hook（`check_bash.py`・`redirect-tmp.py`・`check_file_read.py`）は TS の判定器（`pi/harness/judge`）へ移し、`[retired_hooks].scripts` に載せた。
 
 | 生成先 | 生成方法 | 扱い |

@@ -52,6 +52,7 @@
 | [0020](0020-pi-migration.md) | OpenCode のハーネスを pi へ移す（判定 API・ハーネス・配布・境界・ハーネス以外の機能・撤去） | In progress | 段 1〜5 は完了。Orca・Zed は素の `pi`、`pis` は利用者の起動用で優先度低（利用者の判断）。残りの段 6（OpenCode の撤去）は任意で保留。Windows は OpenCode を残すか未定 | 段 6 を進めるか判断する（進めるなら Windows の扱いを先に決める） | 2026-10-09 |
 | [0021](0021-windows-admin-consolidation.md) | Windows の chezmoi セットアップを整え、管理者権限の作業を 1 回の UAC に集約する | In progress | UAC 承認を含む通し実行が未検証（クリーンな Windows 実機が要る）。Python Launcher と Orca の UAC の有無が未確認。管理者グループの利用者の `administrators_authorized_keys` が未対応 | クリーンな Windows で `chezmoi apply` を通し、UAC が 1 回だけ出ることを確かめる | 2026-10-10 |
 | [0022](0022-windows11-settings-review.md) | Windows 11 の設定を見直し、古い設定の修正と体験の改善を入れる | In progress | 段 1・2・3・4・6・7・8 は完了（ウィジェットは自動化を見送り）。`gow` と WSL・WSL 3 は保留 | `gow` の履歴の再集計、WSL の取り組み | 2026-10-12 |
+| [0023](0023-guard-terminology.md) | 「ハーネス」の呼び方を整理し（ガード / フルガード / 簡易ガード / サンドボックス）、`pis` をサンドボックス既定にする | In progress | 段 3（サンドボックス既定）: 拡張（`todo`・`plan` など）がサンドボックス内で未対応、Orca の状態表示が使えない、Windows・macOS では Fence が無い | 拡張をサンドボックス内で読める形にできるか（`ocs` の `pi.py`） | 2026-10-14 |
 
 ## 保留
 

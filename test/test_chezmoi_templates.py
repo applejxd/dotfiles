@@ -118,12 +118,12 @@ def test_opencode_config_is_deployed_on_windows(tmp_path, target):
 
 # Windows の除外の書き方 (除外の行が出るか)。Linux には一切出ない
 WINDOWS_PI_IGNORES = (
-    ".pi/agent/prompts/",  # /fleet はハーネス (Unix だけ) の guarded_task が要る
+    ".pi/agent/prompts/",  # /fleet はフルガード (Unix だけ) の guarded_task が要る
     ".local/bin/pis",
     "!.config/pi/",  # 補助の拡張 (commit-confirm) のためにディレクトリを戻す
-    ".config/pi/harness/",  # 戻したうえでハーネスは改めて除外する
+    ".config/pi/harness/",  # 戻したうえでフルガードは改めて除外する
     ".config/pi/harness/**",
-    ".config/pi/guard/",  # ガードはハーネスの判定器に依るので Unix だけ
+    ".config/pi/guard/",  # 簡易ガードはフルガードの判定器に依るので Unix だけ
     ".config/pi/guard/**",
 )
 

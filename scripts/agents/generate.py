@@ -1857,7 +1857,7 @@ def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
 
 
 def pi_default_role(common: dict[str, Any]) -> str:
-    """``[pi] default_role``。pis の既定の役割で、素の pi のガードの固定の役割。
+    """``[pi] default_role``。pis の既定の役割で、簡易ガードの固定の役割。
 
     ``[pi.profiles]`` に無い名前なら生成を止める (判定器は未知の役割を deny するので、
     ここで止めないと全部のツールが止まる)。
@@ -1870,17 +1870,17 @@ def pi_default_role(common: dict[str, Any]) -> str:
 
 
 def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
-    """pi のハーネスが読む ``~/.config/pi/harness/rules.json``。
+    """pi のフルガードが読む ``~/.config/pi/harness/rules.json``。
 
     判定そのもの (TS 版の判定器 ``judge/``) が読む設定 (``judge``: ``common.toml`` の
-    ``[bash]`` / ``[file]`` / ``[pi]`` と ``tables.toml``) と、ハーネスが自分で使うもの
+    ``[bash]`` / ``[file]`` / ``[pi]`` と ``tables.toml``) と、フルガードが自分で使うもの
     (伏字化・シェルへ入れる環境変数) を置く。
     伏字化の正規表現は OpenCode の guide plugin と同じ JavaScript の方言。
-    see docs/spec/pi-harness.md
+    see docs/spec/pi-guard.md
     """
     redact = opencode_redact(common)
     if not redact:
-        raise SystemExit("[pi.redact] が無いか無効 (pi のハーネスは伏字化を前提にする)")
+        raise SystemExit("[pi.redact] が無いか無効 (pi のフルガードは伏字化を前提にする)")
     return {
         "judge": pi_judge_data(common),
         "default_role": pi_default_role(common),
@@ -1910,7 +1910,7 @@ def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[
 
     pi 自身が書くキー (``lastChangelogVersion`` など) と、利用者が ``/settings`` で変えた
     持ち物以外のキーは残す。
-    see docs/spec/pi-harness.md#pi-の設定
+    see docs/spec/pi-guard.md#pi-の設定
     """
     declared = (common.get("pi") or {}).get("settings") or {}
     if not isinstance(declared, dict):
@@ -1926,10 +1926,10 @@ def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[
 
 
 def pi_post_edit_hooks(common: dict[str, Any]) -> list[dict[str, str]]:
-    """``[[hooks]]`` のうち ``post_edit`` のもの。ハーネスが edit / write の後に呼ぶ。
+    """``[[hooks]]`` のうち ``post_edit`` のもの。フルガードが edit / write の後に呼ぶ。
 
     整形 (``format-file.sh``) と markdownlint を、Claude / Copilot の hook と同じスクリプトで行う。
-    see docs/spec/pi-harness.md#整形
+    see docs/spec/pi-guard.md#整形
     """
     out = []
     for hook in common.get("hooks") or []:
@@ -1955,7 +1955,7 @@ def pi_keybindings(_existing: dict[str, Any], common: dict[str, Any]) -> dict[st
     """``~/.pi/agent/keybindings.json``。``[pi.keybinds]`` をそのまま出す (ファイルごと持ち物)。
 
     値は 1 つのキー (文字列) か、キーの配列 (空なら割り当てを外す)。
-    see docs/spec/pi-harness.md#キーバインド
+    see docs/spec/pi-guard.md#キーバインド
     """
     declared = (common.get("pi") or {}).get("keybinds") or {}
     if not isinstance(declared, dict):
@@ -1977,7 +1977,7 @@ def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
 
     ランチャー (``ocs --harness pi``) が起動ディレクトリと合わせて Fence の設定を組み立てる。
     OpenCode の境界が無効なら (共有キーが無いので) 出さない。
-    see docs/spec/pi-harness.md#境界
+    see docs/spec/pi-guard.md#サンドボックス
     """
     base = opencode_sandbox(common)
     if base is None:
@@ -2024,7 +2024,7 @@ def pi_model_ref(common: dict[str, Any], tier: str) -> str:
 
 
 def pi_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """``[pi.agents]`` を検査し、ハーネスが子エージェントを起動する形にする。"""
+    """``[pi.agents]`` を検査し、フルガードが子エージェントを起動する形にする。"""
     pi = common.get("pi") or {}
     profiles = pi.get("profiles") or {}
     out: dict[str, dict[str, Any]] = {}
@@ -2039,7 +2039,7 @@ def pi_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
         if profile not in profiles:
             raise SystemExit(f"{where} の profile {profile!r} が [pi.profiles] に無い")
         if "task" in (profiles[profile].get("tools") or []):
-            # 子からさらに子を起動させない (ハーネスも子では task を登録しない)
+            # 子からさらに子を起動させない (フルガードも子では task を登録しない)
             raise SystemExit(f"{where} の profile {profile!r} は task を持つので子に使えない")
         for key in ("description", "system"):
             if not isinstance(agent.get(key), str) or not agent[key].strip():
@@ -2062,11 +2062,11 @@ PI_SUBAGENT_TOOLS = frozenset({"read", "grep", "find", "ls"})
 
 
 def build_pi_subagents(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
-    """ハーネス無しの素の pi (Windows) が読む子エージェントの宣言。
+    """フルガード無しの素の pi (Windows) が読む子エージェントの宣言。
 
     判定器が無いので、shell・編集のツールを持たない読み取り役
     (read / grep / find / ls だけ) に限る。
-    see docs/spec/pi-harness.md#windows-の子エージェント
+    see docs/spec/pi-guard.md#windows-の子エージェント
     """
     profiles = (common.get("pi") or {}).get("profiles") or {}
     agents = {
@@ -2078,7 +2078,7 @@ def build_pi_subagents(_existing: dict[str, Any], common: dict[str, Any]) -> dic
 
 
 def pi_mcp_servers(common: dict[str, Any]) -> list[dict[str, Any]]:
-    """``[[mcp]]`` のうち pi へ出すもの。ハーネスが ``registerMcpServer`` で登録する。"""
+    """``[[mcp]]`` のうち pi へ出すもの。フルガードが ``registerMcpServer`` で登録する。"""
     exposures = {str(s.get("id")): s.get("exposure") for s in common.get("mcp", [])}
     out: list[dict[str, Any]] = []
     for name, server in mcp_servers(common, "pi"):

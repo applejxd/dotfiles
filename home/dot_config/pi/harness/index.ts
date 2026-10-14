@@ -1,6 +1,6 @@
-// pi のハーネス。組み込みのツールの代わりに guarded_* のツールを登録し、判定器 (./judge) で
+// pi のフルガード。組み込みのツールの代わりに guarded_* のツールを登録し、判定器 (./judge) で
 // 実行してよいかを決める。起動は `pi -nbt -ne -e ~/.config/pi/harness`。
-// see docs/spec/pi-harness.md
+// see docs/spec/pi-guard.md
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	compact,
@@ -22,7 +22,7 @@ import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
 import { createRedactor } from "./redact.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-// 組み込みと同じ名前にしないこと。/reload でハーネスが抜けたとき、組み込みが同じ名前で戻って
+// 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
 // 判定なしに動く (docs/research/agents/pi-harness-spike.md の E1)
 const PREFIX = "guarded_";
 const TOOLS = ["bash", "read", "edit", "write", "grep", "find", "ls"] as const;
@@ -43,13 +43,13 @@ const AGENT_ENV: Record<string, string> = rules.agent_env ?? {};
 if (typeof rules.default_role !== "string") throw new Error("rules.json に default_role が無い (chezmoi apply で作り直す)");
 const ROLE: string = process.env.PI_HARNESS_ROLE || rules.default_role;
 
-// 伏字化 (redact.ts。素の pi のガードと共有)
+// 伏字化 (redact.ts。簡易ガードと共有)
 const { redactText, redactResult, deniedPathIn, withheld } = createRedactor(rules.redact);
 
 // ─── 確認画面の補助 ─────────────────────────────────────────────────
 
 // git commit の件名と本文を、確認画面へ出す。OpenCode の guide plugin と同じ純関数 (commit-message.js) を使う。
-// 飾りなので、読み込めなくてもハーネスは止めない (出さないだけ)。段 6 で OpenCode を外すときにここへ移す。
+// 飾りなので、読み込めなくてもフルガードは止めない (出さないだけ)。段 6 で OpenCode を外すときにここへ移す。
 let commitPreview: ((command: string, opts?: unknown) => any) | null = null;
 async function loadCommitPreview() {
 	if (!rules.commit_preview) return;
@@ -142,7 +142,7 @@ export default async function (pi: ExtensionAPI) {
 		return undefined;
 	});
 
-	// ハーネスが持たないツール (MCP など) の結果。tool_result の例外は無視されて生の結果が残るので、
+	// フルガードが持たないツール (MCP など) の結果。tool_result の例外は無視されて生の結果が残るので、
 	// ここでは投げずに結果ごと伏せる
 	pi.on("tool_result", async (event) => {
 		if (event.toolName.startsWith(PREFIX)) return undefined;
@@ -204,7 +204,7 @@ export default async function (pi: ExtensionAPI) {
 		});
 	}
 
-	// MCP はハーネスから登録する。ハーネスが抜ければ登録も消える (spike の E3)
+	// MCP はフルガードから登録する。フルガードが抜ければ登録も消える (spike の E3)
 	for (const server of rules.mcp ?? []) pi.registerMcpServer(server.name, server.config);
 
 	const agents: Record<string, any> = rules.agents ?? {};
@@ -342,7 +342,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				"",
 				r.answer,
 			].join("\n");
-			// 子の出力にも伏字化を掛ける (子の bash の出力は子のハーネスが伏せているが、返答の本文は伏せていない)
+			// 子の出力にも伏字化を掛ける (子の bash の出力は子のフルガードが伏せているが、返答の本文は伏せていない)
 			return {
 				content: [{ type: "text", text: redactText(text) }],
 				details: { agent: params.agent, status: r.status, blocked: r.blocked.length, errors: r.errors.length },

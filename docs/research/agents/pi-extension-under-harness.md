@@ -1,6 +1,8 @@
 # ハーネス付きの pi（`pis`）へ、明示の `-e` で拡張を足してよいか
 
-<!-- 現在の総合判断は docs/change/0020-pi-migration.md と docs/spec/pi-harness.md が正本。
+> **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](../../change/0023-guard-terminology.md)、対応表は [pi のガード](../../spec/pi-guard.md#用語)。
+
+<!-- 現在の総合判断は docs/change/0020-pi-migration.md と docs/spec/pi-guard.md が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
 ## 記録 E5 — 2026-10-11
@@ -24,7 +26,7 @@
 
 ### 問い
 
-[`pis`](../../spec/pi-harness.md#起動) は `-ne` で、ほかの拡張を読まない。ただし pi の文書（`cli.md`）では、
+[`pis`](../../spec/pi-guard.md#起動) は `-ne` で、ほかの拡張を読まない。ただし pi の文書（`cli.md`）では、
 `-ne` でも明示した `-e` は読まれる。検索のような入口を、拡張として足すことが現実的かを確かめる。
 
 1. `-ne` のまま、明示の `-e` で足した拡張は読まれるか。そのツールはモデルに見えるか
@@ -141,4 +143,3 @@ E5 と同じ試験の仕組み。`rules.json` の `mcp` に、既存の `mcp_ser
 - 試験（`test/agents/test_pi_harness_extensions.py`）: 生成した設定で MCP のツールが宣言され、`pis` では既定の確認になること、
   `exposure` を出さない旧い設定では `Tool … not found` になること（欠陥の再現。pi が `codemode` を宣言する版になれば見直す）
 - 実機の `pis`（Unix）で、Bedrock の `agentcore-websearch` が呼べるかは未確認
-

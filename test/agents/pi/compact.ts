@@ -1,5 +1,5 @@
 // 試験用。圧縮を起こして終わるまで待つコマンド。
-// see docs/spec/pi-harness.md
+// see docs/spec/pi-guard.md
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {

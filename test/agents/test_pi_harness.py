@@ -1,8 +1,8 @@
-"""pi のハーネス (``~/.config/pi/harness``) を、偽のモデル (faux) で通信なしに回す試験。
+"""pi のフルガード (``~/.config/pi/harness``) を、偽のモデル (faux) で通信なしに回す試験。
 
 pi が無い環境では skip する。pi の内部の挙動に頼る点 (``/reload`` で組み込みが同じ名前で
 戻ること・``details`` に生の出力が入ることなど) も、ここで検出する。
-see docs/spec/pi-harness.md
+see docs/spec/pi-guard.md
 """
 
 from __future__ import annotations
@@ -33,8 +33,8 @@ SECRET = "abc123rawsecret"
 
 @pytest.fixture
 def env(tmp_path):
-    """ハーネスの置き場 (rules.json 付き)・作業ツリー・使い捨ての agent 置き場を用意する。"""
-    # 配備先と同じ並び (ハーネスは ../../opencode/guide-plugin/commit-message.js を取り込む)
+    """フルガードの置き場 (rules.json 付き)・作業ツリー・使い捨ての agent 置き場を用意する。"""
+    # 配備先と同じ並び (フルガードは ../../opencode/guide-plugin/commit-message.js を取り込む)
     harness = tmp_path / ".config" / "pi" / "harness"
     harness.mkdir(parents=True)
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
@@ -339,7 +339,7 @@ def test_pis_bypass_and_role(pis_env):
 def test_pis_refuses_without_the_harness(pis_env):
     shutil.rmtree(pis_env["home"] / ".config" / "pi" / "harness")
     proc = run_pis(pis_env)
-    assert proc.returncode == 1 and "ハーネスが無い" in proc.stderr
+    assert proc.returncode == 1 and "フルガードが無い" in proc.stderr
 
 
 def test_pis_refuses_servers_in_the_agent_mcp_json(pis_env):

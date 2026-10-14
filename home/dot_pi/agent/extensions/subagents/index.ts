@@ -1,7 +1,7 @@
-// ハーネス無しの素の pi (Windows) 用の子エージェント `task`。
+// フルガード無しの素の pi (Windows) 用の子エージェント `task`。
 // 子は読み取りツールだけ (read / grep / find / ls) の別プロセスで、shell も編集も持たない。
 // 宣言は agents.json (common.toml の [pi.agents] から生成)。
-// see docs/spec/pi-harness.md#windows-の子エージェント
+// see docs/spec/pi-guard.md#windows-の子エージェント
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";

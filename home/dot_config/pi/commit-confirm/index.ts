@@ -1,9 +1,9 @@
-// 素の pi (ハーネス無し) 向けの補助。bash の git について:
+// 素の pi (フルガード無し) 向けの補助。bash の git について:
 //   git push   → 完全手動なので止める
 //   git commit → 構造 (リポジトリ・ブランチ・対象・メッセージ) を見せて確認する。時間切れ・不在・画面なしのときは
 //                コミットせず内容を refs/pi/pending/ へ退避し、作業を続けさせる
-// 保護ではなく補助 (別名・スクリプト越しは検出しない)。ハーネス (pis) は同じ確認を自前で持つので -ne で外れる。
-// see docs/spec/pi-harness.md#commit-の確認-素の-pi
+// 保護ではなく補助 (別名・スクリプト越しは検出しない)。フルガード (pis) は同じ確認を自前で持つので -ne で外れる。
+// see docs/spec/pi-guard.md#commit-の確認-素の-pi
 import { analyze } from "./parse.ts";
 import { describeCommit, rawText } from "./describe.ts";
 import { pendingTarget, savePending, type Saved } from "./pending.ts";

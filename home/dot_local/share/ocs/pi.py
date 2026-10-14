@@ -6,7 +6,7 @@
 pi は設定と認証を読むときにも隣へ ``.lock`` を作るので、agent 置き場は書ける必要がある。
 一方、本物の ``~/.pi/agent`` を境界に入れると、内側で作られた拡張を外の通常の pi が読む。
 そこで**起動ごとに境界用の agent 置き場を作り**、認証・モデルの一覧・設定を写す。
-see docs/spec/pi-harness.md#境界
+see docs/spec/pi-guard.md#サンドボックス
 """
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ DROP_ENV = (
 def check_installed() -> None:
     for path, hint in (
         (PI, "pi を入れる (chezmoi apply)"),
-        (HARNESS / "index.ts", "chezmoi apply でハーネスを配る"),
-        (RULES, "chezmoi apply でハーネスを配る"),
+        (HARNESS / "index.ts", "chezmoi apply でフルガードを配る"),
+        (RULES, "chezmoi apply でフルガードを配る"),
     ):
         if not path.is_file():
             die(f"{path} が無い", hint)

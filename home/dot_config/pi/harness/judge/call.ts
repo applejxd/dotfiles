@@ -1,11 +1,11 @@
-// 判定器を「ツールの呼び出し」に当てる口 (ハーネスと、素の pi 向けのガードの両方が使う)。
+// 判定器を「ツールの呼び出し」に当てる口 (フルガードと、簡易ガードの両方が使う)。
 //
 // ツール名と入力から、判定器の要求を組んで決定を返す。例外は投げず、異常は deny にする。
 // - bg_run (拡張 activity): 起動するコマンドを bash と同じ判定に通す
 // - bg_log / bg_kill: ジョブの確認と停止だけなので、bash を使える役割には allow
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md, docs/spec/pi-harness.md
+// see docs/spec/pi-decide.md, docs/spec/pi-guard.md
 import type { Tables } from "./context.ts";
 import { decide as judge, setBashDecider } from "./decide.ts";
 import { makeBashDecider } from "./bash.ts";

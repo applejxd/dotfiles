@@ -39,8 +39,8 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 判定器の TS 移植の進み具合と、次にやることを知る | [TS 版への移植](spec/pi-decide.md#ts-版への移植)（決定は [ADR-0017](adr/0017-pi-only-and-ts-judge.md)） |
 | 新しい機械での初回導入を Docker で検証する | [Docker での検証](spec/development.md#新しい機械での初回導入を-docker-で検証する) |
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
-| pi のハーネスの判定器（`decide`）を変える | [判定 API](spec/pi-decide.md) |
-| pi のハーネスを起動する・変える | [pi のハーネス](spec/pi-harness.md) |
+| pi のガードの判定器（`decide`）を変える | [判定 API](spec/pi-decide.md) |
+| pi のガード（`pis`）を起動する・変える | [pi のガード](spec/pi-guard.md) |
 | `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
 | コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/agent-command-policy.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-config-generation.md#mcp-サーバ) |
@@ -98,6 +98,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | [CHG-0011](change/0011-agent-first-shell.md) | In progress | シェルの主な利用者を AI エージェントとして残課題を整える。波 1〜3 は実装済み。通常版 pip の誘導文は前段停止で解決。前段停止を deny 全項目へ拡張（`[bash.deny_guide]`）。bypass を ask→allow に再定義（ADR-0014）。残りは Claude / Copilot への git 環境変数、Windows 実機での検証 |
 | [CHG-0021](change/0021-windows-admin-consolidation.md) | In progress | Windows の chezmoi セットアップを整え、管理者権限の作業を 1 回の UAC に集約する。実装・docs は済み。UAC 承認を含む通し実行（クリーンな Windows 実機）が未検証 |
 | [CHG-0022](change/0022-windows11-settings-review.md) | In progress | Windows 11 の設定を見直し、古い設定の修正と体験の改善を入れる。大半は完了。`gow` と WSL・WSL 3 は保留 |
+| [CHG-0023](change/0023-guard-terminology.md) | In progress | 「ハーネス」の呼び方を整理した（ガード・フルガード・簡易ガード・サンドボックス）。次は `pis` をサンドボックス既定にする。拡張の未対応・Orca・Windows が未解決 |
 
 ## 判断待ち・障害
 

@@ -1,7 +1,7 @@
 """commit-confirm の解釈・表示・退避 (純関数。home/dot_config/pi/commit-confirm/*.ts) の試験。
 
 node で直接動かす (Node 22.18 以上は型を取り除いて .ts を読める)。pi は使わない。
-see docs/spec/pi-harness.md#commit-の確認-素の-pi
+see docs/spec/pi-guard.md#commit-の確認-素の-pi
 """
 
 from __future__ import annotations

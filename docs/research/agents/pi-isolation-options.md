@@ -1,6 +1,6 @@
 # pi をどこで・どこまで守って動かすか（権限の有無と隔離の選択肢）
 
-<!-- 現在の運用の正本は docs/spec/pi-harness.md。ここは「いつ何を調べ・測ったか」を積む場所 -->
+<!-- 現在の運用の正本は docs/spec/pi-guard.md。ここは「いつ何を調べ・測ったか」を積む場所 -->
 
 ## 記録 I1 — 2026-10-13
 
@@ -144,15 +144,15 @@ README を読んだ範囲（未導入・未実測）。
 ### 出典
 
 - pi の同梱ドキュメント: `docs/security.md`、`docs/containerization.md`、`docs/windows.md`、`docs/extensions.md`、`docs/cli.md`
-- https://github.com/earendil-works/pi
-- https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-system
-- https://github.com/MasuRii/pi-permission-system
-- https://www.npmjs.com/package/@sysid/pi-sandbox
-- https://github.com/fmuecke/agent-win-sandbox
-- https://github.com/fmuecke/network-sandbox
-- https://agentpatterns.ai/security/windows-sandbox-primitives-coding-agents/
-- https://botmonster.com/ai/pi-never-asks-permission-before-touching-your-files/
-- https://learn.microsoft.com/en-us/windows/wsl/wsl-container
-- https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-cli
-- https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-configure-using-wsb-file
-- https://4sysops.com/archives/new-windows-sandbox-configuration-options-with-gui-and-cli/
+- <https://github.com/earendil-works/pi>
+- <https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-system>
+- <https://github.com/MasuRii/pi-permission-system>
+- <https://www.npmjs.com/package/@sysid/pi-sandbox>
+- <https://github.com/fmuecke/agent-win-sandbox>
+- <https://github.com/fmuecke/network-sandbox>
+- <https://agentpatterns.ai/security/windows-sandbox-primitives-coding-agents/>
+- <https://botmonster.com/ai/pi-never-asks-permission-before-touching-your-files/>
+- <https://learn.microsoft.com/en-us/windows/wsl/wsl-container>
+- <https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-cli>
+- <https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-configure-using-wsb-file>
+- <https://4sysops.com/archives/new-windows-sandbox-configuration-options-with-gui-and-cli/>

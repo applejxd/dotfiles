@@ -1,11 +1,11 @@
 # 判定 API（`decide`）
 
-pi のハーネスが、ツールの呼び出しを実行してよいかを問い合わせる判定器。CLI に依存せず、
+pi のフルガードが、ツールの呼び出しを実行してよいかを問い合わせる判定器。CLI に依存せず、
 **どの入力にも allow / ask / deny と理由を返す**。判定の中身は Claude Code / Copilot CLI の
 hook（`check_bash.py` / `check_file_read.py`）と同じ `bashrules` と `command_policy.py` を使う。
 hook の出力は変えない（`check_bash.py` はこの判定器を使わない）。
 
-移行の計画と経緯は [CHG-0020](../change/0020-pi-migration.md)。呼び出し側は [pi のハーネス](pi-harness.md)。
+移行の計画と経緯は [CHG-0020](../change/0020-pi-migration.md)。呼び出し側は [pi のガード](pi-guard.md)。
 
 ## 置き場
 
@@ -27,12 +27,12 @@ response: { decision: allow | ask | deny, reason, source: rule | check | default
 
 | キー | 中身 |
 | --- | --- |
-| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls` / `task`（子エージェントの起動）/ `todo`（タスクリストの拡張）と MCP のツール（`mcp__…`）。ハーネスがツールを別名で登録していても、元の名前で渡す。役割の `tools` に無い名前は deny |
+| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls` / `task`（子エージェントの起動）/ `todo`（タスクリストの拡張）と MCP のツール（`mcp__…`）。フルガードがツールを別名で登録していても、元の名前で渡す。役割の `tools` に無い名前は deny |
 | `input` | ツールの引数。`bash` は `command`、ファイルのツールは `path`（`grep` / `find` / `ls` は省略すると `.`） |
 | `cwd` | 作業ディレクトリの絶対パス。相対パスの解決と「作業ツリーの中か」の判定に使う |
 | `role` | `[pi.profiles]` の名前（「役割」の表） |
 | `bypass` | 真なら ask を allow にする（deny は変えない） |
-| `boundary` | 境界（Fence）の内側か。**受け取るだけで、まだ判定に使っていない**（CHG-0020 の段 4） |
+| `boundary` | サンドボックス（Fence）の内側か。**受け取るだけで、まだ判定に使っていない**（CHG-0020 の段 4） |
 
 `source` は判定がどこで決まったか。
 
@@ -65,8 +65,8 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
      `>` `<` `` ` `` `$(` `--output` を含む形は allow にしない。`[pi.skill_scripts]` の宣言どおりの形も allow
    - 読み取り: `[file] read_ask_globs` は ask。作業ツリーの中と `[pi.external_read]` の中は allow。それ以外の外は ask
    - 書き込み: `[file] write_ask_globs` は ask。作業ツリーの外は ask。中は allow
-   - `task`: allow（子は同じハーネスと判定器で、子の役割で判定される）
-   - `todo`: allow（メモリの状態だけを変える。拡張は[自作の拡張](pi-harness.md#自作の拡張-todo--plan--btw)）
+   - `task`: allow（子は同じフルガードと判定器で、子の役割で判定される）
+   - `todo`: allow（メモリの状態だけを変える。拡張は[自作の拡張](pi-guard.md#自作の拡張-todo--plan--btw)）
 4. **既定**。役割の `default`（実装役は ask、読み取り役は deny）
 5. **bypass**。3・4 の ask だけを allow にする
 
@@ -109,7 +109,7 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 | `worker` | 7 つのツール | ask | `shell_deny` に git の状態を変える操作 | 子の `worker` |
 
 **既定の役割**は `[pi] default_role`（`common.toml`。既定は `implementer`）。`pis` は `--role` / `PI_HARNESS_ROLE` で上書きでき、
-素の `pi` のガードは実行時に切り替えずこの値で固定する（`[pi.profiles]` に無い名前は、生成が止まり、ガードも読み込みに失敗する）。
+簡易ガードは実行時に切り替えずこの値で固定する（`[pi.profiles]` に無い名前は、生成が止まり、ガードも読み込みに失敗する）。
 
 `git status` / `git diff` は `.git/config` 経由でコマンドを起動しうるので、全体の `[pi.shell] allow` には載せず、
 `committer` の `shell_allow` だけに置く（今の OpenCode の `commit` と同じ）。
@@ -129,9 +129,9 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 
 ## TS 版への移植
 
-pi だけを使う前提で、判定器を TypeScript に移し、ハーネスのプロセスの中で動かす計画（`docs/change/0020-pi-migration.md`）。
+pi だけを使う前提で、判定器を TypeScript に移し、フルガードのプロセスの中で動かす計画（`docs/change/0020-pi-migration.md`）。
 外部プロセスの起動をやめ、Windows の `python3` の壁と、判定のたびのプロセス起動の費用をなくす。
-**移植は途中**で、ハーネスはまだ Python 版（`decide.py`）を呼んでいる。
+**移植は途中**で、フルガードはまだ Python 版（`decide.py`）を呼んでいる。
 
 | 層 | 中身 | 状態 |
 | --- | --- | --- |
@@ -166,7 +166,7 @@ bash 以外（ファイル 1,081 件・そのほかのツール 16 件・不正�
 `split_heredoc_body` が積み、`check_pipe_to_shell` が「記録と同じ本文のセグメントを見送る」ために読む。どこでも消さないので、
 `python3 - <<'PY'` の後に引用なしの `python3 - <<PY`（本文の `$(curl …)` が実行時に展開される）を判定すると、後者の検査が見送られた。
 
-- hook（1 コマンド 1 プロセス）と、ハーネスが呼ぶ `decide.py`（呼び出しごとに新しいプロセス）では起きない
+- hook（1 コマンド 1 プロセス）と、フルガードが呼ぶ `decide.py`（呼び出しごとに新しいプロセス）では起きない
 - 起きるのは、同じプロセスで続けて判定したとき（試験、将来の常駐化・TS 版）。**TS へ移すときにこのグローバルな記録を写してはいけない**（判定ごとの状態にする）
 - 対処: `decide()` が bash を判定する前にこの記録を空にする。試験 `test_decision_does_not_depend_on_earlier_calls` を足した。
   `test_decide` の hook との等価試験のドライバも、コマンドごとに空にした（以前は hook 側も同じ汚染を受けていて、両方が同じ誤りで一致していた）
@@ -189,7 +189,7 @@ bash 5,208・file 1,081・invalid 6・other 16）。検査関数 32 種は `chec
 
 ### 切り替え（済み）
 
-ハーネス（`harness/index.ts`）は、`python3 decide.py` を呼ぶ代わりに、同じプロセスで `judge/decide.ts` の `decide()` を呼ぶ。
+フルガード（`harness/index.ts`）は、`python3 decide.py` を呼ぶ代わりに、同じプロセスで `judge/decide.ts` の `decide()` を呼ぶ。
 bash は `setBashDecider(makeBashDecider(tables))` で差し込む。判定のたびに 0.1 秒ほどかかっていたプロセス起動が無くなった。
 
 - 設定の渡し方: `generate.py` の `build_pi_harness` が、`rules.json` の `judge` に
@@ -214,4 +214,4 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。判定の�
 - `[pi.external_read]` だけを開けている。OpenCode が開けている `[opencode.sandbox] work_read`（`~/src` など）は
   まだ読まないので、隣のリポジトリを読むと確認になる
 - `boundary` を判定に使っていない
-- 1 回の判定ごとに Python を起動する（hook と同じ）。呼び出しの多いハーネスで遅さが問題になるかは未計測
+- 1 回の判定ごとに Python を起動する（hook と同じ）。呼び出しの多いフルガードで遅さが問題になるかは未計測

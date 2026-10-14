@@ -84,7 +84,7 @@
 | `structure.md`「管理者権限の集約」 | 記述なし → 309 の流れ・昇格の仕組み・保証しないこと・個別の判断 | 段 2〜4 | 済 |
 | `structure.md`「winget パッケージの user / machine の振り分け」 | 記述なし → 実測した scope の一覧と扱い | 段 3 | 済 |
 | `security.md`「SSH 公開鍵の authorized_keys への追加」 | 記述なし → 条件と動作の表 | 段 5 | 済 |
-| `pi-harness.md`「Windows の子エージェント」 | 記述なし → 読み取り専用の子エージェント | [CHG-0020](0020-pi-migration.md) | 済 |
+| `pi-guard.md`「Windows の子エージェント」 | 記述なし → 読み取り専用の子エージェント | [CHG-0020](0020-pi-migration.md) | 済 |
 
 ## 実装・検証
 

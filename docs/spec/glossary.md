@@ -9,7 +9,8 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
 
 - **境界**（OS が強制するアクセス境界）: bwrap・seccomp・proxy などで OS が強制する
   読み書きと通信の制限。permission・hook・plugin による規則の照合は「安全網」と呼び、
-  境界とは呼ばない。旧称: OS 境界、権限境界
+  境界とは呼ばない。旧称: OS 境界、権限境界。**pi の文脈では「サンドボックス」と呼ぶ**
+  （下の「pi のガード」。OpenCode・`ocs` の文書は境界のまま）
 - **機構の境界**: 「どの機構（sandbox / permission / hook）に書くか」の線引き。
   上の境界とは別の意味（[ADR-0007](../adr/0007-filesystem-guard-boundary.md)）
 - **sandbox**: Claude Code / Copilot CLI に組み込みの sandbox 機能。`common.toml` の
@@ -28,6 +29,17 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
 - **隔離用 DB**: 以前の隔離起動がセッションを持っていた
   `<起動ディレクトリ>/.opencode-sandbox/opencode.db`。今は DB を通常起動と共有する
   （[セッションの引き継ぎ](opencode-sandbox.md#セッションの引き継ぎ)）。旧称: 隔離 DB
+
+## pi のガード
+
+[CHG-0023](../change/0023-guard-terminology.md) で整理した呼び方。詳細は [pi のガード](pi-guard.md#用語)。
+
+- **ハーネス**: pi 本体を含む仕組み全体（一般の用法）。pi に足す特定の拡張は指さない。
+  旧称では、pi に足す判定の拡張を「ハーネス」と呼んでいた
+- **ガード**: ツール呼び出しを判定し、allow / ask / deny に振り分ける層。上の「安全網」のうち pi に足すもの
+- **フルガード**: `pis` で効くガード（役割・確認・伏字化まで含む）。旧称: ハーネス
+- **簡易ガード**: 素の `pi` に付く、deny と伏字化だけのガード。旧称: 素の pi のガード
+- **サンドボックス**（pi の文脈）: Fence による OS レベルの隔離（`pis --boundary`）。ガードとは別の層で、上の「境界」と同じもの。旧称: 境界
 
 ## 生成と配置
 

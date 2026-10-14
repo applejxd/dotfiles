@@ -856,7 +856,7 @@ approvals = [
 # ---------------------------------------------------------------------------
 # pi と OpenCode が共有する節 ([pi] が正本)
 # ---------------------------------------------------------------------------
-# pi のハーネスの判定器が読む。OpenCode へは generate.py が同じ値を [opencode.*] の位置へ写す
+# pi のフルガードの判定器が読む。OpenCode へは generate.py が同じ値を [opencode.*] の位置へ写す
 # (CHG-0020 の段 6 で OpenCode を撤去するまで)。[opencode.*] 側に同じキーを書くと生成が止まる。
 # see docs/spec/agent-config-generation.md#pi-と共有する節
 
@@ -1037,13 +1037,13 @@ message = "ヒアドキュメントでスクリプトを渡さないでくださ
 
 # ~/.pi/agent/settings.json へ出す設定。ここに書いたキーは生成器の持ち物で、消すと settings.json からも消える。
 # 書けるキー: defaultThinkingLevel / skills / enabledModels / extensions。既定のモデルは [opencode.model] の default 階層。
-# see docs/spec/pi-harness.md#pi-の設定
+# see docs/spec/pi-guard.md#pi-の設定
 [pi.settings]
 defaultThinkingLevel = "medium"
 skills = ["~/.claude/skills"]
 # 素の pi (Orca・Zed・Windows) 向けの補助。pis は -ne で外れる。
-# commit-confirm: see docs/spec/pi-harness.md#commit-の確認-素の-pi
-# guard (deny だけを止める判定器): see docs/spec/pi-harness.md#素の-pi-のガード。ハーネスの判定器を使うので Unix だけ
+# commit-confirm: see docs/spec/pi-guard.md#commit-の確認-素の-pi
+# guard (deny だけを止める判定器): see docs/spec/pi-guard.md#簡易ガード。フルガードの判定器を使うので Unix だけ
 {{- if and (hasKey .chezmoi "os") (ne .chezmoi.os "windows") }}
 extensions = ["~/.config/pi/commit-confirm", "~/.config/pi/guard"]
 {{- else }}
@@ -1052,7 +1052,7 @@ extensions = ["~/.config/pi/commit-confirm"]
 
 # pi が実際に受け付けるモデルは OpenCode の階層の表と違うことがある。ここにある階層だけ上書きする。
 # ★gpt-6-astra は pi の Copilot 経由で model_not_supported (2026-10 実測)。
-# see docs/spec/pi-harness.md#windows-の子エージェント
+# see docs/spec/pi-guard.md#windows-の子エージェント
 [pi.model.tier.github-copilot]
 second_opinion = "gpt-6-sol"
 
@@ -1060,7 +1060,7 @@ second_opinion = "gpt-6-sol"
 # 段 6 で OpenCode を撤去するときに、共有キーをここへ移す)。pis --boundary が使う。
 # ★read の ~/.config/agents は判定器 (decide.py) が common.toml を読むために要る。書き込みは開けない。
 # ★protected は、dotfiles のリポジトリを作業ツリーにしたときに書き込みを塞ぐ相対パス。
-# see docs/spec/pi-harness.md#境界
+# see docs/spec/pi-guard.md#サンドボックス
 [pi.sandbox]
 read = [
   "~/bin",
@@ -1085,7 +1085,7 @@ protected = [
 # pi のプロンプトテンプレート (~/.pi/agent/prompts/<名前>.md になり、/<名前> で呼ぶ)。
 # 文面は pi のツール (guarded_task) に合わせてある。[opencode.commands] とは別 (段 6 で OpenCode 側を消す)。
 # $ARGUMENTS は呼び出しの引数全部。
-# see docs/spec/pi-harness.md#fleet
+# see docs/spec/pi-guard.md#fleet
 [pi.commands.fleet]
 description = "依頼を並列に動かせる作業に分け、作業役 (worker) を同時に起動して進める"
 argument_hint = "<依頼>"
@@ -1183,7 +1183,7 @@ shell_deny = [
 # profile は [pi.profiles] の名前、tier は [opencode.model.tier.*] の階層 (無ければ親と同じモデル)。
 # inherit_bypass = true なら、親が bypass のとき子も bypass で動く (ask を allow にする)。
 # ★ask に git commit などが残る役割 (committer) には付けない
-# see docs/spec/pi-harness.md#子エージェント
+# see docs/spec/pi-guard.md#子エージェント
 [pi.agents.explore]
 profile = "reader"
 inherit_bypass = true
@@ -1921,7 +1921,7 @@ args = [
 # ---------------------------------------------------------------------------
 # Hooks (pi の編集後の整形)
 # ---------------------------------------------------------------------------
-# pi のハーネスが、edit / write の後に呼ぶスクリプト (整形と markdownlint)。
+# pi のフルガードが、edit / write の後に呼ぶスクリプト (整形と markdownlint)。
 # Claude Code / Copilot CLI の settings.json・~/.copilot/hooks への登録は撤去した
 # (pi 一本化。see docs/adr/0017-pi-only-and-ts-judge.md)。判定の hook (check_bash.py など) は
 # TS の判定器 (pi/harness/judge) へ移したので、下の retired_hooks へ移した。
@@ -1930,9 +1930,9 @@ args = [
 #   script        ~/.claude/hooks/ 配下のファイル名
 #   runner        "python3" / "bash" (素の Ubuntu に `python` は無い)
 #   purpose       用途メモ
-#   post_edit     true なら、pi のハーネスが edit / write の後に呼ぶ
+#   post_edit     true なら、pi のフルガードが edit / write の後に呼ぶ
 #   timeout_sec   秒
-# see docs/spec/pi-harness.md#整形
+# see docs/spec/pi-guard.md#整形
 
 [[hooks]]
 id = "markdownlint"

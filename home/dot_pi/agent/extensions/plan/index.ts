@@ -1,6 +1,6 @@
 // 計画モード。`/plan` で切り替える。計画中は、書き込み・実行のツール (edit / write / bash / MCP など) を
-// モデルから外し、読むツールだけにする。ハーネス (`pis`) の `guarded_` 付きのツールも同じ扱い。
-// see docs/spec/pi-harness.md#自作の拡張-todo--plan--btw
+// モデルから外し、読むツールだけにする。フルガード (`pis`) の `guarded_` 付きのツールも同じ扱い。
+// see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // 計画中に残すツール (`guarded_` を外した名前)

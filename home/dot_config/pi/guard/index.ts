@@ -1,12 +1,12 @@
-// 素の pi (ハーネス無し) 向けのガード。ツールの実行前に判定器へ通し、**deny だけ**を止める。
+// 簡易ガード (素の pi 向け)。ツールの実行前に判定器へ通し、**deny だけ**を止める。
 //   deny / 誘導 → 止める (理由はモデルへの案内になる)
 //   ask         → 止めない (確認は出さない。Orca・Zed のように応える人が居ない環境でも止まらない)
-// ハーネス (pis) の判定と同じ判定器・同じ規則 (rules.json の judge)。違いは ask を通す点と、役割を実装役に固定する点。
-// あわせて、ハーネスと同じ伏字化 (rules.json の redact) を tool_result で掛ける: bash などの結果の秘密を伏せる。
+// フルガード (pis) の判定と同じ判定器・同じ規則 (rules.json の judge)。違いは ask を通す点と、役割を実装役に固定する点。
+// あわせて、フルガードと同じ伏字化 (rules.json の redact) を tool_result で掛ける: bash などの結果の秘密を伏せる。
 // 保護ではなくガードレール: tool_call だけで判定し (execute() の最終判定は無い)、拡張の読み込み時の処理や
 // 利用者が手で打つ `!cmd` は囲えない。実行中の途中経過の表示は伏せられない。
-// ハーネス (pis) は -ne で外れるので、二重にならない。
-// see docs/spec/pi-harness.md#素の-pi-のガード
+// フルガード (pis) は -ne で外れるので、二重にならない。
+// see docs/spec/pi-guard.md#簡易ガード
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,7 +56,7 @@ export default async function (pi: any) {
 		}
 		const d = decide(tool, event.input, ctx.cwd ?? process.cwd());
 		if (d.decision === "deny") return { block: true, reason: d.reason };
-		// 保護対象のパスを参照するコマンドは、どこが秘密か分からないので実行しない (ハーネスは出力を伏せるだけにする)
+		// 保護対象のパスを参照するコマンドは、どこが秘密か分からないので実行しない (フルガードは出力を伏せるだけにする)
 		const hit = tool === "bash" && redactor ? redactor.deniedPathIn(String(event.input?.command ?? "")) : null;
 		if (hit) return { block: true, reason: redactor?.withheld(hit).structuredContent.withheld };
 		return undefined;

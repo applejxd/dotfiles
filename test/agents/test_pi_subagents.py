@@ -1,4 +1,4 @@
-"""素の pi (Windows) 用の子エージェント宣言。see docs/spec/pi-harness.md#windows-の子エージェント"""
+"""素の pi (Windows) 用の子エージェント宣言。see docs/spec/pi-guard.md#windows-の子エージェント"""
 
 from __future__ import annotations
 

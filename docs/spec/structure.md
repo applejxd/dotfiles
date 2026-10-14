@@ -506,7 +506,7 @@ Windows は Copilot CLI と OpenCode V2 を導入し、`applejxd` 以外では
 Claude Code も導入します。Linux / WSL / macOS では加えて oh-my-pi (`omp`) と
 pi（`pi.dev/install.sh`）も公式インストーラーで入れます（Windows の pi は mise が入れる。[Windows の pi](#windows-の-pi)）。pi は mise の Node.js が入っていないと
 入れません（インストーラーが Node.js の導入を端末で聞くため。次の apply で走り直す）。
-pi はハーネス付きの `pis` で起動する（[pi のハーネス](pi-harness.md#起動)）。
+pi はフルガード付きの `pis` で起動する（[pi のガード](pi-guard.md#起動)）。
 
 スクリプトは `run_onchange_after_` で、**既に PATH 上にある CLI には触りません**。
 ただし mise の shim（`~/.local/share/mise/shims/` 配下）は導入済みと数えません。

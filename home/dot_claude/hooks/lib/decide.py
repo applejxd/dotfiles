@@ -1,4 +1,4 @@
-"""CLI に依存しない判定 API。pi のハーネスが呼ぶ。
+"""CLI に依存しない判定 API。pi のフルガードが呼ぶ。
 
 ``decide(request) -> response`` は allow / ask / deny と理由を必ず返し、どこで決まったか
 (``source``) を添える。判定の中身は Claude / Copilot の hook と同じ ``bashrules`` と
@@ -20,10 +20,10 @@ from typing import Any
 from policy_loader import load_policy
 
 DECISIONS = ("allow", "ask", "deny")
-# 判定器が扱うツール。ハーネスは別名で登録しても、ここへは元の名前で渡す
+# 判定器が扱うツール。フルガードは別名で登録しても、ここへは元の名前で渡す
 FILE_READ_TOOLS = ("read", "grep", "find", "ls")
 FILE_WRITE_TOOLS = ("edit", "write")
-# 子エージェントの起動。子は同じハーネスと判定器で動くので、役割に入っていれば allow
+# 子エージェントの起動。子は同じフルガードと判定器で動くので、役割に入っていれば allow
 TASK_TOOL = "task"
 # 拡張 (extensions/todo) のタスクリスト。状態をメモリに持つだけで、ファイルも外部も触らない
 TODO_TOOL = "todo"

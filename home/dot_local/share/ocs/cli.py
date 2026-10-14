@@ -122,7 +122,7 @@ def run_pi(args: argparse.Namespace, passthrough: list[str]) -> int:
     """pi を囲って起動する。OpenCode と違い、DB も設定の書き出しも要らない。
 
     境界用の agent 置き場を起動ごとに作り (:mod:`pi`)、セッションの置き場だけを本物へ開ける。
-    see docs/spec/pi-harness.md#境界
+    see docs/spec/pi-guard.md#サンドボックス
     """
     pi.check_installed()
     sandbox = boundary.load_boundary(pi.RULES, required=())

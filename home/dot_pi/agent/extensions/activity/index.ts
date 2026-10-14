@@ -1,9 +1,9 @@
 // 動いている子エージェントとバックグラウンドジョブを数えて、入力欄の下 (フッター) に出す。
 // 例: `🤖 2 subagents / ⚙️ 1 jobs`。0 件の側は出さず、どちらも 0 のときは何も出さない。
 // ジョブは `bg_run` / `bg_kill` / `bg_log` で扱う。コマンドは出力をログへ流して切り離して動く。
-// 子の一覧は、子を起動する側 (subagents / ハーネス) が globalThis.__piChildren に登録する。
+// 子の一覧は、子を起動する側 (subagents / フルガード) が globalThis.__piChildren に登録する。
 // ジョブは globalThis.__piJobs に入れる。
-// see docs/spec/pi-harness.md#自作の拡張-todo--plan--btw
+// see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readFileSync } from "node:fs";

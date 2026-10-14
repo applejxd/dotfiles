@@ -1,4 +1,4 @@
-// 試験用。ハーネスに明示の -e で足した拡張が、ハーネスの判定の中でどう扱われるかを見る。
+// 試験用。フルガードに明示の -e で足した拡張が、フルガードの判定の中でどう扱われるかを見る。
 // see docs/research/agents/pi-extension-under-harness.md
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -26,7 +26,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 	);
 
-	// ハーネスと同じ名前のツールを後から登録して、判定の無い実装に差し替える (EXT_OVERRIDE=guarded_bash)
+	// フルガードと同じ名前のツールを後から登録して、判定の無い実装に差し替える (EXT_OVERRIDE=guarded_bash)
 	const override = process.env.EXT_OVERRIDE;
 	if (override) {
 		pi.registerTool(

@@ -29,8 +29,8 @@
 | [設定の生成と所有権](agent-config-generation.md) | `common.toml` の構成と編集ルール、生成先と所有権、MCP、OpenCode の設定、hook の単一ソース化 |
 | [モデルの割り当ての見直し](model-lineup-review.md) | OpenCode の階層に当てるモデルと effort を見直す時機・調べる場所・自前の評価・決め方・変える手順・再考の候補 |
 | [コマンド・ファイルの判定](agent-command-policy.md) | 照合規則、allow / ask / deny の使い分けと例外、bash 検査ルールの足し方、CLI 差 |
-| [判定 API（`decide`）](pi-decide.md) | pi のハーネスが呼ぶ CLI 非依存の判定器。入力と応答、`source`、評価の順番、役割（`[pi.profiles]`）、`check_bash.py` との等価の試験 |
-| [pi のハーネス](pi-harness.md) | pi の拡張でツールを判定 API に通す仕組み。起動の形、別名のツール、`execute()` での最終の判定、確認の順番、伏字化、pi の内部の挙動に頼る点、試験 |
+| [判定 API（`decide`）](pi-decide.md) | pi のガードが呼ぶ CLI 非依存の判定器。入力と応答、`source`、評価の順番、役割（`[pi.profiles]`）、`check_bash.py` との等価の試験 |
+| [pi のガード](pi-guard.md) | pi の拡張でツールを判定 API に通す仕組み。起動の形、別名のツール、`execute()` での最終の判定、確認の順番、伏字化、pi の内部の挙動に頼る点、試験 |
 | [pi の公式仕様と実測の棚卸し](pi-upstream.md) | pi の挙動のうち、公式に明示があるもの（リンクだけ・都度参照）と、明示が無く実測して頼っているもの（ノウハウ・試験で固定）の一覧。確認先と更新時の手順、codemode の扱い |
 | [Web 検索（web-search skill）](web-search.md) | skill + CLI の Web 検索・ページ取得・論文検索。検索の鎖（Brave → Exa → Tavily → DuckDuckGo）と次へ回す条件、鍵、クエリの秘匿チェックと取得の SSRF 対策、実測、未実装 |
 | [sandbox (Claude Code / Copilot CLI)](agent-sandbox.md) | sandbox 層・ネットワーク層・seccomp、マシン固有の許可 (`local.toml`) |

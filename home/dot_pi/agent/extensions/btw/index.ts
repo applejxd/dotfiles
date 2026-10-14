@@ -1,7 +1,7 @@
 // `/btw <質問>`: いまの会話を文脈にした「ついでの質問」に、現在のモデルが答える。
 // ツールは使わず、答えは会話履歴にもモデルの文脈にも残さない (表示するだけ)。
 // 応答中 (エージェントが動いている最中) でも実行できる。
-// see docs/spec/pi-harness.md#自作の拡張-todo--plan--btw
+// see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { DynamicBorder, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, matchesKey, Text } from "@earendil-works/pi-tui";

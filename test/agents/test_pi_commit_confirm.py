@@ -2,7 +2,7 @@
 
 settings.json の ``extensions`` から読ませ、push の拒否・commit の確認・時間切れの退避を見る。
 解釈・表示・退避の細部は test_pi_commit_parse.py。
-see docs/spec/pi-harness.md#commit-の確認-素の-pi
+see docs/spec/pi-guard.md#commit-の確認-素の-pi
 """
 
 from __future__ import annotations
@@ -347,7 +347,7 @@ def test_the_tui_shows_the_structure_and_a_countdown_then_saves_on_timeout(env):
     assert commits(env) == [] and len(pending_refs(env)) == 1
 
 
-# ─── ハーネスとの関係 ────────────────────────────────────────────────
+# ─── フルガードとの関係 ────────────────────────────────────────────────
 
 
 def test_the_harness_replaces_it_instead_of_doubling(env):
@@ -390,7 +390,7 @@ def test_a_later_confirmation_shows_the_state_before_the_earlier_commit_runs(env
 
     pi は同じ応答の全呼び出しの tool_call を終えてから実行を始める (実行の終わりを待つと、
     安全弁の時間まで止まる)。そのため 2 件目は、1 件目が入る前の状態 (a.txt も対象) を見せる。
-    既知の限界 (docs/spec/pi-harness.md#commit-の確認-素の-pi)。
+    既知の限界 (docs/spec/pi-guard.md#commit-の確認-素の-pi)。
     """
     (env["proj"] / "b.txt").write_text("b\n", encoding="utf-8")
     calls = bash_call(COMMIT) + bash_call("git add -- b.txt && git commit -m 'second'")

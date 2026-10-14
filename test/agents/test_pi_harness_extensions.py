@@ -1,4 +1,4 @@
-"""ハーネスへ明示の ``-e`` で足した拡張が、判定・伏字化の中でどう扱われるかを、偽のモデルで試す。
+"""フルガードへ明示の ``-e`` で足した拡張が、判定・伏字化の中でどう扱われるかを、偽のモデルで試す。
 
 pi が無い環境では skip する (``test_pi_harness.py`` と同じ)。
 see docs/research/agents/pi-extension-under-harness.md
@@ -55,7 +55,7 @@ def test_listed_extension_tool_is_asked_and_its_result_is_redacted(env):
     assert "not approved:" in proc.stdout, proc.stdout
     assert not ran.exists()
 
-    # bypass で実行させると、ハーネスの tool_result が結果の秘密を伏せる
+    # bypass で実行させると、フルガードの tool_result が結果の秘密を伏せる
     proc = run_pi(env, CALL, extra=EXT, mode="json", PI_HARNESS_BYPASS="1", **common)
     assert ran.exists()
     assert "伏字" in proc.stdout
@@ -85,7 +85,7 @@ def test_extension_cannot_replace_a_guarded_tool(env):
     assert not pwned.exists()
 
 
-# ─── MCP の exposure (生成器 → ハーネス) ─────────────────────────────
+# ─── MCP の exposure (生成器 → フルガード) ─────────────────────────────
 
 MCP_SERVER = FIXTURES / "mcp_server.py"
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# pi をハーネス付きで起動する。
+# pi をフルガード付きで起動する。
 # usage: pis [--bypass] [--boundary] [--role <役割>] [--] [pi の引数...]
-# see docs/spec/pi-harness.md#起動
+# see docs/spec/pi-guard.md#起動
 set -eu
 
 harness="${HOME}/.config/pi/harness"
 agent_dir="${PI_CODING_AGENT_DIR:-${HOME}/.pi/agent}"
 bypass=""
 boundary=""
-role=""   # 空なら [pi] default_role (ハーネスが rules.json から読む)
+role=""   # 空なら [pi] default_role (フルガードが rules.json から読む)
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -23,11 +23,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ ! -f "${harness}/index.ts" ] || [ ! -f "${harness}/rules.json" ]; then
-    echo "pis: ハーネスが無い (${harness})。chezmoi apply で配る" >&2
+    echo "pis: フルガードが無い (${harness})。chezmoi apply で配る" >&2
     exit 1
 fi
 
-# ~/.pi/agent/mcp.json のサーバはハーネスと関係なく繋がり、ハーネスが抜けても判定なしで残る
+# ~/.pi/agent/mcp.json のサーバはフルガードと関係なく繋がり、フルガードが抜けても判定なしで残る
 if [ -f "${agent_dir}/mcp.json" ] && python3 - "${agent_dir}/mcp.json" <<'PY'
 import json, sys
 try:
