@@ -1,7 +1,10 @@
 """``pis``: pi をフルガード付きで起動する入口。
 
-標準は素の起動 (``-nbt -ne`` とフルガードの明示の ``-e``)。``--boundary`` は Fence で囲って起動する
-(:func:`cli.main` の ``--harness pi``)。起動フラグと拡張の一覧は :mod:`pi` と共有する。
+標準は **サンドボックス (Fence) の中** で起動する (:func:`cli.main` の ``--harness pi``)。
+``--no-sandbox`` はフルガードだけで起動する (``-nbt -ne`` とフルガードの明示の ``-e``)。
+サンドボックスを張れない OS では、黙って弱い守りに落とさず、起動を断って
+``--no-sandbox`` を案内する。
+起動フラグと拡張の一覧は :mod:`pi` と共有する。
 see docs/spec/pi-guard.md#起動
 """
 
@@ -17,16 +20,24 @@ from pathlib import Path
 from . import cli, pi
 from .common import HOME
 
-USAGE = "usage: pis [--bypass] [--boundary] [--role <役割>] [--] [pi の引数...]"
+USAGE = "usage: pis [--bypass] [--no-sandbox] [--role <役割>] [--] [pi の引数...]"
 # 外から入った内部の環境変数。子エージェントの印は pis が起動するたびに外す
-INTERNAL_ENV = ("PI_HARNESS_CHILD", "PI_HARNESS_TEST_CHILD_EXT", "PI_HARNESS_BOUNDARY")
+INTERNAL_ENV = (
+    "PI_HARNESS_CHILD",
+    "PI_HARNESS_TEST_CHILD_EXT",
+    "PI_HARNESS_BOUNDARY",
+    "PI_HARNESS_NO_SANDBOX",
+    "PI_HARNESS_ALLOWED",
+    "PI_HARNESS_CANARY_READ",
+    "PI_HARNESS_CANARY_WRITE",
+)
 ORCA_MARKER = "@orca-managed-pi-extension"
 
 
 @dataclass
 class Options:
     bypass: bool
-    boundary: bool
+    sandbox: bool
     role: str
     rest: list[str]
 
@@ -38,7 +49,7 @@ def fail(message: str, code: int = 1) -> None:
 
 def parse(argv: list[str]) -> Options:
     """先頭の pis のオプションだけを解釈し、残りを pi (と ``--check`` など) へ渡す。"""
-    bypass = boundary = False
+    bypass = no_sandbox = boundary = False
     role = ""
     i = 0
     while i < len(argv):
@@ -46,7 +57,10 @@ def parse(argv: list[str]) -> Options:
         if arg == "--bypass":
             bypass = True
             i += 1
-        elif arg == "--boundary":
+        elif arg == "--no-sandbox":
+            no_sandbox = True
+            i += 1
+        elif arg == "--boundary":  # 互換 (今は標準と同じ意味)
             boundary = True
             i += 1
         elif arg == "--role":
@@ -59,7 +73,9 @@ def parse(argv: list[str]) -> Options:
             break
         else:
             break
-    return Options(bypass, boundary, role, argv[i:])
+    if no_sandbox and boundary:
+        fail("--no-sandbox と --boundary は同時に使えない", 2)
+    return Options(bypass, not no_sandbox, role, argv[i:])
 
 
 def agent_dir() -> Path:
@@ -103,6 +119,8 @@ def environment(options: Options) -> dict[str, str]:
     else:
         env.pop("PI_HARNESS_ROLE", None)
     env["PI_HARNESS_BYPASS"] = "1" if options.bypass else ""
+    if not options.sandbox:
+        env["PI_HARNESS_NO_SANDBOX"] = "1"  # フッターの表示用 (安全の根拠にはしない)
     return env
 
 
@@ -125,10 +143,16 @@ def main(argv: list[str] | None = None) -> int:
     agent = agent_dir()
     check_mcp_json(agent)
     env = environment(options)
-    if options.boundary:
+    if options.sandbox:
+        if sys.platform != "linux":
+            fail(
+                "この OS ではサンドボックスを張れないので起動しない。"
+                "守りがフルガードだけでよければ pis --no-sandbox を使う"
+            )
         os.environ.clear()
         os.environ.update(env)
         return cli.main(["--harness", "pi", *options.rest])
+    print("pis: サンドボックス無しで起動する (守りはフルガードだけ)", file=sys.stderr)
     if shutil.which("pi", path=env.get("PATH")) is None:
         fail("pi が PATH に無い")
     command = plain_command(options, agent)

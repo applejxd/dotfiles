@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """pi をフルガード付きで起動する ``pis`` の入口。
 
-usage: pis [--bypass] [--boundary] [--role <役割>] [--] [pi の引数...]
+usage: pis [--bypass] [--no-sandbox] [--role <役割>] [--] [pi の引数...]  (標準はサンドボックスの中)
 本体は ``~/.local/share/ocs/pis.py``（隔離起動 ``ocs`` と同じ置き場）。ここから絶対パスで読み込み、
 **sys.path・PYTHONPATH・カレントディレクトリからは探さない**（``ocs`` の入口と同じ読み込み）。
 see docs/spec/pi-guard.md#起動

@@ -19,6 +19,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
+import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { createRedactor } from "./redact.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -27,7 +28,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const PREFIX = "guarded_";
 const TOOLS = ["bash", "read", "edit", "write", "grep", "find", "ls"] as const;
 const BYPASS = process.env.PI_HARNESS_BYPASS === "1";
-const BOUNDARY = process.env.PI_HARNESS_BOUNDARY === "1";
+// サンドボックスの内側と期待されているか (PI_HARNESS_BOUNDARY=1)。これは期待にすぎない。
+// 期待されているときは、カナリアで実測し、効いていなければ起動を止める。緩和 (BOUNDARY) は実測が通ったときだけ。
+const BOUNDARY_ENV = readBoundaryEnv(process.env);
+const NO_SANDBOX = process.env.PI_HARNESS_NO_SANDBOX === "1";
 // 子エージェントとして起動されたか。子では guarded_task を登録しない (入れ子にしない)
 const CHILD = process.env.PI_HARNESS_CHILD === "1";
 // 承認されなかった呼び出しの理由の先頭。子の結果から「承認待ちで未完了」を見分けるのに使う
@@ -42,6 +46,13 @@ const AGENT_ENV: Record<string, string> = rules.agent_env ?? {};
 // 役割。pis の --role / PI_HARNESS_ROLE が優先し、無ければ [pi] default_role
 if (typeof rules.default_role !== "string") throw new Error("rules.json に default_role が無い (chezmoi apply で作り直す)");
 const ROLE: string = process.env.PI_HARNESS_ROLE || rules.default_role;
+
+let BOUNDARY = false;
+if (BOUNDARY_ENV) {
+	const canary = runCanary(BOUNDARY_ENV.spec);
+	if (!canary.ok) throw new Error(`サンドボックスを確認できないので起動しない: ${canary.reason}`);
+	BOUNDARY = true;
+}
 
 // 伏字化 (redact.ts。簡易ガードと共有)
 const { redactText, redactResult, deniedPathIn, withheld } = createRedactor(rules.redact);
@@ -93,6 +104,7 @@ const callDecider = createCallDecider({
 	role: ROLE,
 	bypass: BYPASS,
 	boundary: BOUNDARY,
+	allowed: BOUNDARY_ENV?.allowed,
 });
 
 export function decide(tool: string, input: unknown, cwd: string): Decision {
@@ -125,6 +137,12 @@ function baseName(toolName: string): string {
 
 export default async function (pi: ExtensionAPI) {
 	await loadCommitPreview();
+	// 状態の表示 (安全の根拠ではなく、いまどちらで動いているかの目印)
+	pi.on("session_start", async (_event, ctx) => {
+		if (!ctx.hasUI) return;
+		if (BOUNDARY) ctx.ui.setStatus("sandbox", "🔒 サンドボックス");
+		else if (NO_SANDBOX) ctx.ui.setStatus("sandbox", "⚠ サンドボックス無し");
+	});
 	pi.on("tool_call", async (event, ctx) => {
 		const tool = baseName(event.toolName);
 		const d = decide(tool, event.input, ctx.cwd);

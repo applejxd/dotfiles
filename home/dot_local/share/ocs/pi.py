@@ -20,9 +20,11 @@ import signal
 import subprocess
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
-from .common import HOME, die
+from . import check
+from .common import HOME, STATE, die
 
 RULES = HOME / ".config/pi/harness/rules.json"
 HARNESS = HOME / ".config/pi/harness"
@@ -46,6 +48,10 @@ DROP_ENV = (
     "PI_HARNESS_CHILD",
     "PI_HARNESS_TEST_CHILD_EXT",
     "PI_HARNESS_BOUNDARY",
+    "PI_HARNESS_NO_SANDBOX",
+    "PI_HARNESS_ALLOWED",
+    "PI_HARNESS_CANARY_READ",
+    "PI_HARNESS_CANARY_WRITE",
 )
 
 
@@ -113,13 +119,27 @@ def sessions_dir(workspace: Path, real: Path | None = None) -> Path:
     return path
 
 
-def inner_env(agent: Path) -> dict[str, str]:
-    """境界の内側へ渡す環境変数。役割と bypass は ``pis`` が環境変数で渡す。"""
+def inner_env(agent: Path, config_: dict) -> dict[str, str]:
+    """境界の内側へ渡す環境変数。役割と bypass は ``pis`` が環境変数で渡す。
+
+    ``PI_HARNESS_BOUNDARY`` は「内側のはず」という期待にすぎない。内側のフルガードが、次のカナリアで
+    実測し (読めてはいけないファイル・書けてはいけない場所)、効いていなければ起動を止める。
+    許可の一覧 (``PI_HARNESS_ALLOWED``) は、実際に開けた場所で、作業ツリーの外の判定に使う。
+    see docs/spec/pi-guard.md#緩和のゲート
+    """
     from .cli import DROP_ENV as COMMON_DROP
 
+    check.ensure_canary()
+    fs = config_["filesystem"]
     env = {k: v for k, v in os.environ.items() if k not in (*COMMON_DROP, *DROP_ENV)}
     env["PI_CODING_AGENT_DIR"] = str(agent)
     env["PI_HARNESS_BOUNDARY"] = "1"
+    env["PI_HARNESS_ALLOWED"] = json.dumps(
+        {"read": list(fs.get("allowRead") or []), "write": list(fs.get("allowWrite") or [])}
+    )
+    env["PI_HARNESS_CANARY_READ"] = str(HOME / check.CANARY_REL)
+    # 存在しないパス。内側から書けてしまったらサンドボックスが効いていない
+    env["PI_HARNESS_CANARY_WRITE"] = str(STATE / f"canary-write-{uuid.uuid4().hex}")
     return env
 
 

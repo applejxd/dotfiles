@@ -28,7 +28,10 @@ export type Request = {
 	cwd: string;
 	role: string;
 	bypass?: boolean;
+	/** サンドボックスの内側と証明できているか。true のときだけ、下の緩和が効く (基準は保守的) */
 	boundary?: boolean;
+	/** サンドボックスが実際に開けた場所 (起動時の許可)。boundary のとき、作業ツリーの外の判定に使う */
+	allowed?: { read: string[]; write: string[] };
 };
 
 const DECISIONS: readonly string[] = ["allow", "ask", "deny"];
@@ -143,6 +146,7 @@ function decideFile(
 	cwd: string,
 	pi: Record<string, any>,
 	common: Common,
+	allowed?: Request["allowed"],
 ): { commonDeny: Response | null; roleRule: Response | null } {
 	const write = FILE_WRITE_TOOLS.includes(tool);
 	const key = write ? "write_deny_globs" : "read_deny_globs";
@@ -174,6 +178,8 @@ function decideFile(
 			};
 		}
 		if (!insideCwd) {
+			// サンドボックスの内側: OS が開けた場所なら許可、外なら理由つきの deny (確認しても OS が拒否する)
+			if (allowed) return { commonDeny: null, roleRule: sandboxFile("書き込み", path, absolute, allowed.write) };
 			return { commonDeny: null, roleRule: response("ask", `\`${path}\` は作業ツリーの外への書き込み`, "rule") };
 		}
 		return { commonDeny: null, roleRule: response("allow", "作業ツリーの中への書き込み", "rule") };
@@ -192,7 +198,23 @@ function decideFile(
 	if (opened.some((d: string) => inside(absolute, d))) {
 		return { commonDeny: null, roleRule: response("allow", "[pi.external_read] で開けた場所の読み取り", "rule") };
 	}
+	if (allowed) {
+		return { commonDeny: null, roleRule: sandboxFile("読み取り", path, absolute, [...allowed.read, ...allowed.write]) };
+	}
 	return { commonDeny: null, roleRule: response("ask", `\`${path}\` は作業ツリーの外の読み取り`, "rule") };
+}
+
+/** サンドボックスの内側での、作業ツリーの外の読み書き。OS が開けた場所だけ allow し、外は理由つきの deny。 */
+function sandboxFile(kind: string, path: string, absolute: string, opened: string[]): Response {
+	const roots = opened.map((d) => realpathLoose(expandUser(String(d))));
+	if (roots.some((d) => inside(absolute, d))) {
+		return response("allow", `サンドボックスが開けた場所の${kind}`, "rule");
+	}
+	return response(
+		"deny",
+		`\`${path}\` はサンドボックスの外の${kind}。OS も拒否する (必要なら、許可する場所を設定へ足して起動し直す)`,
+		"rule",
+	);
 }
 
 // ─── 入口 ────────────────────────────────────────────────
@@ -206,6 +228,13 @@ function validate(request: unknown): string | null {
 	for (const key of ["bypass", "boundary"]) {
 		const value = request[key];
 		if (value !== undefined && typeof value !== "boolean") return `${key} が真偽値ではありません`;
+	}
+	const allowed = request.allowed;
+	if (allowed !== undefined) {
+		const strings = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");
+		if (!isObject(allowed) || !strings(allowed.read) || !strings(allowed.write)) {
+			return "allowed が { read, write } (文字列の配列) ではありません";
+		}
 	}
 	return null;
 }
@@ -236,7 +265,7 @@ function decideInner(request: unknown, common: Common): Response {
 	} else if (FILE_READ_TOOLS.includes(tool) || FILE_WRITE_TOOLS.includes(tool)) {
 		const path = toolInput.path ?? (["grep", "find", "ls"].includes(tool) ? "." : undefined);
 		if (typeof path !== "string" || !path) return errorResponse(`${tool} の path がありません`);
-		({ commonDeny, roleRule } = decideFile(tool, path, cwd, pi, common));
+		({ commonDeny, roleRule } = decideFile(tool, path, cwd, pi, common, req.boundary ? req.allowed : undefined));
 	} else if (tool === TASK_TOOL) {
 		commonDeny = null;
 		roleRule = response("allow", "子エージェントは同じハーネスと判定器で動く", "rule");
@@ -257,6 +286,12 @@ function decideInner(request: unknown, common: Common): Response {
 	// 3. 役割の確認と許可、4. 既定
 	const result =
 		roleRule ?? response(profile.default, `どの規則にも当たらない (役割 ${pyRepr(req.role)} の既定)`, "default");
+
+	// 4'. サンドボックスの内側 (証明済み) では、日常の shell の確認だけを外す。
+	//     [bash] ask・意味解析の ask・誘導・deny はそのまま (どの規則にも当たらず、役割の既定の ask になったものだけ)
+	if (req.boundary && tool === "bash" && result.source === "default" && result.decision === "ask") {
+		return response("allow", "サンドボックスの内側の日常の shell (どの規則にも当たらない)", "rule", { sandboxed: true });
+	}
 
 	// 5. bypass は ask だけを allow にする (deny はそのまま)
 	if (req.bypass && result.decision === "ask") return { ...result, decision: "allow", bypassed: true };

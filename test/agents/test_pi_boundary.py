@@ -149,9 +149,16 @@ def test_inner_command_and_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("GH_TOKEN", "secret")
     monkeypatch.setenv("PI_HARNESS_CHILD", "1")
     monkeypatch.setenv("PI_HARNESS_ROLE", "reader")
-    env = pi.inner_env(tmp_path / "agent")
+    config_ = {"filesystem": {"allowRead": ["/a"], "allowWrite": ["/b"]}}
+    monkeypatch.setenv("PI_HARNESS_ALLOWED", "outer")
+    monkeypatch.setattr(pi.check, "ensure_canary", lambda: None)
+    env = pi.inner_env(tmp_path / "agent", config_)
     assert "GH_TOKEN" not in env and "PI_HARNESS_CHILD" not in env
     assert env["PI_HARNESS_BOUNDARY"] == "1"
+    # 外から入った値は捨て、実際に開けた場所を渡す。カナリアは内側から見えない状態領域に置く
+    assert json.loads(env["PI_HARNESS_ALLOWED"]) == {"read": ["/a"], "write": ["/b"]}
+    assert env["PI_HARNESS_CANARY_READ"].endswith(pi.check.CANARY_REL)
+    assert env["PI_HARNESS_CANARY_WRITE"].startswith(str(pi.STATE))
     assert env["PI_CODING_AGENT_DIR"] == str(tmp_path / "agent")
     assert env["PI_HARNESS_ROLE"] == "reader"
     rules = tmp_path / "rules.json"
@@ -214,9 +221,7 @@ def test_own_extensions_rejects_unsafe_names(bad):
         gen.pi_own_extensions(common)
 
 
-def test_pis_boundary_hands_over_to_the_sandbox_launcher(monkeypatch):
-    """pis --boundary は、環境変数 (役割・bypass) を整えて、サンドボックスの起動へ引き継ぐ。"""
-    ocs = _ocs()
+def _stub_pis(monkeypatch, ocs):
     monkeypatch.setattr(ocs.pis, "check_installed", lambda: None)
     monkeypatch.setattr(ocs.pis, "check_mcp_json", lambda _agent: None)
     seen = {}
@@ -227,12 +232,44 @@ def test_pis_boundary_hands_over_to_the_sandbox_launcher(monkeypatch):
         return 7
 
     monkeypatch.setattr(ocs.cli, "main", fake_main)
+    return seen
+
+
+def test_pis_defaults_to_the_sandbox(monkeypatch):
+    """pis は標準でサンドボックスの中。役割・bypass の環境を整えて引き継ぐ (--boundary は互換)。"""
+    ocs = _ocs()
+    seen = _stub_pis(monkeypatch, ocs)
     monkeypatch.setenv("PI_HARNESS_CHILD", "1")
-    code = ocs.pis.main(["--boundary", "--bypass", "--role", "reader", "-c"])
-    assert code == 7
+    monkeypatch.setenv("PI_HARNESS_ALLOWED", "outer")
+    assert ocs.pis.main(["--bypass", "--role", "reader", "-c"]) == 7
     assert seen["argv"] == ["--harness", "pi", "-c"]
     assert seen["env"] == ("reader", "1")
-    assert "PI_HARNESS_CHILD" not in os.environ
+    assert "PI_HARNESS_CHILD" not in os.environ and "PI_HARNESS_ALLOWED" not in os.environ
+    assert ocs.pis.main(["--boundary", "-c"]) == 7 and seen["argv"] == ["--harness", "pi", "-c"]
+
+
+def test_pis_refuses_the_sandbox_where_it_cannot_be_built(monkeypatch, capsys):
+    ocs = _ocs()
+    _stub_pis(monkeypatch, ocs)
+    monkeypatch.setattr(ocs.pis.sys, "platform", "darwin")
+    with pytest.raises(SystemExit):
+        ocs.pis.main(["-c"])
+    assert "--no-sandbox" in capsys.readouterr().err
+
+
+def test_pis_no_sandbox_marks_the_environment_and_warns(monkeypatch, capsys):
+    ocs = _ocs()
+    _stub_pis(monkeypatch, ocs)
+    monkeypatch.setattr(ocs.pis.shutil, "which", lambda *_a, **_k: "/usr/bin/pi")
+    captured = {}
+    monkeypatch.setattr(ocs.pis.os, "execvpe", lambda f, a, e: captured.update(file=f, env=e))
+    monkeypatch.setenv("PI_HARNESS_BOUNDARY", "1")  # 外から入った期待は捨てる
+    ocs.pis.main(["--no-sandbox", "-c"])
+    assert captured["env"]["PI_HARNESS_NO_SANDBOX"] == "1"
+    assert "PI_HARNESS_BOUNDARY" not in captured["env"]
+    assert "サンドボックス無し" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        ocs.pis.parse(["--no-sandbox", "--boundary"])
 
 
 def test_pis_plain_command_shares_the_flags_and_the_extension_list(monkeypatch, tmp_path):
@@ -257,12 +294,61 @@ def test_pis_plain_command_shares_the_flags_and_the_extension_list(monkeypatch, 
 def test_pis_parse_takes_only_the_leading_options():
     ocs = _ocs()
     options = ocs.pis.parse(["--bypass", "--role", "reader", "--", "--bypass", "x"])
-    assert (options.bypass, options.boundary, options.role, options.rest) == (
-        True, False, "reader", ["--bypass", "x"],
+    assert (options.bypass, options.sandbox, options.role, options.rest) == (
+        True, True, "reader", ["--bypass", "x"],
     )
     assert ocs.pis.parse(["-c", "--bypass"]).rest == ["-c", "--bypass"]
     with pytest.raises(SystemExit):
         ocs.pis.parse(["--role"])
+
+
+def _preflight_setup(monkeypatch, tmp_path, codes):
+    ocs = _ocs()
+    monkeypatch.setattr(ocs.check, "PREFLIGHT_DIR", tmp_path / "preflight")
+    fake = tmp_path / "fence"
+    fake.write_text("#!/bin/sh\necho fence-1.0\n", encoding="utf-8")
+    fake.chmod(0o755)
+    check_script = tmp_path / "ocs-boundary-check"
+    check_script.write_text("v1", encoding="utf-8")
+    monkeypatch.setattr(ocs.check, "CHECK", check_script)
+    calls = []
+
+    def run_check(*_args):
+        calls.append(1)
+        return codes.pop(0)
+
+    monkeypatch.setattr(ocs.check, "run_check", run_check)
+    return ocs, fake, check_script, calls
+
+
+def _project(agent, extra=None):
+    config = {"filesystem": {"allowWrite": [agent, "/w"], "denyWrite": [f"{agent}/settings.json"]}}
+    config.update(extra or {})
+    return {"workspace": "/w", "config": config}
+
+
+def test_preflight_remembers_only_a_pass_and_rekeys_on_any_change(monkeypatch, tmp_path):
+    ocs, fence, script, calls = _preflight_setup(monkeypatch, tmp_path, [1, 0, 0])
+    run = lambda agent, **kw: ocs.check.preflight(  # noqa: E731
+        fence, "b.json", _project(agent, **kw), {}, tmp_path, volatile=[agent]
+    )
+    assert run("/agent-aaa") == 1 and len(calls) == 1  # 不合格は覚えない
+    assert run("/agent-bbb") == 0 and len(calls) == 2  # 合格を覚える
+    assert run("/agent-ccc") == 0 and len(calls) == 2  # 起動ごとに変わる置き場は鍵に影響しない
+    assert run("/agent-ddd", extra={"network": {"allowedDomains": ["x"]}}) == 0 and len(calls) == 3
+    script.write_text("v2", encoding="utf-8")  # 検査スクリプトが変わったら再検査する
+    monkeypatch.setattr(ocs.check, "run_check", lambda *_a: (calls.append(1), 0)[1])
+    assert run("/agent-eee") == 0 and len(calls) == 4
+
+
+def test_preflight_forgets_after_the_max_age(monkeypatch, tmp_path):
+    ocs, fence, _script, calls = _preflight_setup(monkeypatch, tmp_path, [0, 0])
+    args = (fence, "b.json", _project("/a"), {}, tmp_path, ["/a"])
+    assert ocs.check.preflight(*args) == 0 and len(calls) == 1
+    marker = next((tmp_path / "preflight").iterdir())
+    old = time.time() - ocs.check.PREFLIGHT_MAX_AGE_SECONDS - 10
+    os.utime(marker, (old, old))
+    assert ocs.check.preflight(*args) == 0 and len(calls) == 2
 
 
 # ─── 認証を本物へ戻す ───────────────────────────────────────────────

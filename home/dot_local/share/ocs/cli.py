@@ -150,7 +150,7 @@ def run_pi(args: argparse.Namespace, passthrough: list[str]) -> int:
         "db": "",
         "config": config_,
     }
-    env = pi.inner_env(agent)
+    env = pi.inner_env(agent, config_)
 
     if args.check:
         boundary_file = write_boundary(config_)
@@ -161,8 +161,21 @@ def run_pi(args: argparse.Namespace, passthrough: list[str]) -> int:
             pi.cleanup(agent)
 
     try:
-        backup.backup_worktree(workspace, args.no_backup)
         boundary_file = write_boundary(config_)
+        try:
+            # 事前検査 (同じ設定で合格した記憶があれば省く)。落ちたら起動しない
+            code = check.preflight(
+                runtime, boundary_file, project, env, FENCE_TMP, volatile=[str(agent)]
+            )
+            if code != 0:
+                die(
+                    "サンドボックスの事前検査に落ちた",
+                    "pis --check で詳細を見る。サンドボックス無しで使うなら pis --no-sandbox",
+                )
+            backup.backup_worktree(workspace, args.no_backup)
+        except BaseException:
+            Path(boundary_file).unlink(missing_ok=True)
+            raise
     except BaseException:
         pi.cleanup(agent)
         raise
@@ -203,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         "--harness",
         choices=("opencode", "pi"),
         default="opencode",
-        help="囲って起動するもの (pi は pis --boundary が使う)",
+        help="囲って起動するもの (pi は pis が使う)",
     )
     args, passthrough = parser.parse_known_args(argv)
     if args.harness == "pi":

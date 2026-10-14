@@ -6,7 +6,7 @@ OpenCode のガード（permission の生成・guide plugin）の後継で、移
 [pi のハーネスの試作（旧称。現在のフルガード）](../research/agents/pi-harness-spike.md)（E1〜E4）。
 
 > **位置づけ**: フルガードは `pis` で起動したときだけ効く。**Orca と Zed が呼ぶ素の `pi` は、フルガード無しで動く**
-> （利用者の判断。保護が要る作業は `pis` か `pis --boundary` で起動する）。`pis` は利用者が自分で起動するとき用で、
+> （利用者の判断。保護が要る作業は `pis` で起動する。標準でサンドボックスの中）。`pis` は利用者が自分で起動するとき用で、
 > 優先度は低い（[CHG-0020](../change/0020-pi-migration.md)）。素の `pi` にも、**deny だけを止める判定器**
 > （[簡易ガード](#簡易ガード)。Unix のみ）が付く。
 
@@ -21,22 +21,26 @@ pi に足す判定の層、および起動の形を、次のように呼び分�
 | ガード | ツール呼び出しを判定し、allow / ask / deny に振り分ける層 | ハーネス（拡張の意味のとき） |
 | フルガード | `pis` で効く、役割・確認（ask）・伏字化まで含むガード（`~/.config/pi/harness`） | ハーネス |
 | 簡易ガード | 素の `pi` に付く、deny と伏字化だけのガード（`~/.config/pi/guard`） | 素の pi のガード |
-| サンドボックス | Fence による OS レベルの隔離（`pis --boundary`）。ガードとは別の層 | 境界 |
+| サンドボックス | Fence による OS レベルの隔離（`pis` の標準）。ガードとは別の層 | 境界 |
 
-コードの識別子（`PI_HARNESS_*`・`~/.config/pi/harness`・`test_pi_harness*.py`・`--boundary`）は旧称のまま変えない。
+コードの識別子（`PI_HARNESS_*`・`~/.config/pi/harness`・`test_pi_harness*.py`・`--boundary`（互換の別名））は旧称のまま変えない。
 
 ## 起動
 
 ```bash
-pis                 # 実装役で起動する
+pis                 # 実装役で、サンドボックス (Fence) の中で起動する (標準。Ubuntu / WSL のみ)
+pis --no-sandbox    # サンドボックス無しで起動する (守りはフルガードだけ。起動時に警告、フッターに常時表示)
 pis --bypass        # 確認 (ask) を確認なしで通す。deny と誘導は効く
 pis --role reader   # 役割を選ぶ ([pi.profiles] の名前。省略すると [pi] default_role)
-pis --boundary      # Fence で囲って起動する (Ubuntu / WSL のみ。サンドボックスを参照)
 pis -c              # pi の引数はそのまま渡る (例: 直前のセッションを続ける)
 ```
 
-`pis`（`~/.local/bin/pis`）は次の形で pi を起動する。素の `pi` はフルガード無しで動くので、普段使いの切り替え
-（CHG-0020 の段 6）までは `pis` を使う。
+- **サンドボックスが標準**。サンドボックスを張れない OS（macOS・Windows ネイティブ）では、`pis` は起動せず `--no-sandbox` を案内する（黙って弱い守りに落とさない）。
+  `--boundary` は互換の別名（標準と同じ意味）
+- サンドボックスの検査に落ちたとき・起動場所が危険なときも起動しない。制御ファイル・フルガードの編集、復旧、Orca・Zed は `--no-sandbox` で行う
+- 設計の根拠は [CHG-0023](../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
+
+`pis --no-sandbox`（`~/.local/bin/pis`）は次の形で pi を起動する（サンドボックスの内側も、同じフラグ `BASE_FLAGS` で起動する）。素の `pi` はフルガード無しで動く。
 
 ```bash
 pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
@@ -322,7 +326,7 @@ deny は承認で外せないので、誤検知はその場で回避できない
 
 ## サンドボックス
 
-`pis --boundary` は、`ocs --harness pi` へ引き継いで pi を Fence で囲って起動する。サンドボックスの組み立て・危険な
+`pis`（標準）は、`ocs --harness pi` と同じ処理（`cli.main`）へ引き継いで pi を Fence で囲って起動する。サンドボックスの組み立て・危険な
 起動場所の拒否・起動前の退避・`--check` は OpenCode の隔離起動と共通（[OpenCode 隔離起動](opencode-sandbox.md)）。
 pi だけの部分は `~/.local/share/ocs/pi.py`。`--no-backup` / `--check` は `ocs` が解釈するので、pi には渡らない。
 
@@ -335,6 +339,28 @@ pi だけの部分は `~/.local/share/ocs/pi.py`。`--no-backup` / `--check` は
 | 判定器 | `PI_HARNESS_BOUNDARY=1` を渡す（判定器はまだ使っていない） | サンドボックスの中の既定は段 5 で決める |
 | 設定の出所 | 共有のキーは `[opencode.sandbox]`、pi の追加分は `[pi.sandbox]`（読み取り: フルガード・自作の拡張 4 つ・判定器・`~/.config/agents`・`~/.claude/hooks`・pi 本体） | 段 6 で OpenCode を撤去するとき、共有キーを `[pi.sandbox]` へ移す |
 | 作業先ごとの追加 | OpenCode と同じ `.opencode/sandbox.toml` | 名前は段 6 で決める |
+
+### 緩和のゲート
+
+**基準は保守的**（サンドボックス無しの動き: 確認は全部出す）。サンドボックスの内側と**証明できたときだけ**、次の緩和が効く。
+
+| | サンドボックス無し（基準） | サンドボックスの内側（証明済み） |
+| --- | --- | --- |
+| 日常の shell（どの規則にも当たらず、役割の既定の ask になったもの） | 確認 | 確認なし（`sandboxed: true`） |
+| 作業ツリーの外の読み取り・書き込み | 確認 | OS が開けた場所なら allow、外は**理由つきの deny** |
+| `[bash] ask`・意味解析の ask・誘導・deny、`git commit`・MCP の確認、秘密の読み取りの deny、伏字化、役割 | そのまま | **変えない** |
+
+- **証明**: 起動したホストが、内側から見えてはいけないファイルと、書けてはいけない場所を用意し、パスを環境変数で渡す（`PI_HARNESS_CANARY_READ` / `PI_HARNESS_CANARY_WRITE`）。
+  フルガード（`canary.ts`）が**自分で**読み・書きを試し、読めた・書けた・書き込み先が既にあった（拒否の証明にならない）ときは**起動しない**。通ったときだけ判定器へ `boundary: true` を渡す
+- `PI_HARNESS_BOUNDARY=1` は「内側のはず」という期待にすぎない。環境変数だけを立てても、許可の一覧（`PI_HARNESS_ALLOWED`）とカナリアが揃わなければ起動せず、緩和もされない。
+  期待していなければ（変数が無ければ）、緩和は一切効かない
+- **許可の一覧**（`PI_HARNESS_ALLOWED`）は、起動時に実際に Fence へ渡した `allowRead` / `allowWrite`。判定器は、作業ツリーの外のパスをこれと照合する。
+  実際の OS の許可とずれても、OS が拒否するだけで安全側（拒否の理由が判定器と OS で食い違う場合がある）
+- 子エージェントは、同じ環境変数を引き継いだ同じ Fence の中で動き、子もカナリアで確かめる
+- **起動前の事前検査**（`ocs --check` と同じ検査。通信・保護対象・秘密の不可視）は、同じ設定・Fence の版・検査スクリプトで合格した記憶（`~/.local/state/opencode-sandbox/preflight/`、7 日）があれば省く。
+  **合格だけを覚え**、落ちたら起動しない（`--no-sandbox` を案内）
+- フッターに「🔒 サンドボックス」（証明済み）または「⚠ サンドボックス無し」を出す。**目印であり、安全の根拠ではない**
+- 試験: `test_pi_judge_ts.py`（緩和の範囲）、`test_pi_harness.py`（カナリアが読める・書ける・既にある・自己申告だけ・証明済み）、`test_pi_boundary.py`（事前検査の記憶）
 
 `~/.config/agents`（判定器が `common.toml` を読む）は読めるが書けない。内側から判定の規則を書き換えられない。
 OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに入っているので、pi からも読める
@@ -361,7 +387,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | `home/dot_config/pi/commit-confirm/index.ts` | `~/.config/pi/commit-confirm/index.ts` | 素の pi の `git commit` の確認（[補助](#commit-の確認-素の-pi)）。`settings.json` の `extensions` から読む |
 | `home/dot_config/pi/harness/modify_rules.json.py.tmpl` | `~/.config/pi/harness/rules.json` | `generate.py --target pi-harness` が作る。判定器の設定（`judge`: `common.toml` の `[bash]` / `[file]` / `[pi]` と `tables.toml`）・伏字化の規則・シェルへ入れる環境変数・子エージェント・MCP・役割ごとのツール |
 | `home/dot_local/bin/executable_pis` | `~/.local/bin/pis` | 起動の入口（Python。`~/.local/share/ocs/pis.py` を絶対パスで読み込む。[起動](#起動)） |
-| `home/dot_local/share/ocs/pis.py` | `~/.local/share/ocs/pis.py` | `pis` の本体。引数の解釈・素の起動・`--boundary` の引き継ぎ。起動フラグ（`BASE_FLAGS`）と拡張の一覧は、サンドボックスの `pi.py` と共有する。ライブラリは macOS にも置く（`pis` が読むため） |
+| `home/dot_local/share/ocs/pis.py` | `~/.local/share/ocs/pis.py` | `pis` の本体。引数の解釈・サンドボックス（標準）の引き継ぎ・`--no-sandbox` の素の起動。起動フラグ（`BASE_FLAGS`）と拡張の一覧は、サンドボックスの `pi.py` と共有する。ライブラリは macOS にも置く（`pis` が読むため） |
 | `home/dot_local/share/ocs/pi.py` | `~/.local/share/ocs/pi.py` | サンドボックスの pi 用の部分（[サンドボックス](#サンドボックス)） |
 | `home/dot_pi/agent/modify_keybindings.json.py.tmpl`・`AGENTS.md.tmpl`・`prompts/fleet.md.tmpl` | `~/.pi/agent/keybindings.json`・`AGENTS.md`・`prompts/fleet.md` | [ガード以外の機能](#ガード以外の機能) |
 | `home/dot_pi/agent/modify_settings.json.py.tmpl` | `~/.pi/agent/settings.json` | `generate.py --target pi-settings` が持ち物のキーだけを書く（[pi の設定](#pi-の設定)） |

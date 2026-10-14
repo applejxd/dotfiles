@@ -32,7 +32,8 @@ response: { decision: allow | ask | deny, reason, source: rule | check | default
 | `cwd` | 作業ディレクトリの絶対パス。相対パスの解決と「作業ツリーの中か」の判定に使う |
 | `role` | `[pi.profiles]` の名前（「役割」の表） |
 | `bypass` | 真なら ask を allow にする（deny は変えない） |
-| `boundary` | サンドボックス（Fence）の内側か。**受け取るだけで、まだ判定に使っていない**（CHG-0020 の段 4） |
+| `boundary` | サンドボックス（Fence）の内側と**証明できているか**（フルガードがカナリアで実測した結果。環境変数の自己申告ではない）。真のときだけ、評価の順番の 4' の緩和が効く |
+| `allowed` | `{ read, write }`。サンドボックスが実際に開けた場所。`boundary` が真のとき、作業ツリーの外の読み書きの判定に使う（形が違えば `source: error` の deny） |
 
 `source` は判定がどこで決まったか。
 
@@ -68,6 +69,8 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
    - `task`: allow（子は同じフルガードと判定器で、子の役割で判定される）
    - `todo`: allow（メモリの状態だけを変える。拡張は[自作の拡張](pi-guard.md#自作の拡張-todo--plan--btw)）
 4. **既定**。役割の `default`（実装役は ask、読み取り役は deny）
+4'. **サンドボックスの緩和**（`boundary` が真のときだけ）。bash は、どの規則にも当たらず役割の既定（ask）になったものだけを allow にする（`sandboxed: true`）。
+   作業ツリーの外の読み書きは、`allowed` が開けた場所なら allow、外は理由つきの deny（`allowed` が無ければ基準の ask）。ask の規則・deny・誘導は変えない
 5. **bypass**。3・4 の ask だけを allow にする
 
 `rm` の承認の免除（`ask_hook_owned`）は、hook と同じく `[bash] ask` から外れる。判定器ではその先の
@@ -213,5 +216,5 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。判定の�
 
 - `[pi.external_read]` だけを開けている。OpenCode が開けている `[opencode.sandbox] work_read`（`~/src` など）は
   まだ読まないので、隣のリポジトリを読むと確認になる
-- `boundary` を判定に使っていない
+- `boundary` の緩和は TS 版だけにある（Python 版 `decide.py` は持たない。正解データは `boundary` なしの要求）。試験は `test_pi_judge_ts.py`
 - 1 回の判定ごとに Python を起動する（hook と同じ）。呼び出しの多いフルガードで遅さが問題になるかは未計測

@@ -23,7 +23,10 @@ export type CallDeciderOptions = {
 	role: string;
 	/** true なら ask を allow にする (deny と誘導は効く) */
 	bypass: boolean;
+	/** サンドボックスの内側と証明できているか (緩和が効く)。env の自己申告ではなく、カナリアの結果を渡す */
 	boundary: boolean;
+	/** サンドボックスが開けた場所。boundary のときの、作業ツリーの外の判定に使う */
+	allowed?: { read: string[]; write: string[] };
 };
 
 export function createCallDecider(o: CallDeciderOptions): (tool: string, input: unknown, cwd: string) => Decision {
@@ -44,6 +47,7 @@ export function createCallDecider(o: CallDeciderOptions): (tool: string, input: 
 			role: o.role,
 			bypass: o.bypass,
 			boundary: o.boundary,
+			...(o.boundary && o.allowed ? { allowed: o.allowed } : {}),
 		};
 		// judge() は例外を投げず、異常は source: error の deny にする。念のため形も確かめる
 		try {

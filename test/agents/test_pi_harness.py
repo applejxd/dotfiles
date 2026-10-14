@@ -40,6 +40,7 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
     shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
     shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
+    shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
     guide = tmp_path / ".config" / "opencode" / "guide-plugin"
     guide.mkdir(parents=True)
     shutil.copy2(COMMIT_MESSAGE_SRC, guide / "commit-message.js")
@@ -120,6 +121,63 @@ def test_bypass_runs_ask_but_not_deny(env):
     assert (env["proj"] / "made-by-pi").exists()
     proc = run_pi(env, bash_call("git push"), PI_HARNESS_BYPASS="1")
     assert "isError=true" in proc.stdout
+
+
+# ─── サンドボックスのゲート (カナリアで実測できたときだけ緩和する) ───────────────
+
+
+def _boundary_env(env, *, read=None, write=None, allowed=True):
+    """サンドボックスの内側のつもりの環境変数。カナリアの既定は「読めない・書けない」(存在しない場所)。"""
+    tmp = env["tmp"]
+    out = {
+        "PI_HARNESS_BOUNDARY": "1",
+        "PI_HARNESS_CANARY_READ": str(read or tmp / "hidden" / "canary-read"),
+        "PI_HARNESS_CANARY_WRITE": str(write or tmp / "hidden" / "canary-write"),
+    }
+    if allowed:
+        root = str(env["proj"])
+        out["PI_HARNESS_ALLOWED"] = json.dumps({"read": [root], "write": [root]})
+    return out
+
+
+def test_boundary_expected_but_canary_readable_refuses_to_start(env):
+    readable = env["tmp"] / "readable"
+    readable.write_text("secret", encoding="utf-8")
+    proc = run_pi(env, bash_call("touch made-by-pi"), **_boundary_env(env, read=readable))
+    assert proc.returncode != 0 and "サンドボックスを確認できない" in proc.stdout + proc.stderr
+    assert not (env["proj"] / "made-by-pi").exists()
+
+
+def test_boundary_expected_but_canary_writable_refuses_to_start(env):
+    writable = env["tmp"] / "writable"
+    proc = run_pi(env, [], **_boundary_env(env, write=writable))
+    assert proc.returncode != 0 and "サンドボックスを確認できない" in proc.stdout + proc.stderr
+    assert not writable.exists(), "カナリアの書き込みの跡を残している"
+    existing = env["tmp"] / "existing"
+    existing.write_text("x", encoding="utf-8")
+    proc = run_pi(env, [], **_boundary_env(env, write=existing))
+    assert proc.returncode != 0, "既にあるパスへの書き込みの失敗は、拒否の証明にならない"
+
+
+def test_boundary_env_alone_never_relaxes(env):
+    # 一覧・カナリアの場所が無い自己申告だけでは、起動しない (緩和もしない)
+    proc = run_pi(env, bash_call("touch made-by-pi"), PI_HARNESS_BOUNDARY="1")
+    assert proc.returncode != 0 and not (env["proj"] / "made-by-pi").exists()
+    proc = run_pi(env, bash_call("touch made-by-pi"), **_boundary_env(env, allowed=False))
+    assert proc.returncode != 0 and not (env["proj"] / "made-by-pi").exists()
+
+
+def test_proven_boundary_drops_the_plain_shell_ask_and_explains_outside_access(env):
+    proven = _boundary_env(env)
+    proc = run_pi(env, bash_call("touch made-by-pi"), **proven)
+    assert proc.returncode == 0, proc.stderr
+    assert (env["proj"] / "made-by-pi").exists(), "証明できたのに日常の shell を確認した"
+    # 規則に当たる deny は変わらない
+    proc = run_pi(env, bash_call("git push"), **proven)
+    assert "isError=true :: `git push` は deny" in proc.stdout
+    # 許可の外は、確認ではなく理由つきの deny
+    proc = run_pi(env, [{"name": "guarded_read", "args": {"path": "/etc/hostname"}}], **proven)
+    assert "サンドボックスの外" in proc.stdout, proc.stdout + proc.stderr
 
 
 def test_reader_role_does_not_see_bash(env):
@@ -314,7 +372,9 @@ def pis_env(env, tmp_path):
 
 def run_pis(pis_env, *pis_args, calls=(), **env_extra):
     faux = str(FIXTURES / "faux.ts")
-    args = [str(PIS), *pis_args, "--model", "faux/spike", "-e", faux, "-p", "go"]
+    # 標準はサンドボックスの中。この試験は素の起動 (フルガードだけ) を見るので --no-sandbox を付ける
+    sandbox = () if "--boundary" in pis_args else ("--no-sandbox",)
+    args = [str(PIS), *sandbox, *pis_args, "--model", "faux/spike", "-e", faux, "-p", "go"]
     return subprocess.run(
         [sys.executable, *args],
         cwd=pis_env["proj"],
@@ -571,8 +631,9 @@ def _orca_extension(pis_env, probe, marker=True):
 
 def _run_pis_probe(pis_env, **env_extra):
     faux = str(FIXTURES / "faux.ts")
+    probe = ["-p", "/orca-probe"]
     return subprocess.run(
-        [sys.executable, str(PIS), "--model", "faux/spike", "-e", faux, "-p", "/orca-probe"],
+        [sys.executable, str(PIS), "--no-sandbox", "--model", "faux/spike", "-e", faux, *probe],
         cwd=pis_env["proj"],
         env={**pis_env["env"], "FAUX_TOOL_CALLS": "[]", **env_extra},
         capture_output=True,

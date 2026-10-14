@@ -6,11 +6,14 @@ see docs/spec/opencode-sandbox.md#境界チェック
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
-from .common import HOME, die
+from .common import HOME, STATE, die
 
 CHECK = HOME / ".local/bin/ocs-boundary-check"
 # 境界チェックで「読めない」ことを確かめる対象。HOME 相対と WSL の Windows 側。
@@ -129,6 +132,67 @@ def _may_be_allowed(host: str, allowed: list[str]) -> bool:
         elif host == p:
             return True
     return False
+
+
+# 事前検査の合格の記憶。設定・Fence の版・検査スクリプトのどれかが変わると鍵が変わり、再検査する
+PREFLIGHT_DIR = STATE / "preflight"
+PREFLIGHT_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
+
+
+def preflight_key(runtime: Path, project: dict, volatile: list[str]) -> str:
+    """事前検査の鍵。起動ごとに変わるパス (``volatile``) は固定の記号に置き換えて数える。"""
+    try:
+        version = subprocess.run(
+            [str(runtime), "--version"], capture_output=True, text=True, timeout=15, check=False
+        ).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        version = ""
+    try:
+        script = hashlib.sha256(CHECK.read_bytes()).hexdigest()
+    except OSError:
+        script = ""
+    config = json.dumps(project["config"], sort_keys=True)
+    for index, path in enumerate(volatile):
+        config = config.replace(path, f"<volatile-{index}>")
+    payload = json.dumps(
+        {"config": config, "workspace": project["workspace"], "fence": version, "check": script}
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def preflight(
+    runtime: Path, boundary: str, project: dict, env: dict, tmpdir: Path, volatile: list[str]
+) -> int:
+    """事前検査。同じ設定・Fence・検査スクリプトで合格した記憶があれば、再検査しない。
+
+    ★合格だけを覚える (不合格や時間切れは覚えない)。記憶は一定期間で捨てる (環境の変化に備える)。
+    """
+    marker = PREFLIGHT_DIR / preflight_key(runtime, project, volatile)
+    try:
+        if time.time() - marker.stat().st_mtime < PREFLIGHT_MAX_AGE_SECONDS:
+            return 0
+    except OSError:
+        pass
+    code = run_check(runtime, boundary, project, env, tmpdir)
+    if code == 0:
+        try:
+            PREFLIGHT_DIR.mkdir(parents=True, exist_ok=True)
+            os.chmod(PREFLIGHT_DIR, 0o700)
+            marker.write_text("ok\n", encoding="utf-8")
+            _prune_preflight()
+        except OSError:
+            pass  # 覚えられなくても起動は妨げない (次回また検査する)
+    return code
+
+
+def _prune_preflight() -> None:
+    cutoff = time.time() - PREFLIGHT_MAX_AGE_SECONDS
+    for path in PREFLIGHT_DIR.glob("*"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            pass
 
 
 def run_check(

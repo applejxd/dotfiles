@@ -79,3 +79,88 @@ def test_ts_bashrules_parts_match_the_python_golden():
     )
     assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-1000:]
     assert "heredoc" in proc.stdout and "commands" in proc.stdout
+
+
+# ─── サンドボックスの内側 (boundary / allowed) の緩和 ─────────────────────
+
+
+def _judge(requests):
+    import json
+
+    proc = subprocess.run(
+        [_node(), str(ROOT / "test" / "agents" / "pi" / "judge_boundary.mjs")],
+        input=json.dumps({"requests": requests}),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=ROOT,
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    return json.loads(proc.stdout)
+
+
+def _req(tool, input_, **extra):
+    return {"tool": tool, "input": input_, "cwd": "/work/proj", "role": "implementer", **extra}
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_boundary_only_drops_the_default_ask_of_plain_shell_commands():
+    out = _judge(
+        [
+            _req("bash", {"command": "touch made-by-pi"}),
+            _req("bash", {"command": "touch made-by-pi"}, boundary=True),
+            # 規則に当たる ask・deny・誘導は、サンドボックスの中でも変わらない
+            _req("bash", {"command": "git commit -m x"}, boundary=True),
+            _req("bash", {"command": "git push"}, boundary=True),
+            _req("bash", {"command": "rm -rf ."}, boundary=True),
+            _req("bash", {"command": "cat README.md"}, boundary=True),
+        ]
+    )
+    assert (out[0]["decision"], out[0]["source"]) == ("ask", "default")
+    assert out[1]["decision"] == "allow" and out[1]["sandboxed"] is True
+    assert out[2]["decision"] == "ask"
+    assert out[3]["decision"] == "deny" and out[4]["decision"] == "deny"
+    assert out[5]["decision"] == "deny" and out[5].get("guide")
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_boundary_file_access_outside_the_worktree_follows_what_the_os_opened():
+    allowed = {"read": ["/opt/ok"], "write": ["/opt/w"]}
+    out = _judge(
+        [
+            _req("read", {"path": "/opt/ok/f"}, boundary=True, allowed=allowed),
+            _req("read", {"path": "/opt/w/f"}, boundary=True, allowed=allowed),
+            _req("read", {"path": "/opt/other/f"}, boundary=True, allowed=allowed),
+            _req("write", {"path": "/opt/w/f", "content": "x"}, boundary=True, allowed=allowed),
+            _req("write", {"path": "/opt/ok/f", "content": "x"}, boundary=True, allowed=allowed),
+            # 許可の一覧が無い・サンドボックスと証明されていないときは、基準 (確認) のまま
+            _req("read", {"path": "/opt/other/f"}, boundary=True),
+            _req("read", {"path": "/opt/ok/f"}, boundary=False, allowed=allowed),
+            _req("write", {"path": "/opt/w/f", "content": "x"}, allowed=allowed),
+        ]
+    )
+    assert [r["decision"] for r in out] == [
+        "allow", "allow", "deny", "allow", "deny", "ask", "ask", "ask",
+    ]
+    assert "サンドボックスの外" in out[2]["reason"] and "サンドボックスの外" in out[4]["reason"]
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_boundary_never_relaxes_the_common_denies_or_a_broken_request():
+    import os
+
+    ssh = os.path.expanduser("~/.ssh/id_rsa")
+    allowed = {"read": [os.path.expanduser("~")], "write": [os.path.expanduser("~")]}
+    out = _judge(
+        [
+            _req("read", {"path": ssh}, boundary=True, allowed=allowed),
+            _req("bash", {"command": "cat ~/.ssh/id_rsa"}, boundary=True, allowed=allowed),
+            _req("read", {"path": "/opt/ok/f"}, boundary=True, allowed={"read": "x", "write": []}),
+            _req("bash", {"command": "ls"}, boundary="yes"),
+        ]
+    )
+    assert out[0]["decision"] == "deny" and out[1]["decision"] == "deny"
+    assert out[2]["decision"] == "deny" and out[2]["source"] == "error"
+    assert out[3]["decision"] == "deny" and out[3]["source"] == "error"
