@@ -109,6 +109,10 @@ def prepare_agent_dir(real: Path | None = None, home: Path | None = None) -> Pat
         source = real / name
         if source.is_dir():
             shutil.copytree(source, agent / name, symlinks=True)
+    # pi は <agent 置き場>/bin の fd・rg を探し、無ければダウンロードする。
+    # 起動ごとの置き場では毎回見つからないので、本物の bin (読み取りだけ許可済み) を指すリンクにする
+    if (real / "bin").is_dir():
+        (agent / "bin").symlink_to(real / "bin")
     for name in FROZEN_FILES:
         if not (agent / name).exists():
             (agent / name).write_text("" if name.endswith(".md") else "{}\n", encoding="utf-8")

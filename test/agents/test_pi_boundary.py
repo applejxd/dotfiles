@@ -131,6 +131,13 @@ def test_agent_dir_carries_the_instructions_keybindings_and_prompts(tmp_path):
     assert (agent / "prompts" / "fleet.md").read_text(encoding="utf-8") == "fleet"
     for name in ("AGENTS.md", "keybindings.json", "prompts"):
         assert str(agent / name) in pi.frozen_paths(agent)
+    # fd・rg は本物の bin を指すリンク (毎回ダウンロードさせない)。本物に bin が無ければ作らない
+    assert (agent / "bin").is_symlink() is False
+    (real / "bin").mkdir()
+    (real / "bin" / "fd").write_text("fd", encoding="utf-8")
+    linked = pi.prepare_agent_dir(real, tmp_path / "home3")
+    assert (linked / "bin").is_symlink()
+    assert (linked / "bin" / "fd").read_text(encoding="utf-8") == "fd"
     # 本物に無いときも、書き込みを塞ぐ場所が空で在る (denyWrite は無いパスに効かない)
     bare = pi.prepare_agent_dir(tmp_path / "none", tmp_path / "home2")
     assert (bare / "AGENTS.md").read_text(encoding="utf-8") == ""
