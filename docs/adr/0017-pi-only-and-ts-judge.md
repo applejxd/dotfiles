@@ -55,10 +55,29 @@
 | ハーネスを Windows へ移植 | 判定器が TS になれば壁は減るが、境界が無い残余リスクは残る。需要が増えたら再検討する |
 | Windows でも pi 全体を隔離（Windows Sandbox・Hyper-V・専用ユーザー） | 使える手段はあるが、永続性・使い勝手・ライセンスのどれかを諦める。必要な用途が出たら個別に決める |
 
+### スキルのスクリプト（`.py` / `.sh`）の言語
+
+| 選択肢 | 評価 |
+| --- | --- |
+| **Python / bash のまま（採用）** | chezmoi の `modify_*.py.tmpl`・`generate.py`・テスト・pre-commit・`uv` の単一ファイルが Python なので、スキルを TS にしても Python 依存は消えない。書き換えの費用と回帰（許可規則 `[pi.skill_scripts]` が `python3 …` の形に固定されている）に見合わない |
+| TS へ一括で移す | 得るものが無い。一括では行わない |
+| 個別に TS 化 | 次のどれかが出たときだけ検討する。① TS のコード（判定器・伏字化）を共有したい ② Windows で Python なしに動かしたい ③ 起動の速さが問題になる。直すとき `[pi.skill_scripts]` の許可と `runners` を一緒に変える。`node script.ts` は型除去（node 22.18 以上）に依る |
+
+### Claude / Copilot から TS の判定器を呼ぶ道（作らない）
+
+Claude Code と Copilot CLI の hook は、外部コマンドに標準入力で JSON を渡し、標準出力の JSON を読む形式で、コマンドの言語は問われない。
+そのため **原理的には**、`node <判定器を呼ぶ薄い CLI>.ts` を hook に登録すれば、TS の判定器をそのまま使える
+（`check_bash.py` と `agent_compat.py` が担う「入力 JSON → 判定 → 出力 JSON」の変換だけを TS で書く）。
+
+- **作らない**。Claude / Copilot は保守の対象外で、hook の登録も撤去した（上の決定 1）
+- 必要が出たら、薄い CLI を 1 本足す。条件は ① node 22.18 以上 ② 型除去の警告を出さない（`NODE_NO_WARNINGS=1` か `--disable-warning=ExperimentalWarning`。
+  hook の stderr を汚さない）③ 判定の設定は `rules.json` の `judge`（`common.toml` の `[bash]` / `[file]` / `[pi]` と `tables.toml` を JSON にしたもの）を読む
+- **未検証**: hook の仕様に基づく見立てで、実際に Claude / Copilot から TS の hook を動かしてはいない。作るときは、まず小さな試験で確かめる
+
 ## 結果
 
 - **得るもの**: 保守の対象が減る（OpenCode の plugin・生成、Claude / Copilot の判定の共有）。判定が速く単純になり、Windows の壁が減る
 - **払うもの**: 単一のツール（pi）への依存。pi は 1.x で若く、ハーネスが内部の挙動 4 点に頼る（[CHG-0020](../change/0020-pi-migration.md) の「引き継ぐ前提」）。
   版の固定と、更新のときの試験で抑える。移植の工数（約 5,600 行、数日規模）
 - **進め方**: [仕様: TS 版への移植](../spec/pi-decide.md#ts-版への移植)。層ごとに正解データとの一致で進捗を測る
-- **見直す条件**: pi が止まる・方針が大きく変わる、移植が全件一致に届かない、Windows でガード付きで使う需要が増える
+- **見直す条件**: pi が止まる・方針が大きく変わる、移植が全件一致に届かない、Windows でガード付きで使う需要が増える、Claude / Copilot を再び使う（TS の判定器を呼ぶ薄い CLI を足す。上の選択肢）
