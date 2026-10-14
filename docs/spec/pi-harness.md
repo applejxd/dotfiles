@@ -92,7 +92,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - 計画中は shell が無いので、`git log` などの調査もできない。必要なら `/plan` を終えて調べる
 - `pis --boundary` は起動を `ocs` に任せるので、この拡張を足していない（未対応）
 - `activity` の実測（Linux、偽の pi API でツールを直接動かした）: `bg_run` で ID を返し、`🤖 2 subagents / ⚙️ 1 jobs` が出る。`bg_log` が出力の末尾を返し、`bg_kill` でジョブが消えて通知が出て、子もジョブも 0 になると表示が消える。**未確認**: 実機の TUI でのフッター表示、ハーネス（`pis`）の下での `bg_run` の確認（拡張のツールなので既定で確認になる想定だが未実測）、Windows の `taskkill` での停止
-- **ハーネス（`pis`）の下では、`bg_run` のコマンドを bash と同じ判定（`decide`）に通す**。deny は止め（bypass でも外れない）、ask は確認画面を出し（画面に「バックグラウンドで実行」と出る）、役割の `shell_deny` / `shell_allow` と誘導も効く。役割が `bash` を持たなければ `bg_run` も使えない。`bg_log` / `bg_kill` はジョブの確認と停止だけなので、`bash` を持つ役割には allow。素の `pi` には判定の仕組みが無く、`bg_run` は判定なしで動く
+- **ハーネス（`pis`）の下では、`bg_run` のコマンドを bash と同じ判定（`decide`）に通す**。deny は止め（bypass でも外れない）、ask は確認画面を出し（画面に「バックグラウンドで実行」と出る）、役割の `shell_deny` / `shell_allow` と誘導も効く。役割が `bash` を持たなければ `bg_run` も使えない。`bg_log` / `bg_kill` はジョブの確認と停止だけなので、`bash` を持つ役割には allow。素の `pi` では、Unix ではガードが同じ判定を掛ける（Windows は判定なしで動く）
 - `btw` は `ctx.modelRegistry.complete()` で別に 1 回呼ぶので、そのぶんのトークンは消費する（セッションの合計には入らない）
 - 実測: `btw` は print モードで、直前の会話の内容（合言葉）を踏まえて答え、セッションファイルの行数が増えないことを確認した（オーバーレイ表示は TUI でしか出ず未確認）。Git Bash では `/btw` が `C:/Program Files/Git/btw` に変換されるので、試すときは `MSYS_NO_PATHCONV=1`
 - 実測: `todo` は実際のモデル（`claude-sonnet-5.5`）で add / toggle / list が通った。`plan` は読み込みまで（切り替えと確認画面は TUI でしか動かず、未確認）
@@ -251,7 +251,7 @@ ask の確認は出さない。応える人が居ない Orca・Zed でも止ま�
 | 設定 | ハーネスと同じ `~/.config/pi/harness/rules.json` の `judge` と `judge/`（`common.toml` を編集して `chezmoi apply` すれば効く） |
 | 読めないとき | 対象のツールを**止める**（理由に「ガードの設定を読めない」）。黙って素通しにはしない |
 | 伏字化 | ハーネスと同じ `redact.ts`（`rules.json` の `redact`）を `tool_result` で掛ける。`bash` と、他の拡張・MCP のツールの結果が対象。`content`・`structuredContent`・`details` と、長い出力の退避ファイルを伏せる。`read` `edit` `write` `grep` `find` `ls` は伏せない（伏せた本文を元に edit されると、ファイルへ伏字が書き込まれる） |
-| 保護パスを参照するコマンド | `bash` のコマンドが保護対象のパス（`[file] read_deny_globs` から作る）を参照していれば、**実行しない**（ハーネスは実行して出力を伏せる。ガードは実行前に止められるので止める） |
+| 保護パスを参照するコマンド | `bash` のコマンドが保護対象のパス（`[file] read_deny_globs` から作る）を参照していれば、**実行しない**（`pis` も実行せず、出力を伏せた結果を返す。ガードは `tool_call` で止める＝エラーで返る。どちらもコマンドは動かない） |
 | 伏字化の設定を読めないとき | 対象のツールの結果を出さない（「伏字化に失敗」） |
 | `pis` | `-ne` で拡張が外れるので、二重にならない |
 | `git commit` | ask なので通す。確認は `commit-confirm` が出す |
@@ -262,6 +262,14 @@ ask の確認は出さない。応える人が居ない Orca・Zed でも止ま�
 deny は承認で外せないので、誤検知はその場で回避できない。Orca・Zed で観察して規則を直す。
 
 - Unix だけ。ハーネスの `judge/` と `rules.json` に依るので、Windows には配らない（`.chezmoiignore`・`[pi.settings]` の `extensions` を OS で分けている）。Windows 版はパスの扱い（`C:\…`）を確かめてから
+- **保証しないこと**（レビューで挙がった範囲を明示する）:
+  - 秘密の保護は**パス判定（`[file] read_deny_globs`）と既知の形の伏字化**に依る。`read` の結果は伏せないので、保護パスに無いファイルの中の秘密はモデルへ渡る。ディレクトリを渡す `grep` / `find` / `ls` は、返ったファイルごとには再検査しない（保護対象を内包するディレクトリでの実挙動は未確認）
+  - 素の `pi` は **ask をすべて無確認で通す**。deny の抜けだけでなく、意図して ask にした操作（`rm`・`git clean`・外部への変更・作業ツリー外への書き込みなど）も無人で通る
+  - `bg_run` は事前のコマンド判定が bash と同じだが、**実行は拡張の `execute()`**（`pis` の `guarded_bash` の最終判定・途中経過の伏字化は掛からない）。
+    ログは平文でファイルに書かれ、`bg_log` で返すときだけ伏字化する。ログのパスは `read_deny_globs`（`**/pi-jobs/**`）で `read` から守る
+  - ツールは 3 群に分かれる: ① ハーネス所有（`guarded_*`。事前・最終の判定と出力の伏字化）、② 素の `pi` のガードが判定する組み込みと `bg_*`
+    （事前の判定と、`bash` の結果の伏字化）、③ 他の拡張・MCP（`pis` は `tool_call` の判定と結果の伏字化。素の `pi` は結果の伏字化だけ）。拡張の読み込み時のコードはどの群も囲えない
+  - fail-closed が働くのは**ガードが読み込まれた後**。ガードの拡張が読み込まれなかったことは検知しない
 - 役割の既定（`[pi] default_role`）は `pis` と共有する。`pis` だけ `--role` / `PI_HARNESS_ROLE` で上書きできる。ガードは、役割の `tools` に無いツールを隠せない（deny を返すだけで、ツールの宣言は残る）
 - 試験: `test_pi_guard.py`（本物の pi と偽のモデル。deny が止まる・ask が通る・他の拡張は対象外・設定が壊れていれば止まる・出力と退避ファイルの伏字化・read は伏せない）
 
@@ -362,7 +370,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | 判定器の異常 | 設定が壊れて判定に失敗した・形の正しくない応答は deny（判定器は同じプロセスで動き、プロセスの起動に失敗することは無い） | 空の応答を allow と読まない |
 | 確認 | 1 件ずつ順に出す | TUI の確認画面は 1 枠を共有し、後の確認が先の確認を置き換える。codemode の中で並べた呼び出しで、先の確認が永久に止まった（E3） |
 | 伏字化 | `guarded_bash` の `execute()` の中で、途中経過・最終結果・長い出力の退避ファイルを伏せる。伏せるのは `content`・`structuredContent`・`details`。ハーネスが持たないツール（MCP など）は `tool_result` で、例外を投げずに結果ごと差し替える | `details` はモデルへ送られないが、セッションと画面に残る（`details.truncation.content` に生の出力。E3）。`tool_result` の例外は無視されて生の結果が残る |
-| 出力ごと伏せる | 保護対象のパス（`[file] read_deny_globs` から作る）を参照したコマンドは、出力を全部伏せる | OpenCode の guide plugin と同じ（[shell 出力の伏字化](agent-config-generation.md#shell-出力の伏字化)） |
+| 出力ごと伏せる | 保護対象のパス（`[file] read_deny_globs` から作る）を参照したコマンドは、**実行せず**、出力を全部伏せた結果を返す | OpenCode の guide plugin と同じ（[shell 出力の伏字化](agent-config-generation.md#shell-出力の伏字化)） |
 | read などは伏せない | `guarded_read` などの結果には伏字化を掛けない | 伏せた本文を元に edit されると、ファイルへ伏字が書き込まれる |
 | 圧縮 | `session_before_compact` で、`guarded_read` / `guarded_edit` / `guarded_write` が触ったファイルを圧縮のファイルの一覧に足す | pi の既定の圧縮は `read` / `edit` / `write` の名前でしか拾わない（E2） |
 | シェルの環境変数 | `[agent_env]` を、未設定のときだけ bash の環境へ入れる | git の入力待ちを防ぐ（[shell ツールの環境変数](agent-config-generation.md#shell-ツールの環境変数)） |

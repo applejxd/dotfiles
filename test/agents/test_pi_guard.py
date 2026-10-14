@@ -275,3 +275,12 @@ def test_the_generator_rejects_a_default_role_that_is_not_a_profile():
     common["pi"]["default_role"] = "nobody"
     with pytest.raises(SystemExit, match="default_role"):
         gen.build_pi_harness({}, common)
+
+
+def test_background_job_logs_cannot_be_read_with_the_read_tool(env):
+    """ログには生の出力が入る。read は伏字化しないので、読むのは伏字化する bg_log だけにする。"""
+    log = env["tmp"] / "pi-jobs" / "1-j1.log"
+    log.parent.mkdir()
+    log.write_text("raw output" + chr(10), encoding="utf-8")
+    proc = run_pi(env, [{"name": "read", "args": {"path": str(log)}}])
+    assert "isError=true" in proc.stdout and "read_deny_globs" in proc.stdout, proc.stdout

@@ -49,6 +49,17 @@ def test_golden_matches_the_python_judge_on_a_sample():
     )
 
 
+def test_common_json_is_up_to_date():
+    """TS 版が読む設定 (common.json) が、描画した common.toml と一致する。
+
+    古いまま差分試験を回すと、設定を変えたのに TS 版は古い設定で通ってしまう。
+    """
+    exporter = _exporter()
+    assert exporter.COMMON_OUT.read_text(encoding="utf-8") == exporter.common_json(), (
+        "設定の正解データが古い。`python scripts/agents/export_decide_golden.py` で書き出し直す"
+    )
+
+
 def test_golden_covers_every_decision_and_source():
     pairs = set()
     for line in GOLDEN.read_text(encoding="utf-8").splitlines():
