@@ -68,9 +68,18 @@ def is_secret_env(name: str) -> bool:
     return SECRET_ENV.search(name) is not None
 
 
+def pi_binary() -> Path:
+    """pi の実体。インストーラーが作る場所は PATH で変わるので、順に探す。"""
+    for path in (PI, HOME / ".local/bin/pi", REAL_AGENT / "bin/pi"):
+        if path.is_file():
+            return path
+    found = shutil.which("pi")
+    return Path(found) if found else PI
+
+
 def check_installed() -> None:
     for path, hint in (
-        (PI, "pi を入れる (chezmoi apply)"),
+        (pi_binary(), "pi を入れる (公式インストーラー。~/bin か ~/.local/bin に pi が要る)"),
         (HARNESS / "index.ts", "chezmoi apply でフルガードを配る"),
         (RULES, "chezmoi apply でフルガードを配る"),
     ):
@@ -201,7 +210,7 @@ def inner_command(passthrough: list[str], path: str, sessions: Path) -> list[str
         f"PATH={path}",
         "TMPDIR=/tmp",
         f"XDG_STATE_HOME={INNER_STATE}",
-        str(PI),
+        str(pi_binary()),
         *BASE_FLAGS,
         *extension_args(),
         "-e",
