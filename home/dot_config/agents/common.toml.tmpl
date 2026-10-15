@@ -1045,14 +1045,9 @@ message = "ヒアドキュメントでスクリプトを渡さないでくださ
 [pi.settings]
 defaultThinkingLevel = "medium"
 skills = ["~/.claude/skills"]
-# 素の pi (Orca・Zed・Windows) 向けの補助。pis は -ne で外れる。
+# 素の pi (Windows・Orca の起動ボタンなど) 向けの補助。pis は -ne で外れる。ガードは付けない (CHG-0023 段 3f)。
 # commit-confirm: see docs/spec/pi-guard.md#commit-の確認-素の-pi
-# guard (deny だけを止める判定器): see docs/spec/pi-guard.md#簡易ガード。フルガードの判定器を使うので Unix だけ
-{{- if and (hasKey .chezmoi "os") (ne .chezmoi.os "windows") }}
-extensions = ["~/.config/pi/commit-confirm", "~/.config/pi/guard"]
-{{- else }}
 extensions = ["~/.config/pi/commit-confirm"]
-{{- end }}
 
 # pi が実際に受け付けるモデルは OpenCode の階層の表と違うことがある。ここにある階層だけ上書きする。
 # ★gpt-6-astra は pi の Copilot 経由で model_not_supported (2026-10 実測)。

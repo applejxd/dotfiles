@@ -1185,8 +1185,7 @@
   "settings": {
    "defaultThinkingLevel": "medium",
    "extensions": [
-    "~/.config/pi/commit-confirm",
-    "~/.config/pi/guard"
+    "~/.config/pi/commit-confirm"
    ],
    "skills": [
     "~/.claude/skills"

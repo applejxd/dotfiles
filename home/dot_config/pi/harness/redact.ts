@@ -1,4 +1,4 @@
-// 伏字化 (フルガードと、簡易ガードが共有する)。
+// 伏字化 (フルガードが使う)。
 //
 // 設定は rules.json の `redact` (common.toml の [pi.redact] から生成)。
 // - redactText / redactValue / redactResult: 内容の形で伏せる (秘密鍵・トークンなど)
@@ -6,7 +6,7 @@
 // - withheld: 出力ごと伏せたときの結果
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-guard.md#伏字化
+// see docs/spec/pi-guard.md#しくみ
 
 export type RedactConfig = {
 	rule: { name: string; pattern: string }[];

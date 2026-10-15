@@ -54,7 +54,7 @@ if (BOUNDARY_ENV) {
 	BOUNDARY = true;
 }
 
-// 伏字化 (redact.ts。簡易ガードと共有)
+// 伏字化 (redact.ts)
 const { redactText, redactResult, deniedPathIn, withheld } = createRedactor(rules.redact);
 
 // ─── 確認画面の補助 ─────────────────────────────────────────────────

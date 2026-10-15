@@ -1857,7 +1857,7 @@ def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
 
 
 def pi_default_role(common: dict[str, Any]) -> str:
-    """``[pi] default_role``。pis の既定の役割で、簡易ガードの固定の役割。
+    """``[pi] default_role``。pis の既定の役割。
 
     ``[pi.profiles]`` に無い名前なら生成を止める (判定器は未知の役割を deny するので、
     ここで止めないと全部のツールが止まる)。

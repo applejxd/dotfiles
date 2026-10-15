@@ -7,8 +7,8 @@ OpenCode のガード（permission の生成・guide plugin）の後継で、移
 
 > **位置づけ**: フルガードは `pis` で起動したときだけ効く。**Orca と Zed が呼ぶ素の `pi` は、フルガード無しで動く**
 > （利用者の判断。保護が要る作業は `pis` で起動する。標準でサンドボックスの中）。`pis` は利用者が自分で起動するとき用で、
-> 優先度は低い（[CHG-0020](../change/0020-pi-migration.md)）。素の `pi` にも、**deny だけを止める判定器**
-> （[簡易ガード](#簡易ガード)。Unix のみ）が付く。
+> 優先度は低い（[CHG-0020](../change/0020-pi-migration.md)）。素の `pi` には**ガードを付けない**（簡易ガードは廃止。CHG-0023 の段 3f）。
+> 付くのは `git push` の拒否と `git commit` の確認だけ（[commit の確認](#commit-の確認-素の-pi)）。
 
 ## 用語
 
@@ -20,7 +20,7 @@ pi に足す判定の層、および起動の形を、次のように呼び分�
 | --- | --- | --- |
 | ガード | ツール呼び出しを判定し、allow / ask / deny に振り分ける層 | ハーネス（拡張の意味のとき） |
 | フルガード | `pis` で効く、役割・確認（ask）・伏字化まで含むガード（`~/.config/pi/harness`） | ハーネス |
-| 簡易ガード | 素の `pi` に付く、deny と伏字化だけのガード（`~/.config/pi/guard`） | 素の pi のガード |
+| 簡易ガード（廃止） | 素の `pi` に付いていた、deny と伏字化だけのガード。段 3f で廃止した | 素の pi のガード |
 | サンドボックス | Fence による OS レベルの隔離（`pis` の標準）。ガードとは別の層 | 境界 |
 
 コードの識別子（`PI_HARNESS_*`・`~/.config/pi/harness`・`test_pi_harness*.py`・`--boundary`（互換の別名））は旧称のまま変えない。
@@ -258,41 +258,6 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
   （`!` は除外より先に効く。実物の `chezmoi` で確かめた）。Windows 実機は未検証
 - 試験: `test_pi_commit_parse.py`（解釈・表示・退避。node で直接）、`test_pi_commit_confirm.py`
   （pi + 偽のモデル。RPC・非対話・TMUX の TUI）
-
-### 簡易ガード
-
-素の `pi` にも、フルガードと同じ判定器で **deny だけ**を止め、結果を**伏字化**する小さな拡張 `~/.config/pi/guard` を付ける（`settings.json` の `extensions`）。
-ask の確認は出さない。応える人が居ない Orca・Zed でも止まらず、`rm -rf ~`・秘密ファイルの読み取り・`git push`・
-誘導（`cat` / `head` / `tail` は read ツールへ）が効く。
-
-| 項目 | 内容 |
-| --- | --- |
-| 判定 | フルガードと同じ `judge/`（`call.ts` の `createCallDecider`）。`bypass: true`（ask を allow にする。deny と誘導は効く）。役割は `[pi] default_role`（既定 `implementer`）で**固定**し、実行時には切り替えない（環境変数も効かない）。`[pi.profiles]` に無い名前なら読み込みに失敗し、対象のツールを止める |
-| 対象のツール | `bash` `read` `edit` `write` `grep` `find` `ls` と、`bg_run` / `bg_log` / `bg_kill`。他の拡張・MCP のツールは対象外（判定器は役割に無いツールを deny するので、そのまま通すと拡張が動かなくなる） |
-| 設定 | フルガードと同じ `~/.config/pi/harness/rules.json` の `judge` と `judge/`（`common.toml` を編集して `chezmoi apply` すれば効く） |
-| 読めないとき | 対象のツールを**止める**（理由に「ガードの設定を読めない」）。黙って素通しにはしない |
-| 伏字化 | フルガードと同じ `redact.ts`（`rules.json` の `redact`）を `tool_result` で掛ける。`bash` と、他の拡張・MCP のツールの結果が対象。`content`・`structuredContent`・`details` と、長い出力の退避ファイルを伏せる。`read` `edit` `write` `grep` `find` `ls` は伏せない（伏せた本文を元に edit されると、ファイルへ伏字が書き込まれる） |
-| 保護パスを参照するコマンド | `bash` のコマンドが保護対象のパス（`[file] read_deny_globs` から作る）を参照していれば、**実行しない**（`pis` も実行せず、出力を伏せた結果を返す。ガードは `tool_call` で止める＝エラーで返る。どちらもコマンドは動かない） |
-| 伏字化の設定を読めないとき | 対象のツールの結果を出さない（「伏字化に失敗」） |
-| `pis` | `-ne` で拡張が外れるので、二重にならない |
-| `git commit` | ask なので通す。確認は `commit-confirm` が出す |
-
-**保護ではなくガードレール**: `tool_call` だけで判定し、`execute()` の最終判定は無い（別の拡張が入力を書き換えても止められない）。
-拡張の読み込み時の処理と、利用者が手で打つ `!cmd` は囲えない。**実行中の途中経過（`tool_execution_update`）は伏せられない**
-（フルガードは `execute()` を包んで伏せるが、簡易ガードは結果の `tool_result` だけを伏せる。モデルへ渡る結果と、最終のイベント・退避ファイルは伏せる）。規則に無い操作は通る（deny の抜けがそのまま露出する）。
-deny は承認で外せないので、誤検知はその場で回避できない。Orca・Zed で観察して規則を直す。
-
-- Unix だけ。フルガードの `judge/` と `rules.json` に依るので、Windows には配らない（`.chezmoiignore`・`[pi.settings]` の `extensions` を OS で分けている）。Windows 版はパスの扱い（`C:\…`）を確かめてから
-- **保証しないこと**（レビューで挙がった範囲を明示する）:
-  - 秘密の保護は**パス判定（`[file] read_deny_globs`）と既知の形の伏字化**に依る。`read` の結果は伏せないので、保護パスに無いファイルの中の秘密はモデルへ渡る。ディレクトリを渡す `grep` / `find` / `ls` は、返ったファイルごとには再検査しない（保護対象を内包するディレクトリでの実挙動は未確認）
-  - 素の `pi` は **ask をすべて無確認で通す**。deny の抜けだけでなく、意図して ask にした操作（`rm`・`git clean`・外部への変更・作業ツリー外への書き込みなど）も無人で通る
-  - `bg_run` は事前のコマンド判定が bash と同じだが、**実行は拡張の `execute()`**（`pis` の `guarded_bash` の最終判定・途中経過の伏字化は掛からない）。
-    ログは平文でファイルに書かれ、`bg_log` で返すときだけ伏字化する。ログのパスは `read_deny_globs`（`**/pi-jobs/**`）で `read` から守る
-  - ツールは 3 群に分かれる: ① フルガード所有（`guarded_*`。事前・最終の判定と出力の伏字化）、② 簡易ガードが判定する組み込みと `bg_*`
-    （事前の判定と、`bash` の結果の伏字化）、③ 他の拡張・MCP（`pis` は `tool_call` の判定と結果の伏字化。素の `pi` は結果の伏字化だけ）。拡張の読み込み時のコードはどの群も囲えない
-  - fail-closed が働くのは**簡易ガードが読み込まれた後**。簡易ガードの拡張が読み込まれなかったことは検知しない
-- 役割の既定（`[pi] default_role`）は `pis` と共有する。`pis` だけ `--role` / `PI_HARNESS_ROLE` で上書きできる。簡易ガードは、役割の `tools` に無いツールを隠せない（deny を返すだけで、ツールの宣言は残る）
-- 試験: `test_pi_guard.py`（本物の pi と偽のモデル。deny が止まる・ask が通る・他の拡張は対象外・設定が壊れていれば止まる・出力と退避ファイルの伏字化・read は伏せない）
 
 ### 整形
 
