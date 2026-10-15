@@ -25,8 +25,7 @@ PI = shutil.which("pi")
 pytestmark = pytest.mark.skipif(PI is None, reason="pi is not installed")
 
 HARNESS_SRC = ROOT / "home" / "dot_config" / "pi" / "harness" / "index.ts"
-GUIDE_SRC = ROOT / "home" / "dot_config" / "opencode" / "guide-plugin"
-COMMIT_MESSAGE_SRC = GUIDE_SRC / "commit-message.js"
+COMMIT_MESSAGE_SRC = ROOT / "home" / "dot_config" / "pi" / "harness" / "commit-message.js"
 FIXTURES = Path(__file__).resolve().parent / "pi"
 SECRET = "abc123rawsecret"
 
@@ -34,16 +33,13 @@ SECRET = "abc123rawsecret"
 @pytest.fixture
 def env(tmp_path):
     """フルガードの置き場 (rules.json 付き)・作業ツリー・使い捨ての agent 置き場を用意する。"""
-    # 配備先と同じ並び (フルガードは ../../opencode/guide-plugin/commit-message.js を取り込む)
     harness = tmp_path / ".config" / "pi" / "harness"
     harness.mkdir(parents=True)
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
     shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
     shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
-    guide = tmp_path / ".config" / "opencode" / "guide-plugin"
-    guide.mkdir(parents=True)
-    shutil.copy2(COMMIT_MESSAGE_SRC, guide / "commit-message.js")
+    shutil.copy2(COMMIT_MESSAGE_SRC, harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
     # 子エージェントも偽のモデルで動かす (階層のモデルは認証が要る)
     for agent in rules["agents"].values():

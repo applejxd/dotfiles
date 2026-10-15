@@ -59,13 +59,13 @@ const { redactText, redactResult, deniedPathIn, withheld } = createRedactor(rule
 
 // ─── 確認画面の補助 ─────────────────────────────────────────────────
 
-// git commit の件名と本文を、確認画面へ出す。OpenCode の guide plugin と同じ純関数 (commit-message.js) を使う。
-// 飾りなので、読み込めなくてもフルガードは止めない (出さないだけ)。段 6 で OpenCode を外すときにここへ移す。
+// git commit の件名と本文を、確認画面へ出す。同じ置き場の純関数 (commit-message.js) を使う。
+// 飾りなので、読み込めなくてもフルガードは止めない (出さないだけ)。
 let commitPreview: ((command: string, opts?: unknown) => any) | null = null;
 async function loadCommitPreview() {
 	if (!rules.commit_preview) return;
 	try {
-		const url = pathToFileURL(join(HERE, "..", "..", "opencode", "guide-plugin", "commit-message.js")).href;
+		const url = pathToFileURL(join(HERE, "commit-message.js")).href;
 		commitPreview = (await import(url)).commitPreview;
 	} catch {}
 }

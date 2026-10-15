@@ -362,12 +362,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
     shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
-    guide = env["tmp"] / ".config" / "opencode" / "guide-plugin"
-    guide.mkdir(parents=True)
-    shutil.copy2(
-        ROOT / "home" / "dot_config" / "opencode" / "guide-plugin" / "commit-message.js",
-        guide / "commit-message.js",
-    )
+    shutil.copy2(HARNESS_SRC.parent / "commit-message.js", harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
     for agent in rules["agents"].values():
         agent["model"] = None
@@ -400,3 +395,15 @@ def test_a_later_confirmation_shows_the_state_before_the_earlier_commit_runs(env
     assert "A a.txt" in requests[0]["message"]
     assert "A a.txt" in requests[1]["message"], requests[1]["message"]
     assert "A b.txt" in requests[1]["message"]
+
+
+def test_commit_message_copy_for_opencode_is_identical():
+    """OpenCode の guide plugin の写しと、フルガードの本体が一致する (撤去で写しを消す)。"""
+    pi = ROOT / "home" / "dot_config" / "pi" / "harness" / "commit-message.js"
+    copy = ROOT / "home" / "dot_config" / "opencode" / "guide-plugin" / "commit-message.js"
+
+    def body(path):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        return "\n".join(line for line in lines if not line.startswith("//"))
+
+    assert body(pi) == body(copy)

@@ -164,10 +164,11 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 
 ### `git commit` の確認
 
-`git commit -m …` の確認の本文に、件名・本文・追加するパスを出す。OpenCode の guide plugin と同じ純関数
-（`~/.config/opencode/guide-plugin/commit-message.js`）を取り込み、表示の幅と行数は
+`git commit -m …` の確認の本文に、件名・本文・追加するパスを出す。フルガードの置き場の純関数
+（`~/.config/pi/harness/commit-message.js`）を取り込み、表示の幅と行数は
 `[opencode.ask_description.commit]` を使う。読み込めなくても出さないだけでフルガードは止めない。
-段 6 で OpenCode を外すときに、`commit-message.js` をフルガードの置き場へ移す。
+OpenCode の guide plugin には同じ内容の写しがあり（`test_pi_commit_confirm.py` が一致を確かめる）、
+OpenCode の撤去（CHG-0020 の段 6）で写しごと消す。フルガードは OpenCode の置き場を読まない（CHG-0023 の段 3g の前半）。
 
 ### commit の確認 (素の pi)
 
