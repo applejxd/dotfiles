@@ -308,6 +308,30 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 | 設定の出所 | 共有のキーは `[opencode.sandbox]`、pi の追加分は `[pi.sandbox]`（読み取り: フルガード・自作の拡張 4 つ・判定器・`~/.config/agents`・`~/.claude/hooks`・pi 本体） | 段 6 で OpenCode を撤去するとき、共有キーを `[pi.sandbox]` へ移す |
 | 作業先ごとの追加 | OpenCode と同じ `.opencode/sandbox.toml` | 名前は段 6 で決める |
 
+### 社内プロキシ越しの通信
+
+ホストに社内プロキシの環境変数（`HTTPS_PROXY` / `https_proxy` / `HTTP_PROXY` / `http_proxy`）がある機械では、
+`pi.py` が起動のあいだだけ、小さな中継（`relay.py`、`pis` と同じ処理のスレッド）を `127.0.0.1` の空きポートで動かす。
+変数が無い機械は何も変わらない。
+Fence は許可リスト（`allowedDomains`）に当たる通信を直接つなぐので、社内プロキシが必須の機械では許可済みの宛先にも届かない
+（[調査](../research/agents/corp-proxy-boundary.md)）。
+
+| 項目 | 内容 | 理由 |
+| --- | --- | --- |
+| 設定の変え方 | Fence へ渡す設定だけ、`allowedDomains` を空にし `defaultAction: "proxy"`・`upstreamProxy: http://127.0.0.1:<中継>` を足す。`deniedDomains` は Fence に残す | Fence の上流プロキシは、許可リストにも拒否リストにも当たらない通信にしか使われない |
+| 中継の動き | 許可リストと照合し、当たる宛先だけを社内プロキシへ `CONNECT` する。当たらなければ 403 を返し、社内プロキシへは何も送らない | 許可リストの効きを Fence の外へ移しても保つ |
+| 通すもの | `CONNECT`（HTTPS）だけ。平文の HTTP は 403 | 平文は 1 本の接続で別の宛先へ続けて送れ、照合をすり抜ける |
+| 許可リストの書き方 | Fence と同じ。`*.x` は `x` 自身を含まない。`host:port` も書ける | 切り替えても挙動が変わらないようにする |
+| `NO_PROXY` | 当たる宛先は社内プロキシを通さず直接つなぐ（ホスト名・ドメイン接尾辞・CIDR・`*`） | 社内の宛先へ社内プロキシ越しにつなげない機械がある |
+| 認証 | 社内プロキシの URL の `user:pass@` を `Proxy-Authorization: Basic` にする。設定・ログには出さない | Fence の設定は `0600` のファイルに書かれるが、平文を残さない |
+| 使わない場合 | 許可リストが空・`*` を含む・社内プロキシが `https://` など `http://` 以外 | `*` は Fence が直接の通信を許す形で、照合を移す意味が無い。`http://` 以外は Fence も未対応（警告を出して従来どおり） |
+| 境界チェック | 元の許可リストで検査先を引く。事前検査の記憶の鍵に「中継の有無」を含める | 中継の有無で同じ記憶を使い回さない |
+
+- **`pis` だけが対象。** OpenCode の `ocs` は `execve` で置き換えるので、中継のスレッドが残らない。`ocs` は撤去予定のため対応しない
+- 待ち受けは `127.0.0.1` だけで認証が無い。同じ機械のプロセスは、許可リストの宛先に限って社内プロキシ越しに通信できる
+- 社内プロキシが NTLM / Kerberos などの認証を要求する場合は未対応（Basic だけ）
+- 切り分けは `sh scripts/diagnose-corp-proxy.sh`（何も書き換えない。認証情報は伏せて出力する）
+
 ### 緩和のゲート
 
 **基準は保守的**（サンドボックス無しの動き: 確認は全部出す）。サンドボックスの内側と**証明できたときだけ**、次の緩和が効く。
@@ -358,6 +382,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | `home/dot_local/bin/executable_pis` | `~/.local/bin/pis` | 起動の入口（Python。`~/.local/share/ocs/pis.py` を絶対パスで読み込む。[起動](#起動)） |
 | `home/dot_local/share/ocs/pis.py` | `~/.local/share/ocs/pis.py` | `pis` の本体。引数の解釈・サンドボックス（標準）の引き継ぎ・`--no-sandbox` の素の起動。起動フラグ（`BASE_FLAGS`）と拡張の一覧は、サンドボックスの `pi.py` と共有する。ライブラリは macOS にも置く（`pis` が読むため） |
 | `home/dot_local/share/ocs/pi.py` | `~/.local/share/ocs/pi.py` | サンドボックスの pi 用の部分（[サンドボックス](#サンドボックス)） |
+| `home/dot_local/share/ocs/relay.py` | `~/.local/share/ocs/relay.py` | 社内プロキシ越しの通信の中継（[社内プロキシ越しの通信](#社内プロキシ越しの通信)）。単独の部品で、ほかのモジュールを読まない |
 | `home/dot_pi/agent/modify_keybindings.json.py.tmpl`・`AGENTS.md.tmpl`・`prompts/fleet.md.tmpl` | `~/.pi/agent/keybindings.json`・`AGENTS.md`・`prompts/fleet.md` | [ガード以外の機能](#ガード以外の機能) |
 | `home/dot_pi/agent/modify_settings.json.py.tmpl` | `~/.pi/agent/settings.json` | `generate.py --target pi-settings` が持ち物のキーだけを書く（[pi の設定](#pi-の設定)） |
 | `home/.chezmoitemplates/agent-cli-install.sh.tmpl` の `install_pi` | `~/.pi/agent/install`・`~/bin/pi` または `~/.local/bin/pi`（インストーラーが PATH を見て選ぶ。`pis` は両方と PATH を探す） | pi 本体を公式インストーラーで入れる（[AI CLI の導入](structure.md#ai-cli-の導入)） |
@@ -467,6 +492,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 - MCP: フルガードから登録され、実装役では確認になる（`test_pi_harness.py`）
 - サンドボックス（`test_pi_boundary.py`）: 生成・サンドボックス用の置き場・セッションの置き場・認証の戻し（新しい分だけ・ロック・壊れた写し）・
   実際の Fence でのサンドボックスチェック（Fence・bwrap・pi が無ければ skip）
+- 社内プロキシ越しの中継（`test_relay.py`）: 許可リスト・`NO_PROXY`・社内プロキシの URL の読み方、許可した宛先だけが上流へ届く・許可外と平文 HTTP は上流へ何も送らない・認証ヘッダ・上流の拒否が 502 になる、設定が必要なときだけ変わる
 - 誘導: `cat` が read ツールへの案内で止まる
 - 圧縮（指示が履歴の要約の依頼に入る・ファイルの一覧）、`git commit` の確認の本文（RPC で確認の要求を受け取る。期限が付く）、
   整形（ruff・markdownlint）、`/fleet` の展開、キーバインドと共通の指示の生成、Orca の拡張の読み込み条件

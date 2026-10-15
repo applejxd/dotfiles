@@ -24,7 +24,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import backup, boundary, check, cli
+from . import backup, boundary, check, cli, relay
 from .common import HOME, STATE, die
 
 RULES = HOME / ".config/pi/harness/rules.json"
@@ -338,45 +338,48 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     }
     env = inner_env(agent, config_)
 
-    if args.check:
-        boundary_file = cli.write_boundary(config_)
+    # 社内プロキシ越しでないと外へ出られない機械では、許可リストの照合を中継へ移す (relay)
+    with relay.session(config_) as fence_config:
+        project["relay"] = fence_config is not config_
+        if args.check:
+            boundary_file = cli.write_boundary(fence_config)
+            try:
+                return check.run_check(runtime, boundary_file, project, env, cli.FENCE_TMP)
+            finally:
+                Path(boundary_file).unlink(missing_ok=True)
+                cleanup(agent)
+
         try:
-            return check.run_check(runtime, boundary_file, project, env, cli.FENCE_TMP)
+            boundary_file = cli.write_boundary(fence_config)
+            try:
+                # 事前検査 (同じ設定で合格した記憶があれば省く)。落ちたら起動しない
+                code = check.preflight(
+                    runtime, boundary_file, project, env, cli.FENCE_TMP, volatile=[str(agent)]
+                )
+                if code != 0:
+                    die(
+                        "サンドボックスの事前検査に落ちた",
+                        "pis --check で詳細を見る。サンドボックス無しで使うなら pis --no-sandbox",
+                    )
+                backup.backup_worktree(workspace, args.no_backup)
+            except BaseException:
+                Path(boundary_file).unlink(missing_ok=True)
+                raise
+        except BaseException:
+            cleanup(agent)
+            raise
+        argv = [
+            str(runtime),
+            "--settings",
+            boundary_file,
+            "--",
+            *inner_command(passthrough, env.get("PATH", check.HOST_PATH), sessions),
+        ]
+        try:
+            # execve で置き換えない: 終了後に認証を本物へ戻し、写しを消すため (:func:`pi.run`)
+            return run(argv, check.host_env(env, cli.FENCE_TMP), agent)
         finally:
             Path(boundary_file).unlink(missing_ok=True)
-            cleanup(agent)
-
-    try:
-        boundary_file = cli.write_boundary(config_)
-        try:
-            # 事前検査 (同じ設定で合格した記憶があれば省く)。落ちたら起動しない
-            code = check.preflight(
-                runtime, boundary_file, project, env, cli.FENCE_TMP, volatile=[str(agent)]
-            )
-            if code != 0:
-                die(
-                    "サンドボックスの事前検査に落ちた",
-                    "pis --check で詳細を見る。サンドボックス無しで使うなら pis --no-sandbox",
-                )
-            backup.backup_worktree(workspace, args.no_backup)
-        except BaseException:
-            Path(boundary_file).unlink(missing_ok=True)
-            raise
-    except BaseException:
-        cleanup(agent)
-        raise
-    argv = [
-        str(runtime),
-        "--settings",
-        boundary_file,
-        "--",
-        *inner_command(passthrough, env.get("PATH", check.HOST_PATH), sessions),
-    ]
-    try:
-        # execve で置き換えない: 終了後に認証を本物へ戻し、写しを消すため (:func:`pi.run`)
-        return run(argv, check.host_env(env, cli.FENCE_TMP), agent)
-    finally:
-        Path(boundary_file).unlink(missing_ok=True)
 
 
 def run_sandboxed(argv: list[str]) -> int:

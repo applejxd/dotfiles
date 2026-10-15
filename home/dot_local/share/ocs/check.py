@@ -155,7 +155,13 @@ def preflight_key(runtime: Path, project: dict, volatile: list[str]) -> str:
     for index, path in enumerate(volatile):
         config = config.replace(path, f"<volatile-{index}>")
     payload = json.dumps(
-        {"config": config, "workspace": project["workspace"], "fence": version, "check": script}
+        {
+            "config": config,
+            "workspace": project["workspace"],
+            "relay": bool(project.get("relay")),
+            "fence": version,
+            "check": script,
+        }
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
