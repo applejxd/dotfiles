@@ -1,4 +1,4 @@
-"""pi を Fence で囲って起動する (``ocs --harness pi``) の試験。
+"""pi を Fence で囲って起動する (``pis`` の標準) の試験。
 
 - 生成: ``[pi.sandbox]`` の追加分が共有の境界の素材に足される
 - 準備: 境界用の agent 置き場 (認証の写し・設定の凍結・古いものの掃除)
@@ -265,7 +265,7 @@ def _stub_pis(monkeypatch, ocs):
         seen["env"] = (os.environ.get("PI_HARNESS_ROLE"), os.environ.get("PI_HARNESS_BYPASS"))
         return 7
 
-    monkeypatch.setattr(ocs.cli, "main", fake_main)
+    monkeypatch.setattr(ocs.pi, "run_sandboxed", fake_main)
     return seen
 
 
@@ -276,10 +276,10 @@ def test_pis_defaults_to_the_sandbox(monkeypatch):
     monkeypatch.setenv("PI_HARNESS_CHILD", "1")
     monkeypatch.setenv("PI_HARNESS_ALLOWED", "outer")
     assert ocs.pis.main(["--bypass", "--role", "reader", "-c"]) == 7
-    assert seen["argv"] == ["--harness", "pi", "-c"]
+    assert seen["argv"] == ["-c"]
     assert seen["env"] == ("reader", "1")
     assert "PI_HARNESS_CHILD" not in os.environ and "PI_HARNESS_ALLOWED" not in os.environ
-    assert ocs.pis.main(["--boundary", "-c"]) == 7 and seen["argv"] == ["--harness", "pi", "-c"]
+    assert ocs.pis.main(["--boundary", "-c"]) == 7 and seen["argv"] == ["-c"]
 
 
 def test_pis_refuses_the_sandbox_where_it_cannot_be_built(monkeypatch, capsys):
@@ -482,7 +482,7 @@ def test_real_fence_boundary_check_passes_for_pi(tmp_path, monkeypatch):
         monkeypatch.setattr(ocs.pi, "AGENT_HOME", tmp_path / "pi-sandbox")
         monkeypatch.setattr(ocs.check, "CHECK", BOUNDARY_CHECK)
         monkeypatch.setenv("AGENTS_CONFIG_DIR", str(agents_config_dir()))
-        code = ocs.cli.main(["--harness", "pi", "--check", "--no-backup"])
+        code = ocs.pi.run_sandboxed(["--check", "--no-backup"])
     finally:
         shutil.rmtree(workspace, ignore_errors=True)
     assert code == 0

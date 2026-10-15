@@ -1992,7 +1992,7 @@ PI_SANDBOX_KEYS = frozenset({"read", "write", "control_dirs", "protected", "netw
 def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     """pi を囲う境界の素材。``[opencode.sandbox]`` の共有キーに ``[pi.sandbox]`` の追加分を足す。
 
-    ランチャー (``ocs --harness pi``) が起動ディレクトリと合わせて Fence の設定を組み立てる。
+    ランチャー (``pis``。``ocs/pi.py``) が起動ディレクトリと合わせて Fence の設定を組み立てる。
     OpenCode の境界が無効なら (共有キーが無いので) 出さない。
     see docs/spec/pi-guard.md#サンドボックス
     """

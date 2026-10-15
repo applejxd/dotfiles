@@ -1,6 +1,6 @@
 """``pis``: pi をフルガード付きで起動する入口。
 
-標準は **サンドボックス (Fence) の中** で起動する (:func:`cli.main` の ``--harness pi``)。
+標準は **サンドボックス (Fence) の中** で起動する (:func:`pi.run_sandboxed`)。
 ``--no-sandbox`` はフルガードだけで起動する (``-nbt -ne`` とフルガードの明示の ``-e``)。
 サンドボックスを張れない OS では、黙って弱い守りに落とさず、起動を断って
 ``--no-sandbox`` を案内する。
@@ -17,7 +17,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import cli, pi
+from . import pi
 from .common import HOME
 
 USAGE = "usage: pis [--bypass] [--no-sandbox] [--role <役割>] [--] [pi の引数...]"
@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         os.environ.clear()
         os.environ.update(env)
-        return cli.main(["--harness", "pi", *options.rest])
+        return pi.run_sandboxed(options.rest)
     print("pis: サンドボックス無しで起動する (守りはフルガードだけ)", file=sys.stderr)
     if shutil.which("pi", path=env.get("PATH")) is None:
         fail("pi が PATH に無い")

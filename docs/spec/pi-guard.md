@@ -327,9 +327,11 @@ deny は承認で外せないので、誤検知はその場で回避できない
 
 ## サンドボックス
 
-`pis`（標準）は、`ocs --harness pi` と同じ処理（`cli.main`）へ引き継いで pi を Fence で囲って起動する。サンドボックスの組み立て・危険な
-起動場所の拒否・起動前の退避・`--check` は OpenCode の隔離起動と共通（[OpenCode 隔離起動](opencode-sandbox.md)）。
-pi だけの部分は `~/.local/share/ocs/pi.py`。`--no-backup` / `--check` は `ocs` が解釈するので、pi には渡らない。
+`pis`（標準）は、`pi.py` の `run_sandboxed` が pi を Fence で囲って起動する（`ocs` のコマンドは経由しない。CHG-0023 の段 3c）。
+サンドボックスの組み立て・危険な起動場所の拒否・起動前の退避・検査は、OpenCode の隔離起動と共通のモジュール
+（`boundary.py`・`backup.py`・`check.py`。[OpenCode 隔離起動](opencode-sandbox.md)）を使い、Fence の設定の書き出しの補助だけ `cli.py` から借りる
+（OpenCode の撤去で、共通の部分を中立のモジュールへ移す）。pi だけの部分は `~/.local/share/ocs/pi.py`。
+`--no-backup` / `--check` は `run_sandboxed` が解釈するので、pi には渡らない。
 
 | 項目 | 内容 | 理由 |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-"""pi を Fence で囲って起動する (``ocs --harness pi``)。
+"""pi を Fence で囲って起動する (``pis`` の標準)。
 
 境界の組み立て・危険な起動場所の拒否・起動前の退避は OpenCode と共通 (``boundary`` / ``backup``)。
 ここは pi だけの部分: 境界用の agent 置き場の作成、起動コマンド、内側へ渡さない環境変数。
@@ -11,6 +11,7 @@ see docs/spec/pi-guard.md#サンドボックス
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import json
 import os
@@ -23,7 +24,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import check
+from . import backup, boundary, check, cli
 from .common import HOME, STATE, die
 
 RULES = HOME / ".config/pi/harness/rules.json"
@@ -292,3 +293,98 @@ def cleanup(agent: Path) -> None:
     """認証を戻して、写しを置いた境界用の agent 置き場を消す。"""
     sync_auth_back(agent)
     shutil.rmtree(agent, ignore_errors=True)
+
+
+def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
+    """pi を Fence で囲って起動する。OpenCode と違い、DB も設定の書き出しも要らない。
+
+    境界用の agent 置き場を起動ごとに作り (:mod:`pi`)、セッションの置き場だけを本物へ開ける。
+    see docs/spec/pi-guard.md#サンドボックス
+    """
+    check_installed()
+    sandbox = boundary.load_boundary(RULES, required=())
+    runtime = Path(sandbox["runtime_path"])
+    if not runtime.is_file():
+        die(f"Fence が無い: {runtime}", "mise install で入れる")
+
+    workspace = Path.cwd().resolve()
+    boundary.reject_unsafe_workspace(sandbox, workspace)
+    request = boundary.read_request(workspace)
+    boundary.reject_control_dirs(sandbox, workspace, request)
+    boundary.reject_protected_workspace(sandbox, workspace, request)
+    boundary.announce_request(request)
+
+    agent = prepare_agent_dir()
+    sessions = sessions_dir(workspace)
+    config_ = boundary.build_boundary(sandbox, workspace, request, agent)
+    # セッションの置き場だけを本物へ開け、境界用 agent 置き場の設定と拡張は書けなくする
+    config_["filesystem"]["allowWrite"].append(str(sessions))
+    config_["filesystem"]["allowRead"].append(str(sessions))
+    config_["filesystem"]["denyWrite"] += boundary.prepare_protected(frozen_paths(agent))
+    project = {
+        "workspace": str(workspace),
+        "data_dir": str(agent),
+        "db": "",
+        "config": config_,
+    }
+    env = inner_env(agent, config_)
+
+    if args.check:
+        boundary_file = cli.write_boundary(config_)
+        try:
+            return check.run_check(runtime, boundary_file, project, env, cli.FENCE_TMP)
+        finally:
+            Path(boundary_file).unlink(missing_ok=True)
+            cleanup(agent)
+
+    try:
+        boundary_file = cli.write_boundary(config_)
+        try:
+            # 事前検査 (同じ設定で合格した記憶があれば省く)。落ちたら起動しない
+            code = check.preflight(
+                runtime, boundary_file, project, env, cli.FENCE_TMP, volatile=[str(agent)]
+            )
+            if code != 0:
+                die(
+                    "サンドボックスの事前検査に落ちた",
+                    "pis --check で詳細を見る。サンドボックス無しで使うなら pis --no-sandbox",
+                )
+            backup.backup_worktree(workspace, args.no_backup)
+        except BaseException:
+            Path(boundary_file).unlink(missing_ok=True)
+            raise
+    except BaseException:
+        cleanup(agent)
+        raise
+    argv = [
+        str(runtime),
+        "--settings",
+        boundary_file,
+        "--",
+        *inner_command(passthrough, env.get("PATH", check.HOST_PATH), sessions),
+    ]
+    try:
+        # execve で置き換えない: 終了後に認証を本物へ戻し、写しを消すため (:func:`pi.run`)
+        return run(argv, check.host_env(env, cli.FENCE_TMP), agent)
+    finally:
+        Path(boundary_file).unlink(missing_ok=True)
+
+
+def run_sandboxed(argv: list[str]) -> int:
+    """``pis`` の標準の起動 (サンドボックスの中)。
+
+    ``--no-backup`` と ``--check`` だけを解釈し、残りは pi へ渡す。
+    """
+    parser = argparse.ArgumentParser(prog="pis")
+    parser.add_argument(
+        "--no-backup",
+        action="store_true",
+        help="起動前の退避をしない (壊した未コミットの変更は戻せなくなる)",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="起動せず、この起動ディレクトリのサンドボックスを内側から検査する",
+    )
+    args, passthrough = parser.parse_known_args(argv)
+    return _launch(args, passthrough)
