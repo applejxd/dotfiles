@@ -58,6 +58,8 @@ pi を更新したときの手順:
 | 9 | ツール定義の常駐トークン: 最小の MCP ツール 1 つで約 +37、`codemode` で約 +680（偽のモデルの見積もり） | 無し（`codemode.inlineBudget` の既定は宣言の説明に 3,000 トークンまで） | 1.1.0 | E6 | 入口の選択の目安 |
 | 10 | 試験が使う `pi-ai/dist/providers/faux.js` の位置は、インストール方法で変わる（mise・公式インストーラーは兄弟、Windows の npm global は入れ子） | 内部のパスで、公開 API ではない | 1.1.0 | `test/agents/pi/faux.ts` が両方に対応 | パスが変わったら試験が落ちる |
 | 11 | Windows の npm global の `pi` は `pi.CMD` で、子の pi を `spawn("pi")` する処理（子エージェント）と、その試験が動かない | 無し | 1.1.0 | Windows で `test_pi_harness.py` の 9 件が失敗 | `pis` は Unix 専用（既知） |
+| 12 | `fd`・`rg` は、`<agent 置き場>/bin` → PATH の順に探し、どちらにも無ければダウンロードして `<agent 置き場>/bin` へ置く（`tools-manager.js` の `getToolPath`、`config.js` の `getBinDir`）。起動ごとに新しい agent 置き場では、毎回ダウンロードされる | 未確認（実装を読んだ。公式の文書は探していない） | 1.1.0 | [記録 S1](../research/agents/pis-sandbox-field-test.md)、`test_agent_dir_carries_the_instructions_keybindings_and_prompts` | サンドボックスの agent 置き場の `bin/` を、本物の `~/.pi/agent/bin` へのリンクにする |
+| 13 | セッションの置き場は `sessions/--<作業ディレクトリ>--`（先頭の区切りを外し、`/` `\` `:` を `-` にする。`getDefaultSessionDirPath`）。`--session-dir` は渡した場所へそのまま置く | 未確認（`pi.py` の記述による。今回は再確認していない） | 1.1.0 | `test_pi_boundary.py` の `sessions_dir` の試験 | サンドボックスの起動が同じ命名を再実装している（変わると外の `pi -c` で再開できない。pi の更新時に再開を確かめる） |
 
 ## codemode の扱い
 

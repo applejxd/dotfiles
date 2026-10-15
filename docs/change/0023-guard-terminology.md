@@ -1,8 +1,8 @@
 # CHG-0023: 「ハーネス」の呼び方を整理し、`pis` をサンドボックス既定にする
 
 - **状態**: In progress
-- **更新日**: 2026-10-14
-- **基準**: コミット 8cab246、pi 1.1.0、WSL2 (Ubuntu)
+- **更新日**: 2026-10-15
+- **基準**: コミット c0bf603、pi 1.1.0（実機の試験時。のち利用者が更新）、Fence 0.1.67、WSL2 (Ubuntu)
 
 ## 目的と非目的
 
@@ -22,7 +22,7 @@
 | ハーネス | pi 本体を含む仕組み全体（一般の用法。このリポジトリでは特定の拡張を指さない） | （拡張を指していた） |
 | ガード | ツール呼び出しを判定し、allow / ask / deny に振り分ける層 | ハーネス（拡張の意味のとき） |
 | フルガード | `pis` で効く、役割・確認・伏字化まで含むガード | ハーネス |
-| 簡易ガード | 素の `pi` に付く、deny と伏字化だけのガード | 素の pi のガード |
+| 簡易ガード（廃止） | 素の `pi` に付いていた、deny と伏字化だけのガード（段 3f で廃止） | 素の pi のガード |
 | サンドボックス | Fence による OS レベルの隔離。ガードとは別の層 | 境界 |
 
 正本は [pi のガード](../spec/pi-guard.md#用語)。
@@ -33,11 +33,11 @@
 | --- | --- | --- | --- |
 | 1 | 用語が利用者の感覚とずれている | 旧 `pi-harness.md`（`docs/spec/`）を `pi-guard.md` へ改名し、本文を上の用語へ書き換える。`pi-decide.md` など生きている仕様も同様 | 完了 |
 | 2 | 改名でリンクが切れる・コメントが旧称のまま残る | 全リンクと見出しの索引を直し、コード内のコメント・docstring・docs への参照を追従する。実行時の文言（`decide` の理由など。golden が固定）は変えない | 完了 |
-| 3a | サンドボックスの中で自作の拡張（`todo`・`plan`・`btw`・`activity`）が使えない | `ocs` の `pi.py` が `-e` で足し、`[pi.sandbox] read` で拡張ごとに読み取りを開けた（単体試験は通過。実機で `todo`・`plan`・`btw` の認識を確認。`activity` のフッターは未確認） | 実装済み（未コミット） |
-| 3b | 拡張の宣言が複数箇所にある | `common.toml` の `[pi.extensions]` から `rules.json` へ出し、`pis` と `pi.py` が同じ一覧を読む。読み取りの許可も一覧から生成する | 実装済み（試験は通過。実機の `chezmoi apply` は未確認） |
+| 3a | サンドボックスの中で自作の拡張（`todo`・`plan`・`btw`・`activity`）が使えない | `ocs` の `pi.py` が `-e` で足し、`[pi.sandbox] read` で拡張ごとに読み取りを開けた（実機で `todo`・`plan`・`btw` の認識を確認。`activity` のフッターは未確認） | 完了 |
+| 3b | 拡張の宣言が複数箇所にある | `common.toml` の `[pi] own_extensions` から `rules.json` へ出し、`pis` と `pi.py` が同じ一覧を読む。読み取りの許可も一覧から生成する | 完了（実機で `apply` して `pis`・`pis --boundary` の双方が拡張 5 つを読み込むことを確認） |
 | 3c | サンドボックスの起動が `ocs`（OpenCode 用）に載っている | `pis` を独立したランチャーにし、Fence 設定の組み立てを共通のモジュールへ切り出す。agent view の写す一覧を決める | 実装済み（`pis` を Python 化し、起動フラグと拡張の一覧を `pi.py` と共有。pi の起動は `pi.run_sandboxed` で、`ocs` の CLI（`--harness pi`）を経由しない。Fence 設定の書き出しの補助だけ `cli.py` に残る（OpenCode の撤去で、共通の部分を中立のモジュールへ移す）。実機は未確認） |
-| 3d | 緩和のゲートと既定化 | **緩和のゲート**（事前検査の結果の記憶・拡張が内側で行うカナリア・通信隔離の必須化）と、その敵対的な試験（カナリアの偽装・環境変数だけを立てる・拡張が読み込めない）。説明付き deny。`pis` を標準でサンドボックスの中にし、`--no-sandbox` を残す（決定済み） | 実装済み（試験は通過。実機は未確認。事前検査は `ocs --check` の流用で、起動のたびではなく合格の記憶つき） |
-| 3f | 簡易ガードと素の `pi` の保護が二重 | 簡易ガード（`guard/`）と、Unix の素の `pi` 用の `commit-confirm` 配布を廃止する。Orca・Zed を `pis` から起動できるか確かめ、切り替える | 実装済み（簡易ガードを廃止。素の `pi` には `commit-confirm` だけ。利用者は Orca のターミナルから `pis` を打って起動していて、Orca の設定の確認は不要だった。実機は未確認） |
+| 3d | 緩和のゲートと既定化 | **緩和のゲート**（事前検査の結果の記憶・拡張が内側で行うカナリア・通信隔離の必須化）と、その敵対的な試験（カナリアの偽装・環境変数だけを立てる・拡張が読み込めない）。説明付き deny。`pis` を標準でサンドボックスの中にし、`--no-sandbox` を残す（決定済み） | 完了（試験は通過。事前検査は `ocs --check` の流用で、起動のたびではなく合格の記憶つき。実機の試験（[記録 S1](../research/agents/pis-sandbox-field-test.md)）で、緩和・deny・遮断・環境・指示の読み込みを確認し、3 つの不具合を直した。事前検査の初回の所要時間と、カナリアが失敗する場合は実機で未確認） |
+| 3f | 簡易ガードと素の `pi` の保護が二重 | 簡易ガード（`guard/`）を廃止する（素の `pi` には `commit-confirm` だけを残す）。Orca・Zed の入口は、利用者が Orca のターミナルから `pis` を打って起動する運用で足りた | 実装済み（簡易ガードを廃止。素の `pi` には `commit-confirm` だけ。利用者は Orca のターミナルから `pis` を打って起動していて、Orca の設定の確認は不要だった。実機は未確認） |
 | 3g | コミット解析が 3 か所にあり、フルガードが OpenCode の `commit-message.js` に依存している | 解析を `judge/` へ一元化し、OpenCode への依存を消す。Windows 用の `commit-confirm`・`subagents` は凍結（新規開発しない） | 前半（フルガードが OpenCode の置き場を読まない・`commit-message.js` を写して一致を試験）は実装済み。後半（解析の一元化）は優先度低 |
 | 3e | 認証が内側にある | ホスト側の認証プロキシ（任意） | 見送り（別案件・未確認が多い） |
 | 4 | 識別子が旧称のまま | `PI_HARNESS_*` などの改名の要否を決める | 保留（段 3 のあと） |
@@ -46,28 +46,29 @@
 
 ## 現在地
 
-- 段 1・2 は完了。旧称は過去の案件・調査記録・ADR（`docs/change/` `docs/research/` `docs/adr/`）に残る。
+- 段 1・2・3a・3b・3d・3f は完了、3c は実装済み。旧称は過去の案件・調査記録・ADR（`docs/change/` `docs/research/` `docs/adr/`）に残る。
   ファイル名も変えていない（`0006-pi-harness-trial.md`・`pi-harness-spike.md` など）。対応は [pi のガード](../spec/pi-guard.md#用語)
-- 段 3a は実装済みで、利用者が実機で `todo`・`plan`・`btw` の認識を確認した。設計（段 3b〜3e）は 2 つのモデルのレビューを受けて改めた（「重要な更新」）。段 3b・3c の一部・3d を実装した（3d: `pis` はサンドボックスが標準、`--no-sandbox`、緩和のゲート）。残りは 3c の Fence 設定の切り出しと、3f・3g
-- 検証: `test/agents/` と `test_windows_assets.py`・`test_chezmoi_templates.py` は通った。Windows 実機は未確認（コメントと文言のみの変更）
+- 設計は 2 つのモデルのレビューを受けて改め（「重要な更新」）、設計原則（基準は保守的・緩和はサンドボックスが証明されたときだけ・実装は 1 つ）は
+  [ADR-0018](../adr/0018-pis-sandbox-default-relax-only-when-proven.md) に記録した
+- 実機の試験（[記録 S1](../research/agents/pis-sandbox-field-test.md)、2026-10-15）で、`pis` の標準（サンドボックス）の 12 項目を確認し、
+  Orca の資格情報の漏れ・共通指示の欠落・`fd` の毎回のダウンロードを見つけて直した（修正は `chezmoi apply` で反映され、`fd` の表示が消えたことを利用者が確認）
+- 検証: `test/agents/` 全体と `test_windows_assets.py`・`test_chezmoi_templates.py` は通った（「実装・検証」）。段 3c・3f の `chezmoi apply` 後の実機と、Windows 実機は未確認
 
 ## 未解決点
 
 - **共有の `~/.pi/agent` を使えるか**（レビュー案）: 書き込み可能にして拒否リスト（`extensions/`・`settings.json` など）で守れば、写しも認証の戻しも要らない。ただし拒否リスト方式は、pi の更新で発見先が増えると穴になり、E4（外の pi が内側の拡張を読む）の再検証が前提。当面は写す方式のまま
 - **ホスト側の認証プロキシ**: pi が接続先を差し替えられるか、OAuth の更新をどうするか
-- **Orca のポート**: 内側から届かせてよいか
+- **Orca の状態表示**: サンドボックスの内側では使えない（資格情報の `ORCA_AGENT_HOOK_TOKEN` などを落とし、拡張も読み込まない。推測。未検証）。利用者は Orca のターミナルから `pis` を打って使っていて、状態表示が要る場合は `pis --no-sandbox`
 - **`skills` の参照先**: サンドボックスの内側で、`settings.json` の `skills` が指す場所が読み取りで開いているか
 
-決定済み（2026-10-14、利用者）: **`pis` はサンドボックスが標準**で、`--no-sandbox` の切り替えは残す。
+決定済み（2026-10-14、利用者）: **`pis` はサンドボックスが標準**で、`--no-sandbox` の切り替えは残す（[ADR-0018](../adr/0018-pis-sandbox-default-relax-only-when-proven.md)）。
 
 ## 次の調査・実験
 
-1. `activity` を `bg_run` で確かめ、サンドボックスの中で拡張 4 つが動くことを確定する（3a の残り）
-2. 内側で `AGENTS.md`・`keybindings.json`・`prompts/` が読めているかを確かめ、agent view の写す一覧を決める
-3. 段 3b: `[pi.extensions]` と生成を実装し、`pis` と `pi.py` を同じ一覧へ寄せる（試験付き）
-4. 段 3c: ランチャーを `ocs` から独立させる（Fence 設定の組み立ての切り出し）
-5. 段 3d: 緩和のゲート（事前検査の結果の記憶・拡張が内側で行うカナリア・通信隔離の必須化）とその敵対的な試験、説明付き deny、`--no-sandbox`（フッター表示と警告）を実装する
-6. 段 3f: Orca・Zed が `pis` を起動できるか（Orca の設定、Zed の RPC の通過）を確かめる
+1. `chezmoi apply` のあと、段 3c・3f の実機の確認（`pis`・`pis --no-sandbox`・`pis --check`。素の `pi` の `commit-confirm` のみ）
+2. 事前検査の初回の所要時間を測る。カナリアが失敗する場合（サンドボックスの外から環境変数だけで起動する）の実機の挙動を確かめる
+3. `activity` のフッターを、`bg_run` を動かして確かめる
+4. 段 3g の後半（コミット解析の一元化）、段 4（識別子の改名）は、1〜3 のあとに要否を決める
 
 ## 評価基準
 
@@ -120,12 +121,12 @@ ocs（OpenCode の隔離起動）の実装に引きずられず、pi の守り�
 
 ### 部品
 
-1. **拡張の一覧**: `common.toml` に `[pi.extensions]` を足し、生成器が `rules.json` へ出す。`rules.json` は今もサンドボックスの素材（`sandbox` キー）を持つので、
+1. **拡張の一覧**: `common.toml` の `[pi] own_extensions` を唯一の宣言にし、生成器が `rules.json` へ出す。`rules.json` は今もサンドボックスの素材（`sandbox` キー）を持つので、
    新しい生成物（`launch.json`）は作らない。`[pi.sandbox] read` のうち拡張の分は、この一覧から生成する。**拡張を足すときは `common.toml` の 1 か所だけを直す**
 2. **単一のランチャー** `pis`（`ocs` から独立）: 一覧を読む → agent view を作る → 起動場所を検査する → サンドボックスの検査 → Fence で pi を起動 → 後始末（どの段で失敗しても `finally` で認証を戻して置き場を消す）。
    `ocs` の Fence 設定の組み立て・起動場所の拒否・退避は、OpenCode に依らない共通のモジュールとして切り出して使う。起動は引き続き `-nbt -ne` と明示の `-e`（拡張の発見先を絞る仮定に頼らない）
 3. **agent view**（今の境界用の agent 置き場）: 起動ごとの `~/.local/share/pi-sandbox/agent-*`。**写すものを一覧で決め、内外で同じものを読ませる**。
-   `AGENTS.md`・`keybindings.json`・`prompts/`（`/fleet`）を写していなかったので足した（2026-10-15。実機の試験で、共通指示が内側に無い疑いが出て、コードで確認）
+   `AGENTS.md`・`keybindings.json`・`prompts/`（`/fleet`）を写していなかったので足し、`bin/` を本物の `~/.pi/agent/bin` へのリンクにした（2026-10-15。実機の試験で見つけ、再試験で個人用の `AGENTS.md` の引用を確認した）
 4. **検査**: 起動のたびに、(a) 同じ設定で動く事前検査（今の `ocs --check`。通信・保護対象・秘密の不可視を含む。設定と Fence の版が変わったときだけ再実行し、結果を覚える）と、
    (b) 実際に動く pi の中での**カナリア**（内側から秘密が読めない・境界の外へ書けないを実測し、失敗したらツールを 0 個にする。`rules.json` が読めないときと同じ流儀）を行う。
    Fence が通信の隔離（network namespace）を張れずに代替の動きになる環境では、**起動を拒否する**。`PI_HARNESS_BOUNDARY` は表示用の目印で、安全の根拠にしない
@@ -162,20 +163,29 @@ ocs（OpenCode の隔離起動）の実装に引きずられず、pi の守り�
 | 日常の shell | 確認なし | 確認 |
 | `git commit`・MCP・役割の制限・伏字化 | 変えない | 変えない |
 
-- **agent view が写すもの**（確認済みの現状 + 追加）: 写す（読み書き可）= `auth.json`・`models-store.json`。写す（読み取り専用）= `settings.json`・`AGENTS.md`・`keybindings.json`・`prompts/`。
-  空で置く（読み取り専用）= `extensions/`・`mcp.json`・`trust.json`。`AGENTS.md`・`keybindings.json`・`prompts/` は今は写していない（追加分）
+- **agent view が写すもの**: 写す（読み書き可）= `auth.json`・`models-store.json`。写す（読み取り専用）= `settings.json`・`AGENTS.md`・`keybindings.json`・`prompts/`。
+  空で置く（読み取り専用）= `extensions/`・`mcp.json`・`trust.json`。本物へのリンク = `bin/`（`fd`・`rg`。pi が無いとダウンロードするため）
 
 ### 残る課題・保証の範囲
 
 - **保護対象が書けないのは、保護対象の置き場から起動したときの、その Git の根の中**。別のクローンを追加の `write` で開いたときは対象外になる（`opencode-sandbox.md` の「制御ファイルの保護が効く範囲」）。保証を、配備先・このリポジトリ・別のクローンに分けて書く
 - **認証**: 今は写しを内側に置き、終了後に有効期限が新しい分だけ本物へ戻す。複数の `pis` を同時に起動したときや、更新後の異常終了（SIGKILL）では失効しうる（推測。未試験）。
   同期に失敗したら置き場を消さず、警告して手動の復旧手順を示す。理想の**ホスト側の認証プロキシ**は、pi が接続先を差し替えられるかが未確認のため別案件。AWS 系（Bedrock）は `DROP_ENV` で落ちるので別に扱う
-- **このリポジトリでの作業**: 保護対象（`home/dot_config/pi`・`home/dot_claude/hooks`・`home/dot_pi`・`scripts/agents`）は内側で書けない。**ガードの編集は素の `pi`、検証は外のシェル**と運用が分かれる。
-  素の `pi` は弱いので、対象を限った手動作業と、外での検証（`pre-commit`・`test/agents/`）の手順を決める。`uv run`・`pre-commit` が内側で通信できるかは未確認
+- **このリポジトリでの作業**: 保護対象（`home/dot_config/pi`・`home/dot_claude/hooks`・`home/dot_pi`・`scripts/agents`）は内側で書けない。**ガードの編集は `pis --no-sandbox`、検証は外のシェル**と運用が分かれる。
+  素の `pi` はガードを持たないので、復旧にも `pis --no-sandbox` を使う。`uv run`・`pre-commit` が内側で通信できるかは未確認
 - **MCP**: サーバは内側で動く。`npx` / `uvx` 系は許可ドメインが要り、`GH_TOKEN` が落ちるので GitHub 系は動かない（推測。未確認）
-- **Orca・Zed**: 今は素の `pi`。内側から Orca のローカルポートへ届くには、Fence の `allowLocalOutbound` に加えて**ポートの指定**が要り（資料から）、`ORCA_AGENT_HOOK_PORT` は起動ごとに変わる
+- **Orca・Zed**: 利用者は Orca のターミナルから `pis` を打って起動している。Orca の起動ボタンで立つ素の `pi` にはガードが付かない（段 3f）。サンドボックスの内側から Orca のローカルポートへ届くには、Fence の `allowLocalOutbound` に加えて**ポートの指定**が要り（資料から）、`ORCA_AGENT_HOOK_PORT` は起動ごとに変わる。Zed は未確認
 - **macOS・Windows**: Fence は macOS の Seatbelt にも対応するので、「Fence が無い」のではない。制約は `ocs` 由来の Linux 前提（`/usr/bin/env`・`/tmp` など）。macOS は別案件にする。Windows は ADR-0017 のとおり変えない
 - **セッションの置き場**: `pi.py` が pi の命名規則（`getDefaultSessionDirPath`）を再実装している。[pi の公式仕様と実測の棚卸し](../spec/pi-upstream.md)の「頼る点」へ足し、pi の更新時に再開の試験を入れる
+
+## 実装・検証
+
+- **コミット**: 段 3a〜3g の前半は `37f7c2f`・`c3f69f3`・`dfaab08`・`a4d52ae`・`14d80cc`・`1320d89`・`c0bf603` など（`git log` で追える）
+- **自動試験**（2026-10-15。`test/agents/` は `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q`）:
+  - `test/agents/` 全体: 3546 passed / 7 skipped（簡易ガードの試験を削除した後。それ以前は 3564〜3566 passed）
+  - `test_chezmoi_templates.py`・`test_windows_assets.py`: 91 passed
+  - 緩和のゲートの試験: `test_pi_judge_ts.py`（緩和の範囲）、`test_pi_harness.py`（カナリアが読める・書ける・既にある・自己申告だけ・証明済み）、`test_pi_boundary.py`（事前検査の記憶・環境変数・agent view）
+- **実機の試験**: [記録 S1](../research/agents/pis-sandbox-field-test.md)（12 項目と、見つかった 3 つの不具合）。段 3c・3f の反映後の実機は未確認
 
 ## 重要な更新
 
@@ -191,3 +201,8 @@ ocs（OpenCode の隔離起動）の実装に引きずられず、pi の守り�
 - **2026-10-14（設計原則）**: 利用者が「神経質になるのはサンドボックス有りのケースだけ。無しは有りから機能をオフするだけでよい」と決めた。
   これを「基準は保守的、緩和はサンドボックスが証明されたときだけ」と整理した（「設計原則」）。帰結: 別名ツール方式の 1 実装に寄せ、簡易ガードを廃止（段 3f）、
   サンドボックス無しは別経路を作らず緩和が無い設定にする、厳密さを緩和のゲート（段 3d）に集中する
+- **2026-10-15（実機の試験）**: 利用者が `pis`（標準のサンドボックス）で 12 項目を試し、11 項目が期待どおり。見つかった不具合 3 つを直した（[記録 S1](../research/agents/pis-sandbox-field-test.md)）:
+  サンドボックスの内側に Orca の資格情報（`ORCA_AGENT_HOOK_TOKEN`・`ORCA_PANE_KEY`）が渡っていた（名前のパターンで落とす形に変更）、
+  共通の指示（`AGENTS.md`）・キーバインド・`/fleet` が agent 置き場に無かった（写す）、pi が起動のたびに `fd` をダウンロードしていた（`bin/` を本物へのリンクに）
+- **2026-10-15（簡易ガードの廃止）**: 利用者が Orca のターミナルから `pis` を打って起動していると確認した。素の `pi` の保護は不要と判断し、簡易ガードを廃止した（段 3f）。素の `pi` には `commit-confirm` だけが付く
+- **2026-10-15（ADR）**: 設計原則と、サンドボックス標準・`--no-sandbox` を残す判断を [ADR-0018](../adr/0018-pis-sandbox-default-relax-only-when-proven.md) に記録した

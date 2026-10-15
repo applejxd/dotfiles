@@ -4,6 +4,8 @@
 - **日付**: 2026-10-13
 - **決定者**: applejxd
 
+> **用語の注記（2026-10-15）**: 決定は変えない。本文の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。対応は [pi のガード](../spec/pi-guard.md#用語)。
+
 ## コンテキスト
 
 このリポジトリは、Claude Code・Copilot CLI・OpenCode・pi の 4 つの AI CLI の権限・hook・sandbox を、

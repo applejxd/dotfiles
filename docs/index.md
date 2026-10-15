@@ -85,6 +85,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 秘密情報の管理 | sops + age と Bitwarden で利用している | 2026-09-19（最終レビュー） | [セキュリティ](spec/security.md) |
 | 圧縮を跨ぐ引き継ぎ | OpenCode V2 のみ。実機の自動圧縮で確かめた。Claude / Copilot 向けの圧縮 hook は撤去 | 2026-09-25 | [CHG-0001](change/closed/0001-compaction-context-handover.md) |
 | OpenCode の隔離起動（`ocs`） | Ubuntu / WSL で通常起動と併用。境界の道具を Fence に替え、履歴を通常起動と共有する。境界チェックは `ocs --check` で手動 | 2026-09-29 | [CHG-0009](change/closed/0009-ocs-simplify-for-accidents.md) |
+| `pis`（pi のサンドボックス標準の起動） | Ubuntu / WSL で、標準でサンドボックス（Fence）の中。緩和はカナリアで証明できたときだけ。実機の試験で確かめた（段 3c・3f の反映後は未確認） | 2026-10-15 | [記録 S1](research/agents/pis-sandbox-field-test.md)・[ADR-0018](adr/0018-pis-sandbox-default-relax-only-when-proven.md) |
 | Claude Code | 使えない（OAuth 期限切れ）。棚上げ中 | 2026-09-25 | [判断待ち・障害](#判断待ち障害) |
 
 ## 活動中
@@ -98,7 +99,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | [CHG-0011](change/0011-agent-first-shell.md) | In progress | シェルの主な利用者を AI エージェントとして残課題を整える。波 1〜3 は実装済み。通常版 pip の誘導文は前段停止で解決。前段停止を deny 全項目へ拡張（`[bash.deny_guide]`）。bypass を ask→allow に再定義（ADR-0014）。残りは Claude / Copilot への git 環境変数、Windows 実機での検証 |
 | [CHG-0021](change/0021-windows-admin-consolidation.md) | In progress | Windows の chezmoi セットアップを整え、管理者権限の作業を 1 回の UAC に集約する。実装・docs は済み。UAC 承認を含む通し実行（クリーンな Windows 実機）が未検証 |
 | [CHG-0022](change/0022-windows11-settings-review.md) | In progress | Windows 11 の設定を見直し、古い設定の修正と体験の改善を入れる。大半は完了。`gow` と WSL・WSL 3 は保留 |
-| [CHG-0023](change/0023-guard-terminology.md) | In progress | 「ハーネス」の呼び方を整理した（ガード・フルガード・サンドボックス。簡易ガードは廃止）。次は `pis` をサンドボックス既定にする。拡張の未対応・Orca・Windows が未解決 |
+| [CHG-0023](change/0023-guard-terminology.md) | In progress | 「ハーネス」の呼び方を整理し（ガード・フルガード・サンドボックス）、`pis` をサンドボックス標準にした（ADR-0018）。簡易ガードは廃止。実機の試験を済ませ、3c・3f の反映後の実機が未確認。認証プロキシ・Orca の状態表示が未決 |
 
 ## 判断待ち・障害
 
@@ -117,6 +118,9 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 終了した案件の一覧は [案件の索引「終了」](change/index.md#終了) にある。
 
+- 2026-10-14 — `pis` をサンドボックス標準にし、緩和はサンドボックスが証明されたときだけ効かせる
+  （「ハーネス」はガード・フルガード・サンドボックスに呼び分け、簡易ガードを廃止）
+  — [ADR-0018](adr/0018-pis-sandbox-default-relax-only-when-proven.md)
 - 2026-09-26 — Raspberry Pi（64bit / ヘッドレス）を導入対象に追加。
   **`chezmoi init` を前提にした設計にしない**という規約を得た
   — [CHG-0008](change/closed/0008-raspi-branching.md)
