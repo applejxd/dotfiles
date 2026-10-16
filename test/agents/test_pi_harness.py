@@ -25,6 +25,7 @@ PI = shutil.which("pi")
 pytestmark = pytest.mark.skipif(PI is None, reason="pi is not installed")
 
 HARNESS_SRC = ROOT / "home" / "dot_config" / "pi" / "harness" / "index.ts"
+TODO_EXT = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "todo" / "index.ts"
 COMMIT_MESSAGE_SRC = ROOT / "home" / "dot_config" / "pi" / "harness" / "commit-message.js"
 FIXTURES = Path(__file__).resolve().parent / "pi"
 SECRET = "abc123rawsecret"
@@ -521,6 +522,276 @@ def _rpc(env, calls, answers, timeout=120):
     return requests
 
 
+def _rpc_script(env, calls, messages, answers, timeout=120, status_key="bypass", extra=()):
+    """RPC で messages を順に送る。確認 (confirm) には answers の順に応え、尽きたら拒否する。
+
+    各メッセージは、応答 (response) を待ち、実行が始まったもの (started) は agent_end まで待つ。
+    返すのは、確認の要求と、status_key の表示 (setStatus) の履歴。
+    """
+    args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
+    args += ["-e", str(env["harness"]), *extra, "-e", str(FIXTURES / "faux.ts"), "--mode", "rpc"]
+    proc = subprocess.Popen(
+        args,
+        cwd=env["proj"],
+        env={**env["env"], "FAUX_TOOL_CALLS": json.dumps(calls)},
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    requests, statuses = [], []
+    deadline = time.time() + timeout
+    try:
+        for index, message in enumerate(messages):
+            command = {"id": f"m{index}", "type": "prompt", "message": message}
+            proc.stdin.write(json.dumps(command) + "\n")
+            proc.stdin.flush()
+            responded, started, ended = False, False, False
+            for line in proc.stdout:
+                if time.time() > deadline:
+                    raise TimeoutError(f"{message!r}: {requests} {statuses}")
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if event.get("type") == "extension_ui_request":
+                    if event.get("method") == "confirm":
+                        requests.append(event)
+                        n = len(requests)
+                        answer = answers[n - 1] if n <= len(answers) else False
+                        reply = {"type": "extension_ui_response", "id": event["id"]}
+                        proc.stdin.write(json.dumps({**reply, "confirmed": answer}) + "\n")
+                        proc.stdin.flush()
+                    elif (
+                        event.get("method") == "setStatus" and event.get("statusKey") == status_key
+                    ):
+                        statuses.append(event.get("statusText"))
+                if event.get("type") == "response" and event.get("id") == f"m{index}":
+                    responded = True
+                    started = (event.get("data") or {}).get("disposition") == "started"
+                if event.get("type") == "agent_end":
+                    ended = True
+                if responded and (ended or not started):
+                    break
+    finally:
+        proc.kill()
+    return requests, statuses
+
+
+def test_bypass_command_turns_on_after_confirmation_and_shows_the_status(env):
+    # /bypass on の確認に応じると、次の ask が確認なしで通る
+    calls = bash_call("touch made-by-pi")
+    requests, statuses = _rpc_script(env, calls, ["/bypass on", "go"], [True])
+    assert len(requests) == 1 and "bypass" in requests[0]["title"], requests
+    # 先頭の None は起動時の消去。ON で表示が出る
+    assert statuses[0] is None and "bypass" in statuses[-1], statuses
+    assert (env["proj"] / "made-by-pi").exists()
+
+
+def test_bypass_command_declined_keeps_asking(env):
+    calls = bash_call("touch made-by-pi")
+    requests, statuses = _rpc_script(env, calls, ["/bypass on", "go"], [False, False])
+    assert len(requests) == 2, requests  # bypass の確認と、touch の確認
+    assert statuses == [] or all(s is None for s in statuses)
+    assert not (env["proj"] / "made-by-pi").exists()
+
+
+def test_bypass_command_off_restores_asking_and_clears_the_status(env):
+    messages = ["/bypass on", "/bypass off", "go"]
+    requests, statuses = _rpc_script(env, bash_call("touch made-by-pi"), messages, [True, False])
+    assert len(requests) == 2, requests  # bypass の確認 (OFF は確認なし) と、touch の確認
+    assert statuses[0] is None and "bypass" in statuses[1] and statuses[-1] is None, statuses
+    assert not (env["proj"] / "made-by-pi").exists()
+
+
+def test_bypass_command_does_not_lift_deny(env):
+    requests, _ = _rpc_script(env, bash_call("git push"), ["/bypass on", "go"], [True])
+    assert len(requests) == 1, requests  # git push は確認も出ずに拒否される
+    assert not (env["proj"] / "pushed").exists()
+
+
+def test_bypass_starting_value_is_shown_and_can_be_turned_off(env):
+    env["env"]["PI_HARNESS_BYPASS"] = "1"
+    calls = bash_call("touch made-by-pi")
+    requests, statuses = _rpc_script(env, calls, ["/bypass off", "go"], [False])
+    assert statuses and statuses[-1] is None, statuses
+    assert len(requests) == 1, requests  # touch の確認だけ
+    assert not (env["proj"] / "made-by-pi").exists()
+
+
+def _todo(**args):
+    return {"name": "todo", "args": args}
+
+
+def _last_todo_result(stdout):
+    """偽のモデルが書き出した、最後の todo の結果 (`todo: isError=… :: 本文`) の本文。"""
+    return stdout.split("todo: isError=")[-1]
+
+
+def _run_todo(env, calls, *messages, **kwargs):
+    extra = ("-e", str(TODO_EXT), *kwargs.pop("extra", ()))
+    return run_pi(env, calls, *messages, extra=extra, **kwargs)
+
+
+def test_todo_adds_many_sets_states_and_folds_finished_items(env):
+    calls = [
+        _todo(action="add", texts=["a", "b", "c"]),
+        _todo(action="set", id=1, status="done"),
+        _todo(action="set", id=2, status="in_progress"),
+        _todo(action="list"),
+    ]
+    proc = _run_todo(env, calls)
+    assert proc.returncode == 0, proc.stderr
+    assert "追加: #1 a / #2 b / #3 c" in proc.stdout, proc.stdout
+    # 畳んだ一覧: 未完了だけ出し、完了は件数にする
+    tail = _last_todo_result(proc.stdout)
+    assert "[>] #2: b" in tail and "[ ] #3: c" in tail and "完了 1 件" in tail, proc.stdout
+    assert "[x] #1: a" not in tail, proc.stdout
+
+
+def test_todo_list_all_shows_finished_and_cancelled(env):
+    calls = [
+        _todo(action="add", texts=["a", "b"]),
+        _todo(action="set", id=1, status="done"),
+        _todo(action="set", id=2, status="cancelled"),
+        _todo(action="list", all=True),
+    ]
+    proc = _run_todo(env, calls)
+    assert "[x] #1: a" in proc.stdout and "[-] #2: b" in proc.stdout, proc.stdout
+
+
+def test_todo_set_is_idempotent_unlike_toggle(env):
+    calls = [
+        _todo(action="add", text="a"),
+        _todo(action="set", id=1, status="done"),
+        _todo(action="set", id=1, status="done"),
+        _todo(action="list", all=True),
+    ]
+    proc = _run_todo(env, calls)
+    assert "[x] #1: a" in _last_todo_result(proc.stdout), proc.stdout
+
+
+def test_todo_warns_on_several_in_progress_and_rejects_bad_input(env):
+    calls = [
+        _todo(action="add", texts=["a", "b"]),
+        _todo(action="set", id=1, status="in_progress"),
+        _todo(action="set", id=2, status="in_progress"),
+        _todo(action="set", id=99, status="done"),
+        _todo(action="update", id=1),
+        _todo(action="add"),
+    ]
+    proc = _run_todo(env, calls)
+    assert "in_progress が 2 件" in proc.stdout, proc.stdout
+    assert "#99 が無い" in proc.stdout, proc.stdout
+    assert "update には text が要る" in proc.stdout, proc.stdout
+    assert "add には text か texts が要る" in proc.stdout, proc.stdout
+
+
+def test_todo_update_and_remove(env):
+    calls = [
+        _todo(action="add", texts=["a", "b"]),
+        _todo(action="update", id=1, text="a2"),
+        _todo(action="remove", id=2),
+        _todo(action="list", all=True),
+    ]
+    proc = _run_todo(env, calls)
+    last = _last_todo_result(proc.stdout)
+    assert "[ ] #1: a2" in last and "#2" not in last, proc.stdout
+
+
+def _todo_states(sessions):
+    """セッションに残った todo の状態を、古い順に返す。
+
+    ツール結果の details と、利用者の操作の custom エントリ (todo-state) の両方。
+    """
+    states = []
+    for e in _session_entries(sessions):
+        if e.get("type") == "message" and e["message"].get("toolName") == "todo":
+            states.append(e["message"]["details"])
+        elif e.get("type") == "custom" and e.get("customType") == "todo-state":
+            states.append(e["data"])
+    return states
+
+
+def _resume_todo(env, sessions, calls, *messages, **kwargs):
+    extra = ("--approve", "--session-dir", str(sessions), "-c", *kwargs.pop("extra", ()))
+    return _run_todo(env, calls, *messages, session=True, extra=extra, **kwargs)
+
+
+def test_todo_state_survives_resume_and_reads_the_old_format(env):
+    sessions = env["tmp"] / "sessions"
+    first = [_todo(action="add", texts=["a", "b"]), _todo(action="set", id=1, status="done")]
+    proc = _run_todo(env, first, session=True, extra=("--approve", "--session-dir", str(sessions)))
+    assert proc.returncode == 0, proc.stderr
+    # 旧形式 ({ id, text, done }) に戻す
+    for path in sessions.rglob("*.jsonl"):
+        text = path.read_text(encoding="utf-8")
+        text = text.replace('"status":"done"', '"done":true').replace(
+            '"status":"pending"', '"done":false'
+        )
+        path.write_text(text, encoding="utf-8")
+    proc = _resume_todo(
+        env, sessions, [_todo(action="add", text="c"), _todo(action="list", all=True)]
+    )
+    assert proc.returncode == 0, proc.stderr
+    last = _last_todo_result(proc.stdout)
+    # 旧形式の done が完了として読まれ、ID は続き (#3) から振られる
+    assert "[x] #1: a" in last and "[ ] #2: b" in last and "[ ] #3: c" in last, proc.stdout
+
+
+def test_todos_tidy_and_clear_are_user_commands_that_persist(env):
+    sessions = env["tmp"] / "sessions"
+    calls = [_todo(action="add", texts=["a", "b"]), _todo(action="set", id=1, status="done")]
+    extra = ("--approve", "--session-dir", str(sessions))
+    proc = _run_todo(env, calls, "go", "/todos tidy", session=True, extra=extra)
+    assert proc.returncode == 0, proc.stderr
+    # 利用者の操作は custom エントリで残り、完了だけが片付いている
+    last = _todo_states(sessions)[-1]
+    assert [t["id"] for t in last["todos"]] == [2], last
+    # 再開しても片付いたまま。モデルが呼べるのはツールだけで、/todos は呼べない
+    proc = _resume_todo(env, sessions, [_todo(action="list", all=True)])
+    tail = _last_todo_result(proc.stdout)
+    assert "#1" not in tail and "[ ] #2: b" in tail, proc.stdout
+
+
+def test_todo_state_survives_compaction(env):
+    settings = env["proj"] / ".pi"
+    settings.mkdir()
+    (settings / "settings.json").write_text(
+        '{"compaction": {"keepRecentTokens": 1}}', encoding="utf-8"
+    )
+    sessions = env["tmp"] / "sessions"
+    extra = ("--approve", "--session-dir", str(sessions), "-e", str(FIXTURES / "compact.ts"))
+    calls = [_todo(action="add", text="x")]
+    proc = _run_todo(env, calls, "go", "again", "/spike-compact", session=True, extra=extra)
+    assert proc.returncode == 0, proc.stderr
+    assert any(e.get("type") == "compaction" for e in _session_entries(sessions)), (
+        proc.stdout + proc.stderr
+    )
+    proc = _resume_todo(
+        env, sessions, [_todo(action="list", all=True)], extra=("-e", str(FIXTURES / "compact.ts"))
+    )
+    # 圧縮の前に足した項目 (2 ターン分) が、圧縮のあとも復元される
+    assert "#1: x" in proc.stdout and "#2: x" in proc.stdout, proc.stdout
+
+
+def test_todo_footer_shows_progress_the_active_item_and_clears_on_tidy(env):
+    calls = [
+        _todo(action="add", texts=["first step", "second"]),
+        _todo(action="set", id=1, status="in_progress"),
+        _todo(action="set", id=1, status="done"),
+        _todo(action="set", id=2, status="done"),
+    ]
+    extra = (str(TODO_EXT),)
+    _, statuses = _rpc_script(
+        env, calls, ["go", "/todos tidy"], [], status_key="todo", extra=("-e", *extra)
+    )
+    assert any(s and "📋 0/2 ▶ first step" in s for s in statuses), statuses
+    assert any(s and "✅ 2/2" in s for s in statuses), statuses
+    assert statuses[-1] is None, statuses  # 片付けて空になったら表示を消す
+
+
 def test_git_commit_confirmation_shows_subject_and_body(env):
     subprocess.run(["git", "init", "-q"], cwd=env["proj"], check=True)
     command = "git commit -m 'feat: 件名です' -m '本文の 1 行目'"
@@ -583,6 +854,33 @@ def test_fleet_prompt_template_expands_under_no_extensions(env):
     # 引数が $ARGUMENTS に入り、テンプレート本文が利用者の発言として届く
     assert "依頼:\nREADME を直す" in proc.stdout, proc.stdout
     assert "guarded_task" in proc.stdout
+
+
+def test_stepback_prompt_template_expands_the_question_and_asks_for_a_step_back(env):
+    prompts = Path(env["env"]["PI_CODING_AGENT_DIR"]) / "prompts"
+    prompts.mkdir()
+    rendered = _render(ROOT / "home" / "dot_pi" / "agent" / "prompts" / "stepback.md.tmpl")
+    (prompts / "stepback.md").write_text(rendered, encoding="utf-8")
+    proc = run_pi(env, [], "/stepback なぜ cron が動かない", FAUX_ECHO_USER="1")
+    assert proc.returncode == 0, proc.stderr
+    assert "質問:\nなぜ cron が動かない" in proc.stdout, proc.stdout
+    assert "ステップバック質問" in proc.stdout
+    # 読み取りだけで確かめる指示 (状態を変えない) と、ツール名に依らない文面であること
+    assert "状態を変えない" in proc.stdout
+    assert "guarded_" not in proc.stdout
+
+
+def test_stepback_without_an_argument_targets_the_previous_exchange(env):
+    prompts = Path(env["env"]["PI_CODING_AGENT_DIR"]) / "prompts"
+    prompts.mkdir()
+    rendered = _render(ROOT / "home" / "dot_pi" / "agent" / "prompts" / "stepback.md.tmpl")
+    (prompts / "stepback.md").write_text(rendered, encoding="utf-8")
+    proc = run_pi(env, [], "/stepback", FAUX_ECHO_USER="1")
+    assert proc.returncode == 0, proc.stderr
+    # 引数が空でも展開され、「質問:」が空のときは直前のやり取りを対象にする指示が届く
+    assert "質問:\n\n" in proc.stdout, proc.stdout
+    assert "直前の利用者の質問" in proc.stdout
+    assert "$ARGUMENTS" not in proc.stdout
 
 
 def test_shared_instructions_are_rendered_for_pi():

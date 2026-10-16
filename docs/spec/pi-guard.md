@@ -58,6 +58,19 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 > pi の公式仕様に頼る箇所と、実測して頼っている挙動の一覧は [pi の公式仕様と実測の棚卸し](pi-upstream.md)。pi を更新したときは、そこの手順で確かめる。
 
+### bypass の切り替え
+
+`pis` の起動後に、利用者が `/bypass [on|off]`（引数なしはトグル）で bypass を切り替えられる。起動時の値は `--bypass`（`PI_HARNESS_BYPASS`）。
+
+- **利用者専用**: スラッシュコマンドとして登録し、モデルが呼べるツールは作らない。`bypass` の名前のツールは存在しない
+- **ON は確認を出す**。サンドボックスの内側（証明済み）なら「deny とサンドボックスは有効のまま」、無いときは「deny だけが守り」と文言を変える。確認を出せない（UI が無い）ときは ON にならない。**OFF は確認なし**
+- **表示**: 入力欄の下に `⚡ bypass`（警告色）を出す。`--bypass` で起動したときも出る。サンドボックスの表示（`🔒` / `⚠`）とは別のキー
+- **保持しない**: セッションには残さない。`-c` で再開しても `--bypass` の指定どおりから始まる
+- 効くのは判定器の ask だけで、deny・誘導・秘密の保護は変わらない（[評価順](pi-decide.md)）。切り替え時は、`tool_call` で下した判定の使い回し（`decided`）を捨てる
+- 子エージェントへは、**起動した時点の値**を `inherit_bypass` の子にだけ渡す。動いている子には後からの切り替えが届かない
+- サンドボックスの切り替えはできない（Fence は外側から囲うので、内側から外せない。再起動する）
+- 試験: `test_pi_harness.py` の `test_bypass_command_*`（RPC で `/bypass` を送る。TUI の表示そのものは未確認）
+
 ## 拡張の方針
 
 **拡張は自作を基本とする**（[ADR-0016](../adr/0016-pi-extensions-own-first.md)）。外部の拡張は、**どうしても必要で、自前実装が困難で、振る舞いを十分に確認したもの**だけを、
@@ -101,7 +114,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 | 拡張 | 中身 |
 | --- | --- |
-| `todo` | `todo` ツール（list / add / toggle / clear）と `/todos`。状態はツール結果の `details` に持つので、分岐・再開でその時点に戻る。フッターに進捗を出す |
+| `todo` | `todo` ツールと `/todos`。**リストは 1 つで、勝手には消さない**（同じ目標のための別目標は同じリストへ足していく）。ツールの操作は `list`（`all` で完了・中止も）/ `add`（`text` か `texts` で複数）/ `set`（`id` と `status`: `pending`・`in_progress`・`done`・`cancelled`。何度呼んでも同じ結果で、旧 `toggle` の取り違えが起きない）/ `update` / `remove` / `clear`。モデルへ返す一覧は未完了だけで、完了・中止は件数にたたむ。`in_progress` は同時に 1 件までが指示で、超えると結果に注意を出すが止めない。`/todos` は全件を表示し、`/todos tidy`（完了・中止を片付ける）・`/todos clear` は**利用者専用**（モデルは呼べない）。状態はツール結果の `details` と、利用者の操作の custom エントリ（`todo-state`）に持つので、分岐・再開・圧縮のあとも、その時点に戻る（旧形式 `{ id, text, done }` も読む）。フッターに `📋 完了/全体 ▶ 作業中の項目`（全部完了なら `✅`）を出す |
 | `plan` | `/plan` で切り替え。計画中は **`edit` / `write` / `bash` / MCP などのツールを外し**、`read` / `grep` / `find` / `ls` / `todo` / `task` だけを残す（`guarded_` 付きも同じ）。計画の指示を毎ターン注入し、番号付きの手順で終わったら「実行する / 続ける / 直す」を尋ねる。「実行する」でツールを戻し、実行を依頼する |
 | `btw` | `/btw <質問>`。いまの会話（user / assistant の本文とツール呼び出しの要約。新しい側 6 万文字まで）を文脈に、**現在のモデル**がツールなしで答える。答えはオーバーレイに出すだけで、会話履歴にもモデルの文脈にも残さない。エージェントの応答中でも使える |
 | `activity` | 動いている子エージェント（`task` / `guarded_task`）とバックグラウンドジョブの数を、入力欄の下（フッター）に `🤖 2 subagents / ⚙️ 1 jobs` の形で常時出す（0 件の側は出さず、どちらも 0 なら消す）。1 秒ごとに数え直す。子は起動する側（`subagents` とフルガード）が `globalThis.__piChildren` に登録し、ジョブは `bg_run` が `globalThis.__piJobs` に登録する。ツールは `bg_run`（コマンドを切り離して起動し、ID とログのパスを返す）・`bg_log`（状態とログの末尾。ID なしで一覧）・`bg_kill`（プロセスの木ごと止める）。pi の終了時には動いているジョブも止める。一覧のコマンドは作らない（数だけ）。旧 `/agents` はこれに置き換えた |
@@ -115,7 +128,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - **フルガード（`pis`）の下では、`bg_run` のコマンドを bash と同じ判定（`decide`）に通す**。deny は止め（bypass でも外れない）、ask は確認画面を出し（画面に「バックグラウンドで実行」と出る）、役割の `shell_deny` / `shell_allow` と誘導も効く。役割が `bash` を持たなければ `bg_run` も使えない。`bg_log` / `bg_kill` はジョブの確認と停止だけなので、`bash` を持つ役割には allow。素の `pi` では、Unix ではガードが同じ判定を掛ける（Windows は判定なしで動く）
 - `btw` は `ctx.modelRegistry.complete()` で別に 1 回呼ぶので、そのぶんのトークンは消費する（セッションの合計には入らない）
 - 実測: `btw` は print モードで、直前の会話の内容（合言葉）を踏まえて答え、セッションファイルの行数が増えないことを確認した（オーバーレイ表示は TUI でしか出ず未確認）。Git Bash では `/btw` が `C:/Program Files/Git/btw` に変換されるので、試すときは `MSYS_NO_PATHCONV=1`
-- 実測: `todo` は実際のモデル（`claude-sonnet-5.5`）で add / toggle / list が通った。`plan` は読み込みまで（切り替えと確認画面は TUI でしか動かず、未確認）
+- 実測: `todo` は、書き換え前の版（`toggle` 方式）で実際のモデル（`claude-sonnet-5.5`）の add / toggle / list が通った。書き換え後の版は偽のモデルでの試験（`test_pi_harness.py` の `test_todo_*`・`test_todos_*`。圧縮と再開をまたぐ復元、旧形式の読み込み、利用者の操作の永続化、フッター）までで、**実際のモデルが `set` / `texts` / `cancelled` を使い分けるかと、TUI の表示は未確認**。`plan` は読み込みまで（切り替えと確認画面は TUI でしか動かず、未確認）
 
 ## Windows
 
@@ -271,6 +284,20 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 1 回の応答に並べて起動させる。指示文は `[pi.commands.fleet]` から作る。pi は 1 つの返答に並んだ tool call を
 並列に実行する。`-ne` でもプロンプトテンプレートは読まれる（試験済み）。
 
+### stepback
+
+`/stepback [質問]`（`~/.pi/agent/prompts/stepback.md`）が、質問から具体的な固有名・数値・状況を取り除いた**ステップバック質問**（背景にある原理・概念・上位の問い。1〜3 個）を作って利用者へ示し、先にそれへ答えてから、その答えを根拠に元の質問へ答えさせる
+（ステップバック・プロンプティング）。指示文は `[pi.commands.stepback]` から作る。
+
+- **引数を省略した `/stepback`**: 会話の直前の利用者の質問と、それへの直近の回答を対象にし、「この回答をもっと俯瞰して見直す」依頼として扱う。
+  直前の回答がどの粒度・前提で答えたかを踏まえてステップバック質問を作り、答え直しでは「直前の回答と何が変わるか」を示す。
+  対象の決め方は、`$ARGUMENTS` が空かどうかをモデルが文面で判断するだけで、拡張のコードは無い。直前のやり取りが無いときは、対象を利用者に尋ねて止まる
+
+- 利用者が打ったときだけ展開されるプロンプトテンプレートで、モデルが呼べるツールは作らない。ツールを増やさないので、ガードの判定・伏字化は変わらない
+- 確かめるときは読み取りだけにし（状態を変えない）、確かめていないことは「未確認」「推測」と書かせる。元の質問が変更・実行の依頼でも、答え（方針）を出すところまでで止め、作業に進むかは利用者に確かめさせる
+- ツール名に依らない文面なので、役割（`reader` など）を問わず使える。配る範囲は `/fleet` と同じ（Unix のフルガード側。Windows は `.chezmoiignore` で `prompts/` ごと除外）
+- 試験: `test_pi_harness.py` の `test_stepback_prompt_template_*`（偽のモデルで、引数が `質問:` に入り本文が届くことまで。モデルが実際にどう答えるかは未確認）
+
 ### キーバインド
 
 `~/.pi/agent/keybindings.json` は `[pi.keybinds]` の中身そのもの（ファイルごと生成器の持ち物）。今は
@@ -392,7 +419,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | 変数 | 既定 | 意味 |
 | --- | --- | --- |
 | `PI_HARNESS_ROLE` | `[pi] default_role` | 判定器へ渡す役割（`[pi.profiles]` の名前） |
-| `PI_HARNESS_BYPASS` | 無し | `1` なら判定器へ `bypass` を渡す（ask だけを allow にする） |
+| `PI_HARNESS_BYPASS` | 無し | `1` なら判定器へ `bypass` を渡す（ask だけを allow にする）。起動時の値で、起動後は [`/bypass`](#bypass-の切り替え) で変える |
 | `PI_HARNESS_BOUNDARY` | 無し | `1` なら判定器へ `boundary` を渡す（判定器はまだ使っていない） |
 | `PI_HARNESS_CHILD` | 無し | `1` なら子エージェントとして動く（`guarded_task` を登録しない）。フルガードが子を起動するときに付ける |
 | `PI_HARNESS_TEST_CHILD_EXT` | 無し | 試験だけが使う。子にも読ませる拡張（偽のモデル）のパス |
