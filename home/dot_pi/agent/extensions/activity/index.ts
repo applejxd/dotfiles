@@ -22,6 +22,8 @@ const children = () => g.__piChildren ?? new Map<string, unknown>();
 const STATUS_KEY = "activity";
 const TAIL_DEFAULT = 40;
 const TAIL_MAX = 200;
+const NOTIFY_TAIL = 20;
+const killed = new Set<string>();
 
 function label(): string | undefined {
 	const c = children().size;
@@ -129,6 +131,21 @@ export default function (pi: ExtensionAPI) {
 				try {
 					ui?.notify(`job ${id} 終了 (exit ${exit}): ${params.command.slice(0, 60)}`, code === 0 ? "info" : "warning");
 				} catch {}
+				// LLM にも知らせる。これが無いと、ジョブ待ちで止まったターンが再開しない。
+				// followUp: 作業中はそのターンが終わってから、アイドルならすぐにターンを起こす。
+				// bg_kill で止めたときは LLM 自身が知っているので送らない。
+				if (killed.delete(id)) return;
+				try {
+					pi.sendMessage(
+						{
+							customType: "bg-job-finished",
+							content: `バックグラウンドジョブ ${id} が終わりました (exit ${exit})\nコマンド: ${params.command}\n--- ログの末尾 ${NOTIFY_TAIL} 行 ---\n${tail(log, NOTIFY_TAIL)}`,
+							display: true,
+							details: { id, exit },
+						},
+						{ triggerTurn: true, deliverAs: "followUp" },
+					);
+				} catch {}
 			});
 			return text(`started ${id} (pid ${child.pid})\nlog: ${log}`);
 		},
@@ -169,6 +186,7 @@ export default function (pi: ExtensionAPI) {
 			const job = jobs.get(params.id);
 			if (!job) return text(`not running: ${params.id}`, true);
 			killTree(job.pid);
+			killed.add(params.id);
 			return text(`stop requested: ${params.id}`);
 		},
 	});
