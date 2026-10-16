@@ -158,6 +158,12 @@ A. `chezmoi apply --exclude=scripts` を使う
 （[スクリプトの無効化](docs/spec/development.md#スクリプトの無効化)）。
 zinit などの external は除外されない。
 
+### Q. sudo が使えない機械で apply / update したい
+
+A. `CHEZMOI_NO_SUDO=1 chezmoi apply`（`update` も同じ）。Linux / WSL のみ。
+root が要るスクリプトは飛ばし、sudo が使えるようになった次の apply で走る
+（[sudo 無しモード](docs/spec/development.md#sudo-無しモード)）。
+
 ### Q. 「zinit が無いためプラグインを読み込みません」と出る
 
 A. `chezmoi apply --refresh-externals` を実行する

@@ -130,6 +130,17 @@ Documents/**
 .chezmoiscripts/100_linux/**
 {{- end }}
 
+{{- if eq (includeTemplate "no-sudo" .) "true" }}
+# sudo 無しモード。root が要るスクリプトは除外する (run_once の記録は残らないので、
+# sudo が使えるようになった次の apply で走る)。125 は apt の部分だけ中で分岐する
+# see docs/spec/development.md#sudo-無しモード
+.chezmoiscripts/100_linux/110_native/
+.chezmoiscripts/100_linux/110_native/**
+.chezmoiscripts/100_linux/120_wsl.sh
+.chezmoiscripts/100_linux/121_ubuntu.sh
+.chezmoiscripts/100_linux/130_shell.sh
+{{- end }}
+
 {{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
 # 個人 PC のみで導入
 .config/git/user

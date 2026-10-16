@@ -182,6 +182,27 @@ sudo のパスワードはどこにも保存せず、スクリプトが実行時
 **環境変数からは読まない。** `export SUDO_PASSWORD=...` は効かないうえ、そのシェルから
 起動した AI CLI などの子プロセスへパスワードが引き継がれるので使わない。
 
+### sudo 無しモード
+
+root 権限が無い機械（共有サーバなど）でも `chezmoi apply` / `update` を通すためのモード。
+Linux / WSL のみ。macOS と Windows は対象外。
+
+```bash
+CHEZMOI_NO_SUDO=1 chezmoi apply     # 明示する
+```
+
+`sudo` が PATH に無いときも自動で有効になる。判定は `home/.chezmoitemplates/no-sudo` が
+単一ソースで、`apply` のたびに評価する（`init` に依存しない）。
+
+| 対象 | 有効時の挙動 |
+| --- | --- |
+| `100_linux/110_native/`、`120_wsl.sh`、`121_ubuntu.sh`、`130_shell.sh` | `.chezmoiignore.tmpl` で除外（全部 apt / `/etc` / `chsh` が要る） |
+| `125_mise.sh` | `sudo -v` と Python ビルド用の apt を飛ばし、mise 本体とツールはユーザ領域へ入れる |
+
+除外したスクリプトは `run_once_` の記録が残らないので、sudo が使えるようになった次の
+`apply` で走る。apt 依存のツール（ビルド用パッケージ、bubblewrap など）は自動では入らない。
+管理者に入れてもらうか、sudo のある環境で一度 `apply` する。
+
 ### スクリプトの無効化
 
 一時的に全スクリプトを除外する場合：

@@ -1,0 +1,21 @@
+{{- /*
+sudo を使わないモードの判定。単一ソース。"true" か空文字を返す。
+
+使う側:
+    {{ $nosudo := eq (includeTemplate "no-sudo" .) "true" }}
+
+次のどれかで有効になる (Linux / WSL のみ)。
+  - 環境変数 CHEZMOI_NO_SUDO が空でも "0" でもない
+  - sudo が PATH に無い
+  - データ no_sudo が真 (lint の軸と手動の強制用)
+chezmoi.toml の [data] には置かない (chezmoi update は init を呼ばない)。
+仕組みは docs/spec/development.md#sudo-無しモード が正本。
+*/ -}}
+{{- if eq .chezmoi.os "linux" -}}
+{{-   $env := env "CHEZMOI_NO_SUDO" -}}
+{{-   if hasKey . "no_sudo" -}}
+{{-     if .no_sudo }}true{{ end -}}
+{{-   else if or (and (ne $env "") (ne $env "0")) (not (lookPath "sudo")) -}}
+true
+{{-   end -}}
+{{- end -}}

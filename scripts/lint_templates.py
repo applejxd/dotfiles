@@ -42,6 +42,9 @@ EVERY_OS = ("linux", "darwin", "windows")
 USERS = ("applejxd", "other-user")
 # Raspberry Pi 軸。鍵が無い状態 (init し直していないマシン) も通す
 RASPI = (False, True)
+# sudo 無しモード軸。no-sudo を参照するファイルだけ両方通す
+# (False でもデータで明示し、ホストに依存させない)
+NO_SUDO = (False, True)
 
 EXCLUDED = {
     # `execute-template --init` が要る (別経路)
@@ -118,8 +121,17 @@ def target_raspi(text: str) -> tuple[bool, ...]:
     return RASPI if ("is-raspi" in text or "is_raspi" in text) else RASPI[:1]
 
 
+def target_no_sudo(text: str) -> tuple[bool | None, ...]:
+    return NO_SUDO if "no-sudo" in text else (None,)
+
+
 def render(
-    source: Path, text: str, platform: str, username: str, raspi: bool = False
+    source: Path,
+    text: str,
+    platform: str,
+    username: str,
+    raspi: bool = False,
+    no_sudo: bool | None = None,
 ) -> tuple[str | None, str]:
     """(描画結果, 理由) を返す。秘密でスキップしたときは (None, 理由)。"""
     chezmoi = shutil.which("chezmoi")
@@ -129,6 +141,8 @@ def render(
     # 鍵の不在そのものが分岐条件 (hasKey) なので、False 側では鍵を渡さない。
     if raspi:
         data["is_raspi"] = True
+    if no_sudo is not None:
+        data["no_sudo"] = no_sudo
     override = json.dumps(data)
     result = subprocess.run(
         [
@@ -163,18 +177,21 @@ def check(source: Path, path: str) -> list[str]:
     for platform in target_platforms(path):
         for username in target_users(text):
             for raspi in target_raspi(text):
-                where = f"{path} [os={platform} user={username} raspi={raspi}]"
-                rendered, reason = render(source, text, platform, username, raspi)
-                if rendered is None:
-                    if not reason.startswith("秘密"):
-                        failures.append(f"{where}: {reason}")
-                    continue
-                # {{ if }} で中身が全部消えるテンプレートがある
-                if not rendered.replace("\ufeff", "").strip():
-                    continue
-                problem = linter(rendered)
-                if problem:
-                    failures.append(f"{where}:\n{problem}")
+                for no_sudo in target_no_sudo(text):
+                    where = (
+                        f"{path} [os={platform} user={username} raspi={raspi} no_sudo={no_sudo}]"
+                    )
+                    rendered, reason = render(source, text, platform, username, raspi, no_sudo)
+                    if rendered is None:
+                        if not reason.startswith("秘密"):
+                            failures.append(f"{where}: {reason}")
+                        continue
+                    # {{ if }} で中身が全部消えるテンプレートがある
+                    if not rendered.replace("\ufeff", "").strip():
+                        continue
+                    problem = linter(rendered)
+                    if problem:
+                        failures.append(f"{where}:\n{problem}")
     return failures
 
 
