@@ -1,0 +1,6 @@
+{{- $stepback := (includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml).pi.commands.stepback -}}
+---
+description: {{ $stepback.description | toJson }}
+argument-hint: {{ $stepback.argument_hint | toJson }}
+---
+{{ $stepback.template | trim }}
