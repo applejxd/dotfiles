@@ -21,8 +21,8 @@ export type CallDeciderOptions = {
 	/** 役割ごとに登録するツール (rules.json の profile_tools) */
 	profileTools: Record<string, string[]>;
 	role: string;
-	/** true なら ask を allow にする (deny と誘導は効く) */
-	bypass: boolean;
+	/** true なら ask を allow にする (deny と誘導は効く)。関数なら呼び出しごとに評価する (起動後に切り替えるため) */
+	bypass: boolean | (() => boolean);
 	/** サンドボックスの内側と証明できているか (緩和が効く)。env の自己申告ではなく、カナリアの結果を渡す */
 	boundary: boolean;
 	/** サンドボックスが開けた場所。boundary のときの、作業ツリーの外の判定に使う */
@@ -45,7 +45,7 @@ export function createCallDecider(o: CallDeciderOptions): (tool: string, input: 
 			input: asBash ? { command: (input as any)?.command } : input,
 			cwd,
 			role: o.role,
-			bypass: o.bypass,
+			bypass: typeof o.bypass === "function" ? o.bypass() : o.bypass,
 			boundary: o.boundary,
 			...(o.boundary && o.allowed ? { allowed: o.allowed } : {}),
 		};

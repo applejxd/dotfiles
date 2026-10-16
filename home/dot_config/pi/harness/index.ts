@@ -27,7 +27,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // 判定なしに動く (docs/research/agents/pi-harness-spike.md の E1)
 const PREFIX = "guarded_";
 const TOOLS = ["bash", "read", "edit", "write", "grep", "find", "ls"] as const;
-const BYPASS = process.env.PI_HARNESS_BYPASS === "1";
+// 起動時の値は pis の --bypass。起動後は /bypass (利用者の入力欄からだけ。ツールは作らない) で切り替える
+let bypass = process.env.PI_HARNESS_BYPASS === "1";
 // サンドボックスの内側と期待されているか (PI_HARNESS_BOUNDARY=1)。これは期待にすぎない。
 // 期待されているときは、カナリアで実測し、効いていなければ起動を止める。緩和 (BOUNDARY) は実測が通ったときだけ。
 const BOUNDARY_ENV = readBoundaryEnv(process.env);
@@ -102,7 +103,7 @@ const callDecider = createCallDecider({
 	judge: rules.judge,
 	profileTools: rules.profile_tools ?? {},
 	role: ROLE,
-	bypass: BYPASS,
+	bypass: () => bypass,
 	boundary: BOUNDARY,
 	allowed: BOUNDARY_ENV?.allowed,
 });
@@ -138,10 +139,44 @@ function baseName(toolName: string): string {
 export default async function (pi: ExtensionAPI) {
 	await loadCommitPreview();
 	// 状態の表示 (安全の根拠ではなく、いまどちらで動いているかの目印)
+	const showBypass = (ctx: any) => {
+		if (ctx.hasUI) ctx.ui.setStatus("bypass", bypass ? ctx.ui.theme.fg("warning", "⚡ bypass") : undefined);
+	};
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
+		showBypass(ctx);
 		if (BOUNDARY) ctx.ui.setStatus("sandbox", "🔒 サンドボックス");
 		else if (NO_SANDBOX) ctx.ui.setStatus("sandbox", "⚠ サンドボックス無し");
+	});
+	// 利用者専用の bypass 切り替え。モデルが呼べるツールは作らない。セッションには残さない
+	// see docs/spec/pi-guard.md#bypass-の切り替え
+	pi.registerCommand("bypass", {
+		description: "bypass (ask を確認なしで通す) の切り替え: /bypass [on|off]",
+		handler: async (args: string, ctx: any) => {
+			const arg = String(args ?? "").trim();
+			if (arg !== "" && arg !== "on" && arg !== "off") {
+				ctx.ui?.notify?.("使い方: /bypass [on|off]", "warning");
+				return;
+			}
+			const want = arg === "on" ? true : arg === "off" ? false : !bypass;
+			if (want === bypass) {
+				ctx.ui?.notify?.(`bypass はすでに ${bypass ? "ON" : "OFF"}`, "info");
+				return;
+			}
+			if (want) {
+				// ON にできるのは確認を出せるときだけ
+				if (!ctx.hasUI) return;
+				const body = BOUNDARY
+					? "ask の操作 (git commit や MCP など) を確認なしで通します。deny とサンドボックスは有効のまま。"
+					: "サンドボックスが無いまま、ask の操作 (git commit や未知の shell や MCP など) を確認なしで通します。deny だけが守りです。";
+				if ((await ctx.ui.confirm("bypass を有効にしますか？", body)) !== true) return;
+			}
+			bypass = want;
+			// 前の設定で下した判定を execute() で使い回さない
+			decided.clear();
+			showBypass(ctx);
+			ctx.ui?.notify?.(`bypass を ${bypass ? "ON" : "OFF"} にした`, bypass ? "warning" : "info");
+		},
 	});
 	pi.on("tool_call", async (event, ctx) => {
 		const tool = baseName(event.toolName);
@@ -335,7 +370,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				...process.env,
 				PI_HARNESS_CHILD: "1",
 				PI_HARNESS_ROLE: agent.profile,
-				PI_HARNESS_BYPASS: BYPASS && agent.inherit_bypass ? "1" : "",
+				PI_HARNESS_BYPASS: bypass && agent.inherit_bypass ? "1" : "",
 			};
 			const child = spawn("pi", args, { cwd: ctx.cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
 			runningChildren.set(toolCallId, { agent: params.agent, model, task: params.task, pid: child.pid, startedAt: Date.now() });
