@@ -112,9 +112,88 @@ function skillScriptAllowed(cmd: string, pi: Obj): string | null {
 	return null;
 }
 
+// ローカルの shell が解釈する文字。クォートの外にあれば、ssh の引数が「リモートへ渡る文字列」だと言い切れない
+const LOCAL_SHELL_META = ";&|<>(){}$`\n*?[~#!";
+
+/**
+ * `ssh <許可した宛先> <コマンド>` / `scp [-rpqCv] <許可した宛先>:<パス> <ローカル>` (逆向きも) なら、
+ * 通常の判定にかける文字列を返す (それ以外は null)。
+ * - ssh: リモートで実行される文字列そのもの。
+ * - scp: 転送を `cp` に置き換えた形。ローカル側の読み取り・書き込みの検査が cp と同じに効く
+ *   (リモート側は `/dev/null` に置き換える。リモートのパスはローカルでは判定できない)。
+ * ローカルの shell が先に解釈しうる形 (クォート外のメタ文字・二重引用符内の `$` や `` ` ``) は対象にしない。
+ * 宛先の前のオプション (`-o ProxyCommand=…` など) は受け付けず、コマンドなし (対話 shell) も対象外。
+ * see docs/spec/pi-decide.md#ssh--scp-の許可
+ */
+function unwrapRemoteExec(cmd: string, targets: readonly string[]): string | null {
+	if (targets.length === 0) return null;
+	const text = cmd.trim();
+	const isScp = text.startsWith("scp ");
+	// scp はリモートのパスに `~` を書く (`host:~/x`)。語頭の `~` はローカルでは展開されない `host:` の後ろなので許す
+	const meta = isScp ? LOCAL_SHELL_META.replace("~", "") : LOCAL_SHELL_META;
+	let quote = "";
+	for (const c of text) {
+		if (quote === "'") {
+			if (c === "'") quote = "";
+		} else if (quote === '"') {
+			if (c === '"') quote = "";
+			else if (c === "$" || c === "`" || c === "\\" || c === "!") return null;
+		} else if (c === "'" || c === '"') {
+			quote = c;
+		} else if (c === "\\" || meta.includes(c)) {
+			return null;
+		}
+	}
+	if (quote) return null;
+	let tokens: string[];
+	try {
+		tokens = shlexSplit(text);
+	} catch (e) {
+		if (e instanceof ShlexError) return null;
+		throw e;
+	}
+	if (isScp) return unwrapScp(tokens, targets);
+	if (tokens.length < 3 || tokens[0] !== "ssh" || !targets.includes(tokens[1])) return null;
+	return tokens.slice(2).join(" ");
+}
+
+const SCP_FLAGS = new Set(["-r", "-p", "-q", "-C", "-v"]);
+const shq = (t: string): string => (/^[\w@%+=:,./~-]+$/.test(t) ? t : `'${t.replaceAll("'", "'\\''")}'`);
+
+/** scp の引数を、リモート側を `/dev/null` にした `cp` に置き換える。許す形は、リモートがちょうど 1 つで、アップロードかダウンロード 1 件。 */
+function unwrapScp(tokens: string[], targets: readonly string[]): string | null {
+	let i = 1;
+	const flags: string[] = [];
+	while (i < tokens.length && tokens[i].startsWith("-")) {
+		if (!SCP_FLAGS.has(tokens[i])) return null;
+		if (tokens[i] === "-r") flags.push("-r");
+		i++;
+	}
+	const operands = tokens.slice(i);
+	if (operands.length < 2) return null;
+	const isRemote = (t: string): boolean => targets.some((h) => t.startsWith(`${h}:`));
+	// 宛先以外の `host:` 形 (別ホスト・scp:// の URL) は、ローカルのファイルではないので受け付けない
+	if (operands.some((t) => !isRemote(t) && /^[^/]*:/.test(t))) return null;
+	const remotes = operands.filter(isRemote).length;
+	if (remotes !== 1) return null;
+	const last = operands[operands.length - 1];
+	let local: string[];
+	if (isRemote(last)) local = [...operands.slice(0, -1), "/dev/null"];
+	else if (isRemote(operands[0]) && operands.length === 2) local = ["/dev/null", last];
+	else return null;
+	return ["cp", ...flags, ...local.map(shq)].join(" ");
+}
+
 /** bash の判定器を作る。`tables` は tables.toml を JSON にしたもの。 */
 export function makeBashDecider(tables: Tables): BashDecider {
-	return (rawCmd, cwd, pi, profile, common: Common) => {
+	const decide = (
+		rawCmd: string,
+		cwd: string,
+		pi: Obj,
+		profile: Obj,
+		common: Common,
+		remote: boolean,
+	): ReturnType<BashDecider> => {
 		// 判定ごとに文脈を作り直す (呼び出しの順に依らない)
 		const ctx = newCtx(tables, common, cwd);
 		let cmd = rawCmd;
@@ -128,6 +207,10 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		} catch {
 			// 解析できないときは元の文字列で検査
 		}
+		// ssh の許可は 1 段だけ。中身は同じ判定にかけるので、リモート側の `ssh` はそのまま deny に当たる
+		const targets = ((pi.remote_exec?.targets as unknown[] | undefined) ?? []).map(String);
+		const inner = remote ? null : unwrapRemoteExec(cmd, targets);
+		if (inner !== null) return decide(inner, cwd, pi, profile, common, true);
 		const deny = bashCommonDeny(ctx, cmd);
 		if (deny) return { commonDeny: deny, roleRule: null };
 		const g = guide(cmd, pi);
@@ -149,4 +232,5 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		if (script) return { commonDeny: null, roleRule: response("allow", `\`${script}\` は [pi.skill_scripts] にある`, "rule") };
 		return { commonDeny: null, roleRule: null };
 	};
+	return (rawCmd, cwd, pi, profile, common: Common) => decide(rawCmd, cwd, pi, profile, common, false);
 }

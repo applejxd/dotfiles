@@ -1166,6 +1166,11 @@
     }
    ]
   },
+  "remote_exec": {
+   "targets": [
+    "sbx@sandbox-gpu"
+   ]
+  },
   "sandbox": {
    "control_dirs": [
     "~/.config/pi",

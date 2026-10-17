@@ -884,6 +884,12 @@ allow = [
   "docker ps",
 ]
 
+# `ssh <targets の宛先> <コマンド>` と `scp` (この宛先との 1 件の転送) を、通常の判定にかける。
+# [bash] deny の "ssh" / "scp" は残す (対象外の形は deny のまま)。
+# see docs/spec/pi-decide.md#ssh--scp-の許可
+[pi.remote_exec]
+targets = ["sbx@sandbox-gpu"]
+
 # shell 出力の伏字化。誘導と結果フィルタを抜けて shell を通ったものへの安全網。
 # ★境界ではない。base64 や tr で変換されるとすり抜ける (実測)。事故と素朴な
 #   プロンプトインジェクションを想定した層で、意図的な持ち出しは止まらない。
