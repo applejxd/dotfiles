@@ -112,9 +112,53 @@ function skillScriptAllowed(cmd: string, pi: Obj): string | null {
 	return null;
 }
 
+// ローカルの shell が解釈する文字。クォートの外にあれば、ssh の引数が「リモートへ渡る文字列」だと言い切れない
+const LOCAL_SHELL_META = ";&|<>(){}$`\n*?[~#!";
+
+/**
+ * `ssh <許可した宛先> <コマンド>` なら、リモートで実行される文字列を返す (それ以外は null)。
+ * ローカルの shell が先に解釈しうる形 (クォート外のメタ文字・二重引用符内の `$` や `` ` ``) は対象にしない。
+ * 宛先の前のオプション (`-o ProxyCommand=…` など) は受け付けず、コマンドなし (対話 shell) も対象外。
+ * see docs/spec/pi-decide.md#ssh-の許可
+ */
+function unwrapRemoteExec(cmd: string, targets: readonly string[]): string | null {
+	if (targets.length === 0) return null;
+	const text = cmd.trim();
+	let quote = "";
+	for (const c of text) {
+		if (quote === "'") {
+			if (c === "'") quote = "";
+		} else if (quote === '"') {
+			if (c === '"') quote = "";
+			else if (c === "$" || c === "`" || c === "\\" || c === "!") return null;
+		} else if (c === "'" || c === '"') {
+			quote = c;
+		} else if (c === "\\" || LOCAL_SHELL_META.includes(c)) {
+			return null;
+		}
+	}
+	if (quote) return null;
+	let tokens: string[];
+	try {
+		tokens = shlexSplit(text);
+	} catch (e) {
+		if (e instanceof ShlexError) return null;
+		throw e;
+	}
+	if (tokens.length < 3 || tokens[0] !== "ssh" || !targets.includes(tokens[1])) return null;
+	return tokens.slice(2).join(" ");
+}
+
 /** bash の判定器を作る。`tables` は tables.toml を JSON にしたもの。 */
 export function makeBashDecider(tables: Tables): BashDecider {
-	return (rawCmd, cwd, pi, profile, common: Common) => {
+	const decide = (
+		rawCmd: string,
+		cwd: string,
+		pi: Obj,
+		profile: Obj,
+		common: Common,
+		remote: boolean,
+	): ReturnType<BashDecider> => {
 		// 判定ごとに文脈を作り直す (呼び出しの順に依らない)
 		const ctx = newCtx(tables, common, cwd);
 		let cmd = rawCmd;
@@ -128,6 +172,10 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		} catch {
 			// 解析できないときは元の文字列で検査
 		}
+		// ssh の許可は 1 段だけ。中身は同じ判定にかけるので、リモート側の `ssh` はそのまま deny に当たる
+		const targets = ((pi.remote_exec?.targets as unknown[] | undefined) ?? []).map(String);
+		const inner = remote ? null : unwrapRemoteExec(cmd, targets);
+		if (inner !== null) return decide(inner, cwd, pi, profile, common, true);
 		const deny = bashCommonDeny(ctx, cmd);
 		if (deny) return { commonDeny: deny, roleRule: null };
 		const g = guide(cmd, pi);
@@ -149,4 +197,5 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		if (script) return { commonDeny: null, roleRule: response("allow", `\`${script}\` は [pi.skill_scripts] にある`, "rule") };
 		return { commonDeny: null, roleRule: null };
 	};
+	return (rawCmd, cwd, pi, profile, common: Common) => decide(rawCmd, cwd, pi, profile, common, false);
 }

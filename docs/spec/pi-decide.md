@@ -76,6 +76,18 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 `rm` の承認の免除（`ask_hook_owned`）は、hook と同じく `[bash] ask` から外れる。判定器ではその先の
 既定（実装役は ask）に落ちるので、作業ツリーの中の `rm` も確認になる（今の OpenCode と同じ）。
 
+## ssh の許可
+
+`[bash] deny` の `ssh` は残したまま、`[pi.remote_exec] targets` に載せた宛先（`sbx@sandbox-gpu`）への `ssh <宛先> <コマンド>` だけを、
+`<コマンド>` をリモートで実行される文字列として**通常の判定**（共通の禁止・誘導・ask・allow）にかける（`judge/bash.ts` の `unwrapRemoteExec`）。
+`ssh sbx@sandbox-gpu git push` は `git push` の deny、`... git log` は `[pi.shell] allow` の allow になる。
+
+- 展開するのは 1 段だけ。リモート側の `ssh` は deny に当たる
+- 次の形は展開せず、`ssh` の deny のまま。宛先の前のオプション（`-o ProxyCommand=…` / `-J`）、コマンドなし（対話 shell）、他の宛先、
+  ローカルの shell が先に解釈する文字（クォート外の `; & | < > ( ) { } $ \` * ? [ ~ # !`・改行・`\`、二重引用符内の `$` `` ` `` `\` `!`）、閉じていないクォート
+- 判定のパスの検査（`~/.ssh` など）はローカルの `cwd` / ホームで行う。リモートのパスとは対応しない（厳しめに倒れる）
+- リモートで動くので、リモート側のファイルへの `read` / `write` の境界判定は効かない。信頼できる宛先だけを載せる
+
 ## 誘導
 
 `[[pi.guide]]` に当たる bash のコマンドは、より適したツールへの案内を理由にして deny する（応答の `guide` に id）。

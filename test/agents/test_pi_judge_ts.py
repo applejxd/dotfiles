@@ -106,6 +106,28 @@ def _req(tool, input_, **extra):
 
 
 @pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_ssh_to_the_allowed_target_is_judged_by_the_remote_command():
+    h = "ssh sbx@sandbox-gpu"
+    cmds = [
+        h + " git log",
+        h + " 'git push'",
+        h + " 'git log && git push'",
+        h + " 'cat ~/.ssh/id_rsa'",
+        h + " 'ssh other@host ls'",
+        h,
+        "ssh other@host ls",
+        "ssh -o ProxyCommand=x sbx@sandbox-gpu ls",
+        h + " ls; git push",
+        h + " ls > out",
+        h + ' "echo $HOME"',
+    ]
+    out = _judge([_req("bash", {"command": c}) for c in cmds])
+    assert out[0]["decision"] == "allow"
+    assert [o["decision"] for o in out[1:]] == ["deny"] * 10
+    assert "git push" in out[1]["reason"] and "ssh" in out[4]["reason"]
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
 def test_boundary_only_drops_the_default_ask_of_plain_shell_commands():
     out = _judge(
         [
@@ -142,7 +164,14 @@ def test_boundary_file_access_outside_the_worktree_follows_what_the_os_opened():
         ]
     )
     assert [r["decision"] for r in out] == [
-        "allow", "allow", "deny", "allow", "deny", "ask", "ask", "ask",
+        "allow",
+        "allow",
+        "deny",
+        "allow",
+        "deny",
+        "ask",
+        "ask",
+        "ask",
     ]
     assert "サンドボックスの外" in out[2]["reason"] and "サンドボックスの外" in out[4]["reason"]
 
