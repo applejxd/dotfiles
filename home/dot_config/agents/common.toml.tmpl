@@ -884,9 +884,9 @@ allow = [
   "docker ps",
 ]
 
-# `ssh <targets の宛先> <コマンド>` は、<コマンド> をリモートで実行される文字列として通常の判定にかける。
-# [bash] deny の "ssh" は残す (宛先の前のオプション・コマンドなし・他の宛先は deny のまま)。
-# see docs/spec/pi-decide.md#ssh-の許可
+# `ssh <targets の宛先> <コマンド>` と `scp` (この宛先との 1 件の転送) を、通常の判定にかける。
+# [bash] deny の "ssh" / "scp" は残す (対象外の形は deny のまま)。
+# see docs/spec/pi-decide.md#ssh--scp-の許可
 [pi.remote_exec]
 targets = ["sbx@sandbox-gpu"]
 
