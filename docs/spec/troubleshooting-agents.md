@@ -152,6 +152,32 @@ uv run --with pyyaml --no-project python scripts/agents/validate_skills.py
 **成功の確認**: `validate_skills.py` が何も出さずに終わり、CLI の再起動後にバナーの
 警告が消える。
 
+## ツール呼び出しの引数が壊れる（`Invalid arguments`、引数が空）
+
+**対象**: pi のツール呼び出し全般（観測したのは `guarded_edit`）。モデルは `claude-sonnet-5.5` で観測。
+
+**症状**: 呼び出しが `Invalid arguments for tool "guarded_edit": Expected ':' after property name in JSON at position N`
+で失敗する。記録上の呼び出しは `arguments` が `{}`（空）になる。
+他のマシンで「引数が空のツール呼び出し」を見た記憶があるが、同じ現象と推測している（未確認）。
+
+**確認**: セッション記録で失敗を数える。
+
+```sh
+grep -rhoE 'argumentsError": ?"[^\\]*' ~/.pi/agent/sessions | cut -c1-110 | sort | uniq -c
+```
+
+**原因**: モデルが引数の JSON を生成する途中で、壊れた出力をする。実測では、`"oldText"` の直後に
+`:` ではなく `>` が出て、本文も途中で欠けていた。pi が `argumentsError` として検出し、モデルへ
+不正な引数と返す。ツールやガードが壊したものではない。
+
+**頻度**（2026-10-18、この機の全セッション）: ツール呼び出し約 2,600 回中 1 回（`guarded_edit` は 211 回中 1 回）。
+直後の送り直しで成功した。子のエージェント（`guarded_task`）は `--no-session` で記録が残らないので、
+子の失敗率は未測定。
+
+**対処**: 同じ呼び出しを送り直す（モデルが自動で再送する）。頻発するなら、同じ編集を `write`（全文）に替える。
+
+**成功の確認**: 送り直した呼び出しが `Successfully replaced ...` を返す。
+
 ## Windows で .copilot/skills のリンクが作られない
 
 **対象**: Windows の Copilot CLI。`run_after_342_copilot_skills.ps1.tmpl` が作る
