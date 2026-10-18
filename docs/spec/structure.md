@@ -246,6 +246,29 @@ systemd（`systemd=true`）に任せます。WSL の init は起動直後に `mo
 そのままマウントされます（NAS への CIFS マウントで確認済み）。
 `/etc/fstab` 自体は chezmoi では管理しません。
 
+#### WSL の時刻同期
+
+同じ `120_wsl` が、`systemd-timesyncd` を**止めて mask** し、偏った `adjtimex` の `tick` を標準値へ戻します
+（条件: systemd が動いていて、ユニットがあり、まだ mask されていない）。内容を変えたので、既存のマシンでも
+次の `apply` で一度だけ実行されます。
+
+- **理由**: Ubuntu 24.04 以前は `systemd-timesyncd` が既定で有効です。WSL は Hyper-V の時刻同期でホストと常に
+  同期するため NTP クライアントは不要で、むしろ干渉して `tick` を偏らせ、`CLOCK_MONOTONIC` を約 2% 遅らせます。
+  これにより、プロセスの生死を `create_time` の厳密一致で判定するアプリ（FreeVideo の常駐サービスなど）が壊れます。
+  Canonical の公式文書も、Ubuntu 24.04 以前では「ホストの暗黙の時刻同期と衝突するのでこのユニットを無効にすべき」としています
+  （<https://ubuntu.com/wsl/docs/latest/explanation/time-sync/>）。上流の報告とこの環境の実測は dockers リポジトリの
+  `docs/research/wsl2-clock-timesyncd-upstream.md` と `freevideo-install-and-generation.md` の記録 E2〜E5 を参照
+- **`disable` ではなく `mask --now`**: `disable` だけでは動いているサービスは止まらず、他のユニットが起動し直すこともある。
+- **`tick` を戻す理由**: `timesyncd` を止めても、すでに偏った `tick` は誰かが戻すまで残る
+  （この環境の実測）。標準値は `1000000 / CLK_TCK`（通常 10000）。再起動でも元に戻る
+- **対象外**: 隔離ディストロ（`[automount] enabled=false`）はこのスクリプトが早期に終わるため触らない。
+  sandbox は `guest/setup.sh` が同じ設定を入れる（[時刻同期](wsl-sandbox.md#時刻同期)）。Ubuntu 25.10 以降の新規環境は
+  既定が chrony（WSL では `-x`）で `timesyncd` が無いため、条件を満たさず何もしない
+- **未確認**: `timesyncd` を止めた状態で、壁時計の絶対的なずれが長期（数時間〜数日）で許容範囲に収まるか。
+  Canonical の説明（Hyper-V の同期でよい）に頼るが、この環境では測り続けていない。
+  このスクリプトを実機で `chezmoi apply` した結果（mask と `tick` の復元）と、再起動後の動作も未確認
+  （スクリプトは描画・構文・shellcheck まで確かめた）
+
 ### リモートから WSL へ SSH する
 
 **基本は Tailscale 経由で、`tailscale serve` を 1 回設定する。ファイアウォールの規則は要らない**

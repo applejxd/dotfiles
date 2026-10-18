@@ -62,4 +62,47 @@ if ! $has_conf || ! cmp -s "$cur" "$new"; then
     sudo install -m 644 "$new" "$conf"
 fi
 
+# Ubuntu 24.04 以前は systemd-timesyncd が既定で有効で、WSL の Hyper-V 時刻同期と干渉して
+# adjtimex の tick が偏り、単調時計が遅れる (Canonical は無効化を推奨)。止めて mask する
+# see docs/spec/structure.md#wsl-の時刻同期
+if [[ -d /run/systemd/system ]] && systemctl cat systemd-timesyncd.service > /dev/null 2>&1 \
+    && [[ "$(systemctl is-enabled systemd-timesyncd.service 2> /dev/null || true)" != masked ]]; then
+    sudo systemctl mask --now systemd-timesyncd.service
+    echo "systemd-timesyncd を止めて mask しました (WSL は Hyper-V の時刻同期に任せます)"
+fi
+
+# timesyncd を止めても、すでに偏った tick は誰かが戻すまで残る。標準値からずれていれば戻す (再起動でも戻る)
+if [[ -d /run/systemd/system ]]; then
+    sudo python3 - << 'PY'
+import ctypes
+import os
+
+ADJ_TICK = 0x4000
+
+
+class Timex(ctypes.Structure):
+    _fields_ = [
+        ("modes", ctypes.c_uint), ("offset", ctypes.c_long), ("freq", ctypes.c_long),
+        ("maxerror", ctypes.c_long), ("esterror", ctypes.c_long), ("status", ctypes.c_int),
+        ("constant", ctypes.c_long), ("precision", ctypes.c_long), ("tolerance", ctypes.c_long),
+        ("time_sec", ctypes.c_long), ("time_usec", ctypes.c_long), ("tick", ctypes.c_long),
+        ("ppsfreq", ctypes.c_long), ("jitter", ctypes.c_long), ("shift", ctypes.c_int),
+        ("stabil", ctypes.c_long), ("jitcnt", ctypes.c_long), ("calcnt", ctypes.c_long),
+        ("errcnt", ctypes.c_long), ("stbcnt", ctypes.c_long), ("tai", ctypes.c_int),
+        ("pad", ctypes.c_int * 11),
+    ]
+
+
+libc = ctypes.CDLL(None, use_errno=True)
+nominal = round(1_000_000 / os.sysconf("SC_CLK_TCK"))
+current = Timex()
+if libc.adjtimex(ctypes.byref(current)) >= 0 and current.tick != nominal:
+    change = Timex()
+    change.modes = ADJ_TICK
+    change.tick = nominal
+    if libc.adjtimex(ctypes.byref(change)) >= 0:
+        print(f"adjtimex の tick を {current.tick} から {nominal} へ戻しました")
+PY
+fi
+
 echo "✅ 完了：WSL の設定を行いました"
