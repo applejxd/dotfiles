@@ -94,7 +94,7 @@ def diff_context(docs: Path, since: str | None) -> dict | None:
     if baseline is None:
         out = _git(["log", "-1", "--format=%H%x09%cs%x09%s", "--", docs_rel], top)
         if out and out.strip():
-            parts = (out.strip().split("\t", 2) + ["", ""])[:3]
+            parts = [*out.strip().split("\t", 2), "", ""][:3]
             baseline = parts[0]
             baseline_label = f"{parts[0][:8]} {parts[1]} {parts[2]}"
 
@@ -158,7 +158,7 @@ def active_changes(docs: Path) -> list[str]:
 def _capped(lines: list[str]) -> list[str]:
     if len(lines) <= MAX_LIST:
         return lines
-    return lines[:MAX_LIST] + [f"... ほか {len(lines) - MAX_LIST} 件"]
+    return [*lines[:MAX_LIST], f"... ほか {len(lines) - MAX_LIST} 件"]
 
 
 def cmd_status(args: argparse.Namespace) -> int:

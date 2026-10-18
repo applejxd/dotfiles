@@ -9,6 +9,7 @@ see docs/spec/web-search.md
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import html
 import html.parser
@@ -26,9 +27,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, ClassVar
 
 CHAIN = ("brave", "exa", "tavily", "duckduckgo")
 KEYED = {"brave", "exa", "tavily", "openalex"}
@@ -272,10 +274,8 @@ def classify(status: int, headers: dict[str, str]) -> None:
     if 200 <= status < 300:
         return
     retry = 0.0
-    try:
+    with contextlib.suppress(ValueError):
         retry = float(headers.get("retry-after", "0"))
-    except ValueError:
-        pass
     if status in (401, 403):
         raise ProviderError("auth", f"HTTP {status}")
     if status == 402:
@@ -608,8 +608,10 @@ def default_transport(parts: urllib.parse.SplitResult, address: str, timeout: fl
 
 
 class _TextParser(html.parser.HTMLParser):
-    SKIP = {"script", "style", "noscript", "template", "svg"}
-    BLOCK = {"p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "section", "article", "table"}
+    SKIP: ClassVar[set[str]] = {"script", "style", "noscript", "template", "svg"}
+    BLOCK: ClassVar[set[str]] = {
+        "p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "section", "article", "table",
+    }
 
     def __init__(self) -> None:
         super().__init__()
@@ -731,10 +733,8 @@ def sync_keys(
         if not session:
             return added, wanted
         env["BW_SESSION"] = session
-    try:
+    with contextlib.suppress(OSError, subprocess.SubprocessError):  # 同期できなくても、取れる分は取る
         run([bw, "sync", "--nointeraction"], capture_output=True, text=True, timeout=120, env=env)
-    except (OSError, subprocess.SubprocessError):
-        pass  # 同期できなくても、取れる分は取る
     for name in wanted:
         try:
             proc = run(

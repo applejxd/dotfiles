@@ -445,14 +445,12 @@ def load_policy(path: Path | None) -> dict[str, Any]:
 def overlaps_allowed(policy: dict[str, Any], slide: int, a: str, b: str) -> bool:
     pairs = policy.get("intentional_overlaps", [])
     wanted = {a, b}
-    for item in pairs:
-        if (
-            isinstance(item, dict)
-            and item.get("slide") == slide
-            and {item.get("a"), item.get("b")} == wanted
-        ):
-            return True
-    return False
+    return any(
+        isinstance(item, dict)
+        and item.get("slide") == slide
+        and {item.get("a"), item.get("b")} == wanted
+        for item in pairs
+    )
 
 
 def audit(
