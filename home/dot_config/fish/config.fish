@@ -43,7 +43,7 @@ end
 # http://www.rickynews.com/blog/2014/07/19/useful-bash-aliases/
 # http://rksz.hateblo.jp/entry/2012/10/27/201939
 function jcd
-    if $argv[1]
+    if test -n "$argv[1]"
         set -l JUMPDIR (find . -type d -maxdepth 1 | grep $argv[1] | tail -1)
         if test -d "$JUMPDIR" &&  test -n "$JUMPDIR"
             cd "$JUMPDIR"
@@ -125,11 +125,11 @@ function wman
 end
 
 function audio-dl
-    youtube-dl --ignore-errors --output "~/Downloads/%(title)s.%(ext)s" --extract-audio --audio-format mp3 --embed-thumbnail "$argv[1]"
+    yt-dlp --ignore-errors --output "$HOME/Downloads/%(title)s.%(ext)s" --extract-audio --audio-format mp3 --embed-thumbnail "$argv[1]"
 end
 
 function video-dl
-    youtube-dl --ignore-errors --output "~/Downloads/%(title)s.%(ext)s" --recode-video mp4  --add-metadata "$argv[1]"
+    yt-dlp --ignore-errors --output "$HOME/Downloads/%(title)s.%(ext)s" --recode-video mp4  --add-metadata "$argv[1]"
 end
 
 # $argv[1] = kind, $argv[2] = string
@@ -175,4 +175,5 @@ set -x BIBINPUTS ~/Dropbox/bib $BIBINPUTS
 # Initialization for FDK command line tools.Fri Jul 29 10:12:14 2016
 ## for Adobe Font Development Kit for OpenType
 set -x PATH "~/bin/FDK/Tools/osx" $PATH
-set -x FDK_EXE "~/bin/FDK/Tools/osx"set GHQ_SELECTOR peco
+set -x FDK_EXE "~/bin/FDK/Tools/osx"
+set GHQ_SELECTOR peco
