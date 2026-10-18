@@ -1,9 +1,12 @@
 #!/bin/zsh
 # .zshenv>.zprofile>.zshrc>.zlogin
 
-# Unable path_helper from /etc/profile
+# /etc/zprofile の path_helper (PATH を並べ替える) を走らせない
 # see http://karur4n.hatenablog.com/entry/2016/01/18/100000
 setopt no_global_rcs
+
+# 入れ子のシェルで PATH が重複して増えないようにする (以降の追加を含む。shellenv.sh より前に置く)
+typeset -U path
 
 #-----------------------#
 # Environment variables #
