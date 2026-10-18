@@ -75,7 +75,7 @@ ADMIN_SCRIPT = (
 def test_admin_steps_are_consolidated_into_one_elevation():
     script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
 
-    # 昇格は 309 と、新しい鍵のときだけの 348 (指紋の記録で通常は出ない)。ほかの chezmoi スクリプトは自前で昇格しない  # noqa: E501
+    # 昇格は 309 と、新しい鍵のときだけの 348 (指紋の記録で通常は出ない)。ほかの chezmoi スクリプトは自前で昇格しない
     assert script.count("'RunAs'") == 1
     key_script = ROOT / "home/.chezmoiscripts/300_windows/run_after_348_authorized_keys.ps1.tmpl"
     assert key_script.read_text(encoding="utf-8-sig").count("'RunAs'") == 1
@@ -442,7 +442,7 @@ def test_shared_git_config_sanitizer_uses_dotnet_apis_only():
 
 
 def test_windows_terminal_settings_are_managed_only_by_the_modify_script():
-    """341 (json.load で読み直して書く) は廃止した。コメント入りの settings.json で失敗し、既定設定を消すため。"""  # noqa: E501
+    """341 (json.load で読み直して書く) は廃止した。コメント入りの settings.json で失敗し、既定設定を消すため。"""
     assert not (ROOT / "home/.chezmoiscripts/300_windows/run_after_341_terminal.py.tmpl").exists()
     assert not (ROOT / "config/windows/terminal.json").exists()
 
@@ -595,7 +595,7 @@ def test_machine_only_winget_packages_are_installed_by_the_admin_step():
         # UAC を出すものは 309 に 1 回だけ。310 に残すと個別に UAC が出る
         assert f"Id = '{package_id}'" in admin, package_id
         assert f"winst {package_id}" not in winget, package_id
-    # マニフェストが scope を宣言していない MSI に --scope を付けると 'No applicable installer' になる  # noqa: E501
+    # マニフェストが scope を宣言していない MSI に --scope を付けると 'No applicable installer' になる
     assert "Id = 'Python.Launcher'; Scope = ''" in admin
     # user scope で入る (UAC なし) ものは 310 に残す
     for package_id in ("Git.Git", "Microsoft.PowerToys", "Discord.Discord"):
@@ -619,7 +619,7 @@ def test_admin_setup_enables_openssh_server_without_opening_public():
 def test_admin_setup_points_sshd_at_a_stable_pwsh_path():
     script = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
 
-    # MSIX の pwsh は更新のたびにパスが変わり、sshd のログインが全部失敗するので、固定パスの MSI を使う  # noqa: E501
+    # MSIX の pwsh は更新のたびにパスが変わり、sshd のログインが全部失敗するので、固定パスの MSI を使う
     assert "'PowerShellMsi'" in script
     assert "InstallerType = 'wix'" in script and "Force = $true" in script
     assert "'--installer-type'" in script and "'--force'" in script
@@ -647,7 +647,7 @@ def test_power_settings_are_applied_every_run_and_never_sleep_on_ac():
 
 
 def test_powershell_path_expands_unexpanded_variables_for_ssh_sessions():
-    """sshd 経由のセッションは PATH の %VAR% を展開せず渡す。WindowsApps のエイリアスが引けなくなる。"""  # noqa: E501
+    """sshd 経由のセッションは PATH の %VAR% を展開せず渡す。WindowsApps のエイリアスが引けなくなる。"""
     profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
 
     assert "[System.Environment]::ExpandEnvironmentVariables($_)" in profile
@@ -658,7 +658,7 @@ def test_7zip_registers_a_selectable_default_app_instead_of_setting_userchoice()
         ROOT / "home/.chezmoiscripts/300_windows/320_regkey/run_once_after_322_7zip.ps1"
     ).read_text(encoding="utf-8-sig")
 
-    # UserChoice は保護されていて書けない。既定アプリの一覧に出る形 (ProgID + Capabilities) で登録する  # noqa: E501
+    # UserChoice は保護されていて書けない。既定アプリの一覧に出る形 (ProgID + Capabilities) で登録する
     assert "UserChoice" not in script.replace("UserChoice is protected", "")
     assert "RegisteredApplications" in script
     assert "OpenWithProgids" in script
@@ -711,7 +711,7 @@ def test_admin_setup_enables_the_builtin_sudo_safely_for_the_personal_machine_on
     # 公式の手順で、既定の forceNewWindow (sudo のたびに UAC。normal / disableInput は選ばない)
     assert "config --enable forceNewWindow" in script
     assert "--enable normal" not in script and "--enable disableInput" not in script
-    # 24H2 より前 (sudo.exe が無い) とポリシーで無効に固定された機械は飛ばす。有効な方式は選び直さない  # noqa: E501
+    # 24H2 より前 (sudo.exe が無い) とポリシーで無効に固定された機械は飛ばす。有効な方式は選び直さない
     assert "Test-SudoSupported" in script and "Test-SudoAllowedByPolicy" in script
     assert "[int]$value -ge 1" in script
     assert r"Microsoft\Windows\CurrentVersion\Sudo" in script
@@ -722,7 +722,7 @@ def test_power_settings_are_read_back_and_a_mismatch_only_warns():
         encoding="utf-8-sig"
     )
 
-    # 設定した値を powercfg /q で読み取って確かめる (表示の言語に依らず、末尾の 2 つの 0x… を AC・DC とする)  # noqa: E501
+    # 設定した値を powercfg /q で読み取って確かめる (表示の言語に依らず、末尾の 2 つの 0x… を AC・DC とする)
     assert "function Get-PowerValue" in script and "0x[0-9A-Fa-f]{8}" in script
     assert "$script:Expected" in script
     # 上書きされていても apply は止めない (警告だけ)。設定が無い機種の任意の項目は確かめない

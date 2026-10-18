@@ -41,6 +41,11 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "PIE", "RUF"]
 # このリポジトリはコメント・メッセージを日本語で書くので意図した文字。
 ignore = ["RUF001", "RUF002", "RUF003"]
 
+[tool.ruff.lint.pycodestyle]
+# E501 の上限だけを広げる (line-length は整形の幅として 100 のまま)。ruff は全角を幅 2 で数えるので、
+# 日本語のコメント・docstring は 100 桁だと 50 文字ぶんしか書けない。実測の最長は 139。
+max-line-length = 140
+
 [tool.ruff.lint.per-file-ignores]
 # pytest の fixture を別ファイルから import して使う (引数名が再定義に見える)
 "test/agents/test_pi_harness_extensions.py" = ["F811"]
