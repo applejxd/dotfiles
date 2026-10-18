@@ -103,7 +103,7 @@ os-release でも判定できません（`raspbian` は 32bit 版のみ）。
 
 | 対象 | Raspberry Pi での扱い |
 | --- | --- |
-| `100_linux/110_native/`（VS Code と拡張 20 個） | 導入しない |
+| `100_linux/110_native/`（VS Code 本体のみ） | 導入しない |
 | i3 / rofi / polybar / lxappearance / xsel | 導入しない |
 | `.config/i3`、`.config/polybar`、`.Xmodmap`、`.xsession`、`.xsessionrc` | 展開しない |
 | `xdg-user-dirs-update`、`systemctl --user mask` | 実行しない（ヘッドレスでは失敗して apply が止まる） |
@@ -258,7 +258,7 @@ chezmoi スクリプト自身が出す UAC を 1 回にする。通常ユーザ�
 | 流れ | 通常権限で不足を判定 → 不足があるときだけ UAC を 1 回 → 昇格子が不足分だけ実行 → 通常権限で再判定。導入済みなら UAC は出ない |
 | 失敗 | UAC キャンセル・昇格子の非ゼロ終了・再判定の残りはすべて非ゼロで止める。失敗した回は `run_once` に記録されないので、直して `chezmoi apply` をやり直せば 309 は再実行される。成功後に消えたものは自動では直さない（内容を変えるか `chezmoi state delete-bucket --bucket=scriptState` で再実行） |
 | 実行順 | 同じディレクトリで `309_admin` は `310_winget` より前（属性を除いた名前の昇順） |
-| ユーザーの作業 | `340_vscode`（拡張）・`315_keypirinha_extensions` は通常権限のまま。VS Code が無ければ 340 は失敗する |
+| ユーザーの作業 | `315_keypirinha_extensions` は通常権限のまま |
 
 ### WSL 本体（`WslPlatform`）
 
@@ -341,7 +341,7 @@ winget の既定は user scope なので、user 版があるものは UAC なし
 
 ### 個別の判断
 
-- **VS Code**: machine 版でも user 版でも `Code.exe` があれば満たす（併存を許容。340 は `code` が使えればよい）
+- **VS Code**: machine 版でも user 版でも `Code.exe` があれば満たす（併存を許容。347 は `code` が使えればよい）
 - **WinSCP**: Keypirinha が system-wide を要求するので machine 版だけを満たすとみなす。user 版などが残って
   winget が拒否した場合は失敗にし、`winget list --id WinSCP.WinSCP` で確認してアンインストールしてから再実行する
 - **RDP**: `applejxd` かつ Pro / Enterprise / Education 系の SKU のときだけ。`fDenyTSConnections=0`、NLA（`UserAuthentication=1`）、
@@ -821,6 +821,21 @@ a.cpp -- foo                   # プログラムに引数を渡す
 
 検査は `test/test_shell_startup.py`（bash / zsh の両方で、release の実行、debug での
 範囲外アクセスの検出、`--` 以降の引数、コンパイル失敗時に実行しないこと、不正な入力）。
+
+## VS Code の拡張
+
+拡張は chezmoi では入れない。拡張・設定・キーバインドの正本は VS Code の Settings Sync
+（GitHub アカウント）に任せる。新しいマシンでは VS Code でサインインして同期を有効にする
+（ブラウザでの認証が要るので自動化できない）。Remote-WSL 側（`~/.vscode-server`）に
+拡張が反映されるかは環境により確認が要る（未確認）。
+
+`coding-test` プロファイルは別で、その WSL 拡張だけ `347` が入れる
+（[次節](#コーディング試験の練習用-vs-codecode-exam)）。
+
+拡張導入スクリプト（旧 `112` / `340`）を廃止した理由:
+拡張の一覧が Linux 約 30 個・Windows 約 10 個で食い違い、実際に使う拡張（ある WSL で 53 個）と
+大きくずれていた。112 は WSL と Raspberry Pi では動かず（`110_native/` を除外）、
+ネイティブ Ubuntu のデスクトップだけが対象だった。最近 VS Code を使うことも減った。
 
 ## コーディング試験の練習用 VS Code（code-exam）
 

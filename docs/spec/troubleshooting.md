@@ -29,7 +29,7 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | `You are not logged in.`、`error calling bitwarden`、`bw: command not found` | 全 OS | [chezmoi update が Bitwarden で止まる](troubleshooting-bootstrap.md#chezmoi-update-が-bitwarden-で止まる) |
 | age 鍵が無い、sops で復号できない | 全 OS | [秘密情報の管理セットアップ: 鍵が見つからない](sops-age.md#鍵が展開されない) |
 | `bw` などの npm 由来のツールが `Cannot find module` / `node: not found` | Linux / WSL / macOS | [mise の npm ツールが突然動かなくなる](troubleshooting-bootstrap.md#mise-の-npm-ツールが突然動かなくなる) |
-| VS Code の拡張が入っていない | ネイティブ Linux / Windows | [VS Code の拡張が入っていない](troubleshooting-bootstrap.md#vs-code-の拡張が入っていない) |
+| VS Code の拡張が入っていない | 全環境（Settings Sync で同期） | [VS Code の拡張が入っていない](troubleshooting-bootstrap.md#vs-code-の拡張が入っていない) |
 | `apt update` が GitHub CLI の `NO_PUBKEY` を警告する | Ubuntu | [apt update が GitHub CLI の NO_PUBKEY を警告する](troubleshooting-bootstrap.md#apt-update-が-github-cli-の-no_pubkey-を警告する) |
 | `apt update` が VS Code のソース二重登録を警告する | ネイティブ Linux | [apt update が VS Code のソース二重登録を警告する](troubleshooting-bootstrap.md#apt-update-が-vs-code-のソース二重登録を警告する) |
 | `No version is set for shim`、`configuration invalid` | Linux / WSL / macOS の AI CLI | [AI CLI が mise に global default version を指定しろと言う](troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う) |

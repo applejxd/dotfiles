@@ -48,27 +48,23 @@ def test_zero_byte_windows_targets_use_empty_attribute():
         assert path.stat().st_size == 0
 
 
-def test_vscode_installer_does_not_hide_extension_failures():
-    script = (
-        ROOT / "home" / ".chezmoiscripts" / "300_windows" / "run_once_after_340_vscode.ps1"
-    ).read_text(encoding="utf-8-sig")
-
-    assert "$LASTEXITCODE -ne 0" in script
-    assert "$failedExtensions += $extension" in script
-    assert "throw" in script
-    for disallowed_extension in (
-        "Anan.jetbrains-darcula-theme",
-        "chadalen.vscode-jetbrains-icon-theme",
-        "genieai.chatgpt-vscode",
-        "saoudrizwan.claude-dev",
-        "yzhang.markdown-all-in-one",
-        "DavidAnson.vscode-markdownlint",
-        "xaver.clang-format",
-        "jeff-hykin.better-cpp-syntax",
-        "notskm.clang-tidy",
-        "twxs.cmake",
-    ):
-        assert disallowed_extension not in script
+def test_vscode_extensions_are_not_installed_by_chezmoi():
+    """拡張は Settings Sync が正本 (docs/spec/structure.md#vs-code-の拡張)。復活させない。"""
+    scripts = ROOT / "home" / ".chezmoiscripts"
+    assert not (scripts / "300_windows" / "run_once_after_340_vscode.ps1").exists()
+    assert not (
+        scripts / "100_linux" / "110_native" / "run_once_after_112_vscode_extensions.sh.tmpl"
+    ).exists()
+    # 別名で復活しても検出する。例外は coding-test プロファイルへ WSL 拡張を入れる 347 だけ
+    allowed = {"run_after_347_vscode_coding_test.ps1.tmpl"}
+    offenders = sorted(
+        path.name
+        for path in scripts.rglob("*")
+        if path.is_file()
+        and path.name not in allowed
+        and "--install-extension" in path.read_text(encoding="utf-8-sig", errors="ignore")
+    )
+    assert offenders == []
 
 
 ADMIN_SCRIPT = (

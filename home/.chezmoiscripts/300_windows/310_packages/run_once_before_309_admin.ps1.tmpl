@@ -134,7 +134,7 @@ function Test-ProgramFilesFile {
 }
 
 function Test-VSCodeInstalled {
-  # Machine or per-user install both count (340_vscode only needs `code`).
+  # Machine or per-user install both count (347 only needs `code`).
   if (Test-ProgramFilesFile 'Microsoft VS Code\Code.exe') { return $true }
   return [bool]($env:LOCALAPPDATA -and
       (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'Programs\Microsoft VS Code\Code.exe') -PathType Leaf))

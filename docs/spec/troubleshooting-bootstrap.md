@@ -27,7 +27,6 @@ chezmoi status --include=scripts
 - 非ゼロで終わったスクリプトは記録されない。**次の apply でもう一度走る**
 - 警告だけ出して 0 で終わったスクリプトは成功として記録される。**内容が変わるまで
   走らない**。外部の一時的な不調で apply を止めないため、次は 0 で終わる
-  - `100_linux/110_native/112_vscode_extensions`（`code` が無いとき）
   - `100_linux/125_mise`（`mise install` の一部が失敗したとき。
     [ツール 1 個の失敗で apply を止めない](structure.md#ツール-1-個の失敗で-apply-を止めない)）
 
@@ -389,36 +388,15 @@ mise install "npm:@bitwarden/cli"
 
 ## VS Code の拡張が入っていない
 
-**対象**: ネイティブ Linux（`100_linux/110_native/`。WSL と Raspberry Pi では対象外）と
-Windows（`300_windows/340_vscode`）。
+**対象**: 全環境。拡張は chezmoi の対象外で、VS Code の Settings Sync が正本
+（[VS Code の拡張](structure.md#vs-code-の拡張)）。
 
-**症状**: VS Code は使えるが、`chezmoi apply` 後も拡張が入っていない。
+**症状**: 新しいマシンで VS Code の拡張が無い。
 
-**確認**: `code` が PATH にあるか見る。
+**対処**: VS Code で Settings Sync を有効にする（GitHub アカウントでサインイン）。
+ブラウザでの認証が要るので自動化できない。
 
-```bash
-command -v code
-code --list-extensions
-```
-
-**原因**: Linux の `112_vscode_extensions` は `code` が無いと拡張の導入を飛ばし、
-**0 で終わる**。`run_once_` なので成功として記録され、後から VS Code を入れても
-走り直さない。通常は直前の `111_microsoft` が `code` を入れるので起きない。
-
-Windows の `340_vscode` は拡張だけを入れる（VS Code 本体は [309_admin](structure.md#管理者権限の集約)）。VS Code が無いか拡張の導入に失敗すると
-非ゼロで終わる。記録されないので、次の apply でもう一度走る。
-
-**対処**: Linux は VS Code を入れてから `112` だけを走らせ直す
-（[スクリプトを走らせ直す](#スクリプトを走らせ直す)）。
-
-```bash
-src="$(chezmoi source-path)"
-bash "$src/.chezmoiscripts/100_linux/110_native/run_once_after_112_vscode_extensions.sh.tmpl"
-```
-
-このテンプレートはテンプレート構文を含まないので、描画せずに実行できる。
-
-**成功の確認**: `code --list-extensions` に `eamodio.gitlens` などが出る。
+**成功の確認**: `code --list-extensions` に、他のマシンで使っている拡張が出る。
 
 ## apt update が GitHub CLI の NO_PUBKEY を警告する
 

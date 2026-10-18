@@ -111,7 +111,7 @@ Documents/**
 .config/shell/wslenv.sh
 {{-     if eq (includeTemplate "is-raspi" .) "true" }}
 # Raspberry Pi (ヘッドレス) では導入しない。
-# VS Code 本体と拡張 20 個は SD カードを数百 MB 食うが、Remote-SSH で繋ぐ側に
+# VS Code 本体は SD カードを数百 MB 食うが、Remote-SSH で繋ぐ側に
 # あればよい。i3 / polybar / X11 関連も接続する画面が無いと使わない。
 .chezmoiscripts/100_linux/110_native/
 .chezmoiscripts/100_linux/110_native/**
