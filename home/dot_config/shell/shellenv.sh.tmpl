@@ -134,22 +134,36 @@ fi
 # see docs/research/shell/mise-shims-resolution.md
 __mise_shims="${MISE_DATA_DIR:-${HOME}/.local/share/mise}/shims"
 if [[ -d "${__mise_shims}" ]]; then
-  __p=":${PATH}:"
-  while [[ "${__p}" == *":${__mise_shims}:"* ]]; do
-    __p="${__p%%":${__mise_shims}:"*}:${__p#*":${__mise_shims}:"}"
-  done
-  __p="${__p#:}"
-  __p="${__p%:}"
-  if [[ -n "${VIRTUAL_ENV:-}" && ":${__p}:" == *":${VIRTUAL_ENV}/bin:"* ]]; then
-    __p=":${__p}:"
-    __p="${__p%%":${VIRTUAL_ENV}/bin:"*}:${VIRTUAL_ENV}/bin:${__mise_shims}:${__p#*":${VIRTUAL_ENV}/bin:"}"
+  if [[ -n "${ZSH_VERSION:-}" ]]; then
+    # zsh: 文字列の `${__p#*...}` は長い PATH で二次的に遅い (約 40ms) ため配列で扱う。
+    # see docs/spec/structure.md#zsh-の起動時間
+    eval '
+      path=(${path:#"${__mise_shims}"})
+      __i=${path[(i)${VIRTUAL_ENV:-/nonexistent}/bin]}
+      if [[ -n "${VIRTUAL_ENV:-}" ]] && (( __i <= ${#path} )); then
+        path[__i]=("${VIRTUAL_ENV}/bin" "${__mise_shims}")
+      else
+        path=("${__mise_shims}" $path)
+      fi
+      unset __i'
+  else
+    __p=":${PATH}:"
+    while [[ "${__p}" == *":${__mise_shims}:"* ]]; do
+      __p="${__p%%":${__mise_shims}:"*}:${__p#*":${__mise_shims}:"}"
+    done
     __p="${__p#:}"
     __p="${__p%:}"
-    export PATH="${__p}"
-  else
-    export PATH="${__mise_shims}${__p:+:${__p}}"
+    if [[ -n "${VIRTUAL_ENV:-}" && ":${__p}:" == *":${VIRTUAL_ENV}/bin:"* ]]; then
+      __p=":${__p}:"
+      __p="${__p%%":${VIRTUAL_ENV}/bin:"*}:${VIRTUAL_ENV}/bin:${__mise_shims}:${__p#*":${VIRTUAL_ENV}/bin:"}"
+      __p="${__p#:}"
+      __p="${__p%:}"
+      export PATH="${__p}"
+    else
+      export PATH="${__mise_shims}${__p:+:${__p}}"
+    fi
+    unset __p
   fi
-  unset __p
 fi
 unset __mise_shims
 

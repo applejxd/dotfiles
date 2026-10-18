@@ -3,6 +3,12 @@
 
 [[ -o interactive ]] || return 0
 
+# 起動中だけ /mnt/* (WSL の 9p) を PATH から外す。`command -v` が未導入コマンドを
+# 探すたびに 9p を走査して遅いため。末尾で元に戻す。
+# see docs/spec/structure.md#zsh-の起動時間
+typeset -ga _zshrc_win_path=(${(M)path:#/mnt/*})
+path=(${path:#/mnt/*})
+
 # /etc/zsh/zshrc は no_global_rcs (.zshenv) で自動読込されないためここで読む
 if [[ -e /etc/zsh/zshrc ]]; then
     # skip_global_compinit=1: システム側の compinit を抑制し手動で明示的に実行
@@ -15,7 +21,14 @@ fi
 bindkey -e
 
 if [[ -e "${HOME}/.local/bin/mise" ]]; then
-    eval "$("${HOME}/.local/bin/mise" activate zsh)"
+    # activate スクリプトは mise 本体の更新時だけ作り直す (毎回の fork を省く)
+    _mise_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/mise-activate.zsh"
+    if [[ ! -s $_mise_cache || ${HOME}/.local/bin/mise -nt $_mise_cache ]]; then
+        mkdir -p "${_mise_cache:h}"
+        "${HOME}/.local/bin/mise" activate zsh >| "$_mise_cache"
+    fi
+    source "$_mise_cache"
+    unset _mise_cache
 fi
 
 #--------#
@@ -176,3 +189,7 @@ if [[ -d ${HOME}/.zshrc.d ]]; then
     done
     unset f
 fi
+
+# 起動中に外した /mnt/* を PATH の末尾へ戻す
+path+=(${_zshrc_win_path:|path})
+unset _zshrc_win_path

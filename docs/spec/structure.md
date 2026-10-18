@@ -866,6 +866,29 @@ WSL 拡張だけで、AI 機能のオフ（右下のメニューか `settings.js
 作業ディレクトリの作成、`applejxd` 以外では定義されないこと）。実際に VS Code が開くかは
 検査しない。
 
+## zsh の起動時間
+
+`zsh -i -c exit` の実測（WSL2、2026-10）。診断は `zmodload zsh/zprof` 後に
+`source ~/.zshrc; zprof`、区間ごとの時間は `EPOCHREALTIME` で測る。
+
+| 状態 | 時間 |
+| --- | --- |
+| 改善前 | 約 0.37 s |
+| 改善後 | 約 0.24 s |
+
+効いた原因と対処:
+
+- **未導入コマンドの `command -v` が約 10 ms**: PATH の `/mnt/*`（WSL の 9p）を走査するため。
+  `.zshrc` は起動中だけ `/mnt/*` を PATH から外し、末尾で戻す（約 -60 ms）
+- **`.zshenv` の shims 処理が約 40 ms**: 長い PATH に対する `${__p#*"…"}`（先頭 `*` の
+  最短一致）が二次的に遅い。zsh では `path` 配列で処理する（`shellenv.sh`）。
+  `.zshenv` は非対話の起動でも読まれるため全 zsh に効く
+- **`mise activate zsh` の fork が約 30 ms**: 出力を `~/.cache/zsh/mise-activate.zsh` に
+  キャッシュし、mise 本体が新しいときだけ作り直す
+
+残り: 初回 `_mise_hook`（約 40 ms、環境の確定に必要なため同期のまま）と zinit の
+同期ロード（zeno・fast-syntax-highlighting・pure）。
+
 ## シェルプラグインの取得
 
 シェルの rc が読み込むプラグインのうち、下の表の 5 項目は起動時ではなく
