@@ -7,8 +7,13 @@ start_sudo_keepalive
 
 echo "Starting macOS system setup..." >&2
 
-# for x86_64 architecture
-yes A | softwareupdate --install-rosetta
+# Rosetta 2 (Apple Silicon だけ。oahd が動いていれば導入済み)。
+# 失敗しても Homebrew や arm64 ネイティブのアプリは動くので、警告して続ける
+if [[ $(uname -m) == arm64 ]] && ! /usr/bin/pgrep -q oahd; then
+    if ! sudo softwareupdate --install-rosetta --agree-to-license; then
+        echo "⚠️ Rosetta 2 を導入できませんでした。Rosetta が要るアプリは後で失敗します" >&2
+    fi
+fi
 
 #---------------#
 # Load Homebrew #
@@ -33,11 +38,10 @@ if [[ $(uname -m) == arm64 ]]; then
 
     # sudo が要る GUI アプリ (認証は冒頭の start_sudo_keepalive で取得済み)
     brew install avast-security
-    # Needs Rosetta2
-    brew install google-japanese-ime
-    brew install karabiner-elements
-    brew install xquartz
-    brew install qlvideo
+    # Needs Rosetta2 (Rosetta を導入できなかったときに備え、失敗しても残りを続ける)
+    for cask in google-japanese-ime karabiner-elements xquartz qlvideo; do
+        brew install "$cask" || echo "⚠️ brew install $cask に失敗しました。後で手動で試してください" >&2
+    done
 fi
 
 #--------#
