@@ -50,13 +50,32 @@ if [ ! -e ~/.iterm2_shell_integration.zsh ]; then
 fi
 
 # For bits/stdc++.h
-if [[ $(which gcc) != "/opt/homebrew/bin/gcc" ]]; then
+brew_bin=$(dirname "$brew_path")
+if [[ $(command -v gcc) != "$brew_bin/gcc" ]]; then
     brew install gcc
-    gcc_path=$(ls /opt/homebrew/bin/gcc-[0-9]*)
-    gpp_path=$(ls /opt/homebrew/bin/g++-[0-9]*)
+    # 末尾の版数を数値で比べて最大を選ぶ (sort -V は macOS で保証が無い)。無ければ何も出さない
+    latest_versioned() {
+        local prefix=$1 best="" best_n=-1 f n
+        for f in "$brew_bin"/"$prefix"-[0-9]*; do
+            [[ -e $f ]] || continue
+            n=${f##*-}
+            [[ $n =~ ^[0-9]+$ ]] || continue
+            if ((n > best_n)); then
+                best=$f
+                best_n=$n
+            fi
+        done
+        printf '%s' "$best"
+    }
+    gcc_path=$(latest_versioned gcc)
+    gpp_path=$(latest_versioned g++)
 
-    ln -fs "$gcc_path" /opt/homebrew/bin/gcc
-    ln -fs "$gpp_path" /opt/homebrew/bin/g++
+    if [[ -n $gcc_path && -n $gpp_path && ${gcc_path##*-} == "${gpp_path##*-}" ]]; then
+        ln -fs "$gcc_path" "$brew_bin/gcc"
+        ln -fs "$gpp_path" "$brew_bin/g++"
+    else
+        echo "⚠️ $brew_bin に版数の揃った gcc-N / g++-N が見つからないため、リンク作成をスキップします" >&2
+    fi
 fi
 
 # For LaTeX

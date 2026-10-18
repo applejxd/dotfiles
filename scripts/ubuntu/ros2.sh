@@ -30,16 +30,16 @@ if [[ ! -e /opt/ros/"${ROS_DISTRO}"/setup.bash ]]; then
     echo "$password" | sudo -S add-apt-repository universe
 
     echo "$password" | sudo -S apt-get update
-    echo "$password" | sudo -S apt-get -y curl
+    echo "$password" | sudo -S apt-get install -y curl
     echo "$password" | sudo -S sudo curl \
         -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
         -o /usr/share/keyrings/ros-archive-keyring.gpg
 
+    # tee の stdin には APT ソース行だけを流す (認証は直前の sudo -S -v で済ませる)
+    echo "$password" | sudo -S -v
     # shellcheck source=/dev/null
-    {
-        echo "$password"
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo "$UBUNTU_CODENAME") main"
-    } | sudo -k -S tee /etc/apt/sources.list.d/ros2.list >/dev/null
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo "$UBUNTU_CODENAME") main" |
+        sudo tee /etc/apt/sources.list.d/ros2.list >/dev/null
 
     echo "$password" | sudo -S apt-get update
     echo "$password" | sudo -S apt-get -y upgrade
