@@ -66,14 +66,14 @@ see docs/adr/0003-require-python-311-for-agent-configuration.md
     command = "py"
     args = ["-3"]
 {{- else }}
-    command = "{{ $python }}"
+    command = {{ $python | toJson }}
 {{- end }}
 
 [data]
 {{- if $http_proxy }}
-    http_proxy = "{{ $http_proxy }}"
+    http_proxy = {{ $http_proxy | toJson }}
 {{- end }}
 {{- if $https_proxy }}
-    https_proxy = "{{ $https_proxy }}"
+    https_proxy = {{ $https_proxy | toJson }}
 {{- end }}
-    no_proxy = "{{ $no_proxy }}"
+    no_proxy = {{ $no_proxy | toJson }}
