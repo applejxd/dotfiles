@@ -273,6 +273,51 @@ Windows の Tailscale が tailnet の 50022 を受けて、`localhost:50022`（m
 - 公開鍵は `400_unix/run_after_440_authorized_keys.sh.tmpl` が Bitwarden から追加する
   （[SSH 公開鍵の authorized_keys への追加](security.md#ssh-公開鍵の-authorized_keys-への追加)。`BW_SESSION` が必要）
 
+#### 手動の手順（初回・復旧後）
+
+前提: Windows の Tailscale（ログイン済み）、`.wslconfig` が `networkingMode=mirrored`、WSL が止まっていない（下記）。
+
+1. **WSL の sshd を 50022 にする**（WSL のターミナル。sudo のパスワードを尋ねられる）
+
+   ```sh
+   cd ~/.local/share/chezmoi
+   PORT=50022 ./scripts/ubuntu/ssh.sh
+   ss -ltn | grep 50022      # 0.0.0.0:50022 が LISTEN になっていること
+   ```
+
+   既定は公開鍵のみ（`PASSWORD_AUTH=no`）、`PERMIT_ROOT_LOGIN=prohibit-password`。設定は
+   `/etc/ssh/sshd_config.d/10-override.conf` に書かれる。
+2. **公開鍵を入れる**（WSL。Bitwarden を解除した状態で `apply`）
+
+   ```sh
+   export BW_SESSION="$(bw unlock --raw)"   # マスターパスワードが要る
+   chezmoi apply
+   ```
+
+   `authorized_keys: <hostname> の鍵を追加した`（または「登録済み」）と出ればよい。
+   接続元はこの鍵に対応する**秘密鍵**で接続する（[仕組み](security.md#ssh-公開鍵の-authorized_keys-への追加)）。
+3. **`tailscale serve` を設定する**（Windows の PowerShell。管理者は不要）。上のコマンド。
+   `tailscale` が PATH に無ければ `& 'C:\Program Files\Tailscale\tailscale.exe' serve ...`
+4. **接続する**（tailnet の機器から）: `ssh -p 50022 applejxd@<Windows の Tailscale アドレス>`。
+   アドレスは Windows で `tailscale ip -4`
+
+**復旧の順番**（起動ディスクの故障などで Windows と WSL を入れ直したとき）: Tailscale を入れ直してログイン →
+手順 1 → 2 → 3。`serve` の設定は Tailscale の状態に保存されるので、入れ直すと消える（**忘れやすい**）。
+入れ直した機器が同じ名前・アドレスで復帰するかは未確認。
+
+**WSL が止まっていないこと**: WSL の VM が止まっていると、`serve` が `localhost:50022` に届かず
+タイムアウトする（Windows の sshd（22）は WSL と関係なく届く）。この機では `sandbox-keepalive` タスクが
+実行中で VM を常駐させている（`Ubuntu` と `sandbox` が 1 つの VM を共有する）。`sandbox` を削除する、または
+タスクを止めると止まる可能性がある（`.wslconfig` に `vmIdleTimeout` の指定は無い。止まったときの挙動は未実測）。
+
+#### 接続できないときの切り分け
+
+| 症状（接続元のエラー） | 主な原因 | 確認 |
+| --- | --- | --- |
+| `connection timed out` | `tailscale serve` が無い、または WSL が止まっている | Windows で `tailscale serve status`、`wsl.exe -l -v` で `Running` か。Windows の sshd（22）に届くか（届くなら tailnet は正常） |
+| `Connection refused` | WSL の sshd が 50022 で待ち受けていない | WSL で `ss -ltn \| grep 50022`、`systemctl is-active ssh` |
+| `Permission denied (publickey)` | 到達している。鍵が合わない | 手順 2 を実行。接続元が、`authorized_keys` に入った鍵の秘密鍵を使っているか |
+
 #### なぜ規則ではなく `serve` か
 
 mirrored では、**Tailscale のアドレス（`100.x`）への 50022 が WSL の VM に転送されない**（2026-10-18、この機）。

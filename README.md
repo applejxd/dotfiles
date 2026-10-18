@@ -191,6 +191,13 @@ A. [AgentCore Web Search](docs/spec/agent-config-generation.md#agentcore-web-sea
 A. 以前「常に許可」した承認が残っている。
 [保存した承認の確認とリセット](docs/spec/agent-permissions.md#保存した承認の確認とリセット) を参照。
 
+### Q. 外出先から WSL に SSH したい
+
+A. Tailscale 経由で、Windows で `tailscale serve --bg --tcp 50022 tcp://localhost:50022` を 1 回実行する
+（WSL の sshd を 50022 にし、公開鍵を入れる前提。手順と復旧時の順番は
+[リモートから WSL へ SSH する](docs/spec/structure.md#リモートから-wsl-へ-ssh-する)、
+つながらないときは[切り分け](docs/spec/structure.md#接続できないときの切り分け)）。
+
 ## ライセンス
 
 MIT License
