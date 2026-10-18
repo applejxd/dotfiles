@@ -1,6 +1,16 @@
+# WSL2 global settings. Run `wsl --shutdown` to apply changes.
+# Keep comments on their own lines, and keep this file ASCII-only (encoding safety).
 [wsl2]
+# Share IP and loopback with the Windows host (localhost reaches both ways).
 networkingMode=mirrored
 
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
+# Memory cap for the whole WSL VM. Also the basis of ComfyUI's pinned-memory limit.
 memory=48GB
 {{- end }}
+
+# Experimental section: widely used in current WSL, but names may change.
+[experimental]
+# Return idle page cache to Windows gradually, so vmmem does not stay high after
+# builds or big file reads. Side effect: cache is re-read from disk (slightly slower).
+autoMemoryReclaim=gradual
