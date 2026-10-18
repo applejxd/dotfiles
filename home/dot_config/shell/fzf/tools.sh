@@ -105,7 +105,7 @@ if command -v "brew" >/dev/null 2>&1; then
     # Install or open the webpage for the selected application
     # using brew search --casks as input source
     # and display a info quickview window for the currently marked application
-    function install() {
+    function fcask() {
         local token
         token=$(brew search --casks | fzf-tmux --query="$1" +m --preview 'brew info --cask {}')
 
@@ -124,7 +124,7 @@ if command -v "brew" >/dev/null 2>&1; then
     # Uninstall or open the webpage for the selected application
     # using brew list as input source (all installed casks)
     # and display a info quickview window for the currently marked application
-    function uninstall() {
+    function funcask() {
         local token
         token=$(brew list --cask | fzf-tmux --query="$1" +m --preview 'brew info --cask {}')
 

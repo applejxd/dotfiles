@@ -1100,7 +1100,7 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
 | --- | --- |
 | `fzf/core.sh` | `FZF_*` のオプションと、移動・汎用の関数（`xf` / `xg` / `xgw` / `v` / `sshf` / `fgg` など） |
 | `fzf/git.sh` | git の関数（`fbr` / `fbrm` / `fshow` / `cdworktree` / `fadd`） |
-| `fzf/tools.sh` | mise / Singularity / Homebrew の関数 |
+| `fzf/tools.sh` | mise / Singularity / Homebrew の関数（Homebrew は `fcask` / `funcask`。`install` は `/usr/bin/install` を隠すので使わない） |
 
 各ファイルの関数は、対応するコマンドがある場合だけ定義されます。Windows では
 `.chezmoiignore` の `.config/*` によって `fzf/` ごと配られません。
