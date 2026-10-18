@@ -471,6 +471,10 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 - 未確認: 子へ `settings.json` の `defaultThinkingLevel`（今は `medium`）が実際に効いているか
 
 - 子は会話を見られないので、親は必要なことを全部 `task` に書く
+- **モデルに存在を知らせる**: 自作ツールは `promptSnippet` が無いと system prompt の「Available tools」に載らず、
+  モデルは関数定義の一覧に埋もれた `guarded_task` に気付きにくい（実際に「子が無い」と誤認した）。
+  `registerTask` は `promptSnippet` と、`review` を使う場面の `promptGuidelines` を付ける。
+  Windows の `subagents` 拡張の `task` も同じ。試験は `test_task_tool_is_listed_in_the_system_prompt`
 - **子の結果**: 子の JSON のイベントから、承認されなかった呼び出し（理由が `not approved:` で始まる。
   フルガードが付ける）・ほかのツールのエラー・最後の返答を拾う。承認されなかった呼び出しがあれば
   `blocked`（承認待ちで未完了）として、親のツールの結果をエラーにする。子は UI を持たないので、子の

@@ -37,6 +37,7 @@ CLI によって使える子が違う。
 | Copilot CLI | `code-review`（組み込み） | レビュー役に `git diff` などを実行させてよい |
 | Claude Code | 組み込みに無い。`code-review` を定義していればそれを、無ければ `general-purpose` に「編集せず指摘だけを返す」と指示して使う | 同上 |
 | OpenCode | `review` | `review` は shell を使えない（読むだけ）。差分・未追跡ファイルの一覧は親が実行し、出力を依頼文に貼る |
+| pi | `guarded_task` の `agent: review`（フルガード `pis` が登録。素の `pi` には無い）。子は会話を見られず shell を使えない | 同上（親が差分・未追跡ファイルの内容を依頼文に貼る） |
 
 OpenCode に `code-review` / `security-review` は無い。作業先のリポジトリが同じ名前の子を
 定義していても、`bypass` からは起動できない（起動できる子は許可リストで決まっている）。

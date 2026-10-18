@@ -289,6 +289,15 @@ def run_child(env, agent, child_calls, **env_extra):
     )
 
 
+def test_task_tool_is_listed_in_the_system_prompt(env):
+    # promptSnippet が無い自作ツールは Available tools に出ず、モデルが気付けない
+    proc = run_pi(env, [], FAUX_DUMP_PROMPT="1")
+    assert proc.returncode == 0, proc.stderr
+    prompt = proc.stdout
+    assert "- guarded_task:" in prompt, prompt
+    assert 'guarded_task with agent "review"' in prompt, prompt
+
+
 def test_child_cannot_start_another_child(env):
     calls = [{"name": "guarded_task", "args": {"agent": "worker", "task": "x"}}]
     proc = run_child(env, "worker", calls)

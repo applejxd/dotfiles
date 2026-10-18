@@ -347,6 +347,11 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 	pi.registerTool({
 		name: `${PREFIX}task`,
 		label: "task",
+		// promptSnippet が無い自作ツールは system prompt の Available tools に出ず、モデルが存在に気付けない
+		promptSnippet: `Run a task in a child agent (${names.join(" / ")}). Use for independent review, exploration, or parallel work`,
+		promptGuidelines: [
+			`Use ${PREFIX}task with agent "review" for an independent review or a second opinion. The child cannot see this conversation, so put everything it needs in \`task\`.`,
+		],
 		description:
 			"Run a task in a child agent. The child is a separate pi process with the same guard, and cannot see this conversation, " +
 			"so put everything it needs into `task`. Agents:\n" +

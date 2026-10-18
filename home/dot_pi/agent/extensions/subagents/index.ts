@@ -60,6 +60,11 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "task",
 		label: "task",
+		// promptSnippet が無い自作ツールは system prompt の Available tools に出ず、モデルが存在に気付けない
+		promptSnippet: `Run a read-only task in a child agent (${names.join(" / ")}). Use for independent review or exploration`,
+		promptGuidelines: [
+			"Use task with agent \"review\" for an independent review or a second opinion. The child cannot see this conversation, so put everything it needs in `task`.",
+		],
 		description:
 			"Run a read-only task in a child agent (separate pi process; tools: read, grep, find, ls only). " +
 			"The child cannot see this conversation, so put everything it needs into `task`. Agents:\n" +
