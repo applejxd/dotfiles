@@ -33,5 +33,18 @@ if (-not ([System.String]::Join(" ", [System.Drawing.FontFamily]::Families)).Con
   # see https://tarma.com/support/im9/using/symbols/functions/csidls.htm
   (New-Object -ComObject Shell.Application).Namespace(0x14).CopyHere("$Home\Cica\Cica-Regular.ttf", 0x10)
   Remove-Item $Home\Cica.zip
-  Remove-Item -Recurse $Home\Cica
+
+  # CopyHere は非同期になり得るため、インストール先に現れるまで最大 30 秒待つ
+  # 権限によりシステム全体とユーザー単位のどちらにも入り得る
+  $systemFont = Join-Path ([Environment]::GetFolderPath('Fonts')) "Cica-Regular.ttf"
+  $userFont = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts\Cica-Regular.ttf"
+  $deadline = (Get-Date).AddSeconds(30)
+  while (-not ((Test-Path $systemFont) -or (Test-Path $userFont)) -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 500
+  }
+  if ((Test-Path $systemFont) -or (Test-Path $userFont)) {
+    Remove-Item -Recurse $Home\Cica
+  } else {
+    Write-Warning "Cica font was not installed; keeping $Home\Cica"
+  }
 }
