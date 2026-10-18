@@ -786,11 +786,12 @@ def test_wsl_ssh_firewall_rule_is_hyper_v_private_only_and_port_50022():
     assert "$port = 50022" in script
     # xrdp (53389) は不要。Profile の無い規則を作らない
     assert "53389" not in script
-    assert (
-        "-Profile Domain, Private" in script
-    )  # 標準ファイアウォールも必要 (実測: 消すと LAN から届かない)
+    assert "-Profile Domain, Private" in script  # 標準ファイアウォール側も作る
     assert "New-NetFirewallRule" in script
     assert "AlsoWindowsFirewall" not in script
+    # 2 つの規則は別の名前 (同じだと Remove-NetFirewallRule -Name が両方を消す)
+    assert "$hvRuleName = 'WSL-SSH-In-TCP-HyperV'" in script
+    assert "$stdRuleName = 'WSL-SSH-In-TCP'" in script
 
 
 def test_wsl_platform_is_installed_without_a_distribution_for_applejxd():

@@ -252,10 +252,11 @@ WSL の sshd は `scripts/ubuntu/ssh.sh` が `/etc/ssh/sshd_config.d/10-override
 （Windows 自身の sshd は 22 番で、`309_admin` が管理します）。`.wslconfig` は `networkingMode=mirrored` で、
 ポート転送（portproxy）は使いません。
 
-mirrored では、WSL の VM への受信を **2 つの層**が止めます（どちらも規則が要る。実測）。
-
-1. **Hyper-V ファイアウォール**（WSL の VM 向け。既定は `DefaultInboundAction=Block`）
-2. **標準の Windows ファイアウォール**（規則を消すと LAN から届かなくなった）
+mirrored では、WSL の VM への受信を **Hyper-V ファイアウォール**（WSL の VM 向け。既定は
+`DefaultInboundAction=Block`）が止めます。**標準の Windows ファイアウォールの規則も必要かは未確定**です。
+2026-10-18 に「標準の規則を消すと LAN から届かなくなった」と記録したが、両方の規則を同じ名前にしていたため
+`Remove-NetFirewallRule -Name` が Hyper-V の規則も消した可能性があり、標準の規則だけの必要性を
+示す実験になっていない。現在は両方を作る（別々の名前で、片方だけ操作できるようにした）。
 
 `scripts/windows/netsh.ps1`（管理者の PowerShell で手動実行。`chezmoi apply` では走らない）が、両方に
 次の規則を作ります。
@@ -269,7 +270,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\<ユ�
 
 | 項目 | 値 |
 | --- | --- |
-| 規則名 | `WSL-SSH-In-TCP`（Hyper-V ファイアウォールと標準の Windows ファイアウォールに 1 つずつ） |
+| 規則名 | Hyper-V: `WSL-SSH-In-TCP-HyperV`、標準: `WSL-SSH-In-TCP`（別々の名前。同じ名前だと `Remove-NetFirewallRule -Name` が両方を消す） |
 | 方向・ポート | 受信、TCP 50022 |
 | 範囲 | Domain / Private のみ（Public では開けない） |
 | Hyper-V の対象の VM | WSL（`VMCreatorId` `{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}`。`Get-NetFirewallHyperVVMCreator` で確認できる） |
@@ -287,7 +288,7 @@ Windows 自身の sshd（22）は、ホストで受けるので Tailscale 経由
 | Hyper-V ファイアウォール | 規則あり。**無効にしても届かない** |
 | 標準の Windows ファイアウォール | 規則あり（`Tailscale-In` は全許可）。届かない |
 | WSL の VM の `eth2`（Tailscale）の受信パケット数 | 接続を試した間も増えない。パケットが VM に届いていない |
-| LAN 経由（`192.168.0.21:50022`） | 届く（`ss` で `ESTAB`） |
+| LAN 経由（`192.168.0.21:50022`） | 届く（`ss` で `ESTAB`。両方の規則を同じ名前で作った状態） |
 
 そのため、tailnet からは **`tailscale serve`** で、Windows の Tailscale に `localhost:50022` へ転送させる。
 `localhost` は mirrored で WSL に届く（Windows から `127.0.0.1:50022` は届く）。
