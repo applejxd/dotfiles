@@ -772,6 +772,23 @@ def test_gpu_power_dir_is_recreated_without_following_links():
     assert body.index("ReparsePoint") < body.index("-Recurse")
 
 
+def test_wsl_ssh_firewall_rule_is_hyper_v_private_only_and_port_50022():
+    """mirrored の WSL への受信は Hyper-V ファイアウォールが止める。Public では開けない。"""
+    scripts = ROOT / "scripts" / "windows"
+    assert not (
+        scripts / "sshd.ps1"
+    ).exists()  # 309_admin が自動化済み (OpenSSHServer / SshDefaultShell)
+    script = (scripts / "netsh.ps1").read_text(encoding="utf-8-sig")
+
+    assert "New-NetFirewallHyperVRule" in script
+    assert "{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}" in script
+    assert "-Profiles Domain, Private" in script
+    assert "$port = 50022" in script
+    # xrdp (53389) は不要。Profile の無い規則を作らない
+    assert "53389" not in script
+    assert "-Profile Domain, Private" in script  # 標準ファイアウォール側も同じ
+
+
 def test_wsl_platform_is_installed_without_a_distribution_for_applejxd():
     admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
     winget = (

@@ -246,6 +246,30 @@ systemd（`systemd=true`）に任せます。WSL の init は起動直後に `mo
 そのままマウントされます（NAS への CIFS マウントで確認済み）。
 `/etc/fstab` 自体は chezmoi では管理しません。
 
+### リモートから WSL へ SSH する
+
+WSL の sshd は `scripts/ubuntu/ssh.sh` が `/etc/ssh/sshd_config.d/10-override.conf` で **50022** 番にします
+（Windows 自身の sshd は 22 番で、`309_admin` が管理します）。`.wslconfig` は `networkingMode=mirrored` で、
+ポート転送（portproxy）は使いません。
+
+mirrored では、WSL の VM への受信を **Hyper-V ファイアウォール**（既定は `DefaultInboundAction=Block`）が
+止めます。標準の Windows ファイアウォールとは別の層です。`scripts/windows/netsh.ps1`
+（管理者の PowerShell で手動実行。`chezmoi apply` では走らない）が、WSL の VM 向けに次の規則を作ります。
+
+| 項目 | 値 |
+| --- | --- |
+| 規則名 | `WSL-SSH-In-TCP`（Hyper-V ファイアウォール） |
+| 方向・ポート | 受信、TCP 50022 |
+| 範囲 | `-Profiles Domain, Private`（Public では開けない） |
+| 対象の VM | WSL（`VMCreatorId` `{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}`。`Get-NetFirewallHyperVVMCreator` で確認できる） |
+| `-AlsoWindowsFirewall` | 標準のファイアウォールにも同じ規則を作る。Hyper-V の規則だけで届かないときの切り分け用 |
+
+実測（2026-10-18、この機）: WSL の sshd は `0.0.0.0:50022` で待ち受け、Windows から `127.0.0.1:50022` は
+届く。Hyper-V ファイアウォールは有効で受信は Block、規則は `WslCore` の ICMP と mDNS だけで 50022 は
+無い。同じ機の LAN アドレス・Tailscale アドレスへの 50022 は届かなかった（このテストは自分から
+自分への接続なので、実際のリモートと同じ経路ではない）。規則を作った後に別のマシンから
+届くかは**未確認**。
+
 ## 管理者権限の集約
 
 Windows で管理者権限が要る作業は `300_windows/310_packages/run_once_before_309_admin.ps1.tmpl` の 1 本に集約し、
