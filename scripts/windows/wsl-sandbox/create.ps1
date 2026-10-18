@@ -155,6 +155,9 @@ $nics = (Get-WslText '-d', $Name, '-u', $User, '--', 'sbx-run', $CudaImage, 'ls'
 Add-Check "既定でネットワークが無い (I/F: $nics)" ($nics -eq 'lo')
 $rc = Get-WslExit '-d', $Name, '-u', $User, '--', 'sbx-run', '--privileged', $CudaImage, 'true'
 Add-Check 'sbx-run が --privileged を拒否する' ($rc -ne 0)
+# 別ディストロの timesyncd と時計を調整し合わないこと (see docs/spec/wsl-sandbox.md#時刻同期)
+$timesync = (Get-WslText '-d', $Name, '-u', 'root', '--exec', 'systemctl', 'is-enabled', 'systemd-timesyncd').Trim()
+Add-Check "systemd-timesyncd が無効 (状態: $timesync)" ($timesync -eq 'masked')
 
 # ---- 6. VM の常駐化 ----
 if (-not $NoKeepalive) {

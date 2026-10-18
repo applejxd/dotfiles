@@ -858,3 +858,14 @@ def test_wsl_sandbox_guest_files_are_lf_and_have_all_placeholders_resolved_by_se
     run = (guest / "sbx-run.sh").read_text(encoding="utf-8")
     assert "net=none" in run and "--cap-drop ALL" in run and "no-new-privileges" in run
     assert "-*) echo" in run  # 未対応のオプションを拒否する
+
+
+def test_wsl_sandbox_masks_timesyncd_so_it_does_not_fight_other_distros_over_the_shared_clock():
+    # WSL2 の全ディストロは同じカーネル時計を共有する。timesyncd が複数動くと tick が偏り、
+    # 単調時計が約 2% 遅れる (see docs/spec/wsl-sandbox.md#時刻同期)
+    setup = (WSL_SANDBOX / "guest/setup.sh").read_text(encoding="utf-8")
+    assert "systemctl mask --now systemd-timesyncd" in setup
+
+    script = (WSL_SANDBOX / "create.ps1").read_bytes().decode("utf-8-sig")
+    assert "is-enabled', 'systemd-timesyncd'" in script
+    assert "-eq 'masked'" in script

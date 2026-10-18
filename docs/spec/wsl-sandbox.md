@@ -35,8 +35,10 @@ pwsh scripts/windows/wsl-sandbox/create.ps1
    `wsl/noble/current/` は 404 になる
 3. **隔離**: `/etc/wsl.conf` に `systemd=true`、`[automount] enabled=false`、`[interop] enabled=false`、`appendWindowsPath=false` を書き、`wsl --terminate` で反映
 4. **ゲスト内**（`guest/setup.sh`）: Docker 公式 apt から docker-ce 一式、NVIDIA 公式 apt から nvidia-container-toolkit、Tailscale 公式 apt から tailscale。
-   `nvidia-ctk runtime configure --runtime=docker`、`sbx` を docker グループへ、`/usr/local/bin/sbx-run`・`sbx-help`・`/home/sbx/AGENTS.md` を配置
-5. **検証**: `/mnt/c` が無いか空、`cmd.exe` が失敗（interop 無効）、`sbx-run` でコンテナから GPU が見える、既定でネットワークが無い（I/F が `lo` だけ）、`--privileged` を拒否
+   `nvidia-ctk runtime configure --runtime=docker`、`sbx` を docker グループへ、`/usr/local/bin/sbx-run`・`sbx-help`・`/home/sbx/AGENTS.md` を配置。
+   `systemd-timesyncd` は mask する（[時刻同期](#時刻同期)）
+5. **検証**: `/mnt/c` が無いか空、`cmd.exe` が失敗（interop 無効）、`sbx-run` でコンテナから GPU が見える、既定でネットワークが無い（I/F が `lo` だけ）、`--privileged` を拒否、
+   `systemd-timesyncd` が `masked`
 6. **常駐化**: スケジュールタスク `<Name>-keepalive`（ログオン時に `conhost.exe --headless wsl.exe -d <Name> -u root -- sleep infinity`）
 7. **Tailscale**: `tailscale up --hostname=...`（表示された URL をブラウザで開いてログイン）と `tailscale set --ssh`
 
@@ -68,6 +70,41 @@ pwsh scripts/windows/wsl-sandbox/create.ps1
 - 隔離ディストロの中で `chezmoi apply` を実行しない。`100_linux/run_once_after_120_wsl.sh.tmpl` は `[automount] enabled=false` を見つけると
   `/etc/wsl.conf` の書き換えを飛ばして警告するが、ほかのスクリプトも走るので、引き続き実行しない。
 - `.wslconfig` の `vmIdleTimeout` は全ディストロの VM に効くので、常駐化には使わない。
+
+## 時刻同期
+
+**sandbox では `systemd-timesyncd` を止めて mask する**（`guest/setup.sh` が `systemctl mask --now systemd-timesyncd` を実行し、
+`create.ps1` が `masked` を検証する）。メインのディストロ側は触らない。
+
+- 理由: WSL2 の全ディストロは同じ VM・同じカーネルの時計を共有する。複数のディストロで `timesyncd` が動くと、
+  互いの調整が競合して `adjtimex` の `tick` が約 2% 偏り（標準 10000 に対して 9800 前後）、
+  `CLOCK_MONOTONIC` と `CLOCK_BOOTTIME` が約 2% 遅れる（調整を受けない `CLOCK_MONOTONIC_RAW` と Windows の時刻は一致していた）。
+  `timesyncd` は壁時計を約 0.6 秒ずつステップ補正するので、「壁時計 − 単調時計」が増え続け、
+  psutil の `create_time` が時間とともにずれる。これにより、プロセスの生死を `create_time` の厳密一致で判定する
+  アプリで、生きているプロセスが「死んだ」と誤判定される。観測した例は、dockers リポジトリの FreeVideo（常駐サービス経由の動画生成が
+  起動の数十秒後に失敗する）
+- 根拠（dockers リポジトリの `docs/research/freevideo-install-and-generation.md` の記録 E2〜E4）: 2026-10-18、
+  Ubuntu と sandbox の両方で `timesyncd` を止めて `tick` を 10000 へ戻すと、`tick` は維持され、`create_time` が一致し、
+  サーバー経由の生成が成功した。Ubuntu 側だけを止めても、約 60 秒後に `tick` が戻った
+- 時刻はホスト側の同期（`hv_utils`）に任せる。**メインのディストロだけで `timesyncd` を動かした状態が安定するかは未確認**
+  （上の実測は「両方を止めた状態」でのもの）。単一ディストロの通常の WSL2 では `timesyncd` を動かすのが一般的だが、
+  この環境での実測はしていない
+- **作成済みの sandbox へは、手動で適用する**（`create.ps1` は同名のディストロがあると中止するため、作り直さない）:
+
+  ```powershell
+  wsl.exe -d sandbox -u root -- systemctl mask --now systemd-timesyncd
+  ```
+
+  変更を戻すには `systemctl unmask systemd-timesyncd` のあと、`systemctl enable --now systemd-timesyncd`。
+- メインのディストロですでに `tick` が偏っているときは、一時的に `timesyncd` を止めて `adjtimex` で `tick` を `1000000 / CLK_TCK`
+  （通常は 10000）へ戻す（root 権限。再起動でも元に戻る）。測定スクリプトは上の記録で使ったもの
+  （`.tmp/`、リポジトリには無い）
+- 確認: 単調時計が遅れていないことは、次の差が 0 に近いことで見る（ダメなときは約 −0.3 秒 / 15 秒、−1.2 秒 / 60 秒）
+
+  ```console
+  $ python3 -c "import time;a=time.clock_gettime(time.CLOCK_MONOTONIC);b=time.clock_gettime(time.CLOCK_MONOTONIC_RAW);time.sleep(15);print((time.clock_gettime(time.CLOCK_MONOTONIC)-a)-(time.clock_gettime(time.CLOCK_MONOTONIC_RAW)-b))"
+  -0.000
+  ```
 
 ## 運用上の注意
 

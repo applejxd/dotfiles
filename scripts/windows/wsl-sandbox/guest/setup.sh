@@ -52,6 +52,11 @@ if [ "$tailscale" = tailscale ]; then
   systemctl enable --now tailscaled
 fi
 
+# WSL2 の全ディストロは同じカーネル時計を共有する。別のディストロの systemd-timesyncd と調整し合うと
+# 単調時計が約 2% 遅れるので、時刻はホスト側の同期に任せ、ここでは動かさない
+# see docs/spec/wsl-sandbox.md#時刻同期
+systemctl mask --now systemd-timesyncd
+
 # ラッパーと agent 向けガイド。@...@ を値に置き換えて配置する
 render() {
   sed -e "s#@USER@#$user#g" -e "s#@HOST@#$host#g" -e "s#@MEMORY@#$memory#g" "$1"
