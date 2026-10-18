@@ -32,6 +32,18 @@ $SudoWanted = $false
 $WslWanted = $false
 {{- end }}
 
+# GPU の電力上限 (この PC の RTX 3070 だけ。hostname と、実行時の型番の両方で限定)。see docs/spec/structure.md#gpu-の電力上限
+{{- if and (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) (eq (lower .chezmoi.hostname) "heimdall-ufbs-010") }}
+$GpuPowerLimitWanted = $true
+{{- else }}
+$GpuPowerLimitWanted = $false
+{{- end }}
+$GpuPowerLimitWatts = 150
+$GpuPowerModelPattern = 'RTX 3070'
+$GpuPowerTaskName = 'gpu-power-limit'
+$GpuPowerDir = Join-Path $env:ProgramData 'gpu-power-limit'
+$GpuPowerScript = Join-Path $GpuPowerDir 'set-power-limit.ps1'
+
 # winget packages whose only installers are machine-wide (or scope-unspecified MSI), so winget raises UAC for them.
 # Scope = 'machine' passes --scope machine; '' passes none (the manifest declares no scope).
 # Inventory: docs/spec/structure.md#winget-パッケージの-user--machine-の振り分け
@@ -59,7 +71,7 @@ $WingetMachinePackages = [ordered]@{
 {{- end }}
 {{- end }}
 }
-$AllowedTargets = @('Chocolatey', 'chocolateygui', 'Keypirinha', 'WinSCP', 'VSCode', 'LongPaths', 'RDP', 'OpenSSHServer', 'SshDefaultShell', 'Sudo', 'WslPlatform') + @($WingetMachinePackages.Keys)
+$AllowedTargets = @('Chocolatey', 'chocolateygui', 'Keypirinha', 'WinSCP', 'VSCode', 'LongPaths', 'RDP', 'OpenSSHServer', 'SshDefaultShell', 'Sudo', 'WslPlatform', 'GpuPowerLimit') + @($WingetMachinePackages.Keys)
 
 function Write-Step {
   param([string]$Message)
@@ -257,6 +269,95 @@ function Enable-Wsl {
   if ($update.ExitCode -ne 0) { Write-Step "WSL: wsl --update failed ($($update.ExitCode)); run it manually" }
 }
 
+# ---- GPU の電力上限 ---- #
+# 電力上限は再起動・ドライバのリセット・スリープ復帰で既定値へ戻る (Windows に永続化の手段が無い)。
+# SYSTEM のタスクが、起動・ログオン・復帰のたびに設定し直す。SYSTEM が実行するスクリプトは、
+# 管理者と SYSTEM しか書けない場所 (ProgramData 配下) に置き、通常ユーザーが書き換えて昇格できないようにする。
+function Get-GpuPowerScriptText {
+  # 型番に合う GPU だけに -pl を実行する。ドライバが立ち上がるまで最大 2 分待つ。内容は ASCII のみ
+  $template = @'
+$ErrorActionPreference = 'Stop'
+$smi = Join-Path $env:SystemRoot 'System32\nvidia-smi.exe'
+$rows = $null
+for ($i = 0; $i -lt 12; $i++) {
+  $out = @(& $smi --query-gpu=index,name --format=csv,noheader 2>$null)
+  if ($LASTEXITCODE -eq 0 -and $out.Count -gt 0) { $rows = $out; break }
+  Start-Sleep -Seconds 10
+}
+if (-not $rows) { exit 1 }
+$target = $rows | Where-Object { $_ -match '__PATTERN__' } | Select-Object -First 1
+if (-not $target) { exit 0 }
+$index = ($target -split ',')[0].Trim()
+& $smi -i $index -pl __LIMIT__
+exit $LASTEXITCODE
+'@
+  return $template.Replace('__PATTERN__', $GpuPowerModelPattern).Replace('__LIMIT__', [string]$GpuPowerLimitWatts)
+}
+
+function Get-NvidiaSmiPath {
+  $path = Join-Path $env:SystemRoot 'System32\nvidia-smi.exe'
+  if (Test-Path -LiteralPath $path -PathType Leaf) { return $path }
+  return $null
+}
+
+function Test-GpuPowerLimitApplicable {
+  # 型番に合う GPU が見えるときだけ対象にする (GPU を替えた・ドライバが無い機械では何もしない)
+  $smi = Get-NvidiaSmiPath
+  if (-not $smi) { return $false }
+  $names = @(& $smi --query-gpu=name --format=csv,noheader 2>$null)
+  if ($LASTEXITCODE -ne 0) { return $false }
+  return [bool]($names | Where-Object { $_ -match $GpuPowerModelPattern })
+}
+
+function Test-GpuPowerLimitConfigured {
+  if (-not (Test-Path -LiteralPath $GpuPowerScript -PathType Leaf)) { return $false }
+  $actual = (Get-Content -LiteralPath $GpuPowerScript -Raw) -replace "`r`n", "`n"
+  $expected = (Get-GpuPowerScriptText) -replace "`r`n", "`n"
+  if ($actual.Trim() -ne $expected.Trim()) { return $false }
+  # 通常権限では SYSTEM のタスクを読めない (Get-ScheduledTask が無言で空を返す。実機で確認済み)。
+  # スクリプトは昇格側がタスクと一緒に作るので、通常権限では内容の一致だけで設定済みとみなす (タスクを手で消したときは検知しない)
+  if (-not (Test-IsElevated)) { return $true }
+  $task = Get-ScheduledTask -TaskName $GpuPowerTaskName -ErrorAction Ignore
+  if (-not $task) { return $false }
+  if ($task.Principal.UserId -ne 'SYSTEM' -or $task.Principal.RunLevel -ne 'Highest') { return $false }
+  return @($task.Triggers).Count -eq 3
+}
+
+function Enable-GpuPowerLimit {
+  # ディレクトリごと作り直し、所有者と ACL を昇格後の管理者のものにする (事前に置かれたファイルを引き継がない)
+  if (Test-Path -LiteralPath $GpuPowerDir) { Remove-Item -LiteralPath $GpuPowerDir -Recurse -Force }
+  New-Item -ItemType Directory -Path $GpuPowerDir | Out-Null
+  & icacls.exe $GpuPowerDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "icacls failed: $LASTEXITCODE" }
+  [IO.File]::WriteAllText($GpuPowerScript, (Get-GpuPowerScriptText), (New-Object Text.UTF8Encoding($false)))
+
+  $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -File "' + $GpuPowerScript + '"')
+  $boot = New-ScheduledTaskTrigger -AtStartup
+  $boot.Delay = 'PT1M'
+  $logon = New-ScheduledTaskTrigger -AtLogOn
+  $eventClass = Get-CimClass -ClassName MSFT_TaskEventTrigger -Namespace 'Root/Microsoft/Windows/TaskScheduler'
+  $resume = New-CimInstance -CimClass $eventClass -ClientOnly
+  $resume.Enabled = $true
+  $resume.Subscription = '<QueryList><Query Id="0" Path="System"><Select Path="System">*[System[Provider[@Name=''Microsoft-Windows-Power-Troubleshooter''] and EventID=1]]</Select></Query></QueryList>'
+  $resume.Delay = 'PT10S'
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
+      -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+  $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+  Register-ScheduledTask -TaskName $GpuPowerTaskName -Action $action -Trigger @($boot, $logon, $resume) `
+      -Settings $settings -Principal $principal -Description "Set the GPU power limit to $GpuPowerLimitWatts W (RTX 3070 only)" -Force | Out-Null
+
+  # 今の起動にも反映し、上限が変わったことを読み取って確かめる
+  Start-ScheduledTask -TaskName $GpuPowerTaskName
+  $smi = Get-NvidiaSmiPath
+  $applied = $false
+  for ($i = 0; $i -lt 30 -and -not $applied; $i++) {
+    Start-Sleep -Seconds 2
+    $limits = @(& $smi --query-gpu=power.limit --format=csv,noheader,nounits 2>$null)
+    $applied = [bool]($limits | Where-Object { [math]::Round([double]($_.Trim())) -eq $GpuPowerLimitWatts })
+  }
+  if (-not $applied) { throw "GPU power limit did not become $GpuPowerLimitWatts W (see Task Scheduler: $GpuPowerTaskName)" }
+}
+
 function Get-Missing {
   $missing = @()
   $choco = Get-ChocoPath
@@ -288,6 +389,7 @@ function Get-Missing {
   if ($SshdWanted -and -not (Test-SshDefaultShell)) { $missing += 'SshDefaultShell' }
   if ($SudoWanted -and (Test-SudoSupported) -and (Test-SudoAllowedByPolicy) -and -not (Test-SudoEnabled)) { $missing += 'Sudo' }
   if ($WslWanted -and -not (Test-WslInstalled)) { $missing += 'WslPlatform' }
+  if ($GpuPowerLimitWanted -and (Test-GpuPowerLimitApplicable) -and -not (Test-GpuPowerLimitConfigured)) { $missing += 'GpuPowerLimit' }
   return $missing
 }
 
@@ -402,6 +504,7 @@ function Install-Targets {
   & $run 'OpenSSHServer' { if (-not (Test-SshdConfigured)) { Enable-Sshd } }
   & $run 'Sudo' { if (-not (Test-SudoEnabled)) { Enable-Sudo } }
   & $run 'WslPlatform' { if (-not (Test-WslInstalled)) { Enable-Wsl } }
+  & $run 'GpuPowerLimit' { if (-not (Test-GpuPowerLimitConfigured)) { Enable-GpuPowerLimit } }
   foreach ($key in $WingetMachinePackages.Keys) {
     if ($Wanted -notcontains $key) { continue }
     $pkg = $WingetMachinePackages[$key]
