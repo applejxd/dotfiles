@@ -1,22 +1,18 @@
 ﻿<#
   .SYNOPSIS
-    mirrored モードの WSL へ、リモートから SSH (50022) できるようにする
+    mirrored モードの WSL へ、LAN から SSH (50022) できるようにする
   .DESCRIPTION
-    mirrored モードでは、WSL の VM への受信を Hyper-V ファイアウォールが止める (既定は Block)。
-    標準の Windows ファイアウォールの規則とは別の層なので、WSL の VM 向けの規則を作る。
+    mirrored モードでは、WSL の VM への受信を 2 つの層が止める。どちらも規則が要る (実測)。
+      1. Hyper-V ファイアウォール (WSL の VM 向け。既定は Block)
+      2. 標準の Windows ファイアウォール (これを消すと LAN から届かなくなった)
     規則は Domain / Private のネットワークだけに限定し、Public では開けない。
 
-    -AlsoWindowsFirewall: 標準の Windows ファイアウォールにも同じ規則を作る。
-    Hyper-V の規則だけで届かないときの切り分け用 (既定では作らない)。
-    see docs/spec/structure.md#wsl
+    Tailscale 経由はこの規則では通らない (Wintun のパケットは VM へ転送されない)。
+    tailnet からは `tailscale serve` で localhost:50022 へ転送する。
+    see docs/spec/structure.md#リモートから-wsl-へ-ssh-する
 #>
 
 #Requires -RunAsAdministrator
-
-[CmdletBinding()]
-param(
-    [switch]$AlsoWindowsFirewall
-)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -36,12 +32,10 @@ New-NetFirewallHyperVRule -Name $ruleName -DisplayName $displayName `
     -VMCreatorId $wslCreatorId -Profiles Domain, Private -Enabled True | Out-Null
 Write-Host "Hyper-V firewall rule '$ruleName' (TCP $port, Domain/Private) is set."
 
-if ($AlsoWindowsFirewall) {
-    if (Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue) {
-        Remove-NetFirewallRule -Name $ruleName
-    }
-    New-NetFirewallRule -Name $ruleName -DisplayName $displayName `
-        -Enabled True -Direction Inbound -Protocol TCP -Action Allow `
-        -LocalPort $port -Profile Domain, Private | Out-Null
-    Write-Host "Windows firewall rule '$ruleName' (TCP $port, Domain/Private) is set."
+if (Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue) {
+    Remove-NetFirewallRule -Name $ruleName
 }
+New-NetFirewallRule -Name $ruleName -DisplayName $displayName `
+    -Enabled True -Direction Inbound -Protocol TCP -Action Allow `
+    -LocalPort $port -Profile Domain, Private | Out-Null
+Write-Host "Windows firewall rule '$ruleName' (TCP $port, Domain/Private) is set."
