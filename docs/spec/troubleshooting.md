@@ -23,6 +23,7 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | 「一部の開発ツールを導入できませんでした」 | Linux / WSL | [ツール 1 個の失敗で apply を止めない](structure.md#ツール-1-個の失敗で-apply-を止めない) |
 | 「zinit が無いためプラグインを読み込みません」、apply しても `~/.zinit` が空 | Linux / WSL / macOS | [apply しても zinit などの external が取得されない](troubleshooting-bootstrap.md#apply-しても-zinit-などの-external-が取得されない) |
 | zsh の起動時に `wait ice received invalid suffix letter` | Linux / WSL / macOS | `chezmoi update` で dotfiles を最新にする（[zinit の遅延読み込みの順序](structure.md#zinit-の遅延読み込みの順序)） |
+| `chezmoi: warning: config file template has changed, run chezmoi init` | 全 OS | [config file template has changed と警告される](troubleshooting-bootstrap.md#config-file-template-has-changed-と警告される) |
 | sudo のパスワード入力で止まる | macOS | [sudo のパスワードで止まる](troubleshooting-bootstrap.md#sudo-のパスワードで止まる) |
 | `No module named 'tomllib'`、`chezmoi-python3: no such file or directory` | Linux / WSL / macOS | [Unix で tomllib が無いと言われて apply が止まる](troubleshooting-bootstrap.md#unix-で-tomllib-が無いと言われて-apply-が止まる) |
 | `tomllib` や Python のエラー | Windows | [Windows で tomllib や Python のエラーが出る](troubleshooting-bootstrap.md#windows-で-tomllib-や-python-のエラーが出る) |

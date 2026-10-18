@@ -160,6 +160,33 @@ chezmoi apply
 **成功の確認**: 同じ apply で macOS / Linux のスクリプトが最後まで進み、
 `chezmoi status --include=scripts` に残らない。
 
+## config file template has changed と警告される
+
+**対象**: 全 OS。`.chezmoi.toml.tmpl` が変わった後の `chezmoi update` / `apply` / `status` / `verify`。
+
+**症状**: `chezmoi: warning: config file template has changed, run chezmoi init to regenerate config file`
+が毎回出る。`apply` は成功する。
+
+**確認**: 今のテンプレートを描画した結果が、使われている設定と同じか比べる。
+
+```sh
+chezmoi execute-template < ~/.local/share/chezmoi/home/.chezmoi.toml.tmpl | diff ~/.config/chezmoi/chezmoi.toml -
+```
+
+**原因**: `~/.config/chezmoi/chezmoi.toml` は `chezmoi init` のときにだけ生成される。
+テンプレートが変わると、生成済みの設定との食い違いを警告する。
+
+**対処**:
+
+- 差が無い（描画結果が同じ）: **無視してよい**。消したければ `chezmoi init` を実行する（同じ内容で再生成される）
+- 差がある: 新しい値を使うには `chezmoi init` を実行する。それまでは、生成済みの設定が使われ続ける
+
+`init` を前提にした設計にしない（普段の運用は `update` が中心）。マシン判定などは
+`.chezmoitemplates/` の共有テンプレートに置き、`apply` のたびに評価させる
+（[CHG-0008](../change/closed/0008-raspi-branching.md)）。
+
+**成功の確認**: `chezmoi status` に警告が出ない。
+
 ## Unix で tomllib が無いと言われて apply が止まる
 
 **対象**: Linux / WSL / macOS。`scripts/agents/generate.py` を呼ぶ modify script
