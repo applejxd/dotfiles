@@ -74,6 +74,25 @@ EOF
         echo "zpack: $dst: already exists (not overwritten)" >&2
         return 1
     fi
+    # 出力先が圧縮対象の中だと一時ファイル自身を tar が取り込むので拒否する (例: zpack .)
+    if [ -d "$src" ]; then
+        local src_abs src_prefix dst_dir
+        src_abs=$(cd "$src" && pwd -P)
+        dst_dir=$(cd "$(dirname "$dst")" && pwd -P)
+        if [ -z "$src_abs" ] || [ -z "$dst_dir" ]; then
+            echo "zpack: cannot resolve paths: $src, $dst" >&2
+            return 1
+        fi
+        # "/" を空にして、"$src_prefix"/* が全パスに一致するようにする
+        # (bash は case のパターンに空に展開する引用付きの変数を直接置くと一致しないので、一度代入する)
+        src_prefix=${src_abs%/}
+        case "$dst_dir/" in
+            "$src_prefix"/*)
+                echo "zpack: $dst: output is inside the source directory" >&2
+                return 1
+                ;;
+        esac
+    fi
     local tmp="${dst}.zpack.$$"
     set -- -T0 "-$level" -o "$tmp"
     if [ -n "$ultra_flag" ]; then

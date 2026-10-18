@@ -62,8 +62,12 @@ function _tmpdir_repo_local_update() {
 
     if [[ -n "$repo_root" ]]; then
         local repo_tmp="${repo_root}/.tmp"
-        [[ -d "$repo_tmp" ]] || mkdir -p "$repo_tmp"
-        export TMPDIR="$repo_tmp"
+        # 作れない / 書き込めないとき (読み取り専用など) は元の TMPDIR を維持し、非対話でも出力しない
+        if { [[ -d "$repo_tmp" ]] || mkdir -p "$repo_tmp" 2>/dev/null; } && [[ -w "$repo_tmp" ]]; then
+            export TMPDIR="$repo_tmp"
+        else
+            export TMPDIR="$_TMPDIR_REPO_LOCAL_ORIG"
+        fi
     else
         export TMPDIR="$_TMPDIR_REPO_LOCAL_ORIG"
     fi

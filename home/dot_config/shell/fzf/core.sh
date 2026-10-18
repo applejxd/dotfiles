@@ -119,16 +119,18 @@ function shellf() {
 if [[ "$OSTYPE" == "darwin"* ]]; then
     unmount() {
         DEVICE=$(diskutil list | grep '/dev' | cut -d ' ' -f 1 | fzf --preview 'diskutil info {}')
+        # 選択をキャンセルしたときは何もしない
+        [ -n "$DEVICE" ] || return 0
 
         # Sanity check the device
         diskutil info "$DEVICE" | grep "Device Location" | grep -q External || {
             echo "Chosen disk is an internal disk, so cannot unmount" >&2
-            exit 1
+            return 1
         }
 
         diskutil info "$DEVICE" | grep "Virtual" | grep -q No || {
             echo "Chosen disk is virtual, so cannot unmount" >&2
-            exit 1
+            return 1
         }
 
         echo "Unmounting $DEVICE"

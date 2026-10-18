@@ -11,7 +11,8 @@ if command -v "git" >/dev/null 2>&1; then
         local branches branch
         branches=$(git branch -vv) &&
             branch=$(echo "$branches" | fzf +m) &&
-            git checkout "$(echo "$branch" | awk '{print $1}' | sed "s/.* //")"
+            # 現在のブランチ (`* `) と他の worktree のブランチ (`+ `) の印 (先頭 2 文字) だけを除く。`+` で始まるブランチ名を削らない
+            git checkout "$(echo "$branch" | sed -E 's/^[*+ ] //' | awk '{print $1}')"
     }
 
     # fbrm - checkout git branch (including remote branches)
