@@ -305,7 +305,11 @@ tailscale serve reset       # 戻す
 - `chezmoi apply` では実行しない（全マシンの公開範囲が意図せず増えるため）。手動で、必要なマシンだけ
 
 この機の WSL の sshd は `0.0.0.0:50022` で待ち受け、`AllowUsers` は未設定、`PermitRootLogin prohibit-password`、
-`PasswordAuthentication no`。`tailscale serve` 経由の接続は**未確認**（設定のみ。接続できたら追記する）。
+`PasswordAuthentication no`。
+
+**確認済み**（2026-10-18、iPhone の Termius）: `192.168.0.21:50022`（LAN）と
+`100.107.198.96:50022`（Tailscale、`tailscale serve` 経由）の**両方で SSH できた**。その時点の状態は、
+2 つのファイアウォール規則を作成済みで `tailscale serve` も有効。規則がそれぞれ単独で必要かは未確定。
 
 ## 管理者権限の集約
 
