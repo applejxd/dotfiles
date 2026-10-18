@@ -6,7 +6,6 @@
     リダイレクトが有効な環境では $PROFILE が OneDrive 側を指すため、配置した
     ローダーが一切読み込まれない。実際の MyDocuments を解決し、必要な場合だけ
     そちらにも同じローダーを置く。
-    あわせて、旧構成 (Documents\commands) の残骸を掃除する。
 
     パスは PowerShell の $HOME ではなく chezmoi が解決したホームを使う。
     ドメイン参加機では $HOME (HOMEDRIVE+HOMEPATH) が chezmoi の ~
@@ -59,17 +58,5 @@ if (
       )
       Write-Host "MyDocuments is redirected; updated $target"
     }
-  }
-}
-
-# 旧構成: プロファイルから dot-source していた補助コマンド群。
-# ユーザーが後から置いたファイルを巻き込まないよう、.ps1 だけを消して
-# 空になった場合にのみディレクトリを削除する。
-$legacyCommands = Join-Path $managedDocuments 'commands'
-if (Test-Path -LiteralPath $legacyCommands -PathType Container) {
-  Get-ChildItem -LiteralPath $legacyCommands -File -Filter '*.ps1' | Remove-Item -Force
-  if (-not (Get-ChildItem -LiteralPath $legacyCommands -Force)) {
-    Remove-Item -LiteralPath $legacyCommands -Force
-    Write-Host "Removed the legacy command directory: $legacyCommands"
   }
 }

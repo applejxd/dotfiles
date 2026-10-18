@@ -72,7 +72,6 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | Linux | `100_linux/run_once_after_121_ubuntu.sh.tmpl` | `/etc/apt/sources.list.d/vscode.list`（`vscode.sources` と重複するとき） | apt の重複警告が消える |
 | Linux | 同上 | `$HOME` 直下の `デスクトップ` `ダウンロード` `テンプレート` `公開` `ドキュメント` `ミュージック` `ピクチャ` `ビデオ`（**空のときだけ** `rmdir`） | `xdg-user-dirs-update` が英語名を作った直後に、日本語名の空フォルダを消す。中身があれば警告を出して残す |
 | Windows | `300_windows/run_once_after_344_cleanup_agents_pycache.ps1` | `~\.config\agents\__pycache__` | 古い pyc が消える。Python が再生成する |
-| Windows | `300_windows/run_after_345_powershell_profile.ps1.tmpl` | `Documents\commands\*.ps1`（旧構成。空なら `commands` ごと） | 旧構成の残骸が消える。利用者が置いた `.ps1` も消える |
 
 ## modify_ スクリプトの一時ファイル
 
