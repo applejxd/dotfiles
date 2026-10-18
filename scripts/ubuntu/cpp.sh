@@ -22,6 +22,9 @@ sudo apt-get install -y git build-essential cmake libssl-dev libncurses5-dev
 # C/C++ Build Tools
 sudo apt-get install -y cmake-curses-gui gcc clang gdb clangd
 
+# gdb の OpenCV 表示 (dot_config/gdb/opencv_gdb.py) が使う。gdb の Python は /usr/bin/python3
+sudo apt-get install -y python3-numpy
+
 # Formatter, Linter, Document Generator
 sudo apt-get install -y clang-format cpplint doxygen graphviz
 
