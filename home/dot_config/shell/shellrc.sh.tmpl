@@ -205,6 +205,15 @@ function sha1() {
     echo -n "$1" | openssl sha1 | sed "s/^.* //"
 }
 
+# yt-dlp (mise が入れる) で ~/Downloads へ保存する
+function audio-dl() {
+    yt-dlp --ignore-errors --output "$HOME/Downloads/%(title)s.%(ext)s" --extract-audio --audio-format mp3 --embed-thumbnail "$1"
+}
+
+function video-dl() {
+    yt-dlp --ignore-errors --output "$HOME/Downloads/%(title)s.%(ext)s" --recode-video mp4 --add-metadata "$1"
+}
+
 #-----------#
 # functions #
 #-----------#
