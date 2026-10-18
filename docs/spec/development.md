@@ -141,6 +141,11 @@ README の第 2 フェーズ（`bw login` → `BW_SESSION` → 再度の `init` 
 Bitwarden 由来のファイルは検証の対象外。
 実機の環境（古い winget 版 node、PATH の残り）に影響されない。
 
+**実行ポリシーの抜けを検出できない**（既知の限界）。`launch.ps1` が `-ExecutionPolicy Bypass` で
+`guest.ps1` を起動すると、子の `chezmoi` にも `PSExecutionPolicyPreference=Bypass` が引き継がれる
+（実測）。README の `Set-ExecutionPolicy` の行は、`Restricted` のままだと `chezmoi` が `.ps1` の
+run スクリプトを実行できないために必要（実測）だが、この検証はその行が無くても通る。
+
 ```powershell
 # ホストの PowerShell で（Sandbox の有効化と再起動が済んでいること）
 pwsh scripts/windows/sandbox/launch.ps1

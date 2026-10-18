@@ -80,9 +80,10 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 | 対象 | 状態 | 確認日 | 根拠 |
 | --- | --- | --- | --- |
-| source state 全体 | 全 OS ぶん更新済み。適用して実機で確かめたのは Linux / WSL のみ | 2026-09-19（最終レビュー） | [仕様・運用](spec/index.md) |
+| source state 全体 | 全 OS ぶん更新済み。適用して実機で確かめたのは Linux / WSL と Windows 11（個別は下の行） | 2026-09-19（最終レビュー） | [仕様・運用](spec/index.md) |
 | Raspberry Pi（64bit / ヘッドレス） | 実機で `apply` が完走。判定は `apply` のたびに評価する | 2026-09-26 | [CHG-0008](change/closed/0008-raspi-branching.md) |
-| Windows native | source state のみ更新。Windows 11 の実機では未確認 | 2026-09-27 | [Windows での扱い](spec/agent-permissions.md#windows-での扱い) |
+| Windows native の dotfiles | Windows 11 の実機で `apply` して使用中（管理者権限の集約、設定の見直し） | 2026-10-12 | [CHG-0021](change/0021-windows-admin-consolidation.md)、[CHG-0022](change/0022-windows11-settings-review.md) |
+| Windows native の AI CLI の権限・sandbox | source state のみ更新。Windows 11 の実機では未確認 | 2026-09-27 | [Windows での扱い](spec/agent-permissions.md#windows-での扱い) |
 | 権限 / hook / MCP の生成 | `common.toml` から各 AI CLI へ生成して利用している | 2026-09-19（最終レビュー） | [エージェント権限仕様](spec/agent-permissions.md) |
 | 秘密情報の管理 | sops + age と Bitwarden で利用している | 2026-09-19（最終レビュー） | [セキュリティ](spec/security.md) |
 | 圧縮を跨ぐ引き継ぎ | OpenCode V2 のみ。実機の自動圧縮で確かめた。Claude / Copilot 向けの圧縮 hook は撤去 | 2026-09-25 | [CHG-0001](change/closed/0001-compaction-context-handover.md) |

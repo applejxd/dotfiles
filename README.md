@@ -29,7 +29,7 @@ brew install chezmoi
 winget install --id Python.Python.3.12 --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
 winget install --id Git.Git --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
 winget install --id twpayne.chezmoi --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
-Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned   # Restricted のままだと chezmoi が .ps1 を実行できない
 ```
 
 Windows では **Python 3.11 以上**が必要（`py -3` で最新の Python 3 を選ぶ。
