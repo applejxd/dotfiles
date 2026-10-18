@@ -47,3 +47,16 @@ def neutral_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(key)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+
+
+@pytest.fixture(autouse=True)
+def neutral_pi_harness_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """実行者の ``PI_HARNESS_*`` と ``ORCA_*`` を遮断する。
+
+    ★フルガード (``pis``) の中で実行すると ``PI_HARNESS_BYPASS=1`` などが子プロセスへ
+      引き継がれる。bypass 中は ask が確認なしで通るので、「確認が 1 回出る」ことを
+      見る ``test_pi_commit_confirm.py`` が環境しだいで落ちる (実際 23 件落ちた)。
+      各テストが必要な値は自分で ``setenv`` する。
+    """
+    for key in [k for k in os.environ if k.startswith(("PI_HARNESS_", "ORCA_"))]:
+        monkeypatch.delenv(key)
