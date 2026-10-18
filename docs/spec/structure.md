@@ -1361,7 +1361,7 @@ Windows Terminal 側でこのキーを `adjustOpacity`（`opacity: 0`、`relativ
 
 | パス | 役割 |
 | --- | --- |
-| `home/.chezmoitemplates/agent-instructions.md` | 4 CLI 共通の本文（応答・停止と報告・検証） |
+| `home/.chezmoitemplates/agent-instructions.md` | 4 CLI 共通の本文（応答・停止と報告・検証・未知の不具合の調査） |
 | `home/dot_claude/CLAUDE.md.tmpl` | `~/.claude/CLAUDE.md`。共通本文のみ |
 | `home/dot_codex/AGENTS.md.tmpl` | `~/.codex/AGENTS.md`。共通本文のみ |
 | `home/dot_config/opencode/AGENTS.md.tmpl` | `~/.config/opencode/AGENTS.md`。共通本文 + 自動リマインダー節（提供元が差し込む著作権などの注意への言及を止め、出力トークンを節約する。起きたのが OpenCode なのでここだけ） + 文脈の引き継ぎ節（`checkpoint` スキルが OpenCode 専用のため） |
