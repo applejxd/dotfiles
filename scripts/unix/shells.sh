@@ -1,20 +1,15 @@
 #!/bin/bash
 # install shells
 
-if [ $# -eq 0 ]; then
-    # save password
-    read -rsp "Password: " password
-else
-    password=$1
-fi
+sudo -v
 
 #---------#
 # Install #
 #---------#
 
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
-    echo "$password" | sudo -S apt-get update
-    echo "$password" | sudo -S apt-get install -y zsh fish unzip
+    sudo apt-get update
+    sudo apt-get install -y zsh fish unzip
 fi
 
 if [[ "$OSTYPE" =~ darwin ]]; then
@@ -37,19 +32,19 @@ fi
 
 # register bash
 if ! grep -q "$(which bash)" /etc/shells; then
-    echo "$password" | sudo -S sh -c "echo $(which bash) >> /etc/shells"
+    sudo sh -c "echo $(which bash) >> /etc/shells"
 fi
 
 # register fish
 if command -v "fish" >/dev/null 2>&1; then
     if ! grep -q "$(which fish)" /etc/shells; then
-        echo "$password" | sudo -S sh -c "echo $(which fish) >> /etc/shells"
+        sudo sh -c "echo $(which fish) >> /etc/shells"
     fi
 fi
 
 # register zsh
 if command -v "zsh" >/dev/null 2>&1; then
     if ! grep -q "$(which zsh)" /etc/shells; then
-        echo "$password" | sudo -S sh -c "echo $(which zsh) >> /etc/shells"
+        sudo sh -c "echo $(which zsh) >> /etc/shells"
     fi
 fi

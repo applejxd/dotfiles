@@ -1,11 +1,6 @@
 #!/bin/bash
 
-if [ $# -eq 0 ]; then
-    # save password
-    read -rsp "Password: " password
-else
-    password=$1
-fi
+sudo -v
 
 if [[ ! -e /etc/lsb-release ]]; then
     echo "Your OS is not Ubuntu!"
@@ -26,24 +21,22 @@ fi
 
 # from https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html
 if [[ ! -e /opt/ros/"${ROS_DISTRO}"/setup.bash ]]; then
-    echo "$password" | sudo -S apt install software-properties-common
-    echo "$password" | sudo -S add-apt-repository universe
+    sudo apt install software-properties-common
+    sudo add-apt-repository universe
 
-    echo "$password" | sudo -S apt-get update
-    echo "$password" | sudo -S apt-get install -y curl
-    echo "$password" | sudo -S sudo curl \
+    sudo apt-get update
+    sudo apt-get install -y curl
+    sudo curl \
         -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
         -o /usr/share/keyrings/ros-archive-keyring.gpg
 
-    # tee の stdin には APT ソース行だけを流す (認証は直前の sudo -S -v で済ませる)
-    echo "$password" | sudo -S -v
     # shellcheck source=/dev/null
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo "$UBUNTU_CODENAME") main" |
         sudo tee /etc/apt/sources.list.d/ros2.list >/dev/null
 
-    echo "$password" | sudo -S apt-get update
-    echo "$password" | sudo -S apt-get -y upgrade
-    echo "$password" | sudo -S apt install -y ros-"${ROS_DISTRO}"-desktop python3-argcomplete
+    sudo apt-get update
+    sudo apt-get -y upgrade
+    sudo apt install -y ros-"${ROS_DISTRO}"-desktop python3-argcomplete
 
     # shellcheck source=/dev/null
     source /opt/ros/"${ROS_DISTRO}"/setup.sh

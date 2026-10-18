@@ -62,5 +62,5 @@ sudo apt-get install -y libopencv-dev libpcl-dev
 sudo apt-get install -y python3-numpy python3-matplotlib
 if [ ! -e /usr/include/matplotlibcpp.h ]; then
   sudo wget https://raw.githubusercontent.com/lava/matplotlib-cpp/master/matplotlibcpp.h -P /usr/include
-  # echo "${password}" | sudo -S rm /usr/include/matplotlibcpp.h
+  # sudo rm /usr/include/matplotlibcpp.h
 fi
