@@ -46,7 +46,10 @@ fi
 sudo apt-get install -y -qq uidmap dbus-user-session slirp4netns docker-ce-rootless-extras
 
 # rootful を止める (rootless と同時に動かさない)
-sudo systemctl disable --now docker.service docker.socket >/dev/null 2>&1 || true
+# 停止後もソケットが残り、docker グループのユーザーには書き込み可能なため、
+# setuptool が rootful 稼働中と誤判定する。残骸を消す。
+sudo systemctl disable --now docker.service docker.socket
+sudo rm -f /var/run/docker.sock
 
 # Ubuntu 24.04 以降は非特権 userns が AppArmor で制限され、rootlesskit が起動できない
 # 参考: https://docs.docker.com/engine/security/rootless/#distribution-specific-hint
