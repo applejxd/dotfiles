@@ -40,7 +40,11 @@ echo "✅ 完了：Ubuntu パッケージを更新しました"
 if command -v xdg-user-dirs-update >/dev/null 2>&1; then
     echo "既知のフォルダを整理します..."
     LANG=C xdg-user-dirs-update --force
-    rm -rf デスクトップ ダウンロード テンプレート 公開 ドキュメント ミュージック ピクチャ ビデオ
+    # 旧ロケールの空フォルダだけ消す (中身があれば残す)。基準は $HOME (cwd に依存させない)
+    for d in デスクトップ ダウンロード テンプレート 公開 ドキュメント ミュージック ピクチャ ビデオ; do
+        [[ -d "$HOME/$d" ]] || continue
+        rmdir -- "$HOME/$d" 2>/dev/null || echo "⚠️ $HOME/$d は空でないので残します" >&2
+    done
     echo "✅ 完了：既知のフォルダを整理しました"
 else
     echo "xdg-user-dirs-update が無いので既知のフォルダの整理を飛ばします"
