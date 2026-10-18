@@ -7,7 +7,6 @@
 # update shell
 if OS.mac?
     brew "bash"
-    brew "fish"
     # the zsh cannot the use pure theme on Linux
     # brew "zsh"
 end

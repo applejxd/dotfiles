@@ -9,7 +9,7 @@ sudo -v
 
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
     sudo apt-get update
-    sudo apt-get install -y zsh fish unzip
+    sudo apt-get install -y zsh unzip
 fi
 
 if [[ "$OSTYPE" =~ darwin ]]; then
@@ -33,13 +33,6 @@ fi
 # register bash
 if ! grep -q "$(which bash)" /etc/shells; then
     sudo sh -c "echo $(which bash) >> /etc/shells"
-fi
-
-# register fish
-if command -v "fish" >/dev/null 2>&1; then
-    if ! grep -q "$(which fish)" /etc/shells; then
-        sudo sh -c "echo $(which fish) >> /etc/shells"
-    fi
 fi
 
 # register zsh

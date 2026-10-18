@@ -61,7 +61,7 @@
 | `openssl@1.1`、wxMaxima | `home/dot_config/shell/osxenv.sh` | **削除した**（2026-10-18、利用者の確認）。`openssl@1.1` は公式に終了済みで、`PKG_CONFIG_PATH` が Intel のパスで不整合でもあった |
 | MacTeX の PATH | `home/dot_config/shell/osxenv.sh` | 必須ではないが LaTeX 環境は要る（`210_osx` が `brew install mactex`）。起動のたびの `find` + `sed` をやめ、固定の `/Library/TeX/texbin` を通す形にした |
 | Java 11 | `home/dot_config/shell/wslenv.sh` | 同上 |
-| fish の設定全体 | `home/dot_config/fish/config.fish` | **fish は使っていない**。MAMP、fink、FDK、YaTeX など古い macOS 向けが中心。削除候補 |
+| fish の設定全体 | `home/dot_config/fish/config.fish`、`scripts/unix/install.fish`、`shells.sh` と `brew_shell.rb` の fish | **削除した**（2026-10-18、fish は使っていない）。`audio-dl` / `video-dl` だけを zsh 側（`shellrc.sh.tmpl`）へ移した。他のマシンに配布済みの `~/.config/fish/config.fish` は残る（`.chezmoiremove` は足さない）。移さなかった `ggl` / `wdic` / `wman`（Chrome を開く）と `dic`（`w3m` の weblio）は切り捨てた |
 | `{"key":…, "value":[…]}` と素の配列の両方を受ける | `400_unix/run_onchange_after_420 / 430` | 旧形式が実在した裏付けが無い、予防的な処理 |
 
 ## 手法の注意
