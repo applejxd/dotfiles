@@ -64,7 +64,8 @@ if command -v "git" >/dev/null 2>&1; then
         local out input_key select_num selected_files
         # "out" is true except when cancel fzf selection
         # --exit-0: Exit if lenght of the list is 0
-        while out=$(git status --short | awk '{if (substr($0,2,1) !~ / /) print $2}' | fzf --exit-0 --expect=ctrl-d); do
+        # ls-files は空白を含む名前もそのまま出す (status --short は引用符で囲むので awk で割れる)
+        while out=$(git -c core.quotepath=off ls-files -m -o --exclude-standard | fzf --exit-0 --expect=ctrl-d); do
             # Use "fzf --expect=KEY" function (see https://www.mankier.com/1/fzf#Options-Scripting)
             input_key=$(echo "$out" | head -1)
             # Arithmetric Expansion
@@ -74,10 +75,10 @@ if command -v "git" >/dev/null 2>&1; then
 
             if [ "$input_key" == ctrl-d ]; then
                 # Show diff
-                git diff --color=always "$selected_files" | less -R
+                git diff --color=always -- "$selected_files" | less -R
             else
                 # When input ENTER
-                git add "$selected_files"
+                git add -- "$selected_files"
             fi
         done
     }
