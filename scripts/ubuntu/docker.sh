@@ -79,8 +79,36 @@ fi
 unset DOCKER_HOST
 # Docker Desktop (WSL 統合) が残した壊れた symlink (contexts 等) で setuptool の mkdir が失敗する
 find "$HOME/.docker" -maxdepth 1 -xtype l -print -delete 2>/dev/null || true
+
+# Docker Desktop 用の credential helper (desktop.exe) が残っていると pull が失敗する
+DOCKER_CFG="$HOME/.docker/config.json"
+if [[ -f "$DOCKER_CFG" ]] && grep -q '"desktop' "$DOCKER_CFG"; then
+  python3 - "$DOCKER_CFG" <<'EOF'
+import json, sys
+
+path = sys.argv[1]
+with open(path) as f:
+    cfg = json.load(f)
+if str(cfg.get("credsStore", "")).startswith("desktop"):
+    del cfg["credsStore"]
+helpers = cfg.get("credHelpers", {})
+for k in [k for k, v in helpers.items() if str(v).startswith("desktop")]:
+    del helpers[k]
+with open(path, "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+EOF
+fi
+
+# systemd の Environment= は空白入りの PATH (WSL の Windows 側) を解釈できない。
+# 過去に作られた壊れたユニットは作り直す (setuptool は既存ユニットを上書きしない)
+UNIT="$HOME/.config/systemd/user/docker.service"
+if [[ -f "$UNIT" ]] && grep -q '^Environment=PATH=.* ' "$UNIT"; then
+  rm -f "$UNIT"
+fi
+CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v -e ' ' -e '^/mnt/' | paste -sd: -)"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-dockerd-rootless-setuptool.sh install
+PATH="$CLEAN_PATH" dockerd-rootless-setuptool.sh install
 systemctl --user enable --now docker.service
 # ブート時 (ログイン前) から自動起動
 sudo loginctl enable-linger "$USER"
