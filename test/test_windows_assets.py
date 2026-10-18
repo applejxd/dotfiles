@@ -787,6 +787,15 @@ def test_wsl_ssh_goes_through_tailscale_serve_not_firewall_rules():
     assert "tailscale serve --bg --tcp 50022 tcp://localhost:50022" in doc
 
 
+def test_authorized_keys_acl_discards_explicit_aces_before_removing_inheritance():
+    """/inheritance:r は継承された ACE しか消さない。既存の明示的な ACE は /reset で先に捨てる。"""
+    key_script = ROOT / "home/.chezmoiscripts/300_windows/run_after_348_authorized_keys.ps1.tmpl"
+    script = key_script.read_text(encoding="utf-8-sig")
+
+    assert "'/reset'" in script
+    assert script.index("'/reset'") < script.index("'/inheritance:r'")
+
+
 def test_wsl_platform_is_installed_without_a_distribution_for_applejxd():
     admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
     winget = (
