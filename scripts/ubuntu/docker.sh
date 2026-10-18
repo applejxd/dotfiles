@@ -48,6 +48,53 @@ sudo apt-get install -y -qq uidmap dbus-user-session slirp4netns docker-ce-rootl
 # rootful を止める (rootless と同時に動かさない)
 # 停止後もソケットが残り、docker グループのユーザーには書き込み可能なため、
 # setuptool が rootful 稼働中と誤判定する。残骸を消す。
+rootful_active=false
+rootful_enabled=false
+if systemctl is-active --quiet docker.service || systemctl is-active --quiet docker.socket; then
+  rootful_active=true
+fi
+if systemctl is-enabled --quiet docker.service || systemctl is-enabled --quiet docker.socket; then
+  rootful_enabled=true
+fi
+
+# rootless は rootful と保存領域 (~/.local/share/docker) が別で、イメージもボリュームも引き継がない
+# 照会できなかったときは "?" を返す (0 件と取り違えない)
+count_rootful() {
+  local out
+  out="$(sudo docker "$@" 2>/dev/null)" || { echo "?"; return 0; }
+  if [[ -z "$out" ]]; then echo 0; else printf '%s\n' "$out" | wc -l; fi
+}
+if $rootful_active; then
+  n_images="$(count_rootful images -q)"
+  n_volumes="$(count_rootful volume ls -q)"
+  n_running="$(count_rootful ps -q)"
+  unknown=""
+  if [[ "$n_images$n_volumes$n_running" == *"?"* ]]; then unknown=" ('?' は照会できませんでした)"; fi
+  if [[ -n "$unknown" ]] || (( n_images + n_volumes + n_running > 0 )); then
+    echo "[警告] rootful Docker のイメージ ${n_images} 個・ボリューム ${n_volumes} 個・実行中のコンテナ ${n_running} 個${unknown}。" >&2
+    echo "       rootless は保存領域が別で、これらは引き継がれません (/var/lib/docker に残ります)。" >&2
+  fi
+fi
+
+# 以降で失敗したら、止めた rootful を元に戻す (どちらも動かない状態を残さない)
+# もともと動いていたときだけ --now を付け、有効化だけされていたときは有効化を戻す
+rootful_stopped=false
+restore_rootful() {
+  local rc=$?
+  if [[ $rc -ne 0 ]] && $rootful_stopped; then
+    local now=""
+    if $rootful_active; then now="--now"; fi
+    echo "[警告] rootless の導入に失敗したので rootful Docker を元に戻します" >&2
+    # shellcheck disable=SC2086 # now は空か --now のみ
+    sudo systemctl enable $now docker.socket docker.service \
+      || echo "[警告] 戻せませんでした。手動で: sudo systemctl enable $now docker.socket docker.service" >&2
+  fi
+}
+trap restore_rootful EXIT
+
+if $rootful_active || $rootful_enabled; then
+  rootful_stopped=true
+fi
 sudo systemctl disable --now docker.service docker.socket
 sudo rm -f /var/run/docker.sock
 
@@ -110,6 +157,8 @@ CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v -e ' ' -e '^/mnt/' | p
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 PATH="$CLEAN_PATH" dockerd-rootless-setuptool.sh install
 systemctl --user enable --now docker.service
+# rootless が立ち上がったので、以降の失敗 (linger、GPU 設定など) では rootful を戻さない
+rootful_stopped=false
 # ブート時 (ログイン前) から自動起動
 sudo loginctl enable-linger "$USER"
 
