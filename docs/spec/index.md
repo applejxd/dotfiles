@@ -39,6 +39,7 @@
 | [トラブルシューティング](troubleshooting.md) | 症状 → 対象 OS・CLI → 対応先の索引 |
 | [トラブルシューティング: 導入と適用](troubleshooting-bootstrap.md) | スクリプトの再実行、Python・Bitwarden・mise・APT・AI CLI の導入で起きる障害 |
 | [トラブルシューティング: AI CLI の実行時](troubleshooting-agents.md) | sandbox の依存（Copilot / Claude 別）、Windows の hook、skills の読み込み失敗、`.copilot/skills` の junction |
+| [隔離 GPU サンドボックス（WSL2）](wsl-sandbox.md) | 専用 WSL2 ディストロ + Docker + Tailscale SSH の作成スクリプト（`scripts/windows/wsl-sandbox/`、手動実行）。手順、手作業で残る ACL、隔離の限界（mirrored）、運用上の注意、検証の状況 |
 | [用語集](glossary.md) | 境界・隔離起動・通常起動、出力内容と配置先、許可の種類、秘密情報と資格情報、適用と検証の段階、A1 / A2 / B |
 
 [ドキュメント一覧へ戻る](../index.md)

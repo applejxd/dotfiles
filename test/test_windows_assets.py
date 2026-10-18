@@ -782,3 +782,46 @@ def test_wsl_platform_is_installed_without_a_distribution_for_applejxd():
     assert "Microsoft.WSL" not in admin and "Microsoft.WSL" not in winget
     # 再起動が要ることを出す (VirtualMachinePlatform)
     assert "a restart is needed" in admin
+
+
+WSL_SANDBOX = ROOT / "scripts/windows/wsl-sandbox"
+
+
+def test_wsl_sandbox_script_is_manual_and_isolates_the_distro():
+    raw = (WSL_SANDBOX / "create.ps1").read_bytes()
+    script = raw.decode("utf-8-sig")
+
+    # PowerShell 5.1 が CP932 として読まないよう BOM 付き
+    assert raw.startswith(b"\xef\xbb\xbf")
+    # 隔離: Windows のドライブと interop を切る。rootfs は公式の current/ から SHA256 検証
+    for line in ("[automount]", "enabled=false", "[interop]", "appendWindowsPath=false"):
+        assert line in script, line
+    assert "releases/24.04/current" in script and "SHA256SUMS" in script
+    # 既存ディストロは削除しない (作り直しは手動)
+    assert "'--unregister'" not in script and "wsl.exe --unregister" not in script
+    # 関数呼び出しの -- は PowerShell が消すので、wsl.exe の引数は配列で渡す
+    assert "function Invoke-Wsl([string[]]$WslArgs)" in script
+    # chezmoi の自動実行の対象に入れない
+    assert not list((ROOT / "home").rglob("*wsl-sandbox*"))
+
+
+def test_wsl_sandbox_guest_files_are_lf_and_have_all_placeholders_resolved_by_setup():
+    guest = WSL_SANDBOX / "guest"
+    names = ["setup.sh", "sbx-run.sh", "sbx-help.sh", "sbx-AGENTS.md"]
+    for name in names:
+        data = (guest / name).read_bytes()
+        assert b"\r" not in data, name
+
+    setup = (guest / "setup.sh").read_text(encoding="utf-8")
+    placeholders = set()
+    for name in names[1:]:
+        placeholders |= set(re.findall(r"@([A-Z]+)@", (guest / name).read_text(encoding="utf-8")))
+    # setup.sh が置き換えるのは USER / HOST / MEMORY だけ
+    assert placeholders <= {"USER", "HOST", "MEMORY"}
+    for key in placeholders:
+        assert f"@{key}@" in setup, key
+
+    # sbx-run は docker オプションを渡させず、既定でネットワークを切る
+    run = (guest / "sbx-run.sh").read_text(encoding="utf-8")
+    assert "net=none" in run and "--cap-drop ALL" in run and "no-new-privileges" in run
+    assert "-*) echo" in run  # 未対応のオプションを拒否する
