@@ -6,9 +6,13 @@ sudo -v
 
 echo "WSL の設定を行います..."
 
+conf=/etc/wsl.conf
+new="$(mktemp)"
+cur="$(mktemp)"
+trap 'rm -f "$new" "$cur"' EXIT
+
 # WSL config
-# Write WSL config directly with heredoc
-sudo tee /etc/wsl.conf > /dev/null << 'EOF'
+cat > "$new" << 'EOF'
 [automount]
 options = "metadata"
 enabled = true
@@ -25,5 +29,37 @@ systemd=true
 [user]
 default={{ .chezmoi.username }}
 EOF
+
+# 既存の内容は昇格して一度だけ読む (読めないときは set -e で止め、不一致と取り違えない)
+has_conf=false
+if [[ -e "$conf" ]]; then
+    sudo cat "$conf" | tee "$cur" > /dev/null
+    has_conf=true
+fi
+
+# 隔離ディストロ ([automount] enabled=false) では書き換えない
+# see docs/spec/wsl-sandbox.md
+if $has_conf && awk '
+    /^\[automount\]/ { s = 1; next }
+    /^\[/ { s = 0 }
+    s && tolower($0) ~ /^[ \t]*enabled[ \t]*=[ \t]*false[ \t\r]*(#.*)?$/ { found = 1 }
+    END { exit !found }
+' "$cur"; then
+    echo "⚠️ $conf は automount が無効 (隔離ディストロ) なので、書き換えずに飛ばします" >&2
+    exit 0
+fi
+
+# 内容が変わるときだけ、退避と差分の表示をしてから書き換える
+if $has_conf && ! cmp -s "$cur" "$new"; then
+    # 同名の退避を上書きしないよう、一意な名前を確保してから中身を写す
+    backup="$(sudo mktemp "$conf.bak.$(date +%Y%m%d-%H%M%S).XXXXXX")"
+    sudo cp -p "$conf" "$backup"
+    echo "既存の $conf を $backup に退避しました。差分:"
+    diff -u --label "$conf" --label "新しい内容" "$cur" "$new" || true
+fi
+
+if ! $has_conf || ! cmp -s "$cur" "$new"; then
+    sudo install -m 644 "$new" "$conf"
+fi
 
 echo "✅ 完了：WSL の設定を行いました"

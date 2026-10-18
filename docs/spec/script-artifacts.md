@@ -32,7 +32,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | --- | --- | --- | --- |
 | `100_linux/run_once_after_122_font_cica.sh` | `~/.local/share/fonts/Cica/*.ttf` と、`fc-cache -fv` で更新するフォントキャッシュ | 生成物・キャッシュ（外部コマンドに作らせる） | fontconfig があり Cica が未導入のとき。ダウンロード用の `mktemp -d` は `trap` で削除する。フォントキャッシュは再生成できる |
 | `100_linux/run_after_140_herdr_integration.sh.tmpl` | `~/.claude/skills/herdr/.herdr-skill.XXXXXX` | 一時 | 毎 apply。`trap` と `mv -f` で本体（`SKILL.md`）へ置き換え、残らない |
-| `100_linux/run_once_after_120_wsl.sh.tmpl` | `/etc/wsl.conf` | 生成物（`sudo tee`） | 消すと systemd の有効化などが失われる |
+| `100_linux/run_once_after_120_wsl.sh.tmpl` | `/etc/wsl.conf` と、内容が変わるときの退避 `/etc/wsl.conf.bak.<日時>.<乱数>`。比較用の `mktemp` は `trap` で削除 | 生成物（`sudo install`）・バックアップ | 消すと systemd の有効化などが失われる。退避は世代を消さないので増える（不要なら手で消す） |
 | `100_linux/run_once_after_121_ubuntu.sh.tmpl` | `/etc/default/zramswap`・`/etc/sysctl.d/99-zram.conf`・`/etc/default/earlyoom` | 生成物（`sudo tee`） | Raspberry Pi のみ。消すと zram と earlyoom の設定が既定に戻る |
 | `100_linux/110_native/run_once_after_111_microsoft.sh.tmpl` | `/usr/share/keyrings/microsoft.gpg`・`/etc/apt/sources.list.d/vscode.list` | 生成物 | Raspberry Pi 以外。`vscode.sources` があるときは `vscode.list` を作らない |
 

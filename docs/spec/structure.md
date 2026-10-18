@@ -229,7 +229,9 @@ Raspberry Pi 固有のシステム設定（memlock など）は chezmoi では�
 ### WSL
 
 `/etc/wsl.conf` は `100_linux/run_once_after_120_wsl.sh.tmpl` が丸ごと書き出します
-（内容を変えると次の `apply` で再実行され、sudo を求めます）。反映には Windows 側で
+（内容を変えると次の `apply` で再実行され、sudo を求めます）。既存の内容が違うときは
+`/etc/wsl.conf.bak.<日時>.<乱数>` に退避して差分を表示してから書き換え、`[automount] enabled=false`
+（隔離ディストロ）のときは書き換えずに警告して飛ばします。反映には Windows 側で
 `wsl --shutdown` が要ります。
 
 `[automount] mountFsTab = false` で、`/etc/fstab` の処理を WSL の init ではなく

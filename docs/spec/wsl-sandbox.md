@@ -65,8 +65,8 @@ pwsh scripts/windows/wsl-sandbox/create.ps1
 - `networkingMode` は VM 全体の設定で、sandbox だけ変えられない。NAT にしてもコンテナの外向き通信は防げない（防ぐのは主にホストのループバックへの到達）。
   当面は mirrored を維持し、隔離は `sbx-run` の既定 `--network none` で補う。
 - `sbx` は docker グループなので事実上 root と同等。`sbx-run` は付け忘れを防ぐ仕組みで、強制ではない。
-- 隔離ディストロの中で `chezmoi apply` を実行しない。`100_linux/run_once_after_120_wsl.sh.tmpl` が `/etc/wsl.conf` を丸ごと書き換え、
-  automount と interop が有効に戻る。
+- 隔離ディストロの中で `chezmoi apply` を実行しない。`100_linux/run_once_after_120_wsl.sh.tmpl` は `[automount] enabled=false` を見つけると
+  `/etc/wsl.conf` の書き換えを飛ばして警告するが、ほかのスクリプトも走るので、引き続き実行しない。
 - `.wslconfig` の `vmIdleTimeout` は全ディストロの VM に効くので、常駐化には使わない。
 
 ## 運用上の注意
