@@ -94,6 +94,9 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_run",
 		label: "bg_run",
+		// promptSnippet が無いと Available tools に出ない
+		promptSnippet: "Start a long-running or waiting command (server, watcher, build) in the background and get a job id",
+		promptGuidelines: ["Use bg_run instead of bash for commands that run long or wait; check them with bg_log and stop them with bg_kill."],
 		description:
 			"Start a shell command in the background and return immediately with a job id. " +
 			"Output goes to a log file. Use bg_log to read it and bg_kill to stop it. " +
@@ -154,6 +157,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_log",
 		label: "bg_log",
+		promptSnippet: "Show the state and log tail of a background job by id (no id: list jobs)",
 		description: "Show the state of a background job and the tail of its log. Without an id, list all jobs.",
 		parameters: Type.Object({
 			id: Type.Optional(Type.String({ description: "Job id returned by bg_run" })),
@@ -180,6 +184,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_kill",
 		label: "bg_kill",
+		promptSnippet: "Stop a background job by id",
 		description: "Stop a running background job (kills its process tree).",
 		parameters: Type.Object({ id: Type.String({ description: "Job id returned by bg_run" }) }),
 		async execute(_id: string, params: any) {

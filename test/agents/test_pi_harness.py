@@ -298,6 +298,17 @@ def test_task_tool_is_listed_in_the_system_prompt(env):
     assert 'guarded_task with agent "review"' in prompt, prompt
 
 
+def test_todo_and_activity_tools_are_listed_in_the_system_prompt(env):
+    # promptSnippet が無い自作ツールは Available tools に出ず、モデルが気付けない
+    activity = TODO_EXT.parent.parent / "activity" / "index.ts"
+    extra = ("-e", str(TODO_EXT), "-e", str(activity))
+    proc = run_pi(env, [], extra=extra, FAUX_DUMP_PROMPT="1")
+    assert proc.returncode == 0, proc.stderr
+    prompt = proc.stdout
+    for tool in ("todo", "bg_run", "bg_log", "bg_kill"):
+        assert f"- {tool}:" in prompt, prompt
+
+
 def test_child_cannot_start_another_child(env):
     calls = [{"name": "guarded_task", "args": {"agent": "worker", "task": "x"}}]
     proc = run_child(env, "worker", calls)

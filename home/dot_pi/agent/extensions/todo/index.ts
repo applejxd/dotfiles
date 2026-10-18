@@ -80,6 +80,11 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "todo",
 		label: "Todo",
+		// promptSnippet が無いと Available tools に出ない
+		promptSnippet: "Keep the task list: add steps, mark them in_progress / done, list them",
+		promptGuidelines: [
+			"For work with 3 or more steps, use todo add to list the steps before starting; set the current item to in_progress (one at a time) and to done when finished.",
+		],
 		description:
 			"作業のタスクリスト (1 つ)。action: list (all=true で完了・中止も) / add (text か texts で複数) / " +
 			"set (id と status: pending・in_progress・done・cancelled。何度呼んでも同じ結果) / update (id と text) / remove (id、誤って足したものだけ) / clear。" +
