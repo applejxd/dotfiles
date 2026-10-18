@@ -325,7 +325,15 @@ function Test-GpuPowerLimitConfigured {
 
 function Enable-GpuPowerLimit {
   # ディレクトリごと作り直し、所有者と ACL を昇格後の管理者のものにする (事前に置かれたファイルを引き継がない)
-  if (Test-Path -LiteralPath $GpuPowerDir) { Remove-Item -LiteralPath $GpuPowerDir -Recurse -Force }
+  if (Test-Path -LiteralPath $GpuPowerDir) {
+    $existing = Get-Item -LiteralPath $GpuPowerDir -Force
+    if ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+      # リンク (ジャンクション・シンボリックリンク) はリンクだけを外す。再帰削除でリンク先の中身を消さない
+      if ($existing.PSIsContainer) { [IO.Directory]::Delete($GpuPowerDir) } else { [IO.File]::Delete($GpuPowerDir) }
+    } else {
+      Remove-Item -LiteralPath $GpuPowerDir -Recurse -Force
+    }
+  }
   New-Item -ItemType Directory -Path $GpuPowerDir | Out-Null
   & icacls.exe $GpuPowerDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "icacls failed: $LASTEXITCODE" }

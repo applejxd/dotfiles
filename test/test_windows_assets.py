@@ -759,6 +759,19 @@ def test_device_and_usage_specific_packages_are_limited_to_the_named_host():
         assert package_id not in winget, key
 
 
+def test_gpu_power_dir_is_recreated_without_following_links():
+    """SYSTEM のタスクが実行するスクリプトの置き場。リンクならリンクだけ外す。"""
+    admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+    start = admin.index("function Enable-GpuPowerLimit")
+    body = admin[start : admin.index("Register-ScheduledTask", start)]
+
+    assert "ReparsePoint" in body
+    assert "[IO.Directory]::Delete($GpuPowerDir)" in body
+    assert "Remove-Item -LiteralPath $GpuPowerDir -Recurse -Force" in body
+    # リンクの判定は再帰削除より先
+    assert body.index("ReparsePoint") < body.index("-Recurse")
+
+
 def test_wsl_platform_is_installed_without_a_distribution_for_applejxd():
     admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
     winget = (
