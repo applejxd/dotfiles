@@ -25,9 +25,19 @@ if [[ -e "${HOME}/.local/bin/mise" ]]; then
     _mise_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/mise-activate.zsh"
     if [[ ! -s $_mise_cache || ${HOME}/.local/bin/mise -nt $_mise_cache ]]; then
         mkdir -p "${_mise_cache:h}"
-        "${HOME}/.local/bin/mise" activate zsh >| "$_mise_cache"
+        # 一時ファイルへ生成し、成功時だけ置き換える (失敗・同時起動でも旧キャッシュを壊さない)
+        if "${HOME}/.local/bin/mise" activate zsh >| "$_mise_cache.$$" && [[ -s "$_mise_cache.$$" ]] \
+            && mv -f "$_mise_cache.$$" "$_mise_cache"; then
+            :
+        else
+            command rm -f "$_mise_cache.$$"
+        fi
     fi
-    source "$_mise_cache"
+    if [[ -s $_mise_cache ]]; then
+        source "$_mise_cache"
+    else
+        eval "$("${HOME}/.local/bin/mise" activate zsh)"
+    fi
     unset _mise_cache
 fi
 

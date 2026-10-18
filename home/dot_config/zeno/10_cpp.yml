@@ -12,7 +12,7 @@ snippets:
 completions:
   - name: cmake build type
     patterns:
-      - "^cmake*-DCMAKE_BUILD_TYPE=$"
+      - "^cmake .*-DCMAKE_BUILD_TYPE=$"
     sourceCommand: "echo -e 'Debug\nRelease\nRelWithDebInfo\nMinSizeRel'"
     options:
       --prompt: "'Build Type> '"

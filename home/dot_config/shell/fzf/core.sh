@@ -12,7 +12,7 @@ export FZF_CTRL_R_OPTS='--sort --exact'
 # search command
 # see https://qiita.com/kamykn/items/aa9920f07487559c0c7e
 if command -v "rg" >/dev/null 2>&1; then
-    export FZF_DEFAULT_COMMAND=(rg --files --hidden --follow --glob "!.git/*")
+    export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
 else
     unset FZF_DEFAULT_COMMAND
 fi
@@ -82,16 +82,23 @@ fi
 
 # v - open files in ~/.viminfo
 v() {
-    local files
-    files=$(grep '^>' ~/.viminfo | cut -c3- |
+    local selected line
+    selected=$(grep '^>' ~/.viminfo | cut -c3- |
         while read -r line; do
             [ -f "${line/\~/$HOME}" ] && echo "$line"
-        done | fzf -d -m -q "$*" -1) && vim "${files//\~/$HOME}"
+        done | fzf -d -m -q "$*" -1) || return
+    [ -n "$selected" ] || return 0
+    # 配列の添字に依存せず積む (bash/zsh 両対応)
+    local -a files=()
+    while IFS= read -r line; do
+        files+=("${line/\~/$HOME}")
+    done <<<"$selected"
+    vim "${files[@]}"
 }
 
 function sshf() {
     # see https://www.jamesridgway.co.uk/list-ssh-hosts-from-your-ssh-config/
-    name=$(grep -P "^Host ([^*]+)$" "$HOME"/.ssh/config | sed 's/Host //' | fzf)
+    name=$(grep -E "^Host ([^*]+)$" "$HOME"/.ssh/config | sed 's/Host //' | fzf)
     [ -n "$name" ] && ssh "$name"
 }
 
@@ -101,9 +108,9 @@ alias fgg='_fgg'
 function _fgg() {
     wc=$(jobs | wc -l | tr -d ' ')
     if [ "$wc" -ne 0 ]; then
-        job=$(jobs | awk -F "suspended" "{print $1 $2}" | sed -e "s/\-//g" -e "s/\+//g" -e "s/\[//g" -e "s/\]//g" | grep -v pwd | fzf | awk "{print $1}")
-        wc_grep=$(echo "$job" | grep -v grep | grep 'suspended')
-        if [ "$wc_grep" != "" ]; then
+        # bash: "[1]+  Stopped ..." / zsh: "[1]  + suspended ..." からジョブ番号を取り出す
+        job=$(jobs | grep -v pwd | fzf | sed -n 's/^[^0-9]*\([0-9][0-9]*\)\].*/\1/p')
+        if [ -n "$job" ]; then
             fg %"$job"
         fi
     fi

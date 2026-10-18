@@ -15,6 +15,7 @@ function extract() {
     *.tar.Z) tar zxvf "$1" ;;
     *.gz) gzip -d "$1" ;;
     *.bz2) bzip2 -dc "$1" ;;
+    *.xz) xz -dk "$1" ;;
     *.Z) uncompress "$1" ;;
     *.tar.zst | *.tzst) zstd -d --threads=0 -c "$1" | tar -xvf - ;;
     *.zst) zstd -d "$1" ;;

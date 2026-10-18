@@ -11,6 +11,7 @@ if command -v "mise" >/dev/null 2>&1; then
         fi
         local select_ver
         select_ver=$(mise ls-remote "$1" | sort -rV | fzf)
+        [ -n "$select_ver" ] || return 0
         mise use "$1@${select_ver}"
     }
 fi

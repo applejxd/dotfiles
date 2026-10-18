@@ -8,7 +8,7 @@ if [ -r "${HOME}/.z/z.sh" ]; then
     function z-fzf() {
         local selected_dir=$(_z -l 2>&1 | fzf +s --tac | sed 's/^[0-9,.]* *//')
         if [[ -n "$selected_dir" ]]; then
-            BUFFER="cd ${selected_dir}"
+            BUFFER="cd ${(q)selected_dir}"
             zle accept-line
         fi
         zle reset-prompt
@@ -23,7 +23,8 @@ if command -v "ghq" >/dev/null 2>&1; then
     function ghq-fzf() {
         local selected_dir=$(ghq list | fzf --query="$LBUFFER")
         if [[ -n "$selected_dir" ]]; then
-            BUFFER="cd $(ghq root)/${selected_dir}"
+            local target="$(ghq root)/${selected_dir}"
+            BUFFER="cd ${(q)target}"
             zle accept-line
         fi
         zle reset-prompt

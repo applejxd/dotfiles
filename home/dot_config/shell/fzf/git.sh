@@ -55,7 +55,7 @@ if command -v "git" >/dev/null 2>&1; then
             return
         fi
 
-        cd "$selectedWorkTreeDir" || exit
+        cd "$selectedWorkTreeDir" || return 1
     }
 
     # interactive 'diff' and 'add'
