@@ -256,6 +256,13 @@ mirrored では、WSL の VM への受信を **Hyper-V ファイアウォール*
 止めます。標準の Windows ファイアウォールとは別の層です。`scripts/windows/netsh.ps1`
 （管理者の PowerShell で手動実行。`chezmoi apply` では走らない）が、WSL の VM 向けに次の規則を作ります。
 
+WSL 側のパス（`\\wsl.localhost\...`）のスクリプトは、実行ポリシーが RemoteSigned だと
+「デジタル署名されていない」で止まる。そのプロセスだけ `Bypass` にする。
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\<ユーザー>\.local\share\chezmoi\scripts\windows\netsh.ps1'
+```
+
 | 項目 | 値 |
 | --- | --- |
 | 規則名 | `WSL-SSH-In-TCP`（Hyper-V ファイアウォール） |
