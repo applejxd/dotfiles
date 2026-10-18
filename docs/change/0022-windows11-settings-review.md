@@ -30,6 +30,7 @@
 
 - **WSL 本体（ディストロなし）は 309 で導入するようにした**（2026-10-12。[仕様](../spec/structure.md#wsl-本体wslplatform)）。**ディストロの導入と、仮想ディスク（VHDX）が C ドライブ以外にあることの扱いは、いまは触らない**
 - この機には Linux ディストリビューションが入っておらず、`wsl --version` が `wsl --install` を促す状態（2026-10-11 実測）。`home/dot_wslconfig.tmpl`（`networkingMode=mirrored`、applejxd は `memory=32GB`）は配布されている
+- **「隔離 GPU サンドボックス」用の専用ディストロだけは、手動実行のスクリプトで作れるようにした**（2026-10-17。[仕様](../spec/wsl-sandbox.md)。通しの実行は未検証）。既定のディストロと置き場所の方針は引き続き保留
 - 取り組むときに決めること: 仮想ディスクの置き場所の管理（`wsl --import` / `--move`）、導入と確認の手順、`.wslconfig` の最低版、WSL 3 の扱い
 
 ## 現在地

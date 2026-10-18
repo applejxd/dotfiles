@@ -248,7 +248,7 @@ chezmoi スクリプト自身が出す UAC を 1 回にする。通常ユーザ�
 
 | 項目 | 内容 |
 | --- | --- |
-| 対象（許可リストのキー） | `Chocolatey`（winget 経由）・`chocolateygui`・`Keypirinha`・`WinSCP`（machine scope）・`VSCode`（machine scope）・`LongPaths`・`RDP`・`OpenSSHServer`・`SshDefaultShell`・`Sudo`・`WslPlatform`・machine 版しかない winget パッケージ（[下記](#winget-パッケージの-user--machine-の振り分け)） |
+| 対象（許可リストのキー） | `Chocolatey`（winget 経由）・`chocolateygui`・`Keypirinha`・`WinSCP`（machine scope）・`VSCode`（machine scope）・`LongPaths`・`RDP`・`OpenSSHServer`・`SshDefaultShell`・`Sudo`・`WslPlatform`・`GpuPowerLimit`（[下記](#gpu-の電力上限gpupowerlimit)）・machine 版しかない winget パッケージ（[下記](#winget-パッケージの-user--machine-の振り分け)） |
 | 流れ | 通常権限で不足を判定 → 不足があるときだけ UAC を 1 回 → 昇格子が不足分だけ実行 → 通常権限で再判定。導入済みなら UAC は出ない |
 | 失敗 | UAC キャンセル・昇格子の非ゼロ終了・再判定の残りはすべて非ゼロで止める。失敗した回は `run_once` に記録されないので、直して `chezmoi apply` をやり直せば 309 は再実行される。成功後に消えたものは自動では直さない（内容を変えるか `chezmoi state delete-bucket --bucket=scriptState` で再実行） |
 | 実行順 | 同じディレクトリで `309_admin` は `310_winget` より前（属性を除いた名前の昇順） |
@@ -266,6 +266,24 @@ applejxd の全 PC で、**WSL 本体だけ**を入れる。ディストロは�
 - 実測（2026-10-12、ビルド 26300）: 管理者の `cmd` で `wsl --install --no-distribution` を実行すると、`VirtualMachinePlatform` の有効化（要再起動）と WSL 3.0.1 の導入が済んだ。`wsl --version` は 3.0.1.0（カーネル 6.18.40.1）。
   `wslc`（WSL containers）の CLI は、再起動後の確認が残っている。winget の `Microsoft.WSL` は 2.7.13 で遅れているため使わず、`wsl --update`（Store）で最新にする
 - 「WSL 3」は、WSL パッケージの版が 3.0 になったという意味で、新しい方式ではない（担当 PM は「WSL 3 というものは無い」と述べている）。3.0.1 は WSL containers（`wslc`）の一般提供（2026-09-29）
+
+### GPU の電力上限（`GpuPowerLimit`）
+
+`heimdall-ufbs-010` の RTX 3070 だけ、電力上限を 150 W にする。2026-10-17 から 18 にかけて 2 回止まり（Kernel-Power 41）、
+電力上限を下げたらクラッシュしなくなった（下記「実測」）。
+
+- **対象の限定**: テンプレートで `applejxd` かつ hostname `heimdall-ufbs-010` のときだけ有効にし、実行時にも `nvidia-smi --query-gpu=name` が `RTX 3070` を含むときだけ対象にする（GPU を替えた・ドライバが無い PC では何もしない）
+- **永続しない**: Windows では電力上限（`nvidia-smi -pl`）が再起動・ドライバのリセット・スリープ復帰で既定値へ戻り、永続化の手段が無い（Linux の `-pm` は WDDM では使えない）。そこで SYSTEM のスケジュールタスク `gpu-power-limit` が設定し直す
+- **トリガー（3 つ）**: 起動時（1 分遅延）・ログオン時・スリープ復帰時（`Microsoft-Windows-Power-Troubleshooter` の ID 1、10 秒遅延）。`-pl` は冪等なので重なっても問題ない
+- **実行するスクリプト**: `%ProgramData%\gpu-power-limit\set-power-limit.ps1`（内容は 309 が生成する ASCII のみ）。ドライバが立ち上がるまで最大 2 分待ち、型番に合う GPU に `nvidia-smi -i <index> -pl 150` を実行する
+- **昇格の抜け穴を作らない**: SYSTEM が実行するファイルを通常ユーザーが書き換えられると権限昇格になる（[常駐ヘルパー案の見送り](../change/0021-windows-admin-consolidation.md)と同じ理由）。ディレクトリは作り直して ACL を SYSTEM・Administrators のフルコントロールと Users の読み取りだけにする
+- **判定**: スクリプトの内容が期待と一致するときに「設定済み」とする。昇格している場合は、さらにタスクが SYSTEM・最上位の権限で、トリガーが 3 つあることも見る。**通常権限では SYSTEM のタスクを読めない**（`Get-ScheduledTask` が無言で空を返す。実機で確認）ので、内容の一致だけで判定する（タスクを手で消しても検知しない）。現在の電力値は見ない（再起動直後にタスクが動く前でも UAC を出さないため）
+- **検証（昇格後）**: タスクを即時実行し、最大 60 秒、`power.limit` が 150 W になることを確かめる。ならなければ失敗にする
+- 150 W は `nvidia-smi -pl` で手動設定してクラッシュが止まった値。変える場合は 309 の `$GpuPowerLimitWatts`
+
+実測: ダンプ（`C:\Windows\Minidump\101726-11968-01.dmp`）の停止コードは 0x133（`DPC_QUEUE_EXECUTION_TIMEOUT_EXCEEDED`）、
+スタックは `nvlddmkm`（NVIDIA ドライバ）の割り込み処理で、実行中のプロセスは `vmmemWSL` だった。2 回目は BSOD のダンプが無く、
+直前に dxgkrnl の LiveKernelEvent 0x193 が出ていた。原因がドライバかハードかは未確定。
 
 ### 昇格の仕組み
 
@@ -299,7 +317,7 @@ winget の既定は user scope なので、user 版があるものは UAC なし
 `.chezmoi.hostname` は `chezmoi.toml` の `[data]` ではなく **`apply` のたびに評価される組み込みの値**なので、`init` を呼び直さなくても効く。
 
 - 書き方（`309_admin` の例）: `{{- if eq (lower .chezmoi.hostname) "heimdall-ufbs-010" }}`（`lower` は大文字小文字の違いを避けるため）
-- 現在の対象（`heimdall-ufbs-010` だけ）: **Stream Deck**・**Wacom ドライバー**（どちらも本体をつないだ PC だけ）、**Steam**（ゲーム用）、**iTunes**（iPhone の同期用）
+- 現在の対象（`heimdall-ufbs-010` だけ）: **Stream Deck**・**Wacom ドライバー**（どちらも本体をつないだ PC だけ）、**Steam**（ゲーム用）、**iTunes**（iPhone の同期用）、**GPU の電力上限**（RTX 3070 の不安定さへの対策。[下記](#gpu-の電力上限gpupowerlimit)）
 - 他の PC では、これらは**入れない**（導入済みのものを消しはしない）
 - 他の PC にも入れるときは、`or (eq …) (eq …)` と並べるか、`has (lower .chezmoi.hostname) (list "…" "…")` にする
 - 実機で、この PC では `StreamDeck` が許可リストと導入対象に出て、hostname または user が違うと出ないことを描画で確かめた（`chezmoi execute-template`）
