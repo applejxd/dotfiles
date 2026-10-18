@@ -414,8 +414,7 @@ pi の導入（Node.js 22.19 以上が必要）が失敗したためです。`31
 の場所を PATH の先頭に置いてから npm を実行します。winget に残るのは mise 自体（bootstrap）、
 Git・Python 3.12（chezmoi が要る）、GUI アプリです。既に winget 版が入っている PC は
 `winget uninstall OpenJS.NodeJS astral-sh.uv junegunn.fzf jqlang.jq` で外せます。
-mise の node（zip 版）の npm の global prefix は node の版付きフォルダなので、そのままだと npm で入れる CLI（opencode）は PATH に出ず、版を上げると消えます（Sandbox で確認）。`314` は `NPM_CONFIG_PREFIX=%APPDATA%
-pm` を設定してから npm を実行し、そのフォルダを User PATH に保証します。
+mise の node（zip 版）の npm の global prefix は node の版付きフォルダなので、そのままだと npm で入れる CLI（opencode）は PATH に出ず、版を上げると消えます（Sandbox で確認）。`314` は `NPM_CONFIG_PREFIX=%APPDATA%\npm` を設定してから npm を実行し、そのフォルダを User PATH に保証します。
 
 ### chezmoi 本体
 
@@ -886,13 +885,15 @@ WSL 拡張だけで、AI 機能のオフ（右下のメニューか `settings.js
 
 ## zsh の起動時間
 
-`zsh -i -c exit` の実測（WSL2、2026-10）。診断は `zmodload zsh/zprof` 後に
-`source ~/.zshrc; zprof`、区間ごとの時間は `EPOCHREALTIME` で測る。
+`zsh -i -c exit` の実測（WSL2、2026-10-18）。数値の根拠は
+`docs/research/shell/zsh-startup-time.md`（[記録](../research/shell/zsh-startup-time.md)）。
+診断は `zmodload zsh/zprof` 後に `source ~/.zshrc; zprof`、区間ごとの時間は
+`EPOCHREALTIME` で測る。
 
 | 状態 | 時間 |
 | --- | --- |
-| 改善前 | 約 0.37 s |
-| 改善後 | 約 0.24 s |
+| 改善前 | 0.37〜0.40 s |
+| 改善後 | 0.24〜0.25 s |
 
 効いた原因と対処:
 
@@ -902,7 +903,8 @@ WSL 拡張だけで、AI 機能のオフ（右下のメニューか `settings.js
   最短一致）が二次的に遅い。zsh では `path` 配列で処理する（`shellenv.sh`）。
   `.zshenv` は非対話の起動でも読まれるため全 zsh に効く
 - **`mise activate zsh` の fork が約 30 ms**: 出力を `~/.cache/zsh/mise-activate.zsh` に
-  キャッシュし、mise 本体が新しいときだけ作り直す
+  キャッシュし、mise 本体が新しいときだけ作り直す。一時ファイルへ生成して成功時だけ
+  `mv` で置き換え、失敗時は旧キャッシュを使う（旧キャッシュも無ければ直接 `eval`）
 
 残り: 初回 `_mise_hook`（約 40 ms、環境の確定に必要なため同期のまま）と zinit の
 同期ロード（zeno・fast-syntax-highlighting・pure）。

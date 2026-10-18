@@ -134,8 +134,11 @@ UTF-8 BOM、winget の記法、プロファイルの字面までで、次は拾�
 
 ### Windows Sandbox でのクリーン導入の検証
 
-まっさらな Windows に README の手順（`winget install` → `chezmoi init applejxd --apply`）だけで
-導入でき、`pi` などが新しいシェルで起動するかを、使い捨ての Windows Sandbox で確かめる。
+まっさらな Windows に README の第 1 フェーズ相当（`winget install` → `chezmoi init applejxd --apply`
+の 1 回）だけで導入でき、`pi` などが新しいシェルで起動するかを、使い捨ての Windows Sandbox で確かめる
+（`scripts/windows/sandbox/guest.ps1` は `init --apply` を 1 回だけ実行する）。
+README の第 2 フェーズ（`bw login` → `BW_SESSION` → 再度の `init` / `apply`）で入る
+Bitwarden 由来のファイルは検証の対象外。
 実機の環境（古い winget 版 node、PATH の残り）に影響されない。
 
 ```powershell

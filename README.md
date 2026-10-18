@@ -26,7 +26,9 @@ brew install chezmoi
 
 ```powershell
 # Windows (PowerShell)
-winget install Python.Python.3.12 Git.Git twpayne.chezmoi --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
+winget install --id Python.Python.3.12 --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
+winget install --id Git.Git --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
+winget install --id twpayne.chezmoi --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
