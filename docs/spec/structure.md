@@ -248,50 +248,12 @@ systemd（`systemd=true`）に任せます。WSL の init は起動直後に `mo
 
 ### リモートから WSL へ SSH する
 
+**基本は Tailscale 経由で、`tailscale serve` を 1 回設定する。ファイアウォールの規則は要らない**
+（2026-10-18 に、規則が 1 つも無い状態で iPhone の Termius から Tailscale 経由の SSH が通ることを確認）。
+
 WSL の sshd は `scripts/ubuntu/ssh.sh` が `/etc/ssh/sshd_config.d/10-override.conf` で **50022** 番にします
 （Windows 自身の sshd は 22 番で、`309_admin` が管理します）。`.wslconfig` は `networkingMode=mirrored` で、
 ポート転送（portproxy）は使いません。
-
-mirrored では、WSL の VM への受信を **Hyper-V ファイアウォール**（WSL の VM 向け。既定は
-`DefaultInboundAction=Block`）が止めます。**標準の Windows ファイアウォールの規則も必要かは未確定**です。
-2026-10-18 に「標準の規則を消すと LAN から届かなくなった」と記録したが、両方の規則を同じ名前にしていたため
-`Remove-NetFirewallRule -Name` が Hyper-V の規則も消した可能性があり、標準の規則だけの必要性を
-示す実験になっていない。現在は両方を作る（別々の名前で、片方だけ操作できるようにした）。
-
-`scripts/windows/netsh.ps1`（管理者の PowerShell で手動実行。`chezmoi apply` では走らない）が、両方に
-次の規則を作ります。
-
-WSL 側のパス（`\\wsl.localhost\...`）のスクリプトは、実行ポリシーが RemoteSigned だと
-「デジタル署名されていない」で止まる。そのプロセスだけ `Bypass` にする。
-
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu\home\<ユーザー>\.local\share\chezmoi\scripts\windows\netsh.ps1'
-```
-
-| 項目 | 値 |
-| --- | --- |
-| 規則名 | Hyper-V: `WSL-SSH-In-TCP-HyperV`、標準: `WSL-SSH-In-TCP`（別々の名前。同じ名前だと `Remove-NetFirewallRule -Name` が両方を消す） |
-| 方向・ポート | 受信、TCP 50022 |
-| 範囲 | Domain / Private のみ（Public では開けない） |
-| Hyper-V の対象の VM | WSL（`VMCreatorId` `{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}`。`Get-NetFirewallHyperVVMCreator` で確認できる） |
-
-#### Tailscale 経由は規則では通らない
-
-**LAN からは届くが、Tailscale のアドレス（`100.x`）への 50022 は届かない**（2026-10-18、この機）。
-Tailscale の仮想アダプター（Wintun）経由のパケットは、Windows のホストのネットワークスタックで
-受け取られ、WSL の VM へは転送されない（実測からの推定。Microsoft のドキュメントでの裏付けは未確認）。
-Windows 自身の sshd（22）は、ホストで受けるので Tailscale 経由でも届く。
-
-| 確認した層 | 結果 |
-| --- | --- |
-| tailnet の ACL（Tailscale の受信フィルタ） | 全送信元から全ポート許可。原因ではない |
-| Hyper-V ファイアウォール | 規則あり。**無効にしても届かない** |
-| 標準の Windows ファイアウォール | 規則あり（`Tailscale-In` は全許可）。届かない |
-| WSL の VM の `eth2`（Tailscale）の受信パケット数 | 接続を試した間も増えない。パケットが VM に届いていない |
-| LAN 経由（`192.168.0.21:50022`） | 届く（`ss` で `ESTAB`。両方の規則を同じ名前で作った状態） |
-
-そのため、tailnet からは **`tailscale serve`** で、Windows の Tailscale に `localhost:50022` へ転送させる。
-`localhost` は mirrored で WSL に届く（Windows から `127.0.0.1:50022` は届く）。
 
 ```powershell
 tailscale serve --bg --tcp 50022 tcp://localhost:50022
@@ -299,17 +261,53 @@ tailscale serve status      # 確認
 tailscale serve reset       # 戻す
 ```
 
-- 設定は Tailscale の状態に保存され、dotfiles には入らない（秘密も含まない）。公開範囲は tailnet 内だけ（`funnel` は使わない）
-- tailnet の ACL が全ポート許可なので、tailnet の全機器から 50022 に届く。WSL の sshd は公開鍵のみ
-- sshd のログの接続元が `127.0.0.1` になる（`serve` が localhost から接続するため）
-- `chezmoi apply` では実行しない（全マシンの公開範囲が意図せず増えるため）。手動で、必要なマシンだけ
+Windows の Tailscale が tailnet の 50022 を受けて、`localhost:50022`（mirrored で WSL の sshd に届く）へ
+転送する。接続先は `tailscale serve status` が出す `100.x.x.x:50022` またはホスト名。
 
-この機の WSL の sshd は `0.0.0.0:50022` で待ち受け、`AllowUsers` は未設定、`PermitRootLogin prohibit-password`、
-`PasswordAuthentication no`。
+- **設定は手動で、Tailscale の状態に保存される**（再起動では消えない。Tailscale の再インストール・
+  状態の初期化・`serve reset` で消える）。dotfiles には入らず、秘密も含まない。`chezmoi apply` では実行しない
+- 公開範囲は tailnet 内だけ（`funnel` は使わない）。tailnet の ACL は全送信元から全ポート許可なので、
+  tailnet の全機器から 50022 に届く。WSL の sshd は公開鍵のみ
+- sshd のログの接続元が `127.0.0.1` になる（`serve` が localhost から接続するため）。`AllowUsers user@host` など
+  接続元での制限は効かない
+- 公開鍵は `400_unix/run_after_440_authorized_keys.sh.tmpl` が Bitwarden から追加する
+  （[SSH 公開鍵の authorized_keys への追加](security.md#ssh-公開鍵の-authorized_keys-への追加)。`BW_SESSION` が必要）
 
-**確認済み**（2026-10-18、iPhone の Termius）: `192.168.0.21:50022`（LAN）と
-`100.107.198.96:50022`（Tailscale、`tailscale serve` 経由）の**両方で SSH できた**。その時点の状態は、
-2 つのファイアウォール規則を作成済みで `tailscale serve` も有効。規則がそれぞれ単独で必要かは未確定。
+#### なぜ規則ではなく `serve` か
+
+mirrored では、**Tailscale のアドレス（`100.x`）への 50022 が WSL の VM に転送されない**（2026-10-18、この機）。
+Tailscale の仮想アダプター（Wintun）経由のパケットは、Windows のホストのネットワークスタックで受け取られ、
+VM へは転送されない（実測からの推定。Microsoft のドキュメントでの裏付けは未確認）。Windows 自身の sshd（22）は
+ホストで受けるので Tailscale 経由でも届く。
+
+| 確認した層 | 結果 |
+| --- | --- |
+| tailnet の ACL（Tailscale の受信フィルタ） | 全送信元から全ポート許可。原因ではない |
+| Hyper-V ファイアウォール（WSL の VM 向け。既定は受信 Block） | 規則を作っても、**無効にしても**届かない |
+| 標準の Windows ファイアウォール | 規則あり（`Tailscale-In` は全許可）。届かない |
+| WSL の VM の `eth2`（Tailscale）の受信パケット数 | 接続を試した間も増えない。パケットが VM に届いていない |
+| `tailscale serve` を設定（規則なし） | **届く** |
+
+#### LAN の IP を直接指定する場合
+
+LAN の IP（`192.168.0.21:50022`）を直接指定する接続は、ファイアウォールの規則が要る可能性が高い
+（Tailscale は同じ LAN 内では直接接続するので、通常は不要）。2 つの層（Hyper-V ファイアウォールの規則と、
+標準の Windows ファイアウォールの規則）のどちらが単独で必要かは**未確定**。
+2026-10-18 に「標準の規則を消すと LAN から届かなくなった」と記録したが、2 つの規則を同じ名前にしていて
+`Remove-NetFirewallRule -Name` が Hyper-V の規則も消した可能性があり、単独の必要性を示す実験になっていない。
+必要になったら、規則を **別々の名前**で作ること（同じ名前だと片方だけの操作ができない）。
+
+```powershell
+# 管理者の PowerShell。Domain / Private だけ (Public では開けない)
+New-NetFirewallHyperVRule -Name WSL-SSH-In-TCP-HyperV -DisplayName 'OpenSSH Server (WSL)' `
+    -Direction Inbound -Action Allow -Protocol TCP -LocalPorts 50022 `
+    -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -Profiles Domain, Private -Enabled True
+New-NetFirewallRule -Name WSL-SSH-In-TCP -DisplayName 'OpenSSH Server (WSL)' -Enabled True `
+    -Direction Inbound -Protocol TCP -Action Allow -LocalPort 50022 -Profile Domain, Private
+```
+
+WSL の VM の作成者 ID は `Get-NetFirewallHyperVVMCreator` で確認できる。LAN 経由（両方の規則を作った状態）で
+接続できたことは確認済み。
 
 ## 管理者権限の集約
 

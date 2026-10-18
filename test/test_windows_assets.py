@@ -772,26 +772,19 @@ def test_gpu_power_dir_is_recreated_without_following_links():
     assert body.index("ReparsePoint") < body.index("-Recurse")
 
 
-def test_wsl_ssh_firewall_rule_is_hyper_v_private_only_and_port_50022():
-    """mirrored の WSL への受信は Hyper-V ファイアウォールが止める。Public では開けない。"""
-    scripts = ROOT / "scripts" / "windows"
-    assert not (
-        scripts / "sshd.ps1"
-    ).exists()  # 309_admin が自動化済み (OpenSSHServer / SshDefaultShell)
-    script = (scripts / "netsh.ps1").read_text(encoding="utf-8-sig")
+def test_wsl_ssh_goes_through_tailscale_serve_not_firewall_rules():
+    """WSL への SSH は `tailscale serve` で通す (規則は要らないと実測済み)。
 
-    assert "New-NetFirewallHyperVRule" in script
-    assert "{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}" in script
-    assert "-Profiles Domain, Private" in script
-    assert "$port = 50022" in script
-    # xrdp (53389) は不要。Profile の無い規則を作らない
-    assert "53389" not in script
-    assert "-Profile Domain, Private" in script  # 標準ファイアウォール側も作る
-    assert "New-NetFirewallRule" in script
-    assert "AlsoWindowsFirewall" not in script
-    # 2 つの規則は別の名前 (同じだと Remove-NetFirewallRule -Name が両方を消す)
-    assert "$hvRuleName = 'WSL-SSH-In-TCP-HyperV'" in script
-    assert "$stdRuleName = 'WSL-SSH-In-TCP'" in script
+    mirrored では Tailscale 経由のパケットが VM へ転送されない。手動用のスクリプトは
+    どちらも廃止済みで、手順は docs にある。復活させない。
+    """
+    scripts = ROOT / "scripts" / "windows"
+    # sshd.ps1: 309_admin が自動化済み (OpenSSHServer / SshDefaultShell)。手動実行は設定を戻す
+    assert not (scripts / "sshd.ps1").exists()
+    # netsh.ps1: Public を開ける形で始まり、規則は Tailscale 経由に不要と分かった
+    assert not (scripts / "netsh.ps1").exists()
+    doc = (ROOT / "docs" / "spec" / "structure.md").read_text(encoding="utf-8")
+    assert "tailscale serve --bg --tcp 50022 tcp://localhost:50022" in doc
 
 
 def test_wsl_platform_is_installed_without_a_distribution_for_applejxd():
