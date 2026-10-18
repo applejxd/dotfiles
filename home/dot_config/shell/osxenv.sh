@@ -9,19 +9,8 @@ export LANG="${LANG:-ja_JP.UTF-8}"
 # The default (lowest priority, first declaration)
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:${PATH}}"
 
-# for openssl
-if [[ -e "/opt/homebrew/opt/openssl@1.1" ]]; then
-  export PATH="/opt/homebrew/opt/openssl@1.1/bin:${PATH}"
-  export LDFLAGS="-L/opt/homebrew/opt/openssl@1.1/lib"
-  export CPPFLAGS="-I/opt/homebrew/opt/openssl@1.1/include"
-  export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig"
-fi
-
-# MacTeX
-if [[ -e "/usr/local/texlive" ]]; then
-  prefix=$(find /usr/local/texlive -maxdepth 1 -type d | sed -n 2p)
-  export PATH="${prefix}/bin/universal-darwin:${PATH}"
-fi
+# MacTeX (brew install mactex が作る固定のシンボリックリンク。no_global_rcs で path_helper が動かないので自分で通す)
+[[ -d "/Library/TeX/texbin" ]] && export PATH="/Library/TeX/texbin:${PATH}"
 
 #------------#
 # BSD -> GNU #
@@ -41,13 +30,3 @@ PATH="/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH"
 PATH="/opt/homebrew/opt/gnu-tar/libexec/gnubin:$PATH"
 # grep
 PATH="/opt/homebrew/opt/grep/libexec/gnubin:$PATH"
-
-#---------------#
-# Specific root #
-#---------------#
-
-# for Maxima
-if [[ -e /Applications/wxMaxima.app/ ]]; then
-  export PATH=/Applications/wxMaxima.app/bin:$PATH
-  export MAXIMA_USERDIR=/Applications/wxMaxima.app/.maxima
-fi
