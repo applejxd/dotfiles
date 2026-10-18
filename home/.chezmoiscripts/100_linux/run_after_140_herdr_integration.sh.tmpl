@@ -3,11 +3,13 @@
 set -euo pipefail
 
 # 125 の mise bootstrap は別プロセスなので、PATH の activate に依存しない。
+# herdr や AI CLI が無いときは警告して飛ばす (導入できなかった 1 個で apply を失敗させない。
+# see docs/spec/structure.md#ツール-1-個の失敗で-apply-を止めない)。次の apply で再試行される。
 mise_path="${HOME}/.local/bin/mise"
-herdr_path="$("$mise_path" -C "$HOME" which herdr)"
-if [[ ! -x "$herdr_path" ]]; then
-    echo "Herdr is not available at ${herdr_path}" >&2
-    exit 1
+herdr_path="$("$mise_path" -C "$HOME" which herdr 2>/dev/null || true)"
+if [[ -z "$herdr_path" || ! -x "$herdr_path" ]]; then
+    echo "⚠️ herdr が無いので統合を飛ばします (mise ls --missing で確認。導入後の次の apply で設定されます)" >&2
+    exit 0
 fi
 
 # `herdr integration install` は settings.json を末尾改行なしで書き戻す。
@@ -31,8 +33,8 @@ PATH="${HOME}/.local/bin:${HOME}/.opencode/bin:$PATH"
 export PATH
 agent_path="$(command -v "$agent_command" || true)"
 if [[ ! -x "$agent_path" ]]; then
-    echo "${agent_command} is not available on PATH" >&2
-    exit 1
+    echo "⚠️ ${agent_command} が PATH に無いので、herdr 統合を飛ばします (導入後の次の apply で設定されます)" >&2
+    exit 0
 fi
 "$herdr_path" integration install "$agent_command"
 normalize_trailing_newline "${HOME}/.${agent_command}/settings.json"

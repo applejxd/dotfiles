@@ -15,25 +15,17 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "home" / ".chezmoiscripts"
 LINUX_SCRIPT = SCRIPTS / "100_linux" / "run_after_140_herdr_integration.sh.tmpl"
-WINDOWS_SCRIPT = (
-    SCRIPTS
-    / "300_windows"
-    / "run_after_343_herdr_integration.ps1.tmpl"
-)
+WINDOWS_SCRIPT = SCRIPTS / "300_windows" / "run_after_343_herdr_integration.ps1.tmpl"
 MISE_CONFIG = ROOT / "home" / "dot_config" / "mise" / "config.toml.tmpl"
 MISE_SCRIPTS = {
     "linux": SCRIPTS / "100_linux/run_onchange_after_125_mise.sh.tmpl",
     "darwin": SCRIPTS / "200_mac/run_onchange_after_225_mise.sh.tmpl",
-    "windows": (
-        SCRIPTS / "300_windows/310_packages/run_onchange_after_313_mise.ps1.tmpl"
-    ),
+    "windows": (SCRIPTS / "300_windows/310_packages/run_onchange_after_313_mise.ps1.tmpl"),
 }
 AGENT_CLI_SCRIPTS = {
     "linux": SCRIPTS / "100_linux/run_onchange_after_126_agent_cli.sh.tmpl",
     "darwin": SCRIPTS / "200_mac/run_onchange_after_226_agent_cli.sh.tmpl",
-    "windows": (
-        SCRIPTS / "300_windows/310_packages/run_onchange_after_314_agent_cli.ps1.tmpl"
-    ),
+    "windows": (SCRIPTS / "300_windows/310_packages/run_onchange_after_314_agent_cli.ps1.tmpl"),
 }
 
 
@@ -50,7 +42,9 @@ def render_template(path, *, os_name="linux", username="applejxd", home="/test-h
         }
     }
     template = (
-        "{{ with " + json.dumps(json.dumps(context)) + " | fromJson }}\n"
+        "{{ with "
+        + json.dumps(json.dumps(context))
+        + " | fromJson }}\n"
         + path.read_text(encoding="utf-8-sig")
         + "\n{{ end }}"
     )
@@ -109,9 +103,7 @@ def test_windows_mise_config_is_not_ignored():
 
 def test_direct_installers_are_removed():
     assert not (SCRIPTS / "100_linux" / "run_once_after_126_herdr.sh").exists()
-    assert not (
-        SCRIPTS / "300_windows" / "310_packages" / "run_once_before_313_herdr.ps1"
-    ).exists()
+    assert not (SCRIPTS / "300_windows" / "310_packages" / "run_once_before_313_herdr.ps1").exists()
     assert not (
         SCRIPTS / "300_windows" / "310_packages" / "run_once_before_314_claude.ps1.tmpl"
     ).exists()
@@ -139,9 +131,7 @@ def test_unix_agent_cli_installer_uses_official_sources(os_name):
     assert source.index('PATH="${HOME}/.local/bin') < source.index("copilot-install")
     # AI CLI 本体は mise で入れない (公式インストーラーへ一本化)。
     # 残骸掃除の経緯はコメントに書いてあるので、実行される行だけを見る
-    commands = "\n".join(
-        line for line in source.splitlines() if not line.lstrip().startswith("#")
-    )
+    commands = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
     assert "mise use" not in commands
     assert "mise install" not in commands
 
@@ -180,9 +170,7 @@ def run_agent_cli_installer(script: str, home: Path, tmp_path: Path, fail_url: s
             (stub_bin / tool).symlink_to(found)
     curl_log = tmp_path / "curl.log"
     curl = stub_bin / "curl"
-    fail_branch = (
-        f'case "$*" in *{fail_url}*) exit 22 ;; esac\n' if fail_url else ""
-    )
+    fail_branch = f'case "$*" in *{fail_url}*) exit 22 ;; esac\n' if fail_url else ""
     curl.write_text(
         f'#!/bin/sh\necho "$*" >> "{curl_log}"\n{fail_branch}exit 0\n',
         encoding="utf-8",
@@ -220,9 +208,7 @@ def test_one_failed_installer_does_not_block_the_others(tmp_path: Path):
     home = tmp_path / "home"
     home.mkdir()
 
-    result, called = run_agent_cli_installer(
-        script, home, tmp_path, fail_url="omp.sh/install"
-    )
+    result, called = run_agent_cli_installer(script, home, tmp_path, fail_url="omp.sh/install")
 
     # 失敗しても後続は試される
     assert "https://claude.ai/install.sh" in called
@@ -386,9 +372,7 @@ def test_windows_integration_resolves_agent_from_path(username, agent):
     assert "GetEnvironmentVariable('Path', 'User')" in source
     assert "-CommandType Application -ErrorAction Stop" in source
     assert source.index("which herdr") < source.index("integration install $agentCommand")
-    assert source.index("Get-Command $agentCommand") < source.index(
-        "Split-Path -Parent $agentPath"
-    )
+    assert source.index("Get-Command $agentCommand") < source.index("Split-Path -Parent $agentPath")
     assert source.index("Split-Path -Parent $agentPath") < source.index(
         "integration install $agentCommand"
     )
@@ -455,11 +439,16 @@ def test_chezmoi_applies_mise_config_before_bootstrap_and_integrations(tmp_path,
     result = subprocess.run(
         [
             chezmoi,
-            "--config", str(config),
-            "--source", str(source),
-            "--destination", str(destination),
-            "--persistent-state", str(tmp_path / "state.boltdb"),
-            "--cache", str(tmp_path / "cache"),
+            "--config",
+            str(config),
+            "--source",
+            str(source),
+            "--destination",
+            str(destination),
+            "--persistent-state",
+            str(tmp_path / "state.boltdb"),
+            "--cache",
+            str(tmp_path / "cache"),
             "apply",
         ],
         env={**os.environ, "HOME": str(destination)},
@@ -577,26 +566,21 @@ def test_linux_integration_uses_managed_binary_and_refreshes_skill(
         assert (home / f".{agent}/settings.json").read_text() == '{"preserved":true}\n'
         assert sorted(path.name for path in skill_dir.iterdir()) == ["SKILL.md"]
     commands = [json.loads(line) for line in Path(env["COMMAND_LOG"]).read_text().splitlines()]
-    assert commands == [
-        ["mise", "-C", str(home), "which", "herdr"],
-        ["herdr", "integration", "install", agent],
-        ["herdr", "--skill"],
-    ] * 2
+    assert (
+        commands
+        == [
+            ["mise", "-C", str(home), "which", "herdr"],
+            ["herdr", "integration", "install", agent],
+            ["herdr", "--skill"],
+        ]
+        * 2
+    )
 
 
-@pytest.mark.parametrize(
-    "stage",
-    ["which", "integration", "--skill", "invalid_skill", "missing_binary", "missing_agent"],
-)
+@pytest.mark.parametrize("stage", ["integration", "--skill", "invalid_skill"])
 def test_linux_integration_stops_on_errors_and_preserves_skill(linux_environment, stage):
     home, env = linux_environment
     env["FAIL_STAGE"] = stage
-    if stage == "missing_binary":
-        env["HERDR_BINARY"] = str(home / "missing-herdr")
-    if stage == "missing_agent":
-        for agent in ("claude", "copilot"):
-            (home / ".local/bin" / agent).unlink()
-            (home / "stale-bin" / agent).unlink()
     skill_dir = home / ".claude/skills/herdr"
     skill_dir.mkdir(parents=True)
     skill = skill_dir / "SKILL.md"
@@ -608,11 +592,37 @@ def test_linux_integration_stops_on_errors_and_preserves_skill(linux_environment
     assert sorted(path.name for path in skill_dir.iterdir()) == ["SKILL.md"]
 
 
+@pytest.mark.parametrize("stage", ["which", "missing_binary", "missing_agent"])
+def test_linux_integration_skips_with_a_warning_when_a_tool_is_missing(linux_environment, stage):
+    """herdr や AI CLI が無いだけでは apply を失敗させない (docs/spec/structure.md)。"""
+    home, env = linux_environment
+    env["FAIL_STAGE"] = stage
+    if stage == "missing_binary":
+        env["HERDR_BINARY"] = str(home / "missing-herdr")
+    if stage == "missing_agent":
+        for agent in ("claude", "copilot"):
+            (home / ".local/bin" / agent).unlink()
+            (home / "stale-bin" / agent).unlink()
+        # 実機に本物の AI CLI があっても「無い」状況にする (PATH から除く)
+        env["PATH"] = os.pathsep.join(
+            d
+            for d in env["PATH"].split(os.pathsep)
+            if not any((Path(d) / a).exists() for a in ("claude", "copilot"))
+        )
+    skill_dir = home / ".claude/skills/herdr"
+    skill_dir.mkdir(parents=True)
+    skill = skill_dir / "SKILL.md"
+    skill.write_text("old skill")
+    result = run_linux_integration(home, env)
+    assert result.returncode == 0, result.stderr
+    assert "飛ばします" in result.stderr
+    assert skill.read_text() == "old skill"
+    assert sorted(path.name for path in skill_dir.iterdir()) == ["SKILL.md"]
+
+
 def test_windows_skill_replace_uses_nonempty_backup_path():
     source = WINDOWS_SCRIPT.read_text(encoding="utf-8")
 
     assert "[System.IO.File]::Replace($skillTempPath, $skillPath, $null)" not in source
-    assert (
-        "[System.IO.File]::Replace($skillTempPath, $skillPath, $skillBackupPath)" in source
-    )
+    assert "[System.IO.File]::Replace($skillTempPath, $skillPath, $skillBackupPath)" in source
     assert "Remove-Item -LiteralPath $skillBackupPath -Force" in source
