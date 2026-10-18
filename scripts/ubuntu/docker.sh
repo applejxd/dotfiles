@@ -77,6 +77,8 @@ fi
 
 # 起動中の rootful が使うソケットと DOCKER_HOST が衝突すると setuptool が失敗する
 unset DOCKER_HOST
+# Docker Desktop (WSL 統合) が残した壊れた symlink (contexts 等) で setuptool の mkdir が失敗する
+find "$HOME/.docker" -maxdepth 1 -xtype l -print -delete 2>/dev/null || true
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 dockerd-rootless-setuptool.sh install
 systemctl --user enable --now docker.service
