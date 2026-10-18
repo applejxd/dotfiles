@@ -23,5 +23,7 @@ windows:
       layout: main-horizontal
       panes:
         - btop
+        # <% if system("command -v nvidia-smi >/dev/null 2>&1") %>
         - nvitop
+        # <% end %>
         - ctop
