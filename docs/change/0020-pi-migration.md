@@ -56,7 +56,7 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | 5c | formatter（edit / write の後に既存の hook を呼ぶ） | 完了 |
 | 5d | `/fleet`（プロンプトテンプレートの生成）・キーバインド・共通の指示（`AGENTS.md`）の配布 | 完了 |
 | 5e | Orca・Zed から起動するときの扱い（Orca の拡張を読む・RPC の確認の期限）。起動の入口は、利用者の判断で素の `pi` のまま（`pis` は利用者の起動用） | 完了 |
-| 6 | **OpenCode の撤去**（任意。優先度低）。Orca・Zed は素の `pi` のままなので「切り替え」は要らない。残るのは、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs・Windows の導入を消すかどうかの判断。規模は、配布物 約 3,900 行、`generate.py` の OpenCode 関連 約 1,300 行、テスト 約 19,700 行、docs 約 9,700 行。CHG-0017 を閉じ、CHG-0005 を再開できる状態にする。Windows は pi のハーネスが無いので、OpenCode を残すか決める | 未着手（保留） |
+| 6 | **OpenCode の撤去**（任意。優先度低）。Orca・Zed は素の `pi` のままなので「切り替え」は要らない。残るのは、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs・Windows の導入を消すかどうかの判断。規模は、配布物 約 3,900 行、`generate.py` の OpenCode 関連 約 1,300 行、テスト 約 19,700 行、docs 約 9,700 行。CHG-0017 を閉じ、CHG-0005 を再開できる状態にする。Windows は pi のハーネスが無いので、OpenCode を残すか決める | 未着手（保留。利用者は OpenCode をもう使っていないが、急がない、2026-10-20） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -305,6 +305,7 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-20**: 利用者が「OpenCode はもう使っていない」と確認した。だが急ぐ理由は無いので、段 6（撤去）と OpenCode 専用の `checkpoint`（スキル・plugin・スクリプト・試験・[仕様](../spec/checkpoint.md)、約 2,900 行）は**現状維持で保留**とした。pi は自作の圧縮が checkpoint を兼ねる（[圧縮（旧 checkpoint）](../spec/pi-guard.md#圧縮旧-checkpoint)。同日に思考レベルの設定漏れを直して実モデルで確認済み）。撤去するときは一緒に消す。撤去前に決めるのは Windows の扱い（pi のハーネスが無い）
 - **2026-10-13**: 利用者が **pi に一本化する**と決め、判定器を TypeScript に移すことにした（[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。2026-10-09 の「判定器を Claude / Copilot と共有する」はこれで覆る。Windows ネイティブの `pi` は信頼できる環境でだけ開く（ガードなし）。調査は[記録 I1](../research/agents/pi-isolation-options.md)
 - **2026-10-13**: 判定器の TS 移植に着手した（[仕様](../spec/pi-decide.md#ts-版への移植)）。Python 版の判定結果 6,311 件と、部品ごとの出力 9,199 件を正解データにした。層 C（入口・役割・ファイル・bypass）と層 A（`shlex`・分割・正規化・照合）は全件一致。層 B（`bashrules` の約 3,900 行）は土台（パス・文脈・`shellparse`・共通部品）まで書いたが、正解データでの検証はこれから
 - **2026-10-13**: 移植の過程で、Python 版の判定が「同じプロセスで前に何を判定したか」で変わると分かり、直した。`_LITERAL_HEREDOC_BODIES`（引用付き heredoc の本文の記録）がプロセスに残り、後の引用なしの heredoc の `check_pipe_to_shell` を見送らせた。hook・ハーネスは 1 コマンド 1 プロセスなので本番では起きないが、常駐させる TS 版へ写してはいけない（[仕様](../spec/pi-decide.md#判定が前の呼び出しに依存していた修正済み)）
