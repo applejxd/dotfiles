@@ -44,12 +44,20 @@ export default async function (pi: ExtensionAPI) {
 		// 圧縮の要約の依頼 (pi の要約の system prompt)。フルガードの指示が入っているかも返す
 		if (getCurrentSystemPrompt(messages).includes("context summarization assistant")) {
 			const instr = JSON.stringify(messages).includes("【圧縮の指示】") ? "yes" : "no";
+			const custom = JSON.stringify(messages).includes("【利用者の指定】") ? "yes" : "no";
 			// 最初の依頼だけ出力の上限で切れた応答にする (切れた要約は保存されない)
 			if (process.env.FAUX_SUMMARY_LENGTH_ONCE === "1" && !(globalThis as any).__fauxLengthDone) {
 				(globalThis as any).__fauxLengthDone = true;
 				return fauxAssistantMessage(fauxText("cut"), { stopReason: "length" });
 			}
-			return fauxAssistantMessage(fauxText(`SUMMARY INSTR=${instr}`));
+			// 思考の指定が無い (「thinking: disabled」で送られる) 依頼を拒むモデル (Copilot の claude-sonnet-5.5 の実測の 400)
+			if (process.env.FAUX_REJECT_NO_THINKING === "1" && (globalThis as any).__fauxReasoning === "none") {
+				return fauxAssistantMessage(fauxText(""), {
+					stopReason: "error",
+					errorMessage: '400 {"error":{"message":"To turn thinking off on this model, send thinking between_tools instead of disabled"}}',
+				});
+			}
+			return fauxAssistantMessage(fauxText(`SUMMARY INSTR=${instr} CUSTOM=${custom} THINK=${(globalThis as any).__fauxReasoning ?? "none"}`));
 		}
 		// 利用者の発言をそのまま返す (プロンプトテンプレートの展開を見る)
 		if (process.env.FAUX_ECHO_USER === "1" && last?.role === "user") {
@@ -116,12 +124,16 @@ export default async function (pi: ExtensionAPI) {
 		baseUrl: "http://127.0.0.1:9",
 		apiKey: "faux",
 		api: core.api as any,
-		streamSimple: core.streamSimple as any,
+		streamSimple: ((model: any, context: any, options: any) => {
+			// 圧縮の要約の依頼に思考レベル (options.reasoning) が付いているかを、要約の応答へ渡す
+			(globalThis as any).__fauxReasoning = options?.reasoning ?? "none";
+			return core.streamSimple(model, context, options);
+		}) as any,
 		models: [
 			{
 				id: "spike",
 				name: "spike",
-				reasoning: false,
+				reasoning: process.env.FAUX_REASONING === "1",
 				input: ["text"],
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 				contextWindow: 100000,

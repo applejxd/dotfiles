@@ -847,6 +847,9 @@ def test_compaction_carries_the_handover_instructions_and_file_lists(env):
     assert compactions, proc.stdout + proc.stderr
     entry = compactions[-1]
     assert "INSTR=yes" in entry["summary"], f"圧縮の指示が要約の依頼に入っていない: {proc.stderr}"
+    assert "圧縮の指示を付けられなかった" not in proc.stderr, (
+        proc.stderr
+    )  # 既定の圧縮へ落ちていない
     details = entry.get("details") or {}
     assert "f.txt" in json.dumps(details), "別名のツールで読んだファイルが一覧に無い"
 
@@ -874,6 +877,106 @@ def test_compaction_retries_once_when_the_summary_hits_the_output_cap(env):
     assert compactions, proc.stdout + proc.stderr
     # やり直しが効けば、指示つきの要約が保存される (既定の圧縮に落ちれば INSTR=no になる)
     assert "INSTR=yes" in compactions[-1]["summary"], proc.stderr
+    assert "圧縮の指示を付けられなかった" not in proc.stderr, proc.stderr
+
+
+def test_compaction_sends_the_session_thinking_level(env):
+    """思考レベルを渡さないと「thinking: disabled」で送られ、受け付けないモデルで指示つきの圧縮が失敗して既定に落ちる。"""
+    settings = env["proj"] / ".pi"
+    settings.mkdir()
+    small = '{"compaction": {"keepRecentTokens": 1}}'
+    (settings / "settings.json").write_text(small, encoding="utf-8")
+    (env["proj"] / "f.txt").write_text("x\n", encoding="utf-8")
+    sessions = env["tmp"] / "sessions"
+    calls = [{"name": "guarded_read", "args": {"path": "f.txt"}}]
+    env["env"]["FAUX_REASONING"] = "1"
+    proc = run_pi(
+        env,
+        calls,
+        "go",
+        "again",
+        "/spike-compact",
+        session=True,
+        extra=(
+            "--approve",
+            "--thinking",
+            "medium",
+            "--session-dir",
+            str(sessions),
+            "-e",
+            str(FIXTURES / "compact.ts"),
+        ),
+    )
+    assert proc.returncode == 0, proc.stderr
+    compactions = [e for e in _session_entries(sessions) if e.get("type") == "compaction"]
+    assert compactions, proc.stdout + proc.stderr
+    summary = compactions[-1]["summary"]
+    assert "INSTR=yes" in summary, (
+        proc.stderr
+    )  # 指示つきの圧縮が保存された (既定に落ちたら INSTR=no)
+    assert "THINK=medium" in summary, summary
+    assert "圧縮の指示を付けられなかった" not in proc.stderr, proc.stderr
+
+
+def test_compaction_retries_with_minimal_thinking_when_disabled_is_rejected(env):
+    """思考「なし」を拒むモデルでも、指示つきの圧縮を保存する (pi 既定の圧縮は同じ 400 で失敗する)。"""
+    settings = env["proj"] / ".pi"
+    settings.mkdir()
+    small = '{"compaction": {"keepRecentTokens": 1}}'
+    (settings / "settings.json").write_text(small, encoding="utf-8")
+    (env["proj"] / "f.txt").write_text("x\n", encoding="utf-8")
+    sessions = env["tmp"] / "sessions"
+    calls = [{"name": "guarded_read", "args": {"path": "f.txt"}}]
+    env["env"]["FAUX_REASONING"] = "1"
+    env["env"]["FAUX_REJECT_NO_THINKING"] = "1"
+    proc = run_pi(
+        env,
+        calls,
+        "go",
+        "again",
+        "/spike-compact",
+        session=True,
+        extra=(
+            "--approve",
+            "--thinking",
+            "off",
+            "--session-dir",
+            str(sessions),
+            "-e",
+            str(FIXTURES / "compact.ts"),
+        ),
+    )
+    assert proc.returncode == 0, proc.stderr
+    compactions = [e for e in _session_entries(sessions) if e.get("type") == "compaction"]
+    assert compactions, proc.stdout + proc.stderr
+    summary = compactions[-1]["summary"]
+    assert "INSTR=yes" in summary and "THINK=minimal" in summary, summary
+    assert "圧縮の指示を付けられなかった" not in proc.stderr, proc.stderr
+
+
+def test_compaction_keeps_the_users_compact_arguments(env):
+    """/compact の引数 (利用者の指定した焦点) を、自作の圧縮が捨てない。"""
+    settings = env["proj"] / ".pi"
+    settings.mkdir()
+    small = '{"compaction": {"keepRecentTokens": 1}}'
+    (settings / "settings.json").write_text(small, encoding="utf-8")
+    (env["proj"] / "f.txt").write_text("x\n", encoding="utf-8")
+    sessions = env["tmp"] / "sessions"
+    calls = [{"name": "guarded_read", "args": {"path": "f.txt"}}]
+    proc = run_pi(
+        env,
+        calls,
+        "go",
+        "again",
+        "/spike-compact APIの変更点に絞って",
+        session=True,
+        extra=("--approve", "--session-dir", str(sessions), "-e", str(FIXTURES / "compact.ts")),
+    )
+    assert proc.returncode == 0, proc.stderr
+    compactions = [e for e in _session_entries(sessions) if e.get("type") == "compaction"]
+    assert compactions, proc.stdout + proc.stderr
+    summary = compactions[-1]["summary"]
+    assert "INSTR=yes" in summary and "CUSTOM=yes" in summary, summary
 
 
 def _rpc(env, calls, answers, timeout=120):

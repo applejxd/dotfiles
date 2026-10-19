@@ -318,25 +318,39 @@ export default async function (pi: ExtensionAPI) {
 			if (!auth.ok) throw new Error(`認証を解決できない: ${auth.error}`);
 			// 認証の解決結果の baseUrl をモデルへ反映する (Copilot はトークンごとに違う。pi 自身も同じ)
 			const requestModel = auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model;
-			const run = (preparation: any) =>
+			// 引き継ぎの指示に、/compact の引数（利用者が指定した焦点）を合わせる。pi 既定の圧縮もこの引数を要約へ足す
+			const instructions = event.customInstructions
+				? `${COMPACT_INSTRUCTIONS}\n\n【利用者の指定】${event.customInstructions}`
+				: COMPACT_INSTRUCTIONS;
+			const run = (preparation: any, level: any = pi.getThinkingLevel()) =>
 				compact(
 					preparation,
 					requestModel,
 					auth.apiKey,
 					auth.headers,
-					COMPACT_INSTRUCTIONS,
+					instructions,
 					event.signal,
-					undefined,
+					// pi 本体の経路と同じ、セッションの思考レベル。渡さないと「思考なし」で送られ、
+					// 「thinking: disabled」を受け付けないモデル (Copilot の claude-sonnet-5.5 など) で 400 になる
+					level,
 					// 拡張が登録した提供元も通るよう、pi の呼び出し経路を使う (既定はグローバルな提供元の表だけを引く)
 					(m: any, c: any, o: any) => ctx.modelRegistry.streamSimple(m, c, o),
 					auth.env,
+					// 一時的な失敗 (レート制限・5xx・切断) の再試行。pi の既定値 (設定は拡張から読めない)
+					{ enabled: true, maxRetries: 3, baseDelayMs: 2000, maxAgentDelayMs: 60000 },
 				);
 			try {
 				return { compaction: await run(event.preparation) };
 			} catch (e) {
+				const message = (e as Error).message;
+				// 思考が「無効」の指定を受け付けないモデル (Copilot の claude-sonnet-5.5 など) は 400 を返す。pi 既定の圧縮も同じ指定で
+				// 失敗するので、思考を最小にして 1 回やり直す (圧縮が全く通らなくなるのを防ぐ)
+				if (pi.getThinkingLevel() === "off" && /\b400\b/.test(message) && /thinking/i.test(message) && /(disabled|between_tools)/i.test(message)) {
+					return { compaction: await run(event.preparation, "minimal") };
+				}
 				// 要約が出力の上限で切れたときだけ、上限 (reserveTokens の 0.8 倍) を倍にして 1 回やり直す。
 				// 切れた要約は pi が保存しない (getSummarizationFailure)。他の失敗は繰り返さない
-				if (!/token cap/.test((e as Error).message)) throw e;
+				if (!/token cap/.test(message)) throw e;
 				const s = event.preparation.settings;
 				return { compaction: await run({ ...event.preparation, settings: { ...s, reserveTokens: s.reserveTokens * 2 } }) };
 			}

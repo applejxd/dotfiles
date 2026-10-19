@@ -184,9 +184,13 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 - `compact()` を `ctx.modelRegistry.streamSimple` 経由で呼ぶ。認証の解決結果の `baseUrl` をモデルへ反映する
   （Copilot はトークンごとに違う。pi 自身も同じ。反映しないと 401 になった）
 - 失敗したら標準エラーと通知（端末の幅で切れないよう全文）へ理由を出して、pi の既定の圧縮に任せる（指示は補助で、圧縮は止めない）
+- **`compact()` に、セッションの思考レベル（`pi.getThinkingLevel()`）と、一時的な失敗の再試行方針（pi の既定値。利用者の `retry` 設定は拡張から読めないため、設定にかかわらず既定値に固定）を渡す**。
+  渡さないと「thinking: disabled」で送られ、それを受け付けないモデル（Copilot の `claude-sonnet-5.5` など）が 400 を返して、
+  **どの PC でも指示つきの圧縮が失敗して既定に落ちた**（実測 [表 B の 19](pi-upstream.md#b-明示が無いここに書く)）。
+  思考レベルが `off` で同じ 400 になったときは、思考を `minimal` にして 1 回だけやり直す（pi の既定の圧縮は、同じ指定で失敗して全く圧縮できない）
+- `/compact <焦点>` の引数（`event.customInstructions`）は、引き継ぎの指示に【利用者の指定】として合わせる（自作の圧縮が成功すると既定の圧縮には進まないので、合わせないと捨てられる）
 - 要約が出力の上限（`reserveTokens` の 0.8 倍）で切れたとき（`Summarization failed: generation hit the token cap …`。切れた要約は pi が保存しない）だけ、
-  `reserveTokens` を倍にして **1 回だけ**やり直す。実際の失敗の原因が上限だったかは未確認（理由の全文を通知から取って確かめる）
-- `compact()` に `retry`（一時的なストリーム切断の再試行）を渡していない。pi 本体の経路は渡す。原因が切断だった場合の候補
+  `reserveTokens` を倍にして **1 回だけ**やり直す。実際には起きていない（今回の原因ではない）が、公開の報告にある失敗の型
 - 指示は履歴の要約にだけ入る。分割されたターンの前半の要約（`Turn Context`）には入らない（pi の仕様）
 - 別名のツールで触ったファイルは、これまでどおり要約のファイルの一覧に足す
 
@@ -609,6 +613,10 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
   元の確認項目: `bg_run` で `sleep 5` を起動して応答を終えさせる。アイドルのまま LLM が自動で再開するか。作業中に終わったときはそのターン後に届くか。
   `bg_kill` で止めたときは再開しないか。終了メッセージが画面に出て、ログ末尾が入っているか
 - [ ] **フッター表示**（`activity`）: TUI で `🤖 N subagents / ⚙️ N jobs` が出て、どちも 0 になると消えるか
+- [ ] **圧縮（実際のモデル。pi・既定モデルの更新のたびと、定期的に）**: `uv run --with pytest --with pyyaml --no-project python3 scripts/pi-harness-spike/compact-real.py`
+  （使い捨ての作業場所で、実際のモデルへ `/compact` をかけ、**既定の圧縮に落ちた警告が無いか**を見る。`COMPACTS=2` で 2 回目も。
+  `scripts/pi-harness-spike/compact-matrix.sh` はモデルと思考レベルの組を順に回す）。偽のモデルは、実モデルが拒む指定を再現できない。
+  2026-10-20: `claude-sonnet-5.5`（`low`・`medium`・`high`・`off`）、`claude-haiku-5.5`、`gemini-3.8-flash`、`grok-4.7`、2 回続けて、で警告なしを確認。`gpt-5.5` は Copilot 側で利用不可で未試験
 - [ ] **`pis` の下の `bg_run`**: 確認画面が出るか。deny のコマンドが始まらないか
 - [ ] **Windows の `taskkill`**: `bg_kill` でプロセスの木ごと止まるか
 - [ ] **`review` のモデル**: `guarded_task` の `review` が実際に親と違うモデル（Copilot なら `gpt-6-sol`）で
