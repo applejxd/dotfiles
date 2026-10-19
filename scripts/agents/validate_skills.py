@@ -27,10 +27,12 @@ ROOT = Path(__file__).resolve().parents[2]
 # 配布する skill のルート。増やしたら .pre-commit-config.yaml の
 # skill-frontmatter-local の files も合わせる（テストが突き合わせる）。
 # 再帰で探さないのは、skill に同梱した資材の中の SKILL.md を拾わないため。
+# このリポジトリだけで使う skill (.agents/skills) も含める。`pis` が --skill で足すので、frontmatter が壊れると黙って読み飛ばされる。
 SKILL_ROOTS = (
     "home/dot_claude/skills",
     "home/dot_codex/skills",
     "home/dot_config/opencode/skills",
+    ".agents/skills",
 )
 
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -85,15 +87,10 @@ def check_plain_scalar(frontmatter: str, key: str, errors: list[str]) -> None:
         return
     for pattern, reason in FRAGILE_PLAIN_PATTERNS.items():
         if pattern in value:
-            errors.append(
-                f"{key} に {pattern!r} が含まれるので引用符で囲むこと"
-                f"（{reason}）"
-            )
+            errors.append(f"{key} に {pattern!r} が含まれるので引用符で囲むこと（{reason}）")
 
 
-def check_fork_needs_no_conversation(
-    data: dict, body: str, errors: list[str]
-) -> None:
+def check_fork_needs_no_conversation(data: dict, body: str, errors: list[str]) -> None:
     """会話を入力にするスキルが fork を宣言していたら弾く。
 
     fork は会話の分岐ではなく**新規コンテキストのサブエージェント**なので、
@@ -135,17 +132,14 @@ def validate(path: Path) -> list[str]:
         if not NAME_RE.match(name):
             errors.append(f"name {name!r} は小文字英数とハイフンのみにすること")
         if name != path.parent.name:
-            errors.append(
-                f"name {name!r} がディレクトリ名 {path.parent.name!r} と一致しない"
-            )
+            errors.append(f"name {name!r} がディレクトリ名 {path.parent.name!r} と一致しない")
 
     description = data.get("description")
     if not isinstance(description, str) or not description.strip():
         errors.append("description が無い、または空")
     elif len(description) > MAX_DESCRIPTION_LEN:
         errors.append(
-            f"description が {len(description)} 文字で "
-            f"{MAX_DESCRIPTION_LEN} 文字を超える"
+            f"description が {len(description)} 文字で {MAX_DESCRIPTION_LEN} 文字を超える"
         )
 
     for key in ("name", "description"):
@@ -158,9 +152,7 @@ def validate(path: Path) -> list[str]:
 
 def discover(root: Path = ROOT) -> list[Path]:
     """配布する全 SKILL.md（各ルートの直下 1 階層）を返す。"""
-    return sorted(
-        path for skills in SKILL_ROOTS for path in (root / skills).glob("*/SKILL.md")
-    )
+    return sorted(path for skills in SKILL_ROOTS for path in (root / skills).glob("*/SKILL.md"))
 
 
 def collect(argv: list[str]) -> list[Path]:
