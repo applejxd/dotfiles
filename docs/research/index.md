@@ -66,6 +66,7 @@
 | [ハーネス付きの pi への拡張の追加](agents/pi-extension-under-harness.md) | 2026-10-11。E5: 明示の `-e` の拡張は `-ne` でも読まれ、ツールは判定（役割の `tools`・既定の確認）と結果の伏字化を通る。同名ツールの差し替えは pi が起動を止める。ただし拡張の読み込み時の処理は囲えない。E6: `pis` では `exposure` が既定の `codemode` の MCP のツールは呼べない（`-nbt` で `codemode` が宣言されない）（Windows で実施。Unix は未実施） |
 | [pi をどこで・どこまで守って動かすか](agents/pi-isolation-options.md) | 2026-10-13。I1: pi 本体に承認機能は無く、公式は境界（隔離）を勧める。Windows の隔離手段の比較（Sandbox・Hyper-V・`wslc`・専用ユーザー）、`wsb` の CLI、Sandbox での導入検証の実測、ハーネスの Windows 移植を見送った理由。運用の判断: Windows ネイティブの `pi` は信頼できる環境でだけ、ガードなし |
 | [pis（標準のサンドボックス）の実機の挙動](agents/pis-sandbox-field-test.md) | 2026-10-15。S1: 12 項目のうち 11 が期待どおり。Orca の資格情報の漏れ・共通指示の欠落・`fd` の毎回のダウンロードを見つけて直した |
+| [pi の公開拡張の調査と、使えないことの不利益](agents/pi-public-extensions-survey.md) | 2026-10-20。P1: 月間ダウンロード数の上位 150 件を分類し、今のハーネスと対比。主要な機能は自作で持っている。不足は、構造化した質問・永続する記憶・LSP の診断・worktree 隔離の 4 点。スキルは軽く試せるが拡張は重い。中継プロキシ型・観測の SaaS 送信・ Web UI は避ける。npm の検索 API は重複で網羅に使えない |
 | [社内プロキシ必須の機械で境界の通信を通すには](agents/corp-proxy-boundary.md) | 2026-10-15。Fence は許可済みの通信を直接つなぎ、上流プロキシはグレーゾーン用。`srt` の `parentProxy` は許可リストを保って通るが、`pis` の境界の形（R1・存在しない保護対象・`$HOME` 拒否）が載らない。許可リストを照合する中継を足して解決（会社の機械では未実測） |
 | [Claude の deny の展開数](agents/claude-deny-glob-expansion.md) | 名前マッチの deny が 3239 件の bind-mount に展開された測定、whitelist 化の根拠 |
 | [Copilot の開発ツール自動許可の実効権限](agents/copilot-dev-tool-access-grants.md) | dev-tool access ON 時の取りこぼし・RO 上書き、ヘッダが見えない粒度、PATH の bin が RO、mise の latest が消える |
