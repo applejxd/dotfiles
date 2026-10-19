@@ -442,9 +442,9 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 
 ## 子エージェント
 
-`[pi.agents.<名前>]` に宣言し、親の `guarded_task` ツール（引数 `agent` と `task`）で起動する。
-子は同じフルガードを付けた別の pi プロセス（`--mode json -p --no-session -nbt -ne -e builtin:mcp`
-の形）で、判定は子のフルガードが子の役割で行う。
+`[pi.agents.<名前>]` に宣言し、親の `guarded_task` ツールで起動する。子は同じフルガードを付けた別の pi プロセスで、
+**RPC モード**（`--mode rpc --no-session --no-approve -nbt -ne -e builtin:mcp -e <フルガード>`。`pis` と同じ保護条件）で
+動かし、親の拡張が job として保持する（`children.ts`）。判定は子のフルガードが子の役割で行う。
 
 | キー | 意味 |
 | --- | --- |
@@ -476,13 +476,46 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
   モデルは関数定義の一覧に埋もれた `guarded_task` に気付きにくい（実際に「子が無い」と誤認した）。
   `registerTask` は `promptSnippet` と、`review` を使う場面の `promptGuidelines` を付ける。
   Windows の `subagents` 拡張の `task` も同じ（`todo` / `activity` も同様に対処済み）。試験は `test_task_tool_is_listed_in_the_system_prompt`
-- **子の結果**: 子の JSON のイベントから、承認されなかった呼び出し（理由が `not approved:` で始まる。
+- **子の結果**: 子の RPC のイベントから、承認されなかった呼び出し（理由が `not approved:` で始まる。
   フルガードが付ける）・ほかのツールのエラー・最後の返答を拾う。承認されなかった呼び出しがあれば
-  `blocked`（承認待ちで未完了）として、親のツールの結果をエラーにする。子は UI を持たないので、子の
-  ask は bypass を継がない限り `blocked` になる
+  `blocked`（承認待ちで未完了）として、親のツールの結果をエラーにする。RPC の子は UI があるものとして確認要求
+  （`extension_ui_request` の `confirm` / `select` / `input` / `editor`）を出すので、親は**即座に `cancelled`
+  を返す**（親モデルは承認できない）。ask は bypass を継がない限り `blocked` になる
 - 親を中断すると、子をプロセスグループごと止める
-- 子の返答の本文にも伏字化を掛ける
+- 子の返答の本文にも伏字化を掛け、その後に 20000 文字で切り詰める
 - 起動の前に、親の判定器で `task` を判定する（`tool_call` と `execute()` の両方）
+
+### 子を保持して追加依頼する（job）
+
+`guarded_task` は 1 つのツールで 3 形式を持つ。形の排他は、スキーマではなく **`execute()` が確かめる**
+（tool の最上位に `anyOf` を置くと拒む提供元がある。判定器は名前と役割だけを見る）。
+
+| 形式 | 入力 | 動き |
+| --- | --- | --- |
+| 新規 | `{agent, task, keep?}` | 子を起動して 1 往復を待つ。`keep` が無ければ完了で子を止める（従来と同じ）。`keep=true` なら idle で残し、`jobId` を返す |
+| 追加依頼 | `{jobId, task}` | 残した子へ、履歴を保ったまま次の依頼を送る。`agent` `keep` `close` は付けられない |
+| 停止 | `{jobId, close:true}` | 子を止める（冪等。無ければ「既に無い」を成功で返す） |
+
+- **往復の終わり**は `agent_settled`（自動リトライ・圧縮の回復まで終えた境界）。`prompt` の応答の `disposition` が
+  `started` でなければ失敗にする（前回の答えを返さない）。終了コードは使わない
+- **最終状態**の優先順: 親の停止・中断・時間切れ（`closed` / `limit`）→ `not approved:` があれば `blocked` →
+  最後の assistant の `stopReason`（`stop` / `toolUse` は `done`、`length` `error` `aborted` と未知の値・
+  assistant 無しは `failed`）。途中のツールエラーはモデルが回復して `done` なら失敗にせず、件数だけ返す
+- `done` 以外になった job は、その場で止めて**再利用しない**（未実行の操作を完了済みとみなした履歴から続けないため）
+- 同じ job への依頼は 1 つずつ。`running` 中の追加依頼は待たせず `busy` で断る。`running` 中の `close` は即停止し、
+  待っていた呼び出しには `closed` を返す。`jobId → 所有確認 → running` は await の前に同期で確定する
+  （並列のツール呼び出しで競合しないため。`guarded_task` を逐次実行にしないこと）
+- 生かしておく子の上限は 4（`running` も含む）。上限では追い出さず、新しい起動を断って jobId の一覧を返す。
+  枠は spawn の前に同期で確保する。1 往復の待機は 15 分まで（超えたら `limit` で止める）
+- job は起動時の cwd と役割を持ち、別の cwd・役割からの追加依頼は断る。`jobId` は乱数だが認証手段ではなく、
+  所有の確認が本体
+- **止まる契機**: `close`・`keep` 無しの完了・`done` 以外・セッションの終了と切り替えと `/reload`（`session_shutdown`）・
+  `/bypass` の切り替え（起動時の bypass を持ち越させない）・親プロセスの終了。TTL は無い
+  （忘れた job は上限のエラーの一覧で気付く）。止め方は stdin を閉じ、3 秒で終わらなければプロセスグループを SIGKILL
+- モデルへは `promptGuidelines` で「後続が見込まれるときだけ `keep`」「追加依頼は返った `jobId` にだけ」
+  「終わったら `close`」「消えたら要約を添えて新規にやり直す」を伝える
+- **未対応**（段階②③）: 子が質問して止まり、回答で再開する形。作業中の追加指示（steer）と進捗の区切り。
+  子から親への通信は無い
 
 ## MCP
 
@@ -520,7 +553,8 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 - 判定の後に別の拡張（`test/agents/pi/mutator.ts`）が入力を書き換えても実行しない
 - 伏字化（JSON のイベント・退避ファイルに生の秘密が残らない）と、保護対象のパスを参照したコマンド
 - 子エージェント: 入れ子にならない・読み取り役に bash を出さない・子の ask が `blocked` で返る・
-  bypass を継ぐ・役割の `shell_deny` が bypass でも効く・`commit` が確認なしで git を読む
+  bypass を継ぐ・役割の `shell_deny` が bypass でも効く・`commit` が確認なしで git を読む・
+  `keep` した子が履歴を保って追加依頼に答える・入力 3 形式の排他・上限 4・`busy`・時間切れ・親より長生きしない
 - MCP: フルガードから登録され、実装役では確認になる（`test_pi_harness.py`）
 - サンドボックス（`test_pi_boundary.py`）: 生成・サンドボックス用の置き場・セッションの置き場・認証の戻し（新しい分だけ・ロック・壊れた写し）・
   実際の Fence でのサンドボックスチェック（Fence・bwrap・pi が無ければ skip）

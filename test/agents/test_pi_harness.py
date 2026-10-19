@@ -40,6 +40,7 @@ def env(tmp_path):
     shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
     shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
+    shutil.copy2(HARNESS_SRC.parent / "children.ts", harness / "children.ts")
     shutil.copy2(COMMIT_MESSAGE_SRC, harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
     # 子エージェントも偽のモデルで動かす (階層のモデルは認証が要る)
@@ -327,6 +328,122 @@ def test_child_ask_is_returned_as_blocked(env):
     assert "needs the user's approval" in proc.stdout
     assert "isError=true" in proc.stdout
     assert not (env["proj"] / "by-child").exists()
+
+
+def _rounds(env, rounds, **env_extra):
+    """親が複数ターンで guarded_task を呼ぶ。子は受けた利用者の発言の数を返す (履歴が続いているかが分かる)。"""
+    return run_pi(
+        env,
+        [],
+        FAUX_TOOL_ROUNDS=json.dumps(rounds),
+        FAUX_CHILD_TOOL_CALLS="[]",
+        FAUX_COUNT_USER="1",
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+        **env_extra,
+    )
+
+
+def _task(**args):
+    return {"name": "guarded_task", "args": args}
+
+
+def test_kept_child_remembers_the_conversation_until_closed(env):
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="first", keep=True)],
+            [_task(jobId="{{JOB}}", task="second")],
+            [_task(jobId="{{JOB}}", close=True)],
+        ],
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "USERS=1" in proc.stdout and "USERS=2" in proc.stdout, proc.stdout
+    assert "idle; follow up with" in proc.stdout, proc.stdout
+    assert "closed" in proc.stdout.split("USERS=2", 1)[1], proc.stdout
+
+
+def test_child_is_stopped_after_the_answer_unless_kept(env):
+    proc = _rounds(env, [[_task(agent="worker", task="once")]])
+    assert "child worker: completed" in proc.stdout, proc.stdout
+    assert "- job:" not in proc.stdout, proc.stdout
+
+
+def test_task_input_forms_are_exclusive(env):
+    bad = [
+        _task(jobId="job-x", agent="worker", task="t"),
+        _task(close=True),
+        _task(jobId="job-x", task="t", close=True),
+        _task(agent="worker"),
+        _task(jobId="job-x", keep=True, task="t"),
+    ]
+    proc = _rounds(env, [bad])
+    assert proc.stdout.count("invalid guarded_task input") == len(bad), proc.stdout
+    # スキーマにない項目は実行前に拒否される
+    proc = _rounds(env, [[_task(agent="worker", task="t", bogus=1)]])
+    assert "isError=true" in proc.stdout and "USERS=" not in proc.stdout, proc.stdout
+
+
+def test_follow_up_to_a_missing_job_says_to_start_over(env):
+    proc = _rounds(env, [[_task(jobId="job-0000000000000000", task="x")]])
+    assert "does not exist" in proc.stdout and "include a summary" in proc.stdout, proc.stdout
+
+
+def test_live_jobs_are_capped_and_the_error_lists_them(env):
+    proc = _rounds(env, [[_task(agent="worker", task=f"t{i}", keep=True) for i in range(5)]])
+    assert proc.stdout.count("too many live child jobs") == 1, proc.stdout
+    assert proc.stdout.count("USERS=1") == 4, proc.stdout
+
+
+def test_second_request_to_a_busy_job_is_refused(env):
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="first", keep=True)],
+            [_task(jobId="{{JOB}}", task="a"), _task(jobId="{{JOB}}", task="b")],
+        ],
+        FAUX_DELAY_MS="1500",
+    )
+    assert proc.stdout.count("is busy with another request") == 1, proc.stdout
+
+
+def test_round_time_limit_stops_the_child(env):
+    proc = _rounds(
+        env,
+        [[_task(agent="worker", task="slow", keep=True)], [_task(jobId="{{JOB}}", task="again")]],
+        FAUX_DELAY_MS="5000",
+        PI_HARNESS_TEST_ROUND_MS="500",
+    )
+    assert "child worker: limit" in proc.stdout, proc.stdout
+    assert "does not exist" in proc.stdout, proc.stdout
+
+
+def _live_children(agent_dir):
+    """環境変数が試験の agent 置き場で、子の印が付いたプロセスの数 (Linux の /proc だけ)。"""
+    count = 0
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            environ = (entry / "environ").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        if (
+            f"PI_CODING_AGENT_DIR={agent_dir}".encode() in environ
+            and b"PI_HARNESS_CHILD=1" in environ
+        ):
+            count += 1
+    return count
+
+
+@pytest.mark.skipif(not Path("/proc/self/environ").exists(), reason="/proc が無い")
+def test_kept_children_do_not_outlive_the_parent(env):
+    proc = _rounds(env, [[_task(agent="worker", task="keep me", keep=True)]])
+    assert "USERS=1" in proc.stdout, proc.stdout
+    agent_dir = env["env"]["PI_CODING_AGENT_DIR"]
+    deadline = time.time() + 10
+    while time.time() < deadline and _live_children(agent_dir):
+        time.sleep(0.2)
+    assert _live_children(agent_dir) == 0
 
 
 def test_parent_bypass_reaches_only_children_that_inherit_it(env):

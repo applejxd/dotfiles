@@ -20,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
+import { Jobs, NOT_APPROVED, parseTaskInput, type Job } from "./children.ts";
 import { createRedactor } from "./redact.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -35,8 +36,6 @@ const BOUNDARY_ENV = readBoundaryEnv(process.env);
 const NO_SANDBOX = process.env.PI_HARNESS_NO_SANDBOX === "1";
 // 子エージェントとして起動されたか。子では guarded_task を登録しない (入れ子にしない)
 const CHILD = process.env.PI_HARNESS_CHILD === "1";
-// 承認されなかった呼び出しの理由の先頭。子の結果から「承認待ちで未完了」を見分けるのに使う
-const NOT_APPROVED = "not approved:";
 
 // rules.json が読めなければ読み込みごと失敗させる。起動は止まり、/reload ではツールが無くなる
 const rules = JSON.parse(readFileSync(join(HERE, "rules.json"), "utf-8"));
@@ -142,6 +141,8 @@ export default async function (pi: ExtensionAPI) {
 	const showBypass = (ctx: any) => {
 		if (ctx.hasUI) ctx.ui.setStatus("bypass", bypass ? ctx.ui.theme.fg("warning", "⚡ bypass") : undefined);
 	};
+	// セッションの終了・切り替え・/reload で、保持している子を全部止める
+	pi.on("session_shutdown", async () => jobs.closeAll());
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		showBypass(ctx);
@@ -174,6 +175,8 @@ export default async function (pi: ExtensionAPI) {
 			bypass = want;
 			// 前の設定で下した判定を execute() で使い回さない
 			decided.clear();
+			// 起動時の bypass を持つ子に、権限を持ち越させない
+			jobs.closeAll();
 			showBypass(ctx);
 			ctx.ui?.notify?.(`bypass を ${bypass ? "ON" : "OFF"} にした`, bypass ? "warning" : "info");
 		},
@@ -311,39 +314,28 @@ export default async function (pi: ExtensionAPI) {
 
 // ─── 子エージェント ─────────────────────────────────────────────────
 
-type ChildResult = { status: "completed" | "blocked" | "failed"; blocked: string[]; errors: string[]; answer: string };
-
-// 子の JSON のイベントから、承認されなかった呼び出し・ほかのツールのエラー・最後の返答を拾う
-export function readChild(stdout: string, code: number): ChildResult {
-	const blocked: string[] = [];
-	const errors: string[] = [];
-	let answer = "";
-	for (const line of stdout.split("\n")) {
-		let e: any;
-		try {
-			e = JSON.parse(line);
-		} catch {
-			continue;
-		}
-		if (e.type === "tool_execution_end" && e.isError) {
-			const text = (e.result?.content ?? []).map((c: any) => c.text ?? "").join("");
-			(text.startsWith(NOT_APPROVED) ? blocked : errors).push(`${e.toolName}: ${text.slice(0, 300)}`);
-		}
-		if (e.type === "message_end" && e.message?.role === "assistant") {
-			answer = (e.message.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("");
-		}
-	}
-	const status = code !== 0 ? "failed" : blocked.length > 0 ? "blocked" : "completed";
-	return { status, blocked, errors, answer };
-}
-
 // 動いている子の一覧 (`activity` 拡張が数えて表示する)。プロセス内で共有する
 type RunningChild = { agent: string; model: string; task: string; pid?: number; startedAt: number };
 const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, RunningChild>()) as Map<string, RunningChild>;
 
+// 生かしておく子 (job) の上限と、1 往復の待機の上限、返却の上限
+const MAX_JOBS = 4;
+const ROUND_TIMEOUT_MS = Number(process.env.PI_HARNESS_TEST_ROUND_MS) || 15 * 60 * 1000;
+const MAX_REPLY_CHARS = 20000;
+const jobs = new Jobs(MAX_JOBS);
+// 異常終了でも孤児の子を残さない (stdin が閉じても止まるが、作業中の子はすぐ止める)
+process.once("exit", () => jobs.closeAll(true));
+
+const STATUS_LABEL: Record<string, string> = { done: "completed" };
+
 function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 	const names = Object.keys(agents);
 	const catalog = names.map((n) => `- ${n}: ${agents[n].description}`).join("\n");
+	const text = (t: string, isError = false, details: Record<string, unknown> = {}) => ({
+		content: [{ type: "text", text: t }],
+		details,
+		isError,
+	});
 	pi.registerTool({
 		name: `${PREFIX}task`,
 		label: "task",
@@ -351,61 +343,108 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		promptSnippet: `Run a task in a child agent (${names.join(" / ")}). Use for independent review, exploration, or parallel work`,
 		promptGuidelines: [
 			`Use ${PREFIX}task with agent "review" for an independent review or a second opinion. The child cannot see this conversation, so put everything it needs in \`task\`.`,
+			`Set keep=true on ${PREFIX}task only when you expect follow-up requests to the same child. Send a follow-up with {jobId, task} using the jobId it returned, and close it with {jobId, close:true} when done. A job that is gone (closed, failed, or dropped when the bypass or session changed) must be restarted as a new task with a summary.`,
 		],
 		description:
 			"Run a task in a child agent. The child is a separate pi process with the same guard, and cannot see this conversation, " +
-			"so put everything it needs into `task`. Agents:\n" +
+			"so put everything it needs into `task`. Three forms (do not mix their fields):\n" +
+			"- new: {agent, task, keep?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned.\n" +
+			"- follow-up: {jobId, task}. Sends another request to a kept child; it remembers the earlier conversation. One request at a time per job.\n" +
+			"- close: {jobId, close:true}. Stops the kept child.\n" +
+			"Agents:\n" +
 			catalog,
-		parameters: Type.Object({
-			agent: Type.Union(names.map((n) => Type.Literal(n))),
-			task: Type.String({ description: "What the child should do, with all the context it needs" }),
-		}),
+		parameters: Type.Object(
+			{
+				agent: Type.Optional(Type.Union(names.map((n) => Type.Literal(n)), { description: "new task only" })),
+				task: Type.Optional(Type.String({ description: "What the child should do, with all the context it needs" })),
+				keep: Type.Optional(Type.Boolean({ description: "new task only: keep the child idle after it finishes, for follow-ups" })),
+				jobId: Type.Optional(Type.String({ description: "follow-up or close: the jobId of a kept child" })),
+				close: Type.Optional(Type.Boolean({ description: "with jobId only: stop the kept child" })),
+			},
+			{ additionalProperties: false },
+		),
 		async execute(toolCallId: string, params: any, signal: any, _onUpdate: any, ctx: any) {
-			const agent = agents[params.agent];
-			if (!agent) throw new Error(`unknown agent: ${params.agent}`);
+			// 入力の形 (3 形式の排他) は execute() で確かめる。判定は名前と役割だけを見る
+			const input = parseTaskInput(params);
 			// 最終の判定 (ほかのツールと同じく execute() でも確かめる)
 			const d = decide("task", params, ctx.cwd);
 			if (d.decision !== "allow") throw new Error(`実行前の判定で止めた: ${d.decision}: ${d.reason}`);
-			const args = ["--mode", "json", "-p", "--no-session", "-nbt", "-ne", "-e", HERE];
-			// 試験だけが使う (偽のモデルを子にも読ませる)
-			for (const ext of (process.env.PI_HARNESS_TEST_CHILD_EXT ?? "").split(",").filter(Boolean)) args.push("-e", ext);
-			const model = agent.model ?? `${ctx.model.provider}/${ctx.model.id}`;
-			args.push("--model", model, "--append-system-prompt", agent.system, params.task);
-			const env: Record<string, string | undefined> = {
-				...process.env,
-				PI_HARNESS_CHILD: "1",
-				PI_HARNESS_ROLE: agent.profile,
-				PI_HARNESS_BYPASS: bypass && agent.inherit_bypass ? "1" : "",
-			};
-			const child = spawn("pi", args, { cwd: ctx.cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
-			runningChildren.set(toolCallId, { agent: params.agent, model, task: params.task, pid: child.pid, startedAt: Date.now() });
-			const kill = () => {
-				try {
-					process.kill(-child.pid!, "SIGTERM");
-				} catch {}
-			};
-			signal?.addEventListener("abort", kill, { once: true });
-			let out = "";
-			child.stdout.on("data", (b: Buffer) => (out += b.toString()));
-			child.stderr.on("data", () => {});
-			const code: number = await new Promise((resolve) => child.on("close", (c: number | null) => resolve(c ?? -1)));
-			runningChildren.delete(toolCallId);
-			signal?.removeEventListener("abort", kill);
+			const owner = { cwd: ctx.cwd, role: ROLE };
+
+			let job: Job | undefined;
+			let message: string;
+			let keep: boolean;
+			if (input.kind === "new") {
+				const agent = agents[input.agent];
+				if (!agent) throw new Error(`unknown agent: ${input.agent}`);
+				const model = agent.model ?? `${ctx.model.provider}/${ctx.model.id}`;
+				// 起動条件は pis と同じ (作業先の .pi/ を読まない・組み込みと拡張の自動発見を止める・MCP だけ戻す)
+				const args = ["--mode", "rpc", "--no-session", "--no-approve", "-nbt", "-ne", "-e", "builtin:mcp", "-e", HERE];
+				// 試験だけが使う (偽のモデルを子にも読ませる)
+				for (const ext of (process.env.PI_HARNESS_TEST_CHILD_EXT ?? "").split(",").filter(Boolean)) args.push("-e", ext);
+				args.push("--model", model, "--append-system-prompt", agent.system);
+				const env: Record<string, string | undefined> = {
+					...process.env,
+					PI_HARNESS_CHILD: "1",
+					PI_HARNESS_ROLE: agent.profile,
+					PI_HARNESS_BYPASS: bypass && agent.inherit_bypass ? "1" : "",
+				};
+				// 枠は spawn の前に同期で確保される (並行する起動でも上限を超えない)
+				job = jobs.create({ agent: input.agent, args, cwd: ctx.cwd, env, owner });
+				if (!job) {
+					const live = jobs.list().map((j) => `- ${j.id} (${j.agent}, ${j.state})`).join("\n");
+					return text(`too many live child jobs (max ${MAX_JOBS}). Close one with {jobId, close:true}:\n${live}`, true);
+				}
+				message = input.task;
+				keep = input.keep;
+				runningChildren.set(toolCallId, { agent: input.agent, model, task: input.task, pid: job.pid, startedAt: Date.now() });
+			} else {
+				job = jobs.get(input.jobId);
+				if (!job) {
+					if (input.kind === "close") return text(`job ${input.jobId} does not exist (already closed)`);
+					return text(`job ${input.jobId} does not exist (closed, failed, or dropped). Start a new task and include a summary of the earlier work.`, true);
+				}
+				if (job.owner.cwd !== owner.cwd || job.owner.role !== owner.role) throw new Error(`job ${input.jobId} belongs to another context`);
+				if (input.kind === "close") {
+					job.close();
+					return text(`job ${input.jobId} closed`, false, { jobId: input.jobId, status: "closed" });
+				}
+				if (job.state === "running") return text(`job ${input.jobId} is busy with another request`, true);
+				message = input.task;
+				keep = true;
+				runningChildren.set(toolCallId, { agent: job.agent, model: "", task: input.task, pid: job.pid, startedAt: Date.now() });
+			}
+
+			let r;
+			try {
+				r = await job.run(message, { signal, timeoutMs: ROUND_TIMEOUT_MS });
+			} finally {
+				runningChildren.delete(toolCallId);
+			}
 			if (signal?.aborted) throw new Error("child aborted");
-			const r = readChild(out, code);
-			const text = [
-				`child ${params.agent}: ${r.status} (exit ${code})`,
+			// keep でなければ完了で子を止める (done 以外は job が自分で閉じる)
+			if (!keep) job.close();
+			const alive = r.status === "done" && keep;
+			const label = STATUS_LABEL[r.status] ?? r.status;
+			const body = [
+				`child ${job.agent}: ${label}${r.note ? ` (${r.note})` : ""}`,
 				...r.blocked.map((b) => `- needs the user's approval (not run): ${b}`),
 				...r.errors.map((b) => `- tool error: ${b}`),
+				...(alive ? [`- job: ${job.id} (idle; follow up with {jobId, task}, close with {jobId, close:true})`] : []),
 				"",
 				r.answer,
 			].join("\n");
-			// 子の出力にも伏字化を掛ける (子の bash の出力は子のフルガードが伏せているが、返答の本文は伏せていない)
-			return {
-				content: [{ type: "text", text: redactText(text) }],
-				details: { agent: params.agent, status: r.status, blocked: r.blocked.length, errors: r.errors.length },
-				isError: r.status !== "completed",
-			};
+			// 子の出力にも伏字化を掛ける (子の bash の出力は子のフルガードが伏せているが、返答の本文は伏せていない)。
+			// 切り詰めは伏字化の後 (秘密の途中で切って伏字化から漏れないように)
+			let out = redactText(body);
+			if (out.length > MAX_REPLY_CHARS) out = `${out.slice(0, MAX_REPLY_CHARS)}\n[truncated: reply over ${MAX_REPLY_CHARS} chars]`;
+			return text(out, r.status !== "done", {
+				agent: job.agent,
+				status: r.status,
+				blocked: r.blocked.length,
+				errors: r.errors.length,
+				jobId: alive ? job.id : undefined,
+			});
 		},
 	});
 }

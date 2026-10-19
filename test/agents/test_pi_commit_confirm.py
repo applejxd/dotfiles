@@ -362,6 +362,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
     shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
+    shutil.copy2(HARNESS_SRC.parent / "children.ts", harness / "children.ts")
     shutil.copy2(HARNESS_SRC.parent / "commit-message.js", harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
     for agent in rules["agents"].values():
