@@ -70,3 +70,10 @@
 
 # 2026-10: hook-creator skill を廃止した (Claude / Copilot の hook を作る場面が無くなった。pi 一本化。ADR-0017)。
 .claude/skills/hook-creator
+
+# 2026-10: Codex 用の skill を廃止した (Codex は使わない)。Codex 自身の .system などを巣き込まないよう、名前で指定する。
+.codex/skills/code
+.codex/skills/commit
+.codex/skills/plan
+.codex/skills/pytest
+.codex/skills/solve

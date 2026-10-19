@@ -28,7 +28,6 @@ SKILL_PATHS = vs.discover()
 # 収集ロジックと独立に書いた既知のパス。glob を使い回すと自己確認になる。
 KNOWN_SKILLS = [
     "home/dot_claude/skills/commit/SKILL.md",
-    "home/dot_codex/skills/commit/SKILL.md",
     "home/dot_config/opencode/skills/checkpoint/SKILL.md",
 ]
 

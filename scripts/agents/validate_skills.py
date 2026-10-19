@@ -30,7 +30,6 @@ ROOT = Path(__file__).resolve().parents[2]
 # このリポジトリだけで使う skill (.agents/skills) も含める。`pis` が --skill で足すので、frontmatter が壊れると黙って読み飛ばされる。
 SKILL_ROOTS = (
     "home/dot_claude/skills",
-    "home/dot_codex/skills",
     "home/dot_config/opencode/skills",
     ".agents/skills",
 )

@@ -21,7 +21,6 @@ from check_bash_hook import COMMON, COMMON_PATH, HOOK, HOOK_PATH, ROOT, gen, pol
 
 COMMIT_SKILL_PATHS = [
     ROOT / "home" / "dot_claude" / "skills" / "commit" / "SKILL.md",
-    ROOT / "home" / "dot_codex" / "skills" / "commit" / "SKILL.md",
 ]
 CHEZMOI_TEMPLATES = ROOT / "home" / ".chezmoitemplates"
 # 常時読み込まれる個人用カスタム指示。共通部分は .chezmoitemplates に置き、
@@ -51,6 +50,7 @@ def render_instructions(cli: str) -> str:
 # ---------------------------------------------------------------------------
 # run_hook 自体の検査
 # ---------------------------------------------------------------------------
+
 
 def _fake_hook(tmp_path: Path, body: str) -> Path:
     hook = tmp_path / "fake_hook.py"
@@ -130,6 +130,7 @@ def test_run_hook_accepts_decision_from_a_clean_exit(tmp_path, decision):
 # common.toml の整合性
 # ---------------------------------------------------------------------------
 
+
 def test_bash_has_exactly_three_lists():
     """人が書く policy は allow / ask / deny の 3 つだけ (critical_* は廃止)。
 
@@ -172,6 +173,7 @@ def test_more_specific_deny_overrides_broader_ask():
 # Copilot は permission リストを持たない (deny/ask 非対応) が、hook が同じ
 # リストを読むため両 CLI で同じ判定になる。
 
+
 def test_git_dash_c_is_not_allowed():
     """作業ディレクトリを付け替える形式は permission バイパスの既知形式なので allow しない."""
     assert not [a for a in COMMON["bash"]["allow"] if a.startswith("git -C")]
@@ -201,7 +203,7 @@ def test_hook_and_permissions_come_from_the_same_lists():
     perms = gen.build_claude_permissions(COMMON)
     for key, loader in (("ask", policy.load_ask), ("deny", policy.load_deny)):
         from_permissions = {
-            r[len("Bash("):-len(":*)")] for r in perms[key] if r.startswith("Bash(")
+            r[len("Bash(") : -len(":*)")] for r in perms[key] if r.startswith("Bash(")
         }
         from_hook = set(loader(str(COMMON_PATH)))
         if key == "ask":
@@ -250,6 +252,7 @@ def test_hook_owned_ask_is_not_emitted_as_a_static_claude_rule():
 # 生成される permission リスト
 # ---------------------------------------------------------------------------
 
+
 def test_generated_permissions_leave_rm_to_the_hook():
     """rm は deny にも静的 ask にも出さず、hook の判定に委ねる。
 
@@ -270,8 +273,7 @@ def test_generated_permissions_keep_high_risk_in_deny():
 
 @pytest.mark.parametrize(
     "command",
-    ["docker rm", "docker rmi",
-     "git clean", "git branch -D", "git commit", "gh pr create"],
+    ["docker rm", "docker rmi", "git clean", "git branch -D", "git commit", "gh pr create"],
 )
 def test_reversible_commands_are_ask_not_deny(command):
     """復旧可能だが不可逆性・外部影響があるものは deny ではなく ask."""
@@ -282,9 +284,23 @@ def test_reversible_commands_are_ask_not_deny(command):
 
 @pytest.mark.parametrize(
     "command",
-    ["sudo", "git push", "git reset --hard", "git rebase", "ssh",
-     "telnet", "npm install -g", "pip", "pip3", "psql", "mysql",
-     "redis-cli", "docker system prune", "gh pr merge", "gh repo delete"],
+    [
+        "sudo",
+        "git push",
+        "git reset --hard",
+        "git rebase",
+        "ssh",
+        "telnet",
+        "npm install -g",
+        "pip",
+        "pip3",
+        "psql",
+        "mysql",
+        "redis-cli",
+        "docker system prune",
+        "gh pr merge",
+        "gh repo delete",
+    ],
 )
 def test_high_risk_commands_stay_denied(command):
     """外部への漏洩・システム変更・規約違反は deny のまま."""
@@ -313,6 +329,7 @@ def test_permission_modes_are_generated():
 # (Copilot は hook の ask が自動承認される。github/copilot-cli#3590)
 # allow に載せると手動モードでも無条件に通る。
 # → 未掲載にすることで、実行の可否を LLM に判断させる。
+
 
 @pytest.mark.parametrize(
     "command",
@@ -345,9 +362,22 @@ def test_delegated_commands_are_unlisted(command):
 @pytest.mark.parametrize(
     "command",
     [
-        "uvx", "uv tool run", "npx", "pnpm dlx", "yarn dlx", "pipx run",
-        "python -c", "uv add", "npm install", "npm ci", "npm uninstall",
-        "npm remove", "mv", "docker exec", "gh repo clone", "git gc",
+        "uvx",
+        "uv tool run",
+        "npx",
+        "pnpm dlx",
+        "yarn dlx",
+        "pipx run",
+        "python -c",
+        "uv add",
+        "npm install",
+        "npm ci",
+        "npm uninstall",
+        "npm remove",
+        "mv",
+        "docker exec",
+        "gh repo clone",
+        "git gc",
     ],
 )
 def test_delegated_commands_are_in_no_list(command):
@@ -392,6 +422,7 @@ def test_npx_is_delegated_but_dangerous_forms_are_denied():
 # ---------------------------------------------------------------------------
 # Copilot 側で allow に隠される (shadowing) 組み合わせ
 # ---------------------------------------------------------------------------
+
 
 def _shadowed_entries() -> list[tuple[str, str]]:
     """allow の先頭トークンと衝突する ask / deny エントリを列挙する.
@@ -442,10 +473,9 @@ def test_shadowed_entries_are_enforced_by_hook(entry, decision):
 # コミットの手順と承認 (スキル・常時読込の指示)
 # ---------------------------------------------------------------------------
 
+
 def test_compound_git_add_and_commit_requires_approval():
-    decision, reason = run_hook(
-        "git add -- src/app.py && git commit -m 'fix: update app'"
-    )
+    decision, reason = run_hook("git add -- src/app.py && git commit -m 'fix: update app'")
     assert decision == "ask", f"-> {decision} ({reason})"
 
 
@@ -456,16 +486,12 @@ def test_commit_skill_uses_direct_commands_and_separate_calls():
     assert "git commit -m '<件名>' -m '<本文>'" in skill
     assert "get-git-context.sh" not in skill
     assert "git commit -a" in skill
-    assert not (
-        COMMIT_SKILL_PATHS[0].parent / "scripts" / "executable_get-git-context.sh"
-    ).exists()
+    assert not (COMMIT_SKILL_PATHS[0].parent / "scripts" / "executable_get-git-context.sh").exists()
     # ★ファイル個別指定だと中身が消えた後に空の scripts/ が残るため、
     #   ディレクトリごと消している (.chezmoiremove 冒頭の規則)。
     remove_lines = [
         line.strip()
-        for line in (ROOT / "home" / ".chezmoiremove")
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in (ROOT / "home" / ".chezmoiremove").read_text(encoding="utf-8").splitlines()
     ]
     assert ".claude/skills/commit/scripts" in remove_lines
 
@@ -494,13 +520,6 @@ def test_commit_skill_is_cli_agnostic():
     docs = (ROOT / "docs" / "spec" / "agent-command-policy.md").read_text(encoding="utf-8")
     assert "github/copilot-cli/issues/3590" in docs
     assert "auto_approved" in docs
-
-
-def test_codex_commit_skill_uses_separate_policy_checked_commands():
-    skill = COMMIT_SKILL_PATHS[1].read_text(encoding="utf-8")
-    assert "git add -- <対象ファイル...>" in skill
-    assert "git add -- <対象ファイル...> &&" not in skill
-    assert "shell compound の内側を解析しない" in skill
     assert "get-git-context.sh" not in skill
 
 
@@ -526,15 +545,14 @@ def test_copilot_instructions_require_commit_approval():
 # 個人用カスタム指示
 # ---------------------------------------------------------------------------
 
+
 def test_checkpoint_instructions_reach_opencode_only():
     """checkpoint スキルは OpenCode にしか配っていない。
 
     共通本文に置くと、Claude / Codex / Copilot に存在しないスキルの実行を
     毎回要求することになる。
     """
-    assert "checkpoint" not in (CHEZMOI_TEMPLATES / SHARED_INSTRUCTIONS).read_text(
-        encoding="utf-8"
-    )
+    assert "checkpoint" not in (CHEZMOI_TEMPLATES / SHARED_INSTRUCTIONS).read_text(encoding="utf-8")
     assert "`checkpoint` スキル" in render_instructions("opencode")
     for cli in ("claude", "codex", "copilot"):
         assert "checkpoint" not in render_instructions(cli), cli
@@ -577,6 +595,7 @@ def test_personal_instructions_require_japanese_tool_arguments():
 # ---------------------------------------------------------------------------
 # fail-closed
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     ("label", "files"),
