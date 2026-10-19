@@ -318,22 +318,33 @@ export default async function (pi: ExtensionAPI) {
 			if (!auth.ok) throw new Error(`認証を解決できない: ${auth.error}`);
 			// 認証の解決結果の baseUrl をモデルへ反映する (Copilot はトークンごとに違う。pi 自身も同じ)
 			const requestModel = auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model;
-			const compaction = await compact(
-				event.preparation,
-				requestModel,
-				auth.apiKey,
-				auth.headers,
-				COMPACT_INSTRUCTIONS,
-				event.signal,
-				undefined,
-				// 拡張が登録した提供元も通るよう、pi の呼び出し経路を使う (既定はグローバルな提供元の表だけを引く)
-				(m: any, c: any, o: any) => ctx.modelRegistry.streamSimple(m, c, o),
-				auth.env,
-			);
-			return { compaction };
+			const run = (preparation: any) =>
+				compact(
+					preparation,
+					requestModel,
+					auth.apiKey,
+					auth.headers,
+					COMPACT_INSTRUCTIONS,
+					event.signal,
+					undefined,
+					// 拡張が登録した提供元も通るよう、pi の呼び出し経路を使う (既定はグローバルな提供元の表だけを引く)
+					(m: any, c: any, o: any) => ctx.modelRegistry.streamSimple(m, c, o),
+					auth.env,
+				);
+			try {
+				return { compaction: await run(event.preparation) };
+			} catch (e) {
+				// 要約が出力の上限で切れたときだけ、上限 (reserveTokens の 0.8 倍) を倍にして 1 回やり直す。
+				// 切れた要約は pi が保存しない (getSummarizationFailure)。他の失敗は繰り返さない
+				if (!/token cap/.test((e as Error).message)) throw e;
+				const s = event.preparation.settings;
+				return { compaction: await run({ ...event.preparation, settings: { ...s, reserveTokens: s.reserveTokens * 2 } }) };
+			}
 		} catch (e) {
-			// 既定の圧縮に任せる。理由は残す (指示が効いていないことに気付けるように)
-			console.error(`[harness] 圧縮の指示を付けられなかったので既定の圧縮にする: ${(e as Error).message}`);
+			// 既定の圧縮に任せる。理由は全文を残す (指示が効いていないことに気付けるように。端末の幅で切れないよう通知にも出す)
+			const reason = `圧縮の指示を付けられなかったので既定の圧縮にする: ${(e as Error).message}`;
+			console.error(`[harness] ${reason}`);
+			if (ctx.hasUI) ctx.ui.notify(reason, "warning");
 			return undefined;
 		}
 	});

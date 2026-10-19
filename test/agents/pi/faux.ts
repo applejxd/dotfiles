@@ -44,6 +44,11 @@ export default async function (pi: ExtensionAPI) {
 		// 圧縮の要約の依頼 (pi の要約の system prompt)。フルガードの指示が入っているかも返す
 		if (getCurrentSystemPrompt(messages).includes("context summarization assistant")) {
 			const instr = JSON.stringify(messages).includes("【圧縮の指示】") ? "yes" : "no";
+			// 最初の依頼だけ出力の上限で切れた応答にする (切れた要約は保存されない)
+			if (process.env.FAUX_SUMMARY_LENGTH_ONCE === "1" && !(globalThis as any).__fauxLengthDone) {
+				(globalThis as any).__fauxLengthDone = true;
+				return fauxAssistantMessage(fauxText("cut"), { stopReason: "length" });
+			}
 			return fauxAssistantMessage(fauxText(`SUMMARY INSTR=${instr}`));
 		}
 		// 利用者の発言をそのまま返す (プロンプトテンプレートの展開を見る)

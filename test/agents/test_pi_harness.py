@@ -851,6 +851,31 @@ def test_compaction_carries_the_handover_instructions_and_file_lists(env):
     assert "f.txt" in json.dumps(details), "別名のツールで読んだファイルが一覧に無い"
 
 
+def test_compaction_retries_once_when_the_summary_hits_the_output_cap(env):
+    settings = env["proj"] / ".pi"
+    settings.mkdir()
+    small = '{"compaction": {"keepRecentTokens": 1}}'
+    (settings / "settings.json").write_text(small, encoding="utf-8")
+    (env["proj"] / "f.txt").write_text("x\n", encoding="utf-8")
+    sessions = env["tmp"] / "sessions"
+    calls = [{"name": "guarded_read", "args": {"path": "f.txt"}}]
+    env["env"]["FAUX_SUMMARY_LENGTH_ONCE"] = "1"
+    proc = run_pi(
+        env,
+        calls,
+        "go",
+        "again",
+        "/spike-compact",
+        session=True,
+        extra=("--approve", "--session-dir", str(sessions), "-e", str(FIXTURES / "compact.ts")),
+    )
+    assert proc.returncode == 0, proc.stderr
+    compactions = [e for e in _session_entries(sessions) if e.get("type") == "compaction"]
+    assert compactions, proc.stdout + proc.stderr
+    # やり直しが効けば、指示つきの要約が保存される (既定の圧縮に落ちれば INSTR=no になる)
+    assert "INSTR=yes" in compactions[-1]["summary"], proc.stderr
+
+
 def _rpc(env, calls, answers, timeout=120):
     """pi を RPC モードで動かし、確認の要求 (extension_ui_request) に answers の順に応える。"""
     args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
