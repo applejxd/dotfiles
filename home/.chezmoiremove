@@ -67,3 +67,6 @@
 # 2026-10: 簡易ガード (素の pi 向けの deny だけの拡張) を廃止 (CHG-0023 段 3f)。
 # 素の pi には commit-confirm だけが付く。
 .config/pi/guard
+
+# 2026-10: hook-creator skill を廃止した (Claude / Copilot の hook を作る場面が無くなった。pi 一本化。ADR-0017)。
+.claude/skills/hook-creator

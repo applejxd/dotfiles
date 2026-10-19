@@ -64,8 +64,7 @@ def test_every_tracked_skill_is_collected():
     missed = [
         path
         for path in tracked_skill_files()
-        if path not in SKILL_PATHS
-        and not any(d in path.parents for d in skill_dirs)
+        if path not in SKILL_PATHS and not any(d in path.parents for d in skill_dirs)
     ]
     assert not missed, f"SKILL_ROOTS に無い場所の SKILL.md: {missed}"
 
@@ -122,9 +121,7 @@ def test_colon_in_quoted_description_is_accepted(tmp_path):
 
 def test_hash_in_unquoted_description_is_rejected(tmp_path):
     """パースは通るが ` #` 以降が無言で捨てられるため、引用符を要求する。"""
-    path = write_skill(
-        tmp_path, "sample", "name: sample\ndescription: use # for comments"
-    )
+    path = write_skill(tmp_path, "sample", "name: sample\ndescription: use # for comments")
     errors = vs.validate(path)
     assert any("引用符で囲むこと" in e for e in errors)
 
@@ -243,20 +240,3 @@ def test_uv_migration_description_names_uv_lock_and_mise():
     assert "のみ" not in data["description"]
     assert "uv.lock" in data["description"]
     assert "mise" in data["description"]
-
-
-def test_hook_creator_branches_before_direct_registration():
-    """common.toml が正本の環境で、生成先を直接編集させない。"""
-    _, body = load_skill("hook-creator")
-    branch = body.index("## 登録先の判定")
-    assert branch < body.index("## 判断フロー")
-    assert branch < body.index("## テンプレート選択と配置")
-
-
-def test_hook_creator_names_existing_sources():
-    """source state のパスが古いと、managed の手順で存在しないファイルを探す。"""
-    _, body = load_skill("hook-creator")
-    relpaths = re.findall(r"`(home/[^`<>{}*]+)`", body)
-    assert relpaths
-    for relpath in relpaths:
-        assert (ROOT / relpath).exists(), relpath

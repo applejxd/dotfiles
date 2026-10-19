@@ -228,7 +228,7 @@ WEB = "~/.claude/skills/web-search/scripts/websearch.py"
         (f"uv run --no-project python {SDD}/lint_docs.py --docs docs", "ask"),
         ('uv run --no-project python "$S/lint_docs.py" --docs docs', "ask"),
         (f'python3 "{HOME}/.claude/skills/sdd-docs/scripts/lint_docs.py"', "ask"),
-        ("bash ~/.claude/skills/hook-creator/scripts/verify-hook.sh h.sh", "ask"),
+        ("bash ~/.claude/skills/other-skill/scripts/run.sh h.sh", "ask"),
     ],
 )
 def test_skill_scripts(command: str, expected: str):

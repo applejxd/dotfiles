@@ -1,6 +1,6 @@
 ---
 name: skill-creator
-description: "新しいスキルを作る、既存のスキルを直す、スキルの description を見直す。SKILL.md の書き方 (frontmatter・段階的な読み込み・本文の構成)、試験の依頼文を作って比較しながら直す手順、description の発動精度の確かめ方を扱う。「スキルを作って」「この手順をスキルにして」「スキルを改善して」「スキルが発動しない」で使う。このリポジトリでの置き場所と検証の約束も含む。hook は hook-creator、pi の拡張は pi-extension-dev を使う。"
+description: "新しいスキルを作る、既存のスキルを直す、スキルの description を見直す。SKILL.md の書き方 (frontmatter・段階的な読み込み・本文の構成)、試験の依頼文を作って比較しながら直す手順、description の発動精度の確かめ方を扱う。「スキルを作って」「この手順をスキルにして」「スキルを改善して」「スキルが発動しない」で使う。このリポジトリでの置き場所と検証の約束も含む。pi の拡張は pi-extension-dev を使う。"
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
