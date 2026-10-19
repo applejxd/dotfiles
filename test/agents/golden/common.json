@@ -963,16 +963,18 @@
     "tier": "routine"
    },
    "explore": {
-    "description": "読み取り専用の探索役。今あるファイルを探して読み、要点を返す。shell は使えない",
+    "description": "読み取り専用の探索役。ファイルを探して読み、要点を返す。wc と読み取り専用の git (status / diff / log / show / ls-files) だけ使える",
     "inherit_bypass": true,
-    "profile": "reader",
-    "system": "あなたは読み取り専用の探索役です。親から依頼された調査を、ファイルを探して読むことで行い、\n見つけたことを根拠のパスと行とともに簡潔に返します。ファイルは編集しません。\nGit の履歴やコマンドの実行が要る調査は、できないことを書いて親へ返します。\n"
+    "plain_description": "読み取り専用の探索役。今あるファイルを探して読み、要点を返す。shell は使えない",
+    "plain_system": "あなたは読み取り専用の探索役です。親から依頼された調査を、ファイルを探して読むことで行い、\n見つけたことを根拠のパスと行とともに簡潔に返します。ファイルは編集しません。\nGit の履歴やコマンドの実行が要る調査は、できないことを書いて親へ返します。\n数・行数・件数などの値は、読んで確かめたものだけを報告し、迂回して数えた値はその方法を添えます。\n",
+    "profile": "explorer",
+    "system": "あなたは読み取り専用の探索役です。親から依頼された調査を、ファイルを探して読むことで行い、\n見つけたことを根拠のパスと行とともに簡潔に返します。ファイルは編集しません。\n使えるコマンドは wc と、読み取り専用の git (status / diff / log / show / ls-files) だけです。それ以外の実行が要る調査は、\nできないことを書いて親へ返します。\n数・行数・件数・サイズなどの値は、道具 (wc や検索の結果) で得た値だけを報告します。\n道具で得られなかった値は推測せず「不明」と書き、迂回して数えた値はその方法を添えます。\n道具が失敗したときは、答えの冒頭にその旨を書きます。\n"
    },
    "review": {
     "description": "別系統のモデルで、設計案・差分・調査結果の欠陥を指摘する。読むだけ。差分は依頼文に含めて渡す",
     "inherit_bypass": true,
     "profile": "reader",
-    "system": "あなたはレビュー役です。依頼文の対象 (設計案・差分・調査結果) を読み、欠陥・見落とし・誤りを\n重大度 (BLOCKER / MAJOR / MINOR) と根拠付きで指摘します。修正はしません。確信が無いものは\n「未確認」と書きます。\n",
+    "system": "あなたはレビュー役です。依頼文の対象 (設計案・差分・調査結果) を読み、欠陥・見落とし・誤りを\n重大度 (BLOCKER / MAJOR / MINOR) と根拠付きで指摘します。修正はしません。確信が無いものは\n「未確認」と書きます。数・行数・件数などの値は、読んで確かめたものだけを書き、推測は「推測」と明記します。\n道具が失敗したときは、答えの冒頭にその旨を書きます。\n",
     "tier": "second_opinion"
    },
    "worker": {
@@ -1027,6 +1029,12 @@
     "message": "ヒアドキュメントでスクリプトを渡さないでください。write ツールでファイルに書いてから実行してください (確認画面が 1 行になり、中身は差分で見えます)。",
     "pattern": "(^|[^<])<<-?\\s*[\"']?\\w+[\"']?[^\\n]*\\n",
     "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
+   },
+   {
+    "id": "bg-run-instead-of-ampersand",
+    "message": "bash の & / nohup / setsid でバックグラウンド実行しないでください。bg_run ツールを使ってください (完了時に通知が届いてターンが再開し、bg_log / bg_kill で管理できます)。",
+    "pattern": "(^|[^&>\\s])\\s*&\\s*(\\n|$)|(^|&&|;|\\n)\\s*(nohup|setsid)\\s|(^|[\\s;])disown(\\s|$)",
+    "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
    }
   ],
   "keybinds": {
@@ -1057,6 +1065,35 @@
      "git status",
      "git diff",
      "git log",
+     "git branch --show-current",
+     "git rev-parse --show-toplevel"
+    ],
+    "shell_deny": [
+     "git add",
+     "git commit",
+     "git stash",
+     "git checkout",
+     "git switch",
+     "git restore",
+     "git reset"
+    ],
+    "tools": [
+     "bash",
+     "read",
+     "grep",
+     "find",
+     "ls"
+    ]
+   },
+   "explorer": {
+    "default": "deny",
+    "shell_allow": [
+     "wc",
+     "git status",
+     "git diff",
+     "git log",
+     "git show",
+     "git ls-files",
      "git branch --show-current",
      "git rev-parse --show-toplevel"
     ],

@@ -84,7 +84,9 @@ def test_invalid_requests_are_denied_as_errors(request_):
 def test_cli_always_prints_one_valid_response(stdin):
     env = {**os.environ, "AGENTS_CONFIG_DIR": str(CONFIG_DIR)}
     proc = subprocess.run(
-        [sys.executable, str(CLI)], input=stdin, capture_output=True,
+        [sys.executable, str(CLI)],
+        input=stdin,
+        capture_output=True,
         text=True,
         encoding="utf-8",
         env=env,
@@ -164,6 +166,10 @@ def test_bash_decisions(command, decision, source):
         ("sed -n 1,5p README.md", "read-sed-n"),
         ("cat > out.txt <<'EOF'\nx\nEOF", "write-cat-tee-heredoc"),
         ("python3 - <<'PY'\nprint(1)\nPY", "write-heredoc-script"),
+        ("sleep 3 &", "bg-run-instead-of-ampersand"),
+        ("(sleep 3; echo x) &", "bg-run-instead-of-ampersand"),
+        ("nohup sh -c 'sleep 3' > out.log 2>&1 &", "bg-run-instead-of-ampersand"),
+        ("setsid make build", "bg-run-instead-of-ampersand"),
     ],
 )
 def test_guides_deny_with_their_message(command, guide):
@@ -178,6 +184,10 @@ def test_guides_deny_with_their_message(command, guide):
         "tail -f log.txt",
         "git commit -m 'cat > f <<EOF の例'",
         "echo 'a << b'",
+        "ls && echo ok",
+        "make 2>&1 | wc -l",
+        "echo hi &> /dev/null",
+        "git commit -m 'run nohup x &'",
     ],
 )
 def test_guide_exclusions(command):

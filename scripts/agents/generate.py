@@ -214,9 +214,7 @@ def resolve_pi_shared(common: dict[str, Any]) -> dict[str, Any]:
         for key in dst[:-1]:
             parent = parent.setdefault(key, {})
         if dst[-1] in parent:
-            raise SystemExit(
-                f"[opencode.{'.'.join(dst)}] は書けない ([pi.{'.'.join(src)}] が正本)"
-            )
+            raise SystemExit(f"[opencode.{'.'.join(dst)}] は書けない ([pi.{'.'.join(src)}] が正本)")
         parent[dst[-1]] = copy.deepcopy(value)
     _resolve_pi_guides(pi, opencode)
     return out
@@ -1955,8 +1953,13 @@ def pi_post_edit_hooks(common: dict[str, Any]) -> list[dict[str, str]]:
         runner, script = str(hook.get("runner", "")), str(hook.get("script", ""))
         if runner not in ("bash", "python3") or not script or "/" in script:
             raise SystemExit(f"[[hooks]] {hook.get('id')} の runner / script が不正")
-        out.append({"id": str(hook["id"]), "runner": runner,
-                    "script": expand_user(f"~/.claude/hooks/{script}")})
+        out.append(
+            {
+                "id": str(hook["id"]),
+                "runner": runner,
+                "script": expand_user(f"~/.claude/hooks/{script}"),
+            }
+        )
     return out
 
 
@@ -2019,7 +2022,17 @@ def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     return out
 
 
-PI_AGENT_KEYS = frozenset({"profile", "description", "system", "tier", "inherit_bypass"})
+PI_AGENT_KEYS = frozenset(
+    {
+        "profile",
+        "description",
+        "system",
+        "tier",
+        "inherit_bypass",
+        "plain_description",
+        "plain_system",
+    }
+)
 
 
 def pi_model_ref(common: dict[str, Any], tier: str) -> str:
@@ -2085,15 +2098,29 @@ def build_pi_subagents(_existing: dict[str, Any], common: dict[str, Any]) -> dic
     """フルガード無しの素の pi (Windows) が読む子エージェントの宣言。
 
     判定器が無いので、shell・編集のツールを持たない読み取り役
-    (read / grep / find / ls だけ) に限る。
+    (read / grep / find / ls だけ) に限る。shell を持つ役割でも、読み取り専用の版
+    (``plain_description`` / ``plain_system``) を宣言していれば、それを出す (explore)。
     see docs/spec/pi-guard.md#windows-の子エージェント
     """
-    profiles = (common.get("pi") or {}).get("profiles") or {}
-    agents = {
-        name: {k: a[k] for k in ("description", "system", "model")}
-        for name, a in pi_agents(common).items()
-        if set(profiles[a["profile"]].get("tools") or []) <= PI_SUBAGENT_TOOLS
-    }
+    pi = common.get("pi") or {}
+    profiles = pi.get("profiles") or {}
+    raw = pi.get("agents") or {}
+    agents: dict[str, dict[str, Any]] = {}
+    for name, a in pi_agents(common).items():
+        if set(profiles[a["profile"]].get("tools") or []) <= PI_SUBAGENT_TOOLS:
+            agents[name] = {k: a[k] for k in ("description", "system", "model")}
+            continue
+        plain = {k: raw[name].get(k) for k in ("plain_description", "plain_system")}
+        if any(plain.values()):
+            if not all(isinstance(v, str) and v.strip() for v in plain.values()):
+                raise SystemExit(
+                    f"[pi.agents.{name}] の plain_description と plain_system は両方 (空でない文字列) が要る"
+                )
+            agents[name] = {
+                "description": plain["plain_description"].strip(),
+                "system": plain["plain_system"].strip(),
+                "model": a["model"],
+            }
     return {"agents": agents}
 
 

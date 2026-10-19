@@ -96,7 +96,7 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 ## 誘導
 
 `[[pi.guide]]` に当たる bash のコマンドは、より適したツールへの案内を理由にして deny する（応答の `guide` に id）。
-今は 4 件で、すべて読み書きを pi のツールへ寄せるもの。
+今は 5 件で、読み書きを pi のツールへ寄せるものと、バックグラウンド実行を `bg_run` へ寄せるもの。
 
 | id | 止める形 | 案内 |
 | --- | --- | --- |
@@ -104,6 +104,9 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 | `read-sed-n` | `sed -n` での読み取り | read ツール |
 | `write-cat-tee-heredoc` | `cat >` / `tee` とヒアドキュメントでのファイル作成 | write ツール |
 | `write-heredoc-script` | ヒアドキュメントでスクリプトを渡す形 | write ツールで書いてから実行 |
+| `bg-run-instead-of-ampersand` | 行末の `&`、行頭の `nohup` / `setsid`、`disown` | `bg_run` ツール（終了通知でターンが再開する。bash の `&` は通知が届かない） |
+
+`bg-run-instead-of-ampersand` は pi 専用。行の途中の `a & b` は引用内と区別できないので対象外（`&&` / `2>&1` / `&>` は当たらない）。
 
 - OpenCode の guide plugin も同じ `[[pi.guide]]` を使う。`[[opencode.shell.guide]]` の `pi = "<id>"` が、
   並びのどこに差し込むかを決める（[pi と共有する節](agent-config-generation.md#pi-と共有する節)）

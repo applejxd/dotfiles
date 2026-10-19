@@ -1045,6 +1045,17 @@ pattern = '''(^|[^<])<<-?\s*["']?\w+["']?[^\n]*\n'''
 unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
 message = "ヒアドキュメントでスクリプトを渡さないでください。write ツールでファイルに書いてから実行してください (確認画面が 1 行になり、中身は差分で見えます)。"
 
+# bash でのバックグラウンド起動を bg_run へ寄せる。bash の `&` / nohup は完了通知が届かず、
+# ターンも再開しない。bg_run (bash と同じ判定) だけが終了時にターンを起こす。
+# ★対象は行末の `&` と行頭の nohup / setsid、disown。`&&` / `2>&1` / `&>` は当たらない。
+# ★行の途中の `a & b` は引用内と区別が付かないので対象外 (割り切り)。
+# see docs/spec/pi-decide.md#誘導
+[[pi.guide]]
+id = "bg-run-instead-of-ampersand"
+pattern = '(^|[^&>\s])\s*&\s*(\n|$)|(^|&&|;|\n)\s*(nohup|setsid)\s|(^|[\s;])disown(\s|$)'
+unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+message = "bash の & / nohup / setsid でバックグラウンド実行しないでください。bg_run ツールを使ってください (完了時に通知が届いてターンが再開し、bg_log / bg_kill で管理できます)。"
+
 # ~/.pi/agent/settings.json へ出す設定。ここに書いたキーは生成器の持ち物で、消すと settings.json からも消える。
 # 書けるキー: defaultThinkingLevel / skills / enabledModels / extensions。既定のモデルは [opencode.model] の default 階層。
 # see docs/spec/pi-guard.md#pi-の設定
@@ -1177,6 +1188,33 @@ default = "ask"
 tools = ["read", "grep", "find", "ls"]
 default = "deny"
 
+# 探索役。reader に加え、数や履歴を道具で確かめられるよう、読み取り専用のコマンドだけを確認なしで通す。
+# ★上以外の shell は deny。git status / git diff は .git/config 経由でコマンドを起動しうるので、全体の [pi.shell] allow には載せない
+#   (committer と同じ扱い)。書き込み系の git は全て拒否する
+# see docs/spec/pi-guard.md#子エージェント
+[pi.profiles.explorer]
+tools = ["bash", "read", "grep", "find", "ls"]
+default = "deny"
+shell_allow = [
+  "wc",
+  "git status",
+  "git diff",
+  "git log",
+  "git show",
+  "git ls-files",
+  "git branch --show-current",
+  "git rev-parse --show-toplevel",
+]
+shell_deny = [
+  "git add",
+  "git commit",
+  "git stash",
+  "git checkout",
+  "git switch",
+  "git restore",
+  "git reset",
+]
+
 # コミットの計画役。読むだけで、git の状態の把握だけを確認なしで通す。
 # ★git status / git diff は .git/config 経由でコマンドを起動しうる。全体の [pi.shell] allow には載せない
 # see docs/spec/agent-config-generation.md#コミットの確認
@@ -1221,13 +1259,25 @@ shell_deny = [
 # ★ask に git commit などが残る役割 (committer) には付けない
 # see docs/spec/pi-guard.md#子エージェント
 [pi.agents.explore]
-profile = "reader"
+profile = "explorer"
 inherit_bypass = true
-description = "読み取り専用の探索役。今あるファイルを探して読み、要点を返す。shell は使えない"
+description = "読み取り専用の探索役。ファイルを探して読み、要点を返す。wc と読み取り専用の git (status / diff / log / show / ls-files) だけ使える"
 system = """
 あなたは読み取り専用の探索役です。親から依頼された調査を、ファイルを探して読むことで行い、
 見つけたことを根拠のパスと行とともに簡潔に返します。ファイルは編集しません。
+使えるコマンドは wc と、読み取り専用の git (status / diff / log / show / ls-files) だけです。それ以外の実行が要る調査は、
+できないことを書いて親へ返します。
+数・行数・件数・サイズなどの値は、道具 (wc や検索の結果) で得た値だけを報告します。
+道具で得られなかった値は推測せず「不明」と書き、迂回して数えた値はその方法を添えます。
+道具が失敗したときは、答えの冒頭にその旨を書きます。
+"""
+# フルガード無しの素の pi (Windows) 用の読み取り専用版。shell を持てないので、数は読んで確かめる。
+plain_description = "読み取り専用の探索役。今あるファイルを探して読み、要点を返す。shell は使えない"
+plain_system = """
+あなたは読み取り専用の探索役です。親から依頼された調査を、ファイルを探して読むことで行い、
+見つけたことを根拠のパスと行とともに簡潔に返します。ファイルは編集しません。
 Git の履歴やコマンドの実行が要る調査は、できないことを書いて親へ返します。
+数・行数・件数などの値は、読んで確かめたものだけを報告し、迂回して数えた値はその方法を添えます。
 """
 
 [pi.agents.review]
@@ -1238,7 +1288,8 @@ description = "別系統のモデルで、設計案・差分・調査結果の�
 system = """
 あなたはレビュー役です。依頼文の対象 (設計案・差分・調査結果) を読み、欠陥・見落とし・誤りを
 重大度 (BLOCKER / MAJOR / MINOR) と根拠付きで指摘します。修正はしません。確信が無いものは
-「未確認」と書きます。
+「未確認」と書きます。数・行数・件数などの値は、読んで確かめたものだけを書き、推測は「推測」と明記します。
+道具が失敗したときは、答えの冒頭にその旨を書きます。
 """
 
 [pi.agents.commit]
