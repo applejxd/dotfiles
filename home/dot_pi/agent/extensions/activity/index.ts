@@ -23,7 +23,14 @@ const STATUS_KEY = "activity";
 const TAIL_DEFAULT = 40;
 const TAIL_MAX = 200;
 const NOTIFY_TAIL = 20;
+const NOTIFY_TAIL_MANY = 5; // まとめて届けるときの、ジョブ 1 件あたりの末尾の行数
+const NOTIFY_MAX_JOBS = 30;
+const COALESCE_MS = 2500; // この間に終わったジョブは 1 通にまとめる (B1 の F3)
 const killed = new Set<string>();
+// 終了を LLM に知らせる前のジョブと、終了後に LLM が bg_log で読んだジョブ (読み済みは通知しない。B1 の F2)
+type Done = { id: string; exit: number | string; command: string; log: string };
+const pending: Done[] = [];
+const seen = new Set<string>();
 
 const secs = (ms: number) => `${Math.max(0, Math.round(ms / 1000))}s`;
 
@@ -84,6 +91,55 @@ export default function (pi: ExtensionAPI) {
 	let ui: { setStatus: (key: string, text: string | undefined) => void; notify: (m: string, t?: any) => void } | undefined;
 
 	let last: string | undefined | null = null; // 表示が変わったときだけ出す (何も無い間も毎秒出さない。B1 の F1)
+	let busy = false; // 親が作業中か (作業中は通知を溜め、終わってから読み済みを除いて届ける)
+	let flushTimer: ReturnType<typeof setTimeout> | undefined;
+
+	const compose = (batch: Done[]): string => {
+		if (batch.length === 1) {
+			const b = batch[0];
+			return `バックグラウンドジョブ ${b.id} が終わりました (exit ${b.exit})\nコマンド: ${b.command}\n--- ログの末尾 ${NOTIFY_TAIL} 行 ---\n${tail(b.log, NOTIFY_TAIL)}`;
+		}
+		const shown = batch.slice(0, NOTIFY_MAX_JOBS).map((b) => {
+			const out = tail(b.log, NOTIFY_TAIL_MANY).split("\n").map((l) => `    ${l}`).join("\n");
+			return `- ${b.id} (exit ${b.exit}): ${b.command.slice(0, 80)}\n${out}`;
+		});
+		const more = batch.length > NOTIFY_MAX_JOBS ? `\n…ほか ${batch.length - NOTIFY_MAX_JOBS} 件` : "";
+		return `バックグラウンドジョブ ${batch.length} 件が終わりました (各ログの末尾 ${NOTIFY_TAIL_MANY} 行。全部は bg_log)\n${shown.join("\n")}${more}`;
+	};
+
+	// LLM に知らせる。これが無いと、ジョブ待ちで止まったターンが再開しない。
+	// followUp: 作業中はそのターンが終わってから、アイドルならすぐにターンを起こす。
+	// 終了後に bg_log で読んだジョブは、LLM がもう知っているので除く (全部読み済みならターンを起こさない)。
+	const flush = () => {
+		flushTimer = undefined;
+		if (busy) return; // 作業中は agent_settled まで溜める (そこで窓はもう閉じている)
+		const batch = pending.splice(0).filter((p) => !seen.delete(p.id));
+		if (batch.length === 0) return;
+		try {
+			pi.sendMessage(
+				{
+					customType: "bg-job-finished",
+					content: compose(batch),
+					display: true,
+					details: { id: batch[0].id, exit: batch[0].exit, ids: batch.map((b) => b.id) },
+				},
+				{ triggerTurn: true, deliverAs: "followUp" },
+			);
+		} catch {}
+	};
+	const schedule = () => {
+		flushTimer ??= setTimeout(flush, COALESCE_MS);
+		flushTimer.unref?.();
+	};
+	pi.on("agent_start", async () => {
+		busy = true;
+	});
+	// 作業中の終わりは agent_end ではなく agent_settled (自動再試行・圧縮・続行が agent_end の後に続くことがある)。
+	// まとめる窓がまだ開いていれば (タイマーが残っていれば) タイマーに任せ、窓と settled の両方を満たしてから送る。
+	pi.on("agent_settled", async () => {
+		busy = false;
+		if (pending.length > 0 && !flushTimer) flush();
+	});
 
 	const refresh = () => {
 		try {
@@ -97,6 +153,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event: any, ctx: any) => {
 		ui = undefined;
 		last = null;
+		busy = false;
 		if (!ctx.hasUI) return;
 		ui = ctx.ui;
 		timer ??= setInterval(refresh, 1000);
@@ -106,6 +163,10 @@ export default function (pi: ExtensionAPI) {
 
 	// 終わるときは、動いているジョブも止める (切り離したままにしない)
 	pi.on("session_shutdown", async () => {
+		if (flushTimer) clearTimeout(flushTimer);
+		flushTimer = undefined;
+		pending.length = 0;
+		seen.clear();
 		if (timer) clearInterval(timer);
 		timer = undefined;
 		for (const job of jobs.values()) killTree(job.pid);
@@ -160,21 +221,10 @@ export default function (pi: ExtensionAPI) {
 				try {
 					ui?.notify(`job ${id} 終了 (exit ${exit}): ${params.command.slice(0, 60)}`, code === 0 ? "info" : "warning");
 				} catch {}
-				// LLM にも知らせる。これが無いと、ジョブ待ちで止まったターンが再開しない。
-				// followUp: 作業中はそのターンが終わってから、アイドルならすぐにターンを起こす。
-				// bg_kill で止めたときは LLM 自身が知っているので送らない。
+				// bg_kill で止めたときは LLM 自身が知っているので通知しない。それ以外は、短い間に終わった分をまとめて届ける (flush)
 				if (killed.delete(id)) return;
-				try {
-					pi.sendMessage(
-						{
-							customType: "bg-job-finished",
-							content: `バックグラウンドジョブ ${id} が終わりました (exit ${exit})\nコマンド: ${params.command}\n--- ログの末尾 ${NOTIFY_TAIL} 行 ---\n${tail(log, NOTIFY_TAIL)}`,
-							display: true,
-							details: { id, exit },
-						},
-						{ triggerTurn: true, deliverAs: "followUp" },
-					);
-				} catch {}
+				pending.push({ id, exit, command: params.command, log });
+				schedule();
 			});
 			return text(`started ${id} (pid ${child.pid})\nread its output with bg_log (the log file itself is not readable by other tools)`);
 		},
@@ -201,6 +251,7 @@ export default function (pi: ExtensionAPI) {
 			const job = jobs.get(params.id);
 			const done = finished.get(params.id);
 			if (!job && !done) return text(`unknown job: ${params.id}`, true);
+			if (!job && pending.some((p) => p.id === params.id)) seen.add(params.id); // 通知待ちのジョブを終了後に読んだ (通知はもう要らない)
 			const log = job?.log ?? join(tmpdir(), "pi-jobs", `${process.pid}-${params.id}.log`);
 			const state = job ? `running (${Math.floor((Date.now() - job.startedAt) / 1000)}s)` : `finished (exit ${done?.exit})`;
 			const snapshot = tailWithCount(log, lines);

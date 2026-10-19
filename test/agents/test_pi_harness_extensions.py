@@ -9,11 +9,14 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import subprocess
 import sys
+import threading
+import time
 
 import pytest
 from agents_common import ROOT
-from test_pi_harness import FIXTURES, SECRET, bash_call, env, run_pi  # noqa: F401
+from test_pi_harness import FIXTURES, PI, SECRET, bash_call, env, run_pi  # noqa: F401
 
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
@@ -191,6 +194,115 @@ def test_bg_run_does_not_show_the_log_path_and_bg_log_reports_the_line_count(env
     assert "pi-jobs" not in proc.stdout, proc.stdout
     assert "bg_log" in proc.stdout.split("started j1", 1)[1], proc.stdout
     assert re.search(r"tail \d+ of \d+ lines", proc.stdout), proc.stdout
+
+
+def _agent_runs_after_jobs(env, rounds, quiet=6.0, limit=60.0):
+    """RPC で 1 回依頼し、ジョブの終了通知でターンが何回始まったか (agent_start の数) と、届いた通知の本文を返す。
+
+    確認 (confirm) はすべて承認する。最後の出来事から quiet 秒、何も起きなければ終わり。
+    """
+    args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
+    args += [
+        "-e",
+        str(env["harness"]),
+        "-e",
+        str(ACTIVITY),
+        "-e",
+        str(FIXTURES / "faux.ts"),
+        "--mode",
+        "rpc",
+    ]
+    proc = subprocess.Popen(
+        args,
+        cwd=env["proj"],
+        env={**env["env"], "FAUX_TOOL_ROUNDS": json.dumps(rounds)},
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        encoding="utf-8",
+    )
+    starts, notices, state = [], [], {"last": time.time(), "running": False}
+
+    def read():
+        for line in proc.stdout:
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            kind = event.get("type")
+            if kind == "agent_start":
+                starts.append(time.time())
+                state["running"] = True
+            elif kind == "agent_end":
+                state["running"] = False
+            if kind in ("agent_start", "agent_end", "tool_execution_end"):
+                state["last"] = time.time()
+            if kind == "message_end" and (event.get("message") or {}).get("role") == "custom":
+                notices.append(json.dumps(event["message"], ensure_ascii=False))
+            if kind == "extension_ui_request" and event.get("method") == "confirm":
+                reply = {"type": "extension_ui_response", "id": event["id"], "confirmed": True}
+                proc.stdin.write(json.dumps(reply) + "\n")
+                proc.stdin.flush()
+
+    threading.Thread(target=read, daemon=True).start()
+    try:
+        proc.stdin.write(json.dumps({"id": "m0", "type": "prompt", "message": "go"}) + "\n")
+        proc.stdin.flush()
+        deadline = time.time() + limit
+        settled = False
+        while time.time() < deadline:
+            time.sleep(0.2)
+            if not state["running"] and starts and time.time() - state["last"] > quiet:
+                settled = True
+                break
+    finally:
+        proc.kill()
+    assert settled, (
+        f"{limit} 秒で落ち着かなかった (ターンが続いている): {len(starts)} 回, {notices}"
+    )
+    return starts, notices
+
+
+def test_jobs_that_finish_together_wake_the_agent_once(env):
+    """同じごろに終わったジョブは 1 通にまとめ、ターンは 1 回だけ起きる (B1 の F3)。"""
+    rounds = [[*_bg("wc -c /dev/null"), *_bg("wc -l /dev/null"), *_bg("wc -w /dev/null")]]
+    starts, notices = _agent_runs_after_jobs(env, rounds)
+    assert len(starts) == 2, (starts, notices)  # 最初の依頼 + まとめた通知の 1 回
+    assert len(notices) == 1 and "3 件が終わりました" in notices[0], notices
+
+
+def test_a_job_read_with_bg_log_after_it_finished_does_not_wake_the_agent(env):
+    """終了後に bg_log で読んだジョブの通知は、ターンを起こさない (B1 の F2)。"""
+    rounds = [
+        _bg("sleep 0.2"),
+        [{"name": "guarded_bash", "args": {"command": "sleep 1.5"}}],  # ジョブが終わるまでの間
+        [{"name": "bg_log", "args": {"id": "j1"}}],
+    ]
+    starts, notices = _agent_runs_after_jobs(env, rounds)
+    assert len(starts) == 1 and notices == [], (starts, notices)
+
+
+def test_a_job_not_read_still_wakes_the_agent_after_the_turn(env):
+    """読み済みでないジョブは、作業中に終わってもターンの後に届く (対照)。"""
+    rounds = [_bg("sleep 0.2"), [{"name": "guarded_bash", "args": {"command": "sleep 1.5"}}]]
+    starts, notices = _agent_runs_after_jobs(env, rounds)
+    assert len(starts) == 2 and len(notices) == 1, (starts, notices)
+
+
+def test_the_notice_waits_for_the_coalescing_window_even_after_the_turn_settled(env):
+    """ターンが settled しても、まとめる窓 (2.5 秒) が開いている間は送らない。送るのは窓と settled の両方を満たしてから。"""
+    rounds = [_bg("sleep 0.2"), [{"name": "guarded_bash", "args": {"command": "sleep 0.4"}}]]
+    starts, notices = _agent_runs_after_jobs(env, rounds)
+    assert len(starts) == 2 and len(notices) == 1, (starts, notices)
+    # ジョブは起動の 0.2 秒後に終わる。窓はその 2.5 秒後に閉じる (ターンは 1 秒未満で settled)
+    assert starts[1] - starts[0] >= 2.2, starts
+
+
+def test_a_killed_job_does_not_wake_the_agent(env):
+    rounds = [_bg("sleep 30"), [{"name": "bg_kill", "args": {"id": "j1"}}]]
+    starts, notices = _agent_runs_after_jobs(env, rounds)
+    assert len(starts) == 1 and notices == [], (starts, notices)
 
 
 def test_bg_run_asks_when_bash_would_ask(env):
