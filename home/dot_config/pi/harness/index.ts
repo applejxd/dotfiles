@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
-import { Jobs, NOT_APPROVED, parseTaskInput, type Job } from "./children.ts";
+import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -148,6 +148,33 @@ export default async function (pi: ExtensionAPI) {
 		showBypass(ctx);
 		if (BOUNDARY) ctx.ui.setStatus("sandbox", "🔒 サンドボックス");
 		else if (NO_SANDBOX) ctx.ui.setStatus("sandbox", "⚠ サンドボックス無し");
+	});
+	// フルガードの下では、pi がスキルの一覧をシステムプロンプトへ入れない (宣言されたツールに read / bash が無いため)。
+	// 同じ形の一覧を、読むツールを guarded_* の名前にして自分で足す。bypass・サンドボックスの有無とは無関係。
+	// see docs/spec/pi-upstream.md (表 B の 16)
+	pi.on("before_agent_start", async (event: any) => {
+		const options = event.systemPromptOptions;
+		if (!options || String(event.systemPrompt ?? "").includes("<available_skills>")) return;
+		const skills = (options.skills ?? []).filter((s: any) => !s.disableModelInvocation);
+		if (skills.length === 0) return;
+		const reader = ["guarded_read", "guarded_bash"].find((t) => (options.selectedTools ?? []).includes(t));
+		const esc = (s: string) =>
+			String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+		const lines = [
+			"The following skills provide specialized instructions for specific tasks.",
+			reader
+				? `Use the ${reader} tool to load a skill's file when the task matches its description.`
+				: "Load a skill's file when the task matches its description.",
+			"When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.",
+			"",
+			"<available_skills>",
+		];
+		for (const s of skills) {
+			lines.push("  <skill>", `    <name>${esc(s.name)}</name>`, `    <description>${esc(s.description)}</description>`);
+			lines.push(`    <location>${esc(s.filePath)}</location>`, "  </skill>");
+		}
+		lines.push("</available_skills>");
+		options.sections = { ...(options.sections ?? {}), skills: lines.join("\n") };
 	});
 	// 利用者専用の bypass 切り替え。モデルが呼べるツールは作らない。セッションには残さない
 	// see docs/spec/pi-guard.md#bypass-の切り替え
@@ -327,6 +354,13 @@ const jobs = new Jobs(MAX_JOBS);
 process.once("exit", () => jobs.closeAll(true));
 
 const STATUS_LABEL: Record<string, string> = { done: "completed" };
+const MAX_LIST_ERRORS = 5;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+const fmtSecs = (ms: number) => `${Math.max(0, Math.round(ms / 1000))}s`;
+const fmtStats = (s: RoundStats) =>
+	`${fmtSecs(s.durationMs)}, ${s.calls} calls, ${fmtTokens(s.tokens)} tokens${s.cost > 0 ? `, $${s.cost.toFixed(3)}` : ""}`;
 
 function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 	const names = Object.keys(agents);
@@ -336,6 +370,106 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		details,
 		isError,
 	});
+	// 子のモデルを呼び出しごとに選べるのは、宣言済みの役割のモデルと、親と同じモデルだけ (階層の範囲内)
+	const allowedModels = (parentModel: string) => new Set([parentModel, ...names.map((n) => agents[n].model).filter(Boolean)]);
+
+	// 子を 1 つ起動する。枠は同期で確保する (並行する起動でも上限を超えない)
+	type Spawned = { job: Job; model: string } | { error: string; full?: boolean };
+	const spawnChild = (agentName: string, ctx: any, owner: { cwd: string; role: string }, modelOverride?: string): Spawned => {
+		const agent = agents[agentName];
+		if (!agent) throw new Error(`unknown agent: ${agentName}`);
+		const parentModel = `${ctx.model.provider}/${ctx.model.id}`;
+		if (modelOverride && !allowedModels(parentModel).has(modelOverride)) {
+			throw new Error(`model not allowed: ${modelOverride}. Allowed: ${[...allowedModels(parentModel)].join(", ")}`);
+		}
+		const model = modelOverride ?? agent.model ?? parentModel;
+		// 起動条件は pis と同じ (作業先の .pi/ を読まない・組み込みと拡張の自動発見を止める・MCP だけ戻す)
+		const args = ["--mode", "rpc", "--no-session", "--no-approve", "-nbt", "-ne", "-e", "builtin:mcp", "-e", HERE];
+		// 親の --skill (pis が足した作業先の .agents/skills) をそのまま引き継ぐ。判断は起動側 (pi.py skill_args) の 1 か所
+		const argv = process.argv;
+		for (let i = 0; i < argv.length - 1; i++) if (argv[i] === "--skill") args.push("--skill", argv[i + 1]);
+		// 試験だけが使う (偽のモデルを子にも読ませる)
+		for (const ext of (process.env.PI_HARNESS_TEST_CHILD_EXT ?? "").split(",").filter(Boolean)) args.push("-e", ext);
+		args.push("--model", model, "--append-system-prompt", agent.system);
+		const env: Record<string, string | undefined> = {
+			...process.env,
+			PI_HARNESS_CHILD: "1",
+			PI_HARNESS_ROLE: agent.profile,
+			PI_HARNESS_BYPASS: bypass && agent.inherit_bypass ? "1" : "",
+		};
+		const job = jobs.create({ agent: agentName, args, cwd: ctx.cwd, env, owner });
+		if (!job) {
+			const live = jobs.list().map((j) => `- ${j.id} (${j.agent}, ${j.state})`).join("\n");
+			return { error: `too many live child jobs (max ${MAX_JOBS}). Close one with {jobId, close:true}:\n${live}`, full: true };
+		}
+		return { job, model };
+	};
+
+	// 子の結果を、見出し・承認待ち・警告 (ツールエラー)・job・答えの本文に分けて返す。
+	// 子のツールエラーは答えに混ぜない (件数を絞り、同じものは 1 つにまとめる)
+	const resultText = (job: Job, r: RoundResult, alive: boolean) => {
+		const label = STATUS_LABEL[r.status] ?? r.status;
+		const errors = [...new Set(r.errors)];
+		const shown = errors.slice(0, MAX_LIST_ERRORS);
+		const parts = [
+			`child ${job.agent}: ${label}${r.note ? ` (${r.note})` : ""} [${fmtStats(r.stats)}]`,
+			...r.blocked.map((b) => `- needs the user's approval (not run): ${b}`),
+			...(shown.length > 0
+				? [`warnings (tool errors during the run; the answer below already accounts for them):`, ...shown.map((b) => `- tool error: ${b}`)]
+				: []),
+			...(errors.length > shown.length ? [`- ... and ${errors.length - shown.length} more tool errors`] : []),
+			...(alive ? [`- job: ${job.id} (idle; follow up with {jobId, task}, close with {jobId, close:true})`] : []),
+			...(r.answer ? ["", "answer:", r.answer] : [""]),
+		];
+		// 子の出力にも伏字化を掛ける (子の bash の出力は子のフルガードが伏せているが、返答の本文は伏せていない)。
+		// 切り詰めは伏字化の後 (秘密の途中で切って伏字化から漏れないように)
+		return redactText(parts.join("\n"));
+	};
+	const clip = (s: string, max = MAX_REPLY_CHARS) => (s.length > max ? `${s.slice(0, max)}\n[truncated: reply over ${max} chars]` : s);
+	const detailsOf = (job: Job, r: RoundResult, alive: boolean) => ({
+		agent: job.agent,
+		status: r.status,
+		blocked: r.blocked.length,
+		errors: r.errors.length,
+		stats: r.stats,
+		jobId: alive ? job.id : undefined,
+	});
+
+	// 割り当てた ToDo の項目へ結果を反映する (done なら done、そうでなければメモだけ)。todo 拡張が入口を置く
+	const linkTodo = (id: number | undefined, job: Job, r: RoundResult) => {
+		if (id === undefined) return;
+		const note = `child ${job.agent}: ${r.status} (${fmtStats(r.stats)})`;
+		try {
+			(globalThis as any).__piTodoUpdate?.({ id, status: r.status === "done" ? "done" : undefined, note });
+		} catch {}
+	};
+
+	// 待たずに走らせる。完了は followUp で親へ知らせる (ターンが再開する)
+	const runInBackground = (job: Job, message: string, keep: boolean, key: string, todo?: number, wake = true) => {
+		runningChildren.set(key, { agent: job.agent, model: "", task: message, pid: job.pid, startedAt: Date.now() });
+		job
+			.run(message, { timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE })
+			.then((r) => {
+				if (!keep) job.close();
+				const alive = (r.status === "done" || r.status === "aborted") && keep;
+				linkTodo(todo, job, r);
+				const body = clip(resultText(job, r, alive));
+				try {
+					pi.sendMessage(
+						{
+							customType: "child-finished",
+							content: `バックグラウンドの子 ${job.id} (${job.agent}) が終わりました\n${body}`,
+							display: true,
+							details: detailsOf(job, r, alive),
+						},
+						{ triggerTurn: wake, ...(wake ? { deliverAs: "followUp" as const } : {}) },
+					);
+				} catch {}
+			})
+			.catch(() => {})
+			.finally(() => runningChildren.delete(key));
+	};
+
 	pi.registerTool({
 		name: `${PREFIX}task`,
 		label: "task",
@@ -344,12 +478,19 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		promptGuidelines: [
 			`Use ${PREFIX}task with agent "review" for an independent review or a second opinion. The child cannot see this conversation, so put everything it needs in \`task\`.`,
 			`Set keep=true on ${PREFIX}task only when you expect follow-up requests to the same child. Send a follow-up with {jobId, task} using the jobId it returned, and close it with {jobId, close:true} when done. A job that is gone (closed, failed, or dropped when the bypass or session changed) must be restarted as a new task with a summary.`,
+			`Use background=true on ${PREFIX}task to keep working while the child runs; you are notified when it finishes. Use {jobId, status:true} or {list:true} to look at running children, {jobId, steer:"..."} to redirect one, and {jobId, abort:true} to stop its current round (the child stays).`,
+			`For several independent tasks, use {tasks:[{agent, task}, ...]} (up to ${MAX_BATCH}); tasks beyond the live-job limit wait instead of failing.`,
 		],
 		description:
 			"Run a task in a child agent. The child is a separate pi process with the same guard, and cannot see this conversation, " +
-			"so put everything it needs into `task`. Three forms (do not mix their fields):\n" +
-			"- new: {agent, task, keep?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned.\n" +
-			"- follow-up: {jobId, task}. Sends another request to a kept child; it remembers the earlier conversation. One request at a time per job.\n" +
+			"so put everything it needs into `task`. Forms (do not mix their fields):\n" +
+			"- new: {agent, task, keep?, background?, model?, todo?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned. " +
+			"background=true returns at once and notifies you on completion. model must be a model already used by an agent below, or your own. todo is a todo id to update when the child finishes.\n" +
+			"- tasks: {tasks:[{agent, task, model?}, ...], background?}. Runs them in parallel (waiting for free slots) and returns every result.\n" +
+			"- follow-up: {jobId, task, background?}. Sends another request to a kept child; it remembers the earlier conversation. One request at a time per job.\n" +
+			"- status: {jobId, status:true}, or list: {list:true}. State, elapsed time, last tool, calls and tokens of children.\n" +
+			"- steer: {jobId, steer:\"...\"}. Sends an extra instruction to a running child (delivered after its current turn).\n" +
+			"- abort: {jobId, abort:true}. Stops the child's current round; the child stays for a follow-up.\n" +
 			"- close: {jobId, close:true}. Stops the kept child.\n" +
 			"Agents:\n" +
 			catalog,
@@ -358,93 +499,229 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				agent: Type.Optional(Type.Union(names.map((n) => Type.Literal(n)), { description: "new task only" })),
 				task: Type.Optional(Type.String({ description: "What the child should do, with all the context it needs" })),
 				keep: Type.Optional(Type.Boolean({ description: "new task only: keep the child idle after it finishes, for follow-ups" })),
-				jobId: Type.Optional(Type.String({ description: "follow-up or close: the jobId of a kept child" })),
+				background: Type.Optional(Type.Boolean({ description: "new / tasks / follow-up: return at once and be notified on completion" })),
+				model: Type.Optional(Type.String({ description: "new task only: a model already used by a declared agent, or your own" })),
+				todo: Type.Optional(Type.Number({ description: "new task only: a todo id to mark done (or annotate) when the child finishes" })),
+				tasks: Type.Optional(
+					Type.Array(
+						Type.Object(
+							{ agent: Type.String(), task: Type.String(), model: Type.Optional(Type.String()) },
+							{ additionalProperties: false },
+						),
+						{ description: `parallel tasks (up to ${MAX_BATCH}); do not combine with other fields except background` },
+					),
+				),
+				jobId: Type.Optional(Type.String({ description: "follow-up, status, steer, abort or close: the jobId of a kept child" })),
 				close: Type.Optional(Type.Boolean({ description: "with jobId only: stop the kept child" })),
+				status: Type.Optional(Type.Boolean({ description: "with jobId only: show the child's state" })),
+				abort: Type.Optional(Type.Boolean({ description: "with jobId only: stop the child's current round (the child stays)" })),
+				steer: Type.Optional(Type.String({ description: "with jobId only: an extra instruction for a running child" })),
+				list: Type.Optional(Type.Boolean({ description: "list the children" })),
 			},
 			{ additionalProperties: false },
 		),
 		async execute(toolCallId: string, params: any, signal: any, _onUpdate: any, ctx: any) {
-			// 入力の形 (3 形式の排他) は execute() で確かめる。判定は名前と役割だけを見る
+			// 入力の形の排他は execute() で確かめる。判定は名前と役割だけを見る
 			const input = parseTaskInput(params);
 			// 最終の判定 (ほかのツールと同じく execute() でも確かめる)
 			const d = decide("task", params, ctx.cwd);
 			if (d.decision !== "allow") throw new Error(`実行前の判定で止めた: ${d.decision}: ${d.reason}`);
 			const owner = { cwd: ctx.cwd, role: ROLE };
+			const own = (j: Job) => j.owner.cwd === owner.cwd && j.owner.role === owner.role;
 
-			let job: Job | undefined;
-			let message: string;
-			let keep: boolean;
-			if (input.kind === "new") {
-				const agent = agents[input.agent];
-				if (!agent) throw new Error(`unknown agent: ${input.agent}`);
-				const model = agent.model ?? `${ctx.model.provider}/${ctx.model.id}`;
-				// 起動条件は pis と同じ (作業先の .pi/ を読まない・組み込みと拡張の自動発見を止める・MCP だけ戻す)
-				const args = ["--mode", "rpc", "--no-session", "--no-approve", "-nbt", "-ne", "-e", "builtin:mcp", "-e", HERE];
-				// 試験だけが使う (偽のモデルを子にも読ませる)
-				for (const ext of (process.env.PI_HARNESS_TEST_CHILD_EXT ?? "").split(",").filter(Boolean)) args.push("-e", ext);
-				args.push("--model", model, "--append-system-prompt", agent.system);
-				const env: Record<string, string | undefined> = {
-					...process.env,
-					PI_HARNESS_CHILD: "1",
-					PI_HARNESS_ROLE: agent.profile,
-					PI_HARNESS_BYPASS: bypass && agent.inherit_bypass ? "1" : "",
-				};
-				// 枠は spawn の前に同期で確保される (並行する起動でも上限を超えない)
-				job = jobs.create({ agent: input.agent, args, cwd: ctx.cwd, env, owner });
-				if (!job) {
+			// ─── 一覧 ───
+			if (input.kind === "list") {
+				const rows = jobs
+					.list()
+					.filter(own)
+					.map((j) => j.snapshot())
+					.map(
+						(s) =>
+							`- ${s.id} ${s.agent} ${s.state}${s.state === "running" ? ` ${fmtSecs(s.roundMs)}` : ""} | calls ${s.calls}, ${fmtTokens(s.tokens)} tokens${s.lastTool ? `, last tool: ${s.lastTool}` : ""}`,
+					);
+				return text(rows.length ? rows.join("\n") : "(no live children)", false, { count: rows.length });
+			}
+
+			// ─── 並列の一括 ───
+			if (input.kind === "batch") {
+				for (const t of input.tasks) if (!agents[t.agent]) throw new Error(`unknown agent: ${t.agent}`);
+				const slots = MAX_JOBS - jobs.size;
+				if (slots <= 0) {
 					const live = jobs.list().map((j) => `- ${j.id} (${j.agent}, ${j.state})`).join("\n");
 					return text(`too many live child jobs (max ${MAX_JOBS}). Close one with {jobId, close:true}:\n${live}`, true);
 				}
+				const items = input.tasks;
+				const per = Math.floor(MAX_REPLY_CHARS / items.length);
+				const runAll = async (sig: AbortSignal | undefined) => {
+					const sections = new Array<string>(items.length);
+					const statuses = new Array<string>(items.length);
+					let next = 0;
+					const worker = async () => {
+						for (;;) {
+							const i = next++;
+							if (i >= items.length) return;
+							const it = items[i];
+							let sp: Spawned = { error: "", full: true };
+							// 空きが出るまで待つ (上限は維持する)
+							for (let tries = 0; tries < 6000 && "error" in sp && sp.full; tries++) {
+								sp = spawnChild(it.agent, ctx, owner, it.model);
+								if ("error" in sp && sp.full) await sleep(100);
+							}
+							const head = `### ${i + 1}/${items.length} ${it.agent}: ${it.task.slice(0, 60).replace(/\s+/g, " ")}`;
+							if ("error" in sp) {
+								sections[i] = `${head}\n${sp.error}`;
+								statuses[i] = "failed";
+								continue;
+							}
+							const job = sp.job;
+							const r = await job.run(it.task, { signal: sig, timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE });
+							job.close();
+							sections[i] = `${head}\n${clip(resultText(job, r, false), per)}`;
+							statuses[i] = r.status;
+						}
+					};
+					await Promise.all(Array.from({ length: Math.min(slots, items.length) }, worker));
+					return { sections, statuses };
+				};
+				if (input.background) {
+					const key = `${toolCallId}:batch`;
+					runningChildren.set(key, { agent: `${items.length} tasks`, model: "", task: "", startedAt: Date.now() });
+					runAll(undefined)
+						.then(({ sections, statuses }) => {
+							try {
+								pi.sendMessage(
+									{
+										customType: "child-finished",
+										content: `バックグラウンドの ${items.length} 件の子が終わりました\n\n${sections.join("\n\n")}`,
+										display: true,
+										details: { statuses },
+									},
+									{ triggerTurn: true, deliverAs: "followUp" },
+								);
+							} catch {}
+						})
+						.catch(() => {})
+						.finally(() => runningChildren.delete(key));
+					return text(`started ${items.length} tasks in the background (up to ${slots} at a time). You will be notified when they finish.`, false, { background: true, tasks: items.length });
+				}
+				runningChildren.set(toolCallId, { agent: `${items.length} tasks`, model: "", task: "", startedAt: Date.now() });
+				let out;
+				try {
+					out = await runAll(signal);
+				} finally {
+					runningChildren.delete(toolCallId);
+				}
+				if (signal?.aborted) throw new Error("child aborted");
+				const bad = out.statuses.some((s) => s !== "done");
+				return text(clip(out.sections.join("\n\n")), bad, { statuses: out.statuses });
+			}
+
+			// ─── 既存の job への操作 ───
+			let job: Job | undefined;
+			let message = "";
+			let keep = false;
+			let background = false;
+			let todo: number | undefined;
+			if (input.kind === "new") {
+				const sp = spawnChild(input.agent, ctx, owner, input.model);
+				if ("error" in sp) return text(sp.error, true);
+				job = sp.job;
 				message = input.task;
 				keep = input.keep;
-				runningChildren.set(toolCallId, { agent: input.agent, model, task: input.task, pid: job.pid, startedAt: Date.now() });
+				background = input.background;
+				todo = input.todo;
+				if (!background) runningChildren.set(toolCallId, { agent: input.agent, model: sp.model, task: input.task, pid: job.pid, startedAt: Date.now() });
 			} else {
 				job = jobs.get(input.jobId);
 				if (!job) {
 					if (input.kind === "close") return text(`job ${input.jobId} does not exist (already closed)`);
 					return text(`job ${input.jobId} does not exist (closed, failed, or dropped). Start a new task and include a summary of the earlier work.`, true);
 				}
-				if (job.owner.cwd !== owner.cwd || job.owner.role !== owner.role) throw new Error(`job ${input.jobId} belongs to another context`);
+				if (!own(job)) throw new Error(`job ${input.jobId} belongs to another context`);
 				if (input.kind === "close") {
 					job.close();
 					return text(`job ${input.jobId} closed`, false, { jobId: input.jobId, status: "closed" });
 				}
+				if (input.kind === "status") {
+					const s = job.snapshot();
+					return text(
+						`job ${s.id} (${s.agent}): ${s.state}${s.state === "running" ? `, this round ${fmtSecs(s.roundMs)}` : ""}\n` +
+							`age ${fmtSecs(s.ageMs)}, calls ${s.calls}, ${fmtTokens(s.tokens)} tokens${s.cost > 0 ? `, $${s.cost.toFixed(3)}` : ""}` +
+							`${s.lastTool ? `, last tool: ${s.lastTool}` : ""}`,
+						false,
+						{ ...s },
+					);
+				}
+				if (input.kind === "steer") {
+					const r = job.steer(input.message);
+					return text(r === "queued" ? `steer queued for ${job.id} (delivered after its current turn)` : `job ${job.id} is not running; nothing to steer`, r !== "queued", { jobId: job.id, steer: r });
+				}
+				if (input.kind === "abort") {
+					const ok = job.interrupt();
+					return text(ok ? `abort sent to ${job.id}; the child stays and the running request will report "aborted"` : `job ${job.id} is not running; nothing to abort`, !ok, { jobId: job.id, abort: ok });
+				}
 				if (job.state === "running") return text(`job ${input.jobId} is busy with another request`, true);
 				message = input.task;
 				keep = true;
-				runningChildren.set(toolCallId, { agent: job.agent, model: "", task: input.task, pid: job.pid, startedAt: Date.now() });
+				background = input.background;
+				if (!background) runningChildren.set(toolCallId, { agent: job.agent, model: "", task: input.task, pid: job.pid, startedAt: Date.now() });
 			}
 
-			let r;
+			if (background) {
+				runInBackground(job, message, keep, job.id, todo);
+				return text(`started ${job.agent} in the background as ${job.id}. You will be notified when it finishes (status: {jobId, status:true}, steer: {jobId, steer:"..."}, abort: {jobId, abort:true}).`, false, {
+					jobId: job.id,
+					background: true,
+				});
+			}
+
+			let r: RoundResult;
 			try {
-				r = await job.run(message, { signal, timeoutMs: ROUND_TIMEOUT_MS });
+				r = await job.run(message, { signal, timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE });
 			} finally {
 				runningChildren.delete(toolCallId);
 			}
 			if (signal?.aborted) throw new Error("child aborted");
-			// keep でなければ完了で子を止める (done 以外は job が自分で閉じる)
+			// keep でなければ完了で子を止める (done と aborted 以外は job が自分で閉じる)
 			if (!keep) job.close();
-			const alive = r.status === "done" && keep;
-			const label = STATUS_LABEL[r.status] ?? r.status;
-			const body = [
-				`child ${job.agent}: ${label}${r.note ? ` (${r.note})` : ""}`,
-				...r.blocked.map((b) => `- needs the user's approval (not run): ${b}`),
-				...r.errors.map((b) => `- tool error: ${b}`),
-				...(alive ? [`- job: ${job.id} (idle; follow up with {jobId, task}, close with {jobId, close:true})`] : []),
-				"",
-				r.answer,
-			].join("\n");
-			// 子の出力にも伏字化を掛ける (子の bash の出力は子のフルガードが伏せているが、返答の本文は伏せていない)。
-			// 切り詰めは伏字化の後 (秘密の途中で切って伏字化から漏れないように)
-			let out = redactText(body);
-			if (out.length > MAX_REPLY_CHARS) out = `${out.slice(0, MAX_REPLY_CHARS)}\n[truncated: reply over ${MAX_REPLY_CHARS} chars]`;
-			return text(out, r.status !== "done", {
-				agent: job.agent,
-				status: r.status,
-				blocked: r.blocked.length,
-				errors: r.errors.length,
-				jobId: alive ? job.id : undefined,
-			});
+			const alive = (r.status === "done" || r.status === "aborted") && keep;
+			linkTodo(todo, job, r);
+			return text(clip(resultText(job, r, alive)), r.status !== "done", detailsOf(job, r, alive));
+		},
+	});
+
+	// 利用者専用のコマンド (モデルは呼べない)。見た目はテキストだけ
+	pi.registerCommand("agents", {
+		description: "動いている子エージェントの一覧 (状態・経過・最後のツール・使用量)",
+		handler: async (_args: string, ctx: any) => {
+			const owner = { cwd: ctx.cwd, role: ROLE };
+			const rows = jobs
+				.list()
+				.filter((j) => j.owner.cwd === owner.cwd && j.owner.role === owner.role)
+				.map((j) => j.snapshot())
+				.map(
+					(s) =>
+						`${s.id} ${s.agent} ${s.state}${s.state === "running" ? ` ${fmtSecs(s.roundMs)}` : ""} | calls ${s.calls}, ${fmtTokens(s.tokens)} tokens${s.lastTool ? `, last tool: ${s.lastTool}` : ""}`,
+				);
+			ctx.ui?.notify?.(rows.length ? rows.join("\n") : "子エージェントはありません", "info");
+		},
+	});
+	pi.registerCommand("agent", {
+		description: `子を直接起動する: /agent <${names.join("|")}> <依頼>。結果はチャットに表示する (モデルは待たずに続きを進められる)`,
+		handler: async (args: string, ctx: any) => {
+			const m = /^(\S+)\s+([\s\S]+)$/.exec(String(args ?? "").trim());
+			if (!m || !agents[m[1]]) {
+				ctx.ui?.notify?.(`使い方: /agent <${names.join("|")}> <依頼>`, "warning");
+				return;
+			}
+			const sp = spawnChild(m[1], ctx, { cwd: ctx.cwd, role: ROLE });
+			if ("error" in sp) {
+				ctx.ui?.notify?.(sp.error, "warning");
+				return;
+			}
+			// 完了はチャットに表示するだけ。モデルのターンは起こさない
+			runInBackground(sp.job, m[2], false, sp.job.id, undefined, false);
+			ctx.ui?.notify?.(`${m[1]} を起動しました (${sp.job.id})。終わるとここに結果を表示します`, "info");
 		},
 	});
 }

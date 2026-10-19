@@ -39,6 +39,7 @@ pi を更新したときの手順:
 | 初期のプロンプトとツール集合を記録し、変更は次の要求の前に追記する | `extensions.md`（Prompt cache の節） | キャッシュ安定性の見込み（ツール定義を増やすと先頭側が変わる） |
 | `ctx.hasUI`・`ctx.mode` | `extensions.md` | UI の無い起動での確認の扱い（フルガード側の判断は表 B の 8） |
 | `skills` の設定 | `settings.md`（`skills`）、`skills.md` | `[pi.settings] skills = ["~/.claude/skills"]` |
+| project trust: `--approve` / `--no-approve` が保存済みの決定（`trust.json`）より先に効く。`AGENTS.md` は trust と無関係に読まれる。`.pi/` と、作業先から祖先の `.agents/skills` が保護対象 | `security.md`（Understand project trust）、`configuration.md` | `pis` は `--no-approve` を固定し、作業先のスキルだけ `--skill` で足す（[起動](pi-guard.md#起動)） |
 | `--print`・`--mode json` / `rpc` とイベント | `cli.md`、`json.md`、`rpc.md` | 試験（偽のモデル）、Zed・Orca の RPC |
 
 ## B. 明示が無い（ここに書く）
@@ -60,6 +61,11 @@ pi を更新したときの手順:
 | 11 | Windows の npm global の `pi` は `pi.CMD` で、子の pi を `spawn("pi")` する処理（子エージェント）と、その試験が動かない | 無し | 1.1.0 | Windows で `test_pi_harness.py` の 9 件が失敗 | `pis` は Unix 専用（既知） |
 | 12 | `fd`・`rg` は、`<agent 置き場>/bin` → PATH の順に探し、どちらにも無ければダウンロードして `<agent 置き場>/bin` へ置く（`tools-manager.js` の `getToolPath`、`config.js` の `getBinDir`）。起動ごとに新しい agent 置き場では、毎回ダウンロードされる | 未確認（実装を読んだ。公式の文書は探していない） | 1.1.0 | [記録 S1](../research/agents/pis-sandbox-field-test.md)、`test_agent_dir_carries_the_instructions_keybindings_and_prompts` | サンドボックスの agent 置き場の `bin/` を、本物の `~/.pi/agent/bin` へのリンクにする |
 | 13 | セッションの置き場は `sessions/--<作業ディレクトリ>--`（先頭の区切りを外し、`/` `\` `:` を `-` にする。`getDefaultSessionDirPath`）。`--session-dir` は渡した場所へそのまま置く | 未確認（`pi.py` の記述による。今回は再確認していない） | 1.1.0 | `test_pi_boundary.py` の `sessions_dir` の試験 | サンドボックスの起動が同じ命名を再実装している（変わると外の `pi -c` で再開できない。pi の更新時に再開を確かめる） |
+| 14 | 明示した `--skill` は `--no-approve` でも読まれ、**同名のスキルはグローバル（`settings.json` の `skills`）が勝つ**。`--approve` の自動発見ではプロジェクトが勝つ（乗っ取れる） | `cli.md` に `--skill` の説明はあるが、競合の優先は無い（`skills.md` は「最初に見つけたものが残る」） | 1.3.0 | `test_explicit_skill_loads_under_no_approve_and_global_wins_on_a_name_clash` | `pis` は作業先の `.agents/skills` を `--skill` で足す（[起動](pi-guard.md#起動)） |
+| 15 | `/reload` は `--skill` で明示したディレクトリを再走査し、起動後に足したスキルが `[Skills]` と `/skill:` の補完に出る | `skills.md` は「編集後は `/reload`」とあるが、`--skill` のパスは明示が無い | 1.3.0 | tmux の TUI で実測（2026-10。試験は無し） | 起動後に足したスキルは `/reload` で読める |
+| 16 | pi は、宣言されたツールに `read` か `bash` があるときだけ、スキルの一覧をシステムプロンプトへ入れる（`dist/core/system-prompt.js`）。**フルガード（`guarded_*`）の下では pi 自身は一覧を入れない** | 無し（`extensions.md` は `before_agent_start` の `systemPromptOptions` を書き換えられると書く） | 1.3.0 | `core/system-prompt.js` と実測。フルガードが `before_agent_start` で同じ形の一覧を `sections.skills` に足す（`disable-model-invocation` のスキルは除く）。`test_the_harness_adds_the_skill_list_to_the_system_prompt` と `test_the_child_also_gets_the_skill_list` | 対応済み（`index.ts`）。pi の版で `systemPromptOptions` の形が変わったら、この 2 件が落ちる |
+| 17 | RPC の子への `steer`（作業中の追加指示）は、今のターンのツール呼び出しが終わったあとに届き、子はもう 1 回答える。`abort` は今の往復だけを止め、`agent_settled` で終わる。子は残る | `rpc-commands.md` にコマンドの説明はあるが、子の応答の形と順序は明示が無い | 1.3.0 | `test_steer_reaches_a_running_child`、`test_abort_stops_only_the_round_and_keeps_the_child` | `guarded_task` の steer / abort。版で応答の形が変わったらこの 2 件が落ちる |
+| 18 | `agent_before_settle` は、応答を終える直前に、`outcome: "completed"` で発火する。この時点で `context.canContinue` は `false`（最後が assistant のメッセージのため）だが、`custom_message` を足して `continue: true` を返すと、次のモデルの呼び出しが 1 回起きる。`canContinue` で続行を断ってはいけない | `extensions.md` は「エントリを足して `continue: true` で 1 回続行できる。無条件の続行はループする」とだけ書く（`canContinue` の意味は無い） | 1.3.0 | `test_todo_reminds_once_when_the_answer_ends_with_work_in_progress`、`test_todo_does_not_remind_when_nothing_is_in_progress` | `todo` のリマインド。利用者の発言ごとに 1 回だけ出すことでループを避ける |
 
 ## codemode の扱い
 

@@ -56,6 +56,18 @@ export default async function (pi: ExtensionAPI) {
 			return fauxAssistantMessage(fauxText(`USERS=${messages.filter((m: any) => m.role === "user").length}`));
 		}
 		if (rounds) {
+			// todo のリマインド (agent_before_settle の続行で始まるターン) をそのまま返す
+			if (process.env.FAUX_ECHO_REMINDER === "1" && /作業中 \(in_progress\) のまま/.test(textOf(last?.content ?? ""))) {
+				return fauxAssistantMessage(fauxText(`REMINDER=${textOf(last.content)}`));
+			}
+			// バックグラウンドの子の完了通知 (followUp で始まるターン) をそのまま返す
+			const lastText = textOf(last?.content ?? "");
+			if (process.env.FAUX_ECHO_CHILD_FINISHED === "1" && /バックグラウンドの/.test(lastText)) {
+				const earlier = messages
+					.filter((m: any) => m.role === "toolResult")
+					.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, 400)}`);
+				return fauxAssistantMessage(fauxText(`${earlier.join("\n--\n")}\nFINISHED=${lastText}`));
+			}
 			const issued = messages.filter((m: any) => m.role === "assistant" && Array.isArray(m.content) && m.content.some((c: any) => c.type === "toolCall")).length;
 			if (issued < rounds.length) {
 				const job = jobIn(messages);
@@ -65,9 +77,10 @@ export default async function (pi: ExtensionAPI) {
 					{ stopReason: "toolUse" },
 				);
 			}
+			if (process.env.FAUX_FINAL_DELAY_MS) await sleep(Number(process.env.FAUX_FINAL_DELAY_MS));
 			const all = messages
 				.filter((m: any) => m.role === "toolResult")
-				.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, 400)}`);
+				.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, Number(process.env.FAUX_RESULT_CHARS) || 400)}`);
 			return fauxAssistantMessage(fauxText(`TOOLS=${JSON.stringify(tools)}\n${all.join("\n--\n")}`));
 		}
 		if (last?.role === "toolResult") {
@@ -78,6 +91,15 @@ export default async function (pi: ExtensionAPI) {
 			return fauxAssistantMessage(fauxText(`TOOLS=${JSON.stringify(tools)}\n${results.join("\n")}`));
 		}
 		if (process.env.FAUX_DUMP_PROMPT === "1") return fauxAssistantMessage(fauxText(getCurrentSystemPrompt(messages)));
+		// 子: システムプロンプトのスキル一覧の名前だけを返す (フルガードが一覧を足すかを見る)
+		if (process.env.FAUX_CHILD_SKILLS === "1" && process.env.PI_HARNESS_CHILD === "1" && last?.role === "user") {
+			const names = [...getCurrentSystemPrompt(messages).matchAll(/<name>([^<]+)<\/name>/g)].map((m) => m[1]);
+			return fauxAssistantMessage(fauxText(`SKILLS=${JSON.stringify(names)}`));
+		}
+		// 子: 受けた依頼 (スラッシュコマンドの展開後) をそのまま返す (親の --skill の引き継ぎを見る)
+		if (process.env.FAUX_CHILD_ECHO_USER === "1" && process.env.PI_HARNESS_CHILD === "1" && last?.role === "user") {
+			return fauxAssistantMessage(fauxText(`CHILD_USER=${textOf(last.content)}`));
+		}
 		if (calls.length === 0) return fauxAssistantMessage(fauxText(`TOOLS=${JSON.stringify(tools)}`));
 		return fauxAssistantMessage(
 			calls.map((c: Call) => fauxToolCall(c.name, c.args)),

@@ -25,11 +25,17 @@ const TAIL_MAX = 200;
 const NOTIFY_TAIL = 20;
 const killed = new Set<string>();
 
+const secs = (ms: number) => `${Math.max(0, Math.round(ms / 1000))}s`;
+
+// 動いている子が 3 件以下なら名前と経過時間、それより多ければ件数 (1 行に収める)
 function label(): string | undefined {
-	const c = children().size;
+	const list = [...children().values()] as { agent?: string; startedAt?: number }[];
 	const j = jobs.size;
 	const parts: string[] = [];
-	if (c > 0) parts.push(`🤖 ${c} subagents`);
+	if (list.length > 0) {
+		const named = list.length <= 3 && list.every((x) => typeof x.agent === "string" && typeof x.startedAt === "number");
+		parts.push(named ? `🤖 ${list.map((x) => `${x.agent} ${secs(Date.now() - (x.startedAt as number))}`).join(", ")}` : `🤖 ${list.length} subagents`);
+	}
 	if (j > 0) parts.push(`⚙️ ${j} jobs`);
 	return parts.length ? parts.join(" / ") : undefined;
 }

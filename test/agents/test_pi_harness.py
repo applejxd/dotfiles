@@ -290,6 +290,80 @@ def run_child(env, agent, child_calls, **env_extra):
     )
 
 
+def _skill_dir(tmp, name, description, group=None):
+    """``<tmp>/skills-<group>/<name>/SKILL.md`` を作り、スキル群のディレクトリを返す。本文は description と同じ印。"""
+    base = tmp / f"skills-{group or name}"
+    (base / name).mkdir(parents=True)
+    (base / name / "SKILL.md").write_text(
+        f'---\nname: {name}\ndescription: "{description}"\n---\n# {name}\n{description}\n',
+        encoding="utf-8",
+    )
+    return base
+
+
+# ★フルガードの下では組み込みの read / bash が無いので、pi 自身はスキルの一覧をシステムプロンプトへ入れない。
+#   フルガードが同じ形で足す (下の test_the_harness_adds_the_skill_list...)。読まれたかは /skill:<名前> の展開でも見る
+def test_explicit_skill_loads_under_no_approve_and_global_wins_on_a_name_clash(env):
+    # pis は --no-approve のまま、作業先のスキルだけを --skill で足す。同名ならグローバルが勝つ (乗っ取られない)
+    project = _skill_dir(env["tmp"], "projonly", "PROJECT-ONLY-DESC")
+    clash = _skill_dir(env["tmp"], "clash", "PROJECT-CLASH-DESC", group="project-clash")
+    global_dir = _skill_dir(env["tmp"], "clash", "GLOBAL-CLASH-DESC", group="global-clash")
+    (env["tmp"] / "agent" / "settings.json").write_text(
+        json.dumps({"skills": [str(global_dir)]}), encoding="utf-8"
+    )
+    extra = ("--no-approve", "--skill", str(project), "--skill", str(clash))
+    proc = run_pi(env, [], "/skill:projonly go", extra=extra, FAUX_ECHO_USER="1")
+    assert proc.returncode == 0, proc.stderr
+    assert "PROJECT-ONLY-DESC" in proc.stdout, proc.stdout
+    proc = run_pi(env, [], "/skill:clash go", extra=extra, FAUX_ECHO_USER="1")
+    assert "GLOBAL-CLASH-DESC" in proc.stdout and "PROJECT-CLASH-DESC" not in proc.stdout, (
+        proc.stdout
+    )
+
+
+def test_the_harness_adds_the_skill_list_to_the_system_prompt(env):
+    # pi は宣言されたツールに read / bash が無いと一覧を入れない。フルガードが guarded_* を読むツールとして足す
+    shown = _skill_dir(env["tmp"], "shown", "SHOWN-SKILL-DESC")
+    hidden = _skill_dir(env["tmp"], "hidden", "HIDDEN-SKILL-DESC")
+    (hidden / "hidden" / "SKILL.md").write_text(
+        '---\nname: hidden\ndescription: "HIDDEN-SKILL-DESC"\ndisable-model-invocation: true\n---\n# h\n',
+        encoding="utf-8",
+    )
+    extra = ("--no-approve", "--skill", str(shown), "--skill", str(hidden))
+    proc = run_pi(env, [], extra=extra, FAUX_DUMP_PROMPT="1")
+    assert proc.returncode == 0, proc.stderr
+    prompt = proc.stdout
+    assert "<available_skills>" in prompt and "<name>shown</name>" in prompt, prompt
+    assert "SHOWN-SKILL-DESC" in prompt
+    assert "Use the guarded_read tool to load a skill's file" in prompt
+    # モデルが自動で選ばないように指定したスキルは載せない (pi の標準と同じ)
+    assert "HIDDEN-SKILL-DESC" not in prompt
+    # bypass でも同じ
+    proc = run_pi(env, [], extra=extra, FAUX_DUMP_PROMPT="1", PI_HARNESS_BYPASS="1")
+    assert "<name>shown</name>" in proc.stdout
+
+
+def test_the_child_also_gets_the_skill_list(env):
+    project = _skill_dir(env["tmp"], "childlist", "CHILD-LIST-DESC")
+    calls = [{"name": "guarded_task", "args": {"agent": "worker", "task": "list skills"}}]
+    common = dict(FAUX_CHILD_SKILLS="1", PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"))
+    proc = run_pi(env, calls, extra=("--skill", str(project)), **common)
+    assert proc.returncode == 0, proc.stderr
+    assert "SKILLS=[" in proc.stdout and '"childlist"' in proc.stdout, proc.stdout
+
+
+def test_child_inherits_the_parents_explicit_skills(env):
+    project = _skill_dir(env["tmp"], "childskill", "CHILD-SKILL-DESC")
+    calls = [{"name": "guarded_task", "args": {"agent": "worker", "task": "/skill:childskill go"}}]
+    common = dict(FAUX_CHILD_ECHO_USER="1", PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"))
+    proc = run_pi(env, calls, extra=("--skill", str(project)), **common)
+    assert proc.returncode == 0, proc.stderr
+    assert '<skill name="childskill"' in proc.stdout, proc.stdout
+    # 親が足していなければ、子にも入らない
+    proc = run_pi(env, calls, **common)
+    assert '<skill name="childskill"' not in proc.stdout, proc.stdout
+
+
 def test_task_tool_is_listed_in_the_system_prompt(env):
     # promptSnippet が無い自作ツールは Available tools に出ず、モデルが気付けない
     proc = run_pi(env, [], FAUX_DUMP_PROMPT="1")
@@ -318,8 +392,19 @@ def test_child_cannot_start_another_child(env):
 
 
 def test_reader_child_does_not_get_bash(env):
-    proc = run_child(env, "explore", bash_call("wc -c /dev/null"))
+    proc = run_child(env, "review", bash_call("wc -c /dev/null"))
     assert "Tool guarded_bash not found" in proc.stdout, proc.stdout
+
+
+def test_explore_child_gets_only_the_read_only_commands(env):
+    # wc と読み取り専用の git だけ確認なしで通る。それ以外の shell は拒否 (子は承認できないところで止まる)
+    proc = run_child(env, "explore", bash_call("wc -c /dev/null"))
+    assert "0 /dev/null" in proc.stdout and "child explore: completed" in proc.stdout, proc.stdout
+    proc = run_child(env, "explore", bash_call("touch made-by-explore"))
+    assert "tool error: guarded_bash" in proc.stdout, proc.stdout
+    assert not (env["proj"] / "made-by-explore").exists()
+    proc = run_child(env, "explore", bash_call("git commit -m x"))
+    assert "tool error: guarded_bash" in proc.stdout, proc.stdout
 
 
 def test_child_ask_is_returned_as_blocked(env):
@@ -404,6 +489,152 @@ def test_second_request_to_a_busy_job_is_refused(env):
         FAUX_DELAY_MS="1500",
     )
     assert proc.stdout.count("is busy with another request") == 1, proc.stdout
+
+
+def test_child_result_is_split_into_status_stats_warnings_and_answer(env):
+    proc = run_child(env, "worker", bash_call("touch by-child"), PI_HARNESS_BYPASS="1")
+    import re
+
+    # 見出し行に使用量、あとは承認待ち・警告・job・答えの順に分ける
+    assert re.search(r"child worker: \w+ \[\d+s, \d+ calls, [\d.]+k? tokens", proc.stdout), (
+        proc.stdout
+    )
+    assert "answer:" in proc.stdout, proc.stdout
+
+
+def test_task_input_new_forms_are_exclusive(env):
+    bad = [
+        _task(list=True, agent="worker"),
+        _task(jobId="job-x", status=True, task="t"),
+        _task(jobId="job-x", steer=""),
+        _task(steer="x"),
+        _task(tasks=[]),
+        _task(tasks=[{"agent": "worker", "task": "t", "keep": True}]),
+        _task(tasks=[{"agent": "worker", "task": "t"}], agent="worker"),
+        _task(jobId="job-x", abort=True, background=True),
+        _task(agent="worker", task="t", todo=1.5),
+    ]
+    proc = _rounds(env, [bad])
+    # どれも子を起動せずに拒否される (スキーマで拒むものと、execute() の排他で拒むもの)
+    assert proc.stdout.count("isError=true") == len(bad), proc.stdout
+    assert "USERS=" not in proc.stdout, proc.stdout
+
+
+def test_background_child_reports_status_and_notifies_on_completion(env):
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="slow", background=True)],
+            [_task(jobId="{{JOB}}", status=True), _task(list=True)],
+        ],
+        FAUX_DELAY_MS="1500",
+        FAUX_FINAL_DELAY_MS="3000",
+        FAUX_ECHO_CHILD_FINISHED="1",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "in the background as job-" in proc.stdout, proc.stdout
+    # 状態の問い合わせと一覧（動いている間）
+    assert "running" in proc.stdout and "calls" in proc.stdout, proc.stdout
+    # 完了は followUp で親へ届く (ターンが再開する)
+    assert "FINISHED=バックグラウンドの子" in proc.stdout and "USERS=1" in proc.stdout, proc.stdout
+
+
+def test_steer_reaches_a_running_child(env):
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="slow", background=True)],
+            [_task(jobId="{{JOB}}", steer="change course")],
+        ],
+        FAUX_DELAY_MS="1500",
+        FAUX_FINAL_DELAY_MS="4500",
+        FAUX_ECHO_CHILD_FINISHED="1",
+    )
+    assert "steer queued" in proc.stdout, proc.stdout
+    # 子は追加の指示を受けてもう 1 回答える (利用者の発言が 2 つ)
+    assert "USERS=2" in proc.stdout, proc.stdout
+
+
+def test_steer_and_abort_say_so_when_the_job_is_not_running(env):
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="first", keep=True)],
+            [_task(jobId="{{JOB}}", steer="x"), _task(jobId="{{JOB}}", abort=True)],
+            [_task(jobId="{{JOB}}", close=True)],
+        ],
+    )
+    assert "is not running; nothing to steer" in proc.stdout, proc.stdout
+    assert "is not running; nothing to abort" in proc.stdout, proc.stdout
+
+
+def test_abort_stops_only_the_round_and_keeps_the_child(env):
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="slow", keep=True, background=True)],
+            [_task(jobId="{{JOB}}", abort=True)],
+        ],
+        FAUX_DELAY_MS="1500",
+        FAUX_FINAL_DELAY_MS="4000",
+        FAUX_ECHO_CHILD_FINISHED="1",
+    )
+    assert "abort sent to job-" in proc.stdout, proc.stdout
+    assert "aborted" in proc.stdout.split("FINISHED=", 1)[-1], proc.stdout
+    # keep していた子は残る (job の案内が付く)
+    assert "idle; follow up with" in proc.stdout.split("FINISHED=", 1)[-1], proc.stdout
+
+
+def test_tasks_run_in_parallel_and_wait_for_free_slots(env):
+    items = [{"agent": "worker", "task": f"t{i}"} for i in range(6)]
+    proc = _rounds(env, [[_task(tasks=items)]], FAUX_DELAY_MS="300", FAUX_RESULT_CHARS="20000")
+    assert proc.returncode == 0, proc.stderr
+    # 上限 4 を超える 2 件も断らず、待ってすべて実行する
+    assert proc.stdout.count("USERS=1") == 6, proc.stdout
+    assert "too many live child jobs" not in proc.stdout, proc.stdout
+    for i in range(1, 7):
+        assert f"### {i}/6 worker" in proc.stdout, proc.stdout
+
+
+def test_tasks_unknown_agent_is_refused_before_anything_starts(env):
+    proc = _rounds(
+        env, [[_task(tasks=[{"agent": "worker", "task": "a"}, {"agent": "nobody", "task": "b"}])]]
+    )
+    assert "unknown agent: nobody" in proc.stdout or "isError=true" in proc.stdout, proc.stdout
+    assert "USERS=" not in proc.stdout, proc.stdout
+
+
+def test_model_override_is_limited_to_models_already_in_use(env):
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="x", model="nowhere/unknown")],
+            [_task(agent="worker", task="y", model="faux/spike")],
+        ],
+    )
+    assert "model not allowed: nowhere/unknown" in proc.stdout, proc.stdout
+    # 親と同じモデルは指定できる
+    assert "child worker: completed" in proc.stdout, proc.stdout
+
+
+def test_child_result_updates_the_assigned_todo(env):
+    rounds = [
+        [{"name": "todo", "args": {"action": "add", "text": "investigate"}}],
+        [_task(agent="worker", task="t", todo=1)],
+        [{"name": "todo", "args": {"action": "list", "all": True}}],
+    ]
+    proc = run_pi(
+        env,
+        [],
+        extra=("-e", str(TODO_EXT)),
+        FAUX_TOOL_ROUNDS=json.dumps(rounds),
+        FAUX_CHILD_TOOL_CALLS="[]",
+        FAUX_COUNT_USER="1",
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+    )
+    assert proc.returncode == 0, proc.stderr
+    # 完了した子を割り当てた項目は done になり、メモに結果が残る
+    assert "[x] #1: investigate — child worker: done" in proc.stdout, proc.stdout
 
 
 def test_round_time_limit_stops_the_child(env):
@@ -659,7 +890,9 @@ def _rpc(env, calls, answers, timeout=120):
     return requests
 
 
-def _rpc_script(env, calls, messages, answers, timeout=120, status_key="bypass", extra=()):
+def _rpc_script(
+    env, calls, messages, answers, timeout=120, status_key="bypass", extra=(), notices=None
+):
     """RPC で messages を順に送る。確認 (confirm) には answers の順に応え、尽きたら拒否する。
 
     各メッセージは、応答 (response) を待ち、実行が始まったもの (started) は agent_end まで待つ。
@@ -700,6 +933,8 @@ def _rpc_script(env, calls, messages, answers, timeout=120, status_key="bypass",
                         reply = {"type": "extension_ui_response", "id": event["id"]}
                         proc.stdin.write(json.dumps({**reply, "confirmed": answer}) + "\n")
                         proc.stdin.flush()
+                    elif event.get("method") == "notify" and notices is not None:
+                        notices.append(event.get("message"))
                     elif (
                         event.get("method") == "setStatus" and event.get("statusKey") == status_key
                     ):
@@ -767,6 +1002,8 @@ def _last_todo_result(stdout):
 
 
 def _run_todo(env, calls, *messages, **kwargs):
+    # 試験の偶のモデルは「続行」で同じ呼び出しをやり直すので、リマインドは切る (専用の試験で確かめる)
+    kwargs.setdefault("PI_TODO_NO_REMINDER", "1")
     extra = ("-e", str(TODO_EXT), *kwargs.pop("extra", ()))
     return run_pi(env, calls, *messages, extra=extra, **kwargs)
 
@@ -821,8 +1058,144 @@ def test_todo_warns_on_several_in_progress_and_rejects_bad_input(env):
     proc = _run_todo(env, calls)
     assert "in_progress が 2 件" in proc.stdout, proc.stdout
     assert "#99 が無い" in proc.stdout, proc.stdout
-    assert "update には text が要る" in proc.stdout, proc.stdout
+    assert "update には text か note が要る" in proc.stdout, proc.stdout
     assert "add には text か texts が要る" in proc.stdout, proc.stdout
+
+
+def test_todo_batch_applies_many_operations_in_one_call(env):
+    calls = [
+        _todo(action="add", texts=["a", "b", "c", "d"]),
+        _todo(
+            action="batch",
+            ops=[
+                {"action": "set", "id": 1, "status": "done"},
+                {"action": "set", "id": 2, "status": "in_progress"},
+                {"action": "update", "id": 3, "text": "c2"},
+                {"action": "remove", "id": 4},
+                {"action": "add", "text": "e"},
+            ],
+        ),
+        _todo(action="list", all=True),
+    ]
+    proc = _run_todo(env, calls)
+    last = _last_todo_result(proc.stdout)
+    assert "[x] #1: a" in last and "[>] #2: b" in last and "[ ] #3: c2" in last, proc.stdout
+    assert "#4" not in last and "[ ] #5: e" in last, proc.stdout
+
+
+def test_todo_batch_is_atomic_and_names_the_failing_operation(env):
+    calls = [
+        _todo(action="add", texts=["a", "b"]),
+        _todo(
+            action="batch",
+            ops=[
+                {"action": "set", "id": 1, "status": "done"},
+                {"action": "set", "id": 99, "status": "done"},
+            ],
+        ),
+        _todo(action="list", all=True),
+    ]
+    proc = _run_todo(env, calls)
+    assert "ops[1]: #99 が無い" in proc.stdout, proc.stdout
+    # 1 件目も適用されていない
+    assert "[ ] #1: a" in _last_todo_result(proc.stdout), proc.stdout
+
+
+def test_todo_replace_rewrites_the_list_and_keeps_ids_on_request(env):
+    calls = [
+        _todo(action="add", texts=["a", "b", "c"]),
+        _todo(
+            action="replace",
+            items=[
+                {"id": 2, "text": "b2", "status": "in_progress"},
+                {"text": "new"},
+            ],
+        ),
+        _todo(action="list", all=True),
+    ]
+    proc = _run_todo(env, calls)
+    assert "置き換えた: 2 件 (消えた既存の項目 2 件)" in proc.stdout, proc.stdout
+    last = _last_todo_result(proc.stdout)
+    # id を付けた項目は引き継ぎ、無い項目は新しい ID (次の番号) を振る
+    assert "[>] #2: b2" in last and "[ ] #4: new" in last, proc.stdout
+    assert "#1" not in last and "#3" not in last, proc.stdout
+
+
+def test_todo_replace_rejects_bad_items(env):
+    calls = [
+        _todo(action="add", text="a"),
+        _todo(action="replace", items=[{"text": " "}]),
+        _todo(action="replace", items=[{"id": 1, "text": "x"}, {"id": 1, "text": "y"}]),
+        _todo(action="list"),
+    ]
+    proc = _run_todo(env, calls)
+    assert "text は空にできない" in proc.stdout and "id が重複している" in proc.stdout, proc.stdout
+    assert "[ ] #1: a" in _last_todo_result(proc.stdout), proc.stdout
+
+
+def test_todo_note_is_kept_shown_and_cleared(env):
+    calls = [
+        _todo(action="add", text="a", note="初期のメモ"),
+        _todo(action="set", id=1, status="done", note="pytest 3 passed"),
+        _todo(action="list", all=True),
+        _todo(action="update", id=1, note=""),
+        _todo(action="list", all=True),
+    ]
+    proc = _run_todo(env, calls)
+    _first, second = proc.stdout.split("todo: isError=")[-2:]
+    assert "[x] #1: a — pytest 3 passed" in proc.stdout, proc.stdout
+    assert "—" not in second, proc.stdout
+    assert "pytest 3 passed" not in second
+
+
+def test_todo_changes_return_a_compact_summary_not_the_whole_list(env):
+    texts = [f"item{i}" for i in range(1, 8)]
+    proc = _run_todo(env, [_todo(action="add", texts=texts)])
+    body = _last_todo_result(proc.stdout)
+    # 変更の結果は、未完了の先頭 3 件と件数だけ (全件は list)
+    assert "#1: item1" in body and "#3: item3" in body and "#4: item4" not in body, proc.stdout
+    assert "… 他 4 件" in body and "未完了 7 件" in body, proc.stdout
+    # list は全件
+    proc = _run_todo(env, [_todo(action="add", texts=texts), _todo(action="list")])
+    assert "#7: item7" in _last_todo_result(proc.stdout), proc.stdout
+
+
+def test_todo_reminds_once_when_the_answer_ends_with_work_in_progress(env):
+    rounds = [
+        [
+            _todo(action="add", texts=["a", "b"]),
+            _todo(action="set", id=1, status="in_progress"),
+        ]
+    ]
+    proc = run_pi(
+        env,
+        [],
+        extra=("-e", str(TODO_EXT)),
+        FAUX_TOOL_ROUNDS=json.dumps(rounds),
+        FAUX_ECHO_REMINDER="1",
+    )
+    assert proc.returncode == 0, proc.stderr
+    # 作業中の項目が残るので、終わろうとしたところで 1 回だけ促す
+    assert "REMINDER=" in proc.stdout and "#1 a" in proc.stdout, proc.stdout
+    assert proc.stdout.count("REMINDER=") == 1, proc.stdout
+
+
+def test_todo_does_not_remind_when_nothing_is_in_progress(env):
+    rounds = [
+        [
+            _todo(action="add", texts=["a"]),
+            _todo(action="set", id=1, status="done"),
+        ]
+    ]
+    proc = run_pi(
+        env,
+        [],
+        extra=("-e", str(TODO_EXT)),
+        FAUX_TOOL_ROUNDS=json.dumps(rounds),
+        FAUX_ECHO_REMINDER="1",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "REMINDER=" not in proc.stdout, proc.stdout
 
 
 def test_todo_update_and_remove(env):
@@ -927,6 +1300,39 @@ def test_todo_footer_shows_progress_the_active_item_and_clears_on_tidy(env):
     assert any(s and "📋 0/2 ▶ first step" in s for s in statuses), statuses
     assert any(s and "✅ 2/2" in s for s in statuses), statuses
     assert statuses[-1] is None, statuses  # 片付けて空になったら表示を消す
+
+
+def test_agent_commands_start_a_child_and_list_children(env):
+    env["env"].update(
+        FAUX_CHILD_TOOL_CALLS="[]",
+        FAUX_COUNT_USER="1",
+        FAUX_DELAY_MS="1500",
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+    )
+    notices: list = []
+    messages = ["/agent worker investigate", "/agents", "/agent nobody x", "/agent"]
+    _rpc_script(env, [], messages, [], notices=notices)
+    joined = "\n".join(str(n) for n in notices)
+    assert "worker を起動しました" in joined, notices
+    # 動いている間の一覧
+    assert "worker running" in joined and "calls" in joined, notices
+    assert joined.count("使い方: /agent") == 2, notices
+
+
+def test_activity_footer_names_the_running_children_with_elapsed_time(env):
+    # 3 件以下なら名前と経過時間 (子は遅くして、フッターの 1 秒ごとの更新を見る)
+    env["env"].update(
+        FAUX_CHILD_TOOL_CALLS="[]",
+        FAUX_COUNT_USER="1",
+        FAUX_DELAY_MS="2500",
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+    )
+    activity = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "activity" / "index.ts"
+    calls = [{"name": "guarded_task", "args": {"agent": "worker", "task": "slow"}}]
+    _, statuses = _rpc_script(
+        env, calls, ["go"], [], status_key="activity", extra=("-e", str(activity))
+    )
+    assert any(s and s.startswith("🤖 worker ") for s in statuses), statuses
 
 
 def test_git_commit_confirmation_shows_subject_and_body(env):

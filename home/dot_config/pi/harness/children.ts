@@ -7,13 +7,17 @@ import { randomBytes } from "node:crypto";
 // 承認されなかった呼び出しの理由の先頭。子の結果から「承認待ちで未完了」を見分けるのに使う
 export const NOT_APPROVED = "not approved:";
 
-export type RoundStatus = "done" | "blocked" | "failed" | "limit" | "closed";
-export type RoundResult = { status: RoundStatus; blocked: string[]; errors: string[]; answer: string; note?: string };
+// aborted: 親が abort で今の往復だけを止めた (子は残る。履歴は途中までで、完了とは見なさない)
+export type RoundStatus = "done" | "blocked" | "failed" | "limit" | "closed" | "aborted";
+// 1 往復の使用量 (子の assistant メッセージの usage の合計)
+export type RoundStats = { durationMs: number; calls: number; tokens: number; cost: number };
+export type RoundResult = { status: RoundStatus; blocked: string[]; errors: string[]; answer: string; note?: string; stats: RoundStats };
 
-// 1 往復の最終状態。優先順: 親の停止・中断・時間切れ → 承認されなかった呼び出し → 最後の assistant の stopReason
+// 1 往復の最終状態。優先順: 親の停止・中断・時間切れ → 親の abort → 承認されなかった呼び出し → 最後の assistant の stopReason
 export type RoundFacts = {
 	closed: boolean;
 	timedOut: boolean;
+	interrupted?: boolean; // 親が abort を送った
 	aborted: boolean; // agent_settled.aborted
 	blocked: number;
 	last: { stopReason?: string; errorMessage?: string } | null;
@@ -21,6 +25,7 @@ export type RoundFacts = {
 export function classify(f: RoundFacts): { status: RoundStatus; note?: string } {
 	if (f.closed) return { status: "closed", note: "closed while running" };
 	if (f.timedOut) return { status: "limit", note: "time limit" };
+	if (f.interrupted) return { status: "aborted", note: "interrupted by the parent (partial work)" };
 	if (f.aborted) return { status: "failed", note: "aborted" };
 	if (f.blocked > 0) return { status: "blocked" };
 	if (!f.last) return { status: "failed", note: "no assistant message" };
@@ -34,40 +39,95 @@ export function classify(f: RoundFacts): { status: RoundStatus; note?: string } 
 
 // ─── 入力 ───────────────────────────────────────────────────────────
 
+export type BatchItem = { agent: string; task: string; model?: string };
 export type TaskInput =
-	| { kind: "new"; agent: string; task: string; keep: boolean }
-	| { kind: "followup"; jobId: string; task: string }
-	| { kind: "close"; jobId: string };
+	| { kind: "new"; agent: string; task: string; keep: boolean; background: boolean; model?: string; todo?: number }
+	| { kind: "batch"; tasks: BatchItem[]; background: boolean }
+	| { kind: "followup"; jobId: string; task: string; background: boolean }
+	| { kind: "close"; jobId: string }
+	| { kind: "status"; jobId: string }
+	| { kind: "steer"; jobId: string; message: string }
+	| { kind: "abort"; jobId: string }
+	| { kind: "list" };
 
-// 3 形式の排他を決める。スキーマはモデルへの説明のために 1 つの平らな object で、排他はここで確かめる
+export const MAX_BATCH = 12;
+
+// 形の排他を決める。スキーマはモデルへの説明のために 1 つの平らな object で、排他はここで確かめる
 // (tool の parameters の最上位に anyOf を置くと拒む提供元がある)
 export function parseTaskInput(p: any): TaskInput {
 	const has = (k: string) => p?.[k] !== undefined && p?.[k] !== null;
 	const fail = (msg: string): never => {
 		throw new Error(`invalid guarded_task input: ${msg}`);
 	};
+	const only = (allowed: string[], form: string) => {
+		for (const k of Object.keys(p ?? {})) if (has(k) && !allowed.includes(k)) fail(`\`${k}\` cannot be used with ${form}`);
+	};
+	const bool = (k: string) => {
+		if (p?.[k] !== undefined && typeof p[k] !== "boolean") fail(`\`${k}\` must be boolean`);
+		return p?.[k] === true;
+	};
+	if (has("list")) {
+		if (p.list !== true) fail("`list` must be true");
+		only(["list"], "`list`");
+		return { kind: "list" };
+	}
+	if (has("tasks")) {
+		only(["tasks", "background"], "`tasks`");
+		if (!Array.isArray(p.tasks) || p.tasks.length === 0) fail("`tasks` must be a non-empty array");
+		if (p.tasks.length > MAX_BATCH) fail(`\`tasks\` can have at most ${MAX_BATCH} items`);
+		const tasks: BatchItem[] = p.tasks.map((t: any, i: number) => {
+			if (typeof t?.agent !== "string" || t.agent === "") fail(`tasks[${i}] needs \`agent\``);
+			if (typeof t?.task !== "string" || t.task === "") fail(`tasks[${i}] needs \`task\``);
+			if (t.model !== undefined && typeof t.model !== "string") fail(`tasks[${i}].model must be a string`);
+			for (const k of Object.keys(t)) if (!["agent", "task", "model"].includes(k)) fail(`tasks[${i}] has unknown \`${k}\``);
+			return { agent: t.agent, task: t.task, ...(t.model ? { model: t.model } : {}) };
+		});
+		return { kind: "batch", tasks, background: bool("background") };
+	}
 	if (has("jobId")) {
-		if (has("agent") || has("keep")) fail("`agent` and `keep` cannot be used with `jobId`");
 		if (typeof p.jobId !== "string" || p.jobId === "") fail("`jobId` must be a string");
-		if (p.close !== undefined && p.close !== true) fail("`close` must be true");
-		if (p.close === true) {
-			if (has("task")) fail("`task` cannot be used with `close`");
-			return { kind: "close", jobId: p.jobId };
+		const modes = ["close", "status", "steer", "abort", "task"].filter(has);
+		if (modes.length !== 1) fail(`with \`jobId\`, give exactly one of close / status / steer / abort / task (got ${modes.length === 0 ? "none" : modes.join(", ")})`);
+		const mode = modes[0];
+		if (mode === "close" || mode === "status" || mode === "abort") {
+			if (p[mode] !== true) fail(`\`${mode}\` must be true`);
+			only(["jobId", mode], `\`${mode}\``);
+			return { kind: mode, jobId: p.jobId } as TaskInput;
+		}
+		if (mode === "steer") {
+			if (typeof p.steer !== "string" || p.steer === "") fail("`steer` must be a non-empty string");
+			only(["jobId", "steer"], "`steer`");
+			return { kind: "steer", jobId: p.jobId, message: p.steer };
 		}
 		if (typeof p.task !== "string" || p.task === "") fail("follow-up needs `task`");
-		return { kind: "followup", jobId: p.jobId, task: p.task };
+		only(["jobId", "task", "background"], "a follow-up");
+		return { kind: "followup", jobId: p.jobId, task: p.task, background: bool("background") };
 	}
-	if (p?.close !== undefined) fail("`close` needs `jobId`");
+	for (const k of ["close", "status", "steer", "abort"]) if (has(k)) fail(`\`${k}\` needs \`jobId\``);
 	if (typeof p?.agent !== "string" || p.agent === "") fail("new task needs `agent`");
 	if (typeof p?.task !== "string" || p.task === "") fail("new task needs `task`");
 	if (p.keep !== undefined && typeof p.keep !== "boolean") fail("`keep` must be boolean");
-	return { kind: "new", agent: p.agent, task: p.task, keep: p.keep === true };
+	if (p.model !== undefined && typeof p.model !== "string") fail("`model` must be a string");
+	if (p.todo !== undefined && (typeof p.todo !== "number" || !Number.isInteger(p.todo))) fail("`todo` must be an integer id");
+	return {
+		kind: "new",
+		agent: p.agent,
+		task: p.task,
+		keep: p.keep === true,
+		background: bool("background"),
+		...(p.model ? { model: p.model } : {}),
+		...(p.todo !== undefined ? { todo: p.todo } : {}),
+	};
 }
 
 // ─── job ────────────────────────────────────────────────────────────
 
 const UI_REQUESTS_TO_CANCEL = new Set(["confirm", "select", "input", "editor"]);
 const MAX_LINE = 4 * 1024 * 1024; // 1 行の上限 (これを超える 1 行は捨てる。メモリを守る)
+// 時間切れの前に子へ送る「まとめに入れ」の割合と文面
+const WRAP_UP_RATIO = 0.8;
+export const WRAP_UP_MESSAGE =
+	"時間の上限が近づいています。いまの作業を切り上げ、ここまでに分かったことと未完了の点を、途中でもよいので返答にまとめてください。";
 
 type Round = {
 	id: string;
@@ -77,10 +137,14 @@ type Round = {
 	answer: string;
 	resolve: (r: RoundResult) => void;
 	timer?: NodeJS.Timeout;
+	warn?: NodeJS.Timeout;
 	timedOut: boolean;
 	aborted: boolean;
+	interrupted: boolean;
 	closed: boolean;
 	started: boolean;
+	startedAt: number;
+	base: { calls: number; tokens: number; cost: number };
 };
 
 export type JobOptions = {
@@ -94,12 +158,30 @@ export type JobOptions = {
 	command?: string;
 };
 
+export type JobSnapshot = {
+	id: string;
+	agent: string;
+	state: "idle" | "running" | "closed";
+	ageMs: number;
+	roundMs: number;
+	lastTool: string;
+	calls: number;
+	tokens: number;
+	cost: number;
+};
+
 export class Job {
 	readonly id: string;
 	readonly agent: string;
 	readonly owner: { cwd: string; role: string };
 	state: "idle" | "running" | "closed" = "idle";
 	readonly proc: ChildProcess;
+	// 子の使用量 (assistant メッセージの usage の合計) と、最後に使ったツール
+	readonly createdAt = Date.now();
+	lastTool = "";
+	calls = 0;
+	tokens = 0;
+	cost = 0;
 	private round: Round | null = null;
 	private buf = "";
 	private dropping = false;
@@ -138,6 +220,21 @@ export class Job {
 		return this.proc.pid;
 	}
 
+	snapshot(): JobSnapshot {
+		const now = Date.now();
+		return {
+			id: this.id,
+			agent: this.agent,
+			state: this.state,
+			ageMs: now - this.createdAt,
+			roundMs: this.round ? now - this.round.startedAt : 0,
+			lastTool: this.lastTool,
+			calls: this.calls,
+			tokens: this.tokens,
+			cost: this.cost,
+		};
+	}
+
 	private send(obj: unknown) {
 		if (this.exited || !this.proc.stdin || this.proc.stdin.destroyed) return;
 		this.proc.stdin.write(`${JSON.stringify(obj)}\n`);
@@ -171,6 +268,16 @@ export class Job {
 			if (UI_REQUESTS_TO_CANCEL.has(e.method)) this.send({ type: "extension_ui_response", id: e.id, cancelled: true });
 			return;
 		}
+		// 状態の集計 (往復の外でも数える)
+		if (e.type === "tool_execution_start") this.lastTool = String(e.toolName ?? "");
+		else if (e.type === "message_end" && e.message?.role === "assistant") {
+			this.calls++;
+			const u = e.message.usage;
+			if (u) {
+				this.tokens += Number(u.totalTokens ?? Number(u.input ?? 0) + Number(u.output ?? 0)) || 0;
+				this.cost += Number(u.cost?.total ?? 0) || 0;
+			}
+		}
 		const r = this.round;
 		if (!r) return;
 		if (e.type === "response" && e.id === r.id) {
@@ -189,36 +296,67 @@ export class Job {
 		}
 	}
 
-	// 往復を 1 つ終える。status が null なら事実から判定する。done 以外は job も閉じる
+	private statsOf(r: Round): RoundStats {
+		return {
+			durationMs: Date.now() - r.startedAt,
+			calls: this.calls - r.base.calls,
+			tokens: this.tokens - r.base.tokens,
+			cost: this.cost - r.base.cost,
+		};
+	}
+
+	// 往復を 1 つ終える。status が null なら事実から判定する。done と aborted 以外は job も閉じる
 	private finish(r: Round | null, status: RoundStatus | null, note?: string) {
 		if (!r || this.round !== r) return;
 		this.round = null;
 		if (r.timer) clearTimeout(r.timer);
+		if (r.warn) clearTimeout(r.warn);
 		let result: { status: RoundStatus; note?: string };
 		if (status === null) {
-			result = classify({ closed: r.closed, timedOut: r.timedOut, aborted: r.aborted, blocked: r.blocked.length, last: r.last });
+			result = classify({ closed: r.closed, timedOut: r.timedOut, interrupted: r.interrupted, aborted: r.aborted, blocked: r.blocked.length, last: r.last });
 		} else {
 			result = { status: r.timedOut ? "limit" : r.closed ? "closed" : status, note };
 		}
 		if (this.state !== "closed") this.state = "idle";
-		// 時間切れ・中断は子が作業中のまま。それ以外の done でない往復は子が idle なので、stdin を閉じれば済む
-		if (result.status !== "done") this.close(result.status === "limit" || result.status === "closed");
-		r.resolve({ ...result, blocked: r.blocked, errors: r.errors, answer: r.answer });
+		// 時間切れ・中断は子が作業中のまま。それ以外の done でない往復は子が idle なので、stdin を閉じれば済む。
+		// 親の abort は、子が止まって idle になっているので、子は残す (追加依頼で続けられる)
+		if (result.status !== "done" && result.status !== "aborted") this.close(result.status === "limit" || result.status === "closed");
+		r.resolve({ ...result, blocked: r.blocked, errors: r.errors, answer: r.answer, stats: this.statsOf(r) });
 	}
 
 	// 1 往復を実行する。呼び出しの前に state を同期で running にする (並行する呼び出しは busy)
-	run(message: string, opts: { signal?: AbortSignal; timeoutMs: number }): Promise<RoundResult> {
+	run(message: string, opts: { signal?: AbortSignal; timeoutMs: number; wrapUpMessage?: string }): Promise<RoundResult> {
 		if (this.state === "closed") return Promise.reject(new Error("job is closed"));
 		if (this.state === "running") return Promise.reject(new Error("job is busy"));
 		this.state = "running";
 		const id = `r${++this.seq}`;
 		return new Promise<RoundResult>((resolve) => {
-			const r: Round = { id, blocked: [], errors: [], last: null, answer: "", resolve, timedOut: false, aborted: false, closed: false, started: false };
+			const r: Round = {
+				id,
+				blocked: [],
+				errors: [],
+				last: null,
+				answer: "",
+				resolve,
+				timedOut: false,
+				aborted: false,
+				interrupted: false,
+				closed: false,
+				started: false,
+				startedAt: Date.now(),
+				base: { calls: this.calls, tokens: this.tokens, cost: this.cost },
+			};
 			this.round = r;
 			r.timer = setTimeout(() => {
 				r.timedOut = true;
 				this.finish(r, "limit", "time limit");
 			}, opts.timeoutMs);
+			// 上限の手前で、まとめに入るよう子へ促す (途中の結果が失われないように)
+			if (opts.wrapUpMessage) {
+				r.warn = setTimeout(() => {
+					if (this.round === r && r.started) this.send({ type: "steer", message: opts.wrapUpMessage });
+				}, Math.floor(opts.timeoutMs * WRAP_UP_RATIO));
+			}
 			const onAbort = () => {
 				this.send({ type: "abort" });
 				r.closed = true;
@@ -233,6 +371,22 @@ export class Job {
 			};
 			this.send({ id, type: "prompt", message });
 		});
+	}
+
+	// 作業中の子へ追加の指示を送る (今のターンのツール呼び出しが終わってから、次の LLM 呼び出しの前に届く)
+	steer(message: string): "queued" | "not-running" {
+		if (this.state !== "running" || !this.round) return "not-running";
+		this.send({ type: "steer", message });
+		return "queued";
+	}
+
+	// 今の往復だけを止める。子は残り、追加依頼で続けられる。待っている run() には aborted を返す
+	interrupt(): boolean {
+		const r = this.round;
+		if (!r || this.state !== "running") return false;
+		r.interrupted = true;
+		this.send({ type: "abort" });
+		return true;
 	}
 
 	// 停止 (冪等)。待機中の往復には closed を返す。stdin を閉じ、3 秒で終わらなければ強制終了する。
