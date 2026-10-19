@@ -104,9 +104,15 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 | `read-sed-n` | `sed -n` での読み取り | read ツール |
 | `write-cat-tee-heredoc` | `cat >` / `tee` とヒアドキュメントでのファイル作成 | write ツール |
 | `write-heredoc-script` | ヒアドキュメントでスクリプトを渡す形 | write ツールで書いてから実行 |
-| `bg-run-instead-of-ampersand` | 行末の `&`、行頭の `nohup` / `setsid`、`disown` | `bg_run` ツール（終了通知でターンが再開する。bash の `&` は通知が届かない） |
+| `bg-run-instead-of-ampersand` | 行末の `&`、両側が空白の `&`（`a & b`）、行頭の `nohup` / `setsid`、`disown` | `bg_run` ツール（終了通知でターンが再開する。bash の `&` は通知が届かない） |
 
-`bg-run-instead-of-ampersand` は pi 専用。行の途中の `a & b` は引用内と区別できないので対象外（`&&` / `2>&1` / `&>` は当たらない）。
+`bg-run-instead-of-ampersand` は pi 専用。`&&` / `2>&1` / `&>` / `|&` / URL の `?a=1&b=2` は当たらない。
+引用内の `a & b`（`echo "Q & A"`、`git log --grep='a & b'`、`echo a \& b`、ヒアドキュメント本文、コメントなど）は、引用と区別できないので**当たる**
+（割り切り。回避: `&` の両側の空白を外す。git / gh の `-m` / `--title` / `--body` などは `unless` で外す）。
+**`unless` はコマンド全体に効くので、`gh pr create --title x & sleep 20` のように本物のバックグラウンドを併記する形は見逃す**（既知。
+実際に起きる頻度は低いと見ているが未計測）。引用を考慮した判定（TS の判定器で引用外の演算子だけを見る）は、これらが実害になったときの候補。
+行の途中の `&` を対象に足したのは、実際のモデルがすり抜けたため（`grok-4.7` の `sleep 20 & echo $!`、`gpt-6-sol` の `… & pid=$!`。
+[実験 B1 の F6](../research/agents/pi-bg-experiments.md)）。
 
 - OpenCode の guide plugin も同じ `[[pi.guide]]` を使う。`[[opencode.shell.guide]]` の `pi = "<id>"` が、
   並びのどこに差し込むかを決める（[pi と共有する節](agent-config-generation.md#pi-と共有する節)）

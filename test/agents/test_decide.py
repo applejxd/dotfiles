@@ -170,6 +170,16 @@ def test_bash_decisions(command, decision, source):
         ("(sleep 3; echo x) &", "bg-run-instead-of-ampersand"),
         ("nohup sh -c 'sleep 3' > out.log 2>&1 &", "bg-run-instead-of-ampersand"),
         ("setsid make build", "bg-run-instead-of-ampersand"),
+        # 行の途中の & (B1 の F6: grok-4.7 / gpt-6-sol がすり抜けた形)
+        ("sleep 20 & echo $!", "bg-run-instead-of-ampersand"),
+        (
+            "sleep 20 </dev/null >/dev/null 2>&1 & pid=$!; printf '%s' $pid",
+            "bg-run-instead-of-ampersand",
+        ),
+        (
+            "python3 -m http.server 8765 & sleep 1 && curl -s localhost:8765",
+            "bg-run-instead-of-ampersand",
+        ),
     ],
 )
 def test_guides_deny_with_their_message(command, guide):
@@ -187,6 +197,9 @@ def test_guides_deny_with_their_message(command, guide):
         "ls && echo ok",
         "make 2>&1 | wc -l",
         "echo hi &> /dev/null",
+        "curl -s 'http://x.example/?a=1&b=2'",
+        "make 2>&1 | head -5 && echo ok",
+        "git push |& cat",
         "git commit -m 'run nohup x &'",
     ],
 )

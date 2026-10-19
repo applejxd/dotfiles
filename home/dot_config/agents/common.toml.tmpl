@@ -1047,12 +1047,12 @@ message = "ヒアドキュメントでスクリプトを渡さないでくださ
 
 # bash でのバックグラウンド起動を bg_run へ寄せる。bash の `&` / nohup は完了通知が届かず、
 # ターンも再開しない。bg_run (bash と同じ判定) だけが終了時にターンを起こす。
-# ★対象は行末の `&` と行頭の nohup / setsid、disown。`&&` / `2>&1` / `&>` は当たらない。
-# ★行の途中の `a & b` は引用内と区別が付かないので対象外 (割り切り)。
-# see docs/spec/pi-decide.md#誘導
+# ★対象は行末の `&`、両側が空白の `&` (`a & b`)、行頭の nohup / setsid、disown。`&&` / `2>&1` / `&>` / `|&` / URL の `?a=1&b=2` は当たらない。
+# ★引用内の `a & b` (`echo "Q & A"` など) も当たる。引用とは区別が付かない割り切り (git / gh の -m は unless で外す)。
+# see docs/research/agents/pi-bg-experiments.md (F6)、docs/spec/pi-decide.md#誘導
 [[pi.guide]]
 id = "bg-run-instead-of-ampersand"
-pattern = '(^|[^&>\s])\s*&\s*(\n|$)|(^|&&|;|\n)\s*(nohup|setsid)\s|(^|[\s;])disown(\s|$)'
+pattern = '(^|[^&>\s])\s*&\s*(\n|$)|(?<=\s)&(?=\s)|(^|&&|;|\n)\s*(nohup|setsid)\s|(^|[\s;])disown(\s|$)'
 unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
 message = "bash の & / nohup / setsid でバックグラウンド実行しないでください。bg_run ツールを使ってください (完了時に通知が届いてターンが再開し、bg_log / bg_kill で管理できます)。"
 

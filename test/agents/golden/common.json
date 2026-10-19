@@ -1033,7 +1033,7 @@
    {
     "id": "bg-run-instead-of-ampersand",
     "message": "bash の & / nohup / setsid でバックグラウンド実行しないでください。bg_run ツールを使ってください (完了時に通知が届いてターンが再開し、bg_log / bg_kill で管理できます)。",
-    "pattern": "(^|[^&>\\s])\\s*&\\s*(\\n|$)|(^|&&|;|\\n)\\s*(nohup|setsid)\\s|(^|[\\s;])disown(\\s|$)",
+    "pattern": "(^|[^&>\\s])\\s*&\\s*(\\n|$)|(?<=\\s)&(?=\\s)|(^|&&|;|\\n)\\s*(nohup|setsid)\\s|(^|[\\s;])disown(\\s|$)",
     "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
    }
   ],
