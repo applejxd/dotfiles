@@ -114,7 +114,7 @@ skill-name/
   - このリポジトリでだけ使う: `.agents/skills/<名前>/SKILL.md`（`pis` が作業先の分を `--skill` で足す。
     `docs/spec/pi-guard.md` の「起動」）
 - **frontmatter の検証**: `uv run pre-commit run --files <SKILL.md>`（`name` とディレクトリ名の一致、`description` の長さ、
-  引用符を確かめる。`home/dot_claude/skills` などの配布先が対象で、`.agents/skills` は対象外のため、読み込めるかは別に確かめる）
+  引用符を確かめる。`.agents/skills` も対象。`scripts/agents/validate_skills.py` の `SKILL_ROOTS`）。読み込めるかは `pis` の `/reload` でも確かめる
 - **`pis` の下で呼ぶ**: フルガードがスキルの一覧をシステムプロンプトへ足すので、description で自動に発動する。
   明示して呼ぶなら `/skill:<名前>`、編集したら `/reload` で再読み込みする
 - **コメントと docs**: 仕組み・判断・経緯は `docs/` を正本にし、スキルからは参照先を示す。同じ説明を両方に書かない
