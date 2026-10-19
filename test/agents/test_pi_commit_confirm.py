@@ -317,7 +317,7 @@ def test_the_tui_shows_the_structure_and_a_countdown_then_saves_on_timeout(env):
     script.write_text(
         f"cd {env['proj']}\nexport {exports} PI_COMMIT_CONFIRM_TIMEOUT_MS=6000\n"
         f"export FAUX_TOOL_CALLS={json.dumps(json.dumps(bash_call(COMMIT)))}\n"
-        f"exec {PI} --no-session --model faux/spike -e {FIXTURES / 'faux.ts'}\n",
+        f"exec {PI} --no-approve --no-session --model faux/spike -e {FIXTURES / 'faux.ts'}\n",
         encoding="utf-8",
     )
     subprocess.run(
