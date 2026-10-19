@@ -305,6 +305,17 @@ def test_a_killed_job_does_not_wake_the_agent(env):
     assert len(starts) == 1 and notices == [], (starts, notices)
 
 
+def test_long_sleep_is_refused_in_guarded_bash_but_not_inside_a_background_job(env):
+    """長い sleep で会話を止めない (#77)。待つジョブ (bg_run) の中身には当てない。bypass でも外れない。"""
+    proc = run_pi(env, bash_call("sleep 30"), PI_HARNESS_BYPASS="1")
+    assert "isError=true" in proc.stdout and "10 秒以上の sleep" in proc.stdout, proc.stdout
+    proc = run_pi(env, bash_call("sleep 1.5"), PI_HARNESS_BYPASS="1")
+    assert "10 秒以上の sleep" not in proc.stdout, proc.stdout
+    proc = run_pi(env, _bg("sleep 30"), extra=("-e", str(ACTIVITY)), PI_HARNESS_BYPASS="1")
+    assert "started j1" in proc.stdout, proc.stdout
+    assert "10 秒以上の sleep" not in proc.stdout, proc.stdout
+
+
 def test_bg_run_asks_when_bash_would_ask(env):
     """bash なら確認になるコマンドは、バックグラウンドでも確認になる (UI が無ければ拒否)。"""
     marker = env["tmp"] / "started"

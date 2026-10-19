@@ -54,6 +54,8 @@ function bashAsk(ctx: Ctx, cmd: string): Response | null {
 /** `[[pi.guide]]` (誘導) に当たれば、案内を理由にした deny。bypass でも外れない。 */
 function guide(cmd: string, pi: Obj): Response | null {
 	for (const g of (pi.guide as Obj[] | undefined) ?? []) {
+		// scope 付きはここでは評価しない (foreground は judge/call.ts が guarded_bash だけに当てる)
+		if (g.scope) continue;
 		const { pattern, unless } = g;
 		if (typeof pattern !== "string" || typeof g.message !== "string") {
 			throw new Error(`[[pi.guide]] ${JSON.stringify(g.id ?? null)} に pattern と message が要ります`);

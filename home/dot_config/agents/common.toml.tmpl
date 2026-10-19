@@ -1056,6 +1056,17 @@ pattern = '(^|[^&>\s])\s*&\s*(\n|$)|(?<=\s)&(?=\s)|(^|&&|;|\n)\s*(nohup|setsid)\
 unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
 message = "bash の & / nohup / setsid でバックグラウンド実行しないでください。bg_run ツールを使ってください (完了時に通知が届いてターンが再開し、bg_log / bg_kill で管理できます)。"
 
+# 長い sleep で会話を止めない。待つコマンドは bg_run (終わったときの通知でターンが再開する) で起こす。
+# ★scope = "foreground": guarded_bash だけに効く。bg_run の中身 (sleep 300 を待つジョブそのもの) には当てない。判定器本体 (judge/bash.ts, decide.py) は scope 付きを無視する。
+# ★対象はコマンドの先頭や ; && | & ( do then else の直後の sleep で、秒数が 10 以上、または m / h / d 付き、infinity。sleep 9 以下や sleep 1.5 は通す。
+# see docs/spec/pi-decide.md#誘導、docs/research/agents/pi-bg-experiments.md
+[[pi.guide]]
+id = "long-sleep-in-foreground"
+scope = "foreground"
+pattern = '(^|&&|[;|&(\n]|\b(do|then|else))\s*sleep\s+(\d{2,}(\.\d+)?s?|\d+(\.\d+)?[mhd]|infinity)(\s|;|&|\)|$)'
+unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
+message = "10 秒以上の sleep でここを止めないでください (その間会話が止まります)。待つコマンドは bg_run で起動すると、終わったときの通知でターンが再開し、待つ間も会話を続けられます。短い待ち (9 秒以下) はそのままで構いません。"
+
 # ~/.pi/agent/settings.json へ出す設定。ここに書いたキーは生成器の持ち物で、消すと settings.json からも消える。
 # 書けるキー: defaultThinkingLevel / skills / enabledModels / extensions。既定のモデルは [opencode.model] の default 階層。
 # see docs/spec/pi-guard.md#pi-の設定

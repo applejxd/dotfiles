@@ -70,11 +70,17 @@ def test_opencode_guides_take_pi_guides_by_id_in_place():
     [
         ({"pi": "missing"}, "に無い"),
         ({"pi": "a", "message": "x"}, "他のキー"),
+        ({"pi": "s"}, "scope 付き"),
     ],
 )
 def test_bad_guide_references_stop_generation(entry, message):
     common = {
-        "pi": {"guide": [{"id": "a", "pattern": "x", "message": "m"}]},
+        "pi": {
+            "guide": [
+                {"id": "a", "pattern": "x", "message": "m"},
+                {"id": "s", "pattern": "y", "message": "m", "scope": "foreground"},
+            ]
+        },
         "opencode": {"shell": {"guide": [entry]}},
     }
     with pytest.raises(SystemExit, match=message):

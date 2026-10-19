@@ -207,6 +207,50 @@ def test_guide_exclusions(command):
     assert "guide" not in bash(command)
 
 
+def _long_sleep_guide():
+    from agents_common import load_common
+
+    guides = {g["id"]: g for g in load_common()["pi"]["guide"]}
+    return guides["long-sleep-in-foreground"]
+
+
+@pytest.mark.parametrize(
+    ("command", "hit"),
+    [
+        ("sleep 10", True),
+        ("sleep 30", True),
+        ("sleep 270 && echo done", True),
+        ("cd x && sleep 60; ls", True),
+        ("while true; do sleep 60; done", True),
+        ("sleep 5m", True),
+        ("sleep 1h", True),
+        ("sleep infinity", True),
+        ("sleep 9", False),
+        ("sleep 1.5", False),
+        ("sleep 0.2 && echo ok", False),
+        ("echo sleep 30", False),
+        ("grep -r 'sleep 30' src", False),
+        ("git commit -m 'wait; sleep 30'", False),
+        ("ls", False),
+        # 既知の限界 (引用を解釈しない。docs/spec/pi-decide.md): 引用内の `; sleep 30` は当たる
+        ("printf 'a; sleep 30 b'", True),
+        # unless はコマンド全体に効くので、git / gh の -m と併記した本物の sleep は見逃す
+        ("git commit -m 'ok'; sleep 30", False),
+    ],
+)
+def test_long_sleep_guide_pattern(command, hit):
+    import re
+
+    g = _long_sleep_guide()
+    matched = bool(re.search(g["pattern"], command)) and not re.search(g["unless"], command)
+    assert matched is hit
+
+
+def test_the_judge_itself_ignores_a_foreground_scoped_guide():
+    """scope 付きは判定器本体では評価しない (guarded_bash だけに当てる。bg_run の中身には当てない)。"""
+    assert "guide" not in bash("sleep 30", bypass=True)
+
+
 def test_reader_cannot_use_bash_but_common_deny_comes_first():
     assert bash("ls", role="reader")["decision"] == "deny"
     assert bash("ls", role="reader")["source"] == "rule"

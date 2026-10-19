@@ -10,6 +10,7 @@ import type { Tables } from "./context.ts";
 import { decide as judge, setBashDecider } from "./decide.ts";
 import { makeBashDecider } from "./bash.ts";
 import type { Common } from "./policy.ts";
+import { pyRegex } from "./pystr.ts";
 
 export type Decision = { decision: "allow" | "ask" | "deny"; reason: string; source: string };
 
@@ -32,7 +33,17 @@ export type CallDeciderOptions = {
 export function createCallDecider(o: CallDeciderOptions): (tool: string, input: unknown, cwd: string) => Decision {
 	// 判定器は呼び出しごとに文脈を作り直す。ここで持つのは読み込んだ設定だけ
 	setBashDecider(makeBashDecider(o.judge.tables));
+	// scope = "foreground" の誘導は、bash (guarded_bash) だけに当てる。bg_run の中身 (待つコマンドそのもの) には当てない
+	const foreground = (((o.judge.common as any)?.pi?.guide as any[] | undefined) ?? []).filter((g) => g?.scope === "foreground");
 	return (tool, input, cwd) => {
+		if (tool === "bash" && foreground.length > 0) {
+			const command = String((input as any)?.command ?? "");
+			for (const g of foreground) {
+				if (pyRegex(g.pattern).test(command) && !(g.unless && pyRegex(g.unless).test(command))) {
+					return { decision: "deny", reason: g.message, source: "rule" };
+				}
+			}
+		}
 		if (BG_OTHERS.includes(tool)) {
 			if ((o.profileTools[o.role] ?? []).includes("bash")) {
 				return { decision: "allow", reason: "ジョブの確認と停止だけ (bash を使える役割)", source: "rule" };

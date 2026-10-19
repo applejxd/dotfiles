@@ -1035,6 +1035,13 @@
     "message": "bash の & / nohup / setsid でバックグラウンド実行しないでください。bg_run ツールを使ってください (完了時に通知が届いてターンが再開し、bg_log / bg_kill で管理できます)。",
     "pattern": "(^|[^&>\\s])\\s*&\\s*(\\n|$)|(?<=\\s)&(?=\\s)|(^|&&|;|\\n)\\s*(nohup|setsid)\\s|(^|[\\s;])disown(\\s|$)",
     "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
+   },
+   {
+    "id": "long-sleep-in-foreground",
+    "message": "10 秒以上の sleep でここを止めないでください (その間会話が止まります)。待つコマンドは bg_run で起動すると、終わったときの通知でターンが再開し、待つ間も会話を続けられます。短い待ち (9 秒以下) はそのままで構いません。",
+    "pattern": "(^|&&|[;|&(\\n]|\\b(do|then|else))\\s*sleep\\s+(\\d{2,}(\\.\\d+)?s?|\\d+(\\.\\d+)?[mhd]|infinity)(\\s|;|&|\\)|$)",
+    "scope": "foreground",
+    "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
    }
   ],
   "keybinds": {

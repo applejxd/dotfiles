@@ -114,6 +114,10 @@ def _guide(cmd: str, pi: dict[str, Any]) -> dict[str, Any] | None:
     (OpenCode の guide plugin と共有)。
     """
     for guide in pi.get("guide") or []:
+        if guide.get(
+            "scope"
+        ):  # scope 付き (foreground) は judge/call.ts が guarded_bash だけに当てる。ここでは評価しない
+            continue
         pattern, unless = guide.get("pattern"), guide.get("unless")
         if not isinstance(pattern, str) or not isinstance(guide.get("message"), str):
             raise ValueError(f"[[pi.guide]] {guide.get('id')!r} に pattern と message が要ります")

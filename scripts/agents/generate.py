@@ -220,7 +220,10 @@ def resolve_pi_shared(common: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-PI_GUIDE_KEYS = frozenset({"id", "pattern", "unless", "message", "early"})
+PI_GUIDE_KEYS = frozenset({"id", "pattern", "unless", "message", "early", "scope"})
+PI_GUIDE_SCOPES = frozenset(
+    {"foreground"}
+)  # foreground: guarded_bash だけに効く (bg_run には効かない)
 
 
 def _resolve_pi_guides(pi: dict[str, Any], opencode: dict[str, Any]) -> None:
@@ -233,6 +236,10 @@ def _resolve_pi_guides(pi: dict[str, Any], opencode: dict[str, Any]) -> None:
         if not isinstance(guide, dict) or not isinstance(guide.get("id"), str):
             raise SystemExit("[[pi.guide]] は id (文字列) が要る")
         _reject_unknown(f"pi.guide.{guide['id']}", set(guide), PI_GUIDE_KEYS)
+        if "scope" in guide and guide["scope"] not in PI_GUIDE_SCOPES:
+            raise SystemExit(
+                f"[[pi.guide]] {guide['id']} の scope は {sorted(PI_GUIDE_SCOPES)} のどれか"
+            )
         if guide["id"] in guides:
             raise SystemExit(f"[[pi.guide]] の id が重複している: {guide['id']}")
         guides[guide["id"]] = {k: v for k, v in guide.items() if k != "id"}
@@ -249,6 +256,10 @@ def _resolve_pi_guides(pi: dict[str, Any], opencode: dict[str, Any]) -> None:
             raise SystemExit(f"[[opencode.shell.guide]] の pi = {ref!r} には他のキーを書けない")
         if ref not in guides:
             raise SystemExit(f"[[opencode.shell.guide]] の pi = {ref!r} が [[pi.guide]] に無い")
+        if "scope" in guides[ref]:
+            raise SystemExit(
+                f"[[opencode.shell.guide]] の pi = {ref!r} は scope 付き (pi 専用)。OpenCode からは参照できない"
+            )
         resolved.append(copy.deepcopy(guides[ref]))
     shell["guide"] = resolved
 
