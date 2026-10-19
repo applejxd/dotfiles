@@ -67,18 +67,36 @@ function tail(path: string, lines: number): string {
 
 const text = (t: string, isError = false) => ({ content: [{ type: "text", text: t }], details: {}, isError });
 
+// ログの末尾と総行数 (bg_log 用)。一度の読み取りから作る (見出しと本文が別時点にならない)
+function tailWithCount(path: string, lines: number): { total: number; text: string } {
+	try {
+		const all = readFileSync(path, "utf-8").split("\n");
+		if (all[all.length - 1] === "") all.pop();
+		return { total: all.length, text: all.slice(-lines).join("\n") };
+	} catch {
+		return { total: 0, text: "" };
+	}
+}
+
 export default function (pi: ExtensionAPI) {
 	let timer: ReturnType<typeof setInterval> | undefined;
 	let counter = 0;
 	let ui: { setStatus: (key: string, text: string | undefined) => void; notify: (m: string, t?: any) => void } | undefined;
 
+	let last: string | undefined | null = null; // 表示が変わったときだけ出す (何も無い間も毎秒出さない。B1 の F1)
+
 	const refresh = () => {
 		try {
-			ui?.setStatus(STATUS_KEY, label());
+			const now = label();
+			if (now === last) return;
+			last = now;
+			ui?.setStatus(STATUS_KEY, now);
 		} catch {}
 	};
 
 	pi.on("session_start", async (_event: any, ctx: any) => {
+		ui = undefined;
+		last = null;
 		if (!ctx.hasUI) return;
 		ui = ctx.ui;
 		timer ??= setInterval(refresh, 1000);
@@ -95,6 +113,8 @@ export default function (pi: ExtensionAPI) {
 		try {
 			ui?.setStatus(STATUS_KEY, undefined);
 		} catch {}
+		ui = undefined; // 停止後に遅れて来るコールバックが古い UI へ書かないようにする
+		last = null;
 	});
 
 	pi.registerTool({
@@ -156,7 +176,7 @@ export default function (pi: ExtensionAPI) {
 					);
 				} catch {}
 			});
-			return text(`started ${id} (pid ${child.pid})\nlog: ${log}`);
+			return text(`started ${id} (pid ${child.pid})\nread its output with bg_log (the log file itself is not readable by other tools)`);
 		},
 	});
 
@@ -164,7 +184,7 @@ export default function (pi: ExtensionAPI) {
 		name: "bg_log",
 		label: "bg_log",
 		promptSnippet: "Show the state and log tail of a background job by id (no id: list jobs)",
-		description: "Show the state of a background job and the tail of its log. Without an id, list all jobs.",
+		description: "Show the state of a background job and the tail of its log (the log file itself cannot be read with read or bash; use this). Without an id, list all jobs.",
 		parameters: Type.Object({
 			id: Type.Optional(Type.String({ description: "Job id returned by bg_run" })),
 			lines: Type.Optional(Type.Number({ description: `Tail lines (default ${TAIL_DEFAULT}, max ${TAIL_MAX})` })),
@@ -183,7 +203,8 @@ export default function (pi: ExtensionAPI) {
 			if (!job && !done) return text(`unknown job: ${params.id}`, true);
 			const log = job?.log ?? join(tmpdir(), "pi-jobs", `${process.pid}-${params.id}.log`);
 			const state = job ? `running (${Math.floor((Date.now() - job.startedAt) / 1000)}s)` : `finished (exit ${done?.exit})`;
-			return text(`${params.id}: ${state}\n--- tail ${lines} ---\n${tail(log, lines)}`);
+			const snapshot = tailWithCount(log, lines);
+			return text(`${params.id}: ${state}\n--- tail ${lines} of ${snapshot.total} lines ---\n${snapshot.text}`);
 		},
 	});
 

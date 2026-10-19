@@ -55,7 +55,12 @@ export const MAX_BATCH = 12;
 // 形の排他を決める。スキーマはモデルへの説明のために 1 つの平らな object で、排他はここで確かめる
 // (tool の parameters の最上位に anyOf を置くと拒む提供元がある)
 export function parseTaskInput(p: any): TaskInput {
-	const has = (k: string) => p?.[k] !== undefined && p?.[k] !== null;
+	// 指定ありとみなすのは、実質の値があるときだけ。厳格なスキーマのモデル (gpt-6-sol など) は、使わない省略可能な引数も
+	// false / "" / [] / 0 で埋めて送る (B1 の F5)。それらは「指定なし」として扱う (todo の id は 1 からで、数値の 0 も埋め草と見る)
+	const has = (k: string) => {
+		const v = p?.[k];
+		return v !== undefined && v !== null && v !== false && v !== "" && v !== 0 && !(Array.isArray(v) && v.length === 0);
+	};
 	const fail = (msg: string): never => {
 		throw new Error(`invalid guarded_task input: ${msg}`);
 	};
@@ -108,7 +113,7 @@ export function parseTaskInput(p: any): TaskInput {
 	if (typeof p?.task !== "string" || p.task === "") fail("new task needs `task`");
 	if (p.keep !== undefined && typeof p.keep !== "boolean") fail("`keep` must be boolean");
 	if (p.model !== undefined && typeof p.model !== "string") fail("`model` must be a string");
-	if (p.todo !== undefined && (typeof p.todo !== "number" || !Number.isInteger(p.todo))) fail("`todo` must be an integer id");
+	if (has("todo") && (typeof p.todo !== "number" || !Number.isInteger(p.todo))) fail("`todo` must be an integer id");
 	return {
 		kind: "new",
 		agent: p.agent,
@@ -116,7 +121,7 @@ export function parseTaskInput(p: any): TaskInput {
 		keep: p.keep === true,
 		background: bool("background"),
 		...(p.model ? { model: p.model } : {}),
-		...(p.todo !== undefined ? { todo: p.todo } : {}),
+		...(has("todo") ? { todo: p.todo } : {}),
 	};
 }
 

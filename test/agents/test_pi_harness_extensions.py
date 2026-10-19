@@ -7,6 +7,7 @@ see docs/research/agents/pi-extension-under-harness.md
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 
@@ -180,6 +181,16 @@ def test_bg_run_starts_an_allowed_command_and_bg_log_and_bg_kill_are_allowed(env
     )
     assert "not approved" not in proc.stdout, proc.stdout
     assert "使えない" not in proc.stdout, proc.stdout
+
+
+def test_bg_run_does_not_show_the_log_path_and_bg_log_reports_the_line_count(env):
+    """ログのパスは read_deny で読めないので、教えるとモデルが行き止まる (B1 の F4)。読むのは bg_log。"""
+    calls = [*_bg("wc -c /dev/null"), {"name": "bg_log", "args": {"id": "j1"}}]
+    proc = run_pi(env, calls, extra=("-e", str(ACTIVITY)))
+    assert "started j1" in proc.stdout, proc.stdout
+    assert "pi-jobs" not in proc.stdout, proc.stdout
+    assert "bg_log" in proc.stdout.split("started j1", 1)[1], proc.stdout
+    assert re.search(r"tail \d+ of \d+ lines", proc.stdout), proc.stdout
 
 
 def test_bg_run_asks_when_bash_would_ask(env):

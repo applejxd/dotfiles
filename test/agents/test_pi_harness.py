@@ -468,6 +468,57 @@ def test_task_input_forms_are_exclusive(env):
     assert "isError=true" in proc.stdout and "USERS=" not in proc.stdout, proc.stdout
 
 
+def test_task_input_ignores_unused_arguments_filled_with_empty_values(env):
+    """厳格なスキーマのモデル (gpt-6-sol) は、使わない引数も false / \"\" / [] で埋める (B1 の F5)。"""
+    filled = {
+        "list": False,
+        "close": False,
+        "status": False,
+        "abort": False,
+        "steer": "",
+        "tasks": [],
+    }
+    filled |= {"jobId": "", "background": False, "keep": False, "model": "", "todo": 0}
+    proc = _rounds(env, [[_task(agent="worker", task="t", **filled)]])
+    assert "invalid guarded_task input" not in proc.stdout, proc.stdout
+    assert "child worker: completed" in proc.stdout, proc.stdout
+
+
+def test_task_input_forms_accept_empty_fillers_but_still_reject_real_conflicts(env):
+    """全形式で、埋め草 (空の値) は無視し、実質の値同士の衝突は拒む。"""
+    empty = {
+        "list": False,
+        "status": False,
+        "abort": False,
+        "close": False,
+        "steer": "",
+        "tasks": [],
+    }
+    empty |= {"agent": "", "task": "", "model": "", "todo": 0, "keep": False, "background": False}
+    only = lambda **keep: {**empty, **keep}  # noqa: E731
+    proc = _rounds(
+        env,
+        [
+            [_task(**only(agent="worker", task="first", keep=True))],
+            [_task(**only(jobId="{{JOB}}", task="second"))],
+            [_task(**only(jobId="{{JOB}}", status=True))],
+            [_task(**only(jobId="{{JOB}}", close=True))],
+            [_task(**only(list=True))],
+            [_task(**only(tasks=[{"agent": "worker", "task": "b"}]))],
+        ],
+    )
+    assert "invalid guarded_task input" not in proc.stdout, proc.stdout
+    assert "USERS=2" in proc.stdout and "closed" in proc.stdout, proc.stdout
+    # 実質の値どうしは拒む (埋め草で拒むようにはなっていない)
+    bad = [
+        _task(**only(jobId="job-x", close=True, status=True)),
+        _task(**only(list=True, agent="worker", task="t")),
+        _task(**only(jobId="job-x")),
+    ]
+    proc = _rounds(env, [bad])
+    assert proc.stdout.count("invalid guarded_task input") == len(bad), proc.stdout
+
+
 def test_follow_up_to_a_missing_job_says_to_start_over(env):
     proc = _rounds(env, [[_task(jobId="job-0000000000000000", task="x")]])
     assert "does not exist" in proc.stdout and "include a summary" in proc.stdout, proc.stdout

@@ -521,7 +521,8 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			catalog,
 		parameters: Type.Object(
 			{
-				agent: Type.Optional(Type.Union(names.map((n) => Type.Literal(n)), { description: "new task only" })),
+				// "" は埋め草 (厳格なスキーマのモデルが使わない引数を空で埋める。B1 の F5)。実際の形の判定は parseTaskInput
+				agent: Type.Optional(Type.Union([...names, ""].map((n) => Type.Literal(n)), { description: "new task only" })),
 				task: Type.Optional(Type.String({ description: "What the child should do, with all the context it needs" })),
 				keep: Type.Optional(Type.Boolean({ description: "new task only: keep the child idle after it finishes, for follow-ups" })),
 				background: Type.Optional(Type.Boolean({ description: "new / tasks / follow-up: return at once and be notified on completion" })),
