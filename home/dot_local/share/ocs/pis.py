@@ -131,6 +131,7 @@ def plain_command(options: Options, agent: Path) -> list[str]:
         *pi.BASE_FLAGS,
         *orca_args(agent),
         *pi.extension_args(agent),
+        *pi.skill_args(),
         "-e",
         str(pi.HARNESS),
         *options.rest,

@@ -201,6 +201,41 @@ def extension_args(real: Path | None = None, names: list[str] | None = None) -> 
     return args
 
 
+def _git_root(start: Path) -> Path | None:
+    for directory in (start, *start.parents):
+        if (directory / ".git").exists():
+            return directory
+    return None
+
+
+def skill_args(workspace: Path | None = None) -> list[str]:
+    """作業先のスキル (``.agents/skills``) を足す ``--skill``。
+
+    ``--no-approve`` は project trust を拒否するので、pi の自動発見では読まれない。
+    作業先から git ルートまでの ``.agents/skills`` だけを、明示の ``--skill`` で足す
+    (pi の発見の範囲と同じ。git ルートが無ければ何も足さない)。
+    ``--skill`` はグローバルのスキルより後に載るので、同名ならグローバルが勝つ。
+    スキルは指示を読む許可で、実行の許可ではない (実行は判定器とサンドボックスが決める)。
+    see docs/spec/pi-guard.md#起動
+    """
+    try:
+        start = (workspace if workspace is not None else Path.cwd()).resolve()
+        root = _git_root(start)
+        if root is None:
+            return []
+        user_skills = (HOME / ".agents/skills").resolve()  # ユーザーのスキルは pi が元から読む
+        args: list[str] = []
+        for directory in (start, *start.parents):
+            skills = directory / ".agents" / "skills"
+            if skills.is_dir() and skills.resolve() != user_skills:
+                args += ["--skill", str(skills)]
+            if directory == root:
+                break
+    except OSError:
+        return []
+    return args
+
+
 def inner_command(passthrough: list[str], path: str, sessions: Path) -> list[str]:
     """境界の内側で走らせるコマンド。``pis`` と同じ形の引数に、セッションの置き場を足す。"""
     from .cli import INNER_STATE
@@ -213,6 +248,7 @@ def inner_command(passthrough: list[str], path: str, sessions: Path) -> list[str
         str(pi_binary()),
         *BASE_FLAGS,
         *extension_args(),
+        *skill_args(),
         "-e",
         str(HARNESS),
         "--session-dir",

@@ -325,11 +325,78 @@ def test_pis_plain_command_shares_the_flags_and_the_extension_list(monkeypatch, 
     assert tuple(inner[start : start + len(ocs.pi.BASE_FLAGS)]) == ocs.pi.BASE_FLAGS
 
 
+def _repo(tmp_path, *skills):
+    """git ルートを作る。skills は ``ルートからの相対パス`` (そこに .agents/skills を置く)。"""
+    root = tmp_path / "repo"
+    (root / ".git").mkdir(parents=True)
+    for rel in skills:
+        (root / rel / ".agents" / "skills").mkdir(parents=True)
+    return root
+
+
+def test_skill_args_adds_the_worktree_skills_up_to_the_git_root(tmp_path):
+    pi = _ocs().pi
+    root = _repo(tmp_path, ".", "sub")
+    (root / "sub" / "deep").mkdir()
+    # 作業先から git ルートまでの .agents/skills を、近い順に足す (pi の発見の範囲と同じ)
+    assert pi.skill_args(root / "sub" / "deep") == [
+        "--skill",
+        str(root / "sub/.agents/skills"),
+        "--skill",
+        str(root / ".agents/skills"),
+    ]
+    assert pi.skill_args(root) == ["--skill", str(root / ".agents/skills")]
+
+
+def test_skill_args_adds_nothing_without_a_git_root_or_skills(tmp_path, monkeypatch):
+    pi = _ocs().pi
+    # git ルートが無いと足さない (.agents/skills があっても)。tmp が別の git の中にあっても動くように差し替える
+    loose = tmp_path / "loose"
+    (loose / ".agents" / "skills").mkdir(parents=True)
+    monkeypatch.setattr(pi, "_git_root", lambda _start: None)
+    assert pi.skill_args(loose) == []
+    monkeypatch.undo()
+    # git ルートより上の .agents/skills は足さない
+    root = tmp_path / "outer" / "repo"
+    (root / ".git").mkdir(parents=True)
+    (tmp_path / "outer" / ".agents" / "skills").mkdir(parents=True)
+    assert pi.skill_args(root) == []
+
+
+def test_skill_args_skips_the_user_level_skills(tmp_path, monkeypatch):
+    pi = _ocs().pi
+    # $HOME 自体が git リポジトリでも、~/.agents/skills (pi が元から読む) は重ねない
+    home = _repo(tmp_path, ".")
+    monkeypatch.setattr(pi, "HOME", home)
+    assert pi.skill_args(home) == []
+
+
+def test_skill_args_reaches_both_launch_commands(tmp_path, monkeypatch):
+    ocs = _ocs()
+    root = _repo(tmp_path, ".")
+    rules = tmp_path / "rules.json"
+    rules.write_text(json.dumps({"extensions": []}), encoding="utf-8")
+    monkeypatch.setattr(ocs.pi, "RULES", rules)
+    monkeypatch.chdir(root)
+    skill = ["--skill", str(root / ".agents/skills")]
+    inner = ocs.pi.inner_command([], "/usr/bin", tmp_path / "sessions")
+    plain = ocs.pis.plain_command(ocs.pis.parse([]), tmp_path / "agent")
+    for command in (inner, plain):
+        # 信頼を緩めず (--no-approve のまま)、スキルだけ明示で足す。フルガードより前
+        assert "--no-approve" in command
+        at = command.index("--skill")
+        assert command[at : at + 2] == skill
+        assert at < command.index(str(ocs.pi.HARNESS))
+
+
 def test_pis_parse_takes_only_the_leading_options():
     ocs = _ocs()
     options = ocs.pis.parse(["--bypass", "--role", "reader", "--", "--bypass", "x"])
     assert (options.bypass, options.sandbox, options.role, options.rest) == (
-        True, True, "reader", ["--bypass", "x"],
+        True,
+        True,
+        "reader",
+        ["--bypass", "x"],
     )
     assert ocs.pis.parse(["-c", "--bypass"]).rest == ["-c", "--bypass"]
     with pytest.raises(SystemExit):
