@@ -55,6 +55,7 @@
 | [0023](0023-guard-terminology.md) | 「ハーネス」の呼び方を整理し（ガード / フルガード / 簡易ガード / サンドボックス）、`pis` をサンドボックス既定にする | In progress | 段 3a・3b・3d・3f は完了、3c は実装済み（実機の試験で 3 つの不具合を直した。3c・3f の反映後の実機は未確認）。設計原則は [ADR-0018](../adr/0018-pis-sandbox-default-relax-only-when-proven.md)。共有 `~/.pi/agent`・認証プロキシ・Orca の状態表示が未決。段 3g の後半・段 4 は保留 | `chezmoi apply` 後に 3c・3f の実機を確認、事前検査の初回の所要時間 | 2026-10-15 |
 | [0024](0024-diagnostics-feedback.md) | 編集直後の診断フィードバック (LSP・linter・型検査) を足す | Planned | どの言語・道具まで対応するか。型検査の実行の頻度。LSP の常駐とガード・サンドボックスの関係 | 段階案 A (post_edit の延長) の対象言語を決める | 2026-10-20 |
 | [0025](0025-goal-autonomous-loop.md) | `/goal` の自律ループ (目標・計画・独立した完了の監査) を足す | Planned | 予算の既定値と停滞の検知。`agent_before_settle` で続行を複数回要求できるか。bypass との相互作用 | 段階案 A (todo のリマインドの延長) で複数回の続行を実測する | 2026-10-20 |
+| [0027](0027-zed-pi-acp-with-pis.md) | Zed の pi-acp から `pis --no-sandbox`（フルガード）を使えるようにする | Exploring | Zed の `env` から `PI_ACP_PI_COMMAND`（ラッパーのパス）を渡して実際に起動できるか、起動の遅さ（約 4 秒以上）。ソースの読みでは `confirm` は Zed のダイアログになる | `npx` で pi-acp を取得し、`PI_ACP_PI_COMMAND` を付けて ACP を手で送る（実施前に利用者へ確認） | 2026-10-20 |
 
 ## 保留
 
