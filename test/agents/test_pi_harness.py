@@ -1748,15 +1748,18 @@ def test_ask_is_removed_from_the_tools_without_a_ui(env):
 
 def test_ask_returns_the_chosen_option_label(env):
     qs = [_ask_q("Which?", "A", "B")]
-    requests, result = _ask_rpc(env, qs, ["B — d-B"])
+    requests, result = _ask_rpc(env, qs, ["2. B"])
     assert [r["method"] for r in requests] == ["select"], requests
     assert "Type something." in requests[0]["options"], requests
+    # 行はラベルだけ、説明は質問文の一覧に出る
+    assert requests[0]["options"][:2] == ["1. A", "2. B"], requests
+    assert "d-A" in requests[0]["title"] and "d-B" in requests[0]["title"], requests
     assert "→ B" in result, result
 
 
 def test_ask_asks_several_questions_in_one_call(env):
     qs = [_ask_q("First?", "A", "B"), _ask_q("Second?", "C", "D")]
-    requests, result = _ask_rpc(env, qs, ["A — d-A", "D — d-D"])
+    requests, result = _ask_rpc(env, qs, ["1. A", "2. D"])
     assert len(requests) == 2, requests
     assert "→ A" in result and "→ D" in result, result
 
@@ -1771,15 +1774,15 @@ def test_ask_takes_free_text_and_returns_to_options_on_an_empty_answer(env):
 
 def test_ask_multi_select_collects_checked_options_and_free_text(env):
     qs = [_ask_q("Which?", "A", "B", "C", multi=True)]
-    replies = ["[ ] A — d-A", "[ ] C — d-C", "Type something.", "extra", "Next"]
+    replies = ["[ ] 1. A", "[ ] 3. C", "Type something.", "extra", "Next"]
     requests, result = _ask_rpc(env, qs, replies)
-    assert "[x] A — d-A" in requests[1]["options"], requests
+    assert "[x] 1. A" in requests[1]["options"], requests
     assert "→ A, C, 自由記述: extra" in result, result
 
 
 def test_ask_reports_unanswered_questions_when_dismissed_midway(env):
     qs = [_ask_q("First?", "A", "B"), _ask_q("Second?", "C", "D")]
-    _, result = _ask_rpc(env, qs, ["A — d-A", None])
+    _, result = _ask_rpc(env, qs, ["1. A", None])
     assert "未回答の問: Q2" in result and "→ A" in result, result
 
 

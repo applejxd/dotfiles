@@ -93,10 +93,12 @@ export default function (pi: ExtensionAPI) {
 			let stopped = false;
 			for (let i = 0; i < qs.length && !stopped; i++) {
 				const q = qs[i];
-				const rows = q.options.map((o) => `${o.label} — ${o.description}`);
+				// 行はラベルだけ (1 行で収まり、カーソルの位置が分かる)。説明は質問文の下に番号つきの一覧で出す
+				const rows = q.options.map((o, k) => `${k + 1}. ${o.label}`);
+				const detail = `${title(q, i)}\n\n${q.options.map((o, k) => `  ${k + 1}. ${o.label}\n       ${o.description}`).join("\n")}\n`;
 				if (!q.multi) {
 					for (;;) {
-						const picked = await ctx.ui.select(title(q, i), [...rows, FREE], opts);
+						const picked = await ctx.ui.select(detail, [...rows, FREE], opts);
 						if (picked === undefined) {
 							stopped = true;
 							break;
@@ -115,7 +117,7 @@ export default function (pi: ExtensionAPI) {
 					let custom: string | undefined;
 					for (;;) {
 						const marked = q.options.map((o, k) => `${chosen.has(o.label) ? "[x]" : "[ ]"} ${rows[k]}`);
-						const picked = await ctx.ui.select(`${title(q, i)} (複数選択。選び終えたら ${NEXT})`, [...marked, FREE, NEXT], opts);
+						const picked = await ctx.ui.select(`${detail}(複数選択。選び終えたら ${NEXT})`, [...marked, FREE, NEXT], opts);
 						if (picked === undefined) {
 							stopped = true;
 							break;
