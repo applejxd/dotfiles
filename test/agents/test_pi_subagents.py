@@ -23,6 +23,25 @@ def test_only_read_only_agents_are_declared():
         assert set(agent) == {"description", "system", "model"}
 
 
+def test_declarations_stay_in_step_with_the_full_guard_agents():
+    # Windows の subagents とフルガードの task は別物 (see docs/spec/pi-guard.md#二つの-task-を別物にしている理由) だが、
+    # 同じ [pi.agents] から出る宣言なので、名前・モデル・読み取り専用の役割の説明と指示は食い違わせない
+    common = load_common()
+    plain = gen.build_pi_subagents({}, common)["agents"]
+    full = gen.build_pi_harness({}, common)["agents"]
+    raw = common["pi"]["agents"]
+    assert set(plain) <= set(full), set(plain) - set(full)
+    for name, agent in plain.items():
+        assert agent["model"] == full[name]["model"], name
+        if raw[name].get("plain_description"):
+            # 読み取り専用の版を宣言している役割 (explore): 説明と指示は意図して違う
+            assert agent["description"] == raw[name]["plain_description"].strip(), name
+            assert agent["system"] == raw[name]["plain_system"].strip(), name
+        else:
+            assert agent["description"] == full[name]["description"], name
+            assert agent["system"] == full[name]["system"], name
+
+
 def test_pi_tier_override_beats_the_opencode_tier():
     common = load_common()
     provider = common["opencode"]["model"]["provider"]

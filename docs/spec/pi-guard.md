@@ -171,6 +171,16 @@ Windows（PowerShell）では**素の `pi` だけ**を使う。フルガード�
 - 判定器と伏字化が無いので、`read_deny_globs` の保護は効かない。子は読むだけで書けないが、秘密ファイルは読める
 - 子のモデルは `second_opinion` が `github-copilot/gpt-6-sol`。OpenCode の階層の `gpt-6-astra` は pi の Copilot 経由で `model_not_supported`（2026-10 実測）なので、`[pi.model.tier.github-copilot]` で上書きする（Unix のフルガードにも効く）
 
+### 二つの task を別物にしている理由
+
+Windows の `task`（`subagents` 拡張。120 行）とフルガードの `guarded_task`（`registerTask` と `children.ts`。約 1,200 行）は、統合せず別物のままにしている（調査と判断は [調査 P3](../research/agents/pi-public-extensions-survey.md)、採点の訂正）。
+
+- **重なるのは約 50 行**（答えの取り出し・プロセスの起動と停止・役割一覧の整形・`promptSnippet`）。子の一覧 `globalThis.__piChildren` を `activity` が読む点だけが共有
+- **子の実行方式が違う**: `subagents` は 1 回だけ実行する `--mode json -p`、`guarded_task` は常駐できる `--mode rpc`（`Job`。並列・背景・`keep`・`steer`・`abort`）。後者の子はハーネスを `-e` で読み、`PI_HARNESS_*` を前提にする
+- **Windows にはフルガードが無い**（`pis` は Unix 専用。簡易ガードは廃止）。`Job` を流用すると、判定器なしで shell を持つ子を出せてしまう。だから `subagents` は読み取り専用に限る
+- **共通モジュールにしない**: ハーネスは `~/.config/pi/harness`、拡張は `~/.pi/agent/extensions` にあり、別の場所からの import は配置とサンドボックスの許可の点で脆い
+- **ずれは試験で止める**: 宣言は同じ `[pi.agents]` から出る。名前・モデル・読み取り専用の役割の説明と指示が食い違わないことを `test_pi_subagents.py::test_declarations_stay_in_step_with_the_full_guard_agents` が確かめる（`plain_description` を宣言した役割だけ、意図して違う）
+
 ## ガード以外の機能
 
 OpenCode のガードにあった機能のうち、pi へ移したもの。仕分けと経緯は
