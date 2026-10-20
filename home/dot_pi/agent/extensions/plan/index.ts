@@ -4,7 +4,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // 計画中に残すツール (`guarded_` を外した名前)
-const KEEP = new Set(["read", "grep", "find", "ls", "todo", "task"]);
+const KEEP = new Set(["read", "grep", "find", "ls", "todo", "task", "ask"]);
 const baseName = (n: string) => (n.startsWith("guarded_") ? n.slice("guarded_".length) : n);
 
 type State = { enabled: boolean; saved?: string[] };

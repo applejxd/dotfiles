@@ -70,6 +70,7 @@ FILE_CWDS = ("${ROOT}", "/tmp")
 OTHER_TOOLS = (
     {"tool": "task", "input": {"agent": "explore", "task": "x"}},
     {"tool": "todo", "input": {"action": "list"}},
+    {"tool": "ask", "input": {"questions": []}},
     {"tool": "mcp__x__y", "input": {}},
     {"tool": "unknown", "input": {}},
 )

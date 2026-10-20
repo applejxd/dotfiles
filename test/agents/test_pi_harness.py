@@ -1670,3 +1670,135 @@ def test_pis_loads_orcas_status_extension_only_from_orca_with_its_marker(pis_env
     _orca_extension(pis_env, probe, marker=False)
     _run_pis_probe(pis_env, ORCA_AGENT_HOOK_PORT="1")
     assert not probe.exists(), "印の無い拡張を読んだ"
+
+
+# ─── ask (利用者への質問) ───────────────────────────────────────────
+
+ASK_EXT = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "ask" / "index.ts"
+
+
+def _ask_q(question, *labels, **extra):
+    options = [{"label": label, "description": f"d-{label}"} for label in labels]
+    return {"question": question, "options": options, **extra}
+
+
+def _ask_rpc(env, questions, replies, timeout=120, **env_extra):
+    """ask を RPC で呼び、select / input の要求に replies の順に応える (None は中断)。返すのは (要求, 結果の本文)。"""
+    calls = [{"name": "ask", "args": {"questions": questions}}]
+    args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
+    args += [
+        "-e",
+        str(env["harness"]),
+        "-e",
+        str(ASK_EXT),
+        "-e",
+        str(FIXTURES / "faux.ts"),
+        "--mode",
+        "rpc",
+    ]
+    proc = subprocess.Popen(
+        args,
+        cwd=env["proj"],
+        env={**env["env"], "FAUX_TOOL_CALLS": json.dumps(calls), **env_extra},
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    requests, result = [], ""
+    proc.stdin.write(json.dumps({"type": "prompt", "message": "go"}) + "\n")
+    proc.stdin.flush()
+    deadline = time.time() + timeout
+    try:
+        for line in proc.stdout:
+            if time.time() > deadline:
+                break
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") == "extension_ui_request" and event.get("method") in (
+                "select",
+                "input",
+            ):
+                requests.append(event)
+                n = len(requests)
+                value = replies[n - 1] if n <= len(replies) else None
+                reply = {"type": "extension_ui_response", "id": event["id"]}
+                reply |= {"cancelled": True} if value is None else {"value": value}
+                proc.stdin.write(json.dumps(reply) + "\n")
+                proc.stdin.flush()
+            if event.get("type") == "tool_execution_end" and event.get("toolName") == "ask":
+                content = (event.get("result") or {}).get("content") or []
+                result = "".join(c.get("text", "") for c in content)
+            if event.get("type") == "agent_end":
+                break
+    finally:
+        proc.kill()
+    return requests, result
+
+
+def test_ask_is_removed_from_the_tools_without_a_ui(env):
+    # print モードは UI が無いので、ask はモデルに見せない
+    proc = run_pi(env, [], extra=("-e", str(ASK_EXT)), FAUX_DUMP_PROMPT="1")
+    assert proc.returncode == 0, proc.stderr
+    assert "- ask:" not in proc.stdout, proc.stdout
+
+
+def test_ask_returns_the_chosen_option_label(env):
+    qs = [_ask_q("Which?", "A", "B")]
+    requests, result = _ask_rpc(env, qs, ["B — d-B"])
+    assert [r["method"] for r in requests] == ["select"], requests
+    assert "Type something." in requests[0]["options"], requests
+    assert "→ B" in result, result
+
+
+def test_ask_asks_several_questions_in_one_call(env):
+    qs = [_ask_q("First?", "A", "B"), _ask_q("Second?", "C", "D")]
+    requests, result = _ask_rpc(env, qs, ["A — d-A", "D — d-D"])
+    assert len(requests) == 2, requests
+    assert "→ A" in result and "→ D" in result, result
+
+
+def test_ask_takes_free_text_and_returns_to_options_on_an_empty_answer(env):
+    qs = [_ask_q("Which?", "A", "B")]
+    # 空の自由記述は記録せず、選択肢へ戻る
+    requests, result = _ask_rpc(env, qs, ["Type something.", "  ", "Type something.", "mine"])
+    assert [r["method"] for r in requests] == ["select", "input", "select", "input"], requests
+    assert "→ mine" in result, result
+
+
+def test_ask_multi_select_collects_checked_options_and_free_text(env):
+    qs = [_ask_q("Which?", "A", "B", "C", multi=True)]
+    replies = ["[ ] A — d-A", "[ ] C — d-C", "Type something.", "extra", "Next"]
+    requests, result = _ask_rpc(env, qs, replies)
+    assert "[x] A — d-A" in requests[1]["options"], requests
+    assert "→ A, C, 自由記述: extra" in result, result
+
+
+def test_ask_reports_unanswered_questions_when_dismissed_midway(env):
+    qs = [_ask_q("First?", "A", "B"), _ask_q("Second?", "C", "D")]
+    _, result = _ask_rpc(env, qs, ["A — d-A", None])
+    assert "未回答の問: Q2" in result and "→ A" in result, result
+
+
+def test_ask_dismissed_at_once_is_a_cancellation(env):
+    _, result = _ask_rpc(env, [_ask_q("Which?", "A", "B")], [None])
+    assert "答えなかった" in result and "→" not in result, result
+
+
+@pytest.mark.parametrize(
+    ("questions", "code"),
+    [
+        ([_ask_q("Q?", "A", "Other")], "reserved_label"),
+        ([_ask_q("Q?", "A", "Type something.")], "reserved_label"),
+        ([_ask_q("Q?", "A", "A")], "duplicate_option_label"),
+        ([_ask_q("Q?", "A", "B"), _ask_q("Q?", "C", "D")], "duplicate_question"),
+    ],
+)
+def test_ask_rejects_a_malformed_questionnaire_without_asking(env, questions, code):
+    # 選択肢の個数の上限はスキーマが先に弾く (ここは実行時の検査だけ)
+    requests, result = _ask_rpc(env, questions, [])
+    assert requests == [], requests
+    assert code in result, result

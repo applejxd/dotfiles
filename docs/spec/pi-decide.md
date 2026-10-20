@@ -27,7 +27,7 @@ response: { decision: allow | ask | deny, reason, source: rule | check | default
 
 | キー | 中身 |
 | --- | --- |
-| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls` / `task`（子エージェントの起動）/ `todo`（タスクリストの拡張）と MCP のツール（`mcp__…`）。フルガードがツールを別名で登録していても、元の名前で渡す。役割の `tools` に無い名前は deny |
+| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls` / `task`（子エージェントの起動）/ `todo`（タスクリストの拡張）/ `ask`（利用者への質問の拡張）と MCP のツール（`mcp__…`）。フルガードがツールを別名で登録していても、元の名前で渡す。役割の `tools` に無い名前は deny |
 | `input` | ツールの引数。`bash` は `command`、ファイルのツールは `path`（`grep` / `find` / `ls` は省略すると `.`） |
 | `cwd` | 作業ディレクトリの絶対パス。相対パスの解決と「作業ツリーの中か」の判定に使う |
 | `role` | `[pi.profiles]` の名前（「役割」の表） |
@@ -68,6 +68,7 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
    - 書き込み: `[file] write_ask_globs` は ask。作業ツリーの外は ask。中は allow
    - `task`: allow（子は同じフルガードと判定器で、子の役割で判定される）
    - `todo`: allow（メモリの状態だけを変える。拡張は[自作の拡張](pi-guard.md#自作の拡張-todo--plan--btw)）
+   - `ask`: allow（利用者への質問。UI だけを使い、ファイルも外部も触らない。[自作の拡張](pi-guard.md#自作の拡張-todo--plan--btw)）
 4. **既定**。役割の `default`（実装役は ask、読み取り役は deny）
 4'. **サンドボックスの緩和**（`boundary` が真のときだけ）。bash は、どの規則にも当たらず役割の既定（ask）になったものだけを allow にする（`sandboxed: true`）。
    作業ツリーの外の読み書きは、`allowed` が開けた場所なら allow、外は理由つきの deny（`allowed` が無ければ基準の ask）。ask の規則・deny・誘導は変えない
@@ -141,7 +142,7 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 
 | 役割 | `tools` | `default` | ほか | 使うもの |
 | --- | --- | --- | --- | --- |
-| `implementer` | 7 つのツール・`task`・`todo`・`mcp__*` | ask | — | 親（主エージェント） |
+| `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | — | 親（主エージェント） |
 | `reader` | read・grep・find・ls | deny | — | 子の `explore` / `review` |
 | `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |
 | `worker` | 7 つのツール | ask | `shell_deny` に git の状態を変える操作 | 子の `worker` |

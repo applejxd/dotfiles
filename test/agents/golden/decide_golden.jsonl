@@ -6291,6 +6291,10 @@
 {"request": {"bypass": false, "cwd": "${ROOT}", "input": {"action": "list"}, "role": "reader", "tool": "todo"}, "response": {"decision": "deny", "reason": "役割 'reader' は todo を使えない", "source": "rule"}}
 {"request": {"bypass": false, "cwd": "${ROOT}", "input": {"action": "list"}, "role": "committer", "tool": "todo"}, "response": {"decision": "deny", "reason": "役割 'committer' は todo を使えない", "source": "rule"}}
 {"request": {"bypass": false, "cwd": "${ROOT}", "input": {"action": "list"}, "role": "worker", "tool": "todo"}, "response": {"decision": "deny", "reason": "役割 'worker' は todo を使えない", "source": "rule"}}
+{"request": {"bypass": false, "cwd": "${ROOT}", "input": {"questions": []}, "role": "implementer", "tool": "ask"}, "response": {"decision": "allow", "reason": "利用者への質問は UI だけを使う (ファイルも外部も触らない)", "source": "rule"}}
+{"request": {"bypass": false, "cwd": "${ROOT}", "input": {"questions": []}, "role": "reader", "tool": "ask"}, "response": {"decision": "deny", "reason": "役割 'reader' は ask を使えない", "source": "rule"}}
+{"request": {"bypass": false, "cwd": "${ROOT}", "input": {"questions": []}, "role": "committer", "tool": "ask"}, "response": {"decision": "deny", "reason": "役割 'committer' は ask を使えない", "source": "rule"}}
+{"request": {"bypass": false, "cwd": "${ROOT}", "input": {"questions": []}, "role": "worker", "tool": "ask"}, "response": {"decision": "deny", "reason": "役割 'worker' は ask を使えない", "source": "rule"}}
 {"request": {"bypass": false, "cwd": "${ROOT}", "input": {}, "role": "implementer", "tool": "mcp__x__y"}, "response": {"decision": "ask", "reason": "どの規則にも当たらない (役割 'implementer' の既定)", "source": "default"}}
 {"request": {"bypass": false, "cwd": "${ROOT}", "input": {}, "role": "reader", "tool": "mcp__x__y"}, "response": {"decision": "deny", "reason": "役割 'reader' は mcp__x__y を使えない", "source": "rule"}}
 {"request": {"bypass": false, "cwd": "${ROOT}", "input": {}, "role": "committer", "tool": "mcp__x__y"}, "response": {"decision": "deny", "reason": "役割 'committer' は mcp__x__y を使えない", "source": "rule"}}

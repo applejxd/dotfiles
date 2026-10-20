@@ -377,6 +377,11 @@ def test_todo_is_allowed_only_for_roles_that_have_it():
     assert decide(req("todo", role="worker"))["decision"] == "deny"
 
 
+def test_ask_is_allowed_only_for_roles_that_have_it():
+    assert decide(req("ask"))["decision"] == "allow"
+    assert decide(req("ask", role="worker"))["decision"] == "deny"
+
+
 # ─── check_bash.py との等価 ─────────────────────────────────────────
 
 

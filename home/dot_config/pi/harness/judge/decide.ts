@@ -39,6 +39,7 @@ const FILE_READ_TOOLS = ["read", "grep", "find", "ls"];
 const FILE_WRITE_TOOLS = ["edit", "write"];
 const TASK_TOOL = "task";
 const TODO_TOOL = "todo";
+const ASK_TOOL = "ask";
 
 /** bash の判定器。移植が済むまでは差し込まれない。 */
 export type BashDecider = (
@@ -272,6 +273,9 @@ function decideInner(request: unknown, common: Common): Response {
 	} else if (tool === TODO_TOOL) {
 		commonDeny = null;
 		roleRule = response("allow", "タスクリストはメモリの状態だけを変える", "rule");
+	} else if (tool === ASK_TOOL) {
+		commonDeny = null;
+		roleRule = response("allow", "利用者への質問は UI だけを使う (ファイルも外部も触らない)", "rule");
 	} else {
 		commonDeny = null;
 		roleRule = null;

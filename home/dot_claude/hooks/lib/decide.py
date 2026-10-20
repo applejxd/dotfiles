@@ -27,7 +27,9 @@ FILE_WRITE_TOOLS = ("edit", "write")
 TASK_TOOL = "task"
 # 拡張 (extensions/todo) のタスクリスト。状態をメモリに持つだけで、ファイルも外部も触らない
 TODO_TOOL = "todo"
-KNOWN_TOOLS = ("bash", *FILE_READ_TOOLS, *FILE_WRITE_TOOLS, TASK_TOOL, TODO_TOOL)
+# 拡張 (extensions/ask) の利用者への質問。UI だけを使い、ファイルも外部も触らない
+ASK_TOOL = "ask"
+KNOWN_TOOLS = ("bash", *FILE_READ_TOOLS, *FILE_WRITE_TOOLS, TASK_TOOL, TODO_TOOL, ASK_TOOL)
 # 検査の上限。check_bash.py と同じ
 MAX_COMMAND_LEN = 10000
 # allow の一覧に当たっても、書き込みや実行時の展開の余地がある形は allow にしない
@@ -361,6 +363,9 @@ def _decide(request: Any) -> dict[str, Any]:
         common_deny, role_rule = None, _response("allow", reason, "rule")
     elif tool == TODO_TOOL:
         reason = "タスクリストはメモリの状態だけを変える"
+        common_deny, role_rule = None, _response("allow", reason, "rule")
+    elif tool == ASK_TOOL:
+        reason = "利用者への質問は UI だけを使う (ファイルも外部も触らない)"
         common_deny, role_rule = None, _response("allow", reason, "rule")
     else:
         common_deny, role_rule = None, None
