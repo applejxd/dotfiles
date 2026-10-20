@@ -317,6 +317,8 @@ export default function (pi: ExtensionAPI) {
 			const invalid = validate(qs);
 			if (invalid) return fail(invalid, "質問の形が不正。直して呼び直す");
 
+			// 利用者の答えを待つ前に BEL (端末の通知)。RPC では stdout が通信なので TUI だけ
+			if (ctx.mode === "tui") process.stdout.write("\x07");
 			const opts = { signal, timeout: TIMEOUT_MS };
 			const title = (q: Question, i: number) => `[${i + 1}/${qs.length}] ${q.header ? `${q.header}: ` : ""}${q.question}`;
 			// 自由記述。空・中断なら undefined (呼び出し側が選択肢へ戻す)

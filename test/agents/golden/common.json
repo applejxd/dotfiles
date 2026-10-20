@@ -1064,7 +1064,8 @@
    "plan",
    "btw",
    "activity",
-   "ask"
+   "ask",
+   "notify"
   ],
   "profiles": {
    "committer": {

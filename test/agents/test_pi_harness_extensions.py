@@ -329,3 +329,18 @@ def test_a_role_without_bash_cannot_use_the_background_tools(env):
     proc = run_pi(env, calls, extra=("-e", str(ACTIVITY)), PI_HARNESS_ROLE="reader")
     assert "は bash を使えない" in proc.stdout, proc.stdout
     assert "は bg_log を使えない" in proc.stdout, proc.stdout
+
+
+NOTIFY = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "notify" / "index.ts"
+
+
+def test_the_bell_is_written_only_in_the_tui_not_in_print_mode(env):
+    """BEL (\\x07) は TUI のときだけ。print / RPC では stdout が出力・通信なので汚さない。
+
+    TUI で鳴ること自体は自動試験にできない (実機で確かめる)。
+    """
+    proc = run_pi(env, [], extra=("-e", str(NOTIFY)))
+    assert proc.returncode == 0, proc.stderr
+    assert "\x07" not in proc.stdout, repr(proc.stdout)
+    proc = run_pi(env, bash_call("touch made-by-pi"), extra=("-e", str(NOTIFY)))
+    assert "\x07" not in proc.stdout, repr(proc.stdout)

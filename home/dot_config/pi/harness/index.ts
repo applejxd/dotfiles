@@ -122,9 +122,12 @@ let confirmQueue: Promise<unknown> = Promise.resolve();
 const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 function confirmInOrder(ctx: any, title: string, body: string): Promise<boolean> {
 	const timeout = ctx.mode === "tui" ? undefined : CONFIRM_TIMEOUT_MS;
-	const run = confirmQueue.then(() =>
-		ctx.signal?.aborted ? false : ctx.ui.confirm(title, body, { signal: ctx.signal, timeout }),
-	);
+	const run = confirmQueue.then(() => {
+		if (ctx.signal?.aborted) return false;
+		// 利用者の答えを待つ前に BEL (端末の通知)。RPC では stdout が通信なので TUI だけ
+		if (ctx.mode === "tui") process.stdout.write("\x07");
+		return ctx.ui.confirm(title, body, { signal: ctx.signal, timeout });
+	});
 	confirmQueue = run.catch(() => undefined);
 	return run.then((v: unknown) => v === true).catch(() => false);
 }
