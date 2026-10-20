@@ -104,13 +104,14 @@ function panel(ctx: any, q: Question, index: number, total: number, signal?: Abo
 		editor.onSubmit = (value: string) => {
 			const text = value.trim();
 			if (!text) {
-				editing = false; // 空は記録せず一覧へ戻る
-				return refresh();
-			}
-			if (q.multi) {
-				custom = text;
+				custom = undefined; // 空は記録せず (複数選択では以前の入力も消し) 一覧へ戻る
 				editing = false;
 				return refresh();
+			}
+			// 複数選択でもここで送信する (チェックした選択肢と自由記述をまとめて。Enter が「入力の確定」と「送信」で別にならないように)
+			if (q.multi) {
+				custom = text;
+				return finish(result());
 			}
 			finish({ selected: [], custom: text });
 		};
@@ -166,7 +167,9 @@ function panel(ctx: any, q: Question, index: number, total: number, signal?: Abo
 			}
 			lines.push("");
 			const keys = editing
-				? "Enter 確定 • Esc 一覧へ戻る"
+				? q.multi
+					? "Enter 送信（チェックとこの入力をまとめて） • Esc 一覧へ戻る"
+					: "Enter 送信 • Esc 一覧へ戻る"
 				: q.multi
 					? "↑↓ 移動 • Space 選択/解除 • Enter 確定 • Esc 中止"
 					: "↑↓ 移動 • Enter 選択 • Esc 中止";
