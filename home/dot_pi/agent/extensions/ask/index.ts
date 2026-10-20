@@ -1,15 +1,15 @@
 // `ask` ツール: モデルが推測せず、選択肢つきで利用者に尋ねる。1 回の呼び出しで最大 4 問。
-// TUI では自前のパネル (ctx.ui.custom: 選択肢・複数選択・行内の自由記述)、それ以外 (RPC) は 1 問ずつの select / input。
+// TUI では自前のパネル (ctx.ui.custom: 問ごとのタブ + 確認・複数選択・行内の自由記述)、それ以外 (RPC) は 1 問ずつの select / input。
 // UI が無い実行 (print・子エージェント) ではツールを外す。
 // see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Editor, type EditorTheme, Key, matchesKey, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { Editor, type EditorTheme, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 const MAX_QUESTIONS = 4;
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 4;
-// 1 回の画面が答えを待つ上限。尽きたら未回答として返す (離席中に止まり続けない)。試験用に環境変数で変える
+// 操作が無いまま待つ上限。尽きたら未回答として返す (離席中に止まり続けない)。試験用に環境変数で変える
 const TIMEOUT_MS = Number(process.env.PI_ASK_TIMEOUT_MS) > 0 ? Number(process.env.PI_ASK_TIMEOUT_MS) : 5 * 60 * 1000;
 // 画面が自分で足す行。選択肢のラベルには使えない (モデルが「その他」を自作しないように)
 const FREE = "Type something.";
@@ -20,7 +20,7 @@ type Option = { label: string; description: string };
 type Question = { question: string; header?: string; options: Option[]; multi?: boolean };
 type Answer = { questionIndex: number; question: string; kind: "option" | "custom" | "multi"; answer: string | null; selected?: string[] };
 
-// 表示幅 (全角は 2) で折り返す。選択肢の説明を字下げして揃えるため (端末の折り返しは行頭に戻ってしまう)
+// 表示幅 (全角は 2) で折り返す。RPC の選択肢の説明を字下げして揃えるため (端末の折り返しは行頭に戻ってしまう)
 const WRAP_COLS = 64;
 const INDENT = "       ";
 const cols = (ch: string) => (/[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/.test(ch) ? 2 : 1);
@@ -62,16 +62,17 @@ function validate(qs: Question[]): string | undefined {
 	return undefined;
 }
 
-// TUI のパネル。戻りは選んだラベルと自由記述。中断・時間切れは null。
+// TUI のパネル。問が複数のときは、問ごとのタブと、最後の確認タブ (Tab / Shift+Tab で移動)。問が 1 つだけならタブも確認も無く、答えたらすぐ送る。
+// 戻りは問ごとの回答 (未回答は undefined)。Esc・時間切れは全部 undefined。
 // 自由記述は行の下でその場で書く (Enter で確定・Esc で一覧へ戻る)。複数選択はカーソルを動かさずに切り替えられる
-type Picked = { selected: string[]; custom?: string } | null;
-function panel(ctx: any, q: Question, index: number, total: number, signal?: AbortSignal): Promise<Picked> {
-	return ctx.ui.custom((tui: any, theme: any, _kb: any, done: (v: Picked) => void) => {
-		const freeAt = q.options.length;
-		const checked = new Set<number>();
-		let cursor = 0;
+type Picked = { selected: string[]; custom?: string };
+function panel(ctx: any, qs: Question[], signal?: AbortSignal): Promise<(Picked | undefined)[]> {
+	return ctx.ui.custom((tui: any, theme: any, _kb: any, done: (v: (Picked | undefined)[]) => void) => {
+		const n = qs.length;
+		const tabs = n > 1 ? n + 1 : 1; // 最後の 1 つは確認
+		const st = qs.map(() => ({ cursor: 0, checked: new Set<number>(), custom: undefined as string | undefined, answer: undefined as Picked | undefined }));
+		let tab = 0;
 		let editing = false;
-		let custom: string | undefined;
 		let finished = false;
 		let cache: string[] | undefined;
 		const editorTheme: EditorTheme = {
@@ -86,37 +87,62 @@ function panel(ctx: any, q: Question, index: number, total: number, signal?: Abo
 		};
 		const editor = new Editor(tui, editorTheme);
 		const refresh = () => {
+			if (finished) return;
 			cache = undefined;
 			tui.requestRender();
 		};
-		const finish = (v: Picked) => {
+		const finish = (v: (Picked | undefined)[]) => {
 			if (finished) return;
 			finished = true;
 			clearTimeout(timer);
 			signal?.removeEventListener("abort", onAbort);
 			done(v);
 		};
-		const onAbort = () => finish(null);
-		const timer = setTimeout(() => finish(null), TIMEOUT_MS);
+		const none = () => qs.map(() => undefined);
+		const onAbort = () => finish(none());
+		let timer = setTimeout(onAbort, TIMEOUT_MS);
+		const touch = () => {
+			clearTimeout(timer);
+			timer = setTimeout(onAbort, TIMEOUT_MS);
+		};
 		signal?.addEventListener("abort", onAbort, { once: true });
-		const result = (): Picked => ({ selected: q.options.map((o) => o.label).filter((_, k) => checked.has(k)), ...(custom ? { custom } : {}) });
+
+		const multiResult = (k: number): Picked => ({
+			selected: qs[k].options.map((o) => o.label).filter((_, j) => st[k].checked.has(j)),
+			...(st[k].custom ? { custom: st[k].custom } : {}),
+		});
+		// 答えを記録したあとの移動。問が 1 つなら送信、複数なら次のタブ (最後の問の次は確認)
+		const advance = () => {
+			if (n === 1) return finish(st.map((s) => s.answer));
+			tab = Math.min(tab + 1, tabs - 1);
+		};
+		const isConfirm = () => n > 1 && tab === n;
+		const text = (k: number) => {
+			const a = st[k].answer;
+			if (!a) return undefined;
+			return [...a.selected, ...(a.custom ? [`自由記述: ${a.custom}`] : [])].join(", ") || "(選択なし)";
+		};
 
 		editor.onSubmit = (value: string) => {
-			const text = value.trim();
-			if (!text) {
-				custom = undefined; // 空は記録せず (複数選択では以前の入力も消し) 一覧へ戻る
-				editing = false;
+			const k = tab;
+			const s = st[k];
+			const t = value.trim();
+			editing = false;
+			if (!t) {
+				// 空は記録しない (以前の自由記述も消す)
+				s.custom = undefined;
+				if (s.answer) s.answer = qs[k].multi ? multiResult(k) : undefined;
 				return refresh();
 			}
-			// 複数選択でもここで送信する (チェックした選択肢と自由記述をまとめて。Enter が「入力の確定」と「送信」で別にならないように)
-			if (q.multi) {
-				custom = text;
-				return finish(result());
-			}
-			finish({ selected: [], custom: text });
+			// 複数選択でも、ここでチェックした選択肢と自由記述をまとめて確定する (Enter が「入力の確定」と「確定」で被らないように)
+			s.custom = t;
+			s.answer = qs[k].multi ? multiResult(k) : { selected: [], custom: t };
+			advance();
+			refresh();
 		};
 
 		const handleInput = (data: string) => {
+			touch();
 			if (editing) {
 				if (matchesKey(data, Key.escape)) {
 					editing = false;
@@ -125,24 +151,42 @@ function panel(ctx: any, q: Question, index: number, total: number, signal?: Abo
 				editor.handleInput(data);
 				return refresh();
 			}
-			if (matchesKey(data, Key.up)) cursor = Math.max(0, cursor - 1);
-			else if (matchesKey(data, Key.down)) cursor = Math.min(freeAt, cursor + 1);
-			else if (/^[1-9]$/.test(data) && Number(data) <= freeAt) cursor = Number(data) - 1;
-			else if (matchesKey(data, Key.space) && q.multi && cursor < freeAt) {
-				if (checked.has(cursor)) checked.delete(cursor);
-				else checked.add(cursor);
+			if (matchesKey(data, Key.escape)) return finish(none());
+			if (tabs > 1 && (matchesKey(data, Key.tab) || matchesKey(data, Key.shift("tab")))) {
+				// 複数選択でチェックしたままタブを離れたときは、そのとおり回答として扱う
+				if (!isConfirm() && qs[tab].multi && (st[tab].checked.size > 0 || st[tab].custom)) st[tab].answer = multiResult(tab);
+				tab = (tab + (matchesKey(data, Key.tab) ? 1 : tabs - 1)) % tabs;
+				return refresh();
+			}
+			if (isConfirm()) {
+				if (matchesKey(data, Key.enter)) finish(st.map((s) => s.answer));
+				return;
+			}
+			const q = qs[tab];
+			const s = st[tab];
+			const freeAt = q.options.length;
+			if (matchesKey(data, Key.up)) s.cursor = Math.max(0, s.cursor - 1);
+			else if (matchesKey(data, Key.down)) s.cursor = Math.min(freeAt, s.cursor + 1);
+			else if (/^[1-9]$/.test(data) && Number(data) <= freeAt) s.cursor = Number(data) - 1;
+			else if (matchesKey(data, Key.space) && q.multi && s.cursor < freeAt) {
+				if (s.checked.has(s.cursor)) s.checked.delete(s.cursor);
+				else s.checked.add(s.cursor);
+				if (s.answer) s.answer = multiResult(tab);
 			} else if (matchesKey(data, Key.enter)) {
-				if (cursor === freeAt) {
+				if (s.cursor === freeAt) {
 					editing = true;
-					editor.setText(custom ?? "");
+					editor.setText(s.custom ?? "");
 				} else if (!q.multi) {
-					return finish({ selected: [q.options[cursor].label] });
+					s.custom = undefined;
+					s.answer = { selected: [q.options[s.cursor].label] };
+					advance();
 				} else {
 					// 何も選んでいないときは、今の行を選んで確定する
-					if (checked.size === 0 && !custom) checked.add(cursor);
-					return finish(result());
+					if (s.checked.size === 0 && !s.custom) s.checked.add(s.cursor);
+					s.answer = multiResult(tab);
+					advance();
 				}
-			} else if (matchesKey(data, Key.escape)) return finish(null);
+			}
 			refresh();
 		};
 
@@ -150,30 +194,57 @@ function panel(ctx: any, q: Question, index: number, total: number, signal?: Abo
 			if (cache) return cache;
 			const w = Math.max(1, width);
 			const lines: string[] = [];
-			const add = (prefix: string, text: string) => {
+			const add = (prefix: string, body: string) => {
 				const pad = " ".repeat(visibleWidth(prefix));
-				wrapTextWithAnsi(text, Math.max(1, w - visibleWidth(prefix))).forEach((l, k) => lines.push((k === 0 ? prefix : pad) + l));
+				wrapTextWithAnsi(body, Math.max(1, w - visibleWidth(prefix))).forEach((l, k) => lines.push((k === 0 ? prefix : pad) + l));
 			};
 			lines.push(theme.fg("accent", "─".repeat(w)));
-			add(" ", theme.fg("text", `[${index + 1}/${total}] ${q.header ? `${q.header}: ` : ""}${q.question}`));
+			if (tabs > 1) {
+				const items = [...qs.map((q, i) => `${st[i].answer ? "✓" : "□"} ${truncateToWidth(q.header ?? q.question, 10, "…")}`), "確認"];
+				const bar = items.map((t, i) => (i === tab ? theme.bold(theme.fg("accent", `[${t}]`)) : theme.fg("muted", ` ${t} `))).join(" ");
+				lines.push(truncateToWidth(` ${bar}`, w));
+				lines.push("");
+			}
+			if (isConfirm()) {
+				add(" ", theme.fg("text", "回答の確認"));
+				lines.push("");
+				let blank = 0;
+				qs.forEach((q, i) => {
+					const t = text(i);
+					if (!t) blank++;
+					add("  ", theme.fg(t ? "success" : "warning", `${t ? "✓" : "✗"} ${i + 1}. ${q.header ?? q.question}`));
+					add("      ", theme.fg(t ? "text" : "warning", t ? `→ ${t}` : "未回答"));
+				});
+				lines.push("");
+				if (blank > 0) add(" ", theme.fg("warning", `未回答の問が ${blank} 件あります。送信すると未回答として返ります (Tab で戻って答えられます)`));
+				add(" ", theme.fg("dim", `Enter 送信 • Tab / Shift+Tab 移動 • Esc 中止 • ${Math.round(TIMEOUT_MS / 60000)} 分無操作で時間切れ`));
+				lines.push(theme.fg("accent", "─".repeat(w)));
+				cache = lines;
+				return lines;
+			}
+			const q = qs[tab];
+			const s = st[tab];
+			const freeAt = q.options.length;
+			add(" ", theme.fg("text", `${n > 1 ? `[${tab + 1}/${n}] ` : ""}${q.header ? `${q.header}: ` : ""}${q.question}`));
 			for (let k = 0; k <= freeAt; k++) {
 				lines.push("");
-				const on = k === cursor;
-				const mark = q.multi ? (k === freeAt ? (custom ? "[x] " : "[ ] ") : checked.has(k) ? "[x] " : "[ ] ") : "";
-				const label = k === freeAt ? `${FREE}${editing ? " ✎" : custom ? `  ${custom}` : ""}` : `${k + 1}. ${q.options[k].label}`;
+				const on = k === s.cursor;
+				const isFree = k === freeAt;
+				const mark = q.multi
+					? (isFree ? s.custom : s.checked.has(k)) ? "[x] " : "[ ] "
+					: (isFree ? s.answer?.custom : s.answer?.selected[0] === q.options[k].label) ? "(●) " : "( ) ";
+				const label = isFree ? `${FREE}${editing ? " ✎" : s.custom ? `  ${s.custom}` : ""}` : `${k + 1}. ${q.options[k].label}`;
 				add(on ? theme.fg("accent", "❯ ") : "  ", theme.fg(on ? "accent" : "text", mark + label));
-				if (k < freeAt) add("      ", theme.fg("muted", q.options[k].description));
+				if (!isFree) add("      ", theme.fg("muted", q.options[k].description));
 				else if (editing) for (const l of editor.render(Math.max(1, w - 6))) lines.push(`      ${l}`);
 			}
 			lines.push("");
 			const keys = editing
 				? q.multi
-					? "Enter 送信（チェックとこの入力をまとめて） • Esc 一覧へ戻る"
-					: "Enter 送信 • Esc 一覧へ戻る"
-				: q.multi
-					? "↑↓ 移動 • Space 選択/解除 • Enter 確定 • Esc 中止"
-					: "↑↓ 移動 • Enter 選択 • Esc 中止";
-			add(" ", theme.fg("dim", `${keys} • ${Math.round(TIMEOUT_MS / 60000)} 分で時間切れ`));
+					? `Enter ${n > 1 ? "確定して次へ" : "送信"}（チェックとこの入力をまとめて） • Esc 一覧へ戻る`
+					: `Enter ${n > 1 ? "確定して次へ" : "送信"} • Esc 一覧へ戻る`
+				: `↑↓ 移動 • ${q.multi ? "Space 選択/解除 • " : ""}Enter ${q.multi ? "確定" : "選択"}${n > 1 ? "して次へ • Tab 次の問" : "して送信"} • Esc 中止`;
+			add(" ", theme.fg("dim", `${keys} • ${Math.round(TIMEOUT_MS / 60000)} 分無操作で時間切れ`));
 			lines.push(theme.fg("accent", "─".repeat(w)));
 			cache = lines;
 			return lines;
@@ -254,20 +325,19 @@ export default function (pi: ExtensionAPI) {
 				return text?.trim() ? text.trim() : undefined;
 			};
 			const answers: Answer[] = [];
-			let stopped = false;
-			for (let i = 0; i < qs.length && !stopped; i++) {
-				const q = qs[i];
-				if (ctx.mode === "tui") {
-					const r = await panel(ctx, q, i, qs.length, signal);
-					if (r === null) {
-						stopped = true;
-						break;
-					}
+			if (ctx.mode === "tui") {
+				const picks = await panel(ctx, qs, signal);
+				picks.forEach((r, i) => {
+					if (!r) return;
+					const q = qs[i];
 					if (q.multi) answers.push({ questionIndex: i, question: q.question, kind: "multi", answer: r.custom ?? null, selected: r.selected });
 					else if (r.custom) answers.push({ questionIndex: i, question: q.question, kind: "custom", answer: r.custom });
 					else answers.push({ questionIndex: i, question: q.question, kind: "option", answer: r.selected[0] });
-					continue;
-				}
+				});
+			}
+			let stopped = ctx.mode === "tui"; // TUI は上のパネルで全部済んでいる
+			for (let i = 0; i < qs.length && !stopped; i++) {
+				const q = qs[i];
 				// 行はラベルだけ (1 行で収まり、カーソルの位置が分かる)。説明は質問文の下に番号つきの一覧で出す
 				const rows = q.options.map((o, k) => `${k + 1}. ${o.label}`);
 				const detail = `${title(q, i)}\n\n${q.options.map((o, k) => `  ${k + 1}. ${o.label}\n${wrap(o.description).map((l) => INDENT + l).join("\n")}`).join("\n\n")}\n\n`;
