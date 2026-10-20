@@ -1757,6 +1757,20 @@ def test_ask_returns_the_chosen_option_label(env):
     assert "→ B" in result, result
 
 
+def test_ask_wraps_long_descriptions_with_a_hanging_indent_and_blank_lines(env):
+    long = "とても長い説明文。" * 12
+    q = {
+        "question": "Which?",
+        "options": [{"label": "A", "description": long}, {"label": "B", "description": "short"}],
+    }
+    requests, _ = _ask_rpc(env, [q], ["1. A"])
+    title = requests[0]["title"]
+    body = [line for line in title.splitlines() if line.startswith(" " * 7)]
+    assert len(body) >= 3, title  # 長い説明は複数行になり、どの行も字下げが付く
+    assert all(len(line) <= 7 + 33 for line in body), body  # 全角 32 文字 (64 カラム) まで
+    assert "\n\n  2. B" in title, title  # 選択肢の間に空行
+
+
 def test_ask_asks_several_questions_in_one_call(env):
     qs = [_ask_q("First?", "A", "B"), _ask_q("Second?", "C", "D")]
     requests, result = _ask_rpc(env, qs, ["1. A", "2. D"])
