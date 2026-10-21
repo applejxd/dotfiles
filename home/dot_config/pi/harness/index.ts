@@ -512,7 +512,8 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		try {
 			const r = await sp.job.run(task, { signal, timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE });
 			sp.job.close();
-			if (r.status === "done" && r.answer) return { ok: true, text: redactText(r.answer).slice(0, MAX_REPLY_CHARS) };
+			// 上限での切り詰めと「省略あり」の表示は、呼び出し側 (btw) がする
+			if (r.status === "done" && r.answer) return { ok: true, text: redactText(r.answer) };
 			return { ok: false, text: clip(resultText(sp.job, r, false)) };
 		} catch (e) {
 			sp.job.close(true);

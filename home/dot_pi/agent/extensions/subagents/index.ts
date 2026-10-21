@@ -12,6 +12,7 @@ import { Type } from "typebox";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MAX_TASK = 30000; // Windows の引数長の上限 (32767) に収める
 const TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_OUT_BYTES = 8 * 1024 * 1024; // 子の JSON イベントを貯める上限。超えたら子を止める
 
 type Agent = { description: string; system: string; model: string | null };
 
@@ -86,7 +87,14 @@ export default function (pi: ExtensionAPI) {
 		signal?.addEventListener("abort", kill, { once: true });
 		let out = "";
 		let err = "";
-		child.stdout.on("data", (b: Buffer) => (out += b.toString()));
+		let tooLarge = false;
+		child.stdout.on("data", (b: Buffer) => {
+			if (out.length < MAX_OUT_BYTES) out += b.toString();
+			else if (!tooLarge) {
+				tooLarge = true;
+				kill();
+			}
+		});
 		child.stderr.on("data", (b: Buffer) => (err = (err + b.toString()).slice(-2000)));
 		const code: number = await new Promise((resolve) => {
 			child.on("error", () => resolve(-1));
@@ -95,15 +103,17 @@ export default function (pi: ExtensionAPI) {
 		runningChildren.delete(id);
 		clearTimeout(timer);
 		signal?.removeEventListener("abort", kill);
-		return { model, code, answer: readAnswer(out), err };
+		return { model, code, answer: tooLarge ? "" : readAnswer(out), err: tooLarge ? "child output too large; stopped" : err };
 	};
 
-	// `btw` などの利用者のコマンドが、読み取り専用の子の答えだけを受け取る入口 (この拡張の子は常に読み取り専用)
+	// `btw` などの利用者のコマンドが、読み取り専用の子の答えだけを受け取る入口。
+	// agents.json は読み取り専用の役割しか含まない (生成器の約束。子は --tools read,grep,find,ls 固定)。伏字化と読み取り禁止の保護は無い
 	(globalThis as any).__piAskReadChild = async (agentName: string, task: string, ctx: any, signal?: AbortSignal) => {
 		try {
-			const r = await runChild(`btw-${Date.now()}`, agentName, task, ctx, signal);
+			const r = await runChild(`btw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, agentName, task, ctx, signal);
 			if (signal?.aborted) return { ok: false, text: "aborted" };
-			return r.code === 0 && r.answer ? { ok: true, text: r.answer } : { ok: false, text: r.answer || r.err || `exit ${r.code}` };
+			if (r.code !== 0 || !r.answer) return { ok: false, text: r.answer || r.err || `exit ${r.code}` };
+			return { ok: true, text: r.answer };
 		} catch (e) {
 			return { ok: false, text: e instanceof Error ? e.message : String(e) };
 		}

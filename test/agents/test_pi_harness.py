@@ -400,6 +400,33 @@ def test_review_child_reads_with_the_same_read_only_commands_as_explore(env):
     assert not (env["proj"] / "made-by-review").exists()
 
 
+# `--` を含む形は、判定器が `--` の後ろを「別のコマンド」として判定し、パスが allow に無くて拒まれる (既知の限界)。
+# see docs/spec/pi-guard.md#review-への依頼の書き方
+DOUBLE_DASH = pytest.mark.xfail(strict=True, reason="`--` の後ろを別コマンドとして判定する")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git log --oneline -5",
+        "git show HEAD",
+        "git show HEAD --stat",
+        "git diff",
+        "git diff HEAD~1",
+        "git diff HEAD",
+        "git status --short",
+        pytest.param("git show HEAD -- file.txt", marks=DOUBLE_DASH),
+        pytest.param("git diff HEAD~1 -- file.txt", marks=DOUBLE_DASH),
+        pytest.param("git diff -- file.txt", marks=DOUBLE_DASH),
+        pytest.param("git log -- file.txt", marks=DOUBLE_DASH),
+    ],
+)
+def test_review_child_may_read_a_revision_with_git(env, command):
+    # review は差分を自分で読む。リビジョンを付けた形も、判定で「どの規則にも当たらない」と拒まれない
+    proc = run_child(env, "review", bash_call(command))
+    assert "どの規則にも当たらない" not in proc.stdout, proc.stdout
+
+
 def test_explore_child_gets_only_the_read_only_commands(env):
     # wc と読み取り専用の git だけ確認なしで通る。それ以外の shell は拒否 (子は承認できないところで止まる)
     proc = run_child(env, "explore", bash_call("wc -c /dev/null"))
