@@ -391,9 +391,13 @@ def test_child_cannot_start_another_child(env):
     assert "Tool guarded_task not found" in proc.stdout
 
 
-def test_reader_child_does_not_get_bash(env):
+def test_review_child_reads_with_the_same_read_only_commands_as_explore(env):
+    # review は差分を自分で取りに行けるよう explorer 役。それ以外の shell は拒否
     proc = run_child(env, "review", bash_call("wc -c /dev/null"))
-    assert "Tool guarded_bash not found" in proc.stdout, proc.stdout
+    assert "0 /dev/null" in proc.stdout and "child review: completed" in proc.stdout, proc.stdout
+    proc = run_child(env, "review", bash_call("touch made-by-review"))
+    assert "tool error: guarded_bash" in proc.stdout, proc.stdout
+    assert not (env["proj"] / "made-by-review").exists()
 
 
 def test_explore_child_gets_only_the_read_only_commands(env):
@@ -405,6 +409,47 @@ def test_explore_child_gets_only_the_read_only_commands(env):
     assert not (env["proj"] / "made-by-explore").exists()
     proc = run_child(env, "explore", bash_call("git commit -m x"))
     assert "tool error: guarded_bash" in proc.stdout, proc.stdout
+
+
+ASK_READ_CHILD = FIXTURES / "ask_read_child.ts"
+BTW_EXT = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "btw" / "index.ts"
+CHILD_ECHO = dict(FAUX_CHILD_ECHO_USER="1", PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"))
+
+
+def test_ask_read_child_entry_runs_only_read_only_agents(env):
+    # btw が使う入口。利用者のコマンドなので判定は通さないかわりに、読み取り専用の役割だけを許す
+    proc = run_pi(
+        env, [], "/askchild explore hello-child", extra=("-e", str(ASK_READ_CHILD)), **CHILD_ECHO
+    )
+    out = proc.stdout + proc.stderr
+    assert "ASKCHILD ok=true" in out and "CHILD_USER=hello-child" in out, out
+    for agent in ("worker", "commit"):
+        proc = run_pi(
+            env,
+            [],
+            f"/askchild {agent} hello-child",
+            extra=("-e", str(ASK_READ_CHILD)),
+            **CHILD_ECHO,
+        )
+        out = proc.stdout + proc.stderr
+        assert "ASKCHILD ok=false not a read-only agent" in out, out
+        assert "CHILD_USER=" not in out
+
+
+def test_btw_asks_an_explore_child_by_default_and_plain_does_not(env):
+    # 子の入口を記録するものに差し替えて、btw が渡すものを見る (print モードでは答えの表示が見えない)
+    extra = ("-e", str(ASK_READ_CHILD), "-e", str(BTW_EXT))
+    proc = run_pi(env, [], "/btw where-is-x", extra=extra, ASKCHILD_STUB="1")
+    out = proc.stdout + proc.stderr
+    assert (
+        "STUB agent=explore" in out
+        and "ついでの質問: where-is-x" in out
+        and "<conversation>" in out
+    ), out
+    proc = run_pi(env, [], "/btw --plain where-is-x", extra=extra, ASKCHILD_STUB="1")
+    assert proc.returncode == 0 and "STUB" not in proc.stdout + proc.stderr, (
+        proc.stdout + proc.stderr
+    )
 
 
 def test_child_ask_is_returned_as_blocked(env):

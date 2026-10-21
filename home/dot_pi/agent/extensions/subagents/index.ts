@@ -57,13 +57,65 @@ export default function (pi: ExtensionAPI) {
 	if (names.length === 0) return;
 	const catalog = names.map((n) => `- ${n}: ${agents[n].description}`).join("\n");
 
+	// 子を 1 つ走らせて答えを受け取る (task ツールと、`btw` の入口が共有する)
+	const runChild = async (id: string, agentName: string, task: string, ctx: any, signal: any) => {
+		const agent = agents[agentName];
+		if (!agent) throw new Error(`unknown agent: ${agentName}`);
+		if (task.length > MAX_TASK) throw new Error(`task is too long (${task.length} > ${MAX_TASK})`);
+		const model = agent.model ?? `${ctx.model.provider}/${ctx.model.id}`;
+		// 実行中の pi をそのまま直接起動する (node 版は node + cli.js、バイナリ版は pi.exe。シェルを使わず引数を壊さない)
+		const args = childArgs({
+			argv1: process.argv[1],
+			bun: Boolean((process.versions as { bun?: string }).bun),
+			model,
+			system: agent.system,
+			task,
+		});
+		const child = spawn(process.execPath, args, {
+			cwd: ctx.cwd,
+			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
+			stdio: ["ignore", "pipe", "pipe"],
+			windowsHide: true,
+		});
+		runningChildren.set(id, { agent: agentName, model, task, pid: child.pid, startedAt: Date.now() });
+		const kill = () => {
+			if (process.platform === "win32") spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+			else child.kill("SIGTERM");
+		};
+		const timer = setTimeout(kill, TIMEOUT_MS);
+		signal?.addEventListener("abort", kill, { once: true });
+		let out = "";
+		let err = "";
+		child.stdout.on("data", (b: Buffer) => (out += b.toString()));
+		child.stderr.on("data", (b: Buffer) => (err = (err + b.toString()).slice(-2000)));
+		const code: number = await new Promise((resolve) => {
+			child.on("error", () => resolve(-1));
+			child.on("close", (c: number | null) => resolve(c ?? -1));
+		});
+		runningChildren.delete(id);
+		clearTimeout(timer);
+		signal?.removeEventListener("abort", kill);
+		return { model, code, answer: readAnswer(out), err };
+	};
+
+	// `btw` などの利用者のコマンドが、読み取り専用の子の答えだけを受け取る入口 (この拡張の子は常に読み取り専用)
+	(globalThis as any).__piAskReadChild = async (agentName: string, task: string, ctx: any, signal?: AbortSignal) => {
+		try {
+			const r = await runChild(`btw-${Date.now()}`, agentName, task, ctx, signal);
+			if (signal?.aborted) return { ok: false, text: "aborted" };
+			return r.code === 0 && r.answer ? { ok: true, text: r.answer } : { ok: false, text: r.answer || r.err || `exit ${r.code}` };
+		} catch (e) {
+			return { ok: false, text: e instanceof Error ? e.message : String(e) };
+		}
+	};
+
 	pi.registerTool({
 		name: "task",
 		label: "task",
 		// promptSnippet が無い自作ツールは system prompt の Available tools に出ず、モデルが存在に気付けない
 		promptSnippet: `Run a read-only task in a child agent (${names.join(" / ")}). Use for independent review or exploration`,
 		promptGuidelines: [
-			"Use task with agent \"review\" for an independent review or a second opinion. The child cannot see this conversation, so put everything it needs in `task`.",
+			"Use task with agent \"review\" for an independent review or a second opinion. The child cannot see this conversation and has no shell, so paste the diff, and write: (1) the goal and constraints, (2) where to look (paths), (3) what you verified and what you did not, (4) options you rejected and why, (5) your tentative conclusion, last, labelled as the thing to challenge, (6) the question you want answered. Do not paste the transcript.",
 		],
 		description:
 			"Run a read-only task in a child agent (separate pi process; tools: read, grep, find, ls only). " +
@@ -74,44 +126,8 @@ export default function (pi: ExtensionAPI) {
 			task: Type.String({ description: "What the child should do, with all the context it needs" }),
 		}),
 		async execute(id: string, params: any, signal: any, _onUpdate: any, ctx: any) {
-			const agent = agents[params.agent];
-			if (!agent) throw new Error(`unknown agent: ${params.agent}`);
-			if (params.task.length > MAX_TASK) throw new Error(`task is too long (${params.task.length} > ${MAX_TASK})`);
-			const model = agent.model ?? `${ctx.model.provider}/${ctx.model.id}`;
-			// 実行中の pi をそのまま直接起動する (node 版は node + cli.js、バイナリ版は pi.exe。シェルを使わず引数を壊さない)
-			const args = childArgs({
-				argv1: process.argv[1],
-				bun: Boolean((process.versions as { bun?: string }).bun),
-				model,
-				system: agent.system,
-				task: params.task,
-			});
-			const child = spawn(process.execPath, args, {
-				cwd: ctx.cwd,
-				env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
-				stdio: ["ignore", "pipe", "pipe"],
-				windowsHide: true,
-			});
-			runningChildren.set(id, { agent: params.agent, model, task: params.task, pid: child.pid, startedAt: Date.now() });
-			const kill = () => {
-				if (process.platform === "win32") spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-				else child.kill("SIGTERM");
-			};
-			const timer = setTimeout(kill, TIMEOUT_MS);
-			signal?.addEventListener("abort", kill, { once: true });
-			let out = "";
-			let err = "";
-			child.stdout.on("data", (b: Buffer) => (out += b.toString()));
-			child.stderr.on("data", (b: Buffer) => (err = (err + b.toString()).slice(-2000)));
-			const code: number = await new Promise((resolve) => {
-				child.on("error", () => resolve(-1));
-				child.on("close", (c: number | null) => resolve(c ?? -1));
-			});
-			runningChildren.delete(id);
-			clearTimeout(timer);
-			signal?.removeEventListener("abort", kill);
+			const { model, code, answer, err } = await runChild(id, params.agent, params.task, ctx, signal);
 			if (signal?.aborted) throw new Error("child aborted");
-			const answer = readAnswer(out);
 			const failed = code !== 0 || !answer;
 			const text = `child ${params.agent}: ${failed ? "failed" : "completed"} (exit ${code})\n\n${answer || err}`;
 			return { content: [{ type: "text", text }], details: { agent: params.agent, model }, isError: failed };

@@ -305,6 +305,11 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 
 ## 重要な更新
 
+- **2026-10-21**: 利用者の判断で、`review` を `explorer` 役（`wc` と読み取り専用の git を持つ）にし、`btw` の既定を `explore` の子にした（`--plain` は従来どおりのツールなし）。
+  `review` は、親が会話の転写や差分の全文を書くと親の解釈が混ざるので、依頼は目的・制約・確かめたことと未確認のこと・退けた案・暫定の結論（最後に「疑う対象」と明記）・聞きたいことに絞り、差分や対象は子が自分で読む形にした（[仕様](../spec/pi-guard.md#review-への依頼の書き方)）。
+  `btw` の子は、フルガードと Windows の `subagents` が `globalThis.__piAskReadChild` に置く入口で起動する。利用者のコマンドなので判定器は通さず、読み取り専用の役割だけを許す（[仕様](../spec/pi-guard.md#自作の拡張-todo--plan--btw)）。
+  見送ったもの: `pi-memory`（`sdd-docs` の構造化した記録を採る）・`pi-btw`（ツール付きのサブセッション）・`pi-advisor-flow`（そのままの導入。自動ゲートは設計の参考として別途検討）・`@ff-labs/pi-fff`（`rg` / `fd` / `fzf` で足りる）。根拠は[記録 P5](../research/agents/pi-public-extensions-survey.md#記録-p5--2026-10-21-人気の拡張のうち未導入のものと既存の機能との比較)。
+  未確認: 実機の TUI での `btw` の表示、Windows の素の `pi` での子の起動、実モデルでの `review` の指摘の質
 - **2026-10-20**: 利用者が「OpenCode はもう使っていない」と確認した。だが急ぐ理由は無いので、段 6（撤去）と OpenCode 専用の `checkpoint`（スキル・plugin・スクリプト・試験・[仕様](../spec/checkpoint.md)、約 2,900 行）は**現状維持で保留**とした。pi は自作の圧縮が checkpoint を兼ねる（[圧縮（旧 checkpoint）](../spec/pi-guard.md#圧縮旧-checkpoint)。同日に思考レベルの設定漏れを直して実モデルで確認済み）。撤去するときは一緒に消す。撤去前に決めるのは Windows の扱い（pi のハーネスが無い）
 - **2026-10-13**: 利用者が **pi に一本化する**と決め、判定器を TypeScript に移すことにした（[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。2026-10-09 の「判定器を Claude / Copilot と共有する」はこれで覆る。Windows ネイティブの `pi` は信頼できる環境でだけ開く（ガードなし）。調査は[記録 I1](../research/agents/pi-isolation-options.md)
 - **2026-10-13**: 判定器の TS 移植に着手した（[仕様](../spec/pi-decide.md#ts-版への移植)）。Python 版の判定結果 6,311 件と、部品ごとの出力 9,199 件を正解データにした。層 C（入口・役割・ファイル・bypass）と層 A（`shlex`・分割・正規化・照合）は全件一致。層 B（`bashrules` の約 3,900 行）は土台（パス・文脈・`shellparse`・共通部品）まで書いたが、正解データでの検証はこれから

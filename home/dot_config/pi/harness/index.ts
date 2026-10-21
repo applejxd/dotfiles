@@ -377,6 +377,8 @@ const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, Ru
 const MAX_JOBS = 4;
 const ROUND_TIMEOUT_MS = Number(process.env.PI_HARNESS_TEST_ROUND_MS) || 15 * 60 * 1000;
 const MAX_REPLY_CHARS = 20000;
+// 利用者のコマンド (`btw`) が起動できる子の役割。読み取り専用に限る
+const READ_ONLY_CHILD_PROFILES = new Set(["reader", "explorer"]);
 const jobs = new Jobs(MAX_JOBS);
 // 異常終了でも孤児の子を残さない (stdin が閉じても止まるが、作業中の子はすぐ止める)
 process.once("exit", () => jobs.closeAll(true));
@@ -498,13 +500,35 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			.finally(() => runningChildren.delete(key));
 	};
 
+	// `btw` が、読み取り専用の子の答えだけを受け取る入口。利用者が起こす操作なので /agent と同じく判定は通さない。
+	// 子の役割は読み取り専用だけを許し、答えには伏字化を掛ける
+	(globalThis as any).__piAskReadChild = async (agentName: string, task: string, ctx: any, signal?: AbortSignal) => {
+		const agent = agents[agentName];
+		if (!agent || !READ_ONLY_CHILD_PROFILES.has(agent.profile)) return { ok: false, text: `not a read-only agent: ${agentName}` };
+		const sp = spawnChild(agentName, ctx, { cwd: ctx.cwd, role: ROLE });
+		if ("error" in sp) return { ok: false, text: sp.error };
+		const key = `btw-${sp.job.id}`;
+		runningChildren.set(key, { agent: agentName, model: sp.model, task, pid: sp.job.pid, startedAt: Date.now() });
+		try {
+			const r = await sp.job.run(task, { signal, timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE });
+			sp.job.close();
+			if (r.status === "done" && r.answer) return { ok: true, text: redactText(r.answer).slice(0, MAX_REPLY_CHARS) };
+			return { ok: false, text: clip(resultText(sp.job, r, false)) };
+		} catch (e) {
+			sp.job.close(true);
+			return { ok: false, text: e instanceof Error ? e.message : String(e) };
+		} finally {
+			runningChildren.delete(key);
+		}
+	};
+
 	pi.registerTool({
 		name: `${PREFIX}task`,
 		label: "task",
 		// promptSnippet が無い自作ツールは system prompt の Available tools に出ず、モデルが存在に気付けない
 		promptSnippet: `Run a task in a child agent (${names.join(" / ")}). Use for independent review, exploration, or parallel work`,
 		promptGuidelines: [
-			`Use ${PREFIX}task with agent "review" for an independent review or a second opinion. The child cannot see this conversation, so put everything it needs in \`task\`.`,
+			`Use ${PREFIX}task with agent "review" for an independent review or a second opinion. The child cannot see this conversation, but it reads files and runs read-only git itself, so do not paste the transcript or whole diffs. Write in \`task\`: (1) the goal and constraints, (2) where to look (paths, refs), (3) what you verified and what you did not, (4) options you rejected and why, (5) your tentative conclusion, last, labelled as the thing to challenge, (6) the question you want answered.`,
 			`Set keep=true on ${PREFIX}task only when you expect follow-up requests to the same child. Send a follow-up with {jobId, task} using the jobId it returned, and close it with {jobId, close:true} when done. A job that is gone (closed, failed, or dropped when the bypass or session changed) must be restarted as a new task with a summary.`,
 			`Use background=true on ${PREFIX}task to keep working while the child runs; you are notified when it finishes. Use {jobId, status:true} or {list:true} to look at running children, {jobId, steer:"..."} to redirect one, and {jobId, abort:true} to stop its current round (the child stays).`,
 			`For several independent tasks, use {tasks:[{agent, task}, ...]} (up to ${MAX_BATCH}); tasks beyond the live-job limit wait instead of failing.`,

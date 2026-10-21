@@ -197,6 +197,39 @@
   同名ツールの二重登録で起動が失敗する (gentle-shell #1277)
 - **自作への反映**: 名前は `ask`（衡突回避）、予約ラベル、空入力は選択肢へ戻す、`unanswered` を返す、待ち上限 5 分。タブ画面・プレビュー・メモ・BEL は後回し
 
+## 記録 P5 — 2026-10-21: 人気の拡張のうち未導入のものと、既存の機能との比較
+
+- **対象バージョン**: pi 1.3.0。**拡張のインストール・実行はしていない**（[ADR-0016](../../adr/0016-pi-extensions-own-first.md)）。コードは読まず、README と説明文だけを読んだ。README の主張は未検証
+- **問い**: 月間ダウンロード数の上位の拡張のうち、取り入れていないものは何か。`pi-memory`・`pi-btw`・`pi-advisor-flow`・`@ff-labs/pi-fff` は、今の仕組み（`sdd-docs`・自作 `btw`・`review`・`rg` / `fd` / `fzf`）で足りているか
+- **出典**（いずれも 2026-10-21 に取得）: <https://awesome-pi.site/extensions/>（順位。取得は 6,000 文字で打ち切ったので、上位約 40 件まで）、
+  <https://pi.dev/packages/pi-memory>、<https://pi.dev/packages/pi-btw>、<https://pi.dev/packages/pi-advisor-flow>、<https://pi.dev/packages/@ff-labs/pi-fff>、
+  <https://pi.dev/packages/pi-cc-extensions>。検索語: `pi-memory pi coding agent extension qmd MEMORY.md github`、`pi-advisor-flow pi extension Executor Advisor github`、`@ff-labs/pi-fff pi extension fuzzy file search github`、`pi-btw pi extension side conversations github`
+- **順位の変化**: P1（2026-10-20）から入れ替わっている（`pi-mcp-adapter` が 2 位、`pi-subagents` が 5 位）。全体は 12,845 件。順位の付け方は未確認のまま
+
+### 比較の結果
+
+| 拡張（順位・月間 DL） | 今の仕組み | 差と判断 |
+| --- | --- | --- |
+| `pi-memory`（28 位前後・44.9k） | `sdd-docs`（構造化した記録）・checkpoint 相当の圧縮の指示・`AGENTS.md` | 差は「エージェントが自動で書き、毎ターンのシステムプロンプトへ注入する」ことだけ（長期記憶 4K・当日ログ 3K・scratchpad 2K、計 16K 文字まで。README）。自動で書いた内容が永続的に注入される点は、誤った記憶やツール結果に紛れた指示が残る危険がある（**推測**）。**利用者の判断（2026-10-21）: `sdd-docs` の構造化した形のほうがよい。`AGENTS.md` も肥大化させたくない。導入しない** |
+| `pi-btw`（32 位・42.6k） | 自作 `btw`（ツールなしの 1 回きりの応答） | `pi-btw` は、本物のサブセッションで `read` / `bash` / `edit` / `write` を持ち、スレッドが続き、`/btw:ask`（読み取り専用）・`/btw:tangent`（会話を引き継がない）・`/btw:inject`（本体へ戻す）・専用モデルを持つ。ツール付きのセッションは、P2 の `pi-subagents` と同じ構造的な衝突になり得る（**推測**）。**導入しない。自作 `btw` は `explore` の子を既定にした**（[pi-guard](../../spec/pi-guard.md#自作の拡張-todo--plan--btw)） |
+| `pi-advisor-flow`（24 位前後・70.2k） | `guarded_task` の `review` | `review` は親が明示して呼ぶ別プロセスの読み取り役。`pi-advisor-flow` は、実行役の `ask_advisor` に加えて自動のゲート（計画の前・失敗の連続後・完了宣言の前）と、同じツール呼び出しの繰り返しの検出（ツールの実行を止めることがある）を持ち、会話を自動で再構成して渡す。助言役はツールを使わない。約 1 MB で版の動きが速い（0.14.2）。**導入しない。自動ゲートは設計の参考にする（別の話題として後日）。会話をそのまま渡さない、読み取りツールを持たせる、は自作の方針として維持** |
+| `@ff-labs/pi-fff`（34 位・39.1k） | 組み込みの `grep` / `find`（README によれば `rg` / `fd` を起動）と、`fzf` | `rg` 14.1.1・`fd` 10.5.0・`fzf` 0.53.0 が手元にある。正規表現・OR の複数パターン（`rg -e a -e b`）・`.gitignore` の尊重は足りる。足りないのは、frecency とクエリ履歴での順位づけ、git の変更ファイルを上位にする機能、事前インデックス、カーソルによるページ送り。frecency の DB を `~/.pi/agent/fff/` に書くので、`pis` の起動ごとの agent 置き場・書き込み制限と衝突し得る（表 B の 7・12 と同種。**推測**）。ネイティブのバインディングを持ち、依存は 2 つ。**導入しない** |
+
+### 訂正
+
+- 同日の会話で、`pi-cc-extensions` を `/btw` と同種として分類したのは**誤り**だった。これは Claude Code 風の TUI 表示・フッター・`/context` 検査・`@` でのセッション参照で、`/btw` の機能は持たない
+
+### 反映したこと
+
+- `review` を `explorer` 役（`wc` と読み取り専用の git を持つ）にし、依頼は「意図と問い」を書く形に改めた。差分や対象は子が自分で読む（[review への依頼の書き方](../../spec/pi-guard.md#review-への依頼の書き方)）
+- `btw` の既定を `explore` の子にした。`--plain` は従来どおり（[btw](../../spec/pi-guard.md#自作の拡張-todo--plan--btw)）
+
+### 未確認
+
+- 順位は上位約 40 件までで、それ以下は見ていない。README の主張（性能・機能）は実測していない
+- `guarded_grep` / `guarded_find` が `rg` / `fd` を呼ぶか（`harness/index.ts` に直接の言及が見つからなかった）。`pis` で `fzf -f` が確認なしで通るか。実際のリポジトリでの検索の速度
+- `pi-advisor-flow` の「自動ゲート」の詳細（README の後半は、取得が 7,000 文字で打ち切られて読めていない）
+
 ## 付録: 上位 150 件の分類
 
 括弧内は月間ダウンロード数の順位（2026-10-20 時点）。
