@@ -1818,7 +1818,9 @@ def test_pis_loads_orcas_status_extension_only_from_orca_with_its_marker(pis_env
 ASK_EXT = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "ask" / "index.ts"
 
 
-def _ask_q(question, *labels, **extra):
+def _ask_q(question, *labels, mark=True, **extra):
+    """mark=True は最初の選択肢の label に推奨の印を付ける (推奨の検査を通すため)。"""
+    labels = [f"{labels[0]} (推奨)", *labels[1:]] if mark else list(labels)
     options = [{"label": label, "description": f"d-{label}"} for label in labels]
     return {"question": question, "options": options, **extra}
 
@@ -1893,7 +1895,7 @@ def test_ask_returns_the_chosen_option_label(env):
     assert [r["method"] for r in requests] == ["select"], requests
     assert "Type something." in requests[0]["options"], requests
     # 行はラベルだけ、説明は質問文の一覧に出る
-    assert requests[0]["options"][:2] == ["1. A", "2. B"], requests
+    assert requests[0]["options"][:2] == ["1. A (推奨)", "2. B"], requests
     assert "d-A" in requests[0]["title"] and "d-B" in requests[0]["title"], requests
     assert "→ B" in result, result
 
@@ -1902,9 +1904,12 @@ def test_ask_wraps_long_descriptions_with_a_hanging_indent_and_blank_lines(env):
     long = "とても長い説明文。" * 12
     q = {
         "question": "Which?",
-        "options": [{"label": "A", "description": long}, {"label": "B", "description": "short"}],
+        "options": [
+            {"label": "A (推奨)", "description": long},
+            {"label": "B", "description": "short"},
+        ],
     }
-    requests, _ = _ask_rpc(env, [q], ["1. A"])
+    requests, _ = _ask_rpc(env, [q], ["1. A (推奨)"])
     title = requests[0]["title"]
     body = [line for line in title.splitlines() if line.startswith(" " * 7)]
     assert len(body) >= 3, title  # 長い説明は複数行になり、どの行も字下げが付く
@@ -1914,9 +1919,9 @@ def test_ask_wraps_long_descriptions_with_a_hanging_indent_and_blank_lines(env):
 
 def test_ask_asks_several_questions_in_one_call(env):
     qs = [_ask_q("First?", "A", "B"), _ask_q("Second?", "C", "D")]
-    requests, result = _ask_rpc(env, qs, ["1. A", "2. D"])
+    requests, result = _ask_rpc(env, qs, ["1. A (推奨)", "2. D"])
     assert len(requests) == 2, requests
-    assert "→ A" in result and "→ D" in result, result
+    assert "→ A (推奨)" in result and "→ D" in result, result
 
 
 def test_ask_takes_free_text_and_returns_to_options_on_an_empty_answer(env):
@@ -1929,16 +1934,16 @@ def test_ask_takes_free_text_and_returns_to_options_on_an_empty_answer(env):
 
 def test_ask_multi_select_collects_checked_options_and_free_text(env):
     qs = [_ask_q("Which?", "A", "B", "C", multi=True)]
-    replies = ["[ ] 1. A", "[ ] 3. C", "Type something.", "extra", "Next"]
+    replies = ["[ ] 1. A (推奨)", "[ ] 3. C", "Type something.", "extra", "Next"]
     requests, result = _ask_rpc(env, qs, replies)
-    assert "[x] 1. A" in requests[1]["options"], requests
-    assert "→ A, C, 自由記述: extra" in result, result
+    assert "[x] 1. A (推奨)" in requests[1]["options"], requests
+    assert "→ A (推奨), C, 自由記述: extra" in result, result
 
 
 def test_ask_reports_unanswered_questions_when_dismissed_midway(env):
     qs = [_ask_q("First?", "A", "B"), _ask_q("Second?", "C", "D")]
-    _, result = _ask_rpc(env, qs, ["1. A", None])
-    assert "未回答の問: Q2" in result and "→ A" in result, result
+    _, result = _ask_rpc(env, qs, ["1. A (推奨)", None])
+    assert "未回答の問: Q2" in result and "→ A (推奨)" in result, result
 
 
 def test_ask_dismissed_at_once_is_a_cancellation(env):
@@ -1951,8 +1956,12 @@ def test_ask_dismissed_at_once_is_a_cancellation(env):
     [
         ([_ask_q("Q?", "A", "Other")], "reserved_label"),
         ([_ask_q("Q?", "A", "Type something.")], "reserved_label"),
-        ([_ask_q("Q?", "A", "A")], "duplicate_option_label"),
+        ([_ask_q("Q?", "A", "A", mark=False)], "duplicate_option_label"),
         ([_ask_q("Q?", "A", "B"), _ask_q("Q?", "C", "D")], "duplicate_question"),
+        # 推奨の検査。直し方 (末尾に ` (推奨)` を付ける) もエラー文に出る
+        ([_ask_q("Q?", "A", "B", mark=False)], "missing_recommended"),
+        ([_ask_q("Q?", "A", "B (推奨)", mark=False)], "recommended_not_first"),
+        ([_ask_q("Q?", "A (推奨)", "B (推奨)", mark=False)], "multiple_recommended"),
     ],
 )
 def test_ask_rejects_a_malformed_questionnaire_without_asking(env, questions, code):
@@ -1960,3 +1969,35 @@ def test_ask_rejects_a_malformed_questionnaire_without_asking(env, questions, co
     requests, result = _ask_rpc(env, questions, [])
     assert requests == [], requests
     assert code in result, result
+    if code.endswith("_recommended") or code == "recommended_not_first":
+        assert "末尾に ` (推奨)` を付けて呼び直す" in result and "最も安全な選択肢" in result, (
+            result
+        )
+
+
+def test_ask_reports_every_violating_question_in_one_error(env):
+    qs = [
+        _ask_q("First question?", "A", "B", mark=False),
+        _ask_q("Fine?", "C", "D"),
+        _ask_q("Third question?", "E", "F (推奨)", mark=False),
+    ]
+    requests, result = _ask_rpc(env, qs, [])
+    assert requests == [], requests
+    assert "missing_recommended" in result and "Q1 (First question?)" in result, result
+    assert "Q3 (Third question?)" in result and "先頭にない" in result, result
+    assert "Q2" not in result, result
+
+
+def test_ask_allows_several_recommended_options_when_multi(env):
+    qs = [_ask_q("Which?", "A (推奨)", "B (推奨)", "C", multi=True, mark=False)]
+    requests, result = _ask_rpc(env, qs, ["[ ] 2. B (推奨)", "Next"])
+    assert [r["method"] for r in requests] == ["select", "select"], requests
+    assert "→ B (推奨)" in result, result
+
+
+@pytest.mark.parametrize("mark", ["(recommended)", "（推奨）", "(Recommended)"])
+def test_ask_recognises_the_other_recommended_marks(env, mark):
+    qs = [_ask_q("Which?", f"A {mark}", "B", mark=False)]
+    requests, result = _ask_rpc(env, qs, [f"1. A {mark}"])
+    assert [r["method"] for r in requests] == ["select"], requests
+    assert f"→ A {mark}" in result, result

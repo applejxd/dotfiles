@@ -62,6 +62,32 @@ function validate(qs: Question[]): string | undefined {
 	return undefined;
 }
 
+// 推奨の印: label の末尾の (推奨) / (recommended)。全角括弧・大文字小文字は問わない。印は label に残る
+const RECOMMENDED = /\s*[(（](推奨|recommended)[)）]\s*$/i;
+const isRecommended = (o: Option) => RECOMMENDED.test(o.label);
+
+// 推奨の検査 (validate の後)。違反した質問は全部まとめて 1 つのエラーにする。コードは最初の違反のもの
+function validateRecommended(qs: Question[]): { code: string; text: string } | undefined {
+	let code: string | undefined;
+	const lines: string[] = [];
+	qs.forEach((q, i) => {
+		const count = q.options.filter(isRecommended).length;
+		const head = `Q${i + 1} (${[...q.question].slice(0, 20).join("")})`;
+		const add = (c: string, msg: string) => {
+			code ??= c;
+			lines.push(`${head}: ${msg}`);
+		};
+		if (count === 0) add("missing_recommended", "推奨する選択肢が無い");
+		else if (count > 1 && !q.multi) add("multiple_recommended", `推奨が ${count} 個ある (複数選択でなければ 1 個だけ)`);
+		if (count > 0 && !isRecommended(q.options[0])) add("recommended_not_first", "推奨の選択肢が先頭にない");
+	});
+	if (!code) return undefined;
+	return {
+		code,
+		text: `${lines.join(" / ")}。推奨する選択肢を 1 つ決め、先頭に置き、label の末尾に \` (推奨)\` を付けて呼び直す。決めかねるときは、最も安全な選択肢を推奨にして、description にその理由を書く`,
+	};
+}
+
 // TUI のパネル。問が複数のときは、問ごとのタブと、最後の確認タブ (Tab / Shift+Tab で移動)。問が 1 つだけならタブも確認も無く、答えたらすぐ送る。
 // 戻りは問ごとの回答 (未回答は undefined)。Esc・時間切れは全部 undefined。
 // 自由記述は行の下でその場で書く (Enter で確定・Esc で一覧へ戻る)。複数選択はカーソルを動かさずに切り替えられる
@@ -283,11 +309,12 @@ export default function (pi: ExtensionAPI) {
 		promptGuidelines: [
 			"Use ask only when an unresolved choice would change the result and you cannot decide from the code or docs; do not ask for things you can check yourself.",
 			"Put independent questions into one ask call (up to 4). A question that depends on an earlier answer goes into the next call.",
-			"Give each question 2-4 options with a one-line description of the trade-off; put the recommended option first. A free-text row is added automatically, so do not add 'Other'.",
+			"Give each question 2-4 options with a one-line description of the trade-off; put the recommended option first and end its label with ' (推奨)' (or ' (recommended)'); keep labels short because labels are limited to 60 characters. A free-text row is added automatically, so do not add 'Other'.",
 		],
 		description:
 			`利用者に選択肢つきの質問を最大 ${MAX_QUESTIONS} 問まとめて尋ねる。questions の各項目は question (質問文)・header (短い見出し。任意)・` +
 			`options (${MIN_OPTIONS}〜${MAX_OPTIONS} 個。label と description)・multi (複数選択。任意)。自由記述の行 "${FREE}" は自動で足されるので、"Other" や "${NEXT}" を選択肢にしない。` +
+			"各質問は推奨の選択肢をちょうど 1 つ (multi は 1 つ以上) 持ち、先頭に置き、label の末尾に ' (推奨)' を付ける (label は 60 字までなので短くする)。守られないとエラーで返る。" +
 			"戻りは answers (答えた問)・unanswered (答えなかった問の番号。0 始まり)・cancelled。" +
 			"中断・時間切れ・UI が無いときは未回答として返るので、その場合は推測で進めず、地の文で尋ね直すか安全側に進める。",
 		parameters: Type.Object({
@@ -316,6 +343,8 @@ export default function (pi: ExtensionAPI) {
 			if (!ctx.hasUI) return fail("no_ui", "UI が無く、利用者には尋ねられなかった。質問は地の文で書くか、安全側に進める");
 			const invalid = validate(qs);
 			if (invalid) return fail(invalid, "質問の形が不正。直して呼び直す");
+			const unrecommended = validateRecommended(qs);
+			if (unrecommended) return fail(unrecommended.code, unrecommended.text);
 
 			// 利用者の答えを待つ前に BEL (端末の通知)。RPC では stdout が通信なので TUI だけ
 			if (ctx.mode === "tui") process.stdout.write("\x07");
