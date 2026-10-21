@@ -1,7 +1,7 @@
 # CHG-0027: Zed の pi-acp から `pis`（フルガード）を使えるようにする
 
 - **状態**: Exploring
-- **更新日**: 2026-10-20
+- **更新日**: 2026-10-21
 - **基準**: pi 1.3.0、`~/.local/share/ocs/pis.py`、pi-acp（svkozak/pi-acp の main、2026-10-20 時点）
 
 ## 目的と非目的
@@ -21,6 +21,7 @@
 | 4 | 確認が要る操作の拒否と 5 分の期限が、pi-acp 経由でどう見えるか確かめる | 未着手 |
 | 5 | Zed の実機で `agent_servers` を設定して通す。設定の置き場（chezmoi の管理）を決める | 未着手 |
 | 6 | Orca の起動ボタンから `pis` を使えるかを調べる（Orca の設定の公開情報の調査。実機は未確認） | 調査済み（2026-10-20）。実機は未着手 |
+| 7 | Zed の Terminal Threads（ACP を使わない）で `pis` を直接起動し、通知（BEL）を出す | 実装済み（2026-10-21、`84060d9`）。実機の確認は未報告 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -43,6 +44,13 @@
 - フルガードの拡張（`~/.config/pi/harness/index.ts`）が使う UI は `confirm`（確認）・`notify`（警告）・`setStatus`（状態表示）だけ。いずれも pi-acp が扱える。確認は Zed のダイアログに出るので、[5 分の期限](../spec/pi-guard.md#orcazed)に頼らず利用者が答えられる見込み（実機は未確認）
 
 ## 未解決点
+
+- **Zed の通知（2026-10-21）**: 公式文書と pi-acp のソースの読み。Zed の実機は下の BEL の確認を除いて未確認
+  - Zed の通知設定は `agent.notify_when_agent_waiting`（デスクトップ通知）と `agent.play_sound_when_agent_done`（音）（[Agent Panel](https://zed.dev/docs/ai/agent-panel)）。ACP の外部エージェントでも効くかは文書に明記が無い
+  - **ACP 経由（pi-acp）で失うもの**: `input`・`editor` は取り消されるので `ask` の自由記述と `plan` の指摘は使えない。`setStatus` は無視されるので `bypass`・サンドボックスの状態表示が出ない。`notify` は会話欄のメッセージになるだけで、OS 通知にはならない。pi からの `timeout` を pi-acp は取り込まない（`session.ts` に無い）ので、5 分の確認の期限と Zed のダイアログがずれるおそれ（推測）
+  - **Terminal Threads（ACP を使わない）**: 端末で CLI をそのまま動かす。`agent.terminal_init_command` に `pis` を入れられる。フォーカス外の端末が BEL を出すと、完了と同じ通知が出る（[Terminal Threads](https://zed.dev/docs/ai/terminal-threads)）。`sleep 5; printf '\a'` で、スレッド一覧に青丸が出ることを利用者が確かめた（ポップアップは出なかった）
+  - **未確認**: `pis` の `notify` 拡張（下の実装・検証）で、完了・確認待ち・`ask` のときに青丸が出るか。ポップアップや音が出ない理由（OS の通知設定か）。Windows の実機
+- **Orca のネイティブチャット（2026-10-21）**: Orca の「Pi Chat」は、ローカルの macOS・Linux・ネイティブ Windows と、ペアリングした Orca Server だけで使える。WSL と SSH はターミナル型のままで、WSL のプロジェクトでは「No chat in WSL」と出て `Pi (CLI)` だけになる（画面の観測と[公式文書](https://www.onorca.dev/docs/agents/native-chat)。[記録 Z2](../research/agents/zed-orca-pis-integration.md)）。Local Windows で `pis` が `--mode rpc` を通るかは未確認
 
 - **Orca（段 6 の調査、2026-10-20）**: 公開情報の読みで、実機は未確認
   - Orca（stablyai/orca）は、Settings → Agents に、エージェントごとの起動コマンド・引数・環境変数の上書き（`agentCmdOverrides`・`agentDefaultArgs`・`agentDefaultEnv`）を持つ（[Issue #20552](https://github.com/stablyai/orca/issues/20552)）。pi の起動コマンドを `pis` に替えられる見込み。pi の派生（`omo`）を `agentCmdOverrides.pi = "omo"` で使い、状態表示・再開・プロンプトの事前入力が動いた報告がある（[Issue #28273](https://github.com/stablyai/orca/issues/28273)。ただし同じ報告で、`worker-start --agent pi` の起動待ち（`agent_readiness`）は、派生がターミナルのタイトルを変えると 60 秒で時間切れになる）
@@ -76,6 +84,7 @@
 | D. SDK 組み込み版（victor-software-house/pi-acp） | 子プロセスの起動が無い | フルガードを通す方法が無い。公開元の信頼を審査していない | | 見送り（`pis` の包み方と合わない） | |
 | E. 現状のまま素の `pi`（フルガード無し） | 今の運用で、利用者の判断済み（[pi のガード](../spec/pi-guard.md#起動)） | 守りが無い | | 現状 | |
 | F. Orca の pi の起動コマンドを `pis`（`--no-sandbox` 付き）に上書きする | Orca の設定にある公開の機能。派生の起動の報告がある。拡張の読み込み処理は `pis` に済み | 起動コマンドに引数を足せるか未確認。`--no-sandbox` なので守りはフルガードだけ | 状態表示・プロセス名の判定が `pis` で壊れないか | 未評価 | 段 6 の実機 |
+| G. Zed の Terminal Threads で `pis` を直接起動し、BEL で通知する | ACP が不要で、`ask`・`plan`・状態表示を失わない。BEL で Zed の通知（青丸）が出ることを確かめた。`notify` 拡張を実装済み | Zed のチャットパネルではなく端末になる。ポップアップは出なかった | `notify` 拡張の実機（完了・確認待ち・`ask`）。Windows | 有望 | 実機で青丸を確かめる |
 
 扱い: 未評価 / 検証中 / 有望 / 採用 / 保留 / 見送り
 
@@ -98,8 +107,11 @@ echo '{"id":"1","type":"get_state"}' | pis --no-sandbox --mode rpc
 
 pi-acp 本体の実行、Zed の実機は未実施。
 
+2026-10-21: `notify` 拡張（`home/dot_pi/agent/extensions/notify/index.ts`、`84060d9`）を足した。作業が完全に終わったとき（`agent_settled`）、フルガードの確認を出す直前、`ask` を出す直前に、TUI のときだけ BEL を端末へ送る。`pytest test/agents/` は、golden を書き出し直す前の実行で 1 失敗・3695 通過・7 skip（失敗は古い `common.json`。書き出し直した後は `test_decide_golden.py` が通過。全件の再実行は未実施）。試験は、print モードで BEL が混ざらないことだけ。TUI で鳴ること・Windows 実機は未確認。仕様は [pi のガード](../spec/pi-guard.md)の拡張の表に追記済み。
+
 ## 重要な更新
 
+- 2026-10-21: Orca のネイティブチャットは WSL で使えないと分かった（記録 Z2）。Zed は ACP を使わない Terminal Threads で `pis` を直接起動でき、BEL で通知できると分かった。候補 G を有望にした（ACP 経由は `ask` の自由記述と状態表示を失うため）。`notify` 拡張を実装した（段 7）
 - 2026-10-20: 段 6（Orca）を調べた。公開情報では、Orca は起動コマンドの上書きを持ち、`pis --no-sandbox` なら状態表示の拡張も読まれる見込み。実機は未確認
 - 2026-10-20: 段 2 を終えた。`PI_ACP_PI_COMMAND` で起動コマンドを差し替えられ、`confirm`・`notify`・`setStatus` も扱えると分かった。候補 B を有望、A を保留にした
 - 2026-10-20: 起案。段 1（下調べと手元の RPC の試験）まで済み。pi-acp の実行は未実施
