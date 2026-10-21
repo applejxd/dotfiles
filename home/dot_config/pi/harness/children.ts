@@ -405,11 +405,15 @@ export class Job {
 		if (wasRunning) this.finish(this.round, "closed", "closed while running");
 		try {
 			this.proc.stdin?.end();
-		} catch {}
+		} catch {
+			// stdin が既に壊れている (終了済み)
+		}
 		const kill = (sig: NodeJS.Signals) => {
 			try {
 				process.kill(-this.proc.pid!, sig);
-			} catch {}
+			} catch {
+				// プロセスグループが既に無い (終了済み)
+			}
 		};
 		if (wasRunning || force) kill("SIGTERM");
 		const t = setTimeout(() => !this.exited && kill("SIGKILL"), 3000);

@@ -14,7 +14,7 @@ import {
 	withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
@@ -67,7 +67,9 @@ async function loadCommitPreview() {
 	try {
 		const url = pathToFileURL(join(HERE, "commit-message.js")).href;
 		commitPreview = (await import(url)).commitPreview;
-	} catch {}
+	} catch {
+		// 飾りなので出さないだけ (上のコメント)
+	}
 }
 
 function describeCall(tool: string, input: any): string {
@@ -383,6 +385,38 @@ const jobs = new Jobs(MAX_JOBS);
 // 異常終了でも孤児の子を残さない (stdin が閉じても止まるが、作業中の子はすぐ止める)
 process.once("exit", () => jobs.closeAll(true));
 
+// 完了した job の結果を status で引けるように残す時間と件数
+const FINISHED_TTL_MS = 30 * 60 * 1000;
+const MAX_FINISHED = 20;
+// 通知の通番 (この pi セッション内で 1 から)
+let childSeq = 0;
+const FINISHED_DIR = join(".tmp", "subagents");
+// 保存した結果の掃除 (新しい順にこの件数まで残し、これより古いものは消す)
+const SAVED_KEEP = 50;
+const SAVED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// 保存ファイル 1 件 (batch では子 1 件) の上限
+const SAVED_MAX_CHARS = 20000;
+
+// 握りつぶさず利用者に見える形で警告する (UI が無ければ stderr)
+function warnUser(ctx: any, msg: string) {
+	try {
+		if (ctx?.hasUI && ctx.ui?.notify) {
+			ctx.ui.notify(msg, "warning");
+			return;
+		}
+	} catch {
+		// 廃棄済みの ctx は stderr へ回す
+	}
+	console.error(`[harness] ${msg}`);
+}
+// 警告文に入れる例外の message は伏字化を通す
+const errMsg = (e: unknown) => redactText(e instanceof Error ? e.message : String(e));
+const fmtClock = (t: number) => {
+	const d = new Date(t);
+	const p = (n: number) => String(n).padStart(2, "0");
+	return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+};
+
 const STATUS_LABEL: Record<string, string> = { done: "completed" };
 const MAX_LIST_ERRORS = 5;
 
@@ -465,38 +499,111 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		jobId: alive ? job.id : undefined,
 	});
 
+	// 完了した job の結果 (redact 済みの全文)。close した job の分は消す
+	type Finished = { at: number; owner: { cwd: string; role: string }; agent: string; status: string; text: string };
+	const finished = new Map<string, Finished>();
+	// close で閉じた job の id (終わりかけの往復の完了で結果が復活しないように覚える)
+	const closedByParent = new Set<string>();
+	const remember = (job: Job, r: RoundResult, full: string) => {
+		if (closedByParent.has(job.id)) return;
+		const now = Date.now();
+		for (const [k, v] of finished) if (now - v.at > FINISHED_TTL_MS) finished.delete(k);
+		finished.delete(job.id);
+		finished.set(job.id, { at: now, owner: job.owner, agent: job.agent, status: r.status, text: full });
+		while (finished.size > MAX_FINISHED) finished.delete(finished.keys().next().value as string);
+	};
+	const recall = (id: string): Finished | undefined => {
+		const f = finished.get(id);
+		if (f && Date.now() - f.at > FINISHED_TTL_MS) {
+			finished.delete(id);
+			return undefined;
+		}
+		return f;
+	};
+
+	// 通知の見出しの追記 (通番・起動時刻・完了時刻) と、結果の全文の保存。保存できなくても通知は止めない
+	const stampOf = (seq: number, startedAt: number) => `#${seq} 起動 ${fmtClock(startedAt)} / 完了 ${fmtClock(Date.now())}`;
+	const saveFull = (ctx: any, cwd: string, seq: number, id: string, stamp: string, full: string): string | null => {
+		const rel = join(FINISHED_DIR, `${seq}-${id}.md`);
+		const dir = join(cwd, FINISHED_DIR);
+		try {
+			let isLink = false;
+			try {
+				isLink = lstatSync(dir).isSymbolicLink();
+			} catch {
+				// まだ無い (これから作る)
+			}
+			if (isLink) throw new Error(`${FINISHED_DIR} がシンボリックリンクなので書かない`);
+			mkdirSync(dir, { recursive: true });
+			// wx: 既存のファイル (リンク含む) には書かない
+			writeFileSync(join(cwd, rel), `${stamp}\n\n${full}\n`, { encoding: "utf-8", flag: "wx" });
+		} catch (e) {
+			warnUser(ctx, `子の結果を ${rel} へ保存できなかった: ${errMsg(e)}`);
+			return null;
+		}
+		pruneSaved(dir);
+		return rel;
+	};
+	const pruneSaved = (dir: string) => {
+		try {
+			const now = Date.now();
+			const files = readdirSync(dir)
+				.filter((n) => n.endsWith(".md"))
+				.flatMap((n) => {
+					const st = lstatSync(join(dir, n));
+					return st.isFile() ? [{ n, t: st.mtimeMs }] : [];
+				})
+				.sort((a, b) => b.t - a.t);
+			files.forEach((f, i) => {
+				if (i >= SAVED_KEEP || now - f.t > SAVED_MAX_AGE_MS) unlinkSync(join(dir, f.n));
+			});
+		} catch {
+			// 掃除の失敗は結果の保存と通知に関係しないので警告しない
+		}
+	};
+
 	// 割り当てた ToDo の項目へ結果を反映する (done なら done、そうでなければメモだけ)。todo 拡張が入口を置く
-	const linkTodo = (id: number | undefined, job: Job, r: RoundResult) => {
+	const linkTodo = (id: number | undefined, job: Job, r: RoundResult, ctx?: any) => {
 		if (id === undefined) return;
 		const note = `child ${job.agent}: ${r.status} (${fmtStats(r.stats)})`;
 		try {
 			(globalThis as any).__piTodoUpdate?.({ id, status: r.status === "done" ? "done" : undefined, note });
-		} catch {}
+		} catch (e) {
+			warnUser(ctx, `ToDo #${id} へ子の結果を反映できなかった: ${errMsg(e)}`);
+		}
 	};
 
 	// 待たずに走らせる。完了は followUp で親へ知らせる (ターンが再開する)
-	const runInBackground = (job: Job, message: string, keep: boolean, key: string, todo?: number, wake = true) => {
-		runningChildren.set(key, { agent: job.agent, model: "", task: message, pid: job.pid, startedAt: Date.now() });
+	const runInBackground = (job: Job, message: string, keep: boolean, key: string, todo: number | undefined, wake: boolean, ctx: any) => {
+		const startedAt = Date.now();
+		runningChildren.set(key, { agent: job.agent, model: "", task: message, pid: job.pid, startedAt });
 		job
 			.run(message, { timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE })
 			.then((r) => {
 				if (!keep) job.close();
 				const alive = (r.status === "done" || r.status === "aborted") && keep;
-				linkTodo(todo, job, r);
-				const body = clip(resultText(job, r, alive));
+				linkTodo(todo, job, r, ctx);
+				const full = resultText(job, r, alive);
+				remember(job, r, full);
+				const seq = ++childSeq;
+				const stamp = stampOf(seq, startedAt);
+				const saved = saveFull(ctx, job.owner.cwd, seq, job.id, stamp, full);
+				const body = clip(full) + (saved ? `\n結果の全文: ${saved}` : "");
 				try {
 					pi.sendMessage(
 						{
 							customType: "child-finished",
-							content: `バックグラウンドの子 ${job.id} (${job.agent}) が終わりました\n${body}`,
+							content: `バックグラウンドの子 ${job.id} (${job.agent}) が終わりました (${stamp})\n${body}`,
 							display: true,
 							details: detailsOf(job, r, alive),
 						},
 						{ triggerTurn: wake, ...(wake ? { deliverAs: "followUp" as const } : {}) },
 					);
-				} catch {}
+				} catch (e) {
+					warnUser(ctx, `子 ${job.id} の完了通知を配信できなかった (結果は ${saved ?? "status で確認"}): ${errMsg(e)}`);
+				}
 			})
-			.catch(() => {})
+			.catch((e) => warnUser(ctx, `子 ${job.id} の完了処理が失敗した: ${errMsg(e)}`))
 			.finally(() => runningChildren.delete(key));
 	};
 
@@ -609,6 +716,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				const runAll = async (sig: AbortSignal | undefined) => {
 					const sections = new Array<string>(items.length);
 					const statuses = new Array<string>(items.length);
+					const fulls = new Array<string>(items.length);
 					let next = 0;
 					const worker = async () => {
 						for (;;) {
@@ -621,40 +729,52 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 								sp = spawnChild(it.agent, ctx, owner, it.model);
 								if ("error" in sp && sp.full) await sleep(100);
 							}
-							const head = `### ${i + 1}/${items.length} ${it.agent}: ${it.task.slice(0, 60).replace(/\s+/g, " ")}`;
+							// 依頼文は秘密を含みうるので、伏字化してから切る
+							const head = `### ${i + 1}/${items.length} ${it.agent}: ${redactText(it.task).slice(0, 60).replace(/\s+/g, " ")}`;
 							if ("error" in sp) {
 								sections[i] = `${head}\n${sp.error}`;
+								fulls[i] = sections[i];
 								statuses[i] = "failed";
 								continue;
 							}
 							const job = sp.job;
 							const r = await job.run(it.task, { signal: sig, timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE });
 							job.close();
-							sections[i] = `${head}\n${clip(resultText(job, r, false), per)}`;
+							const body = resultText(job, r, false);
+							sections[i] = `${head}\n${clip(body, per)}`;
+							fulls[i] = `${head}\n${clip(body, SAVED_MAX_CHARS)}`;
 							statuses[i] = r.status;
 						}
 					};
 					await Promise.all(Array.from({ length: Math.min(slots, items.length) }, worker));
-					return { sections, statuses };
+					return { sections, statuses, fulls };
 				};
 				if (input.background) {
 					const key = `${toolCallId}:batch`;
-					runningChildren.set(key, { agent: `${items.length} tasks`, model: "", task: "", startedAt: Date.now() });
+					const batchStartedAt = Date.now();
+					runningChildren.set(key, { agent: `${items.length} tasks`, model: "", task: "", startedAt: batchStartedAt });
 					runAll(undefined)
-						.then(({ sections, statuses }) => {
+						.then(({ sections, statuses, fulls }) => {
+							const seq = ++childSeq;
+							const stamp = stampOf(seq, batchStartedAt);
+							const full = sections.join("\n\n");
+							// id に時刻を入れる (別セッションの同じ通番と名前が重なると wx で保存できない)
+							const saved = saveFull(ctx, ctx.cwd, seq, `batch-${Date.now().toString(36)}`, stamp, fulls.join("\n\n"));
 							try {
 								pi.sendMessage(
 									{
 										customType: "child-finished",
-										content: `バックグラウンドの ${items.length} 件の子が終わりました\n\n${sections.join("\n\n")}`,
+										content: `バックグラウンドの ${items.length} 件の子が終わりました (${stamp})\n\n${full}${saved ? `\n結果の全文: ${saved}` : ""}`,
 										display: true,
 										details: { statuses },
 									},
 									{ triggerTurn: true, deliverAs: "followUp" },
 								);
-							} catch {}
+							} catch (e) {
+								warnUser(ctx, `並列の子の完了通知を配信できなかった (結果は ${saved ?? "未保存"}): ${errMsg(e)}`);
+							}
 						})
-						.catch(() => {})
+						.catch((e) => warnUser(ctx, `並列の子の完了処理が失敗した: ${errMsg(e)}`))
 						.finally(() => runningChildren.delete(key));
 					return text(`started ${items.length} tasks in the background (up to ${slots} at a time). You will be notified when they finish.`, false, { background: true, tasks: items.length });
 				}
@@ -688,20 +808,30 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			} else {
 				job = jobs.get(input.jobId);
 				if (!job) {
+					const f = recall(input.jobId);
+					if (input.kind === "status" && f && f.owner.cwd === owner.cwd && f.owner.role === owner.role) {
+						return text(`job ${input.jobId} (${f.agent}): finished (${f.status}, ${fmtClock(f.at)}); the child is gone. Saved result:\n${clip(f.text)}`, false, { jobId: input.jobId, status: f.status, finished: true });
+					}
+					// 所有者が違う保持結果は消さない (存在しないのと同じ応答で、他の文脈の結果の有無を漏らさない)
+					if (input.kind === "close" && f && f.owner.cwd === owner.cwd && f.owner.role === owner.role) finished.delete(input.jobId);
 					if (input.kind === "close") return text(`job ${input.jobId} does not exist (already closed)`);
 					return text(`job ${input.jobId} does not exist (closed, failed, or dropped). Start a new task and include a summary of the earlier work.`, true);
 				}
 				if (!own(job)) throw new Error(`job ${input.jobId} belongs to another context`);
 				if (input.kind === "close") {
+					closedByParent.add(input.jobId);
 					job.close();
+					finished.delete(input.jobId);
 					return text(`job ${input.jobId} closed`, false, { jobId: input.jobId, status: "closed" });
 				}
 				if (input.kind === "status") {
 					const s = job.snapshot();
+					const f = s.state === "running" ? undefined : recall(job.id);
 					return text(
 						`job ${s.id} (${s.agent}): ${s.state}${s.state === "running" ? `, this round ${fmtSecs(s.roundMs)}` : ""}\n` +
 							`age ${fmtSecs(s.ageMs)}, calls ${s.calls}, ${fmtTokens(s.tokens)} tokens${s.cost > 0 ? `, $${s.cost.toFixed(3)}` : ""}` +
-							`${s.lastTool ? `, last tool: ${s.lastTool}` : ""}`,
+							`${s.lastTool ? `, last tool: ${s.lastTool}` : ""}` +
+							(f ? `\nlast result (${f.status}, ${fmtClock(f.at)}):\n${clip(f.text)}` : ""),
 						false,
 						{ ...s },
 					);
@@ -722,7 +852,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			}
 
 			if (background) {
-				runInBackground(job, message, keep, job.id, todo);
+				runInBackground(job, message, keep, job.id, todo, true, ctx);
 				return text(`started ${job.agent} in the background as ${job.id}. You will be notified when it finishes (status: {jobId, status:true}, steer: {jobId, steer:"..."}, abort: {jobId, abort:true}).`, false, {
 					jobId: job.id,
 					background: true,
@@ -739,8 +869,10 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			// keep でなければ完了で子を止める (done と aborted 以外は job が自分で閉じる)
 			if (!keep) job.close();
 			const alive = (r.status === "done" || r.status === "aborted") && keep;
-			linkTodo(todo, job, r);
-			return text(clip(resultText(job, r, alive)), r.status !== "done", detailsOf(job, r, alive));
+			linkTodo(todo, job, r, ctx);
+			const full = resultText(job, r, alive);
+			remember(job, r, full);
+			return text(clip(full), r.status !== "done", detailsOf(job, r, alive));
 		},
 	});
 
@@ -774,7 +906,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				return;
 			}
 			// 完了はチャットに表示するだけ。モデルのターンは起こさない
-			runInBackground(sp.job, m[2], false, sp.job.id, undefined, false);
+			runInBackground(sp.job, m[2], false, sp.job.id, undefined, false, ctx);
 			ctx.ui?.notify?.(`${m[1]} を起動しました (${sp.job.id})。終わるとここに結果を表示します`, "info");
 		},
 	});

@@ -7,12 +7,12 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-type Status = "pending" | "in_progress" | "done" | "cancelled";
+type Status = "pending" | "in_progress" | "blocked" | "done" | "cancelled";
 type Todo = { id: number; text: string; status: Status; note?: string };
 type Details = { todos: Todo[]; nextId: number; error?: string };
 
-const STATUSES = ["pending", "in_progress", "done", "cancelled"] as const;
-const MARK: Record<Status, string> = { pending: "[ ]", in_progress: "[>]", done: "[x]", cancelled: "[-]" };
+const STATUSES = ["pending", "in_progress", "blocked", "done", "cancelled"] as const;
+const MARK: Record<Status, string> = { pending: "[ ]", in_progress: "[>]", blocked: "[~]", done: "[x]", cancelled: "[-]" };
 const STATE_ENTRY = "todo-state";
 // 戻り値に出す未完了の先頭件数と、メモの最大文字数
 const SUMMARY_OPEN = 3;
@@ -88,7 +88,8 @@ function applyOp(w: Work, op: Op): { message?: string; error?: string } {
 			if (!t) return { error: `#${op.id} が無い` };
 			t.status = op.status;
 			setNote(t);
-			return { message: `#${t.id} を ${t.status} にした` };
+			const warn = t.status === "blocked" && !t.note ? "。注意: 待ち先 (ジョブ ID など) を note に書いてください" : "";
+			return { message: `#${t.id} を ${t.status} にした${warn}` };
 		}
 		case "update": {
 			const t = find();
@@ -114,7 +115,7 @@ export default function (pi: ExtensionAPI) {
 	let todos: Todo[] = [];
 	let nextId = 1;
 
-	const open = () => todos.filter((t) => t.status === "pending" || t.status === "in_progress");
+	const open = () => todos.filter((t) => t.status === "pending" || t.status === "in_progress" || t.status === "blocked");
 	const line = (t: Todo) => `${MARK[t.status]} #${t.id}: ${t.text}${t.note ? ` — ${clip(t.note, NOTE_MAX)}` : ""}`;
 	const counts = () => {
 		const done = todos.filter((t) => t.status === "done").length;
@@ -217,17 +218,18 @@ export default function (pi: ExtensionAPI) {
 		name: "todo",
 		label: "Todo",
 		// promptSnippet が無いと Available tools に出ない
-		promptSnippet: "Keep the task list: add steps, mark them in_progress / done, list them",
+		promptSnippet: "Keep the task list: add steps, mark them in_progress / blocked / done, list them",
 		promptGuidelines: [
 			"For work with 3 or more steps, use todo add to list the steps before starting; set the current item to in_progress (one at a time) and to done when finished.",
+			"Set an item to blocked (not in_progress) while it only waits on something external, such as a background job, a child agent, or the user's reply; write what it waits for (e.g. the job ID) in note.",
 			"Use todo batch (ops) to change several items in one call, and todo replace (items) to rewrite the whole list at once.",
 		],
 		description:
 			"作業のタスクリスト (1 つ)。action: list (all=true で完了・中止も) / add (text か texts で複数) / " +
-			"set (id と status: pending・in_progress・done・cancelled。何度呼んでも同じ結果) / update (id と text か note) / remove (id、誤って足したものだけ) / clear / " +
+			"set (id と status: pending・in_progress・blocked・done・cancelled。何度呼んでも同じ結果) / update (id と text か note) / remove (id、誤って足したものだけ) / clear / " +
 			"batch (ops に操作の配列。順に適用し、1 件でも失敗したら全体を適用しない。複数の項目を 1 回で変えるときに使う) / " +
 			"replace (items にリスト全体を渡して置き換える。載せない項目は消える。id を付ければ既存の項目を引き継ぐ)。" +
-			"note は完了の根拠や引き継ぎのメモ。3 手順以上の作業では、始める前に add で手順を並べる。作業中の項目は in_progress (同時に 1 件まで)、終えたら done。" +
+			"note は完了の根拠や引き継ぎのメモ。3 手順以上の作業では、始める前に add で手順を並べる。作業中の項目は in_progress (同時に 1 件まで)、終えたら done。ジョブ・子・利用者の返答など外部の完了待ちは blocked にし、note に待ち先 (ジョブ ID など) を書く (同時 1 件の数に入れない)。" +
 			"同じ目標のための新しい手順は、新しいリストを作らず同じリストへ add する。やめた・置き換わったものは cancelled にする。" +
 			"全部 done になってもリストは消さない (片付けは利用者の /todos tidy・clear)。変更の結果は、未完了の先頭数件と件数だけ返す (全件は list)。",
 		parameters: Params,

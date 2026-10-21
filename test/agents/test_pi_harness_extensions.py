@@ -344,3 +344,57 @@ def test_the_bell_is_written_only_in_the_tui_not_in_print_mode(env):
     assert "\x07" not in proc.stdout, repr(proc.stdout)
     proc = run_pi(env, bash_call("touch made-by-pi"), extra=("-e", str(NOTIFY)))
     assert "\x07" not in proc.stdout, repr(proc.stdout)
+
+
+# --- todo の blocked (外部の完了待ち)。helper は test_pi_harness.py のものを使う ---
+from test_pi_harness import TODO_EXT, _last_todo_result, _run_todo, _todo  # noqa: E402
+
+
+def test_todo_blocked_can_be_set_and_stays_open(env):
+    calls = [
+        _todo(action="add", text="a"),
+        _todo(action="set", id=1, status="blocked", note="bg job 7"),
+        _todo(action="list"),
+    ]
+    proc = _run_todo(env, calls)
+    assert proc.returncode == 0, proc.stderr
+    tail = _last_todo_result(proc.stdout)
+    assert "[~] #1: a — bg job 7" in tail, proc.stdout
+    assert "注意" not in proc.stdout, proc.stdout
+
+
+def test_todo_does_not_remind_when_only_blocked_items_remain(env):
+    rounds = [
+        [
+            _todo(action="add", texts=["a"]),
+            _todo(action="set", id=1, status="blocked", note="bg job 7"),
+        ]
+    ]
+    proc = run_pi(
+        env,
+        [],
+        extra=("-e", str(TODO_EXT)),
+        FAUX_TOOL_ROUNDS=json.dumps(rounds),
+        FAUX_ECHO_REMINDER="1",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "REMINDER=" not in proc.stdout, proc.stdout
+
+
+def test_todo_blocked_is_not_counted_in_the_one_in_progress_warning(env):
+    calls = [
+        _todo(action="add", texts=["a", "b"]),
+        _todo(action="set", id=1, status="blocked", note="bg job 7"),
+        _todo(action="set", id=2, status="in_progress"),
+    ]
+    proc = _run_todo(env, calls)
+    assert proc.returncode == 0, proc.stderr
+    assert "同時に 1 件" not in proc.stdout, proc.stdout
+
+
+def test_todo_blocked_without_a_note_warns_but_is_accepted(env):
+    calls = [_todo(action="add", text="a"), _todo(action="set", id=1, status="blocked")]
+    proc = _run_todo(env, calls)
+    assert proc.returncode == 0, proc.stderr
+    tail = _last_todo_result(proc.stdout)
+    assert "待ち先" in tail and "note" in tail and "#1 を blocked にした" in tail, proc.stdout
