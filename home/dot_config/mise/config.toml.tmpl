@@ -1,6 +1,7 @@
 # see below for documentation
 # https://mise.jdx.dev/configuration.html
 # 宣言の理由は docs/spec/structure.md#mise-による-cli-管理 が正本
+# PC 固有の設定は ~/.config/mise/conf.d/*.toml に置く (chezmoi 管理外)
 
 {{- $raspi := eq (includeTemplate "is-raspi" .) "true" }}
 
