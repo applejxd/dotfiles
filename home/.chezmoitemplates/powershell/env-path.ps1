@@ -42,25 +42,39 @@ public static extern System.IntPtr SendMessageTimeout(
 }
 
 function Add-UserPathEntry {
-  # User の PATH へ永続的に追記する。既にあれば何もしない (戻り値は追記したか)。
+  # User の PATH へ永続的に追記する。既にあれば追記しない (戻り値は追記したか)。
   # [Environment]::SetEnvironmentVariable と setx は REG_EXPAND_SZ を REG_SZ に降格させ、
   # PATH 内の %VAR% が展開されなくなるため、レジストリへ ExpandString で直接書く。
+  # 既に降格している場合は、追記が無くても同じ値を ExpandString で書き直して直す。
   param([Parameter(Mandatory)][string]$Path)
 
   $normalized = $Path.TrimEnd('\')
+  $appended = $false
+  $dirty = $false
   $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
   try {
     $current = [string]$key.GetValue(
       'Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
     )
+    $isExpand = $true
+    if ($null -ne $key.GetValue('Path', $null)) {
+      $isExpand = $key.GetValueKind('Path') -eq [Microsoft.Win32.RegistryValueKind]::ExpandString
+    }
     $entries = @($current -split ';' | Where-Object { $_ })
     $known = @($entries | ForEach-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') })
-    if ($known -contains $normalized) { return $false }
-    $key.SetValue('Path', (($entries + $normalized) -join ';'),
-      [Microsoft.Win32.RegistryValueKind]::ExpandString)
+    if ($known -notcontains $normalized) {
+      $entries = @($entries + $normalized)
+      $appended = $true
+      $dirty = $true
+    } elseif (-not $isExpand) {
+      $dirty = $true
+    }
+    if ($dirty) {
+      $key.SetValue('Path', ($entries -join ';'), [Microsoft.Win32.RegistryValueKind]::ExpandString)
+    }
   } finally {
     $key.Dispose()
   }
-  Send-EnvironmentChange
-  return $true
+  if ($dirty) { Send-EnvironmentChange }
+  return $appended
 }

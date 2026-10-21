@@ -898,6 +898,8 @@ def test_env_path_template_writes_user_path_as_expand_string():
     code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
     assert "DoNotExpandEnvironmentNames" in code
     assert "RegistryValueKind]::ExpandString" in code
+    # 既に降格した値は、追記が無くても ExpandString で書き直す
+    assert "GetValueKind('Path')" in code
     assert "WM_SETTINGCHANGE" in source
     assert "SetEnvironmentVariable" not in code
     assert not re.search(r"\bsetx\b", code, re.IGNORECASE)

@@ -551,7 +551,7 @@ PATH を読み直す・永続化する処理は、`home/.chezmoitemplates/powers
 | 関数 | 役割 |
 | --- | --- |
 | `Update-PathFromEnvironment` | レジストリの Machine → User と現在の順に並べて、このプロセスの PATH を更新する（重複は先頭だけ残す） |
-| `Add-UserPathEntry` | User の PATH へ永続的に追記する。既にあれば何もしない。レジストリへ REG_EXPAND_SZ で直接書き、`WM_SETTINGCHANGE` を送る |
+| `Add-UserPathEntry` | User の PATH へ永続的に追記する。既にあれば追記しない。レジストリへ REG_EXPAND_SZ で直接書き、`WM_SETTINGCHANGE` を送る。既に REG_SZ へ降格している場合は、追記が無くても同じ値を REG_EXPAND_SZ で書き直す |
 
 - `[Environment]::SetEnvironmentVariable` と `setx` で PATH を書かない。REG_EXPAND_SZ を REG_SZ に降格させ、
   PATH 内の `%USERPROFILE%` などが展開されなくなるという報告がある
