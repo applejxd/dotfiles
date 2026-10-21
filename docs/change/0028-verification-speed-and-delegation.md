@@ -24,9 +24,9 @@
 | B-1 | 委譲の原則が指示に無い | 共通の指示に「子エージェントへの委譲」の節を足す | 完了（試験で確認済み） |
 | B-2 | 子の結果の形がばらつき、長いと通知で切れる | 結果の標準形（結論 / 根拠 / 未確認 / 次の候補）を役割の指示に入れる。**長さの上限と使えるコマンドの案内は未反映** | 一部完了 |
 | B-3 | 完了通知の遅延・順序入れ替わり・消失を疑う | 通知の経路を調べる | 調査完了、対応は未着手 |
-| B-4 | 検証を子に任せられない（確認が子で止まる） | 任せ方の設計を比べる | 調査完了、実験は未着手 |
+| B-4 | 検証を子に任せられない（確認が子で止まる） | 任せ方の設計を比べる | 調査と `review` 完了。方針を決定（下の「判断」）。(iv) の実験は未着手 |
 | B-5 | `explorer` 役が `git diff -- <パス>` を使えない | 判定器の `--` の扱いを直す | 設計完了、実装は未着手 |
-| B-6〜B-8 | ToDo が待ち状態を表せない・子と結び付けていない・階層が無い | `blocked` 状態、`todo` 引数での結び付け、階層化（後回し） | 未着手 |
+| B-6〜B-8 | ToDo が待ち状態を表せない・子と結び付けていない・階層が無い | `blocked` 状態、`todo` 引数での結び付け、階層化（後回し） | B-6・B-7 完了、B-8 は未着手（B-6: `blocked` 状態、B-7: `todo` 引数での結び付けの指示） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り
 
@@ -40,11 +40,16 @@
 - **B-3（読みによる）**: 遅延と順序入れ替わりは設計どおりに説明がつく（親の作業中は `followUp` がターンの終わりまで待ち、1 件ずつ取り出される）。
   結果を失いうる箇所は、`sendMessage` の例外を握りつぶす 2 か所（`index.ts` の `catch {}`）と、`session_shutdown` / `bypass` 切り替え時の `closeAll()`。
   「完了通知のあとに `status` が存在しないと返す」順序は、設計では説明できない（起動時の `jobId` の取り違えなどが候補）。完了した job の結果を保持する仕組みは無い。
-- **B-4（読みによる）**: 守りの本体は許可リストではなくサンドボックスにある。**サンドボックスの内側に限って検証だけを許す `verifier` 役**が有望。
+- **B-4（読みによる。`review` で確認済み）**: 守りの本体は許可リストではなくサンドボックスにある。サンドボックスの内側に限って検証だけを許す `verifier` 役が有望だが、現在の Fence は workspace 全体と共有 `.git`、`~/.cache` を書込可にし、通信も共通の許可ドメインを使う。「被害が `.tmp/` に収まる」は現状の保護としては成立しない（実験の目標としてのみ）。
+  - **判断（2026-10-22、利用者）**: 通常は (i) 親が実行する。(ii) は「利用者が bypass を ON にした後の新しい `worker`」に限る明示的な例外運用。`explore` / `review`（`explorer` 役）は既定が deny で、bypass でも検証は通らない。(ii) の代償は、その `worker` の他の確認も通ること。(iv) は隔離の実測を先に行う。別案: 利用者の端末や CI が検証を実行し、親は終了コードとログを読む。
   入口に自己検査を持たせて改ざんを防ぐ案は、穴が多くて割に合わない（`conftest.py`・未追跡ファイル・`.gitignore` 対象・`PYTHONPATH`・依存の連鎖・承認ハッシュの置き場）。
 - **B-5（読みによる）**: 判定器の `--` の後ろを別コマンドとして拾う処理（`normalize.ts` と Python 版 `command_policy.py` の対応箇所）が原因。
-  **許可リスト方式（ラッパーの先頭語だけ拾う）は deny の検出を弱める**（`kubectl exec p -- git push` など）。**拒否リスト方式（まず `git` だけ除く）**が安全で、最小。TS と Python の両実装と正解データの再生成が要る。
-- **未コミットの変更が 3 つの塊**: (1) `btw` の改良、(2) `imozuru` の取り込み（[spec](../spec/imozuru.md)）、(3) 本案件の A2・A3・B-1・B-2。
+  **許可リスト方式（ラッパーの先頭語だけ拾う）は deny の検出を弱める**（`kubectl exec p -- git push` など）。**拒否リスト方式（まず `git` だけ除く）**が最小。正規化後の先頭語が `git` のときだけ、`--` の後ろを別コマンドとして抽出しない（パス引数として扱う）。これは**埋め込みコマンドの抽出を抑えるだけ**で、共通 deny・役割 deny・ask・allow の判定は従来どおりコマンド全体に掛かる（`git push -- origin main` は deny のまま）。TS と Python の両実装と正解データの再生成が要る。
+- **B-9（実測。B-5 とは独立の既存の穴）**: allow に当たる git コマンドが、前置設定やオプションで任意のプログラムを起動できた。`git -c core.pager=id log -- file.txt`、`git --paginate log`、`git -c diff.external=id diff --ext-diff`、`git -c core.fsmonitor=id status`、`git --exec-path=/tmp log` が explorer と implementer で `allow` / source `rule`（`--` を外しても同じ）。正規化が前置オプションを落として `git log` に揃えるため。直し方は、元のセグメントの `git` のグローバル領域（`git` とサブコマンドの間）の `-c` `--config-env` `--exec-path` `--paginate` `-p` と、サブコマンド以降の `--ext-diff` `--textconv` `--exec` `--upload-pack` `--receive-pack` を allow にしない（`--output` と同じ層。deny / ask は足さない。`git log -p` 等は従来どおり）。両実装に入れ、試験と正解データの再生成は未実行。
+- **B-10（実測。B-9 と同じ層の既存の穴）**: コマンドの前の環境変数の代入を正規化が落とすため、代入の有無で allow 判定が変わらなかった。`GIT_PAGER='sh -c id' git log`（explorer と implementer で allow / rule）、`GIT_EXTERNAL_DIFF=id git diff`・`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status`（explorer で allow）、`GIT_DIR=` `LD_PRELOAD=` `PATH=` `FOO=1` `env GIT_PAGER=id` を前置した `git log` も allow（対照: `FOO=1 ls` は explorer で deny / default）。直し方は、B-9 と同じ層（`allSegmentsAllowed` / `_all_segments_allowed` の入口）で、位置を追わず、元のコマンド全体の `NAME=value` 形のトークン（先頭の `(` `{` `;` `!` は除く）を見て、名前が `LANG` `LC_*` `TZ` `NO_COLOR` `COLUMNS` `LINES` `TERM` `CI` `FORCE_COLOR` `CLICOLOR` `PYTHONDONTWRITEBYTECODE` 以外なら allow にしない（`-` 始まりの引数を持つ `env` も同様。deny / ask は足さない）。最初に入れた先頭の位置を追う方式は、`( GIT_PAGER=id git log )` `{ GIT_PAGER=id git log; }` `if git status; then GIT_PAGER=id git log; fi` `xargs env GIT_PAGER=id git log` で抜けた（親の実測。正規化が剥がす構文との集合の食い違い）ため作り直した。両実装に入れ、試験と正解データの再生成は未実行。
+  - **既知の限界**: リポジトリ自身の設定（`.git/config` の fsmonitor や外部 diff など）から起動する経路は、この除外の対象外。`cd <別のリポジトリ> && git log` や `git -C <dir> log` は allow のままで、移動先のリポジトリ自身の設定から実行される経路も対象外。
+  - **追記**: レビューで、`env LANG=C${IFS}GIT_PAGER=id git log` のように、変数展開の語分割で代入を後から作る形が指摘された。`$` を含む形も allow にしないことにした（`$(` だけだった除外を `$` に広げた）。
+- **コミット状況**: btw・imozuru・検証の入口（A1〜A3・B-1・B-2）はコミット済み（`ba78b5e` `1424b3e` `51c226d`）。B-3・B-5・B-6・B-7・B-9・B-10 もコミット済み（`65d49b0` `32b085c`）。
 
 ## 未解決点
 
@@ -60,7 +65,7 @@
 - A1: `HOME` の隔離を試す（`test_pi_harness.py` の `env` fixture）。`worksteal` を数回再実行して安定性を見る。
 - B-3: `catch {}` を見える化し、完了した job の結果を `status` で引けるよう保持する小さな変更（`children.ts` と `index.ts`）。
 - B-5: `normalize.ts` と `command_policy.py` の同じ形の変更、正解データの再生成、`test_pi_harness.py` の `DOUBLE_DASH`（xfail）を外す、`kubectl exec p -- git push` などの回帰試験。
-- B-6: `todo` 拡張へ `blocked` 状態を足す（`agent_before_settle` のリマインド対象から外す）。
+- B-6: 完了（`blocked` を足し、リマインド対象外にした。`todo` の試験 23 件通過）。実機でのリマインドの確認は未実施。
 
 ## 評価基準
 
@@ -75,11 +80,11 @@
 | A1: `--dist loadfile` | fixture をファイル内に保てる | `test_pi_harness.py`（約 4 分）が下限。242.21 秒 | — | 見送り | — |
 | A1: `--dist worksteal` | **96.25 秒**。新規の失敗なし。試験単位で偏りに強い | — | 再実行での安定性 | 採用 | 数回の再実行 |
 | B-4 (i) 親が実行 | 追加設計なし。承認は利用者 | 子に任せられない | — | 採用（今） | — |
-| B-4 (ii) `bypass` の区間 | 実装済み | 守りが弱まる。`explorer` は deny が既定で `pytest` は通らない | — | 保留（条件つき） | — |
+| B-4 (ii) `bypass` の区間 | 実装済み | 守りが弱まる。`explorer` は deny が既定で `pytest` は通らない | — | 採用（`worker` に限る例外運用） | — |
 | B-4 (iii) 入口を許可に載せる | 一致判定の形が既にある | 改ざん検出の穴が多い | — | 見送り（単独では） | — |
-| B-4 (iv) `verifier` 役 | サンドボックス内に限れば被害が `.tmp/` に収まる | 書き込み範囲・通信・キャッシュが未確認 | 実験が要る | 有望 | 最小の実験 |
+| B-4 (iv) `verifier` 役 | サンドボックス内に限れば被害を抑えられる見込み（現状の Fence では `.tmp/` には収まらない） | 書き込み範囲・通信・キャッシュが未確認。`default = "deny"`・`inherit_bypass = false`・専用の `shell_allow` が必要 | 実験が要る | 保留（隔離の実測が先） | 使い捨ての作業ツリーで実測 |
 | B-5 許可リスト方式 | — | deny の検出が弱まる | — | 見送り | — |
-| B-5 拒否リスト方式（`git` だけ除く） | 最小。安全 | 両実装と正解データの変更 | 正解データの差分の件数 | 有望 | `review` → 実装 |
+| B-5 拒否リスト方式（`git` だけ除く） | 最小。抽出を抑えるだけで判定は従来どおり | 両実装と正解データの変更 | 正解データの差分の件数 | 有望 | `review` → 実装 |
 
 扱い: 未評価 / 検証中 / 有望 / 採用 / 保留 / 見送り
 
@@ -89,8 +94,8 @@
 | --- | --- | --- | --- |
 | `AGENTS.md`・`docs/spec/development.md`・`testing.md` | 検証の入口に `mise run verify` / `verify:all`、方針（日常は選択実行、コミット前に全件 1 回）を足す | A2・A3 | 適用済み |
 | 共通の指示（`agent-instructions.md`）・`common.toml.tmpl` | 「子エージェントへの委譲」の節、子の結果の標準形 | B-1・B-2 | 適用済み（試験 156 件通過） |
-| 判定器（TS と Python）・正解データ | `--` の後ろを拾う先頭語を、`git` を除いて限る | B-5 | 未適用 |
-| `todo` 拡張 | `blocked` 状態 | B-6 | 未適用 |
+| 判定器（TS と Python）・正解データ | 正規化後の先頭語が `git` のときだけ、`--` の後ろを別コマンドとして抽出しない（抽出を抑えるだけで、判定は従来どおり） | B-5 | 実装済み（正解データ 3 種を再生成し、`test/agents/` 3874 passed。失敗は既存の `test_mcp_servers` のみ） |
+| `todo` 拡張 | `blocked` 状態 | B-6 | 適用済み（未コミット） |
 
 ## 実装・検証
 
