@@ -295,6 +295,8 @@ def test_pis_no_sandbox_marks_the_environment_and_warns(monkeypatch, capsys):
     ocs = _ocs()
     _stub_pis(monkeypatch, ocs)
     monkeypatch.setattr(ocs.pis.shutil, "which", lambda *_a, **_k: "/usr/bin/pi")
+    # 配備済みの rules.json (~/.config/pi/harness) に依存しない
+    monkeypatch.setattr(ocs.pi, "own_extensions", lambda *_a, **_k: [])
     captured = {}
     monkeypatch.setattr(ocs.pis.os, "execvpe", lambda f, a, e: captured.update(file=f, env=e))
     monkeypatch.setenv("PI_HARNESS_BOUNDARY", "1")  # 外から入った期待は捨てる

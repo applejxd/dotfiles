@@ -18,6 +18,8 @@ import pytest
 from agents_common import ROOT
 from test_pi_harness import FIXTURES, PI, SECRET, bash_call, env, run_pi  # noqa: F401
 
+pytestmark = pytest.mark.skipif(PI is None, reason="pi is not installed")
+
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 EXT = ("-e", str(FIXTURES / "ext_tool.ts"))

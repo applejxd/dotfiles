@@ -435,7 +435,7 @@ def test_windows_claude_script_covers_the_same_servers():
     # AI CLI は mise で入れないので、mise に claude を尋ねない
     assert "which claude" not in rendered
     assert "'.local\\bin\\claude.exe'" in rendered
-    embedded = json.loads(rendered.split("@'", 1)[1].split("'@", 1)[0])
+    embedded = json.loads(rendered.split("$managed = @'", 1)[1].split("'@", 1)[0])
     assert [server["id"] for server in embedded] == [name for name, _ in servers_for("tester")]
     # 自動変数 $args と衝突する名前を使っていないこと
     assert "$args" not in rendered
