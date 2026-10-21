@@ -10,6 +10,8 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 | 対象 | コマンド |
 | --- | --- |
+| 変更に応じた選択実行（日常） | `mise run verify`（`--dry-run` でコマンドを列挙） |
+| 全件（コミット前に 1 回、約 9 分） | `mise run verify:all` |
 | 全体（lint / secret scan） | `uv run pre-commit run --all-files` |
 | agent 設定・hook | `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` |
 | Windows 資産（静的） | `uv run --with pytest --no-project pytest test/test_windows_assets.py -q` |
@@ -19,6 +21,9 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 | docs の索引整合 | `mise exec -- python3 home/dot_claude/skills/sdd-docs/scripts/lint_docs.py` |
 | OpenCode の実機試験 | `mise run opencode:probe -- '<prompt>'`（実 DB を汚さない） |
 | 展開結果 | `chezmoi diff`（sandbox 内では不可。下記） |
+
+日常は `mise run verify`、コミット前に `mise run verify:all` を 1 回回す。
+選択規則・フォールバック・方針は [検証の方針](docs/spec/development.md#検証の方針と選択実行)。
 
 `*.tmpl` は pre-commit の linter が素通りするので、テンプレートを編集したら
 `lint_templates.py` も実行する（[理由と対象](docs/spec/development.md#テンプレートの検査)）。

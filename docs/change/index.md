@@ -56,6 +56,7 @@
 | [0024](0024-diagnostics-feedback.md) | 編集直後の診断フィードバック (LSP・linter・型検査) を足す | Planned | どの言語・道具まで対応するか。型検査の実行の頻度。LSP の常駐とガード・サンドボックスの関係 | 段階案 A (post_edit の延長) の対象言語を決める | 2026-10-20 |
 | [0025](0025-goal-autonomous-loop.md) | `/goal` の自律ループ (目標・計画・独立した完了の監査) を足す | Planned | 予算の既定値と停滞の検知。`agent_before_settle` で続行を複数回要求できるか。bypass との相互作用 | 段階案 A (todo のリマインドの延長) で複数回の続行を実測する | 2026-10-20 |
 | [0027](0027-zed-pi-acp-with-pis.md) | Zed の pi-acp から `pis --no-sandbox`（フルガード）を使えるようにする | Exploring | Zed の `env` から `PI_ACP_PI_COMMAND`（ラッパーのパス）を渡して実際に起動できるか、起動の遅さ（約 4 秒以上）。ソースの読みでは `confirm` は Zed のダイアログになる | `npx` で pi-acp を取得し、`PI_ACP_PI_COMMAND` を付けて ACP を手で送る。または、ACP 経由ではなく、Zed の Terminal Threads で `pis` を直接起動して BEL で通知する候補 G を実機で確かめる（`notify` 拡張。完了・確認待ち・`ask` で青丸が出るか）。Orca のネイティブチャットは WSL で使えない | 2026-10-21 |
+| [0028](0028-verification-speed-and-delegation.md) | 全件の検証を速くし（直列 643.67 秒→並列 96.25 秒。`--dist worksteal` で確定）、調査・実装・レビューを子エージェントへ任せる運用を整える | In progress | `HOME` 隔離と再実行の安定性。通知の失われうる経路。`verifier` 役の実験。判定器の `--` の直し（拒否リスト方式） | `worksteal` を数回再実行し、コミット後に B-6・B-3・B-5 に進む | 2026-10-22 |
 
 ## 保留
 

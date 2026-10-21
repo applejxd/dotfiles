@@ -17,6 +17,14 @@ UV_PROJECT_ENVIRONMENT = "{% if os() == 'windows' %}.venv-windows{% else %}.venv
 description = "Docker で cold start を検証する（引数: [service] [mode]。test/README.md 参照）"
 run = "bash test/test.sh"
 
+[tasks.verify]
+description = "変更に応じた検証だけを選んで実行する（日常用。横断的な変更は全件へフォールバック）"
+run = "python3 scripts/verify.py --changed"
+
+[tasks."verify:all"]
+description = "検証を全件実行する（約 9 分。コミット前に 1 回）"
+run = "python3 scripts/verify.py --all"
+
 [tasks."opencode:probe"]
 description = "隔離環境で opencode を実行する（実 DB を汚さない）"
 run = "./scripts/opencode_probe.sh"

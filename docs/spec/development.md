@@ -60,6 +60,30 @@ gitleaks を**ソースからビルド**する。Raspberry Pi 4（RAM 3.7GB、sw
 | `home/` 全般 | 展開結果（`chezmoi diff`） | エージェントの sandbox の外で実行する |
 | `.chezmoiscripts/`、`.chezmoi.toml.tmpl`、`.chezmoitemplates/` | — | [Docker での初回導入の検証](#新しい機械での初回導入を-docker-で検証する) |
 
+### 検証の方針と選択実行
+
+方針: 日常は変更に応じた選択実行、全件はコミット前に 1 回。全件の pytest は約 3,700 件で
+約 9 分かかる（2026-10-22 実測 556 秒）。CI で全件を回す件は
+[テストと検証の仕組み](testing.md#いつ回すか) に未着手の候補として書いた。
+
+```text
+python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
+```
+
+- `--changed`（既定。`mise run verify`）: git の変更（ステージ済み・未ステージ・未追跡）を見て、
+  上の表に当たる試験・検査だけを実行する。この表を自動化したもの
+- `--all`（`mise run verify:all`）: 全件
+- `--dry-run`: 実行せずコマンドを列挙する
+- `--list`: 変更パスごとの対応を表示する
+
+次の変更は**全件にフォールバック**する。影響範囲を規則で絞れず、絞ると見逃すため。
+
+- どの規則にも当たらない変更
+- 横断的に効く設定（`common.toml.tmpl`、`scripts/agents/generate.py`、`pyproject.toml` など）
+
+`pre-push` hook に全件は入れない。待ち時間が `--no-verify` を誘い、`AGENTS.md` の
+「長時間実行スクリプトは追加しない」とも合わない。選択実行に限れば入れてよい。
+
 ### テンプレートの検査
 
 `identify` は `*.tmpl` に一切タグを付けないため、`check-toml` / ruff /

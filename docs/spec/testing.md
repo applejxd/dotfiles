@@ -291,6 +291,22 @@ OVERALL STATUS: FAILED
 - 新しいマシンを組む直前
 - 半年以上回していないと気づいたとき（腐敗の検知そのもの）
 
+### pytest の全件
+
+日常は `mise run verify`（選択実行）、コミット前に `mise run verify:all`（全件）を 1 回回す。
+選択規則は [検証の方針と選択実行](development.md#検証の方針と選択実行)。
+
+現状（調査で判明した事実）:
+
+- Linux の CI に pytest は無い。GitHub Actions は `windows.yml`（パス絞りの push と手動。
+  `windows-2025` で `test/agents/` と `test/test_windows_assets.py`、`timeout-minutes: 30`）と
+  `e2e.yml`（毎月 2 日の schedule と手動。cold start）だけ
+- push 時の hook は無い（`pre-push` は sample のみ）
+- リポジトリは public
+
+未着手の候補: Linux の CI で全件を回す。並列化の効果を測ってから決める。
+GitHub の素の runner で通るかは未確認。
+
 ## 既知の未達
 
 `ubuntu2204` の `apply` と `update`（2 回の apply と残差分 0 件）は通る
