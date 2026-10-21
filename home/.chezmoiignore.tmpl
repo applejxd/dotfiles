@@ -145,15 +145,20 @@ Documents/**
 # 個人 PC のみで導入
 .config/git/user
 .config/sops/age/keys.txt
+# YouTube (yt-dlp) の字幕は個人 PC だけ。会社の PC にはスクリプト自体を配らない
+# see docs/spec/imozuru.md#youtube
+.claude/skills/imozuru/scripts/fetch_youtube.py
 .vscode-server/
 .vscode-server/**
 {{- end }}
 
-# 業務用 (Bedrock) は検索を AgentCore の MCP に一本化する。web-search skill は私用 (github-copilot) だけに配る
-# see docs/spec/web-search.md#配る範囲
+# 業務用 (Bedrock) は検索を AgentCore の MCP に一本化する。web-search skill と、それに依存する imozuru は私用 (github-copilot) だけに配る
+# see docs/spec/web-search.md#配る範囲、docs/spec/imozuru.md#配る範囲
 {{- if eq (includeTemplate "llm-provider" .) "amazon-bedrock" }}
 .claude/skills/web-search/
 .claude/skills/web-search/**
+.claude/skills/imozuru/
+.claude/skills/imozuru/**
 {{- end }}
 
 # Bitwarden 由来のファイルは一度のみ展開する

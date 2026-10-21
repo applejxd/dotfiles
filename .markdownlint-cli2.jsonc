@@ -9,6 +9,8 @@
   },
   "ignores": [
     "node_modules",
-    ".venv"
+    ".venv",
+    // imozuru (MIT) の上流の文書。上流と同一に保つ (sha256 を references/upstream.md に記録)
+    "home/dot_claude/skills/imozuru/references/theory.md"
   ]
 }

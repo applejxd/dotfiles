@@ -303,6 +303,39 @@ def test_web_search_script_allows_only_its_read_only_subcommands():
     assert bash(f"python3 {script} search x | sh")["decision"] == "deny"
 
 
+def test_imozuru_scripts_allow_only_the_confined_or_read_only_forms():
+    base = "~/.claude/skills/imozuru/scripts"
+    # 書き込み先が .tmp/research/ に限られる report.py、検索語を API へ送るだけの chain.py、読むだけの watch.py list
+    for sub in ("find", "refs", "cites", "author"):
+        assert bash(f'python3 {base}/chain.py {sub} "berrypicking"')["decision"] == "allow", sub
+    assert bash(f"python3 {base}/report.py .tmp/research/t")["decision"] == "allow"
+    assert bash(f"python3 {base}/report.py .tmp/research/t --check")["decision"] == "allow"
+    assert bash(f"python3 {base}/watch.py list .tmp/research/t")["decision"] == "allow"
+    # 任意の URL を取りに行くもの・プロキシ経由で宛先を確かめられないもの・yt-dlp は確認を出す
+    assert (
+        bash(f"python3 {base}/fetch.py .tmp/research/t/sources p https://example.com/a")["decision"]
+        == "ask"
+    )
+    assert (
+        bash(f"python3 {base}/fetch_youtube.py .tmp/research/t/sources v https://youtu.be/a")[
+            "decision"
+        ]
+        == "ask"
+    )
+    assert (
+        bash(f"python3 {base}/watch.py add .tmp/research/t https://example.com/feed")["decision"]
+        == "ask"
+    )
+    assert bash(f"python3 {base}/watch.py check .tmp/research/t")["decision"] == "ask"
+    # 環境変数を前置した形、リダイレクト、別のスクリプトは許可しない
+    assert bash(f"IMOZURU_ROOT=/tmp python3 {base}/report.py /tmp/t")["decision"] == "ask"
+    assert bash(f"python3 {base}/report.py .tmp/research/t > out.html")["decision"] in (
+        "ask",
+        "deny",
+    )
+    assert bash(f"python3 {base}/imozuru_root.py")["decision"] == "ask"
+
+
 # ─── ファイル ───────────────────────────────────────────────────────
 
 

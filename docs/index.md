@@ -48,6 +48,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/agent-command-policy.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-config-generation.md#mcp-サーバ) |
 | Bedrock の PC で web 検索を使えるようにする（AgentCore Web Search） | [AgentCore Web Search](spec/agent-config-generation.md#agentcore-web-search) |
+| 調べものスキル（imozuru）を使う・変える・上流を更新する | [imozuru](spec/imozuru.md) |
 | OpenCode のモデル・プロバイダ（Copilot / Bedrock）を PC ごとに変える | [モデルの割り当て](spec/agent-config-generation.md#モデルの割り当て) |
 | 新しいモデルが出たときに OpenCode のモデルの割り当てを見直す | [モデルの割り当ての見直し](spec/model-lineup-review.md) |
 | OpenCode で作業を並列に進める（`/fleet`） | [並列作業](spec/agent-config-generation.md#並列作業fleet) |

@@ -196,6 +196,7 @@ def test_wildcard_intersection_refuses_shapes_it_cannot_cross(a, b):
 SDD = "~/.claude/skills/sdd-docs/scripts"
 CP = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 WEB = "~/.claude/skills/web-search/scripts/websearch.py"
+IMOZURU = "~/.claude/skills/imozuru/scripts"
 
 
 @pytest.mark.parametrize(
@@ -277,6 +278,15 @@ def test_skill_script_allow_is_not_widened_silently():
         f"python3 {WEB} fetch *",
         f"python3 {WEB} papers *",
         f"python3 {WEB} status *",
+        # imozuru: report.py と watch.py list は置き場 (.tmp/research/) の中だけを読み書きする (confine)。
+        # chain.py は公開 API へ検索語を送るだけ (秘匙チェックつき)。任意の URL を取りに行く
+        # fetch.py / fetch_youtube.py と watch.py の add / check は載せない
+        f"python3 {IMOZURU}/chain.py find *",
+        f"python3 {IMOZURU}/chain.py refs *",
+        f"python3 {IMOZURU}/chain.py cites *",
+        f"python3 {IMOZURU}/chain.py author *",
+        f"python3 {IMOZURU}/report.py *",
+        f"python3 {IMOZURU}/watch.py list *",
     ]
 
 

@@ -361,8 +361,23 @@ def test_interpreter_falls_back_to_shim_without_modern_python(tmp_path, availabl
     [("applejxd", False), (r"DOMAIN\applejxd", False), ("worker", True)],
 )
 def test_web_search_skill_is_not_deployed_to_bedrock_users(tmp_path, username, ignored):
-    """業務用 (Bedrock) は検索を AgentCore に一本化する。web-search skill は私用だけに配る。"""
+    """業務用 (Bedrock) は検索を AgentCore に一本化する。web-search skill と、それに依存する imozuru は私用だけに配る。"""
     rendered = render(home=str(tmp_path), username=username)
 
     assert (".claude/skills/web-search/" in rendered) is ignored
     assert (".claude/skills/web-search/**" in rendered) is ignored
+    assert (".claude/skills/imozuru/" in rendered) is ignored
+    assert (".claude/skills/imozuru/**" in rendered) is ignored
+
+
+@pytest.mark.parametrize(
+    ("username", "ignored"),
+    [("applejxd", False), (r"DOMAIN\applejxd", False), ("worker", True)],
+)
+def test_imozuru_youtube_script_is_only_for_the_personal_pc(tmp_path, username, ignored):
+    """yt-dlp で YouTube の字幕を取るスクリプトは、個人の PC (applejxd) だけに配る。会社の PC にはスクリプト自体を配らない。"""
+    rendered = render(home=str(tmp_path), username=username)
+
+    assert (".claude/skills/imozuru/scripts/fetch_youtube.py" in rendered) is ignored
+    # fetch.py 自体は YouTube を通さないので、これは Bedrock 側の除外 (スキルごと) だけが効く
+    assert (".claude/skills/imozuru/scripts/fetch.py" in rendered) is False
