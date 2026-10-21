@@ -380,7 +380,7 @@ const MAX_JOBS = 4;
 const ROUND_TIMEOUT_MS = Number(process.env.PI_HARNESS_TEST_ROUND_MS) || 15 * 60 * 1000;
 const MAX_REPLY_CHARS = 20000;
 // 利用者のコマンド (`btw`) が起動できる子の役割。読み取り専用に限る
-const READ_ONLY_CHILD_PROFILES = new Set(["reader", "explorer"]);
+const READ_ONLY_CHILD_PROFILES = new Set(["explorer"]);
 const jobs = new Jobs(MAX_JOBS);
 // 異常終了でも孤児の子を残さない (stdin が閉じても止まるが、作業中の子はすぐ止める)
 process.once("exit", () => jobs.closeAll(true));
