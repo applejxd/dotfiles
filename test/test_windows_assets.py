@@ -869,3 +869,19 @@ def test_wsl_sandbox_masks_timesyncd_so_it_does_not_fight_other_distros_over_the
     script = (WSL_SANDBOX / "create.ps1").read_bytes().decode("utf-8-sig")
     assert "is-enabled', 'systemd-timesyncd'" in script
     assert "-eq 'masked'" in script
+
+
+def test_pwsh_update_check_is_disabled():
+    """TEMP-REMOVE: pwsh 7.6.x の更新通知クラッシュの一時対処。上流が直ったら削除する。"""
+    path = (
+        ROOT
+        / "home"
+        / ".chezmoiscripts"
+        / "300_windows"
+        / "run_after_351_pwsh_update_check_off.ps1"
+    )
+    raw = path.read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf"), "UTF-8 BOM が必要"
+    script = raw.decode("utf-8-sig")
+    assert "POWERSHELL_UPDATECHECK" in script
+    assert "'Off', 'User'" in script

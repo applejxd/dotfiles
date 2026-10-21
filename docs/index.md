@@ -26,6 +26,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | sops + age を導入・復旧する | [秘密情報の管理セットアップ（sops + age）](spec/sops-age.md) |
 | 圧縮を跨いで作業文脈を保つ仕組みを知る | [文脈の引き継ぎ](spec/checkpoint.md) |
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |
+| 入れてある一時対処と、その撤去の条件を知る | [一時対処の一覧](spec/temporary-workarounds.md) |
 | WSL にリモートから SSH する（Tailscale） | [リモートから WSL へ SSH する](spec/structure.md#リモートから-wsl-へ-ssh-する) |
 | `run_once_` / `run_onchange_` を走らせ直す | [スクリプトを走らせ直す](spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す) |
 
