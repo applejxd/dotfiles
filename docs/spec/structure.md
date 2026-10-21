@@ -543,19 +543,6 @@ Windows の `313_mise` は `mise install` の前に `winget upgrade --id jdx.mis
 winget の終了コードのうち、更新が無い（`0x8A15002B`）と winget 以外で導入された
 （`0x8A150014`）は成功として扱い、`mise install` へ進みます。
 
-### GUI アプリから mise の shim を使う（Windows）
-
-Zed などの GUI アプリは `$PROFILE` を読まないため、`mise activate pwsh --shims` の効果が届きません。
-shim（`mise-shim.exe` のコピー）は PATH から `mise.exe` を探すので、`mise.exe` の場所が PATH に無いと
-`mise-shim: failed to execute mise: program not found` で止まります。
-
-`313_mise` は `%LOCALAPPDATA%\mise\shims` と `mise.exe` のあるディレクトリを、User / Machine の
-PATH に無いときだけ User の PATH へ追記します（冪等）。反映は新しく起動したプロセスからなので、
-Zed は完全に終了して再起動します。
-
-- 出典: <https://mise.jdx.dev/dev-tools/shims.html>（取得日は作業日）。同症状の issue は `jdx/mise` に見つからず
-- 未検証: Windows 実機での効果（原因は PATH の推測。実機の PATH は未確認）
-
 ### Windows の node / uv / fzf / jq
 
 Windows でも `node` / `uv` / `fzf` / `jq` は mise が管理します（`310_winget` からは外しました）。
