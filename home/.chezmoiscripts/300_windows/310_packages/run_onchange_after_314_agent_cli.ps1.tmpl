@@ -6,11 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $homeDir = {{ .chezmoi.homeDir | toJson }}
 
-function Update-PathFromEnvironment {
-  # 同じ apply の winget / npm スクリプトで PATH が増えていても拾えるようにする。
-  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
-      [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
-}
+{{ includeTemplate "powershell/env-path.ps1" }}
 
 function Use-MiseNode {
   # npm は mise の node を使う。PATH 上の古い node (winget 版など) を避ける。
@@ -27,11 +23,7 @@ function Use-MiseNode {
 
 function Add-NpmGlobalToUserPath {
   # npm の global bin (pi / opencode)。Node.js の winget 版を外すと PATH から消えるので自前で保証する。
-  $npmBin = Join-Path $env:APPDATA 'npm'
-  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-  if (($userPath -split ';') -notcontains $npmBin) {
-    [Environment]::SetEnvironmentVariable('Path', "$userPath;$npmBin".TrimStart(';'), 'User')
-  }
+  [void](Add-UserPathEntry (Join-Path $env:APPDATA 'npm'))
 }
 
 function Test-CliInstalled {

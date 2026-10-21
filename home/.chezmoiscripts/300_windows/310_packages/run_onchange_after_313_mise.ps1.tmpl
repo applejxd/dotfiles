@@ -5,6 +5,8 @@ $ErrorActionPreference = 'Stop'
 
 $homeDir = {{ .chezmoi.homeDir | toJson }}
 
+{{ includeTemplate "powershell/env-path.ps1" }}
+
 # 310_winget は導入済みなら更新しない。古い mise の registry には新しいツールが無い
 # (docs/spec/structure.md#windows-の-mise-の更新)
 if (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue) {
@@ -19,7 +21,7 @@ if (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue) {
 
 $miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
 if (-not $miseCommand) {
-  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+  Update-PathFromEnvironment
   $miseCommand = Get-Command mise -CommandType Application -ErrorAction Stop
 }
 

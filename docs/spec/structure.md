@@ -543,6 +543,32 @@ Windows の `313_mise` は `mise install` の前に `winget upgrade --id jdx.mis
 winget の終了コードのうち、更新が無い（`0x8A15002B`）と winget 以外で導入された
 （`0x8A150014`）は成功として扱い、`mise install` へ進みます。
 
+### Windows の PATH の扱い
+
+PATH を読み直す・永続化する処理は、`home/.chezmoitemplates/powershell/env-path.ps1` の共通関数を
+`includeTemplate` で取り込んで使います（309 / 313 / 314 / 343 / 346）。手書きの複製をこれ以上増やさないでください。
+
+| 関数 | 役割 |
+| --- | --- |
+| `Update-PathFromEnvironment` | レジストリの Machine → User と現在の順に並べて、このプロセスの PATH を更新する（重複は先頭だけ残す） |
+| `Add-UserPathEntry` | User の PATH へ永続的に追記する。既にあれば何もしない。レジストリへ REG_EXPAND_SZ で直接書き、`WM_SETTINGCHANGE` を送る |
+
+- `[Environment]::SetEnvironmentVariable` と `setx` で PATH を書かない。REG_EXPAND_SZ を REG_SZ に降格させ、
+  PATH 内の `%USERPROFILE%` などが展開されなくなるという報告がある
+  （<https://stackoverflow.com/questions/714877/setting-windows-powershell-environment-variables>、
+  <https://github.com/Gentleman-Programming/gentle-ai/issues/5581>、いずれも 2026-10-21 取得）。
+  試験でこの書き方の再導入を止めている（`test_env_path_template_writes_user_path_as_expand_string`）
+- 以前の `314` は `SetEnvironmentVariable('Path', …, 'User')` で追記していた。この書き方で実際に降格した PC が
+  あるかは未確認。確かめるには `(Get-Item HKCU:\Environment).GetValueKind('Path')` が `ExpandString` かを見る
+- GUI（システムの詳細設定）の環境変数エディタは 1 変数 2047 文字まで。超えた PATH を保存すると末尾が無警告で切れる
+  という報告がある（<https://stackoverflow.com/questions/60231125/environment-variable-is-too-large>、
+  <https://github.com/microsoft/winget-cli/issues/3601>）。PATH を長くしすぎない。長さを根本から減らす手段は、
+  ツールごとの PATH 追加をまとめる shim ディレクトリ（mise の shims など）へ寄せること
+- Zed の統合ターミナルで PATH が途中で切れる・更新が反映されない報告がある
+  （<https://github.com/zed-industries/zed/issues/40837>、<https://github.com/zed-industries/zed/issues/51349>）。
+  この repo の環境での原因は未確定
+- 未検証: Windows 実機での共通関数の動作（この環境には pwsh がなく、構文検査もしていない）
+
 ### Windows の node / uv / fzf / jq
 
 Windows でも `node` / `uv` / `fzf` / `jq` は mise が管理します（`310_winget` からは外しました）。

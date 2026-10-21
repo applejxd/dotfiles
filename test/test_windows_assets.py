@@ -885,3 +885,44 @@ def test_pwsh_update_check_is_disabled():
     script = raw.decode("utf-8-sig")
     assert "POWERSHELL_UPDATECHECK" in script
     assert "'Off', 'User'" in script
+
+
+WINDOWS_SCRIPTS = ROOT / "home" / ".chezmoiscripts" / "300_windows"
+ENV_PATH_TEMPLATE = ROOT / "home" / ".chezmoitemplates" / "powershell" / "env-path.ps1"
+
+
+def test_env_path_template_writes_user_path_as_expand_string():
+    # SetEnvironmentVariable / setx は REG_EXPAND_SZ を REG_SZ に降格させ、PATH 内の %VAR% が展開されなくなる
+    # (see docs/spec/structure.md#windows-の-path-の扱い)
+    source = ENV_PATH_TEMPLATE.read_text(encoding="utf-8")
+    code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
+    assert "DoNotExpandEnvironmentNames" in code
+    assert "RegistryValueKind]::ExpandString" in code
+    assert "WM_SETTINGCHANGE" in source
+    assert "SetEnvironmentVariable" not in code
+    assert not re.search(r"\bsetx\b", code, re.IGNORECASE)
+    assert "{{" not in source, "テンプレート構文を書くと自分自身を再帰して取り込む"
+
+
+def test_windows_scripts_share_the_env_path_helpers():
+    include = '{{ includeTemplate "powershell/env-path.ps1" }}'
+    users = [
+        "310_packages/run_once_before_309_admin.ps1.tmpl",
+        "310_packages/run_onchange_after_313_mise.ps1.tmpl",
+        "310_packages/run_onchange_after_314_agent_cli.ps1.tmpl",
+        "run_after_343_herdr_integration.ps1.tmpl",
+        "run_onchange_after_346_claude_mcp.ps1.tmpl",
+    ]
+    for name in users:
+        source = (WINDOWS_SCRIPTS / name).read_text(encoding="utf-8-sig")
+        assert include in source, name
+        # PATH の読み直しと永続化は共通関数を通す。手書きの複製を残さない
+        assert "function Update-PathFromEnvironment" not in source, name
+        assert "GetEnvironmentVariable('Path'" not in source, name
+        assert "SetEnvironmentVariable('Path'" not in source, name
+        assert include_before_first_use(source), name
+
+
+def include_before_first_use(source: str) -> bool:
+    head = source.split('includeTemplate "powershell/env-path.ps1"')[0]
+    return "Update-PathFromEnvironment" not in head and "Add-UserPathEntry" not in head

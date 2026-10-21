@@ -79,15 +79,7 @@ function Write-Step {
   if ($LogPath) { Add-Content -LiteralPath $LogPath -Value $Message -Encoding UTF8 }
 }
 
-function Update-PathFromEnvironment {
-  # Elevated installs change the Machine PATH; this session's copy is stale.
-  $parts = @(
-    [Environment]::GetEnvironmentVariable('Path', 'Machine'),
-    [Environment]::GetEnvironmentVariable('Path', 'User'),
-    $env:Path
-  ) | Where-Object { $_ }
-  $env:Path = $parts -join ';'
-}
+{{ includeTemplate "powershell/env-path.ps1" }}
 
 function Test-IsElevated {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

@@ -11,6 +11,8 @@ $ErrorActionPreference = 'Stop'
 # Unix 側の 400_unix/410 と同じ役割 (あちらは .chezmoiignore で Windows 除外)。
 $homeDir = {{ .chezmoi.homeDir | toJson }}
 
+{{ includeTemplate "powershell/env-path.ps1" }}
+
 $managed = @'
 {{ $mcp | toJson }}
 '@ | ConvertFrom-Json
@@ -34,8 +36,7 @@ if (@($managed).Count -eq 0) { return }
 # 同じ apply で入れた直後は PATH に無いので、machine / user の PATH も取り込む
 $claudePath = Join-Path $homeDir '.local\bin\claude.exe'
 if (-not (Test-Path -LiteralPath $claudePath -PathType Leaf)) {
-  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
-      [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
+  Update-PathFromEnvironment
   $claudeCommand = Get-Command claude -CommandType Application -ErrorAction SilentlyContinue
   if (-not $claudeCommand) {
     throw 'claude is not available. Install it and re-run chezmoi apply'

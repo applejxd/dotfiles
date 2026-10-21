@@ -2,10 +2,13 @@
 $ErrorActionPreference = 'Stop'
 
 $homeDir = {{ .chezmoi.homeDir | toJson }}
+
+{{ includeTemplate "powershell/env-path.ps1" }}
+
 $miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue
 if (-not $miseCommand) {
   # 同じ apply の Winget スクリプトで mise を初めて導入した場合。
-  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+  Update-PathFromEnvironment
   $miseCommand = Get-Command mise -CommandType Application -ErrorAction Stop
 }
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
@@ -23,8 +26,7 @@ if (-not (Test-Path -LiteralPath $herdrPath -PathType Leaf)) {
 
 # AI CLI は mise ではなく公式手段 (install.ps1 / winget / npm) で入るため、
 # machine / user の PATH を取り込んでから探す。
-$env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
-    [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
+Update-PathFromEnvironment
 $agentApp = Get-Command $agentCommand -CommandType Application -ErrorAction SilentlyContinue
 if (-not $agentApp) {
   throw "$agentCommand is not available on PATH"

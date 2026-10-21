@@ -369,7 +369,7 @@ def test_windows_integration_resolves_agent_from_path(username, agent):
     assert "which $agentCommand" not in source
     assert "Failed to resolve Herdr via mise" in source
     assert "$agentApp = Get-Command $agentCommand -CommandType Application" in source
-    assert "GetEnvironmentVariable('Path', 'User')" in source
+    assert "Update-PathFromEnvironment" in source
     assert "-CommandType Application -ErrorAction Stop" in source
     assert source.index("which herdr") < source.index("integration install $agentCommand")
     assert source.index("Get-Command $agentCommand") < source.index("Split-Path -Parent $agentPath")
