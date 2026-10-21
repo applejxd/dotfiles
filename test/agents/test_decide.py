@@ -400,6 +400,186 @@ def test_profile_shell_allow_and_deny(role, command, bypass, decision):
     assert bash(command, role=role, bypass=bypass)["decision"] == decision
 
 
+# git の前置設定・オプションで任意のプログラムを起動できる形は、allow の一覧に当たっても allow にしない
+_GIT_EXEC_COMMANDS = [
+    "git -c core.pager='sh -c \"id\"' --paginate log",
+    "git -c core.pager=id log -- file.txt",
+    "git --paginate log",
+    "git -c diff.external=id diff --ext-diff",
+    "git -c core.fsmonitor=id status",
+    "git --exec-path=/tmp log",
+    "env git -c core.pager=id log",
+    "git log -- x; git -c core.pager=id log",
+    "git -p log",
+    "git -c core.pager=x log -p",
+    "git -ccore.pager=x log",
+    "git log --ext-diff",
+    "git diff --textconv",
+    "git -C dir -c core.pager=x log",
+    "git --git-dir=.git -c a=b log",
+    "env git -p log",
+    'bash -c "git -p log"',
+]
+
+# コマンドの前の環境変数の代入 (安全な名前以外) は、allow の一覧に当たっても allow にしない
+_ENV_PREFIX_COMMANDS = [
+    "GIT_PAGER='sh -c id' git log",
+    "GIT_EXTERNAL_DIFF=id git diff",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status",
+    "GIT_DIR=/tmp/x git log",
+    "GIT_CONFIG_GLOBAL=/tmp/x git log",
+    "LD_PRELOAD=/tmp/x.so git log",
+    "PATH=/tmp:$PATH git log",
+    "FOO=1 git log",
+    "env GIT_PAGER=id git log",
+    "env -i git log",
+    "env -u PATH git log",
+    "command FOO=1 git log",
+    "nice FOO=1 git log",
+    'bash -c "GIT_PAGER=x git log"',
+    "GIT_PAGER=x git log; git log",
+    "( GIT_PAGER=id git log )",
+    "{ GIT_PAGER=id git log; }",
+    "if git status; then GIT_PAGER=id git log; fi",
+    "xargs env GIT_PAGER=id git log",
+    "xargs -I{} env GIT_PAGER=id git log",
+    "env LANG=C${IFS}GIT_PAGER=id git log",
+    "git log $HOME",
+    "export GIT_PAGER=id; git log",
+]
+
+# `--` の後ろは、正規化後の先頭が git のときだけ別コマンドとして抽出しない (パス引数)。
+# 判定は元のコマンド全体に掛かるので、deny / ask の規則は従来どおり効く。
+# 期待は (役割, コマンド, decision, source)。source が None のものは decision だけ確かめる
+_DASH_CASES = [
+    ("explorer", "git log -- file.txt", "allow", "rule"),
+    ("implementer", "git log -- file.txt", "allow", "rule"),
+    ("explorer", "git --no-pager log -- file.txt", "allow", "rule"),
+    ("explorer", "git -C dir log -- file.txt", "allow", "rule"),
+    ("explorer", "git show HEAD -- file.txt", "allow", "rule"),
+    ("explorer", "git diff -- a b", "allow", "rule"),
+    ("explorer", "git status -- .", "allow", "rule"),
+    # 親は git show / diff / status を allow に持たない (既定の確認)
+    ("implementer", "git show HEAD -- file.txt", "ask", "default"),
+    ("implementer", "git diff -- a b", "ask", "default"),
+    ("implementer", "git status -- .", "ask", "default"),
+    # `--output` は allow にならない
+    ("explorer", "git log --output=file -- x", "deny", "default"),
+    ("implementer", "git log --output=file -- x", "ask", "default"),
+    # 抽出を抑えるだけ。共通 deny は元のコマンドに掛かる
+    ("explorer", "git push -- origin main", "deny", "rule"),
+    ("implementer", "git push -- origin main", "deny", "rule"),
+    ("explorer", "sudo git log -- file.txt", "deny", "rule"),
+    ("explorer", 'bash -c "git push -- origin main"', "deny", "rule"),
+    # git 以外の `--` の後ろは従来どおりコマンドとして評価する
+    ("explorer", "kubectl exec p -- git push", "deny", "rule"),
+    ("implementer", "kubectl exec p -- git push", "deny", "rule"),
+    ("explorer", "xargs -- git push", "deny", "rule"),
+    ("explorer", "ssh h -- git push", "deny", None),
+    # `mise exec` / `npm run` / 複合でも `--` の後ろの git push は deny
+    ("explorer", "mise exec -- git push", "deny", "rule"),
+    ("implementer", "mise exec -- git push", "deny", "rule"),
+    ("explorer", "npm run x -- git push", "deny", "rule"),
+    ("implementer", "npm run x -- git push", "deny", "rule"),
+    ("explorer", "git log -- x; kubectl exec p -- git push", "deny", "rule"),
+    ("implementer", "git log -- x; kubectl exec p -- git push", "deny", "rule"),
+    # 通るべき形
+    ("explorer", "git log", "allow", "rule"),
+    ("implementer", "git log", "allow", "rule"),
+    ("implementer", "git -C dir log -- file.txt", "allow", "rule"),
+    ("implementer", "git --no-pager log -- file.txt", "allow", "rule"),
+    ("explorer", "git status --short", "allow", "rule"),
+    ("implementer", "git status --short", "ask", "default"),
+    ("explorer", "git diff HEAD~1 -- f", "allow", "rule"),
+    ("implementer", "git diff HEAD~1 -- f", "ask", "default"),
+    # サブコマンドの後ろの -p / -c (patch / combined diff) は従来どおり allow
+    ("explorer", "git log -p", "allow", "rule"),
+    ("implementer", "git log -p", "allow", "rule"),
+    ("explorer", "git log -c", "allow", "rule"),
+    ("implementer", "git log -c", "allow", "rule"),
+    ("explorer", "git log -p -- f", "allow", "rule"),
+    ("implementer", "git log -p -- f", "allow", "rule"),
+    ("explorer", "git diff -p", "allow", "rule"),
+    ("implementer", "git diff -p", "ask", "default"),
+    ("explorer", "git show -c HEAD", "allow", "rule"),
+    ("implementer", "git show -c HEAD", "ask", "default"),
+    # 環境変数の前置: 安全な名前だけ allow のまま
+    ("explorer", "LANG=C git log", "allow", "rule"),
+    ("implementer", "LANG=C git log", "allow", "rule"),
+    ("explorer", "LC_ALL=C TZ=UTC git log", "allow", "rule"),
+    ("implementer", "LC_ALL=C TZ=UTC git log", "allow", "rule"),
+    # `-` 始まりでない NAME= 形のトークンだけが対象。引数の中の k=v は影響しない
+    ("explorer", "git log --grep=a=b", "allow", "rule"),
+    ("implementer", "git log --grep=a=b", "allow", "rule"),
+    # 既存の check による deny
+    (
+        "explorer",
+        "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log",
+        "deny",
+        "check",
+    ),
+    (
+        "implementer",
+        "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log",
+        "deny",
+        "check",
+    ),
+    *[
+        (role, cmd, decision, "default")
+        for cmd in _ENV_PREFIX_COMMANDS
+        for role, decision in (("explorer", "deny"), ("implementer", "ask"))
+    ],
+    *[
+        (role, cmd, decision, "default")
+        for cmd in _GIT_EXEC_COMMANDS
+        for role, decision in (("explorer", "deny"), ("implementer", "ask"))
+    ],
+]
+
+
+@pytest.mark.parametrize(("role", "command", "decision", "source"), _DASH_CASES)
+def test_double_dash_decisions(role, command, decision, source):
+    response = bash(command, role=role)
+    assert_shape(response)
+    assert response["decision"] == decision, response["reason"]
+    if source is not None:
+        assert response["source"] == source, response["reason"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git log -- file.txt",
+        "git --no-pager log -- file.txt",
+        "git -C dir log -- file.txt",
+        "env git log -- file.txt",
+        "git show HEAD -- file.txt",
+        "git diff -- a b",
+        'bash -c "git log -- x"',
+    ],
+)
+def test_normalize_keeps_git_double_dash_paths_as_arguments(command):
+    from policy_loader import load_policy
+
+    segments = load_policy().module.normalize(command)
+    assert not {"file.txt", "a b", "x"} & set(segments), segments
+
+
+@pytest.mark.parametrize(
+    ("command", "nested"),
+    [
+        ("kubectl exec p -- git push", "git push"),
+        ("xargs -- git push", "git push"),
+        ("mise exec -- git push", "git push"),
+        ("ssh h -- git push", "git push"),
+    ],
+)
+def test_normalize_still_extracts_commands_after_double_dash(command, nested):
+    from policy_loader import load_policy
+
+    assert nested in load_policy().module.normalize(command)
+
+
 def test_task_is_allowed_only_for_roles_that_have_it():
     assert decide(req("task"))["decision"] == "allow"
     assert decide(req("task", role="worker"))["decision"] == "deny"

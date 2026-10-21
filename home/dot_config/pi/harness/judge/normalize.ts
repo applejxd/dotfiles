@@ -586,6 +586,16 @@ export function extractFunctionBodies(command: string): string[] {
 	return bodies;
 }
 
+/** ラッパーとグローバルオプションを剥がした後の先頭語。割れないときは空文字。 */
+function normalizedHead(segment: string): string {
+	try {
+		return basename(shlexSplit(normalizeSegment(segment))[0] ?? "");
+	} catch (e) {
+		if (e instanceof ShlexError) return "";
+		throw e;
+	}
+}
+
 function expandEmbeddedCommands(segment: string): string[] {
 	let tokens: string[];
 	try {
@@ -645,8 +655,9 @@ function expandEmbeddedCommands(segment: string): string[] {
 	}
 
 	// `mise exec -- CMD` / `npm run x -- CMD` のように `--` の後ろが実コマンドになるもの
+	// 正規化後の先頭が git なら `git log -- PATH` のパス区切りなので抽出しない
 	const dash = tokens.indexOf("--", 1);
-	if (dash >= 0) {
+	if (dash >= 0 && normalizedHead(segment) !== "git") {
 		const rest = tokens.slice(dash + 1);
 		if (rest.length > 0) out.push(rest.join(" "));
 	}

@@ -892,6 +892,15 @@ def _looks_like_wrapper_operand(token: str) -> bool:
     return _looks_like_option_value(token)
 
 
+def _normalized_head(segment: str) -> str:
+    """ラッパーとグローバルオプションを剥がした後の先頭語。割れないときは空文字。"""
+    try:
+        tokens = shlex.split(_normalize_segment(segment))
+    except ValueError:
+        return ""
+    return _basename(tokens[0]) if tokens else ""
+
+
 def _expand_embedded_commands(segment: str) -> list[str]:
     """``find . -exec git push \\;`` のように引数中に埋まったコマンドを返す。
 
@@ -960,8 +969,9 @@ def _expand_embedded_commands(segment: str) -> list[str]:
         return out
 
     # `mise exec -- CMD` / `npm run x -- CMD` / `cargo run -- CMD` のように
-    # `--` の後ろが実コマンドになるもの
-    if "--" in tokens[1:]:
+    # `--` の後ろが実コマンドになるもの。
+    # 正規化後の先頭が git なら `git log -- PATH` のパス区切りなので抽出しない
+    if "--" in tokens[1:] and _normalized_head(segment) != "git":
         idx = tokens.index("--", 1)
         rest = tokens[idx + 1 :]
         if rest:

@@ -63,7 +63,7 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
    - `bash`: [誘導](#誘導)に当たれば、案内を理由にした deny（bypass でも外れない）。
      次に役割の `shell_deny` に当たれば deny（bypass でも外れない）。次に `check_bash.py` の ask 側（`[bash] ask` と意味解析）。
      当たらず、全部の区切りが `[pi.shell] allow`（役割に `shell_allow` があればそちら）に当たれば allow。
-     `>` `<` `` ` `` `$(` `--output` を含む形は allow にしない。`[pi.skill_scripts]` の宣言どおりの形も allow
+     `>` `<` `` ` `` `$` `--output` を含む形は allow にしない（`$` は変数展開と語分割で、`env LANG=C${IFS}GIT_PAGER=id git log` のように代入を後から作れるため）。元のセグメントの `git` のグローバル領域（`git` とサブコマンドの間）に `-c` `--config-env` `--exec-path` `--paginate` `-p` があるか、サブコマンド以降に `--ext-diff` `--textconv` `--exec` `--upload-pack` `--receive-pack` がある形も allow にしない（ページャーや外部 diff でプログラムが起動しうるため。正規化前のトークンで見る。サブコマンドの後ろの `-p` `-c`（`git log -p` など）は従来どおり。`-C` `--no-pager` `-P` `--git-dir` `--work-tree` も従来どおり）。コマンド全体（位置に関係なく。括弧・波括弧・`if` の中や `xargs env` の後ろも含む）の `NAME=value` 形のトークン（先頭の `(` `{` `;` `!` は除いて見る）は、名前が `LANG` `LC_*` `TZ` `NO_COLOR` `COLUMNS` `LINES` `TERM` `CI` `FORCE_COLOR` `CLICOLOR` `PYTHONDONTWRITEBYTECODE` のときだけ許し、それ以外のトークンや、`-` 始まりの引数を持つ `env`（`-i` `-u` `-S` `-C`）があれば allow にしない（既定の判定に落ちる。`-` 始まりの `--grep=a=b` は対象外。引用の中や shlex が失敗する形も同じ）。`[pi.skill_scripts]` の宣言どおりの形も allow
    - 読み取り: `[file] read_ask_globs` は ask。作業ツリーの中と `[pi.external_read]` の中は allow。それ以外の外は ask
    - 書き込み: `[file] write_ask_globs` は ask。作業ツリーの外は ask。中は allow
    - `task`: allow（子は同じフルガードと判定器で、子の役割で判定される）

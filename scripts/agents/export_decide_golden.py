@@ -41,6 +41,85 @@ from decide import decide  # noqa: E402
 from test_decide import _hook_test_commands  # noqa: E402
 
 ROLES = ("implementer", "reader", "committer", "worker")
+# `--` の後ろの扱い (git だけパス引数)。explorer と親 (implementer) で評価する。
+# 期待値は test_decide.py の _DASH_CASES
+DASH_ROLES = ("explorer", "implementer")
+DASH_COMMANDS = (
+    "git log -- file.txt",
+    "git --no-pager log -- file.txt",
+    "git -C dir log -- file.txt",
+    "env git log -- file.txt",
+    "sudo git log -- file.txt",
+    "xargs git log --",
+    "git show HEAD -- file.txt",
+    "git diff -- a b",
+    "git status -- .",
+    "git push -- origin main",
+    "git log --output=file -- x",
+    "kubectl exec p -- git push",
+    "xargs -- git push",
+    "ssh h -- git push",
+    'bash -c "git log -- x"',
+    'bash -c "git push -- origin main"',
+    # git の前置設定・オプションで任意のプログラムが起動する形 (allow にならない)
+    "git log",
+    "git status --short",
+    "git diff HEAD~1 -- f",
+    "git -C dir log -- f",
+    "git -c core.pager='sh -c \"id\"' --paginate log",
+    "git -c core.pager=id log -- file.txt",
+    "git --paginate log",
+    "git -c diff.external=id diff --ext-diff",
+    "git -c core.fsmonitor=id status",
+    "git --exec-path=/tmp log",
+    "env git -c core.pager=id log",
+    "git log -- x; git -c core.pager=id log",
+    "git log -p",
+    "git diff -p",
+    "git log -c",
+    "git show -c HEAD",
+    "git log -p -- f",
+    "git -p log",
+    "git -c core.pager=x log -p",
+    "git -ccore.pager=x log",
+    "GIT_PAGER='sh -c id' git log",
+    "GIT_EXTERNAL_DIFF=id git diff",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status",
+    "GIT_DIR=/tmp/x git log",
+    "GIT_CONFIG_GLOBAL=/tmp/x git log",
+    "LD_PRELOAD=/tmp/x.so git log",
+    "PATH=/tmp:$PATH git log",
+    "FOO=1 git log",
+    "FOO=1 ls",
+    "env GIT_PAGER=id git log",
+    "env -i git log",
+    "env -u PATH git log",
+    "command FOO=1 git log",
+    "nice FOO=1 git log",
+    'bash -c "GIT_PAGER=x git log"',
+    "GIT_PAGER=x git log; git log",
+    "( GIT_PAGER=id git log )",
+    "{ GIT_PAGER=id git log; }",
+    "if git status; then GIT_PAGER=id git log; fi",
+    "xargs env GIT_PAGER=id git log",
+    "xargs -I{} env GIT_PAGER=id git log",
+    "env LANG=C${IFS}GIT_PAGER=id git log",
+    "git log $HOME",
+    "export GIT_PAGER=id; git log",
+    "git log --grep=a=b",
+    "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log",
+    "LANG=C git log",
+    "LC_ALL=C TZ=UTC git log",
+    "git log --ext-diff",
+    "git diff --textconv",
+    "git -C dir -c core.pager=x log",
+    "git --git-dir=.git -c a=b log",
+    "env git -p log",
+    'bash -c "git -p log"',
+    "mise exec -- git push",
+    "npm run x -- git push",
+    "git log -- x; kubectl exec p -- git push",
+)
 HOME = str(Path.home())
 
 # ファイルツールの対象。${ROOT} / ${HOME} は試験側で展開する
@@ -130,6 +209,9 @@ def requests() -> list[Any]:
         for role in ROLES:
             out.append(_request("bash", role, "${ROOT}", command=command))
         out.append(_request("bash", "implementer", "${ROOT}", bypass=True, command=command))
+    for command in DASH_COMMANDS:
+        for role in DASH_ROLES:
+            out.append(_request("bash", role, "${ROOT}", command=command))
     for tool in FILE_TOOLS:
         for role in ROLES:
             for cwd in FILE_CWDS:

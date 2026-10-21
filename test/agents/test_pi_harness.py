@@ -400,11 +400,7 @@ def test_review_child_reads_with_the_same_read_only_commands_as_explore(env):
     assert not (env["proj"] / "made-by-review").exists()
 
 
-# `--` を含む形は、判定器が `--` の後ろを「別のコマンド」として判定し、パスが allow に無くて拒まれる (既知の限界)。
 # see docs/spec/pi-guard.md#review-への依頼の書き方
-DOUBLE_DASH = pytest.mark.xfail(strict=True, reason="`--` の後ろを別コマンドとして判定する")
-
-
 @pytest.mark.parametrize(
     "command",
     [
@@ -415,10 +411,10 @@ DOUBLE_DASH = pytest.mark.xfail(strict=True, reason="`--` の後ろを別コマ�
         "git diff HEAD~1",
         "git diff HEAD",
         "git status --short",
-        pytest.param("git show HEAD -- file.txt", marks=DOUBLE_DASH),
-        pytest.param("git diff HEAD~1 -- file.txt", marks=DOUBLE_DASH),
-        pytest.param("git diff -- file.txt", marks=DOUBLE_DASH),
-        pytest.param("git log -- file.txt", marks=DOUBLE_DASH),
+        "git show HEAD -- file.txt",
+        "git diff HEAD~1 -- file.txt",
+        "git diff -- file.txt",
+        "git log -- file.txt",
     ],
 )
 def test_review_child_may_read_a_revision_with_git(env, command):
@@ -660,6 +656,79 @@ def test_background_child_reports_status_and_notifies_on_completion(env):
     assert "running" in proc.stdout and "calls" in proc.stdout, proc.stdout
     # 完了は followUp で親へ届く (ターンが再開する)
     assert "FINISHED=バックグラウンドの子" in proc.stdout and "USERS=1" in proc.stdout, proc.stdout
+
+
+def test_finished_result_can_be_read_with_status_until_the_job_is_closed(env):
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="once", keep=True)],
+            [_task(jobId="{{JOB}}", status=True)],
+            [_task(jobId="{{JOB}}", close=True)],
+            [_task(jobId="{{JOB}}", status=True)],
+        ],
+        FAUX_RESULT_CHARS="2000",
+    )
+    assert proc.returncode == 0, proc.stderr
+    # 完了後の status は直近の結果の全文を返し、close した後は結果を返さない (状態だけが closed と出る)
+    assert proc.stdout.count("last result (done") == 1, proc.stdout
+    assert "(worker): closed" in proc.stdout, proc.stdout
+
+
+def test_background_notification_has_sequence_and_times_and_the_result_is_saved(env):
+    import re
+
+    proc = _rounds(
+        env,
+        [[_task(agent="worker", task="slow", background=True)]],
+        FAUX_DELAY_MS="500",
+        FAUX_FINAL_DELAY_MS="3000",
+        FAUX_ECHO_CHILD_FINISHED="1",
+    )
+    assert proc.returncode == 0, proc.stderr
+    m = re.search(r"\(#1 起動 \d\d:\d\d:\d\d / 完了 \d\d:\d\d:\d\d\)", proc.stdout)
+    assert m, proc.stdout
+    saved = list((env["proj"] / ".tmp" / "subagents").glob("1-job-*.md"))
+    assert len(saved) == 1, proc.stdout
+    assert f"結果の全文: .tmp/subagents/{saved[0].name}" in proc.stdout, proc.stdout
+    body = saved[0].read_text(encoding="utf-8")
+    assert "#1 起動" in body and "answer:" in body, body
+
+
+def test_batch_heading_and_saved_file_do_not_leak_a_secret_in_the_task(env):
+    task = f'password = "{SECRET}" を使って調べる'
+    proc = _rounds(
+        env,
+        [[_task(tasks=[{"agent": "worker", "task": task}], background=True)]],
+        FAUX_DELAY_MS="500",
+        FAUX_FINAL_DELAY_MS="3000",
+        FAUX_ECHO_CHILD_FINISHED="1",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "FINISHED=バックグラウンドの 1 件の子" in proc.stdout, proc.stdout
+    assert SECRET not in proc.stdout, proc.stdout
+    saved = list((env["proj"] / ".tmp" / "subagents").glob("1-batch-*.md"))
+    assert len(saved) == 1, proc.stdout
+    assert SECRET not in saved[0].read_text(encoding="utf-8")
+
+
+def test_symlinked_save_dir_is_not_written_but_the_notification_still_arrives(env):
+    outside = env["tmp"] / "outside"
+    outside.mkdir()
+    (env["proj"] / ".tmp").mkdir()
+    (env["proj"] / ".tmp" / "subagents").symlink_to(outside, target_is_directory=True)
+    proc = _rounds(
+        env,
+        [[_task(agent="worker", task="slow", background=True)]],
+        FAUX_DELAY_MS="500",
+        FAUX_FINAL_DELAY_MS="3000",
+        FAUX_ECHO_CHILD_FINISHED="1",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "FINISHED=バックグラウンドの子" in proc.stdout, proc.stdout
+    assert "結果の全文" not in proc.stdout, proc.stdout
+    assert list(outside.iterdir()) == []
+    assert "シンボリックリンク" in proc.stderr, proc.stderr
 
 
 def test_steer_reaches_a_running_child(env):

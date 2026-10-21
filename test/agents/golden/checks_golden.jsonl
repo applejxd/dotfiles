@@ -4544,7 +4544,7 @@
 {"arg": "git branch -D feature/old", "fn": "check", "name": "check_policy_ask", "ok": "`git branch -D` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: git branch -D feature/old\n内容を確認して問題なければ承認してください。"}
 {"arg": "git checkout -- .", "fn": "heredoc", "literal": [], "out": "git checkout -- ."}
 {"arg": "git checkout -- .", "fn": "expand_cd", "out": ""}
-{"arg": "git checkout -- .", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["checkout", "checkout"], ["--", "--"], [".", "."]]}, {"redirects": [], "words": [[".", "."]]}, {"redirects": [], "words": [[".", "."]]}, {"redirects": [], "words": [["git", "git"], ["checkout", "checkout"], ["--", "--"], [".", "."]]}]}
+{"arg": "git checkout -- .", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["checkout", "checkout"], ["--", "--"], [".", "."]]}, {"redirects": [], "words": [["git", "git"], ["checkout", "checkout"], ["--", "--"], [".", "."]]}]}
 {"arg": "git checkout -- .", "fn": "write_targets", "ok": []}
 {"arg": "git checkout -- .", "fn": "http_calls", "ok": []}
 {"arg": "git checkout -- .", "fn": "gh_calls", "ok": []}
@@ -5261,7 +5261,7 @@
 {"arg": "mawk '/secret/ {print $2}' app.log", "fn": "fetched_paths", "ok": []}
 {"arg": "mise exec -- git push", "fn": "heredoc", "literal": [], "out": "mise exec -- git push"}
 {"arg": "mise exec -- git push", "fn": "expand_cd", "out": ""}
-{"arg": "mise exec -- git push", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["mise", "mise"], ["exec", "exec"], ["--", "--"], ["git", "git"], ["push", "push"]]}]}
+{"arg": "mise exec -- git push", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["mise", "mise"], ["exec", "exec"], ["--", "--"], ["git", "git"], ["push", "push"]]}]}
 {"arg": "mise exec -- git push", "fn": "write_targets", "ok": []}
 {"arg": "mise exec -- git push", "fn": "http_calls", "ok": []}
 {"arg": "mise exec -- git push", "fn": "gh_calls", "ok": []}
@@ -8506,6 +8506,497 @@
 {"arg": "a && b || c ; d & e\nf", "fn": "http_calls", "ok": []}
 {"arg": "a && b || c ; d & e\nf", "fn": "gh_calls", "ok": []}
 {"arg": "a && b || c ; d & e\nf", "fn": "fetched_paths", "ok": []}
+{"arg": "git log -- file.txt", "fn": "heredoc", "literal": [], "out": "git log -- file.txt"}
+{"arg": "git log -- file.txt", "fn": "expand_cd", "out": ""}
+{"arg": "git log -- file.txt", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}]}
+{"arg": "git log -- file.txt", "fn": "write_targets", "ok": []}
+{"arg": "git log -- file.txt", "fn": "http_calls", "ok": []}
+{"arg": "git log -- file.txt", "fn": "gh_calls", "ok": []}
+{"arg": "git log -- file.txt", "fn": "fetched_paths", "ok": []}
+{"arg": "git --no-pager log -- file.txt", "fn": "heredoc", "literal": [], "out": "git --no-pager log -- file.txt"}
+{"arg": "git --no-pager log -- file.txt", "fn": "expand_cd", "out": ""}
+{"arg": "git --no-pager log -- file.txt", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}, {"redirects": [], "words": [["git", "git"], ["--no-pager", "--no-pager"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}]}
+{"arg": "git --no-pager log -- file.txt", "fn": "write_targets", "ok": []}
+{"arg": "git --no-pager log -- file.txt", "fn": "http_calls", "ok": []}
+{"arg": "git --no-pager log -- file.txt", "fn": "gh_calls", "ok": []}
+{"arg": "git --no-pager log -- file.txt", "fn": "fetched_paths", "ok": []}
+{"arg": "git -C dir log -- file.txt", "fn": "heredoc", "literal": [], "out": "git -C dir log -- file.txt"}
+{"arg": "git -C dir log -- file.txt", "fn": "expand_cd", "out": ""}
+{"arg": "git -C dir log -- file.txt", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}, {"redirects": [], "words": [["git", "git"], ["-C", "-C"], ["dir", "dir"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}]}
+{"arg": "git -C dir log -- file.txt", "fn": "write_targets", "ok": []}
+{"arg": "git -C dir log -- file.txt", "fn": "http_calls", "ok": []}
+{"arg": "git -C dir log -- file.txt", "fn": "gh_calls", "ok": []}
+{"arg": "git -C dir log -- file.txt", "fn": "fetched_paths", "ok": []}
+{"arg": "env git log -- file.txt", "fn": "heredoc", "literal": [], "out": "env git log -- file.txt"}
+{"arg": "env git log -- file.txt", "fn": "expand_cd", "out": ""}
+{"arg": "env git log -- file.txt", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}, {"redirects": [], "words": [["env", "env"], ["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}]}
+{"arg": "env git log -- file.txt", "fn": "write_targets", "ok": []}
+{"arg": "env git log -- file.txt", "fn": "http_calls", "ok": []}
+{"arg": "env git log -- file.txt", "fn": "gh_calls", "ok": []}
+{"arg": "env git log -- file.txt", "fn": "fetched_paths", "ok": []}
+{"arg": "sudo git log -- file.txt", "fn": "heredoc", "literal": [], "out": "sudo git log -- file.txt"}
+{"arg": "sudo git log -- file.txt", "fn": "expand_cd", "out": ""}
+{"arg": "sudo git log -- file.txt", "fn": "commands", "ok": [{"redirects": [], "words": [["sudo", "sudo"], ["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}, {"redirects": [], "words": [["file.txt", "file.txt"]]}, {"redirects": [], "words": [["file.txt", "file.txt"]]}, {"redirects": [], "words": [["sudo", "sudo"], ["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}]}
+{"arg": "sudo git log -- file.txt", "fn": "write_targets", "ok": []}
+{"arg": "sudo git log -- file.txt", "fn": "http_calls", "ok": []}
+{"arg": "sudo git log -- file.txt", "fn": "gh_calls", "ok": []}
+{"arg": "sudo git log -- file.txt", "fn": "fetched_paths", "ok": []}
+{"arg": "sudo git log -- file.txt", "fn": "check", "name": "check_policy_deny", "ok": "`sudo` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "xargs git log --", "fn": "heredoc", "literal": [], "out": "xargs git log --"}
+{"arg": "xargs git log --", "fn": "expand_cd", "out": ""}
+{"arg": "xargs git log --", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"]]}, {"redirects": [], "words": [["xargs", "xargs"], ["git", "git"], ["log", "log"], ["--", "--"]]}]}
+{"arg": "xargs git log --", "fn": "write_targets", "ok": []}
+{"arg": "xargs git log --", "fn": "http_calls", "ok": []}
+{"arg": "xargs git log --", "fn": "gh_calls", "ok": []}
+{"arg": "xargs git log --", "fn": "fetched_paths", "ok": []}
+{"arg": "git show HEAD -- file.txt", "fn": "heredoc", "literal": [], "out": "git show HEAD -- file.txt"}
+{"arg": "git show HEAD -- file.txt", "fn": "expand_cd", "out": ""}
+{"arg": "git show HEAD -- file.txt", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["show", "show"], ["HEAD", "HEAD"], ["--", "--"], ["file.txt", "file.txt"]]}, {"redirects": [], "words": [["git", "git"], ["show", "show"], ["HEAD", "HEAD"], ["--", "--"], ["file.txt", "file.txt"]]}]}
+{"arg": "git show HEAD -- file.txt", "fn": "write_targets", "ok": []}
+{"arg": "git show HEAD -- file.txt", "fn": "http_calls", "ok": []}
+{"arg": "git show HEAD -- file.txt", "fn": "gh_calls", "ok": []}
+{"arg": "git show HEAD -- file.txt", "fn": "fetched_paths", "ok": []}
+{"arg": "git diff -- a b", "fn": "heredoc", "literal": [], "out": "git diff -- a b"}
+{"arg": "git diff -- a b", "fn": "expand_cd", "out": ""}
+{"arg": "git diff -- a b", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["--", "--"], ["a", "a"], ["b", "b"]]}, {"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["--", "--"], ["a", "a"], ["b", "b"]]}]}
+{"arg": "git diff -- a b", "fn": "write_targets", "ok": []}
+{"arg": "git diff -- a b", "fn": "http_calls", "ok": []}
+{"arg": "git diff -- a b", "fn": "gh_calls", "ok": []}
+{"arg": "git diff -- a b", "fn": "fetched_paths", "ok": []}
+{"arg": "git status -- .", "fn": "heredoc", "literal": [], "out": "git status -- ."}
+{"arg": "git status -- .", "fn": "expand_cd", "out": ""}
+{"arg": "git status -- .", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["status", "status"], ["--", "--"], [".", "."]]}, {"redirects": [], "words": [["git", "git"], ["status", "status"], ["--", "--"], [".", "."]]}]}
+{"arg": "git status -- .", "fn": "write_targets", "ok": []}
+{"arg": "git status -- .", "fn": "http_calls", "ok": []}
+{"arg": "git status -- .", "fn": "gh_calls", "ok": []}
+{"arg": "git status -- .", "fn": "fetched_paths", "ok": []}
+{"arg": "git push -- origin main", "fn": "heredoc", "literal": [], "out": "git push -- origin main"}
+{"arg": "git push -- origin main", "fn": "expand_cd", "out": ""}
+{"arg": "git push -- origin main", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["push", "push"], ["--", "--"], ["origin", "origin"], ["main", "main"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"], ["--", "--"], ["origin", "origin"], ["main", "main"]]}]}
+{"arg": "git push -- origin main", "fn": "write_targets", "ok": []}
+{"arg": "git push -- origin main", "fn": "http_calls", "ok": []}
+{"arg": "git push -- origin main", "fn": "gh_calls", "ok": []}
+{"arg": "git push -- origin main", "fn": "fetched_paths", "ok": []}
+{"arg": "git push -- origin main", "fn": "check", "name": "check_policy_deny", "ok": "`git push` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "git log --output=file -- x", "fn": "heredoc", "literal": [], "out": "git log --output=file -- x"}
+{"arg": "git log --output=file -- x", "fn": "expand_cd", "out": ""}
+{"arg": "git log --output=file -- x", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--output=file", "--output=file"], ["--", "--"], ["x", "x"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["--output=file", "--output=file"], ["--", "--"], ["x", "x"]]}]}
+{"arg": "git log --output=file -- x", "fn": "write_targets", "ok": []}
+{"arg": "git log --output=file -- x", "fn": "http_calls", "ok": []}
+{"arg": "git log --output=file -- x", "fn": "gh_calls", "ok": []}
+{"arg": "git log --output=file -- x", "fn": "fetched_paths", "ok": []}
+{"arg": "kubectl exec p -- git push", "fn": "heredoc", "literal": [], "out": "kubectl exec p -- git push"}
+{"arg": "kubectl exec p -- git push", "fn": "expand_cd", "out": ""}
+{"arg": "kubectl exec p -- git push", "fn": "commands", "ok": [{"redirects": [], "words": [["kubectl", "kubectl"], ["exec", "exec"], ["p", "p"], ["--", "--"], ["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["kubectl", "kubectl"], ["exec", "exec"], ["p", "p"], ["--", "--"], ["git", "git"], ["push", "push"]]}]}
+{"arg": "kubectl exec p -- git push", "fn": "write_targets", "ok": []}
+{"arg": "kubectl exec p -- git push", "fn": "http_calls", "ok": []}
+{"arg": "kubectl exec p -- git push", "fn": "gh_calls", "ok": []}
+{"arg": "kubectl exec p -- git push", "fn": "fetched_paths", "ok": []}
+{"arg": "kubectl exec p -- git push", "fn": "check", "name": "check_policy_deny", "ok": "`git push` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "xargs -- git push", "fn": "heredoc", "literal": [], "out": "xargs -- git push"}
+{"arg": "xargs -- git push", "fn": "expand_cd", "out": ""}
+{"arg": "xargs -- git push", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["xargs", "xargs"], ["--", "--"], ["git", "git"], ["push", "push"]]}]}
+{"arg": "xargs -- git push", "fn": "write_targets", "ok": []}
+{"arg": "xargs -- git push", "fn": "http_calls", "ok": []}
+{"arg": "xargs -- git push", "fn": "gh_calls", "ok": []}
+{"arg": "xargs -- git push", "fn": "fetched_paths", "ok": []}
+{"arg": "xargs -- git push", "fn": "check", "name": "check_policy_deny", "ok": "`git push` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "ssh h -- git push", "fn": "heredoc", "literal": [], "out": "ssh h -- git push"}
+{"arg": "ssh h -- git push", "fn": "expand_cd", "out": ""}
+{"arg": "ssh h -- git push", "fn": "commands", "ok": [{"redirects": [], "words": [["ssh", "ssh"], ["h", "h"], ["--", "--"], ["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["ssh", "ssh"], ["h", "h"], ["--", "--"], ["git", "git"], ["push", "push"]]}]}
+{"arg": "ssh h -- git push", "fn": "write_targets", "ok": []}
+{"arg": "ssh h -- git push", "fn": "http_calls", "ok": []}
+{"arg": "ssh h -- git push", "fn": "gh_calls", "ok": []}
+{"arg": "ssh h -- git push", "fn": "fetched_paths", "ok": []}
+{"arg": "ssh h -- git push", "fn": "check", "name": "check_policy_deny", "ok": "`ssh` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "bash -c \"git log -- x\"", "fn": "heredoc", "literal": [], "out": "bash -c \"git log -- x\""}
+{"arg": "bash -c \"git log -- x\"", "fn": "expand_cd", "out": ""}
+{"arg": "bash -c \"git log -- x\"", "fn": "commands", "ok": [{"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"git log -- x\"", "git log -- x"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["x", "x"]]}, {"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"git log -- x\"", "git log -- x"]]}]}
+{"arg": "bash -c \"git log -- x\"", "fn": "write_targets", "ok": []}
+{"arg": "bash -c \"git log -- x\"", "fn": "http_calls", "ok": []}
+{"arg": "bash -c \"git log -- x\"", "fn": "gh_calls", "ok": []}
+{"arg": "bash -c \"git log -- x\"", "fn": "fetched_paths", "ok": []}
+{"arg": "bash -c \"git push -- origin main\"", "fn": "heredoc", "literal": [], "out": "bash -c \"git push -- origin main\""}
+{"arg": "bash -c \"git push -- origin main\"", "fn": "expand_cd", "out": ""}
+{"arg": "bash -c \"git push -- origin main\"", "fn": "commands", "ok": [{"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"git push -- origin main\"", "git push -- origin main"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"], ["--", "--"], ["origin", "origin"], ["main", "main"]]}, {"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"git push -- origin main\"", "git push -- origin main"]]}]}
+{"arg": "bash -c \"git push -- origin main\"", "fn": "write_targets", "ok": []}
+{"arg": "bash -c \"git push -- origin main\"", "fn": "http_calls", "ok": []}
+{"arg": "bash -c \"git push -- origin main\"", "fn": "gh_calls", "ok": []}
+{"arg": "bash -c \"git push -- origin main\"", "fn": "fetched_paths", "ok": []}
+{"arg": "bash -c \"git push -- origin main\"", "fn": "check", "name": "check_policy_deny", "ok": "`git push` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "git log", "fn": "heredoc", "literal": [], "out": "git log"}
+{"arg": "git log", "fn": "expand_cd", "out": ""}
+{"arg": "git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}]}
+{"arg": "git log", "fn": "write_targets", "ok": []}
+{"arg": "git log", "fn": "http_calls", "ok": []}
+{"arg": "git log", "fn": "gh_calls", "ok": []}
+{"arg": "git log", "fn": "fetched_paths", "ok": []}
+{"arg": "git status --short", "fn": "heredoc", "literal": [], "out": "git status --short"}
+{"arg": "git status --short", "fn": "expand_cd", "out": ""}
+{"arg": "git status --short", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["status", "status"], ["--short", "--short"]]}, {"redirects": [], "words": [["git", "git"], ["status", "status"], ["--short", "--short"]]}]}
+{"arg": "git status --short", "fn": "write_targets", "ok": []}
+{"arg": "git status --short", "fn": "http_calls", "ok": []}
+{"arg": "git status --short", "fn": "gh_calls", "ok": []}
+{"arg": "git status --short", "fn": "fetched_paths", "ok": []}
+{"arg": "git diff HEAD~1 -- f", "fn": "heredoc", "literal": [], "out": "git diff HEAD~1 -- f"}
+{"arg": "git diff HEAD~1 -- f", "fn": "expand_cd", "out": ""}
+{"arg": "git diff HEAD~1 -- f", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["HEAD~1", "HEAD~1"], ["--", "--"], ["f", "f"]]}, {"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["HEAD~1", "HEAD~1"], ["--", "--"], ["f", "f"]]}]}
+{"arg": "git diff HEAD~1 -- f", "fn": "write_targets", "ok": []}
+{"arg": "git diff HEAD~1 -- f", "fn": "http_calls", "ok": []}
+{"arg": "git diff HEAD~1 -- f", "fn": "gh_calls", "ok": []}
+{"arg": "git diff HEAD~1 -- f", "fn": "fetched_paths", "ok": []}
+{"arg": "git -c core.pager='sh -c \"id\"' --paginate log", "fn": "heredoc", "literal": [], "out": "git -c core.pager='sh -c \"id\"' --paginate log"}
+{"arg": "git -c core.pager='sh -c \"id\"' --paginate log", "fn": "expand_cd", "out": ""}
+{"arg": "git -c core.pager='sh -c \"id\"' --paginate log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["-c", "-c"], ["core.pager='sh -c \"id\"'", "core.pager=sh -c \"id\""], ["--paginate", "--paginate"], ["log", "log"]]}]}
+{"arg": "git -c core.pager='sh -c \"id\"' --paginate log", "fn": "write_targets", "ok": []}
+{"arg": "git -c core.pager='sh -c \"id\"' --paginate log", "fn": "http_calls", "ok": []}
+{"arg": "git -c core.pager='sh -c \"id\"' --paginate log", "fn": "gh_calls", "ok": []}
+{"arg": "git -c core.pager='sh -c \"id\"' --paginate log", "fn": "fetched_paths", "ok": []}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "heredoc", "literal": [], "out": "git -c core.pager=id log -- file.txt"}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "expand_cd", "out": ""}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}, {"redirects": [], "words": [["git", "git"], ["-c", "-c"], ["core.pager=id", "core.pager=id"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}]}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "write_targets", "ok": []}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "http_calls", "ok": []}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "gh_calls", "ok": []}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "fetched_paths", "ok": []}
+{"arg": "git --paginate log", "fn": "heredoc", "literal": [], "out": "git --paginate log"}
+{"arg": "git --paginate log", "fn": "expand_cd", "out": ""}
+{"arg": "git --paginate log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["--paginate", "--paginate"], ["log", "log"]]}]}
+{"arg": "git --paginate log", "fn": "write_targets", "ok": []}
+{"arg": "git --paginate log", "fn": "http_calls", "ok": []}
+{"arg": "git --paginate log", "fn": "gh_calls", "ok": []}
+{"arg": "git --paginate log", "fn": "fetched_paths", "ok": []}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "heredoc", "literal": [], "out": "git -c diff.external=id diff --ext-diff"}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "expand_cd", "out": ""}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["--ext-diff", "--ext-diff"]]}, {"redirects": [], "words": [["git", "git"], ["-c", "-c"], ["diff.external=id", "diff.external=id"], ["diff", "diff"], ["--ext-diff", "--ext-diff"]]}]}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "write_targets", "ok": []}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "http_calls", "ok": []}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "gh_calls", "ok": []}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "fetched_paths", "ok": []}
+{"arg": "git -c core.fsmonitor=id status", "fn": "heredoc", "literal": [], "out": "git -c core.fsmonitor=id status"}
+{"arg": "git -c core.fsmonitor=id status", "fn": "expand_cd", "out": ""}
+{"arg": "git -c core.fsmonitor=id status", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["status", "status"]]}, {"redirects": [], "words": [["git", "git"], ["-c", "-c"], ["core.fsmonitor=id", "core.fsmonitor=id"], ["status", "status"]]}]}
+{"arg": "git -c core.fsmonitor=id status", "fn": "write_targets", "ok": []}
+{"arg": "git -c core.fsmonitor=id status", "fn": "http_calls", "ok": []}
+{"arg": "git -c core.fsmonitor=id status", "fn": "gh_calls", "ok": []}
+{"arg": "git -c core.fsmonitor=id status", "fn": "fetched_paths", "ok": []}
+{"arg": "git --exec-path=/tmp log", "fn": "heredoc", "literal": [], "out": "git --exec-path=/tmp log"}
+{"arg": "git --exec-path=/tmp log", "fn": "expand_cd", "out": ""}
+{"arg": "git --exec-path=/tmp log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["--exec-path=/tmp", "--exec-path=/tmp"], ["log", "log"]]}]}
+{"arg": "git --exec-path=/tmp log", "fn": "write_targets", "ok": []}
+{"arg": "git --exec-path=/tmp log", "fn": "http_calls", "ok": []}
+{"arg": "git --exec-path=/tmp log", "fn": "gh_calls", "ok": []}
+{"arg": "git --exec-path=/tmp log", "fn": "fetched_paths", "ok": []}
+{"arg": "env git -c core.pager=id log", "fn": "heredoc", "literal": [], "out": "env git -c core.pager=id log"}
+{"arg": "env git -c core.pager=id log", "fn": "expand_cd", "out": ""}
+{"arg": "env git -c core.pager=id log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["git", "git"], ["-c", "-c"], ["core.pager=id", "core.pager=id"], ["log", "log"]]}]}
+{"arg": "env git -c core.pager=id log", "fn": "write_targets", "ok": []}
+{"arg": "env git -c core.pager=id log", "fn": "http_calls", "ok": []}
+{"arg": "env git -c core.pager=id log", "fn": "gh_calls", "ok": []}
+{"arg": "env git -c core.pager=id log", "fn": "fetched_paths", "ok": []}
+{"arg": "git log -p", "fn": "heredoc", "literal": [], "out": "git log -p"}
+{"arg": "git log -p", "fn": "expand_cd", "out": ""}
+{"arg": "git log -p", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"]]}]}
+{"arg": "git log -p", "fn": "write_targets", "ok": []}
+{"arg": "git log -p", "fn": "http_calls", "ok": []}
+{"arg": "git log -p", "fn": "gh_calls", "ok": []}
+{"arg": "git log -p", "fn": "fetched_paths", "ok": []}
+{"arg": "git diff -p", "fn": "heredoc", "literal": [], "out": "git diff -p"}
+{"arg": "git diff -p", "fn": "expand_cd", "out": ""}
+{"arg": "git diff -p", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["-p", "-p"]]}, {"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["-p", "-p"]]}]}
+{"arg": "git diff -p", "fn": "write_targets", "ok": []}
+{"arg": "git diff -p", "fn": "http_calls", "ok": []}
+{"arg": "git diff -p", "fn": "gh_calls", "ok": []}
+{"arg": "git diff -p", "fn": "fetched_paths", "ok": []}
+{"arg": "git log -c", "fn": "heredoc", "literal": [], "out": "git log -c"}
+{"arg": "git log -c", "fn": "expand_cd", "out": ""}
+{"arg": "git log -c", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["-c", "-c"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["-c", "-c"]]}]}
+{"arg": "git log -c", "fn": "write_targets", "ok": []}
+{"arg": "git log -c", "fn": "http_calls", "ok": []}
+{"arg": "git log -c", "fn": "gh_calls", "ok": []}
+{"arg": "git log -c", "fn": "fetched_paths", "ok": []}
+{"arg": "git show -c HEAD", "fn": "heredoc", "literal": [], "out": "git show -c HEAD"}
+{"arg": "git show -c HEAD", "fn": "expand_cd", "out": ""}
+{"arg": "git show -c HEAD", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["show", "show"], ["-c", "-c"], ["HEAD", "HEAD"]]}, {"redirects": [], "words": [["git", "git"], ["show", "show"], ["-c", "-c"], ["HEAD", "HEAD"]]}]}
+{"arg": "git show -c HEAD", "fn": "write_targets", "ok": []}
+{"arg": "git show -c HEAD", "fn": "http_calls", "ok": []}
+{"arg": "git show -c HEAD", "fn": "gh_calls", "ok": []}
+{"arg": "git show -c HEAD", "fn": "fetched_paths", "ok": []}
+{"arg": "git log -p -- f", "fn": "heredoc", "literal": [], "out": "git log -p -- f"}
+{"arg": "git log -p -- f", "fn": "expand_cd", "out": ""}
+{"arg": "git log -p -- f", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"], ["--", "--"], ["f", "f"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"], ["--", "--"], ["f", "f"]]}]}
+{"arg": "git log -p -- f", "fn": "write_targets", "ok": []}
+{"arg": "git log -p -- f", "fn": "http_calls", "ok": []}
+{"arg": "git log -p -- f", "fn": "gh_calls", "ok": []}
+{"arg": "git log -p -- f", "fn": "fetched_paths", "ok": []}
+{"arg": "git -p log", "fn": "heredoc", "literal": [], "out": "git -p log"}
+{"arg": "git -p log", "fn": "expand_cd", "out": ""}
+{"arg": "git -p log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["-p", "-p"], ["log", "log"]]}]}
+{"arg": "git -p log", "fn": "write_targets", "ok": []}
+{"arg": "git -p log", "fn": "http_calls", "ok": []}
+{"arg": "git -p log", "fn": "gh_calls", "ok": []}
+{"arg": "git -p log", "fn": "fetched_paths", "ok": []}
+{"arg": "git -c core.pager=x log -p", "fn": "heredoc", "literal": [], "out": "git -c core.pager=x log -p"}
+{"arg": "git -c core.pager=x log -p", "fn": "expand_cd", "out": ""}
+{"arg": "git -c core.pager=x log -p", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"]]}, {"redirects": [], "words": [["git", "git"], ["-c", "-c"], ["core.pager=x", "core.pager=x"], ["log", "log"], ["-p", "-p"]]}]}
+{"arg": "git -c core.pager=x log -p", "fn": "write_targets", "ok": []}
+{"arg": "git -c core.pager=x log -p", "fn": "http_calls", "ok": []}
+{"arg": "git -c core.pager=x log -p", "fn": "gh_calls", "ok": []}
+{"arg": "git -c core.pager=x log -p", "fn": "fetched_paths", "ok": []}
+{"arg": "git -ccore.pager=x log", "fn": "heredoc", "literal": [], "out": "git -ccore.pager=x log"}
+{"arg": "git -ccore.pager=x log", "fn": "expand_cd", "out": ""}
+{"arg": "git -ccore.pager=x log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["-ccore.pager=x", "-ccore.pager=x"], ["log", "log"]]}]}
+{"arg": "git -ccore.pager=x log", "fn": "write_targets", "ok": []}
+{"arg": "git -ccore.pager=x log", "fn": "http_calls", "ok": []}
+{"arg": "git -ccore.pager=x log", "fn": "gh_calls", "ok": []}
+{"arg": "git -ccore.pager=x log", "fn": "fetched_paths", "ok": []}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "heredoc", "literal": [], "out": "GIT_PAGER='sh -c id' git log"}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "expand_cd", "out": ""}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_PAGER='sh -c id'", "GIT_PAGER=sh -c id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "write_targets", "ok": []}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "http_calls", "ok": []}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "gh_calls", "ok": []}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "fetched_paths", "ok": []}
+{"arg": "GIT_EXTERNAL_DIFF=id git diff", "fn": "heredoc", "literal": [], "out": "GIT_EXTERNAL_DIFF=id git diff"}
+{"arg": "GIT_EXTERNAL_DIFF=id git diff", "fn": "expand_cd", "out": ""}
+{"arg": "GIT_EXTERNAL_DIFF=id git diff", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"]]}, {"redirects": [], "words": [["GIT_EXTERNAL_DIFF=id", "GIT_EXTERNAL_DIFF=id"], ["git", "git"], ["diff", "diff"]]}]}
+{"arg": "GIT_EXTERNAL_DIFF=id git diff", "fn": "write_targets", "ok": []}
+{"arg": "GIT_EXTERNAL_DIFF=id git diff", "fn": "http_calls", "ok": []}
+{"arg": "GIT_EXTERNAL_DIFF=id git diff", "fn": "gh_calls", "ok": []}
+{"arg": "GIT_EXTERNAL_DIFF=id git diff", "fn": "fetched_paths", "ok": []}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "heredoc", "literal": [], "out": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status"}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "expand_cd", "out": ""}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["status", "status"]]}, {"redirects": [], "words": [["GIT_CONFIG_COUNT=1", "GIT_CONFIG_COUNT=1"], ["GIT_CONFIG_KEY_0=core.fsmonitor", "GIT_CONFIG_KEY_0=core.fsmonitor"], ["GIT_CONFIG_VALUE_0=id", "GIT_CONFIG_VALUE_0=id"], ["git", "git"], ["status", "status"]]}]}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "write_targets", "ok": []}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "http_calls", "ok": []}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "gh_calls", "ok": []}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "fetched_paths", "ok": []}
+{"arg": "GIT_DIR=/tmp/x git log", "fn": "heredoc", "literal": [], "out": "GIT_DIR=/tmp/x git log"}
+{"arg": "GIT_DIR=/tmp/x git log", "fn": "expand_cd", "out": ""}
+{"arg": "GIT_DIR=/tmp/x git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_DIR=/tmp/x", "GIT_DIR=/tmp/x"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "GIT_DIR=/tmp/x git log", "fn": "write_targets", "ok": []}
+{"arg": "GIT_DIR=/tmp/x git log", "fn": "http_calls", "ok": []}
+{"arg": "GIT_DIR=/tmp/x git log", "fn": "gh_calls", "ok": []}
+{"arg": "GIT_DIR=/tmp/x git log", "fn": "fetched_paths", "ok": []}
+{"arg": "GIT_CONFIG_GLOBAL=/tmp/x git log", "fn": "heredoc", "literal": [], "out": "GIT_CONFIG_GLOBAL=/tmp/x git log"}
+{"arg": "GIT_CONFIG_GLOBAL=/tmp/x git log", "fn": "expand_cd", "out": ""}
+{"arg": "GIT_CONFIG_GLOBAL=/tmp/x git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_CONFIG_GLOBAL=/tmp/x", "GIT_CONFIG_GLOBAL=/tmp/x"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "GIT_CONFIG_GLOBAL=/tmp/x git log", "fn": "write_targets", "ok": []}
+{"arg": "GIT_CONFIG_GLOBAL=/tmp/x git log", "fn": "http_calls", "ok": []}
+{"arg": "GIT_CONFIG_GLOBAL=/tmp/x git log", "fn": "gh_calls", "ok": []}
+{"arg": "GIT_CONFIG_GLOBAL=/tmp/x git log", "fn": "fetched_paths", "ok": []}
+{"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "heredoc", "literal": [], "out": "LD_PRELOAD=/tmp/x.so git log"}
+{"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "expand_cd", "out": ""}
+{"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["LD_PRELOAD=/tmp/x.so", "LD_PRELOAD=/tmp/x.so"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "write_targets", "ok": []}
+{"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "http_calls", "ok": []}
+{"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "gh_calls", "ok": []}
+{"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "fetched_paths", "ok": []}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "heredoc", "literal": [], "out": "PATH=/tmp:$PATH git log"}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "expand_cd", "out": ""}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["PATH=/tmp:$PATH", "PATH=/tmp:$PATH"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "write_targets", "ok": []}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "http_calls", "ok": []}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "gh_calls", "ok": []}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "fetched_paths", "ok": []}
+{"arg": "FOO=1 git log", "fn": "heredoc", "literal": [], "out": "FOO=1 git log"}
+{"arg": "FOO=1 git log", "fn": "expand_cd", "out": ""}
+{"arg": "FOO=1 git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["FOO=1", "FOO=1"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "FOO=1 git log", "fn": "write_targets", "ok": []}
+{"arg": "FOO=1 git log", "fn": "http_calls", "ok": []}
+{"arg": "FOO=1 git log", "fn": "gh_calls", "ok": []}
+{"arg": "FOO=1 git log", "fn": "fetched_paths", "ok": []}
+{"arg": "FOO=1 ls", "fn": "heredoc", "literal": [], "out": "FOO=1 ls"}
+{"arg": "FOO=1 ls", "fn": "expand_cd", "out": ""}
+{"arg": "FOO=1 ls", "fn": "commands", "ok": [{"redirects": [], "words": [["ls", "ls"]]}, {"redirects": [], "words": [["FOO=1", "FOO=1"], ["ls", "ls"]]}]}
+{"arg": "FOO=1 ls", "fn": "write_targets", "ok": []}
+{"arg": "FOO=1 ls", "fn": "http_calls", "ok": []}
+{"arg": "FOO=1 ls", "fn": "gh_calls", "ok": []}
+{"arg": "FOO=1 ls", "fn": "fetched_paths", "ok": []}
+{"arg": "env GIT_PAGER=id git log", "fn": "heredoc", "literal": [], "out": "env GIT_PAGER=id git log"}
+{"arg": "env GIT_PAGER=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "env GIT_PAGER=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "env GIT_PAGER=id git log", "fn": "write_targets", "ok": []}
+{"arg": "env GIT_PAGER=id git log", "fn": "http_calls", "ok": []}
+{"arg": "env GIT_PAGER=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "env GIT_PAGER=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "env -i git log", "fn": "heredoc", "literal": [], "out": "env -i git log"}
+{"arg": "env -i git log", "fn": "expand_cd", "out": ""}
+{"arg": "env -i git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["-i", "-i"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "env -i git log", "fn": "write_targets", "ok": []}
+{"arg": "env -i git log", "fn": "http_calls", "ok": []}
+{"arg": "env -i git log", "fn": "gh_calls", "ok": []}
+{"arg": "env -i git log", "fn": "fetched_paths", "ok": []}
+{"arg": "env -u PATH git log", "fn": "heredoc", "literal": [], "out": "env -u PATH git log"}
+{"arg": "env -u PATH git log", "fn": "expand_cd", "out": ""}
+{"arg": "env -u PATH git log", "fn": "commands", "ok": [{"redirects": [], "words": [["PATH", "PATH"], ["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["-u", "-u"], ["PATH", "PATH"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "env -u PATH git log", "fn": "write_targets", "ok": []}
+{"arg": "env -u PATH git log", "fn": "http_calls", "ok": []}
+{"arg": "env -u PATH git log", "fn": "gh_calls", "ok": []}
+{"arg": "env -u PATH git log", "fn": "fetched_paths", "ok": []}
+{"arg": "command FOO=1 git log", "fn": "heredoc", "literal": [], "out": "command FOO=1 git log"}
+{"arg": "command FOO=1 git log", "fn": "expand_cd", "out": ""}
+{"arg": "command FOO=1 git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["command", "command"], ["FOO=1", "FOO=1"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "command FOO=1 git log", "fn": "write_targets", "ok": []}
+{"arg": "command FOO=1 git log", "fn": "http_calls", "ok": []}
+{"arg": "command FOO=1 git log", "fn": "gh_calls", "ok": []}
+{"arg": "command FOO=1 git log", "fn": "fetched_paths", "ok": []}
+{"arg": "nice FOO=1 git log", "fn": "heredoc", "literal": [], "out": "nice FOO=1 git log"}
+{"arg": "nice FOO=1 git log", "fn": "expand_cd", "out": ""}
+{"arg": "nice FOO=1 git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["nice", "nice"], ["FOO=1", "FOO=1"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "nice FOO=1 git log", "fn": "write_targets", "ok": []}
+{"arg": "nice FOO=1 git log", "fn": "http_calls", "ok": []}
+{"arg": "nice FOO=1 git log", "fn": "gh_calls", "ok": []}
+{"arg": "nice FOO=1 git log", "fn": "fetched_paths", "ok": []}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "heredoc", "literal": [], "out": "bash -c \"GIT_PAGER=x git log\""}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "expand_cd", "out": ""}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "commands", "ok": [{"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"GIT_PAGER=x git log\"", "GIT_PAGER=x git log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"GIT_PAGER=x git log\"", "GIT_PAGER=x git log"]]}]}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "write_targets", "ok": []}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "http_calls", "ok": []}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "gh_calls", "ok": []}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "fetched_paths", "ok": []}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "heredoc", "literal": [], "out": "GIT_PAGER=x git log; git log"}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "expand_cd", "out": ""}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_PAGER=x", "GIT_PAGER=x"], ["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}]}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "write_targets", "ok": []}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "http_calls", "ok": []}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "gh_calls", "ok": []}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "fetched_paths", "ok": []}
+{"arg": "( GIT_PAGER=id git log )", "fn": "heredoc", "literal": [], "out": "( GIT_PAGER=id git log )"}
+{"arg": "( GIT_PAGER=id git log )", "fn": "expand_cd", "out": ""}
+{"arg": "( GIT_PAGER=id git log )", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "( GIT_PAGER=id git log )", "fn": "write_targets", "ok": []}
+{"arg": "( GIT_PAGER=id git log )", "fn": "http_calls", "ok": []}
+{"arg": "( GIT_PAGER=id git log )", "fn": "gh_calls", "ok": []}
+{"arg": "( GIT_PAGER=id git log )", "fn": "fetched_paths", "ok": []}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "heredoc", "literal": [], "out": "{ GIT_PAGER=id git log; }"}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "expand_cd", "out": ""}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "write_targets", "ok": []}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "http_calls", "ok": []}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "gh_calls", "ok": []}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "fetched_paths", "ok": []}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "heredoc", "literal": [], "out": "if git status; then GIT_PAGER=id git log; fi"}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "expand_cd", "out": ""}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["status", "status"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["if", "if"], ["git", "git"], ["status", "status"]]}, {"redirects": [], "words": [["then", "then"], ["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["fi", "fi"]]}]}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "write_targets", "ok": []}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "http_calls", "ok": []}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "gh_calls", "ok": []}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "fetched_paths", "ok": []}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "heredoc", "literal": [], "out": "xargs env GIT_PAGER=id git log"}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["xargs", "xargs"], ["env", "env"], ["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "write_targets", "ok": []}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "http_calls", "ok": []}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "heredoc", "literal": [], "out": "xargs -I{} env GIT_PAGER=id git log"}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["xargs", "xargs"], ["-I{}", "-I{}"], ["env", "env"], ["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "write_targets", "ok": []}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "http_calls", "ok": []}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "heredoc", "literal": [], "out": "env LANG=C${IFS}GIT_PAGER=id git log"}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["LANG=C${IFS}GIT_PAGER=id", "LANG=C${IFS}GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "write_targets", "ok": []}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "http_calls", "ok": []}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "git log $HOME", "fn": "heredoc", "literal": [], "out": "git log $HOME"}
+{"arg": "git log $HOME", "fn": "expand_cd", "out": ""}
+{"arg": "git log $HOME", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["$HOME", "$HOME"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["$HOME", "$HOME"]]}]}
+{"arg": "git log $HOME", "fn": "write_targets", "ok": []}
+{"arg": "git log $HOME", "fn": "http_calls", "ok": []}
+{"arg": "git log $HOME", "fn": "gh_calls", "ok": []}
+{"arg": "git log $HOME", "fn": "fetched_paths", "ok": []}
+{"arg": "export GIT_PAGER=id; git log", "fn": "heredoc", "literal": [], "out": "export GIT_PAGER=id; git log"}
+{"arg": "export GIT_PAGER=id; git log", "fn": "expand_cd", "out": ""}
+{"arg": "export GIT_PAGER=id; git log", "fn": "commands", "ok": [{"redirects": [], "words": [["export", "export"], ["GIT_PAGER=id", "GIT_PAGER=id"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["export", "export"], ["GIT_PAGER=id", "GIT_PAGER=id"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}]}
+{"arg": "export GIT_PAGER=id; git log", "fn": "write_targets", "ok": []}
+{"arg": "export GIT_PAGER=id; git log", "fn": "http_calls", "ok": []}
+{"arg": "export GIT_PAGER=id; git log", "fn": "gh_calls", "ok": []}
+{"arg": "export GIT_PAGER=id; git log", "fn": "fetched_paths", "ok": []}
+{"arg": "git log --grep=a=b", "fn": "heredoc", "literal": [], "out": "git log --grep=a=b"}
+{"arg": "git log --grep=a=b", "fn": "expand_cd", "out": ""}
+{"arg": "git log --grep=a=b", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--grep=a=b", "--grep=a=b"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["--grep=a=b", "--grep=a=b"]]}]}
+{"arg": "git log --grep=a=b", "fn": "write_targets", "ok": []}
+{"arg": "git log --grep=a=b", "fn": "http_calls", "ok": []}
+{"arg": "git log --grep=a=b", "fn": "gh_calls", "ok": []}
+{"arg": "git log --grep=a=b", "fn": "fetched_paths", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "heredoc", "literal": [], "out": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log"}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["GIT_CONFIG_COUNT=1", "GIT_CONFIG_COUNT=1"], ["GIT_CONFIG_KEY_0=core.pager", "GIT_CONFIG_KEY_0=core.pager"], ["GIT_CONFIG_VALUE_0=id", "GIT_CONFIG_VALUE_0=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "write_targets", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "http_calls", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "check", "name": "check_env_exposure", "ok": "センシティブな環境変数を出力しようとしています: `env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log`"}
+{"arg": "LANG=C git log", "fn": "heredoc", "literal": [], "out": "LANG=C git log"}
+{"arg": "LANG=C git log", "fn": "expand_cd", "out": ""}
+{"arg": "LANG=C git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["LANG=C", "LANG=C"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "LANG=C git log", "fn": "write_targets", "ok": []}
+{"arg": "LANG=C git log", "fn": "http_calls", "ok": []}
+{"arg": "LANG=C git log", "fn": "gh_calls", "ok": []}
+{"arg": "LANG=C git log", "fn": "fetched_paths", "ok": []}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "heredoc", "literal": [], "out": "LC_ALL=C TZ=UTC git log"}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "expand_cd", "out": ""}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["LC_ALL=C", "LC_ALL=C"], ["TZ=UTC", "TZ=UTC"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "write_targets", "ok": []}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "http_calls", "ok": []}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "gh_calls", "ok": []}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "fetched_paths", "ok": []}
+{"arg": "git log --ext-diff", "fn": "heredoc", "literal": [], "out": "git log --ext-diff"}
+{"arg": "git log --ext-diff", "fn": "expand_cd", "out": ""}
+{"arg": "git log --ext-diff", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--ext-diff", "--ext-diff"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["--ext-diff", "--ext-diff"]]}]}
+{"arg": "git log --ext-diff", "fn": "write_targets", "ok": []}
+{"arg": "git log --ext-diff", "fn": "http_calls", "ok": []}
+{"arg": "git log --ext-diff", "fn": "gh_calls", "ok": []}
+{"arg": "git log --ext-diff", "fn": "fetched_paths", "ok": []}
+{"arg": "git diff --textconv", "fn": "heredoc", "literal": [], "out": "git diff --textconv"}
+{"arg": "git diff --textconv", "fn": "expand_cd", "out": ""}
+{"arg": "git diff --textconv", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["--textconv", "--textconv"]]}, {"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["--textconv", "--textconv"]]}]}
+{"arg": "git diff --textconv", "fn": "write_targets", "ok": []}
+{"arg": "git diff --textconv", "fn": "http_calls", "ok": []}
+{"arg": "git diff --textconv", "fn": "gh_calls", "ok": []}
+{"arg": "git diff --textconv", "fn": "fetched_paths", "ok": []}
+{"arg": "git -C dir -c core.pager=x log", "fn": "heredoc", "literal": [], "out": "git -C dir -c core.pager=x log"}
+{"arg": "git -C dir -c core.pager=x log", "fn": "expand_cd", "out": ""}
+{"arg": "git -C dir -c core.pager=x log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["-C", "-C"], ["dir", "dir"], ["-c", "-c"], ["core.pager=x", "core.pager=x"], ["log", "log"]]}]}
+{"arg": "git -C dir -c core.pager=x log", "fn": "write_targets", "ok": []}
+{"arg": "git -C dir -c core.pager=x log", "fn": "http_calls", "ok": []}
+{"arg": "git -C dir -c core.pager=x log", "fn": "gh_calls", "ok": []}
+{"arg": "git -C dir -c core.pager=x log", "fn": "fetched_paths", "ok": []}
+{"arg": "git --git-dir=.git -c a=b log", "fn": "heredoc", "literal": [], "out": "git --git-dir=.git -c a=b log"}
+{"arg": "git --git-dir=.git -c a=b log", "fn": "expand_cd", "out": ""}
+{"arg": "git --git-dir=.git -c a=b log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["--git-dir=.git", "--git-dir=.git"], ["-c", "-c"], ["a=b", "a=b"], ["log", "log"]]}]}
+{"arg": "git --git-dir=.git -c a=b log", "fn": "write_targets", "ok": []}
+{"arg": "git --git-dir=.git -c a=b log", "fn": "http_calls", "ok": []}
+{"arg": "git --git-dir=.git -c a=b log", "fn": "gh_calls", "ok": []}
+{"arg": "git --git-dir=.git -c a=b log", "fn": "fetched_paths", "ok": []}
+{"arg": "env git -p log", "fn": "heredoc", "literal": [], "out": "env git -p log"}
+{"arg": "env git -p log", "fn": "expand_cd", "out": ""}
+{"arg": "env git -p log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["git", "git"], ["-p", "-p"], ["log", "log"]]}]}
+{"arg": "env git -p log", "fn": "write_targets", "ok": []}
+{"arg": "env git -p log", "fn": "http_calls", "ok": []}
+{"arg": "env git -p log", "fn": "gh_calls", "ok": []}
+{"arg": "env git -p log", "fn": "fetched_paths", "ok": []}
+{"arg": "bash -c \"git -p log\"", "fn": "heredoc", "literal": [], "out": "bash -c \"git -p log\""}
+{"arg": "bash -c \"git -p log\"", "fn": "expand_cd", "out": ""}
+{"arg": "bash -c \"git -p log\"", "fn": "commands", "ok": [{"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"git -p log\"", "git -p log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"git -p log\"", "git -p log"]]}]}
+{"arg": "bash -c \"git -p log\"", "fn": "write_targets", "ok": []}
+{"arg": "bash -c \"git -p log\"", "fn": "http_calls", "ok": []}
+{"arg": "bash -c \"git -p log\"", "fn": "gh_calls", "ok": []}
+{"arg": "bash -c \"git -p log\"", "fn": "fetched_paths", "ok": []}
+{"arg": "git log -- x; kubectl exec p -- git push", "fn": "heredoc", "literal": [], "out": "git log -- x; kubectl exec p -- git push"}
+{"arg": "git log -- x; kubectl exec p -- git push", "fn": "expand_cd", "out": ""}
+{"arg": "git log -- x; kubectl exec p -- git push", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["x", "x"]]}, {"redirects": [], "words": [["kubectl", "kubectl"], ["exec", "exec"], ["p", "p"], ["--", "--"], ["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["x", "x"]]}, {"redirects": [], "words": [["kubectl", "kubectl"], ["exec", "exec"], ["p", "p"], ["--", "--"], ["git", "git"], ["push", "push"]]}]}
+{"arg": "git log -- x; kubectl exec p -- git push", "fn": "write_targets", "ok": []}
+{"arg": "git log -- x; kubectl exec p -- git push", "fn": "http_calls", "ok": []}
+{"arg": "git log -- x; kubectl exec p -- git push", "fn": "gh_calls", "ok": []}
+{"arg": "git log -- x; kubectl exec p -- git push", "fn": "fetched_paths", "ok": []}
+{"arg": "git log -- x; kubectl exec p -- git push", "fn": "check", "name": "check_policy_deny", "ok": "`git push` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "curl https://example.com", "fn": "heredoc", "literal": [], "out": "curl https://example.com"}
 {"arg": "curl https://example.com", "fn": "expand_cd", "out": ""}
 {"arg": "curl https://example.com", "fn": "commands", "ok": [{"redirects": [], "words": [["curl", "curl"], ["https://example.com", "https://example.com"]]}, {"redirects": [], "words": [["curl", "curl"], ["https://example.com", "https://example.com"]]}]}
@@ -10992,12 +11483,232 @@
 {"arg": "git show HEAD:.env", "fn": "fetched_paths", "ok": []}
 {"arg": "git log -p -- .env", "fn": "heredoc", "literal": [], "out": "git log -p -- .env"}
 {"arg": "git log -p -- .env", "fn": "expand_cd", "out": ""}
-{"arg": "git log -p -- .env", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"], ["--", "--"], [".env", ".env"]]}, {"redirects": [], "words": [[".env", ".env"]]}, {"redirects": [], "words": [[".env", ".env"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"], ["--", "--"], [".env", ".env"]]}]}
+{"arg": "git log -p -- .env", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"], ["--", "--"], [".env", ".env"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["-p", "-p"], ["--", "--"], [".env", ".env"]]}]}
 {"arg": "git log -p -- .env", "fn": "write_targets", "ok": []}
 {"arg": "git log -p -- .env", "fn": "http_calls", "ok": []}
 {"arg": "git log -p -- .env", "fn": "gh_calls", "ok": []}
 {"arg": "git log -p -- .env", "fn": "fetched_paths", "ok": []}
 {"arg": "git log -p -- .env", "fn": "check", "name": "check_file_read", "ok": "`git log` がセンシティブなパスを対象にしています (パターン: .env)"}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "heredoc", "literal": [], "out": "git -c core.pager=id log -- file.txt"}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "expand_cd", "out": ""}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}, {"redirects": [], "words": [["git", "git"], ["-c", "-c"], ["core.pager=id", "core.pager=id"], ["log", "log"], ["--", "--"], ["file.txt", "file.txt"]]}]}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "write_targets", "ok": []}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "http_calls", "ok": []}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "gh_calls", "ok": []}
+{"arg": "git -c core.pager=id log -- file.txt", "fn": "fetched_paths", "ok": []}
+{"arg": "git --paginate log", "fn": "heredoc", "literal": [], "out": "git --paginate log"}
+{"arg": "git --paginate log", "fn": "expand_cd", "out": ""}
+{"arg": "git --paginate log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["--paginate", "--paginate"], ["log", "log"]]}]}
+{"arg": "git --paginate log", "fn": "write_targets", "ok": []}
+{"arg": "git --paginate log", "fn": "http_calls", "ok": []}
+{"arg": "git --paginate log", "fn": "gh_calls", "ok": []}
+{"arg": "git --paginate log", "fn": "fetched_paths", "ok": []}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "heredoc", "literal": [], "out": "git -c diff.external=id diff --ext-diff"}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "expand_cd", "out": ""}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["diff", "diff"], ["--ext-diff", "--ext-diff"]]}, {"redirects": [], "words": [["git", "git"], ["-c", "-c"], ["diff.external=id", "diff.external=id"], ["diff", "diff"], ["--ext-diff", "--ext-diff"]]}]}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "write_targets", "ok": []}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "http_calls", "ok": []}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "gh_calls", "ok": []}
+{"arg": "git -c diff.external=id diff --ext-diff", "fn": "fetched_paths", "ok": []}
+{"arg": "git --exec-path=/tmp log", "fn": "heredoc", "literal": [], "out": "git --exec-path=/tmp log"}
+{"arg": "git --exec-path=/tmp log", "fn": "expand_cd", "out": ""}
+{"arg": "git --exec-path=/tmp log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["--exec-path=/tmp", "--exec-path=/tmp"], ["log", "log"]]}]}
+{"arg": "git --exec-path=/tmp log", "fn": "write_targets", "ok": []}
+{"arg": "git --exec-path=/tmp log", "fn": "http_calls", "ok": []}
+{"arg": "git --exec-path=/tmp log", "fn": "gh_calls", "ok": []}
+{"arg": "git --exec-path=/tmp log", "fn": "fetched_paths", "ok": []}
+{"arg": "git -p log", "fn": "heredoc", "literal": [], "out": "git -p log"}
+{"arg": "git -p log", "fn": "expand_cd", "out": ""}
+{"arg": "git -p log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["-p", "-p"], ["log", "log"]]}]}
+{"arg": "git -p log", "fn": "write_targets", "ok": []}
+{"arg": "git -p log", "fn": "http_calls", "ok": []}
+{"arg": "git -p log", "fn": "gh_calls", "ok": []}
+{"arg": "git -p log", "fn": "fetched_paths", "ok": []}
+{"arg": "git -ccore.pager=x log", "fn": "heredoc", "literal": [], "out": "git -ccore.pager=x log"}
+{"arg": "git -ccore.pager=x log", "fn": "expand_cd", "out": ""}
+{"arg": "git -ccore.pager=x log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["-ccore.pager=x", "-ccore.pager=x"], ["log", "log"]]}]}
+{"arg": "git -ccore.pager=x log", "fn": "write_targets", "ok": []}
+{"arg": "git -ccore.pager=x log", "fn": "http_calls", "ok": []}
+{"arg": "git -ccore.pager=x log", "fn": "gh_calls", "ok": []}
+{"arg": "git -ccore.pager=x log", "fn": "fetched_paths", "ok": []}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "heredoc", "literal": [], "out": "GIT_PAGER='sh -c id' git log"}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "expand_cd", "out": ""}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_PAGER='sh -c id'", "GIT_PAGER=sh -c id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "write_targets", "ok": []}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "http_calls", "ok": []}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "gh_calls", "ok": []}
+{"arg": "GIT_PAGER='sh -c id' git log", "fn": "fetched_paths", "ok": []}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "heredoc", "literal": [], "out": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status"}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "expand_cd", "out": ""}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["status", "status"]]}, {"redirects": [], "words": [["GIT_CONFIG_COUNT=1", "GIT_CONFIG_COUNT=1"], ["GIT_CONFIG_KEY_0=core.fsmonitor", "GIT_CONFIG_KEY_0=core.fsmonitor"], ["GIT_CONFIG_VALUE_0=id", "GIT_CONFIG_VALUE_0=id"], ["git", "git"], ["status", "status"]]}]}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "write_targets", "ok": []}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "http_calls", "ok": []}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "gh_calls", "ok": []}
+{"arg": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status", "fn": "fetched_paths", "ok": []}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "heredoc", "literal": [], "out": "PATH=/tmp:$PATH git log"}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "expand_cd", "out": ""}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["PATH=/tmp:$PATH", "PATH=/tmp:$PATH"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "write_targets", "ok": []}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "http_calls", "ok": []}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "gh_calls", "ok": []}
+{"arg": "PATH=/tmp:$PATH git log", "fn": "fetched_paths", "ok": []}
+{"arg": "FOO=1 git log", "fn": "heredoc", "literal": [], "out": "FOO=1 git log"}
+{"arg": "FOO=1 git log", "fn": "expand_cd", "out": ""}
+{"arg": "FOO=1 git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["FOO=1", "FOO=1"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "FOO=1 git log", "fn": "write_targets", "ok": []}
+{"arg": "FOO=1 git log", "fn": "http_calls", "ok": []}
+{"arg": "FOO=1 git log", "fn": "gh_calls", "ok": []}
+{"arg": "FOO=1 git log", "fn": "fetched_paths", "ok": []}
+{"arg": "env GIT_PAGER=id git log", "fn": "heredoc", "literal": [], "out": "env GIT_PAGER=id git log"}
+{"arg": "env GIT_PAGER=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "env GIT_PAGER=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "env GIT_PAGER=id git log", "fn": "write_targets", "ok": []}
+{"arg": "env GIT_PAGER=id git log", "fn": "http_calls", "ok": []}
+{"arg": "env GIT_PAGER=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "env GIT_PAGER=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "env -i git log", "fn": "heredoc", "literal": [], "out": "env -i git log"}
+{"arg": "env -i git log", "fn": "expand_cd", "out": ""}
+{"arg": "env -i git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["-i", "-i"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "env -i git log", "fn": "write_targets", "ok": []}
+{"arg": "env -i git log", "fn": "http_calls", "ok": []}
+{"arg": "env -i git log", "fn": "gh_calls", "ok": []}
+{"arg": "env -i git log", "fn": "fetched_paths", "ok": []}
+{"arg": "command FOO=1 git log", "fn": "heredoc", "literal": [], "out": "command FOO=1 git log"}
+{"arg": "command FOO=1 git log", "fn": "expand_cd", "out": ""}
+{"arg": "command FOO=1 git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["command", "command"], ["FOO=1", "FOO=1"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "command FOO=1 git log", "fn": "write_targets", "ok": []}
+{"arg": "command FOO=1 git log", "fn": "http_calls", "ok": []}
+{"arg": "command FOO=1 git log", "fn": "gh_calls", "ok": []}
+{"arg": "command FOO=1 git log", "fn": "fetched_paths", "ok": []}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "heredoc", "literal": [], "out": "bash -c \"GIT_PAGER=x git log\""}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "expand_cd", "out": ""}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "commands", "ok": [{"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"GIT_PAGER=x git log\"", "GIT_PAGER=x git log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["bash", "bash"], ["-c", "-c"], ["\"GIT_PAGER=x git log\"", "GIT_PAGER=x git log"]]}]}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "write_targets", "ok": []}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "http_calls", "ok": []}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "gh_calls", "ok": []}
+{"arg": "bash -c \"GIT_PAGER=x git log\"", "fn": "fetched_paths", "ok": []}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "heredoc", "literal": [], "out": "GIT_PAGER=x git log; git log"}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "expand_cd", "out": ""}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_PAGER=x", "GIT_PAGER=x"], ["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}]}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "write_targets", "ok": []}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "http_calls", "ok": []}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "gh_calls", "ok": []}
+{"arg": "GIT_PAGER=x git log; git log", "fn": "fetched_paths", "ok": []}
+{"arg": "( GIT_PAGER=id git log )", "fn": "heredoc", "literal": [], "out": "( GIT_PAGER=id git log )"}
+{"arg": "( GIT_PAGER=id git log )", "fn": "expand_cd", "out": ""}
+{"arg": "( GIT_PAGER=id git log )", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "( GIT_PAGER=id git log )", "fn": "write_targets", "ok": []}
+{"arg": "( GIT_PAGER=id git log )", "fn": "http_calls", "ok": []}
+{"arg": "( GIT_PAGER=id git log )", "fn": "gh_calls", "ok": []}
+{"arg": "( GIT_PAGER=id git log )", "fn": "fetched_paths", "ok": []}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "heredoc", "literal": [], "out": "{ GIT_PAGER=id git log; }"}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "expand_cd", "out": ""}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "write_targets", "ok": []}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "http_calls", "ok": []}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "gh_calls", "ok": []}
+{"arg": "{ GIT_PAGER=id git log; }", "fn": "fetched_paths", "ok": []}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "heredoc", "literal": [], "out": "if git status; then GIT_PAGER=id git log; fi"}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "expand_cd", "out": ""}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["status", "status"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["if", "if"], ["git", "git"], ["status", "status"]]}, {"redirects": [], "words": [["then", "then"], ["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["fi", "fi"]]}]}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "write_targets", "ok": []}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "http_calls", "ok": []}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "gh_calls", "ok": []}
+{"arg": "if git status; then GIT_PAGER=id git log; fi", "fn": "fetched_paths", "ok": []}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "heredoc", "literal": [], "out": "xargs env GIT_PAGER=id git log"}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["xargs", "xargs"], ["env", "env"], ["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "write_targets", "ok": []}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "http_calls", "ok": []}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "xargs env GIT_PAGER=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "heredoc", "literal": [], "out": "xargs -I{} env GIT_PAGER=id git log"}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["xargs", "xargs"], ["-I{}", "-I{}"], ["env", "env"], ["GIT_PAGER=id", "GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "write_targets", "ok": []}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "http_calls", "ok": []}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "xargs -I{} env GIT_PAGER=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "heredoc", "literal": [], "out": "env LANG=C${IFS}GIT_PAGER=id git log"}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["LANG=C${IFS}GIT_PAGER=id", "LANG=C${IFS}GIT_PAGER=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "write_targets", "ok": []}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "http_calls", "ok": []}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "env LANG=C${IFS}GIT_PAGER=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "git log $HOME", "fn": "heredoc", "literal": [], "out": "git log $HOME"}
+{"arg": "git log $HOME", "fn": "expand_cd", "out": ""}
+{"arg": "git log $HOME", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["$HOME", "$HOME"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["$HOME", "$HOME"]]}]}
+{"arg": "git log $HOME", "fn": "write_targets", "ok": []}
+{"arg": "git log $HOME", "fn": "http_calls", "ok": []}
+{"arg": "git log $HOME", "fn": "gh_calls", "ok": []}
+{"arg": "git log $HOME", "fn": "fetched_paths", "ok": []}
+{"arg": "export GIT_PAGER=id; git log", "fn": "heredoc", "literal": [], "out": "export GIT_PAGER=id; git log"}
+{"arg": "export GIT_PAGER=id; git log", "fn": "expand_cd", "out": ""}
+{"arg": "export GIT_PAGER=id; git log", "fn": "commands", "ok": [{"redirects": [], "words": [["export", "export"], ["GIT_PAGER=id", "GIT_PAGER=id"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["export", "export"], ["GIT_PAGER=id", "GIT_PAGER=id"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}]}
+{"arg": "export GIT_PAGER=id; git log", "fn": "write_targets", "ok": []}
+{"arg": "export GIT_PAGER=id; git log", "fn": "http_calls", "ok": []}
+{"arg": "export GIT_PAGER=id; git log", "fn": "gh_calls", "ok": []}
+{"arg": "export GIT_PAGER=id; git log", "fn": "fetched_paths", "ok": []}
+{"arg": "git log --grep=a=b", "fn": "heredoc", "literal": [], "out": "git log --grep=a=b"}
+{"arg": "git log --grep=a=b", "fn": "expand_cd", "out": ""}
+{"arg": "git log --grep=a=b", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--grep=a=b", "--grep=a=b"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["--grep=a=b", "--grep=a=b"]]}]}
+{"arg": "git log --grep=a=b", "fn": "write_targets", "ok": []}
+{"arg": "git log --grep=a=b", "fn": "http_calls", "ok": []}
+{"arg": "git log --grep=a=b", "fn": "gh_calls", "ok": []}
+{"arg": "git log --grep=a=b", "fn": "fetched_paths", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "heredoc", "literal": [], "out": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log"}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "expand_cd", "out": ""}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["env", "env"], ["GIT_CONFIG_COUNT=1", "GIT_CONFIG_COUNT=1"], ["GIT_CONFIG_KEY_0=core.pager", "GIT_CONFIG_KEY_0=core.pager"], ["GIT_CONFIG_VALUE_0=id", "GIT_CONFIG_VALUE_0=id"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "write_targets", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "http_calls", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "gh_calls", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "fetched_paths", "ok": []}
+{"arg": "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log", "fn": "check", "name": "check_env_exposure", "ok": "センシティブな環境変数を出力しようとしています: `env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=id git log`"}
+{"arg": "LANG=C git log", "fn": "heredoc", "literal": [], "out": "LANG=C git log"}
+{"arg": "LANG=C git log", "fn": "expand_cd", "out": ""}
+{"arg": "LANG=C git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["LANG=C", "LANG=C"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "LANG=C git log", "fn": "write_targets", "ok": []}
+{"arg": "LANG=C git log", "fn": "http_calls", "ok": []}
+{"arg": "LANG=C git log", "fn": "gh_calls", "ok": []}
+{"arg": "LANG=C git log", "fn": "fetched_paths", "ok": []}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "heredoc", "literal": [], "out": "LC_ALL=C TZ=UTC git log"}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "expand_cd", "out": ""}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["LC_ALL=C", "LC_ALL=C"], ["TZ=UTC", "TZ=UTC"], ["git", "git"], ["log", "log"]]}]}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "write_targets", "ok": []}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "http_calls", "ok": []}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "gh_calls", "ok": []}
+{"arg": "LC_ALL=C TZ=UTC git log", "fn": "fetched_paths", "ok": []}
+{"arg": "git log --ext-diff", "fn": "heredoc", "literal": [], "out": "git log --ext-diff"}
+{"arg": "git log --ext-diff", "fn": "expand_cd", "out": ""}
+{"arg": "git log --ext-diff", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"], ["--ext-diff", "--ext-diff"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"], ["--ext-diff", "--ext-diff"]]}]}
+{"arg": "git log --ext-diff", "fn": "write_targets", "ok": []}
+{"arg": "git log --ext-diff", "fn": "http_calls", "ok": []}
+{"arg": "git log --ext-diff", "fn": "gh_calls", "ok": []}
+{"arg": "git log --ext-diff", "fn": "fetched_paths", "ok": []}
+{"arg": "git show -c HEAD", "fn": "heredoc", "literal": [], "out": "git show -c HEAD"}
+{"arg": "git show -c HEAD", "fn": "expand_cd", "out": ""}
+{"arg": "git show -c HEAD", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["show", "show"], ["-c", "-c"], ["HEAD", "HEAD"]]}, {"redirects": [], "words": [["git", "git"], ["show", "show"], ["-c", "-c"], ["HEAD", "HEAD"]]}]}
+{"arg": "git show -c HEAD", "fn": "write_targets", "ok": []}
+{"arg": "git show -c HEAD", "fn": "http_calls", "ok": []}
+{"arg": "git show -c HEAD", "fn": "gh_calls", "ok": []}
+{"arg": "git show -c HEAD", "fn": "fetched_paths", "ok": []}
+{"arg": "mise exec -- git push", "fn": "heredoc", "literal": [], "out": "mise exec -- git push"}
+{"arg": "mise exec -- git push", "fn": "expand_cd", "out": ""}
+{"arg": "mise exec -- git push", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["mise", "mise"], ["exec", "exec"], ["--", "--"], ["git", "git"], ["push", "push"]]}]}
+{"arg": "mise exec -- git push", "fn": "write_targets", "ok": []}
+{"arg": "mise exec -- git push", "fn": "http_calls", "ok": []}
+{"arg": "mise exec -- git push", "fn": "gh_calls", "ok": []}
+{"arg": "mise exec -- git push", "fn": "fetched_paths", "ok": []}
+{"arg": "mise exec -- git push", "fn": "check", "name": "check_policy_deny", "ok": "`git push` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "npm run x -- git push", "fn": "heredoc", "literal": [], "out": "npm run x -- git push"}
+{"arg": "npm run x -- git push", "fn": "expand_cd", "out": ""}
+{"arg": "npm run x -- git push", "fn": "commands", "ok": [{"redirects": [], "words": [["npm", "npm"], ["run", "run"], ["x", "x"], ["--", "--"], ["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["x", "x"], ["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["x", "x"], ["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["npm", "npm"], ["run", "run"], ["x", "x"], ["--", "--"], ["git", "git"], ["push", "push"]]}]}
+{"arg": "npm run x -- git push", "fn": "write_targets", "ok": []}
+{"arg": "npm run x -- git push", "fn": "http_calls", "ok": []}
+{"arg": "npm run x -- git push", "fn": "gh_calls", "ok": []}
+{"arg": "npm run x -- git push", "fn": "fetched_paths", "ok": []}
+{"arg": "npm run x -- git push", "fn": "check", "name": "check_policy_deny", "ok": "`git push` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "git blame .env", "fn": "heredoc", "literal": [], "out": "git blame .env"}
 {"arg": "git blame .env", "fn": "expand_cd", "out": ""}
 {"arg": "git blame .env", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["blame", "blame"], [".env", ".env"]]}, {"redirects": [], "words": [["git", "git"], ["blame", "blame"], [".env", ".env"]]}]}

@@ -11,15 +11,72 @@ import { newCtx } from "./context.ts";
 import type { BashDecider, Response } from "./decide.ts";
 import { errorResponse, response } from "./decide.ts";
 import { expandUser } from "./pathutil.ts";
-import { findMatch, normalize } from "./normalize.ts";
+import { findMatch, normalize, splitCommandSegments } from "./normalize.ts";
 import type { Common } from "./policy.ts";
-import { pyLen, pyRegex, shlexSplit, ShlexError } from "./pystr.ts";
+import { basename, pyLen, pyRegex, shlexSplit, ShlexError } from "./pystr.ts";
 import { expandCdTargets, splitHeredocBody } from "./shared.ts";
 
 // 検査の上限。check_bash.py と同じ
 const MAX_COMMAND_LEN = 10000;
 // allow の一覧に当たっても、書き込みや実行時の展開の余地がある形は allow にしない
-const UNSAFE_FOR_ALLOW = [">", "<", "`", "$(", "--output"];
+const UNSAFE_FOR_ALLOW = [">", "<", "`", "$", "--output"];
+// git が任意のプログラムを起動しうるオプション。allow の一覧に当たっても allow にしない
+// グローバル (git とサブコマンドの間) の -c / --config-env / --exec-path / --paginate / -p が対象。サブコマンドの後ろの -p / -c は別の意味
+const GIT_GLOBAL_ARG_OPTS = new Set(["-C", "-c", "--config-env", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--super-prefix", "--attr-source"]);
+const GIT_SUB_EXEC_OPTS = ["--upload-pack", "--receive-pack", "--ext-diff", "--exec", "--textconv"];
+
+function isGitGlobalExecOpt(t: string): boolean {
+	return t.startsWith("-c") || t === "-p" || t === "--paginate" || t === "--config-env" || t.startsWith("--config-env=") || t === "--exec-path" || t.startsWith("--exec-path=");
+}
+
+/** 元のセグメントの `git` のグローバル領域に実行系オプションが、サブコマンド以降に GIT_SUB_EXEC_OPTS (`--opt=値` を含む) があるか。正規化は前置オプションを落とすのでここで見る。 */
+function hasGitExecOption(cmd: string): boolean {
+	for (const raw of splitCommandSegments(cmd)) {
+		let tokens: string[];
+		try {
+			tokens = shlexSplit(raw);
+		} catch (e) {
+			if (!(e instanceof ShlexError)) throw e;
+			tokens = [raw];
+		}
+		tokens = tokens.flatMap((t) => t.split(/[ \t\n]+/)).filter((t) => t);
+		const git = tokens.findIndex((t) => basename(t) === "git");
+		if (git < 0) continue;
+		let i = git + 1;
+		while (i < tokens.length && tokens[i].startsWith("-")) {
+			if (isGitGlobalExecOpt(tokens[i])) return true;
+			i += GIT_GLOBAL_ARG_OPTS.has(tokens[i]) ? 2 : 1;
+		}
+		if (tokens.slice(i).some((t) => GIT_SUB_EXEC_OPTS.some((o) => t === o || t.startsWith(`${o}=`)))) return true;
+	}
+	return false;
+}
+
+// 代入として渡してよい環境変数の名前 (LC_ で始まる名前も可)。これ以外の `NAME=` 形のトークンがあれば allow にしない
+const SAFE_ENV_NAMES = new Set(["LANG", "LC_ALL", "TZ", "NO_COLOR", "COLUMNS", "LINES", "TERM", "CI", "FORCE_COLOR", "CLICOLOR", "PYTHONDONTWRITEBYTECODE"]);
+
+/** 元のコマンドのどこかに、安全な名前以外の `NAME=` 形のトークンか、`-` 始まりの引数を持つ `env` があるか。shlex が失敗したら true。 */
+function hasUnsafeEnvPrefix(cmd: string): boolean {
+	for (const raw of splitCommandSegments(cmd)) {
+		let tokens: string[];
+		try {
+			tokens = shlexSplit(raw);
+		} catch (e) {
+			if (!(e instanceof ShlexError)) throw e;
+			return true;
+		}
+		tokens = tokens
+			.flatMap((t) => t.split(/[ \t\n]+/))
+			.filter((t) => t)
+			.map((t) => t.replace(/^[({;!]+/, ""));
+		for (let i = 0; i < tokens.length; i++) {
+			const m = /^([A-Za-z_][A-Za-z0-9_]*)=/.exec(tokens[i]);
+			if (m && !SAFE_ENV_NAMES.has(m[1]) && !m[1].startsWith("LC_")) return true;
+			if (basename(tokens[i]) === "env" && i + 1 < tokens.length && tokens[i + 1].startsWith("-")) return true;
+		}
+	}
+	return false;
+}
 
 type Obj = Record<string, any>;
 
@@ -69,7 +126,7 @@ function guide(cmd: string, pi: Obj): Response | null {
 
 /** 全セグメントが allow の一覧に当たれば、当たった最初のパターンを返す。 */
 function allSegmentsAllowed(cmd: string, patterns: readonly string[]): string | null {
-	if (patterns.length === 0 || UNSAFE_FOR_ALLOW.some((t) => cmd.includes(t))) return null;
+	if (patterns.length === 0 || UNSAFE_FOR_ALLOW.some((t) => cmd.includes(t)) || hasGitExecOption(cmd) || hasUnsafeEnvPrefix(cmd)) return null;
 	const segments = normalize(cmd);
 	if (segments.length === 0) return null;
 	let first: string | null = null;

@@ -33,7 +33,29 @@ KNOWN_TOOLS = ("bash", *FILE_READ_TOOLS, *FILE_WRITE_TOOLS, TASK_TOOL, TODO_TOOL
 # 検査の上限。check_bash.py と同じ
 MAX_COMMAND_LEN = 10000
 # allow の一覧に当たっても、書き込みや実行時の展開の余地がある形は allow にしない
-_UNSAFE_FOR_ALLOW = (">", "<", "`", "$(", "--output")
+_UNSAFE_FOR_ALLOW = (">", "<", "`", "$", "--output")
+# git が任意のプログラムを起動しうるオプション。allow の一覧に当たっても allow にしない
+# グローバル (git とサブコマンドの間) の -c / --config-env / --exec-path / --paginate / -p が対象。サブコマンドの後ろの -p / -c は別の意味
+_GIT_GLOBAL_ARG_OPTS = frozenset(
+    (
+        "-C",
+        "-c",
+        "--config-env",
+        "--git-dir",
+        "--work-tree",
+        "--namespace",
+        "--exec-path",
+        "--super-prefix",
+        "--attr-source",
+    )
+)
+_GIT_SUB_EXEC_OPTS = (
+    "--upload-pack",
+    "--receive-pack",
+    "--ext-diff",
+    "--exec",
+    "--textconv",
+)
 
 
 def _response(decision: str, reason: str, source: str, **extra: Any) -> dict[str, Any]:
@@ -128,9 +150,82 @@ def _guide(cmd: str, pi: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _has_git_exec_option(cmd: str, policy: Any) -> bool:
+    """git のグローバル領域の実行系オプションと、サブコマンド以降の ``_GIT_SUB_EXEC_OPTS`` があるか。
+    正規化は前置オプションを落とすので、元のトークンで見る。"""
+    for raw in policy.split_command_segments(cmd):
+        try:
+            tokens = shlex.split(raw)
+        except ValueError:
+            tokens = [raw]
+        tokens = [p for t in tokens for p in re.split(r"[ \t\n]+", t) if p]
+        git = next((i for i, t in enumerate(tokens) if t.rsplit("/", 1)[-1] == "git"), None)
+        if git is None:
+            continue
+        i = git + 1
+        while i < len(tokens) and tokens[i].startswith("-"):
+            t = tokens[i]
+            if t.startswith(("-c", "--config-env=", "--exec-path=")) or t in (
+                "-p",
+                "--paginate",
+                "--config-env",
+                "--exec-path",
+            ):
+                return True
+            i += 2 if t in _GIT_GLOBAL_ARG_OPTS else 1
+        if any(t == o or t.startswith(o + "=") for t in tokens[i:] for o in _GIT_SUB_EXEC_OPTS):
+            return True
+    return False
+
+
+# 代入として渡してよい環境変数の名前 (LC_ で始まる名前も可)。これ以外の `NAME=` 形のトークンがあれば allow にしない
+_SAFE_ENV_NAMES = frozenset(
+    (
+        "LANG",
+        "LC_ALL",
+        "TZ",
+        "NO_COLOR",
+        "COLUMNS",
+        "LINES",
+        "TERM",
+        "CI",
+        "FORCE_COLOR",
+        "CLICOLOR",
+        "PYTHONDONTWRITEBYTECODE",
+    )
+)
+
+
+def _has_unsafe_env_prefix(cmd: str, policy: Any) -> bool:
+    """元のコマンドのどこかに、安全な名前以外の ``NAME=`` 形のトークンか、``-`` 始まりの引数を持つ ``env`` があるか。
+    shlex が失敗したら True。"""
+    for raw in policy.split_command_segments(cmd):
+        try:
+            tokens = shlex.split(raw)
+        except ValueError:
+            return True
+        tokens = [p.lstrip("({;!") for t in tokens for p in re.split(r"[ \t\n]+", t) if p]
+        for i, t in enumerate(tokens):
+            m = re.match(r"([A-Za-z_][A-Za-z0-9_]*)=", t)
+            if m and m.group(1) not in _SAFE_ENV_NAMES and not m.group(1).startswith("LC_"):
+                return True
+            if (
+                t.rsplit("/", 1)[-1] == "env"
+                and i + 1 < len(tokens)
+                and tokens[i + 1].startswith("-")
+            ):
+                return True
+    return False
+
+
 def _all_segments_allowed(cmd: str, patterns: list[str], policy: Any) -> str | None:
     """全セグメントが allow の一覧に当たれば、当たった最初のパターンを返す。"""
-    if not patterns or any(t in cmd for t in _UNSAFE_FOR_ALLOW):
+    if (
+        not patterns
+        or any(t in cmd for t in _UNSAFE_FOR_ALLOW)
+        or _has_git_exec_option(cmd, policy)
+        or _has_unsafe_env_prefix(cmd, policy)
+    ):
         return None
     segments = policy.normalize(cmd)
     if not segments:
