@@ -1,0 +1,49 @@
+name: linux
+
+# Linux (ubuntu) の素の runner で pytest の全件を回す。pi / mise / zsh などが無いと
+# skip される試験は skip のまま。see docs/spec/testing.md#linux-の-github-actions
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      # chezmoi が無いとテンプレートの試験がモジュールごと skip する
+      - name: Install chezmoi
+        run: |
+          bin="$RUNNER_TEMP/chezmoi-bin"
+          sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b "$bin"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Tool versions
+        run: |
+          chezmoi --version
+          uv --version
+          for tool in git node bash zsh shellcheck mise pi; do
+            if command -v "$tool" >/dev/null; then echo "$tool: $(command -v "$tool")"; else echo "$tool: (none)"; fi
+          done
+          echo "ImageOS=$ImageOS ImageVersion=$ImageVersion nproc=$(nproc)"
+
+      # -n auto --dist worksteal は scripts/verify.py の全件と同じ
+      - name: pytest
+        run: >-
+          uv run --python 3.13 --with pytest --with pyyaml --with pytest-xdist --no-project
+          pytest test/ -q -ra -n auto --dist worksteal

@@ -1,5 +1,8 @@
 # Dotfiles
 
+[![linux](https://github.com/applejxd/dotfiles/actions/workflows/linux.yml/badge.svg)](https://github.com/applejxd/dotfiles/actions/workflows/linux.yml)
+[![windows](https://github.com/applejxd/dotfiles/actions/workflows/windows.yml/badge.svg)](https://github.com/applejxd/dotfiles/actions/workflows/windows.yml)
+
 chezmoi を使用した個人用 dotfiles 管理リポジトリ。Windows/Ubuntu/WSL/macOS に対応。
 
 ## 特徴

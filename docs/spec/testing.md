@@ -40,6 +40,27 @@ Windows の Copilot コマンド hook は `powershell` ツール名も照合・�
 agent テストでは生成された matcher と実 hook の判定を両方確認し、
 パスの `\` 区切りや大文字小文字によって既存の保護対象が見落とされないことも検証する。
 
+## Linux の GitHub Actions
+
+`.github/workflows/linux.yml` が `ubuntu-24.04` の素の runner で pytest の全件を回す
+（`uv run … pytest test/ -n auto --dist worksteal`。`scripts/verify.py` の全件と同じ並列の設定）。
+`main` への push、`pull_request`、手動実行で起動する。chezmoi を入れる（無いとテンプレートの試験が
+モジュールごと skip）。`pi`・`mise`・`zsh` などが無いと skip される試験は skip のまま。
+
+push 前に、空の `HOME`、最小の `PATH`、git の identity なしで素の runner を近似して全件を回した
+（2026-10-22、`node` も `pi` も無い状態。HOME は作業ツリーの外に置く。作業ツリーの中だと
+「作業ツリー内の読み取り」と判定されて偏る）。ここで見つかった 2 点を直した:
+
+- `test_pi_harness_extensions.py` に `pi` が無いときの skip が無く、`TypeError` で落ちていた
+  （`test_pi_harness.py` にはあった）
+- `test_pis_no_sandbox_marks_the_environment_and_warns` が、配備済みの
+  `~/.config/pi/harness/rules.json` に依存していた
+
+直したあとの近似での全件の再実行はしていない（直した 2 ファイルだけ近似環境で通った）。
+**本物の runner での結果は未確認で、push 後の初回の実行で確かめる。**
+近似では拾えない差: runner には `node` や `shellcheck` が入っていることがあり、
+その分の skip が実際には実行されて落ちる可能性がある。
+
 ## Windows の GitHub Actions
 
 `.github/workflows/windows.yml` が `windows-2025` の runner で `test/agents/` と
@@ -298,14 +319,14 @@ OVERALL STATUS: FAILED
 
 現状（調査で判明した事実）:
 
-- Linux の CI に pytest は無い。GitHub Actions は `windows.yml`（パス絞りの push と手動。
+- Linux の CI は `linux.yml`（全件の pytest。初回の実行結果は未確認）。ほかの GitHub Actions は
+  `windows.yml`（パス絞りの push と手動。
   `windows-2025` で `test/agents/` と `test/test_windows_assets.py`、`timeout-minutes: 30`）と
   `e2e.yml`（毎月 2 日の schedule と手動。cold start）だけ
 - push 時の hook は無い（`pre-push` は sample のみ）
 - リポジトリは public
 
-未着手の候補: Linux の CI で全件を回す。並列化の効果を測ってから決める。
-GitHub の素の runner で通るかは未確認。
+未着手の候補: `pre-commit` や `lint_templates` を CI で回す（mise を入れる必要がある）。
 
 ## 既知の未達
 

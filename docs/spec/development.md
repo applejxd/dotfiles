@@ -84,6 +84,15 @@ python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
 `pre-push` hook に全件は入れない。待ち時間が `--no-verify` を誘い、`AGENTS.md` の
 「長時間実行スクリプトは追加しない」とも合わない。選択実行に限れば入れてよい。
 
+#### 部分コミットで pre-commit が落ちるとき
+
+コミットを複数に分けるとき、pre-commit は未ステージの変更を一時的に退避するが、
+**未追跡ファイルは退避されない**。たとえば索引を変更したが、索引に載る新規の docs を
+このコミットに含めないときは、「索引に載っていない」と `lint-docs-local` が落とす。
+その docs を `.tmp/` へ一時的に退避してからコミットし、後で戻す（`--no-verify` は使わない）。
+同じ理由で、`pre-commit run --all-files` は未追跡の新規ファイルを検査しない。
+新規ファイルは `--files <パス>` でも回す。
+
 ### テンプレートの検査
 
 `identify` は `*.tmpl` に一切タグを付けないため、`check-toml` / ruff /
