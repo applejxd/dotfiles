@@ -31,3 +31,19 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
   throw "mise reshim failed with exit code $LASTEXITCODE"
 }
+
+# GUI アプリ (Zed など) は $PROFILE を読まないため、shim と mise.exe を User の PATH に永続化する
+# see docs/spec/structure.md#gui-アプリから-mise-の-shim-を使う-windows
+$persistDirs = @(
+  (Join-Path $env:LOCALAPPDATA 'mise\shims'),
+  (Split-Path -Parent $miseCommand.Path)
+)
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+$known = @(($userPath, $machinePath) | ForEach-Object { $_ -split ';' } | ForEach-Object { $_.TrimEnd('\') })
+foreach ($dir in $persistDirs) {
+  if ($known -notcontains $dir.TrimEnd('\')) {
+    $userPath = "$userPath;$dir".TrimStart(';')
+    [Environment]::SetEnvironmentVariable('Path', $userPath, 'User')
+  }
+}
