@@ -63,6 +63,12 @@
   - **意味**: 子ごとの書込境界を、親の Fence の内側で、さらに狭められる。ただし、**狭められるだけで広げられない**ので、子が書く領域（worktree、共有 `.git` の `worktrees/<id>`・`objects`・`refs/pi-agent`、`~/.cache`）は、親の Fence がすでに書込可にしている場所でなければならない。親の cwd（本体のリポジトリ）の下の `.tmp/` に worktree を置く案が自然で、`~/worktrees` は読み取りだけなので使えない。W0b の結果と合わせると、`refs/heads` は Landlock の許可から外せるので、**子が `refs/heads` を書ける穴も、判定器に頼らずにふさげる**（推測。未実測）
   - **実装の形（案。未実測）**: 子の起動を、小さなラッパー（標準ライブラリだけの Python。ctypes で上の 3 つを呼ぶ）で包む: `python3 landlock_exec.py --write <worktree> --write <.git の必要な場所> ... -- pi ...`。カーネルの ABI 版に応じて、扱うアクセスの種類（`REFER`・`TRUNCATE` など）を変える必要がある。使い捨てのスクリプトは `.tmp/landlock_try.py`（コミットしていない。ABI 1 の種類だけを扱う）
   - **未確認**: 親の実際の `pis` の Fence の中での実行（今回の確認は、最小の設定の Fence）。`uv`・`pytest` が、狭めた許可で動くか。Landlock が使えないカーネル（ABI なし）での振る舞い（拒否して起動しない、が案）
+- **Landlock ラッパーの試作の実測（2026-10-22、WSL。`scripts/agents/w0b_landlock.py` と `w0b_probe.sh nest`）**: 書込可を、worktree、共有 `.git` の `worktrees/<id>`・`objects`・`refs/pi-agent`、`~/.cache`、tmp、`/dev/null` に絞って子のコマンドを包んだ。
+  - **通った**: `git status`、編集、`git add`、`update-ref refs/pi-agent/*`、`python3`、`uv run`、`uv run pytest`
+  - **拒否された**: `update-ref refs/heads/*`、`git tag`（`refs/tags`）、兄弟 worktree・本体の作業ツリー・本体 `.git/hooks` への書き込み
+  - **条件**: (1) Fence なし、(2) 親を模した Fence（wt1・共有 `.git` の `worktrees`・`objects`・`refs` 全体・`~/.cache`・`/tmp` が書込可。`refs` 全体が書込可でも、Landlock が `refs/heads` と `refs/tags` を拒否した）の 2 通りで、同じ結果だった
+  - **試作で見つけた不具合**: `git` は `/dev/null` を読み書きで開くので、書込可に含める必要がある。Landlock はファイルに対して、ディレクトリ用の権限（`MAKE_*` など）を指定できないので、ファイルは別の権限の集合にする（`w0b_landlock.py`）
+  - **未確認**: 利用者の実際の `pis` の Fence の中での実行（`wt1` で `pis` を起動し、`!sh scripts/agents/w0b_probe.sh nest`）。ネットワークが要る `uv` の操作。`REFER`（ディレクトリをまたぐ名前変更）が要る操作
 - **`review`（2026-10-22）の指摘**:
   - **BLOCKER**: Fence の書込可は親の起動時の cwd で、子はそれを継ぐ。子の cwd を `~/worktrees` に移しても、子の編集は拒否される見込みで、親の cwd への書込可も残る。「親を書き換えられない」という必須の条件を、コマンドの deny だけでは証明できない
   - **MAJOR**: スナップショットが秘密を Git オブジェクトへ永続化しうる（伺字化はツールの返答に掛ける処理で、ファイルや patch を書く前の秘匿処理ではない）。共有 `.git` の書込可と、`hooks` / `config` の拒否は子向けに境界を生成した場合の設定で、親の cwd から継いだ境界で効くかは未確認。子のコマンドの deny（`update-ref`・`worktree`・`branch`）は誤操作の抑止で、隔離の保証ではない
@@ -238,3 +244,4 @@ W0a と W0b の実測の対象。いずれも結果で設計が変わる。
 - **2026-10-22（`review` の 2 回目を反映）**: 仕様案を直した。秘密の検査を `git add` の前（列挙 → パス検査 → 容量 → `add`）に移し、正本を `matchesReadDeny` と一致試験にした（内容中の秘密は保証しない）。未取り込みの成果物は期限掃除から外し、`gc --prune=now` は通常の後片付けから外した。状態表に、子の終了確認待ちと、記録・worktree・ref の食い違いの復旧を足した。**W1 は最小段（事前選別 → 作成 → 停止後の回収 → 起動時の警告と手動復旧）に絞り、取り込みは当面、利用者の手動の `git apply`**。`integrate` と安全に直結するファイルの検査は W2 に移し、受入条件（排他・直前の再確認・途中失敗の復旧・複数プロセス・bypass 中の確認）を書いた。W1 の前に W0b が要る。
 - **2026-10-22（W0b の実測）**: 利用者の `pis` の実機で、worktree を cwd にした Fence の下で、通常の作業（`git add` ほか）が通り、本体・兄弟・`hooks`・`config` が拒否されることを確かめた。`refs/heads` は書ける（判定器で拒否する候補）。独立 clone は不要になった。未確認は、親の `pis` から子を新しい Fence で起動する入れ子で、コードの読みでは通りにくい。実験を 2 つ用意した。
 - **2026-10-22（入れ子の実測）**: `fence` の入れ子は不可（uid map の拒否）だが、Fence の中で Landlock を重ねて、子の書込可をさらに狭められることを確かめた。子の起動を Landlock のラッパーで包む設計が有望で、共有 `.git` の `refs/heads` を子から外せる見込み（未実測）。次は、実際の `pis` の Fence の中での確認と、`uv`・`pytest` が動くかの確認。
+- **2026-10-22（Landlock ラッパーの試作）**: 子の起動を Landlock で包む試作を作り、Fence なしと親を模した Fence の両方で、通常の作業と `uv run pytest` が通り、`refs/heads`・`refs/tags`・兄弟・本体・`hooks` が拒否されることを確かめた。方式は「linked worktree + Landlock で包んだ子」が有望。実際の `pis` での確認と、`review` が次の段。

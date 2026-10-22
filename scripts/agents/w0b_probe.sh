@@ -11,6 +11,7 @@ usage() {
 使い方 (sh scripts/agents/w0b_probe.sh <setup|probe|clean>):
   setup  Fence の外のシェルで 1 回。$BASE に使い捨ての main リポジトリと worktree wt1・wt2 を作る
   probe  Fence の下 (cd $BASE/wt1 して pis を起動し、その中) で実行。各操作が通るか・拒否されるかを表示する
+  nest   Fence の下 (wt1 で pis を起動し、その中) で実行。Landlock を重ねた子が、通常の作業をできるか、refs/heads などを書けないかを表示する
   clean  Fence の外のシェルで。$BASE を消す
 EOF
 }
@@ -81,6 +82,44 @@ probe() {
   echo "完了。結果の表を貼ってください。(a.txt の編集と index は clean で消えます)"
 }
 
+nest() {
+  here=$(pwd)
+  gitdir=$(git rev-parse --absolute-git-dir)
+  main_git=$(cd "$(git rev-parse --git-common-dir)" && pwd)
+  main=$(dirname "$main_git")
+  sib="$(dirname "$here")/wt2"
+  LL="$(cd "$(dirname "$0")" && pwd)/w0b_landlock.py"
+  mkdir -p "$main_git/refs/pi-agent"
+  echo "cwd=$here gitdir=$gitdir"
+  echo "--- Landlock を重ねた子 (書込可: worktree, .git/worktrees/<id>, objects, refs/pi-agent, ~/.cache, tmp) ---"
+  # shellcheck disable=SC2329 # check から間接的に呼ぶ
+  ll_run() {
+    python3 "$LL" --write "$here" --write "$gitdir" --write "$main_git/objects" \
+      --write "$main_git/refs/pi-agent" --write "$HOME/.cache" --write "${TMPDIR:-/tmp}" --write /dev/null -- "$@"
+  }
+  check "landlock の適用と実行" 通る ll_run echo ok
+  check "git status" 通る ll_run git status --short
+  check "ファイルの編集" 通る ll_run sh -c 'echo x >>a.txt'
+  check "git add" 通る ll_run git add a.txt
+  check "update-ref refs/pi-agent/nest" 通る ll_run git update-ref refs/pi-agent/nest HEAD
+  check "python3 の実行" 通る ll_run python3 -c 'print(1)'
+  check "uv run (キャッシュへの書き込み)" 通る ll_run uv run --no-project python -c 'print(1)'
+  check "uv run pytest" 通る ll_run uv run --with pytest --no-project pytest --version
+  echo "--- 拒否されてほしい ---"
+  check "update-ref refs/heads/nest-hijack" 拒否 ll_run git update-ref refs/heads/nest-hijack HEAD
+  check "git tag (refs/tags)" 拒否 ll_run git tag nest-tag HEAD
+  check "兄弟 worktree への書き込み" 拒否 ll_run sh -c "echo x >'$sib/n.txt'"
+  check "本体の作業ツリーへの書き込み" 拒否 ll_run sh -c "echo x >'$main/n.txt'"
+  check "本体 .git/hooks への書き込み" 拒否 ll_run sh -c "echo x >'$main_git/hooks/nest-test'"
+  echo "--- 後始末 ---"
+  git update-ref -d refs/pi-agent/nest 2>/dev/null || true
+  git update-ref -d refs/heads/nest-hijack 2>/dev/null || true
+  git tag -d nest-tag 2>/dev/null || true
+  rm -f "$sib/n.txt" "$main/n.txt" "$main_git/hooks/nest-test" 2>/dev/null || true
+  git checkout -q -- a.txt 2>/dev/null || true
+  echo "完了。w0b-nest-result.txt に同じ表を書きました"
+}
+
 clean() {
   case "$BASE" in
     "$HOME"/worktrees/*) rm -rf "$BASE" ;;
@@ -95,6 +134,7 @@ clean() {
 case "${1:-}" in
   setup) setup ;;
   probe) probe 2>&1 | tee w0b-result.txt ;;
+  nest) nest 2>&1 | tee w0b-nest-result.txt ;;
   clean) clean ;;
   *) usage ;;
 esac
