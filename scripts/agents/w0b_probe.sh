@@ -94,7 +94,7 @@ clean() {
 
 case "${1:-}" in
   setup) setup ;;
-  probe) probe ;;
+  probe) probe 2>&1 | tee w0b-result.txt ;;
   clean) clean ;;
   *) usage ;;
 esac
