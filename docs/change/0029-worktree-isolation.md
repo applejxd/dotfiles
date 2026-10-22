@@ -69,6 +69,7 @@
   - **条件**: (1) Fence なし、(2) 親を模した Fence（wt1・共有 `.git` の `worktrees`・`objects`・`refs` 全体・`~/.cache`・`/tmp` が書込可。`refs` 全体が書込可でも、Landlock が `refs/heads` と `refs/tags` を拒否した）の 2 通りで、同じ結果だった
   - **試作で見つけた不具合**: `git` は `/dev/null` を読み書きで開くので、書込可に含める必要がある。Landlock はファイルに対して、ディレクトリ用の権限（`MAKE_*` など）を指定できないので、ファイルは別の権限の集合にする（`w0b_landlock.py`）
   - **未確認**: 利用者の実際の `pis` の Fence の中での実行（`wt1` で `pis` を起動し、`!sh scripts/agents/w0b_probe.sh nest`）。ネットワークが要る `uv` の操作。`REFER`（ディレクトリをまたぐ名前変更）が要る操作
+- **実際の `pis` の境界での実測（2026-10-22、私の環境で。LLM は使わない）**: `ocs` のモジュール（`boundary.build_boundary`）が、`wt1` を cwd にして組み立てる Fence の設定を取り出し、その下で `w0b_probe.sh nest` を実行した（`.tmp/real_fence_nest.py`。未コミットの使い捨て）。設定の中身は、書込可が wt1・`~/.cache`・境界用の agent 置き場・本体の `.git` 全体、書込不可が `wt1/.opencode`・本体の `.git/hooks`・`.git/config`。結果は、親を模した Fence の実測と同じ: `git status`・編集・`git add`・`update-ref refs/pi-agent/*`・`python3`・`uv run`・`uv run pytest` が通り、`refs/heads`・`refs/tags`・兄弟・本体の作業ツリー・`hooks` が拒否された。**本体の `.git` 全体が書込可でも、Landlock が `refs/heads` と `refs/tags` を拒否した**。この実測で未確認なのは、`pis` の起動全体（中継、事前検査、内側の環境変数、実際の `pi` が子を起動する経路）と、利用者の端末での実行
 - **`review`（2026-10-22）の指摘**:
   - **BLOCKER**: Fence の書込可は親の起動時の cwd で、子はそれを継ぐ。子の cwd を `~/worktrees` に移しても、子の編集は拒否される見込みで、親の cwd への書込可も残る。「親を書き換えられない」という必須の条件を、コマンドの deny だけでは証明できない
   - **MAJOR**: スナップショットが秘密を Git オブジェクトへ永続化しうる（伺字化はツールの返答に掛ける処理で、ファイルや patch を書く前の秘匿処理ではない）。共有 `.git` の書込可と、`hooks` / `config` の拒否は子向けに境界を生成した場合の設定で、親の cwd から継いだ境界で効くかは未確認。子のコマンドの deny（`update-ref`・`worktree`・`branch`）は誤操作の抑止で、隔離の保証ではない
@@ -245,3 +246,4 @@ W0a と W0b の実測の対象。いずれも結果で設計が変わる。
 - **2026-10-22（W0b の実測）**: 利用者の `pis` の実機で、worktree を cwd にした Fence の下で、通常の作業（`git add` ほか）が通り、本体・兄弟・`hooks`・`config` が拒否されることを確かめた。`refs/heads` は書ける（判定器で拒否する候補）。独立 clone は不要になった。未確認は、親の `pis` から子を新しい Fence で起動する入れ子で、コードの読みでは通りにくい。実験を 2 つ用意した。
 - **2026-10-22（入れ子の実測）**: `fence` の入れ子は不可（uid map の拒否）だが、Fence の中で Landlock を重ねて、子の書込可をさらに狭められることを確かめた。子の起動を Landlock のラッパーで包む設計が有望で、共有 `.git` の `refs/heads` を子から外せる見込み（未実測）。次は、実際の `pis` の Fence の中での確認と、`uv`・`pytest` が動くかの確認。
 - **2026-10-22（Landlock ラッパーの試作）**: 子の起動を Landlock で包む試作を作り、Fence なしと親を模した Fence の両方で、通常の作業と `uv run pytest` が通り、`refs/heads`・`refs/tags`・兄弟・本体・`hooks` が拒否されることを確かめた。方式は「linked worktree + Landlock で包んだ子」が有望。実際の `pis` での確認と、`review` が次の段。
+- **2026-10-22（実際の `pis` の境界での実測）**: `ocs` が組み立てる Fence の設定（`wt1` を cwd にしたもの）の下で、Landlock ラッパーの検査が、期待どおりに通った（本体の `.git` 全体が書込可でも、`refs/heads` と `refs/tags` は拒否された）。方式は「linked worktree + Landlock で包んだ子」で確定に近い。残りは、`pis` の起動全体の中での確認と、`review`。
