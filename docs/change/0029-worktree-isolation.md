@@ -117,7 +117,7 @@ W0a と W0b の実測の対象。いずれも結果で設計が変わる。
 
 - **必須**:
   - 親の未コミットの作業が、失われず、子に書き換えられない
-  - 子の被害が、自分の作業ツリーと、専用の ref（`refs/pi-agent/`）に限られる（共有 `.git` を子から書ける限り、この条件を満たす境界の方式を W0b で選ぶ。満たせないなら、条件の言い方を直す）
+  - 子の被害が、自分の作業ツリーと、専用の ref（`refs/pi-agent/`）、共有 `objects` への不要なオブジェクトに限られる（W0b と Landlock の実測で、`refs/heads` と `refs/tags` は拒否できると分かった。「専用の ref だけ」とは言わない）
   - 作成に失敗したとき、黙って共有ツリーで動かさない
   - コミットの hook を飛ばす操作（`--no-verify`）を使わない
   - 親への反映は、利用者の明示的な操作で行う（W1 は利用者の手動の `git apply`。W2 以降の `integrate` は、衝突したら何も変えないことを受入条件にする）
@@ -273,6 +273,104 @@ W0a と W0b の実測の対象。いずれも結果で設計が変わる。
 
 この例から決まる W1 の条件（案）: (1) データセットの場所を `.opencode/sandbox.toml` の `read` に宣言すること、(2) 出力先を worktree の中へ向けられること、(3) Landlock の書込可の許可リストに、存在するデバイスを足すこと、(4) 成果物の許可リストによる回収。外部フォルダへの出力（`write` の宣言の引き継ぎ）、GPU、Docker を使う作業は、W1 の対象外とし、親が隔離なしで行う（または `sandbox-gpu` へ `ssh` で渡す）。
 
+## W1 の実装計画
+
+W1（最小段）の実装を段に分けた計画。**利用者が承認した（2026-10-23。決めた点 3 つを含む）。実装は S0 から進める**。差し込み点は `explore` の調査（2026-10-23。コードを読んだもので、実行はしていない）による。2026-10-23 の `review` の指摘（BLOCKER 2・MAJOR 7）を反映して改訂した（「重要な更新」）。
+
+### 方針
+
+- 新しいファイル `home/dot_config/pi/harness/worktree.ts`（git の操作・事前選別・スナップショット・回収・記録）と、`home/dot_config/pi/harness/landlock_exec.py`（`scripts/agents/w0b_landlock.py` の試作を製品にしたもの）を足す。`children.ts` と `index.ts` の変更は、差し込みに必要な分だけにする
+- 隔離は `guarded_task` の新しい引数 `isolation: "worktree"` で明示的に選ぶ（opt-in）。対象は `worker` の**単独の新規依頼だけ**。`tasks`（一括）に `isolation` が混ざったら**拒否**する（一括の `worker` は、従来どおり共有の作業ツリーで動くので、入力の説明に「隔離されない」と明記する）。`keep`（往復を重ねる子）との併用も W1 では**拒否**する（回収は 1 往復の終わりに 1 回。`keep` を許すと、往復ごとの回収という別の設計が要る）
+- **隔離を指定した job の最終結果は、子の終了と回収が確定してから組み立てる**（下の「契約」）
+- Landlock が使えない環境、ラッパーの適用に失敗した場合は、隔離の依頼を**拒否**する（隔離なしで黙って動かさない）
+- 取り込みは作らない。結果は `refs/pi-agent/<job id>` と patch に残し、利用者が確認して手動で `git apply`
+- 脅威の範囲: 子の事故と暴走（ADR-0012）。意図的に回避する子（別のプロセスグループへ離脱する孫、`.opencode` が symlink のときの置換など）は保証しない。共有の `objects` への書き込みは Landlock の許可に残るので、被害は「自分の worktree、専用の ref、共有 `objects` への不要なオブジェクト」に限られる（`refs/heads` と `refs/tags` は拒否。「専用の ref だけ」とは言わない）
+
+### 契約: 往復の完了と、終了・回収の確定
+
+現行コードは、往復の結果が子の終了より先に返る（`children.ts:328-351` の `finish()` が往復の Promise を解決し、`index.ts:595-618,875-889` がその直後に `job.close()`、結果の生成、通知か返却をする。`close()` は終了を待たない（`children.ts:403-425`）。`onExit` は後の `close` イベント（`children.ts:214-229`））。そこで、隔離の job には **2 つの Promise** を持たせる:
+
+- `roundDone`: 往復の完了（現行の挙動）
+- `finalized`: 子のプロセスグループの停止の確認 → 回収 → 記録の確定（または「保持」の確定）まで終わったこと
+
+隔離の job では、`runInBackground` の `.then`、同期の `job.close()`、batch（対象外）のいずれの経路も、**`finalized` を待ってから**結果の本文・通知・ToDo の更新を行う。結果には、ref・patch のパス・取り込みのコマンド（`git apply <patch>`）、または「保持（理由）」を載せる。
+
+### 子の停止の確認
+
+- 停止は、プロセスグループへの `SIGTERM` → 猶予（3 秒。既存の `close()` と同じ）→ `SIGKILL`。その後、`kill(-pgid, 0)` が `ESRCH` を返す（グループが空になる）まで、短い間隔で確認する。期限（案: 10 秒。推測）までに空にならなければ、**回収しない**。状態を「保持（終了を確認できない）」にして、worktree・ref・記録をそのまま残す
+- 確認できるのは、同じプロセスグループの中の孫だけ。別のグループへ離脱したプロセスは、この方式では保証しない（脅威の範囲に書いたとおり）。回収中も、`lock` は取ったままにする
+
+### 差し込み点
+
+| 何を | どこへ | 根拠 |
+| --- | --- | --- |
+| 作成（事前選別・スナップショット・`git worktree add`・`lock`・ラッパー指定） | `index.ts` の `spawnChild`（443〜469 行）。同期関数なので、`git` は `spawnSync`（個別の時間の上限と、全工程の時間の上限つき。下の「時間の上限」）で呼ぶ。Promise 化すると呼び出し元 5 か所に波及する | `explore`、`review` |
+| 子の起動の差し替え | `children.ts:207` の `spawn(o.command ?? "pi", ...)`。`JobOptions.cwd` と `command` は既にあるので、`cwd` に worktree（親の cwd がリポジトリ根の下の `sub/` なら、worktree の下の `sub/`。相対位置を保つ）、`command` に `python3`、`args` の先頭にラッパーを渡す | `explore`、`review` |
+| job id の事前採番 | `Jobs.create`（`children.ts:438〜445`）が id を内部で作る。worktree の名前・ref・記録に使うので、id を先に決めて渡す形に直す（小改造） | `explore` |
+| 往復の完了と確定の分離 | `Job` に `finalized` を足す。`onExit`（`children.ts:200`、`close` ハンドラ 214〜220 行）が呼ぶ後始末（停止の確認 → 回収）を、`Jobs.create` が上書きしないよう連鎖させる。起動失敗（`proc.on("error")`）でも呼ばれるので、変更なしとして破棄する分岐を持つ | `explore`、`review` |
+| 結果への表示 | `resultText`（`index.ts:465〜`）に、`worktree:` の行（ref・patch・コマンド、または保持の理由）を足す（`- calls:` の行と同じ形） | `explore` |
+| `/worktrees` | `registerCommand`（`/bypass`・`/agents` の例）。一覧・詳細・破棄（`ctx.ui.confirm`）。モデルには渡さない | `explore` |
+| 起動時の警告 | `session_start`（`index.ts:152〜158`）。UI が無いときは早期 return する点に注意。記録・worktree・ref の三者を突き合わせる | `explore` |
+| 保護対象の検査 | `index.ts` が読み込み済みの `rules.judge.common` から、`policy.ts` の `matchesReadDeny` を呼ぶ。候補パスは、リポジトリ相対か絶対かを揃えて渡す（`decide.ts:171〜174` は両方を試す） | `explore` |
+| `guarded_task` の引数 | `parameters`（`additionalProperties: false`）、`parseTaskInput`（`children.ts:59`）、`TaskInput` の `new` 形に `isolation` を足す。`tasks` の項目に混ざったら拒否 | `explore`、`review` |
+
+### git の実行（S1 の受入条件）
+
+呼ぶコマンドごとに、リポジトリ自身の設定を介したコード実行の経路を塞ぐ。共通: `GIT_*` を落とし、`/usr/bin/git` の絶対パスで呼び、`-c core.hooksPath=<空のディレクトリ> -c core.fsmonitor=false` を付ける。`core.hooksPath` の無効化は、**ハーネス自身が実行する plumbing（`worktree add` など）の hook を動かさない**ための措置で、利用者・エージェントのコミットの検証を飛ばす（`--no-verify`）ものではない、と判断する（このリポジトリが禁じるのは、後者）。
+
+| コマンド | 走りうるもの | 対策（案） |
+| --- | --- | --- |
+| `ls-files --others --exclude-standard`、`status --porcelain` | fsmonitor | `core.fsmonitor=false` |
+| `read-tree`、`write-tree`、`commit-tree` | なし（hook は走らない。W0a で実測） | — |
+| `add -A`（一時 index） | clean filter・process filter（`filter.<名>.clean`・`.process`）。fsmonitor | **`filter.*` の定義が 1 つでもあれば、隔離の起動を拒否**（LFS の `filter.lfs.*` も対象。LFS のリポジトリは W1 では対象外）。`core.fsmonitor=false` |
+| `worktree add --detach` | checkout の smudge filter・process filter、`post-checkout` hook | 上と同じ（`filter.*` があれば拒否）。`core.hooksPath` を空に |
+| `diff --binary --full-index --no-renames` | external diff、textconv | `--no-ext-diff --no-textconv`、`-c diff.external=`。`.gitattributes` の `diff=<名>` は `--no-textconv` で無効 |
+| `update-ref`、`worktree lock`・`unlock`・`remove`・`prune`、`config --get-regexp` | なし | — |
+
+`core.sshCommand` は、ローカルの操作では実行経路ではない（remote やサブモジュールの操作を足すときの確認対象）。
+
+### 事前選別（S1）
+
+順序: (1) 候補の列挙（追跡の変更と、ignored でない未追跡。`.tmp/` 自身は除く）→ (2) 保護対象のパスの検査（`matchesReadDeny`。当たれば拒否して、パスと一致した規則を示す）→ (3) 容量（合計・1 ファイル。`stat` の合計）→ (4) filter driver の確認 → (5) 配置先の検査 → (6) 一時 index で `add -A`（ここで初めてオブジェクトを書く）→ (7) 作成後の index と、(1) の候補の一致の確認。
+
+**配置先の検査**: 配置先は `<リポジトリ根>/.tmp/worktrees/<job id>`。(a) `git check-ignore -q` で `.tmp/` が ignored であること（無ければ**起動を拒否**。親の作業ツリーを勝手に変えない）、(b) `.tmp` と `.tmp/worktrees` が実ディレクトリで、symlink でなく、実体のパスがリポジトリ根の下であること、(c) `git ls-files .tmp` が空であること（追跡されたファイルが無い）、(d) 作成先が存在しないこと。
+
+**保証の範囲**: (1) の列挙と (6) の `add` の間に、親が変更しても、(7) の一致で検出するのは事後で、**書いたオブジェクトは取り消せない**。そのため、(7) で食い違ったら起動を拒否して一時 index を消すが、オブジェクトは、参照されないまま `gc` まで残る、と結果に表示する。
+
+### 時間の上限
+
+`spawnSync` は親 pi のイベント処理を止める。各 `git` 呼び出しに個別の timeout（案: 30 秒。推測）と出力量の上限を付け、事前選別から worktree の作成までの**全工程**にも上限（案: 60 秒。推測）を置く。超えたら起動を拒否して、一時 index と作成途中の worktree を片付ける。根拠の実測: 200MB の未追跡ファイルのスナップショットが 5.1 秒、worktree の作成が 0.28 秒（W0a）。実測で停止が長ければ、非同期化（呼び出し元 5 か所の改修）を再検討する。
+
+### 回収の順序（S1 の受入条件）
+
+回収は、**結果の ref が真実の源**（patch は ref から再生成できる）になる順序にする: (1) 子の worktree のスナップショットを一時 index で作り、結果の commit を作る（`commit-tree`、親は起点の commit）→ (2) `refs/pi-agent/<job id>` を `update-ref`（オブジェクトを `gc` から守る）→ (3) patch を一時ファイルへバイナリで書き、`rename`（`wx`、リンクの拒否。保存先は `.tmp/subagents/`。子の Landlock の書込可に含まれない）→ (4) 記録（job ごとの JSON。状態、起点・結果の commit、ref、patch のパスとハッシュ）を、一時ファイルへ書いて `rename` で更新（状態は `collected`）→ (5) `unlock`。どこで落ちても、既存の成果物を自動で消さない。復旧（起動時）: 状態が `collecting` で ref があり patch が無ければ、ref から patch を再生成する。ref が無ければ、worktree が残っていれば回収をやり直せる（利用者が `/worktrees` で実行）。
+
+### 実装の段
+
+| 段 | 内容 | 完了の条件 |
+| --- | --- | --- |
+| S0 | **実測（実装の前）**: **親の `pis` と同じ境界**（親の cwd をリポジトリ根にした `ocs` の Fence。`.tmp/real_fence_cmd.py` の方式。worktree を cwd にした Fence で代用しない）の内側から、ラッパー → 偽モデル（`faux.ts`）の子 `pi` を起動し、1 往復を終えられる最小の書込可の一覧を求める。`/dev/null`・`/dev/tty`・`/dev/shm`・`/tmp`・`PI_CODING_AGENT_DIR` 配下・`~/.cache`・MCP のキャッシュが要るか。`python3` が Fence の下で起動できるか。親・兄弟・共有 refs（`refs/heads`・`refs/tags`）への書き込みが拒否されること | 成功する一覧と、拒否の結果を 0029 に記録。書込可を、広い既存のディレクトリへ安易に広げない |
+| S1 | `worktree.ts` の中核（上の事前選別、git の実行、時間の上限、スナップショット、`git worktree add` と `lock`、同時数の上限、記録、回収、`unlock`）。子の起動は含めない | 使い捨ての git リポジトリでの試験（`tmp_path`）。W0a の実測を試験にする（往復、衝突の拒否、秘密の拒否、容量の拒否、`.tmp` が ignored でない場合の拒否、`filter.*` がある場合の拒否、配置先の symlink、(7) の一致、各工程で落ちたときの状態）。`review` |
+| S2 | `landlock_exec.py`: 入力の検証（`--write` の値の欠落、`--` の後の欠落、存在しないパスを拒否）、ABI に応じたアクセス種別、ファイルとディレクトリの権利の分離、存在するデバイスだけの許可、適用の失敗で `execvp` の前に非ゼロで終了 | 単体の試験。Landlock の ABI が無い環境は skip。配置が、子から書けない場所（`~/.config/pi/harness`。`control_dirs`）であることを、S0 の境界で確認 |
+| S3 | `children.ts`・`index.ts` の差し込み（事前採番、`finalized` の追加と停止の確認、`isolation`、`spawnChild`、回収、`resultText`、**起動時の取り残しの検出と三者の照合**（S4 から前倒し））。試験の足場（`run_child`）で、偽モデルの `worker` が `.tmp/worktrees/` の下で動き、結果に ref と patch が出る。`tasks` に `isolation` が混ざると拒否する。孫プロセスが残る子（停止を確認できない）で「保持」になる | 既存の試験が通る。新しい統合試験。`review` |
+| S4 | `/worktrees`（一覧・詳細・破棄）、docs（`pi-guard.md` に節、0029 の更新）、試験のコピー一覧への追記 | 全件検証 |
+| S5 | 利用者の実機（`pis`）での通し確認（実際の MCP・キャッシュを含む）。`review` | 結果を 0029 に記録 |
+
+各段の終わりに全件検証を行う。
+
+### 落とし穴（`explore` の調査）
+
+- **試験のコピー一覧**: harness の `.ts`・`.py` を足すと、`test/agents/test_pi_harness.py:41-45`、`test/agents/test_pi_commit_confirm.py:363-367`、`scripts/pi-harness-spike/compact-real.py:34` の個別コピーの一覧に足さないと、全試験が `ModuleNotFound` で落ちる（`audit.ts` を足したとき 125 件が落ちた）。新しいファイルを足す段で直す。`scripts/verify.py` の選択規則（`_PI_TESTS`、`test_every_test_file_is_selectable`）にも、新しい試験ファイルを足す
+- **判定器の「作業ツリーの中」**: ツール呼び出しの `ctx.cwd` 基準なので、子の cwd を worktree にすれば worktree 基準になる（`decide.ts:170`、`shared.ts:258`）。`PI_HARNESS_ALLOWED.write` は変えなくてよい（worktree は親の書込領域の中）
+- **`process.once("exit")` は同期**: ここで回収はできない。実行中のまま残った worktree は、次回の起動時の警告で拾う
+- **`worker` の `shell_deny` に `update-ref`・`worktree`・`branch` が無い**: Landlock が `refs/heads`・`refs/tags` への書き込みを拒否するので、判定器の追加は W1 では不要（W3 の見直しで扱う）
+
+### 決めた点（2026-10-23、利用者が 3 つとも推奨どおりに確定。`review` も同意した）
+
+1. 隔離を **`isolation` 引数の opt-in** にするか、`worker` の既定にするか（案: opt-in。使って慣れてから既定にする。opt-in の間は、結果に「隔離なし」か「隔離あり」を表示して、「worker なら常に隔離」と誤認させない）
+2. `.tmp/` が ignored でないリポジトリでは、**起動を拒否**するか、`.git/info/exclude` へ自動で足すか（案: 拒否）
+3. 回収の失敗（patch が書けないなど）のとき、**worktree を保持して警告**する（案）か、結果の本文だけ返すか
+
 ## 他の案件から移管された内容
 
 | 元 | 内容 | この案件での扱い |
@@ -297,3 +395,5 @@ W0a と W0b の実測の対象。いずれも結果で設計が変わる。
 - **2026-10-22（具体例と Landlock のデバイス）**: 利用者の具体例（SLAM・SfM の大規模動画データセット。読み取り専用のデータ、中間・結果の書き出し）を「大きなデータと外部フォルダ」に足した。Landlock の書込可に `/dev/shm`・`/dev/dxg` などを足す必要を実測した（含めないと拒否）。W1 は読み取りまでで、出力先は worktree の中、成果物は許可リストで回収する案。
 - **2026-10-22（データセットの読み取りと GPU の調査）**: `pis` が組み立てる Fence の下で、許可外の場所（ホームの下・外）は読めず、`.opencode/sandbox.toml` の `read`・`write` で足せること、Fence の下では GPU（`nvidia-smi`）が使えないこと（既存の制約。GPU は `sandbox-gpu` への `ssh` の設計）を確かめ、SLAM の具体例の節を直した。W1 は、データセットは `read` の宣言、出力は worktree の中、GPU・Docker・外部への出力は対象外。
 - **2026-10-22（GPU の原因の特定）**: `pis` の Fence の下で GPU が使えない原因は、Fence の `devices.mode` が `/dev/dxg` を見せないこと。`devices.allow = ["/dev/dxg"]` を足すと、実際の境界の下で `nvidia-smi` と CUDA の初期化が通る（実測）。worktree 隔離とは独立で、`ocs` の境界に足す別の案件。「大きなデータと外部フォルダ」の GPU の記述と表を直した。
+- **2026-10-23（W1 の実装計画と `review`）**: 実測が揃ったので、W1 の最小段の実装計画（S0〜S5）を書いて `review` に見せた。BLOCKER 2: 往復の結果が子の終了より先に返る現行コードでは、回収を終了後に行うと結果・通知・ToDo が回収より先に確定する（隔離の job に `roundDone` と `finalized` の 2 つの Promise を持たせ、結果は `finalized` の後に組み立てる契約にした）、`close` イベントは孫の停止の証明ではない（プロセスグループの停止を確認し、確認できなければ回収せず保持）。MAJOR 7: S0 は親の実境界で行う、git の実行をコマンドごとに表にして `filter.*` があれば拒否・`hooksPath` と `fsmonitor` を無効化、事前選別と配置先の検査の具体化と保証範囲の限定、同期 `git` の全工程の時間の上限、回収の永続化の順序（ref が真実の源）、ラッパーの入力検証、起動時の照合を S3 へ前倒し。`keep` と `tasks` との併用は W1 では拒否。決める点 3 つに `review` は同意。
+- **2026-10-23（W1 の計画の承認）**: 利用者が、W1 の実装計画と決めた点 3 つ（opt-in、`.tmp` が ignored でなければ拒否、回収の失敗は保持して警告）を推奨どおりに承認した。S0（実測）から実装する。
