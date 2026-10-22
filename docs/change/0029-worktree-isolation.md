@@ -357,7 +357,7 @@ W1（最小段）の実装を段に分けた計画。**利用者が承認した�
 | 段 | 内容 | 完了の条件 |
 | --- | --- | --- |
 | S0 | **実測（実装の前）**: **親の `pis` と同じ境界**（親の cwd をリポジトリ根にした `ocs` の Fence。`.tmp/real_fence_cmd.py` の方式。worktree を cwd にした Fence で代用しない）の内側から、ラッパー → 偽モデル（`faux.ts`）の子 `pi` を起動し、1 往復を終えられる最小の書込可の一覧を求める。`/dev/null`・`/dev/tty`・`/dev/shm`・`/tmp`・`PI_CODING_AGENT_DIR` 配下・`~/.cache`・MCP のキャッシュが要るか。`python3` が Fence の下で起動できるか。親・兄弟・共有 refs（`refs/heads`・`refs/tags`）への書き込みが拒否されること | **完了（2026-10-23。「現在地」の S0 の実測）**。成功する一覧と拒否の結果を記録した |
-| S1 | `worktree.ts` の中核（上の事前選別、git の実行、時間の上限、スナップショット、`git worktree add` と `lock`、同時数の上限、記録、回収、`unlock`）。子の起動は含めない | 使い捨ての git リポジトリでの試験（`tmp_path`）。W0a の実測を試験にする（往復、衝突の拒否、秘密の拒否、容量の拒否、`.tmp` が ignored でない場合の拒否、`filter.*` がある場合の拒否、配置先の symlink、(7) の一致、各工程で落ちたときの状態）。`review` |
+| S1 | `worktree.ts` の中核（上の事前選別、git の実行、時間の上限、スナップショット、`git worktree add` と `lock`、同時数の上限、記録、回収、`unlock`）。子の起動は含めない | 使い捨ての git リポジトリでの試験（`tmp_path`）。W0a の実測を試験にする（往復、衝突の拒否、秘密の拒否、容量の拒否、`.tmp` が ignored でない場合の拒否、`filter.*` がある場合の拒否、配置先の symlink、(7) の一致、各工程で落ちたときの状態）。`review`。**完了（2026-10-23。仕様と残る限界は「S1 の実装」。review 3 回）** |
 | S2 | `landlock_exec.py`: 入力の検証（`--write` の値の欠落、`--` の後の欠落、存在しないパスを拒否）、ABI に応じたアクセス種別、ファイルとディレクトリの権利の分離、存在するデバイスだけの許可、適用の失敗で `execvp` の前に非ゼロで終了 | 単体の試験。Landlock の ABI が無い環境は skip。配置が、子から書けない場所（`~/.config/pi/harness`。`control_dirs`）であることを、S0 の境界で確認 |
 | S3 | `children.ts`・`index.ts` の差し込み（事前採番、`finalized` の追加と停止の確認、`isolation`、`spawnChild`、回収、`resultText`、**起動時の取り残しの検出と三者の照合**（S4 から前倒し））。試験の足場（`run_child`）で、偽モデルの `worker` が `.tmp/worktrees/` の下で動き、結果に ref と patch が出る。`tasks` に `isolation` が混ざると拒否する。孫プロセスが残る子（停止を確認できない）で「保持」になる | 既存の試験が通る。新しい統合試験。`review` |
 | S4 | `/worktrees`（一覧・詳細・破棄）、docs（`pi-guard.md` に節、0029 の更新）、試験のコピー一覧への追記 | 全件検証 |
@@ -371,6 +371,44 @@ W1（最小段）の実装を段に分けた計画。**利用者が承認した�
 - **判定器の「作業ツリーの中」**: ツール呼び出しの `ctx.cwd` 基準なので、子の cwd を worktree にすれば worktree 基準になる（`decide.ts:170`、`shared.ts:258`）。`PI_HARNESS_ALLOWED.write` は変えなくてよい（worktree は親の書込領域の中）
 - **`process.once("exit")` は同期**: ここで回収はできない。実行中のまま残った worktree は、次回の起動時の警告で拾う
 - **`worker` の `shell_deny` に `update-ref`・`worktree`・`branch` が無い**: Landlock が `refs/heads`・`refs/tags` への書き込みを拒否するので、判定器の追加は W1 では不要（W3 の見直しで扱う）
+
+### S1 の実装（`worktree.ts`）の仕様と残る限界
+
+S1（2026-10-23）で実装した `home/dot_config/pi/harness/worktree.ts` の振る舞い。実装は、`worker` が書き、`review` を 3 回経た。試験は `test/agents/test_pi_worktree.py`（使い捨ての git リポジトリで 47 件）。
+
+**記録の状態**: `creating`（作成の途中。先に書く）→ `running` → `collecting` → `collected`。失敗は `kept`（何も消さずに保持）。件数の上限（`maxWorktrees`）には、`creating`・`running`・`collecting`・`collected`・`kept` のすべてを数える（自動では消さない）。`creating` が 10 分を過ぎると、`reconcile` が `stuck_creating` と報告する。
+
+**前提（所有権の根拠）**: 記録（`.tmp/subagents/worktrees/<job id>.json`）は、**子から書けない**配置であること。子の Landlock の書込可は、worktree・`.git/worktrees/<id>`・共有 `objects`・`~/.cache`・`/tmp` などで、`.tmp/subagents/` を含まない（S0 の実測）。この前提が崩れると、`discard` の所有権の根拠が失われる。
+
+**`discard` の規則**:
+
+- 記録が無い・壊れている・`repo` が違う、のときは**何も消さず** `not_owned`。利用者が同じパスに作った worktree や、同名の ref には触れない
+- worktree は、記録のパスが規約のパスと一致し、`git worktree list` の登録パスが完全一致し、登録の HEAD が `snapshotCommit` の子孫で、管理領域の検証（下）に通るときだけ消す。違反があれば、**ref・patch も含めて何も消さず**（破棄全体を止め）、記録を `kept` にして理由を残す
+- ref は、記録の `ref` が `refs/pi-agent/<job id>` で、現在値が記録の `resultCommit` と同じときだけ（値を指定した `update-ref -d`）。patch は、`.tmp/subagents/` 直下の通常ファイルで、sha256 が記録と同じで、**他の記録が同じ patch を参照していない**ときだけ。patch の名前（`patchName`）には job id を含めることが必須（別の job と同じ patch を共有して、片方の破棄でもう片方の成果物を失うのを防ぐ）
+- ref・patch・worktree のどれか 1 つでも残したときは、**記録を消さず**、`kept` と、残したものと理由を `note` に追記する
+
+**管理領域（`.git/worktrees/pi-agent-<job id>`）の検証**（`collect` と `discard` の両方。子が書ける領域なので、git に渡す前に調べる）:
+
+| 対象 | 検査 |
+| --- | --- |
+| 管理領域そのもの | 実ディレクトリで symlink でない。`realpath` が本体の共有 git ディレクトリの `worktrees/` の下 |
+| `commondir`・`gitdir`・`<worktree>/.git` | 内容が、本体の共有 git ディレクトリ・worktree の `.git`・管理領域と対応している |
+| `config.worktree` | **あれば拒否**（`extensions.worktreeConfig` を介した設定の注入を防ぐ。`-c extensions.worktreeConfig=false` も併用するが、効くかは未確認） |
+| 許可する名前 | `HEAD`・`ORIG_HEAD`・`commondir`・`gitdir`・`locked`・`index`・`index.lock`・`logs`・`pi-agent-collect-index`・`refs`。**それ以外の名前は拒否** |
+| 許可名の中身 | `HEAD` は 40/64 桁の 16 進 1 行（デタッチ。`ref:` は拒否）。`index` 系は通常ファイルで 64MB 以下。`locked` などは通常ファイルで 1KB 以下。`logs`・`refs` は再帰して symlink 不可、1 ファイル 1MB 以下、合計 1000 件以下 |
+
+**ロック**: 作成・回収・破棄は、同じリポジトリの `.tmp/subagents/worktrees/.lock`（ディレクトリ。pid と乱数のトークン）の下で動く。取れなければ、50 ミリ秒間隔で最大 `lockWaitMs`（既定 1 秒。推測の値）待ち、`busy`（`detail` に、古いロックかを示す `stale` と `pid`）。**古いロックは自動では奪わない**（3 回の `review` で、奪取の手順に、生きたロックを動かす競合の窓が残ると分かったため）。明示的な `clearStaleLock(repo)`（呼び出しは S4 の `/worktrees` とセッション開始）が、pid が死んでいて、かつディレクトリの mtime が 60 秒より古いときだけ、識別を読み直して同じことを確かめてから消す。残る競合の窓は、その読み直しと削除の間。pid の再利用で、死んだはずの pid が生きている場合は消さない。**待ちは同期**（`Atomics.wait`）で、最大 `lockWaitMs` の間、親のイベントループを止める。
+
+**再回収の冪等性**: patch の公開後・`collected` の記録の前に落ちて `kept` になった job を、再度 `collect` できる。既存の ref が、今回の結果と同じ tree・同じ親なら再利用し、既存の patch が同じ sha256 なら再利用する。それ以外は衝突で失敗し、**既存を上書きしない**。
+
+**`kept` の手動復旧**: 記録の `note` を読んで原因を直し、`collect`（`kept` を受け付ける）か `discard` を再実行する。管理領域が壊れた worktree は、自動では破棄されない。利用者が手動で `git worktree` と記録を整理する（S4 の `/worktrees` で案内する）。確定後の `unlock` の失敗は、状態を `kept` に戻さず、`warnings` と `note` で返す。
+
+**残る限界（記録して先へ進む）**:
+
+- ディレクトリの `lstat` と使用の間の差し替え（TOCTOU）は、完全には防げない。管理領域の検証と、その後の git の実行の間にも窓がある。`O_NOFOLLOW` を、patch と記録の一時ファイルの作成に使うが、読み出し側（記録・patch の sha256 の読み込み）は `lstat` の後に読む
+- 検証した管理領域の内容は、子の実行中に変わりうる。回収は停止の確認の後にだけ行う（S3 の契約）
+- 候補の列挙と `add` の間の変更は、事後（一致の確認）にしか検出できず、書いたオブジェクトは取り消せない
+- 試験していない分岐: 確定後の `unlock` の非ゼロ終了、奪取中の競合、`worktree add` が部分的に成功して失敗する実際の経路（分岐は関数の単位で試験）、`extensions.worktreeConfig=false` の効果
 
 ### 決めた点（2026-10-23、利用者が 3 つとも推奨どおりに確定。`review` も同意した）
 
@@ -405,3 +443,4 @@ W1（最小段）の実装を段に分けた計画。**利用者が承認した�
 - **2026-10-23（W1 の実装計画と `review`）**: 実測が揃ったので、W1 の最小段の実装計画（S0〜S5）を書いて `review` に見せた。BLOCKER 2: 往復の結果が子の終了より先に返る現行コードでは、回収を終了後に行うと結果・通知・ToDo が回収より先に確定する（隔離の job に `roundDone` と `finalized` の 2 つの Promise を持たせ、結果は `finalized` の後に組み立てる契約にした）、`close` イベントは孫の停止の証明ではない（プロセスグループの停止を確認し、確認できなければ回収せず保持）。MAJOR 7: S0 は親の実境界で行う、git の実行をコマンドごとに表にして `filter.*` があれば拒否・`hooksPath` と `fsmonitor` を無効化、事前選別と配置先の検査の具体化と保証範囲の限定、同期 `git` の全工程の時間の上限、回収の永続化の順序（ref が真実の源）、ラッパーの入力検証、起動時の照合を S3 へ前倒し。`keep` と `tasks` との併用は W1 では拒否。決める点 3 つに `review` は同意。
 - **2026-10-23（W1 の計画の承認）**: 利用者が、W1 の実装計画と決めた点 3 つ（opt-in、`.tmp` が ignored でなければ拒否、回収の失敗は保持して警告）を推奨どおりに承認した。S0（実測）から実装する。
 - **2026-10-23（S0 の実測）**: 親の実境界の内側で、Landlock のラッパー越しの子の `pi`（偽モデル）が 1 往復を終えられ、必要な書込可の最小の一覧が分かった（`agent_dir`・`wt`・`/dev/null`、作業によって `~/.cache`・`/tmp`・`gitdir`・`objects`。`refs/pi-agent` と `/dev/tty` は子に不要）。拒否も確認した。次は S1（`worktree.ts` の中核）。
+- **2026-10-23（S1 の実装と `review` 3 回）**: `home/dot_config/pi/harness/worktree.ts`（`git` の安全な実行、事前選別、スナップショット、worktree の作成と `lock`、記録、回収、破棄、照合）と試験（52 件）を実装した。`review` の指摘: 1 回目 BLOCKER 1（`discard` が記録のない利用者の worktree・ref を消せる）・MAJOR 4（`worktree add` の途中失敗、管理領域を検証せず信用、回収と破棄がロックの外、確定後の `unlock` 失敗で保持に戻る）、2 回目 BLOCKER 1（記録が嘘をつく場合）・MAJOR 3（ロック奪取の競合、部分破棄で記録を失う、管理領域の許可名の中身）、3 回目 MAJOR 2（管理領域違反でも ref・patch を消す、patch を別 job と共有）・MINOR 1（奪取の復元の競合）。すべて直した（自動のロック奪取はやめて明示的な `clearStaleLock` に）。残る限界（TOCTOU、`clearStaleLock` の窓、記録は子から書けないという前提）は「S1 の実装」に記録した。次は S2（`landlock_exec.py`）と S3。
