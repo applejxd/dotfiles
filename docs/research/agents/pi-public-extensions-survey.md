@@ -305,6 +305,58 @@
 - 現行の TUI での通知・質問の体験。worktree の先行例の実機での挙動
 - P1・P2・P4 の出典は、節ごとに追跡性が違う（配布物の固定 URL・ハッシュが無い節がある）。ここでは新しい観測だけに版・取得日・URL を付けた
 
+## 記録 P7 — 2026-10-22: worktree 隔離の先行例の比較 (Claude Code・Codex・Cursor)
+
+- **問い**: pi の拡張以外の、広く使われるエージェント（Claude Code・Codex アプリ・Cursor ほか）は、worktree の起点・取り込み・隔離の強制・後始末をどう作っているか。
+  [CHG-0029](../../change/0029-worktree-isolation.md) の設計に、取り入れる点と避ける点は何か。pi の拡張 2 つ（`@gotgenes/pi-subagents-worktrees`・`@tintinweb/pi-subagents`）は、[記録 P6](#記録-p6--2026-10-22-worktree-隔離の先行例と-p1p5-の訂正) のとおりで、ここでは再掲しない
+- **方法と限界**: 公式 docs を取得して読んだ。**実機では動かしていない**。取得日はすべて 2026-10-22。
+  `.worktreeinclude` は、ignored のファイルを worktree へコピーする対象を選ぶ設定ファイル。`filter driver` は、git が `add` などでファイルの内容を変換するために呼ぶ外部コマンドの設定
+
+| 対象 | 根拠の種類 | 出典 |
+| --- | --- | --- |
+| Claude Code | **一次**（公式 docs を取得して読んだ） | <https://code.claude.com/docs/en/worktrees> |
+| Cursor | **一次**（公式 docs を取得して読んだ） | <https://cursor.com/docs/configuration/worktrees> |
+| Codex アプリ | **二次**。公式ページ <https://developers.openai.com/codex/app/worktrees> は本文が動的描画で取得できず、検索結果の要約が根拠。詳細は、コミュニティの解説記事 <https://codex.danielvaughan.com/2026/04/11/codex-app-worktree-lifecycle-local-environments/> を読んだ（**公式でも未検証**） | 左の 2 つ |
+| Conductor・vibe-kanban・claude-squad | **二次・未確認**。解説記事の検索結果の断片だけで、一次情報は未読 | 検索結果 |
+
+### 比較
+
+| 論点 | Claude Code（一次） | Codex アプリ（二次） | Cursor（一次） | 今回の設計（CHG-0029。**案**） |
+| --- | --- | --- | --- | --- |
+| 起点 | 既定はリモートの既定ブランチ（`worktree.baseRef: "fresh"`）。`"head"` はローカルの HEAD（コミット済みの追跡ファイルだけ。未コミットは持ち込まない） | 選んだブランチの未コミットの変更も適用する（detached HEAD） | 本調査では未読 | 親の未コミット・未追跡（ignored を除く）を含むスナップショット |
+| 取り込み | 自動でない。ブランチ `worktree-<name>` を利用者がマージ | Handoff で worktree の変更を本体のチェックアウトへ移す（逆も可。同じブランチを 2 か所で開くと失敗する） | `/apply-worktree` で本体へ適用 | W1: 回収した patch を利用者が手動で `git apply`。自動の取り込みは W2 以降 |
+| 隔離の強制 | ツール呼び出しの 4 つの検査: 本体への Edit/Write/NotebookEdit、本体を指す cwd の Bash、git の迂回（`git -C`・`--git-dir`・`GIT_DIR`・`GIT_WORK_TREE`・`cd`）、コマンド形が検証できないもの。**`cp` やシェルのリダイレクトによる書き込みは追跡せず**、権限とサンドボックスの設定に任せる（docs が明記） | 未読 | 未読 | OS レベル: Landlock が子の書込可を worktree と共有 `.git` の一部に絞る（Fence の入れ子は不可。Landlock は実測済み） |
+| ignored・未追跡 | ignored は `.worktreeinclude`（`.gitignore` の書式。ignored のものだけコピー）で選ぶ | ignored は Handoff で移らない。セットアップのスクリプトで補う | `.cursor/worktrees.json` のセットアップのスクリプト | 未追跡は持ち込む（`add` の前に秘密のパスを検査し、容量で拒否）。ignored は持ち込まない |
+| 後始末 | 終了時、変更なしなら自動削除（名前付きは確認）、変更ありは保持して確認。サブエージェントの worktree は、変更なしで自動削除、変更ありは定期の掃除（`cleanupPeriodDays`）が、変更・未追跡・未 push のコミットがあるものを消さない。作成した worktree の git メタデータに**目印**を書き、無いもの（利用者が `git worktree add` で作ったもの）は掃除しない。実行中は `git worktree lock` を取り、掃除と `git worktree remove` を拒む。killed なセッションの lock は掃除が解放する。状態が検証できないとき（サブモジュールを調べられないなど）は、自動削除せず確認する | 管理下の worktree は約 15 個を上限に自動削除し、**削除の前にスナップショットを保存する** | `/delete-worktree` で削除。3.5 以降、機械全体で最大 25 個（既定、`cursor.worktreeMaxCount`）。**`git worktree add` で作った外部のものも削除の対象** | 未取り込みの成果物は掃除しない。取り残しは起動時に警告し、利用者が確認して破棄 |
+| 作成の拒否条件 | 4 つの拒否条件の 1 つが、リポジトリの設定の **filter driver** が把握できない・切れない場合 | 未読 | 未読 | 秘密のパスの検査と容量で拒否（filter driver は未対応。CHG-0029 で決める） |
+| コミットの hook | docs から読み取れた記述なし（**未確認**） | 未確認 | 未確認 | 走らせない（プラミングで ref を作り、`--no-verify` は使わない） |
+
+Conductor・vibe-kanban・claude-squad は、解説記事の断片（各 worktree を分ける、レビューしてマージする、衝突で止まる、など）だけで、**二次情報・未確認**。表には入れていない。
+
+### 今回の設計との違い
+
+- **起点**: Claude Code の既定は、利用者の未コミットを持ち込まない。このリポジトリは作業中ずっと未コミットなので、`"head"` でも足りない。Codex だけが未コミットの変更を適用する（二次情報）
+- **隔離の強制の層**: Claude Code は、ツール呼び出しの検査（アプリ層）で隔離し、`cp` やリダイレクトは追跡しない。今回は、子の書込可を OS（Landlock）で絞るので、コマンドの形に依らない。ただし、Claude Code の検査は、実機ではなく docs の記述で比べた
+- **取り込み**: 先行例は、利用者が操作する形（ブランチのマージ・`/apply-worktree`・Handoff）で、自動で親へ書かない。W1 の手動の `git apply` と同じ方向
+- **後始末**: Cursor は、`git worktree add` で作った外部のものまで削除の対象にする。Cursor・Codex は、上限を超えると自動で削除する（Codex は削除の前にスナップショットを保存する）。今回は、未取り込みの成果物を自動で消さない
+
+### 分かったこと
+
+1. **実行中の worktree は `git worktree lock` で守る**（Claude Code）。`git worktree remove` を拒むことは、先行例の記述で、このリポジトリでは未実測 → CHG-0029 に取り入れた
+2. **自分が作ったものだけを扱う**（Claude Code の目印）。Cursor の失敗（外部のものも削除）を避ける → 取り入れた
+3. **同時に持つ数の上限**は、先行例にある（Cursor 25・Codex 約 15）。ただし先行例は自動で削除する。今回は、上限を超えたら新しい子の起動を拒否する → 取り入れた
+4. **filter driver の確認**（Claude Code が作成を拒む）。clean filter は `git add -A` の間に任意のコマンドを実行しうる → 起動前の確認に足す案として取り入れた
+5. **状態を検証できないときは自動で削除しない**（Claude Code）→ 取り入れた
+6. **`.worktreeinclude` 相当**（ignored のファイルを選んでコピー）は、Claude Code と Cursor（セットアップのスクリプト）にある → W2 以降の候補
+7. **Codex の「削除の前にスナップショット」**は、今回の「未取り込みの成果物は消さない」で足りるため、取り入れない
+
+### 未確認
+
+- Codex・Conductor・vibe-kanban・claude-squad の一次情報。Cursor の起点と隔離の強制の記述（本調査では読んでいない項目）
+- Claude Code の `git worktree lock` が、`git worktree remove` を実際に拒むか（このリポジトリの git 2.43.0 では未実測）
+- 各ツールのコミットの hook の扱い
+- 実機での挙動。docs の記述と実装のずれ
+
 ## 付録: 上位 150 件の分類
 
 括弧内は月間ダウンロード数の順位（2026-10-20 時点）。
