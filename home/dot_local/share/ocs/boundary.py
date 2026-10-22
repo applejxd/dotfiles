@@ -17,6 +17,7 @@ from .common import HOME, die
 RULES = HOME / ".config/opencode/guide-plugin/rules.json"
 REQUEST_REL = ".opencode/sandbox.toml"
 REQUEST_KEYS = ("read", "write", "network_allow")
+EXTRA_READ_ENV = "PIS_EXTRA_READ"
 
 
 def load_boundary(
@@ -63,8 +64,14 @@ def git_common_dir(workspace: Path) -> Path | None:
       (``GIT_DIR`` を通すと、別のリポジトリが書けるようになる)。
     """
     done = subprocess.run(
-        ["/usr/bin/git", "-C", str(workspace), "rev-parse", "--path-format=absolute",
-         "--git-common-dir"],
+        [
+            "/usr/bin/git",
+            "-C",
+            str(workspace),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -157,9 +164,7 @@ def protected_candidates(sandbox: dict, workspace: Path) -> list[Path]:
     return _uniq_paths([_real(root / rel) for root in roots for rel in rels])
 
 
-def reject_protected_workspace(
-    sandbox: dict, workspace: Path, request: dict | None = None
-) -> None:
+def reject_protected_workspace(sandbox: dict, workspace: Path, request: dict | None = None) -> None:
     """保護対象の中での起動と、保護対象の中を ``write`` に足す宣言を拒否する。
 
     see docs/spec/opencode-sandbox.md#保護対象denywrite
@@ -247,13 +252,16 @@ def build_boundary(
     # 実体でも比べ、実体で渡す (ホームが symlink だと起動ディレクトリは実体になる)
     opened_real = [str(_real(Path(p))) for p in opened]
     home_real = [str(_real(HOME))]
-    deny_read = _uniq([
-        str(_real(Path(p))) for p in _existing(base.get("deny_read", []))
-        if not _within(p, [str(HOME)])
-        or not _within(str(_real(Path(p))), home_real)
-        or _within(p, opened)
-        or _within(str(_real(Path(p))), opened_real)
-    ])
+    deny_read = _uniq(
+        [
+            str(_real(Path(p)))
+            for p in _existing(base.get("deny_read", []))
+            if not _within(p, [str(HOME)])
+            or not _within(str(_real(Path(p))), home_real)
+            or _within(p, opened)
+            or _within(str(_real(Path(p))), opened_real)
+        ]
+    )
     network = dict(base["network"])
     if extras.get("network_allow"):
         network["allowedDomains"] = _uniq(
@@ -292,11 +300,48 @@ def _resolve_requested(value: str, workspace: Path) -> str:
     return os.path.normpath(expanded)
 
 
+def env_extra_read() -> list[str]:
+    """``PIS_EXTRA_READ`` (コロン区切りの絶対パス) を読む。相対パスは起動しない。
+
+    see docs/spec/opencode-sandbox.md#環境変数での追加
+    """
+    out: list[str] = []
+    bad: list[str] = []
+    for raw in os.environ.get(EXTRA_READ_ENV, "").split(":"):
+        if not raw:
+            continue
+        expanded = Path(raw).expanduser()
+        if not expanded.is_absolute():
+            bad.append(raw)
+            continue
+        out.append(os.path.normpath(expanded))
+    if bad:
+        die(
+            f"{EXTRA_READ_ENV} に絶対パスでない要素がある: {', '.join(bad)}",
+            "絶対パス (または ~ 始まり) をコロンで区切って書く",
+        )
+    return _uniq(out)
+
+
 def read_request(workspace: Path) -> dict | None:
-    """``.opencode/sandbox.toml`` を読む。無ければ ``None``。"""
-    path = workspace / REQUEST_REL
-    if not path.is_file():
+    """``.opencode/sandbox.toml`` と ``PIS_EXTRA_READ`` を読む。足す分が無ければ ``None``。
+
+    環境変数は ``read`` の後ろに足す。``env_read`` は、ファイルに無い環境変数由来の分 (表示用)。
+    """
+    path, extras = _read_request_file(workspace)
+    env_read = [p for p in env_extra_read() if p not in extras["read"]]
+    extras["read"] = _uniq([*extras["read"], *env_read])
+    if not any(extras.values()):
         return None
+    return {"path": path, "extras": extras, "env_read": env_read}
+
+
+def _read_request_file(workspace: Path) -> tuple[Path | None, dict[str, list[str]]]:
+    """``.opencode/sandbox.toml`` の中身。ファイルが無ければ ``(None, 空)``。"""
+    path = workspace / REQUEST_REL
+    empty: dict[str, list[str]] = {key: [] for key in REQUEST_KEYS}
+    if not path.is_file():
+        return None, empty
     try:
         import tomllib
     except ModuleNotFoundError:  # pragma: no cover - 3.11 未満
@@ -314,20 +359,20 @@ def read_request(workspace: Path) -> dict | None:
         if not isinstance(values, list) or any(not isinstance(v, str) for v in values):
             die(f"{path} の {key} は文字列の配列でなければならない")
         extras[key] = [
-            v if key == "network_allow" else _resolve_requested(v, workspace)
-            for v in values
+            v if key == "network_allow" else _resolve_requested(v, workspace) for v in values
         ]
-    if not any(extras.values()):
-        return None
-    return {"path": path, "extras": extras}
+    return path, extras
 
 
 def describe_request(request: dict) -> str:
     """起動時に表示する、``.opencode/sandbox.toml`` で足した分。"""
     labels = {"read": "読める", "write": "書ける", "network_allow": "通信"}
-    lines = [f"ocs: {request['path']} の追加を適用する"]
+    lines = [f"ocs: {request['path'] or EXTRA_READ_ENV} の追加を適用する"]
+    env_read = set(request.get("env_read", []))
     for key, label in labels.items():
         values = request["extras"][key]
+        if key == "read":
+            values = [f"{v} ({EXTRA_READ_ENV})" if v in env_read else v for v in values]
         if values:
             lines.append(f"  {label}: {', '.join(values)}")
     return "\n".join(lines)

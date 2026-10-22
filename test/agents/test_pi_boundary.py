@@ -181,9 +181,11 @@ def test_inner_command_and_environment(tmp_path, monkeypatch):
     for name in ("ORCA_AGENT_HOOK_TOKEN", "ORCA_PANE_KEY", "MY_SERVICE_SECRET", "db_password"):
         monkeypatch.setenv(name, "x")
     monkeypatch.setenv("ORCA_AGENT_HOOK_PORT", "1234")  # ポートは資格情報ではない
+    monkeypatch.setenv("PIS_EXTRA_READ", "/data2")  # 起動前に外側が読む入力
     monkeypatch.setattr(pi.check, "ensure_canary", lambda: None)
     env = pi.inner_env(tmp_path / "agent", config_)
     assert "GH_TOKEN" not in env and "PI_HARNESS_CHILD" not in env
+    assert "PIS_EXTRA_READ" not in env
     # 名前から資格情報と分かるものは、固定の一覧に無くても渡さない
     for name in ("ORCA_AGENT_HOOK_TOKEN", "ORCA_PANE_KEY", "MY_SERVICE_SECRET", "db_password"):
         assert name not in env, name

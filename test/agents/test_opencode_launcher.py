@@ -98,6 +98,12 @@ _IMPL_GIT_HOME: str | None = None
 
 
 @pytest.fixture(autouse=True)
+def _clear_extra_read_env(monkeypatch):
+    """実行者の ``PIS_EXTRA_READ`` を試験へ持ち込まない。"""
+    monkeypatch.delenv("PIS_EXTRA_READ", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_launcher_git(request, monkeypatch, tmp_path_factory):
     """ランチャーが動かす git (退避・``git_common_dir``) も実行者の git 設定から切り離す。
 
@@ -652,6 +658,135 @@ def test_request_paths_are_resolved(tmp_path):
     _request(ws, 'read = ["~/datasets", "sub/dir", "../other"]\n')
     extras = launcher.boundary.read_request(ws)["extras"]["read"]
     assert extras == [str(Path.home() / "datasets"), str(ws / "sub/dir"), str(tmp_path / "other")]
+
+
+def test_env_extra_read_without_file_makes_a_request(tmp_path, monkeypatch):
+    """``PIS_EXTRA_READ`` だけでも read に入る。write と network_allow は空。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_READ", str(data))
+    request = launcher.boundary.read_request(ws)
+    assert request["extras"] == {"read": [str(data)], "write": [], "network_allow": []}
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, request)
+    assert str(data) in got["filesystem"]["allowRead"]
+
+
+@pytest.mark.parametrize("value", [None, "", ":", "::"])
+def test_env_extra_read_unset_or_empty_keeps_old_result(tmp_path, monkeypatch, value):
+    """未設定・空・空要素だけなら従来どおり (ファイルが無ければ ``None``)。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    if value is not None:
+        monkeypatch.setenv("PIS_EXTRA_READ", value)
+    assert launcher.boundary.read_request(ws) is None
+    a = tmp_path / "a"
+    _request(ws, f'read = ["{a}"]\n')
+    request = launcher.boundary.read_request(ws)
+    assert request["extras"]["read"] == [str(a)]
+    assert request["env_read"] == []
+
+
+def test_env_extra_read_follows_file_read_without_duplicates(tmp_path, monkeypatch):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    a, b, c = (tmp_path / n for n in "abc")
+    _request(ws, f'read = ["{a}", "{b}"]\nwrite = ["{tmp_path / "w"}"]\n')
+    monkeypatch.setenv("PIS_EXTRA_READ", f"{c}::{a}:{c}")
+    request = launcher.boundary.read_request(ws)
+    assert request["extras"]["read"] == [str(a), str(b), str(c)]
+    assert request["extras"]["write"] == [str(tmp_path / "w")]
+    assert request["env_read"] == [str(c)]
+
+
+def test_env_extra_read_expands_tilde(tmp_path, monkeypatch):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "h"))
+    monkeypatch.setenv("PIS_EXTRA_READ", "~/dataset:/data2")
+    extras = launcher.boundary.read_request(ws)["extras"]["read"]
+    assert extras == [str(tmp_path / "h" / "dataset"), "/data2"]
+
+
+def test_env_extra_read_relative_path_refuses_to_start(tmp_path, monkeypatch, capsys):
+    """相対パスは基準が無いので拒否し、どの要素かを表示する。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_READ", f"{tmp_path}:rel/dir:../up")
+    with pytest.raises(SystemExit):
+        launcher.boundary.read_request(ws)
+    err = capsys.readouterr().err
+    assert "PIS_EXTRA_READ" in err and "rel/dir" in err and "../up" in err
+
+
+def test_env_extra_read_cannot_add_write_or_network(tmp_path, monkeypatch):
+    """環境変数で足せるのは read だけ。write の形の値も read になるだけで、write は空。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    out = tmp_path / "out"
+    monkeypatch.setenv("PIS_EXTRA_READ", str(out))
+    monkeypatch.setenv("PIS_EXTRA_WRITE", str(tmp_path / "w"))
+    monkeypatch.setenv("PIS_EXTRA_NETWORK_ALLOW", "api.example.test")
+    request = launcher.boundary.read_request(ws)
+    assert request["extras"]["write"] == [] and request["extras"]["network_allow"] == []
+    out.mkdir()
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, request)
+    assert str(out) not in got["filesystem"]["allowWrite"]
+    assert got["network"]["allowedDomains"] == ["github.com"]
+
+
+def test_env_extra_read_keeps_secrets_hidden(tmp_path, monkeypatch):
+    """既存の ``read`` の検査 (reject_*) は write だけに効く。read は ``denyRead`` が守る。
+
+    秘密を ``PIS_EXTRA_READ`` で開けても、``denyRead`` には残る (Fence で denyRead が
+    allowRead に勝つことは、この試験では確かめない)。
+    """
+    launcher = _launcher()
+    root = tmp_path.resolve()
+    home = root / "home"
+    (home / ".ssh").mkdir(parents=True)
+    ws = home / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(launcher.boundary, "HOME", home)
+    monkeypatch.setenv("PIS_EXTRA_READ", str(home / ".ssh"))
+    sandbox = _base_sandbox(tmp_path, deny_read=[str(home / ".ssh")])
+    request = launcher.boundary.read_request(ws)
+    launcher.boundary.reject_control_dirs(sandbox, ws, request)
+    launcher.boundary.reject_protected_workspace(sandbox, ws, request)
+    got = launcher.boundary.build_boundary(sandbox, ws, request)["filesystem"]
+    assert str(home / ".ssh") in got["denyRead"]
+
+
+def test_env_extra_read_is_marked_when_announced(tmp_path, monkeypatch, capsys):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    a, c = tmp_path / "a", tmp_path / "c"
+    monkeypatch.setenv("PIS_EXTRA_READ", str(c))
+    launcher.boundary.announce_request(launcher.boundary.read_request(ws))
+    only_env = capsys.readouterr().err
+    assert only_env.splitlines()[0] == "ocs: PIS_EXTRA_READ の追加を適用する"
+    assert f"  読める: {c} (PIS_EXTRA_READ)" in only_env
+    _request(ws, f'read = ["{a}"]\n')
+    launcher.boundary.announce_request(launcher.boundary.read_request(ws))
+    both = capsys.readouterr().err
+    assert f"  読める: {a}, {c} (PIS_EXTRA_READ)" in both
+    assert both.splitlines()[0] == f"ocs: {ws / '.opencode' / 'sandbox.toml'} の追加を適用する"
+
+
+def test_extra_read_env_is_not_passed_inside(monkeypatch):
+    """内側へ渡さない一覧 (OpenCode は cli.DROP_ENV、pi はそれを併用) に入っている。"""
+    launcher = _launcher()
+    monkeypatch.setenv("PIS_EXTRA_READ", "/data2")
+    env = launcher.cli.inner_env({"config_dir": "/c"})
+    assert "PIS_EXTRA_READ" not in env
 
 
 def test_unknown_keys_in_request_refuse_to_start(tmp_path):
