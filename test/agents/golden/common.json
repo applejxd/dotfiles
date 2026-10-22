@@ -1067,7 +1067,8 @@
    "btw",
    "activity",
    "ask",
-   "notify"
+   "notify",
+   "delegate-nudge"
   ],
   "profiles": {
    "committer": {

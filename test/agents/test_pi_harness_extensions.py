@@ -400,3 +400,130 @@ def test_todo_blocked_without_a_note_warns_but_is_accepted(env):
     assert proc.returncode == 0, proc.stderr
     tail = _last_todo_result(proc.stdout)
     assert "待ち先" in tail and "note" in tail and "#1 を blocked にした" in tail, proc.stdout
+
+
+# --- delegate-nudge (N1a: 通知なしで集計を記録するだけ。CHG-0031) ---
+from test_pi_harness import _session_entries, _task  # noqa: E402
+
+DELEGATE_EXT = ROOT / "home/dot_pi/agent/extensions/delegate-nudge/index.ts"
+READ_TOOLS = {"guarded_read", "guarded_grep", "guarded_find", "guarded_ls"}
+
+
+def _delegate_run(env, calls, *messages, rounds=None, **env_extra):
+    """セッションを残して実行する。記録は ``_delegate_stats`` でセッションのファイルから読む。"""
+    sessions = env["tmp"] / "sessions"
+    extra = ("--approve", "--session-dir", str(sessions), "-e", str(DELEGATE_EXT))
+    if rounds is not None:
+        env_extra.update(
+            FAUX_TOOL_ROUNDS=json.dumps(rounds),
+            FAUX_CHILD_TOOL_CALLS="[]",
+            FAUX_COUNT_USER="1",
+            PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+        )
+    return run_pi(env, calls, *messages, session=True, extra=extra, **env_extra), sessions
+
+
+def _delegate_stats(sessions):
+    entries = [
+        e["data"]
+        for e in _session_entries(sessions)
+        if e.get("type") == "custom" and e.get("customType") == "delegate-stats"
+    ]
+    return sorted(entries, key=lambda d: d["seq"])
+
+
+def _read_results(sessions):
+    """セッションに残った読み取り系ツールの結果 (message エントリ)。"""
+    return [
+        e["message"]
+        for e in _session_entries(sessions)
+        if e.get("type") == "message" and e["message"].get("toolName") in READ_TOOLS
+    ]
+
+
+def _text_lines(message):
+    texts = [c["text"] for c in message["content"] if c.get("type") == "text"]
+    return sum(0 if t == "" else t.count("\n") + 1 for t in texts)
+
+
+READS = [
+    {"name": "guarded_read", "args": {"path": "f.txt"}},
+    {"name": "guarded_ls", "args": {"path": "."}},
+]
+
+
+def _with_file(env):
+    (env["proj"] / "f.txt").write_text("a\nb\nc\n", encoding="utf-8")
+
+
+def test_delegate_nudge_records_reads_without_notice_or_changing_results(env):
+    _with_file(env)
+    proc, sessions = _delegate_run(env, READS)
+    assert proc.returncode == 0, proc.stderr
+    # (a) 通知も結果の変更も無い: 結果は 1 要素のまま、出力に拡張の語が無い
+    results = _read_results(sessions)
+    assert len(results) == 2, proc.stdout
+    assert all(len(m["content"]) == 1 for m in results), results
+    assert "delegate" not in proc.stdout.lower(), proc.stdout
+    # (b) 記録が 1 件。行数は、セッションに残った結果から数え直した値と一致する
+    (stat,) = _delegate_stats(sessions)
+    assert stat["v"] == 1 and stat["seq"] == 1 and stat["nudge"] == "off", stat
+    assert re.fullmatch(r"[0-9a-f]{8}", stat["turnId"]), stat
+    assert stat["readCalls"] == 2 and stat["readErrors"] == 0, stat
+    assert stat["byTool"] == {"guarded_read": 1, "guarded_ls": 1}, stat
+    assert stat["readLines"] == sum(_text_lines(m) for m in results) > 0, stat
+    assert stat["delegations"] == {"explore": 0, "review": 0, "commit": 0, "worker": 0}, stat
+    assert stat["otherCalls"] == 0, stat
+    # 読んだ内容・パスは入れない
+    assert "f.txt" not in json.dumps(stat) and set(stat) == {
+        "v", "turnId", "seq", "ts", "nudge", "readCalls", "readLines", "readChars",
+        "readErrors", "byTool", "delegations", "otherCalls", "endReason",
+    }, stat  # fmt: skip
+
+
+def test_delegate_nudge_splits_records_per_user_message(env):
+    _with_file(env)
+    proc, sessions = _delegate_run(env, READS, "go", "again")
+    assert proc.returncode == 0, proc.stderr
+    stats = _delegate_stats(sessions)
+    # (c) 発言ごとにリセットされ、2 件に分かれる (累積ではない)
+    assert [s["seq"] for s in stats] == [1, 2], stats
+    assert [s["readCalls"] for s in stats] == [2, 2], stats
+    assert stats[0]["turnId"] != stats[1]["turnId"], stats
+
+
+def test_delegate_nudge_counts_new_delegations_but_not_status_or_followups(env):
+    rounds = [
+        [_task(agent="worker", task="first", keep=True)],
+        [_task(jobId="{{JOB}}", status=True)],
+        [_task(jobId="{{JOB}}", task="second")],
+        [_task(jobId="{{JOB}}", close=True)],
+        [_task(list=True)],
+        [_task(tasks=[{"agent": "explore", "task": "x"}, {"agent": "review", "task": "y"}])],
+    ]
+    proc, sessions = _delegate_run(env, [], rounds=rounds)
+    assert proc.returncode == 0, proc.stderr
+    (stat,) = _delegate_stats(sessions)
+    # (d) 新規は worker 1 + 一括の explore / review。status・追加依頼・close・list は数えない
+    assert stat["delegations"] == {"explore": 1, "review": 1, "commit": 0, "worker": 1}, stat
+    assert stat["otherCalls"] == 6 and stat["readCalls"] == 0, stat
+
+
+def test_delegate_nudge_records_nothing_in_a_child(env):
+    _with_file(env)
+    proc, sessions = _delegate_run(
+        env, [], PI_HARNESS_CHILD="1", FAUX_CHILD_TOOL_CALLS=json.dumps(READS)
+    )
+    # (e) 対照: 読み取りは実際に動いている (記録が無いのは拡張が動かなかったから)
+    assert proc.returncode == 0, proc.stderr
+    assert _read_results(sessions), proc.stdout
+    assert _delegate_stats(sessions) == []
+
+
+def test_delegate_nudge_can_be_turned_off_with_the_environment_variable(env):
+    _with_file(env)
+    proc, sessions = _delegate_run(env, READS, PI_DELEGATE_NUDGE="0")
+    # (f) 対照 (上の試験) と同じ呼び出しで、記録だけが無い
+    assert proc.returncode == 0, proc.stderr
+    assert len(_read_results(sessions)) == 2, proc.stdout
+    assert _delegate_stats(sessions) == []
