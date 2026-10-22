@@ -2,3 +2,8 @@
 
 export http_proxy=http://address:port
 export https_proxy=http://address:port
+
+# データセットなどの置き場がマシンごとに違うとき、pis が読めるパスをここで足す
+# (コロン区切りの絶対パスか ~。読み取り専用。docs/spec/opencode-sandbox.md#環境変数での追加)
+# リンクのあるディレクトリと実体のルートの両方を書く
+# export PIS_EXTRA_READ="$HOME/dataset:/data2"

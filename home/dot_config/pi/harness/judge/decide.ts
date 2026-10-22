@@ -211,11 +211,11 @@ function sandboxFile(kind: string, path: string, absolute: string, opened: strin
 	if (roots.some((d) => inside(absolute, d))) {
 		return response("allow", `サンドボックスが開けた場所の${kind}`, "rule");
 	}
-	return response(
-		"deny",
-		`\`${path}\` はサンドボックスの外の${kind}。OS も拒否する (必要なら、許可する場所を設定へ足して起動し直す)`,
-		"rule",
-	);
+	const fix =
+		kind === "読み取り"
+			? "読み取りを足すには、起動前に環境変数 `PIS_EXTRA_READ` (例: `PIS_EXTRA_READ=~/dataset`)、またはそのリポジトリの `.opencode/sandbox.toml` の `read` に書いて、`pis` を起動し直す"
+			: "書き込みを足すには、そのリポジトリの `.opencode/sandbox.toml` の `write` に書いて、`pis` を起動し直す";
+	return response("deny", `\`${path}\` はサンドボックスの外の${kind}。OS も拒否する (${fix})`, "rule");
 }
 
 // ─── 入口 ────────────────────────────────────────────────

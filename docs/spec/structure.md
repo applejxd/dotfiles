@@ -905,6 +905,19 @@ mise に統一している方針と合わない、標準コマンドの意味を
 置いて実行し、zinit・mise・fzf・ネットワークは使わない。実機の対話シェルの
 起動（プロンプトまで）は検査しない。
 
+## マシン固有の設定の置き場
+
+マシンごとに違う値（データセットの置き場、プロキシなど）は、リポジトリに書かず次のどれかへ置く。
+
+| 置き場 | 何を置くか | いつ読まれるか | 注意 |
+| --- | --- | --- | --- |
+| `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export PIS_EXTRA_READ="$HOME/dataset:/data2"` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る。`PIS_EXTRA_READ` は読み取り専用で、詳細は [環境変数での追加](opencode-sandbox.md#環境変数での追加) |
+| `~/.config/mise/conf.d/*.toml` | `mise` の設定のマシン固有分 | `mise` が設定を読むとき | chezmoi の管理外。`[env]` は mise を有効化したシェルでしか効かない（**推測**。公式 docs では未確認） |
+| `<起動ディレクトリ>/.opencode/sandbox.toml` | リポジトリごとの `read`・`write`・`network_allow` | `pis` の起動時 | パスがマシン依存なら、1 行目の環境変数のほうがよい（環境変数で足せるのは読み取りだけ） |
+
+出典: `home/dot_config/shell/shellenv.sh.tmpl`（「User settings」の節が `userenv.sh` を読む）、
+`home/dot_config/mise/config.toml.tmpl` の冒頭のコメント（`conf.d` の案内）。
+
 ## C++ の単一ファイル実行（runcpp）
 
 コーディング試験・競技プログラミングの問題を解くための関数（`functions/cpp.sh`）。

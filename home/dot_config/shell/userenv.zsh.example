@@ -1,3 +1,5 @@
 #!/bin/zsh
 
 # .zshenv>.zprofile>.zshrc>.zlogin
+
+# zsh 専用の設定。共通の環境変数は userenv.sh.example の PIS_EXTRA_READ を参照
