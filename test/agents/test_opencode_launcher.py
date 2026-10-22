@@ -101,6 +101,7 @@ _IMPL_GIT_HOME: str | None = None
 def _clear_extra_read_env(monkeypatch):
     """実行者の ``PIS_EXTRA_READ`` を試験へ持ち込まない。"""
     monkeypatch.delenv("PIS_EXTRA_READ", raising=False)
+    monkeypatch.delenv("PIS_EXTRA_DEVICES", raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -669,7 +670,12 @@ def test_env_extra_read_without_file_makes_a_request(tmp_path, monkeypatch):
     data.mkdir()
     monkeypatch.setenv("PIS_EXTRA_READ", str(data))
     request = launcher.boundary.read_request(ws)
-    assert request["extras"] == {"read": [str(data)], "write": [], "network_allow": []}
+    assert request["extras"] == {
+        "read": [str(data)],
+        "write": [],
+        "network_allow": [],
+        "devices": [],
+    }
     got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, request)
     assert str(data) in got["filesystem"]["allowRead"]
 
@@ -787,6 +793,223 @@ def test_extra_read_env_is_not_passed_inside(monkeypatch):
     monkeypatch.setenv("PIS_EXTRA_READ", "/data2")
     env = launcher.cli.inner_env({"config_dir": "/c"})
     assert "PIS_EXTRA_READ" not in env
+
+
+def test_extra_devices_env_is_not_passed_inside(monkeypatch):
+    launcher = _launcher()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", "/dev/dxg")
+    env = launcher.cli.inner_env({"config_dir": "/c"})
+    assert "PIS_EXTRA_DEVICES" not in env
+
+
+def test_devices_unset_leaves_no_devices_key(tmp_path):
+    """既定は無効: ``devices`` を設定に作らない (``mode`` は auto のまま)。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    assert launcher.boundary.read_request(ws) is None
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, None)
+    assert "devices" not in got
+    _request(ws, 'network_allow = ["api.example.test"]\n')
+    request = launcher.boundary.read_request(ws)
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, request)
+    assert "devices" not in got
+
+
+def test_env_extra_devices_without_file_makes_minimal_allow(tmp_path, monkeypatch):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", "/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm")
+    request = launcher.boundary.read_request(ws)
+    devices = ["/dev/nvidiactl", "/dev/nvidia0", "/dev/nvidia-uvm"]
+    assert request["extras"] == {
+        "read": [],
+        "write": [],
+        "network_allow": [],
+        "devices": devices,
+    }
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, request)
+    assert got["devices"] == {"mode": "minimal", "allow": devices}
+    assert got["allowPty"] is True
+
+
+@pytest.mark.parametrize("value", ["", ":", "::"])
+def test_env_extra_devices_empty_keeps_old_result(tmp_path, monkeypatch, value):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", value)
+    assert launcher.boundary.read_request(ws) is None
+
+
+def test_env_extra_devices_follows_file_without_duplicates(tmp_path, monkeypatch):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    _request(ws, 'devices = ["/dev/nvidiactl", "/dev/dxg"]\n')
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", "/dev/nvidia0::/dev/dxg:/dev/nvidia0")
+    request = launcher.boundary.read_request(ws)
+    assert request["extras"]["devices"] == ["/dev/nvidiactl", "/dev/dxg", "/dev/nvidia0"]
+    assert request["env_devices"] == ["/dev/nvidia0"]
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, request)
+    assert got["devices"]["allow"] == ["/dev/nvidiactl", "/dev/dxg", "/dev/nvidia0"]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "dxg",  # 相対
+        "dev/dxg",
+        "~/dxg",
+        "/dev/../etc/passwd",
+        "/dev//dxg",
+        "/dev/./dxg",
+        "/dev",
+        "/dev/",
+        "/dev/dxg/",
+        "/dev/dri/card0",  # 階層が深い
+        "/etc/passwd",
+        "//dev/dxg",
+        "/dev/nvidia*",  # glob (Fence が受けると確認できない)
+        "/dev/nvidia?",
+        "/dev/nvidia[0-9]",
+        "/dev/mem",
+        "/dev/kmem",
+        "/dev/sda",
+        "/dev/nvme0n1",
+        "/dev/loop0",
+        "/dev/kvm",
+        "/dev/fuse",
+        "/dev/input",
+        "/dev/tty0",
+        "/dev/ttyS0",
+        "/dev/null",
+        "/dev/zero",
+        "/dev/random",
+        "/dev/snd",
+        "/dev/dri",  # ディレクトリ全体 (card0 を含む) が見える
+        "/dev/kfd",
+        "/dev/nvidia-modeset",
+        "/dev/nvidia-caps",
+        "/dev/nvidia0abc",  # re.fullmatch (fnmatch だと通ってしまう)
+        "/dev/nvidia",  # nvidia[0-9]+ に合わない
+        "/dev/nvidia-foo",
+        "/dev/dxgx",  # 完全一致
+        "/dev/DXG",  # 大文字小文字を区別する
+    ],
+)
+def test_env_extra_devices_unsafe_element_refuses_to_start(tmp_path, monkeypatch, capsys, bad):
+    """不正な要素はどれかを示して拒否し、許可リストも表示する。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", f"/dev/dxg:{bad}")
+    with pytest.raises(SystemExit):
+        launcher.boundary.read_request(ws)
+    err = capsys.readouterr().err
+    assert "PIS_EXTRA_DEVICES" in err and repr(bad) in err
+    assert "nvidia[0-9]+" in err and "dxg" in err
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "dxg",
+        "nvidiactl",
+        "nvidia0",
+        "nvidia12",
+        "nvidia-uvm",
+        "nvidia-uvm-tools",
+    ],
+)
+def test_env_extra_devices_allows_listed_names(tmp_path, monkeypatch, name):
+    """許可リストの名前は通る。"""
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", f"/dev/{name}")
+    assert launcher.boundary.read_request(ws)["extras"]["devices"] == [f"/dev/{name}"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "dri",
+        "kfd",
+        "nvidia-modeset",
+        "nvidia-caps",
+        "nvidia0abc",
+        "nvidia",
+        "nvidia-foo",
+        "mem",
+        "snd",
+        "null",
+        "dxgx",
+        "DXG",
+    ],
+)
+def test_not_allowed_reason_says_not_in_allowlist(tmp_path, monkeypatch, capsys, name):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", f"/dev/{name}")
+    with pytest.raises(SystemExit):
+        launcher.boundary.read_request(ws)
+    assert "許可リストにない" in capsys.readouterr().err
+
+
+def test_file_devices_unsafe_element_refuses_to_start(tmp_path, capsys):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    _request(ws, 'devices = ["/dev/dxg", "/dev/sda", "rel"]\n')
+    with pytest.raises(SystemExit):
+        launcher.boundary.read_request(ws)
+    err = capsys.readouterr().err
+    assert "'/dev/sda'" in err and "'rel'" in err and "devices" in err
+    assert "'/dev/dxg'" not in err.split("許可:")[0]
+
+
+def test_file_devices_must_be_string_list(tmp_path):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    for body in ('devices = "/dev/dxg"\n', "devices = [1]\n"):
+        _request(ws, body)
+        with pytest.raises(SystemExit):
+            launcher.boundary.read_request(ws)
+
+
+def test_env_extra_devices_cannot_add_write_or_network(tmp_path, monkeypatch):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", "/dev/dxg")
+    monkeypatch.setenv("PIS_EXTRA_WRITE", str(tmp_path / "w"))
+    monkeypatch.setenv("PIS_EXTRA_NETWORK_ALLOW", "api.example.test")
+    request = launcher.boundary.read_request(ws)
+    assert request["extras"]["write"] == [] and request["extras"]["network_allow"] == []
+    assert request["extras"]["read"] == []
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, request)
+    assert got["network"]["allowedDomains"] == ["github.com"]
+    assert str(tmp_path / "w") not in got["filesystem"]["allowWrite"]
+
+
+def test_env_extra_devices_is_marked_when_announced(tmp_path, monkeypatch, capsys):
+    launcher = _launcher()
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", "/dev/nvidia0")
+    launcher.boundary.announce_request(launcher.boundary.read_request(ws))
+    only_env = capsys.readouterr().err
+    assert only_env.splitlines()[0] == "ocs: PIS_EXTRA_DEVICES の追加を適用する"
+    assert "  デバイス: /dev/nvidia0 (PIS_EXTRA_DEVICES)" in only_env
+    _request(ws, 'devices = ["/dev/dxg"]\n')
+    launcher.boundary.announce_request(launcher.boundary.read_request(ws))
+    both = capsys.readouterr().err
+    assert "  デバイス: /dev/dxg, /dev/nvidia0 (PIS_EXTRA_DEVICES)" in both
+    assert both.splitlines()[0] == f"ocs: {ws / '.opencode' / 'sandbox.toml'} の追加を適用する"
 
 
 def test_unknown_keys_in_request_refuse_to_start(tmp_path):

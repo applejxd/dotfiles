@@ -35,7 +35,7 @@
 | [Web 検索（web-search skill）](web-search.md) | skill + CLI の Web 検索・ページ取得・論文検索。検索の鎖（Brave → Exa → Tavily → DuckDuckGo）と次へ回す条件、鍵、クエリの秘匿チェックと取得の SSRF 対策、実測、未実装 |
 | [imozuru（調べものスキル）](imozuru.md) | 上流 MaryCache/imozuru（MIT）を vendor して調整した調べものスキル。原文を要約せず保存し、検索は web-search を使う。配る範囲・書き込み先の制限・接続の固定・秘匿チェック・YouTube（applejxd 限定）・`pis` の許可規則・レビューの経緯・未確認 |
 | [sandbox (Claude Code / Copilot CLI)](agent-sandbox.md) | sandbox 層・ネットワーク層・seccomp、マシン固有の許可 (`local.toml`) |
-| [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) | `ocs` の構成、起動順序、Fence の境界の組み立て規則、DB の共有、起動前の退避、境界チェック（`ocs --check`）、環境変数 `PIS_EXTRA_READ` での読み取りの追加 |
+| [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) | `ocs` の構成、起動順序、Fence の境界の組み立て規則、DB の共有、起動前の退避、境界チェック（`ocs --check`）、環境変数 `PIS_EXTRA_READ` での読み取りの追加、`devices`・`PIS_EXTRA_DEVICES` でのデバイスの追加 |
 | [文脈の引き継ぎ](checkpoint.md) | 圧縮を跨いで作業文脈を保つ checkpoint の保存先・記録の形・plugin・失敗時の動作 |
 | [トラブルシューティング](troubleshooting.md) | 症状 → 対象 OS・CLI → 対応先の索引 |
 | [トラブルシューティング: 導入と適用](troubleshooting-bootstrap.md) | スクリプトの再実行、Python・Bitwarden・mise・APT・AI CLI の導入で起きる障害 |

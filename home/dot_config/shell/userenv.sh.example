@@ -7,3 +7,7 @@ export https_proxy=http://address:port
 # (コロン区切りの絶対パスか ~。読み取り専用。docs/spec/opencode-sandbox.md#環境変数での追加)
 # リンクのあるディレクトリと実体のルートの両方を書く
 # export PIS_EXTRA_READ="$HOME/dataset:/data2"
+
+# WSL の GPU を pis の中へ見せる (コロン区切りの /dev/ 直下の絶対パス。ネイティブの Linux は /dev/nvidia* を並べる)
+# docs/spec/opencode-sandbox.md#環境変数での追加
+# export PIS_EXTRA_DEVICES=/dev/dxg

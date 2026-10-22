@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -16,8 +17,21 @@ from .common import HOME, die
 
 RULES = HOME / ".config/opencode/guide-plugin/rules.json"
 REQUEST_REL = ".opencode/sandbox.toml"
-REQUEST_KEYS = ("read", "write", "network_allow")
+REQUEST_KEYS = ("read", "write", "network_allow", "devices")
 EXTRA_READ_ENV = "PIS_EXTRA_READ"
+EXTRA_DEVICES_ENV = "PIS_EXTRA_DEVICES"
+# devices に足せる /dev/ 直下の名前 (CUDA の計算に要るものだけ)。これ以外は拒否
+# see docs/spec/opencode-sandbox.md#プロジェクトごとの追加
+ALLOWED_DEVICE_NAMES = (
+    "dxg",
+    "nvidiactl",
+    "nvidia-uvm",
+    "nvidia-uvm-tools",
+)
+# 番号付きのノード (nvidia0・nvidia12 など)。re.fullmatch で照合する
+ALLOWED_DEVICE_PATTERN = r"nvidia[0-9]+"
+# エラーのヒントに出す許可の一覧
+ALLOWED_DEVICES = (*ALLOWED_DEVICE_NAMES, ALLOWED_DEVICE_PATTERN)
 
 
 def load_boundary(
@@ -53,7 +67,7 @@ def load_boundary(
 def project_extras(request: dict | None) -> dict:
     """``.opencode/sandbox.toml`` で足す分。宣言が無ければ追加はゼロ。"""
     if request is None:
-        return {"read": [], "write": [], "network_allow": []}
+        return {key: [] for key in REQUEST_KEYS}
     return request["extras"]
 
 
@@ -267,7 +281,7 @@ def build_boundary(
         network["allowedDomains"] = _uniq(
             [*network.get("allowedDomains", []), *extras["network_allow"]]
         )
-    return {
+    config = {
         "network": network,
         "filesystem": {
             "defaultDenyRead": True,
@@ -279,6 +293,10 @@ def build_boundary(
         # TUI の再描画 (リサイズ) に要る
         "allowPty": True,
     }
+    if extras.get("devices"):
+        # auto の挙動に依存しないよう minimal を明示する (足さないときはキーごと作らない)
+        config["devices"] = {"mode": "minimal", "allow": list(extras["devices"])}
+    return config
 
 
 def _uniq(values: list[str]) -> list[str]:
@@ -323,17 +341,64 @@ def env_extra_read() -> list[str]:
     return _uniq(out)
 
 
-def read_request(workspace: Path) -> dict | None:
-    """``.opencode/sandbox.toml`` と ``PIS_EXTRA_READ`` を読む。足す分が無ければ ``None``。
+def _device_problem(raw: str) -> str | None:
+    """``devices`` の 1 要素の問題。無ければ ``None``。
 
-    環境変数は ``read`` の後ろに足す。``env_read`` は、ファイルに無い環境変数由来の分 (表示用)。
+    glob は拒否する (Fence の README に ``devices.allow`` が glob を受けるとの記述が無い)。
+    """
+    if not raw.startswith("/"):
+        return "絶対パスでない (~ も不可)"
+    if any(c in raw for c in "*?["):
+        return "glob 文字は使えない"
+    if os.path.normpath(raw) != raw:
+        return "正規化されていない (.. や // や末尾の / など)"
+    parent, name = os.path.split(raw)
+    if parent != "/dev" or not name:
+        return "/dev/ 直下の名前 1 つでない"
+    if name not in ALLOWED_DEVICE_NAMES and not re.fullmatch(ALLOWED_DEVICE_PATTERN, name):
+        return "許可リストにない"
+    return None
+
+
+def _checked_devices(values: list[str], source: str) -> list[str]:
+    """``devices`` の要素を検証する。1 つでも不正なら、どの要素かを示して起動しない。"""
+    bad = [f"{v!r} ({p})" for v in values if (p := _device_problem(v)) is not None]
+    if bad:
+        die(
+            f"{source} に不正なデバイスがある: {', '.join(bad)}",
+            f"/dev/ 直下の名前 1 つの絶対パスで、許可リストにある名前だけ。許可: {', '.join(ALLOWED_DEVICES)}",
+        )
+    return values
+
+
+def env_extra_devices() -> list[str]:
+    """``PIS_EXTRA_DEVICES`` (コロン区切りの ``/dev/`` 直下の絶対パス) を読む。
+
+    see docs/spec/opencode-sandbox.md#環境変数での追加
+    """
+    raws = [r for r in os.environ.get(EXTRA_DEVICES_ENV, "").split(":") if r]
+    return _uniq(_checked_devices(raws, EXTRA_DEVICES_ENV))
+
+
+def read_request(workspace: Path) -> dict | None:
+    """``.opencode/sandbox.toml`` と環境変数 (``PIS_EXTRA_READ``・``PIS_EXTRA_DEVICES``) を読む。
+
+    足す分が無ければ ``None``。環境変数はファイルの後ろに足す。
+    ``env_read``・``env_devices`` は、ファイルに無い環境変数由来の分 (表示用)。
     """
     path, extras = _read_request_file(workspace)
     env_read = [p for p in env_extra_read() if p not in extras["read"]]
     extras["read"] = _uniq([*extras["read"], *env_read])
+    env_devices = [d for d in env_extra_devices() if d not in extras["devices"]]
+    extras["devices"] = _uniq([*extras["devices"], *env_devices])
     if not any(extras.values()):
         return None
-    return {"path": path, "extras": extras, "env_read": env_read}
+    return {
+        "path": path,
+        "extras": extras,
+        "env_read": env_read,
+        "env_devices": env_devices,
+    }
 
 
 def _read_request_file(workspace: Path) -> tuple[Path | None, dict[str, list[str]]]:
@@ -358,6 +423,9 @@ def _read_request_file(workspace: Path) -> tuple[Path | None, dict[str, list[str
         values = data.get(key, [])
         if not isinstance(values, list) or any(not isinstance(v, str) for v in values):
             die(f"{path} の {key} は文字列の配列でなければならない")
+        if key == "devices":
+            extras[key] = _uniq(_checked_devices(values, f"{path} の devices"))
+            continue
         extras[key] = [
             v if key == "network_allow" else _resolve_requested(v, workspace) for v in values
         ]
@@ -366,13 +434,24 @@ def _read_request_file(workspace: Path) -> tuple[Path | None, dict[str, list[str
 
 def describe_request(request: dict) -> str:
     """起動時に表示する、``.opencode/sandbox.toml`` で足した分。"""
-    labels = {"read": "読める", "write": "書ける", "network_allow": "通信"}
-    lines = [f"ocs: {request['path'] or EXTRA_READ_ENV} の追加を適用する"]
-    env_read = set(request.get("env_read", []))
+    labels = {
+        "read": "読める",
+        "write": "書ける",
+        "network_allow": "通信",
+        "devices": "デバイス",
+    }
+    env_names = {"read": EXTRA_READ_ENV, "devices": EXTRA_DEVICES_ENV}
+    env_values = {
+        "read": set(request.get("env_read", [])),
+        "devices": set(request.get("env_devices", [])),
+    }
+    sources = [env_names[k] for k in env_names if env_values[k]]
+    origin = request["path"] or " / ".join(sources) or EXTRA_READ_ENV
+    lines = [f"ocs: {origin} の追加を適用する"]
     for key, label in labels.items():
         values = request["extras"][key]
-        if key == "read":
-            values = [f"{v} ({EXTRA_READ_ENV})" if v in env_read else v for v in values]
+        if key in env_names:
+            values = [f"{v} ({env_names[key]})" if v in env_values[key] else v for v in values]
         if values:
             lines.append(f"  {label}: {', '.join(values)}")
     return "\n".join(lines)

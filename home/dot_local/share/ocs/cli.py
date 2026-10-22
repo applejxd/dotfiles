@@ -31,9 +31,10 @@ SECCOMP_MAX_AGE_SECONDS = 10 * 60
 # 内側の XDG_STATE_HOME (内側の /tmp は tmpfs で、終了時に消える)
 INNER_STATE = "/tmp/xdg-state"
 # 境界の内側へ渡さない環境変数 (資格情報と、OpenCode の DB・設定の差し替え)
-# PIS_EXTRA_READ は起動前に外側が読む入力 (see docs/spec/opencode-sandbox.md#環境変数での追加)
+# PIS_EXTRA_READ・PIS_EXTRA_DEVICES は起動前に外側が読む入力 (see docs/spec/opencode-sandbox.md#環境変数での追加)
 DROP_ENV = (
     "PIS_EXTRA_READ",
+    "PIS_EXTRA_DEVICES",
     "GH_TOKEN",
     "GITHUB_TOKEN",
     "GH_ENTERPRISE_TOKEN",

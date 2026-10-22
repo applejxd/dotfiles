@@ -288,13 +288,54 @@ OpenCode は起動ディレクトリから Git の根まで遡って `.opencode`
 read = ["/mnt/d/datasets/example"]
 write = ["/mnt/d/outputs/example"]
 network_allow = ["api.example.com"]
+devices = ["/dev/dxg"]
 ```
 
 - **確認なしで適用し、起動時に足す分を表示する。** 承認の記録は持たない
 - 知らないキー・文字列の配列でない値があれば起動しない
-- `~` は展開し、相対パスは起動ディレクトリ基準にする
+- `~` は展開し、相対パスは起動ディレクトリ基準にする (`devices` を除く。下記)
 - 親ディレクトリの宣言は子に効かない（起動ディレクトリのものだけを見る）
 - `.opencode` は保護対象なので、内側から宣言を書き換えることはできない
+
+#### `devices` (デバイスを境界の中へ見せる)
+
+Fence の `devices.allow` へ渡す。WSL の GPU は `/dev/dxg`、ネイティブの Linux の NVIDIA は
+`/dev/nvidiactl`・`/dev/nvidia0`・`/dev/nvidia-uvm` など。
+
+- **既定は無効。** どちらも無ければ `devices` を設定に作らない (Fence は `mode: auto` で、`/dev` は最小)。
+  足すときだけ `{"mode": "minimal", "allow": [...]}` を設定へ入れる (`auto` の挙動に依存しないため)
+- **書式**: `~` を使わない絶対パスで、`/dev/` 直下の名前 1 つだけ (`/dev/dxg`)。`..`・`//`・余計な階層・
+  `/dev` 自体・末尾の `/` は拒否する。glob (`* ? [`) も拒否する (Fence の README に `devices.allow` が
+  glob を受ける記述が無く、未確認のため)。起動ディレクトリ基準の展開はしない
+- **許可リスト方式** (`boundary.ALLOWED_DEVICE_NAMES` と `ALLOWED_DEVICE_PATTERN`。`/dev/` 直下の名前を、完全一致の集合と
+  `re.fullmatch` で照合する。大文字小文字を区別): CUDA の計算に要るものだけ。
+  `dxg` (WSL の GPU)・`nvidiactl`・`nvidia[0-9]+` (`nvidia0`・`nvidia12`。`nvidia0abc`・`nvidia` 単体・
+  `nvidia-foo` は通さない)・`nvidia-uvm`・`nvidia-uvm-tools`。**これ以外はすべて拒否**し、許可リストに無い
+  要素と許可する名前の一覧を示して起動しない
+- **外した名前とその理由** (2026-10-23、WSL、fence 0.1.67 の実測と推測を分ける):
+  - `dri`: 実測で、`{"mode":"minimal","allow":["/dev/dri"]}` はディレクトリ全体 (`card0` と `renderD128`) を見せた。
+    `card0` は KMS の特権操作を含みうる (推測)。計算には不要
+  - `kfd`: AMD の ROCm 用。この環境に無い (実測)
+  - `nvidia-modeset`: 表示用 (推測)。CUDA の計算に要らない
+  - `nvidia-caps`: MIG 用のディレクトリ (推測)。計算に要らない
+  - 必要になったら、公開範囲を確かめたうえで、一覧に足す変更をする
+- 一覧に足すには `ocs` (`boundary.py`) の変更が要る。利用者の設定では足せない
+- **拒否の一覧方式は採らなかった** (2026-10-23 に利用者が判断)。一覧に無い未知の危険なデバイスが通ってしまうため。
+  `/dev/snd`・`/dev/kvm`・`/dev/ttyS0` などの GPU 以外も、許可リストに無いので拒否する
+- **存在しないデバイスは、Fence が黙って無視する** (実測。エラーにならない)。`ocs` は存在を確かめない。
+  名前を間違えても起動はするが、GPU は使えない
+- 実測: `allow: ["/dev/dxg"]` だけで、`/dev` に `dxg` が 1 つ加わる。標準のデバイスは残り、`nvidia-smi` が通り、
+  CUDA の `cuInit` が 0 を返した
+- **文字列の検査は形まで。** 許可名が `/dev` で symlink のときの参照先は見ない
+- **`.opencode` が symlink の場合の限界**: 上の「保護対象が symlink なら、書ける親からリンクを置換できる」
+  は `.opencode/sandbox.toml` の `devices` にも当てはまる。通常のディレクトリなら、内側からの新規作成・
+  編集は塞がっている (`.opencode` は `denyWrite`)。symlink の場合の悪意ある操作は非目的
+  ([ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)) の範囲として許容する
+- **設計の判断**: 環境変数だけにして `sandbox.toml` には足さない、というより小さい設計も検討した。
+  プロジェクトごとの GPU 要件を共有する用途があるため、両方を残した
+- **`/dev/dxg` を許すと、Windows の GPU ドライバへの経路が境界の内側に開く。** 影響は未評価のまま
+- worktree 隔離 ([CHG-0029](../change/0029-worktree-isolation.md)) の子の Landlock の書込可にも、
+  同じデバイスが要る (そちらで扱う)
 
 ### 環境変数での追加
 
@@ -320,6 +361,18 @@ export PIS_EXTRA_READ="$HOME/dataset:/data2"
 - **内側から広げられない**: 環境変数は起動ラッパーが Fence の外で、起動前に読む。内側の環境には
   渡さない (`cli.DROP_ENV`、pi も併用)。内側のエージェントが次回の起動の環境を変える経路は
   無いと見ているが、利用者のシェルの設定ファイルを書けるかは別の話で、ここでは確かめていない (推測)
+
+`PIS_EXTRA_DEVICES` で、`devices` ([プロジェクトごとの追加](#プロジェクトごとの追加)) を足せる。
+
+```sh
+export PIS_EXTRA_DEVICES=/dev/dxg                                  # WSL の GPU
+export PIS_EXTRA_DEVICES=/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm  # ネイティブの Linux
+```
+
+- 書式はコロン区切り。検証・許可リスト・既定 (無効) は `devices` と同じ。不正な要素は表示して起動しない
+- `.opencode/sandbox.toml` の `devices` の後ろに足す (重複は 1 つ)。表示には `(PIS_EXTRA_DEVICES)` を付ける
+- 起動ラッパーが Fence の外で読み、内側へは渡さない (`cli.DROP_ENV`)。`write`・`network_allow` は
+  環境変数では足せない
 
 ## 状態の置き場
 
