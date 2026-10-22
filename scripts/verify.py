@@ -278,7 +278,8 @@ RULES: tuple[Rule, ...] = (
         ("test_lint_templates",),
         ("templates",),
     ),
-    Rule("検証の入口", ("scripts/verify.py",), ("test_verify",)),
+    Rule("検証の入口", ("scripts/verify.py",), ("test_verify", "test_verify_stamp")),
+    Rule("検証の印", ("scripts/verify_stamp.py",), ("test_verify_stamp",)),
     Rule("model-eval", ("scripts/model-eval/**",), ("test_model_eval",)),
     Rule(
         "shell 設定",
@@ -615,6 +616,17 @@ def execute(commands: Sequence[Sequence[str]]) -> list[list[str]]:
     return failed
 
 
+def _write_stamp() -> None:
+    """全件検証の成功を印に残す。失敗しても検証の結果は変えない。"""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import verify_stamp
+
+        verify_stamp.write_stamp(ROOT)
+    except Exception as exc:
+        print(f"警告: 検証の印を書けませんでした: {exc}", file=sys.stderr)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="変更に応じた試験・検査の選択実行")
     mode = parser.add_mutually_exclusive_group()
@@ -653,6 +665,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         for cmd in failed:
             print(f"  {shlex.join(cmd)}")
         return 1
+    if result.full:
+        _write_stamp()
     print("すべて成功")
     return 0
 

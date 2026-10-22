@@ -93,6 +93,28 @@ python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
 同じ理由で、`pre-commit run --all-files` は未追跡の新規ファイルを検査しない。
 新規ファイルは `--files <パス>` でも回す。
 
+#### コミット前の検証の印
+
+`verify.py --all`（`--changed` が全件に落ちた場合を含む）が成功すると、そのときの作業ツリーの内容
+（HEAD + 変更 + 未追跡。`.gitignore` は効く）を印として残す。コミット時に `verify-stamp` hook
+（`scripts/verify_stamp.py check`）がステージ済みの内容と照合し、一致しなければ**警告を出すだけで
+コミットは通す**（終了コードは常に 0）。
+
+- 残すもの: `{version, head, created, entries: {パス: [mode, blob]}}` の JSON。実 index・refs・作業ツリーは
+  変えず、一時 index に `add -A` して作る
+- 置き場: `git rev-parse --git-path` が指す `.git/` 配下（worktree ごと）。`verify-stamp.json`（印）、
+  `verify-stamp.log`（警告の記録）
+- 照合: ステージ済みの追加・変更の各パスで (mode, blob) を印と比べる。削除は見ない。部分コミットでは、
+  ステージしたパスだけが一致すればよい。印が無いときも警告する
+- 警告しない場合: 不一致のパスを `verify.py` の `plan()` に通し、全件にならない（選択実行で足りる。
+  docs だけの変更など）とき。`plan()` を読み込めなかったときは全件扱いで警告する
+- 強制しない理由: 約 9 分の待ち時間が `--no-verify` を誘う（`pre-push` に全件を入れない判断と同じ。
+  [0028](../change/closed/0028-verification-speed-and-delegation.md)）
+- 記録の見方: `verify-stamp.log` は 1 行 1 件の JSONL（`{"at", "result": "no-stamp" | "mismatch",
+  "count"}`）。`wc -l` で警告の回数、`result` で印が無かったのか内容が違ったのかが分かる
+- 強制に進める条件: 記録で「全件検証を回し忘れたコミット」が頻発したとき。そのときは hook を
+  失敗させる（終了コード 1）形に変えるか、`pre-push` で見るかを案件で決める
+
 ### テンプレートの検査
 
 `identify` は `*.tmpl` に一切タグを付けないため、`check-toml` / ruff /

@@ -22,7 +22,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 | OpenCode の実機試験 | `mise run opencode:probe -- '<prompt>'`（実 DB を汚さない） |
 | 展開結果 | `chezmoi diff`（sandbox 内では不可。下記） |
 
-日常は `mise run verify`、コミット前に `mise run verify:all` を 1 回回す。
+日常は `mise run verify`、コミット前に `mise run verify:all` を 1 回回す。回さないと pre-commit が警告する。
 選択規則・フォールバック・方針は [検証の方針](docs/spec/development.md#検証の方針と選択実行)。
 
 `*.tmpl` は pre-commit の linter が素通りするので、テンプレートを編集したら

@@ -87,6 +87,15 @@ repos:
         pass_filenames: false
         files: ^(docs/.*\.md|home/dot_claude/skills/sdd-docs/scripts/lint_docs\.py)$
 
+      # 警告のみでコミットは止めない。see docs/spec/development.md#コミット前の検証の印
+      - id: verify-stamp
+        name: Warn when staged content lacks a verify:all stamp
+        entry: python3 scripts/verify_stamp.py check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
