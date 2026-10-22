@@ -100,7 +100,7 @@ export default async function (pi: ExtensionAPI) {
 			const results = messages
 				.filter((m: any) => m.role === "toolResult")
 				.slice(-calls.length)
-				.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, 300)}`);
+				.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, 600)}`);
 			return fauxAssistantMessage(fauxText(`TOOLS=${JSON.stringify(tools)}\n${results.join("\n")}`));
 		}
 		if (process.env.FAUX_DUMP_PROMPT === "1") return fauxAssistantMessage(fauxText(getCurrentSystemPrompt(messages)));

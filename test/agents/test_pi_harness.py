@@ -41,6 +41,7 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
     shutil.copy2(HARNESS_SRC.parent / "children.ts", harness / "children.ts")
+    shutil.copy2(HARNESS_SRC.parent / "audit.ts", harness / "audit.ts")
     shutil.copy2(COMMIT_MESSAGE_SRC, harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
     # 子エージェントも偽のモデルで動かす (階層のモデルは認証が要る)
@@ -619,6 +620,29 @@ def test_child_result_is_split_into_status_stats_warnings_and_answer(env):
         proc.stdout
     )
     assert "answer:" in proc.stdout, proc.stdout
+
+
+def test_child_result_warns_when_the_answer_lacks_the_standard_sections(env):
+    proc = run_child(env, "worker", bash_call("echo hi"), PI_HARNESS_BYPASS="1")
+    assert "child worker: completed" in proc.stdout, proc.stdout
+    assert "format check (the answer lacks the standard sections" in proc.stdout, proc.stdout
+    assert "- missing: 結論, 根拠, 未確認, 次の候補" in proc.stdout, proc.stdout
+    assert "- calls: bash×1" in proc.stdout, proc.stdout
+
+
+def test_child_result_has_no_format_check_for_a_standard_answer(env):
+    # 子は受けた依頼をそのまま答える (CHILD_USER=...)。先頭行は見出しにしない
+    task = "x\n## 結論\nok\n## 根拠\na\n## 未確認\nnone\n## 次の候補\nnone"
+    proc = run_pi(
+        env,
+        [{"name": "guarded_task", "args": {"agent": "worker", "task": task}}],
+        FAUX_CHILD_TOOL_CALLS="[]",
+        FAUX_CHILD_ECHO_USER="1",
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+    )
+    assert "child worker: completed" in proc.stdout, proc.stdout
+    assert "- calls: none" in proc.stdout, proc.stdout
+    assert "format check" not in proc.stdout, proc.stdout
 
 
 def test_task_input_new_forms_are_exclusive(env):

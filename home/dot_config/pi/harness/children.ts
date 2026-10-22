@@ -11,7 +11,9 @@ export const NOT_APPROVED = "not approved:";
 export type RoundStatus = "done" | "blocked" | "failed" | "limit" | "closed" | "aborted";
 // 1 往復の使用量 (子の assistant メッセージの usage の合計)
 export type RoundStats = { durationMs: number; calls: number; tokens: number; cost: number };
-export type RoundResult = { status: RoundStatus; blocked: string[]; errors: string[]; answer: string; note?: string; stats: RoundStats };
+export type RoundResult = { status: RoundStatus; blocked: string[]; errors: string[]; toolCalls: string[]; answer: string; note?: string; stats: RoundStats };
+// 往復ごとに記録するツール名の上限 (名前のみ。引数・出力は秘密が入りうるので持たない)
+export const MAX_TOOL_CALLS = 500;
 
 // 1 往復の最終状態。優先順: 親の停止・中断・時間切れ → 親の abort → 承認されなかった呼び出し → 最後の assistant の stopReason
 export type RoundFacts = {
@@ -138,6 +140,7 @@ type Round = {
 	id: string;
 	blocked: string[];
 	errors: string[];
+	toolCalls: string[];
 	last: RoundFacts["last"];
 	answer: string;
 	resolve: (r: RoundResult) => void;
@@ -285,6 +288,7 @@ export class Job {
 		}
 		const r = this.round;
 		if (!r) return;
+		if (e.type === "tool_execution_start" && r.toolCalls.length < MAX_TOOL_CALLS) r.toolCalls.push(String(e.toolName ?? ""));
 		if (e.type === "response" && e.id === r.id) {
 			if (e.success === false) this.finish(r, "failed", `prompt rejected: ${e.error ?? "unknown"}`);
 			else if (e.data?.disposition && e.data.disposition !== "started") this.finish(r, "failed", `prompt not started (${e.data.disposition})`);
@@ -326,7 +330,7 @@ export class Job {
 		// 時間切れ・中断は子が作業中のまま。それ以外の done でない往復は子が idle なので、stdin を閉じれば済む。
 		// 親の abort は、子が止まって idle になっているので、子は残す (追加依頼で続けられる)
 		if (result.status !== "done" && result.status !== "aborted") this.close(result.status === "limit" || result.status === "closed");
-		r.resolve({ ...result, blocked: r.blocked, errors: r.errors, answer: r.answer, stats: this.statsOf(r) });
+		r.resolve({ ...result, blocked: r.blocked, errors: r.errors, toolCalls: r.toolCalls, answer: r.answer, stats: this.statsOf(r) });
 	}
 
 	// 1 往復を実行する。呼び出しの前に state を同期で running にする (並行する呼び出しは busy)
@@ -340,6 +344,7 @@ export class Job {
 				id,
 				blocked: [],
 				errors: [],
+				toolCalls: [],
 				last: null,
 				answer: "",
 				resolve,

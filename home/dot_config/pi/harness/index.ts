@@ -22,6 +22,7 @@ import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
+import { auditFormat, summarizeCalls } from "./audit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -475,6 +476,8 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		const label = STATUS_LABEL[r.status] ?? r.status;
 		const errors = [...new Set(r.errors)];
 		const shown = errors.slice(0, MAX_LIST_ERRORS);
+		// 形式検査は答えがある通常の完了だけ (結果の本文は変えない)
+		const missing = r.status === "done" && r.answer ? auditFormat(r.answer) : [];
 		const parts = [
 			`child ${job.agent}: ${label}${r.note ? ` (${r.note})` : ""} [${fmtStats(r.stats)}]`,
 			...r.blocked.map((b) => `- needs the user's approval (not run): ${b}`),
@@ -482,6 +485,10 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				? [`warnings (tool errors during the run; the answer below already accounts for them):`, ...shown.map((b) => `- tool error: ${b}`)]
 				: []),
 			...(errors.length > shown.length ? [`- ... and ${errors.length - shown.length} more tool errors`] : []),
+			...(missing.length > 0
+				? [`format check (the answer lacks the standard sections; verify its claims yourself):`, `- missing: ${missing.join(", ")}`]
+				: []),
+			...(r.status === "done" && r.answer ? [`- calls: ${summarizeCalls(r.toolCalls ?? [])}`] : []),
 			...(alive ? [`- job: ${job.id} (idle; follow up with {jobId, task}, close with {jobId, close:true})`] : []),
 			...(r.answer ? ["", "answer:", r.answer] : [""]),
 		];
