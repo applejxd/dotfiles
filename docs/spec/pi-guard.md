@@ -579,7 +579,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | abort | `{jobId, abort: true}` | RPC の `abort`。**今の往復だけ**止め、子は残す（状態 `aborted`。履歴は途中までで、`keep` なら追加依頼で続けられる）。`done` 以外で job を止める原則の例外（親が明示した中断だから） |
 | 並列 | `{tasks: [{agent, task, model?}, ...]}`（最大 12） | 上限 4 は維持し、超えた分は断らず空きを待つ。結果は順に連結。上限は「生かしておく子」を数えるので、空きが 0 なら断る |
 | モデル | `model: "provider/id"` | 選べるのは、宣言済みの役割が使うモデルと、親と同じモデルだけ（階層の範囲内） |
-| ToDo | `{agent, task, todo: <id>}` | 子が `done` で終わればその項目を `done` にし、結果を `note` へ。それ以外はメモだけ（`todo` 拡張が `globalThis.__piTodoUpdate` を置く） |
+| ToDo | `{agent, task, todo: <id>}` | 子が `done` で終わればその項目を `done` にし、結果を `note` へ。それ以外はメモだけ（`todo` 拡張が `globalThis.__piTodoUpdate` を置く）。**`todo` ツールが有効な実行では、新しい子を起動する単発の形（`explore` / `review` / `worker`）に `todo` が必須**で、無いと `todo is required for <agent>: add a todo item for this work and pass its id as \`todo\`` を `error`で返し、子は起動しない（`commit`は任意。追加依頼・状態・steer・abort・close と、`tasks`の並列は対象外。項目の存在は確かめず、`todo`は整数かだけをスキーマで見る）。`todo` ツールが無い実行（todo 拡張を読み込まない試験など）では要求しない。試験は `test_task_requires_todo_*` ほか（未実行） |
 
 - **結果の形**: 見出し行（`child <役割>: <状態> [時間, 呼び出し数, トークン, 費用]`）→ 承認待ち → 警告（子のツールエラー。同じものは 1 つにし、5 件まで）→ job → `answer:` の順。
   エラーを答えに混ぜない

@@ -562,6 +562,8 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		}
 	};
 
+	const TODO_REQUIRED_AGENTS = new Set(["explore", "review", "worker"]);
+
 	// 割り当てた ToDo の項目へ結果を反映する (done なら done、そうでなければメモだけ)。todo 拡張が入口を置く
 	const linkTodo = (id: number | undefined, job: Job, r: RoundResult, ctx?: any) => {
 		if (id === undefined) return;
@@ -639,13 +641,14 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			`Use ${PREFIX}task with agent "review" for an independent review or a second opinion. The child cannot see this conversation, but it reads files and runs read-only git itself, so do not paste the transcript or whole diffs. Write in \`task\`: (1) the goal and constraints, (2) where to look (paths, refs), (3) what you verified and what you did not, (4) options you rejected and why, (5) your tentative conclusion, last, labelled as the thing to challenge, (6) the question you want answered.`,
 			`Set keep=true on ${PREFIX}task only when you expect follow-up requests to the same child. Send a follow-up with {jobId, task} using the jobId it returned, and close it with {jobId, close:true} when done. A job that is gone (closed, failed, or dropped when the bypass or session changed) must be restarted as a new task with a summary.`,
 			`Use background=true on ${PREFIX}task to keep working while the child runs; you are notified when it finishes. Use {jobId, status:true} or {list:true} to look at running children, {jobId, steer:"..."} to redirect one, and {jobId, abort:true} to stop its current round (the child stays).`,
+			`${PREFIX}task with agent explore / review / worker requires \`todo\` (the id of a todo item you added for this work) when the todo tool is active; without it the call fails.`,
 			`For several independent tasks, use {tasks:[{agent, task}, ...]} (up to ${MAX_BATCH}); tasks beyond the live-job limit wait instead of failing.`,
 		],
 		description:
 			"Run a task in a child agent. The child is a separate pi process with the same guard, and cannot see this conversation, " +
 			"so put everything it needs into `task`. Forms (do not mix their fields):\n" +
 			"- new: {agent, task, keep?, background?, model?, todo?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned. " +
-			"background=true returns at once and notifies you on completion. model must be a model already used by an agent below, or your own. todo is a todo id to update when the child finishes.\n" +
+			"background=true returns at once and notifies you on completion. model must be a model already used by an agent below, or your own. todo is a todo id to update when the child finishes; it is required for explore / review / worker when the todo tool is active (add a todo item first).\n" +
 			"- tasks: {tasks:[{agent, task, model?}, ...], background?}. Runs them in parallel (waiting for free slots) and returns every result.\n" +
 			"- follow-up: {jobId, task, background?}. Sends another request to a kept child; it remembers the earlier conversation. One request at a time per job.\n" +
 			"- status: {jobId, status:true}, or list: {list:true}. State, elapsed time, last tool, calls and tokens of children.\n" +
@@ -797,6 +800,10 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			let background = false;
 			let todo: number | undefined;
 			if (input.kind === "new") {
+				// todo ツールが有効な実行だけ、委譲に ToDo の項目を要求する (batch は対象外)
+				if (TODO_REQUIRED_AGENTS.has(input.agent) && input.todo === undefined && pi.getActiveTools().some((n) => n === "todo")) {
+					return text(`todo is required for ${input.agent}: add a todo item for this work and pass its id as \`todo\``, true);
+				}
 				const sp = spawnChild(input.agent, ctx, owner, input.model);
 				if ("error" in sp) return text(sp.error, true);
 				job = sp.job;

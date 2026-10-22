@@ -829,6 +829,44 @@ def test_child_result_updates_the_assigned_todo(env):
     assert "[x] #1: investigate — child worker: done" in proc.stdout, proc.stdout
 
 
+def _run_task_with_todo_ext(env, rounds):
+    return run_pi(
+        env,
+        [],
+        extra=("-e", str(TODO_EXT)),
+        FAUX_TOOL_ROUNDS=json.dumps(rounds),
+        FAUX_CHILD_TOOL_CALLS="[]",
+        FAUX_COUNT_USER="1",
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+    )
+
+
+def test_task_requires_todo_for_worker_when_todo_tool_is_active(env):
+    proc = _run_task_with_todo_ext(env, [[_task(agent="worker", task="t")]])
+    assert "todo is required for worker" in proc.stdout, proc.stdout
+    assert "isError=true" in proc.stdout and "USERS=" not in proc.stdout, proc.stdout
+
+
+def test_task_todo_is_optional_for_commit_agent(env):
+    proc = _run_task_with_todo_ext(env, [[_task(agent="commit", task="t")]])
+    assert "todo is required" not in proc.stdout, proc.stdout
+    assert "child commit: completed" in proc.stdout, proc.stdout
+
+
+def test_task_follow_up_and_status_do_not_need_todo(env):
+    rounds = [
+        [{"name": "todo", "args": {"action": "add", "text": "x"}}],
+        [_task(agent="worker", task="first", keep=True, todo=1)],
+        [_task(jobId="{{JOB}}", task="second")],
+        [_task(jobId="{{JOB}}", status=True)],
+        [_task(jobId="{{JOB}}", close=True)],
+    ]
+    proc = _run_task_with_todo_ext(env, rounds)
+    assert proc.returncode == 0, proc.stderr
+    assert "todo is required" not in proc.stdout, proc.stdout
+    assert "USERS=2" in proc.stdout, proc.stdout
+
+
 def test_round_time_limit_stops_the_child(env):
     proc = _rounds(
         env,
