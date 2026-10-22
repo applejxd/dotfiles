@@ -17,15 +17,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFLIGHT_PATH = (
-    ROOT
-    / "home"
-    / "dot_claude"
-    / "skills"
-    / "away-shift"
-    / "scripts"
-    / "executable_preflight.py"
+    ROOT / "home" / "dot_claude" / "skills" / "away-shift" / "scripts" / "executable_preflight.py"
 )
 HOOK_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_check_bash.py"
+DECIDE_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_decide.py"
 
 from agents_common import agents_config_dir  # noqa: E402
 
@@ -45,6 +40,7 @@ preflight = load_preflight()
 def use_repository_hook(monkeypatch):
     """配布先ではなくリポジトリの hook を見るようにする."""
     monkeypatch.setattr(preflight, "HOOK_PATH", HOOK_PATH)
+    monkeypatch.setattr(preflight, "DECIDE_PATH", DECIDE_PATH)
     monkeypatch.setenv("AGENTS_CONFIG_DIR", str(agents_config_dir()))
 
 
@@ -93,11 +89,11 @@ def _fake_hook(monkeypatch, tmp_path, body):
     [
         "import nope_missing_module\n",
         "import sys; sys.exit(1)\n",
-        "import sys; print('{\"permissionDecision\": \"allow\"}'); sys.exit(2)\n",
+        'import sys; print(\'{"permissionDecision": "allow"}\'); sys.exit(2)\n',
         "print('not json')\n",
         "print('{\"foo\": 1}')\n",
         "print('[1]')\n",
-        "print('{\"permissionDecision\": \"maybe\"}')\n",
+        'print(\'{"permissionDecision": "maybe"}\')\n',
     ],
     ids=[
         "import-error",
@@ -136,7 +132,68 @@ def test_silent_clean_exit_is_allowed(monkeypatch, tmp_path):
 
 def test_scratch_deletion_is_allowed():
     """away-shift が使う work/ 配下の削除は事前判定でも通る."""
-    verdict, _ = preflight.decide(
-        "rm -rf .tmp/away-shift/r1/work", str(ROOT)
-    )
+    verdict, _ = preflight.decide("rm -rf .tmp/away-shift/r1/work", str(ROOT))
     assert verdict == "allow"
+
+
+# ─── --judge pi ──────────────────────────────────────────────────────
+
+
+def _pi(command, *extra, capsys):
+    code = preflight.main([command, "--judge", "pi", *extra])
+    return code, capsys.readouterr().out
+
+
+def test_pi_allow(capsys):
+    code, out = _pi("git log --oneline -3", capsys=capsys)
+    assert (code, out.strip()) == (preflight.EXIT_SAFE, "ALLOW")
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["git commit -m x", "python3 script.py", "git status"],
+    ids=["rule-ask", "default-ask-python", "default-ask-status"],
+)
+def test_pi_ask_including_default_is_blocked(command, capsys):
+    """規則に当たらない ask (source: default) も実行しない."""
+    code, out = _pi(command, capsys=capsys)
+    assert code == preflight.EXIT_BLOCKED
+    assert out.startswith("ASK")
+
+
+def test_pi_deny(capsys):
+    code, out = _pi("git push", capsys=capsys)
+    assert code == preflight.EXIT_BLOCKED
+    assert out.startswith("DENY")
+
+
+def test_pi_role_changes_the_verdict(capsys):
+    command = "git status --short"
+    assert _pi(command, capsys=capsys)[0] == preflight.EXIT_BLOCKED
+    code, out = _pi(command, "--role", "explorer", capsys=capsys)
+    assert (code, out.strip()) == (preflight.EXIT_SAFE, "ALLOW")
+
+
+def test_pi_bypass_turns_ask_into_allow(capsys):
+    code, _ = _pi("git commit -m x", "--bypass", capsys=capsys)
+    assert code == preflight.EXIT_SAFE
+    code, _ = _pi("git push", "--bypass", capsys=capsys)
+    assert code == preflight.EXIT_BLOCKED
+
+
+def test_pi_missing_judge_is_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setattr(preflight, "DECIDE_PATH", tmp_path / "absent.py")
+    assert preflight.main(["git log", "--judge", "pi"]) == preflight.EXIT_UNAVAILABLE
+
+
+def test_pi_broken_judge_is_unavailable(monkeypatch, tmp_path):
+    bad = tmp_path / "bad.py"
+    bad.write_text("print('not json')\n", encoding="utf-8")
+    monkeypatch.setattr(preflight, "DECIDE_PATH", bad)
+    assert preflight.main(["git log", "--judge", "pi"]) == preflight.EXIT_UNAVAILABLE
+
+
+def test_default_judge_is_still_claude(monkeypatch, tmp_path):
+    """--judge 無しは pi の判定器を見ない (後方互換)."""
+    monkeypatch.setattr(preflight, "DECIDE_PATH", tmp_path / "absent.py")
+    assert preflight.main(["uv sync"]) == preflight.EXIT_SAFE

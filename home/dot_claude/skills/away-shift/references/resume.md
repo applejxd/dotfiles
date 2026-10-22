@@ -16,6 +16,7 @@ away-shift は離席時間いっぱい動くため、開始前に次の 3 つが
 | Copilot CLI | `manage_schedule`（`wakeup` / `create` / `stop`） | 未確認（このリポジトリで実測していない） |
 | OpenCode v2 | 不明 | 未確認 |
 | Claude Code | 不明 | 未確認 |
+| pi (pis) | `bg_run` で `sleep` を起動し、完了で自動再開 / `bg_kill` | 実測あり (`docs/research/agents/pi-bg-experiments.md` の s1・s2。TUI での見え方と数十分の sleep の上限は未確認) |
 
 どの CLI で使えるかは実測が無いので断定しない。ツール一覧に予約・取り消しに
 相当するものが見つからなければ「手段なし」として開始しない。
@@ -36,6 +37,21 @@ manage_schedule(action="wakeup", id=<自己ペースループの id>,
 を作る。prompt には **run_id と「SKILL の手順 3 から再開する」旨**を書く。
 
 停止・復帰では `manage_schedule(action="stop", id=...)` を呼ぶ。
+
+## `bg_run` を使える場合 (pi)
+
+仕様と実測は `docs/spec/pi-guard.md` と `docs/research/agents/pi-bg-experiments.md`。
+
+- **予約**: サイクルの最後に `bg_run` で
+  `python3 ~/.claude/skills/away-shift/scripts/away_guard.py sleep <NEXT_WAKE_SECONDS>`
+  を起動し (生の `sleep` は確認になる。1〜7200 秒)、応答を終える。完了でアイドルのまま自動再開する。予約の本文は run_id と
+  「SKILL の手順 3 から再開する」旨。同じ内容を `todo` の項目 (blocked、
+  note に bg ジョブ ID と run_id) にも残す
+- **停止・復帰**: `bg_kill <ジョブ ID>` で予約を取り消す (再開を起こさない)。
+  利用者のメッセージが来たら、まず `bg_kill` する
+- **読まない**: `bg_log` で完了を読むと、通知と合わせて余分に 1 ターン走る (F2)。
+  sleep のジョブは `bg_log` で読まない
+- 1 サイクル = 1 ターン + 1 ジョブ
 
 ## サブエージェント
 

@@ -567,6 +567,10 @@ subcommands = ["paths", "lint", "read"]
 - 載せてよいかの判断は、引数で書き込み先・実行するもの・送り先を決められないか、
   リポジトリの設定（`.git/config`・`.python-version` など）からコマンドを起動しないか。
   足すときは `test_skill_script_allow_is_not_widened_silently` も更新する
+- **away-shift。** `away_guard.py` の `init` / `check` / `log` / `status` / `sleep` と `preflight.py` を載せた（`preflight.py` は渡された文字列を判定器へ渡すだけで実行しない。コードを読んで確認）。
+  書き込みは `.tmp/away-shift/` の中に閉じる（run_id の検査、リンクの拒否、`--note-file` は `work/` 直下のみ。`test_away_guard.py` が固定）。
+  待機は `sleep <秒>`（1〜7200 の整数。何も読み書きしない）を許可し、生の `sleep` は `[pi.shell] allow` に足さない（OpenCode の全体許可へ複写され、`sleep … > ファイル` が書き込み経路になるため）。
+  `skill_scripts` は `shell_allow` を持つ探索・レビュー役からも到達するが、書き込み先が閉じているので受け入れる。読み取り専用と説明している役割に書き込みの例外ができることを今回受け入れる。許可の期待値は `test_decide.py` の `test_away_shift_scripts_allow_only_the_listed_subcommands` が固定している（2026-10-22 に全件通過）。実際の pis（TS 版）での挙動は未確認
 
 ### bypass から呼べる子エージェント
 

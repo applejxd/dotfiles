@@ -26,6 +26,22 @@ allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Task
 自動拒否・スキップ・応答待ちのいずれかになり、どれもサイクルが無駄になる。
 加えて、事前承認や `ask` 未登録のせいで**止まらない**破壊的操作も実在する）。
 
+## pi (pis) で使うとき
+
+- スクリプトは `python3 ~/.claude/skills/away-shift/scripts/<script>.py …` で呼ぶ
+  （pi の許可規則の runner は `python3`。`uv run --no-project python` は Claude Code / Copilot 向け）
+- ツール名は Bash→`guarded_bash`、Read→`guarded_read`、Write→`guarded_write`、
+  Edit→`guarded_edit`、Task→`guarded_task` と読み替える（frontmatter は Claude 向けのまま）
+- 無人で確認の画面に当たらないよう、`preflight.py` に `--judge pi` を付ける
+  （必要なら `--role`・`--bypass`）。規則に無いコマンドも ASK になり、実行しない。
+  この判定は Python 版の判定器による**近似**で、実際の pis（TS 版。境界が証明されたセッションでは default の ask を allow に緩和する）より厳しめ（ASK が多め）に出る。安全側の見積り
+- **記録の渡し方**: `log --text "$(cat <<'EOF' …)"` は pi の判定器が allow にしない
+  （`$` と heredoc）。記録の本文を `write` ツールで `.tmp/away-shift/<run-id>/work/note.md`
+  に書き、`away_guard.py log <run-id> --note-file note.md` で渡す（実装済み）
+- 再開の予約は `bg_run` で `python3 ~/.claude/skills/away-shift/scripts/away_guard.py sleep <NEXT_WAKE_SECONDS>`
+  を起動する（生の `sleep` は確認になる。1〜7200 秒）
+- 再開・停止・復帰は `references/resume.md` の「`bg_run` を使える場合 (pi)」
+
 ## 使わない場面
 
 | 状況 | 理由 |
@@ -57,6 +73,8 @@ allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Task
 uv run --no-project python ~/.claude/skills/away-shift/scripts/away_guard.py \
   init --goal "<目標>" --deadline "<復帰予定時刻>"
 ```
+
+> pi では上の「pi (pis) で使うとき」の呼び方（`python3 …`、`--note-file`）を使う。
 
 `--deadline` は `HH:MM`（次にその時刻になる瞬間）、`YYYY-MM-DD HH:MM`、
 `8h`、`90m` のいずれか。出力された `run_id` を以降ずっと使う。
@@ -91,6 +109,8 @@ uv run --no-project python ~/.claude/skills/away-shift/scripts/away_guard.py \
 uv run --no-project python ~/.claude/skills/away-shift/scripts/away_guard.py \
   check <run-id>
 ```
+
+> pi では上の「pi (pis) で使うとき」の呼び方（`python3 …`、`--note-file`）を使う。
 
 - 終了コード 0 → 継続。出力に残り時間、現在のサイクル番号、
   次のサイクルまで空ける秒数（`NEXT_WAKE_SECONDS`）が出る
@@ -142,6 +162,8 @@ uv run --no-project python ~/.claude/skills/away-shift/scripts/away_guard.py \
 EOF
 )"
 ```
+
+> pi では上の「pi (pis) で使うとき」の呼び方（`python3 …`、`--note-file`）を使う。
 
 ### 3-1. 離席時間いっぱい使う（重要）
 

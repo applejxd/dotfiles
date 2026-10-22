@@ -336,6 +336,26 @@ def test_imozuru_scripts_allow_only_the_confined_or_read_only_forms():
     assert bash(f"python3 {base}/imozuru_root.py")["decision"] == "ask"
 
 
+def test_away_shift_scripts_allow_only_the_listed_subcommands():
+    base = "~/.claude/skills/away-shift/scripts"
+    guard = f"python3 {base}/away_guard.py"
+    for sub in (
+        "init --goal g --deadline 8h --run-id r1",
+        "check r1",
+        'log r1 --text "done"',
+        "log r1 --note-file note.md",
+        "status r1",
+        "sleep 600",
+    ):
+        assert bash(f"{guard} {sub}")["decision"] == "allow", sub
+    # bg_run の中身は bash と同じ判定 (docs/spec/pi-guard.md)。再開の予約はこの形で呼ぶ
+    assert bash(f"{guard} sleep 600")["decision"] == "allow"
+    assert bash(f"python3 {base}/preflight.py --help")["decision"] == "allow"
+    # 載せていないサブコマンド、コマンド置換を含む形は許可しない
+    assert bash(f"{guard} evil")["decision"] != "allow"
+    assert bash(f'{guard} log r1 --text "$(cat x)"')["decision"] != "allow"
+
+
 # ─── ファイル ───────────────────────────────────────────────────────
 
 

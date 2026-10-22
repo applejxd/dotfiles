@@ -1286,6 +1286,19 @@
      ]
     },
     {
+     "script": "~/.claude/skills/away-shift/scripts/away_guard.py",
+     "subcommands": [
+      "init",
+      "check",
+      "log",
+      "status",
+      "sleep"
+     ]
+    },
+    {
+     "script": "~/.claude/skills/away-shift/scripts/preflight.py"
+    },
+    {
      "script": "~/.claude/skills/web-search/scripts/websearch.py",
      "subcommands": [
       "search",

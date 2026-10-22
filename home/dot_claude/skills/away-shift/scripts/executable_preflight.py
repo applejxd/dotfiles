@@ -24,6 +24,13 @@ exit code:
 判定できるのは bash コマンドだけで、ファイル書き込みツールは対象外。
 また hook の判定であって、CLI 側の事前承認設定は考慮しない (事前承認は
 プロンプトを減らす方向にしか働かないので、安全側の見積もりになる)。
+
+pi (フルガード pis) では ``--judge pi`` を付ける。リポジトリの判定器
+(``~/.claude/hooks/decide.py``) に {tool, input, cwd, role, bypass} を渡し、
+{decision, reason, source} を受ける。``--role`` と ``--bypass`` は pis の起動に合わせる。
+これは Python 版の判定器による近似で、実際の pis (TS 版) の境界の緩和を含まない。実際より ask が多めに出る (安全側)。
+規則に当たらないコマンドは ask (source: default) で返るが、これも「実行しない」
+(終了 3) とする。無人で確認の画面に当たらないための判定だから。
 """
 
 from __future__ import annotations
@@ -36,6 +43,8 @@ import sys
 from pathlib import Path
 
 HOOK_PATH = Path.home() / ".claude" / "hooks" / "check_bash.py"
+# chezmoi の executable_ 接頭辞は配備時に外れる
+DECIDE_PATH = Path.home() / ".claude" / "hooks" / "decide.py"
 
 EXIT_SAFE = 0
 EXIT_BLOCKED = 3
@@ -81,17 +90,68 @@ def decide(command: str, cwd: str) -> tuple[str, str]:
     return verdict, reason
 
 
+def decide_pi(
+    command: str, cwd: str, role: str = "implementer", bypass: bool = False
+) -> tuple[str, str]:
+    """pi の判定器 (decide.py) に問い合わせ、(判定, 理由) を返す。"""
+    if not DECIDE_PATH.exists():
+        raise FileNotFoundError(f"判定器が見つかりません: {DECIDE_PATH}")
+    payload = json.dumps(
+        {
+            "tool": "bash",
+            "input": {"command": command},
+            "cwd": cwd,
+            "role": role,
+            "bypass": bypass,
+        }
+    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(DECIDE_PATH)],
+            input=payload,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("判定器がタイムアウトしました") from exc
+    if proc.returncode != 0:
+        detail = proc.stderr.strip().splitlines()[-1:] or [""]
+        raise RuntimeError(f"判定器が終了コード {proc.returncode} で終了: {detail[0]}")
+    out = proc.stdout.strip()
+    try:
+        data = json.loads(out)
+        verdict = data["decision"]
+        reason = data.get("reason", "")
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise RuntimeError(f"判定器の出力を解釈できません: {out[:200]}") from exc
+    if verdict not in ("allow", "ask", "deny") or not isinstance(reason, str):
+        raise RuntimeError(f"判定器の出力が不正です: {out[:200]}")
+    return verdict, reason
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("command", help="実行しようとしている bash コマンド")
     parser.add_argument("--cwd", default=os.getcwd())
+    parser.add_argument("--quiet", action="store_true", help="判定だけを出力する (理由を省く)")
     parser.add_argument(
-        "--quiet", action="store_true", help="判定だけを出力する (理由を省く)"
+        "--judge",
+        choices=("claude", "pi"),
+        default="claude",
+        help="判定器。claude は PreToolUse hook、pi は decide.py",
+    )
+    parser.add_argument("--role", default="implementer", help="--judge pi の役割")
+    parser.add_argument(
+        "--bypass", action="store_true", help="--judge pi で pis --bypass 相当にする"
     )
     args = parser.parse_args(argv)
 
     try:
-        verdict, reason = decide(args.command, args.cwd)
+        if args.judge == "pi":
+            verdict, reason = decide_pi(args.command, args.cwd, args.role, args.bypass)
+        else:
+            verdict, reason = decide(args.command, args.cwd)
     except Exception as exc:
         print(f"判定できません: {exc}", file=sys.stderr)
         return EXIT_UNAVAILABLE

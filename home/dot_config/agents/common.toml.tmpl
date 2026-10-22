@@ -990,6 +990,15 @@ script = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 # write は標準入力を引数のパスへ書くので載せない
 subcommands = ["paths", "lint", "read"]
 
+# away-shift。書き込み先はスクリプト側で .tmp/away-shift/ に閉じる。preflight.py は判定するだけで実行しない
+# see docs/spec/agent-config-generation.md#スキルのスクリプト
+[[pi.skill_scripts.allow]]
+script = "~/.claude/skills/away-shift/scripts/away_guard.py"
+subcommands = ["init", "check", "log", "status", "sleep"]
+
+[[pi.skill_scripts.allow]]
+script = "~/.claude/skills/away-shift/scripts/preflight.py"
+
 # web-search。私用 (github-copilot) だけ。業務用 (Bedrock) は検索を AgentCore に一本化する (skill も配らない)。
 # 外部へ出るのはクエリだけで、クエリは秘匿チェックで止める。sync-keys は bw を呼ぶので載せない。
 # see docs/spec/web-search.md#pis-の許可規則
