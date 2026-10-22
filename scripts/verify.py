@@ -6,7 +6,7 @@
 どの規則にも当たらないパス・「全件に回す領域」のパス・削除されたパスが 1 つでも
 あれば全件にフォールバックする (取りこぼしより過剰な実行を選ぶ)。
 試験が読むファイル (ソースの文字列・パス連結から拾う) の変更は、その試験を選ぶ。
-see docs/spec/development.md#検証の入口
+see docs/spec/development.md#検証の方針と選択実行
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 PYTEST_OPTS = ["-q"]
-# 並列化 (pytest-xdist)。方式の選び方と実測は docs/change/0028-verification-speed-and-delegation.md
+# 並列化 (pytest-xdist)。方式の選び方と実測は docs/change/closed/0028-verification-speed-and-delegation.md
 PARALLEL_OPTS = ["-n", "auto", "--dist", "worksteal"]
 PARALLEL_MIN_FILES = 3  # 少数のファイルだけの実行では、ワーカーの起動の方が高いので直列のまま
 LINT_TEMPLATES = ["mise", "exec", "--", "python3", "scripts/lint_templates.py"]

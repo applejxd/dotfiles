@@ -2,7 +2,12 @@
 
 <!-- 現在の運用の正本は docs/spec/pi-guard.md。ここは「いつ何を調べ・測ったか」を積む場所 -->
 
+> **後の観測への案内（2026-10-22）**: P1〜P5 は当時の記録で、本文はそのまま残している。その後の実装で古くなった主張（質問機能の欠落・通知・P2 の不満・`btw` の比較・P3 の行数）の訂正と、worktree 隔離の先行例は、
+> [記録 P6](#記録-p6--2026-10-22-worktree-隔離の先行例と-p1p5-の訂正)。
+
 ## 記録 P1 — 2026-10-20
+
+> 2026-10-22 の訂正: 「不足している 4 つ」のうち、構造化した質問は実装済み。通知もローカルの BEL と子の完了通知がある。[記録 P6](#記録-p6--2026-10-22-worktree-隔離の先行例と-p1p5-の訂正)
 
 - **対象バージョン**: pi 1.3.0（`pi --version`）
 - **環境**: Ubuntu（WSL）。公開情報の閲覧だけで、**拡張のインストール・実行はしていない**（[ADR-0016](../../adr/0016-pi-extensions-own-first.md)、
@@ -110,6 +115,8 @@
 
 ## 記録 P2 — 2026-10-20: subagents / todo を公開拡張へ置き換えられるか
 
+> 2026-10-22 の訂正: 「自作を実際に使って見えこと」の不満は一部解消、一部は残る。[記録 P6](#記録-p6--2026-10-22-worktree-隔離の先行例と-p1p5-の訂正)
+
 - **問い**: 自作の `subagents` / `todo` は、Claude Code の同種の機能に遠く及ばない。公開拡張（ユーザーが多い）を審査して導入したほうが、保守と使い勝手の両方でよいか
 - **方法**: 実際にこのセッションで自作の `guarded_task` と `todo` を使い（エージェント側の使い勝手）、`@tintinweb/pi-subagents`
   v0.22.0 の README・`package.json`・`src/agent-runner.ts`（子のセッションの作り方）を読んだ。**コードは実行していない**。特殊な経路（TUI の表示）は、利用者の画面でしか確かめられない
@@ -163,6 +170,8 @@
 
 ## 記録 P3 — 2026-10-20: 自作拡張の採点（公開の標準像との比較）
 
+> 2026-10-22 の訂正: **この採点は現行の点ではない**。拡張の構成・行数・質問の有無・通知が変わった。[記録 P6](#記録-p6--2026-10-22-worktree-隔離の先行例と-p1p5-の訂正)
+
 - **対象**: `home/dot_pi/agent/extensions/` の自作 5 個（activity 276 行・btw 121・plan 87・subagents 120・todo 342。計 946 行）と、
   フルガード（`home/dot_config/pi/harness/`）。比較の標準像は、本ファイルの P1（上位 150 件の分類）
 - **方法**: 構成・行数・各拡張の冒頭と、P1・P2・ADR-0016 を読んで、AI が採点した。**コードの全行読み・試験の実行・ネットの再検索はしていない**。
@@ -188,6 +197,8 @@
 
 ## 記録 P4 — 2026-10-20: ask-user 系拡張の方式（自作 `ask` の設計の参考）
 
+> 2026-10-22 の訂正: 「後回し」のうち、問ごとのタブと BEL は実装済み。推奨の事前チェックを足した。[記録 P6](#記録-p6--2026-10-22-worktree-隔離の先行例と-p1p5-の訂正)
+
 - **方法**: README と docs を読んだだけ（取得・実行・コード複写なし。コード本体は未読）。README の主張は未検証
 - **出典**: `juicesharp/rpiv-mono` の `rpiv-ask-user-question`（README・`docs/tool-schema.md`・`docs/hosts.md`）、`edlsh/pi-ask-user` の README、
   同リポジトリの issue #291・#301・#310・#313、`Gentleman-Programming/gentle-shell` #1277（検索語: `pi-ask-user pi coding agent extension ask_user tool README`、`rpiv-ask-user-question issue bug`）
@@ -198,6 +209,8 @@
 - **自作への反映**: 名前は `ask`（衡突回避）、予約ラベル、空入力は選択肢へ戻す、`unanswered` を返す、待ち上限 5 分。タブ画面・プレビュー・メモ・BEL は後回し
 
 ## 記録 P5 — 2026-10-21: 人気の拡張のうち未導入のものと、既存の機能との比較
+
+> 2026-10-22 の訂正: 「`btw`（ツールなしの 1 回きりの応答）」は当時の説明。現行の既定は `explore` の子で、`--plain` だけがツールなし。[記録 P6](#記録-p6--2026-10-22-worktree-隔離の先行例と-p1p5-の訂正)
 
 - **対象バージョン**: pi 1.3.0。**拡張のインストール・実行はしていない**（[ADR-0016](../../adr/0016-pi-extensions-own-first.md)）。コードは読まず、README と説明文だけを読んだ。README の主張は未検証
 - **問い**: 月間ダウンロード数の上位の拡張のうち、取り入れていないものは何か。`pi-memory`・`pi-btw`・`pi-advisor-flow`・`@ff-labs/pi-fff` は、今の仕組み（`sdd-docs`・自作 `btw`・`review`・`rg` / `fd` / `fzf`）で足りているか
@@ -229,6 +242,68 @@
 - 順位は上位約 40 件までで、それ以下は見ていない。README の主張（性能・機能）は実測していない
 - `guarded_grep` / `guarded_find` が `rg` / `fd` を呼ぶか（`harness/index.ts` に直接の言及が見つからなかった）。`pis` で `fzf -f` が確認なしで通るか。実際のリポジトリでの検索の速度
 - `pi-advisor-flow` の「自動ゲート」の詳細（README の後半は、取得が 7,000 文字で打ち切られて読めていない）
+
+## 記録 P6 — 2026-10-22: worktree 隔離の先行例と P1〜P5 の訂正
+
+- **対象バージョン**: pi 1.3.0。**拡張のインストール・実行・展開はしていない**（[ADR-0016](../../adr/0016-pi-extensions-own-first.md)、
+  [safe-acquisition](../../../home/dot_claude/skills/oss-research/references/safe-acquisition.md)）
+- **問い**: (1) P1・P2 が「設計だけ借りて自作できる」とした worktree 隔離は、先行例でどう作られているか。
+  (2) P1〜P5 の主張のうち、その後の実装で古くなったものはどれか
+- **方法**: npm レジストリから配布物を直接取得し、`dist.integrity`（sha512）と照合し、`tar -xzO` で必要なファイルだけを標準出力へ出して読んだ。
+  取得物は調査の後に削除した。訂正は、独立の `review`（子エージェント）に、リポジトリの現状と照らして点検させた
+- **出典**（いずれも 2026-10-22 に取得）:
+  - `@gotgenes/pi-subagents-worktrees` 0.3.3（レジストリの更新 2026-09-05）:
+    <https://registry.npmjs.org/@gotgenes/pi-subagents-worktrees/-/pi-subagents-worktrees-0.3.3.tgz>、
+    integrity `sha512-5s7DIYm9Ge/2+/APnk9f9e5QAlq5u/xL1j0DKe/lXURE0/l8q031vqqEZVkCFjxUVnkFPebsOHKdTVrd4xeVzA==`（取得物を計算した値と一致）、
+    リポジトリ <https://github.com/gotgenes/pi-packages>。読んだ: `README.md`（全文）と `src/worktree.ts` の先頭 9,000 バイト
+  - `@tintinweb/pi-subagents` 0.22.0:
+    <https://registry.npmjs.org/@tintinweb/pi-subagents/-/pi-subagents-0.22.0.tgz>、
+    integrity `sha512-vkpH930uAi/Y8KOyc4+D7bSNgrL8xX4TAdMF6AWTqFjs2BTxuSobZ4ViA5jcL87FmyKb7O1X+r6ZPiEVTk3GQg==`（一致）。
+    読んだ: `README.md` の worktree に関する行と、`src/worktree.ts` の先頭 7,000 バイト
+  - Claude Code の公式 docs <https://code.claude.com/docs/en/worktrees>: **取得を試したが失敗し（`network: 取得できない`）、未読**。迴回していない。
+    検索（`websearch.py search`、Brave）の要約だけが手元にある（**二次情報**）: `isolation: worktree` をサブエージェントの定義に書ける、
+    `.worktreeinclude` で git 管理外のファイルを持ち込める、変更が無ければ自動で消し、あれば定期的な掃除まで残す、という。裏となる一次資料で確かめていない
+
+### worktree 隔離の先行例
+
+| 論点 | `@gotgenes/pi-subagents-worktrees` 0.3.3 | `@tintinweb/pi-subagents` 0.22.0 |
+| --- | --- | --- |
+| 対象の選び方 | エージェントの種類ごとの opt-in（`worktreeAgents`） | frontmatter の `isolation: worktree`。全体の切り替え `worktreeIsolation` |
+| 作成 | `os.tmpdir()` の下に `pi-agent-<id>-<uuid8>`、HEAD から `--detach` | 同じ。モノレポのサブディレクトリを保つ `workPath` |
+| 作成の失敗 | **子の実行を失敗にする**（隔離なしで黙って動かさない） | 隔離なしの通常 cwd へ黙って落とす |
+| 完了時 | 変更なし→削除。あり→`git add -A` とコミット、ブランチ `pi-agent-<id>`（衡突時は時刻を付ける）→削除 | 同じ |
+| コミットの hook | 失敗したら `--no-verify` で 1 回だけ再試行し、結果に警告を付ける | 常に `--no-verify` |
+| 後片付けの失敗 | **消さずに残し**、結果にパスを示す | 最善努力で強制削除（作業を失いうる） |
+| 取り残しの発見 | 起動時の警告、`/subagents-worktrees` で一覧と削除（確認つき） | 読んだ範囲では見当たらない |
+| 統合 | 対象外（「ブランチの先は利用者の仕事」） | 同様（README の説明の範囲） |
+| 破壊的操作 | モデルには渡さない（スラッシュコマンドだけ） | 読んだ範囲では見当たらない |
+| 検証 | — | `gate: "npm test"` で、モデルでなくコマンドで子を検証する（README の記述。実装は未読） |
+
+- **共通の弱点（このリポジトリにとって）**: どちらも起点が HEAD で、親の未コミットの変更が子に見えない。このリポジトリは作業中は常に未コミット（コミットは承認制）。
+  さらに、どちらもコミットの hook を飛ばす（このリポジトリは `--no-verify` を禁じている）
+- **設計への示唆**（詳細は [CHG-0029](../../change/0029-worktree-isolation.md)）: `@gotgenes` の「作成失敗は失敗」「未確定なものは消さない」「取り残しの警告」「破壊的操作をモデルに渡さない」は取り入れる。
+  起点をスナップショットにし、回収を hook の走らないプラミングにする点は、先行例に無いこのリポジトリ固有の設計
+- **限界**: 実機での挙動は未確認。`src/` のこれ以外のファイル（設定・起動時の警告・スラッシュコマンドの実装）は未読。README の主張は未検証
+
+### P1〜P5 の訂正
+
+現状は 2026-10-22 時点の作業ツリーを読んだもの。点数の再採点はしていない。
+
+| 記録 | 当時の主張 | 現状 | 判断 |
+| --- | --- | --- | --- |
+| P1（結論・対比表・自作の候補）、P3（機能の幅・改善の優先） | 構造化した質問（ask-user）が無く、不足の 4 つのうちの 1 つ | 自作 `ask` がある（`home/dot_pi/agent/extensions/ask/index.ts`。選択肢・最大 4 問・自由記述・複数選択）。さらに推奨の選択肢を先頭に置く事前チェックを足した（171cf25）。**子から利用者への質問の中継は未実装**（[CHG-0026](../../change/0026-specialist-agents-with-skills.md)） | 質問は実装済み。不足は 3 つ（記憶・LSP 診断・worktree 隔離）。中継は別の問題 |
+| P1（対比表の「通知・Web UI は無い」）、P3（UI・体験「通知は無い」） | 通知が無い | `notify` 拡張の BEL、ジョブと子の完了通知（通番・時刻・結果の保存）がある。Web UI・外部チャットの入口は無い | ローカルの通知はある。HTTP・チャットへの公開は無い（この点は当時のまま） |
+| P2（「自作を実際に使って見えたこと」と「変えるとすれば」） | `todo` の `set` が 1 件ずつ・返り値が長い、`guarded_task` に背景実行・steering が無い、子のエラーが本文に混じる、`explore` で行数を数えられない | `todo` に `batch` と `replace` と結果の縮約、子の `background`・`steer`・状態照会、エラーと回答の分離、`explorer` の `wc` と読み取り専用の git がある。**子の逐次の進捗ウィジェットは完成したとは言えない**（確認していない） | 一括で「全部解消」とは言わない。進捗ウィジェットは未確認 |
+| P3（拡張の行数 946 行） | activity 276・btw 121・plan 87・subagents 120・todo 342 | `wc -l`（レビューで確認）: 当時の 5 拡張だけで 1,068 行（activity 276・btw 215・plan 87・subagents 146・todo 344）、現在の 7 拡張で 1,520 行（さらに ask 439・notify 13） | P3 の行数と点数は現行のものではない。点数は「筆者の判断で再現できる測定ではない」（P3 自身の限界）。再採点が要る |
+| P4（後回しの範囲） | タブ画面・プレビュー・メモ・BEL は後回し | 問ごとのタブと確認タブは実装済み（`ask/index.ts`）。BEL は `notify` にある。プレビュー・メモは実装していないと読める（未確認）。「推奨の事前チェック」は、**推奨を先頭に置くことを送信前に検証する**もので、画面で推奨を自動で選ぶものではない | P4 の「後回し」は範囲ごとに覆った |
+| P5（`btw` の比較） | 自作 `btw` はツールなしの 1 回きりの応答 | 現行の既定は読み取り可能な `explore` の子。`--plain` だけがツールなし（P5 の同じ表の判断欄の後半と、「反映したこと」もこの現状を述べている） | P5 の表の前半は当時の説明。現行は `pi-guard.md` |
+| このセッションの実装（P1〜P5 の「自作の候補」を実現したもの） | — | `guarded_task` の `todo` 必須化は、`explore` / `review` / `worker` の**単独の新規依頼**で、`todo` ツールが有効なときだけ。`tasks` の一括形と `commit` は対象外 | 無条件の仕様として読まない |
+
+### 未確認
+
+- P1 の順位・ダウンロード数・分類件数、P2 の外部拡張の規模や安全性は再検証していない
+- 現行の TUI での通知・質問の体験。worktree の先行例の実機での挙動
+- P1・P2・P4 の出典は、節ごとに追跡性が違う（配布物の固定 URL・ハッシュが無い節がある）。ここでは新しい観測だけに版・取得日・URL を付けた
 
 ## 付録: 上位 150 件の分類
 
