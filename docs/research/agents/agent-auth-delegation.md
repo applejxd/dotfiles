@@ -99,3 +99,89 @@ LiteLLM のような常駐のゲートウェイが要る。代替は少ない。
 - <https://docs.litellm.ai/blog/security-incident-oct-21-2026>、<https://docs.litellm.ai/blog/security-update-march-2026>、<https://docs.litellm.ai/docs/proxy/virtual_keys>、<https://docs.litellm.ai/docs/proxy/prod>
 - <https://github.com/Infisical/agent-vault>、<https://nono.sh/docs/cli/features/credential-injection>、<https://docs.nvidia.com/openshell/how-it-works/providers/overview>、<https://docs.docker.com/reference/cli/sbx/secret/>
 - <https://docs.astral.sh/uv/concepts/resolution/>（`exclude-newer` の相対指定）、<https://cooldowns.dev/>、<https://securitylabs.datadoghq.com/articles/dependency-cooldowns/>（第三者）
+
+## 記録 D3 — 2026-10-24（LiteLLM の連携、設計を真似る要点、共有ゲートウェイと個人の GitHub）
+
+- **観測日**: 2026-10-24。`explore` の子 4 件（検索 10 回以上、本文の取得あり）と、親の確認。親が確かめた行は「確認済み」（保存先 `.tmp/research/openshell-vs-pis-sandbox/sources/litellm-mcp-*.md`）。本文を読んでいない抜粋のみの項目は、そう書く
+
+### 問い
+
+(1) LiteLLM は、AgentCore と `gh`（GitHub）と連携できるか。(2) LiteLLM を採用しなくても、**設計を真似る**ために、何を押さえればよいか。(3) 利用者の制約: **`websearch` は、課内の全員で共有するゲートウェイ**で、**GitHub は、メンバーごとにアカウントを指定したい**。
+
+### 結果
+
+#### LiteLLM の MCP Gateway
+
+- **MCP Gateway**: 「すべての MCP ツールに固定のエンドポイントを使い、キー・チームごとにアクセスを制御する」（確認済み: `litellm-mcp-gateway.md:9`）。transport は streamable HTTP・SSE・stdio。**stdio は、環境変数 `LITELLM_ENABLE_MCP_STDIO=true` を付けて起動しない限り無効**（確認済み: `:100`。設定ファイルや DB では有効にできない）。登録は `config.yaml` の `mcp_servers`、UI、`POST /v1/mcp/server`。クライアントは `x-litellm-api-key` に仮想キーを送り、ツール名はサーバー名の接頭辞つき（例 `github_mcp-search_issues`）
+- **上流への認証**（`auth_type` の値。子の抜き書き。公式の表）: `none`・`api_key`・`bearer_token`（確認済み: `:223`）・`basic`・`authorization`・`token`（GitHub 形式）・`oauth2`（`authorization_code` と `client_credentials`）・`oauth2_token_exchange`・`oauth_delegate`・`true_passthrough`・**`aws_sigv4`**。ほかに `static_headers`、クライアントのヘッダーを通す許可リスト `extra_headers`
+- **AgentCore との連携**: 「AWS Bedrock AgentCore 上のホストした MCP サーバーへ、SigV4 で接続する」（確認済み: `litellm-mcp-aws-sigv4.md:11`）。認証情報を省くと boto3 の既定の連鎖を使い、`aws_role_name` を設定すると AssumeRole（「recommended」と注記。確認済み: `:65`）。署名は、要求ごとに、本文のハッシュを含めて行う（子の抜き書き）。**対象は Runtime にホストした MCP サーバー**と読める。**AgentCore の Gateway（共有ゲートウェイ）を登録できるかは、文書に明記が無く、JWT での登録は見つからなかった**（SigV4 の署名先サービス名は同じ `bedrock-agentcore` なので動く可能性はあるが、推測）。Runtime のエージェントを呼ぶ経路も 2 つある（`bedrock/agentcore/<ARN>` と A2A ゲートウェイ）
+- **GitHub との連携**: GitHub の MCP サーバー（`https://api.githubcopilot.com/mcp`）を、`auth_type: bearer_token` ＋ PAT で登録できる（確認済み: `:266`）。OAuth は、GitHub が動的なクライアント登録に対応しないので、事前登録したアプリの `client_id` と `client_secret` を使う（GitHub 側の回答。2026-05）。LiteLLM の UI で認証 URL の未設定エラーが出る報告がある。**`gh` の CLI をプロキシする機能は、見つからなかった**（LiteLLM が扱うのは HTTP・MCP の経路で、CLI は範囲外）
+- **ユーザーごとの認証**: `is_byok`（ユーザーが自分のキーを保存。DB に暗号化して、`(user_id, server_id)` をキーに保存）、ユーザーごとの OAuth（トークンを暗号化して保存し、更新して、その利用者の呼び出しに注入）、`env_vars` の `scope: user`、クライアントが `x-mcp-{alias}-{header}` で毎回持ち込む方式（LiteLLM は保存しない）。「キー・チーム単位で、保存した認証情報を上書きする機能は、ネイティブには無い」
+- **アクセス制御・監査**: キー・チーム・ユーザーなど 6 階層の積集合。**既定は「どの階層にも一覧が無ければ、すべてのサーバーに到達できる」**で、`require_key_mcp_access_defined: true` が推奨。ツール単位の `allowed_tools`・`disallowed_tools`、ツール定義の固定（pin。ツールの名前・説明・スキーマの差分を検知して、tool poisoning を防ぐ）、`mcp_rpm_limit`、ガードレール
+- **セキュリティ上の問題**（第三者の記事・公式ブログ。一部は抜粋のみ）: CVE-2026-59822（MCP の OAuth2 パススルーの fallback で、検証失敗時に空の認証に置き換わり、偽の Bearer で到達。1.84.0 で修正、CISA の KEV に 2026-09-02 登録）、CVE-2026-42271（MCP のテスト用エンドポイントの stdio 経由のコマンド注入。CVSS 8.7）、CVE-2026-30623（Anthropic の MCP SDK の stdio のコマンド注入）。**仮想キーが上流へ漏れる不具合**（`extra_headers` に `Authorization` を設定すると、`auth_type: none` などで仮想キーが上流へ漏れた。PR #46932、2026-10-20 にマージ）
+
+#### 設計を真似る要点（LiteLLM から読み取れるもの）
+
+1. **二層の認証を分ける**: ゲートウェイへの入場用の鍵（仮想キー）と、上流の認証情報を、別のヘッダー・別の保存先にし、**入場用の鍵を上流へ転送しない**（漏れた不具合の教訓）
+2. **注入は、上流へ送る直前**: 静的な認証はヘッダーとして、OAuth は期限が切れていれば更新してから、SigV4 は要求ごとに本文のハッシュを含めて署名する。署名の後に、クライアント由来のヘッダーを足す
+3. **書き込み専用**: 認証情報の入力は、返さず、伏せ字にする。一覧の API は秘密の値を返さない
+4. **保存**: 環境変数の参照（`os.environ/NAME`）を既定にし、DB に置くなら、暗号化に専用の salt key を使う（マスターキーと分ける。後から変えると読めなくなる）。ユーザー別は `(user_id, server_id)` で暗号化
+5. **既定を拒否にする**: 到達できるサーバーとツールは、許可を明示した鍵だけにする（LiteLLM の既定は「開いている」ので、真似るときは逆にする）
+6. **ツール定義を固定する**: 差分が出たら警告（tool poisoning）。stdio は既定で無効（コマンド注入の教訓）
+7. **ユーザー別の認証情報は、「保存する」「毎回持ち込む」の 2 通り**。後者は、ゲートウェイに長期の秘密が残らない
+
+#### AgentCore Gateway 自体の外向き認証（既に使っている仕組みの拡張）
+
+- target の種類ごとに、外向きの認証が選べる（公式の表の要約。子の抜き書き）: **MCP サーバーと OpenAPI の target は、なし・gateway ロール・OAuth 2LO・OAuth 3LO・トークン交換・API キー**。Lambda は gateway ロールのみ。API キーと OAuth の認証情報は、**AgentCore Identity の credential provider**（保存先は Secrets Manager）に置く。**gateway が自分で認証情報を取り（`GetResourceApiKey`・`GetResourceOauth2Token`）、エージェントには渡さない**。Identity の上限は、API キー provider 50 件・OAuth2 provider 50 件（調整可）。Identity は、Runtime か Gateway 経由なら追加料金なし
+- **3LO（ユーザーごとの OAuth）**: GitHub の MCP サーバーを target にし、GitHub の OAuth アプリを Identity の組み込みの GitHub provider に登録する公式のブログ（2026-04-06）とサンプルがある。トークンは「workload identity と user identity の下の Token Vault」に入る。初回はユーザーの同意が要る。**3LO はユーザー ID を要するので、受け付け認証が AWS_IAM の Gateway との組み合わせは、文書で未確認**
+- **GitHub の API キー（PAT）の target は、現時点で不具合の報告がある**: `aws/agentcore-cli#2550`（2026-10-07、Open）。`tools/list` は通るが、`tools/call` が HTTP 400 で失敗する（Gateway の MCP クライアントが送る `Accept` ヘッダーが、GitHub の要求を満たさないとみられる）。AWS 側の返答は見つからなかった。**GitHub App の installation token を発行する credential provider は無い**
+- ツール単位の制御は Cedar のポリシー（呼び出し元の claim・ツール・引数）。ログは、ログ出力先を作ると CloudWatch などに出て、要求・応答の本文も出せる（ログに秘密が残る点に注意）。ユーザー単位のレート制限が 2026-08-06 に追加された。Web Search は 1,000 クエリあたり 7 ドル（公式）
+
+#### 他のゲートウェイの設計
+
+- **agentgateway**（Linux Foundation 配下。Apache-2.0。Rust。★5.5k）: **単一の静的バイナリ**、YAML 1 つで、Kubernetes は不要（第三者・AAIF の記事）。`backendAuth` に、静的キー・パススルー・クラウドの認証情報・署名 JWT・トークン交換。**`backendAuth: aws`（リージョン・サービス名・`assumeRole`）で SigV4**、Bedrock のプロバイダー設定（`auth: aws: {}`）、**AgentCore のバックエンドは IAM（SigV4）と JWT の両方**（ベンダーの docs）。仮想キー・トークン・予算・CEL のポリシー・レート制限。MCP（stdio・SSE・streamable HTTP）と OpenAI 互換の LLM プロキシ。**2026 年に CVE-2026-29791（CVSS 4.9）、GHSA-mvgg-jvj2-4frq（High 8.1、MCP の認可、v1.4.0 で対処）、GHSA-jwm2-83f3-52xc（Moderate）**。インストールは `curl … | sudo bash` が案内されている（採るなら、リリースのバイナリを、checksum で固定する）。DB の要否、署名・SBOM の有無は未確認
+- **Bifrost**（Apache-2.0、Go、★9.1k）: `npx -y @maximhq/bifrost` で起動。**CVE-2026-90898（CVSS 9.8）: 管理認証が既定で無効の、2.1.0 より前の版で、認証なしで RCE**（抜粋のみ。本文は 403）。SigV4 の記述は見つからなかった。MCP のツールフィルターと仮想キーはある
+- **Docker MCP Gateway**（MIT、Go、★1.6k）: **Docker Desktop 4.59 以上が前提**（Desktop なしは `DOCKER_MCP_IN_CONTAINER=1`）。MCP 専用で LLM のプロキシは無い。秘密は Docker Desktop の secrets 管理。SigV4 の署名は見つからなかった
+- **Envoy Gateway / Envoy AI Gateway**: Kubernetes 前提。Secret を `HTTPRoute` のフィルターで注入（Basic・JWT・API キー）。**SigV4 の署名そのものではない**。IBM ContextForge は Python・DB あり
+- 起動時間・メモリの実測値は、どの対象でも見つからなかった
+
+#### 現行の `pi` と `pis` の MCP（リポジトリのファイルで確認）
+
+- pi は MCP を**組み込み**でサポートし、stdio と streamable HTTP に対応（`docs/mcp.md:3`。旧式の SSE は非対応）。`registerMcpServer` は `url`・`headers`・`env`・`oauth`・`exposure` を受け、`env` と `headers` は `${VAR}` や `!command` を使える（`mcp.md:81`）
+- **ただし、このリポジトリの設定生成は、http のサーバーには `url` しか出さず、`headers` を出さない**（`generate.py:2139`〜`:2153`）。`pis` は `-nbt -ne -e builtin:mcp -e <ハーネス>` で起動し、`-ne` が `codemode` と `tool_search` を外すので、**`exposure` が `codemode` / `deferred` のサーバーはモデルから呼べない**（既定は `direct`）。stdio のサーバーは、pi が子として起動する（pi は Fence の内側なので、内側とみられる。文書の明記は無い）
+- ローカルの HTTP の MCP サーバー（`http://127.0.0.1:<port>/mcp`）の登録自体はできると読める（pi の `mcp.md` は `localhost`・`127.0.0.1` を例外として扱う）。**ただし、リポジトリには、Fence の `allowLocalOutbound` と `allowUnixSockets` を出す記述が 1 つも無い**（`allowLocalBinding: False` のみ）。内側から `127.0.0.1` へ届くかは、設定生成の追加と実機の確認が要る
+- `agentcore-websearch` の起動は `uv run … agentcore_websearch_mcp.py`（`common.toml.tmpl:2085`〜`:2102`。このスクリプトが `uvx mcp-proxy-for-aws-cli` を実行する）。Bedrock の PC だけに出る
+
+#### GitHub のトークンの種類（利用者の制約: メンバーごとのアカウント）
+
+- **GitHub App の installation token**: 1 時間で失効し、リポジトリと権限を絞れるが、**アプリ自身（ボット）として動く**ので、メンバーごとのアカウントの帰属にはならない
+- **GitHub App の user access token**: **ユーザーとして動き**、**8 時間で失効、リフレッシュトークンは 6 か月**（確認済み: GitHub Docs の「Refreshing user access tokens」）。メンバーがアプリを承認する（device flow など）。アプリは 1 つ（課や組織で共有）でよい
+- **細粒度の PAT**: ユーザーとして動き、**50 を超える細かい権限**でリポジトリを絞れる。有効期限は選べ、「無期限は許されるが、組織の最大期間のポリシーで禁止されうる」。組織の既定の最大期間は 366 日（確認済み: GitHub Docs の検索結果の抜粋）
+
+### 考察
+
+言える:
+
+- **LiteLLM は、AgentCore の MCP サーバー（SigV4）と GitHub の MCP サーバー（PAT・OAuth）を、MCP Gateway で束ねられる**。ただし、`gh` の CLI は束ねられない。共有のゲートウェイ（Gateway）に対応するかは、文書に明記が無い。**採用しなくても、「二層の認証」「注入は送信の直前」「書き込み専用」「既定は拒否」「ツール定義の固定」は、そのまま真似られる**
+- **利用者の制約は、設計を決める**: (a) **`websearch` の共有ゲートウェイは、各メンバーが自分の IAM の認証（SigV4）で呼ぶ**ので、メンバーごとの認証情報は、メンバーのホストに残る。(b) **GitHub をメンバーごとにするなら、中央のゲートウェイに GitHub の認証情報を集約する設計は合わない**。LiteLLM の per-user BYOK や、AgentCore の 3LO は、ユーザーごとに保存できるが、**共有の IAM の Gateway との組み合わせが未確認**で、課の共有物を、個人の都合で変えにくい。したがって、**GitHub の認証は、メンバーごとのホスト側で持つ（ローカルのブローカー、または、起動時に短命のトークンを渡す）**形が自然
+- **GitHub の候補**: (G4a) メンバーごとの細粒度 PAT（短い有効期限、必要なリポジトリと権限だけ）を、Bitwarden から起動時に取り出して渡す（最小の実装。漏れても、権限・期間が限られる）、(G4b) 課で共有する GitHub App の user access token（8 時間）を、ホスト側のブローカーが device flow で取得・更新する（短命で、ユーザーとして動く。アプリの登録が要る）、(G4c) 注入プロキシ（Agent Vault など）に PAT を置き、内側には渡さない（MITM と CA の信頼が要る）
+
+言えない:
+
+- LiteLLM が、共有の AgentCore Gateway（IAM 認証）を、MCP サーバーとして登録できるか
+- AgentCore Gateway の 3LO が、IAM 受け付けでメンバーごとに働くか。issue #2550 の修正の状況
+- agentgateway の DB の要否、署名・SBOM の有無、起動の重さ（実測が無い）
+- 本文を読んでいない抜粋のみの項目（CVE の一部、Bifrost の CVE 本文）
+
+### 次の問い
+
+- 課の共有ゲートウェイを触らずに済む、**メンバーごとのホスト側のブローカー**（最小は、`pis` と同じ寿命のローカルプロセス。`relay.py` の型）。`pi` の MCP を、`http://127.0.0.1:<port>/mcp` に向ける場合の、設定生成（`headers`・`allowLocalOutbound`）の追加
+- GitHub は、(G4a) の PAT の最小運用から。(G4b) は、課で GitHub App を共有できるかを、GitHub の管理者に確認
+- 「設計を真似る」場合の最小のブローカーの仕様書（二層の認証、書き込み専用、既定は拒否、ツール定義の固定）。実装は、`review` を経る
+
+### 参照
+
+- <https://docs.litellm.ai/docs/mcp>、<https://docs.litellm.ai/docs/mcp_aws_sigv4>、<https://docs.litellm.ai/docs/mcp_control>、<https://docs.litellm.ai/docs/mcp_per_user_auth>
+- <https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-outbound-auth.html>、<https://aws.amazon.com/blogs/machine-learning/connecting-mcp-servers-to-amazon-bedrock-agentcore-gateway-using-authorization-code-flow/>、<https://github.com/aws/agentcore-cli/issues/2550>
+- <https://github.com/agentgateway/agentgateway>、<https://github.com/maximhq/bifrost>、<https://github.com/docker/mcp-gateway>
+- <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens>、<https://docs.github.com/en/organizations/managing-programmatic-access-to-your-organization/setting-a-personal-access-token-policy-for-your-organization>
