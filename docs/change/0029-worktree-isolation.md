@@ -359,8 +359,8 @@ W1（最小段）の実装を段に分けた計画。**利用者が承認した�
 | S0 | **実測（実装の前）**: **親の `pis` と同じ境界**（親の cwd をリポジトリ根にした `ocs` の Fence。`.tmp/real_fence_cmd.py` の方式。worktree を cwd にした Fence で代用しない）の内側から、ラッパー → 偽モデル（`faux.ts`）の子 `pi` を起動し、1 往復を終えられる最小の書込可の一覧を求める。`/dev/null`・`/dev/tty`・`/dev/shm`・`/tmp`・`PI_CODING_AGENT_DIR` 配下・`~/.cache`・MCP のキャッシュが要るか。`python3` が Fence の下で起動できるか。親・兄弟・共有 refs（`refs/heads`・`refs/tags`）への書き込みが拒否されること | **完了（2026-10-23。「現在地」の S0 の実測）**。成功する一覧と拒否の結果を記録した |
 | S1 | `worktree.ts` の中核（上の事前選別、git の実行、時間の上限、スナップショット、`git worktree add` と `lock`、同時数の上限、記録、回収、`unlock`）。子の起動は含めない | 使い捨ての git リポジトリでの試験（`tmp_path`）。W0a の実測を試験にする（往復、衝突の拒否、秘密の拒否、容量の拒否、`.tmp` が ignored でない場合の拒否、`filter.*` がある場合の拒否、配置先の symlink、(7) の一致、各工程で落ちたときの状態）。`review`。**完了（2026-10-23。仕様と残る限界は「S1 の実装」。review 3 回）** |
 | S2 | `landlock_exec.py`: 入力の検証（`--write` の値の欠落、`--` の後の欠落、存在しないパスを拒否）、ABI に応じたアクセス種別、ファイルとディレクトリの権利の分離、存在するデバイスだけの許可、適用の失敗で `execvp` の前に非ゼロで終了 | 単体の試験。Landlock の ABI が無い環境は skip。配置が、子から書けない場所（`~/.config/pi/harness`。`control_dirs`）であることを、S0 の境界で確認。**完了（2026-10-23。仕様と残る限界は「S2 の実装」）** |
-| S3 | `children.ts`・`index.ts` の差し込み（事前採番、`finalized` の追加と停止の確認、`isolation`、`spawnChild`、回収、`resultText`、**起動時の取り残しの検出と三者の照合**（S4 から前倒し））。試験の足場（`run_child`）で、偽モデルの `worker` が `.tmp/worktrees/` の下で動き、結果に ref と patch が出る。`tasks` に `isolation` が混ざると拒否する。孫プロセスが残る子（停止を確認できない）で「保持」になる | 既存の試験が通る。新しい統合試験。`review`。**段 1〜4 は完了（2026-10-23。「S3 の実装」）。段 5（起動時の照合）は未実装** |
-| S4 | `/worktrees`（一覧・詳細・破棄）、docs（`pi-guard.md` に節、0029 の更新）、試験のコピー一覧への追記 | 全件検証 |
+| S3 | `children.ts`・`index.ts` の差し込み（事前採番、`finalized` の追加と停止の確認、`isolation`、`spawnChild`、回収、`resultText`、**起動時の取り残しの検出と三者の照合**（S4 から前倒し））。試験の足場（`run_child`）で、偽モデルの `worker` が `.tmp/worktrees/` の下で動き、結果に ref と patch が出る。`tasks` に `isolation` が混ざると拒否する。孫プロセスが残る子（停止を確認できない）で「保持」になる | 既存の試験が通る。新しい統合試験。`review`。**段 1〜4 は完了（2026-10-23。「S3 の実装」）。段 5（起動時の照合）も完了（2026-10-23。「S3 段 5 と S4 の実装」）** |
+| S4 | `/worktrees`（一覧・詳細・破棄）、docs（`pi-guard.md` に節、0029 の更新）、試験のコピー一覧への追記 | 全件検証。**完了（2026-10-23。「S3 段 5 と S4 の実装」）** |
 | S5 | 利用者の実機（`pis`）での通し確認（実際の MCP・キャッシュを含む）。`review` | 結果を 0029 に記録 |
 
 各段の終わりに全件検証を行う。
@@ -446,7 +446,33 @@ S3（2026-10-23）で、`children.ts`・`index.ts` への差し込みを実装�
 
 **結果の行**: `- isolation: worktree` と、`- worktree: ref refs/pi-agent/<id>; patch .tmp/subagents/<id>.patch; apply: git apply <patch>`（回収。`warnings` があれば末尾）、`- worktree: no changes (removed)`（変更なし。worktree と記録は消える）、`- worktree: kept (<理由>). recover: /worktrees`（保持・失敗。`/worktrees` は S4 で実装）。patch の名前は `<id>.patch`（job id を含むことが必須）。
 
-**残る限界**: `closeAll`・セッション終了・`process.once("exit")` では `finalized` を待たない（同期処理しかできない）。**取り残しは、起動時の照合（段 5）で拾う。段 5 は未実装なので、それまでは、取り残された worktree を `git worktree list` と `.tmp/subagents/worktrees/` で手動で見つける**。孫プロセスが別のプロセスグループへ離脱した場合は、停止を確認できず、保証の範囲外。**`chmod` と更新時刻の変更は、子が親の書込領域の中で行える**（S2 の限界）。`stopped=false` から `kept` になる経路、孫の残存、二重シグナルは、**直接は試験していない**（統合試験は偽モデルで、通常の回収と拒否を確かめる。`children.ts` は引数プロパティを使うので Node の型除去で読めず、単体試験を外した）。`PI_CODING_AGENT_DIR` が未設定だと、子が往復できない可能性がある。リポジトリが `/tmp` の下にあると、隔離は拒否される。
+**残る限界**: `closeAll`・セッション終了・`process.once("exit")` では `finalized` を待たない（同期処理しかできない）。**取り残しは、起動時の照合（段 5。「S3 段 5 と S4 の実装」）で拾い、`/worktrees` で回収のやり直しと破棄ができる**。孫プロセスが別のプロセスグループへ離脱した場合は、停止を確認できず、保証の範囲外。**`chmod` と更新時刻の変更は、子が親の書込領域の中で行える**（S2 の限界）。`stopped=false` から `kept` になる経路、孫の残存、二重シグナルは、**直接は試験していない**（統合試験は偽モデルで、通常の回収と拒否を確かめる。`children.ts` は引数プロパティを使うので Node の型除去で読めず、単体試験を外した）。`PI_CODING_AGENT_DIR` が未設定だと、子が往復できない可能性がある。リポジトリが `/tmp` の下にあると、隔離は拒否される。
+
+### S3 段 5 と S4 の実装（起動時の照合と `/worktrees`）
+
+S3 段 5 と S4（2026-10-23）で、起動時の取り残しの照合と、利用者のスラッシュコマンド `/worktrees`（**モデルには渡さない**）を実装した。`review` は 1 回（BLOCKER 1・MAJOR 2・MINOR 2。反映済み）。コマンドの本体は、`worktree.ts` だけに依存する小さなファイル `home/dot_config/pi/harness/worktrees-command.ts`（Node の型除去で読めるように、引数プロパティを使わない）に切り出し、Node で直接試験する（`test/agents/test_pi_worktrees_command.py`。対話の `/worktrees` は print モードで呼べないため）。`index.ts` は、依存（リポジトリ根・実行中の job・確認・出力）を渡して呼ぶ。
+
+**起動時の照合**（`session_start`。UI の有無に関わらず）:
+
+- **痕跡が無ければ `git` を呼ばない**。痕跡は、cwd から上へ最初に見つかる `.git` が**ディレクトリ**で、`.tmp/subagents/worktrees` か `.tmp/worktrees` がある、で判定する（子の worktree は `.git` がファイルなので対象外。記録も `.tmp/worktrees` も無い `ref_only` は検出しない）
+- 子（`PI_HARNESS_CHILD=1`）と、既定と違う `PI_HARNESS_ROLE` の起動では、照合しない
+- 順序: `clearStaleLock` → 記録の読み込み（壊れた記録も拾う）→ `reconcile`。食い違いは、**1 つの警告**にまとめて出す（件数、各 job id・issue 名・理由。パスはリポジトリからの相対。内容は出さない。`/worktrees` の案内）
+- **自動で変えるのは、古いロックの解除だけ**（pid が死んでいて、60 秒以上古いもの）。解除したときは別の 1 行で明記する。worktree・ref・記録は消さない・直さない
+- 時間の上限: `git` は 3 秒、全体 5 秒（`STARTUP_LIMITS`）。時間切れ・失敗は、警告 1 行にして、起動を止めない。同期の `git` なので、痕跡のある起動では、最大でこの時間だけイベントループを止める
+
+**`/worktrees` のサブコマンド**:
+
+| サブコマンド | 内容と拒否の条件 |
+| --- | --- |
+| （なし） | 記録の一覧（job id・状態・作成日時・worktree・ref・patch の有無・`note`）と、食い違い |
+| `show <jobId>` | 記録の詳細（起点・結果の commit、ref、patch のパスとハッシュ、`note`） |
+| `collect <jobId>` | 回収のやり直し。**子が生きている（このプロセスの `jobs` にある）job は拒否**。`collected`・`creating` も拒否。`kept`・`running`・`collecting` は、**確認（`confirm`）が取れたときだけ**実行し、UI が無ければ拒否。確認文に状態と `note` と「別の pi プロセスの子は、この画面から見えません」を出し、`note` が「停止を確認できない」ことを示すときは、強い警告（作業中の worktree を回収すると、子の変更が失われるおそれ）を加える。`read_deny_globs` が空なら拒否 |
+| `discard <jobId>` | 確認のうえ、`discard`（S1 の所有権の規則）。子が生きている job・UI なし・記録なしは拒否。残したもの（照合に失敗したもの）は `notes` で表示 |
+| `unlock` | 古いロックの手動解除（`clearStaleLock`）。古くないロック・生きた pid のロックは消さない |
+
+jobId は、サブコマンドと引数の個数を確かめた後で `validateJobId` に通す前に、パスにも確認文にも使わない。出力は `redactText` を通し、パスと job id と状態と `note` だけを出す。
+
+**残る限界**: 別の pi プロセスの子は、`jobs` から見えない（`kept` の回収に確認を要求するのはこのため）。「停止を確認できない」の判定は `markKept` の `note` の文言に依存する（文言を変えるときは判定も直す）。管理領域が壊れた `kept` は、自動では破棄されず、利用者が手動で `git worktree` と記録を整理する。対話での表示と確認ダイアログは、print モードで試験できず、実機（S5）で確かめる。起動時の `git` の同期待ちの上限は、痕跡のある起動だけに及ぶ。時間切れの経路は試験していない。
 
 ### 決めた点（2026-10-23、利用者が 3 つとも推奨どおりに確定。`review` も同意した）
 
@@ -483,3 +509,4 @@ S3（2026-10-23）で、`children.ts`・`index.ts` への差し込みを実装�
 - **2026-10-23（S0 の実測）**: 親の実境界の内側で、Landlock のラッパー越しの子の `pi`（偽モデル）が 1 往復を終えられ、必要な書込可の最小の一覧が分かった（`agent_dir`・`wt`・`/dev/null`、作業によって `~/.cache`・`/tmp`・`gitdir`・`objects`。`refs/pi-agent` と `/dev/tty` は子に不要）。拒否も確認した。次は S1（`worktree.ts` の中核）。
 - **2026-10-23（S1 の実装と `review` 3 回）**: `home/dot_config/pi/harness/worktree.ts`（`git` の安全な実行、事前選別、スナップショット、worktree の作成と `lock`、記録、回収、破棄、照合）と試験（52 件）を実装した。`review` の指摘: 1 回目 BLOCKER 1（`discard` が記録のない利用者の worktree・ref を消せる）・MAJOR 4（`worktree add` の途中失敗、管理領域を検証せず信用、回収と破棄がロックの外、確定後の `unlock` 失敗で保持に戻る）、2 回目 BLOCKER 1（記録が嘘をつく場合）・MAJOR 3（ロック奪取の競合、部分破棄で記録を失う、管理領域の許可名の中身）、3 回目 MAJOR 2（管理領域違反でも ref・patch を消す、patch を別 job と共有）・MINOR 1（奪取の復元の競合）。すべて直した（自動のロック奪取はやめて明示的な `clearStaleLock` に）。残る限界（TOCTOU、`clearStaleLock` の窓、記録は子から書けないという前提）は「S1 の実装」に記録した。次は S2（`landlock_exec.py`）と S3。
 - **2026-10-23（S2・S3 の段 1〜4）**: Landlock のラッパー（`landlock_exec.py`。最低 ABI 3、広すぎる許可パスの拒否、`chmod` と更新時刻は守れないという実測の限界）と、`isolation: "worktree"` の起動・終了確認・回収（`finalized`、プロセスグループの停止確認、`kept`）を実装した。`review` の S3 での BLOCKER: 書込可（`TMPDIR` など）がリポジトリを包含する・リポジトリの中にあると、子が記録を書き換えられる（この環境では `TMPDIR` が `.tmp` を指す）→ 重なりを検査して拒否・外す・上書きする形に直した。残りは段 5（起動時の照合）、S4（`/worktrees`）、S5（実機の通し確認）。
+- **2026-10-23（S3 段 5 と S4）**: 起動時の取り残しの照合（痕跡が無ければ `git` を呼ばない。自動で変えるのは古いロックの解除だけ。時間の上限つき）と、利用者のスラッシュコマンド `/worktrees`（一覧・`show`・`collect`・`discard`・`unlock`。モデルには渡さない）を実装した。`review` の BLOCKER: `kept` の回収が確認なしで進む（停止を確認できなかった子の worktree を回収しうる。別の pi プロセスの子は `jobs` から見えない）→ `kept` にも確認を必須にし、停止を確認できなかった旨は強い警告にした。残りは S5（実機での通し確認）と、W2 以降。

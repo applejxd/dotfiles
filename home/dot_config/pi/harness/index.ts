@@ -27,6 +27,7 @@ import { createRedactor } from "./redact.ts";
 import { auditFormat, summarizeCalls } from "./audit.ts";
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
+import { STARTUP_LIMITS, findRepoRoot, isolationTraceRoot, runWorktreesCommand, startupReconcile } from "./worktrees-command.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -154,6 +155,7 @@ export default async function (pi: ExtensionAPI) {
 	// セッションの終了・切り替え・/reload で、保持している子を全部止める
 	pi.on("session_shutdown", async () => jobs.closeAll());
 	pi.on("session_start", async (_event, ctx) => {
+		reconcileOnStart(ctx);
 		if (!ctx.hasUI) return;
 		showBypass(ctx);
 		if (BOUNDARY) ctx.ui.setStatus("sandbox", "🔒 サンドボックス");
@@ -516,23 +518,44 @@ function finalizeIsolation(repoRoot: string, id: string, readDeny: ReadDeny) {
 	};
 }
 
+// 起動時の取り残しの照合。git は、記録か worktree の置き場があるときだけ呼ぶ。失敗しても起動は止めない
+function reconcileOnStart(ctx: any) {
+	if (process.env.PI_HARNESS_CHILD === "1") return;
+	if (process.env.PI_HARNESS_ROLE && process.env.PI_HARNESS_ROLE !== rules.default_role) return; // 子 (親が役割を渡す) は親の記録を照合しない
+	try {
+		const candidate = isolationTraceRoot(String(ctx.cwd));
+		if (candidate === null) return;
+		const repoRoot = findRepoRoot(candidate, STARTUP_LIMITS);
+		if (repoRoot === null) return;
+		const msg = startupReconcile(repoRoot, jobs.list().map((j) => j.id), STARTUP_LIMITS);
+		if (msg !== null) warnUser(ctx, redactText(msg));
+	} catch (e) {
+		if (e instanceof WorktreeError && e.code === "timeout") warnUser(ctx, "隔離の取り残しの照合を時間切れで省略した");
+		else warnUser(ctx, `隔離の取り残しの照合に失敗した: ${errMsg(e)}`);
+	}
+}
+
+function buildReadDeny(): ReadDeny {
+	const common = rules.judge.common;
+	return { globs: loadFileGlobs(common, "read_deny_globs"), exceptions: loadReadDenyExceptions(common) };
+}
+
 // 隔離の起動の準備: Landlock の確認 → リポジトリ根 → ReadDeny → id → worktree の作成 → 子の起動の組み立て。
 // 拒否は { error } で返す (黙って共有の作業ツリーで動かさない)。WorktreeError 以外は投げ直す
 function prepareIsolation(parentCwd: string, childArgs: string[]): IsolationPlan | { error: string } {
 	const refuse = (why: string) => ({ error: `isolation refused: ${why}` });
 	const problem = checkLandlock();
 	if (problem !== null) return refuse(`landlock_unavailable: ${problem}`);
-	const common = rules.judge.common;
-	const readDeny: ReadDeny = { globs: loadFileGlobs(common, "read_deny_globs"), exceptions: loadReadDenyExceptions(common) };
+	const readDeny = buildReadDeny();
 	if (readDeny.globs.length === 0) return refuse("no_read_deny_rules: [file] read_deny_globs がありません");
 	let repoRoot: string;
 	let rel: string;
 	let id: string;
 	let record: IsolationRecord;
 	try {
-		const top = runGit(["rev-parse", "--show-toplevel"], { cwd: parentCwd });
-		if (top.status !== 0) return refuse("not_a_git_repository");
-		repoRoot = realpathSync(String(top.stdout).trim());
+		const found = findRepoRoot(parentCwd);
+		if (found === null) return refuse("not_a_git_repository");
+		repoRoot = found;
 		rel = relative(repoRoot, realpathSync(parentCwd));
 		if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return refuse("cwd_outside_repository");
 		// 書込可の候補とリポジトリの重なりは createIsolation の前に判定する (worktree と管理領域・objects は意図して中にある)
@@ -1108,6 +1131,25 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		},
 	});
 
+	// 隔離 (worktree) の一覧・回収のやり直し・破棄。利用者専用 (モデルは呼べない)
+	pi.registerCommand("worktrees", {
+		description: "隔離 (worktree) の一覧・回収のやり直し・破棄: /worktrees [show|collect|discard <jobId> | unlock]",
+		handler: async (args: string, ctx: any) => {
+			let repoRoot: string | null = null;
+			try {
+				repoRoot = findRepoRoot(ctx.cwd);
+			} catch {
+				repoRoot = null;
+			}
+			const res = await runWorktreesCommand(String(args ?? ""), {
+				repoRoot,
+				liveJobIds: jobs.list().map((j) => j.id),
+				readDeny: buildReadDeny,
+				confirm: ctx.hasUI ? (title: string, body: string) => confirmInOrder(ctx, title, body) : null,
+			});
+			ctx.ui?.notify?.(redactText(res.text), res.level);
+		},
+	});
 	// 利用者専用のコマンド (モデルは呼べない)。見た目はテキストだけ
 	pi.registerCommand("agents", {
 		description: "動いている子エージェントの一覧 (状態・経過・最後のツール・使用量)",

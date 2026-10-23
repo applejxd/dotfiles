@@ -37,6 +37,7 @@ try:
         "children.ts",
         "audit.ts",
         "worktree.ts",
+        "worktrees-command.ts",
         "landlock_exec.py",
         "commit-message.js",
     ):
