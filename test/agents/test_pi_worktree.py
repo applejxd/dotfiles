@@ -1126,3 +1126,38 @@ def test_git_env_drops_git_variables_and_keeps_home(tmp_path):
         and env["GIT_COMMITTER_EMAIL"] == "pi-agent@localhost.invalid"
     )
     assert env["GIT_TERMINAL_PROMPT"] == "0" and env["HOME"] == str(e.home)
+
+
+# ─── markKept ───
+
+
+def test_mark_kept_updates_state_and_note_and_nothing_else(tmp_path):
+    e = Env(tmp_path)
+    build_repo(e)
+    rec = e.create(1)
+    before = load_rec(e, 1)
+    assert before["state"] == "running"
+    out = e.op(op="mark_kept", repo=str(e.repo), jobId=jid(1), note="stop not confirmed")
+    assert out["record"]["state"] == "kept" and out["record"]["note"] == "stop not confirmed"
+    after = load_rec(e, 1)
+    assert after["state"] == "kept" and after["note"] == "stop not confirmed"
+    assert {k: v for k, v in after.items() if k not in ("state", "note")} == {
+        k: v for k, v in before.items() if k not in ("state", "note")
+    }
+    # worktree は残し、ロックは解放する
+    assert Path(rec["worktree"]).is_dir()
+    assert not (rec_file(e, 1).parent / ".lock").exists()
+
+
+def test_mark_kept_without_a_record_does_nothing(tmp_path):
+    e = Env(tmp_path)
+    build_repo(e)
+    # 記録の置き場自体が無い: 何も作らない
+    assert e.op(op="mark_kept", repo=str(e.repo), jobId=jid(2), note="x") == {"record": None}
+    assert not (e.repo / ".tmp" / "subagents").exists()
+    # 置き場はあるが、この job の記録が無い
+    e.create(1)
+    files = sorted(p.name for p in rec_file(e, 1).parent.iterdir())
+    assert e.op(op="mark_kept", repo=str(e.repo), jobId=jid(2), note="x") == {"record": None}
+    assert sorted(p.name for p in rec_file(e, 1).parent.iterdir()) == files
+    assert load_rec(e, 1)["state"] == "running"

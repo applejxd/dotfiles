@@ -31,6 +31,8 @@ function run() {
 		}
 		case "discard":
 			return W.discard(args.repo, args.jobId, limits);
+		case "mark_kept":
+			return { record: W.markKept(args.repo, args.jobId, args.note, limits) };
 		case "clear_stale_lock":
 			return W.clearStaleLock(args.repo);
 		case "list":

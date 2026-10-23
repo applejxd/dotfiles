@@ -494,6 +494,21 @@ function withLock<T>(repo: string, limits: Limits, fn: () => T): T {
 	}
 }
 
+/** 記録を `kept` にして note を書く (回収せずに保持するとき)。記録が無ければ何もせず null。 */
+export function markKept(repo: string, jobId: string, note: string, limits: Limits = DEFAULT_LIMITS): IsolationRecord | null {
+	validateJobId(jobId);
+	const root = canonRepo(repo);
+	ensureDirs(root, [REL.tmp, REL.subagents, REL.records], false);
+	if (!lstatOrNull(path.join(root, REL.records))) return null;
+	return withLock(root, limits, () => {
+		const rec = readRecord(root, jobId);
+		if (!rec) return null;
+		const next: IsolationRecord = { ...rec, state: "kept", note };
+		writeRecord(root, next);
+		return next;
+	});
+}
+
 // ─── 事前選別 ───────────────────────────────────────────────────────────
 
 /** repo が作業ツリーの根で、HEAD がある。HEAD の commit を返す。 */

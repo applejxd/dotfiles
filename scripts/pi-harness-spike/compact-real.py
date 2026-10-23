@@ -31,7 +31,15 @@ try:
     harness.mkdir(parents=True)
     shutil.copy2(SRC / "index.ts", harness / "index.ts")
     shutil.copytree(SRC / "judge", harness / "judge")
-    for name in ("redact.ts", "canary.ts", "children.ts", "audit.ts", "commit-message.js"):
+    for name in (
+        "redact.ts",
+        "canary.ts",
+        "children.ts",
+        "audit.ts",
+        "worktree.ts",
+        "landlock_exec.py",
+        "commit-message.js",
+    ):
         shutil.copy2(SRC / name, harness / name)
     rules = gen.build_pi_harness({}, load_common())
     for agent in rules["agents"].values():

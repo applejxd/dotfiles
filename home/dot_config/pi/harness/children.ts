@@ -171,7 +171,22 @@ export type JobOptions = {
 	// 同じ job を使ってよい持ち主か (起動時の cwd と役割)
 	owner: { cwd: string; role: string };
 	command?: string;
+	// 隔離の job だけ。往復の完了後に子のプロセスグループを止め、止まったか (stopped) を渡して呼ぶ。例外は握られる
+	finalize?: (job: Job, stopped: boolean) => Promise<void>;
 };
+
+// 隔離の job の回収の結果 (resultText が表示する)
+export type IsolationInfo =
+	| { kind: "collected"; ref: string; patch: string; resultCommit: string; warnings: string[] }
+	| { kind: "unchanged" }
+	| { kind: "kept"; reason: string }
+	| { kind: "failed"; code: string; reason: string };
+
+// close() と同じ猶予。プロセスグループが空になるまでの確認の間隔と上限
+const KILL_GRACE_MS = 3000;
+const STOP_POLL_MS = 100;
+const STOP_CONFIRM_MS = 10_000;
+const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export type JobSnapshot = {
 	id: string;
@@ -204,6 +219,12 @@ export class Job {
 	private exited = false;
 	private closing = false;
 	private stderrTail = "";
+	// finalize を渡された job だけ Promise (子の停止の確認と回収が終わると resolve。reject しない)。通常の job は null
+	readonly finalized: Promise<void> | null;
+	isolationInfo?: IsolationInfo;
+	private finalizeFn: ((job: Job, stopped: boolean) => Promise<void>) | null;
+	private finalizeStarted = false;
+	private finalizeDone: (() => void) | null = null;
 	// 子が終了した (停止を含む) ときに呼ばれる。追加の後始末は addOnExit で足す (onExitLast は Jobs が使う。最後に呼ぶ)
 	private onExitHooks: Array<() => void> = [];
 	onExitLast: (() => void) | null = null;
@@ -222,6 +243,8 @@ export class Job {
 		this.id = o.id;
 		this.agent = o.agent;
 		this.owner = o.owner;
+		this.finalizeFn = o.finalize ?? null;
+		this.finalized = o.finalize ? new Promise<void>((res) => (this.finalizeDone = res)) : null;
 		this.proc = spawn(o.command ?? "pi", o.args, { cwd: o.cwd, env: o.env, detached: true, stdio: ["pipe", "pipe", "pipe"] });
 		this.proc.stdout!.on("data", (b: Buffer) => this.feed(b.toString("utf-8")));
 		this.proc.stderr!.on("data", (b: Buffer) => (this.stderrTail = (this.stderrTail + b.toString("utf-8")).slice(-2000)));
@@ -231,6 +254,7 @@ export class Job {
 			this.exited = true;
 			this.finish(this.round, "failed", `spawn failed: ${e.message}`);
 			this.state = "closed";
+			this.runFinalize();
 			this.onExit();
 		});
 		this.proc.on("close", (code) => {
@@ -238,6 +262,7 @@ export class Job {
 			this.state = "closed";
 			const note = `process exited (${code ?? "signal"})${this.stderrTail.trim() ? `: ${this.stderrTail.trim().slice(-300)}` : ""}`;
 			this.finish(this.round, this.round?.closed ? "closed" : "failed", note);
+			this.runFinalize();
 			this.onExit();
 		});
 	}
@@ -349,6 +374,66 @@ export class Job {
 		// 親の abort は、子が止まって idle になっているので、子は残す (追加依頼で続けられる)
 		if (result.status !== "done" && result.status !== "aborted") this.close(result.status === "limit" || result.status === "closed");
 		r.resolve({ ...result, blocked: r.blocked, errors: r.errors, toolCalls: r.toolCalls, answer: r.answer, stats: this.statsOf(r) });
+		this.runFinalize();
+	}
+
+	// 隔離の job の後始末 (1 回だけ)。グループへ SIGTERM → 猶予 → SIGKILL → 空になるまで確認し、finalize を呼ぶ。
+	// finalized は必ず resolve する。待ちは setTimeout で、親のイベントループを止めない
+	private runFinalize() {
+		const fin = this.finalizeFn;
+		if (!fin || this.finalizeStarted) return;
+		this.finalizeStarted = true;
+		void (async () => {
+			let stopped = false;
+			try {
+				stopped = await this.stopGroup();
+			} catch {
+				// 確認できなかったものとして扱う (回収しない)
+			}
+			try {
+				await fin(this, stopped);
+			} catch (e) {
+				// 回収側が失敗を記録する。未設定のときだけ、型名と先頭 200 文字を残す
+				if (!this.isolationInfo) {
+					const name = e instanceof Error ? e.name : typeof e;
+					const msg = e instanceof Error ? e.message : "";
+					this.isolationInfo = { kind: "failed", code: "finalize_error", reason: `${name}: ${msg}`.slice(0, 200) };
+				}
+			}
+			this.finalizeDone?.();
+		})();
+	}
+
+	// プロセスグループが空になったら true。上限までに空にならなければ false
+	private async stopGroup(): Promise<boolean> {
+		const pid = this.proc.pid;
+		if (pid === undefined) return true; // 起動できなかった (グループが無い)
+		const signal = (sig: NodeJS.Signals) => {
+			try {
+				process.kill(-pid, sig);
+			} catch {
+				// ESRCH: 既に空
+			}
+		};
+		const empty = () => {
+			try {
+				process.kill(-pid, 0);
+				return false;
+			} catch (e) {
+				return (e as NodeJS.ErrnoException).code === "ESRCH";
+			}
+		};
+		signal("SIGTERM");
+		// 猶予の間も、空になれば待たずに進む
+		const grace = Date.now() + KILL_GRACE_MS;
+		while (!empty() && Date.now() < grace) await sleepMs(STOP_POLL_MS);
+		if (!empty()) signal("SIGKILL");
+		const limit = Date.now() + STOP_CONFIRM_MS;
+		for (;;) {
+			if (empty()) return true;
+			if (Date.now() >= limit) return false;
+			await sleepMs(STOP_POLL_MS);
+		}
 	}
 
 	// 1 往復を実行する。呼び出しの前に state を同期で running にする (並行する呼び出しは busy)
@@ -467,7 +552,9 @@ export class Jobs {
 		const job = new Job({ ...o, id });
 		this.map.set(id, job);
 		job.onExitLast = () => {
-			this.map.delete(id);
+			// 隔離の job は回収が終わるまで一覧に残す (/agent の一覧から回収の前に消えないように)
+			if (job.finalized) void job.finalized.finally(() => this.map.delete(id));
+			else this.map.delete(id);
 		};
 		return job;
 	}

@@ -81,6 +81,7 @@ _PI_TESTS = (
     "test_pi_audit",
     "test_pi_landlock_exec",
     "test_pi_worktree",
+    "test_pi_isolation",
     "test_pi_subagents",
     "test_pi_shared",
     "test_btw_view",

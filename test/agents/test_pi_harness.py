@@ -42,6 +42,8 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
     shutil.copy2(HARNESS_SRC.parent / "children.ts", harness / "children.ts")
     shutil.copy2(HARNESS_SRC.parent / "audit.ts", harness / "audit.ts")
+    shutil.copy2(HARNESS_SRC.parent / "worktree.ts", harness / "worktree.ts")
+    shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
     shutil.copy2(COMMIT_MESSAGE_SRC, harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
     # 子エージェントも偽のモデルで動かす (階層のモデルは認証が要る)
@@ -571,14 +573,16 @@ def test_task_input_isolation_is_validated(env):
     proc = _rounds(env, [bad])
     # "other" はスキーマ (リテラルの Union) で弾かれ、残りの 4 つが parseTaskInput の拒否
     assert proc.stdout.count("invalid guarded_task input") == len(bad) - 1, proc.stdout
-    assert "isolation: must be equal to constant" in proc.stdout and '"isolation": "other"' in proc.stdout, (
-        proc.stdout
-    )
+    assert (
+        "isolation: must be equal to constant" in proc.stdout
+        and '"isolation": "other"' in proc.stdout
+    ), proc.stdout
 
 
-def test_task_isolation_worktree_is_not_implemented_yet(env):
+def test_task_isolation_is_refused_when_it_cannot_be_set_up(env):
+    # proj は git リポジトリではない (Landlock が使えない環境でも拒否される。通る場合は test_pi_isolation.py)
     proc = _rounds(env, [[_task(agent="worker", task="t", isolation="worktree")]])
-    assert "isolation is not implemented yet" in proc.stdout, proc.stdout
+    assert "isolation refused:" in proc.stdout, proc.stdout
     assert "isError=true" in proc.stdout and "USERS=" not in proc.stdout, proc.stdout
 
 

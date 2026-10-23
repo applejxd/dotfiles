@@ -14,8 +14,10 @@ import {
 	withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
-import { lstatSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { randomBytes } from "node:crypto";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
@@ -23,6 +25,8 @@ import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
 import { auditFormat, summarizeCalls } from "./audit.ts";
+import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
+import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -427,6 +431,172 @@ const fmtSecs = (ms: number) => `${Math.max(0, Math.round(ms / 1000))}s`;
 const fmtStats = (s: RoundStats) =>
 	`${fmtSecs(s.durationMs)}, ${s.calls} calls, ${fmtTokens(s.tokens)} tokens${s.cost > 0 ? `, $${s.cost.toFixed(3)}` : ""}`;
 
+// ─── 隔離 (worktree) ────────────────────────────────────────────────
+// 契約・順序・残る限界は docs/change/0029-worktree-isolation.md の「W1 の実装計画」
+
+// Landlock が使えるかは、プロセスの寿命の間 1 回だけ確かめる (null: 使える。文字列: 使えない理由)
+let landlockProblem: string | null | undefined;
+function checkLandlock(): string | null {
+	if (landlockProblem !== undefined) return landlockProblem;
+	const r = spawnSync("python3", [join(HERE, "landlock_exec.py"), "--check"], { encoding: "utf-8", timeout: 10_000 });
+	if (r.status === 0) landlockProblem = null;
+	else {
+		const first = String(r.stderr ?? "").split("\n").find((l) => l.trim() !== "");
+		landlockProblem = redactText((first ?? r.error?.message ?? `exit ${r.status}`).trim());
+	}
+	return landlockProblem;
+}
+
+// 子の書込可に足すデバイス (存在するものだけ)。refs/pi-agent と /dev/tty は含めない (S0)
+const ISOLATION_DEVICES = ["/dev/dxg", "/dev/nvidiactl", "/dev/nvidia-uvm", "/dev/nvidia-uvm-tools", ...Array.from({ length: 8 }, (_, i) => `/dev/nvidia${i}`)];
+
+// p が base と同じか中にあれば真 (文字列の前方一致にしない)
+function isWithin(base: string, p: string): boolean {
+	const r = relative(base, p);
+	return r === "" || (r !== ".." && !r.startsWith(`..${sep}`) && !isAbsolute(r));
+}
+
+// realpath。存在しなければ、存在する最も近い親の realpath に残りを連結する
+function realApprox(p: string): string {
+	let cur = resolve(p);
+	const rest: string[] = [];
+	for (;;) {
+		try {
+			return join(realpathSync(cur), ...rest);
+		} catch {
+			const up = dirname(cur);
+			if (up === cur) return join(cur, ...rest);
+			rest.unshift(cur.slice(up.length).replace(/^[\\/]+/, ""));
+			cur = up;
+		}
+	}
+}
+
+// p がリポジトリを包含する、またはリポジトリの中にあれば真
+function overlapsRepo(repoReal: string, p: string): boolean {
+	const real = realApprox(p);
+	return isWithin(real, repoReal) || isWithin(repoReal, real);
+}
+
+type IsolationPlan = {
+	id: string;
+	repoRoot: string;
+	cwd: string;
+	command: string;
+	args: string[];
+	finalize: (job: Job, stopped: boolean) => Promise<void>;
+	env: Record<string, string>; // 子の環境へ上書きする値
+};
+
+// 子の停止を確認した後に呼ばれる。回収の結果を job.isolationInfo に書く (例外は投げない)
+function finalizeIsolation(repoRoot: string, id: string, readDeny: ReadDeny) {
+	return async (job: Job, stopped: boolean): Promise<void> => {
+		if (!stopped) {
+			try {
+				markKept(repoRoot, id, "child process group not confirmed stopped");
+			} catch {
+				// 記録を更新できなくても、worktree は消していない
+			}
+			job.isolationInfo = { kind: "kept", reason: "終了を確認できない" };
+			return;
+		}
+		try {
+			const res = collect(repoRoot, id, `${id}.patch`, readDeny, DEFAULT_LIMITS);
+			job.isolationInfo = res.changed
+				? { kind: "collected", ref: res.ref, patch: relative(repoRoot, res.patch.path), resultCommit: res.resultCommit, warnings: res.warnings }
+				: { kind: "unchanged" };
+		} catch (e) {
+			if (e instanceof WorktreeError) {
+				const cause = typeof e.detail.cause === "string" ? ` (${e.detail.cause})` : "";
+				job.isolationInfo = { kind: "failed", code: e.code, reason: `${e.message}${cause}` };
+			} else {
+				job.isolationInfo = { kind: "failed", code: "error", reason: errMsg(e) };
+			}
+		}
+	};
+}
+
+// 隔離の起動の準備: Landlock の確認 → リポジトリ根 → ReadDeny → id → worktree の作成 → 子の起動の組み立て。
+// 拒否は { error } で返す (黙って共有の作業ツリーで動かさない)。WorktreeError 以外は投げ直す
+function prepareIsolation(parentCwd: string, childArgs: string[]): IsolationPlan | { error: string } {
+	const refuse = (why: string) => ({ error: `isolation refused: ${why}` });
+	const problem = checkLandlock();
+	if (problem !== null) return refuse(`landlock_unavailable: ${problem}`);
+	const common = rules.judge.common;
+	const readDeny: ReadDeny = { globs: loadFileGlobs(common, "read_deny_globs"), exceptions: loadReadDenyExceptions(common) };
+	if (readDeny.globs.length === 0) return refuse("no_read_deny_rules: [file] read_deny_globs がありません");
+	let repoRoot: string;
+	let rel: string;
+	let id: string;
+	let record: IsolationRecord;
+	try {
+		const top = runGit(["rev-parse", "--show-toplevel"], { cwd: parentCwd });
+		if (top.status !== 0) return refuse("not_a_git_repository");
+		repoRoot = realpathSync(String(top.stdout).trim());
+		rel = relative(repoRoot, realpathSync(parentCwd));
+		if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return refuse("cwd_outside_repository");
+		// 書込可の候補とリポジトリの重なりは createIsolation の前に判定する (worktree と管理領域・objects は意図して中にある)
+		const agentDir = process.env.PI_CODING_AGENT_DIR;
+		if (agentDir && overlapsRepo(repoRoot, agentDir)) return refuse("agent_dir_overlaps_repository");
+		if (overlapsRepo(repoRoot, "/tmp")) return refuse("tmp_overlaps_repository");
+		id = validateJobId(`job-${randomBytes(6).toString("hex")}`);
+		record = createIsolation(repoRoot, id, readDeny, DEFAULT_LIMITS);
+	} catch (e) {
+		if (e instanceof WorktreeError) return refuse(`${e.code}: ${e.message}`);
+		throw e;
+	}
+	// 作成の後の失敗は、作った worktree を片付けてから返す (片付けに失敗しても記録が残り、起動時の照合が拾う)
+	const abandon = () => {
+		try {
+			discard(repoRoot, id);
+		} catch {
+			// 記録は残る
+		}
+	};
+	try {
+		const wt = record.worktree;
+		const cwd = join(wt, rel);
+		if (!existsSync(cwd)) {
+			abandon();
+			return refuse("cwd_missing_in_worktree");
+		}
+		const g = runGit(["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: repoRoot });
+		if (g.status !== 0) {
+			abandon();
+			return refuse("git_common_dir_unavailable");
+		}
+		const gitCommon = String(g.stdout).trim();
+		// TMPDIR と ~/.cache がリポジトリと重なるときは書込可に含めない。TMPDIR は子の環境で /tmp に上書きする
+		const env: Record<string, string> = {};
+		const tmpdir = process.env.TMPDIR;
+		const cache = join(homedir(), ".cache");
+		let useTmpdir = tmpdir;
+		if (tmpdir && overlapsRepo(repoRoot, tmpdir)) {
+			env.TMPDIR = "/tmp";
+			useTmpdir = undefined;
+		}
+		let useCache: string | undefined = cache;
+		if (overlapsRepo(repoRoot, cache)) {
+			useCache = undefined;
+		}
+		const writes = [wt, join(gitCommon, "worktrees", `pi-agent-${id}`), join(gitCommon, "objects"), process.env.PI_CODING_AGENT_DIR, useCache, useTmpdir, "/tmp", "/dev/null"]
+			.filter((p): p is string => typeof p === "string" && p !== "" && existsSync(p));
+		const wrapped = [
+			join(HERE, "landlock_exec.py"),
+			...[...new Set(writes)].flatMap((p) => ["--write", p]),
+			...ISOLATION_DEVICES.flatMap((p) => ["--write-if-exists", p]),
+			"--",
+			"pi",
+			...childArgs,
+		];
+		return { id, repoRoot, cwd, command: "python3", args: wrapped, finalize: finalizeIsolation(repoRoot, id, readDeny), env };
+	} catch (e) {
+		abandon();
+		if (e instanceof WorktreeError) return refuse(`${e.code}: ${e.message}`);
+		throw e;
+	}
+}
+
 function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 	const names = Object.keys(agents);
 	const catalog = names.map((n) => `- ${n}: ${agents[n].description}`).join("\n");
@@ -440,7 +610,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 
 	// 子を 1 つ起動する。枠は同期で確保する (並行する起動でも上限を超えない)
 	type Spawned = { job: Job; model: string } | { error: string; full?: boolean };
-	const spawnChild = (agentName: string, ctx: any, owner: { cwd: string; role: string }, modelOverride?: string): Spawned => {
+	const spawnChild = (agentName: string, ctx: any, owner: { cwd: string; role: string }, modelOverride?: string, isolation?: boolean): Spawned => {
 		const agent = agents[agentName];
 		if (!agent) throw new Error(`unknown agent: ${agentName}`);
 		const parentModel = `${ctx.model.provider}/${ctx.model.id}`;
@@ -462,12 +632,53 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			PI_HARNESS_ROLE: agent.profile,
 			PI_HARNESS_BYPASS: bypass && agent.inherit_bypass ? "1" : "",
 		};
-		const job = jobs.create({ agent: agentName, args, cwd: ctx.cwd, env, owner });
+		const plan = isolation ? prepareIsolation(ctx.cwd, args) : null;
+		if (plan && "error" in plan) return { error: plan.error };
+		const abandon = () => {
+			try {
+				if (plan) discard(plan.repoRoot, plan.id);
+			} catch {
+				// 記録は残る (起動時の照合と /worktrees が拾う)
+			}
+		};
+		let job: Job | null;
+		try {
+			job = jobs.create(
+				plan
+					? { id: plan.id, agent: agentName, args: plan.args, cwd: plan.cwd, env: { ...env, ...plan.env }, owner, command: plan.command, finalize: plan.finalize }
+					: { agent: agentName, args, cwd: ctx.cwd, env, owner },
+			);
+		} catch (e) {
+			abandon();
+			throw e;
+		}
 		if (!job) {
+			abandon();
 			const live = jobs.list().map((j) => `- ${j.id} (${j.agent}, ${j.state})`).join("\n");
 			return { error: `too many live child jobs (max ${MAX_JOBS}). Close one with {jobId, close:true}:\n${live}`, full: true };
 		}
 		return { job, model };
+	};
+
+	// 隔離の job の結果の行。opt-in の間は、隔離しない worker にも「none」を出して誤認を防ぐ
+	const isolationLines = (job: Job): string[] => {
+		if (!job.finalized) return job.agent === "worker" ? ["- isolation: none"] : [];
+		const info = job.isolationInfo;
+		const head = "- isolation: worktree";
+		if (!info) return [head, "- worktree: kept (not finalized). recover: /worktrees"];
+		switch (info.kind) {
+			case "collected":
+				return [
+					head,
+					`- worktree: ref ${info.ref}; patch ${info.patch}; apply: git apply ${info.patch}${info.warnings.length > 0 ? `; warnings: ${info.warnings.join(", ")}` : ""}`,
+				];
+			case "unchanged":
+				return [head, "- worktree: no changes (removed)"];
+			case "kept":
+				return [head, `- worktree: kept (${info.reason}). recover: /worktrees`];
+			default:
+				return [head, `- worktree: kept (${info.code}: ${info.reason}). recover: /worktrees`];
+		}
 	};
 
 	// 子の結果を、見出し・承認待ち・警告 (ツールエラー)・job・答えの本文に分けて返す。
@@ -489,6 +700,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				? [`format check (the answer lacks the standard sections; verify its claims yourself):`, `- missing: ${missing.join(", ")}`]
 				: []),
 			...(r.status === "done" && r.answer ? [`- calls: ${summarizeCalls(r.toolCalls ?? [])}`] : []),
+			...isolationLines(job),
 			...(alive ? [`- job: ${job.id} (idle; follow up with {jobId, task}, close with {jobId, close:true})`] : []),
 			...(r.answer ? ["", "answer:", r.answer] : [""]),
 		];
@@ -588,8 +800,10 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		runningChildren.set(key, { agent: job.agent, model: "", task: message, pid: job.pid, startedAt });
 		job
 			.run(message, { timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE })
-			.then((r) => {
+			.then(async (r) => {
 				if (!keep) job.close();
+				// 隔離の job は、停止の確認と回収が終わってから結果を組み立てる
+				if (job.finalized) await job.finalized;
 				const alive = (r.status === "done" || r.status === "aborted") && keep;
 				linkTodo(todo, job, r, ctx);
 				const full = resultText(job, r, alive);
@@ -813,8 +1027,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				if (TODO_REQUIRED_AGENTS.has(input.agent) && input.todo === undefined && pi.getActiveTools().some((n) => n === "todo")) {
 					return text(`todo is required for ${input.agent}: add a todo item for this work and pass its id as \`todo\``, true);
 				}
-				if (input.isolation === "worktree") return text("isolation is not implemented yet", true);
-				const sp = spawnChild(input.agent, ctx, owner, input.model);
+				const sp = spawnChild(input.agent, ctx, owner, input.model, input.isolation === "worktree");
 				if ("error" in sp) return text(sp.error, true);
 				job = sp.job;
 				message = input.task;
@@ -879,6 +1092,8 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			let r: RoundResult;
 			try {
 				r = await job.run(message, { signal, timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE });
+				// 隔離の job は、停止の確認と回収を待つ (待つ間も動いている子として見せる)。abort されたら待たない
+				if (job.finalized && !signal?.aborted) await job.finalized;
 			} finally {
 				runningChildren.delete(toolCallId);
 			}
