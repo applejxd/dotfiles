@@ -156,3 +156,120 @@ README を読んだ範囲（未導入・未実測）。
 - <https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-cli>
 - <https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-configure-using-wsb-file>
 - <https://4sysops.com/archives/new-windows-sandbox-configuration-options-with-gui-and-cli/>
+
+## 記録 I2 — 2026-10-24（OpenShell で、PowerShell の `pis` が使えない問題を解決できるか）
+
+- **対象**: NVIDIA OpenShell v0.1.5（公式 docs の「Latest」）と、現行の `pis`（ADR-0017 決定 5）。取得日は 2026-10-24
+- **方法の限界**: OpenShell は**動かしていない**。保存した公式の docs・issues と、`explore` の子の抜き書き（親が代表の行を原文で確かめた。確かめた行は「確認済み」）
+
+### 問い
+
+Windows ネイティブ（PowerShell）では、`pis`（フルガード + サンドボックス）が使えず、素の `pi` を信頼できる環境でだけ使っている（[ADR-0017](../../adr/0017-pi-only-and-ts-judge.md) 決定 5）。OpenShell を使えば、この状態を解決できるか。
+
+### 事前の予想
+
+OpenShell の対応表では Windows は「WSL 2 + Docker Desktop」の Experimental なので、PowerShell のネイティブの `pi` を直接包む形にはならず、WSL2 を経由する形になる。解決にはならない可能性が高い。
+
+### 結果
+
+**現状の事実（このリポジトリ）**:
+
+- 文書が言い切っていること: Windows ネイティブにはフルガード・`pis`・サンドボックスが無い。サンドボックスが Fence に依るため。判定器は TS で動くが、フルガードの Windows 版は未着手で優先度は低い（`docs/spec/pi-guard.md:151`）。守りが要る作業は、WSL の `pis` で行う（同 `:165`、ADR-0017 決定 5）
+- 文書が言い切っていないこと: 「使えない」の原因を 1 つにしていない（Fence が Linux/macOS 専用、`spawn("pi")` が `pi.cmd` 経由、負の PID への `kill`、Windows での判定の待ち時間は未実測、など。別モデルによるレビューの指摘で、実機試験はしていない。`pi-isolation-options.md` の「ハーネスの Windows 移植の見送り」）。**PowerShell で `pis` を使いたい理由を、利用者の動機として書いた文書は見つからなかった**（Orca・Zed が素の `pi` を呼ぶ記述はある）
+- 再検討の条件: ADR-0017 は、Windows でガード付きで使う需要が増えたときに見直す、としている
+
+**OpenShell 側の事実**（ベンダーの一次情報。issue の日付は 2026-09〜10）:
+
+- Windows は「WSL 2 + Docker Desktop」が **Experimental**（確認済み: `nvidia-openshell-support-matrix.md:102`）。Windows ネイティブは、`mxc` ドライバとして docs に載っているが、実行環境の一覧では「Coming soon」（確認済み: `nvidia-openshell-runtimes.md:72`。ドライバの設定の記述は `nvidia-openshell-gateways-configuration.md:1030`）
+- ネイティブ Windows の提案（issue #2050。Microsoft の MXC を使う。「Linux VM・Docker Desktop・WSL なし」）は、**2026-10-13 に、無活動による stale の自動処理で「not planned」として閉じた**（確認済み: `openshell-issue-2050-native-windows-mxc.md:93`、`:766`、`:801`、`:804`）。決定として却下されたのではなく、無活動で閉じた。docs の `mxc` の記述との関係は未確認
+- WSL2 + Docker Desktop では、gateway は WSL のディストロの中の systemd のユーザーサービスで動き、エンジンは Docker Desktop。サンドボックスは**コンテナ**（イメージの例: Ubuntu 24.04）。supervisor が `network_mode: host` で動くため、Docker Desktop ではホストのネットワークが WSL ではなく Docker Desktop の VM となり、supervisor が gateway に届かない。回避策は `host.docker.internal` の指定（確認済み: `openshell-issue-3880-*.md:70`、`:78`）。報告は v0.1.2、修正の PR #3924 は triage 時点で未レビュー、本体の最終状態は未確認
+- WSL2 のカーネル 6.6.87 では、seccomp の probe で `sandbox create` が失敗し、報告者は「WSL2 で使うこと自体の hard blocker」と書く。カーネル 6.18 では通るという報告と、6.18 でも Windows 11 で失敗し Windows 10 で成功するという報告がある（子の抜き書き: `openshell-issue-3842-*.md:103`、`:166〜176`、`:246〜248`。issue は Closed、理由は未確認）
+- ワークスペースは `openshell sandbox upload` / `--upload ./src:/workspace/src` で入れ、`download` で戻す。ホストの bind mount は、gateway のホストのパスで、既定は無効（`enable_bind_mounts = true` が要る。隔離とファイル方針を迂回しうる）（子の抜き書き: `sandboxes-overview.md:919`〜`:964`、`runtimes.md:224`）。Windows の `C:\` のパスの扱いは**原文に記述なし**
+- **PowerShell から `openshell` の CLI を実行できるか、サンドボックスの中で動くのが Linux のプロセスか Windows のプロセスかは、原文に記述なし**（docker 経由は Linux コンテナ。ただし「pi は Linux 版になる」と明記した文は無い）。エディタ連携は SSH（`--editor vscode` など。子の抜き書き: `sandboxes-overview.md:317`、`:906`）
+
+**Windows ネイティブ向けの他の候補**（子の抜き書き。ベンダー・個人ブログ・第三者を区別。取得日 2026-10-24。この子は Web 検索を実行せず、保存済みの原文だけで答えた）:
+
+- Docker Sandboxes（`sbx`）: Windows 11（x86_64）で動き、Docker Desktop は要らない。HypervisorPlatform を管理者の PowerShell で有効にする（個人ブログ `andrewlock-…:77〜81`、確認済み: `:77`）。pi を包めるかは記述なし。ワークスペースだけを共有し、ホストの Node・git・mise が使えるかは記述なし。資格情報はネットワーク境界で注入（ベンダー、確認済み）。experimental（個人ブログ）
+- Anthropic の sandbox-runtime（`srt`）: Windows のネイティブが **alpha**。管理者権限で 1 回だけインストールし、専用アカウント `srt-sandbox`、ファイルの ACL、Windows Filtering Platform で外向きの通信を制御する。**任意のプロセスを包める**（ベンダーの README と第三者の記事）。ユーザープロファイルは、資格情報ストアを除いて読める。ユーザーごとのツールが使えない可能性がある。TLS の証明書失効の互換問題と、システムの DNS が囲われない問題がある（第三者）
+- Codex の Windows サンドボックス: restricted tokens（個人の gist と第三者）。Codex 専用で、他の CLI を包めるかは記述なし（二次資料のみ）
+- nono: WSL2 は対応、**ネイティブ Windows は非対応**（第三者）
+- Windows Sandbox・Hyper-V・WSL2 の上に自分で組む方法、AppContainer・Job Object のランチャー: 保存済みの原文には記述なし（既存の 記録 I1 に整理がある）
+
+### 考察
+
+言える:
+
+- **OpenShell を使っても、「PowerShell のネイティブの `pi` を、そのまま守る」ことにはならない。** サンドボックスの中で動くのは、Docker 経由の Linux コンテナで、そこで動く `pi` は Linux 版になるとみられる（明記は無い）。つまり、WSL の `pis`（現行）で足りている「Linux の中で守る」形を、Docker Desktop と gateway を足して作り直すことになる。ネイティブの Windows の `pi`（Windows のパス・ツール）を包む手段は、docs に「Coming soon」のみ
+- 事前の予想は、原文と整合した。WSL2 の不具合報告（Open の #3880、Closed の #3842）が複数あり、実運用の安定性は未確認
+
+言えない:
+
+- PowerShell から OpenShell の CLI を使えるか、`C:\` のリポジトリを渡す具体的な手順は、原文に無く、動かしていないので不明
+- 「PowerShell で `pis` が使えない」の動機（Zed の pi-acp、Orca、会社の PC、Windows 側のリポジトリ）が文書に無い。動機によって、解決策が違う（`wsl` 経由で WSL の `pis` を呼ぶ薄いラッパー、Windows ネイティブの境界、など）
+
+### 次の問い
+
+- 利用者に、動機を尋ねる（どのツールから、どのリポジトリで、どの PC で）
+- `explore` の子に、`websearch.py` の検索を明示して頼み直し、`srt` の Windows の既知の制限、Docker Sandboxes の対応エージェントとカスタムのテンプレート、Windows の AppContainer 系のランチャーを調べる
+- `wsl` 経由で WSL の `pis` を呼び、Windows 側のリポジトリ（`/mnt/c`）を扱う薄いラッパーが、Fence の境界と両立するか（読み取りの許可の追加、速度）を確かめる
+
+### 参照
+
+- <https://github.com/NVIDIA/OpenShell/issues/2050>、`/3880`、`/3842`、`/1803`
+- <https://docs.nvidia.com/openshell/about/support-matrix>、`docs.nvidia.com/openshell/how-it-works/sandboxes/runtimes`
+- <https://andrewlock.net/running-ai-agents-safely-in-a-microvm-using-docker-sandbox/>（個人ブログ）、<https://github.com/anthropics/sandbox-runtime>、<https://rywalker.com/research/local-agent-sandboxes>（第三者）
+
+## 記録 I3 — 2026-10-24（動機の確認と、I2 への影響）
+
+- **観測日**: 2026-10-24。利用者への質問（`ask`）の回答
+
+### 問い
+
+記録 I2 で未確認だった、PowerShell で `pis` を使いたい理由。
+
+### 結果
+
+- 利用者の回答: **リポジトリが Windows 側にある**。自由記述: 「**Windows 起動が前提のサーバやアプリも開発するため**」
+- （選択肢のうち「Windows のツールから pi を呼ぶ」「WSL を使えない PC がある」「操作を統一したいだけ」は選ばれていない）
+
+### 考察
+
+- 推測: Windows でしか動かないサーバ・アプリを、エージェントが**ビルド・起動して確かめる**必要がある。OpenShell の経路（WSL2 + Docker Desktop）のサンドボックスは Linux コンテナなので（I2 の確認済みの記述）、Windows 専用のアプリはその中で動かせない。**この動機では、OpenShell は解決策にならない**（I2 の見込みが、動機の面からも裏づけられた）
+- 同様に、WSL の `pis` を `wsl` 経由で呼ぶ薄いラッパーも、Windows のプロセスを起動できないので、この動機には足りない（ラッパーは別の動機向け）
+- 候補になるのは、**Windows ネイティブの境界**に限られる。I2 の抜き書きでは、`srt` の Windows alpha（専用アカウント・ACL・Windows Filtering Platform。任意のプロセスを包める）と、専用の標準ユーザー + OS の制限（I1）。Docker Sandboxes の microVM のゲストが Linux か Windows かは、今回の原文では確かめていない
+- 言えない: どの候補も、`pi` を Windows ネイティブで包んで動かした実測が無い
+
+### 次の問い
+
+- `srt` の Windows alpha の既知の制限と、`pi` を包む使い方（`explore` の子が Web 検索中。[CHG-0033](../../change/0033-sandbox-build-value-assessment.md) の「重要な更新」）
+- Windows ネイティブの境界で、Windows のサーバ・アプリを起動できるか（子プロセスへの制限の伝播、ポートの待ち受け、ファイアウォールの扱い）
+
+## 記録 I4 — 2026-10-24（Windows ネイティブで `pi` を包む候補の、Web 検索による確認）
+
+- **観測日**: 2026-10-24（検索の出力に日付は無く、取得日は実行日）。`explore` の子が `websearch.py` で検索した（Web 取得は 1 件が HTTP 403）。親が確かめた行は「確認済み」
+
+### 問い
+
+Windows ネイティブ（PowerShell）で、`pi` を OS の境界つきで動かす手段のうち、公式の文書で確かめられるものは何か。
+
+### 結果
+
+- **`srt`（Anthropic の sandbox-runtime。ベンダー、Apache-2.0、README は「Beta Research Preview」）**: 任意のコマンドを包める（確認済み: `srt-readme-official.md:325` 「wraps any command with security boundaries」）。Windows は alpha で、専用のローカルユーザー `srt-sandbox`、Windows Filtering Platform の外向きの遮断、write-restricted token、ファイルの ACL を使う（確認済み: `:968`）。導入は 1 回、`npx @anthropic-ai/sandbox-runtime windows-install`（UAC の確認が 1 回。子の抜き書き）。**既知の制限**（確認済みは行番号つき）: Schannel を使うクライアントは動かない（`:1306`）。ユーザーごとのツール（nvm/fnm の Node、ユーザー単位の winget・Scoop など）は、プロファイルの読み取りを許可しないと届かない（`:1308`）。システムサービス経由の通信（SMB など）はフェンスに当たらない（`:1314`）。システムの DNS は遮断されない、匿名トークンなどでネットワークの遮断を迂回できる、共有マシンでは他のユーザーが残存する書き込み許可を使える、トークンがコマンドラインに見える（子の抜き書き）。Windows では `NODE_USE_ENV_PROXY=1` が要る（Node 22.21 以上・24.5 以上）
+- **Docker Sandboxes（`sbx`）**: Windows ネイティブで動く（ベンダー、個人ブログ）。任意のエージェントは `sbx run shell`（「Bash のログインシェル」。エージェントは入っていない）で試せる（確認済み: `docker-sbx-shell-agent.md:1882`、`:1892`）。ゲストの OS は原文で確かめていない（Bash なので Linux とみられる。推測）
+- **Codex の Windows サンドボックス**: 昇格モードでは、専用のローカルユーザーにファイアウォールの規則を当て、子プロセスは restricted token（write_restricted）で動かす（ベンダーの記事の抜粋。本文は HTTP 403 で未取得）。第三者は、昇格なしのモードを「現在のユーザーから派生した restricted token」と述べる。Windows は、restricted token のファイアウォール規則を、主体でない ID に対応づけられないため、専用ユーザーを使う、との説明がある（第三者）。他の CLI を包める公式の手順は**見つからなかった**
+- **オープンソースのランチャー**（名前と URL のみ。ライセンス・最終更新・Star は未取得）: `fmuecke/agent-win-sandbox`（「Docker・WSL なしで、ネイティブのビルドツールを使う」）、`akitaonrails/ai-jail`、AppContainer と Job の計画の issue（`ChristianPresley/zigguro`、完成品かは不明）。AppContainer の問題報告に「Git Bash が AppContainer の中で起動しない」
+- **`pi` を Windows ネイティブで包んだ報告**: `srt`・`sbx`・Codex・nono で包んだ報告は**見つからなかった**。個人のリポジトリ（`psychobarge/pi-sandbox-windows`、0 Star）は、Docker Desktop のコンテナで `pi` を動かす（ネイティブではない）。第三者の記事は、`pi` は「ユーザーの権限で動き、組み込みのサンドボックスが無い」と述べる
+
+### 考察
+
+言える: `srt` の Windows alpha が、公式の文書の範囲で、**任意のコマンド・Windows ネイティブ・管理者権限は導入時の 1 回**を満たす唯一の候補。ただし alpha で、既知の制限が、開発の道具（ユーザーごとの Node、Schannel を使うクライアント）に当たる可能性がある。言えない: `pi` を包んで動くか、Windows のサーバ・アプリを起動できるか（実測が無い）。
+
+### 次の問い
+
+[CHG-0034](../../change/0034-windows-native-pi-boundary.md) の段 W1（Windows 実機で `srt` に `pi` を包む）。`agent-win-sandbox` の README とライセンス。
+
+### 参照
+
+- <https://github.com/anthropics/sandbox-runtime>（ベンダー）、<https://docs.docker.com/ai/sandboxes/agents/shell/>（ベンダー）
+- <https://openai.com/index/building-codex-windows-sandbox/>（ベンダー）、<https://agentpatterns.ai/security/windows-sandbox-primitives-coding-agents/>（第三者）
+- <https://github.com/fmuecke/agent-win-sandbox>、<https://github.com/psychobarge/pi-sandbox-windows>（個人）

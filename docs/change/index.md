@@ -61,6 +61,7 @@
 | [0029](0029-worktree-isolation.md) | 子エージェントの実装作業を git worktree で分離し、検証を子の隔離環境で回せるようにする（CHG-0026・0028 の未完事項の移管先） | Exploring | 隔離の前提（Fence 配下の子が linked worktree で動けるか、共有 `.git` や親の作業ツリーへ書けるか、スナップショットの往復。いずれも実測前） | W0: 使い捨てのリポジトリで実測 E1〜E5（E1・E2・E4 は `pis` の実機） | 2026-10-22 |
 | [0032](0032-guard-url-false-positive.md) | 判定器と、検索・取得のスクリプトの検査が、URL を誤検出して調査を止めないようにする | In progress | 実機（`chezmoi apply` 後の `pis`）で、取れなかった記事が取れるか。許容した限界（`=` 直後の URL、URL 内の小文字のパスフレーズ） | CHG-0033 の段 P1 の再調査で実機の確認 | 2026-10-23 |
 | [0033](0033-sandbox-build-value-assessment.md) | 自作したサンドボックスに価値があったかを、サンクコストを除いて、エビデンスで判定する | Exploring | nono をこの環境で試した実測が無い。コマンド内容を解析する既製品が本当に無いか。判定器の限界価値 | 暫定の判定は「部分的に置き換え（縮小）」。Python 版オラクルの撤去の案件化、nono の小さな試験 | 2026-10-24 |
+| [Windows ネイティブ（PowerShell）で pi を、OS の境界つきで動かす](0034-windows-native-pi-boundary.md) | リポジトリが Windows 側で、Windows 起動前提のアプリも開発するので、Windows ネイティブで pi を境界つきで動かしたい（OpenShell・Docker Sandboxes は合わない） | Exploring | `srt` の Windows alpha で `pi` を包めるか。サーバ・アプリの起動と通信の制御が両立するか。Windows 実機が要る | 段 W1: Windows 実機で `srt` に `pi` を包む手順書を作り、利用者に実行してもらう | 2026-10-24 |
 
 ## 保留
 
