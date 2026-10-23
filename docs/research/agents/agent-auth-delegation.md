@@ -249,3 +249,57 @@ LiteLLM のような常駐のゲートウェイが要る。代替は少ない。
 - <https://docs.litellm.ai/docs/proxy/docker_quick_start>、<https://docs.litellm.ai/docs/providers/github_copilot>、<https://docs.litellm.ai/docs/reasoning_content>、<https://docs.litellm.ai/blog/security-incident-oct-21-2026>、<https://docs.litellm.ai/docs/proxy/docker_image_security>
 - <https://github.com/BerriAI/litellm/issues/26320>、`/18155`、`/14194`、`/47826`、<https://github.com/benchflow-ai/benchflow/issues/1135>
 - <https://cooldowns.dev/>、<https://pydevtools.com/handbook/how-to/how-to-protect-against-python-supply-chain-attacks-with-uv/>
+
+## 記録 D5 — 2026-10-24（世間の実践と、既製の署名プロキシの実用性: 自作を最小にできるか）
+
+- **観測日**: 2026-10-24。`explore` の子 2 件（検索 12 回以上、本文の取得あり）。取得日は、ページ内に日付があるもの以外は不明。実機では動かしていない
+- **きっかけ**: 利用者の不安「みんなこんなことを本当にしているのか。本当に自作する必要があるか」
+
+### 問い
+
+(1) 開発者は、コーディングエージェントに、Bedrock や GitHub の認証情報を、どう渡しているか。(2) 既製の署名プロキシ（`aws-sigv4-proxy` など）を、Bedrock（ConverseStream）と AgentCore（MCP）で、そのまま使えるか。
+
+### 結果
+
+**(1) 世間の実践: 主流は「内側に置く」**（公式 docs・個人の記事・Reddit。企業の導入事例は見つからなかった）:
+
+- Claude Code の公式 docs（Bedrock）: AWS の既定の認証の連鎖を一度解決して、メモリに保持する。`awsAuthRefresh` と `awsCredentialExport` で自動更新。**中央の LLM ゲートウェイが認証情報を注入する場合は、クライアント側の認証を無効にする**、とも書く。公式の devcontainer の docs: 「`~/.ssh` やクラウドの認証情報のファイルを、コンテナにマウントするな。リポジトリ単位や短命のトークンを使え」。公式の sandbox の docs: **「既定の読み取りの方針では `~/.aws` と `~/.ssh` が読める」ので、`sandbox.credentials` に追記する**
+- 個人の記事: Claude Code のネイティブのサンドボックスは、「認証情報の隔離の問題を解決しない。`cat ~/.aws/credentials` は成功する」（EngSecLabs、2026-04-27）。Imperva（2026-05-14）: 「理想の修正は認証情報の隔離だ」。日本語の記事（Zenn・Qiita）は、環境変数や SSO で Claude Code 自身が使う手順で、エージェントから隔離する話ではない
+- **内側に置かない手段は実在するが、利用の報告は個人・OSS・ベンダーの docs が中心**: Docker sbx（`sbx secret`。要望の issue が出ている）、nono（phantom token。報道は 2026-07-27）、NVIDIA OpenShell、Infisical の Agent Vault、個人の `elhaz`（Unix ソケットだけをコンテナにマウントし、`credential_process` で取得）、短命の STS を専用コンテナへ（Reddit・個人）。「どう管理しているか」というスレッドが立つこと自体、**定着した標準が無い**ことを示す
+- ガイド類（OWASP の DevSecOps、AI Agent Security Cheat Sheet）は、「タスク単位の短命のトークン。長命・本番の認証情報を、エージェントの環境・プロンプト・設定に置くな」。**「内側に置かない方式を使う開発者の割合」の統計は、見つからなかった**
+
+**(2) 既製の署名プロキシ**:
+
+- **`awslabs/aws-sigv4-proxy`**（AWS 公式、Go SDK v1、最新 v1.13.1）: Host ヘッダーの宛先へ署名して転送する汎用プロキシ。`-s Authorization` で受けたヘッダーを除去、`--name`・`--region`・`--host`。認証情報は SDK の既定の探索。**ただし、ストリーミングの応答がバッファされる**（Issue #250、Open。PR #251 は未マージ。メンテナーが修正の方式を指摘）。**Bedrock の ConverseStream で試した報告は見つからなかった**。HTTP/2・Unix ソケット・認証情報の再読み込みは README に記述なし
+- **NVIDIA OpenShell** の SigV4 プロバイダーは、同じ形（プレースホルダーの `Authorization` を除去し、本物の認証情報で再署名）だが、**ストリーミング用の `invoke-with-response-stream` を、一時期外していた**（Issue #1940。共有のストリーミングの中継が、AWS の event-stream 形式のエラーを出せるまで）。本文の上限は 10 MiB
+- **Envoy の `aws_request_signing` フィルター**（公式）: Authorization ヘッダーを、計算した SigV4 に**置き換える**（内側にダミーを渡せる）。Envoy はストリーミングの透過が前提の成熟したプロキシ。**ただし Bedrock の設定例は見つからなかった**（例は VPC Lattice）
+- `aws/mcp-proxy-for-aws`（AgentCore 用）: stdio のブリッジで、ローカルの HTTP で公開するオプションは見当たらない。別の `aws-samples/sample-aws-stdio-http-proxy-mcp` に、streamable HTTP で公開する例がある（未読）。aws-sigv4-proxy を AgentCore Gateway に使った報告は見つからなかった
+- 個人の Go 製 `bedrock-local-proxy`（★0）は、OpenAI・Anthropic 形式へ変換する（`pi` のネイティブの Converse の忠実度が下がる）
+- 「内側に短命の本物を渡す」手段: aws-vault の `--server`（EC2 のメタデータ相当をローカルに立てる。`sudo` が要る）、IAM Roles Anywhere の `serve`（「127.0.0.1 に届くプロセスは、認証情報を取得できる」）
+
+### 考察
+
+言える:
+
+- **「みんなやっている」わけではない**。主流は、認証情報を内側に置く（環境変数・`~/.aws`・SSO）。隔離の手段は、2026 年に出始めた段階で、標準も、企業の導入事例も、見つからなかった
+- **自作が「必須」とは言えない**: 汎用の部品（Envoy、`aws-sigv4-proxy`）で、署名の再計算はできる。**ただし、既製の `aws-sigv4-proxy` は、ストリーミングが現状バッファされる**ので、長い推論を使う `ConverseStream` に向かない可能性が高い。Envoy は、設定だけで足りる可能性があるが、Bedrock の例が無く、**実験が要る**
+- **通信の方針と連動する**: 通信を拒否リスト型（ほぼ全許可）にすると、内側にキーがある場合、プロンプトインジェクションで、**キーを外へ POST される経路が増える**（判定器は、`curl -d` と秘密の環境変数の送信は止めるが、Python などのインラインの HTTP は穴）。内側に置かない価値は、通信を緩めるほど、上がる
+
+言えない:
+
+- Envoy の `aws_request_signing` が、Bedrock Runtime の `ConverseStream`（ペイロードのハッシュ、eventstream の透過）で動くか
+- `aws-sigv4-proxy` の最新版（v1.13.1）が、ストリーミングを透過するか（#250 の状態は Open だが、リリースノートの確認は未実施）
+- 内側にキーを置く場合（専用の最小権限のユーザー）の、実際の漏洩の被害（費用の不正利用。上限は IAM とクォータ・予算の警告で絞れる）
+
+### 次の問い
+
+- **最小の順**: (0) 専用ユーザーのキーを、直接渡す（作り込み 0。漏れたときの被害は費用の不正利用。通信を緩めるなら、キーの持ち出しの経路が増える）→ (1) Envoy を設定だけで試す（コード 0。要実験）→ (2) それが不可なら、小さな自作のストリーミング対応プロキシ
+- 実験は、会社の機（または専用ユーザーのキーを借りた別環境）で、`ConverseStream` を通す
+
+### 参照
+
+- <https://code.claude.com/docs/en/amazon-bedrock>、<https://code.claude.com/docs/en/devcontainer>、<https://code.claude.com/docs/en/sandboxing>
+- <https://engseclabs.com/blog/agent-credential-isolation/>、<https://www.imperva.com/blog/using-bedrock-with-claude-code-your-aws-credentials-are-shared-with-every-subprocess/>
+- <https://owasp.github.io/DevSecOpsGuideline/2-Process/2-2-Develop/2-2-5-AI-Agent-and-MCP-Security/>、<https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html>
+- <https://github.com/awslabs/aws-sigv4-proxy>（`/issues/250`、`/pull/251`）、<https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/aws_request_signing_filter>、<https://docs.nvidia.com/openshell/v0.0.116/providers/aws-sigv4>
+- <https://github.com/aws/mcp-proxy-for-aws>、<https://github.com/aws-samples/sample-aws-stdio-http-proxy-mcp>、<https://github.com/aws/rolesanywhere-credential-helper>
