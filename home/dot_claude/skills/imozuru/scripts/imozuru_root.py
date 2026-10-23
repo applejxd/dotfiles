@@ -95,14 +95,33 @@ _FALLBACK = [
     ),
 ]
 _LONG_TOKEN = re.compile(r"[A-Za-z0-9+/_=-]{40,}")
-_SLUG_PART = re.compile(r"[a-z]{1,20}|\d{1,8}")
+_WORD_PART = re.compile(r"[A-Za-z]{1,20}")
+_DIGIT_PART = re.compile(r"\d{1,8}")
+_SHORT_MIXED = re.compile(r"(?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{2,6}")
 _URL_IN_TEXT = re.compile(r"https?://\S+", re.IGNORECASE)
 
 
-def _is_slug(token: str) -> bool:
-    """web-search の `is_slug` と同じ (英小文字の語と数字を `-` `_` `/` でつないだ 4 つ以上の列)。URL の中だけで使う。"""
-    parts = [p for p in re.split(r"[-_/]", token) if p]
-    return len(parts) >= 4 and all(_SLUG_PART.fullmatch(p) for p in parts)
+def _is_slug(segment: str) -> bool:
+    """web-search の `is_slug` と同じ。URL の中のパスの 1 つの区切りだけに使う。"""
+    parts = [p for p in re.split(r"[-_]", segment) if p]
+    if not parts:
+        return False
+    mixed = 0
+    words = 0
+    for p in parts:
+        if _WORD_PART.fullmatch(p):
+            words += 1
+        elif _DIGIT_PART.fullmatch(p):
+            continue
+        elif _SHORT_MIXED.fullmatch(p):
+            mixed += 1
+        else:
+            return False
+    if mixed > 2:
+        return False
+    if len(parts) >= 4:
+        return words >= 3
+    return mixed == 0 and len(segment) <= 30
 
 
 def _websearch_check():

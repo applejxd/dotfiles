@@ -212,21 +212,42 @@ SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ),
 ]
 LONG_TOKEN = re.compile(r"[A-Za-z0-9+/_=-]{40,}")
-_SLUG_PART = re.compile(r"[a-z]{1,20}|\d{1,8}")
+_WORD_PART = re.compile(r"[A-Za-z]{1,20}")
+_DIGIT_PART = re.compile(r"\d{1,8}")
+_SHORT_MIXED = re.compile(
+    r"(?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{2,6}"
+)  # z3, h264, 2ea0 (記事末尾の短い ID など)
 _URL_IN_TEXT = re.compile(r"https?://\S+", re.IGNORECASE)
 
 
-def is_slug(token: str) -> bool:
-    """英小文字の語 (20 文字まで) と数字 (8 桁まで) だけを `-` `_` `/` でつないだ 4 つ以上の列。
+def is_slug(segment: str) -> bool:
+    """URL の 1 つのパスの区切りが、語を `-` `_` でつないだだけのもの (スラッグや人間の読める名前) か。
 
-    記事の題名をそのまま使った URL の末尾などがこの形。
-
-    実際のトークンは大文字・小文字・数字が混ざるので、これには当たらない。語をつないだパスフレーズを通してしまう
-    ので、`check_query` は URL の中のトークンにだけ適用する。
+    部分は英字だけ (20 文字まで)、数字 (8 桁まで)、短い英小文字と数字の混在 (`z3`、`2ea0`。最大 2 つ) のいずれか。
+    4 部分以上なら英字だけの語が 3 つ以上、あるいは 3 部分以下なら混在なし・30 文字以下。
+    実際のトークン (大文字・小文字・数字の混在、長い 16 進) は除く。語をつないだパスフレーズを通すので、
+    `check_query` は URL の中のトークンにだけ適用する。
     see docs/change/0032-guard-url-false-positive.md
     """
-    parts = [p for p in re.split(r"[-_/]", token) if p]
-    return len(parts) >= 4 and all(_SLUG_PART.fullmatch(p) for p in parts)
+    parts = [p for p in re.split(r"[-_]", segment) if p]
+    if not parts:
+        return False
+    mixed = 0
+    words = 0
+    for p in parts:
+        if _WORD_PART.fullmatch(p):
+            words += 1
+        elif _DIGIT_PART.fullmatch(p):
+            continue
+        elif _SHORT_MIXED.fullmatch(p):
+            mixed += 1
+        else:
+            return False
+    if mixed > 2:
+        return False
+    if len(parts) >= 4:
+        return words >= 3
+    return mixed == 0 and len(segment) <= 30
 
 
 def check_query(query: str) -> str | None:

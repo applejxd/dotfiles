@@ -302,6 +302,12 @@ def test_ordinary_queries_pass(query):
 SLUG_URLS = [
     "https://nvidia.github.io/OpenShell-Research/articles/2026-09-10-learning-formal-methods-agent-policy",
     "https://example.com/blog/egress-proxy-api-keys-for-agent-sandboxes-in-2026-complete-guide",
+    # dev.to のように末尾に短い ID がつく形、途中に `z3` のような短い英数字がある形
+    "https://dev.to/frankchu/i-built-openshells-z3-policy-prover-and-ran-29-checks-it-caught-everything-except-the-metadata-2ea0",
+    "https://dev.to/slabb/agents-should-never-hold-your-api-keys-nvidia-just-open-sourced-the-runtime-that-enforces-it-3jm4",
+    # 語のような名前のパスが長く続く形と、単独では 40 文字未満のハッシュがパスにある形 (gist)
+    "https://github.com/NVIDIA/product-security/tree/main/2026/5872",
+    "https://gist.github.com/wincent/2752d8d97727577050c043e4ff9e386e",
 ]
 
 
@@ -317,6 +323,11 @@ def test_hyphenated_slug_urls_pass(url):
         "https://example.com/?k=" + "a1b2c3d4" * 6,  # `=` を含む値
         "https://example.com/" + "de1dbeef" * 6,  # 16 進の長い値 (ハイフンなし)
         "https://example.com/a-" + "Ab1-" * 12,  # ハイフンでつないだが、各部分が大文字混じり
+        # 16 進の群をハイフンでつないだ値 (短い英数字の部分は 2 つまで)
+        "https://example.com/"
+        + "-".join(
+            ["a1b2", "c3d4", "e5f6", "a7b8", "c9d0", "e1f2", "a3b4", "c5d6", "e7f8", "a9b0"]
+        ),
         "https://example.com/" + "a" * 25 + "-" + "b" * 25 + "-1-2",  # 部分が 20 文字を超える
         # URL の外ではスラッグを除かない (語をつないだパスフレーズを通さない)
         "correct-horse-battery-staple-correct-horse-battery-staple-9",
