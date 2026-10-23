@@ -654,8 +654,9 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		description:
 			"Run a task in a child agent. The child is a separate pi process with the same guard, and cannot see this conversation, " +
 			"so put everything it needs into `task`. Forms (do not mix their fields):\n" +
-			"- new: {agent, task, keep?, background?, model?, todo?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned. " +
-			"background=true returns at once and notifies you on completion. model must be a model already used by an agent below, or your own. todo is a todo id to update when the child finishes; it is required for explore / review / worker when the todo tool is active (add a todo item first).\n" +
+			"- new: {agent, task, keep?, background?, model?, todo?, isolation?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned. " +
+			"background=true returns at once and notifies you on completion. model must be a model already used by an agent below, or your own. todo is a todo id to update when the child finishes; it is required for explore / review / worker when the todo tool is active (add a todo item first). " +
+			"isolation: \"worktree\" runs the worker isolated in a git worktree (a single new worker task only; not with keep).\n" +
 			"- tasks: {tasks:[{agent, task, model?}, ...], background?}. Runs them in parallel (waiting for free slots) and returns every result.\n" +
 			"- follow-up: {jobId, task, background?}. Sends another request to a kept child; it remembers the earlier conversation. One request at a time per job.\n" +
 			"- status: {jobId, status:true}, or list: {list:true}. State, elapsed time, last tool, calls and tokens of children.\n" +
@@ -673,6 +674,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				background: Type.Optional(Type.Boolean({ description: "new / tasks / follow-up: return at once and be notified on completion" })),
 				model: Type.Optional(Type.String({ description: "new task only: a model already used by a declared agent, or your own" })),
 				todo: Type.Optional(Type.Number({ description: "new task only: a todo id to mark done (or annotate) when the child finishes" })),
+				isolation: Type.Optional(Type.Union([Type.Literal("worktree"), Type.Literal("")], { description: "new worker task only: \"worktree\" runs the worker isolated in a git worktree (not with keep)" })),
 				tasks: Type.Optional(
 					Type.Array(
 						Type.Object(
@@ -811,6 +813,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				if (TODO_REQUIRED_AGENTS.has(input.agent) && input.todo === undefined && pi.getActiveTools().some((n) => n === "todo")) {
 					return text(`todo is required for ${input.agent}: add a todo item for this work and pass its id as \`todo\``, true);
 				}
+				if (input.isolation === "worktree") return text("isolation is not implemented yet", true);
 				const sp = spawnChild(input.agent, ctx, owner, input.model);
 				if ("error" in sp) return text(sp.error, true);
 				job = sp.job;

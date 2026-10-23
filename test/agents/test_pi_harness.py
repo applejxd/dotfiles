@@ -547,10 +547,39 @@ def test_task_input_ignores_unused_arguments_filled_with_empty_values(env):
         "steer": "",
         "tasks": [],
     }
-    filled |= {"jobId": "", "background": False, "keep": False, "model": "", "todo": 0}
+    filled |= {
+        "jobId": "",
+        "background": False,
+        "keep": False,
+        "model": "",
+        "todo": 0,
+        "isolation": "",
+    }
     proc = _rounds(env, [[_task(agent="worker", task="t", **filled)]])
     assert "invalid guarded_task input" not in proc.stdout, proc.stdout
     assert "child worker: completed" in proc.stdout, proc.stdout
+
+
+def test_task_input_isolation_is_validated(env):
+    bad = [
+        _task(agent="worker", task="t", isolation="worktree", keep=True),
+        _task(tasks=[{"agent": "worker", "task": "t"}], isolation="worktree"),
+        _task(jobId="job-x", task="t", isolation="worktree"),
+        _task(agent="explore", task="t", isolation="worktree"),
+        _task(agent="worker", task="t", isolation="other"),
+    ]
+    proc = _rounds(env, [bad])
+    # "other" はスキーマ (リテラルの Union) で弾かれ、残りの 4 つが parseTaskInput の拒否
+    assert proc.stdout.count("invalid guarded_task input") == len(bad) - 1, proc.stdout
+    assert "isolation: must be equal to constant" in proc.stdout and '"isolation": "other"' in proc.stdout, (
+        proc.stdout
+    )
+
+
+def test_task_isolation_worktree_is_not_implemented_yet(env):
+    proc = _rounds(env, [[_task(agent="worker", task="t", isolation="worktree")]])
+    assert "isolation is not implemented yet" in proc.stdout, proc.stdout
+    assert "isError=true" in proc.stdout and "USERS=" not in proc.stdout, proc.stdout
 
 
 def test_task_input_forms_accept_empty_fillers_but_still_reject_real_conflicts(env):

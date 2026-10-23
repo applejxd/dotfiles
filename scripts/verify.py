@@ -79,6 +79,7 @@ _PI_TESTS = (
     "test_pi_boundary",
     "test_pi_commit_confirm",
     "test_pi_audit",
+    "test_pi_landlock_exec",
     "test_pi_worktree",
     "test_pi_subagents",
     "test_pi_shared",

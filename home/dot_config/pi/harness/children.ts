@@ -43,7 +43,7 @@ export function classify(f: RoundFacts): { status: RoundStatus; note?: string } 
 
 export type BatchItem = { agent: string; task: string; model?: string };
 export type TaskInput =
-	| { kind: "new"; agent: string; task: string; keep: boolean; background: boolean; model?: string; todo?: number }
+	| { kind: "new"; agent: string; task: string; keep: boolean; background: boolean; model?: string; todo?: number; isolation?: "worktree" }
 	| { kind: "batch"; tasks: BatchItem[]; background: boolean }
 	| { kind: "followup"; jobId: string; task: string; background: boolean }
 	| { kind: "close"; jobId: string }
@@ -116,6 +116,12 @@ export function parseTaskInput(p: any): TaskInput {
 	if (p.keep !== undefined && typeof p.keep !== "boolean") fail("`keep` must be boolean");
 	if (p.model !== undefined && typeof p.model !== "string") fail("`model` must be a string");
 	if (has("todo") && (typeof p.todo !== "number" || !Number.isInteger(p.todo))) fail("`todo` must be an integer id");
+	if (has("isolation")) {
+		if (p.isolation !== "worktree") fail('`isolation` must be "worktree"');
+		// 隔離の job は 1 往復で終わり、回収は 1 回
+		if (p.keep === true) fail("`isolation` cannot be used with `keep` (an isolated job has one round and is collected once)");
+		if (p.agent !== "worker") fail("`isolation` is for worker only");
+	}
 	return {
 		kind: "new",
 		agent: p.agent,
@@ -124,6 +130,7 @@ export function parseTaskInput(p: any): TaskInput {
 		background: bool("background"),
 		...(p.model ? { model: p.model } : {}),
 		...(has("todo") ? { todo: p.todo } : {}),
+		...(has("isolation") ? { isolation: "worktree" as const } : {}),
 	};
 }
 
@@ -197,8 +204,19 @@ export class Job {
 	private exited = false;
 	private closing = false;
 	private stderrTail = "";
-	// 子が終了した (停止を含む) ときに呼ばれる
-	onExit: (() => void) | null = null;
+	// 子が終了した (停止を含む) ときに呼ばれる。追加の後始末は addOnExit で足す (onExitLast は Jobs が使う。最後に呼ぶ)
+	private onExitHooks: Array<() => void> = [];
+	onExitLast: (() => void) | null = null;
+	addOnExit(fn: () => void) {
+		this.onExitHooks.push(fn);
+	}
+	onExit() {
+		for (const fn of [...this.onExitHooks, ...(this.onExitLast ? [this.onExitLast] : [])]) {
+			try {
+				fn();
+			} catch {}
+		}
+	}
 
 	constructor(o: JobOptions) {
 		this.id = o.id;
@@ -213,14 +231,14 @@ export class Job {
 			this.exited = true;
 			this.finish(this.round, "failed", `spawn failed: ${e.message}`);
 			this.state = "closed";
-			this.onExit?.();
+			this.onExit();
 		});
 		this.proc.on("close", (code) => {
 			this.exited = true;
 			this.state = "closed";
 			const note = `process exited (${code ?? "signal"})${this.stderrTail.trim() ? `: ${this.stderrTail.trim().slice(-300)}` : ""}`;
 			this.finish(this.round, this.round?.closed ? "closed" : "failed", note);
-			this.onExit?.();
+			this.onExit();
 		});
 	}
 
@@ -441,12 +459,16 @@ export class Jobs {
 	}
 
 	// 上限を超えるなら null。枠は同期で確保する (並行する起動でも上限を超えない)
-	create(o: Omit<JobOptions, "id">): Job | null {
+	// id が渡されたら使う (形式の検査は呼び出し側)。同じ id の job が既にあれば null
+	create(o: Omit<JobOptions, "id"> & { id?: string }): Job | null {
 		if (this.map.size >= this.max) return null;
-		const id = `job-${randomBytes(8).toString("hex")}`;
+		if (o.id !== undefined && this.map.has(o.id)) return null;
+		const id = o.id ?? `job-${randomBytes(8).toString("hex")}`;
 		const job = new Job({ ...o, id });
 		this.map.set(id, job);
-		job.onExit = () => this.map.delete(id);
+		job.onExitLast = () => {
+			this.map.delete(id);
+		};
 		return job;
 	}
 
