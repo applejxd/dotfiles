@@ -185,3 +185,67 @@ LiteLLM のような常駐のゲートウェイが要る。代替は少ない。
 - <https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-outbound-auth.html>、<https://aws.amazon.com/blogs/machine-learning/connecting-mcp-servers-to-amazon-bedrock-agentcore-gateway-using-authorization-code-flow/>、<https://github.com/aws/agentcore-cli/issues/2550>
 - <https://github.com/agentgateway/agentgateway>、<https://github.com/maximhq/bifrost>、<https://github.com/docker/mcp-gateway>
 - <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens>、<https://docs.github.com/en/organizations/managing-programmatic-access-to-your-organization/setting-a-personal-access-token-policy-for-your-organization>
+
+## 記録 D4 — 2026-10-24（LiteLLM の再評価: 専用ユーザーが作れ、封じ込めの対策を取る場合）
+
+- **観測日**: 2026-10-24。`explore` の子 3 件（検索・本文の取得あり）と、`pi` のローカルのソース（`pi-ai`、pi 1.3.0）の読み取り。親が確かめた行は「確認済み」
+- **前提**: 利用者の回答（2026-10-24）: 会社は Bedrock 専用の最小権限の IAM ユーザーを作れる。LiteLLM は、サプライチェーンの対策を取れば採用してよいか。Bedrock と GitHub Copilot を、別々に自作したくない
+
+### 問い
+
+(1) LiteLLM は、Bedrock と Copilot の認証を、ホスト側で肩代わりできるか。(2) DB なしで、`pis` と同じ寿命で起動・終了して使えるか。(3) サプライチェーンの対策で、2026-10 の事件を避けられたか。(4) 自作の素通しのプロキシと比べて、忠実度とコストはどうか。
+
+### 結果
+
+**LiteLLM の DB なしの運用**（確認済み: `litellm-docker-quick-start.md:139`〜`:163`）:
+
+- **master key だけで動く**（「Requests authenticate with the master key」）。起動時に master key が無いと起動しない。**仮想キーは DB が要る**（「virtual keys themselves need a database」）。予算は DB なしでは効かない。入場用のキーは、master key の 1 つだけ（起動ごとの乱数で足りる）。SQLite の言及は見つからなかった。テレメトリーは既定で OFF（`LITELLM_TELEMETRY_DISABLED=true` で確実に止める）
+- **起動・終了の重さ**: 実測値は見つからなかった。公式の目安は 1 worker あたり **4Gi**（DB 利用の本番向け）、`import` だけで 1.1 秒・2,523 モジュール（第三者の計測）。メモリの増加の報告が 2 件（#12685、#15128）。`litellm-core`（約 10 依存を目指す軽量版）は、「目標であって、最初のリリースの依存数ではない」とブログが述べる（未リリースとみられる）
+
+**Bedrock の忠実度（`pi` から LiteLLM 経由で使う場合）**（公式の docs・issue）:
+
+- extended thinking とツール呼び出しの組み合わせは、OpenAI 互換のクライアントと「完全には互換でない」。`thinking_blocks` の再送が必須で、無いと 400（`modify_params: true` なら、その回だけ thinking を落とす）。Bedrock で `Expected thinking or redacted_thinking, but found tool_use`（#14194）
+- prompt caching: Bedrock への `/v1/messages` で、トップレベルの `cache_control` が 400、または**無言で無効**（#26320、**not planned で close**）。Bedrock Converse の 1 時間 TTL が 400（#34248）。**chat/completions の橋渡し経由で、キャッシュのヒット率が約 9%、直接なら約 99%（「12〜32 倍のコスト」。個人の報告 benchflow#1135）**
+- **`pi` の Bedrock プロバイダーは、Converse をネイティブに話す**ので、素通しのプロキシなら、これらの劣化を避けられる
+
+**Copilot**:
+
+- LiteLLM の docs（公式）: ゲートウェイの Copilot 認証は、**ユーザーごとの GitHub OAuth のみ**で、**トークンを DB に暗号化して保存**（リフレッシュトークンは保存しない）。SDK の直接呼び出しは、`~/.config/litellm/github_copilot/access-token` に保存し、「ゲートウェイはこのサインインを使わない」。個人のブログ（2026-03）は、`master_key` ＋ `config.yaml` だけで、デバイスコードがログに出る手順を示し、**現行の公式の docs と食い違う**（どの版からか未確認）。VS Code の Copilot Chat を名乗るヘッダーを付ける。不具合: 長い処理での premium request の余分な消費（#18155、**not planned**）、thinking が表示されない
+- **規約**: GitHub は、Copilot の公開 API を発表していない（個人のブログ）。サードパーティ製プロジェクトは、「過剰な自動化は不正検知に当たりうる」と注意する。GitHub の公式の見解は、サードパーティ製クライアントを名指しした条文を、見つけられなかった。**LiteLLM 経由だけの問題ではなく、`pi` 自身の Copilot 認証も同じ立場**
+- **`pi` は、Copilot の認証を自前で実装している**（確認済み: `pi-ai/dist/auth/oauth/github-copilot.js:32`、`:165`）: OAuth のデバイスフロー（**scope は `read:user` だけ**）で長期の GitHub トークンを得て、`copilot_internal/v2/token` で短命の Copilot トークンに交換し（期限の 5 分前に更新）、宛先はトークン内の `proxy-ep` から決め、固定ヘッダーと、要求ごとのヘッダー（`X-Initiator`・`Openai-Intent`・画像の有無）を付ける。**長期のトークンは `auth.json` に入り、`pis` が起動のたびに内側へ写す**（`pi.py:41`）
+- **したがって、内側に残る Copilot の長期トークンは `read:user` の権限だけ**（リポジトリには触れない）。漏れたときの被害は、Copilot の利用（アカウントの不正利用・不正検知）に限られる。ホスト側のブローカーで Copilot を代理するには、デバイスフロー・トークン交換・`proxy-ep` の解釈・固定ヘッダー・要求ごとのヘッダー・モデルごとの API 形式（3 種）・`/models` の取得・ポリシーの有効化を再実装することになる
+
+**2026-10-21 の事件と対策**（公式のブログ・個人の解析・第三者）:
+
+- 公式の推奨: バージョンを 1.106.2 以前の明示的な版に**固定**。「`pip install` から始めない」（`pip` 自体が `cook.pth` を再実行する）。ローテーションは、IAM ロール・プロキシ DB の全プロバイダーのキー・master と仮想キー・`DATABASE_URL` のパスワード・環境変数の秘密。3 月の事件後の対策として「更新前に待機期間を置く」
+- **汚染された成果物は、署名つき**（公式: 「ran the compromised workflow … which signed and published」）。署名と公開が同じ workflow だったので、**cosign の検証が、汚染されたイメージを防げた根拠は確認できない**。「LiteLLM は attestation を公開したことがない」（個人の解析）
+- **待機期間（cooldown）は、効いた**: `[tool.uv] exclude-newer = "7 days"` なら 1.105.1 を選ぶ（個人の実測、2026-10-22）。公開から削除までは、PyPI 約 1 時間 44 分、Docker Hub 約 2 時間 33 分
+- 窃取の送信先は、`POST http://www.litellm.dev/healthcheck` と、`raw.githubusercontent.com` からの 2 次段の読み出し。**外向き通信の許可リストを、Bedrock のエンドポイントだけにすれば、この 2 経路は塞げる**（宛先の記録からの推論。実証記事は見つからなかった）
+- **`.pth` の検査**: `python -S -I` で `site-packages` を読む検査。痕跡は `cook.pth`・`cook.py`・`sitecustomize.py`・`/tmp/.pc_once_…`・`PRIVCOLLECT_ACTIVE=1`
+- 封じ込め: systemd の `ProtectHome`・`PrivateTmp`・`RestrictAddressFamilies`・`IPAddressDeny=any`＋`IPAddressAllow`（IP 単位。ホスト名は未確認）。**WSL2 での cgroup BPF の動作を示す出典は、見つからなかった**。rootless のコンテナや、Bedrock だけを許可する外向き制限の公式の指針は、見つからなかった。LiteLLM の `litellm[proxy]` の推移依存の件数は、見つからなかった
+
+### 考察
+
+言える:
+
+- **サプライチェーンの対策だけなら、取れる**: バージョンの固定、`uv.lock` のハッシュ、7 日の待機期間（今回の事件の版を避けられた）、専用の最小権限の IAM ユーザー（被害の上限）、外向き通信の許可リスト（送信先を塞ぐ）、`.pth` の検査。ただし、**署名や attestation だけでは、今回の事件を防げない**
+- **LiteLLM を見送る、決め手は、サプライチェーンではなく、機能の側**にある: (1) **Bedrock の忠実度の劣化**（思考ブロック、prompt caching。`pi` はネイティブに話せるので、素通しなら避けられる）、(2) **重さ**（4Gi の目安、起動時間の実測が無い）、(3) **Copilot は DB なしのゲートウェイで動くか不確か**（公式はユーザーごとの OAuth ＋ DB。公式と個人のブログが食い違う）、Copilot の不具合の報告（premium request の余分な消費、thinking）
+- **ご懸念（Bedrock と Copilot を別々に作り込む）への答え**: Bedrock の素通しの署名プロキシは**小さい**（`pi` がプロキシを最初から想定している。AgentCore の MCP も同じ部品で中継できる）。**Copilot は、作り込まなくてよい**: `pi` の既存の認証が、すでに動いており、内側に残る長期トークンの権限は `read:user` だけ（リポジトリには触れない）。必要になるまで、現状維持でよい
+
+言えない:
+
+- DB なしの LiteLLM が、Copilot の認証を通すか（公式の記述が食い違う）、起動の秒数・メモリの実測値
+- 汚染された署名つきイメージが、公式の cosign の検証を通るか（鍵の流出の有無が未記載）
+- `models.json` の `baseUrl` の上書きが、Copilot の `toAuth` の `baseUrl` より優先されるか（`pi` のコードを読み切っていない）
+
+### 次の問い
+
+- Bedrock の素通しの署名プロキシ（自作。Python と `botocore`、入場用の乱数、宛先の許可リスト、キーの再読み込み）を、設計して試作する（CHG-0037 の段 U7）
+- Copilot は現状維持。長期トークンの権限が `read:user` であること、Copilot の利用規約の位置づけを、利用者が把握しておく
+- LiteLLM を採る場合の必須の対策（再開条件が来たとき）: 固定・ハッシュ・7 日の待機・専用ユーザーまたはコンテナ・外向き通信の許可リスト・`.pth` の検査
+
+### 参照
+
+- <https://docs.litellm.ai/docs/proxy/docker_quick_start>、<https://docs.litellm.ai/docs/providers/github_copilot>、<https://docs.litellm.ai/docs/reasoning_content>、<https://docs.litellm.ai/blog/security-incident-oct-21-2026>、<https://docs.litellm.ai/docs/proxy/docker_image_security>
+- <https://github.com/BerriAI/litellm/issues/26320>、`/18155`、`/14194`、`/47826`、<https://github.com/benchflow-ai/benchflow/issues/1135>
+- <https://cooldowns.dev/>、<https://pydevtools.com/handbook/how-to/how-to-protect-against-python-supply-chain-attacks-with-uv/>
