@@ -361,7 +361,7 @@ W1（最小段）の実装を段に分けた計画。**利用者が承認した�
 | S2 | `landlock_exec.py`: 入力の検証（`--write` の値の欠落、`--` の後の欠落、存在しないパスを拒否）、ABI に応じたアクセス種別、ファイルとディレクトリの権利の分離、存在するデバイスだけの許可、適用の失敗で `execvp` の前に非ゼロで終了 | 単体の試験。Landlock の ABI が無い環境は skip。配置が、子から書けない場所（`~/.config/pi/harness`。`control_dirs`）であることを、S0 の境界で確認。**完了（2026-10-23。仕様と残る限界は「S2 の実装」）** |
 | S3 | `children.ts`・`index.ts` の差し込み（事前採番、`finalized` の追加と停止の確認、`isolation`、`spawnChild`、回収、`resultText`、**起動時の取り残しの検出と三者の照合**（S4 から前倒し））。試験の足場（`run_child`）で、偽モデルの `worker` が `.tmp/worktrees/` の下で動き、結果に ref と patch が出る。`tasks` に `isolation` が混ざると拒否する。孫プロセスが残る子（停止を確認できない）で「保持」になる | 既存の試験が通る。新しい統合試験。`review`。**段 1〜4 は完了（2026-10-23。「S3 の実装」）。段 5（起動時の照合）も完了（2026-10-23。「S3 段 5 と S4 の実装」）** |
 | S4 | `/worktrees`（一覧・詳細・破棄）、docs（`pi-guard.md` に節、0029 の更新）、試験のコピー一覧への追記 | 全件検証。**完了（2026-10-23。「S3 段 5 と S4 の実装」）** |
-| S5 | 利用者の実機（`pis`）での通し確認（実際の MCP・キャッシュを含む）。`review` | 結果を 0029 に記録 |
+| S5 | 利用者の実機（`pis`）での通し確認（実際の MCP・キャッシュを含む）。`review` | 結果を 0029 に記録。手順は「S5 の手順」（`scripts/agents/s5_isolation.sh`）。利用者の実機の結果待ち |
 
 各段の終わりに全件検証を行う。
 
@@ -479,6 +479,35 @@ jobId は、サブコマンドと引数の個数を確かめた後で `validateJ
 1. 隔離を **`isolation` 引数の opt-in** にするか、`worker` の既定にするか（案: opt-in。使って慣れてから既定にする。opt-in の間は、結果に「隔離なし」か「隔離あり」を表示して、「worker なら常に隔離」と誤認させない）
 2. `.tmp/` が ignored でないリポジトリでは、**起動を拒否**するか、`.git/info/exclude` へ自動で足すか（案: 拒否）
 3. 回収の失敗（patch が書けないなど）のとき、**worktree を保持して警告**する（案）か、結果の本文だけ返すか
+
+## S5 の手順
+
+利用者の端末（実機の `pis`、実際のモデルと MCP）で、隔離の worker を通しで確かめる。所要は 10 分ほど。使い捨てのリポジトリ（`~/src/s5-isolation`）だけを触り、本物のリポジトリには書かない。`scripts/agents/s5_isolation.sh` が、準備・状態の表示・後片付けをする。
+
+1. **準備**（Fence の外のシェルで 1 回）: `sh scripts/agents/s5_isolation.sh setup`。追跡の変更（`notes.txt` の 2 行目が `two-parent`）、未追跡のファイル（`parent-only.txt`）、ignored のファイル（`ignored/data.txt`）を持つリポジトリができる。
+2. **A. 基本**: `cd ~/src/s5-isolation && pis` を起動し、次を貼る。
+
+    ```text
+    先に todo を 1 件作って、その id を使って、guarded_task を agent=worker, isolation="worktree" で 1 回だけ呼んでください。子への依頼は次のとおりです: 「pwd を実行して結果を報告し、notes.txt の 2 行目を two-child に変え、child-new.txt に from child と書いてください。」
+    ```
+
+    期待: 子の `pwd` が `.../.tmp/worktrees/pi-agent-job-...` の下。結果に `- isolation: worktree` と `- worktree: ref refs/pi-agent/job-...; patch .tmp/subagents/job-....patch; apply: git apply ...` が出る。**結果の全文を貼る**。
+
+3. **A の確認**（別のシェルで）: `sh scripts/agents/s5_isolation.sh status`。期待: 親の `notes.txt` は `two-parent` のまま、`parent-only.txt` もそのまま。`refs/pi-agent/job-...` と記録、patch がある。続けて `cd ~/src/s5-isolation && git apply --check .tmp/subagents/<patch の名前>` が通る。**`status` の出力と `git apply --check` の結果を貼る**。
+4. **B. 境界**: `pis` の中で、次を貼る。
+
+    ```text
+    先に todo を 1 件作って、その id を使って、guarded_task を agent=worker, isolation="worktree" で 1 回だけ呼んでください。子への依頼: 「bash で echo x > ~/src/s5-isolation/escape.txt を実行し、結果（エラーの文言）を報告してください。」
+    ```
+
+    期待: 子の書き込みが拒否される（`Permission denied` か `Read-only file system`）。`~/src/s5-isolation/escape.txt` が**できていない**こと（`ls` で確認）。**結果を貼る**。
+
+5. **C. `/worktrees`（対話）**: `pis` の中で `/worktrees` を実行する。期待: A と B の記録が `collected`（B は変更なしなら `no changes` で記録が消えている）として一覧に出る。`/worktrees show <A の job id>` で詳細が出る。`/worktrees discard <A の job id>` で**確認ダイアログが出る**ので、まず「いいえ」を選び、何も消えない（`status` で確認）こと、次にもう一度実行して「はい」を選び、worktree・ref・patch・記録が消えることを確かめる。**一覧・詳細・ダイアログの表示（文面と見た目）を貼る**。
+6. **D. 起動時の警告**: `pis` の中で、`guarded_task` を `isolation="worktree"` で呼び、子に `sleep 300` を実行させる。**実行中に `pis` を終了する**（`Ctrl-C` を 2 回）。同じリポジトリで `pis` を起動し直す。期待: 起動時に**取り残しの警告**（件数・job id・`stuck_running`・`/worktrees` の案内）が出る。続けて `/worktrees collect <job id>` を実行し、**確認ダイアログ**（状態と `note`。停止を確認できなかった場合は強い警告）が出ること、「はい」で回収されることを確かめる。**警告とダイアログの表示を貼る**。
+7. **E.（任意）GPU**: `PIS_EXTRA_DEVICES=/dev/dxg` を設定した `pis` で、隔離の worker に `nvidia-smi -L` を実行させ、GPU が見えるか（子の Landlock の書込可に、存在するデバイスが含まれる）を確かめる。
+8. **後片付け**（Fence の外のシェルで）: `sh scripts/agents/s5_isolation.sh clean`。
+
+**確かめる項目の対応**: A = 実モデル・MCP での往復（`rpc` モード、書込可の一覧で足りるか）・回収・結果の行。B = 親への書き込みの拒否（実際の Fence の下）。C = 対話の表示と確認ダイアログ。D = 起動時の警告と、`running` の回収の確認。E = GPU。**うまくいかない場合は、画面の文面をそのまま貼る**（`isolation refused: <コード>` などが手がかりになる）。
 
 ## 他の案件から移管された内容
 
