@@ -38,7 +38,7 @@
 
 ## 検索役を使わない理由
 
-上流の「検索役」は、Web 検索できる軽いモデルのサブエージェントを 2 本並べる設計。このリポジトリの `guarded_task` の子は**読み取り専用で Web 検索できない**ので、既定は、親が `websearch.py`（`search`・`papers`）を順に呼ぶ形に変えた（SKILL.md の「検索役」の節）。検索語の秘匿チェックは `websearch.py` が掛ける。
+上流の「検索役」は、Web 検索できる軽いモデルのサブエージェントを 2 本並べる設計。このリポジトリの `guarded_task` の子（`explore` / `review`）は**読み取り専用だが、`websearch.py` の `search`・`papers`・`fetch` と `chain.py` は確認なしに実行できる**（2026-10-24 に `explore` の子で `websearch.py search` を実行して確かめた。許可は `[pi.skill_scripts.allow]` にあり、役割を問わず効く）。保存の `fetch.py` だけは確認が要るので、子には任せず親が行う。既定は親が `websearch.py` を順に呼ぶ形で、広く浅い検索を子に任せるのは任意（SKILL.md の「検索役」の節）。検索語の秘匿チェックは `websearch.py` が掛ける。
 
 なお、`explore` / `review`（`explorer` 役）の子は、スキルのスクリプトの許可が全役割に効くため、`websearch.py` の `search` / `papers` を**確認なしで呼べる**（2026-10-21 の実測。使い捨ての試験）。専用の検索役 `searcher`（`bash` だけ・`search` / `papers` だけ・軽い階層）を足す案は、imozuru の試用のあとに判断する。
 

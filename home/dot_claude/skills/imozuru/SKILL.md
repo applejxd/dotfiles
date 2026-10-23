@@ -33,7 +33,7 @@ watch/      … 見張りの結果。<日付>.md
 
 ## 検索役（検索のしかた）
 
-0周目と各周の探索は、**検索役**が行う。**既定は、親（全体を進めるエージェント）が自分で、`web-search` スキルの `websearch.py` を使って順に検索する**（Web 検索できる子エージェントが無い環境が多いため。pi の `guarded_task` の子は読み取り専用で、Web 検索できない）。
+0周目と各周の探索は、**検索役**が行う。**既定は、親（全体を進めるエージェント）が自分で、`web-search` スキルの `websearch.py` を使って順に検索する**（Web 検索できる子エージェントが無い環境が多いため）。pi では、`guarded_task` の `explore` / `review` の子も `websearch.py` の `search` / `papers` / `fetch` と `chain.py` を確認なしに実行できる（2026-10-24 に実機で確かめた）。広く浅い検索と原文の読み取りは子に任せてよい。保存の `fetch.py` は確認が要るので、子ではなく親が行う。
 
 ```bash
 python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" -n 8

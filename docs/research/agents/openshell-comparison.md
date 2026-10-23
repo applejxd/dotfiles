@@ -1,5 +1,7 @@
 # OpenShell と現行サンドボックスの比較（境界の位置・資格情報・WSL2・既知の問題）
 
+> **後続の観測**: 記録 O2（2026-10-24）で、O1 で「不明」「取れなかった」とした CVE の修正版・対応エージェント・形式検証の限界を取り直した。ローカルの代替候補との比較は [代替候補の比較](sandbox-alternatives-comparison.md)。
+
 <!-- 現在の総合判断は docs/change/ の候補比較表が正本（CHG-0033）。
      ここは「いつ何を観測したか」を積む場所 -->
 
@@ -88,3 +90,32 @@ OpenShell は、現行の `pis` のサンドボックス（Fence + `ocs` + ハ�
 - 第三者のレビュー: <https://aireiter.com/blog/nvidia-openshell-review-security-runtime>
 
 出典の取得日はすべて 2026-10-23。
+
+## 記録 O2 — 2026-10-24（O1 で取れなかった資料の取り直し）
+
+- **対象**: OpenShell v0.1.5 と、NVD の CVE 2 件。取得日はすべて 2026-10-24
+- **前提**: O1 で「URL が長い・URL の語が保護対象の規則に当たる」ため取れなかった資料を、[CHG-0032](../../change/0032-guard-url-false-positive.md) で判定器と取得スクリプトを直した後に取り直した（修正の実機確認を兼ねる）。原文は `.tmp/research/openshell-vs-pis-sandbox/sources/`（リポジトリには入れない）。下の「ファイル:行」はそこのファイル
+
+### 問い
+
+O1 で「不明」「取れなかった」だった 3 点: (1) CVE の修正済みの版、(2) OpenShell が対応するエージェント（pi の有無）、(3) 形式検証の実際の限界。
+
+### 結果
+
+- **CVE（NVIDIA PSIRT の JSON、ベンダーの一次情報）**: CVE-2026-65083 と CVE-2026-65091 のどちらも `"version": "0 to 0.0.33"`（`nvidia-psirt-cve-2026-65083-json.md:15`、`-65091-json.md:15`）。**JSON に修正済みの版の記述は無い**。「0.0.34 以降」はこの影響範囲からの推測で、第三者の記事がそう述べている（Armis の検索結果の要約。ページ本体は JS で読み込むため本文は取れなかった）。現在の版は v0.1.5 なので、影響範囲の外。同じ PSIRT の 5872 の下に CVE-2026-65081 から連番の複数の JSON がある（`nvidia-product-security-5872.md`）
+- **対応エージェント（ベンダーの製品ページ）**: 「OpenShell supports agent paths such as Claude Code, Codex, GitHub Copilot CLI, Hermes, LangChain Deep Agents, OpenClaw, OpenCode, and others. ... teams can also bring custom agents and custom sandbox images.」（`nvidia-openshell-product-page.md:436`）。**pi の名指しは無い**。「任意のエージェントを持ち込める」はある。公式の Supported Agents ページ（`docs.nvidia.com/openshell/about/supported-agents`）は取得時に HTTP 404
+- **形式検証の限界（ベンダー系の研究記事）**: 「These logic checks do not understand context- for example requesting access to delete a temporary, throw-away repository vs a production repository.」（`openshell-research-formal-methods.md:151`）、「modeling these policies can be complex, and must be kept up to date」（`:143`）
+- **第三者の実行（個人ブログ、`devto-frankchu-prover-29-checks.md`）**: 著者はデバッグビルドの boundary CLI で、手書きの方針 29 組を検査。REST のエスカレーション・L4 の迂回・新しいバイナリは捕えたが、**メタデータアドレス 169.254.169.254 は「境界の内」と判定された**。理由は、`ip.rs` の `HARD_V4`（127.0.0.0/8、169.254.0.0/16 など）を包含モデルから除外しているため（実行時のハードブロックを読んで確かめたが、実際のエージェントでは試していないと著者自身が述べる）。gateway や実際のサンドボックスは使いっていない
+- **第三者の解説（個人ブログ、`devto-slabb-agents-never-hold-keys.md`）**: 「Confinement is not evidence.」「The gateway is the new trusted core.」「It's 0.1.x.」（`:100〜112`）。著者自身の実行の記述は、読んだ範囲では無かった
+
+### 考察
+
+言える: O1 で「不明」だった CVE の影響範囲は、0.0.33 以前。現行の版では「修正済み」と言えるのは、影響範囲の記述からの推測に限る（ベンダーの修正の記述は無い）。pi は名指しされていない。形式検証はネットワークと資格情報の論理の検査で、文脈（どのリポジトリを消すか）は理解しないと、ベンダー系の記事自身が述べている。言えない: OpenShell 自体を動かした結果は、ここに無い。
+
+### 参照
+
+- <https://github.com/NVIDIA/product-security/tree/main/2026/5872>（`CVE-2026-65083.json`、`-65091.json`）
+- <https://www.nvidia.com/en-us/ai/openshell/>
+- <https://nvidia.github.io/OpenShell-Research/dev-notes/posts/2026-09-10-learning-formal-methods-agent-policy-prover/>
+- <https://dev.to/frankchu/i-built-openshells-z3-policy-prover-and-ran-29-checks-it-caught-everything-except-the-metadata-2ea0>
+- <https://dev.to/slabb/agents-should-never-hold-your-api-keys-nvidia-just-open-sourced-the-runtime-that-enforces-it-3jm4>
