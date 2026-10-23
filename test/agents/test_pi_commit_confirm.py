@@ -344,18 +344,18 @@ def test_the_tui_shows_the_structure_and_a_countdown_then_saves_on_timeout(env):
         return screen
 
     try:
-        # pi は起動時に fd をダウンロードすることがあり、連続実行の負荷では長引く。終わるまで入力を送らない
-        wait_for(
-            lambda s: (
-                s.strip() != ""
-                and "Startup is still in progress" not in s
-                and "Downloading" not in s
-            ),
-            90,
-        )
-        time.sleep(1)
+        # pi は起動時に fd をダウンロードすることがあり、連続実行の負荷では長引く。入力欄 (フッター) が出てから送る。
+        # 「Startup is still in progress」などの通知は消えずに残るので、待つ条件にしない
+        wait_for(lambda s: "/100k" in s, 90)
+        time.sleep(2)
         subprocess.run(["tmux", "send-keys", "-t", session, "go", "Enter"], check=True)
-        screen = wait_for(lambda s: "メッセージ:" in s and "s)" in s, 20)
+        screen = wait_for(lambda s: "メッセージ:" in s and "s)" in s, 8)
+        for _ in range(4):
+            if "メッセージ:" in screen:
+                break
+            # 起動直後に送った Enter が取りこぼされていることがある。入力欄に `go` が残っていれば Enter をやり直す
+            subprocess.run(["tmux", "send-keys", "-t", session, "Enter"], check=True)
+            screen = wait_for(lambda s: "メッセージ:" in s and "s)" in s, 8)
         assert (
             "リポジトリ: (origin なし)" in screen and "対象:" in screen and "メッセージ:" in screen
         ), screen
