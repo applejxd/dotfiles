@@ -4,9 +4,13 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 `home/` 配下が chezmoi の source state で、それ以外は導入・生成・検証用。
 構成やセットアップの詳細は [docs/index.md](docs/index.md) にある。
 
+指示の分担: 全リポジトリ共通の作法（応答の言語・判断の仰ぎ方・検証の姿勢・委譲・設計の姿勢）は
+グローバルの指示（`home/.chezmoitemplates/agent-instructions.md`）が正本。
+このファイルには、**このリポジトリで何を実行し何を守るか**だけを書く。
+
 ## 検証
 
-変更したら該当するものを実行し、出力を根拠として示す。
+変更したら該当するものを実行する。
 
 | 対象 | コマンド |
 | --- | --- |
@@ -86,4 +90,4 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   `.chezmoitemplates/` の共有テンプレートへ置き、`apply` のたびに評価させる。
   `chezmoi.toml` の `[data]` は `init` 時にしか更新されない
   （[CHG-0008](docs/change/closed/0008-raspi-branching.md)）
-- ユーザーへの説明とドキュメントは日本語で書く
+- ドキュメントは日本語で書く
