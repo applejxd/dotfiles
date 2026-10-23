@@ -502,7 +502,8 @@ def full_commands() -> list[list[str]]:
     return [
         pytest_command(["test/"]),
         ["uv", "run", "pre-commit", "run", "--all-files"],
-        list(LINT_TEMPLATES),
+        # commit の stage には lint-templates-local と raspi-regression-local が無い (pre-push のみ)
+        ["uv", "run", "pre-commit", "run", "--all-files", "--hook-stage", "pre-push"],
         list(LINT_DOCS),
     ]
 

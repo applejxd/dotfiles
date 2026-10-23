@@ -20,11 +20,13 @@ chezmoi apply
 
 # mise が uv を提供し、uv が pyproject.toml に従って Python 3.13 以上を選ぶ
 uv sync                    # 依存関係のインストール
-uv run pre-commit install  # pre-commit フックの設定
+uv run pre-commit install  # commit / push の hook の設定 (default_install_hook_types で両方入る)
 ```
 
-版は `mise.toml` と `uv.lock` で固定している。以後は `git commit` のたびに
-pre-commit が走る。
+版は `mise.toml` と `uv.lock` で固定している。以後は `git commit` のたびに速い hook が、
+`git push` のたびに重い hook と検証の印の警告が走る
+([hook の stage の分け方](#hook-の-stage-の分け方))。
+すでに install 済みの環境では `uv run pre-commit install` をもう一度実行して pre-push を入れる。
 
 Windows native と WSL で同じ worktree を共有する場合、mise が
 `UV_PROJECT_ENVIRONMENT` を切り替え、Windows は `.venv-windows`、
@@ -81,8 +83,30 @@ python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
 - どの規則にも当たらない変更
 - 横断的に効く設定（`common.toml.tmpl`、`scripts/agents/generate.py`、`pyproject.toml` など）
 
-`pre-push` hook に全件は入れない。待ち時間が `--no-verify` を誘い、`AGENTS.md` の
-「長時間実行スクリプトは追加しない」とも合わない。選択実行に限れば入れてよい。
+`pre-push` hook に**全件検証は入れない**。待ち時間が `--no-verify` を誘い、`AGENTS.md` の
+「長時間実行スクリプトは追加しない」とも合わない。入れるのは下記の速い hook と印の警告だけ。
+
+#### hook の stage の分け方
+
+速いものは commit、重いものと検証の印の警告は push に置く。`.pre-commit-config.yaml` は
+`default_stages: [pre-commit]` を既定にし、push に回す hook だけ `stages: [pre-push]` を付ける
+(`stages` を省くと全 stage で走り、push でも二重に走るため)。
+`default_install_hook_types` で `pre-commit install` だけで両方の hook が入る。
+
+| stage | hook | 所要時間 (2026-10-23 実測) |
+| --- | --- | --- |
+| commit | gitleaks・YAML・ruff・frontmatter・`common-toml-local`・docs の索引・`verify-stamp`・空白など | 各 0.5 秒以下 |
+| commit | Markdown lint | 1.7 秒 |
+| push | `lint-templates-local` (テンプレートの描画 lint) | 9.9 秒 |
+| push | `raspi-regression-local` (Raspberry Pi の回帰テスト) | 3.0 秒 |
+| push | `verify-stamp-push` (印の警告) | 0.5 秒以下 |
+
+- 理由: commit のたびに 10 秒以上待たせると `--no-verify` を誘う。push は回数が少なく、
+  まとめて検査する場所に向く。利用者の判断 (2026-10-23)
+- 選択実行 (`verify.py --changed`) は `pre-commit run --files` を使うため commit の stage だけを走らせる。
+  push 側の `lint-templates-local` は `LINT_TEMPLATES` として別に走り、回帰テストは
+  `test_raspi_detection` の選択で走る。全件 (`--all`) は `--hook-stage pre-push` の呼び出しで push の hook も走らせる
+- 構造は `test/test_verify.py` の `test_pre_commit_config_splits_stages` が守る
 
 #### 部分コミットで pre-commit が落ちるとき
 
@@ -98,7 +122,11 @@ python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
 `verify.py --all`（`--changed` が全件に落ちた場合を含む）が成功すると、そのときの作業ツリーの内容
 （HEAD + 変更 + 未追跡。`.gitignore` は効く）を印として残す。コミット時に `verify-stamp` hook
 （`scripts/verify_stamp.py check`）がステージ済みの内容と照合し、一致しなければ**警告を出すだけで
-コミットは通す**（終了コードは常に 0）。
+コミットは通す**（終了コードは常に 0）。push 時には `verify-stamp-push` hook
+（`check-push`）が、pre-commit が渡す `PRE_COMMIT_FROM_REF` と `PRE_COMMIT_TO_REF`（push する範囲）の
+変更 (`git diff --raw` の追加・変更。削除は除く) を同じ仕組みで照合し、「push するコミット」として警告する
+（常に 0）。FROM が無い・全ゼロ（新しいブランチ）のときは `origin/main` との merge-base から見る。
+それも無ければ何も言わない。
 
 - 残すもの: `{version, head, created, entries: {パス: [mode, blob]}}` の JSON。実 index・refs・作業ツリーは
   変えず、一時 index に `add -A` して作る
@@ -113,7 +141,7 @@ python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
 - 記録の見方: `verify-stamp.log` は 1 行 1 件の JSONL（`{"at", "result": "no-stamp" | "mismatch",
   "count"}`）。`wc -l` で警告の回数、`result` で印が無かったのか内容が違ったのかが分かる
 - 強制に進める条件: 記録で「全件検証を回し忘れたコミット」が頻発したとき。そのときは hook を
-  失敗させる（終了コード 1）形に変えるか、`pre-push` で見るかを案件で決める
+  失敗させる（終了コード 1）形に変える案件で決める（push 側の警告は実装済み）
 
 ### テンプレートの検査
 

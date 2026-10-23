@@ -1,4 +1,8 @@
 ---
+# 速い hook は commit、重いものと印の警告は push。see docs/spec/development.md#hook-の-stage-の分け方
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
 repos:
   # 公式の language: golang はフック環境を作るときに Go でソースビルドし、
   # Raspberry Pi をメモリ枯渇で固めた。mise のプレビルドを使う
@@ -63,6 +67,7 @@ repos:
         language: system
         pass_filenames: false
         files: (\.tmpl|^scripts/lint_templates\.py)$
+        stages: [pre-push]
 
       # 実機で踏んだ 4 件の回帰テスト。lint_templates.py では捕まらない範囲を
       # 埋める (`.chezmoi.toml.tmpl` は lint の除外対象、`is-raspi` は拡張子が
@@ -77,6 +82,7 @@ repos:
         pass_filenames: false
         files: >-
           (^home/\.chezmoitemplates/is-raspi$|^home/\.chezmoi(ignore|\.toml)\.tmpl$|^home/dot_config/mise/config\.toml\.tmpl$|^test/test_raspi_detection\.py$)
+        stages: [pre-push]
 
       # 索引と実ファイルの整合。索引が腐ると docs 全体が腐るので機械に見せる。
       # 検査するのは整合だけで、記述の妥当性は判定しない。
@@ -96,6 +102,15 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # push する範囲の内容を印と照合する。警告のみ (常に 0)
+      - id: verify-stamp-push
+        name: Warn when pushed content lacks a verify:all stamp
+        entry: python3 scripts/verify_stamp.py check-push
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -106,8 +121,10 @@ repos:
         exclude: ^home/dot_codex/modify_config\.toml$
       - id: end-of-file-fixer
         name: Fix end of files
+        stages: [pre-commit]
         # 模範解答のパッチは空の文脈行が要る
         exclude: ^scripts/model-eval/worker/solutions/.*\.patch$
       - id: trailing-whitespace
         name: Trim trailing whitespace
+        stages: [pre-commit]
         exclude: ^scripts/model-eval/worker/solutions/.*\.patch$

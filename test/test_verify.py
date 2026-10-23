@@ -241,8 +241,43 @@ def test_full_commands_shape():
     assert cmds[0][:3] == ["uv", "run", "--with"]
     assert "test/" in cmds[0]
     assert ["uv", "run", "pre-commit", "run", "--all-files"] in cmds
-    assert verify.LINT_TEMPLATES in cmds
+    # pre-push の hook (lint-templates-local など) も全件の流れで走る
+    assert [
+        "uv",
+        "run",
+        "pre-commit",
+        "run",
+        "--all-files",
+        "--hook-stage",
+        "pre-push",
+    ] in cmds
     assert verify.LINT_DOCS in cmds
+
+
+def _hook_stages() -> tuple[dict, dict[str, list[str]]]:
+    """.pre-commit-config.yaml を読み、(設定全体, hook id → 実効の stage) を返す。"""
+    yaml = pytest.importorskip("yaml")
+    config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    default = config["default_stages"]
+    stages = {
+        hook["id"]: hook.get("stages", default)
+        for repo in config["repos"]
+        for hook in repo["hooks"]
+    }
+    return config, stages
+
+
+def test_pre_commit_config_splits_stages():
+    """速い hook は commit、重いものと印の警告 (push 用) は push。"""
+    config, stages = _hook_stages()
+    assert set(config["default_install_hook_types"]) == {"pre-commit", "pre-push"}
+    assert config["default_stages"] == ["pre-commit"]
+    heavy = {"lint-templates-local", "raspi-regression-local", "verify-stamp-push"}
+    for hook_id in heavy:
+        assert stages[hook_id] == ["pre-push"], hook_id
+    for hook_id in stages.keys() - heavy:
+        assert "pre-push" not in stages[hook_id], hook_id
+    assert stages["verify-stamp"] == ["pre-commit"]
 
 
 def test_every_test_file_is_selectable():

@@ -323,7 +323,8 @@ OVERALL STATUS: FAILED
   `windows.yml`（パス絞りの push と手動。
   `windows-2025` で `test/agents/` と `test/test_windows_assets.py`、`timeout-minutes: 30`）と
   `e2e.yml`（毎月 2 日の schedule と手動。cold start）だけ
-- push 時の hook は無い（`pre-push` は sample のみ）
+- push 時の hook は `pre-push` stage に、テンプレートの描画 lint・Raspberry Pi の回帰テスト・検証の印の警告がある
+  （全件検証は入れない。[hook の stage の分け方](development.md#hook-の-stage-の分け方)）
 - リポジトリは public
 
 未着手の候補: `pre-commit` や `lint_templates` を CI で回す（mise を入れる必要がある）。

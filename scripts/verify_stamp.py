@@ -2,7 +2,7 @@
 """コミット前の検証の印 (stamp)。verify.py --all の成功時に作業ツリーの内容を残し、
 コミット時にステージ済みの内容と照合して、一致しなければ警告だけ出す (常に終了コード 0)。
 
-    python3 scripts/verify_stamp.py write | check
+    python3 scripts/verify_stamp.py write | check | check-push
 
 see docs/spec/development.md#コミット前の検証の印
 """
@@ -100,19 +100,8 @@ def write_stamp(repo: Path) -> Path:
     return dest
 
 
-def staged(repo: Path) -> Entries:
-    """ステージ済みの追加・変更の path → [新しい mode, 新しい blob] (削除は含めない)。"""
-    # GIT_INDEX_FILE は落とさない (pre-commit は部分コミットで一時 index を渡す)
-    raw = _git(
-        Path(repo),
-        "diff",
-        "--cached",
-        "--no-renames",
-        "--no-abbrev",
-        "--raw",
-        "-z",
-        env=dict(os.environ),
-    ).stdout
+def _parse_raw(raw: bytes) -> Entries:
+    """`git diff --raw -z` の出力 → 追加・変更の path → [新しい mode, 新しい blob] (削除は含めない)。"""
     tokens = raw.decode("utf-8", "surrogateescape").split("\0")
     entries: Entries = {}
     i = 0
@@ -126,6 +115,46 @@ def staged(repo: Path) -> Entries:
             entries[tokens[i + 1]] = [new_mode, new_blob]
         i += 2
     return entries
+
+
+def staged(repo: Path) -> Entries:
+    """ステージ済みの追加・変更の path → [新しい mode, 新しい blob] (削除は含めない)。"""
+    # GIT_INDEX_FILE は落とさない (pre-commit は部分コミットで一時 index を渡す)
+    raw = _git(
+        Path(repo),
+        "diff",
+        "--cached",
+        "--no-renames",
+        "--no-abbrev",
+        "--raw",
+        "-z",
+        env=dict(os.environ),
+    ).stdout
+    return _parse_raw(raw)
+
+
+def _is_commit(repo: Path, ref: str) -> bool:
+    proc = _git(repo, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}", check=False)
+    return proc.returncode == 0
+
+
+def pushed(repo: Path, from_ref: str | None, to_ref: str | None) -> Entries | None:
+    """push する範囲の追加・変更の path → [mode, blob]。範囲が決められなければ None。
+
+    from_ref が無い・全ゼロ・存在しない (新しいブランチ) ときは origin/main との merge-base から。
+    to_ref が無い・全ゼロ (ブランチの削除) ときは None。
+    """
+    repo = Path(repo)
+    if not to_ref or set(to_ref) == {"0"} or not _is_commit(repo, to_ref):
+        return None
+    base = from_ref if from_ref and set(from_ref) != {"0"} and _is_commit(repo, from_ref) else None
+    if base is None:
+        proc = _git(repo, "merge-base", "origin/main", to_ref, check=False)
+        base = proc.stdout.decode().strip() if proc.returncode == 0 else None
+    if not base:
+        return None
+    raw = _git(repo, "diff", "--raw", "--no-renames", "--no-abbrev", "-z", base, to_ref).stdout
+    return _parse_raw(raw)
 
 
 def _load_stamp(repo: Path) -> Entries | None:
@@ -166,10 +195,14 @@ def _log(repo: Path, result: str, count: int) -> None:
             fh.write(line + "\n")
 
 
-def check(repo: Path, needs_full: Callable[[Sequence[str]], bool] | None = None) -> int:
-    """警告のみ。常に 0。needs_full は不一致パス → 全件検証が要るか (省略時は plan())。"""
-    repo = Path(repo)
-    now = staged(repo)
+def _compare(
+    repo: Path,
+    now: Entries,
+    subject: str,
+    deadline: str,
+    needs_full: Callable[[Sequence[str]], bool] | None,
+) -> int:
+    """now を印と照合する。警告のみで常に 0。subject は警告文の主語 (「このコミット」など)。"""
     if not now:
         return 0
     stamp = _load_stamp(repo)
@@ -185,18 +218,36 @@ def check(repo: Path, needs_full: Callable[[Sequence[str]], bool] | None = None)
     rest = len(mismatched) - SHOWN_PATHS
     where = "印がありません" if stamp is None else shown + (f" ほか {rest} 件" if rest > 0 else "")
     sys.stderr.write(
-        "警告: このコミットの内容は、全件検証 (verify.py --all) を通した内容と"
+        f"警告: {subject}の内容は、全件検証 (verify.py --all) を通した内容と"
         f"一致しません: {where}。急ぐときはこのまま進めてよいが、"
-        "コミット前に 1 回 verify:all を回す約束です (docs/spec/development.md)\n"
+        f"{deadline}に 1 回 verify:all を回す約束です (docs/spec/development.md)\n"
     )
     _log(repo, result, len(mismatched))
     return 0
 
 
+def check(repo: Path, needs_full: Callable[[Sequence[str]], bool] | None = None) -> int:
+    """警告のみ。常に 0。needs_full は不一致パス → 全件検証が要るか (省略時は plan())。"""
+    repo = Path(repo)
+    return _compare(repo, staged(repo), "このコミット", "コミット前", needs_full)
+
+
+def check_push(
+    repo: Path,
+    from_ref: str | None,
+    to_ref: str | None,
+    needs_full: Callable[[Sequence[str]], bool] | None = None,
+) -> int:
+    """push する範囲の内容を照合する。警告のみ。常に 0。範囲が決められなければ何も言わない。"""
+    repo = Path(repo)
+    now = pushed(repo, from_ref, to_ref)
+    return _compare(repo, now or {}, "push するコミット", "push 前", needs_full)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 1 or args[0] not in {"write", "check"}:
-        sys.stderr.write("使い方: verify_stamp.py write | check\n")
+    if len(args) != 1 or args[0] not in {"write", "check", "check-push"}:
+        sys.stderr.write("使い方: verify_stamp.py write | check | check-push\n")
         return 2
     top = Path(
         subprocess.run(
@@ -212,6 +263,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_stamp(top)
         return 0
     try:
+        if args[0] == "check-push":
+            return check_push(
+                top,
+                os.environ.get("PRE_COMMIT_FROM_REF"),
+                os.environ.get("PRE_COMMIT_TO_REF"),
+            )
         return check(top)
     except Exception as exc:
         sys.stderr.write(f"verify-stamp: 照合できませんでした (無視します): {exc}\n")

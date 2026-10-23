@@ -229,3 +229,117 @@ def test_unknown_path_warns_via_plan(repo, capsys):
     code = stamp.check(repo)
     assert code == 0
     assert "警告" in capsys.readouterr().err
+
+
+def head(repo: Path) -> str:
+    return git(repo, "rev-parse", "HEAD").strip()
+
+
+def commit_all(repo: Path, message: str = "change") -> str:
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", message)
+    return head(repo)
+
+
+def run_check_push(repo: Path, capsys, from_ref, to_ref) -> tuple[int, str]:
+    capsys.readouterr()
+    code = stamp.check_push(repo, from_ref, to_ref, always_full)
+    return code, capsys.readouterr().err
+
+
+def test_push_matching_stamp_is_silent(repo, capsys):
+    base = head(repo)
+    (repo / "a.txt").write_text("two\n")
+    stamp.write_stamp(repo)
+    tip = commit_all(repo)
+    code, err = run_check_push(repo, capsys, base, tip)
+    assert code == 0
+    assert err == ""
+
+
+def test_push_mismatch_warns_with_push_wording(repo, capsys):
+    base = head(repo)
+    (repo / "a.txt").write_text("two\n")
+    stamp.write_stamp(repo)
+    (repo / "a.txt").write_text("three\n")
+    tip = commit_all(repo)
+    code, err = run_check_push(repo, capsys, base, tip)
+    assert code == 0
+    assert "警告" in err
+    assert "push するコミット" in err
+    assert "push 前" in err
+    assert "a.txt" in err
+    assert "このコミット" not in err
+    rec = json.loads((repo / ".git" / "verify-stamp.log").read_text().splitlines()[-1])
+    assert rec["result"] == "mismatch"
+
+
+def test_push_without_stamp_warns(repo, capsys):
+    base = head(repo)
+    (repo / "a.txt").write_text("two\n")
+    tip = commit_all(repo)
+    code, err = run_check_push(repo, capsys, base, tip)
+    assert code == 0
+    assert "印がありません" in err
+
+
+def test_push_checks_only_the_pushed_range(repo, capsys):
+    (repo / "a.txt").write_text("two\n")
+    stamp.write_stamp(repo)
+    (repo / "b.txt").write_text("two\n")
+    git(repo, "add", "b.txt")
+    git(repo, "commit", "-q", "-m", "already pushed")
+    already = head(repo)
+    tip = commit_all(repo)
+    code, err = run_check_push(repo, capsys, already, tip)
+    assert code == 0
+    assert err == ""
+
+
+def test_push_without_from_ref_is_silent(repo, capsys):
+    (repo / "a.txt").write_text("two\n")
+    tip = commit_all(repo)
+    for from_ref in (None, "", "0" * 40):
+        code, err = run_check_push(repo, capsys, from_ref, tip)
+        assert code == 0
+        assert err == ""
+
+
+def test_push_new_branch_uses_merge_base_with_origin_main(repo, capsys):
+    git(repo, "update-ref", "refs/remotes/origin/main", head(repo))
+    stamp.write_stamp(repo)
+    (repo / "a.txt").write_text("two\n")
+    tip = commit_all(repo)
+    code, err = run_check_push(repo, capsys, "0" * 40, tip)
+    assert code == 0
+    assert "a.txt" in err
+
+
+def test_push_deleted_branch_and_deleted_files_are_silent(repo, capsys):
+    base = head(repo)
+    code, err = run_check_push(repo, capsys, base, "0" * 40)
+    assert (code, err) == (0, "")
+    git(repo, "rm", "-q", "b.txt")
+    tip = commit_all(repo)
+    assert stamp.pushed(repo, base, tip) == {}
+    code, err = run_check_push(repo, capsys, base, tip)
+    assert (code, err) == (0, "")
+
+
+def test_check_push_command_always_returns_zero(repo, capsys, monkeypatch):
+    base = head(repo)
+    (repo / "a.txt").write_text("two\n")
+    tip = commit_all(repo)
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv("PRE_COMMIT_FROM_REF", base)
+    monkeypatch.setenv("PRE_COMMIT_TO_REF", tip)
+    capsys.readouterr()
+    assert stamp.main(["check-push"]) == 0
+    assert "警告" in capsys.readouterr().err
+    monkeypatch.delenv("PRE_COMMIT_FROM_REF")
+    monkeypatch.delenv("PRE_COMMIT_TO_REF")
+    assert stamp.main(["check-push"]) == 0
+    assert capsys.readouterr().err == ""
+    monkeypatch.setenv("PRE_COMMIT_TO_REF", "no-such-ref")
+    assert stamp.main(["check-push"]) == 0
+    assert capsys.readouterr().err == ""

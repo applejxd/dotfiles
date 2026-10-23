@@ -35,6 +35,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 展開先が空に見えて全て「new file」になる。sandbox 外のシェルで実行する。
 
 初回のみ `mise install && uv sync && uv run pre-commit install` が要る。
+既に install 済みの環境では `uv run pre-commit install` をもう一度実行して pre-push を入れる。
 
 ### Windows 実機での検証
 
