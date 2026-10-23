@@ -95,6 +95,14 @@ _FALLBACK = [
     ),
 ]
 _LONG_TOKEN = re.compile(r"[A-Za-z0-9+/_=-]{40,}")
+_SLUG_PART = re.compile(r"[a-z]{1,20}|\d{1,8}")
+_URL_IN_TEXT = re.compile(r"https?://\S+", re.IGNORECASE)
+
+
+def _is_slug(token: str) -> bool:
+    """web-search の `is_slug` と同じ (英小文字の語と数字を `-` `_` `/` でつないだ 4 つ以上の列)。URL の中だけで使う。"""
+    parts = [p for p in re.split(r"[-_/]", token) if p]
+    return len(parts) >= 4 and all(_SLUG_PART.fullmatch(p) for p in parts)
 
 
 def _websearch_check():
@@ -120,7 +128,13 @@ def secret_reason(text: str) -> str | None:
     for label, pattern in _FALLBACK:
         if pattern.search(text):
             return label
-    for token in _LONG_TOKEN.findall(text):
+    url_spans = [m.span() for m in _URL_IN_TEXT.finditer(text)]
+    for found in _LONG_TOKEN.finditer(text):
+        token = found.group()
+        if any(s <= found.start() < e for s, e in url_spans):
+            token = "/".join(seg for seg in token.split("/") if not _is_slug(seg))
+        if len(token) < 40:
+            continue
         if re.search(r"\d", token) and re.search(r"[A-Za-z]", token):
             return "長いトークンらしき文字列"
     return None

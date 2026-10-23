@@ -89,6 +89,9 @@ export function isSensitivePath(ctx: Ctx, text: string, heuristic = true): strin
 	return null;
 }
 
+/** 引数中の http(s) URL はローカルのパスではない (sensitive.py の `_URL_RE` と同じ)。直前が `/` `.` `~` や語の文字のものや `file://` は除かない。 */
+const URL_RE = pyRegex(`(?<![\\w/.~-])https?://(?:\\[[0-9a-f:.]*\\])?[^\\s'"\`)>,\\[\\]]*`, "ig");
+
 /** 空白を含む引数 (`python3 -c "..."` のコード) は断片も見る。 */
 const pieces = (value: string): string[] => (Array.from(value).some((c) => isSpace(c)) ? split(value) : [value]);
 
@@ -102,7 +105,7 @@ export function sensitivePathInCommand(ctx: Ctx, command: Command, heuristic = t
 		if (r.target !== null && r.op !== "<<" && r.op !== "<<-") candidates.push(r.target.value);
 	}
 	for (const candidate of candidates) {
-		for (const piece of pieces(candidate)) {
+		for (const piece of pieces(candidate.replace(URL_RE, " "))) {
 			const reason = isSensitiveToken(ctx, piece, heuristic);
 			if (reason) return reason;
 		}

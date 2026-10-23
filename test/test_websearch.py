@@ -24,12 +24,29 @@ _spec.loader.exec_module(ws)
 
 
 def resp(status=200, body=None, headers=None):
-    data = body if isinstance(body, bytes) else json.dumps(body if body is not None else {}).encode()
+    data = (
+        body if isinstance(body, bytes) else json.dumps(body if body is not None else {}).encode()
+    )
     return status, {k.lower(): v for k, v in (headers or {}).items()}, data
 
 
-BRAVE_OK = {"web": {"results": [{"title": "Brave A", "url": "https://a.example/x?utm_source=z", "description": "snip A"}]}}
-EXA_OK = {"results": [{"title": "Exa B", "url": "https://b.example/", "highlights": ["hi B"], "publishedDate": "2026-01-01"}]}
+BRAVE_OK = {
+    "web": {
+        "results": [
+            {"title": "Brave A", "url": "https://a.example/x?utm_source=z", "description": "snip A"}
+        ]
+    }
+}
+EXA_OK = {
+    "results": [
+        {
+            "title": "Exa B",
+            "url": "https://b.example/",
+            "highlights": ["hi B"],
+            "publishedDate": "2026-01-01",
+        }
+    ]
+}
 TAVILY_OK = {"results": [{"title": "Tavily C", "url": "https://c.example/", "content": "body C"}]}
 DDG_HTML = (
     '<div class="result"><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fd.example%2Fp&rut=x">DDG D</a>'
@@ -68,7 +85,9 @@ def state(tmp_path, now=lambda: 1000.0):
 
 
 def run(http, tmp_path, keys=KEYS, **kw):
-    return ws.run_search("query", 5, http=http, key_for=keys.get, state=state(tmp_path), sleep=lambda s: None, **kw)
+    return ws.run_search(
+        "query", 5, http=http, key_for=keys.get, state=state(tmp_path), sleep=lambda s: None, **kw
+    )
 
 
 # ─── 鎖 ─────────────────────────────────────────────────────────────
@@ -88,7 +107,9 @@ def test_first_provider_answers_and_urls_are_normalized(tmp_path):
     [(429, {"Retry-After": "30"}), (500, {}), (503, {}), (401, {})],
 )
 def test_failures_fall_back_to_the_next_provider(tmp_path, status, headers):
-    http = FakeHttp({"api.search.brave.com": [resp(status, {}, headers)], "api.exa.ai": [resp(body=EXA_OK)]})
+    http = FakeHttp(
+        {"api.search.brave.com": [resp(status, {}, headers)], "api.exa.ai": [resp(body=EXA_OK)]}
+    )
     out = run(http, tmp_path)
 
     assert out.provider == "exa"
@@ -97,7 +118,10 @@ def test_failures_fall_back_to_the_next_provider(tmp_path, status, headers):
 
 def test_network_error_and_timeout_fall_back(tmp_path):
     http = FakeHttp(
-        {"api.search.brave.com": [ws.ProviderError("network", "TimeoutError")], "api.exa.ai": [resp(body=EXA_OK)]}
+        {
+            "api.search.brave.com": [ws.ProviderError("network", "TimeoutError")],
+            "api.exa.ai": [resp(body=EXA_OK)],
+        }
     )
     assert run(http, tmp_path).provider == "exa"
 
@@ -122,10 +146,24 @@ def test_quota_exhaustion_disables_the_provider_for_a_day(tmp_path):
     clock = [1000.0]
     plan = {"api.search.brave.com": [resp(402)], "api.exa.ai": [resp(body=EXA_OK)]}
     http = FakeHttp(plan)
-    ws.run_search("q", 5, http=http, key_for=KEYS.get, state=ws.State(tmp_path, lambda: clock[0]), sleep=lambda s: None)
+    ws.run_search(
+        "q",
+        5,
+        http=http,
+        key_for=KEYS.get,
+        state=ws.State(tmp_path, lambda: clock[0]),
+        sleep=lambda s: None,
+    )
     first_calls = http.hosts.count("api.search.brave.com")
     clock[0] += 3600
-    out = ws.run_search("q", 5, http=http, key_for=KEYS.get, state=ws.State(tmp_path, lambda: clock[0]), sleep=lambda s: None)
+    out = ws.run_search(
+        "q",
+        5,
+        http=http,
+        key_for=KEYS.get,
+        state=ws.State(tmp_path, lambda: clock[0]),
+        sleep=lambda s: None,
+    )
 
     assert out.provider == "exa" and ("brave", "disabled") in out.attempts
     assert http.hosts.count("api.search.brave.com") == first_calls  # 休止中は呼ばない
@@ -135,8 +173,12 @@ def test_quota_exhaustion_disables_the_provider_for_a_day(tmp_path):
 
 def test_short_retry_after_is_honored_once(tmp_path):
     slept = []
-    http = FakeHttp({"api.search.brave.com": [resp(429, {}, {"Retry-After": "1"}), resp(body=BRAVE_OK)]})
-    out = ws.run_search("q", 5, http=http, key_for=KEYS.get, state=state(tmp_path), sleep=slept.append)
+    http = FakeHttp(
+        {"api.search.brave.com": [resp(429, {}, {"Retry-After": "1"}), resp(body=BRAVE_OK)]}
+    )
+    out = ws.run_search(
+        "q", 5, http=http, key_for=KEYS.get, state=state(tmp_path), sleep=slept.append
+    )
 
     assert out.provider == "brave" and slept == [1.0]
 
@@ -164,7 +206,12 @@ def test_empty_result_moves_on_once_then_stops(tmp_path):
 
 
 def test_all_providers_failing_returns_no_provider(tmp_path):
-    http = FakeHttp({h: [resp(500)] for h in ("api.search.brave.com", "api.exa.ai", "api.tavily.com", "html.duckduckgo.com")})
+    http = FakeHttp(
+        {
+            h: [resp(500)]
+            for h in ("api.search.brave.com", "api.exa.ai", "api.tavily.com", "html.duckduckgo.com")
+        }
+    )
     out = run(http, tmp_path)
 
     assert out.provider is None and out.results == []
@@ -202,7 +249,9 @@ def test_keys_come_from_env_then_file_then_bw(tmp_path, monkeypatch):
     assert ws.get_key("exa", env, keys_file, fake_run) == "file-exa"
     assert ws.get_key("tavily", env, keys_file, fake_run) == "from-bw"
     assert calls == [["/bin/bw", "get", "password", "websearch-tavily", "--nointeraction"]]
-    assert ws.get_key("tavily", {}, keys_file, fake_run) is None  # BW_SESSION が無ければ bw を呼ばない
+    assert (
+        ws.get_key("tavily", {}, keys_file, fake_run) is None
+    )  # BW_SESSION が無ければ bw を呼ばない
     assert len(calls) == 1
 
 
@@ -212,7 +261,10 @@ def test_bw_failure_returns_none_without_leaking(tmp_path, monkeypatch):
         stdout = "secret-looking-output"
 
     monkeypatch.setattr(ws.shutil, "which", lambda name: "/bin/bw")
-    assert ws.get_key("brave", {"BW_SESSION": "s"}, tmp_path / "none.json", lambda *a, **k: P()) is None
+    assert (
+        ws.get_key("brave", {"BW_SESSION": "s"}, tmp_path / "none.json", lambda *a, **k: P())
+        is None
+    )
 
 
 # ─── 秘匿チェック ───────────────────────────────────────────────────
@@ -236,15 +288,53 @@ def test_sensitive_queries_are_blocked(query):
 
 @pytest.mark.parametrize(
     "query",
-    ["Windows 11 AllowNewsAndInterests policy", "python asyncio TaskGroup cancel behavior", "ssh-keygen -t ed25519 options"],
+    [
+        "Windows 11 AllowNewsAndInterests policy",
+        "python asyncio TaskGroup cancel behavior",
+        "ssh-keygen -t ed25519 options",
+    ],
 )
 def test_ordinary_queries_pass(query):
     assert ws.check_query(query) is None
 
 
+# 記事の題名をそのまま使った長い URL (英小文字の語と数字を `-` でつないだもの) はトークンではない (CHG-0032)
+SLUG_URLS = [
+    "https://nvidia.github.io/OpenShell-Research/articles/2026-09-10-learning-formal-methods-agent-policy",
+    "https://example.com/blog/egress-proxy-api-keys-for-agent-sandboxes-in-2026-complete-guide",
+]
+
+
+@pytest.mark.parametrize("url", SLUG_URLS)
+def test_hyphenated_slug_urls_pass(url):
+    assert ws.check_query(url) is None
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "https://example.com/x/" + "Ab1" * 15,  # 大文字と数字の混ざったトークン
+        "https://example.com/?k=" + "a1b2c3d4" * 6,  # `=` を含む値
+        "https://example.com/" + "de1dbeef" * 6,  # 16 進の長い値 (ハイフンなし)
+        "https://example.com/a-" + "Ab1-" * 12,  # ハイフンでつないだが、各部分が大文字混じり
+        "https://example.com/" + "a" * 25 + "-" + "b" * 25 + "-1-2",  # 部分が 20 文字を超える
+        # URL の外ではスラッグを除かない (語をつないだパスフレーズを通さない)
+        "correct-horse-battery-staple-correct-horse-battery-staple-9",
+    ],
+)
+def test_long_tokens_in_urls_are_still_blocked(query):
+    assert ws.check_query(query) == "長いトークンらしき文字列"
+
+
 def test_blocked_query_never_reaches_a_provider(tmp_path, capsys):
     http = FakeHttp({})
-    deps = {"http": http, "key_for": KEYS.get, "cache_dir": tmp_path, "now": lambda: 1.0, "sleep": lambda s: None}
+    deps = {
+        "http": http,
+        "key_for": KEYS.get,
+        "cache_dir": tmp_path,
+        "now": lambda: 1.0,
+        "sleep": lambda s: None,
+    }
     code = ws.main(["search", "password = hunter2hunter2"], deps)
 
     assert code == 2 and http.calls == [] and "止めた" in capsys.readouterr().err
@@ -255,7 +345,13 @@ def test_blocked_query_never_reaches_a_provider(tmp_path, capsys):
 
 def test_cache_avoids_a_second_call_and_is_marked(tmp_path, capsys):
     http = FakeHttp({"api.search.brave.com": [resp(body=BRAVE_OK)]})
-    deps = {"http": http, "key_for": KEYS.get, "cache_dir": tmp_path, "now": lambda: 1000.0, "sleep": lambda s: None}
+    deps = {
+        "http": http,
+        "key_for": KEYS.get,
+        "cache_dir": tmp_path,
+        "now": lambda: 1000.0,
+        "sleep": lambda s: None,
+    }
 
     assert ws.main(["search", "hello world"], deps) == 0
     first = capsys.readouterr().out
@@ -275,18 +371,33 @@ def test_cache_expires(tmp_path):
 
 def test_json_output_has_no_keys_and_lists_attempts(tmp_path, capsys):
     http = FakeHttp({"api.search.brave.com": [resp(500)], "api.exa.ai": [resp(body=EXA_OK)]})
-    deps = {"http": http, "key_for": KEYS.get, "cache_dir": tmp_path, "now": lambda: 5.0, "sleep": lambda s: None}
+    deps = {
+        "http": http,
+        "key_for": KEYS.get,
+        "cache_dir": tmp_path,
+        "now": lambda: 5.0,
+        "sleep": lambda s: None,
+    }
     assert ws.main(["search", "q", "--json", "--no-cache"], deps) == 0
     out = capsys.readouterr().out
     data = json.loads(out)
 
-    assert data["provider"] == "exa" and data["attempts"][0] == {"provider": "brave", "status": "server"}
+    assert data["provider"] == "exa" and data["attempts"][0] == {
+        "provider": "brave",
+        "status": "server",
+    }
     assert not any(v in out for v in KEYS.values())
 
 
 def test_n_is_clamped(tmp_path):
     http = FakeHttp({"api.search.brave.com": [resp(body=BRAVE_OK)]})
-    deps = {"http": http, "key_for": KEYS.get, "cache_dir": tmp_path, "now": lambda: 1.0, "sleep": lambda s: None}
+    deps = {
+        "http": http,
+        "key_for": KEYS.get,
+        "cache_dir": tmp_path,
+        "now": lambda: 1.0,
+        "sleep": lambda s: None,
+    }
     ws.main(["search", "q", "-n", "500", "--no-cache"], deps)
 
     assert "count=20" in http.calls[0][4]
@@ -310,7 +421,13 @@ def test_papers_rebuild_the_abstract_and_use_the_optional_key(tmp_path, capsys):
         ]
     }
     http = FakeHttp({"api.openalex.org": [resp(body=body)]})
-    deps = {"http": http, "key_for": KEYS.get, "cache_dir": tmp_path, "now": lambda: 1.0, "sleep": lambda s: None}
+    deps = {
+        "http": http,
+        "key_for": KEYS.get,
+        "cache_dir": tmp_path,
+        "now": lambda: 1.0,
+        "sleep": lambda s: None,
+    }
     assert ws.main(["papers", "graph", "--from-year", "2024"], deps) == 0
     out = capsys.readouterr().out
 
@@ -346,7 +463,15 @@ def resolver_to(*addresses):
 )
 def test_unsafe_urls_are_blocked_before_connecting(url):
     def resolve(host, port, **kw):
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1" if host == "localhost" else "93.184.216.34", port))]
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1" if host == "localhost" else "93.184.216.34", port),
+            )
+        ]
 
     def transport(*a):
         raise AssertionError("接続してはいけない")
@@ -357,7 +482,11 @@ def test_unsafe_urls_are_blocked_before_connecting(url):
 
 def test_a_name_resolving_to_a_private_address_is_blocked():
     with pytest.raises(ws.Blocked):
-        ws.fetch_page("https://rebind.example/", resolver=resolver_to("93.184.216.34", "10.0.0.1"), transport=lambda *a: None)
+        ws.fetch_page(
+            "https://rebind.example/",
+            resolver=resolver_to("93.184.216.34", "10.0.0.1"),
+            transport=lambda *a: None,
+        )
 
 
 def test_redirect_to_an_internal_address_is_blocked():
@@ -384,7 +513,9 @@ def test_fetch_connects_to_the_validated_address_and_extracts_text():
         seen.append(address)
         return 200, {"content-type": "text/html; charset=utf-8"}, page
 
-    out = ws.fetch_page("https://ok.example/p", resolver=resolver_to("93.184.216.34"), transport=transport)
+    out = ws.fetch_page(
+        "https://ok.example/p", resolver=resolver_to("93.184.216.34"), transport=transport
+    )
 
     assert seen == ["93.184.216.34"]
     assert out["title"] == "T itle" and "Hello" in out["text"] and "World" in out["text"]
@@ -397,7 +528,12 @@ def test_fetch_limits_and_content_types():
     def transport(parts, address, timeout):
         return 200, {"content-type": "text/plain"}, big
 
-    out = ws.fetch_page("https://ok.example/", resolver=resolver_to("93.184.216.34"), transport=transport, max_chars=1000)
+    out = ws.fetch_page(
+        "https://ok.example/",
+        resolver=resolver_to("93.184.216.34"),
+        transport=transport,
+        max_chars=1000,
+    )
     assert len(out["text"]) == 1000 and out["truncated"]
 
     with pytest.raises(ws.Blocked):
@@ -413,7 +549,9 @@ def test_too_many_redirects_are_stopped():
         return 302, {"location": "https://ok.example/again"}, b""
 
     with pytest.raises(ws.Blocked):
-        ws.fetch_page("https://ok.example/", resolver=resolver_to("93.184.216.34"), transport=transport)
+        ws.fetch_page(
+            "https://ok.example/", resolver=resolver_to("93.184.216.34"), transport=transport
+        )
 
 
 def test_status_never_prints_a_key(tmp_path, capsys):
@@ -472,7 +610,10 @@ def test_sync_keys_writes_the_available_items_and_reports_the_rest(tmp_path, bw_
     added, missing = ws.sync_keys(bw_ready, bw, keys)
 
     assert added == ["brave", "exa"] and missing == ["tavily", "openalex"]
-    assert json.loads(keys.read_text(encoding="utf-8")) == {"brave": "secret-brave", "exa": "secret-exa"}
+    assert json.loads(keys.read_text(encoding="utf-8")) == {
+        "brave": "secret-brave",
+        "exa": "secret-exa",
+    }
     if ws.os.name != "nt":
         assert keys.stat().st_mode & 0o777 == 0o600
 
@@ -484,7 +625,13 @@ def test_sync_keys_keeps_existing_values_unless_forced(tmp_path, bw_ready):
 
     ws.sync_keys(bw_ready, bw, keys)
     assert json.loads(keys.read_text(encoding="utf-8")) == {"brave": "old", "exa": "e"}
-    assert ["/bin/bw", "get", "password", "websearch-brave", "--nointeraction"] not in bw.calls  # 既にあれば bw を引かない
+    assert [
+        "/bin/bw",
+        "get",
+        "password",
+        "websearch-brave",
+        "--nointeraction",
+    ] not in bw.calls  # 既にあれば bw を引かない
 
     ws.sync_keys(bw_ready, bw, keys, force=True)
     assert json.loads(keys.read_text(encoding="utf-8"))["brave"] == "new"
@@ -520,7 +667,9 @@ def test_sync_keys_command_never_prints_a_key(tmp_path, bw_ready, monkeypatch, c
 # ─── chezmoi のスクリプト (鍵ファイルの作成) ───────────────────────────
 
 UNIX_KEYS_SCRIPT = ROOT / "home/.chezmoiscripts/400_unix/run_after_441_websearch_keys.sh.tmpl"
-WINDOWS_KEYS_SCRIPT = ROOT / "home/.chezmoiscripts/300_windows/run_after_349_websearch_keys.ps1.tmpl"
+WINDOWS_KEYS_SCRIPT = (
+    ROOT / "home/.chezmoiscripts/300_windows/run_after_349_websearch_keys.ps1.tmpl"
+)
 
 
 @pytest.mark.parametrize("path", [UNIX_KEYS_SCRIPT, WINDOWS_KEYS_SCRIPT])
@@ -528,11 +677,17 @@ def test_key_scripts_are_personal_and_never_stop_apply(path):
     text = path.read_text(encoding="utf-8-sig")
     backslash = chr(92)
 
-    assert "(^|" + backslash * 4 + ")applejxd$" in text  # applejxd の機械だけ (chezmoi のテンプレートでは \ を 4 つ書く)
+    assert (
+        "(^|" + backslash * 4 + ")applejxd$" in text
+    )  # applejxd の機械だけ (chezmoi のテンプレートでは \ を 4 つ書く)
     assert "BW_SESSION" in text and "sync-keys" in text
     assert "DOTFILES_RESYNC_WEBSEARCH_KEYS" in text
     # 認証を求めて apply を入力待ちにしない (コメントの手順以外に bw unlock を実行しない)。失敗しても 0 で終わる
-    assert not [line for line in text.splitlines() if re.match(r"\s*(bw unlock|& bw|\$env:BW_SESSION\s*=)", line)]
+    assert not [
+        line
+        for line in text.splitlines()
+        if re.match(r"\s*(bw unlock|& bw|\$env:BW_SESSION\s*=)", line)
+    ]
     assert "skip" in text.lower()
     # 鍵そのものを書き出す処理が無い (書くのは websearch.py だけ)
     assert "Set-Content" not in text and "Out-File" not in text and "bw get" not in text
@@ -586,17 +741,28 @@ def test_sync_keys_prompts_to_unlock_only_with_the_flag(tmp_path, monkeypatch, c
     keys = tmp_path / "k.json"
     plain = FakeBw({"websearch-brave": "b"})
     assert ws.main(["sync-keys"], {"run": plain, "keys_file": keys, "cache_dir": tmp_path}) == 0
-    assert plain.calls == [] and "--unlock" in capsys.readouterr().out  # 既定 (chezmoi apply) では求めない
+    assert (
+        plain.calls == [] and "--unlock" in capsys.readouterr().out
+    )  # 既定 (chezmoi apply) では求めない
 
     asked = FakeBw({"websearch-brave": "b"})
-    assert ws.main(["sync-keys", "--unlock"], {"run": asked, "keys_file": keys, "cache_dir": tmp_path}) == 0
+    assert (
+        ws.main(["sync-keys", "--unlock"], {"run": asked, "keys_file": keys, "cache_dir": tmp_path})
+        == 0
+    )
     assert asked.subcommands[:2] == ["unlock", "sync"]
     assert json.loads(keys.read_text(encoding="utf-8")) == {"brave": "b"}
 
 
 def test_search_provider_option_uses_only_that_provider_and_skips_the_cache(tmp_path, capsys):
     http = FakeHttp({"api.exa.ai": [resp(body=EXA_OK)]})
-    deps = {"http": http, "key_for": KEYS.get, "cache_dir": tmp_path, "now": lambda: 1000.0, "sleep": lambda s: None}
+    deps = {
+        "http": http,
+        "key_for": KEYS.get,
+        "cache_dir": tmp_path,
+        "now": lambda: 1000.0,
+        "sleep": lambda s: None,
+    }
 
     assert ws.main(["search", "hello", "--provider", "exa"], deps) == 0
     out = capsys.readouterr().out

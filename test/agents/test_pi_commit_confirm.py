@@ -324,17 +324,38 @@ def test_the_tui_shows_the_structure_and_a_countdown_then_saves_on_timeout(env):
         ["tmux", "new-session", "-d", "-s", session, "-x", "110", "-y", "36", f"bash {script}"],
         check=True,
     )
-    try:
-        time.sleep(3)
-        subprocess.run(["tmux", "send-keys", "-t", session, "go", "Enter"], check=True)
-        time.sleep(2.5)
-        screen = subprocess.run(
+
+    def capture() -> str:
+        return subprocess.run(
             ["tmux", "capture-pane", "-t", session, "-p"],
             capture_output=True,
             text=True,
             encoding="utf-8",
             check=True,
         ).stdout
+
+    def wait_for(predicate, seconds: float) -> str:
+        # 負荷で起動や描画が遅れると固定の sleep では落ちるので、画面を見ながら待つ
+        deadline = time.monotonic() + seconds
+        screen = capture()
+        while not predicate(screen) and time.monotonic() < deadline:
+            time.sleep(0.3)
+            screen = capture()
+        return screen
+
+    try:
+        # pi は起動時に fd をダウンロードすることがあり、連続実行の負荷では長引く。終わるまで入力を送らない
+        wait_for(
+            lambda s: (
+                s.strip() != ""
+                and "Startup is still in progress" not in s
+                and "Downloading" not in s
+            ),
+            90,
+        )
+        time.sleep(1)
+        subprocess.run(["tmux", "send-keys", "-t", session, "go", "Enter"], check=True)
+        screen = wait_for(lambda s: "メッセージ:" in s and "s)" in s, 20)
         assert (
             "リポジトリ: (origin なし)" in screen and "対象:" in screen and "メッセージ:" in screen
         ), screen

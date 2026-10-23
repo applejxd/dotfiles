@@ -423,8 +423,9 @@ def test_review_child_reads_with_the_same_read_only_commands_as_explore(env):
 )
 def test_review_child_may_read_a_revision_with_git(env, command):
     # review は差分を自分で読む。リビジョンを付けた形も、判定で「どの規則にも当たらない」と拒まれない
+    # 出力にはリポジトリの差分が入る (正解データにこの文言がある) ので、拒否の形だけを見る
     proc = run_child(env, "review", bash_call(command))
-    assert "どの規則にも当たらない" not in proc.stdout, proc.stdout
+    assert "tool error: guarded_bash: どの規則にも当たらない" not in proc.stdout, proc.stdout
 
 
 def test_explore_child_gets_only_the_read_only_commands(env):

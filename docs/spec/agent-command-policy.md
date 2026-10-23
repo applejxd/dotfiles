@@ -125,6 +125,22 @@ world-readable な `passwd` / `group` は書き込み先のときだけ deny と
    中身を読まないため、`ls tests/fixtures/secrets` は通る。
    ただし確実な証拠 (`ls -la ~/.ssh`) は列挙でも deny のまま
 
+### 引数の URL はパスとして判定しない
+
+引数に入る `http(s)://` の URL は、ローカルのファイルのパスではないので、2 段のどちらにも掛けない
+(`python3 fetch.py https://example.com/blog/api-credentials-guide out.md` や
+`curl https://example.com/.env` を拒否しない)。判定の前に、引数から URL の部分を除く。
+
+- 除く範囲: `http://` / `https://` で始まり、空白・引用符・`)` `>` `,` `[` `]` の手前まで
+  (IPv6 のホスト `[::1]` は含める)。**直前が `/` `.` `~` `-` や語の文字のものは除かない**。
+  `./https://host/.ssh/id_rsa` はローカルのパスの一部だから
+- 除かないもの: `file://`(ローカルのパス)。URL と連結したローカルのパス(`https://a,~/.ssh/id_rsa`)
+- **既知の限界**: `--url=https://…` のように `=` の直後にある URL も除く。`=https:` という名前の
+  ディレクトリ経由で保護対象を読む形は見逃すが、事故防止の水準([ADR-0012](../adr/0012-ocs-boundary-for-accidents.md))で
+  は、そのディレクトリを作る必要があり、実質の穴にならないとして許容した
+- 実装は Python 版 `sensitive.py` の `_URL_RE` と TS 版 `sensitive.ts` の `URL_RE`(同じ正規表現)。
+  経緯と review は [CHG-0032](../change/0032-guard-url-false-positive.md)
+
 ## エージェント CLI のランタイム設定も秘密扱いにする
 
 `~/.claude.json` と `~/.copilot/config.json` は CLI が自分で書き換えるランタイム

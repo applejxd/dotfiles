@@ -153,7 +153,9 @@ class State:
             pass
 
 
-def cache_get(directory: Path, key: str, now: Callable[[], float] = time.time) -> dict[str, Any] | None:
+def cache_get(
+    directory: Path, key: str, now: Callable[[], float] = time.time
+) -> dict[str, Any] | None:
     path = directory / "search" / f"{key}.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -162,7 +164,9 @@ def cache_get(directory: Path, key: str, now: Callable[[], float] = time.time) -
     return data if isinstance(data, dict) and now() - float(data.get("ts", 0)) < CACHE_TTL else None
 
 
-def cache_put(directory: Path, key: str, payload: dict[str, Any], now: Callable[[], float] = time.time) -> None:
+def cache_put(
+    directory: Path, key: str, payload: dict[str, Any], now: Callable[[], float] = time.time
+) -> None:
     try:
         path = directory / "search" / f"{key}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -172,7 +176,9 @@ def cache_put(directory: Path, key: str, payload: dict[str, Any], now: Callable[
 
 
 def cache_key(kind: str, query: str, n: int, extra: str = "") -> str:
-    return hashlib.sha256(json.dumps([kind, query.strip().lower(), n, extra]).encode()).hexdigest()[:32]
+    return hashlib.sha256(json.dumps([kind, query.strip().lower(), n, extra]).encode()).hexdigest()[
+        :32
+    ]
 
 
 # ─── クエリの秘匿チェック ─────────────────────────────────────────────────
@@ -180,12 +186,22 @@ def cache_key(kind: str, query: str, n: int, extra: str = "") -> str:
 SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("秘密鍵", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("AWS のアクセスキー", re.compile(r"\b(AKIA|ASIA)[0-9A-Z]{16}\b")),
-    ("GitHub のトークン", re.compile(r"\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b")),
-    ("API キー", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}\b|\bAIza[0-9A-Za-z_-]{30,}\b")),
+    (
+        "GitHub のトークン",
+        re.compile(r"\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+    ),
+    (
+        "API キー",
+        re.compile(
+            r"\bsk-[A-Za-z0-9_-]{20,}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}\b|\bAIza[0-9A-Za-z_-]{30,}\b"
+        ),
+    ),
     ("JWT", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.")),
     (
         "代入された秘密",
-        re.compile(r"(?i)\b(password|passwd|secret|token|api[_-]?key|access[_-]?key)\b\s*[:=]\s*\S{6,}"),
+        re.compile(
+            r"(?i)\b(password|passwd|secret|token|api[_-]?key|access[_-]?key)\b\s*[:=]\s*\S{6,}"
+        ),
     ),
     (
         "内部アドレス",
@@ -196,6 +212,21 @@ SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ),
 ]
 LONG_TOKEN = re.compile(r"[A-Za-z0-9+/_=-]{40,}")
+_SLUG_PART = re.compile(r"[a-z]{1,20}|\d{1,8}")
+_URL_IN_TEXT = re.compile(r"https?://\S+", re.IGNORECASE)
+
+
+def is_slug(token: str) -> bool:
+    """英小文字の語 (20 文字まで) と数字 (8 桁まで) だけを `-` `_` `/` でつないだ 4 つ以上の列。
+
+    記事の題名をそのまま使った URL の末尾などがこの形。
+
+    実際のトークンは大文字・小文字・数字が混ざるので、これには当たらない。語をつないだパスフレーズを通してしまう
+    ので、`check_query` は URL の中のトークンにだけ適用する。
+    see docs/change/0032-guard-url-false-positive.md
+    """
+    parts = [p for p in re.split(r"[-_/]", token) if p]
+    return len(parts) >= 4 and all(_SLUG_PART.fullmatch(p) for p in parts)
 
 
 def check_query(query: str) -> str | None:
@@ -203,7 +234,14 @@ def check_query(query: str) -> str | None:
     for label, pattern in SECRET_PATTERNS:
         if pattern.search(query):
             return label
-    for token in LONG_TOKEN.findall(query):
+    url_spans = [m.span() for m in _URL_IN_TEXT.finditer(query)]
+    for found in LONG_TOKEN.finditer(query):
+        token = found.group()
+        # URL の中の、記事の題名をそのまま使ったパスの区切り (スラッグ) だけ、長さの数えから除く
+        if any(s <= found.start() < e for s, e in url_spans):
+            token = "/".join(seg for seg in token.split("/") if not is_slug(seg))
+        if len(token) < 40:
+            continue
         if re.search(r"\d", token) and re.search(r"[A-Za-z]", token):
             return "長いトークンらしき文字列"
     return None
@@ -219,7 +257,9 @@ def normalize_url(url: str) -> str:
         parts = urllib.parse.urlsplit(url.strip())
     except ValueError:
         return url
-    query = urllib.parse.urlencode([(k, v) for k, v in urllib.parse.parse_qsl(parts.query) if not TRACKING.match(k)])
+    query = urllib.parse.urlencode(
+        [(k, v) for k, v in urllib.parse.parse_qsl(parts.query) if not TRACKING.match(k)]
+    )
     path = parts.path.rstrip("/") or "/"
     return urllib.parse.urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, query, ""))
 
@@ -258,11 +298,17 @@ def http_request(
         def redirect_request(self, *args: Any, **kwargs: Any) -> None:
             return None
 
-    request = urllib.request.Request(url, data=body, method=method, headers={"User-Agent": USER_AGENT, **(headers or {})})
+    request = urllib.request.Request(
+        url, data=body, method=method, headers={"User-Agent": USER_AGENT, **(headers or {})}
+    )
     opener = urllib.request.build_opener(NoRedirect)
     try:
         with opener.open(request, timeout=timeout) as response:
-            return response.status, {k.lower(): v for k, v in response.headers.items()}, response.read(5_000_000)
+            return (
+                response.status,
+                {k.lower(): v for k, v in response.headers.items()},
+                response.read(5_000_000),
+            )
     except urllib.error.HTTPError as error:
         return error.code, {k.lower(): v for k, v in error.headers.items()}, error.read(200_000)
     except (urllib.error.URLError, TimeoutError, OSError) as error:
@@ -298,8 +344,12 @@ def parse_json(body: bytes) -> Any:
 
 
 def search_brave(query: str, n: int, key: str, http: Http) -> list[Result]:
-    url = "https://api.search.brave.com/res/v1/web/search?" + urllib.parse.urlencode({"q": query, "count": n})
-    status, headers, body = http("GET", url, {"X-Subscription-Token": key, "Accept": "application/json"})
+    url = "https://api.search.brave.com/res/v1/web/search?" + urllib.parse.urlencode(
+        {"q": query, "count": n}
+    )
+    status, headers, body = http(
+        "GET", url, {"X-Subscription-Token": key, "Accept": "application/json"}
+    )
     classify(status, headers)
     data = parse_json(body)
     items = ((data.get("web") or {}).get("results") or []) if isinstance(data, dict) else []
@@ -311,9 +361,14 @@ def search_brave(query: str, n: int, key: str, http: Http) -> list[Result]:
 
 
 def search_exa(query: str, n: int, key: str, http: Http) -> list[Result]:
-    payload = json.dumps({"query": query, "type": "auto", "numResults": n, "contents": {"highlights": True}}).encode()
+    payload = json.dumps(
+        {"query": query, "type": "auto", "numResults": n, "contents": {"highlights": True}}
+    ).encode()
     status, headers, body = http(
-        "POST", "https://api.exa.ai/search", {"x-api-key": key, "Content-Type": "application/json"}, payload
+        "POST",
+        "https://api.exa.ai/search",
+        {"x-api-key": key, "Content-Type": "application/json"},
+        payload,
     )
     classify(status, headers)
     data = parse_json(body)
@@ -323,8 +378,20 @@ def search_exa(query: str, n: int, key: str, http: Http) -> list[Result]:
         if not isinstance(i, dict):
             continue
         highlights = i.get("highlights") or []
-        text = " … ".join(h for h in highlights if isinstance(h, str)) or i.get("summary") or i.get("text") or ""
-        out.append(Result(clip(i.get("title") or "", 200), i.get("url", ""), clip(text), {"date": i.get("publishedDate")}))
+        text = (
+            " … ".join(h for h in highlights if isinstance(h, str))
+            or i.get("summary")
+            or i.get("text")
+            or ""
+        )
+        out.append(
+            Result(
+                clip(i.get("title") or "", 200),
+                i.get("url", ""),
+                clip(text),
+                {"date": i.get("publishedDate")},
+            )
+        )
     return out
 
 
@@ -485,7 +552,9 @@ def _abstract(index: Any) -> str:
     return " ".join(words[i] for i in sorted(words))
 
 
-def search_papers(query: str, n: int, key: str | None, http: Http, from_year: int | None = None) -> list[Result]:
+def search_papers(
+    query: str, n: int, key: str | None, http: Http, from_year: int | None = None
+) -> list[Result]:
     params = {
         "search": query,
         "per_page": n,
@@ -496,7 +565,9 @@ def search_papers(query: str, n: int, key: str | None, http: Http, from_year: in
     if key:
         params["api_key"] = key
     status, headers, body = http(
-        "GET", "https://api.openalex.org/works?" + urllib.parse.urlencode(params), {"Accept": "application/json"}
+        "GET",
+        "https://api.openalex.org/works?" + urllib.parse.urlencode(params),
+        {"Accept": "application/json"},
     )
     classify(status, headers)
     data = parse_json(body)
@@ -506,9 +577,16 @@ def search_papers(query: str, n: int, key: str | None, http: Http, from_year: in
         if not isinstance(i, dict):
             continue
         authors = [
-            a.get("author", {}).get("display_name", "") for a in (i.get("authorships") or [])[:3] if isinstance(a, dict)
+            a.get("author", {}).get("display_name", "")
+            for a in (i.get("authorships") or [])[:3]
+            if isinstance(a, dict)
         ]
-        landing = ((i.get("primary_location") or {}).get("landing_page_url")) or i.get("doi") or i.get("id") or ""
+        landing = (
+            ((i.get("primary_location") or {}).get("landing_page_url"))
+            or i.get("doi")
+            or i.get("id")
+            or ""
+        )
         meta = (
             f"{i.get('publication_year') or '?'} / {', '.join(a for a in authors if a) or '著者不明'}"
             f" / 被引用 {i.get('cited_by_count', 0)}"
@@ -537,7 +615,9 @@ def _check_ip(address: str) -> None:
         raise Blocked(f"内部・予約済みのアドレス ({ip}) には接続しない")
 
 
-def check_url(url: str, resolver: Resolver = socket.getaddrinfo) -> tuple[urllib.parse.SplitResult, list[str]]:
+def check_url(
+    url: str, resolver: Resolver = socket.getaddrinfo
+) -> tuple[urllib.parse.SplitResult, list[str]]:
     """http(s) の公開アドレスだけを許す。検証した IP のリストを返す (接続はこの IP に固定する)。"""
     try:
         parts = urllib.parse.urlsplit(url.strip())
@@ -567,7 +647,9 @@ def check_url(url: str, resolver: Resolver = socket.getaddrinfo) -> tuple[urllib
     return parts, addresses
 
 
-def _pinned_connection(parts: urllib.parse.SplitResult, address: str, timeout: float) -> http.client.HTTPConnection:
+def _pinned_connection(
+    parts: urllib.parse.SplitResult, address: str, timeout: float
+) -> http.client.HTTPConnection:
     """検証した IP へ接続し、Host と SNI は元の名前を使う (DNS の再解決で差し替えられない)。"""
     host, secure = parts.hostname or "", parts.scheme == "https"
     port = parts.port or (443 if secure else 80)
@@ -586,7 +668,9 @@ def _pinned_connection(parts: urllib.parse.SplitResult, address: str, timeout: f
 Transport = Callable[[urllib.parse.SplitResult, str, float], "tuple[int, dict[str, str], bytes]"]
 
 
-def default_transport(parts: urllib.parse.SplitResult, address: str, timeout: float) -> tuple[int, dict[str, str], bytes]:
+def default_transport(
+    parts: urllib.parse.SplitResult, address: str, timeout: float
+) -> tuple[int, dict[str, str], bytes]:
     conn = _pinned_connection(parts, address, timeout)
     try:
         target = (parts.path or "/") + (("?" + parts.query) if parts.query else "")
@@ -610,7 +694,21 @@ def default_transport(parts: urllib.parse.SplitResult, address: str, timeout: fl
 class _TextParser(html.parser.HTMLParser):
     SKIP: ClassVar[set[str]] = {"script", "style", "noscript", "template", "svg"}
     BLOCK: ClassVar[set[str]] = {
-        "p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "section", "article", "table",
+        "p",
+        "div",
+        "br",
+        "li",
+        "tr",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "pre",
+        "section",
+        "article",
+        "table",
     }
 
     def __init__(self) -> None:
@@ -673,7 +771,10 @@ def fetch_page(
         if not 200 <= status < 300:
             raise ProviderError("input", f"HTTP {status}")
         ctype = headers.get("content-type", "text/plain").split(";")[0].strip().lower()
-        if not (ctype.startswith("text/") or ctype in ("application/json", "application/xml", "application/xhtml+xml")):
+        if not (
+            ctype.startswith("text/")
+            or ctype in ("application/json", "application/xml", "application/xhtml+xml")
+        ):
             raise Blocked(f"対応していない content-type ({ctype})")
         truncated_bytes = len(body) > FETCH_BYTES
         match = re.search(r"charset=([\w-]+)", headers.get("content-type", ""), re.I)
@@ -683,7 +784,13 @@ def fetch_page(
             raw = body[:FETCH_BYTES].decode("utf-8", "replace")
         title, text = html_to_text(raw) if "html" in ctype else ("", raw.strip())
         truncated = truncated_bytes or len(text) > max_chars
-        return {"url": current, "title": title, "text": text[:max_chars], "truncated": truncated, "content_type": ctype}
+        return {
+            "url": current,
+            "title": title,
+            "text": text[:max_chars],
+            "truncated": truncated,
+            "content_type": ctype,
+        }
     raise Blocked("リダイレクトが多すぎる")
 
 
@@ -726,14 +833,18 @@ def sync_keys(
             return added, wanted
         try:
             # マスターパスワードは bw が端末 (stderr / tty) で尋ねる。stdout の鍵 (セッション) だけを受け取る
-            proc = run([bw, "unlock", "--raw"], stdout=subprocess.PIPE, text=True, timeout=300, env=env)
+            proc = run(
+                [bw, "unlock", "--raw"], stdout=subprocess.PIPE, text=True, timeout=300, env=env
+            )
         except (OSError, subprocess.SubprocessError):
             return added, wanted
         session = proc.stdout.strip() if proc.returncode == 0 else ""
         if not session:
             return added, wanted
         env["BW_SESSION"] = session
-    with contextlib.suppress(OSError, subprocess.SubprocessError):  # 同期できなくても、取れる分は取る
+    with contextlib.suppress(
+        OSError, subprocess.SubprocessError
+    ):  # 同期できなくても、取れる分は取る
         run([bw, "sync", "--nointeraction"], capture_output=True, text=True, timeout=120, env=env)
     for name in wanted:
         try:
@@ -786,7 +897,10 @@ def to_json(outcome: Outcome) -> dict[str, Any]:
         "provider": outcome.provider,
         "cached": outcome.cached,
         "attempts": [{"provider": p, "status": s} for p, s in outcome.attempts],
-        "results": [{"title": r.title, "url": r.url, "snippet": r.snippet, **r.extra} for r in outcome.results],
+        "results": [
+            {"title": r.title, "url": r.url, "snippet": r.snippet, **r.extra}
+            for r in outcome.results
+        ],
     }
 
 
@@ -796,7 +910,10 @@ def to_json(outcome: Outcome) -> dict[str, Any]:
 def cmd_search(args: argparse.Namespace, deps: dict[str, Any]) -> int:
     reason = check_query(args.query)
     if reason:
-        print(f"検索を止めた: クエリに{reason}らしきものが含まれる。外部の検索には送らない。", file=sys.stderr)
+        print(
+            f"検索を止めた: クエリに{reason}らしきものが含まれる。外部の検索には送らない。",
+            file=sys.stderr,
+        )
         return 2
     n = max(1, min(args.n, MAX_N))
     directory = deps["cache_dir"]
@@ -807,7 +924,9 @@ def cmd_search(args: argparse.Namespace, deps: dict[str, Any]) -> int:
         hit = cache_get(directory, key, deps["now"])
         if hit:
             cached = [Result(**r) for r in hit["results"]]
-            outcome = Outcome(cached, hit.get("provider"), [(hit.get("provider") or "-", "ok")], cached=True)
+            outcome = Outcome(
+                cached, hit.get("provider"), [(hit.get("provider") or "-", "ok")], cached=True
+            )
     if outcome is None:
         try:
             outcome = run_search(
@@ -823,11 +942,20 @@ def cmd_search(args: argparse.Namespace, deps: dict[str, Any]) -> int:
             print(f"検索を止めた: {error}", file=sys.stderr)
             return 2
         if outcome.results and not no_cache:
-            payload = {"provider": outcome.provider, "results": [r.__dict__ for r in outcome.results]}
+            payload = {
+                "provider": outcome.provider,
+                "results": [r.__dict__ for r in outcome.results],
+            }
             cache_put(directory, key, payload, deps["now"])
-    print(json.dumps(to_json(outcome), ensure_ascii=False) if args.json else format_results("web_search", args.query, outcome))
+    print(
+        json.dumps(to_json(outcome), ensure_ascii=False)
+        if args.json
+        else format_results("web_search", args.query, outcome)
+    )
     if outcome.provider is None:
-        print("すべてのプロバイダで検索できなかった。`status` で鍵と状態を確認する。", file=sys.stderr)
+        print(
+            "すべてのプロバイダで検索できなかった。`status` で鍵と状態を確認する。", file=sys.stderr
+        )
         return 3
     return 0
 
@@ -839,18 +967,29 @@ def cmd_papers(args: argparse.Namespace, deps: dict[str, Any]) -> int:
         return 2
     n = max(1, min(args.n, MAX_N))
     try:
-        results = search_papers(args.query, n, deps["key_for"]("openalex"), deps["http"], args.from_year)
+        results = search_papers(
+            args.query, n, deps["key_for"]("openalex"), deps["http"], args.from_year
+        )
     except ProviderError as error:
         print(f"論文検索に失敗した: {error}", file=sys.stderr)
         return 3
     outcome = Outcome(dedupe(results), "openalex", [("openalex", "ok")])
-    print(json.dumps(to_json(outcome), ensure_ascii=False) if args.json else format_results("search_papers", args.query, outcome))
+    print(
+        json.dumps(to_json(outcome), ensure_ascii=False)
+        if args.json
+        else format_results("search_papers", args.query, outcome)
+    )
     return 0
 
 
 def cmd_fetch(args: argparse.Namespace, deps: dict[str, Any]) -> int:
     try:
-        page = fetch_page(args.url, resolver=deps["resolver"], transport=deps["transport"], max_chars=args.max_chars)
+        page = fetch_page(
+            args.url,
+            resolver=deps["resolver"],
+            transport=deps["transport"],
+            max_chars=args.max_chars,
+        )
     except Blocked as error:
         print(f"取得を止めた: {error}", file=sys.stderr)
         return 2
@@ -860,7 +999,9 @@ def cmd_fetch(args: argparse.Namespace, deps: dict[str, Any]) -> int:
     if args.json:
         print(json.dumps(page, ensure_ascii=False))
     else:
-        print(f"# web_fetch: {page['url']}" + (f" title={page['title']!r}" if page["title"] else ""))
+        print(
+            f"# web_fetch: {page['url']}" + (f" title={page['title']!r}" if page["title"] else "")
+        )
         print(UNTRUSTED)
         print(page["text"])
         if page["truncated"]:
@@ -884,12 +1025,17 @@ def cmd_status(args: argparse.Namespace, deps: dict[str, Any]) -> int:
 def cmd_sync_keys(args: argparse.Namespace, deps: dict[str, Any]) -> int:
     unlock = args.unlock
     added, missing = sync_keys(
-        force=args.force, run=deps.get("run", subprocess.run), keys_file=deps.get("keys_file"), unlock=unlock
+        force=args.force,
+        run=deps.get("run", subprocess.run),
+        keys_file=deps.get("keys_file"),
+        unlock=unlock,
     )
     # PowerShell のコンソール (cp932) でも崩れないよう ASCII で出す。鍵は表示しない
     print(f"websearch-keys: added={added or 'none'} missing={missing or 'none'}")
     if missing and not (os.environ.get("BW_SESSION") or unlock):
-        print("hint: BW_SESSION が無い。--unlock を付けると bw unlock を求める (chezmoi apply では求めない)")
+        print(
+            "hint: BW_SESSION が無い。--unlock を付けると bw unlock を求める (chezmoi apply では求めない)"
+        )
     elif missing:
         print("hint: Bitwarden に Login 項目 websearch-<名前> があるか確認する (Password 欄が鍵)")
     return 0
@@ -903,7 +1049,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("-n", type=int, default=8)
     s.add_argument("--json", action="store_true")
     s.add_argument("--no-cache", action="store_true")
-    s.add_argument("--provider", choices=CHAIN, help="鎖を使わず、このプロバイダだけで検索する (鍵の確認用。キャッシュしない)")
+    s.add_argument(
+        "--provider",
+        choices=CHAIN,
+        help="鎖を使わず、このプロバイダだけで検索する (鍵の確認用。キャッシュしない)",
+    )
     f = sub.add_parser("fetch", help="URL の本文を取得する (公開アドレスの http / https だけ)")
     f.add_argument("url")
     f.add_argument("--max-chars", type=int, default=FETCH_CHARS)
@@ -914,9 +1064,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--from-year", type=int)
     p.add_argument("--json", action="store_true")
     sub.add_parser("status", help="鍵の有無と休止中のプロバイダを表示する")
-    k = sub.add_parser("sync-keys", help="Bitwarden (websearch-<名前>) から鍵ファイルを作る (BW_SESSION が要る)")
+    k = sub.add_parser(
+        "sync-keys", help="Bitwarden (websearch-<名前>) から鍵ファイルを作る (BW_SESSION が要る)"
+    )
     k.add_argument("--force", action="store_true", help="既にある値も取り直す")
-    k.add_argument("--unlock", action="store_true", help="BW_SESSION が無いとき、bw unlock を求める (対話で使う。apply では付けない)")
+    k.add_argument(
+        "--unlock",
+        action="store_true",
+        help="BW_SESSION が無いとき、bw unlock を求める (対話で使う。apply では付けない)",
+    )
     return parser
 
 

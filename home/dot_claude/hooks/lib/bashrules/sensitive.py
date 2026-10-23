@@ -142,6 +142,14 @@ def is_sensitive_path(text: str, *, heuristic: bool = True) -> str | None:
     return None
 
 
+# 引数中の http(s) URL はローカルのパスではない。直前が `/` `.` `~` や語の文字のものは
+# `./https://host/.ssh/id_rsa` のようなローカルパスの一部なので除かない。`file://` も除かない。
+# see docs/change/0032-guard-url-false-positive.md
+_URL_RE = re.compile(
+    r"""(?<![\w/.~-])https?://(?:\[[0-9a-f:.]*\])?[^\s'"`)>,\[\]]*""", re.IGNORECASE
+)
+
+
 def _pieces(value: str) -> list[str]:
     """空白を含む引数 (``python3 -c "..."`` のコード) は断片も見る。"""
     return value.split() if any(c.isspace() for c in value) else [value]
@@ -160,7 +168,7 @@ def sensitive_path_in_command(command: shellparse.Command, *, heuristic: bool = 
         if r.target is not None and r.op not in ("<<", "<<-")
     ]
     for candidate in candidates:
-        for piece in _pieces(candidate):
+        for piece in _pieces(_URL_RE.sub(" ", candidate)):
             reason = _is_sensitive_token(piece, heuristic=heuristic)
             if reason:
                 return reason

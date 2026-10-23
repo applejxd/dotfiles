@@ -152,6 +152,16 @@ def test_refuse_secrets_lets_ordinary_queries_through():
     mod.refuse_secrets("URL", "https://arxiv.org/abs/2401.12345")
 
 
+def test_refuse_secrets_lets_hyphenated_slug_urls_through():
+    """記事の題名をそのまま使った長い URL はトークンではない (CHG-0032)。内蔵の代替の検査も同じ結果にする。"""
+    mod = _load("imozuru_root")
+    url = "https://nvidia.github.io/OpenShell-Research/articles/2026-09-10-learning-formal-methods-agent-policy"
+    mod.refuse_secrets("URL", url)
+    assert mod._is_slug("2026-09-10-learning-formal-methods-agent-policy")
+    assert not mod._is_slug("Ab1" * 15)
+    assert not mod._is_slug("a-" + "Ab1-" * 12)
+
+
 def test_refuse_secrets_falls_back_when_web_search_is_missing(monkeypatch):
     mod = _load("imozuru_root")
     monkeypatch.setattr(mod, "_websearch_check", lambda: None)
