@@ -62,6 +62,8 @@
 | [0032](0032-guard-url-false-positive.md) | 判定器と、検索・取得のスクリプトの検査が、URL を誤検出して調査を止めないようにする | In progress | 実機（`chezmoi apply` 後の `pis`）で、取れなかった記事が取れるか。許容した限界（`=` 直後の URL、URL 内の小文字のパスフレーズ） | CHG-0033 の段 P1 の再調査で実機の確認 | 2026-10-23 |
 | [0033](0033-sandbox-build-value-assessment.md) | 自作したサンドボックスに価値があったかを、サンクコストを除いて、エビデンスで判定する | Exploring | nono をこの環境で試した実測が無い。コマンド内容を解析する既製品が本当に無いか。判定器の限界価値 | 暫定の判定は「部分的に置き換え（縮小）」。Python 版オラクルの撤去の案件化、nono の小さな試験 | 2026-10-24 |
 | [Windows ネイティブ（PowerShell）で pi を、OS の境界つきで動かす](0034-windows-native-pi-boundary.md) | リポジトリが Windows 側で、Windows 起動前提のアプリも開発するので、Windows ネイティブで pi を境界つきで動かしたい（OpenShell・Docker Sandboxes は合わない） | Exploring | `srt` の Windows alpha で `pi` を包めるか。サーバ・アプリの起動と通信の制御が両立するか。Windows 実機が要る | 段 W1: Windows 実機で `srt` に `pi` を包む手順書を作り、利用者に実行してもらう | 2026-10-24 |
+| [0035](0035-retire-python-judge-oracle.md) | 判定器の Python 版（オラクル）を撤去して、二重保守を解消する | Exploring | 「実機での観察」の定義（ADR-0017 に無い）。正解データを Python 版なしで保つ設計 | 段 R1: 撤去の条件を利用者と決める。段 R2: 凍結か書き出しかの設計を `review` へ | 2026-10-24 |
+| [0036](0036-nono-trial-on-wsl2.md) | nono を WSL2 で小さく試し、境界の層（`ocs`）の置き換えの可否を測る | Exploring | WSL2 で nono がドメインの許可リストを標準では提供しない（現行の境界との差）。導入に利用者の許可が要る | 段 N1: 導入と `nono setup --check-only` の許可を尋ねる | 2026-10-24 |
 
 ## 保留
 
