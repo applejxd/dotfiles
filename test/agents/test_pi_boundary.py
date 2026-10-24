@@ -567,7 +567,7 @@ def test_broker_rejects_invalid_values(bad, capsys):
     pi = _ocs().pi
     with pytest.raises(SystemExit):
         pi.parse_broker(bad)
-    assert "PIS_COPILOT_BROKER" in capsys.readouterr().err
+    assert "broker.copilot" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("value", ["http://127.0.0.1:18080", "http://127.0.0.1:18080/"])
@@ -748,7 +748,8 @@ def test_real_fence_boundary_check_passes_for_pi(tmp_path, monkeypatch):
         monkeypatch.setattr(ocs.pi, "AGENT_HOME", tmp_path / "pi-sandbox")
         monkeypatch.setattr(ocs.check, "CHECK", BOUNDARY_CHECK)
         monkeypatch.setenv("AGENTS_CONFIG_DIR", str(agents_config_dir()))
-        code = ocs.pi.run_sandboxed(["--check", "--no-backup"])
+        # 生成した rules.json の broker (auto の機では Envoy を起動してしまう) を使わない
+        code = ocs.pi.run_sandboxed(["--check", "--no-backup", "--no-broker"])
     finally:
         shutil.rmtree(workspace, ignore_errors=True)
     assert code == 0

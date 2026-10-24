@@ -1,4 +1,4 @@
-"""``pis`` の Copilot ブローカー自動起動 (``PIS_COPILOT_BROKER=auto``) の試験。
+"""``pis`` の Copilot ブローカー自動起動 (rules.json の ``broker.copilot`` = ``auto``) の試験。
 
 本物の Envoy とネットワークは使わない。トークンの取得は差し替え、``envoy`` は PATH に置く偽物
 (設定の ``port_value`` で ``/__pis_broker`` に答える Python スクリプト) にする。
@@ -76,9 +76,14 @@ def _ocs() -> SimpleNamespace:
     try:
         namespace["load"](LIB)
         importlib.import_module("ocs_lib.pi")
+        importlib.import_module("ocs_lib.pis")
     finally:
         sys.dont_write_bytecode = saved
-    return SimpleNamespace(pi=sys.modules["ocs_lib.pi"], broker=sys.modules["ocs_lib.broker"])
+    return SimpleNamespace(
+        pi=sys.modules["ocs_lib.pi"],
+        pis=sys.modules["ocs_lib.pis"],
+        broker=sys.modules["ocs_lib.broker"],
+    )
 
 
 def _install_envoy(directory: Path, script: str = FAKE_ENVOY) -> None:
@@ -162,7 +167,7 @@ def test_manual_mode_validation_is_unchanged(capsys):
     for bad in ("auto", "http://example.com:18080", "http://127.0.0.1", "http://127.0.0.1:80"):
         with pytest.raises(SystemExit):
             pi.parse_broker(bad)
-    assert "PIS_COPILOT_BROKER" in capsys.readouterr().err
+    assert "broker.copilot" in capsys.readouterr().err
 
 
 # ─── (b) 設定の置換 ─────────────────────────────────────────────────
@@ -415,41 +420,53 @@ def _recording_session(pi, events, url="http://127.0.0.1:18081"):
     return session
 
 
-def test_auto_mode_enters_the_session_and_passes_the_url_on(monkeypatch):
+def _rules(tmp_path, monkeypatch, pi, copilot):
+    """``broker.copilot`` だけを持つ rules.json を ``pi.RULES`` に差す (None なら ``broker`` 節なし)。"""
+    path = tmp_path / "rules.json"
+    body = {} if copilot is None else {"broker": {"copilot": copilot}}
+    path.write_text(json.dumps(body), encoding="utf-8")
+    monkeypatch.setattr(pi, "RULES", path)
+
+
+def _args(no_broker=False):
+    return SimpleNamespace(no_broker=no_broker)
+
+
+def test_auto_mode_enters_the_session_and_passes_the_url_on(monkeypatch, tmp_path):
     pi = _ocs().pi
     events: list = []
     monkeypatch.setattr(pi, "check_installed", lambda: None)
     monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
-    monkeypatch.setenv(pi.BROKER_ENV, "Auto")
+    _rules(tmp_path, monkeypatch, pi, "Auto")
 
     def launch_with(args, passthrough, value):
         events.append(("launch", value))
         return 7
 
     monkeypatch.setattr(pi, "_launch_with", launch_with)
-    assert pi._launch(SimpleNamespace(), []) == 7
+    assert pi._launch(_args(), []) == 7
     assert [e[0] for e in events] == ["enter", "launch", "exit"]  # 起動の間ずっと有効
     assert events[0][1] == (pi.REAL_AGENT,)
     assert events[1] == ("launch", "http://127.0.0.1:18081")
 
 
-def test_auto_mode_stops_the_broker_when_the_launch_raises(monkeypatch):
+def test_auto_mode_stops_the_broker_when_the_launch_raises(monkeypatch, tmp_path):
     pi = _ocs().pi
     events: list = []
     monkeypatch.setattr(pi, "check_installed", lambda: None)
     monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
-    monkeypatch.setenv(pi.BROKER_ENV, "auto")
+    _rules(tmp_path, monkeypatch, pi, "auto")
 
     def launch_with(args, passthrough, value):
         raise SystemExit(3)
 
     monkeypatch.setattr(pi, "_launch_with", launch_with)
     with pytest.raises(SystemExit):
-        pi._launch(SimpleNamespace(), [])
+        pi._launch(_args(), [])
     assert events[-1] == ("exit",)
 
 
-def test_auto_mode_turns_a_broker_error_into_die(monkeypatch, capsys):
+def test_auto_mode_turns_a_broker_error_into_die(monkeypatch, capsys, tmp_path):
     pi = _ocs().pi
     monkeypatch.setattr(pi, "check_installed", lambda: None)
 
@@ -459,21 +476,70 @@ def test_auto_mode_turns_a_broker_error_into_die(monkeypatch, capsys):
         yield  # pragma: no cover
 
     monkeypatch.setattr(pi.broker, "session", failing)
-    monkeypatch.setenv(pi.BROKER_ENV, "auto")
+    _rules(tmp_path, monkeypatch, pi, "auto")
     monkeypatch.setattr(pi, "_launch_with", lambda *a: pytest.fail("起動してはいけない"))
     with pytest.raises(SystemExit):
-        pi._launch(SimpleNamespace(), [])
+        pi._launch(_args(), [])
     err = capsys.readouterr().err
     assert "envoy が見つからない" in err and "導入の案内" in err
+    assert "--no-broker" in err  # 一時的に外す手段を案内する
 
 
-def test_manual_mode_does_not_start_a_broker(monkeypatch):
+def test_manual_mode_does_not_start_a_broker(monkeypatch, tmp_path):
     pi = _ocs().pi
     events: list = []
     monkeypatch.setattr(pi, "check_installed", lambda: None)
     monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
-    monkeypatch.setenv(pi.BROKER_ENV, "http://127.0.0.1:18080")
+    _rules(tmp_path, monkeypatch, pi, "http://127.0.0.1:18080")
     seen = []
     monkeypatch.setattr(pi, "_launch_with", lambda args, p, value: seen.append(value) or 0)
-    assert pi._launch(SimpleNamespace(), []) == 0
+    assert pi._launch(_args(), []) == 0
     assert events == [] and seen == ["http://127.0.0.1:18080"]
+
+
+@pytest.mark.parametrize("copilot", ["off", None], ids=["off", "no-broker-section"])
+def test_off_or_missing_setting_uses_no_broker(monkeypatch, tmp_path, copilot):
+    pi = _ocs().pi
+    events: list = []
+    monkeypatch.setattr(pi, "check_installed", lambda: None)
+    monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
+    _rules(tmp_path, monkeypatch, pi, copilot)
+    seen = []
+    monkeypatch.setattr(pi, "_launch_with", lambda args, p, value: seen.append(value) or 0)
+    assert pi._launch(_args(), []) == 0
+    assert events == [] and seen == [None]
+
+
+@pytest.mark.parametrize("copilot", ["auto", "http://127.0.0.1:18080"])
+def test_no_broker_flag_overrides_the_setting_and_warns(monkeypatch, tmp_path, capsys, copilot):
+    pi = _ocs().pi
+    events: list = []
+    monkeypatch.setattr(pi, "check_installed", lambda: None)
+    monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
+    _rules(tmp_path, monkeypatch, pi, copilot)
+    seen = []
+    monkeypatch.setattr(pi, "_launch_with", lambda args, p, value: seen.append(value) or 0)
+    assert pi._launch(_args(no_broker=True), []) == 0
+    assert events == [] and seen == [None]
+    assert "ブローカー無し" in capsys.readouterr().err
+
+
+def test_broker_setting_must_be_a_string(monkeypatch, tmp_path, capsys):
+    pi = _ocs().pi
+    _rules(tmp_path, monkeypatch, pi, 1)
+    with pytest.raises(SystemExit):
+        pi.read_broker_setting()
+    assert "broker.copilot" in capsys.readouterr().err
+
+
+def test_no_broker_is_parsed_by_pis_and_forwarded(monkeypatch):
+    ocs = _ocs()
+    assert ocs.pis.parse(["--no-broker", "--bypass", "-c"]).no_broker is True
+    assert ocs.pis.parse(["-c"]).no_broker is False
+    seen = {}
+    monkeypatch.setattr(
+        ocs.pi, "_launch", lambda args, rest: seen.update(no_broker=args.no_broker, rest=rest) or 0
+    )
+    assert ocs.pi.run_sandboxed(["--no-broker", "-c"]) == 0
+    assert seen == {"no_broker": True, "rest": ["-c"]}
+    assert ocs.pi.run_sandboxed(["-c"]) == 0 and seen["no_broker"] is False

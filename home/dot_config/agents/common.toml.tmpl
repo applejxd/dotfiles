@@ -1132,6 +1132,14 @@ protected = [
   "home/dot_pi",
 ]
 
+# see docs/spec/opencode-sandbox.md#copilot-ブローカーpis-のみ
+[pis.broker]
+{{- if eq (includeTemplate "llm-provider" .) "github-copilot" }}
+copilot = "auto"
+{{- else }}
+copilot = "off"
+{{- end }}
+
 # pi のプロンプトテンプレート (~/.pi/agent/prompts/<名前>.md になり、/<名前> で呼ぶ)。
 # 文面は pi のツール (guarded_task) に合わせてある。[opencode.commands] とは別 (段 6 で OpenCode 側を消す)。
 # $ARGUMENTS は呼び出しの引数全部。

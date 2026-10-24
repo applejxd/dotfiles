@@ -1338,6 +1338,11 @@
    }
   }
  },
+ "pis": {
+  "broker": {
+   "copilot": "auto"
+  }
+ },
  "provider": {
   "amazon-bedrock": {
    "network_allow": [

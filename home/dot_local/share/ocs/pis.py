@@ -20,7 +20,7 @@ from pathlib import Path
 from . import pi
 from .common import HOME
 
-USAGE = "usage: pis [--bypass] [--no-sandbox] [--role <役割>] [--] [pi の引数...]"
+USAGE = "usage: pis [--bypass] [--no-sandbox] [--no-broker] [--role <役割>] [--] [pi の引数...]"
 # 外から入った内部の環境変数。子エージェントの印は pis が起動するたびに外す
 INTERNAL_ENV = (
     "PI_HARNESS_CHILD",
@@ -40,6 +40,7 @@ class Options:
     sandbox: bool
     role: str
     rest: list[str]
+    no_broker: bool = False
 
 
 def fail(message: str, code: int = 1) -> None:
@@ -49,7 +50,7 @@ def fail(message: str, code: int = 1) -> None:
 
 def parse(argv: list[str]) -> Options:
     """先頭の pis のオプションだけを解釈し、残りを pi (と ``--check`` など) へ渡す。"""
-    bypass = no_sandbox = boundary = False
+    bypass = no_sandbox = boundary = no_broker = False
     role = ""
     i = 0
     while i < len(argv):
@@ -59,6 +60,9 @@ def parse(argv: list[str]) -> Options:
             i += 1
         elif arg == "--no-sandbox":
             no_sandbox = True
+            i += 1
+        elif arg == "--no-broker":
+            no_broker = True
             i += 1
         elif arg == "--boundary":  # 互換 (今は標準と同じ意味)
             boundary = True
@@ -75,7 +79,7 @@ def parse(argv: list[str]) -> Options:
             break
     if no_sandbox and boundary:
         fail("--no-sandbox と --boundary は同時に使えない", 2)
-    return Options(bypass, not no_sandbox, role, argv[i:])
+    return Options(bypass, not no_sandbox, role, argv[i:], no_broker)
 
 
 def agent_dir() -> Path:
@@ -152,7 +156,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         os.environ.clear()
         os.environ.update(env)
-        return pi.run_sandboxed(options.rest)
+        return pi.run_sandboxed(
+            ["--no-broker", *options.rest] if options.no_broker else options.rest
+        )
     print("pis: サンドボックス無しで起動する (守りはフルガードだけ)", file=sys.stderr)
     if shutil.which("pi", path=env.get("PATH")) is None:
         fail("pi が PATH に無い")

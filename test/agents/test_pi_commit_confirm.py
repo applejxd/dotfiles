@@ -362,7 +362,11 @@ def test_the_tui_shows_the_structure_and_a_countdown_then_saves_on_timeout(env):
         assert "feat: 件名です" in screen and "(" in screen and "s)" in screen, (
             "残り時間が出ていない"
         )
+        # 期限切れの保存 (git の ref 作成) も負荷で遅れる。固定の sleep ではなく、保存されるまで待つ
         time.sleep(6)
+        deadline = time.monotonic() + 30
+        while not pending_refs(env) and time.monotonic() < deadline:
+            time.sleep(0.5)
     finally:
         subprocess.run(["tmux", "kill-session", "-t", session], check=False)
     assert commits(env) == [] and len(pending_refs(env)) == 1

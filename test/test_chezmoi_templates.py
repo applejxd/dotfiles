@@ -218,9 +218,59 @@ SHELL_RC_FILES = (
 )
 
 
-def render_external(*, home: Path, os_name: str = "linux") -> dict:
-    context = {"chezmoi": {"os": os_name, "homeDir": str(home)}}
+def render_external(
+    *,
+    home: Path,
+    os_name: str = "linux",
+    provider: str = "amazon-bedrock",
+    raspi: bool = False,
+    arch: str = "amd64",
+) -> dict:
+    # llm_provider / is_raspi は共有テンプレートの上書き用キー (実機の判定に依らず固定する)
+    context = {
+        "chezmoi": {"os": os_name, "homeDir": str(home), "arch": arch},
+        "llm_provider": provider,
+        "is_raspi": raspi,
+    }
     return tomllib.loads(execute_with_context(EXTERNAL_TEMPLATE, context, dict(os.environ)))
+
+
+ENVOY_SHA256 = {
+    "amd64": ("x86_64", "7104734ba4adaf505acff192cddf5427fb7b0c53827a2039171969fb2d694060"),
+    "arm64": ("aarch_64", "2ca4468240d277b3af0b869bea3b21a58945bc517ef2c263be57bd5431e80498"),
+}
+
+
+@pytest.mark.parametrize("arch", ["amd64", "arm64"])
+def test_envoy_is_fetched_for_copilot_linux_hosts(tmp_path, arch):
+    """pis の Copilot ブローカー用の Envoy は、github-copilot の Linux 機にだけ、sha256 固定で置く。"""
+    externals = render_external(home=tmp_path, provider="github-copilot", arch=arch)
+    asset, sha256 = ENVOY_SHA256[arch]
+    entry = externals[".local/bin/envoy"]
+    assert entry["type"] == "file"
+    assert entry["executable"] is True
+    assert entry["checksum"] == {"sha256": sha256}
+    assert entry["url"].endswith(f"/v1.40.1/envoy-1.40.1-linux-{asset}")
+    # 既存の宣言は残る
+    assert set(externals) == {*SHELL_PLUGINS, ".local/bin/envoy"}
+
+
+@pytest.mark.parametrize(
+    ("os_name", "provider", "raspi", "arch"),
+    [
+        ("windows", "github-copilot", False, "amd64"),
+        ("darwin", "github-copilot", False, "arm64"),
+        ("linux", "amazon-bedrock", False, "amd64"),
+        ("linux", "github-copilot", True, "arm64"),
+        ("linux", "github-copilot", False, "386"),
+    ],
+    ids=["windows", "macos", "bedrock", "raspi", "unsupported-arch"],
+)
+def test_envoy_is_not_fetched_elsewhere(tmp_path, os_name, provider, raspi, arch):
+    externals = render_external(
+        home=tmp_path, os_name=os_name, provider=provider, raspi=raspi, arch=arch
+    )
+    assert ".local/bin/envoy" not in externals
 
 
 @pytest.mark.parametrize("os_name", ["linux", "darwin"])

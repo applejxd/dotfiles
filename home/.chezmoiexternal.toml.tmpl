@@ -36,4 +36,19 @@
     type = "file"
     url = "https://raw.githubusercontent.com/cocopon/iceberg.vim/master/colors/iceberg.vim"
 {{-   end }}
+{{-   if eq .chezmoi.os "linux" }}
+{{-     if and (eq (includeTemplate "llm-provider" .) "github-copilot") (ne (includeTemplate "is-raspi" .) "true") }}
+{{-       $envoy := dict "amd64" (dict "asset" "x86_64" "sha256" "7104734ba4adaf505acff192cddf5427fb7b0c53827a2039171969fb2d694060") "arm64" (dict "asset" "aarch_64" "sha256" "2ca4468240d277b3af0b869bea3b21a58945bc517ef2c263be57bd5431e80498") }}
+{{-       if hasKey $envoy .chezmoi.arch }}
+{{-         $asset := index $envoy .chezmoi.arch }}
+
+# Envoy (pis の Copilot ブローカー)。更新手順: see docs/spec/structure.md
+[".local/bin/envoy"]
+    type = "file"
+    url = "https://github.com/envoyproxy/envoy/releases/download/v1.40.1/envoy-1.40.1-linux-{{ $asset.asset }}"
+    executable = true
+    checksum.sha256 = "{{ $asset.sha256 }}"
+{{-       end }}
+{{-     end }}
+{{-   end }}
 {{- end }}

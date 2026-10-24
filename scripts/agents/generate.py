@@ -1894,6 +1894,30 @@ def pi_own_extensions(common: dict[str, Any]) -> list[str]:
     return list(names)
 
 
+PI_BROKER_KEYS = frozenset({"copilot"})
+
+
+def pi_broker(common: dict[str, Any]) -> dict[str, str]:
+    """``[pis.broker] copilot``。rules.json の ``broker.copilot`` (無ければ ``off``)。
+
+    ここでは ``off`` / ``auto`` / ``http://`` で始まる文字列かだけを見る。URL の形
+    (127.0.0.1・1024-65535) の厳密な検証は pis (``pi.parse_broker``) が起動時に行う。
+    see docs/spec/opencode-sandbox.md#copilot-ブローカーモードpis_copilot_brokerpis-のみ
+    """
+    section = (common.get("pis") or {}).get("broker")
+    if section is None:
+        return {"copilot": "off"}
+    if not isinstance(section, dict):
+        raise SystemExit("[pis.broker] がテーブルでない")
+    _reject_unknown("pis.broker", set(section), PI_BROKER_KEYS)
+    value = section.get("copilot", "off")
+    if not isinstance(value, str) or not (value in ("off", "auto") or value.startswith("http://")):
+        raise SystemExit(
+            f'[pis.broker] copilot は "off" / "auto" / "http://127.0.0.1:<port>" のどれか: {value!r}'
+        )
+    return {"copilot": value}
+
+
 def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """pi のフルガードが読む ``~/.config/pi/harness/rules.json``。
 
@@ -1911,6 +1935,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
         "default_role": pi_default_role(common),
         "extensions": pi_own_extensions(common),
         "agent_env": agent_env(common),
+        "broker": pi_broker(common),
         "redact": redact,
         "agents": pi_agents(common),
         "mcp": pi_mcp_servers(common),

@@ -1,4 +1,4 @@
-# pis の Copilot ブローカー (PIS_COPILOT_BROKER=auto) が起動する Envoy の設定の雛形。
+# pis の Copilot ブローカー (設定 [pis.broker] copilot = "auto") が起動する Envoy の設定の雛形。
 # broker.py が起動ごとに、アットマークで囲んだ次の 3 つの名前を置き換えて、状態ディレクトリへ書く。
 #   PORT     127.0.0.1 のリッスンポート (空きポート。引用符ごと整数に置き換える)
 #   HOST     中継先 (Copilot の API ホスト。トークンの proxy-ep から決める)

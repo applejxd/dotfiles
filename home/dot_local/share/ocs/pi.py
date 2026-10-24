@@ -19,6 +19,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
@@ -73,25 +74,47 @@ def is_secret_env(name: str) -> bool:
 
 # ─── Copilot ブローカーモード ────────────────────────────────────────
 # ホスト側の Envoy が本物の認証情報を持ち、内側の pi にはダミーだけを渡す。
-# 入力は PIS_COPILOT_BROKER (未設定なら何も変わらない)。
-BROKER_ENV = "PIS_COPILOT_BROKER"
+# 入力は rules.json の broker.copilot (正本は common.toml の [pis.broker] copilot)。
+# see docs/spec/opencode-sandbox.md#copilot-ブローカーモードpis_copilot_brokerpis-のみ
+BROKER_KEY = "broker.copilot"
+NO_BROKER_NOTICE = "pis: ブローカー無し: 内側に Copilot の認証情報が入る"
+NO_BROKER_HINT = "一時的に外すなら pis --no-broker (内側に本物の Copilot の認証が入る)"
 BROKER_PROVIDER = "github-copilot"
 BROKER_DUMMY_TOKEN = "dummy-not-a-real-token"
 BROKER_IDENTITY_PATH = "/__pis_broker"
 BROKER_IDENTITY_PREFIX = "pis-broker-copilot"
 BROKER_TIMEOUT_SECONDS = 3
-BROKER_HINT = (
-    f"{BROKER_ENV} は http://127.0.0.1:<1024-65535> の形で指定する (例 http://127.0.0.1:18080)"
-)
+BROKER_HINT = f"{BROKER_KEY} は off / auto / http://127.0.0.1:<1024-65535> のどれか (例 http://127.0.0.1:18080)"
 
 
 def is_auto_broker(value: str | None) -> bool:
-    """``PIS_COPILOT_BROKER=auto`` (大文字小文字は区別しない)。前後の空白は認めない。"""
+    """``broker.copilot`` が ``auto`` (大文字小文字は区別しない)。前後の空白は認めない。"""
     return value is not None and value.lower() == "auto"
 
 
+def read_broker_setting(rules_path: Path | None = None) -> str | None:
+    """``rules.json`` の ``broker.copilot`` を返す。``off``・未設定・``broker`` 節が無いなら None。
+
+    ``auto`` や URL の検証は :func:`parse_broker` と :func:`is_auto_broker` に任せる。
+    """
+    path = rules_path if rules_path is not None else RULES
+    try:
+        rules = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        die(f"{path} を読めない: {e}", "chezmoi apply で生成する")
+    section = rules.get("broker") if isinstance(rules, dict) else None
+    if section is None:
+        return None
+    value = section.get("copilot") if isinstance(section, dict) else None
+    if value is None or value == "off":
+        return None
+    if not isinstance(value, str):
+        die(f"{path} の {BROKER_KEY} が文字列でない: {value!r}", BROKER_HINT)
+    return value
+
+
 def parse_broker(value: str | None) -> tuple[str, int] | None:
-    """``PIS_COPILOT_BROKER`` を厳密に検証し、(末尾スラッシュなしの URL, ポート) を返す。
+    """``broker.copilot`` の URL を厳密に検証し、(末尾スラッシュなしの URL, ポート) を返す。
 
     未設定 (None / 空文字) なら None。http・127.0.0.1・1024〜65535・パス無し・
     ユーザー情報 / クエリ / フラグメント無し以外は起動を拒否する。
@@ -99,22 +122,22 @@ def parse_broker(value: str | None) -> tuple[str, int] | None:
     if value is None or value == "":
         return None
     if value != value.strip() or "?" in value or "#" in value:
-        die(f"{BROKER_ENV} が不正: {value!r} (空白・クエリ・フラグメントは使えない)", BROKER_HINT)
+        die(f"{BROKER_KEY} が不正: {value!r} (空白・クエリ・フラグメントは使えない)", BROKER_HINT)
     try:
         parts = urlsplit(value)
         port = parts.port
     except ValueError:
-        die(f"{BROKER_ENV} が URL として読めない: {value!r}", BROKER_HINT)
+        die(f"{BROKER_KEY} が URL として読めない: {value!r}", BROKER_HINT)
     if parts.scheme != "http":
-        die(f"{BROKER_ENV} のスキームは http のみ: {value!r}", BROKER_HINT)
+        die(f"{BROKER_KEY} のスキームは http のみ: {value!r}", BROKER_HINT)
     if "@" in parts.netloc:
-        die(f"{BROKER_ENV} にユーザー情報は書けない: {value!r}", BROKER_HINT)
+        die(f"{BROKER_KEY} にユーザー情報は書けない: {value!r}", BROKER_HINT)
     if parts.hostname != "127.0.0.1":
-        die(f"{BROKER_ENV} のホストは 127.0.0.1 のみ: {value!r}", BROKER_HINT)
+        die(f"{BROKER_KEY} のホストは 127.0.0.1 のみ: {value!r}", BROKER_HINT)
     if port is None or not 1024 <= port <= 65535:
-        die(f"{BROKER_ENV} のポートは 1024〜65535 (必須): {value!r}", BROKER_HINT)
+        die(f"{BROKER_KEY} のポートは 1024〜65535 (必須): {value!r}", BROKER_HINT)
     if parts.path not in ("", "/"):
-        die(f"{BROKER_ENV} にパスは書けない: {value!r}", BROKER_HINT)
+        die(f"{BROKER_KEY} にパスは書けない: {value!r}", BROKER_HINT)
     return f"http://127.0.0.1:{port}", port
 
 
@@ -127,7 +150,10 @@ def verify_broker(url: str) -> None:
     """境界を組む前に、ブローカーが本物か確かめる。違えば起動を拒否する。"""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     target = url + BROKER_IDENTITY_PATH
-    hint = f"{BROKER_ENV}=auto なら pis が Envoy を自動で起動する。手動なら Envoy を起動してから pis を使う"
+    hint = (
+        f"{BROKER_KEY}=auto なら pis が Envoy を自動で起動する。手動なら Envoy を起動してから pis を使う。"
+        f"{NO_BROKER_HINT}"
+    )
     try:
         with opener.open(target, timeout=BROKER_TIMEOUT_SECONDS) as response:
             status = response.status
@@ -485,7 +511,11 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     see docs/spec/pi-guard.md#サンドボックス
     """
     check_installed()
-    value = os.environ.get(BROKER_ENV)
+    if args.no_broker:
+        print(NO_BROKER_NOTICE, file=sys.stderr)
+        value = None
+    else:
+        value = read_broker_setting()
     # auto は pis と同じ寿命の Envoy を立て、その URL を手動モードと同じ経路へ渡す。
     # 例外・SystemExit でも ExitStack が止めて状態を消す。境界を組む前に入る
     with contextlib.ExitStack() as stack:
@@ -493,12 +523,12 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
             try:
                 value = stack.enter_context(broker.session(REAL_AGENT))
             except broker.BrokerError as e:
-                die(str(e), e.hint)
+                die(str(e), f"{e.hint}。{NO_BROKER_HINT}")
         return _launch_with(args, passthrough, value)
 
 
 def _launch_with(args: argparse.Namespace, passthrough: list[str], broker_value: str | None) -> int:
-    """``_launch`` の本体。``broker_value`` は ``PIS_COPILOT_BROKER`` の URL (無ければ None)。"""
+    """``_launch`` の本体。``broker_value`` は ``broker.copilot`` の URL (無ければ None)。"""
     # ブローカーモード (未設定なら None で、以降は現行と同じ)。境界を組む前に検証と身元確認をする
     endpoint = parse_broker(broker_value)
     if endpoint is not None:
@@ -579,7 +609,7 @@ def _launch_with(args: argparse.Namespace, passthrough: list[str], broker_value:
 def run_sandboxed(argv: list[str]) -> int:
     """``pis`` の標準の起動 (サンドボックスの中)。
 
-    ``--no-backup`` と ``--check`` だけを解釈し、残りは pi へ渡す。
+    ``--no-backup``・``--check``・``--no-broker`` だけを解釈し、残りは pi へ渡す。
     """
     parser = argparse.ArgumentParser(prog="pis")
     parser.add_argument(
@@ -591,6 +621,11 @@ def run_sandboxed(argv: list[str]) -> int:
         "--check",
         action="store_true",
         help="起動せず、この起動ディレクトリのサンドボックスを内側から検査する",
+    )
+    parser.add_argument(
+        "--no-broker",
+        action="store_true",
+        help="Copilot ブローカーを使わない (設定が auto でも。内側に本物の Copilot の認証が入る)",
     )
     args, passthrough = parser.parse_known_args(argv)
     return _launch(args, passthrough)

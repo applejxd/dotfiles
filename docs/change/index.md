@@ -64,7 +64,7 @@
 | [Windows ネイティブ（PowerShell）で pi を、OS の境界つきで動かす](0034-windows-native-pi-boundary.md) | リポジトリが Windows 側で、Windows 起動前提のアプリも開発するので、Windows ネイティブで pi を境界つきで動かしたい（OpenShell・Docker Sandboxes は合わない） | Exploring | `srt` の Windows alpha で `pi` を包めるか。サーバ・アプリの起動と通信の制御が両立するか。Windows 実機が要る | 段 W1: Windows 実機で `srt` に `pi` を包む手順書を作り、利用者に実行してもらう | 2026-10-24 |
 | [0035](0035-retire-python-judge-oracle.md) | 判定器の Python 版（オラクル）を撤去して、二重保守を解消する | Exploring | 「実機での観察」の定義（ADR-0017 に無い）。正解データを Python 版なしで保つ設計 | 段 R1: 撤去の条件を利用者と決める。段 R2: 凍結か書き出しかの設計を `review` へ | 2026-10-24 |
 | [0036](0036-nono-trial-on-wsl2.md) | nono を WSL2 で小さく試し、境界の層（`ocs`）の置き換えの可否を測る | Exploring | WSL2 で nono がドメインの許可リストを標準では提供しない（現行の境界との差）。導入に利用者の許可が要る | 段 N1: 導入と `nono setup --check-only` の許可を尋ねる | 2026-10-24 |
-| [0037](0037-pis-usability-and-telemetry.md) | `pis` の使い勝手を、他のプロジェクトで常用できる水準に上げ、運用の記録を取る（便益を測る前提） | Exploring | 通信を拒否リスト型に引き直す設計。認証情報を内側に置かないホスト側のブローカー（Envoy。`PIS_COPILOT_BROKER=auto` で `pis` と同寿命。Copilot は実機で応答 OK）。境界つきのネット調査が通るか未検証 | 段 U7a: 利用者が Envoy を導入して `PIS_COPILOT_BROKER=auto pis` を使う（24 時間後の再読み込みの確認）。続けて段 U7b（Bedrock、会社の機） | 2026-10-24 |
+| [0037](0037-pis-usability-and-telemetry.md) | `pis` の使い勝手を、他のプロジェクトで常用できる水準に上げ、運用の記録を取る（便益を測る前提） | Exploring | 通信を拒否リスト型に引き直す設計。認証情報を内側に置かないホスト側のブローカー（Envoy。設定 `[pis.broker]` で `pis` と同寿命。Copilot は実機で応答 OK）。境界つきのネット調査が通るか未検証 | 段 U7a: 利用者が `pis` を普段どおり使う（24 時間後の再読み込みの確認）。Envoy は `chezmoi apply` が導入。続けて段 U7b（Bedrock、会社の機） | 2026-10-24 |
 
 ## 保留
 

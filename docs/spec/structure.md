@@ -1123,6 +1123,18 @@ zinit が管理するプラグイン（`yuki-yano/zeno.zsh`、`zsh-users/zsh-com
 Windows native では rc を配らないため対象外です。Linux / WSL / Raspberry Pi /
 macOS では同じです。
 
+## Envoy の取得
+
+`pis` の Copilot ブローカー（[opencode-sandbox.md](opencode-sandbox.md#copilot-ブローカーpis-のみ)）が使う Envoy は、
+`chezmoi apply` が `home/.chezmoiexternal.toml.tmpl` で `~/.local/bin/envoy` へ取得します。
+固定版（v1.40.1）の公式リリースのバイナリを、`checksum.sha256` で照合します（chezmoi が検証）。
+
+- **対象**: Linux / WSL で、`llm-provider` が `github-copilot` の機、Raspberry Pi 以外、amd64 と arm64 だけ
+  （Envoy は macOS・Windows のバイナリを配布していない。会社の機は、Bedrock の対応（CHG-0037 段 U7b）まで対象外）
+- **更新手順**: 公式リリースの `checksums.txt.asc` から、`envoy-<版>-linux-x86_64` と `envoy-<版>-linux-aarch_64` の
+  sha256 を取り、`.chezmoiexternal.toml.tmpl` の版・URL・sha256 を 3 つ同時に書き換える（署名の検証は任意）
+- **sha256 の限界**: 同じリリースの checksums との一致で、改ざん検知の根拠は弱い（署名の検証は未実施）
+
 各項目は**パスがまだ無いときだけ宣言します**（`stat` で判定）。chezmoi 2.72 の
 git-repo external には次の挙動があり、既に clone 済みの機械を壊すためです。
 

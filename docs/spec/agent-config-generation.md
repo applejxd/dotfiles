@@ -348,6 +348,13 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 3 層との対応と Claude / Copilot との扱いの差は
 [OpenCode V2 の扱い](agent-permissions.md#opencode-v2-の扱い) を参照。
 
+### Copilot ブローカーの設定（`[pis.broker]`）
+
+`common.toml.tmpl` の `[pis.broker] copilot`（`off` / `auto` / `http://127.0.0.1:<port>`）は、
+`build_pi_harness` が `rules.json` の `broker.copilot` へ出し、`pis` が起動時に読む。
+未知のキーは拒否、省略時は `off`。値の厳密な検証（URL の形）は起動時に `pi.py` が行う。
+意味と振る舞いは [opencode-sandbox.md](opencode-sandbox.md#copilot-ブローカーpis-のみ)。
+
 ### pi と共有する節
 
 次の 5 つは `[pi]` が正本で、pi のフルガードの判定器と OpenCode の生成の両方が読む（移行の計画は

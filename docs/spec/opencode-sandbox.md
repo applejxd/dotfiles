@@ -374,26 +374,32 @@ export PIS_EXTRA_DEVICES=/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm  # ネイ�
 - 起動ラッパーが Fence の外で読み、内側へは渡さない (`cli.DROP_ENV`)。`write`・`network_allow` は
   環境変数では足せない
 
-### Copilot ブローカーモード（`PIS_COPILOT_BROKER`、`pis` のみ）
+### Copilot ブローカー（`pis` のみ）
 
 本物の Copilot の認証情報をホスト側の中継（Envoy）に持たせ、内側の `pi` にはダミーだけを渡す
 ([CHG-0037](../change/0037-pis-usability-and-telemetry.md) 段 U7a)。
 
-```sh
-export PIS_COPILOT_BROKER=http://127.0.0.1:18080
-```
+有効にするのは設定 `[pis.broker] copilot`（`common.toml.tmpl`。`rules.json` の `broker.copilot` へ生成）。
+環境変数は使わない。値は 3 種類:
 
-- **未設定なら挙動は変わらない**。形は `http://127.0.0.1:<1024-65535>` だけ（https・他のホスト・パス・クエリは起動拒否）
-- 起動前（Fence の外）に `<値>/__pis_broker` へ GET し、本文が `pis-broker-copilot` で始まる 200 でなければ起動しない
+| 値 | 意味 |
+| --- | --- |
+| `"off"`（既定） | 使わない。挙動は従来どおり |
+| `"auto"` | `pis` が起動ごとに自分専用の Envoy を空きポートで立て、終了時に止める |
+| `"http://127.0.0.1:<1024-65535>"` | 自分で立てた中継を使う（https・他のホスト・パス・クエリは起動拒否） |
+
+家の機（`llm-provider` が `github-copilot`）は `"auto"`、それ以外は `"off"`。一時的に外すには
+`pis --no-broker`（内側に本物の Copilot の認証が入るので、起動時に 1 行注意を表示する）。
+
+- 起動前（Fence の外）に `<URL>/__pis_broker` へ GET し、本文が `pis-broker-copilot` で始まる 200 でなければ起動しない
   （別のサービスがそのポートを占有していても使わない）
 - 境界に `allowLocalOutbound=true`・`allowLocalOutboundPorts=[<port>]` を足す（`ocs` は変えない）
 - 起動別の `auth.json` から `github-copilot` を除いて写し、終了時にホストへ戻さない。内側へは
   `COPILOT_GITHUB_TOKEN` のダミー値と、起動別の `models.json`（`providers.github-copilot.baseUrl`）を渡す
-- **自動モード**: `PIS_COPILOT_BROKER=auto` にすると、`pis` が起動ごとに、自分専用の Envoy を空きポートで立て、終了時に止める
-  （`broker.py`、`relay.py` と同じ型。同時に複数起動してもポートと状態は別）。ホストの `auth.json` の長期トークンで、
-  短命の Copilot トークンを取得し、SDS ファイルへ書く（`0700` の一時ディレクトリ、更新はスレッドで期限の 5 分前）。
-  Envoy は PATH か `~/.local/bin/envoy` から探す（**無ければ起動しない**。リリースの sha256 と照合して置く）。
-  手動モード（上の URL 指定）は、自分で立てた中継を使うとき用に残す
+- **`auto` の仕組み**: `broker.py`（`relay.py` と同じ型。同時に複数起動してもポートと状態は別）。ホストの `auth.json` の
+  長期トークンで、短命の Copilot トークンを取得し、SDS ファイルへ書く（`0700` の一時ディレクトリ、
+  更新はスレッドで期限の 5 分前）。Envoy は PATH か `~/.local/bin/envoy` から探す。無ければ起動しない
+  （`chezmoi apply` が、家の機へ固定版・sha256 照合で導入する。[導入と更新](structure.md#envoy-の取得)）
 - 内側から送れる要求は、観測した 3 つの POST（`/v1/messages`・`/responses`・`/chat/completions`）だけ、他は 403
 
 ## 状態の置き場

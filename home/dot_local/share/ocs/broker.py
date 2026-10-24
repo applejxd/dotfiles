@@ -1,4 +1,4 @@
-"""``pis`` の Copilot ブローカー (``PIS_COPILOT_BROKER=auto``) を、pis と同じ寿命で動かす。
+"""``pis`` の Copilot ブローカー (設定 ``[pis.broker] copilot = "auto"``) を、pis と同じ寿命で動かす。
 
 ホスト側 (Fence の外) で自分専用の Envoy を空きポートに立て、pis の終了で止める。
 本物の認証情報 (GitHub の長期トークンと短命の Copilot トークン) はホストと Envoy だけが持ち、
@@ -57,7 +57,8 @@ EXCHANGE_TIMEOUT_SECONDS = 30
 STOP_TIMEOUT_SECONDS = 5
 
 INSTALL_HINT = (
-    "Envoy の公式リリースの Linux x86_64 バイナリと、同じリリースの sha256 を取り、"
+    "chezmoi apply で導入される (llm-provider が github-copilot の機)。手動なら、"
+    "Envoy の公式リリースの Linux バイナリと同じリリースの sha256 を取り、"
     "照合してから ~/.local/bin/envoy へ置いて実行権限を付ける"
 )
 
