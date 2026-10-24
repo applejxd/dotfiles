@@ -374,6 +374,24 @@ export PIS_EXTRA_DEVICES=/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm  # ネイ�
 - 起動ラッパーが Fence の外で読み、内側へは渡さない (`cli.DROP_ENV`)。`write`・`network_allow` は
   環境変数では足せない
 
+### Copilot ブローカーモード（`PIS_COPILOT_BROKER`、`pis` のみ）
+
+本物の Copilot の認証情報をホスト側の中継（Envoy）に持たせ、内側の `pi` にはダミーだけを渡す
+([CHG-0037](../change/0037-pis-usability-and-telemetry.md) 段 U7a)。
+
+```sh
+export PIS_COPILOT_BROKER=http://127.0.0.1:18080
+```
+
+- **未設定なら挙動は変わらない**。形は `http://127.0.0.1:<1024-65535>` だけ（https・他のホスト・パス・クエリは起動拒否）
+- 起動前（Fence の外）に `<値>/__pis_broker` へ GET し、本文が `pis-broker-copilot` で始まる 200 でなければ起動しない
+  （別のサービスがそのポートを占有していても使わない）
+- 境界に `allowLocalOutbound=true`・`allowLocalOutboundPorts=[<port>]` を足す（`ocs` は変えない）
+- 起動別の `auth.json` から `github-copilot` を除いて写し、終了時にホストへ戻さない。内側へは
+  `COPILOT_GITHUB_TOKEN` のダミー値と、起動別の `models.json`（`providers.github-copilot.baseUrl`）を渡す
+- Envoy と更新スクリプトの起動は `pis` に統合していない（`scripts/agents/broker_spike.sh`）。
+  内側から中継へ送れる要求の範囲（パス・メソッド）の制限は未実施
+
 ## 状態の置き場
 
 ```mermaid

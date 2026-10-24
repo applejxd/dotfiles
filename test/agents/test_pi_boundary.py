@@ -11,13 +11,16 @@ see docs/spec/pi-guard.md#サンドボックス
 
 from __future__ import annotations
 
+import http.server
 import importlib
 import json
 import os
 import shutil
+import socket
 import stat
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -514,6 +517,196 @@ def test_cleanup_removes_the_copy_after_syncing(tmp_path, monkeypatch):
     pi.cleanup(agent)
     assert not agent.exists()
     assert json.loads((real / "auth.json").read_text(encoding="utf-8"))["openai"]["expires"] == 200
+
+
+# ─── Copilot ブローカーモード ───────────────────────────────────────
+
+
+def _broker_real(tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    auth = _auth(openai=100, **{"github-copilot": 500})
+    (real / "auth.json").write_text(json.dumps(auth), encoding="utf-8")
+    os.chmod(real / "auth.json", 0o600)
+    return real, auth
+
+
+def test_broker_unset_keeps_the_current_behaviour(tmp_path, monkeypatch):
+    pi = _ocs().pi
+    assert pi.parse_broker(None) is None and pi.parse_broker("") is None
+    real, auth = _broker_real(tmp_path)
+    agent = pi.prepare_agent_dir(real, tmp_path / "home")
+    assert json.loads((agent / "auth.json").read_text(encoding="utf-8")) == auth
+    assert not (agent / "models.json").exists()
+    monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "host-secret")
+    monkeypatch.setattr(pi.check, "ensure_canary", lambda: None)
+    env = pi.inner_env(agent, {"filesystem": {}})
+    assert "COPILOT_GITHUB_TOKEN" not in env
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "https://127.0.0.1:18080",
+        "http://example.com:18080",
+        "http://localhost:18080",
+        "http://127.0.0.1:80",
+        "http://127.0.0.1:65536",
+        "http://127.0.0.1",
+        "http://127.0.0.1:18080/v1",
+        "http://127.0.0.1:18080/?a=1",
+        "http://127.0.0.1:18080?",
+        "http://127.0.0.1:18080/#x",
+        "http://user:pw@127.0.0.1:18080",
+        "http://user@127.0.0.1:18080",
+        " http://127.0.0.1:18080",
+        "http://127.0.0.1:abc",
+    ],
+)
+def test_broker_rejects_invalid_values(bad, capsys):
+    pi = _ocs().pi
+    with pytest.raises(SystemExit):
+        pi.parse_broker(bad)
+    assert "PIS_COPILOT_BROKER" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["http://127.0.0.1:18080", "http://127.0.0.1:18080/"])
+def test_broker_accepts_a_loopback_url(value):
+    pi = _ocs().pi
+    assert pi.parse_broker(value) == ("http://127.0.0.1:18080", 18080)
+
+
+def test_broker_opens_only_its_port_in_the_fence_config():
+    pi = _ocs().pi
+    config_ = {"network": {"allowLocalBinding": False, "allowedDomains": ["x"]}}
+    pi.apply_broker_network(config_, 18080)
+    assert config_["network"] == {
+        "allowLocalBinding": False,
+        "allowedDomains": ["x"],
+        "allowLocalOutbound": True,
+        "allowLocalOutboundPorts": [18080],
+    }
+
+
+def test_broker_agent_dir_drops_only_the_copilot_auth(tmp_path):
+    pi = _ocs().pi
+    real, auth = _broker_real(tmp_path)
+    agent = pi.prepare_agent_dir(real, tmp_path / "home", "http://127.0.0.1:18080")
+    copied = json.loads((agent / "auth.json").read_text(encoding="utf-8"))
+    assert "github-copilot" not in copied and copied["openai"] == auth["openai"]
+    assert stat.S_IMODE((agent / "auth.json").stat().st_mode) == 0o600
+    # 本物は触らない
+    assert json.loads((real / "auth.json").read_text(encoding="utf-8")) == auth
+
+
+def test_broker_agent_dir_writes_models_json(tmp_path):
+    pi = _ocs().pi
+    real, _ = _broker_real(tmp_path)
+    agent = pi.prepare_agent_dir(real, tmp_path / "home", "http://127.0.0.1:18080/")
+    models = json.loads((agent / "models.json").read_text(encoding="utf-8"))
+    assert models == {"providers": {"github-copilot": {"baseUrl": "http://127.0.0.1:18080"}}}
+    # 既にあれば (他のプロバイダや項目を残して) マージする
+    (agent / "models.json").write_text(
+        json.dumps({"providers": {"x": {"a": 1}, "github-copilot": {"b": 2}}}), encoding="utf-8"
+    )
+    pi._write_broker_models(agent, "http://127.0.0.1:18080")
+    merged = json.loads((agent / "models.json").read_text(encoding="utf-8"))
+    assert merged["providers"]["x"] == {"a": 1}
+    assert merged["providers"]["github-copilot"] == {"b": 2, "baseUrl": "http://127.0.0.1:18080"}
+
+
+def test_broker_env_has_the_dummy_and_never_the_host_value(tmp_path, monkeypatch):
+    pi = _ocs().pi
+    monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "host-secret")
+    monkeypatch.setenv("GH_TOKEN", "host-secret")
+    monkeypatch.setattr(pi.check, "ensure_canary", lambda: None)
+    env = pi.inner_env(tmp_path / "agent", {"filesystem": {}}, broker=True)
+    assert env["COPILOT_GITHUB_TOKEN"] == "dummy-not-a-real-token"
+    assert "GH_TOKEN" not in env and "host-secret" not in env.values()
+
+
+def test_broker_sync_does_not_write_the_copilot_entry_back(tmp_path, monkeypatch):
+    pi = _ocs().pi
+    real_auth = _auth(openai=100, **{"github-copilot": 500})
+    copy_auth = _auth(openai=200, **{"github-copilot": 900})  # 内側で作られた (新しい) 分
+    real, agent = _setup_auth(tmp_path, real_auth, copy_auth)
+    monkeypatch.setattr(pi, "REAL_AGENT", real)
+    pi.cleanup(agent, broker=True)
+    merged = json.loads((real / "auth.json").read_text(encoding="utf-8"))
+    assert merged["openai"] == copy_auth["openai"]  # 他は現行どおり戻る
+    assert merged["github-copilot"] == real_auth["github-copilot"]
+
+
+def test_broker_sync_does_not_create_a_missing_copilot_entry(tmp_path):
+    pi = _ocs().pi
+    copy_auth = _auth(openai=200, **{"github-copilot": 900})
+    real, agent = _setup_auth(tmp_path, _auth(openai=100), copy_auth)
+    assert pi.sync_auth_back(agent, real, skip=("github-copilot",)) is True
+    assert "github-copilot" not in json.loads((real / "auth.json").read_text(encoding="utf-8"))
+
+
+class _Handler(http.server.BaseHTTPRequestHandler):
+    status = 200
+    body = b"pis-broker-copilot"
+    paths: list[str] = []  # noqa: RUF012
+
+    def do_GET(self):
+        type(self).paths.append(self.path)
+        self.send_response(type(self).status)
+        self.send_header("Content-Length", str(len(type(self).body)))
+        self.end_headers()
+        self.wfile.write(type(self).body)
+
+    def log_message(self, *_args):
+        pass
+
+
+def _serve(status, body):
+    handler = type("H", (_Handler,), {"status": status, "body": body, "paths": []})
+    server = http.server.HTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, handler, thread
+
+
+def test_broker_identity_check_accepts_the_real_broker(monkeypatch):
+    pi = _ocs().pi
+    # 環境のプロキシ設定があっても使わない
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:9")
+    server, handler, thread = _serve(200, b"pis-broker-copilot\n")
+    try:
+        pi.verify_broker(f"http://127.0.0.1:{server.server_port}")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+    assert handler.paths == ["/__pis_broker"]
+
+
+@pytest.mark.parametrize(("status", "body"), [(200, b"hello"), (404, b"pis-broker-copilot")])
+def test_broker_identity_check_refuses_another_service(status, body, capsys):
+    pi = _ocs().pi
+    server, _handler, thread = _serve(status, body)
+    try:
+        with pytest.raises(SystemExit):
+            pi.verify_broker(f"http://127.0.0.1:{server.server_port}")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+    assert "別のサービス" in capsys.readouterr().err
+
+
+def test_broker_identity_check_refuses_when_unreachable(capsys):
+    pi = _ocs().pi
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()  # 閉じた直後のポートは誰も聞いていない
+    with pytest.raises(SystemExit):
+        pi.verify_broker(f"http://127.0.0.1:{port}")
+    assert "動いていない" in capsys.readouterr().err
 
 
 # ─── 実際の Fence ───────────────────────────────────────────────────

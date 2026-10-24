@@ -21,8 +21,11 @@ import signal
 import subprocess
 import tempfile
 import time
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import backup, boundary, check, cli, relay
 from .common import HOME, STATE, die
@@ -68,6 +71,121 @@ def is_secret_env(name: str) -> bool:
     return SECRET_ENV.search(name) is not None
 
 
+# ─── Copilot ブローカーモード ────────────────────────────────────────
+# ホスト側の Envoy が本物の認証情報を持ち、内側の pi にはダミーだけを渡す。
+# 入力は PIS_COPILOT_BROKER (未設定なら何も変わらない)。
+BROKER_ENV = "PIS_COPILOT_BROKER"
+BROKER_PROVIDER = "github-copilot"
+BROKER_DUMMY_TOKEN = "dummy-not-a-real-token"
+BROKER_IDENTITY_PATH = "/__pis_broker"
+BROKER_IDENTITY_PREFIX = "pis-broker-copilot"
+BROKER_TIMEOUT_SECONDS = 3
+BROKER_HINT = (
+    f"{BROKER_ENV} は http://127.0.0.1:<1024-65535> の形で指定する (例 http://127.0.0.1:18080)"
+)
+
+
+def parse_broker(value: str | None) -> tuple[str, int] | None:
+    """``PIS_COPILOT_BROKER`` を厳密に検証し、(末尾スラッシュなしの URL, ポート) を返す。
+
+    未設定 (None / 空文字) なら None。http・127.0.0.1・1024〜65535・パス無し・
+    ユーザー情報 / クエリ / フラグメント無し以外は起動を拒否する。
+    """
+    if value is None or value == "":
+        return None
+    if value != value.strip() or "?" in value or "#" in value:
+        die(f"{BROKER_ENV} が不正: {value!r} (空白・クエリ・フラグメントは使えない)", BROKER_HINT)
+    try:
+        parts = urlsplit(value)
+        port = parts.port
+    except ValueError:
+        die(f"{BROKER_ENV} が URL として読めない: {value!r}", BROKER_HINT)
+    if parts.scheme != "http":
+        die(f"{BROKER_ENV} のスキームは http のみ: {value!r}", BROKER_HINT)
+    if "@" in parts.netloc:
+        die(f"{BROKER_ENV} にユーザー情報は書けない: {value!r}", BROKER_HINT)
+    if parts.hostname != "127.0.0.1":
+        die(f"{BROKER_ENV} のホストは 127.0.0.1 のみ: {value!r}", BROKER_HINT)
+    if port is None or not 1024 <= port <= 65535:
+        die(f"{BROKER_ENV} のポートは 1024〜65535 (必須): {value!r}", BROKER_HINT)
+    if parts.path not in ("", "/"):
+        die(f"{BROKER_ENV} にパスは書けない: {value!r}", BROKER_HINT)
+    return f"http://127.0.0.1:{port}", port
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        return None  # リダイレクトは辿らない (HTTPError になる)
+
+
+def verify_broker(url: str) -> None:
+    """境界を組む前に、ブローカーが本物か確かめる。違えば起動を拒否する。"""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+    target = url + BROKER_IDENTITY_PATH
+    hint = "Envoy (scripts/agents/broker-spike/envoy-copilot.yaml) を起動してから pis を使う"
+    try:
+        with opener.open(target, timeout=BROKER_TIMEOUT_SECONDS) as response:
+            status = response.status
+            body = response.read(256).decode("utf-8", errors="replace")
+    except OSError as e:  # URLError / HTTPError / タイムアウトはすべて OSError の仲間
+        die(f"Copilot ブローカーが動いていない、または別のサービス: {target} ({e})", hint)
+    if status != 200 or not body.startswith(BROKER_IDENTITY_PREFIX):
+        die(
+            f"Copilot ブローカーが動いていない、または別のサービス: {target} (status={status})",
+            hint,
+        )
+
+
+def _copy_auth_without_broker_provider(source: Path, dest: Path) -> None:
+    """``auth.json`` を、``github-copilot`` のエントリだけ除いて写す (権限は元のまま)。"""
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        die(
+            f"{source} を読めない ({e})",
+            "ブローカーモードでは auth.json を JSON として読む必要がある",
+        )
+    if not isinstance(data, dict):
+        die(f"{source} がオブジェクトでない", "auth.json を直す")
+    data.pop(BROKER_PROVIDER, None)
+    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    shutil.copystat(source, dest)
+
+
+def _write_broker_models(agent: Path, broker_url: str) -> None:
+    """``models.json`` に Copilot の ``baseUrl`` を入れる (あれば既存へマージ、無ければ新規)。"""
+    path = agent / "models.json"
+    data: dict = {}
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError as e:
+            die(f"{path} を JSON として読めない ({e})")
+        if not isinstance(data, dict):
+            die(f"{path} がオブジェクトでない")
+    providers = data.get("providers")
+    if not isinstance(providers, dict):
+        providers = {}
+    entry = providers.get(BROKER_PROVIDER)
+    entry = dict(entry) if isinstance(entry, dict) else {}
+    entry["baseUrl"] = broker_url.rstrip("/")
+    providers[BROKER_PROVIDER] = entry
+    data["providers"] = providers
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def apply_broker_network(config_: dict, port: int) -> None:
+    """ブローカーモードのときだけ、ホストのブローカーのポート 1 つへ localhost の送信を許す。
+
+    ``allowLocalBinding`` は触らない (``ocs`` と共通の ``build_boundary`` の出力は変えない)。
+    """
+    network = config_["network"]
+    network["allowLocalOutbound"] = True
+    network["allowLocalOutboundPorts"] = [port]
+
+
 def pi_binary() -> Path:
     """pi の実体。インストーラーが作る場所は PATH で変わるので、順に探す。"""
     for path in (PI, HOME / ".local/bin/pi", REAL_AGENT / "bin/pi"):
@@ -100,10 +218,14 @@ def _prune_agents(home: Path) -> None:
             pass  # 消せなくても起動は妨げない
 
 
-def prepare_agent_dir(real: Path | None = None, home: Path | None = None) -> Path:
+def prepare_agent_dir(
+    real: Path | None = None, home: Path | None = None, broker_url: str | None = None
+) -> Path:
     """境界用の agent 置き場を作り、本物から必要なものだけを写す。
 
     既定の置き場は呼び出しのときに引く (定義時に固定すると、差し替えが効かない)。
+    ``broker_url`` があれば (ブローカーモード) ``auth.json`` から ``github-copilot`` を除き、
+    ``models.json`` に ``baseUrl`` を入れる。
     """
     real = real if real is not None else REAL_AGENT
     home = home if home is not None else AGENT_HOME
@@ -114,7 +236,10 @@ def prepare_agent_dir(real: Path | None = None, home: Path | None = None) -> Pat
     for name in COPY_FILES:
         source = real / name
         if source.is_file():
-            shutil.copy2(source, agent / name)
+            if broker_url and name == "auth.json":
+                _copy_auth_without_broker_provider(source, agent / name)
+            else:
+                shutil.copy2(source, agent / name)
     for name in COPY_DIRS:
         source = real / name
         if source.is_dir():
@@ -128,6 +253,8 @@ def prepare_agent_dir(real: Path | None = None, home: Path | None = None) -> Pat
             (agent / name).write_text("" if name.endswith(".md") else "{}\n", encoding="utf-8")
     for name in FROZEN_DIRS:
         (agent / name).mkdir(exist_ok=True)
+    if broker_url:
+        _write_broker_models(agent, broker_url)
     return agent
 
 
@@ -149,7 +276,7 @@ def sessions_dir(workspace: Path, real: Path | None = None) -> Path:
     return path
 
 
-def inner_env(agent: Path, config_: dict) -> dict[str, str]:
+def inner_env(agent: Path, config_: dict, broker: bool = False) -> dict[str, str]:
     """境界の内側へ渡す環境変数。役割と bypass は ``pis`` が環境変数で渡す。
 
     ``PI_HARNESS_BOUNDARY`` は「内側のはず」という期待にすぎない。内側のフルガードが、次のカナリアで
@@ -166,6 +293,9 @@ def inner_env(agent: Path, config_: dict) -> dict[str, str]:
         for k, v in os.environ.items()
         if k not in (*COMMON_DROP, *DROP_ENV) and not is_secret_env(k)
     }
+    if broker:
+        # TOKEN を含む名前のフィルターの後に足す (ホストの同名変数は上で落ちている)
+        env["COPILOT_GITHUB_TOKEN"] = BROKER_DUMMY_TOKEN
     env["PI_CODING_AGENT_DIR"] = str(agent)
     env["PI_HARNESS_BOUNDARY"] = "1"
     env["PI_HARNESS_ALLOWED"] = json.dumps(
@@ -262,12 +392,13 @@ def _expires(entry: object) -> float:
     return float(value) if isinstance(value, (int, float)) else 0.0
 
 
-def sync_auth_back(agent: Path, real: Path | None = None) -> bool:
+def sync_auth_back(agent: Path, real: Path | None = None, skip: tuple[str, ...] = ()) -> bool:
     """境界の内側で更新された認証を本物の ``auth.json`` へ戻す。
 
     OAuth のリフレッシュトークンは更新のたびに入れ替わりうる。写しの中だけで更新されると、
     本物のトークンが失効する。**有効期限が本物より新しいプロバイダの分だけ**戻し、ほかは触らない。
     本物は pi と同じ ``auth.json.lock`` を取って書く。取れなければ戻さない (False)。
+    ``skip`` のプロバイダは戻さない (ブローカーモードの ``github-copilot``)。
     """
     real = real if real is not None else REAL_AGENT
     copy_path, real_path = agent / "auth.json", real / "auth.json"
@@ -297,6 +428,8 @@ def sync_auth_back(agent: Path, real: Path | None = None) -> bool:
             return False
         changed = False
         for name, entry in theirs.items():
+            if name in skip:
+                continue
             if entry != ours.get(name) and _expires(entry) > _expires(ours.get(name)):
                 ours[name] = entry
                 changed = True
@@ -313,7 +446,7 @@ def sync_auth_back(agent: Path, real: Path | None = None) -> bool:
             lock.rmdir()
 
 
-def run(argv: list[str], env: dict[str, str], agent: Path) -> int:
+def run(argv: list[str], env: dict[str, str], agent: Path, broker: bool = False) -> int:
     """境界の内側の pi を子プロセスとして動かし、終わったら認証を本物へ戻して置き場を消す。
 
     ``execve`` で置き換えると終了後の処理ができない。Ctrl-C は端末が子へも届けるので、
@@ -331,12 +464,12 @@ def run(argv: list[str], env: dict[str, str], agent: Path) -> int:
     finally:
         for number, handler in saved.items():
             signal.signal(number, handler)
-        cleanup(agent)
+        cleanup(agent, broker)
 
 
-def cleanup(agent: Path) -> None:
+def cleanup(agent: Path, broker: bool = False) -> None:
     """認証を戻して、写しを置いた境界用の agent 置き場を消す。"""
-    sync_auth_back(agent)
+    sync_auth_back(agent, skip=(BROKER_PROVIDER,) if broker else ())
     shutil.rmtree(agent, ignore_errors=True)
 
 
@@ -347,6 +480,10 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     see docs/spec/pi-guard.md#サンドボックス
     """
     check_installed()
+    # ブローカーモード (未設定なら None で、以降は現行と同じ)。境界を組む前に検証と身元確認をする
+    broker = parse_broker(os.environ.get(BROKER_ENV))
+    if broker is not None:
+        verify_broker(broker[0])
     sandbox = boundary.load_boundary(RULES, required=())
     runtime = Path(sandbox["runtime_path"])
     if not runtime.is_file():
@@ -359,9 +496,11 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     boundary.reject_protected_workspace(sandbox, workspace, request)
     boundary.announce_request(request)
 
-    agent = prepare_agent_dir()
+    agent = prepare_agent_dir(broker_url=broker[0] if broker else None)
     sessions = sessions_dir(workspace)
     config_ = boundary.build_boundary(sandbox, workspace, request, agent)
+    if broker is not None:
+        apply_broker_network(config_, broker[1])
     # セッションの置き場だけを本物へ開け、境界用 agent 置き場の設定と拡張は書けなくする
     config_["filesystem"]["allowWrite"].append(str(sessions))
     config_["filesystem"]["allowRead"].append(str(sessions))
@@ -372,7 +511,7 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
         "db": "",
         "config": config_,
     }
-    env = inner_env(agent, config_)
+    env = inner_env(agent, config_, broker is not None)
 
     # 社内プロキシ越しでないと外へ出られない機械では、許可リストの照合を中継へ移す (relay)
     with relay.session(config_) as fence_config:
@@ -383,7 +522,7 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
                 return check.run_check(runtime, boundary_file, project, env, cli.FENCE_TMP)
             finally:
                 Path(boundary_file).unlink(missing_ok=True)
-                cleanup(agent)
+                cleanup(agent, broker is not None)
 
         try:
             boundary_file = cli.write_boundary(fence_config)
@@ -402,7 +541,7 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
                 Path(boundary_file).unlink(missing_ok=True)
                 raise
         except BaseException:
-            cleanup(agent)
+            cleanup(agent, broker is not None)
             raise
         argv = [
             str(runtime),
@@ -413,7 +552,7 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
         ]
         try:
             # execve で置き換えない: 終了後に認証を本物へ戻し、写しを消すため (:func:`pi.run`)
-            return run(argv, check.host_env(env, cli.FENCE_TMP), agent)
+            return run(argv, check.host_env(env, cli.FENCE_TMP), agent, broker is not None)
         finally:
             Path(boundary_file).unlink(missing_ok=True)
 
