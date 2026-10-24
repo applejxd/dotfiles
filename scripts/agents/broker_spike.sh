@@ -27,16 +27,23 @@ cmd_check() {
 	say "auth.json: ${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/auth.json に github-copilot の OAuth が要る (pi で /login)。"
 }
 
-cmd_up() {
-	command -v envoy >/dev/null 2>&1 || { say "envoy が無い。check を見る"; exit 1; }
+cmd_prepare() {
 	mkdir -p "$state"
 	chmod 700 "$state"
-	sed "s#@STATE@#$state#g" "$spike/envoy-copilot.yaml" >"$state/envoy-copilot.yaml"
+	python3 "$spike/copilot_refresh.py" --out "$state/copilot-sds.json" >"$state/refresh.log" 2>&1 || { say "トークンの取得に失敗。$state/refresh.log を見る"; exit 1; }
+	host="$(cat "$state/upstream-host")"
+	sed -e "s#@STATE@#$state#g" -e "s#@HOST@#$host#g" "$spike/envoy-copilot.yaml" >"$state/envoy-copilot.yaml"
+	say "準備した: 中継先 $host、設定 $state/envoy-copilot.yaml"
+}
+
+cmd_up() {
+	command -v envoy >/dev/null 2>&1 || { say "envoy が無い。check を見る"; exit 1; }
+	cmd_prepare
 
 	if alive "$state/refresh.pid"; then
 		say "refresh は起動済み"
 	else
-		nohup python3 "$spike/copilot_refresh.py" --out "$state/copilot-sds.json" --loop >"$state/refresh.log" 2>&1 &
+		setsid nohup python3 "$spike/copilot_refresh.py" --out "$state/copilot-sds.json" --loop >"$state/refresh.log" 2>&1 &
 		echo $! >"$state/refresh.pid"
 	fi
 	i=0
@@ -52,7 +59,7 @@ cmd_up() {
 	if alive "$state/envoy.pid"; then
 		say "envoy は起動済み"
 	else
-		nohup envoy --config-path "$state/envoy-copilot.yaml" --log-level info >"$state/envoy.log" 2>&1 &
+		setsid nohup envoy --config-path "$state/envoy-copilot.yaml" --log-level info >"$state/envoy.log" 2>&1 &
 		echo $! >"$state/envoy.pid"
 	fi
 	i=0
@@ -100,6 +107,7 @@ cmd_clean() {
 case "${1:-}" in
 check) cmd_check ;;
 up) cmd_up ;;
+prepare) cmd_prepare ;;
 status) cmd_status ;;
 pi-test) cmd_pi_test ;;
 down) cmd_down ;;

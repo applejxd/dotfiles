@@ -1,6 +1,7 @@
 # CHG-0037 段 U7a の使い捨ての設定 (Copilot を Envoy 経由で中継する)。
 # @STATE@ は broker_spike.sh が、状態ディレクトリの絶対パスに置き換える。
 # 試験の観点は docs/change/0037-pis-usability-and-telemetry.md の「認証の方針」と、段 U7。
+node: {id: broker-spike, cluster: broker-spike}
 static_resources:
   listeners:
     - name: copilot
@@ -24,7 +25,7 @@ static_resources:
                             cluster: copilot_upstream
                             timeout: 0s
                             idle_timeout: 3600s
-                            host_rewrite_literal: api.individual.githubcopilot.com
+                            host_rewrite_literal: "@HOST@"
                 http_filters:
                   - name: envoy.filters.http.credential_injector
                     typed_config:
@@ -55,9 +56,9 @@ static_resources:
           - lb_endpoints:
               - endpoint:
                   address:
-                    socket_address: {address: api.individual.githubcopilot.com, port_value: 443}
+                    socket_address: {address: "@HOST@", port_value: 443}
       transport_socket:
         name: envoy.transport_sockets.tls
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
-          sni: api.individual.githubcopilot.com
+          sni: "@HOST@"

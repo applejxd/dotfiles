@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -79,6 +80,15 @@ def write_sds(path: Path, token: str) -> None:
         raise
 
 
+def write_host(path: Path, token: str) -> None:
+    """トークンの proxy-ep から、中継先のホストを、値と別のファイルへ書く (秘密ではない)。"""
+    match = re.search(r"proxy-ep=([^;]+)", token)
+    host = (
+        match.group(1).replace("proxy.", "api.", 1) if match else "api.individual.githubcopilot.com"
+    )
+    path.with_name("upstream-host").write_text(host + "\n", encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -95,6 +105,7 @@ def main() -> int:
     while True:
         token, expires_at = exchange(refresh)
         write_sds(out, token)
+        write_host(out, token)
         remaining = expires_at - int(time.time())
         print(f"書き出した: {out} (有効期限まで {remaining} 秒。値は表示しない)", flush=True)
         if not args.loop:
