@@ -390,7 +390,7 @@ export PIS_COPILOT_BROKER=http://127.0.0.1:18080
 - 起動別の `auth.json` から `github-copilot` を除いて写し、終了時にホストへ戻さない。内側へは
   `COPILOT_GITHUB_TOKEN` のダミー値と、起動別の `models.json`（`providers.github-copilot.baseUrl`）を渡す
 - Envoy と更新スクリプトの起動は `pis` に統合していない（`scripts/agents/broker_spike.sh`）。
-  内側から中継へ送れる要求の範囲（パス・メソッド）の制限は未実施
+  内側から送れる要求は、観測した 3 つの POST（`/v1/messages`・`/responses`・`/chat/completions`）だけ、他は 403
 
 ## 状態の置き場
 
