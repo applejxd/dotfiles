@@ -1,12 +1,15 @@
-# CHG-0037 段 U7a の使い捨ての設定 (Copilot を Envoy 経由で中継する)。
-# @STATE@ は broker_spike.sh が、状態ディレクトリの絶対パスに置き換える。
-# 試験の観点は docs/change/0037-pis-usability-and-telemetry.md の「認証の方針」と、段 U7。
-node: {id: broker-spike, cluster: broker-spike}
+# pis の Copilot ブローカー (PIS_COPILOT_BROKER=auto) が起動する Envoy の設定の雛形。
+# broker.py が起動ごとに、アットマークで囲んだ次の 3 つの名前を置き換えて、状態ディレクトリへ書く。
+#   PORT     127.0.0.1 のリッスンポート (空きポート。引用符ごと整数に置き換える)
+#   HOST     中継先 (Copilot の API ホスト。トークンの proxy-ep から決める)
+#   SDS_DIR  SDS ファイル copilot-sds.json を置く状態ディレクトリの絶対パス
+# 仕組みは docs/change/0037-pis-usability-and-telemetry.md の「認証の方針」。
+node: {id: pis-broker, cluster: pis-broker}
 static_resources:
   listeners:
     - name: copilot
       address:
-        socket_address: {address: 127.0.0.1, port_value: 18080}
+        socket_address: {address: 127.0.0.1, port_value: "@PORT@"}
       filter_chains:
         - filters:
             - name: envoy.filters.network.http_connection_manager
@@ -64,8 +67,8 @@ static_resources:
                             name: copilot_token
                             sds_config:
                               path_config_source:
-                                path: "@STATE@/copilot-sds.json"
-                                watched_directory: {path: "@STATE@"}
+                                path: "@SDS_DIR@/copilot-sds.json"
+                                watched_directory: {path: "@SDS_DIR@"}
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router

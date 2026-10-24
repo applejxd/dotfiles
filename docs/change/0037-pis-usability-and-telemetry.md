@@ -81,7 +81,7 @@
 | 段 U4 | 実装 | 決めた改善を実装する（案件の分割も可） | 未着手 |
 | 段 U5 | 運用の記録の仕組み | 受入条件 5。既存のログ（`/delegate-stats` など）に載せられるかを調べ、足す | 未着手 |
 | 段 U6 | 便益の判定 | 他のプロジェクトで、一定期間常用した後、[CHG-0033](0033-sandbox-build-value-assessment.md) の便益の側を判定する | 未着手（常用の開始後） |
-| 段 U7a | Copilot（家）を、Envoy 経由で、内側にダミーだけを渡して使えるか分からない（**先に試す。今すぐ試せ、`pi` の開発にも活きる**） | `scripts/agents/broker_spike.sh`（使い捨ての手順書。`check`・`up`・`pi-test`・`down`・`clean`）。ホスト側の `copilot_refresh.py` が、`auth.json` の長期トークン（`read:user`）で短命の Copilot トークンを取得し、Envoy の SDS ファイルへ書く。Envoy（`credential_injector`、`overwrite: true`）が、`Authorization` を差し替えて `api.individual.githubcopilot.com` へ中継する。`pi` は、ダミーの `COPILOT_GITHUB_TOKEN` と、`models.json` の `baseUrl` の上書きだけで動かす。**観点**: (a) ダミーで応答が返るか、(b) ストリーミングが増分で届くか、(c) 30 分以上たって、トークンが更新されても続くか、(d) `/models` などの付随の要求が通るか。**利用者がホストで実行し、結果を貼る** | **完了（2026-10-24 の実測。(a)(b)(d) は合格、(c) は一部）**。結果は「重要な更新」 |
+| 段 U7a | Copilot（家）を、Envoy 経由で、内側にダミーだけを渡して使えるか分からない（**先に試す。今すぐ試せ、`pi` の開発にも活きる**） | 使い捨ての手順書（`broker_spike.sh`。現在は撤去し、`PIS_COPILOT_BROKER=auto` に置き換えた）。ホスト側の `copilot_refresh.py` が、`auth.json` の長期トークン（`read:user`）で短命の Copilot トークンを取得し、Envoy の SDS ファイルへ書く。Envoy（`credential_injector`、`overwrite: true`）が、`Authorization` を差し替えて `api.individual.githubcopilot.com` へ中継する。`pi` は、ダミーの `COPILOT_GITHUB_TOKEN` と、`models.json` の `baseUrl` の上書きだけで動かす。**観点**: (a) ダミーで応答が返るか、(b) ストリーミングが増分で届くか、(c) 30 分以上たって、トークンが更新されても続くか、(d) `/models` などの付随の要求が通るか。**利用者がホストで実行し、結果を貼る** | **完了（2026-10-24 の実測。(a)(b)(d) は合格、(c) は一部）**。結果は「重要な更新」 |
 | 段 U7b | Bedrock（会社）を、Envoy の `aws_request_signing` で、設定だけで中継できるか分からない | 段 U7a の Envoy を流用する。`ConverseStream` のストリーミングの透過、ペイロードのハッシュ、IAM ユーザーのキーの再読み込み、AgentCore の MCP（streamable HTTP）の中継。不可なら、小さな自作のストリーミング対応プロキシ（(2)）。設計は `review` へ | 未着手（段 U7a の後。会社の機が要る） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -93,7 +93,7 @@
 - **読み取りの範囲は、worktree に限られていない**（確認済み: 任意の起動 cwd が読み書き可で、`work_read`（`~/src`・`~/worktrees`・`~/papers`・chezmoi のリポジトリ）と、`PIS_EXTRA_READ`・`.opencode/sandbox.toml` で足す。`boundary.py:244,255`）。理由 1 の摩擦は、worktree の実装でほぼ解消する見込み（利用者の見立て）。他のプロジェクト（例: `~/projects/foo`）で実際に起動して確かめる
 - 本セッションで、多数のドメイン（公式の docs、GitHub、個人のブログ、NVD など）の取得が通った（境界なしでの実行とみられる。境界つきでは未検証）。したがって、**境界つきで同じ調査ができるかは、実測が要る**
 - **状況のまとめ（2026-10-24。圧縮の前の要点）**: ① サンドボックスは使い勝手が悪く、境界なしの起動がほとんどだったので、便益を測れていない（[CHG-0033](0033-sandbox-build-value-assessment.md) の段 P6）。この案件はその前提の整備。② **通信**は、許可リスト型から、**拒否リスト型**（GET は無条件、POST は判定器が確認、会社と家で別）へ引き直す。Fence は `deniedDomains` 優先・`*` は緩和モード・L7 なし。③ **認証**は、**ホスト側のブローカーが本物の認証情報を持ち、内側にはダミーだけ**を渡す方向（G2）。LiteLLM は、サプライチェーンの対策は取れるが、Bedrock の忠実度・重さ・Copilot の DB なしの不確かさで見送り（G5）。④ **会社の AWS は IAM ユーザーの長期キー**（`aws configure`）。**専用の最小権限ユーザーは作れる**（利用者の回答）。⑤ **Copilot（家）**は、`pi` が認証を実装済みで、内側に残る長期トークンの権限は `read:user` だけ。実験は Copilot（段 U7a）から。⑥ 自作は最小にする規則: **既製の汎用部品 → 設定だけ → 接着 → 最後に自作**
-- 実験の道具は `scripts/agents/broker_spike.sh`（と `broker-spike/` の Envoy の設定・更新スクリプト）。**境界の外のホストで、利用者が実行する**。実行は未検証（静的検査のみ通過）
+- 道具は `PIS_COPILOT_BROKER=auto`（`ocs/broker.py` と `ocs/envoy-copilot.yaml`。`pis` と同寿命で Envoy を起動）。実機（WSL2、境界あり）で応答 OK。使い捨ての手順書は撤去
 
 ## 未解決点
 
@@ -112,7 +112,7 @@
 
 ## 次の調査・実験
 
-1. **利用者**: 段 U7a を実行する（`scripts/agents/broker_spike.sh check`・`up`・`pi-test`。Envoy の導入は、リリースの sha256 と照合する）。結果と、`~/.local/state/pis-broker-spike/` のログ（値は出ない）を貼る
+1. **利用者**: Envoy を導入し（リリースの Linux x86_64 バイナリを sha256 と照合して `~/.local/bin/envoy` へ）、`PIS_COPILOT_BROKER=auto pis` で普段どおり使う。24 時間後（トークンの期限後）も通るかを見る（SDS の再読み込みの実機確認）
 2. 段 U7a の結果で、設定の直し、または、小さな自作のプロキシへの切り替えを決める（ストリーミング、SDS の監視、30 分後の更新）
 3. 段 U7b: Bedrock（会社の機。専用の最小権限の IAM ユーザーのキーで）。Envoy の `aws_request_signing`、`ConverseStream`、AgentCore の MCP の中継、IAM ユーザーのキーの再読み込み
 4. 設計を `review` へ（境界に関わる）: 内側へ渡す環境変数の例外（`pis` の `DROP_ENV`・名前に `TOKEN` を含むものの除去）、Fence の `allowLocalOutbound` ＋ポートの生成、`pi` の設定生成（`baseUrl` と http の MCP の `headers`）
@@ -173,3 +173,4 @@
 - **2026-10-24（段 U7a の実測。親が WSL2 のホストで実行）**: Envoy 1.40.1（リリースの sha256 が checksums と一致。署名は未検証）で、**ダミーの `COPILOT_GITHUB_TOKEN` と `models.json` の `baseUrl` の上書きだけで、`pi -p` が Copilot（claude-haiku-4.5）の応答を受け取れた**。(a) 応答 OK、(b) ストリーミングは増分（`stream:true` で最初の 1 バイトが 1.3 秒、全体 4.3 秒、`data:` が 124 件）、(d) `/models` は 200。(c) 更新: SDS ファイルを書き直した後も 200（ただし、トークンの有効期限は 86400 秒で、旧トークンがまだ有効なので、**再読み込みの証明にはならない**。期限切れ後の挙動は未確認）。**つまずき 3 点（設定の直しで解消）**: ① Envoy は SDS の使用に `node: {id, cluster}` が必須、② この環境のトークンの `proxy-ep` は `api.enterprise.githubcopilot.com`（個人の `api.individual...` に固定すると 401）なので、中継先は `proxy-ep` から取る、③ ツールの終了時に子プロセスが止められる環境では、Envoy を別のジョブで動かす必要がある（利用者の端末では `up` で足りるはず）。**意味**: 内側にダミーだけを置く方式は、Copilot では成立する。**未確認**: `pis` の境界の中から `127.0.0.1:18080` へ届くか（Fence の `allowLocalOutbound`）、長期の運用（期限切れ後の SDS の再読み込み、長い会話）、Bedrock（段 U7b）。
 - **2026-10-24（`pis` のブローカーモード。実装と実機）**: `review` の指摘（ポート番号は身元を保証しない／`auth.json` の写しと終了時の同期を塞ぐ／ダミーはフィルターの後に設定／起動別の `PI_CODING_AGENT_DIR` を使う）を取り入れ、`PIS_COPILOT_BROKER`（`pis` のみ、既定不変）を実装した（`pi.py`、Envoy の `/__pis_broker` の身元確認の経路、仕様は [opencode-sandbox.md](../spec/opencode-sandbox.md)）。**実機（WSL2、境界あり）で、`pis -p` が、ダミーだけで Copilot の応答を受け取れた**。事前に、境界の内側から `127.0.0.1:18080` は接続拒否（Fence は内側のループバックがホストと別で、`allowLocalOutbound` ＋ポートだけがブリッジされる。`fence` 直接で、許可なし＝拒否・あり＝200 を実測）。ブローカーが無い場合と、不正な値は、起動拒否を確認。**残り**: 中継へ送れる要求の範囲の制限（`review` の MAJOR。使用権を内側が持つ前提）、期限切れ後の SDS の再読み込み、`pis` への Envoy 統合、Bedrock（段 U7b）。
 - **2026-10-24（要求の範囲の制限。実測）**: `review` の MAJOR を受けて、Envoy が通す要求を、観測した 3 つの POST（`/v1/messages`（Claude）・`/responses`（GPT）・`/chat/completions`（Gemini）。`pi` は print モードで `/models` を呼ばない）に限り、それ以外は 403 にした。パスは `normalize_path`・`merge_slashes` ＋ `path_separated_prefix` で照合する。実測: 許可の 3 つは 200、GET・別パス・`/../models`・`/chat/completionsx` は 403、`//chat/completions` は 200（統合後に一致）。`pis` から 3 つのモデルで応答 OK。アクセスログ（メソッド・パス・コード）も出す。**残り**: 新しい経路（`pi` の更新で増える API）を許可に足す運用、トークン量・回数の上限（Envoy のレート制限）は未実施。
+- **2026-10-24（`pis` への統合。実機）**: `PIS_COPILOT_BROKER=auto` で、`pis` が起動ごとに自分専用の Envoy を空きポートで立て、終了時に止める（`ocs/broker.py`、設定の雛形は `ocs/envoy-copilot.yaml`。更新はスレッド。使い捨ての `broker_spike.sh` と `broker-spike/` は撤去）。手動の URL 指定モードは残す。試験 147 件（`test_broker.py` 新規を含む）が通り、**実機で、`auto` の `pis -p` が応答を返し、終了後に Envoy・一時ディレクトリが残らない**ことを確認。確認で直した点: 雛形の `@PORT@` は YAML として不正（引用符つきにし、置換時に引用符ごと整数へ）。**未確認**: 期限切れ後の SDS の再読み込み（24 時間後）、`pis` が `run()` の外で SIGTERM を受けた場合の Envoy の残り（親の死亡の検知は入れていない）、Bedrock（段 U7b）。

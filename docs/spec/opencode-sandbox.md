@@ -389,8 +389,12 @@ export PIS_COPILOT_BROKER=http://127.0.0.1:18080
 - 境界に `allowLocalOutbound=true`・`allowLocalOutboundPorts=[<port>]` を足す（`ocs` は変えない）
 - 起動別の `auth.json` から `github-copilot` を除いて写し、終了時にホストへ戻さない。内側へは
   `COPILOT_GITHUB_TOKEN` のダミー値と、起動別の `models.json`（`providers.github-copilot.baseUrl`）を渡す
-- Envoy と更新スクリプトの起動は `pis` に統合していない（`scripts/agents/broker_spike.sh`）。
-  内側から送れる要求は、観測した 3 つの POST（`/v1/messages`・`/responses`・`/chat/completions`）だけ、他は 403
+- **自動モード**: `PIS_COPILOT_BROKER=auto` にすると、`pis` が起動ごとに、自分専用の Envoy を空きポートで立て、終了時に止める
+  （`broker.py`、`relay.py` と同じ型。同時に複数起動してもポートと状態は別）。ホストの `auth.json` の長期トークンで、
+  短命の Copilot トークンを取得し、SDS ファイルへ書く（`0700` の一時ディレクトリ、更新はスレッドで期限の 5 分前）。
+  Envoy は PATH か `~/.local/bin/envoy` から探す（**無ければ起動しない**。リリースの sha256 と照合して置く）。
+  手動モード（上の URL 指定）は、自分で立てた中継を使うとき用に残す
+- 内側から送れる要求は、観測した 3 つの POST（`/v1/messages`・`/responses`・`/chat/completions`）だけ、他は 403
 
 ## 状態の置き場
 

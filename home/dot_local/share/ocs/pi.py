@@ -27,7 +27,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import backup, boundary, check, cli, relay
+from . import backup, boundary, broker, check, cli, relay
 from .common import HOME, STATE, die
 
 RULES = HOME / ".config/pi/harness/rules.json"
@@ -85,6 +85,11 @@ BROKER_HINT = (
 )
 
 
+def is_auto_broker(value: str | None) -> bool:
+    """``PIS_COPILOT_BROKER=auto`` (大文字小文字は区別しない)。前後の空白は認めない。"""
+    return value is not None and value.lower() == "auto"
+
+
 def parse_broker(value: str | None) -> tuple[str, int] | None:
     """``PIS_COPILOT_BROKER`` を厳密に検証し、(末尾スラッシュなしの URL, ポート) を返す。
 
@@ -122,7 +127,7 @@ def verify_broker(url: str) -> None:
     """境界を組む前に、ブローカーが本物か確かめる。違えば起動を拒否する。"""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     target = url + BROKER_IDENTITY_PATH
-    hint = "Envoy (scripts/agents/broker-spike/envoy-copilot.yaml) を起動してから pis を使う"
+    hint = f"{BROKER_ENV}=auto なら pis が Envoy を自動で起動する。手動なら Envoy を起動してから pis を使う"
     try:
         with opener.open(target, timeout=BROKER_TIMEOUT_SECONDS) as response:
             status = response.status
@@ -480,10 +485,24 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     see docs/spec/pi-guard.md#サンドボックス
     """
     check_installed()
+    value = os.environ.get(BROKER_ENV)
+    # auto は pis と同じ寿命の Envoy を立て、その URL を手動モードと同じ経路へ渡す。
+    # 例外・SystemExit でも ExitStack が止めて状態を消す。境界を組む前に入る
+    with contextlib.ExitStack() as stack:
+        if is_auto_broker(value):
+            try:
+                value = stack.enter_context(broker.session(REAL_AGENT))
+            except broker.BrokerError as e:
+                die(str(e), e.hint)
+        return _launch_with(args, passthrough, value)
+
+
+def _launch_with(args: argparse.Namespace, passthrough: list[str], broker_value: str | None) -> int:
+    """``_launch`` の本体。``broker_value`` は ``PIS_COPILOT_BROKER`` の URL (無ければ None)。"""
     # ブローカーモード (未設定なら None で、以降は現行と同じ)。境界を組む前に検証と身元確認をする
-    broker = parse_broker(os.environ.get(BROKER_ENV))
-    if broker is not None:
-        verify_broker(broker[0])
+    endpoint = parse_broker(broker_value)
+    if endpoint is not None:
+        verify_broker(endpoint[0])
     sandbox = boundary.load_boundary(RULES, required=())
     runtime = Path(sandbox["runtime_path"])
     if not runtime.is_file():
@@ -496,11 +515,11 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     boundary.reject_protected_workspace(sandbox, workspace, request)
     boundary.announce_request(request)
 
-    agent = prepare_agent_dir(broker_url=broker[0] if broker else None)
+    agent = prepare_agent_dir(broker_url=endpoint[0] if endpoint else None)
     sessions = sessions_dir(workspace)
     config_ = boundary.build_boundary(sandbox, workspace, request, agent)
-    if broker is not None:
-        apply_broker_network(config_, broker[1])
+    if endpoint is not None:
+        apply_broker_network(config_, endpoint[1])
     # セッションの置き場だけを本物へ開け、境界用 agent 置き場の設定と拡張は書けなくする
     config_["filesystem"]["allowWrite"].append(str(sessions))
     config_["filesystem"]["allowRead"].append(str(sessions))
@@ -511,7 +530,7 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
         "db": "",
         "config": config_,
     }
-    env = inner_env(agent, config_, broker is not None)
+    env = inner_env(agent, config_, endpoint is not None)
 
     # 社内プロキシ越しでないと外へ出られない機械では、許可リストの照合を中継へ移す (relay)
     with relay.session(config_) as fence_config:
@@ -522,7 +541,7 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
                 return check.run_check(runtime, boundary_file, project, env, cli.FENCE_TMP)
             finally:
                 Path(boundary_file).unlink(missing_ok=True)
-                cleanup(agent, broker is not None)
+                cleanup(agent, endpoint is not None)
 
         try:
             boundary_file = cli.write_boundary(fence_config)
@@ -541,7 +560,7 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
                 Path(boundary_file).unlink(missing_ok=True)
                 raise
         except BaseException:
-            cleanup(agent, broker is not None)
+            cleanup(agent, endpoint is not None)
             raise
         argv = [
             str(runtime),
@@ -552,7 +571,7 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
         ]
         try:
             # execve で置き換えない: 終了後に認証を本物へ戻し、写しを消すため (:func:`pi.run`)
-            return run(argv, check.host_env(env, cli.FENCE_TMP), agent, broker is not None)
+            return run(argv, check.host_env(env, cli.FENCE_TMP), agent, endpoint is not None)
         finally:
             Path(boundary_file).unlink(missing_ok=True)
 
