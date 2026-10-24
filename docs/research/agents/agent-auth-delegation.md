@@ -303,3 +303,49 @@ LiteLLM のような常駐のゲートウェイが要る。代替は少ない。
 - <https://owasp.github.io/DevSecOpsGuideline/2-Process/2-2-Develop/2-2-5-AI-Agent-and-MCP-Security/>、<https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html>
 - <https://github.com/awslabs/aws-sigv4-proxy>（`/issues/250`、`/pull/251`）、<https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/aws_request_signing_filter>、<https://docs.nvidia.com/openshell/v0.0.116/providers/aws-sigv4>
 - <https://github.com/aws/mcp-proxy-for-aws>、<https://github.com/aws-samples/sample-aws-stdio-http-proxy-mcp>、<https://github.com/aws/rolesanywhere-credential-helper>
+
+## 記録 D6 — 2026-10-24（GitHub の認証を、内側に置かずに `gh` で使う方式）
+
+- **観測日**: 2026-10-24。`explore` の子 5 件（公式 docs・cli/cli と go-gh のソース・検索）と、親の実測（`gh` 2.101.0、Envoy 1.40.1、WSL2）。取得日が分からないページは、日付を書かない
+- **きっかけ**: 利用者が、会社で issue の起票・返信、PR の作成・レビューを `gh` でよく行うので、隔離環境でも使えるようにしたい（[CHG-0037](../change/0037-pis-usability-and-telemetry.md) 段 U8）
+
+### 世間の方式（公式 docs の記述と、第三者の報告を区別する）
+
+**公式 docs**:
+
+- **Docker Sandboxes（sbx）**: ホスト側のプロキシが認証ヘッダーを上書きし、内側には「センチネル」だけが見える。`github` サービス（`api.github.com`・`github.com`）があり、「`gh` CLI を内側で使える」と書く。トークンの出どころは、OS のキーチェーン・`--command`（任意のホストコマンドの出力。既定で 55 分キャッシュ）・`--ref`（1Password・AWS Secrets Manager）・環境変数の取り込み（<https://docs.docker.com/ai/sandboxes/security/credentials/>）。CA の注入方法は、本文では確認できていない
+- **nono**: 内蔵の `github` ルート（上流 `api.github.com`）。内側にはファントムトークン（`GH_TOKEN`）。**MITM ではなく、`127.0.0.1:<port>/<service>/...` のリバースプロキシ方式**。トークンの出どころは、キーリング・1Password・**Bitwarden `bw://`**・ファイル・環境変数・コマンド。**WSL2 では `--credential` が既定でブロック**（opt-in の回避あり。<https://alwaysfurther.mintlify.app/cli/features/credential-injection>）
+- **NVIDIA OpenShell**: 「環境にはプレースホルダー、プロキシが転送の直前に差し替える」。`github` のプロファイルがある。CA の注入・WSL2・`gh` の動作は、読んだ範囲に記載なし（<https://docs.nvidia.com/openshell/how-it-works/providers/overview>）
+- **Infisical Agent Vault**: `HTTPS_PROXY` 経由の MITM。内側に `SSL_CERT_FILE`・`GIT_SSL_CAINFO` などを設定。Linux 向け。Windows・WSL の記載なし（README のみ確認）
+- **Claude Code の sandbox**: `sandbox.credentials` の `mask`（`GH_TOKEN` に `injectHosts: ["api.github.com"]`、`~/.config/gh/hosts.yml` の `oauth_token` も指定できる）。前提は `network.tlsTerminate`。**Go 製の `gh` は、macOS で TLS の検証に失敗する**（Linux・WSL2 は記載なし）。ネイティブ Windows は無サンドボックス（<https://code.claude.com/docs/en/sandboxing>）
+
+**第三者の Issue・PR（実装案が多く、実運用の確証は薄い）**: 「プレースホルダーの `GH_TOKEN` ＋ `HTTPS_PROXY` ＋ TLS 終端プロキシ ＋ `SSL_CERT_FILE`/`GIT_SSL_CAINFO` で CA を信頼」が複数ある（flotilla #3312、antiproton #339（fake 値での実測あり）、Loxaic #289）。TLS を終端しない案として、平文のホスト側 git ゲートウェイと `insteadOf` もある（atrium #25）。本物のトークンを内側へ渡している現状の例もある（cplt #820）。
+
+**要約**: 全製品が「内側に置かず、外側のプロキシが差し込む」。主流は **MITM ＋ CA の信頼**で、`gh` の透過性と引き換えに CA の管理が要る。**「Unix ソケット」を使う方式は、調べた製品に出てこなかった**。
+
+### `gh` のソース（cli/cli、go-gh。コードの読みと実測）
+
+- **宛先**: `GH_HOST` は GHES 扱いで、**`https://<host>/api/v3/...` の https 固定**（`github.localhost` だけが http。ホスト名に `:` を含む形は検証で拒否）。実測: `GH_HOST=127.0.0.1:<port>` では `https://127.0.0.1:<port>/api/v3/...`。リポジトリの中では、`GH_HOST` に合う git remote が無いと失敗する（実測）
+- **`GH_REPO=<host>/<owner>/<repo>`**: git remote を読まずに、そのホストで動く（ソースの読み。`gh issue`・`gh pr` が `GH_REPO` を使うことは未確認）
+- **`http_unix_socket`**（`config.yml` のキー。環境変数ではない）: go-gh は、`DialContext` と `DialTLSContext` の両方に同じ Unix ソケットの接続関数を使う。**TLS ハンドシェイクを行わず、リクエストのスキームとホストを無視して、常にそのソケットへ接続する**（ソースの読み）
+- トークンの検証のための事前のリクエストは、読んだ範囲に無い（`CheckAuth` は環境変数のトークンがあればネットワークに出ない）
+
+### 実測: `http_unix_socket` ＋ Envoy（親、2026-10-24、ホスト）
+
+Envoy の `pipe` のリスナー（Unix ソケット）に、`credential_injector` と、`api.github.com` への上流 TLS（Copilot と同じ検証）を置き、`GH_CONFIG_DIR` の `config.yml` に `http_unix_socket: <ソケット>`、`GH_TOKEN=<ダミー>` を設定して `gh api repos/cli/cli` を実行した。
+
+- **`gh` は、`https://api.github.com/...` のまま、平文で Unix ソケットへ送る**（`GH_DEBUG=api` で確認）。**Envoy のアクセスログに `GET api.github.com /repos/cli/cli` が出た**。Envoy が、内側のダミーを、本物側の値に差し替えて上流へ転送し、GitHub の応答（401。本物側の値がダミーのため）が返った
+- **`GH_HOST` の上書きも、リポジトリ検出の問題も、CA の信頼も要らない**（宛先が github.com のままで、TLS を内側で行わない）。`GH_TOKEN` はダミーで足りる
+- **未確認**: 本物の PAT での成功、`pis` の内側からソケットへ届くか（ソケットを、内側から書ける起動別のディレクトリに置く想定。Unix ソケットはネットワーク名前空間の分離の対象外のはずだが未実測）、`gh pr`・`gh issue`・`gh project`・GraphQL の通し、`git` の https（Unix ソケットは使えない）
+
+### 考察
+
+- 世間の主流（MITM ＋ CA）に対し、**`http_unix_socket` 方式は、CA も MITM も要らず、リポジトリ検出も壊さない**。`gh` 限定の方式で、`git` の https（clone・push）には使えない。push は、現行のガードが拒否しており、境界の外で行う運用と整合する
+- Envoy の設定は Copilot の延長（リスナーが `pipe` になるだけ）。自作の追加はほぼ無い（ソケットのパスの受け渡しと、PAT の読み込み）
+- PAT の出どころ: sbx・nono に倣い、**ホストのコマンドの出力（Bitwarden の `bw` など）か、ファイル**を設定で選べるのが妥当
+
+### 参照
+
+- <https://docs.docker.com/ai/sandboxes/security/credentials/>、<https://alwaysfurther.mintlify.app/cli/features/credential-injection>、<https://docs.nvidia.com/openshell/how-it-works/providers/overview>、<https://github.com/Infisical/agent-vault>、<https://code.claude.com/docs/en/sandboxing>
+- <https://github.com/flotilla-org/flotilla/issues/3312>、<https://github.com/botiverse/antiproton/pull/339>、<https://github.com/CyberCyclone/Loxaic/pull/289>、<https://github.com/jeiang/atrium/issues/25>、<https://github.com/navikt/cplt/issues/820>
+- cli/cli `internal/ghinstance/host.go`、`pkg/cmdutil/repo_override.go`、`pkg/cmdutil/auth_check.go`、go-gh `pkg/api/http_client.go`（<https://github.com/cli>）
