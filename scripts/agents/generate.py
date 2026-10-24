@@ -1894,11 +1894,15 @@ def pi_own_extensions(common: dict[str, Any]) -> list[str]:
     return list(names)
 
 
-PI_BROKER_KEYS = frozenset({"copilot"})
+PI_BROKER_KEYS = frozenset({"copilot", "github", "github_token_file", "github_token_command"})
 
 
-def pi_broker(common: dict[str, Any]) -> dict[str, str]:
-    """``[pis.broker] copilot``。rules.json の ``broker.copilot`` (無ければ ``off``)。
+def pi_broker(common: dict[str, Any]) -> dict[str, Any]:
+    """``[pis.broker]``。rules.json の ``broker`` (無ければ ``copilot`` と ``github`` がともに ``off``)。
+
+    ``github`` は ``off`` / ``auto``。PAT の出どころは ``github_token_file`` (文字列のパス) か
+    ``github_token_command`` (文字列の配列、argv) のどちらか一方で、書いたものだけ出力する。
+    以下は ``copilot`` の説明:
 
     ここでは ``off`` / ``auto`` / ``http://`` で始まる文字列かだけを見る。URL の形
     (127.0.0.1・1024-65535) の厳密な検証は pis (``pi.parse_broker``) が起動時に行う。
@@ -1906,7 +1910,7 @@ def pi_broker(common: dict[str, Any]) -> dict[str, str]:
     """
     section = (common.get("pis") or {}).get("broker")
     if section is None:
-        return {"copilot": "off"}
+        return {"copilot": "off", "github": "off"}
     if not isinstance(section, dict):
         raise SystemExit("[pis.broker] がテーブルでない")
     _reject_unknown("pis.broker", set(section), PI_BROKER_KEYS)
@@ -1915,7 +1919,33 @@ def pi_broker(common: dict[str, Any]) -> dict[str, str]:
         raise SystemExit(
             f'[pis.broker] copilot は "off" / "auto" / "http://127.0.0.1:<port>" のどれか: {value!r}'
         )
-    return {"copilot": value}
+    out: dict[str, Any] = {"copilot": value}
+    github = section.get("github", "off")
+    if github not in ("off", "auto"):
+        raise SystemExit(f'[pis.broker] github は "off" / "auto" のどちらか: {github!r}')
+    out["github"] = github
+    if "github_token_file" in section and "github_token_command" in section:
+        raise SystemExit(
+            "[pis.broker] github_token_file と github_token_command は両方は書けない (どちらか 1 つ)"
+        )
+    if "github_token_file" in section:
+        path = section["github_token_file"]
+        if not isinstance(path, str) or not path.strip() or "\0" in path:
+            raise SystemExit(f"[pis.broker] github_token_file は空でない文字列のパス: {path!r}")
+        out["github_token_file"] = path
+    if "github_token_command" in section:
+        argv = section["github_token_command"]
+        if (
+            not isinstance(argv, list)
+            or not argv
+            or not all(isinstance(a, str) and "\0" not in a for a in argv)
+            or not argv[0].strip()
+        ):
+            raise SystemExit(
+                f"[pis.broker] github_token_command は空でない文字列の配列 (argv): {argv!r}"
+            )
+        out["github_token_command"] = list(argv)
+    return out
 
 
 def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:

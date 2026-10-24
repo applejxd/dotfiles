@@ -79,6 +79,7 @@ _PI_TESTS = (
     "test_pi_boundary",
     "test_broker",
     "test_pi_broker_generate",
+    "test_pi_github_boundary",
     "test_pi_commit_confirm",
     "test_pi_audit",
     "test_pi_landlock_exec",

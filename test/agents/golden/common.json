@@ -1340,7 +1340,9 @@
  },
  "pis": {
   "broker": {
-   "copilot": "auto"
+   "copilot": "auto",
+   "github": "auto",
+   "github_token_file": "~/.config/pis/github-token"
   }
  },
  "provider": {

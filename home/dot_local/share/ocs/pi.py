@@ -26,6 +26,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import urlsplit
 
 from . import backup, boundary, broker, check, cli, relay
@@ -78,9 +79,17 @@ def is_secret_env(name: str) -> bool:
 # see docs/spec/opencode-sandbox.md#copilot-ブローカーモードpis_copilot_brokerpis-のみ
 BROKER_KEY = "broker.copilot"
 NO_BROKER_NOTICE = "pis: ブローカー無し: 内側に Copilot の認証情報が入る"
+NO_BROKER_GITHUB_NOTICE = "。GitHub ブローカーも使わない (gh にはダミーも本物も渡さない)"
 NO_BROKER_HINT = "一時的に外すなら pis --no-broker (内側に本物の Copilot の認証が入る)"
 BROKER_PROVIDER = "github-copilot"
 BROKER_DUMMY_TOKEN = "dummy-not-a-real-token"
+# GitHub ブローカー (gh)。内側の gh にはダミーの GH_TOKEN と Unix ソケットの設定だけを渡す。
+# see docs/spec/opencode-sandbox.md#github-ブローカーpis-のみ
+GITHUB_DUMMY_TOKEN = "dummy-not-a-real-token"
+GITHUB_HINT = (
+    "broker.github は off / auto、broker.github_token_file (文字列) と "
+    "broker.github_token_command (文字列の配列) はどちらか一方"
+)
 BROKER_IDENTITY_PATH = "/__pis_broker"
 BROKER_IDENTITY_PREFIX = "pis-broker-copilot"
 BROKER_TIMEOUT_SECONDS = 3
@@ -95,13 +104,8 @@ def is_auto_broker(value: str | None) -> bool:
     return value is not None and value.lower() == "auto"
 
 
-def read_broker_setting(rules_path: Path | None = None) -> str | None:
-    """``rules.json`` の ``broker.copilot`` を返す。``off``・未設定・``broker`` 節が無いなら None。
-    ``broker`` が表でない・``copilot`` が文字列でない (``null`` を含む) ときは起動を拒否する。
-
-    ``auto`` や URL の検証は :func:`parse_broker` と :func:`is_auto_broker` に任せる。
-    """
-    path = rules_path if rules_path is not None else RULES
+def _broker_section(path: Path) -> dict | None:
+    """``rules.json`` の ``broker`` 節。無ければ None。表でない (破損) なら起動を拒否する。"""
     try:
         rules = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -112,7 +116,18 @@ def read_broker_setting(rules_path: Path | None = None) -> str | None:
     # 設定の破損を off 扱いにしない (fail-closed)
     if not isinstance(section, dict):
         die(f"{path} の broker が表でない: {section!r}", BROKER_HINT)
-    if "copilot" not in section:
+    return section
+
+
+def read_broker_setting(rules_path: Path | None = None) -> str | None:
+    """``rules.json`` の ``broker.copilot`` を返す。``off``・未設定・``broker`` 節が無いなら None。
+    ``broker`` が表でない・``copilot`` が文字列でない (``null`` を含む) ときは起動を拒否する。
+
+    ``auto`` や URL の検証は :func:`parse_broker` と :func:`is_auto_broker` に任せる。
+    """
+    path = rules_path if rules_path is not None else RULES
+    section = _broker_section(path)
+    if section is None or "copilot" not in section:
         return None
     value = section["copilot"]
     if value == "off":
@@ -120,6 +135,51 @@ def read_broker_setting(rules_path: Path | None = None) -> str | None:
     if not isinstance(value, str):
         die(f"{path} の {BROKER_KEY} は文字列でないといけない: {value!r}", BROKER_HINT)
     return value
+
+
+class GithubSetting(NamedTuple):
+    """``broker.github = "auto"`` のときの PAT の出どころ (両方 None なら「設定無し」)。"""
+
+    token_file: str | None
+    token_command: tuple[str, ...] | None
+
+
+def read_github_setting(rules_path: Path | None = None) -> GithubSetting | None:
+    """``rules.json`` の ``broker.github`` を読む。``off``・未設定なら None。
+
+    ``off`` / ``auto`` 以外、出どころの型違い、ファイルとコマンドの両方は起動を拒否する (fail-closed)。
+    """
+    path = rules_path if rules_path is not None else RULES
+    section = _broker_section(path)
+    if section is None or "github" not in section or section["github"] == "off":
+        return None
+    if section["github"] != "auto":
+        die(f"{path} の broker.github が不正: {section['github']!r}", GITHUB_HINT)
+    token_file = section.get("github_token_file")
+    command = section.get("github_token_command")
+    if token_file is not None and command is not None:
+        die(f"{path} の github_token_file と github_token_command が両方ある", GITHUB_HINT)
+    if token_file is not None and (not isinstance(token_file, str) or not token_file.strip()):
+        die(f"{path} の github_token_file が空でない文字列でない", GITHUB_HINT)
+    if command is not None and (
+        not isinstance(command, list)
+        or not command
+        or not all(isinstance(a, str) and "\0" not in a for a in command)
+        or not command[0].strip()
+    ):
+        die(f"{path} の github_token_command が空でない文字列の配列でない", GITHUB_HINT)
+    return GithubSetting(token_file, tuple(command) if command is not None else None)
+
+
+def github_enabled_in_rules(rules_path: Path | None = None) -> bool:
+    """``--no-broker`` の注意の文面用: ``broker.github`` が ``auto`` か。読めない・破損は False (起動は拒否しない)。"""
+    path = rules_path if rules_path is not None else RULES
+    try:
+        rules = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    section = rules.get("broker") if isinstance(rules, dict) else None
+    return isinstance(section, dict) and section.get("github") == "auto"
 
 
 def parse_broker(value: str | None) -> tuple[str, int] | None:
@@ -258,21 +318,29 @@ def _prune_agents(home: Path) -> None:
             pass  # 消せなくても起動は妨げない
 
 
-def prepare_agent_dir(
-    real: Path | None = None, home: Path | None = None, broker_url: str | None = None
-) -> Path:
-    """境界用の agent 置き場を作り、本物から必要なものだけを写す。
+def make_agent_dir(home: Path | None = None) -> Path:
+    """境界用の agent 置き場を**空のまま**確保する (0700)。古いものの掃除もここで。
 
-    既定の置き場は呼び出しのときに引く (定義時に固定すると、差し替えが効かない)。
-    ``broker_url`` があれば (ブローカーモード) ``auth.json`` から ``github-copilot`` を除き、
-    ``models.json`` に ``baseUrl`` を入れる。
+    GitHub ブローカーのソケット (``<agent>/gh.sock``) をブローカーの起動前に決めるため、
+    確保と中身の配置 (:func:`populate_agent_dir`) を分けている。消すのは呼び出し側の責任。
     """
-    real = real if real is not None else REAL_AGENT
     home = home if home is not None else AGENT_HOME
     home.mkdir(parents=True, exist_ok=True)
     os.chmod(home, 0o700)
     _prune_agents(home)
-    agent = Path(tempfile.mkdtemp(prefix="agent-", dir=str(home)))
+    return Path(tempfile.mkdtemp(prefix="agent-", dir=str(home)))
+
+
+def populate_agent_dir(
+    agent: Path, real: Path | None = None, broker_url: str | None = None
+) -> None:
+    """確保済みの agent 置き場へ、本物から必要なものだけを写す。
+
+    既定の置き場は呼び出しのときに引く (定義時に固定すると、差し替えが効かない)。
+    ``broker_url`` があれば (Copilot ブローカーモード) ``auth.json`` から ``github-copilot`` を除き、
+    ``models.json`` に ``baseUrl`` を入れる。
+    """
+    real = real if real is not None else REAL_AGENT
     for name in COPY_FILES:
         source = real / name
         if source.is_file():
@@ -295,7 +363,37 @@ def prepare_agent_dir(
         (agent / name).mkdir(exist_ok=True)
     if broker_url:
         _write_broker_models(agent, broker_url)
+
+
+def prepare_agent_dir(
+    real: Path | None = None, home: Path | None = None, broker_url: str | None = None
+) -> Path:
+    """境界用の agent 置き場を確保して中身を写す (:func:`make_agent_dir` + :func:`populate_agent_dir`)。"""
+    agent = make_agent_dir(home)
+    try:
+        populate_agent_dir(agent, real, broker_url)
+    except BaseException:
+        shutil.rmtree(agent, ignore_errors=True)
+        raise
     return agent
+
+
+def write_gh_config(agent: Path, socket_path: Path) -> Path:
+    """``<agent>/gh/config.yml`` (``http_unix_socket`` の 1 行だけ、0600) を作り、``gh/`` を返す。
+
+    内側の ``gh`` は ``GH_CONFIG_DIR`` でここを読み、``https://api.github.com/...`` を TLS なしで
+    このソケットへ送る。終了時に本物へは戻さない (agent 置き場ごと消える)。
+    """
+    gh = agent / "gh"
+    gh.mkdir(exist_ok=True)
+    os.chmod(gh, 0o700)
+    value = str(socket_path)
+    if re.fullmatch(r"[A-Za-z0-9_./+-]+", value) is None:
+        value = json.dumps(value)  # YAML の二重引用符でもある
+    fd = os.open(gh / "config.yml", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(f"http_unix_socket: {value}\n")
+    return gh
 
 
 def frozen_paths(agent: Path) -> list[str]:
@@ -316,7 +414,9 @@ def sessions_dir(workspace: Path, real: Path | None = None) -> Path:
     return path
 
 
-def inner_env(agent: Path, config_: dict, broker: bool = False) -> dict[str, str]:
+def inner_env(
+    agent: Path, config_: dict, broker: bool = False, github: bool = False
+) -> dict[str, str]:
     """境界の内側へ渡す環境変数。役割と bypass は ``pis`` が環境変数で渡す。
 
     ``PI_HARNESS_BOUNDARY`` は「内側のはず」という期待にすぎない。内側のフルガードが、次のカナリアで
@@ -336,6 +436,13 @@ def inner_env(agent: Path, config_: dict, broker: bool = False) -> dict[str, str
     if broker:
         # TOKEN を含む名前のフィルターの後に足す (ホストの同名変数は上で落ちている)
         env["COPILOT_GITHUB_TOKEN"] = BROKER_DUMMY_TOKEN
+    if github:
+        # こちらもフィルターの後。ホストの GH_TOKEN / GITHUB_TOKEN / GH_ENTERPRISE_TOKEN は上で落ちている
+        env["GH_TOKEN"] = GITHUB_DUMMY_TOKEN
+        env["GH_CONFIG_DIR"] = str(agent / "gh")
+        env["GH_NO_UPDATE_NOTIFIER"] = "1"
+        env["GH_TELEMETRY"] = "false"
+        env["GH_PROMPT_DISABLED"] = "1"
     env["PI_CODING_AGENT_DIR"] = str(agent)
     env["PI_HARNESS_BOUNDARY"] = "1"
     env["PI_HARNESS_ALLOWED"] = json.dumps(
@@ -513,6 +620,30 @@ def cleanup(agent: Path, broker: bool = False) -> None:
     shutil.rmtree(agent, ignore_errors=True)
 
 
+def _github_token(setting: GithubSetting | None) -> str | None:
+    """GitHub ブローカー用の PAT を得る。無効・出どころの設定無し・出どころ無しは None。
+
+    ``auto`` で出どころ無し (ファイル無し・コマンド失敗) なら起動を止めず、値を出さない 1 行を標準エラーへ出す。
+    権限・形式の違反・設定の破損は起動を拒否する。
+    """
+    if setting is None:
+        return None
+    origin = broker.github_origin(setting.token_file, setting.token_command)
+    if origin is None:
+        return None
+    token: str | None = None
+    try:
+        token = broker.resolve_github_token(setting.token_file, setting.token_command)
+    except broker.BrokerError as e:
+        die(str(e), e.hint)
+    if token is None:
+        print(
+            f"pis: GitHub 認証なし: gh は無認証になる (PAT の出どころ: {origin})",
+            file=sys.stderr,
+        )
+    return token
+
+
 def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     """pi を Fence で囲って起動する。OpenCode と違い、DB も設定の書き出しも要らない。
 
@@ -520,22 +651,43 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     see docs/spec/pi-guard.md#サンドボックス
     """
     check_installed()
+    github: GithubSetting | None = None
     if args.no_broker:
-        print(NO_BROKER_NOTICE, file=sys.stderr)
+        notice = NO_BROKER_NOTICE + (NO_BROKER_GITHUB_NOTICE if github_enabled_in_rules() else "")
+        print(notice, file=sys.stderr)
         value = None
     else:
         value = read_broker_setting()
-    # auto は pis と同じ寿命の Envoy を立て、その URL を手動モードと同じ経路へ渡す。
-    # 例外・SystemExit でも ExitStack が止めて状態を消す。境界を組む前に入る
+        github = read_github_setting()
+    # 空の agent 置き場を先に確保し (GitHub のソケット <agent>/gh.sock の置き場所)、ブローカーを起動し、
+    # URL (Copilot) 確定後に中身を配置する。auto は pis と同じ寿命の Envoy を 1 つ立てる。
+    # 例外・SystemExit・--check でも ExitStack がブローカーを止め、agent 置き場を消す
     with contextlib.ExitStack() as stack:
+        agent = make_agent_dir()
+        stack.callback(shutil.rmtree, agent, ignore_errors=True)
+        token = _github_token(github)
+        github_socket = agent / broker.GH_SOCKET_NAME if token is not None else None
+        copilot_auto = is_auto_broker(value)
         state: Path | None = None
-        if is_auto_broker(value):
+        if copilot_auto or token is not None:
             try:
-                started = stack.enter_context(broker.session(REAL_AGENT))
+                started = stack.enter_context(
+                    broker.session(
+                        REAL_AGENT,
+                        copilot=copilot_auto,
+                        github_token=token,
+                        github_socket=github_socket,
+                    )
+                )
             except broker.BrokerError as e:
                 die(str(e), f"{e.hint}。{NO_BROKER_HINT}")
-            value, state = started.url, started.state
-        return _launch_with(args, passthrough, value, state)
+            token = None  # PAT の値をこれ以上持ち回らない
+            state = started.state
+            if copilot_auto:
+                value = started.url
+        return _launch_with(
+            args, passthrough, value, state, agent=agent, github_socket=github_socket
+        )
 
 
 def _reject_state_overlap(state: Path, workspace: Path) -> None:
@@ -553,10 +705,15 @@ def _launch_with(
     passthrough: list[str],
     broker_value: str | None,
     broker_state: Path | None = None,
+    *,
+    agent: Path,
+    github_socket: Path | None = None,
 ) -> int:
     """``_launch`` の本体。``broker_value`` は ``broker.copilot`` の URL (無ければ None)。
 
-    ``broker_state`` は auto のときの状態ディレクトリ (作業場所と重なれば拒否する)。
+    ``broker_state`` はブローカーの状態ディレクトリ (作業場所と重なれば拒否する)。
+    ``agent`` は確保済みの空の agent 置き場 (最終的な削除は呼び出し側の ExitStack)、
+    ``github_socket`` は GitHub ブローカーが有効のときの Unix ソケット。
     """
     # ブローカーモード (未設定なら None で、以降は現行と同じ)。境界を組む前に検証と身元確認をする
     endpoint = parse_broker(broker_value)
@@ -576,8 +733,10 @@ def _launch_with(
     if broker_state is not None:
         _reject_state_overlap(broker_state, workspace)
 
-    agent = prepare_agent_dir(broker_url=endpoint[0] if endpoint else None)
     try:
+        populate_agent_dir(agent, broker_url=endpoint[0] if endpoint else None)
+        if github_socket is not None:
+            write_gh_config(agent, github_socket)
         sessions = sessions_dir(workspace)
         config_ = boundary.build_boundary(sandbox, workspace, request, agent)
         if endpoint is not None:
@@ -592,7 +751,7 @@ def _launch_with(
             "db": "",
             "config": config_,
         }
-        env = inner_env(agent, config_, endpoint is not None)
+        env = inner_env(agent, config_, endpoint is not None, github_socket is not None)
     except BaseException:
         cleanup(agent, endpoint is not None)
         raise
@@ -660,7 +819,7 @@ def run_sandboxed(argv: list[str]) -> int:
     parser.add_argument(
         "--no-broker",
         action="store_true",
-        help="Copilot ブローカーを使わない (設定が auto でも。内側に本物の Copilot の認証が入る)",
+        help="Copilot / GitHub ブローカーを使わない (設定が auto でも。内側に本物の Copilot の認証が入る)",
     )
     args, passthrough = parser.parse_known_args(argv)
     return _launch(args, passthrough)

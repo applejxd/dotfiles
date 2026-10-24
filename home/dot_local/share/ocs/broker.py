@@ -1,11 +1,14 @@
-"""``pis`` の Copilot ブローカー (設定 ``[pis.broker] copilot = "auto"``) を、pis と同じ寿命で動かす。
+"""``pis`` の Copilot / GitHub ブローカー (設定 ``[pis.broker]``) を、pis と同じ寿命で動かす。
 
-ホスト側 (Fence の外) で自分専用の Envoy を空きポートに立て、pis の終了で止める。
-本物の認証情報 (GitHub の長期トークンと短命の Copilot トークン) はホストと Envoy だけが持ち、
-内側の pi にはダミーしか渡さない。Envoy は ``credential_injector`` で ``Authorization`` を付ける。
+ホスト側 (Fence の外) で自分専用の Envoy を 1 つ立て、pis の終了で止める。
+本物の認証情報 (GitHub の長期トークンと短命の Copilot トークン、``gh`` 用の PAT) は
+ホストと Envoy だけが持ち、内側にはダミーしか渡さない。Envoy は ``credential_injector`` で
+``Authorization`` を付ける。Copilot は 127.0.0.1 の空きポート、GitHub (``gh``) は Unix ソケット。
+有効なものだけのリスナー・クラスタ・SDS を 1 つの設定に組む。
 
 - 状態ディレクトリ (0700) に SDS ファイル・Envoy の設定・ログを置き、終了時に丸ごと消す
 - 短命トークンは期限の少し前に取り直し、SDS ファイルを rename で置き換える (Envoy が監視している)
+- PAT の出どころ (ファイルかコマンド) の読み取りは純関数 (``read_token_file`` / ``run_token_command``)
 - トークンの値は、標準出力・標準エラー・例外メッセージ・ログに出さない
 
 see docs/change/0037-pis-usability-and-telemetry.md
@@ -15,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import http.client
 import json
 import os
 import re
@@ -22,6 +26,7 @@ import shutil
 import signal
 import socket
 import ssl
+import stat
 import subprocess
 import sys
 import tempfile
@@ -29,7 +34,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import NamedTuple
 
@@ -45,10 +50,30 @@ TOKEN_URL = "https://api.github.com/copilot_internal/v2/token"
 PROVIDER = "github-copilot"
 SECRET_NAME = "copilot_token"
 SDS_NAME = "copilot-sds.json"
-CONFIG_NAME = "envoy-copilot.yaml"
+CONFIG_NAME = "envoy.yaml"
 LOG_NAME = "broker.log"
 ENVOY_LOG_NAME = "envoy.log"
-TEMPLATE = Path(__file__).resolve().parent / CONFIG_NAME
+# 設定の雛形: 土台 (@LISTENERS@ / @CLUSTERS@ の行を持つ) と、ブローカーごとの断片。
+# 断片は「リスナーの項目、CLUSTERS_MARK の行、クラスタの項目」の順に 1 ファイルへ書く
+TEMPLATE_DIR = Path(__file__).resolve().parent
+BASE_TEMPLATE = TEMPLATE_DIR / "envoy-base.yaml"
+COPILOT_TEMPLATE = TEMPLATE_DIR / "envoy-copilot.yaml"
+GITHUB_TEMPLATE = TEMPLATE_DIR / "envoy-github.yaml"
+CLUSTERS_MARK = "# ---clusters---\n"
+GH_SECRET_NAME = "gh_token"
+GH_SDS_NAME = "gh-sds.json"
+GH_SOCKET_NAME = "gh.sock"
+# GitHub のリスナーの身元確認: 許可外のホストは 403 + この本文で答える (上流へは出ない)
+GH_IDENTITY_HOST = "pis-broker.invalid"
+GH_IDENTITY_PREFIX = "pis-broker:"
+GH_TOKEN_MAX_BYTES = 4096
+GH_COMMAND_TIMEOUT_SECONDS = 30
+UNIX_PATH_MAX = 107  # sockaddr_un.sun_path (108 バイト) から終端の NUL を引く
+GH_FILE_HINT = "chmod 600 で自分だけに絞った通常ファイルにする (シンボリックリンク・他人所有は不可)"
+GH_SHAPE_HINT = "PAT は 1 行・ASCII の印字可能文字・空白なし・255 文字以内で出力する"
+GH_COMMAND_HINT = (
+    "[pis.broker] は github_token_file か github_token_command のどちらか 1 つ (argv の配列)"
+)
 DEFAULT_HOST = "api.individual.githubcopilot.com"
 IDENTITY_PATH = "/__pis_broker"
 IDENTITY_PREFIX = "pis-broker-copilot"
@@ -75,10 +100,15 @@ INSTALL_HINT = (
 
 
 class BrokerSession(NamedTuple):
-    """``session()`` が返す値。``url`` は Envoy の URL、``state`` は起動ごとの状態ディレクトリ。"""
+    """``session()`` が返す値。
 
-    url: str
+    ``url`` は Copilot 用の Envoy の URL (Copilot が無効なら None)、``state`` は起動ごとの
+    状態ディレクトリ、``github_socket`` は GitHub 用の Unix ソケット (無効なら None)。
+    """
+
+    url: str | None
     state: Path
+    github_socket: Path | None = None
 
 
 class BrokerError(RuntimeError):
@@ -176,13 +206,13 @@ def find_ca_file() -> str:
     )
 
 
-def write_sds(path: Path, token: str) -> None:
+def write_sds(path: Path, token: str, name: str = SECRET_NAME) -> None:
     """Envoy が監視するディレクトリへ、rename でアトミックに置く (0600)。"""
     body = {
         "resources": [
             {
                 "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.Secret",
-                "name": SECRET_NAME,
+                "name": name,
                 "generic_secret": {"secret": {"inline_string": token}},
             }
         ]
@@ -198,22 +228,175 @@ def write_sds(path: Path, token: str) -> None:
         raise
 
 
-def render_config(template: str, port: int, host: str, sds_dir: Path, ca_file: str) -> str:
-    """雛形の ``@PORT@`` / ``@HOST@`` / ``@SDS_DIR@`` / ``@CA_FILE@`` を置き換える。
+def _split_template(path: Path) -> tuple[str, str]:
+    """断片を (リスナーの項目, クラスタの項目) に分ける。"""
+    listener, mark, clusters = path.read_text(encoding="utf-8").partition(CLUSTERS_MARK)
+    if not mark:
+        raise BrokerError(f"{path.name} に {CLUSTERS_MARK.strip()} の行が無い")
+    return listener, clusters
 
-    YAML の文字列へ埋めるので、``"`` や改行を含むパスは拒否する。
+
+def build_config(
+    *,
+    sds_dir: Path,
+    ca_file: str,
+    copilot_port: int | None = None,
+    copilot_host: str | None = None,
+    github_socket: Path | None = None,
+) -> str:
+    """有効なブローカーだけのリスナー・クラスタを、土台へ差し込んだ Envoy の設定を返す。
+
+    雛形の ``@PORT@`` / ``@HOST@`` / ``@SDS_DIR@`` / ``@CA_FILE@`` / ``@SOCKET@`` を置き換える。
+    YAML の文字列へ埋めるので、``"`` ``\\`` や改行を含むパスは拒否する。
+    Copilot (``copilot_port`` と ``copilot_host``) も GitHub (``github_socket``) も無ければ例外。
     """
-    for path in (str(sds_dir), ca_file):
-        if '"' in path or "\n" in path or "\r" in path:
-            raise BrokerError("設定へ埋め込めないパス (引用符か改行を含む)")
+    paths = [str(sds_dir), ca_file]
+    if github_socket is not None:
+        paths.append(str(github_socket))
+        if len(os.fsencode(github_socket)) > UNIX_PATH_MAX:
+            raise BrokerError(
+                f"Unix ソケットのパスが長すぎる ({len(os.fsencode(github_socket))} バイト。"
+                f"上限 {UNIX_PATH_MAX}): {github_socket}",
+                'HOME を短いパスにするか、github = "off" にする',
+            )
+    for path in paths:
+        if any(ch in path for ch in ('"', "\\", "\n", "\r")):
+            raise BrokerError("設定へ埋め込めないパス (引用符・バックスラッシュ・改行を含む)")
+    subs = {
+        # 雛形では引用符で囲み (YAML として有効)、置換後は整数
+        '"@PORT@"': str(copilot_port),
+        "@HOST@": copilot_host or "",
+        "@SDS_DIR@": str(sds_dir),
+        "@CA_FILE@": ca_file,
+        "@SOCKET@": str(github_socket),
+    }
+
+    def fill(text: str) -> str:
+        for key, value in subs.items():
+            text = text.replace(key, value)
+        return text
+
+    listeners: list[str] = []
+    clusters: list[str] = []
+    for enabled, template in (
+        (copilot_port is not None and copilot_host is not None, COPILOT_TEMPLATE),
+        (github_socket is not None, GITHUB_TEMPLATE),
+    ):
+        if enabled:
+            listener, cluster = _split_template(template)
+            listeners.append(fill(listener))
+            clusters.append(fill(cluster))
+    if not listeners:
+        raise BrokerError("有効なブローカーが無い (Envoy の設定を組めない)")
+    base = BASE_TEMPLATE.read_text(encoding="utf-8")
     return (
-        template.replace(
-            '"@PORT@"', str(port)
-        )  # 雛形では引用符で囲み (YAML として有効)、置換後は整数
-        .replace("@HOST@", host)
-        .replace("@SDS_DIR@", str(sds_dir))
-        .replace("@CA_FILE@", ca_file)
+        fill(base)
+        .replace("    # @LISTENERS@\n", "".join(listeners))
+        .replace("    # @CLUSTERS@\n", "".join(clusters))
     )
+
+
+def _check_token_shape(raw: bytes) -> str:
+    """取得した PAT を整えて検査する (末尾の空白・改行を除き、1 行・ASCII の印字可能文字・1〜255 文字)。
+
+    違反は「出どころ無し」ではなく起動拒否。例外の本文には値を入れない。
+    """
+    try:
+        value = raw.decode("utf-8").rstrip()
+    except UnicodeDecodeError:
+        raise BrokerError("GitHub の PAT が UTF-8 でない", GH_SHAPE_HINT) from None
+    if re.fullmatch(r"[\x21-\x7e]{1,255}", value) is None:
+        raise BrokerError("GitHub の PAT の形式が不正", GH_SHAPE_HINT)
+    return value
+
+
+def read_token_file(path: Path) -> str | None:
+    """PAT をファイルから読む。ファイルが無ければ None (出どころ無し)。
+
+    シンボリックリンク・通常ファイル以外・他人所有・グループ / 他人に開いた権限・
+    4096 バイト超は :class:`BrokerError` (起動拒否)。値は例外に入れない。
+    """
+    try:
+        # O_NONBLOCK: FIFO を渡されてもここで止まらず、下の種別検査で拒否する
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    except OSError as e:  # シンボリックリンク (ELOOP) を含む
+        raise BrokerError(
+            f"GitHub の PAT のファイルを開けない ({path}: {type(e).__name__})", GH_FILE_HINT
+        ) from None
+    try:
+        info = os.fstat(fd)  # ディレクトリも O_RDONLY で開けるので、fdopen より前に種別を検査する
+        if not stat.S_ISREG(info.st_mode):
+            raise BrokerError(f"GitHub の PAT のファイルが通常ファイルでない: {path}", GH_FILE_HINT)
+        if info.st_uid != os.getuid():
+            raise BrokerError(f"GitHub の PAT のファイルの所有者が自分でない: {path}", GH_FILE_HINT)
+        if info.st_mode & 0o077:
+            raise BrokerError(
+                f"GitHub の PAT のファイルの権限が広すぎる ({stat.S_IMODE(info.st_mode):04o}): {path}",
+                GH_FILE_HINT,
+            )
+        if info.st_size > GH_TOKEN_MAX_BYTES:
+            raise BrokerError(f"GitHub の PAT のファイルが大きすぎる: {path}", GH_FILE_HINT)
+        raw = os.read(fd, GH_TOKEN_MAX_BYTES + 1)
+    finally:
+        os.close(fd)
+    if len(raw) > GH_TOKEN_MAX_BYTES:
+        raise BrokerError(f"GitHub の PAT のファイルが大きすぎる: {path}", GH_FILE_HINT)
+    return _check_token_shape(raw)
+
+
+def run_token_command(argv: Sequence[str]) -> str | None:
+    """PAT をコマンド (argv、シェル無し) の標準出力から取る。
+
+    環境はホストのものを継承する (Bitwarden の ``BW_SESSION`` などが要る。利用者の設定を信頼)。
+    実行ファイルが無い・タイムアウト・終了コードが 0 でない・出力が 4096 バイト超は
+    None (出どころ無し)。標準エラーは捨てる。形式違反は :class:`BrokerError` (起動拒否)。
+    """
+    if not argv:
+        raise BrokerError("github_token_command が空", GH_COMMAND_HINT)
+    try:
+        result = subprocess.run(
+            list(argv),
+            shell=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=GH_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):  # 実行ファイル無し・実行権限無し・タイムアウト
+        return None
+    except ValueError:  # 引数に NUL 文字
+        raise BrokerError("github_token_command の引数が不正", GH_COMMAND_HINT) from None
+    if result.returncode != 0 or len(result.stdout) > GH_TOKEN_MAX_BYTES:
+        return None
+    return _check_token_shape(result.stdout)
+
+
+def github_origin(token_file: str | None, token_command: Sequence[str] | None) -> str | None:
+    """通知用の PAT の出どころ (ファイルのパスか、コマンドの先頭の語)。どちらも無ければ None。"""
+    if token_file is not None:
+        return str(Path(token_file).expanduser())
+    if token_command:
+        return token_command[0]
+    return None
+
+
+def resolve_github_token(token_file: str | None, token_command: Sequence[str] | None) -> str | None:
+    """設定された出どころから PAT を得る。出どころ無し (ファイル無し・コマンド失敗・未設定) は None。
+
+    両方の設定、権限・形式の違反は :class:`BrokerError` (起動拒否)。
+    """
+    if token_file is not None and token_command is not None:
+        raise BrokerError(
+            "github_token_file と github_token_command は両方は書けない", GH_COMMAND_HINT
+        )
+    if token_file is not None:
+        return read_token_file(Path(token_file).expanduser())
+    if token_command is not None:
+        return run_token_command(token_command)
+    return None
 
 
 def free_port() -> int:
@@ -302,9 +485,46 @@ def _probe(opener: urllib.request.OpenerDirector, url: str) -> bool:
         return False  # まだ待ち受けていない (呼び出し側が期限まで再試行する)
 
 
-def _wait_ready(url: str, proc: subprocess.Popen, log: Path, timeout: float) -> None:
-    """``/__pis_broker`` が応答するまで待つ (プロキシは使わない)。出なければログ末尾を添えて例外。"""
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+class _UnixConnection(http.client.HTTPConnection):
+    """Unix ソケットへつなぐ HTTP 接続 (Host は身元確認用の固定の名前)。"""
+
+    def __init__(self, path: str, timeout: float) -> None:
+        super().__init__(GH_IDENTITY_HOST, timeout=timeout)
+        self._path = path
+
+    def connect(self) -> None:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            sock.settimeout(self.timeout)
+            sock.connect(self._path)
+        except OSError:
+            sock.close()
+            raise
+        self.sock = sock
+
+
+def _probe_unix(path: Path) -> bool:
+    """GitHub のリスナーの身元の確認 1 回。許可外のホストへの 403 と ``pis-broker:`` の本文なら True。"""
+    connection = _UnixConnection(str(path), timeout=1)
+    try:
+        connection.request("GET", "/")
+        response = connection.getresponse()
+        body = response.read(256).decode("utf-8", errors="replace")
+        return response.status == 403 and body.startswith(GH_IDENTITY_PREFIX)
+    except (OSError, http.client.HTTPException):
+        return False  # まだ待ち受けていない (呼び出し側が期限まで再試行する)
+    finally:
+        connection.close()
+
+
+def _wait_ready(
+    probes: Sequence[Callable[[], bool]],
+    target: str,
+    proc: subprocess.Popen,
+    log: Path,
+    timeout: float,
+) -> None:
+    """全リスナーが身元の確認に答えるまで待つ (プロキシは使わない)。出なければログ末尾を添えて例外。"""
     deadline = time.monotonic() + timeout
     while True:
         if proc.poll() is not None:
@@ -312,11 +532,11 @@ def _wait_ready(url: str, proc: subprocess.Popen, log: Path, timeout: float) -> 
                 f"Envoy が起動直後に終了した (code={proc.returncode})\n{_tail(log)}",
                 f"{log} を見る",
             )
-        if _probe(opener, url):
+        if all(probe() for probe in probes):
             return
         if time.monotonic() >= deadline:
             raise BrokerError(
-                f"Envoy が {timeout:g} 秒以内に応答しなかった ({url})\n{_tail(log)}",
+                f"Envoy が {timeout:g} 秒以内に応答しなかった ({target})\n{_tail(log)}",
                 f"{log} を見る",
             )
         time.sleep(READY_INTERVAL_SECONDS)
@@ -340,22 +560,37 @@ def session(
     agent: Path | None = None,
     *,
     home: Path | None = None,
+    copilot: bool = True,
+    github_token: str | None = None,
+    github_socket: Path | None = None,
     refresh_margin: float = REFRESH_MARGIN_SECONDS,
     retry_seconds: float = RETRY_SECONDS,
     ready_timeout: float = READY_TIMEOUT_SECONDS,
 ) -> Iterator[BrokerSession]:
-    """自分専用の Envoy を立て、URL (``http://127.0.0.1:<port>``) と状態ディレクトリを返す。
+    """自分専用の Envoy を 1 つ立て、有効なブローカーの接続先と状態ディレクトリを返す。
 
     抜けると止めて状態を消す。
 
-    ``agent`` はホストの agent 置き場 (``auth.json`` がある所。既定は ``PI_CODING_AGENT_DIR`` か
-    ``~/.pi/agent``)。立てられなければ :class:`BrokerError` (呼び出し側が ``die`` に変える)。
-    ``refresh_margin`` ``retry_seconds`` ``ready_timeout`` は試験で短くするための引数。
+    - ``copilot``: Copilot 用のリスナー (``http://127.0.0.1:<port>``) を立てる。``agent`` はホストの agent 置き場
+      (``auth.json`` がある所。既定は ``PI_CODING_AGENT_DIR`` か ``~/.pi/agent``)。
+    - ``github_token`` と ``github_socket``: ``gh`` 用のリスナー (Unix ソケット) を立てる。
+      PAT は呼び出し側が :func:`resolve_github_token` で得て渡す (出どころ無しは立てない)。
+
+    どちらも無効なら :class:`BrokerError`。立てられなければ :class:`BrokerError` (呼び出し側が
+    ``die`` に変える)。``refresh_margin`` ``retry_seconds`` ``ready_timeout`` は試験で短くするための引数。
     """
+    use_github = github_token is not None
+    if use_github != (github_socket is not None):
+        raise BrokerError("github_token と github_socket は組で渡す")
+    if not copilot and not use_github:
+        raise BrokerError("有効なブローカーが無い (Copilot も GitHub も無効)")
     envoy = find_envoy(home)
-    refresh = load_refresh_token(agent if agent is not None else agent_dir())
-    token, expires_at = exchange(refresh)
-    host = upstream_host(token)
+    refresh = token = host = None
+    expires_at = 0
+    if copilot:
+        refresh = load_refresh_token(agent if agent is not None else agent_dir())
+        token, expires_at = exchange(refresh)
+        host = upstream_host(token)
     ca_file = find_ca_file()
     state = make_state_dir(home)
     stop = threading.Event()
@@ -363,12 +598,23 @@ def session(
     thread: threading.Thread | None = None
     try:
         sds = state / SDS_NAME
-        write_sds(sds, token)
-        del token
-        port = free_port()
+        port = None
+        if token is not None:
+            write_sds(sds, token)
+            del token
+            port = free_port()
+        if github_token is not None:
+            write_sds(state / GH_SDS_NAME, github_token, GH_SECRET_NAME)
+            del github_token
         config = state / CONFIG_NAME
         config.write_text(
-            render_config(TEMPLATE.read_text(encoding="utf-8"), port, host, state, ca_file),
+            build_config(
+                sds_dir=state,
+                ca_file=ca_file,
+                copilot_port=port,
+                copilot_host=host,
+                github_socket=github_socket,
+            ),
             encoding="utf-8",
         )
         os.chmod(config, 0o600)
@@ -391,15 +637,34 @@ def session(
                 preexec_fn=_die_with_parent,
                 env=env,
             )
-        thread = threading.Thread(
-            target=_refresh_loop,
-            args=(stop, refresh, sds, state / LOG_NAME, expires_at, refresh_margin, retry_seconds),
-            daemon=True,
-        )
-        thread.start()
-        url = f"http://127.0.0.1:{port}"
-        _wait_ready(url, proc, envoy_log, ready_timeout)
-        yield BrokerSession(url, state)
+        if refresh is not None:
+            thread = threading.Thread(
+                target=_refresh_loop,
+                args=(
+                    stop,
+                    refresh,
+                    sds,
+                    state / LOG_NAME,
+                    expires_at,
+                    refresh_margin,
+                    retry_seconds,
+                ),
+                daemon=True,
+            )
+            thread.start()
+        probes: list[Callable[[], bool]] = []
+        targets: list[str] = []
+        url = None
+        if port is not None:
+            url = f"http://127.0.0.1:{port}"
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            probes.append(lambda: _probe(opener, url))
+            targets.append(url)
+        if github_socket is not None:
+            probes.append(lambda: _probe_unix(github_socket))
+            targets.append(str(github_socket))
+        _wait_ready(probes, ", ".join(targets), proc, envoy_log, ready_timeout)
+        yield BrokerSession(url, state, github_socket)
     finally:
         stop.set()
         if thread is not None:

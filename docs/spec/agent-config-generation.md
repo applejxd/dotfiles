@@ -350,7 +350,7 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 
 ### Copilot ブローカーの設定（`[pis.broker]`）
 
-`common.toml.tmpl` の `[pis.broker] copilot`（`off` / `auto` / `http://127.0.0.1:<port>`）は、
+`common.toml.tmpl` の `[pis.broker]`（`copilot` は `off` / `auto` / `http://127.0.0.1:<port>`。`github` 系は [GitHub ブローカー](opencode-sandbox.md#github-ブローカーpis-のみ)）は、
 `build_pi_harness` が `rules.json` の `broker.copilot` へ出し、`pis` が起動時に読む。
 未知のキーは拒否、省略時は `off`。値の厳密な検証（URL の形）は起動時に `pi.py` が行う。
 意味と振る舞いは [opencode-sandbox.md](opencode-sandbox.md#copilot-ブローカーpis-のみ)。

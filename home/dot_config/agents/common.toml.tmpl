@@ -1139,6 +1139,9 @@ copilot = "auto"
 {{- else }}
 copilot = "off"
 {{- end }}
+# see docs/spec/opencode-sandbox.md#github-ブローカーpis-のみ
+github = "auto"
+github_token_file = "~/.config/pis/github-token"
 
 # pi のプロンプトテンプレート (~/.pi/agent/prompts/<名前>.md になり、/<名前> で呼ぶ)。
 # 文面は pi のツール (guarded_task) に合わせてある。[opencode.commands] とは別 (段 6 で OpenCode 側を消す)。

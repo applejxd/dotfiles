@@ -410,6 +410,37 @@ export PIS_EXTRA_DEVICES=/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm  # ネイ�
 - **範囲の限界**: 起動別の `auth.json` から外すのは `github-copilot` だけ。他のプロバイダーの認証は、従来どおり内側にコピーされる。
   内側から使える Copilot の使用権（上の 3 経路）は、内側に残る。要求の大きさ・回数の上限は無い
 
+### GitHub ブローカー（`pis` のみ）
+
+本物の GitHub PAT をホスト側の Envoy にだけ持たせ、内側の `gh` には、ダミーの `GH_TOKEN` と Unix ソケットの設定だけを渡す
+（[CHG-0037](../change/0037-pis-usability-and-telemetry.md) 段 U8、[調査 D6](../research/agents/agent-auth-delegation.md)）。
+
+- **仕組み**: `gh` は、`config.yml` の `http_unix_socket` があると、`https://api.github.com/...` を **TLS なしで**その Unix ソケットへ送る
+  （宛先・リポジトリ検出はそのまま。CA も MITM も `GH_HOST` も要らない）。ソケットは起動別の agent ディレクトリの `gh.sock`
+  （内側から届く。Fence は Unix ソケットを妨げない）。Envoy が `Authorization` を `Bearer <PAT>` に差し替え、`api.github.com:443` へ
+  上流 TLS（CA と SAN を検証）で転送する。`git` の https（clone・push）には使えない（push は現行のガードが拒否し、境界の外で行う）
+- **設定**（`[pis.broker]`、`common.toml.tmpl`）: `github`（`"off"` 既定 / `"auto"`）と、PAT の出どころ `github_token_file`
+  （既定 `~/.config/pis/github-token`）または `github_token_command`（argv の配列。例: Bitwarden の `bw get password <item>`）。
+  **両方は書けない**。環境変数は使わない
+- **PAT の出どころの検査**: ファイルは、通常ファイル・所有者が自分・`0600` 相当（グループ・他人に権限なし）・4096 バイト以下・
+  シンボリックリンクでないこと（違反は**起動拒否**）。コマンドは、シェルを通さず、標準入力なし、30 秒、出力 4096 バイト以下、
+  環境はホストのものを継承（`BW_SESSION` など）。標準エラーは捨てる。値は 1 行・ASCII の印字可能文字・空白なし・255 文字以下
+  （違反は起動拒否）。値は、例外・ログ・標準エラーに出さない
+- **`auto` の縮退**: 出どころが無い（ファイル無し、コマンドの失敗・タイムアウト）ときは、**起動を止めずに** GitHub ブローカーを無効にし、
+  `GitHub 認証なし: gh は無認証になる (PAT の出どころ: …)` を 1 行出す（キーは内側に出ないので、安全側）。設定の破損・権限違反・
+  形式違反・Envoy／TLS の失敗は起動拒否。GitHub だけが有効で出どころ無しなら、Envoy は起動しない
+- **許可**: Envoy の仮想ホストは `api.github.com`（完全一致）だけを上流へ。それ以外の `:authority`（`github.com`・`uploads.github.com`・
+  偽装した Host）は 403（実測）。**メソッド・パスは制限しない。操作の防御は PAT のスコープ**（このリポジトリは、操作の内容を保証しない）。
+  内側は `gh` 以外からも、ソケットへ任意の HTTP を送れて、PAT の権限内の操作は原則すべて可能
+- 内側へ渡すもの: `GH_CONFIG_DIR`（agent ディレクトリ内の `gh/config.yml`）、ダミーの `GH_TOKEN`（環境のフィルターの後に設定。ホストの
+  `GH_TOKEN`・`GITHUB_TOKEN`・`GH_ENTERPRISE_TOKEN` は渡さない）、`GH_NO_UPDATE_NOTIFIER`・`GH_TELEMETRY=false`・`GH_PROMPT_DISABLED`。
+  `pis --no-broker` は、Copilot と GitHub の両方を無効にする
+- **Copilot と同じ Envoy**: 有効なものだけのリスナー・クラスタ・SDS を 1 つの設定（`envoy-base.yaml` に `envoy-copilot.yaml`・
+  `envoy-github.yaml` の断片を差し込む）に生成する。起動順は、空の agent ディレクトリの確保 → `broker.session()` → 中身の配置
+  （`auth.json` から `github-copilot` を除く処理を、ブローカーの起動前に通さないため）
+- **実測**（WSL2、境界あり、ダミーの PAT）: 内側の `gh issue list` が、ソケット経由で Envoy に届き、GitHub が `HTTP 401: Bad credentials`
+  を返した（差し替え値がダミーのため）。偽装した Host は 403。PAT が無いときは、通知を出して `gh` は無認証。**本物の PAT での成功は未確認**
+
 ## 状態の置き場
 
 ```mermaid

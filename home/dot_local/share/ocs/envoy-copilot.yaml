@@ -1,13 +1,12 @@
-# pis の Copilot ブローカー (設定 [pis.broker] copilot = "auto") が起動する Envoy の設定の雛形。
-# broker.py が起動ごとに、アットマークで囲んだ次の 4 つの名前を置き換えて、状態ディレクトリへ書く。
+# yamllint disable rule:indentation
+# (断片。envoy-base.yaml の中へ差し込むので、行頭がインデントされている)
+# pis の Copilot ブローカー (設定 [pis.broker] copilot = "auto") の Envoy の断片 (リスナーとクラスタ)。
+# broker.py が起動ごとに、アットマークで囲んだ次の 4 つの名前を置き換えて、envoy-base.yaml へ差し込む。
 #   PORT     127.0.0.1 のリッスンポート (空きポート。引用符ごと整数に置き換える)
 #   HOST     中継先 (Copilot の API ホスト。トークンの proxy-ep から決める)
 #   SDS_DIR  SDS ファイル copilot-sds.json を置く状態ディレクトリの絶対パス
 #   CA_FILE  上流の証明書を検証する CA バンドルの絶対パス (無ければ broker.py が起動を拒否する)
-# 仕組みは docs/change/0037-pis-usability-and-telemetry.md の「認証の方針」。
-node: {id: pis-broker, cluster: pis-broker}
-static_resources:
-  listeners:
+# 前半がリスナーの項目、後半 (区切りの行の後) がクラスタの項目。区切りの行を消さない。
     - name: copilot
       address:
         socket_address: {address: 127.0.0.1, port_value: "@PORT@"}
@@ -73,7 +72,7 @@ static_resources:
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
-  clusters:
+# ---clusters---
     - name: copilot_upstream
       type: LOGICAL_DNS
       dns_lookup_family: V4_ONLY
