@@ -111,6 +111,9 @@ def host(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.delenv("PI_CODING_AGENT_DIR", raising=False)
+    ca = tmp_path / "ca.pem"
+    ca.write_text("dummy", encoding="utf-8")
+    monkeypatch.setattr(_ocs().broker, "find_ca_file", lambda: str(ca))
     return SimpleNamespace(home=home, agent=agent, runtime=runtime, bin=bin_dir)
 
 
@@ -173,12 +176,16 @@ def test_manual_mode_validation_is_unchanged(capsys):
 # ─── (b) 設定の置換 ─────────────────────────────────────────────────
 
 
+def _render(broker, tmp_path, host="api.example.test", ca="/etc/ssl/ca.pem"):
+    return broker.render_config(
+        broker.TEMPLATE.read_text(encoding="utf-8"), 12345, host, tmp_path, ca
+    )
+
+
 def test_render_config_fills_every_placeholder(tmp_path):
     broker = _ocs().broker
-    out = broker.render_config(
-        broker.TEMPLATE.read_text(encoding="utf-8"), 12345, "api.example.test", tmp_path
-    )
-    assert not re.search(r"@(PORT|HOST|SDS_DIR)@", out)
+    out = _render(broker, tmp_path)
+    assert not re.search(r"@(PORT|HOST|SDS_DIR|CA_FILE)@", out)
     assert "port_value: 12345}" in out
     assert out.count('"api.example.test"') == 3  # host_rewrite_literal・接続先・SNI
     assert f'path: "{tmp_path}/copilot-sds.json"' in out
@@ -186,15 +193,79 @@ def test_render_config_fills_every_placeholder(tmp_path):
     assert '"@type"' in out  # 型の指定は置換の対象ではない
 
 
+def test_config_verifies_the_upstream_certificate(tmp_path):
+    broker = _ocs().broker
+    out = _render(broker, tmp_path, ca="/etc/ssl/ca.pem")
+    assert 'trusted_ca: {filename: "/etc/ssl/ca.pem"}' in out
+    assert (
+        'match_typed_subject_alt_names: [{san_type: DNS, matcher: {suffix: "githubcopilot.com"}}]'
+        in out
+    )
+
+
+def test_allowed_routes_are_exact_paths(tmp_path):
+    out = _render(_ocs().broker, tmp_path)
+    assert "path_separated_prefix" not in out
+    for route in ("/v1/messages", "/responses", "/chat/completions"):
+        assert f'{{path: "{route}"' in out
+
+
+@pytest.mark.parametrize("bad", ['/tmp/a"b.pem', "/tmp/a\nb.pem"])
+def test_render_config_rejects_paths_that_break_the_yaml_string(tmp_path, bad):
+    broker = _ocs().broker
+    with pytest.raises(broker.BrokerError):
+        _render(broker, tmp_path, ca=bad)
+
+
+def test_ca_file_prefers_the_default_then_falls_back(tmp_path, monkeypatch):
+    broker = _ocs().broker
+    default = tmp_path / "default.pem"
+    default.write_text("x", encoding="utf-8")
+    other = tmp_path / "other.pem"
+    other.write_text("x", encoding="utf-8")
+    paths = SimpleNamespace(cafile=str(default))
+    monkeypatch.setattr(broker.ssl, "get_default_verify_paths", lambda: paths)
+    monkeypatch.setattr(broker, "CA_FALLBACKS", (str(other),))
+    assert broker.find_ca_file() == str(default)
+    paths.cafile = str(tmp_path / "missing.pem")
+    assert broker.find_ca_file() == str(other)
+
+
+def test_missing_ca_file_refuses_to_start(tmp_path, monkeypatch):
+    broker = _ocs().broker
+    monkeypatch.setattr(
+        broker.ssl,
+        "get_default_verify_paths",
+        lambda: SimpleNamespace(cafile=str(tmp_path / "none.pem")),
+    )
+    monkeypatch.setattr(broker, "CA_FALLBACKS", (str(tmp_path / "none2.pem"),))
+    with pytest.raises(broker.BrokerError, match="CA"):
+        broker.find_ca_file()
+
+
+def test_session_refuses_to_start_without_a_ca_file(host, monkeypatch):
+    broker = _ocs().broker
+    _fake_exchange(monkeypatch, broker, [(TOKEN1, _far())])
+
+    def no_ca():
+        raise broker.BrokerError("CA が無い")
+
+    monkeypatch.setattr(broker, "find_ca_file", no_ca)
+    with pytest.raises(broker.BrokerError, match="CA"), broker.session(host.agent, home=host.home):
+        pass
+    assert not list(host.runtime.glob("pis-broker-*"))
+
+
 def test_rendered_config_is_valid_yaml(tmp_path):
     yaml = pytest.importorskip("yaml")
     broker = _ocs().broker
-    out = broker.render_config(
-        broker.TEMPLATE.read_text(encoding="utf-8"), 12345, "api.example.test", tmp_path
-    )
+    out = _render(broker, tmp_path)
     data = yaml.safe_load(out)
     listener = data["static_resources"]["listeners"][0]
     assert listener["address"]["socket_address"] == {"address": "127.0.0.1", "port_value": 12345}
+    context = data["static_resources"]["clusters"][0]["transport_socket"]["typed_config"]
+    validation = context["common_tls_context"]["validation_context"]
+    assert validation["trusted_ca"] == {"filename": "/etc/ssl/ca.pem"}
 
 
 def test_upstream_host_follows_proxy_ep_and_rejects_odd_values():
@@ -204,7 +275,9 @@ def test_upstream_host_follows_proxy_ep_and_rejects_odd_values():
         "api.business.githubcopilot.com"
     )
     assert broker.upstream_host("no endpoint") == broker.DEFAULT_HOST
-    assert broker.upstream_host("proxy-ep=proxy.x.com\nevil: 1") == broker.DEFAULT_HOST
+    for bad in ("proxy-ep=proxy.x.com\nevil: 1", "proxy-ep=proxy.evil.example", "proxy-ep=x.com"):
+        with pytest.raises(broker.BrokerError, match="上流"):
+            broker.upstream_host(bad)
 
 
 # ─── (c) session のライフサイクル ───────────────────────────────────
@@ -213,10 +286,12 @@ def test_upstream_host_follows_proxy_ep_and_rejects_odd_values():
 def test_session_starts_envoy_and_cleans_up(host, monkeypatch, capsys):
     broker = _ocs().broker
     calls = _fake_exchange(monkeypatch, broker, [(TOKEN1, _far())])
-    with broker.session(host.agent, home=host.home) as url:
+    with broker.session(host.agent, home=host.home) as started:
+        url = started.url
         match = re.fullmatch(r"http://127\.0\.0\.1:(\d+)", url)
         assert match
         (state,) = host.runtime.glob("pis-broker-*")
+        assert started.state == state
         assert stat.S_IMODE(state.stat().st_mode) == 0o700
         sds = state / "copilot-sds.json"
         assert stat.S_IMODE(sds.stat().st_mode) == 0o600
@@ -251,7 +326,8 @@ def test_two_sessions_get_separate_ports_and_state(host, monkeypatch):
         broker.session(host.agent, home=host.home) as first,
         broker.session(host.agent, home=host.home) as second,
     ):
-        assert first != second
+        assert first.url != second.url
+        assert first.state != second.state
         assert len(list(host.runtime.glob("pis-broker-*"))) == 2
     assert not list(host.runtime.glob("pis-broker-*"))
 
@@ -413,7 +489,7 @@ def _recording_session(pi, events, url="http://127.0.0.1:18081"):
     def session(*args, **kwargs):
         events.append(("enter", args, kwargs))
         try:
-            yield url
+            yield pi.broker.BrokerSession(url, Path("/nonexistent/run/pis-broker-x"))
         finally:
             events.append(("exit",))
 
@@ -439,7 +515,7 @@ def test_auto_mode_enters_the_session_and_passes_the_url_on(monkeypatch, tmp_pat
     monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
     _rules(tmp_path, monkeypatch, pi, "Auto")
 
-    def launch_with(args, passthrough, value):
+    def launch_with(args, passthrough, value, state=None):
         events.append(("launch", value))
         return 7
 
@@ -457,7 +533,7 @@ def test_auto_mode_stops_the_broker_when_the_launch_raises(monkeypatch, tmp_path
     monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
     _rules(tmp_path, monkeypatch, pi, "auto")
 
-    def launch_with(args, passthrough, value):
+    def launch_with(args, passthrough, value, state=None):
         raise SystemExit(3)
 
     monkeypatch.setattr(pi, "_launch_with", launch_with)
@@ -492,7 +568,7 @@ def test_manual_mode_does_not_start_a_broker(monkeypatch, tmp_path):
     monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
     _rules(tmp_path, monkeypatch, pi, "http://127.0.0.1:18080")
     seen = []
-    monkeypatch.setattr(pi, "_launch_with", lambda args, p, value: seen.append(value) or 0)
+    monkeypatch.setattr(pi, "_launch_with", lambda args, p, value, s=None: seen.append(value) or 0)
     assert pi._launch(_args(), []) == 0
     assert events == [] and seen == ["http://127.0.0.1:18080"]
 
@@ -505,7 +581,7 @@ def test_off_or_missing_setting_uses_no_broker(monkeypatch, tmp_path, copilot):
     monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
     _rules(tmp_path, monkeypatch, pi, copilot)
     seen = []
-    monkeypatch.setattr(pi, "_launch_with", lambda args, p, value: seen.append(value) or 0)
+    monkeypatch.setattr(pi, "_launch_with", lambda args, p, value, s=None: seen.append(value) or 0)
     assert pi._launch(_args(), []) == 0
     assert events == [] and seen == [None]
 
@@ -518,7 +594,7 @@ def test_no_broker_flag_overrides_the_setting_and_warns(monkeypatch, tmp_path, c
     monkeypatch.setattr(pi.broker, "session", _recording_session(pi, events))
     _rules(tmp_path, monkeypatch, pi, copilot)
     seen = []
-    monkeypatch.setattr(pi, "_launch_with", lambda args, p, value: seen.append(value) or 0)
+    monkeypatch.setattr(pi, "_launch_with", lambda args, p, value, s=None: seen.append(value) or 0)
     assert pi._launch(_args(no_broker=True), []) == 0
     assert events == [] and seen == [None]
     assert "ブローカー無し" in capsys.readouterr().err
@@ -530,6 +606,90 @@ def test_broker_setting_must_be_a_string(monkeypatch, tmp_path, capsys):
     with pytest.raises(SystemExit):
         pi.read_broker_setting()
     assert "broker.copilot" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"broker": None}, {"broker": "auto"}, {"broker": []}, {"broker": {"copilot": None}}],
+    ids=["null-section", "string-section", "list-section", "null-copilot"],
+)
+def test_broken_broker_setting_fails_closed(monkeypatch, tmp_path, capsys, body):
+    pi = _ocs().pi
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps(body), encoding="utf-8")
+    monkeypatch.setattr(pi, "RULES", path)
+    with pytest.raises(SystemExit):
+        pi.read_broker_setting()
+    assert "broker" in capsys.readouterr().err
+
+
+def _stub_launch(pi, monkeypatch, tmp_path):
+    """``_launch_with`` の前半 (境界の検証) を素通りさせ、agent 置き場を ``tmp_path`` に作る。"""
+    runtime = tmp_path / "fence"
+    runtime.write_text("", encoding="utf-8")
+    agent = tmp_path / "agent-copy"
+    agent.mkdir()
+    monkeypatch.setattr(
+        pi.boundary, "load_boundary", lambda *a, **k: {"runtime_path": str(runtime)}
+    )
+    for name in (
+        "reject_unsafe_workspace",
+        "reject_control_dirs",
+        "reject_protected_workspace",
+        "announce_request",
+    ):
+        monkeypatch.setattr(pi.boundary, name, lambda *a, **k: None)
+    monkeypatch.setattr(pi.boundary, "read_request", lambda *a, **k: None)
+    prepared = []
+    monkeypatch.setattr(pi, "prepare_agent_dir", lambda **k: prepared.append(agent) or agent)
+    return agent, prepared
+
+
+def test_agent_dir_is_removed_when_a_later_step_raises(monkeypatch, tmp_path):
+    pi = _ocs().pi
+    agent, _ = _stub_launch(pi, monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(pi, "sessions_dir", boom)
+    with pytest.raises(RuntimeError, match="boom"):
+        pi._launch_with(_args(), [], None)
+    assert not agent.exists()
+
+
+@pytest.mark.parametrize("where", ["inside-workspace", "workspace-inside-base"])
+def test_state_dir_overlapping_the_workspace_is_refused(monkeypatch, tmp_path, capsys, where):
+    pi = _ocs().pi
+    _, prepared = _stub_launch(pi, monkeypatch, tmp_path)
+    work = tmp_path / "work"
+    if where == "inside-workspace":
+        state = work / "run" / "pis-broker-x"
+    else:
+        state = tmp_path / "run" / "pis-broker-x"
+        work = tmp_path / "run" / "project"
+    state.mkdir(parents=True)
+    work.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(work)
+    with pytest.raises(SystemExit):
+        pi._launch_with(_args(), [], None, state)
+    assert "重なる" in capsys.readouterr().err
+    assert prepared == []  # agent 置き場を作る前に断っている
+
+
+def test_state_dir_apart_from_the_workspace_passes_the_overlap_check(monkeypatch, tmp_path):
+    pi = _ocs().pi
+    agent, prepared = _stub_launch(pi, monkeypatch, tmp_path)
+    state = tmp_path / "run" / "pis-broker-x"
+    state.mkdir(parents=True)
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    monkeypatch.setattr(pi, "sessions_dir", lambda *a: (_ for _ in ()).throw(RuntimeError("next")))
+    with pytest.raises(RuntimeError, match="next"):
+        pi._launch_with(_args(), [], None, state)
+    assert prepared == [agent]  # 重複の検査を越えて先へ進んだ
 
 
 def test_no_broker_is_parsed_by_pis_and_forwarded(monkeypatch):

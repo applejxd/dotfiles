@@ -87,6 +87,9 @@ BROKER_TIMEOUT_SECONDS = 3
 BROKER_HINT = f"{BROKER_KEY} は off / auto / http://127.0.0.1:<1024-65535> のどれか (例 http://127.0.0.1:18080)"
 
 
+_ABSENT = object()
+
+
 def is_auto_broker(value: str | None) -> bool:
     """``broker.copilot`` が ``auto`` (大文字小文字は区別しない)。前後の空白は認めない。"""
     return value is not None and value.lower() == "auto"
@@ -94,6 +97,7 @@ def is_auto_broker(value: str | None) -> bool:
 
 def read_broker_setting(rules_path: Path | None = None) -> str | None:
     """``rules.json`` の ``broker.copilot`` を返す。``off``・未設定・``broker`` 節が無いなら None。
+    ``broker`` が表でない・``copilot`` が文字列でない (``null`` を含む) ときは起動を拒否する。
 
     ``auto`` や URL の検証は :func:`parse_broker` と :func:`is_auto_broker` に任せる。
     """
@@ -102,14 +106,19 @@ def read_broker_setting(rules_path: Path | None = None) -> str | None:
         rules = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         die(f"{path} を読めない: {e}", "chezmoi apply で生成する")
-    section = rules.get("broker") if isinstance(rules, dict) else None
-    if section is None:
+    section = rules.get("broker", _ABSENT) if isinstance(rules, dict) else _ABSENT
+    if section is _ABSENT:
         return None
-    value = section.get("copilot") if isinstance(section, dict) else None
-    if value is None or value == "off":
+    # 設定の破損を off 扱いにしない (fail-closed)
+    if not isinstance(section, dict):
+        die(f"{path} の broker が表でない: {section!r}", BROKER_HINT)
+    if "copilot" not in section:
+        return None
+    value = section["copilot"]
+    if value == "off":
         return None
     if not isinstance(value, str):
-        die(f"{path} の {BROKER_KEY} が文字列でない: {value!r}", BROKER_HINT)
+        die(f"{path} の {BROKER_KEY} は文字列でないといけない: {value!r}", BROKER_HINT)
     return value
 
 
@@ -519,16 +528,36 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     # auto は pis と同じ寿命の Envoy を立て、その URL を手動モードと同じ経路へ渡す。
     # 例外・SystemExit でも ExitStack が止めて状態を消す。境界を組む前に入る
     with contextlib.ExitStack() as stack:
+        state: Path | None = None
         if is_auto_broker(value):
             try:
-                value = stack.enter_context(broker.session(REAL_AGENT))
+                started = stack.enter_context(broker.session(REAL_AGENT))
             except broker.BrokerError as e:
                 die(str(e), f"{e.hint}。{NO_BROKER_HINT}")
-        return _launch_with(args, passthrough, value)
+            value, state = started.url, started.state
+        return _launch_with(args, passthrough, value, state)
 
 
-def _launch_with(args: argparse.Namespace, passthrough: list[str], broker_value: str | None) -> int:
-    """``_launch`` の本体。``broker_value`` は ``broker.copilot`` の URL (無ければ None)。"""
+def _reject_state_overlap(state: Path, workspace: Path) -> None:
+    """ブローカーの状態ディレクトリが、境界の内側から読める作業場所と重なるなら起動を拒否する。"""
+    base = state.resolve().parent
+    if state.resolve().is_relative_to(workspace) or workspace.is_relative_to(base):
+        die(
+            f"ブローカーの状態の置き場と作業場所が重なる: {base} と {workspace}",
+            "別のディレクトリで起動する (状態は $XDG_RUNTIME_DIR か ~/.local/state/pis の下)",
+        )
+
+
+def _launch_with(
+    args: argparse.Namespace,
+    passthrough: list[str],
+    broker_value: str | None,
+    broker_state: Path | None = None,
+) -> int:
+    """``_launch`` の本体。``broker_value`` は ``broker.copilot`` の URL (無ければ None)。
+
+    ``broker_state`` は auto のときの状態ディレクトリ (作業場所と重なれば拒否する)。
+    """
     # ブローカーモード (未設定なら None で、以降は現行と同じ)。境界を組む前に検証と身元確認をする
     endpoint = parse_broker(broker_value)
     if endpoint is not None:
@@ -544,23 +573,29 @@ def _launch_with(args: argparse.Namespace, passthrough: list[str], broker_value:
     boundary.reject_control_dirs(sandbox, workspace, request)
     boundary.reject_protected_workspace(sandbox, workspace, request)
     boundary.announce_request(request)
+    if broker_state is not None:
+        _reject_state_overlap(broker_state, workspace)
 
     agent = prepare_agent_dir(broker_url=endpoint[0] if endpoint else None)
-    sessions = sessions_dir(workspace)
-    config_ = boundary.build_boundary(sandbox, workspace, request, agent)
-    if endpoint is not None:
-        apply_broker_network(config_, endpoint[1])
-    # セッションの置き場だけを本物へ開け、境界用 agent 置き場の設定と拡張は書けなくする
-    config_["filesystem"]["allowWrite"].append(str(sessions))
-    config_["filesystem"]["allowRead"].append(str(sessions))
-    config_["filesystem"]["denyWrite"] += boundary.prepare_protected(frozen_paths(agent))
-    project = {
-        "workspace": str(workspace),
-        "data_dir": str(agent),
-        "db": "",
-        "config": config_,
-    }
-    env = inner_env(agent, config_, endpoint is not None)
+    try:
+        sessions = sessions_dir(workspace)
+        config_ = boundary.build_boundary(sandbox, workspace, request, agent)
+        if endpoint is not None:
+            apply_broker_network(config_, endpoint[1])
+        # セッションの置き場だけを本物へ開け、境界用 agent 置き場の設定と拡張は書けなくする
+        config_["filesystem"]["allowWrite"].append(str(sessions))
+        config_["filesystem"]["allowRead"].append(str(sessions))
+        config_["filesystem"]["denyWrite"] += boundary.prepare_protected(frozen_paths(agent))
+        project = {
+            "workspace": str(workspace),
+            "data_dir": str(agent),
+            "db": "",
+            "config": config_,
+        }
+        env = inner_env(agent, config_, endpoint is not None)
+    except BaseException:
+        cleanup(agent, endpoint is not None)
+        raise
 
     # 社内プロキシ越しでないと外へ出られない機械では、許可リストの照合を中継へ移す (relay)
     with relay.session(config_) as fence_config:

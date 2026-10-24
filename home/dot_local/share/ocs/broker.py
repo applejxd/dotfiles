@@ -14,13 +14,16 @@ see docs/change/0037-pis-usability-and-telemetry.md
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import json
 import os
 import re
 import shutil
 import signal
 import socket
+import ssl
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -28,6 +31,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
+from typing import NamedTuple
 
 # pi-ai (dist/auth/oauth/github-copilot.js) の COPILOT_HEADERS と同じ
 HEADERS = {
@@ -48,6 +52,13 @@ TEMPLATE = Path(__file__).resolve().parent / CONFIG_NAME
 DEFAULT_HOST = "api.individual.githubcopilot.com"
 IDENTITY_PATH = "/__pis_broker"
 IDENTITY_PREFIX = "pis-broker-copilot"
+UPSTREAM_SUFFIX = ".githubcopilot.com"
+CA_FALLBACKS = (
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/ssl/cert.pem",
+)
+PR_SET_PDEATHSIG = 1
 
 REFRESH_MARGIN_SECONDS = 5 * 60  # 期限のこれだけ前に取り直す
 RETRY_SECONDS = 60  # 取り直しに失敗したときの待ち
@@ -61,6 +72,13 @@ INSTALL_HINT = (
     "Envoy の公式リリースの Linux バイナリと同じリリースの sha256 を取り、"
     "照合してから ~/.local/bin/envoy へ置いて実行権限を付ける"
 )
+
+
+class BrokerSession(NamedTuple):
+    """``session()`` が返す値。``url`` は Envoy の URL、``state`` は起動ごとの状態ディレクトリ。"""
+
+    url: str
+    state: Path
 
 
 class BrokerError(RuntimeError):
@@ -128,13 +146,34 @@ def exchange(refresh: str) -> tuple[str, int]:
 
 
 def upstream_host(token: str) -> str:
-    """トークンの ``proxy-ep=`` から中継先を決める (``proxy.`` → ``api.``)。無い・不正なら既定。"""
+    """トークンの ``proxy-ep=`` から中継先を決める (``proxy.`` → ``api.``)。無ければ既定。
+
+    ``.githubcopilot.com`` で終わらない・ホスト名として不正なら、資格情報の送り先を
+    トークンの内容で変えないよう :class:`BrokerError` にする。
+    """
     match = re.search(r"proxy-ep=([^;]+)", token)
     if not match:
         return DEFAULT_HOST
     host = match.group(1).replace("proxy.", "api.", 1)
     # 設定へ埋め込むので、ホスト名の文字だけを通す
-    return host if re.fullmatch(r"[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?", host) else DEFAULT_HOST
+    valid = re.fullmatch(r"[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?", host) is not None
+    if not valid or not host.endswith(UPSTREAM_SUFFIX):
+        raise BrokerError(
+            "想定外の上流のホスト (トークンの proxy-ep が githubcopilot.com の下に無い)"
+        )
+    return host
+
+
+def find_ca_file() -> str:
+    """上流の証明書の検証に使う CA バンドル。どれも無ければ :class:`BrokerError` (検証なしで続けない)。"""
+    candidates = [ssl.get_default_verify_paths().cafile, *CA_FALLBACKS]
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return candidate
+    raise BrokerError(
+        "上流の証明書を検証する CA バンドルが見つからない",
+        "ca-certificates を入れる (/etc/ssl/certs/ca-certificates.crt が要る)",
+    )
 
 
 def write_sds(path: Path, token: str) -> None:
@@ -159,14 +198,21 @@ def write_sds(path: Path, token: str) -> None:
         raise
 
 
-def render_config(template: str, port: int, host: str, sds_dir: Path) -> str:
-    """雛形の ``@PORT@`` / ``@HOST@`` / ``@SDS_DIR@`` を置き換える。"""
+def render_config(template: str, port: int, host: str, sds_dir: Path, ca_file: str) -> str:
+    """雛形の ``@PORT@`` / ``@HOST@`` / ``@SDS_DIR@`` / ``@CA_FILE@`` を置き換える。
+
+    YAML の文字列へ埋めるので、``"`` や改行を含むパスは拒否する。
+    """
+    for path in (str(sds_dir), ca_file):
+        if '"' in path or "\n" in path or "\r" in path:
+            raise BrokerError("設定へ埋め込めないパス (引用符か改行を含む)")
     return (
         template.replace(
             '"@PORT@"', str(port)
         )  # 雛形では引用符で囲み (YAML として有効)、置換後は整数
         .replace("@HOST@", host)
         .replace("@SDS_DIR@", str(sds_dir))
+        .replace("@CA_FILE@", ca_file)
     )
 
 
@@ -196,6 +242,21 @@ def _log(path: Path, message: str) -> None:
         f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {message}\n")
 
 
+def _die_with_parent() -> None:
+    """子 (Envoy) 側で、親の死亡時に SIGTERM を受けるようにする (Linux)。
+
+    ``preexec_fn`` の中なので、標準エラー (= Envoy のログ) へ直接 1 行書く。失敗しても起動は続ける。
+    """
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.prctl(PR_SET_PDEATHSIG, int(signal.SIGTERM), 0, 0, 0) != 0:
+            os.write(
+                2, f"pis-broker: prctl(PDEATHSIG) failed errno={ctypes.get_errno()}\n".encode()
+            )
+    except (OSError, AttributeError) as e:
+        os.write(2, f"pis-broker: prctl(PDEATHSIG) unavailable: {type(e).__name__}\n".encode())
+
+
 def _refresh_loop(
     stop: threading.Event,
     refresh: str,
@@ -215,7 +276,10 @@ def _refresh_loop(
         except (BrokerError, OSError) as e:
             if stop.is_set():
                 return  # 終了処理中に状態ディレクトリが消えただけ
-            _log(log, f"トークンの更新に失敗: {type(e).__name__}: {e}")
+            try:
+                _log(log, f"トークンの更新に失敗: {type(e).__name__}: {e}")
+            except OSError as log_error:
+                print(f"pis-broker: ログへ書けない ({type(log_error).__name__})", file=sys.stderr)
             if stop.wait(retry):
                 return
 
@@ -279,8 +343,10 @@ def session(
     refresh_margin: float = REFRESH_MARGIN_SECONDS,
     retry_seconds: float = RETRY_SECONDS,
     ready_timeout: float = READY_TIMEOUT_SECONDS,
-) -> Iterator[str]:
-    """自分専用の Envoy を立て、``http://127.0.0.1:<port>`` を返す。抜けると止めて状態を消す。
+) -> Iterator[BrokerSession]:
+    """自分専用の Envoy を立て、URL (``http://127.0.0.1:<port>``) と状態ディレクトリを返す。
+
+    抜けると止めて状態を消す。
 
     ``agent`` はホストの agent 置き場 (``auth.json`` がある所。既定は ``PI_CODING_AGENT_DIR`` か
     ``~/.pi/agent``)。立てられなければ :class:`BrokerError` (呼び出し側が ``die`` に変える)。
@@ -290,6 +356,7 @@ def session(
     refresh = load_refresh_token(agent if agent is not None else agent_dir())
     token, expires_at = exchange(refresh)
     host = upstream_host(token)
+    ca_file = find_ca_file()
     state = make_state_dir(home)
     stop = threading.Event()
     proc: subprocess.Popen | None = None
@@ -301,7 +368,7 @@ def session(
         port = free_port()
         config = state / CONFIG_NAME
         config.write_text(
-            render_config(TEMPLATE.read_text(encoding="utf-8"), port, host, state),
+            render_config(TEMPLATE.read_text(encoding="utf-8"), port, host, state, ca_file),
             encoding="utf-8",
         )
         os.chmod(config, 0o600)
@@ -321,6 +388,7 @@ def session(
                 stdout=out,
                 stderr=out,
                 start_new_session=True,
+                preexec_fn=_die_with_parent,
                 env=env,
             )
         thread = threading.Thread(
@@ -331,7 +399,7 @@ def session(
         thread.start()
         url = f"http://127.0.0.1:{port}"
         _wait_ready(url, proc, envoy_log, ready_timeout)
-        yield url
+        yield BrokerSession(url, state)
     finally:
         stop.set()
         if thread is not None:

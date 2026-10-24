@@ -400,7 +400,15 @@ export PIS_EXTRA_DEVICES=/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm  # ネイ�
   長期トークンで、短命の Copilot トークンを取得し、SDS ファイルへ書く（`0700` の一時ディレクトリ、
   更新はスレッドで期限の 5 分前）。Envoy は PATH か `~/.local/bin/envoy` から探す。無ければ起動しない
   （`chezmoi apply` が、家の機へ固定版・sha256 照合で導入する。[導入と更新](structure.md#envoy-の取得)）
-- 内側から送れる要求は、観測した 3 つの POST（`/v1/messages`・`/responses`・`/chat/completions`）だけ、他は 403
+- 内側から送れる要求は、観測した 3 つの POST（`/v1/messages`・`/responses`・`/chat/completions`。パスは完全一致、クエリは無視）だけ、他は 403
+- **上流の TLS は検証する**: Envoy は `validation_context` が無いと上流の証明書を検証しないので、システムの CA
+  （`ssl` の既定、無ければ代表的な 3 つのパス。**見つからなければ起動しない**）と、SAN の `githubcopilot.com` で終わる DNS 名を
+  明示する。トークンの `proxy-ep` が `.githubcopilot.com` で終わらないときも起動しない（トークンの中身で送り先が変わらないように）
+- **後始末**: Envoy は親（`pis`）の死亡で止まる（`PR_SET_PDEATHSIG`）。起動途中の例外でも、起動別の agent ディレクトリは残らない。
+  状態ディレクトリ（`$XDG_RUNTIME_DIR` 優先、無ければ `~/.local/state/pis`）が作業ディレクトリと重なるときは起動しない
+- 設定が壊れている（`broker` が表でない、`copilot` が文字列でない）ときは、無効にせず起動しない
+- **範囲の限界**: 起動別の `auth.json` から外すのは `github-copilot` だけ。他のプロバイダーの認証は、従来どおり内側にコピーされる。
+  内側から使える Copilot の使用権（上の 3 経路）は、内側に残る。要求の大きさ・回数の上限は無い
 
 ## 状態の置き場
 
