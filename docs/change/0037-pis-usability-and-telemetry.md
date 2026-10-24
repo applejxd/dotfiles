@@ -92,6 +92,8 @@
 - 現状の仕組み（リポジトリのファイルで確かめたもの）: 許可の追加は `PIS_EXTRA_READ`（環境変数）と `.opencode/sandbox.toml`。通信は、ドメイン単位の許可リスト（`ocs/boundary.py` の `allowedDomains`）。`imozuru` の仕様は「任意のドメインの原文を取るには、許可リストを足すか `--no-sandbox` が要る。実機では未確認」と書く（`docs/spec/imozuru.md:102`）
 - **読み取りの範囲は、worktree に限られていない**（確認済み: 任意の起動 cwd が読み書き可で、`work_read`（`~/src`・`~/worktrees`・`~/papers`・chezmoi のリポジトリ）と、`PIS_EXTRA_READ`・`.opencode/sandbox.toml` で足す。`boundary.py:244,255`）。理由 1 の摩擦は、worktree の実装でほぼ解消する見込み（利用者の見立て）。他のプロジェクト（例: `~/projects/foo`）で実際に起動して確かめる
 - 本セッションで、多数のドメイン（公式の docs、GitHub、個人のブログ、NVD など）の取得が通った（境界なしでの実行とみられる。境界つきでは未検証）。したがって、**境界つきで同じ調査ができるかは、実測が要る**
+- **状況のまとめ（2026-10-24。圧縮の前の要点）**: ① サンドボックスは使い勝手が悪く、境界なしの起動がほとんどだったので、便益を測れていない（[CHG-0033](0033-sandbox-build-value-assessment.md) の段 P6）。この案件はその前提の整備。② **通信**は、許可リスト型から、**拒否リスト型**（GET は無条件、POST は判定器が確認、会社と家で別）へ引き直す。Fence は `deniedDomains` 優先・`*` は緩和モード・L7 なし。③ **認証**は、**ホスト側のブローカーが本物の認証情報を持ち、内側にはダミーだけ**を渡す方向（G2）。LiteLLM は、サプライチェーンの対策は取れるが、Bedrock の忠実度・重さ・Copilot の DB なしの不確かさで見送り（G5）。④ **会社の AWS は IAM ユーザーの長期キー**（`aws configure`）。**専用の最小権限ユーザーは作れる**（利用者の回答）。⑤ **Copilot（家）**は、`pi` が認証を実装済みで、内側に残る長期トークンの権限は `read:user` だけ。実験は Copilot（段 U7a）から。⑥ 自作は最小にする規則: **既製の汎用部品 → 設定だけ → 接着 → 最後に自作**
+- 実験の道具は `scripts/agents/broker_spike.sh`（と `broker-spike/` の Envoy の設定・更新スクリプト）。**境界の外のホストで、利用者が実行する**。実行は未検証（静的検査のみ通過）
 
 ## 未解決点
 
@@ -104,15 +106,18 @@
 7. **会社の AWS 側の確認**（利用者が AWS 管理者へ）: 使っているモデルが、入出力を最大 30 日保持する対象（Claude Fable 5 / 5.1 など）か。`data_retention_mode` の設定。「opt-out」が何を指すか（[記録 D1](../research/agents/web-search-data-handling.md)）
 8. **家の確認**（利用者）: GitHub Copilot の「データの利用を許可する」設定（個人プラン）の現在の値
 9. **POST の判定の穴**: Python・Node のインラインコードの HTTP POST、トークン形式の検出。`explore` の子が未読の規則（`check_interpreter_inline_code`）の確認から
-10. **認証情報の渡し方**（候補 G1〜G6）: 最小の実験は G1（Bedrock の短期 API key を専用ロールで生成して渡す）。pi が動くか、AgentCore に使えるか。`pis` に「渡す例外」（`AWS_BEARER_TOKEN_BEDROCK` は名前に `TOKEN` を含むため、現在は落とされる）をどう設計するか。**再開条件**: 会社の機での実験、設計を `review` へ
+10. **認証情報の渡し方**（候補 G1〜G8）: 実験は段 U7a（Copilot）から。G1（短期 API key）は、12 時間の制限で保留。`pis` に「渡す例外」（`AWS_BEARER_TOKEN_BEDROCK` は名前に `TOKEN` を含むため、現在は落とされる）をどう設計するか。**再開条件**: 会社の機での実験、設計を `review` へ
 11. **Fence から `127.0.0.1` のポートへ届くか**（`allowLocalOutbound` ＋ `allowLocalOutboundPorts`。現行の `relay.py` はこの設定を使っていない）。G2 の前提。**再開条件**: 実機での確認
 12. **サプライチェーン**: 常駐のゲートウェイや外部の OSS を入れる場合の必須の対策（ハッシュ固定、`exclude-newer` の 1〜3 日の待機、ゲートウェイの封じ込め、事件時の回転の手順）。G5 を採る場合のみ
 
 ## 次の調査・実験
 
-1. 段 U1: 現状の調査を `explore` の子に任せる（許可の追加の流れ、`pis` の起動の流れ、許可リストの内容と検索・取得の宛先の対応）
-2. 段 U2: 境界の中でのネット調査の手順書を作る（利用者が `pis` で実行し、結果を貼る）
-3. 利用者に、理由 3 の具体例を尋ねる
+1. **利用者**: 段 U7a を実行する（`scripts/agents/broker_spike.sh check`・`up`・`pi-test`。Envoy の導入は、リリースの sha256 と照合する）。結果と、`~/.local/state/pis-broker-spike/` のログ（値は出ない）を貼る
+2. 段 U7a の結果で、設定の直し、または、小さな自作のプロキシへの切り替えを決める（ストリーミング、SDS の監視、30 分後の更新）
+3. 段 U7b: Bedrock（会社の機。専用の最小権限の IAM ユーザーのキーで）。Envoy の `aws_request_signing`、`ConverseStream`、AgentCore の MCP の中継、IAM ユーザーのキーの再読み込み
+4. 設計を `review` へ（境界に関わる）: 内側へ渡す環境変数の例外（`pis` の `DROP_ENV`・名前に `TOKEN` を含むものの除去）、Fence の `allowLocalOutbound` ＋ポートの生成、`pi` の設定生成（`baseUrl` と http の MCP の `headers`）
+5. 通信の方針（拒否リスト型。会社は `defaultAction: "proxy"` ＋ `upstreamProxy` と、現行の `relay.py` の食い違い）の設計。判定器の POST の穴（インラインコード、トークン形式）の拡充
+6. 段 U1（現状の調査）と段 U2（境界の中のネット調査の手順書）。**利用者の宿題**: AWS 管理者に、使っているモデルの保持・`data_retention_mode`・「opt-out」の正体と、専用の最小権限ユーザーの作成を確認。GitHub Copilot の「データの利用を許可する」設定の確認
 
 ## 評価基準
 
