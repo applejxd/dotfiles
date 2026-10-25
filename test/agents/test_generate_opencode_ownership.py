@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 import generate as gen  # noqa: E402
 from agents_common import load_common  # noqa: E402
 
-USERS = pytest.mark.parametrize("username", ["applejxd", "worker"], ids=["私用", "会社用"])
+USERS = pytest.mark.parametrize("username", ["applejxd", "worker"], ids=["個人用", "制約環境用"])
 # 所有の規則を入れる前のコミット (CHG-0018 段 4 の P の直前)
 BEFORE_OWNERSHIP = "d6ea76f"
 HAND_POLICY = {"action": "permission", "resource": "shell:dummy-hand *", "effect": "deny"}

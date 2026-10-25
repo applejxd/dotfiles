@@ -218,7 +218,7 @@
   `~/` の展開。理由: 部品が多く、利用者の TUI で照合が止まってコミットできなかった。コミットは push 前なら
   `--amend` などで直せるので、表示の抜けを仕組みで防ぐ価値が手間に見合わない（利用者の判断）
 - **反映先**: `docs/spec/agent-config-generation.md`（コミットの確認・子エージェント）、
-  `docs/spec/opencode-sandbox.md`、`common.toml.tmpl`（`[opencode.retired] agents` で配備済みの `commit` を消す）、
+  `docs/spec/sandbox/opencode-sandbox.md`、`common.toml.tmpl`（`[opencode.retired] agents` で配備済みの `commit` を消す）、
   `.chezmoiremove`（配備済みのスクリプトと `commit-plan.js` を消す）
 - **残したもの**: 各リポジトリの `<git の共通ディレクトリ>/commit-plan/` に保存済みの計画は消さない
   （自動の掃除も無くなった）。不要なら中身を確かめて個別に消す

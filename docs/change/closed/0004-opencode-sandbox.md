@@ -7,7 +7,7 @@
 - **対象 OS**: **Ubuntu / WSL のみ**（macOS と Windows は [CHG-0002](0002-opencode-ask-by-default.md) の方針を維持）
 
 > **この文書は当時の記録。** 現在の仕様は
-> [opencode-sandbox](../../spec/opencode-sandbox.md)。
+> [opencode-sandbox](../../spec/sandbox/opencode-sandbox.md)。
 >
 > **後続の決定**: 「`bypass` エージェントは不採用」は [CHG-0010](0010-ocs-agents.md) で改めた
 > （`ocs` の中でも使える。境界から抜ける手段ではない。復旧を通常版で行う点は同じ）。
@@ -1576,7 +1576,7 @@ plugins    : ~/.config/opencode/guide-plugin  ← 必要なのはこの 1 つだ
 ### 境界の外から再開する手順（記録）
 
 > **2026-09-24 に B4 で `ocs --handoff` を入れた。** 通常はそちらを使う
-> （[引き継ぎの仕様](../../spec/opencode-sandbox.md#セッションの引き継ぎ)）。
+> （[引き継ぎの仕様](../../spec/sandbox/opencode-sandbox.md#セッションの引き継ぎ)）。
 > 以下は移送せずに直接開く場合の手順で、下記の注意がそのまま残る。
 
 隔離版のセッションは `OPENCODE_DB` で分かれているため、素の `opencode --continue`
@@ -1678,7 +1678,7 @@ OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continu
 
 ### 反映先
 
-- 仕様: [OpenCode 隔離起動のアーキテクチャ](../../spec/opencode-sandbox.md)、
+- 仕様: [OpenCode 隔離起動のアーキテクチャ](../../spec/sandbox/opencode-sandbox.md)、
   守る範囲は [セキュリティ](../../spec/security.md#ai-エージェントの実行境界ubuntu--wsl)
 - 実装: `home/dot_config/agents/common.toml.tmpl` の `[opencode.sandbox]`、
   `~/.local/bin/ocs` / `ocs-boundary-check`（2026-09-28 に `ocs` の本体は
@@ -1693,5 +1693,5 @@ OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone --continu
 | A2 / A4（固有設定の分離 / `common.toml` 廃止の是非） | [CHG-0005](../0005-agents-config-naming.md)（保留） |
 | B5（静的境界）の再検討 | [CHG-0007](../0007-harness-profiles.md) の段 3 に着手するとき |
 | プロバイダ層に資格情報の参照先を持たせるか（B2 の資格情報は例外として受け入れた） | [CHG-0007](../0007-harness-profiles.md)「未解決点」 |
-| 未確認の P1-1〜P1-6（[次の調査・実験](#次の調査実験)）と、外部レビューの未対処分（[外部レビュー](#外部レビュー2026-09-23-未対処の欠陥と簡素化の選択肢)） | 未起票。[opencode-sandbox](../../spec/opencode-sandbox.md) の既知の制限からこの案件へ張っている |
+| 未確認の P1-1〜P1-6（[次の調査・実験](#次の調査実験)）と、外部レビューの未対処分（[外部レビュー](#外部レビュー2026-09-23-未対処の欠陥と簡素化の選択肢)） | 未起票。[opencode-sandbox](../../spec/sandbox/opencode-sandbox.md) の既知の制限からこの案件へ張っている |
 | `rules.json` の `sandbox` キーを分離するか（[当初案と違う形になったもの](#当初案と違う形になったもの)） | 未起票（未評価） |

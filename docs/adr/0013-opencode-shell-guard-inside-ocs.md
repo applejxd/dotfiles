@@ -12,7 +12,7 @@
 > 誘導文を付けられない）は、同日に解消した。決定は変えない。plugin の `tool.execute.before`
 > （permission より前に走る）で pip の規則を判定し、例外で説明付きに止める
 > （[実測](../research/opencode/permission/early-guard.md)、
-> [仕様](../spec/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導)）。
+> [仕様](../spec/guard/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導)）。
 > 静的 deny は変えていない。以下の本文は決定当時のまま残している。
 
 ## コンテキスト
@@ -27,7 +27,7 @@
 - `pip install` は uv 管理の方針と衝突する。これは安全の話ではなく「uv を使う」
   運用の取り決めで、境界の中でも同じに効かせたい
 
-Claude Code / Copilot CLI は hook（[bashrules](../spec/agent-command-policy.md)）で
+Claude Code / Copilot CLI は hook（[bashrules](../spec/guard/agent-command-policy.md)）で
 同等の保護を持つ。OpenCode は guide plugin の `[[opencode.shell.guide]]`
 （生のコマンド文字列への正規表現）で止められる。
 
@@ -48,7 +48,7 @@ ADR-0012 の「境界の内側では rm 等を確認しない」を、次の範�
 
 実装は guide 規則で行う。`ocs` が捨てるのは permission であり guide 規則ではないため、
 ocs の内側にも同じ規則が効く（実機で確認済み。
-[仕様](../spec/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導)）。
+[仕様](../spec/guard/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導)）。
 
 ## 検討した選択肢
 

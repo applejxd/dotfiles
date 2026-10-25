@@ -1,6 +1,6 @@
 // 親の読み取り量と委譲の件数を、利用者の発言ごとに数えて記録するだけ (N1a。通知も結果の変更もしない)。
 // 親だけで動く。記録は `delegate-stats` のカスタムエントリ。`/delegate-stats` で直近を見る。
-// see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
+// see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { randomBytes } from "node:crypto";
 

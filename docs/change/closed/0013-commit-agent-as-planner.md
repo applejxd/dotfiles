@@ -211,5 +211,5 @@
 - **撤回・見送りしたもの**: 計画役の `commit` エージェントと、子に計画を作らせて親が書き写す流れ。親が
   計画を表示しないことがあり（段 5）、代わりの [CHG-0014](0014-deterministic-commit-runner.md) も取り下げたため。
   commit スキルの「子エージェントとして計画だけを求められた場合」などの追記も元に戻した
-- **反映先**: `docs/spec/agent-config-generation.md`、`docs/spec/opencode-sandbox.md`、`common.toml.tmpl`
+- **反映先**: `docs/spec/agent-config-generation.md`、`docs/spec/sandbox/opencode-sandbox.md`、`common.toml.tmpl`
 - **移管した未完事項**: なし

@@ -2,7 +2,7 @@
 
 settings.json の ``extensions`` から読ませ、push の拒否・commit の確認・時間切れの退避を見る。
 解釈・表示・退避の細部は test_pi_commit_parse.py。
-see docs/spec/pi-guard.md#commit-の確認-素の-pi
+see docs/spec/guard/pi-guard.md#commit-の確認-素の-pi
 """
 
 from __future__ import annotations
@@ -389,6 +389,8 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
     shutil.copy2(HARNESS_SRC.parent / "children.ts", harness / "children.ts")
     shutil.copy2(HARNESS_SRC.parent / "audit.ts", harness / "audit.ts")
+    shutil.copy2(HARNESS_SRC.parent / "tools-ext.ts", harness / "tools-ext.ts")
+    shutil.copy2(HARNESS_SRC.parent / "confirm-view.ts", harness / "confirm-view.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktree.ts", harness / "worktree.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktrees-command.ts", harness / "worktrees-command.ts")
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
@@ -416,7 +418,7 @@ def test_a_later_confirmation_shows_the_state_before_the_earlier_commit_runs(env
 
     pi は同じ応答の全呼び出しの tool_call を終えてから実行を始める (実行の終わりを待つと、
     安全弁の時間まで止まる)。そのため 2 件目は、1 件目が入る前の状態 (a.txt も対象) を見せる。
-    既知の限界 (docs/spec/pi-guard.md#commit-の確認-素の-pi)。
+    既知の限界 (docs/spec/guard/pi-guard.md#commit-の確認-素の-pi)。
     """
     (env["proj"] / "b.txt").write_text("b\n", encoding="utf-8")
     calls = bash_call(COMMIT) + bash_call("git add -- b.txt && git commit -m 'second'")

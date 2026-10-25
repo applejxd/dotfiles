@@ -17,7 +17,7 @@ def test_winget_installer_uses_supported_detection_and_package_ids():
 
     assert "--output json" not in script
     assert "winst Microsoft.PowerShell -CheckCommand pwsh" in script
-    # Keyhac v2 は msstore の ID で入れる (msstore は会社で遅いので applejxd のみ)
+    # Keyhac v2 は msstore の ID で入れる (msstore は制約のある環境で遅いので applejxd のみ)
     assert "winst 9P8H1PG6PRHH --source msstore" in script
     assert 'applejxd$" .chezmoi.username' in script
     assert "winst jdx.mise -CheckCommand mise" in script
@@ -862,7 +862,7 @@ def test_wsl_sandbox_guest_files_are_lf_and_have_all_placeholders_resolved_by_se
 
 def test_wsl_sandbox_masks_timesyncd_so_it_does_not_fight_other_distros_over_the_shared_clock():
     # WSL2 の全ディストロは同じカーネル時計を共有する。timesyncd が複数動くと tick が偏り、
-    # 単調時計が約 2% 遅れる (see docs/spec/wsl-sandbox.md#時刻同期)
+    # 単調時計が約 2% 遅れる (see docs/spec/sandbox/wsl-sandbox.md#時刻同期)
     setup = (WSL_SANDBOX / "guest/setup.sh").read_text(encoding="utf-8")
     assert "systemctl mask --now systemd-timesyncd" in setup
 

@@ -4,7 +4,7 @@
 // グローバルな環境変数の書き換えなどを扱う。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableSet } from "./context.ts";
 import { expandUser, isAbsolute, join, normpath, sep } from "./pathutil.ts";

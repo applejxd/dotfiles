@@ -8,7 +8,7 @@
 // - common: common.toml を JSON にした設定 (読み取り専用)
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Common } from "./policy.ts";
 
 export type Tables = Record<string, Record<string, any>>;

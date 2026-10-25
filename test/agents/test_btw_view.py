@@ -1,4 +1,4 @@
-"""btw の表示部品 (view.ts)。pi に依存しないので node で直接動かす。see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw"""
+"""btw の表示部品 (view.ts)。pi に依存しないので node で直接動かす。see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw"""
 
 from __future__ import annotations
 

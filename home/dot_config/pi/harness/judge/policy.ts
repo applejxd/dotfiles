@@ -5,7 +5,7 @@
 // 文字列の扱いと例外の種類は Python 版と同じにして、応答の理由まで一致させる。
 //
 // node の型除去 (strip-types) でそのまま動く書き方だけを使う (enum・namespace・parameter property を使わない)。
-// see docs/spec/pi-decide.md
+// see docs/spec/guard/pi-decide.md
 import { homedir } from "node:os";
 
 /** Python の ValueError / TypeError に相当する。応答の理由に名前が出るので、名前まで揃える。 */

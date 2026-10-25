@@ -5,14 +5,14 @@
 - **終了日**: 2026-09-29
 - **基準**: `62efd96`（OpenCode `v2.0.14` / `@anthropic-ai/sandbox-runtime` `0.0.76`）
 
-> **この文書は当時の記録。** 現在の仕様は [opencode-sandbox](../../spec/opencode-sandbox.md)。
+> **この文書は当時の記録。** 現在の仕様は [opencode-sandbox](../../spec/sandbox/opencode-sandbox.md)。
 > 採用したもの・見送ったもの・反映先・移管した未完事項は「終了結果」にまとめた。
 > 「未解決点」と「次の調査・実験」は、配備の前（2026-09-29 の実装時点）の記録。
 
 ## 目的と非目的
 
 `ocs` は、OpenCode を `srt`（OS の境界を張る道具。bubblewrap・seccomp・通信の proxy）で
-包んで起動するランチャー（[仕様](../../spec/opencode-sandbox.md)）。
+包んで起動するランチャー（[仕様](../../spec/sandbox/opencode-sandbox.md)）。
 
 **目的**: [ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md) で境界の目的を
 「エージェントのうっかり（外部への誤送信、ワークスペース外の破壊、秘密の誤読）を防ぐ」に
@@ -171,7 +171,7 @@ ADR-0012 の「決定の確認方法」をそのまま使う。
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `docs/spec/opencode-sandbox.md` 全体 | `srt` と R1〜R4 → Fence（`defaultDenyRead`）の規則 | 段 0 | 適用済み（worktree） |
+| `docs/spec/sandbox/opencode-sandbox.md` 全体 | `srt` と R1〜R4 → Fence（`defaultDenyRead`）の規則 | 段 0 | 適用済み（worktree） |
 | 同「隔離用 DB」「セッションの引き継ぎ」 | 隔離用 DB と移送 → DB の共有 | 段 1・2 | 適用済み（worktree） |
 | 同「状態の置き場」の承認（`trusted.json`） | 承認を記録 → 表示だけ | 段 3 | 適用済み（worktree） |
 | 同「境界チェック」 | 24 時間ごとに自動 → 手動（`ocs --check`） | 段 4 | 適用済み（worktree） |
@@ -281,7 +281,7 @@ worktree `loop/fence`（基準 `39ac692`）で実装し、実機（WSL2、Fence 
 
 ### 反映先
 
-- 仕様: [opencode-sandbox](../../spec/opencode-sandbox.md)、[構成](../../spec/structure.md)、[セキュリティ](../../spec/security.md)
+- 仕様: [opencode-sandbox](../../spec/sandbox/opencode-sandbox.md)、[構成](../../spec/structure.md)、[セキュリティ](../../spec/security.md)
 - 方針: [ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md)
 - 実装: `c752f69`（docs）、`e4c525b`（`ocs`・生成・mise・テスト）と、境界の設定を常に出す修正
 - 観測: [Fence の調査](../../research/opencode/permission/fence.md)、[DB の共有の調査](../../research/opencode/shared-db.md)

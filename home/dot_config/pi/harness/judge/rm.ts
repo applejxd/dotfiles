@@ -4,7 +4,7 @@
 // 内と確証できるものは承認を省く。その「確証できるか」の判定が中心。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableSet } from "./context.ts";
 import { expandUser, isAbsolute, join, normpath, sep } from "./pathutil.ts";

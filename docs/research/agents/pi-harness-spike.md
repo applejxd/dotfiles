@@ -1,6 +1,6 @@
 # pi のハーネスが読み込み失敗・入力の書き換え・判定器の異常で許可側へ倒れないか
 
-> **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](../../change/0023-guard-terminology.md)、対応表は [pi のガード](../../spec/pi-guard.md#用語)。
+> **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](../../change/0023-guard-terminology.md)、対応表は [pi のガード](../../spec/guard/pi-guard.md#用語)。
 
 <!-- 現在の総合判断は docs/change/0020-pi-migration.md が正本（判断の経緯は docs/change/closed/0019-pi-harness-port-evaluation.md）。
      ここは「いつ何を観測したか」を積む場所 -->

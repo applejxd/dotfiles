@@ -1,6 +1,6 @@
 # CHG-0028: 全件の検証を速くし、調査・実装・レビューを子エージェントへ任せる運用を整える
 
-> この文書は当時の記録。現在の仕様は [検証の方針と選択実行](../../spec/development.md#検証の方針と選択実行)、[pi のガード](../../spec/pi-guard.md)、[判定器](../../spec/pi-decide.md)。
+> この文書は当時の記録。現在の仕様は [検証の方針と選択実行](../../spec/development.md#検証の方針と選択実行)、[pi のガード](../../spec/guard/pi-guard.md)、[判定器](../../spec/guard/pi-decide.md)。
 > 残った作業の引き継ぎ先は「終了結果」の「移管した未完事項」。
 
 - **状態**: Done
@@ -151,7 +151,7 @@
 ### 反映先
 
 - 仕様: [検証の方針と選択実行](../../spec/development.md#検証の方針と選択実行)、[テストの仕組み（Linux の GitHub Actions）](../../spec/testing.md#linux-の-github-actions)、
-  [pi のガード](../../spec/pi-guard.md)（子の操作・結果の保持・`todo` の必須化・`blocked`）、[判定器](../../spec/pi-decide.md)（allow の除外）
+  [pi のガード](../../spec/guard/pi-guard.md)（子の操作・結果の保持・`todo` の必須化・`blocked`）、[判定器](../../spec/guard/pi-decide.md)（allow の除外）
 - 実装: `scripts/verify.py`、`test/test_verify.py`、`mise.toml`、`.github/workflows/linux.yml`、`home/dot_config/pi/harness/`、
   `home/dot_claude/hooks/lib/decide.py`、`home/dot_config/agents/command_policy.py`、`home/dot_pi/agent/extensions/{todo,ask}/`、共通の指示
 - 観測: [公開拡張の調査と worktree の先行例（記録 P6）](../../research/agents/pi-public-extensions-survey.md)
@@ -170,4 +170,4 @@
 | B-5 のあとの「期待値を決める人と実装する人の分離」と、`worker` の git 制限の見直し | [CHG-0029](../0029-worktree-isolation.md) の W3 |
 | B-8: `todo` の階層化 | [CHG-0025](../0025-goal-autonomous-loop.md)（`/goal` の自律ループと一緒に判断する。該当する節はこの案件を終えるときに足す） |
 | 実機での確認（`blocked` のリマインド、`ask` の推奨チェック、`todo` 必須化、警告の出方） | ToDo（利用者待ち。`/reload` が要る） |
-| 判定器の既知の限界（リポジトリ自身の設定から起動する経路、`cd <別のリポジトリ> && git log`） | [判定器の仕様](../../spec/pi-decide.md)（限界として記載済み）。新しい案件は起こさない |
+| 判定器の既知の限界（リポジトリ自身の設定から起動する経路、`cd <別のリポジトリ> && git log`） | [判定器の仕様](../../spec/guard/pi-decide.md)（限界として記載済み）。新しい案件は起こさない |

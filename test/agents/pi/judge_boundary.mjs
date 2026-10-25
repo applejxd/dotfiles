@@ -12,6 +12,8 @@ const JUDGE = resolve(ROOT, "home", "dot_config", "pi", "harness", "judge");
 const { decide, setBashDecider } = await import(pathToFileURL(resolve(JUDGE, "decide.ts")).href);
 const { makeBashDecider } = await import(pathToFileURL(resolve(JUDGE, "bash.ts")).href);
 setBashDecider(makeBashDecider(JSON.parse(readFileSync(resolve(GOLDEN, "tables.json"), "utf8"))));
-const common = JSON.parse(readFileSync(resolve(GOLDEN, "common.json"), "utf8"));
-const { requests } = JSON.parse(readFileSync(0, "utf8"));
+const golden = JSON.parse(readFileSync(resolve(GOLDEN, "common.json"), "utf8"));
+const { requests, common: given } = JSON.parse(readFileSync(0, "utf8"));
+// 入力に common があればそれを使う (正解データを書き出し直さなくても、現在の common.toml で試せる)
+const common = given ?? golden;
 process.stdout.write(JSON.stringify(requests.map((r) => decide(r, common))));

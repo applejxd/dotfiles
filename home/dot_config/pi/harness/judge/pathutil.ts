@@ -1,6 +1,6 @@
 // パスの扱い (Python の os.path 相当)。判定器の各所で共有する。
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, sep } from "node:path";

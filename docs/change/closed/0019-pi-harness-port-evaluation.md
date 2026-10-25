@@ -1,6 +1,6 @@
 # CHG-0019: OpenCode のハーネスを pi で作り直す価値があるかを判断する
 
-> **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](../0023-guard-terminology.md)、対応表は [pi のガード](../../spec/pi-guard.md#用語)。
+> **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](../0023-guard-terminology.md)、対応表は [pi のガード](../../spec/guard/pi-guard.md#用語)。
 >
 > この文書は当時の記録。移行の計画と現在地は [CHG-0020](../0020-pi-migration.md)。
 
@@ -14,7 +14,7 @@
 このリポジトリが OpenCode のために持っているハーネスを、pi（earendil-works/pi）の上で作り直すと、
 **複雑なロジックが減って保守しやすくなるか**を判断する。ハーネスとは、permission の生成、
 guide plugin、checkpoint plugin、子エージェント、`ocs`（OpenCode を Fence で囲って起動する
-ランチャー。[仕様](../../spec/opencode-sandbox.md)）を指す。
+ランチャー。[仕様](../../spec/sandbox/opencode-sandbox.md)）を指す。
 
 判断の前提（利用者の指定、2026-10-08）:
 

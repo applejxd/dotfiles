@@ -69,7 +69,7 @@
 
 ## 決定の確認方法
 
-- [x] 生成した `rules.json` に `bypass_child_agents` が出る（通常版と `ocs`、私用と会社用）
+- [x] 生成した `rules.json` に `bypass_child_agents` が出る（通常版と `ocs`、個人用と制約のある環境用）
 - [x] node で plugin を読むテストで、条件の各組み合わせ・API の失敗・設定の異常を固定した
 - [x] 試験用の設定の実機で、`bypass` → `explore` の作業ツリーの外の read が確認なしで通り、
   `build` → `explore` では確認のままだった

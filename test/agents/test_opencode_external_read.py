@@ -299,8 +299,8 @@ def test_skill_script_allow_is_not_widened_silently():
 
 
 def test_web_search_script_is_allowed_only_for_the_personal_provider():
-    """業務用 (Bedrock) は検索を AgentCore に一本化する。
-    skill も許可も私用 (github-copilot) だけ。"""
+    """制約のある環境用 (Bedrock) は検索を AgentCore に一本化する。
+    skill も許可も個人用 (github-copilot) だけ。"""
     from agents_common import load_common
 
     def scripts(common):

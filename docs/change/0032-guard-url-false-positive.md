@@ -22,7 +22,7 @@
 | 段 2 | 直し方の候補が複数ある | 候補を評価し、`review` に見せて方式を決める | 完了（`review` 2 回） |
 | 段 3 | 判定器の実装 | 選んだ方式を TS 版と Python 版の両方に入れ、正解データ 3 種を再生成し、試験を足す | 完了（全件検証の最終確認は「実装・検証」） |
 | 段 4 | 取得・検索のスクリプトの検査 | `web-search` の `check_query` と、`imozuru` の内蔵の代替の「トークンらしき文字列」の検査を、URL の中のスラッグを許す形に直す | 完了 |
-| 段 5 | 仕様に反映する | `docs/spec/agent-command-policy.md` と `web-search.md` に、URL の扱いを書く | 完了 |
+| 段 5 | 仕様に反映する | `docs/spec/guard/agent-command-policy.md` と `web-search.md` に、URL の扱いを書く | 完了 |
 | 段 6 | 実機で確かめる | `chezmoi apply` の後、`pis` で、取れなかった記事（[記録 O1](../research/agents/openshell-comparison.md) の「届かなかったもの」）が取れることを確かめる | 未着手（CHG-0033 の段 P1 で行う） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -38,7 +38,7 @@
 
 **直した内容**（未デプロイ）:
 
-- 判定器: 各引数から、`http(s)://` で始まる部分（直前が `[\w/.~-]` でないもの。IPv6 `[::1]` を許し、空白・引用符・`)` `>` `,` `[` `]` の手前まで）を除いてから検査する。`./https://host/.ssh/id_rsa`、`~/https://host/.env`、`file://…`、`https://a,~/.ssh/id_rsa` は除かない。仕様は [agent-command-policy](../spec/agent-command-policy.md) の「引数の URL はパスとして判定しない」
+- 判定器: 各引数から、`http(s)://` で始まる部分（直前が `[\w/.~-]` でないもの。IPv6 `[::1]` を許し、空白・引用符・`)` `>` `,` `[` `]` の手前まで）を除いてから検査する。`./https://host/.ssh/id_rsa`、`~/https://host/.env`、`file://…`、`https://a,~/.ssh/id_rsa` は除かない。仕様は [agent-command-policy](../spec/guard/agent-command-policy.md) の「引数の URL はパスとして判定しない」
 - 検査: 長いトークンの数えから、**URL の中の**、英小文字の語（20 文字まで）と数字（8 桁まで）だけを `-` `_` `/` でつないだ 4 部分以上の区切り（スラッグ）を除く。URL の外では従来どおり。仕様は [web-search](../spec/web-search.md)
 
 ## 未解決点
@@ -82,7 +82,7 @@
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `docs/spec/agent-command-policy.md` の「センシティブパスの判定を 2 段に分ける」 | URL の扱いを書いていない → 「引数の URL はパスとして判定しない」の節を足した | 現在地の誤検出 | 適用済み |
+| `docs/spec/guard/agent-command-policy.md` の「センシティブパスの判定を 2 段に分ける」 | URL の扱いを書いていない → 「引数の URL はパスとして判定しない」の節を足した | 現在地の誤検出 | 適用済み |
 | `docs/spec/web-search.md` の秘匿チェック | 長いトークンらしき文字列 → URL の中のスラッグを数えから除く、と書いた | 現在地 | 適用済み |
 
 ## 実装・検証

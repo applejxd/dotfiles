@@ -194,7 +194,7 @@ def prune_backups(directory: Path, current: Path) -> None:
 def backup_worktree(workspace: Path, skip: bool) -> None:
     """起動前に作業ツリーを境界の外へ退避する。**退避できなかったら起動しない。**
 
-    see docs/spec/opencode-sandbox.md#起動前の退避
+    see docs/spec/sandbox/opencode-sandbox.md#起動前の退避
     """
     if skip:
         return
@@ -236,7 +236,7 @@ def backup_worktree(workspace: Path, skip: bool) -> None:
             "承知のうえで進むなら --no-backup",
         )
     # ★内容が同じなら作り直さない。途中で切れたものは作り直す
-    #   see docs/spec/opencode-sandbox.md#起動前の退避
+    #   see docs/spec/sandbox/opencode-sandbox.md#起動前の退避
     for existing in directory.glob(f"*-{tree[:12]}.tgz"):
         if _is_complete(existing):
             return

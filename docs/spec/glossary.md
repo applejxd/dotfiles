@@ -14,13 +14,13 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
 - **機構の境界**: 「どの機構（sandbox / permission / hook）に書くか」の線引き。
   上の境界とは別の意味（[ADR-0007](../adr/0007-filesystem-guard-boundary.md)）
 - **sandbox**: Claude Code / Copilot CLI に組み込みの sandbox 機能。`common.toml` の
-  `[sandbox]` が設定する（[sandbox (Claude Code / Copilot CLI)](agent-sandbox.md)）
+  `[sandbox]` が設定する（[sandbox (Claude Code / Copilot CLI)](sandbox/agent-sandbox.md)）
 - **sandbox runtime（`srt`）**: `@anthropic-ai/sandbox-runtime`。Claude Code は同じ
   パッケージの seccomp フィルタだけを使う。以前は隔離起動も境界を張るのに使っていた
 - **Fence**: bubblewrap・Landlock・seccomp とドメイン単位のプロキシで境界を張る道具
   （[fencesandbox/fence](https://github.com/fencesandbox/fence)）。隔離起動が使う
 - **隔離起動（`ocs`）**: OpenCode のプロセス全体を Fence の境界の内側で起動すること。
-  Ubuntu / WSL のみ（[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)）。
+  Ubuntu / WSL のみ（[OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md)）。
   旧称: 隔離版 OpenCode、境界版
 - **通常起動（`opencode`）**: 境界なしで OpenCode を起動すること。
   旧称: 素の OpenCode、通常版
@@ -28,11 +28,11 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
   たびに `ocs` が書き出す `~/.config/opencode-sandbox/`。「版」は設定を指すときだけ使う
 - **隔離用 DB**: 以前の隔離起動がセッションを持っていた
   `<起動ディレクトリ>/.opencode-sandbox/opencode.db`。今は DB を通常起動と共有する
-  （[セッションの引き継ぎ](opencode-sandbox.md#セッションの引き継ぎ)）。旧称: 隔離 DB
+  （[セッションの引き継ぎ](sandbox/opencode-sandbox.md#セッションの引き継ぎ)）。旧称: 隔離 DB
 
 ## pi のガード
 
-[CHG-0023](../change/0023-guard-terminology.md) で整理した呼び方。詳細は [pi のガード](pi-guard.md#用語)。
+[CHG-0023](../change/0023-guard-terminology.md) で整理した呼び方。詳細は [pi のガード](guard/pi-guard.md#用語)。
 
 - **ハーネス**: pi 本体を含む仕組み全体（一般の用法）。pi に足す特定の拡張は指さない。
   旧称では、pi に足す判定の拡張を「ハーネス」と呼んでいた
@@ -57,7 +57,7 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
   Copilot CLI の両方に効くときだけ無印にし、片方にしか効かないなら `claude_` / `copilot_`
   を付ける。既存の `seccomp_apply_path`（Claude のみ）と `shell_network_allow`
   （Claude と隔離起動）は既存の例外で、無印でも Copilot には効かない
-  （[キー名の規則](agent-sandbox.md#キー名の規則)）
+  （[キー名の規則](sandbox/agent-sandbox.md#キー名の規則)）
 
 ## 許可の種類
 

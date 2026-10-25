@@ -3,7 +3,7 @@
 // 読み取り (GET / HEAD / query) は通し、mutation と判定不能な形式だけを承認対象にする。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableSet } from "./context.ts";
 import { extractCommandSubstitutions, extractFunctionBodies, splitCommandSegments } from "./normalize.ts";
@@ -262,6 +262,64 @@ export function checkGhApiMutation(ctx: Ctx, cmd: string): string | null {
 		if (explicitMethod === null && fields.length === 0) continue;
 		const effectiveMethod = explicitMethod || "POST";
 		return `\`gh api\` が読み取り以外の HTTP method (${effectiveMethod}) を使用します。`;
+	}
+	return null;
+}
+
+// 公開・配布に当たる API 操作 (check_gh_api_publish)。bashrules/ghapi.py と同じ規則 (変えるときは両方)。
+const PUBLISH_WRITE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const PUBLISH_GRAPHQL_RE =
+	/\b(?:createRepository|updateRepository|deleteRepository|archiveRepository|transferRepository|createRef|updateRef|deleteRef|createCommitOnBranch|mergePullRequest)\b/u;
+const PUBLISH_GIT_KINDS = new Set(["refs", "commits", "trees", "blobs", "tags"]);
+
+/** endpoint を小文字の部品に分ける (先頭の URL・`/`・クエリ・末尾の `/` を落とす)。 */
+function endpointParts(endpoint: string): string[] {
+	let path = endpoint.trim().replace(/^https?:\/\/[^/]+\//iu, "");
+	const q = path.indexOf("?");
+	if (q >= 0) path = path.slice(0, q);
+	return path.toLowerCase().replace(/^\/+|\/+$/gu, "").split("/");
+}
+
+/** REST の endpoint と method が、公開・配布に当たる操作か。 */
+function isPublishEndpoint(parts: readonly string[], method: string): boolean {
+	if (!PUBLISH_WRITE.has(method)) return false;
+	const n = parts.length;
+	if (parts[0] === "user" && n === 2 && parts[1] === "repos") return method === "POST";
+	if (parts[0] === "orgs" && n === 3 && parts[2] === "repos") return method === "POST";
+	if (parts[0] !== "repos" || n < 3) return false;
+	if (n === 3) return method === "PATCH" || method === "DELETE";
+	const sub = parts[3];
+	if (sub === "contents") return n >= 5 && (method === "PUT" || method === "DELETE");
+	if (sub === "git") return n >= 5 && PUBLISH_GIT_KINDS.has(parts[4]) && method !== "PUT";
+	if (sub === "releases") return method !== "PUT";
+	if (sub === "transfer") return n === 4;
+	if (sub === "pages") return method !== "PATCH";
+	if (sub === "hooks") return method !== "PUT";
+	if (sub === "collaborators") return n >= 5 && (method === "PUT" || method === "DELETE");
+	if (sub === "dispatches") return method === "POST";
+	if (sub === "actions") return n >= 5 && parts[4] === "secrets" && (method === "PUT" || method === "DELETE");
+	return false;
+}
+
+/** リポジトリの公開・配布・参照の書き換えに当たる `gh api` を止める (それ以外の書き込みは check_gh_api_mutation が ask にする)。 */
+export function checkGhApiPublish(ctx: Ctx, cmd: string): string | null {
+	for (const call of ghApiCalls(ctx, cmd)) {
+		const { endpoint, method, fields, input } = call;
+		if (endpoint === null || call.ambiguous) continue;
+		if (endpoint === "graphql") {
+			if (input !== null) continue;
+			const [query, inspectable] = graphqlQuery(fields);
+			if (inspectable && query !== null && PUBLISH_GRAPHQL_RE.test(query)) {
+				return "公開・配布に当たる API 操作です (`gh api graphql` のミューテーション)。";
+			}
+			continue;
+		}
+		const explicit = method !== null ? method.toUpperCase() : null;
+		if (explicit !== null && !/^[A-Za-z]+(?![\s\S])/u.test(explicit)) continue;
+		const effective = explicit ?? (fields.length > 0 || input !== null ? "POST" : "GET");
+		if (isPublishEndpoint(endpointParts(endpoint), effective)) {
+			return `公開・配布に当たる API 操作です (\`gh api\` ${effective} ${endpoint})。`;
+		}
 	}
 	return null;
 }

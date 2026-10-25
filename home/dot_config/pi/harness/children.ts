@@ -1,6 +1,6 @@
 // 子エージェントの RPC 保持。`pi --mode rpc` の子を job として持ち、完了後も idle で生かして
 // 同じ履歴へ追加依頼できるようにする。pi の API は使わない (index.ts が呼ぶ)。
-// see docs/spec/pi-guard.md#子エージェント
+// see docs/spec/guard/pi-guard.md#子エージェント
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 

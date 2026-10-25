@@ -5,7 +5,7 @@
 //
 // 正解データは scripts/agents/export_policy_golden.py が書き出す。
 // 判定の入口の試験 (judge_golden.mjs) と違い、食い違ったときにどの部品が原因かが分かる。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

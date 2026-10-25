@@ -5,6 +5,7 @@
 ホストと Envoy だけが持ち、内側にはダミーしか渡さない。Envoy は ``credential_injector`` で
 ``Authorization`` を付ける。Copilot は 127.0.0.1 の空きポート、GitHub (``gh``) は Unix ソケット。
 有効なものだけのリスナー・クラスタ・SDS を 1 つの設定に組む。
+検索 (``websearch.py``) 用のリスナーは、鍵をルートごとのヘッダーとして設定ファイル (0600) へ書く。
 
 - 状態ディレクトリ (0700) に SDS ファイル・Envoy の設定・ログを置き、終了時に丸ごと消す
 - 短命トークンは期限の少し前に取り直し、SDS ファイルを rename で置き換える (Envoy が監視している)
@@ -34,7 +35,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import NamedTuple
 
@@ -53,13 +54,9 @@ SDS_NAME = "copilot-sds.json"
 CONFIG_NAME = "envoy.yaml"
 LOG_NAME = "broker.log"
 ENVOY_LOG_NAME = "envoy.log"
-# 設定の雛形: 土台 (@LISTENERS@ / @CLUSTERS@ の行を持つ) と、ブローカーごとの断片。
-# 断片は「リスナーの項目、CLUSTERS_MARK の行、クラスタの項目」の順に 1 ファイルへ書く
-TEMPLATE_DIR = Path(__file__).resolve().parent
-BASE_TEMPLATE = TEMPLATE_DIR / "envoy-base.yaml"
-COPILOT_TEMPLATE = TEMPLATE_DIR / "envoy-copilot.yaml"
-GITHUB_TEMPLATE = TEMPLATE_DIR / "envoy-github.yaml"
-CLUSTERS_MARK = "# ---clusters---\n"
+GH_HOST = "api.github.com"
+TYPE_PREFIX = "type.googleapis.com/envoy.extensions."
+STREAM_IDLE = "3600s"
 GH_SECRET_NAME = "gh_token"
 GH_SDS_NAME = "gh-sds.json"
 GH_SOCKET_NAME = "gh.sock"
@@ -77,6 +74,7 @@ GH_COMMAND_HINT = (
 DEFAULT_HOST = "api.individual.githubcopilot.com"
 IDENTITY_PATH = "/__pis_broker"
 IDENTITY_PREFIX = "pis-broker-copilot"
+COPILOT_PATHS = ("/v1/messages", "/responses", "/chat/completions")
 UPSTREAM_SUFFIX = ".githubcopilot.com"
 CA_FALLBACKS = (
     "/etc/ssl/certs/ca-certificates.crt",
@@ -84,6 +82,38 @@ CA_FALLBACKS = (
     "/etc/ssl/cert.pem",
 )
 PR_SET_PDEATHSIG = 1
+
+# 検索ブローカー: 接頭辞 → 上流・認証ヘッダー・通すメソッドとパス (websearch.py が呼ぶものだけ)。
+# 契約は .tmp/handoff-search/README.md。鍵なしのプロバイダーは auth が None。
+SEARCH_IDENTITY_PREFIX = "pis-broker-search"
+SEARCH_AUTH_HEADERS = ("authorization", "proxy-authorization", "x-api-key", "x-subscription-token")
+SEARCH_KEYS_FILE = Path("~/.config/agents/websearch-keys.json")
+SEARCH_KEYS_MAX_BYTES = 64 * 1024
+SEARCH_KEY_MAX_CHARS = 512
+SEARCH_TIMEOUT = "60s"
+
+
+class _SearchProvider(NamedTuple):
+    name: str
+    host: str
+    header: str | None  # 鍵を入れるヘッダー名 (鍵なしの上流は None)
+    prefix: str  # ヘッダー値の前置き
+    routes: tuple[tuple[str, str], ...]  # (メソッドの正規表現, 上流のパス)
+
+
+SEARCH_PROVIDERS = (
+    _SearchProvider(
+        "brave",
+        "api.search.brave.com",
+        "X-Subscription-Token",
+        "",
+        (("GET", "/res/v1/web/search"),),
+    ),
+    _SearchProvider("exa", "api.exa.ai", "x-api-key", "", (("POST", "/search"),)),
+    _SearchProvider("tavily", "api.tavily.com", "Authorization", "Bearer ", (("POST", "/search"),)),
+    _SearchProvider("openalex", "api.openalex.org", None, "", (("GET", "/works"),)),
+    _SearchProvider("ddg", "html.duckduckgo.com", None, "", (("GET|POST", "/html/"),)),
+)
 
 REFRESH_MARGIN_SECONDS = 5 * 60  # 期限のこれだけ前に取り直す
 RETRY_SECONDS = 60  # 取り直しに失敗したときの待ち
@@ -103,12 +133,14 @@ class BrokerSession(NamedTuple):
     """``session()`` が返す値。
 
     ``url`` は Copilot 用の Envoy の URL (Copilot が無効なら None)、``state`` は起動ごとの
-    状態ディレクトリ、``github_socket`` は GitHub 用の Unix ソケット (無効なら None)。
+    状態ディレクトリ、``github_socket`` は GitHub 用の Unix ソケット (無効なら None)、
+    ``search_url`` は検索用の URL (``http://127.0.0.1:<port>``。無効なら None)。
     """
 
     url: str | None
     state: Path
     github_socket: Path | None = None
+    search_url: str | None = None
 
 
 class BrokerError(RuntimeError):
@@ -228,12 +260,324 @@ def write_sds(path: Path, token: str, name: str = SECRET_NAME) -> None:
         raise
 
 
-def _split_template(path: Path) -> tuple[str, str]:
-    """断片を (リスナーの項目, クラスタの項目) に分ける。"""
-    listener, mark, clusters = path.read_text(encoding="utf-8").partition(CLUSTERS_MARK)
-    if not mark:
-        raise BrokerError(f"{path.name} に {CLUSTERS_MARK.strip()} の行が無い")
+def _typed(name: str, **fields: object) -> dict:
+    return {"@type": TYPE_PREFIX + name, **fields}
+
+
+def _direct(status: int, body: str) -> dict:
+    return {"direct_response": {"status": status, "body": {"inline_string": body}}}
+
+
+def _upstream_route(cluster: str, host: str) -> dict:
+    return {
+        "cluster": cluster,
+        "timeout": "0s",
+        "idle_timeout": STREAM_IDLE,
+        "host_rewrite_literal": host,
+    }
+
+
+def _http_manager(
+    name: str,
+    log_format: str,
+    virtual_hosts: list[dict],
+    sds: tuple[str, str, str] | None = None,
+    formatters: list[dict] | None = None,
+) -> dict:
+    """HttpConnectionManager (アクセスログ・正規化・タイムアウト) と SDS の認証注入。
+
+    ``sds`` = (ディレクトリ, ファイル名, シークレット名)。あれば ``credential_injector`` が ``Authorization`` を付ける。
+    値は SDS ファイルにだけあり、設定にも内側にも出ない。無いとき (検索) はルート側でヘッダーを付ける。
+    """
+    http_filters: list[dict] = []
+    if sds is not None:
+        sds_dir, sds_file, secret = sds
+        injector = _typed(
+            "filters.http.credential_injector.v3.CredentialInjector",
+            overwrite=True,
+            credential={
+                "name": "envoy.http.injected_credentials.generic",
+                "typed_config": _typed(
+                    "http.injected_credentials.generic.v3.Generic",
+                    header="Authorization",
+                    header_value_prefix="Bearer ",
+                    credential={
+                        "name": secret,
+                        "sds_config": {
+                            "path_config_source": {
+                                "path": f"{sds_dir}/{sds_file}",
+                                "watched_directory": {"path": sds_dir},
+                            }
+                        },
+                    },
+                ),
+            },
+        )
+        http_filters.append(
+            {"name": "envoy.filters.http.credential_injector", "typed_config": injector}
+        )
+    http_filters.append(
+        {
+            "name": "envoy.filters.http.router",
+            "typed_config": _typed("filters.http.router.v3.Router"),
+        }
+    )
+    manager = _typed(
+        "filters.network.http_connection_manager.v3.HttpConnectionManager",
+        stat_prefix=name,
+        normalize_path=True,
+        merge_slashes=True,
+        access_log=[
+            {
+                "name": "envoy.access_loggers.stdout",
+                "typed_config": _typed(
+                    "access_loggers.stream.v3.StdoutAccessLog",
+                    log_format={
+                        "text_format_source": {"inline_string": log_format},
+                        **({"formatters": formatters} if formatters else {}),
+                    },
+                ),
+            }
+        ],
+        stream_idle_timeout=STREAM_IDLE,
+        route_config={"name": name, "virtual_hosts": virtual_hosts},
+        http_filters=http_filters,
+    )
+    return {"name": "envoy.filters.network.http_connection_manager", "typed_config": manager}
+
+
+def _listener(name: str, address: dict, manager: dict) -> dict:
+    """リスナー。``address`` は tcp (``socket_address``) か unix (``pipe``)。"""
+    return {"name": name, "address": address, "filter_chains": [{"filters": [manager]}]}
+
+
+def _upstream_cluster(name: str, host: str, ca_file: str, san: dict) -> dict:
+    """上流のクラスタ (LOGICAL_DNS + TLS)。CA バンドルで検証し、SAN (``san``: exact か suffix) を固定する。"""
+    return {
+        "name": name,
+        "type": "LOGICAL_DNS",
+        "dns_lookup_family": "V4_ONLY",
+        "load_assignment": {
+            "cluster_name": name,
+            "endpoints": [
+                {
+                    "lb_endpoints": [
+                        {
+                            "endpoint": {
+                                "address": {"socket_address": {"address": host, "port_value": 443}}
+                            }
+                        }
+                    ]
+                }
+            ],
+        },
+        "transport_socket": {
+            "name": "envoy.transport_sockets.tls",
+            "typed_config": _typed(
+                "transport_sockets.tls.v3.UpstreamTlsContext",
+                sni=host,
+                common_tls_context={
+                    "validation_context": {
+                        "trusted_ca": {"filename": ca_file},
+                        "match_typed_subject_alt_names": [{"san_type": "DNS", "matcher": san}],
+                    }
+                },
+            ),
+        },
+    }
+
+
+def _copilot(port: int, host: str, sds_dir: str, ca_file: str) -> tuple[dict, dict]:
+    """Copilot のリスナーとクラスタ (127.0.0.1)。
+
+    通すのは観測した 3 つの POST (完全一致のパス) と身元確認だけ。他は 403。
+    see docs/spec/sandbox/broker.md#copilot-ブローカー
+    """
+    post = {"name": ":method", "string_match": {"exact": "POST"}}
+    routes: list[dict] = [
+        # pis が起動前に身元を確かめる (上流へは出さない)
+        {"match": {"path": IDENTITY_PATH}, **_direct(200, IDENTITY_PREFIX)},
+    ]
+    routes += [
+        {
+            "match": {"path": path, "headers": [post]},
+            "route": _upstream_route("copilot_upstream", host),
+        }
+        for path in COPILOT_PATHS
+    ]
+    routes.append(
+        {"match": {"prefix": "/"}, **_direct(403, "pis-broker: path or method not allowed")}
+    )
+    manager = _http_manager(
+        "copilot",
+        "ACCESS %REQ(:METHOD)% %REQ(:PATH)% %RESPONSE_CODE%\n",
+        [{"name": "copilot", "domains": ["*"], "routes": routes}],
+        (sds_dir, SDS_NAME, SECRET_NAME),
+    )
+    listener = _listener(
+        "copilot", {"socket_address": {"address": "127.0.0.1", "port_value": port}}, manager
+    )
+    cluster = _upstream_cluster(
+        "copilot_upstream", host, ca_file, {"suffix": UPSTREAM_SUFFIX.lstrip(".")}
+    )
+    return listener, cluster
+
+
+def _github(socket_path: str, sds_dir: str, ca_file: str) -> tuple[dict, dict]:
+    """GitHub (``gh``) のリスナー (Unix ソケット 0600) とクラスタ。
+
+    送れるのは ``api.github.com`` だけ (メソッドとパスは制限しない。操作の防御は PAT のスコープ)。
+    他のホストは 403 で、上流へ出さない (pis が起動前の身元確認に使う)。
+    see docs/spec/sandbox/broker.md#copilot-ブローカー
+    """
+    allowed = {
+        "name": "github",
+        "domains": [GH_HOST],
+        "routes": [
+            {"match": {"prefix": "/"}, "route": _upstream_route("github_upstream", GH_HOST)}
+        ],
+    }
+    denied = {
+        "name": "deny",
+        "domains": ["*"],
+        "routes": [
+            {"match": {"prefix": "/"}, **_direct(403, GH_IDENTITY_PREFIX + " host not allowed")}
+        ],
+    }
+    manager = _http_manager(
+        "github",
+        "ACCESS github %REQ(:METHOD)% %REQ(:AUTHORITY)% %REQ(:PATH)% %RESPONSE_CODE%\n",
+        [allowed, denied],
+        (sds_dir, GH_SDS_NAME, GH_SECRET_NAME),
+    )
+    listener = _listener("github", {"pipe": {"path": socket_path, "mode": 0o600}}, manager)
+    cluster = _upstream_cluster("github_upstream", GH_HOST, ca_file, {"exact": GH_HOST})
+    return listener, cluster
+
+
+def _search_cluster_name(provider: _SearchProvider) -> str:
+    return f"search_{provider.name}_upstream"
+
+
+def _search_header(key: str, value: str) -> dict:
+    # Envoy はヘッダー値の % を書式として解釈するので、% は %% にする
+    return {
+        "header": {"key": key, "value": value.replace("%", "%%")},
+        "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
+    }
+
+
+def _search(
+    port: int,
+    ca_file: str,
+    keys: Mapping[str, str],
+    test_upstreams: Mapping[str, int] | None = None,
+) -> tuple[dict, list[dict]]:
+    """検索 (``websearch.py``) のリスナー (127.0.0.1) と、上流のクラスタ 5 つ。
+
+    ルートは ``/<名前>`` の接頭辞つきで、``websearch.py`` が呼ぶメソッドとパスだけ (完全一致)。接頭辞を
+    除いて上流へ中継し、Host は上流のホスト名にする。認証ヘッダーはルートごとに ``OVERWRITE_IF_EXISTS_OR_ADD``
+    で付け、**自分以外の認証ヘッダーは内側から来ても削除する** (別のプロバイダーへ通さない)。
+    鍵の無い Brave / Exa / Tavily は 503。身元確認 (``/__pis_broker``) と許可外 (403) は上流へ出さない。
+    ``test_upstreams`` (名前 → ポート) は試験用: TLS 無しの 127.0.0.1 の偽の上流へ差し替える。
+    """
+    routes: list[dict] = [
+        {
+            # 身元確認は GET だけ (他のメソッドは末尾の 403)
+            "match": {
+                "path": IDENTITY_PATH,
+                "headers": [{"name": ":method", "string_match": {"exact": "GET"}}],
+            },
+            **_direct(200, SEARCH_IDENTITY_PREFIX),
+        }
+    ]
+    clusters: list[dict] = []
+    for provider in SEARCH_PROVIDERS:
+        cluster = _search_cluster_name(provider)
+        if test_upstreams is not None and provider.name in test_upstreams:
+            clusters.append(_local_cluster(cluster, test_upstreams[provider.name]))
+        else:
+            clusters.append(
+                _upstream_cluster(cluster, provider.host, ca_file, {"exact": provider.host})
+            )
+        key = keys.get(provider.name) if provider.header is not None else None
+        others = [h for h in SEARCH_AUTH_HEADERS if h != (provider.header or "").lower()]
+        for methods, path in provider.routes:
+            method = {
+                "name": ":method",
+                "string_match": (
+                    {"safe_regex": {"regex": methods}} if "|" in methods else {"exact": methods}
+                ),
+            }
+            match = {"path": f"/{provider.name}{path}", "headers": [method]}
+            if provider.header is not None and key is None:
+                routes.append(
+                    {
+                        "match": match,
+                        **_direct(503, f"pis-broker: no key for {provider.name}"),
+                    }
+                )
+                continue
+            route = {
+                "cluster": cluster,
+                "timeout": SEARCH_TIMEOUT,
+                "idle_timeout": STREAM_IDLE,
+                "host_rewrite_literal": provider.host,
+                "regex_rewrite": {"pattern": {"regex": f"^/{provider.name}"}, "substitution": ""},
+            }
+            entry: dict = {
+                "match": match,
+                "route": route,
+                "request_headers_to_remove": others,
+            }
+            if provider.header is not None and key is not None:
+                entry["request_headers_to_add"] = [
+                    _search_header(provider.header, provider.prefix + key)
+                ]
+            routes.append(entry)
+    routes.append(
+        {"match": {"prefix": "/"}, **_direct(403, "pis-broker: path or method not allowed")}
+    )
+    manager = _http_manager(
+        "search",
+        # クエリに検索語が入るので、パスはクエリを除いて出す。ヘッダーは出さない
+        "ACCESS search %REQ(:METHOD)% %REQ_WITHOUT_QUERY(:PATH)% %RESPONSE_CODE%\n",
+        [{"name": "search", "domains": ["*"], "routes": routes}],
+        formatters=[
+            {
+                "name": "envoy.formatter.req_without_query",
+                "typed_config": _typed("formatter.req_without_query.v3.ReqWithoutQuery"),
+            }
+        ],
+    )
+    listener = _listener(
+        "search", {"socket_address": {"address": "127.0.0.1", "port_value": port}}, manager
+    )
     return listener, clusters
+
+
+def _local_cluster(name: str, port: int) -> dict:
+    """試験用: TLS 無しで 127.0.0.1 の偽の上流へつなぐクラスタ (本番の経路からは使わない)。"""
+    return {
+        "name": name,
+        "type": "STATIC",
+        "load_assignment": {
+            "cluster_name": name,
+            "endpoints": [
+                {
+                    "lb_endpoints": [
+                        {
+                            "endpoint": {
+                                "address": {
+                                    "socket_address": {"address": "127.0.0.1", "port_value": port}
+                                }
+                            }
+                        }
+                    ]
+                }
+            ],
+        },
+    }
 
 
 def build_config(
@@ -243,12 +587,17 @@ def build_config(
     copilot_port: int | None = None,
     copilot_host: str | None = None,
     github_socket: Path | None = None,
+    search_port: int | None = None,
+    search_keys: Mapping[str, str] | None = None,
+    search_test_upstreams: Mapping[str, int] | None = None,
 ) -> str:
-    """有効なブローカーだけのリスナー・クラスタを、土台へ差し込んだ Envoy の設定を返す。
+    """有効なブローカーだけのリスナー・クラスタを組んだ Envoy の設定 (JSON 文字列) を返す。
 
-    雛形の ``@PORT@`` / ``@HOST@`` / ``@SDS_DIR@`` / ``@CA_FILE@`` / ``@SOCKET@`` を置き換える。
-    YAML の文字列へ埋めるので、``"`` ``\\`` や改行を含むパスは拒否する。
-    Copilot (``copilot_port`` と ``copilot_host``) も GitHub (``github_socket``) も無ければ例外。
+    JSON は YAML の部分集合なので、Envoy はそのまま読める。``"`` ``\\`` 改行を含むパスは、
+    今までどおり拒否する。
+    Copilot (``copilot_port`` と ``copilot_host``)・GitHub (``github_socket``)・検索 (``search_port``。
+    ``search_keys`` はプロバイダー名 → 鍵で、無い名前は鍵なし) のどれも無ければ例外。
+    鍵は設定へ書かれる (呼び出し側が 0600 で書く)。例外・``repr`` には出さない。
     """
     paths = [str(sds_dir), ca_file]
     if github_socket is not None:
@@ -262,38 +611,36 @@ def build_config(
     for path in paths:
         if any(ch in path for ch in ('"', "\\", "\n", "\r")):
             raise BrokerError("設定へ埋め込めないパス (引用符・バックスラッシュ・改行を含む)")
-    subs = {
-        # 雛形では引用符で囲み (YAML として有効)、置換後は整数
-        '"@PORT@"': str(copilot_port),
-        "@HOST@": copilot_host or "",
-        "@SDS_DIR@": str(sds_dir),
-        "@CA_FILE@": ca_file,
-        "@SOCKET@": str(github_socket),
-    }
-
-    def fill(text: str) -> str:
-        for key, value in subs.items():
-            text = text.replace(key, value)
-        return text
-
-    listeners: list[str] = []
-    clusters: list[str] = []
-    for enabled, template in (
-        (copilot_port is not None and copilot_host is not None, COPILOT_TEMPLATE),
-        (github_socket is not None, GITHUB_TEMPLATE),
-    ):
-        if enabled:
-            listener, cluster = _split_template(template)
-            listeners.append(fill(listener))
-            clusters.append(fill(cluster))
+    sds = str(sds_dir)
+    listeners: list[dict] = []
+    clusters: list[dict] = []
+    if copilot_port is not None and copilot_host is not None:
+        listener, cluster = _copilot(copilot_port, copilot_host, sds, ca_file)
+        listeners.append(listener)
+        clusters.append(cluster)
+    if github_socket is not None:
+        listener, cluster = _github(str(github_socket), sds, ca_file)
+        listeners.append(listener)
+        clusters.append(cluster)
+    if search_port is not None:
+        keys = dict(search_keys or {})
+        for name, value in keys.items():
+            if (
+                not isinstance(name, str)
+                or not isinstance(value, str)
+                or re.fullmatch(rf"[\x21-\x7e]{{1,{SEARCH_KEY_MAX_CHARS}}}", value) is None
+            ):
+                raise BrokerError("検索の鍵の形式が不正 (値は出さない)")
+        listener, search_clusters = _search(search_port, ca_file, keys, search_test_upstreams)
+        listeners.append(listener)
+        clusters.extend(search_clusters)
     if not listeners:
         raise BrokerError("有効なブローカーが無い (Envoy の設定を組めない)")
-    base = BASE_TEMPLATE.read_text(encoding="utf-8")
-    return (
-        fill(base)
-        .replace("    # @LISTENERS@\n", "".join(listeners))
-        .replace("    # @CLUSTERS@\n", "".join(clusters))
-    )
+    config = {
+        "node": {"id": "pis-broker", "cluster": "pis-broker"},
+        "static_resources": {"listeners": listeners, "clusters": clusters},
+    }
+    return json.dumps(config, indent=2, ensure_ascii=False)
 
 
 def _check_token_shape(raw: bytes) -> str:
@@ -399,6 +746,63 @@ def resolve_github_token(token_file: str | None, token_command: Sequence[str] | 
     return None
 
 
+def read_search_keys(path: Path | None = None) -> tuple[dict[str, str], list[str]]:
+    """検索の鍵ファイル (``websearch-keys.json``) をホスト側で読み、(鍵, 通知文の一覧) を返す。
+
+    鍵を必要とするプロバイダー (brave / exa / tavily) だけを拾う。環境変数は見ない。
+    無い・シンボリックリンク・通常ファイル以外・他人所有・グループ / 他人に開いた権限・64 KiB 超・
+    壊れた JSON・文字列でない / 形式不正の値は、該当のプロバイダーを鍵なしとして扱い、
+    鍵を出さない通知文を添える (例外にはしない)。
+    """
+    target = (path if path is not None else SEARCH_KEYS_FILE).expanduser()
+    names = [p.name for p in SEARCH_PROVIDERS if p.header is not None]
+    try:
+        fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return {}, [f"検索の鍵ファイルが無い ({target})"]
+    except OSError as e:
+        return {}, [f"検索の鍵ファイルを開けない ({target}: {type(e).__name__})"]
+    try:
+        info = os.fstat(fd)
+        problem = None
+        if not stat.S_ISREG(info.st_mode):
+            problem = "通常ファイルでない"
+        elif info.st_uid != os.getuid():
+            problem = "所有者が自分でない"
+        elif info.st_mode & 0o077:
+            problem = f"権限が広すぎる ({stat.S_IMODE(info.st_mode):04o}。chmod 600)"
+        elif info.st_size > SEARCH_KEYS_MAX_BYTES:
+            problem = "大きすぎる"
+        if problem is not None:
+            return {}, [f"検索の鍵ファイルを使わない: {problem} ({target})"]
+        raw = os.read(fd, SEARCH_KEYS_MAX_BYTES + 1)
+    finally:
+        os.close(fd)
+    if len(raw) > SEARCH_KEYS_MAX_BYTES:
+        return {}, [f"検索の鍵ファイルを使わない: 大きすぎる ({target})"]
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return {}, [f"検索の鍵ファイルを JSON として読めない ({target})"]
+    if not isinstance(data, dict):
+        return {}, [f"検索の鍵ファイルがオブジェクトでない ({target})"]
+    keys: dict[str, str] = {}
+    notes: list[str] = []
+    for name in names:
+        value = data.get(name)
+        if value is None:
+            continue
+        value = value.strip() if isinstance(value, str) else value
+        if (
+            not isinstance(value, str)
+            or re.fullmatch(rf"[\x21-\x7e]{{1,{SEARCH_KEY_MAX_CHARS}}}", value) is None
+        ):
+            notes.append(f"検索の鍵が不正なので使わない: {name}")
+            continue
+        keys[name] = value
+    return keys, notes
+
+
 def free_port() -> int:
     """127.0.0.1 の空きポートを 1 つ得る (閉じてから Envoy が使う)。"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -475,12 +879,12 @@ def _tail(path: Path, lines: int = 20) -> str:
     return "\n".join(text.splitlines()[-lines:])
 
 
-def _probe(opener: urllib.request.OpenerDirector, url: str) -> bool:
-    """身元の確認 1 回。200 かつ本文が ``pis-broker-copilot`` で始まれば True。まだなら False。"""
+def _probe(opener: urllib.request.OpenerDirector, url: str, prefix: str = IDENTITY_PREFIX) -> bool:
+    """身元の確認 1 回。200 かつ本文が ``prefix`` (既定 ``pis-broker-copilot``) で始まれば True。まだなら False。"""
     try:
         with opener.open(url + IDENTITY_PATH, timeout=1) as response:
             body = response.read(256).decode("utf-8", errors="replace")
-            return response.status == 200 and body.startswith(IDENTITY_PREFIX)
+            return response.status == 200 and body.startswith(prefix)
     except OSError:
         return False  # まだ待ち受けていない (呼び出し側が期限まで再試行する)
 
@@ -563,6 +967,9 @@ def session(
     copilot: bool = True,
     github_token: str | None = None,
     github_socket: Path | None = None,
+    search: bool = False,
+    search_keys: Mapping[str, str] | None = None,
+    search_test_upstreams: Mapping[str, int] | None = None,
     refresh_margin: float = REFRESH_MARGIN_SECONDS,
     retry_seconds: float = RETRY_SECONDS,
     ready_timeout: float = READY_TIMEOUT_SECONDS,
@@ -575,14 +982,17 @@ def session(
       (``auth.json`` がある所。既定は ``PI_CODING_AGENT_DIR`` か ``~/.pi/agent``)。
     - ``github_token`` と ``github_socket``: ``gh`` 用のリスナー (Unix ソケット) を立てる。
       PAT は呼び出し側が :func:`resolve_github_token` で得て渡す (出どころ無しは立てない)。
+    - ``search``: 検索用のリスナー (``http://127.0.0.1:<port>``) を同じ Envoy に足す。``search_keys`` は
+      プロバイダー名 → 鍵 (呼び出し側が :func:`read_search_keys` で得る。無い名前は鍵なし = 503)。鍵は
+      状態ディレクトリの設定ファイル (0600) にだけ入り、戻り値には URL しか入れない。
 
-    どちらも無効なら :class:`BrokerError`。立てられなければ :class:`BrokerError` (呼び出し側が
+    どれも無効なら :class:`BrokerError`。立てられなければ :class:`BrokerError` (呼び出し側が
     ``die`` に変える)。``refresh_margin`` ``retry_seconds`` ``ready_timeout`` は試験で短くするための引数。
     """
     use_github = github_token is not None
     if use_github != (github_socket is not None):
         raise BrokerError("github_token と github_socket は組で渡す")
-    if not copilot and not use_github:
+    if not copilot and not use_github and not search:
         raise BrokerError("有効なブローカーが無い (Copilot も GitHub も無効)")
     envoy = find_envoy(home)
     refresh = token = host = None
@@ -607,6 +1017,11 @@ def session(
             write_sds(state / GH_SDS_NAME, github_token, GH_SECRET_NAME)
             del github_token
         config = state / CONFIG_NAME
+        search_port = None
+        if search:
+            search_port = free_port()
+            while search_port == port:
+                search_port = free_port()
         config.write_text(
             build_config(
                 sds_dir=state,
@@ -614,6 +1029,9 @@ def session(
                 copilot_port=port,
                 copilot_host=host,
                 github_socket=github_socket,
+                search_port=search_port,
+                search_keys=search_keys,
+                search_test_upstreams=search_test_upstreams,
             ),
             encoding="utf-8",
         )
@@ -655,16 +1073,21 @@ def session(
         probes: list[Callable[[], bool]] = []
         targets: list[str] = []
         url = None
+        search_url = None
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         if port is not None:
             url = f"http://127.0.0.1:{port}"
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             probes.append(lambda: _probe(opener, url))
             targets.append(url)
+        if search_port is not None:
+            search_url = f"http://127.0.0.1:{search_port}"
+            probes.append(lambda: _probe(opener, search_url, SEARCH_IDENTITY_PREFIX))
+            targets.append(search_url)
         if github_socket is not None:
             probes.append(lambda: _probe_unix(github_socket))
             targets.append(str(github_socket))
         _wait_ready(probes, ", ".join(targets), proc, envoy_log, ready_timeout)
-        yield BrokerSession(url, state, github_socket)
+        yield BrokerSession(url, state, github_socket, search_url)
     finally:
         stop.set()
         if thread is not None:

@@ -1,6 +1,6 @@
 # pi をどこで・どこまで守って動かすか（権限の有無と隔離の選択肢）
 
-<!-- 現在の運用の正本は docs/spec/pi-guard.md。ここは「いつ何を調べ・測ったか」を積む場所 -->
+<!-- 現在の運用の正本は docs/spec/guard/pi-guard.md。ここは「いつ何を調べ・測ったか」を積む場所 -->
 
 ## 記録 I1 — 2026-10-13
 
@@ -174,7 +174,7 @@ OpenShell の対応表では Windows は「WSL 2 + Docker Desktop」の Experime
 
 **現状の事実（このリポジトリ）**:
 
-- 文書が言い切っていること: Windows ネイティブにはフルガード・`pis`・サンドボックスが無い。サンドボックスが Fence に依るため。判定器は TS で動くが、フルガードの Windows 版は未着手で優先度は低い（`docs/spec/pi-guard.md:151`）。守りが要る作業は、WSL の `pis` で行う（同 `:165`、ADR-0017 決定 5）
+- 文書が言い切っていること: Windows ネイティブにはフルガード・`pis`・サンドボックスが無い。サンドボックスが Fence に依るため。判定器は TS で動くが、フルガードの Windows 版は未着手で優先度は低い（`docs/spec/guard/pi-guard.md:151`）。守りが要る作業は、WSL の `pis` で行う（同 `:165`、ADR-0017 決定 5）
 - 文書が言い切っていないこと: 「使えない」の原因を 1 つにしていない（Fence が Linux/macOS 専用、`spawn("pi")` が `pi.cmd` 経由、負の PID への `kill`、Windows での判定の待ち時間は未実測、など。別モデルによるレビューの指摘で、実機試験はしていない。`pi-isolation-options.md` の「ハーネスの Windows 移植の見送り」）。**PowerShell で `pis` を使いたい理由を、利用者の動機として書いた文書は見つからなかった**（Orca・Zed が素の `pi` を呼ぶ記述はある）
 - 再検討の条件: ADR-0017 は、Windows でガード付きで使う需要が増えたときに見直す、としている
 
@@ -205,7 +205,7 @@ OpenShell の対応表では Windows は「WSL 2 + Docker Desktop」の Experime
 言えない:
 
 - PowerShell から OpenShell の CLI を使えるか、`C:\` のリポジトリを渡す具体的な手順は、原文に無く、動かしていないので不明
-- 「PowerShell で `pis` が使えない」の動機（Zed の pi-acp、Orca、会社の PC、Windows 側のリポジトリ）が文書に無い。動機によって、解決策が違う（`wsl` 経由で WSL の `pis` を呼ぶ薄いラッパー、Windows ネイティブの境界、など）
+- 「PowerShell で `pis` が使えない」の動機（Zed の pi-acp、Orca、制約のある環境の PC、Windows 側のリポジトリ）が文書に無い。動機によって、解決策が違う（`wsl` 経由で WSL の `pis` を呼ぶ薄いラッパー、Windows ネイティブの境界、など）
 
 ### 次の問い
 

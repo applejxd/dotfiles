@@ -5,7 +5,7 @@ bash を含む全件の一致を必須にする (``node test/agents/pi/judge_gol
 
 node の型除去 (strip-types) を使う。22.18 未満の node では実行できないので飛ばす。
 
-see docs/spec/pi-decide.md#ts-版への移植
+see docs/spec/guard/pi-decide.md#ts-版への移植
 """
 
 from __future__ import annotations

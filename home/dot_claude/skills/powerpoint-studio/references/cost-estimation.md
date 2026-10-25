@@ -17,7 +17,7 @@
 3. Copilot CLI — 明示要求時のみベストエフォート
 
 `CLAUDE_CODE_USE_BEDROCK=1`、AWS region、実際に選択されたmodel IDを確認する。
-会社環境ではモデルaliasの自動変更を避け、可能ならモデルIDをpinする。
+制約のある環境ではモデルaliasの自動変更を避け、可能ならモデルIDをpinする。
 
 ### Interactive Claude Code
 

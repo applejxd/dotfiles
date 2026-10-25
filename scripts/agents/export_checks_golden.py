@@ -24,7 +24,7 @@ workspace のパスは ``${ROOT}`` に置き換える。
 
 ``golden/tables.json`` (``tables.toml`` の JSON 版。TS 版が読む) も書く。
 
-see docs/spec/pi-decide.md#ts-版への移植
+see docs/spec/guard/pi-decide.md#ts-版への移植
 """
 
 from __future__ import annotations

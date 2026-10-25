@@ -40,4 +40,5 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py status                 
 | 3 | 全プロバイダが失敗 / 取得に失敗 | `status` を見る。鍵が無いプロバイダは飛ばされ、鍵なしの DuckDuckGo は不安定なことがある |
 
 鍵は環境変数（`BRAVE_API_KEY` など）→ `~/.config/agents/websearch-keys.json` → `bw get password websearch-<名前>` の順で探す。
+環境変数 `WEBSEARCH_BROKER_URL`（`http://127.0.0.1:<port>`。`pis` の内側で設定される）があるときは、検索（`search` / `papers`）をそのブローカー経由で送り、鍵は探さない（鍵はホスト側にあり、`status` の「鍵あり」はダミー値の表示）。形が違う値は終了コード 2 で止まる。`fetch` はブローカーを通らない。
 仕様と設計は `docs/spec/web-search.md`（dotfiles リポジトリ）。

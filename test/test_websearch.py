@@ -784,3 +784,140 @@ def test_search_provider_option_uses_only_that_provider_and_skips_the_cache(tmp_
     deps["http"] = failing
     assert ws.main(["search", "hello", "--provider", "exa"], deps) == 3
     assert failing.hosts == ["api.exa.ai"]  # 失敗しても、ほかのプロバイダへ回さない
+
+
+# ─── ブローカー経由 (WEBSEARCH_BROKER_URL) ─────────────────────────────
+
+BROKER = "http://127.0.0.1:18080"
+AUTH_HEADERS = {"x-subscription-token", "x-api-key", "authorization"}
+
+
+def broker_deps(http, tmp_path):
+    # key_for は渡さない (main が組む。鍵ファイル・bw を見ないことも確かめる)
+    return {
+        "http": http,
+        "cache_dir": tmp_path,
+        "now": lambda: 1000.0,
+        "sleep": lambda s: None,
+    }
+
+
+@pytest.fixture
+def broker(monkeypatch):
+    monkeypatch.setenv("WEBSEARCH_BROKER_URL", BROKER)
+    for name in ("BRAVE", "EXA", "TAVILY", "OPENALEX"):
+        monkeypatch.delenv(f"{name}_API_KEY", raising=False)
+
+    def no_lookup(*a, **k):
+        raise AssertionError("ブローカー経由では鍵を探さない")
+
+    monkeypatch.setattr(ws, "get_key", no_lookup)
+
+
+def test_broker_url_replaces_every_provider_base(broker):
+    expected = {
+        "brave": BROKER + "/brave/res/v1/web/search?q=x",
+        "exa": BROKER + "/exa/search",
+        "tavily": BROKER + "/tavily/search",
+        "openalex": BROKER + "/openalex/works?search=x",
+        "duckduckgo": BROKER + "/ddg/html/",
+    }
+    paths = {
+        "brave": "/res/v1/web/search?q=x",
+        "exa": "/search",
+        "tavily": "/search",
+        "openalex": "/works?search=x",
+        "duckduckgo": "/html/",
+    }
+    for name, path in paths.items():
+        assert ws.endpoint(name, path) == expected[name]
+
+
+def test_without_a_broker_the_upstream_urls_are_unchanged(monkeypatch):
+    monkeypatch.delenv("WEBSEARCH_BROKER_URL", raising=False)
+    assert ws.endpoint("exa", "/search") == "https://api.exa.ai/search"
+    assert ws.endpoint("duckduckgo", "/html/") == "https://html.duckduckgo.com/html/"
+
+
+def test_each_keyed_provider_sends_only_its_own_dummy_header(broker, tmp_path, capsys):
+    own = {
+        "brave": ("api.search.brave.com", "x-subscription-token"),
+        "exa": ("api.exa.ai", "x-api-key"),
+        "tavily": ("api.tavily.com", "authorization"),
+    }
+    bodies = {"brave": BRAVE_OK, "exa": EXA_OK, "tavily": TAVILY_OK}
+    for name, (_, header) in own.items():
+        http = FakeHttp({"127.0.0.1:18080": [resp(body=bodies[name])]})
+        assert ws.main(["search", f"q{name}", "--provider", name], broker_deps(http, tmp_path)) == 0
+        _, _, headers, _, url = http.calls[0]
+        assert url.startswith(f"{BROKER}/{name}/")
+        sent = {k.lower(): v for k, v in headers.items() if k.lower() in AUTH_HEADERS}
+        assert set(sent) == {header}  # 他プロバイダのヘッダは付けない
+        assert "broker" in sent[header]
+    capsys.readouterr()
+
+
+def test_keyless_providers_get_no_auth_header_through_the_broker(broker, tmp_path, capsys):
+    http = FakeHttp({"127.0.0.1:18080": [resp(body=DDG_HTML.encode())]})
+    assert ws.main(["search", "qddg", "--provider", "duckduckgo"], broker_deps(http, tmp_path)) == 0
+    _, _, headers, _, url = http.calls[0]
+    assert url == BROKER + "/ddg/html/"
+    assert not {k.lower() for k in headers} & AUTH_HEADERS
+
+    body = {
+        "results": [
+            {"display_name": "P", "primary_location": {"landing_page_url": "https://p.example/"}}
+        ]
+    }
+    http = FakeHttp({"127.0.0.1:18080": [resp(body=body)]})
+    assert ws.main(["papers", "graph"], broker_deps(http, tmp_path)) == 0
+    _, _, headers, _, url = http.calls[0]
+    assert url.startswith(BROKER + "/openalex/works?")
+    assert "api_key" not in url  # 鍵はクエリにも付けない
+    assert not {k.lower() for k in headers} & AUTH_HEADERS
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://example.com:18080",
+        "https://127.0.0.1:18080",
+        "http://127.0.0.1",
+        "http://127.0.0.1:18080/",
+        "http://127.0.0.1:0",
+        "http://127.0.0.1:99999",
+        "http://localhost:18080",
+        "http://127.0.0.1:18080@evil.example",
+    ],
+)
+def test_invalid_broker_url_fails_loudly(value, monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("WEBSEARCH_BROKER_URL", value)
+    http = FakeHttp({})
+    assert ws.main(["search", "hello"], broker_deps(http, tmp_path)) == 2
+    assert "WEBSEARCH_BROKER_URL" in capsys.readouterr().err
+    assert http.calls == []  # どこへも送らない
+
+
+def test_broker_503_no_key_is_treated_as_a_missing_key(broker, tmp_path):
+    no_key = resp(503, b"pis-broker: no key for brave")
+    http = FakeHttp({"127.0.0.1:18080": [no_key, no_key, no_key, resp(body=DDG_HTML.encode())]})
+    out = ws.run_search(
+        "q",
+        5,
+        http=http,
+        key_for=lambda n: "broker" if n in ws.BROKER_KEYED else None,
+        state=state(tmp_path),
+        sleep=lambda s: None,
+    )
+    assert out.provider == "duckduckgo"
+    assert out.attempts[:3] == [("brave", "no-key"), ("exa", "no-key"), ("tavily", "no-key")]
+    assert state(tmp_path).disabled_until("brave") == 0  # 休止にはしない
+
+
+def test_plain_503_is_still_a_server_error(tmp_path):
+    http = FakeHttp(
+        {"api.search.brave.com": [resp(503, b"busy")], "api.exa.ai": [resp(body=EXA_OK)]}
+    )
+    out = run(http, tmp_path)
+    assert out.attempts[0] == ("brave", "server") and out.provider == "exa"

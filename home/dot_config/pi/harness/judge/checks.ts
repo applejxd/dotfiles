@@ -4,7 +4,7 @@
 // 名前は Python 版の関数名 (`check_xxx`) のまま使う。順序に意味がある並びは移植が揃ってから足す。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { checkCurlFileSend, checkCurlWgetMutation, checkHttpDangerousOutput } from "./http.ts";
 import {
@@ -27,7 +27,7 @@ import {
 	checkToolSelfUpdate,
 } from "./rules_guard.ts";
 import { checkDockerHostEscape, checkDockerIsolation } from "./docker.ts";
-import { checkGhApiMutation, checkGhApiSensitiveInput, checkGhTokenExposure } from "./ghapi.ts";
+import { checkGhApiMutation, checkGhApiPublish, checkGhApiSensitiveInput, checkGhTokenExposure } from "./ghapi.ts";
 import { checkGitAddSensitive, checkHistoryAccess, checkSecretEnvEcho } from "./sensitive.ts";
 
 export type Check = (ctx: Ctx, cmd: string) => string | null;
@@ -44,6 +44,7 @@ export const DENY_NAMES: readonly string[] = [
 	"check_secret_env_echo",
 	"check_gh_token_exposure",
 	"check_gh_api_sensitive_input",
+	"check_gh_api_publish",
 	"check_history_access",
 	"check_guard_tampering",
 	"check_reverse_shell",
@@ -115,6 +116,7 @@ export const CHECKS = new Map<string, Check>([
 	["check_gh_token_exposure", checkGhTokenExposure],
 	["check_gh_api_sensitive_input", checkGhApiSensitiveInput],
 	["check_gh_api_mutation", checkGhApiMutation],
+	["check_gh_api_publish", checkGhApiPublish],
 	["check_docker_host_escape", checkDockerHostEscape],
 	["check_docker_isolation", checkDockerIsolation],
 ]);

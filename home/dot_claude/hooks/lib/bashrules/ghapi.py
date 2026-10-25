@@ -3,6 +3,7 @@
 読み取り (GET / HEAD / query) は通し、mutation と判定不能な形式だけを
 承認対象にする。
 """
+
 from __future__ import annotations
 
 import re
@@ -24,16 +25,14 @@ _GH_API_VALUE_FLAGS = tables.as_set("ghapi", "gh_api_value_flags")
 _GH_API_READ_METHODS = tables.as_set("ghapi", "gh_api_read_methods")
 
 
-def _parse_gh_api_tokens(
-    raw_tokens: list[str], gh_index: int
-) -> dict[str, object]:
+def _parse_gh_api_tokens(raw_tokens: list[str], gh_index: int) -> dict[str, object]:
     """Parse one tokenized ``gh api`` invocation."""
     endpoint: str | None = None
     method: str | None = None
     fields: list[tuple[str, str]] = []
     input_path: str | None = None
     ambiguous = False
-    args = raw_tokens[gh_index + 2:]
+    args = raw_tokens[gh_index + 2 :]
     i = 0
     while i < len(args):
         token = args[i]
@@ -96,10 +95,7 @@ def _parse_gh_api_tokens(
             continue
 
         value_flag = next(
-            (
-                flag for flag in _GH_API_VALUE_FLAGS
-                if token == flag or token.startswith(f"{flag}=")
-            ),
+            (flag for flag in _GH_API_VALUE_FLAGS if token == flag or token.startswith(f"{flag}=")),
             None,
         )
         if value_flag:
@@ -152,9 +148,7 @@ def _gh_api_calls(cmd: str) -> list[dict[str, object]]:
 
     for raw_segment in _policy.split_command_segments(cmd):
         normalized_segments = [
-            segment
-            for segment in _normalize(raw_segment)
-            if segment.startswith("gh api")
+            segment for segment in _normalize(raw_segment) if segment.startswith("gh api")
         ]
         if not normalized_segments:
             continue
@@ -165,7 +159,8 @@ def _gh_api_calls(cmd: str) -> list[dict[str, object]]:
             continue
         gh_index = next(
             (
-                i for i in range(len(raw_tokens) - 1)
+                i
+                for i in range(len(raw_tokens) - 1)
                 if _basename(raw_tokens[i]) == "gh" and raw_tokens[i + 1] == "api"
             ),
             None,
@@ -257,11 +252,7 @@ def check_gh_api_mutation(cmd: str) -> str | None:
         fields = call["fields"]
         input_path = call["input"]
         ambiguous = call["ambiguous"]
-        if (
-            not isinstance(endpoint, str)
-            or not isinstance(fields, list)
-            or ambiguous is True
-        ):
+        if not isinstance(endpoint, str) or not isinstance(fields, list) or ambiguous is True:
             return "`gh api` の endpoint または引数を静的に判定できません。"
 
         if endpoint == "graphql":
@@ -287,4 +278,89 @@ def check_gh_api_mutation(cmd: str) -> str | None:
             continue
         effective_method = explicit_method or "POST"
         return f"`gh api` が読み取り以外の HTTP method ({effective_method}) を使用します。"
+    return None
+
+
+# 公開・配布に当たる API 操作 (check_gh_api_publish)。judge/ghapi.ts と同じ規則 (変えるときは両方)。
+_PUBLISH_WRITE = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_PUBLISH_GRAPHQL_RE = re.compile(
+    r"\b(?:createRepository|updateRepository|deleteRepository|archiveRepository"
+    r"|transferRepository|createRef|updateRef|deleteRef|createCommitOnBranch"
+    r"|mergePullRequest)\b",
+    re.ASCII,
+)
+_PUBLISH_GIT_KINDS = frozenset({"refs", "commits", "trees", "blobs", "tags"})
+
+
+def _endpoint_parts(endpoint: str) -> list[str]:
+    """endpoint を小文字の部品に分ける (先頭の URL・`/`・クエリ・末尾の `/` を落とす)。"""
+    path = re.sub(r"(?i)^https?://[^/]+/", "", endpoint.strip())
+    path = path.split("?", 1)[0]
+    return re.sub(r"^/+|/+$", "", path.lower()).split("/")
+
+
+def _is_publish_endpoint(parts: list[str], method: str) -> bool:
+    """REST の endpoint と method が、公開・配布に当たる操作か。"""
+    if method not in _PUBLISH_WRITE:
+        return False
+    n = len(parts)
+    if parts[0] == "user" and n == 2 and parts[1] == "repos":
+        return method == "POST"
+    if parts[0] == "orgs" and n == 3 and parts[2] == "repos":
+        return method == "POST"
+    if parts[0] != "repos" or n < 3:
+        return False
+    if n == 3:
+        return method in {"PATCH", "DELETE"}
+    sub = parts[3]
+    if sub == "contents":
+        return n >= 5 and method in {"PUT", "DELETE"}
+    if sub == "git":
+        return n >= 5 and parts[4] in _PUBLISH_GIT_KINDS and method != "PUT"
+    if sub == "releases":
+        return method != "PUT"
+    if sub == "transfer":
+        return n == 4
+    if sub == "pages":
+        return method != "PATCH"
+    if sub == "hooks":
+        return method != "PUT"
+    if sub == "collaborators":
+        return n >= 5 and method in {"PUT", "DELETE"}
+    if sub == "dispatches":
+        return method == "POST"
+    if sub == "actions":
+        return n >= 5 and parts[4] == "secrets" and method in {"PUT", "DELETE"}
+    return False
+
+
+def check_gh_api_publish(cmd: str) -> str | None:
+    """Block ``gh api`` calls that publish / distribute or rewrite repo refs.
+
+    Other writes stay with ``check_gh_api_mutation`` (ask).
+    """
+    for call in _gh_api_calls(cmd):
+        endpoint = call["endpoint"]
+        method = call["method"]
+        fields = call["fields"]
+        input_path = call["input"]
+        if (
+            not isinstance(endpoint, str)
+            or not isinstance(fields, list)
+            or call["ambiguous"] is True
+        ):
+            continue
+        if endpoint == "graphql":
+            if input_path is not None:
+                continue
+            query, inspectable = _graphql_query(fields)
+            if inspectable and query is not None and _PUBLISH_GRAPHQL_RE.search(query):
+                return "公開・配布に当たる API 操作です (`gh api graphql` のミューテーション)。"
+            continue
+        explicit = method.upper() if isinstance(method, str) else None
+        if explicit is not None and not re.fullmatch(r"[A-Za-z]+", explicit):
+            continue
+        effective = explicit or ("POST" if fields or input_path is not None else "GET")
+        if _is_publish_endpoint(_endpoint_parts(endpoint), effective):
+            return f"公開・配布に当たる API 操作です (`gh api` {effective} {endpoint})。"
     return None

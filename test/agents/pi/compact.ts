@@ -1,5 +1,5 @@
 // 試験用。圧縮を起こして終わるまで待つコマンド。引数は /compact の引数 (利用者が指定する焦点) として渡す。
-// see docs/spec/pi-guard.md
+// see docs/spec/guard/pi-guard.md
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {

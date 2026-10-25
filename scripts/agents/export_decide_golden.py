@@ -14,7 +14,7 @@ TS へ移植した判定器は、同じ入力で同じ応答 (decision / source 
     uv run --no-project --with pytest,pyyaml python scripts/agents/export_decide_golden.py
     uv run --no-project --with pytest,pyyaml python scripts/agents/export_decide_golden.py --check
 
-see docs/spec/pi-decide.md
+see docs/spec/guard/pi-decide.md
 """
 
 from __future__ import annotations
@@ -126,7 +126,7 @@ HOME = str(Path.home())
 FILE_TOOLS = ("read", "grep", "find", "ls", "edit", "write")
 FILE_PATHS = (
     "README.md",
-    "docs/spec/pi-decide.md",
+    "docs/spec/guard/pi-decide.md",
     "${ROOT}/README.md",
     "${ROOT}/home/dot_config/pi/harness/index.ts",
     "${ROOT}/no-such-file.txt",

@@ -47,7 +47,7 @@
 .copilot/skills
 # pi 本体と設定は Windows にも配る。フルガード (.config/pi) と pis は Unix だけで、
 # フルガード無しでは guarded_task が無く /fleet が働かないので prompts も配らない
-# see docs/spec/pi-guard.md#windows
+# see docs/spec/guard/pi-guard.md#windows
 .pi/agent/prompts/
 .pi/agent/prompts/**
 .local/bin/pis
@@ -145,14 +145,14 @@ Documents/**
 # 個人 PC のみで導入
 .config/git/user
 .config/sops/age/keys.txt
-# YouTube (yt-dlp) の字幕は個人 PC だけ。会社の PC にはスクリプト自体を配らない
+# YouTube (yt-dlp) の字幕は個人 PC だけ。制約のある環境の機にはスクリプト自体を配らない
 # see docs/spec/imozuru.md#youtube
 .claude/skills/imozuru/scripts/fetch_youtube.py
 .vscode-server/
 .vscode-server/**
 {{- end }}
 
-# 業務用 (Bedrock) は検索を AgentCore の MCP に一本化する。web-search skill と、それに依存する imozuru は私用 (github-copilot) だけに配る
+# 制約のある環境用 (Bedrock) は検索を AgentCore の MCP に一本化する。web-search skill と、それに依存する imozuru は個人用 (github-copilot) だけに配る
 # see docs/spec/web-search.md#配る範囲、docs/spec/imozuru.md#配る範囲
 {{- if eq (includeTemplate "llm-provider" .) "amazon-bedrock" }}
 .claude/skills/web-search/

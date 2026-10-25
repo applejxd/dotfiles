@@ -130,9 +130,9 @@ opencode    # 通常起動（境界なし）
   `chezmoi apply` する。境界を確かめるときは `ocs --check`
 - 履歴は通常起動と共有する。内側のセッションは外の `opencode -s <ID>` で再開できる。
   起動のたびに作業ツリーを境界の外へ退避する（復元は
-  [OpenCode 隔離起動](docs/spec/opencode-sandbox.md) を参照）
+  [OpenCode 隔離起動](docs/spec/sandbox/opencode-sandbox.md) を参照）
 - 起動ディレクトリの外を開けたいときは、プロジェクトに `.opencode/sandbox.toml` を置く
-  （書き方は[プロジェクトごとの追加](docs/spec/opencode-sandbox.md#プロジェクトごとの追加)）
+  （書き方は[プロジェクトごとの追加](docs/spec/sandbox/opencode-sandbox.md#プロジェクトごとの追加)）
 
 ## 安全上の注意
 
@@ -183,7 +183,7 @@ A. 生成された設定ファイルは直接編集せず、次のどちらか�
 - このマシンだけ: プロバイダは `chezmoi.toml` の `[data]` に `llm_provider` を書く
   （[プロバイダの判定](docs/spec/agent-config-generation.md#プロバイダの判定)）。
   sandbox の許可は `~/.config/agents/local.toml` に足す
-  （[このマシンだけで許可を足す](docs/spec/agent-sandbox.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない)）
+  （[このマシンだけで許可を足す](docs/spec/sandbox/agent-sandbox.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない)）
 
 ### Q. Bedrock だとハーネスで Web 検索ができない
 

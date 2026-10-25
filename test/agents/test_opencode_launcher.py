@@ -3,7 +3,7 @@
 Run with: ``uv run --with pytest --no-project pytest test/agents/`` or
 ``python3 -m pytest test/agents/``.
 
-see docs/spec/opencode-sandbox.md
+see docs/spec/sandbox/opencode-sandbox.md
 """
 
 from __future__ import annotations
@@ -800,6 +800,15 @@ def test_extra_devices_env_is_not_passed_inside(monkeypatch):
     monkeypatch.setenv("PIS_EXTRA_DEVICES", "/dev/dxg")
     env = launcher.cli.inner_env({"config_dir": "/c"})
     assert "PIS_EXTRA_DEVICES" not in env
+
+
+def test_search_api_key_env_is_not_passed_inside(monkeypatch):
+    launcher = _launcher()
+    names = ("BRAVE_API_KEY", "EXA_API_KEY", "TAVILY_API_KEY", "OPENALEX_API_KEY")
+    for name in names:
+        monkeypatch.setenv(name, "k")
+    env = launcher.cli.inner_env({"config_dir": "/c"})
+    assert not set(names) & set(env)
 
 
 def test_devices_unset_leaves_no_devices_key(tmp_path):

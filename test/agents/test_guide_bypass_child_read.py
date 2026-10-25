@@ -413,7 +413,7 @@ def test_grep_filter_still_applies_to_children(tmp_path):
 
 @pytest.fixture(
     params=[("applejxd", False), ("applejxd", True), ("worker", False), ("worker", True)],
-    ids=["私用-通常", "私用-ocs", "会社用-通常", "会社用-ocs"],
+    ids=["個人用-通常", "個人用-ocs", "制約環境用-通常", "制約環境用-ocs"],
 )
 def flavor(request, tmp_path):
     username, isolated = request.param

@@ -9,7 +9,7 @@
 - 目的: Zed が ACP で呼ぶ pi を、素の `pi` ではなく `pis`（フルガード付き）にできるか確かめる。標準のサンドボックスは使わず `pis --no-sandbox` を前提にする
 - 非目的: サンドボックス（Fence）の中での ACP。`pi-acp` の改造・公開。Orca の扱いは、段 6 の調査にとどめる（実装は [CHG-0020](0020-pi-migration.md) の段 5e・[CHG-0023](0023-guard-terminology.md) の続き）
 
-用語: **pi-acp** は、Zed と ACP（Agent Client Protocol、stdio の JSON-RPC）で話し、`pi --mode rpc --no-themes` を子プロセスとして起動する橋渡し役の公開 npm パッケージ。**フルガード**は `pis` で効く判定器・伏字化など（[pi のガード](../spec/pi-guard.md)）。
+用語: **pi-acp** は、Zed と ACP（Agent Client Protocol、stdio の JSON-RPC）で話し、`pi --mode rpc --no-themes` を子プロセスとして起動する橋渡し役の公開 npm パッケージ。**フルガード**は `pis` で効く判定器・伏字化など（[pi のガード](../spec/guard/pi-guard.md)）。
 
 ## 実施計画
 
@@ -41,7 +41,7 @@
 
 - **起動コマンドの差し替え口がある**: 環境変数 `PI_ACP_PI_COMMAND`（`agent.ts`）。README には載っていない。値は実行ファイル 1 つで、引数は pi-acp が `--mode rpc --no-themes` を付ける（`spawn(cmd, args)`）。`pis --no-sandbox` のような引数つきの文字列は渡せないので、`exec pis --no-sandbox "$@"` だけのラッパースクリプトを置いて、そのパスを渡す。Zed の `agent_servers.<名前>.env` に書ける
 - **`extension_ui_request` の扱い**（`session.ts` の `handleExtensionUiRequest`）: `confirm`・`select` は ACP の許可ダイアログ（Yes / No）になる。`input`・`editor` は「未対応」と表示して取り消す。`notify` は会話にメッセージとして出る。`setStatus` などそれ以外は、取り消しの応答を返して無視する
-- フルガードの拡張（`~/.config/pi/harness/index.ts`）が使う UI は `confirm`（確認）・`notify`（警告）・`setStatus`（状態表示）だけ。いずれも pi-acp が扱える。確認は Zed のダイアログに出るので、[5 分の期限](../spec/pi-guard.md#orcazed)に頼らず利用者が答えられる見込み（実機は未確認）
+- フルガードの拡張（`~/.config/pi/harness/index.ts`）が使う UI は `confirm`（確認）・`notify`（警告）・`setStatus`（状態表示）だけ。いずれも pi-acp が扱える。確認は Zed のダイアログに出るので、[5 分の期限](../spec/guard/pi-guard.md#orcazed)に頼らず利用者が答えられる見込み（実機は未確認）
 
 ## 未解決点
 
@@ -54,7 +54,7 @@
 
 - **Orca（段 6 の調査、2026-10-20）**: 公開情報の読みで、実機は未確認
   - Orca（stablyai/orca）は、Settings → Agents に、エージェントごとの起動コマンド・引数・環境変数の上書き（`agentCmdOverrides`・`agentDefaultArgs`・`agentDefaultEnv`）を持つ（[Issue #20552](https://github.com/stablyai/orca/issues/20552)）。pi の起動コマンドを `pis` に替えられる見込み。pi の派生（`omo`）を `agentCmdOverrides.pi = "omo"` で使い、状態表示・再開・プロンプトの事前入力が動いた報告がある（[Issue #28273](https://github.com/stablyai/orca/issues/28273)。ただし同じ報告で、`worker-start --agent pi` の起動待ち（`agent_readiness`）は、派生がターミナルのタイトルを変えると 60 秒で時間切れになる）
-  - 独自のエージェントの定義（ラッパー・社内 CLI など）は [PR #2521](https://github.com/stablyai/orca/pull/2521)、`expectedProcess`（実行中のプロセス名で状態追跡する）は [Issue #18249](https://github.com/stablyai/orca/issues/18249) で提案中。取り込まれた版は未確認
+  - 独自のエージェントの定義（ラッパー・自作の CLI など）は [PR #2521](https://github.com/stablyai/orca/pull/2521)、`expectedProcess`（実行中のプロセス名で状態追跡する）は [Issue #18249](https://github.com/stablyai/orca/issues/18249) で提案中。取り込まれた版は未確認
   - Orca は pi の起動のたびに、状態表示の拡張 `~/.pi/agent/extensions/orca-agent-status.ts` を書き出す（[PR #17243](https://github.com/stablyai/orca/pull/17243) の記述）。起動した印（`ORCA_AGENT_LAUNCH_TOKEN` など）を状態の送信に付ける。`pis --no-sandbox` は、この拡張を `-e` で足す（`pis.py` の `orca_args`）ので、サンドボックス無しなら状態表示は動く見込み。**サンドボックスの中では、拡張を読まず、`TOKEN` を含む環境変数も落とす**ので、状態表示は出ない（[CHG-0023](0023-guard-terminology.md) に既知）
   - 未確認: 起動コマンドの上書きに引数（`--no-sandbox`）を足せるか。`pis` は `exec` で `pi` に置き換わるので、Orca が見るプロセス名・タイトルが変わらないか。ローカルの `~/.orca` には `agent-hooks` しか無く、設定は読めなかった（Orca が動くホストが別の可能性）
 
@@ -82,7 +82,7 @@
 | B. `PI_ACP_PI_COMMAND` に、`exec pis --no-sandbox "$@"` のラッパーを渡す | 改造が要らない。PATH を触らない。確認は Zed のダイアログに出る（ソースの読み） | 環境変数は README に載っておらず、将来の版で変わりうる | Zed の `env` から渡して実際に起動できるか。起動の遅さ | 有望 | 段 3 |
 | C. pi-acp を自前で直して起動コマンドを差し替える | 確実に差し替えられる | 保守が増える | | 未評価 | A・B が駄目なとき |
 | D. SDK 組み込み版（victor-software-house/pi-acp） | 子プロセスの起動が無い | フルガードを通す方法が無い。公開元の信頼を審査していない | | 見送り（`pis` の包み方と合わない） | |
-| E. 現状のまま素の `pi`（フルガード無し） | 今の運用で、利用者の判断済み（[pi のガード](../spec/pi-guard.md#起動)） | 守りが無い | | 現状 | |
+| E. 現状のまま素の `pi`（フルガード無し） | 今の運用で、利用者の判断済み（[pi のガード](../spec/guard/pi-guard.md#起動)） | 守りが無い | | 現状 | |
 | F. Orca の pi の起動コマンドを `pis`（`--no-sandbox` 付き）に上書きする | Orca の設定にある公開の機能。派生の起動の報告がある。拡張の読み込み処理は `pis` に済み | 起動コマンドに引数を足せるか未確認。`--no-sandbox` なので守りはフルガードだけ | 状態表示・プロセス名の判定が `pis` で壊れないか | 未評価 | 段 6 の実機 |
 | G. Zed の Terminal Threads で `pis` を直接起動し、BEL で通知する | ACP が不要で、`ask`・`plan`・状態表示を失わない。BEL で Zed の通知（青丸）が出ることを確かめた。`notify` 拡張を実装済み | Zed のチャットパネルではなく端末になる。ポップアップは出なかった | `notify` 拡張の実機（完了・確認待ち・`ask`）。Windows | 有望 | 実機で青丸を確かめる |
 
@@ -92,7 +92,7 @@
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `docs/spec/pi-guard.md` の「Orca・Zed」 | Zed は素の `pi` → 通ったら Zed の設定と注意点を足す | 検証後に決める | 未適用 |
+| `docs/spec/guard/pi-guard.md` の「Orca・Zed」 | Zed は素の `pi` → 通ったら Zed の設定と注意点を足す | 検証後に決める | 未適用 |
 
 ## 実装・検証
 
@@ -107,7 +107,7 @@ echo '{"id":"1","type":"get_state"}' | pis --no-sandbox --mode rpc
 
 pi-acp 本体の実行、Zed の実機は未実施。
 
-2026-10-21: `notify` 拡張（`home/dot_pi/agent/extensions/notify/index.ts`、`84060d9`）を足した。作業が完全に終わったとき（`agent_settled`）、フルガードの確認を出す直前、`ask` を出す直前に、TUI のときだけ BEL を端末へ送る。`pytest test/agents/` は、golden を書き出し直す前の実行で 1 失敗・3695 通過・7 skip（失敗は古い `common.json`。書き出し直した後は `test_decide_golden.py` が通過。全件の再実行は未実施）。試験は、print モードで BEL が混ざらないことだけ。TUI で鳴ること・Windows 実機は未確認。仕様は [pi のガード](../spec/pi-guard.md)の拡張の表に追記済み。
+2026-10-21: `notify` 拡張（`home/dot_pi/agent/extensions/notify/index.ts`、`84060d9`）を足した。作業が完全に終わったとき（`agent_settled`）、フルガードの確認を出す直前、`ask` を出す直前に、TUI のときだけ BEL を端末へ送る。`pytest test/agents/` は、golden を書き出し直す前の実行で 1 失敗・3695 通過・7 skip（失敗は古い `common.json`。書き出し直した後は `test_decide_golden.py` が通過。全件の再実行は未実施）。試験は、print モードで BEL が混ざらないことだけ。TUI で鳴ること・Windows 実機は未確認。仕様は [pi のガード](../spec/guard/pi-guard.md)の拡張の表に追記済み。
 
 ## 重要な更新
 

@@ -3,7 +3,7 @@
 // 守る対象のファイル名・ディレクトリ・環境変数名は tables.toml (tables.json) にある。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableList, tableSet } from "./context.ts";
 import { basename as osBasename, isSpace, pyRegex, split, stripChars } from "./pystr.ts";

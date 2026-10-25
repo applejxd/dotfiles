@@ -11,7 +11,7 @@
     管理者権限は要らない (スケジュールタスクの登録に失敗した場合のみ警告する)。
     Tailscale のログインは表示された URL をブラウザで開く。ACL の SSH ルールは管理画面で手動変更する。
 
-    see docs/spec/wsl-sandbox.md
+    see docs/spec/sandbox/wsl-sandbox.md
 #>
 [CmdletBinding()]
 param(
@@ -155,7 +155,7 @@ $nics = (Get-WslText '-d', $Name, '-u', $User, '--', 'sbx-run', $CudaImage, 'ls'
 Add-Check "既定でネットワークが無い (I/F: $nics)" ($nics -eq 'lo')
 $rc = Get-WslExit '-d', $Name, '-u', $User, '--', 'sbx-run', '--privileged', $CudaImage, 'true'
 Add-Check 'sbx-run が --privileged を拒否する' ($rc -ne 0)
-# 別ディストロの timesyncd と時計を調整し合わないこと (see docs/spec/wsl-sandbox.md#時刻同期)
+# 別ディストロの timesyncd と時計を調整し合わないこと (see docs/spec/sandbox/wsl-sandbox.md#時刻同期)
 $timesync = (Get-WslText '-d', $Name, '-u', 'root', '--exec', 'systemctl', 'is-enabled', 'systemd-timesyncd').Trim()
 Add-Check "systemd-timesyncd が無効 (状態: $timesync)" ($timesync -eq 'masked')
 
@@ -182,7 +182,7 @@ if (-not $NoKeepalive) {
     }
   }
   catch {
-    Write-Warning "タスクの登録に失敗しました ($($_.Exception.Message))。管理者の PowerShell で再実行するか手動で登録してください (docs/spec/wsl-sandbox.md)"
+    Write-Warning "タスクの登録に失敗しました ($($_.Exception.Message))。管理者の PowerShell で再実行するか手動で登録してください (docs/spec/sandbox/wsl-sandbox.md)"
     $failures.Add('keepalive タスクの登録')
   }
 }

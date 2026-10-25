@@ -7,7 +7,7 @@
 // この判定が使う範囲 (ホストとポートの取り出し・ループバックの判定) を CPython の実装どおりに書き写した。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableSet } from "./context.ts";
 import { extractCommandSubstitutions, extractFunctionBodies, splitCommandSegments } from "./normalize.ts";

@@ -364,7 +364,7 @@ def test_local_overlay_default_path_is_outside_chezmoi_source(monkeypatch):
 # ---------------------------------------------------------------------------
 # Claude が Copilot より緩くならないこと
 # ---------------------------------------------------------------------------
-# 運用方針: Copilot は家用で緩め、Claude は会社用で厳し目。
+# 運用方針: Copilot は個人用で緩め、Claude は制約のある環境用で厳し目。
 # claude_read_allow は Copilot の allowDevToolAccess が自動許可する範囲の代替なので、
 # そこを超えて「他のリポジトリ」まで開けると方針が逆転してしまう。
 # 実測した Copilot の実効ポリシーには $HOME 配下の作業ディレクトリ許可は無く、

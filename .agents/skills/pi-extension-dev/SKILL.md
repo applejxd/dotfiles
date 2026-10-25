@@ -61,7 +61,7 @@ pi 自身は、フルガードの下でスキルの一覧をモデルへ渡さ�
 ### 1. 要望を整理する
 
 目的・使う場面・成功条件・やらないことを 1 つずつ書き出す。曖昧なら利用者に確認する。
-あわせて、拡張が本当に要るかを [入口の選び方](../../../docs/spec/pi-guard.md#入口の選び方) で判断する
+あわせて、拡張が本当に要るかを [入口の選び方](../../../docs/spec/guard/pi-guard.md#入口の選び方) で判断する
 （skill + CLI や MCP で足りるなら拡張にしない）。
 
 ### 2. 公開拡張の動向を調べる（導入はしない）
@@ -72,7 +72,7 @@ pi 自身は、フルガードの下でスキルの一覧をモデルへ渡さ�
 
 ### 3. 現行のハーネスとの相性を確かめる
 
-次を `docs/spec/pi-guard.md` と実コードで確認する。
+次を `docs/spec/guard/pi-guard.md` と実コードで確認する。
 
 - **判定と伏字化**: 拡張のツールは `guarded_*` の判定を通る。役割（`implementer` など）の `tools` に載せるか、判定の規則が要るか。
   `bash` を置き換える方式は、判定を迂回しないかを必ず見る
@@ -80,7 +80,7 @@ pi 自身は、フルガードの下でスキルの一覧をモデルへ渡さ�
 - **起動の違い**: `pis` は `-ne`（自動発見なし）で、自作は `[pi] own_extensions` から `-e` で足す。素の `pi` は自動発見で読む。
   サンドボックスの読み取り許可も一覧から生成される
 - **システムプロンプトへの露出**: ツールには `promptSnippet`（必要なら `promptGuidelines`）を付けないとモデルが使い忘れる
-- **pi の内部に頼る点**: 増やすなら [pi の内部の挙動に頼る点](../../../docs/spec/pi-guard.md#pi-の内部の挙動に頼る点) へ足す
+- **pi の内部に頼る点**: 増やすなら [pi の内部の挙動に頼る点](../../../docs/spec/guard/pi-guard.md#pi-の内部の挙動に頼る点) へ足す
 - **Windows**: プロセス停止やパスの扱いが違う。実機で回せないなら未検証と明記する
 - 既存の拡張（`todo` / `plan` / `btw` / `activity` / `subagents`）と機能・名前が重ならないか
 - **同じ脅威を既存の仕組み（サンドボックス・判定器・確認）がすでに防いでいないか。** 防いでいるなら、段 4 で重ねない
@@ -104,7 +104,7 @@ pi 自身は、フルガードの下でスキルの一覧をモデルへ渡さ�
 ### 5. 自作して試験する
 
 - 置き場: `home/dot_pi/agent/extensions/<名前>/index.ts`。一覧は `home/dot_config/agents/common.toml.tmpl` の `[pi] own_extensions` の 1 か所
-- 判定器のルールや誘導を変えたら、`docs/spec/pi-decide.md` と golden（`scripts/agents/export_decide_golden.py`）も合わせる
+- 判定器のルールや誘導を変えたら、`docs/spec/guard/pi-decide.md` と golden（`scripts/agents/export_decide_golden.py`）も合わせる
 - 偽のモデル（`test/agents/pi/faux.ts`）で、決まったツール呼び出しを通信なしに出させて試す。
   既存の試験（`test/agents/test_pi_harness.py` / `test_pi_harness_extensions.py` / `test_pi_subagents.py`）が型になる
 - 試験する観点: ツールがシステムプロンプトに載る / 判定（allow・deny・ask）/ 伏字化 / `/reload` 後の状態 / 異常系
@@ -119,19 +119,19 @@ pi 自身は、フルガードの下でスキルの一覧をモデルへ渡さ�
   ```
 
 - 偽のモデルで確かめられないこと（TUI の表示、実際のモデルの使い分け、Windows）は、
-  `docs/spec/pi-guard.md` の「実機で確認する項目」へ未確認として足す。確かめていない結果を書かない
+  `docs/spec/guard/pi-guard.md` の「実機で確認する項目」へ未確認として足す。確かめていない結果を書かない
 
 ## 終わるとき（共通）
 
 1. **記録する。** 公式に明示が無い挙動を実測したら `pi-upstream.md` の表 B へ（**原則は試験で固定。自動試験が組めないときは、再現の条件・手動で見た結果・未確認の範囲を残す**）、明示があるものは表 A へリンクだけ。
-   自作の拡張は `pi-guard.md`（自作の拡張の表）、実機でしか確かめられないものは「実機で確認する項目」へ。必要なら `docs/index.md` も
+   自作の拡張は `guard/pi-guard.md`（自作の拡張の表）、実機でしか確かめられないものは「実機で確認する項目」へ。必要なら `docs/index.md` も
 2. **還流する。** 修理で、既知のパターンに無い型を見つけたら、[修理の進め方](references/repair-guide.md)の表へ 1 行足す。
    このスキルの手順が実際と食い違っていたら、その場で直す（`skill-creator` の手順で）
 3. **利用者へ伝える。** `chezmoi apply` が要るか、実機で確かめてほしい点、未確認として残る点
 
 ## 関連
 
-- 方針と記録: [pi-guard.md](../../../docs/spec/pi-guard.md#拡張の方針)、[ADR-0016](../../../docs/adr/0016-pi-extensions-own-first.md)
+- 方針と記録: [pi-guard.md](../../../docs/spec/guard/pi-guard.md#拡張の方針)、[ADR-0016](../../../docs/adr/0016-pi-extensions-own-first.md)
 - 拡張とフルガードの相互作用の実測: [pi-extension-under-harness.md](../../../docs/research/agents/pi-extension-under-harness.md)
-- 判定器・誘導: [pi-decide.md](../../../docs/spec/pi-decide.md)
+- 判定器・誘導: [pi-decide.md](../../../docs/spec/guard/pi-decide.md)
 - 公開拡張の調査記録と、公開 OSS の読み取り調査の作法: [公開拡張の調べ方](references/public-research.md)

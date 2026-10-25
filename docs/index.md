@@ -39,14 +39,14 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | テストの種類と Docker ハーネスの契約を知る | [テストと検証の仕組み](spec/testing.md) |
 | Windows 資産を実機で検証する | [Windows 実機での検証](spec/development.md#windows-実機での検証) |
 | まっさらな Windows への導入を Sandbox で検証する | [Windows Sandbox での検証](spec/development.md#windows-sandbox-でのクリーン導入の検証) |
-| 隔離 GPU サンドボックス（専用 WSL2 + Docker + Tailscale SSH）を作る | [隔離 GPU サンドボックス](spec/wsl-sandbox.md) |
-| 判定器の TS 移植の進み具合と、次にやることを知る | [TS 版への移植](spec/pi-decide.md#ts-版への移植)（決定は [ADR-0017](adr/0017-pi-only-and-ts-judge.md)） |
+| 隔離 GPU サンドボックス（専用 WSL2 + Docker + Tailscale SSH）を作る | [隔離 GPU サンドボックス](spec/sandbox/wsl-sandbox.md) |
+| 判定器の TS 移植の進み具合と、次にやることを知る | [TS 版への移植](spec/guard/pi-decide.md#ts-版への移植)（決定は [ADR-0017](adr/0017-pi-only-and-ts-judge.md)） |
 | 新しい機械での初回導入を Docker で検証する | [Docker での検証](spec/development.md#新しい機械での初回導入を-docker-で検証する) |
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
-| pi のガードの判定器（`decide`）を変える | [判定 API](spec/pi-decide.md) |
-| pi のガード（`pis`）を起動する・変える | [pi のガード](spec/pi-guard.md) |
+| pi のガードの判定器（`decide`）を変える | [判定 API](spec/guard/pi-decide.md) |
+| pi のガード（`pis`）を起動する・変える | [pi のガード](spec/guard/pi-guard.md) |
 | `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
-| コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/agent-command-policy.md) |
+| コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/guard/agent-command-policy.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/agent-config-generation.md#mcp-サーバ) |
 | Bedrock の PC で web 検索を使えるようにする（AgentCore Web Search） | [AgentCore Web Search](spec/agent-config-generation.md#agentcore-web-search) |
 | 調べものスキル（imozuru）を使う・変える・上流を更新する | [imozuru](spec/imozuru.md) |
@@ -60,11 +60,11 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 目的 | 文書 |
 | --- | --- |
 | 何を守り、なぜ Bitwarden / sops なのかを知る | [セキュリティ](spec/security.md) |
-| Claude Code / Copilot CLI の sandbox で読めない・書けない | [sandbox (Claude Code / Copilot CLI)](spec/agent-sandbox.md) |
+| Claude Code / Copilot CLI の sandbox で読めない・書けない | [sandbox (Claude Code / Copilot CLI)](spec/sandbox/agent-sandbox.md) |
 | OpenCode の権限がなぜ他と違うか知る | [OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い) |
 | OpenCode の「常に許可」で保存した承認を確認・リセットする（`oc-utils`） | [保存した承認の確認とリセット](spec/agent-permissions.md#保存した承認の確認とリセット) |
-| OpenCode を境界の内側で起動する仕組み（隔離起動 `ocs`）を知る | [OpenCode 隔離起動のアーキテクチャ](spec/opencode-sandbox.md) |
-| 隔離起動の境界内で読めない・書けない原因を調べる | [境界の組み立ての規則](spec/opencode-sandbox.md#組み立ての規則) |
+| OpenCode を境界の内側で起動する仕組み（隔離起動 `ocs`）を知る | [OpenCode 隔離起動のアーキテクチャ](spec/sandbox/opencode-sandbox.md) |
+| 隔離起動の境界内で読めない・書けない原因を調べる | [境界の組み立ての規則](spec/sandbox/opencode-sandbox.md#組み立ての規則) |
 | sandbox で何ができるか調べる | [sandbox機能の包括調査](research/agents/sandbox-capabilities.md) |
 
 ### 案件と根拠

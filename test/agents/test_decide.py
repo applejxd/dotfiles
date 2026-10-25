@@ -4,7 +4,7 @@
 - 評価順: 共通の禁止 → 役割のツール → 役割の確認と許可 → 既定 → bypass
 - 等価: ``check_bash.py`` の試験に出てくる全コマンドで、hook の deny / ask と同じ判定になる
 
-see docs/spec/pi-decide.md
+see docs/spec/guard/pi-decide.md
 """
 
 from __future__ import annotations
@@ -232,7 +232,7 @@ def _long_sleep_guide():
         ("grep -r 'sleep 30' src", False),
         ("git commit -m 'wait; sleep 30'", False),
         ("ls", False),
-        # 既知の限界 (引用を解釈しない。docs/spec/pi-decide.md): 引用内の `; sleep 30` は当たる
+        # 既知の限界 (引用を解釈しない。docs/spec/guard/pi-decide.md): 引用内の `; sleep 30` は当たる
         ("printf 'a; sleep 30 b'", True),
         # unless はコマンド全体に効くので、git / gh の -m と併記した本物の sleep は見逃す
         ("git commit -m 'ok'; sleep 30", False),
@@ -348,7 +348,7 @@ def test_away_shift_scripts_allow_only_the_listed_subcommands():
         "sleep 600",
     ):
         assert bash(f"{guard} {sub}")["decision"] == "allow", sub
-    # bg_run の中身は bash と同じ判定 (docs/spec/pi-guard.md)。再開の予約はこの形で呼ぶ
+    # bg_run の中身は bash と同じ判定 (docs/spec/guard/pi-guard.md)。再開の予約はこの形で呼ぶ
     assert bash(f"{guard} sleep 600")["decision"] == "allow"
     assert bash(f"python3 {base}/preflight.py --help")["decision"] == "allow"
     # 載せていないサブコマンド、コマンド置換を含む形は許可しない

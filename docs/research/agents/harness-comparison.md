@@ -359,7 +359,7 @@ Copilot 限定の規則は、常時読み込まれる `~/.copilot/copilot-instru
 `git commit` は後者を採用した。commit skill は CLI を判別せず、どの CLI でも
 コミット直前に対象ファイルとメッセージを提示して承認を得る（Copilot 用の
 補強として `~/.copilot/copilot-instructions.md` にも同じ規則を置く）。
-構成は [「未掲載」という 4 つ目の選択肢](../../spec/agent-command-policy.md#未掲載という-4-つ目の選択肢) を参照。
+構成は [「未掲載」という 4 つ目の選択肢](../../spec/guard/agent-command-policy.md#未掲載という-4-つ目の選択肢) を参照。
 バグが修正されても、確認の目的がメッセージのレビューなので明示確認は残す。
 
 ### Copilot の設定キーは Web ドキュメントに載っていない
@@ -456,19 +456,19 @@ calls `task_complete`**」とあり、autopilot 前提のツールだと分か�
 | --- | --- | --- | --- |
 | 1 | **V2 は公開されているが非常に若い**。`@opencode/cli` 2.0.0 が 2026-09-11、2.0.10 が 09-19。**8 日で 11 リリース**（約 1.4 回/日）。`instructions` 配列・セッション共有・**LSP** が「受理するが動かない」 | この頻度で仕様を追うのは、いま払っている維持コストと変わらない。**現時点で唯一の見送り理由** | [V2 仕様](../opencode/v2-capabilities.md)、`npm view @opencode/cli time` |
 | 2 | ~~compaction 系 hook は `experimental.` 接頭辞~~ | **V2 で解消**。`ctx.session.hook("compaction")` から `experimental.` が外れ、`result` を設定すれば要約を自分で書ける | <https://opencode.ai/v2/docs/build/plugins> |
-| 3 | ~~会社は Claude Code のみ許可~~ | **誤り**。指定されているのは **Bedrock 経由であること**だけ。OpenCode は Bedrock も Copilot 契約も公式サポートするため、**1 本化が現実に可能**（下記） | <https://opencode.ai/docs/providers/#amazon-bedrock> |
+| 3 | ~~利用できる CLI が Claude Code のみに制限される環境がある~~ | **誤り**。想定していた制限は **Bedrock 経由であること**だけ。OpenCode は Bedrock も Copilot 契約も公式サポートするため、**1 本化が現実に可能**（下記） | <https://opencode.ai/docs/providers/#amazon-bedrock> |
 | 4 | OpenCode に **OS レベル sandbox が無い**。あるのはアプリ層の `permission` のみ | **決定的ではない**（下記）。ただし [ADR 0007](../../adr/0007-filesystem-guard-boundary.md) の層 0 を使う設計はそのまま持ち込めない | リポジトリ内 `bubblewrap`/`seccomp`/`landlock` 検索 0 件、<https://opencode.ai/docs/permissions/> |
 
 #### 一本化が可能になった（#3 の訂正）
 
-当初は「会社が Claude Code 固定なので、Copilot CLI を OpenCode に替えてもハーネスは
-2 つのまま」と考えていた。これは前提が誤っていた。**業務環境の要件は「Bedrock 経由で
+当初は「利用できる CLI が Claude Code に固定される環境があるので、Copilot CLI を OpenCode に替えてもハーネスは
+2 つのまま」と考えていた。これは前提が誤っていた。**制約のある環境の要件は「Bedrock 経由で
 あること」だけ**で、クライアントの指定は無い。
 
 | 環境 | 接続先 | OpenCode の対応 |
 | --- | --- | --- |
-| 自宅 | GitHub Copilot 契約 | `/connect` で公式サポート（GitHub との正式提携） |
-| 業務 | AWS Bedrock | provider として公式サポート（`AWS_PROFILE` / `aws sso login`） |
+| 個人機 | GitHub Copilot 契約 | `/connect` で公式サポート（GitHub との正式提携） |
+| 制約のある環境 | AWS Bedrock | provider として公式サポート（`AWS_PROFILE` / `aws sso login`） |
 
 つまり **OpenCode 1 本で両環境を賄える**。これは他の候補（Pi / DSH）には無い性質で、
 「ハーネス差の吸収」という作業そのものが消える。見送りの理由が
@@ -504,7 +504,7 @@ sandbox は**目的ではなく代替手段**である。Claude Code の permiss
 → **設定を一切移さずに試せる**ので、評価したくなったら `npm i -g opencode-ai`
 （mise なら `aqua:anomalyco/opencode`）を入れて `/connect` するだけでよい。
 `common.toml` にも `generate.py` にも触れないこと。chezmoi には入れない
-（会社機は Claude Code のみ許可のため）。
+（制約のある環境の機で Claude Code のみ許可される場合があるため）。
 
 ### 痛みの源は harness の数ではない
 

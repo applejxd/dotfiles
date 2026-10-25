@@ -6,7 +6,7 @@
 // 正解データ (test/agents/golden/decide_golden.jsonl) との一致で進捗を測る (test/agents/pi/judge_golden.mjs)。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md
+// see docs/spec/guard/pi-decide.md
 import { realpathSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
 import type { Common } from "./policy.ts";
@@ -21,7 +21,14 @@ import {
 } from "./policy.ts";
 
 export type Decision = "allow" | "ask" | "deny";
-export type Response = { decision: Decision; reason: string; source: string; [extra: string]: unknown };
+export type Response = {
+	decision: Decision;
+	reason: string;
+	source: string;
+	/** "ask" のときだけ真になりうる。bypass もサンドボックスの緩和も効かず、利用者に必ず確認する */
+	mustConfirm?: boolean;
+	[extra: string]: unknown;
+};
 export type Request = {
 	tool: string;
 	input: Record<string, any>;
@@ -297,8 +304,8 @@ function decideInner(request: unknown, common: Common): Response {
 		return response("allow", "サンドボックスの内側の日常の shell (どの規則にも当たらない)", "rule", { sandboxed: true });
 	}
 
-	// 5. bypass は ask だけを allow にする (deny はそのまま)
-	if (req.bypass && result.decision === "ask") return { ...result, decision: "allow", bypassed: true };
+	// 5. bypass は ask だけを allow にする (deny はそのまま)。mustConfirm の ask は bypass でも ask のまま
+	if (req.bypass && result.decision === "ask" && !result.mustConfirm) return { ...result, decision: "allow", bypassed: true };
 	return result;
 }
 

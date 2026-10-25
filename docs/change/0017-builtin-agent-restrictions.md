@@ -29,7 +29,7 @@ question を拒否）は変えない。
 - `bypass` は、一覧に載せた子（`bypass-worker` / `bypass-fleet-worker` / `explore` /
   `review` / `commit`）だけを起動できる。一覧に無い子（今後足す子、作業先のリポジトリが
   定義する子、plugin が足す子）は起動できない
-- 通常の起動と `ocs`（OpenCode を Fence で隔離して起動するコマンド。[仕様](../spec/opencode-sandbox.md)）
+- 通常の起動と `ocs`（OpenCode を Fence で隔離して起動するコマンド。[仕様](../spec/sandbox/opencode-sandbox.md)）
   の両方で同じ制限が効く
 - 全体の秘密ファイルの保護（read / edit の deny）を、どのエージェントでも緩めない
 
@@ -95,7 +95,7 @@ question を拒否）は変えない。
   計画ディレクトリの allow の直後に挟み、生成物は末尾にまとめる）。段 6 で実効規則を確かめる
 - 段 5 を実装した（2026-10-08。未 apply）。`git log` で始まる部分の `--output` を guide 規則で
   止める。Claude / Copilot は OS の sandbox が書き込み先を限るので足さない。範囲と止める例・
-  止めない例は [allow したコマンドの書き込み形](../spec/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)
+  止めない例は [allow したコマンドの書き込み形](../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)
 - 段 1〜4 を apply し、段 6 の確認をした（2026-10-08。段 5 は apply 前）。本物のサービスの
   API で取り出した実効規則を調査用の照合で評価すると、`explore` は shell / edit / 子の起動 /
   question がすべて deny（`.env.example` も）、`plan` は計画ファイル以外の edit が deny、計画
@@ -178,7 +178,7 @@ question を拒否）は変えない。
   未知の名前は拒否。古い `*` の allow が残った設定からでも置き換わる
 - 役割の違う 3 つの集合（`bypass` が起動できる子・確認を自動で許可にする `bypass_agents`・
   `bypass` 以外から起動させない `guarded_subagents`）は一致させず、それぞれの期待値を固定する
-- 通常の起動と `ocs` の生成物、私用と会社用（Bedrock）の生成物の両方で上の条件が成り立つ
+- 通常の起動と `ocs` の生成物、個人用と制約のある環境用（Bedrock）の生成物の両方で上の条件が成り立つ
 - 手書きの定義や V1 形式の `agent.<名前>` が既にある設定と結合しても上の条件が成り立つ
 
 調査用の照合スクリプト（`.tmp/opencode/eval_perms.py`）は公式の照合規則を再実装した
@@ -266,7 +266,7 @@ flowchart LR
 
 | 候補 | 支持する根拠 | 不利な点・反証 | 未検証点 | 扱い | 次の確認 |
 | --- | --- | --- | --- | --- | --- |
-| 1. edit / shell / subagent / question を deny | 確認がほぼ出なくなり、書き込めなくなる。`build` から使っても静かになる | `git log` / `git blame` / `git ls-files` を使えない（履歴の調査は親か作業役に回す）。会社用（Bedrock）は組み込みの websearch を切って MCP の検索を使うので、会社用の `explore` には Web 検索の手段が無い（検索は親に回す） | 本物の設定への適用後の挙動 | 採用 | 段 6 |
+| 1. edit / shell / subagent / question を deny | 確認がほぼ出なくなり、書き込めなくなる。`build` から使っても静かになる | `git log` / `git blame` / `git ls-files` を使えない（履歴の調査は親か作業役に回す）。制約のある環境用（Bedrock）は組み込みの websearch を切って MCP の検索を使うので、その `explore` には Web 検索の手段が無い（検索は親に回す） | 本物の設定への適用後の挙動 | 採用 | 段 6 |
 | 2. `bypass` からだけ `explore` を禁止し、`bypass-worker` に調査させる | 変更が 1 行 | `bypass-worker` は編集でき、確認も出ないので、読むだけの調査には権限が広い。`explore` の書き込みの漏れが残る | — | 見送り | — |
 | 3. `bypass` 用の読み取り専用の子 `bypass-explore` を新設 | `explore` を変えない。残る確認も自動で通る | 自作のエージェントは基底の「全部許可」から始まるので、4 つの deny では組み込みの `explore` と同じにならない（MCP や Code Mode が残る）。権限を別に設計する必要があり、定義を二重に管理する。組み込みの system プロンプトは写せない | — | 保留（段 7 で判断） | — |
 
@@ -317,7 +317,7 @@ flowchart LR
 | `commit` | deny | git の読み取りだけ allow、ほかは deny | **自動で通らない** | 同上。`*--output*` の deny を自前で持つので、段 5 の穴は及ばない |
 
 - MCP ツールと Code Mode（`execute`）は、`review` / `commit` / `bypass-worker` /
-  `bypass-fleet-worker` では基底の allow のまま。今の設定で有効な MCP は会社用の検索
+  `bypass-fleet-worker` では基底の allow のまま。今の設定で有効な MCP は制約のある環境用の検索
   サーバだけなので、今すぐの穴ではない。変更系の MCP を足すときに見直す
 - 修正後の `explore` は、組み込みの拒否が保たれて MCP と Code Mode を使えない
 
@@ -330,7 +330,7 @@ flowchart LR
 | `common.toml.tmpl` の `bypass` | 子の起動規則が全部許可 → 全部禁止して 5 つだけ許可 | 一覧に無い子は確認が自動で通らず、事故が再発する（レビュー） | 未適用 |
 | `common.toml.tmpl` の `/fleet` | 作業役が無い場合の分岐なし → `plan` では計画までで止める。自動で判断させるのは `bypass` の上に限ると明記 | `plan` から作業役を起動できなくなる。利用者の方針で `build` の上の `/fleet` は対象外 | 未適用 |
 | `agent-config-generation.md` | 「`explore` / `review` は読むだけで確認がほぼ出ない」 → 全体の規則が組み込みの制限を上書きすることと、修正後の扱い、許可リスト | 今回の実測で、`explore` は確認を出し、書き込めた | 未適用 |
-| 全体の shell | `git log *` の allow のみ → `git log` の `--output` を guide 規則で止める | `build` で `git log -1 --output=<パス>` が確認なしにファイルを作った（E2）。`*--output*` を全体で deny すると `git commit -m` の本文や正当な `--output` まで止まるので、`git log` で始まる部分だけに当てる guide 規則にする。guide 規則は `bypass` でも止まる | 未適用（実装済み。[仕様](../spec/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)） |
+| 全体の shell | `git log *` の allow のみ → `git log` の `--output` を guide 規則で止める | `build` で `git log -1 --output=<パス>` が確認なしにファイルを作った（E2）。`*--output*` を全体で deny すると `git commit -m` の本文や正当な `--output` まで止まるので、`git log` で始まる部分だけに当てる guide 規則にする。guide 規則は `bypass` でも止まる | 未適用（実装済み。[仕様](../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)） |
 
 ## 実装・検証
 

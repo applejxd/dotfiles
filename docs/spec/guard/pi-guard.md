@@ -2,19 +2,19 @@
 
 pi（earendil-works/pi）の拡張として、ツールの実行を判定器（TypeScript の `judge/`。[`decide`](pi-decide.md)）に通す仕組み。
 OpenCode のガード（permission の生成・guide plugin）の後継で、移行の計画と経緯は
-[CHG-0020](../change/0020-pi-migration.md)、設計の根拠になった試作の観測は
-[pi のハーネスの試作（旧称。現在のフルガード）](../research/agents/pi-harness-spike.md)（E1〜E4）。
+[CHG-0020](../../change/0020-pi-migration.md)、設計の根拠になった試作の観測は
+[pi のハーネスの試作（旧称。現在のフルガード）](../../research/agents/pi-harness-spike.md)（E1〜E4）。
 
 > **位置づけ**: フルガードは `pis` で起動したときだけ効く。**Orca と Zed が呼ぶ素の `pi` は、フルガード無しで動く**
 > （利用者の判断。保護が要る作業は `pis` で起動する。標準でサンドボックスの中）。`pis` は利用者が自分で起動するとき用で、
-> 優先度は低い（[CHG-0020](../change/0020-pi-migration.md)）。素の `pi` には**ガードを付けない**（簡易ガードは廃止。CHG-0023 の段 3f）。
+> 優先度は低い（[CHG-0020](../../change/0020-pi-migration.md)）。素の `pi` には**ガードを付けない**（簡易ガードは廃止。CHG-0023 の段 3f）。
 > 付くのは `git push` の拒否と `git commit` の確認だけ（[commit の確認](#commit-の確認-素の-pi)）。
 
 ## 用語
 
 このリポジトリでは、pi 本体を含む仕組み全体を「ハーネス」と呼ぶ（一般の用法と同じ）。
 pi に足す判定の層、および起動の形を、次のように呼び分ける
-（旧称は過去の案件・調査記録・ADR に残り、それらは書き換えない。[CHG-0023](../change/0023-guard-terminology.md)）。
+（旧称は過去の案件・調査記録・ADR に残り、それらは書き換えない。[CHG-0023](../../change/0023-guard-terminology.md)）。
 
 | 用語 | 指すもの | 旧称 |
 | --- | --- | --- |
@@ -28,9 +28,10 @@ pi に足す判定の層、および起動の形を、次のように呼び分�
 ## 起動
 
 ```bash
-pis                 # 実装役で、サンドボックス (Fence) の中で起動する (標準。Ubuntu / WSL のみ)
-pis --no-sandbox    # サンドボックス無しで起動する (守りはフルガードだけ。起動時に警告、フッターに常時表示)
-pis --bypass        # 確認 (ask) を確認なしで通す。deny と誘導は効く
+pis                 # 実装役で、サンドボックス (Fence) の中で起動する (標準。Ubuntu / WSL のみ)。bypass は既定でオン
+pis --no-bypass     # bypass をオフにして起動する (確認 (ask) を出す)
+pis --no-sandbox    # サンドボックス無しで起動する (守りはフルガードだけ。bypass は既定でオフ。起動時に警告、フッターに常時表示)
+pis --bypass        # 確認 (ask) を確認なしで通す。deny と誘導は効く。**confirm (外部への送信・公開) は bypass でも確認する** (サンドボックス無しでもオンにできる)
 pis --role reader   # 役割を選ぶ ([pi.profiles] の名前。省略すると [pi] default_role)
 pis -c              # pi の引数はそのまま渡る (例: 直前のセッションを続ける)
 ```
@@ -38,7 +39,7 @@ pis -c              # pi の引数はそのまま渡る (例: 直前のセッシ
 - **サンドボックスが標準**。サンドボックスを張れない OS（macOS・Windows ネイティブ）では、`pis` は起動せず `--no-sandbox` を案内する（黙って弱い守りに落とさない）。
   `--boundary` は互換の別名（標準と同じ意味）
 - サンドボックスの検査に落ちたとき・起動場所が危険なときも起動しない。制御ファイル・フルガードの編集、復旧、Orca・Zed は `--no-sandbox` で行う
-- 設計の根拠は [CHG-0023](../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
+- 設計の根拠は [CHG-0023](../../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
 
 `pis --no-sandbox`（`~/.local/bin/pis`）は次の形で pi を起動する（サンドボックスの内側も、同じフラグ `BASE_FLAGS` で起動する）。素の `pi` はフルガード無しで動く。
 
@@ -52,9 +53,9 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
   `~/.agents/skills` は pi が元から読むので重ねない）。`--no-approve` のままなので、拡張・MCP・設定は信頼済みでも読まない。
   サブエージェントは親の `--skill` をそのまま引き継ぐ（判断は起動側の 1 か所）
   - **契約**: スキルを読むのは**指示を読む許可**で、実行の許可ではない。スクリプトの実行は判定器とサンドボックスが決める。
-    `AGENTS.md` と同じ種類の入力として、作業先を使う時点でユーザーが信頼している前提で許容する（脅威モデルは「うっかり防止」。[ADR-0018](../adr/0018-pis-sandbox-default-relax-only-when-proven.md)）。
+    `AGENTS.md` と同じ種類の入力として、作業先を使う時点でユーザーが信頼している前提で許容する（脅威モデルは「うっかり防止」。[ADR-0018](../../adr/0018-pis-sandbox-default-relax-only-when-proven.md)）。
     他人のリポジトリを調べるために開いたときも、そのスキルが読まれる点は許容している
-  - 同名のスキルは**グローバルが勝つ**（`--skill` は後に載る）。作業先のスキルが `commit` などを乗っ取れない（[pi-upstream の表 B の 14](pi-upstream.md#b-明示が無いここに書く)）
+  - 同名のスキルは**グローバルが勝つ**（`--skill` は後に載る）。作業先のスキルが `commit` などを乗っ取れない（[pi-upstream の表 B の 14](../pi-upstream.md#b-明示が無いここに書く)）
   - 起動後に足したスキルは `/reload` で読める（表 B の 15）
   - 素の `pi`（Orca・Zed・Windows）でこのリポジトリ（とその配下）を開くと、`.agents/skills` があるため **project trust の確認が出る**。
     `pis` は `--no-approve` なので出ない。TUI を tmux で有効にする試験は `--no-approve` を付ける（確認画面がキー入力を食う）
@@ -62,29 +63,48 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - `-nbt`（`--no-builtin-tools`）: 組み込みのツールを使わない。ツールはフルガードが登録したものだけになる
 - `-ne`（`--no-extensions`）: 拡張を自動では読まない。審査していない拡張が混ざらないようにするため（方針は[拡張の方針](#拡張の方針)）
   - 明示した `-e` は `-ne` でも読まれる（Orca の拡張がその例）。足した拡張のツールも判定と伏字化を通り、同名ツールの差し替えは pi が止めるが、
-    **拡張の読み込み時の処理は囲えない**（[実測](../research/agents/pi-extension-under-harness.md)）
+    **拡張の読み込み時の処理は囲えない**（[実測](../../research/agents/pi-extension-under-harness.md)）
 - `-e builtin:mcp`: `-ne` で外れる組み込みの MCP 対応だけを戻す。サーバはフルガードが登録する（[MCP](#mcp)）
 - フルガード（`index.ts` と `rules.json`）が無い、または `~/.pi/agent/mcp.json` にサーバがあるときは起動しない
 - 子エージェントの印（`PI_HARNESS_CHILD`）など、外から入った内部の環境変数は外す
 
-> pi の公式仕様に頼る箇所と、実測して頼っている挙動の一覧は [pi の公式仕様と実測の棚卸し](pi-upstream.md)。pi を更新したときは、そこの手順で確かめる。
+> pi の公式仕様に頼る箇所と、実測して頼っている挙動の一覧は [pi の公式仕様と実測の棚卸し](../pi-upstream.md)。pi を更新したときは、そこの手順で確かめる。
 
 ### bypass の切り替え
 
-`pis` の起動後に、利用者が `/bypass [on|off]`（引数なしはトグル）で bypass を切り替えられる。起動時の値は `--bypass`（`PI_HARNESS_BYPASS`）。
+`pis` の起動後に、利用者が `/bypass [on|off]`（引数なしはトグル）で bypass を切り替えられる。起動時の値は `--bypass` / `--no-bypass`（`PI_HARNESS_BYPASS`）で、
+省略すると**サンドボックスでの起動はオン、`--no-sandbox` はオフ**（利用者の決定、境界の内側でこそ確認なしで通す。守りがガードだけのときは確認を残す）。
 
 - **利用者専用**: スラッシュコマンドとして登録し、モデルが呼べるツールは作らない。`bypass` の名前のツールは存在しない
-- **ON は確認を出す**。サンドボックスの内側（証明済み）なら「deny とサンドボックスは有効のまま」、無いときは「deny だけが守り」と文言を変える。確認を出せない（UI が無い）ときは ON にならない。**OFF は確認なし**
-- **表示**: 入力欄の下に `⚡ bypass`（警告色）を出す。`--bypass` で起動したときも出る。サンドボックスの表示（`🔒` / `⚠`）とは別のキー
-- **保持しない**: セッションには残さない。`-c` で再開しても `--bypass` の指定どおりから始まる
+- **ON は確認を出す**。サンドボックスの内側（証明済み）なら「deny とサンドボックスは有効のまま」、無いときは「deny だけが守り」と文言を変える。**確認が要る外部への送信・公開（`gh` の投稿など。[confirm](pi-decide.md#confirm)）は、bypass でも確認する**とも書く。確認を出せない（UI が無い）ときは ON にならない。**OFF は確認なし**
+- **表示**: 入力欄の下に `⚡ bypass (外部送信は確認)`（警告色）を出す。`--bypass` で起動したときも出る。サンドボックスの表示（`🔒` / `⚠`）とは別のキー
+- **保持しない**: セッションには残さない。`-c` で再開しても起動時の指定 (既定を含む) どおりから始まる
 - 効くのは判定器の ask だけで、deny・誘導・秘密の保護は変わらない（[評価順](pi-decide.md)）。切り替え時は、`tool_call` で下した判定の使い回し（`decided`）を捨てる
 - 子エージェントへは、**起動した時点の値**を `inherit_bypass` の子にだけ渡す。動いている子には後からの切り替えが届かない
 - サンドボックスの切り替えはできない（Fence は外側から囲うので、内側から外せない。再起動する）
 - 試験: `test_pi_harness.py` の `test_bypass_command_*`（RPC で `/bypass` を送る。TUI の表示そのものは未確認）
 
+### confirm の確認
+
+判定器が `mustConfirm` の ask を返したとき（[confirm](pi-decide.md#confirm)）、ハーネス（`index.ts`・`confirm-view.ts`）が、bypass でも次の確認を出す。
+
+- **見出し**は「⚠ bypass でも確認が要る操作 (外部への送信・公開)」。**本文**は、コマンドの**全文**（切り詰めない。ANSI エスケープなどの制御文字は
+  `\x1b` のように可視化し、`\n` と `\t` は残す）と、`gh pr|issue` の `--title`/`--body`/`--body-file`/`--base`/`--head`/`-R` などの**参考表示**
+  （「解析結果。実際に実行されるのは上のコマンド」。解釈できない形は省く）
+- **`--body-file <path>`**: ハーネスがそのファイルを読んで本文に出す（32 KiB まで。`read` の判定が allow のときだけ）。読めない・`-`（標準入力）・上限超えは、
+  確認を出さず拒否。承認後にファイルが差し替えられないよう、`execute()` で再読みして内容が違えば拒否する。タイトルと本文の合計が 8,000 字を超えるときも、
+  確認を出さず拒否（短くするか、利用者が自分で実行する）
+- **無反応は deny**: `[pi.confirm] timeout_seconds`（既定 300）を、TUI でも `confirm` の `timeout` に渡す。期限は確認画面を出してから数える。
+  結果は、承認・拒否・時間切れ・取消・UI 無し・abort を区別して、拒否の理由に反映する（`not approved:` の接頭辞は保つ。子の `blocked` の分類のため）。
+  時間切れは「再試行せず、利用者の新しい指示を待つ」、拒否は「同じ操作をくり返さない」
+- **UI が無い実行は deny**: print モードと子（RPC。親が UI 要求を取り消す）は、確認できないので拒否する（`inherit_bypass` の子でも通らない）。`bg_run` の `--body-file` は
+  `execute()` で再読みできないので、一律に拒否する
+- **`/bypass`**: description・ON の確認の本文・フッター（`⚡ bypass (外部送信は確認)`）に、「確認が要る外部への送信・公開は、bypass でも確認する」を書く
+- **未確認**: 実際の TUI での表示（残り秒数、長い本文のスクロール）は、実機で見ていない（試験は RPC と print）。確認の誤入力の防止（表示直後の確定キーの無視）は未実装
+
 ## 拡張の方針
 
-**拡張は自作を基本とする**（[ADR-0016](../adr/0016-pi-extensions-own-first.md)）。外部の拡張は、**どうしても必要で、自前実装が困難で、振る舞いを十分に確認したもの**だけを、
+**拡張は自作を基本とする**（[ADR-0016](../../adr/0016-pi-extensions-own-first.md)）。外部の拡張は、**どうしても必要で、自前実装が困難で、振る舞いを十分に確認したもの**だけを、
 例外として導入する。手順は ADR-0016 の「例外の手順」（審査・版の固定・偽のモデルでの試験・配備・記録）。
 
 - `pis` は `-ne` を維持し、足す拡張は必ず `-e <パス>` で明示する（自動発見はしない）
@@ -100,7 +120,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 | 常駐するコンテキスト | skill の名前と説明だけ。本文は必要時に読む | `codemode`（既定）はツール定義を宣言せず、サーバ名の 1 行。`direct` ならツール定義が常駐 | ツール定義が常駐（動的な有効化もできるが、ツール集合が変わる） |
 | キャッシュへの影響（見込み。実測は未） | ツール集合が変わらないので小さい | `codemode` は小さい。接続後に概要が追記されることがある | ツールを足すと先頭側の固定部分が変わる（最小のスキーマで入力 +36 トークン、偽のモデルの見積もり） |
 | 使える CLI | `bash` と skill を持つものすべて（pi、Claude Code、OpenCode、Copilot） | MCP を持つもの（登録の経路は CLI ごとに違う） | **pi 専用**（TypeScript、pi の API に依存） |
-| フルガードとの整合 | `guarded_bash` の判定と伏字化を通る。許可の規則をサブコマンドで絞る | `mcp__*` として判定（既定は確認）、結果は `tool_result` で伏字化。`mcp.json` は `pis` と共存できない | 判定と伏字化は通る（[E5](../research/agents/pi-extension-under-harness.md)）。読み込み時のコードは囲えない |
+| フルガードとの整合 | `guarded_bash` の判定と伏字化を通る。許可の規則をサブコマンドで絞る | `mcp__*` として判定（既定は確認）、結果は `tool_result` で伏字化。`mcp.json` は `pis` と共存できない | 判定と伏字化は通る（[E5](../../research/agents/pi-extension-under-harness.md)）。読み込み時のコードは囲えない |
 | 機能の深さ | 呼び出しと標準出力まで。UI・イベント・状態は持てない | 型付きのツール、構造化された結果、**常駐サーバでの状態保持** | **pi の内部に介入できる**（イベントのフック、スラッシュコマンド、UI、システムプロンプト、子エージェントの起動、圧縮、独自のプロバイダ） |
 | 試験のしやすさ | 手で実行でき、単体テストも簡単 | 中（プロトコルの層が増える） | 偽のモデルが要る（フルガードの試験の仕組みはある） |
 | 開発・保守のコスト | 最小 | 中（サーバ・登録・配布） | 中〜大（pi の版に追従する） |
@@ -128,10 +148,10 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 | `todo` | `todo` ツールと `/todos`。**リストは 1 つで、勝手には消さない**（同じ目標のための別目標は同じリストへ足していく）。ツールの操作は `list`（`all` で完了・中止も）/ `add`（`text` か `texts` で複数）/ `set`（`id` と `status`: `pending`・`in_progress`・`blocked`・`done`・`cancelled`。何度呼んでも同じ結果で、旧 `toggle` の取り違えが起きない）/ `update`（`text` か `note`）/ `remove` / `clear` / **`batch`**（`ops` に操作の配列。順に適用し、1 件でも失敗したら全体を適用せず、失敗した `ops[i]` を返す）/ **`replace`**（`items` でリスト全体を置き換える。`id` を付けた項目は引き継ぎ、載せない既存の項目は消える。Claude Code の `TodoWrite` 相当）。項目には**メモ `note`**（完了の根拠・引き継ぎ。80 字まで表示）を付けられる。変更の結果としてモデルへ返すのは、**変更の要約と、未完了の先頭 3 件・件数だけ**（全件は `list`）。`list` が返す一覧は未完了だけで、完了・中止は件数にたたむ。`in_progress` は同時に 1 件までが指示で、超えると結果に注意を出すが止めない。**`blocked`（`[~]`）は、ジョブ・子・利用者の返答など外部の完了待ち**で、未完了には数えるが、`in_progress` の同時 1 件の数と終了時のリマインドの対象には入れない。note なしで `blocked` にすると、待ち先を書く旨の注意を返す（拒否はしない）。**`in_progress` が残ったまま応答を終えようとしたとき、`agent_before_settle` で確認を促すメッセージ（`custom_message`）を足して続行を 1 回だけ要求する**（利用者の発言ごとに 1 回。中断・エラーで終わったときは出さない。切るには環境変数 `PI_TODO_NO_REMINDER=1`）。子の完了は `guarded_task` の `todo` で項目へ反映できる。`/todos` は全件を表示し、`/todos tidy`（完了・中止を片付ける）・`/todos clear` は**利用者専用**（モデルは呼べない）。状態はツール結果の `details` と、利用者の操作の custom エントリ（`todo-state`）に持つので、分岐・再開・圧縮のあとも、その時点に戻る（旧形式 `{ id, text, done }` も読む）。フッターに `📋 完了/全体 ▶ 作業中の項目`（全部完了なら `✅`）を出す |
 | `plan` | `/plan` で切り替え。計画中は **`edit` / `write` / `bash` / MCP などのツールを外し**、`read` / `grep` / `find` / `ls` / `todo` / `task` だけを残す（`guarded_` 付きも同じ）。計画の指示を毎ターン注入し、番号付きの手順で終わったら「実行する / 続ける / 直す」を尋ねる。「実行する」でツールを戻し、実行を依頼する |
 | `btw` | `/btw [--plain] <質問>`。いまの会話（user / assistant の本文とツール呼び出しの要約）を文脈に答える。**既定は、読み取り専用の子（`explore`）が、必要ならファイルを読んで確かめてから答える**（会話は新しい側 2 万文字まで。子の起動は、フルガードか Windows の `subagents` 拡張が `globalThis.__piAskReadChild` に置く入口を使い、上限は 3 分）。`--plain` は、ツールなしで**現在のモデル**が 1 回だけ答える（速い。会話は新しい側 6 万文字まで、上限 2 分）。**子が失敗したときは、理由を表示して終わる**（調べていない推測を答えとして出さない。ファイルを見ずに答えさせるなら `--plain`）。子の入口が無いときだけ `--plain` と同じ動きになる。答えは、端末の高さに合わせて**本文の窓だけを描くスクロールできる表示**に出し（↑↓ / j k で 1 行、Space / b で 1 ページ、g / G で先頭・末尾、Enter / Esc / q で閉じる。位置と閉じる案内は最下行）、会話履歴にもモデルの文脈にも残さない。返信はどの経路でも **2 万文字**で切り、「省略あり」を末尾に書く。子と `--plain` の指示は「画面 1 枚（約 20 行）に収める」。エージェントの応答中でも使える |
-| `ask` | `ask` ツール。利用者へ選択肢つきの質問を**最大 4 問まとめて**尋ねる（`questions`: `question`・`header`・`options` 2む4 個（`label` と `description`）・`multi`）。画面は、**TUI では自前のパネル**（`ctx.ui.custom()`。問が複数のときは問ごとのタブと最後の「確認」タブ（Tab / Shift+Tab で移動。回答は保持して戻って直せる。確認タブで未回答を警告し、Enter で送信。Esc は全体の中止）。問が 1 つだけならタブも確認も無く、答えたらすぐ送る。選択肢と説明を縦に並べ、カーソルは ❯。複数選択は Space でカーソルを動かさずに切り替え、Enter で確定（チェックしたまま Tab で離れても回答として扱う）。`Type something.` はその行の下でその場で書き、Enter で確定（複数選択でもこの Enter で、チェックと自由記述をまとめて確定する）・Esc で一覧へ戻る。数字キーで行へ移動。IME のためフォーカスをエディタへ渡す）、**RPC（Orca・Zed）では 1 問ずつの `select` / `input`**（選択行は「1. ラベル」の 1 行だけで、説明は質問文の下に番号つきの一覧として出す。表示幅 64 カラムで自前に折り返して字下げし、選択肢の間に空行を入れる。RPC の複数選択は、チェックを切り替えるたびにカーソルが 1 個目に戻る）。長い行の折り返しで境界とカーソルが分からなくなったため）（TUI と RPC で共通。Orca と Zed でも動く）。全問に自由記述の行 `Type something.` を自動で足す（空の入力は記録せず選択肢へ戻る）。`Other` / `Type something.` / `Next` は選択肢のラベルに使えない（`reserved_label`。ほかに `no_questions`・`too_many_questions`・`duplicate_question`・`empty_options`・`duplicate_option_label`・`no_ui`）。**推奨の検査**: 各質問は推奨の選択肢をちょうど 1 つ（multi は 1 つ以上）持ち、先頭に置く。印は label の末尾の `(推奨)` か `(recommended)`（直前に空白を置く。全角括弧・大文字小文字可。label に残り、答えもそのまま返す）。違反は `missing_recommended`・`multiple_recommended`（multi 以外で 2 つ以上）・`recommended_not_first` で、違反した質問を全部 1 つのエラーにまとめ、直し方を添えて返す（形の検査の後。label は 60 字までなので短くする）。試験は `test_pi_harness.py` に足したが未実行。戻りは `answers`・`unanswered`（0 始まりの番号）・`cancelled`。中断や時間切れのところから先は未回答として返る。**1 回の画面の待ち上限は 5 分**（試験用に `PI_ASK_TIMEOUT_MS`）。**UI が無い実行（print・子エージェント）では、`before_agent_start` でツールを外す**。`plan` 中も残る。設計は公開拡張（`rpiv-ask-user-question`・`pi-ask-user`）の README を参考にした（[調査 P3・P4](../research/agents/pi-public-extensions-survey.md)）。タブ画面・プレビュー・メモは作らない（`ctx.ui.custom()` が必要で、RPC では出せない） |
-| `notify` | **利用者の入力を待つとき、端末へ BEL（`\x07`）を 1 回送る**。送るのは、作業が完全に終わったとき（`agent_settled`。`agent_end` ではない）、フルガードの確認（`confirmInOrder`）を出す直前、`ask` の質問を出す直前。Zed の Terminal Threads は、フォーカス外の端末の BEL を通知にする（[Terminal Threads](https://zed.dev/docs/ai/terminal-threads)、2026-10-21）。**TUI（`ctx.mode === "tui"`）のときだけ書く**。RPC では stdout が JSON 行の通信なので汚さない。試験は `test_the_bell_is_written_only_in_the_tui_not_in_print_mode`（鳴らさないことだけ。鳴ること自体は未確認）。ACP 経由の Zed（pi-acp）には効かない（[Z1・Z2](../research/agents/zed-orca-pis-integration.md)） |
-| `activity` | 動いている子エージェント（`task` / `guarded_task`）とバックグラウンドジョブの数を、入力欄の下（フッター）に `🤖 2 subagents / ⚙️ 1 jobs` の形で常時出す（0 件の側は出さず、どちらも 0 なら消す）。1 秒ごとに数え直し、表示が変わったときだけ `setStatus` する。子は起動する側（`subagents` とフルガード）が `globalThis.__piChildren` に登録し、ジョブは `bg_run` が `globalThis.__piJobs` に登録する。ツールは `bg_run`（コマンドを切り離して起動し、ID を返す（ログのパスは見せない。`read_deny_globs` で読めないので、教えるとモデルが行き止まる。[実験 B1 の F4](../research/agents/pi-bg-experiments.md)））・`bg_log`（状態とログの末尾と総行数。ID なしで一覧）・`bg_kill`（プロセスの木ごと止める）。pi の終了時には動いているジョブも止める。**ジョブが終わると `pi.sendMessage`（`triggerTurn: true`、`deliverAs: "followUp"`）で LLM へ終了を知らせる**（ID・exit・コマンド・ログ末尾 20 行）。 **2.5 秒の間に終わった分は 1 通にまとめる**（2 件以上は各ログの末尾 5 行。同時に終わる 12 件で 12 ターンになっていた。[B1 の F3](../research/agents/pi-bg-experiments.md)）。 **終了後に `bg_log` で読んだジョブは通知から外し、全部が読み済みならターンを起こさない**（画面の通知だけ。B1 の F2）。 親が作業中は届けず、「まとめる窓が閉じた」と「`agent_settled`（`agent_end` ではない。再試行・圧縮・続行がその後に続くことがある）」の両方を満たしてから、読み済みを除いて届ける。アイドルなら、窓が閉じたときにすぐターンを起こす。 試験は `test_jobs_that_finish_together_wake_the_agent_once` / `test_a_job_read_with_bg_log_after_it_finished_does_not_wake_the_agent` / `test_a_job_not_read_still_wakes_the_agent_after_the_turn`（外すと落ちることを確認）。 ないとジョブ待ちで止まったターンが再開しない。`bg_kill` で止めたときと終了時の停止では送らない。一覧のコマンドは作らない（数だけ）。旧 `/agents` はこれに置き換えた |
-| `delegate-nudge` | 親が委譲を忘れない契機の第一歩として、**通知なしで統計だけを取る**試作（N1a）。利用者の発言ごとに、読み取り系ツール（`guarded_read` / `guarded_grep` / `guarded_find` / `guarded_ls`、素の pi の `read` / `grep` / `find` / `ls`）の呼び出し回数・結果の行数と文字数・エラー数・ツール名ごとの回数、`guarded_task` の新規の子の起動数（agent ごと。status・steer・追加依頼は数えない）、それ以外のツール呼び出しの数を、`appendEntry("delegate-stats", …)` でセッションに 1 件残す（モデルの文脈には入らない）。**読んだ内容・パス・引数は入れない**。通知もツール結果の変更もしない（ハンドラは常に `undefined` を返し、例外は黙って無視する）。**子（`PI_HARNESS_CHILD=1`）では動かず**、`PI_DELEGATE_NUDGE=0` で止められる。`/delegate-stats` で直近 10 発言の要約と合計を出す。案件は [CHG-0031](../change/0031-delegate-nudge.md)。**`own_extensions` には未登録**で、試験（`test_pi_harness_extensions.py` の `test_delegate_nudge_*`）は未実行 |
+| `ask` | `ask` ツール。利用者へ選択肢つきの質問を**最大 4 問まとめて**尋ねる（`questions`: `question`・`header`・`options` 2む4 個（`label` と `description`）・`multi`）。画面は、**TUI では自前のパネル**（`ctx.ui.custom()`。問が複数のときは問ごとのタブと最後の「確認」タブ（Tab / Shift+Tab で移動。回答は保持して戻って直せる。確認タブで未回答を警告し、Enter で送信。Esc は全体の中止）。問が 1 つだけならタブも確認も無く、答えたらすぐ送る。選択肢と説明を縦に並べ、カーソルは ❯。複数選択は Space でカーソルを動かさずに切り替え、Enter で確定（チェックしたまま Tab で離れても回答として扱う）。`Type something.` はその行の下でその場で書き、Enter で確定（複数選択でもこの Enter で、チェックと自由記述をまとめて確定する）・Esc で一覧へ戻る。数字キーで行へ移動。IME のためフォーカスをエディタへ渡す）、**RPC（Orca・Zed）では 1 問ずつの `select` / `input`**（選択行は「1. ラベル」の 1 行だけで、説明は質問文の下に番号つきの一覧として出す。表示幅 64 カラムで自前に折り返して字下げし、選択肢の間に空行を入れる。RPC の複数選択は、チェックを切り替えるたびにカーソルが 1 個目に戻る）。長い行の折り返しで境界とカーソルが分からなくなったため）（TUI と RPC で共通。Orca と Zed でも動く）。全問に自由記述の行 `Type something.` を自動で足す（空の入力は記録せず選択肢へ戻る）。`Other` / `Type something.` / `Next` は選択肢のラベルに使えない（`reserved_label`。ほかに `no_questions`・`too_many_questions`・`duplicate_question`・`empty_options`・`duplicate_option_label`・`no_ui`）。**推奨の検査**: 各質問は推奨の選択肢をちょうど 1 つ（multi は 1 つ以上）持ち、先頭に置く。印は label の末尾の `(推奨)` か `(recommended)`（直前に空白を置く。全角括弧・大文字小文字可。label に残り、答えもそのまま返す）。違反は `missing_recommended`・`multiple_recommended`（multi 以外で 2 つ以上）・`recommended_not_first` で、違反した質問を全部 1 つのエラーにまとめ、直し方を添えて返す（形の検査の後。label は 60 字までなので短くする）。試験は `test_pi_harness.py` に足したが未実行。戻りは `answers`・`unanswered`（0 始まりの番号）・`cancelled`。中断や時間切れのところから先は未回答として返る。**1 回の画面の待ち上限は 5 分**（試験用に `PI_ASK_TIMEOUT_MS`）。**UI が無い実行（print・子エージェント）では、`before_agent_start` でツールを外す**。`plan` 中も残る。設計は公開拡張（`rpiv-ask-user-question`・`pi-ask-user`）の README を参考にした（[調査 P3・P4](../../research/agents/pi-public-extensions-survey.md)）。タブ画面・プレビュー・メモは作らない（`ctx.ui.custom()` が必要で、RPC では出せない） |
+| `notify` | **利用者の入力を待つとき、端末へ BEL（`\x07`）を 1 回送る**。送るのは、作業が完全に終わったとき（`agent_settled`。`agent_end` ではない）、フルガードの確認（`confirmInOrder`）を出す直前、`ask` の質問を出す直前。Zed の Terminal Threads は、フォーカス外の端末の BEL を通知にする（[Terminal Threads](https://zed.dev/docs/ai/terminal-threads)、2026-10-21）。**TUI（`ctx.mode === "tui"`）のときだけ書く**。RPC では stdout が JSON 行の通信なので汚さない。試験は `test_the_bell_is_written_only_in_the_tui_not_in_print_mode`（鳴らさないことだけ。鳴ること自体は未確認）。ACP 経由の Zed（pi-acp）には効かない（[Z1・Z2](../../research/agents/zed-orca-pis-integration.md)） |
+| `activity` | 動いている子エージェント（`task` / `guarded_task`）とバックグラウンドジョブの数を、入力欄の下（フッター）に `🤖 2 subagents / ⚙️ 1 jobs` の形で常時出す（0 件の側は出さず、どちらも 0 なら消す）。1 秒ごとに数え直し、表示が変わったときだけ `setStatus` する。子は起動する側（`subagents` とフルガード）が `globalThis.__piChildren` に登録し、ジョブは `bg_run` が `globalThis.__piJobs` に登録する。ツールは `bg_run`（コマンドを切り離して起動し、ID を返す（ログのパスは見せない。`read_deny_globs` で読めないので、教えるとモデルが行き止まる。[実験 B1 の F4](../../research/agents/pi-bg-experiments.md)））・`bg_log`（状態とログの末尾と総行数。ID なしで一覧）・`bg_kill`（プロセスの木ごと止める）。pi の終了時には動いているジョブも止める。**ジョブが終わると `pi.sendMessage`（`triggerTurn: true`、`deliverAs: "followUp"`）で LLM へ終了を知らせる**（ID・exit・コマンド・ログ末尾 20 行）。 **2.5 秒の間に終わった分は 1 通にまとめる**（2 件以上は各ログの末尾 5 行。同時に終わる 12 件で 12 ターンになっていた。[B1 の F3](../../research/agents/pi-bg-experiments.md)）。 **終了後に `bg_log` で読んだジョブは通知から外し、全部が読み済みならターンを起こさない**（画面の通知だけ。B1 の F2）。 親が作業中は届けず、「まとめる窓が閉じた」と「`agent_settled`（`agent_end` ではない。再試行・圧縮・続行がその後に続くことがある）」の両方を満たしてから、読み済みを除いて届ける。アイドルなら、窓が閉じたときにすぐターンを起こす。 試験は `test_jobs_that_finish_together_wake_the_agent_once` / `test_a_job_read_with_bg_log_after_it_finished_does_not_wake_the_agent` / `test_a_job_not_read_still_wakes_the_agent_after_the_turn`（外すと落ちることを確認）。 ないとジョブ待ちで止まったターンが再開しない。`bg_kill` で止めたときと終了時の停止では送らない。一覧のコマンドは作らない（数だけ）。旧 `/agents` はこれに置き換えた |
+| `delegate-nudge` | 親が委譲を忘れない契機の第一歩として、**通知なしで統計だけを取る**試作（N1a）。利用者の発言ごとに、読み取り系ツール（`guarded_read` / `guarded_grep` / `guarded_find` / `guarded_ls`、素の pi の `read` / `grep` / `find` / `ls`）の呼び出し回数・結果の行数と文字数・エラー数・ツール名ごとの回数、`guarded_task` の新規の子の起動数（agent ごと。status・steer・追加依頼は数えない）、それ以外のツール呼び出しの数を、`appendEntry("delegate-stats", …)` でセッションに 1 件残す（モデルの文脈には入らない）。**読んだ内容・パス・引数は入れない**。通知もツール結果の変更もしない（ハンドラは常に `undefined` を返し、例外は黙って無視する）。**子（`PI_HARNESS_CHILD=1`）では動かず**、`PI_DELEGATE_NUDGE=0` で止められる。`/delegate-stats` で直近 10 発言の要約と合計を出す。案件は [CHG-0031](../../change/0031-delegate-nudge.md)。**`own_extensions` には未登録**で、試験（`test_pi_harness_extensions.py` の `test_delegate_nudge_*`）は未実行 |
 
 - **モデルに存在を知らせる**: `todo` / `bg_run` / `bg_log` / `bg_kill` にも `promptSnippet`（と `todo` / `bg_run` の `promptGuidelines`）を付けた。無いと「Available tools」に載らず、モデルが使い忘れる（[子エージェント](#子エージェント)と同じ対処）。試験は `test_todo_and_activity_tools_are_listed_in_the_system_prompt`
 - `pis` は `-ne` なので、`-e` で明示して足す。素の `pi` は自動発見で読む
@@ -139,12 +159,36 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - フルガードの役割は、`implementer` の `tools` に `todo` を足してある（判定器は `todo` を allow）。`plan` はツールを登録しないので判定に関わらない
 - 計画中は shell が無いので、`git log` などの調査もできない。必要なら `/plan` を終えて調べる
 - `pis --boundary` も同じ一覧を `-e` で足す。読み取りは拡張ごとに開ける（`~/.pi/agent/extensions/<名前>`。一覧に無い `orca-agent-status` などは開けない）。実機で `todo`・`plan`・`btw` の認識を確認した
-- `activity` の実測（Linux、偽の pi API でツールを直接動かした）: `bg_run` で ID を返し、`🤖 2 subagents / ⚙️ 1 jobs` が出る。`bg_log` が出力の末尾を返し、`bg_kill` でジョブが消えて通知が出て、子もジョブも 0 になると表示が消える。**未確認**: 実機の TUI でのフッター表示、フルガード（`pis`）の下での `bg_run` の確認（拡張のツールなので既定で確認になる想定だが未実測）、Windows の `taskkill` での停止、終了通知が実機の TUI で見えること（RPC の実モデルでは、通知でターンが再開することを確認済み。[B1](../research/agents/pi-bg-experiments.md)）
+- `activity` の実測（Linux、偽の pi API でツールを直接動かした）: `bg_run` で ID を返し、`🤖 2 subagents / ⚙️ 1 jobs` が出る。`bg_log` が出力の末尾を返し、`bg_kill` でジョブが消えて通知が出て、子もジョブも 0 になると表示が消える。**未確認**: 実機の TUI でのフッター表示、フルガード（`pis`）の下での `bg_run` の確認（拡張のツールなので既定で確認になる想定だが未実測）、Windows の `taskkill` での停止、終了通知が実機の TUI で見えること（RPC の実モデルでは、通知でターンが再開することを確認済み。[B1](../../research/agents/pi-bg-experiments.md)）
 - **フルガード（`pis`）の下では、`bg_run` のコマンドを bash と同じ判定（`decide`）に通す**。deny は止め（bypass でも外れない）、ask は確認画面を出し（画面に「バックグラウンドで実行」と出る）、役割の `shell_deny` / `shell_allow` と誘導も効く。役割が `bash` を持たなければ `bg_run` も使えない。`bg_log` / `bg_kill` はジョブの確認と停止だけなので、`bash` を持つ役割には allow。素の `pi` では、Unix ではガードが同じ判定を掛ける（Windows は判定なしで動く）
 - `btw` は、`--plain` では `ctx.modelRegistry.complete()` を 1 回呼び、既定では `explore` の子を 1 つ起動する。どちらもトークンを消費する（セッションの合計には入らない）
 - **子の入口 `__piAskReadChild`**: 利用者のコマンドが起こす操作なので、`/agent` と同じく判定器は通さない。そのかわり、起動できる役割を**読み取り専用（`reader` / `explorer`）に限る**（`worker` / `commit` は拒否）。答えには伏字化を掛ける（Windows の入口には伏字化も読み取り禁止も無いので、`btw` は開始の通知に「ガードなし」を出す。子の出力の貯め込みは 8 MB で止める）。試験は `test_ask_read_child_entry_runs_only_read_only_agents`・`test_btw_asks_an_explore_child_by_default_and_plain_does_not`、表示の部品（上限・窓・スクロールのキー）は `test_btw_view.py`。**実測**（2026-10-21、tmux の pi 1.3.0）: 窓なし（全文を Container に入れる）だと、120 行の返信で画面に収まる約 28 行だけが表示され、末尾と閉じる案内が見えなかった。窓を入れたあとは 130 行を「1-32 / 130 行」で表示し、`End` / `G` で末尾に届く。**PgUp / PgDn はこの端末では効かなかった**（pi 本体が先に取ると見られる。理由は未確認）ので、Space / b を当てた。**未確認**: Windows の素の `pi` での子の起動、全画面モード、端末幅の変更時の再描画
 - 実測: `btw` は print モードで、直前の会話の内容（合言葉）を踏まえて答え、セッションファイルの行数が増えないことを確認した（オーバーレイ表示は TUI でしか出ず未確認）。Git Bash では `/btw` が `C:/Program Files/Git/btw` に変換されるので、試すときは `MSYS_NO_PATHCONV=1`
 - 実測: `todo` は、書き換え前の版（`toggle` 方式）で実際のモデル（`claude-sonnet-5.5`）の add / toggle / list が通った。書き換え後の版は偽のモデルでの試験（`test_pi_harness.py` の `test_todo_*`・`test_todos_*`。圧縮と再開をまたぐ復元、旧形式の読み込み、利用者の操作の永続化、フッター）までで、**実際のモデルが `set` / `texts` / `cancelled` を使い分けるかと、TUI の表示は未確認**。`plan` は読み込みまで（切り替えと確認画面は TUI でしか動かず、未確認）
+
+### ツールの拡張（`guarded_read` / `guarded_write` / `guarded_bash` の使いやすさ）
+
+誘導の deny（[誘導](pi-decide.md#誘導)）が多発する原因は、代替が同等でないことと、ツール定義の説明が弱いこと
+（[CHG-0038](../../change/0038-guard-reclassification.md) 段 G8。他の製品の調査は
+[記録](../../research/agents/tool-design-survey.md)）。ハーネスは、pi の組み込みの定義を `...def` で展開して
+`guarded_*` として登録し、`tools-ext.ts` で次を足す（pi 本体を import しない純関数。node で単体試験できる）。
+
+- **説明の上書き**: `guarded_bash` は「実行（ビルド・テスト・git・`grep`/`find`/`ls`）に使い、ファイルの内容を読む・作る・変える用途に
+  使わない」と、具体的な言い換え（`cat`/`head`/`tail`/`sed -n` → `guarded_read`、`echo >`・`cat > f <<EOF` → `guarded_write`、
+  `sed`/`awk` → `guarded_edit`）、複数ファイルは並列の `guarded_read`、長い待ちは `bg_run` を書く。組み込みの snippet にあった、
+  ファイル操作の `ls, grep, find` を勧める文は外した。`guarded_read`・`guarded_write`・`guarded_edit` にも、使い分けとトークン効率を書く
+- **`guarded_read` の `tail`**: 末尾から N 行（`offset` と同時に指定するとエラー、`limit` は無視、32 MiB 超は不可）。総行数を数えて
+  `offset`・`limit` に直し、組み込みの `read` を呼ぶ。判定は `path` に従来どおり掛かる
+- **`guarded_write` の `append`**: 既存の末尾へ、`content` をそのまま連結（改行は自動で足さない）。組み込みの write の mutation queue・
+  親ディレクトリの作成・整形・判定（`edit` の deny・ask・bypass）はそのまま
+- **読みの失敗のヒント**: offset が範囲外のとき有効な範囲、存在しないとき同じディレクトリの似た名前（最大 3 件。`read_deny_globs` に
+  当たるもの・`decide` が allow でないものは出さない）
+- **拒否メッセージの言い換え**: 誘導の deny（読み取り・書き込みの 4 規則）の理由の末尾に、該当の断片と具体的な言い換え
+  （`sed -n 'A,Bp' f` → `guarded_read {path, offset, limit}`、`tail -n N f` → `{tail: N}`、`cat >> f <<EOF` → `guarded_write {..., append: true}` など）
+  を機械的に足す。パイプ・リダイレクト・`$`・グロブ・引用の閉じ忘れを含む断片、パースできない形には付けない。**deny の判定は変えない**
+  （再試行のコストを下げる変更）
+- **しないこと**: 複数ファイルの一括読み（並列の呼び出しで足りる）、`stdin` の引数（pi の bash は `command` と `timeout` しか受けない）、
+  透過実行、`executable`
 
 ## Windows
 
@@ -152,7 +196,7 @@ Windows（PowerShell）では**素の `pi` だけ**を使う。フルガード�
 
 | 配るもの | 方法 |
 | --- | --- |
-| pi 本体 | mise の `aqua:earendil-works/pi`（バイナリ版。node 不要）。`313_mise` が入れ、`314_agent_cli.ps1` が旧 npm 版を外して起動を確かめる（[Windows の pi](structure.md#windows-の-pi)）。公式の `install.ps1` は `Read-Host` で確認を聞き、apply では答えられないので使わない |
+| pi 本体 | mise の `aqua:earendil-works/pi`（バイナリ版。node 不要）。`313_mise` が入れ、`314_agent_cli.ps1` が旧 npm 版を外して起動を確かめる（[Windows の pi](../structure.md#windows-の-pi)）。公式の `install.ps1` は `Read-Host` で確認を聞き、apply では答えられないので使わない |
 | `~/.pi/agent/settings.json`・`keybindings.json`・`AGENTS.md` | Unix と同じ（`.chezmoiignore` で戻している） |
 | `~/.config/pi/commit-confirm` | Unix と同じ（[commit の確認](#commit-の確認-素の-pi)） |
 | `/fleet`（`prompts/`） | **配らない**。`guarded_task` はフルガードが登録するので、素の `pi` では働かない |
@@ -162,7 +206,7 @@ Windows（PowerShell）では**素の `pi` だけ**を使う。フルガード�
   PowerShell をモデルに使わせるなら `defaultTools` を変える（[Run Pi on Windows](https://pi.dev/docs/latest/windows)）。
   今は管理していない
 - 素の `pi` なので、権限・秘密の保護は効かない（Orca・Zed と同じ。[位置づけ](#起動)）。`git commit` の確認だけは補助の拡張が出す
-- **Windows ネイティブの `pi` は、信頼できる環境でだけ開く（ガードは付けない）。** 守りが要る作業は WSL の `pis` で行う。フルガードの Windows 移植は見送り（[調査記録](../research/agents/pi-isolation-options.md)）
+- **Windows ネイティブの `pi` は、信頼できる環境でだけ開く（ガードは付けない）。** 守りが要る作業は WSL の `pis` で行う。フルガードの Windows 移植は見送り（[調査記録](../../research/agents/pi-isolation-options.md)）
 - Windows 実機では未検証（WSL からは `chezmoi` の描画と静的な試験だけ）
 
 ### Windows の子エージェント
@@ -176,7 +220,7 @@ Windows（PowerShell）では**素の `pi` だけ**を使う。フルガード�
 
 ### 二つの task を別物にしている理由
 
-Windows の `task`（`subagents` 拡張。120 行）とフルガードの `guarded_task`（`registerTask` と `children.ts`。約 1,200 行）は、統合せず別物のままにしている（調査と判断は [調査 P3](../research/agents/pi-public-extensions-survey.md)、採点の訂正）。
+Windows の `task`（`subagents` 拡張。120 行）とフルガードの `guarded_task`（`registerTask` と `children.ts`。約 1,200 行）は、統合せず別物のままにしている（調査と判断は [調査 P3](../../research/agents/pi-public-extensions-survey.md)、採点の訂正）。
 
 - **重なるのは約 50 行**（答えの取り出し・プロセスの起動と停止・役割一覧の整形・`promptSnippet`）。子の一覧 `globalThis.__piChildren` を `activity` が読む点だけが共有
 - **子の実行方式が違う**: `subagents` は 1 回だけ実行する `--mode json -p`、`guarded_task` は常駐できる `--mode rpc`（`Job`。並列・背景・`keep`・`steer`・`abort`）。後者の子はハーネスを `-e` で読み、`PI_HARNESS_*` を前提にする
@@ -187,7 +231,7 @@ Windows の `task`（`subagents` 拡張。120 行）とフルガードの `guard
 ## ガード以外の機能
 
 OpenCode のガードにあった機能のうち、pi へ移したもの。仕分けと経緯は
-[CHG-0020](../change/0020-pi-migration.md#段-5-の仕分け2026-10-09)。
+[CHG-0020](../../change/0020-pi-migration.md#段-5-の仕分け2026-10-09)。
 
 ### 圧縮（旧 checkpoint）
 
@@ -200,7 +244,7 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 - 失敗したら標準エラーと通知（端末の幅で切れないよう全文）へ理由を出して、pi の既定の圧縮に任せる（指示は補助で、圧縮は止めない）
 - **`compact()` に、セッションの思考レベル（`pi.getThinkingLevel()`）と、一時的な失敗の再試行方針（pi の既定値。利用者の `retry` 設定は拡張から読めないため、設定にかかわらず既定値に固定）を渡す**。
   渡さないと「thinking: disabled」で送られ、それを受け付けないモデル（Copilot の `claude-sonnet-5.5` など）が 400 を返して、
-  **どの PC でも指示つきの圧縮が失敗して既定に落ちた**（実測 [表 B の 19](pi-upstream.md#b-明示が無いここに書く)）。
+  **どの PC でも指示つきの圧縮が失敗して既定に落ちた**（実測 [表 B の 19](../pi-upstream.md#b-明示が無いここに書く)）。
   思考レベルが `off` で同じ 400 になったときは、思考を `minimal` にして 1 回だけやり直す（pi の既定の圧縮は、同じ指定で失敗して全く圧縮できない）
 - `/compact <焦点>` の引数（`event.customInstructions`）は、引き継ぎの指示に【利用者の指定】として合わせる（自作の圧縮が成功すると既定の圧縮には進まないので、合わせないと捨てられる）
 - 要約が出力の上限（`reserveTokens` の 0.8 倍）で切れたとき（`Summarization failed: generation hit the token cap …`。切れた要約は pi が保存しない）だけ、
@@ -354,7 +398,7 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 
 `pis`（標準）は、`pi.py` の `run_sandboxed` が pi を Fence で囲って起動する（`ocs` のコマンドは経由しない。CHG-0023 の段 3c）。
 サンドボックスの組み立て・危険な起動場所の拒否・起動前の退避・検査は、OpenCode の隔離起動と共通のモジュール
-（`boundary.py`・`backup.py`・`check.py`。[OpenCode 隔離起動](opencode-sandbox.md)）を使い、Fence の設定の書き出しの補助だけ `cli.py` から借りる
+（`boundary.py`・`backup.py`・`check.py`。[OpenCode 隔離起動](../sandbox/opencode-sandbox.md)）を使い、Fence の設定の書き出しの補助だけ `cli.py` から借りる
 （OpenCode の撤去で、共通の部分を中立のモジュールへ移す）。pi だけの部分は `~/.local/share/ocs/pi.py`。
 `--no-backup` / `--check` は `run_sandboxed` が解釈するので、pi には渡らない。
 
@@ -368,28 +412,28 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 | 設定の出所 | 共有のキーは `[opencode.sandbox]`、pi の追加分は `[pi.sandbox]`（読み取り: フルガード・自作の拡張 4 つ・判定器・`~/.config/agents`・`~/.claude/hooks`・pi 本体） | 段 6 で OpenCode を撤去するとき、共有キーを `[pi.sandbox]` へ移す |
 | 作業先ごとの追加 | OpenCode と同じ `.opencode/sandbox.toml` | 名前は段 6 で決める |
 
-### 社内プロキシ越しの通信
+### プロキシ必須の環境での通信
 
-ホストに社内プロキシの環境変数（`HTTPS_PROXY` / `https_proxy` / `HTTP_PROXY` / `http_proxy`）がある機械では、
+ホストにプロキシの環境変数（`HTTPS_PROXY` / `https_proxy` / `HTTP_PROXY` / `http_proxy`）がある機械では、
 `pi.py` が起動のあいだだけ、小さな中継（`relay.py`、`pis` と同じ処理のスレッド）を `127.0.0.1` の空きポートで動かす。
 変数が無い機械は何も変わらない。
-Fence は許可リスト（`allowedDomains`）に当たる通信を直接つなぐので、社内プロキシが必須の機械では許可済みの宛先にも届かない
-（[調査](../research/agents/corp-proxy-boundary.md)）。
+Fence は許可リスト（`allowedDomains`）に当たる通信を直接つなぐので、プロキシが必須の機械では許可済みの宛先にも届かない
+（[調査](../../research/agents/corp-proxy-boundary.md)）。
 
 | 項目 | 内容 | 理由 |
 | --- | --- | --- |
 | 設定の変え方 | Fence へ渡す設定だけ、`allowedDomains` を空にし `defaultAction: "proxy"`・`upstreamProxy: http://127.0.0.1:<中継>` を足す。`deniedDomains` は Fence に残す | Fence の上流プロキシは、許可リストにも拒否リストにも当たらない通信にしか使われない |
-| 中継の動き | 許可リストと照合し、当たる宛先だけを社内プロキシへ `CONNECT` する。当たらなければ 403 を返し、社内プロキシへは何も送らない | 許可リストの効きを Fence の外へ移しても保つ |
+| 中継の動き | 許可リストと照合し、当たる宛先だけをプロキシへ `CONNECT` する。当たらなければ 403 を返し、プロキシへは何も送らない | 許可リストの効きを Fence の外へ移しても保つ |
 | 通すもの | `CONNECT`（HTTPS）だけ。平文の HTTP は 403 | 平文は 1 本の接続で別の宛先へ続けて送れ、照合をすり抜ける |
 | 許可リストの書き方 | Fence と同じ。`*.x` は `x` 自身を含まない。`host:port` も書ける | 切り替えても挙動が変わらないようにする |
-| `NO_PROXY` | 当たる宛先は社内プロキシを通さず直接つなぐ（ホスト名・ドメイン接尾辞・CIDR・`*`） | 社内の宛先へ社内プロキシ越しにつなげない機械がある |
-| 認証 | 社内プロキシの URL の `user:pass@` を `Proxy-Authorization: Basic` にする。設定・ログには出さない | Fence の設定は `0600` のファイルに書かれるが、平文を残さない |
-| 使わない場合 | 許可リストが空・`*` を含む・社内プロキシが `https://` など `http://` 以外 | `*` は Fence が直接の通信を許す形で、照合を移す意味が無い。`http://` 以外は Fence も未対応（警告を出して従来どおり） |
+| `NO_PROXY` | 当たる宛先はプロキシを通さず直接つなぐ（ホスト名・ドメイン接尾辞・CIDR・`*`） | 内部の宛先へプロキシ越しにつなげない機械がある |
+| 認証 | プロキシの URL の `user:pass@` を `Proxy-Authorization: Basic` にする。設定・ログには出さない | Fence の設定は `0600` のファイルに書かれるが、平文を残さない |
+| 使わない場合 | 許可リストが空・`*` を含む・プロキシが `https://` など `http://` 以外 | `*` は Fence が直接の通信を許す形で、照合を移す意味が無い。`http://` 以外は Fence も未対応（警告を出して従来どおり） |
 | 境界チェック | 元の許可リストで検査先を引く。事前検査の記憶の鍵に「中継の有無」を含める | 中継の有無で同じ記憶を使い回さない |
 
 - **`pis` だけが対象。** OpenCode の `ocs` は `execve` で置き換えるので、中継のスレッドが残らない。`ocs` は撤去予定のため対応しない
-- 待ち受けは `127.0.0.1` だけで認証が無い。同じ機械のプロセスは、許可リストの宛先に限って社内プロキシ越しに通信できる
-- 社内プロキシが NTLM / Kerberos などの認証を要求する場合は未対応（Basic だけ）
+- 待ち受けは `127.0.0.1` だけで認証が無い。同じ機械のプロセスは、許可リストの宛先に限ってプロキシ越しに通信できる
+- プロキシが NTLM / Kerberos などの認証を要求する場合は未対応（Basic だけ）
 - 切り分けは `sh scripts/diagnose-corp-proxy.sh`（何も書き換えない。認証情報は伏せて出力する）
 
 ### 緩和のゲート
@@ -408,14 +452,14 @@ Fence は許可リスト（`allowedDomains`）に当たる通信を直接つな�
   期待していなければ（変数が無ければ）、緩和は一切効かない
 - **許可の一覧**（`PI_HARNESS_ALLOWED`）は、起動時に実際に Fence へ渡した `allowRead` / `allowWrite`。判定器は、作業ツリーの外のパスをこれと照合する。
   実際の OS の許可とずれても、OS が拒否するだけで安全側（拒否の理由が判定器と OS で食い違う場合がある）
-- **内側へ渡さない環境変数**: 固定の一覧（`GH_TOKEN`・`SSH_AUTH_SOCK`・`AWS_*` など）に加え、名前に `TOKEN`・`SECRET`・`PASSWORD`・`PASSPHRASE` を含むものと `ORCA_PANE_KEY`（Orca が起動時に入れる資格情報）を、パターンで落とす（実機で `ORCA_AGENT_HOOK_TOKEN` が内側に見えたため。2026-10-15）。プロバイダの API キーを環境変数で渡す使い方（`*_API_KEY`）は、今は落とさない
+- **内側へ渡さない環境変数**: 固定の一覧（`GH_TOKEN`・`SSH_AUTH_SOCK`・`AWS_*` など）に加え、名前に `TOKEN`・`SECRET`・`PASSWORD`・`PASSPHRASE` を含むものと `ORCA_PANE_KEY`（Orca が起動時に入れる資格情報）を、パターンで落とす（実機で `ORCA_AGENT_HOOK_TOKEN` が内側に見えたため。2026-10-15）。プロバイダの API キーを環境変数で渡す使い方（`*_API_KEY`）は、今は落とさない（**検索 API の 4 種（`BRAVE_API_KEY`・`EXA_API_KEY`・`TAVILY_API_KEY`・`OPENALEX_API_KEY`）だけは、名前を指定して落とす**。2026-10-25）
 - 子エージェントは、同じ環境変数を引き継いだ同じ Fence の中で動き、子もカナリアで確かめる
 - **起動前の事前検査**（`ocs --check` と同じ検査。通信・保護対象・秘密の不可視）は、同じ設定・Fence の版・検査スクリプトで合格した記憶（`~/.local/state/opencode-sandbox/preflight/`、7 日）があれば省く。
   **合格だけを覚え**、落ちたら起動しない（`--no-sandbox` を案内）
 - フッターに「🔒 サンドボックス」（証明済み）または「⚠ サンドボックス無し」を出す。**目印であり、安全の根拠ではない**
 - 試験: `test_pi_judge_ts.py`（緩和の範囲）、`test_pi_harness.py`（カナリアが読める・書ける・既にある・自己申告だけ・証明済み）、`test_pi_boundary.py`（事前検査の記憶）
 
-`~/.config/agents`（判定器が `common.toml` を読む）は読めるが書けない。内側から判定の規則を書き換えられない。
+`~/.config/agents`（判定器が `common.toml` を読む）は読めるが書けない。内側から判定の規則を書き換えられない。**その中の検索 API の鍵 `websearch-keys.json` は、`[pi.sandbox] deny_read` で隠す**（内側からは `/dev/null` に見え、読むと許可がない。**`test -r` は真になる**ので、可否の確認は実際に読むこと。実測 2026-10-25: 内側から読むとエラー、ホストでは 201 バイト）。検索は今、内側から使えない（プロバイダーが許可リストに無い）。内側で使うには、ブローカー（[CHG-0033](../../change/0033-sandbox-build-value-assessment.md) の棚卸し）が要る
 OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに入っているので、pi からも読める
 （秘密を含まない道具の置き場）。
 
@@ -427,7 +471,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 
 | キー | 出所 |
 | --- | --- |
-| `defaultProvider` / `defaultModel` | `[opencode.model]` の `default` 階層（[モデルの割り当て](agent-config-generation.md#モデルの割り当て)） |
+| `defaultProvider` / `defaultModel` | `[opencode.model]` の `default` 階層（[モデルの割り当て](../agent-config-generation.md#モデルの割り当て)） |
 | `defaultThinkingLevel` / `skills` / `enabledModels` | `[pi.settings]`（書いたものだけ） |
 
 今は `defaultThinkingLevel = "medium"`、`skills = ["~/.claude/skills"]`。`~/.agents/skills` は pi が元から読む。
@@ -442,10 +486,10 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | `home/dot_local/bin/executable_pis` | `~/.local/bin/pis` | 起動の入口（Python。`~/.local/share/ocs/pis.py` を絶対パスで読み込む。[起動](#起動)） |
 | `home/dot_local/share/ocs/pis.py` | `~/.local/share/ocs/pis.py` | `pis` の本体。引数の解釈・サンドボックス（標準）の引き継ぎ・`--no-sandbox` の素の起動。起動フラグ（`BASE_FLAGS`）と拡張の一覧は、サンドボックスの `pi.py` と共有する。ライブラリは macOS にも置く（`pis` が読むため） |
 | `home/dot_local/share/ocs/pi.py` | `~/.local/share/ocs/pi.py` | サンドボックスの pi 用の部分（[サンドボックス](#サンドボックス)） |
-| `home/dot_local/share/ocs/relay.py` | `~/.local/share/ocs/relay.py` | 社内プロキシ越しの通信の中継（[社内プロキシ越しの通信](#社内プロキシ越しの通信)）。単独の部品で、ほかのモジュールを読まない |
+| `home/dot_local/share/ocs/relay.py` | `~/.local/share/ocs/relay.py` | プロキシ必須の環境での通信の中継（[プロキシ必須の環境での通信](#プロキシ必須の環境での通信)）。単独の部品で、ほかのモジュールを読まない |
 | `home/dot_pi/agent/modify_keybindings.json.py.tmpl`・`AGENTS.md.tmpl`・`prompts/fleet.md.tmpl` | `~/.pi/agent/keybindings.json`・`AGENTS.md`・`prompts/fleet.md` | [ガード以外の機能](#ガード以外の機能) |
 | `home/dot_pi/agent/modify_settings.json.py.tmpl` | `~/.pi/agent/settings.json` | `generate.py --target pi-settings` が持ち物のキーだけを書く（[pi の設定](#pi-の設定)） |
-| `home/.chezmoitemplates/agent-cli-install.sh.tmpl` の `install_pi` | `~/.pi/agent/install`・`~/bin/pi` または `~/.local/bin/pi`（インストーラーが PATH を見て選ぶ。`pis` は両方と PATH を探す） | pi 本体を公式インストーラーで入れる（[AI CLI の導入](structure.md#ai-cli-の導入)） |
+| `home/.chezmoitemplates/agent-cli-install.sh.tmpl` の `install_pi` | `~/.pi/agent/install`・`~/bin/pi` または `~/.local/bin/pi`（インストーラーが PATH を見て選ぶ。`pis` は両方と PATH を探す） | pi 本体を公式インストーラーで入れる（[AI CLI の導入](../structure.md#ai-cli-の導入)） |
 
 ## 環境変数
 
@@ -466,10 +510,10 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | 判定器の異常 | 設定が壊れて判定に失敗した・形の正しくない応答は deny（判定器は同じプロセスで動き、プロセスの起動に失敗することは無い） | 空の応答を allow と読まない |
 | 確認 | 1 件ずつ順に出す | TUI の確認画面は 1 枠を共有し、後の確認が先の確認を置き換える。codemode の中で並べた呼び出しで、先の確認が永久に止まった（E3） |
 | 伏字化 | `guarded_bash` の `execute()` の中で、途中経過・最終結果・長い出力の退避ファイルを伏せる。伏せるのは `content`・`structuredContent`・`details`。フルガードが持たないツール（MCP など）は `tool_result` で、例外を投げずに結果ごと差し替える | `details` はモデルへ送られないが、セッションと画面に残る（`details.truncation.content` に生の出力。E3）。`tool_result` の例外は無視されて生の結果が残る |
-| 出力ごと伏せる | 保護対象のパス（`[file] read_deny_globs` から作る）を参照したコマンドは、**実行せず**、出力を全部伏せた結果を返す | OpenCode の guide plugin と同じ（[shell 出力の伏字化](agent-config-generation.md#shell-出力の伏字化)） |
+| 出力ごと伏せる | 保護対象のパス（`[file] read_deny_globs` から作る）を参照したコマンドは、**実行せず**、出力を全部伏せた結果を返す | OpenCode の guide plugin と同じ（[shell 出力の伏字化](../agent-config-generation.md#shell-出力の伏字化)） |
 | read などは伏せない | `guarded_read` などの結果には伏字化を掛けない | 伏せた本文を元に edit されると、ファイルへ伏字が書き込まれる |
 | 圧縮 | `session_before_compact` で、`guarded_read` / `guarded_edit` / `guarded_write` が触ったファイルを圧縮のファイルの一覧に足す | pi の既定の圧縮は `read` / `edit` / `write` の名前でしか拾わない（E2） |
-| シェルの環境変数 | `[agent_env]` を、未設定のときだけ bash の環境へ入れる | git の入力待ちを防ぐ（[shell ツールの環境変数](agent-config-generation.md#shell-ツールの環境変数)） |
+| シェルの環境変数 | `[agent_env]` を、未設定のときだけ bash の環境へ入れる | git の入力待ちを防ぐ（[shell ツールの環境変数](../agent-config-generation.md#shell-ツールの環境変数)） |
 | `rules.json` | 読めない・形が違うときは、拡張の読み込みごと失敗させる | 起動は止まり、`/reload` ではツールが無くなる（どちらも判定なしでは動かない） |
 
 ## 子エージェント
@@ -538,7 +582,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 （tool の最上位に `anyOf` を置くと拒む提供元がある。判定器は名前と役割だけを見る）。
 **`false` / `""` / `[]` / `0` / `null` は「指定なし」として扱う**。厳格なスキーマのモデル（`gpt-6-sol`）は、使わない省略可能な引数もこれらで埋めて送る。
 `agent` はスキーマがエージェント名の列挙なので、`""` も列挙に加えている（無いと `execute()` に届く前に pi の検証で拒まれる）。
-この扱いが無いと `` `list` must be true `` で 5 回連続で拒まれた（[実験 B1 の F5](../research/agents/pi-bg-experiments.md)。試験は `test_task_input_ignores_unused_arguments_filled_with_empty_values` と
+この扱いが無いと `` `list` must be true `` で 5 回連続で拒まれた（[実験 B1 の F5](../../research/agents/pi-bg-experiments.md)。試験は `test_task_input_ignores_unused_arguments_filled_with_empty_values` と
 `test_task_input_forms_accept_empty_fillers_but_still_reject_real_conflicts`）。
 
 | 形式 | 入力 | 動き |
@@ -569,7 +613,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 
 ### 子の操作: バックグラウンド・状態・steer・並列・モデル・ToDo
 
-`guarded_task` に、引き続き 1 つのツールで次の形を足した（排他は `execute()` で確かめる。[調査 P2](../research/agents/pi-public-extensions-survey.md)）。
+`guarded_task` に、引き続き 1 つのツールで次の形を足した（排他は `execute()` で確かめる。[調査 P2](../../research/agents/pi-public-extensions-survey.md)）。
 見た目はフッター 1 行とテキストだけ。ウィジェットは作らない。
 
 | 形 | 入力 | 動き |
@@ -594,15 +638,15 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 - **利用者コマンド**: `/agents`（一覧）、`/agent <名前> <依頼>`（子を直接起動。完了はチャットに表示するだけで、モデルのターンは起こさない）。モデルは呼べない
 - **フッター**: `activity` が、動いている子が 3 件以下なら `🤖 explore 12s, review 40s`、それより多ければ件数
 - **やらないこと**: プロジェクト内の定義ファイルからの役割（`--no-approve` と衝突）、子から子（入れ子）
-- **worktree 隔離は実装済み**: `guarded_task` の `isolation: "worktree"`（opt-in。単独の新規 `worker` のみ）。仕様は [CHG-0029](../change/0029-worktree-isolation.md)。S5（実機の通し確認）の後に、この文書へ移す
+- **worktree 隔離は実装済み**: `guarded_task` の `isolation: "worktree"`（opt-in。単独の新規 `worker` のみ）。仕様は [CHG-0029](../../change/0029-worktree-isolation.md)。S5（実機の通し確認）の後に、この文書へ移す
 
 ## MCP
 
 > **`pis` では、`exposure` が `codemode`（既定）・`deferred` のサーバのツールは、モデルから呼べない。**
 > `-ne` が組み込みの拡張（`builtin:codemode`・`builtin:tool-search`）も外すため、`Tool … not found` になる
-> （2026-10-11、偽のモデルで実測。[E6](../research/agents/pi-extension-under-harness.md#記録-e6--2026-10-11)）。
+> （2026-10-11、偽のモデルで実測。[E6](../../research/agents/pi-extension-under-harness.md#記録-e6--2026-10-11)）。
 > **対策済み**: `[[mcp]]` の `exposure` を省略すると、生成器（`pi_mcp_servers`）が `direct` を出す
-> （[仕様](agent-config-generation.md#mcp-サーバ)）。`codemode` を使いたいときは `-e builtin:codemode` を足す（+680 トークン）。
+> （[仕様](../agent-config-generation.md#mcp-サーバ)）。`codemode` を使いたいときは `-e builtin:codemode` を足す（+680 トークン）。
 > 実機の `pis`（Unix）では未確認
 
 `[[mcp]]` のうち `clis` に `pi` を含むものを、フルガードが起動のたびに `registerMcpServer` で登録する。
@@ -637,7 +681,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 - MCP: フルガードから登録され、実装役では確認になる（`test_pi_harness.py`）
 - サンドボックス（`test_pi_boundary.py`）: 生成・サンドボックス用の置き場・セッションの置き場・認証の戻し（新しい分だけ・ロック・壊れた写し）・
   実際の Fence でのサンドボックスチェック（Fence・bwrap・pi が無ければ skip）
-- 社内プロキシ越しの中継（`test_relay.py`）: 許可リスト・`NO_PROXY`・社内プロキシの URL の読み方、許可した宛先だけが上流へ届く・許可外と平文 HTTP は上流へ何も送らない・認証ヘッダ・上流の拒否が 502 になる、設定が必要なときだけ変わる
+- プロキシ越しの中継（`test_relay.py`）: 許可リスト・`NO_PROXY`・プロキシの URL の読み方、許可した宛先だけが上流へ届く・許可外と平文 HTTP は上流へ何も送らない・認証ヘッダ・上流の拒否が 502 になる、設定が必要なときだけ変わる
 - 誘導: `cat` が read ツールへの案内で止まる
 - 圧縮（指示が履歴の要約の依頼に入る・ファイルの一覧）、`git commit` の確認の本文（RPC で確認の要求を受け取る。期限が付く）、
   整形（ruff・markdownlint）、`/fleet` の展開、キーバインドと共通の指示の生成、Orca の拡張の読み込み条件
@@ -648,7 +692,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 すべて `chezmoi apply` して新しいセッションで確かめる。
 
 - [ ] **ジョブ終了のフィードバック**（`activity`、`20507a0`）: 2026-10-20 に実機（`pis`、このセッション）で、アイドル時の自動再開と、
-  作業中に終わった分がそのターンの後に届くことを確認した。さらに同日、RPC の使い捨てセッション（実モデル 4 つ、[B1](../research/agents/pi-bg-experiments.md)）で、
+  作業中に終わった分がそのターンの後に届くことを確認した。さらに同日、RPC の使い捨てセッション（実モデル 4 つ、[B1](../../research/agents/pi-bg-experiments.md)）で、
   `bg_kill` で止めたときに再開しないこと、完了のたびに次を起動する連鎖が 3 回で止まること（無限ループにならない）を確認した。
   **未確認**: TUI での見え方、承認を拒否したとき、Windows。
   元の確認項目: `bg_run` で `sleep 5` を起動して応答を終えさせる。アイドルのまま LLM が自動で再開するか。作業中に終わったときはそのターン後に届くか。

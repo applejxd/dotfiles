@@ -1,5 +1,5 @@
 // btw の表示用の部品。pi に依存しない (試験で単体に動かせるよう、index.ts から分けてある)。
-// see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
+// see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
 
 // 表示する返信の上限 (文字数)。どの経路 (子・--plain・非 TUI) でも同じ値で切る
 export const MAX_ANSWER_CHARS = 20000;

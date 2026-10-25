@@ -1,6 +1,6 @@
 """境界チェック (``ocs --check``)。
 
-see docs/spec/opencode-sandbox.md#境界チェック
+see docs/spec/sandbox/opencode-sandbox.md#境界チェック
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ WSL_HIDDEN_TARGETS = ("/mnt/c/Users", "/mnt/c/Windows")
 # 許可外ドメインの検査先の候補 (IANA の予約ドメイン。HTTPS で応答する)
 DENIED_CANDIDATES = ("example.com", "example.net", "example.org")
 # Fence は境界を張る前に bwrap / socat / bash を PATH から探して動かす。
-# see docs/spec/opencode-sandbox.md#信頼の鎖
+# see docs/spec/sandbox/opencode-sandbox.md#信頼の鎖
 HOST_PATH = "/usr/bin:/bin"
 
 

@@ -5,7 +5,7 @@
 - **終了日**: 2026-09-29
 - **基準**: `55f7e0d`（OpenCode `v2.0.14` / Fence `0.1.67`）
 
-> **この文書は当時の記録。** 現在の仕様は [opencode-sandbox](../../spec/opencode-sandbox.md) の「エージェントとコマンド」。
+> **この文書は当時の記録。** 現在の仕様は [opencode-sandbox](../../spec/sandbox/opencode-sandbox.md) の「エージェントとコマンド」。
 > 採用したもの・見送ったもの・反映先・移管した未完事項は「終了結果」にまとめた。
 > 「現在地」「未解決点」「次の調査・実験」は、配備の前（2026-09-29）の記録。
 >
@@ -13,7 +13,7 @@
 
 ## 目的と非目的
 
-`ocs`（OpenCode を Fence の境界で包むランチャー。[仕様](../../spec/opencode-sandbox.md)）の中では、
+`ocs`（OpenCode を Fence の境界で包むランチャー。[仕様](../../spec/sandbox/opencode-sandbox.md)）の中では、
 `common.toml` で定義したエージェント（`bypass`・`bypass-worker`・`commit`・`review`・`fleet-worker` など）と
 コマンド（`/fleet` など）が使えない。隔離版の設定（`~/.config/opencode-sandbox/opencode.json`）に
 エージェントとコマンドの定義が入っていないため。
@@ -60,7 +60,7 @@
   OS の境界で読めない。**ワークスペースの中の秘密（`.env` など）は `bypass` から読める**
   （guide plugin の伏字化と `grep` / `glob` の結果フィルタも `bypass` では素通りになる。コードからの判断で、実機では未確認）。
   通常版の `bypass` と同じ性質で、ADR-0012 の範囲では受け入れる
-- 業務 PC（Bedrock）では、`ocs` から Bedrock に届かないのでモデルの割り当てを出さず、子エージェントは
+- 制約のある環境の機（Bedrock）では、`ocs` から Bedrock に届かないのでモデルの割り当てを出さず、子エージェントは
   親のモデルで動く（単体テストだけで、実機では未確認）
 - 解決済み: 隔離版の `experimental.policies` は隔離版のものだけを使う。通常版の `provider.use` の policy
   （この PC のプロバイダ以外を塞ぐ）は出さない。出すと Bedrock の PC では `ocs` のモデルがすべて塞がる
@@ -93,7 +93,7 @@
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `docs/spec/opencode-sandbox.md`「エージェントとコマンド」 | 節を新設（置くもの・差し替え方・理由・`bypass` の注意） | 段 1 | 適用済み |
+| `docs/spec/sandbox/opencode-sandbox.md`「エージェントとコマンド」 | 節を新設（置くもの・差し替え方・理由・`bypass` の注意） | 段 1 | 適用済み |
 | `docs/spec/agent-config-generation.md` | `ocs` でのモデルの割り当て、子エージェントが `ocs` に渡ることを反映 | 段 1 | 適用済み |
 
 ## 実装・検証
@@ -178,7 +178,7 @@
 
 ### 反映先
 
-- 仕様: [opencode-sandbox](../../spec/opencode-sandbox.md)（「エージェントとコマンド」「起動ディレクトリの制限」「制御ファイルの保護が効く範囲」「起動前の退避」）、[エージェント設定の生成](../../spec/agent-config-generation.md)、[セキュリティ](../../spec/security.md)
+- 仕様: [opencode-sandbox](../../spec/sandbox/opencode-sandbox.md)（「エージェントとコマンド」「起動ディレクトリの制限」「制御ファイルの保護が効く範囲」「起動前の退避」）、[エージェント設定の生成](../../spec/agent-config-generation.md)、[セキュリティ](../../spec/security.md)
 - 方針: [ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md) の保証を条件付きにした
 - 実装: `ca8b43d`・`6bc485d`（段 1）、`4b703f0`・`df17d61`・`02e6bea`（レビューループの修正）
 
@@ -187,5 +187,5 @@
 | 内容 | 移管先 |
 | --- | --- |
 | ワークスペースの中の秘密（`.env` など）が `bypass` から読めること（コードからの判断。通常版と同じ性質で受け入れる） | 未起票 |
-| 業務 PC（Bedrock）で子エージェントが親のモデルで動くこと（単体テストだけ） | 未起票 |
+| 制約のある環境の機（Bedrock）で子エージェントが親のモデルで動くこと（単体テストだけ） | 未起票 |
 | 隔離版の設定を `chezmoi apply` 時に生成する（CHG-0009 の段 6） | 未起票 |

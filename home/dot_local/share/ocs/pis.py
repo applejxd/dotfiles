@@ -5,7 +5,7 @@
 サンドボックスを張れない OS では、黙って弱い守りに落とさず、起動を断って
 ``--no-sandbox`` を案内する。
 起動フラグと拡張の一覧は :mod:`pi` と共有する。
-see docs/spec/pi-guard.md#起動
+see docs/spec/guard/pi-guard.md#起動
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 from . import pi
 from .common import HOME
 
-USAGE = "usage: pis [--bypass] [--no-sandbox] [--no-broker] [--role <役割>] [--] [pi の引数...]"
+USAGE = "usage: pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--role <役割>] [--] [pi の引数...]"
 # 外から入った内部の環境変数。子エージェントの印は pis が起動するたびに外す
 INTERNAL_ENV = (
     "PI_HARNESS_CHILD",
@@ -49,14 +49,22 @@ def fail(message: str, code: int = 1) -> None:
 
 
 def parse(argv: list[str]) -> Options:
-    """先頭の pis のオプションだけを解釈し、残りを pi (と ``--check`` など) へ渡す。"""
-    bypass = no_sandbox = boundary = no_broker = False
+    """先頭の pis のオプションだけを解釈し、残りを pi (と ``--check`` など) へ渡す。
+
+    bypass の既定: サンドボックスで起動するときはオン、``--no-sandbox`` のときはオフ。
+    ``--bypass`` / ``--no-bypass`` で明示すれば、そちらが勝つ。
+    """
+    no_sandbox = boundary = no_broker = False
+    bypass_flag: bool | None = None
     role = ""
     i = 0
     while i < len(argv):
         arg = argv[i]
         if arg == "--bypass":
-            bypass = True
+            bypass_flag = True
+            i += 1
+        elif arg == "--no-bypass":
+            bypass_flag = False
             i += 1
         elif arg == "--no-sandbox":
             no_sandbox = True
@@ -79,6 +87,7 @@ def parse(argv: list[str]) -> Options:
             break
     if no_sandbox and boundary:
         fail("--no-sandbox と --boundary は同時に使えない", 2)
+    bypass = (not no_sandbox) if bypass_flag is None else bypass_flag
     return Options(bypass, not no_sandbox, role, argv[i:], no_broker)
 
 

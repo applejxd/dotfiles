@@ -64,21 +64,22 @@
 | [Windows ネイティブ（PowerShell）で pi を、OS の境界つきで動かす](0034-windows-native-pi-boundary.md) | リポジトリが Windows 側で、Windows 起動前提のアプリも開発するので、Windows ネイティブで pi を境界つきで動かしたい（OpenShell・Docker Sandboxes は合わない） | Exploring | `srt` の Windows alpha で `pi` を包めるか。サーバ・アプリの起動と通信の制御が両立するか。Windows 実機が要る | 段 W1: Windows 実機で `srt` に `pi` を包む手順書を作り、利用者に実行してもらう | 2026-10-24 |
 | [0035](0035-retire-python-judge-oracle.md) | 判定器の Python 版（オラクル）を撤去して、二重保守を解消する | Exploring | 「実機での観察」の定義（ADR-0017 に無い）。正解データを Python 版なしで保つ設計 | 段 R1: 撤去の条件を利用者と決める。段 R2: 凍結か書き出しかの設計を `review` へ | 2026-10-24 |
 | [0036](0036-nono-trial-on-wsl2.md) | nono を WSL2 で小さく試し、境界の層（`ocs`）の置き換えの可否を測る | Exploring | WSL2 で nono がドメインの許可リストを標準では提供しない（現行の境界との差）。導入に利用者の許可が要る | 段 N1: 導入と `nono setup --check-only` の許可を尋ねる | 2026-10-24 |
-| [0037](0037-pis-usability-and-telemetry.md) | `pis` の使い勝手を、他のプロジェクトで常用できる水準に上げ、運用の記録を取る（便益を測る前提） | Exploring | 通信を拒否リスト型に引き直す設計。認証情報を内側に置かないホスト側のブローカー（Envoy。設定 `[pis.broker]` で `pis` と同寿命。Copilot は実機で応答 OK）。境界つきのネット調査が通るか未検証 | 段 U7a: 利用者が `pis` を普段どおり使う（24 時間後の再読み込みの確認）。Envoy は `chezmoi apply` が導入。続けて段 U7b（Bedrock、会社の機） | 2026-10-24 |
+| [0037](0037-pis-usability-and-telemetry.md) | `pis` の使い勝手を、他のプロジェクトで常用できる水準に上げ、運用の記録を取る（便益を測る前提） | Exploring | 通信を拒否リスト型に引き直す設計。認証情報を内側に置かないホスト側のブローカー（Envoy。設定 `[pis.broker]` で `pis` と同寿命。Copilot は実機で応答 OK）。境界つきのネット調査が通るか未検証 | 段 U7a: 利用者が `pis` を普段どおり使う（24 時間後の再読み込みの確認）。Envoy は `chezmoi apply` が導入。続けて段 U7b（Bedrock、制約のある環境の機） | 2026-10-24 |
+| [0038](0038-guard-reclassification.md) | ガードを「防ぐ害」（UX・認証情報・外部送信・破壊・構造）で分類し直し、外部への送信・公開の穴を塞ぐ（`confirm` の新設） | Exploring | 標準の `pis`（bypass オン）で、規則に載っていない外部書き込みと載っている ask が確認なしで通る。`confirm`（bypass 不可・内容つき・無反応は deny）の実装設計。分類は整理で、区分の on/off の仕組みは作らない | 段 G5: 実機の確認（利用者）。段 G6: C1 の棚卸し | 2026-10-24 |
 
 ## 保留
 
 | # | 目的 | 保留理由 | 再開条件 | 更新日 |
 | --- | --- | --- | --- | --- |
 | [0005](0005-agents-config-naming.md) | `common.toml` の命名を実態に合わせ、固有設定を分離する | 段階 A1 完了 / A3 消滅 / A4 保留（checkpoint の A1 / A2 とは別の、この案件の段階番号）。残る A2 は第一サポートが変われば対象も変わるため、先に動かすと手戻りになる | CHG-0020 の段 6 で OpenCode の節を撤去したあと（第一サポートが pi に決まった）。なお A2 の前提である ADR-0007 規則 3 との矛盾と、A1 で取り残した `[file]` 節のコメントは、それと独立に片付けられる | 2026-10-09 |
-| [0016](0016-away-shift-opencode.md) | away-shift を OpenCode 向けに最適化し、運用（深層学習ジョブの調査・再開、会社 PC での利用）を見直す | 着手前。applejxd 限定の棚卸しを先に進めるため積んだ | 利用者が着手を指示したとき | 2026-10-08 |
+| [0016](0016-away-shift-opencode.md) | away-shift を OpenCode 向けに最適化し、運用（深層学習ジョブの調査・再開、制約のある環境の機での利用）を見直す | 着手前。applejxd 限定の棚卸しを先に進めるため積んだ | 利用者が着手を指示したとき | 2026-10-08 |
 | [0026](0026-specialist-agents-with-skills.md) | 専門スキルを、専用の子エージェント (migrator・writer) に持たせる。`away-shift` は親のスキルのまま残す | 構想のみ。子の質問の中継 (ask-user 段 2) が未実装で、圧縮の修理を先にするため一旦保留 | 子の質問の中継が使える。圧縮の修理が済む。専門スキルの利用が増える。CHG-0029 の W1（worktree 隔離）が済む | 2026-10-22 |
 
 ## 終了
 
 | # | 目的 | 結果 | 終了日 | 現行仕様 / ADR |
 | --- | --- | --- | --- | --- |
-| [0028](closed/0028-verification-speed-and-delegation.md) | 全件の検証を速くし、調査・実装・レビューを子エージェントへ任せる運用を整える | 採用（並列化 `worksteal` で直列 643.67 秒→ 96.25 秒、`verify.py` と Linux の CI、委譲の指示、完了通知の追跡、`todo` の `blocked` と必須化、判定器の穴 3 種の修正。CI の初回結果・`HOME` 隔離・通知の症状の原因は ToDo、`verifier` 役と完了時の自動検証は CHG-0029、`todo` の階層化は CHG-0025 へ移管） | 2026-10-22 | [検証の方針と選択実行](../spec/development.md#検証の方針と選択実行) / [pi のガード](../spec/pi-guard.md) |
+| [0028](closed/0028-verification-speed-and-delegation.md) | 全件の検証を速くし、調査・実装・レビューを子エージェントへ任せる運用を整える | 採用（並列化 `worksteal` で直列 643.67 秒→ 96.25 秒、`verify.py` と Linux の CI、委譲の指示、完了通知の追跡、`todo` の `blocked` と必須化、判定器の穴 3 種の修正。CI の初回結果・`HOME` 隔離・通知の症状の原因は ToDo、`verifier` 役と完了時の自動検証は CHG-0029、`todo` の階層化は CHG-0025 へ移管） | 2026-10-22 | [検証の方針と選択実行](../spec/development.md#検証の方針と選択実行) / [pi のガード](../spec/guard/pi-guard.md) |
 | [0002](closed/0002-opencode-ask-by-default.md) | OpenCode の permission を既定 ask にし、秘密への経路を機構で塞ぐ | 採用（段階 0〜3。4a / 4b は見送り、6 は決着。段階 5 の `verify` ツールは pi へ移行するので CHG-0020 へ移管） | 2026-10-09 | [agent-config-generation](../spec/agent-config-generation.md#既定は-ask) |
 | [0019](closed/0019-pi-harness-port-evaluation.md) | OpenCode のハーネスを pi で作り直す価値があるかを判断する | 採用（移行する。構成はツールを自分で持つハーネス。試作で BLOCKER と段 4 の項目がすべて合格。移行は CHG-0020） | 2026-10-09 | [CHG-0020](0020-pi-migration.md) / [試作の記録](../research/agents/pi-harness-spike.md) |
 | [0018](closed/0018-opencode-policy-role-split.md) | OpenCode の権限を「共通の禁止」と「役割ごとの権限」に分けて生成する | 一部採用（所有の規則 P のみ。S と段 5 は pi への移行で見送り、プロファイルの設計は CHG-0020 へ） | 2026-10-09 | [agent-config-generation](../spec/agent-config-generation.md#配置済みの設定の所有) |
@@ -86,8 +87,8 @@
 | [0014](closed/0014-deterministic-commit-runner.md) | コミットの表示と実行を決定的なスクリプトに任せる | 見送り（`--auto` では通ったが、利用者の TUI で照合が止まった。部品の多さに見合わないとして取り下げ、親が commit スキルでコミットする形に戻した） | 2026-10-07 | [コミットの確認](../spec/agent-config-generation.md#コミットの確認) |
 | [0013](closed/0013-commit-agent-as-planner.md) | commit エージェントを計画役にし、コミットは親が行う | 一部採用（隔離起動でも `git commit` を確認・`git -c … commit` の停止・確認画面の連結形の表示は残した。計画役の `commit` エージェントは廃止） | 2026-10-07 | [コミットの確認](../spec/agent-config-generation.md#コミットの確認) |
 | [0008](closed/0008-raspi-branching.md) | Raspberry Pi（64bit / ヘッドレス）を導入対象に加える | 採用・適用済み（実機 3 周目で apply が 45 秒で完走。判定は `.chezmoitemplates/is-raspi` で `chezmoi update` だけで効く。`[data] is_raspi` の方式は撤回） | 2026-09-26 | [プロジェクト構造](../spec/structure.md#raspberry-pi) |
-| [0010](closed/0010-ocs-agents.md) | `ocs` の中でも `common.toml` のエージェントとコマンドを使う | 採用・配備済み（隔離版の設定にエージェントとコマンドを出した。Fence 化からの差分もレビューループで直した） | 2026-09-29 | [opencode-sandbox](../spec/opencode-sandbox.md) / [ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) |
-| [0009](closed/0009-ocs-simplify-for-accidents.md) | `ocs` をうっかりの防止に必要な分まで簡素にする（ADR-0012） | 採用・配備済み（境界を Fence に替え、履歴を通常の起動と共有し、承認と起動時の検査をやめた。段 6 は未起票で移管） | 2026-09-29 | [opencode-sandbox](../spec/opencode-sandbox.md) / [ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) |
+| [0010](closed/0010-ocs-agents.md) | `ocs` の中でも `common.toml` のエージェントとコマンドを使う | 採用・配備済み（隔離版の設定にエージェントとコマンドを出した。Fence 化からの差分もレビューループで直した） | 2026-09-29 | [opencode-sandbox](../spec/sandbox/opencode-sandbox.md) / [ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) |
+| [0009](closed/0009-ocs-simplify-for-accidents.md) | `ocs` をうっかりの防止に必要な分まで簡素にする（ADR-0012） | 採用・配備済み（境界を Fence に替え、履歴を通常の起動と共有し、承認と起動時の検査をやめた。段 6 は未起票で移管） | 2026-09-29 | [opencode-sandbox](../spec/sandbox/opencode-sandbox.md) / [ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) |
 | [0001](closed/0001-compaction-context-handover.md) | compaction を跨いで作業文脈を失わない | 採用・適用済み（圧縮要約そのものを checkpoint にした。Claude / Copilot の hook は撤去） | 2026-09-25 | [checkpoint](../spec/checkpoint.md) / [ADR-0009](../adr/0009-save-before-documenting.md) |
-| [0004](closed/0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | 採用・適用済み（通常起動と併用。既定を `ocs` にする案は撤回） | 2026-09-24 | [opencode-sandbox](../spec/opencode-sandbox.md) |
+| [0004](closed/0004-opencode-sandbox.md) | OpenCode の保護を OS のアクセス制御へ移す（Ubuntu / WSL のみ） | 採用・適用済み（通常起動と併用。既定を `ocs` にする案は撤回） | 2026-09-24 | [opencode-sandbox](../spec/sandbox/opencode-sandbox.md) |
 | [0003](closed/0003-ask-command-description.md) | 確認画面で長いコマンドを判断可能にする | 採用・適用済み | 2026-09-22 | [agent-config-generation](../spec/agent-config-generation.md#確認画面に出るコマンドの説明) |

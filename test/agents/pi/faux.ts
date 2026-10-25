@@ -1,5 +1,5 @@
 // 試験用。決まった tool call を返す偽のモデルと、/reload を起こすコマンド。
-// see docs/spec/pi-guard.md
+// see docs/spec/guard/pi-guard.md
 import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { type ExtensionAPI, getPackageDir } from "@earendil-works/pi-coding-agent";
 import { existsSync, rmSync, writeFileSync } from "node:fs";

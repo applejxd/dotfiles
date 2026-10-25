@@ -6,7 +6,7 @@
 // - withheld: 出力ごと伏せたときの結果
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-guard.md#しくみ
+// see docs/spec/guard/pi-guard.md#しくみ
 
 export type RedactConfig = {
 	rule: { name: string; pattern: string }[];

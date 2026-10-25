@@ -706,7 +706,6 @@ def test_uv_add_is_delegated_not_denied():
         "g++ -o /usr/local/bin/x x.cpp",
         # 認証情報がホームに残る / レジストリへ公開される
         "docker login",
-        "docker push myimage",
     ],
 )
 def test_global_scope_mutation_asks(command):
@@ -735,6 +734,29 @@ def test_tool_self_update_is_denied(command):
     影響が全プロジェクトに及び、元のバージョンを知らないと戻せないため
     承認の余地なく拒否する。
     """
+    decision, reason = run_hook(command)
+    assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh repo edit --visibility public",
+        "gh repo create foo --public",
+        "gh release delete v1",
+        "gh release edit v1",
+        "npm publish",
+        "yarn publish",
+        "pnpm publish",
+        "uv publish",
+        "twine upload dist/*",
+        "cargo publish",
+        "gem push foo.gem",
+        "docker push myimage",
+    ],
+)
+def test_publish_commands_are_denied(command):
+    """公開・配布は承認の余地なく拒否する (ask ではない)."""
     decision, reason = run_hook(command)
     assert decision == "deny", f"{command!r} -> {decision} ({reason})"
 

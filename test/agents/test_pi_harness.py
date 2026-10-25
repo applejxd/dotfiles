@@ -2,7 +2,7 @@
 
 pi が無い環境では skip する。pi の内部の挙動に頼る点 (``/reload`` で組み込みが同じ名前で
 戻ること・``details`` に生の出力が入ることなど) も、ここで検出する。
-see docs/spec/pi-guard.md
+see docs/spec/guard/pi-guard.md
 """
 
 from __future__ import annotations
@@ -42,6 +42,8 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
     shutil.copy2(HARNESS_SRC.parent / "children.ts", harness / "children.ts")
     shutil.copy2(HARNESS_SRC.parent / "audit.ts", harness / "audit.ts")
+    shutil.copy2(HARNESS_SRC.parent / "tools-ext.ts", harness / "tools-ext.ts")
+    shutil.copy2(HARNESS_SRC.parent / "confirm-view.ts", harness / "confirm-view.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktree.ts", harness / "worktree.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktrees-command.ts", harness / "worktrees-command.ts")
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
@@ -404,7 +406,7 @@ def test_review_child_reads_with_the_same_read_only_commands_as_explore(env):
     assert not (env["proj"] / "made-by-review").exists()
 
 
-# see docs/spec/pi-guard.md#review-への依頼の書き方
+# see docs/spec/guard/pi-guard.md#review-への依頼の書き方
 @pytest.mark.parametrize(
     "command",
     [
@@ -2098,3 +2100,157 @@ def test_ask_recognises_the_other_recommended_marks(env, mark):
     requests, result = _ask_rpc(env, qs, [f"1. A {mark}"])
     assert [r["method"] for r in requests] == ["select"], requests
     assert f"→ A {mark}" in result, result
+
+
+# ─── bypass でも出す確認 (mustConfirm) ──────────────────────────────
+# 判定器が mustConfirm を返す前提 (judge/ に mustConfirm が無いと飛ばす)。
+# 確認の本文・解析・分類の表試験は test_pi_confirm_view.py (判定器に依らない)。
+
+MUST_REASON_HEAD = "確認が必要な外部への送信・公開"
+GH_CONFIRM = "gh pr create"  # [pi.confirm] bash は、[bash] ask と同じ前方一致の文字列
+GH_CREATE = "gh pr create --title T --body B -R o/r"
+
+
+def _judge_returns_must_confirm():
+    judge = HARNESS_SRC.parent / "judge"
+    return any("mustConfirm" in p.read_text(encoding="utf-8") for p in judge.glob("*.ts"))
+
+
+needs_must_confirm = pytest.mark.skipif(
+    not _judge_returns_must_confirm(), reason="判定器がまだ mustConfirm を返さない"
+)
+
+
+def _with_confirm_rules(env, timeout_seconds=300):
+    """rules.json の judge.common.pi.confirm に gh pr create を入れる (環境変数は使わない)。"""
+    path = env["harness"] / "rules.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    pi = rules["judge"]["common"].setdefault("pi", {})
+    pi["confirm"] = {"timeout_seconds": timeout_seconds, "bash": [GH_CONFIRM]}
+    path.write_text(json.dumps(rules), encoding="utf-8")
+
+
+def _rpc_outcome(env, calls, answers, timeout=90, **env_extra):
+    """RPC で 1 回呼ぶ。answers の None は確認に応えない (pi の期限を待つ)。
+
+    返すのは (確認の要求, ツールの結果の本文)。
+    """
+    args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
+    args += ["-e", str(env["harness"]), "-e", str(FIXTURES / "faux.ts"), "--mode", "rpc"]
+    proc = subprocess.Popen(
+        args,
+        cwd=env["proj"],
+        env={**env["env"], "FAUX_TOOL_CALLS": json.dumps(calls), **env_extra},
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    requests, result = [], ""
+    proc.stdin.write(json.dumps({"type": "prompt", "message": "go"}) + "\n")
+    proc.stdin.flush()
+    deadline = time.time() + timeout
+    try:
+        for line in proc.stdout:
+            if time.time() > deadline:
+                break
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") == "extension_ui_request" and event.get("method") == "confirm":
+                requests.append(event)
+                n = len(requests)
+                answer = answers[n - 1] if n <= len(answers) else False
+                if answer is not None:
+                    reply = {
+                        "type": "extension_ui_response",
+                        "id": event["id"],
+                        "confirmed": answer,
+                    }
+                    proc.stdin.write(json.dumps(reply) + "\n")
+                    proc.stdin.flush()
+            if event.get("type") == "tool_execution_end":
+                content = (event.get("result") or {}).get("content") or []
+                result += "".join(c.get("text", "") for c in content)
+            if event.get("type") == "agent_end":
+                break
+    finally:
+        proc.kill()
+    return requests, result
+
+
+@needs_must_confirm
+@pytest.mark.parametrize("bypass", ["", "1"])
+def test_must_confirm_is_asked_with_and_without_bypass(env, bypass):
+    _with_confirm_rules(env, timeout_seconds=300)
+    requests, result = _rpc_outcome(env, bash_call(GH_CREATE), [False], PI_HARNESS_BYPASS=bypass)
+    assert len(requests) == 1, requests
+    req = requests[0]
+    assert "bypass でも確認が要る" in req["title"], req
+    assert (
+        GH_CREATE in req["message"]
+        and "解析結果 (参考。実際に実行されるのは上のコマンド)" in req["message"]
+    )
+    assert MUST_REASON_HEAD in req["message"], req["message"]
+    assert req.get("timeout") == 300 * 1000, req
+    # 拒否: 接頭辞は保ち、同じ操作をくり返さないよう伝える
+    assert "not approved:" in result and "利用者が拒否した" in result, result
+
+
+@needs_must_confirm
+def test_must_confirm_times_out_and_tells_the_model_not_to_retry(env):
+    _with_confirm_rules(env, timeout_seconds=1)
+    requests, result = _rpc_outcome(env, bash_call(GH_CREATE), [None])
+    assert len(requests) == 1 and requests[0].get("timeout") == 1000, requests
+    assert "not approved:" in result and "再試行せず" in result, result
+
+
+@needs_must_confirm
+@pytest.mark.parametrize("bypass", ["", "1"])
+def test_must_confirm_without_a_ui_is_refused(env, bypass):
+    _with_confirm_rules(env)
+    proc = run_pi(env, bash_call(GH_CREATE), PI_HARNESS_BYPASS=bypass)
+    assert "isError=true :: not approved:" in proc.stdout, proc.stdout + proc.stderr
+    assert "確認できない実行" in proc.stdout, proc.stdout
+
+
+@needs_must_confirm
+def test_must_confirm_is_refused_in_a_child_even_when_it_inherits_bypass(env):
+    _with_confirm_rules(env)
+    proc = run_child(env, "worker", bash_call(GH_CREATE), PI_HARNESS_BYPASS="1")
+    assert "needs the user's approval" in proc.stdout, proc.stdout
+    assert "確認できない実行" in proc.stdout, proc.stdout
+
+
+@needs_must_confirm
+def test_must_confirm_shows_the_body_file_and_refuses_what_it_cannot_show(env):
+    _with_confirm_rules(env)
+    (env["proj"] / "body.md").write_text("ファイルの本文です\n2 行目", encoding="utf-8")
+    (env["proj"] / "big.md").write_text("x" * 9000, encoding="utf-8")
+    requests, _ = _rpc_outcome(env, bash_call("gh pr create -t T -F body.md"), [False])
+    assert len(requests) == 1 and "ファイルの本文です\n2 行目" in requests[0]["message"], requests
+    for command, why in (
+        ("gh pr create -t T -F missing.md", "本文のファイルを読めないので確認できない"),
+        ("gh pr create -t T -F big.md", "本文が長すぎて確認できない"),
+    ):
+        requests, result = _rpc_outcome(env, bash_call(command), [True])
+        assert requests == [], (command, requests)
+        assert "not approved:" in result and why in result, result
+
+
+@needs_must_confirm
+def test_must_confirm_command_is_shown_in_full_with_control_characters_visible(env):
+    _with_confirm_rules(env)
+    command = f"gh pr create -t T -b 'a\x1b[31m{'y' * 3000}'"
+    requests, _ = _rpc_outcome(env, bash_call(command), [False])
+    message = requests[0]["message"]
+    assert "\x1b" not in message and "\\x1b[31m" in message and "y" * 3000 in message
+
+
+def test_bypass_command_body_says_that_external_posts_are_still_confirmed(env):
+    requests, _ = _rpc_script(env, [], ["/bypass on"], [True])
+    assert len(requests) == 1, requests
+    assert "外部への送信・公開" in requests[0]["message"], requests
+    assert "bypass でも確認します" in requests[0]["message"], requests

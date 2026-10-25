@@ -93,7 +93,7 @@ winst Python.Python.3.12  # needed by chezmoi
 {{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username }}
 winst Bitwarden.Bitwarden
 winst Bitwarden.CLI
-# Keyhac v2 (msstore は会社で遅いため applejxd のみ)
+# Keyhac v2 (msstore は制約のある環境で遅いため applejxd のみ)
 winst 9P8H1PG6PRHH --source msstore
 # iCloud
 winst 9PKTQ5699M62 --source msstore

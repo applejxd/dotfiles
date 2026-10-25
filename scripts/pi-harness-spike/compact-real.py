@@ -36,6 +36,8 @@ try:
         "canary.ts",
         "children.ts",
         "audit.ts",
+        "tools-ext.ts",
+        "confirm-view.ts",
         "worktree.ts",
         "worktrees-command.ts",
         "landlock_exec.py",

@@ -78,7 +78,7 @@ allow = [
 #
 # ★Copilot は hook の ask を自動承認する既知バグがある。確実に止めたいものは
 #   ask ではなく deny に置く。
-# see docs/spec/agent-command-policy.md 「`ask` に載せるかどうかの判断軸」、
+# see docs/spec/guard/agent-command-policy.md 「`ask` に載せるかどうかの判断軸」、
 #     docs/research/agents/harness-comparison.md 「hook の ask が自動承認される」
 ask = [
   # 削除は承認制。壊滅的なターゲット (ルート・ホーム・作業ディレクトリ全体・
@@ -119,9 +119,8 @@ ask = [
   "uv python install",
   "uv python uninstall",
   "cmake --install",
-  # 認証情報がホームに残る / レジストリへ公開される
+  # 認証情報がホームに残る
   "docker login",
-  "docker push",
   # 素の疎通確認 (-z など) は使うが、-e/-c/-l は check_reverse_shell が deny する
   "nc",
   # 読み取り (--get / --list) も含めて確認を挟む。hook を無効化しうる
@@ -137,7 +136,7 @@ ask = [
 # ★OpenCode には除外が効かない (hook 機構が無く、委譲先が存在しない)。
 #   そのため OpenCode へは素の ask として出る。ここに足すものは
 #   「hook が無ければ毎回 ask で妥当」な粒度に保つこと。
-# see docs/spec/agent-command-policy.md 「`rm` の承認範囲」
+# see docs/spec/guard/agent-command-policy.md 「`rm` の承認範囲」
 ask_hook_owned = [
   "rm",
 ]
@@ -254,12 +253,25 @@ deny = [
   "gsutil cp",
   "az storage blob upload",
   "gh release upload",
+  # 公開・配布 (取り消せない / 外部に公開される)
+  "gh repo edit",
+  "gh repo create",
+  "gh release delete",
+  "gh release edit",
+  "npm publish",
+  "yarn publish",
+  "pnpm publish",
+  "uv publish",
+  "twine upload",
+  "cargo publish",
+  "gem push",
+  "docker push",
 ]
 
 # OpenCode だけ。deny の全項目を 3 つのどれかに分類し、静的 deny の前に説明付きで止める。
 # 分類に漏れ・重複・deny に無い項目があると生成が止まる。deny を足したら必ずここにも足す。
 # ★deny の一覧自体は変えない (plugin が壊れても静的 deny が止める)。
-# see docs/spec/agent-command-policy.md#opencode-の-deny-の説明前段停止
+# see docs/spec/guard/agent-command-policy.md#opencode-の-deny-の説明前段停止
 [bash.deny_guide]
 # 代替が無いもの (利用者に頼む)。迷ったらここ
 user_message = "この操作はエージェントには許可されていません。迂回せず、実行してほしいコマンドと理由を利用者に示してください。"
@@ -327,6 +339,18 @@ user_only = [
   "gsutil cp",
   "az storage blob upload",
   "gh release upload",
+  "gh repo edit",
+  "gh repo create",
+  "gh release delete",
+  "gh release edit",
+  "npm publish",
+  "yarn publish",
+  "pnpm publish",
+  "uv publish",
+  "twine upload",
+  "cargo publish",
+  "gem push",
+  "docker push",
 ]
 # 個別の guide 規則 ([[opencode.shell.guide]] の early = true) が前段で止めるもの。ここで二重にしない
 elsewhere = ["pip", "pip3"]
@@ -534,7 +558,7 @@ except = ["**/.env.example", "**/.env.sample", "**/.env.template"]
 #
 # ★sandbox に効く wildcard は **先頭の `*.` と 単独の `*` だけ**。
 #   `example.*` は WebFetch には効くが sandbox 側は無視する。
-# see docs/spec/agent-sandbox.md 「ネットワーク」
+# see docs/spec/sandbox/agent-sandbox.md 「ネットワーク」
 allow_domains = [
   "github.com",
   "api.github.com",
@@ -590,7 +614,7 @@ deny_domains = []
 #   (user 設定では ~/.claude 基準)。ホーム全体に効かせるなら `~/` を明示する。
 #   Copilot は絶対パス限定・ワイルドカード非対応・存在しないパスは無効。
 #
-# see docs/spec/agent-sandbox.md 「sandbox」
+# see docs/spec/sandbox/agent-sandbox.md 「sandbox」
 #     https://code.claude.com/docs/en/sandboxing
 #     https://docs.github.com/copilot/concepts/agents/copilot-cli/understanding-local-sandboxing
 [sandbox]
@@ -612,7 +636,7 @@ deny = [
   # ocs の状態 (起動前の退避・境界の定義)。下の write 許可 (~/.local/state) の
   # 内側なので名指しで塞ぐ。Copilot は無いパスの deny を捨てるので、chezmoi が
   # 先に作る (home/dot_local/state)
-  # see docs/spec/opencode-sandbox.md#状態の置き場
+  # see docs/spec/sandbox/opencode-sandbox.md#状態の置き場
   "~/.local/state/opencode-sandbox",
   "~/.bash_history", "~/.zsh_history", "~/.python_history",
   "~/.node_repl_history",
@@ -644,7 +668,7 @@ claude_write_deny = [
 # ★このマシンでしか使わないパスはここに書かない。chezmoi 管理外の
 #   ~/.config/agents/local.toml に [sandbox] claude_read_allow として書く。
 # ★実在するパスだけを書く (存在しないパスは bind-mount 失敗の要因になる)。
-# see docs/spec/agent-sandbox.md 「このマシンだけで許可を足す」
+# see docs/spec/sandbox/agent-sandbox.md 「このマシンだけで許可を足す」
 claude_read_allow = [
   # ツールチェーン (mise / uv / cargo / node / go / TeX)
   "~/.local", "~/.cache", "~/.cargo", "~/.rustup", "~/.nvm", "~/.npm",
@@ -716,7 +740,7 @@ copilot_allow_dev_tool_access = false
 # ワイルドカードを含むものは除外される (Copilot は非対応)。
 # 存在しないパスの deny は黙って無効化されるが、後で作られたときに効くよう
 # `deny` には残してある。
-# see docs/spec/agent-sandbox.md 「sandbox」
+# see docs/spec/sandbox/agent-sandbox.md 「sandbox」
 #
 # なお ~/.ssh を denied にすると git over SSH は使えなくなるが、
 # sandbox の auth.git / auth.gh が GitHub へのトークンを注入するため
@@ -758,7 +782,7 @@ shell_network_allow = [
 # 入れるので、公式の代替手段 (settings.json でパスを直接指す) で橋渡しする。
 # {arch} は generate.py が x64 / arm64 に置換する。パスが無いマシンでは
 # 設定を出力しないので、共有の common.toml に書いても他環境を壊さない。
-# see docs/spec/agent-sandbox.md 「seccomp」
+# see docs/spec/sandbox/agent-sandbox.md 「seccomp」
 seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/{arch}/apply-seccomp"
 
 # ---------------------------------------------------------------------------
@@ -862,12 +886,12 @@ approvals = [
 
 # 役割 ([pi.profiles] の名前) の既定。pis と素の pi のガードが使う。
 # pis は --role / PI_HARNESS_ROLE で上書きできる。ガードは実行時に切り替えない (この値で固定)。
-# see docs/spec/pi-decide.md#役割
+# see docs/spec/guard/pi-decide.md#役割
 [pi]
 default_role = "implementer"
 # pis とサンドボックスの起動が -e で足す自作の拡張 (~/.pi/agent/extensions/<名前>/index.ts)。
 # 拡張はここへ足す 1 か所だけ。起動引数 (pis・pi.py) と [pi.sandbox] の読み取りの許可は、この一覧から生成する。
-# see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
+# see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
 own_extensions = ["todo", "plan", "btw", "activity", "ask", "notify", "delegate-nudge"]
 
 # 無確認で実行してよい shell コマンド ([bash] allow とは共用しない。前提が違う)。
@@ -886,9 +910,46 @@ allow = [
 
 # `ssh <targets の宛先> <コマンド>` と `scp` (この宛先との 1 件の転送) を、通常の判定にかける。
 # [bash] deny の "ssh" / "scp" は残す (対象外の形は deny のまま)。
-# see docs/spec/pi-decide.md#ssh--scp-の許可
+# see docs/spec/guard/pi-decide.md#ssh--scp-の許可
 [pi.remote_exec]
 targets = ["sbx@sandbox-gpu"]
+
+# bypass でもサンドボックスの緩和でも allow にならない確認 (内容つきで必ず利用者に見せる)。
+# see docs/spec/guard/pi-decide.md#confirm
+[pi.confirm]
+bash = [
+  "gh pr create",
+  "gh pr edit",
+  "gh pr review",
+  "gh pr comment",
+  "gh pr close",
+  "gh pr reopen",
+  "gh pr ready",
+  "gh issue create",
+  "gh issue edit",
+  "gh issue comment",
+  "gh issue close",
+  "gh issue reopen",
+  "gh issue lock",
+  "gh issue unlock",
+  "gh issue transfer",
+  "gh issue pin",
+  "gh issue unpin",
+  "gh issue delete",
+  "gh repo fork",
+  "gh repo rename",
+  "gh repo archive",
+  "gh repo unarchive",
+  "gh workflow run",
+  "gh workflow enable",
+  "gh workflow disable",
+  "gh variable set",
+  "gh variable delete",
+  "gh gist edit",
+  "gh gist delete",
+]
+checks = ["check_gh_api_mutation"]
+timeout_seconds = 300
 
 # shell 出力の伏字化。誘導と結果フィルタを抜けて shell を通ったものへの安全網。
 # ★境界ではない。base64 や tr で変換されるとすり抜ける (実測)。事故と素朴な
@@ -999,7 +1060,7 @@ subcommands = ["init", "check", "log", "status", "sleep"]
 [[pi.skill_scripts.allow]]
 script = "~/.claude/skills/away-shift/scripts/preflight.py"
 
-# web-search。私用 (github-copilot) だけ。業務用 (Bedrock) は検索を AgentCore に一本化する (skill も配らない)。
+# web-search。個人用 (github-copilot) だけ。制約のある環境用 (Bedrock) は検索を AgentCore に一本化する (skill も配らない)。
 # 外部へ出るのはクエリだけで、クエリは秘匿チェックで止める。sync-keys は bw を呼ぶので載せない。
 # see docs/spec/web-search.md#pis-の許可規則
 {{- if eq (includeTemplate "llm-provider" .) "github-copilot" }}
@@ -1007,7 +1068,7 @@ script = "~/.claude/skills/away-shift/scripts/preflight.py"
 script = "~/.claude/skills/web-search/scripts/websearch.py"
 subcommands = ["search", "fetch", "papers", "status"]
 
-# imozuru (web-search と同じ私用だけ。vendor したスキル)。確認なしに載せるのは、書き込み先が .tmp/research/ の中に限られるものと、
+# imozuru (web-search と同じ個人用だけ。vendor したスキル)。確認なしに載せるのは、書き込み先が .tmp/research/ の中に限られるものと、
 # 公開済みの API へ検索語を送るだけのもの。fetch.py・fetch_youtube.py・watch.py の add / check は載せない (確認を出す)
 # see docs/spec/imozuru.md#pis-の許可規則
 [[pi.skill_scripts.allow]]
@@ -1025,7 +1086,7 @@ subcommands = ["list"]
 # 誘導 (deny と案内)。pi の判定器と OpenCode の guide plugin の両方が使う。
 # id で OpenCode の [[opencode.shell.guide]] の並びへ差し込む (pi = "<id>")。
 # pattern / unless は Python と JavaScript の両方で同じ意味になる正規表現だけを書く。
-# see docs/spec/pi-decide.md#誘導
+# see docs/spec/guard/pi-decide.md#誘導
 
 # 読み取りを read ツールへ寄せる。目的は確認回数ではなく保護で、
 # shell 経由では read の deny が効かないため。
@@ -1072,7 +1133,7 @@ message = "ヒアドキュメントでスクリプトを渡さないでくださ
 # ターンも再開しない。bg_run (bash と同じ判定) だけが終了時にターンを起こす。
 # ★対象は行末の `&`、両側が空白の `&` (`a & b`)、行頭の nohup / setsid、disown。`&&` / `2>&1` / `&>` / `|&` / URL の `?a=1&b=2` は当たらない。
 # ★引用内の `a & b` (`echo "Q & A"` など) も当たる。引用とは区別が付かない割り切り (git / gh の -m は unless で外す)。
-# see docs/research/agents/pi-bg-experiments.md (F6)、docs/spec/pi-decide.md#誘導
+# see docs/research/agents/pi-bg-experiments.md (F6)、docs/spec/guard/pi-decide.md#誘導
 [[pi.guide]]
 id = "bg-run-instead-of-ampersand"
 pattern = '(^|[^&>\s])\s*&\s*(\n|$)|(?<=\s)&(?=\s)|(^|&&|;|\n)\s*(nohup|setsid)\s|(^|[\s;])disown(\s|$)'
@@ -1082,7 +1143,7 @@ message = "bash の & / nohup / setsid でバックグラウンド実行しな�
 # 長い sleep で会話を止めない。待つコマンドは bg_run (終わったときの通知でターンが再開する) で起こす。
 # ★scope = "foreground": guarded_bash だけに効く。bg_run の中身 (sleep 300 を待つジョブそのもの) には当てない。判定器本体 (judge/bash.ts, decide.py) は scope 付きを無視する。
 # ★対象はコマンドの先頭や ; && | & ( do then else の直後の sleep で、秒数が 10 以上、または m / h / d 付き、infinity。sleep 9 以下や sleep 1.5 は通す。
-# see docs/spec/pi-decide.md#誘導、docs/research/agents/pi-bg-experiments.md
+# see docs/spec/guard/pi-decide.md#誘導、docs/research/agents/pi-bg-experiments.md
 [[pi.guide]]
 id = "long-sleep-in-foreground"
 scope = "foreground"
@@ -1092,17 +1153,17 @@ message = "10 秒以上の sleep でここを止めないでください (その
 
 # ~/.pi/agent/settings.json へ出す設定。ここに書いたキーは生成器の持ち物で、消すと settings.json からも消える。
 # 書けるキー: defaultThinkingLevel / skills / enabledModels / extensions。既定のモデルは [opencode.model] の default 階層。
-# see docs/spec/pi-guard.md#pi-の設定
+# see docs/spec/guard/pi-guard.md#pi-の設定
 [pi.settings]
 defaultThinkingLevel = "medium"
 skills = ["~/.claude/skills"]
 # 素の pi (Windows・Orca の起動ボタンなど) 向けの補助。pis は -ne で外れる。ガードは付けない (CHG-0023 段 3f)。
-# commit-confirm: see docs/spec/pi-guard.md#commit-の確認-素の-pi
+# commit-confirm: see docs/spec/guard/pi-guard.md#commit-の確認-素の-pi
 extensions = ["~/.config/pi/commit-confirm"]
 
 # pi が実際に受け付けるモデルは OpenCode の階層の表と違うことがある。ここにある階層だけ上書きする。
 # ★gpt-6-astra は pi の Copilot 経由で model_not_supported (2026-10 実測)。
-# see docs/spec/pi-guard.md#windows-の子エージェント
+# see docs/spec/guard/pi-guard.md#windows-の子エージェント
 [pi.model.tier.github-copilot]
 second_opinion = "gpt-6-sol"
 
@@ -1110,7 +1171,8 @@ second_opinion = "gpt-6-sol"
 # 段 6 で OpenCode を撤去するときに、共有キーをここへ移す)。pis (標準のサンドボックス) が使う。
 # ★read の ~/.config/agents は判定器 (decide.py) が common.toml を読むために要る。書き込みは開けない。
 # ★protected は、dotfiles のリポジトリを作業ツリーにしたときに書き込みを塞ぐ相対パス。
-# see docs/spec/pi-guard.md#サンドボックス
+# ★deny_read は、read の ~/.config/agents の内側にある検索 API の鍵 (内側へ渡さない)。
+# see docs/spec/guard/pi-guard.md#サンドボックス
 [pi.sandbox]
 read = [
   "~/bin",
@@ -1126,27 +1188,35 @@ control_dirs = [
   "~/.claude/hooks",
   "~/.local/share/pi-sandbox",
 ]
+deny_read = ["~/.config/agents/websearch-keys.json"]
 protected = [
   "home/dot_config/pi",
   "home/dot_claude/hooks",
   "home/dot_pi",
 ]
 
-# see docs/spec/opencode-sandbox.md#copilot-ブローカーpis-のみ
+# see docs/spec/sandbox/broker.md#copilot-ブローカー
 [pis.broker]
 {{- if eq (includeTemplate "llm-provider" .) "github-copilot" }}
 copilot = "auto"
 {{- else }}
 copilot = "off"
 {{- end }}
-# see docs/spec/opencode-sandbox.md#github-ブローカーpis-のみ
+# see docs/spec/sandbox/broker.md#github-ブローカー
 github = "auto"
+# 検索 (websearch.py) の鍵をホスト側の Envoy に持たせ、内側へは渡さない。鍵は ~/.config/agents/websearch-keys.json
+search = "auto"
+{{- if eq (includeTemplate "llm-provider" .) "github-copilot" }}
+# 個人の機: gh のブラウザ認証 (gh auth login) で保存されたトークンを、ホスト側で取り出す
+github_token_command = ["gh", "auth", "token"]
+{{- else }}
 github_token_file = "~/.config/pis/github-token"
+{{- end }}
 
 # pi のプロンプトテンプレート (~/.pi/agent/prompts/<名前>.md になり、/<名前> で呼ぶ)。
 # 文面は pi のツール (guarded_task) に合わせてある。[opencode.commands] とは別 (段 6 で OpenCode 側を消す)。
 # $ARGUMENTS は呼び出しの引数全部。
-# see docs/spec/pi-guard.md#fleet
+# see docs/spec/guard/pi-guard.md#fleet
 [pi.commands.fleet]
 description = "依頼を並列に動かせる作業に分け、作業役 (worker) を同時に起動して進める"
 argument_hint = "<依頼>"
@@ -1180,7 +1250,7 @@ $ARGUMENTS
 
 # /stepback [質問]: 質問 (省略時は直前の質問と回答) を一段抽象化した「ステップバック質問」を作り、先にそれを考えてから答え直す。
 # 配るのは /fleet と同じ範囲 (Unix のフルガード側。Windows は .chezmoiignore で除外)。
-# see docs/spec/pi-guard.md#stepback
+# see docs/spec/guard/pi-guard.md#stepback
 [pi.commands.stepback]
 description = "質問 (省略すると直前の質問と回答) からステップバック質問 (一段抽象化した問い) を作り、先にそれを考えてから答え直す"
 argument_hint = "[質問]"
@@ -1220,7 +1290,7 @@ $ARGUMENTS
 # pi の判定器の役割 (プロファイル)。判定器の `role` に名前を渡す。pi だけが読む。
 # tools に無いツールは deny。default は、どの規則にも当たらない操作の扱い。
 # ★評価の順番は判定器のコードに固定してある (この並びに意味は無い)。
-# see docs/spec/pi-decide.md
+# see docs/spec/guard/pi-decide.md
 # shell_allow を書くと、その役割では [pi.shell] allow の代わりにそれを使う。
 # shell_deny はその役割だけの禁止 (bypass でも外れない)。
 # task は子エージェントの起動 ([pi.agents])。子は同じ判定器で動く。
@@ -1236,7 +1306,7 @@ default = "deny"
 # 探索役。reader に加え、数や履歴を道具で確かめられるよう、読み取り専用のコマンドだけを確認なしで通す。
 # ★上以外の shell は deny。git status / git diff は .git/config 経由でコマンドを起動しうるので、全体の [pi.shell] allow には載せない
 #   (committer と同じ扱い)。書き込み系の git は全て拒否する
-# see docs/spec/pi-guard.md#子エージェント
+# see docs/spec/guard/pi-guard.md#子エージェント
 [pi.profiles.explorer]
 tools = ["bash", "read", "grep", "find", "ls"]
 default = "deny"
@@ -1302,7 +1372,7 @@ shell_deny = [
 # profile は [pi.profiles] の名前、tier は [opencode.model.tier.*] の階層 (無ければ親と同じモデル)。
 # inherit_bypass = true なら、親が bypass のとき子も bypass で動く (ask を allow にする)。
 # ★ask に git commit などが残る役割 (committer) には付けない
-# see docs/spec/pi-guard.md#子エージェント
+# see docs/spec/guard/pi-guard.md#子エージェント
 [pi.agents.explore]
 profile = "explorer"
 inherit_bypass = true
@@ -1331,7 +1401,7 @@ Git の履歴やコマンドの実行が要る調査は、できないことを�
 読んだ範囲と実行できなかったことを未確認に明記します。
 """
 
-# see docs/spec/pi-guard.md#review-への依頼の書き方
+# see docs/spec/guard/pi-guard.md#review-への依頼の書き方
 [pi.agents.review]
 profile = "explorer"
 tier = "second_opinion"
@@ -1733,14 +1803,14 @@ pi = "read-sed-n"
 # ★対象は [pi.shell] allow と揃えること。allow を増やすならここも足し、
 #   引数でファイルへ書けるオプション (git log の --output など) も点検して下のように塞ぐ。
 # see docs/change/closed/0002-opencode-ask-by-default.md 「段階 4a」
-# see docs/spec/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形
+# see docs/spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形
 [[opencode.shell.guide]]
 pattern = '(^|&&|\|\||;|\n)\s*(wc|grep\s+-n|git\s+log|uv\s+pip\s+list|docker\s+ps)\b[^\n]*>(?!&\s*(\d+|-)(?=$|[\s;|&)])|>?\s*/dev/null(?=$|[\s;|&)]))'
 message = "allow されたコマンドの出力をリダイレクトで書き込まないでください。ファイルを作る・書き換えるときは write / edit ツールを使ってください。"
 
 # allow の `git log *` に当たる `git log --output=<パス>` を止める (CHG-0017 段 5)。
 # ★当てるのは git log で始まる部分 (次の区切りまで) だけ。引用の中は飛ばす。
-# see docs/spec/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形
+# see docs/spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n(`{])\s*git[ \t]+log(?=[ \t]|\\\n)(?:[^;&|\n'"\\]|\\[\s\S]|'[^']*'|"(?:[^"\\]|\\[\s\S])*")*?(?:[ \t]|\\\n)['"]?--output['"]?(=|[ \t])'''
 message = "git log の --output でファイルへ書き込まないでください。ファイルを作るときは write ツールを使ってください。"
@@ -1764,7 +1834,7 @@ pi = "write-heredoc-script"
 # plugin の execute.before が先に止めて message を返す。
 # ★ocs でも効く (drop_shell は permission のフィルタで guide は対象外)。
 # ★`uv pip ...` は行頭が uv なので当たらない。poetry / pipenv は止めない。
-# see docs/spec/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導
+# see docs/spec/guard/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導
 # see docs/research/opencode/permission/early-guard.md
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n])[ \t]*((uv[ \t]+run|mise[ \t]+exec[ \t]+--)[ \t]+)?(pip3?(\.\d+)?|python[0-9.]*[ \t]+-m[ \t]*pip3?(\.\d+)?)([ \t]|$)'''
@@ -1776,7 +1846,7 @@ message = "pip は使わないでください。依存の追加は `uv add <pkg>
 # ★ocs の中でも効く (ADR-0012 の部分変更)。通常の掃除 (.tmp/ や build の削除) は止めない。
 # ★prose (git commit -m の本文) は上の pip と同じ unless で外す。unless はコマンドが
 #   git / gh の 1 コマンドだけのときに限る (連結・置換を含めると見送らない)。
-# see docs/spec/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導
+# see docs/spec/guard/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n])[ \t]*rm[ \t]+([^\s;&|]+[ \t]+)*["']?(\./)?([^\s;&|"']*/)?\.git(/[^\s;&|"']*)?["']?(?=[\s;&|]|$)'''
 unless = '''^\s*(git|gh)\s(?=[^\n]*\s-{1,2}(m|am|message|body|title)[\s=])(?:[^;&|\n'"`$()<>\\]|\\[^\n]|'[^']*'|"(?:[^"\\`$]|\\.|\$\(cat <<-?'(\w+)'\n[\s\S]*?\n\3\n\s*\))*")*$'''
@@ -1801,7 +1871,7 @@ message = "/ ~ .git を起点にした find の -delete / -exec rm はしない�
 # ランチャーが Fence で境界を張ってから opencode --standalone を起動する。
 # ★generate.py は Fence の有無に関係なく設定を出力する。実体が無いマシンでは
 #   ランチャーが起動を断る。
-# see docs/spec/opencode-sandbox.md
+# see docs/spec/sandbox/opencode-sandbox.md
 [opencode.sandbox]
 enabled = true
 # Fence の実体。版は mise/config.toml.tmpl が固定する。
@@ -1809,7 +1879,7 @@ runtime_path = "~/.local/share/mise/installs/github-fencesandbox-fence/latest/fe
 
 # 読み取りは既定で拒否し、ここ (と work_read) に並べた所だけ開ける。
 # 無いパスは起動時に落とす。
-# see docs/spec/opencode-sandbox.md#境界の中身
+# see docs/spec/sandbox/opencode-sandbox.md#境界の中身
 read = [
   "~/.opencode",
   "~/.local/share/mise",
@@ -1860,7 +1930,7 @@ unsafe_workspace = [
 
 # 配備済みの制御ファイルの置き場。そのもの・祖先・子孫のどこでも起動せず、
 # .opencode/sandbox.toml の write とも重ねさせない。ここの編集は ocs の外で行う。
-# see docs/spec/opencode-sandbox.md#起動ディレクトリの制限
+# see docs/spec/sandbox/opencode-sandbox.md#起動ディレクトリの制限
 control_dirs = [
   "~/.local/share/ocs",
   "~/.local/bin",
@@ -1918,7 +1988,7 @@ protected = [
   "home/dot_config/mise",
   # ★.opencode/plugins は置かれると**自動ロードされる**。Fence の denyWrite は
   #   無いパスに効かないので、ランチャーが空のディレクトリを先に作る。
-  # see docs/spec/opencode-sandbox.md#保護対象denywrite
+  # see docs/spec/sandbox/opencode-sandbox.md#保護対象denywrite
   ".opencode",
 ]
 
@@ -1998,14 +2068,14 @@ provider = "github-copilot"
 model = "claude-sonnet-5.5"
 
 # プロジェクト個別の追加許可はここに書かず、<起動ディレクトリ>/.opencode/sandbox.toml に書く。
-# see docs/spec/opencode-sandbox.md#プロジェクトごとの追加
+# see docs/spec/sandbox/opencode-sandbox.md#プロジェクトごとの追加
 
 [opencode.sandbox.policies]
 # グローバル設定に置くとプロジェクト設定から解除できない。
 # ★任意コードへの境界ではない。permission 検査を通る操作にしか効かず、
 #   plugin のコードを sandbox しない。不正な statement は警告付きで破棄される
 #   ので、置いた事実ではなく**有効性**を確認する。
-# ★hard-deny には承認による例外が無い。通常業務で承認付き利用を想定する操作は
+# ★hard-deny には承認による例外が無い。通常作業で承認付き利用を想定する操作は
 #   ここへ置かない。
 deny = [
   "shell:git push *",
@@ -2125,7 +2195,7 @@ args = [
 #   purpose       用途メモ
 #   post_edit     true なら、pi のフルガードが edit / write の後に呼ぶ
 #   timeout_sec   秒
-# see docs/spec/pi-guard.md#整形
+# see docs/spec/guard/pi-guard.md#整形
 
 [[hooks]]
 id = "markdownlint"

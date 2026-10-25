@@ -42,7 +42,6 @@
    "uv python uninstall",
    "cmake --install",
    "docker login",
-   "docker push",
    "nc",
    "git config"
   ],
@@ -134,7 +133,19 @@
    "aws s3 sync",
    "gsutil cp",
    "az storage blob upload",
-   "gh release upload"
+   "gh release upload",
+   "gh repo edit",
+   "gh repo create",
+   "gh release delete",
+   "gh release edit",
+   "npm publish",
+   "yarn publish",
+   "pnpm publish",
+   "uv publish",
+   "twine upload",
+   "cargo publish",
+   "gem push",
+   "docker push"
   ],
   "deny_guide": {
    "alternative": [
@@ -257,7 +268,19 @@
     "aws s3 sync",
     "gsutil cp",
     "az storage blob upload",
-    "gh release upload"
+    "gh release upload",
+    "gh repo edit",
+    "gh repo create",
+    "gh release delete",
+    "gh release edit",
+    "npm publish",
+    "yarn publish",
+    "pnpm publish",
+    "uv publish",
+    "twine upload",
+    "cargo publish",
+    "gem push",
+    "docker push"
    ]
   }
  },
@@ -999,6 +1022,43 @@
     "template": "次の質問に、ステップバック (一歩引いて考える) 方式で答えてください。\n\n質問:\n$ARGUMENTS\n\n対象の決め方: 上の「質問:」が空でなければ、それが対象。空のときは、この会話の直前の利用者の質問と、\nそれへのあなたの直近の回答を対象にし、「この回答をもっと俯瞰して見直す」という依頼として扱う\n(手順 1 では、直前の回答がどの粒度・前提で答えたかも踏まえ、手順 4 では直前の回答と何が変わるかを示す)。\n直前のやり取りが無いときは、何を対象にするかを利用者に尽ねて止まる。\n\n手順:\n\n1. 質問から具体的な固有名・数値・状況を取り除き、背景にある原理・概念・上位の問いを 1〜3 個に言い換える。\n   これがステップバック質問。元の質問を言い換えただけのものは不可\n   (「X のエラーを直すには」ではなく「X はどういう条件で、なぜそのエラーを返す設計か」のように、\n   答えが元の質問以外にも使える粒度にする)\n2. ステップバック質問を、最初に利用者へ示す\n3. ステップバック質問それぞれに先に答える。コードや文書で確かめられることは、読み取りだけで確かめる\n   (ファイルの変更・コマンドの実行で状態を変えない)。確かめていないことは「未確認」「推測」と書く\n4. 3 の答えを根拠にして、元の質問に答える。どのステップバック質問の答えを使ったかを示す。\n   3 の答えが元の質問と食い違う、または足りないときは、その点を書き、結論を弱める\n5. 元の質問が変更や実行の依頼でも、ここでは答え (方針) を出すところまでにする。作業に進むかは利用者に確かめる\n"
    }
   },
+  "confirm": {
+   "bash": [
+    "gh pr create",
+    "gh pr edit",
+    "gh pr review",
+    "gh pr comment",
+    "gh pr close",
+    "gh pr reopen",
+    "gh pr ready",
+    "gh issue create",
+    "gh issue edit",
+    "gh issue comment",
+    "gh issue close",
+    "gh issue reopen",
+    "gh issue lock",
+    "gh issue unlock",
+    "gh issue transfer",
+    "gh issue pin",
+    "gh issue unpin",
+    "gh issue delete",
+    "gh repo fork",
+    "gh repo rename",
+    "gh repo archive",
+    "gh repo unarchive",
+    "gh workflow run",
+    "gh workflow enable",
+    "gh workflow disable",
+    "gh variable set",
+    "gh variable delete",
+    "gh gist edit",
+    "gh gist delete"
+   ],
+   "checks": [
+    "check_gh_api_mutation"
+   ],
+   "timeout_seconds": 300
+  },
   "default_role": "implementer",
   "external_read": {
    "paths": [
@@ -1228,6 +1288,9 @@
     "~/.claude/hooks",
     "~/.local/share/pi-sandbox"
    ],
+   "deny_read": [
+    "~/.config/agents/websearch-keys.json"
+   ],
    "protected": [
     "home/dot_config/pi",
     "home/dot_claude/hooks",
@@ -1342,7 +1405,12 @@
   "broker": {
    "copilot": "auto",
    "github": "auto",
-   "github_token_file": "~/.config/pis/github-token"
+   "github_token_command": [
+    "gh",
+    "auth",
+    "token"
+   ],
+   "search": "auto"
   }
  },
  "provider": {

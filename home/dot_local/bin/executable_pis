@@ -4,7 +4,7 @@
 usage: pis [--bypass] [--no-sandbox] [--role <役割>] [--] [pi の引数...]  (標準はサンドボックスの中)
 本体は ``~/.local/share/ocs/pis.py``（隔離起動 ``ocs`` と同じ置き場）。ここから絶対パスで読み込み、
 **sys.path・PYTHONPATH・カレントディレクトリからは探さない**（``ocs`` の入口と同じ読み込み）。
-see docs/spec/pi-guard.md#起動
+see docs/spec/guard/pi-guard.md#起動
 """
 
 from __future__ import annotations

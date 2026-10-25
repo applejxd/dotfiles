@@ -1248,7 +1248,7 @@ def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
 
 # 前段停止の「セグメント先頭」と語境界 (単一の空白・区切り・末尾)。
 # 引用符・括弧・``#``・``\``・``<<``・単語の ``{`` を含むコマンドは前段で止めない。
-# see docs/spec/agent-command-policy.md#opencode-の-deny-の説明前段停止
+# see docs/spec/guard/agent-command-policy.md#opencode-の-deny-の説明前段停止
 DENY_GUIDE_SEGMENT_START = r"(^|&&|\|\||[;|\n])[ \t]*"
 DENY_GUIDE_COMMAND_END = r"(?= |$|[;|\n]|&&)"
 DENY_GUIDE_UNLESS = r"""['"`\\#()]|<<|(^|[\s;&|])\{(\s|$)"""
@@ -1382,7 +1382,7 @@ def _bash_deny_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
 
     全 deny が分類のどれか 1 つに属さないと生成を止める。通常版と隔離版の最終の静的 deny から
     決め、隔離版で捨てた項目に ``not_isolated``、覆しうるエージェントに ``except_agents`` を付ける。
-    see docs/spec/agent-command-policy.md#opencode-の-deny-の説明前段停止
+    see docs/spec/guard/agent-command-policy.md#opencode-の-deny-の説明前段停止
     """
     bash = common.get("bash", {})
     cfg = bash.get("deny_guide")
@@ -1724,7 +1724,7 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     ここでは共通の許可リストだけを出す。
 
     **Fence の有無に関係なく返す。** 実体が無いときはランチャーが起動を断る。
-    see docs/spec/opencode-sandbox.md#境界の中身
+    see docs/spec/sandbox/opencode-sandbox.md#境界の中身
     """
     cfg = common.get("opencode", {}).get("sandbox")
     if not cfg or not cfg.get("enabled"):
@@ -1804,7 +1804,7 @@ def opencode_sandbox_agents(common: dict[str, Any], reachable: list[str]) -> dic
 
     **通常版の ``opencode.json`` からは引き継がない**（空の既存に対して組む）。
     モデルの割り当てと接続設定は、この PC のプロバイダが境界の内から届くときだけ出す。
-    see docs/spec/opencode-sandbox.md#エージェントとコマンド
+    see docs/spec/sandbox/opencode-sandbox.md#エージェントとコマンド
     """
     out: dict[str, Any] = {}
     agent = merge_opencode_agents({}, common)
@@ -1847,6 +1847,54 @@ def agent_env(common: dict[str, Any]) -> dict[str, str]:
 
 JUDGE_COMMON_KEYS = ("bash", "file", "pi")
 JUDGE_TABLES = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/tables.toml"
+JUDGE_CHECKS = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/checks.ts"
+PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds"})
+PI_CONFIRM_TIMEOUT_DEFAULT = 300
+
+
+def judge_ask_names() -> frozenset[str]:
+    """``judge/checks.ts`` の ``ASK_NAMES`` にある検査名 (``[pi.confirm] checks`` の検証用)。"""
+    text = JUDGE_CHECKS.read_text(encoding="utf-8")
+    block = re.search(r"export const ASK_NAMES[^=]*=\s*\[(.*?)\]", text, re.DOTALL)
+    if block is None:
+        raise SystemExit(f"{JUDGE_CHECKS} に ASK_NAMES が見つからない")
+    return frozenset(re.findall(r'"(check_[a-z0-9_]+)"', block.group(1)))
+
+
+def pi_confirm(common: dict[str, Any]) -> dict[str, Any]:
+    """``[pi.confirm]`` を検証し、既定値を補って返す (無ければ空の表と既定のタイムアウト)。
+
+    bypass でもサンドボックスの緩和でも allow にならない ask の表。``bash`` は前方一致の文字列、
+    ``checks`` は ``ASK_NAMES`` に実在する検査名、``timeout_seconds`` は 10　3600 の整数 (bool 不可)。
+    see docs/spec/guard/pi-decide.md#confirm
+    """
+    section = (common.get("pi") or {}).get("confirm")
+    if section is None:
+        section = {}
+    if not isinstance(section, dict):
+        raise SystemExit("[pi.confirm] がテーブルでない")
+    _reject_unknown("pi.confirm", set(section), PI_CONFIRM_KEYS)
+    out: dict[str, Any] = {}
+    for key in ("bash", "checks"):
+        value = section.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+            raise SystemExit(f"[pi.confirm] {key} は空でない文字列の配列")
+        out[key] = list(value)
+    unknown = sorted(set(out["checks"]) - judge_ask_names())
+    if unknown:
+        raise SystemExit(
+            "[pi.confirm] checks に judge/checks.ts の ASK_NAMES に無い名前がある: "
+            + ", ".join(unknown)
+        )
+    timeout = section.get("timeout_seconds", PI_CONFIRM_TIMEOUT_DEFAULT)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 10 <= timeout <= 3600:
+        raise SystemExit(f"[pi.confirm] timeout_seconds は 10　3600 の整数: {timeout!r}")
+    out["timeout_seconds"] = timeout
+    return out
+
+
+JUDGE_COMMON_KEYS = ("bash", "file", "pi")
+JUDGE_TABLES = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/tables.toml"
 
 
 def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
@@ -1855,12 +1903,15 @@ def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
     ``common`` は読んだままの ``[bash]`` / ``[file]`` / ``[pi]``
     (``[pi]`` は ``resolve_pi_shared`` で変わらない)。
     ``tables`` は検査関数が引く表 (``judge/tables.toml``)。
-    see docs/spec/pi-decide.md
+    see docs/spec/guard/pi-decide.md
     """
     with JUDGE_TABLES.open("rb") as f:
         tables = tomllib.load(f)
+    judge_common = {key: common[key] for key in JUDGE_COMMON_KEYS if key in common}
+    if "pi" in judge_common:
+        judge_common["pi"] = {**judge_common["pi"], "confirm": pi_confirm(common)}
     return {
-        "common": {key: common[key] for key in JUDGE_COMMON_KEYS if key in common},
+        "common": judge_common,
         "tables": tables,
     }
 
@@ -1894,7 +1945,9 @@ def pi_own_extensions(common: dict[str, Any]) -> list[str]:
     return list(names)
 
 
-PI_BROKER_KEYS = frozenset({"copilot", "github", "github_token_file", "github_token_command"})
+PI_BROKER_KEYS = frozenset(
+    {"copilot", "github", "github_token_file", "github_token_command", "search"}
+)
 
 
 def pi_broker(common: dict[str, Any]) -> dict[str, Any]:
@@ -1902,11 +1955,12 @@ def pi_broker(common: dict[str, Any]) -> dict[str, Any]:
 
     ``github`` は ``off`` / ``auto``。PAT の出どころは ``github_token_file`` (文字列のパス) か
     ``github_token_command`` (文字列の配列、argv) のどちらか一方で、書いたものだけ出力する。
+    ``search`` は ``off`` / ``auto`` (検索ブローカー。書いたときだけ出力し、無ければ pis は ``off`` 扱い)。
     以下は ``copilot`` の説明:
 
     ここでは ``off`` / ``auto`` / ``http://`` で始まる文字列かだけを見る。URL の形
     (127.0.0.1・1024-65535) の厳密な検証は pis (``pi.parse_broker``) が起動時に行う。
-    see docs/spec/opencode-sandbox.md#copilot-ブローカーモードpis_copilot_brokerpis-のみ
+    see docs/spec/sandbox/broker.md#copilot-ブローカー
     """
     section = (common.get("pis") or {}).get("broker")
     if section is None:
@@ -1924,6 +1978,11 @@ def pi_broker(common: dict[str, Any]) -> dict[str, Any]:
     if github not in ("off", "auto"):
         raise SystemExit(f'[pis.broker] github は "off" / "auto" のどちらか: {github!r}')
     out["github"] = github
+    if "search" in section:
+        search = section["search"]
+        if search not in ("off", "auto"):
+            raise SystemExit(f'[pis.broker] search は "off" / "auto" のどちらか: {search!r}')
+        out["search"] = search
     if "github_token_file" in section and "github_token_command" in section:
         raise SystemExit(
             "[pis.broker] github_token_file と github_token_command は両方は書けない (どちらか 1 つ)"
@@ -1955,7 +2014,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
     ``[bash]`` / ``[file]`` / ``[pi]`` と ``tables.toml``) と、フルガードが自分で使うもの
     (伏字化・シェルへ入れる環境変数) を置く。
     伏字化の正規表現は OpenCode の guide plugin と同じ JavaScript の方言。
-    see docs/spec/pi-guard.md
+    see docs/spec/guard/pi-guard.md
     """
     redact = opencode_redact(common)
     if not redact:
@@ -1991,7 +2050,7 @@ def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[
 
     pi 自身が書くキー (``lastChangelogVersion`` など) と、利用者が ``/settings`` で変えた
     持ち物以外のキーは残す。
-    see docs/spec/pi-guard.md#pi-の設定
+    see docs/spec/guard/pi-guard.md#pi-の設定
     """
     declared = (common.get("pi") or {}).get("settings") or {}
     if not isinstance(declared, dict):
@@ -2010,7 +2069,7 @@ def pi_post_edit_hooks(common: dict[str, Any]) -> list[dict[str, str]]:
     """``[[hooks]]`` のうち ``post_edit`` のもの。フルガードが edit / write の後に呼ぶ。
 
     整形 (``format-file.sh``) と markdownlint を、Claude / Copilot の hook と同じスクリプトで行う。
-    see docs/spec/pi-guard.md#整形
+    see docs/spec/guard/pi-guard.md#整形
     """
     out = []
     for hook in common.get("hooks") or []:
@@ -2041,7 +2100,7 @@ def pi_keybindings(_existing: dict[str, Any], common: dict[str, Any]) -> dict[st
     """``~/.pi/agent/keybindings.json``。``[pi.keybinds]`` をそのまま出す (ファイルごと持ち物)。
 
     値は 1 つのキー (文字列) か、キーの配列 (空なら割り当てを外す)。
-    see docs/spec/pi-guard.md#キーバインド
+    see docs/spec/guard/pi-guard.md#キーバインド
     """
     declared = (common.get("pi") or {}).get("keybinds") or {}
     if not isinstance(declared, dict):
@@ -2055,7 +2114,9 @@ def pi_keybindings(_existing: dict[str, Any], common: dict[str, Any]) -> dict[st
     return copy.deepcopy(declared)
 
 
-PI_SANDBOX_KEYS = frozenset({"read", "write", "control_dirs", "protected", "network_allow"})
+PI_SANDBOX_KEYS = frozenset(
+    {"read", "write", "control_dirs", "protected", "network_allow", "deny_read"}
+)
 
 
 def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
@@ -2063,7 +2124,7 @@ def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
 
     ランチャー (``pis``。``ocs/pi.py``) が起動ディレクトリと合わせて Fence の設定を組み立てる。
     OpenCode の境界が無効なら (共有キーが無いので) 出さない。
-    see docs/spec/pi-guard.md#サンドボックス
+    see docs/spec/guard/pi-guard.md#サンドボックス
     """
     base = opencode_sandbox(common)
     if base is None:
@@ -2073,7 +2134,7 @@ def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
         raise SystemExit("[pi.sandbox] は表でなければならない")
     _reject_unknown("pi.sandbox", set(extra), PI_SANDBOX_KEYS)
     out = {"runtime_path": base["runtime_path"], "base": copy.deepcopy(base["base"])}
-    for key in ("read", "write", "control_dirs"):
+    for key in ("read", "write", "control_dirs", "deny_read"):
         added = [expand_user(str(p)) for p in extra.get(key) or []]
         if key == "read":
             # 自作の拡張は、一覧 ([pi] own_extensions) から読み取りだけを開ける
@@ -2166,7 +2227,7 @@ def build_pi_subagents(_existing: dict[str, Any], common: dict[str, Any]) -> dic
     判定器が無いので、shell・編集のツールを持たない読み取り役
     (read / grep / find / ls だけ) に限る。shell を持つ役割でも、読み取り専用の版
     (``plain_description`` / ``plain_system``) を宣言していれば、それを出す (explore)。
-    see docs/spec/pi-guard.md#windows-の子エージェント
+    see docs/spec/guard/pi-guard.md#windows-の子エージェント
     """
     pi = common.get("pi") or {}
     profiles = pi.get("profiles") or {}

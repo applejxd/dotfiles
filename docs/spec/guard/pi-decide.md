@@ -5,7 +5,7 @@ pi のフルガードが、ツールの呼び出しを実行してよいかを�
 hook（`check_bash.py` / `check_file_read.py`）と同じ `bashrules` と `command_policy.py` を使う。
 hook の出力は変えない（`check_bash.py` はこの判定器を使わない）。
 
-移行の計画と経緯は [CHG-0020](../change/0020-pi-migration.md)。呼び出し側は [pi のガード](pi-guard.md)。
+移行の計画と経緯は [CHG-0020](../../change/0020-pi-migration.md)。呼び出し側は [pi のガード](pi-guard.md)。
 
 ## 置き場
 
@@ -13,7 +13,7 @@ hook の出力は変えない（`check_bash.py` はこの判定器を使わな�
 | --- | --- | --- |
 | `home/dot_claude/hooks/executable_decide.py` | `~/.claude/hooks/decide.py` | CLI。stdin の JSON を 1 つ読み、stdout に応答を 1 つ書く |
 | `home/dot_claude/hooks/lib/decide.py` | `~/.claude/hooks/lib/decide.py` | `decide(request)` の本体 |
-| `home/dot_config/agents/common.toml.tmpl` の `[pi]` | `~/.config/agents/common.toml` | 役割（`[pi.profiles]`）と、pi が正本の共有の節（[pi と共有する節](agent-config-generation.md#pi-と共有する節)） |
+| `home/dot_config/agents/common.toml.tmpl` の `[pi]` | `~/.config/agents/common.toml` | 役割（`[pi.profiles]`）と、pi が正本の共有の節（[pi と共有する節](../agent-config-generation.md#pi-と共有する節)） |
 
 `~/.claude/hooks/` に置くのは、判定の中身（`bashrules`）がそこにあるため。`AGENTS_CONFIG_DIR` で
 `command_policy.py` と `common.toml` の置き場を差し替えられる（hook と同じ）。
@@ -31,7 +31,7 @@ response: { decision: allow | ask | deny, reason, source: rule | check | default
 | `input` | ツールの引数。`bash` は `command`、ファイルのツールは `path`（`grep` / `find` / `ls` は省略すると `.`） |
 | `cwd` | 作業ディレクトリの絶対パス。相対パスの解決と「作業ツリーの中か」の判定に使う |
 | `role` | `[pi.profiles]` の名前（「役割」の表） |
-| `bypass` | 真なら ask を allow にする（deny は変えない） |
+| `bypass` | 真なら ask を allow にする（deny は変えない。[confirm](#confirm) の ask は除く） |
 | `boundary` | サンドボックス（Fence）の内側と**証明できているか**（フルガードがカナリアで実測した結果。環境変数の自己申告ではない）。真のときだけ、評価の順番の 4' の緩和が効く |
 | `allowed` | `{ read, write }`。サンドボックスが実際に開けた場所。`boundary` が真のとき、作業ツリーの外の読み書きの判定に使う（形が違えば `source: error` の deny） |
 
@@ -61,7 +61,7 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 2. **役割のツール**。役割の `tools` に無いツールは deny（末尾が `*` の項目は前方一致）
 3. **役割の確認と許可**
    - `bash`: [誘導](#誘導)に当たれば、案内を理由にした deny（bypass でも外れない）。
-     次に役割の `shell_deny` に当たれば deny（bypass でも外れない）。次に `check_bash.py` の ask 側（`[bash] ask` と意味解析）。
+     次に役割の `shell_deny` に当たれば deny（bypass でも外れない）。次に [confirm](#confirm)（bypass でもサンドボックスの緩和でも allow にならない ask）。次に `check_bash.py` の ask 側（`[bash] ask` と意味解析）。
      当たらず、全部の区切りが `[pi.shell] allow`（役割に `shell_allow` があればそちら）に当たれば allow。
      `>` `<` `` ` `` `$` `--output` を含む形は allow にしない（`$` は変数展開と語分割で、`env LANG=C${IFS}GIT_PAGER=id git log` のように代入を後から作れるため）。元のセグメントの `git` のグローバル領域（`git` とサブコマンドの間）に `-c` `--config-env` `--exec-path` `--paginate` `-p` があるか、サブコマンド以降に `--ext-diff` `--textconv` `--exec` `--upload-pack` `--receive-pack` がある形も allow にしない（ページャーや外部 diff でプログラムが起動しうるため。正規化前のトークンで見る。サブコマンドの後ろの `-p` `-c`（`git log -p` など）は従来どおり。`-C` `--no-pager` `-P` `--git-dir` `--work-tree` も従来どおり）。コマンド全体（位置に関係なく。括弧・波括弧・`if` の中や `xargs env` の後ろも含む）の `NAME=value` 形のトークン（先頭の `(` `{` `;` `!` は除いて見る）は、名前が `LANG` `LC_*` `TZ` `NO_COLOR` `COLUMNS` `LINES` `TERM` `CI` `FORCE_COLOR` `CLICOLOR` `PYTHONDONTWRITEBYTECODE` のときだけ許し、それ以外のトークンや、`-` 始まりの引数を持つ `env`（`-i` `-u` `-S` `-C`）があれば allow にしない（既定の判定に落ちる。`-` 始まりの `--grep=a=b` は対象外。引用の中や shlex が失敗する形も同じ）。`[pi.skill_scripts]` の宣言どおりの形も allow
    - 読み取り: `[file] read_ask_globs` は ask。作業ツリーの中と `[pi.external_read]` の中は allow。それ以外の外は ask
@@ -72,10 +72,33 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 4. **既定**。役割の `default`（実装役は ask、読み取り役は deny）
 4'. **サンドボックスの緩和**（`boundary` が真のときだけ）。bash は、どの規則にも当たらず役割の既定（ask）になったものだけを allow にする（`sandboxed: true`）。
    作業ツリーの外の読み書きは、`allowed` が開けた場所なら allow、外は理由つきの deny（`allowed` が無ければ基準の ask）。ask の規則・deny・誘導は変えない
-5. **bypass**。3・4 の ask だけを allow にする
+5. **bypass**。3・4 の ask だけを allow にする（`mustConfirm` の ask は除く）
 
 `rm` の承認の免除（`ask_hook_owned`）は、hook と同じく `[bash] ask` から外れる。判定器ではその先の
 既定（実装役は ask）に落ちるので、作業ツリーの中の `rm` も確認になる（今の OpenCode と同じ）。
+
+## confirm
+
+bypass でも確認を出す ask。外部への送信・公開（issue や PR の投稿など）を、`pis` の標準起動（サンドボックス＋bypass 既定オン）でも確認なしに通さないための仕組み
+（[CHG-0038](../../change/0038-guard-reclassification.md)）。ガードは境界ではなく「うっかり防止」（Python などで迂回できる）。強い保証は PAT のスコープとブローカーで。
+
+- **属性**: 応答の `mustConfirm: true`（`decision` が `ask` のときだけ）。**bypass（手順 5）も、サンドボックスの緩和（手順 4'。`source: default` だけに効く）も、この ask を allow にしない**。
+  理由の先頭は「確認が必要な外部への送信・公開 (bypass でも確認する): 」。確認の UI と時間切れは[ハーネス側](pi-guard.md#confirm-の確認)
+- **確認表**（`[pi.confirm] bash`。前方一致の文字列の配列。`[bash] ask` と同じ正規化済みセグメントの照合なので、`cd x && gh pr create`、`gh -R o/r pr create` も当たる）: `gh pr create/edit/review/comment/close/reopen/ready`、
+  `gh issue create/edit/comment/close/reopen/lock/unlock/transfer/pin/unpin/delete`、`gh repo fork/rename/archive/unarchive`、`gh workflow run/enable/disable`、`gh variable set/delete`、`gh gist edit/delete`。
+  評価の位置は、**役割の `shell_deny` の後、`bashAsk` の前**（`[bash] allow`・`skill_scripts` に先取りされない）
+- **確認に格上げする検査**（`[pi.confirm] checks`）: `check_gh_api_mutation` の ask。**他の ask（`check_policy_ask` など）より先に引く**
+  （`git commit -m x && gh api -X POST …` のような複合で、先に別の ask が当たって bypass で通らないように）。`curl`/`wget` の POST と MCP は、従来どおり bypass 可能な ask
+- **本文を確認できない形は deny**: 確認表に当たった `gh pr|issue create|comment|edit|review` で、本文・タイトルが標準入力（`--body-file -`、`-F -`、`-b -`）、
+  またはコマンド置換（`$(…)`・バッククォート）を含むとき
+- **公開・配布は deny**: `[bash] deny` に `gh repo edit`・`gh repo create`・`gh release delete/edit`・`npm/yarn/pnpm/uv publish`・`twine upload`・`cargo publish`・`gem push`・`docker push`。
+  `gh api` の兯開・配布に当たる操作は、新しい deny 検査 `check_gh_api_publish`（TS と Python の両方）: REST の `repos/{o}/{r}` の PATCH・DELETE、
+  コンテンツ・git refs/commits/trees/blobs/tags・releases・pages・hooks・collaborators・dispatches・actions secrets、`user/repos`・`orgs/*/repos` の POST、
+  GraphQL の `createRepository`・`updateRepository`・`deleteRepository`・`archiveRepository`・`transferRepository`・`createRef`・`updateRef`・`deleteRef`・`createCommitOnBranch`・`mergePullRequest`。
+  これは **GitHub API 経由の push 相当**（コンテンツ API・Git データ API）を塞ぐ。それ以外の書き込みは ask（確認に格上げ）
+- **表に無い外部書き込みは、従来どおり**（役割の既定の ask。サンドボックスでは allow）。この表では「すべて」を捕捉できない（すり抜けを許容する範囲）
+- **Python 版（照合用）**: `mustConfirm` を知らない。[正解データの照合](#差分試験正解データ)では、`mustConfirm` を比較から外し、
+  TS が ask＋mustConfirm、Python が ask または allow＋bypassed の組を一致とみなす（標本は除かない）。`[bash] deny` と `check_gh_api_publish` は両方に効く
 
 ## ssh / scp の許可
 
@@ -122,10 +145,10 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 **`unless` はコマンド全体に効くので、`gh pr create --title x & sleep 20` のように本物のバックグラウンドを併記する形は見逃す**（既知。
 実際に起きる頻度は低いと見ているが未計測）。引用を考慮した判定（TS の判定器で引用外の演算子だけを見る）は、これらが実害になったときの候補。
 行の途中の `&` を対象に足したのは、実際のモデルがすり抜けたため（`grok-4.7` の `sleep 20 & echo $!`、`gpt-6-sol` の `… & pid=$!`。
-[実験 B1 の F6](../research/agents/pi-bg-experiments.md)）。
+[実験 B1 の F6](../../research/agents/pi-bg-experiments.md)）。
 
 - OpenCode の guide plugin も同じ `[[pi.guide]]` を使う。`[[opencode.shell.guide]]` の `pi = "<id>"` が、
-  並びのどこに差し込むかを決める（[pi と共有する節](agent-config-generation.md#pi-と共有する節)）
+  並びのどこに差し込むかを決める（[pi と共有する節](../agent-config-generation.md#pi-と共有する節)）
 - 正規表現は Python（判定器）と JavaScript（guide plugin）の両方で同じ意味になるものだけを書く。
   `test_pi_shared.py` が代表のコマンドで両方の結果を突き合わせる
 - OpenCode の誘導のうち、次は pi には入れていない（判定器のほかの規則で足りる）

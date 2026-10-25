@@ -5,7 +5,7 @@
 
 **このスクリプトは境界が張られる前にホストで動く。** 失敗したら**起動しない**。
 素の OpenCode へ落とすと境界にならない。
-see docs/spec/opencode-sandbox.md
+see docs/spec/sandbox/opencode-sandbox.md
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ SECCOMP_MAX_AGE_SECONDS = 10 * 60
 # 内側の XDG_STATE_HOME (内側の /tmp は tmpfs で、終了時に消える)
 INNER_STATE = "/tmp/xdg-state"
 # 境界の内側へ渡さない環境変数 (資格情報と、OpenCode の DB・設定の差し替え)
-# PIS_EXTRA_READ・PIS_EXTRA_DEVICES は起動前に外側が読む入力 (see docs/spec/opencode-sandbox.md#環境変数での追加)
+# PIS_EXTRA_READ・PIS_EXTRA_DEVICES は起動前に外側が読む入力 (see docs/spec/sandbox/opencode-sandbox.md#環境変数での追加)
 DROP_ENV = (
     "PIS_EXTRA_READ",
     "PIS_EXTRA_DEVICES",
@@ -42,6 +42,10 @@ DROP_ENV = (
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
     "AWS_SESSION_TOKEN",
+    "BRAVE_API_KEY",
+    "EXA_API_KEY",
+    "TAVILY_API_KEY",
+    "OPENALEX_API_KEY",
     "OPENCODE_CONFIG",
     "OPENCODE_CLI_CONFIG_CONTENT",
     "OPENCODE_DB",

@@ -11,7 +11,7 @@
 
 いまは `allowDevToolAccess` を切り、必要な範囲を `copilot_read_allow` /
 `copilot_write_allow` に並べている。現在の規則は
-[sandbox (Claude Code / Copilot CLI)](../../spec/agent-sandbox.md#copilot-が読み書きできる場所-copilot_read_allow--copilot_write_allow)、
+[sandbox (Claude Code / Copilot CLI)](../../spec/sandbox/agent-sandbox.md#copilot-が読み書きできる場所-copilot_read_allow--copilot_write_allow)、
 判断は [ADR-0008](../../adr/0008-explicit-dev-tool-grants.md)、自動付与の仕様の網羅は
 [sandbox 機能の包括調査](sandbox-capabilities.md) が正本。
 ここには、自動付与が有効だった間に見たものだけを残す。

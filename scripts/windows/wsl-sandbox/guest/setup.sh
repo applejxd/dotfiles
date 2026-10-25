@@ -1,7 +1,7 @@
 #!/bin/bash
 # sandbox ディストロの中で root として実行する。create.ps1 が呼ぶ。
 # usage: setup.sh <user> <tailnet-host> <memory> <tailscale|skip>
-# see docs/spec/wsl-sandbox.md
+# see docs/spec/sandbox/wsl-sandbox.md
 set -euo pipefail
 
 user=$1
@@ -54,7 +54,7 @@ fi
 
 # WSL2 の全ディストロは同じカーネル時計を共有する。別のディストロの systemd-timesyncd と調整し合うと
 # 単調時計が約 2% 遅れるので、時刻はホスト側の同期に任せ、ここでは動かさない
-# see docs/spec/wsl-sandbox.md#時刻同期
+# see docs/spec/sandbox/wsl-sandbox.md#時刻同期
 systemctl mask --now systemd-timesyncd
 
 # ラッパーと agent 向けガイド。@...@ を値に置き換えて配置する

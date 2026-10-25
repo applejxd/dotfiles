@@ -4,7 +4,7 @@
 // `checkPolicyLoaded` は設定を読めなかったときに fail-closed で拒否する。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { findMatch } from "./normalize.ts";
 import { loadStrList } from "./policy.ts";

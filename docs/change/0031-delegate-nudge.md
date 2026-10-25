@@ -94,7 +94,7 @@
 | --- | --- | --- | --- |
 | `home/dot_pi/agent/extensions/delegate-nudge/`（新規） | 親の読み取り系ツールの量を数え、帯を超えたら注記を足す。統計を `.tmp/` へ。例外は黙って無視 | N1 | 未適用 |
 | `common.toml.tmpl` の `[pi] own_extensions` | `delegate-nudge` を足す | 拡張は `own_extensions` が唯一の宣言 | 未適用 |
-| `docs/spec/pi-guard.md` | 自作の拡張の節に `delegate-nudge`（帯・注記・統計・止め方）を足す | N1 | 未適用 |
+| `docs/spec/guard/pi-guard.md` | 自作の拡張の節に `delegate-nudge`（帯・注記・統計・止め方）を足す | N1 | 未適用 |
 | 試験 | 偽のモデルで、帯の前後の注記の有無、発言ごとのリセット、子で読まれないこと、例外で結果が変わらないことを固定 | N1 | 未適用 |
 
 ## 重要な更新

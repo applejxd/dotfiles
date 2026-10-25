@@ -1,6 +1,6 @@
 // シェルのコマンドを、git の呼び出しとして読むための小さな字句解析と解釈 (純関数。git は呼ばない)。
 // 方針: 読めないものは「読めない」と言う。読めない形を、読めたことにして表示しない。
-// see docs/spec/pi-guard.md#commit-の確認-素の-pi
+// see docs/spec/guard/pi-guard.md#commit-の確認-素の-pi
 
 export type Word = { text: string; dynamic: boolean };
 export type Heredoc = { body: string; dynamic: boolean };

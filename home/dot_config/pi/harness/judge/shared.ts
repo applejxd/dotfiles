@@ -4,7 +4,7 @@
 // 表 (tables.toml) は `ctx.tables` から引く。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { memo, tableList, tableSet } from "./context.ts";
 import { normalize } from "./normalize.ts";

@@ -1,10 +1,10 @@
-"""社内プロキシ越しの中継 (``relay``) の試験。
+"""プロキシ必須の環境での中継 (``relay``) の試験。
 
-- 判定: 許可リストの照合・``NO_PROXY``・社内プロキシの URL の読み方
-- 中継: 許可した宛先だけが社内プロキシへ届く。許可外・平文 HTTP は上流へ何も送らない
+- 判定: 許可リストの照合・``NO_PROXY``・プロキシの URL の読み方
+- 中継: 許可した宛先だけが上流のプロキシへ届く。許可外・平文 HTTP は上流へ何も送らない
 - 設定: 中継が要るときだけ Fence の設定が変わる
 
-see docs/spec/pi-guard.md#社内プロキシ越しの通信
+see docs/spec/guard/pi-guard.md#プロキシ必須の環境での通信
 """
 
 from __future__ import annotations
@@ -101,7 +101,7 @@ def test_corporate_proxy_rejects_unsupported_schemes_with_a_warning(capsys):
 
 
 class FakeProxy:
-    """社内プロキシの代役。CONNECT を記録し、つないだ先でエコーする。"""
+    """プロキシの代役。CONNECT を記録し、つないだ先でエコーする。"""
 
     def __init__(self, status: int = 200) -> None:
         self.status = status

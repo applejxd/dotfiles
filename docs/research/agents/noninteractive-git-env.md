@@ -159,7 +159,7 @@ fatal: could not read Username for '…': terminal prompts disabled             
 > Modify shell commands, working directories, timeouts, executables, or environment variables before execution.
 
 - 仕様: [plugin 層](../../spec/agent-config-generation.md#plugin-層-guide-plugin)、
-  [OpenCode の隔離起動](../../spec/opencode-sandbox.md)
+  [OpenCode の隔離起動](../../spec/sandbox/opencode-sandbox.md)
 - 関連: [mise shims の解決](../shell/mise-shims-resolution.md)
 
 [調査記録一覧へ戻る](../../index.md)

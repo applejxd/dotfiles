@@ -38,7 +38,7 @@ if [[ -e "$conf" ]]; then
 fi
 
 # 隔離ディストロ ([automount] enabled=false) では書き換えない
-# see docs/spec/wsl-sandbox.md
+# see docs/spec/sandbox/wsl-sandbox.md
 if $has_conf && awk '
     /^\[automount\]/ { s = 1; next }
     /^\[/ { s = 0 }

@@ -27,9 +27,9 @@ sandbox が **何を提供しているか** (採用していない機能も含�
 | 変えたいもの | 文書 |
 | --- | --- |
 | `common.toml` の構成、生成先と所有権、MCP、OpenCode の設定、hook の登録 | [設定の生成と所有権](agent-config-generation.md) |
-| コマンド・ファイルの allow / ask / deny、照合規則、bash 検査ルール | [コマンド・ファイルの判定](agent-command-policy.md) |
-| Claude Code / Copilot CLI の sandbox (ファイル・ネットワーク・seccomp)、マシン固有の許可 | [sandbox (Claude Code / Copilot CLI)](agent-sandbox.md) |
-| OpenCode の隔離起動 (`ocs`) | [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) |
+| コマンド・ファイルの allow / ask / deny、照合規則、bash 検査ルール | [コマンド・ファイルの判定](guard/agent-command-policy.md) |
+| Claude Code / Copilot CLI の sandbox (ファイル・ネットワーク・seccomp)、マシン固有の許可 | [sandbox (Claude Code / Copilot CLI)](sandbox/agent-sandbox.md) |
+| OpenCode の隔離起動 (`ocs`) | [OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md) |
 
 ## 3 層構成
 
@@ -68,11 +68,11 @@ sandbox は無い。強制に使えるのは permission リストと plugin の 
 
 Ubuntu / WSL では OpenCode を丸ごと OS のアクセス制御で囲う**隔離起動 (`ocs`)**
 も併用している。その境界と permission の違いは
-[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md) が正本。
+[OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md) が正本。
 
 | 層 | OpenCode (通常起動) での状態 |
 | --- | --- |
-| 0. sandbox | **無い**。OS レベルの強制は効かない（[検討して不採用](../change/closed/0002-opencode-ask-by-default.md)。隔離起動 `ocs` は別。[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)） |
+| 0. sandbox | **無い**。OS レベルの強制は効かない（[検討して不採用](../change/closed/0002-opencode-ask-by-default.md)。隔離起動 `ocs` は別。[OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md)） |
 | 1. permission リスト | `opencode.json` の `permissions`。**既定は `ask`** |
 | 2. hook | plugin の `permission.evaluate` / `tool.execute.*`（`guide-plugin`） |
 
@@ -217,7 +217,7 @@ echo '{"tool_input":{"path":"/path/to/foo.py"}}' | bash ~/.claude/hooks/format-f
    追加する。配備先の `~/.config/agents/common.toml` は `chezmoi apply` のたびに
    上書きされるので直接編集しない
 3. このマシンだけの項目は chezmoi 管理外の `~/.config/agents/local.toml` へ書く
-   ([このマシンだけで許可を足す](agent-sandbox.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない))
+   ([このマシンだけで許可を足す](sandbox/agent-sandbox.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない))
 4. `chezmoi apply` で各 AI CLI の設定が再生成される
 
 なお初回 apply 時、Claude Code が未起動なら `~/.claude/settings.json` は存在しない。

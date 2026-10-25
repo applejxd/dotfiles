@@ -16,7 +16,7 @@
 `ocs` は、OpenCode を `srt`（`@anthropic-ai/sandbox-runtime`。bubblewrap・seccomp・
 通信の proxy で OS の境界を張る道具）で包んで起動するランチャー。
 [CHG-0004](../change/closed/0004-opencode-sandbox.md) で作り、仕様は
-[opencode-sandbox](../spec/opencode-sandbox.md) にある。
+[opencode-sandbox](../spec/sandbox/opencode-sandbox.md) にある。
 
 これまでの設計は、**ワークスペースの中身そのものを疑う**前提に立っていた。
 境界の内側から書けるもの（リポジトリのファイル、設定、`.git` の設定が指す
@@ -97,9 +97,9 @@
   起動ディレクトリとその Git の根から相対で解く保護対象として守り、配備先は重なる場所での起動と
   重なる `write` の拒否で守る。精査していない `.opencode/sandbox.toml` の `write` で Git の根の外の
   別の場所を開けた場合、そこにある source state は対象外
-  （[制御ファイルの保護が効く範囲](../spec/opencode-sandbox.md#制御ファイルの保護が効く範囲)）
+  （[制御ファイルの保護が効く範囲](../spec/sandbox/opencode-sandbox.md#制御ファイルの保護が効く範囲)）
 - **起動前の退避**: うっかりで壊した未コミットの変更を戻せる（Git リポジトリの中で起動したとき。
-  [起動前の退避](../spec/opencode-sandbox.md#起動前の退避)）
+  [起動前の退避](../spec/sandbox/opencode-sandbox.md#起動前の退避)）
 - **境界を張れないときは起動しない**
 
 ### 保証しないもの（非目的）

@@ -131,7 +131,7 @@ Bitwarden Secrets Manager の `bws` は使用しない。
 OpenCode を OS のアクセス制御（[Fence](https://github.com/fencesandbox/fence)）で囲って起動する
 （[CHG-0004](../change/closed/0004-opencode-sandbox.md)、[CHG-0009](../change/closed/0009-ocs-simplify-for-accidents.md)）。
 通常起動（`opencode`）と**併用**する段階。構成・起動順序・境界の組み立て規則は
-[OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)。ここでは
+[OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md)。ここでは
 **何を守り、何を守らないか**を書く。境界の目的は**エージェントのうっかり**
 （外部への誤送信、ワークスペース外の破壊、秘密の誤読）の防止に絞っている
 （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)）。
@@ -148,11 +148,11 @@ OS 側へ移した。ただし境界は万能ではない。
 
 | 守る | 守らない |
 | --- | --- |
-| ホストの秘密情報（`~/.ssh`・資格情報）。読み取りは既定で拒否し、道具の置き場と作業用の親ディレクトリだけを開ける。**例外: モデル API の資格情報**は共有する DB にあり、内側から平文で読める（[決めた例外](opencode-sandbox.md#既知の制約)） | **ワークスペースの中**。`.env` や `.git/hooks` は shell から届く |
+| ホストの秘密情報（`~/.ssh`・資格情報）。読み取りは既定で拒否し、道具の置き場と作業用の親ディレクトリだけを開ける。**例外: モデル API の資格情報**は共有する DB にあり、内側から平文で読める（[決めた例外](sandbox/opencode-sandbox.md#既知の制約)） | **ワークスペースの中**。`.env` や `.git/hooks` は shell から届く |
 | Windows 側（`/mnt`）とホストの `/tmp` | 開けた作業用ディレクトリ（`~/src` など）に紛れた秘密の読み取り |
 | 起動ディレクトリの外（`~/.cache`・OpenCode のデータディレクトリなどの例外を除く）への書き込み | ローカルの Git 履歴（未コミット作業は起動前に退避する） |
 | 通信を許可したドメイン以外への通信 | 通信を許可したドメインへ何を送るか |
-| 保護機構そのもの（`denyWrite` と起動の拒否。効く範囲は[条件付き](opencode-sandbox.md#制御ファイルの保護が効く範囲)） | 他のプロジェクトの会話（DB を共有する） |
+| 保護機構そのもの（`denyWrite` と起動の拒否。効く範囲は[条件付き](sandbox/opencode-sandbox.md#制御ファイルの保護が効く範囲)） | 他のプロジェクトの会話（DB を共有する） |
 
 permission 規則のうち**ワークスペース内を対象とするものは「ツール操作上の
 禁止」にすぎない**。`read` / `edit` ツールは止まるが、shell からは同じ対象へ
@@ -161,7 +161,7 @@ permission 規則のうち**ワークスペース内を対象とするものは�
 ### プロジェクトごとの追加の許可
 
 起動ディレクトリの外を開けたいときは、プロジェクトが `.opencode/sandbox.toml` で足す
-（書き方は [プロジェクトごとの追加](opencode-sandbox.md#プロジェクトごとの追加)）。
+（書き方は [プロジェクトごとの追加](sandbox/opencode-sandbox.md#プロジェクトごとの追加)）。
 
 **承認は取らない。** 精査していないリポジトリが自分で境界を広げることは、ADR-0012 で
 非目的にした。境界の内側のエージェントが宣言を書き足すことはできない（`.opencode` は保護対象）。
@@ -176,7 +176,7 @@ permission 規則のうち**ワークスペース内を対象とするものは�
 - `ocs` は境界を張る前にホストで `git`（退避と worktree の判定）と Fence を動かし、
   OpenCode の DB を読み取り専用で開く（既定モデルの選択）。`opencode` はホストでは動かさず、
   Fence の子として境界の内側で起動する。環境変数は、落とす資格情報と Fence・`git`・内側の
-  opencode 向けに変えるもの（[信頼の鎖](opencode-sandbox.md#信頼の鎖)）を除き、利用者の
+  opencode 向けに変えるもの（[信頼の鎖](sandbox/opencode-sandbox.md#信頼の鎖)）を除き、利用者の
   環境のまま渡す。精査していないワークスペースがそれらを騙すことは対象外
   （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的）
 

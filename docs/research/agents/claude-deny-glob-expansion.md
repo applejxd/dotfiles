@@ -9,7 +9,7 @@
 - **関連する不具合**: [anthropics/claude-code#45451](https://github.com/anthropics/claude-code/issues/45451)
 
 現在の方式（deny は `~/` の 1 本にして whitelist 化する）と、その理由は
-[sandbox (Claude Code / Copilot CLI)](../../spec/agent-sandbox.md#なぜ広い名前マッチを-deny-に置かないか)
+[sandbox (Claude Code / Copilot CLI)](../../spec/sandbox/agent-sandbox.md#なぜ広い名前マッチを-deny-に置かないか)
 が正本。ここには、その判断の根拠になった測定だけを残す。
 
 ## 前提

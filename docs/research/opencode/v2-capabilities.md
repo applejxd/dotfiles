@@ -9,7 +9,7 @@
 > （[ask と並列バッチ](ask-and-parallel-batch.md)）。
 >
 > **現行の仕様**: [OpenCode V2 の設定](../../spec/agent-config-generation.md#opencode-v2-の設定)、
-> [OpenCode 隔離起動のアーキテクチャ](../../spec/opencode-sandbox.md)
+> [OpenCode 隔離起動のアーキテクチャ](../../spec/sandbox/opencode-sandbox.md)
 >
 > **調査日: 2026-09-20**
 > **対象: `@opencode/cli` 2.0.10（V2）/ 比較対象 `opencode-ai` 1.18.31（V1）**
@@ -27,7 +27,7 @@
 
 **この環境の前提**（判断が変わったら §10 も直す）:
 
-- 自宅は GitHub Copilot 契約、業務は AWS Bedrock 経由が要件。**OpenCode は両方を
+- 個人機は GitHub Copilot 契約、制約のある環境は AWS Bedrock 経由が要件。**OpenCode は両方を
   公式サポートするので、1 本化が原理的に可能**
 - OS レベル sandbox は必須ではない。評価軸は
   **「permission だけで必要な禁止を表現しきれるか」**

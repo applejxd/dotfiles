@@ -20,7 +20,7 @@
 >   （[permission の穴 5 章](gaps.md#5-プロジェクト設定がグローバルの-deny-を上書きする2026-09-23-再確認)）
 > - 24 節の DB の作り方は 2026-09-24 にやめた（同節の追記）
 >
-> **現行の仕様**: [OpenCode 隔離起動のアーキテクチャ](../../../spec/opencode-sandbox.md)
+> **現行の仕様**: [OpenCode 隔離起動のアーキテクチャ](../../../spec/sandbox/opencode-sandbox.md)
 >
 > **調査日: 2026-09-22 / 対象: `@anthropic-ai/sandbox-runtime` v0.0.76（Ubuntu on WSL2）**
 >

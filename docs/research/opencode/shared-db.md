@@ -18,7 +18,7 @@
 
 ### 問い
 
-`ocs`（OpenCode を `srt` の境界で包むランチャー。[仕様](../../spec/opencode-sandbox.md)）は、
+`ocs`（OpenCode を `srt` の境界で包むランチャー。[仕様](../../spec/sandbox/opencode-sandbox.md)）は、
 ワークスペースごとの隔離用 DB を使っている。これをやめ、ホストの DB とデータディレクトリを
 境界の内側と外側（常駐サービス）で共有したとき、次が成り立つか
 （[CHG-0009](../../change/closed/0009-ocs-simplify-for-accidents.md) の段 1）。

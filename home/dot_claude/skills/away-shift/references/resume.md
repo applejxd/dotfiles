@@ -40,7 +40,7 @@ manage_schedule(action="wakeup", id=<自己ペースループの id>,
 
 ## `bg_run` を使える場合 (pi)
 
-仕様と実測は `docs/spec/pi-guard.md` と `docs/research/agents/pi-bg-experiments.md`。
+仕様と実測は `docs/spec/guard/pi-guard.md` と `docs/research/agents/pi-bg-experiments.md`。
 
 - **予約**: サイクルの最後に `bg_run` で
   `python3 ~/.claude/skills/away-shift/scripts/away_guard.py sleep <NEXT_WAKE_SECONDS>`

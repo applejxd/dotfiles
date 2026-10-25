@@ -2,9 +2,9 @@
 
 `[bash]` / `[file]` / `[web]` の allow / ask / deny が、hook と各 CLI の
 permission でどう照合・判定されるかをまとめる。
-全体像は [AI CLI 統合 permission / hook 管理](agent-permissions.md)、
-OpenCode の既定 `ask` と照合順は [OpenCode V2 の設定](agent-config-generation.md#opencode-v2-の設定)、
-sandbox によるパス単位の遮断は [sandbox (Claude Code / Copilot CLI)](agent-sandbox.md) を参照。
+全体像は [AI CLI 統合 permission / hook 管理](../agent-permissions.md)、
+OpenCode の既定 `ask` と照合順は [OpenCode V2 の設定](../agent-config-generation.md#opencode-v2-の設定)、
+sandbox によるパス単位の遮断は [sandbox (Claude Code / Copilot CLI)](../sandbox/agent-sandbox.md) を参照。
 
 ## 照合規則
 
@@ -136,10 +136,10 @@ world-readable な `passwd` / `group` は書き込み先のときだけ deny と
   `./https://host/.ssh/id_rsa` はローカルのパスの一部だから
 - 除かないもの: `file://`(ローカルのパス)。URL と連結したローカルのパス(`https://a,~/.ssh/id_rsa`)
 - **既知の限界**: `--url=https://…` のように `=` の直後にある URL も除く。`=https:` という名前の
-  ディレクトリ経由で保護対象を読む形は見逃すが、事故防止の水準([ADR-0012](../adr/0012-ocs-boundary-for-accidents.md))で
+  ディレクトリ経由で保護対象を読む形は見逃すが、事故防止の水準([ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md))で
   は、そのディレクトリを作る必要があり、実質の穴にならないとして許容した
 - 実装は Python 版 `sensitive.py` の `_URL_RE` と TS 版 `sensitive.ts` の `URL_RE`(同じ正規表現)。
-  経緯と review は [CHG-0032](../change/0032-guard-url-false-positive.md)
+  経緯と review は [CHG-0032](../../change/0032-guard-url-false-positive.md)
 
 ## エージェント CLI のランタイム設定も秘密扱いにする
 
@@ -168,12 +168,12 @@ OpenCode の read・Copilot の `check_file_read.py` から読める。対応は
 
 `.env` は `**/.env`・`**/.env.*`（どちらも deny）と書く。`**/` が無いと OpenCode の
 resource は直下にしか当たらず、`app/.env` は OpenCode 既定の ask 止まりになる
-（実測: [秘密ファイル一覧のずれ](../research/agents/secret-file-lists.md)）。
+（実測: [秘密ファイル一覧のずれ](../../research/agents/secret-file-lists.md)）。
 `.env.*` は以前 ask だったが、bypass が ask を allow にするので deny へ上げた
-（[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。サンプルの `.env.example` /
+（[ADR-0014](../../adr/0014-bypass-as-ask-upgrade.md)）。サンプルの `.env.example` /
 `.env.sample` / `.env.template` は `[[file.deny_exceptions]]` で、対の `**/.env.*` にだけ
 例外にする（OpenCode と Copilot。Claude は deny 優先で例外を書けず deny のまま。
-[仕組み](agent-config-generation.md#deny-の例外envexample-など)）。
+[仕組み](../agent-config-generation.md#deny-の例外envexample-など)）。
 Bash hook 側（`sensitive.py`）は `.env.*`（`.env.local` 以外）をサンプル扱いにしており、変えていない。
 
 ## 秘密の環境変数
@@ -252,7 +252,7 @@ dialog を数十 ms 表示しただけで自動承認する既知バグ
 があるため。セッションの記録では hook 由来の permission が
 `outcome=auto_approved` / `source=assisted_approval` で解決される。
 件数・所要時間の実測と切り分け手順は
-[ハーネス比較](../research/agents/harness-comparison.md#copilot-cli-では-hook-の-ask-が自動承認される2026-08-27-実測)
+[ハーネス比較](../../research/agents/harness-comparison.md#copilot-cli-では-hook-の-ask-が自動承認される2026-08-27-実測)
 にある。1.0.84-2 でも `git config --get user.name` が確認無しで実行された。
 `deny` はこのバグの影響を受けず正常にブロックする。
 
@@ -330,12 +330,12 @@ deny 側は `check_rm_root_guard` が担う。作業ディレクトリ全体と 
 OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生のコマンド文字列への
 正規表現で deny と誘導文を返す。Claude / Copilot の hook（上の `check_rm_root_guard`
 など）とは別実装で、**止める具体例だけ**に限る（決定は
-[ADR-0013](../adr/0013-opencode-shell-guard-inside-ocs.md)）。
+[ADR-0013](../../adr/0013-opencode-shell-guard-inside-ocs.md)）。
 
 > [!WARNING]
 > **うっかり防止であり、完全な保護ではない。** 正規表現は変数・サブシェル・
 > `sudo` / `command` 等の前置・スクリプト経由・別名を見ない。bypass エージェントにも同じに効く
-> （[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）が、
+> （[ADR-0014](../../adr/0014-bypass-as-ask-upgrade.md)）が、
 > `rules.json` が読めないと効かない。止めたいときの本命は境界（ocs）と退避である。
 
 | 規則 | 止める例 | 止めない例 |
@@ -364,8 +364,8 @@ OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生の�
   plugin が `tool.execute.before`（permission より前に走る）で同じ `pattern` / `unless` を判定し、
   当たれば例外を投げて `message` をモデルへ届ける。静的 deny は変えないので、plugin が無い・
   `rules.json` が壊れているときは従来どおり静的 deny が止める。bypass エージェントにも効く
-  （[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。
-  実機で確認した（[記録](../research/opencode/permission/early-guard.md)）。前段で止めるのは
+  （[ADR-0014](../../adr/0014-bypass-as-ask-upgrade.md)）。
+  実機で確認した（[記録](../../research/opencode/permission/early-guard.md)）。前段で止めるのは
   `early` を付けた規則だけで、他の規則は従来どおり `evaluate` で判定する
 - 検査は `test/agents/test_guide_pip_rm.py`（止める例と止めない例の両方を、生成した
   `rules.json` を plugin に通して判定する）と、前段の停止を見る `test/agents/test_guide_early_pip.py`
@@ -378,12 +378,12 @@ guide 規則は effect が allow でも走るので、allow を保ったまま�
 
 | 規則 | 止める例 | 止めない例 |
 | --- | --- | --- |
-| リダイレクト（[CHG-0002 段階 4a](../change/closed/0002-opencode-ask-by-default.md)） | `git log > ~/.bashrc`、`wc f 2>&1 > f` | `git log 2>&1 \| head`、`wc -l a 2>/dev/null` |
-| `git log --output`（[CHG-0017 段 5](../change/0017-builtin-agent-restrictions.md)） | `git log -1 --output=f`、`git log --output f`、`git log -p --output=f`、`ls && git log --output=f`（`;` `\|\|` `\|` `(` も） | `git log -1 --oneline`、`git log --stat`、`git log --output-indicator-new=+`、`git commit -m 'git log --output=x'`、`echo --output` |
+| リダイレクト（[CHG-0002 段階 4a](../../change/closed/0002-opencode-ask-by-default.md)） | `git log > ~/.bashrc`、`wc f 2>&1 > f` | `git log 2>&1 \| head`、`wc -l a 2>/dev/null` |
+| `git log --output`（[CHG-0017 段 5](../../change/0017-builtin-agent-restrictions.md)） | `git log -1 --output=f`、`git log --output f`、`git log -p --output=f`、`ls && git log --output=f`（`;` `\|\|` `\|` `(` も） | `git log -1 --oneline`、`git log --stat`、`git log --output-indicator-new=+`、`git commit -m 'git log --output=x'`、`echo --output` |
 
 - **allow を足すときは、リダイレクトだけでなく引数でファイルへ書けるオプションも点検する。**
   `git log --output=<パス>` は確認なしに、作業ツリーの外にも書けた
-  （[記録 E2](../research/opencode/permission/builtin-agent-override.md#記録-e2--2026-10-08)）。
+  （[記録 E2](../../research/opencode/permission/builtin-agent-override.md#記録-e2--2026-10-08)）。
   点検の結果、内容と書き込み先の両方を引数で決めて書けるのは `git log` だけだった
 - `--output` の規則は `git log` で始まる部分（次の `;` `&` `|` 改行まで。引用の中は飛ばす）
   だけに当てる。`*--output*` を全体で deny すると、コミットの本文や正当な `--output` まで止まる。
@@ -395,7 +395,7 @@ guide 規則は effect が allow でも走るので、allow を保ったまま�
   止まり、ocs（既定が allow）でも同じに効く
 - **Claude / Copilot には足さない。** どちらも OS の sandbox で shell の書き込みが作業ディレクトリと
   許可した場所に限られ、起動ファイルなどは `claude_write_deny` / Copilot の deny-by-default で
-  塞がる（[sandbox](agent-sandbox.md)）。作業ディレクトリの中は、既定の権限モード
+  塞がる（[sandbox](../sandbox/agent-sandbox.md)）。作業ディレクトリの中は、既定の権限モード
   （Claude の `auto`、Copilot の `assisted`）で編集もできるので、`--output` で書けても新しい
   権限にならない。OpenCode の通常版は shell に OS の境界が無いため、ここだけで塞ぐ。
   ただし Claude で sandbox の外で実行させる形（unsandboxed コマンド）に `git log` の allow が
@@ -406,9 +406,9 @@ guide 規則は effect が allow でも走るので、allow を保ったまま�
 
 V2 は静的 deny に当たると plugin の `evaluate` を呼ばず、モデルへは `Permission denied: shell` だけが
 返る（理由も代替も伝わらない）。pip で実証した前段停止（上、
-[記録](../research/opencode/permission/early-guard.md)）を `[bash] deny` の全項目へ広げ、
+[記録](../../research/opencode/permission/early-guard.md)）を `[bash] deny` の全項目へ広げ、
 **説明文を返す**。静的 deny は一切変えない（plugin が壊れても静的 deny が止める）。bypass エージェントにも
-同じに効く（[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。
+同じに効く（[ADR-0014](../../adr/0014-bypass-as-ask-upgrade.md)）。
 
 ### 分類（正本は `common.toml.tmpl` の `[bash.deny_guide]`）
 
@@ -427,13 +427,13 @@ deny に無い項目・`elsewhere` を止める early 規則が無い、のい�
 Claude / Copilot の生成物は変わらない。
 
 スキルのスクリプトのリダイレクトの静的 deny（`[pi.skill_scripts]`）も同じ `deny_guide` に出す
-（説明は `redirect_message`。範囲は [スキルのスクリプト](agent-config-generation.md#スキルのスクリプト)）。
+（説明は `redirect_message`。範囲は [スキルのスクリプト](../agent-config-generation.md#スキルのスクリプト)）。
 `[bash.deny_guide]` が無くても生成する。
 
 ### 前段で止めるのは静的 deny の部分集合だけ
 
 OpenCode の静的照合は、scanner が分割した各セグメントに `cmd` / `cmd *` のワイルドカードを当てる
-（[分割の観測](../research/opencode/permission/allow-list-audit.md)）。前段は生のコマンド文字列への
+（[分割の観測](../../research/opencode/permission/allow-list-audit.md)）。前段は生のコマンド文字列への
 正規表現なので、一致集合がずれうる。そこで**確実に部分集合になる保守的な形**にしている。
 
 - **セグメント先頭だけ**: 行頭と `&&` `||` `;` `|` 改行の直後で、コマンド名（`git push` などは単一の空白でつなぐ）
@@ -449,7 +449,7 @@ OpenCode の静的照合は、scanner が分割した各セグメントに `cmd`
   （`bash` / `shell` / `*` キー、文字列も）の両方から算出し、読めない形は覆すものとして扱う。
   ただし `restate_global_deny` に `shell` を含むエージェント（`plan`）は、全体の shell の deny が
   エージェントの規則の後ろに写されて覆されないので、`shell * ask` があっても例外にしない
-  （[子エージェント](agent-config-generation.md#子エージェント)）
+  （[子エージェント](../agent-config-generation.md#子エージェント)）
 - **対象は生成器が permission を把握しているエージェントだけ**（`rules.json` の `deny_guide_agents`。
   宣言済み + 組み込みの `build` / `plan` / `general` / `explore`）。宣言外のエージェント（利用者が
   `opencode.json` に直接書いたもの）や `agent` が分からないとき、隠しエージェント（`title` など）は止めない
@@ -465,7 +465,7 @@ OpenCode の静的照合は、scanner が分割した各セグメントに `cmd`
   （分割 + 後勝ちの `cmd` / `cmd *`）、deny の全項目 × 34 の形（引用符・コメント・継続行・ヒアドキュメント・
   置換など）+ 止めてはいけない例を、通常版・ocs × 4 エージェントで plugin に通して「前段で止まる ⇒ 静的にも deny」を検査する
 
-実機での観測は [early-guard の追記](../research/opencode/permission/early-guard.md#追記-deny-全体への拡張2026-10-03)。
+実機での観測は [early-guard の追記](../../research/opencode/permission/early-guard.md#追記-deny-全体への拡張2026-10-03)。
 
 **既知の限界**（静的 deny の部分集合を保てない場面。静的 deny は変えないので安全側には倒れるが、
 説明が付かないか、まれに過剰に止まる）:
@@ -474,7 +474,7 @@ OpenCode の静的照合は、scanner が分割した各セグメントに `cmd`
   permission での上書きは、plugin が実効設定を取得できないため考慮しない。plugin の `ctx` に
   設定を返す API は文書化されておらず（`opencode api config.get` は CLI 側）、使っていない。
   宣言外のエージェントは対象外にして被害を狭めるが、組み込み（`build` など）を利用者が上書きした場合は
-  検知できない。[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的
+  検知できない。[ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md) の非目的
   「利用者自身の明示的な上書き」と同じ扱い
 - 引用符などを含むコマンドには説明が付かない（上記）
 bypass-fleet-worker 固有の deny（`git add` / `commit` など）は対象外。
@@ -777,7 +777,7 @@ classifier が通せば取得できる。
 | --- | --- | --- |
 | `~/.claude/settings.json` | `permissions.allow` | 自動承認のみ。deny 側へは出力されない |
 | `~/.copilot/settings.json` | `allowedUrls` / deny | Copilot は `deny_domains` も反映できる |
-| `~/.config/opencode/opencode.json` | (出力しない) | resource が URL 全体で、ドメイン許可を正しく書けない ([OpenCode へ渡さないもの](agent-config-generation.md#opencode-へ渡さないもの)) |
+| `~/.config/opencode/opencode.json` | (出力しない) | resource が URL 全体で、ドメイン許可を正しく書けない ([OpenCode へ渡さないもの](../agent-config-generation.md#opencode-へ渡さないもの)) |
 
 Claude には「許可した以外を拒否する」表現手段が無い。
 `permissions.deny` に素の `WebFetch` を置くと **全 WebFetch が止まる**

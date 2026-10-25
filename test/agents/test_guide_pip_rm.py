@@ -2,7 +2,7 @@
 
 生成した rules.json を実際の guide plugin (node) に通して判定する。
 止めるべき例と、止めてはいけない例 (誤検知) を両方並べる。
-これは事故防止であって完全な保護ではない (see docs/spec/agent-command-policy.md)。
+これは事故防止であって完全な保護ではない (see docs/spec/guard/agent-command-policy.md)。
 
 Run with: ``uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q``
 """

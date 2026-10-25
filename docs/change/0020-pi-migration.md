@@ -1,6 +1,6 @@
 # CHG-0020: OpenCode のハーネスを pi へ移す
 
-> **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](0023-guard-terminology.md)、対応表は [pi のガード](../spec/pi-guard.md#用語)。
+> **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](0023-guard-terminology.md)、対応表は [pi のガード](../spec/guard/pi-guard.md#用語)。
 
 - **状態**: In progress
 - **更新日**: 2026-10-11
@@ -42,14 +42,14 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | --- | --- | --- |
 | 1 | **判定 API**。CLI に依存せず allow / ask / deny と理由を必ず返し、異常時は拒否する判定器を作る。規則は `common.toml` から生成し、「共通の禁止」と「役割ごとのプロファイル」に分ける（CHG-0018 の設計を引き継ぐ） | 完了（誘導・境界の中・`work_read` は段 2 / 段 4 へ） |
 | 1a | `[pi]` を正本にする。`[opencode.shell] allow`・`redact`・`external_read`・`skill_scripts` を `[pi]` へ移し、OpenCode へは `generate.py` が写す。OpenCode の出力は変えない | 完了 |
-| 1b | 判定 API `decide()` を作る。応答に `source` を入れ、異常は deny | 完了（[判定 API](../spec/pi-decide.md)） |
+| 1b | 判定 API `decide()` を作る。応答に `source` を入れ、異常は deny | 完了（[判定 API](../spec/guard/pi-decide.md)） |
 | 1c | `decide()` が今の `check_bash.py` と同じ入力で同じ deny / ask を返すことを試験で固定する | 完了（1041 件で一致） |
 | 2 | **ハーネス拡張**。試作（`scripts/pi-harness-spike/`）を本番の形にする: ツールは組み込みに無い名前、`execute()` で再判定、確認は 1 件ずつ、伏字化は `content`・`structuredContent`・`details`、圧縮のファイルの一覧の補い、子エージェント、MCP はハーネスから登録 | 完了 |
-| 2a | ハーネスの核: 別名のツール、判定 API の呼び出し（`execute()` で最終の判定）、確認の順番待ち、伏字化、圧縮のファイルの一覧、`[agent_env]`、`rules.json` の生成、偽のモデルの試験 | 完了（[pi のガード](../spec/pi-guard.md)） |
-| 2b | 子エージェント（役割と bypass の受け渡し、子の拒否を構造化して返す）と、MCP をハーネスから登録 | 完了（[子エージェント](../spec/pi-guard.md#子エージェント)・[MCP](../spec/pi-guard.md#mcp)） |
-| 2c | 誘導（`[[opencode.shell.guide]]` の 13 件）の仕分けと判定器への取り込み | 完了（4 件を `[[pi.guide]]` へ。[誘導](../spec/pi-decide.md#誘導)） |
-| 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 完了（起動は `pis`、[起動](../spec/pi-guard.md#起動)・[pi の設定](../spec/pi-guard.md#pi-の設定)） |
-| 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 完了（`pis --boundary`。[境界](../spec/pi-guard.md#サンドボックス)） |
+| 2a | ハーネスの核: 別名のツール、判定 API の呼び出し（`execute()` で最終の判定）、確認の順番待ち、伏字化、圧縮のファイルの一覧、`[agent_env]`、`rules.json` の生成、偽のモデルの試験 | 完了（[pi のガード](../spec/guard/pi-guard.md)） |
+| 2b | 子エージェント（役割と bypass の受け渡し、子の拒否を構造化して返す）と、MCP をハーネスから登録 | 完了（[子エージェント](../spec/guard/pi-guard.md#子エージェント)・[MCP](../spec/guard/pi-guard.md#mcp)） |
+| 2c | 誘導（`[[opencode.shell.guide]]` の 13 件）の仕分けと判定器への取り込み | 完了（4 件を `[[pi.guide]]` へ。[誘導](../spec/guard/pi-decide.md#誘導)） |
+| 3 | **配布**。pi の導入（`agent-cli-install`）、設定、起動の入口（`-nbt -ne -e <ハーネス>` を固定する）、`common.toml` の `[[mcp]]` から MCP を生成 | 完了（起動は `pis`、[起動](../spec/guard/pi-guard.md#起動)・[pi の設定](../spec/guard/pi-guard.md#pi-の設定)） |
+| 4 | **境界**。`ocs` の仕組みで pi を Fence で包む。境界用の agent 置き場を起動ごとに書き出す | 完了（`pis --boundary`。[境界](../spec/guard/pi-guard.md#サンドボックス)） |
 | 5 | **ハーネス以外の機能**。checkpoint（`session_before_compact`）、モデルの階層と effort、確認画面の説明、`git commit` の件名と本文の表示、`/fleet`、キーバインド、Orca、Windows、検証コマンドを畳む `verify` ツール（CHG-0002 の段階 5 から移管） | 完了 |
 | 5a | checkpoint を圧縮の要約の指示に置き換える（`compact()` に雛形の要点を渡す） | 完了（実際のモデルでも確認） |
 | 5b | `git commit` の確認に件名・本文を出す（`commit-message.js` を取り込む） | 完了 |
@@ -65,7 +65,7 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 
 ## 現在地
 
-**2026-10-13 の方針**: pi に一本化し、判定器を TS に移す（[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。以下の「判定器は Claude Code / Copilot CLI と共有する」（2026-10-09）は、これで覆った。移植の進み具合は[仕様](../spec/pi-decide.md#ts-版への移植)の表と、`node test/agents/pi/judge_golden.mjs --bash` の食い違いの数で見る。
+**2026-10-13 の方針**: pi に一本化し、判定器を TS に移す（[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。以下の「判定器は Claude Code / Copilot CLI と共有する」（2026-10-09）は、これで覆った。移植の進み具合は[仕様](../spec/guard/pi-decide.md#ts-版への移植)の表と、`node test/agents/pi/judge_golden.mjs --bash` の食い違いの数で見る。
 
 段 1 を進めている。2026-10-09 に利用者が 2 つ決めた。
 
@@ -99,11 +99,11 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 `committer` だけが `git status` / `git diff` を確認なしで通す。実際のモデルで、親（Sonnet 5.5）が `explore` を起動して
 結果を受け取れた。起動の形は `pi -nbt -ne -e builtin:mcp -e ~/.config/pi/harness` に変わった（MCP のため）。
 
-2a を終えた（2026-10-09）。ハーネスの本体は `~/.config/pi/harness/`（[pi のガード](../spec/pi-guard.md)）。
+2a を終えた（2026-10-09）。ハーネスの本体は `~/.config/pi/harness/`（[pi のガード](../spec/guard/pi-guard.md)）。
 偽のモデルの試験 13 件が通り、実際のモデル（Copilot の Sonnet 5.5）でも読み取り・`git log`・確認の拒否が
 期待どおりに動いた。判定 1 回は 0.1 秒ほど（Python の起動）で、`tool_call` と `execute()` で同じ入力なら 1 回にした。
 
-段 1 を終えた（2026-10-09）。判定 API は [判定 API](../spec/pi-decide.md) が正本。
+段 1 を終えた（2026-10-09）。判定 API は [判定 API](../spec/guard/pi-decide.md) が正本。
 `check_bash.py` の試験に出てくる 1041 件のコマンドで、hook の deny / ask と判定器の decision が一致した
 （deny 555・ask 147・hook が何も返さない 339）。
 
@@ -211,7 +211,7 @@ ask の交差（`wildcard_intersection`）、`guarded_subagents` / `bypass_child
 | 共通の指示（`AGENTS.md`） | `~/.config/opencode/AGENTS.md`（共通の指示 + OpenCode 固有の 2 節） | `~/.pi/agent/AGENTS.md` へ共通の指示だけを配る | **作る（小）** |
 | skills | `~/.config/opencode/skills`（checkpoint） | `[pi.settings] skills` に `~/.claude/skills` を入れた（済）。checkpoint の skill は作らない | **済** |
 | Orca・herdr | Orca の上書き設定を `shellenv.sh` で補う。herdr は Copilot / Claude の hook を登録 | pi 向けには要らない見込み。Orca や herdr から pi を起動するか、pi に herdr の連携があるかは未確認 | **未確認（利用者に確認）** |
-| Windows | OpenCode は Windows にも配る | pi・ハーネス・`pis`・境界は Unix だけ。Windows は OpenCode を外すまで使う。素の `pi` には、読み取り専用の子エージェント（`explore` / `review`）の `task` 拡張だけを配った（2026-10-10。[Windows の子エージェント](../spec/pi-guard.md#windows-の子エージェント)） | **段 6 で決める**（子エージェントは済） |
+| Windows | OpenCode は Windows にも配る | pi・ハーネス・`pis`・境界は Unix だけ。Windows は OpenCode を外すまで使う。素の `pi` には、読み取り専用の子エージェント（`explore` / `review`）の `task` 拡張だけを配った（2026-10-10。[Windows の子エージェント](../spec/guard/pi-guard.md#windows-の子エージェント)） | **段 6 で決める**（子エージェントは済） |
 
 **段 6 で消えるもの（見込み）**: guide plugin（`index.js` 511 行・`commit-message.js` 216 行・`tui.ts` 140 行。
 `commit-message.js` はハーネスへ移す）、checkpoint plugin（214 行）・`checkpoint.py`・checkpoint の skill、
@@ -306,15 +306,15 @@ skill のスクリプト・境界を置く。`[opencode.*]` から移すもの�
 ## 重要な更新
 
 - **2026-10-21**: 利用者の判断で、`review` を `explorer` 役（`wc` と読み取り専用の git を持つ）にし、`btw` の既定を `explore` の子にした（`--plain` は従来どおりのツールなし）。
-  `review` は、親が会話の転写や差分の全文を書くと親の解釈が混ざるので、依頼は目的・制約・確かめたことと未確認のこと・退けた案・暫定の結論（最後に「疑う対象」と明記）・聞きたいことに絞り、差分や対象は子が自分で読む形にした（[仕様](../spec/pi-guard.md#review-への依頼の書き方)）。
-  `btw` の子は、フルガードと Windows の `subagents` が `globalThis.__piAskReadChild` に置く入口で起動する。利用者のコマンドなので判定器は通さず、読み取り専用の役割だけを許す（[仕様](../spec/pi-guard.md#自作の拡張-todo--plan--btw)）。
+  `review` は、親が会話の転写や差分の全文を書くと親の解釈が混ざるので、依頼は目的・制約・確かめたことと未確認のこと・退けた案・暫定の結論（最後に「疑う対象」と明記）・聞きたいことに絞り、差分や対象は子が自分で読む形にした（[仕様](../spec/guard/pi-guard.md#review-への依頼の書き方)）。
+  `btw` の子は、フルガードと Windows の `subagents` が `globalThis.__piAskReadChild` に置く入口で起動する。利用者のコマンドなので判定器は通さず、読み取り専用の役割だけを許す（[仕様](../spec/guard/pi-guard.md#自作の拡張-todo--plan--btw)）。
   見送ったもの: `pi-memory`（`sdd-docs` の構造化した記録を採る）・`pi-btw`（ツール付きのサブセッション）・`pi-advisor-flow`（そのままの導入。自動ゲートは設計の参考として別途検討）・`@ff-labs/pi-fff`（`rg` / `fd` / `fzf` で足りる）。根拠は[記録 P5](../research/agents/pi-public-extensions-survey.md#記録-p5--2026-10-21-人気の拡張のうち未導入のものと既存の機能との比較)。
-  同日の後続: `btw` の長い返信を実機の TUI で確かめたところ、画面に収まる行だけが表示され、末尾と閉じる案内が見えなかった。`review` の子のレビューも踏まえ、スクロールできる窓つき表示・返信上限の経路間の統一・子の失敗時に `--plain` へ自動で戻らない形に直した（[仕様](../spec/pi-guard.md#自作の拡張-todo--plan--btw)）。`explorer` 役の `git` は `--` を含む形（`git diff -- <パス>` など）が判定器の限界で拒まれる（未着手。[review への依頼の書き方](../spec/pi-guard.md#review-への依頼の書き方)）
+  同日の後続: `btw` の長い返信を実機の TUI で確かめたところ、画面に収まる行だけが表示され、末尾と閉じる案内が見えなかった。`review` の子のレビューも踏まえ、スクロールできる窓つき表示・返信上限の経路間の統一・子の失敗時に `--plain` へ自動で戻らない形に直した（[仕様](../spec/guard/pi-guard.md#自作の拡張-todo--plan--btw)）。`explorer` 役の `git` は `--` を含む形（`git diff -- <パス>` など）が判定器の限界で拒まれる（未着手。[review への依頼の書き方](../spec/guard/pi-guard.md#review-への依頼の書き方)）
   未確認: Windows の素の `pi` での子の起動、実モデルでの `review` の指摘の質
-- **2026-10-20**: 利用者が「OpenCode はもう使っていない」と確認した。だが急ぐ理由は無いので、段 6（撤去）と OpenCode 専用の `checkpoint`（スキル・plugin・スクリプト・試験・[仕様](../spec/checkpoint.md)、約 2,900 行）は**現状維持で保留**とした。pi は自作の圧縮が checkpoint を兼ねる（[圧縮（旧 checkpoint）](../spec/pi-guard.md#圧縮旧-checkpoint)。同日に思考レベルの設定漏れを直して実モデルで確認済み）。撤去するときは一緒に消す。撤去前に決めるのは Windows の扱い（pi のハーネスが無い）
+- **2026-10-20**: 利用者が「OpenCode はもう使っていない」と確認した。だが急ぐ理由は無いので、段 6（撤去）と OpenCode 専用の `checkpoint`（スキル・plugin・スクリプト・試験・[仕様](../spec/checkpoint.md)、約 2,900 行）は**現状維持で保留**とした。pi は自作の圧縮が checkpoint を兼ねる（[圧縮（旧 checkpoint）](../spec/guard/pi-guard.md#圧縮旧-checkpoint)。同日に思考レベルの設定漏れを直して実モデルで確認済み）。撤去するときは一緒に消す。撤去前に決めるのは Windows の扱い（pi のハーネスが無い）
 - **2026-10-13**: 利用者が **pi に一本化する**と決め、判定器を TypeScript に移すことにした（[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。2026-10-09 の「判定器を Claude / Copilot と共有する」はこれで覆る。Windows ネイティブの `pi` は信頼できる環境でだけ開く（ガードなし）。調査は[記録 I1](../research/agents/pi-isolation-options.md)
-- **2026-10-13**: 判定器の TS 移植に着手した（[仕様](../spec/pi-decide.md#ts-版への移植)）。Python 版の判定結果 6,311 件と、部品ごとの出力 9,199 件を正解データにした。層 C（入口・役割・ファイル・bypass）と層 A（`shlex`・分割・正規化・照合）は全件一致。層 B（`bashrules` の約 3,900 行）は土台（パス・文脈・`shellparse`・共通部品）まで書いたが、正解データでの検証はこれから
-- **2026-10-13**: 移植の過程で、Python 版の判定が「同じプロセスで前に何を判定したか」で変わると分かり、直した。`_LITERAL_HEREDOC_BODIES`（引用付き heredoc の本文の記録）がプロセスに残り、後の引用なしの heredoc の `check_pipe_to_shell` を見送らせた。hook・ハーネスは 1 コマンド 1 プロセスなので本番では起きないが、常駐させる TS 版へ写してはいけない（[仕様](../spec/pi-decide.md#判定が前の呼び出しに依存していた修正済み)）
+- **2026-10-13**: 判定器の TS 移植に着手した（[仕様](../spec/guard/pi-decide.md#ts-版への移植)）。Python 版の判定結果 6,311 件と、部品ごとの出力 9,199 件を正解データにした。層 C（入口・役割・ファイル・bypass）と層 A（`shlex`・分割・正規化・照合）は全件一致。層 B（`bashrules` の約 3,900 行）は土台（パス・文脈・`shellparse`・共通部品）まで書いたが、正解データでの検証はこれから
+- **2026-10-13**: 移植の過程で、Python 版の判定が「同じプロセスで前に何を判定したか」で変わると分かり、直した。`_LITERAL_HEREDOC_BODIES`（引用付き heredoc の本文の記録）がプロセスに残り、後の引用なしの heredoc の `check_pipe_to_shell` を見送らせた。hook・ハーネスは 1 コマンド 1 プロセスなので本番では起きないが、常駐させる TS 版へ写してはいけない（[仕様](../spec/guard/pi-decide.md#判定が前の呼び出しに依存していた修正済み)）
 - **2026-10-11**: 拡張の方針を改めた（[ADR-0016](../adr/0016-pi-extensions-own-first.md)）。従来の「`-ne` で拡張を足さない」は、AI の提案を理解せずに承認したもので、
   利用者の方針ではなかった。明示した `-e` の拡張が判定・伏字化を通ることを実測し（[E5](../research/agents/pi-extension-under-harness.md)、コミット a0f934d）、
   「自作を基本とし、必要かつ自作が困難で十分に確認したものだけ外部の拡張を例外で導入する」に改めた。`-ne` は維持する（自動発見はしない）

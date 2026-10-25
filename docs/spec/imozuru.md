@@ -3,14 +3,14 @@
 知らない分野を、用語・人・場から引用と著者を芋づる式にたどり、**原文を要約せずに保存**して、要る主張ごとに原文の行番号を付けるスキル。
 上流は [MaryCache/imozuru](https://github.com/MaryCache/imozuru)（MIT）で、`home/dot_claude/skills/imozuru/` に vendor して調整した。
 検索は、すでにある [web-search](web-search.md) スキルの `websearch.py` を使う（検索役のサブエージェントは使わない）。
-入口を skill + CLI にした理由は [入口の選び方](pi-guard.md#入口の選び方)、拡張でなくスキルで足りる判断は [ADR-0016](../adr/0016-pi-extensions-own-first.md)。
+入口を skill + CLI にした理由は [入口の選び方](guard/pi-guard.md#入口の選び方)、拡張でなくスキルで足りる判断は [ADR-0016](../adr/0016-pi-extensions-own-first.md)。
 
 - 取り込んだ版: 上流 `ecb82c71b611872a0f49e783eda3bec987c80d91`（2026-10-21）。取得物の sha256 と原本のハッシュは、スキル内の `references/upstream.md`
 - 調査の日付: 2026-10-22。**コードは実行せずに読んだ**（上流の README・SKILL.md・スクリプト・試験名）。実際の通信・実機の `pis` では未確認
 
 ## 配る範囲
 
-**私用（`llm-provider` が `github-copilot`、つまり applejxd）だけ**に配る。`web-search` と同じ理由（業務機の検索語を AWS の外へ出さない）に、依存関係を足した。
+**個人用（`llm-provider` が `github-copilot`、つまり applejxd）だけ**に配る。`web-search` と同じ理由（制約のある環境の機の検索語を AWS の外へ出さない）に、依存関係を足した。
 
 | 対象 | 条件 | 実装 |
 | --- | --- | --- |
@@ -75,7 +75,7 @@
 
 ## YouTube
 
-`yt-dlp` は**自分で通信し、宛先をこちらで確かめられない**（接続の固定が効かない）。会社の PC で動画を取ることも避けたいので、次の 2 段にした。
+`yt-dlp` は**自分で通信し、宛先をこちらで確かめられない**（接続の固定が効かない）。制約のある環境の機で動画を取ることも避けたいので、次の 2 段にした。
 
 1. `fetch.py` は YouTube の URL を**常に拒否**する（`yt-dlp` を起動せずに FAIL。メッセージで `fetch_youtube.py` を案内する）
 2. `fetch_youtube.py`（`fetch.py` を YouTube 許可つきで呼ぶだけの別スクリプト）は、**個人の PC（applejxd）にだけ chezmoi が配る**。許可規則には載せないので、呼ぶたびに確認が出る
@@ -99,7 +99,7 @@
 検査は `test/agents/test_decide.py::test_imozuru_scripts_allow_only_the_confined_or_read_only_forms`。
 
 **`fetch.py` を確認なしにする条件**（満たしたら載せる）: `pis` のサンドボックス（Fence）のプロキシが内側の宛先を拒むことを確かめる。または、プロキシ宛ての接続でも固定できる実装にする。それまでは、確認を毎回出す。
-なお、`pis` の既定のサンドボックスは**ドメイン単位の許可リスト**（`allowedDomains`）で通信を絞るので、任意のドメインの原文を取るには、許可リストを足すか `pis --no-sandbox` が要る（[pi のガード](pi-guard.md#サンドボックス)）。この点は実機で未確認。
+なお、`pis` の既定のサンドボックスは**ドメイン単位の許可リスト**（`allowedDomains`）で通信を絞るので、任意のドメインの原文を取るには、許可リストを足すか `pis --no-sandbox` が要る（[pi のガード](guard/pi-guard.md#サンドボックス)）。この点は実機で未確認。
 
 ## レビューの経緯
 
@@ -111,7 +111,7 @@
 | 3 | **BLOCKER**: プロキシ環境変数があるだけで直接接続も固定を失う / ハードリンクが `confine()` を通る。**MAJOR**: YouTube（`yt-dlp`）は固定を通らない / 代替の秘匿検査が弱く、feed URL は送る直前に検査されない | 要求ごとのプロキシ判定・ハードリンクの拒否・YouTube の分離・代替の補強・feed URL の検査 |
 | 4 | **BLOCKER**: プロキシ経路は固定できない。**MAJOR**: YouTube の環境変数は継承で迂回できる / feed URL は名前を引いたあとに秘匿検査している | 環境変数をやめて `fetch_youtube.py` に分離・秘匿検査を先に移した。プロキシ経路は**許可に載せないことで対応**（修正は未着手） |
 
-- レビューは、3 回とも私の暫定の結論に反対した（「`confine()` を足せば全部を許可に載せてよい」など）。依頼文は、`pi-guard.md` の「[review への依頼の書き方](pi-guard.md#review-への依頼の書き方)」の型で書いた
+- レビューは、3 回とも私の暫定の結論に反対した（「`confine()` を足せば全部を許可に載せてよい」など）。依頼文は、`pi-guard.md` の「[review への依頼の書き方](guard/pi-guard.md#review-への依頼の書き方)」の型で書いた
 - レビューの子は**コードも試験も実行できない**（判定で拒否される）。「53 件が通った」などの実行結果は、親が実行した値で、子は再検証していない
 - 問題なしとされた点: `fetch.py` の `<name>`（単一のファイル名）の検査、`report.py` の引用元の検査、外部コマンドを引数リストで起動していること
 

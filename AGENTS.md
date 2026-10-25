@@ -70,7 +70,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   参照先だけを示す（`# see docs/spec/structure.md#見出し`）。
   同じ説明をコメントと `docs/` の両方に書かない（更新時に必ず片方が古くなる）
   - 正本の対応: `common.toml.tmpl` → `docs/spec/agent-permissions.md`（入口）と
-    分割先の `agent-config-generation.md` / `agent-command-policy.md` / `agent-sandbox.md`、
+    分割先の `agent-config-generation.md` / `guard/agent-command-policy.md` / `sandbox/agent-sandbox.md`、
     `mise/config.toml.tmpl` と `.chezmoiscripts/` → `docs/spec/structure.md`
   - コメントに残してよい例: 非自明な 1 行の意図、公式ドキュメントの URL、
     消すと壊れる理由の 1 文
@@ -90,4 +90,10 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   `.chezmoitemplates/` の共有テンプレートへ置き、`apply` のたびに評価させる。
   `chezmoi.toml` の `[data]` は `init` 時にしか更新されない
   （[CHG-0008](docs/change/closed/0008-raspi-branching.md)）
+- **このリポジトリは公開。私物の環境以外の具体を書かない。** 勤務先・所属組織の環境、契約、利用ポリシー、
+  認証・権限・ネットワークの構成、組織名・部署名・社内の URL やホスト名・ドメインは、コード・コメント・docs・
+  コミットメッセージ・案件・調査記録のどこにも残さない（公開後は履歴から消せない）。そうした制約が設計に影響する
+  ときは、「制約のある環境（認証つきプロキシが必須、fine-grained PAT が使えない、など）」のように
+  **条件つきの一般論**で書き、確認した事実のように断定しない。個人の機（私物）の事実は書いてよい。
+  迷ったら書かず、リポジトリ外の非公開メモ（`.tmp/` など）に置く
 - ドキュメントは日本語で書く

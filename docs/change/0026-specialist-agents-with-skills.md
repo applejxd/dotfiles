@@ -104,5 +104,5 @@
 
 ## 参照
 
-- [pi のガード](../spec/pi-guard.md)（子エージェント、`[pi.agents]`）
+- [pi のガード](../spec/guard/pi-guard.md)（子エージェント、`[pi.agents]`）
 - [CHG-0025](0025-goal-autonomous-loop.md)（自律ループ。子の `steer` / `background` が前提）

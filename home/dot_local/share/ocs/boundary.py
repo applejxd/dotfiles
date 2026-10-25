@@ -1,6 +1,6 @@
 """境界 (Fence の設定) の組み立てと、プロジェクトごとの追加。
 
-see docs/spec/opencode-sandbox.md#境界の中身
+see docs/spec/sandbox/opencode-sandbox.md#境界の中身
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ REQUEST_KEYS = ("read", "write", "network_allow", "devices")
 EXTRA_READ_ENV = "PIS_EXTRA_READ"
 EXTRA_DEVICES_ENV = "PIS_EXTRA_DEVICES"
 # devices に足せる /dev/ 直下の名前 (CUDA の計算に要るものだけ)。これ以外は拒否
-# see docs/spec/opencode-sandbox.md#プロジェクトごとの追加
+# see docs/spec/sandbox/opencode-sandbox.md#プロジェクトごとの追加
 ALLOWED_DEVICE_NAMES = (
     "dxg",
     "nvidiactl",
@@ -142,7 +142,7 @@ def reject_control_dirs(sandbox: dict, workspace: Path, request: dict | None = N
 
     そのもの・祖先・子孫のどれで起動しても置き場の中が書けてしまう。
     ``workspace`` は実体パスで渡すこと。
-    see docs/spec/opencode-sandbox.md#起動ディレクトリの制限
+    see docs/spec/sandbox/opencode-sandbox.md#起動ディレクトリの制限
     """
     targets = _uniq_paths(
         [t for raw in sandbox["base"].get("control_dirs", []) for t in _normalized(raw)]
@@ -168,7 +168,7 @@ def reject_control_dirs(sandbox: dict, workspace: Path, request: dict | None = N
 def protected_candidates(sandbox: dict, workspace: Path) -> list[Path]:
     """保護対象を、起動ディレクトリとリポジトリの根の両方を基準に解決する (実体パスで返す)。
 
-    see docs/spec/opencode-sandbox.md#保護対象denywrite
+    see docs/spec/sandbox/opencode-sandbox.md#保護対象denywrite
     """
     roots = [workspace]
     top = backup.git_toplevel(workspace)
@@ -181,7 +181,7 @@ def protected_candidates(sandbox: dict, workspace: Path) -> list[Path]:
 def reject_protected_workspace(sandbox: dict, workspace: Path, request: dict | None = None) -> None:
     """保護対象の中での起動と、保護対象の中を ``write`` に足す宣言を拒否する。
 
-    see docs/spec/opencode-sandbox.md#保護対象denywrite
+    see docs/spec/sandbox/opencode-sandbox.md#保護対象denywrite
     """
     targets = protected_candidates(sandbox, workspace)
     for target in targets:
@@ -321,7 +321,7 @@ def _resolve_requested(value: str, workspace: Path) -> str:
 def env_extra_read() -> list[str]:
     """``PIS_EXTRA_READ`` (コロン区切りの絶対パス) を読む。相対パスは起動しない。
 
-    see docs/spec/opencode-sandbox.md#環境変数での追加
+    see docs/spec/sandbox/opencode-sandbox.md#環境変数での追加
     """
     out: list[str] = []
     bad: list[str] = []
@@ -374,7 +374,7 @@ def _checked_devices(values: list[str], source: str) -> list[str]:
 def env_extra_devices() -> list[str]:
     """``PIS_EXTRA_DEVICES`` (コロン区切りの ``/dev/`` 直下の絶対パス) を読む。
 
-    see docs/spec/opencode-sandbox.md#環境変数での追加
+    see docs/spec/sandbox/opencode-sandbox.md#環境変数での追加
     """
     raws = [r for r in os.environ.get(EXTRA_DEVICES_ENV, "").split(":") if r]
     return _uniq(_checked_devices(raws, EXTRA_DEVICES_ENV))

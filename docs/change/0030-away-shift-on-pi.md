@@ -31,7 +31,7 @@
   `away_guard.py` の `init` / `check` / `log`、`preflight.py`、`uv run --no-project python …`、`timeout 20m pytest …`、`mkdir -p .tmp/away-shift/…`、`cp … .tmp/away-shift/…`、`sleep 600`
 - **`write` / `edit` は、作業ツリーの中ならどこでも allow**（`.tmp/away-shift/` に限らない。`home/dot_config/pi/harness/index.ts` への `write` も allow）。
   Claude Code の hook にある「`.tmp` だけ免除」とは違い、pi では「リポジトリ本体を書き換えない」がスキルの指示だけになる
-- **`bg_run` は bash と同じ判定を通る**（`docs/spec/pi-guard.md`）。`sleep` は既定で確認になる（`guarded_bash` は 10 秒を超える `sleep` を拒むが、`bg_run` の中は許される）
+- **`bg_run` は bash と同じ判定を通る**（`docs/spec/guard/pi-guard.md`）。`sleep` は既定で確認になる（`guarded_bash` は 10 秒を超える `sleep` を拒むが、`bg_run` の中は許される）
 - **再開**: `bg_run` で `sleep` を起動して応答を終えると、完了でアイドルのまま自動再開する（実際のモデル 4 つで確認。[記録](../research/agents/pi-bg-experiments.md)の s1）。
   **停止**: `bg_kill` は再開を起こさない（同 s2）。**復帰**: 利用者のメッセージで新しいターンが始まる。このセッションでも、`bg_run` の完了通知でターンが再開することを何度も確認した。
   **未確認**: TUI での見え方、`sleep` を数十分にしたときの上限

@@ -4,17 +4,17 @@
 // 判定は呼び出しごとの文脈 `Ctx` で行い、呼び出し間で状態を持たない。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md
+// see docs/spec/guard/pi-decide.md
 import { ASK_NAMES, CHECKS, DENY_NAMES, PATH_NAMES } from "./checks.ts";
 import type { Ctx, Tables } from "./context.ts";
 import { newCtx } from "./context.ts";
 import type { BashDecider, Response } from "./decide.ts";
 import { errorResponse, response } from "./decide.ts";
 import { expandUser } from "./pathutil.ts";
-import { findMatch, normalize, splitCommandSegments } from "./normalize.ts";
+import { findMatch, normalize, patternMatches, splitCommandSegments } from "./normalize.ts";
 import type { Common } from "./policy.ts";
 import { basename, pyLen, pyRegex, shlexSplit, ShlexError } from "./pystr.ts";
-import { expandCdTargets, splitHeredocBody } from "./shared.ts";
+import { clip200, expandCdTargets, splitHeredocBody } from "./shared.ts";
 
 // 検査の上限。check_bash.py と同じ
 const MAX_COMMAND_LEN = 10000;
@@ -80,12 +80,25 @@ function hasUnsafeEnvPrefix(cmd: string): boolean {
 
 type Obj = Record<string, any>;
 
-function runChecks(ctx: Ctx, names: readonly string[], cmd: string, decision: "deny" | "ask", ruleName: string): Response | null {
+function runChecks(
+	ctx: Ctx,
+	names: readonly string[],
+	cmd: string,
+	decision: "deny" | "ask",
+	ruleName: string,
+	confirmChecks: readonly string[] = [],
+): Response | null {
 	for (const name of names) {
 		const check = CHECKS.get(name);
 		if (check === undefined) throw new Error(`検査関数 ${name} が登録されていません`);
 		const reason = check(ctx, cmd);
-		if (reason) return response(decision, reason, name === ruleName ? "rule" : "check", { check: name });
+		if (reason) {
+			// [pi.confirm] checks に載る検査の ask は、bypass でも確認する (理由の先頭は契約の接頭辞)
+			if (decision === "ask" && confirmChecks.includes(name)) {
+				return response("ask", `${MUST_CONFIRM_PREFIX}${reason}`, name === ruleName ? "rule" : "check", { check: name, mustConfirm: true });
+			}
+			return response(decision, reason, name === ruleName ? "rule" : "check", { check: name });
+		}
 	}
 	return null;
 }
@@ -104,8 +117,68 @@ function bashCommonDeny(ctx: Ctx, cmd: string): Response | null {
 	return null;
 }
 
-function bashAsk(ctx: Ctx, cmd: string): Response | null {
-	return runChecks(ctx, ASK_NAMES, cmd, "ask", "check_policy_ask");
+function bashAsk(ctx: Ctx, cmd: string, pi: Obj): Response | null {
+	const confirmChecks = ((pi.confirm?.checks as unknown[] | undefined) ?? []).map(String);
+	// 確認に格上げする検査 (mustConfirm) は、他の ask (check_policy_ask など) より先に引く。
+	// 先に別の ask が当たると mustConfirm が付かず、bypass で確認なしに通ってしまうため
+	if (confirmChecks.length > 0) {
+		const first = runChecks(ctx, ASK_NAMES.filter((n) => confirmChecks.includes(n)), cmd, "ask", "check_policy_ask", confirmChecks);
+		if (first) return first;
+	}
+	return runChecks(ctx, ASK_NAMES, cmd, "ask", "check_policy_ask", confirmChecks);
+}
+
+// 契約: mustConfirm の ask の理由はこの接頭辞で始める (ハーネスの確認 UI が見る)
+const MUST_CONFIRM_PREFIX = "確認が必要な外部への送信・公開 (bypass でも確認する): ";
+// 本文・タイトルを利用者が確認できない形 (標準入力・コマンド置換) を deny にする対象
+const BODY_CMD_RE = /^gh (?:pr|issue) (?:create|comment|edit|review)$/u;
+const BODY_STDIN_FLAGS = new Set(["--body-file", "-F", "-b", "--body"]);
+const BLIND_BODY_REASON = "本文を確認できない形 (標準入力・コマンド置換)。--body か --body-file <ファイル> で書き直す";
+
+/** 正規化したセグメントの本文引数が標準入力 (`--body-file -` / `-F -` / `-b -` / `--body-file=-`) か。 */
+function bodyFromStdin(segment: string): boolean {
+	let tokens: string[];
+	try {
+		tokens = shlexSplit(segment);
+	} catch (e) {
+		if (!(e instanceof ShlexError)) throw e;
+		// 解析できない形は本文を確認できないとみなす
+		return true;
+	}
+	return tokens.some((t, i) => t === "--body-file=-" || (BODY_STDIN_FLAGS.has(t) && tokens[i + 1] === "-"));
+}
+
+/**
+ * `[pi.confirm] bash` の確認表。当たれば `mustConfirm` の ask (bypass もサンドボックスの緩和も効かない)。
+ * 本文を確認できない形の `gh pr|issue create|comment|edit|review` は deny。
+ * see docs/spec/guard/pi-decide.md#confirm
+ */
+function confirmTable(cmd: string, pi: Obj): Response | null {
+	const patterns = ((pi.confirm?.bash as unknown[] | undefined) ?? []).map(String);
+	if (patterns.length === 0) return null;
+	let first: string | null = null;
+	let blind = false;
+	for (const segment of normalize(cmd)) {
+		const pat = patterns.find((p) => patternMatches(segment, p));
+		if (!pat) continue;
+		first = first ?? pat;
+		if (BODY_CMD_RE.test(pat) && bodyFromStdin(segment)) blind = true;
+	}
+	if (first === null) return null;
+	if (!blind) {
+		const bodyPatterns = patterns.filter((p) => BODY_CMD_RE.test(p));
+		// コマンド置換は元のセグメントの文字で見る (正規化を通すと内側に展開されうる)
+		blind = splitCommandSegments(cmd).some(
+			(raw) => (raw.includes("$(") || raw.includes("`")) && normalize(raw).some((s) => bodyPatterns.some((p) => patternMatches(s, p))),
+		);
+	}
+	if (blind) return response("deny", BLIND_BODY_REASON, "rule");
+	return response(
+		"ask",
+		`${MUST_CONFIRM_PREFIX}\`${first}\`\n実行しようとしているコマンド: ${clip200(cmd)}`,
+		"rule",
+		{ mustConfirm: true },
+	);
 }
 
 /** `[[pi.guide]]` (誘導) に当たれば、案内を理由にした deny。bypass でも外れない。 */
@@ -182,7 +255,7 @@ const LOCAL_SHELL_META = ";&|<>(){}$`\n*?[~#!";
  *   (リモート側は `/dev/null` に置き換える。リモートのパスはローカルでは判定できない)。
  * ローカルの shell が先に解釈しうる形 (クォート外のメタ文字・二重引用符内の `$` や `` ` ``) は対象にしない。
  * 宛先の前のオプション (`-o ProxyCommand=…` など) は受け付けず、コマンドなし (対話 shell) も対象外。
- * see docs/spec/pi-decide.md#ssh--scp-の許可
+ * see docs/spec/guard/pi-decide.md#ssh--scp-の許可
  */
 function unwrapRemoteExec(cmd: string, targets: readonly string[]): string | null {
 	if (targets.length === 0) return null;
@@ -279,7 +352,9 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		if (roleDeny) {
 			return { commonDeny: null, roleRule: response("deny", `\`${roleDeny}\` はこの役割の shell_deny にある`, "rule") };
 		}
-		const ask = bashAsk(ctx, cmd);
+		const confirm = confirmTable(cmd, pi);
+		if (confirm) return { commonDeny: null, roleRule: confirm };
+		const ask = bashAsk(ctx, cmd, pi);
 		if (ask) return { commonDeny: null, roleRule: ask };
 		// 役割が shell_allow を持てば、[pi.shell] allow の代わりにそれを使う
 		const own = profile.shell_allow;

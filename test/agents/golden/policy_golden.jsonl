@@ -579,6 +579,13 @@
 {"arg": "cargo build", "fn": "find_match", "list": "deny", "out": null}
 {"arg": "cargo build", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "cargo build", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "cargo publish", "fn": "split", "out": ["cargo publish"]}
+{"arg": "cargo publish", "fn": "normalize", "out": ["cargo publish"]}
+{"arg": "cargo publish", "fn": "subst", "out": []}
+{"arg": "cargo publish", "fn": "funcs", "out": []}
+{"arg": "cargo publish", "fn": "find_match", "list": "deny", "out": "cargo publish"}
+{"arg": "cargo publish", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "cargo publish", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "cargo run -- git push", "fn": "split", "out": ["cargo run -- git push"]}
 {"arg": "cargo run -- git push", "fn": "normalize", "out": ["cargo run -- git push", "git push", "git push", "git push", "git push"]}
 {"arg": "cargo run -- git push", "fn": "subst", "out": []}
@@ -2494,8 +2501,8 @@
 {"arg": "docker push myimage", "fn": "normalize", "out": ["docker push myimage"]}
 {"arg": "docker push myimage", "fn": "subst", "out": []}
 {"arg": "docker push myimage", "fn": "funcs", "out": []}
-{"arg": "docker push myimage", "fn": "find_match", "list": "deny", "out": null}
-{"arg": "docker push myimage", "fn": "find_match", "list": "ask", "out": "docker push"}
+{"arg": "docker push myimage", "fn": "find_match", "list": "deny", "out": "docker push"}
+{"arg": "docker push myimage", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "docker push myimage", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "docker rm", "fn": "split", "out": ["docker rm"]}
 {"arg": "docker rm", "fn": "normalize", "out": ["docker rm"]}
@@ -3470,6 +3477,13 @@
 {"arg": "gcc -o ~/.local/bin/x x.c", "fn": "find_match", "list": "deny", "out": null}
 {"arg": "gcc -o ~/.local/bin/x x.c", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "gcc -o ~/.local/bin/x x.c", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "gem push foo.gem", "fn": "split", "out": ["gem push foo.gem"]}
+{"arg": "gem push foo.gem", "fn": "normalize", "out": ["gem push foo.gem"]}
+{"arg": "gem push foo.gem", "fn": "subst", "out": []}
+{"arg": "gem push foo.gem", "fn": "funcs", "out": []}
+{"arg": "gem push foo.gem", "fn": "find_match", "list": "deny", "out": "gem push"}
+{"arg": "gem push foo.gem", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "gem push foo.gem", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "gh --hostname github.com api graphql -f 'query=mutation { addStar(input: {}) { clientMutationId } }'", "fn": "split", "out": ["gh --hostname github.com api graphql -f 'query=mutation { addStar(input: {}) { clientMutationId } }'"]}
 {"arg": "gh --hostname github.com api graphql -f 'query=mutation { addStar(input: {}) { clientMutationId } }'", "fn": "normalize", "out": ["gh api graphql -f query=mutation { addStar(input: {}) { clientMutationId"]}
 {"arg": "gh --hostname github.com api graphql -f 'query=mutation { addStar(input: {}) { clientMutationId } }'", "fn": "subst", "out": []}
@@ -3869,6 +3883,20 @@
 {"arg": "gh release create v1.0.0", "fn": "find_match", "list": "deny", "out": "gh release create"}
 {"arg": "gh release create v1.0.0", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "gh release create v1.0.0", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "gh release delete v1", "fn": "split", "out": ["gh release delete v1"]}
+{"arg": "gh release delete v1", "fn": "normalize", "out": ["gh release delete v1"]}
+{"arg": "gh release delete v1", "fn": "subst", "out": []}
+{"arg": "gh release delete v1", "fn": "funcs", "out": []}
+{"arg": "gh release delete v1", "fn": "find_match", "list": "deny", "out": "gh release delete"}
+{"arg": "gh release delete v1", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "gh release delete v1", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "gh release edit v1", "fn": "split", "out": ["gh release edit v1"]}
+{"arg": "gh release edit v1", "fn": "normalize", "out": ["gh release edit v1"]}
+{"arg": "gh release edit v1", "fn": "subst", "out": []}
+{"arg": "gh release edit v1", "fn": "funcs", "out": []}
+{"arg": "gh release edit v1", "fn": "find_match", "list": "deny", "out": "gh release edit"}
+{"arg": "gh release edit v1", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "gh release edit v1", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "gh release list", "fn": "split", "out": ["gh release list"]}
 {"arg": "gh release list", "fn": "normalize", "out": ["gh release list"]}
 {"arg": "gh release list", "fn": "subst", "out": []}
@@ -3904,6 +3932,13 @@
 {"arg": "gh repo clone owner/repo", "fn": "find_match", "list": "deny", "out": null}
 {"arg": "gh repo clone owner/repo", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "gh repo clone owner/repo", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "gh repo create foo --public", "fn": "split", "out": ["gh repo create foo --public"]}
+{"arg": "gh repo create foo --public", "fn": "normalize", "out": ["gh repo create foo --public"]}
+{"arg": "gh repo create foo --public", "fn": "subst", "out": []}
+{"arg": "gh repo create foo --public", "fn": "funcs", "out": []}
+{"arg": "gh repo create foo --public", "fn": "find_match", "list": "deny", "out": "gh repo create"}
+{"arg": "gh repo create foo --public", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "gh repo create foo --public", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "gh repo delete", "fn": "split", "out": ["gh repo delete"]}
 {"arg": "gh repo delete", "fn": "normalize", "out": ["gh repo delete"]}
 {"arg": "gh repo delete", "fn": "subst", "out": []}
@@ -3918,6 +3953,13 @@
 {"arg": "gh repo delete owner/name", "fn": "find_match", "list": "deny", "out": "gh repo delete"}
 {"arg": "gh repo delete owner/name", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "gh repo delete owner/name", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "gh repo edit --visibility public", "fn": "split", "out": ["gh repo edit --visibility public"]}
+{"arg": "gh repo edit --visibility public", "fn": "normalize", "out": ["gh repo edit --visibility public"]}
+{"arg": "gh repo edit --visibility public", "fn": "subst", "out": []}
+{"arg": "gh repo edit --visibility public", "fn": "funcs", "out": []}
+{"arg": "gh repo edit --visibility public", "fn": "find_match", "list": "deny", "out": "gh repo edit"}
+{"arg": "gh repo edit --visibility public", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "gh repo edit --visibility public", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "gh repo list owner", "fn": "split", "out": ["gh repo list owner"]}
 {"arg": "gh repo list owner", "fn": "normalize", "out": ["gh repo list owner"]}
 {"arg": "gh repo list owner", "fn": "subst", "out": []}
@@ -5213,6 +5255,13 @@
 {"arg": "npm install token-utils", "fn": "find_match", "list": "deny", "out": null}
 {"arg": "npm install token-utils", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "npm install token-utils", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "npm publish", "fn": "split", "out": ["npm publish"]}
+{"arg": "npm publish", "fn": "normalize", "out": ["npm publish"]}
+{"arg": "npm publish", "fn": "subst", "out": []}
+{"arg": "npm publish", "fn": "funcs", "out": []}
+{"arg": "npm publish", "fn": "find_match", "list": "deny", "out": "npm publish"}
+{"arg": "npm publish", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "npm publish", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "npm remove", "fn": "split", "out": ["npm remove"]}
 {"arg": "npm remove", "fn": "normalize", "out": ["npm remove"]}
 {"arg": "npm remove", "fn": "subst", "out": []}
@@ -5437,6 +5486,13 @@
 {"arg": "pnpm dlx prettier --check .", "fn": "find_match", "list": "deny", "out": null}
 {"arg": "pnpm dlx prettier --check .", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "pnpm dlx prettier --check .", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "pnpm publish", "fn": "split", "out": ["pnpm publish"]}
+{"arg": "pnpm publish", "fn": "normalize", "out": ["pnpm publish"]}
+{"arg": "pnpm publish", "fn": "subst", "out": []}
+{"arg": "pnpm publish", "fn": "funcs", "out": []}
+{"arg": "pnpm publish", "fn": "find_match", "list": "deny", "out": "pnpm publish"}
+{"arg": "pnpm publish", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "pnpm publish", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "pre-commit run --all-files", "fn": "split", "out": ["pre-commit run --all-files"]}
 {"arg": "pre-commit run --all-files", "fn": "normalize", "out": ["pre-commit run --all-files"]}
 {"arg": "pre-commit run --all-files", "fn": "subst", "out": []}
@@ -6851,6 +6907,13 @@
 {"arg": "truncate -s 0 ~/.claude/settings.json", "fn": "find_match", "list": "deny", "out": null}
 {"arg": "truncate -s 0 ~/.claude/settings.json", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "truncate -s 0 ~/.claude/settings.json", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "twine upload dist/*", "fn": "split", "out": ["twine upload dist/*"]}
+{"arg": "twine upload dist/*", "fn": "normalize", "out": ["twine upload dist/*"]}
+{"arg": "twine upload dist/*", "fn": "subst", "out": []}
+{"arg": "twine upload dist/*", "fn": "funcs", "out": []}
+{"arg": "twine upload dist/*", "fn": "find_match", "list": "deny", "out": "twine upload"}
+{"arg": "twine upload dist/*", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "twine upload dist/*", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "unbuffer bash -c 'cat ~/.ssh/id_rsa'", "fn": "split", "out": ["unbuffer bash -c 'cat ~/.ssh/id_rsa'"]}
 {"arg": "unbuffer bash -c 'cat ~/.ssh/id_rsa'", "fn": "normalize", "out": ["unbuffer bash -c 'cat ~/.ssh/id_rsa'", "cat ~/.ssh/id_rsa"]}
 {"arg": "unbuffer bash -c 'cat ~/.ssh/id_rsa'", "fn": "subst", "out": []}
@@ -6900,6 +6963,13 @@
 {"arg": "uv pip list", "fn": "find_match", "list": "deny", "out": null}
 {"arg": "uv pip list", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "uv pip list", "fn": "find_match", "list": "allow", "out": "uv pip list"}
+{"arg": "uv publish", "fn": "split", "out": ["uv publish"]}
+{"arg": "uv publish", "fn": "normalize", "out": ["uv publish"]}
+{"arg": "uv publish", "fn": "subst", "out": []}
+{"arg": "uv publish", "fn": "funcs", "out": []}
+{"arg": "uv publish", "fn": "find_match", "list": "deny", "out": "uv publish"}
+{"arg": "uv publish", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "uv publish", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "uv python install 3.13", "fn": "split", "out": ["uv python install 3.13"]}
 {"arg": "uv python install 3.13", "fn": "normalize", "out": ["uv python install 3.13"]}
 {"arg": "uv python install 3.13", "fn": "subst", "out": []}
@@ -7327,6 +7397,13 @@
 {"arg": "yarn dlx eslint .", "fn": "find_match", "list": "deny", "out": null}
 {"arg": "yarn dlx eslint .", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "yarn dlx eslint .", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "yarn publish", "fn": "split", "out": ["yarn publish"]}
+{"arg": "yarn publish", "fn": "normalize", "out": ["yarn publish"]}
+{"arg": "yarn publish", "fn": "subst", "out": []}
+{"arg": "yarn publish", "fn": "funcs", "out": []}
+{"arg": "yarn publish", "fn": "find_match", "list": "deny", "out": "yarn publish"}
+{"arg": "yarn publish", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "yarn publish", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "zip -r out.zip ~/.gnupg", "fn": "split", "out": ["zip -r out.zip ~/.gnupg"]}
 {"arg": "zip -r out.zip ~/.gnupg", "fn": "normalize", "out": ["zip -r out.zip ~/.gnupg"]}
 {"arg": "zip -r out.zip ~/.gnupg", "fn": "subst", "out": []}
@@ -8379,6 +8456,7 @@
 {"arg": "bw get password foo", "fn": "shlex", "out": {"tokens": ["bw", "get", "password", "foo"]}}
 {"arg": "bw list items", "fn": "shlex", "out": {"tokens": ["bw", "list", "items"]}}
 {"arg": "cargo build", "fn": "shlex", "out": {"tokens": ["cargo", "build"]}}
+{"arg": "cargo publish", "fn": "shlex", "out": {"tokens": ["cargo", "publish"]}}
 {"arg": "cargo run -- git push", "fn": "shlex", "out": {"tokens": ["cargo", "run", "--", "git", "push"]}}
 {"arg": "case x in x) git push;; esac", "fn": "shlex", "out": {"tokens": ["case", "x", "in", "x)", "git", "push;;", "esac"]}}
 {"arg": "cat \"dir with space/.env\"", "fn": "shlex", "out": {"tokens": ["cat", "dir with space/.env"]}}
@@ -8967,6 +9045,7 @@
 {"arg": "gcc -o /usr/local/bin/x x.c", "fn": "shlex", "out": {"tokens": ["gcc", "-o", "/usr/local/bin/x", "x.c"]}}
 {"arg": "gcc -o build/out x.c", "fn": "shlex", "out": {"tokens": ["gcc", "-o", "build/out", "x.c"]}}
 {"arg": "gcc -o ~/.local/bin/x x.c", "fn": "shlex", "out": {"tokens": ["gcc", "-o", "~/.local/bin/x", "x.c"]}}
+{"arg": "gem push foo.gem", "fn": "shlex", "out": {"tokens": ["gem", "push", "foo.gem"]}}
 {"arg": "gh --hostname github.com api graphql -f 'query=mutation { addStar(input: {}) { clientMutationId } }'", "fn": "shlex", "out": {"tokens": ["gh", "--hostname", "github.com", "api", "graphql", "-f", "query=mutation { addStar(input: {}) { clientMutationId } }"]}}
 {"arg": "gh api graphql -f query=mutation { addStar(input: {}) { clientMutationId", "fn": "shlex", "out": {"tokens": ["gh", "api", "graphql", "-f", "query=mutation", "{", "addStar(input:", "{})", "{", "clientMutationId"]}}
 {"arg": "gh --hostname github.com auth status --show-token", "fn": "shlex", "out": {"tokens": ["gh", "--hostname", "github.com", "auth", "status", "--show-token"]}}
@@ -9044,13 +9123,17 @@
 {"arg": "gh project list", "fn": "shlex", "out": {"tokens": ["gh", "project", "list"]}}
 {"arg": "gh project view 1", "fn": "shlex", "out": {"tokens": ["gh", "project", "view", "1"]}}
 {"arg": "gh release create v1.0.0", "fn": "shlex", "out": {"tokens": ["gh", "release", "create", "v1.0.0"]}}
+{"arg": "gh release delete v1", "fn": "shlex", "out": {"tokens": ["gh", "release", "delete", "v1"]}}
+{"arg": "gh release edit v1", "fn": "shlex", "out": {"tokens": ["gh", "release", "edit", "v1"]}}
 {"arg": "gh release list", "fn": "shlex", "out": {"tokens": ["gh", "release", "list"]}}
 {"arg": "gh release upload v1 .env", "fn": "shlex", "out": {"tokens": ["gh", "release", "upload", "v1", ".env"]}}
 {"arg": "gh release view v1.0.0", "fn": "shlex", "out": {"tokens": ["gh", "release", "view", "v1.0.0"]}}
 {"arg": "gh repo clone", "fn": "shlex", "out": {"tokens": ["gh", "repo", "clone"]}}
 {"arg": "gh repo clone owner/repo", "fn": "shlex", "out": {"tokens": ["gh", "repo", "clone", "owner/repo"]}}
+{"arg": "gh repo create foo --public", "fn": "shlex", "out": {"tokens": ["gh", "repo", "create", "foo", "--public"]}}
 {"arg": "gh repo delete", "fn": "shlex", "out": {"tokens": ["gh", "repo", "delete"]}}
 {"arg": "gh repo delete owner/name", "fn": "shlex", "out": {"tokens": ["gh", "repo", "delete", "owner/name"]}}
+{"arg": "gh repo edit --visibility public", "fn": "shlex", "out": {"tokens": ["gh", "repo", "edit", "--visibility", "public"]}}
 {"arg": "gh repo list owner", "fn": "shlex", "out": {"tokens": ["gh", "repo", "list", "owner"]}}
 {"arg": "gh repo view owner/repo", "fn": "shlex", "out": {"tokens": ["gh", "repo", "view", "owner/repo"]}}
 {"arg": "gh run list", "fn": "shlex", "out": {"tokens": ["gh", "run", "list"]}}
@@ -9288,6 +9371,7 @@
 {"arg": "npm install -g typescript", "fn": "shlex", "out": {"tokens": ["npm", "install", "-g", "typescript"]}}
 {"arg": "npm install express", "fn": "shlex", "out": {"tokens": ["npm", "install", "express"]}}
 {"arg": "npm install token-utils", "fn": "shlex", "out": {"tokens": ["npm", "install", "token-utils"]}}
+{"arg": "npm publish", "fn": "shlex", "out": {"tokens": ["npm", "publish"]}}
 {"arg": "npm remove", "fn": "shlex", "out": {"tokens": ["npm", "remove"]}}
 {"arg": "npm remove express", "fn": "shlex", "out": {"tokens": ["npm", "remove", "express"]}}
 {"arg": "npm run-script custom -- git push", "fn": "shlex", "out": {"tokens": ["npm", "run-script", "custom", "--", "git", "push"]}}
@@ -9329,6 +9413,7 @@
 {"arg": "pnpm dlx", "fn": "shlex", "out": {"tokens": ["pnpm", "dlx"]}}
 {"arg": "pnpm dlx prettier --check .", "fn": "shlex", "out": {"tokens": ["pnpm", "dlx", "prettier", "--check", "."]}}
 {"arg": "prettier --check .", "fn": "shlex", "out": {"tokens": ["prettier", "--check", "."]}}
+{"arg": "pnpm publish", "fn": "shlex", "out": {"tokens": ["pnpm", "publish"]}}
 {"arg": "pre-commit run --all-files", "fn": "shlex", "out": {"tokens": ["pre-commit", "run", "--all-files"]}}
 {"arg": "printenv", "fn": "shlex", "out": {"tokens": ["printenv"]}}
 {"arg": "printenv AWS_SECRET_ACCESS_KEY", "fn": "shlex", "out": {"tokens": ["printenv", "AWS_SECRET_ACCESS_KEY"]}}
@@ -9589,6 +9674,7 @@
 {"arg": "true; env", "fn": "shlex", "out": {"tokens": ["true;", "env"]}}
 {"arg": "truncate -s 0 build.log", "fn": "shlex", "out": {"tokens": ["truncate", "-s", "0", "build.log"]}}
 {"arg": "truncate -s 0 ~/.claude/settings.json", "fn": "shlex", "out": {"tokens": ["truncate", "-s", "0", "~/.claude/settings.json"]}}
+{"arg": "twine upload dist/*", "fn": "shlex", "out": {"tokens": ["twine", "upload", "dist/*"]}}
 {"arg": "unbuffer bash -c 'cat ~/.ssh/id_rsa'", "fn": "shlex", "out": {"tokens": ["unbuffer", "bash", "-c", "cat ~/.ssh/id_rsa"]}}
 {"arg": "unlink ~/.claude/hooks/check_bash.py", "fn": "shlex", "out": {"tokens": ["unlink", "~/.claude/hooks/check_bash.py"]}}
 {"arg": "uv add", "fn": "shlex", "out": {"tokens": ["uv", "add"]}}
@@ -9596,6 +9682,7 @@
 {"arg": "uv lock", "fn": "shlex", "out": {"tokens": ["uv", "lock"]}}
 {"arg": "uv pip install requests", "fn": "shlex", "out": {"tokens": ["uv", "pip", "install", "requests"]}}
 {"arg": "uv pip list", "fn": "shlex", "out": {"tokens": ["uv", "pip", "list"]}}
+{"arg": "uv publish", "fn": "shlex", "out": {"tokens": ["uv", "publish"]}}
 {"arg": "uv python install 3.13", "fn": "shlex", "out": {"tokens": ["uv", "python", "install", "3.13"]}}
 {"arg": "uv remove requests", "fn": "shlex", "out": {"tokens": ["uv", "remove", "requests"]}}
 {"arg": "uv run pre-commit run --all-files", "fn": "shlex", "out": {"tokens": ["uv", "run", "pre-commit", "run", "--all-files"]}}
@@ -9680,6 +9767,7 @@
 {"arg": "yarn dlx", "fn": "shlex", "out": {"tokens": ["yarn", "dlx"]}}
 {"arg": "yarn dlx eslint .", "fn": "shlex", "out": {"tokens": ["yarn", "dlx", "eslint", "."]}}
 {"arg": "eslint .", "fn": "shlex", "out": {"tokens": ["eslint", "."]}}
+{"arg": "yarn publish", "fn": "shlex", "out": {"tokens": ["yarn", "publish"]}}
 {"arg": "zip -r out.zip ~/.gnupg", "fn": "shlex", "out": {"tokens": ["zip", "-r", "out.zip", "~/.gnupg"]}}
 {"arg": "zsh -c \"git rebase main\"", "fn": "shlex", "out": {"tokens": ["zsh", "-c", "git rebase main"]}}
 {"arg": "git rebase main", "fn": "shlex", "out": {"tokens": ["git", "rebase", "main"]}}

@@ -17,7 +17,7 @@
     uv run --no-project --with pytest,pyyaml python scripts/agents/export_policy_golden.py
     uv run --no-project --with pytest,pyyaml python scripts/agents/export_policy_golden.py --check
 
-see docs/spec/pi-decide.md#ts-版への移植
+see docs/spec/guard/pi-decide.md#ts-版への移植
 """
 
 from __future__ import annotations

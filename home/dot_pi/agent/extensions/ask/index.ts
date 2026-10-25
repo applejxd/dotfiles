@@ -1,7 +1,7 @@
 // `ask` ツール: モデルが推測せず、選択肢つきで利用者に尋ねる。1 回の呼び出しで最大 4 問。
 // TUI では自前のパネル (ctx.ui.custom: 問ごとのタブ + 確認・複数選択・行内の自由記述)、それ以外 (RPC) は 1 問ずつの select / input。
 // UI が無い実行 (print・子エージェント) ではツールを外す。
-// see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
+// see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Editor, type EditorTheme, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Type } from "typebox";

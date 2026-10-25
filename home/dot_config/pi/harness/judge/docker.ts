@@ -1,7 +1,7 @@
 // docker のホスト側への影響を判定する (bashrules/docker.py の移植)。権限昇格・ホストマウント。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableList, tableSet } from "./context.ts";
 import { ShlexError, shlexSplit, split, strip, stripChars } from "./pystr.ts";

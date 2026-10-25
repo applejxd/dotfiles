@@ -659,6 +659,14 @@
 {"arg": "cargo build", "fn": "http_calls", "ok": []}
 {"arg": "cargo build", "fn": "gh_calls", "ok": []}
 {"arg": "cargo build", "fn": "fetched_paths", "ok": []}
+{"arg": "cargo publish", "fn": "heredoc", "literal": [], "out": "cargo publish"}
+{"arg": "cargo publish", "fn": "expand_cd", "out": ""}
+{"arg": "cargo publish", "fn": "commands", "ok": [{"redirects": [], "words": [["cargo", "cargo"], ["publish", "publish"]]}, {"redirects": [], "words": [["cargo", "cargo"], ["publish", "publish"]]}]}
+{"arg": "cargo publish", "fn": "write_targets", "ok": []}
+{"arg": "cargo publish", "fn": "http_calls", "ok": []}
+{"arg": "cargo publish", "fn": "gh_calls", "ok": []}
+{"arg": "cargo publish", "fn": "fetched_paths", "ok": []}
+{"arg": "cargo publish", "fn": "check", "name": "check_policy_deny", "ok": "`cargo publish` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "cargo run -- git push", "fn": "heredoc", "literal": [], "out": "cargo run -- git push"}
 {"arg": "cargo run -- git push", "fn": "expand_cd", "out": ""}
 {"arg": "cargo run -- git push", "fn": "commands", "ok": [{"redirects": [], "words": [["cargo", "cargo"], ["run", "run"], ["--", "--"], ["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["git", "git"], ["push", "push"]]}, {"redirects": [], "words": [["cargo", "cargo"], ["run", "run"], ["--", "--"], ["git", "git"], ["push", "push"]]}]}
@@ -2778,7 +2786,7 @@
 {"arg": "docker push myimage", "fn": "http_calls", "ok": []}
 {"arg": "docker push myimage", "fn": "gh_calls", "ok": []}
 {"arg": "docker push myimage", "fn": "fetched_paths", "ok": []}
-{"arg": "docker push myimage", "fn": "check", "name": "check_policy_ask", "ok": "`docker push` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: docker push myimage\n内容を確認して問題なければ承認してください。"}
+{"arg": "docker push myimage", "fn": "check", "name": "check_policy_deny", "ok": "`docker push` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "docker rm", "fn": "heredoc", "literal": [], "out": "docker rm"}
 {"arg": "docker rm", "fn": "expand_cd", "out": ""}
 {"arg": "docker rm", "fn": "commands", "ok": [{"redirects": [], "words": [["docker", "docker"], ["rm", "rm"]]}, {"redirects": [], "words": [["docker", "docker"], ["rm", "rm"]]}]}
@@ -3858,6 +3866,14 @@
 {"arg": "gcc -o ~/.local/bin/x x.c", "fn": "gh_calls", "ok": []}
 {"arg": "gcc -o ~/.local/bin/x x.c", "fn": "fetched_paths", "ok": []}
 {"arg": "gcc -o ~/.local/bin/x x.c", "fn": "check", "name": "check_global_env_mutation", "ok": "`gcc -o ~/.local/bin/x` はプロジェクトの外へ実行ファイルを書き出します。\n実行しようとしているコマンド: gcc -o ~/.local/bin/x x.c\n出力先を確認して問題なければ承認してください。"}
+{"arg": "gem push foo.gem", "fn": "heredoc", "literal": [], "out": "gem push foo.gem"}
+{"arg": "gem push foo.gem", "fn": "expand_cd", "out": ""}
+{"arg": "gem push foo.gem", "fn": "commands", "ok": [{"redirects": [], "words": [["gem", "gem"], ["push", "push"], ["foo.gem", "foo.gem"]]}, {"redirects": [], "words": [["gem", "gem"], ["push", "push"], ["foo.gem", "foo.gem"]]}]}
+{"arg": "gem push foo.gem", "fn": "write_targets", "ok": []}
+{"arg": "gem push foo.gem", "fn": "http_calls", "ok": []}
+{"arg": "gem push foo.gem", "fn": "gh_calls", "ok": []}
+{"arg": "gem push foo.gem", "fn": "fetched_paths", "ok": []}
+{"arg": "gem push foo.gem", "fn": "check", "name": "check_policy_deny", "ok": "`gem push` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "gh --hostname github.com api graphql -f 'query=mutation { addStar(input: {}) { clientMutationId } }'", "fn": "heredoc", "literal": [], "out": "gh --hostname github.com api graphql -f 'query=mutation { addStar(input: {}) { clientMutationId } }'"}
 {"arg": "gh --hostname github.com api graphql -f 'query=mutation { addStar(input: {}) { clientMutationId } }'", "fn": "expand_cd", "out": ""}
 {"arg": "gh --hostname github.com api graphql -f 'query=mutation { addStar(input: {}) { clientMutationId } }'", "fn": "commands", "ok": [{"redirects": [], "words": [["gh", "gh"], ["api", "api"], ["graphql", "graphql"], ["-f", "-f"], ["query=mutation", "query=mutation"], ["{", "{"], ["addStar", "addStar"]]}, {"redirects": [], "words": [["input:", "input:"], ["{}", "{}"]]}, {"redirects": [], "words": [["clientMutationId", "clientMutationId"]]}, {"redirects": [], "words": [["gh", "gh"], ["--hostname", "--hostname"], ["github.com", "github.com"], ["api", "api"], ["graphql", "graphql"], ["-f", "-f"], ["'query=mutation { addStar(input: {}) { clientMutationId } }'", "query=mutation { addStar(input: {}) { clientMutationId } }"]]}]}
@@ -4293,6 +4309,22 @@
 {"arg": "gh release create v1.0.0", "fn": "gh_calls", "ok": []}
 {"arg": "gh release create v1.0.0", "fn": "fetched_paths", "ok": []}
 {"arg": "gh release create v1.0.0", "fn": "check", "name": "check_policy_deny", "ok": "`gh release create` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "gh release delete v1", "fn": "heredoc", "literal": [], "out": "gh release delete v1"}
+{"arg": "gh release delete v1", "fn": "expand_cd", "out": ""}
+{"arg": "gh release delete v1", "fn": "commands", "ok": [{"redirects": [], "words": [["gh", "gh"], ["release", "release"], ["delete", "delete"], ["v1", "v1"]]}, {"redirects": [], "words": [["gh", "gh"], ["release", "release"], ["delete", "delete"], ["v1", "v1"]]}]}
+{"arg": "gh release delete v1", "fn": "write_targets", "ok": []}
+{"arg": "gh release delete v1", "fn": "http_calls", "ok": []}
+{"arg": "gh release delete v1", "fn": "gh_calls", "ok": []}
+{"arg": "gh release delete v1", "fn": "fetched_paths", "ok": []}
+{"arg": "gh release delete v1", "fn": "check", "name": "check_policy_deny", "ok": "`gh release delete` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "gh release edit v1", "fn": "heredoc", "literal": [], "out": "gh release edit v1"}
+{"arg": "gh release edit v1", "fn": "expand_cd", "out": ""}
+{"arg": "gh release edit v1", "fn": "commands", "ok": [{"redirects": [], "words": [["gh", "gh"], ["release", "release"], ["edit", "edit"], ["v1", "v1"]]}, {"redirects": [], "words": [["gh", "gh"], ["release", "release"], ["edit", "edit"], ["v1", "v1"]]}]}
+{"arg": "gh release edit v1", "fn": "write_targets", "ok": []}
+{"arg": "gh release edit v1", "fn": "http_calls", "ok": []}
+{"arg": "gh release edit v1", "fn": "gh_calls", "ok": []}
+{"arg": "gh release edit v1", "fn": "fetched_paths", "ok": []}
+{"arg": "gh release edit v1", "fn": "check", "name": "check_policy_deny", "ok": "`gh release edit` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "gh release list", "fn": "heredoc", "literal": [], "out": "gh release list"}
 {"arg": "gh release list", "fn": "expand_cd", "out": ""}
 {"arg": "gh release list", "fn": "commands", "ok": [{"redirects": [], "words": [["gh", "gh"], ["release", "release"], ["list", "list"]]}, {"redirects": [], "words": [["gh", "gh"], ["release", "release"], ["list", "list"]]}]}
@@ -4329,6 +4361,14 @@
 {"arg": "gh repo clone owner/repo", "fn": "http_calls", "ok": []}
 {"arg": "gh repo clone owner/repo", "fn": "gh_calls", "ok": []}
 {"arg": "gh repo clone owner/repo", "fn": "fetched_paths", "ok": []}
+{"arg": "gh repo create foo --public", "fn": "heredoc", "literal": [], "out": "gh repo create foo --public"}
+{"arg": "gh repo create foo --public", "fn": "expand_cd", "out": ""}
+{"arg": "gh repo create foo --public", "fn": "commands", "ok": [{"redirects": [], "words": [["gh", "gh"], ["repo", "repo"], ["create", "create"], ["foo", "foo"], ["--public", "--public"]]}, {"redirects": [], "words": [["gh", "gh"], ["repo", "repo"], ["create", "create"], ["foo", "foo"], ["--public", "--public"]]}]}
+{"arg": "gh repo create foo --public", "fn": "write_targets", "ok": []}
+{"arg": "gh repo create foo --public", "fn": "http_calls", "ok": []}
+{"arg": "gh repo create foo --public", "fn": "gh_calls", "ok": []}
+{"arg": "gh repo create foo --public", "fn": "fetched_paths", "ok": []}
+{"arg": "gh repo create foo --public", "fn": "check", "name": "check_policy_deny", "ok": "`gh repo create` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "gh repo delete", "fn": "heredoc", "literal": [], "out": "gh repo delete"}
 {"arg": "gh repo delete", "fn": "expand_cd", "out": ""}
 {"arg": "gh repo delete", "fn": "commands", "ok": [{"redirects": [], "words": [["gh", "gh"], ["repo", "repo"], ["delete", "delete"]]}, {"redirects": [], "words": [["gh", "gh"], ["repo", "repo"], ["delete", "delete"]]}]}
@@ -4345,6 +4385,14 @@
 {"arg": "gh repo delete owner/name", "fn": "gh_calls", "ok": []}
 {"arg": "gh repo delete owner/name", "fn": "fetched_paths", "ok": []}
 {"arg": "gh repo delete owner/name", "fn": "check", "name": "check_policy_deny", "ok": "`gh repo delete` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
+{"arg": "gh repo edit --visibility public", "fn": "heredoc", "literal": [], "out": "gh repo edit --visibility public"}
+{"arg": "gh repo edit --visibility public", "fn": "expand_cd", "out": ""}
+{"arg": "gh repo edit --visibility public", "fn": "commands", "ok": [{"redirects": [], "words": [["gh", "gh"], ["repo", "repo"], ["edit", "edit"], ["--visibility", "--visibility"], ["public", "public"]]}, {"redirects": [], "words": [["gh", "gh"], ["repo", "repo"], ["edit", "edit"], ["--visibility", "--visibility"], ["public", "public"]]}]}
+{"arg": "gh repo edit --visibility public", "fn": "write_targets", "ok": []}
+{"arg": "gh repo edit --visibility public", "fn": "http_calls", "ok": []}
+{"arg": "gh repo edit --visibility public", "fn": "gh_calls", "ok": []}
+{"arg": "gh repo edit --visibility public", "fn": "fetched_paths", "ok": []}
+{"arg": "gh repo edit --visibility public", "fn": "check", "name": "check_policy_deny", "ok": "`gh repo edit` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "gh repo list owner", "fn": "heredoc", "literal": [], "out": "gh repo list owner"}
 {"arg": "gh repo list owner", "fn": "expand_cd", "out": ""}
 {"arg": "gh repo list owner", "fn": "commands", "ok": [{"redirects": [], "words": [["gh", "gh"], ["repo", "repo"], ["list", "list"], ["owner", "owner"]]}, {"redirects": [], "words": [["gh", "gh"], ["repo", "repo"], ["list", "list"], ["owner", "owner"]]}]}
@@ -5769,6 +5817,14 @@
 {"arg": "npm install token-utils", "fn": "http_calls", "ok": []}
 {"arg": "npm install token-utils", "fn": "gh_calls", "ok": []}
 {"arg": "npm install token-utils", "fn": "fetched_paths", "ok": []}
+{"arg": "npm publish", "fn": "heredoc", "literal": [], "out": "npm publish"}
+{"arg": "npm publish", "fn": "expand_cd", "out": ""}
+{"arg": "npm publish", "fn": "commands", "ok": [{"redirects": [], "words": [["npm", "npm"], ["publish", "publish"]]}, {"redirects": [], "words": [["npm", "npm"], ["publish", "publish"]]}]}
+{"arg": "npm publish", "fn": "write_targets", "ok": []}
+{"arg": "npm publish", "fn": "http_calls", "ok": []}
+{"arg": "npm publish", "fn": "gh_calls", "ok": []}
+{"arg": "npm publish", "fn": "fetched_paths", "ok": []}
+{"arg": "npm publish", "fn": "check", "name": "check_policy_deny", "ok": "`npm publish` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "npm remove", "fn": "heredoc", "literal": [], "out": "npm remove"}
 {"arg": "npm remove", "fn": "expand_cd", "out": ""}
 {"arg": "npm remove", "fn": "commands", "ok": [{"redirects": [], "words": [["npm", "npm"], ["remove", "remove"]]}, {"redirects": [], "words": [["npm", "npm"], ["remove", "remove"]]}]}
@@ -6022,6 +6078,14 @@
 {"arg": "pnpm dlx prettier --check .", "fn": "http_calls", "ok": []}
 {"arg": "pnpm dlx prettier --check .", "fn": "gh_calls", "ok": []}
 {"arg": "pnpm dlx prettier --check .", "fn": "fetched_paths", "ok": []}
+{"arg": "pnpm publish", "fn": "heredoc", "literal": [], "out": "pnpm publish"}
+{"arg": "pnpm publish", "fn": "expand_cd", "out": ""}
+{"arg": "pnpm publish", "fn": "commands", "ok": [{"redirects": [], "words": [["pnpm", "pnpm"], ["publish", "publish"]]}, {"redirects": [], "words": [["pnpm", "pnpm"], ["publish", "publish"]]}]}
+{"arg": "pnpm publish", "fn": "write_targets", "ok": []}
+{"arg": "pnpm publish", "fn": "http_calls", "ok": []}
+{"arg": "pnpm publish", "fn": "gh_calls", "ok": []}
+{"arg": "pnpm publish", "fn": "fetched_paths", "ok": []}
+{"arg": "pnpm publish", "fn": "check", "name": "check_policy_deny", "ok": "`pnpm publish` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "pre-commit run --all-files", "fn": "heredoc", "literal": [], "out": "pre-commit run --all-files"}
 {"arg": "pre-commit run --all-files", "fn": "expand_cd", "out": ""}
 {"arg": "pre-commit run --all-files", "fn": "commands", "ok": [{"redirects": [], "words": [["pre-commit", "pre-commit"], ["run", "run"], ["--all-files", "--all-files"]]}, {"redirects": [], "words": [["pre-commit", "pre-commit"], ["run", "run"], ["--all-files", "--all-files"]]}]}
@@ -7629,6 +7693,14 @@
 {"arg": "truncate -s 0 ~/.claude/settings.json", "fn": "gh_calls", "ok": []}
 {"arg": "truncate -s 0 ~/.claude/settings.json", "fn": "fetched_paths", "ok": []}
 {"arg": "truncate -s 0 ~/.claude/settings.json", "fn": "check", "name": "check_guard_tampering", "ok": "エージェントのガード設定 (`~/.claude/settings.json`) を変更しようとしています。\nhook や permission の無効化に繋がるため許可されていません。\n設定を変えたい場合は chezmoi のソースを編集してください。"}
+{"arg": "twine upload dist/*", "fn": "heredoc", "literal": [], "out": "twine upload dist/*"}
+{"arg": "twine upload dist/*", "fn": "expand_cd", "out": ""}
+{"arg": "twine upload dist/*", "fn": "commands", "ok": [{"redirects": [], "words": [["twine", "twine"], ["upload", "upload"], ["dist/*", "dist/*"]]}, {"redirects": [], "words": [["twine", "twine"], ["upload", "upload"], ["dist/*", "dist/*"]]}]}
+{"arg": "twine upload dist/*", "fn": "write_targets", "ok": []}
+{"arg": "twine upload dist/*", "fn": "http_calls", "ok": []}
+{"arg": "twine upload dist/*", "fn": "gh_calls", "ok": []}
+{"arg": "twine upload dist/*", "fn": "fetched_paths", "ok": []}
+{"arg": "twine upload dist/*", "fn": "check", "name": "check_policy_deny", "ok": "`twine upload` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "unbuffer bash -c 'cat ~/.ssh/id_rsa'", "fn": "heredoc", "literal": [], "out": "unbuffer bash -c 'cat ~/.ssh/id_rsa'"}
 {"arg": "unbuffer bash -c 'cat ~/.ssh/id_rsa'", "fn": "expand_cd", "out": ""}
 {"arg": "unbuffer bash -c 'cat ~/.ssh/id_rsa'", "fn": "commands", "ok": [{"redirects": [], "words": [["unbuffer", "unbuffer"], ["bash", "bash"], ["-c", "-c"], ["'cat ~/.ssh/id_rsa'", "cat ~/.ssh/id_rsa"]]}, {"redirects": [], "words": [["cat", "cat"], ["~/.ssh/id_rsa", "~/.ssh/id_rsa"]]}, {"redirects": [], "words": [["unbuffer", "unbuffer"], ["bash", "bash"], ["-c", "-c"], ["'cat ~/.ssh/id_rsa'", "cat ~/.ssh/id_rsa"]]}]}
@@ -7680,6 +7752,14 @@
 {"arg": "uv pip list", "fn": "http_calls", "ok": []}
 {"arg": "uv pip list", "fn": "gh_calls", "ok": []}
 {"arg": "uv pip list", "fn": "fetched_paths", "ok": []}
+{"arg": "uv publish", "fn": "heredoc", "literal": [], "out": "uv publish"}
+{"arg": "uv publish", "fn": "expand_cd", "out": ""}
+{"arg": "uv publish", "fn": "commands", "ok": [{"redirects": [], "words": [["uv", "uv"], ["publish", "publish"]]}, {"redirects": [], "words": [["uv", "uv"], ["publish", "publish"]]}]}
+{"arg": "uv publish", "fn": "write_targets", "ok": []}
+{"arg": "uv publish", "fn": "http_calls", "ok": []}
+{"arg": "uv publish", "fn": "gh_calls", "ok": []}
+{"arg": "uv publish", "fn": "fetched_paths", "ok": []}
+{"arg": "uv publish", "fn": "check", "name": "check_policy_deny", "ok": "`uv publish` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "uv python install 3.13", "fn": "heredoc", "literal": [], "out": "uv python install 3.13"}
 {"arg": "uv python install 3.13", "fn": "expand_cd", "out": ""}
 {"arg": "uv python install 3.13", "fn": "commands", "ok": [{"redirects": [], "words": [["uv", "uv"], ["python", "python"], ["install", "install"], ["3.13", "3.13"]]}, {"redirects": [], "words": [["uv", "uv"], ["python", "python"], ["install", "install"], ["3.13", "3.13"]]}]}
@@ -8150,6 +8230,14 @@
 {"arg": "yarn dlx eslint .", "fn": "http_calls", "ok": []}
 {"arg": "yarn dlx eslint .", "fn": "gh_calls", "ok": []}
 {"arg": "yarn dlx eslint .", "fn": "fetched_paths", "ok": []}
+{"arg": "yarn publish", "fn": "heredoc", "literal": [], "out": "yarn publish"}
+{"arg": "yarn publish", "fn": "expand_cd", "out": ""}
+{"arg": "yarn publish", "fn": "commands", "ok": [{"redirects": [], "words": [["yarn", "yarn"], ["publish", "publish"]]}, {"redirects": [], "words": [["yarn", "yarn"], ["publish", "publish"]]}]}
+{"arg": "yarn publish", "fn": "write_targets", "ok": []}
+{"arg": "yarn publish", "fn": "http_calls", "ok": []}
+{"arg": "yarn publish", "fn": "gh_calls", "ok": []}
+{"arg": "yarn publish", "fn": "fetched_paths", "ok": []}
+{"arg": "yarn publish", "fn": "check", "name": "check_policy_deny", "ok": "`yarn publish` は deny パターンに一致するためブロックされました。\nこのコマンドは common.toml の [bash] deny で禁止されています。"}
 {"arg": "zip -r out.zip ~/.gnupg", "fn": "heredoc", "literal": [], "out": "zip -r out.zip ~/.gnupg"}
 {"arg": "zip -r out.zip ~/.gnupg", "fn": "expand_cd", "out": ""}
 {"arg": "zip -r out.zip ~/.gnupg", "fn": "commands", "ok": [{"redirects": [], "words": [["zip", "zip"], ["-r", "-r"], ["out.zip", "out.zip"], ["~/.gnupg", "~/.gnupg"]]}, {"redirects": [], "words": [["zip", "zip"], ["-r", "-r"], ["out.zip", "out.zip"], ["~/.gnupg", "~/.gnupg"]]}]}
@@ -13438,6 +13526,7 @@
 {"arg": "gh api -X DELETE repos/o/r", "fn": "http_calls", "ok": []}
 {"arg": "gh api -X DELETE repos/o/r", "fn": "gh_calls", "ok": [{"ambiguous": false, "endpoint": "repos/o/r", "fields": [], "input": null, "method": "DELETE"}]}
 {"arg": "gh api -X DELETE repos/o/r", "fn": "fetched_paths", "ok": []}
+{"arg": "gh api -X DELETE repos/o/r", "fn": "check", "name": "check_gh_api_publish", "ok": "公開・配布に当たる API 操作です (`gh api` DELETE repos/o/r)。"}
 {"arg": "gh api -X DELETE repos/o/r", "fn": "check", "name": "check_gh_api_mutation", "ok": "`gh api` が読み取り以外の HTTP method (DELETE) を使用します。"}
 {"arg": "gh api --method PATCH repos/o/r", "fn": "heredoc", "literal": [], "out": "gh api --method PATCH repos/o/r"}
 {"arg": "gh api --method PATCH repos/o/r", "fn": "expand_cd", "out": ""}
@@ -13446,6 +13535,7 @@
 {"arg": "gh api --method PATCH repos/o/r", "fn": "http_calls", "ok": []}
 {"arg": "gh api --method PATCH repos/o/r", "fn": "gh_calls", "ok": [{"ambiguous": false, "endpoint": "repos/o/r", "fields": [], "input": null, "method": "PATCH"}]}
 {"arg": "gh api --method PATCH repos/o/r", "fn": "fetched_paths", "ok": []}
+{"arg": "gh api --method PATCH repos/o/r", "fn": "check", "name": "check_gh_api_publish", "ok": "公開・配布に当たる API 操作です (`gh api` PATCH repos/o/r)。"}
 {"arg": "gh api --method PATCH repos/o/r", "fn": "check", "name": "check_gh_api_mutation", "ok": "`gh api` が読み取り以外の HTTP method (PATCH) を使用します。"}
 {"arg": "gh api --method=PUT repos/o/r", "fn": "heredoc", "literal": [], "out": "gh api --method=PUT repos/o/r"}
 {"arg": "gh api --method=PUT repos/o/r", "fn": "expand_cd", "out": ""}
@@ -13926,6 +14016,7 @@
 {"arg": "cd x && gh api repos/o/r -X DELETE", "fn": "http_calls", "ok": []}
 {"arg": "cd x && gh api repos/o/r -X DELETE", "fn": "gh_calls", "ok": [{"ambiguous": false, "endpoint": "repos/o/r", "fields": [], "input": null, "method": "DELETE"}]}
 {"arg": "cd x && gh api repos/o/r -X DELETE", "fn": "fetched_paths", "ok": []}
+{"arg": "cd x && gh api repos/o/r -X DELETE", "fn": "check", "name": "check_gh_api_publish", "ok": "公開・配布に当たる API 操作です (`gh api` DELETE repos/o/r)。"}
 {"arg": "cd x && gh api repos/o/r -X DELETE", "fn": "check", "name": "check_gh_api_mutation", "ok": "`gh api` が読み取り以外の HTTP method (DELETE) を使用します。"}
 {"arg": "env gh api repos/o/r -X POST", "fn": "heredoc", "literal": [], "out": "env gh api repos/o/r -X POST"}
 {"arg": "env gh api repos/o/r -X POST", "fn": "expand_cd", "out": ""}

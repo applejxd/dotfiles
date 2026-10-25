@@ -2,7 +2,7 @@
 
 Claude Code / Copilot CLI の sandbox 層 (`[sandbox]`) とネットワーク層、
 マシン固有の許可の足し方をまとめる。
-全体像は [AI CLI 統合 permission / hook 管理](agent-permissions.md)、
+全体像は [AI CLI 統合 permission / hook 管理](../agent-permissions.md)、
 OpenCode の隔離起動 (`ocs`) は [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)
 が正本。
 
@@ -13,7 +13,7 @@ OpenCode の隔離起動 (`ocs`) は [OpenCode 隔離起動のアーキテクチ
 > ホスト側の前提条件になる。Linux の bubblewrap backend は `bwrap` /
 > `slirp4netns` / `unshare` / `nsenter` / `iptables` などを probe し、1 つでも
 > 欠けると**起動を拒否して全ツールが失敗する**。症状と一覧は
-> [Linux で sandbox がコマンドを 1 つも実行できない](troubleshooting-agents.md#linux-で-sandbox-がコマンドを-1-つも実行できない)
+> [Linux で sandbox がコマンドを 1 つも実行できない](../troubleshooting-agents.md#linux-で-sandbox-がコマンドを-1-つも実行できない)
 > を参照。
 
 ### なぜ既定が逆なのに揃えるのか
@@ -25,7 +25,7 @@ OpenCode の隔離起動 (`ocs`) は [OpenCode 隔離起動のアーキテクチ
 1. **Claude の既定が緩すぎる。** 公式が
    「この既定では `~/.aws/credentials` や `~/.ssh/` も読める」と明記している。
    何もしなければ Copilot より明確に緩くなり、
-   「Copilot が家用で緩め、Claude が会社用で厳し目」という運用方針が逆転する
+   「Copilot が家用で緩め、Claude が制約のある環境用で厳し目」という運用方針が逆転する
 2. **ブラックリストは fail-open。** 列挙し忘れた秘密は黙って読める。
    ホワイトリストは fail-closed で、新しいツールが動かなくなる形で
    気付ける。**壊れ方が見える側**を選んでいる
@@ -35,14 +35,14 @@ OpenCode の隔離起動 (`ocs`) は [OpenCode 隔離起動のアーキテクチ
 コストは `claude_read_allow` のパスを手で維持していること。
 Copilot 側も `copilot_read_allow` で同じものを列挙する。以前は
 `allowDevToolAccess` が自動で行っていたが、不具合のため切っている
-([ADR-0008](../adr/0008-explicit-dev-tool-grants.md))。
+([ADR-0008](../../adr/0008-explicit-dev-tool-grants.md))。
 
 > [!NOTE]
 > 揃えているのは **filesystem だけ**。network は Copilot にドメイン単位の
 > 制御が無く、`allowedUrls` も「プロンプトを省略する URL」であって制限では
 > ないため、**実効ポリシーを揃えられない**。
 > 層ごとの方式の違いは
-> [sandbox機能の包括調査](../research/agents/sandbox-capabilities.md) を参照。
+> [sandbox機能の包括調査](../../research/agents/sandbox-capabilities.md) を参照。
 
 ### ホーム外の経路は塞いでいない（契約と実装の不一致）
 
@@ -72,14 +72,14 @@ Claude と Copilot で既定が逆なので、分けて書く。
 
   sandbox 内から実際に読めるかは Claude では
   **未検証**。OpenCode 側では `srt` のころに実測で `/mnt/c/Users` まで読めることを確認して塞いだ
-  （[CHG-0004](../change/closed/0004-opencode-sandbox.md)、
-  [調査記録 21 節](../research/opencode/permission/sandbox-runtime.md)）。
+  （[CHG-0004](../../change/closed/0004-opencode-sandbox.md)、
+  [調査記録 21 節](../../research/opencode/permission/sandbox-runtime.md)）。
   今の `ocs`（Fence）は読める場所を並べる形なので、`/mnt` は開けない限り見えない。
   **Claude には同じ対処を入れていない**
 - **Copilot**: `copilot_*` の許可を足す前の `/sandbox policy`（2026-09-13）では、
   `/mnt` は `/mnt/wsl/resolv.conf` だけが read-only、一時領域は `$TMPDIR` だけが
   read-write で、`/tmp` `/var/tmp` `/dev/shm` は一覧に無かった
-  （[既定の許可範囲の実測](../research/agents/copilot-sandbox-default-policy.md)）。
+  （[既定の許可範囲の実測](../../research/agents/copilot-sandbox-default-policy.md)）。
   このリポジトリでは `TMPDIR` をリポジトリ直下の `.tmp` に向けている。
   現在の設定（`allowDevToolAccess = false` と `copilot_*` の許可）での表示と、
   `TMPDIR` が `/tmp` のままのマシンでの扱いは**未検証**
@@ -183,23 +183,23 @@ Claude の `denyRead` は `~/` 配下しか塞いでいないため。
 #### Step 6. 根拠を書き、テストで固定する
 
 `common.toml.tmpl` のコメントには **その値を足す/消すときの制約** と参照先
-(`see docs/spec/agent-sandbox.md 「<見出し>」`) だけを残す。制約と短い理由は
+(`see docs/spec/sandbox/agent-sandbox.md 「<見出し>」`) だけを残す。制約と短い理由は
 この文書の該当節へ、**実測値**と**何が壊れたかの経過**は `docs/research/` へ書いて
-該当節からリンクする ([コメントの書き分け](agent-config-generation.md#コメントの書き分け))。
+該当節からリンクする ([コメントの書き分け](../agent-config-generation.md#コメントの書き分け))。
 `test/agents/test_generate_sandbox.py` に、そのパスが期待どおりの権限で
 生成されることと、**write を与えていない**ことを固定する。
 
 > [!IMPORTANT]
 > **禁止 (deny) をこの手順で足さないこと。** CLI 固有キーは許可の補償専用で、
 > 禁止を置くと片方だけ無防備になる。遮断は `[sandbox] deny` (Claude・Copilot 共通) か
-> hook で行う。境界は [ADR-0007](../adr/0007-filesystem-guard-boundary.md)。
+> hook で行う。境界は [ADR-0007](../../adr/0007-filesystem-guard-boundary.md)。
 
 ### Copilot が読み書きできる場所 (`copilot_read_allow` / `copilot_write_allow`)
 
 Copilot の filesystem は deny-by-default なので、このリストが
 **Copilot に見える範囲そのもの**になる。以前は `allowDevToolAccess` が
 `PATH` 上のツールやキャッシュを自動で許可していたが、
-**この自動付与は切ってある** ([ADR-0008](../adr/0008-explicit-dev-tool-grants.md))。
+**この自動付与は切ってある** ([ADR-0008](../../adr/0008-explicit-dev-tool-grants.md))。
 
 切った理由は 2 つ。
 
@@ -213,7 +213,7 @@ Copilot の filesystem は deny-by-default なので、このリストが
 自動付与が有効だった間は、`~/.cache/uv` が read-only のまま (`uv run` が EROFS)、
 `~/.local/share/uv/python` と `/usr/include`・`/usr/local` が不可視だった。
 **ライブラリは見えるのにヘッダが見えない**ように、粒度が直感と一致しない
-(実測は [開発ツール自動許可の実効権限](../research/agents/copilot-dev-tool-access-grants.md))。
+(実測は [開発ツール自動許可の実効権限](../../research/agents/copilot-dev-tool-access-grants.md))。
 
 現在のリストは `claude_read_allow` とほぼ同じ内容に、ホーム外を足した形になる。
 
@@ -298,7 +298,7 @@ bind-mount** する。公式の意図は
 "a command needs to run `git`, not modify it" で、実行ファイルの置き場を
 改竄から守るもの。**保護されるのは PATH に載っているディレクトリそのもの**で、
 その親は関係ない (mise なら `installs/<tool>/<版>` は rw、その下の `bin` だけが
-RO。[実測](../research/agents/copilot-dev-tool-access-grants.md#3-path-上のディレクトリは-read-only))。
+RO。[実測](../../research/agents/copilot-dev-tool-access-grants.md#3-path-上のディレクトリは-read-only))。
 
 このため `mise install --force` は、使用中のツールの `bin/` を消そうとして
 `Read-only file system (os error 30)` で失敗する。sandbox の外で
@@ -326,7 +326,7 @@ PATH          : .../node/latest/bin             ← 解決できない
 
 **対処は親ディレクトリごと許可すること。** 親を許可した領域は bind-mount では
 なく素通しになり、中の symlink はリンクのまま見える
-([実測](../research/agents/copilot-dev-tool-access-grants.md#4-mise-の-latest-symlink-が消える))。
+([実測](../../research/agents/copilot-dev-tool-access-grants.md#4-mise-の-latest-symlink-が消える))。
 `copilot_read_allow` が
 `~/.local/share/mise/installs` ではなく **`~/.local` ごと** 許可しているのは
 この理由による。
@@ -338,7 +338,7 @@ PATH          : .../node/latest/bin             ← 解決できない
 ### 機構の境界 (どこに書くか)
 
 置き場所は **「誰が強制できるか」** で決める
-([ADR-0007](../adr/0007-filesystem-guard-boundary.md))。
+([ADR-0007](../../adr/0007-filesystem-guard-boundary.md))。
 
 | 表現したいもの | 置き場所 | 効く CLI |
 | --- | --- | --- |
@@ -434,7 +434,7 @@ glob 記法とは **書式が異なる**:
 揃っている**必要がある。
 
 > [!IMPORTANT]
-> 運用方針は Copilot が家用で緩め、Claude が会社用で厳し目。
+> 運用方針は Copilot が家用で緩め、Claude が制約のある環境用で厳し目。
 > `claude_read_allow` を安易に広げると **Claude の方が緩くなり方針が逆転する**。
 > 実測した Copilot の実効ポリシーには `$HOME` 配下の作業ディレクトリ許可は
 > 無く、skill も `~/.agents/skills` と `~/.claude/skills` だけが出る。
@@ -455,7 +455,7 @@ Claude の Linux sandbox は **deny 対象の各パスに `/dev/null` を bind-m
 する**実装。そのため `~/**/*secret*` のような名前マッチを deny に書くと
 展開結果の数だけ mount が必要になる。この環境の `$HOME` では deny 全体が
 数千件に展開され、コマンド 1 回ごとの mount として実用に耐えなかった
-([展開数の実測](../research/agents/claude-deny-glob-expansion.md))。さらに deny 対象が
+([展開数の実測](../../research/agents/claude-deny-glob-expansion.md))。さらに deny 対象が
 **symlink を経由すると bwrap のセットアップごと失敗**し、全 sandbox コマンドが
 動かなくなる既知の不具合がある ([anthropics/claude-code#45451][cc-45451])。
 whitelist なら deny は `~/` の 1 本で済み、どちらの問題も起きない。
@@ -520,7 +520,7 @@ Claude の `sandbox.network.allowedDomains` になり、`deny_domains` は
 (ドメイン単位の設定が存在しないため)。`allowedUrls` は公式に
 "URLs or domains allowed without prompting" とあるとおり**承認プロンプトの
 省略リスト**であって通信制限ではなく、sandbox 内の `curl` は任意のホストへ
-到達できる。結果としてネットワークは Claude (会社用・厳しめ) と
+到達できる。結果としてネットワークは Claude (制約のある環境用・厳しめ) と
 Copilot (家用・緩め) で非対称なままになるが、これは運用方針とは一致している。
 
 ### 資格情報を sandbox 側で落とす (`sandbox.credentials`)
@@ -820,7 +820,7 @@ Claude との差で特に重要なもの:
 
 `copilot_*` の許可を足す前の Copilot が既定で何を許すかを、`/sandbox policy` で
 見たもの。表示そのものは
-[既定の許可範囲の実測](../research/agents/copilot-sandbox-default-policy.md) にある
+[既定の許可範囲の実測](../../research/agents/copilot-sandbox-default-policy.md) にある
 (当時は `allowDevToolAccess = true`。現在は `false` で許可も足してあるので、
 同じ表示にはならない)。
 既定で許可されるのはシステム領域 (read-only)、`$TMPDIR`・cwd・セッション領域

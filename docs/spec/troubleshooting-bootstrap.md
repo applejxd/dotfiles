@@ -58,7 +58,7 @@ symlink やディレクトリを消してから apply し直す。
 
 印は apply（ホスト）が書くので、置き場はどのエージェントの sandbox からも書けない
 場所にする。`~/.local/state` は Claude Code / Copilot CLI の sandbox から書ける
-（[agent-sandbox.md](agent-sandbox.md)）ので使わない。書けると、印を `~/.bashrc` への
+（[agent-sandbox.md](sandbox/agent-sandbox.md)）ので使わない。書けると、印を `~/.bashrc` への
 symlink に差し替えてホストの apply に中身を書き潰させられる。
 同じ理由で、印は同じディレクトリの一時ファイルから `mv` で差し替え、既存の symlink を
 追わない。中身を埋め込まないのは、書き換えられたときにスクリプトへコードが入らないため。
@@ -400,7 +400,7 @@ find ~/.local/share/mise/installs -path '*/node_modules/.mise/*' \
 **対処**: ディレクトリごと消してから入れ直す。Copilot CLI の sandbox の中では
 `~/.local/share/mise` が read-only なので（Claude Code の sandbox は書き込みを許している）、
 `rm` も `mise install --force` も `Read-only file system` で失敗する。sandbox の外の
-シェルで実行する（[sandbox](agent-sandbox.md)）。
+シェルで実行する（[sandbox](sandbox/agent-sandbox.md)）。
 
 ```bash
 rm -rf ~/.local/share/mise/installs/npm-bitwarden-cli

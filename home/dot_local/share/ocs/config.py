@@ -15,7 +15,7 @@ HOST_CONFIG = HOME / ".config/opencode/opencode.json"
 #   agent / agents / commands は通常版からは引き継がず、common.toml から出す。
 INHERIT_KEYS = ("theme", "keybinds", "username", "layout", "model", "small_model")
 # common.toml のエージェント・コマンド。宣言外のエントリも残さず丸ごと差し替える。
-# see docs/spec/opencode-sandbox.md#エージェントとコマンド
+# see docs/spec/sandbox/opencode-sandbox.md#エージェントとコマンド
 REPLACED_KEYS = ("agent", "agents", "commands")
 
 
@@ -81,7 +81,7 @@ def write_isolated_config(sandbox: dict, project: dict) -> None:
         existing = {}
 
     # ★管理キーは空でも差し替える (空なら取り除く)。
-    #   see docs/spec/opencode-sandbox.md#隔離版の設定の書き出し方
+    #   see docs/spec/sandbox/opencode-sandbox.md#隔離版の設定の書き出し方
     config: dict = {
         **existing,
         "$schema": "https://opencode.ai/config.json",

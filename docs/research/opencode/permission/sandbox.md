@@ -7,7 +7,7 @@
 > 採らなかった。6 章の snap の問題は、chezmoi を snap から外して解消した
 > （[CHG-0004 段階 1](../../../change/closed/0004-opencode-sandbox.md#段階-1-chezmoi-を-snap-から外す完了)）。
 >
-> **現行の仕様**: [OpenCode 隔離起動のアーキテクチャ](../../../spec/opencode-sandbox.md)。
+> **現行の仕様**: [OpenCode 隔離起動のアーキテクチャ](../../../spec/sandbox/opencode-sandbox.md)。
 > 通常起動の `opencode` には今も境界が無い
 > （[OpenCode V2 の扱い](../../../spec/agent-permissions.md#opencode-v2-の扱い)）
 >
@@ -38,7 +38,7 @@
 Claude Code と Copilot CLI は OS レベル sandbox を内蔵しており、
 このリポジトリは既にその設定を生成している
 （[sandbox 機能の包括調査](../../agents/sandbox-capabilities.md)、
-[agent-sandbox](../../../spec/agent-sandbox.md)）。
+[agent-sandbox](../../../spec/sandbox/agent-sandbox.md)）。
 
 ## 1. 組み込みの sandbox は無い
 

@@ -25,7 +25,7 @@
 | 簡易ガード（廃止） | 素の `pi` に付いていた、deny と伏字化だけのガード（段 3f で廃止） | 素の pi のガード |
 | サンドボックス | Fence による OS レベルの隔離。ガードとは別の層 | 境界 |
 
-正本は [pi のガード](../spec/pi-guard.md#用語)。
+正本は [pi のガード](../spec/guard/pi-guard.md#用語)。
 
 ## 実施計画
 
@@ -47,7 +47,7 @@
 ## 現在地
 
 - 段 1・2・3a・3b・3d・3f は完了、3c は実装済み。旧称は過去の案件・調査記録・ADR（`docs/change/` `docs/research/` `docs/adr/`）に残る。
-  ファイル名も変えていない（`0006-pi-harness-trial.md`・`pi-harness-spike.md` など）。対応は [pi のガード](../spec/pi-guard.md#用語)
+  ファイル名も変えていない（`0006-pi-harness-trial.md`・`pi-harness-spike.md` など）。対応は [pi のガード](../spec/guard/pi-guard.md#用語)
 - 設計は 2 つのモデルのレビューを受けて改め（「重要な更新」）、設計原則（基準は保守的・緩和はサンドボックスが証明されたときだけ・実装は 1 つ）は
   [ADR-0018](../adr/0018-pis-sandbox-default-relax-only-when-proven.md) に記録した
 - 実機の試験（[記録 S1](../research/agents/pis-sandbox-field-test.md)、2026-10-15）で、`pis` の標準（サンドボックス）の 12 項目を確認し、

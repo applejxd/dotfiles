@@ -1,7 +1,7 @@
 // ファイルの読み取り・持ち出し・書き込み先に関するルール (bashrules/rules_files.py の移植)。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableList, tableSet } from "./context.ts";
 import { pyRegex } from "./pystr.ts";

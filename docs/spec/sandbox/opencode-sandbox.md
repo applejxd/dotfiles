@@ -3,11 +3,11 @@
 OpenCode を OS のアクセス制御で囲って起動する仕組みの構成を書く。
 **対象は Ubuntu / WSL のみ**（macOS / Windows は bubblewrap が無いので非対応）。
 
-- 何を守り何を守らないかは [ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)
+- 何を守り何を守らないかは [ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md)
   （目的は**エージェントのうっかりの防止**。悪意あるワークスペースやプロンプト
-  インジェクションへの耐性は非目的）と [セキュリティ](security.md#ai-エージェントの実行境界ubuntu--wsl)
-- 経緯と候補比較は [CHG-0004](../change/closed/0004-opencode-sandbox.md)（作った経緯）と
-  [CHG-0009](../change/closed/0009-ocs-simplify-for-accidents.md)（Fence への切り替えと簡素化）
+  インジェクションへの耐性は非目的）と [セキュリティ](../security.md#ai-エージェントの実行境界ubuntu--wsl)
+- 経緯と候補比較は [CHG-0004](../../change/closed/0004-opencode-sandbox.md)（作った経緯）と
+  [CHG-0009](../../change/closed/0009-ocs-simplify-for-accidents.md)（Fence への切り替えと簡素化）
 - ここは**現在の構成**だけを書く
 
 ```bash
@@ -31,12 +31,12 @@ opencode     # 通常起動（境界なし）
 > **なぜ shell だけでは足りないか。** OpenCode はプロジェクト設定から
 > permission を上書きでき、`.opencode/plugins/` は自動ロードされ、`mcp` は
 > プロセスを起動する。ツール層だけ塞いでも、同じプロセスの中から回避される
-> （[permission の穴 §5](../research/opencode/permission/gaps.md#5-プロジェクト設定がグローバルの-deny-を上書きする2026-09-23-再確認)）。
+> （[permission の穴 §5](../../research/opencode/permission/gaps.md#5-プロジェクト設定がグローバルの-deny-を上書きする2026-09-23-再確認)）。
 
 ## 通常起動と `ocs` の使い分け
 
 分けるのは**境界を張るかどうか**で、エージェントではない。`bypass`（通常と同じ permission のまま、
-確認（`ask`）だけを guide plugin が `allow` にするエージェント。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）は
+確認（`ask`）だけを guide plugin が `allow` にするエージェント。[ADR-0014](../../adr/0014-bypass-as-ask-upgrade.md)）は
 どちらでも使えるが、外れるものが違う。
 
 | | 通常の `opencode` | `ocs` |
@@ -49,10 +49,10 @@ opencode     # 通常起動（境界なし）
 そこの編集は通常の `opencode` で行う。
 
 > 以前は「`ocs` では `bypass` を使わない。復旧は境界の外の通常版」と決めていた
-> （[CHG-0004](../change/closed/0004-opencode-sandbox.md)。同じサーバーの中でエージェント名を変えても
-> OS 上の権限は分かれないため）。[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) で境界の目的を
+> （[CHG-0004](../../change/closed/0004-opencode-sandbox.md)。同じサーバーの中でエージェント名を変えても
+> OS 上の権限は分かれないため）。[ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md) で境界の目的を
 > うっかりの防止に絞り、`ocs` の中の `bypass` は境界から抜ける手段ではないので、
-> [CHG-0010](../change/closed/0010-ocs-agents.md) で使えるようにした。復旧を通常版で行う点は変わらない。
+> [CHG-0010](../../change/closed/0010-ocs-agents.md) で使えるようにした。復旧を通常版で行う点は変わらない。
 
 ## 全体像
 
@@ -136,7 +136,7 @@ Fence へ渡す設定（`fence.json` の形）は、共通の素材 + 起動デ�
 | `allowWrite` | 起動ディレクトリ、`write`（`~/.cache`）、`XDG_DATA_HOME/opencode`、worktree の共有 `.git` |
 | `denyRead` | 開けた場所の内側にある秘密（`deny_read` と `[sandbox] deny` のうち glob でないもの） |
 | `denyWrite` | [保護対象](#保護対象denywrite)、worktree の共有 `.git` の `hooks` と `config` |
-| `network` | 通信を許可したドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../change/0007-harness-profiles.md)） |
+| `network` | 通信を許可したドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../../change/0007-harness-profiles.md)） |
 | `allowPty` | `true`。TUI のリサイズを内側へ伝える |
 
 ### 組み立ての規則
@@ -240,7 +240,7 @@ Fence へ渡す設定（`fence.json` の形）は、共通の素材 + 起動デ�
 Fence も `denyWrite` を実体へ解いてからマウントする（上流の `main` の `resolvePathForMount`。
 `v0.1.67` での実測はしていない）。
 symlink の項目そのもの（親ディレクトリの中の名前）は塞げないので、親が書ければ
-symlink を消して置き換えることはできる（悪意ある操作は[非目的](../adr/0012-ocs-boundary-for-accidents.md)）。
+symlink を消して置き換えることはできる（悪意ある操作は[非目的](../../adr/0012-ocs-boundary-for-accidents.md)）。
 
 OpenCode は起動ディレクトリから Git の根まで遡って `.opencode` を読む。`ocs` が塞ぐのは
 起動ディレクトリと根の `.opencode` だけで、根の `.opencode` の中での起動は上の表で拒否する。
@@ -248,7 +248,7 @@ OpenCode は起動ディレクトリから Git の根まで遡って `.opencode`
 `write = [".."]` のように広げたときは塞がれない。中間の `.opencode` や、起動ディレクトリと根
 以外のプロジェクト設定まで守る仕組みではない。
 
-**Fence の `denyWrite` はまだ無いパスに効かない**（[実測](../research/opencode/permission/fence.md)の 4'）。
+**Fence の `denyWrite` はまだ無いパスに効かない**（[実測](../../research/opencode/permission/fence.md)の 4'）。
 そこで `ocs` は、無い保護対象のうち**親が在るものを空のディレクトリとして先に作ってから**
 塞ぐ。`.opencode` は起動ディレクトリに必ず作られる（空のディレクトリは `git status` に
 出ない）。親が無いもの（このリポジトリ以外での `home/dot_config/agents` など）は、
@@ -261,8 +261,8 @@ OpenCode は起動ディレクトリから Git の根まで遡って `.opencode`
 #### 制御ファイルの保護が効く範囲
 
 この dotfiles の制御ファイル（permission・境界・ランチャーの単一ソースと、その配備先）が
-境界の内側から書けないのは、次の範囲だけ。この文書・[セキュリティ](security.md)・
-[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) で「書けない」「守る」と書くときは、
+境界の内側から書けないのは、次の範囲だけ。この文書・[セキュリティ](../security.md)・
+[ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md) で「書けない」「守る」と書くときは、
 すべてこの範囲を指す。
 
 | 対象 | 守り方 | 効く範囲 |
@@ -277,7 +277,7 @@ OpenCode は起動ディレクトリから Git の根まで遡って `.opencode`
   解かれないので塞がない。配備先と重なる `write` だけは拒否する
 - 起動ディレクトリと根の間にある中間の `.opencode`、symlink の項目そのものの置き換え（上記）
 - 利用者自身が `[opencode.sandbox] write` や `XDG_DATA_HOME` を配備先へ向けた場合
-  （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的「利用者自身の明示的な上書き」）
+  （[ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md) の非目的「利用者自身の明示的な上書き」）
 
 ### プロジェクトごとの追加
 
@@ -330,11 +330,11 @@ Fence の `devices.allow` へ渡す。WSL の GPU は `/dev/dxg`、ネイティ�
 - **`.opencode` が symlink の場合の限界**: 上の「保護対象が symlink なら、書ける親からリンクを置換できる」
   は `.opencode/sandbox.toml` の `devices` にも当てはまる。通常のディレクトリなら、内側からの新規作成・
   編集は塞がっている (`.opencode` は `denyWrite`)。symlink の場合の悪意ある操作は非目的
-  ([ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)) の範囲として許容する
+  ([ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md)) の範囲として許容する
 - **設計の判断**: 環境変数だけにして `sandbox.toml` には足さない、というより小さい設計も検討した。
   プロジェクトごとの GPU 要件を共有する用途があるため、両方を残した
 - **`/dev/dxg` を許すと、Windows の GPU ドライバへの経路が境界の内側に開く。** 影響は未評価のまま
-- worktree 隔離 ([CHG-0029](../change/0029-worktree-isolation.md)) の子の Landlock の書込可にも、
+- worktree 隔離 ([CHG-0029](../../change/0029-worktree-isolation.md)) の子の Landlock の書込可にも、
   同じデバイスが要る (そちらで扱う)
 
 ### 環境変数での追加
@@ -357,7 +357,7 @@ export PIS_EXTRA_READ="$HOME/dataset:/data2"
   Fence 側で `denyRead` が `allowRead` に勝つ点は未確認)
 - **表示**: 起動時に足す分を表示し、環境変数由来のものには `(PIS_EXTRA_READ)` を付ける
 - **リンク**: Fence はリンクを辿って許可を広げない。リンクのあるディレクトリと実体の両方を
-  指定する ([CHG-0029](../change/0029-worktree-isolation.md) の「データセットの読み取りと GPU の調査」の実測)
+  指定する ([CHG-0029](../../change/0029-worktree-isolation.md) の「データセットの読み取りと GPU の調査」の実測)
 - **内側から広げられない**: 環境変数は起動ラッパーが Fence の外で、起動前に読む。内側の環境には
   渡さない (`cli.DROP_ENV`、pi も併用)。内側のエージェントが次回の起動の環境を変える経路は
   無いと見ているが、利用者のシェルの設定ファイルを書けるかは別の話で、ここでは確かめていない (推測)
@@ -376,70 +376,11 @@ export PIS_EXTRA_DEVICES=/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm  # ネイ�
 
 ### Copilot ブローカー（`pis` のみ）
 
-本物の Copilot の認証情報をホスト側の中継（Envoy）に持たせ、内側の `pi` にはダミーだけを渡す
-([CHG-0037](../change/0037-pis-usability-and-telemetry.md) 段 U7a)。
-
-有効にするのは設定 `[pis.broker] copilot`（`common.toml.tmpl`。`rules.json` の `broker.copilot` へ生成）。
-環境変数は使わない。値は 3 種類:
-
-| 値 | 意味 |
-| --- | --- |
-| `"off"`（既定） | 使わない。挙動は従来どおり |
-| `"auto"` | `pis` が起動ごとに自分専用の Envoy を空きポートで立て、終了時に止める |
-| `"http://127.0.0.1:<1024-65535>"` | 自分で立てた中継を使う（https・他のホスト・パス・クエリは起動拒否） |
-
-家の機（`llm-provider` が `github-copilot`）は `"auto"`、それ以外は `"off"`。一時的に外すには
-`pis --no-broker`（内側に本物の Copilot の認証が入るので、起動時に 1 行注意を表示する）。
-
-- 起動前（Fence の外）に `<URL>/__pis_broker` へ GET し、本文が `pis-broker-copilot` で始まる 200 でなければ起動しない
-  （別のサービスがそのポートを占有していても使わない）
-- 境界に `allowLocalOutbound=true`・`allowLocalOutboundPorts=[<port>]` を足す（`ocs` は変えない）
-- 起動別の `auth.json` から `github-copilot` を除いて写し、終了時にホストへ戻さない。内側へは
-  `COPILOT_GITHUB_TOKEN` のダミー値と、起動別の `models.json`（`providers.github-copilot.baseUrl`）を渡す
-- **`auto` の仕組み**: `broker.py`（`relay.py` と同じ型。同時に複数起動してもポートと状態は別）。ホストの `auth.json` の
-  長期トークンで、短命の Copilot トークンを取得し、SDS ファイルへ書く（`0700` の一時ディレクトリ、
-  更新はスレッドで期限の 5 分前）。Envoy は PATH か `~/.local/bin/envoy` から探す。無ければ起動しない
-  （`chezmoi apply` が、家の機へ固定版・sha256 照合で導入する。[導入と更新](structure.md#envoy-の取得)）
-- 内側から送れる要求は、観測した 3 つの POST（`/v1/messages`・`/responses`・`/chat/completions`。パスは完全一致、クエリは無視）だけ、他は 403
-- **上流の TLS は検証する**: Envoy は `validation_context` が無いと上流の証明書を検証しないので、システムの CA
-  （`ssl` の既定、無ければ代表的な 3 つのパス。**見つからなければ起動しない**）と、SAN の `githubcopilot.com` で終わる DNS 名を
-  明示する。トークンの `proxy-ep` が `.githubcopilot.com` で終わらないときも起動しない（トークンの中身で送り先が変わらないように）
-- **後始末**: Envoy は親（`pis`）の死亡で止まる（`PR_SET_PDEATHSIG`）。起動途中の例外でも、起動別の agent ディレクトリは残らない。
-  状態ディレクトリ（`$XDG_RUNTIME_DIR` 優先、無ければ `~/.local/state/pis`）が作業ディレクトリと重なるときは起動しない
-- 設定が壊れている（`broker` が表でない、`copilot` が文字列でない）ときは、無効にせず起動しない
-- **範囲の限界**: 起動別の `auth.json` から外すのは `github-copilot` だけ。他のプロバイダーの認証は、従来どおり内側にコピーされる。
-  内側から使える Copilot の使用権（上の 3 経路）は、内側に残る。要求の大きさ・回数の上限は無い
+正本は [ブローカー](broker.md#copilot-ブローカー)（設定・許可する経路・上流の TLS・身元確認・範囲の限界）。
 
 ### GitHub ブローカー（`pis` のみ）
 
-本物の GitHub PAT をホスト側の Envoy にだけ持たせ、内側の `gh` には、ダミーの `GH_TOKEN` と Unix ソケットの設定だけを渡す
-（[CHG-0037](../change/0037-pis-usability-and-telemetry.md) 段 U8、[調査 D6](../research/agents/agent-auth-delegation.md)）。
-
-- **仕組み**: `gh` は、`config.yml` の `http_unix_socket` があると、`https://api.github.com/...` を **TLS なしで**その Unix ソケットへ送る
-  （宛先・リポジトリ検出はそのまま。CA も MITM も `GH_HOST` も要らない）。ソケットは起動別の agent ディレクトリの `gh.sock`
-  （内側から届く。Fence は Unix ソケットを妨げない）。Envoy が `Authorization` を `Bearer <PAT>` に差し替え、`api.github.com:443` へ
-  上流 TLS（CA と SAN を検証）で転送する。`git` の https（clone・push）には使えない（push は現行のガードが拒否し、境界の外で行う）
-- **設定**（`[pis.broker]`、`common.toml.tmpl`）: `github`（`"off"` 既定 / `"auto"`）と、PAT の出どころ `github_token_file`
-  （既定 `~/.config/pis/github-token`）または `github_token_command`（argv の配列。例: Bitwarden の `bw get password <item>`）。
-  **両方は書けない**。環境変数は使わない
-- **PAT の出どころの検査**: ファイルは、通常ファイル・所有者が自分・`0600` 相当（グループ・他人に権限なし）・4096 バイト以下・
-  シンボリックリンクでないこと（違反は**起動拒否**）。コマンドは、シェルを通さず、標準入力なし、30 秒、出力 4096 バイト以下、
-  環境はホストのものを継承（`BW_SESSION` など）。標準エラーは捨てる。値は 1 行・ASCII の印字可能文字・空白なし・255 文字以下
-  （違反は起動拒否）。値は、例外・ログ・標準エラーに出さない
-- **`auto` の縮退**: 出どころが無い（ファイル無し、コマンドの失敗・タイムアウト）ときは、**起動を止めずに** GitHub ブローカーを無効にし、
-  `GitHub 認証なし: gh は無認証になる (PAT の出どころ: …)` を 1 行出す（キーは内側に出ないので、安全側）。設定の破損・権限違反・
-  形式違反・Envoy／TLS の失敗は起動拒否。GitHub だけが有効で出どころ無しなら、Envoy は起動しない
-- **許可**: Envoy の仮想ホストは `api.github.com`（完全一致）だけを上流へ。それ以外の `:authority`（`github.com`・`uploads.github.com`・
-  偽装した Host）は 403（実測）。**メソッド・パスは制限しない。操作の防御は PAT のスコープ**（このリポジトリは、操作の内容を保証しない）。
-  内側は `gh` 以外からも、ソケットへ任意の HTTP を送れて、PAT の権限内の操作は原則すべて可能
-- 内側へ渡すもの: `GH_CONFIG_DIR`（agent ディレクトリ内の `gh/config.yml`）、ダミーの `GH_TOKEN`（環境のフィルターの後に設定。ホストの
-  `GH_TOKEN`・`GITHUB_TOKEN`・`GH_ENTERPRISE_TOKEN` は渡さない）、`GH_NO_UPDATE_NOTIFIER`・`GH_TELEMETRY=false`・`GH_PROMPT_DISABLED`。
-  `pis --no-broker` は、Copilot と GitHub の両方を無効にする
-- **Copilot と同じ Envoy**: 有効なものだけのリスナー・クラスタ・SDS を 1 つの設定（`envoy-base.yaml` に `envoy-copilot.yaml`・
-  `envoy-github.yaml` の断片を差し込む）に生成する。起動順は、空の agent ディレクトリの確保 → `broker.session()` → 中身の配置
-  （`auth.json` から `github-copilot` を除く処理を、ブローカーの起動前に通さないため）
-- **実測**（WSL2、境界あり、ダミーの PAT）: 内側の `gh issue list` が、ソケット経由で Envoy に届き、GitHub が `HTTP 401: Bad credentials`
-  を返した（差し替え値がダミーのため）。偽装した Host は 403。PAT が無いときは、通知を出して `gh` は無認証。**本物の PAT での成功は未確認**
+正本は [ブローカー](broker.md#github-ブローカー)（`gh` の Unix ソケット・PAT の出どころと検査・縮退・PAT の設計・実測と未確認）。
 
 ## 状態の置き場
 
@@ -481,7 +422,7 @@ flowchart LR
 別の DB を使い、履歴が分かれる）。
 
 - 同時書き込み・外での再開・外からの `/undo` は実測で通った
-  （[DB の共有の調査](../research/opencode/shared-db.md)、CHG-0009 の実装・検証）
+  （[DB の共有の調査](../../research/opencode/shared-db.md)、CHG-0009 の実装・検証）
 - **`~/.local/state/opencode/` は開けない。** 常駐サービスの接続情報 `service.json` がある。
   opencode は起動時にそこへディレクトリを作るので、内側の `XDG_STATE_HOME` は
   `/tmp/xdg-state`（内側の tmpfs）へ向ける。内側で選んだモデルと入力履歴は残らない
@@ -527,8 +468,8 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 
 `common.toml` の `[opencode.agent]`（`bypass`・`bypass-worker`）・`[opencode.agents]`
 （`commit`・`review`・`fleet-worker`）・`[opencode.commands]`（`/fleet`）を、隔離版にも
-出す（[CHG-0010](../change/closed/0010-ocs-agents.md)）。境界の目的をうっかりの防止に絞ったので
-（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)）、境界の中で `bypass` を使ってよい。
+出す（[CHG-0010](../../change/closed/0010-ocs-agents.md)）。境界の目的をうっかりの防止に絞ったので
+（[ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md)）、境界の中で `bypass` を使ってよい。
 
 | キー | 中身 | 既存の扱い |
 | --- | --- | --- |
@@ -544,7 +485,7 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
   外した古い定義か外で手書きしたものだけで、前者が全部 allow のエージェントだと、
   外したはずの緩和が隔離版に居座る。エージェントの権限は緩和に関わるキーとして扱う
 - **届かないプロバイダのモデルは割り当てない。** Bedrock は `ocs` では使えない
-  （[モデルの割り当て](agent-config-generation.md#隔離起動ocs)）ので、Bedrock の PC では
+  （[モデルの割り当て](../agent-config-generation.md#隔離起動ocs)）ので、Bedrock の PC では
   子エージェントは親のモデルで動く。接続設定も同じ理由で出さない
 - **シェルの確認は通常起動より少ない。** 隔離版の全体の規則はシェルの既定が `allow`
   （`[opencode.sandbox.permissions] default_shell_effect`）で、`rm` などの
@@ -553,19 +494,19 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
   当たらなければ確認なしで通る。
   **`git commit` の `ask` は捨てない**（会話での承認に加えて、実行時の確認を残す）。
   オプションを前に置いた `git -c … commit` は `ask` に当たらないので、guide 規則で止める
-  （[コミットの確認](agent-config-generation.md#コミットの確認)）
+  （[コミットの確認](../agent-config-generation.md#コミットの確認)）
 - **作業ツリーの外の読み取りは、通常版と同じく確認なし。** `external_directory` の `allow`
   （スキルの置き場と `work_read`）は隔離版にも出し、同じ場所への edit の `ask` も残す
-  （[作業ツリーの外の読み取り](agent-config-generation.md#作業ツリーの外の読み取り)）。
+  （[作業ツリーの外の読み取り](../agent-config-generation.md#作業ツリーの外の読み取り)）。
   スキルのスクリプト用の規則は出さない。隔離版の shell は既定が `allow` なので、出しても
-  拒否が増えるだけ（[スキルのスクリプト](agent-config-generation.md#スキルのスクリプト)）
+  拒否が増えるだけ（[スキルのスクリプト](../agent-config-generation.md#スキルのスクリプト)）
 - `bypass-worker` を `bypass` 以外から起動させない仕組み（全体の `subagent` の deny と
   guide plugin の起動元の検査）は、隔離版でもそのまま効く
-  （[bypass から呼べる子エージェント](agent-config-generation.md#bypass-から呼べる子エージェント)）
+  （[bypass から呼べる子エージェント](../agent-config-generation.md#bypass-から呼べる子エージェント)）
 - `bypass` の中でも `experimental.policies`（`git push` / `chezmoi apply` など）は止まる
   （実機で確認）。秘密ファイルの読み取りの deny も、guide plugin の誘導・伏字化・
   `grep` / `glob` の結果フィルタも `bypass` に効く（`bypass` が緩めるのは `ask` → `allow` だけ。
-  [ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。ワークスペースの中の `.env` / `.env.*` も
+  [ADR-0014](../../adr/0014-bypass-as-ask-upgrade.md)）。ワークスペースの中の `.env` / `.env.*` も
   deny で読めない（`.env.example` などのサンプルは例外）
 - プロバイダの `provider.use` の policy（通常版がこの PC のプロバイダ以外を塞ぐもの）は
   隔離版には出さない。隔離版で使えるプロバイダは通信先の許可（`[opencode.sandbox] providers`）
@@ -573,13 +514,13 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
   Bedrock の PC では `ocs` のモデルがすべて塞がる
 
 一時の設定・DB と Fence の境界の中で、定義が出ることと `bypass` / `bypass-worker` の
-起動の制限が効くことを確かめた（[CHG-0010](../change/closed/0010-ocs-agents.md) の実装・検証）。
+起動の制限が効くことを確かめた（[CHG-0010](../../change/closed/0010-ocs-agents.md) の実装・検証）。
 
 内側の環境には `OCS_ISOLATED=1` を渡す。guide plugin はこれで隔離起動を見分け、
 確認画面の説明の生成（モデルの呼び出し）だけを止める。偽装されても説明が出なくなるだけで、
 判定には効かない。止めたのは、以前の版では隔離起動で `tui.ts` が読まれず、作っても表示されなかった
 ため。OpenCode 2.0.14 では `opencode.json` の登録からも `tui.ts` が読まれるので、モデルを呼ばない
-`git commit` の件名と本文の表示は隔離起動でも出る（[`git commit` の件名と本文](agent-config-generation.md#git-commit-の件名と本文)）。
+`git commit` の件名と本文の表示は隔離起動でも出る（[`git commit` の件名と本文](../agent-config-generation.md#git-commit-の件名と本文)）。
 モデルの説明を止め続けるかは見直していない
 
 ## 起動前の退避
@@ -747,7 +688,7 @@ Fence へは引数を並べて渡すので、引用の心配は無い。
 | `~/.local/share/ocs/check.py` | [境界チェック](#境界チェック)の準備と実行、Fence へ渡す PATH と TMPDIR |
 | `~/.local/share/ocs/backup.py` | [起動前の退避](#起動前の退避) |
 | `~/.local/share/ocs/config.py` | [隔離版の設定の書き出し](#隔離版の設定の書き出し方) |
-| `~/.local/share/ocs/pi.py` | pi を囲う部分（`pis` の標準。`ocs` のコマンドは経由しない）: 境界用の agent 置き場、起動コマンド、認証を本物へ戻す処理（[pi のガード](pi-guard.md#サンドボックス)） |
+| `~/.local/share/ocs/pi.py` | pi を囲う部分（`pis` の標準。`ocs` のコマンドは経由しない）: 境界用の agent 置き場、起動コマンド、認証を本物へ戻す処理（[pi のガード](../guard/pi-guard.md#サンドボックス)） |
 | `~/.local/share/ocs/common.py` | 共有の定数と失敗の扱い |
 | `~/.local/bin/ocs-boundary-check` | 境界の内側で走る検査スクリプト |
 
@@ -777,7 +718,7 @@ Fence へは引数を並べて渡すので、引用の心配は無い。
 ## 版の扱い
 
 Fence は mise の github backend で**版とチェックサムを固定**して入れる
-（`home/dot_config/mise/config.toml.tmpl`、[構成](structure.md#github-backend-で版を固定している-fence)）。
+（`home/dot_config/mise/config.toml.tmpl`、[構成](../structure.md#github-backend-で版を固定している-fence)）。
 `ocs` は `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence` を呼ぶ。
 
 - 境界の設定は実体の有無に関係なく `rules.json` に出す。実体が無ければ `ocs` が起動を断る
@@ -797,11 +738,11 @@ Fence は mise の github backend で**版とチェックサムを固定**して
 | コマンド単位の逃げ道が無い | プロセス単位で包む以上、`dangerouslyDisableSandbox` 相当は作れない |
 | 設定が通常起動と分かれる | 隔離版の設定は `~/.config/opencode-sandbox`。履歴（DB）は共有する |
 | 境界はエージェントから見えない | `ENOENT` を「存在しない」と誤診する。`AGENTS.md` で明示的に伝えている |
-| 起動が約 0.8 秒遅い | Fence の機能の検出など（[実測](../research/opencode/permission/fence.md)） |
+| 起動が約 0.8 秒遅い | Fence の機能の検出など（[実測](../../research/opencode/permission/fence.md)） |
 | 起動ディレクトリに `.opencode/` が作られる | 保護対象を塞ぐため。空のディレクトリで、`git status` には出ない |
-| **資格情報は境界内にある**（決めた例外） | 共有する DB が `credential` を持ち、内側から**平文で取り出せる**。無いとモデルへ繋げないため、[明示的な例外として受け入れた](../change/closed/0004-opencode-sandbox.md#決定-明示的な例外として受け入れる2026-09-24)。見落としではない |
+| **資格情報は境界内にある**（決めた例外） | 共有する DB が `credential` を持ち、内側から**平文で取り出せる**。無いとモデルへ繋げないため、[明示的な例外として受け入れた](../../change/closed/0004-opencode-sandbox.md#決定-明示的な例外として受け入れる2026-09-24)。見落としではない |
 | 他のプロジェクトの会話が読める | DB を共有するため。ADR-0012 で保証しないと決めた |
 | 開けた作業用ディレクトリの中の秘密は読める | `work_read` は秘密を置かない場所だけにする |
 | 起動ディレクトリがリポジトリの下位ディレクトリだと、そのリポジトリの `.git` が書ける | worktree と同じ扱いで共有 `.git` を開けるため（`hooks` と `config` は除く） |
 
-[仕様一覧へ戻る](index.md)
+[仕様一覧へ戻る](../index.md)

@@ -262,10 +262,10 @@ PLAN_DECLARED = [
 
 @pytest.fixture(
     params=[("applejxd", False), ("applejxd", True), ("worker", False), ("worker", True)],
-    ids=["私用-通常", "私用-ocs", "会社用-通常", "会社用-ocs"],
+    ids=["個人用-通常", "個人用-ocs", "制約環境用-通常", "制約環境用-ocs"],
 )
 def flavor(request, tmp_path) -> dict:
-    """私用 / 会社用 (Bedrock) と、通常版 / 隔離版 (ocs) の生成物。
+    """個人用 / 制約のある環境用 (Bedrock) と、通常版 / 隔離版 (ocs) の生成物。
 
     どちらも ``permissions`` (全体の規則)・``agent``・``agents`` を持つ。
     """

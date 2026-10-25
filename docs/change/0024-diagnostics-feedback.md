@@ -54,4 +54,4 @@
 ## 参照
 
 - [調査記録 P1](../research/agents/pi-public-extensions-survey.md)（コード理解・編集支援の分類）
-- [pi のガード](../spec/pi-guard.md)（編集の後の整形）
+- [pi のガード](../spec/guard/pi-guard.md)（編集の後の整形）

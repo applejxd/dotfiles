@@ -8,7 +8,7 @@
 // - 状態を持たない (呼び出しの間で何も残さない。Python 版の `_LITERAL_HEREDOC_BODIES` のような記録を作らない)
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import {
 	basename,
 	isSpace,

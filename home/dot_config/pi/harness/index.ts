@@ -1,6 +1,6 @@
 // pi のフルガード。組み込みのツールの代わりに guarded_* のツールを登録し、判定器 (./judge) で
 // 実行してよいかを決める。起動は `pi -nbt -ne -e ~/.config/pi/harness`。
-// see docs/spec/pi-guard.md
+// see docs/spec/guard/pi-guard.md
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	compact,
@@ -15,7 +15,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -24,6 +24,8 @@ import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
+import { MAX_BODY_FILE_BYTES, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, type BodyFileResult, type ConfirmRaw } from "./confirm-view.ts";
+import { appendOperations, appendResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { auditFormat, summarizeCalls } from "./audit.ts";
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
@@ -121,23 +123,59 @@ export function decide(tool: string, input: unknown, cwd: string): Decision {
 
 // tool_call で判定した入力と結果。execute() で同じ入力なら判定を使い回す (判定 1 回 0.1 秒ほど)。
 // 入力が書き換わっていれば判定し直す
-const decided = new Map<string, { input: string; decision: Decision; approved: boolean }>();
+// bodyFile は mustConfirm の確認で見せた --body-file の内容 (execute() で差し替えを検出する)
+const decided = new Map<string, { input: string; decision: Decision; approved: boolean; bodyFile?: { path: string; text: string } }>();
 
 // 確認は 1 件ずつ出す。TUI の confirm は 1 枠を共有し、後の確認が先の確認を置き換える
 // (codemode の中で並べた呼び出しで先の確認が永久に止まった。spike の E3)
 let confirmQueue: Promise<unknown> = Promise.resolve();
 // TUI 以外 (RPC など) は、クライアントが確認に応えないと永久に待つので期限を付ける (期限が来たら拒否)
 const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
-function confirmInOrder(ctx: any, title: string, body: string): Promise<boolean> {
-	const timeout = ctx.mode === "tui" ? undefined : CONFIRM_TIMEOUT_MS;
-	const run = confirmQueue.then(() => {
-		if (ctx.signal?.aborted) return false;
+// timeoutMs を渡すと TUI でも期限が付く (mustConfirm)。結果は経過時間つきで返す (時間切れと拒否の区別用)
+function confirmDetailed(ctx: any, title: string, body: string, timeoutMs?: number): Promise<ConfirmRaw> {
+	const timeout = timeoutMs ?? (ctx.mode === "tui" ? undefined : CONFIRM_TIMEOUT_MS);
+	const run = confirmQueue.then(async (): Promise<ConfirmRaw> => {
+		if (ctx.signal?.aborted) return { ok: false, elapsedMs: 0, aborted: true, error: false };
 		// 利用者の答えを待つ前に BEL (端末の通知)。RPC では stdout が通信なので TUI だけ
 		if (ctx.mode === "tui") process.stdout.write("\x07");
-		return ctx.ui.confirm(title, body, { signal: ctx.signal, timeout });
+		const t0 = Date.now();
+		const v = await ctx.ui.confirm(title, body, { signal: ctx.signal, timeout });
+		return { ok: v === true, elapsedMs: Date.now() - t0, aborted: ctx.signal?.aborted === true, error: false };
 	});
 	confirmQueue = run.catch(() => undefined);
-	return run.then((v: unknown) => v === true).catch(() => false);
+	return run.catch((): ConfirmRaw => ({ ok: false, elapsedMs: 0, aborted: false, error: true }));
+}
+function confirmInOrder(ctx: any, title: string, body: string): Promise<boolean> {
+	return confirmDetailed(ctx, title, body).then((r) => r.ok);
+}
+
+// --body-file を読む (32 KiB まで。読み取りの判定が allow のときだけ)。確認の前と execute() の両方で使う
+function readBodyFile(path: string, cwd: string, tool: string): BodyFileResult {
+	if (tool === BG_RUN) return { ok: false, why: "bg_run では本文のファイルを確認できない (guarded_bash を使う)" };
+	if (path === "-") return { ok: false, why: "標準入力は読めない" };
+	const d = decide("read", { path }, cwd);
+	if (d.decision !== "allow") return { ok: false, why: `${path} は読み取りが許可されていない` };
+	try {
+		const abs = resolve(cwd, path);
+		const st = statSync(abs);
+		if (!st.isFile()) return { ok: false, why: `${path} は通常のファイルではない` };
+		if (st.size > MAX_BODY_FILE_BYTES) return { ok: false, why: `${path} が ${MAX_BODY_FILE_BYTES} バイトを超える` };
+		return { ok: true, text: readFileSync(abs, "utf-8") };
+	} catch (e) {
+		return { ok: false, why: `${path} を読めない: ${(e as Error).message}` };
+	}
+}
+
+// bash の読み取り・書き込みの誘導 (deny) の理由。deny されたときの再試行を安くするため、具体的な言い換えを末尾へ足す。
+// 判定 (allow / deny) は変えない。
+const GUIDE_IDS = ["read-cat-head-tail", "read-sed-n", "write-cat-tee-heredoc", "write-heredoc-script"];
+const GUIDE_REASONS = new Set<string>(
+	((rules.judge.common?.pi?.guide as any[] | undefined) ?? []).filter((g) => !g?.scope && GUIDE_IDS.includes(g?.id)).map((g) => String(g.message)),
+);
+function denyReason(tool: string, input: any, d: Decision): string {
+	if (tool !== "bash" || d.source !== "rule" || !GUIDE_REASONS.has(d.reason)) return d.reason;
+	const hint = guideHint(String(input?.command ?? ""), PREFIX);
+	return hint ? `${d.reason}\n${hint}` : d.reason;
 }
 
 function baseName(toolName: string): string {
@@ -150,7 +188,7 @@ export default async function (pi: ExtensionAPI) {
 	await loadCommitPreview();
 	// 状態の表示 (安全の根拠ではなく、いまどちらで動いているかの目印)
 	const showBypass = (ctx: any) => {
-		if (ctx.hasUI) ctx.ui.setStatus("bypass", bypass ? ctx.ui.theme.fg("warning", "⚡ bypass") : undefined);
+		if (ctx.hasUI) ctx.ui.setStatus("bypass", bypass ? ctx.ui.theme.fg("warning", "⚡ bypass (外部送信は確認)") : undefined);
 	};
 	// セッションの終了・切り替え・/reload で、保持している子を全部止める
 	pi.on("session_shutdown", async () => jobs.closeAll());
@@ -189,9 +227,9 @@ export default async function (pi: ExtensionAPI) {
 		options.sections = { ...(options.sections ?? {}), skills: lines.join("\n") };
 	});
 	// 利用者専用の bypass 切り替え。モデルが呼べるツールは作らない。セッションには残さない
-	// see docs/spec/pi-guard.md#bypass-の切り替え
+	// see docs/spec/guard/pi-guard.md#bypass-の切り替え
 	pi.registerCommand("bypass", {
-		description: "bypass (ask を確認なしで通す) の切り替え: /bypass [on|off]",
+		description: "bypass (ask を確認なしで通す。外部への送信・公開は bypass でも確認する) の切り替え: /bypass [on|off]",
 		handler: async (args: string, ctx: any) => {
 			const arg = String(args ?? "").trim();
 			if (arg !== "" && arg !== "on" && arg !== "off") {
@@ -206,9 +244,11 @@ export default async function (pi: ExtensionAPI) {
 			if (want) {
 				// ON にできるのは確認を出せるときだけ
 				if (!ctx.hasUI) return;
-				const body = BOUNDARY
-					? "ask の操作 (git commit や MCP など) を確認なしで通します。deny とサンドボックスは有効のまま。"
-					: "サンドボックスが無いまま、ask の操作 (git commit や未知の shell や MCP など) を確認なしで通します。deny だけが守りです。";
+				const body =
+					(BOUNDARY
+						? "ask の操作 (git commit や MCP など) を確認なしで通します。deny とサンドボックスは有効のまま。"
+						: "サンドボックスが無いまま、ask の操作 (git commit や未知の shell や MCP など) を確認なしで通します。deny だけが守りです。") +
+					"\n確認が要る外部への送信・公開 (gh の投稿など) は、bypass でも確認します。";
 				if ((await ctx.ui.confirm("bypass を有効にしますか？", body)) !== true) return;
 			}
 			bypass = want;
@@ -224,8 +264,23 @@ export default async function (pi: ExtensionAPI) {
 		const tool = baseName(event.toolName);
 		const d = decide(tool, event.input, ctx.cwd);
 		const input = JSON.stringify(event.input);
-		if (d.decision === "deny") return { block: true, reason: d.reason };
+		if (d.decision === "deny") return { block: true, reason: denyReason(tool, event.input, d) };
 		if (d.decision === "ask") {
+			// bypass でも出す確認 (外部への送信・公開)。判定器は bypass でも allow にしない
+			if ((d as any).mustConfirm === true) {
+				const isShell = tool === "bash" || tool === BG_RUN;
+				const block = (why: string) => ({ block: true, reason: `${NOT_APPROVED} ${why}` });
+				// UI が無い実行 (print) と子 (RPC の確認は自動で取り消される) では、確認が要る操作は拒否する
+				if (!ctx.hasUI || CHILD) return block(NO_UI_REASON);
+				const text = isShell ? String(event.input?.command ?? "") : `${tool}: ${JSON.stringify(event.input)}`;
+				const view = buildMustConfirmView(text, d.reason, (p) => readBodyFile(p, ctx.cwd, tool));
+				if (view.kind === "block") return block(view.reason);
+				const timeoutMs = confirmTimeoutSeconds(rules) * 1000;
+				const outcome = classifyConfirm(await confirmDetailed(ctx, view.title, view.body, timeoutMs), timeoutMs);
+				if (outcome !== "approved") return block(outcomeReason(outcome));
+				decided.set(event.toolCallId, { input, decision: d, approved: true, bodyFile: view.bodyFile });
+				return undefined;
+			}
 			const ok =
 				ctx.hasUI &&
 				(await confirmInOrder(ctx, "実行してよいですか？", `${tool === BG_RUN ? "バックグラウンドで実行:\n" : ""}${describeCall(tool === BG_RUN ? "bash" : tool, event.input)}\n\n理由: ${d.reason}`));
@@ -261,6 +316,8 @@ export default async function (pi: ExtensionAPI) {
 		find: createFindToolDefinition(cwd),
 		ls: createLsToolDefinition(cwd),
 	};
+	// write の append: true 用。書き込みだけを追記に替えた組み込みの定義 (mutation queue・親ディレクトリの作成は組み込みのまま)
+	const appendDef = createWriteToolDefinition(cwd, { operations: appendOperations() });
 	// 役割に無いツールは登録しない (モデルに見せない)。判定は判定器が別に行う。
 	// 役割が rules.json に無ければ何も登録しない
 	const roleTools: string[] = rules.profile_tools?.[ROLE] ?? [];
@@ -269,6 +326,9 @@ export default async function (pi: ExtensionAPI) {
 		const def = definitions[tool];
 		pi.registerTool({
 			...def,
+			// 説明の上書き (組み込みの文言は ...def で入る。tools-ext.ts)。read の tail と write の append は引数を足す
+			...toolText(tool, PREFIX, def),
+			...(tool === "read" ? { parameters: readParameters(Type) } : tool === "write" ? { parameters: writeParameters(Type) } : {}),
 			name: `${PREFIX}${tool}`,
 			// 最終の判定はここ。tool_call の後に別の拡張が入力を書き換えても、ここで止まる (spike の E1)
 			async execute(toolCallId: string, params: any, signal: any, onUpdate: any, ctx: any) {
@@ -277,13 +337,27 @@ export default async function (pi: ExtensionAPI) {
 				const input = JSON.stringify(params);
 				const d = seen && seen.input === input ? seen.decision : decide(tool, params, ctx.cwd);
 				const approved = seen?.approved === true && seen.input === input;
+				// 確認で見せた --body-file が、承認の後に差し替えられていないこと
+				if (approved && seen?.bodyFile) {
+					const now = readBodyFile(seen.bodyFile.path, ctx.cwd, tool);
+					if (!now.ok || now.text !== seen.bodyFile.text) {
+						throw new Error("実行前の判定で止めた: 確認した本文のファイルが承認の後に変わった (もう一度確認が要る)");
+					}
+				}
 				if (d.decision === "deny" || (d.decision === "ask" && !approved)) {
-					throw new Error(`実行前の判定で止めた: ${d.decision}: ${d.reason}`);
+					throw new Error(`実行前の判定で止めた: ${d.decision}: ${d.decision === "deny" ? denyReason(tool, params, d) : d.reason}`);
 				}
 				// edit / write の後に整形する (Claude / Copilot の PostToolUse hook と同じスクリプト)
 				if (tool === "edit" || tool === "write") {
-					const result = await def.execute(toolCallId, params, signal, onUpdate, ctx);
+					const result =
+						tool === "write" && params?.append === true
+							? appendResult(await appendDef.execute(toolCallId, params, signal, onUpdate, ctx), params.path, String(params.content ?? "").length)
+							: await def.execute(toolCallId, params, signal, onUpdate, ctx);
 					return await formatAfterEdit(result, params?.path, ctx.cwd);
+				}
+				if (tool === "read") {
+					const canRead = (p: string) => decide("read", { path: p }, ctx.cwd).decision === "allow";
+					return runRead(def, toolCallId, params, signal, onUpdate, ctx, { cwd: ctx.cwd, canRead });
 				}
 				// read などに伏字化を掛けると、伏せた本文を元に edit されてファイルへ伏字が書き込まれる
 				if (tool !== "bash") return def.execute(toolCallId, params, signal, onUpdate, ctx);

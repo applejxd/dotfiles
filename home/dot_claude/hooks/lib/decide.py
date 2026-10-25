@@ -4,7 +4,7 @@
 (``source``) を添える。判定の中身は Claude / Copilot の hook と同じ ``bashrules`` と
 ``command_policy`` を使う。hook の出力は変えない (``check_bash.py`` はこのモジュールを使わない)。
 
-see docs/spec/pi-decide.md
+see docs/spec/guard/pi-decide.md
 """
 
 from __future__ import annotations

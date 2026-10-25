@@ -1,19 +1,19 @@
-"""社内プロキシ越しに、許可リストを保ったまま Fence の通信を出す小さな中継。
+"""認証つき HTTP プロキシ越しに、許可リストを保ったまま Fence の通信を出す小さな中継。
 
-Fence は ``allowedDomains`` に当たる通信を**直接**つなぐ。外へ出るのに社内プロキシが要る
+Fence は ``allowedDomains`` に当たる通信を**直接**つなぐ。外へ出るのにプロキシが要る
 環境では、許可済みのドメインにも届かない。上流プロキシ (``upstreamProxy``) は、許可リストにも
 拒否リストにも当たらない通信にしか使われない。
 そこで許可リストを Fence から**この中継へ移し**、Fence には「当たらない通信は全部ここへ」と
-渡す (``defaultAction: "proxy"``)。中継は許可リストと照合し、許可した宛先だけを社内プロキシへ
-``CONNECT`` する。許可外は 403 で返し、社内プロキシへは何も送らない。
+渡す (``defaultAction: "proxy"``)。中継は許可リストと照合し、許可した宛先だけを上流のプロキシへ
+``CONNECT`` する。許可外は 403 で返し、上流のプロキシへは何も送らない。
 
-- 対象はホストに社内プロキシの環境変数 (``HTTPS_PROXY`` など) がある機械だけ。無ければ何もしない
+- 対象はホストにプロキシの環境変数 (``HTTPS_PROXY`` など) がある機械だけ。無ければ何もしない
 - 通すのは ``CONNECT`` (HTTPS) だけ。平文の HTTP は、1 本の接続で別の宛先へ続けて送れて
   照合をすり抜けるので 403 にする
 - 待ち受けは ``127.0.0.1`` の空きポート。接続できるのは同じ機械のプロセスで、
   通せるのは許可リストの宛先だけ
 
-see docs/spec/pi-guard.md#社内プロキシ越しの通信
+see docs/spec/guard/pi-guard.md#プロキシ必須の環境での通信
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def _first(env: dict, names: tuple[str, ...]) -> str:
 
 
 def corporate_proxy(env: dict | None = None) -> str | None:
-    """ホストの社内プロキシの URL。無い・使えない形なら ``None``。
+    """ホストのプロキシの URL。無い・使えない形なら ``None``。
 
     対応は ``http://[user:pass@]host:port`` だけ。``https://`` や SOCKS は Fence 側も未対応なので
     使えない形として警告し、従来どおり (中継なし) にする。
@@ -61,7 +61,7 @@ def corporate_proxy(env: dict | None = None) -> str | None:
     parts = urlsplit(value)
     if parts.scheme.lower() != "http" or not parts.hostname:
         print(
-            f"警告: 社内プロキシの形 ({parts.scheme}://) に未対応なので、通信の中継は使わない"
+            f"警告: プロキシの形 ({parts.scheme}://) に未対応なので、通信の中継は使わない"
             " (http://host:port だけ対応)",
             file=sys.stderr,
         )
@@ -95,7 +95,7 @@ def host_allowed(host: str, port: int, patterns: list[str]) -> bool:
 
 
 def bypass(host: str, no_proxy: str) -> bool:
-    """``NO_PROXY`` に当たる宛先は、社内プロキシを通さず直接つなぐ。"""
+    """``NO_PROXY`` に当たる宛先は、プロキシを通さず直接つなぐ。"""
     host = host.lower().rstrip(".")
     for raw in no_proxy.split(","):
         entry = raw.strip().lower()
@@ -204,7 +204,7 @@ class _Handler(socketserver.BaseRequestHandler):
             client.sendall(head + body)
 
     def _dial(self, host: str, port: int) -> tuple[socket.socket | None, bytes]:
-        """宛先へのトンネルを張る。``NO_PROXY`` なら直接、でなければ社内プロキシ経由。"""
+        """宛先へのトンネルを張る。``NO_PROXY`` なら直接、でなければプロキシ経由。"""
         server = self.server
         try:
             if bypass(host, server.no_proxy):
@@ -247,7 +247,7 @@ class _Server(socketserver.ThreadingTCPServer):
 
 
 class Relay:
-    """許可リストで絞って社内プロキシへ中継する。``start`` で待ち受けを始める。"""
+    """許可リストで絞って上流のプロキシへ中継する。``start`` で待ち受けを始める。"""
 
     def __init__(self, allowed: list[str], proxy_url: str, no_proxy: str = "") -> None:
         self._server = _Server(allowed, proxy_url, no_proxy)
@@ -286,7 +286,7 @@ def fence_config(config_: dict, port: int) -> dict:
 def session(config_: dict, env: dict | None = None) -> Iterator[dict]:
     """必要なら中継を起動し、Fence へ渡す設定を返す。要らなければ設定をそのまま返す。
 
-    要るのは、社内プロキシの環境変数があり、許可リストがあり、``*`` を含まないとき。
+    要るのは、プロキシの環境変数があり、許可リストがあり、``*`` を含まないとき。
     ``*`` は Fence が直接の通信を許す緩い形なので、許可リストの照合を中継へ移す意味が無い。
     """
     source = os.environ if env is None else env

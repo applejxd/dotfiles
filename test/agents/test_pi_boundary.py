@@ -6,7 +6,7 @@
 - セッション: 外の ``pi -c`` と同じ置き場
 - 実機: 実際の Fence で境界チェックが通る (Fence・bwrap・pi が無ければ skip)
 
-see docs/spec/pi-guard.md#サンドボックス
+see docs/spec/guard/pi-guard.md#サンドボックス
 """
 
 from __future__ import annotations
@@ -78,6 +78,15 @@ def test_pi_sandbox_adds_pi_paths_to_the_shared_material():
     assert set(pi) == {"runtime_path", "base"}
     # 書き込みは増やさない (セッションと境界用の agent 置き場はランチャーが足す)
     assert pi["base"]["write"] == shared["base"]["write"]
+
+
+def test_pi_sandbox_hides_the_search_keys_inside_the_open_config_dir():
+    # ~/.config/agents は判定器のために開けるが、その中の検索 API の鍵は内側へ見せない
+    pi = gen.pi_sandbox(load_common())
+    assert pi is not None
+    home = os.path.expanduser("~")
+    assert f"{home}/.config/agents" in pi["base"]["read"]
+    assert f"{home}/.config/agents/websearch-keys.json" in pi["base"]["deny_read"]
 
 
 def test_pi_sandbox_rejects_unknown_keys():
@@ -410,6 +419,16 @@ def test_pis_parse_takes_only_the_leading_options():
     assert ocs.pis.parse(["-c", "--bypass"]).rest == ["-c", "--bypass"]
     with pytest.raises(SystemExit):
         ocs.pis.parse(["--role"])
+
+
+def test_bypass_defaults_on_in_the_sandbox_and_off_without_it():
+    pis = _ocs().pis
+    assert pis.parse([]).bypass is True  # サンドボックスでの起動が既定
+    assert pis.parse(["--no-bypass"]).bypass is False
+    assert pis.parse(["--no-sandbox"]).bypass is False  # 守りがガードだけのときは確認を残す
+    assert pis.parse(["--no-sandbox", "--bypass"]).bypass is True  # 明示すれば勝つ
+    assert pis.parse(["--bypass", "--no-bypass"]).bypass is False  # 後の指定が勝つ
+    assert pis.parse(["-c", "--no-bypass"]).rest == ["-c", "--no-bypass"]  # pi の引数は解釈しない
 
 
 def _preflight_setup(monkeypatch, tmp_path, codes):

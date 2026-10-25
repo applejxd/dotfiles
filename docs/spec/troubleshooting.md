@@ -38,7 +38,7 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | `403`、「導入できなかった CLI」 | Linux / WSL / macOS の AI CLI | [AI CLI の導入が 403 で失敗する](troubleshooting-bootstrap.md#ai-cli-の導入が-403-で失敗する) |
 | sandbox の中で全ツールが即失敗する（`requires 'slirp4netns' on PATH` など） | Linux / WSL の Copilot CLI | [Linux で sandbox がコマンドを 1 つも実行できない](troubleshooting-agents.md#copilot-cli) |
 | `/sandbox` に Dependencies タブが出る | Linux / WSL の Claude Code | [Linux で sandbox がコマンドを 1 つも実行できない](troubleshooting-agents.md#claude-code) |
-| sandbox の中で読めない・書けない | Claude Code / Copilot CLI | [sandbox](agent-sandbox.md) |
+| sandbox の中で読めない・書けない | Claude Code / Copilot CLI | [sandbox](sandbox/agent-sandbox.md) |
 | hook が起動しない | Windows の Copilot CLI | [Windows で Copilot の hook が起動しない](troubleshooting-agents.md#windows-で-copilot-の-hook-が起動しない) |
 | `Failed to load 1 skill.` | Claude Code / Copilot CLI | [CLI 起動時に Failed to load 1 skill と出る](troubleshooting-agents.md#cli-起動時に-failed-to-load-1-skill-と出る) |
 | `Invalid arguments for tool ...`、引数が空のツール呼び出し | pi | [ツール呼び出しの引数が壊れる](troubleshooting-agents.md#ツール呼び出しの引数が壊れるinvalid-arguments引数が空) |

@@ -4,7 +4,7 @@
 // `cd` の除去や `bash -c` の展開は normalize が担うので、ここは正規化済みのセグメントに当てる。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 
 /** 1 語。`raw` は書かれたまま、`value` は引用とエスケープを外した値 (`$VAR` / `$(...)` は展開しない)。 */
 export type Word = { readonly raw: string; readonly value: string };

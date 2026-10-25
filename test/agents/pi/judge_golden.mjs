@@ -6,7 +6,7 @@
 //
 // 正解データは scripts/agents/export_decide_golden.py が書き出す (規則や判定器を変えたら書き出し直す)。
 // パスは ${ROOT} / ${HOME} の記号で保存してあり、ここで自分の場所に展開する。
-// see docs/spec/pi-decide.md
+// see docs/spec/guard/pi-decide.md
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -59,6 +59,20 @@ const category = (request) => {
 	return "other";
 };
 
+// TS 版だけの後続の規則を、Python 版の正解と照合する (Python 版には確認表 [pi.confirm] と本文の形の deny が無い。標本は除かない)。
+//  - mustConfirm の ask: Python は ask、あるいは bypass 要求の allow+bypassed。理由・source・check は確認表だけに載ると Python では default なので比べない
+//  - 本文を確認できない形の deny: Python はそのコマンドを ask / allow として扱う
+const BLIND_PREFIX = "本文を確認できない形";
+const askLike = (r) => r?.decision === "ask" || (r?.decision === "allow" && r?.bypassed === true);
+const sameAsExpected = (got, expected) => {
+	if (stable(got) === stable(expected)) return true;
+	if (got?.decision === "ask" && got.mustConfirm === true) return askLike(expected);
+	if (got?.decision === "deny" && typeof got.reason === "string" && got.reason.startsWith(BLIND_PREFIX)) {
+		return expected?.decision === "ask" || expected?.decision === "allow";
+	}
+	return false;
+};
+
 const stats = {};
 const failures = {};
 for (const line of lines) {
@@ -66,7 +80,7 @@ for (const line of lines) {
 	const cat = category(request);
 	stats[cat] ??= { pass: 0, fail: 0 };
 	const got = tokenize(decide(expand(request), common));
-	if (stable(got) === stable(expected)) {
+	if (sameAsExpected(got, expected)) {
 		stats[cat].pass += 1;
 	} else {
 		stats[cat].fail += 1;

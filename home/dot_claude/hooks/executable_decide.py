@@ -7,7 +7,7 @@
 
 どんな異常でも、形の正しい deny を出して exit 0 で終わる。呼び出し側は、形の正しい応答
 以外 (空・不正な JSON・異常終了・タイムアウト) を deny と読む。
-see docs/spec/pi-decide.md
+see docs/spec/guard/pi-decide.md
 """
 
 from __future__ import annotations

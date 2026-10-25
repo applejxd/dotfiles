@@ -262,7 +262,7 @@ systemd（`systemd=true`）に任せます。WSL の init は起動直後に `mo
 - **`tick` を戻す理由**: `timesyncd` を止めても、すでに偏った `tick` は誰かが戻すまで残る
   （この環境の実測）。標準値は `1000000 / CLK_TCK`（通常 10000）。再起動でも元に戻る
 - **対象外**: 隔離ディストロ（`[automount] enabled=false`）はこのスクリプトが早期に終わるため触らない。
-  sandbox は `guest/setup.sh` が同じ設定を入れる（[時刻同期](wsl-sandbox.md#時刻同期)）。Ubuntu 25.10 以降の新規環境は
+  sandbox は `guest/setup.sh` が同じ設定を入れる（[時刻同期](sandbox/wsl-sandbox.md#時刻同期)）。Ubuntu 25.10 以降の新規環境は
   既定が chrony（WSL では `-x`）で `timesyncd` が無いため、条件を満たさず何もしない
 - **未確認**: `timesyncd` を止めた状態で、壁時計の絶対的なずれが長期（数時間〜数日）で許容範囲に収まるか。
   Canonical の説明（Hyper-V の同期でよい）に頼るが、この環境では測り続けていない。
@@ -621,7 +621,7 @@ user scope に未登録のものだけを対象にし、既存のカスタム設
 | ツール | 理由 |
 | --- | --- |
 | `npm:@bitwarden/cli` | snap 版が動作しなくなったため。bw 不在でも `apply` は完走し、その `apply` 中に入ります。[セキュリティ](security.md#bitwarden連携) |
-| `npm:@anthropic-ai/sandbox-runtime` | Claude Code の sandbox が使う seccomp フィルタ。WSL2 では無いと sandbox から脱出できます。mise の隔離先を `settings.json` の `sandbox.seccomp.applyPath` へ橋渡しする必要があり、生成は `scripts/agents/generate.py` が行います。[WSL2 での抜け穴](agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ) |
+| `npm:@anthropic-ai/sandbox-runtime` | Claude Code の sandbox が使う seccomp フィルタ。WSL2 では無いと sandbox から脱出できます。mise の隔離先を `settings.json` の `sandbox.seccomp.applyPath` へ橋渡しする必要があり、生成は `scripts/agents/generate.py` が行います。[WSL2 での抜け穴](sandbox/agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ) |
 
 seccomp フィルタは手で `npm install -g` する必要はありません。導入先が実在する
 ときだけ `~/.claude/settings.json` に設定が出るため、初回は mise の導入後に
@@ -630,7 +630,7 @@ seccomp フィルタは手で `npm install -g` する必要はありません。
 ### github backend で版を固定している Fence
 
 `github:fencesandbox/fence` は OpenCode の隔離起動（`ocs`）が境界を張る道具です
-（[OpenCode 隔離起動](opencode-sandbox.md)）。Linux / WSL だけに入れます。
+（[OpenCode 隔離起動](sandbox/opencode-sandbox.md)）。Linux / WSL だけに入れます。
 
 - **版とチェックサムを固定しています。** 0.1.x で開発元が 1 社のため、`latest` で
   追わず、上げるときは Releases の `checksums.txt` の値を `platforms.<os>-<arch>.checksum`
@@ -656,7 +656,7 @@ Windows の pi は、mise の `aqua:earendil-works/pi`（ビルド済みバイ�
   実体も shim も欠けずに届く
 - バイナリ版は `process.argv[1]` が仮想パス（`B:/~BUN/root/pi.exe`）で、CLI ファイルではない。
   `subagents` はこれを子の引数に渡さないようにした（`childArgs`、試験あり）
-- 未確認: 稼働中の `pi.exe` を更新できるか（ファイルロック）、Defender・会社の実行制限、全自作拡張のバイナリでの動作、
+- 未確認: 稼働中の `pi.exe` を更新できるか（ファイルロック）、Defender・制約のある環境の実行制限、全自作拡張のバイナリでの動作、
   `mise use -g` での shim と旧 `pi.cmd` の PATH 競合（`314` が旧版を外すので起きない想定）
 - 旧 npm 版が残る PC は、`npm uninstall -g @earendil-works/pi-coding-agent` で外す（`314` が自動で行う）
 
@@ -686,7 +686,7 @@ Windows は Copilot CLI と OpenCode V2 を導入し、`applejxd` 以外では
 Claude Code も導入します。Linux / WSL / macOS では加えて oh-my-pi (`omp`) と
 pi（`pi.dev/install.sh`）も公式インストーラーで入れます（Windows の pi は mise が入れる。[Windows の pi](#windows-の-pi)）。pi は mise の Node.js が入っていないと
 入れません（インストーラーが Node.js の導入を端末で聞くため。次の apply で走り直す）。
-pi はフルガード付きの `pis` で起動する（[pi のガード](pi-guard.md#起動)）。
+pi はフルガード付きの `pis` で起動する（[pi のガード](guard/pi-guard.md#起動)）。
 
 スクリプトは `run_onchange_after_` で、**既に PATH 上にある CLI には触りません**。
 ただし mise の shim（`~/.local/share/mise/shims/` 配下）は導入済みと数えません。
@@ -911,7 +911,7 @@ mise に統一している方針と合わない、標準コマンドの意味を
 
 | 置き場 | 何を置くか | いつ読まれるか | 注意 |
 | --- | --- | --- | --- |
-| `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export PIS_EXTRA_READ="$HOME/dataset:/data2"` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る。`PIS_EXTRA_READ` は読み取り専用で、詳細は [環境変数での追加](opencode-sandbox.md#環境変数での追加) |
+| `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export PIS_EXTRA_READ="$HOME/dataset:/data2"` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る。`PIS_EXTRA_READ` は読み取り専用で、詳細は [環境変数での追加](sandbox/opencode-sandbox.md#環境変数での追加) |
 | `~/.config/mise/conf.d/*.toml` | `mise` の設定のマシン固有分 | `mise` が設定を読むとき | chezmoi の管理外。`[env]` は mise を有効化したシェルでしか効かない（**推測**。公式 docs では未確認） |
 | `<起動ディレクトリ>/.opencode/sandbox.toml` | リポジトリごとの `read`・`write`・`network_allow` | `pis` の起動時 | パスがマシン依存なら、1 行目の環境変数のほうがよい（環境変数で足せるのは読み取りだけ） |
 
@@ -1125,12 +1125,12 @@ macOS では同じです。
 
 ## Envoy の取得
 
-`pis` の Copilot ブローカー（[opencode-sandbox.md](opencode-sandbox.md#copilot-ブローカーpis-のみ)）が使う Envoy は、
+`pis` の Copilot ブローカー（[opencode-sandbox.md](sandbox/opencode-sandbox.md#copilot-ブローカーpis-のみ)）が使う Envoy は、
 `chezmoi apply` が `home/.chezmoiexternal.toml.tmpl` で `~/.local/bin/envoy` へ取得します。
 固定版（v1.40.1）の公式リリースのバイナリを、`checksum.sha256` で照合します（chezmoi が検証）。
 
 - **対象**: Linux / WSL で、`llm-provider` が `github-copilot` の機、Raspberry Pi 以外、amd64 と arm64 だけ
-  （Envoy は macOS・Windows のバイナリを配布していない。会社の機は、Bedrock の対応（CHG-0037 段 U7b）まで対象外）
+  （Envoy は macOS・Windows のバイナリを配布していない。制約のある環境の機は、Bedrock の対応（CHG-0037 段 U7b）まで対象外）
 - **更新手順**: 公式リリースの `checksums.txt.asc` から、`envoy-<版>-linux-x86_64` と `envoy-<版>-linux-aarch_64` の
   sha256 を取り、`.chezmoiexternal.toml.tmpl` の版・URL・sha256 を 3 つ同時に書き換える（署名の検証は任意）
 - **sha256 の限界**: 同じリリースの checksums との一致で、改ざん検知の根拠は弱い（署名の検証は未実施）
@@ -1432,7 +1432,7 @@ OpenCode V2 が global 指示として読むのは `~/.config/opencode/AGENTS.md
 - **CLI 固有の節だけを足す**: Copilot のコミット節は
   [github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590)
   という Copilot 固有の事実を理由に書いているため、機械的強制がある
-  Claude Code / Codex CLI には置きません（`docs/spec/agent-command-policy.md` の
+  Claude Code / Codex CLI には置きません（`docs/spec/guard/agent-command-policy.md` の
   CLI 別の表を参照）。
 - **テンプレート内で分岐しない**: 固有の節は該当ファイルへ直接書き足します。
   `{{ if }}` を使わないので、テストは `includeTemplate` を展開するだけで

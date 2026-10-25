@@ -1,7 +1,7 @@
 # wsl-sandbox
 
 隔離 GPU サンドボックス用の専用 WSL2 ディストロ（Ubuntu 24.04 + Docker + Tailscale SSH）を作る、**手動実行**のスクリプト。
-`chezmoi apply` では実行されない。仕組み・隔離の限界・運用は [docs/spec/wsl-sandbox.md](../../../docs/spec/wsl-sandbox.md) が正本。
+`chezmoi apply` では実行されない。仕組み・隔離の限界・運用は [docs/spec/sandbox/wsl-sandbox.md](../../../docs/spec/sandbox/wsl-sandbox.md) が正本。
 
 ## 使い方
 
@@ -13,7 +13,7 @@ pwsh scripts/windows/wsl-sandbox/create.ps1 -Name sandbox2 -TailnetHostname sand
 - 前提: WSL 本体が導入済み、Windows 側の NVIDIA ドライバ、50GB 以上の空き。管理者権限は不要
 - 同名のディストロがあれば中止する（削除はしない。作り直すなら手動で `wsl --unregister <Name>`）
 - 途中で Tailscale のログイン URL が出るので、ブラウザで開く
-- 引数の一覧は [仕様](../../../docs/spec/wsl-sandbox.md#実行方法)
+- 引数の一覧は [仕様](../../../docs/spec/sandbox/wsl-sandbox.md#実行方法)
 
 ## 構成
 

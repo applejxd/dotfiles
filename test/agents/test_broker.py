@@ -2,7 +2,8 @@
 
 本物の Envoy とネットワークは使わない。トークンの取得は差し替え、``envoy`` は PATH に置く偽物
 (設定の ``port_value`` で ``/__pis_broker`` に答える Python スクリプト) にする。
-see docs/spec/pi-guard.md
+例外: ``test_real_envoy_*`` は本物の Envoy をローカルで立てる (無いときは skip)。
+see docs/spec/guard/pi-guard.md
 """
 
 from __future__ import annotations
@@ -34,8 +35,8 @@ TOKEN2 = "tid=TOKEN_TWO_SECRET;proxy-ep=proxy.individual.githubcopilot.com;exp=2
 
 FAKE_ENVOY = """#!{python}
 import http.server
+import json
 import os
-import re
 import socketserver
 import sys
 import threading
@@ -73,14 +74,17 @@ class UnixHandler(http.server.BaseHTTPRequestHandler):
 
 
 servers = []
-tcp = re.search(r"address: 127[.]0[.]0[.]1, port_value: (\\d+)", text)
-if tcp:
-    servers.append(http.server.HTTPServer(("127.0.0.1", int(tcp.group(1))), Handler))
-pipe = re.search(r'pipe: [{]path: "([^"]+)"', text)
-if pipe:
-    if os.path.exists(pipe.group(1)):
-        os.unlink(pipe.group(1))
-    servers.append(socketserver.UnixStreamServer(pipe.group(1), UnixHandler))
+listeners = json.loads(text)["static_resources"]["listeners"]
+for item in listeners:
+    address = item["address"]
+    if "socket_address" in address:
+        port = address["socket_address"]["port_value"]
+        servers.append(http.server.HTTPServer(("127.0.0.1", port), Handler))
+    else:
+        sock = address["pipe"]["path"]
+        if os.path.exists(sock):
+            os.unlink(sock)
+        servers.append(socketserver.UnixStreamServer(sock, UnixHandler))
 for extra in servers[1:]:
     threading.Thread(target=extra.serve_forever, daemon=True).start()
 servers[0].serve_forever()
@@ -208,39 +212,76 @@ def _render(broker, tmp_path, host="api.example.test", ca="/etc/ssl/ca.pem", **k
     return broker.build_config(**{**options, **kwargs})
 
 
-def test_render_config_fills_every_placeholder(tmp_path):
+GOLDEN = ROOT / "test" / "agents" / "golden" / "broker_config.json"
+# scripts/agents/export_broker_golden.py が同じ値で書き出す
+GOLDEN_ARGS = {
+    "copilot": {"copilot_port": 12345, "copilot_host": "api.individual.githubcopilot.com"},
+    "github": {"github_socket": Path("/agent/dir/gh.sock")},
+    "both": {
+        "copilot_port": 12345,
+        "copilot_host": "api.individual.githubcopilot.com",
+        "github_socket": Path("/agent/dir/gh.sock"),
+    },
+}
+
+
+@pytest.mark.parametrize("case", ["copilot", "github", "both"])
+def test_config_matches_the_golden_structure(case):
+    """旧実装 (断片 YAML の置換) の出力を解析した構造と、完全に一致する。"""
+    yaml = pytest.importorskip("yaml")
+    broker = _ocs().broker
+    out = broker.build_config(
+        sds_dir=Path("/state/dir"), ca_file="/etc/ssl/ca.pem", **GOLDEN_ARGS[case]
+    )
+    golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    assert yaml.safe_load(out) == golden[case]
+
+
+def test_render_config_fills_every_value(tmp_path):
     broker = _ocs().broker
     out = _render(broker, tmp_path)
-    assert not re.search(r"@(PORT|HOST|SDS_DIR|CA_FILE|SOCKET|LISTENERS|CLUSTERS)@", out)
-    assert "port_value: 12345}" in out
-    assert out.count('"api.example.test"') == 3  # host_rewrite_literal・接続先・SNI
-    assert f'path: "{tmp_path}/copilot-sds.json"' in out
-    assert f'watched_directory: {{path: "{tmp_path}"}}' in out
-    assert '"@type"' in out  # 型の指定は置換の対象ではない
-    for absent in ("github_upstream", "gh_token", "pipe:", "gh-sds.json"):
+    data = json.loads(out)
+    (listener,) = data["static_resources"]["listeners"]
+    assert listener["address"]["socket_address"]["port_value"] == 12345
+    assert out.count('"api.example.test"') == 5  # host_rewrite_literal (3 ルート)・接続先・SNI
+    assert f'"path": "{tmp_path}/copilot-sds.json"' in out
+    assert not re.search(r"@(PORT|HOST|SDS_DIR|CA_FILE|SOCKET)@", out)
+    for absent in ("github_upstream", "gh_token", "pipe", "gh-sds.json"):
         assert absent not in out  # Copilot だけ有効なら GitHub の要素は出ない
-    assert broker.CLUSTERS_MARK.strip() not in out
 
 
 def test_config_verifies_the_upstream_certificate(tmp_path):
     broker = _ocs().broker
-    out = _render(broker, tmp_path, ca="/etc/ssl/ca.pem")
-    assert 'trusted_ca: {filename: "/etc/ssl/ca.pem"}' in out
-    assert (
-        'match_typed_subject_alt_names: [{san_type: DNS, matcher: {suffix: "githubcopilot.com"}}]'
-        in out
-    )
+    data = json.loads(_render(broker, tmp_path, ca="/etc/ssl/ca.pem"))
+    (cluster,) = data["static_resources"]["clusters"]
+    validation = cluster["transport_socket"]["typed_config"]["common_tls_context"][
+        "validation_context"
+    ]
+    assert validation["trusted_ca"] == {"filename": "/etc/ssl/ca.pem"}
+    assert validation["match_typed_subject_alt_names"] == [
+        {"san_type": "DNS", "matcher": {"suffix": "githubcopilot.com"}}
+    ]
 
 
 def test_allowed_routes_are_exact_paths(tmp_path):
-    out = _render(_ocs().broker, tmp_path)
-    assert "path_separated_prefix" not in out
-    for route in ("/v1/messages", "/responses", "/chat/completions"):
-        assert f'{{path: "{route}"' in out
+    data = json.loads(_render(_ocs().broker, tmp_path))
+    (listener,) = data["static_resources"]["listeners"]
+    manager = listener["filter_chains"][0]["filters"][0]["typed_config"]
+    (vhost,) = manager["route_config"]["virtual_hosts"]
+    matches = [route["match"] for route in vhost["routes"]]
+    post = [{"name": ":method", "string_match": {"exact": "POST"}}]
+    assert matches == [
+        {"path": "/__pis_broker"},
+        {"path": "/v1/messages", "headers": post},
+        {"path": "/responses", "headers": post},
+        {"path": "/chat/completions", "headers": post},
+        {"prefix": "/"},
+    ]
+    assert vhost["routes"][-1]["direct_response"]["status"] == 403
 
 
 @pytest.mark.parametrize("bad", ['/tmp/a"b.pem', "/tmp/a\nb.pem", "/tmp/a\\b.pem"])
-def test_render_config_rejects_paths_that_break_the_yaml_string(tmp_path, bad):
+def test_render_config_rejects_paths_with_quotes_backslashes_or_newlines(tmp_path, bad):
     broker = _ocs().broker
     with pytest.raises(broker.BrokerError):
         _render(broker, tmp_path, ca=bad)
@@ -287,11 +328,12 @@ def test_session_refuses_to_start_without_a_ca_file(host, monkeypatch):
     assert not list(host.runtime.glob("pis-broker-*"))
 
 
-def test_rendered_config_is_valid_yaml(tmp_path):
+def test_rendered_config_is_valid_json_and_yaml(tmp_path):
     yaml = pytest.importorskip("yaml")
     broker = _ocs().broker
     out = _render(broker, tmp_path)
     data = yaml.safe_load(out)
+    assert data == json.loads(out)
     (listener,) = data["static_resources"]["listeners"]
     assert listener["name"] == "copilot"
     assert listener["address"]["socket_address"] == {"address": "127.0.0.1", "port_value": 12345}
@@ -331,7 +373,7 @@ def test_session_starts_envoy_and_cleans_up(host, monkeypatch, capsys):
         assert stat.S_IMODE(sds.stat().st_mode) == 0o600
         assert _sds_token(state) == TOKEN1
         config = (state / "envoy.yaml").read_text(encoding="utf-8")
-        assert f"port_value: {match.group(1)}}}" in config
+        assert f'"port_value": {match.group(1)}' in config
         assert "api.individual.githubcopilot.com" in config
         pid = int((state / "fake.pid").read_text(encoding="utf-8"))
         os.kill(pid, 0)  # 生きている
@@ -1072,9 +1114,8 @@ def test_both_brokers_share_one_config(tmp_path):
     assert [item["name"] for item in listeners] == ["copilot", "github"]
     clusters = data["static_resources"]["clusters"]
     assert [item["name"] for item in clusters] == ["copilot_upstream", "github_upstream"]
-    assert (
-        f'path: "{tmp_path}/copilot-sds.json"' in out and f'path: "{tmp_path}/gh-sds.json"' in out
-    )
+    assert f'"path": "{tmp_path}/copilot-sds.json"' in out
+    assert f'"path": "{tmp_path}/gh-sds.json"' in out
 
 
 def test_config_without_any_broker_is_refused(tmp_path):
@@ -1115,7 +1156,7 @@ def test_github_only_session_starts_envoy_on_a_unix_socket(host, monkeypatch, sh
         assert stat.S_IMODE((state / "gh-sds.json").stat().st_mode) == 0o600
         assert not (state / "copilot-sds.json").exists()
         config = (state / "envoy.yaml").read_text(encoding="utf-8")
-        assert f'pipe: {{path: "{sock}"' in config and PAT not in config
+        assert f'"path": "{sock}"' in config and PAT not in config
         assert "copilot_upstream" not in config
         pid = int((state / "fake.pid").read_text(encoding="utf-8"))
         os.kill(pid, 0)
@@ -1504,3 +1545,126 @@ def test_no_broker_notice_does_not_mention_github_when_it_was_off(monkeypatch, t
     _flow(pi, monkeypatch, tmp_path)
     assert pi._launch(_args(no_broker=True), []) == 0
     assert "GitHub" not in capsys.readouterr().err
+
+
+# ─── (k) 本物の Envoy でのルートの検査 (Envoy が無ければ skip) ────────────
+
+
+@pytest.fixture
+def real_envoy(short_dir):
+    """本物の Envoy で Copilot (127.0.0.1) と GitHub (Unix ソケット) のリスナーを立てる。
+
+    上流は到達できない名前 (``localhost``) へ向ける。許可した経路は上流への接続で失敗する (403 以外)。
+    """
+    import http.client
+    import shutil
+    import subprocess
+
+    envoy = shutil.which("envoy") or str(Path.home() / ".local" / "bin" / "envoy")
+    if not os.access(envoy, os.X_OK):
+        pytest.skip("envoy が無い")
+    broker = _ocs().broker
+    try:
+        ca_file = broker.find_ca_file()
+    except broker.BrokerError:
+        pytest.skip("CA バンドルが無い")
+    state = short_dir / "s"
+    state.mkdir()
+    port = broker.free_port()
+    sock = short_dir / "gh.sock"
+    broker.write_sds(state / broker.SDS_NAME, "COPILOT_X", broker.SECRET_NAME)
+    broker.write_sds(state / broker.GH_SDS_NAME, "GH_X", broker.GH_SECRET_NAME)
+    config = state / broker.CONFIG_NAME
+    config.write_text(
+        broker.build_config(
+            sds_dir=state,
+            ca_file=ca_file,
+            copilot_port=port,
+            copilot_host="localhost",
+            github_socket=sock,
+        ),
+        encoding="utf-8",
+    )
+    log = state / "envoy.log"
+    with log.open("wb") as out:
+        proc = subprocess.Popen(
+            [
+                envoy,
+                "--config-path",
+                str(config),
+                "--log-level",
+                "warning",
+                "--disable-hot-restart",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=out,
+            stderr=out,
+            start_new_session=True,
+        )
+    try:
+
+        def request_tcp(method, path, host=None):
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+            try:
+                connection.request(method, path, headers={"Host": host} if host else {})
+                response = connection.getresponse()
+                return response.status, response.read(256).decode("utf-8", errors="replace")
+            except TimeoutError:
+                return 0, ""  # 上流を待っている = 403 ではなく通した
+            finally:
+                connection.close()
+
+        def request_unix(host):
+            connection = broker._UnixConnection(str(sock), timeout=5)
+            try:
+                connection.request("GET", "/x", headers={"Host": host})
+                response = connection.getresponse()
+                return response.status, response.read(256).decode("utf-8", errors="replace")
+            finally:
+                connection.close()
+
+        def ready():
+            if proc.poll() is not None:
+                pytest.skip(
+                    f"envoy が起動しない: {log.read_text(encoding='utf-8', errors='replace')[-400:]}"
+                )
+            try:
+                return request_tcp("GET", "/__pis_broker")[0] == 200 and request_unix("x")[0] == 403
+            except (OSError, http.client.HTTPException):
+                return False
+
+        if not _wait_for(ready, timeout=15):
+            pytest.skip("envoy が時間内に応答しない")
+        yield SimpleNamespace(tcp=request_tcp, unix=request_unix)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+
+
+def test_real_envoy_copilot_identity_and_denials(real_envoy):
+    assert real_envoy.tcp("GET", "/__pis_broker") == (200, "pis-broker-copilot")
+    for method, path in (
+        ("GET", "/v1/messages"),  # 許可した経路でもメソッドが違う
+        ("POST", "/v1/messages/x"),  # 完全一致ではない
+        ("POST", "/v1/other"),
+        ("DELETE", "/responses"),
+        ("GET", "/"),
+    ):
+        status, body = real_envoy.tcp(method, path)
+        assert status == 403 and body == "pis-broker: path or method not allowed", (method, path)
+
+
+def test_real_envoy_copilot_allowed_posts_reach_the_upstream_cluster(real_envoy):
+    for path in ("/v1/messages", "/responses", "/chat/completions"):
+        status, _ = real_envoy.tcp("POST", path)
+        assert status != 403, path  # 通した (上流へ出られず 5xx になる)
+
+
+def test_real_envoy_github_denies_other_hosts(real_envoy):
+    for host in ("pis-broker.invalid", "example.com", "api.github.com.evil.test"):
+        status, body = real_envoy.unix(host)
+        assert status == 403 and body == "pis-broker: host not allowed", host

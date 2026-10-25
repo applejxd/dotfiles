@@ -12,7 +12,7 @@
 
 ### 問い
 
-`ocs`（OpenCode を境界で包むランチャー。[仕様](../../../spec/opencode-sandbox.md)）の境界の道具を
+`ocs`（OpenCode を境界で包むランチャー。[仕様](../../../spec/sandbox/opencode-sandbox.md)）の境界の道具を
 `srt` から Fence に替えると、`srt` の癖（一部だけの `denyRead` が効かない、規則 R1、無い名前への
 `/dev/null` のマウント、`TMPDIR`）が消え、[CHG-0009](../../../change/closed/0009-ocs-simplify-for-accidents.md)
 の評価基準の必須の項目を満たせるか。

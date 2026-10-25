@@ -1,5 +1,5 @@
 // 試験用。フルガードの tool_call が許可した後に bash のコマンドを書き換える拡張。
-// see docs/spec/pi-guard.md
+// see docs/spec/guard/pi-guard.md
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {

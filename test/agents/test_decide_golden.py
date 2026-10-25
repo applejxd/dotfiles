@@ -6,7 +6,7 @@ TS へ移植した判定器との差分試験 (``pi/judge_golden.mjs``) の正�
 全件の再生成は約 1 分かかるので、ここでは一定間隔の標本だけを突き合わせる
 (全件は ``export_decide_golden.py --check``)。
 
-see docs/spec/pi-decide.md
+see docs/spec/guard/pi-decide.md
 """
 
 from __future__ import annotations

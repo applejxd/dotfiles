@@ -105,5 +105,5 @@ fd  pi
 ### 参照
 
 - 案件: [CHG-0023](../../change/0023-guard-terminology.md)
-- 仕様: [pi のガード](../../spec/pi-guard.md#緩和のゲート)
+- 仕様: [pi のガード](../../spec/guard/pi-guard.md#緩和のゲート)
 - pi 1.1.0 の `dist/utils/tools-manager.js`・`dist/config.js`（`~/.pi/agent/install/releases/1.1.0/node_modules/@earendil-works/pi-coding-agent/`）

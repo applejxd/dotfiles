@@ -214,7 +214,7 @@ def test_file_a_test_reads_selects_that_test():
         ),
         ("home/dot_claude/skills/commit/SKILL.md", "test/agents/test_check_bash_config.py"),
         ("home/dot_claude/skills/sdd-docs/SKILL.md", "test/agents/test_opencode_external_read.py"),
-        ("docs/spec/agent-command-policy.md", "test/agents/test_check_bash_config.py"),
+        ("docs/spec/guard/agent-command-policy.md", "test/agents/test_check_bash_config.py"),
         (
             "home/dot_config/opencode/modify_opencode.json.py.tmpl",
             "test/agents/test_modifier_wrappers.py",

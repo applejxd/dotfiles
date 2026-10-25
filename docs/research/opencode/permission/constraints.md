@@ -8,7 +8,7 @@
 > 解消した。permission と plugin が境界でないという結論は、通常起動の
 > `opencode` については今も有効。
 >
-> **現行の仕様**: [OpenCode 隔離起動のアーキテクチャ](../../../spec/opencode-sandbox.md)、
+> **現行の仕様**: [OpenCode 隔離起動のアーキテクチャ](../../../spec/sandbox/opencode-sandbox.md)、
 > [OpenCode V2 の扱い](../../../spec/agent-permissions.md#opencode-v2-の扱い)
 >
 > **調査日: 2026-09-20 〜 2026-09-22 / 対象: `opencode v2.0.10` 〜 `v2.0.12`**

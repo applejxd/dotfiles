@@ -3,7 +3,7 @@
 // 答えは会話履歴にもモデルの文脈にも残さない (表示するだけ)。応答中 (エージェントが動いている最中) でも実行できる。
 // 子の起動は、フルガード (harness) か Windows の subagents 拡張が `globalThis.__piAskReadChild` に置く入口を使う。無ければ `--plain` と同じ。
 // 子が失敗したときは理由を表示して終える (調べていない推測を、答えとして出さない)。
-// see docs/spec/pi-guard.md#自作の拡張-todo--plan--btw
+// see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { DynamicBorder, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Markdown, matchesKey, Text } from "@earendil-works/pi-tui";

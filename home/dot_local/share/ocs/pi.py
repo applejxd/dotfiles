@@ -6,7 +6,7 @@
 pi は設定と認証を読むときにも隣へ ``.lock`` を作るので、agent 置き場は書ける必要がある。
 一方、本物の ``~/.pi/agent`` を境界に入れると、内側で作られた拡張を外の通常の pi が読む。
 そこで**起動ごとに境界用の agent 置き場を作り**、認証・モデルの一覧・設定を写す。
-see docs/spec/pi-guard.md#サンドボックス
+see docs/spec/guard/pi-guard.md#サンドボックス
 """
 
 from __future__ import annotations
@@ -76,15 +76,16 @@ def is_secret_env(name: str) -> bool:
 # ─── Copilot ブローカーモード ────────────────────────────────────────
 # ホスト側の Envoy が本物の認証情報を持ち、内側の pi にはダミーだけを渡す。
 # 入力は rules.json の broker.copilot (正本は common.toml の [pis.broker] copilot)。
-# see docs/spec/opencode-sandbox.md#copilot-ブローカーモードpis_copilot_brokerpis-のみ
+# see docs/spec/sandbox/broker.md#copilot-ブローカー
 BROKER_KEY = "broker.copilot"
 NO_BROKER_NOTICE = "pis: ブローカー無し: 内側に Copilot の認証情報が入る"
 NO_BROKER_GITHUB_NOTICE = "。GitHub ブローカーも使わない (gh にはダミーも本物も渡さない)"
+NO_BROKER_SEARCH_NOTICE = "。検索ブローカーも使わない (内側から websearch の検索は使えない)"
 NO_BROKER_HINT = "一時的に外すなら pis --no-broker (内側に本物の Copilot の認証が入る)"
 BROKER_PROVIDER = "github-copilot"
 BROKER_DUMMY_TOKEN = "dummy-not-a-real-token"
 # GitHub ブローカー (gh)。内側の gh にはダミーの GH_TOKEN と Unix ソケットの設定だけを渡す。
-# see docs/spec/opencode-sandbox.md#github-ブローカーpis-のみ
+# see docs/spec/sandbox/broker.md#github-ブローカー
 GITHUB_DUMMY_TOKEN = "dummy-not-a-real-token"
 GITHUB_HINT = (
     "broker.github は off / auto、broker.github_token_file (文字列) と "
@@ -92,6 +93,10 @@ GITHUB_HINT = (
 )
 BROKER_IDENTITY_PATH = "/__pis_broker"
 BROKER_IDENTITY_PREFIX = "pis-broker-copilot"
+# 検索ブローカー (websearch.py)。内側へはこの環境変数で URL だけを渡す (鍵は渡さない)。
+# see .tmp/handoff-search/README.md
+SEARCH_ENV = "WEBSEARCH_BROKER_URL"
+SEARCH_HINT = 'broker.search は "off" / "auto" のどちらか'
 BROKER_TIMEOUT_SECONDS = 3
 BROKER_HINT = f"{BROKER_KEY} は off / auto / http://127.0.0.1:<1024-65535> のどれか (例 http://127.0.0.1:18080)"
 
@@ -182,6 +187,34 @@ def github_enabled_in_rules(rules_path: Path | None = None) -> bool:
     return isinstance(section, dict) and section.get("github") == "auto"
 
 
+def read_search_setting(rules_path: Path | None = None) -> bool:
+    """``rules.json`` の ``broker.search`` を読む。``auto`` なら True。``off``・未設定・``broker`` 節無しなら False。
+
+    ``off`` / ``auto`` 以外 (型違いを含む) は起動を拒否する (fail-closed)。
+    """
+    path = rules_path if rules_path is not None else RULES
+    section = _broker_section(path)
+    if section is None or "search" not in section:
+        return False
+    value = section["search"]
+    if value == "off":
+        return False
+    if value != "auto":
+        die(f"{path} の broker.search が不正: {value!r}", SEARCH_HINT)
+    return True
+
+
+def search_enabled_in_rules(rules_path: Path | None = None) -> bool:
+    """``--no-broker`` の注意の文面用: ``broker.search`` が ``auto`` か。読めない・破損は False。"""
+    path = rules_path if rules_path is not None else RULES
+    try:
+        rules = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    section = rules.get("broker") if isinstance(rules, dict) else None
+    return isinstance(section, dict) and section.get("search") == "auto"
+
+
 def parse_broker(value: str | None) -> tuple[str, int] | None:
     """``broker.copilot`` の URL を厳密に検証し、(末尾スラッシュなしの URL, ポート) を返す。
 
@@ -215,7 +248,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None  # リダイレクトは辿らない (HTTPError になる)
 
 
-def verify_broker(url: str) -> None:
+def verify_broker(url: str, prefix: str = BROKER_IDENTITY_PREFIX, label: str = "Copilot") -> None:
     """境界を組む前に、ブローカーが本物か確かめる。違えば起動を拒否する。"""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     target = url + BROKER_IDENTITY_PATH
@@ -228,10 +261,10 @@ def verify_broker(url: str) -> None:
             status = response.status
             body = response.read(256).decode("utf-8", errors="replace")
     except OSError as e:  # URLError / HTTPError / タイムアウトはすべて OSError の仲間
-        die(f"Copilot ブローカーが動いていない、または別のサービス: {target} ({e})", hint)
-    if status != 200 or not body.startswith(BROKER_IDENTITY_PREFIX):
+        die(f"{label} ブローカーが動いていない、または別のサービス: {target} ({e})", hint)
+    if status != 200 or not body.startswith(prefix):
         die(
-            f"Copilot ブローカーが動いていない、または別のサービス: {target} (status={status})",
+            f"{label} ブローカーが動いていない、または別のサービス: {target} (status={status})",
             hint,
         )
 
@@ -276,14 +309,14 @@ def _write_broker_models(agent: Path, broker_url: str) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
-def apply_broker_network(config_: dict, port: int) -> None:
-    """ブローカーモードのときだけ、ホストのブローカーのポート 1 つへ localhost の送信を許す。
+def apply_broker_network(config_: dict, *ports: int) -> None:
+    """ブローカーモードのときだけ、ホストのブローカーのポート (Copilot・検索) だけへ localhost の送信を許す。
 
     ``allowLocalBinding`` は触らない (``ocs`` と共通の ``build_boundary`` の出力は変えない)。
     """
     network = config_["network"]
     network["allowLocalOutbound"] = True
-    network["allowLocalOutboundPorts"] = [port]
+    network["allowLocalOutboundPorts"] = list(ports)
 
 
 def pi_binary() -> Path:
@@ -415,14 +448,18 @@ def sessions_dir(workspace: Path, real: Path | None = None) -> Path:
 
 
 def inner_env(
-    agent: Path, config_: dict, broker: bool = False, github: bool = False
+    agent: Path,
+    config_: dict,
+    broker: bool = False,
+    github: bool = False,
+    search_url: str | None = None,
 ) -> dict[str, str]:
     """境界の内側へ渡す環境変数。役割と bypass は ``pis`` が環境変数で渡す。
 
     ``PI_HARNESS_BOUNDARY`` は「内側のはず」という期待にすぎない。内側のフルガードが、次のカナリアで
     実測し (読めてはいけないファイル・書けてはいけない場所)、効いていなければ起動を止める。
     許可の一覧 (``PI_HARNESS_ALLOWED``) は、実際に開けた場所で、作業ツリーの外の判定に使う。
-    see docs/spec/pi-guard.md#緩和のゲート
+    see docs/spec/guard/pi-guard.md#緩和のゲート
     """
     from .cli import DROP_ENV as COMMON_DROP
 
@@ -443,6 +480,10 @@ def inner_env(
         env["GH_NO_UPDATE_NOTIFIER"] = "1"
         env["GH_TELEMETRY"] = "false"
         env["GH_PROMPT_DISABLED"] = "1"
+    # ホストの同名変数は落とし、検索ブローカーが有効のときだけ自分の URL を入れる (鍵は入れない)
+    env.pop(SEARCH_ENV, None)
+    if search_url is not None:
+        env[SEARCH_ENV] = search_url
     env["PI_CODING_AGENT_DIR"] = str(agent)
     env["PI_HARNESS_BOUNDARY"] = "1"
     env["PI_HARNESS_ALLOWED"] = json.dumps(
@@ -493,7 +534,7 @@ def skill_args(workspace: Path | None = None) -> list[str]:
     (pi の発見の範囲と同じ。git ルートが無ければ何も足さない)。
     ``--skill`` はグローバルのスキルより後に載るので、同名ならグローバルが勝つ。
     スキルは指示を読む許可で、実行の許可ではない (実行は判定器とサンドボックスが決める)。
-    see docs/spec/pi-guard.md#起動
+    see docs/spec/guard/pi-guard.md#起動
     """
     try:
         start = (workspace if workspace is not None else Path.cwd()).resolve()
@@ -648,17 +689,20 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     """pi を Fence で囲って起動する。OpenCode と違い、DB も設定の書き出しも要らない。
 
     境界用の agent 置き場を起動ごとに作り (:mod:`pi`)、セッションの置き場だけを本物へ開ける。
-    see docs/spec/pi-guard.md#サンドボックス
+    see docs/spec/guard/pi-guard.md#サンドボックス
     """
     check_installed()
     github: GithubSetting | None = None
+    search_on = False
     if args.no_broker:
         notice = NO_BROKER_NOTICE + (NO_BROKER_GITHUB_NOTICE if github_enabled_in_rules() else "")
+        notice += NO_BROKER_SEARCH_NOTICE if search_enabled_in_rules() else ""
         print(notice, file=sys.stderr)
         value = None
     else:
         value = read_broker_setting()
         github = read_github_setting()
+        search_on = read_search_setting()
     # 空の agent 置き場を先に確保し (GitHub のソケット <agent>/gh.sock の置き場所)、ブローカーを起動し、
     # URL (Copilot) 確定後に中身を配置する。auto は pis と同じ寿命の Envoy を 1 つ立てる。
     # 例外・SystemExit・--check でも ExitStack がブローカーを止め、agent 置き場を消す
@@ -669,7 +713,23 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
         github_socket = agent / broker.GH_SOCKET_NAME if token is not None else None
         copilot_auto = is_auto_broker(value)
         state: Path | None = None
-        if copilot_auto or token is not None:
+        search_url: str | None = None
+        search_kwargs: dict = {}
+        if search_on:
+            # 鍵はホスト側でだけ読む (環境変数は見ない)。読めないものは鍵なし (理由は出すが鍵は出さない)
+            search_keys, notes = broker.read_search_keys()
+            for note in notes:
+                print(f"pis: {note}", file=sys.stderr)
+            missing = [
+                p.name for p in broker.SEARCH_PROVIDERS if p.header and p.name not in search_keys
+            ]
+            if missing:
+                print(
+                    f"pis: 検索の鍵なし: {', '.join(missing)} (このプロバイダーは使えない)",
+                    file=sys.stderr,
+                )
+            search_kwargs = {"search": True, "search_keys": search_keys}
+        if copilot_auto or token is not None or search_on:
             try:
                 started = stack.enter_context(
                     broker.session(
@@ -677,16 +737,27 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
                         copilot=copilot_auto,
                         github_token=token,
                         github_socket=github_socket,
+                        **search_kwargs,
                     )
                 )
             except broker.BrokerError as e:
                 die(str(e), f"{e.hint}。{NO_BROKER_HINT}")
             token = None  # PAT の値をこれ以上持ち回らない
+            search_kwargs = {}  # 鍵も同じ
             state = started.state
             if copilot_auto:
                 value = started.url
+            search_url = started.search_url
+        # 検索が有効のときだけ search_url を渡す (無効なときの呼び出しを変えない)
+        extra = {"search_url": search_url} if search_url is not None else {}
         return _launch_with(
-            args, passthrough, value, state, agent=agent, github_socket=github_socket
+            args,
+            passthrough,
+            value,
+            state,
+            agent=agent,
+            github_socket=github_socket,
+            **extra,
         )
 
 
@@ -708,17 +779,22 @@ def _launch_with(
     *,
     agent: Path,
     github_socket: Path | None = None,
+    search_url: str | None = None,
 ) -> int:
     """``_launch`` の本体。``broker_value`` は ``broker.copilot`` の URL (無ければ None)。
 
     ``broker_state`` はブローカーの状態ディレクトリ (作業場所と重なれば拒否する)。
     ``agent`` は確保済みの空の agent 置き場 (最終的な削除は呼び出し側の ExitStack)、
-    ``github_socket`` は GitHub ブローカーが有効のときの Unix ソケット。
+    ``github_socket`` は GitHub ブローカーが有効のときの Unix ソケット、
+    ``search_url`` は検索ブローカーが有効のときの URL (内側へ ``WEBSEARCH_BROKER_URL`` として渡す)。
     """
     # ブローカーモード (未設定なら None で、以降は現行と同じ)。境界を組む前に検証と身元確認をする
     endpoint = parse_broker(broker_value)
     if endpoint is not None:
         verify_broker(endpoint[0])
+    search_endpoint = parse_broker(search_url)
+    if search_endpoint is not None:
+        verify_broker(search_endpoint[0], broker.SEARCH_IDENTITY_PREFIX, "検索")
     sandbox = boundary.load_boundary(RULES, required=())
     runtime = Path(sandbox["runtime_path"])
     if not runtime.is_file():
@@ -739,8 +815,10 @@ def _launch_with(
             write_gh_config(agent, github_socket)
         sessions = sessions_dir(workspace)
         config_ = boundary.build_boundary(sandbox, workspace, request, agent)
-        if endpoint is not None:
-            apply_broker_network(config_, endpoint[1])
+        if endpoint is not None or search_endpoint is not None:
+            apply_broker_network(
+                config_, *[e[1] for e in (endpoint, search_endpoint) if e is not None]
+            )
         # セッションの置き場だけを本物へ開け、境界用 agent 置き場の設定と拡張は書けなくする
         config_["filesystem"]["allowWrite"].append(str(sessions))
         config_["filesystem"]["allowRead"].append(str(sessions))
@@ -751,12 +829,18 @@ def _launch_with(
             "db": "",
             "config": config_,
         }
-        env = inner_env(agent, config_, endpoint is not None, github_socket is not None)
+        env = inner_env(
+            agent,
+            config_,
+            endpoint is not None,
+            github_socket is not None,
+            search_endpoint[0] if search_endpoint else None,
+        )
     except BaseException:
         cleanup(agent, endpoint is not None)
         raise
 
-    # 社内プロキシ越しでないと外へ出られない機械では、許可リストの照合を中継へ移す (relay)
+    # プロキシ越しでないと外へ出られない機械では、許可リストの照合を中継へ移す (relay)
     with relay.session(config_) as fence_config:
         project["relay"] = fence_config is not config_
         if args.check:

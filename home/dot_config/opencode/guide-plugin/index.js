@@ -62,7 +62,7 @@ const compiled =
   ) ?? []
 
 // 静的 deny の項目ごとの説明。execute.before だけで使う。
-// ★前段は静的 deny の部分集合に限る。仕組みは docs/spec/agent-command-policy.md#opencode-の-deny-の説明前段停止
+// ★前段は静的 deny の部分集合に限る。仕組みは docs/spec/guard/agent-command-policy.md#opencode-の-deny-の説明前段停止
 const denyGuideAgents = section("deny_guide_agents", (r) => {
   if (r.deny_guide === undefined) return new Set()
   const agents = names(r.deny_guide_agents)
@@ -110,7 +110,7 @@ if (ask?.commit) {
 
 // 隔離版 (ocs) ではモデルでの説明の生成だけを止める (git commit の件名と本文は止めない)。
 // ocs が境界の内側へ渡す印で見分ける。
-// see docs/spec/opencode-sandbox.md#隔離版の設定の書き出し方
+// see docs/spec/sandbox/opencode-sandbox.md#隔離版の設定の書き出し方
 const ISOLATED = process.env.OCS_ISOLATED === "1"
 
 // bypass 扱いのエージェント。通常と同じ permission のまま、evaluate の最後で

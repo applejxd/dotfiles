@@ -3,8 +3,8 @@
 `common.toml` をどう書き、`generate.py` などがそれを各 CLI の設定ファイルへ
 どう展開するか (どのキーを置き換え、どれを合算・保持するか) をまとめる。
 全体像は [AI CLI 統合 permission / hook 管理](agent-permissions.md)、
-判定の中身は [コマンド・ファイルの判定](agent-command-policy.md)、
-sandbox は [sandbox (Claude Code / Copilot CLI)](agent-sandbox.md) を参照。
+判定の中身は [コマンド・ファイルの判定](guard/agent-command-policy.md)、
+sandbox は [sandbox (Claude Code / Copilot CLI)](sandbox/agent-sandbox.md) を参照。
 
 ## ファイル構成
 
@@ -124,7 +124,7 @@ project の uv 環境や外部 `tomli` には依存しない。
 - `[bash] deny` は hook が hard-block し、Claude では permission でも拒否される
 - `[bash] ask` は hook が `ask` を返す。承認すればそのまま実行される
   (Copilot CLI では hook の `ask` が自動承認される既知バグがある。
-  [`allow` の粒度に注意](agent-command-policy.md#allow-の粒度に注意))
+  [`allow` の粒度に注意](guard/agent-command-policy.md#allow-の粒度に注意))
 - `[bash] allow` の先頭トークンだけが Copilot の承認済みコマンド名になる
   (Copilot は deny / ask を表現できないため、強制は hook が担う)
 - `[file.write_ask_globs]` / `[file.write_deny_globs]` は Claude の
@@ -191,7 +191,7 @@ args = [
 | OpenCode V2 | `~/.config/opencode/opencode.json` の `mcp.servers` | `generate.py --target opencode-config` |
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
-| pi | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](pi-guard.md#mcp)） |
+| pi | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)） |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
 
@@ -322,7 +322,7 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name agentcore-web
 使う人の IAM には、作った Gateway の ARN に対する
 `bedrock-agentcore:InvokeGateway` を付ける。
 
-#### 業務 PC での設定
+#### 制約のある環境の機での設定
 
 1. 上で得た URL をシェルの初期化ファイル（リポジトリ管理外）に書く:
    `export AGENTCORE_GATEWAY_URL='https://<gateway-id>.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp'`。
@@ -350,10 +350,16 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 
 ### Copilot ブローカーの設定（`[pis.broker]`）
 
-`common.toml.tmpl` の `[pis.broker]`（`copilot` は `off` / `auto` / `http://127.0.0.1:<port>`。`github` 系は [GitHub ブローカー](opencode-sandbox.md#github-ブローカーpis-のみ)）は、
+`common.toml.tmpl` の `[pis.broker]`（`copilot` は `off` / `auto` / `http://127.0.0.1:<port>`。`github` 系は [GitHub ブローカー](sandbox/opencode-sandbox.md#github-ブローカーpis-のみ)）は、
 `build_pi_harness` が `rules.json` の `broker.copilot` へ出し、`pis` が起動時に読む。
 未知のキーは拒否、省略時は `off`。値の厳密な検証（URL の形）は起動時に `pi.py` が行う。
-意味と振る舞いは [opencode-sandbox.md](opencode-sandbox.md#copilot-ブローカーpis-のみ)。
+意味と振る舞いは [opencode-sandbox.md](sandbox/opencode-sandbox.md#copilot-ブローカーpis-のみ)。
+
+### 確認表の設定（`[pi.confirm]`）
+
+`common.toml.tmpl` の `[pi.confirm]`（`bash`: 前方一致の文字列の配列、`checks`: 確認に格上げする検査の名前、`timeout_seconds`: 確認の待ち時間、既定 300）は、
+`pi_confirm`（`generate.py`）が検証して `rules.json` の `judge.common.pi.confirm` へ出す。`checks` の各要素は `judge/checks.ts` の ask の検査の名前に実在すること
+（生成時に検証）、`timeout_seconds` は 10〜3600 の整数、未知のキーは拒否、省略すると空の表。意味と振る舞いは [pi-decide.md の confirm](guard/pi-decide.md#confirm)。
 
 ### pi と共有する節
 
@@ -366,7 +372,7 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 | `[pi.redact]` | shell 出力の伏字化（[shell 出力の伏字化](#shell-出力の伏字化)） | `[opencode.redact]` |
 | `[pi.external_read]` | 作業ツリーの外で確認なしに読める場所（[作業ツリーの外の読み取り](#作業ツリーの外の読み取り)） | `[opencode.external_read]` |
 | `[pi.skill_scripts]` | 確認なしに実行できるスキルのスクリプト（[スキルのスクリプト](#スキルのスクリプト)） | `[opencode.skill_scripts]` |
-| `[[pi.guide]]` | 誘導（[判定 API の誘導](pi-decide.md#誘導)） | `[[opencode.shell.guide]]` の `pi = "<id>"` の位置 |
+| `[[pi.guide]]` | 誘導（[判定 API の誘導](guard/pi-decide.md#誘導)） | `[[opencode.shell.guide]]` の `pi = "<id>"` の位置 |
 
 - `generate.py` は `common.toml` を読んだ直後（`load_common`）に、`[pi]` の値を OpenCode の位置へ写す
   （`resolve_pi_shared`）。OpenCode の生成の処理は写した後の位置を読むので、出力は写す前と同じ
@@ -459,7 +465,7 @@ hook 版との違いが 2 つある。
 | `[file] claude_read_allow` | OpenCode は allow が既定 (`{action:"*", resource:"*", effect:"allow"}`)。同義の規則が増えるだけ |
 | `[claude] mcp_deny` | Claude の `mcp__<server>__<tool>` と OpenCode の `<server>_<tool>` は別体系。機械変換すると実在しない名前を deny したまま気付けない |
 | `[[hooks]]` | Claude の hook 契約とは別物。OpenCode 側は plugin で書く |
-| `[sandbox]` | 通常起動に sandbox が無い (`claude_write_deny` の意図だけ `[file]` 側へ写している)。隔離起動 `ocs` は `[opencode.sandbox]` と `[sandbox] shell_network_allow` を使う ([OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)) |
+| `[sandbox]` | 通常起動に sandbox が無い (`claude_write_deny` の意図だけ `[file]` 側へ写している)。隔離起動 `ocs` は `[opencode.sandbox]` と `[sandbox] shell_network_allow` を使う ([OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md)) |
 
 ### 既定は `ask`
 
@@ -548,7 +554,7 @@ subcommands = ["paths", "lint", "read"]
   `wc *` と同じく任意書き込みの手段になる。`2>&1` も止まる（止まったら付けずに
   呼び直せばよい）。静的 deny のままだとモデルには `Permission denied: shell` しか
   返らないので、同じ範囲を `deny_guide` にも出し、`redirect_message` の説明付きで
-  前段で止める（[前段停止](agent-command-policy.md#opencode-の-deny-の説明前段停止)）。
+  前段で止める（[前段停止](guard/agent-command-policy.md#opencode-の-deny-の説明前段停止)）。
   前段は静的 deny より広く止めない: `exact` の形・`subcommands` に無い形・引用符付き・
   `&` を挟む形（`&>`）は前段で見送り、静的 deny か確認に任せる
 - **runner に `uv run --no-project python` を使わない。** 作業ツリーの
@@ -705,7 +711,7 @@ permissions = [
 - `bypass` でも**静的 deny は効く**。秘密ファイルの read / edit の deny・`pip` の deny は
   外れない。誘導・結果フィルタ・伏字化も通常と同じに効く（下の plugin 層）
 - 隔離起動（`ocs`）でも、全体の deny と guide plugin の検査の両方が効く
-  （[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
+  （[隔離版の設定の書き出し方](sandbox/opencode-sandbox.md#エージェントとコマンド)）
 
 実測（全体の deny だけで build からは `Permission denied: subagent`、bypass からは
 起動できる、子からの入れ子は不可。build に個別の `task = "allow"` があると全体の deny は
@@ -727,8 +733,8 @@ permissions = [
 | 役割 | 実体 | 登録先 |
 | --- | --- | --- |
 | 誘導（deny + 代替案）と説明の生成 | `index.js` | `opencode.json` の `plugins` |
-| allow したコマンドの書き込み形の歯止め（リダイレクト・`git log --output`。[詳細](agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)） | `index.js` | 同上 |
-| 静的 deny の説明（前段停止。`deny_guide`。[詳細](agent-command-policy.md#opencode-の-deny-の説明前段停止)） | `index.js` | 同上 |
+| allow したコマンドの書き込み形の歯止め（リダイレクト・`git log --output`。[詳細](guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)） | `index.js` | 同上 |
+| 静的 deny の説明（前段停止。`deny_guide`。[詳細](guard/agent-command-policy.md#opencode-の-deny-の説明前段停止)） | `index.js` | 同上 |
 | `grep` / `glob` の結果フィルタ | `index.js` | 同上 |
 | shell 出力の伏字化 | `index.js` | 同上 |
 | bypass の子エージェントの起動元の検査（[上](#bypass-から呼べる子エージェント)）と `ask` → `allow` | `index.js` | 同上 |
@@ -1076,15 +1082,15 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 | 条件（上から順に評価） | プロバイダ |
 | --- | --- |
 | `chezmoi.toml` の `[data]` に `llm_provider` がある | その値 |
-| ユーザー名が `applejxd`（`DOMAIN\applejxd` も含む、大小無視） | `github-copilot`（私用） |
-| それ以外 | `amazon-bedrock`（業務用） |
+| ユーザー名が `applejxd`（`DOMAIN\applejxd` も含む、大小無視） | `github-copilot`（個人用） |
+| それ以外 | `amazon-bedrock`（制約のある環境用） |
 
-判定の前提は「私用 PC のユーザーは `applejxd`、業務 PC は別名で AWS CLI にログイン
+判定の前提は「個人機のユーザーは `applejxd`、制約のある環境の機は別名で AWS CLI にログイン
 している」こと。どちらでもない PC では OpenCode を使わない。
 
-- **gh のログイン状態は見ない。** 業務 PC でも `gh auth login` していることがあり、
+- **gh のログイン状態は見ない。** 制約のある環境の機でも `gh auth login` していることがあり、
   見分けに使えない。OpenCode の Copilot 接続も `gh` とは別で、`/connect` が要る
-- **`~/.aws` の有無も見ない。** 私用 PC にも `~/.aws` ディレクトリだけ存在する
+- **`~/.aws` の有無も見ない。** 個人機にも `~/.aws` ディレクトリだけ存在する
   ことがある（この PC で確認）
 - `[data]` ではなくテンプレートで判定するのは、`chezmoi update` が `init` を
   呼ばないため（[CHG-0008](../change/closed/0008-raspi-branching.md)）。
@@ -1202,7 +1208,7 @@ explore = "worker"      # 例
 `ocs` の既定モデルは `[opencode.sandbox] model_preference` が決め、ここの `default` は
 使わない（通常版から引き継ぐのは `model` だけ）。エージェントごとの割り当ては、この PC の
 プロバイダが `[opencode.sandbox] providers` にあるときだけ隔離版にも出す
-（[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）。
+（[隔離版の設定の書き出し方](sandbox/opencode-sandbox.md#エージェントとコマンド)）。
 **Bedrock は `ocs` では使えない**
 （コードから判断。実機では未確認）。境界の内側から `~/.aws` が読めず
 （開けていない）、AWS の資格情報の環境変数も落とすため（`ocs` の `inner_env`）。
@@ -1258,7 +1264,7 @@ explore = "worker"      # 例
 - 宣言したキーを差し替え、宣言から外したキーは[所有の規則](#配置済みの設定の所有)で消す。
   生成器が書かないキー（`model` / `request` など）と、宣言も組み込みでもないエージェントは残す
 - 隔離起動（`ocs`）にも同じ定義が出る。通常版の `opencode.json` からは引き継がず、
-  `common.toml` から作る（[隔離版の設定の書き出し方](opencode-sandbox.md#エージェントとコマンド)）
+  `common.toml` から作る（[隔離版の設定の書き出し方](sandbox/opencode-sandbox.md#エージェントとコマンド)）
 
 ### 配置済みの設定の所有
 
@@ -1389,7 +1395,7 @@ Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる�
   無人の実行（`opencode run --auto`）では子セッションの確認に答えられず止まる
   （[commit エージェントの実機確認](../research/opencode/commit-review-agents.md)）。
   隔離起動（`ocs`）はシェルの既定が `allow` なので、個別の deny / ask に当たる操作以外は
-  確認が出ない（[隔離版のエージェントとコマンド](opencode-sandbox.md#エージェントとコマンド)）
+  確認が出ない（[隔離版のエージェントとコマンド](sandbox/opencode-sandbox.md#エージェントとコマンド)）
 - **作業役の `system` は、担当の範囲の外で起きることも確かめさせる**
   （[指示を足した前後の計測](../research/opencode/fleet-worker-instructions.md)）:
   - 既存の関数や振る舞いを変えたら、呼び出し元を grep で探して読み、壊れる所や

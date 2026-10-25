@@ -7,7 +7,7 @@
 // 正解データは scripts/agents/export_checks_golden.py が書き出す (checks_golden.jsonl / tables.json)。
 // 検査関数は judge/checks.ts の CHECKS (名前 → 関数) に載せたものだけを試す。
 // 1 コマンドごとに、判定と同じく文脈 (Ctx) を作り直す。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

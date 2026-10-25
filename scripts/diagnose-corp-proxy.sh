@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-# 社内プロキシ必須の PC で、境界（Fence / srt）の通信が通らない原因を切り分ける。
+# プロキシ必須の環境で、境界（Fence / srt）の通信が通らない原因を切り分ける。
 # 実行: sh scripts/diagnose-corp-proxy.sh [許可ドメイン] [許可外ドメイン]
 # 出力は貼り付けて共有できる (プロキシの認証情報は伏せる)。何も書き換えない。
 # see docs/research/agents/corp-proxy-boundary.md
@@ -23,7 +23,7 @@ for v in HTTP_PROXY http_proxy HTTPS_PROXY https_proxy NO_PROXY no_proxy ALL_PRO
 done
 PROXY="${HTTPS_PROXY:-${https_proxy:-${HTTP_PROXY:-${http_proxy:-}}}}"
 if [ -z "$PROXY" ]; then
-  echo "プロキシ変数なし。この診断は社内プロキシ環境向け"
+  echo "プロキシ変数なし。この診断はプロキシ必須の環境向け"
 else
   case "$PROXY" in
     http://*) echo "scheme: http (Fence の upstreamProxy が使える形)" ;;
@@ -50,7 +50,7 @@ say "2. ホストから ($ALLOWED)"
 code="$(curl -s -m "$T" -o /dev/null -w '%{http_code}' "https://$ALLOWED" 2>&1 || true)"
 echo "プロキシ変数を使う: $code"
 code="$(env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy curl -s -m "$T" -o /dev/null -w '%{http_code}' "https://$ALLOWED" 2>&1 || true)"
-echo "プロキシ変数を外す: $code (000 なら社内プロキシ必須)"
+echo "プロキシ変数を外す: $code (000 ならプロキシ必須)"
 
 # 境界内から curl で試す。$1=道具 $2=設定 $3=ホスト
 inside() {
@@ -72,7 +72,7 @@ EOF
 
   # --- 4. Fence: 上流プロキシ (許可リストは無効になる。仕組みの確認だけ) ---
   if [ -n "$PROXY" ]; then
-    say "4. Fence upstreamProxy (全通信を社内プロキシへ。仕組みの確認用)"
+    say "4. Fence upstreamProxy (全通信をプロキシへ。仕組みの確認用)"
     cat >"$WORK/f2.json" <<EOF
 {"network":{"allowedDomains":[],"defaultAction":"proxy","upstreamProxy":"$PROXY"},"filesystem":{"allowWrite":[]}}
 EOF
@@ -93,7 +93,7 @@ fi
 
 say "読み方"
 cat <<'EOF'
-- 2 でプロキシ変数を外すと 000、使うと 200 → 社内プロキシ必須
+- 2 でプロキシ変数を外すと 000、使うと 200 → プロキシ必須
 - 3 が 000 で Fence のログに dial 失敗 → 許可済み通信を Fence が直接つないでいる (仮説どおり)
 - 4 が 200 → upstreamProxy の仕組みと URL の形式は使える (ただし許可リストは効かない)
 - 5 の許可済みが 200・許可外が 000/403 → srt なら許可リストを保ったまま通る

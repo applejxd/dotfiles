@@ -5,14 +5,20 @@
 // - bg_log / bg_kill: ジョブの確認と停止だけなので、bash を使える役割には allow
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md, docs/spec/pi-guard.md
+// see docs/spec/guard/pi-decide.md, docs/spec/guard/pi-guard.md
 import type { Tables } from "./context.ts";
 import { decide as judge, setBashDecider } from "./decide.ts";
 import { makeBashDecider } from "./bash.ts";
 import type { Common } from "./policy.ts";
 import { pyRegex } from "./pystr.ts";
 
-export type Decision = { decision: "allow" | "ask" | "deny"; reason: string; source: string };
+export type Decision = {
+	decision: "allow" | "ask" | "deny";
+	reason: string;
+	source: string;
+	/** "ask" のときだけ真になりうる。bypass でも必ず確認する */
+	mustConfirm?: boolean;
+};
 
 export const BG_RUN = "bg_run";
 const BG_OTHERS = ["bg_log", "bg_kill"];

@@ -29,17 +29,17 @@ pi を更新したときの手順:
 
 | 項目 | 公式の文書 | このリポジトリが頼っているところ |
 | --- | --- | --- |
-| `-ne` は発見・設定・組み込みの拡張を無効にし、明示した `-e` は読む | `cli.md`（`-e`、`-ne`） | `pis` の起動（`-nbt -ne -e builtin:mcp -e <フルガード>`）、Orca の拡張を足す形、[外部の拡張の方針](pi-guard.md#拡張の方針) |
+| `-ne` は発見・設定・組み込みの拡張を無効にし、明示した `-e` は読む | `cli.md`（`-e`、`-ne`） | `pis` の起動（`-nbt -ne -e builtin:mcp -e <フルガード>`）、Orca の拡張を足す形、[外部の拡張の方針](guard/pi-guard.md#拡張の方針) |
 | 組み込みの拡張の名前（`builtin:mcp`・`builtin:llama.cpp`・`builtin:codemode`・`builtin:tool-search`） | `settings.md`（Built-in extensions） | `-e builtin:mcp` だけを戻す。`codemode` を足すときは `-e builtin:codemode` |
 | ツールの選択（`-nbt`・`--tools`・`-xt`・`-nt`、`defaultTools`） | `cli.md`、`settings.md` | 組み込みのツールを外し、フルガードの `guarded_*` だけにする |
-| `codemode`（スクリプトの API・結果の形・オプション・`store`・`models`・上限） | `codemode.md`、`cli.md`（Enable codemode）、`settings.md`（`codemode.mode`・`codemode.inlineBudget`） | 検索の入口の比較（[入口の選び方](pi-guard.md#入口の選び方)）。今は使っていない |
+| `codemode`（スクリプトの API・結果の形・オプション・`store`・`models`・上限） | `codemode.md`、`cli.md`（Enable codemode）、`settings.md`（`codemode.mode`・`codemode.inlineBudget`） | 検索の入口の比較（[入口の選び方](guard/pi-guard.md#入口の選び方)）。今は使っていない |
 | MCP の設定・`exposure`（`codemode` / `deferred` / `direct` / `hidden`）・ツール名 `mcp__<server>__<tool>`・`pi mcp add`・project trust | `mcp.md` | `[[mcp]]` の `exposure`（[仕様](agent-config-generation.md#mcp-サーバ)）、`mcp.json` を `pis` が拒む理由 |
 | 拡張の API: `registerTool`、`registerMcpServer` | `extensions.md` | フルガードのツールと MCP の登録 |
 | `tool_call` は入力を書き換える・実行を止められる、`tool_result` は合成される、`tool_call` の失敗は fail-safe で止まる、`ctx.executeTool` の入れ子も `tool_call` / `tool_result` を通る | `extensions.md`（Events、Nested tool calls、Error handling） | 判定の方式（`tool_call` と `execute()` の二重の判定）、`codemode` の中の呼び出しが判定を通ること |
 | 初期のプロンプトとツール集合を記録し、変更は次の要求の前に追記する | `extensions.md`（Prompt cache の節） | キャッシュ安定性の見込み（ツール定義を増やすと先頭側が変わる） |
 | `ctx.hasUI`・`ctx.mode` | `extensions.md` | UI の無い起動での確認の扱い（フルガード側の判断は表 B の 8） |
 | `skills` の設定 | `settings.md`（`skills`）、`skills.md` | `[pi.settings] skills = ["~/.claude/skills"]` |
-| project trust: `--approve` / `--no-approve` が保存済みの決定（`trust.json`）より先に効く。`AGENTS.md` は trust と無関係に読まれる。`.pi/` と、作業先から祖先の `.agents/skills` が保護対象 | `security.md`（Understand project trust）、`configuration.md` | `pis` は `--no-approve` を固定し、作業先のスキルだけ `--skill` で足す（[起動](pi-guard.md#起動)） |
+| project trust: `--approve` / `--no-approve` が保存済みの決定（`trust.json`）より先に効く。`AGENTS.md` は trust と無関係に読まれる。`.pi/` と、作業先から祖先の `.agents/skills` が保護対象 | `security.md`（Understand project trust）、`configuration.md` | `pis` は `--no-approve` を固定し、作業先のスキルだけ `--skill` で足す（[起動](guard/pi-guard.md#起動)） |
 | `--print`・`--mode json` / `rpc` とイベント | `cli.md`、`json.md`、`rpc.md` | 試験（偽のモデル）、Zed・Orca の RPC |
 
 ## B. 明示が無い（ここに書く）
@@ -61,7 +61,7 @@ pi を更新したときの手順:
 | 11 | Windows の npm global の `pi` は `pi.CMD` で、子の pi を `spawn("pi")` する処理（子エージェント）と、その試験が動かない | 無し | 1.1.0 | Windows で `test_pi_harness.py` の 9 件が失敗 | `pis` は Unix 専用（既知） |
 | 12 | `fd`・`rg` は、`<agent 置き場>/bin` → PATH の順に探し、どちらにも無ければダウンロードして `<agent 置き場>/bin` へ置く（`tools-manager.js` の `getToolPath`、`config.js` の `getBinDir`）。起動ごとに新しい agent 置き場では、毎回ダウンロードされる | 未確認（実装を読んだ。公式の文書は探していない） | 1.1.0 | [記録 S1](../research/agents/pis-sandbox-field-test.md)、`test_agent_dir_carries_the_instructions_keybindings_and_prompts` | サンドボックスの agent 置き場の `bin/` を、本物の `~/.pi/agent/bin` へのリンクにする |
 | 13 | セッションの置き場は `sessions/--<作業ディレクトリ>--`（先頭の区切りを外し、`/` `\` `:` を `-` にする。`getDefaultSessionDirPath`）。`--session-dir` は渡した場所へそのまま置く | 未確認（`pi.py` の記述による。今回は再確認していない） | 1.1.0 | `test_pi_boundary.py` の `sessions_dir` の試験 | サンドボックスの起動が同じ命名を再実装している（変わると外の `pi -c` で再開できない。pi の更新時に再開を確かめる） |
-| 14 | 明示した `--skill` は `--no-approve` でも読まれ、**同名のスキルはグローバル（`settings.json` の `skills`）が勝つ**。`--approve` の自動発見ではプロジェクトが勝つ（乗っ取れる） | `cli.md` に `--skill` の説明はあるが、競合の優先は無い（`skills.md` は「最初に見つけたものが残る」） | 1.3.0 | `test_explicit_skill_loads_under_no_approve_and_global_wins_on_a_name_clash` | `pis` は作業先の `.agents/skills` を `--skill` で足す（[起動](pi-guard.md#起動)） |
+| 14 | 明示した `--skill` は `--no-approve` でも読まれ、**同名のスキルはグローバル（`settings.json` の `skills`）が勝つ**。`--approve` の自動発見ではプロジェクトが勝つ（乗っ取れる） | `cli.md` に `--skill` の説明はあるが、競合の優先は無い（`skills.md` は「最初に見つけたものが残る」） | 1.3.0 | `test_explicit_skill_loads_under_no_approve_and_global_wins_on_a_name_clash` | `pis` は作業先の `.agents/skills` を `--skill` で足す（[起動](guard/pi-guard.md#起動)） |
 | 15 | `/reload` は `--skill` で明示したディレクトリを再走査し、起動後に足したスキルが `[Skills]` と `/skill:` の補完に出る | `skills.md` は「編集後は `/reload`」とあるが、`--skill` のパスは明示が無い | 1.3.0 | tmux の TUI で実測（2026-10。試験は無し） | 起動後に足したスキルは `/reload` で読める |
 | 16 | pi は、宣言されたツールに `read` か `bash` があるときだけ、スキルの一覧をシステムプロンプトへ入れる（`dist/core/system-prompt.js`）。**フルガード（`guarded_*`）の下では pi 自身は一覧を入れない** | 無し（`extensions.md` は `before_agent_start` の `systemPromptOptions` を書き換えられると書く） | 1.3.0 | `core/system-prompt.js` と実測。フルガードが `before_agent_start` で同じ形の一覧を `sections.skills` に足す（`disable-model-invocation` のスキルは除く）。`test_the_harness_adds_the_skill_list_to_the_system_prompt` と `test_the_child_also_gets_the_skill_list` | 対応済み（`index.ts`）。pi の版で `systemPromptOptions` の形が変わったら、この 2 件が落ちる |
 | 17 | RPC の子への `steer`（作業中の追加指示）は、今のターンのツール呼び出しが終わったあとに届き、子はもう 1 回答える。`abort` は今の往復だけを止め、`agent_settled` で終わる。子は残る | `rpc-commands.md` にコマンドの説明はあるが、子の応答の形と順序は明示が無い | 1.3.0 | `test_steer_reaches_a_running_child`、`test_abort_stops_only_the_round_and_keeps_the_child` | `guarded_task` の steer / abort。版で応答の形が変わったらこの 2 件が落ちる |
@@ -73,10 +73,10 @@ pi を更新したときの手順:
 - **スクリプトの API・結果の形・上限・有効化の方法は、公式に明示がある**ので、**ここには写さず、リンクだけ**にする（表 A）。読む先は
   `codemode.md`（スクリプト・グローバル・結果）、`cli.md`（有効化）、`mcp.md`（`exposure` との関係）、`settings.md`（`codemode.mode`・`codemode.inlineBudget`）
 - **このリポジトリの条件での挙動は、公式に無いので、表 B に書いた**（2: `pis` では既定で使えない、9: 常駐の +680 トークン、5: 並列の確認が止まる）
-- 今は使っていない（検索は skill + CLI、MCP は `direct`）。使うなら、まず表 B の 2・5・9 を読み、入口の選び方（[比較表](pi-guard.md#入口の選び方)）で他の入口と比べる
+- 今は使っていない（検索は skill + CLI、MCP は `direct`）。使うなら、まず表 B の 2・5・9 を読み、入口の選び方（[比較表](guard/pi-guard.md#入口の選び方)）で他の入口と比べる
 
 ## 運用
 
 - 新しく pi の挙動に頼るときは、**まず公式の文書を探す**。明示があれば表 A に 1 行（リンクと頼っている所）。無ければ、実測して表 B に書き、**試験で固定する**
 - 表 B の項目が、公式の文書で明示されるようになったら、表 A へ移して、ここのノウハウは消す（リンクだけにする）
-- 実測の経緯は [research/agents/](../research/index.md)（E1〜E6）、判定の設計は [pi のガード](pi-guard.md)
+- 実測の経緯は [research/agents/](../research/index.md)（E1〜E6）、判定の設計は [pi のガード](guard/pi-guard.md)

@@ -1,6 +1,6 @@
 """``[pis.broker]`` (common.toml) から rules.json の ``broker`` を生成する。
 
-see docs/spec/opencode-sandbox.md#copilot-ブローカーモードpis_copilot_brokerpis-のみ
+see docs/spec/sandbox/broker.md#copilot-ブローカー
 """
 
 from __future__ import annotations
@@ -28,8 +28,13 @@ def test_rules_json_carries_the_broker_setting_from_common_toml():
     assert broker["copilot"] == expected
     # GitHub ブローカーは機を問わず auto (出どころ無しなら pis が縮退する)
     assert broker["github"] == "auto"
-    assert broker["github_token_file"] == "~/.config/pis/github-token"
-    assert "github_token_command" not in broker
+    # 出どころは機で切り替わる: 個人(github-copilot)は gh の保存済みトークン、それ以外は PAT のファイル
+    if provider == "github-copilot":
+        assert broker["github_token_command"] == ["gh", "auth", "token"]
+        assert "github_token_file" not in broker
+    else:
+        assert broker["github_token_file"] == "~/.config/pis/github-token"
+        assert "github_token_command" not in broker
 
 
 def test_broker_defaults_to_off_without_the_table():
@@ -121,3 +126,25 @@ def test_broker_rejects_unknown_keys():
 def test_broker_rejects_a_non_table():
     with pytest.raises(SystemExit, match=r"pis\.broker"):
         gen.build_pi_harness({}, _with_broker("auto"))
+
+
+def test_rules_json_carries_the_search_setting_from_common_toml():
+    broker = gen.build_pi_harness({}, load_common())["broker"]
+    assert broker["search"] == "auto"
+
+
+@pytest.mark.parametrize("value", ["off", "auto"])
+def test_broker_search_accepts_the_documented_values(value):
+    rules = gen.build_pi_harness({}, _with_broker({"search": value}))
+    assert rules["broker"]["search"] == value
+
+
+def test_broker_search_is_omitted_when_not_written():
+    rules = gen.build_pi_harness({}, _with_broker({"copilot": "auto"}))
+    assert "search" not in rules["broker"]
+
+
+@pytest.mark.parametrize("value", ["on", "AUTO", "", True, 1, None, ["auto"]])
+def test_broker_search_rejects_other_values(value):
+    with pytest.raises(SystemExit, match=r"pis\.broker.*search"):
+        gen.build_pi_harness({}, _with_broker({"search": value}))

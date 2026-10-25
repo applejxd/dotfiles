@@ -2,13 +2,13 @@
 
 pi など、内蔵の検索ツールが無い AI CLI のための Web 検索・ページ取得・論文検索。**skill + CLI** の形で、標準ライブラリだけの Python
 （`home/dot_claude/skills/web-search/scripts/websearch.py`）を、`python3`（Windows は `uv run --no-project`）で呼ぶ。
-入口を skill + CLI にした理由と、MCP・拡張との比較は [入口の選び方](pi-guard.md#入口の選び方)、方針は
+入口を skill + CLI にした理由と、MCP・拡張との比較は [入口の選び方](guard/pi-guard.md#入口の選び方)、方針は
 [ADR-0016](../adr/0016-pi-extensions-own-first.md)。
 
 ## 配る範囲
 
-**私用（`llm-provider` が `github-copilot`、つまり `applejxd`）だけに配る。** 業務用（Bedrock）は、検索を
-[AgentCore Web Search の MCP](agent-config-generation.md#mcp-サーバ)に一本化する（業務機のクエリを AWS の外の検索へ出さず、手段が 2 つになってモデルが迷うのを避ける）。
+**個人用（`llm-provider` が `github-copilot`、つまり `applejxd`）だけに配る。** 制約のある環境用（Bedrock）は、検索を
+[AgentCore Web Search の MCP](agent-config-generation.md#mcp-サーバ)に一本化する（制約のある環境の機のクエリを AWS の外の検索へ出さず、手段が 2 つになってモデルが迷うのを避ける）。
 
 - skill の配布: `home/.chezmoiignore.tmpl` が、Bedrock のとき `.claude/skills/web-search/` を除く
 - `pis` の許可（`[pi.skill_scripts]`）: `common.toml.tmpl` が、`github-copilot` のときだけ出す

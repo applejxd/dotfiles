@@ -100,7 +100,7 @@ sudo apt-get install -y bubblewrap slirp4netns util-linux iptables
 （[Configure the sandboxed Bash tool](https://code.claude.com/docs/en/sandboxing)）。
 
 **原因**: `bwrap` か `socat` が無い。seccomp フィルタだけが無い場合は動くが、WSL2 では
-sandbox から抜けられる（[WSL2 での抜け穴](agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ)）。
+sandbox から抜けられる（[WSL2 での抜け穴](sandbox/agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ)）。
 
 **対処**:
 

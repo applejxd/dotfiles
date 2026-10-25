@@ -3,7 +3,7 @@
 // 判定器は Python 版の振る舞いを 1 文字まで揃えて移す (正解データとの全件一致が完了条件)。
 // そのため、JS の `\s` `\b` `\w` や `String.prototype.trim` ではなく、Python と同じ範囲を使う。
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/spec/pi-decide.md#ts-版への移植
+// see docs/spec/guard/pi-decide.md#ts-版への移植
 
 /** Python の `str.isspace()` が真になる文字 (`str.split()` / `strip()` が空白とみなす範囲)。 */
 const WS_CLASS = " \\t\\n\\r\\f\\v\\x1c-\\x1f\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";

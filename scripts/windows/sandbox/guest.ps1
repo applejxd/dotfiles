@@ -7,7 +7,7 @@
     see docs/spec/development.md#windows-sandbox-でのクリーン導入の検証
 #>
 
-# -LegacyNode: 会社 PC の再現。古い winget 版 Node.js (Machine PATH) を先に入れてから導入する
+# -LegacyNode: 制約のある環境の再現。古い winget 版 Node.js (Machine PATH) を先に入れてから導入する
 param([switch]$LegacyNode)
 
 $ErrorActionPreference = 'Continue'

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """試験用。秘密に見える文字列を返すだけの stdio MCP サーバ（依存なし）。
 
-see docs/spec/pi-guard.md
+see docs/spec/guard/pi-guard.md
 """
 
 import json
