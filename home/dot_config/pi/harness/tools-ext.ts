@@ -2,7 +2,7 @@
 // see docs/spec/guard/pi-guard.md
 //
 // node の型除去でそのまま動く書き方だけを使う (enum・namespace は使わない)。pi 本体は import しない。
-import { appendFile, mkdir, open, stat } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, stat } from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -496,5 +496,173 @@ export function guideHint(command: string, P: string): string | null {
 		return out.join("\n");
 	} catch {
 		return null;
+	}
+}
+
+// ─── edit の失敗のヒント ─────────────────────────────────────────────
+
+export const EDIT_HINT_MAX_BYTES = 512 * 1024;
+
+/** 制御文字を可視化し、max 字で切る。 */
+export function visible(s: string, max = 80): string {
+	let out = s
+		.replace(/\t/g, "→")
+		.replace(/\r/g, "␍")
+		.replace(/[\u0000-\u001f\u007f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+	if (out.length > max) out = `${out.slice(0, max)}…`;
+	return out;
+}
+
+function normLine(s: string): string {
+	return s.replace(/\s+/g, " ").trim();
+}
+
+export type NearestMatch = { start: number; end: number; exact: boolean; diffLine: number; expected: string; actual: string };
+
+/** oldText に最も近い箇所 (行単位。空白を正規化した行が一致した数が最大の窓)。無ければ null。行番号は 1 始まり。 */
+export function nearestMatch(fileText: string, oldText: string): NearestMatch | null {
+	const fileLines = fileText.replace(/\r\n/g, "\n").split("\n");
+	const oldLines = oldText.replace(/\r\n/g, "\n").split("\n");
+	while (oldLines.length > 0 && normLine(oldLines[oldLines.length - 1]) === "") oldLines.pop();
+	while (oldLines.length > 0 && normLine(oldLines[0]) === "") oldLines.shift();
+	if (oldLines.length === 0) return null;
+	const o = oldLines.slice(0, 200).map(normLine);
+	const f = fileLines.map(normLine);
+	let best = -1;
+	let bestScore = 0;
+	for (let s = 0; s < f.length; s++) {
+		let score = 0;
+		for (let i = 0; i < o.length && s + i < f.length; i++) if (o[i] !== "" && o[i] === f[s + i]) score++;
+		if (score > bestScore) {
+			bestScore = score;
+			best = s;
+		}
+	}
+	if (best < 0) return null;
+	const len = Math.min(o.length, f.length - best);
+	let diff = -1;
+	for (let i = 0; i < o.length; i++) {
+		if (best + i >= f.length || o[i] !== f[best + i]) {
+			diff = i;
+			break;
+		}
+	}
+	if (diff >= 0) {
+		return { start: best + 1, end: best + len, exact: false, diffLine: best + diff + 1, expected: oldLines[diff] ?? "", actual: fileLines[best + diff] ?? "(ファイルの末尾)" };
+	}
+	// 正規化すれば一致。生の行で最初に違う行を示す
+	let raw = 0;
+	while (raw < o.length - 1 && oldLines[raw] === fileLines[best + raw]) raw++;
+	return { start: best + 1, end: best + len, exact: true, diffLine: best + raw + 1, expected: oldLines[raw], actual: fileLines[best + raw] };
+}
+
+function editsOf(input: any): { oldText: string; newText: string }[] {
+	if (Array.isArray(input?.edits)) {
+		return input.edits.map((e: any) => ({ oldText: typeof e?.oldText === "string" ? e.oldText : "", newText: typeof e?.newText === "string" ? e.newText : "" }));
+	}
+	if (typeof input?.oldText === "string") return [{ oldText: input.oldText, newText: typeof input.newText === "string" ? input.newText : "" }];
+	return [];
+}
+
+export type EditErrorKind = "invalid" | "notfound" | "nochange" | "multiple" | "overlap";
+
+/** 失敗の文面から、ヒントの種類と edits の添字 (単独の edit は null) を読む。足さないもの (ガードの拒否・EROFS・ENOENT など) は null。 */
+export function classifyEditError(msg: string): { kind: EditErrorKind; index: number | null } | null {
+	if (/^Invalid arguments for tool /.test(msg)) return { kind: "invalid", index: null };
+	if (/^edits\[\d+\] and edits\[\d+\] overlap in /.test(msg)) return { kind: "overlap", index: null };
+	let m = /^Could not find (?:the exact text|edits\[(\d+)\]) in /.exec(msg);
+	if (m) return { kind: "notfound", index: m[1] !== undefined ? Number(m[1]) : null };
+	m = /^Found \d+ occurrences of (?:the text|edits\[(\d+)\]) in /.exec(msg);
+	if (m) return { kind: "multiple", index: m[1] !== undefined ? Number(m[1]) : null };
+	if (/^No changes made to /.test(msg)) return { kind: "nochange", index: null };
+	return null;
+}
+
+function lineOf(text: string, pos: number): number {
+	let n = 1;
+	for (let i = text.indexOf("\n"); i >= 0 && i < pos; i = text.indexOf("\n", i + 1)) n++;
+	return n;
+}
+
+/**
+ * edit の失敗の文面 msg に足すヒント (複数行の文字列。純関数)。足せなければ null。
+ * fileText は対象の本文 (読めない・大きい・バイナリなら null。本文が要らない種類は null でも足す)。
+ */
+export function editFailureHint(msg: string, input: unknown, fileText: string | null): string | null {
+	const c = classifyEditError(msg);
+	if (!c) return null;
+	if (c.kind === "invalid") {
+		return "oldText・newText に引用符・バックスラッシュ・改行を含む長い編集は、edits を小さく分けるか、ファイル全体を書き換えるなら guarded_write を使う";
+	}
+	if (c.kind === "overlap") return "近い編集を 1 つにまとめる";
+	if (fileText === null) return null;
+	const edits = editsOf(input);
+	const edit = edits[c.index !== null && c.index < edits.length ? c.index : 0];
+	if (!edit) return null;
+	const text = fileText.replace(/\r\n/g, "\n");
+	if (c.kind === "nochange") {
+		const nt = edits[0].newText.replace(/\r\n/g, "\n");
+		const at = nt !== "" ? text.indexOf(nt) : -1;
+		if (at >= 0) return `すでに適用済みの可能性: newText が行 ${lineOf(text, at)} にある。再編集は不要`;
+		return "oldText と newText が同じ内容になっている。編集の意図を見直す";
+	}
+	if (c.kind === "multiple") {
+		const needle = edit.oldText.replace(/\r\n/g, "\n");
+		if (needle === "") return null;
+		const lines = text.split("\n");
+		const hits: string[] = [];
+		let total = 0;
+		for (let p = text.indexOf(needle); p >= 0; p = text.indexOf(needle, p + 1)) {
+			total++;
+			if (hits.length < 5) {
+				const ln = lineOf(text, p);
+				hits.push(`行 ${ln} (直前: ${ln > 1 ? `\`${visible(lines[ln - 2], 60)}\`` : "なし"})`);
+			}
+		}
+		if (total === 0) return null;
+		return `一致: ${hits.join("、")}${total > hits.length ? `、ほか ${total - hits.length} 件` : ""}。直前の行を含めて oldText を一意にする`;
+	}
+	// notfound
+	const near = nearestMatch(text, edit.oldText);
+	if (!near) return "guarded_read で該当箇所を読み直してから、oldText をコピーし直す";
+	const head = `最も近い箇所: 行 ${near.start}〜${near.end}。違い: 行 ${near.diffLine} (期待: \`${visible(near.expected)}\` / 実際: \`${visible(near.actual)}\`)`;
+	return near.exact ? `${head}\n空白・タブ・改行コードの違いの可能性` : head;
+}
+
+/**
+ * guarded_edit の失敗結果 (tool_result) に足す差分。足さなければ undefined。元の本文は消さず、末尾へ追記する。
+ * 読めない (読み取り拒否・無い・512 KiB 超・バイナリ・例外) ときは、本文が要るヒントを省く。
+ */
+export async function decorateEditResult(
+	event: { isError?: boolean; input?: any; content?: any[] },
+	cwd: string,
+	canRead: (absPath: string) => boolean,
+): Promise<{ content: any[] } | undefined> {
+	try {
+		if (!event?.isError || !Array.isArray(event.content)) return undefined;
+		const at = event.content.findIndex((b: any) => b?.type === "text" && typeof b.text === "string");
+		if (at < 0) return undefined;
+		const msg: string = event.content[at].text;
+		if (!classifyEditError(msg)) return undefined;
+		let fileText: string | null = null;
+		const path = event.input?.path;
+		if (typeof path === "string" && path !== "") {
+			try {
+				const abs = resolveInputPath(path, cwd);
+				const st = await stat(abs);
+				if (st.isFile() && st.size <= EDIT_HINT_MAX_BYTES && canRead(abs)) {
+					const buf = await readFile(abs);
+					if (!buf.includes(0)) fileText = buf.toString("utf-8");
+				}
+			} catch {
+				fileText = null;
+			}
+		}
+		const hint = editFailureHint(msg, event.input, fileText);
+		if (!hint) return undefined;
+		const content = event.content.map((b: any, i: number) => (i === at ? { ...b, text: `${b.text}\n${hint}` } : b));
+		return { content };
+	} catch {
+		return undefined;
 	}
 }

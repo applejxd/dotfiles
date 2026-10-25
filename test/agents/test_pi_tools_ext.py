@@ -91,6 +91,98 @@ def test_offset_beyond_the_end_keeps_the_message_and_adds_the_range(table):
 
 
 @needs_node
+@pytest.mark.parametrize(
+    ("case", "expected"),
+    [
+        (
+            "ws_only",
+            "最も近い箇所: 行 1〜3。違い: 行 2 (期待: `beta()` / 実際: `  beta()`)\n空白・タブ・改行コードの違いの可能性",
+        ),
+        ("one_line", "最も近い箇所: 行 1〜3。違い: 行 2 (期待: `  beta(1)` / 実際: `  beta()`)"),
+        ("none", "guarded_read で該当箇所を読み直してから、oldText をコピーし直す"),
+        ("indexed", "最も近い箇所: 行 3〜4。違い: 行 4 (期待: `delta2` / 実際: `delta`)"),
+        ("applied", "すでに適用済みの可能性: newText が行 3 にある。再編集は不要"),
+        ("not_applied", "oldText と newText が同じ内容になっている。編集の意図を見直す"),
+        (
+            "multi",
+            "一致: 行 2 (直前: `head`)、行 4 (直前: `mid`)、行 6 (直前: `x`)。直前の行を含めて oldText を一意にする",
+        ),
+        (
+            "multi_first_line",
+            "一致: 行 1 (直前: なし)、行 3 (直前: `x`)。直前の行を含めて oldText を一意にする",
+        ),
+        ("overlap", "近い編集を 1 つにまとめる"),
+    ],
+)
+def test_edit_failure_hints(table, case, expected):
+    assert table["editHints"][case] == expected
+
+
+@needs_node
+def test_edit_hint_variants(table):
+    h = table["editHints"]
+    assert "空白・タブ・改行コードの違いの可能性" in h["tab_crlf"] and "`→beta()`" in h["tab_crlf"]
+    assert "可能性" not in h["one_line"]
+    assert "q" * 80 + "…" in h["long_line"] and "q" * 81 not in h["long_line"]
+    assert "be\\x01ta" in h["control"]
+    assert "行 2 (直前: `row 0`)" in h["multi_many"] and "ほか 4 件" in h["multi_many"]
+    assert h["multi_many"].count("直前:") == 5
+    assert "guarded_write" in h["invalid"] and "edits を小さく分ける" in h["invalid"]
+    assert len(h["ws_only"].splitlines()) <= 3
+
+
+@needs_node
+@pytest.mark.parametrize("case", ["no_text", "nochange_no_text", "guard_deny", "erofs", "enoent"])
+def test_edit_hint_is_omitted_without_text_or_for_other_errors(table, case):
+    assert table["editHints"][case] is None
+
+
+@needs_node
+def test_nearest_match(table):
+    n = table["nearest"]
+    assert n["ws"] == {
+        "start": 1,
+        "end": 2,
+        "exact": True,
+        "diffLine": 2,
+        "expected": "beta()",
+        "actual": "  beta()",
+    }
+    assert n["none"] is None and n["blank"] is None
+
+
+@needs_node
+def test_edit_result_keeps_the_message_and_appends_the_hint(table):
+    nf = "Could not find the exact text in e.txt. The old text must match exactly including all whitespace and newlines."
+    hint = "最も近い箇所: 行 1〜2。違い: 行 2 (期待: `beta(1)` / 実際: `  beta()`)"
+    for case in ("ok", "absolute"):
+        assert table["deco"][case] == {"content": [{"type": "text", "text": f"{nf}\n{hint}"}]}
+    inv = table["deco"]["invalid_without_file"]["content"][0]["text"]
+    assert (
+        inv.startswith('Invalid arguments for tool "guarded_edit": bad\n')
+        and "guarded_write" in inv
+    )
+
+
+@needs_node
+@pytest.mark.parametrize(
+    "case",
+    [
+        "success",
+        "success_text_looks_like_error",
+        "missing",
+        "binary",
+        "huge",
+        "unreadable",
+        "deny",
+        "no_content",
+    ],
+)
+def test_edit_result_is_left_alone(table, case):
+    assert table["deco"][case] is None
+
+
+@needs_node
 def test_other_read_errors_are_left_alone(table):
     assert table["hints"]["other_error"]["error"] == "boom"
 

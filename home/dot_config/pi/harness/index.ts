@@ -25,7 +25,7 @@ import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
 import { MAX_BODY_FILE_BYTES, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, type BodyFileResult, type ConfirmRaw } from "./confirm-view.ts";
-import { appendOperations, appendResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
+import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { auditFormat, summarizeCalls } from "./audit.ts";
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
@@ -301,7 +301,12 @@ export default async function (pi: ExtensionAPI) {
 
 	// フルガードが持たないツール (MCP など) の結果。tool_result の例外は無視されて生の結果が残るので、
 	// ここでは投げずに結果ごと伏せる
-	pi.on("tool_result", async (event) => {
+	pi.on("tool_result", async (event, ctx) => {
+		// guarded_edit の失敗に次の一手のヒントを足す (引数の不正は execute の前に起きるので、ここで扱う)
+		if (event.toolName === `${PREFIX}edit`) {
+			const canRead = (p: string) => decide("read", { path: p }, ctx.cwd).decision === "allow";
+			return decorateEditResult(event as any, ctx.cwd, canRead);
+		}
 		if (event.toolName.startsWith(PREFIX)) return undefined;
 		try {
 			return redactResult({ content: event.content, details: event.details, structuredContent: event.structuredContent });

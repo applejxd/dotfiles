@@ -17,7 +17,7 @@ description: "これまでのセッションログから、利用者の不満・
 ## 手順
 
 1. **集計する**(決定的。親が実行):
-   `python3 scripts/agents/friction_scan.py --since <YYYY-MM-DD>`(最新だけなら `--session latest`)。
+   `python3 .agents/skills/friction-review/scripts/friction_scan.py --since <YYYY-MM-DD>`(最新だけなら `--session latest`)。
    → `.tmp/friction/<日付>/report.md` と `report.json`。内容は、エラーが多いツール、同じ形のエラー、承認されなかった実行、二重承認の候補(投稿・コミットの直前の `ask`)、利用者の発話の抜粋(「ちょっと待って」「ごめん」「やばい」など。偽陽性を含む)。
 2. **分類する**(子エージェント。`guarded_task` の `explore`。**レポートだけを渡し、生ログは渡さない**):
    次の分類で、各手がかりを分け、根拠(件数・抜粋)を付ける。

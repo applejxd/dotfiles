@@ -89,6 +89,7 @@ _PI_TESTS = (
     "test_pi_landlock_exec",
     "test_pi_tools_ext",
     "test_pi_confirm_view",
+    "test_pi_ask_normalize",
     "test_pi_worktree",
     "test_pi_isolation",
     "test_pi_worktrees_command",
@@ -170,7 +171,7 @@ RULES: tuple[Rule, ...] = (
     Rule("共通設定の検証", ("scripts/agents/validate_common.py",), ("test_mcp_servers",)),
     Rule(
         "不満・摩擦の集計",
-        ("scripts/agents/friction_scan.py", "scripts/agents/measure_routing.py"),
+        (".agents/skills/friction-review/scripts/*.py", ".agents/skills/friction-review/SKILL.md"),
         ("test_friction_scan",),
     ),
     Rule(

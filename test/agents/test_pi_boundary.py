@@ -634,6 +634,77 @@ def test_broker_agent_dir_writes_models_json(tmp_path):
     assert merged["providers"]["github-copilot"] == {"b": 2, "baseUrl": "http://127.0.0.1:18080"}
 
 
+def test_agent_dir_gets_only_the_provider_compat_from_models_json(tmp_path):
+    # 本物の models.json から写すのは providers.*.compat だけ (apiKey ・ baseUrl ・ headers ・ models は写さない)
+    pi = _ocs().pi
+    real, _ = _broker_real(tmp_path)
+    (real / "models.json").write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "github-copilot": {
+                        "compat": {"supportsEagerToolInputStreaming": False},
+                        "headers": {"x": "y"},
+                    },
+                    "custom": {
+                        "apiKey": "SECRET-KEY",
+                        "baseUrl": "http://h",
+                        "models": [{"id": "m"}],
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    agent = pi.prepare_agent_dir(real, tmp_path / "home")
+    text = (agent / "models.json").read_text(encoding="utf-8")
+    assert json.loads(text) == {
+        "providers": {"github-copilot": {"compat": {"supportsEagerToolInputStreaming": False}}}
+    }
+    assert "SECRET-KEY" not in text and "headers" not in text
+
+
+def test_agent_dir_compat_merges_with_the_broker_base_url(tmp_path):
+    pi = _ocs().pi
+    real, _ = _broker_real(tmp_path)
+    (real / "models.json").write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "github-copilot": {"compat": {"supportsEagerToolInputStreaming": False}}
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    agent = pi.prepare_agent_dir(real, tmp_path / "home", "http://127.0.0.1:18080")
+    models = json.loads((agent / "models.json").read_text(encoding="utf-8"))
+    assert models["providers"]["github-copilot"] == {
+        "compat": {"supportsEagerToolInputStreaming": False},
+        "baseUrl": "http://127.0.0.1:18080",
+    }
+
+
+@pytest.mark.parametrize(
+    "body", [None, "not json", "[]", '{"providers": 3}', '{"providers": {"x": {"compat": 1}}}']
+)
+def test_agent_dir_ignores_a_missing_or_odd_models_json(tmp_path, body):
+    pi = _ocs().pi
+    real, _ = _broker_real(tmp_path)
+    if body is not None:
+        (real / "models.json").write_text(body, encoding="utf-8")
+    agent = pi.prepare_agent_dir(real, tmp_path / "home")
+    assert not (agent / "models.json").exists()
+
+
+def test_shipped_models_json_turns_off_eager_tool_input_streaming():
+    # 配布する models.json: Copilot のツール引数を、検証なしの細粒度ストリーミングで送らせない
+    data = json.loads((ROOT / "home/dot_pi/agent/models.json").read_text(encoding="utf-8"))
+    assert data == {
+        "providers": {"github-copilot": {"compat": {"supportsEagerToolInputStreaming": False}}}
+    }
+
+
 def test_broker_env_has_the_dummy_and_never_the_host_value(tmp_path, monkeypatch):
     pi = _ocs().pi
     monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "host-secret")

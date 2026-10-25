@@ -178,9 +178,21 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - **実行**: `execFile`（シェル無し）、cwd は `ctx.cwd`、環境変数は継承（ブローカー経由の `gh` のため）、120 秒。本文は 0700 のディレクトリへ 0600・排他的作成で書き、承認後に再読みせず、`finally` で消す。値は型（`repo` の正規表現・`int`・`text` の長さと NUL）で検証し、`-` 始まりは通らない。終了コードが 0 でなければ、出力を返してエラーにする。
 - **誤った経路を寄せる**: `replaces`（`git commit`・`gh issue comment`）に当たる bash は、`action` を持つ役割では **deny**（ask にしない）。評価の位置は `[[pi.guide]]` の直後、`shell_deny` の前（bypass でも外れない）。理由に、`guarded_action` の呼び出し例（`-R` と番号が分かれば候補として入れる）を入れる。`action` を持たない役割・他の CLI は従来どおり（`git commit` は ask）。ツールの説明、`guarded_bash` の説明、`ask` の説明にも同じ境界を書く。
 - **指示**: グローバル指示と `commit` スキルは、`guarded_action` が使えるときは事前に `ask` で承認を取らず、bash で実行しない、と書く（ツールが無い環境は従来どおり）。
-- **計測**: `scripts/agents/measure_routing.py`（導入前の基準: 71 セッションで投稿・コミットの bash の直接実行 275 回、うち直前に `ask` で承認を取ったもの 60 回）。導入後に同じスクリプトで、bash の直接実行の割合と `guarded_action` の呼び出し数を比べる。
+- **計測**: `.agents/skills/friction-review/scripts/measure_routing.py`（導入前の基準: 71 セッションで投稿・コミットの bash の直接実行 275 回、うち直前に `ask` で承認を取ったもの 60 回）。導入後に同じスクリプトで、bash の直接実行の割合と `guarded_action` の呼び出し数を比べる。
 - **試験**: `test_pi_actions.py`（生成器・判定器・TS/Python の同一性）、`test_pi_actions_harness.py`（確認が 1 回・実行・拒否・時間切れ・UI 無し・子・引数の検証・同一性・本文ファイル・編集）。
 - **未確認**: 実際の TUI での確認画面の表示（3 択、長い本文、editor の操作）。サンドボックス内でのブローカー経由の `gh` の実機。`git commit` の hook が失敗したときの再試行の運用。**段階 3**（表の一般化と、`gh pr create`・`gh issue create`・`gh pr comment` などの追加）は、実測の後。
+
+### ツール引数の JSON を壊さない設定
+
+モデルが出すツール引数の JSON が壊れる問題（`Invalid arguments for tool … Expected ',' or ']' … in JSON`。`friction-review` の集計で、`guarded_edit` 16 件・`ask` 6 件）への対処。pi 本体が引数の JSON を解析できないと、ツール側では救えない（`toolCall.argumentsError`）。
+
+- **原因の候補（公式文書で確認）**: Anthropic の細粒度ツールストリーミング（`eager_input_streaming`）は、サーバー側でバッファリングも JSON の検証もせず、不完全・不正な JSON が届き得る（<https://platform.claude.com/docs/en/agents-and-tools/tool-use/fine-grained-tool-streaming>）。pi の Anthropic 経路は、既定で全ツールにこれを付ける（`supportsEagerToolInputStreaming ?? true`）。**実測**（pi の `before_provider_request` で送信直前のペイロードを記録。Copilot 経由の Sonnet 5）: 既定では全ツールに付く（20/20）。
+- **設定**: `models.json` の `providers.github-copilot.compat.supportsEagerToolInputStreaming: false`（プロバイダー単位。モデルの一覧を持たない）。配るファイルは `home/dot_pi/agent/models.json`。実測: 設定すると送られなくなり（Sonnet 5・Haiku 5.5 で確認）、呼び出しは正常。戻すときは、設定を外す。副作用は、ツール引数が完成するまで画面に出ないこと。
+- **`pis` の内側**: agent ディレクトリは本物の `models.json` を写さず、**`providers.*.compat` だけ**を写す（`ocs/pi.py` の `_copy_provider_compat`。`apiKey`・`baseUrl`・`headers`・`models` は写さない許可リスト）。ブローカーの `baseUrl` とは合成される。
+- **採用しなかった（今は）: `strict`（厳密な JSON スキーマ）**。実測: pi は既定で Copilot の Claude に `strict` を送らない（`supportsStrictTools` が `github-copilot` のモデルに無い）。`compat.supportsStrictTools: true` で送ると、Copilot は受け付けた（40/40）が、**強制するかは未確認**（公式文書・報告が見つからない）。さらに、Anthropic の strict が対応しないキーワード（`maxItems`、`minItems`（0・1 以外）、`minLength`/`maxLength` など。公式文書による）がスキーマにあると、pi は黙って通常の呼び出しにフォールバックする（`ask` のスキーマが該当）。必要になれば、`ask` のスキーマからそれらを外し（個数などは自前の検証に任せる）、再検討する。
+- **効果の測定**: 実験室では、壊れた JSON を再現できなかった（現状の設定で 0/40（通常のプロンプト）、0/20（引用符・バックスラッシュ・複数行を多用するプロンプト））。実使用の発生率は約 1.7%（`guarded_edit` の 940 回中 16 回）で、数百回の比較は費用に見合わない。**数日使った後に、`friction-review` の集計で `Invalid arguments` の件数を比べる**。
+- **未確認**: Copilot が `eager_input_streaming` を実際に尊重しているか（送らなくなったことは確認したが、サーバー側の挙動は未確認）。他のモデル（GPT・Gemini）と Bedrock の経路。
+- **調べた範囲**（2026-10-25）: Anthropic の strict tool use の公式文書（<https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use>）、pi の issue（#9643 旧版の壊れた JSON、#10502・#9953 strict の 400）、他のエージェントの報告（Claude Code は `StructuredOutput` に `strict` を付けず `eager_input_streaming` を付ける、OpenRouter で不正な JSON の報告）。反例: Bedrock などで `strict` を送ると 400 になった報告。
 
 ### ツールの拡張（`guarded_read` / `guarded_write` / `guarded_bash` の使いやすさ）
 
@@ -203,6 +215,8 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
   （`sed -n 'A,Bp' f` → `guarded_read {path, offset, limit}`、`tail -n N f` → `{tail: N}`、`cat >> f <<EOF` → `guarded_write {..., append: true}` など）
   を機械的に足す。パイプ・リダイレクト・`$`・グロブ・引用の閉じ忘れを含む断片、パースできない形には付けない。**deny の判定は変えない**
   （再試行のコストを下げる変更）
+- **`guarded_edit` の失敗のヒント**（`friction-review` の集計: 呼び出し 940 件のうち 118 件（約 12.5%）が失敗。内訳は、oldText が見つからない 50、結果が同一 36、引数の不正 16、複数一致 9、重なり 3）: 失敗した結果の末尾に、次の一手を追記する（元のメッセージは消さない。`tool_result` で扱う。引数の不正は `execute` に届く前に起きるため）。見つからない → 最も近い箇所（行番号と、違う行の期待と実際。空白・タブ・改行コードの違いの可能性）。結果が同一 → newText がすでにあれば「適用済みの可能性（行 N）」。複数一致 → 一致した行番号と直前の行。引数の不正 → 編集を小さく分ける、全体の書き換えは `guarded_write`。重なり → 1 つにまとめる。ファイルが読めない・512 KiB 超・バイナリ・読み取り拒否のときは、ヒントを省く（本文は最大 3 行の抜粋）。実機で確認（oldText の空白を間違えた呼び出しで、行 2 の違いが返る）。純関数は `tools-ext.ts`、試験は `test_pi_tools_ext.py`。
+- **`ask` の引数の正規化**（失敗 11 件: 壊れた JSON 6、`question` が要素の外 5）: `prepareArguments`（スキーマ検証の前に呼ばれる）の純関数 `normalizeAskArgs`（`extensions/ask/normalize.ts`）で、よくある形の間違い（`question`・`options` がトップレベル、`question` が要素の外、`question` が無く `header` がある、`options` が文字列、`questions` が JSON 文字列、`multi` が文字列、`description` が無い）を直す。**意味を変える補完（推奨の自動付与など）はしない**。壊れた JSON は pi 本体が解析できず、ツール側では救えないので、説明に正しい例と「文字列に半角の `"` を入れない」を足して発生率を下げる（効果は未測定）。自前のエラー文にも正しい例を添える。`constrainedSampling`（プロバイダー側の厳密なスキーマ）は、`guarded_edit` で JSON の不正が出ていることから、今の経路では効かない可能性が高いと見て見送った。
 - **しないこと**: 複数ファイルの一括読み（並列の呼び出しで足りる）、`stdin` の引数（pi の bash は `command` と `timeout` しか受けない）、
   透過実行、`executable`
 

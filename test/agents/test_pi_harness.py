@@ -1942,9 +1942,13 @@ def _ask_q(question, *labels, mark=True, **extra):
     return {"question": question, "options": options, **extra}
 
 
-def _ask_rpc(env, questions, replies, timeout=120, **env_extra):
-    """ask を RPC で呼び、select / input の要求に replies の順に応える (None は中断)。返すのは (要求, 結果の本文)。"""
-    calls = [{"name": "ask", "args": {"questions": questions}}]
+def _ask_rpc(env, questions, replies, timeout=120, raw_args=None, **env_extra):
+    """ask を RPC で呼び、select / input の要求に replies の順に応える (None は中断)。返すのは (要求, 結果の本文)。
+
+    raw_args を渡すと questions の代わりに、その引数をそのまま呼び出しに使う (形の間違いの試験用)。"""
+    calls = [
+        {"name": "ask", "args": raw_args if raw_args is not None else {"questions": questions}}
+    ]
     args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
     args += [
         "-e",
@@ -2090,6 +2094,29 @@ def test_ask_rejects_a_malformed_questionnaire_without_asking(env, questions, co
         assert "末尾に ` (推奨)` を付けて呼び直す" in result and "最も安全な選択肢" in result, (
             result
         )
+
+
+def test_ask_rescues_a_question_placed_outside_the_questions_element(env):
+    # question がトップレベルにある誤りは、スキーマ検証の前に正規化されて質問画面が出る
+    raw = {
+        "question": "Which?",
+        "questions": [{"options": _ask_q("x", "A", "B")["options"]}],
+    }
+    requests, result = _ask_rpc(env, None, ["2. B"], raw_args=raw)
+    assert [r["method"] for r in requests] == ["select"], (requests, result)
+    assert "→ B" in result, result
+
+
+def test_ask_rescues_top_level_question_and_options(env):
+    raw = {"question": "Which?", "options": _ask_q("x", "A", "B")["options"]}
+    requests, result = _ask_rpc(env, None, ["1. A (推奨)"], raw_args=raw)
+    assert [r["method"] for r in requests] == ["select"], (requests, result)
+    assert "→ A (推奨)" in result, result
+
+
+def test_ask_error_messages_carry_a_correct_example(env):
+    _, result = _ask_rpc(env, [_ask_q("Q?", "A", "B", mark=False)], [])
+    assert '{"questions":[{"question"' in result, result
 
 
 def test_ask_reports_every_violating_question_in_one_error(env):

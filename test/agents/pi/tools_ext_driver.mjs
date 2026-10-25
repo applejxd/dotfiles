@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "tools-ext.ts")).href);
-const { toolText, guideHint, runRead, similarNames } = mod;
+const { toolText, guideHint, runRead, similarNames, editFailureHint, nearestMatch, decorateEditResult } = mod;
 
 const dir = mkdtempSync(join(tmpdir(), "tools-ext-"));
 const files = {
@@ -112,4 +112,61 @@ const hint = {
 	unbalanced: G("cat 'a"),
 };
 
-process.stdout.write(JSON.stringify({ tail, hints, texts, hint }));
+// ─── edit の失敗のヒント ───
+const NF = "Could not find the exact text in a.txt. The old text must match exactly including all whitespace and newlines.";
+const NF_N = (i) => `Could not find edits[${i}] in a.txt. The oldText must match exactly including all whitespace and newlines.`;
+const MULTI = "Found 3 occurrences of the text in a.txt. The text must be unique. Please provide more context to make it unique.";
+const NOCHG = "No changes made to a.txt. The replacement produced identical content. This might indicate an issue with special characters or the text not existing as expected.";
+const one = (oldText, newText = "x") => ({ path: "a.txt", edits: [{ oldText, newText }] });
+const FILE = "alpha\n  beta()\ngamma\ndelta\n";
+const eh = (msg, input, text) => editFailureHint(msg, input, text);
+const bigLines = Array.from({ length: 9 }, (_, i) => `row ${i}\ndup`).join("\n");
+const editHints = {
+	ws_only: eh(NF, one("alpha\nbeta()\ngamma"), FILE),
+	tab_crlf: eh(NF, one("alpha\r\n\tbeta()\r\ngamma"), FILE),
+	one_line: eh(NF, one("alpha\n  beta(1)\ngamma"), FILE),
+	none: eh(NF, one("zzz\nyyy"), FILE),
+	indexed: eh(NF_N(1), { path: "a.txt", edits: [{ oldText: "zzz", newText: "" }, { oldText: "gamma\ndelta2", newText: "" }] }, FILE),
+	long_line: eh(NF, one("alpha\n" + "q".repeat(300)), "alpha\n" + "p".repeat(300)),
+	control: eh(NF, one("alpha\nbe\u0001ta"), FILE),
+	no_text: eh(NF, one("alpha"), null),
+	applied: eh(NOCHG, one("zzz", "gamma\ndelta"), FILE),
+	not_applied: eh(NOCHG, one("zzz", "nowhere"), FILE),
+	nochange_no_text: eh(NOCHG, one("a", "b"), null),
+	multi: eh(MULTI, one("dup"), "head\ndup\nmid\ndup\nx\ndup\n"),
+	multi_first_line: eh(MULTI, one("dup"), "dup\nx\ndup\n"),
+	multi_many: eh("Found 9 occurrences of edits[0] in a.txt. Each oldText must be unique. Please provide more context to make it unique.", one("dup"), bigLines),
+	invalid: eh('Invalid arguments for tool "guarded_edit": Expected \':\' after property name', {}, null),
+	overlap: eh("edits[0] and edits[1] overlap in a.txt. Merge them into one edit or target disjoint regions.", one("a"), null),
+	guard_deny: eh("実行前の判定で止めた: deny: x", one("a"), FILE),
+	erofs: eh("EROFS: read-only file system, open 'a.txt'", one("a"), FILE),
+	enoent: eh("ENOENT: no such file or directory, access 'a.txt'", one("a"), null),
+};
+const nearest = {
+	ws: nearestMatch(FILE, "alpha\nbeta()"),
+	none: nearestMatch(FILE, "zzz"),
+	blank: nearestMatch(FILE, "\n\n"),
+};
+
+// 読み込みの層 (decorateEditResult)
+writeFileSync(join(dir, "e.txt"), FILE);
+writeFileSync(join(dir, "bin.txt"), "a\u0000b\nalpha\n");
+writeFileSync(join(dir, "huge.txt"), "alpha\n".repeat(100 * 1024));
+const ev = (path, text, input, isError = true) => ({ isError, input: input ?? { path, edits: [{ oldText: "alpha\nbeta(1)", newText: "" }] }, content: [{ type: "text", text }] });
+const canRead = (p) => !basename(p).startsWith("secret");
+const NFE = NF.replace("a.txt", "e.txt");
+const deco = {
+	ok: await decorateEditResult(ev("e.txt", NFE), dir, canRead),
+	absolute: await decorateEditResult(ev(join(dir, "e.txt"), NFE), "/nonexistent", canRead),
+	success: (await decorateEditResult(ev("e.txt", "Successfully replaced", undefined, false), dir, canRead)) ?? null,
+	success_text_looks_like_error: (await decorateEditResult(ev("e.txt", NFE, undefined, false), dir, canRead)) ?? null,
+	missing: (await decorateEditResult(ev("nope.txt", NFE), dir, canRead)) ?? null,
+	binary: (await decorateEditResult(ev("bin.txt", NFE), dir, canRead)) ?? null,
+	huge: (await decorateEditResult(ev("huge.txt", NFE), dir, canRead)) ?? null,
+	unreadable: (await decorateEditResult(ev("secret.env", NFE), dir, canRead)) ?? null,
+	deny: (await decorateEditResult(ev("e.txt", "実行前の判定で止めた: deny: x"), dir, canRead)) ?? null,
+	invalid_without_file: await decorateEditResult(ev("", 'Invalid arguments for tool "guarded_edit": bad', {}), dir, canRead),
+	no_content: (await decorateEditResult({ isError: true, input: {} }, dir, canRead)) ?? null,
+};
+
+process.stdout.write(JSON.stringify({ tail, hints, texts, hint, editHints, nearest, deco }));

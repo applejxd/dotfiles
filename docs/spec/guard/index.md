@@ -68,7 +68,7 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 - **誤った経路へ行かせない**（うっかり防止。経路の強制ではない）: 同じ操作の bash は deny（ask にしない）し、理由に呼び出し例を入れる。
   ツールの説明と、グローバル指示・`commit` スキルは、事前に `ask` で承認を取らないと書く。
 - 登録されるのは親の実装役だけ。子・読み取り役・探索役と UI 無しは拒否。
-- 仕様は [pi のガード](pi-guard.md#guarded_action承認つきの外部操作)。導入前の基準（bash の直接実行 275 回、うち直前に `ask` で承認 60 回）を、`scripts/agents/measure_routing.py` で導入後に比べる。
+- 仕様は [pi のガード](pi-guard.md#guarded_action承認つきの外部操作)。導入前の基準（bash の直接実行 275 回、うち直前に `ask` で承認 60 回）を、`.agents/skills/friction-review/scripts/measure_routing.py` で導入後に比べる。
 
 ## ツール定義の拡張
 

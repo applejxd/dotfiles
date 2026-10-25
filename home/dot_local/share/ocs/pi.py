@@ -385,6 +385,7 @@ def populate_agent_dir(
         source = real / name
         if source.is_dir():
             shutil.copytree(source, agent / name, symlinks=True)
+    _copy_provider_compat(real, agent)
     # pi は <agent 置き場>/bin の fd・rg を探し、無ければダウンロードする。
     # 起動ごとの置き場では毎回見つからないので、本物の bin (読み取りだけ許可済み) を指すリンクにする
     if (real / "bin").is_dir():
@@ -396,6 +397,31 @@ def populate_agent_dir(
         (agent / name).mkdir(exist_ok=True)
     if broker_url:
         _write_broker_models(agent, broker_url)
+
+
+def _copy_provider_compat(real: Path, agent: Path) -> None:
+    """本物の ``models.json`` から、プロバイダーごとの ``compat`` だけを内側へ写す。
+
+    ``apiKey``・``baseUrl``・``headers``・``models`` などは写さない (秘密を境界の内側へ出さない許可リスト)。
+    読めない・形が違うときは何もしない。
+    see docs/spec/guard/pi-guard.md#ツール引数の-json-を壊さない設定
+    """
+    try:
+        data = json.loads((real / "models.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    providers = data.get("providers") if isinstance(data, dict) else None
+    if not isinstance(providers, dict):
+        return
+    kept = {
+        name: {"compat": entry["compat"]}
+        for name, entry in providers.items()
+        if isinstance(entry, dict) and isinstance(entry.get("compat"), dict)
+    }
+    if kept:
+        (agent / "models.json").write_text(
+            json.dumps({"providers": kept}, indent=2) + "\n", encoding="utf-8"
+        )
 
 
 def prepare_agent_dir(

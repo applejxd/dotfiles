@@ -5,6 +5,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Editor, type EditorTheme, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { normalizeAskArgs } from "./normalize.ts";
 
 const MAX_QUESTIONS = 4;
 const MIN_OPTIONS = 2;
@@ -15,6 +16,10 @@ const TIMEOUT_MS = Number(process.env.PI_ASK_TIMEOUT_MS) > 0 ? Number(process.en
 const FREE = "Type something.";
 const NEXT = "Next";
 const RESERVED = new Set(["Other", FREE, NEXT]);
+
+// 自前のエラー文に添える正しい呼び方 (エラーから自己修正できるように)
+const EXAMPLE = '{"questions":[{"question":"どの案で進めますか。","options":[{"label":"A (推奨)","description":"…"},{"label":"B","description":"…"}]}]}';
+const HINT = ` 正しい例: ${EXAMPLE} (question と options は questions の各要素の中に置く。文字列に半角の二重引用符を入れない)`;
 
 type Option = { label: string; description: string };
 type Question = { question: string; header?: string; options: Option[]; multi?: boolean };
@@ -84,7 +89,7 @@ function validateRecommended(qs: Question[]): { code: string; text: string } | u
 	if (!code) return undefined;
 	return {
 		code,
-		text: `${lines.join(" / ")}。推奨する選択肢を 1 つ決め、先頭に置き、label の末尾に \` (推奨)\` を付けて呼び直す。決めかねるときは、最も安全な選択肢を推奨にして、description にその理由を書く`,
+		text: `${lines.join(" / ")}。推奨する選択肢を 1 つ決め、先頭に置き、label の末尾に \` (推奨)\` を付けて呼び直す。決めかねるときは、最も安全な選択肢を推奨にして、description にその理由を書く。${HINT}`,
 	};
 }
 
@@ -309,6 +314,7 @@ export default function (pi: ExtensionAPI) {
 		promptGuidelines: [
 			"Use ask only when an unresolved choice would change the result and you cannot decide from the code or docs; do not ask for things you can check yourself.",
 			"Do not use ask to get approval for a commit or a post (guarded_action asks for approval itself).",
+			"In ask, put question and options inside each element of questions (never at the top level), and never put a straight double quote inside a string (use 「」); write newlines as \\n.",
 			"Put independent questions into one ask call (up to 4). A question that depends on an earlier answer goes into the next call.",
 			"Give each question 2-4 options with a one-line description of the trade-off; put the recommended option first and end its label with ' (推奨)' (or ' (recommended)'); keep labels short because labels are limited to 60 characters. A free-text row is added automatically, so do not add 'Other'.",
 		],
@@ -317,7 +323,9 @@ export default function (pi: ExtensionAPI) {
 			`options (${MIN_OPTIONS}〜${MAX_OPTIONS} 個。label と description)・multi (複数選択。任意)。自由記述の行 "${FREE}" は自動で足されるので、"Other" や "${NEXT}" を選択肢にしない。` +
 			"各質問は推奨の選択肢をちょうど 1 つ (multi は 1 つ以上) 持ち、先頭に置き、label の末尾に ' (推奨)' を付ける (label は 60 字までなので短くする)。守られないとエラーで返る。" +
 			"戻りは answers (答えた問)・unanswered (答えなかった問の番号。0 始まり)・cancelled。" +
-			"中断・時間切れ・UI が無いときは未回答として返るので、その場合は推測で進めず、地の文で尋ね直すか安全側に進める。",
+			"中断・時間切れ・UI が無いときは未回答として返るので、その場合は推測で進めず、地の文で尋ね直すか安全側に進める。" +
+			` 例: ${EXAMPLE} question と options は questions の各要素の中に置く。文字列の中に半角の二重引用符を入れない (「」を使う)。改行は \\n。`,
+		prepareArguments: normalizeAskArgs,
 		parameters: Type.Object({
 			questions: Type.Array(
 				Type.Object({
@@ -343,7 +351,7 @@ export default function (pi: ExtensionAPI) {
 			});
 			if (!ctx.hasUI) return fail("no_ui", "UI が無く、利用者には尋ねられなかった。質問は地の文で書くか、安全側に進める");
 			const invalid = validate(qs);
-			if (invalid) return fail(invalid, "質問の形が不正。直して呼び直す");
+			if (invalid) return fail(invalid, `質問の形が不正。直して呼び直す。${HINT}`);
 			const unrecommended = validateRecommended(qs);
 			if (unrecommended) return fail(unrecommended.code, unrecommended.text);
 

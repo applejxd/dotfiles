@@ -1,7 +1,7 @@
 """pi のセッションログから、投稿・コミットの経路(bash の直接実行・事前の ask)を集計する。
 
 段 G11 (guarded_action) の導入前の基準と、導入後の誤った経路の割合の計測に使う。読み取りだけ。
-使い方: python3 scripts/agents/measure_routing.py [--root ~/.pi/agent/sessions] [--since 2026-10-01]
+使い方: python3 .agents/skills/friction-review/scripts/measure_routing.py [--root ~/.pi/agent/sessions] [--since 2026-10-01]
 出力は件数だけ (本文は出さない)。
 """
 
