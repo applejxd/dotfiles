@@ -215,4 +215,40 @@ chezmoi apply
 **成功の確認**: 上の確認コマンドで `LinkType` が `Junction`、`Target` が
 `~/.claude/skills` になる。
 
+## pis の内側でクリップボードへコピーできない
+
+**対象**: `pis`（sandbox の内側で動く pi）。WSL2（WSLg）で、Orca のターミナルから使う構成で確認した。
+
+**症状**: `/copy` や選択コピーで `Clipboard unavailable: install \`wl-clipboard\` (\`wl-copy\`) or check Wayland access` と出る。
+
+**原因**: 次の 2 点が重なる（出所は pi 本体の `dist/utils/clipboard.js`、1.3.0）。
+
+- 内側から `DISPLAY` / `WAYLAND_DISPLAY` が見えるため、pi がデスクトップ環境と判断し、
+  `wl-copy` / `xclip` / `xsel` だけを試す。OSC 52 には**回らない**（効いたかを確かめられないため）
+- sandbox がそれらのソケットと、`powershell.exe` の相互運用を塞ぐ（推測。内側では未実測）
+
+上流の見解（pi Issue #10558、2026-10-07 に not a bug で close）は「表示の変数が出ているなら、動くソケットを
+用意するか、変数を unset する」。同じ症状の回避策として、メンテナは `PI_CLIPBOARD_OSC52=1` を挙げている
+（Issue #11273）。
+
+**対処**: `pis` は内側の環境へ `PI_CLIPBOARD_OSC52=1` を自動で渡す（`home/dot_local/share/ocs/pi.py` の
+`inner_env`）。OSC 52 は端末への書き込み専用なので、sandbox の境界を広げない（X11 / Wayland のソケットを
+許可すると、内側からクリップボードを読めてしまう）。端末側で OSC 52 の書き込みを許可する。
+
+- Orca: `Settings → Terminal → Allow TUI Clipboard Writes (OSC 52)`
+  （<https://www.onorca.dev/docs/terminal、日付未確認）>
+- tmux 内で使うなら、別の問題がある。tmux は既定で OSC 52 を転送しない（pi Issue #10628、open。
+  `set -g set-clipboard on` / `allow-passthrough` が要る）。`WT_SESSION` の継承で無言の失敗になる
+  報告もある（Issue #11029、2026-10-16 close。`env -u WT_SESSION` が回避策）
+
+**成功の確認**（`pis` の外のシェルで端末が対応しているかを見る）:
+
+```bash
+printf '\033]52;c;%s\a' "$(printf hello | base64)"
+```
+
+その後に貼り付けて `hello` が出れば、端末は対応している。2026-10-25 に Orca で確認した。
+
+**限界**: pi は OSC 52 の成否を確かめられないので、端末が非対応でも「コピーした」と出る。
+
 [トラブルシューティングへ戻る](troubleshooting.md)

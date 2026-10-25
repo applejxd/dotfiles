@@ -205,6 +205,8 @@ def test_inner_command_and_environment(tmp_path, monkeypatch):
         assert name not in env, name
     assert env["ORCA_AGENT_HOOK_PORT"] == "1234"
     assert env["PI_HARNESS_BOUNDARY"] == "1"
+    # 内側ではネイティブのクリップボード経路が塞がれるので、OSC 52 を強制する
+    assert env["PI_CLIPBOARD_OSC52"] == "1"
     # 外から入った値は捨て、実際に開けた場所を渡す。カナリアは内側から見えない状態領域に置く
     assert json.loads(env["PI_HARNESS_ALLOWED"]) == {"read": ["/a"], "write": ["/b"]}
     assert env["PI_HARNESS_CANARY_READ"].endswith(pi.check.CANARY_REL)
