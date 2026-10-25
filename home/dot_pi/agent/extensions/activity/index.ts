@@ -1,10 +1,12 @@
-// 動いている子エージェントとバックグラウンドジョブを数えて、入力欄の下 (フッター) に出す。
+// 動いている子エージェントとバックグラウンドジョブを数えて、入力欄の下の**専用の 1 行** (ウィジェット) に出す。
+// 起動モード・ToDo の行 (フッターのステータス行) とは別の行。
 // 例: `🤖 2 subagents / ⚙️ 1 jobs`。0 件の側は出さず、どちらも 0 のときは何も出さない。
 // ジョブは `bg_run` / `bg_kill` / `bg_log` で扱う。コマンドは出力をログへ流して切り離して動く。
 // 子の一覧は、子を起動する側 (subagents / フルガード) が globalThis.__piChildren に登録する。
 // ジョブは globalThis.__piJobs に入れる。
 // see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,7 +46,8 @@ function label(): string | undefined {
 		parts.push(named ? `🤖 ${list.map((x) => `${x.agent} ${secs(Date.now() - (x.startedAt as number))}`).join(", ")}` : `🤖 ${list.length} subagents`);
 	}
 	if (j > 0) parts.push(`⚙️ ${j} jobs`);
-	return parts.length ? parts.join(" / ") : undefined;
+	// 中くらいの幅に収まるよう、表示幅で切る (列数は毎回引くので、リサイズに追従する)
+	return parts.length ? truncateToWidth(parts.join(" / "), Math.max(20, (process.stdout.columns ?? 80) - 2), "…") : undefined;
 }
 
 function killTree(pid: number | undefined): void {
@@ -88,7 +91,12 @@ function tailWithCount(path: string, lines: number): { total: number; text: stri
 export default function (pi: ExtensionAPI) {
 	let timer: ReturnType<typeof setInterval> | undefined;
 	let counter = 0;
-	let ui: { setStatus: (key: string, text: string | undefined) => void; notify: (m: string, t?: any) => void } | undefined;
+	let ui:
+		| {
+				setWidget: (key: string, lines: string[] | undefined, options?: { placement?: "aboveEditor" | "belowEditor" }) => void;
+				notify: (m: string, t?: any) => void;
+		  }
+		| undefined;
 
 	let last: string | undefined | null = null; // 表示が変わったときだけ出す (何も無い間も毎秒出さない。B1 の F1)
 	let busy = false; // 親が作業中か (作業中は通知を溜め、終わってから読み済みを除いて届ける)
@@ -146,7 +154,7 @@ export default function (pi: ExtensionAPI) {
 			const now = label();
 			if (now === last) return;
 			last = now;
-			ui?.setStatus(STATUS_KEY, now);
+			ui?.setWidget(STATUS_KEY, now ? [now] : undefined, { placement: "belowEditor" });
 		} catch {}
 	};
 
@@ -172,7 +180,7 @@ export default function (pi: ExtensionAPI) {
 		for (const job of jobs.values()) killTree(job.pid);
 		jobs.clear();
 		try {
-			ui?.setStatus(STATUS_KEY, undefined);
+			ui?.setWidget(STATUS_KEY, undefined);
 		} catch {}
 		ui = undefined; // 停止後に遅れて来るコールバックが古い UI へ書かないようにする
 		last = null;

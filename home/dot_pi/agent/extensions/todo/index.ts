@@ -5,6 +5,7 @@
 // see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 type Status = "pending" | "in_progress" | "blocked" | "done" | "cancelled";
@@ -147,7 +148,9 @@ export default function (pi: ExtensionAPI) {
 		const done = counted.filter((t) => t.status === "done").length;
 		const doing = todos.find((t) => t.status === "in_progress");
 		const head = open().length === 0 ? "✅" : "📋";
-		const tail = doing ? ` ▶ ${doing.text.length > 24 ? `${doing.text.slice(0, 24)}…` : doing.text}` : "";
+		// 中くらいの幅 (80 列前後) に収まるよう、タイトルは表示幅 (全角 2) で切る。他の状態 (bypass など) と同じ行に出る
+		const budget = Math.max(10, Math.min(30, (process.stdout.columns ?? 80) - 48));
+		const tail = doing ? ` ▶ ${truncateToWidth(doing.text, budget, "…")}` : "";
 		ctx.ui.setStatus("todo", `${head} ${done}/${counted.length}${tail}`);
 	};
 	// 今のブランチの、最後の状態に戻す (ツール結果の details か、利用者の操作の custom エントリ)

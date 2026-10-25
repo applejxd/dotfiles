@@ -195,7 +195,7 @@ export default async function (pi: ExtensionAPI) {
 	await loadCommitPreview();
 	// 状態の表示 (安全の根拠ではなく、いまどちらで動いているかの目印)
 	const showBypass = (ctx: any) => {
-		if (ctx.hasUI) ctx.ui.setStatus("bypass", bypass ? ctx.ui.theme.fg("warning", "⚡ bypass (外部送信は確認)") : undefined);
+		if (ctx.hasUI) ctx.ui.setStatus("bypass", bypass ? ctx.ui.theme.fg("warning", "⚡ bypass") : undefined);
 	};
 	// セッションの終了・切り替え・/reload で、保持している子を全部止める
 	pi.on("session_shutdown", async () => jobs.closeAll());
@@ -203,8 +203,8 @@ export default async function (pi: ExtensionAPI) {
 		reconcileOnStart(ctx);
 		if (!ctx.hasUI) return;
 		showBypass(ctx);
-		if (BOUNDARY) ctx.ui.setStatus("sandbox", "🔒 サンドボックス");
-		else if (NO_SANDBOX) ctx.ui.setStatus("sandbox", "⚠ サンドボックス無し");
+		if (BOUNDARY) ctx.ui.setStatus("sandbox", "🔒 sandbox");
+		else if (NO_SANDBOX) ctx.ui.setStatus("sandbox", ctx.ui.theme.fg("warning", "⚠ no sandbox"));
 	});
 	// フルガードの下では、pi がスキルの一覧をシステムプロンプトへ入れない (宣言されたツールに read / bash が無いため)。
 	// 同じ形の一覧を、読むツールを guarded_* の名前にして自分で足す。bypass・サンドボックスの有無とは無関係。

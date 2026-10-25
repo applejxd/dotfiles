@@ -1314,7 +1314,15 @@ def _rpc(env, calls, answers, timeout=120):
 
 
 def _rpc_script(
-    env, calls, messages, answers, timeout=120, status_key="bypass", extra=(), notices=None
+    env,
+    calls,
+    messages,
+    answers,
+    timeout=120,
+    status_key="bypass",
+    extra=(),
+    notices=None,
+    widget_key=None,
 ):
     """RPC で messages を順に送る。確認 (confirm) には answers の順に応え、尽きたら拒否する。
 
@@ -1362,6 +1370,13 @@ def _rpc_script(
                         event.get("method") == "setStatus" and event.get("statusKey") == status_key
                     ):
                         statuses.append(event.get("statusText"))
+                    elif (
+                        widget_key is not None
+                        and event.get("method") == "setWidget"
+                        and event.get("widgetKey") == widget_key
+                    ):
+                        lines = event.get("widgetLines")
+                        statuses.append(" ".join(lines) if lines else None)
                 if event.get("type") == "response" and event.get("id") == f"m{index}":
                     responded = True
                     started = (event.get("data") or {}).get("disposition") == "started"
@@ -1709,6 +1724,24 @@ def test_todo_state_survives_compaction(env):
     assert "#1: x" in proc.stdout and "#2: x" in proc.stdout, proc.stdout
 
 
+def test_todo_footer_truncates_a_long_title_by_display_width(env):
+    # 中くらいの幅に収めるため、全角の長いタイトルは表示幅 (全角 2) で切る
+    import re
+    import unicodedata
+
+    title = "とても長い日本語のタイトルがここに入ります。ステータス行に収まらない長さです"
+    calls = [_todo(action="add", texts=[title]), _todo(action="set", id=1, status="in_progress")]
+    _, statuses = _rpc_script(
+        env, calls, ["go"], [], status_key="todo", extra=("-e", str(TODO_EXT))
+    )
+    shown = [s for s in statuses if s and "▶" in s][-1]
+    tail = re.sub(
+        r"\x1b\[[0-9;]*m", "", shown.split("▶ ", 1)[1]
+    )  # pi-tui は省略記号の前後にリセットを入れる
+    width = sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in tail)
+    assert tail.endswith("…") and width <= 30, (tail, width)
+
+
 def test_todo_footer_shows_progress_the_active_item_and_clears_on_tidy(env):
     calls = [
         _todo(action="add", texts=["first step", "second"]),
@@ -1753,7 +1786,7 @@ def test_activity_footer_names_the_running_children_with_elapsed_time(env):
     activity = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "activity" / "index.ts"
     calls = [{"name": "guarded_task", "args": {"agent": "worker", "task": "slow"}}]
     _, statuses = _rpc_script(
-        env, calls, ["go"], [], status_key="activity", extra=("-e", str(activity))
+        env, calls, ["go"], [], widget_key="activity", extra=("-e", str(activity))
     )
     assert any(s and s.startswith("🤖 worker ") for s in statuses), statuses
 
