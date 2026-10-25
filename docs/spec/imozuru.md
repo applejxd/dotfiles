@@ -64,6 +64,15 @@
 - **プロキシ宛ての要求（HTTP のプロキシ・HTTPS の CONNECT）は固定しない**: プロキシが名前を引くので、stdlib の接続のまま。`no_proxy` などで**直接つなぐ宛先は、環境変数の有無に関わらず固定する**（要求ごとに `req.has_proxy()` / `_tunnel_host` で判定）
 - 上流の宛先の検査（`url_problem`）は残る。VPN などで外の名前まで内側に引ける環境は、`IMOZURU_ALLOW_PRIVATE=1` で外せる（上流の仕様）
 - **残る限界**: プロキシ経由の通信では、プロキシが後で別の IP に解決するのを、こちらでは固定できない。`pis` のサンドボックス（Fence）のプロキシが内側の宛先を拒むかは**未確認**。この限界のために、`fetch.py` と `watch.py` の `add` / `check` は確認なしの許可に載せていない（下の許可規則）
+- **`pis` の内側のプロキシ越しの取得**（2026-10-25）: 内側は DNS が引けないので、`url_problem` の事前の名前解決で全 URL が失敗していた。`PIS_FETCH_VIA_PROXY=1`（`pis` が付ける）とループバックの
+  `HTTPS_PROXY` が揃い、`no_proxy` に当たらない https の URL だけ、`url_problem` が名前を引かずにホスト名の形だけ見る（`imozuru_net.py` の
+  `via_fetch_proxy` / `proxy_url_problem`。`websearch.py` と同じ規則で、正規表現の一致は `test_imozuru.py` が固定する）。仕組みと理由は
+  [web-search、pis の内側のプロキシ越しの取得](web-search.md#pis-の内側のプロキシ越しの取得)。
+  `urllib` が実際に使うプロキシと `no_proxy` を同じ関数で見るので、検査だけ省いて直接つなぐ食い違いは出ない。
+  Fence のプロキシは、許可ドメインの外を 403 で拒む（`curl` で実測）。ただし「内側の宛先を拒む」こと自体は、許可リストに内部名が無いことに依存する
+   実測（2026-10-25、`pis -p` の内側）: `fetch.py` は arxiv の abs を `OK`（終了コード 0）で保存でき、許可外のドメインは
+   `FAIL … URLError: <urlopen error Tunnel connection failed: 403 Forbidden>`（終了コード 1）で止まった
+- **残る限界**: プロキシ経由の通信では、プロキシが後で別の IP に解決するのを、こちらでは固定できない。この限界のために、`fetch.py` と `watch.py` の `add` / `check` は確認なしの許可に載せていない（下の許可規則）
 
 ## 外へ送る文字列の秘匿チェック
 
@@ -117,7 +126,7 @@
 
 ## 上流との差分
 
-上流への変更は最小にした（`chain.py` +6 行、`fetch.py` +17、`report.py` +6、`watch.py` +13）。置換は `scripts/vendor/imozuru_patch.py` で、上流の原本に何度でも当て直せる（置換元が 1 つでなければ止まる）。編集ツールの後処理の整形が差分を膨らませるので、置換は編集ツールでなくこのスクリプトで行う。`pyproject.toml` の `extend-exclude` に、上流の 4 本を載せてある（整形・lint の対象外）。
+上流への変更は最小にした（`chain.py` +6 行、`fetch.py` +21、`report.py` +6、`watch.py` +17。`fetch.py` と `watch.py` の +4 行はプロキシ越しの取得）。置換は `scripts/vendor/imozuru_patch.py` で、上流の原本に何度でも当て直せる（置換元が 1 つでなければ止まる）。編集ツールの後処理の整形が差分を膨らますので、置換は編集ツールでなくこのスクリプトで行う。**`fetch.py` / `watch.py` を編集ツールで直接直すと、整形が走って差分が 300 行規模になり、上流の文字列を壊す**（2026-10-25 に実際に起きた）。このファイルを直すときは、編集ツールを通さない置換スクリプトを `python3` で実行する。`pyproject.toml` の `extend-exclude` に、上流の 4 本を載せてある（整形・lint の対象外）。
 
 **上流を更新する手順**: 新しい版を取得して原本と比べ（`references/upstream.md` の sha256）、差分を取り込んでから `imozuru_patch.py` を当て直し、`test/test_imozuru.py` と `review` で確かめる。
 

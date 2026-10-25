@@ -18,7 +18,10 @@ def head(*names: str, net: bool = False, pathlib: bool = False) -> str:
         lines.append("from pathlib import Path")
     lines.append("sys.path.insert(0, str(Path(__file__).resolve().parent))")
     if net:
-        lines.append("from imozuru_net import PinnedHTTPHandler, PinnedHTTPSHandler  # noqa: E402")
+        lines.append(
+            "from imozuru_net import PinnedHTTPHandler, PinnedHTTPSHandler, proxy_url_problem, via_fetch_proxy"
+            "  # noqa: E402"
+        )
     lines.append(f"from imozuru_root import {', '.join(names)}  # noqa: E402")
     return "\n".join(lines) + "\n"
 
@@ -38,6 +41,11 @@ YOUTUBE_NEW = (
     "        return 1\n" + YOUTUBE_OLD
 )
 
+# 内側 (pis) は DNS が引けないので、プロキシ越しの取得と判定できるときは、事前の名前解決を省いてホスト名の形だけ見る
+# (imozuru_net.py。fetch.py と watch.py の url_problem の両方に入れる)
+PROXY_OLD = "    try:\n        addrs = resolve(host)"
+PROXY_NEW = "    if via_fetch_proxy(url):\n        return proxy_url_problem(url)\n" + PROXY_OLD
+
 PATCHES = {
     "fetch.py": [
         (
@@ -46,6 +54,7 @@ PATCHES = {
             + head("confine", "refuse_secrets", "youtube_problem", net=True),
         ),
         (OPENER_OLD, OPENER_NEW),
+        (PROXY_OLD, PROXY_NEW),
         (
             "sources, name, url = Path(sys.argv[1]), sys.argv[2], sys.argv[3]",
             'sources, name, url = confine(Path(sys.argv[1])), sys.argv[2], sys.argv[3]\n    refuse_secrets("URL", url)',
@@ -71,6 +80,7 @@ PATCHES = {
             + head("confine", "refuse_secrets", "secret_reason", net=True),
         ),
         (OPENER_OLD, OPENER_NEW),
+        (PROXY_OLD, PROXY_NEW),
         # 見張る先の URL は外部のページが示したものを保存して、あとの check で送る。送る直前にも検査する
         (
             "    problem = url_problem(url)\n    if problem:\n        raise UnsafeURL(problem)\n"

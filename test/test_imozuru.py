@@ -478,3 +478,121 @@ def test_watch_checks_a_stored_feed_url_for_secrets_just_before_sending(work, mo
     )
     with pytest.raises(watch.UnsafeURL, match="らしき文字列"):
         watch.fetch_final("https://example.com/feed?api_key=abcdefghijkl")
+
+
+# ─── pis の内側のプロキシ越しの取得 ─────────────────────────────────
+
+
+@pytest.fixture
+def proxy_env(monkeypatch):
+    """pis の内側の環境 (フラグ + ループバックのプロキシ)。no_proxy は localhost 系だけ。"""
+    for name in ("https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY", "no_proxy", "NO_PROXY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("IMOZURU_ALLOW_PRIVATE", raising=False)
+    monkeypatch.setenv("PIS_FETCH_VIA_PROXY", "1")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:3128")
+    monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1,::1")
+
+
+def test_proxy_mode_needs_the_flag_https_and_a_loopback_proxy(proxy_env, monkeypatch):
+    net = _load("imozuru_net")
+    assert net.via_fetch_proxy("https://arxiv.org/abs/1")
+    # http・フラグなし・ループバック以外・形の違うプロキシは対象外
+    assert not net.via_fetch_proxy("http://arxiv.org/abs/1")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:3128")
+    assert not net.via_fetch_proxy("https://arxiv.org/")
+    monkeypatch.setenv("HTTPS_PROXY", "socks5h://127.0.0.1:1080")
+    assert not net.via_fetch_proxy("https://arxiv.org/")
+    monkeypatch.setenv("HTTPS_PROXY", "http://u:p@127.0.0.1:3128")
+    assert not net.via_fetch_proxy("https://arxiv.org/")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:3128")
+    monkeypatch.delenv("PIS_FETCH_VIA_PROXY")
+    assert not net.via_fetch_proxy(
+        "https://arxiv.org/"
+    )  # ホストの既存のプロキシ設定だけでは有効にならない
+
+
+def test_proxy_mode_follows_no_proxy_like_urllib(proxy_env, monkeypatch):
+    """no_proxy に当たる宛先は urllib が直接つなぐので、検査も従来のまま (省かない)。"""
+    net = _load("imozuru_net")
+    monkeypatch.setenv("NO_PROXY", "arxiv.org")
+    assert not net.via_fetch_proxy("https://arxiv.org/abs/1")
+    assert net.via_fetch_proxy("https://raw.githubusercontent.com/x")
+    monkeypatch.setenv("NO_PROXY", "*")
+    assert not net.via_fetch_proxy("https://arxiv.org/abs/1")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://user:pw@arxiv.org/",
+        "https://arxiv.org:8443/",
+        "https://127.0.0.1/",
+        "https://[::1]/",
+        "https://2130706433/",
+        "https://0x7f.1/",
+        "https://127.1/",
+        "https://localhost/",
+        "https://app.localhost/",
+        "https://host.local/",
+        "https://db.internal/",
+        "https://arxiv.org./",
+        "https://日本語.example/",
+    ],
+)
+def test_proxy_mode_rejects_unsafe_hosts(url):
+    assert _load("imozuru_net").proxy_url_problem(url)
+
+
+def test_proxy_mode_accepts_an_ordinary_host():
+    assert _load("imozuru_net").proxy_url_problem("https://arxiv.org/abs/2510.05096") is None
+
+
+@pytest.mark.parametrize("name", ["fetch", "watch"])
+def test_url_problem_skips_name_resolution_in_proxy_mode(name, proxy_env, monkeypatch):
+    mod = _load(name)
+
+    def boom(host):
+        raise AssertionError("プロキシ越しでは名前を引かない")
+
+    monkeypatch.setattr(mod, "resolve", boom)
+    assert mod.url_problem("https://arxiv.org/abs/2510.05096") is None
+    assert mod.url_problem("https://10.0.0.1/")  # IP の直指定は止まる
+    assert mod.url_problem("https://2130706433/")
+    assert mod.url_problem("https://db.internal/")
+    assert mod.url_problem("https://arxiv.org:8443/")
+
+
+@pytest.mark.parametrize("name", ["fetch", "watch"])
+def test_url_problem_keeps_resolving_outside_the_proxy_mode(name, proxy_env, monkeypatch):
+    mod = _load(name)
+    monkeypatch.delenv("PIS_FETCH_VIA_PROXY")
+    monkeypatch.setattr(mod, "resolve", lambda host: {"127.0.0.1"})
+    assert "手元や内側の宛先" in mod.url_problem("https://arxiv.org/")
+    # http はフラグがあっても従来の検査
+    monkeypatch.setenv("PIS_FETCH_VIA_PROXY", "1")
+    assert "手元や内側の宛先" in mod.url_problem("http://arxiv.org/")
+
+
+def test_proxy_mode_checks_match_websearch():
+    """websearch.py の check_proxy_url と、同じホストの形・同じプロキシの形を使う (二重に持つので固定する)。"""
+    path = ROOT / "home" / "dot_claude" / "skills" / "web-search" / "scripts" / "websearch.py"
+    spec = importlib.util.spec_from_file_location("websearch_for_imozuru", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["websearch_for_imozuru"] = module
+    spec.loader.exec_module(module)
+    net = _load("imozuru_net")
+    assert net._HOST_RE.pattern == module._HOST_RE.pattern
+    assert net._PROXY_RE.pattern == module._PROXY_RE.pattern
+    assert net._INTERNAL_SUFFIXES == module._INTERNAL_SUFFIXES
+    assert net.FETCH_PROXY_ENV == module.FETCH_PROXY_ENV
+
+
+@pytest.mark.parametrize("name", ["fetch.py", "watch.py"])
+def test_the_patch_is_present_in_both_url_problem_copies(name):
+    """fetch.py と watch.py の url_problem は複製。両方に同じ差分が入っていること (imozuru_patch.py と同じ置換)。"""
+    text = (SCRIPTS / name).read_text(encoding="utf-8")
+    assert (
+        "    if via_fetch_proxy(url):\n        return proxy_url_problem(url)\n"
+        "    try:\n        addrs = resolve(host)"
+    ) in text

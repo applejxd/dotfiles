@@ -15,9 +15,74 @@ from __future__ import annotations
 import http.client
 import ipaddress
 import os
+import re
 import socket
 import ssl
+import urllib.parse
 import urllib.request
+
+# ─── pis の内側のプロキシ越しの取得 ──────────────────────────────────────
+# 内側は DNS が引けず、url_problem の事前の名前解決で必ず落ちる。pis が PIS_FETCH_VIA_PROXY=1 を付けたときだけ、
+# urllib が実際に使うプロキシがループバックなら、名前解決を省く (許可ドメインはプロキシが強制する)。
+# 検査は web-search の websearch.py (check_proxy_url) と同じ。正規表現が同じことは test_imozuru.py が固定する。
+# see docs/spec/web-search.md#pis-の内側のプロキシ越しの取得
+FETCH_PROXY_ENV = "PIS_FETCH_VIA_PROXY"
+_PROXY_RE = re.compile(r"http://127\.0\.0\.1:([0-9]{1,5})/?")
+_HOST_RE = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?"
+)
+_INTERNAL_SUFFIXES = (
+    ".localhost",
+    ".local",
+    ".internal",
+    ".lan",
+    ".home.arpa",
+    ".intranet",
+    ".corp",
+)
+
+
+def via_fetch_proxy(url: str) -> bool:
+    """この URL の取得を、プロキシ越しとして扱ってよいか。
+
+    フラグがあり、https で、urllib が実際に使うプロキシ (getproxies) がループバックで、
+    かつ no_proxy に当たらないときだけ。urllib の判定と同じ値を見るので、検査だけ省いて直接つなぐ食い違いが出ない。
+    """
+    if os.environ.get(FETCH_PROXY_ENV) != "1":
+        return False
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return False
+    if parts.scheme.lower() != "https" or not host:
+        return False
+    match = _PROXY_RE.fullmatch(urllib.request.getproxies().get("https", ""))
+    if not match or not 1 <= int(match.group(1)) <= 65535:
+        return False
+    return not urllib.request.proxy_bypass(host)
+
+
+def proxy_url_problem(url: str) -> str | None:
+    """プロキシ越しに取ってよい URL なら None、だめなら理由。名前を引けないので、ホストの形を厳しく見る。"""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return "URL の形が壊れている"
+    host = parts.hostname or ""
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
+        return "認証情報つきの URL は取りに行かない"
+    if port not in (None, 443):
+        return "プロキシ越しは 443 のポートだけ"
+    if (
+        not host
+        or len(host) > 253
+        or not _HOST_RE.fullmatch(host)
+        or host.endswith(_INTERNAL_SUFFIXES)
+    ):
+        return "プロキシ越しに取れるホスト名の形ではない（英数字とハイフンをドットでつないだ名前だけ。IP の直指定・内部名は不可）"
+    return None
 
 
 def _addresses_inside(ip):

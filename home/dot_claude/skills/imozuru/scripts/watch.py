@@ -42,7 +42,7 @@ from xml.parsers import expat
 
 # この dotfiles 側の追加 (imozuru_root.py / imozuru_net.py)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from imozuru_net import PinnedHTTPHandler, PinnedHTTPSHandler  # noqa: E402
+from imozuru_net import PinnedHTTPHandler, PinnedHTTPSHandler, proxy_url_problem, via_fetch_proxy  # noqa: E402
 from imozuru_root import confine, refuse_secrets, secret_reason  # noqa: E402
 
 UA = {"User-Agent": "Mozilla/5.0 imozuru-watch"}
@@ -96,6 +96,8 @@ def url_problem(url: str) -> str | None:
         return "URL のホストに「@」か「%」が入っている"
     if os.environ.get("IMOZURU_ALLOW_PRIVATE") == "1":
         return None
+    if via_fetch_proxy(url):
+        return proxy_url_problem(url)
     try:
         addrs = resolve(host)
     except (OSError, UnicodeError, ValueError) as e:
