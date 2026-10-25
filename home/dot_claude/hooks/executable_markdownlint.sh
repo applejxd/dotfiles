@@ -30,6 +30,11 @@ case "$FILE_PATH" in
 esac
 [ -f "$FILE_PATH" ] || exit 0
 
+# .tmp/ は調査用の作業領域（日本語の長行・compact な表）。lint も自動修正もしない
+case "$FILE_PATH" in
+  */.tmp/*|.tmp/*) exit 0 ;;
+esac
+
 if command -v markdownlint-cli2 >/dev/null 2>&1; then
   LINT="markdownlint-cli2"
 elif command -v npx >/dev/null 2>&1; then

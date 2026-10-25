@@ -27,6 +27,26 @@ ENV_EXPOSURE_BINS = tables.as_set("rules_files", "env_exposure_bins")
 _BARE_ONLY_DUMP_BINS = tables.as_set("rules_files", "bare_only_dump_bins")
 
 
+_ENV_READABLE = tables.as_list("rules_files", "env_readable_names")
+
+_ENV_CHECK = "python3 ~/.claude/skills/env-check/scripts/env_check.py"
+
+# `declare -p NAME` / `export -p NAME` のように変数の中身を読む形 (代入の `NAME=値` は読まない)
+_READ_FLAG_RE = re.compile(r"^-[A-Za-z]*p")
+
+
+def _env_guide() -> str:
+    """環境変数の拒否文に添える誘導。何が止まり、代わりに何を使うかを示す。"""
+    return (
+        "複合コマンド (`;` `|` `&&`) の一部なら、コマンド全体を実行していません。"
+        "この部分を除いて呼び直してください。\n"
+        f"環境変数の診断は `{_ENV_CHECK}` を使ってください "
+        "(`names` で変数名の一覧、`show` で許可リストとプロキシ・ブローカー系の値 "
+        "(URL の認証情報は伏せる)、`get NAME` で個別の設定有無を出します)。\n"
+        f"直接読めるのは許可リストの変数だけです (`printenv NAME` / `echo $NAME`): {', '.join(_ENV_READABLE)}"
+    )
+
+
 ARCHIVE_COMMANDS = tables.as_list("rules_files", "archive_commands")
 
 
@@ -79,12 +99,21 @@ def check_env_exposure(cmd: str) -> str | None:
         text = _command_text(command)
         args = [t for t in argv[1:] if not t.startswith("-")]
         if not args and not (head in _BARE_ONLY_DUMP_BINS and len(argv) > 1):
-            return (
-                f"環境変数を全件出力するコマンドは許可されていません: `{text}`\n"
-                "特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"
-            )
+            return f"環境変数の全件・一覧の出力は許可されていません: `{text}`\n{_env_guide()}"
         if any(_SENSITIVE_ENV_RE.search(a) for a in args):
-            return f"センシティブな環境変数を出力しようとしています: `{text}`"
+            return f"センシティブな環境変数を出力しようとしています: `{text}`\n{_env_guide()}"
+        # 許可リスト方式: 名前を指定して読む形は、リストにある変数だけ通す
+        reads = head == "printenv" or (
+            head in ("declare", "typeset", "export")
+            and any(_READ_FLAG_RE.match(t) for t in argv[1:] if t.startswith("-"))
+        )
+        if reads:
+            denied = [a for a in args if "=" not in a and a not in _ENV_READABLE]
+            if denied:
+                return (
+                    f"許可リストに無い環境変数は直接読めません ({', '.join(denied)}): `{text}`\n"
+                    f"{_env_guide()}"
+                )
     # `env | grep -i key` のように絞り込む形
     if re.search(r"\b(?:env|printenv)\b\s*(?:\||$)", cmd) and _SENSITIVE_ENV_RE.search(cmd):
         return f"環境変数からセンシティブな値を抽出しようとしています: `{cmd.strip()[:200]}`"

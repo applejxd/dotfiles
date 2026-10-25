@@ -631,11 +631,45 @@ def test_ordinary_env_names_are_not_treated_as_secret(name):
         "true && printenv",
         "env | grep -i key",
         "printenv AWS_SECRET_ACCESS_KEY",
+        # 許可リスト方式: 一覧・リスト外の個別参照は止め、env-check へ誘導する
+        "env | cut -d= -f1",
+        "env | grep -i proxy",
+        "timeout 15 gh api repos/o/r --jq .x 2>&1 | head -3; env | grep -i proxy",
+        "printenv HTTPS_PROXY",
+        "printenv FOO_BAR",
+        "printenv HOME FOO_BAR",
+        "declare -p FOO_BAR",
+        "export -p",
+        "typeset -xp FOO_BAR",
     ],
 )
 def test_env_exposure_variants_are_denied(command):
     decision, reason = run_hook(command)
     assert decision == "deny", f"{command!r} -> {decision} ({reason})"
+    # 拒否文は代わりの手段 (env-check) と許可リストを案内する
+    if "AWS_SECRET" not in command and "-i key" not in command:
+        assert "env_check.py" in reason, reason
+        assert "WEBSEARCH_BROKER_URL" in reason, reason
+        assert "コマンド全体を実行していません" in reason, reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "printenv HOME",
+        "printenv HOME LANG",
+        "printenv WEBSEARCH_BROKER_URL",
+        "declare -p HOME",
+        "export FOO_BAR=1",
+        "export FOO_BAR=1 && echo ok",
+        "set -eu",
+        "python3 ~/.claude/skills/env-check/scripts/env_check.py show",
+        "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY",
+    ],
+)
+def test_env_readable_names_and_diagnosis_are_allowed(command):
+    decision, reason = run_hook(command)
+    assert decision is None, f"{command!r} -> {decision} ({reason})"
 
 
 @pytest.mark.parametrize(

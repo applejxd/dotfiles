@@ -72,6 +72,8 @@ _HOOK_TESTS = (
     "test_redirect_tmp",
     "test_secret_lists_in_sync",
     "test_generate_hooks",
+    "test_markdownlint_hook",
+    "test_env_check",
 )
 _PI_TESTS = (
     "test_pi_harness",
@@ -291,6 +293,7 @@ RULES: tuple[Rule, ...] = (
         ("docs",),
     ),
     Rule("away-shift", ("home/dot_claude/skills/away-shift/**",), ("test_away_guard",)),
+    Rule("env-check", ("home/dot_claude/skills/env-check/**",), ("test_env_check",)),
     Rule(
         "テンプレート検査器",
         ("scripts/lint_templates.py",),

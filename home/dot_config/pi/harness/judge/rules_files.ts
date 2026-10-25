@@ -36,6 +36,18 @@ export function checkFileRead(ctx: Ctx, cmd: string): string | null {
 	return null;
 }
 
+/** 環境変数の拒否文に添える誘導 (Python 版 `_env_guide` と同じ文面)。 */
+function envGuide(ctx: Ctx): string {
+	const readable = tableList(ctx, "rules_files", "env_readable_names");
+	return (
+		"複合コマンド (`;` `|` `&&`) の一部なら、コマンド全体を実行していません。この部分を除いて呼び直してください。\n" +
+		"環境変数の診断は `python3 ~/.claude/skills/env-check/scripts/env_check.py` を使ってください " +
+		"(`names` で変数名の一覧、`show` で許可リストとプロキシ・ブローカー系の値 " +
+		"(URL の認証情報は伏せる)、`get NAME` で個別の設定有無を出します)。\n" +
+		`直接読めるのは許可リストの変数だけです (\`printenv NAME\` / \`echo $NAME\`): ${readable.join(", ")}`
+	);
+}
+
 /** 環境変数を露出するコマンドを検出 (全件出力・個別参照・絞り込み)。 */
 export function checkEnvExposure(ctx: Ctx, cmd: string): string | null {
 	const exposureBins = tableSet(ctx, "rules_files", "env_exposure_bins");
@@ -48,12 +60,22 @@ export function checkEnvExposure(ctx: Ctx, cmd: string): string | null {
 		const text = commandText(command);
 		const args = a.slice(1).filter((t) => !t.startsWith("-"));
 		if (args.length === 0 && !(bareOnly.has(head) && a.length > 1)) {
-			return (
-				`環境変数を全件出力するコマンドは許可されていません: \`${text}\`\n` +
-				"特定の変数を確認する場合は `echo $VAR_NAME` を使用してください。"
-			);
+			return `環境変数の全件・一覧の出力は許可されていません: \`${text}\`\n${envGuide(ctx)}`;
 		}
-		if (args.some((x) => SENSITIVE_ENV_RE.test(x))) return `センシティブな環境変数を出力しようとしています: \`${text}\``;
+		if (args.some((x) => SENSITIVE_ENV_RE.test(x))) {
+			return `センシティブな環境変数を出力しようとしています: \`${text}\`\n${envGuide(ctx)}`;
+		}
+		// 許可リスト方式: 名前を指定して読む形は、リストにある変数だけ通す
+		const reads =
+			head === "printenv" ||
+			(["declare", "typeset", "export"].includes(head) && a.slice(1).some((t) => t.startsWith("-") && /^-[A-Za-z]*p/.test(t)));
+		if (reads) {
+			const readable = tableList(ctx, "rules_files", "env_readable_names");
+			const denied = args.filter((x) => !x.includes("=") && !readable.includes(x));
+			if (denied.length > 0) {
+				return `許可リストに無い環境変数は直接読めません (${denied.join(", ")}): \`${text}\`\n${envGuide(ctx)}`;
+			}
+		}
 	}
 	// `env | grep -i key` のように絞り込む形
 	if (pyRegex("\\b(?:env|printenv)\\b\\s*(?:\\||$)").test(cmd) && SENSITIVE_ENV_RE.test(cmd)) {

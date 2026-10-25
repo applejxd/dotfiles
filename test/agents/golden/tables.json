@@ -554,6 +554,24 @@
    "set",
    "typeset"
   ],
+  "env_readable_names": [
+   "HOME",
+   "USER",
+   "LOGNAME",
+   "SHELL",
+   "PWD",
+   "TERM",
+   "TZ",
+   "EDITOR",
+   "VISUAL",
+   "PAGER",
+   "LANG",
+   "LANGUAGE",
+   "LC_ALL",
+   "VIRTUAL_ENV",
+   "WSL_DISTRO_NAME",
+   "WEBSEARCH_BROKER_URL"
+  ],
   "git_file_subcommands": [
    "blame",
    "cat-file",

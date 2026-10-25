@@ -248,6 +248,14 @@ env_exposure_bins = ["declare", "env", "export", "printenv", "set", "typeset"]
 # `set -e` / `set -eu` を全件出力と誤認しないよう、素の `set` だけを対象にする。
 bare_only_dump_bins = ["set"]
 
+# 環境変数を名前で直接読んでよい許可リスト (`printenv NAME` / `declare -p NAME`)。ここに無い名前の個別参照と、
+# 一覧・全件の出力は止めて env-check へ誘導する。値に認証情報が入りうるもの (プロキシの URL など) は載せない。
+# 診断スクリプト env_check.py も同じ表を読む。
+env_readable_names = [
+  "HOME", "USER", "LOGNAME", "SHELL", "PWD", "TERM", "TZ", "EDITOR", "VISUAL", "PAGER",
+  "LANG", "LANGUAGE", "LC_ALL", "VIRTUAL_ENV", "WSL_DISTRO_NAME", "WEBSEARCH_BROKER_URL",
+]
+
 # ─── アーカイブコマンド ───────────────────────────────────────────────
 archive_commands = ["tar", "zip", "gzip", "bzip2", "7z", "xz"]
 

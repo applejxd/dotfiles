@@ -1083,6 +1083,12 @@ subcommands = ["init", "check", "log", "status", "sleep"]
 [[pi.skill_scripts.allow]]
 script = "~/.claude/skills/away-shift/scripts/preflight.py"
 
+# env-check。環境変数の診断 (読み取り専用。秘密らしい名前の値と URL の認証情報は出さない)。hook が env / printenv を止めたときの誘導先
+# see docs/spec/guard/agent-command-policy.md#環境変数の診断
+[[pi.skill_scripts.allow]]
+script = "~/.claude/skills/env-check/scripts/env_check.py"
+subcommands = ["names", "show", "get"]
+
 # web-search。個人用 (github-copilot) だけ。制約のある環境用 (Bedrock) は検索を AgentCore に一本化する (skill も配らない)。
 # 外部へ出るのはクエリだけで、クエリは秘匿チェックで止める。sync-keys は bw を呼ぶので載せない。
 # see docs/spec/web-search.md#pis-の許可規則

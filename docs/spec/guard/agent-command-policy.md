@@ -212,6 +212,37 @@ sed / awk / jq など、stdin を stdout へ通すフィルタを含む) と
 変数名の判定は `PATH` / `PATHS` / `MONKEY` / `KEYCLOAK_URL` / `AUTHOR_NAME` に
 当たらないよう、`PAT` / `KEY` / `AUTH` は単語境界付きで照合する。
 
+### 環境変数の診断
+
+環境変数の**一覧・個別参照**は許可リスト方式で止める（`check_env_exposure`。Python は `rules_files.py`、TS は `rules_files.ts`。
+表は `tables.toml` の `[rules_files] env_readable_names`）。
+
+| 形 | 結果 |
+| --- | --- |
+| `env` / `printenv` / `export -p` / `declare -p` / `set`（引数なし）、`env \| cut -d= -f1` などの絞り込み | deny |
+| `printenv NAME` / `declare -p NAME` の `NAME` が許可リストに無い | deny |
+| `printenv HOME` など、許可リストの変数だけ | 通す |
+| `export FOO=1` / `set -eu`（代入・設定） | 通す |
+| `echo $NAME` | 従来どおり。秘密らしい名前（`_SECRET_SINK_COMMANDS` への出力）だけ止める |
+
+`echo $NAME` まで許可リスト化していないのは、`$HOME` や `$PWD` をパスに使う通常の開発操作を止めてしまうため。
+許可リストには、値に認証情報が入りうるもの（プロキシの URL など）を載せない。
+
+拒否文は、(1) 複合コマンドのときは**全体を実行していない**こと、(2) 代わりに使う診断の入口 `env-check` スキル、(3) 直接読める許可リスト、を必ず案内する。
+複合コマンドの一部（`...; env | grep proxy`）が止まると、他の部分も実行されないので、再実行の仕方が分からないと診断が止まる。
+
+診断の入口は `home/dot_claude/skills/env-check/scripts/env_check.py`（`[pi.skill_scripts]` で確認なしに実行できる）。
+
+| サブコマンド | 出力 |
+| --- | --- |
+| `names` | 変数名だけ |
+| `show` | 許可リストと、`proxy` / `broker` / `*_CA_BUNDLE` / `SSL_CERT` / `BASE_URL` を含む名前の値。URL の `user:pass@` は `***@` に伏せる |
+| `get NAME` | 設定の有無。値は上と同じ範囲だけ。それ以外は文字数だけ |
+
+秘密らしい名前（`_SENSITIVE_ENV_RE`）は、どのサブコマンドでも値を出さない。
+正規表現はスクリプトに複製してあり、`test_env_check.py::test_sensitive_pattern_matches_the_hook` が一致を固定する。
+経緯は T2（sandbox のトラブル報告）: `env | grep -i proxy` が止まり、診断の手段が無かった。
+
 `cd <dir> && <cmd> <relpath>` のように作業ディレクトリを移してから相対パスで触る形は、
 パスを結合した変種を作ってパス系のチェックだけ再適用する。
 

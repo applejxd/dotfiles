@@ -198,6 +198,7 @@ CP = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
 WEB = "~/.claude/skills/web-search/scripts/websearch.py"
 IMOZURU = "~/.claude/skills/imozuru/scripts"
 AWAY = "~/.claude/skills/away-shift/scripts"
+ENVCHECK = "~/.claude/skills/env-check/scripts"
 
 
 @pytest.mark.parametrize(
@@ -279,6 +280,10 @@ def test_skill_script_allow_is_not_widened_silently():
         f"python3 {AWAY}/away_guard.py status *",
         f"python3 {AWAY}/away_guard.py sleep *",
         f"python3 {AWAY}/preflight.py *",
+        # env-check: 読み取り専用。秘密らしい名前の値と URL の認証情報は出さない
+        f"python3 {ENVCHECK}/env_check.py names *",
+        f"python3 {ENVCHECK}/env_check.py show *",
+        f"python3 {ENVCHECK}/env_check.py get *",
         # web-search: 引数で決められるのはクエリ・URL・件数・--json などだけで、
         # 書き込み先や実行するものは決められない。書くのは固定の場所 (~/.cache/websearch) の
         # 結果と休止の状態だけ。sync-keys (bw を呼ぶ) は載せない

@@ -1420,6 +1420,14 @@
      "script": "~/.claude/skills/away-shift/scripts/preflight.py"
     },
     {
+     "script": "~/.claude/skills/env-check/scripts/env_check.py",
+     "subcommands": [
+      "names",
+      "show",
+      "get"
+     ]
+    },
+    {
      "script": "~/.claude/skills/web-search/scripts/websearch.py",
      "subcommands": [
       "search",
