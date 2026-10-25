@@ -527,3 +527,13 @@ def test_delegate_nudge_can_be_turned_off_with_the_environment_variable(env):
     assert proc.returncode == 0, proc.stderr
     assert len(_read_results(sessions)) == 2, proc.stdout
     assert _delegate_stats(sessions) == []
+
+
+def test_bg_run_and_a_running_bg_log_tell_the_model_not_to_wait_by_sleeping_or_polling(env):
+    """完了は通知で届く。sleep や bg_log の連打で待たせない (ツール側の案内。AGENTS.md に書かない)。"""
+    calls = [*_bg("sleep 30"), {"name": "bg_log", "args": {"id": "j1"}}]
+    proc = run_pi(env, calls, extra=("-e", str(ACTIVITY)), PI_HARNESS_BYPASS="1")
+    assert "started j1" in proc.stdout and "j1: running" in proc.stdout, proc.stdout
+    started, logged = proc.stdout.split("started j1", 1)[1].split("j1: running", 1)
+    assert "notified automatically" in started and "sleep" in started, proc.stdout
+    assert "still running" in logged and "Do not poll bg_log" in logged, proc.stdout

@@ -138,6 +138,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 **既知の限界**（`&` の規則と同じ、引用を解釈しない。試験で固定済み）: 引用内やヒアドキュメント本文の `; sleep 30` や行頭の `sleep 30` は当たる（過剰な拒否）。
 `unless` はコマンド全体に効くので、`git commit -m 'ok'; sleep 30` のように git / gh の `-m` と併記した本物の `sleep` は見逃す。
 計測した頭数は少ない（利用者の設計としては「うっかり防止」で、悪意の回避は対象外。`timeout 30 sleep 30`、`bash -c 'sleep 30'`、`read -t 30`、`sleep 9; sleep 9` は通る）。
+連結や `bg_log` の連打で待つ形は、規則では止めず、`bg_run` / `bg_log` の説明・戻り値の「通知が届くので待たない」の案内で減らす（[ツール側に置く理由と経緯](pi-guard.md)）。
 `scope` 付きの id を `[[opencode.shell.guide]]` の `pi = "<id>"` から参照すると、生成で止まる（OpenCode の guide plugin は scope を読まず、意味が変わるため。`test_bad_guide_references_stop_generation`）。
 この規則は、利用者の、「sleep で会話を止めない」という提案（2026-10-20）から。実モデルで「30 秒待ってから実行」を依頼し、`sonnet-5.5`・`gpt-6-sol` とも、`bg_run` で待ち、完了通知で報告した。
 

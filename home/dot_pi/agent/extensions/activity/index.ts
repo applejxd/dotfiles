@@ -191,10 +191,14 @@ export default function (pi: ExtensionAPI) {
 		label: "bg_run",
 		// promptSnippet が無いと Available tools に出ない
 		promptSnippet: "Start a long-running or waiting command (server, watcher, build) in the background and get a job id",
-		promptGuidelines: ["Use bg_run instead of bash for commands that run long or wait; check them with bg_log and stop them with bg_kill."],
+		promptGuidelines: [
+			"Use bg_run instead of bash for commands that run long or wait; check them with bg_log and stop them with bg_kill.",
+			"A message arrives automatically when a bg_run job finishes. Do not wait with sleep or poll bg_log; do other work, or end your turn when nothing else is left.",
+		],
 		description:
 			"Start a shell command in the background and return immediately with a job id. " +
 			"Output goes to a log file. Use bg_log to read it and bg_kill to stop it. " +
+			"A notification message arrives when the job finishes, so do not sleep or poll while waiting. " +
 			"Use for long-running commands (servers, watchers, builds); not for quick commands.",
 		parameters: Type.Object({
 			command: Type.String({ description: "Shell command to run" }),
@@ -234,7 +238,10 @@ export default function (pi: ExtensionAPI) {
 				pending.push({ id, exit, command: params.command, log });
 				schedule();
 			});
-			return text(`started ${id} (pid ${child.pid})\nread its output with bg_log (the log file itself is not readable by other tools)`);
+			return text(
+				`started ${id} (pid ${child.pid})\nread its output with bg_log (the log file itself is not readable by other tools)\n` +
+					"You will be notified automatically when it finishes. Do not wait with sleep or poll bg_log; continue other work, or end your turn if nothing else is left.",
+			);
 		},
 	});
 
@@ -263,7 +270,8 @@ export default function (pi: ExtensionAPI) {
 			const log = job?.log ?? join(tmpdir(), "pi-jobs", `${process.pid}-${params.id}.log`);
 			const state = job ? `running (${Math.floor((Date.now() - job.startedAt) / 1000)}s)` : `finished (exit ${done?.exit})`;
 			const snapshot = tailWithCount(log, lines);
-			return text(`${params.id}: ${state}\n--- tail ${lines} of ${snapshot.total} lines ---\n${snapshot.text}`);
+			const hint = job ? "\n(still running: a notification arrives when it finishes. Do not poll bg_log or sleep; do other work, or end your turn.)" : "";
+			return text(`${params.id}: ${state}\n--- tail ${lines} of ${snapshot.total} lines ---\n${snapshot.text}${hint}`);
 		},
 	});
 
