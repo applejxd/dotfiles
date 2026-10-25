@@ -25,13 +25,15 @@ export function toolText(tool: string, P: string, def: { description?: string; p
 					`Do NOT use it to read, create, or change file contents: use ${P}read instead of cat/head/tail/sed -n (offset/limit for a range, tail for the last N lines), ` +
 					`${P}write instead of echo > / cat > f <<EOF / tee (append: true to append), and ${P}edit instead of sed/awk edits. ` +
 					`To read several files, make parallel ${P}read calls instead of chaining them in one command. ` +
-					`Waits of 10 seconds or more (sleep) and background jobs (&, nohup) go through bg_run.`,
+					`Waits of 10 seconds or more (sleep) and background jobs (&, nohup) go through bg_run. ` +
+					`Exception: git commit and gh issue comment go through ${P}action when ${P}action is available (it asks for approval itself).`,
 				promptSnippet: "Run shell commands (build, test, git; search with grep/find/ls). Not for reading or writing file contents",
 				promptGuidelines: [
 					...(def.promptGuidelines ?? []),
 					`Do not use ${P}bash to read, create, or change file contents. cat/head/tail/sed -n -> ${P}read (offset/limit for a range, tail for the last N lines); echo >, cat > f <<EOF, tee -> ${P}write (append: true to append); sed/awk edits -> ${P}edit.`,
 					`To read several files, make parallel ${P}read calls; do not concatenate them in one ${P}bash command.`,
 					`Run waits of 10 seconds or more (sleep) and background jobs (&, nohup) with bg_run, not ${P}bash.`,
+					`Exception to running git in ${P}bash: git commit and gh issue comment use ${P}action (when ${P}action is available), not ${P}bash.`,
 				],
 			};
 		case "read":

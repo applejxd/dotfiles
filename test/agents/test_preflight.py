@@ -151,7 +151,7 @@ def test_pi_allow(capsys):
 
 @pytest.mark.parametrize(
     "command",
-    ["git commit -m x", "python3 script.py", "git status"],
+    ["uv tool install ruff", "python3 script.py", "git status"],
     ids=["rule-ask", "default-ask-python", "default-ask-status"],
 )
 def test_pi_ask_including_default_is_blocked(command, capsys):
@@ -175,7 +175,7 @@ def test_pi_role_changes_the_verdict(capsys):
 
 
 def test_pi_bypass_turns_ask_into_allow(capsys):
-    code, _ = _pi("git commit -m x", "--bypass", capsys=capsys)
+    code, _ = _pi("uv tool install ruff", "--bypass", capsys=capsys)
     assert code == preflight.EXIT_SAFE
     code, _ = _pi("git push", "--bypass", capsys=capsys)
     assert code == preflight.EXIT_BLOCKED

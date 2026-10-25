@@ -29,11 +29,12 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 1. **共通の禁止**（deny）: `[bash] deny` と意味解析、`[file]` の読み書きの禁止。どの役割・bypass でも外れない。
 2. **役割のツール**: 役割（`[pi.profiles]`）に無いツールは deny。
 3. **誘導**（deny）: 専用ツールがあるのに `cat` や `grep` を使うなどの形を、案内つきで deny。
-4. **役割の `shell_deny`**（deny）。
-5. **confirm**: `[pi.confirm]` の確認表と、確認に格上げする検査（`check_gh_api_mutation`）。他の ask より先に引く。
-6. **ask** と **allow**: `[bash] ask`・意味解析・`[pi.shell] allow`。
-7. **既定**: 役割の既定（実装役は ask、読み取り役は deny）。
-8. **サンドボックスの緩和**（境界が実測で証明されているときだけ）と **bypass**（ask だけを allow にする）。
+4. **`guarded_action` の置き換え対象**（deny。役割が `action` ツールを持つときだけ）: `[[pi.actions]]` の `replaces` に当たる bash（`git commit`・`gh issue comment`）を、呼び出し例つきで deny。
+5. **役割の `shell_deny`**（deny）。
+6. **confirm**: `[pi.confirm]` の確認表と、確認に格上げする検査（`check_gh_api_mutation`）。他の ask より先に引く。
+7. **ask** と **allow**: `[bash] ask`・意味解析・`[pi.shell] allow`。
+8. **既定**: 役割の既定（実装役は ask、読み取り役は deny）。
+9. **サンドボックスの緩和**（境界が実測で証明されているときだけ）と **bypass**（ask だけを allow にする）。
 
 ## 役割
 
@@ -56,6 +57,18 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 - 個人機: fine-grained PAT（Metadata Read・Issues Write・Pull requests Write・Contents Read、Administration 無し）が理想。fine-grained PAT は Web でしか作れない。
 - 制約のある環境の機: fine-grained PAT が使えず classic PAT だけの場合がある。`repo` スコープは粗く、**投稿だけ許して push を許さない形は作れない**。リポジトリのロールが Admin でない場合、Admin 級（公開化・設定変更・Webhook・削除）を拒否させ、保護ブランチは規則で守る。非保護ブランチへの refs・contents・release の書き込みと GraphQL の mutation は、PAT では塞げず、判定器の deny が残る。
 - 判定器の `gh api` 公開系の列挙（`check_gh_api_publish`）は、権限側で塞げると確認できた部分から縮小する。**確認前は撤去しない**。
+
+## 投稿・コミットの流れ（`guarded_action`）
+
+`git commit` と `gh issue comment` は、通常の ask と違い、**内容を見せて 1 回だけ承認を取り、承認した内容で実行する**流れに固定する（二重承認を避ける）。専用ツール `guarded_action` 1 本と、操作を宣言する表
+`[[pi.actions]]` で、操作を増やすときは表に項目を足す（ツールは増やさない）。
+
+- ハーネスが引数を検証して argv を組み立て、シェルを通さずに実行する。承認した文字列がそのまま使われるので、コマンドの解析を要しない。
+  commit は、承認時と実行直前に HEAD・ブランチ・index を照合する。
+- **誤った経路へ行かせない**（うっかり防止。経路の強制ではない）: 同じ操作の bash は deny（ask にしない）し、理由に呼び出し例を入れる。
+  ツールの説明と、グローバル指示・`commit` スキルは、事前に `ask` で承認を取らないと書く。
+- 登録されるのは親の実装役だけ。子・読み取り役・探索役と UI 無しは拒否。
+- 仕様は [pi のガード](pi-guard.md#guarded_action承認つきの外部操作)。導入前の基準（bash の直接実行 275 回、うち直前に `ask` で承認 60 回）を、`scripts/agents/measure_routing.py` で導入後に比べる。
 
 ## ツール定義の拡張
 

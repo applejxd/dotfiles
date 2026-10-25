@@ -153,7 +153,7 @@ def test_boundary_only_drops_the_default_ask_of_plain_shell_commands():
             _req("bash", {"command": "touch made-by-pi"}),
             _req("bash", {"command": "touch made-by-pi"}, boundary=True),
             # 規則に当たる ask・deny・誘導は、サンドボックスの中でも変わらない
-            _req("bash", {"command": "git commit -m x"}, boundary=True),
+            _req("bash", {"command": "gh pr create --title t --body b"}, boundary=True),
             _req("bash", {"command": "git push"}, boundary=True),
             _req("bash", {"command": "rm -rf ."}, boundary=True),
             _req("bash", {"command": "cat README.md"}, boundary=True),

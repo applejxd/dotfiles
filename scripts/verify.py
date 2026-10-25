@@ -76,6 +76,8 @@ _HOOK_TESTS = (
 _PI_TESTS = (
     "test_pi_harness",
     "test_pi_harness_extensions",
+    "test_pi_actions_harness",
+    "test_pi_actions",
     "test_pi_boundary",
     "test_broker",
     "test_broker_search",
@@ -166,6 +168,11 @@ RULES: tuple[Rule, ...] = (
         ("test_websearch",),
     ),
     Rule("共通設定の検証", ("scripts/agents/validate_common.py",), ("test_mcp_servers",)),
+    Rule(
+        "不満・摩擦の集計",
+        ("scripts/agents/friction_scan.py", "scripts/agents/measure_routing.py"),
+        ("test_friction_scan",),
+    ),
     Rule(
         "golden",
         ("scripts/agents/export_*_golden.py", "test/agents/golden/**"),

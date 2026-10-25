@@ -5,6 +5,7 @@
 //
 // node の型除去でそのまま動く書き方だけを使う。
 // see docs/spec/guard/pi-decide.md
+import { actionDenyReason } from "./actions.ts";
 import { ASK_NAMES, CHECKS, DENY_NAMES, PATH_NAMES } from "./checks.ts";
 import type { Ctx, Tables } from "./context.ts";
 import { newCtx } from "./context.ts";
@@ -347,6 +348,11 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		if (deny) return { commonDeny: deny, roleRule: null };
 		const g = guide(cmd, pi);
 		if (g) return { commonDeny: null, roleRule: g };
+		// action ツールを持つ役割だけ: 操作表 [[pi.actions]] の replaces に当たるコマンドは guarded_action へ誘導する (bypass でも外れない)
+		if (Array.isArray(profile.tools) && profile.tools.includes("action")) {
+			const reason = actionDenyReason(cmd, pi);
+			if (reason !== null) return { commonDeny: null, roleRule: response("deny", reason, "rule") };
+		}
 		// 役割だけの禁止。共通の禁止ではないが、bypass では外れない (bypass は ask だけを変える)
 		const roleDeny = findMatch(cmd, ((profile.shell_deny as unknown[] | undefined) ?? []).map(String));
 		if (roleDeny) {

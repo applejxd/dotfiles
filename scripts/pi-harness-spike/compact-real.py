@@ -38,6 +38,7 @@ try:
         "audit.ts",
         "tools-ext.ts",
         "confirm-view.ts",
+        "actions.ts",
         "worktree.ts",
         "worktrees-command.ts",
         "landlock_exec.py",

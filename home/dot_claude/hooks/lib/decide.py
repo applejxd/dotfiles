@@ -10,6 +10,7 @@ see docs/spec/guard/pi-decide.md
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import re
 import shlex
@@ -29,7 +30,17 @@ TASK_TOOL = "task"
 TODO_TOOL = "todo"
 # 拡張 (extensions/ask) の利用者への質問。UI だけを使い、ファイルも外部も触らない
 ASK_TOOL = "ask"
-KNOWN_TOOLS = ("bash", *FILE_READ_TOOLS, *FILE_WRITE_TOOLS, TASK_TOOL, TODO_TOOL, ASK_TOOL)
+# guarded_action (承認つきの操作)。確認はツール自身が 1 回だけ取るので、判定器は役割にあれば allow
+ACTION_TOOL = "action"
+KNOWN_TOOLS = (
+    "bash",
+    *FILE_READ_TOOLS,
+    *FILE_WRITE_TOOLS,
+    TASK_TOOL,
+    TODO_TOOL,
+    ASK_TOOL,
+    ACTION_TOOL,
+)
 # 検査の上限。check_bash.py と同じ
 MAX_COMMAND_LEN = 10000
 # allow の一覧に当たっても、書き込みや実行時の展開の余地がある形は allow にしない
@@ -147,6 +158,124 @@ def _guide(cmd: str, pi: dict[str, Any]) -> dict[str, Any] | None:
             raise ValueError(f"[[pi.guide]] {guide.get('id')!r} に pattern と message が要ります")
         if re.search(pattern, cmd) and not (unless and re.search(unless, cmd)):
             return _response("deny", guide["message"], "rule", guide=guide.get("id"))
+    return None
+
+
+def _action_tokens(text: str) -> list[str]:
+    try:
+        return shlex.split(text)
+    except ValueError:
+        return text.split()
+
+
+def _action_flat(text: str) -> list[str]:
+    return [p for t in _action_tokens(text) for p in re.split(r"[ \t\n]+", t) if p]
+
+
+_ACTION_REPO_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+")
+_ACTION_INT_RE = re.compile(r"[0-9]+")
+_ACTION_VALUE_FLAGS = frozenset(
+    ("-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--title", "-m", "--message")
+)
+_ACTION_TYPE_RANK = {"repo": 0, "int": 1, "text": 2}
+_ACTION_PLACEHOLDER_TEXT = {"body": "<本文>", "message": "<件名と本文>"}
+
+
+def _action_repo_in(tokens: list[str]) -> str | None:
+    for i, t in enumerate(tokens):
+        value = None
+        if t in ("-R", "--repo"):
+            value = tokens[i + 1] if i + 1 < len(tokens) else None
+        elif t.startswith("--repo="):
+            value = t[len("--repo=") :]
+        if value is not None and _ACTION_REPO_RE.fullmatch(value):
+            return value
+    return None
+
+
+def _action_number_in(rest: list[str]) -> int | None:
+    skip = False
+    for t in rest:
+        if skip:
+            skip = False
+        elif t in _ACTION_VALUE_FLAGS:
+            skip = True
+        elif t.startswith("-"):
+            continue
+        elif _ACTION_INT_RE.fullmatch(t) and 1 <= int(t) <= 1000000000:
+            return int(t)
+    return None
+
+
+def _action_entries(pi: dict[str, Any]) -> list[tuple[str, list[str], list[tuple[str, str]]]]:
+    """``[[pi.actions]]`` を (id, replaces, 型と名前順の fields) にする。形が壊れていれば ValueError。"""
+    table = pi.get("actions")
+    if table is None:
+        return []
+    if not isinstance(table, list):
+        raise ValueError("[[pi.actions]] が配列ではありません")
+    out = []
+    for a in table:
+        if not isinstance(a, dict) or not isinstance(a.get("id"), str):
+            raise ValueError("[[pi.actions]] の項目に id (文字列) が要ります")
+        replaces = a.get("replaces")
+        if not isinstance(replaces, list) or not all(isinstance(r, str) for r in replaces):
+            raise ValueError(f"[[pi.actions]] {a['id']!r} の replaces が文字列の配列ではありません")
+        fields = a.get("fields")
+        if not isinstance(fields, dict):
+            raise ValueError(f"[[pi.actions]] {a['id']!r} の fields が表ではありません")
+        pairs = [
+            (k, str(v.get("type") if isinstance(v, dict) else None)) for k, v in fields.items()
+        ]
+        pairs.sort(key=lambda p: (_ACTION_TYPE_RANK.get(p[1], 9), p[0]))
+        out.append((a["id"], list(replaces), pairs))
+    return out
+
+
+def _action_deny_reason(cmd: str, pi: dict[str, Any], policy: Any) -> str | None:
+    """action ツールを持つ役割の bash が、操作表の ``replaces`` に当たれば deny の理由。
+
+    judge/actions.ts と同じ文字列を返す (差分試験で確かめる)。候補の値はコマンドから確実に分かるものだけ。
+    """
+    entries = _action_entries(pi)
+    if not entries:
+        return None
+    segments = policy.normalize(cmd)
+    for aid, replaces, fields in entries:
+        for segment in segments:
+            pattern = next((p for p in replaces if policy._pattern_matches(segment, p)), None)
+            if pattern is None:
+                continue
+            tokens = _action_flat(segment)
+            repo = _action_repo_in(tokens)
+            if repo is None:
+                for raw in policy.split_command_segments(cmd):
+                    raws = _action_flat(raw)
+                    if not any(t == "gh" or t.endswith("/gh") for t in raws):
+                        continue
+                    repo = _action_repo_in(raws)
+                    if repo is not None:
+                        break
+            number = _action_number_in(_action_tokens(segment)[len(pattern.split()) :])
+            parts = []
+            for name, kind in fields:
+                key = json.dumps(name, ensure_ascii=False)
+                if kind == "repo":
+                    value = json.dumps(repo or "<owner/name>", ensure_ascii=False)
+                elif kind == "int":
+                    value = "<N>" if number is None else str(number)
+                else:
+                    placeholder = _ACTION_PLACEHOLDER_TEXT.get(name, f"<{name}>")
+                    value = json.dumps(placeholder, ensure_ascii=False)
+                parts.append(f"{key}:{value}")
+            example = (
+                f'{{"action":{json.dumps(aid, ensure_ascii=False)},"params":{{{",".join(parts)}}}}}'
+            )
+            return (
+                "投稿・コミットは guarded_action で行う（承認はそのツールが 1 回だけ取る。"
+                "事前に ask やチャットで承認を取らない）。"
+                f"呼び出し例（値は候補。実際の値を確認する）: guarded_action {example}"
+            )
     return None
 
 
@@ -301,6 +430,11 @@ def _decide_bash(
     guide = _guide(cmd, pi)
     if guide:
         return None, guide
+    # 役割に action ツールがあるときだけ: 操作表の replaces に当たるコマンドは guarded_action へ誘導 (bypass でも外れない)
+    if ACTION_TOOL in profile["tools"]:
+        action_reason = _action_deny_reason(cmd, pi, policy)
+        if action_reason:
+            return None, _response("deny", action_reason, "rule")
     # 役割だけの禁止。共通の禁止ではないが、bypass では外れない (bypass は ask だけを変える)
     role_deny = policy.find_match(cmd, [str(c) for c in profile.get("shell_deny") or []])
     if role_deny:
@@ -461,6 +595,9 @@ def _decide(request: Any) -> dict[str, Any]:
         common_deny, role_rule = None, _response("allow", reason, "rule")
     elif tool == ASK_TOOL:
         reason = "利用者への質問は UI だけを使う (ファイルも外部も触らない)"
+        common_deny, role_rule = None, _response("allow", reason, "rule")
+    elif tool == ACTION_TOOL:
+        reason = "guarded_action は確認を自分で 1 回だけ取る"
         common_deny, role_rule = None, _response("allow", reason, "rule")
     else:
         common_deny, role_rule = None, None

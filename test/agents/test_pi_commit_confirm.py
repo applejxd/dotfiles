@@ -391,6 +391,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copy2(HARNESS_SRC.parent / "audit.ts", harness / "audit.ts")
     shutil.copy2(HARNESS_SRC.parent / "tools-ext.ts", harness / "tools-ext.ts")
     shutil.copy2(HARNESS_SRC.parent / "confirm-view.ts", harness / "confirm-view.ts")
+    shutil.copy2(HARNESS_SRC.parent / "actions.ts", harness / "actions.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktree.ts", harness / "worktree.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktrees-command.ts", harness / "worktrees-command.ts")
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
@@ -398,6 +399,13 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     rules = gen.build_pi_harness({}, load_common())
     for agent in rules["agents"].values():
         agent["model"] = None
+    # action を持たない役割では、bash の git commit は従来どおり確認を出す (この試験は「確認が 1 回だけ」を見る)
+    for tools in rules["profile_tools"].values():
+        if "action" in tools:
+            tools.remove("action")
+    for profile in (rules["judge"]["common"].get("pi") or {}).get("profiles", {}).values():
+        if "action" in (profile.get("tools") or []):
+            profile["tools"].remove("action")
     (harness / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
     env["env"]["AGENTS_CONFIG_DIR"] = str(agents_config_dir())
     calls = [{"name": "guarded_bash", "args": {"command": COMMIT}}]

@@ -951,6 +951,29 @@ bash = [
 checks = ["check_gh_api_mutation"]
 timeout_seconds = 300
 
+# 承認つきで実行する操作 (guarded_action)。action を持つ役割では、replaces に当たる bash は deny。
+# argv はシェル無しで実行する。置換点は {<フィールド名>} / {<フィールド名>_file}。
+# see docs/spec/guard/pi-decide.md
+[[pi.actions]]
+id = "gh_issue_comment"
+label = "issue にコメントを投稿"
+argv = ["gh", "issue", "comment", "{number}", "-R", "{repo}", "--body-file", "{body_file}"]
+replaces = ["gh issue comment"]
+preview = "none"
+[pi.actions.fields]
+repo = { type = "repo" }
+number = { type = "int" }
+body = { type = "text", file = true, content = true, max_chars = 8000 }
+
+[[pi.actions]]
+id = "git_commit"
+label = "コミット"
+argv = ["git", "commit", "-F", "{message_file}"]
+replaces = ["git commit"]
+preview = "git_staged"
+[pi.actions.fields]
+message = { type = "text", file = true, content = true, max_chars = 8000 }
+
 # shell 出力の伏字化。誘導と結果フィルタを抜けて shell を通ったものへの安全網。
 # ★境界ではない。base64 や tr で変換されるとすり抜ける (実測)。事故と素朴な
 #   プロンプトインジェクションを想定した層で、意図的な持ち出しは止まらない。
@@ -1296,7 +1319,7 @@ $ARGUMENTS
 # task は子エージェントの起動 ([pi.agents])。子は同じ判定器で動く。
 # 末尾が * の項目は前方一致。mcp__* は MCP のツール全部 (規則が無いので既定の扱いになる)。
 [pi.profiles.implementer]
-tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "todo", "ask", "mcp__*"]
+tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "todo", "ask", "action", "mcp__*"]
 default = "ask"
 
 [pi.profiles.reader]

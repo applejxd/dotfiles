@@ -26,6 +26,7 @@ import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Jo
 import { createRedactor } from "./redact.ts";
 import { MAX_BODY_FILE_BYTES, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, type BodyFileResult, type ConfirmRaw } from "./confirm-view.ts";
 import { appendOperations, appendResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
+import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { auditFormat, summarizeCalls } from "./audit.ts";
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
@@ -144,6 +145,12 @@ function confirmDetailed(ctx: any, title: string, body: string, timeoutMs?: numb
 	});
 	confirmQueue = run.catch(() => undefined);
 	return run.catch((): ConfirmRaw => ({ ok: false, elapsedMs: 0, aborted: false, error: true }));
+}
+// guarded_action の対話 (select・editor・input) を、確認の枠を共有して 1 件ずつ行う
+function dialogInOrder<T>(fn: () => Promise<T>): Promise<T> {
+	const run = confirmQueue.then(fn);
+	confirmQueue = run.catch(() => undefined);
+	return run;
 }
 function confirmInOrder(ctx: any, title: string, body: string): Promise<boolean> {
 	return confirmDetailed(ctx, title, body).then((r) => r.ok);
@@ -375,6 +382,51 @@ export default async function (pi: ExtensionAPI) {
 
 	// MCP はフルガードから登録する。フルガードが抜ければ登録も消える (spike の E3)
 	for (const server of rules.mcp ?? []) pi.registerMcpServer(server.name, server.config);
+
+	// 承認つきの操作 (git commit・gh issue comment)。役割に action があり、子でないときだけ登録する
+	const actionSpecs = loadActions(rules);
+	if (!CHILD && roleTools.includes(ACTION_TOOL) && actionSpecs.length > 0) {
+		pi.registerTool({
+			name: `${PREFIX}${ACTION_TOOL}`,
+			label: "action",
+			promptSnippet: "Commit and post issue comments with approval (git commit, gh issue comment). Use instead of shell commands",
+			promptGuidelines: [
+				`Use ${PREFIX}${ACTION_TOOL} for git commit and gh issue comment. It asks the user for approval itself, exactly once; do not ask in chat or with ask beforehand. Stage files with ${PREFIX}bash first.`,
+				...actionSpecs.map((a) => `${PREFIX}${ACTION_TOOL}: ${actionLine(a)}`),
+			],
+			description: actionDescription(actionSpecs),
+			parameters: Type.Object(
+				{
+					action: Type.String({ description: "the id of the operation" }),
+					params: Type.Record(Type.String(), Type.Unknown(), { description: "the arguments of the operation (all required)" }),
+				},
+				{ additionalProperties: false },
+			),
+			async execute(toolCallId: string, params: any, signal: any, _onUpdate: any, ctx: any) {
+				decided.delete(toolCallId);
+				return executeAction(
+					{
+						actions: actionSpecs,
+						rules,
+						child: CHILD,
+						env: { ...AGENT_ENV, ...process.env },
+						redact: redactText,
+						judge: (input, cwd) => {
+							const d = decide(ACTION_TOOL, input, cwd);
+							return d.decision === "allow" ? null : `${d.decision}: ${d.reason}`;
+						},
+						dialog: dialogInOrder,
+						bell: () => {
+							if (ctx.mode === "tui") process.stdout.write("\x07");
+						},
+					},
+					params,
+					signal,
+					ctx,
+				);
+			},
+		});
+	}
 
 	const agents: Record<string, any> = rules.agents ?? {};
 	if (!CHILD && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);

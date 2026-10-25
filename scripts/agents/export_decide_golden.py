@@ -122,6 +122,40 @@ DASH_COMMANDS = (
 )
 HOME = str(Path.home())
 
+# guarded_action (承認つきの操作)。action を持つ役割 (implementer) でだけ deny + 呼び出し例になる
+# 期待値は test_pi_actions.py
+ACTION_ROLES = ("implementer", "explorer", "committer", "worker")
+ACTION_COMMANDS = (
+    "git commit -m x",
+    "git commit",
+    "git commit --amend --no-edit",
+    "git -C d commit -m x",
+    "cd x && git commit -m x",
+    "git add a && git commit -m x",
+    "bash -c 'git commit -m x'",
+    "env git commit -m x",
+    "gh issue comment 1 -R o/r --body x",
+    "gh issue comment 12 --repo o/r --body x",
+    "gh issue comment 12 --repo=o/r -b x",
+    "gh -R o/r issue comment 3 --body x",
+    "gh issue comment 5 --body x",
+    "gh issue comment --body x",
+    "gh issue comment https://example.com/o/r/issues/1 -b x",
+    "gh issue comment 1 -R bad --body x",
+    "cd x && gh issue comment 7 -R o/r -b x",
+    "bash -c 'gh -R o/r issue comment 9 --body x'",
+    "echo git commit",
+    "git commit-tree HEAD",
+    "gh issue view 1",
+    "gh issue comment",
+    "git log",
+)
+ACTION_INPUTS = (
+    {"action": "git_commit", "params": {"message": "x"}},
+    {"action": "gh_issue_comment", "params": {"repo": "o/r", "number": 1, "body": "x"}},
+    {},
+)
+
 # ファイルツールの対象。${ROOT} / ${HOME} は試験側で展開する
 FILE_TOOLS = ("read", "grep", "find", "ls", "edit", "write")
 FILE_PATHS = (
@@ -212,6 +246,22 @@ def requests() -> list[Any]:
     for command in DASH_COMMANDS:
         for role in DASH_ROLES:
             out.append(_request("bash", role, "${ROOT}", command=command))
+    for command in ACTION_COMMANDS:
+        for role in ACTION_ROLES:
+            out.append(_request("bash", role, "${ROOT}", command=command))
+        out.append(_request("bash", "implementer", "${ROOT}", bypass=True, command=command))
+    for action_input in ACTION_INPUTS:
+        for role in ACTION_ROLES:
+            for bypass in (False, True):
+                out.append(
+                    {
+                        "tool": "action",
+                        "input": action_input,
+                        "cwd": "${ROOT}",
+                        "role": role,
+                        "bypass": bypass,
+                    }
+                )
     for tool in FILE_TOOLS:
         for role in ROLES:
             for cwd in FILE_CWDS:

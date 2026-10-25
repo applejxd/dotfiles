@@ -978,6 +978,62 @@
   }
  },
  "pi": {
+  "actions": [
+   {
+    "argv": [
+     "gh",
+     "issue",
+     "comment",
+     "{number}",
+     "-R",
+     "{repo}",
+     "--body-file",
+     "{body_file}"
+    ],
+    "fields": {
+     "body": {
+      "content": true,
+      "file": true,
+      "max_chars": 8000,
+      "type": "text"
+     },
+     "number": {
+      "type": "int"
+     },
+     "repo": {
+      "type": "repo"
+     }
+    },
+    "id": "gh_issue_comment",
+    "label": "issue にコメントを投稿",
+    "preview": "none",
+    "replaces": [
+     "gh issue comment"
+    ]
+   },
+   {
+    "argv": [
+     "git",
+     "commit",
+     "-F",
+     "{message_file}"
+    ],
+    "fields": {
+     "message": {
+      "content": true,
+      "file": true,
+      "max_chars": 8000,
+      "type": "text"
+     }
+    },
+    "id": "git_commit",
+    "label": "コミット",
+    "preview": "git_staged",
+    "replaces": [
+     "git commit"
+    ]
+   }
+  ],
   "agents": {
    "commit": {
     "description": "変更を読み、論理単位ごとの対象ファイルとコミットメッセージ全文 (計画) を返す。ステージもコミットもしない",
@@ -1199,6 +1255,7 @@
      "task",
      "todo",
      "ask",
+     "action",
      "mcp__*"
     ]
    },

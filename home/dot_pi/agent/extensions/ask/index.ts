@@ -308,11 +308,12 @@ export default function (pi: ExtensionAPI) {
 		promptSnippet: "Ask the user 1-4 multiple-choice questions at once instead of guessing",
 		promptGuidelines: [
 			"Use ask only when an unresolved choice would change the result and you cannot decide from the code or docs; do not ask for things you can check yourself.",
+			"Do not use ask to get approval for a commit or a post (guarded_action asks for approval itself).",
 			"Put independent questions into one ask call (up to 4). A question that depends on an earlier answer goes into the next call.",
 			"Give each question 2-4 options with a one-line description of the trade-off; put the recommended option first and end its label with ' (推奨)' (or ' (recommended)'); keep labels short because labels are limited to 60 characters. A free-text row is added automatically, so do not add 'Other'.",
 		],
 		description:
-			`利用者に選択肢つきの質問を最大 ${MAX_QUESTIONS} 問まとめて尋ねる。questions の各項目は question (質問文)・header (短い見出し。任意)・` +
+			`利用者に選択肢つきの質問を最大 ${MAX_QUESTIONS} 問まとめて尋ねる。投稿・コミットの承認には使わない (guarded_action が承認を取る)。questions の各項目は question (質問文)・header (短い見出し。任意)・` +
 			`options (${MIN_OPTIONS}〜${MAX_OPTIONS} 個。label と description)・multi (複数選択。任意)。自由記述の行 "${FREE}" は自動で足されるので、"Other" や "${NEXT}" を選択肢にしない。` +
 			"各質問は推奨の選択肢をちょうど 1 つ (multi は 1 つ以上) 持ち、先頭に置き、label の末尾に ' (推奨)' を付ける (label は 60 字までなので短くする)。守られないとエラーで返る。" +
 			"戻りは answers (答えた問)・unanswered (答えなかった問の番号。0 始まり)・cancelled。" +

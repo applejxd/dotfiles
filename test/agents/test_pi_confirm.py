@@ -73,7 +73,6 @@ CONFIRM_COMMANDS = [
     "gh pr ready 1",
     "gh issue create --title t --body b",
     "gh issue edit 1 --title t",
-    "gh issue comment 1 --body x",
     "gh issue close 1",
     "gh issue reopen 1",
     "gh issue lock 1",
@@ -98,7 +97,7 @@ CONFIRM_COMMANDS = [
 PREFIXED_FORMS = [
     "cd x && gh pr create --title t --body b",
     "gh -R owner/repo pr create --title t --body b",
-    "gh --repo x issue comment 1 -b y",
+    "gh --repo x issue close 1",
     "env gh pr create --title t --body b",
     "bash -c 'gh pr create --title t --body b'",
     "echo hi; gh issue close 1",
@@ -110,7 +109,7 @@ BLIND_COMMANDS = [
     "gh issue create -b - -t x",
     "gh pr edit 1 --body-file=-",
     'gh pr create --title t --body "$(cat f)"',
-    "gh issue comment 1 --body `date`",
+    "gh issue edit 1 --body `date`",
     "gh pr review 1 --approve --body-file -",
     "bash -c 'gh pr create --title t --body-file -'",
 ]
@@ -197,11 +196,11 @@ def test_confirm_table_asks_even_with_bypass_and_boundary():
 
 @needs_node
 def test_existing_bash_ask_commands_in_the_table_become_must_confirm():
-    # [bash] ask にもある gh pr create / gh issue create|close|comment は、確認表が先に当たる
+    # [bash] ask にもある gh pr create / gh issue create|close は、確認表が先に当たる
+    # (gh issue comment は implementer では guarded_action へ誘導する deny。test_pi_actions.py)
     for command in (
         "gh pr create --title t --body b",
         "gh issue close 1",
-        "gh issue comment 1 --body x",
     ):
         out = _judge(_modes(command))
         assert all(o["decision"] == "ask" and o["mustConfirm"] is True for o in out), out
@@ -216,7 +215,7 @@ def test_non_table_commands_keep_the_old_bypass_and_boundary_behaviour():
     assert out[3]["decision"] == "allow"
     assert all("mustConfirm" not in o for o in out)
     # [bash] ask の通常の確認は bypass で allow のまま
-    out = _judge(_modes("git commit -m x"))
+    out = _judge(_modes("git add a"))
     assert out[0]["decision"] == "ask" and "mustConfirm" not in out[0]
     assert out[1]["decision"] == "allow" and out[1]["bypassed"] is True
 
@@ -365,9 +364,7 @@ def test_python_gh_api_reads_are_not_blocked(command):
 @needs_node
 def test_confirm_checks_come_before_the_other_asks():
     # [bash] ask の git commit (check_policy_ask) と複合しても、gh api の書き込みは bypass でも確認する
-    out = _judge(
-        [_bash("git commit -m x && gh api -X POST repos/o/r/issues -f title=x", bypass=True)]
-    )
+    out = _judge([_bash("git add a && gh api -X POST repos/o/r/issues -f title=x", bypass=True)])
     assert out[0]["decision"] == "ask" and out[0]["mustConfirm"] is True
     assert "bypassed" not in out[0]
 

@@ -1850,6 +1850,122 @@ JUDGE_TABLES = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness
 JUDGE_CHECKS = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/checks.ts"
 PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds"})
 PI_CONFIRM_TIMEOUT_DEFAULT = 300
+PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview"})
+PI_ACTION_PREVIEWS = frozenset({"none", "git_staged"})
+PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "text"})
+PI_ACTION_FIELD_KEYS = {
+    "repo": frozenset({"type"}),
+    "int": frozenset({"type"}),
+    "text": frozenset({"type", "file", "content", "max_chars"}),
+}
+PI_ACTION_ID = re.compile(r"[a-z][a-z0-9_]*")
+PI_ACTION_POINT = re.compile(r"\{([^{}]*)\}")
+PI_ACTION_MAX_CHARS = 100000
+
+
+def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
+    """``[[pi.actions]]`` (guarded_action の操作表) を検証して返す (無ければ空の配列)。
+
+    argv の置換点は ``{<フィールド名>}`` (repo / int) と ``{<フィールド名>_file}``
+    (``file = true`` の text) だけ。全フィールドが argv に現れる必要がある。
+    """
+    section = (common.get("pi") or {}).get("actions")
+    if section is None:
+        return []
+    if not isinstance(section, list):
+        raise SystemExit("[[pi.actions]] は表の配列でなければならない")
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in section:
+        if not isinstance(entry, dict):
+            raise SystemExit("[[pi.actions]] の各項目は表でなければならない")
+        aid = entry.get("id")
+        where = f"[[pi.actions]] {aid!r}"
+        if not isinstance(aid, str) or not PI_ACTION_ID.fullmatch(aid):
+            raise SystemExit(f"{where} の id は ^[a-z][a-z0-9_]*$ の文字列")
+        if aid in seen:
+            raise SystemExit(f"{where} の id が重複している")
+        seen.add(aid)
+        try:
+            _reject_unknown(f"pi.actions.{aid}", set(entry), PI_ACTION_KEYS)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+        if not isinstance(entry.get("label"), str) or not entry["label"].strip():
+            raise SystemExit(f"{where} に label (空でない文字列) が要る")
+        preview = entry.get("preview")
+        if preview not in PI_ACTION_PREVIEWS:
+            raise SystemExit(
+                f"{where} の preview は {sorted(PI_ACTION_PREVIEWS)} のどれか: {preview!r}"
+            )
+        replaces = entry.get("replaces")
+        if (
+            not isinstance(replaces, list)
+            or not replaces
+            or not all(isinstance(r, str) and r.strip() for r in replaces)
+        ):
+            raise SystemExit(f"{where} の replaces は空でない文字列の空でない配列")
+        fields = entry.get("fields")
+        if not isinstance(fields, dict) or not fields:
+            raise SystemExit(f"{where} の fields は空でない表")
+        points: dict[str, str] = {}  # 置換点の名前 -> フィールド名
+        for name, spec in fields.items():
+            if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9]*", name):
+                raise SystemExit(f"{where} のフィールド名が不正: {name!r}")
+            if not isinstance(spec, dict) or spec.get("type") not in PI_ACTION_FIELD_TYPES:
+                raise SystemExit(
+                    f"{where} の fields.{name} の type は {sorted(PI_ACTION_FIELD_TYPES)} のどれか"
+                )
+            kind = spec["type"]
+            unknown = sorted(set(spec) - PI_ACTION_FIELD_KEYS[kind])
+            if unknown:
+                raise SystemExit(f"{where} の fields.{name} に未知のキー: {', '.join(unknown)}")
+            if kind == "text":
+                for flag in ("file", "content"):
+                    if not isinstance(spec.get(flag, False), bool):
+                        raise SystemExit(f"{where} の fields.{name}.{flag} は真偽値")
+                limit = spec.get("max_chars")
+                if (
+                    isinstance(limit, bool)
+                    or not isinstance(limit, int)
+                    or not 1 <= limit <= PI_ACTION_MAX_CHARS
+                ):
+                    raise SystemExit(
+                        f"{where} の fields.{name}.max_chars は 1–{PI_ACTION_MAX_CHARS} の整数"
+                    )
+                points[f"{name}_file" if spec.get("file", False) else name] = name
+                if not spec.get("file", False):
+                    raise SystemExit(f"{where} の fields.{name} (text) は file = true が要る")
+            else:
+                points[name] = name
+        argv = entry.get("argv")
+        if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
+            raise SystemExit(f"{where} の argv は空でない文字列の配列")
+        if not argv[0] or PI_ACTION_POINT.search(argv[0]):
+            raise SystemExit(f"{where} の argv の先頭は置換点を含まない実行ファイル名")
+        used: set[str] = set()
+        for item in argv:
+            if item.count("{") != item.count("}") or re.search(r"\{[^{}]*\{|\}[^{}]*\}", item):
+                raise SystemExit(f"{where} の argv の波括弧が不正: {item!r}")
+            for point in PI_ACTION_POINT.findall(item):
+                if point not in points:
+                    raise SystemExit(
+                        f"{where} の argv の置換点 {{{point}}} に対応するフィールドが無い"
+                    )
+                used.add(points[point])
+        missing = sorted(set(fields) - used)
+        if missing:
+            raise SystemExit(f"{where} の必須フィールドが argv に現れない: {', '.join(missing)}")
+        out.append(
+            {
+                "id": aid,
+                "label": entry["label"],
+                "argv": list(argv),
+                "fields": {k: dict(v) for k, v in fields.items()},
+                "replaces": list(replaces),
+                "preview": preview,
+            }
+        )
+    return out
 
 
 def judge_ask_names() -> frozenset[str]:
@@ -1909,7 +2025,11 @@ def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
         tables = tomllib.load(f)
     judge_common = {key: common[key] for key in JUDGE_COMMON_KEYS if key in common}
     if "pi" in judge_common:
-        judge_common["pi"] = {**judge_common["pi"], "confirm": pi_confirm(common)}
+        judge_common["pi"] = {
+            **judge_common["pi"],
+            "confirm": pi_confirm(common),
+            "actions": pi_actions(common),
+        }
     return {
         "common": judge_common,
         "tables": tables,

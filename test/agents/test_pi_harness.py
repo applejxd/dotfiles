@@ -44,6 +44,7 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "audit.ts", harness / "audit.ts")
     shutil.copy2(HARNESS_SRC.parent / "tools-ext.ts", harness / "tools-ext.ts")
     shutil.copy2(HARNESS_SRC.parent / "confirm-view.ts", harness / "confirm-view.ts")
+    shutil.copy2(HARNESS_SRC.parent / "actions.ts", harness / "actions.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktree.ts", harness / "worktree.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktrees-command.ts", harness / "worktrees-command.ts")
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
@@ -101,7 +102,10 @@ def test_only_guarded_tools_are_declared(env):
     proc = run_pi(env, [])
     assert proc.returncode == 0, proc.stderr
     tools = json.loads(lines(proc)[0].removeprefix("TOOLS="))
-    names = ("bash", "edit", "find", "grep", "ls", "read", "task", "write")
+    names = ["bash", "edit", "find", "grep", "ls", "read", "task", "write"]
+    rules = json.loads((env["harness"] / "rules.json").read_text(encoding="utf-8"))
+    if rules["judge"]["common"].get("pi", {}).get("actions"):
+        names.append("action")  # 役割に action があり、表も宣言されているときだけ登録される
     assert tools == sorted(f"guarded_{t}" for t in names)
 
 
@@ -1754,7 +1758,21 @@ def test_activity_footer_names_the_running_children_with_elapsed_time(env):
     assert any(s and s.startswith("🤖 worker ") for s in statuses), statuses
 
 
+def _without_action_tool(env):
+    """役割から action を外す (action を持たない役割では、bash の git commit は従来どおり確認を出す)。"""
+    path = env["harness"] / "rules.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    for tools in rules["profile_tools"].values():
+        if "action" in tools:
+            tools.remove("action")
+    for profile in (rules["judge"]["common"].get("pi") or {}).get("profiles", {}).values():
+        if "action" in (profile.get("tools") or []):
+            profile["tools"].remove("action")
+    path.write_text(json.dumps(rules), encoding="utf-8")
+
+
 def test_git_commit_confirmation_shows_subject_and_body(env):
+    _without_action_tool(env)
     subprocess.run(["git", "init", "-q"], cwd=env["proj"], check=True)
     command = "git commit -m 'feat: 件名です' -m '本文の 1 行目'"
     requests = _rpc(env, bash_call(command), [False])
