@@ -92,7 +92,7 @@
 
 ## 現在地
 
-- 分類と方針は決定済み（上の「決定」）。**段 G1〔G4 は完了**（2026-10-25。実装はコミット `9e37e04`、仕様は [pi-decide.md](../spec/guard/pi-decide.md#confirm) と [pi-guard.md](../spec/guard/pi-guard.md#confirm-の確認)）。**段 G5 は利用者の `pis` で、確認画面が実際に出ることを確かめる**。段 G6（C1 の棚卸し）・段 G8（誘導の縮小の次の項目）は、再計測の後。段 G9 は保留
+- 分類と方針は決定済み（上の「決定」）。**段 G1〔G4 は完了**（2026-10-25。実装はコミット `9e37e04`、仕様は [pi-decide.md](../spec/guard/pi-decide.md#confirm) と [pi-guard.md](../spec/guard/pi-guard.md#confirm-の確認)）。**段 G11（`guarded_action`）の段階 1・2 も実装済み**（[pi-guard.md](../spec/guard/pi-guard.md#guarded_action承認つきの外部操作)。導入前の基準: bash の直接実行 275 回、うち直前に `ask` で承認 60 回）。**段 G5・G11 の確認画面は、利用者の対話の `pis` で確かめる状態**（`guarded_action` は 1 回実際に使われ、確認を経てコミットされたが、画面の感想は未取得）。段 G6（C1 の棚卸し）・段 G8（誘導の縮小の次の項目）は再計測の後。段 G9（ブローカーでの決定的な deny）と段 G10（権限側へ寄せる。PAT を作り直す余裕ができたとき）は保留
 - 関連: [CHG-0033](0033-sandbox-build-value-assessment.md)（責務の棚卸し）、[CHG-0035](0035-retire-python-judge-oracle.md)、[CHG-0037](0037-pis-usability-and-telemetry.md)
 
 ## 未解決点
@@ -103,8 +103,11 @@
 4. 子エージェントの確認の扱い（UI が無いので deny。`inherit_bypass` との関係。**実装と統合試験で確かめた**）
 5. 実際の TUI での確認画面の表示（残り秒数、長い本文のスクロール）。試験は RPC と print だけ
 6. `gh api` の暗黙の POST（`-f`/`-F`/`--input`）、`-X` の別形、前置フラグへの対応の試験の追加（調査で、OSS も欠く穴と分かった）
-7. **サンドボックスで検索のプロバイダーに届かない**（実測。許可の一覧に無い。[CHG-0037](0037-pis-usability-and-telemetry.md) の通信の方針とあわせて決める）
+7. ~~サンドボックスで検索のプロバイダーに届かない~~ **解消**（2026-10-25。検索ブローカーで内側から検索が通る。[CHG-0037](0037-pis-usability-and-telemetry.md)）
 8. 確認の誤入力の防止（表示直後の確定キーの無視）と、判定の監査ログ（JSONL）（調査で参考になった。実績を見て判断）
+9. **導入後の計測**（数日使った後。`python3 .agents/skills/friction-review/scripts/friction_scan.py --since <日付>`）: `guarded_action` を導入した後の、bash の直接実行の割合と二重承認（基準 275 回・60 回）、`guarded_edit` の失敗率（基準 12.5%）、`ask` のエラー（基準 11 件）、`Invalid arguments`（JSON の不正。Copilot の `eager_input_streaming` 無効化の効果）。**新しい拡張は起動時に読むので、効果はセッションを開き直してから**
+10. 集計スクリプトにプロバイダー・モデル別のエラー件数を足す（Copilot と Bedrock の比較。**保留**）。Bedrock 経由の環境で壊れた JSON が出るかは**未確認で保留**（こちらは eager を送らない。再発したら、送信ペイロードを `before_provider_request` で見る。[pi-guard.md](../spec/guard/pi-guard.md#ツール引数の-json-を壊さない設定)）
+11. 判定器の Python 版（照合用）の撤去（[CHG-0035](0035-retire-python-judge-oracle.md)）。規模の削減として最大。規模の内訳の計測から
 
 ## 評価基準
 
