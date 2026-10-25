@@ -921,3 +921,135 @@ def test_plain_503_is_still_a_server_error(tmp_path):
     )
     out = run(http, tmp_path)
     assert out.attempts[0] == ("brave", "server") and out.provider == "exa"
+
+
+# ─── 取得: pis の内側のプロキシ越し ─────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({"PIS_FETCH_VIA_PROXY": "1", "HTTPS_PROXY": "http://127.0.0.1:3128"}, ("127.0.0.1", 3128)),
+        (
+            {"PIS_FETCH_VIA_PROXY": "1", "https_proxy": "http://127.0.0.1:3128/"},
+            ("127.0.0.1", 3128),
+        ),
+        # フラグが無い (ホストの既存のプロキシ設定だけでは有効にならない)
+        ({"HTTPS_PROXY": "http://127.0.0.1:3128"}, None),
+        ({"PIS_FETCH_VIA_PROXY": "0", "HTTPS_PROXY": "http://127.0.0.1:3128"}, None),
+        # ループバック以外・認証情報つき・形が違うプロキシは使わない
+        ({"PIS_FETCH_VIA_PROXY": "1", "HTTPS_PROXY": "http://proxy.example:3128"}, None),
+        ({"PIS_FETCH_VIA_PROXY": "1", "HTTPS_PROXY": "http://u:p@127.0.0.1:3128"}, None),
+        ({"PIS_FETCH_VIA_PROXY": "1", "HTTPS_PROXY": "socks5h://127.0.0.1:1080"}, None),
+        ({"PIS_FETCH_VIA_PROXY": "1", "HTTPS_PROXY": "http://127.0.0.1:99999"}, None),
+        ({"PIS_FETCH_VIA_PROXY": "1"}, None),
+    ],
+)
+def test_fetch_proxy_needs_the_flag_and_a_loopback_proxy(env, expected):
+    assert ws.fetch_proxy(env) == expected
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://arxiv.org/abs/1",  # https だけ
+        "https://user:pw@arxiv.org/",
+        "https://@arxiv.org/",
+        "https://arxiv.org:8443/",
+        "https://127.0.0.1/",  # IP の直指定
+        "https://[::1]/",
+        "https://2130706433/",  # 10進の IP
+        "https://0x7f.1/",  # 16進
+        "https://127.1/",  # 省略形
+        "https://localhost/",
+        "https://app.localhost/",
+        "https://host.local/",
+        "https://db.internal/",
+        "https://arxiv.org./",  # 末尾のドット
+        "https://arxiv%2eorg/",
+        "https://日本語.example/",  # 非 ASCII (punycode で渡す)
+        "https://a_b.example/",
+    ],
+)
+def test_proxy_mode_rejects_unsafe_hosts(url):
+    with pytest.raises(ws.Blocked):
+        ws.check_proxy_url(url)
+
+
+def test_proxy_mode_accepts_an_ordinary_https_url_and_lowercases_the_host():
+    parts = ws.check_proxy_url("https://ArXiv.ORG/abs/2510.05096")
+    assert parts.hostname == "arxiv.org" and parts.path == "/abs/2510.05096"
+
+
+def test_fetch_through_the_proxy_never_resolves_names():
+    seen = []
+
+    def resolver(*a, **kw):
+        raise AssertionError("プロキシ越しでは名前を引かない")
+
+    def proxy_transport(parts, proxy, timeout):
+        seen.append((parts.hostname, proxy))
+        return 200, {"content-type": "text/html"}, b"<title>T</title><p>hello</p>"
+
+    page = ws.fetch_page(
+        "https://arxiv.org/abs/1",
+        resolver=resolver,
+        transport=lambda *a: pytest.fail("固定接続の経路を通ってはいけない"),
+        proxy=("127.0.0.1", 3128),
+        proxy_transport=proxy_transport,
+    )
+    assert seen == [("arxiv.org", ("127.0.0.1", 3128))]
+    assert page["title"] == "T" and "hello" in page["text"]
+
+
+def test_http_urls_keep_the_pinned_path_even_with_a_proxy():
+    used = []
+
+    def transport(parts, address, timeout):
+        used.append(address)
+        return 200, {"content-type": "text/plain"}, b"ok"
+
+    ws.fetch_page(
+        "http://ok.example/",
+        resolver=resolver_to("93.184.216.34"),
+        transport=transport,
+        proxy=("127.0.0.1", 3128),
+        proxy_transport=lambda *a: pytest.fail("http はプロキシ越しにしない"),
+    )
+    assert used == ["93.184.216.34"]
+
+
+def test_redirects_are_checked_again_in_proxy_mode():
+    answers = {"arxiv.org": (302, {"location": "https://127.0.0.1/x"}, b"")}
+
+    with pytest.raises(ws.Blocked):
+        ws.fetch_page(
+            "https://arxiv.org/",
+            proxy=("127.0.0.1", 3128),
+            proxy_transport=lambda parts, proxy, timeout: answers[parts.hostname],
+        )
+    # 内部名への転送も止まる
+    answers["arxiv.org"] = (302, {"location": "https://db.internal/x"}, b"")
+    with pytest.raises(ws.Blocked):
+        ws.fetch_page(
+            "https://arxiv.org/",
+            proxy=("127.0.0.1", 3128),
+            proxy_transport=lambda parts, proxy, timeout: answers[parts.hostname],
+        )
+
+
+def test_a_proxy_that_refuses_the_tunnel_is_reported_as_blocked():
+    """許可外ドメインはプロキシが CONNECT に 403 を返す。ページの 403 とは分けて伝える。"""
+    import socketserver
+    import threading
+
+    class Handler(socketserver.BaseRequestHandler):
+        def handle(self):
+            self.request.recv(4096)
+            self.request.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+
+    with socketserver.TCPServer(("127.0.0.1", 0), Handler) as server:
+        threading.Thread(target=server.handle_request, daemon=True).start()
+        port = server.server_address[1]
+        with pytest.raises(ws.Blocked, match="プロキシが接続を拒否"):
+            ws.fetch_page("https://denied.example/", proxy=("127.0.0.1", port), timeout=5)

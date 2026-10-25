@@ -734,6 +734,103 @@ def _pinned_connection(
 Transport = Callable[[urllib.parse.SplitResult, str, float], "tuple[int, dict[str, str], bytes]"]
 
 
+# ─── プロキシ越しの取得 (pis の内側だけ) ──────────────────────────────────
+# 内側は DNS が引けず、検査してから IP に固定する経路が必ず落ちる。pis が PIS_FETCH_VIA_PROXY=1 を
+# 付けたときだけ、ループバックのプロキシへ CONNECT して取る (許可ドメインはプロキシが強制する)。
+# see docs/spec/web-search.md#pis-の内側のプロキシ越しの取得
+FETCH_PROXY_ENV = "PIS_FETCH_VIA_PROXY"
+_PROXY_RE = re.compile(r"http://127\.0\.0\.1:([0-9]{1,5})/?")
+# ASCII のホスト名だけ。最後の部分は英字で始める (10進・16進・省略形の IPv4 を名前として通さない)
+_HOST_RE = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?"
+)
+_INTERNAL_SUFFIXES = (
+    ".localhost",
+    ".local",
+    ".internal",
+    ".lan",
+    ".home.arpa",
+    ".intranet",
+    ".corp",
+)
+
+ProxyTransport = Callable[
+    [urllib.parse.SplitResult, tuple[str, int], float], "tuple[int, dict[str, str], bytes]"
+]
+
+
+def fetch_proxy(env: dict[str, str] | None = None) -> tuple[str, int] | None:
+    """プロキシ越しの取得に使うプロキシ。フラグと、ループバックの HTTPS_PROXY が揃うときだけ返す。"""
+    env = os.environ if env is None else env
+    if env.get(FETCH_PROXY_ENV) != "1":
+        return None
+    match = _PROXY_RE.fullmatch(env.get("HTTPS_PROXY") or env.get("https_proxy") or "")
+    if not match or not 1 <= int(match.group(1)) <= 65535:
+        return None
+    return "127.0.0.1", int(match.group(1))
+
+
+def check_proxy_url(url: str) -> urllib.parse.SplitResult:
+    """プロキシ越しに取ってよい URL か。名前を引けないので、ホストの形を厳しく見る。
+
+    検査と CONNECT と SNI に同じ (小文字にした) ホスト名を使う。内部の宛先を引く名前の防御は、
+    プロキシの許可ドメインに任せる (許可外は CONNECT が 403)。
+    """
+    try:
+        parts = urllib.parse.urlsplit(url.strip())
+        port = parts.port
+    except ValueError:
+        raise Blocked("URL が不正") from None
+    if parts.scheme != "https":
+        raise Blocked("プロキシ越しは https の URL だけ取得できる")
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
+        raise Blocked("認証情報つきの URL は取得しない")
+    if "%" in parts.netloc:
+        raise Blocked("ホストに「%」が入った URL は取得しない")
+    if port not in (None, 443):
+        raise Blocked("443 以外のポートには接続しない")
+    host = parts.hostname or ""
+    if (
+        not host
+        or len(host) > 253
+        or not _HOST_RE.fullmatch(host)
+        or host.endswith(_INTERNAL_SUFFIXES)
+    ):
+        raise Blocked("ホスト名が取得できる形ではない (英数字とハイフンをドットでつないだ名前だけ)")
+    return parts
+
+
+def default_proxy_transport(
+    parts: urllib.parse.SplitResult, proxy: tuple[str, int], timeout: float
+) -> tuple[int, dict[str, str], bytes]:
+    """プロキシへ CONNECT し、その上で元のホスト名の TLS (証明書の検証つき) を張って GET する。"""
+    conn = http.client.HTTPSConnection(proxy[0], proxy[1], timeout=timeout)
+    conn.set_tunnel(parts.hostname or "", 443)
+    try:
+        target = (parts.path or "/") + (("?" + parts.query) if parts.query else "")
+        conn.request(
+            "GET",
+            target,
+            headers={
+                "Host": parts.netloc,
+                "User-Agent": USER_AGENT,
+                "Accept": "text/html,text/plain,application/json;q=0.9,*/*;q=0.1",
+                "Accept-Encoding": "identity",
+            },
+        )
+        response = conn.getresponse()
+        body = response.read(FETCH_BYTES + 1)
+        return response.status, {k.lower(): v for k, v in response.getheaders()}, body
+    except OSError as error:
+        if "Tunnel connection failed" in str(error):
+            raise Blocked(
+                f"プロキシが接続を拒否した ({error})。許可ドメインの外の可能性がある"
+            ) from None
+        raise
+    finally:
+        conn.close()
+
+
 def default_transport(
     parts: urllib.parse.SplitResult, address: str, timeout: float
 ) -> tuple[int, dict[str, str], bytes]:
@@ -823,14 +920,24 @@ def fetch_page(
     max_chars: int = FETCH_CHARS,
     timeout: float = 20.0,
     max_redirects: int = 5,
+    proxy: tuple[str, int] | None = None,
+    proxy_transport: ProxyTransport = default_proxy_transport,
 ) -> dict[str, Any]:
     current = url
     for _ in range(max_redirects + 1):
-        parts, addresses = check_url(current, resolver)
-        try:
-            status, headers, body = transport(parts, addresses[0], timeout)
-        except (OSError, http.client.HTTPException):
-            raise ProviderError("network", "取得できない") from None
+        # プロキシ越しは https だけ。http (と、リダイレクトで http に落ちた先) は従来の検査して固定する経路
+        if proxy is not None and urllib.parse.urlsplit(current.strip()).scheme == "https":
+            parts = check_proxy_url(current)
+            try:
+                status, headers, body = proxy_transport(parts, proxy, timeout)
+            except (OSError, http.client.HTTPException):
+                raise ProviderError("network", "取得できない") from None
+        else:
+            parts, addresses = check_url(current, resolver)
+            try:
+                status, headers, body = transport(parts, addresses[0], timeout)
+            except (OSError, http.client.HTTPException):
+                raise ProviderError("network", "取得できない") from None
         if status in (301, 302, 303, 307, 308) and headers.get("location"):
             current = urllib.parse.urljoin(current, headers["location"])
             continue
@@ -1054,6 +1161,8 @@ def cmd_fetch(args: argparse.Namespace, deps: dict[str, Any]) -> int:
             args.url,
             resolver=deps["resolver"],
             transport=deps["transport"],
+            proxy=deps["fetch_proxy"](),
+            proxy_transport=deps["proxy_transport"],
             max_chars=args.max_chars,
         )
     except Blocked as error:
@@ -1166,6 +1275,8 @@ def main(argv: list[str] | None = None, deps: dict[str, Any] | None = None) -> i
         "sleep": time.sleep,
         "resolver": socket.getaddrinfo,
         "transport": default_transport,
+        "fetch_proxy": fetch_proxy,
+        "proxy_transport": default_proxy_transport,
     }
     base.update(deps or {})
     handlers = {

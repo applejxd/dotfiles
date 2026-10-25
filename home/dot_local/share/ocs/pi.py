@@ -514,6 +514,11 @@ def inner_env(
     # 「Clipboard unavailable」で失敗する。OSC 52 (端末への書き込み専用) を強制する
     # see docs/spec/troubleshooting-agents.md#pis-の内側でクリップボードへコピーできない
     env["PI_CLIPBOARD_OSC52"] = "1"
+    # 内側は DNS が引けないが、プロキシ (HTTPS_PROXY) が許可ドメインを強制する。web-search の fetch に、
+    # 事前の DNS 検査を省いてプロキシ越しに取らせる印。ホスト側の同名の値は信用しない
+    # see docs/spec/web-search.md#pis-の内側のプロキシ越しの取得
+    env.pop("PIS_FETCH_VIA_PROXY", None)
+    env["PIS_FETCH_VIA_PROXY"] = "1"
     env["PI_CODING_AGENT_DIR"] = str(agent)
     env["PI_HARNESS_BOUNDARY"] = "1"
     env["PI_HARNESS_ALLOWED"] = json.dumps(

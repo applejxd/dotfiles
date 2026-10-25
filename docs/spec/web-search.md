@@ -130,6 +130,51 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py sync-keys --force --unl
 - 外へ出るのはクエリだけで、秘匿チェックが止める。`fetch` の取得先は SSRF 対策で公開アドレスに限る
 - 検査は `test/agents/test_decide.py::test_web_search_script_allows_only_its_read_only_subcommands`
 
+## `pis` の内側のプロキシ越しの取得
+
+**症状**: `pis` の内側で `fetch` が `取得を止めた: 名前を解決できない`（終了コード 2）になる。imozuru の `fetch.py` も
+`ホストを引けない（Temporary failure in name resolution）` で全 URL が失敗する。
+
+**実測**（2026-10-25、`pis -p` の内側）:
+
+- 内側は DNS を引けない（`getent hosts raw.githubusercontent.com` が終了コード 2）
+- 環境変数に `HTTPS_PROXY=http://127.0.0.1:3128`（Fence のプロキシ）がある。`curl -sI https://arxiv.org` は `200 Connection Established` のあと
+  HTTP 200、`https://raw.githubusercontent.com` は 301 で通る
+- 許可リストの外（`voiceover.manim.community`）は、プロキシが `403 Forbidden` を返す。**ドメインの許可はプロキシが強制している**
+
+**原因**: `fetch` は接続の前に自分で名前を引き、全ての IP が公開アドレスかを検査して、その IP に接続を固定する。
+内側では名前を引けないので、プロキシに届く前に検査で落ちる。
+
+**対処（プロキシモード）**: 次の**両方**が揃うときだけ、事前の名前解決を省いて、プロキシへ `CONNECT` して取る。
+
+1. `PIS_FETCH_VIA_PROXY=1`（`pis` の `inner_env` だけが付ける。ホストの同名の値は落とす）
+2. `HTTPS_PROXY`（または `https_proxy`）が `http://127.0.0.1:<port>` の形（ループバックだけ。認証情報つき・`socks5h` などは使わない）
+
+境界の外（普通のシェル、`--no-sandbox`）では、フラグが無いので従来どおり（名前を引いて公開 IP に固定する）。
+環境変数は境界の証明にならない（`PI_HARNESS_BOUNDARY` と同じく「期待」にすぎない）ので、既存のプロキシ設定だけでは有効にしない。
+
+プロキシモードの規則:
+
+| 項目 | 内容 |
+| --- | --- |
+| 対象 | **https の URL だけ**。http（と、リダイレクトで http に落ちた先）は従来の経路。中継は平文の HTTP を 403 にするため |
+| ホスト名 | 小文字の ASCII で、ドットで区切った名前だけ。最後の部分は英字で始める（10進・16進・省略形の IPv4 を名前として通さない）。IP の直指定、`localhost`、`*.local` / `*.internal` / `*.lan` / `*.home.arpa` / `*.localhost` / `*.intranet` / `*.corp`、末尾のドット、`@`・`%`、非 ASCII は止める |
+| 接続 | プロキシへ `CONNECT <ホスト>:443`。TLS は元のホスト名で証明書を検証する。検査・CONNECT・SNI に同じホスト名を使う |
+| 残す検査 | 認証情報つき URL、ポート 443 のみ、リダイレクトは 5 回まで**毎回**同じ検査、本文 2 MB、`text/*` と JSON・XML のみ |
+| 失敗の分類 | CONNECT が拒否されたら `取得を止めた: プロキシが接続を拒否した …`（終了コード 2。許可ドメインの外の可能性）。ページが 403 なら `HTTP 403`（終了コード 3） |
+
+**防御の位置が移る**: 内部アドレスに解決される名前の防御は、ツール内の IP 検査から、プロキシの許可ドメインへ移る。
+許可リストに内部名を足さない限り、内部の宛先へは届かない。
+
+**未対応**: imozuru（`fetch.py` / `imozuru_net.py` / `watch.py`）は、同じ事前の名前解決で止まるので、未対応のまま。
+
+**実測（修正後、2026-10-25、`pis -p` の内側）**: `fetch https://arxiv.org/abs/2510.05096` と
+`fetch https://raw.githubusercontent.com/…/README.md` は終了コード 0 で本文を取れた。許可外の `https://voiceover.manim.community/` は
+`取得を止めた: プロキシが接続を拒否した (Tunnel connection failed: 403 Forbidden)…`（終了コード 2）。
+
+検査は `test/test_websearch.py`（`fetch_proxy`、ホストの検査、名前を引かないこと、http の経路、リダイレクト、CONNECT の拒否）と
+`test/agents/test_pi_boundary.py`（フラグを `inner_env` が付けること）。
+
 ## 未実装・未決
 
 - プロバイダの順位の実測比較（Brave と Exa）
