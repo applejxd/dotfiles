@@ -17,6 +17,8 @@
     log    サイクルの記録を追記する (--text / --note-file / 標準入力)。停止済みの run でも使える
     status 現在の run の要約を出す。停止済みの run でも使える
     sleep  <秒> (整数 1〜7200) だけ待つ。何も読み書きしない。pi の bg_run で再開を予約する用
+    snapshot  コードを変えて試す用に、リポジトリの作業コピーを work/src へ作る。
+           隔離の保証ではない (SKILL.md の「コードを変えて検証する」)
 
 exit code:
 
@@ -35,7 +37,9 @@ import datetime as dt
 import json
 import os
 import re
+import shutil
 import stat
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -401,6 +405,160 @@ def cmd_sleep(args: argparse.Namespace) -> int:
     return EXIT_CONTINUE
 
 
+# ─── snapshot ──────────────────────────────────────────────────────────────
+
+# 秘密になりうるものは、作業コピーへ持ち込まない。持ち込むと read の deny を迂回して読めてしまうので、
+# 正本は ``[file] read_deny_globs``（判定器と同じ command_policy 経由。ここに複製を持たない）。読めないときは拒否する
+SNAPSHOT_DEFAULT_MAX_MB = 200
+SNAPSHOT_DEFAULT_MAX_FILES = 20000
+
+
+def _agents_config_dir() -> Path:
+    override = os.environ.get("AGENTS_CONFIG_DIR")
+    if override:
+        return Path(override)
+    config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return Path(config_home) / "agents"
+
+
+def _load_read_deny():
+    """(判定関数, ) を返す: パスを渡すと当たった read_deny の glob を返し、無ければ None。
+
+    一覧が読めない・空のときは Refused (fail closed)。
+    """
+    import importlib.util
+
+    agents = _agents_config_dir()
+    module_path = agents / "command_policy.py"
+    common = agents / "common.toml"
+    if not module_path.is_file() or not common.is_file():
+        raise Refused(f"保護対象の一覧が読めません: {agents} (command_policy.py / common.toml)")
+    try:
+        spec = importlib.util.spec_from_file_location("_away_command_policy", module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        globs = module.load_file_globs("read_deny_globs", str(common))
+        exceptions = module.load_read_deny_exceptions(str(common))
+    except Exception as exc:
+        raise Refused(f"保護対象の一覧を読めません: {type(exc).__name__}: {exc}") from None
+    if not globs:
+        raise Refused("read_deny_globs が空です (保護対象を確かめられない)")
+    return lambda candidate: module.matches_read_deny(candidate, globs, exceptions)
+
+
+def _git(args: list[str]) -> bytes:
+    """読み取り専用の git。fsmonitor を切り、任意のロックを取らない。"""
+    env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
+    result = subprocess.run(
+        ["git", "-c", "core.fsmonitor=false", *args],
+        capture_output=True,
+        env=env,
+        timeout=60,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise Refused(
+            f"git {' '.join(args)} が失敗: {result.stderr.decode('utf-8', 'replace')[:200]}"
+        )
+    return result.stdout
+
+
+def cmd_snapshot(args: argparse.Namespace) -> int:
+    """追跡と、ignored でない未追跡のファイルを <run>/work/src へコピーする。
+
+    コピー先は Git リポジトリではない (.git を持ち込まない)。コピー内で git を使うと
+    親をたどって本体の .git を見るので、差分は ``git diff --no-index`` で取る。
+    ignored の生成物・ローカル設定・シンボリックリンク・サブモジュール・秘密の疑いは
+    コピーせず、何を除いたかを出す (レポートの「入力に含まれないもの」に書く)。
+    """
+    try:
+        load_state(args.run_id)
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_USAGE
+
+    cwd = Path.cwd().resolve()
+    top = Path(_git(["rev-parse", "--show-toplevel"]).decode("utf-8").strip()).resolve()
+    if top != cwd:
+        raise Refused(f"リポジトリの根で実行してください (根: {top}、いま: {cwd})")
+    head = _git(["rev-parse", "HEAD"]).decode("utf-8").strip()
+    protected = _load_read_deny()
+
+    dest = run_dir(args.run_id) / "work" / "src"
+    confine(dest)
+    if dest.exists():
+        if not args.replace:
+            raise Refused(f"{dest} が既にあります (作り直すなら --replace。work/ の中だけを消す)")
+        shutil.rmtree(dest)
+
+    listed = _git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+    rels = sorted({p for p in listed.decode("utf-8", "surrogateescape").split("\0") if p})
+
+    skipped: dict[str, list[str]] = {
+        "self": [], "protected": [], "symlink": [], "not-regular": [], "missing": [],
+        "outside": [], "too-large": [],
+    }  # fmt: skip
+    todo: list[tuple[str, int]] = []
+    total = 0
+    per_file_max = args.max_file_mb * 1024 * 1024
+    for rel in rels:
+        if rel in (".tmp", ".git") or rel.startswith((".tmp/", ".git/")):
+            skipped["self"].append(rel)
+            continue
+        if protected(rel) or protected(str(cwd / rel)):
+            skipped["protected"].append(rel)
+            continue
+        src = cwd / rel
+        try:
+            info = src.lstat()
+        except OSError:
+            skipped["missing"].append(rel)
+            continue
+        if stat.S_ISLNK(info.st_mode):
+            skipped["symlink"].append(rel)
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            skipped["not-regular"].append(rel)  # サブモジュールの gitlink など
+            continue
+        if cwd not in Path(os.path.realpath(src)).parents:
+            skipped["outside"].append(rel)  # 途中がリンクでリポジトリの外を指す
+            continue
+        if info.st_size > per_file_max:
+            skipped["too-large"].append(rel)
+            continue
+        todo.append((rel, info.st_size))
+        total += info.st_size
+
+    if len(todo) > args.max_files:
+        raise Refused(f"ファイル数が上限を超える: {len(todo)} > {args.max_files} (--max-files)")
+    if total > args.max_mb * 1024 * 1024:
+        raise Refused(
+            f"合計容量が上限を超える: {total // (1024 * 1024)} MB > {args.max_mb} MB (--max-mb)"
+        )
+
+    make_dir(dest)
+    for rel, _size in todo:
+        target = dest / rel
+        make_dir(target.parent)
+        confine(target)
+        shutil.copyfile(cwd / rel, target, follow_symlinks=False)
+        shutil.copymode(cwd / rel, target, follow_symlinks=False)
+
+    print(f"作業コピー: {dest}")
+    print(f"  起点: HEAD {head[:12]} + 未コミットの変更・未追跡 (ignored を除く)")
+    print(f"  コピー: {len(todo)} ファイル、{total // 1024} KiB")
+    for reason, items in skipped.items():
+        if items:
+            shown = ", ".join(items[:5]) + (" ほか" if len(items) > 5 else "")
+            print(f"  除外 ({reason}): {len(items)} 件 {shown}")
+    print("  ignored の生成物・ローカル設定は含まれない (必要な入力が欠けないかを確かめる)")
+    print("注意: これは作業用のコピーで、隔離ではない。")
+    print("  - コピーは Git リポジトリではない。コピーの中で git を使わない (本体の .git を見る)")
+    print(f"  - 差分は `git diff --no-index -- <本体のパス> {dest}/<同じパス>`")
+    print("  - 実行は cwd をコピーにし、本体のパスを絶対パスで渡さない")
+    return EXIT_CONTINUE
+
+
 def _sleep_seconds(value: str) -> int:
     try:
         seconds = int(value)
@@ -468,6 +626,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_sleep = sub.add_parser("sleep", help="上限つきで待つ (1〜7200 秒)")
     p_sleep.add_argument("seconds", type=_sleep_seconds)
     p_sleep.set_defaults(func=cmd_sleep)
+
+    p_snap = sub.add_parser("snapshot", help="作業用のコピーを work/src に作る (隔離ではない)")
+    p_snap.add_argument("run_id")
+    p_snap.add_argument("--replace", action="store_true", help="既存の work/src を消して作り直す")
+    p_snap.add_argument(
+        "--max-mb", type=int, default=SNAPSHOT_DEFAULT_MAX_MB, help="合計容量の上限"
+    )
+    p_snap.add_argument(
+        "--max-file-mb", type=int, default=10, help="1 ファイルの上限 (超えるものは除外)"
+    )
+    p_snap.add_argument("--max-files", type=int, default=SNAPSHOT_DEFAULT_MAX_FILES)
+    p_snap.set_defaults(func=cmd_snapshot)
 
     return parser
 

@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from agents_common import agents_config_dir
 
 ROOT = Path(__file__).resolve().parents[2]
 GUARD_PATH = (
@@ -566,3 +567,129 @@ def test_sleep_waits_and_touches_nothing(workspace):
 
 def test_sleep_limit_covers_the_default_wake_interval():
     assert guard.SLEEP_MAX_SECONDS >= 60 * 60
+
+
+# ---------------------------------------------------------------------------
+# snapshot: 作業用コピー (隔離ではない)
+# ---------------------------------------------------------------------------
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-c", "user.email=t@example.invalid", "-c", "user.name=t", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.fixture()
+def repo(workspace, monkeypatch):
+    monkeypatch.setenv("AGENTS_CONFIG_DIR", str(agents_config_dir()))
+    _git(workspace, "init", "-q")
+    (workspace / ".gitignore").write_text(".tmp/\nbuild/\n")
+    (workspace / "a.py").write_text("print('a')\n")
+    (workspace / "sub").mkdir()
+    (workspace / "sub" / "b.py").write_text("print('b')\n")
+    _git(workspace, "add", "-A")
+    _git(workspace, "commit", "-q", "-m", "init")
+    assert init_run("r1") == 0
+    return workspace
+
+
+def _src(repo: Path) -> Path:
+    return repo / ".tmp" / "away-shift" / "r1" / "work" / "src"
+
+
+def test_snapshot_copies_tracked_modified_and_untracked_but_not_ignored(repo, capsys):
+    (repo / "a.py").write_text("print('changed')\n")  # 未コミットの変更
+    (repo / "new.py").write_text("print('new')\n")  # 未追跡
+    (repo / "build").mkdir()
+    (repo / "build" / "out.bin").write_text("generated")  # ignored
+
+    assert guard.main(["snapshot", "r1"]) == 0
+
+    src = _src(repo)
+    assert (src / "a.py").read_text() == "print('changed')\n"
+    assert (src / "new.py").exists()
+    assert (src / "sub" / "b.py").exists()
+    assert not (src / "build").exists()
+    assert not (src / ".git").exists()  # コピーは Git リポジトリではない
+    out = capsys.readouterr().out
+    assert "隔離ではない" in out
+    assert "git diff --no-index" in out
+
+
+def test_snapshot_leaves_the_original_untouched(repo):
+    before = (repo / "a.py").read_text()
+    assert guard.main(["snapshot", "r1"]) == 0
+    (_src(repo) / "a.py").write_text("edited in the copy\n")
+    assert (repo / "a.py").read_text() == before
+
+
+def test_snapshot_skips_secrets_symlinks_and_reports_them(repo, capsys):
+    (repo / ".env").write_text("TOKEN=x\n")
+    (repo / ".env.example").write_text("TOKEN=\n")
+    (repo / "id_rsa").write_text("key\n")
+    (repo / "my_secret_notes.txt").write_text("s\n")  # 部分一致の glob (*secret*)
+    (repo / ".ssh").mkdir()
+    (repo / ".ssh" / "config").write_text("Host x\n")
+    (repo / "link.py").symlink_to("a.py")
+    outside = repo.parent / f"{repo.name}-outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("s")
+    (repo / "dirlink").symlink_to(outside)
+
+    assert guard.main(["snapshot", "r1"]) == 0
+
+    src = _src(repo)
+    assert not (src / ".env").exists()
+    assert (src / ".env.example").exists()
+    assert not (src / "id_rsa").exists()
+    assert not (src / "my_secret_notes.txt").exists()
+    assert not (src / ".ssh").exists()
+    assert not (src / "link.py").exists()
+    assert not (src / "dirlink").exists()
+    out = capsys.readouterr().out
+    assert "除外 (protected)" in out
+    assert "除外 (symlink)" in out
+
+
+def test_snapshot_refuses_existing_copy_unless_replace(repo):
+    assert guard.main(["snapshot", "r1"]) == 0
+    (_src(repo) / "scratch.txt").write_text("x")
+    assert guard.main(["snapshot", "r1"]) == guard.EXIT_USAGE
+    assert (_src(repo) / "scratch.txt").exists()
+    assert guard.main(["snapshot", "r1", "--replace"]) == 0
+    assert not (_src(repo) / "scratch.txt").exists()
+
+
+def test_snapshot_refuses_over_the_limits_and_copies_nothing(repo):
+    assert guard.main(["snapshot", "r1", "--max-files", "1"]) == guard.EXIT_USAGE
+    assert not _src(repo).exists()
+    (repo / "big.bin").write_bytes(b"x" * (2 * 1024 * 1024))
+    assert guard.main(["snapshot", "r1", "--max-mb", "1"]) == guard.EXIT_USAGE
+    assert not _src(repo).exists()
+
+
+def test_snapshot_skips_a_file_over_the_per_file_limit(repo, capsys):
+    (repo / "big.bin").write_bytes(b"x" * (2 * 1024 * 1024))
+    assert guard.main(["snapshot", "r1", "--max-file-mb", "1"]) == 0
+    assert not (_src(repo) / "big.bin").exists()
+    assert "除外 (too-large)" in capsys.readouterr().out
+
+
+def test_snapshot_refuses_when_the_protected_list_cannot_be_read(repo, monkeypatch, tmp_path):
+    monkeypatch.setenv("AGENTS_CONFIG_DIR", str(tmp_path / "missing"))
+    assert guard.main(["snapshot", "r1"]) == guard.EXIT_USAGE
+    assert not _src(repo).exists()
+
+
+def test_snapshot_needs_the_repository_root(repo):
+    os.chdir(repo / "sub")
+    assert init_run("r2") == 0
+    assert guard.main(["snapshot", "r2"]) == guard.EXIT_USAGE
+
+
+def test_snapshot_of_an_unknown_run_is_a_usage_error(repo):
+    assert guard.main(["snapshot", "nope"]) == guard.EXIT_USAGE

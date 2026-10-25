@@ -273,12 +273,14 @@ def test_skill_script_allow_is_not_widened_silently():
         f"python3 {CP} paths *",
         f"python3 {CP} lint *",
         f"python3 {CP} read *",
-        # away-shift: 書き込み先は .tmp/away-shift/ に閉じる (スクリプト側の検査)。sleep は 1〜7200 秒の待機だけ
+        # away-shift: 書き込み先は .tmp/away-shift/ に閉じる (スクリプト側の検査)。sleep は 1〜7200 秒の待機だけ。
+        # snapshot は読み取り専用の git と work/src へのコピーだけ (保護対象を除く)
         f"python3 {AWAY}/away_guard.py init *",
         f"python3 {AWAY}/away_guard.py check *",
         f"python3 {AWAY}/away_guard.py log *",
         f"python3 {AWAY}/away_guard.py status *",
         f"python3 {AWAY}/away_guard.py sleep *",
+        f"python3 {AWAY}/away_guard.py snapshot *",
         f"python3 {AWAY}/preflight.py *",
         # env-check: 読み取り専用。秘密らしい名前の値と URL の認証情報は出さない
         f"python3 {ENVCHECK}/env_check.py names *",
