@@ -1,6 +1,6 @@
 # 組み込みエージェントの制限は全体の permissions に上書きされるか
 
-<!-- 現在の総合判断は docs/change/0017-builtin-agent-restrictions.md が正本。
+<!-- 現在の総合判断は docs/change/closed/0017-builtin-agent-restrictions.md が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
 > **後続の観測**: E1 の「全体の規則は配列の中に 2 回現れる」は、`OPENCODE_CONFIG` による

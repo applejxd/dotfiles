@@ -3,7 +3,7 @@
 > **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](0023-guard-terminology.md)、対応表は [pi のガード](../spec/guard/pi-guard.md#用語)。
 
 - **状態**: In progress
-- **更新日**: 2026-10-11
+- **更新日**: 2026-10-21
 - **基準**: pi 1.1.0、OpenCode v2.0.22、コミット d5f012c、WSL2 (Ubuntu)
 
 ## 目的と非目的
@@ -26,14 +26,14 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 非目的:
 
 - Claude Code / Copilot CLI の設定を変えること（判定器を共有するかは段 1 で決めるが、変えるなら別の案件）
-- oh-my-pi（`omp`）の評価（[CHG-0006](0006-pi-harness-trial.md) が持つ）
+- oh-my-pi（`omp`）の評価（[CHG-0006](closed/0006-pi-harness-trial.md) が持つ）
 - 移行の途中で OpenCode のハーネスを改良すること。OpenCode の穴は CHG-0017 の補修までで止める
   （[CHG-0018](closed/0018-opencode-policy-role-split.md) は所有の規則までで閉じた）
 
 > **2026-10-09、利用者が方針を決めた。** Orca と Zed は素の `pi`（ハーネス無し）を呼ぶ形のまま変えない。
 > `pis`（ハーネス付き）は利用者が自分で起動するとき用で、**優先度を下げる**。段 1〜5 で作ったもの
 > （判定 API・ハーネス・`pis`・境界）は、いまの状態で止めて保守だけにする。素の `pi` が保護無しで動くことは、
-> [CHG-0006](0006-pi-harness-trial.md) の「利便性を取り、払う代償を明記する」という軸のとおり（保護が要る作業は
+> [CHG-0006](closed/0006-pi-harness-trial.md) の「利便性を取り、払う代償を明記する」という軸のとおり（保護が要る作業は
 > `pis` か `pis --boundary` で起動する）。段 6 は、この方針に合わせて内容を改める（下の計画表）。
 
 ## 実施計画
@@ -56,7 +56,7 @@ pi の上で作り直す。移すと決めた理由と判断材料は [CHG-0019]
 | 5c | formatter（edit / write の後に既存の hook を呼ぶ） | 完了 |
 | 5d | `/fleet`（プロンプトテンプレートの生成）・キーバインド・共通の指示（`AGENTS.md`）の配布 | 完了 |
 | 5e | Orca・Zed から起動するときの扱い（Orca の拡張を読む・RPC の確認の期限）。起動の入口は、利用者の判断で素の `pi` のまま（`pis` は利用者の起動用） | 完了 |
-| 6 | **OpenCode の撤去**（任意。優先度低）。Orca・Zed は素の `pi` のままなので「切り替え」は要らない。残るのは、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs・Windows の導入を消すかどうかの判断。規模は、配布物 約 3,900 行、`generate.py` の OpenCode 関連 約 1,300 行、テスト 約 19,700 行、docs 約 9,700 行。CHG-0017 を閉じ、CHG-0005 を再開できる状態にする。Windows は pi のハーネスが無いので、OpenCode を残すか決める | 未着手（保留。利用者は OpenCode をもう使っていないが、急がない、2026-10-20） |
+| 6 | **OpenCode の撤去**（任意。優先度低）。Orca・Zed は素の `pi` のままなので「切り替え」は要らない。残るのは、OpenCode の生成・plugin・`ocs` の OpenCode 部分・docs・Windows の導入を消すかどうかの判断。規模は、配布物 約 3,900 行、`generate.py` の OpenCode 関連 約 1,300 行、テスト 約 19,700 行、docs 約 9,700 行。CHG-0017 を閉じ（閉じた: 2026-10-25、[終了結果](closed/0017-builtin-agent-restrictions.md#終了結果)）、CHG-0005 を再開できる状態にする。Windows は pi のハーネスが無いので、OpenCode を残すか決める | 未着手（保留。利用者は OpenCode をもう使っていないが、急がない、2026-10-20） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 

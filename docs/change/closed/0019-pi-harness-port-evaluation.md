@@ -30,7 +30,7 @@ guide plugin、checkpoint plugin、子エージェント、`ocs`（OpenCode を 
 
 非目的:
 
-- 利便性の軸での pi / oh-my-pi の評価（[CHG-0006](../0006-pi-harness-trial.md) が持つ）
+- 利便性の軸での pi / oh-my-pi の評価（[CHG-0006](0006-pi-harness-trial.md) が持つ）
 - 移行の実施。この案件は判断までで、移行するなら別の案件を起こす
 - Claude Code / Copilot CLI の設定を変えること
 
@@ -155,7 +155,7 @@ OpenCode の最大の複雑さの源（後勝ちの連結）をかなり減ら�
 | 作業ツリーの外の読み取り（`external_directory`） | パスで判定するコード | 単純化。ただし cwd・`..`・symlink・未作成のパス・大小文字を、ツールのパス解決とそろえる必要がある（指摘 9） |
 | `grep` / `glob` の結果フィルタ、shell 出力の伏字化 | `tool_result` で加工する | **同程度ではなく、出力の経路ごとに要る**。`tool_result` の例外は処理を止めず生の出力が残る。途中経過の出力と、長い出力の退避ファイルは加工されない（指摘 8） |
 | formatter | edit / write の後に `format-file.sh` を呼ぶ | Markdown が欠ける（今の `markdownlint` 相当が無い）。編集の順番待ちの外で走るので競合しうる（指摘 12） |
-| MCP | pi 1.1.0 は `mcp.json` で対応する（`docs/mcp.md`） | 単純。[CHG-0006](../0006-pi-harness-trial.md) の「Pi は MCP を持たない」は古い |
+| MCP | pi 1.1.0 は `mcp.json` で対応する（`docs/mcp.md`） | 単純。[CHG-0006](0006-pi-harness-trial.md) の「Pi は MCP を持たない」は古い |
 | プロジェクトの設定がグローバルに勝つ問題 | project trust を承認したときだけ、プロジェクトの拡張・設定・MCP を読む | 一部が消える。ただし「ユーザの拡張で常に拒否」はできない。CLI の `--approve` が先に効き、拡張の中では最初に答えたものが決める。`sessionDir` と `AGENTS.md` は拒否しても読まれる（指摘 5）。ランチャーで `--no-approve` を固定する |
 
 ### Python の判定器の共有について
@@ -267,7 +267,7 @@ allow より広い。
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| [CHG-0006](../0006-pi-harness-trial.md) の「Pi は MCP を持たない」 | MCP の記述が 0 件 → pi 1.1.0 は `mcp.json` で対応 | `docs/mcp.md`、`docs/extensions.md` の `registerMcpServer` | 完了（CHG-0006 に追記） |
+| [CHG-0006](0006-pi-harness-trial.md) の「Pi は MCP を持たない」 | MCP の記述が 0 件 → pi 1.1.0 は `mcp.json` で対応 | `docs/mcp.md`、`docs/extensions.md` の `registerMcpServer` | 完了（CHG-0006 に追記） |
 
 ## 実装・検証
 

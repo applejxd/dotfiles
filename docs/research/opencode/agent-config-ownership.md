@@ -17,7 +17,7 @@ CHG-0018 の段 4（全体の規則をプロファイルと policy へ移し、`
 
 ### 事前の予想
 
-[CHG-0017](../../change/0017-builtin-agent-restrictions.md) の「実装・検証」で、宣言を消しても
+[CHG-0017](../../change/closed/0017-builtin-agent-restrictions.md) の「実装・検証」で、宣言を消しても
 配置済みのキーが残ることは分かっていた。V1 と V2 の併用は未知。
 
 ### 方法・条件

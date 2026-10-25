@@ -12,7 +12,7 @@
 名前だけを見る。そのため、`bypass` から起動した読むだけの子（`explore` / `review` /
 `commit`）の確認は自動で通らない（ADR-0014 のネガティブな結果）。
 
-[CHG-0017](../change/0017-builtin-agent-restrictions.md) で `explore` に shell と edit の deny を
+[CHG-0017](../change/closed/0017-builtin-agent-restrictions.md) で `explore` に shell と edit の deny を
 足した後も、子に残る主な確認は、開けていない作業ツリーの外を読むときの
 `external_directory` だった。利用者の方針は「`bypass` と `bypass` の上の `/fleet` では、
 利用者に聞かずできるだけ自動で判断させる」である。

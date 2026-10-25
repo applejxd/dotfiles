@@ -6,7 +6,7 @@
 > 埋めた（[CHG-0004](../../change/closed/0004-opencode-sandbox.md)）。§10 が挙げる
 > Claude / Copilot の圧縮 hook（`test_compaction_restore_is_wired_on_both_clis`）は
 > 2026-09-25 に撤去した。第一サポートの選定は
-> [CHG-0006](../../change/0006-pi-harness-trial.md) で続いている。
+> [CHG-0006](../../change/closed/0006-pi-harness-trial.md) で続いている。
 >
 > **現行の仕様**: [エージェント権限仕様](../../spec/agent-permissions.md)、
 > [文脈の引き継ぎ](../../spec/checkpoint.md)

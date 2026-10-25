@@ -1,7 +1,7 @@
 # CHG-0011: AI エージェントがシェルの主な利用者である前提へ整える
 
 - **状態**: In progress
-- **更新日**: 2026-10-07
+- **更新日**: 2026-10-25
 - **基準**: ecaf230（起動ファイルの対話 / 非対話の分離。
   [シェルの起動契約](../spec/structure.md#シェルの起動契約)と
   `test/test_shell_startup.py`）
@@ -140,3 +140,4 @@
   `git commit -m x && rm -rf ~` を通していた穴を塞いだ（`f1773ac`。原因の整理は [CHG-0012](0012-bash-hook-shared-parser.md)）
 - 2026-10-07 — Q7 の例外に挙げた `commit` の `git restore --staged --` は、`commit` が読み取りだけの計画役になり
   該当しなくなった（[CHG-0015](closed/0015-commit-planner-with-chat-approval.md)）。`except_agents` の仕組みは残っている
+- **2026-10-25**: 棚卸し。段 2b・4・5 は OpenCode 向け（OpenCode の拒否規則・`bypass`・前段停止）。OpenCode は 2026-10-20 に「もう使っていない」と確認されており、撤去は [CHG-0020](0020-pi-migration.md) の段 6（保留）。**撤去の方針が決まれば、これらの段の成果は撤去とともに消える**。方針は「保留のまま」とした（利用者の判断、2026-10-25）。残りの実機確認（Windows、Claude Code への環境変数の入れ方）は、OpenCode の撤去とは独立。

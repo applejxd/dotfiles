@@ -1,7 +1,7 @@
 # CHG-0038: ガードを「防ぐ害」で分類し直し、外部への送信・公開の穴を塞ぐ（`confirm` の新設）
 
-- **状態**: Exploring
-- **更新日**: 2026-10-24
+- **状態**: In progress
+- **更新日**: 2026-10-25
 - **基準**: コミット `6b61aa8`（`pis` は、サンドボックスでの起動で bypass が既定オン。内側の認証情報は偽物のみ）。判定器は TS 版が本番（[pi-decide.md](../spec/guard/pi-decide.md)）、Python 版は照合用（[CHG-0035](0035-retire-python-judge-oracle.md)）
 
 ## 目的と非目的

@@ -1,14 +1,19 @@
 # CHG-0017: 組み込みエージェント（explore / plan）の制限が全体の設定に上書きされる問題を直す
 
-- **状態**: In progress
-- **更新日**: 2026-10-08
+> この文書は当時の記録。現在の仕様は [`spec/agent-config-generation.md` の子エージェント](../../spec/agent-config-generation.md#子エージェント)と
+> [`spec/guard/agent-command-policy.md` の OpenCode の allow したコマンドの書き込み形](../../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)。
+> OpenCode は 2026-10-20 に利用者が「もう使っていない」と確認しており、撤去は [CHG-0020](../0020-pi-migration.md) の段 6（保留）。
+
+- **状態**: Done
+- **更新日**: 2026-10-25
+- **終了日**: 2026-10-25
 - **基準**: OpenCode v2.0.22、コミット f890912、WSL2 (Ubuntu)
 
 ## 目的と非目的
 
 OpenCode の組み込みエージェントのうち、制限を持つ `explore`（読み取り専用の探索役）と
 `plan`（実装前の計画役）が、本来の制限どおりに動くようにする。あわせて、`bypass`
-（確認（ask）を plugin が自動で許可にする主エージェント。[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）
+（確認（ask）を plugin が自動で許可にする主エージェント。[ADR-0014](../../adr/0014-bypass-as-ask-upgrade.md)）
 から起動する子エージェントを、確認なしで動かせる範囲に整える。
 
 きっかけは、`bypass` から起動した `explore` が shell で確認を大量に出したこと。
@@ -29,7 +34,7 @@ question を拒否）は変えない。
 - `bypass` は、一覧に載せた子（`bypass-worker` / `bypass-fleet-worker` / `explore` /
   `review` / `commit`）だけを起動できる。一覧に無い子（今後足す子、作業先のリポジトリが
   定義する子、plugin が足す子）は起動できない
-- 通常の起動と `ocs`（OpenCode を Fence で隔離して起動するコマンド。[仕様](../spec/sandbox/opencode-sandbox.md)）
+- 通常の起動と `ocs`（OpenCode を Fence で隔離して起動するコマンド。[仕様](../../spec/sandbox/opencode-sandbox.md)）
   の両方で同じ制限が効く
 - 全体の秘密ファイルの保護（read / edit の deny）を、どのエージェントでも緩めない
 
@@ -53,7 +58,7 @@ question を拒否）は変えない。
 | 4 | `/fleet` の指示文を直す（`plan` では計画までで止める。自動で判断させるのは `bypass` の上の `/fleet` に限ると明記）。docs を直す | 完了（未 apply） |
 | 5 | 全体の `git log --output` を guide 規則で止める（別コミット。確認なしに書けることは実測済み） | 完了 |
 | 6 | `chezmoi apply` 後、本物のサービスの API と probe で受入条件を確かめる | 完了（`ocs` は生成物の確認まで。実際の `ocs` の起動は未確認） |
-| 7 | `bypass` から起動した読むだけの子に残る確認を、自動で判断させる方法を決めて入れる | 完了（[ADR-0015](../adr/0015-bypass-child-external-read.md)） |
+| 7 | `bypass` から起動した読むだけの子に残る確認を、自動で判断させる方法を決めて入れる | 完了（[ADR-0015](../../adr/0015-bypass-child-external-read.md)） |
 | 8 | 段 7 の後の再検証（`bypass` と、そうでない主エージェントの対照。plugin が無いときに確認へ戻ること） | 完了（plugin が無いとき・一覧が壊れたときはテストでの確認。実機は `ocs`・TUI・子の再開と fork が未確認） |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -65,7 +70,7 @@ question を拒否）は変えない。
 段 0 が完了した。原因は OpenCode の仕様で、規則は「全エージェント共通の基底 → 組み込み
 エージェントの追加方針 → 全体の `permissions` → エージェントの `permissions`」の順に
 連結され、最後に一致したものが勝つ。全体の規則に一致した操作では、組み込みの制限が
-上書きされる（[調査記録](../research/opencode/permission/builtin-agent-override.md)）。
+上書きされる（[調査記録](../../research/opencode/permission/builtin-agent-override.md)）。
 
 - `explore`: 全体の `shell * ask` で shell が確認になり、`git log *` の allow で実行でき、
   `.env.example` の edit の allow で実際に書き込めた（実測）。`.env.sample` /
@@ -83,19 +88,19 @@ question を拒否）は変えない。
     （`[opencode.retired.agents]`）を、元に戻すときに足す方式に決めた（「実装・検証」を参照）
   - `git log --output=<パス>` は、`build` で確認なしに書けた（作業ツリーの外にも）。
     段 5 は guide 規則（`[[opencode.shell.guide]]`。正規表現で前段で止め、説明を返す既存の
-    仕組み）で止める（[調査記録 E2](../research/opencode/permission/builtin-agent-override.md#記録-e2--2026-10-08)）
+    仕組み）で止める（[調査記録 E2](../../research/opencode/permission/builtin-agent-override.md#記録-e2--2026-10-08)）
   - `agents.plan` を試験用の設定で宣言すると、組み込みの規則と plan モードの指示は保たれ、
     宣言した規則が末尾に足されるだけだった。子は `explore` / `review` だけになり、計画
     ディレクトリの中の秘密ファイルも拒否された。試験用の設定で別ポートのサーバを起動すれば、
     モデルに頼らずに実効規則を取り出せる（同 E2）
 - 段 1〜4 を実装した（2026-10-08。未 apply）。plan の deny の並べ直しは、生成時だけのキー
   `restate_global_deny`（全体の指定した action の deny をエージェントの規則の後ろへ写す）で
-  行う。仕様は [子エージェント](../spec/agent-config-generation.md#子エージェント)。生成物の並びは
+  行う。仕様は [子エージェント](../../spec/agent-config-generation.md#子エージェント)。生成物の並びは
   E2 の試験用設定と action ごとには同じだが、全体の並びは違う（試験用は秘密ファイルの deny を
   計画ディレクトリの allow の直後に挟み、生成物は末尾にまとめる）。段 6 で実効規則を確かめる
 - 段 5 を実装した（2026-10-08。未 apply）。`git log` で始まる部分の `--output` を guide 規則で
   止める。Claude / Copilot は OS の sandbox が書き込み先を限るので足さない。範囲と止める例・
-  止めない例は [allow したコマンドの書き込み形](../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)
+  止めない例は [allow したコマンドの書き込み形](../../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)
 - 段 1〜4 を apply し、段 6 の確認をした（2026-10-08。段 5 は apply 前）。本物のサービスの
   API で取り出した実効規則を調査用の照合で評価すると、`explore` は shell / edit / 子の起動 /
   question がすべて deny（`.env.example` も）、`plan` は計画ファイル以外の edit が deny、計画
@@ -114,7 +119,7 @@ question を拒否）は変えない。
   `commands` を差し替えて書き出すので、次の起動で反映される。実際に `ocs` を起動しての確認はしていない
 - 段 7 を apply し、段 8 の再検証をした（2026-10-08）。配備された `rules.json` に
   `bypass_child_agents`（`commit` / `explore` / `review`）が出ていた。実際の設定での probe の結果は
-  次のとおり（[調査記録 E3](../research/opencode/permission/builtin-agent-override.md#記録-e3--2026-10-08)）
+  次のとおり（[調査記録 E3](../../research/opencode/permission/builtin-agent-override.md#記録-e3--2026-10-08)）
 
   | 親 → 子 | 操作 | 結果 |
   | --- | --- | --- |
@@ -132,7 +137,7 @@ question を拒否）は変えない。
   `opencode.json` に手書きの `plan` / `explore` の定義があると、宣言したキーは上書きされて
   元に戻せない。このマシンには無いことを確かめた。ほかのマシンは apply の前に確かめる
 - `plan` の shell の確認が、実際に毎回人の確認になるか。「常に許可」で保存した承認は
-  project 単位の allow になる（[V2 の機能調査](../research/opencode/v2-capabilities.md#既定ポリシー)）。
+  project 単位の allow になる（[V2 の機能調査](../../research/opencode/v2-capabilities.md#既定ポリシー)）。
   `plan` で保存した承認がどう効くかは実機で確かめる
 - `title` / `summary` も全体の規則で拒否が上書きされている。ツールを実行する経路が
   あるかは未確認。**再開条件**: 段 6 の後に確かめる
@@ -141,7 +146,7 @@ question を拒否）は変えない。
   `--cache-dir`）。影響が小さいので今回は扱わない。**再開条件**: allow を足すか見直すとき
 - `bypass` から起動した読むだけの子に残る確認は、段 7 で、親が `bypass` のときに作業ツリーの
   外の読み取り（`read` / `grep` / `glob` 由来の `external_directory`）の確認だけを plugin が
-  省く形にした（[ADR-0015](../adr/0015-bypass-child-external-read.md)）。残るのは次のもの
+  省く形にした（[ADR-0015](../../adr/0015-bypass-child-external-read.md)）。残るのは次のもの
   - `production.env` のような読み取りの確認と、shell 由来の `external_directory`
     （`commit` の外部のリポジトリでの git を確認なしにしないため、意図して残す）
   - 段 8 で、3 つの子と read / grep / glob、shell 由来が確認に残ることを実機で確かめた。
@@ -325,16 +330,16 @@ flowchart LR
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `common.toml.tmpl` | `explore` の定義なし → `[opencode.agents.explore]`（description、`mode = "subagent"`、4 つの deny） | 全体の規則が組み込みの拒否を上書きし、`explore` が確認を出し `.env.example` を書けた。deny を足すとツールが一覧から消え確認ゼロになった（[調査記録](../research/opencode/permission/builtin-agent-override.md)の手順 1・2） | 未適用 |
+| `common.toml.tmpl` | `explore` の定義なし → `[opencode.agents.explore]`（description、`mode = "subagent"`、4 つの deny） | 全体の規則が組み込みの拒否を上書きし、`explore` が確認を出し `.env.example` を書けた。deny を足すとツールが一覧から消え確認ゼロになった（[調査記録](../../research/opencode/permission/builtin-agent-override.md)の手順 1・2） | 未適用 |
 | `common.toml.tmpl` / `generate.py` | `plan` の定義なし → `[opencode.agents.plan]`（edit は計画ファイル以外を拒否し秘密ファイルの deny を並べ直す、子は `explore` と `review` だけ、shell は deny を除いて確認） | 実効規則の評価で `plan` の edit の制限が漏れ、`plan` → `general` で確認なしに編集できる。shell の allow に書き込める形があり `ocs` では既定が allow（同手順 3 と 2 回のレビュー） | 未適用 |
 | `common.toml.tmpl` の `bypass` | 子の起動規則が全部許可 → 全部禁止して 5 つだけ許可 | 一覧に無い子は確認が自動で通らず、事故が再発する（レビュー） | 未適用 |
 | `common.toml.tmpl` の `/fleet` | 作業役が無い場合の分岐なし → `plan` では計画までで止める。自動で判断させるのは `bypass` の上に限ると明記 | `plan` から作業役を起動できなくなる。利用者の方針で `build` の上の `/fleet` は対象外 | 未適用 |
 | `agent-config-generation.md` | 「`explore` / `review` は読むだけで確認がほぼ出ない」 → 全体の規則が組み込みの制限を上書きすることと、修正後の扱い、許可リスト | 今回の実測で、`explore` は確認を出し、書き込めた | 未適用 |
-| 全体の shell | `git log *` の allow のみ → `git log` の `--output` を guide 規則で止める | `build` で `git log -1 --output=<パス>` が確認なしにファイルを作った（E2）。`*--output*` を全体で deny すると `git commit -m` の本文や正当な `--output` まで止まるので、`git log` で始まる部分だけに当てる guide 規則にする。guide 規則は `bypass` でも止まる | 未適用（実装済み。[仕様](../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)） |
+| 全体の shell | `git log *` の allow のみ → `git log` の `--output` を guide 規則で止める | `build` で `git log -1 --output=<パス>` が確認なしにファイルを作った（E2）。`*--output*` を全体で deny すると `git commit -m` の本文や正当な `--output` まで止まるので、`git log` で始まる部分だけに当てる guide 規則にする。guide 規則は `bypass` でも止まる | 未適用（実装済み。[仕様](../../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)） |
 
 ## 実装・検証
 
-段 0 の実測は[調査記録](../research/opencode/permission/builtin-agent-override.md)にある。
+段 0 の実測は[調査記録](../../research/opencode/permission/builtin-agent-override.md)にある。
 試験用の設定は `.tmp/opencode/probe-config/` と `.tmp/opencode/plan-config/`、実効規則の
 取り出しと評価のスクリプトは `.tmp/opencode/`（いずれもコミットしない）。
 
@@ -380,12 +385,51 @@ flowchart LR
 - 2026-10-08: 段 1〜5 を apply し、段 6 を終えた。残りは段 7（`bypass` から起動した読むだけの子に
   残る確認）と段 8（その後の再検証）
 - 2026-10-08: 段 7 を実装した。親のセッションを `ctx.session.get` で辿れることを実測し
-  （[調査記録 E3](../research/opencode/permission/builtin-agent-override.md#記録-e3--2026-10-08)）、
+  （[調査記録 E3](../../research/opencode/permission/builtin-agent-override.md#記録-e3--2026-10-08)）、
   案 A をレビューを経て採用した。レビューの指摘で、自動で許可するのを `read` / `grep` / `glob`
   由来の `external_directory` に限り（`commit` の shell 由来を外す）、子の一覧を起動の許可リスト
   から導出せず `[opencode.bypass_children]` に明示した。決定は ADR-0015 に記録した
 - 2026-10-08: 段 7 を apply し、段 8 の再検証を終えた。実施計画の段はすべて完了した。残りは
   「未解決点」の項目
 - 2026-10-08: 根本解決を別系統のモデルに相談し、構造の変更（共通の禁止を policy へ、役割ごとの
-  権限をエージェント別へ）は [CHG-0018](closed/0018-opencode-policy-role-split.md) で扱うことにした。
+  権限をエージェント別へ）は [CHG-0018](0018-opencode-policy-role-split.md) で扱うことにした。
   この案件は今の設計の修理として続ける。`review-loop` の子の名指しを直した
+
+## 終了結果
+
+**Done。** 実施計画の段 0〜8 はすべて完了した。OpenCode は 2026-10-20 に利用者が「もう使っていない」と確認した（[CHG-0020](../0020-pi-migration.md) の重要な更新）。
+残る未確認は OpenCode の実機での確認だけなので、確認せずに閉じた（2026-10-25、利用者の選択）。
+2026-10-08 時点の「現在地」「未解決点」「次の調査・実験」は、この結果で置き換わる（本文は当時のまま残す）。
+
+### 採用したもの
+
+- `[opencode.agents.explore]`: 組み込みの `explore` の制限を再宣言（`common.toml.tmpl`）
+- `[opencode.agents.plan]`: edit は計画ファイル以外を拒否して秘密ファイルの deny を並べ直し、子は `explore` と `review` だけ。生成時だけのキー `restate_global_deny` で、全体の deny を再掲する
+- `[opencode.bypass_children]`: `bypass` が起動できる子を許可リストにする（一覧に無い子は起動できない）
+- `git log` の `--output` を guide 規則で止める（段 5。Claude / Copilot には足さない。OS の sandbox が書き込み先を限るため）
+- `bypass` から起動した読むだけの子の、作業ツリーの外の読み取り（`read` / `grep` / `glob` 由来の `external_directory`）の確認を plugin が省く（[ADR-0015](../../adr/0015-bypass-child-external-read.md)）
+- 共有の skill `review-loop` が OpenCode に無い子を名指ししていた件を、CLI ごとのレビュー役の表で直した（2026-10-08）
+
+### 撤回・見送りしたもの
+
+| 項目 | 扱い | 理由 |
+| --- | --- | --- |
+| `ocs` の実起動・TUI・子の再開と fork での確認 | 確認せず閉じた | OpenCode を使っていない |
+| `plan` の shell の「常に許可」で保存した承認の効き方の実機確認 | 同上 | 同上 |
+| `title` / `summary` が全体の規則で拒否を上書きされている件の確認（再開条件は「段 6 の後」） | 同上 | 同上 |
+| `agents.plan` で `description` を変えたとき・`prompt` / `system` を書いたときに、組み込みのプロンプトが保たれるかの確認 | 同上 | 同上 |
+| 全体の allow に残る書き込み形（`checkpoint.py paths *` の `--cwd`、`uv pip list *` の `--cache-dir`） | 扱わない | 影響が小さい。再開条件は「allow を足すか見直すとき」 |
+
+### 反映先
+
+- 実装: `home/dot_config/agents/common.toml.tmpl` の `[opencode.agents.explore]`（1684 行付近）・`[opencode.agents.plan]`（1697 行付近）・`[opencode.bypass_children]`（1610 行付近）・`git log` の `--output` の guide 規則（1840 行付近）
+- 仕様: [agent-config-generation.md](../../spec/agent-config-generation.md#子エージェント)、[agent-command-policy.md](../../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)、[opencode-sandbox.md](../../spec/sandbox/opencode-sandbox.md)
+- 判断: [ADR-0015](../../adr/0015-bypass-child-external-read.md)
+- 調査記録: [builtin-agent-override.md](../../research/opencode/permission/builtin-agent-override.md)
+
+「仕様への変更案」の表の「適用結果」欄は、起票時の「未適用」のまま更新していない。実施は「重要な更新」の記録と、上の反映先の現物（2026-10-25 に `common.toml.tmpl` の節の存在を確認）で確かめた。
+
+### 移管した未完事項
+
+- 全体の allow に残る書き込み形の見直し: 移管先は [CHG-0020](../0020-pi-migration.md) の段 6（OpenCode の撤去）。撤去するとき、この案件の成果の設定ごと消える
+- OpenCode の実機での確認項目: 起票しない（OpenCode を使っていないため）

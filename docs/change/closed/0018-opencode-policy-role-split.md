@@ -10,7 +10,7 @@
 
 ## 目的と非目的
 
-[CHG-0017](../0017-builtin-agent-restrictions.md) では、組み込みエージェント（`explore` / `plan`）の
+[CHG-0017](0017-builtin-agent-restrictions.md) では、組み込みエージェント（`explore` / `plan`）の
 制限が全体の `permissions` に上書きされる穴を、個別の deny や写し直しで 1 つずつ塞いだ。
 穴が個別に出続ける原因は構造にある。OpenCode の規則は「全エージェント共通の基底 →
 組み込みの追加方針 → 全体の `permissions` → エージェントの `permissions`」の順に連結され、

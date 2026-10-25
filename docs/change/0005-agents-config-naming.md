@@ -11,7 +11,7 @@
 > **再開条件**: [CHG-0020](0020-pi-migration.md)（pi への移行）の段 6 で OpenCode の節を撤去したあと。
 > 2026-10-09 に第一サポートが pi に決まった（[CHG-0019](closed/0019-pi-harness-port-evaluation.md)）。
 > CHG-0020 は `[pi]` の節を足し、段 6 で `[opencode.*]` を撤去するので、その前に A2 を進めると手戻りになる。
-> （当初の再開条件は「[CHG-0006](0006-pi-harness-trial.md) が第一サポートを決めたとき」）
+> （当初の再開条件は「[CHG-0006](closed/0006-pi-harness-trial.md) が第一サポートを決めたとき」）
 >
 > **A2 に入る前に決めることが 1 つある**（CHG-0006 と独立に片付けられる）。
 > `[sandbox] claude_write_deny` の 20 件が ADR-0007 の規則 3

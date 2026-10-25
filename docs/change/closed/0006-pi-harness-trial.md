@@ -1,7 +1,11 @@
 # CHG-0006: Pi / oh-my-pi を利便性の軸で試す
 
-- **状態**: In progress
-- **更新日**: 2026-09-30
+> この文書は当時の記録。導入済みの `omp` の現行仕様は [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/structure.md#oh-my-piompの設定)。
+> 第一サポートは 2026-10-09 に pi と決まり（[CHG-0019](0019-pi-harness-port-evaluation.md)）、pi への一本化は [ADR-0017](../../adr/0017-pi-only-and-ts-judge.md)。
+
+- **状態**: Done
+- **更新日**: 2026-10-25
+- **終了日**: 2026-10-25
 - **基準**: 未導入の状態から開始。既存は Claude Code / Copilot CLI / OpenCode V2
 
 ## 目的と非目的
@@ -27,7 +31,7 @@ permission 機構を持たないと明記があり、権限制御は拡張か外
 > Pi does not include a built-in permission system for restricting filesystem,
 > process, network, or credential access.
 
-したがって **[CHG-0004](closed/0004-opencode-sandbox.md) と同じ安全性第一の物差しで
+したがって **[CHG-0004](0004-opencode-sandbox.md) と同じ安全性第一の物差しで
 評価しない。** 同じ物差しを当てると、これらの harness の長所（最小構成・
 拡張性・IDE 統合）が全部「欠点」として出力されるため、判断材料にならない。
 
@@ -70,7 +74,7 @@ permission 機構を持たないと明記があり、権限制御は拡張か外
 
 > **導入済みの `omp` の現行仕様**（導入方法、`chezmoi apply` が設定する 4 項目、
 > 真偽値を初回だけ置くこと）は
-> [プロジェクト構造「oh-my-pi（`omp`）の設定」](../spec/structure.md#oh-my-piompの設定)が
+> [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/structure.md#oh-my-piompの設定)が
 > 正本。この案件には、その形にした判断と、まだ確かめていないことを残す。
 >
 > **2026-09-28 にコードと照合した。** 段 1〜1.6 の実装（`agent-cli-install.sh.tmpl` の
@@ -258,7 +262,7 @@ github / claude-plugins まで同時に開くと「どの定義が採用され�
 ## 仕様への変更案
 
 > 「完了」の行の現行の形は
-> [プロジェクト構造「oh-my-pi（`omp`）の設定」](../spec/structure.md#oh-my-piompの設定)
+> [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/structure.md#oh-my-piompの設定)
 > が正本。この表と続く 2 節（`modify_` にしなかった理由、真偽値を一度だけ置く理由）は
 > その形を選んだ判断の記録。
 
@@ -391,7 +395,7 @@ omp の設定の読み取り（`omp config get --json`）に失敗したとき�
 
 > **2026-10-08 訂正: pi v1.1.0 は MCP に対応している**（`docs/mcp.md`。`~/.pi/agent/mcp.json`、
 > 拡張からの `pi.registerMcpServer`）。以下は 2026-09-24 時点の読みとして残す
-> （[CHG-0019](closed/0019-pi-harness-port-evaluation.md)）。
+> （[CHG-0019](0019-pi-harness-port-evaluation.md)）。
 
 **`packages/coding-agent/docs/` の 39 ファイル全てに `MCP` の記述が 1 件も無い。**
 `settings.md` にも MCP の項目が無い。拡張（TypeScript）で自作する余地は
@@ -435,7 +439,7 @@ omp の `~/.omp/agent/config.yml` とは**別物なので共有させない**
   探索ルートに `.claude` が含まれることと、`~/.claude/skills` を読むことは
   別だった。**素のままでは自作 skills が 1 つも見えない**。
   `skills.customDirectories` へパスで明示する方式で対処した
-- **2026-09-24**: `[CHG-0005](0005-agents-config-naming.md)` の A2（固有設定の
+- **2026-09-24**: `[CHG-0005](../0005-agents-config-naming.md)` の A2（固有設定の
   native 分離）は、この案件の結論が出るまで**優先度を下げる**。
   第一サポートが変わるなら、整理の対象も変わるため
 - **2026-09-24**: `omp config list` の全項目（9 節・約 400 件）を見た。
@@ -457,8 +461,32 @@ omp の `~/.omp/agent/config.yml` とは**別物なので共有させない**
   既存の真偽値と同じく初回だけ置く（`run_onchange_after_430_omp_claude_assets`）
 
 - **2026-10-08**: pi v1.1.0 で MCP に対応していると分かり、「Pi は MCP を持たない」を訂正した。
-  OpenCode のハーネスを pi で作り直す価値の検討は [CHG-0019](closed/0019-pi-harness-port-evaluation.md) に分けた
+  OpenCode のハーネスを pi で作り直す価値の検討は [CHG-0019](0019-pi-harness-port-evaluation.md) に分けた
 
 ## 終了結果
 
-<!-- Done にするとき記入 -->
+**Done。** 第一サポートは 2026-10-09 に pi と決まった（「第一サポートを決める」という目的は、この案件の外で達成した）。
+利用者は `omp` を使っていない（2026-10-25 の回答）。段 2 以降を実施せずに閉じた。
+2026-10-08 時点の「現在地」「未解決点」は、この結果で置き換わる（本文は当時のまま残す）。
+
+### 採用したもの
+
+- `omp` の導入（`agent-cli-install.sh.tmpl` の `install_omp`）、自作 skills を `omp` から見えるようにする（`420_omp_skills`）、`enabledProviders` と `~/.claude` の資産の取り込み（`430_omp_claude_assets`）、常用で決まった設定 1 件（`personality`）の回収。現行の仕様は [structure.md](../../spec/structure.md#oh-my-piompの設定)
+- 「安全性の軸で評価しない」という前提と、「抵う代償を正確に言語化して利便性を取る」という決め方（「抵う代償」の節）
+
+### 撤回・見送りしたもの
+
+| 項目 | 時期 | 理由 |
+| --- | --- | --- |
+| 段 2（普段の作業を 1 周通す。進行中だった）、段 2.5 の残り（設定の回収。先行 1 件のみ実施）、段 3（常用 skills の確認）、段 4（Pi を比較用に追加）、段 5（第一サポートを決める） | 2026-10-25 | 第一サポートは別の案件で pi に決まっている。`omp` を使っていない |
+| 「未解決点」の実機確認（`enabledProviders: [claude]` の効果、`omp` が `~/.claude/settings.json` を設定源として読むか、`CLAUDE.md` のどちらが採用されるか、`PI_CONFIG_DIR` の共有、自動発見の採用の見えにくさ） | 2026-10-25 | 確認せずに閉じた。`omp` を使っていない |
+
+### 反映先
+
+- 実装: `home/.chezmoitemplates/agent-cli-install.sh.tmpl`（`install_omp`）、`home/.chezmoiscripts/400_unix/run_onchange_after_420_omp_skills.sh.tmpl`、`run_onchange_after_430_omp_claude_assets.sh.tmpl`
+- 仕様: [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/structure.md#oh-my-piompの設定)
+- 判断: [ADR-0017](../../adr/0017-pi-only-and-ts-judge.md)（pi へ一本化）、[CHG-0019](0019-pi-harness-port-evaluation.md)（第一サポートを pi と決めた評価）
+
+### 移管した未完事項
+
+- 導入済みの `omp` の資産（上の実装）を撤去するか: **未起票**。`omp` を使っていないので、導入スクリプトと資産が残っている。撤去の判断は別の機会に行う

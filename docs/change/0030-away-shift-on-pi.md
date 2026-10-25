@@ -77,11 +77,11 @@
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `references/resume.md` | CLI の表に pi の行を足す。`bg_run` の手順（予約・停止・復帰）を書く | 実測（上の「現在地」） | 未適用（P1） |
-| `scripts/preflight.py` | `--judge pi`（`decide.py` を使い、役割・bypass を指定できる）を足す。既定は Claude Code の hook のまま | 判定器の差 | 未適用（P1） |
-| `SKILL.md`・`references/unattended.md` | pi の記述（呼び方は `python3`、`guarded_task` の `abort`、確認の待ち）を足す | 実測 | 未適用（P1） |
-| `common.toml.tmpl` の `[pi.skill_scripts.allow]` と `[pi.shell] allow` | `away_guard.py`（`init` `check` `log` `status`）、`preflight.py`、`sleep` を足す | 無人で止まらないため | 未適用（P2。`review` が先） |
-| `scripts/away_guard.py` | `log --note-file`（run ディレクトリの中に限る）。書き込み先の閉じ込め | P2 | 未適用 |
+| `references/resume.md` | CLI の表に pi の行を足す。`bg_run` の手順（予約・停止・復帰）を書く | 実測（上の「現在地」） | 適用済み（P1。`resume.md` の表と「`bg_run` を使える場合 (pi)」の節） |
+| `scripts/preflight.py` | `--judge pi`（`decide.py` を使い、役割・bypass を指定できる）を足す。既定は Claude Code の hook のまま | 判定器の差 | 適用済み（P1。`executable_preflight.py` に `--judge` / `--role`） |
+| `SKILL.md`・`references/unattended.md` | pi の記述（呼び方は `python3`、`guarded_task` の `abort`、確認の待ち）を足す | 実測 | 適用済み（P1。`SKILL.md` の「pi (pis) で使うとき」節。`unattended.md` は未確認） |
+| `common.toml.tmpl` の `[pi.skill_scripts.allow]` と `[pi.shell] allow` | `away_guard.py`（`init` `check` `log` `status`）、`preflight.py`、`sleep` を足す | 無人で止まらないため | 適用済み（P2。`review` 済。`common.toml.tmpl` の `[pi.skill_scripts.allow]` に `away_guard.py` の `init` / `check` / `log` / `status` / `sleep` と `preflight.py`） |
+| `scripts/away_guard.py` | `log --note-file`（run ディレクトリの中に限る）。書き込み先の閉じ込め | P2 | 適用済み（P2。`executable_away_guard.py` に `log --note-file`） |
 
 ## 重要な更新
 

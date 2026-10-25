@@ -636,7 +636,7 @@ permissions = [
 - **許可した子の作業ツリーの外の読み取りは、親が `bypass` なら確認を省く。**
   `explore` / `review` / `commit` は `bypass_agents` に無いので、自分の規則では確認が自動で
   通らない。guide plugin は、次の条件を**全部**満たすときだけ、その確認を `allow` にする
-  （[CHG-0017](../change/0017-builtin-agent-restrictions.md) の段 7）
+  （[CHG-0017](../change/closed/0017-builtin-agent-restrictions.md) の段 7）
   1. 効果が `ask`
   2. 評価しているエージェントが `rules.json` の `bypass_child_agents` に完全一致で含まれる
   3. action が `external_directory`
@@ -1234,7 +1234,7 @@ explore = "worker"      # 例
   上書きする。宣言しないと、`explore` は shell で確認を出し `.env.example` を書け、`plan` は
   `.env.example` を確認なしに書けて `general` 経由で編集できた
   （[調査記録](../research/opencode/permission/builtin-agent-override.md)、
-  [CHG-0017](../change/0017-builtin-agent-restrictions.md)）。`system` は書かず、組み込みの
+  [CHG-0017](../change/closed/0017-builtin-agent-restrictions.md)）。`system` は書かず、組み込みの
   プロンプトを使う（plan モードの指示は利用者のメッセージに付いて渡され、宣言しても残る）
 - **組み込みの方針を丸ごと写さない。** 足すのは deny と最小の allow だけ。`explore` の組み込みの
   `read *` の allow や `.env` の ask まで写すと、全体の秘密ファイルの deny を緩める
@@ -1383,7 +1383,7 @@ Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる�
   実装を含むなら計画を示して止め、作業役を呼べるエージェントへの切り替えを利用者に頼む
   （拒否された作業を親の shell で肩代わりしない）
 - **確認なしで進めたいときは `bypass` の上で使う。** `build` の上の `/fleet` は作業役が
-  承認制なので確認が出る（[CHG-0017](../change/0017-builtin-agent-restrictions.md) で対象外とした）
+  承認制なので確認が出る（[CHG-0017](../change/closed/0017-builtin-agent-restrictions.md) で対象外とした）
 - 調査の振り分けは、今あるファイルの探索を `explore`、Git の履歴やコマンドが要る調査を
   作業役、第三者の検証を `review` にする（`explore` は shell を使えない）
 - **取りまとめは今のセッションで動かす（`subagent = false`）。** 子エージェントは

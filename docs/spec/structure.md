@@ -744,7 +744,7 @@ mise の shim が残って優先される場合は `mise reshim` を実行して
 
 ### oh-my-pi（`omp`）の設定
 
-`omp` は試用中です（[CHG-0006](../change/0006-pi-harness-trial.md)）。
+`omp` は試用中です（[CHG-0006](../change/closed/0006-pi-harness-trial.md)）。
 Linux / WSL / macOS で `curl -fsSL https://omp.sh/install | sh` により導入します。
 Pi のフォークで、LSP 統合・DAP・subagent を持ちます。起動は `omp` で、
 境界（`ocs`）の外で動きます。
@@ -769,7 +769,7 @@ Pi のフォークで、LSP 統合・DAP・subagent を持ちます。起動は 
 > 権限制御は拡張か外部の sandbox に委ねます。保護は「どこで起動するか」と
 > git の使い方に依存します。**対象リポジトリ直下で起動し、開始前に作業を
 > 区切ってコミットしてください。**
-> 経緯と代償の一覧は [CHG-0006](../change/0006-pi-harness-trial.md) にあります。
+> 経緯と代償の一覧は [CHG-0006](../change/closed/0006-pi-harness-trial.md) にあります。
 
 ## Herdr の管理
 
