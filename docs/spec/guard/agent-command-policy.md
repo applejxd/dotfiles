@@ -241,7 +241,7 @@ sed / awk / jq など、stdin を stdout へ通すフィルタを含む) と
 
 秘密らしい名前（`_SENSITIVE_ENV_RE`）は、どのサブコマンドでも値を出さない。
 正規表現はスクリプトに複製してあり、`test_env_check.py::test_sensitive_pattern_matches_the_hook` が一致を固定する。
-経緯は T2（sandbox のトラブル報告）: `env | grep -i proxy` が止まり、診断の手段が無かった。
+経緯と選択肢は [ADR-0020](../../adr/0020-env-allowlist-and-env-check.md): `env | grep -i proxy` が止まり、診断の手段が無かった。
 
 `cd <dir> && <cmd> <relpath>` のように作業ディレクトリを移してから相対パスで触る形は、
 パスを結合した変種を作ってパス系のチェックだけ再適用する。

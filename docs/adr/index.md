@@ -73,3 +73,5 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0016](0016-pi-extensions-own-first.md) | pi の拡張は自作を基本とし、外部の拡張は条件を満たす例外だけを導入する | Accepted | 2026-10-11 | 従来の「拡張を足さない」は AI の提案を理解せず承認したもので、利用者の方針ではなかった。明示の `-e` で足せることを実測した。外部の拡張は、必要かつ自作が困難で、審査と版の固定と試験を済ませたものだけ |
 | [0017](0017-pi-only-and-ts-judge.md) | AI CLI を pi に一本化し、判定器を TypeScript に移してハーネスのプロセスの中で動かす | Accepted | 2026-10-13 | 2026-10-09 の「判定器を Claude / Copilot と共有する」を覆す（CHG-0020 に反映）。2026-10-15 注記: 本文の「ハーネス」は現在のフルガード（[用語](../spec/guard/pi-guard.md#用語)） |
 | [0018](0018-pis-sandbox-default-relax-only-when-proven.md) | pis をサンドボックス標準にし、緩和はサンドボックスが証明されたときだけ効かせる | Accepted | 2026-10-14 | ADR-0012・0013・0016・0017 の決定は変えない（ADR-0017 の Windows の扱いも同じ）。実装は CHG-0023 |
+| [0019](0019-pis-fetch-via-proxy-with-explicit-flag.md) | pis の内側のページ取得は、専用フラグでプロキシ越しにし、事前の名前解決を省く | Accepted | 2026-10-25 | 実測は[記録 S2](../research/agents/pis-sandbox-field-test.md)。案件は CHG-0037 |
+| [0020](0020-env-allowlist-and-env-check.md) | 環境変数の一覧・個別参照は許可リスト方式で止め、診断は env-check に集める | Accepted | 2026-10-25 | 案件は CHG-0037 |

@@ -107,3 +107,101 @@ fd  pi
 - 案件: [CHG-0023](../../change/0023-guard-terminology.md)
 - 仕様: [pi のガード](../../spec/guard/pi-guard.md#緩和のゲート)
 - pi 1.1.0 の `dist/utils/tools-manager.js`・`dist/config.js`（`~/.pi/agent/install/releases/1.1.0/node_modules/@earendil-works/pi-coding-agent/`）
+
+## 記録 S2 — 2026-10-25（内側のネットワーク・ページ取得・クリップボード）
+
+- **対象バージョン**: pi 1.3.0（`~/.pi/agent/install/releases/1.3.0` のソースを読んだ）、Fence 0.1.67（PATH のインストール先から）
+- **環境**: WSL2 (Ubuntu)、Orca のターミナル。`pis -p` を `~/src/skill-lab` から実行し、内側のモデルにコマンドを実行させて、出力を報告させた
+  （**出力は内側のモデルが報告したもの**。拒否文や終了コードはそのまま報告させ、迂回は禁じた）
+- **基準コミット**: 修正前の実測は `b5b04c9` の時点、修正後は `ddbcb4a`（web-search）・`f2e7fb9`（imozuru）の反映後
+
+### 結論
+
+- 内側は **DNS を引けない**が、**プロキシ越しの `CONNECT` は通る**。許可ドメインの外はプロキシが `403 Forbidden` を返す（許可リスト型の挙動）
+- ページ取得（`websearch.py fetch`・imozuru の `fetch.py`）が全滅していた原因は、ツール側の事前の名前解決（接続前に自分で DNS を引き、IP を検査して固定する作り）だった。
+  Fence のプロキシの設定不備ではない。修正後は、許可ドメインの取得が通り、許可外は「プロキシが接続を拒否した」で止まる
+- クリップボード: 内側では `Clipboard unavailable` になる。原因は上流の仕様（表示の環境変数が見えるとデスクトップ環境とみなし、OSC 52 に回らない）と、sandbox が塞ぐソケットの組み合わせ（推測を含む）。回避策は `PI_CLIPBOARD_OSC52=1`
+
+### 問い
+
+`pis` の内側で、(1) ネットワークはどこまで届くか、(2) ページ取得が失敗する原因は何か、(3) 画面の内容をクリップボードへコピーできない原因は何か。
+
+### 事前の予想
+
+報告書（修理担当向けの sandbox のトラブル報告）は「sandbox が外部取得を持たない」前提で、ブローカーへの `/fetch` の追加などを案にしていた。
+
+### 方法・条件
+
+`pis -p "<コマンドを実行して出力をそのまま報告せよ>"` を、修正の前後で実行。クリップボードは、利用者が画面のエラー（スクリーンショット）を提示し、ソース `dist/utils/clipboard.js` を読んだ。
+
+### 結果
+
+**環境変数**（内側。`env_check.py show` の出力から）:
+
+| 変数 | 値 |
+| --- | --- |
+| `HTTPS_PROXY` / `HTTP_PROXY`（小文字も） | `http://127.0.0.1:3128` |
+| `all_proxy` | `socks5h://127.0.0.1:1080` |
+| `NO_PROXY`（小文字も） | `localhost,127.0.0.1,::1` |
+| `WEBSEARCH_BROKER_URL` | `http://127.0.0.1:<port>` |
+
+**ネットワーク**（内側。修正前）:
+
+| コマンド | 結果 |
+| --- | --- |
+| `getent hosts raw.githubusercontent.com` | 終了コード 2（名前を引けない） |
+| `curl -sI -m 8 https://arxiv.org` | 終了コード 0。`HTTP/1.1 200 Connection Established` のあと `HTTP/2 200` |
+| `curl -sI -m 8 https://raw.githubusercontent.com` | 終了コード 0。`200 Connection Established` のあと `HTTP/2 301` |
+| `curl -sI -m 8 https://voiceover.manim.community`（許可リストに無い） | 終了コード 56。`HTTP/1.1 403 Forbidden` |
+| `curl -sI -m 8 http://localhost:1/` | 終了コード 7（出力なし） |
+| `websearch.py fetch https://arxiv.org/abs/2510.05096` | 終了コード 2。`取得を止めた: 名前を解決できない` |
+
+**ページ取得**（内側。修正後）:
+
+| コマンド | 結果 |
+| --- | --- |
+| `websearch.py fetch https://arxiv.org/abs/2510.05096` | 終了コード 0。本文を取得（title つき） |
+| `websearch.py fetch https://raw.githubusercontent.com/…/README.md` | 終了コード 0。本文を取得 |
+| `websearch.py fetch https://voiceover.manim.community/` | 終了コード 2。`取得を止めた: プロキシが接続を拒否した (Tunnel connection failed: 403 Forbidden)…` |
+| imozuru の `fetch.py … arxiv-abs https://arxiv.org/abs/2510.05096` | 終了コード 0。`OK arxiv-abs …sources/arxiv-abs.md 6968 …` |
+| imozuru の `fetch.py … denied https://voiceover.manim.community/` | 終了コード 1。`FAIL denied URLError: <urlopen error Tunnel connection failed: 403 Forbidden>` |
+
+**クリップボード**: 画面のエラーは `Clipboard unavailable: install wl-clipboard (wl-copy) or check Wayland access`。
+内側でない通常のシェルでは、`WAYLAND_DISPLAY=wayland-0`・`DISPLAY=:0`が見え、`xsel` は入っているが `wl-copy` は無い。
+`pis` の外のシェルで `printf '\033]52;c;%s\a' "$(printf hello | base64)"` を実行すると、Orca で OSC 52 が使えた（利用者の確認）。
+
+**上流の報告**（`gh issue view`、2026-10-25 に取得）:
+
+| Issue | 状態 | 内容 |
+| --- | --- | --- |
+| pi #11273 | bot が自動で close。メンバーが回避策を回答 | devcontainer でコピーできない。`PI_CLIPBOARD_OSC52=1`、または `wl-clipboard` の導入 |
+| pi #10558 | 2026-10-07 に close（メンバー「バグではない」） | 表示の変数が出ているがソケットが無い。動くソケットを用意するか、変数を unset する |
+| pi #11029 | 2026-10-16 に close | WSL の tmux が `WT_SESSION` を継承して無言で失敗。`set-clipboard on` か `env -u WT_SESSION` |
+| pi #10628 | open | tmux が全画面 TUI の OSC 52 を飲む |
+
+Orca の文書に `Settings → Terminal → Allow TUI Clipboard Writes (OSC 52)` がある（<https://www.onorca.dev/docs/terminal。日付は未確認）。>
+
+**別件（誤検知）**: 通常のシェルで `echo $WT_SESSION` を実行すると、「センシティブな環境変数」として拒否された
+（名前に `SESSION` を含むため。`_SENSITIVE_ENV_RE`）。`WT_SESSION` は Windows Terminal のセッション識別子で、秘密ではない。**未修正**。
+
+### 考察
+
+- **言えること**: 取得の失敗は、ツールの作り（事前の DNS 検査）と内側の環境（DNS なし・プロキシあり）の食い違い。プロキシは設計どおり動いている
+  （許可は通し、許可外は 403）。許可の強制の位置は、ツール内の IP 検査から、プロキシの許可リストへ移る
+- **今の内側の通信は許可リスト型の挙動**（許可外の 1 ドメインで 403）。[CHG-0037](../../change/0037-pis-usability-and-telemetry.md) の「通信の方針」（拒否リスト型へ引き直す）は、
+  この観測の時点では実現していない（推測: 許可の一覧は `[web] allow_domains`・`[sandbox] shell_network_allow`。内側へ実際に渡った一覧は未確認）
+- **言えないこと**: 内側の DNS が引けないのが Fence の設計か（文書で確認していない）。`socks5h` の経路（`all_proxy`）は使っていない。
+  クリップボードの失敗が、ソケットと `powershell.exe` の相互運用のどちらで起きているか（推測）。`PI_CLIPBOARD_OSC52=1` を渡した `pis` の内側で、`/copy` が実際に通ること（未確認）
+
+### 次の問い
+
+- `pis` の内側で、`PI_CLIPBOARD_OSC52=1` により `/copy` が通るか（利用者の端末の設定が要る）
+- 内側へ渡った許可ドメインの一覧と、許可外の内部名（`*.internal` など）へプロキシが 403 を返すか
+- imozuru で、任意のドメインの原文を取るための許可リストの足し方（今は、許可外は 403 になる）
+
+### 参照
+
+- 案件: [CHG-0037](../../change/0037-pis-usability-and-telemetry.md)（段 U2）
+- 仕様: [web-search（pis の内側のプロキシ越しの取得）](../../spec/web-search.md#pis-の内側のプロキシ越しの取得)、[imozuru](../../spec/imozuru.md)、[トラブルシューティング（クリップボード）](../../spec/troubleshooting-agents.md#pis-の内側でクリップボードへコピーできない)
+- ADR: [ADR-0019](../../adr/0019-pis-fetch-via-proxy-with-explicit-flag.md)
+- pi 1.3.0 の `dist/utils/clipboard.js`、pi の Issue（上の表）
