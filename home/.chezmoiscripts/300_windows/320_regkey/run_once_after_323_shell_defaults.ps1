@@ -4,7 +4,7 @@
   .DESCRIPTION
     5.1 ships with the Restricted policy, which blocks the profile (*.ps1) the dotfiles deploy.
     PowerShell 7 already defaults to RemoteSigned, so only 5.1 needs this.
-    see docs/spec/structure.md#シェルの既定値
+    see docs/spec/windows-settings.md#シェルの既定値
 #>
 
 Set-StrictMode -Version Latest

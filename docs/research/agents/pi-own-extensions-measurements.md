@@ -1,6 +1,6 @@
 # 自作の拡張（todo / plan / btw / activity / ask / notify / delegate-nudge）の実測と未確認
 
-> `docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw` から移した記録。移設時点で再測定していない。
+> `docs/spec/guard/pi-extensions.md#自作の拡張-todo--plan--btw` から移した記録。移設時点で再測定していない。
 
 ## 記録 — 観測日は各文に記載（移設 2026-10-26）
 

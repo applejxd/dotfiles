@@ -2,7 +2,7 @@
 //
 //   node test/agents/pi/audit_golden.mjs
 //
-// see docs/spec/guard/pi-guard.md#子エージェント
+// see docs/spec/guard/pi-subagents.md#子エージェント
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 

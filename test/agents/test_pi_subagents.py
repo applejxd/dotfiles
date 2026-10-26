@@ -1,4 +1,4 @@
-"""素の pi (Windows) 用の子エージェント宣言。see docs/spec/guard/pi-guard.md#windows-の子エージェント"""
+"""素の pi (Windows) 用の子エージェント宣言。see docs/spec/guard/pi-subagents.md#windows-の子エージェント"""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def test_only_read_only_agents_are_declared():
 
 
 def test_declarations_stay_in_step_with_the_full_guard_agents():
-    # Windows の subagents とフルガードの task は別物 (see docs/spec/guard/pi-guard.md#二つの-task-を別物にしている理由) だが、
+    # Windows の subagents とフルガードの task は別物 (see docs/spec/guard/pi-subagents.md#二つの-task-を別物にしている理由) だが、
     # 同じ [pi.agents] から出る宣言なので、名前・モデル・読み取り専用の役割の説明と指示は食い違わせない
     common = load_common()
     plain = gen.build_pi_subagents({}, common)["agents"]

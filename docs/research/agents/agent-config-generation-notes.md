@@ -8,7 +8,7 @@
 - **対象**: Claude Code / Copilot CLI / OpenCode V2（v2.0.12〜2.0.14）/ pi
 - **根拠**: 元の文にある記録へのリンク・コマンド（各節に再掲）
 
-## 記録 N1 — MCP の生成先（`docs/spec/agent-config-generation.md#mcp-サーバ`）
+## 記録 N1 — MCP の生成先（`docs/spec/mcp-servers.md#mcp-サーバ`）
 
 ### 問い
 

@@ -28,7 +28,7 @@ chezmoi status --include=scripts
 - 警告だけ出して 0 で終わったスクリプトは成功として記録される。**内容が変わるまで
   走らない**。外部の一時的な不調で apply を止めないため、次は 0 で終わる
   - `100_linux/125_mise`（`mise install` の一部が失敗したとき。
-    [ツール 1 個の失敗で apply を止めない](structure.md#ツール-1-個の失敗で-apply-を止めない)）
+    [ツール 1 個の失敗で apply を止めない](platform-raspberry-pi.md#ツール-1-個の失敗で-apply-を止めない)）
 - AI CLI の導入（`126_agent_cli` / `226_agent_cli`）と omp の設定の取得（`420_omp_skills` /
   `430_omp_claude_assets`）は、失敗した回に**再実行の印**を書き直して次の apply で走り直す。
   成功した回は印に触れないので、その後は走り直さない
@@ -105,7 +105,7 @@ chezmoi state get-bucket --bucket=gitRepoExternalState
 chezmoi apply --refresh-externals
 ```
 
-取得先が既にある項目は宣言されない（[シェルプラグインの取得](structure.md#シェルプラグインの取得)）
+取得先が既にある項目は宣言されない（[シェルプラグインの取得](shell.md#シェルプラグインの取得)）
 ので、取得済みのものに `git pull` は走らない。記録だけを消してもよい。
 
 ```bash
@@ -155,7 +155,7 @@ chezmoi execute-template < ~/.local/share/chezmoi/home/.chezmoi.toml.tmpl | diff
 - 差がある: 新しい値を使うには `chezmoi init` を実行する。それまでは、生成済みの設定が使われ続ける
 
 `init` を前提にした設計にしない理由と、マシン判定を `apply` のたびに評価させる仕組みは
-[Raspberry Pi](structure.md#raspberry-pi) を参照。
+[Raspberry Pi](platform-raspberry-pi.md#raspberry-pi) を参照。
 
 **成功の確認**: `chezmoi status` に警告が出ない。
 
@@ -384,7 +384,7 @@ mise install "npm:@bitwarden/cli"
 ## VS Code の拡張が入っていない
 
 **対象**: 全環境。拡張は chezmoi の対象外で、VS Code の Settings Sync が正本
-（[VS Code の拡張](structure.md#vs-code-の拡張)）。
+（[VS Code の拡張](dev-environment.md#vs-code-の拡張)）。
 
 **症状**: 新しいマシンで VS Code の拡張が無い。
 
@@ -412,7 +412,7 @@ grep -rl 'cli\.github\.com' /etc/apt/sources.list.d/
 
 **原因**: 残っている APT 登録の署名鍵が失効している。**chezmoi は自動で直さない。**
 既存の APT 登録・鍵・認証設定は自動削除しない方針のため
-（[mise による CLI 管理](structure.md#mise-による-cli-管理)）。
+（[mise による CLI 管理](cli-management.md#mise-による-cli-管理)）。
 
 鍵の状態は次で見られる（2 列目の `e` が失効。確かめた例は
 [観測記録](../research/chezmoi/bootstrap-observations.md#記録-e2--2026-10-01github-cli-の-apt-署名鍵の失効)）。
@@ -476,7 +476,7 @@ sudo apt-get update
 Windows の PATH は Machine が User より先に解決されるので、winget や MSI で入れた古い node
 （Machine PATH）が、mise の新しい node より先に使われることが原因になる。旧方式の npm 版の pi だけが
 node に依存し、Node.js 22.19 以上を要る。今の pi は mise のバイナリ版で、導入の仕様は
-[Windows の pi](structure.md#windows-の-pi)。
+[Windows の pi](cli-management.md#windows-の-pi)。
 
 確認（pwsh）:
 
@@ -532,7 +532,7 @@ V2 スキーマなので V1 のバイナリが弾く。世代の違いは
 
 **対処**: `126_agent_cli` / `226_agent_cli`（中身は
 `home/.chezmoitemplates/agent-cli-install.sh.tmpl`）が残骸を消し、shim を「導入済み」と
-数えない（[mise 版からの移行](structure.md#mise-版からの移行)）。掃除を入れた版に
+数えない（[mise 版からの移行](cli-management.md#mise-版からの移行)）。掃除を入れた版に
 更新された最初の apply で 1 回走る。**その後に再発した場合は `chezmoi apply` では
 走らない**ので、手で消す。
 

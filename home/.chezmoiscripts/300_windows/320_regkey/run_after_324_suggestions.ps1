@@ -5,7 +5,7 @@
     Feature updates reset some of these values, so this runs on every apply and only writes what differs.
     A value Windows refuses to write (protected keys) is reported and skipped.
     The taskbar widget (weather) is a machine policy set by 309_admin.
-    see docs/spec/structure.md#広告と推奨の抑止
+    see docs/spec/windows-settings.md#広告と推奨の抑止
 #>
 
 Set-StrictMode -Version Latest

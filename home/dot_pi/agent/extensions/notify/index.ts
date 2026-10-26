@@ -2,7 +2,7 @@
 // Zed の Terminal Threads などは、フォーカス外の端末の BEL を通知にする。
 // 確認 (フルガード) と質問 (ask) で待つ直前の BEL は、それぞれの側で鳴らす。
 // RPC では stdout が JSON 行の通信なので、TUI のときだけ書く。
-// see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
+// see docs/spec/guard/pi-extensions.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {

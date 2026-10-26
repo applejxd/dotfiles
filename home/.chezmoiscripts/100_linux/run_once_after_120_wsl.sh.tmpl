@@ -16,7 +16,7 @@ cat > "$new" << 'EOF'
 [automount]
 options = "metadata"
 enabled = true
-# see docs/spec/structure.md#wsl
+# see docs/spec/platform-wsl.md#wsl
 mountFsTab = false
 
 [interop]
@@ -64,7 +64,7 @@ fi
 
 # Ubuntu 24.04 以前は systemd-timesyncd が既定で有効で、WSL の Hyper-V 時刻同期と干渉して
 # adjtimex の tick が偏り、単調時計が遅れる (Canonical は無効化を推奨)。止めて mask する
-# see docs/spec/structure.md#wsl-の時刻同期
+# see docs/spec/platform-wsl.md#wsl-の時刻同期
 if [[ -d /run/systemd/system ]] && systemctl cat systemd-timesyncd.service > /dev/null 2>&1 \
     && [[ "$(systemctl is-enabled systemd-timesyncd.service 2> /dev/null || true)" != masked ]]; then
     sudo systemctl mask --now systemd-timesyncd.service

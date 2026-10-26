@@ -1,6 +1,6 @@
 # ツール引数の JSON が壊れる問題の調査（細粒度ツールストリーミング・strict・Bedrock）
 
-> `docs/spec/guard/pi-guard.md#ツール引数の-json-を壊さない設定` から移した記録。移設時点で再測定していない。
+> `docs/spec/guard/pi-extensions.md#ツール引数の-json-を壊さない設定` から移した記録。移設時点で再測定していない。
 
 ## 記録 — 観測日は各文に記載（移設 2026-10-26）
 

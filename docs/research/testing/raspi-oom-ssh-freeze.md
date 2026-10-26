@@ -7,7 +7,7 @@
   （gitleaks フックの置き換え）の本文。**固まっている間のログは取れていない**
 
 いまの対策（zram と earlyoom の設定値）は
-[プロジェクト構造](../../spec/structure.md#メモリが尽きても-ssh-できるようにする)、
+[プロジェクト構造](../../spec/platform-raspberry-pi.md#メモリが尽きても-ssh-できるようにする)、
 gitleaks をプレビルドで動かす理由は
 [開発ガイド](../../spec/development.md#gitleaks-はプレビルドを使う) が正本。
 

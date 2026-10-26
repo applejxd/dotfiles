@@ -1358,7 +1358,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 // ★編集と整形の順番: 同じ応答に同じファイルへの edit / write が並んだとき、整形は、その最後の 1 件の後に 1 回だけ。
 // 編集の間に整形が入ると、後ろの編集の oldText (整形前の本文を見て作ったもの) が合わず、
 // "The old text must match exactly" で失敗する (遅いマシンや承認待ちで、編集の開始がずれると起きやすい)。
-// see docs/spec/guard/pi-guard.md#整形
+// see docs/spec/guard/pi-extensions.md#整形
 
 // 応答ごとの edit / write の数 (絶対パスごと)。batchTotals は応答の合計、pendingEdits はまだ結果が出ていない残り
 let batchTotals = new Map<string, number>();

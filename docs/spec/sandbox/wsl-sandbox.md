@@ -25,7 +25,7 @@ pwsh scripts/windows/wsl-sandbox/create.ps1
 | `-SkipTailscale` | 無効 | Tailscale の導入とログインを省く |
 | `-NoKeepalive` | 無効 | VM 常駐化のタスクを作らない |
 
-前提: WSL 本体が導入済み（[WslPlatform](../structure.md#wsl-本体wslplatform)）、Windows 側の NVIDIA ドライバ、
+前提: WSL 本体が導入済み（[WslPlatform](../windows-admin.md#wsl-本体wslplatform)）、Windows 側の NVIDIA ドライバ、
 `~` のドライブに 50GB 以上の空き。管理者権限は要らない。
 
 ## 手順の中身
@@ -78,7 +78,7 @@ pwsh scripts/windows/wsl-sandbox/create.ps1
 
 **全ディストロで `timesyncd` を止める必要がある**（sandbox だけでは `tick` が偏る）。メインのディストロ側は `120_wsl` が同じ設定を入れる。
 WSL2 の全ディストロは同じ VM・同じカーネルの時計を共有するため、1 つでも `timesyncd` が動くと `adjtimex` の `tick` が偏り、
-`CLOCK_MONOTONIC` が遅れてプロセスの `create_time` がずれる。仕組み・止める理由は [WSL の時刻同期](../structure.md#wsl-の時刻同期)、
+`CLOCK_MONOTONIC` が遅れてプロセスの `create_time` がずれる。仕組み・止める理由は [WSL の時刻同期](../platform-wsl.md#wsl-の時刻同期)、
 この環境での実測と原因分析は [専用 WSL2 の時刻同期の実測](../../research/chezmoi/wsl-sandbox-time-sync.md)。
 すべてのディストロで止めた状態で、壁時計が長時間正確に保たれるかは未確認。
 
@@ -90,7 +90,7 @@ WSL2 の全ディストロは同じ VM・同じカーネルの時計を共有す
 
   変更を戻すには `systemctl unmask systemd-timesyncd` のあと、`systemctl enable --now systemd-timesyncd`。
 - **メインのディストロ**: ここの `timesyncd` も止める必要がある。**`100_linux/run_once_after_120_wsl.sh.tmpl` が、`mask --now` と
-  `tick` の復元をする**（[WSL の時刻同期](../structure.md#wsl-の時刻同期)）。手動でやるなら、一時的には
+  `tick` の復元をする**（[WSL の時刻同期](../platform-wsl.md#wsl-の時刻同期)）。手動でやるなら、一時的には
   `sudo systemctl stop systemd-timesyncd`（再起動で元に戻る）、恒久的には `sudo systemctl mask --now systemd-timesyncd`
 - メインのディストロですでに `tick` が偏っているときも、`120_wsl` が `adjtimex` で `tick` を `1000000 / CLK_TCK`
   （通常は 10000）へ戻す。手動でやるなら root 権限で `adjtimex` の `ADJ_TICK` を使う（再起動でも元に戻る）

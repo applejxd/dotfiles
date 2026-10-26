@@ -2,7 +2,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Tailscale を Unattended (ログオン前・サインアウト後も接続) にする。see docs/spec/structure.md#tailscale-の-unattended
+# Tailscale を Unattended (ログオン前・サインアウト後も接続) にする。see docs/spec/windows-settings.md#tailscale-の-unattended
 # 初回のブラウザ認証は対話が要るのでここでは行わず、未ログインなら手順を表示して 0 で終わる。
 $exe = Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {

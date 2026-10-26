@@ -1,13 +1,13 @@
 # see below for documentation
 # https://mise.jdx.dev/configuration.html
-# 宣言の理由は docs/spec/structure.md#mise-による-cli-管理 が正本
+# 宣言の理由は docs/spec/cli-management.md#mise-による-cli-管理 が正本
 # PC 固有の設定は ~/.config/mise/conf.d/*.toml に置く (chezmoi 管理外)
 
 {{- $raspi := eq (includeTemplate "is-raspi" .) "true" }}
 
 [tools]
 gh = "latest"
-# AI CLI は mise で管理しない。例外は Windows の pi (docs/spec/structure.md#windows-の-pi)
+# AI CLI は mise で管理しない。例外は Windows の pi (docs/spec/cli-management.md#windows-の-pi)
 {{- if or (eq .chezmoi.os "linux") (eq .chezmoi.os "windows") }}
 herdr = "latest"
 {{- end }}
@@ -77,7 +77,7 @@ sops = "latest"
 # snap 版が動かないため npm backend (docs/spec/security.md#bitwarden連携)
 "npm:@bitwarden/cli" = "latest"
 # Claude sandbox の seccomp フィルタ。WSL2 では無いと脱出できる
-# (docs/spec/sandbox/agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ)
+# (docs/spec/sandbox/cli-sandbox-network.md#wsl2-での抜け穴-seccomp-フィルタ)
 "npm:@anthropic-ai/sandbox-runtime" = "latest"
 yt-dlp = "latest"
 {{- else }}
@@ -87,7 +87,7 @@ aws-cli = "latest"
 {{- if eq .chezmoi.os "linux" }}
 
 # OpenCode の隔離起動 (ocs) の境界。版とチェックサムを固定する
-# (docs/spec/structure.md#mise-による-cli-管理)
+# (docs/spec/cli-management.md#mise-による-cli-管理)
 [tools."github:fencesandbox/fence"]
 version = "0.1.67"
 
@@ -105,13 +105,13 @@ sops.age_key_file = "~/.config/sops/age/keys.txt"
 {{- if not $raspi }}
 
 # プリコンパイル済みバイナリは Tkinter を含まない
-# (all_compile を使わない理由は docs/spec/structure.md#mise-の-settings)
+# (all_compile を使わない理由は docs/spec/cli-management.md#mise-の-settings)
 [settings.python]
 compile = true
 {{- else }}
 
 # プレビルドが無いとき ruby-build へ落ちるのを止める
-# (docs/spec/structure.md#ruby-はプレビルドで入れる)
+# (docs/spec/platform-raspberry-pi.md#ruby-はプレビルドで入れる)
 [settings.ruby]
 compile = false
 {{- end }}

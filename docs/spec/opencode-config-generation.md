@@ -555,7 +555,7 @@ Windows 以外では `.chezmoiignore.tmpl` がこのファイルを外し、Open
 > OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
 
 `[opencode.agents.<id>]` に V2 形式でエージェントを定義し、`opencode.json` の
-`agents` へ出す。モデルは書かず、[`[opencode.model.agents]`](agent-config-generation.md#モデルの割り当て) で
+`agents` へ出す。モデルは書かず、[`[opencode.model.agents]`](agent-model-assignment.md#モデルの割り当て) で
 階層を割り当てる（PC ごとのプロバイダで ID が変わるため）。
 
 | ID | 階層 | 役割 | 権限で塞ぐもの |

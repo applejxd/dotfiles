@@ -2160,7 +2160,7 @@ def pi_network(common: dict[str, Any]) -> dict[str, Any]:
     宛先) で RFC1918 と ULA を通す (既定 false。イントラネットを読む環境向け)。**上流プロキシが名前を解決する経路の
     到達範囲は変えない**。
     ``local_ports`` は、内側からホストの 127.0.0.1 のこのポートへつなげるようにする (Fence の ``allowLocalOutboundPorts``)。
-    see docs/spec/guard/pi-guard.md#拒否リスト型の通信
+    see docs/spec/guard/pi-sandbox.md#拒否リスト型の通信
     """
     section = (common.get("pis") or {}).get("network")
     if section is None:
@@ -2282,7 +2282,7 @@ def pi_post_edit_hooks(common: dict[str, Any]) -> list[dict[str, str]]:
     """``[[hooks]]`` のうち ``post_edit`` のもの。フルガードが edit / write の後に呼ぶ。
 
     整形 (``format-file.sh``) と markdownlint を、Claude / Copilot の hook と同じスクリプトで行う。
-    see docs/spec/guard/pi-guard.md#整形
+    see docs/spec/guard/pi-extensions.md#整形
     """
     out = []
     for hook in common.get("hooks") or []:
@@ -2313,7 +2313,7 @@ def pi_keybindings(_existing: dict[str, Any], common: dict[str, Any]) -> dict[st
     """``~/.pi/agent/keybindings.json``。``[pi.keybinds]`` をそのまま出す (ファイルごと持ち物)。
 
     値は 1 つのキー (文字列) か、キーの配列 (空なら割り当てを外す)。
-    see docs/spec/guard/pi-guard.md#キーバインド
+    see docs/spec/guard/pi-extensions.md#キーバインド
     """
     declared = (common.get("pi") or {}).get("keybinds") or {}
     if not isinstance(declared, dict):
@@ -2337,7 +2337,7 @@ def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
 
     ランチャー (``pis``。``ocs/pi.py``) が起動ディレクトリと合わせて Fence の設定を組み立てる。
     OpenCode の境界が無効なら (共有キーが無いので) 出さない。
-    see docs/spec/guard/pi-guard.md#サンドボックス
+    see docs/spec/guard/pi-sandbox.md#サンドボックス
     """
     base = opencode_sandbox(common)
     if base is None:
@@ -2440,7 +2440,7 @@ def build_pi_subagents(_existing: dict[str, Any], common: dict[str, Any]) -> dic
     判定器が無いので、shell・編集のツールを持たない読み取り役
     (read / grep / find / ls だけ) に限る。shell を持つ役割でも、読み取り専用の版
     (``plain_description`` / ``plain_system``) を宣言していれば、それを出す (explore)。
-    see docs/spec/guard/pi-guard.md#windows-の子エージェント
+    see docs/spec/guard/pi-subagents.md#windows-の子エージェント
     """
     pi = common.get("pi") or {}
     profiles = pi.get("profiles") or {}
@@ -2646,7 +2646,7 @@ def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
     階層名 (``default`` / ``worker`` など) を ``provider/model[#variant]`` に直す。
     未知のプロバイダ・階層は ``apply`` を止める。黙って落とすと、存在しない
     モデルを指したまま「応答が来ない」形でしか現れない。
-    see docs/spec/agent-config-generation.md#モデルの割り当て
+    see docs/spec/agent-model-assignment.md#モデルの割り当て
     """
     cfg = common.get("opencode", {}).get("model")
     if not cfg:
@@ -2975,7 +2975,7 @@ def merge_opencode_agent_models(existing: Any, models: dict[str, Any]) -> dict[s
     親のモデルで動く (実測)。
     割り当てから外したエージェントは、値が階層のモデルのときだけ消す
     (手で書いた別のモデルは残す)。空になったエントリは消す。
-    see docs/spec/agent-config-generation.md#モデルの割り当て
+    see docs/spec/agent-model-assignment.md#モデルの割り当て
     """
     source = existing if isinstance(existing, dict) else {}
     out = {name: dict(entry) for name, entry in source.items() if isinstance(entry, dict)}

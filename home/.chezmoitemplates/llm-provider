@@ -7,7 +7,7 @@ AI CLI が使うモデルのプロバイダ。単一ソース。
 
 chezmoi.toml の [data] ではなくここに置くのは、chezmoi update が
 chezmoi init を呼ばないため。判定の根拠は
-docs/spec/agent-config-generation.md#モデルの割り当て が正本。
+docs/spec/agent-model-assignment.md#モデルの割り当て が正本。
 */ -}}
 {{- if and (hasKey . "llm_provider") .llm_provider -}}
 {{-   .llm_provider -}}

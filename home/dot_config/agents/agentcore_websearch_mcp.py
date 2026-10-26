@@ -11,7 +11,7 @@ Gateway の URL はアカウント固有なので環境変数 ``AGENTCORE_GATEWA
 - pi のサンドボックスの内側 (``PI_HARNESS_BOUNDARY=1``)。内側では AWS の認証情報を使えない
   (ブローカーでの中継は、Bedrock のブローカー (段 U7b) の後。CHG-0037)
 
-see docs/spec/agent-config-generation.md#agentcore-web-search
+see docs/spec/mcp-servers.md#agentcore-web-search
 """
 
 from __future__ import annotations

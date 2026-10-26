@@ -2,7 +2,7 @@
 
 拒否リスト型 (denylist) の設定の生成と、起動側の読み取り (破損は起動を拒否する)。
 中継そのものの試験は test_relay.py。
-see docs/spec/guard/pi-guard.md#拒否リスト型の通信
+see docs/spec/guard/pi-sandbox.md#拒否リスト型の通信
 """
 
 from __future__ import annotations

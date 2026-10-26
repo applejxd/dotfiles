@@ -20,7 +20,7 @@ Fence は ``allowedDomains`` に当たる通信を**直接**つなぐ。外へ�
 アドレスへつなぐ (ループバックだけ ``allow_loopback`` で開けられる)。
 ``NO_PROXY`` は安全の判断に使わない。
 
-see docs/spec/guard/pi-guard.md#プロキシ必須の環境での通信
+see docs/spec/guard/pi-sandbox.md#プロキシ必須の環境での通信
 see docs/change/0037-pis-usability-and-telemetry.md (候補 E1')
 """
 

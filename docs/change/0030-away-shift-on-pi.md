@@ -92,5 +92,5 @@
   - 事実（`decide.py` の実行で確認）: `git worktree add` / `list` / `prune` は規則に当たらず ask（`source: default`）。`pis` で境界が証明されたセッションでは default の ask が allow に緩和される（[pi-decide.md](../spec/guard/pi-decide.md) 手順 4'）。`remove` は deny。away-shift の `preflight.py --judge pi`（Python 版）には緩和が無く ASK になる。直近の `worker` 27 件に `isolation: "worktree"` は 0 件（担当ファイルの分割で足りていた）。
   - 退けた案: worktree を作る（`.git/worktrees` を書き、掃除の `remove` が deny で非対称。`-b`/`-B`・`-f`・外部パス・checkout 時の処理も条件に残る）、`isolation: "worktree"` の `worker`（単独・新規のみ、1 往復 15 分、子の確認は親へ blocked、成果物が `.tmp/away-shift/` の外）、`git worktree add` の条件つき allow（実装と試験が重く、効果が小さい）。
   - `review` の指摘を反映: コピーは Git リポジトリではなく本体の `.git` を見るのでコピー内の git は禁止し、差分は `git diff --no-index`。`ls-files` では ignored の生成物が欠けるので、除外を出力してレポートに書く。コピーは**隔離の保証ではない**（SKILL.md に明記）。秘密の選別は `[file] read_deny_globs`（判定器と同じ `command_policy`）を使い、一覧が読めなければ拒否する。
-  - **`git worktree add` の判定は変えない**（利用者の判断。`list` の allow も足さない）。挙動は [pi-guard.md](../spec/guard/pi-guard.md#worktree-隔離の場所と承認) に記録した。
+  - **`git worktree add` の判定は変えない**（利用者の判断。`list` の allow も足さない）。挙動は [pi-subagents.md](../spec/guard/pi-subagents.md#worktree-隔離の場所と承認) に記録した。
   - 許可: `[pi.skill_scripts.allow]` の `away_guard.py` に `snapshot` を足した（読み取りは `git ls-files` と `rev-parse` だけ。書き込みは `.tmp/away-shift/<run>/work/src` に閉じる）。試験は `test_away_guard.py`。未確認: 実際の pis（TS 版）での通し、Windows。

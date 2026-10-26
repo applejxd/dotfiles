@@ -9,7 +9,7 @@ OpenCode と pi の各階層に当てるモデルと effort を、新しいモ�
 `#variant` は思考の強さ `:low` などへ読み替える）。階層は用途の名前で、
 エージェントは階層名で指すので、見直しで変わるのは階層に当てるモデル ID と
 `#variant`（effort など）だけになる。階層の用途・今の割り当て・その根拠は
-[階層](agent-config-generation.md#階層)の表が正本で、ここには写さない。
+[階層](agent-model-assignment.md#階層)の表が正本で、ここには写さない。
 
 ## いつ見直すか
 
@@ -21,7 +21,7 @@ OpenCode と pi の各階層に当てるモデルと effort を、新しいモ�
 
 ## 前提: プロバイダで選ぶ基準が違う
 
-PC ごとのプロバイダは 1 つ（[プロバイダの判定](agent-config-generation.md#プロバイダの判定)）。
+PC ごとのプロバイダは 1 つ（[プロバイダの判定](agent-model-assignment.md#プロバイダの判定)）。
 予算の形が違うので、同じ階層でも選ぶ基準が変わる。
 
 | プロバイダ | 予算 | 選ぶ基準 |
@@ -169,11 +169,11 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 - **中身が同じ階層があってもよい。** 階層名は用途なので、今 `routine` と `worker` が同じモデルでも
   分けたままにし、片方だけ差し替えられるようにしておく
 - **`default` には `#variant` を付けられない**（付けると `apply` が止まる）。Copilot の `default` の
-  推論の強さは、設定では変えられない（[階層](agent-config-generation.md#階層)の注記）
+  推論の強さは、設定では変えられない（[階層](agent-model-assignment.md#階層)の注記）
 - **Bedrock の variant は、付けられるかを Bedrock の PC で確かめる。** models.dev に段があっても、
   その PC で通るかは別。今の Bedrock の Sonnet 5.5 の effort は利用者が確かめた
 - 子エージェントの階層は計測で決め、測れない階層（`deep` / `second_opinion`）は公開の数字で決める。
-  判断と根拠は、変えたときに[階層](agent-config-generation.md#階層)の表の下の注記へ書く
+  判断と根拠は、変えたときに[階層](agent-model-assignment.md#階層)の表の下の注記へ書く
 
 ## 変えるときの手順
 
@@ -188,7 +188,7 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
    uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q
    ```
 
-3. [階層](agent-config-generation.md#階層)の表と、その下の根拠の注記を書き換える。
+3. [階層](agent-model-assignment.md#階層)の表と、その下の根拠の注記を書き換える。
    隔離起動（`ocs`）の既定モデルは別の設定（`[opencode.sandbox] model_preference`）なので、
    合わせるなら一緒に変える（[隔離起動（`ocs`）](opencode-config-generation.md#隔離起動ocs)）
 4. 計測や調べた数字を調査記録に残す。同じ問い（その階層にどのモデルを当てるか）の測り直しなら

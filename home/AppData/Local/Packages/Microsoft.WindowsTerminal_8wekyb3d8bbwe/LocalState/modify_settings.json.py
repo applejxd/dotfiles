@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Windows Terminal の settings.json に、LANG2 (VK_IME_OFF) の無効化と配色・外観 (Iceberg / Cica) を足す。
-# see docs/spec/structure.md#windows-terminal
+# see docs/spec/windows-settings.md#windows-terminal
 from __future__ import annotations
 
 import json

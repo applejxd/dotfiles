@@ -49,7 +49,7 @@ def test_zero_byte_windows_targets_use_empty_attribute():
 
 
 def test_vscode_extensions_are_not_installed_by_chezmoi():
-    """拡張は Settings Sync が正本 (docs/spec/structure.md#vs-code-の拡張)。復活させない。"""
+    """拡張は Settings Sync が正本 (docs/spec/dev-environment.md#vs-code-の拡張)。復活させない。"""
     scripts = ROOT / "home" / ".chezmoiscripts"
     assert not (scripts / "300_windows" / "run_once_after_340_vscode.ps1").exists()
     assert not (
@@ -783,7 +783,7 @@ def test_wsl_ssh_goes_through_tailscale_serve_not_firewall_rules():
     assert not (scripts / "sshd.ps1").exists()
     # netsh.ps1: Public を開ける形で始まり、規則は Tailscale 経由に不要と分かった
     assert not (scripts / "netsh.ps1").exists()
-    doc = (ROOT / "docs" / "spec" / "structure.md").read_text(encoding="utf-8")
+    doc = (ROOT / "docs" / "spec" / "platform-wsl.md").read_text(encoding="utf-8")
     assert "tailscale serve --bg --tcp 50022 tcp://localhost:50022" in doc
 
 
@@ -893,7 +893,7 @@ ENV_PATH_TEMPLATE = ROOT / "home" / ".chezmoitemplates" / "powershell" / "env-pa
 
 def test_env_path_template_writes_user_path_as_expand_string():
     # SetEnvironmentVariable / setx は REG_EXPAND_SZ を REG_SZ に降格させ、PATH 内の %VAR% が展開されなくなる
-    # (see docs/spec/structure.md#windows-の-path-の扱い)
+    # (see docs/spec/cli-management.md#windows-の-path-の扱い)
     source = ENV_PATH_TEMPLATE.read_text(encoding="utf-8")
     code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
     assert "DoNotExpandEnvironmentNames" in code

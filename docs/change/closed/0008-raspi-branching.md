@@ -7,7 +7,7 @@
   WSL / native の 2 値のみで、アーキテクチャ軸と GUI 有無の軸が無い
 
 > **この文書は当時の記録。** 現在の仕様は
-> [プロジェクト構造](../../spec/structure.md#raspberry-pi)。
+> [プロジェクト構造](../../spec/platform-raspberry-pi.md#raspberry-pi)。
 >
 > 実機で 3 周した記録を含む。1 周目は ruby のビルドで停止、2 周目は
 > `chezmoi init` 未実行で分岐が発動せず、3 周目で完走した。
@@ -310,7 +310,7 @@ Raspberry Pi）の `chezmoi update` が 45 秒で完走し、raspi 分岐が全�
 
 ### 反映先
 
-- 仕様: [プロジェクト構造](../../spec/structure.md#raspberry-pi)「Raspberry Pi」
+- 仕様: [プロジェクト構造](../../spec/platform-raspberry-pi.md#raspberry-pi)「Raspberry Pi」
   「mise の settings」、GitHub CLI の警告は
   [トラブルシューティング](../../spec/troubleshooting.md)
 - 実装: `home/.chezmoitemplates/is-raspi`、`home/.chezmoiignore.tmpl`、
@@ -326,7 +326,7 @@ Raspberry Pi）の `chezmoi update` が 45 秒で完走し、raspi 分岐が全�
 | `rust` / `go` がプレビルドで入ったかの個別確認 | 未起票（導入自体は `mise all tools are installed` で成立） |
 | `LC_ALL=ja_JP.UTF-8` の影響 | 未起票（3 周目のログに警告なし。問題が出たら対処） |
 | `.chezmoi.toml.tmpl` は `lint_templates.py` の対象外 | [開発ガイド](../../spec/development.md)（`execute-template --init` で確かめる） |
-| 32bit（armhf） | 対象外として [プロジェクト構造](../../spec/structure.md#raspberry-pi) に明記 |
+| 32bit（armhf） | 対象外として [プロジェクト構造](../../spec/platform-raspberry-pi.md#raspberry-pi) に明記 |
 
 ### 判定が効いた証拠
 

@@ -1,7 +1,7 @@
 """OpenCode のモデルとプロバイダの生成 (``[opencode.model]``) の test.
 
 PC ごとのプロバイダは ``.chezmoitemplates/llm-provider`` が決める。
-see docs/spec/agent-config-generation.md#モデルの割り当て
+see docs/spec/agent-model-assignment.md#モデルの割り当て
 
 Run with: ``uv run --with pytest --no-project pytest test/agents/ -q``
 """

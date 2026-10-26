@@ -41,7 +41,7 @@
 
 - **起動コマンドの差し替え口がある**: 環境変数 `PI_ACP_PI_COMMAND`（`agent.ts`）。README には載っていない。値は実行ファイル 1 つで、引数は pi-acp が `--mode rpc --no-themes` を付ける（`spawn(cmd, args)`）。`pis --no-sandbox` のような引数つきの文字列は渡せないので、`exec pis --no-sandbox "$@"` だけのラッパースクリプトを置いて、そのパスを渡す。Zed の `agent_servers.<名前>.env` に書ける
 - **`extension_ui_request` の扱い**（`session.ts` の `handleExtensionUiRequest`）: `confirm`・`select` は ACP の許可ダイアログ（Yes / No）になる。`input`・`editor` は「未対応」と表示して取り消す。`notify` は会話にメッセージとして出る。`setStatus` などそれ以外は、取り消しの応答を返して無視する
-- フルガードの拡張（`~/.config/pi/harness/index.ts`）が使う UI は `confirm`（確認）・`notify`（警告）・`setStatus`（状態表示）だけ。いずれも pi-acp が扱える。確認は Zed のダイアログに出るので、[5 分の期限](../spec/guard/pi-guard.md#orcazed)に頼らず利用者が答えられる見込み（実機は未確認）
+- フルガードの拡張（`~/.config/pi/harness/index.ts`）が使う UI は `confirm`（確認）・`notify`（警告）・`setStatus`（状態表示）だけ。いずれも pi-acp が扱える。確認は Zed のダイアログに出るので、[5 分の期限](../spec/guard/pi-extensions.md#orcazed)に頼らず利用者が答えられる見込み（実機は未確認）
 
 ## 未解決点
 

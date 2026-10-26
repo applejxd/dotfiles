@@ -14,7 +14,7 @@
 
 | 段 | 解決したいこと | 内容 | 状態 |
 | --- | --- | --- | --- |
-| 1 | 7-Zip の関連付けが効かない（`.zip` の `UserChoice` が `CompressedFolder` のまま。実機で確認） | `UserChoice` は直接書けないため、ProgID・`OpenWithProgids`・`Capabilities`・`RegisteredApplications` を登録し、「既定のアプリ」に「7-Zip (extract)」が出る形にした（[仕様](../spec/structure.md#7-zip-の関連付け)）。**設定の一覧に出ることを目視で確認した（2026-10-12）** | 完了 |
+| 1 | 7-Zip の関連付けが効かない（`.zip` の `UserChoice` が `CompressedFolder` のまま。実機で確認） | `UserChoice` は直接書けないため、ProgID・`OpenWithProgids`・`Capabilities`・`RegisteredApplications` を登録し、「既定のアプリ」に「7-Zip (extract)」が出る形にした（[仕様](../spec/windows-settings.md#7-zip-の関連付け)）。**設定の一覧に出ることを目視で確認した（2026-10-12）** | 完了 |
 | 2 | `341` が JSONC に弱く、`profiles.defaults` 全体を置き換える | LANG2 の `modify_` に統合し（JSONC のまま、管理するキーだけ更新）、341 と `config/windows/terminal.json` を廃止した | 完了 |
 | 3 | 新しいマシンで `ExecutionPolicy` を手で設定する必要がある（README の手順のみ）。Terminal が既定のターミナルアプリでない | `ExecutionPolicy`（5.1、CurrentUser = RemoteSigned）と既定のターミナルアプリを `323_shell_defaults` で自動設定する | 完了 |
 | 4 | 広告・推奨・タスクバーの天気（ウィジェット）が邪魔 | 広告・推奨は `324_suggestions`（毎回）で止めた。ウィジェットはレジストリの直接書き込みが全方式で拒否される（保護された値）。ローカル GPO 経由なら止められ、この機は適用済みだが、自動化は見送り（手動の手順を docs に記録） | 完了（ウィジェットは見送り） |
@@ -28,7 +28,7 @@
 
 ## 保留: WSL と WSL 3
 
-- **WSL 本体（ディストロなし）は 309 で導入するようにした**（2026-10-12。[仕様](../spec/structure.md#wsl-本体wslplatform)）。**ディストロの導入と、仮想ディスク（VHDX）が C ドライブ以外にあることの扱いは、いまは触らない**
+- **WSL 本体（ディストロなし）は 309 で導入するようにした**（2026-10-12。[仕様](../spec/windows-admin.md#wsl-本体wslplatform)）。**ディストロの導入と、仮想ディスク（VHDX）が C ドライブ以外にあることの扱いは、いまは触らない**
 - この機には Linux ディストリビューションが入っておらず、`wsl --version` が `wsl --install` を促す状態（2026-10-11 実測）。`home/dot_wslconfig.tmpl`（`networkingMode=mirrored`、applejxd のみ `memory` を指定、値はテンプレートが正本）は配布されている
 - **「隔離 GPU サンドボックス」用の専用ディストロだけは、手動実行のスクリプトで作れるようにした**（2026-10-17。[仕様](../spec/sandbox/wsl-sandbox.md)。通しの実行は未検証）。既定のディストロと置き場所の方針は引き続き保留
 - 取り組むときに決めること: 仮想ディスクの置き場所の管理（`wsl --import` / `--move`）、導入と確認の手順、`.wslconfig` の最低版、WSL 3 の扱い

@@ -6,7 +6,7 @@
 - セッション: 外の ``pi -c`` と同じ置き場
 - 実機: 実際の Fence で境界チェックが通る (Fence・bwrap・pi が無ければ skip)
 
-see docs/spec/guard/pi-guard.md#サンドボックス
+see docs/spec/guard/pi-sandbox.md#サンドボックス
 """
 
 from __future__ import annotations

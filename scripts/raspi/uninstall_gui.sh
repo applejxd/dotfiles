@@ -1,6 +1,6 @@
 #!/bin/bash
 # raspi 判定が効く前の chezmoi が入れた GUI 一式と xrdp を取り除く
-# 対象と残すもの: docs/spec/structure.md#入ってしまった-gui-一式を消す
+# 対象と残すもの: docs/spec/platform-raspberry-pi.md#入ってしまった-gui-一式を消す
 #
 # usage: scripts/raspi/uninstall_gui.sh [-n|--dry-run]
 

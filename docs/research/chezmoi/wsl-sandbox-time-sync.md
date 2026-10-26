@@ -2,7 +2,7 @@
 
 `docs/spec/sandbox/wsl-sandbox.md#時刻同期` と `docs/spec/sandbox/wsl-sandbox.md#検証の状況` から移した記録。移設時点で再測定していない。
 
-> **現行の仕様**: [隔離 GPU サンドボックス（WSL2）](../../spec/sandbox/wsl-sandbox.md)。一般的な時刻同期の運用は [構成](../../spec/structure.md#wsl-の時刻同期)。
+> **現行の仕様**: [隔離 GPU サンドボックス（WSL2）](../../spec/sandbox/wsl-sandbox.md)。一般的な時刻同期の運用は [構成](../../spec/platform-wsl.md#wsl-の時刻同期)。
 
 ## 記録 E1 — 2026-10-18〜19 の時刻同期の実測
 
@@ -17,7 +17,7 @@
 
 > **これだけでは不十分**（2026-10-19 の実測）。この環境では `timesyncd` が**1 つだけ**動いていても `tick` が偏った。
 > 安定したのは「**すべてのディストロで `timesyncd` を止めた**」ときだけ。メインのディストロ側は `120_wsl` が同じ設定を入れる
-> （[WSL の時刻同期](../../spec/structure.md#wsl-の時刻同期)）。
+> （[WSL の時刻同期](../../spec/platform-wsl.md#wsl-の時刻同期)）。
 
 - 理由: WSL2 の全ディストロは同じ VM・同じカーネルの時計を共有する。`timesyncd` が動いていると、`adjtimex` の `tick` が偏る。
   2 つのディストロで動かすと持続的に約 2% 偏り（標準 10000 に対して 9800 前後）、1 つだけでも数分後に 9629〜10076 へ揺れた。

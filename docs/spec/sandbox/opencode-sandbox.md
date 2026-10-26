@@ -99,7 +99,7 @@ flowchart TD
 
 ## 起動シーケンス
 
-> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](../guard/pi-guard.md#サンドボックス)。
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](../guard/pi-sandbox.md#サンドボックス)。
 
 ```mermaid
 flowchart TD
@@ -150,7 +150,7 @@ flowchart LR
 | 置き場 | 中身 | なぜそこか |
 | --- | --- | --- |
 | `~/.local/state/opencode-sandbox/` | 境界の定義・Fence の TMPDIR・退避・目印 | 内側から見えず、重なる場所での起動も拒否する（[起動ディレクトリの制限](fence-boundary.md#起動ディレクトリの制限)）。chezmoi が apply で先に作る（[信頼の鎖](fence-boundary.md#信頼の鎖)） |
-| `~/.config/opencode-sandbox/` | 隔離版の `opencode.json`・`AGENTS.md`（OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中。pi は起動ごとの agent 置き場を使う。[pi のガード](../guard/pi-guard.md#サンドボックス)） | 緩和設定を内側から広げられないようにする。書き手は常に外（[効く範囲](fence-boundary.md#制御ファイルの保護が効く範囲)） |
+| `~/.config/opencode-sandbox/` | 隔離版の `opencode.json`・`AGENTS.md`（OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中。pi は起動ごとの agent 置き場を使う。[pi のガード](../guard/pi-sandbox.md#サンドボックス)） | 緩和設定を内側から広げられないようにする。書き手は常に外（[効く範囲](fence-boundary.md#制御ファイルの保護が効く範囲)） |
 | `XDG_DATA_HOME/opencode/` | DB・snapshot・shell の出力・ログ（OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中） | 通常起動と共有する（下記） |
 
 - **境界の定義は起動ごとに書き、24 時間より古いものを次の起動で捨てる。**

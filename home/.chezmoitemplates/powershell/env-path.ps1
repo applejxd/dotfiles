@@ -1,7 +1,7 @@
 # PATH の読み直し (プロセス) と永続化 (User) の共通関数。
 # 取り込み側は includeTemplate "powershell/env-path.ps1" で読み込む
 # (波括弧の記法をここに書くと自分自身を再帰して取り込むため書かない)。
-# 仕組みと注意は docs/spec/structure.md#windows-の-path-の扱い
+# 仕組みと注意は docs/spec/cli-management.md#windows-の-path-の扱い
 
 function Update-PathFromEnvironment {
   # 同じ apply の winget / npm / 管理者権限の導入が増やした PATH を、このプロセスへ取り込む。

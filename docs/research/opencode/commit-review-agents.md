@@ -6,7 +6,7 @@
 > **現行の仕様**: [子エージェント](../../spec/opencode-config-generation.md#子エージェント)
 >
 > 階層名は 2026-09-30 に用途の名前へ改めた（`light` → `worker`、`standard` → `routine`、
-> `heavy` → `deep`）。本文の名前は当時のもの（[階層](../../spec/agent-config-generation.md#階層)）
+> `heavy` → `deep`）。本文の名前は当時のもの（[階層](../../spec/agent-model-assignment.md#階層)）
 
 ## 結論
 
@@ -526,7 +526,7 @@ allow の形の外に出た呼び出し（`git commit` の確認を除く）:
 
 - 書式は、`claude-sonnet-5` では haiku の崩れが消え、opus と同等以上にそろった（3 行が 14 件中 14 件）。
   コミットまでも 10/10 で進んだ。Bedrock の PC の `commit` を Sonnet にする根拠になる
-  （[モデルの割り当て](../../spec/agent-config-generation.md#階層)で `standard` 階層を足して採用）
+  （[モデルの割り当て](../../spec/agent-model-assignment.md#階層)で `standard` 階層を足して採用）
 - 代わりに試行錯誤は haiku・opus より多い。`cd … &&` の誘導は利用者に見えないが、連結による `ask` は
   Bedrock の PC で `git commit` 以外の確認として 1 回の依頼あたり 0.8 回出る
 - Copilot の近似なので、Bedrock の `global.anthropic.claude-sonnet-5` で同じ傾向かは未確認
@@ -638,7 +638,7 @@ allow の形の外に出た呼び出し（`git commit` の確認を除く）:
 
 - `claude-sonnet-5.5#medium` は、コミット 10/10・書式 16 件中 15 件・`git commit` 以外の確認と誘導 0 回で、
   opus と同等だった。所要時間は約半分、単価も半分なので、Copilot の `standard` を
-  `claude-sonnet-5.5#medium` に切り替えた（[階層](../../spec/agent-config-generation.md#階層)）
+  `claude-sonnet-5.5#medium` に切り替えた（[階層](../../spec/agent-model-assignment.md#階層)）
 - 承認済みの全文は、直したくなる箇所を含めても一字も変えずに使った。基準コミットの流れは Sonnet 5.5 で成り立つ
 - `system` に足した 1 文で、`claude-sonnet-5` の `cd … &&` の誘導は消え、連結による確認は 0.8 → 0.3 回に減った。
   残りはコミット後の確かめで `echo ---` を挟む形だけ。Bedrock の PC で `git commit` 以外の確認が

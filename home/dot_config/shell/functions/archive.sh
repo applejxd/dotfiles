@@ -1,7 +1,7 @@
 #!/bin/bash
 # 圧縮・展開の関数 (extract / zpack / zunpack)。
 # shellrc.sh から読み込む (対話シェル専用)。zsh では suffix alias で extract が呼ばれる。
-# 失敗時の扱い: docs/spec/structure.md#シェルの起動契約 (方針 5)
+# 失敗時の扱い: docs/spec/shell.md#シェルの起動契約 (方針 5)
 
 # 拡張子に応じて展開する
 # see http://bit.ly/2tCOvHP

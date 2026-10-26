@@ -1,6 +1,6 @@
 # CHG-0006: Pi / oh-my-pi を利便性の軸で試す
 
-> この文書は当時の記録。導入済みの `omp` の現行仕様は [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/structure.md#oh-my-piompの設定)。
+> この文書は当時の記録。導入済みの `omp` の現行仕様は [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/cli-management.md#oh-my-piompの設定)。
 > 第一サポートは 2026-10-09 に pi と決まり（[CHG-0019](0019-pi-harness-port-evaluation.md)）、pi への一本化は [ADR-0017](../../adr/0017-pi-only-and-ts-judge.md)。
 
 - **状態**: Done
@@ -74,7 +74,7 @@ permission 機構を持たないと明記があり、権限制御は拡張か外
 
 > **導入済みの `omp` の現行仕様**（導入方法、`chezmoi apply` が設定する 4 項目、
 > 真偽値を初回だけ置くこと）は
-> [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/structure.md#oh-my-piompの設定)が
+> [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/cli-management.md#oh-my-piompの設定)が
 > 正本。この案件には、その形にした判断と、まだ確かめていないことを残す。
 >
 > **2026-09-28 にコードと照合した。** 段 1〜1.6 の実装（`agent-cli-install.sh.tmpl` の
@@ -262,7 +262,7 @@ github / claude-plugins まで同時に開くと「どの定義が採用され�
 ## 仕様への変更案
 
 > 「完了」の行の現行の形は
-> [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/structure.md#oh-my-piompの設定)
+> [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/cli-management.md#oh-my-piompの設定)
 > が正本。この表と続く 2 節（`modify_` にしなかった理由、真偽値を一度だけ置く理由）は
 > その形を選んだ判断の記録。
 
@@ -471,7 +471,7 @@ omp の `~/.omp/agent/config.yml` とは**別物なので共有させない**
 
 ### 採用したもの
 
-- `omp` の導入（`agent-cli-install.sh.tmpl` の `install_omp`）、自作 skills を `omp` から見えるようにする（`420_omp_skills`）、`enabledProviders` と `~/.claude` の資産の取り込み（`430_omp_claude_assets`）、常用で決まった設定 1 件（`personality`）の回収。現行の仕様は [structure.md](../../spec/structure.md#oh-my-piompの設定)
+- `omp` の導入（`agent-cli-install.sh.tmpl` の `install_omp`）、自作 skills を `omp` から見えるようにする（`420_omp_skills`）、`enabledProviders` と `~/.claude` の資産の取り込み（`430_omp_claude_assets`）、常用で決まった設定 1 件（`personality`）の回収。現行の仕様は [cli-management.md](../../spec/cli-management.md#oh-my-piompの設定)
 - 「安全性の軸で評価しない」という前提と、「抵う代償を正確に言語化して利便性を取る」という決め方（「抵う代償」の節）
 
 ### 撤回・見送りしたもの
@@ -484,7 +484,7 @@ omp の `~/.omp/agent/config.yml` とは**別物なので共有させない**
 ### 反映先
 
 - 実装: `home/.chezmoitemplates/agent-cli-install.sh.tmpl`（`install_omp`）、`home/.chezmoiscripts/400_unix/run_onchange_after_420_omp_skills.sh.tmpl`、`run_onchange_after_430_omp_claude_assets.sh.tmpl`
-- 仕様: [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/structure.md#oh-my-piompの設定)
+- 仕様: [プロジェクト構造「oh-my-pi（`omp`）の設定」](../../spec/cli-management.md#oh-my-piompの設定)
 - 判断: [ADR-0017](../../adr/0017-pi-only-and-ts-judge.md)（pi へ一本化）、[CHG-0019](0019-pi-harness-port-evaluation.md)（第一サポートを pi と決めた評価）
 
 ### 移管した未完事項

@@ -1,6 +1,6 @@
 # 圧縮の 400 エラー（thinking: disabled）の経緯
 
-> `docs/spec/guard/pi-guard.md#圧縮旧-checkpoint` から移した記録。移設時点で再測定していない。
+> `docs/spec/guard/pi-extensions.md#圧縮旧-checkpoint` から移した記録。移設時点で再測定していない。
 
 ## 記録 — 観測日は各文に記載（移設 2026-10-26）
 

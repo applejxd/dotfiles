@@ -4,7 +4,7 @@
 // ジョブは `bg_run` / `bg_kill` / `bg_log` で扱う。コマンドは出力をログへ流して切り離して動く。
 // 子の一覧は、子を起動する側 (subagents / フルガード) が globalThis.__piChildren に登録する。
 // ジョブは globalThis.__piJobs に入れる。
-// see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
+// see docs/spec/guard/pi-extensions.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { spawn } from "node:child_process";

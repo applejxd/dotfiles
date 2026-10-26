@@ -26,7 +26,7 @@
 準備（初回だけ、5 分）:
 
 1. **リポジトリを最新にする**（`chezmoi update` か、`~/.local/share/chezmoi` で `git pull`）。
-2. **Envoy を置く**: `ls ~/.local/bin/envoy` で無ければ、[Envoy の取得](../../spec/structure.md#envoy-の取得)の版（v1.40.1）を `~/.local/bin/envoy`（実行権限つき）へ置く。
+2. **Envoy を置く**: `ls ~/.local/bin/envoy` で無ければ、[Envoy の取得](../../spec/cli-management.md#envoy-の取得)の版（v1.40.1）を `~/.local/bin/envoy`（実行権限つき）へ置く。
    この機は `chezmoi apply` では入らない（`llm-provider` が `github-copilot` の機だけが対象）。手で置いてよい（確認だけなので、sha256 は任意）
 3. **専用の IAM ユーザーの静的キーを、`~/.aws/credentials` に別のプロファイルとして足す**（`chmod 600`）:
 

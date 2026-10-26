@@ -1,7 +1,7 @@
 // Windows 用の子エージェント `task`。子にもフルガード (~/.config/pi/harness) を載せ、役割 (既定 reader) が
 // ツールを決める。フルガードが無い・読めないとき、親にフルガードが載っていないときは子を起動しない。
 // 宣言は agents.json (common.toml の [pi.agents] から生成)。
-// see docs/spec/guard/pi-guard.md#windows-の子エージェント
+// see docs/spec/guard/pi-subagents.md#windows-の子エージェント
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn } from "node:child_process";
 import { accessSync, constants, readFileSync } from "node:fs";

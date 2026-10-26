@@ -12,7 +12,7 @@
 判定の根拠は、個人のユーザー名 (applejxd) だけ。それ以外はすべて会社 PC とみなす
 (勤務先の具体はリポジトリに書かない)。chezmoi.toml の [data] の work = true / false で上書きできる。
 chezmoi update は chezmoi init を呼ばないので、ここ (apply のたびに評価される共有テンプレート) に置く。
-see docs/spec/agent-config-generation.md#会社-pc-の判定
+see docs/spec/agent-model-assignment.md#会社-pc-の判定
 */ -}}
 {{- if hasKey . "work" -}}
 {{-   if .work -}}true{{- else -}}false{{- end -}}

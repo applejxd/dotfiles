@@ -564,7 +564,7 @@ except = ["**/.env.example", "**/.env.sample", "**/.env.template"]
 #
 # ★sandbox に効く wildcard は **先頭の `*.` と 単独の `*` だけ**。
 #   `example.*` は WebFetch には効くが sandbox 側は無視する。
-# see docs/spec/sandbox/agent-sandbox.md 「ネットワーク」
+# see docs/spec/sandbox/cli-sandbox-network.md 「ネットワーク」
 allow_domains = [
   "github.com",
   "api.github.com",
@@ -674,7 +674,7 @@ claude_write_deny = [
 # ★このマシンでしか使わないパスはここに書かない。chezmoi 管理外の
 #   ~/.config/agents/local.toml に [sandbox] claude_read_allow として書く。
 # ★実在するパスだけを書く (存在しないパスは bind-mount 失敗の要因になる)。
-# see docs/spec/sandbox/agent-sandbox.md 「このマシンだけで許可を足す」
+# see docs/spec/sandbox/cli-sandbox-local-allow.md 「このマシンだけで許可を足す」
 claude_read_allow = [
   # ツールチェーン (mise / uv / cargo / node / go / TeX)
   "~/.local", "~/.cache", "~/.cargo", "~/.rustup", "~/.nvm", "~/.npm",
@@ -788,7 +788,7 @@ shell_network_allow = [
 # 入れるので、公式の代替手段 (settings.json でパスを直接指す) で橋渡しする。
 # {arch} は generate.py が x64 / arm64 に置換する。パスが無いマシンでは
 # 設定を出力しないので、共有の common.toml に書いても他環境を壊さない。
-# see docs/spec/sandbox/agent-sandbox.md 「seccomp」
+# see docs/spec/sandbox/cli-sandbox-network.md 「seccomp」
 seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runtime/latest/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/{arch}/apply-seccomp"
 
 # ---------------------------------------------------------------------------
@@ -814,7 +814,7 @@ network_allow = ["api.anthropic.com"]
 network_allow = ["api.openai.com"]
 
 # ★profile が無いと Bedrock が有効にならない。network_allow は region と揃える。
-# see docs/spec/agent-config-generation.md#モデルの割り当て
+# see docs/spec/agent-model-assignment.md#モデルの割り当て
 [provider.amazon-bedrock]
 profile = "default"
 region = "us-east-1"
@@ -897,7 +897,7 @@ approvals = [
 default_role = "implementer"
 # pis とサンドボックスの起動が -e で足す自作の拡張 (~/.pi/agent/extensions/<名前>/index.ts)。
 # 拡張はここへ足す 1 か所だけ。起動引数 (pis・pi.py) と [pi.sandbox] の読み取りの許可は、この一覧から生成する。
-# see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
+# see docs/spec/guard/pi-extensions.md#自作の拡張-todo--plan--btw
 own_extensions = ["todo", "plan", "btw", "activity", "ask", "notify", "delegate-nudge"]
 
 # 無確認で実行してよい shell コマンド ([bash] allow とは共用しない。前提が違う)。
@@ -983,7 +983,7 @@ number = { type = "int" }
 body = { type = "text", file = true, content = true, max_chars = 8000 }
 
 # タイトルは 1 行の短い文字列 (type = "line")。gh にタイトルのファイル渡しが無いので、argv の 1 要素として直接渡す (シェル無し)。
-# この行を足した理由と仕様は docs/spec/guard/pi-guard.md#guarded_action承認つきの外部操作
+# この行を足した理由と仕様は docs/spec/guard/pi-extensions.md#guarded_action承認つきの外部操作
 [[pi.actions]]
 id = "gh_issue_edit_title"
 label = "issue のタイトルを編集"
@@ -1233,7 +1233,7 @@ defaultTools = []
 
 # pi が実際に受け付けるモデルは OpenCode の階層の表と違うことがある。ここにある階層だけ上書きする。
 # ★gpt-6-astra は pi の Copilot 経由で model_not_supported (2026-10 実測)。
-# see docs/spec/guard/pi-guard.md#windows-の子エージェント
+# see docs/spec/guard/pi-subagents.md#windows-の子エージェント
 [pi.model.tier.github-copilot]
 second_opinion = "gpt-6-sol"
 
@@ -1242,7 +1242,7 @@ second_opinion = "gpt-6-sol"
 # ★read の ~/.config/agents は判定器 (decide.py) が common.toml を読むために要る。書き込みは開けない。
 # ★protected は、dotfiles のリポジトリを作業ツリーにしたときに書き込みを塞ぐ相対パス。
 # ★deny_read は、read の ~/.config/agents の内側にある検索 API の鍵 (内側へ渡さない)。
-# see docs/spec/guard/pi-guard.md#サンドボックス
+# see docs/spec/guard/pi-sandbox.md#サンドボックス
 [pi.sandbox]
 read = [
   "~/bin",
@@ -1289,7 +1289,7 @@ github_token_file = "~/.config/pis/github-token"
 # 残る限界: 作業ディレクトリの .env 等は内側で読め、denylist では任意のホストへ送れる (CHG-0037)。
 # 一時的に戻すには pis --allowlist。
 # このマシンだけの deny / local_ports / mode は、chezmoi 管理外の ~/.config/agents/local.toml の [pis.network] に書く (apply で消えない)。
-# see docs/spec/guard/pi-guard.md#拒否リスト型の通信
+# see docs/spec/guard/pi-sandbox.md#拒否リスト型の通信
 [pis.network]
 {{- if eq (includeTemplate "llm-provider" .) "github-copilot" }}
 mode = "denylist"
@@ -1304,7 +1304,7 @@ local_ports = []
 # pi のプロンプトテンプレート (~/.pi/agent/prompts/<名前>.md になり、/<名前> で呼ぶ)。
 # 文面は pi のツール (guarded_task) に合わせてある。[opencode.commands] とは別 (段 6 で OpenCode 側を消す)。
 # $ARGUMENTS は呼び出しの引数全部。
-# see docs/spec/guard/pi-guard.md#fleet
+# see docs/spec/guard/pi-extensions.md#fleet
 [pi.commands.fleet]
 description = "依頼を並列に動かせる作業に分け、作業役 (worker) を同時に起動して進める"
 argument_hint = "<依頼>"
@@ -1338,7 +1338,7 @@ $ARGUMENTS
 
 # /stepback [質問]: 質問 (省略時は直前の質問と回答) を一段抽象化した「ステップバック質問」を作り、先にそれを考えてから答え直す。
 # 配るのは /fleet と同じ範囲 (Unix のフルガード側。Windows は .chezmoiignore で除外)。
-# see docs/spec/guard/pi-guard.md#stepback
+# see docs/spec/guard/pi-extensions.md#stepback
 [pi.commands.stepback]
 description = "質問 (省略すると直前の質問と回答) からステップバック質問 (一段抽象化した問い) を作り、先にそれを考えてから答え直す"
 argument_hint = "[質問]"
@@ -1394,7 +1394,7 @@ default = "deny"
 # 探索役。reader に加え、数や履歴を道具で確かめられるよう、読み取り専用のコマンドだけを確認なしで通す。
 # ★上以外の shell は deny。git status / git diff は .git/config 経由でコマンドを起動しうるので、全体の [pi.shell] allow には載せない
 #   (committer と同じ扱い)。書き込み系の git は全て拒否する
-# see docs/spec/guard/pi-guard.md#子エージェント
+# see docs/spec/guard/pi-subagents.md#子エージェント
 [pi.profiles.explorer]
 tools = ["bash", "read", "grep", "find", "ls"]
 default = "deny"
@@ -1460,7 +1460,7 @@ shell_deny = [
 # profile は [pi.profiles] の名前、tier は [opencode.model.tier.*] の階層 (無ければ親と同じモデル)。
 # inherit_bypass = true なら、親が bypass のとき子も bypass で動く (ask を allow にする)。
 # ★ask に git commit などが残る役割 (committer) には付けない
-# see docs/spec/guard/pi-guard.md#子エージェント
+# see docs/spec/guard/pi-subagents.md#子エージェント
 [pi.agents.explore]
 profile = "explorer"
 inherit_bypass = true
@@ -1489,7 +1489,7 @@ Git の履歴やコマンドの実行が要る調査は、できないことを�
 読んだ範囲と実行できなかったことを未確認に明記します。
 """
 
-# see docs/spec/guard/pi-guard.md#review-への依頼の書き方
+# see docs/spec/guard/pi-subagents.md#review-への依頼の書き方
 [pi.agents.review]
 profile = "explorer"
 tier = "second_opinion"
@@ -1603,7 +1603,7 @@ port = 4098
 # .chezmoitemplates/llm-provider が決め、ほかのプロバイダは policies で塞ぐ。
 # ★ID は実在を確認してから書く (公式のモデル一覧か TUI の /models)。
 #   default には #variant を付けられない。
-# see docs/spec/agent-config-generation.md#モデルの割り当て
+# see docs/spec/agent-model-assignment.md#モデルの割り当て
 [opencode.model]
 provider = "{{ includeTemplate "llm-provider" . }}"
 
@@ -1616,7 +1616,7 @@ fleet-worker = "worker"
 bypass-fleet-worker = "worker"
 
 # 階層名は用途 (default / routine / worker / deep / second_opinion)。
-# see docs/spec/agent-config-generation.md#階層
+# see docs/spec/agent-model-assignment.md#階層
 [opencode.model.tier.amazon-bedrock]
 default = "us.anthropic.claude-sonnet-5-5"
 routine = "us.anthropic.claude-sonnet-5-5#low"
@@ -2249,13 +2249,13 @@ extensions = [".md", ".markdown"]
 #
 # ★トークンをここに書かない。headers に秘密が要るサーバは環境変数参照として
 #   各 CLI 側で設定する (ADR-0005)。
-# see docs/spec/agent-config-generation.md 「MCP サーバ」
+# see docs/spec/mcp-servers.md 「MCP サーバ」
 # ★deepwiki は索引が古く、実ソースと食い違う説明を返すため 2026-09-25 に外した。
 
 # AgentCore Web Search。会社 PC の検索 (Bedrock でも Copilot でも)。全機に配り、使うかは実行時に決まる:
 # Gateway の URL (環境変数 AGENTCORE_GATEWAY_URL) が無い機 (家) では、pi のフルガードは登録せず (requires_env)、
 # 素の pi (Windows) ではラッパーが「ツールの無い空のサーバ」になる。認証が無ければ何も起きない。
-# see docs/spec/agent-config-generation.md#agentcore-web-search
+# see docs/spec/mcp-servers.md#agentcore-web-search
 [[mcp]]
 id = "agentcore-websearch"
 purpose = "AgentCore Web Search で web 検索する (Gateway の URL がある機だけ)"
@@ -2283,7 +2283,7 @@ args = [
 #   purpose       用途メモ
 #   post_edit     true なら、pi のフルガードが edit / write の後に呼ぶ
 #   timeout_sec   秒
-# see docs/spec/guard/pi-guard.md#整形
+# see docs/spec/guard/pi-extensions.md#整形
 
 [[hooks]]
 id = "markdownlint"
@@ -2303,7 +2303,7 @@ timeout_sec = 30
 
 # 撤去した hook のスクリプト名。hook を撤去したらここへ足すこと
 # (足し忘れると settings.json の古い登録が外部の hook として残る)。
-# see docs/spec/agent-config-generation.md#外部ツールとの共存-orca--herdr
+# see docs/spec/agent-hooks-generation.md#外部ツールとの共存-orca--herdr
 [retired_hooks]
 scripts = [
     "block-dangerous-commands.sh",

@@ -136,7 +136,7 @@ __mise_shims="${MISE_DATA_DIR:-${HOME}/.local/share/mise}/shims"
 if [[ -d "${__mise_shims}" ]]; then
   if [[ -n "${ZSH_VERSION:-}" ]]; then
     # zsh: 文字列の `${__p#*...}` は長い PATH で二次的に遅い (約 40ms) ため配列で扱う。
-    # see docs/spec/structure.md#zsh-の起動時間
+    # see docs/spec/shell.md#zsh-の起動時間
     eval '
       path=(${path:#"${__mise_shims}"})
       __i=${path[(i)${VIRTUAL_ENV:-/nonexistent}/bin]}

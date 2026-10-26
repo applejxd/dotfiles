@@ -1,7 +1,7 @@
 ﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# 有効な電源プランへ毎回明示的に設定する (既定値と同じものも書く)。see docs/spec/structure.md#電源設定
+# 有効な電源プランへ毎回明示的に設定する (既定値と同じものも書く)。see docs/spec/windows-settings.md#電源設定
 # 単位は秒 (0 = なし)。LIDACTION は 0 = 何もしない / 1 = スリープ。
 # 設定した値を、あとで読み取って確かめる (グループポリシーなどで上書きされていないか)
 $script:Expected = @()

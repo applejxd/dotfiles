@@ -3,7 +3,7 @@
 - **状態**: In progress
 - **更新日**: 2026-10-25
 - **基準**: ecaf230（起動ファイルの対話 / 非対話の分離。
-  [シェルの起動契約](../spec/structure.md#シェルの起動契約)と
+  [シェルの起動契約](../spec/shell.md#シェルの起動契約)と
   `test/test_shell_startup.py`）
 
 ## 目的と非目的
@@ -16,7 +16,7 @@
 
 - Nix 化、`rm` を `gomi` に差し替える alias、`is_human` による人間判定
   （参考記事 <https://tellme.tokyo/post/2026/10/01/ai-agent-first-dotfiles/> のうち不採用。
-  理由は[シェルの起動契約](../spec/structure.md#シェルの起動契約)）
+  理由は[シェルの起動契約](../spec/shell.md#シェルの起動契約)）
 - `EDITOR=true` のように成功を偽装する設定
 - 安全境界の強化。危険な `rm` の拒否は「うっかり防止」であって完全な保護ではない
 

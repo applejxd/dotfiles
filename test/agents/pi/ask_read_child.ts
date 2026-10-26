@@ -1,6 +1,6 @@
 // 試験用。`globalThis.__piAskReadChild` (btw が使う、読み取り専用の子の入口) を直接呼ぶコマンド。
 // `/askchild <役割> <依頼>`。結果は ASKCHILD ok=<真偽> <本文> の 1 行で出す。
-// see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
+// see docs/spec/guard/pi-extensions.md#自作の拡張-todo--plan--btw
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {

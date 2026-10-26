@@ -1,6 +1,6 @@
 # pi の子エージェント job の結果の保持と通知の仕様メモ
 
-> `docs/spec/guard/pi-guard.md#子の操作-バックグラウンド状態steer並列モデルtodo` から移した記録。移設時点で再測定していない。
+> `docs/spec/guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo` から移した記録。移設時点で再測定していない。
 
 ## 記録 — 観測日は各文に記載（移設 2026-10-26）
 
@@ -26,4 +26,4 @@
 
 ### 解釈・次の候補
 
-現行の仕様（何が保持され、いつ消え、何が通知されるか）は [pi-guard.md](../../spec/guard/pi-guard.md#子の操作-バックグラウンド状態steer並列モデルtodo) に要点だけ残してある。
+現行の仕様（何が保持され、いつ消え、何が通知されるか）は [pi-subagents.md](../../spec/guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) に要点だけ残してある。

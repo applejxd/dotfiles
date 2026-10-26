@@ -8,7 +8,7 @@
   同コミットで `docs/spec/agent-permissions.md` に写したもの
 
 現在の設定と、ここから導いた運用上の注意は
-[sandbox (Claude Code / Copilot CLI)](../../spec/sandbox/agent-sandbox.md#実測した既定の許可範囲-wsl2-chezmoi-リポジトリを-cwd-として-sandbox-policy)
+[sandbox (Claude Code / Copilot CLI)](../../spec/sandbox/copilot-sandbox.md#実測した既定の許可範囲-wsl2-chezmoi-リポジトリを-cwd-として-sandbox-policy)
 が正本。**現在は `allowDevToolAccess = false` で許可も足してあるので、同じ表示には
 ならない**。
 

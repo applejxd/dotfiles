@@ -3,7 +3,7 @@
 
 # mise の init は毎起動で外部プロセスを起動するが、出力は実行ファイルが変わらない
 # 限り不変なのでキャッシュする。oh-my-posh の init はキャッシュできないため、
-# profile.ps1 の対話ブロックで毎回実行している (see docs/spec/structure.md#powershellプロファイル)。
+# profile.ps1 の対話ブロックで毎回実行している (see docs/spec/shell.md#powershellプロファイル)。
 #
 # stamp には実行ファイルの絶対パス・サイズ・更新時刻を記録し、検証もそれだけで
 # 行う。Get-Command はコマンド探索を走らせて 0.2 秒かかるため、キャッシュが無効

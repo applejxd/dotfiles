@@ -50,7 +50,7 @@
 - 無条件の続行はループするという公式の注意（`extensions.md`）。停滞の検知の方法
 - `agent_before_settle` で、続行を複数回要求できるか（今の `todo` は 1 回だけ。複数回の実測が要る）
 - bypass との相互作用、セッション再開時の状態の戻し方
-- 依存: 子の `background`・`steer`（実装済み。[pi のガード](../spec/guard/pi-guard.md#子の操作-バックグラウンド状態steer並列モデルtodo)）
+- 依存: 子の `background`・`steer`（実装済み。[pi のガード](../spec/guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo)）
 
 ## 参照
 

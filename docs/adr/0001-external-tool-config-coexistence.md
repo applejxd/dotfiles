@@ -186,7 +186,7 @@ hook 設定の管理をやめ、CLI と Orca に任せる。
 - 手で置いて登録した hook は、`common.toml` に転記しなくても残るようになった
   （再現性が無いので転記する運用は変えない）
 
-詳細は [外部ツールとの共存](../spec/agent-config-generation.md#外部ツールとの共存-orca--herdr)。
+詳細は [外部ツールとの共存](../spec/agent-hooks-generation.md#外部ツールとの共存-orca--herdr)。
 
 ## 関連 ADR
 

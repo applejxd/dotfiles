@@ -3,7 +3,7 @@
 // 起動したホスト側が、内側から見えてはいけないファイル (読み取り) と、書けてはいけない場所 (書き込み) を用意し、
 // そのパスを環境変数で渡す。内側で読めたり書けたりしたら、サンドボックスは効いていない。
 // 環境変数 (PI_HARNESS_BOUNDARY) は「内側のはず」という期待にすぎず、緩和の根拠にしない。
-// see docs/spec/guard/pi-guard.md#緩和のゲート
+// see docs/spec/guard/pi-sandbox.md#緩和のゲート
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
 export type CanarySpec = { read: string; write: string };

@@ -4,7 +4,7 @@ set -euo pipefail
 
 # 125 の mise bootstrap は別プロセスなので、PATH の activate に依存しない。
 # herdr や AI CLI が無いときは警告して飛ばす (導入できなかった 1 個で apply を失敗させない。
-# see docs/spec/structure.md#ツール-1-個の失敗で-apply-を止めない)。次の apply で再試行される。
+# see docs/spec/platform-raspberry-pi.md#ツール-1-個の失敗で-apply-を止めない)。次の apply で再試行される。
 mise_path="${HOME}/.local/bin/mise"
 herdr_path="$("$mise_path" -C "$HOME" which herdr 2>/dev/null || true)"
 if [[ -z "$herdr_path" || ! -x "$herdr_path" ]]; then

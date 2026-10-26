@@ -1,4 +1,4 @@
-{{- /* see docs/spec/structure.md#シェルプラグインの取得 */ -}}
+{{- /* see docs/spec/shell.md#シェルプラグインの取得 */ -}}
 {{- if ne .chezmoi.os "windows" }}
 {{-   $home := .chezmoi.homeDir }}
 # 既に在るパスは宣言しない。宣言すると既存の clone へ git pull が走り、

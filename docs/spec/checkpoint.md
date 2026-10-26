@@ -1,6 +1,6 @@
 # 文脈の引き継ぎ (checkpoint)
 
-> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の圧縮は [圧縮（旧 checkpoint）](guard/pi-guard.md#圧縮旧-checkpoint)。
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の圧縮は [圧縮（旧 checkpoint）](guard/pi-extensions.md#圧縮旧-checkpoint)。
 
 コンテキスト圧縮を跨いで、作業の経緯・決定・残作業を失わないための仕組み。
 

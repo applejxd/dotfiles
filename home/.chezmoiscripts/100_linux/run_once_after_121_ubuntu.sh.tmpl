@@ -65,12 +65,12 @@ sudo apt-get install -y \
 {{- end }}
 
 # Build tools
-# libyaml-dev は ruby の psych 拡張に要る (docs/spec/structure.md#ruby-はプレビルドで入れる)
+# libyaml-dev は ruby の psych 拡張に要る (docs/spec/platform-raspberry-pi.md#ruby-はプレビルドで入れる)
 sudo apt install -y \
     make cmake gcc g++ clang clang-tidy libclang-dev pkg-config build-essential \
     libyaml-dev
 
-# clang が選ぶ gcc の版に合わせる (docs/spec/structure.md#clang-が-c-の標準ヘッダを見つけられるようにする)
+# clang が選ぶ gcc の版に合わせる (docs/spec/platform-raspberry-pi.md#clang-が-c-の標準ヘッダを見つけられるようにする)
 if ! clang_info="$(LC_ALL=C /usr/bin/clang -x c++ -E -v /dev/null -o /dev/null 2>&1)"; then
     printf '%s\n' "$clang_info" >&2
     exit 1
@@ -104,7 +104,7 @@ echo "✅ 完了：基本的なツールをインストール/更新しました
 {{- if $raspi }}
 
 # メモリ枯渇で SSH ごと固まるのを防ぐ
-# (docs/spec/structure.md#メモリが尽きても-ssh-できるようにする)
+# (docs/spec/platform-raspberry-pi.md#メモリが尽きても-ssh-できるようにする)
 echo "zram と earlyoom をインストール/設定します..."
 sudo apt-get install -y zram-tools earlyoom
 # Ubuntu for Raspberry Pi は zram モジュールを別パッケージに分けている
@@ -149,7 +149,7 @@ echo "✅ 完了：ユーティリティツールをインストール/更新し
 
 {{- if and (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) (not $raspi) }}
 # Raspberry Pi では入れない。clamd が常駐で 1GB 超を占める
-# (docs/spec/structure.md#raspberry-pi)
+# (docs/spec/platform-raspberry-pi.md#raspberry-pi)
 echo "ClamAV をインストール/更新します..."
 
 echo "Installing security tools..." >&2

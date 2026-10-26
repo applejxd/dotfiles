@@ -5,7 +5,7 @@
     Windows 11 does not allow a script to set the default app (UserChoice is protected).
     This registers the ProgIDs and an app capability, so that Settings > Apps > Default apps
     lists "7-Zip (extract)" and one click there makes double-click extract.
-    see docs/spec/structure.md#7-zip-の関連付け
+    see docs/spec/windows-settings.md#7-zip-の関連付け
 #>
 
 Set-StrictMode -Version Latest

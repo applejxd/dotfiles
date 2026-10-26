@@ -3,7 +3,7 @@
 `pis`（pi をサンドボックスの中で起動する）と `ocs`（OpenCode の隔離起動）が**共有する Fence の境界**の仕様: 境界の組み立ての規則、起動ディレクトリの制限、保護対象、プロジェクトごとの追加、環境変数での追加、起動前の退避、境界チェック、信頼の鎖、版の扱い。
 
 - OpenCode の隔離起動（`ocs`）だけの仕様（DB の共有・セッションの引き継ぎ・隔離版設定・エージェントとコマンド）は [OpenCode 隔離起動](opencode-sandbox.md)（撤去予定。CHG-0020 段 6 は保留中）
-- `pis` の使い方と pi のガードは [pi のガード](../guard/pi-guard.md#サンドボックス)。サンドボックスの総覧は [サンドボックス](index.md)
+- `pis` の使い方と pi のガードは [pi のガード](../guard/pi-sandbox.md#サンドボックス)。サンドボックスの総覧は [サンドボックス](index.md)
 
 ## 境界の中身
 
@@ -390,7 +390,7 @@ Fence や境界の素材を変えたとき、OpenCode や Fence を更新した�
   `~/.local/state` は Claude / Copilot の sandbox の書き込みの許可に入っているので、
   `[sandbox] deny` と `[file] write_deny_globs` で名指しして塞ぐ
   - **Copilot は、セッション開始時に無いパスの deny を捨て、途中で作られても
-    効かせない**（[実測](agent-sandbox.md#実測した既定の許可範囲-wsl2-chezmoi-リポジトリを-cwd-として-sandbox-policy)）。`ocs` を初めて起動する前はこの
+    効かせない**（[実測](copilot-sandbox.md#実測した既定の許可範囲-wsl2-chezmoi-リポジトリを-cwd-として-sandbox-policy)）。`ocs` を初めて起動する前はこの
     ディレクトリが無いので、chezmoi が apply で先に作る
     （`home/dot_local/state/private_opencode-sandbox/.keep`、`0700`、Linux のみ）
 
@@ -411,7 +411,7 @@ Fence や境界の素材を変えたとき、OpenCode や Fence を更新した�
 | `~/.local/share/ocs/check.py` | [境界チェック](#境界チェック)の準備と実行、Fence へ渡す PATH と TMPDIR |
 | `~/.local/share/ocs/backup.py` | [起動前の退避](#起動前の退避) |
 | `~/.local/share/ocs/config.py` | [隔離版の設定の書き出し](opencode-sandbox.md#隔離版の設定の書き出し方) |
-| `~/.local/share/ocs/pi.py` | pi を囲う部分（`pis` の標準。`ocs` のコマンドは経由しない）: 境界用の agent 置き場、起動コマンド、認証を本物へ戻す処理（[pi のガード](../guard/pi-guard.md#サンドボックス)） |
+| `~/.local/share/ocs/pi.py` | pi を囲う部分（`pis` の標準。`ocs` のコマンドは経由しない）: 境界用の agent 置き場、起動コマンド、認証を本物へ戻す処理（[pi のガード](../guard/pi-sandbox.md#サンドボックス)） |
 | `~/.local/share/ocs/common.py` | 共有の定数と失敗の扱い |
 | `~/.local/bin/ocs-boundary-check` | 境界の内側で走る検査スクリプト |
 
@@ -441,7 +441,7 @@ Fence や境界の素材を変えたとき、OpenCode や Fence を更新した�
 ## 版の扱い
 
 Fence は mise の github backend で**版とチェックサムを固定**して入れる
-（`home/dot_config/mise/config.toml.tmpl`、[構成](../structure.md#github-backend-で版を固定している-fence)）。
+（`home/dot_config/mise/config.toml.tmpl`、[構成](../cli-management.md#github-backend-で版を固定している-fence)）。
 `ocs` は `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence` を呼ぶ。
 
 - 境界の設定は実体の有無に関係なく `rules.json` に出す。実体が無ければ `ocs` が起動を断る
@@ -451,4 +451,4 @@ Fence は mise の github backend で**版とチェックサムを固定**して
   **「拒否すべきものが拒否される」**ことを確かめる。変更履歴も読む
   （新しい許可キーの既定値が緩い方向でも、チェック項目に無ければ合格する）
 - Claude Code の sandbox は引き続き `srt`（`@anthropic-ai/sandbox-runtime`）を使う
-  （[エージェント権限仕様](agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ)）
+  （[エージェント権限仕様](cli-sandbox-network.md#wsl2-での抜け穴-seccomp-フィルタ)）

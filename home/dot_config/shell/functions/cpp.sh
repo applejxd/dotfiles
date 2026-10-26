@@ -1,7 +1,7 @@
 #!/bin/bash
 # 競技プログラミング用: C++ の単一ファイルを debug / release でコンパイルして実行する。
 # shellrc.sh から読み込む (対話シェル専用)。zsh では suffix alias で *.cpp から呼ばれる。
-# 使い方とフラグの意図: docs/spec/structure.md#c-の単一ファイル実行runcpp
+# 使い方とフラグの意図: docs/spec/dev-environment.md#c-の単一ファイル実行runcpp
 
 # Usage: runcpp [options] <src.cpp> [options] [-- program args...]
 function runcpp() {

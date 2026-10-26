@@ -1,6 +1,6 @@
 # Windows の task と guarded_task を統合しない理由
 
-> `docs/spec/guard/pi-guard.md#二つの-task-を別物にしている理由` から移した記録。移設時点で再測定していない。
+> `docs/spec/guard/pi-subagents.md#二つの-task-を別物にしている理由` から移した記録。移設時点で再測定していない。
 
 ## 記録 — 観測日は各文に記載（移設 2026-10-26）
 

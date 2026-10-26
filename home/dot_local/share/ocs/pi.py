@@ -6,7 +6,7 @@
 pi は設定と認証を読むときにも隣へ ``.lock`` を作るので、agent 置き場は書ける必要がある。
 一方、本物の ``~/.pi/agent`` を境界に入れると、内側で作られた拡張を外の通常の pi が読む。
 そこで**起動ごとに境界用の agent 置き場を作り**、認証・モデルの一覧・設定を写す。
-see docs/spec/guard/pi-guard.md#サンドボックス
+see docs/spec/guard/pi-sandbox.md#サンドボックス
 """
 
 from __future__ import annotations
@@ -171,7 +171,7 @@ def read_network_setting(rules_path: Path | None = None) -> dict | None:
 
     ``allowlist``・未設定なら None (従来どおり)。破損 (表でない・型違い・未知の mode) は起動を拒否する。
     ここで開く側 (拒否リスト型) へのフォールバックをしない (fail-closed)。
-    see docs/spec/guard/pi-guard.md#拒否リスト型の通信
+    see docs/spec/guard/pi-sandbox.md#拒否リスト型の通信
     """
     path = rules_path if rules_path is not None else RULES
     try:
@@ -483,7 +483,7 @@ def _copy_provider_compat(real: Path, agent: Path) -> None:
 
     ``apiKey``・``baseUrl``・``headers``・``models`` などは写さない (秘密を境界の内側へ出さない許可リスト)。
     読めない・形が違うときは何もしない。
-    see docs/spec/guard/pi-guard.md#ツール引数の-json-を壊さない設定
+    see docs/spec/guard/pi-extensions.md#ツール引数の-json-を壊さない設定
     """
     try:
         data = json.loads((real / "models.json").read_text(encoding="utf-8"))
@@ -564,7 +564,7 @@ def inner_env(
     ``PI_HARNESS_BOUNDARY`` は「内側のはず」という期待にすぎない。内側のフルガードが、次のカナリアで
     実測し (読めてはいけないファイル・書けてはいけない場所)、効いていなければ起動を止める。
     許可の一覧 (``PI_HARNESS_ALLOWED``) は、実際に開けた場所で、作業ツリーの外の判定に使う。
-    see docs/spec/guard/pi-guard.md#緩和のゲート
+    see docs/spec/guard/pi-sandbox.md#緩和のゲート
     """
     from .cli import DROP_ENV as COMMON_DROP
 
@@ -803,7 +803,7 @@ def _launch(args: argparse.Namespace, passthrough: list[str]) -> int:
     """pi を Fence で囲って起動する。OpenCode と違い、DB も設定の書き出しも要らない。
 
     境界用の agent 置き場を起動ごとに作り (:mod:`pi`)、セッションの置き場だけを本物へ開ける。
-    see docs/spec/guard/pi-guard.md#サンドボックス
+    see docs/spec/guard/pi-sandbox.md#サンドボックス
     """
     check_installed()
     github: GithubSetting | None = None

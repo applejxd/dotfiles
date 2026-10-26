@@ -3,7 +3,7 @@
 //   git commit → 構造 (リポジトリ・ブランチ・対象・メッセージ) を見せて確認する。時間切れ・不在・画面なしのときは
 //                コミットせず内容を refs/pi/pending/ へ退避し、作業を続けさせる
 // 保護ではなく補助 (別名・スクリプト越しは検出しない)。フルガード (pis) は同じ確認を自前で持つので -ne で外れる。
-// see docs/spec/guard/pi-guard.md#commit-の確認-素の-pi
+// see docs/spec/guard/pi-extensions.md#commit-の確認-素の-pi
 import { analyze } from "./parse.ts";
 import { describeCommit, rawText } from "./describe.ts";
 import { pendingTarget, savePending, type Saved } from "./pending.ts";

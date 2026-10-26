@@ -8,7 +8,7 @@ $homeDir = {{ .chezmoi.homeDir | toJson }}
 {{ includeTemplate "powershell/env-path.ps1" }}
 
 # 310_winget は導入済みなら更新しない。古い mise の registry には新しいツールが無い
-# (docs/spec/structure.md#windows-の-mise-の更新)
+# (docs/spec/cli-management.md#windows-の-mise-の更新)
 if (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue) {
   & winget upgrade --id jdx.mise --exact --silent --disable-interactivity `
       --accept-package-agreements --accept-source-agreements

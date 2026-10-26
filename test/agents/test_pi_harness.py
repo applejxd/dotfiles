@@ -412,7 +412,7 @@ def test_review_child_reads_with_the_same_read_only_commands_as_explore(env):
     assert not (env["proj"] / "made-by-review").exists()
 
 
-# see docs/spec/guard/pi-guard.md#review-への依頼の書き方
+# see docs/spec/guard/pi-subagents.md#review-への依頼の書き方
 @pytest.mark.parametrize(
     "command",
     [

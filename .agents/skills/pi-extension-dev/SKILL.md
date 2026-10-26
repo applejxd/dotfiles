@@ -61,7 +61,7 @@ pi 自身は、フルガードの下でスキルの一覧をモデルへ渡さ�
 ### 1. 要望を整理する
 
 目的・使う場面・成功条件・やらないことを 1 つずつ書き出す。曖昧なら利用者に確認する。
-あわせて、拡張が本当に要るかを [入口の選び方](../../../docs/spec/guard/pi-guard.md#入口の選び方) で判断する
+あわせて、拡張が本当に要るかを [入口の選び方](../../../docs/spec/guard/pi-extensions.md#入口の選び方) で判断する
 （skill + CLI や MCP で足りるなら拡張にしない）。
 
 ### 2. 公開拡張の動向を調べる（導入はしない）
@@ -131,7 +131,7 @@ pi 自身は、フルガードの下でスキルの一覧をモデルへ渡さ�
 
 ## 関連
 
-- 方針と記録: [pi-guard.md](../../../docs/spec/guard/pi-guard.md#拡張の方針)、[ADR-0016](../../../docs/adr/0016-pi-extensions-own-first.md)
+- 方針と記録: [pi-extensions.md](../../../docs/spec/guard/pi-extensions.md#拡張の方針)、[ADR-0016](../../../docs/adr/0016-pi-extensions-own-first.md)
 - 拡張とフルガードの相互作用の実測: [pi-extension-under-harness.md](../../../docs/research/agents/pi-extension-under-harness.md)
 - 判定器・誘導: [pi-decide.md](../../../docs/spec/guard/pi-decide.md)
 - 公開拡張の調査記録と、公開 OSS の読み取り調査の作法: [公開拡張の調べ方](references/public-research.md)

@@ -1,6 +1,6 @@
 # commit の確認（素の pi）の仕様メモ
 
-> `docs/spec/guard/pi-guard.md#commit-の確認-素の-pi` から移した記録。移設時点で再測定していない。
+> `docs/spec/guard/pi-extensions.md#commit-の確認-素の-pi` から移した記録。移設時点で再測定していない。
 
 ## 記録 — 観測日は各文に記載（移設 2026-10-26）
 
@@ -106,4 +106,4 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 
 ### 解釈・次の候補
 
-現行の仕様は [pi-guard.md](../../spec/guard/pi-guard.md#commit-の確認-素の-pi)。この記録は経緯・実装の詳細・確認の記録で、再測定していない。
+現行の仕様は [pi-extensions.md](../../spec/guard/pi-extensions.md#commit-の確認-素の-pi)。この記録は経緯・実装の詳細・確認の記録で、再測定していない。

@@ -25,7 +25,7 @@ brew install chezmoi
 
 > **snap 版は使わない。** 既に入っている場合は `sudo snap remove chezmoi` で外し、
 > `hash -r` を実行する。上記は初回の bootstrap だけで、以降は mise が管理を
-> 引き継ぐ（[chezmoi 本体](docs/spec/structure.md#chezmoi-本体)）。
+> 引き継ぐ（[chezmoi 本体](docs/spec/cli-management.md#chezmoi-本体)）。
 
 ```powershell
 # Windows (PowerShell)
@@ -63,9 +63,9 @@ chezmoi apply
 `apply` で入るツール（gh、Herdr、AI CLI、oh-my-pi、Claude Code の seccomp フィルタ）と
 その更新方法は [プロジェクト構造](docs/spec/structure.md) を参照。
 
-- [mise による CLI 管理](docs/spec/structure.md#mise-による-cli-管理)（gh、seccomp フィルタ）
-- [AI CLI の導入](docs/spec/structure.md#ai-cli-の導入)（Claude Code / Copilot CLI / OpenCode V2、oh-my-pi、pi）
-- [Herdr の管理](docs/spec/structure.md#herdr-の管理)
+- [mise による CLI 管理](docs/spec/cli-management.md#mise-による-cli-管理)（gh、seccomp フィルタ）
+- [AI CLI の導入](docs/spec/cli-management.md#ai-cli-の導入)（Claude Code / Copilot CLI / OpenCode V2、oh-my-pi、pi）
+- [Herdr の管理](docs/spec/cli-management.md#herdr-の管理)
 
 ### Raspberry Pi (64bit / ヘッドレス)
 
@@ -77,7 +77,7 @@ chezmoi execute-template '{{ includeTemplate "is-raspi" . }}'   # true なら分
 ```
 
 導入されないもの・判定の仕組み・入ってしまった GUI 一式の消し方は
-[Raspberry Pi](docs/spec/structure.md#raspberry-pi) を参照。
+[Raspberry Pi](docs/spec/platform-raspberry-pi.md#raspberry-pi) を参照。
 
 ### 更新
 
@@ -143,7 +143,7 @@ opencode    # 通常起動（境界なし）
   [何を守り、何を守らないか](docs/spec/security.md#何を守り何を守らないか)
 - **`omp`（oh-my-pi、試用中）は permission 機構を持たない。** 対象リポジトリ直下で
   起動し、開始前に作業を区切ってコミットする
-  （[oh-my-pi の設定](docs/spec/structure.md#oh-my-piompの設定)）
+  （[oh-my-pi の設定](docs/spec/cli-management.md#oh-my-piompの設定)）
 
 ## ドキュメント
 
@@ -181,13 +181,13 @@ A. 生成された設定ファイルは直接編集せず、次のどちらか�
 - 全マシン共通: `home/dot_config/agents/common.toml.tmpl` を編集する
   （[設定の生成と所有権](docs/spec/agent-config-generation.md)）
 - このマシンだけ: プロバイダは `chezmoi.toml` の `[data]` に `llm_provider` を書く
-  （[プロバイダの判定](docs/spec/agent-config-generation.md#プロバイダの判定)）。
+  （[プロバイダの判定](docs/spec/agent-model-assignment.md#プロバイダの判定)）。
   sandbox の許可は `~/.config/agents/local.toml` に足す
-  （[このマシンだけで許可を足す](docs/spec/sandbox/agent-sandbox.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない)）
+  （[このマシンだけで許可を足す](docs/spec/sandbox/cli-sandbox-local-allow.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない)）
 
 ### Q. Bedrock だとハーネスで Web 検索ができない
 
-A. [AgentCore Web Search](docs/spec/agent-config-generation.md#agentcore-web-search) を参照。
+A. [AgentCore Web Search](docs/spec/mcp-servers.md#agentcore-web-search) を参照。
 
 ### Q. OpenCode で確認されるはずの操作が確認なしで実行される
 
@@ -198,8 +198,8 @@ A. 以前「常に許可」した承認が残っている。
 
 A. Tailscale 経由で、Windows で `tailscale serve --bg --tcp 50022 tcp://localhost:50022` を 1 回実行する
 （WSL の sshd を 50022 にし、公開鍵を入れる前提。手順と復旧時の順番は
-[リモートから WSL へ SSH する](docs/spec/structure.md#リモートから-wsl-へ-ssh-する)、
-つながらないときは[切り分け](docs/spec/structure.md#接続できないときの切り分け)）。
+[リモートから WSL へ SSH する](docs/spec/platform-wsl.md#リモートから-wsl-へ-ssh-する)、
+つながらないときは[切り分け](docs/spec/platform-wsl.md#接続できないときの切り分け)）。
 
 ## ライセンス
 

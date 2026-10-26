@@ -40,7 +40,7 @@ function Add-EnvPathEntry {
 
 # mise の activate は毎回 PATH の先頭へ追加するため、入れ子のシェルで PATH が
 # 際限なく伸びる。追加後に一度だけ重複を畳み、先頭側の優先順位だけを残す。
-# 未展開の `%VAR%` も展開する (sshd 経由。see docs/spec/structure.md#powershellプロファイル)
+# 未展開の `%VAR%` も展開する (sshd 経由。see docs/spec/shell.md#powershellプロファイル)
 function Remove-DuplicateEnvPathEntry {
   $seen = [System.Collections.Generic.HashSet[string]]::new(
     [System.StringComparer]::OrdinalIgnoreCase
@@ -204,7 +204,7 @@ function copilot {
 . "$PSScriptRoot/commands/fzf.ps1"
 
 # テーマ。winget の MSIX 版 (ohmyposh.cli) は POSH_THEMES_PATH を設定しないので、同梱の複製を使う
-# see docs/spec/structure.md#powershellプロファイル
+# see docs/spec/shell.md#powershellプロファイル
 $poshTheme = if ($env:POSH_THEMES_PATH -and [System.IO.File]::Exists([System.IO.Path]::Combine($env:POSH_THEMES_PATH, 'pure.omp.json'))) {
   [System.IO.Path]::Combine($env:POSH_THEMES_PATH, 'pure.omp.json')
 } else {

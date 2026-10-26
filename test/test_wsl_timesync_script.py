@@ -1,6 +1,6 @@
 """WSL 用スクリプト (120_wsl) の時刻同期まわりの回帰テスト (静的)。
 
-see docs/spec/structure.md#wsl-の時刻同期
+see docs/spec/platform-wsl.md#wsl-の時刻同期
 """
 
 from pathlib import Path

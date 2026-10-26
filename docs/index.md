@@ -14,21 +14,21 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | --- | --- |
 | リポジトリ全体の構成を知る | [プロジェクト構造](spec/structure.md) |
 | chezmoi スクリプトが作るキャッシュ・状態ファイルを知る | [スクリプトが作るキャッシュ・状態](spec/script-artifacts.md) |
-| Raspberry Pi へ導入する | [Raspberry Pi](spec/structure.md#raspberry-pi) |
-| Raspberry Pi に入った GUI 一式を消す | [入ってしまった GUI 一式を消す](spec/structure.md#入ってしまった-gui-一式を消す) |
-| Herdr を mise で導入・更新する | [Herdr の管理](spec/structure.md#herdr-の管理) |
-| GitHub CLI を mise で導入・更新する | [mise による CLI 管理](spec/structure.md#mise-による-cli-管理) |
-| Claude Code / Copilot CLI / OpenCode を導入・更新する | [AI CLI の導入](spec/structure.md#ai-cli-の導入) |
-| シェルの起動ファイルに何を置いてよいか知る | [シェルの起動契約](spec/structure.md#シェルの起動契約) |
-| マシンごとに違う設定（データセットの置き場など）を置く | [マシン固有の設定の置き場](spec/structure.md#マシン固有の設定の置き場) |
-| C++ の 1 ファイルを debug / release で実行する（`runcpp`） | [C++ の単一ファイル実行](spec/structure.md#c-の単一ファイル実行runcpp) |
-| zsh プラグインの遅延読み込みの順序を変える | [zinit の遅延読み込みの順序](spec/structure.md#zinit-の遅延読み込みの順序) |
-| oh-my-pi（omp）を使う | [oh-my-pi の設定](spec/structure.md#oh-my-piompの設定) |
+| Raspberry Pi へ導入する | [Raspberry Pi](spec/platform-raspberry-pi.md#raspberry-pi) |
+| Raspberry Pi に入った GUI 一式を消す | [入ってしまった GUI 一式を消す](spec/platform-raspberry-pi.md#入ってしまった-gui-一式を消す) |
+| Herdr を mise で導入・更新する | [Herdr の管理](spec/cli-management.md#herdr-の管理) |
+| GitHub CLI を mise で導入・更新する | [mise による CLI 管理](spec/cli-management.md#mise-による-cli-管理) |
+| Claude Code / Copilot CLI / OpenCode を導入・更新する | [AI CLI の導入](spec/cli-management.md#ai-cli-の導入) |
+| シェルの起動ファイルに何を置いてよいか知る | [シェルの起動契約](spec/shell.md#シェルの起動契約) |
+| マシンごとに違う設定（データセットの置き場など）を置く | [マシン固有の設定の置き場](spec/shell.md#マシン固有の設定の置き場) |
+| C++ の 1 ファイルを debug / release で実行する（`runcpp`） | [C++ の単一ファイル実行](spec/dev-environment.md#c-の単一ファイル実行runcpp) |
+| zsh プラグインの遅延読み込みの順序を変える | [zinit の遅延読み込みの順序](spec/shell.md#zinit-の遅延読み込みの順序) |
+| oh-my-pi（omp）を使う | [oh-my-pi の設定](spec/cli-management.md#oh-my-piompの設定) |
 | sops + age を導入・復旧する | [秘密情報の管理セットアップ（sops + age）](spec/sops-age.md) |
 | 圧縮を跨いで作業文脈を保つ仕組みを知る | [文脈の引き継ぎ](spec/checkpoint.md) |
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |
 | 入れてある一時対処と、その撤去の条件を知る | [一時対処の一覧](spec/temporary-workarounds.md) |
-| WSL にリモートから SSH する（Tailscale） | [リモートから WSL へ SSH する](spec/structure.md#リモートから-wsl-へ-ssh-する) |
+| WSL にリモートから SSH する（Tailscale） | [リモートから WSL へ SSH する](spec/platform-wsl.md#リモートから-wsl-へ-ssh-する) |
 | `run_once_` / `run_onchange_` を走らせ直す | [スクリプトを走らせ直す](spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す) |
 
 ### 設定の変更・検証
@@ -47,10 +47,10 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | pi のガード（`pis`）を起動する・変える | [pi のガード](spec/guard/pi-guard.md) |
 | `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
 | コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/guard/agent-command-policy.md) |
-| MCP サーバを追加・変更する | [MCP サーバ](spec/agent-config-generation.md#mcp-サーバ) |
-| Bedrock の PC で web 検索を使えるようにする（AgentCore Web Search） | [AgentCore Web Search](spec/agent-config-generation.md#agentcore-web-search) |
+| MCP サーバを追加・変更する | [MCP サーバ](spec/mcp-servers.md#mcp-サーバ) |
+| Bedrock の PC で web 検索を使えるようにする（AgentCore Web Search） | [AgentCore Web Search](spec/mcp-servers.md#agentcore-web-search) |
 | 調べものスキル（imozuru）を使う・変える・上流を更新する | [imozuru](spec/imozuru.md) |
-| OpenCode のモデル・プロバイダ（Copilot / Bedrock）を PC ごとに変える | [モデルの割り当て](spec/agent-config-generation.md#モデルの割り当て) |
+| OpenCode のモデル・プロバイダ（Copilot / Bedrock）を PC ごとに変える | [モデルの割り当て](spec/agent-model-assignment.md#モデルの割り当て) |
 | 新しいモデルが出たときに OpenCode のモデルの割り当てを見直す | [モデルの割り当ての見直し](spec/model-lineup-review.md) |
 | OpenCode で作業を並列に進める（`/fleet`） | [並列作業](spec/opencode-config-generation.md#並列作業fleet) |
 | OpenCode のプラグインを検討する | [プラグイン生態系の棚卸し](research/opencode/plugin/ecosystem.md) |

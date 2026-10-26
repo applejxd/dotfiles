@@ -29,11 +29,11 @@ pi を更新したときの手順:
 
 | 項目 | 公式の文書 | このリポジトリが頼っているところ |
 | --- | --- | --- |
-| `-ne` は発見・設定・組み込みの拡張を無効にし、明示した `-e` は読む | `cli.md`（`-e`、`-ne`） | `pis` の起動（`-nbt -ne -e builtin:mcp -e <フルガード>`）、Orca の拡張を足す形、[外部の拡張の方針](guard/pi-guard.md#拡張の方針) |
+| `-ne` は発見・設定・組み込みの拡張を無効にし、明示した `-e` は読む | `cli.md`（`-e`、`-ne`） | `pis` の起動（`-nbt -ne -e builtin:mcp -e <フルガード>`）、Orca の拡張を足す形、[外部の拡張の方針](guard/pi-extensions.md#拡張の方針) |
 | 組み込みの拡張の名前（`builtin:mcp`・`builtin:llama.cpp`・`builtin:codemode`・`builtin:tool-search`） | `settings.md`（Built-in extensions） | `-e builtin:mcp` だけを戻す。`codemode` を足すときは `-e builtin:codemode` |
 | ツールの選択（`-nbt`・`--tools`・`-xt`・`-nt`、`defaultTools`） | `cli.md`、`settings.md` | 組み込みのツールを外し、フルガードの `guarded_*` だけにする |
-| `codemode`（スクリプトの API・結果の形・オプション・`store`・`models`・上限） | `codemode.md`、`cli.md`（Enable codemode）、`settings.md`（`codemode.mode`・`codemode.inlineBudget`） | 検索の入口の比較（[入口の選び方](guard/pi-guard.md#入口の選び方)）。今は使っていない |
-| MCP の設定・`exposure`（`codemode` / `deferred` / `direct` / `hidden`）・ツール名 `mcp__<server>__<tool>`・`pi mcp add`・project trust | `mcp.md` | `[[mcp]]` の `exposure`（[仕様](agent-config-generation.md#mcp-サーバ)）、`mcp.json` を `pis` が拒む理由 |
+| `codemode`（スクリプトの API・結果の形・オプション・`store`・`models`・上限） | `codemode.md`、`cli.md`（Enable codemode）、`settings.md`（`codemode.mode`・`codemode.inlineBudget`） | 検索の入口の比較（[入口の選び方](guard/pi-extensions.md#入口の選び方)）。今は使っていない |
+| MCP の設定・`exposure`（`codemode` / `deferred` / `direct` / `hidden`）・ツール名 `mcp__<server>__<tool>`・`pi mcp add`・project trust | `mcp.md` | `[[mcp]]` の `exposure`（[仕様](mcp-servers.md#mcp-サーバ)）、`mcp.json` を `pis` が拒む理由 |
 | 拡張の API: `registerTool`、`registerMcpServer` | `extensions.md` | フルガードのツールと MCP の登録 |
 | `tool_call` は入力を書き換える・実行を止められる、`tool_result` は合成される、`tool_call` の失敗は fail-safe で止まる、`ctx.executeTool` の入れ子も `tool_call` / `tool_result` を通る | `extensions.md`（Events、Nested tool calls、Error handling） | 判定の方式（`tool_call` と `execute()` の二重の判定）、`codemode` の中の呼び出しが判定を通ること |
 | 初期のプロンプトとツール集合を記録し、変更は次の要求の前に追記する | `extensions.md`（Prompt cache の節） | キャッシュ安定性の見込み（ツール定義を増やすと先頭側が変わる） |
@@ -73,7 +73,7 @@ pi を更新したときの手順:
 - **スクリプトの API・結果の形・上限・有効化の方法は、公式に明示がある**ので、**ここには写さず、リンクだけ**にする（表 A）。読む先は
   `codemode.md`（スクリプト・グローバル・結果）、`cli.md`（有効化）、`mcp.md`（`exposure` との関係）、`settings.md`（`codemode.mode`・`codemode.inlineBudget`）
 - **このリポジトリの条件での挙動は、公式に無いので、表 B に書いた**（2: `pis` では既定で使えない、9: 常駐の +680 トークン、5: 並列の確認が止まる）
-- 今は使っていない（検索は skill + CLI、MCP は `direct`）。使うなら、まず表 B の 2・5・9 を読み、入口の選び方（[比較表](guard/pi-guard.md#入口の選び方)）で他の入口と比べる
+- 今は使っていない（検索は skill + CLI、MCP は `direct`）。使うなら、まず表 B の 2・5・9 を読み、入口の選び方（[比較表](guard/pi-extensions.md#入口の選び方)）で他の入口と比べる
 
 ## 運用
 

@@ -1,6 +1,6 @@
 # ガードツール（guarded_edit / ask）の失敗の集計と見送った案
 
-> `docs/spec/guard/pi-guard.md#ツールの拡張guarded_read--guarded_write--guarded_bash-の使いやすさ` から移した記録。移設時点で再測定していない。
+> `docs/spec/guard/pi-extensions.md#ツールの拡張guarded_read--guarded_write--guarded_bash-の使いやすさ` から移した記録。移設時点で再測定していない。
 
 ## 記録 — 観測日は各文に記載（移設 2026-10-26）
 

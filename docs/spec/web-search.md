@@ -2,18 +2,18 @@
 
 pi など、内蔵の検索ツールが無い AI CLI のための Web 検索・ページ取得・論文検索。**skill + CLI** の形で、標準ライブラリだけの Python
 （`home/dot_claude/skills/web-search/scripts/websearch.py`）を、`python3`（Windows は `uv run --no-project`）で呼ぶ。
-入口を skill + CLI にした理由と、MCP・拡張との比較は [入口の選び方](guard/pi-guard.md#入口の選び方)、方針は
+入口を skill + CLI にした理由と、MCP・拡張との比較は [入口の選び方](guard/pi-extensions.md#入口の選び方)、方針は
 [ADR-0016](../adr/0016-pi-extensions-own-first.md)。
 
 ## 配る範囲
 
 **個人用（`is-work` でない機、つまり `applejxd`）だけに配る。**（切り替えの経緯は [記録](../research/agents/web-search-spec-notes.md)） 制約のある環境用（Bedrock）は、検索を
-[AgentCore Web Search の MCP](agent-config-generation.md#mcp-サーバ)に一本化する（制約のある環境の機のクエリを AWS の外の検索へ出さず、手段が 2 つになってモデルが迷うのを避ける）。
+[AgentCore Web Search の MCP](mcp-servers.md#mcp-サーバ)に一本化する（制約のある環境の機のクエリを AWS の外の検索へ出さず、手段が 2 つになってモデルが迷うのを避ける）。
 
 - skill の配布: `home/.chezmoiignore.tmpl` が、`is-work` のとき `.claude/skills/web-search/` を除く
 - `pis` の許可（`[pi.skill_scripts]`）: `common.toml.tmpl` が、`github-copilot` のときだけ出す
 - 鍵ファイルの作成（441 / 349）: `applejxd` の機械だけ
-- 判定は `is-work`（[会社 PC の判定](agent-config-generation.md#会社-pc-の判定)が正本）。検査は `test/test_chezmoi_templates.py` と、OpenCode 向けの規則を見る `test/agents/test_opencode_external_read.py`（OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中）
+- 判定は `is-work`（[会社 PC の判定](agent-model-assignment.md#会社-pc-の判定)が正本）。検査は `test/test_chezmoi_templates.py` と、OpenCode 向けの規則を見る `test/agents/test_opencode_external_read.py`（OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中）
 - 既に配られたファイルは、除外しても自動では消えない（chezmoi の除外は「管理しない」で、削除ではない）
 
 ## 構成

@@ -21,13 +21,23 @@
 
 | 文書 | 内容 |
 | --- | --- |
-| [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoiスクリプトの順序、対応OS、chezmoi 本体の導入、gh / Herdrのmise管理、AI CLIの公式インストーラーでの導入、oh-my-pi の設定、シェルの起動契約、マシン固有の設定の置き場、個人用カスタム指示の共有 |
+| [Raspberry Pi への導入](platform-raspberry-pi.md) | ヘッドレスの Raspberry Pi への導入: ruby のプレビルド、clang の標準ヘッダ、失敗で apply を止めない設計、メモリ切れ対策、GUI 一式の削除 |
+| [WSL](platform-wsl.md) | WSL の時刻同期、リモートからの SSH（Tailscale。手順・切り分け・LAN の IP 直指定） |
+| [Windows の管理者権限](windows-admin.md) | 管理者権限が要る作業を 1 回の UAC に集約する仕組み（WSL 本体・GPU の電力上限・昇格・winget の scope・hostname） |
+| [Windows の設定](windows-settings.md) | 電源・Tailscale の Unattended・7-Zip の関連付け・広告と推奨の抑止・シェルの既定値・Windows Terminal |
+| [CLI の導入と管理](cli-management.md) | mise による CLI 管理、AI CLI の導入と更新、Herdr、Envoy の取得 |
+| [シェル](shell.md) | シェルの起動契約、マシン固有の設定の置き場、zsh の起動時間とプラグイン、PowerShell プロファイル |
+| [開発環境](dev-environment.md) | C++ の単一ファイル実行（runcpp）、VS Code の拡張、code-exam |
+| [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoi スクリプトの順序、対応 OS、話題別の文書の地図 |
 | [開発ガイド](development.md) | 環境の準備、変更の種類ごとの検証、Windows 実機での検証、スクリプトの追加 |
 | [スクリプトが作るキャッシュ・状態](script-artifacts.md) | chezmoi スクリプトが直接作るキャッシュ・状態ファイル・再実行の印・一時ファイルを OS ごとに一覧にし、消すと何が起きるかを示す |
 | [テストと検証の仕組み](testing.md) | Docker ハーネスのモード・環境変数・判定の契約、GitHub Actions で見ている範囲、既知の未達 |
 | [セキュリティ](security.md) | 秘密情報の保護対象・脅威と、Bitwarden / sops の方式の理由 |
 | [秘密情報の管理セットアップ（sops + age）](sops-age.md) | age 鍵の作成・バックアップ、プロジェクト設定、鍵の復旧手順 |
 | [エージェント権限仕様](agent-permissions.md) | AI CLI の permission / hook / sandbox の入口。CLI ごとの適用範囲、3 層の概要、OpenCode の保存した承認の確認とリセット（`oc-utils`）、動作確認・導入・トラブルシュート |
+| [MCP サーバの設定](mcp-servers.md) | `[[mcp]]` を各 CLI の形式へ生成する仕様、AgentCore Web Search の構成 |
+| [モデルの割り当て](agent-model-assignment.md) | プロバイダと会社 PC の判定、階層（`[opencode.model.tier.*]` と pi の上書き）、生成されるもの |
+| [hook の単一ソース化](agent-hooks-generation.md) | `[[hooks]]` から Claude / Copilot の hook を生成する仕様、外部ツールとの共存、Copilot CLI の制約 |
 | [設定の生成と所有権](agent-config-generation.md) | `common.toml` の構成と編集ルール、生成先と所有権、MCP、pi と共有する設定（モデルの割り当て・コミットの確認など）、hook の単一ソース化 |
 | [OpenCode 向けの設定の生成](opencode-config-generation.md) | OpenCode だけが使う設定（plugin 層・bypass・キーバインド・隔離起動）の生成。保留中のレガシー（撤去予定） |
 | [モデルの割り当ての見直し](model-lineup-review.md) | OpenCode の階層に当てるモデルと effort を見直す時機・調べる場所・自前の評価・決め方・変える手順・再考の候補 |
@@ -47,6 +57,9 @@
 | --- | --- |
 | [サンドボックス（総覧）](sandbox/index.md) | 目的と脅威モデル、層と責務、起動のモード、内側から見えるもの・見えないもの、通信の方針、設定と試験の対応、未解決 |
 | [認証ブローカー（`pis`）](sandbox/broker.md) | Copilot・GitHub・検索の認証ブローカー（Envoy）の正本。責務、全体像、`[pis.broker]` と `--no-broker`、各ブローカーの契約、鍵の隔離、不変条件と試験の対応、Envoy の導入、未対応・未検証（認証つきプロキシ・Bedrock） |
+| [Claude / Copilot の sandbox のネットワーク層](sandbox/cli-sandbox-network.md) | ドメインの whitelist、資格情報の除去、WSL2 の抜け穴（seccomp）、sandbox に移せないネットワーク系の検査 |
+| [このマシンだけで許可を足す](sandbox/cli-sandbox-local-allow.md) | `local.toml`・`settings.local.json`・Copilot の `allowed_directories` などの使い分け |
+| [Copilot の sandbox](sandbox/copilot-sandbox.md) | Claude との違いと、実測した既定の許可範囲 |
 | [Fence 境界の組み立て](sandbox/fence-boundary.md) | `pis` と `ocs` が共有する Fence の境界: 組み立ての規則、起動ディレクトリの制限、保護対象、プロジェクトごとの追加、起動前の退避、境界チェック、信頼の鎖 |
 | [OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md) | `ocs` の構成、起動順序、Fence の境界の組み立て規則、DB の共有、起動前の退避、境界チェック（`ocs --check`）、環境変数 `PIS_EXTRA_READ` での読み取りの追加、`devices`・`PIS_EXTRA_DEVICES` でのデバイスの追加 |
 | [sandbox (Claude Code / Copilot CLI)](sandbox/agent-sandbox.md) | sandbox 層・ネットワーク層・seccomp、マシン固有の許可 (`local.toml`) |
@@ -58,7 +71,10 @@
 | --- | --- |
 | [ガード（総覧）](guard/index.md) | 目的と保証の範囲、判定の 4 つの結果（deny / confirm / ask / allow）、評価の順番、確認の振る舞い、権限の設計（GitHub）、ツール定義の拡張、設定と試験の対応、未解決 |
 | [判定 API（`decide`）](guard/pi-decide.md) | pi のガードが呼ぶ CLI 非依存の判定器。入力と応答、`source`、評価の順番、confirm、役割（`[pi.profiles]`）、`check_bash.py` との等価の試験 |
-| [pi のガード](guard/pi-guard.md) | pi の拡張でツールを判定 API に通す仕組み。起動の形、別名のツール、`execute()` での最終の判定、確認の順番、伏字化、pi の内部の挙動に頼る点、試験 |
+| [pi の拡張と補助機能](guard/pi-extensions.md) | 拡張の入れ方の方針、`guarded_action`、ツールの拡張、圧縮、`git commit` の確認、整形、`/fleet`、stepback、キーバインド、Orca・Zed |
+| [pi の子エージェント](guard/pi-subagents.md) | `guarded_task` の起動と役割、`review` への依頼、job、子の操作、worktree 隔離、Windows の `task` |
+| [pis のサンドボックス（pi の側）](guard/pi-sandbox.md) | agent 置き場・セッション・認証、プロキシ必須の環境での通信、拒否リスト型の通信、緩和のゲート |
+| [pi のガード](guard/pi-guard.md) | 起動の形、素の pi との対応、Windows、pi の設定、判定の外で動くもの、置き場・環境変数・しくみ、MCP、試験、実機で確認する項目 |
 | [OpenCode のガードの仕様](guard/opencode-guard.md) | OpenCode の guide plugin が出す誘導・deny の説明・allow したコマンドの書き込み形。保留中のレガシー（撤去予定） |
 | [コマンド・ファイルの判定](guard/agent-command-policy.md) | 照合規則、allow / ask / deny の使い分けと例外、bash 検査ルールの足し方、CLI 差 |
 

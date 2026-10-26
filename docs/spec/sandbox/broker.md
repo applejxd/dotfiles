@@ -205,7 +205,7 @@ CLI: `pis --no-broker` は**3 つとも**無効にする（設定が `auto` で�
 `checksum.sha256` で照合する。対象は `llm-provider` が `github-copilot` で、Raspberry Pi 以外の機。
 **Bedrock（`amazon-bedrock`）の機には入らない**（このためこの機では、`github`・`search` を `auto` にしても Envoy が無く、
 GitHub は起動拒否か縮退の経路に当たる。未確認: この機での実際の挙動）。
-更新手順と sha256 の限界は [Envoy の取得](../structure.md#envoy-の取得)。
+更新手順と sha256 の限界は [Envoy の取得](../cli-management.md#envoy-の取得)。
 
 ## 未対応・未検証
 

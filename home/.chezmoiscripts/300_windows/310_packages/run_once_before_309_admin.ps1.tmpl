@@ -5,7 +5,7 @@
     Detects what is missing as the signed-in user; only when something is missing,
     elevates once and runs just those steps. The elevated child never writes to a
     user profile (HKCU / %APPDATA% / ~). Result is re-checked as the signed-in user.
-    see docs/spec/structure.md#管理者権限の集約
+    see docs/spec/windows-admin.md#管理者権限の集約
   .PARAMETER Targets
     Internal. Comma-separated allow-listed keys; set only for the elevated child.
   .PARAMETER LogPath
@@ -46,7 +46,7 @@ $GpuPowerScript = Join-Path $GpuPowerDir 'set-power-limit.ps1'
 
 # winget packages whose only installers are machine-wide (or scope-unspecified MSI), so winget raises UAC for them.
 # Scope = 'machine' passes --scope machine; '' passes none (the manifest declares no scope).
-# Inventory: docs/spec/structure.md#winget-パッケージの-user--machine-の振り分け
+# Inventory: docs/spec/windows-admin.md#winget-パッケージの-user--machine-の振り分け
 $WingetMachinePackages = [ordered]@{
   'Chrome'         = @{ Id = 'Google.Chrome'; Scope = 'machine' }
   'JapaneseIME'    = @{ Id = 'Google.JapaneseIME'; Scope = 'machine' }

@@ -69,7 +69,7 @@ AI CLI を公式インストーラーでの導入へ切り替えた後も、410�
 `generate.py` が `~/.claude/hooks/` 配下を起動する hook をすべて自分の物とみなし、
 herdr が同じディレクトリに置く `herdr-agent-state.sh` の hook を apply のたびに消していた
 （直後の `140` が足し直す）。所有権をスクリプト名（現役 + 撤去済み）で決めるようにした。
-see [外部ツールとの共存](../../spec/agent-config-generation.md#外部ツールとの共存-orca--herdr)
+see [外部ツールとの共存](../../spec/agent-hooks-generation.md#外部ツールとの共存-orca--herdr)
 
 ## 7. init を通すモードで Pi 扱いの注入が消えていた（2026-09-27）
 

@@ -4,7 +4,7 @@
 - 中継: 許可した宛先だけが上流のプロキシへ届く。許可外・平文 HTTP は上流へ何も送らない
 - 設定: 中継が要るときだけ Fence の設定が変わる
 
-see docs/spec/guard/pi-guard.md#プロキシ必須の環境での通信
+see docs/spec/guard/pi-sandbox.md#プロキシ必須の環境での通信
 """
 
 from __future__ import annotations

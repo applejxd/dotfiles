@@ -72,6 +72,7 @@
 ## 文書の地図
 
 - [ブローカー](broker.md): Copilot・GitHub・検索の認証ブローカーの正本。
+- [Claude / Copilot の sandbox のネットワーク層](cli-sandbox-network.md)・[このマシンだけで許可を足す](cli-sandbox-local-allow.md)・[Copilot の sandbox](copilot-sandbox.md): Claude / Copilot の sandbox の続き（`agent-sandbox.md` から分けた）。
 - [Fence 境界の組み立て](fence-boundary.md): `pis` と `ocs` が共有する境界の正本（組み立ての規則・起動ディレクトリの制限・保護対象・退避・境界チェック・信頼の鎖）。
 - [OpenCode 隔離起動（`ocs`）](opencode-sandbox.md): 起動の順序、状態・DB、環境変数での追加、制御ファイルの保護。`pis` と `ocs` が共有する境界の正本でもある（OpenCode 専用の部分は撤去予定）。
 - [Claude Code / Copilot CLI の sandbox](agent-sandbox.md): それらの CLI 自身が持つ sandbox（`pis` の Fence とは別物）の層・ネットワーク・seccomp。

@@ -100,7 +100,7 @@ sudo apt-get install -y bubblewrap slirp4netns util-linux iptables
 （[Configure the sandboxed Bash tool](https://code.claude.com/docs/en/sandboxing)）。
 
 **原因**: `bwrap` か `socat` が無い。seccomp フィルタだけが無い場合は動くが、WSL2 では
-sandbox から抜けられる（[WSL2 での抜け穴](sandbox/agent-sandbox.md#wsl2-での抜け穴-seccomp-フィルタ)）。
+sandbox から抜けられる（[WSL2 での抜け穴](sandbox/cli-sandbox-network.md#wsl2-での抜け穴-seccomp-フィルタ)）。
 
 **対処**:
 
@@ -109,7 +109,7 @@ sudo apt-get install -y bubblewrap socat
 ```
 
 seccomp フィルタは mise の `npm:@anthropic-ai/sandbox-runtime` が入れ、`chezmoi apply` が
-`settings.json` へ橋渡しする（[npm backend で入れている 2 つ](structure.md#npm-backend-で入れている-2-つ)）。
+`settings.json` へ橋渡しする（[npm backend で入れている 2 つ](cli-management.md#npm-backend-で入れている-2-つ)）。
 依存の検査は起動時に走るので、入れた後に Claude Code を再起動する。
 
 **成功の確認**: 再起動後の `/sandbox` に Dependencies タブが出ない。

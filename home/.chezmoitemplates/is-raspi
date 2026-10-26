@@ -6,7 +6,7 @@ Raspberry Pi の判定。単一ソース。"true" か空文字を返す。
 
 chezmoi.toml の [data] ではなくここに置くのは、chezmoi update が
 chezmoi init を呼ばないため。[data] だと判定が更新されない。
-手がかりの守備範囲は docs/spec/structure.md#raspberry-pi が正本。
+手がかりの守備範囲は docs/spec/platform-raspberry-pi.md#raspberry-pi が正本。
 */ -}}
 {{- if hasKey . "is_raspi" -}}
 {{-   if .is_raspi }}true{{ end -}}

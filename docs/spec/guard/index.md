@@ -48,12 +48,12 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 ## 投稿・コミットの流れ（`guarded_action`）
 
 `git commit`・`gh issue comment`・`gh issue edit` は、**内容を見せて 1 回だけ承認を取り、承認した内容で実行する**専用ツール `guarded_action` に寄せる（同じ操作の bash は deny）。
-操作は `[[pi.actions]]` の表で宣言する。仕様の正本は [pi のガード](pi-guard.md#guarded_action承認つきの外部操作)。
+操作は `[[pi.actions]]` の表で宣言する。仕様の正本は [pi のガード](pi-extensions.md#guarded_action承認つきの外部操作)。
 
 ## ツール定義の拡張
 
 `guarded_read`・`guarded_write`・`guarded_edit`・`guarded_bash` の説明と引数を、使用コストを下げる形で拡張している。
-仕様の正本は [pi のガード](pi-guard.md#ツールの拡張guarded_read--guarded_write--guarded_bash-の使いやすさ)、経緯と目標は [CHG-0038](../../change/0038-guard-reclassification.md)。
+仕様の正本は [pi のガード](pi-extensions.md#ツールの拡張guarded_read--guarded_write--guarded_bash-の使いやすさ)、経緯と目標は [CHG-0038](../../change/0038-guard-reclassification.md)。
 
 ## 設定と試験の対応
 
@@ -69,7 +69,10 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 ## 文書の地図
 
 - [判定 API（`decide`）](pi-decide.md): 入力・応答・評価の順番・confirm・誘導・TS 版への移植。
-- [pi のガード](pi-guard.md): 起動・bypass・サンドボックスの統合・拡張・子エージェント・確認の UI。
+- [pi のガード](pi-guard.md): 起動・bypass・confirm の UI・Windows・pi の設定・MCP。
+- [pi の拡張と補助機能](pi-extensions.md): 拡張の方針・`guarded_action`・ツールの拡張・圧縮・commit の確認・整形・`/fleet`。
+- [pi の子エージェント](pi-subagents.md): `guarded_task`・job・worktree 隔離・Windows の `task`。
+- [pis のサンドボックス（pi の側）](pi-sandbox.md): agent 置き場・通信・緩和のゲート。
 - [OpenCode のガードの仕様](opencode-guard.md): 保留中のレガシー（撤去予定）の誘導・deny の説明。
 - [コマンド・ファイルの判定](agent-command-policy.md): 照合規則、allow / ask / deny の一覧、意味解析。
 - [設定の生成](../agent-config-generation.md): `common.toml` から各 CLI の設定を作る仕組み。

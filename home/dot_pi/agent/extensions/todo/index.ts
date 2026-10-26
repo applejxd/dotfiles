@@ -2,7 +2,7 @@
 // 状態は、ツール結果の details と、利用者の操作 (/todos clear・tidy) の custom エントリに持たせる。
 // どちらもセッションに残るので、分岐・再開・圧縮のあとも、その時点の状態に戻る。
 // 操作は 1 回の呼び出しに複数まとめられる (batch)。途中で失敗したら全体を適用しない。
-// see docs/spec/guard/pi-guard.md#自作の拡張-todo--plan--btw
+// see docs/spec/guard/pi-extensions.md#自作の拡張-todo--plan--btw
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";

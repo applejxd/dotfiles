@@ -168,6 +168,6 @@ Copilot の実行は `gpt-5-mini` で 5 回（`-p` のみ。実行させたの�
 
 - 前の記録: [エージェントの git 入力待ちを防ぐ環境変数](noninteractive-git-env.md)
 - 案件: [CHG-0011](../../change/0011-agent-first-shell.md)
-- 仕様: [hooks の単一ソース化](../../spec/agent-config-generation.md#hooks-の単一ソース化)
+- 仕様: [hooks の単一ソース化](../../spec/agent-hooks-generation.md#hooks-の単一ソース化)
 
 [調査記録一覧へ戻る](../../index.md)

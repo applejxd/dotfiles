@@ -3,7 +3,7 @@
 <!-- 現在の総合判断は docs/change/ の候補比較表が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
-> **現行の仕様**: [階層](../../spec/agent-config-generation.md#階層)
+> **現行の仕様**: [階層](../../spec/agent-model-assignment.md#階層)
 >
 > この記録の「記録 E3〜E6」は [commit / review エージェントの実機確認](commit-review-agents.md) の節を指す。
 
@@ -27,7 +27,7 @@
 
 - deep（旧 heavy）は計測しなかった（[理由](#deep-を計測しなかった理由)）
 - この結果で、worker を両プロバイダとも Sonnet 5.5 に切り替え、routine は変えなかった
-  （[階層](../../spec/agent-config-generation.md#階層)）
+  （[階層](../../spec/agent-model-assignment.md#階層)）
 
 ## 記録 E1 — 2026-09-30
 

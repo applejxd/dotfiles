@@ -238,7 +238,7 @@ echo '{"tool_input":{"path":"/path/to/foo.py"}}' | bash ~/.claude/hooks/format-f
    追加する。配備先の `~/.config/agents/common.toml` は `chezmoi apply` のたびに
    上書きされるので直接編集しない
 3. このマシンだけの項目は chezmoi 管理外の `~/.config/agents/local.toml` へ書く
-   ([このマシンだけで許可を足す](sandbox/agent-sandbox.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない))
+   ([このマシンだけで許可を足す](sandbox/cli-sandbox-local-allow.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない))
 4. `chezmoi apply` で各 AI CLI の設定が再生成される
 
 なお初回 apply 時、Claude Code が未起動なら `~/.claude/settings.json` は存在しない。

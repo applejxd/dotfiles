@@ -44,7 +44,7 @@ fi
 mise self-update --yes
 
 # ツール 1 個の失敗で apply 全体を巻き添えにしない
-# (docs/spec/structure.md#ツール-1-個の失敗で-apply-を止めない)
+# (docs/spec/platform-raspberry-pi.md#ツール-1-個の失敗で-apply-を止めない)
 set +e
 mise -C "$HOME" install
 mise_status=$?
