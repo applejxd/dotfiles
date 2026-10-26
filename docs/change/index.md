@@ -65,7 +65,6 @@
 | [0038](0038-guard-reclassification.md) | ガードを「防ぐ害」（UX・認証情報・外部送信・破壊・構造）で分類し直し、外部への送信・公開の穴を塞ぐ（`confirm` の新設） | In progress | 標準の `pis`（bypass オン）で、規則に載っていない外部書き込みと載っている ask が確認なしで通る。`confirm`（bypass 不可・内容つき・無反応は deny）の実装設計。分類は整理で、区分の on/off の仕組みは作らない | 段 G5: 実機の確認（利用者）。段 G6: C1 の棚卸し | 2026-10-24 |
 | [0039](0039-bell-with-message.md) | 入力待ちの通知（BEL）に、メッセージを添える | Exploring | BEL は 1 バイトで本文を運べない。OSC 9 / 777 で本文を運べる可能性があるが、使っている端末（Zed・Orca）の対応は未確認。BEL は必ず残し、非対応の端末で表示を壊さない形を基本にする | 段 N1: 端末での確認（利用者） | 2026-10-26 |
 | [0040](0040-pi-guard-by-settings.md) | pi のフルガードを設定で載せ、pis をサンドボックス専用に寄せる | Exploring | 素の pi（Unix）が settings.json だけでフルガード付きで起動する。作業先の信頼は既定の確認のまま、判定の外で動くもの（mcp.json・信頼した作業先の .pi/）は警告する。pis --no-sandbox は移行用に残す | Windows への展開（配備・子エージェント・MSYS のパス）、実機の確認 | 2026-10-26 |
-| [0041](0041-commit-auto-in-bypass.md) | コミットを bypass のとき確認なしで実行できるようにする（確認の場を push 前へ移す） | Exploring | 承認待ちの時間切れが作業を止める。コミットは push まで取り消せる。bypass のときだけ `git_commit` の確認を省く案（属性 `confirm_in_bypass`）が有望。有効化は、pre-push の全コミットの検査（段 3）の後 | 段 1（設計の review）は完了。次: 段 2 の実装（pre-push の検査は段 3、有効化は段 4） | 2026-10-27 |
 
 ## 保留
 
@@ -80,6 +79,7 @@
 
 | # | 目的 | 結果 | 終了日 | 現行仕様 / ADR |
 | --- | --- | --- | --- | --- |
+| [0041](closed/0041-commit-auto-in-bypass.md) | コミットを bypass のとき確認なしで実行できるようにする（確認の場を push 前へ移す） | 見送り（設計は `review` 10 ラウンドで収束したが、各リポジトリに pre-push のスタブを配備し pre-commit の shim に依存する副作用が、確認の省略に見合わないとして、実装せず閉じた。実測は文書に残した） | 2026-10-27 | [guarded_action](../spec/guard/pi-extensions.md#guarded_action承認つきの外部操作) |
 | [0006](closed/0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試し、第一サポートを選べる状態を作る | 採用（導入・skills・設定の取り込みまで。第一サポートは別案件で pi に決まり、段 2 以降は `omp` を使っていないので実施せず閉じた） | 2026-10-25 | [omp の設定](../spec/cli-management.md#oh-my-piompの設定)、[ADR-0017](../adr/0017-pi-only-and-ts-judge.md) |
 | [0017](closed/0017-builtin-agent-restrictions.md) | 組み込みの `explore` / `plan` の制限が全体の設定に上書きされる問題を直し、`bypass` から起動する子を確認なしで動かせる範囲に整える | 採用（段 0〜8 完了。OpenCode の実機での確認は、OpenCode を使っていないので確認せず閉じた） | 2026-10-25 | [子エージェント](../spec/opencode-config-generation.md#子エージェント)、[ADR-0015](../adr/0015-bypass-child-external-read.md) |
 | [0028](closed/0028-verification-speed-and-delegation.md) | 全件の検証を速くし、調査・実装・レビューを子エージェントへ任せる運用を整える | 採用（並列化 `worksteal` で直列 643.67 秒→ 96.25 秒、`verify.py` と Linux の CI、委譲の指示、完了通知の追跡、`todo` の `blocked` と必須化、判定器の穴 3 種の修正。CI の初回結果・`HOME` 隔離・通知の症状の原因は ToDo、`verifier` 役と完了時の自動検証は CHG-0029、`todo` の階層化は CHG-0025 へ移管） | 2026-10-22 | [検証の方針と選択実行](../spec/development.md#検証の方針と選択実行) / [pi のガード](../spec/guard/pi-guard.md) |
