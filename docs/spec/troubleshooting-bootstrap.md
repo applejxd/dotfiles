@@ -181,9 +181,8 @@ chezmoi execute-template < ~/.local/share/chezmoi/home/.chezmoi.toml.tmpl | diff
 - 差が無い（描画結果が同じ）: **無視してよい**。消したければ `chezmoi init` を実行する（同じ内容で再生成される）
 - 差がある: 新しい値を使うには `chezmoi init` を実行する。それまでは、生成済みの設定が使われ続ける
 
-`init` を前提にした設計にしない（普段の運用は `update` が中心）。マシン判定などは
-`.chezmoitemplates/` の共有テンプレートに置き、`apply` のたびに評価させる
-（[CHG-0008](../change/closed/0008-raspi-branching.md)）。
+`init` を前提にした設計にしない理由と、マシン判定を `apply` のたびに評価させる仕組みは
+[Raspberry Pi](structure.md#raspberry-pi) を参照。
 
 **成功の確認**: `chezmoi status` に警告が出ない。
 
@@ -384,18 +383,15 @@ find ~/.local/share/mise/installs -path '*/node_modules/.mise/*' \
 `~/.config/mise/config.toml` とリポジトリの `mise.toml` に宣言が無ければ残骸なので、
 そのまま消してよい。
 
-**原因**: 導入物の一部が消えている。2026-09-15 に次の 2 通りを観測した。
-**何が消したかは特定できていない**（キャッシュ削除ツール、ディスク掃除、中断した
-導入などが候補）。
+**原因**: 導入物の一部が消えている。**何が消したかは特定できていない**（キャッシュ削除ツール、
+ディスク掃除、中断した導入などが候補）。観測した例は
+[観測記録](../research/chezmoi/bootstrap-observations.md#記録-e1--2026-09-15mise-の-npm-ツールの欠損)。
 
 - **A. キャッシュの実体が消えた**: npm backend は依存の実体を
   `~/.cache/aube/virtual-store/` に置き、`installs/` からそこへ symlink を張ることがある。
-  `~/.cache` を消すとリンク先だけが消える。npm-bitwarden-cli 2026.7.0 では `.mise/` 配下の
-  symlink 213 個が全滅し、実体ディレクトリで入っていた npm-anthropic-ai-sandbox-runtime は
-  無傷だった
+  `~/.cache` を消すとリンク先だけが消える。実体ディレクトリで入っているツールは無傷
 - **B. 導入物の一部が欠けた**: 古い世代の導入物は `bin/<tool>` が
-  `../lib/node_modules/...` を指す。npm-markdownlint-cli2 0.22.1 は `bin/` が残って
-  `lib/` だけが無かった。同じ世代の npm-google-gemini-cli は無傷で、個別の欠損だった
+  `../lib/node_modules/...` を指す。`bin/` が残って `lib/` だけが無いことがある
 
 **対処**: ディレクトリごと消してから入れ直す。Copilot CLI の sandbox の中では
 `~/.local/share/mise` が read-only なので（Claude Code の sandbox は書き込みを許している）、
@@ -407,8 +403,7 @@ rm -rf ~/.local/share/mise/installs/npm-bitwarden-cli
 mise install "npm:@bitwarden/cli"
 ```
 
-入れ直した後の `.mise/` 配下は symlink ではなく実体のディレクトリになっていた
-（2026-09-15、3 ツールとも symlink 0 件）。再び symlink で入るようなら、`~/.cache` を
+入れ直した後の `.mise/` 配下が再び symlink になるようなら、`~/.cache` を
 消さない運用にするか、消した直後に入れ直す。
 
 **成功の確認**: `bw --version` などが版を表示し、上の `find` が何も出さない。
@@ -446,9 +441,8 @@ grep -rl 'cli\.github\.com' /etc/apt/sources.list.d/
 既存の APT 登録・鍵・認証設定は自動削除しない方針のため
 （[mise による CLI 管理](structure.md#mise-による-cli-管理)）。
 
-2026-10-01 に WSL で確かめた例では、手元の鍵（`23F3D4EA75716059`）が
-2026-09-06 に失効しており、配布元の鍵ファイルには新しい鍵 `5612B36462313325` が
-加わっていた。鍵の状態は次で見られる（2 列目の `e` が失効）。
+鍵の状態は次で見られる（2 列目の `e` が失効。確かめた例は
+[観測記録](../research/chezmoi/bootstrap-observations.md#記録-e2--2026-10-01github-cli-の-apt-署名鍵の失効)）。
 
 ```bash
 gpg --show-keys --with-colons <登録の signed-by= が指す鍵ファイル> | grep -E '^(pub|sub)'
@@ -507,7 +501,9 @@ sudo apt-get update
 
 `pi --version` が `SyntaxError` などで落ちる、または pi の導入（npm）が失敗する。
 Windows の PATH は Machine が User より先に解決されるので、winget や MSI で入れた古い node
-（Machine PATH）が、mise の新しい node より先に使われることが原因になる。npm 版の pi は Node.js 22.19 以上が要る。
+（Machine PATH）が、mise の新しい node より先に使われることが原因になる。旧方式の npm 版の pi だけが
+node に依存し、Node.js 22.19 以上を要る。今の pi は mise のバイナリ版で、導入の仕様は
+[Windows の pi](structure.md#windows-の-pi)。
 
 確認（pwsh）:
 
@@ -518,8 +514,7 @@ node --version
 
 対処:
 
-- 今の pi は mise のバイナリ版（node 不要）なので、`chezmoi apply` を実行すれば、旧 npm 版が外れて直る
-  （[Windows の pi](structure.md#windows-の-pi)）
+- `chezmoi apply` を実行すれば、旧 npm 版が外れて直る
 - cmd.exe などプロファイルを通らない起動では、古い node が先に使われる。pwsh から使うか、
   管理者権限で古い node を外す（`winget uninstall OpenJS.NodeJS`）
 - opencode（npm 版）は node に依存する。同じ症状なら、上の `node --version` を確認する
@@ -548,7 +543,7 @@ command -v opencode      # ~/.local/share/mise/shims/opencode なら該当
 
 **原因**: CLI が公式の導入先ではなく **mise の残骸 shim** に解決されている。
 
-AI CLI は `d0abd95` で mise 管理から各社の公式インストーラーへ移したが、切り替え前の
+AI CLI は mise 管理から各社の公式インストーラーへ移したが、切り替え前の
 shim と installs は残る。PATH 上では mise の shims が公式の導入先（`~/.local/bin` など）
 より前に来る。ここで抜けられない輪ができる。
 

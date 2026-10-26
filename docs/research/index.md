@@ -85,6 +85,25 @@
 | [エージェントの git 入力待ちを防ぐ環境変数](agents/noninteractive-git-env.md) | 2026-10-03。OpenCode V2 の `ctx.shell.hook("create.before")` で子シェルの環境を `??=` で足せる実測、ocs は `inner_env` に足せる、`GIT_TERMINAL_PROMPT=0` は TTY があるときだけ効く、`GIT_EDITOR=false` で `rebase -i` が即失敗（`git commit` と分岐した merge は権限で測れず） |
 | [Claude / Copilot で git 入力待ち防止の環境変数を入れられるか](agents/noninteractive-git-env-claude-copilot.md) | 2026-10-04。Claude の `settings.json` の `env` はシェルの値を上書きするので「未設定時のみ」に不適（公式）、`CLAUDE_ENV_FILE` は実機未検証。Copilot は環境変数の設定が無く `preToolUse` の `modifiedArgs` は効くが狭い allow で実行が拒否された（実測）、起動ラッパーは未設定→既定・既設定→維持を実測。推奨は起動ラッパー |
 | [秘密ファイル一覧のずれと直下以外の `.env`](agents/secret-file-lists.md) | 2026-10-03。hook の `tables.toml` にあって `read_deny_globs` に無かった資格情報・履歴 15 件、`.env` が `**/` 無しで直下以外は ask 止まりだった実測と、`**/` 化後の deny |
+| [AI CLI 設定の生成に関する経緯・実測](agents/agent-config-generation-notes.md) | MCP の配布の経緯・常駐ポートの衝突・モデル階層の比較・hooks 撤去の経緯。2026-08〜10（`agent-config-generation.md` から移設。再測定していない） |
+| [Claude / Copilot の sandbox の許可範囲と経路の実測](agents/agent-sandbox-measurements.md) | 2026-09 の実測と未決の点（`agent-sandbox.md` から移設。再測定していない） |
+| [AI CLI の実行時の障害の観測（引数破損の頻度・pis のクリップボード）](agents/agents-runtime-observations.md) | 2026-10。頻度と上流 Issue の経緯（`troubleshooting-agents.md` から移設） |
+| [ブローカー仕様の実測と経緯](agents/broker-spec-notes.md) | 2026-10-24〜25 の実測（`broker.md` から移設） |
+| [checkpoint 仕様の経緯・実測](agents/checkpoint-notes.md) | 2026-09-24 に OpenCode 専用にした経緯、A1 と A2/B の分離、保存先の変遷（`checkpoint.md` から移設） |
+| [Claude Code permission リストの既知バグ](agents/claude-permission-known-bugs.md) | 2026-05 時点の issue の表。現在の状態は未確認（`agent-command-policy.md` から移設） |
+| [コマンド判定の設計の経緯メモ](agents/command-policy-design-notes.md) | 廃止した判定・以前の穴・採用理由（`agent-command-policy.md` から移設） |
+| [imozuru 仕様の経緯・実測・レビュー記録](agents/imozuru-spec-notes.md) | 2026-10-21〜25 の取り込み・調査・レビュー（`imozuru.md` から移設） |
+| [モデルの割り当ての見直しの日付つき経緯](agents/model-lineup-review-notes.md) | 2026-10-07 の `commit` の役割変更と採点の前提（`model-lineup-review.md` から移設） |
+| [agent-permissions の実測・根拠](agents/permissions-notes.md) | 2026-09-27 の Windows native での確認の範囲（`agent-permissions.md` から移設） |
+| [pi の圧縮の 400 エラー（thinking: disabled）の経緯](agents/pi-compaction-400-history.md) | 2026-10。`pi-guard.md` から移設 |
+| [長い sleep の誘導の由来と実モデルでの確認](agents/pi-decide-guide-sleep-origin.md) | 2026-10-20。`pi-decide.md` から移設 |
+| [自作の拡張（todo / plan / btw / activity / ask / notify / delegate-nudge）の実測と未確認](agents/pi-own-extensions-measurements.md) | 2026-10。`pi-guard.md` から移設 |
+| [子エージェント（guarded_task）の経緯・日付・試験結果](agents/pi-subagents-spec-history.md) | 2026-10-09〜22。`pi-guard.md` から移設 |
+| [pis のサンドボックスの実機発見談と拒否リスト型の実測・未確認](agents/pis-sandbox-spec-observations.md) | 2026-10-15〜26。`pi-guard.md` から移設 |
+| [ツール引数の JSON が壊れる問題の調査](agents/tool-arg-json-breakage.md) | 細粒度ツールストリーミング・strict・Bedrock。`pi-guard.md` から移設 |
+| [ガードツール（guarded_edit / ask）の失敗の集計と見送った案](agents/tool-extension-measurements.md) | 失敗 118 件・940 件などの集計。`pi-guard.md` から移設 |
+| [二つの task（guarded_task と Windows の task）を別物にしている理由](agents/two-task-tools-rationale.md) | 統合しなかった判断と採点の訂正。`pi-guard.md` から移設 |
+| [web 検索スキル仕様の実測・経緯](agents/web-search-spec-notes.md) | 2026-10-11〜26 の実測と CHG-0032 の経緯（`web-search.md` から移設） |
 
 ### OpenCode 全般
 
@@ -104,6 +123,7 @@
 | [OpenCode の DB を srt の境界の内外で共有できるか](opencode/shared-db.md) | 同時書き込み・外での再開・外からの `/undo` が通った、書き込みの例外は `XDG_DATA_HOME/opencode` 全体、ignore が無いと snapshot が取れない、`TMPDIR` が見えないと通信が止まる |
 | [OpenCode V2 は LSP を使えるか](opencode/lsp-support.md) | 2026-10-01。v2.0.14〜v2.0.21 は `lsp` 設定を受理・保持するだけで言語サーバを起動せず診断も出さない（公式の移行ガイド・ソース・バイナリで確認）。実装は V1 にだけある。#50916 は未回答 |
 | [配置済みの opencode.json に残るキーと V1 / V2 の併用](opencode/agent-config-ownership.md) | 2026-10-08。宣言から外したキーや V1 の定義が残り、元に戻した後の判定を残った policy が支える。同じ ID を V1 と V2 に書くと V2 が丸ごと勝ち V1 のキーは捨てられる。生成器が持つ範囲を決める「所有の規則」を先に入れれば、段 4 を元に戻すだけで元の JSON に戻る（試作） |
+| [`ocs` 境界の仕様の補足記録（経緯・実測）](opencode/opencode-sandbox-spec-notes.md) | bypass を使えるようにした経緯・外したデバイス名の実測・以前の隔離用 DB の移行・起動の遅れの実測（`opencode-sandbox.md` から移設） |
 
 ### OpenCode の permission
 
@@ -142,6 +162,8 @@
 | --- | --- |
 | [Raspberry Pi 4 がメモリ切れで SSH ごと固まった件](testing/raspi-oom-ssh-freeze.md) | swap 0 で gitleaks のソースビルド中に固まった経過、zram / earlyoom 導入後の確認 |
 | [Docker の cold start 検証で直した障害](testing/docker-cold-start-fixes.md) | tmpfs の noexec、modify_ の python3 解決、Pi 扱いの注入が init で消える、Codex の TOML 連結など解決済み 9 件の経緯 |
+| [開発ガイドの実測メモ](testing/development-timing-notes.md) | hook の所要時間・全件の時間・Windows Sandbox の実測・利用者の判断（`development.md` から移設） |
+| [testing 仕様の実測メモ](testing/testing-spec-notes.md) | 近似 runner の実測と日付つきの注記（`testing.md` から移設） |
 
 ### シェル
 
@@ -152,11 +174,18 @@
 | [Windows PowerShell 5.1 / 7 での実機確認](shell/windows-powershell-live-check.md) | 2026-10-05。`copilot` 関数の環境変数・終了コード・finally・パイプ、非対話でのプロファイル、Windows の Python での読み取り判定の大小文字。5.1 はネイティブ引数（`"`・空文字・末尾 `\`）が欠ける。pwsh 7 は `finally` が変数を空文字で残す不具合（修正済み・再確認済み）、未確認は対話シェル |
 | [非対話シェルで mise の shims を使う](shell/mise-shims-resolution.md) | 2026-10-03。shims を先頭側に置くと cwd の `mise.toml` に従う、`activate` 済み PATH の継承は版が固定される、未 trust はエラー終了で待たない、venv が先なら venv が勝つ、shim は約 40 ms/回 |
 | [zenoとzsh-autosuggestionsの連携](shell/zeno-autosuggestions-integration.md) | 2026-05-12〜13。widget競合の原因、ロード順、回避策 |
+| [シェル・VS Code まわりの経緯メモ](shell/structure-shell-notes.md) | シェルの起動契約で採らなかった案・code-exam の案・拡張スクリプト廃止の経緯（`structure.md` から移設） |
 
 ### chezmoi の導入・移行コード
 
 | 文書 | 内容 |
 | --- | --- |
 | [過去の実装に依存する処理の棚卸し](chezmoi/legacy-cleanup-inventory.md) | 2026-10-18。移行・掃除コードを「消せる条件」付きで記録。他のマシンへの適用状況を把握できないため、死にコード以外は残した |
+| [導入・適用の障害の観測記録](chezmoi/bootstrap-observations.md) | mise の npm ツールの欠損（2026-09-15）・GitHub CLI の APT 鍵の失効（2026-10-01）（`troubleshooting-bootstrap.md` から移設） |
+| [セキュリティ仕様の経緯メモ](chezmoi/security-spec-notes.md) | chezmoi 本体の age 暗号化の廃止の経緯・旧『実行境界』の記述（`security.md` から移設） |
+| [Raspberry Pi 向け導入の観測メモ](chezmoi/structure-raspi-notes.md) | clang の標準ヘッダの観測（2026-10-01・10-05。`structure.md` から移設） |
+| [Windows 設定の実測・経緯メモ](chezmoi/structure-windows-notes.md) | WSL 3.0.1・GPU のクラッシュ・sudo・PATH 降格・oh-my-posh・7-Zip・電源・ウィジェット・LGPO など（`structure.md` から移設） |
+| [WSL の時刻同期と SSH の実測メモ](chezmoi/structure-wsl-time-and-ssh-notes.md) | 時刻同期の未確認事項・SSH の層別の実測・LAN の IP の実験（`structure.md` から移設） |
+| [専用 WSL2 の時刻同期の実測](chezmoi/wsl-sandbox-time-sync.md) | 2026-10-18〜19 の実測と原因分析・構築記録（`wsl-sandbox.md` から移設） |
 
 [ドキュメント一覧へ戻る](../index.md)

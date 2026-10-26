@@ -24,17 +24,8 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 
 ## 評価の順番
 
-仕様は [判定 API](pi-decide.md#評価の順番)。要約:
-
-1. **共通の禁止**（deny）: `[bash] deny` と意味解析、`[file]` の読み書きの禁止。どの役割・bypass でも外れない。
-2. **役割のツール**: 役割（`[pi.profiles]`）に無いツールは deny。
-3. **誘導**（deny）: 専用ツールがあるのに `cat` や `grep` を使うなどの形を、案内つきで deny。
-4. **`guarded_action` の置き換え対象**（deny。役割が `action` ツールを持つときだけ）: `[[pi.actions]]` の `replaces` に当たる bash（`git commit`・`gh issue comment`）を、呼び出し例つきで deny。
-5. **役割の `shell_deny`**（deny）。
-6. **confirm**: `[pi.confirm]` の確認表と、確認に格上げする検査（`check_gh_api_mutation`）。他の ask より先に引く。
-7. **ask** と **allow**: `[bash] ask`・意味解析・`[pi.shell] allow`。
-8. **既定**: 役割の既定（実装役は ask、読み取り役は deny）。
-9. **サンドボックスの緩和**（境界が実測で証明されているときだけ）と **bypass**（ask だけを allow にする）。
+共通の禁止 → 役割のツール → 誘導 → `guarded_action` の置き換え → 役割の `shell_deny` → confirm → ask / allow → 既定 → サンドボックスの緩和と bypass の順。
+各段の仕様の正本は [判定 API](pi-decide.md#評価の順番)。
 
 ## 役割
 
@@ -43,37 +34,26 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 
 ## 確認（confirm）の振る舞い
 
-仕様は [confirm](pi-decide.md#confirm) と [確認の UI](pi-guard.md#confirm-の確認)。
-
-- 確認画面に、コマンドの**全文**（制御文字は可視化）と、`gh` の `--title`・`--body`・`--body-file` などの**参考表示**を出す。`--body-file` はハーネスが読んで出し、承認後の差し替えは再読みで検出する。
-- 本文を確認できない形（標準入力・コマンド置換）は deny。タイトルと本文の合計が 8,000 字を超えるものも、確認を出さず拒否する。
-- **無反応は deny**（`[pi.confirm] timeout_seconds`、既定 300）。時間切れの理由は「再試行せず、利用者の新しい指示を待つ」。
-- 公開・配布（`gh repo edit/create`、`gh release delete/edit`、`npm/yarn/pnpm/uv publish`、`twine upload`、`cargo publish`、`gem push`、`docker push`、`gh api` の公開・配布系）は、確認ではなく deny。
+判定は [confirm](pi-decide.md#confirm)、確認画面は [確認の UI](pi-guard.md#confirm-の確認) が正本。
+無反応は deny（`[pi.confirm] timeout_seconds`、既定 300）。公開・配布（`gh repo edit/create`、`npm publish` など）は、確認ではなく deny。
 
 ## 権限の設計（GitHub）
 
-決定的な防御は、トークンのスコープで行う（[CHG-0038 段 G10](../../change/0038-guard-reclassification.md)。**実機の確認前**）。
+決定的な防御は、トークンのスコープで行う（[CHG-0038 段 G10](../../change/0038-guard-reclassification.md)）。
 
 - 個人機: fine-grained PAT（Metadata Read・Issues Write・Pull requests Write・Contents Read、Administration 無し）が理想。fine-grained PAT は Web でしか作れない。
 - 制約のある環境の機: fine-grained PAT が使えず classic PAT だけの場合がある。`repo` スコープは粗く、**投稿だけ許して push を許さない形は作れない**。リポジトリのロールが Admin でない場合、Admin 級（公開化・設定変更・Webhook・削除）を拒否させ、保護ブランチは規則で守る。非保護ブランチへの refs・contents・release の書き込みと GraphQL の mutation は、PAT では塞げず、判定器の deny が残る。
-- 判定器の `gh api` 公開系の列挙（`check_gh_api_publish`）は、権限側で塞げると確認できた部分から縮小する。**確認前は撤去しない**。
+- 判定器の `gh api` 公開系の列挙（`check_gh_api_publish`）は、権限側で塞げると確認できた部分から縮小する。確認が取れていない部分は撤去しない。確認の進み具合は [CHG-0038](../../change/0038-guard-reclassification.md)。
 
 ## 投稿・コミットの流れ（`guarded_action`）
 
-`git commit` と `gh issue comment` は、通常の ask と違い、**内容を見せて 1 回だけ承認を取り、承認した内容で実行する**流れに固定する（二重承認を避ける）。専用ツール `guarded_action` 1 本と、操作を宣言する表
-`[[pi.actions]]` で、操作を増やすときは表に項目を足す（ツールは増やさない）。
-
-- ハーネスが引数を検証して argv を組み立て、シェルを通さずに実行する。承認した文字列がそのまま使われるので、コマンドの解析を要しない。
-  commit は、承認時と実行直前に HEAD・ブランチ・index を照合する。
-- **誤った経路へ行かせない**（うっかり防止。経路の強制ではない）: 同じ操作の bash は deny（ask にしない）し、理由に呼び出し例を入れる。
-  ツールの説明と、グローバル指示・`commit` スキルは、事前に `ask` で承認を取らないと書く。
-- 登録されるのは親の実装役だけ。子・読み取り役・探索役と UI 無しは拒否。
-- 仕様は [pi のガード](pi-guard.md#guarded_action承認つきの外部操作)。導入前の基準（bash の直接実行 275 回、うち直前に `ask` で承認 60 回）を、`.agents/skills/friction-review/scripts/measure_routing.py` で導入後に比べる。
+`git commit`・`gh issue comment`・`gh issue edit` は、**内容を見せて 1 回だけ承認を取り、承認した内容で実行する**専用ツール `guarded_action` に寄せる（同じ操作の bash は deny）。
+操作は `[[pi.actions]]` の表で宣言する。仕様の正本は [pi のガード](pi-guard.md#guarded_action承認つきの外部操作)。
 
 ## ツール定義の拡張
 
-`guarded_read`・`guarded_write`・`guarded_edit`・`guarded_bash` の説明と引数を、使用コストを下げる形で拡張している（`tail`・`append`、読み失敗のヒント、誘導 deny への具体的な言い換え）。
-目標は、誘導 deny の割合を 1% 未満にすること（計測: 約 4.6% → 再計測は未実施）。仕様は [pi のガード](pi-guard.md#ツールの拡張guarded_read--guarded_write--guarded_bash-の使いやすさ)。
+`guarded_read`・`guarded_write`・`guarded_edit`・`guarded_bash` の説明と引数を、使用コストを下げる形で拡張している。
+仕様の正本は [pi のガード](pi-guard.md#ツールの拡張guarded_read--guarded_write--guarded_bash-の使いやすさ)、経緯と目標は [CHG-0038](../../change/0038-guard-reclassification.md)。
 
 ## 設定と試験の対応
 
@@ -96,8 +76,8 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 
 ## 未解決
 
-- 実際の TUI での確認画面の表示（残り秒数・長い本文）は、実機で見ていない。
-- `gh api` の暗黙の POST・`-X` の別形・前置フラグの試験の追加。
-- Python 版の判定器（照合用）の撤去（[CHG-0035](../../change/0035-retire-python-judge-oracle.md)）。二重実装と正解データの保守が、最大の規模の削減になる。
-- 個人機の PAT の絞り込み（`gh` の日常のコマンドが通るかの実機確認）と、制約のある環境の機のロールの確認。
-- 経緯と調査は [CHG-0038](../../change/0038-guard-reclassification.md)、[他社の比較](../../research/agents/permission-bypass-survey.md)、[代替設計の調査](../../research/agents/guard-design-alternatives.md)。
+進行中の課題は案件で管理する。
+
+- 確認画面・GitHub のトークン権限の実機確認: [CHG-0038](../../change/0038-guard-reclassification.md)、[CHG-0040](../../change/0040-pi-guard-by-settings.md)
+- Python 版の判定器（照合用）の撤去: [CHG-0035](../../change/0035-retire-python-judge-oracle.md)
+- 経緯と調査: [他社の比較](../../research/agents/permission-bypass-survey.md)、[代替設計の調査](../../research/agents/guard-design-alternatives.md)

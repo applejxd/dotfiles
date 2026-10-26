@@ -47,16 +47,8 @@ agent テストでは生成された matcher と実 hook の判定を両方確�
 `main` への push、`pull_request`、手動実行で起動する。chezmoi を入れる（無いとテンプレートの試験が
 モジュールごと skip）。`pi`・`mise`・`zsh` などが無いと skip される試験は skip のまま。
 
-push 前に、空の `HOME`、最小の `PATH`、git の identity なしで素の runner を近似して全件を回した
-（2026-10-22、`node` も `pi` も無い状態。HOME は作業ツリーの外に置く。作業ツリーの中だと
-「作業ツリー内の読み取り」と判定されて偏る）。ここで見つかった 2 点を直した:
-
-- `test_pi_harness_extensions.py` に `pi` が無いときの skip が無く、`TypeError` で落ちていた
-  （`test_pi_harness.py` にはあった）
-- `test_pis_no_sandbox_marks_the_environment_and_warns` が、配備済みの
-  `~/.config/pi/harness/rules.json` に依存していた
-
-直したあとの近似での全件の再実行はしていない（直した 2 ファイルだけ近似環境で通った）。
+素の runner の近似（空の `HOME`・最小の `PATH`・git の identity なし）で全件を回した結果は
+[testing 仕様の実測メモ](../research/testing/testing-spec-notes.md#記録-e1--素の-runner-の近似での全件実行2026-10-22)。
 **本物の runner での結果は未確認で、push 後の初回の実行で確かめる。**
 近似では拾えない差: runner には `node` や `shellcheck` が入っていることがあり、
 その分の skip が実際には実行されて落ちる可能性がある。
@@ -226,13 +218,13 @@ gh workflow run e2e -f service=raspi2204 -f mode=update   # 手元から起動�
 ユーザが既にいるので `tester` は別の UID になり、git が dubious ownership で
 拒む。`~/.gitconfig` は検証対象なので `safe.directory` を書かず、`$HOME` 外の
 一時ファイルを `GIT_CONFIG_GLOBAL` で `/repo` を読む git にだけ渡す。
-`git -c safe.directory=...` は clone の所有者検査まで届かない（git 2.43 で実測）。
+`git -c safe.directory=...` は clone の所有者検査まで届かない（git 2.43）。
 `userdel ubuntu` でイメージ側を合わせる案は、ホスト UID との一致に依存するので採らない。
 
 ### 失敗を握り潰さない
 
-設定テンプレートの描画に失敗したら、そこで止める。以前は代替 config を書いて
-続行していたが、これは**検出したい不具合そのものを隠す**（`*/` でコメントが
+設定テンプレートの描画に失敗したら、そこで止める。代替 config を書いて
+続行すると、**検出したい不具合そのものを隠す**（`*/` でコメントが
 壊れた事故が実際にあった）。
 
 ### 依存を先入れしない
@@ -300,7 +292,7 @@ OVERALL STATUS: FAILED
 | 症状 | 原因 |
 | --- | --- |
 | `no space left on device` | tmpfs の上限。`$HOME` 使用率 95% 以上なら UNDETERMINED にする |
-| apply が上限（`APPLY_TIMEOUT`、既定 15 分）で打ち切り | 回線速度か arm64 のエミュレーション。実測で mise の取得が 23〜145 kB/s まで落ちた |
+| apply が上限（`APPLY_TIMEOUT`、既定 15 分）で打ち切り | 回線速度か arm64 のエミュレーション |
 | `導入できなかった CLI:claude` | ネットワークか GitHub のレート制限 |
 
 ## いつ回すか
@@ -317,26 +309,23 @@ OVERALL STATUS: FAILED
 日常は `mise run verify`（選択実行）、コミット前に `mise run verify:all`（全件）を 1 回回す。
 選択規則は [検証の方針と選択実行](development.md#検証の方針と選択実行)。
 
-現状（調査で判明した事実）:
+現状:
 
-- Linux の CI は `linux.yml`（全件の pytest。初回の実行結果は未確認）。ほかの GitHub Actions は
+- Linux の CI は `linux.yml`（全件の pytest）。ほかの GitHub Actions は
   `windows.yml`（パス絞りの push と手動。
   `windows-2025` で `test/agents/` と `test/test_windows_assets.py`、`timeout-minutes: 30`）と
   `e2e.yml`（毎月 2 日の schedule と手動。cold start）だけ
-- push 時の hook は `pre-push` stage に、テンプレートの描画 lint・Raspberry Pi の回帰テスト・検証の印の警告がある
-  （全件検証は入れない。[hook の stage の分け方](development.md#hook-の-stage-の分け方)）
 - リポジトリは public
-
-未着手の候補: `pre-commit` や `lint_templates` を CI で回す（mise を入れる必要がある）。
 
 ## 既知の未達
 
 `ubuntu2204` の `apply` と `update`（2 回の apply と残差分 0 件）は通る
-（2026-09-27 時点。そこへ至るまでに直したものは
+（そこへ至るまでに直したものは
 [記録](../research/testing/docker-cold-start-fixes.md)）。
 
 ### 未着手
 
+- `pre-commit` や `lint_templates` を CI で回す（mise を入れる必要がある）
 - 2 フェーズ bootstrap の本物の `bw` での確認（`bootstrap` モードはスタブで流れだけを見る）
 - `arm2404`（arm64、Pi 扱いなし）での `apply`
 

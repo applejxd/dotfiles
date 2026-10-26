@@ -31,13 +31,26 @@ sandbox が **何を提供しているか** (採用していない機能も含�
 | Claude Code / Copilot CLI の sandbox (ファイル・ネットワーク・seccomp)、マシン固有の許可 | [sandbox (Claude Code / Copilot CLI)](sandbox/agent-sandbox.md) |
 | OpenCode の隔離起動 (`ocs`) | [OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md) |
 
+## pi の層構成
+
+現行の標準は pi（`pis` で起動）。層の仕様は次の文書が正本で、ここでは位置づけだけを示す。
+
+| 層 | 役割 | 正本 |
+| --- | --- | --- |
+| サンドボックス | OS（Fence）とブローカーが、読み書き・ネットワーク・認証キーの境界を強制する。保証の外は、外部のスコープ（PAT・IAM・ブランチ保護）が決める | [サンドボックス（総覧）](sandbox/index.md) |
+| ガード | ツール呼び出しを実行前に判定し（deny / confirm / ask / allow）、必要なら確認を出す。迂回できるので境界ではなく「うっかり防止」 | [ガード（総覧）](guard/index.md) |
+| 設定の生成 | `common.toml` から pi のガード・サンドボックスの設定（`rules.json` など）と、各 CLI の設定を作る | [設定の生成と所有権](agent-config-generation.md) |
+
+Claude Code / Copilot CLI の判定 hook（`check_bash.py` など）の登録は外れ、規則は pi の TS の判定器が引き継いだ（`common.toml.tmpl` の `[retired_hooks]`、[CHG-0035](../change/0035-retire-python-judge-oracle.md)）。
+以下の「3 層構成」は、Claude Code / Copilot CLI の permission・sandbox の層を書く。
+
 ## 3 層構成
 
 | 層 | 仕組み | 効く CLI |
 | --- | --- | --- |
 | 0. sandbox | Claude: `~/.claude/settings.json` の `sandbox.filesystem.denyRead/denyWrite`、Copilot: `~/.copilot/settings.json` の `sandbox.userPolicy.filesystem.deniedPaths` (どちらも generate.py が生成)。OS レベル (bwrap/Seatbelt) で強制されるパス単位の deny | **Claude + Copilot** |
 | 1. permission リスト | `~/.claude/settings.json` の `permissions` (generate.py が生成) | **Claude のみ** |
-| 2. hook | `check_bash.py` が同じリストを読んで deny / ask を返す | **Claude + Copilot** |
+| 2. hook | `check_bash.py` が同じリストを読んで deny / ask を返す（**登録は撤去済み**。判定は pi の TS の判定器へ移った。上の「pi の層構成」） | （Claude + Copilot。現在は未登録） |
 
 人が書くのは `common.toml` の `[bash] allow / ask / deny` と `[sandbox]` の
 パス列だけ。そこから permission リストと sandbox 設定が生成され、hook も
@@ -60,6 +73,8 @@ Copilot CLI の `permissions-config.json` は deny / ask を表現できない
 扱えないため、生成時に `*` を含む要素だけ落とす)。
 
 ### OpenCode V2 の扱い
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [ガード（総覧）](guard/index.md)・[サンドボックス（総覧）](sandbox/index.md)。
 
 この節は**通常起動 (`opencode`)** の扱いを書く。通常起動の OpenCode V2 に
 sandbox は無い。強制に使えるのは permission リストと plugin の 2 つで、
@@ -122,14 +137,15 @@ glob の変換・formatter・plugin・キーバインド・照合順などの詳
 ## Windows での扱い
 
 Windows native では、CLI ごとに OS レベルの保護の有無が違う。
-**Windows 11 の実機では確かめていない**（2026-09-27 時点。GitHub Actions の
-Windows Server でテストを回したのと、上流のソース・公式資料を読んだのが根拠）。
+**Windows 11 の実機では確かめていない**（根拠と観測日は [記録](../research/agents/permissions-notes.md)）。
 
 | CLI | 何が効くか |
 | --- | --- |
 | Claude Code | `permissions` と hook は効く。**sandbox は native Windows 非対応**（公式は macOS・Linux・WSL2 のみ）。`settings.json` に `denyRead` を書いても OS では強制されない |
 | Copilot CLI | `permissions-config.json` と hook は効く。sandbox は **Windows Insiders ビルドが必要**で、パス単位の deny は CLI と同梱の MXC の版次第（changelog 1.0.76 は「Windows cannot deny per path」、上流の MXC には deny 対応の判定がある）。`deniedPaths` は Windows では `C:\Users\...` の形に揃えて出す |
-| OpenCode | `opencode.json` の permission と guide plugin が効く |
+| OpenCode（撤去予定。CHG-0020 段 6 は保留中） | `opencode.json` の permission と guide plugin が効く |
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [ガード（総覧）](guard/index.md)。
 
 OpenCode は `310_packages/314_agent_cli` が Windows にも入れるので、`.chezmoiignore.tmpl`
 の `.config/*` の除外から `.config/opencode/` を外している。以前は外しておらず、
@@ -146,6 +162,8 @@ Windows の常駐サービスは WSL と同じポートだと衝突するので�
 （[常駐サービスのポート](agent-config-generation.md#常駐サービスのポート)）。
 
 ## 保存した承認の確認とリセット
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [ガード（総覧）](guard/index.md)。
 
 OpenCode V2 の確認で「常に許可」を選ぶと、その承認は**プロジェクトごとに DB へ保存**され、
 以後は同じ操作が確認なしで通る。`opencode.json` の permission には現れず、公式には
@@ -172,7 +190,7 @@ oc-utils approvals reset --yes      # 消したあと取り直して 0 件を確
   付けないと空を返すので、全プロジェクトを回している
 - 既定は常駐サービスへ繋ぐ。`--standalone` / `--server URL` は `opencode api` へ
   そのまま渡す。`--standalone` は `OPENCODE_DB` を複製へ向けた試験用で、呼び出しの
-  たびにサーバーを立てるため遅い（80 件の `reset --yes` で約 90 秒。2026-09-29、v2.0.14）
+  たびにサーバーを立てるため遅い（実測は [記録](../research/agents/permissions-notes.md)）
 - 配るのは Linux（Ubuntu / WSL）だけ。他の OS では試していない
 
 ## 動作確認手順
@@ -195,6 +213,9 @@ chezmoi diff ~/.copilot/permissions-config.json
 ```
 
 ### apply 後の hook 動作確認
+
+`check_bash.py` は Claude Code / Copilot CLI へ登録されない（`[retired_hooks]`）。次は、配布されているスクリプトを手で呼ぶ確認で、
+CLI からの起動は確かめない。pi の判定は `test/agents/test_pi_judge_ts.py` などで確かめる（[ガード（総覧）](guard/index.md#設定と試験の対応)）。
 
 ```bash
 # 正常コマンド (PASS)

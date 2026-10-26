@@ -145,10 +145,7 @@ Pi でそこに入ると十数分かけてから失敗します。`false` にす
 パッケージが無い・確認が通らないときはエラーで止めます（黙って飛ばすと
 `run_once_` が成功として記録され、やり直されないため）。
 
-gcc の triplet から `/usr/lib/gcc/<triplet>/` の最新版を推測する方式は採りません。
-clang の選択と一致する保証が無く、conda の gcc が PATH の先にあると
-`gcc -dumpmachine` が `x86_64-conda-linux-gnu` を返して存在しないディレクトリを
-探すためです（2026-10-05 に観測）。`/usr/bin/clang` を明示するのも、conda などの
+gcc の triplet から版を推測する方式は採りません（clang の選択と一致する保証が無いため。[観測](../research/chezmoi/structure-raspi-notes.md)）。`/usr/bin/clang` を明示するのも、conda などの
 clang ではなく apt の clang を直すためです。
 
 clang（`clang-tidy` も）は、C++ の標準ヘッダを探すときに最も新しい gcc の版の
@@ -156,8 +153,7 @@ clang（`clang-tidy` も）は、C++ の標準ヘッダを探すときに最も�
 別のパッケージ（例: `libgccjit0`）がそれを引き込むことがあります。その版の
 `libstdc++-<版>-dev` が無いと、`#include <cstdio>` すら `file not found` になります。
 
-2026-10-01 に WSL（Ubuntu 24.04）で観測しました。`libgcc-14-dev` があり
-`libstdc++-14-dev` が無い状態で、Ubuntu の clang 18 も同じエラーを出しました。
+観測の記録は [記録](../research/chezmoi/structure-raspi-notes.md)。
 版を決め打ちしないのは、Ubuntu の版ごとに gcc の版が違うためです。
 
 `clang-tidy` は OpenCode の編集直後の lint で C/C++ に使います。
@@ -264,15 +260,12 @@ systemd（`systemd=true`）に任せます。WSL の init は起動直後に `mo
 - **対象外**: 隔離ディストロ（`[automount] enabled=false`）はこのスクリプトが早期に終わるため触らない。
   sandbox は `guest/setup.sh` が同じ設定を入れる（[時刻同期](sandbox/wsl-sandbox.md#時刻同期)）。Ubuntu 25.10 以降の新規環境は
   既定が chrony（WSL では `-x`）で `timesyncd` が無いため、条件を満たさず何もしない
-- **未確認**: `timesyncd` を止めた状態で、壁時計の絶対的なずれが長期（数時間〜数日）で許容範囲に収まるか。
-  Canonical の説明（Hyper-V の同期でよい）に頼るが、この環境では測り続けていない。
-  このスクリプトを実機で `chezmoi apply` した結果（mask と `tick` の復元）と、再起動後の動作も未確認
-  （スクリプトは描画・構文・shellcheck まで確かめた）
+- 長期の時刻のずれと、実機での適用結果の未確認事項は [記録](../research/chezmoi/structure-wsl-time-and-ssh-notes.md)
 
 ### リモートから WSL へ SSH する
 
 **基本は Tailscale 経由で、`tailscale serve` を 1 回設定する。ファイアウォールの規則は要らない**
-（2026-10-18 に、規則が 1 つも無い状態で iPhone の Termius から Tailscale 経由の SSH が通ることを確認）。
+（規則が無い状態での確認は [記録](../research/chezmoi/structure-wsl-time-and-ssh-notes.md)）
 
 WSL の sshd は `scripts/ubuntu/ssh.sh` が `/etc/ssh/sshd_config.d/10-override.conf` で **50022** 番にします
 （Windows 自身の sshd は 22 番で、`309_admin` が管理します）。`.wslconfig` は `networkingMode=mirrored` で、
@@ -343,26 +336,15 @@ Windows の Tailscale が tailnet の 50022 を受けて、`localhost:50022`（m
 
 #### なぜ規則ではなく `serve` か
 
-mirrored では、**Tailscale のアドレス（`100.x`）への 50022 が WSL の VM に転送されない**（2026-10-18、この機）。
-Tailscale の仮想アダプター（Wintun）経由のパケットは、Windows のホストのネットワークスタックで受け取られ、
-VM へは転送されない（実測からの推定。Microsoft のドキュメントでの裏付けは未確認）。Windows 自身の sshd（22）は
-ホストで受けるので Tailscale 経由でも届く。
-
-| 確認した層 | 結果 |
-| --- | --- |
-| tailnet の ACL（Tailscale の受信フィルタ） | 全送信元から全ポート許可。原因ではない |
-| Hyper-V ファイアウォール（WSL の VM 向け。既定は受信 Block） | 規則を作っても、**無効にしても**届かない |
-| 標準の Windows ファイアウォール | 規則あり（`Tailscale-In` は全許可）。届かない |
-| WSL の VM の `eth2`（Tailscale）の受信パケット数 | 接続を試した間も増えない。パケットが VM に届いていない |
-| `tailscale serve` を設定（規則なし） | **届く** |
+mirrored では、Tailscale のアドレス（`100.x`）への 50022 が WSL の VM に転送されない。そのため、規則ではなく `tailscale serve` を使う。
+Windows 自身の sshd（22）はホストで受けるので Tailscale 経由でも届く。確認した層ごとの結果と実測は [記録](../research/chezmoi/structure-wsl-time-and-ssh-notes.md)。
 
 #### LAN の IP を直接指定する場合
 
 LAN の IP（`<LAN の IP>:50022`）を直接指定する接続は、ファイアウォールの規則が要る可能性が高い
 （Tailscale は同じ LAN 内では直接接続するので、通常は不要）。2 つの層（Hyper-V ファイアウォールの規則と、
 標準の Windows ファイアウォールの規則）のどちらが単独で必要かは**未確定**。
-2026-10-18 に「標準の規則を消すと LAN から届かなくなった」と記録したが、2 つの規則を同じ名前にしていて
-`Remove-NetFirewallRule -Name` が Hyper-V の規則も消した可能性があり、単独の必要性を示す実験になっていない。
+実験の経過は [記録](../research/chezmoi/structure-wsl-time-and-ssh-notes.md)。
 必要になったら、規則を **別々の名前**で作ること（同じ名前だと片方だけの操作ができない）。
 
 ```powershell
@@ -400,14 +382,11 @@ applejxd の全 PC で、**WSL 本体だけ**を入れる。ディストロは�
 - 判定は `wsl.exe --version` に加えて `vmcompute` サービスの有無も見る（`wsl.exe` だけ入って `VirtualMachinePlatform` が無いと distro 起動が `HCS_E_SERVICE_NOT_AVAILABLE` で失敗する）。導入時は `dism` で機能を明示的に有効化し、`hypervisorlaunchtype` が Off なら `auto` にする
 - 有効化直後は再起動するまで `vmcompute` が現れないので、導入後の再判定で `WslPlatform` が残っても失敗にせず「再起動して `mise run restore:wsl`」と警告する
 - **`VirtualMachinePlatform` の有効化には再起動が要る。** 導入した直後でも `wsl --version` は成功するので、309 は再起動の要否を判定できない。導入したときは「再起動が要る」とログに出す
-- 実測（2026-10-12、ビルド 26300）: 管理者の `cmd` で `wsl --install --no-distribution` を実行すると、`VirtualMachinePlatform` の有効化（要再起動）と WSL 3.0.1 の導入が済んだ。`wsl --version` は 3.0.1.0（カーネル 6.18.40.1）。
-  `wslc`（WSL containers）の CLI は、再起動後の確認が残っている。winget の `Microsoft.WSL` は 2.7.13 で遅れているため使わず、`wsl --update`（Store）で最新にする
-- 「WSL 3」は、WSL パッケージの版が 3.0 になったという意味で、新しい方式ではない（担当 PM は「WSL 3 というものは無い」と述べている）。3.0.1 は WSL containers（`wslc`）の一般提供（2026-09-29）
+- `winget` の `Microsoft.WSL` は版が遅れているため使わず、`wsl --update`（Store）で最新にする。実測と「WSL 3」の意味は [記録](../research/chezmoi/structure-windows-notes.md)
 
 ### GPU の電力上限（`GpuPowerLimit`）
 
-`heimdall-ufbs-010` の RTX 3070 だけ、電力上限を 150 W にする。2026-10-17 から 18 にかけて 2 回止まり（Kernel-Power 41）、
-電力上限を下げたらクラッシュしなくなった（下記「実測」）。
+`heimdall-ufbs-010` の RTX 3070 だけ、電力上限を 150 W にする。RTX 3070 で起きたクラッシュへの対策（経過は [記録](../research/chezmoi/structure-windows-notes.md)）。
 
 - **対象の限定**: テンプレートで `applejxd` かつ hostname `heimdall-ufbs-010` のときだけ有効にし、実行時にも `nvidia-smi --query-gpu=name` が `RTX 3070` を含むときだけ対象にする（GPU を替えた・ドライバが無い PC では何もしない）
 - **永続しない**: Windows では電力上限（`nvidia-smi -pl`）が再起動・ドライバのリセット・スリープ復帰で既定値へ戻り、永続化の手段が無い（Linux の `-pm` は WDDM では使えない）。そこで SYSTEM のスケジュールタスク `gpu-power-limit` が設定し直す
@@ -418,9 +397,7 @@ applejxd の全 PC で、**WSL 本体だけ**を入れる。ディストロは�
 - **検証（昇格後）**: タスクを即時実行し、最大 60 秒、`power.limit` が 150 W になることを確かめる。ならなければ失敗にする
 - 150 W は `nvidia-smi -pl` で手動設定してクラッシュが止まった値。変える場合は 309 の `$GpuPowerLimitWatts`
 
-実測: ダンプ（`C:\Windows\Minidump\101726-11968-01.dmp`）の停止コードは 0x133（`DPC_QUEUE_EXECUTION_TIMEOUT_EXCEEDED`）、
-スタックは `nvlddmkm`（NVIDIA ドライバ）の割り込み処理で、実行中のプロセスは `vmmemWSL` だった。2 回目は BSOD のダンプが無く、
-直前に dxgkrnl の LiveKernelEvent 0x193 が出ていた。原因がドライバかハードかは未確定。
+実測（ダンプ・原因の切り分け）は [記録](../research/chezmoi/structure-windows-notes.md)。
 
 ### 昇格の仕組み
 
@@ -489,7 +466,7 @@ winget の既定は user scope なので、user 版があるものは UAC なし
   （0 = 無効 / 1 = forceNewWindow / 2 = disableInput / 3 = normal。`microsoft/sudo` のソースで確認）。**有効な方式は選び直さない**。
   chezmoi 自身は `sudo` を使わない。対話で管理者のコマンドを打つための便利機能で、`forceNewWindow` は新しい窓で実行し、`sudo` のたびに UAC の確認が出る
   （`normal` は、昇格していないプロセスが昇格したプロセスへ入力できる恐れがあると公式が警告しているので選ばない）。
-  scoop の `sudo`（2020 年の近似実装）は導入しない。実機で、検出（未有効 → 次の apply で UAC）と昇格なしの失敗の扱いを確かめ、**UAC の承認を通した有効化も確認した**（2026-10-12。`Enabled` が 1、`sudo config` が forceNewWindow を示した）
+  scoop の `sudo`（2020 年の近似実装）は導入しない。実機での確認は [記録](../research/chezmoi/structure-windows-notes.md)
 - **sshd の既定シェル**: `applejxd` のとき、`HKLM\SOFTWARE\OpenSSH\DefaultShell` を `%ProgramFiles%\PowerShell\7\pwsh.exe` にする（未設定だと `cmd.exe`）。
   MSIX 版の `pwsh` は `WindowsApps` の版つきのパスで、更新のたびに変わり、指していると ssh のログインが全部失敗する。そのため
   `winget install Microsoft.PowerShell --installer-type wix --scope machine --force` で**固定パスの MSI 版**を別に入れる（MSIX 版と併存。`--force` が
@@ -554,20 +531,11 @@ PATH を読み直す・永続化する処理は、`home/.chezmoitemplates/powers
 | `Add-UserPathEntry` | User の PATH へ永続的に追記する。既にあれば追記しない。レジストリへ REG_EXPAND_SZ で直接書き、`WM_SETTINGCHANGE` を送る。既に REG_SZ へ降格している場合は、追記が無くても同じ値を REG_EXPAND_SZ で書き直す |
 
 - `[Environment]::SetEnvironmentVariable` と `setx` で PATH を書かない。REG_EXPAND_SZ を REG_SZ に降格させ、
-  PATH 内の `%USERPROFILE%` などが展開されなくなるという報告がある
-  （<https://stackoverflow.com/questions/714877/setting-windows-powershell-environment-variables>、
-  <https://github.com/Gentleman-Programming/gentle-ai/issues/5581>、いずれも 2026-10-21 取得）。
+  PATH 内の `%USERPROFILE%` などが展開されなくなるという報告がある。
   試験でこの書き方の再導入を止めている（`test_env_path_template_writes_user_path_as_expand_string`）
-- 以前の `314` は `SetEnvironmentVariable('Path', …, 'User')` で追記していた。この書き方で実際に降格した PC が
-  あるかは未確認。確かめるには `(Get-Item HKCU:\Environment).GetValueKind('Path')` が `ExpandString` かを見る
-- GUI（システムの詳細設定）の環境変数エディタは 1 変数 2047 文字まで。超えた PATH を保存すると末尾が無警告で切れる
-  という報告がある（<https://stackoverflow.com/questions/60231125/environment-variable-is-too-large>、
-  <https://github.com/microsoft/winget-cli/issues/3601>）。PATH を長くしすぎない。長さを根本から減らす手段は、
-  ツールごとの PATH 追加をまとめる shim ディレクトリ（mise の shims など）へ寄せること
-- Zed の統合ターミナルで PATH が途中で切れる・更新が反映されない報告がある
-  （<https://github.com/zed-industries/zed/issues/40837>、<https://github.com/zed-industries/zed/issues/51349>）。
-  この repo の環境での原因は未確定
-- 未検証: Windows 実機での共通関数の動作（この環境には pwsh がなく、構文検査もしていない）
+- GUI の環境変数エディタは 1 変数 2047 文字までで、超えた PATH は末尾が無警告で切れるという報告がある。
+  PATH を長くしすぎない。長さを根本から減らす手段は、ツールごとの PATH 追加をまとめる shim ディレクトリ（mise の shims など）へ寄せること
+- 上の報告の出典（URL・取得日）、Zed の統合ターミナルの報告、未確認・未検証の事項は [記録](../research/chezmoi/structure-windows-notes.md)
 
 ### Windows の node / uv / fzf / jq
 
@@ -629,15 +597,15 @@ seccomp フィルタは手で `npm install -g` する必要はありません。
 
 ### github backend で版を固定している Fence
 
-`github:fencesandbox/fence` は OpenCode の隔離起動（`ocs`）が境界を張る道具です
-（[OpenCode 隔離起動](sandbox/opencode-sandbox.md)）。Linux / WSL だけに入れます。
+`github:fencesandbox/fence` は、`ocs`（OpenCode の隔離起動。[OpenCode 隔離起動](sandbox/opencode-sandbox.md)）と
+`pis`（pi のサンドボックス起動。[pi のガード](guard/pi-guard.md#起動)）が境界を張る道具です。Linux / WSL だけに入れます。
 
 - **版とチェックサムを固定しています。** 0.1.x で開発元が 1 社のため、`latest` で
   追わず、上げるときは Releases の `checksums.txt` の値を `platforms.<os>-<arch>.checksum`
   に写します（`linux-x64` と `linux-arm64`）。mise は落とした tar.gz の sha256 を照合し、
   違えば導入を止めます
-- `ocs` は `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence` を
-  絶対パスで呼びます（`[opencode.sandbox] runtime_path`）。境界の設定は実体の有無に
+- （OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中）`ocs` は `~/.local/share/mise/installs/github-fencesandbox-fence/latest/fence` を
+絶対パスで呼びます（`[opencode.sandbox] runtime_path`）。境界の設定は実体の有無に
   関係なく生成され、実体が無ければ `ocs` が起動を断ります（`mise install` で入れる）
 - Claude Code の sandbox は引き続き `npm:@anthropic-ai/sandbox-runtime` を使います
 
@@ -651,13 +619,9 @@ Windows の pi は、mise の `aqua:earendil-works/pi`（ビルド済みバイ�
 - 選んだ理由: npm 版は node の解決順に左右される。Machine PATH に古い node があると、pi の導入も起動も失敗する
   （Sandbox で再現）。バイナリ版は node を使わないので、この種の障害が起きない。WSL / Linux の `~/.pi/agent/bin/pi`
   と同じバイナリでもある。公式の `install.ps1` は `Read-Host` で確認を聞き、apply では答えられない
-- 実測（Windows、隔離した mise 環境）: 導入は 3〜4 秒。起動は実体 0.45 秒、shim 経由 0.51 秒、npm 版 0.41 秒。
-  自作の `.ts` 拡張を読み、Copilot モデルで応答する。起動引数（複数行・引用符・`%` `$` `&` `|`・日本語）は、
-  実体も shim も欠けずに届く
 - バイナリ版は `process.argv[1]` が仮想パス（`B:/~BUN/root/pi.exe`）で、CLI ファイルではない。
   `subagents` はこれを子の引数に渡さないようにした（`childArgs`、試験あり）
-- 未確認: 稼働中の `pi.exe` を更新できるか（ファイルロック）、Defender・制約のある環境の実行制限、全自作拡張のバイナリでの動作、
-  `mise use -g` での shim と旧 `pi.cmd` の PATH 競合（`314` が旧版を外すので起きない想定）
+- 導入・起動の実測と未確認事項は [記録](../research/chezmoi/structure-windows-notes.md)
 - 旧 npm 版が残る PC は、`npm uninstall -g @earendil-works/pi-coding-agent` で外す（`314` が自動で行う）
 
 ## AI CLI の導入
@@ -744,10 +708,11 @@ mise の shim が残って優先される場合は `mise reshim` を実行して
 
 ### oh-my-pi（`omp`）の設定
 
-`omp` は試用中です（[CHG-0006](../change/closed/0006-pi-harness-trial.md)）。
+`omp` は試用の案件（[CHG-0006](../change/closed/0006-pi-harness-trial.md)。閉じた案件で、第一サポートは pi。
+`omp` は導入と設定の取り込みまでで、以後は使っていない）で入れたもので、導入は続けています。
 Linux / WSL / macOS で `curl -fsSL https://omp.sh/install | sh` により導入します。
 Pi のフォークで、LSP 統合・DAP・subagent を持ちます。起動は `omp` で、
-境界（`ocs`）の外で動きます。
+境界（`ocs` / `pis` の Fence）の外で動きます。
 
 **`omp` は `~/.claude` を設定探索ルートに含みますが、他ツールのユーザ領域は
 既定で 1 つも読みません**（`enabledProviders` の既定が空）。
@@ -894,10 +859,7 @@ Copilot CLI がツールとして起動するシェルへ渡す git の既定値
    読み込み元が `shellrc.sh` だけなので、対話シェル専用であることは変わらない。
    小さい関数は `shellrc.sh` に残す。zsh の `autoload` は bash で使えないので採らない。
 
-参考にした記事（tellme.tokyo の AI-first dotfiles）のうち、Nix 化・`rm` を `gomi`
-に差し替える alias・`is_human` による人間判定は採らない。それぞれ、導入物の管理を
-mise に統一している方針と合わない、標準コマンドの意味を変えない方針（3）と
-合わない、判定を環境変数の列挙に頼るため（2）である。
+Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判定は採らない（検討した記事との比較は [記録](../research/shell/structure-shell-notes.md)）。
 
 検査は `test/test_shell_startup.py`（非対話 zsh / login bash の alias・環境変数・
 出力、`.zshrc` の早期 return、`shellenv.sh` 単体、`functions/` の読み込み、`zpack`、
@@ -1002,10 +964,7 @@ a.cpp -- foo                   # プログラムに引数を渡す
 `coding-test` プロファイルは別で、その WSL 拡張だけ `347` が入れる
 （[次節](#コーディング試験の練習用-vs-codecode-exam)）。
 
-拡張導入スクリプト（旧 `112` / `340`）を廃止した理由:
-拡張の一覧が Linux 約 30 個・Windows 約 10 個で食い違い、実際に使う拡張（ある WSL で 53 個）と
-大きくずれていた。112 は WSL と Raspberry Pi では動かず（`110_native/` を除外）、
-ネイティブ Ubuntu のデスクトップだけが対象だった。最近 VS Code を使うことも減った。
+拡張導入スクリプト（旧 `112` / `340`）は廃止した（理由は [記録](../research/shell/structure-shell-notes.md)）。
 
 ## コーディング試験の練習用 VS Code（code-exam）
 
@@ -1058,11 +1017,7 @@ WSL 拡張だけで、AI 機能のオフ（右下のメニューか `settings.js
 - HackerRank 本番では外部エディタからの貼り付けやタブの切り替えが記録されるため、
   本番は HackerRank のエディタで解く。この関数は練習専用
   （[Test Integrity](https://support.hackerrank.com/articles/1079706165-proctoring-hackerrank-tests)）
-- `--user-data-dir` で設定ごと分ける案は採らない。WSL の `code` は
-  remote CLI を経由し、`user-data-dir` を Windows 側へ渡さずに捨てる
-  （VS Code の `src/vs/server/node/server.cli.ts` の `isSupportedForCmd`）。
-  `Code.exe` を直接呼べば回避できるが、VS Code の内部の起動手順に依存する。
-  `--profile` は WSL からも渡る
+- `--profile` で分ける（WSL からも渡る）。`--user-data-dir` で分ける案を採らない理由は [記録](../research/shell/structure-shell-notes.md)
 - `--disable-extensions` でも、WSL への接続に使う拡張（resolver）は有効のまま残る
   （`extensionEnablementService.ts` の `_isDisabledInEnv`）。ただし例外になるのは
   プロファイルに入っている拡張だけなので、上の初回手順が要る。厳密には
@@ -1076,15 +1031,9 @@ WSL 拡張だけで、AI 機能のオフ（右下のメニューか `settings.js
 
 ## zsh の起動時間
 
-`zsh -i -c exit` の実測（WSL2、2026-10-18）。数値の根拠は
-`docs/research/shell/zsh-startup-time.md`（[記録](../research/shell/zsh-startup-time.md)）。
-診断は `zmodload zsh/zprof` 後に `source ~/.zshrc; zprof`、区間ごとの時間は
-`EPOCHREALTIME` で測る。
-
-| 状態 | 時間 |
-| --- | --- |
-| 改善前 | 0.37〜0.40 s |
-| 改善後 | 0.24〜0.25 s |
+現在は `zsh -i -c exit` で 0.24〜0.25 s（WSL2。改善前は 0.37〜0.40 s）。測定の記録は
+[記録](../research/shell/zsh-startup-time.md)。
+診断は `zmodload zsh/zprof` 後に `source ~/.zshrc; zprof`、区間ごとの時間は `EPOCHREALTIME` で測る。
 
 効いた原因と対処:
 
@@ -1125,12 +1074,12 @@ macOS では同じです。
 
 ## Envoy の取得
 
-`pis` の Copilot ブローカー（[opencode-sandbox.md](sandbox/opencode-sandbox.md#copilot-ブローカーpis-のみ)）が使う Envoy は、
+`pis` の Copilot ブローカー（[認証ブローカー](sandbox/broker.md#copilot-ブローカー)）が使う Envoy は、
 `chezmoi apply` が `home/.chezmoiexternal.toml.tmpl` で `~/.local/bin/envoy` へ取得します。
 固定版（v1.40.1）の公式リリースのバイナリを、`checksum.sha256` で照合します（chezmoi が検証）。
 
 - **対象**: Linux / WSL で、`llm-provider` が `github-copilot` の機、Raspberry Pi 以外、amd64 と arm64 だけ
-  （Envoy は macOS・Windows のバイナリを配布していない。制約のある環境の機は、Bedrock の対応（CHG-0037 段 U7b）まで対象外）
+  （Envoy は macOS・Windows のバイナリを配布していない。制約のある環境の機（Bedrock を使う機）は、Bedrock の対応（[CHG-0037](../change/0037-pis-usability-and-telemetry.md)）まで対象外）
 - **更新手順**: 公式リリースの `checksums.txt.asc` から、`envoy-<版>-linux-x86_64` と `envoy-<版>-linux-aarch_64` の
   sha256 を取り、`.chezmoiexternal.toml.tmpl` の版・URL・sha256 を 3 つ同時に書き換える（署名の検証は任意）
 - **sha256 の限界**: 同じリリースの checksums との一致で、改ざん検知の根拠は弱い（署名の検証は未実施）
@@ -1154,7 +1103,7 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
 新しい機械では apply に git とネットワークが要り、取得に失敗すると apply が
 エラーになります。
 
-### zinit の遅延読み込みの順序
+## zinit の遅延読み込みの順序
 
 `home/dot_zshrc.tmpl` は重いプラグインを `wait` ice で遅延読み込みし、
 `wait'0a'` → `'0b'` → `'0c'` の順に読み込ませます。
@@ -1165,7 +1114,7 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
   増やさず、同じ文字の中で並べる（ohmyzsh の `lib/git.zsh` や docker 関連は
   `'0c'` で fzf-tab の後に置いている）
 
-### fzf の関数
+## fzf の関数
 
 `~/.config/shell/fzf.sh` は、fzf がある場合だけ `.bashrc` / `.zshrc` から
 読み込まれる入口です。同じ階層の `fzf/` にある次の 3 ファイルを順に読み込みます。
@@ -1248,12 +1197,12 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
   引けず、既定のpowerlineテーマに戻ります。
 - **oh-my-posh のテーマ**: `POSH_THEMES_PATH` の `pure.omp.json` があればそれを、無ければ `~/.config/powershell/themes/pure.omp.json`
   （同梱の複製）を使います。winget の MSIX 版（`ohmyposh.cli`）は `POSH_THEMES_PATH` を設定せず、
-  従来はテーマが見つからないまま既定のプロンプトで起動していました（2026-10 実測、31.7.0）。
+  従来はテーマが見つからないまま既定のプロンプトで起動していました（[観測](../research/chezmoi/structure-windows-notes.md)）。
 - **PATHを冪等に更新する**: `mise activate` は毎回PATHの先頭へ追加するため、
   追加後に重複を畳みます。
   あわせて未展開の `%VAR%`（例: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps`）を展開します。
   ssh（`sshd`）経由のセッションは、ユーザー PATH の `%VAR%` を展開せずに渡し、MSIX 版 oh-my-posh の
-  エイリアス（`WindowsApps`）が見つからずテーマが出なかった（2026-10 実測。展開済みのパスを直接指せば実行できた）。
+  エイリアス（`WindowsApps`）が見つからずテーマが出なかった（[観測](../research/chezmoi/structure-windows-notes.md)）。
 
 この構成にしたときの起動時間の計測は
 [PowerShell プロファイルの起動時間](../research/shell/powershell-profile-startup.md)
@@ -1280,8 +1229,7 @@ prefix + U）。取り直すときはパスを消してから `chezmoi apply --r
   違う値が見つかれば警告する（グループポリシーなどが上書きしている可能性）が、`apply` は止めない。蓋・無人時のスリープのように、機種に無く読めない任意の設定は確かめない。
   実機で、実際の実行は警告なし、期待値を変えた複製では警告が出ることを確かめた
 - **グループポリシー**で電源設定が固定されている機械では、`powercfg` の値が上書きされる（未確認）
-- 実機の確認: 通常権限で 2 回実行し、2 回目も同じ値になること、`STANDBYIDLE` の AC が 0・DC が 600 になることを `powercfg /q` で確認した。
-  蓋と無人時のスリープは、この機にその設定が無く、値を読み取れなかった（デスクトップ機。ノート PC での挙動は未確認）
+- 実機の確認は [記録](../research/chezmoi/structure-windows-notes.md)
 
 ## Tailscale の Unattended
 
@@ -1305,9 +1253,7 @@ Windows 11 は、スクリプトから既定のアプリを設定させない（
 
 までを自動化する。**ダブルクリックで解凍させるには、設定で一度だけ「7-Zip (extract)」を既定に選ぶ必要がある**（手動）。
 
-- 実機（ビルド 26300）の `.zip` は、`UserChoice` が `CompressedFolder` のまま（2026-10-11 実測）。従来のスクリプトは ProgID のコマンドだけを書いており、
-  この機の 7-Zip は ProgID も `RegisteredApplications` も登録しないため、選ぶ手段が無く、事実上効いていなかった
-- 登録内容は 2 回目の実行で変化しない（値が揃っていれば何もしない）ことを実機で確かめた。設定画面の「既定のアプリ」に「7-Zip (extract)」が出ることを、目視で確認した（2026-10-12）
+- 経緯と実機の確認は [記録](../research/chezmoi/structure-windows-notes.md)
 
 ## 広告と推奨の抑止
 
@@ -1324,12 +1270,7 @@ Windows 11 の広告・推奨・おすすめ表示を止める。HKCU の値は 
 | 言語リストの公開（1 = 拒否） | `Control Panel\International\User Profile\HttpAcceptLanguageOptOut` |
 
 - Windows が書き込みを拒む値は、警告して残りを続ける
-- **タスクバーの天気（ウィジェット）は、レジストリを直接書いても止められない。自動化もしない（手動）。** 実測（2026-10-11、ビルド 26300）:
-  - 対象の値は 2 つで、どちらも保護されており、次の書き込みがすべて拒否された:
-    `HKCU\...\Explorer\Advanced\TaskbarDa`（通常権限）と `HKLM\SOFTWARE\Policies\Microsoft\Dsh\AllowNewsAndInterests`（管理者・SYSTEM）
-  - 試した方法: `Set-ItemProperty` / `New-ItemProperty`、.NET の `Registry.SetValue`、`reg add`、`reg import`、**SYSTEM のスケジュールタスクでの `reg add`**
-    （HKCU は昇格なしで 4 方法、HKLM は管理者で 4 方法 + SYSTEM タスク。すべて「アクセスが拒否されました」）
-  - `Dsh` キー自体の ACL は普通（Administrators に FullControl）で、別名の値は書ける。**値名に対する保護**と見られる（公式資料に記載は無く、推測）
+- **タスクバーの天気（ウィジェット）は、レジストリを直接書いても止められない。自動化もしない（手動）。** 試した方法と結果は [記録](../research/chezmoi/structure-windows-notes.md)。
   - **ローカルグループポリシー経由なら書ける（実測）。** `gpsvc`（ポリシーを適用する SYSTEM のサービス）が書くため。
     `AllowNewsAndInterests` は Policy CSP の公式ポリシー（Pro・Windows 11 21H2 以降。値 0 でタスクバーを含むウィジェット全体を無効。
     [Policy CSP - NewsAndInterests](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-newsandinterests)）
@@ -1338,9 +1279,7 @@ Windows 11 の広告・推奨・おすすめ表示を止める。HKCU の値は 
     または、管理者の PowerShell で LGPO（`winget install Microsoft.SecurityComplianceToolkit.LGPO`）を使う:
     `Set-Content widgets.txt -Encoding ASCII -Value 'Computer','SOFTWARE\Policies\Microsoft\Dsh','AllowNewsAndInterests','DWORD:0',''`、
     `LGPO /t widgets.txt`、`gpupdate /target:computer /force`（戻すときは `DWORD:0` を `DELETE` にして同じ手順）。**全アカウントに効く**
-  - 自動化するなら（未実施の設計）: 昇格子が `LGPO.zip`（`download.microsoft.com/download/8/5/c/85c25433-a1b0-4ffa-9429-7e023e7da8d8/LGPO.zip`、SHA-256 `cb7159d1…cc55`、
-    Authenticode は Microsoft で有効）を管理者だけが書ける場所へ取得・検証して実行し、入力は固定内容にする。ユーザーが書ける場所の `.exe` は実行しない
-- 実機の確認: HKCU の値は 2 回の実行で書き込まれ、警告は出なかった（保護されたキーは無かった）
+  - 自動化する設計（未実施）は [記録](../research/chezmoi/structure-windows-notes.md)
 - 抑止しないもの: タスクビューボタン、タスクバーの検索ボックスの形、Copilot のボタン（好みで決める）
 
 ## シェルの既定値
@@ -1356,7 +1295,7 @@ Windows 11 の広告・推奨・おすすめ表示を止める。HKCU の値は 
 - **グループポリシー**（`...\Policies\Microsoft\Windows\PowerShell`）で固定されていれば、警告して何もしない
 - `Set-ExecutionPolicy` は使わず、レジストリへ直接書く（モジュールの読み込みに依存しないため）
 - 既定のターミナルは、Windows Terminal（`wt.exe`）がある機械だけ設定する
-- 検証: 一時キーに向けた複製で、1 回目に設定、2 回目は変更なし、`Bypass` は維持されることを確認した。実機の `HKCU` は、実行ポリシーが既に `RemoteSigned` で、既定のターミナルは未設定だった
+- 検証の記録は [記録](../research/chezmoi/structure-windows-notes.md)
 
 ## Windows Terminal
 

@@ -1,9 +1,9 @@
 # 判定 API（`decide`）
 
 pi のフルガードが、ツールの呼び出しを実行してよいかを問い合わせる判定器。CLI に依存せず、
-**どの入力にも allow / ask / deny と理由を返す**。判定の中身は Claude Code / Copilot CLI の
-hook（`check_bash.py` / `check_file_read.py`）と同じ `bashrules` と `command_policy.py` を使う。
-hook の出力は変えない（`check_bash.py` はこの判定器を使わない）。
+**どの入力にも allow / ask / deny と理由を返す**。本番の実装は TS 版（`home/dot_config/pi/harness/judge/`。[TS 版への移植](#ts-版への移植)）。
+Python 版（`decide.py` と、`bashrules` / `command_policy.py`）は、TS 版の正解データの出力元として残っている（撤去は [CHG-0035](../../change/0035-retire-python-judge-oracle.md)）。
+以下の `check_bash.py` は Claude Code / Copilot CLI の Python 版の hook の名前で、判定の hook の登録は外してある。`check_bash.py` はこの判定器を使わない。
 
 移行の計画と経緯は [CHG-0020](../../change/0020-pi-migration.md)。呼び出し側は [pi のガード](pi-guard.md)。
 
@@ -12,7 +12,7 @@ hook の出力は変えない（`check_bash.py` はこの判定器を使わな�
 | 実体 | 配置先 | 役割 |
 | --- | --- | --- |
 | `home/dot_claude/hooks/executable_decide.py` | `~/.claude/hooks/decide.py` | CLI。stdin の JSON を 1 つ読み、stdout に応答を 1 つ書く |
-| `home/dot_claude/hooks/lib/decide.py` | `~/.claude/hooks/lib/decide.py` | `decide(request)` の本体 |
+| `home/dot_claude/hooks/lib/decide.py` | `~/.claude/hooks/lib/decide.py` | `decide(request)` の本体（Python 版。正解データの出力元。本番の判定は `judge/decide.ts`） |
 | `home/dot_config/agents/common.toml.tmpl` の `[pi]` | `~/.config/agents/common.toml` | 役割（`[pi.profiles]`）と、pi が正本の共有の節（[pi と共有する節](../agent-config-generation.md#pi-と共有する節)） |
 
 `~/.claude/hooks/` に置くのは、判定の中身（`bashrules`）がそこにあるため。`AGENTS_CONFIG_DIR` で
@@ -140,7 +140,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 計測した頭数は少ない（利用者の設計としては「うっかり防止」で、悪意の回避は対象外。`timeout 30 sleep 30`、`bash -c 'sleep 30'`、`read -t 30`、`sleep 9; sleep 9` は通る）。
 連結や `bg_log` の連打で待つ形は、規則では止めず、`bg_run` / `bg_log` の説明・戻り値の「通知が届くので待たない」の案内で減らす（[ツール側に置く理由と経緯](pi-guard.md)）。
 `scope` 付きの id を `[[opencode.shell.guide]]` の `pi = "<id>"` から参照すると、生成で止まる（OpenCode の guide plugin は scope を読まず、意味が変わるため。`test_bad_guide_references_stop_generation`）。
-この規則は、利用者の、「sleep で会話を止めない」という提案（2026-10-20）から。実モデルで「30 秒待ってから実行」を依頼し、`sonnet-5.5`・`gpt-6-sol` とも、`bg_run` で待ち、完了通知で報告した。
+この規則の由来と実モデルでの確認は[記録](../../research/agents/pi-decide-guide-sleep-origin.md)。
 
 `bg-run-instead-of-ampersand` は pi 専用。`&&` / `2>&1` / `&>` / `|&` / URL の `?a=1&b=2` は当たらない。
 引用内の `a & b`（`echo "Q & A"`、`git log --grep='a & b'`、`echo a \& b`、ヒアドキュメント本文、コメントなど）は、引用と区別できないので**当たる**
@@ -154,7 +154,8 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
   並びのどこに差し込むかを決める（[pi と共有する節](../agent-config-generation.md#pi-と共有する節)）
 - 正規表現は Python（判定器）と JavaScript（guide plugin）の両方で同じ意味になるものだけを書く。
   `test_pi_shared.py` が代表のコマンドで両方の結果を突き合わせる
-- OpenCode の誘導のうち、次は pi には入れていない（判定器のほかの規則で足りる）
+- OpenCode の誘導のうち、次は pi には入れていない（判定器のほかの規則で足りる）。
+  > OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は[評価の順番](#評価の順番)。
 
 | OpenCode の誘導 | pi で入れない理由 |
 | --- | --- |
@@ -189,59 +190,41 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 
 - 契約: 不正な入力と、CLI の空・不正な入力が、形の正しい deny になる
 - 評価順: bash・ファイル・役割・bypass・skill のスクリプトの代表例
-- **等価**: `test_check_bash_*.py` の `parametrize("command", …)` に並ぶ全コマンド（1000 件余り）を
+- **等価**（Python 版の hook と Python 版の `decide()` の照合。TS 版は[差分試験](#差分試験正解データ)）: `test_check_bash_*.py` の `parametrize("command", …)` に並ぶ全コマンド（1000 件余り）を
   `check_bash.py` と判定器の両方に通し、hook の deny / ask と判定器の decision が一致し、hook が何も
   返さないものを判定器が規則や意味解析で止めないことを確かめる
 
 ## TS 版への移植
 
-pi だけを使う前提で、判定器を TypeScript に移し、フルガードのプロセスの中で動かす計画（`docs/change/0020-pi-migration.md`）。
-外部プロセスの起動をやめ、Windows の `python3` の壁と、判定のたびのプロセス起動の費用をなくす。
-**移植は途中**で、フルガードはまだ Python 版（`decide.py`）を呼んでいる。
-
-| 層 | 中身 | 状態 |
-| --- | --- | --- |
-| C | `decide.py` の入口・役割・ファイルの判定・bypass | 移植済み（`home/dot_config/pi/harness/judge/decide.ts`） |
-| A（glob） | `command_policy.py` の設定の読み出しと glob 照合 | 移植済み（`judge/policy.ts`） |
-| A（正規化） | `command_policy.py` の `normalize` / `find_match`（`shlex` 相当を含む。約 900 行） | 移植済み（`judge/normalize.ts`、Python 互換の部品は `judge/pystr.ts`）。部品ごとの正解データと 9,199 件が全件一致 |
-| B | `bashrules/` の各検査（約 3,900 行）と `tables.toml` | 未着手 |
-| 生成 | `common.toml` を JSON にして配る（TS は TOML を読まない） | 試験用の `golden/common.json` だけ。配布の生成は未着手 |
+判定の本番は TS 版（`home/dot_config/pi/harness/judge/`）で、フルガードがプロセスの中で呼ぶ。
+Python 版（`decide.py`・`bashrules/`・`command_policy.py`）は**撤去されておらず**、
+TS 版の正解データの出力元（照合用）として残る。Claude Code / Copilot CLI の判定 hook は登録を外してあり、Python 版は実行時には走らない。
+Python 版の撤去は [CHG-0035](../../change/0035-retire-python-judge-oracle.md)（段 R1〜R5 は未着手）。
+移植の進捗・実測・修正済みの不具合の経緯は、同案件の「判定器の TS 移植の記録（旧 pi-decide.md から移設）」。
 
 ### 差分試験（正解データ）
 
-Python 版の判定結果を正解として、TS 版との全件一致で進捗を測る。
+Python 版の判定結果を正解として、TS 版との全件一致を確かめる。
 
-- `scripts/agents/export_decide_golden.py`: `test_check_bash_*.py` のコマンド × 役割 × bypass、ファイルツール × パス、そのほかのツール、不正な入力の 6,311 件を `decide()` に流し、
+- `scripts/agents/export_decide_golden.py`: `test_check_bash_*.py` のコマンド × 役割 × bypass、ファイルツール × パス、そのほかのツール、不正な入力を `decide()` に流し、
   `test/agents/golden/decide_golden.jsonl`（応答）と `common.json`（描画した `common.toml` の JSON）に書く。パスは `${ROOT}` / `${HOME}` の記号で保存する。
   規則や判定器を変えたら引数なしで書き出し直す。`--check` は全件を作り直して比べる（約 1 分）
 - `test/agents/test_decide_golden.py`: 正解データが Python 版と一致していること（一定間隔の標本）
-- `test/agents/pi/judge_golden.mjs`: TS 版との差分。`node` の型除去で動く（22.18 以上）。`--bash` で bash も必須にする（移植の完了条件）
-- `test/agents/test_pi_judge_ts.py`: 上を pytest から呼ぶ。いまは bash 以外が全件一致であることを必須にしている
-- 部品ごとの正解データ: `scripts/agents/export_policy_golden.py` が、`shlex`・分割・正規化・置換と関数の抽出・`find_match`（deny / ask / allow の各一覧）の Python 版の出力を
-  `golden/policy_golden.jsonl`（9,199 件）に書く。`test/agents/pi/policy_golden.mjs` が TS 版と突き合わせる（食い違ったときに部品を特定できる）。
+- `test/agents/pi/judge_golden.mjs`: TS 版との差分。`node` の型除去で動く（22.18 以上）。`--bash` で bash も必須にする
+- `test/agents/test_pi_judge_ts.py`: 上を pytest から呼ぶ。bash を含む全件の一致を必須にしている
+- 部品ごとの正解データ: `scripts/agents/export_policy_golden.py`（`shlex`・分割・正規化・置換と関数の抽出・`find_match`）が `golden/policy_golden.jsonl` に、
+  `export_checks_golden.py`（検査関数）が検査ごとの正解データに書く。`test/agents/pi/policy_golden.mjs` / `checks_golden.mjs` が TS 版と突き合わせる（食い違ったときに部品を特定できる）。
   `test_pi_judge_ts.py` が全件一致を必須にし、`test_decide_golden.py` が正解データの鮮度を標本で見る
-
-実測（2026-10-13）: 正規化の層（`shlex`・分割・正規化・照合）は、初回から部品ごとの正解データの 9,199 件が全件一致した
-（複数セグメントへの展開 323 件、`shlex` のエラー 11 件、deny / ask / allow に当たる 373 件を含む）。
-bash 以外（ファイル 1,081 件・そのほかのツール 16 件・不正な入力 6 件）は TS 版が初回から全件一致。bash は未移植（5,205 件が食い違い）。
 
 ### 判定が前の呼び出しに依存していた（修正済み）
 
-正解データを作る過程で、**同じ入力でも、同じプロセスで前に何を判定したかで結果が変わる**ことが分かった。
-`bashrules/_shared.py` の `_LITERAL_HEREDOC_BODIES`（引用付き heredoc の本文の記録）はモジュールのグローバルなリストで、
-`split_heredoc_body` が積み、`check_pipe_to_shell` が「記録と同じ本文のセグメントを見送る」ために読む。どこでも消さないので、
-`python3 - <<'PY'` の後に引用なしの `python3 - <<PY`（本文の `$(curl …)` が実行時に展開される）を判定すると、後者の検査が見送られた。
-
-- hook（1 コマンド 1 プロセス）と、フルガードが呼ぶ `decide.py`（呼び出しごとに新しいプロセス）では起きない
-- 起きるのは、同じプロセスで続けて判定したとき（試験、将来の常駐化・TS 版）。**TS へ移すときにこのグローバルな記録を写してはいけない**（判定ごとの状態にする）
-- 対処: `decide()` が bash を判定する前にこの記録を空にする。試験 `test_decision_does_not_depend_on_earlier_calls` を足した。
-  `test_decide` の hook との等価試験のドライバも、コマンドごとに空にした（以前は hook 側も同じ汚染を受けていて、両方が同じ誤りで一致していた）
-- 正解データは、新しいプロセスで流した結果と一致することを標本（120 件）で確かめた
+同じ入力でも、同じプロセスで前に何を判定したかで結果が変わる不具合があった（`bashrules/_shared.py` の `_LITERAL_HEREDOC_BODIES`、引用付き heredoc の本文の記録がモジュールのグローバルに残る）。
+**TS 版へ写してはいけない（判定ごとの状態にする）**。Python 版は `decide()` が bash の判定の前にこの記録を空にする。
+試験は `test_decision_does_not_depend_on_earlier_calls`。経緯と標本の確認は[移植の記録](../../change/0035-retire-python-judge-oracle.md)。
 
 ### 状態
 
-層 B（`bashrules`）まで、**TS 版が Python 版の正解データと全件一致**している（`node test/agents/pi/judge_golden.mjs --bash`。
-bash 5,208・file 1,081・invalid 6・other 16）。検査関数 32 種は `checks_golden.mjs` でも個別に一致する。
+TS 版は、Python 版の正解データと全件一致している（`node test/agents/pi/judge_golden.mjs --bash`。検査関数は `checks_golden.mjs` でも個別に一致する）。
 
 - 土台: `judge/pathutil.ts`・`context.ts`（`Ctx`）・`shellparse.ts`・`shared.ts`・`pystr.ts`・`normalize.ts`
 - 検査: `sensitive.ts`・`http.ts`・`rules_exec.ts`・`rm.ts`・`bashpolicy.ts`（policy）・`rules_files.ts`・`rules_guard.ts`・`ghapi.ts`・`docker.ts`
@@ -249,14 +232,14 @@ bash 5,208・file 1,081・invalid 6・other 16）。検査関数 32 種は `chec
 - bash の組み立て: `judge/bash.ts`（`makeBashDecider(tables)`。誘導・役割の shell_deny / shell_allow・skill_scripts）。`decide.ts` の `setBashDecider` へ差し込む
 - 差分試験の約束:
   - 正解データは `None` を書かないので、**記録の無いコマンドは `None` のはず**という照合もしている（TS が誤って理由を返す＝誤検知を拾う）
-  - 当たりが薄い検査は、手書きの入力（`export_checks_golden.py` の `EXTRA_*`）で厚くした。検査を足したら同じ流儀で入力を足す
-  - `urlsplit` / `ipaddress` は CPython 3.13.11 の実装に合わせた（ブラケット前後の文字を拒否する検査を含む）。Python を上げたら `local_url` の正解データで確かめる
+  - 検査を足したら、手書きの入力（`export_checks_golden.py` の `EXTRA_*`）も足す
+  - `urlsplit` / `ipaddress` は CPython 3.13.11 の実装に合わせた。Python を上げたら `local_url` の正解データで確かめる
 - 既知の差: `expandUser` は `~` と `~/` だけを展開する（Python は `~user` も解く）。正解データの範囲では差が出ていない
 
 ### 切り替え（済み）
 
-フルガード（`harness/index.ts`）は、`python3 decide.py` を呼ぶ代わりに、同じプロセスで `judge/decide.ts` の `decide()` を呼ぶ。
-bash は `setBashDecider(makeBashDecider(tables))` で差し込む。判定のたびに 0.1 秒ほどかかっていたプロセス起動が無くなった。
+フルガード（`harness/index.ts`）は、同じプロセスで `judge/decide.ts` の `decide()` を呼ぶ。
+bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
 
 - 設定の渡し方: `generate.py` の `build_pi_harness` が、`rules.json` の `judge` に
   `common`（`common.toml` の `[bash]` / `[file]` / `[pi]`）と `tables`（`home/dot_config/pi/harness/judge/tables.toml`）を JSON で入れる。
@@ -267,11 +250,9 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。判定の�
 
 ### 次
 
-- 撤去: Python 版（`decide.py`・`bashrules` の検査・`command_policy.py` の判定部分）を外す。Claude / Copilot の hook 設定は ADR-0017 の段で消す。
-  それまでは、Python 版が正解データの出力元（`scripts/agents/export_*_golden.py`）なので残す。
-  撤去のときは正解データを固定の入力として残し、`--check` の鮮度検査を外す
-- `tables.toml` の置き場（移設済み）: `home/dot_config/pi/harness/judge/tables.toml`。TS 版が `rules.json` 経由で読む。
-  Python 版の `tables.py` は、同じディレクトリ → リポジトリのソース → 配備先 `~/.config/pi/harness/judge/` の順に探す（Python 版を撤去するまでの橋渡し。
+- Python 版の撤去は [CHG-0035](../../change/0035-retire-python-judge-oracle.md)。撤去のときは正解データを固定の入力として残し、`--check` の鮮度検査を外す方針
+- `tables.toml` の置き場: `home/dot_config/pi/harness/judge/tables.toml`。TS 版が `rules.json` 経由で読む。
+  Python 版の `tables.py` は、同じディレクトリ → リポジトリのソース → 配備先 `~/.config/pi/harness/judge/` の順に探す（撤去までの橋渡し。
   Windows は `harness/` を配らないので、Windows の Python の hook は表を読めず fail-closed で止まる）
 - 構文解析の堅牢化（`shellparse` を正式な構文解析に替える）は別の変更。差分試験を残したまま進める
 
@@ -280,4 +261,4 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。判定の�
 - `[pi.external_read]` だけを開けている。OpenCode が開けている `[opencode.sandbox] work_read`（`~/src` など）は
   まだ読まないので、隣のリポジトリを読むと確認になる
 - `boundary` の緩和は TS 版だけにある（Python 版 `decide.py` は持たない。正解データは `boundary` なしの要求）。試験は `test_pi_judge_ts.py`
-- 1 回の判定ごとに Python を起動する（hook と同じ）。呼び出しの多いフルガードで遅さが問題になるかは未計測
+- フルガードは判定を TS 版で同じプロセスの中で行うので、判定ごとのプロセス起動は無い（[切り替え](#切り替え済み)）。Python 版の `decide.py` を CLI として呼ぶのは正解データの書き出しだけ

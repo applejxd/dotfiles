@@ -1,13 +1,14 @@
 # 文脈の引き継ぎ (checkpoint)
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の圧縮は [圧縮（旧 checkpoint）](guard/pi-guard.md#圧縮旧-checkpoint)。
+
 コンテキスト圧縮を跨いで、作業の経緯・決定・残作業を失わないための仕組み。
 
-> **2026-09-24: OpenCode 専用にした。**
-> 圧縮の捕捉に `session.hook("compaction")`、印の保存に `ctx.storage` と、
-> **OpenCode V2 の独自機能に強く依存する**ため、CLI 横断を諦めた。
-> 置き場も `~/.claude/skills` から OpenCode 標準の
-> `~/.config/opencode/skills` へ移した。経緯は
-> [CHG-0001](../change/closed/0001-compaction-context-handover.md)。
+圧縮の捕捉に `session.hook("compaction")`、印の保存に `ctx.storage` と、
+**OpenCode V2 の独自機能に強く依存する**ため、OpenCode 専用で、CLI 横断はしない。
+スキルの置き場は OpenCode 標準の `~/.config/opencode/skills`。
+経緯は [記録](../research/agents/checkpoint-notes.md) と
+[CHG-0001](../change/closed/0001-compaction-context-handover.md)。
 
 設計判断の理由は [ADR-0009](../adr/0009-save-before-documenting.md)、
 Claude Code / Copilot CLI のイベント仕様は
@@ -134,17 +135,7 @@ OpenCode 専用。`sdd-docs` は markdown を編集して `lint_docs.py` を回�
 依存が無いため、3 CLI に届く `~/.claude/skills` へ置く
 （OpenCode がネイティブに監視し、`~/.copilot/skills` がそこへ張られている）。
 
-分けた理由は 2 つ。
-
-1. **description が 2 つの仕事を名乗っていた。** 「復帰記録を保存する。ADR の
-   作成・更新も行う」という形で、ルーティングの手掛かりが濁っていた
-2. **plugin が A1 を自動化した。** A1 と A2/B を束ねていたのは「先に保存」の
-   順序を 1 ファイルで担保するためだったが、圧縮時の A1 はスキルと無関係に
-   走るようになったので、束ねる必要が薄れた
-
-2026-09-19 に `adr` スキルを `checkpoint` へ統合したのは**これを否定しない**。
-当時退けたのは `context: fork` で動く別スキルで、親の会話を見られず棚卸しを
-渡し直す手間が勝っていた。同じセッションで動く兄弟スキルにはその欠点が無い。
+分けた理由と経緯は [記録](../research/agents/checkpoint-notes.md)。
 
 **残るコスト**: 「先に A1」の順序がスキルを跨ぐ約束になる。両方の `SKILL.md`
 に明記して補う。
@@ -162,8 +153,7 @@ OpenCode 専用。`sdd-docs` は markdown を編集して `lint_docs.py` を回�
 
 - **ID を切り詰めない。** OpenCode のセッション ID は時刻由来で、近い時刻に
   作られたセッション（`ses_f1d80f67affe…` と `ses_f1d80c05cffe…`）は先頭が揃う。
-  2026-09-27 まで使っていた「英数字の先頭 8 文字」ではどちらも `sesf1d80` になり、
-  互いの記録を読み書きした。`paths` が返す `session_short` は表示用で、保存名には
+  互いの記録を読み書きした（以前の「英数字の先頭 8 文字」の失敗は [記録](../research/agents/checkpoint-notes.md)）。`paths` が返す `session_short` は表示用で、保存名には
   使わない
 - **読むときはヘッダの `session:` でも持ち主を確かめる。** 英数字以外を除く正規化は
   可逆ではないので、名前だけでは一意と言い切れない。一致しない記録は `read` が
@@ -185,7 +175,7 @@ OpenCode 専用。`sdd-docs` は markdown を編集して `lint_docs.py` を回�
   そこで消すと復帰の注入を壊す
 - **人が不要と確かめた記録は、名指しで手動削除してよい。** 旧形式や試験の残骸が
   対象。`ctx.storage` の印（`saved:` / `pending:`）は残っても害が小さいので消さない
-  （2026-10-07 に旧形式 2 件とテストが漏らした `checkpoint-sessionm` / `sessiono` を削除）
+  （旧形式の削除の経緯は [記録](../research/agents/checkpoint-notes.md)）
 
 ## 記録の形
 
@@ -306,7 +296,7 @@ uv run --no-project python "$CP" read --session "<セッションID>"
 - **案件の更新（A2）と恒久的な文書化（B）は `sdd-docs` スキルが持つ。**
   文脈が逼迫しているなら A1 を先に終える
 - **OpenCode の実機で、圧縮 → 記録の生成 → ユーザの手番への注入を通しで確かめた**
-  （[CHG-0001](../change/closed/0001-compaction-context-handover.md)「通しの実測」）
+  （[記録](../research/agents/checkpoint-notes.md)、[CHG-0001](../change/closed/0001-compaction-context-handover.md)「通しの実測」）
 - **保存名の変更（完全な ID + ヘッダ照合）と `write` 失敗時の退避は、
   テスト（`test/agents/test_checkpoint*.py`）だけで確認している。** 実機の圧縮では
   未検証

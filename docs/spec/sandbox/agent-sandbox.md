@@ -1,7 +1,9 @@
 # AI CLI の sandbox (Claude Code / Copilot CLI)
 
 Claude Code / Copilot CLI の sandbox 層 (`[sandbox]`) とネットワーク層、
-マシン固有の許可の足し方をまとめる。
+マシン固有の許可の足し方をまとめる。この文書は Claude Code / Copilot CLI の
+sandbox (`[sandbox]`) の仕様で、`pis` の Fence の仕様ではない
+(`pis` の読み手は [sandbox の仕様一覧](index.md) から入る)。
 全体像は [AI CLI 統合 permission / hook 管理](../agent-permissions.md)、
 OpenCode の隔離起動 (`ocs`) は [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md)
 が正本。
@@ -25,7 +27,7 @@ OpenCode の隔離起動 (`ocs`) は [OpenCode 隔離起動のアーキテクチ
 1. **Claude の既定が緩すぎる。** 公式が
    「この既定では `~/.aws/credentials` や `~/.ssh/` も読める」と明記している。
    何もしなければ Copilot より明確に緩くなり、
-   「Copilot が家用で緩め、Claude が制約のある環境用で厳し目」という運用方針が逆転する
+   「Copilot は緩め、Claude は制約のある環境でも使えるよう厳し目」という運用方針が逆転する
 2. **ブラックリストは fail-open。** 列挙し忘れた秘密は黙って読める。
    ホワイトリストは fail-closed で、新しいツールが動かなくなる形で
    気付ける。**壊れ方が見える側**を選んでいる
@@ -60,37 +62,11 @@ Claude と Copilot で既定が逆なので、分けて書く。
 | `/mnt`（WSL の Windows 側） | なし | なし（既定で読める） | なし | 開けていないので見えない（`defaultDenyRead`） |
 | `/tmp` `/var/tmp` `/dev/shm` | なし | なし（既定で読める。ホストと共有） | なし（`$TMPDIR` は既定で read-write） | `/tmp` と `/dev/shm` は専用の tmpfs、`/var/tmp` は見えない |
 
-実測の状況:
-
-- **Claude**: 設定の実測（2026-09-23、`~/.claude/settings.json`）では、
-  `/mnt` `/tmp` 系への指定は無い。
-
-  ```text
-  Claude の denyRead に /mnt・/tmp 系: なし
-  Claude の allowRead に /mnt・/tmp 系: なし
-  ```
-
-  sandbox 内から実際に読めるかは Claude では
-  **未検証**。OpenCode 側では `srt` のころに実測で `/mnt/c/Users` まで読めることを確認して塞いだ
-  （[CHG-0004](../../change/closed/0004-opencode-sandbox.md)、
-  [調査記録 21 節](../../research/opencode/permission/sandbox-runtime.md)）。
-  今の `ocs`（Fence）は読める場所を並べる形なので、`/mnt` は開けない限り見えない。
-  **Claude には同じ対処を入れていない**
-- **Copilot**: `copilot_*` の許可を足す前の `/sandbox policy`（2026-09-13）では、
-  `/mnt` は `/mnt/wsl/resolv.conf` だけが read-only、一時領域は `$TMPDIR` だけが
-  read-write で、`/tmp` `/var/tmp` `/dev/shm` は一覧に無かった
-  （[既定の許可範囲の実測](../../research/agents/copilot-sandbox-default-policy.md)）。
-  このリポジトリでは `TMPDIR` をリポジトリ直下の `.tmp` に向けている。
-  現在の設定（`allowDevToolAccess = false` と `copilot_*` の許可）での表示と、
-  `TMPDIR` が `/tmp` のままのマシンでの扱いは**未検証**
-
-未決の点と、決めるときの注意:
-
-- 意図的に開けているのであれば、その旨をここに書いて確定させる
-- 意図していないなら `[sandbox] deny` に `/mnt` `/tmp` `/var/tmp` `/dev/shm`
-  を足す。**ただし `deny` は Copilot の `deniedPaths` にも流れる**ので、
-  Claude と Copilot の両方への影響を確かめてから入れる
-- `/tmp` を塞ぐと専用の空 tmpfs になり、ホストとのファイル受け渡しが切れる
+Claude の `/mnt` `/tmp` 系への `denyRead` / `allowRead` の指定は無く、sandbox 内から実際に読めるかは
+**未検証**。Copilot の既定は `/mnt/wsl/resolv.conf` と `$TMPDIR` を除いて見えないが、現在の設定での
+表示は未検証。実測の状況と未決の点は
+[記録](../../research/agents/agent-sandbox-measurements.md#ホーム外の経路の実測の状況と未決の点)。
+`deny` に足すときは、Copilot の `deniedPaths` にも流れるので両 CLI への影響を確かめてから入れる。
 
 ### キー名の規則
 
@@ -434,7 +410,8 @@ glob 記法とは **書式が異なる**:
 揃っている**必要がある。
 
 > [!IMPORTANT]
-> 運用方針は Copilot が家用で緩め、Claude が制約のある環境用で厳し目。
+> 運用方針は Copilot が緩め、Claude は制約のある環境（許可の最小化が求められる、など）でも
+> 使えるよう厳し目。
 > `claude_read_allow` を安易に広げると **Claude の方が緩くなり方針が逆転する**。
 > 実測した Copilot の実効ポリシーには `$HOME` 配下の作業ディレクトリ許可は
 > 無く、skill も `~/.agents/skills` と `~/.claude/skills` だけが出る。
@@ -818,13 +795,11 @@ Claude との差で特に重要なもの:
 
 ### 実測した既定の許可範囲 (WSL2, chezmoi リポジトリを cwd として `/sandbox policy`)
 
-`copilot_*` の許可を足す前の Copilot が既定で何を許すかを、`/sandbox policy` で
-見たもの。表示そのものは
-[既定の許可範囲の実測](../../research/agents/copilot-sandbox-default-policy.md) にある
-(当時は `allowDevToolAccess = true`。現在は `false` で許可も足してあるので、
-同じ表示にはならない)。
+`copilot_*` の許可を足す前の Copilot が既定で何を許したかの実測は
+[記録](../../research/agents/agent-sandbox-measurements.md#実測した既定の許可範囲wsl2-chezmoi-リポジトリを-cwd-として-sandbox-policy)
+（当時は `allowDevToolAccess = true`。現在は `false` で許可も足してあるので、同じ表示にはならない）。
 既定で許可されるのはシステム領域 (read-only)、`$TMPDIR`・cwd・セッション領域
-(read-write)、`~/.copilot/logs` と skill 置き場 (read-only) だけだった。
+(read-write)、`~/.copilot/logs` と skill 置き場 (read-only) だけ。
 
 ここから分かること:
 

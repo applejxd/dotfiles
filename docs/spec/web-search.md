@@ -7,13 +7,13 @@ pi など、内蔵の検索ツールが無い AI CLI のための Web 検索・�
 
 ## 配る範囲
 
-**個人用（`is-work` でない機、つまり `applejxd`）だけに配る。**（2026-10-26 までは `llm-provider` で切っていたが、会社 PC で Copilot を使うようになったので `is-work` に付け替えた） 制約のある環境用（Bedrock）は、検索を
+**個人用（`is-work` でない機、つまり `applejxd`）だけに配る。**（切り替えの経緯は [記録](../research/agents/web-search-spec-notes.md)） 制約のある環境用（Bedrock）は、検索を
 [AgentCore Web Search の MCP](agent-config-generation.md#mcp-サーバ)に一本化する（制約のある環境の機のクエリを AWS の外の検索へ出さず、手段が 2 つになってモデルが迷うのを避ける）。
 
 - skill の配布: `home/.chezmoiignore.tmpl` が、`is-work` のとき `.claude/skills/web-search/` を除く
 - `pis` の許可（`[pi.skill_scripts]`）: `common.toml.tmpl` が、`github-copilot` のときだけ出す
 - 鍵ファイルの作成（441 / 349）: `applejxd` の機械だけ
-- 判定は `is-work`（`chezmoi.toml` の `[data] work` があればそれを優先。[会社 PC の判定](../agent-config-generation.md#会社-pc-の判定)）。検査は `test/test_chezmoi_templates.py` と `test/agents/test_opencode_external_read.py`
+- 判定は `is-work`（[会社 PC の判定](agent-config-generation.md#会社-pc-の判定)が正本）。検査は `test/test_chezmoi_templates.py` と、OpenCode 向けの規則を見る `test/agents/test_opencode_external_read.py`（OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中）
 - 既に配られたファイルは、除外しても自動では消えない（chezmoi の除外は「管理しない」で、削除ではない）
 
 ## 構成
@@ -40,11 +40,10 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 
 | Brave | `GET /res/v1/web/search`（`X-Subscription-Token`） | 要 | 文字列（版・エラー文・設定名）を手がかりにした検索向き |
 | Exa | `POST /search`（`x-api-key`、`contents.highlights`） | 要 | 意味検索 |
 | Tavily | `POST /search`（`Authorization: Bearer`、`search_depth: basic`） | 要 | |
-| DuckDuckGo | HTML 版の検索フォームへ `POST` | 不要 | 最後の砦。`GET` は bot の確認（HTTP 202）になりやすかった（2026-10-12 実測）。ブラウザの UA は偽装しない |
+| DuckDuckGo | HTML 版の検索フォームへ `POST` | 不要 | 最後の砦。`GET` は bot の確認（HTTP 202）になりやすいので `POST` を使う（実測は [記録](../research/agents/web-search-spec-notes.md)）。ブラウザの UA は偽装しない |
 | OpenAlex | `GET /works`（`search=`、`api_key` は任意） | 任意 | **鎖に入れない。** `papers` の専用。論文のメタデータで、一般の Web 検索の代替にならない |
 
-順位の根拠と、各社の無料枠（2026-10-11 に各社のページで確認）は、設計の相談の記録による: Brave は月 $5 の無料クレジット（約 1,000 件）、Exa は月 $10
-（約 2,500 件）、Tavily は月 1,000 クレジット。**品質・鮮度の優劣は未実測**なので、固定順で始め、実際のクエリで比べて入れ替える。
+順位の根拠と各社の無料枠は[記録](../research/agents/web-search-spec-notes.md)にある。**品質・鮮度の優劣は未実測**なので、固定順で始め、実際のクエリで比べて入れ替える。
 
 ### 次へ回す条件
 
@@ -73,7 +72,7 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 
   - `BW_SESSION`・`bw`・`uv` が無いときは何もせず 0 で終わる（`apply` を止めない・入力待ちにしない）。`chezmoi` のテンプレート関数 `bitwarden` は使わない
     （項目が無いと apply が止まり、`.chezmoiignore` の「一度だけ展開」の仕組みが Windows の `agents` 配下では使いにくいため）
   - `bw` は解決したパスで呼ぶ（Windows の npm 版は `bw.cmd`）。出力は ASCII の 1 行（鍵は出さない）
-  - 実測: Windows で、偽の `bw.cmd` で追加・維持・取り直しを確認し、実際の Bitwarden でも 4 件が取れた（2026-10-12）
+  - 実測は [記録](../research/agents/web-search-spec-notes.md)
 
 ### 鍵の取り直し（対話で使う）
 
@@ -103,15 +102,8 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py sync-keys --force --unl
 
 ## 実測（2026-10-12、Windows 11、鍵なしで実行）
 
-- `fetch https://example.com` は成功（固定した IP への TLS 接続）。`http://localhost/`・`http://169.254.169.254/` は実際の名前解決で止まった（終了コード 2）
-- `search`: 鍵がないので Brave・Exa・Tavily は飛ばされ、DuckDuckGo が答えた（関連する Microsoft Learn のページが出た）。同じクエリの 2 回目はキャッシュ（`(cache)`）
-- `papers`: 鍵なしで OpenAlex が答えた
-- 試験は 49 件（`uv run --with pytest --no-project pytest test/test_websearch.py`）
-- **実際の鍵での確認（2026-10-12）**: `apply` が Bitwarden の 4 項目から鍵ファイルを作り（`added=['brave','exa','tavily','openalex']`）、
-  **Brave・Exa・Tavily・DuckDuckGo・OpenAlex の全てが実際の API で結果を返した**（鎖の先頭は Brave）。最初は Exa が HTTP 401（`INVALID_API_KEY`）で、
-  Bitwarden の項目の値（25 文字）が違っていた。値を直して取り直したら通った（36 文字）。401 は「auth」として次へ回り、そのプロバイダは 1 時間休止する
-- `fetch` は実際の文書サイト（`https://pi.dev/docs/latest/codemode` など）で動き、`search` の結果から公式の URL の形を見つけられた
-- **`added=none missing=[…]` になるときは、Vault が未同期**（実機で、アンロック済みでも項目が見えず、`bw sync` のあとに取れた）。`sync-keys` は取りに行く前に `bw sync` する
+実測（鍵なし・実際の鍵での確認、Vault 未同期の症状）は [記録](../research/agents/web-search-spec-notes.md)に移した。
+試験は `uv run --with pytest --no-project pytest test/test_websearch.py`。`sync-keys` は取りに行く前に `bw sync` する。
 
 ## `pis` の許可規則
 
@@ -135,12 +127,8 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py sync-keys --force --unl
 **症状**: `pis` の内側で `fetch` が `取得を止めた: 名前を解決できない`（終了コード 2）になる。imozuru の `fetch.py` も
 `ホストを引けない（Temporary failure in name resolution）` で全 URL が失敗する。
 
-**実測**（2026-10-25、`pis -p` の内側）:
-
-- 内側は DNS を引けない（`getent hosts raw.githubusercontent.com` が終了コード 2）
-- 環境変数に `HTTPS_PROXY=http://127.0.0.1:3128`（Fence のプロキシ）がある。`curl -sI https://arxiv.org` は `200 Connection Established` のあと
-  HTTP 200、`https://raw.githubusercontent.com` は 301 で通る
-- 許可リストの外（`voiceover.manim.community`）は、プロキシが `403 Forbidden` を返す。**ドメインの許可はプロキシが強制している**
+**実測**（`pis -p` の内側）は [記録](../research/agents/web-search-spec-notes.md)。内側は DNS を引けず、`HTTPS_PROXY=http://127.0.0.1:3128`（Fence のプロキシ）経由なら許可ドメインに届く。
+**ドメインの許可はプロキシが強制している**。
 
 **原因**: `fetch` は接続の前に自分で名前を引き、全ての IP が公開アドレスかを検査して、その IP に接続を固定する。
 内側では名前を引けないので、プロキシに届く前に検査で落ちる。
@@ -168,9 +156,7 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py sync-keys --force --unl
 
 **未対応**: imozuru（`fetch.py` / `imozuru_net.py` / `watch.py`）は、同じ事前の名前解決で止まるので、未対応のまま。
 
-**実測（修正後、2026-10-25、`pis -p` の内側）**: `fetch https://arxiv.org/abs/2510.05096` と
-`fetch https://raw.githubusercontent.com/…/README.md` は終了コード 0 で本文を取れた。許可外の `https://voiceover.manim.community/` は
-`取得を止めた: プロキシが接続を拒否した (Tunnel connection failed: 403 Forbidden)…`（終了コード 2）。
+**修正後の実測**（2026-10-25）は [記録](../research/agents/web-search-spec-notes.md)。許可外のドメインは `取得を止めた: プロキシが接続を拒否した …`（終了コード 2）。
 
 検査は `test/test_websearch.py`（`fetch_proxy`、ホストの検査、名前を引かないこと、http の経路、リダイレクト、CONNECT の拒否）と
 `test/agents/test_pi_boundary.py`（フラグを `inner_env` が付けること）。

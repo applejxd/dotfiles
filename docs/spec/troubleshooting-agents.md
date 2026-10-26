@@ -1,6 +1,6 @@
 # トラブルシューティング: AI CLI の実行時
 
-Claude Code / Copilot CLI の sandbox・hook・skills と、`common.toml` から生成した設定で
+Claude Code / Copilot CLI の sandbox・skills、pi のツール呼び出し・クリップボードと、`common.toml` から生成した設定で
 起きる障害をまとめる。症状からの索引は [トラブルシューティング](troubleshooting.md)。
 導入時の障害（Python・mise・AI CLI の導入）は
 [導入と適用](troubleshooting-bootstrap.md)にある。
@@ -114,11 +114,6 @@ seccomp フィルタは mise の `npm:@anthropic-ai/sandbox-runtime` が入れ�
 
 **成功の確認**: 再起動後の `/sandbox` に Dependencies タブが出ない。
 
-## Windows で Copilot の hook が起動しない
-
-**撤去した**（2026-10、[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。Copilot への hook の登録は生成しない。
-配備済みの `~/.copilot/hooks/from-claude.json` は `chezmoi apply` が消す。判定は pi の判定器が持つ。
-
 ## CLI 起動時に Failed to load 1 skill と出る
 
 **対象**: Claude Code / Copilot CLI。`home/dot_claude/skills/` などの `SKILL.md`。
@@ -166,13 +161,11 @@ uv run --with pyyaml --no-project python scripts/agents/validate_skills.py
 grep -rhoE 'argumentsError": ?"[^\\]*' ~/.pi/agent/sessions | cut -c1-110 | sort | uniq -c
 ```
 
-**原因**: モデルが引数の JSON を生成する途中で、壊れた出力をする。実測では、`"oldText"` の直後に
-`:` ではなく `>` が出て、本文も途中で欠けていた。pi が `argumentsError` として検出し、モデルへ
+**原因**: モデルが引数の JSON を生成する途中で、壊れた出力をする。pi が `argumentsError` として検出し、モデルへ
 不正な引数と返す。ツールやガードが壊したものではない。
 
-**頻度**（2026-10-18、この機の全セッション）: ツール呼び出し約 2,600 回中 1 回（`guarded_edit` は 211 回中 1 回）。
-直後の送り直しで成功した。子のエージェント（`guarded_task`）は `--no-session` で記録が残らないので、
-子の失敗率は未測定。
+**頻度**: まれ（ツール呼び出し約 2,600 回中 1 回）で、直後の送り直しで成功する。実測と出力の例は
+[AI CLI の実行時の障害の観測記録](../research/agents/agents-runtime-observations.md#記録-e1--2026-10-18ツール呼び出しの引数破損)。
 
 **対処**: 同じ呼び出しを送り直す（モデルが自動で再送する）。頻発するなら、同じ編集を `write`（全文）に替える。
 
@@ -227,19 +220,18 @@ chezmoi apply
   `wl-copy` / `xclip` / `xsel` だけを試す。OSC 52 には**回らない**（効いたかを確かめられないため）
 - sandbox がそれらのソケットと、`powershell.exe` の相互運用を塞ぐ（推測。内側では未実測）
 
-上流の見解（pi Issue #10558、2026-10-07 に not a bug で close）は「表示の変数が出ているなら、動くソケットを
-用意するか、変数を unset する」。同じ症状の回避策として、メンテナは `PI_CLIPBOARD_OSC52=1` を挙げている
-（Issue #11273）。
+上流の見解は「表示の変数が出ているなら、動くソケットを用意するか、変数を unset する」。
+同じ症状の回避策として、メンテナは `PI_CLIPBOARD_OSC52=1` を挙げている
+（上流の Issue と日付は[観測記録](../research/agents/agents-runtime-observations.md#記録-e2--2026-10-25pis-の内側のクリップボード)）。
 
 **対処**: `pis` は内側の環境へ `PI_CLIPBOARD_OSC52=1` を自動で渡す（`home/dot_local/share/ocs/pi.py` の
 `inner_env`）。OSC 52 は端末への書き込み専用なので、sandbox の境界を広げない（X11 / Wayland のソケットを
 許可すると、内側からクリップボードを読めてしまう）。端末側で OSC 52 の書き込みを許可する。
 
 - Orca: `Settings → Terminal → Allow TUI Clipboard Writes (OSC 52)`
-  （<https://www.onorca.dev/docs/terminal、日付未確認）>
-- tmux 内で使うなら、別の問題がある。tmux は既定で OSC 52 を転送しない（pi Issue #10628、open。
-  `set -g set-clipboard on` / `allow-passthrough` が要る）。`WT_SESSION` の継承で無言の失敗になる
-  報告もある（Issue #11029、2026-10-16 close。`env -u WT_SESSION` が回避策）
+- tmux 内で使うなら、別の問題がある。tmux は既定で OSC 52 を転送しない
+  （`set -g set-clipboard on` / `allow-passthrough` が要る）。`WT_SESSION` の継承で無言の失敗になる
+  場合は `env -u WT_SESSION` が回避策
 
 **成功の確認**（`pis` の外のシェルで端末が対応しているかを見る）:
 
@@ -247,7 +239,7 @@ chezmoi apply
 printf '\033]52;c;%s\a' "$(printf hello | base64)"
 ```
 
-その後に貼り付けて `hello` が出れば、端末は対応している。2026-10-25 に Orca で確認した。
+その後に貼り付けて `hello` が出れば、端末は対応している（Orca で確認済み）。
 
 **限界**: pi は OSC 52 の成否を確かめられないので、端末が非対応でも「コピーした」と出る。
 

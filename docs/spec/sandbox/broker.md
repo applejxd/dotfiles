@@ -42,7 +42,7 @@ flowchart LR
   `credential_injector` は SDS を渡したときだけ）、`_upstream_cluster`（LOGICAL_DNS + TLS）、`_listener`。
   以前の断片 YAML（`envoy-*.yaml`）は廃止した。旧出力との同値性は、正解データ `test/agents/golden/broker_config.json` を
   `test_broker.py::test_config_matches_the_golden_structure` が照合することで確かめる設計
-  （正解データが旧出力と同値であることの確認は、この文書の作成時には読み取りだけで、確かめていない。CHG-0037 の記録を参照）
+  （旧出力との同値の確認は [ブローカー仕様の実測と経緯](../../research/agents/broker-spec-notes.md)）
 - `broker.session()` が Envoy を立てて `BrokerSession(url, state, github_socket, search_url)` を返し、抜けると止めて状態を消す。
   全リスナーの身元確認が通るまで待つ（既定 10 秒。プロキシは使わない）
 - **状態ディレクトリ**（0700）: `$XDG_RUNTIME_DIR` の下、無ければ `~/.local/state/pis` の下に `pis-broker-*` を作る。
@@ -198,7 +198,6 @@ CLI: `pis --no-broker` は**3 つとも**無効にする（設定が `auto` で�
 | 検索: 実 Envoy で自分の鍵だけ注入、ログに鍵なし | `test_real_envoy_injects_only_the_routes_own_key`、`test_real_envoy_access_log_has_neither_the_query_nor_the_keys` |
 
 実 Envoy の試験（`test_real_*`）は、Envoy が無い環境では skip される（`test_broker.py` の流儀。skip の条件の詳細は未確認）。
-この表の試験を今回は実行していない（読み取りのみ）。
 
 ## Envoy の導入
 
@@ -213,7 +212,7 @@ GitHub は起動拒否か縮退の経路に当たる。未確認: この機で�
 - **認証つき HTTP プロキシ（TLS 検査をするものを含む）を経由する環境での動作は未対応**。調べた事実
   （[corp-proxy-boundary](../../research/agents/corp-proxy-boundary.md) も参照）:
   - Envoy の `Http11ProxyUpstreamTransport` は CONNECT で上流につなげるが、`Proxy-Authorization` を付ける項目が無く、
-    公式が「実運用の実績が少ない」と明記している（調査の記録。この文書の作成時に原典は再確認していない）
+    公式が「実運用の実績が少ない」と明記している（調査の記録。原典は未確認）
   - Fence の `upstreamProxy` は `http://` のみで、許可リストの宛先は認証つき HTTP プロキシを通らず直結する
 - **設計案（推測・未検証）**: 内側はブローカーだけに出る形（Fence の許可リストを空）にし、プロキシは Envoy の側だけで使い、
   認証はローカルのブリッジ（px・cntlm）に任せ、内側に `no_proxy=127.0.0.1` を渡す。プロキシが差し替える CA（TLS 検査のとき）は上流の CA バンドルに要る
@@ -224,14 +223,7 @@ GitHub は起動拒否か縮退の経路に当たる。未確認: この機で�
 
 ## 実測と経緯
 
-- **2026-10-24**（WSL2、境界あり）: ダミーの `COPILOT_GITHUB_TOKEN` と `models.json` の `baseUrl` だけで、`pis -p` が Copilot の応答を受け取れた。
-  ストリーミングは増分で届いた。許可した 3 経路は 200、GET・別パス・`/../models`・`/chat/completionsx` は 403
-- **2026-10-24**（WSL2、境界あり、ダミーの PAT）: 内側の `gh issue list` が `gh.sock` 経由で Envoy に届き、GitHub が `HTTP 401: Bad credentials` を返した
-  （差し替え値がダミーのため。経路の成立の証明）。偽装した Host は 403。PAT が無いときは通知を出して `gh` は無認証
-- **2026-10-24**（個人の機、境界あり）: `github_token_command = ["gh", "auth", "token"]` で、内側の `gh issue list -R cli/cli -L 2` が実際の issue を返した
-- **2026-10-25**: 鍵ファイルは、内側から読むと「許可がありません」（`test -r` は真）
-- **2026-10-25**（個人の機、境界あり）: `pis -p` の内側から `websearch.py search` が通った（`provider=brave`、8 件）。内側に鍵は渡っていない。
-  独立の `review` の指摘（身元確認を GET に限定、`Proxy-Authorization` の削除、不正なパス・エンコードの実 Envoy の試験）を反映した
-- **2026-10-25**: 共通化の前後で `build_config` の出力が同値であることを、HEAD の旧コード（断片 YAML と旧 `broker.py`）を `git show` で取り出して書き出した構造と、正解データ `golden/broker_config.json` のバイト一致で確かめた
-- 詳しい経緯は [CHG-0037](../../change/0037-pis-usability-and-telemetry.md)、方式の調査は
-  [調査 D2〜D6](../../research/agents/agent-auth-delegation.md)
+2026-10 の実機での実測と、共通化の前後での出力の同値確認は
+[ブローカー仕様の実測と経緯](../../research/agents/broker-spec-notes.md)。
+詳しい経緯は [CHG-0037](../../change/0037-pis-usability-and-telemetry.md)、方式の調査は
+[調査 D2〜D6](../../research/agents/agent-auth-delegation.md)。

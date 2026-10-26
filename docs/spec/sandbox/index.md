@@ -38,17 +38,17 @@
 
 ## 内側から見えるもの・見えないもの
 
-実測または設定の読み取りで確かめたことだけを書く（`pis` の内側。2026-10 時点）。
+実測または設定の読み取りで確かめたことだけを書く（`pis` の内側）。
 
 | 対象 | 見えるか | 根拠 |
 | --- | --- | --- |
 | 作業ツリー | 読み書きできる | 境界の設定（`allowWrite`） |
 | `~/.config/agents`（判定器の設定） | 読めるが書けない | `[pi.sandbox] read` |
-| `~/.config/agents/websearch-keys.json`（検索 API の鍵） | **見えない**（読むと「許可がありません」。`/dev/null` と同じ文字デバイスに見える） | `[pi.sandbox] deny_read`。実測 2026-10-25。**`test -r` は真になる**ので、可否は実際に読んで確かめる |
-| `~/.pi/agent/auth.json`、`/run/user/*`、ホストのプロセス | 見えない | 実測 2026-10-24 |
+| `~/.config/agents/websearch-keys.json`（検索 API の鍵） | **見えない**（読むと「許可がありません」。`/dev/null` と同じ文字デバイスに見える） | `[pi.sandbox] deny_read`。実測済み。**`test -r` は真になる**ので、可否は実際に読んで確かめる |
+| `~/.pi/agent/auth.json`、`/run/user/*`、ホストのプロセス | 見えない | 実測済み |
 | ホームの他の場所（`~/.ssh`、`~/.aws` など） | 既定で見えない（読み取りは既定で拒否） | `defaultDenyRead`（境界の生成）。個別には未実測 |
 | 環境変数 `GH_TOKEN`・`GITHUB_TOKEN`・`SSH_AUTH_SOCK`・`AWS_*`、名前に `TOKEN`・`SECRET`・`PASSWORD`・`PASSPHRASE` を含むもの | 渡さない | `DROP_ENV` とパターン |
-| 検索 API の鍵の環境変数（`BRAVE_API_KEY` ほか 3 種） | 渡さない | `DROP_ENV`（2026-10-25 に追加） |
+| 検索 API の鍵の環境変数（`BRAVE_API_KEY` ほか 3 種） | 渡さない | `DROP_ENV` |
 | 作業ツリー内の `.env` や、他の `*_API_KEY` 環境変数 | **見える**（保護していない） | 設計上の穴。利用者が置かない運用に頼る |
 | `--no-broker` のときの Copilot の認証 | 見える（内側に本物が入る） | `--no-broker` の仕様 |
 
@@ -64,7 +64,7 @@
 
 | 設定 | 入口 | 試験 |
 | --- | --- | --- |
-| `[opencode.sandbox]`（共有）・`[pi.sandbox]`（`read`・`deny_read`・`control_dirs`・`protected`・`network_allow`） | `common.toml.tmpl` → 生成器 `pi_sandbox` | `test/agents/test_pi_boundary.py`、`test_generate_opencode_sandbox.py` |
+| `[opencode.sandbox]`（共有。境界の共有の正本は [opencode-sandbox.md](opencode-sandbox.md) で、`pis` と `ocs` が共有する）・`[pi.sandbox]`（`read`・`deny_read`・`control_dirs`・`protected`・`network_allow`） | `common.toml.tmpl` → 生成器 `pi_sandbox` | `test/agents/test_pi_boundary.py`、`test_generate_opencode_sandbox.py` |
 | 内側へ渡さない環境変数 | `ocs/cli.py` の `DROP_ENV`、`ocs/pi.py` | `test/agents/test_opencode_launcher.py` |
 | `[pis.broker]` | `common.toml.tmpl` → `rules.json` の `broker.*` | `test_pi_broker_generate.py`、`test_broker.py`、`test_broker_search.py` |
 | 起動と境界の検査（カナリア） | `ocs/pi.py`・`ocs/boundary.py` | `test_pi_boundary.py` |
@@ -72,14 +72,14 @@
 ## 文書の地図
 
 - [ブローカー](broker.md): Copilot・GitHub・検索の認証ブローカーの正本。
-- [境界の構成（`ocs`）](opencode-sandbox.md): 起動の順序、状態・DB、環境変数での追加、制御ファイルの保護。
-- [Claude Code / Copilot CLI の sandbox](agent-sandbox.md): CLI 側の sandbox の層・ネットワーク・seccomp。
-- [隔離 GPU サンドボックス（WSL2）](wsl-sandbox.md): 専用の WSL2 ディストロ。
+- [境界の構成（`ocs`）](opencode-sandbox.md): 起動の順序、状態・DB、環境変数での追加、制御ファイルの保護。`pis` と `ocs` が共有する境界の正本でもある（OpenCode 専用の部分は撤去予定）。
+- [Claude Code / Copilot CLI の sandbox](agent-sandbox.md): それらの CLI 自身が持つ sandbox（`pis` の Fence とは別物）の層・ネットワーク・seccomp。
+- [隔離 GPU サンドボックス（WSL2）](wsl-sandbox.md): GPU 付きの検証用に専用の WSL2 ディストロを作る手順。`pis` の sandbox とは別目的。
 - [ガード（総覧）](../guard/index.md): 判定と確認。
 
 ## 未解決
 
 - 作業ツリー内の `.env` と、残りの `*_API_KEY` 環境変数が内側から見える。
-- ホームの他の場所の可視性は、個別に実測していない（段 G6 の可視性表）。
+- ホームの他の場所の可視性は、個別に実測していない。
 - 通信の方針（拒否リスト型）、認証つき HTTP プロキシ、Bedrock の署名・AgentCore の MCP 中継は未対応。
-- 経緯と未解決は [CHG-0033](../../change/0033-sandbox-build-value-assessment.md)（責務の棚卸し）・[CHG-0037](../../change/0037-pis-usability-and-telemetry.md)。
+- 進捗と経緯は [CHG-0033](../../change/0033-sandbox-build-value-assessment.md)（責務の棚卸し）・[CHG-0037](../../change/0037-pis-usability-and-telemetry.md)。

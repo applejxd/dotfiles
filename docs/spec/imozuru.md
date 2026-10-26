@@ -5,8 +5,8 @@
 検索は、すでにある [web-search](web-search.md) スキルの `websearch.py` を使う（検索役のサブエージェントは使わない）。
 入口を skill + CLI にした理由は [入口の選び方](guard/pi-guard.md#入口の選び方)、拡張でなくスキルで足りる判断は [ADR-0016](../adr/0016-pi-extensions-own-first.md)。
 
-- 取り込んだ版: 上流 `ecb82c71b611872a0f49e783eda3bec987c80d91`（2026-10-21）。取得物の sha256 と原本のハッシュは、スキル内の `references/upstream.md`
-- 調査の日付: 2026-10-22。**コードは実行せずに読んだ**（上流の README・SKILL.md・スクリプト・試験名）。実際の通信・実機の `pis` では未確認
+- 取り込んだ版: 上流 `ecb82c71b611872a0f49e783eda3bec987c80d91`。取得物の sha256 と原本のハッシュは、スキル内の `references/upstream.md`
+- 調査の日付・確認の範囲（コードは読んだだけで、実際の通信・実機の `pis` では未確認）は [記録](../research/agents/imozuru-spec-notes.md)
 
 ## 配る範囲
 
@@ -38,9 +38,9 @@
 
 ## 検索役を使わない理由
 
-上流の「検索役」は、Web 検索できる軽いモデルのサブエージェントを 2 本並べる設計。このリポジトリの `guarded_task` の子（`explore` / `review`）は**読み取り専用だが、`websearch.py` の `search`・`papers`・`fetch` と `chain.py` は確認なしに実行できる**（2026-10-24 に `explore` の子で `websearch.py search` を実行して確かめた。許可は `[pi.skill_scripts.allow]` にあり、役割を問わず効く）。保存の `fetch.py` だけは確認が要るので、子には任せず親が行う。既定は親が `websearch.py` を順に呼ぶ形で、広く浅い検索を子に任せるのは任意（SKILL.md の「検索役」の節）。検索語の秘匿チェックは `websearch.py` が掛ける。
+上流の「検索役」は、Web 検索できる軽いモデルのサブエージェントを 2 本並べる設計。このリポジトリでは使わない。`guarded_task` の子（`explore` / `review`）は**読み取り専用だが、`websearch.py` の `search`・`papers`・`fetch` と `chain.py` は確認なしに実行できる**（許可は `[pi.skill_scripts.allow]` にあり、役割を問わず効く。実測は [記録](../research/agents/imozuru-spec-notes.md)）。保存の `fetch.py` だけは確認が要るので、子には任せず親が行う。既定は親が `websearch.py` を順に呼ぶ形で、広く浅い検索を子に任せるのは任意（SKILL.md の「検索役」の節）。検索語の秘匿チェックは `websearch.py` が掛ける。
 
-なお、`explore` / `review`（`explorer` 役）の子は、スキルのスクリプトの許可が全役割に効くため、`websearch.py` の `search` / `papers` を**確認なしで呼べる**（2026-10-21 の実測。使い捨ての試験）。専用の検索役 `searcher`（`bash` だけ・`search` / `papers` だけ・軽い階層）を足す案は、imozuru の試用のあとに判断する。
+採らなかった案（専用の検索役 `searcher`）の理由は [記録](../research/agents/imozuru-spec-notes.md)。
 
 ## 書き込み先の制限
 
@@ -64,15 +64,12 @@
 - **プロキシ宛ての要求（HTTP のプロキシ・HTTPS の CONNECT）は固定しない**: プロキシが名前を引くので、stdlib の接続のまま。`no_proxy` などで**直接つなぐ宛先は、環境変数の有無に関わらず固定する**（要求ごとに `req.has_proxy()` / `_tunnel_host` で判定）
 - 上流の宛先の検査（`url_problem`）は残る。VPN などで外の名前まで内側に引ける環境は、`IMOZURU_ALLOW_PRIVATE=1` で外せる（上流の仕様）
 - **残る限界**: プロキシ経由の通信では、プロキシが後で別の IP に解決するのを、こちらでは固定できない。`pis` のサンドボックス（Fence）のプロキシが内側の宛先を拒むかは**未確認**。この限界のために、`fetch.py` と `watch.py` の `add` / `check` は確認なしの許可に載せていない（下の許可規則）
-- **`pis` の内側のプロキシ越しの取得**（2026-10-25）: 内側は DNS が引けないので、`url_problem` の事前の名前解決で全 URL が失敗していた。`PIS_FETCH_VIA_PROXY=1`（`pis` が付ける）とループバックの
+- **`pis` の内側のプロキシ越しの取得**: 内側は DNS が引けないので、`PIS_FETCH_VIA_PROXY=1`（`pis` が付ける）とループバックの
   `HTTPS_PROXY` が揃い、`no_proxy` に当たらない https の URL だけ、`url_problem` が名前を引かずにホスト名の形だけ見る（`imozuru_net.py` の
   `via_fetch_proxy` / `proxy_url_problem`。`websearch.py` と同じ規則で、正規表現の一致は `test_imozuru.py` が固定する）。仕組みと理由は
   [web-search、pis の内側のプロキシ越しの取得](web-search.md#pis-の内側のプロキシ越しの取得)。
   `urllib` が実際に使うプロキシと `no_proxy` を同じ関数で見るので、検査だけ省いて直接つなぐ食い違いは出ない。
-  Fence のプロキシは、許可ドメインの外を 403 で拒む（`curl` で実測）。ただし「内側の宛先を拒む」こと自体は、許可リストに内部名が無いことに依存する
-   実測（2026-10-25、`pis -p` の内側）: `fetch.py` は arxiv の abs を `OK`（終了コード 0）で保存でき、許可外のドメインは
-   `FAIL … URLError: <urlopen error Tunnel connection failed: 403 Forbidden>`（終了コード 1）で止まった
-- **残る限界**: プロキシ経由の通信では、プロキシが後で別の IP に解決するのを、こちらでは固定できない。この限界のために、`fetch.py` と `watch.py` の `add` / `check` は確認なしの許可に載せていない（下の許可規則）
+  Fence のプロキシは許可ドメインの外を 403 で拒む。ただし「内側の宛先を拒む」こと自体は、許可リストに内部名が無いことに依存する（実測は [記録](../research/agents/imozuru-spec-notes.md)）
 
 ## 外へ送る文字列の秘匿チェック
 
@@ -112,21 +109,12 @@
 
 ## レビューの経緯
 
-`review` の子（別系統のモデル。読み取りと `git` の読み取りだけ）に、取り込む前に 3 回レビューさせた（2026-10-22。1 回約 0.2〜0.4 ドル）。最初の 1 回は展開前の取得物しか無く、読めなかった。
-
-| 回 | 見つかったこと | 対応 |
-| --- | --- | --- |
-| 2 | **BLOCKER**: `confine()` が渡したディレクトリしか見ず、中の子パスのシンボリックリンク経由で外へ書ける / DNS の検査後に再接続するので DNS rebinding が効く。**MAJOR**: 送る URL・題名・著者名に秘匿チェックが無い / `yt-dlp` の設定・標準入力 | リンク走査・根の固定・`imozuru_net.py`・`refuse_secrets()`・`--ignore-config` と標準入力の遮断 |
-| 3 | **BLOCKER**: プロキシ環境変数があるだけで直接接続も固定を失う / ハードリンクが `confine()` を通る。**MAJOR**: YouTube（`yt-dlp`）は固定を通らない / 代替の秘匿検査が弱く、feed URL は送る直前に検査されない | 要求ごとのプロキシ判定・ハードリンクの拒否・YouTube の分離・代替の補強・feed URL の検査 |
-| 4 | **BLOCKER**: プロキシ経路は固定できない。**MAJOR**: YouTube の環境変数は継承で迂回できる / feed URL は名前を引いたあとに秘匿検査している | 環境変数をやめて `fetch_youtube.py` に分離・秘匿検査を先に移した。プロキシ経路は**許可に載せないことで対応**（修正は未着手） |
-
-- レビューは、3 回とも私の暫定の結論に反対した（「`confine()` を足せば全部を許可に載せてよい」など）。依頼文は、`pi-guard.md` の「[review への依頼の書き方](guard/pi-guard.md#review-への依頼の書き方)」の型で書いた
-- レビューの子は**コードも試験も実行できない**（判定で拒否される）。「53 件が通った」などの実行結果は、親が実行した値で、子は再検証していない
-- 問題なしとされた点: `fetch.py` の `<name>`（単一のファイル名）の検査、`report.py` の引用元の検査、外部コマンドを引数リストで起動していること
+取り込む前に `review` の子（別系統のモデル）へ 3 回レビューさせた。各回の指摘と対応は [記録](../research/agents/imozuru-spec-notes.md)。
+現行の契約（上の「書き込み先の制限」「接続の固定」「外へ送る文字列の秘匿チェック」「YouTube」「`pis` の許可規則」）は、その対応を反映している。
 
 ## 上流との差分
 
-上流への変更は最小にした（`chain.py` +6 行、`fetch.py` +21、`report.py` +6、`watch.py` +17。`fetch.py` と `watch.py` の +4 行はプロキシ越しの取得）。置換は `scripts/vendor/imozuru_patch.py` で、上流の原本に何度でも当て直せる（置換元が 1 つでなければ止まる）。編集ツールの後処理の整形が差分を膨らますので、置換は編集ツールでなくこのスクリプトで行う。**`fetch.py` / `watch.py` を編集ツールで直接直すと、整形が走って差分が 300 行規模になり、上流の文字列を壊す**（2026-10-25 に実際に起きた）。このファイルを直すときは、編集ツールを通さない置換スクリプトを `python3` で実行する。`pyproject.toml` の `extend-exclude` に、上流の 4 本を載せてある（整形・lint の対象外）。
+上流への変更は最小にした（`chain.py` +6 行、`fetch.py` +21、`report.py` +6、`watch.py` +17。`fetch.py` と `watch.py` の +4 行はプロキシ越しの取得）。置換は `scripts/vendor/imozuru_patch.py` で、上流の原本に何度でも当て直せる（置換元が 1 つでなければ止まる）。編集ツールの後処理の整形が差分を膨らますので、置換は編集ツールでなくこのスクリプトで行う。**`fetch.py` / `watch.py` を編集ツールで直接直すと、整形が走って差分が 300 行規模になり、上流の文字列を壊す**（失敗談は [記録](../research/agents/imozuru-spec-notes.md)）。このファイルを直すときは、編集ツールを通さない置換スクリプトを `python3` で実行する。`pyproject.toml` の `extend-exclude` に、上流の 4 本を載せてある（整形・lint の対象外）。
 
 **上流を更新する手順**: 新しい版を取得して原本と比べ（`references/upstream.md` の sha256）、差分を取り込んでから `imozuru_patch.py` を当て直し、`test/test_imozuru.py` と `review` で確かめる。
 

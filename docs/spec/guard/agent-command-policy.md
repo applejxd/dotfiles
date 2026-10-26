@@ -6,6 +6,12 @@ permission でどう照合・判定されるかをまとめる。
 OpenCode の既定 `ask` と照合順は [OpenCode V2 の設定](../agent-config-generation.md#opencode-v2-の設定)、
 sandbox によるパス単位の遮断は [sandbox (Claude Code / Copilot CLI)](../sandbox/agent-sandbox.md) を参照。
 
+> **現状**: Claude Code / Copilot CLI の判定 hook（`check_bash.py` など）は登録を外した（`common.toml.tmpl` の `[retired_hooks]`、
+> [ADR-0017](../../adr/0017-pi-only-and-ts-judge.md)）。この文書の「hook」の規則（`bashrules`）は Python 版で、
+> 同じ規則を TS の判定器（`pi/harness/judge/`）と `tables.toml` が引き継いでいる（[判定 API](pi-decide.md)）。
+> Python 版は TS 版の正解データの出力元として残り、撤去は [CHG-0035](../../change/0035-retire-python-judge-oracle.md)。
+> Claude / Copilot の permission（allow / ask / deny の生成）の記述は、各 CLI の仕様の説明として残してある。
+
 ## 照合規則
 
 パターンは素のトークン列で書く (例: `git push`)。
@@ -80,8 +86,7 @@ curl URL -o a.sh && chmod +x a.sh && ./a.sh
 | `check_secret_env_echo` | 秘密の環境変数を**出力先へ流す**形 |
 
 `git -C <dir> <sub>` は normalize が `git <sub>` に畳むため、専用のチェックは持たない。
-以前あった部分一致の判定は `git -C sub show HEAD -- config/app.yml` のような
-読み取りまで deny する誤検知しか生まなかったため廃止した。
+部分一致の判定は廃止した（[経緯](../../research/agents/command-policy-design-notes.md#git--c-の部分一致の判定を廃止した理由)）。
 
 評価順は **deny → ask → allow**。より具体的なパターンを deny に置けば、
 一般形を ask にできる。
@@ -358,6 +363,8 @@ deny 側は `check_rm_root_guard` が担う。作業ディレクトリ全体と 
 
 ## OpenCode の pip 誘導と rm の誘導
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [判定 API の評価の順番](pi-decide.md#評価の順番)。
+
 OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生のコマンド文字列への
 正規表現で deny と誘導文を返す。Claude / Copilot の hook（上の `check_rm_root_guard`
 など）とは別実装で、**止める具体例だけ**に限る（決定は
@@ -383,8 +390,7 @@ OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生の�
   `grep -r 'rm -rf' .` は止めない。`$(rm …)` のように `(` の直後のものも当たらない（承知の穴）
 - `git commit -m` / `gh … --body` の本文は `unless` で外す。外すのはコマンド全体が git / gh の
   1 コマンドだけのとき（区切り・`$`・バッククォート・括弧・リダイレクトを引用の外に含まない。
-  引用内の `$(cat <<'EOF' … EOF)` は認める）に限る。以前の `unless` はコマンドのどこかに
-  `git … -m` があれば全体を見送り、`git commit -m x && rm -rf ~` が素通りしていた。
+  引用内の `$(cat <<'EOF' … EOF)` は認める）に限る。（以前の `unless` の穴は[経緯](../../research/agents/command-policy-design-notes.md#opencode-の-unless-の以前の穴)）
   heredoc の誘導と伏字化（`deny_path_unless`）は全体に当てる形のまま（承知の割り切り）
 - **ocs の内側にも効く。** `ocs` が捨てるのは permission（`drop_shell`）で guide 規則ではなく、
   同じ `rules.json` を plugin が読む。permission を捨てて既定 allow にした設定でも、
@@ -402,6 +408,8 @@ OpenCode では `[[opencode.shell.guide]]`（`common.toml.tmpl`）が、生の�
   `rules.json` を plugin に通して判定する）と、前段の停止を見る `test/agents/test_guide_early_pip.py`
 
 ## OpenCode の allow したコマンドの書き込み形
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [判定 API の評価の順番](pi-decide.md#評価の順番)。
 
 `[pi.shell] allow` は前方一致なので、載せたコマンドの書き込み形も確認なしに通る。
 guide 規則は effect が allow でも走るので、allow を保ったまま書き込み形だけを deny する
@@ -434,6 +442,8 @@ guide 規則は effect が allow でも走るので、allow を保ったまま�
 - 検査は `test/agents/test_guide_git_log_output.py`（リダイレクトは `test_generate_opencode.py`）
 
 ## OpenCode の deny の説明（前段停止）
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [判定 API の評価の順番](pi-decide.md#評価の順番)。
 
 V2 は静的 deny に当たると plugin の `evaluate` を呼ばず、モデルへは `Permission denied: shell` だけが
 返る（理由も代替も伝わらない）。pip で実証した前段停止（上、
@@ -475,8 +485,7 @@ OpenCode の静的照合は、scanner が分割した各セグメントに `cmd`
   継続行にあると、scanner の分割と食い違う。その場合は静的 deny が（説明なしで）止める。
   例: `git config --global user.name "x"` は説明が付かない
 - **エージェントの規則が静的 deny を覆す項目は、そのエージェントでは止めない**（`except_agents`。
-  エージェントの規則は全体の規則の後ろに付いて後勝ち。今の宣言には該当するエージェントが無い。
-  以前は `commit` がコミットまで行い、`git restore --staged -- *` の allow が該当した）。V2 の `permissions` と V1 の `permission`
+  エージェントの規則は全体の規則の後ろに付いて後勝ち。今の宣言には該当するエージェントが無い）。V2 の `permissions` と V1 の `permission`
   （`bash` / `shell` / `*` キー、文字列も）の両方から算出し、読めない形は覆すものとして扱う。
   ただし `restate_global_deny` に `shell` を含むエージェント（`plan`）は、全体の shell の deny が
   エージェントの規則の後ろに写されて覆されないので、`shell * ask` があっても例外にしない
@@ -487,7 +496,7 @@ OpenCode の静的照合は、scanner が分割した各セグメントに `cmd`
 - **`rules.json` の形が不正なら節ごと無効にする。** `deny_guide` は各項目の `pattern` / `unless` /
   `message`（非空文字列）、`not_isolated`（真偽値）、`except_agents`（文字列配列）、`deny_guide_agents`
   （文字列配列）を検証し、1 件でも不正（全一致に近い `pattern` を含む）なら全体を止めない（静的 deny に任せる）。
-  `guide` 節も同じ検証をする（`pattern` 欠落が `new RegExp(undefined)` で全一致になり、全 shell を止める穴があった）
+  `guide` 節も同じ検証をする（経緯は[設計メモ](../../research/agents/command-policy-design-notes.md#opencode-前段停止の過去の穴)）
 - **通常版と隔離版（ocs）で、それぞれの最終的な静的 deny から決める。** `rules.json` は両者で共有
   なので、ocs が `drop_shell` で捨てた項目には `not_isolated` を付け、plugin が `OCS_ISOLATED` で見分けて
   ocs では止めない（`sudo`・`systemctl`・`git config --global` / `--system`・`npm install -g`・
@@ -541,8 +550,7 @@ workspace 免除との違いは 2 点だけ。
 
 免除が落ちて ask になったときは、`check_policy_ask` が通る書き方を
 メッセージに添える (`rm -rf .tmp/<名前>` の形にする、`cd` や変数展開と
-混ぜない)。常時読み込まれる個人用カスタム指示に書くと毎ターン
-コンテキストを消費するため、**止めた時点のメッセージで誘導する**方を採った。
+混ぜない)。誘導は**止めた時点のメッセージ**で行う（採用理由は[設計メモ](../../research/agents/command-policy-design-notes.md#scratch-免除の誘導をメッセージにした理由)）。
 
 なお `ask` は Copilot CLI では自動承認される（[Copilot CLI は hook の `ask` を自動承認する](#copilot-cli-は-hook-の-ask-を自動承認する)）ため、この緩和が実際に効くのは
 Claude Code だけである。逆に言うと、deny へ上げた 2 つは
@@ -817,6 +825,9 @@ Claude には「許可した以外を拒否する」表現手段が無い。
 
 ## bash 検査ルールの足し方
 
+> 判定の本番は TS 版（`pi/harness/judge/`）。`bashrules/*.py` は Python 版（照合用）で、`check_bash.py` の hook は登録を外してある。
+> 検査を足すときは TS 版にも同じ検査を足し、正解データを書き出し直して全件一致を確かめる（[差分試験](pi-decide.md#差分試験正解データ)）。
+
 `check_bash.py` は入出力とループだけを持ち、判定は
 `~/.claude/hooks/lib/bashrules/` にある。足す場所は 3 段階で選ぶ。
 
@@ -848,14 +859,7 @@ Python を書く場合は、内容に合うモジュールへ
 
 ## Claude Code permission リストの既知バグ
 
-下記は 2026-05 時点で open。hook 側の normalize で必ず防ぐべき理由。
-
-| Issue | 概要 |
-| --- | --- |
-| [#59498](https://github.com/anthropics/claude-code/issues/59498) | `cd /elsewhere && git push` が `Bash(git push:*)` ask/deny を bypass |
-| [#59006](https://github.com/anthropics/claude-code/issues/59006) | `git -C /path commit` が `Bash(git commit *)` deny を bypass |
-| [#20085](https://github.com/anthropics/claude-code/issues/20085) | compound 命令 (`a && b`) が個別評価されない |
-| [#52419](https://github.com/anthropics/claude-code/issues/52419) | VS Code 拡張の auto-attach が `.claudeignore` / deny を bypass |
-
-`test/agents/test_command_policy.py` の `test_real_bug_*` ケースで、これらの
-bypass パターンを hook が確実に block することを保証している。
+Claude Code の permission リストは、`cd /elsewhere && git push`・`git -C` などの形で ask / deny を迂回される既知のバグがあった。
+そのため、迂回を防ぐ normalize は hook 側（Python 版の `command_policy.py`、TS 版の `normalize.ts`）で必ず行う。
+issue の一覧と各時点の状態は[記録](../../research/agents/claude-permission-known-bugs.md)。
+`test/agents/test_command_policy.py` の `test_real_bug_*` ケースが、これらの迂回の形を Python 版が block することを保証している。

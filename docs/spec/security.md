@@ -118,33 +118,33 @@ Bitwarden Secrets Manager の `bws` は使用しない。
 
 ### 廃止した仕組み: chezmoi 本体の age 暗号化
 
-以前は chezmoi 本体の age 暗号化（`~/.config/chezmoi/key.txt` と
-`.chezmoi.toml.tmpl` の `encryption = "age"`）も設定していた。
-`chezmoi add --encrypt` したファイルを復号するためのものだったが、
-暗号化ファイルを一度も運用しておらず、Bitwarden テンプレート方式
-（`{{ (bitwarden ...) }}` を直接書く形）と機能が重複していたため廃止した。
-既存マシンに `~/.config/chezmoi/key.txt` が残っていても `chezmoi apply` は
-削除しないので、不要であれば手動で削除する。
+chezmoi 本体の age 暗号化（`~/.config/chezmoi/key.txt` と `.chezmoi.toml.tmpl` の `encryption = "age"`）は使わない。
+既存マシンに `~/.config/chezmoi/key.txt` が残っていても `chezmoi apply` は削除しないので、不要であれば手動で削除する。
+廃止の経緯は [セキュリティ仕様の経緯メモ](../research/chezmoi/security-spec-notes.md)。
 
 ## AI エージェントの実行境界（Ubuntu / WSL）
 
-OpenCode を OS のアクセス制御（[Fence](https://github.com/fencesandbox/fence)）で囲って起動する
-（[CHG-0004](../change/closed/0004-opencode-sandbox.md)、[CHG-0009](../change/closed/0009-ocs-simplify-for-accidents.md)）。
-通常起動（`opencode`）と**併用**する段階。構成・起動順序・境界の組み立て規則は
-[OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md)。ここでは
-**何を守り、何を守らないか**を書く。境界の目的は**エージェントのうっかり**
-（外部への誤送信、ワークスペース外の破壊、秘密の誤読）の防止に絞っている
-（[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md)）。
+標準の起動は `pis`（pi を Fence というサンドボックスで包む）。脅威モデル・責務の分担・内側から見えるものの正本は
+[サンドボックス（総覧）](sandbox/index.md#目的と脅威モデル)。ここでは要点だけを書く。
 
-```bash
-ocs         # 隔離起動（境界の内側で起動する）
-opencode    # 通常起動（境界なし）
-```
+- **最優先**: 本物の認証キー（LLM・GitHub・検索 API）を内側（エージェントが動く領域）に置かない。
+  認証は内側の外にあるブローカーが中継する（[ブローカー](sandbox/broker.md)）
+- **次に**: 読み書きできる範囲を作業ツリーと必要な場所に絞る。読み取りは既定で拒否する
+- **守らないこと**: 内側で許された操作の中身の妥当性（認証済みの操作の範囲は PAT・IAM・ブランチ保護が決める）、ワークスペースの中（`.env` など）
+- コマンドの判定（[ガード](guard/index.md)）は境界ではなく、うっかり防止
 
 ### 何を守り、何を守らないか
 
-**列挙型の規則では任意コード実行の権限境界を作れない**ため、保護の主役を
-OS 側へ移した。ただし境界は万能ではない。
+`pis` の守る・守らないは上の要点と [内側から見えるもの・見えないもの](sandbox/index.md#内側から見えるもの見えないもの) のとおり。
+**列挙型の規則では任意コード実行の権限境界を作れない**ため、保護の主役を OS 側（Fence）へ置く。
+permission 規則のうち**ワークスペース内を対象とするものは「ツール操作上の禁止」にすぎない**。
+`read` / `edit` ツールは止まるが、shell からは同じ対象へ届く。誤操作の抑止にはなるが、任意コードに対する保護ではない。
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [サンドボックス（総覧）](sandbox/index.md)。
+
+OpenCode の隔離起動 `ocs`（[Fence](https://github.com/fencesandbox/fence) で囲う。通常起動 `opencode` と併用。
+構成と境界の組み立て規則は [OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md)、
+目的は[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) のとおりエージェントのうっかりの防止）の守る・守らないは次のとおり。
 
 | 守る | 守らない |
 | --- | --- |
@@ -154,24 +154,30 @@ OS 側へ移した。ただし境界は万能ではない。
 | 通信を許可したドメイン以外への通信 | 通信を許可したドメインへ何を送るか |
 | 保護機構そのもの（`denyWrite` と起動の拒否。効く範囲は[条件付き](sandbox/opencode-sandbox.md#制御ファイルの保護が効く範囲)） | 他のプロジェクトの会話（DB を共有する） |
 
-permission 規則のうち**ワークスペース内を対象とするものは「ツール操作上の
-禁止」にすぎない**。`read` / `edit` ツールは止まるが、shell からは同じ対象へ
-届く。誤操作の抑止にはなるが、**任意コードに対する保護ではない**。
-
 ### プロジェクトごとの追加の許可
 
-起動ディレクトリの外を開けたいときは、プロジェクトが `.opencode/sandbox.toml` で足す
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [サンドボックス（総覧）](sandbox/index.md)。
+
+起動ディレクトリの外を開けたいときは、`ocs` ではプロジェクトが `.opencode/sandbox.toml` で足す
 （書き方は [プロジェクトごとの追加](sandbox/opencode-sandbox.md#プロジェクトごとの追加)）。
+`pis` の追加の入口は [境界の構成](sandbox/opencode-sandbox.md)（`pis` と `ocs` が共有）にある。
 
 **承認は取らない。** 精査していないリポジトリが自分で境界を広げることは、ADR-0012 で
 非目的にした。境界の内側のエージェントが宣言を書き足すことはできない（`.opencode` は保護対象）。
 
 ### 受容しているリスク
 
+`pis` と `ocs` に共通:
+
 - 未コミット・未追跡・ignored のファイルは失いうる
 - ローカルの Git 履歴も失いうる（`.git` は書き込み可能領域の中）
 - 信頼済みリモートへ push 済みの内容は、**ローカルの破壊だけでは**失われない
   （復旧にはリモート側の保持と可用性が要る）
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [サンドボックス（総覧）](sandbox/index.md)。
+
+`ocs` だけのもの:
+
 - DB を共有するので、エージェントのうっかりで DB を壊すと全部の履歴と snapshot に響く
 - `ocs` は境界を張る前にホストで `git`（退避と worktree の判定）と Fence を動かし、
   OpenCode の DB を読み取り専用で開く（既定モデルの選択）。`opencode` はホストでは動かさず、
@@ -197,8 +203,14 @@ snapshot（`/undo`）は**日常の取り消し機能**であって保全では�
 > 1. まずテンプレートを評価せず、データとして読む
 > 2. テンプレートと参照先の審査が済んでから `chezmoi diff` を使う
 
-**未審査の作業コピーを OpenCode の通常起動（`opencode`）で開かないこと。** 起動時に
-プロジェクト設定を探索し、plugin・MCP・formatter・LSP が動きうる。
+**未審査の作業コピーを開くときは、project trust（作業先の `.pi/` の拡張・MCP・設定を読むかの確認）に従うこと。**
+素の `pi` は信頼の確認が出るので、精査するまで許可しない。`pis` は作業先の `.pi/` を常に読まない（`--no-approve`。
+[pi のガード](guard/pi-guard.md#起動)）。
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md#起動)。
+
+OpenCode の通常起動（`opencode`）は、起動時にプロジェクト設定を探索し、plugin・MCP・formatter・LSP が動きうるので、
+未審査の作業コピーでは開かない。
 
 ## セキュリティ要件
 

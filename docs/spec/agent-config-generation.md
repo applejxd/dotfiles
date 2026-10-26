@@ -24,8 +24,11 @@ home/.chezmoiscripts/
     400_unix/run_onchange_after_410_claude_mcp.sh.tmpl      同上 (Unix)
 home/dot_claude/
     modify_settings.json.py.tmpl             ~/.claude/settings.json を更新
-home/dot_claude/hooks/
+home/dot_claude/hooks/                       Python 版の判定器。Claude / Copilot への登録は撤去済みで
+                                             実行時は呼ばれず、TS の判定器の正解データの書き出し元
+                                             (オラクル) として残る ([CHG-0035](../change/0035-retire-python-judge-oracle.md))
     executable_check_bash.py                 入出力とループのみ (fail-closed)
+    executable_decide.py                     判定 API (decide) の入口
     lib/policy_loader.py                     command_policy の import と設定ディレクトリの解決
     lib/bashrules/                           bash コマンド検査ルールの本体
         __init__.py                          DENY / ASK の登録簿 (評価順の正本)
@@ -36,10 +39,10 @@ home/dot_claude/hooks/
         rm.py  docker.py                     同上
         rules_exec.py  rules_guard.py        同上
         rules_files.py                       同上
-    executable_check_file_read.py            Copilot のファイル読み取りを遮断 (fail-closed)
-    executable_redirect-tmp.py               /tmp 利用を ./.tmp へ誘導
-    executable_markdownlint.sh               Markdown の lint
-    executable_format-file.sh                拡張子別のフォーマッタ実行
+    executable_check_file_read.py            ファイル読み取りを遮断 (fail-closed。判定器側)
+    executable_redirect-tmp.py               /tmp 利用を ./.tmp へ誘導 (判定器側)
+    executable_markdownlint.sh               Markdown の lint (pi のフルガードが edit / write の後に呼ぶ)
+    executable_format-file.sh                拡張子別のフォーマッタ実行 (同上)
 home/dot_copilot/
     modify_private_settings.json.py.tmpl     ~/.copilot/settings.json を更新
     modify_private_permissions-config.json.py.tmpl
@@ -104,8 +107,8 @@ TOML として読めること・必須の deny リストが空でないこと・
 | `docs/spec/agent-*.md` | なぜその方式か、upstream の不具合 | 名前マッチの deny は展開数だけ bind-mount が要る |
 | `docs/research/` | 実測値、何が壊れたかの経過 | bind-mount が 3239 件に展開された測定 |
 
-経緯をファイル側に書くと、設定 386 行に対してコメントが 500 行を超えて
-「値を探すのが難しいファイル」になる。実際そうなっていたので分離した。
+経緯をファイル側に書くと値を探しにくくなるので分離した
+（[経緯](../research/agents/agent-config-generation-notes.md)）。
 
 Python runtime は 3.11 以上を前提とし、TOML は標準ライブラリ `tomllib` で読む。
 Windows ではインストール済みの最新 Python 3 を選ぶ `py -3`、Unix では
@@ -190,8 +193,7 @@ args = [
 | OpenCode V2 | `~/.config/opencode/opencode.json` の `mcp.servers` | `generate.py --target opencode-config` |
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
-| pi（Unix・Windows。フルガードあり） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)） |
-| pi（Windows） | `~/.config/pi/harness/rules.json` の `mcp` | Unix と同じ（2026-10-26。Windows にもフルガードを載せたので、`mcp.json` へ書く経路は廃止した） |
+| pi（Unix・Windows） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)。`mcp.json` へ書く経路は無い。[経緯](../research/agents/agent-config-generation-notes.md)） |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
 
@@ -201,7 +203,7 @@ Gemini CLI と Antigravity は使わないため対象外。既存の定義は�
 `direct` はツール定義が常駐する（1 ツールで数十トークン）ので、大きいサーバを足すときは、そのサーバだけ `deferred` などに変えて試す。
 他の CLI の定義には `exposure` を混ぜない。`pis` では MCP のツールは役割の既定（実装役は確認）になる。
 
-**`deepwiki` は 2026-09-25 に外した。** `agentcore-websearch` は全機に配る（2026-10-26。使うかは実行時に決まる。下の「AgentCore Web Search」）。
+`agentcore-websearch` は全機に配る（使うかは実行時に決まる。下の「AgentCore Web Search」。`deepwiki` は外した。[経緯](../research/agents/agent-config-generation-notes.md)）。
 `[[mcp]]` が 1 つも無いと `mcp` キー自体が生えないので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
 deepwiki の代わりの OSS 調査は `oss-research` スキル（インストール済みの実体・配布物・
 版を固定したソースに直接当たる）、GitHub の操作は github MCP を使わず
@@ -283,7 +285,7 @@ Claude Code / OpenCode
 
 | 項目 | 決めたこと |
 | --- | --- |
-| 対象 | **全機に配る**（2026-10-26。会社 PC で Copilot を使うようになったので、`llm-provider` では切らない）。使うかは実行時に決まる（下の「使えない機」）。`clis` は会社 PC が `claude` / `opencode` / `pi`、個人の機が `pi` |
+| 対象 | **全機に配る**（会社 PC で Copilot を使うので、`llm-provider` では切らない）。使うかは実行時に決まる（下の「使えない機」）。`clis` は会社 PC が `claude` / `opencode` / `pi`、個人の機が `pi` |
 | リージョン | `us-east-1`（`[provider.amazon-bedrock]` と揃える） |
 | Gateway の URL | アカウント固有なのでソースに書かず、環境変数 `AGENTCORE_GATEWAY_URL` から読む |
 | 認証 | AWS の既定の認証情報（`AWS_PROFILE` / `~/.aws`）。API キーは無い |
@@ -354,6 +356,8 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 3 層との対応と Claude / Copilot との扱いの差は
 [OpenCode V2 の扱い](agent-permissions.md#opencode-v2-の扱い) を参照。
 
+> この節の OpenCode 専用の小節は保留中のレガシー（撤去予定。CHG-0020 段 6 は保留中）。pi と共有する小節（`[pis.broker]`・`[pi.confirm]`・モデルの割り当て・コミットの確認・スキルのスクリプトなど）は現役で、pi の正本は `[pi]` / `[pis]`。
+
 ### Copilot ブローカーの設定（`[pis.broker]`）
 
 `common.toml.tmpl` の `[pis.broker]`（`copilot` は `off` / `auto` / `http://127.0.0.1:<port>`。`github` 系は [GitHub ブローカー](sandbox/opencode-sandbox.md#github-ブローカーpis-のみ)）は、
@@ -389,6 +393,8 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 - 試験は `test_pi_shared.py`。描画した `common.toml` の `[opencode]` に 4 つが残っていないことも固定する
 
 ### glob の記法差
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
 
 OpenCode のワイルドカードは `*` (**`/` を含む** 0 文字以上) と `?` だけで、
 `**` という記法が無い。`[file]` の glob をそのまま渡すと `**/x` が「`*` 2 つ」
@@ -429,6 +435,8 @@ OpenCode のワイルドカードは `*` (**`/` を含む** 0 文字以上) と 
 
 ### 整形 (formatter)
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+
 `format-file.sh` / `markdownlint.sh` は PostToolUse hook なので OpenCode では
 動かないが、ここだけは **CLI 本体の機能で等価な結果になる**。`opencode.json` の
 `formatter` に `[opencode.formatter]` を出力する。
@@ -465,6 +473,8 @@ hook 版との違いが 2 つある。
 
 ### OpenCode へ渡さないもの
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+
 | 渡さないもの | 理由 |
 | --- | --- |
 | `[web] allow_domains` / `deny_domains` | `webfetch` の resource は **URL 全体**で、`*` が `/` を跨ぐ。`*://*.example.com/*` は `https://evil.test/x.example.com/y` にも当たり、ドメイン許可を正しく書けない。過大な allowlist を出すより出さない方を選ぶ |
@@ -474,6 +484,8 @@ hook 版との違いが 2 つある。
 | `[sandbox]` | 通常起動に sandbox が無い (`claude_write_deny` の意図だけ `[file]` 側へ写している)。隔離起動 `ocs` は `[opencode.sandbox]` と `[sandbox] shell_network_allow` を使う ([OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md)) |
 
 ### 既定は `ask`
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
 
 `permissions` の先頭に `{action:"shell", resource:"*", effect:"ask"}` を置き、
 **未掲載のコマンドが無条件に通らないようにしてある**。shell の `allow` は
@@ -517,7 +529,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
   （`read_deny_globs` / `write_deny_globs`）が後勝ちで効き続ける
 - 作業ツリーの中のパスは resource が相対パスになるので、`~/.local/share/chezmoi/*`
   の `edit` の `ask` は、このリポジトリで作業するときの編集には当たらない
-  （絶対パスで渡しても相対に直る。実測）
+  （絶対パスで渡しても相対に直る）
 - 隔離版（`ocs`）も既定は `ask` なので同じ規則を出す。`~/` 始まりの read / edit の
   規則は隔離版では捨てるが、この `edit` の `ask` だけは残す
   （捨てると、以前は `external_directory` の確認が止めていた edit が確認なしになる）
@@ -587,12 +599,14 @@ subcommands = ["paths", "lint", "read"]
   リポジトリの設定（`.git/config`・`.python-version` など）からコマンドを起動しないか。
   足すときは `test_skill_script_allow_is_not_widened_silently` も更新する
 - **away-shift。** `away_guard.py` の `init` / `check` / `log` / `status` / `sleep` / `snapshot` と `preflight.py` を載せた（`preflight.py` は渡された文字列を判定器へ渡すだけで実行しない。コードを読んで確認）。
-  `snapshot` は、リポジトリの作業用コピーを `work/src/` へ作る（追跡と ignored でない未追跡。`[file] read_deny_globs` に当たるもの・リンク・サブモジュール・容量超過は除外し、一覧が読めなければ拒否する）。**隔離ではない**（[CHG-0030](../change/0030-away-shift-on-pi.md) の 2026-10-26）。
+  `snapshot` は、リポジトリの作業用コピーを `work/src/` へ作る（追跡と ignored でない未追跡。`[file] read_deny_globs` に当たるもの・リンク・サブモジュール・容量超過は除外し、一覧が読めなければ拒否する）。**隔離ではない**（[CHG-0030](../change/0030-away-shift-on-pi.md)）。
   書き込みは `.tmp/away-shift/` の中に閉じる（run_id の検査、リンクの拒否、`--note-file` は `work/` 直下のみ。`test_away_guard.py` が固定）。
   待機は `sleep <秒>`（1〜7200 の整数。何も読み書きしない）を許可し、生の `sleep` は `[pi.shell] allow` に足さない（OpenCode の全体許可へ複写され、`sleep … > ファイル` が書き込み経路になるため）。
-  `skill_scripts` は `shell_allow` を持つ探索・レビュー役からも到達するが、書き込み先が閉じているので受け入れる。読み取り専用と説明している役割に書き込みの例外ができることを今回受け入れる。許可の期待値は `test_decide.py` の `test_away_shift_scripts_allow_only_the_listed_subcommands` が固定している（2026-10-22 に全件通過）。実際の pis（TS 版）での挙動は未確認
+  `skill_scripts` は `shell_allow` を持つ探索・レビュー役からも到達するが、書き込み先が閉じているので受け入れる。読み取り専用と説明している役割に書き込みの例外ができることを今回受け入れる。許可の期待値は `test_decide.py` の `test_away_shift_scripts_allow_only_the_listed_subcommands` が固定している。実際の pis（TS 版）での挙動は未確認
 
 ### bypass から呼べる子エージェント
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
 
 `bypass` は「通常と同じ permission のまま、確認（`ask`）だけを plugin が `allow` にする」
 エージェント（[ADR-0014](../adr/0014-bypass-as-ask-upgrade.md)）。`common.toml` で
@@ -637,8 +651,7 @@ permissions = [
 
 - **許可リストにする理由。** 子は親が `bypass` でも自分の規則で動き、確認が自動で通るのは
   `bypass_agents` に載ったものだけ。承認制の子や一覧に無い子を起動すると、編集やシェルの
-  たびに確認が出て無確認の前提が崩れる（2026-10-08 に、修正前の `explore` を並べて起動して
-  確認が大量に出た）。モデルは説明の広い `general` を選びがちでもある。子を足すときは
+  たびに確認が出て無確認の前提が崩れる（[事例](../research/agents/agent-config-generation-notes.md)）。モデルは説明の広い `general` を選びがちでもある。子を足すときは
   一覧も見直す（一覧の更新が、確認なしで動けるかを見直す機会になる）
 - **許可した子の作業ツリーの外の読み取りは、親が `bypass` なら確認を省く。**
   `explore` / `review` / `commit` は `bypass_agents` に無いので、自分の規則では確認が自動で
@@ -729,6 +742,8 @@ permissions = [
 全 allow を外した構成の実測は [ask→allow の調査](../research/opencode/permission/bypass-ask-upgrade.md)。
 
 ### plugin 層 (`guide-plugin`)
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
 
 `~/.config/opencode/guide-plugin/` に置く。判定表は `common.toml` の
 `[[opencode.shell.guide]]`・`[bash.deny_guide]`・`[pi.redact]`・`[opencode.ask_description]`・
@@ -924,6 +939,8 @@ head -1 README.md   # 誘導が生きていれば permission.rejected が返る
 
 ### 確認画面に出るコマンドの説明
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+
 60 文字以上のコマンドで確認が出るとき、安価なモデルが 1 行の日本語説明を
 作り、toast で表示する。破壊的操作・外部送信・秘密への接触があれば
 先頭に `⚠` が付く。
@@ -997,6 +1014,8 @@ feat(opencode): git commit の確認に件名と本文を抜き出して出す  
 
 ### キーバインド
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+
 TUI のキーバインドは **`cli.json` 側にしか無い**。`opencode.json` へ書いても
 読まれず、誤配置に気づけないので `[opencode.keybinds]` を単一ソースにして
 `merge_opencode_cli()` が `cli.json` へ出す。
@@ -1055,11 +1074,9 @@ Windows で描画したときだけ現れる）。`merge_opencode_service()` が
 `~/.config/opencode/service.json` の `port` だけを書き、`password` などは残す。
 Windows 以外では `.chezmoiignore.tmpl` がこのファイルを外し、OpenCode に任せる。
 
-**理由**: 2026-10-02 に WSL と Windows の OpenCode（v2.0.14）がどちらも 127.0.0.1 の
-4097 番を常駐サービスに使っていた。WSL と Windows が localhost を共有する構成では、
-先に起きた側がポートを握り、もう一方は `Managed service port 4097 ... is already in use`
-を繰り返したのち `Timed out waiting for the background service to start` で止まる
-（Windows 側の `opencode.exe serve --service` が親の終了後も残っていた）。
+**理由**: WSL と Windows の OpenCode が localhost を共有する構成で、どちらも既定で同じ 127.0.0.1 の
+ポート（4097）を常駐サービスに使い、先に起きた側が握ると、もう一方は起動できずに止まるため
+（[経緯](../research/agents/agent-config-generation-notes.md)）。
 
 - `service.json` は秘密情報（`password` が平文）。生成側は `port` 以外を読み書きしない
 - 反映には Windows 側で `opencode service restart` が要る
@@ -1071,9 +1088,7 @@ Windows 以外では `.chezmoiignore.tmpl` がこのファイルを外し、Open
 - **設定ファイルの場所は `OPENCODE_CONFIG_DIR` に従う。** Orca のセッションでは
   `~/.orca-relay/opencode-overlays/<hash>/service.json` が読まれ、
   `~/.config/opencode/service.json` は使われない。Orca 内で `opencode service set` を
-  試すとそちらが書き換わる（2026-10-02、検証のつもりで `XDG_CONFIG_HOME` だけ
-  差し替えて `set port 4098` を実行し、WSL 側も 4098 になって Windows と衝突した。
-  `opencode service unset port` で戻した）
+  試すとそちらが書き換わるので、Orca の外のシェルから設定する（[経緯](../research/agents/agent-config-generation-notes.md)）
 
 ### モデルの割り当て
 
@@ -1134,8 +1149,8 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 | `deep` | 難しい判断・設計 | `claude-sonnet-5.5#high` | `us.anthropic.claude-opus-5-5#high` |
 | `second_opinion` | 別系統のモデルでの確かめ | `gpt-6-astra` | `us.openai.gpt-6-sol` |
 
-Copilot は Opus と Astra が制限されたので（2026-10）、`default`・`deep` は Sonnet 5.5、`second_opinion` は OpenCode の階層では Astra のままで、
-pi の Copilot は `[pi.model.tier.github-copilot]` で Sol に上書きしている。`deep` の `xhigh` は Sonnet で通る確認が取れていないので `high` にした。Bedrock の階層は全部 `us.`
+Copilot の `default`・`deep` は Sonnet 5.5、`second_opinion` は OpenCode の階層では Astra のままで、
+pi の Copilot は `[pi.model.tier.github-copilot]` で Sol に上書きしている（Opus と Astra が制限されたため）。`deep` の `xhigh` は Sonnet で通る確認が取れていないので `high` にした。Bedrock の階層は全部 `us.`
 （`global.` は使わない）。`us.` 無しの ID は `ask_description` の候補の最後のフォールバック
 （`amazon-bedrock/anthropic.claude-haiku-5-5`）だけで、推論プロファイルが無い環境で取りこぼさないための意図的なもの。
 
@@ -1144,29 +1159,17 @@ pi の Copilot は `[pi.model.tier.github-copilot]` で Sol に上書きして�
 
 - **`routine` と `worker` は今は同じモデルだが、分けておく。** 名前は用途なので、
   どちらかの計測結果が変わったときに片方だけ差し替えられる
-- **`routine`（`commit`）は Sonnet 5.5。** 子がコミットまで行っていた頃の測定。`commit` を haiku で動かすとメッセージの書式が崩れ、
-  `claude-sonnet-5` ではそろった（[記録 E4 / E5](../research/opencode/commit-review-agents.md)）。
-  Copilot の `claude-sonnet-5.5#medium` は `claude-opus-5.5#medium` と同等にコミット・書式がそろい、
-  速く単価も半分で、`claude-sonnet-5` より `git commit` 以外の確認が少なかった（記録 E6）。
-  effort を low / high にしても、コミット・書式・確認に差は無かった
-  （[階層のモデルの計測](../research/opencode/tier-models.md)）
-- **`worker`（`fleet-worker`）も Sonnet 5.5。** 小さな実装・バグ修正・リファクタリングなどの
-  課題では、`claude-opus-5.5` と `claude-sonnet-5.5` の low / medium / high の合格率に差が無く、
-  sonnet の medium は opus の medium の約 2/3 の時間で終わった。`claude-haiku-4.5` は
-  難しめの課題で 0/4、担当外にファイルを残し、手数が多いぶん Bedrock の単価での試算も
-  sonnet 5.5 より高かった（[階層のモデルの計測](../research/opencode/tier-models.md)）。
+- **`routine`（`commit`）は Sonnet 5.5。** haiku ではコミットメッセージの書式が崩れ、Sonnet 5.5 でそろう。effort では差が出なかった
+- **`worker`（`fleet-worker`）も Sonnet 5.5。** 実装課題で Opus 5.5 と合格率に差が無く、速い。haiku は難しめの課題で不合格が多く、担当外にファイルを残す。
   Bedrock の値は Copilot で近似した判断で、Bedrock 上では未確認
+- 比較の数値と根拠は[経緯](../research/agents/agent-config-generation-notes.md)と[階層のモデルの計測](../research/opencode/tier-models.md)
 - **effort はプロバイダの予算で分ける。** Copilot（使い放題）は質と待ち時間で選び、`routine` も
   `worker` も `medium`。Bedrock（予算が有限）は、effort で差が出なかった `routine` を `low` にして
   費用を削り、`worker` は `medium`。公開のベンチマークでも、effort の差は難しいコーディングの課題で
   1 段あたり 1〜3 ポイント程度（[階層のモデルの計測](../research/opencode/tier-models.md)の追記）。
   Bedrock の Sonnet 5.5 に effort を付けられることは、利用者が確かめた
-- **`deep` は計測していない。** 良し悪しを機械的に採点できる課題を作れないため、
-  opus の上位の effort のまま
-- **Bedrock の `default` は Sonnet 5.5 のまま（再考の候補あり）。** 上位モデルを低い effort で
-  使うほうが、仕事 1 件あたりの費用で得になる場合がある（公式の資料）ので、Opus 5.5 の `low` を
-  候補として記録した。同じ条件での比較が無く、主エージェントに effort を付けられるかも未確認
-  （[階層のモデルの計測](../research/opencode/tier-models.md)の追記）
+- **`deep` は計測していない**（機械的に採点できる課題が作れないため、opus の上位の effort のまま）
+- **Bedrock の `default` は Sonnet 5.5 のまま。** Opus 5.5 の `low` が候補だが未比較（[経緯](../research/agents/agent-config-generation-notes.md)）
 - `default` を割り当てに使わないのは、Copilot の `default` はバリアントが付けられず
   （下記）ほかの階層と推論の強さが変わるのと、既定モデルを変えたときに子エージェントまで
   変わらないようにするため。Bedrock では今は `routine` / `worker` と同じモデルで、effort だけが違う
@@ -1181,11 +1184,8 @@ explore = "worker"      # 例
   書く。Bedrock の `us.` はクロスリージョン推論プロファイル (米国のリージョン内。以前の `global.` は使わない)
 - **`default` に `#variant` は付けられない。** 既定の `model` はバリアントを
   保持しない（公式）。付けると `apply` を止める
-  - Copilot の `default` を「Opus 5.5 の high」にしたかったが、手段が無かった。
-    モデル単位の `settings.reasoningEffort`・別名モデル・`context` hook の
-    どれで入れても、効くのは 1 回目の呼び出しだけで、ツール結果を受けた 2 回目
-    以降（`/v1/messages`）では推論の強さが送られない
-    （[実測 記録 E2](../research/opencode/agent-models.md#記録-e2--2026-09-28-既定モデルに推論の強さを持たせられるか)）
+  - Copilot の `default` に推論の強さを持たせる手段は無かった（2 回目以降の呼び出しで送られない。
+    [実測 記録 E2](../research/opencode/agent-models.md#記録-e2--2026-09-28-既定モデルに推論の強さを持たせられるか)）
   - そのため Copilot の `default` はバリアントなし（強さは Copilot 側の既定。
     どの強さかは未確認）。high で動かしたいセッションは TUI でバリアントを選ぶ
 - 未知の階層・プロバイダ、`[opencode.agent]`（V1 形式）にあるエージェントへの
@@ -1387,6 +1387,8 @@ explore = "worker"      # 例
 
 ### 並列作業（`/fleet`）
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+
 Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる作業に分け、
 作業役の子エージェントを同時に起動して進める。仕組みは専用の機能ではなく、
 **コマンドの指示文と、1 回の応答で `subagent` ツールを並べて呼ぶこと**で組んでいる
@@ -1442,6 +1444,8 @@ Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる�
 
 ### 後勝ちの照合
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+
 OpenCode は **最後に一致した規則が勝つ**。Claude の deny > ask > allow とは
 逆なので、`generate.py` が `allow` → `ask` → `deny` の順に並べて同じ優先順位を
 作る。並びが崩れると `git reset --hard` の deny を `git reset` の ask が
@@ -1453,9 +1457,10 @@ ask に置く)。
 
 ## hooks の単一ソース化
 
-**Claude / Copilot への hook の登録は撤去した（2026-10、[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。**
+**Claude / Copilot への hook の登録は撤去した（[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。**
 `[[hooks]]` は、pi のフルガードが edit / write の後に呼ぶスクリプト（`post_edit = true`。整形と markdownlint）だけを持つ。
-判定の hook（`check_bash.py`・`redirect-tmp.py`・`check_file_read.py`）は TS の判定器（`pi/harness/judge`）へ移し、`[retired_hooks].scripts` に載せた。
+判定の hook（`check_bash.py`・`redirect-tmp.py`・`check_file_read.py`）の判定は TS の判定器（`pi/harness/judge`）が担い、`[retired_hooks].scripts` に載せた。
+Python 版のファイルは `home/dot_claude/hooks/` に残るが、登録されず実行時は呼ばれない（正解データの書き出し元。[CHG-0035](../change/0035-retire-python-judge-oracle.md)）。
 
 | 生成先 | 生成方法 | 扱い |
 | --- | --- | --- |
@@ -1481,7 +1486,7 @@ ask に置く)。
   二重引用符が外側の引用と衝突しうるため。
   Windows の Python hook は bytecode を生成せず日本語 JSON を壊さない
   `py -3 -B -X utf8` で起動する。
-  （この節の Copilot の hooks 生成は撤去済み。Claude の hook の起動形式の記録として残す）
+  （Copilot の hooks 生成は撤去済み。[記録](../research/agents/agent-config-generation-notes.md)）
 - `hooks` キーは Orca などの**外部ツールも追記する共有領域**なので、apply では
   このリポジトリの hook スクリプトを起動しているエントリだけを差し替える (後述)
 - CLI UI で手動追加した hook も、このリポジトリのスクリプトを指していなければ
@@ -1508,10 +1513,8 @@ Orca は `~/.claude/settings.json` と `~/.gemini/settings.json` の `hooks` へ
 **ディレクトリではなくスクリプト名で所有権を決める。** `~/.claude/hooks/` は
 共有ディレクトリで、herdr（`herdr integration install claude`）も
 `herdr-agent-state.sh` をここに置き、`SessionStart` に登録する。
-以前はディレクトリで判定していたので、apply のたびに herdr の hook を消し、
-直後の `run_after_140_herdr_integration` が足し直していた。2 回 apply しても
-`settings.json` が安定せず、その間は hook が無い状態になる
-（[Docker の検証で発覚](../research/testing/docker-cold-start-fixes.md#6-2-回目の-apply-でも-claudesettingsjson-の差分が消えない2026-09-27)）。
+ディレクトリで判定すると herdr の hook を apply のたびに消してしまう
+（[経緯](../research/testing/docker-cold-start-fixes.md#6-2-回目の-apply-でも-claudesettingsjson-の差分が消えない2026-09-27)）。
 
 `[retired_hooks].scripts` は撤去した hook の名前で、`settings.json` に残った
 古い登録を消すためにある。一覧は git 履歴から作った
@@ -1522,10 +1525,8 @@ Orca は `~/.claude/settings.json` と `~/.gemini/settings.json` の `hooks` へ
 逆に言えば、このディレクトリにスクリプトを置いて `settings.json` へ手で
 登録しても、`common.toml` に転記していなければ外部の hook として残り続ける。
 
-herdr の hook を `common.toml` から生成する案は採らない。herdr の版や OS ごとに
-スクリプト名・引数・起動形式が変わり、それを追従する責任まで負うことになるため。
-herdr 自身が `run_after_140` / `343` で毎回導入し直す今の方式のほうが、
-`mise upgrade herdr` 後の追従や登録の消失からの復旧も兼ねられる。
+herdr の hook は `common.toml` から生成せず、herdr 自身が `run_after_140` / `343` で毎回導入し直す
+（理由は[記録](../research/agents/agent-config-generation-notes.md)）。
 
 - 絞り込みは**エントリ単位ではなくコマンド単位**。1 エントリの `hooks` リストに
   管理対象と外部由来が混在していても、外部由来だけが残る
@@ -1565,6 +1566,8 @@ Copilot は PascalCase イベント名で書くと Claude の tool 名 (`Edit` /
 
 ### Claude Code のイベント名・timeout の注意 (2026-08 時点の公式 docs 準拠)
 
+> 旧 Claude hook の記録。登録は撤去済み（[記録](../research/agents/agent-config-generation-notes.md)）。
+
 - `TaskCompleted` は実在するが、`TaskCreate` ツール経由のタスク完了時にのみ発火する。
   「ターン終了時」に 1 回だけ動かしたい hook は `Stop` を使う
   (`Stop` = "When Claude finishes responding"、cadence は "once per turn")
@@ -1589,9 +1592,7 @@ Copilot は PascalCase イベント名で書くと Claude の tool 名 (`Edit` /
 ### プラグイン (skill) の重複に注意
 
 `anthropic-agent-skills` マーケットプレイスの **`document-skills` と
-`example-skills` は中身が完全に同一** (実測: `skills/` 配下の差分は実行時
-生成物の `__pycache__` のみで、`pptx` / `docx` / `pdf` / `xlsx` など 17 スキルが
-一致)。両方有効にすると全スキルが二重に登録される。
+`example-skills` は中身が完全に同一**（17 スキルが一致。[実測](../research/agents/agent-config-generation-notes.md)）。両方有効にすると全スキルが二重に登録される。
 
 `common.toml` の `[copilot.enabled_plugins]` でどちらを残すかを宣言し、
 `merge_copilot_settings` が `settings.json` の `enabledPlugins` へ反映する。

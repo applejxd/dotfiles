@@ -38,10 +38,9 @@ pre-commit の gitleaks フックは、公式リポジトリ（`language: golang
 `mise exec -- gitleaks` を呼ぶローカルフックにしている。版は `mise.toml` の
 `gitleaks` が正本。
 
-公式フックは、初回にフック環境を作るとき Go のツールチェーンを落として
-gitleaks を**ソースからビルド**する。Raspberry Pi 4（RAM 3.7GB、swap 0）では
-このビルドでメモリが尽き、SSH も応答しなくなって電源の抜き差しが要った
-（2026-09-26）。mise なら GitHub Releases のバイナリを落とすだけで済む。
+公式フックは、初回にフック環境を作るとき gitleaks を**ソースからビルド**するので、RAM の小さい
+Raspberry Pi 4 ではメモリが尽きて SSH も応答しなくなる
+（[記録](../research/testing/raspi-oom-ssh-freeze.md)）。mise なら GitHub Releases のバイナリを落とすだけで済む。
 フックの id は `gitleaks` のままなので、`SKIP=gitleaks` はそのまま使える。
 
 ## 変更の種類ごとの検証
@@ -65,8 +64,9 @@ gitleaks を**ソースからビルド**する。Raspberry Pi 4（RAM 3.7GB、sw
 ### 検証の方針と選択実行
 
 方針: 日常は変更に応じた選択実行、全件はコミット前に 1 回。全件の pytest は約 3,700 件で
-約 9 分かかる（2026-10-22 実測 556 秒）。CI で全件を回す件は
-[テストと検証の仕組み](testing.md#いつ回すか) に未着手の候補として書いた。
+約 9 分かかる（実測値は [開発ガイドの実測メモ](../research/testing/development-timing-notes.md)）。
+CI の範囲は [テストと検証の仕組み](testing.md#いつ回すか)。
+**「いつ・何を回すか」の選択規則の正本はこの節**で、Docker ハーネスの契約は testing.md が正本。
 
 ```text
 python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
@@ -93,16 +93,15 @@ python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
 (`stages` を省くと全 stage で走り、push でも二重に走るため)。
 `default_install_hook_types` で `pre-commit install` だけで両方の hook が入る。
 
-| stage | hook | 所要時間 (2026-10-23 実測) |
-| --- | --- | --- |
-| commit | gitleaks・YAML・ruff・frontmatter・`common-toml-local`・docs の索引・`verify-stamp`・空白など | 各 0.5 秒以下 |
-| commit | Markdown lint | 1.7 秒 |
-| push | `lint-templates-local` (テンプレートの描画 lint) | 9.9 秒 |
-| push | `raspi-regression-local` (Raspberry Pi の回帰テスト) | 3.0 秒 |
-| push | `verify-stamp-push` (印の警告) | 0.5 秒以下 |
+| stage | hook |
+| --- | --- |
+| commit | gitleaks・YAML・ruff・frontmatter・`common-toml-local`・docs の索引・`verify-stamp`・空白・Markdown lint など（速いもの） |
+| push | `lint-templates-local` (テンプレートの描画 lint)、`raspi-regression-local` (Raspberry Pi の回帰テスト)、`verify-stamp-push` (印の警告) |
+
+hook ごとの所要時間は [開発ガイドの実測メモ](../research/testing/development-timing-notes.md)。
 
 - 理由: commit のたびに 10 秒以上待たせると `--no-verify` を誘う。push は回数が少なく、
-  まとめて検査する場所に向く。利用者の判断 (2026-10-23)
+  まとめて検査する場所に向く（利用者の判断）
 - 選択実行 (`verify.py --changed`) は `pre-commit run --files` を使うため commit の stage だけを走らせる。
   push 側の `lint-templates-local` は `LINT_TEMPLATES` として別に走り、回帰テストは
   `test_raspi_detection` の選択で走る。全件 (`--all`) は `--hook-stage pre-push` の呼び出しで push の hook も走らせる
@@ -226,8 +225,8 @@ Bitwarden 由来のファイルは検証の対象外。
 
 **実行ポリシーの抜けを検出できない**（既知の限界）。`launch.ps1` が `-ExecutionPolicy Bypass` で
 `guest.ps1` を起動すると、子の `chezmoi` にも `PSExecutionPolicyPreference=Bypass` が引き継がれる
-（実測）。README の `Set-ExecutionPolicy` の行は、`Restricted` のままだと `chezmoi` が `.ps1` の
-run スクリプトを実行できないために必要（実測）だが、この検証はその行が無くても通る。
+。README の `Set-ExecutionPolicy` の行は、`Restricted` のままだと `chezmoi` が `.ps1` の
+run スクリプトを実行できないために必要だが、この検証はその行が無くても通る。
 
 ```powershell
 # ホストの PowerShell で（Sandbox の有効化と再起動が済んでいること）

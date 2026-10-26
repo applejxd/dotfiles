@@ -1,9 +1,12 @@
 # モデルの割り当ての見直し
 
-OpenCode の各階層に当てるモデルと effort を、新しいモデルが出たときなどに見直す手順。
+OpenCode と pi の各階層に当てるモデルと effort を、新しいモデルが出たときなどに見直す手順。
 
 見直す対象は `common.toml` の `[opencode.model.tier.<プロバイダ>]` にある 5 つの階層
-（`default` / `routine` / `worker` / `deep` / `second_opinion`）。階層は用途の名前で、
+（`default` / `routine` / `worker` / `deep` / `second_opinion`）。pi は同じ表を読み、
+`[pi.model.tier.<プロバイダ>]` に書いた階層だけを上書きする（pi が受け付けるモデルが違う階層用。
+`scripts/agents/generate.py` の `pi_model_ref` が `provider/model[:thinking]` の形にし、
+`#variant` は思考の強さ `:low` などへ読み替える）。階層は用途の名前で、
 エージェントは階層名で指すので、見直しで変わるのは階層に当てるモデル ID と
 `#variant`（effort など）だけになる。階層の用途・今の割り当て・その根拠は
 [階層](agent-config-generation.md#階層)の表が正本で、ここには写さない。
@@ -125,9 +128,7 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 
 - `routine`: 親の `build` に「差分は自分で読まず `commit` に任せる」と頼む。作業用リポジトリの
   変更は 5 種類（複数の論理単位・範囲外の個人メモ・削除・理由の要る破壊的な変更・未追跡の
-  ディレクトリ）。**2026-10-07 に `commit` は計画だけを返す役になり、承認は会話、コミットは親が行う
-  （[コミットの確認](agent-config-generation.md#コミットの確認)）。`scripts/model-eval/routine/` の採点は
-  子がコミットまで行う旧方式が前提で、そのままでは測れない。次の見直しの前に作り直す**
+  ディレクトリ）。**ただし 2026-10-07 の変更は [記録](../research/agents/model-lineup-review-notes.md) を参照。`commit` は計画だけを返す役で、`scripts/model-eval/routine/` の採点は旧方式が前提のため、次の見直しの前に作り直す**
 - `worker`: 親の `build` から、依頼文を一字も変えずに `fleet-worker` へ渡させる（`/fleet` と同じ経路）。
   使い捨ての Python パッケージで課題 7 種類（機能追加・バグ修正・リファクタリング・テストの追加・
   複数ファイルにまたがる変更と、難しめの 2 種類）。採点は作業役に見せない隠しテストで行う。
@@ -159,7 +160,7 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 計測の道具（設定の生成・隔離実行・採点・集計のスクリプト、作業用リポジトリの作り方、課題の依頼文・
 隠しテスト・模範解答、計装した plugin）は [`scripts/model-eval/`](../../scripts/model-eval/README.md) にある。
 回し方はその README。実行記録は `.tmp/model-eval/` に出て、git に入らない。
-2026-09-30 までの記録は、同じ道具の元になった `.tmp/opencode/` の下の版で測った。
+過去の記録が使った版は [記録](../research/agents/model-lineup-review-notes.md)。
 
 ## 決め方の目安
 
@@ -176,8 +177,10 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 
 ## 変えるときの手順
 
+> 手順 1・4・5 の `[opencode.model.tier.*]`・`opencode.json` は OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi は `[pi.model.tier.<プロバイダ>]` の上書きと `pi_model_ref` を使い、設定は `rules.json` / `pis` の起動引数へ生成される（[設定の生成](agent-config-generation.md)）。
+
 1. `home/dot_config/agents/common.toml.tmpl` の `[opencode.model.tier.<プロバイダ>]` を書き換える。
-   どのプロバイダにも同じ階層名をそろえる
+   どのプロバイダにも同じ階層名をそろえる。pi だけ別のモデルにしたい階層は `[pi.model.tier.<プロバイダ>]` に書く
 2. テストを直して通す。`test/agents/test_generate_opencode_models.py` は各プロバイダの ID と
    variant を具体的に固定しているので、変えた値に合わせる
 
@@ -191,7 +194,7 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 4. 計測や調べた数字を調査記録に残す。同じ問い（その階層にどのモデルを当てるか）の測り直しなら
    既存の記録に日付付きの節を足し、問いが変わるなら新しい記録にする。
    [調査記録の索引](../research/index.md)の行も直す
-5. 配備する。`chezmoi apply` で `~/.config/opencode/opencode.json` が変わり、OpenCode は設定ファイルを
+5. 配備する（OpenCode 専用）。`chezmoi apply` で `~/.config/opencode/opencode.json` が変わり、OpenCode は設定ファイルを
    自動で読み直す（[公式](https://opencode.ai/v2/docs/models/)。実行中のリクエストは始めたときの
    設定のまま）
 

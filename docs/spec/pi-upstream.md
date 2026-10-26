@@ -4,7 +4,7 @@ pi（earendil-works/pi）の挙動のうち、このリポジトリが頼って�
 仕様の本文は pi の更新で変わるので、**明示があるものはここへ写さず、リンクだけを置いて都度読む**。
 **明示が無いものは、実測したことをここに書き、試験で固定する**（公式を読んでも分からないため）。
 
-- 対象のバージョン: **pi 1.1.0**（2026-10-11 時点。`pi --version`）
+- 対象のバージョン: 入れているのは **pi 1.4.0**（`pi --version`）。表 B の「確認した版」は項目ごとに実測した版（1.1.0〜1.3.0）で、1.4.0 では全項目を再測定していない
 - 見出し: [A. 公式に明示がある（リンクだけ）](#a-公式に明示があるリンクだけ) / [B. 明示が無い（ここに書く）](#b-明示が無いここに書く) / [確認先](#確認先と更新時の手順) / [codemode の扱い](#codemode-の扱い)
 
 ## 確認先と更新時の手順
@@ -58,7 +58,7 @@ pi を更新したときの手順:
 | 8 | UI の無い起動（`-p`）では、フルガードの確認（ask）は拒否になる | `ctx.hasUI` は明示（表 A）。**拒否にする判断はフルガードの実装** | 1.1.0 | `test_decisions_reach_the_tools` | フルガードの設計（公式の挙動ではない） |
 | 9 | ツール定義の常駐トークン: 最小の MCP ツール 1 つで約 +37、`codemode` で約 +680（偽のモデルの見積もり） | 無し（`codemode.inlineBudget` の既定は宣言の説明に 3,000 トークンまで） | 1.1.0 | E6 | 入口の選択の目安 |
 | 10 | 試験が使う `pi-ai/dist/providers/faux.js` の位置は、インストール方法で変わる（mise・公式インストーラーは兄弟、Windows の npm global は入れ子） | 内部のパスで、公開 API ではない | 1.1.0 | `test/agents/pi/faux.ts` が両方に対応 | パスが変わったら試験が落ちる |
-| 11 | Windows の npm global の `pi` は `pi.CMD` で、子の pi を `spawn("pi")` する処理（子エージェント）と、その試験が動かない | 無し | 1.1.0 | Windows で `test_pi_harness.py` の 9 件が失敗 | `pis` は Unix 専用（既知） |
+| 11 | Windows の npm global の `pi` は `pi.CMD` で、子の pi を `spawn("pi")` する処理（子エージェント）と、その試験が動かない | 無し | 1.1.0 | Windows で `test_pi_harness.py` の 9 件が失敗 | Windows には `pis` を配らず、設定でフルガードを載せ、子は読み取り専用の `task` だけ（`guarded_task` は使わない。[Windows](guard/pi-guard.md#windows)） |
 | 12 | `fd`・`rg` は、`<agent 置き場>/bin` → PATH の順に探し、どちらにも無ければダウンロードして `<agent 置き場>/bin` へ置く（`tools-manager.js` の `getToolPath`、`config.js` の `getBinDir`）。起動ごとに新しい agent 置き場では、毎回ダウンロードされる | 未確認（実装を読んだ。公式の文書は探していない） | 1.1.0 | [記録 S1](../research/agents/pis-sandbox-field-test.md)、`test_agent_dir_carries_the_instructions_keybindings_and_prompts` | サンドボックスの agent 置き場の `bin/` を、本物の `~/.pi/agent/bin` へのリンクにする |
 | 13 | セッションの置き場は `sessions/--<作業ディレクトリ>--`（先頭の区切りを外し、`/` `\` `:` を `-` にする。`getDefaultSessionDirPath`）。`--session-dir` は渡した場所へそのまま置く | 未確認（`pi.py` の記述による。今回は再確認していない） | 1.1.0 | `test_pi_boundary.py` の `sessions_dir` の試験 | サンドボックスの起動が同じ命名を再実装している（変わると外の `pi -c` で再開できない。pi の更新時に再開を確かめる） |
 | 14 | 明示した `--skill` は `--no-approve` でも読まれ、**同名のスキルはグローバル（`settings.json` の `skills`）が勝つ**。`--approve` の自動発見ではプロジェクトが勝つ（乗っ取れる） | `cli.md` に `--skill` の説明はあるが、競合の優先は無い（`skills.md` は「最初に見つけたものが残る」） | 1.3.0 | `test_explicit_skill_loads_under_no_approve_and_global_wins_on_a_name_clash` | `pis` は作業先の `.agents/skills` を `--skill` で足す（[起動](guard/pi-guard.md#起動)） |

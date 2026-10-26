@@ -4,7 +4,7 @@
 
 - [導入と適用](troubleshooting-bootstrap.md): `chezmoi apply` / `chezmoi update`、
   スクリプトの再実行、Python、Bitwarden、mise、APT、AI CLI の導入
-- [AI CLI の実行時](troubleshooting-agents.md): sandbox、hook、skills、ツール呼び出しの引数
+- [AI CLI の実行時](troubleshooting-agents.md): sandbox、skills、ツール呼び出しの引数、クリップボード
 
 ## まず見るもの
 
@@ -28,7 +28,7 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | `No module named 'tomllib'`、`chezmoi-python3: no such file or directory` | Linux / WSL / macOS | [Unix で tomllib が無いと言われて apply が止まる](troubleshooting-bootstrap.md#unix-で-tomllib-が無いと言われて-apply-が止まる) |
 | `tomllib` や Python のエラー | Windows | [Windows で tomllib や Python のエラーが出る](troubleshooting-bootstrap.md#windows-で-tomllib-や-python-のエラーが出る) |
 | `You are not logged in.`、`error calling bitwarden`、`bw: command not found` | 全 OS | [chezmoi update が Bitwarden で止まる](troubleshooting-bootstrap.md#chezmoi-update-が-bitwarden-で止まる) |
-| WSL にリモートから SSH できない（タイムアウト、`Connection refused`、`Permission denied`） | Windows + WSL（mirrored） | [リモートから WSL へ SSH する](structure.md#リモートから-wsl-へ-ssh-する)（[接続できないときの切り分け](structure.md#接続できないときの切り分け） |
+| WSL にリモートから SSH できない（タイムアウト、`Connection refused`、`Permission denied`） | Windows + WSL（mirrored） | [リモートから WSL へ SSH する](structure.md#リモートから-wsl-へ-ssh-する)（[接続できないときの切り分け](structure.md#接続できないときの切り分け)） |
 | age 鍵が無い、sops で復号できない | 全 OS | [秘密情報の管理セットアップ: 鍵が見つからない](sops-age.md#鍵が展開されない) |
 | `bw` などの npm 由来のツールが `Cannot find module` / `node: not found` | Linux / WSL / macOS | [mise の npm ツールが突然動かなくなる](troubleshooting-bootstrap.md#mise-の-npm-ツールが突然動かなくなる) |
 | VS Code の拡張が入っていない | 全環境（Settings Sync で同期） | [VS Code の拡張が入っていない](troubleshooting-bootstrap.md#vs-code-の拡張が入っていない) |
@@ -39,10 +39,11 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | sandbox の中で全ツールが即失敗する（`requires 'slirp4netns' on PATH` など） | Linux / WSL の Copilot CLI | [Linux で sandbox がコマンドを 1 つも実行できない](troubleshooting-agents.md#copilot-cli) |
 | `/sandbox` に Dependencies タブが出る | Linux / WSL の Claude Code | [Linux で sandbox がコマンドを 1 つも実行できない](troubleshooting-agents.md#claude-code) |
 | sandbox の中で読めない・書けない | Claude Code / Copilot CLI | [sandbox](sandbox/agent-sandbox.md) |
-| hook が起動しない | Windows の Copilot CLI | [Windows で Copilot の hook が起動しない](troubleshooting-agents.md#windows-で-copilot-の-hook-が起動しない) |
+| `pi --version` が `SyntaxError` などで落ちる、pi の導入（npm）が失敗する | Windows の pi | [Windows で pi が起動しない（古い node が先に見つかる）](troubleshooting-bootstrap.md#windows-で-pi-が起動しない古い-node-が先に見つかる) |
 | `Failed to load 1 skill.` | Claude Code / Copilot CLI | [CLI 起動時に Failed to load 1 skill と出る](troubleshooting-agents.md#cli-起動時に-failed-to-load-1-skill-と出る) |
 | `Invalid arguments for tool ...`、引数が空のツール呼び出し | pi | [ツール呼び出しの引数が壊れる](troubleshooting-agents.md#ツール呼び出しの引数が壊れるinvalid-arguments引数が空) |
 | `~/.copilot/skills` が作られない | Windows の Copilot CLI | [Windows で .copilot/skills のリンクが作られない](troubleshooting-agents.md#windows-で-copilotskills-のリンクが作られない) |
-| `ask` のはずの操作を確認なしで実行する | OpenCode | [保存した承認の確認とリセット](agent-permissions.md#保存した承認の確認とリセット) |
+| `/copy` で `Clipboard unavailable: install wl-clipboard` と出る | `pis`（WSL2） | [pis の内側でクリップボードへコピーできない](troubleshooting-agents.md#pis-の内側でクリップボードへコピーできない) |
+| `ask` のはずの操作を確認なしで実行する（OpenCode 専用。撤去予定） | OpenCode | [保存した承認の確認とリセット](agent-permissions.md#保存した承認の確認とリセット) |
 
 [仕様・運用一覧へ戻る](index.md)

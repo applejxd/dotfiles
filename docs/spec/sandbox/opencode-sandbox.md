@@ -9,6 +9,9 @@ OpenCode を OS のアクセス制御で囲って起動する仕組みの構成�
 - 経緯と候補比較は [CHG-0004](../../change/closed/0004-opencode-sandbox.md)（作った経緯）と
   [CHG-0009](../../change/closed/0009-ocs-simplify-for-accidents.md)（Fence への切り替えと簡素化）
 - ここは**現在の構成**だけを書く
+- 書き溜めた経緯・実測は [`ocs` 境界の仕様の補足記録](../../research/opencode/opencode-sandbox-spec-notes.md)
+
+> この文書の『境界の中身』『起動前の退避』『境界チェック』『信頼の鎖』は、`pis` と `ocs` が共有する Fence 境界の正本。『状態の置き場』（DB の共有・セッションの引き継ぎ・隔離版設定）『エージェントとコマンド』『OCS_ISOLATED』は OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。
 
 ```bash
 ocs          # 隔離起動（境界の内側で起動する）
@@ -35,6 +38,8 @@ opencode     # 通常起動（境界なし）
 
 ## 通常起動と `ocs` の使い分け
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [境界の中身](#境界の中身)。
+
 分けるのは**境界を張るかどうか**で、エージェントではない。`bypass`（通常と同じ permission のまま、
 確認（`ask`）だけを guide plugin が `allow` にするエージェント。[ADR-0014](../../adr/0014-bypass-as-ask-upgrade.md)）は
 どちらでも使えるが、外れるものが違う。
@@ -48,11 +53,7 @@ opencode     # 通常起動（境界なし）
 制御ファイルの置き場や保護対象の中では、`ocs` は起動を断る（[起動ディレクトリの制限](#起動ディレクトリの制限)）。
 そこの編集は通常の `opencode` で行う。
 
-> 以前は「`ocs` では `bypass` を使わない。復旧は境界の外の通常版」と決めていた
-> （[CHG-0004](../../change/closed/0004-opencode-sandbox.md)。同じサーバーの中でエージェント名を変えても
-> OS 上の権限は分かれないため）。[ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md) で境界の目的を
-> うっかりの防止に絞り、`ocs` の中の `bypass` は境界から抜ける手段ではないので、
-> [CHG-0010](../../change/closed/0010-ocs-agents.md) で使えるようにした。復旧を通常版で行う点は変わらない。
+`ocs` の中でも `bypass` を使える。経緯は [補足記録](../../research/opencode/opencode-sandbox-spec-notes.md#bypass-を-ocs-で使えるようにした経緯)。
 
 ## 全体像
 
@@ -312,16 +313,9 @@ Fence の `devices.allow` へ渡す。WSL の GPU は `/dev/dxg`、ネイティ�
   `dxg` (WSL の GPU)・`nvidiactl`・`nvidia[0-9]+` (`nvidia0`・`nvidia12`。`nvidia0abc`・`nvidia` 単体・
   `nvidia-foo` は通さない)・`nvidia-uvm`・`nvidia-uvm-tools`。**これ以外はすべて拒否**し、許可リストに無い
   要素と許可する名前の一覧を示して起動しない
-- **外した名前とその理由** (2026-10-23、WSL、fence 0.1.67 の実測と推測を分ける):
-  - `dri`: 実測で、`{"mode":"minimal","allow":["/dev/dri"]}` はディレクトリ全体 (`card0` と `renderD128`) を見せた。
-    `card0` は KMS の特権操作を含みうる (推測)。計算には不要
-  - `kfd`: AMD の ROCm 用。この環境に無い (実測)
-  - `nvidia-modeset`: 表示用 (推測)。CUDA の計算に要らない
-  - `nvidia-caps`: MIG 用のディレクトリ (推測)。計算に要らない
-  - 必要になったら、公開範囲を確かめたうえで、一覧に足す変更をする
+- **外した名前**: `dri`・`kfd`・`nvidia-modeset`・`nvidia-caps` は許可リストに入れていない（[理由と実測](../../research/opencode/opencode-sandbox-spec-notes.md#devices-の許可リストから外した名前)）。必要になったら、公開範囲を確かめたうえで、一覧に足す変更をする
 - 一覧に足すには `ocs` (`boundary.py`) の変更が要る。利用者の設定では足せない
-- **拒否の一覧方式は採らなかった** (2026-10-23 に利用者が判断)。一覧に無い未知の危険なデバイスが通ってしまうため。
-  `/dev/snd`・`/dev/kvm`・`/dev/ttyS0` などの GPU 以外も、許可リストに無いので拒否する
+- **許可リスト方式であり、拒否の一覧方式ではない。** 一覧に無い名前は、GPU 以外（`/dev/snd`・`/dev/kvm`・`/dev/ttyS0` など）も含めてすべて拒否する（[判断の経緯](../../research/opencode/opencode-sandbox-spec-notes.md#devices-の拒否の一覧方式を採らなかった判断)）
 - **存在しないデバイスは、Fence が黙って無視する** (実測。エラーにならない)。`ocs` は存在を確かめない。
   名前を間違えても起動はするが、GPU は使えない
 - 実測: `allow: ["/dev/dxg"]` だけで、`/dev` に `dxg` が 1 つ加わる。標準のデバイスは残り、`nvidia-smi` が通り、
@@ -416,6 +410,8 @@ flowchart LR
 
 ### DB の共有
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [境界の中身](#境界の中身)。
+
 内側で `XDG_DATA_HOME` と `OPENCODE_DB` を上書きしない。`ocs` は外側で
 `XDG_DATA_HOME/opencode`（未設定なら `~/.local/share/opencode`）を解決し、
 `allowWrite` に入れる。利用者の環境の `OPENCODE_DB` は**落とす**（残ると常駐サービスと
@@ -432,24 +428,16 @@ flowchart LR
 
 ### セッションの引き継ぎ
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [境界の中身](#境界の中身)。
+
 DB を共有しているので、内側で作ったセッションは OpenCode が終了時に表示する
 `opencode -s <ID>` で**そのまま**外から再開できる。移送の操作は無い。
 
-> 以前の `ocs` は起動ディレクトリごとの隔離用 DB（`<起動ディレクトリ>/.opencode-sandbox/`）を
-> 使っていた。`ocs` はこれを消さない。中の古いセッションは次で開ける（`--standalone` が要る）。
-> これは**会話を読むためのもの**。以前の `ocs` は `XDG_DATA_HOME` も `.opencode-sandbox/data` へ
-> 向けていて snapshot はそちらにあるので、以前の `/undo` は効かない見込み（未確認）。
->
-> ```bash
-> OPENCODE_DB="$PWD/.opencode-sandbox/opencode.db" opencode --standalone
-> ```
->
-> 要らなければ `.opencode-sandbox/` ごと消してよい。`.opencode-sandbox/data/mise` は、
-> 境界の内側の mise が導入済みの道具を見つけられずに入れ直したもので、消してよい。
-> 以前の承認と合格の記録（`~/.local/state/opencode-sandbox/trusted.json`・`checked.json`）も
-> 使われないので消してよい。
+以前の版の起動ディレクトリごとの隔離用 DB（`<起動ディレクトリ>/.opencode-sandbox/`）は `ocs` が消さない。中の古いセッションの開き方と、消してよいものは [補足記録](../../research/opencode/opencode-sandbox-spec-notes.md#以前の隔離用-db-の移行案内)。
 
 ### 隔離版の設定の書き出し方
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [境界の中身](#境界の中身)。
 
 - 緩和に関わるキー（`permissions` / `snapshots` / `policies` / `plugins`）は
   **毎回差し替える**。生成側が空なら取り除く（`AGENTS.md` も同じ）。
@@ -465,6 +453,8 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 > 境界の外の設定で内側の緩和を決められてしまう。
 
 #### エージェントとコマンド
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [境界の中身](#境界の中身)。
 
 `common.toml` の `[opencode.agent]`（`bypass`・`bypass-worker`）・`[opencode.agents]`
 （`commit`・`review`・`fleet-worker`）・`[opencode.commands]`（`/fleet`）を、隔離版にも
@@ -518,10 +508,7 @@ DB を共有しているので、内側で作ったセッションは OpenCode �
 
 内側の環境には `OCS_ISOLATED=1` を渡す。guide plugin はこれで隔離起動を見分け、
 確認画面の説明の生成（モデルの呼び出し）だけを止める。偽装されても説明が出なくなるだけで、
-判定には効かない。止めたのは、以前の版では隔離起動で `tui.ts` が読まれず、作っても表示されなかった
-ため。OpenCode 2.0.14 では `opencode.json` の登録からも `tui.ts` が読まれるので、モデルを呼ばない
-`git commit` の件名と本文の表示は隔離起動でも出る（[`git commit` の件名と本文](../agent-config-generation.md#git-commit-の件名と本文)）。
-モデルの説明を止め続けるかは見直していない
+判定には効かない。止めているのはモデルの呼び出しだけで、モデルを呼ばない `git commit` の件名と本文の表示は隔離起動でも出る（[`git commit` の件名と本文](../agent-config-generation.md#git-commit-の件名と本文)。止めた経緯は[補足記録](../../research/opencode/opencode-sandbox-spec-notes.md#ocs_isolated-でモデルの説明を止めた経緯)）。
 
 ## 起動前の退避
 
@@ -738,7 +725,7 @@ Fence は mise の github backend で**版とチェックサムを固定**して
 | コマンド単位の逃げ道が無い | プロセス単位で包む以上、`dangerouslyDisableSandbox` 相当は作れない |
 | 設定が通常起動と分かれる | 隔離版の設定は `~/.config/opencode-sandbox`。履歴（DB）は共有する |
 | 境界はエージェントから見えない | `ENOENT` を「存在しない」と誤診する。`AGENTS.md` で明示的に伝えている |
-| 起動が約 0.8 秒遅い | Fence の機能の検出など（[実測](../../research/opencode/permission/fence.md)） |
+| 起動が遅くなる | Fence の機能の検出など（[実測](../../research/opencode/permission/fence.md)。値は[補足記録](../../research/opencode/opencode-sandbox-spec-notes.md#起動時間の実測値)） |
 | 起動ディレクトリに `.opencode/` が作られる | 保護対象を塞ぐため。空のディレクトリで、`git status` には出ない |
 | **資格情報は境界内にある**（決めた例外） | 共有する DB が `credential` を持ち、内側から**平文で取り出せる**。無いとモデルへ繋げないため、[明示的な例外として受け入れた](../../change/closed/0004-opencode-sandbox.md#決定-明示的な例外として受け入れる2026-09-24)。見落としではない |
 | 他のプロジェクトの会話が読める | DB を共有するため。ADR-0012 で保証しないと決めた |

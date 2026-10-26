@@ -76,23 +76,12 @@ pwsh scripts/windows/wsl-sandbox/create.ps1
 **sandbox では `systemd-timesyncd` を止めて mask する**（`guest/setup.sh` が `systemctl mask --now systemd-timesyncd` を実行し、
 `create.ps1` が `masked` を検証する）。
 
-> **これだけでは不十分**（2026-10-19 の実測）。この環境では `timesyncd` が**1 つだけ**動いていても `tick` が偏った。
-> 安定したのは「**すべてのディストロで `timesyncd` を止めた**」ときだけ。メインのディストロ側は `120_wsl` が同じ設定を入れる
-> （[WSL の時刻同期](../structure.md#wsl-の時刻同期)）。
+**全ディストロで `timesyncd` を止める必要がある**（sandbox だけでは `tick` が偏る）。メインのディストロ側は `120_wsl` が同じ設定を入れる。
+WSL2 の全ディストロは同じ VM・同じカーネルの時計を共有するため、1 つでも `timesyncd` が動くと `adjtimex` の `tick` が偏り、
+`CLOCK_MONOTONIC` が遅れてプロセスの `create_time` がずれる。仕組み・止める理由は [WSL の時刻同期](../structure.md#wsl-の時刻同期)、
+この環境での実測と原因分析は [専用 WSL2 の時刻同期の実測](../../research/chezmoi/wsl-sandbox-time-sync.md)。
+すべてのディストロで止めた状態で、壁時計が長時間正確に保たれるかは未確認。
 
-- 理由: WSL2 の全ディストロは同じ VM・同じカーネルの時計を共有する。`timesyncd` が動いていると、`adjtimex` の `tick` が偏る。
-  2 つのディストロで動かすと持続的に約 2% 偏り（標準 10000 に対して 9800 前後）、1 つだけでも数分後に 9629〜10076 へ揺れた。
-  `tick` が偏ると `CLOCK_MONOTONIC` と `CLOCK_BOOTTIME` が遅れる（調整を受けない `CLOCK_MONOTONIC_RAW` と Windows の時刻は一致していた）。
-  `timesyncd` は壁時計を約 0.6 秒ずつステップ補正するので、「壁時計 − 単調時計」が増え続け、
-  psutil の `create_time` が時間とともにずれる。これにより、プロセスの生死を `create_time` の厳密一致で判定する
-  アプリで、生きているプロセスが「死んだ」と誤判定される。観測した例は、dockers リポジトリの FreeVideo（常駐サービス経由の動画生成が
-  起動の数十秒後に失敗する）。ホスト側の時刻同期（`hv_utils`）と `timesyncd` が同じ時計を制御していることが原因、と**推測**している（未確認）
-- 根拠（dockers リポジトリの `docs/research/freevideo-install-and-generation.md` の記録 E2〜E5）: 2026-10-18、
-  Ubuntu と sandbox の両方で `timesyncd` を止めて `tick` を 10000 へ戻すと、`tick` は維持され、`create_time` が一致し、
-  サーバー経由の生成が成功した。Ubuntu 側だけを止めても、約 60 秒後に `tick` が戻った。
-  2026-10-19、sandbox を mask して Ubuntu 側だけ動かすと、約 5 分後に `tick` が偏り始め、405 秒で `CLOCK_MONOTONIC` が RAW より 1.075 秒遅れた
-- 時刻はホスト側の同期（`hv_utils`）に任せる。**すべてのディストロで止めた状態で、壁時計が長時間正確に保たれるかは未確認**
-  （区間の経過時間の比較はしたが、絶対的なずれの長期測定はしていない）
 - **作成済みの sandbox へは、手動で適用する**（`create.ps1` は同名のディストロがあると中止するため、作り直さない）:
 
   ```powershell
@@ -128,8 +117,7 @@ pwsh scripts/windows/wsl-sandbox/create.ps1
 
 ## 検証の状況
 
-- 手順は 2026-10-17 に手作業で構築して確かめた（RTX 3070、ドライバ 610.88、Docker 29.9.1、nvidia-container-toolkit 1.20.1、Tailscale 1.104.1。
-  Raspberry Pi からの `ssh sbx@sandbox-gpu docker info` を含む）。
+- 手順は手作業で構築して確かめた（構築記録は [専用 WSL2 の時刻同期の実測](../../research/chezmoi/wsl-sandbox-time-sync.md#記録-e2--構築の記録)）。
 - **`create.ps1` としてまとめたものは、静的な確認（PowerShell 5.1 / 7 の構文、`shellcheck`、`sbx-run` の引数拒否）だけで、通しの実行は未検証。**
   実機で新しい名前（例: `-Name sandbox2`）を使って通しで確かめること。確かめるまでは次が未確認:
   `\wsl.localhost` 経由の書き込み、`systemctl is-system-running --wait` の待ち、通常権限でのスケジュールタスク登録。
