@@ -29,6 +29,7 @@ import { appendOperations, appendResult, decorateEditResult, guideHint, readPara
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { auditFormat, summarizeCalls } from "./audit.ts";
 import { unguardedMessage, unguardedSources } from "./unguarded.ts";
+import { ISOLATION_UNSUPPORTED, NO_BASH_NOTICE, findBash, isWindows, supportsChildTasks } from "./platform.ts";
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
 import { STARTUP_LIMITS, findRepoRoot, isolationTraceRoot, runWorktreesCommand, startupReconcile } from "./worktrees-command.ts";
@@ -193,6 +194,8 @@ function baseName(toolName: string): string {
 // ─── 登録 ───────────────────────────────────────────────────────────
 
 export default async function (pi: ExtensionAPI) {
+	// 自作の拡張のうち実行する道具 (bg_run・task) は、この印が無いと動かない (フルガードの読み込みに失敗した起動で、判定なしに残さない)
+	(globalThis as any).__PI_FULL_GUARD__ = true;
 	await loadCommitPreview();
 	// 状態の表示 (安全の根拠ではなく、いまどちらで動いているかの目印)
 	const showBypass = (ctx: any) => {
@@ -329,7 +332,7 @@ export default async function (pi: ExtensionAPI) {
 		if (event.toolName === `${PREFIX}edit` || event.toolName === `${PREFIX}write`) {
 			const canRead = (p: string) => decide("read", { path: p }, ctx.cwd).decision === "allow";
 			const hinted = event.toolName === `${PREFIX}edit` ? await decorateEditResult(event as any, ctx.cwd, canRead) : undefined;
-			return await finishEdit(event as any, hinted, ctx.cwd);
+			return await finishEdit(event as any, hinted, ctx.cwd, ctx);
 		}
 		if (event.toolName.startsWith(PREFIX)) return undefined;
 		try {
@@ -461,7 +464,7 @@ export default async function (pi: ExtensionAPI) {
 	}
 
 	const agents: Record<string, any> = rules.agents ?? {};
-	if (!CHILD && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);
+	if (!CHILD && supportsChildTasks() && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);
 
 	// 既定の圧縮は read / edit / write の名前でファイルの操作を拾うので、別名の分を足す。
 	// preparation は既定の要約にそのまま渡る (spike の E2)
@@ -597,6 +600,7 @@ const fmtStats = (s: RoundStats) =>
 // Landlock が使えるかは、プロセスの寿命の間 1 回だけ確かめる (null: 使える。文字列: 使えない理由)
 let landlockProblem: string | null | undefined;
 function checkLandlock(): string | null {
+	if (isWindows()) return ISOLATION_UNSUPPORTED;
 	if (landlockProblem !== undefined) return landlockProblem;
 	const r = spawnSync("python3", [join(HERE, "landlock_exec.py"), "--check"], { encoding: "utf-8", timeout: 10_000 });
 	if (r.status === 0) landlockProblem = null;
@@ -678,6 +682,7 @@ function finalizeIsolation(repoRoot: string, id: string, readDeny: ReadDeny) {
 
 // 起動時の取り残しの照合。git は、記録か worktree の置き場があるときだけ呼ぶ。失敗しても起動は止めない
 function reconcileOnStart(ctx: any) {
+	if (!supportsChildTasks()) return;
 	if (process.env.PI_HARNESS_CHILD === "1") return;
 	if (process.env.PI_HARNESS_ROLE && process.env.PI_HARNESS_ROLE !== rules.default_role) return; // 子 (親が役割を渡す) は親の記録を照合しない
 	try {
@@ -702,6 +707,7 @@ function buildReadDeny(): ReadDeny {
 // 拒否は { error } で返す (黙って共有の作業ツリーで動かさない)。WorktreeError 以外は投げ直す
 function prepareIsolation(parentCwd: string, childArgs: string[]): IsolationPlan | { error: string } {
 	const refuse = (why: string) => ({ error: `isolation refused: ${why}` });
+	if (isWindows()) return refuse(ISOLATION_UNSUPPORTED);
 	const problem = checkLandlock();
 	if (problem !== null) return refuse(`landlock_unavailable: ${problem}`);
 	const readDeny = buildReadDeny();
@@ -1385,8 +1391,22 @@ function changedLineCount(before: string, after: string): number {
 	return changed;
 }
 
+// 整形に使う bash は 1 回だけ探す。見つからなければ 1 回だけ知らせて省略する (Windows の Git Bash なし)
+let postEditBash: string | null | undefined;
+let bashNoticeShown = false;
+function postEditBashPath(ctx: any): string | null {
+	if (postEditBash === undefined) postEditBash = findBash(process.platform, process.env, existsSync);
+	if (postEditBash === null && !bashNoticeShown) {
+		bashNoticeShown = true;
+		warnUser(ctx, NO_BASH_NOTICE);
+	}
+	return postEditBash;
+}
+
 /** hook を 1 つ非同期に走らせる (同期で待つと、整形の間、他の tool call の処理も止まる)。失敗・時間切れは status null。 */
-function runPostEditHook(hook: any, abs: string, cwd: string): Promise<{ status: number | null; stderr: string }> {
+function runPostEditHook(hook: any, abs: string, cwd: string, ctx?: any): Promise<{ status: number | null; stderr: string }> {
+	const runner = hook.runner === "bash" ? postEditBashPath(ctx) : hook.runner;
+	if (runner === null) return Promise.resolve({ status: null, stderr: "" });
 	return new Promise((done) => {
 		let stderr = "";
 		let finished = false;
@@ -1396,7 +1416,7 @@ function runPostEditHook(hook: any, abs: string, cwd: string): Promise<{ status:
 			clearTimeout(timer);
 			done({ status, stderr });
 		};
-		const child = spawn(hook.runner, [hook.script], { cwd, stdio: ["pipe", "ignore", "pipe"] });
+		const child = spawn(runner, [hook.script], { cwd, stdio: ["pipe", "ignore", "pipe"] });
 		const timer = setTimeout(() => {
 			child.kill();
 			finish(null);
@@ -1412,14 +1432,14 @@ function runPostEditHook(hook: any, abs: string, cwd: string): Promise<{ status:
 }
 
 /** abs を整形する (書き込みの順番待ちの中で)。返るのは markdownlint の警告と、整形で変わった行数。 */
-async function formatFile(abs: string, cwd: string): Promise<{ warnings: string[]; changed: number }> {
+async function formatFile(abs: string, cwd: string, ctx?: any): Promise<{ warnings: string[]; changed: number }> {
 	const warnings: string[] = [];
 	let changed = 0;
 	if (!rules.post_edit?.length) return { warnings, changed };
 	await withFileMutationQueue(abs, async () => {
 		const before = readSmallText(abs);
 		for (const hook of rules.post_edit) {
-			const r = await runPostEditHook(hook, abs, cwd);
+			const r = await runPostEditHook(hook, abs, cwd, ctx);
 			// exit 2 は「エージェントへ警告する」(hook_emit_posttool_warn)。stderr が警告の本文
 			if (r.status === 2 && r.stderr.trim()) warnings.push(r.stderr.trim());
 		}
@@ -1433,7 +1453,7 @@ async function formatFile(abs: string, cwd: string): Promise<{ warnings: string[
  * guarded_edit / guarded_write の tool_result の仕上げ。hinted は失敗のヒントを足した結果 (無ければ undefined)。
  * 同じ応答の同じファイルへの編集のうち最後の 1 件だけが整形を行い、結果へ警告と「整形で本文が変わった」を足す。
  */
-async function finishEdit(event: any, hinted: { content: any[] } | undefined, cwd: string): Promise<{ content: any[] } | undefined> {
+async function finishEdit(event: any, hinted: { content: any[] } | undefined, cwd: string, ctx?: any): Promise<{ content: any[] } | undefined> {
 	const path = event?.input?.path;
 	if (typeof path !== "string" || path === "") return hinted;
 	const abs = isAbsolute(path) ? path : resolve(cwd, path);
@@ -1454,7 +1474,7 @@ async function finishEdit(event: any, hinted: { content: any[] } | undefined, cw
 	}
 	// 同じ応答の後続の編集が残っている間は整形しない (最後の 1 件が行う)
 	if (remaining > 0) return hinted;
-	const { warnings, changed } = await formatFile(abs, cwd);
+	const { warnings, changed } = await formatFile(abs, cwd, ctx);
 	const notes: string[] = [];
 	if (warnings.length) notes.push(redactText(warnings.join("\n")));
 	if (changed > 0) {

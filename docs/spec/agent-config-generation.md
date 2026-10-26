@@ -190,8 +190,8 @@ args = [
 | OpenCode V2 | `~/.config/opencode/opencode.json` の `mcp.servers` | `generate.py --target opencode-config` |
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
-| pi（Unix。フルガードあり） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)） |
-| pi（Windows。素の pi） | `~/.pi/agent/mcp.json` の `mcpServers` | `generate.py --target pi-mcp`（`modify_mcp.json.py.tmpl`）。同じ名前のサーバだけ差し替え、利用者が足した他のサーバは残す。Unix には配らない（`pis` は `mcp.json` にサーバがあると起動しない） |
+| pi（Unix・Windows。フルガードあり） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)） |
+| pi（Windows） | `~/.config/pi/harness/rules.json` の `mcp` | Unix と同じ（2026-10-26。Windows にもフルガードを載せたので、`mcp.json` へ書く経路は廃止した） |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
 

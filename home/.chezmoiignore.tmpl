@@ -22,11 +22,10 @@
 # PowerShell プロファイルの実体 (Documents 配下は 1 行のローダーのみ)
 !.config/powershell/
 !.config/powershell/**
-# pi の補助の拡張 (git commit の確認) だけ Windows にも配る。フルガードは Unix だけ
-# ★! は ignore より先に効くので、ディレクトリだけ戻して harness を改めて除外する
+# pi のフルガード (harness) は Windows にも配る。境界 (landlock) は Unix 専用なので配らない
+# see docs/spec/guard/pi-guard.md#windows
 !.config/pi/
-.config/pi/harness/
-.config/pi/harness/**
+.config/pi/harness/landlock_exec.py
 # OpenCode は 314 が Windows にも入れる。permission と guide plugin が無いと保護が無い
 # see docs/spec/agent-permissions.md#windows-での扱い
 !.config/opencode/
@@ -45,8 +44,7 @@
 .zshrc
 # Windows は権限不要の directory junction をスクリプトで作成
 .copilot/skills
-# pi 本体と設定は Windows にも配る。フルガード (.config/pi) と pis は Unix だけで、
-# フルガード無しでは guarded_task が無く /fleet が働かないので prompts も配らない
+# pi 本体と設定は Windows にも配る。pis は Unix だけ。prompts (/fleet など) は Windows では配らない
 # see docs/spec/guard/pi-guard.md#windows
 .pi/agent/prompts/
 .pi/agent/prompts/**
@@ -64,13 +62,9 @@ Documents/
 Documents/**
 {{- end }}
 {{- if ne .chezmoi.os "windows" }}
-# フルガードが無い素の pi (Windows) 用の子エージェント拡張。Unix のフルガードは -ne で読まない
+# 子エージェント拡張 (task)。Windows だけ settings で明示ロードする。Unix のフルガードは guarded_task を持つので配らない
 .pi/agent/extensions/subagents/
 .pi/agent/extensions/subagents/**
-# 素の pi が読む MCP の設定 (Windows だけ)。Unix のフルガードは MCP を rules.json から登録し、
-# ~/.pi/agent/mcp.json にサーバがあると pis は起動しない (フルガードと無関係に繋がるため)
-# see docs/spec/guard/pi-guard.md#mcp
-.pi/agent/mcp.json
 {{- end }}
 
 {{- if ne .chezmoi.os "darwin" }}

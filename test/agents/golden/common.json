@@ -431,6 +431,7 @@
    "**/.git/hooks/**",
    "~/.gitconfig",
    "~/.pi/agent/settings.json",
+   "~/.pi/agent/mcp.json",
    "~/.pi/agent/extensions/**",
    "~/.config/pi/harness/**"
   ]

@@ -528,7 +528,7 @@ def test_rendered_policy_is_validated_by_a_hook():
 
 
 # ---------------------------------------------------------------------------
-# requires_env と、素の pi (Windows) の mcp.json
+# requires_env と、pi の MCP の出どころ (rules.json)
 # ---------------------------------------------------------------------------
 
 
@@ -546,34 +546,13 @@ def test_requires_env_is_accepted_and_does_not_reach_other_clis():
     assert "requires_env" not in gen.merge_copilot_mcp({}, common)["mcpServers"]["x"]
 
 
-def test_pi_mcp_json_adds_the_servers_and_keeps_the_users_own():
-    """素の pi (Windows) の ~/.pi/agent/mcp.json。利用者が足した他のサーバと、他のキーは残す。"""
-    existing = {"mcpServers": {"docs": {"url": "https://example.com/mcp"}}, "other": 1}
-    merged = gen.merge_pi_mcp(existing, TESTER)
-    assert merged["other"] == 1
-    assert merged["mcpServers"]["docs"] == {"url": "https://example.com/mcp"}
-    entry = merged["mcpServers"]["agentcore-websearch"]
-    assert entry["command"] == "uv" and "exposure" not in entry and "requires_env" not in entry
-    assert any(a.endswith("agentcore_websearch_mcp.py") for a in entry["args"])
-    assert gen.merge_pi_mcp(merged, TESTER) == merged  # 冪等
-
-
-def test_pi_mcp_json_replaces_a_stale_entry_with_the_same_name():
-    stale = {"mcpServers": {"agentcore-websearch": {"command": "old", "args": ["x"]}}}
-    merged = gen.merge_pi_mcp(stale, TESTER)
-    assert merged["mcpServers"]["agentcore-websearch"]["command"] == "uv"
-
-
-def test_pi_mcp_json_rejects_a_broken_servers_table():
-    with pytest.raises(SystemExit):
-        gen.merge_pi_mcp({"mcpServers": []}, TESTER)
-
-
-def test_pi_mcp_json_is_deployed_only_to_windows():
-    ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8")
-    block = ignore.split('{{- if ne .chezmoi.os "windows" }}', 1)[1].split("{{- end }}", 1)[0]
-    assert ".pi/agent/mcp.json" in block
-    assert (ROOT / "home/dot_pi/agent/modify_mcp.json.py.tmpl").is_file()
+def test_pi_mcp_servers_come_from_rules_json_on_every_os_not_from_mcp_json():
+    """フルガードを載せた pi は、MCP を rules.json から登録する (mcp.json のサーバは判定の外なので配らない)。"""
+    assert not hasattr(gen, "merge_pi_mcp")
+    assert "pi-mcp" not in gen.TARGETS
+    assert not (ROOT / "home/dot_pi/agent/modify_mcp.json.py.tmpl").exists()
+    (entry,) = gen.pi_mcp_servers(TESTER)
+    assert entry["name"] == "agentcore-websearch" and entry["config"]["exposure"] == "direct"
 
 
 # ---------------------------------------------------------------------------

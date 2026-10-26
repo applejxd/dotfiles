@@ -2248,23 +2248,6 @@ PI_EXCLUDE_AUTO = "!extensions/**"
 PI_SETTINGS_OWNED = PI_SETTINGS_KEYS | {"defaultProvider", "defaultModel"}
 
 
-def merge_pi_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
-    """``~/.pi/agent/mcp.json`` (素の pi が読む。Windows だけ) に、``[[mcp]]`` の pi 向けを足す。
-
-    同じ名前のサーバだけを差し替え、利用者が ``pi mcp add`` で足した他のサーバは残す。
-    ``exposure`` は入れない (pis は -ne で codemode を外すので direct を明示するが、素の pi は既定でよい)。
-    see docs/spec/guard/pi-guard.md#mcp
-    """
-    servers = existing.get("mcpServers", {})
-    if not isinstance(servers, dict):
-        raise SystemExit("~/.pi/agent/mcp.json の mcpServers が表でない")
-    merged = dict(servers)
-    for entry in pi_mcp_servers(common):
-        config = {k: v for k, v in entry["config"].items() if k != "exposure"}
-        merged[entry["name"]] = copy.deepcopy(config)
-    return {**existing, "mcpServers": merged}
-
-
 def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """``~/.pi/agent/settings.json`` の生成器の持ち物だけを差し替える。
 
@@ -2312,7 +2295,7 @@ def pi_post_edit_hooks(common: dict[str, Any]) -> list[dict[str, str]]:
             {
                 "id": str(hook["id"]),
                 "runner": runner,
-                "script": expand_user(f"~/.claude/hooks/{script}"),
+                "script": expand_user(f"~/.claude/hooks/{script}").replace("\\", "/"),
             }
         )
     return out
@@ -3270,7 +3253,6 @@ TARGETS = {
     "opencode-guide": build_opencode_guide,
     "opencode-service": merge_opencode_service,
     "pi-harness": build_pi_harness,
-    "pi-mcp": merge_pi_mcp,
     "pi-settings": merge_pi_settings,
     "pi-keybindings": pi_keybindings,
     "pi-subagents": build_pi_subagents,

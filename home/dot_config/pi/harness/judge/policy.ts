@@ -7,6 +7,7 @@
 // node の型除去 (strip-types) でそのまま動く書き方だけを使う (enum・namespace・parameter property を使わない)。
 // see docs/spec/guard/pi-decide.md
 import { homedir } from "node:os";
+import { normalizeForCompare } from "./pathutil.ts";
 
 /** Python の ValueError / TypeError に相当する。応答の理由に名前が出るので、名前まで揃える。 */
 export class ValueError extends Error {
@@ -109,13 +110,19 @@ export function expandUser(path: string): string {
 }
 
 /** 最初に当たる glob。パスは区切りを `/` に揃えてから照合する。Windows では大小文字も区別しない。 */
-export function matchesAnyGlob(path: string, globs: readonly string[]): string | null {
+export function matchesAnyGlob(
+	path: string,
+	globs: readonly string[],
+	platform: string = process.platform,
+	homeDir: string = homedir(),
+): string | null {
 	if (!path) return null;
+	if (platform === "win32") return matchesAnyGlobWin(path, globs, homeDir);
 	const ignoreCase = isWindows();
 	let normalized = path.replaceAll("\\", "/");
 	while (normalized.startsWith("./")) normalized = normalized.slice(2);
 	const candidates = [normalized];
-	const home = homedir().replaceAll("\\", "/");
+	const home = homeDir.replaceAll("\\", "/");
 	const check = ignoreCase ? (s: string) => s.toLowerCase() : (s: string) => s;
 	if (home && check(normalized).startsWith(`${check(home)}/`)) {
 		candidates.push(`~/${normalized.slice(home.length + 1)}`);
@@ -127,15 +134,34 @@ export function matchesAnyGlob(path: string, globs: readonly string[]): string |
 	return null;
 }
 
+/** win32: MSYS・Windows 形式・`$HOME` のどれで書いても、ホーム固定 (`~/`) の glob に当たるようにする。 */
+function matchesAnyGlobWin(path: string, globs: readonly string[], homeDir: string): string | null {
+	let n = normalizeForCompare(path, "win32");
+	while (n.startsWith("./")) n = n.slice(2);
+	const candidates = [n];
+	const home = normalizeForCompare(homeDir, "win32").replace(/\/+$/, "");
+	if (home && n.startsWith(`${home}/`)) candidates.push(`~/${n.slice(home.length + 1)}`);
+	for (const prefix of ["$home/", "${home}/"]) {
+		if (n.startsWith(prefix)) candidates.push(`~/${n.slice(prefix.length)}`);
+	}
+	for (const glob of globs) {
+		const pattern = globToRegex(glob, true);
+		if (candidates.some((c) => pattern.test(c))) return glob;
+	}
+	return null;
+}
+
 /** read_deny_globs に当たる最初の glob。例外は対の deny にだけ効く。 */
 export function matchesReadDeny(
 	path: string,
 	globs: readonly string[],
 	exceptions: readonly DenyException[] = [],
+	platform: string = process.platform,
+	homeDir: string = homedir(),
 ): string | null {
 	for (const glob of globs) {
-		if (!matchesAnyGlob(path, [glob])) continue;
-		if (exceptions.some((e) => e.deny === glob && matchesAnyGlob(path, e.except))) continue;
+		if (!matchesAnyGlob(path, [glob], platform, homeDir)) continue;
+		if (exceptions.some((e) => e.deny === glob && matchesAnyGlob(path, e.except, platform, homeDir))) continue;
 		return glob;
 	}
 	return null;

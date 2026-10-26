@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -66,7 +67,7 @@ def _child_args(tmp_path, cases):
         pytest.skip("node が無い")
     ext = tmp_path / "ext"
     stub = ext / "node_modules" / "typebox"
-    stub.mkdir(parents=True)
+    stub.mkdir(parents=True, exist_ok=True)
     (stub / "package.json").write_text('{"name":"typebox","type":"module","main":"index.js"}')
     (stub / "index.js").write_text(
         "const f=()=>({});export const Type={Object:f,String:f,Union:f,Literal:f};"
@@ -89,7 +90,7 @@ def _child_args(tmp_path, cases):
 
 
 def _case(**kw):
-    return {"bun": False, "model": "p/m", "system": "S", "task": "T", **kw}
+    return {"bun": False, "model": "p/m", "system": "S", "task": "T", "guard": "G/index.ts", **kw}
 
 
 def test_child_args_pass_the_cli_script_for_the_node_build(tmp_path):
@@ -104,6 +105,78 @@ def test_child_args_drop_the_virtual_path_of_the_bun_binary(tmp_path):
         assert args[0] == "--mode"
         assert not any("BUN" in a or "bunfs" in a for a in args)
         assert args[-1] == "T"
+
+
+def test_child_args_load_the_full_guard_without_a_tools_list(tmp_path):
+    [args] = _child_args(tmp_path, [_case(argv1="C:/x/cli.js")])
+    assert "--tools" not in args
+    for flag in ("--no-approve", "-nbt", "-ne"):
+        assert flag in args
+    assert args[args.index("builtin:mcp") - 1] == "-e"
+    assert args[args.index("G/index.ts") - 1] == "-e"
+
+
+_EXT_RUNNER = """
+const m = await import(process.argv[2]);
+const home = process.argv[3];
+const out = { guard: m.findGuard(home), env: m.childEnv({ PI_HARNESS_BYPASS: "1", KEEP: "x" }, process.argv[4] || undefined) };
+const tools = [];
+m.default({ registerTool: (t) => tools.push(t) });
+const run = (t) => t.execute("id", { agent: "review", task: "T" }, undefined, undefined, { cwd: ".", model: { provider: "p", id: "m" } });
+globalThis.__PI_FULL_GUARD__ = undefined;
+out.noMark = await run(tools[0]);
+globalThis.__PI_FULL_GUARD__ = true;
+try { await run(tools[0]); out.noGuard = "started"; } catch (e) { out.noGuard = String(e.message); }
+console.log(JSON.stringify(out));
+"""
+
+
+def _run_ext(tmp_path, home, profile=""):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node が無い")
+    _child_args(tmp_path, [])  # 拡張と typebox の差し替えを用意する
+    ext = tmp_path / "ext"
+    (ext / "agents.json").write_text(
+        json.dumps({"agents": {"review": {"description": "d", "system": "s", "model": "p/m"}}})
+    )
+    runner = ext / "ext_runner.mjs"
+    runner.write_text(_EXT_RUNNER)
+    env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+    out = subprocess.run(
+        [node, str(runner), (ext / "index.ts").as_uri(), str(home), profile],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+        check=True,
+        env=env,
+    )
+    return json.loads(out.stdout)
+
+
+def test_guard_is_found_only_when_index_and_rules_are_both_readable(tmp_path):
+    home = tmp_path / "home"
+    harness = home / ".config" / "pi" / "harness"
+    harness.mkdir(parents=True)
+    (harness / "index.ts").write_text("")
+    assert _run_ext(tmp_path, home)["guard"] is None
+    (harness / "rules.json").write_text("{}")
+    assert _run_ext(tmp_path, home)["guard"].endswith("index.ts")
+
+
+def test_child_env_sets_role_and_drops_the_bypass(tmp_path):
+    env = _run_ext(tmp_path, tmp_path / "h")["env"]
+    assert env["PI_HARNESS_CHILD"] == "1" and env["PI_HARNESS_ROLE"] == "reader"
+    assert "PI_HARNESS_BYPASS" not in env and env["KEEP"] == "x"
+    assert _run_ext(tmp_path, tmp_path / "h", "commit")["env"]["PI_HARNESS_ROLE"] == "commit"
+
+
+def test_task_refuses_without_the_parent_mark_or_the_guard_dir(tmp_path):
+    out = _run_ext(tmp_path, tmp_path / "empty")
+    assert out["noMark"]["isError"] is True
+    assert "task" in out["noMark"]["content"][0]["text"]
+    assert "起動しない" in out["noGuard"]
 
 
 def test_child_args_guard_a_task_that_starts_with_a_dash(tmp_path):

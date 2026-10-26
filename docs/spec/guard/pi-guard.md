@@ -8,7 +8,7 @@ OpenCode のガード（permission の生成・guide plugin）の後継で、移
 > **位置づけ（2026-10-26 から）**: **Unix（Ubuntu・WSL・macOS）では、素の `pi` もフルガード付きで起動する**（`~/.pi/agent/settings.json` が読み込む。
 > [pi の設定](#pi-の設定)）。Orca・Zed が呼ぶ `pi` も同じ。`pis` は「`pi` を Fence のサンドボックスの中で起動する」ものに絞る（標準）。
 > `pis --no-sandbox` は、素の `pi` との差（下の表）を解消するまでの移行用に残す。
-> **Windows の素の `pi` はフルガード無し**（Windows 版は未着手。次の段）。付くのは `git push` の拒否と `git commit` の確認だけ（[commit の確認](#commit-の確認-素の-pi)）。
+> **Windows ネイティブの `pi` も、設定でフルガード（判定・ガードツール・伏字化）付きで起動する**。ただし**境界（Fence）は無く、実機は未検証**（[Windows](#windows)）。`pis` と ocs は Windows に配らない。
 > 経緯は [CHG-0040](../../change/0040-pi-guard-by-settings.md)。
 
 ## 用語
@@ -37,13 +37,14 @@ pis --role reader   # 役割を選ぶ ([pi.profiles] の名前。省略すると
 pis -c              # pi の引数はそのまま渡る (例: 直前のセッションを続ける)
 ```
 
-- **サンドボックスが標準**。サンドボックスを張れない OS（macOS・Windows ネイティブ）では、`pis` は起動せず `--no-sandbox` を案内する（黙って弱い守りに落とさない）。
+- **サンドボックスが標準**。サンドボックスを張れない OS（macOS）では、`pis` は起動せず `--no-sandbox` を案内する（Windows ネイティブには `pis` を配らない）（黙って弱い守りに落とさない）。
   `--boundary` は互換の別名（標準と同じ意味）
 - サンドボックスの検査に落ちたとき・起動場所が危険なときも起動しない。制御ファイル・フルガードの編集、復旧、Orca・Zed は `--no-sandbox` で行う
 - 設計の根拠は [CHG-0023](../../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
 
 **素の `pi`（Unix）**は、`settings.json` の設定だけで、下の `pis` と同じツール構成になる（`extensions` にフルガードと自作の拡張を足し、自動検出の拡張を外し、`defaultTools = []`）。
 役割・bypass は環境変数 `PI_HARNESS_ROLE` / `PI_HARNESS_BYPASS` で変えられる（既定: 実装役、bypass なし）。
+**Windows の素の `pi`** も同じ設定でフルガードが載るが、サンドボックス（Fence）は無く、`task`（読み取り専用）だけを足して `guarded_task` は使えない（[Windows](#windows)）。上の表のうち、Windows は「素の `pi`（Unix）」の列に近い（実機は未検証）。
 
 | | 素の `pi`（Unix） | `pis --no-sandbox`（移行用） | `pis`（標準） |
 | --- | --- | --- | --- |
@@ -55,7 +56,7 @@ pis -c              # pi の引数はそのまま渡る (例: 直前のセッシ
 | Orca の状態表示の拡張 | 名前で足してある（印の確認はしない） | 印を確認して足す | 印を確認して足す |
 
 **復旧の入口**: 設定ごと外して起動するには `pi -ne --tools read,bash,edit,write`（ガードも境界も無い。ガードの故障時だけ）。
-`rules.json` が壊れている・フルガードが無いときは、pi が起動に失敗し、`pi -ne` を案内する。拡張のパスだけが無いときは、ツール無しで起動する（組み込みのツールも無効なので、何も実行できない）。
+`rules.json` が壊れている・フルガードが無いときは、pi が起動に失敗し、`pi -ne` を案内する。拡張のパスだけが無いとき（フルガードの読み込みに失敗した起動）は、組み込みのツールは無効だが、**自作の拡張が残る**。そのうち実行を伴う `bg_run`（`activity`）と `task`（`subagents`）は、フルガードが立てる印 `globalThis.__PI_FULL_GUARD__` が無いと実行しない（[判定の外で動くもの](#判定の外で動くもの)）。
 
 `pis --no-sandbox`（`~/.local/bin/pis`）は次の形で pi を起動する（サンドボックスの内側も、同じフラグ `BASE_FLAGS` で起動する）。`-ne` が設定の拡張を無効にするので、設定と二重にならない。
 
@@ -125,7 +126,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 - `pis` は `-ne` を維持し、足す拡張は必ず `-e <パス>` で明示する（自動発見はしない）
 - 足した拡張のツールも判定と伏字化を通る。拡張の読み込み時の処理は囲えないので、審査と版の固定で下げる
-- 素の `pi`（Windows・Orca・Zed）は拡張を自動で読むが、この方針は**このリポジトリが配る拡張**に適用する
+- 素の `pi`（Orca・Zed など）は拡張を自動で読むが、この方針は**このリポジトリが配る拡張**に適用する
 
 ### 入口の選び方
 
@@ -176,9 +177,9 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - 計画中は shell が無いので、`git log` などの調査もできない。必要なら `/plan` を終えて調べる
 - `pis --boundary` も同じ一覧を `-e` で足す。読み取りは拡張ごとに開ける（`~/.pi/agent/extensions/<名前>`。一覧に無い `orca-agent-status` などは開けない）。実機で `todo`・`plan`・`btw` の認識を確認した
 - `activity` の実測（Linux、偽の pi API でツールを直接動かした）: `bg_run` で ID を返し、`🤖 2 subagents / ⚙️ 1 jobs` が出る。`bg_log` が出力の末尾を返し、`bg_kill` でジョブが消えて通知が出て、子もジョブも 0 になると表示が消える。**未確認**: 実機の TUI でのフッター表示、フルガード（`pis`）の下での `bg_run` の確認（拡張のツールなので既定で確認になる想定だが未実測）、Windows の `taskkill` での停止、終了通知が実機の TUI で見えること（RPC の実モデルでは、通知でターンが再開することを確認済み。[B1](../../research/agents/pi-bg-experiments.md)）
-- **フルガード（`pis`）の下では、`bg_run` のコマンドを bash と同じ判定（`decide`）に通す**。deny は止め（bypass でも外れない）、ask は確認画面を出し（画面に「バックグラウンドで実行」と出る）、役割の `shell_deny` / `shell_allow` と誘導も効く。役割が `bash` を持たなければ `bg_run` も使えない。`bg_log` / `bg_kill` はジョブの確認と停止だけなので、`bash` を持つ役割には allow。素の `pi` では、Unix ではガードが同じ判定を掛ける（Windows は判定なしで動く）
+- **フルガード（`pis`）の下では、`bg_run` のコマンドを bash と同じ判定（`decide`）に通す**。deny は止め（bypass でも外れない）、ask は確認画面を出し（画面に「バックグラウンドで実行」と出る）、役割の `shell_deny` / `shell_allow` と誘導も効く。役割が `bash` を持たなければ `bg_run` も使えない。`bg_log` / `bg_kill` はジョブの確認と停止だけなので、`bash` を持つ役割には allow。素の `pi` でも、フルガードが同じ判定を掛ける（Windows も設定でフルガードが載る。ただし `bg_run` は cmd で動き、実機は未確認。フルガードの印が無い起動では実行しない）
 - `btw` は、`--plain` では `ctx.modelRegistry.complete()` を 1 回呼び、既定では `explore` の子を 1 つ起動する。どちらもトークンを消費する（セッションの合計には入らない）
-- **子の入口 `__piAskReadChild`**: 利用者のコマンドが起こす操作なので、`/agent` と同じく判定器は通さない。そのかわり、起動できる役割を**読み取り専用（`reader` / `explorer`）に限る**（`worker` / `commit` は拒否）。答えには伏字化を掛ける（Windows の入口には伏字化も読み取り禁止も無いので、`btw` は開始の通知に「ガードなし」を出す。子の出力の貯め込みは 8 MB で止める）。試験は `test_ask_read_child_entry_runs_only_read_only_agents`・`test_btw_asks_an_explore_child_by_default_and_plain_does_not`、表示の部品（上限・窓・スクロールのキー）は `test_btw_view.py`。**実測**（2026-10-21、tmux の pi 1.3.0）: 窓なし（全文を Container に入れる）だと、120 行の返信で画面に収まる約 28 行だけが表示され、末尾と閉じる案内が見えなかった。窓を入れたあとは 130 行を「1-32 / 130 行」で表示し、`End` / `G` で末尾に届く。**PgUp / PgDn はこの端末では効かなかった**（pi 本体が先に取ると見られる。理由は未確認）ので、Space / b を当てた。**未確認**: Windows の素の `pi` での子の起動、全画面モード、端末幅の変更時の再描画
+- **子の入口 `__piAskReadChild`**: 利用者のコマンドが起こす操作なので、`/agent` と同じく判定器は通さない。そのかわり、起動できる役割を**読み取り専用（`reader` / `explorer`）に限る**（`worker` / `commit` は拒否）。答えには伏字化を掛ける（Windows の `subagents` 拡張の入口は、子がフルガード付きで起動するので判定と伏字化が効く想定。実機は未確認。子の出力の貯め込みは 8 MB で止める）。試験は `test_ask_read_child_entry_runs_only_read_only_agents`・`test_btw_asks_an_explore_child_by_default_and_plain_does_not`、表示の部品（上限・窓・スクロールのキー）は `test_btw_view.py`。**実測**（2026-10-21、tmux の pi 1.3.0）: 窓なし（全文を Container に入れる）だと、120 行の返信で画面に収まる約 28 行だけが表示され、末尾と閉じる案内が見えなかった。窓を入れたあとは 130 行を「1-32 / 130 行」で表示し、`End` / `G` で末尾に届く。**PgUp / PgDn はこの端末では効かなかった**（pi 本体が先に取ると見られる。理由は未確認）ので、Space / b を当てた。**未確認**: Windows の素の `pi` での子の起動、全画面モード、端末幅の変更時の再描画
 - 実測: `btw` は print モードで、直前の会話の内容（合言葉）を踏まえて答え、セッションファイルの行数が増えないことを確認した（オーバーレイ表示は TUI でしか出ず未確認）。Git Bash では `/btw` が `C:/Program Files/Git/btw` に変換されるので、試すときは `MSYS_NO_PATHCONV=1`
 - 実測: `todo` は、書き換え前の版（`toggle` 方式）で実際のモデル（`claude-sonnet-5.5`）の add / toggle / list が通った。書き換え後の版は偽のモデルでの試験（`test_pi_harness.py` の `test_todo_*`・`test_todos_*`。圧縮と再開をまたぐ復元、旧形式の読み込み、利用者の操作の永続化、フッター）までで、**実際のモデルが `set` / `texts` / `cancelled` を使い分けるかと、TUI の表示は未確認**。`plan` は読み込みまで（切り替えと確認画面は TUI でしか動かず、未確認）
 
@@ -239,30 +240,39 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 ## Windows
 
-Windows（PowerShell）では**素の `pi` だけ**を使う。フルガード・`pis`・サンドボックスは Unix だけ（サンドボックスが Fence に依る。判定器は TS で動くが、フルガードの Windows 版は未着手で、優先度は低い）。
+Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）だけで**フルガード（判定・ガードツール・伏字化）を載せる（2026-10-26。[CHG-0040](../../change/0040-pi-guard-by-settings.md)）。
+**境界（Fence）は Windows に無い**ので、サンドボックスの保護は付かない。`pis` と ocs は Windows に配らない。**Windows 実機は未検証**（WSL からは `chezmoi` の描画・静的な試験・Node でのドライバ試験だけ）。
 
 | 配るもの | 方法 |
 | --- | --- |
 | pi 本体 | mise の `aqua:earendil-works/pi`（バイナリ版。node 不要）。`313_mise` が入れ、`314_agent_cli.ps1` が旧 npm 版を外して起動を確かめる（[Windows の pi](../structure.md#windows-の-pi)）。公式の `install.ps1` は `Read-Host` で確認を聞き、apply では答えられないので使わない |
-| `~/.pi/agent/settings.json`・`keybindings.json`・`AGENTS.md` | Unix と同じ（`.chezmoiignore` で戻している） |
-| `~/.config/pi/commit-confirm` | Unix と同じ（[commit の確認](#commit-の確認-素の-pi)） |
-| `/fleet`（`prompts/`） | **配らない**。`guarded_task` はフルガードが登録するので、素の `pi` では働かない |
+| `~/.pi/agent/settings.json`・`keybindings.json`・`AGENTS.md` | Unix と同じ（`.chezmoiignore` で戻している）。`extensions` はフルガード・自作の拡張・`!extensions/**`・subagents（`+extensions/subagents/index.ts`。Windows だけ）・組み込み拡張の除外、`defaultTools = []`（[pi の設定](#pi-の設定)） |
+| `~/.config/pi/harness/`・`rules.json` | Unix と同じ（`landlock_exec.py` だけ除外。`rules.json` は `py -3` で生成） |
+| 自作の拡張（`activity`・`ask`・`btw`・`delegate-nudge`・`notify`・`plan`・`todo`） | Unix と同じく配り、settings で明示ロードする |
+| `/fleet`（`prompts/`） | **配らない**（`guarded_task` を前提にするため） |
 | 子エージェント `task`（読み取り役だけ） | `~/.pi/agent/extensions/subagents/`（[下記](#windows-の子エージェント)） |
+| `commit-confirm` | settings から**外した**（フルガードに `git commit` の確認があるため。拡張本体の配備は残るが、Windows の settings は読まない。[commit の確認](#commit-の確認-素の-pi)） |
 
-- pi の `bash` ツールと `!` は Git Bash を使う（Git for Windows が要る。無ければ pi が探した場所を示す）。
-  PowerShell をモデルに使わせるなら `defaultTools` を変える（[Run Pi on Windows](https://pi.dev/docs/latest/windows)）。
-  今は管理していない
-- 素の `pi` なので、権限・秘密の保護は効かない（Orca・Zed と同じ。[位置づけ](#起動)）。`git commit` の確認だけは補助の拡張が出す
-- **Windows ネイティブの `pi` は、信頼できる環境でだけ開く（ガードは付けない）。** 守りが要る作業は WSL の `pis` で行う。フルガードの Windows 移植は見送り（[調査記録](../../research/agents/pi-isolation-options.md)）
-- Windows 実機では未検証（WSL からは `chezmoi` の描画と静的な試験だけ）
+- **載せ方**: 素の `pi`（Unix）と同じ設定で、`pi` を起動するだけでフルガードが付く。`defaultTools = []` は pi の**組み込みツールだけ**を無効にするので、モデルに見えるのは `guarded_*` と自作の拡張のツールになる
+- **Windows で無効なもの**: `guarded_task`（子エージェント。Unix のプロセスグループと `pi.cmd` に依る）、隔離（`isolation:"worktree"`。Landlock）、`reconcileOnStart`。代わりに読み取り専用の `task` を明示ロードする
+- **コマンドは Git Bash 経由**: PowerShell ツールは `defaultTools = []` で登録されない。PowerShell のコマンドは bash から呼ぶ（`powershell.exe -Command ...`）。整形 hook の `bash` は Git for Windows の `bash.exe` を探す（標準の場所と、PATH 上の `git.exe` から導く。**WSL の `System32\bash.exe` は選ばない**。見つからなければ 1 回だけ知らせて整形を省略する）。`~\` も展開する
+- **判定器のパス**: win32 のとき、MSYS・WSL 形式（`/c/Users/x`・`/cygdrive/c/...`・`/mnt/c/...`）、Windows 形式（`C:\Users\x`・`C:/Users/x`）、`~`、`$HOME` を同じホームとして扱い、ホーム固定の deny glob（`~/.pi/agent/settings.json` など）と `rm` のホーム全削除の検出に当てる。非 win32 の判定は変えていない。bash コマンド内のパスの deny は別の表・正規表現（`judge/rules_files.ts`・`sensitive.ts`）で、パスの形式に依らず `.ssh` や `id_rsa` を検出する設計だが、**Windows 実機での最終判定は未確認**
+- **MCP は Unix と同じく `rules.json` から**（フルガードが `registerMcpServer` で登録する）。`~/.pi/agent/mcp.json` へ書く経路（`generate.py --target pi-mcp`）は廃止した（[MCP](#mcp)）
+- **自作の拡張の `activity`**: `bg_run` は `spawn(shell:true)`（Windows では cmd）で、`taskkill` で止める。実機は未確認
+- **フルガードを欠いた起動では実行しない**: フルガードは起動時に印 `globalThis.__PI_FULL_GUARD__` を立てる。`bg_run`（`activity`）と `task`（`subagents`）は、印が無いと実行しない（[判定の外で動くもの](#判定の外で動くもの)）
+- **残る限界**: 境界が無い（Fence・Landlock の代わりは無い）、Git Bash というシェルを経由する、`guarded_task` が無い（次の段）、実機未検証。守りが強く要る作業は WSL の `pis` で行う
+- 調査記録: [pi-isolation-options](../../research/agents/pi-isolation-options.md)（過去の判断。Windows に載せる前の記録）
+
+**Windows 実機で確認する項目**は、[実機で確認する項目](#実機で確認する項目)の Windows の節にまとめた。
 
 ### Windows の子エージェント
 
-フルガードの無い素の `pi` でも、読み取り役の子エージェントだけは使える。判定器が無いので、shell・編集を持つ役割は出さない。
+Windows では `guarded_task` を使えないので、**読み取り専用の子エージェント `task`** を `subagents` 拡張で出す。shell・編集を持つ役割は出さない。
 
-- 拡張 `index.ts`（`task` ツール）と `agents.json`（`[pi.agents]` から生成。`generate.py --target pi-subagents`）を Windows にだけ配る（Unix は `.chezmoiignore` で除外）
-- 出すのは `read` `grep` `find` `ls` だけの役割（今は `explore` と `review`）。子は `<実行中の pi>（node 版は node + cli.js、バイナリ版は pi.exe） --mode json -p --no-session -ne --tools read,grep,find,ls` で起動する（`pi.cmd` のシェルを通さない）
-- 判定器と伏字化が無いので、`read_deny_globs` の保護は効かない。子は読むだけで書けないが、秘密ファイルは読める
+- 拡張 `index.ts`（`task` ツール）と `agents.json`（`[pi.agents]` から生成。`generate.py --target pi-subagents`）を Windows にだけ配る（Unix は `.chezmoiignore` で除外）。settings の `+extensions/subagents/index.ts` で明示ロードする
+- 出すのは `read` `grep` `find` `ls` だけの役割（今は `explore` と `review`）。子は `<実行中の pi>（node 版は node + cli.js、バイナリ版は pi.exe） --mode json -p --no-session -ne --tools read,grep,find,ls` に、フルガードを読むフラグを足して起動する（`pi.cmd` のシェルを通さない）
+- **子もフルガード付きで起動する**（役割 `reader`）。置き場 `~/.config/pi/harness` が読めなければ、子を起動せず理由つきで失敗する。親に印 `globalThis.__PI_FULL_GUARD__` が無ければ `task` を実行しない。したがって、子にも判定器と読み取り拒否・伏字化が効く（旧記述の「子には判定器も読み取り拒否も無い」は古い）。実機は未検証
+- 境界（Fence）は無いので、サンドボックスとしての隔離は無い
 - 子のモデルは `second_opinion` が `github-copilot/gpt-6-sol`。OpenCode の階層の `gpt-6-astra` は pi の Copilot 経由で `model_not_supported`（2026-10 実測）なので、`[pi.model.tier.github-copilot]` で上書きする（Unix のフルガードにも効く）
 
 ### 二つの task を別物にしている理由
@@ -271,7 +281,7 @@ Windows の `task`（`subagents` 拡張。120 行）とフルガードの `guard
 
 - **重なるのは約 50 行**（答えの取り出し・プロセスの起動と停止・役割一覧の整形・`promptSnippet`）。子の一覧 `globalThis.__piChildren` を `activity` が読む点だけが共有
 - **子の実行方式が違う**: `subagents` は 1 回だけ実行する `--mode json -p`、`guarded_task` は常駐できる `--mode rpc`（`Job`。並列・背景・`keep`・`steer`・`abort`）。後者の子はハーネスを `-e` で読み、`PI_HARNESS_*` を前提にする
-- **Windows にはフルガードが無い**（`pis` は Unix 専用。簡易ガードは廃止）。`Job` を流用すると、判定器なしで shell を持つ子を出せてしまう。だから `subagents` は読み取り専用に限る
+- **`Job` は Windows で使えない**（Unix のプロセスグループと `pi.cmd` に依る）。Windows の `task` の子はフルガード付きで出すが、`Job` を流用して shell を持つ役割まで出すと、Windows 実機で未検証の経路に判定なしの実行を載せることになる。だから `subagents` は読み取り役に限る
 - **共通モジュールにしない**: ハーネスは `~/.config/pi/harness`、拡張は `~/.pi/agent/extensions` にあり、別の場所からの import は配置とサンドボックスの許可の点で脆い
 - **ずれは試験で止める**: 宣言は同じ `[pi.agents]` から出る。名前・モデル・読み取り専用の役割の説明と指示が食い違わないことを `test_pi_subagents.py::test_declarations_stay_in_step_with_the_full_guard_agents` が確かめる（`plain_description` を宣言した役割だけ、意図して違う）
 
@@ -309,8 +319,8 @@ OpenCode の撤去（CHG-0020 の段 6）で写しごと消す。フルガード
 
 ### commit の確認 (素の pi)
 
-素の `pi`（Orca・Zed・Windows）にはフルガードが無いので、bash の git は素通りになる。その補助として、
-小さな拡張 `~/.config/pi/commit-confirm` を `settings.json` の `extensions`（`[pi.settings]`）から読ませる。
+フルガードを読まない `pi`（フルガードの読み込みに失敗した起動など）では、bash の git は素通りになる。その補助として、
+小さな拡張 `~/.config/pi/commit-confirm` を用意している。**今は `settings.json` の `extensions` に入れていない**（Unix・Windows とも、フルガードに `git commit` の確認があるため。Windows でも settings から外した。拡張本体の配備は残るが、Windows の settings は読まない）。必要なときは `-e` で明示して読ませる。
 **保護ではなく補助**で、別名・スクリプト越しの git は検出しない。`!git commit`（利用者が手で打つ）も対象外。
 
 | コマンド | 扱い |
@@ -391,8 +401,8 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 試験の期限は `PI_COMMIT_CONFIRM_TIMEOUT_MS` で縮める（本番では使わない）。
 
 - `pis` は `-ne` で外れるので、フルガード自身の確認と二重にならない（試験済み）
-- Windows にも配る。`.chezmoiignore` は `.config/pi/` を戻したうえで `harness` を改めて除外する
-  （`!` は除外より先に効く。実物の `chezmoi` で確かめた）。Windows 実機は未検証
+- Windows にも配る。`.chezmoiignore` は `.config/pi/` を戻し、除外するのは `landlock_exec.py` だけ（`harness` は Windows にも配る）。
+  Windows 実機は未検証
 - 試験: `test_pi_commit_parse.py`（解釈・表示・退避。node で直接）、`test_pi_commit_confirm.py`
   （pi + 偽のモデル。RPC・非対話・TMUX の TUI）
 
@@ -557,7 +567,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | --- | --- |
 | `defaultProvider` / `defaultModel` | `[opencode.model]` の `default` 階層（[モデルの割り当て](../agent-config-generation.md#モデルの割り当て)） |
 | `defaultThinkingLevel` / `skills` / `enabledModels` | `[pi.settings]`（書いたものだけ） |
-| `extensions` / `defaultTools` | `[pi.settings]`。**非 Windows**: フルガード・自作の拡張（`[pi] own_extensions`。除外の直後に `+extensions/<名前>/index.ts` で足す）・`!extensions/**`（自動検出の拡張を外す）・Orca の状態表示（`+extensions/orca-agent-status.ts`）・組み込みの `codemode` / `tool-search` / `llama.cpp` の除外、`defaultTools = []`。**Windows**: `commit-confirm` だけ |
+| `extensions` / `defaultTools` | `[pi.settings]`。**非 Windows**: フルガード・自作の拡張（`[pi] own_extensions`。除外の直後に `+extensions/<名前>/index.ts` で足す）・`!extensions/**`（自動検出の拡張を外す）・Orca の状態表示（`+extensions/orca-agent-status.ts`）・組み込みの `codemode` / `tool-search` / `llama.cpp` の除外、`defaultTools = []`。**Windows**: 非 Windows と同じ（Orca の状態表示を含む）に、subagents（`+extensions/subagents/index.ts`）を足す。`commit-confirm` はどちらにも含めない |
 
 今は `defaultThinkingLevel = "medium"`、`skills = ["~/.claude/skills"]`。`~/.agents/skills` は pi が元から読む。
 
@@ -566,7 +576,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 
 ### 判定の外で動くもの
 
-素の `pi` には Fence が無く、次のものはフルガードの判定の外で動く。**止めずに、起動時（TUI）に警告する**（`harness/unguarded.ts`。`pis` は起動しない・読まないので出ない）。
+素の `pi`（Unix・Windows）には Fence が無く、次のものはフルガードの判定の外で動く。**止めずに、起動時（TUI）に警告する**（`harness/unguarded.ts`。`pis` は起動しない・読まないので出ない）。
 
 | もの | 理由 |
 | --- | --- |
@@ -574,15 +584,17 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | 信頼した作業先の `.pi/extensions/`・`.pi/mcp.json`・`.pi/settings.json`（`extensions` / `packages` / `defaultTools` のキー） | 読み込み時のコードは判定の外。設定で `defaultTools` を変えられると、素の `bash` が戻りうる |
 
 作業先のスキル（`.agents/skills`・`.pi/skills`）は指示を読むだけなので、警告しない。
-**書き込みの拒否**: `~/.pi/agent/settings.json`・`extensions/**`・`~/.config/pi/harness/**` は、判定器が書き込みを拒否する（`[file] write_deny_globs`）。素の `pi` は Fence で凍結できないため。変更は chezmoi の source 側（このリポジトリ）で行い、`chezmoi apply` で入れる（`settings.json` の生成器が持つキーは `[pi.settings]` が正本で、直接書いても戻る。拡張は chezmoi から配る）。`mcp.json` は拒否しない（モデルが書いてよい。書かれたサーバは上のとおり警告する）。ただし**ガードは OS の隔離ではない**（シェルの経由などの抜け道は、サンドボックスで塞ぐ）。
+**書き込みの拒否**: `~/.pi/agent/settings.json`・`mcp.json`・`extensions/**`・`~/.config/pi/harness/**` は、判定器が書き込みを拒否する（`[file] write_deny_globs`）。素の `pi` は Fence で凍結できないため。変更は chezmoi の source 側（このリポジトリ）で行い、`chezmoi apply` で入れる（`settings.json` の生成器が持つキーは `[pi.settings]` が正本で、直接書いても戻る。拡張は chezmoi から配る）。`mcp.json` も拒否する（モデルが書いたサーバは、次の起動でガードの外で動くため。2026-10-26 に、一度許可した設計の見落としを直した）。
+**bash 経由でも拒否する**: 上の制御ファイルへの書き込みは、ファイルツールの `write_deny_globs` に加えて、bash のリダイレクト・`mv` / `cp` / `rm` / `tee`・インラインコードでの書き込みも拒否する（`judge/rules_guard.ts` の `GUARD_TARGETS`。試験は `test_pi_control_files_bash.py`）。ただし**ガードは OS の隔離ではない**（シェルの経由などの抜け道は、サンドボックスで塞ぐ）。
 `defaultTools = []` は境界ではなく、`pi --tools …` で戻せる（利用者が意図して選ぶ経路）。
+**フルガードの読み込みに失敗した起動で、判定なしの実行が残らないようにする**: フルガードは起動時に印 `globalThis.__PI_FULL_GUARD__` を立てる。実行を伴う自作の拡張の `bg_run`（`activity`）と `task`（`subagents`）は、印が無いと実行しない。ガードのパスが無いとき、`defaultTools = []` は組み込みツールだけを無効にするので、自作の拡張の `bg_run`（shell）が残るためである（独立レビューで見つかった）。`rules.json` が壊れている・無いときは pi が起動に失敗する（終了コード 1。`pi -ne` で拡張無しに起動できる）。
 
 ## 置き場
 
 | 実体 | 配置先 | 役割 |
 | --- | --- | --- |
 | `home/dot_config/pi/harness/index.ts` | `~/.config/pi/harness/index.ts` | 拡張の本体 |
-| `home/dot_config/pi/commit-confirm/index.ts` | `~/.config/pi/commit-confirm/index.ts` | 素の pi の `git commit` の確認（[補助](#commit-の確認-素の-pi)）。`settings.json` の `extensions` から読む |
+| `home/dot_config/pi/commit-confirm/index.ts` | `~/.config/pi/commit-confirm/index.ts` | 素の pi の `git commit` の確認（[補助](#commit-の確認-素の-pi)）。配備は残すが、`settings.json` の `extensions` には入れていない |
 | `home/dot_config/pi/harness/modify_rules.json.py.tmpl` | `~/.config/pi/harness/rules.json` | `generate.py --target pi-harness` が作る。判定器の設定（`judge`: `common.toml` の `[bash]` / `[file]` / `[pi]` と `tables.toml`）・伏字化の規則・シェルへ入れる環境変数・子エージェント・MCP・役割ごとのツール |
 | `home/dot_local/bin/executable_pis` | `~/.local/bin/pis` | 起動の入口（Python。`~/.local/share/ocs/pis.py` を絶対パスで読み込む。[起動](#起動)） |
 | `home/dot_local/share/ocs/pis.py` | `~/.local/share/ocs/pis.py` | `pis` の本体。引数の解釈・サンドボックス（標準）の引き継ぎ・`--no-sandbox` の素の起動。起動フラグ（`BASE_FLAGS`）と拡張の一覧は、サンドボックスの `pi.py` と共有する。ライブラリは macOS にも置く（`pis` が読むため） |
@@ -763,10 +775,10 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 
 **`[[mcp]]` の `requires_env` が空の機では、登録しない。** 認証や URL が無い機（家の `agentcore-websearch`）で、動かないサーバを起動し続けない（`rules.json` の各項目に `requires_env` が出る。値が空白だけでも空とみなす）。
 
-**素の pi（Windows。フルガードが無い）の MCP は、`~/.pi/agent/mcp.json` に `generate.py --target pi-mcp` が書く**（同じ名前のサーバだけ差し替え、利用者が足した他のサーバは残す。`exposure` は書かない）。Unix には配らない（下の理由）。`agentcore-websearch` のラッパーは、使えない機では空のサーバになるので、家の Windows でも失敗の通知は出ない。
+**MCP の出どころは、Unix も Windows も `rules.json` に統一する**（2026-10-26。Windows にもフルガードを載せたため、`mcp.json` に書く経路（`--target pi-mcp`）は廃止した）。`agentcore-websearch` のラッパーは、使えない機では空のサーバになるので、家の Windows でも失敗の通知は出ない。
 
-**Unix の `~/.pi/agent/mcp.json` には書かない。** そこのサーバはフルガードと関係なく繋がるので、フルガードが
-抜けたときに判定なしで残る（`pi mcp add` はそこへ書く）。`pis` はサーバがあると起動しない。素の `pi` は止めず、起動時に警告する（[判定の外で動くもの](#判定の外で動くもの)）。
+**`~/.pi/agent/mcp.json` には書かない。** そこのサーバはフルガードと関係なく繋がるので、フルガードが
+抜けたときに判定なしで残る（`pi mcp add` はそこへ書く）。**モデルからの書き込みは拒否する**（サーバの `command` は次の起動で、ガードの外で実行される。起動時の警告は事後なので、書かせない）。`pis` はサーバがあると起動しない。素の `pi` は止めず、起動時に警告する（[判定の外で動くもの](#判定の外で動くもの)）。利用者が端末で `pi mcp add` したものは残る。
 
 ## pi の内部の挙動に頼る点
 
@@ -834,6 +846,22 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 - [ ] **`todo` のリマインド**: 実際のモデルで、`in_progress` を残して応答を終えたときに 1 回だけ促され、無限に続かないか
 - [ ] **`ask` の TUI パネル**: tmux と偽のモデルで、表示・行内の自由記述・複数選択を確かめた（2026-10-20）。未確認: 狭い端末・Esc と時間切れ・IME の候補窓の位置。RPC の複数選択はカーソルが戻るのを直していない（`select` に初期位置の指定が無い）
 - [ ] **`ask` の実機**: TUI の選択画面の見え方、実際のモデルが「分岐のときだけ・独立した質問は 1 回で」使うか、使いすぎないか。Windows。待ち上限 5 分の妥当性（試験は RPC の応答まで）
+
+### Windows（すべて未確認）
+
+Windows 実機（PowerShell）で次を確かめる。WSL では描画・静的な試験・Node のドライバ試験しかできない。
+
+- [ ] `chezmoi apply` 後に `~/.config/pi/harness/rules.json` が生成される（`py -3`）。`~/.pi/agent/settings.json` に `extensions`（subagents を含む）と `defaultTools = []` が入る
+- [ ] フラグ無しの `pi` で、モデルに見えるツールが `guarded_*` と自作の拡張のものだけ（組み込みの `bash` などが出ない）
+- [ ] `task`（読み取り専用の子）が動く。子がフルガード付きで起動し、置き場が読めないときは理由つきで失敗する
+- [ ] Git Bash の探索: 標準の場所と、PATH 上の `git.exe` から導く場合。WSL の `System32\bash.exe` を選ばない。見つからないとき 1 回だけ知らせる
+- [ ] 整形 hook が Git Bash の `bash.exe` で動く（`~\` の展開を含む）
+- [ ] `bg_run` が cmd で動き、`bg_kill` の `taskkill` でプロセスの木ごと止まる
+- [ ] MSYS（`/c/Users/x`）・Windows（`C:\Users\x`）形式のパスと `~`・`$HOME` が、ホーム固定の deny glob と `rm` のホーム全削除の検出に当たる。bash コマンド内の `.ssh` / `id_rsa` が検出される
+- [ ] 制御ファイル（`settings.json`・`mcp.json`・`extensions/**`・`harness/**`）への bash 経由の書き込みが拒否される
+- [ ] ガードを欠いた起動（ガードのパスが無い設定）で、`bg_run` と `task` が拒否される
+- [ ] MCP が `rules.json` から登録され、`mcp.json` のサーバは起動時に警告される
+- [ ] `pi mcp add` など `mcp.json` を書く操作が、モデルからは拒否される
 
 ## 未対応
 

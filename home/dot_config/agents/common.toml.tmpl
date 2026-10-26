@@ -542,6 +542,7 @@ write_deny_globs = [
   # pi のフルガードの設定とコード。素の pi には Fence が無いので、書けるとガードを外せる。
   # 正本はこのリポジトリ。変更は chezmoi apply 経由で入れる。see docs/spec/guard/pi-guard.md#判定の外で動くもの
   "~/.pi/agent/settings.json",
+  "~/.pi/agent/mcp.json",
   "~/.pi/agent/extensions/**",
   "~/.config/pi/harness/**",
 ]
@@ -1215,22 +1216,20 @@ message = "10 秒以上の sleep でここを止めないでください (その
 [pi.settings]
 defaultThinkingLevel = "medium"
 skills = ["~/.claude/skills"]
-{{- if and (hasKey .chezmoi "os") (eq .chezmoi.os "windows") }}
-# see docs/spec/guard/pi-guard.md#commit-の確認-素の-pi
-extensions = ["~/.config/pi/commit-confirm"]
-{{- else }}
 # 自作の拡張 ([pi] own_extensions) は生成器が "!extensions/**" の直後へ足す。
 # see docs/spec/guard/pi-guard.md#pi-の設定
 extensions = [
   "~/.config/pi/harness",
   "!extensions/**",
   "+extensions/orca-agent-status.ts",
+{{- if and (hasKey .chezmoi "os") (eq .chezmoi.os "windows") }}
+  "+extensions/subagents/index.ts",
+{{- end }}
   "-builtin:codemode",
   "-builtin:tool-search",
   "-builtin:llama.cpp",
 ]
 defaultTools = []
-{{- end }}
 
 # pi が実際に受け付けるモデルは OpenCode の階層の表と違うことがある。ここにある階層だけ上書きする。
 # ★gpt-6-astra は pi の Copilot 経由で model_not_supported (2026-10 実測)。

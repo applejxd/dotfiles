@@ -38,6 +38,11 @@ const GUARD_TARGETS = [
 	"/.copilot/hooks",
 	"/.copilot/permissions-config.json",
 	"/.config/agents",
+	// pi のフルガードの設定とコード (素の pi は Fence で凍結できない)
+	"/.pi/agent/settings.json",
+	"/.pi/agent/mcp.json",
+	"/.pi/agent/extensions",
+	"/.config/pi/harness",
 	"/.git/config",
 	"/.git/hooks",
 	".git/config",
@@ -49,7 +54,7 @@ const guardHits = (token: string): boolean => {
 	return GUARD_TARGETS.some((t) => expanded.includes(t));
 };
 
-const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/)[^'"]*)['"]`, "g");
+const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/|\\.pi/agent|config/pi/harness)[^'"]*)['"]`, "g");
 const HOOK_ENV_RE = pyRegex("\\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK[A-Z_]*)=(\\S*)", "g");
 
 const MUTATING = new Set([

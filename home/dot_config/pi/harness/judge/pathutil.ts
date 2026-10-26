@@ -39,6 +39,18 @@ export function expandUser(path: string): string {
 	return path;
 }
 
+/**
+ * win32 のとき、比較用にパスを揃える: MSYS・WSL 形式 (`/c/..`・`/cygdrive/c/..`・`/mnt/c/..`) → `c:/..`、`\` → `/`、小文字化。
+ * それ以外の platform では何もしない。`platform` は試験で差し替える。
+ */
+export function normalizeForCompare(path: string, platform: string = process.platform): string {
+	if (platform !== "win32") return path;
+	return path
+		.replaceAll("\\", "/")
+		.replace(/^\/(?:cygdrive\/|mnt\/)?([A-Za-z])(?=\/|$)/, "$1:")
+		.toLowerCase();
+}
+
 /** `os.path.normcase` (Windows では小文字にして `/` へ寄せる。それ以外は何もしない)。 */
 export const normcase = (path: string): string =>
 	process.platform === "win32" ? path.replaceAll("/", "\\").toLowerCase() : path;

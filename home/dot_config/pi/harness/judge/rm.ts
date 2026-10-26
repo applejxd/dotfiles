@@ -7,7 +7,8 @@
 // see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableSet } from "./context.ts";
-import { expandUser, isAbsolute, join, normpath, sep } from "./pathutil.ts";
+import { expandUser, isAbsolute, join, normalizeForCompare, normpath, sep } from "./pathutil.ts";
+import { homedir } from "node:os";
 import { basename, pyRegex, strip } from "./pystr.ts";
 import { argv } from "./shellparse.ts";
 import { stripExecWrappers } from "./rules_exec.ts";
@@ -35,7 +36,18 @@ const XARGS_RE = pyRegex("(?:^|[\\s;&|(])xargs(?![\\w-])");
 const CD_RE = pyRegex("(?:^|[\\s;&|(\"'\\\\])(?:cd|pushd|popd|chdir)(?![\\w-])");
 // /home/<user> や /Users/<user> のようなホームディレクトリそのもの
 const HOME_DIR_RE = pyRegex("^/(?:home|Users)/[^/]+$");
+// win32: `C:\Users\x`・`C:/Users/x`・`/c/Users/x`・`/cygdrive/c/Users/x` (normalizeForCompare 後の形)
+const HOME_DIR_WIN_RE = pyRegex("^[a-z]:/users/[^/]+$");
 const RM_BIN_RE = pyRegex("^(?:/\\S*/)?(?:rm|rmdir|unlink)$");
+
+/** ホームそのもの (win32 では Windows / MSYS 形式も含む)。非 win32 は従来の `/home|/Users/<user>` だけ。 */
+export function isHomeDirTarget(canonical: string, platform: string = process.platform, home: string = homedir()): boolean {
+	if (HOME_DIR_RE.test(canonical)) return true;
+	if (platform !== "win32") return false;
+	let n = normalizeForCompare(canonical, platform);
+	while (n.endsWith("/*") || (n.length > 1 && n.endsWith("/"))) n = n.endsWith("/*") ? n.slice(0, -2) : n.slice(0, -1);
+	return HOME_DIR_WIN_RE.test(n) || n === normalizeForCompare(home, platform).replace(/\/+$/, "");
+}
 
 const isRm = (head: string): boolean => RM_BIN_RE.test(basename(head));
 const isFind = (head: string): boolean => basename(head) === "find";
@@ -93,7 +105,7 @@ function isCatastrophicRmTarget(ctx: Ctx, token: string): boolean {
 	if (canonical === null) return false;
 	if (tableSet(ctx, "_shared", "home_tokens").has(canonical) || canonical === "..") return true;
 	if (tableSet(ctx, "rm", "catastrophic_dirs").has(canonical)) return true;
-	if (HOME_DIR_RE.test(canonical)) return true;
+	if (isHomeDirTarget(canonical)) return true;
 	if (canonical === expandUser("~")) return true;
 	// `.git` は自身だけでなく配下も対象にする。`.g*t` のようにドット始まりの glob で届く形も含める
 	const parts = canonical.split("/").filter((p) => p);

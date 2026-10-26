@@ -4,7 +4,7 @@
 // node の型除去でそのまま動く書き方だけを使う (enum・namespace は使わない)。pi 本体は import しない。
 import { appendFile, mkdir, open, readFile, stat } from "node:fs/promises";
 import { readdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { expandTilde } from "./platform.ts";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 // ─── ツールの説明 (A) ───────────────────────────────────────────────
@@ -134,10 +134,9 @@ export function appendResult(result: any, path: string, chars: number): any {
 export const TAIL_MAX_BYTES = 32 * 1024 * 1024;
 
 /** pi の read と同じ向きで、相対パスを cwd で解く (~ と先頭の @ だけ扱う)。 */
-export function resolveInputPath(p: string, cwd: string): string {
+export function resolveInputPath(p: string, cwd: string, home?: string): string {
 	let s = p.startsWith("@") ? p.slice(1) : p;
-	if (s === "~") s = homedir();
-	else if (s.startsWith("~/")) s = join(homedir(), s.slice(2));
+	s = expandTilde(s, home);
 	return resolve(cwd, s);
 }
 

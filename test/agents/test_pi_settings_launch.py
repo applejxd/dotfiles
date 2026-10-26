@@ -1,7 +1,7 @@
 """素の ``pi`` が、``settings.json`` だけで ``pis --no-sandbox`` と同じフルガード付きになる試験。
 
 生成 (``merge_pi_settings``) の出力と、その出力だけで本物の pi を偽のモデルで起動したときの
-ツール一覧を見る。Windows は commit-confirm だけに保つ。実機 (Windows) は確かめられない。
+ツール一覧を見る。Windows は subagents を足し commit-confirm を外す。実機 (Windows) は確かめられない。
 see docs/spec/guard/pi-guard.md#pi-の設定
 """
 
@@ -76,11 +76,40 @@ def test_unix_settings_carry_the_full_guard(os_name):
     assert out["skills"] == ["~/.claude/skills"]
 
 
-def test_windows_settings_keep_only_commit_confirm():
-    out = _settings("windows")
-    assert out["extensions"] == ["~/.config/pi/commit-confirm"]
-    assert "defaultTools" not in out
-    assert HARNESS_ENTRY not in json.dumps(out)
+def test_windows_settings_carry_the_full_guard_without_commit_confirm():
+    common = _render("windows")
+    out = gen.merge_pi_settings({}, common)
+    own = [f"+extensions/{n}/index.ts" for n in gen.pi_own_extensions(common)]
+    assert out["extensions"] == [
+        HARNESS_ENTRY,
+        "!extensions/**",
+        *own,
+        "+extensions/orca-agent-status.ts",
+        "+extensions/subagents/index.ts",
+        "-builtin:codemode",
+        "-builtin:tool-search",
+        "-builtin:llama.cpp",
+    ]
+    assert out["defaultTools"] == []
+    assert "commit-confirm" not in json.dumps(out)
+
+
+@pytest.mark.parametrize("os_name", ["linux", "darwin"])
+def test_unix_settings_do_not_load_subagents(os_name):
+    assert "subagents" not in json.dumps(_settings(os_name))
+
+
+def test_windows_rules_are_generated_with_a_backslash_home(monkeypatch):
+    """Windows のホーム (C:\\Users\\x) でも rules.json が生成でき、post_edit のパスが崩れない。"""
+    common = _render("windows")  # chezmoi のキャッシュが壊れるので、HOME の差し替えは描画の後
+    monkeypatch.setenv("HOME", "C:\\Users\\x")
+    monkeypatch.setenv("USERPROFILE", "C:\\Users\\x")
+    rules = gen.build_pi_harness({}, common)
+    assert rules["extensions"] == gen.pi_own_extensions(common)
+    assert rules["post_edit"], "post_edit が空"
+    for hook in rules["post_edit"]:
+        assert hook["script"].startswith("C:/Users/x/.claude/hooks/"), hook
+        assert "\\" not in hook["script"]
 
 
 def test_settings_merge_is_idempotent_and_keeps_foreign_keys():
@@ -205,3 +234,32 @@ def test_orca_status_extension_is_loaded_explicitly_but_other_files_are_not(env)
     proc = _launch(env, rogue=False)
     assert proc.returncode == 0, proc.stderr
     assert _tools(proc).count("ext_search") == 1
+
+
+@needs_pi
+def test_bg_run_refuses_to_run_when_the_full_guard_did_not_load(env):
+    """フルガードのパスが無い起動で、自作の拡張 (activity) の bg_run が判定なしの shell にならない。"""
+    settings = gen.merge_pi_settings({}, _render("linux"))
+    settings["extensions"] = [
+        str(env["tmp"] / "nowhere") if e == HARNESS_ENTRY else e for e in settings["extensions"]
+    ]
+    agent = env["tmp"] / "agent"
+    (agent / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+    shutil.copytree(
+        ROOT / "home" / "dot_pi" / "agent" / "extensions" / "activity",
+        agent / "extensions" / "activity",
+    )
+    marker = env["tmp"] / "ran"
+    call = [{"name": "bg_run", "args": {"command": f"touch {marker}"}}]
+    proc = subprocess.run(
+        [PI, "--no-session", "--model", "faux/spike", "-e", str(FIXTURES / "faux.ts"), "-p", "go"],
+        cwd=env["proj"],
+        env={**env["env"], "FAUX_TOOL_CALLS": json.dumps(call)},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=180,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "フルガードが読み込まれていない" in proc.stdout, proc.stdout
+    assert not marker.exists()

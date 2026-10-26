@@ -1,10 +1,11 @@
-// フルガード無しの素の pi (Windows) 用の子エージェント `task`。
-// 子は読み取りツールだけ (read / grep / find / ls) の別プロセスで、shell も編集も持たない。
+// Windows 用の子エージェント `task`。子にもフルガード (~/.config/pi/harness) を載せ、役割 (既定 reader) が
+// ツールを決める。フルガードが無い・読めないとき、親にフルガードが載っていないときは子を起動しない。
 // 宣言は agents.json (common.toml の [pi.agents] から生成)。
 // see docs/spec/guard/pi-guard.md#windows-の子エージェント
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
@@ -14,7 +15,27 @@ const MAX_TASK = 30000; // Windows の引数長の上限 (32767) に収める
 const TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_OUT_BYTES = 8 * 1024 * 1024; // 子の JSON イベントを貯める上限。超えたら子を止める
 
-type Agent = { description: string; system: string; model: string | null };
+type Agent = { description: string; system: string; model: string | null; profile?: string };
+
+/** フルガードの index.ts。index.ts と rules.json が両方読めるときだけ返す */
+export function findGuard(home: string): string | null {
+	const dir = join(home, ".config", "pi", "harness");
+	try {
+		for (const f of ["index.ts", "rules.json"]) accessSync(join(dir, f), constants.R_OK);
+		return join(dir, "index.ts");
+	} catch {
+		return null;
+	}
+}
+
+/** 子の環境変数。親のバイパスは継がない */
+export function childEnv(base: NodeJS.ProcessEnv, profile?: string): NodeJS.ProcessEnv {
+	const env = { ...base, PI_SUBAGENT_CHILD: "1", PI_HARNESS_CHILD: "1", PI_HARNESS_ROLE: profile || "reader" };
+	delete env.PI_HARNESS_BYPASS;
+	return env;
+}
+
+const NO_GUARD = "フルガードが読み込まれていないので task は使えない (parent full guard is not loaded)";
 
 function readAnswer(stdout: string): string {
 	let answer = "";
@@ -39,13 +60,13 @@ const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, Ru
  * CLI ファイルではない。これを渡すと子のプロンプトの先頭に混ざるので渡さない。
  * 先頭が `-` のタスクは pi がオプションと解釈するので、前置きを付ける。
  */
-export function childArgs(opts: { argv1?: string; bun: boolean; model: string; system: string; task: string }): string[] {
+export function childArgs(opts: { argv1?: string; bun: boolean; model: string; system: string; task: string; guard: string }): string[] {
 	const virtual = opts.bun && /~BUN|\$bunfs/.test(opts.argv1 ?? "");
 	const script = !opts.argv1 || virtual ? [] : [opts.argv1];
 	const task = opts.task.startsWith("-") ? `Task: ${opts.task}` : opts.task;
 	return [
-		...script, "--mode", "json", "-p", "--no-session", "-ne",
-		"--tools", "read,grep,find,ls", "--model", opts.model,
+		...script, "--mode", "json", "-p", "--no-session", "--no-approve", "-nbt", "-ne",
+		"-e", "builtin:mcp", "-e", opts.guard, "--model", opts.model,
 		"--append-system-prompt", opts.system, task,
 	];
 }
@@ -63,6 +84,9 @@ export default function (pi: ExtensionAPI) {
 		const agent = agents[agentName];
 		if (!agent) throw new Error(`unknown agent: ${agentName}`);
 		if (task.length > MAX_TASK) throw new Error(`task is too long (${task.length} > ${MAX_TASK})`);
+		if ((globalThis as any).__PI_FULL_GUARD__ !== true) throw new Error(NO_GUARD);
+		const guard = findGuard(homedir());
+		if (!guard) throw new Error(`フルガードの置き場 (~/.config/pi/harness の index.ts と rules.json) が読めないので子を起動しない`);
 		const model = agent.model ?? `${ctx.model.provider}/${ctx.model.id}`;
 		// 実行中の pi をそのまま直接起動する (node 版は node + cli.js、バイナリ版は pi.exe。シェルを使わず引数を壊さない)
 		const args = childArgs({
@@ -71,10 +95,11 @@ export default function (pi: ExtensionAPI) {
 			model,
 			system: agent.system,
 			task,
+			guard,
 		});
 		const child = spawn(process.execPath, args, {
 			cwd: ctx.cwd,
-			env: { ...process.env, PI_SUBAGENT_CHILD: "1" },
+			env: childEnv(process.env, agent.profile),
 			stdio: ["ignore", "pipe", "pipe"],
 			windowsHide: true,
 		});
@@ -107,7 +132,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	// `btw` などの利用者のコマンドが、読み取り専用の子の答えだけを受け取る入口。
-	// agents.json は読み取り専用の役割しか含まない (生成器の約束。子は --tools read,grep,find,ls 固定)。伏字化と読み取り禁止の保護は無い
+	// agents.json は読み取り専用の役割しか含まない (生成器の約束)。子にもフルガードが載り、役割がツールを決める
 	(globalThis as any).__piAskReadChild = async (agentName: string, task: string, ctx: any, signal?: AbortSignal) => {
 		try {
 			const r = await runChild(`btw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, agentName, task, ctx, signal);
@@ -128,7 +153,7 @@ export default function (pi: ExtensionAPI) {
 			"Use task with agent \"review\" for an independent review or a second opinion. The child cannot see this conversation and has no shell, so paste the diff, and write: (1) the goal and constraints, (2) where to look (paths), (3) what you verified and what you did not, (4) options you rejected and why, (5) your tentative conclusion, last, labelled as the thing to challenge, (6) the question you want answered. Do not paste the transcript.",
 		],
 		description:
-			"Run a read-only task in a child agent (separate pi process; tools: read, grep, find, ls only). " +
+			"Run a read-only task in a child agent (separate pi process with the full guard; read-only tools). " +
 			"The child cannot see this conversation, so put everything it needs into `task`. Agents:\n" +
 			catalog,
 		parameters: Type.Object({
@@ -136,6 +161,9 @@ export default function (pi: ExtensionAPI) {
 			task: Type.String({ description: "What the child should do, with all the context it needs" }),
 		}),
 		async execute(id: string, params: any, signal: any, _onUpdate: any, ctx: any) {
+			if ((globalThis as any).__PI_FULL_GUARD__ !== true) {
+				return { content: [{ type: "text", text: NO_GUARD }], details: { agent: params.agent, model: "" }, isError: true };
+			}
 			const { model, code, answer, err } = await runChild(id, params.agent, params.task, ctx, signal);
 			if (signal?.aborted) throw new Error("child aborted");
 			const failed = code !== 0 || !answer;

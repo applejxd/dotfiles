@@ -204,6 +204,10 @@ export default function (pi: ExtensionAPI) {
 			command: Type.String({ description: "Shell command to run" }),
 		}),
 		async execute(_id: string, params: any, _signal: any, _onUpdate: any, ctx: any) {
+			// フルガードが読み込まれていないときは実行しない (判定なしの shell になるため)
+			if ((globalThis as any).__PI_FULL_GUARD__ !== true) {
+				return { content: [{ type: "text", text: "フルガードが読み込まれていないので bg_run は使えません" }], details: undefined };
+			}
 			const id = `j${++counter}`;
 			const dir = join(tmpdir(), "pi-jobs");
 			mkdirSync(dir, { recursive: true });

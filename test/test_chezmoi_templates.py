@@ -124,20 +124,27 @@ def test_opencode_config_is_deployed_on_windows(tmp_path, target):
 
 # Windows の除外の書き方 (除外の行が出るか)。Linux には一切出ない
 WINDOWS_PI_IGNORES = (
-    ".pi/agent/prompts/",  # /fleet はフルガード (Unix だけ) の guarded_task が要る
+    ".pi/agent/prompts/",  # /fleet は Windows では配らない
     ".local/bin/pis",
-    "!.config/pi/",  # 補助の拡張 (commit-confirm) のためにディレクトリを戻す
-    ".config/pi/harness/",  # 戻したうえでフルガードは改めて除外する
-    ".config/pi/harness/**",
+    "!.config/pi/",  # harness と commit-confirm のためにディレクトリを戻す
+    ".config/pi/harness/landlock_exec.py",  # 境界は Unix 専用
 )
 
 
-def test_pi_settings_and_the_commit_confirmation_are_deployed_on_windows(tmp_path):
+def test_pi_settings_and_the_full_guard_are_deployed_on_windows(tmp_path):
     windows = render(home=str(tmp_path), os_name="windows")
     linux = render(home=str(tmp_path), os_name="linux")
     for target in WINDOWS_PI_IGNORES:
         assert target in windows, target
         assert target not in linux, target
+    # harness は丸ごと除外しない (rules.json を含めて Windows にも配る)
+    assert ".config/pi/harness/\n" not in windows
+    assert ".config/pi/harness/**" not in windows
+    # pis と ocs は Windows に配らないまま
+    assert ".local/share/ocs" in windows
+    # Windows だけ、subagents を配る (Unix は配らない)
+    assert ".pi/agent/extensions/subagents/" not in windows
+    assert ".pi/agent/extensions/subagents/" in linux
     # settings / keybindings / AGENTS.md の .pi/ は Windows にも配る (丸ごとの除外は無い)
     assert ".pi/" not in windows and ".pi/**" not in windows
     assert ".config/*" in windows
@@ -486,7 +493,9 @@ def test_is_work_follows_the_personal_username_unless_overridden(username, data,
         ("worker", {"work": False}, False),
     ],
 )
-def test_personal_only_skills_follow_is_work_not_the_llm_provider(tmp_path, username, data, ignored):
+def test_personal_only_skills_follow_is_work_not_the_llm_provider(
+    tmp_path, username, data, ignored
+):
     rendered = render(home=str(tmp_path), username=username, data=data)
     assert (".claude/skills/web-search/" in rendered) is ignored
     assert (".claude/skills/imozuru/" in rendered) is ignored
