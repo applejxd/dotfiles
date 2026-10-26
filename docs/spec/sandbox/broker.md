@@ -217,7 +217,7 @@ GitHub は起動拒否か縮退の経路に当たる。未確認: この機で�
   - Fence の `upstreamProxy` は `http://` のみで、許可リストの宛先は認証つき HTTP プロキシを通らず直結する
 - **設計案（推測・未検証）**: 内側はブローカーだけに出る形（Fence の許可リストを空）にし、プロキシは Envoy の側だけで使い、
   認証はローカルのブリッジ（px・cntlm）に任せ、内側に `no_proxy=127.0.0.1` を渡す。プロキシが差し替える CA（TLS 検査のとき）は上流の CA バンドルに要る
-- Bedrock（`aws_request_signing`・`ConverseStream`・AgentCore の MCP 中継）は未検証
+- Bedrock（`aws_request_signing`・`ConverseStream`・AgentCore の MCP 中継）は未検証。実機の確認の手順と、Copilot との機能差の一覧は [Bedrock ブローカーの実機確認](../../research/agents/bedrock-broker-field-test.md)
 - 制約のある環境の機での本物の PAT による `gh` は未確認。本物の PAT での成功は、個人の機の `gh auth token`（OAuth）でのみ確認した
 - SDS の 24 時間後の再読み込み（トークンの有効期限切れ後の更新）は未確認（CHG-0037 の段 U7a の記録）
 - 要求の大きさ・回数の上限は無い（Copilot・検索とも）
