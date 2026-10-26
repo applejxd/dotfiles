@@ -49,7 +49,7 @@ def expected_servers(username):
             if server["transport"] == "http"
             else {"command": server["command"], "args": server["args"]}
         )
-        for name, server in gen.mcp_servers(load_common(username))
+        for name, server in gen.mcp_servers(load_common(username), "claude")
     }
 
 

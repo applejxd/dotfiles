@@ -177,8 +177,8 @@ _ACTION_INT_RE = re.compile(r"[0-9]+")
 _ACTION_VALUE_FLAGS = frozenset(
     ("-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--title", "-m", "--message")
 )
-_ACTION_TYPE_RANK = {"repo": 0, "int": 1, "text": 2}
-_ACTION_PLACEHOLDER_TEXT = {"body": "<本文>", "message": "<件名と本文>"}
+_ACTION_TYPE_RANK = {"repo": 0, "int": 1, "line": 2, "text": 3}
+_ACTION_PLACEHOLDER_TEXT = {"body": "<本文>", "message": "<件名と本文>", "title": "<タイトル>"}
 
 
 def _action_repo_in(tokens: list[str]) -> str | None:
@@ -241,6 +241,8 @@ def _action_deny_reason(cmd: str, pi: dict[str, Any], policy: Any) -> str | None
     if not entries:
         return None
     segments = policy.normalize(cmd)
+    # 同じコマンドに当たる操作が複数あるとき (issue の本文とタイトルなど) は、表の順に全部の例を出す
+    examples: list[str] = []
     for aid, replaces, fields in entries:
         for segment in segments:
             pattern = next((p for p in replaces if policy._pattern_matches(segment, p)), None)
@@ -271,12 +273,15 @@ def _action_deny_reason(cmd: str, pi: dict[str, Any], policy: Any) -> str | None
             example = (
                 f'{{"action":{json.dumps(aid, ensure_ascii=False)},"params":{{{",".join(parts)}}}}}'
             )
-            return (
-                "投稿・コミットは guarded_action で行う（承認はそのツールが 1 回だけ取る。"
-                "事前に ask やチャットで承認を取らない）。"
-                f"呼び出し例（値は候補。実際の値を確認する）: guarded_action {example}"
-            )
-    return None
+            examples.append(f"guarded_action {example}")
+            break
+    if not examples:
+        return None
+    return (
+        "投稿・コミットは guarded_action で行う（承認はそのツールが 1 回だけ取る。"
+        "事前に ask やチャットで承認を取らない）。"
+        f"呼び出し例（値は候補。実際の値を確認する）: {' または '.join(examples)}"
+    )
 
 
 def _has_git_exec_option(cmd: str, policy: Any) -> bool:

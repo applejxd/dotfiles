@@ -137,10 +137,37 @@ def _common_with(*entries) -> dict:
     return common
 
 
-def test_rules_json_carries_the_two_actions():
+def test_rules_json_carries_the_actions():
     actions = _actions_of(load_common())
-    assert [a["id"] for a in actions] == ["gh_issue_comment", "git_commit"]
-    comment, commit = actions
+    assert [a["id"] for a in actions] == [
+        "gh_issue_comment",
+        "gh_issue_edit_body",
+        "gh_issue_edit_title",
+        "git_commit",
+    ]
+    comment, edit_body, edit_title, commit = actions
+    assert edit_body["argv"] == [
+        "gh",
+        "issue",
+        "edit",
+        "{number}",
+        "-R",
+        "{repo}",
+        "--body-file",
+        "{body_file}",
+    ]
+    assert edit_body["replaces"] == ["gh issue edit"] and edit_body["preview"] == "none"
+    assert edit_title["argv"] == [
+        "gh",
+        "issue",
+        "edit",
+        "{number}",
+        "-R",
+        "{repo}",
+        "--title",
+        "{title}",
+    ]
+    assert edit_title["fields"]["title"] == {"type": "line", "content": True, "max_chars": 256}
     assert comment["argv"] == [
         "gh",
         "issue",
@@ -395,3 +422,45 @@ def test_decide_dump_is_json_serializable():
     # 理由に使う JSON の例は、そのまま JSON として読める (呼び出し例の形)
     example = COMMIT[len(HEAD) :]
     assert json.loads(example)["params"] == {"message": "<件名と本文>"}
+
+
+# ─── line (1 行の短い文字列) ─────────────────────────────────────────
+
+
+def _line_entry(**field):
+    spec = {"type": "line", "content": True, "max_chars": 100}
+    spec.update(field)
+    return {
+        "id": "demo_title",
+        "label": "デモ",
+        "argv": ["demo", "run", "--title", "{title}"],
+        "fields": {"title": spec},
+        "replaces": ["demo run"],
+        "preview": "none",
+    }
+
+
+def test_a_line_field_is_accepted_and_passed_through():
+    actions = _actions_of(_common_with(_line_entry()))
+    assert actions[0]["fields"]["title"] == {"type": "line", "content": True, "max_chars": 100}
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        {"max_chars": 0},
+        {"max_chars": 1001},
+        {"max_chars": True},
+        {"max_chars": None},
+        {"content": "yes"},
+        {"file": True},  # line は本文ファイルにしない
+    ],
+)
+def test_a_broken_line_field_stops_generation(field):
+    entry = _line_entry()
+    if field.get("max_chars", ...) is None:
+        del entry["fields"]["title"]["max_chars"]
+    else:
+        entry["fields"]["title"].update(field)
+    with pytest.raises(SystemExit):
+        _actions_of(_common_with(entry))

@@ -55,7 +55,12 @@ def execute_with_context(template_path: Path, context: dict, env: dict[str, str]
 
 
 def render(
-    *, home: str, username: str = "applejxd", bw_session: str = "", os_name: str = "linux"
+    *,
+    home: str,
+    username: str = "applejxd",
+    bw_session: str = "",
+    os_name: str = "linux",
+    data: dict | None = None,
 ) -> set[str]:
     context = {
         "chezmoi": {
@@ -63,7 +68,8 @@ def render(
             "username": username,
             "homeDir": home,
             "kernel": {"osrelease": "Linux"},
-        }
+        },
+        **(data or {}),
     }
     env = dict(os.environ)
     if bw_session:
@@ -431,3 +437,56 @@ def test_imozuru_youtube_script_is_only_for_the_personal_pc(tmp_path, username, 
     assert (".claude/skills/imozuru/scripts/fetch_youtube.py" in rendered) is ignored
     # fetch.py 自体は YouTube を通さないので、これは Bedrock 側の除外 (スキルごと) だけが効く
     assert (".claude/skills/imozuru/scripts/fetch.py" in rendered) is False
+
+
+# ─── 会社 PC の判定 (is-work) ───────────────────────────────────────────
+
+
+def render_is_work(username: str, data: dict | None = None) -> str:
+    """共有テンプレート ``is-work`` を描画する (``"true"`` / ``"false"``)。"""
+    chezmoi = chezmoi_bin()
+    context = json.dumps(json.dumps({"chezmoi": {"username": username}, **(data or {})}))
+    template = "{{ with " + context + ' | fromJson }}{{ includeTemplate "is-work" . }}{{ end }}'
+    done = subprocess.run(
+        [chezmoi, "--source", str(ROOT), "execute-template", template],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    return done.stdout.strip()
+
+
+@pytest.mark.parametrize(
+    ("username", "data", "expected"),
+    [
+        ("applejxd", None, "false"),
+        ("APPLEJXD", None, "false"),
+        (r"DOMAIN\applejxd", None, "false"),
+        ("worker", None, "true"),
+        (r"CORP\worker", None, "true"),
+        # chezmoi.toml の [data] work で上書きできる (自動の判定が合わない機のため)
+        ("applejxd", {"work": True}, "true"),
+        ("worker", {"work": False}, "false"),
+    ],
+)
+def test_is_work_follows_the_personal_username_unless_overridden(username, data, expected):
+    assert render_is_work(username, data) == expected
+
+
+@pytest.mark.parametrize(
+    ("username", "data", "ignored"),
+    [
+        ("applejxd", None, False),
+        ("worker", None, True),
+        # LLM のプロバイダ (llm_provider) を会社 PC で github-copilot に上書きしても、個人専用のスキルは配らない
+        ("worker", {"llm_provider": "github-copilot"}, True),
+        ("applejxd", {"work": True}, True),
+        ("worker", {"work": False}, False),
+    ],
+)
+def test_personal_only_skills_follow_is_work_not_the_llm_provider(tmp_path, username, data, ignored):
+    rendered = render(home=str(tmp_path), username=username, data=data)
+    assert (".claude/skills/web-search/" in rendered) is ignored
+    assert (".claude/skills/imozuru/" in rendered) is ignored

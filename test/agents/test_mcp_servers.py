@@ -29,8 +29,8 @@ import generate as gen  # noqa: E402
 from agents_common import load_common, render_common  # noqa: E402
 
 COMMON = load_common()
-# applejxd (Copilot) は MCP を 1 つも持たない (deepwiki を外し、検索は Copilot 内蔵)。
-# サーバの中身を確かめる試験は、必ず 1 つ以上ある tester (Bedrock) 側で行う。
+# AgentCore Web Search は全機に配る (使うかは実行時に決まる)。個人の機 (applejxd) では pi だけに出し、
+# 会社 PC (tester) では claude / opencode / pi に出す。
 TESTER = load_common("tester")
 CLAUDE_SCRIPT = ROOT / "home/.chezmoiscripts/400_unix/run_onchange_after_410_claude_mcp.sh.tmpl"
 CLAUDE_WINDOWS_SCRIPT = (
@@ -102,9 +102,7 @@ def servers_for(username, cli=None):
 def test_rendered_common_is_valid_toml(username):
     """テンプレート化で check-toml が効かなくなる分をここで担保する。"""
     rendered = tomllib.loads(render_common(username))
-    # applejxd は 0 件。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない。
-    expected = 0 if username == "applejxd" else 1
-    assert len(rendered.get("mcp", [])) >= expected
+    assert len(rendered.get("mcp", [])) >= 1
     assert rendered["bash"]["deny"], "描画で他の節が壊れていない"
 
 
@@ -131,15 +129,34 @@ def test_declared_servers_pass_validation():
     assert [name for name, _ in gen.mcp_servers(TESTER)] == [s["id"] for s in TESTER["mcp"]]
 
 
-def test_agentcore_websearch_goes_to_claude_and_opencode():
-    """★Bedrock の PC では AgentCore Web Search が Claude Code と OpenCode に入る。
+def test_agentcore_websearch_goes_to_claude_and_opencode_on_work_pcs():
+    """★会社 PC では AgentCore Web Search が Claude Code・OpenCode・pi に入る。
 
-    どちらも Bedrock 経由では内蔵の検索が無い (OpenCode は別契約の検索先が要る)。
+    Bedrock 経由では内蔵の検索が無い (OpenCode は別契約の検索先が要る)。
     Copilot / Codex は使わないので入れない。
     """
     ids = {cli: [name for name, _ in gen.mcp_servers(TESTER, cli)] for cli in sorted(gen.MCP_CLIS)}
-    assert ids["claude"] == ids["opencode"] == ["agentcore-websearch"]
+    assert ids["claude"] == ids["opencode"] == ids["pi"] == ["agentcore-websearch"]
     assert ids["copilot"] == ids["codex"] == []
+
+
+def test_agentcore_websearch_goes_only_to_pi_on_personal_pcs():
+    """個人の機 (家) では、動かない MCP を Claude Code・OpenCode に登録しない。pi だけ (使うかは実行時)。"""
+    personal = load_common("applejxd")
+    ids = {
+        cli: [name for name, _ in gen.mcp_servers(personal, cli)] for cli in sorted(gen.MCP_CLIS)
+    }
+    assert ids["pi"] == ["agentcore-websearch"]
+    assert ids["claude"] == ids["opencode"] == ids["copilot"] == ids["codex"] == []
+
+
+@pytest.mark.parametrize("username", USERS)
+def test_pi_registers_agentcore_only_where_the_gateway_url_exists(username):
+    """pi のフルガードは、AGENTCORE_GATEWAY_URL が空の機では登録しない (requires_env)。"""
+    (entry,) = gen.pi_mcp_servers(load_common(username))
+    assert entry["name"] == "agentcore-websearch"
+    assert entry["requires_env"] == "AGENTCORE_GATEWAY_URL"
+    assert entry["config"]["command"] == "uv" and entry["config"]["exposure"] == "direct"
 
 
 def test_agentcore_websearch_runs_the_deployed_wrapper():
@@ -217,19 +234,10 @@ def test_duplicate_id_stops_generation():
 # ---------------------------------------------------------------------------
 
 
-def test_personal_only_server_is_filtered_in_the_source():
-    personal = {name for name, _ in servers_for("applejxd")}
-    other = {name for name, _ in servers_for("tester")}
-
-    assert personal < other, "applejxd だけ減る想定"
-    assert "agentcore-websearch" in other - personal
-
-
 @pytest.mark.parametrize("username", ["applejxd", "APPLEJXD", "CORP\\applejxd"])
-def test_exclusion_covers_case_and_domain_forms(username):
-    assert {name for name, _ in servers_for(username)} == {
-        name for name, _ in servers_for("applejxd")
-    }
+def test_personal_forms_get_the_personal_cli_list(username):
+    assert [name for name, _ in servers_for(username, "claude")] == []
+    assert [name for name, _ in servers_for(username, "pi")] == ["agentcore-websearch"]
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +429,9 @@ def test_claude_script_embeds_only_this_users_servers(username):
     assert "mcp add-json -s user" in rendered
 
     embedded = json.loads(rendered.split("json.loads(r'''", 1)[1].split("''')", 1)[0])
-    assert [server["id"] for server in embedded] == [name for name, _ in servers_for(username)]
+    assert [server["id"] for server in embedded] == [
+        name for name, _ in servers_for(username, "claude")
+    ]
 
 
 def test_windows_claude_script_covers_the_same_servers():
@@ -515,3 +525,131 @@ def test_rendered_policy_is_validated_by_a_hook():
     config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
     assert "scripts/agents/validate_common.py" in config
     assert (ROOT / "scripts/agents/validate_common.py").is_file()
+
+
+# ---------------------------------------------------------------------------
+# requires_env と、素の pi (Windows) の mcp.json
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", ["", "lower", "1BAD", "A B", 3, ["X"]])
+def test_requires_env_must_be_an_uppercase_variable_name(value):
+    with pytest.raises(ValueError):
+        gen.mcp_servers({"mcp": [{**STDIO, "requires_env": value}]})
+
+
+def test_requires_env_is_accepted_and_does_not_reach_other_clis():
+    common = {"mcp": [{**STDIO, "requires_env": "X_URL"}]}
+    assert [n for n, _ in gen.mcp_servers(common)] == ["x"]
+    (entry,) = gen.pi_mcp_servers(common)
+    assert entry["requires_env"] == "X_URL" and "requires_env" not in entry["config"]
+    assert "requires_env" not in gen.merge_copilot_mcp({}, common)["mcpServers"]["x"]
+
+
+def test_pi_mcp_json_adds_the_servers_and_keeps_the_users_own():
+    """素の pi (Windows) の ~/.pi/agent/mcp.json。利用者が足した他のサーバと、他のキーは残す。"""
+    existing = {"mcpServers": {"docs": {"url": "https://example.com/mcp"}}, "other": 1}
+    merged = gen.merge_pi_mcp(existing, TESTER)
+    assert merged["other"] == 1
+    assert merged["mcpServers"]["docs"] == {"url": "https://example.com/mcp"}
+    entry = merged["mcpServers"]["agentcore-websearch"]
+    assert entry["command"] == "uv" and "exposure" not in entry and "requires_env" not in entry
+    assert any(a.endswith("agentcore_websearch_mcp.py") for a in entry["args"])
+    assert gen.merge_pi_mcp(merged, TESTER) == merged  # 冪等
+
+
+def test_pi_mcp_json_replaces_a_stale_entry_with_the_same_name():
+    stale = {"mcpServers": {"agentcore-websearch": {"command": "old", "args": ["x"]}}}
+    merged = gen.merge_pi_mcp(stale, TESTER)
+    assert merged["mcpServers"]["agentcore-websearch"]["command"] == "uv"
+
+
+def test_pi_mcp_json_rejects_a_broken_servers_table():
+    with pytest.raises(SystemExit):
+        gen.merge_pi_mcp({"mcpServers": []}, TESTER)
+
+
+def test_pi_mcp_json_is_deployed_only_to_windows():
+    ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8")
+    block = ignore.split('{{- if ne .chezmoi.os "windows" }}', 1)[1].split("{{- end }}", 1)[0]
+    assert ".pi/agent/mcp.json" in block
+    assert (ROOT / "home/dot_pi/agent/modify_mcp.json.py.tmpl").is_file()
+
+
+# ---------------------------------------------------------------------------
+# ラッパー: 使えない機では、失敗せずにツールの無い空のサーバになる
+# ---------------------------------------------------------------------------
+
+WRAPPER = ROOT / "home/dot_config/agents/agentcore_websearch_mcp.py"
+
+
+def _run_wrapper(messages, env_extra=None, args=()):
+    env = {
+        k: v
+        for k, v in __import__("os").environ.items()
+        if k not in ("AGENTCORE_GATEWAY_URL", "PI_HARNESS_BOUNDARY")
+    }
+    env.update(env_extra or {})
+    stdin = "".join(json.dumps(m) + "\n" for m in messages)
+    return subprocess.run(
+        [sys.executable, "-B", str(WRAPPER), *args],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        timeout=30,
+        check=False,
+    )
+
+
+INIT = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {"protocolVersion": "2025-03-26"},
+}
+LIST = {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {},  # URL が無い (家)
+        {"AGENTCORE_GATEWAY_URL": "http://insecure.example/mcp"},  # https でない
+        {
+            "AGENTCORE_GATEWAY_URL": "https://gw.example/mcp",
+            "PI_HARNESS_BOUNDARY": "1",
+        },  # サンドボックスの内側
+    ],
+    ids=["no-url", "not-https", "inside-the-sandbox"],
+)
+def test_wrapper_without_a_usable_gateway_serves_an_empty_mcp_server(env):
+    done = _run_wrapper(
+        [INIT, {"jsonrpc": "2.0", "method": "notifications/initialized"}, LIST], env
+    )
+    assert done.returncode == 0, done.stderr
+    replies = [json.loads(line) for line in done.stdout.splitlines()]
+    assert [r["id"] for r in replies] == [1, 2]
+    assert replies[0]["result"]["protocolVersion"] == "2025-03-26"
+    assert replies[0]["result"]["capabilities"] == {"tools": {}}
+    assert replies[1]["result"] == {"tools": []}
+    assert "ツール無しで待機" in done.stderr
+
+
+def test_wrapper_answers_unknown_methods_with_an_error_and_ignores_garbage():
+    done = _run_wrapper([{"jsonrpc": "2.0", "id": 5, "method": "tools/call"}])
+    (reply,) = [json.loads(line) for line in done.stdout.splitlines()]
+    assert reply["id"] == 5 and reply["error"]["code"] == -32601
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="execvp の経路は Unix だけ")
+def test_wrapper_with_a_gateway_runs_the_pinned_proxy(tmp_path):
+    fake = tmp_path / "uvx"
+    fake.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n', encoding="utf-8")
+    fake.chmod(0o755)
+    env = {"AGENTCORE_GATEWAY_URL": "https://gw.example/mcp", "PATH": f"{tmp_path}:/usr/bin:/bin"}
+    done = _run_wrapper([], env, ("--service", "bedrock-agentcore"))
+    args = done.stdout.split()
+    assert args[:2] == ["mcp-proxy-for-aws-cli==1.7.0", "https://gw.example/mcp"], done
+    assert args[2:] == ["--service", "bedrock-agentcore"]

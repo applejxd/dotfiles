@@ -150,9 +150,22 @@ ACTION_COMMANDS = (
     "gh issue comment",
     "git log",
 )
+# action を持つ役割 (implementer) だけで見る。`gh issue edit` は [pi.confirm] の確認表にも載っていて、
+# action を持たない役割では TS の判定器が確認 (ask) にする (Python 版の判定器には確認表が無い)
+ACTION_IMPLEMENTER_COMMANDS = (
+    "gh issue edit 3 -R o/r --title x",
+    "gh issue edit 3 -R o/r --body x",
+    "gh issue edit 3 -R o/r --body-file f",
+    "gh issue edit --title x 3 -R o/r",
+    "gh -R o/r issue edit 9 --title x",
+    "cd x && gh issue edit 7 -R o/r -t x",
+    "gh issue edit",
+)
 ACTION_INPUTS = (
     {"action": "git_commit", "params": {"message": "x"}},
     {"action": "gh_issue_comment", "params": {"repo": "o/r", "number": 1, "body": "x"}},
+    {"action": "gh_issue_edit_body", "params": {"repo": "o/r", "number": 1, "body": "x"}},
+    {"action": "gh_issue_edit_title", "params": {"repo": "o/r", "number": 1, "title": "x"}},
     {},
 )
 
@@ -249,6 +262,9 @@ def requests() -> list[Any]:
     for command in ACTION_COMMANDS:
         for role in ACTION_ROLES:
             out.append(_request("bash", role, "${ROOT}", command=command))
+        out.append(_request("bash", "implementer", "${ROOT}", bypass=True, command=command))
+    for command in ACTION_IMPLEMENTER_COMMANDS:
+        out.append(_request("bash", "implementer", "${ROOT}", command=command))
         out.append(_request("bash", "implementer", "${ROOT}", bypass=True, command=command))
     for action_input in ACTION_INPUTS:
         for role in ACTION_ROLES:

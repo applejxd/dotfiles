@@ -72,7 +72,6 @@ CONFIRM_COMMANDS = [
     "gh pr reopen 1",
     "gh pr ready 1",
     "gh issue create --title t --body b",
-    "gh issue edit 1 --title t",
     "gh issue close 1",
     "gh issue reopen 1",
     "gh issue lock 1",
@@ -109,7 +108,7 @@ BLIND_COMMANDS = [
     "gh issue create -b - -t x",
     "gh pr edit 1 --body-file=-",
     'gh pr create --title t --body "$(cat f)"',
-    "gh issue edit 1 --body `date`",
+    "gh pr edit 1 --body `date`",
     "gh pr review 1 --approve --body-file -",
     "bash -c 'gh pr create --title t --body-file -'",
 ]

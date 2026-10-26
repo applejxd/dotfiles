@@ -1,0 +1,23 @@
+{{- /*
+会社 PC (個人用ではない機) かどうか。"true" か "false" を返す。単一ソース。
+
+使う側:
+    {{ if eq (includeTemplate "is-work" .) "true" }}...{{ end }}
+
+判定は llm-provider とは別の軸。LLM をどのプロバイダで使うか (llm-provider) と、
+「検索語などを AWS の外へ出してよい個人用の機か」(is-work) は独立に決める。
+会社 PC で Copilot を使うようになっても、個人専用の配布 (web-search・imozuru など) が
+会社の機へ入らないようにするため。
+
+判定の根拠は、個人のユーザー名 (applejxd) だけ。それ以外はすべて会社 PC とみなす
+(勤務先の具体はリポジトリに書かない)。chezmoi.toml の [data] の work = true / false で上書きできる。
+chezmoi update は chezmoi init を呼ばないので、ここ (apply のたびに評価される共有テンプレート) に置く。
+see docs/spec/agent-config-generation.md#会社-pc-の判定
+*/ -}}
+{{- if hasKey . "work" -}}
+{{-   if .work -}}true{{- else -}}false{{- end -}}
+{{- else if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+false
+{{- else -}}
+true
+{{- end -}}

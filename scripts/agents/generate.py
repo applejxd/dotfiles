@@ -560,7 +560,10 @@ MCP_TRANSPORT_KEYS = {
     "http": {"url"},
     "stdio": {"command", "args"},
 }
-MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis", "exposure"}
+MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis", "exposure", "requires_env"}
+# requires_env: この環境変数が空のとき、pi のフルガードはこのサーバを登録しない (認証や URL が無い機で、動かないサーバを
+# 起動し続けない)。他の CLI への生成には影響しない
+MCP_ENV_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
 # pi へ出す exposure (モデルへのツールの見せ方)。省略時は direct。pis は -ne で組み込みの
 # codemode / tool_search を外すので、既定の codemode のままだとツールがモデルから呼べない
 # (docs/research/agents/pi-extension-under-harness.md E6)。
@@ -614,6 +617,11 @@ def mcp_servers(common: dict[str, Any], cli: str | None = None) -> list[tuple[st
                 f"[[mcp]] {name} の exposure が不正: {exposure!r} "
                 f"(対応: {', '.join(MCP_EXPOSURES)})"
             )
+        required = server.get("requires_env")
+        if required is not None and (
+            not isinstance(required, str) or MCP_ENV_NAME.fullmatch(required) is None
+        ):
+            raise ValueError(f"[[mcp]] {name} の requires_env は大文字の環境変数名: {required!r}")
 
         targets = server.get("clis")
         if targets is not None:
@@ -1852,10 +1860,12 @@ PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds"})
 PI_CONFIRM_TIMEOUT_DEFAULT = 300
 PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview"})
 PI_ACTION_PREVIEWS = frozenset({"none", "git_staged"})
-PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "text"})
+PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "line", "text"})
 PI_ACTION_FIELD_KEYS = {
     "repo": frozenset({"type"}),
     "int": frozenset({"type"}),
+    # line: 1 行の短い文字列 (issue のタイトルなど)。argv の 1 要素として直接渡す (改行・制御文字は拒否)
+    "line": frozenset({"type", "content", "max_chars"}),
     "text": frozenset({"type", "file", "content", "max_chars"}),
 }
 PI_ACTION_ID = re.compile(r"[a-z][a-z0-9_]*")
@@ -1935,6 +1945,13 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                 points[f"{name}_file" if spec.get("file", False) else name] = name
                 if not spec.get("file", False):
                     raise SystemExit(f"{where} の fields.{name} (text) は file = true が要る")
+            elif kind == "line":
+                if not isinstance(spec.get("content", False), bool):
+                    raise SystemExit(f"{where} の fields.{name}.content は真偽値")
+                limit = spec.get("max_chars")
+                if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
+                    raise SystemExit(f"{where} の fields.{name}.max_chars は 1–1000 の整数")
+                points[name] = name
             else:
                 points[name] = name
         argv = entry.get("argv")
@@ -2221,6 +2238,23 @@ PI_SETTINGS_KEYS = frozenset({"defaultThinkingLevel", "skills", "enabledModels",
 PI_SETTINGS_OWNED = PI_SETTINGS_KEYS | {"defaultProvider", "defaultModel"}
 
 
+def merge_pi_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.pi/agent/mcp.json`` (素の pi が読む。Windows だけ) に、``[[mcp]]`` の pi 向けを足す。
+
+    同じ名前のサーバだけを差し替え、利用者が ``pi mcp add`` で足した他のサーバは残す。
+    ``exposure`` は入れない (pis は -ne で codemode を外すので direct を明示するが、素の pi は既定でよい)。
+    see docs/spec/guard/pi-guard.md#mcp
+    """
+    servers = existing.get("mcpServers", {})
+    if not isinstance(servers, dict):
+        raise SystemExit("~/.pi/agent/mcp.json の mcpServers が表でない")
+    merged = dict(servers)
+    for entry in pi_mcp_servers(common):
+        config = {k: v for k, v in entry["config"].items() if k != "exposure"}
+        merged[entry["name"]] = copy.deepcopy(config)
+    return {**existing, "mcpServers": merged}
+
+
 def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """``~/.pi/agent/settings.json`` の生成器の持ち物だけを差し替える。
 
@@ -2430,6 +2464,7 @@ def build_pi_subagents(_existing: dict[str, Any], common: dict[str, Any]) -> dic
 def pi_mcp_servers(common: dict[str, Any]) -> list[dict[str, Any]]:
     """``[[mcp]]`` のうち pi へ出すもの。フルガードが ``registerMcpServer`` で登録する。"""
     exposures = {str(s.get("id")): s.get("exposure") for s in common.get("mcp", [])}
+    requires = {str(s.get("id")): s.get("requires_env") for s in common.get("mcp", [])}
     out: list[dict[str, Any]] = []
     for name, server in mcp_servers(common, "pi"):
         if server["transport"] == "http":
@@ -2437,7 +2472,10 @@ def pi_mcp_servers(common: dict[str, Any]) -> list[dict[str, Any]]:
         else:
             config = {"command": server["command"], "args": server["args"]}
         config["exposure"] = exposures.get(name) or MCP_DEFAULT_EXPOSURE
-        out.append({"name": name, "config": config})
+        entry: dict[str, Any] = {"name": name, "config": config}
+        if requires.get(name):
+            entry["requires_env"] = requires[name]
+        out.append(entry)
     return out
 
 
@@ -3212,6 +3250,7 @@ TARGETS = {
     "opencode-guide": build_opencode_guide,
     "opencode-service": merge_opencode_service,
     "pi-harness": build_pi_harness,
+    "pi-mcp": merge_pi_mcp,
     "pi-settings": merge_pi_settings,
     "pi-keybindings": pi_keybindings,
     "pi-subagents": build_pi_subagents,

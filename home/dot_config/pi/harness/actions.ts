@@ -18,7 +18,7 @@ const EXEC_TIMEOUT_MS = 120_000;
 const OUTPUT_TAIL_CHARS = 8000;
 const STAT_MAX_CHARS = 4000;
 
-export type FieldSpec = { type: "repo" | "int" | "text"; file?: boolean; content?: boolean; max_chars?: number };
+export type FieldSpec = { type: "repo" | "int" | "line" | "text"; file?: boolean; content?: boolean; max_chars?: number };
 export type ActionSpec = {
 	id: string;
 	label: string;
@@ -80,6 +80,14 @@ export function validateCall(actions: ActionSpec[], input: any): Checked {
 			const n = typeof v === "number" ? v : typeof v === "string" && /^[0-9]+$/.test(v) ? Number(v) : NaN;
 			if (!Number.isInteger(n) || n < 1 || n > INT_MAX) errors.push(`params.${name}: 1〜${INT_MAX} の整数 (受け取った値: ${JSON.stringify(v)})`);
 			else values[name] = String(n);
+		} else if (spec.type === "line") {
+			// 1 行の短い文字列 (issue のタイトルなど)。改行・制御文字を含められない (確認画面と argv の見え方がずれないように)
+			const max = spec.max_chars ?? 256;
+			if (typeof v !== "string") errors.push(`params.${name}: 文字列`);
+			else if (v.trim().length === 0) errors.push(`params.${name}: 空にできない`);
+			else if (v.length > max) errors.push(`params.${name}: ${max} 字以下 (受け取った長さ: ${v.length})`);
+			else if (/[\u0000-\u001f\u007f\u2028\u2029]/.test(v)) errors.push(`params.${name}: 改行・制御文字を含められない (1 行にする)`);
+			else values[name] = v;
 		} else {
 			const max = spec.max_chars ?? 8000;
 			if (typeof v !== "string") errors.push(`params.${name}: 文字列`);
@@ -254,10 +262,11 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			if (choice !== EDIT) return { kind: "approved" as const, values };
 			const edited: Values = { ...values };
 			for (const [name, s] of Object.entries(action.fields)) {
-				if (!(s.type === "text" && s.content)) continue;
+				if (!(s.type === "text" || s.type === "line") || !s.content) continue;
 				const text = await ctx.ui.editor(`${action.label}: ${name} を編集`, values[name]);
 				if (typeof text !== "string" || text.trim() === "") return { kind: "empty" as const };
-				edited[name] = text;
+				// 1 行の項目は、エディタが足す末尾の改行を落とす (途中の改行は再検証で拒否)
+				edited[name] = s.type === "line" ? text.replace(/[\r\n]+$/, "") : text;
 			}
 			return { kind: "approved" as const, values: edited };
 		});

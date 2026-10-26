@@ -1547,7 +1547,9 @@ def _render_common_for_os(os_name: str) -> dict:
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
         pytest.skip("chezmoi is not installed")
-    context = json.dumps(json.dumps({"chezmoi": {"os": os_name, "username": "applejxd"}}))
+    context = json.dumps(
+        json.dumps({"chezmoi": {"os": os_name, "username": "applejxd", "homeDir": "/test-home"}})
+    )
     template = (
         f"{{{{ with {context} | fromJson }}}}"
         '{{ includeTemplate "dot_config/agents/common.toml.tmpl" . }}{{ end }}'

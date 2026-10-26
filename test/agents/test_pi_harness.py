@@ -2332,3 +2332,118 @@ def test_bypass_command_body_says_that_external_posts_are_still_confirmed(env):
     assert len(requests) == 1, requests
     assert "外部への送信・公開" in requests[0]["message"], requests
     assert "bypass でも確認します" in requests[0]["message"], requests
+
+
+# ─── 同じ応答に並んだ編集と、整形の順番 ───────────────────────────────────────
+
+
+def _count_hook(env):
+    """post_edit を、呼ばれるたびにログへ 1 行書く hook に差し替える。ログのパスを返す。"""
+    script = env["tmp"] / "count-hook.sh"
+    script.write_text(
+        '#!/bin/bash\ncat > /dev/null\necho run >> "$TEST_FORMAT_LOG"\n', encoding="utf-8"
+    )
+    path = env["harness"] / "rules.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    rules["post_edit"] = [{"runner": "bash", "script": str(script)}]
+    path.write_text(json.dumps(rules), encoding="utf-8")
+    return env["tmp"] / "format.log"
+
+
+def _edit(path, old, new):
+    return {
+        "name": "guarded_edit",
+        "args": {"path": path, "edits": [{"oldText": old, "newText": new}]},
+    }
+
+
+def _runs(log):
+    return len(log.read_text(encoding="utf-8").splitlines()) if log.exists() else 0
+
+
+def test_parallel_edits_to_one_file_are_formatted_once_after_the_last(env):
+    """★編集の間に整形が入ると、後ろの編集の oldText が整形後の本文と合わず失敗する。整形は最後の 1 件の後に 1 回だけ。"""
+    log = _count_hook(env)
+    (env["proj"] / "a.txt").write_text("one\ntwo\nthree\n", encoding="utf-8")
+    calls = [_edit("a.txt", "one", "1"), _edit("a.txt", "two", "2"), _edit("a.txt", "three", "3")]
+    proc = run_pi(env, calls, TEST_FORMAT_LOG=str(log))
+    assert (env["proj"] / "a.txt").read_text(encoding="utf-8") == "1\n2\n3\n", proc.stdout
+    assert proc.stdout.count("isError=false") == 3, proc.stdout
+    assert _runs(log) == 1
+
+
+def test_edits_to_different_files_are_formatted_once_per_file(env):
+    log = _count_hook(env)
+    (env["proj"] / "a.txt").write_text("a\n", encoding="utf-8")
+    (env["proj"] / "b.txt").write_text("b\n", encoding="utf-8")
+    calls = [_edit("a.txt", "a", "A"), _edit("b.txt", "b", "B")]
+    run_pi(env, calls, TEST_FORMAT_LOG=str(log))
+    assert _runs(log) == 2
+
+
+def test_each_response_formats_its_own_edits(env):
+    """応答が別なら、それぞれの最後の編集の後に整形する (以前と同じ)。"""
+    log = _count_hook(env)
+    (env["proj"] / "a.txt").write_text("a\nb\n", encoding="utf-8")
+    rounds = [[_edit("a.txt", "a", "A")], [_edit("a.txt", "b", "B")]]
+    run_pi(env, [], FAUX_TOOL_ROUNDS=json.dumps(rounds), TEST_FORMAT_LOG=str(log))
+    assert (env["proj"] / "a.txt").read_text(encoding="utf-8") == "A\nB\n"
+    assert _runs(log) == 2
+
+
+def test_a_write_and_an_edit_to_the_same_file_share_one_format(env):
+    log = _count_hook(env)
+    (env["proj"] / "a.txt").write_text("x\n", encoding="utf-8")
+    calls = [
+        {"name": "guarded_write", "args": {"path": "a.txt", "content": "p\nq\n", "append": False}},
+        _edit("a.txt", "q", "Q"),
+    ]
+    run_pi(env, calls, TEST_FORMAT_LOG=str(log))
+    assert _runs(log) == 1
+
+
+def test_a_failed_edit_among_parallel_edits_explains_the_ordering(env):
+    log = _count_hook(env)
+    (env["proj"] / "a.txt").write_text("one\ntwo\n", encoding="utf-8")
+    calls = [_edit("a.txt", "one", "1"), _edit("a.txt", "no such text", "x")]
+    proc = run_pi(env, calls, TEST_FORMAT_LOG=str(log))
+    assert "isError=true" in proc.stdout, proc.stdout
+    assert "同じ応答で同じファイルへ複数の編集を並べる" in proc.stdout, proc.stdout
+    assert (env["proj"] / "a.txt").read_text(encoding="utf-8") == "1\ntwo\n"
+
+
+def test_a_failed_single_edit_does_not_get_the_ordering_hint(env):
+    log = _count_hook(env)
+    (env["proj"] / "a.txt").write_text("one\n", encoding="utf-8")
+    proc = run_pi(env, [_edit("a.txt", "no such text", "x")], TEST_FORMAT_LOG=str(log))
+    assert "isError=true" in proc.stdout
+    assert "同じ応答で同じファイルへ" not in proc.stdout
+
+
+@pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff is not installed")
+def test_the_model_is_told_when_formatting_rewrote_the_file(env):
+    (env["proj"] / "m.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
+    calls = [_edit("m.py", "y = 2", "y   =   20")]
+    proc = run_pi(env, calls)
+    assert (env["proj"] / "m.py").read_text(encoding="utf-8") == "x = 1\ny = 20\n"
+    assert "[整形]" in proc.stdout and "read し直す" in proc.stdout, proc.stdout
+
+
+@pytest.mark.parametrize("variable_set", [False, True], ids=["unset", "set"])
+def test_mcp_server_with_requires_env_is_registered_only_when_the_variable_is_set(
+    env, variable_set
+):
+    """AgentCore のように、URL (環境変数) が無い機では、動かない MCP サーバを登録しない。"""
+    rules = json.loads((env["harness"] / "rules.json").read_text(encoding="utf-8"))
+    config = {"command": sys.executable, "args": [str(FIXTURES / "mcp_server.py")]}
+    rules["mcp"] = [
+        {
+            "name": "spike",
+            "config": {**config, "exposure": "direct"},
+            "requires_env": "SPIKE_MCP_URL",
+        }
+    ]
+    (env["harness"] / "rules.json").write_text(json.dumps(rules), encoding="utf-8")
+    extra = {"SPIKE_MCP_URL": "https://gw.example/mcp"} if variable_set else {"SPIKE_MCP_URL": "  "}
+    proc = run_pi(env, [], **extra)
+    assert ("mcp__spike__echo_secret" in lines(proc)[0]) is variable_set, proc.stdout

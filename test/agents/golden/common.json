@@ -450,6 +450,29 @@
    "timeout_sec": 30
   }
  ],
+ "mcp": [
+  {
+   "args": [
+    "run",
+    "--no-project",
+    "--quiet",
+    "/home/applejxd/.config/agents/agentcore_websearch_mcp.py",
+    "--service",
+    "bedrock-agentcore",
+    "--region",
+    "us-east-1",
+    "--disable-telemetry"
+   ],
+   "clis": [
+    "pi"
+   ],
+   "command": "uv",
+   "id": "agentcore-websearch",
+   "purpose": "AgentCore Web Search で web 検索する (Gateway の URL がある機だけ)",
+   "requires_env": "AGENTCORE_GATEWAY_URL",
+   "transport": "stdio"
+  }
+ ],
  "opencode": {
   "agent": {
    "bypass": {
@@ -1009,6 +1032,69 @@
     "preview": "none",
     "replaces": [
      "gh issue comment"
+    ]
+   },
+   {
+    "argv": [
+     "gh",
+     "issue",
+     "edit",
+     "{number}",
+     "-R",
+     "{repo}",
+     "--body-file",
+     "{body_file}"
+    ],
+    "fields": {
+     "body": {
+      "content": true,
+      "file": true,
+      "max_chars": 8000,
+      "type": "text"
+     },
+     "number": {
+      "type": "int"
+     },
+     "repo": {
+      "type": "repo"
+     }
+    },
+    "id": "gh_issue_edit_body",
+    "label": "issue の本文を編集",
+    "preview": "none",
+    "replaces": [
+     "gh issue edit"
+    ]
+   },
+   {
+    "argv": [
+     "gh",
+     "issue",
+     "edit",
+     "{number}",
+     "-R",
+     "{repo}",
+     "--title",
+     "{title}"
+    ],
+    "fields": {
+     "number": {
+      "type": "int"
+     },
+     "repo": {
+      "type": "repo"
+     },
+     "title": {
+      "content": true,
+      "max_chars": 256,
+      "type": "line"
+     }
+    },
+    "id": "gh_issue_edit_title",
+    "label": "issue のタイトルを編集",
+    "preview": "none",
+    "replaces": [
+     "gh issue edit"
     ]
    },
    {

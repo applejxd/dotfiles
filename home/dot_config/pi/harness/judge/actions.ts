@@ -14,9 +14,9 @@ const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9_.-]+$/;
 const INT_RE = /^[0-9]+$/;
 const VALUE_FLAGS = new Set(["-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "--title", "-m", "--message"]);
 
-const TYPE_RANK: Record<string, number> = { repo: 0, int: 1, text: 2 };
+const TYPE_RANK: Record<string, number> = { repo: 0, int: 1, line: 2, text: 3 };
 
-/** 判定器が見る操作表の 1 項目 (形が壊れていれば例外 = 判定に失敗した deny)。fields は型 (repo, int, text) → 名前の順に並べる。 */
+/** 判定器が見る操作表の 1 項目 (形が壊れていれば例外 = 判定に失敗した deny)。fields は型 (repo, int, line, text) → 名前の順に並べる。 */
 export type ActionEntry = { id: string; replaces: string[]; fields: [string, string][] };
 
 export function actionEntries(pi: Obj): ActionEntry[] {
@@ -92,13 +92,15 @@ function candidates(cmd: string, segment: string, prefixLen: number): { repo: st
 	return { repo, number: numberIn(tokensOf(segment).slice(prefixLen)) };
 }
 
-const PLACEHOLDER_TEXT: Record<string, string> = { body: "<本文>", message: "<件名と本文>" };
+const PLACEHOLDER_TEXT: Record<string, string> = { body: "<本文>", message: "<件名と本文>", title: "<タイトル>" };
 
 /** action ツールを持つ役割の bash が、操作表の `replaces` に当たれば deny の理由を返す (当たらなければ null)。 */
 export function actionDenyReason(cmd: string, pi: Obj): string | null {
 	const entries = actionEntries(pi);
 	if (entries.length === 0) return null;
 	const segments = normalize(cmd);
+	// 同じコマンドに当たる操作が複数あるとき (issue の本文とタイトルなど) は、表の順に全部の例を出す
+	const examples: string[] = [];
 	for (const entry of entries) {
 		for (const segment of segments) {
 			const pattern = entry.replaces.find((p) => patternMatches(segment, p));
@@ -110,12 +112,13 @@ export function actionDenyReason(cmd: string, pi: Obj): string | null {
 				if (type === "int") return `${key}:${found.number === null ? "<N>" : String(found.number)}`;
 				return `${key}:${JSON.stringify(PLACEHOLDER_TEXT[name] ?? `<${name}>`)}`;
 			});
-			const example = `{"action":${JSON.stringify(entry.id)},"params":{${parts.join(",")}}}`;
-			return (
-				"投稿・コミットは guarded_action で行う（承認はそのツールが 1 回だけ取る。事前に ask やチャットで承認を取らない）。" +
-				`呼び出し例（値は候補。実際の値を確認する）: guarded_action ${example}`
-			);
+			examples.push(`guarded_action {"action":${JSON.stringify(entry.id)},"params":{${parts.join(",")}}}`);
+			break;
 		}
 	}
-	return null;
+	if (examples.length === 0) return null;
+	return (
+		"投稿・コミットは guarded_action で行う（承認はそのツールが 1 回だけ取る。事前に ask やチャットで承認を取らない）。" +
+		`呼び出し例（値は候補。実際の値を確認する）: ${examples.join(" または ")}`
+	);
 }

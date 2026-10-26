@@ -299,13 +299,33 @@ export default async function (pi: ExtensionAPI) {
 		return undefined;
 	});
 
+	// 1 つの応答に並んだ edit / write の数をファイルごとに数える。整形 (post_edit) は、その最後の 1 件の後に 1 回だけ行う
+	// (編集の間に整形が入ると、後ろの編集の oldText が整形で変わった本文と合わず、"must match" で失敗する)
+	pi.on("message_end", async (event: any, ctx: any) => {
+		const message = event?.message;
+		if (message?.role !== "assistant" || !Array.isArray(message.content)) return undefined;
+		const counts = new Map<string, number>();
+		for (const block of message.content) {
+			if (block?.type !== "toolCall" || (block.name !== `${PREFIX}edit` && block.name !== `${PREFIX}write`)) continue;
+			const path = block.arguments?.path;
+			if (typeof path !== "string" || path === "") continue;
+			const abs = isAbsolute(path) ? path : resolve(ctx.cwd, path);
+			counts.set(abs, (counts.get(abs) ?? 0) + 1);
+		}
+		batchTotals = counts;
+		pendingEdits = new Map(counts);
+		return undefined;
+	});
+
 	// フルガードが持たないツール (MCP など) の結果。tool_result の例外は無視されて生の結果が残るので、
 	// ここでは投げずに結果ごと伏せる
 	pi.on("tool_result", async (event, ctx) => {
-		// guarded_edit の失敗に次の一手のヒントを足す (引数の不正は execute の前に起きるので、ここで扱う)
-		if (event.toolName === `${PREFIX}edit`) {
+		// guarded_edit の失敗に次の一手のヒントを足す (引数の不正は execute の前に起きるので、ここで扱う)。
+		// edit / write の整形は、同じ応答の同じファイルへの最後の 1 件の後に 1 回だけ行う
+		if (event.toolName === `${PREFIX}edit` || event.toolName === `${PREFIX}write`) {
 			const canRead = (p: string) => decide("read", { path: p }, ctx.cwd).decision === "allow";
-			return decorateEditResult(event as any, ctx.cwd, canRead);
+			const hinted = event.toolName === `${PREFIX}edit` ? await decorateEditResult(event as any, ctx.cwd, canRead) : undefined;
+			return await finishEdit(event as any, hinted, ctx.cwd);
 		}
 		if (event.toolName.startsWith(PREFIX)) return undefined;
 		try {
@@ -359,13 +379,12 @@ export default async function (pi: ExtensionAPI) {
 				if (d.decision === "deny" || (d.decision === "ask" && !approved)) {
 					throw new Error(`実行前の判定で止めた: ${d.decision}: ${d.decision === "deny" ? denyReason(tool, params, d) : d.reason}`);
 				}
-				// edit / write の後に整形する (Claude / Copilot の PostToolUse hook と同じスクリプト)
+				// edit / write の後の整形 (Claude / Copilot の PostToolUse hook と同じスクリプト) は、tool_result の側で行う
+				// (同じ応答に同じファイルへの編集が並ぶとき、最後の 1 件の後に 1 回だけ。finishEdit)
 				if (tool === "edit" || tool === "write") {
-					const result =
-						tool === "write" && params?.append === true
-							? appendResult(await appendDef.execute(toolCallId, params, signal, onUpdate, ctx), params.path, String(params.content ?? "").length)
-							: await def.execute(toolCallId, params, signal, onUpdate, ctx);
-					return await formatAfterEdit(result, params?.path, ctx.cwd);
+					return tool === "write" && params?.append === true
+						? appendResult(await appendDef.execute(toolCallId, params, signal, onUpdate, ctx), params.path, String(params.content ?? "").length)
+						: await def.execute(toolCallId, params, signal, onUpdate, ctx);
 				}
 				if (tool === "read") {
 					const canRead = (p: string) => decide("read", { path: p }, ctx.cwd).decision === "allow";
@@ -385,8 +404,12 @@ export default async function (pi: ExtensionAPI) {
 		});
 	}
 
-	// MCP はフルガードから登録する。フルガードが抜ければ登録も消える (spike の E3)
-	for (const server of rules.mcp ?? []) pi.registerMcpServer(server.name, server.config);
+	// MCP はフルガードから登録する。フルガードが抜ければ登録も消える (spike の E3)。
+	// requires_env があるサーバは、その環境変数が空の機では登録しない (認証や URL が無い機で、動かないサーバを起動し続けない)
+	for (const server of rules.mcp ?? []) {
+		if (typeof server.requires_env === "string" && !(process.env[server.requires_env] ?? "").trim()) continue;
+		pi.registerMcpServer(server.name, server.config);
+	}
 
 	// 承認つきの操作 (git commit・gh issue comment)。役割に action があり、子でないときだけ登録する
 	const actionSpecs = loadActions(rules);
@@ -1320,24 +1343,119 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 // ─── 編集の後の整形 ─────────────────────────────────────────────────
 
 // rules.json の post_edit (PostToolUse の hook) を宣言順に呼ぶ。整形は黙って済ませ、
-// markdownlint が残した違反だけを結果の末尾に足してモデルへ返す。失敗しても編集は成功のまま。
-async function formatAfterEdit(result: any, path: unknown, cwd: string): Promise<any> {
-	if (typeof path !== "string" || !rules.post_edit?.length) return result;
-	const abs = isAbsolute(path) ? path : resolve(cwd, path);
-	const warnings: string[] = [];
-	await withFileMutationQueue(abs, async () => {
-		for (const hook of rules.post_edit) {
-			const r = spawnSync(hook.runner, [hook.script], {
-				input: JSON.stringify({ tool_input: { path: abs } }),
-				encoding: "utf-8",
-				timeout: 30000,
-				cwd,
-			});
-			// exit 2 は「エージェントへ警告する」(hook_emit_posttool_warn)。stderr が警告の本文
-			if (r.status === 2 && r.stderr?.trim()) warnings.push(r.stderr.trim());
-		}
+// markdownlint が残した違反と、整形で本文が変わったことだけをモデルへ返す。失敗しても編集は成功のまま。
+//
+// ★編集と整形の順番: 同じ応答に同じファイルへの edit / write が並んだとき、整形は、その最後の 1 件の後に 1 回だけ。
+// 編集の間に整形が入ると、後ろの編集の oldText (整形前の本文を見て作ったもの) が合わず、
+// "The old text must match exactly" で失敗する (遅いマシンや承認待ちで、編集の開始がずれると起きやすい)。
+// see docs/spec/guard/pi-guard.md#整形
+
+// 応答ごとの edit / write の数 (絶対パスごと)。batchTotals は応答の合計、pendingEdits はまだ結果が出ていない残り
+let batchTotals = new Map<string, number>();
+let pendingEdits = new Map<string, number>();
+
+const FORMAT_NOTICE_MAX_BYTES = 2 * 1024 * 1024;
+const SIBLING_EDIT_HINT =
+	"同じ応答で同じファイルへ複数の編集を並べると、前の編集が先に適用されている (順番に 1 件ずつ)。ファイルを read し直し、" +
+	"変更は 1 回の guarded_edit の edits[] にまとめる (すべて元の本文に対して照合される)";
+
+function readSmallText(abs: string): string | null {
+	try {
+		if (statSync(abs).size > FORMAT_NOTICE_MAX_BYTES) return null;
+		return readFileSync(abs, "utf-8");
+	} catch {
+		return null;
+	}
+}
+
+/** 整形で変わった行の概数 (後にあって前に無い行の数)。 */
+function changedLineCount(before: string, after: string): number {
+	const seen = new Map<string, number>();
+	for (const line of before.split("\n")) seen.set(line, (seen.get(line) ?? 0) + 1);
+	let changed = 0;
+	for (const line of after.split("\n")) {
+		const left = seen.get(line) ?? 0;
+		if (left > 0) seen.set(line, left - 1);
+		else changed++;
+	}
+	return changed;
+}
+
+/** hook を 1 つ非同期に走らせる (同期で待つと、整形の間、他の tool call の処理も止まる)。失敗・時間切れは status null。 */
+function runPostEditHook(hook: any, abs: string, cwd: string): Promise<{ status: number | null; stderr: string }> {
+	return new Promise((done) => {
+		let stderr = "";
+		let finished = false;
+		const finish = (status: number | null) => {
+			if (finished) return;
+			finished = true;
+			clearTimeout(timer);
+			done({ status, stderr });
+		};
+		const child = spawn(hook.runner, [hook.script], { cwd, stdio: ["pipe", "ignore", "pipe"] });
+		const timer = setTimeout(() => {
+			child.kill();
+			finish(null);
+		}, 30000);
+		child.stderr.on("data", (chunk: Buffer) => {
+			if (stderr.length < 65536) stderr += chunk.toString("utf-8");
+		});
+		child.on("error", () => finish(null));
+		child.on("close", (code) => finish(code));
+		child.stdin.on("error", () => {});
+		child.stdin.end(JSON.stringify({ tool_input: { path: abs } }));
 	});
-	if (!warnings.length) return result;
-	const content = [...(result.content ?? []), { type: "text", text: `\n${redactText(warnings.join("\n"))}` }];
-	return { ...result, content };
+}
+
+/** abs を整形する (書き込みの順番待ちの中で)。返るのは markdownlint の警告と、整形で変わった行数。 */
+async function formatFile(abs: string, cwd: string): Promise<{ warnings: string[]; changed: number }> {
+	const warnings: string[] = [];
+	let changed = 0;
+	if (!rules.post_edit?.length) return { warnings, changed };
+	await withFileMutationQueue(abs, async () => {
+		const before = readSmallText(abs);
+		for (const hook of rules.post_edit) {
+			const r = await runPostEditHook(hook, abs, cwd);
+			// exit 2 は「エージェントへ警告する」(hook_emit_posttool_warn)。stderr が警告の本文
+			if (r.status === 2 && r.stderr.trim()) warnings.push(r.stderr.trim());
+		}
+		const after = readSmallText(abs);
+		if (before !== null && after !== null && before !== after) changed = changedLineCount(before, after);
+	});
+	return { warnings, changed };
+}
+
+/**
+ * guarded_edit / guarded_write の tool_result の仕上げ。hinted は失敗のヒントを足した結果 (無ければ undefined)。
+ * 同じ応答の同じファイルへの編集のうち最後の 1 件だけが整形を行い、結果へ警告と「整形で本文が変わった」を足す。
+ */
+async function finishEdit(event: any, hinted: { content: any[] } | undefined, cwd: string): Promise<{ content: any[] } | undefined> {
+	const path = event?.input?.path;
+	if (typeof path !== "string" || path === "") return hinted;
+	const abs = isAbsolute(path) ? path : resolve(cwd, path);
+	const known = pendingEdits.has(abs);
+	const remaining = (pendingEdits.get(abs) ?? 1) - 1;
+	if (known) {
+		if (remaining > 0) pendingEdits.set(abs, remaining);
+		else pendingEdits.delete(abs);
+	}
+	const base: any[] = hinted?.content ?? (Array.isArray(event.content) ? event.content : []);
+	if (event.isError) {
+		// 同じ応答に同じファイルへの編集が並んでいて、照合に失敗したときは、並べ方の影響を示す
+		const first = base.find((b: any) => b?.type === "text" && typeof b.text === "string")?.text ?? "";
+		if ((batchTotals.get(abs) ?? 1) > 1 && /^(Could not find|Found \d+ occurrences)/.test(first)) {
+			return { content: [...base, { type: "text", text: `\n${SIBLING_EDIT_HINT}` }] };
+		}
+		return hinted;
+	}
+	// 同じ応答の後続の編集が残っている間は整形しない (最後の 1 件が行う)
+	if (remaining > 0) return hinted;
+	const { warnings, changed } = await formatFile(abs, cwd);
+	const notes: string[] = [];
+	if (warnings.length) notes.push(redactText(warnings.join("\n")));
+	if (changed > 0) {
+		notes.push(`[整形] hook が ${relative(cwd, abs) || abs} を書き換えた (約 ${changed} 行)。続けて同じ箇所を編集するときは、先に read し直す`);
+	}
+	if (!notes.length) return hinted;
+	return { content: [...base, { type: "text", text: `\n${notes.join("\n")}` }] };
 }

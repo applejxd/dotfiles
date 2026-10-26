@@ -67,6 +67,10 @@ Documents/**
 # フルガードが無い素の pi (Windows) 用の子エージェント拡張。Unix のフルガードは -ne で読まない
 .pi/agent/extensions/subagents/
 .pi/agent/extensions/subagents/**
+# 素の pi が読む MCP の設定 (Windows だけ)。Unix のフルガードは MCP を rules.json から登録し、
+# ~/.pi/agent/mcp.json にサーバがあると pis は起動しない (フルガードと無関係に繋がるため)
+# see docs/spec/guard/pi-guard.md#mcp
+.pi/agent/mcp.json
 {{- end }}
 
 {{- if ne .chezmoi.os "darwin" }}
@@ -152,9 +156,10 @@ Documents/**
 .vscode-server/**
 {{- end }}
 
-# 制約のある環境用 (Bedrock) は検索を AgentCore の MCP に一本化する。web-search skill と、それに依存する imozuru は個人用 (github-copilot) だけに配る
+# 会社 PC は検索を AgentCore の MCP に一本化する。web-search skill と、それに依存する imozuru は個人用 (is-work でない機) だけに配る
+# (LLM のプロバイダ (llm-provider) とは別の軸。会社 PC で Copilot を使っても配らない)
 # see docs/spec/web-search.md#配る範囲、docs/spec/imozuru.md#配る範囲
-{{- if eq (includeTemplate "llm-provider" .) "amazon-bedrock" }}
+{{- if eq (includeTemplate "is-work" .) "true" }}
 .claude/skills/web-search/
 .claude/skills/web-search/**
 .claude/skills/imozuru/

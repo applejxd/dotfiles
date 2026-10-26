@@ -43,6 +43,30 @@ ACTIONS = [
         "preview": "none",
     },
     {
+        "id": "gh_issue_edit_body",
+        "label": "issue の本文を編集",
+        "argv": ["gh", "issue", "edit", "{number}", "-R", "{repo}", "--body-file", "{body_file}"],
+        "fields": {
+            "repo": {"type": "repo"},
+            "number": {"type": "int"},
+            "body": {"type": "text", "file": True, "content": True, "max_chars": 8000},
+        },
+        "replaces": ["gh issue edit"],
+        "preview": "none",
+    },
+    {
+        "id": "gh_issue_edit_title",
+        "label": "issue のタイトルを編集",
+        "argv": ["gh", "issue", "edit", "{number}", "-R", "{repo}", "--title", "{title}"],
+        "fields": {
+            "repo": {"type": "repo"},
+            "number": {"type": "int"},
+            "title": {"type": "line", "content": True, "max_chars": 256},
+        },
+        "replaces": ["gh issue edit --title"],
+        "preview": "none",
+    },
+    {
         "id": "git_commit",
         "label": "コミット",
         "argv": ["git", "commit", "-F", "{message_file}"],
@@ -430,3 +454,54 @@ def test_the_approval_is_for_one_run_only(env):
     # 2 回目は、ステージ済みが無いので確認なしのエラー (承認は再利用されない)
     assert _methods(requests) == ["select"], requests
     assert [r[0] for r in results] == [False, True], results
+
+
+@needs_action
+def test_approved_issue_title_edit_passes_the_title_as_one_argv_element(env):
+    _prepare(env)
+    title = "新しい題 $(touch pwned) `x` --body injected"
+    requests, results = _rpc(
+        env, _call("gh_issue_edit_title", repo="o/r", number=7, title=title), _choose(APPROVE)
+    )
+    assert _methods(requests) == ["select"], requests
+    shown = requests[0]["title"]
+    assert "新しい題" in shown and "o/r" in shown and '"--title"' in shown
+    assert results and results[0][0] is False, results
+    args = (env["ghdir"] / "args").read_text(encoding="utf-8").splitlines()
+    assert args == ["issue", "edit", "7", "-R", "o/r", "--title", title], args
+    assert not (env["proj"] / "pwned").exists()
+
+
+@needs_action
+def test_approved_issue_body_edit_writes_the_body_file(env):
+    _prepare(env)
+    body = "更新した本文\n- [ ] 項目"
+    requests, results = _rpc(
+        env, _call("gh_issue_edit_body", repo="o/r", number=7, body=body), _choose(APPROVE)
+    )
+    assert _methods(requests) == ["select"], requests
+    assert results and results[0][0] is False, results
+    args = (env["ghdir"] / "args").read_text(encoding="utf-8").splitlines()
+    assert args[:6] == ["issue", "edit", "7", "-R", "o/r", "--body-file"], args
+    assert (env["ghdir"] / "body").read_text(encoding="utf-8") == body
+
+
+@needs_action
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("1 行目\n2 行目", "改行・制御文字"),
+        ("tab\tinside", "改行・制御文字"),
+        ("nul\0inside", "改行・制御文字"),
+        ("   ", "空にできない"),
+        ("x" * 257, "256 字以下"),
+    ],
+)
+def test_an_invalid_issue_title_is_refused_before_any_confirmation(env, title, expected):
+    _prepare(env)
+    requests, results = _rpc(
+        env, _call("gh_issue_edit_title", repo="o/r", number=7, title=title), _choose(APPROVE)
+    )
+    assert requests == [], requests
+    assert results and results[0][0] is True and expected in results[0][1], results
+    assert not (env["ghdir"] / "args").exists()

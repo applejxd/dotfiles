@@ -67,7 +67,8 @@ export function toolText(tool: string, P: string, def: { description?: string; p
 				promptSnippet: "Make precise file edits with exact text replacement, including multiple disjoint edits in one call",
 				promptGuidelines: [
 					`Use ${P}edit for partial changes to a file (edits[].oldText must match exactly one place in the original file). Do not edit with sed/awk.`,
-					`When changing several separate places in one file, put them in edits[] of one ${P}edit call instead of several calls.`,
+					`When changing several separate places in one file, put them in edits[] of one ${P}edit call instead of several calls. ` +
+					`Do not put several ${P}edit calls for the same file in one response: they are applied one after another, so a later oldText can stop matching.`,
 				],
 			};
 		case "grep":

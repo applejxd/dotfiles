@@ -133,11 +133,19 @@ def _for_old_generator(common: dict) -> dict:
     """P の直前の生成器が知らない入力を外す。どれも OpenCode の出力には影響しない。
 
     ``[[mcp]] clis`` の ``pi`` は後から足した生成先で、古い生成器は未知の値として止まる。
+    ``requires_env`` (pi のフルガードだけが見る) も同じ。
     """
     common = copy.deepcopy(common)
+    kept = []
     for server in common.get("mcp", []):
+        server.pop("requires_env", None)
         if "clis" in server:
             server["clis"] = [c for c in server["clis"] if c != "pi"]
+            if not server["clis"]:
+                continue  # pi だけに出すサーバは、古い生成器には無い
+        kept.append(server)
+    if "mcp" in common:
+        common["mcp"] = kept
     return common
 
 

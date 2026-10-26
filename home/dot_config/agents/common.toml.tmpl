@@ -966,6 +966,30 @@ number = { type = "int" }
 body = { type = "text", file = true, content = true, max_chars = 8000 }
 
 [[pi.actions]]
+id = "gh_issue_edit_body"
+label = "issue の本文を編集"
+argv = ["gh", "issue", "edit", "{number}", "-R", "{repo}", "--body-file", "{body_file}"]
+replaces = ["gh issue edit"]
+preview = "none"
+[pi.actions.fields]
+repo = { type = "repo" }
+number = { type = "int" }
+body = { type = "text", file = true, content = true, max_chars = 8000 }
+
+# タイトルは 1 行の短い文字列 (type = "line")。gh にタイトルのファイル渡しが無いので、argv の 1 要素として直接渡す (シェル無し)。
+# この行を足した理由と仕様は docs/spec/guard/pi-guard.md#guarded_action承認つきの外部操作
+[[pi.actions]]
+id = "gh_issue_edit_title"
+label = "issue のタイトルを編集"
+argv = ["gh", "issue", "edit", "{number}", "-R", "{repo}", "--title", "{title}"]
+replaces = ["gh issue edit"]
+preview = "none"
+[pi.actions.fields]
+repo = { type = "repo" }
+number = { type = "int" }
+title = { type = "line", content = true, max_chars = 256 }
+
+[[pi.actions]]
 id = "git_commit"
 label = "コミット"
 argv = ["git", "commit", "-F", "{message_file}"]
@@ -1089,10 +1113,10 @@ script = "~/.claude/skills/away-shift/scripts/preflight.py"
 script = "~/.claude/skills/env-check/scripts/env_check.py"
 subcommands = ["names", "show", "get"]
 
-# web-search。個人用 (github-copilot) だけ。制約のある環境用 (Bedrock) は検索を AgentCore に一本化する (skill も配らない)。
+# web-search。個人用 (is-work でない機) だけ。会社 PC は検索を AgentCore に一本化する (skill も配らない)。
 # 外部へ出るのはクエリだけで、クエリは秘匿チェックで止める。sync-keys は bw を呼ぶので載せない。
 # see docs/spec/web-search.md#pis-の許可規則
-{{- if eq (includeTemplate "llm-provider" .) "github-copilot" }}
+{{- if ne (includeTemplate "is-work" .) "true" }}
 [[pi.skill_scripts.allow]]
 script = "~/.claude/skills/web-search/scripts/websearch.py"
 subcommands = ["search", "fetch", "papers", "status"]
@@ -1235,7 +1259,7 @@ copilot = "off"
 github = "auto"
 # 検索 (websearch.py) の鍵をホスト側の Envoy に持たせ、内側へは渡さない。鍵は ~/.config/agents/websearch-keys.json
 search = "auto"
-{{- if eq (includeTemplate "llm-provider" .) "github-copilot" }}
+{{- if ne (includeTemplate "is-work" .) "true" }}
 # 個人の機: gh のブラウザ認証 (gh auth login) で保存されたトークンを、ホスト側で取り出す
 github_token_command = ["gh", "auth", "token"]
 {{- else }}
@@ -2210,15 +2234,16 @@ extensions = [".md", ".markdown"]
 #   各 CLI 側で設定する (ADR-0005)。
 # see docs/spec/agent-config-generation.md 「MCP サーバ」
 # ★deepwiki は索引が古く、実ソースと食い違う説明を返すため 2026-09-25 に外した。
-{{- if eq (includeTemplate "llm-provider" .) "amazon-bedrock" }}
 
-# Bedrock では Claude Code 内蔵の WebSearch が使えないので AgentCore Web Search で補う。
-# Gateway の URL は環境変数 AGENTCORE_GATEWAY_URL から読む (ラッパーが渡す)。
+# AgentCore Web Search。会社 PC の検索 (Bedrock でも Copilot でも)。全機に配り、使うかは実行時に決まる:
+# Gateway の URL (環境変数 AGENTCORE_GATEWAY_URL) が無い機 (家) では、pi のフルガードは登録せず (requires_env)、
+# 素の pi (Windows) ではラッパーが「ツールの無い空のサーバ」になる。認証が無ければ何も起きない。
 # see docs/spec/agent-config-generation.md#agentcore-web-search
 [[mcp]]
 id = "agentcore-websearch"
-purpose = "Bedrock AgentCore Web Search で web 検索する"
-clis = ["claude", "opencode", "pi"]
+purpose = "AgentCore Web Search で web 検索する (Gateway の URL がある機だけ)"
+clis = [{{ if eq (includeTemplate "is-work" .) "true" }}"claude", "opencode", "pi"{{ else }}"pi"{{ end }}]
+requires_env = "AGENTCORE_GATEWAY_URL"
 transport = "stdio"
 command = "uv"
 args = [
@@ -2226,7 +2251,6 @@ args = [
   '{{ .chezmoi.homeDir }}/.config/agents/agentcore_websearch_mcp.py',
   "--service", "bedrock-agentcore", "--region", "us-east-1", "--disable-telemetry",
 ]
-{{- end }}
 
 # ---------------------------------------------------------------------------
 # Hooks (pi の編集後の整形)
