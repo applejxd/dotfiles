@@ -100,6 +100,8 @@ _PI_TESTS = (
     "test_pi_worktrees_command",
     "test_pi_subagents",
     "test_pi_shared",
+    "test_pi_settings_launch",
+    "test_pi_unguarded",
     "test_btw_view",
 )
 _OC_TESTS = (

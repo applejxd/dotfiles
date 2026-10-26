@@ -5,10 +5,11 @@ OpenCode のガード（permission の生成・guide plugin）の後継で、移
 [CHG-0020](../../change/0020-pi-migration.md)、設計の根拠になった試作の観測は
 [pi のハーネスの試作（旧称。現在のフルガード）](../../research/agents/pi-harness-spike.md)（E1〜E4）。
 
-> **位置づけ**: フルガードは `pis` で起動したときだけ効く。**Orca と Zed が呼ぶ素の `pi` は、フルガード無しで動く**
-> （利用者の判断。保護が要る作業は `pis` で起動する。標準でサンドボックスの中）。`pis` は利用者が自分で起動するとき用で、
-> 優先度は低い（[CHG-0020](../../change/0020-pi-migration.md)）。素の `pi` には**ガードを付けない**（簡易ガードは廃止。CHG-0023 の段 3f）。
-> 付くのは `git push` の拒否と `git commit` の確認だけ（[commit の確認](#commit-の確認-素の-pi)）。
+> **位置づけ（2026-10-26 から）**: **Unix（Ubuntu・WSL・macOS）では、素の `pi` もフルガード付きで起動する**（`~/.pi/agent/settings.json` が読み込む。
+> [pi の設定](#pi-の設定)）。Orca・Zed が呼ぶ `pi` も同じ。`pis` は「`pi` を Fence のサンドボックスの中で起動する」ものに絞る（標準）。
+> `pis --no-sandbox` は、素の `pi` との差（下の表）を解消するまでの移行用に残す。
+> **Windows の素の `pi` はフルガード無し**（Windows 版は未着手。次の段）。付くのは `git push` の拒否と `git commit` の確認だけ（[commit の確認](#commit-の確認-素の-pi)）。
+> 経緯は [CHG-0040](../../change/0040-pi-guard-by-settings.md)。
 
 ## 用語
 
@@ -19,7 +20,7 @@ pi に足す判定の層、および起動の形を、次のように呼び分�
 | 用語 | 指すもの | 旧称 |
 | --- | --- | --- |
 | ガード | ツール呼び出しを判定し、allow / ask / deny に振り分ける層 | ハーネス（拡張の意味のとき） |
-| フルガード | `pis` で効く、役割・確認（ask）・伏字化まで含むガード（`~/.config/pi/harness`） | ハーネス |
+| フルガード | 素の `pi`（Unix）と `pis` で効く、役割・確認（ask）・伏字化まで含むガード（`~/.config/pi/harness`） | ハーネス |
 | 簡易ガード（廃止） | 素の `pi` に付いていた、deny と伏字化だけのガード。段 3f で廃止した | 素の pi のガード |
 | サンドボックス | Fence による OS レベルの隔離（`pis` の標準）。ガードとは別の層 | 境界 |
 
@@ -41,7 +42,22 @@ pis -c              # pi の引数はそのまま渡る (例: 直前のセッシ
 - サンドボックスの検査に落ちたとき・起動場所が危険なときも起動しない。制御ファイル・フルガードの編集、復旧、Orca・Zed は `--no-sandbox` で行う
 - 設計の根拠は [CHG-0023](../../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
 
-`pis --no-sandbox`（`~/.local/bin/pis`）は次の形で pi を起動する（サンドボックスの内側も、同じフラグ `BASE_FLAGS` で起動する）。素の `pi` はフルガード無しで動く。
+**素の `pi`（Unix）**は、`settings.json` の設定だけで、下の `pis` と同じツール構成になる（`extensions` にフルガードと自作の拡張を足し、自動検出の拡張を外し、`defaultTools = []`）。
+役割・bypass は環境変数 `PI_HARNESS_ROLE` / `PI_HARNESS_BYPASS` で変えられる（既定: 実装役、bypass なし）。
+
+| | 素の `pi`（Unix） | `pis --no-sandbox`（移行用） | `pis`（標準） |
+| --- | --- | --- | --- |
+| フルガード | 設定で載る | フラグで載る | フラグで載る |
+| サンドボックス（Fence） | なし | なし | あり |
+| 作業先の `.pi/`（拡張・MCP・設定・スキル） | **信頼の確認に従う**（許可すると読む） | 常に読まない（`--no-approve`） | 常に読まない |
+| 作業先のスキル（`.agents/skills`） | 信頼したときに読む | `--skill` で足す | `--skill` で足す |
+| `mcp.json` のサーバ | **警告だけ**（[判定の外で動くもの](#判定の外で動くもの)） | 起動しない | 起動しない |
+| Orca の状態表示の拡張 | 名前で足してある（印の確認はしない） | 印を確認して足す | 印を確認して足す |
+
+**復旧の入口**: 設定ごと外して起動するには `pi -ne --tools read,bash,edit,write`（ガードも境界も無い。ガードの故障時だけ）。
+`rules.json` が壊れている・フルガードが無いときは、pi が起動に失敗し、`pi -ne` を案内する。拡張のパスだけが無いときは、ツール無しで起動する（組み込みのツールも無効なので、何も実行できない）。
+
+`pis --no-sandbox`（`~/.local/bin/pis`）は次の形で pi を起動する（サンドボックスの内側も、同じフラグ `BASE_FLAGS` で起動する）。`-ne` が設定の拡張を無効にするので、設定と二重にならない。
 
 ```bash
 pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
@@ -541,8 +557,25 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 | --- | --- |
 | `defaultProvider` / `defaultModel` | `[opencode.model]` の `default` 階層（[モデルの割り当て](../agent-config-generation.md#モデルの割り当て)） |
 | `defaultThinkingLevel` / `skills` / `enabledModels` | `[pi.settings]`（書いたものだけ） |
+| `extensions` / `defaultTools` | `[pi.settings]`。**非 Windows**: フルガード・自作の拡張（`[pi] own_extensions`。除外の直後に `+extensions/<名前>/index.ts` で足す）・`!extensions/**`（自動検出の拡張を外す）・Orca の状態表示（`+extensions/orca-agent-status.ts`）・組み込みの `codemode` / `tool-search` / `llama.cpp` の除外、`defaultTools = []`。**Windows**: `commit-confirm` だけ |
 
 今は `defaultThinkingLevel = "medium"`、`skills = ["~/.claude/skills"]`。`~/.agents/skills` は pi が元から読む。
+
+`defaultProjectTrust` は設定しない（既定の `ask`）。作業先の信頼の拒否は、`pis` の `--no-approve` が担う。
+**実測**（2026-10-26、Linux・pi 1.3.0。試験は `test_pi_settings_launch.py`）: この設定だけで、フラグ無しの `pi` のツールが `guarded_*` と自作の拡張だけになり、agent 置き場の `extensions/` に置いた未審査の拡張は読まれない。設定と同じ拡張を `-e` でも読むと、ツール名の衝突で起動に失敗する。
+
+### 判定の外で動くもの
+
+素の `pi` には Fence が無く、次のものはフルガードの判定の外で動く。**止めずに、起動時（TUI）に警告する**（`harness/unguarded.ts`。`pis` は起動しない・読まないので出ない）。
+
+| もの | 理由 |
+| --- | --- |
+| `~/.pi/agent/mcp.json` のサーバ | pi が直接つなぐ。`pi mcp add` はここへ書く。読めない JSON も警告する |
+| 信頼した作業先の `.pi/extensions/`・`.pi/mcp.json`・`.pi/settings.json`（`extensions` / `packages` / `defaultTools` のキー） | 読み込み時のコードは判定の外。設定で `defaultTools` を変えられると、素の `bash` が戻りうる |
+
+作業先のスキル（`.agents/skills`・`.pi/skills`）は指示を読むだけなので、警告しない。
+**書き込みの拒否**: `~/.pi/agent/settings.json`・`extensions/**`・`~/.config/pi/harness/**` は、判定器が書き込みを拒否する（`[file] write_deny_globs`）。素の `pi` は Fence で凍結できないため。変更は chezmoi の source 側（このリポジトリ）で行い、`chezmoi apply` で入れる（`settings.json` の生成器が持つキーは `[pi.settings]` が正本で、直接書いても戻る。拡張は chezmoi から配る）。`mcp.json` は拒否しない（モデルが書いてよい。書かれたサーバは上のとおり警告する）。ただし**ガードは OS の隔離ではない**（シェルの経由などの抜け道は、サンドボックスで塞ぐ）。
+`defaultTools = []` は境界ではなく、`pi --tools …` で戻せる（利用者が意図して選ぶ経路）。
 
 ## 置き場
 
@@ -733,7 +766,7 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 **素の pi（Windows。フルガードが無い）の MCP は、`~/.pi/agent/mcp.json` に `generate.py --target pi-mcp` が書く**（同じ名前のサーバだけ差し替え、利用者が足した他のサーバは残す。`exposure` は書かない）。Unix には配らない（下の理由）。`agentcore-websearch` のラッパーは、使えない機では空のサーバになるので、家の Windows でも失敗の通知は出ない。
 
 **Unix の `~/.pi/agent/mcp.json` には書かない。** そこのサーバはフルガードと関係なく繋がるので、フルガードが
-抜けたときに判定なしで残る（`pi mcp add` はそこへ書く）。
+抜けたときに判定なしで残る（`pi mcp add` はそこへ書く）。`pis` はサーバがあると起動しない。素の `pi` は止めず、起動時に警告する（[判定の外で動くもの](#判定の外で動くもの)）。
 
 ## pi の内部の挙動に頼る点
 

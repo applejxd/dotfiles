@@ -539,6 +539,11 @@ write_deny_globs = [
   "**/.git/config",
   "**/.git/hooks/**",
   "~/.gitconfig",
+  # pi のフルガードの設定とコード。素の pi には Fence が無いので、書けるとガードを外せる。
+  # 正本はこのリポジトリ。変更は chezmoi apply 経由で入れる。see docs/spec/guard/pi-guard.md#判定の外で動くもの
+  "~/.pi/agent/settings.json",
+  "~/.pi/agent/extensions/**",
+  "~/.config/pi/harness/**",
 ]
 
 # deny の例外 (仕組みと CLI ごとの差は docs/spec/agent-config-generation.md#deny-の例外envexample-など)
@@ -1205,14 +1210,27 @@ unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
 message = "10 秒以上の sleep でここを止めないでください (その間会話が止まります)。待つコマンドは bg_run で起動すると、終わったときの通知でターンが再開し、待つ間も会話を続けられます。短い待ち (9 秒以下) はそのままで構いません。"
 
 # ~/.pi/agent/settings.json へ出す設定。ここに書いたキーは生成器の持ち物で、消すと settings.json からも消える。
-# 書けるキー: defaultThinkingLevel / skills / enabledModels / extensions。既定のモデルは [opencode.model] の default 階層。
+# 書けるキー: defaultThinkingLevel / skills / enabledModels / extensions / defaultTools。既定のモデルは [opencode.model] の default 階層。
 # see docs/spec/guard/pi-guard.md#pi-の設定
 [pi.settings]
 defaultThinkingLevel = "medium"
 skills = ["~/.claude/skills"]
-# 素の pi (Windows・Orca の起動ボタンなど) 向けの補助。pis は -ne で外れる。ガードは付けない (CHG-0023 段 3f)。
-# commit-confirm: see docs/spec/guard/pi-guard.md#commit-の確認-素の-pi
+{{- if and (hasKey .chezmoi "os") (eq .chezmoi.os "windows") }}
+# see docs/spec/guard/pi-guard.md#commit-の確認-素の-pi
 extensions = ["~/.config/pi/commit-confirm"]
+{{- else }}
+# 自作の拡張 ([pi] own_extensions) は生成器が "!extensions/**" の直後へ足す。
+# see docs/spec/guard/pi-guard.md#pi-の設定
+extensions = [
+  "~/.config/pi/harness",
+  "!extensions/**",
+  "+extensions/orca-agent-status.ts",
+  "-builtin:codemode",
+  "-builtin:tool-search",
+  "-builtin:llama.cpp",
+]
+defaultTools = []
+{{- end }}
 
 # pi が実際に受け付けるモデルは OpenCode の階層の表と違うことがある。ここにある階層だけ上書きする。
 # ★gpt-6-astra は pi の Copilot 経由で model_not_supported (2026-10 実測)。

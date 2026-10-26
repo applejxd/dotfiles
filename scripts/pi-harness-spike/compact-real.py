@@ -41,6 +41,7 @@ try:
         "actions.ts",
         "worktree.ts",
         "worktrees-command.ts",
+        "unguarded.ts",
         "landlock_exec.py",
         "commit-message.js",
     ):

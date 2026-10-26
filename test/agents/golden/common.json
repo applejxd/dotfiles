@@ -429,7 +429,10 @@
    "**/.opencode/opencode.jsonc",
    "**/.git/config",
    "**/.git/hooks/**",
-   "~/.gitconfig"
+   "~/.gitconfig",
+   "~/.pi/agent/settings.json",
+   "~/.pi/agent/extensions/**",
+   "~/.config/pi/harness/**"
   ]
  },
  "hooks": [
@@ -1450,8 +1453,14 @@
   },
   "settings": {
    "defaultThinkingLevel": "medium",
+   "defaultTools": [],
    "extensions": [
-    "~/.config/pi/commit-confirm"
+    "~/.config/pi/harness",
+    "!extensions/**",
+    "+extensions/orca-agent-status.ts",
+    "-builtin:codemode",
+    "-builtin:tool-search",
+    "-builtin:llama.cpp"
    ],
    "skills": [
     "~/.claude/skills"

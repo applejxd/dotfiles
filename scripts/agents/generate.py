@@ -2234,7 +2234,17 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
 
 # ~/.pi/agent/settings.json のうち生成器が持つキー。宣言から外すと消す (所有の規則)。
 # defaultProvider / defaultModel は [opencode.model] の default 階層から作る。
-PI_SETTINGS_KEYS = frozenset({"defaultThinkingLevel", "skills", "enabledModels", "extensions"})
+PI_SETTINGS_KEYS = frozenset(
+    {
+        "defaultThinkingLevel",
+        "skills",
+        "enabledModels",
+        "extensions",
+        "defaultTools",
+    }
+)
+# extensions の中で自動検出の拡張を外す記法。自作の拡張はこの直後に "+" で足す
+PI_EXCLUDE_AUTO = "!extensions/**"
 PI_SETTINGS_OWNED = PI_SETTINGS_KEYS | {"defaultProvider", "defaultModel"}
 
 
@@ -2266,12 +2276,22 @@ def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[
     if not isinstance(declared, dict):
         raise SystemExit("[pi.settings] は表でなければならない")
     _reject_unknown("pi.settings", set(declared), PI_SETTINGS_KEYS)
+    for key in ("extensions", "defaultTools"):
+        value = declared.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise SystemExit(f"[pi.settings] {key} は文字列の配列でなければならない")
+    declared = copy.deepcopy(declared)
+    exts = declared.get("extensions")
+    if exts and PI_EXCLUDE_AUTO in exts:
+        # 明示のパスは除外に負けるので、"+" で除外の後ろに足す (pis が -e で足す一覧と同じ)
+        at = exts.index(PI_EXCLUDE_AUTO) + 1
+        exts[at:at] = [f"+extensions/{n}/index.ts" for n in pi_own_extensions(common)]
     out = {k: v for k, v in existing.items() if k not in PI_SETTINGS_OWNED}
     ref = pi_model_ref(common, "default")
     provider, _, model = ref.partition("/")
     out["defaultProvider"] = provider
     out["defaultModel"] = model
-    out.update(copy.deepcopy(declared))
+    out.update(declared)
     return out
 
 

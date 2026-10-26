@@ -28,6 +28,7 @@ import { MAX_BODY_FILE_BYTES, NO_UI_REASON, buildMustConfirmView, classifyConfir
 import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { auditFormat, summarizeCalls } from "./audit.ts";
+import { unguardedMessage, unguardedSources } from "./unguarded.ts";
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
 import { STARTUP_LIMITS, findRepoRoot, isolationTraceRoot, runWorktreesCommand, startupReconcile } from "./worktrees-command.ts";
@@ -203,6 +204,9 @@ export default async function (pi: ExtensionAPI) {
 		reconcileOnStart(ctx);
 		if (!ctx.hasUI) return;
 		showBypass(ctx);
+		// 判定の外で動きうるもの (mcp.json のサーバ・信頼した作業先の .pi/) は、止めずに知らせる
+		const outside = unguardedSources(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"), ctx.cwd ?? process.cwd(), process.argv);
+		if (outside.length > 0) ctx.ui.notify(unguardedMessage(outside), "warning");
 		if (BOUNDARY) ctx.ui.setStatus("sandbox", "🔒 sandbox");
 		else if (NO_SANDBOX) ctx.ui.setStatus("sandbox", ctx.ui.theme.fg("warning", "⚠ no sandbox"));
 	});

@@ -47,6 +47,7 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "actions.ts", harness / "actions.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktree.ts", harness / "worktree.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktrees-command.ts", harness / "worktrees-command.ts")
+    shutil.copy2(HARNESS_SRC.parent / "unguarded.ts", harness / "unguarded.ts")
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
     shutil.copy2(COMMIT_MESSAGE_SRC, harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
