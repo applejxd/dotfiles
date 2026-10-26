@@ -10,7 +10,7 @@ Windows では `guarded_task` を使えないので、**読み取り専用の子
 - 出すのは `read` `grep` `find` `ls` だけの役割（今は `explore` と `review`）。子は `<実行中の pi>（node 版は node + cli.js、バイナリ版は pi.exe） --mode json -p --no-session -ne --tools read,grep,find,ls` に、フルガードを読むフラグを足して起動する（`pi.cmd` のシェルを通さない）
 - **子もフルガード付きで起動する**（役割 `reader`）。置き場 `~/.config/pi/harness` が読めなければ、子を起動せず理由つきで失敗する。親に印 `globalThis.__PI_FULL_GUARD__` が無ければ `task` を実行しない。したがって、子にも判定器と読み取り拒否・伏字化が効く。実機は未検証
 - 境界（Fence）は無いので、サンドボックスとしての隔離は無い
-- 子のモデルは `second_opinion` が `github-copilot/gpt-6-sol`。OpenCode の階層の `gpt-6-astra` は pi の Copilot 経由で使えない（`model_not_supported`）ので、`[pi.model.tier.github-copilot]` で上書きする（Unix のフルガードにも効く）
+- 子のモデルは `second_opinion` が `github-copilot/gpt-6.1-terra`。OpenCode の階層の `gpt-6-astra` は pi の Copilot 経由で使えない（`model_not_supported`）ので、`[pi.model.tier.github-copilot]` で上書きする（Unix のフルガードにも効く）。`gpt-6.1-terra` は pi のモデル一覧（`pi --list-models`）の Copilot には無く、「custom model id」の警告つきで動く（2026-10-27 に、短い応答とツール呼び出しで確認。一覧に載るのは `openai` の `gpt-6.1-terra` と、Copilot の `gpt-6.1-sol`）。以前は `gpt-6-sol`
 
 ## 二つの task を別物にしている理由
 
@@ -72,6 +72,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 
 - `review` を `explorer` 役にしたのは、差分を親が貼らずに済ませるため。
 - 子の指示（`[pi.agents.review] system`）は、先に目的だけから自分の案を考え、そのあと親の結論と比べる順にして、anchoring を避ける。親の「確認済み」は検証対象で、依頼文に無い関連箇所と不利な事実も探させる。材料が足りなければ推測で埋めず、何があれば判断できるかを返させる
+- **指摘には改善案を付けさせる**（2026-10-27 から）: 子の指示（`[pi.agents.review] system` と `plain_system`、OpenCode の `[opencode.agents.review]`）と、`review-loop` の依頼の雛形（`references/review-prompt.md`）の出力の節で、**BLOCKER と MAJOR には必ず改善案**（具体的な直し方・採る場合の代償・確かめ方。複数案なら推奨を 1 つ）、**MINOR には 1 行の直し方**を付けさせ、NIT は任意にした。以前は「代替案は、採る場合の代償と一緒に示す」だけ（条件つき）で、`review-loop` の雛形も「提案（任意）」だったため、指摘だけで終わりえた。MINOR にも付けるのは、1 行で済み、直す側が往復せずに済むため
 - 親への指示は、フルガードの `promptGuidelines`（`harness/index.ts`）と `AGENTS.md` の「別モデルへの相談」に書いた。Windows の素の `pi` は `git` が無いので、差分は依頼文へ貼る（`plain_system`）
 - **既知の限界**: `git <サブコマンド> -- <パス>`（`git diff -- <パス>`・`git show <rev> -- <パス>`・`git log -- <パス>`）は通る。正規化後の先頭語が `git` のときだけ、`--` の後ろを別コマンドとして抽出しないため（`judge/normalize.ts`・`command_policy.py`。抽出を抑えるだけで、deny / ask / allow の判定は従来どおりコマンド全体に掛かる）。それ以外のコマンドの `--` の後ろ（`mise exec -- CMD`・`kubectl exec p -- git push` など）は従来どおり別コマンドとして評価される。試験は `test_double_dash_decisions`（`test_decide.py`）
 - **未確認**: 実際のモデルで、依頼文の型が守られ、`review` の指摘の質が変わるか（試験は設定の整合と、子が `wc` と読み取り専用の git を使えることまで）

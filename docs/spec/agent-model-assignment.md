@@ -62,7 +62,7 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 | `second_opinion` | 別系統のモデルでの確かめ | `gpt-6-astra` | `us.openai.gpt-6-sol` |
 
 Copilot の `default`・`deep` は Sonnet 5.5、`second_opinion` は OpenCode の階層では Astra のままで、
-pi の Copilot は `[pi.model.tier.github-copilot]` で Sol に上書きしている（Opus と Astra が制限されたため）。`deep` の `xhigh` は Sonnet で通る確認が取れていないので `high` にした。Bedrock の階層は全部 `us.`
+pi の Copilot は `[pi.model.tier.github-copilot]` で `gpt-6.1-terra` に上書きしている（Opus と Astra が制限されたため。以前は Sol。Terra は pi の Copilot の一覧には無く、custom model id の警告つきで動く。[pi の子エージェント](guard/pi-subagents.md)）。`deep` の `xhigh` は Sonnet で通る確認が取れていないので `high` にした。Bedrock の階層は全部 `us.`
 （`global.` は使わない）。`us.` 無しの ID は `ask_description` の候補の最後のフォールバック
 （`amazon-bedrock/anthropic.claude-haiku-5-5`）だけで、推論プロファイルが無い環境で取りこぼさないための意図的なもの。
 

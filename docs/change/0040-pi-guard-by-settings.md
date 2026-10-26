@@ -75,7 +75,7 @@
   2026-10-20: `claude-sonnet-5.5`（`low`・`medium`・`high`・`off`）、`claude-haiku-5.5`、`gemini-3.8-flash`、`grok-4.7`、2 回続けて、で警告なしを確認。`gpt-5.5` は Copilot 側で利用不可で未試験
 - [ ] **`pis` の下の `bg_run`**: 確認画面が出るか。deny のコマンドが始まらないか
 - [ ] **Windows の `taskkill`**: `bg_kill` でプロセスの木ごと止まるか
-- [ ] **`review` のモデル**: `guarded_task` の `review` が実際に親と違うモデル（Copilot なら `gpt-6-sol`）で
+- [ ] **`review` のモデル**: `guarded_task` の `review` が実際に親と違うモデル（Copilot なら `second_opinion` の `gpt-6.1-terra`。2026-10-27 に `gpt-6-sol` から変えた）で
   動いているか。子に聞いても答えられないので、`pi -p --model` の直接呼び出しと見比べるか、
   子の一覧（`__piChildren` の `model`）を見る
 - [ ] **「別モデルに聞いて」の指示**（`d9085e2`）: 実際に `review` を先に使い、名指しのときだけ CLI を呼ぶか。
