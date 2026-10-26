@@ -7,13 +7,13 @@ pi など、内蔵の検索ツールが無い AI CLI のための Web 検索・�
 
 ## 配る範囲
 
-**個人用（`llm-provider` が `github-copilot`、つまり `applejxd`）だけに配る。** 制約のある環境用（Bedrock）は、検索を
+**個人用（`is-work` でない機、つまり `applejxd`）だけに配る。**（2026-10-26 までは `llm-provider` で切っていたが、会社 PC で Copilot を使うようになったので `is-work` に付け替えた） 制約のある環境用（Bedrock）は、検索を
 [AgentCore Web Search の MCP](agent-config-generation.md#mcp-サーバ)に一本化する（制約のある環境の機のクエリを AWS の外の検索へ出さず、手段が 2 つになってモデルが迷うのを避ける）。
 
-- skill の配布: `home/.chezmoiignore.tmpl` が、Bedrock のとき `.claude/skills/web-search/` を除く
+- skill の配布: `home/.chezmoiignore.tmpl` が、`is-work` のとき `.claude/skills/web-search/` を除く
 - `pis` の許可（`[pi.skill_scripts]`）: `common.toml.tmpl` が、`github-copilot` のときだけ出す
 - 鍵ファイルの作成（441 / 349）: `applejxd` の機械だけ
-- 判定は `llm-provider`（`chezmoi.toml` の `[data] llm_provider` があればそれを優先）。検査は `test/test_chezmoi_templates.py` と `test/agents/test_opencode_external_read.py`
+- 判定は `is-work`（`chezmoi.toml` の `[data] work` があればそれを優先。[会社 PC の判定](../agent-config-generation.md#会社-pc-の判定)）。検査は `test/test_chezmoi_templates.py` と `test/agents/test_opencode_external_read.py`
 - 既に配られたファイルは、除外しても自動では消えない（chezmoi の除外は「管理しない」で、削除ではない）
 
 ## 構成

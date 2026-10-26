@@ -10,14 +10,14 @@
 
 ## 配る範囲
 
-**個人用（`llm-provider` が `github-copilot`、つまり applejxd）だけ**に配る。`web-search` と同じ理由（制約のある環境の機の検索語を AWS の外へ出さない）に、依存関係を足した。
+**個人用（`is-work` でない機、つまり applejxd）だけ**に配る。`web-search` と同じ理由（制約のある環境の機の検索語を AWS の外へ出さない）に、依存関係を足した。
 
 | 対象 | 条件 | 実装 |
 | --- | --- | --- |
-| スキル本体（`.claude/skills/imozuru/`） | `llm-provider` が `github-copilot` | `home/.chezmoiignore.tmpl` が Bedrock のとき除く |
+| スキル本体（`.claude/skills/imozuru/`） | `is-work` でない機 | `home/.chezmoiignore.tmpl` が `is-work` のとき除く |
 | `fetch_youtube.py`（YouTube の字幕） | **ユーザー名が applejxd** | `home/.chezmoiignore.tmpl` の「個人 PC のみで導入」の節が、それ以外のユーザーには配らない |
 | `yt-dlp` 本体 | ユーザー名が applejxd | `home/dot_config/mise/config.toml.tmpl`（以前から） |
-| 許可規則（`[pi.skill_scripts.allow]`） | `llm-provider` が `github-copilot` | `common.toml.tmpl` |
+| 許可規則（`[pi.skill_scripts.allow]`） | `is-work` でない機 | `common.toml.tmpl` |
 
 検査は `test/test_chezmoi_templates.py`（Bedrock と `fetch_youtube.py` の除外）。既に配られたファイルは、除外しても自動では消えない（chezmoi の除外は「管理しない」で、削除ではない）。
 
@@ -93,7 +93,7 @@
 
 ## `pis` の許可規則
 
-`[pi.skill_scripts]`（`common.toml.tmpl`）に載せた（`llm-provider` が `github-copilot` のときだけ）。**`python3 ~/.claude/skills/imozuru/scripts/<名前>.py <引数>` の形だけ**が確認なしで通る。
+`[pi.skill_scripts]`（`common.toml.tmpl`）に載せた（`is-work` でない機のときだけ）。**`python3 ~/.claude/skills/imozuru/scripts/<名前>.py <引数>` の形だけ**が確認なしで通る。
 
 | 形 | 判定 | 理由 |
 | --- | --- | --- |

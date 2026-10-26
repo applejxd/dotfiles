@@ -170,11 +170,11 @@ MCP サーバの定義も `common.toml` の `[[mcp]]` が単一ソース。同�
 CLI ごとに書くと、URL を変えたときに片方だけ古いまま残る。
 
 ```toml
-{{- if eq (includeTemplate "llm-provider" .) "amazon-bedrock" }}
 [[mcp]]
 id = "agentcore-websearch"
-purpose = "Bedrock AgentCore Web Search で web 検索する"
-clis = ["claude", "opencode", "pi"]
+purpose = "AgentCore Web Search で web 検索する (Gateway の URL がある機だけ)"
+clis = [{{ if eq (includeTemplate "is-work" .) "true" }}"claude", "opencode", "pi"{{ else }}"pi"{{ end }}]
+requires_env = "AGENTCORE_GATEWAY_URL"
 transport = "stdio"
 command = "uv"
 args = [
@@ -182,7 +182,6 @@ args = [
   '{{ .chezmoi.homeDir }}/.config/agents/agentcore_websearch_mcp.py',
   "--service", "bedrock-agentcore", "--region", "us-east-1", "--disable-telemetry",
 ]
-{{- end }}
 ```
 
 | CLI | 生成先 | 生成する仕組み |
@@ -191,7 +190,8 @@ args = [
 | OpenCode V2 | `~/.config/opencode/opencode.json` の `mcp.servers` | `generate.py --target opencode-config` |
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
-| pi | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)） |
+| pi（Unix。フルガードあり） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)） |
+| pi（Windows。素の pi） | `~/.pi/agent/mcp.json` の `mcpServers` | `generate.py --target pi-mcp`（`modify_mcp.json.py.tmpl`）。同じ名前のサーバだけ差し替え、利用者が足した他のサーバは残す。Unix には配らない（`pis` は `mcp.json` にサーバがあると起動しない） |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
 
@@ -201,16 +201,15 @@ Gemini CLI と Antigravity は使わないため対象外。既存の定義は�
 `direct` はツール定義が常駐する（1 ツールで数十トークン）ので、大きいサーバを足すときは、そのサーバだけ `deferred` などに変えて試す。
 他の CLI の定義には `exposure` を混ぜない。`pis` では MCP のツールは役割の既定（実装役は確認）になる。
 
-**Copilot の PC（applejxd）では `[[mcp]]` が 0 件になる。** `deepwiki` は 2026-09-25 に外し、
-`agentcore-websearch` は Bedrock の PC だけに出すため。`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えない
-ので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
+**`deepwiki` は 2026-09-25 に外した。** `agentcore-websearch` は全機に配る（2026-10-26。使うかは実行時に決まる。下の「AgentCore Web Search」）。
+`[[mcp]]` が 1 つも無いと `mcp` キー自体が生えないので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
 deepwiki の代わりの OSS 調査は `oss-research` スキル（インストール済みの実体・配布物・
 版を固定したソースに直接当たる）、GitHub の操作は github MCP を使わず
 `github-operations` スキル（gh CLI）が担う。
 
 **入れる CLI を絞るには `clis` を書く。** 省略すると 5 つ全部に入る。
-`agentcore-websearch` は `clis = ["claude", "opencode", "pi"]` にしてある（Copilot は内蔵の
-web 検索があり、Codex は使わない）。書ける値は `claude` /
+`agentcore-websearch` は、会社 PC（`is-work`）では `clis = ["claude", "opencode", "pi"]`、個人の機では `["pi"]` にしてある
+（家で、動かない MCP を Claude Code・OpenCode に登録しないため。Copilot は内蔵の web 検索があり、Codex は使わない）。書ける値は `claude` /
 `copilot` / `opencode` / `codex` / `pi` で、それ以外を書くと apply が止まる。
 
 その結果、**Copilot / Codex 向けのサーバは現在 0 件**である。
@@ -247,8 +246,8 @@ TOML の重複宣言になり、Codex が設定ファイル全体を読めなく
 
 **ユーザ・OS による出し分け**: `common.toml` 側のテンプレートに書く。生成側
 3 つは展開後の表だけを見るので、条件の解釈は 1 か所で済む。上の例では
-`.chezmoitemplates/llm-provider` が `amazon-bedrock` を返す PC にだけ
-`agentcore-websearch` を出す（Copilot の PC は Copilot CLI 内蔵の web 検索を使う）。
+`.chezmoitemplates/is-work` で、`agentcore-websearch` を入れる CLI の一覧を切り替える
+（[会社 PC の判定](#会社-pc-の判定)）。
 
 **transport**: `http` は `url`、`stdio` は `command` / `args` を書く。
 `stdio` のサーバは `uvx` から起動する形にしておくと、本体を別途入れずに済み、
@@ -284,12 +283,19 @@ Claude Code / OpenCode
 
 | 項目 | 決めたこと |
 | --- | --- |
-| 対象 | `llm-provider` が `amazon-bedrock` の PC。`clis = ["claude", "opencode", "pi"]` |
+| 対象 | **全機に配る**（2026-10-26。会社 PC で Copilot を使うようになったので、`llm-provider` では切らない）。使うかは実行時に決まる（下の「使えない機」）。`clis` は会社 PC が `claude` / `opencode` / `pi`、個人の機が `pi` |
 | リージョン | `us-east-1`（`[provider.amazon-bedrock]` と揃える） |
 | Gateway の URL | アカウント固有なのでソースに書かず、環境変数 `AGENTCORE_GATEWAY_URL` から読む |
 | 認証 | AWS の既定の認証情報（`AWS_PROFILE` / `~/.aws`）。API キーは無い |
 | proxy の版 | `mcp-proxy-for-aws-cli` をラッパーの `PROXY` で固定。依存まで固定した CLI 用の配布物 |
 | OpenCode 内蔵の検索 | `[opencode] websearch = false` で消す（v2.0.14 で、設定するとツール一覧から消えることを確認） |
+
+**使えない機（家など、URL も AWS の認証も無い機）**: 失敗させず、**ツールの無い空の MCP サーバ**になる（ラッパーが stdio で `initialize` / `tools/list` などに空で答える）。
+起動の失敗が毎回の通知になるのを避け、「家で設定されても、認証しなければ何も起きない」を実現する。空になるのは、`AGENTCORE_GATEWAY_URL` が無い・`https://` でないとき、
+pi のサンドボックスの内側（`PI_HARNESS_BOUNDARY=1`。内側では AWS の認証情報を使えない）のとき。
+Unix の pi のフルガードは、`[[mcp]]` の `requires_env`（`AGENTCORE_GATEWAY_URL`）が空の機では、そもそも登録しない（プロセスも起動しない）。
+**`pis` の内側で AgentCore を使うには、ブローカーでの中継が要る**（Bedrock のブローカー（段 U7b）の後。[CHG-0037](../change/0037-pis-usability-and-telemetry.md)）。
+それまで、会社 PC の `pis` の内側では使えない（境界なしの `pi` か、Windows の素の `pi` では使える）。**未確認**: 起動失敗時の pi の挙動、Windows の `uvx`、内側の環境変数に `PI_HARNESS_BOUNDARY` が伝わるか。
 
 **ラッパーを挟む理由**: proxy は Gateway の URL を位置引数でしか受け取らない。
 MCP の定義に URL を書かずに済ませるには、環境変数から読んで渡す層が要る。
@@ -1075,6 +1081,22 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 接続設定・他のプロバイダの禁止を `opencode.json` へ出す。
 新しいモデルが出たときなどに割り当てを見直す手順は
 [モデルの割り当ての見直し](model-lineup-review.md)にある。
+
+#### 会社 PC の判定
+
+`.chezmoitemplates/is-work` が `apply` のたびに決める（`"true"` / `"false"`）。**LLM のプロバイダ（`llm-provider`）とは別の軸**で、
+「検索語などを AWS の外へ出してよい個人用の機か」を表す。会社 PC で Copilot を使うようになっても、個人専用の配布が会社の機へ入らないようにするため。
+
+| 条件（上から順に評価） | `is-work` |
+| --- | --- |
+| `chezmoi.toml` の `[data]` に `work` がある | その値（`true` / `false`） |
+| ユーザー名が `applejxd`（`DOMAIN\applejxd` も含む、大小無視） | `false`（個人用） |
+| それ以外 | `true`（会社 PC） |
+
+- **`is-work` で切るもの**: `web-search` と `imozuru` のスキルの配布と許可規則（検索語を外へ出さない）、GitHub の認証の出どころ（個人は `gh auth token`、会社 PC は権限を絞った PAT のファイル）、`agentcore-websearch` を入れる CLI の一覧
+- **`llm-provider` で切るもの**: Copilot ブローカー、Envoy の取得、OpenCode のプロバイダ、`[pis.network]` の既定
+- **AgentCore 自体は、どちらでも切らない。** 使うかは実行時（URL の有無）で決まる。判定を誤っても、認証が無ければ何も起きない
+- 勤務先の具体はリポジトリに書かない。判定の根拠は個人のユーザー名だけで、自動の判定が合わない機は `[data] work` で上書きする（`chezmoi update` は `init` を呼ばないので、`[data]` は `init` 時にしか変わらない。上書きが要るのは例外）
 
 #### プロバイダの判定
 

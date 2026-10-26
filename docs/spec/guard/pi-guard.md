@@ -168,15 +168,15 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 ### guarded_action（承認つきの外部操作）
 
-`git commit` と `gh issue comment` を、**1 回の承認で、ハーネスが組み立てた argv を、シェルを通さずに実行する**ツール（[CHG-0038 段 G11](../../change/0038-guard-reclassification.md)）。通常の ask（コマンドを見せて判断）と違い、内容を見せて承認を取り、承認した内容がそのまま使われる。
+`git commit`・`gh issue comment`・`gh issue edit`（本文とタイトル）を、**1 回の承認で、ハーネスが組み立てた argv を、シェルを通さずに実行する**ツール（[CHG-0038 段 G11](../../change/0038-guard-reclassification.md)）。通常の ask（コマンドを見せて判断）と違い、内容を見せて承認を取り、承認した内容がそのまま使われる。
 ガードは境界ではなく「うっかり防止」なので、**誤った経路（bash の直接実行）へ行かないよう寄せる**仕組みであって、経路の強制ではない（Python や curl 経由は迂回できる。強制が要る GitHub 操作は、トークンの権限側で行う）。
 
-- **操作の表**: `common.toml` の `[[pi.actions]]`（`id`・`label`・`argv`・`fields`・`replaces`・`preview`）。生成器が検証して `rules.json` の `judge.common.pi.actions` へ出す。操作の追加は、表に項目を足すだけ（ツールは増えない）。今は `gh_issue_comment`（`repo`・`number`・`body`）と `git_commit`（`message`）。
+- **操作の表**: `common.toml` の `[[pi.actions]]`（`id`・`label`・`argv`・`fields`・`replaces`・`preview`）。生成器が検証して `rules.json` の `judge.common.pi.actions` へ出す。操作の追加は、表に項目を足すだけ（ツールは増えない）。今は `gh_issue_comment`（`repo`・`number`・`body`）、`gh_issue_edit_body`（`repo`・`number`・`body`）、`gh_issue_edit_title`（`repo`・`number`・`title`）、`git_commit`（`message`）。フィールドの型は `repo`・`int`・`line`（1 行の短い文字列。`title` など。`argv` の 1 要素として直接渡す）・`text`（`file = true` の本文）。`line` は改行・制御文字を含められない（確認画面と `argv` の見え方がずれないように）。`gh` にタイトルのファイル渡しが無いので `line` を足した。issue の編集は、本文とタイトルを別の操作にしてある（片方だけ直すときに、もう片方を渡し直さなくてよい）。ラベル・担当者・状態の変更は対象外
 - **ツール**: `guarded_action`（引数 `action` と `params`）。登録されるのは、役割の `tools` に `action` がある親の役割（`implementer`）だけ。子エージェント・読み取り役・探索役には無く、実行時にも拒否する。判定器は `action` を役割の許可だけで通し、**汎用の ask・確認は出さない**（確認は `execute()` が 1 回だけ行う）。
 - **確認**: `select` で「承認して実行 / 編集して承認 / 拒否」。内容（`content` のフィールド）の全文、プレビュー、**実行する argv** を表示する（表示と実行は同じ配列）。無反応（`[pi.confirm] timeout_seconds`）・取消・UI 無し・子は拒否（`not approved:`）。bypass でも省略できない。「編集して承認」は `editor`（timeout が無いので、選んだ後にだけ開く）、「拒否」は `input` で理由を任意に取る。
 - **同一性**: `git_commit` は、プレビューで HEAD・ブランチ・index の識別子（`git ls-files -s -z` の sha256。書き込みを伴わない）を取り、**実行の直前に再取得して照合**する。不一致なら実行せず、もう一度呼ぶよう返す。ステージ済みが空ならエラー。プレビューのコマンドは、設定ではなくコードの許可リスト（`git_staged`・`none`）に限る。hook（pre-commit）による実行中の変更までは保証しない。
 - **実行**: `execFile`（シェル無し）、cwd は `ctx.cwd`、環境変数は継承（ブローカー経由の `gh` のため）、120 秒。本文は 0700 のディレクトリへ 0600・排他的作成で書き、承認後に再読みせず、`finally` で消す。値は型（`repo` の正規表現・`int`・`text` の長さと NUL）で検証し、`-` 始まりは通らない。終了コードが 0 でなければ、出力を返してエラーにする。
-- **誤った経路を寄せる**: `replaces`（`git commit`・`gh issue comment`）に当たる bash は、`action` を持つ役割では **deny**（ask にしない）。評価の位置は `[[pi.guide]]` の直後、`shell_deny` の前（bypass でも外れない）。理由に、`guarded_action` の呼び出し例（`-R` と番号が分かれば候補として入れる）を入れる。`action` を持たない役割・他の CLI は従来どおり（`git commit` は ask）。ツールの説明、`guarded_bash` の説明、`ask` の説明にも同じ境界を書く。
+- **誤った経路を寄せる**: `replaces`（`git commit`・`gh issue comment`・`gh issue edit`）に当たる bash は、`action` を持つ役割では **deny**（ask にしない）。評価の位置は `[[pi.guide]]` の直後、`shell_deny` の前（bypass でも外れない）。理由に、`guarded_action` の呼び出し例（`-R` と番号が分かれば候補として入れる）を入れる。同じコマンドに当たる操作が複数あるとき（`gh issue edit` は本文とタイトル）は、表の順に全部の例を「または」でつなぐ。`action` を持たない役割・他の CLI は従来どおり（`git commit` は ask）。ツールの説明、`guarded_bash` の説明、`ask` の説明にも同じ境界を書く。
 - **指示**: グローバル指示と `commit` スキルは、`guarded_action` が使えるときは事前に `ask` で承認を取らず、bash で実行しない、と書く（ツールが無い環境は従来どおり）。
 - **計測**: `.agents/skills/friction-review/scripts/measure_routing.py`（導入前の基準: 71 セッションで投稿・コミットの bash の直接実行 275 回、うち直前に `ask` で承認を取ったもの 60 回）。導入後に同じスクリプトで、bash の直接実行の割合と `guarded_action` の呼び出し数を比べる。
 - **試験**: `test_pi_actions.py`（生成器・判定器・TS/Python の同一性）、`test_pi_actions_harness.py`（確認が 1 回・実行・拒否・時間切れ・UI 無し・子・引数の検証・同一性・本文ファイル・編集）。
@@ -383,8 +383,14 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 ### 整形
 
 `guarded_edit` / `guarded_write` の後に、`[[hooks]]` の `post_edit`（`markdownlint.sh`・`format-file.sh`）を宣言順に呼ぶ。ファイルの書き込みの順番待ち（`withFileMutationQueue`）の
-中で行う。整形は黙って済ませ、markdownlint が残した違反（hook が exit 2 で返す警告）だけを結果の末尾に足して
-モデルへ返す。失敗しても編集は成功のまま。
+中で行う。整形は黙って済ませ、markdownlint が残した違反（hook が exit 2 で返す警告）と、**整形で本文が変わったこと**（「[整形] … 先に read し直す」）だけを
+結果の末尾に足してモデルへ返す。失敗しても編集は成功のまま。
+
+- **同じ応答に同じファイルへの編集が並んだとき、整形は最後の 1 件の後に 1 回だけ行う。** 編集の間に整形が入ると、後ろの編集の `oldText`（整形前の本文を見て作ったもの）が整形後の本文と合わず、`The old text must match exactly` で失敗する（遅いマシンや承認待ちで、編集の開始がずれると起きやすい）。`message_end` で、その応答の `guarded_edit` / `guarded_write` の数をファイルごとに数え、`tool_result` で残りが 0 になった件が整形する（応答が別なら、それぞれの最後の後）
+- 整形の hook は**非同期**で実行する（同期で待つと、整形の間、同じ応答の他の tool call の処理も止まる）
+- 同じ応答の同じファイルへの編集が照合に失敗したとき、結果に「前の編集が先に適用されている。read し直し、変更を 1 回の `edits[]` にまとめる」を足す
+- 並べずに 1 回の `edits[]` にまとめるのが本来の使い方（すべて元の本文に対して照合される）。ツールの説明にも「同じファイルへの `guarded_edit` を 1 つの応答に並べない」を足した
+- 試験: `test_parallel_edits_to_one_file_are_formatted_once_after_the_last` ほか（`test_pi_harness.py`。整形の hook を呼ぶたびにログへ書く hook に差し替えて、回数を数える）
 
 ### fleet
 
@@ -721,7 +727,11 @@ OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに
 フルガードが抜ければ登録も消える。MCP のツール（`mcp__<サーバ>__<ツール>`）は、実装役の `tools` の
 `mcp__*` に当たり、規則が無いので既定（確認）になる。読み取り役などには出ない。
 
-**`~/.pi/agent/mcp.json` には書かない。** そこのサーバはフルガードと関係なく繋がるので、フルガードが
+**`[[mcp]]` の `requires_env` が空の機では、登録しない。** 認証や URL が無い機（家の `agentcore-websearch`）で、動かないサーバを起動し続けない（`rules.json` の各項目に `requires_env` が出る。値が空白だけでも空とみなす）。
+
+**素の pi（Windows。フルガードが無い）の MCP は、`~/.pi/agent/mcp.json` に `generate.py --target pi-mcp` が書く**（同じ名前のサーバだけ差し替え、利用者が足した他のサーバは残す。`exposure` は書かない）。Unix には配らない（下の理由）。`agentcore-websearch` のラッパーは、使えない機では空のサーバになるので、家の Windows でも失敗の通知は出ない。
+
+**Unix の `~/.pi/agent/mcp.json` には書かない。** そこのサーバはフルガードと関係なく繋がるので、フルガードが
 抜けたときに判定なしで残る（`pi mcp add` はそこへ書く）。
 
 ## pi の内部の挙動に頼る点
