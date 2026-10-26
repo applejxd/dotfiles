@@ -1477,6 +1477,12 @@
     "token"
    ],
    "search": "auto"
+  },
+  "network": {
+   "allow_loopback": false,
+   "deny": [],
+   "local_ports": [],
+   "mode": "allowlist"
   }
  },
  "provider": {

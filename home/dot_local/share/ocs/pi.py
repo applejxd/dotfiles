@@ -79,6 +79,15 @@ def is_secret_env(name: str) -> bool:
 # see docs/spec/sandbox/broker.md#copilot-ブローカー
 BROKER_KEY = "broker.copilot"
 NO_BROKER_NOTICE = "pis: ブローカー無し: 内側に Copilot の認証情報が入る"
+NETWORK_HINT = (
+    "[pis.network] の mode は allowlist / denylist、deny は文字列の配列、allow_loopback は真偽値、"
+    "local_ports は 1024-65535 の整数の配列"
+)
+ALLOWLIST_NOTICE = "pis: 通信を許可リスト型に戻す (--allowlist)。許可外のドメインは内側から届かない"
+NETWORK_NEEDS_BROKER_NOTICE = (
+    "pis: [pis.network] は denylist だが、Copilot ブローカーが無効なので許可リスト型で起動する "
+    "(拒否リスト型は、内側へ本物の認証を渡さないときだけ)"
+)
 NO_BROKER_GITHUB_NOTICE = "。GitHub ブローカーも使わない (gh にはダミーも本物も渡さない)"
 NO_BROKER_SEARCH_NOTICE = "。検索ブローカーも使わない (内側から websearch の検索は使えない)"
 NO_BROKER_HINT = "一時的に外すなら pis --no-broker (内側に本物の Copilot の認証が入る)"
@@ -140,6 +149,49 @@ def read_broker_setting(rules_path: Path | None = None) -> str | None:
     if not isinstance(value, str):
         die(f"{path} の {BROKER_KEY} は文字列でないといけない: {value!r}", BROKER_HINT)
     return value
+
+
+def read_network_setting(rules_path: Path | None = None) -> dict | None:
+    """``rules.json`` の ``network`` を読む。拒否リスト型 (``denylist``) のとだけ設定を返す。
+
+    ``allowlist``・未設定なら None (従来どおり)。破損 (表でない・型違い・未知の mode) は起動を拒否する。
+    ここで開く側 (拒否リスト型) へのフォールバックをしない (fail-closed)。
+    see docs/spec/guard/pi-guard.md#拒否リスト型の通信
+    """
+    path = rules_path if rules_path is not None else RULES
+    try:
+        rules = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        die(f"{path} を読めない: {e}", "chezmoi apply で生成する")
+    section = rules.get("network", _ABSENT) if isinstance(rules, dict) else _ABSENT
+    if section is _ABSENT:
+        return None
+    if not isinstance(section, dict):
+        die(f"{path} の network が表でない: {section!r}", NETWORK_HINT)
+    mode = section.get("mode")
+    if mode == "allowlist":
+        return None
+    if mode != "denylist":
+        die(f"{path} の network.mode が不正: {mode!r}", NETWORK_HINT)
+    deny = section.get("deny", [])
+    loopback = section.get("allow_loopback", False)
+    ports = section.get("local_ports", [])
+    if (
+        not isinstance(deny, list)
+        or not all(isinstance(d, str) and d for d in deny)
+        or not isinstance(loopback, bool)
+        or not isinstance(ports, list)
+        or not all(
+            isinstance(p, int) and not isinstance(p, bool) and 1024 <= p <= 65535 for p in ports
+        )
+    ):
+        die(f"{path} の network の形が不正: {section!r}", NETWORK_HINT)
+    return {
+        "mode": "denylist",
+        "deny": list(deny),
+        "allow_loopback": loopback,
+        "local_ports": list(ports),
+    }
 
 
 class GithubSetting(NamedTuple):
@@ -269,8 +321,11 @@ def verify_broker(url: str, prefix: str = BROKER_IDENTITY_PREFIX, label: str = "
         )
 
 
-def _copy_auth_without_broker_provider(source: Path, dest: Path) -> None:
-    """``auth.json`` を、``github-copilot`` のエントリだけ除いて写す (権限は元のまま)。"""
+def _copy_auth_without_broker_provider(source: Path, dest: Path, keep_others: bool = True) -> None:
+    """``auth.json`` を、``github-copilot`` のエントリだけ除いて写す (権限は元のまま)。
+
+    ``keep_others=False`` は、他のプロバイダーのエントリも写さない (空のオブジェクト)。
+    """
     try:
         data = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -281,6 +336,8 @@ def _copy_auth_without_broker_provider(source: Path, dest: Path) -> None:
     if not isinstance(data, dict):
         die(f"{source} がオブジェクトでない", "auth.json を直す")
     data.pop(BROKER_PROVIDER, None)
+    if not keep_others:
+        data = {}
     fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -365,20 +422,24 @@ def make_agent_dir(home: Path | None = None) -> Path:
 
 
 def populate_agent_dir(
-    agent: Path, real: Path | None = None, broker_url: str | None = None
+    agent: Path,
+    real: Path | None = None,
+    broker_url: str | None = None,
+    keep_other_auth: bool = True,
 ) -> None:
     """確保済みの agent 置き場へ、本物から必要なものだけを写す。
 
     既定の置き場は呼び出しのときに引く (定義時に固定すると、差し替えが効かない)。
     ``broker_url`` があれば (Copilot ブローカーモード) ``auth.json`` から ``github-copilot`` を除き、
-    ``models.json`` に ``baseUrl`` を入れる。
+    ``models.json`` に ``baseUrl`` を入れる。``keep_other_auth=False`` (拒否リスト型) なら、
+    ブローカーを持たない他のプロバイダーの認証も写さない (任意のホストへ送れてしまうため)。
     """
     real = real if real is not None else REAL_AGENT
     for name in COPY_FILES:
         source = real / name
         if source.is_file():
             if broker_url and name == "auth.json":
-                _copy_auth_without_broker_provider(source, agent / name)
+                _copy_auth_without_broker_provider(source, agent / name, keep_other_auth)
             else:
                 shutil.copy2(source, agent / name)
     for name in COPY_DIRS:
@@ -830,6 +891,12 @@ def _launch_with(
     search_endpoint = parse_broker(search_url)
     if search_endpoint is not None:
         verify_broker(search_endpoint[0], broker.SEARCH_IDENTITY_PREFIX, "検索")
+    # 拒否リスト型 ([pis.network] mode = denylist)。内側へ本物の認証を渡さない前提なので、Copilot ブローカーが有効なときだけ
+    allowlist = bool(getattr(args, "allowlist", False))
+    network = None if allowlist else read_network_setting()
+    if network is not None and endpoint is None:
+        print(NETWORK_NEEDS_BROKER_NOTICE, file=sys.stderr)
+        network = None
     sandbox = boundary.load_boundary(RULES, required=())
     runtime = Path(sandbox["runtime_path"])
     if not runtime.is_file():
@@ -845,14 +912,24 @@ def _launch_with(
         _reject_state_overlap(broker_state, workspace)
 
     try:
-        populate_agent_dir(agent, broker_url=endpoint[0] if endpoint else None)
+        populate_agent_dir(
+            agent, broker_url=endpoint[0] if endpoint else None, keep_other_auth=network is None
+        )
         if github_socket is not None:
             write_gh_config(agent, github_socket)
         sessions = sessions_dir(workspace)
         config_ = boundary.build_boundary(sandbox, workspace, request, agent)
-        if endpoint is not None or search_endpoint is not None:
+        if (
+            endpoint is not None
+            or search_endpoint is not None
+            or (network or {}).get("local_ports")
+        ):
             apply_broker_network(
-                config_, *[e[1] for e in (endpoint, search_endpoint) if e is not None]
+                config_,
+                *dict.fromkeys(
+                    [e[1] for e in (endpoint, search_endpoint) if e is not None]
+                    + list((network or {}).get("local_ports") or [])
+                ),
             )
         # セッションの置き場だけを本物へ開け、境界用 agent 置き場の設定と拡張は書けなくする
         config_["filesystem"]["allowWrite"].append(str(sessions))
@@ -875,9 +952,14 @@ def _launch_with(
         cleanup(agent, endpoint is not None)
         raise
 
-    # プロキシ越しでないと外へ出られない機械では、許可リストの照合を中継へ移す (relay)
-    with relay.session(config_) as fence_config:
+    # プロキシ越しでないと外へ出られない機械では、許可リストの照合を中継へ移す (relay)。
+    # 拒否リスト型 ([pis.network] mode = denylist) は、プロキシの無い機械で、中継が直接つなぐ
+    # 拒否リスト型 ([pis.network] mode = denylist) は、プロキシの無い機械で、中継が直接つなぐ
+    if allowlist:
+        print(ALLOWLIST_NOTICE, file=sys.stderr)
+    with relay.session(config_, None, network) as fence_config:
         project["relay"] = fence_config is not config_
+        project["network"] = network
         if args.check:
             boundary_file = cli.write_boundary(fence_config)
             try:
@@ -939,6 +1021,11 @@ def run_sandboxed(argv: list[str]) -> int:
         "--no-broker",
         action="store_true",
         help="Copilot / GitHub ブローカーを使わない (設定が auto でも。内側に本物の Copilot の認証が入る)",
+    )
+    parser.add_argument(
+        "--allowlist",
+        action="store_true",
+        help="通信を許可リスト型に戻す ([pis.network] が denylist でも。許可外のドメインは届かなくなる)",
     )
     args, passthrough = parser.parse_known_args(argv)
     return _launch(args, passthrough)

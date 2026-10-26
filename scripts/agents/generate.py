@@ -2127,6 +2127,52 @@ def pi_broker(common: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+PI_NETWORK_KEYS = frozenset({"mode", "deny", "allow_loopback", "local_ports"})
+
+
+def pi_network(common: dict[str, Any]) -> dict[str, Any]:
+    """``[pis.network]``。rules.json の ``network`` (無ければ ``mode`` は ``allowlist``)。
+
+    ``mode`` は ``allowlist`` (従来。許可リストのドメインだけ) / ``denylist`` (``deny`` 以外の公開宛先へ通す)。
+    ``denylist`` はホストにプロキシの環境変数が無い機械だけで効く (``ocs/relay.py``)。
+    ``allow_loopback`` は中継がホストのループバックへつなげるか (既定 false。内側の ``NO_PROXY`` が localhost を外すので、
+    これを真にしても「内側から localhost を読める」にはならない)。
+    ``local_ports`` は、内側からホストの 127.0.0.1 のこのポートへつなげるようにする (Fence の ``allowLocalOutboundPorts``)。
+    see docs/spec/guard/pi-guard.md#拒否リスト型の通信
+    """
+    section = (common.get("pis") or {}).get("network")
+    if section is None:
+        return {"mode": "allowlist"}
+    if not isinstance(section, dict):
+        raise SystemExit("[pis.network] がテーブルでない")
+    _reject_unknown("pis.network", set(section), PI_NETWORK_KEYS)
+    mode = section.get("mode", "allowlist")
+    if mode not in ("allowlist", "denylist"):
+        raise SystemExit(f'[pis.network] mode は "allowlist" / "denylist" のどちらか: {mode!r}')
+    deny = section.get("deny", [])
+    if not isinstance(deny, list) or not all(
+        isinstance(d, str) and d.strip() and not any(c in d.strip() for c in " /\t\n\0")
+        for d in deny
+    ):
+        raise SystemExit(
+            f"[pis.network] deny はドメイン (host または *.host) の文字列の配列: {deny!r}"
+        )
+    loopback = section.get("allow_loopback", False)
+    if not isinstance(loopback, bool):
+        raise SystemExit(f"[pis.network] allow_loopback は真偽値: {loopback!r}")
+    ports = section.get("local_ports", [])
+    if not isinstance(ports, list) or not all(
+        isinstance(p, int) and not isinstance(p, bool) and 1024 <= p <= 65535 for p in ports
+    ):
+        raise SystemExit(f"[pis.network] local_ports は 1024-65535 の整数の配列: {ports!r}")
+    return {
+        "mode": mode,
+        "deny": _uniq([d.strip() for d in deny]),
+        "allow_loopback": loopback,
+        "local_ports": _uniq(ports),
+    }
+
+
 def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """pi のフルガードが読む ``~/.config/pi/harness/rules.json``。
 
@@ -2145,6 +2191,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
         "extensions": pi_own_extensions(common),
         "agent_env": agent_env(common),
         "broker": pi_broker(common),
+        "network": pi_network(common),
         "redact": redact,
         "agents": pi_agents(common),
         "mcp": pi_mcp_servers(common),
@@ -3218,6 +3265,8 @@ LOCAL_SANDBOX_KEYS = (
 # (公式のリポジトリ設定キー一覧に含まれない) ため、プロジェクト単位の許可は
 # ここが実質唯一の「共有設定を汚さない置き場」になる。
 LOCAL_LOCATION_KEYS = ("path", "approvals", "allowed_directories")
+# local.toml の [pis.network] (pis の内側の通信)。deny / local_ports は追記、mode / allow_loopback は置き換え
+LOCAL_NETWORK_KEYS = ("mode", "deny", "allow_loopback", "local_ports")
 
 
 def local_overlay_path() -> Path:
@@ -3318,11 +3367,125 @@ def _merge_local_locations(merged: dict[str, Any], local_locations: list[Any]) -
     merged["copilot"] = copilot
 
 
+def _merge_local_network(merged: dict[str, Any], local_network: Any) -> None:
+    """local.toml の ``[pis.network]`` を反映する。
+
+    ``deny`` / ``local_ports`` は追記、``mode`` / ``allow_loopback`` は置き換え。型の検査は
+    ``pi_network`` が行う (壊れていれば生成を止める)。このファイルは chezmoi 管理外で、
+    apply しても消えない。
+    """
+    if not isinstance(local_network, dict):
+        raise SystemExit("local.toml の [pis.network] がテーブルでない")
+    ignored = sorted(set(local_network) - set(LOCAL_NETWORK_KEYS))
+    if ignored:
+        print(
+            "warning: local.toml の [pis.network] で使えないキーを無視しました: "
+            + ", ".join(ignored)
+            + " (使えるキー: "
+            + ", ".join(LOCAL_NETWORK_KEYS)
+            + ")",
+            file=sys.stderr,
+        )
+    pis = dict(merged.get("pis") or {})
+    network = dict(pis.get("network") or {})
+    for key in ("mode", "allow_loopback"):
+        if key in local_network:
+            network[key] = local_network[key]
+    for key in ("deny", "local_ports"):
+        if key not in local_network:
+            continue
+        extra = local_network[key]
+        if isinstance(extra, list) and isinstance(network.get(key, []), list):
+            network[key] = _uniq(list(network.get(key, [])) + list(extra))
+        else:
+            network[key] = extra  # 型違いは pi_network が拒否する
+    pis["network"] = network
+    merged["pis"] = pis
+
+
+# local.toml の [pi.sandbox] (pis 全体への追加)。追記のみ。write / protected / control_dirs はマシン全体では緩めない
+LOCAL_PI_SANDBOX_KEYS = ("read", "network_allow", "deny_read")
+
+
+def _merge_local_pi_sandbox(merged: dict[str, Any], local_pi_sandbox: Any) -> None:
+    """local.toml の ``[pi.sandbox]`` (``read`` / ``network_allow`` / ``deny_read``) を追記する。
+
+    共有側のエントリは消さない。型違いは ``pi_sandbox`` が拒否する。書き込みや保護対象の緩和になる
+    ``write`` / ``protected`` / ``control_dirs`` は受け付けない (作業先ごとの ``.opencode/sandbox.toml`` を使う)。
+    """
+    if not isinstance(local_pi_sandbox, dict):
+        raise SystemExit("local.toml の [pi.sandbox] がテーブルでない")
+    ignored = sorted(set(local_pi_sandbox) - set(LOCAL_PI_SANDBOX_KEYS))
+    if ignored:
+        print(
+            "warning: local.toml の [pi.sandbox] で使えないキーを無視しました: "
+            + ", ".join(ignored)
+            + " (使えるキー: "
+            + ", ".join(LOCAL_PI_SANDBOX_KEYS)
+            + ")",
+            file=sys.stderr,
+        )
+    pi = dict(merged.get("pi") or {})
+    sandbox = dict(pi.get("sandbox") or {})
+    for key in LOCAL_PI_SANDBOX_KEYS:
+        if key not in local_pi_sandbox:
+            continue
+        extra = local_pi_sandbox[key]
+        if not isinstance(extra, list) or not all(isinstance(p, str) and p for p in extra):
+            raise SystemExit(f"local.toml の [pi.sandbox] {key} は文字列の配列: {extra!r}")
+        if isinstance(sandbox.get(key, []), list):
+            sandbox[key] = _uniq(list(sandbox.get(key, [])) + list(extra))
+        else:
+            sandbox[key] = extra  # 共有側が壊れているときは pi_sandbox が拒否する
+    pi["sandbox"] = sandbox
+    merged["pi"] = pi
+
+
+def _merge_local_broker(merged: dict[str, Any], local_broker: Any) -> None:
+    """local.toml の ``[pis.broker]`` を置き換える (認証の出どころ・有効と無効)。
+
+    PAT の出どころは ``github_token_file`` と ``github_token_command`` のどちらか一方だけなので、
+    一方を書いたら共有側のもう一方は消す (両方になって生成が止まらないように)。型の検査は ``pi_broker``。
+    """
+    if not isinstance(local_broker, dict):
+        raise SystemExit("local.toml の [pis.broker] がテーブルでない")
+    ignored = sorted(set(local_broker) - set(PI_BROKER_KEYS))
+    if ignored:
+        print(
+            "warning: local.toml の [pis.broker] で使えないキーを無視しました: "
+            + ", ".join(ignored)
+            + " (使えるキー: "
+            + ", ".join(sorted(PI_BROKER_KEYS))
+            + ")",
+            file=sys.stderr,
+        )
+    pis = dict(merged.get("pis") or {})
+    broker = dict(pis.get("broker") or {})
+    for key in PI_BROKER_KEYS:
+        if key in local_broker:
+            broker[key] = local_broker[key]
+    if "github_token_file" in local_broker and "github_token_command" not in local_broker:
+        broker.pop("github_token_command", None)
+    if "github_token_command" in local_broker and "github_token_file" not in local_broker:
+        broker.pop("github_token_file", None)
+    pis["broker"] = broker
+    merged["pis"] = pis
+
+
 def apply_local_overlay(common: dict[str, Any], local: dict[str, Any]) -> dict[str, Any]:
-    """ローカル上書きを common へ追記する (既存エントリは消さない)。"""
+    """ローカル上書きを common へ反映する (追記を基本にし、共有側の deny は消さない)。"""
     local_sandbox = local.get("sandbox") or {}
     local_locations = (local.get("copilot") or {}).get("locations") or []
-    if not local_sandbox and not local_locations:
+    local_network = (local.get("pis") or {}).get("network")
+    local_broker = (local.get("pis") or {}).get("broker")
+    local_pi_sandbox = (local.get("pi") or {}).get("sandbox")
+    if (
+        not local_sandbox
+        and not local_locations
+        and local_network is None
+        and local_broker is None
+        and local_pi_sandbox is None
+    ):
         return common
 
     merged = dict(common)
@@ -3330,6 +3493,12 @@ def apply_local_overlay(common: dict[str, Any], local: dict[str, Any]) -> dict[s
         _merge_local_sandbox(merged, local_sandbox)
     if local_locations:
         _merge_local_locations(merged, local_locations)
+    if local_network is not None:
+        _merge_local_network(merged, local_network)
+    if local_broker is not None:
+        _merge_local_broker(merged, local_broker)
+    if local_pi_sandbox is not None:
+        _merge_local_pi_sandbox(merged, local_pi_sandbox)
     return merged
 
 

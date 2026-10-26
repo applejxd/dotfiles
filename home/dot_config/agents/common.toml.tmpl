@@ -1242,6 +1242,17 @@ github_token_command = ["gh", "auth", "token"]
 github_token_file = "~/.config/pis/github-token"
 {{- end }}
 
+# 内側の通信。allowlist (既定) は許可ドメインだけ、denylist は deny 以外の公開宛先へ HTTPS を通す。
+# denylist は「ホストにプロキシの環境変数が無い」かつ「Copilot ブローカーが有効」のときだけ効く。
+# 切り替える前に、作業ディレクトリの .env 等が内側で読める限界を確認する (CHG-0037)。
+# このマシンだけの deny / local_ports / mode は、chezmoi 管理外の ~/.config/agents/local.toml の [pis.network] に書く (apply で消えない)。
+# see docs/spec/guard/pi-guard.md#拒否リスト型の通信
+[pis.network]
+mode = "allowlist"
+deny = []
+allow_loopback = false
+local_ports = []
+
 # pi のプロンプトテンプレート (~/.pi/agent/prompts/<名前>.md になり、/<名前> で呼ぶ)。
 # 文面は pi のツール (guarded_task) に合わせてある。[opencode.commands] とは別 (段 6 で OpenCode 側を消す)。
 # $ARGUMENTS は呼び出しの引数全部。

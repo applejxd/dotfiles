@@ -42,9 +42,9 @@ def hidden_targets() -> dict[str, list[str]]:
       在ると分かっているものだけを検査に回す。
     """
     ensure_canary()
-    candidates = [
-        str(HOME / rel) for rel in (CANARY_REL, *HIDDEN_HOME_TARGETS)
-    ] + [str(service_json())]
+    candidates = [str(HOME / rel) for rel in (CANARY_REL, *HIDDEN_HOME_TARGETS)] + [
+        str(service_json())
+    ]
     if _is_wsl():
         candidates += WSL_HIDDEN_TARGETS
     present = [p for p in candidates if _exists(p)]
@@ -107,9 +107,22 @@ def check_environment(project: dict, env: dict, hidden: dict[str, list[str]]) ->
         "BOUNDARY_HIDDEN_ABSENT": _lines(hidden["absent"]),
         "BOUNDARY_PROTECTED": _lines(project["config"]["filesystem"].get("denyWrite") or []),
         # 拒否と不通を区別するための対照
-        "BOUNDARY_ALLOWED_HOST": next(
-            (d for d in allowed if not d.startswith("*")), "github.com"
-        ),
+        **_probe_hosts(project, allowed),
+    }
+
+
+def _probe_hosts(project: dict, allowed: list[str]) -> dict:
+    """検査の通信先。拒否リスト型 ([pis.network] denylist) は、公開の宛先が通り、拒否に入れたものが落ちる。
+
+    拒否リストが空なら拒否の検査はしない (空)。``*.x`` は ``probe.x`` で試す。
+    """
+    network = project.get("network")
+    if network and network.get("mode") == "denylist" and project.get("relay"):
+        deny = network.get("deny") or []
+        denied = next((d.replace("*.", "probe.", 1) for d in deny), "")
+        return {"BOUNDARY_ALLOWED_HOST": "github.com", "BOUNDARY_DENIED_HOST": denied}
+    return {
+        "BOUNDARY_ALLOWED_HOST": next((d for d in allowed if not d.startswith("*")), "github.com"),
         "BOUNDARY_DENIED_HOST": denied_probe(allowed),
     }
 
@@ -159,6 +172,7 @@ def preflight_key(runtime: Path, project: dict, volatile: list[str]) -> str:
             "config": config,
             "workspace": project["workspace"],
             "relay": bool(project.get("relay")),
+            "network": project.get("network"),
             "fence": version,
             "check": script,
         }
@@ -201,9 +215,7 @@ def _prune_preflight() -> None:
             pass
 
 
-def run_check(
-    runtime: Path, boundary: str, project: dict, env: dict, tmpdir: Path
-) -> int:
+def run_check(runtime: Path, boundary: str, project: dict, env: dict, tmpdir: Path) -> int:
     """境界チェックを 1 回走らせ、終了コードを返す (0 = 合格)。"""
     if not CHECK.is_file():
         die(f"境界チェックが無い: {CHECK}", "chezmoi apply で配備する")

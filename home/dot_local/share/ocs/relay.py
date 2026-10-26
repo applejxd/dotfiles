@@ -13,7 +13,15 @@ Fence は ``allowedDomains`` に当たる通信を**直接**つなぐ。外へ�
 - 待ち受けは ``127.0.0.1`` の空きポート。接続できるのは同じ機械のプロセスで、
   通せるのは許可リストの宛先だけ
 
+拒否リスト型 (``Relay(deny=[...])``。上流のプロキシが無い機械向け): 拒否に当たらない宛先は
+**中継が直接つなぐ**。Fence 側は ``allowedDomains: []`` + ``deniedDomains`` + ``defaultAction: "proxy"``
+(``fence_config_deny``)。ネットワーク名前空間の隔離は保たれ、プロキシを使わない通信は届かない。
+中継が穴にならないよう、**名前解決の結果が 1 つでも公開アドレスでなければ拒否**し、検査済みの
+アドレスへつなぐ (ループバックだけ ``allow_loopback`` で開けられる)。
+``NO_PROXY`` は安全の判断に使わない。
+
 see docs/spec/guard/pi-guard.md#プロキシ必須の環境での通信
+see docs/change/0037-pis-usability-and-telemetry.md (候補 E1')
 """
 
 from __future__ import annotations
@@ -27,6 +35,7 @@ import socket
 import socketserver
 import sys
 import threading
+import time
 from base64 import b64encode
 from collections.abc import Iterator
 from urllib.parse import unquote, urlsplit
@@ -37,6 +46,9 @@ HEAD_LIMIT = 16 * 1024
 HEAD_TIMEOUT = 10.0
 DIAL_TIMEOUT = 10.0
 IDLE_TIMEOUT = 900.0
+# 拒否リスト型の直接接続。IPv6 が届かない環境で 1 アドレスごとに長く待たない (IPv4 を先に試す)
+CANDIDATE_TIMEOUT = 4.0
+DIRECT_TIMEOUT = 15.0
 
 
 def _first(env: dict, names: tuple[str, ...]) -> str:
@@ -112,6 +124,70 @@ def bypass(host: str, no_proxy: str) -> bool:
     return False
 
 
+class Blocked(Exception):
+    """宛先のアドレスが公開でない。中継は 403 を返す。"""
+
+
+def blocked_address(text: str, allow_loopback: bool = False) -> str | None:
+    """中継がつなぐべきでないアドレスなら理由、つなてよければ ``None``。
+
+    通すのはグローバルなアドレスだけ (``is_global``)。IPv4-mapped の IPv6 は IPv4 として見る。
+    ループバックだけ ``allow_loopback`` で通せる。読めない・迷うものは拒否 (fail closed)。
+    """
+    try:
+        ip = ipaddress.ip_address(text.split("%", 1)[0])
+    except ValueError:
+        return "アドレスとして読めない"
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    if ip.is_loopback:
+        return None if allow_loopback else "ループバック"
+    if ip.is_unspecified:
+        return "未指定アドレス"
+    if ip.is_link_local:
+        return "リンクローカル (クラウドのメタデータを含む)"
+    if ip.is_multicast:
+        return "マルチキャスト"
+    if not ip.is_global:
+        return "非公開・予約済みのアドレス (私設・ULA・共有アドレス空間など)"
+    return None
+
+
+def resolve_public(host: str, port: int, allow_loopback: bool = False) -> list[tuple]:
+    """名前解決し、結果の**どれか 1 つでも**公開でないと ``Blocked``。IPv4 を先に並べて返す。
+
+    解決結果の一部だけを見て残りを通すと、DNS の細工 (公開と内部の混在) で穴になる。
+    """
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    if not infos:
+        raise OSError("名前を解決できない")
+    for info in infos:
+        reason = blocked_address(info[4][0], allow_loopback)
+        if reason:
+            raise Blocked(f"{info[4][0]} は{reason}")
+    return sorted(infos, key=lambda i: 0 if i[0] == socket.AF_INET else 1)
+
+
+def dial_public(host: str, port: int, allow_loopback: bool = False) -> socket.socket:
+    """公開アドレスだけを検査し、**検査したアドレスそのもの**へつなぐ (再解決しない)。"""
+    deadline = time.monotonic() + DIRECT_TIMEOUT
+    last: OSError = OSError("つなげない")
+    for family, kind, proto, _, sockaddr in resolve_public(host, port, allow_loopback):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        sock = socket.socket(family, kind, proto)
+        sock.settimeout(min(CANDIDATE_TIMEOUT, remaining))
+        try:
+            sock.connect(sockaddr)
+        except OSError as exc:
+            last = exc
+            sock.close()
+            continue
+        return sock
+    raise last
+
+
 def _read_head(sock: socket.socket) -> tuple[bytes, bytes]:
     """空行までを読む。返すのは (先頭部, その後ろに続いた分)。"""
     sock.settimeout(HEAD_TIMEOUT)
@@ -174,11 +250,16 @@ class _Handler(socketserver.BaseRequestHandler):
                 self._reply(client, 400, "宛先の形が不正")
                 return
             port = int(port_text)
-            if not host_allowed(host, port, self.server.allowed):
-                self.server.denied.append(f"{host}:{port}")
-                self._reply(client, 403, "許可リストに無い宛先")
-                return
-            upstream, leftover = self._dial(host, port)
+            if self.server.deny is not None:
+                upstream, leftover = self._dial_open(client, host, port)
+                if upstream is None:
+                    return
+            else:
+                if not host_allowed(host, port, self.server.allowed):
+                    self.server.denied.append(f"{host}:{port}")
+                    self._reply(client, 403, "許可リストに無い宛先")
+                    return
+                upstream, leftover = self._dial(host, port)
             if upstream is None:
                 self._reply(client, 502, "上流へつなげない")
                 return
@@ -202,6 +283,25 @@ class _Handler(socketserver.BaseRequestHandler):
         ).encode("latin-1")
         with contextlib.suppress(OSError):
             client.sendall(head + body)
+
+    def _dial_open(
+        self, client: socket.socket, host: str, port: int
+    ) -> tuple[socket.socket | None, bytes]:
+        """拒否リスト型: 拒否に当たらない公開宛先へ直接つなぐ。つなげないときは応答を返して None。"""
+        server = self.server
+        assert server.deny is not None
+        if host_allowed(host, port, server.deny):
+            server.denied.append(f"{host}:{port}")
+            self._reply(client, 403, "拒否リストに当たる宛先")
+            return None, b""
+        try:
+            return dial_public(host, port, server.allow_loopback), b""
+        except Blocked as exc:
+            server.denied.append(f"{host}:{port}")
+            self._reply(client, 403, f"公開でない宛先: {exc}")
+        except OSError:
+            self._reply(client, 502, "つなげない")
+        return None, b""
 
     def _dial(self, host: str, port: int) -> tuple[socket.socket | None, bytes]:
         """宛先へのトンネルを張る。``NO_PROXY`` なら直接、でなければプロキシ経由。"""
@@ -232,8 +332,18 @@ class _Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, allowed: list[str], proxy_url: str, no_proxy: str) -> None:
+    def __init__(
+        self,
+        allowed: list[str],
+        proxy_url: str,
+        no_proxy: str,
+        deny: list[str] | None = None,
+        allow_loopback: bool = False,
+    ) -> None:
         super().__init__(("127.0.0.1", 0), _Handler)
+        # deny が None でないときは拒否リスト型 (上流のプロキシを使わず、allowed / no_proxy は使わない)
+        self.deny = None if deny is None else list(deny)
+        self.allow_loopback = allow_loopback
         parts = urlsplit(proxy_url)
         self.allowed = list(allowed)
         self.no_proxy = no_proxy
@@ -247,10 +357,21 @@ class _Server(socketserver.ThreadingTCPServer):
 
 
 class Relay:
-    """許可リストで絞って上流のプロキシへ中継する。``start`` で待ち受けを始める。"""
+    """許可リストで絞って上流のプロキシへ中継する。``deny`` を渡すと拒否リスト型 (直接接続)。
 
-    def __init__(self, allowed: list[str], proxy_url: str, no_proxy: str = "") -> None:
-        self._server = _Server(allowed, proxy_url, no_proxy)
+    ``start`` で待ち受けを始める。
+    """
+
+    def __init__(
+        self,
+        allowed: list[str],
+        proxy_url: str,
+        no_proxy: str = "",
+        *,
+        deny: list[str] | None = None,
+        allow_loopback: bool = False,
+    ) -> None:
+        self._server = _Server(allowed, proxy_url, no_proxy, deny, allow_loopback)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
 
     @property
@@ -282,16 +403,43 @@ def fence_config(config_: dict, port: int) -> dict:
     return out
 
 
+def fence_config_deny(config_: dict, port: int, deny: list[str]) -> dict:
+    """拒否リスト型の Fence の設定: 許可リストを空にし、拒否を Fence に渡し (hard 403)、残りは中継へ。"""
+    out = copy.deepcopy(config_)
+    network = out.get("network", {})
+    out["network"] = {
+        **network,
+        "allowedDomains": [],
+        "deniedDomains": list(dict.fromkeys([*(network.get("deniedDomains") or []), *deny])),
+        "defaultAction": "proxy",
+        "upstreamProxy": f"http://127.0.0.1:{port}",
+    }
+    return out
+
+
 @contextlib.contextmanager
-def session(config_: dict, env: dict | None = None) -> Iterator[dict]:
+def session(config_: dict, env: dict | None = None, network: dict | None = None) -> Iterator[dict]:
     """必要なら中継を起動し、Fence へ渡す設定を返す。要らなければ設定をそのまま返す。
 
-    要るのは、プロキシの環境変数があり、許可リストがあり、``*`` を含まないとき。
+    拒否リスト型 (``network["mode"] == "denylist"``) は、**ホストにプロキシの環境変数が無いときだけ**
+    (直接接続で、名前解決後のアドレスを中継が検査できる機械)。プロキシ必須の機械では、上流が名前を
+    解決するので中継がアドレスを検査できず、従来の許可リスト型のままにする。
+
+    許可リスト型で中継が要るのは、プロキシの環境変数があり、許可リストがあり、``*`` を含まないとき。
     ``*`` は Fence が直接の通信を許す緩い形なので、許可リストの照合を中継へ移す意味が無い。
     """
     source = os.environ if env is None else env
-    allowed = config_.get("network", {}).get("allowedDomains") or []
     url = corporate_proxy(source)
+    if network and network.get("mode") == "denylist" and not url:
+        deny = list(network.get("deny") or [])
+        server = Relay([], "", deny=deny, allow_loopback=bool(network.get("allow_loopback")))
+        port = server.start()
+        try:
+            yield fence_config_deny(config_, port, deny)
+        finally:
+            server.stop()
+        return
+    allowed = config_.get("network", {}).get("allowedDomains") or []
     if not url or not allowed or "*" in allowed:
         yield config_
         return

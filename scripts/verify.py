@@ -84,6 +84,7 @@ _PI_TESTS = (
     "test_broker",
     "test_broker_search",
     "test_pi_broker_generate",
+    "test_pi_network",
     "test_pi_github_boundary",
     "test_pi_commit_confirm",
     "test_pi_audit",

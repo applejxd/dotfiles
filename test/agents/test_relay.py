@@ -346,3 +346,207 @@ def test_session_relay_enforces_the_allow_list_end_to_end(upstream):
 def test_module_has_no_relative_imports():
     """★単独の部品として読めること (入口が絶対パスで読む信頼の鎖に載るため、依存を増やさない)。"""
     assert "from ." not in Path(SRC).read_text(encoding="utf-8")
+
+
+# ─── 拒否リスト型 (直接接続) ───────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("address", "allow_loopback", "blocked"),
+    [
+        ("93.184.216.34", False, False),  # 公開
+        ("2606:2800:220:1:248:1893:25c8:1946", False, False),  # 公開 (IPv6)
+        ("127.0.0.1", False, True),
+        ("127.0.0.1", True, False),  # ループバックだけ設定で開けられる
+        ("::1", False, True),
+        ("::1", True, False),
+        ("::ffff:127.0.0.1", False, True),  # IPv4-mapped は IPv4 として見る
+        ("::ffff:10.0.0.1", True, True),  # ループバックを開けても私設は開かない
+        ("10.1.2.3", False, True),
+        ("172.16.0.1", False, True),
+        ("192.168.1.1", False, True),
+        ("100.64.0.1", False, True),  # 共有アドレス空間
+        ("169.254.169.254", False, True),  # クラウドのメタデータ
+        ("169.254.169.254", True, True),
+        ("fe80::1", False, True),
+        ("fd00::1", False, True),  # ULA
+        ("0.0.0.0", False, True),
+        ("224.0.0.1", False, True),
+        ("not-an-ip", False, True),  # 読めないものは拒否 (fail closed)
+    ],
+)
+def test_blocked_address(address, allow_loopback, blocked):
+    assert (relay.blocked_address(address, allow_loopback) is not None) is blocked
+
+
+def _fake_resolver(monkeypatch, answers):
+    """getaddrinfo を差し替える。answers は [(family, address), ...]。"""
+
+    def fake(host, port, **_kw):
+        return [(family, socket.SOCK_STREAM, 6, "", (addr, port)) for family, addr in answers]
+
+    monkeypatch.setattr(relay.socket, "getaddrinfo", fake)
+
+
+def test_resolve_public_refuses_when_any_answer_is_not_public(monkeypatch):
+    """★公開と内部が混ざる応答 (DNS の細工) は、全体を拒否する。"""
+    _fake_resolver(monkeypatch, [(socket.AF_INET, "93.184.216.34"), (socket.AF_INET, "10.0.0.5")])
+    with pytest.raises(relay.Blocked):
+        relay.resolve_public("evil.example", 443)
+
+
+def test_resolve_public_puts_ipv4_first(monkeypatch):
+    _fake_resolver(
+        monkeypatch,
+        [
+            (socket.AF_INET6, "2606:2800:220:1:248:1893:25c8:1946"),
+            (socket.AF_INET, "93.184.216.34"),
+        ],
+    )
+    families = [info[0] for info in relay.resolve_public("example.test", 443)]
+    assert families == [socket.AF_INET, socket.AF_INET6]
+
+
+def _echo_server():
+    echo = socket.socket()
+    echo.bind(("127.0.0.1", 0))
+    echo.listen(2)
+
+    def serve():
+        while True:
+            try:
+                conn, _ = echo.accept()
+            except OSError:
+                return
+            with conn:
+                while chunk := conn.recv(4096):
+                    conn.sendall(chunk)
+
+    threading.Thread(target=serve, daemon=True).start()
+    return echo, echo.getsockname()[1]
+
+
+def _deny_relay(deny=(), allow_loopback=False):
+    server = relay.Relay([], "", deny=list(deny), allow_loopback=allow_loopback)
+    server.start()
+    return server
+
+
+def test_deny_mode_dials_a_loopback_target_only_when_allowed():
+    echo, port = _echo_server()
+    request = f"CONNECT 127.0.0.1:{port} HTTP/1.1\r\n\r\n".encode()
+    try:
+        closed = _deny_relay()
+        try:
+            head, _ = _exchange(closed.port, request)
+        finally:
+            closed.stop()
+        assert head.startswith(b"HTTP/1.1 403")
+        assert closed.denied == [f"127.0.0.1:{port}"]
+
+        opened = _deny_relay(allow_loopback=True)
+        try:
+            head, echoed = _exchange(opened.port, request, b"hello")
+        finally:
+            opened.stop()
+        assert head.startswith(b"HTTP/1.1 200")
+        assert echoed == b"hello"
+    finally:
+        echo.close()
+
+
+def test_deny_mode_refuses_the_metadata_address_even_with_loopback_allowed():
+    server = _deny_relay(allow_loopback=True)
+    try:
+        head, _ = _exchange(server.port, b"CONNECT 169.254.169.254:80 HTTP/1.1\r\n\r\n")
+    finally:
+        server.stop()
+    assert head.startswith(b"HTTP/1.1 403")
+
+
+def test_deny_list_match_is_refused_before_any_name_resolution(monkeypatch):
+    calls = []
+    real = socket.getaddrinfo
+
+    def spy(host, *a, **k):
+        if host == "127.0.0.1":  # 試験のクライアント自身の接続
+            return real(host, *a, **k)
+        calls.append(host)
+        return []
+
+    monkeypatch.setattr(relay.socket, "getaddrinfo", spy)
+    server = _deny_relay(deny=["pastebin.com", "*.files.example"])
+    try:
+        for target in ("pastebin.com:443", "a.files.example:443"):
+            head, _ = _exchange(server.port, f"CONNECT {target} HTTP/1.1\r\n\r\n".encode())
+            assert head.startswith(b"HTTP/1.1 403")
+    finally:
+        server.stop()
+    assert calls == []
+
+
+def test_deny_mode_ignores_no_proxy_and_refuses_plain_http():
+    """★NO_PROXY は安全の判断に使わない。平文 HTTP は拒否のまま。"""
+    server = _deny_relay()
+    try:
+        head, _ = _exchange(server.port, b"GET http://example.com/ HTTP/1.1\r\n\r\n")
+    finally:
+        server.stop()
+    assert head.startswith(b"HTTP/1.1 403")
+
+
+def test_deny_mode_unresolvable_name_becomes_502(monkeypatch):
+    real = socket.getaddrinfo
+
+    def fail(host, *a, **k):
+        if host == "127.0.0.1":  # 試験のクライアント自身の接続
+            return real(host, *a, **k)
+        raise socket.gaierror("no such host")
+
+    monkeypatch.setattr(relay.socket, "getaddrinfo", fail)
+    server = _deny_relay()
+    try:
+        head, _ = _exchange(server.port, b"CONNECT nowhere.invalid:443 HTTP/1.1\r\n\r\n")
+    finally:
+        server.stop()
+    assert head.startswith(b"HTTP/1.1 502")
+
+
+def test_fence_config_deny_empties_the_allow_list_and_keeps_existing_denies():
+    config = {
+        "network": {"allowedDomains": ["github.com"], "deniedDomains": ["a.example"]},
+        "filesystem": {"allowRead": ["/x"]},
+    }
+    out = relay.fence_config_deny(config, 4321, ["b.example", "a.example"])
+    assert out["network"]["allowedDomains"] == []
+    assert out["network"]["deniedDomains"] == ["a.example", "b.example"]
+    assert out["network"]["defaultAction"] == "proxy"
+    assert out["network"]["upstreamProxy"] == "http://127.0.0.1:4321"
+    assert out["filesystem"] == config["filesystem"]
+    assert config["network"]["allowedDomains"] == ["github.com"]  # 元は変えない
+
+
+def test_session_denylist_without_a_host_proxy_starts_a_direct_relay():
+    config = {"network": {"allowedDomains": ["github.com"]}}
+    network = {"mode": "denylist", "deny": ["x.example"], "allow_loopback": False}
+    with relay.session(config, {}, network) as out:
+        assert out is not config
+        assert out["network"]["allowedDomains"] == []
+        assert out["network"]["deniedDomains"] == ["x.example"]
+        assert out["network"]["defaultAction"] == "proxy"
+
+
+def test_session_denylist_falls_back_to_the_allowlist_relay_when_the_host_needs_a_proxy():
+    """★上流のプロキシが名前を解決するので、中継はアドレスを検査できない。従来の許可リスト型のまま。"""
+    config = {"network": {"allowedDomains": ["github.com"]}}
+    network = {"mode": "denylist", "deny": ["x.example"]}
+    with relay.session(config, {"HTTPS_PROXY": "http://proxy.corp:8080"}, network) as out:
+        assert out["network"]["allowedDomains"] == []  # 許可リストは中継へ移る (従来どおり)
+        assert out["network"]["upstreamProxy"].startswith("http://127.0.0.1:")
+        assert "deniedDomains" not in out["network"]  # 拒否リスト型にはならない
+
+
+def test_session_without_network_setting_is_unchanged_for_the_allowlist():
+    config = {"network": {"allowedDomains": ["github.com"]}}
+    with relay.session(config, {}, None) as out:
+        assert out is config
