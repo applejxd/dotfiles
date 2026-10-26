@@ -29,44 +29,17 @@ chezmoi status --include=scripts
   走らない**。外部の一時的な不調で apply を止めないため、次は 0 で終わる
   - `100_linux/125_mise`（`mise install` の一部が失敗したとき。
     [ツール 1 個の失敗で apply を止めない](structure.md#ツール-1-個の失敗で-apply-を止めない)）
+- AI CLI の導入（`126_agent_cli` / `226_agent_cli`）と omp の設定の取得（`420_omp_skills` /
+  `430_omp_claude_assets`）は、失敗した回に**再実行の印**を書き直して次の apply で走り直す。
+  成功した回は印に触れないので、その後は走り直さない
+  （[再実行の印の仕組み](script-artifacts.md#再実行の印の仕組み)）
 
-`100_linux/126_agent_cli` / `200_mac/226_agent_cli`（AI CLI の導入）と
-`400_unix/420_omp_skills` / `400_unix/430_omp_claude_assets`（omp の設定の取得・解析に
-失敗したとき）は例外で、失敗したら `~/.local/share/dotfiles/retry/` の下の印を書き直す
-（順に `agent-cli-failed` / `omp-skills-failed` / `omp-claude-assets-failed`）。
-スクリプトにはこの印の**更新時刻だけ**を埋め込むので、次の apply で中身が変わって走り直す。
-成功した回は印に触れないので、その後は走り直さない。仕組みは
-`home/.chezmoitemplates/retry-marker.sh.tmpl` にある。
-
-更新時刻は秒単位で埋め込まれる。前回の印と同じ秒のうちにまた失敗すると描画が
-変わらず、その回が成功として記録されて以後は走らない。そこで、書き直す前の時刻が
-前回の印の時刻以前なら、印の更新時刻を前回 + 1 秒に進める。
-
-印を置けないときは、警告して**スクリプトを非ゼロで終える**。0 で終えると成功として
-記録され、次の apply でも走らないため。上の「非ゼロで終わったスクリプトは記録されない」
-に乗せて次の apply で走り直させる代わりに、その回の apply はそこで止まる。
-置けないのは次のときで、どれも手で片付けるまで毎回止まる。エラーに出たパスを確かめ、
-symlink やディレクトリを消してから apply し直す。
-
-- 印の場所にディレクトリなどファイル以外がある
-- 親の経路（`~/.local` から `~/.local/share/dotfiles/retry` まで）のどれかが symlink か、
-  ディレクトリでない。symlink を追うと別の場所へ書き、既存のファイルを書き潰しうるので、
-  書く前に止める
-
+**印を置けないとき**: 警告を出してスクリプトが非ゼロで終わり、apply がそこで止まる。
+どれも手で片付けるまで毎回止まる。エラーに出たパスを確かめ、symlink やディレクトリを
+消してから apply し直す（置けない条件は
+[再実行の印の仕組み](script-artifacts.md#再実行の印の仕組み)）。
 `~/.local/share/dotfiles/retry` などの経路に通常ファイルがあると、chezmoi の `stat` が
 描画の時点でエラーになり、apply はスクリプトを走らせる前に止まる。
-
-印は apply（ホスト）が書くので、置き場はどのエージェントの sandbox からも書けない
-場所にする。`~/.local/state` は Claude Code / Copilot CLI の sandbox から書ける
-（[agent-sandbox.md](sandbox/agent-sandbox.md)）ので使わない。書けると、印を `~/.bashrc` への
-symlink に差し替えてホストの apply に中身を書き潰させられる。
-同じ理由で、印は同じディレクトリの一時ファイルから `mv` で差し替え、既存の symlink を
-追わない。中身を埋め込まないのは、書き換えられたときにスクリプトへコードが入らないため。
-OS の境界を持たない実行（ocs を通さない OpenCode、omp）からは、この置き場でも守れない。
-
-> [!NOTE]
-> 以前の置き場 `~/.local/state/dotfiles/agent-cli-failed` はもう読まない。残っていても
-> 害は無く、消してよい。
 
 **対処**: 1 本だけ走らせ直すなら、テンプレートを描画して直接実行する。
 chezmoi の記録には触らない。
@@ -311,7 +284,7 @@ Get-Command bw          # Windows
 
 | 行 | 意味 | 対処 |
 | --- | --- | --- |
-| `config file template has changed` | `home/.chezmoi.toml.tmpl` が更新された。`~/.config/chezmoi/chezmoi.toml` は古いまま | `chezmoi init` |
+| `config file template has changed` | `home/.chezmoi.toml.tmpl` が更新された。`~/.config/chezmoi/chezmoi.toml` は古いまま | [config file template has changed と警告される](#config-file-template-has-changed-と警告される)。差があれば `chezmoi init` |
 | `... has changed since chezmoi last wrote it?` | 展開先が chezmoi の記録と食い違う。上書き可否を聞かれている | `chezmoi diff` で中身を見てから答える |
 | `error calling bitwarden` | `bw` は入ったが未ログイン。`bw unlock` が失敗しテンプレートが落ちる | `bw login` してセッションを張る |
 

@@ -104,6 +104,9 @@
 | [ガードツール（guarded_edit / ask）の失敗の集計と見送った案](agents/tool-extension-measurements.md) | 失敗 118 件・940 件などの集計。`pi-guard.md` から移設 |
 | [二つの task（guarded_task と Windows の task）を別物にしている理由](agents/two-task-tools-rationale.md) | 統合しなかった判断と採点の訂正。`pi-guard.md` から移設 |
 | [web 検索スキル仕様の実測・経緯](agents/web-search-spec-notes.md) | 2026-10-11〜26 の実測と CHG-0032 の経緯（`web-search.md` から移設） |
+| [commit の確認（素の pi）の仕様メモ](agents/commit-confirm-spec-notes.md) | 補助拡張 `commit-confirm` の表示例・一時 index・退避 ref の鎖の実装・実モデルでの確認。移設日 2026-10-26（`pi-guard.md` から） |
+| [pi の子エージェント job の結果の保持と通知の仕様メモ](agents/pi-subagent-jobs-notes.md) | `FINISHED_TTL_MS`・通知・保存ファイル・`audit.ts` の実装の細部と試験。移設日 2026-10-26（`pi-guard.md` から） |
+| [AI CLI 設定の生成に関する経緯・実測の記録（その 2）](agents/agent-config-generation-notes-2.md) | 子エージェント・コミットの確認・`/fleet`・bypass の子の、宣言しなかった不具合・採らなかった案・実測（N9〜N12）。2026-09〜10 |
 
 ### OpenCode 全般
 
@@ -187,5 +190,6 @@
 | [Windows 設定の実測・経緯メモ](chezmoi/structure-windows-notes.md) | WSL 3.0.1・GPU のクラッシュ・sudo・PATH 降格・oh-my-posh・7-Zip・電源・ウィジェット・LGPO など（`structure.md` から移設） |
 | [WSL の時刻同期と SSH の実測メモ](chezmoi/structure-wsl-time-and-ssh-notes.md) | 時刻同期の未確認事項・SSH の層別の実測・LAN の IP の実験（`structure.md` から移設） |
 | [専用 WSL2 の時刻同期の実測](chezmoi/wsl-sandbox-time-sync.md) | 2026-10-18〜19 の実測と原因分析・構築記録（`wsl-sandbox.md` から移設） |
+| [再実行の印（retry marker）の置き場に関する記録](chezmoi/rerun-scripts-notes.md) | 印の置き場を sandbox から書けない場所にした理由と、旧置き場の廃止。日付なし（コードの読解。`troubleshooting-bootstrap.md` から移設） |
 
 [ドキュメント一覧へ戻る](../index.md)

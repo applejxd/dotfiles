@@ -13,13 +13,37 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 - **`run_once_` / `run_onchange_` は chezmoi の状態で再実行が決まる。** ここの「消すと再実行される」は、
   スクリプトの実行条件に依存し、ファイルを消しただけでは走り直さないものがある
 
+## 再実行の印の仕組み
+
+`run_onchange_` のスクリプトは、描画結果が前回と同じなら走らない。失敗しても次の apply で走り直したいもの
+（AI CLI の導入 `126` / `226`、omp の設定の取得 `420_omp_skills` / `430_omp_claude_assets`）は、
+失敗した回に印のファイルを書き直し、スクリプトの描画結果を変える。症状からの手順は
+[スクリプトを走らせ直す](troubleshooting-bootstrap.md#スクリプトを走らせ直す)。
+
+- 印は `~/.local/share/dotfiles/retry/` の下に置く（順に `agent-cli-failed` / `omp-skills-failed` /
+  `omp-claude-assets-failed`）。スクリプトには印の**更新時刻だけ**を埋め込む。中身を埋め込まないのは、
+  書き換えられたときにスクリプトへコードが入らないため。実装は `home/.chezmoitemplates/retry-marker.sh.tmpl`
+- 成功した回は印に触れないので、その後は走り直さない
+- 更新時刻は秒単位で埋め込まれる。前回の印と同じ秒のうちにまた失敗すると描画が変わらず、成功として
+  記録されてしまう。そこで、書き直す前の時刻が前回の印の時刻以前なら、更新時刻を前回 + 1 秒に進める
+- 印を置けないときは、警告して**スクリプトを非ゼロで終える**。0 で終えると成功として記録され、次の apply
+  でも走らないため。置けないのは次のときで、どれも手で片付けるまで毎回止まる
+  - 印の場所にディレクトリなどファイル以外がある
+  - 親の経路（`~/.local` から `~/.local/share/dotfiles/retry` まで）のどれかが symlink か、ディレクトリでない。
+    symlink を追うと別の場所へ書き、既存のファイルを書き潰しうるので、書く前に止める
+- 置き場は、どのエージェントの sandbox からも書けない場所にする。印は apply（ホスト）が書くので、
+  sandbox から書けると印を `~/.bashrc` への symlink に差し替えてホストの apply に書き潰させられる。
+  同じ理由で、印は同じディレクトリの一時ファイルから `mv` で差し替え、既存の symlink を追わない。
+  OS の境界を持たない実行（`ocs` を通さない OpenCode、omp）からは、この置き場でも守れない。
+  背景は [記録](../research/chezmoi/rerun-scripts-notes.md)
+
 ## 共通（Ubuntu / WSL / macOS）
 
 `000_unix/` と `400_unix/`、取り込まれるテンプレートは Linux と macOS の両方で動く。
 
 | 作るスクリプト | 作られるもの | 種類 | 後始末・消すと |
 | --- | --- | --- | --- |
-| `retry-marker.sh.tmpl`（`420_omp_skills`・`430_omp_claude_assets`・`agent-cli-install.sh.tmpl` 経由の `126` / `226`） | `~/.local/share/dotfiles/retry/{omp-skills-failed,omp-claude-assets-failed,agent-cli-failed}` | 再実行の印（失敗理由を 1 行） | 成功しても自動では消えない。消すと印の更新時刻が `none` に戻り、スクリプトの描画が変わって次の apply で 1 回走り直す（コードからの推測）。印の差し替え用に同じ場所へ一時ファイル `.retry.XXXXXX` を作り、`mv -f` で置き換える（異常終了時に残りうる。推測） |
+| `retry-marker.sh.tmpl`（`420_omp_skills`・`430_omp_claude_assets`・`agent-cli-install.sh.tmpl` 経由の `126` / `226`） | `~/.local/share/dotfiles/retry/{omp-skills-failed,omp-claude-assets-failed,agent-cli-failed}` | 再実行の印（失敗理由を 1 行） | 成功しても自動では消えない。消すと次の apply で 1 回走り直す（[仕組み](#再実行の印の仕組み)。コードからの推測）。印の差し替え用に同じ場所へ一時ファイル `.retry.XXXXXX` を作り、`mv -f` で置き換える（異常終了時に残りうる。推測） |
 | `430_omp_claude_assets.sh.tmpl` | `~/.omp/agent/.chezmoi-seeded` | 状態（初期値として置いた設定のキー名を追記） | 消すと次の apply で `commands.enableClaudeUser` などを再設定し、利用者が戻した値を上書きしうる。**消さない** |
 | `000_unix/run_before_005_python.sh.tmpl` | `~/.local/bin/chezmoi-python3`（実体の Python への symlink） | 状態（`ln -sfn` で毎回張り直す） | 消すと次の apply で張り直す。その前の `modify_` スクリプトが一時的に失敗しうる |
 | 同上 | `mktemp` の一時ファイル（uv のインストーラ） | 一時 | uv も Python も無いときだけ。使い終えたら `rm -f`（`trap` なし） |

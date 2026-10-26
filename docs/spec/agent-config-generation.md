@@ -733,9 +733,7 @@ permissions = [
 - 隔離起動（`ocs`）でも、全体の deny と guide plugin の検査の両方が効く
   （[隔離版の設定の書き出し方](sandbox/opencode-sandbox.md#エージェントとコマンド)）
 
-実測（全体の deny だけで build からは `Permission denied: subagent`、bypass からは
-起動できる、子からの入れ子は不可。build に個別の `task = "allow"` があると全体の deny は
-上書きされ、plugin の deny でも、個別の規則の最後に置いた deny でも止まる）は
+実測の結果は[記録 N12](../research/agents/agent-config-generation-notes-2.md#記録-n12--bypass-の子の起動の実測)と
 [Bypass モードの調査 6 章](../research/opencode/permission/bypass-agent.md#6-bypass-からだけ呼べる子エージェント2026-09-28)。
 `bypass` から `general` / `fleet-worker` を外した構成と `bypass-fleet-worker` の実測は
 同じ調査の [7 章](../research/opencode/permission/bypass-agent.md#7-bypass-の子の入れ替え2026-09-30)。
@@ -1069,6 +1067,8 @@ service.restart
 
 ### 常駐サービスのポート
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+
 Windows の常駐サービスだけ `port = 4098` にする（`common.toml` の `[opencode.service]`。
 Windows で描画したときだけ現れる）。`merge_opencode_service()` が
 `~/.config/opencode/service.json` の `port` だけを書き、`password` などは残す。
@@ -1193,17 +1193,18 @@ explore = "worker"      # 例
   並んだときの結合順を確かめていないため
   - 改名前の階層名（`light` / `standard` / `heavy`）で割り当てても、未知の階層として止まる。
     エラーには定義済みの階層名が並ぶ
-- `[opencode.agents]` で宣言していない、組み込みでもない ID への割り当ても `apply` を止める
-  （[所有の規則](#配置済みの設定の所有)）
+- 宣言も組み込みでもない ID への割り当ても止める（[所有の規則](#配置済みの設定の所有)）
 
 #### 生成されるもの
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
 
 | キー | 中身 | 残すもの |
 | --- | --- | --- |
 | `model` | `default` 階層 | — （毎回書く） |
 | `agents.<id>.model` | 割り当てた階層 | 割り当てを外したとき、値が階層のモデルなら消す。手で書いた別のモデル・他のキーは残す |
 | `providers.<id>.settings` | `[provider.<id>]` の `profile` / `region` | 他のキー（`baseURL` など）と他のプロバイダ |
-| `experimental.policies` | `provider.use` を `*` で deny、この PC のプロバイダだけ allow | `permission` / `provider.use` 以外の文と、`experimental` の他のキー（[所有の規則](#配置済みの設定の所有)） |
+| `experimental.policies` | `provider.use` を `*` で deny、この PC のプロバイダだけ allow | [所有の規則](#配置済みの設定の所有) |
 
 - **V1 形式の `agent` ではなく V2 形式の `agents` に書く。** `agent` だと
   `#variant` 付きの指定が黙って無視され、親のモデルで動く
@@ -1217,6 +1218,8 @@ explore = "worker"      # 例
 
 #### 効かない使い方
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+
 **主エージェント（`build` / `plan` など）の `model` は、エージェントを選んだだけでは
 使われない。** セッションのモデルは別に保存されていて、`--agent plan` で起動しても
 既定モデルのまま動く（[実測](../research/opencode/agent-models.md)。公式の記述どおり）。
@@ -1228,6 +1231,8 @@ explore = "worker"      # 例
 
 #### 隔離起動（`ocs`）
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+
 `ocs` の既定モデルは `[opencode.sandbox] model_preference` が決め、ここの `default` は
 使わない（通常版から引き継ぐのは `model` だけ）。エージェントごとの割り当ては、この PC の
 プロバイダが `[opencode.sandbox] providers` にあるときだけ隔離版にも出す
@@ -1238,6 +1243,8 @@ explore = "worker"      # 例
 `[provider.amazon-bedrock] network_allow` は用意してあるが、`providers` には入れていない。
 
 ### 子エージェント
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
 
 `[opencode.agents.<id>]` に V2 形式でエージェントを定義し、`opencode.json` の
 `agents` へ出す。モデルは書かず、[`[opencode.model.agents]`](#モデルの割り当て) で
@@ -1254,9 +1261,8 @@ explore = "worker"      # 例
   組み込みエージェントの追加方針 → 全体の `permissions` → エージェントの `permissions`」の順に
   連結され、最後に一致したものが勝つ。全体の規則（`build` 向けの `.env.example` などの例外の
   allow、作業ツリーの外の edit の確認、`shell * ask` と shell の allow）が、組み込みの制限を
-  上書きする。宣言しないと、`explore` は shell で確認を出し `.env.example` を書け、`plan` は
-  `.env.example` を確認なしに書けて `general` 経由で編集できた
-  （[調査記録](../research/opencode/permission/builtin-agent-override.md)、
+  上書きする。宣言しないと組み込みの制限が効かない（宣言しなかったときの不具合は
+  [記録 N9](../research/agents/agent-config-generation-notes-2.md#記録-n9--組み込みエージェントを宣言しなかったときの不具合)、[調査記録](../research/opencode/permission/builtin-agent-override.md)、
   [CHG-0017](../change/closed/0017-builtin-agent-restrictions.md)）。`system` は書かず、組み込みの
   プロンプトを使う（plan モードの指示は利用者のメッセージに付いて渡され、宣言しても残る）
 - **組み込みの方針を丸ごと写さない。** 足すのは deny と最小の allow だけ。`explore` の組み込みの
@@ -1284,12 +1290,13 @@ explore = "worker"      # 例
   スキルの一覧は引き続き足される
 - `permissions` は全体の規則の後ろに付き、後勝ちで効く。効果は `allow` / `ask` / `deny`。
   隔離版で全体から捨てた `ask` も、エージェントの規則で戻せる
-- 宣言したキーを差し替え、宣言から外したキーは[所有の規則](#配置済みの設定の所有)で消す。
-  生成器が書かないキー（`model` / `request` など）と、宣言も組み込みでもないエージェントは残す
+- 宣言したキーの差し替え・外したキーの削除・残すものは[所有の規則](#配置済みの設定の所有)が正本
 - 隔離起動（`ocs`）にも同じ定義が出る。通常版の `opencode.json` からは引き継がず、
   `common.toml` から作る（[隔離版の設定の書き出し方](sandbox/opencode-sandbox.md#エージェントとコマンド)）
 
 ### 配置済みの設定の所有
+
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
 
 `opencode.json` は OpenCode 自身や利用者も書くので、生成器は自分の持ち物だけを置き換え、
 宣言から外したものは持ち物の範囲で消す（所有の規則。状態ファイルは持たない）。
@@ -1339,20 +1346,18 @@ explore = "worker"      # 例
 3. 承認されたら、親がスキルの手順 3〜6 で単位ごとに `git add -- <パス>` と `git commit -m '<件名>' -m '<本文>'` を
    別々に実行する。差分は読み直さず、`git status --short` と `git diff --cached --name-only` で対象を確かめる
 
-- **承認の場を会話にする理由。** 確認画面を承認の場にすると、親が全文を示さずに先へ進めた
-  （[CHG-0013](../change/closed/0013-commit-agent-as-planner.md)）。会話で承認を求める形では、全文を示さないと
-  承認を求められないので、抜けがあっても利用者の目に見える。照合の仕組みは置かない
-  （[CHG-0014](../change/closed/0014-deterministic-commit-runner.md) は部品が多く、TUI で照合が止まった）
+- **承認の場を会話にする理由。** 会話で承認を求める形では、全文を示さないと承認を求められないので、
+  抜けがあっても利用者の目に見える。照合の仕組みは置かない
+  （確認画面を承認の場にした案と照合の仕組みの案を退けた経緯は[記録 N10](../research/agents/agent-config-generation-notes-2.md#記録-n10--コミットの確認で採らなかった案)）
 - 親がこの流れを知る手段は、`commit` の `description`（親の `subagent` ツールの一覧に出る）と commit スキル。
   スキルの手順 4 の既定（提示して承認を得る）をそのまま使い、上書きの指示は出さない
 - 承認の操作は、通常起動と `ocs` で 2 回（会話と `git commit` の確認画面）、`bypass` で 1 回（会話）
 - **docs の反映をコミットの前に置く理由。** コミットの後に促すと docs だけのコミットが続き、
   承認が 2 回になる。判断を親に置くのは、案件に書く経緯（決めたこと・見送ったこと）が差分に
-  現れず、差分だけを読む子には書けないため。子に「docs 未反映」を検出させる保険は、誤検出が
-  多いとみて入れていない（親が飛ばすと提示の前の 1 行が欠けるので、利用者の目に見える）
+  現れず、差分だけを読む子には書けないため。子に「docs 未反映」を検出させる保険は入れていない
+  （親が飛ばすと提示の前の 1 行が欠けるので、利用者の目に見える。理由は上の記録 N10）
 - **ADR・仕様・調査記録（B）は対象外。** 判断が重く、頼まれずに増やさない
-- **git の pre-commit hook や plugin の `git commit` 直前のゲートには置かない。** 前者はモデルを
-  動かせず利用者の手動コミットにも走る。後者は計画の承認後なので、docs を足すと提示し直しになる
+- **git の pre-commit hook や plugin の `git commit` 直前のゲートには置かない**（理由は上の記録 N10）
 
 **子の権限**（後勝ち）:
 
@@ -1435,9 +1440,8 @@ Copilot CLI の `/fleet` に相当するもの。依頼を並列に動かせる�
     allow に無いので、実行するたびに確認が出る（任意コード実行になるので allow に載せていない）
 - 1 つの波は 4 件までと指示している。子エージェントごとにモデルを呼ぶので、
   利用枠の消費は作業役の数だけ増える
-- コマンドは、コマンド用のディレクトリではなく設定の `commands` に出す。
-  スキルでは `~/.config/opencode/skills` が実際には走査されなかった実測があり
-  （[文脈の引き継ぎ](checkpoint.md)）、同じ置き場の扱いを当てにしない
+- コマンドは、コマンド用のディレクトリではなく設定の `commands` に出す
+  （スキルの置き場が走査されなかった実測は[記録 N11](../research/agents/agent-config-generation-notes-2.md#記録-n11--fleet-のコマンドの置き場)）
 - `[opencode.commands.<name>]` に書けるキーは `template`（必須）/ `description` /
   `agent` / `subagent`。**`template` に「`!` + バッククォート」は書けない**
   （展開時にシェルとして権限の確認なしに実行されるため。`apply` を止める）

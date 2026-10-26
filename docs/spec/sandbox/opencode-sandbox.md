@@ -99,6 +99,8 @@ flowchart TD
 
 ## 起動シーケンス
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](../guard/pi-guard.md#サンドボックス)。
+
 ```mermaid
 flowchart TD
     START(["ocs 実行"]) --> LOAD["rules.json から境界の素材を読む"]
@@ -397,8 +399,8 @@ flowchart LR
 | 置き場 | 中身 | なぜそこか |
 | --- | --- | --- |
 | `~/.local/state/opencode-sandbox/` | 境界の定義・Fence の TMPDIR・退避・目印 | 内側から見えず、重なる場所での起動も拒否する（[起動ディレクトリの制限](#起動ディレクトリの制限)）。chezmoi が apply で先に作る（[信頼の鎖](#信頼の鎖)） |
-| `~/.config/opencode-sandbox/` | 隔離版の `opencode.json`・`AGENTS.md` | 緩和設定を内側から広げられないようにする。書き手は常に外（[効く範囲](#制御ファイルの保護が効く範囲)） |
-| `XDG_DATA_HOME/opencode/` | DB・snapshot・shell の出力・ログ | 通常起動と共有する（下記） |
+| `~/.config/opencode-sandbox/` | 隔離版の `opencode.json`・`AGENTS.md`（OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中。pi は起動ごとの agent 置き場を使う。[pi のガード](../guard/pi-guard.md#サンドボックス)） | 緩和設定を内側から広げられないようにする。書き手は常に外（[効く範囲](#制御ファイルの保護が効く範囲)） |
+| `XDG_DATA_HOME/opencode/` | DB・snapshot・shell の出力・ログ（OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中） | 通常起動と共有する（下記） |
 
 - **境界の定義は起動ごとに書き、24 時間より古いものを次の起動で捨てる。**
   `execve` で置き換わるので自分では消せない
@@ -625,6 +627,8 @@ Fence や境界の素材を変えたとき、OpenCode や Fence を更新した�
 
 ## コマンドとフラグ
 
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](../guard/pi-guard.md#起動)。
+
 `ocs` が解釈しない引数は、そのまま OpenCode へ渡る（`ocs --continue`、`ocs -s <ID>` など）。
 Fence へは引数を並べて渡すので、引用の心配は無い。
 
@@ -723,12 +727,12 @@ Fence は mise の github backend で**版とチェックサムを固定**して
 | --- | --- |
 | セッション中に境界を変えられない | bwrap の名前空間はプロセス起動時に作られる。`/add-dir` 相当は無い |
 | コマンド単位の逃げ道が無い | プロセス単位で包む以上、`dangerouslyDisableSandbox` 相当は作れない |
-| 設定が通常起動と分かれる | 隔離版の設定は `~/.config/opencode-sandbox`。履歴（DB）は共有する |
+| 設定が通常起動と分かれる | OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。隔離版の設定は `~/.config/opencode-sandbox`。履歴（DB）は共有する |
 | 境界はエージェントから見えない | `ENOENT` を「存在しない」と誤診する。`AGENTS.md` で明示的に伝えている |
 | 起動が遅くなる | Fence の機能の検出など（[実測](../../research/opencode/permission/fence.md)。値は[補足記録](../../research/opencode/opencode-sandbox-spec-notes.md#起動時間の実測値)） |
 | 起動ディレクトリに `.opencode/` が作られる | 保護対象を塞ぐため。空のディレクトリで、`git status` には出ない |
-| **資格情報は境界内にある**（決めた例外） | 共有する DB が `credential` を持ち、内側から**平文で取り出せる**。無いとモデルへ繋げないため、[明示的な例外として受け入れた](../../change/closed/0004-opencode-sandbox.md#決定-明示的な例外として受け入れる2026-09-24)。見落としではない |
-| 他のプロジェクトの会話が読める | DB を共有するため。ADR-0012 で保証しないと決めた |
+| **資格情報は境界内にある**（決めた例外） | OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。共有する DB が `credential` を持ち、内側から**平文で取り出せる**。無いとモデルへ繋げないため、[明示的な例外として受け入れた](../../change/closed/0004-opencode-sandbox.md#決定-明示的な例外として受け入れる2026-09-24)。見落としではない |
+| 他のプロジェクトの会話が読める | OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。DB を共有するため。ADR-0012 で保証しないと決めた |
 | 開けた作業用ディレクトリの中の秘密は読める | `work_read` は秘密を置かない場所だけにする |
 | 起動ディレクトリがリポジトリの下位ディレクトリだと、そのリポジトリの `.git` が書ける | worktree と同じ扱いで共有 `.git` を開けるため（`hooks` と `config` は除く） |
 

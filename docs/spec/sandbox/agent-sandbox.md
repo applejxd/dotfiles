@@ -80,7 +80,7 @@ Claude の `/mnt` `/tmp` 系への `denyRead` / `allowRead` の指定は無く�
 | `[sandbox] claude_read_allow` | Claude | whitelist に開ける読み取りの穴 |
 | `[sandbox] claude_write_allow` | Claude | cwd + temp 以外に書き込みを許す場所 |
 | `[sandbox] claude_write_deny` | Claude | read は許すが write を禁止する対象。`deny` に**追加**される |
-| `[sandbox] shell_network_allow` | Claude・OpenCode の隔離起動 (`ocs`) | shell が実際に通信する先 (CDN 等) |
+| `[sandbox] shell_network_allow` | Claude・隔離起動 (`ocs` / `pis`) | shell が実際に通信する先 (CDN 等) |
 | `[sandbox] claude_network_strict` | Claude | 許可外ドメインを拒否する (v2.1.219+) |
 | `[sandbox] copilot_read_allow` | Copilot | Copilot が読める場所 (whitelist の本体) |
 | `[sandbox] copilot_write_allow` | Copilot | 同上の書き込み |
@@ -91,7 +91,7 @@ Claude の `/mnt` `/tmp` 系への `denyRead` / `allowRead` の指定は無く�
 
 **新しく足すキー**では、無印は「Claude と Copilot の両方に効く」を意味する。
 **片方にしか渡らない設定を無印で足してはいけない。** `[sandbox]` の既存の
-`seccomp_apply_path`（Claude のみ）と `shell_network_allow`（Claude と `ocs`）は
+`seccomp_apply_path`（Claude のみ）と `shell_network_allow`（Claude と `ocs` / `pis`）は
 無印でも Copilot に効かない例外で、上の表の「効く CLI」列が正しい。`[file]` の
 無印の `*_globs` も Claude と OpenCode 向けで、Copilot には `read_deny_globs` だけが
 渡る。
