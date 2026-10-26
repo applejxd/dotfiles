@@ -190,7 +190,7 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 
 3. [階層](agent-config-generation.md#階層)の表と、その下の根拠の注記を書き換える。
    隔離起動（`ocs`）の既定モデルは別の設定（`[opencode.sandbox] model_preference`）なので、
-   合わせるなら一緒に変える（[隔離起動（`ocs`）](agent-config-generation.md#隔離起動ocs)）
+   合わせるなら一緒に変える（[隔離起動（`ocs`）](opencode-config-generation.md#隔離起動ocs)）
 4. 計測や調べた数字を調査記録に残す。同じ問い（その階層にどのモデルを当てるか）の測り直しなら
    既存の記録に日付付きの節を足し、問いが変わるなら新しい記録にする。
    [調査記録の索引](../research/index.md)の行も直す

@@ -235,7 +235,7 @@ def test_bypass_cannot_launch_approval_based_workers():
     """★承認制の子は bypass の中でも確認で止まる。bypass 用の作業役へ寄せる。
 
     実測で拒否され、subagent ツールの一覧からも消える。
-    see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+    see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
     """
     task = generated()["agent"]["bypass"]["permission"]["task"]
     for name in ("general", "fleet-worker", "unknown-agent"):
@@ -401,7 +401,7 @@ def test_handwritten_builtin_definitions_follow_the_ownership_rule():
 
     V2 の ``system`` / ``hidden`` は宣言していないので消し、``request`` は残す。V2 で宣言した
     ``plan`` の V1 の定義は、生成器が書けるキーだけなので丸ごと消す。
-    see docs/spec/agent-config-generation.md#配置済みの設定の所有
+    see docs/spec/opencode-config-generation.md#配置済みの設定の所有
     """
     existing = {
         "agents": {
@@ -925,7 +925,7 @@ def _broken_guide() -> dict:
 
 
 # ★plugin のロードに失敗すると起動元の検査ごと消える (上流は fail-open)。
-# see docs/spec/agent-config-generation.md#rulesjson-が使えないとき
+# see docs/spec/opencode-config-generation.md#rulesjson-が使えないとき
 @pytest.mark.parametrize(
     "rules",
     [None, "{not json", "[]", _without("guarded_subagents"), _without("bypass_agents")],
@@ -1504,7 +1504,7 @@ def test_cli_json_is_not_registered_twice():
 
 # Windows と WSL の常駐サービスが同じポートだと 127.0.0.1 で衝突し、
 # 後から起動した側が「Timed out waiting for the background service」で止まる。
-# see docs/spec/agent-config-generation.md#常駐サービスのポート
+# see docs/spec/opencode-config-generation.md#常駐サービスのポート
 SERVICE_MODIFIER = ROOT / "home/dot_config/opencode/modify_private_service.json.py.tmpl"
 
 
@@ -1572,7 +1572,7 @@ def test_service_port_differs_from_wsl_only_on_windows():
 
 # guide plugin の各役割を 1 つだけ有効にした common。
 # index.js はどれか 1 つでも有効なら要り、tui.ts は説明の toast (ask_description) にだけ要る。
-# see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
+# see docs/spec/opencode-config-generation.md#plugin-層-guide-plugin
 GUIDE_FEATURES = {
     "guide": {"opencode": {"shell": {"guide": [{"pattern": "^cat ", "message": "read へ"}]}}},
     "read_filter": {"file": {"read_deny_globs": ["**/.env"]}},

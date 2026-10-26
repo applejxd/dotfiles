@@ -873,7 +873,7 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 
 | 置き場 | 何を置くか | いつ読まれるか | 注意 |
 | --- | --- | --- | --- |
-| `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export PIS_EXTRA_READ="$HOME/dataset:/data2"` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る。`PIS_EXTRA_READ` は読み取り専用で、詳細は [環境変数での追加](sandbox/opencode-sandbox.md#環境変数での追加) |
+| `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export PIS_EXTRA_READ="$HOME/dataset:/data2"` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る。`PIS_EXTRA_READ` は読み取り専用で、詳細は [環境変数での追加](sandbox/fence-boundary.md#環境変数での追加) |
 | `~/.config/mise/conf.d/*.toml` | `mise` の設定のマシン固有分 | `mise` が設定を読むとき | chezmoi の管理外。`[env]` は mise を有効化したシェルでしか効かない（**推測**。公式 docs では未確認） |
 | `<起動ディレクトリ>/.opencode/sandbox.toml` | リポジトリごとの `read`・`write`・`network_allow` | `pis` の起動時 | パスがマシン依存なら、1 行目の環境変数のほうがよい（環境変数で足せるのは読み取りだけ） |
 

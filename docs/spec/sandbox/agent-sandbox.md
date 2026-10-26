@@ -551,7 +551,7 @@ disabled.` を出す。
 > **版は固定していない。** `sandbox-runtime` は research preview で、
 > README が「API と設定フォーマットは変わりうる」と明記している。
 > `latest` 経由で Claude に効く（OpenCode の `ocs` は Fence に替えた。
-> [OpenCode 隔離起動のアーキテクチャ](opencode-sandbox.md#版の扱い)）。
+> [OpenCode 隔離起動のアーキテクチャ](fence-boundary.md#版の扱い)）。
 > 更新時は「拒否すべきものが拒否される」ことを確かめる（deny・直接通信・
 > Unix socket・cwd 違い・並行実行）。Claude 側は `applyPath` が実在しなくなると**設定が出力されず自動検出へ戻る**
 > ため、seccomp が黙って無効化されうる。
@@ -827,7 +827,7 @@ Claude との差で特に重要なもの:
   `$HOME` が既定で未許可であるため実害は小さいが、ルールが効いているか
   どうかは **Notes 節を必ず確認する**こと。
   後から作られると困るもの（`~/.local/state/opencode-sandbox`）は、
-  chezmoi が apply で先に作っておく（[信頼の鎖](opencode-sandbox.md#信頼の鎖)）。
+  chezmoi が apply で先に作っておく（[信頼の鎖](fence-boundary.md#信頼の鎖)）。
 - `/sandbox policy` は cwd ごとに解決されるため、確認したいディレクトリで
   実行すること。
 

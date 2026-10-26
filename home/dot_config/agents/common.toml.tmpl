@@ -271,7 +271,7 @@ deny = [
 # OpenCode だけ。deny の全項目を 3 つのどれかに分類し、静的 deny の前に説明付きで止める。
 # 分類に漏れ・重複・deny に無い項目があると生成が止まる。deny を足したら必ずここにも足す。
 # ★deny の一覧自体は変えない (plugin が壊れても静的 deny が止める)。
-# see docs/spec/guard/agent-command-policy.md#opencode-の-deny-の説明前段停止
+# see docs/spec/guard/opencode-guard.md#opencode-の-deny-の説明前段停止
 [bash.deny_guide]
 # 代替が無いもの (利用者に頼む)。迷ったらここ
 user_message = "この操作はエージェントには許可されていません。迂回せず、実行してほしいコマンドと理由を利用者に示してください。"
@@ -402,7 +402,7 @@ message = "キャッシュの削除は許可されていません (再取得に�
 #   (等価な保護は [sandbox] deny と check_file_read.py が担う)。
 #   OpenCode へは read / edit の permission rule として出る。
 #   `**` 記法は OpenCode に無いため generate.py が `*` 主体へ変換する
-#   (see docs/spec/agent-config-generation.md 「glob の記法差」)。
+#   (see docs/spec/opencode-config-generation.md 「glob の記法差」)。
 #
 # ★allow のリスト (下の claude_read_allow) だけは OpenCode へ出さない。
 #   OpenCode は allow が既定なので同じ意味の規則が増えるだけになる。
@@ -1594,7 +1594,7 @@ websearch = false
 {{- if and (hasKey .chezmoi "os") (eq .chezmoi.os "windows") }}
 
 # 常駐サービスのポート。WSL と同じ番号だと 127.0.0.1 で衝突する
-# see docs/spec/agent-config-generation.md#常駐サービスのポート
+# see docs/spec/opencode-config-generation.md#常駐サービスのポート
 [opencode.service]
 port = 4098
 {{- end }}
@@ -1638,7 +1638,7 @@ second_opinion = "gpt-6-astra"
 # ★[claude] mcp_deny も渡さない。OpenCode のツール名は `<server>_<tool>` で
 #   Claude の `mcp__<server>__<tool>` と別体系のため、機械変換すると
 #   実在しない名前を deny したまま気付けなくなる。
-# see docs/spec/agent-config-generation.md 「OpenCode へ渡さないもの」
+# see docs/spec/opencode-config-generation.md 「OpenCode へ渡さないもの」
 
 # OpenCode のカスタムエージェント (V1 の「モード」に相当。トップレベルの mode は非推奨)。
 # ★bypass = true は generate.py が読む印で opencode.json には出ない。印のあるエージェントは
@@ -1652,11 +1652,11 @@ mode = "primary"
 bypass = true
 # 起動できる子の許可リスト。一覧に無い子 (承認制の general / fleet-worker、リポジトリや
 # plugin が足す子) は確認で止まるので呼ばせない。子を足すときはここも見直す。
-# see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+# see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
 permission = { task = { "*" = "deny", bypass-worker = "allow", bypass-fleet-worker = "allow", explore = "allow", review = "allow", commit = "allow" } }
 
 # bypass からだけ呼べる子エージェント (task は V2 の subagent)。
-# see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+# see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
 [opencode.agent.bypass-worker]
 description = "bypass から起動する作業用の子エージェント。通常の確認 (ask) を無確認で通す"
 mode = "subagent"
@@ -1665,14 +1665,14 @@ permission = { task = "deny" }
 
 # 親が bypass のとき、作業ツリーの外を読む確認 (read / grep / glob) を plugin が allow にする子。
 # bypass の task の allow の部分集合で、bypass = true のエージェントは書けない (generate.py が検査)。
-# see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+# see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
 [opencode.bypass_children]
 agents = ["explore", "review", "commit"]
 
 # V2 形式のエージェント定義 (opencode.json の agents へ出す)。モデルは
 # [opencode.model.agents] で階層を割り当てる (ここに model は書かない)。
 # system は組み込みの基底プロンプトを置き換える。permissions は全体の規則の後ろに付く。
-# see docs/spec/agent-config-generation.md#子エージェント
+# see docs/spec/opencode-config-generation.md#子エージェント
 [opencode.agents.commit]
 description = "変更を読み、論理単位ごとの対象ファイルとコミットメッセージ全文 (計画) を返す。ステージもコミットもしない。呼ぶ前に、docs/change/ があるリポジトリでは commit スキルの「コミット前の docs 反映」を親が済ませる。親は差分を読まずにこれへ任せる。返された計画の全文 (対象とメッセージ) を commit スキルの承認時の提示の形で返答に示し、利用者の承認を待って返答を終える (件名だけに縮めない。承認前にステージやコミットをしない)。承認されたら commit スキルの手順 3〜6 に従い、差分は読み直さずに単位ごとに git add -- <パス> と git commit -m '<件名>' -m '<本文>' を別々に実行する。shell は同じ応答に並べず、完了を待って 1 つずつ実行する (並べると .git/index.lock で失敗する)"
 mode = "subagent"
@@ -1739,7 +1739,7 @@ permissions = [
 ]
 
 # 組み込みの探索役。system は書かない (組み込みのプロンプトを使う)。全体の規則が組み込みの
-# 拒否を上書きするので、拒否をここで並べ直す。see docs/spec/agent-config-generation.md#子エージェント
+# 拒否を上書きするので、拒否をここで並べ直す。see docs/spec/opencode-config-generation.md#子エージェント
 [opencode.agents.explore]
 description = "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). When calling this agent, specify the desired thoroughness level: \"quick\" for basic searches, \"medium\" for moderate exploration, or \"very thorough\" for comprehensive analysis across multiple locations and naming conventions. 読み取り専用（read / glob / grep / webfetch / websearch）。Git の履歴やコマンドの実行が要る調査は親へ返す。"
 mode = "subagent"
@@ -1752,7 +1752,7 @@ permissions = [
 
 # 組み込みの計画役。system は書かない。★restate_global_deny は生成時だけのキーで、全体の
 # edit / shell の deny をこの後ろへ写す (計画ファイルの allow で秘密の deny を緩めないため)。
-# see docs/spec/agent-config-generation.md#子エージェント
+# see docs/spec/opencode-config-generation.md#子エージェント
 [opencode.agents.plan]
 description = "Read-only agent for exploring the codebase and planning work before implementation."
 mode = "primary"
@@ -1767,7 +1767,7 @@ permissions = [
 restate_global_deny = ["edit", "shell"]
 
 # /fleet の作業役。編集とシェルは全体の規則のまま (承認制)。同じ作業ツリーを共有するので
-# 担当ファイルは親が割り当てる。see docs/spec/agent-config-generation.md#並列作業fleet
+# 担当ファイルは親が割り当てる。see docs/spec/opencode-config-generation.md#並列作業fleet
 [opencode.agents.fleet-worker]
 description = "/fleet の作業役。親が割り当てた 1 つの作業を、指定された担当ファイルの範囲で実装し、確認して結果を返す。コミットはしない。/fleet 以外から直接使わない"
 mode = "subagent"
@@ -1810,7 +1810,7 @@ permissions = [
 # bypass の /fleet の作業役。指示と禁止は fleet-worker と同じで、ほかは通常の確認を無確認で通す。
 # ★bypass = true が「bypass からだけ起動できる」印 (外すと build からも起動できる)。
 # ★fleet-worker の deny を足したらここにも足す (テストが突き合わせる)。
-# see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+# see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
 [opencode.agents.bypass-fleet-worker]
 description = "bypass の /fleet の作業役。親が割り当てた 1 つの作業を、指定された担当ファイルの範囲で実装し、確認して結果を返す。通常の確認 (ask) を無確認で通す。コミットはしない。/fleet 以外から直接使わない"
 mode = "subagent"
@@ -1891,14 +1891,14 @@ pi = "read-sed-n"
 # ★対象は [pi.shell] allow と揃えること。allow を増やすならここも足し、
 #   引数でファイルへ書けるオプション (git log の --output など) も点検して下のように塞ぐ。
 # see docs/change/closed/0002-opencode-ask-by-default.md 「段階 4a」
-# see docs/spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形
+# see docs/spec/guard/opencode-guard.md#opencode-の-allow-したコマンドの書き込み形
 [[opencode.shell.guide]]
 pattern = '(^|&&|\|\||;|\n)\s*(wc|grep\s+-n|git\s+log|uv\s+pip\s+list|docker\s+ps)\b[^\n]*>(?!&\s*(\d+|-)(?=$|[\s;|&)])|>?\s*/dev/null(?=$|[\s;|&)]))'
 message = "allow されたコマンドの出力をリダイレクトで書き込まないでください。ファイルを作る・書き換えるときは write / edit ツールを使ってください。"
 
 # allow の `git log *` に当たる `git log --output=<パス>` を止める (CHG-0017 段 5)。
 # ★当てるのは git log で始まる部分 (次の区切りまで) だけ。引用の中は飛ばす。
-# see docs/spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形
+# see docs/spec/guard/opencode-guard.md#opencode-の-allow-したコマンドの書き込み形
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n(`{])\s*git[ \t]+log(?=[ \t]|\\\n)(?:[^;&|\n'"\\]|\\[\s\S]|'[^']*'|"(?:[^"\\]|\\[\s\S])*")*?(?:[ \t]|\\\n)['"]?--output['"]?(=|[ \t])'''
 message = "git log の --output でファイルへ書き込まないでください。ファイルを作るときは write ツールを使ってください。"
@@ -1922,7 +1922,7 @@ pi = "write-heredoc-script"
 # plugin の execute.before が先に止めて message を返す。
 # ★ocs でも効く (drop_shell は permission のフィルタで guide は対象外)。
 # ★`uv pip ...` は行頭が uv なので当たらない。poetry / pipenv は止めない。
-# see docs/spec/guard/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導
+# see docs/spec/guard/opencode-guard.md#opencode-の-pip-誘導と-rm-の誘導
 # see docs/research/opencode/permission/early-guard.md
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n])[ \t]*((uv[ \t]+run|mise[ \t]+exec[ \t]+--)[ \t]+)?(pip3?(\.\d+)?|python[0-9.]*[ \t]+-m[ \t]*pip3?(\.\d+)?)([ \t]|$)'''
@@ -1934,7 +1934,7 @@ message = "pip は使わないでください。依存の追加は `uv add <pkg>
 # ★ocs の中でも効く (ADR-0012 の部分変更)。通常の掃除 (.tmp/ や build の削除) は止めない。
 # ★prose (git commit -m の本文) は上の pip と同じ unless で外す。unless はコマンドが
 #   git / gh の 1 コマンドだけのときに限る (連結・置換を含めると見送らない)。
-# see docs/spec/guard/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導
+# see docs/spec/guard/opencode-guard.md#opencode-の-pip-誘導と-rm-の誘導
 [[opencode.shell.guide]]
 pattern = '''(^|[;&|\n])[ \t]*rm[ \t]+([^\s;&|]+[ \t]+)*["']?(\./)?([^\s;&|"']*/)?\.git(/[^\s;&|"']*)?["']?(?=[\s;&|]|$)'''
 unless = '''^\s*(git|gh)\s(?=[^\n]*\s-{1,2}(m|am|message|body|title)[\s=])(?:[^;&|\n'"`$()<>\\]|\\[^\n]|'[^']*'|"(?:[^"\\`$]|\\.|\$\(cat <<-?'(\w+)'\n[\s\S]*?\n\3\n\s*\))*")*$'''
@@ -1967,7 +1967,7 @@ runtime_path = "~/.local/share/mise/installs/github-fencesandbox-fence/latest/fe
 
 # 読み取りは既定で拒否し、ここ (と work_read) に並べた所だけ開ける。
 # 無いパスは起動時に落とす。
-# see docs/spec/sandbox/opencode-sandbox.md#境界の中身
+# see docs/spec/sandbox/fence-boundary.md#境界の中身
 read = [
   "~/.opencode",
   "~/.local/share/mise",
@@ -2018,7 +2018,7 @@ unsafe_workspace = [
 
 # 配備済みの制御ファイルの置き場。そのもの・祖先・子孫のどこでも起動せず、
 # .opencode/sandbox.toml の write とも重ねさせない。ここの編集は ocs の外で行う。
-# see docs/spec/sandbox/opencode-sandbox.md#起動ディレクトリの制限
+# see docs/spec/sandbox/fence-boundary.md#起動ディレクトリの制限
 control_dirs = [
   "~/.local/share/ocs",
   "~/.local/bin",
@@ -2076,7 +2076,7 @@ protected = [
   "home/dot_config/mise",
   # ★.opencode/plugins は置かれると**自動ロードされる**。Fence の denyWrite は
   #   無いパスに効かないので、ランチャーが空のディレクトリを先に作る。
-  # see docs/spec/sandbox/opencode-sandbox.md#保護対象denywrite
+  # see docs/spec/sandbox/fence-boundary.md#保護対象denywrite
   ".opencode",
 ]
 
@@ -2156,7 +2156,7 @@ provider = "github-copilot"
 model = "claude-sonnet-5.5"
 
 # プロジェクト個別の追加許可はここに書かず、<起動ディレクトリ>/.opencode/sandbox.toml に書く。
-# see docs/spec/sandbox/opencode-sandbox.md#プロジェクトごとの追加
+# see docs/spec/sandbox/fence-boundary.md#プロジェクトごとの追加
 
 [opencode.sandbox.policies]
 # グローバル設定に置くとプロジェクト設定から解除できない。
@@ -2177,7 +2177,7 @@ deny = [
 #   書かれているが 2.0.12 の実測では他の行だけ生きる)。足す前に実在を確認する:
 #     strings -n 4 ~/.opencode/bin/opencode | grep -x '<id>'
 # 無効化は false か "none"。<leader> は既定 ctrl+x。
-# see docs/spec/agent-config-generation.md 「キーバインド」
+# see docs/spec/opencode-config-generation.md 「キーバインド」
 [opencode.keybinds]
 # ★app.exit の既定は "ctrl+c,ctrl+d,<leader>q"。ctrl+c を外さずに
 #   session.interrupt へ渡すと Ctrl+C でアプリごと終了する。
@@ -2230,7 +2230,7 @@ max_lines = 8
 # ★command は argv 配列で、シェルは通らない。`$FILE` が絶対パスに置換される。
 # ★組み込みに無い名前は command と extensions の両方が要る
 #   (片方だけだと OpenCode が黙って無視する)。generate.py が検査して止める。
-# see docs/spec/agent-config-generation.md 「整形 (formatter)」
+# see docs/spec/opencode-config-generation.md 「整形 (formatter)」
 
 # markdownlint-cli2 は組み込みに無い。mise の "npm:markdownlint-cli2" が
 # PATH へ shim を置くので素の名前で呼べる。未導入のマシンでは OpenCode が

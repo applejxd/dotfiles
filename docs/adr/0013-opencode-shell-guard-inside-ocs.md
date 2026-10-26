@@ -12,7 +12,7 @@
 > 誘導文を付けられない）は、同日に解消した。決定は変えない。plugin の `tool.execute.before`
 > （permission より前に走る）で pip の規則を判定し、例外で説明付きに止める
 > （[実測](../research/opencode/permission/early-guard.md)、
-> [仕様](../spec/guard/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導)）。
+> [仕様](../spec/guard/opencode-guard.md#opencode-の-pip-誘導と-rm-の誘導)）。
 > 静的 deny は変えていない。以下の本文は決定当時のまま残している。
 
 ## コンテキスト
@@ -48,7 +48,7 @@ ADR-0012 の「境界の内側では rm 等を確認しない」を、次の範�
 
 実装は guide 規則で行う。`ocs` が捨てるのは permission であり guide 規則ではないため、
 ocs の内側にも同じ規則が効く（実機で確認済み。
-[仕様](../spec/guard/agent-command-policy.md#opencode-の-pip-誘導と-rm-の誘導)）。
+[仕様](../spec/guard/opencode-guard.md#opencode-の-pip-誘導と-rm-の誘導)）。
 
 ## 検討した選択肢
 
@@ -67,7 +67,7 @@ ocs の内側にも同じ規則が効く（実機で確認済み。
 
 - **利点**: 止める範囲を具体例に限れる。メッセージで代替案を示せる。ocs の整理を戻さない
 - **欠点**: plugin が読み込めないと効かない（その場合の挙動は
-  [rules.json が使えないとき](../spec/agent-config-generation.md#rulesjson-が使えないとき)）。
+  [rules.json が使えないとき](../spec/opencode-config-generation.md#rulesjson-が使えないとき)）。
   bypass エージェントは対象外
 
 ## 結果

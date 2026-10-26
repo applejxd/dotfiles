@@ -3,7 +3,7 @@
 <!-- 現在の総合判断は docs/change/ の候補比較表が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
-> **現行の仕様**: [並列作業（/fleet）](../../spec/agent-config-generation.md#並列作業fleet)
+> **現行の仕様**: [並列作業（/fleet）](../../spec/opencode-config-generation.md#並列作業fleet)
 >
 > **後続の観測**: 作業役の階層は 2026-09-30 に `light` から `worker` へ改名し、モデルを
 > Sonnet 5.5 に切り替えた（[階層のモデルの計測](tier-models.md)）。下の `claude-opus-5.5#medium` は当時のもの

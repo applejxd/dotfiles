@@ -1256,7 +1256,7 @@ def opencode_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
 
 # 前段停止の「セグメント先頭」と語境界 (単一の空白・区切り・末尾)。
 # 引用符・括弧・``#``・``\``・``<<``・単語の ``{`` を含むコマンドは前段で止めない。
-# see docs/spec/guard/agent-command-policy.md#opencode-の-deny-の説明前段停止
+# see docs/spec/guard/opencode-guard.md#opencode-の-deny-の説明前段停止
 DENY_GUIDE_SEGMENT_START = r"(^|&&|\|\||[;|\n])[ \t]*"
 DENY_GUIDE_COMMAND_END = r"(?= |$|[;|\n]|&&)"
 DENY_GUIDE_UNLESS = r"""['"`\\#()]|<<|(^|[\s;&|])\{(\s|$)"""
@@ -1390,7 +1390,7 @@ def _bash_deny_guide_rules(common: dict[str, Any]) -> list[dict[str, Any]]:
 
     全 deny が分類のどれか 1 つに属さないと生成を止める。通常版と隔離版の最終の静的 deny から
     決め、隔離版で捨てた項目に ``not_isolated``、覆しうるエージェントに ``except_agents`` を付ける。
-    see docs/spec/guard/agent-command-policy.md#opencode-の-deny-の説明前段停止
+    see docs/spec/guard/opencode-guard.md#opencode-の-deny-の説明前段停止
     """
     bash = common.get("bash", {})
     cfg = bash.get("deny_guide")
@@ -1528,7 +1528,7 @@ def opencode_guarded_subagents(common: dict[str, Any]) -> list[str]:
     """bypass からだけ起動させる子エージェント名 (bypass の印があり、子として使えるもの)。
 
     ``opencode.json`` の全体の deny と ``rules.json`` の ``guarded_subagents`` の元。
-    see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+    see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
     """
     return [
         name
@@ -1560,7 +1560,7 @@ def opencode_bypass_child_agents(common: dict[str, Any]) -> list[str]:
     (``[opencode.bypass_children] agents``)。``rules.json`` の ``bypass_child_agents``。
 
     bypass の起動許可リストからは導出せず、明示した一覧を検査する。
-    see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+    see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
     """
     declared = (common.get("opencode", {}).get("bypass_children") or {}).get("agents", [])
     where = "[opencode.bypass_children] agents"
@@ -1581,7 +1581,7 @@ def opencode_subagent_guards(common: dict[str, Any]) -> list[dict[str, str]]:
     全体の permission で起動を deny する。エージェントごとの規則は全体の規則の
     後ろに付き、最後に一致した規則が勝つので、``task`` の ``*`` を allow にした
     エージェント (``bypass``) の中でだけこの deny が上書きされる (実測)。
-    see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+    see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
     """
     return [
         {"action": "subagent", "resource": name, "effect": "deny"}
@@ -1732,7 +1732,7 @@ def opencode_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     ここでは共通の許可リストだけを出す。
 
     **Fence の有無に関係なく返す。** 実体が無いときはランチャーが起動を断る。
-    see docs/spec/sandbox/opencode-sandbox.md#境界の中身
+    see docs/spec/sandbox/fence-boundary.md#境界の中身
     """
     cfg = common.get("opencode", {}).get("sandbox")
     if not cfg or not cfg.get("enabled"):
@@ -2557,7 +2557,7 @@ def opencode_guide_server_needed(common: dict[str, Any], *, tui: bool) -> bool:
     1 つでも有効なら要る。説明は
     TUI 側の toast でしか見えないので、``tui`` が偽 (TUI plugin が読まれない
     隔離版) なら数えない。
-    see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
+    see docs/spec/opencode-config-generation.md#plugin-層-guide-plugin
     """
     return bool(
         opencode_guide_rules(common)
@@ -2590,7 +2590,7 @@ def merge_opencode_plugins(existing_plugins: Any, common: dict[str, Any]) -> lis
 
 
 # OpenCode の組み込みエージェント。宣言していなくても所有の規則で管理する ID に含める。
-# see docs/spec/agent-config-generation.md#配置済みの設定の所有
+# see docs/spec/opencode-config-generation.md#配置済みの設定の所有
 OPENCODE_BUILTIN_AGENTS = ("build", "plan", "general", "explore", "compaction", "title", "summary")
 
 # [opencode.agent.<id>] (V1) から opencode.json へ書けるキー。所有の規則で生成器の持ち物になる。
@@ -2681,7 +2681,7 @@ def opencode_models(common: dict[str, Any]) -> dict[str, Any] | None:
     known = set(opencode.get("agents") or {}) | set(OPENCODE_BUILTIN_AGENTS)
     undeclared = sorted(set(assigned) - known)
     if undeclared:
-        # see docs/spec/agent-config-generation.md#配置済みの設定の所有
+        # see docs/spec/opencode-config-generation.md#配置済みの設定の所有
         raise SystemExit(
             "opencode.model.agents に、[opencode.agents] で宣言していない組み込み以外の"
             " エージェントは書けない (モデルだけの定義は基底の全部許可で動く): "
@@ -2745,7 +2745,7 @@ def restated_global_denies(
 
     エージェントの規則は全体の後ろに付き後勝ちなので、エージェントの allow / ask が
     全体の deny (秘密ファイルや危険なコマンド) を上書きする。後ろに並べ直して deny に戻す。
-    see docs/spec/agent-config-generation.md#子エージェント
+    see docs/spec/opencode-config-generation.md#子エージェント
     """
     return [
         dict(rule)
@@ -2762,7 +2762,7 @@ def opencode_v2_agents(
     V1 の ``[opencode.agent]`` と同じ ID は禁止する (両方に書いたときの結合順は未確認)。
     ``model`` はここでは受けない。PC ごとのプロバイダで変わるので階層で割り当てる。
     ``global_rules`` は ``restate_global_deny`` の写し元 (省略時は通常版の全体の規則)。
-    see docs/spec/agent-config-generation.md#子エージェント
+    see docs/spec/opencode-config-generation.md#子エージェント
     """
     opencode = common.get("opencode", {})
     declared = opencode.get("agents") or {}
@@ -2843,7 +2843,7 @@ def own_opencode_agents(
     いないものを消し、宣言と逆の形式のエントリを消す。逆の形式に生成器が書かないキーが
     残っていたら、黙って消さずに生成を止める。``merge_opencode_agents`` /
     ``merge_opencode_v2_agents`` の前に通す。
-    see docs/spec/agent-config-generation.md#配置済みの設定の所有
+    see docs/spec/opencode-config-generation.md#配置済みの設定の所有
     """
     opencode = common.get("opencode", {})
     declared_v1 = {
@@ -2916,7 +2916,7 @@ def _reverse_form_message(name: str, keys: list[str], *, v2: bool) -> str:
             "あると V1 の定義が丸ごと捨てられる。キーを opencode.json の"
             f" agent.{name} へ移すか (#variant 付きの model は V1 では効かない)、エージェントを"
             " [opencode.agents] へ移して model を [opencode.model.agents] で割り当ててから、"
-            f"agents.{name} を消す。see docs/spec/agent-config-generation.md#配置済みの設定の所有"
+            f"agents.{name} を消す。see docs/spec/opencode-config-generation.md#配置済みの設定の所有"
         )
     return (
         f"opencode.json の agent.{name} (V1) に生成器が書かないキーがある: {found}。"
@@ -2924,7 +2924,7 @@ def _reverse_form_message(name: str, keys: list[str], *, v2: bool) -> str:
         "丸ごと捨てられている。model は [opencode.model.agents] で割り当てるか"
         f" opencode.json の agents.{name}.model へ、ほかのキーは opencode.json の"
         f" agents.{name} へ移してから、agent.{name} を消す。"
-        "see docs/spec/agent-config-generation.md#配置済みの設定の所有"
+        "see docs/spec/opencode-config-generation.md#配置済みの設定の所有"
     )
 
 
@@ -2939,7 +2939,7 @@ def opencode_commands(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
     ``!`` + バッククォートはコマンドの展開時にシェルとして実行され、権限の確認を
     通らない (公式)。引数を混ぜると任意コードの入口になるので、書かせない。
-    see docs/spec/agent-config-generation.md#並列作業fleet
+    see docs/spec/opencode-config-generation.md#並列作業fleet
     """
     out: dict[str, dict[str, Any]] = {}
     for name, command in (common.get("opencode", {}).get("commands") or {}).items():
@@ -3007,7 +3007,7 @@ def merge_opencode_providers(
 
 
 # experimental.policies のうち生成器が持つ statement の action (毎回置き換える)。
-# see docs/spec/agent-config-generation.md#配置済みの設定の所有
+# see docs/spec/opencode-config-generation.md#配置済みの設定の所有
 OPENCODE_OWNED_POLICY_ACTIONS = frozenset({"permission", "provider.use"})
 
 
@@ -3108,7 +3108,7 @@ def build_opencode_keybinds(common: dict[str, Any]) -> dict[str, Any] | None:
     キーバインドは **``cli.json`` 側にしか無い**。``opencode.json`` へ書いても
     読まれないので、誤配置に気づけない。
     未宣言は None、空テーブルは ``{}`` (既存を空で置き換える) と区別する。
-    see docs/spec/agent-config-generation.md 「キーバインド」
+    see docs/spec/opencode-config-generation.md 「キーバインド」
     """
     keybinds = common.get("opencode", {}).get("keybinds")
     if keybinds is None:
@@ -3157,7 +3157,7 @@ def merge_opencode_service(existing: dict[str, Any], common: dict[str, Any]) -> 
     """``~/.config/opencode/service.json`` (常駐サービスの設定) の ``port`` だけを揃える。
 
     ``password`` などは OpenCode が書くので触らない。
-    see docs/spec/agent-config-generation.md#常駐サービスのポート
+    see docs/spec/opencode-config-generation.md#常駐サービスのポート
     """
     out = dict(existing)
     service = (common.get("opencode") or {}).get("service") or {}
@@ -3177,7 +3177,7 @@ def merge_opencode_config(existing: dict[str, Any], common: dict[str, Any]) -> d
     project scope の saved approval として別に保存され、このファイルには
     入らないので、置き換えても手元の承認は失われない。
     ``agent`` / ``agents`` / ``experimental.policies`` は所有の規則で古い値を消す。
-    see docs/spec/agent-config-generation.md#配置済みの設定の所有
+    see docs/spec/opencode-config-generation.md#配置済みの設定の所有
     """
     out: dict[str, Any] = {"$schema": OPENCODE_SCHEMA}
     out.update(existing)

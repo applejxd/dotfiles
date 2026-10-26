@@ -1,6 +1,6 @@
 # CHG-0018: OpenCode の権限を「共通の禁止」と「役割ごとの権限」に分けて生成する
 
-> この文書は当時の記録。現在の仕様は [`spec/agent-config-generation.md` の配置済みの設定の所有](../../spec/agent-config-generation.md#配置済みの設定の所有)。
+> この文書は当時の記録。現在の仕様は [`spec/opencode-config-generation.md` の配置済みの設定の所有](../../spec/opencode-config-generation.md#配置済みの設定の所有)。
 > 役割ごとのプロファイルの設計は [CHG-0020](../0020-pi-migration.md)（pi への移行）に引き継いだ。
 
 - **状態**: Done
@@ -191,7 +191,7 @@
     上書きする）ので、V2 の宣言の `description` 必須の検査を組み込みには外す
   - `experimental.policies` を、`models` の有無に関係なく書く
   - V1 の宣言は空にするが、V1 を扱う処理は元に戻すときに備えて残す
-  - P は実装した（2026-10-08、[配置済みの設定の所有](../../spec/agent-config-generation.md#配置済みの設定の所有)）。
+  - P は実装した（2026-10-08、[配置済みの設定の所有](../../spec/opencode-config-generation.md#配置済みの設定の所有)）。
     設計に無かった追加が 2 つある
     - 逆の形式の V2 のエントリにある `model` のうち、値が階層のモデルのものは生成器の持ち物として
       消す（既存のモデルの整理と同じ考え方）。これが無いと、段 4 で V2 に移した `bypass` 系に

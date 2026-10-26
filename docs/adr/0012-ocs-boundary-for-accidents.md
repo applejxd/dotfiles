@@ -97,9 +97,9 @@
   起動ディレクトリとその Git の根から相対で解く保護対象として守り、配備先は重なる場所での起動と
   重なる `write` の拒否で守る。精査していない `.opencode/sandbox.toml` の `write` で Git の根の外の
   別の場所を開けた場合、そこにある source state は対象外
-  （[制御ファイルの保護が効く範囲](../spec/sandbox/opencode-sandbox.md#制御ファイルの保護が効く範囲)）
+  （[制御ファイルの保護が効く範囲](../spec/sandbox/fence-boundary.md#制御ファイルの保護が効く範囲)）
 - **起動前の退避**: うっかりで壊した未コミットの変更を戻せる（Git リポジトリの中で起動したとき。
-  [起動前の退避](../spec/sandbox/opencode-sandbox.md#起動前の退避)）
+  [起動前の退避](../spec/sandbox/fence-boundary.md#起動前の退避)）
 - **境界を張れないときは起動しない**
 
 ### 保証しないもの（非目的）

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs"
 // 設定ディレクトリ直下で自動探索され、明示指定と二重にロードされる。
 // see docs/research/opencode/plugin/loading.md
 // ★ここから setup までで例外を投げないこと。ロードに失敗すると起動元の検査ごと消える。
-// see docs/spec/agent-config-generation.md#rulesjson-が使えないとき
+// see docs/spec/opencode-config-generation.md#rulesjson-が使えないとき
 function loadRules() {
   try {
     const r = JSON.parse(readFileSync(new URL("./rules.json", import.meta.url), "utf8"))
@@ -62,7 +62,7 @@ const compiled =
   ) ?? []
 
 // 静的 deny の項目ごとの説明。execute.before だけで使う。
-// ★前段は静的 deny の部分集合に限る。仕組みは docs/spec/guard/agent-command-policy.md#opencode-の-deny-の説明前段停止
+// ★前段は静的 deny の部分集合に限る。仕組みは docs/spec/guard/opencode-guard.md#opencode-の-deny-の説明前段停止
 const denyGuideAgents = section("deny_guide_agents", (r) => {
   if (r.deny_guide === undefined) return new Set()
   const agents = names(r.deny_guide_agents)
@@ -121,7 +121,7 @@ const bypassNames = names(rules?.bypass_agents)
 const bypass = bypassNames ?? new Set()
 
 // bypass からだけ起動させる子エージェント。
-// see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+// see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
 const guarded = names(rules?.guarded_subagents)
 const guardKnown = bypassNames !== null && guarded !== null
 if (rules && !guardKnown) {
@@ -132,7 +132,7 @@ const upgradesAsk = (e) => e.effect === "ask" && bypass.has(e.agent)
 
 // 親 (1 段だけ) が bypass のとき、作業ツリーの外を読む確認 (read / grep / glob) を
 // allow にする子。読めない・空なら、この引き上げだけをしない (ask のまま)。
-// see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+// see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
 const bypassChildren = names(rules?.bypass_child_agents) ?? new Set()
 if (rules && !names(rules.bypass_child_agents)) {
   console.error("[guide] rules.json の bypass_child_agents を使えない")
@@ -161,7 +161,7 @@ async function parentIsBypass(ctx, e) {
 
 function guardSubagent(e) {
   if (e.effect === "deny") return
-  // 一覧が読めないときは止めない (see docs/spec/agent-config-generation.md#rulesjson-が使えないとき)
+  // 一覧が読めないときは止めない (see docs/spec/opencode-config-generation.md#rulesjson-が使えないとき)
   if (!guardKnown) return
   const resources = e.resources ?? []
   if (bypass.has(e.agent)) return
@@ -181,7 +181,7 @@ const toSlash = (path) => path.replace(/\\/g, "/")
 const pathRegExp = (p) => new RegExp(p, WINDOWS ? "i" : "")
 // deny の正規表現。元の文字列を src に持つ (例外の対の deny を文字列で見分けるため)
 const tagged = (src) => Object.assign(pathRegExp(src), { src })
-// null は「組めなかった」。結果を伏せる (see docs/spec/agent-config-generation.md#rulesjson-が使えないとき)
+// null は「組めなかった」。結果を伏せる (see docs/spec/opencode-config-generation.md#rulesjson-が使えないとき)
 // 欠落・null も壊れた扱い。明示的な [] だけが有効な空。
 const readDeny = section("read_deny", (r) => {
   if (!names(r.read_deny)) throw new Error("文字列の配列でない")

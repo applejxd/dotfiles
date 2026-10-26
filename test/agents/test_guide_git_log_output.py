@@ -2,7 +2,7 @@
 
 生成した rules.json を実際の guide plugin (node) に通して判定する。
 止めるべき例と、止めてはいけない例 (誤検知) を両方並べる。
-see docs/spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形
+see docs/spec/guard/opencode-guard.md#opencode-の-allow-したコマンドの書き込み形
 
 Run with: ``uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q``
 """

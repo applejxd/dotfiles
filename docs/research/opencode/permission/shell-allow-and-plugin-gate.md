@@ -4,7 +4,7 @@
 > `git status` は、同日の監査で `.git/config` 経由の任意コード実行があると分かり
 > 外した（[allow リスト監査](allow-list-audit.md)）。
 >
-> **現行の仕様**: [既定は `ask`](../../../spec/agent-config-generation.md#既定は-ask)
+> **現行の仕様**: [既定は `ask`](../../../spec/opencode-config-generation.md#既定は-ask)
 > （shell の allow は 5 件）
 >
 > **調査日: 2026-09-21**

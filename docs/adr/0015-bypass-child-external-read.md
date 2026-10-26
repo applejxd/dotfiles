@@ -65,7 +65,7 @@
 親を辿れないとき、一覧が読めないときは `ask` のまま（権限を足す機能なので、分からなければ
 足さない）。静的 deny は plugin に届かないので、この決定でも外れない。
 
-仕様の詳細は [bypass から呼べる子エージェント](../spec/agent-config-generation.md#bypass-から呼べる子エージェント)。
+仕様の詳細は [bypass から呼べる子エージェント](../spec/opencode-config-generation.md#bypass-から呼べる子エージェント)。
 
 ## 決定の確認方法
 

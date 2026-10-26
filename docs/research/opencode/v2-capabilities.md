@@ -8,7 +8,7 @@
 > 相当する CLI フラグは無い」に反し、2.0.10 の `opencode run --auto` は動く
 > （[ask と並列バッチ](ask-and-parallel-batch.md)）。
 >
-> **現行の仕様**: [OpenCode V2 の設定](../../spec/agent-config-generation.md#opencode-v2-の設定)、
+> **現行の仕様**: [OpenCode V2 の設定](../../spec/agent-config-generation.md#pi-と共有する設定opencode-に書きpi-も読む)、
 > [OpenCode 隔離起動のアーキテクチャ](../../spec/sandbox/opencode-sandbox.md)
 >
 > **調査日: 2026-09-20**

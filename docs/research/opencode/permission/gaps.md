@@ -7,7 +7,7 @@
 > 5 章は 2026-09-23 に 2 度測り直し、節ごと差し替えてある（経緯は同章末尾の
 > 注意と `git log`）。
 >
-> **現行の仕様**: [`grep` / `glob` の結果フィルタ](../../../spec/agent-config-generation.md#grep--glob-の結果フィルタ)
+> **現行の仕様**: [`grep` / `glob` の結果フィルタ](../../../spec/opencode-config-generation.md#grep--glob-の結果フィルタ)
 >
 > **調査日: 2026-09-21**
 > **対象: `opencode v2.0.10`**

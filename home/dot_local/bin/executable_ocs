@@ -3,7 +3,7 @@
 
 本体は ``~/.local/share/ocs/`` にあり、ここから絶対パスで読み込む。
 **sys.path・PYTHONPATH・カレントディレクトリからは探さない。**
-see docs/spec/sandbox/opencode-sandbox.md#ランチャーの構成
+see docs/spec/sandbox/fence-boundary.md#ランチャーの構成
 """
 
 from __future__ import annotations

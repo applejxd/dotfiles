@@ -132,7 +132,7 @@ opencode    # 通常起動（境界なし）
   起動のたびに作業ツリーを境界の外へ退避する（復元は
   [OpenCode 隔離起動](docs/spec/sandbox/opencode-sandbox.md) を参照）
 - 起動ディレクトリの外を開けたいときは、プロジェクトに `.opencode/sandbox.toml` を置く
-  （書き方は[プロジェクトごとの追加](docs/spec/sandbox/opencode-sandbox.md#プロジェクトごとの追加)）
+  （書き方は[プロジェクトごとの追加](docs/spec/sandbox/fence-boundary.md#プロジェクトごとの追加)）
 
 ## 安全上の注意
 

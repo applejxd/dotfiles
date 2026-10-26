@@ -69,7 +69,7 @@ V2 は config の静的 deny に当たると plugin の `permission.evaluate` �
 ## 追記: deny 全体への拡張（2026-10-03）
 
 pip 以外の `[bash] deny` 全項目へ広げた（設計は
-[spec](../../../spec/guard/agent-command-policy.md#opencode-の-deny-の説明前段停止)）。
+[spec](../../../spec/guard/opencode-guard.md#opencode-の-deny-の説明前段停止)）。
 
 - **方法**: `generate.py` の生成物（`opencode.json` と `rules.json`）と、作業ツリーの `index.js` を
   `.tmp/` に置き（`plugins` を絶対パスで差し替え）、`OPENCODE_PROBE_CONFIG` で渡した（記録後に削除）。

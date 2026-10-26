@@ -3,7 +3,7 @@
 #
 # ★値を根拠にしない。エラーコード単独でも判定しない。判別できなければ不合格。
 # 終了コード 0 = 合格 / 1 = 不合格
-# see docs/spec/sandbox/opencode-sandbox.md#境界チェック
+# see docs/spec/sandbox/fence-boundary.md#境界チェック
 #
 # ★失敗は fail に集計して最後に返す。set -e で途中終了させてよいのは
 #   検査と無関係な後始末だけなので、それらには `|| :` を付ける。

@@ -70,6 +70,7 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 
 - [判定 API（`decide`）](pi-decide.md): 入力・応答・評価の順番・confirm・誘導・TS 版への移植。
 - [pi のガード](pi-guard.md): 起動・bypass・サンドボックスの統合・拡張・子エージェント・確認の UI。
+- [OpenCode のガードの仕様](opencode-guard.md): 保留中のレガシー（撤去予定）の誘導・deny の説明。
 - [コマンド・ファイルの判定](agent-command-policy.md): 照合規則、allow / ask / deny の一覧、意味解析。
 - [設定の生成](../agent-config-generation.md): `common.toml` から各 CLI の設定を作る仕組み。
 - [サンドボックス（総覧）](../sandbox/index.md)。

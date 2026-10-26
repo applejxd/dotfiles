@@ -2,7 +2,7 @@
 
 生成した rules.json を実際の guide plugin (node) に通して判定する。
 ``ctx.session.get`` は差し替え、呼ばれた sessionID を記録する。
-see docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント
+see docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント
 
 Run with: ``uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q``
 """

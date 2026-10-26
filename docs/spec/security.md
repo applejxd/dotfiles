@@ -152,14 +152,14 @@ OpenCode の隔離起動 `ocs`（[Fence](https://github.com/fencesandbox/fence) 
 | Windows 側（`/mnt`）とホストの `/tmp` | 開けた作業用ディレクトリ（`~/src` など）に紛れた秘密の読み取り |
 | 起動ディレクトリの外（`~/.cache`・OpenCode のデータディレクトリなどの例外を除く）への書き込み | ローカルの Git 履歴（未コミット作業は起動前に退避する） |
 | 通信を許可したドメイン以外への通信 | 通信を許可したドメインへ何を送るか |
-| 保護機構そのもの（`denyWrite` と起動の拒否。効く範囲は[条件付き](sandbox/opencode-sandbox.md#制御ファイルの保護が効く範囲)） | 他のプロジェクトの会話（DB を共有する） |
+| 保護機構そのもの（`denyWrite` と起動の拒否。効く範囲は[条件付き](sandbox/fence-boundary.md#制御ファイルの保護が効く範囲)） | 他のプロジェクトの会話（DB を共有する） |
 
 ### プロジェクトごとの追加の許可
 
 > OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [サンドボックス（総覧）](sandbox/index.md)。
 
 起動ディレクトリの外を開けたいときは、`ocs` ではプロジェクトが `.opencode/sandbox.toml` で足す
-（書き方は [プロジェクトごとの追加](sandbox/opencode-sandbox.md#プロジェクトごとの追加)）。
+（書き方は [プロジェクトごとの追加](sandbox/fence-boundary.md#プロジェクトごとの追加)）。
 `pis` の追加の入口は [境界の構成](sandbox/opencode-sandbox.md)（`pis` と `ocs` が共有）にある。
 
 **承認は取らない。** 精査していないリポジトリが自分で境界を広げることは、ADR-0012 で
@@ -182,7 +182,7 @@ OpenCode の隔離起動 `ocs`（[Fence](https://github.com/fencesandbox/fence) 
 - `ocs` は境界を張る前にホストで `git`（退避と worktree の判定）と Fence を動かし、
   OpenCode の DB を読み取り専用で開く（既定モデルの選択）。`opencode` はホストでは動かさず、
   Fence の子として境界の内側で起動する。環境変数は、落とす資格情報と Fence・`git`・内側の
-  opencode 向けに変えるもの（[信頼の鎖](sandbox/opencode-sandbox.md#信頼の鎖)）を除き、利用者の
+  opencode 向けに変えるもの（[信頼の鎖](sandbox/fence-boundary.md#信頼の鎖)）を除き、利用者の
   環境のまま渡す。精査していないワークスペースがそれらを騙すことは対象外
   （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的）
 

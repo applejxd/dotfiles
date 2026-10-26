@@ -365,7 +365,7 @@ def test_isolated_loads_guide_plugin_for_redaction(tmp_path):
 
 # guide plugin の役割を 1 つだけ有効にした隔離版。通常版と同じ判定関数を通す。
 # ★ask_description は数えない。ocs は説明の生成 (モデルの呼び出し) を OCS_ISOLATED で止める。
-# see docs/spec/agent-config-generation.md#plugin-層-guide-plugin
+# see docs/spec/opencode-config-generation.md#plugin-層-guide-plugin
 ISOLATED_GUIDE_ROLES = {
     "guide": ({"opencode": {"shell": {"guide": [{"pattern": "^cat ", "message": "m"}]}}}, True),
     "read_filter": ({"file": {"read_deny_globs": ["**/.env"]}}, True),
@@ -534,7 +534,7 @@ def test_isolated_skips_models_of_an_unreachable_provider(tmp_path):
 
     Bedrock は ``ocs`` では使えない。割り当てると子エージェントが応答しない。
     割り当てが無ければ親のモデルで動く。
-    see docs/spec/agent-config-generation.md#隔離起動ocs
+    see docs/spec/opencode-config-generation.md#隔離起動ocs
     """
     assert "amazon-bedrock" not in SANDBOX.get("providers", [])
     out = _with_provider(tmp_path, "amazon-bedrock")

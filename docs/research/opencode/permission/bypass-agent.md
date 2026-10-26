@@ -13,8 +13,8 @@
 > （[ADR-0014](../../../adr/0014-bypass-as-ask-upgrade.md)）。以下の本文（特に 0・5 章の
 > 「全 allow」「plugin を貫通する」「誘導を素通りする」）は決定当時のまま残している。
 >
-> **現行の仕様**: [キーバインド](../../../spec/agent-config-generation.md#キーバインド)、
-> [plugin 層](../../../spec/agent-config-generation.md#plugin-層-guide-plugin)
+> **現行の仕様**: [キーバインド](../../../spec/opencode-config-generation.md#キーバインド)、
+> [plugin 層](../../../spec/opencode-config-generation.md#plugin-層-guide-plugin)
 >
 > **調査日: 2026-09-21**
 > **対象: `opencode v2.0.10`**
@@ -154,7 +154,7 @@ Agent bypass cannot run as a subagent
 > モデルが自力で全保護を外せるようになるため、テストで固定する。
 >
 > 2026-09-29 から `mode = "primary"` を明示している。宣言しないと既存設定の `mode` が
-> 残るため（[仕様](../../../spec/agent-config-generation.md#bypass-から呼べる子エージェント)）。
+> 残るため（[仕様](../../../spec/opencode-config-generation.md#bypass-から呼べる子エージェント)）。
 
 なお `subagent` action には permission 規則が **1 件も無く既定 allow**。
 `general` / `explore` は自由に起動できるが、これらは**グローバルの
@@ -163,7 +163,7 @@ permission に従う**ので脱出経路にはならない（[出力フィルタ
 > **後続の判断（2026-09-29）**: 利用者が `agent.general.permission = "allow"` のように
 > 全部 allow へ上書きすると、`mode` を書かなくても子として起動できるまま全部 allow になる。
 > 生成側はこれも起動元を絞る対象に数える
-> （[仕様](../../../spec/agent-config-generation.md#bypass-から呼べる子エージェント)）。
+> （[仕様](../../../spec/opencode-config-generation.md#bypass-から呼べる子エージェント)）。
 > 上書き後も `mode` が `subagent` のまま残ることは、実機のエージェント一覧では**未確認**
 > （`opencode api agent.list --standalone` は組み込みを含めて空を返した）。
 >
@@ -330,7 +330,7 @@ V1 のマップは**キーの順に**規則へ展開される。`task` と `suba
 
 この時点の `index.js` は、一覧が無いときも `general` / `explore` の起動だけは通していた。
 全部 allow に上書きされていても見分けられないため、後に例外を外した
-（[仕様](../../../spec/agent-config-generation.md#rulesjson-が使えないとき)）。
+（[仕様](../../../spec/opencode-config-generation.md#rulesjson-が使えないとき)）。
 
 > **注記（2026-09-29）**: [ADR-0012](../../../adr/0012-ocs-boundary-for-accidents.md) の方針変更で、
 > 一覧が読めないときに子エージェントの起動を全部 deny する処理は取り下げた。今は起動元を

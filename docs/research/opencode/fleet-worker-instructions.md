@@ -3,7 +3,7 @@
 <!-- 現在の総合判断は docs/change/ の候補比較表が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
-> **現行の仕様**: [並列作業（/fleet）](../../spec/agent-config-generation.md#並列作業fleet)
+> **現行の仕様**: [並列作業（/fleet）](../../spec/opencode-config-generation.md#並列作業fleet)
 
 ## 結論
 

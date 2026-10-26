@@ -121,7 +121,7 @@ plugin は `~/.config/opencode/guide-plugin/`。**登録先が 2 つに分かれ
 - ディレクトリ名に `plugin` / `plugins` を使わない（二重ロードになる）
 - **サーバ側 plugin を更新したら `opencode service restart` が要る**
 
-現行の仕様は[plugin 層](../../../spec/agent-config-generation.md#plugin-層-guide-plugin)が正本。
+現行の仕様は[plugin 層](../../../spec/opencode-config-generation.md#plugin-層-guide-plugin)が正本。
 
 ## 再確認すべき情報源
 

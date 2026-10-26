@@ -1,7 +1,7 @@
 """OpenCode の ``opencode.json`` の所有の規則の test.
 
 生成器が書けるキー・statement のうち、今回宣言していないものを配置済みの設定から消す。
-see docs/spec/agent-config-generation.md#配置済みの設定の所有
+see docs/spec/opencode-config-generation.md#配置済みの設定の所有
 
 Run with: ``uv run --with pytest --no-project pytest test/agents/ -q``
 """

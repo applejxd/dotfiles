@@ -1,7 +1,7 @@
 # CHG-0017: 組み込みエージェント（explore / plan）の制限が全体の設定に上書きされる問題を直す
 
-> この文書は当時の記録。現在の仕様は [`spec/agent-config-generation.md` の子エージェント](../../spec/agent-config-generation.md#子エージェント)と
-> [`spec/guard/agent-command-policy.md` の OpenCode の allow したコマンドの書き込み形](../../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)。
+> この文書は当時の記録。現在の仕様は [`spec/opencode-config-generation.md` の子エージェント](../../spec/opencode-config-generation.md#子エージェント)と
+> [`spec/guard/opencode-guard.md` の OpenCode の allow したコマンドの書き込み形](../../spec/guard/opencode-guard.md#opencode-の-allow-したコマンドの書き込み形)。
 > OpenCode は 2026-10-20 に利用者が「もう使っていない」と確認しており、撤去は [CHG-0020](../0020-pi-migration.md) の段 6（保留）。
 
 - **状態**: Done
@@ -95,12 +95,12 @@ question を拒否）は変えない。
     モデルに頼らずに実効規則を取り出せる（同 E2）
 - 段 1〜4 を実装した（2026-10-08。未 apply）。plan の deny の並べ直しは、生成時だけのキー
   `restate_global_deny`（全体の指定した action の deny をエージェントの規則の後ろへ写す）で
-  行う。仕様は [子エージェント](../../spec/agent-config-generation.md#子エージェント)。生成物の並びは
+  行う。仕様は [子エージェント](../../spec/opencode-config-generation.md#子エージェント)。生成物の並びは
   E2 の試験用設定と action ごとには同じだが、全体の並びは違う（試験用は秘密ファイルの deny を
   計画ディレクトリの allow の直後に挟み、生成物は末尾にまとめる）。段 6 で実効規則を確かめる
 - 段 5 を実装した（2026-10-08。未 apply）。`git log` で始まる部分の `--output` を guide 規則で
   止める。Claude / Copilot は OS の sandbox が書き込み先を限るので足さない。範囲と止める例・
-  止めない例は [allow したコマンドの書き込み形](../../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)
+  止めない例は [allow したコマンドの書き込み形](../../spec/guard/opencode-guard.md#opencode-の-allow-したコマンドの書き込み形)
 - 段 1〜4 を apply し、段 6 の確認をした（2026-10-08。段 5 は apply 前）。本物のサービスの
   API で取り出した実効規則を調査用の照合で評価すると、`explore` は shell / edit / 子の起動 /
   question がすべて deny（`.env.example` も）、`plan` は計画ファイル以外の edit が deny、計画
@@ -335,7 +335,7 @@ flowchart LR
 | `common.toml.tmpl` の `bypass` | 子の起動規則が全部許可 → 全部禁止して 5 つだけ許可 | 一覧に無い子は確認が自動で通らず、事故が再発する（レビュー） | 未適用 |
 | `common.toml.tmpl` の `/fleet` | 作業役が無い場合の分岐なし → `plan` では計画までで止める。自動で判断させるのは `bypass` の上に限ると明記 | `plan` から作業役を起動できなくなる。利用者の方針で `build` の上の `/fleet` は対象外 | 未適用 |
 | `agent-config-generation.md` | 「`explore` / `review` は読むだけで確認がほぼ出ない」 → 全体の規則が組み込みの制限を上書きすることと、修正後の扱い、許可リスト | 今回の実測で、`explore` は確認を出し、書き込めた | 未適用 |
-| 全体の shell | `git log *` の allow のみ → `git log` の `--output` を guide 規則で止める | `build` で `git log -1 --output=<パス>` が確認なしにファイルを作った（E2）。`*--output*` を全体で deny すると `git commit -m` の本文や正当な `--output` まで止まるので、`git log` で始まる部分だけに当てる guide 規則にする。guide 規則は `bypass` でも止まる | 未適用（実装済み。[仕様](../../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)） |
+| 全体の shell | `git log *` の allow のみ → `git log` の `--output` を guide 規則で止める | `build` で `git log -1 --output=<パス>` が確認なしにファイルを作った（E2）。`*--output*` を全体で deny すると `git commit -m` の本文や正当な `--output` まで止まるので、`git log` で始まる部分だけに当てる guide 規則にする。guide 規則は `bypass` でも止まる | 未適用（実装済み。[仕様](../../spec/guard/opencode-guard.md#opencode-の-allow-したコマンドの書き込み形)） |
 
 ## 実装・検証
 
@@ -423,7 +423,7 @@ flowchart LR
 ### 反映先
 
 - 実装: `home/dot_config/agents/common.toml.tmpl` の `[opencode.agents.explore]`（1684 行付近）・`[opencode.agents.plan]`（1697 行付近）・`[opencode.bypass_children]`（1610 行付近）・`git log` の `--output` の guide 規則（1840 行付近）
-- 仕様: [agent-config-generation.md](../../spec/agent-config-generation.md#子エージェント)、[agent-command-policy.md](../../spec/guard/agent-command-policy.md#opencode-の-allow-したコマンドの書き込み形)、[opencode-sandbox.md](../../spec/sandbox/opencode-sandbox.md)
+- 仕様: [opencode-config-generation.md](../../spec/opencode-config-generation.md#子エージェント)、[opencode-guard.md](../../spec/guard/opencode-guard.md#opencode-の-allow-したコマンドの書き込み形)、[opencode-sandbox.md](../../spec/sandbox/opencode-sandbox.md)
 - 判断: [ADR-0015](../../adr/0015-bypass-child-external-read.md)
 - 調査記録: [builtin-agent-override.md](../../research/opencode/permission/builtin-agent-override.md)
 

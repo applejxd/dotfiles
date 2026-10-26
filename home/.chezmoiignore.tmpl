@@ -95,7 +95,7 @@ Documents/**
 
 {{- if ne .chezmoi.os "windows" }}
 # 常駐サービスのポートを Windows だけ WSL からずらす。ほかでは OpenCode に任せる
-# see docs/spec/agent-config-generation.md#常駐サービスのポート
+# see docs/spec/opencode-config-generation.md#常駐サービスのポート
 .config/opencode/service.json
 {{- end }}
 

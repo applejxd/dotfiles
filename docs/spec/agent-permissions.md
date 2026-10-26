@@ -95,7 +95,7 @@ Ubuntu / WSL では OpenCode を丸ごと OS のアクセス制御で囲う**隔
 クォートと変数で、実行後の出力検査は `base64` ですり抜ける（実測）。
 
 PostToolUse 系の hook (`format-file.sh` / `markdownlint.sh`) だけは、CLI 本体の
-`formatter` 機能で等価な結果になる ([整形 (formatter)](agent-config-generation.md#整形-formatter))。
+`formatter` 機能で等価な結果になる ([整形 (formatter)](opencode-config-generation.md#整形-formatter))。
 
 この差から、Claude / Copilot 向けとは 3 点だけ扱いを変えている。
 
@@ -114,7 +114,7 @@ exemption がどのモードでも無効化されるため)。OpenCode には委
 認証 password が平文で入る。`[sandbox] deny` と読み取り deny の両方に入れる。
 
 glob の変換・formatter・plugin・キーバインド・照合順などの詳細は
-[OpenCode V2 の設定](agent-config-generation.md#opencode-v2-の設定) にある。
+[OpenCode V2 の設定](agent-config-generation.md#pi-と共有する設定opencode-に書きpi-も読む) にある。
 作業ツリーの外で確認なしに読める場所と、確認なしに実行できるスキルのスクリプトも
 そこに書いた（[作業ツリーの外の読み取り](agent-config-generation.md#作業ツリーの外の読み取り)・
 [スキルのスクリプト](agent-config-generation.md#スキルのスクリプト)）。
@@ -159,7 +159,7 @@ shell のコマンド中の `\` 区切りのパスも候補にする。生成側
 `/` に揃えて照合するので、この問題は無い。
 
 Windows の常駐サービスは WSL と同じポートだと衝突するので、`port` だけずらしている
-（[常駐サービスのポート](agent-config-generation.md#常駐サービスのポート)）。
+（[常駐サービスのポート](opencode-config-generation.md#常駐サービスのポート)）。
 
 ## 保存した承認の確認とリセット
 

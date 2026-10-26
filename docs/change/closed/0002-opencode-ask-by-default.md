@@ -1,7 +1,7 @@
 # CHG-0002: OpenCode の permission を既定 ask にする
 
-> この文書は当時の記録。現在の仕様は [`spec/agent-config-generation.md` の既定は `ask`](../../spec/agent-config-generation.md#既定は-ask) と
-> [plugin 層](../../spec/agent-config-generation.md#plugin-層-guide-plugin)。
+> この文書は当時の記録。現在の仕様は [`spec/opencode-config-generation.md` の既定は `ask`](../../spec/opencode-config-generation.md#既定は-ask) と
+> [plugin 層](../../spec/opencode-config-generation.md#plugin-層-guide-plugin)。
 > 残っていた段階 5（`verify` ツール）は [CHG-0020](../0020-pi-migration.md)（pi への移行）の段 5 へ移した。
 
 - **状態**: Done
@@ -167,7 +167,7 @@ allow の基準は副作用なし・冪等・**任意コード実行を含まな
 | 伏字化 | shell 出力を `execute.after` で書き換える | 安全網 |
 
 **誘導は確認削減の施策ではなく保護の一部。** 実装の詳細は
-[plugin 層](../../spec/agent-config-generation.md#plugin-層-guide-plugin)が正本。
+[plugin 層](../../spec/opencode-config-generation.md#plugin-層-guide-plugin)が正本。
 
 #### 成果（実履歴 1,031 呼び出し）
 

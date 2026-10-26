@@ -12,7 +12,7 @@
 
 ## 記録 N9 — 組み込みエージェントを宣言しなかったときの不具合
 
-元: `docs/spec/agent-config-generation.md#子エージェント`
+元: `docs/spec/opencode-config-generation.md#子エージェント`
 
 ### 問い
 
@@ -45,7 +45,7 @@
 
 ## 記録 N11 — `/fleet` のコマンドの置き場
 
-元: `docs/spec/agent-config-generation.md#並列作業fleet`
+元: `docs/spec/opencode-config-generation.md#並列作業fleet`
 
 ### 問い
 
@@ -58,7 +58,7 @@
 
 ## 記録 N12 — bypass の子の起動の実測
 
-元: `docs/spec/agent-config-generation.md#bypass-から呼べる子エージェント`
+元: `docs/spec/opencode-config-generation.md#bypass-から呼べる子エージェント`
 
 ### 問い
 

@@ -135,7 +135,7 @@ OpenCode の最大の複雑さの源（後勝ちの連結）をかなり減ら�
    `cli.json`）。Orca では `cli.json` が読まれない。常駐サービスの再起動とポートの衝突。
    plugin の読み込みに失敗すると plugin 無しで続く
 4. **エージェントの関係を後から推測している。** bypass の子かどうかを `parentID` で親を引いて
-   判定し、一覧が 4 つある（[bypass から呼べる子エージェント](../../spec/agent-config-generation.md#bypass-から呼べる子エージェント)）
+   判定し、一覧が 4 つある（[bypass から呼べる子エージェント](../../spec/opencode-config-generation.md#bypass-から呼べる子エージェント)）
 5. **プロジェクトの設定がグローバルに勝ち、`.opencode/plugins/` は自動で読まれる。**
    `ocs` でプロセスごと囲う理由の 1 つ
 6. **保存した承認の DB、variant の癖、圧縮の hook の印の状態管理**
