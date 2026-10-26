@@ -65,6 +65,7 @@
 | [0038](0038-guard-reclassification.md) | ガードを「防ぐ害」（UX・認証情報・外部送信・破壊・構造）で分類し直し、外部への送信・公開の穴を塞ぐ（`confirm` の新設） | In progress | 標準の `pis`（bypass オン）で、規則に載っていない外部書き込みと載っている ask が確認なしで通る。`confirm`（bypass 不可・内容つき・無反応は deny）の実装設計。分類は整理で、区分の on/off の仕組みは作らない | 段 G5: 実機の確認（利用者）。段 G6: C1 の棚卸し | 2026-10-24 |
 | [0039](0039-bell-with-message.md) | 入力待ちの通知（BEL）に、メッセージを添える | Exploring | BEL は 1 バイトで本文を運べない。OSC 9 / 777 で本文を運べる可能性があるが、使っている端末（Zed・Orca）の対応は未確認。BEL は必ず残し、非対応の端末で表示を壊さない形を基本にする | 段 N1: 端末での確認（利用者） | 2026-10-26 |
 | [0040](0040-pi-guard-by-settings.md) | pi のフルガードを設定で載せ、pis をサンドボックス専用に寄せる | Exploring | 素の pi（Unix）が settings.json だけでフルガード付きで起動する。作業先の信頼は既定の確認のまま、判定の外で動くもの（mcp.json・信頼した作業先の .pi/）は警告する。pis --no-sandbox は移行用に残す | Windows への展開（配備・子エージェント・MSYS のパス）、実機の確認 | 2026-10-26 |
+| [0041](0041-commit-auto-in-bypass.md) | コミットを bypass のとき確認なしで実行できるようにする（確認の場を push 前へ移す） | Exploring | 承認待ちの時間切れが作業を止める。コミットは push まで取り消せる。bypass のときだけ `git_commit` の確認を省く案（属性 `confirm_in_bypass`）が有望。有効化は、pre-push の全コミットの検査（段 3）の後 | 段 1（設計の review）は完了。次: 段 2 の実装（pre-push の検査は段 3、有効化は段 4） | 2026-10-27 |
 
 ## 保留
 
