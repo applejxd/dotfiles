@@ -939,6 +939,7 @@ def _launch_with(
             write_gh_config(agent, github_socket)
         sessions = sessions_dir(workspace)
         config_ = boundary.build_boundary(sandbox, workspace, request, agent)
+        boundary.hide_workspace_secrets(config_, workspace)
         if (
             endpoint is not None
             or search_endpoint is not None

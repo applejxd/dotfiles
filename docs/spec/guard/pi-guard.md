@@ -448,6 +448,7 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 | 判定器 | `PI_HARNESS_BOUNDARY=1` を渡す（判定器はまだ使っていない） | サンドボックスの中の既定は段 5 で決める |
 | 設定の出所 | 共有のキーは `[opencode.sandbox]`、pi の追加分は `[pi.sandbox]`（読み取り: フルガード・自作の拡張 4 つ・判定器・`~/.config/agents`・`~/.claude/hooks`・pi 本体） | 段 6 で OpenCode を撤去するとき、共有キーを `[pi.sandbox]` へ移す |
 | 作業先ごとの追加 | OpenCode と同じ `.opencode/sandbox.toml` | 名前は段 6 で決める |
+| 起動ディレクトリの秘密 | 起動のたびに、起動ディレクトリの中で `[file] read_deny_globs`（判定器と同じ `command_policy`。`deny_exceptions` も効く）に当たる**実在のファイル・ディレクトリ**を列挙し、Fence の `denyRead` へ足す（`boundary.hide_workspace_secrets`。`.env`・`.env.*`（`.env.example` を除く）・`*.pem`・`secrets/` など）。`.ssh/**` や `secrets/**` のようにディレクトリごと当たる規則は、中を降りずにディレクトリを隠す。`.git`・`node_modules`・`.venv` などは降りない。symlink は辿らない。一覧が読めない・空・30 万件超・当たりが 2000 件超のときは**起動を止める**。内側からは、読めず、上書きもできない（実機で確認、Fence 0.1.67）。**起動後に作られたファイルは隠せない**（列挙は起動時の 1 回）。`pis` だけ（`ocs` は未対応） | 判定器の層だけだと、内側から `cat` 以外の経路（スクリプトや言語のランタイム）で `.env` を読み、拒否リスト型では任意のホストへ送れてしまう |
 
 ### プロキシ必須の環境での通信
 
@@ -499,9 +500,9 @@ Fence は許可リスト（`allowedDomains`）に当たる通信を直接つな�
 | 境界チェック | 公開の宛先（`github.com`）が通り、`deny` の先頭が落ちることを確かめる（`deny` が空なら拒否は検査しない）。事前検査の記憶の鍵に `network` を含める | 許可リスト型の検査は「許可外が落ちる」前提で、拒否リスト型には使えない |
 
 - **未確認**: SOCKS（`ALL_PROXY=socks5h`）を優先するクライアントの挙動、大きな転送の速度、実機の `pis` 全体（Fence の起動・ブローカーとの併用）での通し、Windows。
-- **残る限界**: 作業ディレクトリの `.env` などは OS の層では読める（`read_deny_globs` は Fence の `denyRead` に渡らない。判定器の層だけが守る）。拒否リスト型ではこれが任意のホストへ送信可能になる。**既定にした後も未対応**で、塞ぐ案（起動時に実在ファイルを列挙して `denyRead` へ）は CHG-0037 の未解決点。環境変数は除外方式で、名前に `TOKEN` / `SECRET` / `PASSWORD` を含まないものは残る。
+- **残る限界**: 起動ディレクトリの `.env` などは、起動時に実在するものだけ OS の層で隠す（上の「起動ディレクトリの秘密」。起動後に作られたものと、`.git`・`node_modules` などの降りない場所は隠さない）。起動ディレクトリの**外**で読めるように開けた場所（`read`・`PIS_EXTRA_READ`・作業先ごとの追加）の秘密は、列挙しない。環境変数は除外方式で、名前に `TOKEN` / `SECRET` / `PASSWORD` を含まないものは残る。
 - **上流プロキシ経由の限界**: 内部宛先（LAN・メタデータ・プロキシ側のループバック）を中継が止められるのは、IP リテラルと直接経路だけ。名前が内部へ解決される場合は、上流プロキシの出口制御に任せる。ホスト環境の `HTTPS_PROXY` の認証情報は、Fence が内側の全てのプロキシ環境変数（大文字・小文字・`ALL_PROXY`）を自前の値（127.0.0.1 のポート）で上書きするので、内側には残らない（実測、Fence 0.1.67、`.tmp/exp-denylist/envcheck.py`）。
-- **試験**: `test_relay.py`（アドレスの分類・混在応答・拒否・フォールバック）、`test_pi_network.py`（設定の生成と破損）。実際の Fence での確認は `.tmp/exp-denylist/` の使い捨ての手順（コミットしない）で行った。
+- **試験**: `test_relay.py`（アドレスの分類・混在応答・拒否・フォールバック）、`test_pi_network.py`（設定の生成と破損）、`test_pi_workspace_hide.py`（秘密ファイルの列挙・例外・降りない場所・止める条件）。実際の Fence での確認は `.tmp/exp-denylist/` の使い捨ての手順（コミットしない）で行った。
 
 ### 緩和のゲート
 

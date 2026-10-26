@@ -81,6 +81,7 @@ _PI_TESTS = (
     "test_pi_actions_harness",
     "test_pi_actions",
     "test_pi_boundary",
+    "test_pi_workspace_hide",
     "test_broker",
     "test_broker_search",
     "test_pi_broker_generate",

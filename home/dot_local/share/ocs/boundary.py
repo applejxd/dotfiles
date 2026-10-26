@@ -299,6 +299,90 @@ def build_boundary(
     return config
 
 
+# 秘密ファイルの列挙で降りないディレクトリ (巨大で、秘密を置く場所でもない)
+SECRET_SCAN_PRUNE = frozenset(
+    {".git", "node_modules", ".venv", "venv", "__pycache__", ".tox", ".mypy_cache", ".ruff_cache"}
+)
+SECRET_SCAN_MAX_ENTRIES = 300_000
+SECRET_SCAN_MAX_DENY = 2_000
+
+
+def _load_secret_policy(agents_dir: Path | None = None):
+    """照合する関数 (パス → 当たった glob か None) を返す。正本は ``[file] read_deny_globs``。
+
+    判定器と同じ command_policy を使う。読めないときは起動を止める (秘密を隠せないまま動かさない)。
+    """
+    import importlib.util
+
+    agents = agents_dir if agents_dir is not None else HOME / ".config/agents"
+    module_path, common = agents / "command_policy.py", agents / "common.toml"
+    if not module_path.is_file() or not common.is_file():
+        die(
+            f"秘密ファイルの一覧を読めない: {agents} (command_policy.py / common.toml)",
+            "chezmoi apply で配る",
+        )
+    try:
+        spec = importlib.util.spec_from_file_location("_ocs_command_policy", module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        globs = module.load_file_globs("read_deny_globs", str(common))
+        exceptions = module.load_read_deny_exceptions(str(common))
+    except Exception as e:  # どんな破損でも起動を止める
+        die(f"秘密ファイルの一覧を読めない: {e}", "chezmoi apply で配り直す")
+    if not globs:
+        die("read_deny_globs が空 (秘密ファイルを確かめられない)", "chezmoi apply で配り直す")
+    return lambda path: module.matches_read_deny(path, globs, exceptions)
+
+
+def find_secret_paths(workspace: Path, matches) -> list[str]:
+    """起動ディレクトリの中で ``read_deny_globs`` に当たる実在のファイル・ディレクトリを返す。
+
+    ``.env`` のように作業ディレクトリの中にある秘密を、OS の層 (Fence の ``denyRead``) でも隠すため。
+    ディレクトリ全体が当たる規則 (``**/.ssh/**``・``**/secrets/**``) は、中を降りずにそのディレクトリを返す。
+    **起動後に作られるファイルは隠せない** (列挙は起動時の 1 回)。
+    """
+    found: list[str] = []
+    seen = 0
+    for root, dirs, files in os.walk(workspace, followlinks=False):
+        kept = []
+        for name in sorted(dirs):
+            path = os.path.join(root, name)
+            seen += 1
+            if name in SECRET_SCAN_PRUNE:
+                continue
+            if matches(path + "/x") or matches(path):
+                found.append(str(_real(Path(path))))
+            else:
+                kept.append(name)
+        dirs[:] = kept
+        for name in sorted(files):
+            seen += 1
+            path = os.path.join(root, name)
+            if matches(path):
+                found.append(str(_real(Path(path))))
+        if seen > SECRET_SCAN_MAX_ENTRIES:
+            die(
+                f"起動ディレクトリが大きすぎて秘密ファイルを列挙できない ({SECRET_SCAN_MAX_ENTRIES} 件超)",
+                "より狭いディレクトリで起動する",
+            )
+        if len(found) > SECRET_SCAN_MAX_DENY:
+            die(
+                f"秘密ファイルに当たるものが多すぎる ({SECRET_SCAN_MAX_DENY} 件超)",
+                "より狭いディレクトリで起動する",
+            )
+    return _uniq(found)
+
+
+def hide_workspace_secrets(
+    config: dict, workspace: Path, agents_dir: Path | None = None
+) -> list[str]:
+    """``config`` の ``denyRead`` へ、起動ディレクトリの中の秘密ファイルを足し、足したものを返す。"""
+    hidden = find_secret_paths(workspace, _load_secret_policy(agents_dir))
+    filesystem = config["filesystem"]
+    filesystem["denyRead"] = _uniq([*filesystem.get("denyRead", []), *hidden])
+    return hidden
+
+
 def _uniq(values: list[str]) -> list[str]:
     seen: dict[str, None] = {}
     for value in values:
