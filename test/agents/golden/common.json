@@ -1480,9 +1480,10 @@
   },
   "network": {
    "allow_loopback": false,
+   "allow_private_direct": false,
    "deny": [],
    "local_ports": [],
-   "mode": "allowlist"
+   "mode": "denylist"
   }
  },
  "provider": {

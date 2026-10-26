@@ -2127,7 +2127,9 @@ def pi_broker(common: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-PI_NETWORK_KEYS = frozenset({"mode", "deny", "allow_loopback", "local_ports"})
+PI_NETWORK_KEYS = frozenset(
+    {"mode", "deny", "allow_loopback", "allow_private_direct", "local_ports"}
+)
 
 
 def pi_network(common: dict[str, Any]) -> dict[str, Any]:
@@ -2137,6 +2139,9 @@ def pi_network(common: dict[str, Any]) -> dict[str, Any]:
     ``denylist`` はホストにプロキシの環境変数が無い機械だけで効く (``ocs/relay.py``)。
     ``allow_loopback`` は中継がホストのループバックへつなげるか (既定 false。内側の ``NO_PROXY`` が localhost を外すので、
     これを真にしても「内側から localhost を読める」にはならない)。
+    ``allow_private_direct`` は、中継がアドレスを検査できる経路 (IP リテラル、直接接続、``NO_PROXY`` に当たる
+    宛先) で RFC1918 と ULA を通す (既定 false。イントラネットを読む環境向け)。**上流プロキシが名前を解決する経路の
+    到達範囲は変えない**。
     ``local_ports`` は、内側からホストの 127.0.0.1 のこのポートへつなげるようにする (Fence の ``allowLocalOutboundPorts``)。
     see docs/spec/guard/pi-guard.md#拒否リスト型の通信
     """
@@ -2160,6 +2165,9 @@ def pi_network(common: dict[str, Any]) -> dict[str, Any]:
     loopback = section.get("allow_loopback", False)
     if not isinstance(loopback, bool):
         raise SystemExit(f"[pis.network] allow_loopback は真偽値: {loopback!r}")
+    private = section.get("allow_private_direct", False)
+    if not isinstance(private, bool):
+        raise SystemExit(f"[pis.network] allow_private_direct は真偽値: {private!r}")
     ports = section.get("local_ports", [])
     if not isinstance(ports, list) or not all(
         isinstance(p, int) and not isinstance(p, bool) and 1024 <= p <= 65535 for p in ports
@@ -2169,6 +2177,7 @@ def pi_network(common: dict[str, Any]) -> dict[str, Any]:
         "mode": mode,
         "deny": _uniq([d.strip() for d in deny]),
         "allow_loopback": loopback,
+        "allow_private_direct": private,
         "local_ports": _uniq(ports),
     }
 
@@ -3266,7 +3275,7 @@ LOCAL_SANDBOX_KEYS = (
 # ここが実質唯一の「共有設定を汚さない置き場」になる。
 LOCAL_LOCATION_KEYS = ("path", "approvals", "allowed_directories")
 # local.toml の [pis.network] (pis の内側の通信)。deny / local_ports は追記、mode / allow_loopback は置き換え
-LOCAL_NETWORK_KEYS = ("mode", "deny", "allow_loopback", "local_ports")
+LOCAL_NETWORK_KEYS = ("mode", "deny", "allow_loopback", "allow_private_direct", "local_ports")
 
 
 def local_overlay_path() -> Path:
@@ -3388,7 +3397,7 @@ def _merge_local_network(merged: dict[str, Any], local_network: Any) -> None:
         )
     pis = dict(merged.get("pis") or {})
     network = dict(pis.get("network") or {})
-    for key in ("mode", "allow_loopback"):
+    for key in ("mode", "allow_loopback", "allow_private_direct"):
         if key in local_network:
             network[key] = local_network[key]
     for key in ("deny", "local_ports"):

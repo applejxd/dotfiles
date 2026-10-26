@@ -536,17 +536,240 @@ def test_session_denylist_without_a_host_proxy_starts_a_direct_relay():
         assert out["network"]["defaultAction"] == "proxy"
 
 
-def test_session_denylist_falls_back_to_the_allowlist_relay_when_the_host_needs_a_proxy():
-    """★上流のプロキシが名前を解決するので、中継はアドレスを検査できない。従来の許可リスト型のまま。"""
+def test_session_denylist_with_a_host_proxy_forwards_to_it_by_name(upstream):
+    """上流のプロキシがある機械でも拒否リスト型になる。拒否に当たらない名前は上流へ送る。"""
     config = {"network": {"allowedDomains": ["github.com"]}}
     network = {"mode": "denylist", "deny": ["x.example"]}
-    with relay.session(config, {"HTTPS_PROXY": "http://proxy.corp:8080"}, network) as out:
-        assert out["network"]["allowedDomains"] == []  # 許可リストは中継へ移る (従来どおり)
-        assert out["network"]["upstreamProxy"].startswith("http://127.0.0.1:")
-        assert "deniedDomains" not in out["network"]  # 拒否リスト型にはならない
+    env = {"HTTPS_PROXY": f"http://127.0.0.1:{upstream.port}"}
+    with relay.session(config, env, network) as out:
+        assert out["network"]["allowedDomains"] == []
+        assert out["network"]["deniedDomains"] == ["x.example"]
+        port = int(out["network"]["upstreamProxy"].rsplit(":", 1)[1])
+        head, echoed = _exchange(port, b"CONNECT news.example.org:443 HTTP/1.1\r\n\r\n", b"ok")
+    assert head.startswith(b"HTTP/1.1 200")
+    assert echoed == b"ok"
+    assert upstream.requests[0].startswith("CONNECT news.example.org:443 HTTP/1.1")
 
 
 def test_session_without_network_setting_is_unchanged_for_the_allowlist():
     config = {"network": {"allowedDomains": ["github.com"]}}
     with relay.session(config, {}, None) as out:
         assert out is config
+
+
+# ─── 拒否リスト型 (上流のプロキシあり) と、authority の厳格な解釈 ───────────────
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [
+        ("github.com:443", ("github.com", 443)),
+        ("GitHub.COM.:443", ("github.com", 443)),  # 小文字・末尾ドットなしに正規化
+        ("localhost:8080", ("localhost", 8080)),
+        ("intranet:443", ("intranet", 443)),
+        ("93.184.216.34:443", ("93.184.216.34", 443)),
+        ("[2606:2800:220:1:248:1893:25c8:1946]:443", ("2606:2800:220:1:248:1893:25c8:1946", 443)),
+        ("[::FFFF:7f00:1]:443", ("::ffff:127.0.0.1", 443)),  # 正規化される
+    ],
+)
+def test_parse_authority_accepts_and_normalizes(target, expected):
+    assert relay.parse_authority(target) == expected
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "",
+        "github.com",  # ポート無し
+        "github.com:0",
+        "github.com:65536",
+        "github.com:+443",
+        "github.com:４４３",  # 全角数字
+        "github.com:443443",
+        "git hub.com:443",
+        "github.com\t:443",
+        "gith\u00fcb.com:443",  # ASCII 以外
+        "2852039166:443",  # 10 進の整数表記の IPv4 (上流が別のアドレスと解釈しうる)
+        "0x7f.1:443",
+        "127.1:443",  # 省略形の IPv4
+        "127.0.0.01:443",  # 先頭ゼロ
+        "foo.123:443",  # 最後のラベルが数字
+        "::1:443",  # 括弧の無い IPv6
+        "[::1:443",
+        "[::1]443",
+        "[::1%eth0]:443",  # スコープ ID
+        "[not-v6]:443",
+        "a..b:443",
+        "-bad.example:443",
+    ],
+)
+def test_parse_authority_rejects_odd_forms(target):
+    with pytest.raises(ValueError):
+        relay.parse_authority(target)
+
+
+def test_odd_authority_gets_400_and_nothing_reaches_the_upstream(upstream):
+    for target in ("2852039166:443", "0x7f.1:443", "[::1:443", "host:0", "a b:443"):
+        server = _deny_via(upstream)
+        try:
+            head, _ = _exchange(server.port, f"CONNECT {target} HTTP/1.1\r\n\r\n".encode())
+        finally:
+            server.stop()
+        assert head.startswith(b"HTTP/1.1 400"), target
+    assert upstream.requests == []
+
+
+@pytest.mark.parametrize(
+    ("address", "allow_private", "blocked"),
+    [
+        ("10.1.2.3", True, False),
+        ("172.16.5.5", True, False),
+        ("192.168.0.9", True, False),
+        ("fd12:3456::1", True, False),  # ULA
+        ("::ffff:10.0.0.1", True, False),  # IPv4-mapped は IPv4 として見る
+        ("10.1.2.3", False, True),  # 既定は閉じる
+        ("100.64.0.1", True, True),  # 共有アドレス空間は allow_private でも開けない
+        ("169.254.169.254", True, True),  # メタデータは常に拒否
+        ("fe80::1", True, True),
+        ("127.0.0.1", True, True),  # ループバックは別の設定
+        ("0.0.0.0", True, True),
+        ("192.0.2.1", True, True),  # 文書用の予約。RFC1918 ではない
+        ("198.18.0.1", True, True),
+        ("224.0.0.1", True, True),
+    ],
+)
+def test_blocked_address_allow_private_opens_only_rfc1918_and_ula(address, allow_private, blocked):
+    assert (relay.blocked_address(address, False, allow_private) is not None) is blocked
+
+
+def _deny_via(upstream, deny=(), no_proxy="", allow_loopback=False, allow_private=False):
+    server = relay.Relay(
+        [],
+        f"http://127.0.0.1:{upstream.port}",
+        no_proxy,
+        deny=list(deny),
+        allow_loopback=allow_loopback,
+        allow_private=allow_private,
+    )
+    server.start()
+    return server
+
+
+def test_deny_via_upstream_forwards_a_normal_name_with_the_normalized_authority(upstream):
+    server = _deny_via(upstream)
+    try:
+        head, echoed = _exchange(
+            server.port, b"CONNECT News.Example.ORG.:443 HTTP/1.1\r\n\r\n", b"hello"
+        )
+    finally:
+        server.stop()
+    assert head.startswith(b"HTTP/1.1 200")
+    assert echoed == b"hello"
+    assert upstream.requests[0].startswith("CONNECT news.example.org:443 HTTP/1.1")
+    assert "Host: news.example.org:443" in upstream.requests[0]
+
+
+def test_deny_via_upstream_wraps_an_ipv6_literal_in_brackets(upstream):
+    server = _deny_via(upstream)
+    try:
+        _exchange(server.port, b"CONNECT [2606:2800:220:1::1]:443 HTTP/1.1\r\n\r\n", b"x")
+    finally:
+        server.stop()
+    assert upstream.requests[0].startswith("CONNECT [2606:2800:220:1::1]:443 HTTP/1.1")
+
+
+def test_deny_via_upstream_sends_basic_auth_and_maps_refusal_to_502():
+    proxy = FakeProxy(status=407)
+    server = relay.Relay(
+        [], f"http://us%40er:pw@127.0.0.1:{proxy.port}", "", deny=[], allow_loopback=False
+    )
+    server.start()
+    try:
+        head, _ = _exchange(server.port, b"CONNECT news.example.org:443 HTTP/1.1\r\n\r\n")
+    finally:
+        server.stop()
+        proxy.close()
+    assert head.startswith(b"HTTP/1.1 502")
+    assert "Proxy-Authorization: Basic" in proxy.requests[0]
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "pastebin.com:443",  # 拒否リスト
+        "a.files.example:443",  # *.x
+        "169.254.169.254:80",  # メタデータ (IP リテラル)
+        "10.0.0.5:443",  # 私設 (既定は閉じる)
+        "100.64.1.1:443",
+        "[fe80::1]:443",
+        "[::ffff:127.0.0.1]:443",  # IPv4-mapped のループバック
+        "127.0.0.1:8080",
+        "localhost:8080",  # localhost 系の名前は、上流へ送らず拒否
+        "app.localhost:8080",
+        "0.0.0.0:80",
+    ],
+)
+def test_deny_via_upstream_refuses_before_anything_reaches_the_upstream(upstream, target):
+    server = _deny_via(upstream, deny=["pastebin.com", "*.files.example"])
+    try:
+        head, _ = _exchange(server.port, f"CONNECT {target} HTTP/1.1\r\n\r\n".encode())
+    finally:
+        server.stop()
+    assert head.startswith(b"HTTP/1.1 403"), target
+    assert upstream.requests == []
+
+
+def test_deny_via_upstream_no_proxy_direct_route_is_still_checked(upstream):
+    """★NO_PROXY の直接経路は、上流を使わない代わりに、名前解決後のアドレスを検査する。"""
+    echo, port = _echo_server()
+    request = f"CONNECT 127.0.0.1:{port} HTTP/1.1\r\n\r\n".encode()
+    try:
+        closed = _deny_via(upstream, no_proxy="127.0.0.1")
+        try:
+            head, _ = _exchange(closed.port, request)
+        finally:
+            closed.stop()
+        assert head.startswith(b"HTTP/1.1 403")
+
+        opened = _deny_via(upstream, no_proxy="127.0.0.1", allow_loopback=True)
+        try:
+            head, echoed = _exchange(opened.port, request, b"direct")
+        finally:
+            opened.stop()
+        assert head.startswith(b"HTTP/1.1 200")
+        assert echoed == b"direct"
+    finally:
+        echo.close()
+    assert upstream.requests == []
+
+
+def test_deny_via_upstream_no_proxy_name_resolving_to_a_private_address(monkeypatch, upstream):
+    real = socket.getaddrinfo
+
+    def resolver(host, *a, **k):
+        if host == "intra.example":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.9.9.9", 443))]
+        return real(host, *a, **k)
+
+    monkeypatch.setattr(relay.socket, "getaddrinfo", resolver)
+    server = _deny_via(upstream, no_proxy="intra.example")
+    try:
+        head, _ = _exchange(server.port, b"CONNECT intra.example:443 HTTP/1.1\r\n\r\n")
+    finally:
+        server.stop()
+    assert head.startswith(b"HTTP/1.1 403")  # allow_private が無ければ閉じる
+    with pytest.raises(relay.Blocked):
+        relay.resolve_public("intra.example", 443, False, False)
+    assert relay.resolve_public("intra.example", 443, False, True)  # 開けたときだけ通る
+    assert upstream.requests == []
+
+
+def test_allow_private_does_not_change_what_the_upstream_can_reach(upstream):
+    """★allow_private は、中継が検査できる経路だけを緩める。名前は従来どおり上流へ送る (検査しない)。"""
+    server = _deny_via(upstream, allow_private=True)
+    try:
+        head, _ = _exchange(server.port, b"CONNECT intranet.example:443 HTTP/1.1\r\n\r\n", b"x")
+    finally:
+        server.stop()
+    assert head.startswith(b"HTTP/1.1 200")
+    assert upstream.requests[0].startswith("CONNECT intranet.example:443")

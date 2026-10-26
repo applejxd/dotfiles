@@ -35,6 +35,7 @@ def test_denylist_setting_is_normalized():
         "mode": "denylist",
         "deny": ["a.example", "*.b.example"],
         "allow_loopback": False,
+        "allow_private_direct": False,
         "local_ports": [],
     }
 
@@ -49,6 +50,8 @@ def test_denylist_setting_is_normalized():
         {"mode": "denylist", "deny": ["https://a.example/x"]},
         {"mode": "denylist", "deny": [""]},
         {"mode": "denylist", "allow_loopback": "yes"},
+        {"mode": "denylist", "allow_private_direct": "yes"},
+        {"mode": "denylist", "allow_private_direct": 1},
         {"mode": "denylist", "local_ports": [80]},
         {"mode": "denylist", "local_ports": ["3000"]},
         {"mode": "denylist", "local_ports": [True]},
@@ -90,6 +93,7 @@ def test_read_network_setting_returns_the_denylist(monkeypatch, tmp_path):
         "mode": "denylist",
         "deny": ["a.example"],
         "allow_loopback": True,
+        "allow_private_direct": False,
         "local_ports": [3000],
     }
 
@@ -107,6 +111,7 @@ def test_read_network_setting_returns_the_denylist(monkeypatch, tmp_path):
         {"mode": "denylist", "deny": [1]},
         {"mode": "denylist", "deny": [""]},
         {"mode": "denylist", "allow_loopback": "true"},
+        {"mode": "denylist", "allow_private_direct": "true"},
         {"mode": "denylist", "local_ports": ["3000"]},
         {"mode": "denylist", "local_ports": [80]},
     ],
@@ -158,6 +163,7 @@ def test_local_toml_appends_deny_and_ports_and_replaces_mode():
         "mode": "denylist",
         "deny": ["a.example", "b.example"],
         "allow_loopback": False,
+        "allow_private_direct": False,
         "local_ports": [3000, 8080],
     }
 
@@ -275,3 +281,38 @@ def test_broken_local_toml_for_sandbox_or_broker_stops_generation(local):
     with pytest.raises(SystemExit):
         gen.pi_sandbox(_overlay(local))
         gen.build_pi_harness({}, _overlay(local))
+
+
+def test_default_mode_follows_the_machine_type():
+    """個人の機 (github-copilot) は denylist、それ以外は allowlist (Copilot ブローカーが無効な機に denylist を置かない)。"""
+    common = load_common()
+    provider = common["opencode"]["model"]["provider"]
+    expected = "denylist" if provider == "github-copilot" else "allowlist"
+    assert gen.build_pi_harness({}, common)["network"]["mode"] == expected
+
+
+def test_allow_private_direct_is_read_replaced_by_local_toml_and_defaults_to_false():
+    assert (
+        gen.build_pi_harness({}, _with_network({"mode": "denylist"}))["network"][
+            "allow_private_direct"
+        ]
+        is False
+    )
+    network = gen.build_pi_harness(
+        {}, _with_local({"mode": "denylist"}, {"allow_private_direct": True})
+    )["network"]
+    assert network["allow_private_direct"] is True
+
+
+def test_read_network_setting_carries_allow_private_direct(monkeypatch, tmp_path):
+    pi = _ocs().pi
+    body = {"network": {"mode": "denylist", "allow_private_direct": True}}
+    _rules(tmp_path, monkeypatch, pi, body)
+    assert pi.read_network_setting()["allow_private_direct"] is True
+
+
+def test_the_gate_needs_a_verified_llm_broker_not_just_any_flag():
+    """★拒否リスト型は、選択中の LLM プロバイダーの認証を内側から除いたと確認できるときだけ。"""
+    pi = _ocs().pi
+    assert pi.llm_auth_isolated(None) is False  # --no-broker・ブローカー無し
+    assert pi.llm_auth_isolated(("http://127.0.0.1:18080", 18080)) is True

@@ -84,6 +84,10 @@ NETWORK_HINT = (
     "local_ports は 1024-65535 の整数の配列"
 )
 ALLOWLIST_NOTICE = "pis: 通信を許可リスト型に戻す (--allowlist)。許可外のドメインは内側から届かない"
+NETWORK_VIA_PROXY_NOTICE = (
+    "pis: 拒否リスト型 (上流プロキシ経由): 名前解決後の宛先は中継で検査できない "
+    "(内部宛先の保護は上流プロキシの出口制御と、直接経路・IP リテラルの検査だけ)"
+)
 NETWORK_NEEDS_BROKER_NOTICE = (
     "pis: [pis.network] は denylist だが、Copilot ブローカーが無効なので許可リスト型で起動する "
     "(拒否リスト型は、内側へ本物の認証を渡さないときだけ)"
@@ -151,6 +155,17 @@ def read_broker_setting(rules_path: Path | None = None) -> str | None:
     return value
 
 
+def llm_auth_isolated(copilot_endpoint: tuple[str, int] | None) -> bool:
+    """選択中の LLM プロバイダーの本物の認証が内側に残らないと、確認できているか。
+
+    今は Copilot ブローカー (起動前に身元を確認済みの endpoint) だけ。**プロバイダーを足すときは、ブローカーが
+    動いているだけでは足りない**。そのプロバイダーの本物の認証が内側のファイル・環境変数・設定から除かれ、
+    ブローカーの身元と経路を確認できたときだけ True にする (拒否リスト型は、任意のホストへ認証を送れてしまうため)。
+    ``--no-broker`` や別プロバイダーへの切替でこの条件が崩れるときは False を返すこと。
+    """
+    return copilot_endpoint is not None
+
+
 def read_network_setting(rules_path: Path | None = None) -> dict | None:
     """``rules.json`` の ``network`` を読む。拒否リスト型 (``denylist``) のとだけ設定を返す。
 
@@ -175,11 +190,13 @@ def read_network_setting(rules_path: Path | None = None) -> dict | None:
         die(f"{path} の network.mode が不正: {mode!r}", NETWORK_HINT)
     deny = section.get("deny", [])
     loopback = section.get("allow_loopback", False)
+    private = section.get("allow_private_direct", False)
     ports = section.get("local_ports", [])
     if (
         not isinstance(deny, list)
         or not all(isinstance(d, str) and d for d in deny)
         or not isinstance(loopback, bool)
+        or not isinstance(private, bool)
         or not isinstance(ports, list)
         or not all(
             isinstance(p, int) and not isinstance(p, bool) and 1024 <= p <= 65535 for p in ports
@@ -190,6 +207,7 @@ def read_network_setting(rules_path: Path | None = None) -> dict | None:
         "mode": "denylist",
         "deny": list(deny),
         "allow_loopback": loopback,
+        "allow_private_direct": private,
         "local_ports": list(ports),
     }
 
@@ -891,12 +909,14 @@ def _launch_with(
     search_endpoint = parse_broker(search_url)
     if search_endpoint is not None:
         verify_broker(search_endpoint[0], broker.SEARCH_IDENTITY_PREFIX, "検索")
-    # 拒否リスト型 ([pis.network] mode = denylist)。内側へ本物の認証を渡さない前提なので、Copilot ブローカーが有効なときだけ
+    # 拒否リスト型 ([pis.network] mode = denylist)。内側へ本物の LLM 認証を渡さない前提なので、それが確認できるときだけ
     allowlist = bool(getattr(args, "allowlist", False))
     network = None if allowlist else read_network_setting()
-    if network is not None and endpoint is None:
+    if network is not None and not llm_auth_isolated(endpoint):
         print(NETWORK_NEEDS_BROKER_NOTICE, file=sys.stderr)
         network = None
+    if network is not None and relay.corporate_proxy() is not None:
+        print(NETWORK_VIA_PROXY_NOTICE, file=sys.stderr)
     sandbox = boundary.load_boundary(RULES, required=())
     runtime = Path(sandbox["runtime_path"])
     if not runtime.is_file():

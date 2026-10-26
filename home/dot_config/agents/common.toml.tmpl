@@ -1242,15 +1242,22 @@ github_token_command = ["gh", "auth", "token"]
 github_token_file = "~/.config/pis/github-token"
 {{- end }}
 
-# 内側の通信。allowlist (既定) は許可ドメインだけ、denylist は deny 以外の公開宛先へ HTTPS を通す。
-# denylist は「ホストにプロキシの環境変数が無い」かつ「Copilot ブローカーが有効」のときだけ効く。
-# 切り替える前に、作業ディレクトリの .env 等が内側で読める限界を確認する (CHG-0037)。
+# 内側の通信。allowlist は許可ドメインだけ、denylist は deny 以外の公開宛先へ HTTPS を通す。
+# 個人の機 (llm-provider が github-copilot) は denylist を既定にする (利用者の決定、2026-10-26)。
+# denylist は「ホストにプロキシの環境変数が無い」かつ「Copilot ブローカーが有効」のときだけ効く (満たさなければ allowlist で起動)。
+# 残る限界: 作業ディレクトリの .env 等は内側で読め、denylist では任意のホストへ送れる (CHG-0037)。
+# 一時的に戻すには pis --allowlist。
 # このマシンだけの deny / local_ports / mode は、chezmoi 管理外の ~/.config/agents/local.toml の [pis.network] に書く (apply で消えない)。
 # see docs/spec/guard/pi-guard.md#拒否リスト型の通信
 [pis.network]
+{{- if eq (includeTemplate "llm-provider" .) "github-copilot" }}
+mode = "denylist"
+{{- else }}
 mode = "allowlist"
+{{- end }}
 deny = []
 allow_loopback = false
+allow_private_direct = false
 local_ports = []
 
 # pi のプロンプトテンプレート (~/.pi/agent/prompts/<名前>.md になり、/<名前> で呼ぶ)。
