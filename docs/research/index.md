@@ -108,6 +108,7 @@
 | [pi の子エージェント job の結果の保持と通知の仕様メモ](agents/pi-subagent-jobs-notes.md) | `FINISHED_TTL_MS`・通知・保存ファイル・`audit.ts` の実装の細部と試験。移設日 2026-10-26（`pi-guard.md` から） |
 | [AI CLI 設定の生成に関する経緯・実測の記録（その 2）](agents/agent-config-generation-notes-2.md) | 子エージェント・コミットの確認・`/fleet`・bypass の子の、宣言しなかった不具合・採らなかった案・実測（N9〜N12）。2026-09〜10 |
 | [pi を AI オーケストレーターとして使う仕組みの調査](agents/pi-orchestrator-survey.md) | 2026-10-26。O1: 導入に値する公開拡張は無く（親を管理専用にするのは edxeth/pi-subagents と @saifymatteo/pi-orchestrator など少数で、どれもフルガードと合わない）、自作の `guarded_task` に orchestrator ロール・待ち合わせ・DAG を足す方針。借りる設計・RPC で複数の子を管理する落とし穴・他社（Claude Code・Codex・Cursor・Anthropic・Cognition）の知見。実機での試験は未実施 |
+| [オーケストレーションの役割別のモデル割り当ての調査](agents/subagent-model-assignment.md) | 2026-10-27。M1: 「計画は Claude、実装は GPT」の通説に、一次資料の実測は見つからなかった（体験談で向きも逆の記事がある）。一次資料が支える分担は、能力と費用の分担で、同じ系統の中（`opusplan`・Opus リード + Sonnet サブ）。別系統が効く場面はレビュー。公開評価は、Claude がターミナル作業・長期、GPT-6 Sol がマージ可能な差分と費用で優位。委譲の巧さの役割別評価は無し。見立て: 親は最も強いモデル、worker は Sonnet `#medium`（計測済み）に Sol を足して比較、explore は小型を比較、review は作った者と別の系統。実験の設計案つき |
 
 ### OpenCode 全般
 
