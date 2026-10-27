@@ -46,6 +46,20 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
   呼ばないため（[CHG-0008](../change/closed/0008-raspi-branching.md)）。
   `[data]` の `llm_provider` は判定を覆したいときの逃げ道
 
+### 子エージェントのモデルのカタログ
+
+[CHG-0043](../change/0043-model-catalog.md)。`guarded_task` で、ユーザの指示により、子のモデルと effort を選べる範囲。**最新のモデルだけ**を載せる。
+`[pi.model.catalog.<プロバイダ>]` に、`reviewed_on`（最新かを見直した日）・`enforce_verified`・`families`（系統の分類）と、`[[...models]]`
+（`id`・`family`・`generation`・`verified`・`cost`・`note`）を書く。
+
+- **`generation` は整数の列**（`6.1` は `[6, 1]`。辞書順に比べる。小数で書くと `6.9` と `6.10` が比べられない）。`family` は `families` にある名前だけ（typo を検査で拒否）
+- **階層の既定は、カタログの中の、同じ系統の最新**でなければならない（生成時の検査 `check_pi_tiers_against_catalog`。新しい世代をカタログに足すと、古い世代を使う階層が落ちる）。
+  **`enforce_verified = true` のプロバイダでは `verified = true`** も要る。Bedrock は、使える環境で probe するまで `false`（未確認の環境の生成が止まらないように）
+- **保証の範囲は「確認済みカタログ内で最新」**。外部（プロバイダ）の最新との一致は、`mise run models:check`（`pi --list-models` と比べ、新しい世代・一覧に無い項目・`reviewed_on` が古いことを警告。**一覧の取得に失敗した・空のときは「問題なし」にせず終了コード 2**）と、定期的な見直しで補う。一覧に無いことは廃止の証明ではない（Copilot の Terra は、一覧に無いが動く）
+- `mise run models:probe`: 固定のファイルを読ませ、応答にその固定の文字列が含まれること（ツール呼び出しの成功）を確かめる。**`verified` は自動では書き換えない**（手で直す）
+- 初期のカタログ: Copilot は `claude-sonnet-5.5`・`gpt-6.1-sol`・`gpt-6.1-terra`（すべて `verified`。2026-10-27 に probe）。Bedrock は `us.anthropic.claude-sonnet-5-5`・`us.anthropic.claude-opus-5-5`（`cost = "high"`）・`us.openai.gpt-6.1-sol`・`us.openai.gpt-6.1-terra`。Haiku・古い世代（`gpt-6-*`・`claude-sonnet-5`）は載せない
+- 選べる範囲・effort の仕様と、ユーザの指示なしに選ぶ危険の扱いは [pi の子エージェント](guard/pi-subagents.md)
+
 ### 階層
 
 `[opencode.model.tier.<プロバイダ>]` に**階層名 → モデル ID** を書き、エージェントは

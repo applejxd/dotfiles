@@ -123,11 +123,16 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 | 状態 | `{jobId, status: true}` / `{list: true}` | 状態・経過時間・最後のツール・呼び出し数・トークン（子の assistant メッセージの `usage` の合計） |
 | steer | `{jobId, steer: "..."}` | RPC の `steer`。子の今のターンのツール呼び出しが終わったあと、次の LLM 呼び出しの前に届く |
 | abort | `{jobId, abort: true}` | RPC の `abort`。**今の往復だけ**止め、子は残す（状態 `aborted`。履歴は途中までで、`keep` なら追加依頼で続けられる）。`done` 以外で job を止める原則の例外（親が明示した中断だから） |
-| 並列 | `{tasks: [{agent, task, model?}, ...]}`（最大 12） | 上限 4 は維持し、超えた分は断らず空きを待つ。結果は順に連結。上限は「生かしておく子」を数えるので、空きが 0 なら断る |
-| モデル | `model: "provider/id"` | 選べるのは、宣言済みの役割が使うモデルと、親と同じモデルだけ（階層の範囲内） |
+| 並列 | `{tasks: [{agent, task, model?, effort?}, ...]}`（最大 12） | 上限 4 は維持し、超えた分は断らず空きを待つ。結果は順に連結。上限は「生かしておく子」を数えるので、空きが 0 なら断る |
+| モデルと effort | `model`・`effort`（単発と、並列の各項目） | [カタログ](../agent-model-assignment.md#子エージェントのモデルのカタログ)・親の完全な `provider/id`・宣言済みの役割の既定のモデルから選ぶ。`effort` は `minimal`〜`max` の 6 段（`off` は拒否）。**ユーザが指示したときだけ指定する**（省略すると役割の既定）。結果と状態に、使ったモデル・effort・既定か指定か・未確認・高コストの印を必ず出す。追加依頼では変えられない |
 | ToDo | `{agent, task, todo: <id>}` | 子が `done` で終わればその項目を `done` にし、結果を `note` へ。それ以外はメモだけ（`todo` 拡張が `globalThis.__piTodoUpdate` を置く）。**`todo` ツールが有効な実行では、新しい子を起動する単発の形（`explore` / `review` / `worker`）に `todo` が必須**で、無いと `todo is required for <agent>: add a todo item for this work and pass its id as \`todo\`` を `error`で返し、子は起動しない（`commit`は任意。追加依頼・状態・steer・abort・close と、`tasks`の並列は対象外。項目の存在は確かめず、`todo`は整数かだけをスキーマで見る）。`todo` ツールが無い実行（todo 拡張を読み込まない試験など）では要求しない。試験は `test_task_requires_todo_*` ほか |
 
-- **結果の形**: 見出し行（`child <役割>: <状態> [時間, 呼び出し数, トークン, 費用]`）→ 承認待ち → 警告（子のツールエラー。同じものは 1 つにし、5 件まで）→ job → `answer:` の順。
+- **モデルと effort の選択**（`harness/model-choice.ts`。[CHG-0043](../../change/0043-model-catalog.md)）: 許可の集合は「カタログ（設定のプロバイダのもの）∪ 親の完全な `provider/id` ∪ 役割の既定」。
+  `model` は `id` か `provider/id`（設定と違うプロバイダは、親の完全な `provider/id` と役割の既定に一致するときだけ）。優先順位は
+  **明示の `effort` ＞ `model` の接尾辞（`id:level`）＞（同じモデルのとき）役割の既定の effort ＞ pi の既定**。起動には `--model provider/id[:effort]` を渡す
+  （対応しない段は pi が丸める。`claude-sonnet-5.5:off` は 400 なので、`off` は選ばせない。実測）。`""`・`null` は「指定なし」。
+  **親（LLM）が、ユーザの指示なしに高価なモデルを選ぶ危険は、確認画面なしで受容している**（利用者の決定。補い: 説明で「指示があったときだけ」と書く、結果に必ず表示する）
+- **結果の形**: 見出し行（`child <役割>: <状態> [時間, 呼び出し数, トークン, 費用]`）→ **使ったモデルと effort の行** → 承認待ち → 警告（子のツールエラー。同じものは 1 つにし、5 件まで）→ job → `answer:` の順。
   エラーを答えに混ぜない
 - **結果の保持と通知**: 完了した往復の結果（redact 済みの全文）は、30 分・最大 20 件（`FINISHED_TTL_MS`・`MAX_FINISHED`）だけ親のプロセス内に残し、`{jobId, status: true}` で引ける（`keep` なしで自動で消えた子も対象。引くときの切り詰めは 2 万字）。`close` した job の分は消える。
   バックグラウンドの完了通知（`child-finished`）の見出しには通番と起動・完了の時刻を付け、結果の全文を cwd 基準の `.tmp/subagents/<通番>-<job id>.md` にも書いて、通知の末尾にそのパスを示す（新しい順に 50 件、7 日を超えたものは消す）。

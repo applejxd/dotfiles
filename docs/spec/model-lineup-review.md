@@ -179,6 +179,9 @@ OPENCODE_PROBE_MODEL='github-copilot/<ID>' mise run opencode:probe -- 'Reply wit
 
 > 手順 1・4・5 の `[opencode.model.tier.*]`・`opencode.json` は OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi は `[pi.model.tier.<プロバイダ>]` の上書きと `pi_model_ref` を使い、設定は `rules.json` / `pis` の起動引数へ生成される（[設定の生成](agent-config-generation.md)）。
 
+0. **（pi。カタログ）** 新しいモデルが出たら、`mise run models:check` で、カタログに対する新しい世代を確かめ、`mise run models:probe --model <id>` で、短い応答とツール呼び出しを確かめる。
+   `[pi.model.catalog.<プロバイダ>]` に足し（`verified` は、probe の結果を見て手で。`generation` は整数の列）、`reviewed_on` を直し、古い世代を使う階層（`[pi.model.tier.*]` と `[opencode.model.tier.*]` の pi が使うもの）を新しい世代に直す。
+   直さないと、生成時の検査（`check_pi_tiers_against_catalog`）で落ちる。詳細は[カタログ](agent-model-assignment.md#子エージェントのモデルのカタログ)
 1. `home/dot_config/agents/common.toml.tmpl` の `[opencode.model.tier.<プロバイダ>]` を書き換える。
    どのプロバイダにも同じ階層名をそろえる。pi だけ別のモデルにしたい階層は `[pi.model.tier.<プロバイダ>]` に書く
 2. テストを直して通す。`test/agents/test_generate_opencode_models.py` は各プロバイダの ID と

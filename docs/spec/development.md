@@ -320,3 +320,11 @@ chezmoi apply --exclude=scripts
   `conftest.py` の `pytest_sessionfinish` でも消す（pytest-xdist のワーカーは `os._exit` で終わり、`atexit` が走らない）。
   `pyproject.toml` の `tmp_path_retention_count = 1`・`tmp_path_retention_policy = "failed"` で、落ちたテストの分だけ残す。
   固定する試験は `test_tmp_hygiene.py`（実測: `test/agents` を実行した後の `.tmp` に残骸 0、`pytest-of-*` は 4 KB）
+
+## 子エージェントのモデルのカタログの道具
+
+[CHG-0043](../change/0043-model-catalog.md)。仕様は[カタログ](agent-model-assignment.md#子エージェントのモデルのカタログ)。
+
+- `mise run models:check`: カタログと `pi --list-models` を比べる（`scripts/models.py check`）。警告 = 終了コード 1、**一覧を取得できない・対象のプロバイダが空 = 2（「問題なし」にしない）**。`--list-file` で、保存した一覧を使える（試験用）
+- `mise run models:probe`: 短い応答とツール呼び出しで確かめる（`scripts/models.py probe`）。既定は未確認のもの（無ければ全部）。`--model <id>`・`--effort <段>`・`--all`・`--dry-run`。1 回の上限は 8 件（費用の保護）
+- 試験: `test_pi_model_catalog.py`（生成の検査）・`test_pi_model_choice.py`（ハーネスの選択）・`test_models_tool.py`（道具）
