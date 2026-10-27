@@ -1261,6 +1261,108 @@
    ]
   },
   "model": {
+   "catalog": {
+    "amazon-bedrock": {
+     "enforce_verified": false,
+     "families": [
+      "claude-sonnet",
+      "claude-opus",
+      "gpt-sol",
+      "gpt-terra"
+     ],
+     "models": [
+      {
+       "cost": "normal",
+       "family": "claude-sonnet",
+       "generation": [
+        5,
+        5
+       ],
+       "id": "us.anthropic.claude-sonnet-5-5",
+       "note": "Sonnet 5.5 で effort を付けられることは利用者が確かめた (docs/spec/model-lineup-review.md)",
+       "verified": true
+      },
+      {
+       "cost": "high",
+       "family": "claude-opus",
+       "generation": [
+        5,
+        5
+       ],
+       "id": "us.anthropic.claude-opus-5-5",
+       "note": "高価。deep 階層用。明示の指示のときだけ使う",
+       "verified": false
+      },
+      {
+       "cost": "normal",
+       "family": "gpt-sol",
+       "generation": [
+        6,
+        1
+       ],
+       "id": "us.openai.gpt-6.1-sol",
+       "note": "AWS の公式モデルカードで GA (2026-09-29)。pi からのツール呼び出しは未確認",
+       "verified": false
+      },
+      {
+       "cost": "normal",
+       "family": "gpt-terra",
+       "generation": [
+        6,
+        1
+       ],
+       "id": "us.openai.gpt-6.1-terra",
+       "note": "AWS の公式モデルカードで GA (2026-10-26)。pi からのツール呼び出しは未確認",
+       "verified": false
+      }
+     ],
+     "reviewed_on": "2026-10-27"
+    },
+    "github-copilot": {
+     "enforce_verified": true,
+     "families": [
+      "claude-sonnet",
+      "gpt-sol",
+      "gpt-terra"
+     ],
+     "models": [
+      {
+       "cost": "normal",
+       "family": "claude-sonnet",
+       "generation": [
+        5,
+        5
+       ],
+       "id": "claude-sonnet-5.5",
+       "note": "2026-10-27: :minimal〜:max を確認 (:off は 400 なので effort に含めない)。Opus 5.5 は Copilot で制限",
+       "verified": true
+      },
+      {
+       "cost": "normal",
+       "family": "gpt-sol",
+       "generation": [
+        6,
+        1
+       ],
+       "id": "gpt-6.1-sol",
+       "note": "2026-10-27: :medium・:high とツール呼び出しを確認",
+       "verified": true
+      },
+      {
+       "cost": "normal",
+       "family": "gpt-terra",
+       "generation": [
+        6,
+        1
+       ],
+       "id": "gpt-6.1-terra",
+       "note": "2026-10-27: pi の Copilot の一覧に無く、custom model id の警告つきで動く (:max とツール呼び出しを確認)",
+       "verified": true
+      }
+     ],
+     "reviewed_on": "2026-10-27"
+    }
+   },
    "tier": {
     "amazon-bedrock": {
      "second_opinion": "us.openai.gpt-6.1-terra"

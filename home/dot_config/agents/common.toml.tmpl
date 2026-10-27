@@ -1249,6 +1249,78 @@ second_opinion = "gpt-6.1-terra"
 [pi.model.tier.amazon-bedrock]
 second_opinion = "us.openai.gpt-6.1-terra"
 
+# ★子エージェントのモデルのカタログ (CHG-0043)。最新のモデルだけを載せる。guarded_task の model で選べるのは、ここと、親のモデル、役割の既定だけ。
+# ★generation は整数の列 (6.1 → [6, 1]。辞書順で比べる)。families は明示の分類 (family の typo を検査で拒否する)。
+# ★階層の既定 (pi が使う階層) は、カタログの中の同じ系統の最新であること、enforce_verified = true のプロバイダでは verified = true であることを、生成時に検査する。
+# ★reviewed_on は「最新かどうか」を最後に見直した日 (mise run models:check が、古いと警告)。Haiku は使わない。
+# see docs/change/0043-model-catalog.md
+[pi.model.catalog.github-copilot]
+reviewed_on = "2026-10-27"
+enforce_verified = true
+families = ["claude-sonnet", "gpt-sol", "gpt-terra"]
+
+[[pi.model.catalog.github-copilot.models]]
+id = "claude-sonnet-5.5"
+family = "claude-sonnet"
+generation = [5, 5]
+verified = true
+cost = "normal"
+note = "2026-10-27: :minimal〜:max を確認 (:off は 400 なので effort に含めない)。Opus 5.5 は Copilot で制限"
+
+[[pi.model.catalog.github-copilot.models]]
+id = "gpt-6.1-sol"
+family = "gpt-sol"
+generation = [6, 1]
+verified = true
+cost = "normal"
+note = "2026-10-27: :medium・:high とツール呼び出しを確認"
+
+[[pi.model.catalog.github-copilot.models]]
+id = "gpt-6.1-terra"
+family = "gpt-terra"
+generation = [6, 1]
+verified = true
+cost = "normal"
+note = "2026-10-27: pi の Copilot の一覧に無く、custom model id の警告つきで動く (:max とツール呼び出しを確認)"
+
+# ★Bedrock は、使える環境で probe するまで enforce_verified = false (未確認のままでも、環境の生成が止まらないように)。確認後に true へ直す。
+[pi.model.catalog.amazon-bedrock]
+reviewed_on = "2026-10-27"
+enforce_verified = false
+families = ["claude-sonnet", "claude-opus", "gpt-sol", "gpt-terra"]
+
+[[pi.model.catalog.amazon-bedrock.models]]
+id = "us.anthropic.claude-sonnet-5-5"
+family = "claude-sonnet"
+generation = [5, 5]
+verified = true
+cost = "normal"
+note = "Sonnet 5.5 で effort を付けられることは利用者が確かめた (docs/spec/model-lineup-review.md)"
+
+[[pi.model.catalog.amazon-bedrock.models]]
+id = "us.anthropic.claude-opus-5-5"
+family = "claude-opus"
+generation = [5, 5]
+verified = false
+cost = "high"
+note = "高価。deep 階層用。明示の指示のときだけ使う"
+
+[[pi.model.catalog.amazon-bedrock.models]]
+id = "us.openai.gpt-6.1-sol"
+family = "gpt-sol"
+generation = [6, 1]
+verified = false
+cost = "normal"
+note = "AWS の公式モデルカードで GA (2026-09-29)。pi からのツール呼び出しは未確認"
+
+[[pi.model.catalog.amazon-bedrock.models]]
+id = "us.openai.gpt-6.1-terra"
+family = "gpt-terra"
+generation = [6, 1]
+verified = false
+cost = "normal"
+note = "AWS の公式モデルカードで GA (2026-10-26)。pi からのツール呼び出しは未確認"
+
 
 # pi を Fence で囲うときの追加分 (境界のそのほかのキーは [opencode.sandbox] を共有する。
 # 段 6 で OpenCode を撤去するときに、共有キーをここへ移す)。pis (標準のサンドボックス) が使う。

@@ -2211,6 +2211,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
     redact = opencode_redact(common)
     if not redact:
         raise SystemExit("[pi.redact] が無いか無効 (pi のフルガードは伏字化を前提にする)")
+    check_pi_tiers_against_catalog(common)
     return {
         "judge": pi_judge_data(common),
         "default_role": pi_default_role(common),
@@ -2220,6 +2221,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
         "network": pi_network(common),
         "redact": redact,
         "agents": pi_agents(common),
+        "models": pi_catalog(common),
         "mcp": pi_mcp_servers(common),
         "sandbox": pi_sandbox(common),
         "post_edit": pi_post_edit_hooks(common),
@@ -2394,6 +2396,153 @@ def pi_model_ref(common: dict[str, Any], tier: str) -> str:
         )
     model, _, variant = str(tiers[tier]).partition("#")
     return f"{provider}/{model}" + (f":{variant}" if variant else "")
+
+
+CATALOG_MODEL_KEYS = frozenset({"id", "family", "generation", "verified", "cost", "note"})
+CATALOG_KEYS = frozenset({"reviewed_on", "enforce_verified", "families", "models"})
+CATALOG_COSTS = ("normal", "high")
+PI_THINKING_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh", "max")
+
+
+def _effort_suffix(spec: str) -> str | None:
+    """``id:level`` の level (pi の thinking の段)。無ければ None。"""
+    head, sep, tail = spec.rpartition(":")
+    return tail if sep and head and tail in PI_THINKING_LEVELS else None
+
+
+def _strip_effort(spec: str) -> str:
+    level = _effort_suffix(spec)
+    return spec[: -len(level) - 1] if level else spec
+
+
+def _catalog_of(common: dict[str, Any], provider: str) -> dict[str, Any] | None:
+    return (
+        (((common.get("pi") or {}).get("model") or {}).get("catalog") or {}).get(provider)
+    ) or None
+
+
+def pi_catalog(common: dict[str, Any]) -> dict[str, Any] | None:
+    """``[pi.model.catalog.<provider>]`` (有効なプロバイダのもの) を検査し、ハーネスが読む形にする。
+
+    子エージェントのモデルを ``guarded_task`` の ``model`` で選べる範囲 (最新のモデルだけ)。
+    カタログが無いプロバイダでは None (従来どおり、親と役割の既定だけ)。
+    see docs/change/0043-model-catalog.md
+    """
+    cfg = (common.get("opencode") or {}).get("model") or {}
+    provider = str(cfg.get("provider", ""))
+    raw = _catalog_of(common, provider)
+    if raw is None:
+        return None
+    where = f"[pi.model.catalog.{provider}]"
+    if not isinstance(raw, dict):
+        raise SystemExit(f"{where} は表でなければならない")
+    _reject_unknown(f"pi.model.catalog.{provider}", set(raw), CATALOG_KEYS)
+    reviewed = raw.get("reviewed_on")
+    if not isinstance(reviewed, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", reviewed):
+        raise SystemExit(f"{where} の reviewed_on は YYYY-MM-DD の文字列")
+    if not isinstance(raw.get("enforce_verified"), bool):
+        raise SystemExit(f"{where} の enforce_verified は真偽値")
+    families = raw.get("families")
+    if (
+        not isinstance(families, list)
+        or not families
+        or not all(isinstance(f, str) and f for f in families)
+    ):
+        raise SystemExit(f"{where} の families は空でない文字列の列")
+    models = raw.get("models")
+    if not isinstance(models, list) or not models:
+        raise SystemExit(f"{where} に models (1 件以上) が要る")
+    seen_ids: set[str] = set()
+    seen_gen: set[tuple[str, tuple[int, ...]]] = set()
+    out: list[dict[str, Any]] = []
+    for n, m in enumerate(models):
+        at = f"{where}.models[{n}]"
+        if not isinstance(m, dict):
+            raise SystemExit(f"{at} は表でなければならない")
+        _reject_unknown(f"{at}", set(m), CATALOG_MODEL_KEYS)
+        mid = m.get("id")
+        if not isinstance(mid, str) or not mid.strip() or "/" in mid or _effort_suffix(mid):
+            raise SystemExit(f"{at} の id は、provider/ と :effort を含まない空でない文字列")
+        if mid in seen_ids:
+            raise SystemExit(f"{at} の id {mid!r} が重複している")
+        seen_ids.add(mid)
+        family = m.get("family")
+        if family not in families:
+            raise SystemExit(f"{at} の family {family!r} が families {families} に無い")
+        gen = m.get("generation")
+        if (
+            not isinstance(gen, list)
+            or not gen
+            or not all(isinstance(x, int) and not isinstance(x, bool) and x >= 0 for x in gen)
+        ):
+            raise SystemExit(f"{at} の generation は非負の整数の列 (6.1 なら [6, 1])")
+        key = (str(family), tuple(gen))
+        if key in seen_gen:
+            raise SystemExit(f"{at} は同じ family と generation の組が重複している")
+        seen_gen.add(key)
+        if not isinstance(m.get("verified"), bool):
+            raise SystemExit(f"{at} の verified は真偽値")
+        if m.get("cost") not in CATALOG_COSTS:
+            raise SystemExit(f"{at} の cost は {CATALOG_COSTS} のどれか")
+        note = m.get("note", "")
+        if not isinstance(note, str):
+            raise SystemExit(f"{at} の note は文字列")
+        out.append(
+            {
+                "id": mid.strip(),
+                "family": str(family),
+                "generation": list(gen),
+                "verified": m["verified"],
+                "cost": m["cost"],
+                "note": note,
+            }
+        )
+    return {
+        "provider": provider,
+        "reviewed_on": reviewed,
+        "enforce_verified": raw["enforce_verified"],
+        "models": out,
+    }
+
+
+def check_pi_tiers_against_catalog(common: dict[str, Any]) -> None:
+    """pi が使う階層 (子の tier と default) の既定は、カタログの中の同じ系統の最新であること。
+
+    enforce_verified = true のプロバイダでは verified = true も要求する。古いモデルを階層に
+    残したまま、新しい世代をカタログへ足したときに、ここで落ちる (CHG-0043)。
+    保証の範囲は「確認済みカタログ内で最新」。外部の最新との一致は models:check が警告する。
+    """
+    catalog = pi_catalog(common)
+    if catalog is None:
+        return
+    provider = catalog["provider"]
+    by_id = {m["id"]: m for m in catalog["models"]}
+    pi = common.get("pi") or {}
+    tiers = {"default"} | {
+        str(a["tier"]) for a in (pi.get("agents") or {}).values() if a.get("tier")
+    }
+    for tier in sorted(tiers):
+        ref = pi_model_ref(common, tier)  # provider/model[:effort]
+        model = _strip_effort(ref.split("/", 1)[1])
+        at = f"階層 {tier!r} ({provider}/{model})"
+        entry = by_id.get(model)
+        if entry is None:
+            raise SystemExit(
+                f"{at} が [pi.model.catalog.{provider}] に無い (カタログに足すか、階層をカタログのモデルに直す)"
+            )
+        newest = max(
+            (m for m in catalog["models"] if m["family"] == entry["family"]),
+            key=lambda m: m["generation"],
+        )
+        if newest["id"] != entry["id"]:
+            raise SystemExit(
+                f"{at} は古い (同じ系統 {entry['family']!r} の最新は {newest['id']} で、世代 "
+                f"{newest['generation']} > {entry['generation']})。階層を最新に直す"
+            )
+        if catalog["enforce_verified"] and not entry["verified"]:
+            raise SystemExit(
+                f"{at} は verified = false (enforce_verified = true のプロバイダでは、確認済みのモデルだけを階層の既定にできる)"
+            )
 
 
 def pi_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
