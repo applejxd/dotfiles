@@ -7,9 +7,11 @@ see docs/spec/guard/pi-extensions.md#commit-の確認-素の-pi
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -324,6 +326,16 @@ def test_the_tui_shows_the_structure_and_a_countdown_then_saves_on_timeout(env):
         ["tmux", "new-session", "-d", "-s", session, "-x", "110", "-y", "36", f"bash {script}"],
         check=True,
     )
+    # kill-session の SIGHUP では pi が終わらず、試験のあとも生き残った (inotify を抱えたまま数日間残り、
+    # 110 個たまって envoy の試験が落ちた。2026-10-27)。ペインのプロセスを控えて、確実に終える
+    pane = subprocess.run(
+        ["tmux", "list-panes", "-t", session, "-F", "#{pane_pid}"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout.split()
+    pane_pids = [int(p) for p in pane]
 
     def capture() -> str:
         return subprocess.run(
@@ -369,7 +381,20 @@ def test_the_tui_shows_the_structure_and_a_countdown_then_saves_on_timeout(env):
             time.sleep(0.5)
     finally:
         subprocess.run(["tmux", "kill-session", "-t", session], check=False)
+        _terminate(pane_pids)
     assert commits(env) == [] and len(pending_refs(env)) == 1
+
+
+def _terminate(pids: list[int]) -> None:
+    """pi が SIGHUP で終わらないときのために、SIGTERM → SIGKILL で確実に終える。"""
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        alive = [p for p in pids if Path(f"/proc/{p}").exists()]
+        if not alive:
+            return
+        for p in alive:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(p, sig)
+        time.sleep(2)
 
 
 # ─── フルガードとの関係 ────────────────────────────────────────────────
