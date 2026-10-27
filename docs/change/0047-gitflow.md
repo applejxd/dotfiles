@@ -129,6 +129,9 @@
 | C git-flow-avh | 古くから使われている | アーカイブ済み。squash・worktree が無い | | 見送り | |
 | D 独自のスクリプト（`feature start/finish` を作る） | 引数を完全に制御できる | 作って保守する費用。git-flow-next が足りる | | 保留（A が衝突したときの代案） | 段 1 の結果 |
 | E 現状（main 一本） | 変更なし | 利用者の 3 つの動機が解決しない | | 見送り | |
+| F GitHub flow（main と feature だけ。squash で main へ）＋検証の関門 | 単純。短命の feature・squash・main を常に出せる状態に保つ、が標準的な推奨。git-flow-next にも `github` の preset がある | main への merge 前に検査を必須にしても、**統合先そのものが不安定になる**問題（動機 2）は、develop が無いと残る | | 保留（develop が重いと分かったときの縮小先。tool の設定だけで移れる） | 段 1 以降 |
+| G スタック型のツール（jujutsu・git-branchless・Graphite・git-spice） | 依存する変更を積み重ねて並列に進められる | 学習と導入の費用が大きい。`git flow` だけを許可する方針と合わない | | 見送り | |
+| H worktree の管理ツール（Worktrunk・git-worktree-runner など） | AI の並列実行向けに、worktree の作成・起動を自動化 | git-flow-next が `worktree` と `start --worktree` を持つので重複する | | 見送り（足りないときに再検討） | |
 
 扱い: 未評価 / 検証中 / 有望 / 採用 / 保留 / 見送り
 
@@ -150,4 +153,5 @@
 
 | 日付 | 更新 | 理由・証拠 |
 | --- | --- | --- |
+| 2026-10-28 | **広いネット調査を行い、モデルを決めた**。ブランチモデル（gitflow・GitHub flow・trunk-based）の比較と、AI の並列実行向けの worktree の管理ツール（Worktrunk・git-worktree-runner など）、スタック型ツール（jujutsu・git-branchless・Graphite・git-spice）を調べた。利用者が **gitflow-lite（main / develop / feature。release・hotfix なし。feature は squash）**を選択。GitHub flow は縮小先として残す（git-flow-next の preset と設定で移れるので、許可の形の設計は、どちらでも変わらない） | 出典（2026-10-28 に検索）: <https://trunkbaseddevelopment.com/alternative-branching-models/>・<https://gitkraken.com/blog/how-to-choose-gitflow-vs-trunk-based-in-7-steps-2026>・<https://nx.dev/blog/git-worktrees-ai-agents>・<https://zylos.ai/research/2026-02-22-git-worktree-parallel-ai-development/>。一般に、頻繁にリリースする・人が少ない場合は GitHub flow や trunk-based が勧められ、gitflow は複数のリリースを並行して保守する場合に向くとされる。ただし利用者の動機（統合先の安定・粒度）は、develop を挟む形で直接満たせる |
 | 2026-10-28 | 案件を起票 | 利用者の方針（コミット粒度が細かすぎる・main が不安定・並列開発の改善のために、gitflow へ。feature と worktree の起票・クローズは AI の自動。AI には `git flow` だけを許可）。ネットで git-flow-next を確認、`explore` の調査で現状を確認 |
