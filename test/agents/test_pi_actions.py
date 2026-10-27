@@ -182,7 +182,7 @@ def test_rules_json_carries_the_actions():
     assert commit["argv"] == ["git", "commit", "-F", "{message_file}"]
     assert commit["replaces"] == ["git commit"] and commit["preview"] == "git_staged"
     assert commit["fields"] == {
-        "message": {"type": "text", "file": True, "content": True, "max_chars": 8000}
+        "message": {"type": "text", "file": True, "content": True, "max_chars": 1200}
     }
 
 

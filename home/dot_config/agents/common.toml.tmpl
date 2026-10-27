@@ -1002,7 +1002,8 @@ argv = ["git", "commit", "-F", "{message_file}"]
 replaces = ["git commit"]
 preview = "git_staged"
 [pi.actions.fields]
-message = { type = "text", file = true, content = true, max_chars = 8000 }
+# コミットメッセージは 1200 文字まで (肥大化の抑制)。超えたら連絡先の docs へ逃がす。see docs/spec/guard/pi-extensions.md#guarded_action承認つきの外部操作
+message = { type = "text", file = true, content = true, max_chars = 1200 }
 
 # shell 出力の伏字化。誘導と結果フィルタを抜けて shell を通ったものへの安全網。
 # ★境界ではない。base64 や tr で変換されるとすり抜ける (実測)。事故と素朴な

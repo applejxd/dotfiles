@@ -1112,7 +1112,7 @@
      "message": {
       "content": true,
       "file": true,
-      "max_chars": 8000,
+      "max_chars": 1200,
       "type": "text"
      }
     },
