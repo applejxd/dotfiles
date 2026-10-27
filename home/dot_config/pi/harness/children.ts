@@ -41,9 +41,9 @@ export function classify(f: RoundFacts): { status: RoundStatus; note?: string } 
 
 // ─── 入力 ───────────────────────────────────────────────────────────
 
-export type BatchItem = { agent: string; task: string; model?: string };
+export type BatchItem = { agent: string; task: string; model?: string; effort?: string };
 export type TaskInput =
-	| { kind: "new"; agent: string; task: string; keep: boolean; background: boolean; model?: string; todo?: number; isolation?: "worktree" }
+	| { kind: "new"; agent: string; task: string; keep: boolean; background: boolean; model?: string; effort?: string; todo?: number; isolation?: "worktree" }
 	| { kind: "batch"; tasks: BatchItem[]; background: boolean }
 	| { kind: "followup"; jobId: string; task: string; background: boolean }
 	| { kind: "close"; jobId: string }
@@ -86,8 +86,9 @@ export function parseTaskInput(p: any): TaskInput {
 			if (typeof t?.agent !== "string" || t.agent === "") fail(`tasks[${i}] needs \`agent\``);
 			if (typeof t?.task !== "string" || t.task === "") fail(`tasks[${i}] needs \`task\``);
 			if (t.model !== undefined && typeof t.model !== "string") fail(`tasks[${i}].model must be a string`);
-			for (const k of Object.keys(t)) if (!["agent", "task", "model"].includes(k)) fail(`tasks[${i}] has unknown \`${k}\``);
-			return { agent: t.agent, task: t.task, ...(t.model ? { model: t.model } : {}) };
+			if (t.effort !== undefined && typeof t.effort !== "string") fail(`tasks[${i}].effort must be a string`);
+			for (const k of Object.keys(t)) if (!["agent", "task", "model", "effort"].includes(k)) fail(`tasks[${i}] has unknown \`${k}\``);
+			return { agent: t.agent, task: t.task, ...(t.model ? { model: t.model } : {}), ...(t.effort ? { effort: t.effort } : {}) };
 		});
 		return { kind: "batch", tasks, background: bool("background") };
 	}
@@ -115,6 +116,7 @@ export function parseTaskInput(p: any): TaskInput {
 	if (typeof p?.task !== "string" || p.task === "") fail("new task needs `task`");
 	if (p.keep !== undefined && typeof p.keep !== "boolean") fail("`keep` must be boolean");
 	if (p.model !== undefined && typeof p.model !== "string") fail("`model` must be a string");
+	if (p.effort !== undefined && typeof p.effort !== "string") fail("`effort` must be a string");
 	if (has("todo") && (typeof p.todo !== "number" || !Number.isInteger(p.todo))) fail("`todo` must be an integer id");
 	if (has("isolation")) {
 		if (p.isolation !== "worktree") fail('`isolation` must be "worktree"');
@@ -129,6 +131,7 @@ export function parseTaskInput(p: any): TaskInput {
 		keep: p.keep === true,
 		background: bool("background"),
 		...(p.model ? { model: p.model } : {}),
+		...(p.effort ? { effort: p.effort } : {}),
 		...(has("todo") ? { todo: p.todo } : {}),
 		...(has("isolation") ? { isolation: "worktree" as const } : {}),
 	};
@@ -222,6 +225,8 @@ export class Job {
 	// finalize を渡された job だけ Promise (子の停止の確認と回収が終わると resolve。reject しない)。通常の job は null
 	readonly finalized: Promise<void> | null;
 	isolationInfo?: IsolationInfo;
+	// 使ったモデルと effort (既定か指定か・未確認・高コストの印)。結果に必ず出す (CHG-0043)
+	choiceLine?: string;
 	private finalizeFn: ((job: Job, stopped: boolean) => Promise<void>) | null;
 	private finalizeStarted = false;
 	private finalizeDone: (() => void) | null = null;

@@ -78,7 +78,7 @@ export default async function (pi: ExtensionAPI) {
 			if (process.env.FAUX_ECHO_CHILD_FINISHED === "1" && /バックグラウンドの/.test(lastText)) {
 				const earlier = messages
 					.filter((m: any) => m.role === "toolResult")
-					.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, 400)}`);
+					.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, 700)}`);
 				return fauxAssistantMessage(fauxText(`${earlier.join("\n--\n")}\nFINISHED=${lastText}`));
 			}
 			const issued = messages.filter((m: any) => m.role === "assistant" && Array.isArray(m.content) && m.content.some((c: any) => c.type === "toolCall")).length;
@@ -93,7 +93,7 @@ export default async function (pi: ExtensionAPI) {
 			if (process.env.FAUX_FINAL_DELAY_MS) await sleep(Number(process.env.FAUX_FINAL_DELAY_MS));
 			const all = messages
 				.filter((m: any) => m.role === "toolResult")
-				.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, Number(process.env.FAUX_RESULT_CHARS) || 400)}`);
+				.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, Number(process.env.FAUX_RESULT_CHARS) || 700)}`);
 			return fauxAssistantMessage(fauxText(`TOOLS=${JSON.stringify(tools)}\n${all.join("\n--\n")}`));
 		}
 		if (last?.role === "toolResult") {

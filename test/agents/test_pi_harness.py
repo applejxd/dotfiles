@@ -49,6 +49,7 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "worktrees-command.ts", harness / "worktrees-command.ts")
     shutil.copy2(HARNESS_SRC.parent / "unguarded.ts", harness / "unguarded.ts")
     shutil.copy2(HARNESS_SRC.parent / "session-tmp.ts", harness / "session-tmp.ts")
+    shutil.copy2(HARNESS_SRC.parent / "model-choice.ts", harness / "model-choice.ts")
     shutil.copy2(HARNESS_SRC.parent / "platform.ts", harness / "platform.ts")
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
     shutil.copy2(COMMIT_MESSAGE_SRC, harness / "commit-message.js")
@@ -565,6 +566,7 @@ def test_task_input_ignores_unused_arguments_filled_with_empty_values(env):
         "background": False,
         "keep": False,
         "model": "",
+        "effort": "",
         "todo": 0,
         "isolation": "",
     }
@@ -607,7 +609,15 @@ def test_task_input_forms_accept_empty_fillers_but_still_reject_real_conflicts(e
         "steer": "",
         "tasks": [],
     }
-    empty |= {"agent": "", "task": "", "model": "", "todo": 0, "keep": False, "background": False}
+    empty |= {
+        "agent": "",
+        "task": "",
+        "model": "",
+        "effort": "",
+        "todo": 0,
+        "keep": False,
+        "background": False,
+    }
     only = lambda **keep: {**empty, **keep}  # noqa: E731
     proc = _rounds(
         env,
@@ -875,6 +885,52 @@ def test_model_override_is_limited_to_models_already_in_use(env):
     assert "model not allowed: nowhere/unknown" in proc.stdout, proc.stdout
     # 親と同じモデルは指定できる
     assert "child worker: completed" in proc.stdout, proc.stdout
+
+
+def test_the_result_states_the_model_and_effort_that_were_used(env):
+    """既定でも、指定したときでも、結果に、使ったモデルと effort と「既定か指定か」を必ず出す (CHG-0043)。"""
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="a")],
+            [_task(agent="worker", task="b", effort="high")],
+            [_task(agent="worker", task="c", model="faux/spike", effort="max")],
+        ],
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "- model: faux/spike, effort: (pi default), role default" in proc.stdout, proc.stdout
+    assert (
+        "- model: faux/spike, effort: high, specified by the caller (role default: faux/spike)"
+        in proc.stdout
+    ), proc.stdout
+    assert "- model: faux/spike, effort: max, specified by the caller" in proc.stdout, proc.stdout
+
+
+def test_effort_is_limited_to_the_six_levels_and_off_is_refused(env):
+    """`off` (Claude で 400 になる) を含む、無効な effort は、子を起動する前に拒否する。"""
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="x", effort="off")],
+            [_task(agent="worker", task="y", effort="ultra")],
+            [_task(tasks=[{"agent": "worker", "task": "z", "effort": "off"}])],
+        ],
+    )
+    assert "USERS=" not in proc.stdout, proc.stdout
+    assert proc.stdout.count("isError=true") >= 3, proc.stdout
+
+
+def test_a_follow_up_cannot_change_the_model_or_effort(env):
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="first", keep=True)],
+            [_task(jobId="{{JOB}}", task="second", effort="high")],
+            [_task(jobId="{{JOB}}", task="third", model="faux/spike")],
+        ],
+    )
+    assert proc.stdout.count("invalid guarded_task input") == 2, proc.stdout
+    assert "cannot be used with a follow-up" in proc.stdout, proc.stdout
 
 
 def test_child_result_updates_the_assigned_todo(env):

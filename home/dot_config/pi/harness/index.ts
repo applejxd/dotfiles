@@ -30,6 +30,7 @@ import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions 
 import { auditFormat, summarizeCalls } from "./audit.ts";
 import { unguardedMessage, unguardedSources } from "./unguarded.ts";
 import { SessionTmp } from "./session-tmp.ts";
+import { EFFORTS, catalogText, describeChoice, modelArgument, resolveChoice } from "./model-choice.ts";
 import { ISOLATION_UNSUPPORTED, NO_BASH_NOTICE, findBash, isWindows, supportsChildTasks } from "./platform.ts";
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
@@ -806,19 +807,23 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		details,
 		isError,
 	});
-	// 子のモデルを呼び出しごとに選べるのは、宣言済みの役割のモデルと、親と同じモデルだけ (階層の範囲内)
-	const allowedModels = (parentModel: string) => new Set([parentModel, ...names.map((n) => agents[n].model).filter(Boolean)]);
+	// 子のモデルと effort を呼び出しごとに選べるのは、カタログ (設定のプロバイダ) ・親の完全な provider/id・役割の既定だけ (model-choice.ts。CHG-0043)
 
 	// 子を 1 つ起動する。枠は同期で確保する (並行する起動でも上限を超えない)
 	type Spawned = { job: Job; model: string } | { error: string; full?: boolean };
-	const spawnChild = (agentName: string, ctx: any, owner: { cwd: string; role: string }, modelOverride?: string, isolation?: boolean): Spawned => {
+	const spawnChild = (agentName: string, ctx: any, owner: { cwd: string; role: string }, modelOverride?: string, isolation?: boolean, effortOverride?: string): Spawned => {
 		const agent = agents[agentName];
 		if (!agent) throw new Error(`unknown agent: ${agentName}`);
 		const parentModel = `${ctx.model.provider}/${ctx.model.id}`;
-		if (modelOverride && !allowedModels(parentModel).has(modelOverride)) {
-			throw new Error(`model not allowed: ${modelOverride}. Allowed: ${[...allowedModels(parentModel)].join(", ")}`);
-		}
-		const model = modelOverride ?? agent.model ?? parentModel;
+		const choice = resolveChoice({
+			parentModel,
+			catalog: rules.models ?? null,
+			agentDefault: agent.model ?? null,
+			agentDefaults: names.map((n) => agents[n].model).filter(Boolean),
+			modelArg: modelOverride,
+			effortArg: effortOverride,
+		});
+		const model = modelArgument(choice);
 		// 起動条件は pis と同じ (作業先の .pi/ を読まない・組み込みと拡張の自動発見を止める・MCP だけ戻す)
 		const args = ["--mode", "rpc", "--no-session", "--no-approve", "-nbt", "-ne", "-e", "builtin:mcp", "-e", HERE];
 		// 親の --skill (pis が足した作業先の .agents/skills) をそのまま引き継ぐ。判断は起動側 (pi.py skill_args) の 1 か所
@@ -858,6 +863,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			const live = jobs.list().map((j) => `- ${j.id} (${j.agent}, ${j.state})`).join("\n");
 			return { error: `too many live child jobs (max ${MAX_JOBS}). Close one with {jobId, close:true}:\n${live}`, full: true };
 		}
+		job.choiceLine = describeChoice(choice);
 		return { job, model };
 	};
 
@@ -892,6 +898,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		const missing = r.status === "done" && r.answer ? auditFormat(r.answer) : [];
 		const parts = [
 			`child ${job.agent}: ${label}${r.note ? ` (${r.note})` : ""} [${fmtStats(r.stats)}]`,
+			...(job.choiceLine ? [`- ${job.choiceLine}`] : []),
 			...r.blocked.map((b) => `- needs the user's approval (not run): ${b}`),
 			...(shown.length > 0
 				? [`warnings (tool errors during the run; the answer below already accounts for them):`, ...shown.map((b) => `- tool error: ${b}`)]
@@ -1065,19 +1072,22 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			`Use background=true on ${PREFIX}task to keep working while the child runs; you are notified when it finishes. Use {jobId, status:true} or {list:true} to look at running children, {jobId, steer:"..."} to redirect one, and {jobId, abort:true} to stop its current round (the child stays).`,
 			`${PREFIX}task with agent explore / review / worker requires \`todo\` (the id of a todo item you added for this work) when the todo tool is active; without it the call fails.`,
 			`For several independent tasks, use {tasks:[{agent, task}, ...]} (up to ${MAX_BATCH}); tasks beyond the live-job limit wait instead of failing.`,
+			`Set \`model\` or \`effort\` on ${PREFIX}task only when the user asks for a specific model or thinking level; otherwise omit them (the role default is used). The result always states the model and effort that were used. Use only models from the list in the tool description.`,
 		],
 		description:
 			"Run a task in a child agent. The child is a separate pi process with the same guard, and cannot see this conversation, " +
 			"so put everything it needs into `task`. Forms (do not mix their fields):\n" +
-			"- new: {agent, task, keep?, background?, model?, todo?, isolation?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned. " +
-			"background=true returns at once and notifies you on completion. model must be a model already used by an agent below, or your own. todo is a todo id to update when the child finishes; it is required for explore / review / worker when the todo tool is active (add a todo item first). " +
+			"- new: {agent, task, keep?, background?, model?, effort?, todo?, isolation?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned. " +
+			"background=true returns at once and notifies you on completion. model and effort: see the list below (set them only when the user asks; omit them to use the role default). todo is a todo id to update when the child finishes; it is required for explore / review / worker when the todo tool is active (add a todo item first). " +
 			"isolation: \"worktree\" runs the worker isolated in a git worktree (a single new worker task only; not with keep).\n" +
-			"- tasks: {tasks:[{agent, task, model?}, ...], background?}. Runs them in parallel (waiting for free slots) and returns every result.\n" +
+			"- tasks: {tasks:[{agent, task, model?, effort?}, ...], background?}. Runs them in parallel (waiting for free slots) and returns every result.\n" +
 			"- follow-up: {jobId, task, background?}. Sends another request to a kept child; it remembers the earlier conversation. One request at a time per job.\n" +
 			"- status: {jobId, status:true}, or list: {list:true}. State, elapsed time, last tool, calls and tokens of children.\n" +
 			"- steer: {jobId, steer:\"...\"}. Sends an extra instruction to a running child (delivered after its current turn).\n" +
 			"- abort: {jobId, abort:true}. Stops the child's current round; the child stays for a follow-up.\n" +
 			"- close: {jobId, close:true}. Stops the kept child.\n" +
+			"Follow-ups cannot change the model or effort.\n" +
+			(catalogText(rules.models) ? `${catalogText(rules.models)}\n` : "") +
 			"Agents:\n" +
 			catalog,
 		parameters: Type.Object(
@@ -1087,13 +1097,14 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				task: Type.Optional(Type.String({ description: "What the child should do, with all the context it needs" })),
 				keep: Type.Optional(Type.Boolean({ description: "new task only: keep the child idle after it finishes, for follow-ups" })),
 				background: Type.Optional(Type.Boolean({ description: "new / tasks / follow-up: return at once and be notified on completion" })),
-				model: Type.Optional(Type.String({ description: "new task only: a model already used by a declared agent, or your own" })),
+				model: Type.Optional(Type.String({ description: "new task only: a model from the catalog in this description (only when the user asks), your own model, or a declared agent's model" })),
+				effort: Type.Optional(Type.Union([...EFFORTS, ""].map((e) => Type.Literal(e)), { description: "new task only: thinking level (only when the user asks). \"\" means unset" })),
 				todo: Type.Optional(Type.Number({ description: "new task only: a todo id to mark done (or annotate) when the child finishes" })),
 				isolation: Type.Optional(Type.Union([Type.Literal("worktree"), Type.Literal("")], { description: "new worker task only: \"worktree\" runs the worker isolated in a git worktree (not with keep)" })),
 				tasks: Type.Optional(
 					Type.Array(
 						Type.Object(
-							{ agent: Type.String(), task: Type.String(), model: Type.Optional(Type.String()) },
+							{ agent: Type.String(), task: Type.String(), model: Type.Optional(Type.String()), effort: Type.Optional(Type.Union([...EFFORTS, ""].map((e) => Type.Literal(e)))) },
 							{ additionalProperties: false },
 						),
 						{ description: `parallel tasks (up to ${MAX_BATCH}); do not combine with other fields except background` },
@@ -1153,7 +1164,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 							let sp: Spawned = { error: "", full: true };
 							// 空きが出るまで待つ (上限は維持する)
 							for (let tries = 0; tries < 6000 && "error" in sp && sp.full; tries++) {
-								sp = spawnChild(it.agent, ctx, owner, it.model);
+								sp = spawnChild(it.agent, ctx, owner, it.model, undefined, it.effort);
 								if ("error" in sp && sp.full) await sleep(100);
 							}
 							// 依頼文は秘密を含みうるので、伏字化してから切る
@@ -1228,7 +1239,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				if (TODO_REQUIRED_AGENTS.has(input.agent) && input.todo === undefined && pi.getActiveTools().some((n) => n === "todo")) {
 					return text(`todo is required for ${input.agent}: add a todo item for this work and pass its id as \`todo\``, true);
 				}
-				const sp = spawnChild(input.agent, ctx, owner, input.model, input.isolation === "worktree");
+				const sp = spawnChild(input.agent, ctx, owner, input.model, input.isolation === "worktree", input.effort);
 				if ("error" in sp) return text(sp.error, true);
 				job = sp.job;
 				message = input.task;
@@ -1260,6 +1271,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 					const f = s.state === "running" ? undefined : recall(job.id);
 					return text(
 						`job ${s.id} (${s.agent}): ${s.state}${s.state === "running" ? `, this round ${fmtSecs(s.roundMs)}` : ""}\n` +
+							(job.choiceLine ? `${job.choiceLine}\n` : "") +
 							`age ${fmtSecs(s.ageMs)}, calls ${s.calls}, ${fmtTokens(s.tokens)} tokens${s.cost > 0 ? `, $${s.cost.toFixed(3)}` : ""}` +
 							`${s.lastTool ? `, last tool: ${s.lastTool}` : ""}` +
 							(f ? `\nlast result (${f.status}, ${fmtClock(f.at)}):\n${clip(f.text)}` : ""),
@@ -1284,7 +1296,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 
 			if (background) {
 				runInBackground(job, message, keep, job.id, todo, true, ctx);
-				return text(`started ${job.agent} in the background as ${job.id}. You will be notified when it finishes (status: {jobId, status:true}, steer: {jobId, steer:"..."}, abort: {jobId, abort:true}).`, false, {
+				return text(`started ${job.agent} in the background as ${job.id}${job.choiceLine ? ` (${job.choiceLine})` : ""}. You will be notified when it finishes (status: {jobId, status:true}, steer: {jobId, steer:"..."}, abort: {jobId, abort:true}).`, false, {
 					jobId: job.id,
 					background: true,
 				});

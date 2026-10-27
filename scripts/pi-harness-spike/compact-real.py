@@ -43,6 +43,7 @@ try:
         "worktrees-command.ts",
         "unguarded.ts",
         "session-tmp.ts",
+        "model-choice.ts",
         "platform.ts",
         "landlock_exec.py",
         "commit-message.js",
