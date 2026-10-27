@@ -303,3 +303,20 @@ chezmoi apply --exclude=scripts
 
 恒久的に無効化する場合は、対象ファイルの `run_` 属性を外すか削除する。
 `.tmpl` は実行属性ではないため、拡張子だけを外しても無効化されない。
+
+## 作業ツリーの一時領域（`.tmp/`）
+
+`.tmp/` は git の管理外の使い捨ての置き場で、**掃除が無いと溜まる**（実測で 1 か月に 31 GB）。
+方針は [CHG-0042](../change/0042-tmp-lifecycle.md)。pi のセッションごとの置き場は
+[pi の拡張](guard/pi-extensions.md#セッションごとの一時置き場tmpsid)。
+
+- `mise run tmp:clean`: **既定は一覧だけ**（`--apply` で消す）。`home/dot_config/pi/harness/tmp_clean.py`
+  - **自動で消してよいのは、自分で作ったと確かめられるものだけ**: 持ち主の死亡を確証できた `.tmp/s/<名前>/` と、
+    再生成できる名前（`pytest-of-*`・`tools-ext-*`・`agents-config-*`・`tmp.*` など）の 1 日より古いもの
+  - **未知の名前は一覧に出すだけで消さない**（`--all --apply` で、7 日より古いものを消す。手動の確認用）
+  - 消さない: `keep/`（取り込み待ち）・`research/`・`review-loop/`・`away-shift/`・`subagents/`・`worktrees/`・`checkpoint-*`・画像
+  - `.tmp` やその中の `s` がシンボリックリンクなら拒否し、別のデバイス（マウント）の中へは降りない。`.sweep.lock` で排他
+- **試験が残骸を残さない**: `tools_ext_driver.mjs` は終了時に消す。`agents_common.agents_config_dir` は、
+  `conftest.py` の `pytest_sessionfinish` でも消す（pytest-xdist のワーカーは `os._exit` で終わり、`atexit` が走らない）。
+  `pyproject.toml` の `tmp_path_retention_count = 1`・`tmp_path_retention_policy = "failed"` で、落ちたテストの分だけ残す。
+  固定する試験は `test_tmp_hygiene.py`（実測: `test/agents` を実行した後の `.tmp` に残骸 0、`pytest-of-*` は 4 KB）

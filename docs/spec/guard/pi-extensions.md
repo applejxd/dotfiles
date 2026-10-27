@@ -136,6 +136,33 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 - 指示は履歴の要約にだけ入る。分割されたターンの前半の要約（`Turn Context`）には入らない（pi の仕様）
 - 別名のツールで触ったファイルは、これまでどおり要約のファイルの一覧に足す
 
+### セッションごとの一時置き場（`.tmp/s/<ID>/`）
+
+[CHG-0042](../../change/0042-tmp-lifecycle.md)。作業ツリーの `.tmp/` に残骸が溜まる（実測で 31 GB）のを防ぐため、
+フルガード（`harness/session-tmp.ts`）が、セッションごとの置き場を作り、`quit` で消す。
+
+- **作る**: `session_start` で `<cwd>/.tmp/s/<セッション ID の末尾 8 文字>/`（権限 0700）を排他的に作り、`.owner`
+  （JSON: `pid`・`start`（`/proc/<pid>/stat` の起動時刻）・`pidns`・`host`。権限 0600）を書き、`process.env.TMPDIR` をそこへ向ける。
+  bash ツール・`bg_run`・子は `process.env` を基に環境を作るので、受け取る（実機で確認）。
+  **セッション ID は UUIDv7 で、先頭 8 文字は時刻（約 65 秒は同じ）なので、ランダムな末尾を使う**。同じ名前の別のセッションの置き場が
+  あれば、末尾を伸ばす（12・16・24 文字）。パスが 80 文字を超えるとき（ソケットのパス長の上限）は作らない
+- **何もしない**: 子エージェント（`PI_HARNESS_CHILD=1`。親の `TMPDIR` を継承する。隔離子は従来どおり `/tmp`）・`pis` の内側
+  （`PI_HARNESS_BOUNDARY=1`。`TMPDIR=/tmp` の tmpfs で、セッションごとに消える）・Windows・`<cwd>/.tmp` が無い/
+  シンボリックリンク（`.tmp` を勝手に作らない）・`.tmp/s` がリンク
+- **消す**: `session_shutdown` の `reason` が **`quit` のときだけ**、この実行（プロセス）が作った置き場を**すべて**消す。
+  `new`・`resume`・`fork` では消さない（会話が旧置き場のパスを参照し続ける。pi が切り詰めた出力の全文のパスなど）。
+  `reload` は同じセッションが続くので消さず、再読み込み後も同じ置き場を使う。**消す前に、その置き場を `TMPDIR` にしたまま
+  生きているプロセス**（`/proc/*/environ`）がいれば、最大 3 秒待ち、まだいれば**消さない**（次の起動の回収が消す）
+- **回収**: 起動時（`session_start` の `reason` が `startup`）に、`tmp_clean.py` を背景で呼ぶ。**持ち主の死亡を確証できた
+  `s/<名前>/` だけ**を消す（SIGKILL・クラッシュ・RPC モードの SIGINT で残ったもの。実機で、`session_shutdown` が呼ばれないことを確認）。
+  1 日に 1 回（`.tmp/.clean-stamp`）は、再生成できる名前（テスト・導入の一時）の掃除も行う。**未知の名前は消さない**
+- **死亡の確証**: 同じホスト・同じ PID namespace で、`.owner` の pid が無い、または起動時刻が違う（pid の再利用）。
+  別の namespace・`.owner` が無い/壊れている/書きかけ・`/proc` が無いときは残す。**年齢だけでは `s/` を消さない**
+- 取り込み待ちは `.tmp/keep/<話題>/`（自動では消さない）。運用の置き場（`research`・`review-loop`・`away-shift`・`subagents`・
+  `worktrees`・`checkpoint-*`）も消さない。`activity` の `bg_log` は、終わったジョブの実際のログのパスを保持する
+  （`TMPDIR` がセッションで変わるため）
+- 試験: `test_pi_session_tmp.py`（表試験。`session_tmp_driver.mjs`）。掃除のスクリプトは `test_tmp_clean.py`
+
 ### `git commit` の確認
 
 `git commit -m …` の確認の本文に、件名・本文・追加するパスを出す。フルガードの置き場の純関数

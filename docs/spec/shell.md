@@ -18,7 +18,9 @@
 
 `.zshenv` には環境変数のほかに例外が 1 つある。リポジトリ内にいる間 `TMPDIR` を
 そのリポジトリの `.tmp` に向けるため、関数を 1 つ定義して `mkdir -p` を実行する
-（出力はしない）。
+（出力はしない）。`TMPDIR` が既に `<repo>/.tmp/s/` の配下（pi のセッションの置き場。
+[CHG-0042](../change/0042-tmp-lifecycle.md)）のときは、そのまま維持する（子の zsh が戻さない。試験は
+`test_zshenv_tmpdir.py`）。
 
 `shellenv.sh` は mise の shims（`${MISE_DATA_DIR:-~/.local/share/mise}/shims`）を、
 存在するときだけ PATH の先頭へ 1 回置く（継承した PATH に既にあれば先頭へ移す。venv の
