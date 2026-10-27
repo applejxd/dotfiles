@@ -18,7 +18,7 @@
 
 | 段 | 解決したいこと | 内容 | 状態 |
 | --- | --- | --- | --- |
-| 1 | 設計の前提を実測で確かめる | 使い捨てのリポジトリで、`git flow` の実体・サンドボックス内での動作・ネットワークと push に当たる操作を確かめる（下の「実験」） | 未着手 |
+| 1 | 設計の前提を実測で確かめる | 使い捨てのリポジトリで、`git flow` の実体・サンドボックス内での動作・ネットワークと push に当たる操作を確かめる（下の「実装・検証」）。**主な項目は完了**（残り: worktree 内の pre-commit・スタンプ、公開済みの feature の `finish`） | 進行中 |
 | 2 | 許可の形を決める | 固定の引数の表（`[[pi.actions]]` の拡張）か、規則の許可か。承認の要否。素の `git` の branch 等は、既定の ask のまま、指示で `git flow` へ誘導する。`review` に見せる | 未着手 |
 | 3 | AI が使える形にする | 許可の実装と試験。bypass で `git branch -D` などが通る穴（CHG-0041 の持ち越し）も、ここで塞ぐ | 未着手 |
 | 4 | このリポジトリを切り替える | `develop` と `.gitflow` の作成、検査のスタンプの基準・CI のトリガー・`commit` スキル・docs の更新 | 未着手 |
@@ -100,8 +100,8 @@
 ## 未解決点
 
 - `git flow` の実体の導入方法（`mise` で入れられるか）と、版の固定
-- 実行時の状態の書き込み先（`.git/config`）と、サンドボックスの `config` の書き込み拒否との衝突。回避案: `git flow` の実行をサンドボックスの外のハーネスで行う（`guarded_action` が、どちらの側で実行されるかを、実測で確かめる）
-- `finish` が、ネットワークや push に当たる操作を、既定でどこまで行うか（リモートの追跡ブランチの削除など）
+- ~~実行時の状態の書き込み先（`.git/config`）と、サンドボックスの書き込み拒否との衝突~~ → 実測で確定（上の「実装・検証」）。`start`・`finish` は警告つきで動き、worktree が残る。残る worktree の片付けを、固定の操作に含める。設定の変更は利用者が外で行う
+- ~~公開済み feature の `finish` がリモートへ何をするか~~ → 実測で確定: `--keepremote` が無いとリモートのブランチを削除する。固定の引数に含める（公開（`publish`）は許可しない前提）
 - 確認なしの項目（案 C）の宣言の形と、境界上の意味（`mustConfirm`・bypass との関係）
 - develop → main の自動化の条件（検査済みのスタンプ・CI の結果）
 - 既存の運用とのつなぎ: 進行中の案件（コミット粒度が細かい分）を、どの時点で feature に移すか
@@ -160,12 +160,35 @@
 
 ## 実装・検証
 
-未着手（段 1 の実測の前）。
+実測（2026-10-28、git-flow-next v2.1.0・linux-amd64、配布の SHA-256 を公式の checksums と照合して一致、git 2.43.0。`$TMPDIR` に展開して使い、環境へは入れていない）。
+
+| 確かめたこと | 結果 |
+| --- | --- |
+| 導入 | GitHub のリリースの tar.gz を展開すると、実体は `git-flow` 1 つ（PATH にあれば `git flow`）。`git flow init --preset=classic --defaults` のあと、`config edit topic feature --upstream-strategy=squash` と、`config delete topic release/hotfix/support/bugfix` で、gitflow-lite の構成にできた |
+| worktree の置き場 | `gitflow.worktreePath = '.tmp/worktrees/{{ branchName }}'`（相対）は、リポジトリ直下から解決され、`<repo>/.tmp/worktrees/<名前>` に作られた（本体で動く pi の書き込み範囲に収まる） |
+| squash | feature の中の 3 つの WIP コミットが、develop 上の 1 コミット（`--squash-message` の文）に束ねられた。feature のブランチと worktree は自動で消えた |
+| integrate | `git flow integrate develop` で、main に merge され、develop が追従した（ローカルだけ） |
+| ネットワーク | 到達できないリモート（`git://127.0.0.1:9/`）で、`feature start`（`--no-fetch` なし）は `Fetching from origin...` で止まった（15 秒で打ち切り）。**`start --worktree --no-fetch` と `finish --squash --no-fetch`（`--keepremote` の有無とも）は成功**し、ローカルの bare リモートの ref は変わらなかった（push なし）。`GIT_TRACE` は、`git-flow` が git を直接起動せず（トレースは 2 行だけ）、根拠にならなかった |
+| 公開済みの feature の `finish` | ローカルの bare リモートに feature を push してから `finish --squash --no-fetch` を実行。**`--keepremote` を付けないと、リモートの feature ブランチが削除された**（`--no-fetch` でも。push に当たる操作）。`--keepremote` を付けるとリモートは不変。develop は、リモートへ push されない。**固定の引数に `--keepremote` を必ず含める**必要がある |
+| `.git/config` | **`feature start` は `.git/config` を書き換え、`finish` で元に戻す**（前後のハッシュで確認）。`list`・`config list`・`worktree list` は書かない |
+| サンドボックス（Fence。`.git/config`・`.git/hooks` を denyWrite） | `start` は成功するが、「worktree の由来（provenance）と、feature の基点を記録できない」警告が出る。worktree の中のコミットは可。`finish` は成功（develop に 1 コミット、ブランチは削除）するが、**由来が無い worktree は「手作り」扱いで、ディレクトリが detached HEAD のまま残る**（`worktree list` に `(unmanaged)`）。`git worktree remove <パス>` は Fence の中で成功した |
+
+実験の台本は `.tmp/keep/gitflow-exp/`（非コミット）。
+
+**結論**:
+
+- `.git/config` と `.git/hooks` は、サンドボックスの保護対象（`common.toml.tmpl` の `**/.git/config`・`**/.git/hooks/**`。任意のコードを動かせる設定を、AI が書けないようにする意図）。`git flow` は、この保護と**根本的に衝突する**が、`start`・`finish` は**警告つきで動く**
+- したがって、**設定（`init`・`config`・`--shared` の同期）は、サンドボックスの外で、利用者が一度だけ行う**
+- Fence の内側で動かすなら、`finish` の後に残る worktree の片付け（`git worktree remove .tmp/worktrees/<名前>`。クリーンで detached の worktree だけ）を、固定の操作に含める。フルガードだけの pi（Fence なし）では、完全に動く
+- 案 D（自作のスクリプト）の必要性は、下がった（`git-flow-next` が足りる）
+
+未確認: worktree 内での pre-commit・検査のスタンプの動作、`mise` での導入、案 A（規則での許可）で、内部の git が判定器から見えないことの確認、Windows。
 
 ## 重要な更新
 
 | 日付 | 更新 | 理由・証拠 |
 | --- | --- | --- |
+| 2026-10-28 | **段 1 の実測（主な項目）**。git-flow-next v2.1.0 を `$TMPDIR` に入れて、使い捨てのリポジトリで確認。squash・worktree（相対パス）・integrate・ネットワークなし（`--no-fetch`）は期待どおり。**`start` が `.git/config` を書くので、サンドボックスの内側では警告つきで動き、`finish` の後に worktree が detached で残る**。設定は利用者が外で行う、残る worktree を固定の操作で片付ける、を設計に反映 | 上の「実装・検証」 |
 | 2026-10-28 | **モデルをリポジトリごとの設定にした**。共通は「許可の仕組み」（操作の種類と危険な引数の除外）、モデルは `.gitflow`、設定が無ければ AI はブランチを切らない。素の `git` の branch 等は、全リポジトリでの deny をやめ、既定の ask のまま指示で誘導する（利用者の選択） | 利用者の指摘（プロジェクトによってブランチモデルが違う。GitHub を使うとは限らない） |
 | 2026-10-28 | **広いネット調査を行い、モデルを決めた**。ブランチモデル（gitflow・GitHub flow・trunk-based）の比較と、AI の並列実行向けの worktree の管理ツール（Worktrunk・git-worktree-runner など）、スタック型ツール（jujutsu・git-branchless・Graphite・git-spice）を調べた。利用者が **gitflow-lite（main / develop / feature。release・hotfix なし。feature は squash）**を選択。GitHub flow は縮小先として残す（git-flow-next の preset と設定で移れるので、許可の形の設計は、どちらでも変わらない） | 出典（2026-10-28 に検索）: <https://trunkbaseddevelopment.com/alternative-branching-models/>・<https://gitkraken.com/blog/how-to-choose-gitflow-vs-trunk-based-in-7-steps-2026>・<https://nx.dev/blog/git-worktrees-ai-agents>・<https://zylos.ai/research/2026-02-22-git-worktree-parallel-ai-development/>。一般に、頻繁にリリースする・人が少ない場合は GitHub flow や trunk-based が勧められ、gitflow は複数のリリースを並行して保守する場合に向くとされる。ただし利用者の動機（統合先の安定・粒度）は、develop を挟む形で直接満たせる |
 | 2026-10-28 | 案件を起票 | 利用者の方針（コミット粒度が細かすぎる・main が不安定・並列開発の改善のために、gitflow へ。feature と worktree の起票・クローズは AI の自動。AI には `git flow` だけを許可）。ネットで git-flow-next を確認、`explore` の調査で現状を確認 |
