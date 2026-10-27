@@ -81,6 +81,7 @@ pi の Copilot は `[pi.model.tier.github-copilot]` で、`second_opinion` を `
 レビューの独立性を保つため（2026-10-27、利用者の決定。いったん GPT-6.1 Sol にしたが、worker と review が同じ系統になる点を見直した）。
 GPT-6.1 Sol は、比較の実験で試す（[調査の記録](../research/agents/subagent-model-assignment.md)）。
 **Haiku は使わない**（利用者の方針。`explore`・`commit` の小型の候補にもしない）。
+**`plan` 役（pi の子。[CHG-0044](../change/0044-plan-agent.md)）は `deep` 階層**（Copilot は Sonnet 5.5 の `xhigh`、Bedrock は Opus 5.5 の `high`）。Opus は費用が高く、これまで「明示の指示のときだけ」としてきたが、`plan` の既定だけは例外にした（利用者の決定、2026-10-27）。計測（同じ課題で `medium`・`xhigh`・`max`・Sol を比べ、別系統の採点者が採点）では、`medium` は 15.0 点・事実の誤り 6 件、`xhigh` は 20.5 点、`max` は 21.5 点（25 点満点）で、`max` は `xhigh` の約 3 倍の時間のため、既定は `xhigh`。
 pi の Bedrock の `second_opinion` は `us.openai.gpt-6.1-sol`（AWS の公式モデルカードで GA を確認、Sol は 2026-09-29。`gpt-6.1-terra` はカタログに残す）。`deep` の `xhigh` は Sonnet で通る確認が取れていないので `high` にした。Bedrock の階層は全部 `us.`
 （`global.` は使わない）。`us.` 無しの ID は `ask_description` の候補の最後のフォールバック
 （`amazon-bedrock/anthropic.claude-haiku-5-5`）だけで、推論プロファイルが無い環境で取りこぼさないための意図的なもの。

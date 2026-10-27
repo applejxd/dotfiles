@@ -32,6 +32,8 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 | `profile` | 子の役割（`[pi.profiles]` の名前）。`task` を持つ役割は使えない（入れ子にしない） |
 | `tier` | モデルの階層。今は `[opencode.model.tier.<プロバイダ>]` から引き、`#variant` を pi の思考の強さ（`:medium` など）に読み替える。無ければ親と同じモデル |
 | `inherit_bypass` | 真なら、親が bypass のとき子も bypass で動く。ask に `git commit` などが残る役割には付けない |
+| `timeout_minutes` | 1 往復の上限（分。1〜120 の整数。省略は 15）。「まとめに入れ」の steer は、この上限の 80% で送る。深く考える `plan` だけ 30 |
+| `check_conditions` | 真なら、依頼の守る条件の番号（行頭の `C1: …`）が、返答の「守る条件の突き合わせ」の節に全部あるかを検査し、欠けていれば結果に警告を出す（`plan` だけ。下の「`plan`（計画役）」） |
 | `description` / `system` | 親のツールの説明に出す説明と、子のシステムプロンプトに足す指示（`--append-system-prompt`） |
 
 今の宣言（`common.toml.tmpl`）:
@@ -40,10 +42,18 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 | --- | --- | --- | --- | --- |
 | `explore` | `explorer`（`reader` + `wc` と読み取り専用の git） | 親と同じ | 継ぐ | `explore` |
 | `review` | `explorer`（`explore` と同じ） | `second_opinion` | 継ぐ | `review` |
+| `plan` | `reader`（bash なし） | `deep` | 継がない | なし（OpenCode の `plan` は別物） |
 | `commit` | `committer` | `routine` | 継がない | `commit` |
 | `worker` | `worker` | `worker` | 継ぐ | `fleet-worker` / `bypass-fleet-worker` |
 
 > OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。最右列「今の OpenCode での相当」が対象。pi の仕様は表の左の列と [判定 API](pi-decide.md)。
+
+**`plan`（計画役。[CHG-0044](../../change/0044-plan-agent.md)）**: 大きく複雑な変更・曖昧な要件・移行の、実装の計画を、読み取り専用（`read`・`grep`・`find`・`ls`）で調べて作る。
+`reader` にするのは、`explorer` の bash では共通の `skill_scripts` の許可が通り、読み取り専用を指示だけでは強制できないため。Git の差分や履歴は見られないので、要るなら親が依頼文に載せる（返答には、確かめていない範囲を書かせる）。
+階層は `deep`（Copilot は Sonnet 5.5 の `xhigh`、Bedrock は Opus 5.5 の `high`）で、`bypass` は継がない。`effort` は、ユーザが指示したときだけ変える（`max` は 17〜18 分かかるので、`plan` だけ 1 往復の上限を 30 分にしている）。
+依頼文は自己完結で、**目的・前提・守る条件（`C1: …` と番号つき）・対象のパス・必要な Git の情報・返答の形式**を書く。返答は、結論・手順・変更するファイルの一覧・守る条件の突き合わせ・根拠・リスク・検証の方法・利用者に確認すべき点・未確認・次の候補の順。
+**番号の検査（警告だけ）**: `check_conditions` の役割の結果で、依頼の番号が、見出しに「守る条件」を含む節（次の見出しまで）に全部あるかを見る。節が無い・番号が欠けていれば、`conditions check (…)` を結果に足す。**番号の一致は、条件を満たす証明ではない**（内容は親が確かめる）。`C1` と `C10` は取り違えない。依頼に番号が無ければ検査しない。
+測定は [CHG-0044](../../change/0044-plan-agent.md)（`medium` は存在しない関数名などの誤りが多く、`xhigh` 以上で質が上がる。独立した採点で 15.0 対 20.5〜21.5 点）。
 
 `explore` に `tier` は付けない。`tier` が無いと生成される `model` が `null` になり、フルガードは親の現在のモデル（`ctx.model`）で子を起動する（`index.ts` の `agent.model ??`）。`/model` で親を変えると `explore` も追従する。
 
@@ -102,7 +112,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
   待っていた呼び出しには `closed` を返す。`jobId → 所有確認 → running` は await の前に同期で確定する
   （並列のツール呼び出しで競合しないため。`guarded_task` を逐次実行にしないこと）
 - 生かしておく子の上限は 4（`running` も含む）。上限では追い出さず、新しい起動を断って jobId の一覧を返す。
-  枠は spawn の前に同期で確保する。1 往復の待機は 15 分まで（超えたら `limit` で止める）
+  枠は spawn の前に同期で確保する。1 往復の待機は役割の上限（`timeout_minutes`。省略は 15 分）まで（超えたら `limit` で止める）
 - job は起動時の cwd と役割を持ち、別の cwd・役割からの追加依頼は断る。`jobId` は乱数だが認証手段ではなく、
   所有の確認が本体
 - **止まる契機**: `close`・`keep` 無しの完了・`done` 以外・セッションの終了と切り替えと `/reload`（`session_shutdown`）・
@@ -139,7 +149,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
   完了した往復の結果には、答えがあるとき `- calls: <ツール名×件数>` の 1 行を足す。答えに標準形の見出し（結論・根拠・未確認・次の候補）が欠けていれば `format check (...)` の警告を足す。警告にとどめ、結果の本文は変えず、拒否もしない（`audit.ts`）。
   保存・通知・ToDo 反映の失敗は握りつぶさず、UI があれば `ctx.ui.notify`、無ければ stderr に警告する。セッションをまたいだ参照の境界は cwd と役割まで。
   実装の細部と試験は [job の結果の保持の仕様メモ](../../research/agents/pi-subagent-jobs-notes.md)。
-- **時間の上限**: 1 往復は 15 分。上限の 80% で、子へ steer で「まとめに入れ」を送る（途中の結果を残すため。送ったかの直接の試験は無い）
+- **時間の上限**: 1 往復は、役割の `timeout_minutes`（省略は 15 分。`plan` は 30 分）。上限の 80% で、子へ steer で「まとめに入れ」を送る（途中の結果を残すため。送ったかの直接の試験は無い）
 - **利用者コマンド**: `/agents`（一覧）、`/agent <名前> <依頼>`（子を直接起動。完了はチャットに表示するだけで、モデルのターンは起こさない）。モデルは呼べない
 - **フッター**: `activity` が、動いている子が 3 件以下なら `🤖 explore 12s, review 40s`、それより多ければ件数
 - **やらないこと**: プロジェクト内の定義ファイルからの役割（`--no-approve` と衝突）、子から子（入れ子）

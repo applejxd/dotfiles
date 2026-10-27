@@ -24,7 +24,7 @@
 | --- | --- | --- | --- |
 | 1 | 方針を実装の前に決める | 役・階層・標準形・測定の方法を、`review` に見せて固める（1 回目の指摘を反映済み） | 進行中 |
 | 2 | 計画役を常設する価値があるかを、コードを足さずに測る（**予備の 1 課題・8 本と独立した採点を実施済み**。下の「段 2 の予備の計測」「段 2 の独立した採点」） | **既存の `explore` に、`model`・`effort` を明示して計画を依頼する**（CHG-0043 の機能。役は足さない）。計画なし・`explore`（`worker` 階層）・`explore`（`deep`）を、固定の課題で比べる | 進行中 |
-| 3 | 計画役の常設（段 2 で効果があったとき） | `[pi.agents.plan]`、依頼の条件 ID と返答の突き合わせ（構造化）、Windows の宣言（`plain_description`・`plain_system`）、試験 | 未着手 |
+| 3 | 計画役の常設（段 2 で効果があったとき） | `[pi.agents.plan]`、依頼の条件 ID と返答の突き合わせ（構造化）、Windows の宣言（`plain_description`・`plain_system`）、試験 | **完了（2026-10-27）**。`[pi.agents.plan]`・`timeout_minutes`・`check_conditions`・試験。Windows の宣言は `reader` のため、そのまま出る |
 | 4 | 計画中でも子が書き込める穴を塞ぐ（既存の問題） | `/plan` 中の `guarded_task` を、単発・batch・追加依頼・background で、読み取り専用の権限の役割だけに限定。計画の前から動いていた `worker` の扱いを決める | 未着手 |
 | 5 | `/plan` で強いモデルへ切り替える（案 F。別の opt-in） | 状態遷移表を先に書き、段 4 の後に、利用者が選ぶ設定として設計・実装する | 保留（段 4 と状態遷移の設計の後） |
 | 6 | 運用に載せる | 共通の指示（親の判断基準）、移行スキルからの呼び方、`docs/spec` の反映 | 未着手 |
@@ -231,13 +231,23 @@ Sol の 2 行は、計画に「変更するファイルの一覧」の節が無�
 
 ## 実装・検証
 
-未着手（段 1 の review の後）。実装では、次の試験を足す: `plan` が `reader` のツールだけを持つこと、階層の検査（`deep` がカタログの最新か）、標準形の欠落の検出（既存の `format check`）、Windows の宣言。
+**段 3 を実装した（2026-10-27）**:
+
+- `common.toml.tmpl`: `[pi.agents.plan]`（`reader`・`deep`・`timeout_minutes = 30`・`check_conditions = true`。system は「書く前に実在を確かめる」「golden と docs の索引まで探す」「満たせると書くのは規則が保証するときだけ」「Git は見られない」など）。Opus の注記を「`plan` の既定は例外」に直した
+- `generate.py`: `timeout_minutes`（1〜120 の整数。省略は 15）・`check_conditions`（真偽値）を検査し、`rules.json` の `agents` に出す
+- `model-choice.ts`: `roundTimeoutMs`（役割ごとの 1 往復の上限。試験の環境変数が優先）。`index.ts` の 4 か所の起動で使う。「まとめに入れ」の steer は、その上限の 0.8 倍
+- `audit.ts`: `requestedConditions`・`auditConditions`（依頼の行頭の `C1:` を取り出し、見出しに「守る条件」を含む節に全部あるかを見る。`C1` と `C10` を取り違えない）。`children.ts` の `Job.lastTask` に依頼文を持たせ、`index.ts` の `resultText` が警告（`conditions check`）を足す。**警告だけで、結果を止めない**
+- 試験: `test_pi_plan_role.py`（19 件。設定・不正な値・Windows の宣言・検査・上限）、`test_pi_harness.py` の e2e 4 件（そろっていれば警告なし・番号の欠落・節なし・他の役と番号なしは検査しない）、`test_pi_subagents.py`（Windows の宣言に `plan` が出る）
+- **実機は未確認**: 実際のモデルの子として `plan` を起動した動作（依頼文の標準形で、`deep` が走るか。30 分で足りるか）は、`/reload` のあとに確かめる
+
+次の試験を足した: `plan` が `reader` のツールだけを持つこと、階層の検査（`deep` がカタログの最新か）、標準形の欠落の検出（既存の `format check`）、Windows の宣言。
 
 ## 重要な更新
 
 | 日付 | 更新 | 理由・証拠 |
 | --- | --- | --- |
 | 2026-10-27 | 案件を起票。`plan` の既定の階層は `deep`（Opus の例外）、CHG-0026 の調査役を統合 | 利用者の決定。M4（一般の実践の調査） |
+| 2026-10-27 | **段 3 を実装**: `plan` 役（`reader`・`deep`・30 分）、役割ごとの上限、依頼の守る条件の番号の検査（警告） | 計測の結論（既定は `xhigh`、`max` は 30 分の上限で足りる）。「実装・検証」 |
 | 2026-10-27 | **Sol による独立した採点（8 本・伏せ）を実施**: `medium` 15.0 点・誤り 6 件、`xhigh` 20.5 点、`max` 21.5 点、Sol `xhigh` 20.5 点（25 点満点）。`medium` は存在しない関数名などの誤りが多く、前の採点より差が大きい。`xhigh` 以上は差が小さい | 「現在地」の「段 2 の独立した採点」。`.tmp/keep/plan-measure/judge_out/` |
 | 2026-10-27 | **Sol（`xhigh`）を追加で計測（2 本）**: 4〜5 分・$0.65〜0.71・計画は短く、再現は Claude の `medium`〜`xhigh` 並み（6・7 / 11）。Claude の計画に無かった着眼がある。`plan` の既定にはしない | 利用者の依頼（Sol も検討したほうがよいか）。`.tmp/keep/plan-measure/` |
 | 2026-10-27 | **`max` を追加で計測（2 本）**: 見つけたファイルは 10/11 で 2 回とも安定し、`xhigh` より深い。ただし 17〜18 分・$3.1〜3.9 で、子の 1 往復の上限（15 分）を超える | 利用者の依頼（Copilot は費用が無制限なので、待ち時間だけが制約）。`.tmp/keep/plan-measure/` |
