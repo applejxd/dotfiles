@@ -2364,6 +2364,10 @@ def pi_sandbox(common: dict[str, Any]) -> dict[str, Any] | None:
     return out
 
 
+# 子の 1 往復の上限 (分)。役割ごとに timeout_minutes で変えられる (深い計画は 15 分を超える)
+PI_DEFAULT_ROUND_MINUTES = 15
+PI_MAX_ROUND_MINUTES = 120
+
 PI_AGENT_KEYS = frozenset(
     {
         "profile",
@@ -2371,6 +2375,8 @@ PI_AGENT_KEYS = frozenset(
         "system",
         "tier",
         "inherit_bypass",
+        "timeout_minutes",
+        "check_conditions",
         "plain_description",
         "plain_system",
     }
@@ -2569,6 +2575,18 @@ def pi_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
         inherit = agent.get("inherit_bypass", False)
         if not isinstance(inherit, bool):
             raise SystemExit(f"{where} の inherit_bypass は真偽値")
+        timeout = agent.get("timeout_minutes", PI_DEFAULT_ROUND_MINUTES)
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, int)
+            or not 1 <= timeout <= PI_MAX_ROUND_MINUTES
+        ):
+            raise SystemExit(
+                f"{where} の timeout_minutes は 1〜{PI_MAX_ROUND_MINUTES} の整数 (1 往復の上限)"
+            )
+        check_conditions = agent.get("check_conditions", False)
+        if not isinstance(check_conditions, bool):
+            raise SystemExit(f"{where} の check_conditions は真偽値")
         tier = agent.get("tier")
         out[str(name)] = {
             "profile": profile,
@@ -2576,6 +2594,8 @@ def pi_agents(common: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "system": agent["system"].strip(),
             "model": pi_model_ref(common, str(tier)) if tier else None,
             "inherit_bypass": inherit,
+            "timeout_minutes": timeout,
+            "check_conditions": check_conditions,
         }
     return out
 

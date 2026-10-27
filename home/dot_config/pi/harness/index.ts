@@ -27,10 +27,10 @@ import { createRedactor } from "./redact.ts";
 import { MAX_BODY_FILE_BYTES, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, type BodyFileResult, type ConfirmRaw } from "./confirm-view.ts";
 import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
-import { auditFormat, summarizeCalls } from "./audit.ts";
+import { auditConditions, auditFormat, summarizeCalls } from "./audit.ts";
 import { unguardedMessage, unguardedSources } from "./unguarded.ts";
 import { SessionTmp } from "./session-tmp.ts";
-import { EFFORTS, catalogText, describeChoice, modelArgument, resolveChoice } from "./model-choice.ts";
+import { EFFORTS, catalogText, describeChoice, modelArgument, resolveChoice, roundTimeoutMs } from "./model-choice.ts";
 import { ISOLATION_UNSUPPORTED, NO_BASH_NOTICE, findBash, isWindows, supportsChildTasks } from "./platform.ts";
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
@@ -560,7 +560,6 @@ const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, Ru
 
 // 生かしておく子 (job) の上限と、1 往復の待機の上限、返却の上限
 const MAX_JOBS = 4;
-const ROUND_TIMEOUT_MS = Number(process.env.PI_HARNESS_TEST_ROUND_MS) || 15 * 60 * 1000;
 const MAX_REPLY_CHARS = 20000;
 // 利用者のコマンド (`btw`) が起動できる子の役割。読み取り専用に限る
 const READ_ONLY_CHILD_PROFILES = new Set(["explorer"]);
@@ -896,6 +895,15 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		const shown = errors.slice(0, MAX_LIST_ERRORS);
 		// 形式検査は答えがある通常の完了だけ (結果の本文は変えない)
 		const missing = r.status === "done" && r.answer ? auditFormat(r.answer) : [];
+		// 依頼の守る条件の番号の突き合わせ (check_conditions の役割だけ)
+		const cond = r.status === "done" && r.answer && agents[job.agent]?.check_conditions ? auditConditions(job.lastTask, r.answer) : null;
+		const condLines =
+			cond && (cond.noSection || cond.missing.length > 0)
+				? [
+						`conditions check (the request numbered ${cond.requested.join(", ")}; treat the plan as incomplete until the missing ones are recovered, and note that matching the ids does not prove a condition is met):`,
+						cond.noSection ? "- missing: the section that matches the conditions (heading with 守る条件)" : `- missing in the matching section: ${cond.missing.join(", ")}`,
+					]
+				: [];
 		const parts = [
 			`child ${job.agent}: ${label}${r.note ? ` (${r.note})` : ""} [${fmtStats(r.stats)}]`,
 			...(job.choiceLine ? [`- ${job.choiceLine}`] : []),
@@ -907,6 +915,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			...(missing.length > 0
 				? [`format check (the answer lacks the standard sections; verify its claims yourself):`, `- missing: ${missing.join(", ")}`]
 				: []),
+			...condLines,
 			...(r.status === "done" && r.answer ? [`- calls: ${summarizeCalls(r.toolCalls ?? [])}`] : []),
 			...isolationLines(job),
 			...(alive ? [`- job: ${job.id} (idle; follow up with {jobId, task}, close with {jobId, close:true})`] : []),
@@ -1007,7 +1016,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		const startedAt = Date.now();
 		runningChildren.set(key, { agent: job.agent, model: "", task: message, pid: job.pid, startedAt });
 		job
-			.run(message, { timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE })
+			.run(message, { timeoutMs: roundTimeoutMs(agents, job.agent), wrapUpMessage: WRAP_UP_MESSAGE })
 			.then(async (r) => {
 				if (!keep) job.close();
 				// 隔離の job は、停止の確認と回収が終わってから結果を組み立てる
@@ -1048,7 +1057,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		const key = `btw-${sp.job.id}`;
 		runningChildren.set(key, { agent: agentName, model: sp.model, task, pid: sp.job.pid, startedAt: Date.now() });
 		try {
-			const r = await sp.job.run(task, { signal, timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE });
+			const r = await sp.job.run(task, { signal, timeoutMs: roundTimeoutMs(agents, agentName), wrapUpMessage: WRAP_UP_MESSAGE });
 			sp.job.close();
 			// 上限での切り詰めと「省略あり」の表示は、呼び出し側 (btw) がする
 			if (r.status === "done" && r.answer) return { ok: true, text: redactText(r.answer) };
@@ -1176,7 +1185,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 								continue;
 							}
 							const job = sp.job;
-							const r = await job.run(it.task, { signal: sig, timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE });
+							const r = await job.run(it.task, { signal: sig, timeoutMs: roundTimeoutMs(agents, job.agent), wrapUpMessage: WRAP_UP_MESSAGE });
 							job.close();
 							const body = resultText(job, r, false);
 							sections[i] = `${head}\n${clip(body, per)}`;
@@ -1304,7 +1313,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 
 			let r: RoundResult;
 			try {
-				r = await job.run(message, { signal, timeoutMs: ROUND_TIMEOUT_MS, wrapUpMessage: WRAP_UP_MESSAGE });
+				r = await job.run(message, { signal, timeoutMs: roundTimeoutMs(agents, job.agent), wrapUpMessage: WRAP_UP_MESSAGE });
 				// 隔離の job は、停止の確認と回収を待つ (待つ間も動いている子として見せる)。abort されたら待たない
 				if (job.finalized && !signal?.aborted) await job.finalized;
 			} finally {

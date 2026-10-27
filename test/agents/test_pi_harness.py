@@ -699,6 +699,55 @@ def test_child_result_has_no_format_check_for_a_standard_answer(env):
     assert "format check" not in proc.stdout, proc.stdout
 
 
+def _echo_task(env, agent, task):
+    return run_pi(
+        env,
+        [{"name": "guarded_task", "args": {"agent": agent, "task": task}}],
+        FAUX_CHILD_TOOL_CALLS="[]",
+        FAUX_CHILD_ECHO_USER="1",
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+    )
+
+
+STANDARD = "## 結論\nok\n## 根拠\na\n## 未確認\nnone\n## 次の候補\nnone"
+
+
+def test_plan_result_passes_when_every_requested_condition_is_matched(env):
+    task = (
+        f"x\nC1: first\nC2: second\n## 守る条件の突き合わせ\n- C1: step 1\n- C2: step 2\n{STANDARD}"
+    )
+    proc = _echo_task(env, "plan", task)
+    assert "child plan: completed" in proc.stdout, proc.stdout
+    assert "conditions check" not in proc.stdout and "format check" not in proc.stdout, proc.stdout
+
+
+def test_plan_result_warns_about_a_condition_missing_from_the_matching_section(env):
+    task = f"x\nC1: first\nC2: second\n## 守る条件の突き合わせ\n- C1: step 1\n{STANDARD}"
+    proc = _echo_task(env, "plan", task)
+    assert "conditions check (the request numbered C1, C2;" in proc.stdout, proc.stdout
+    assert "- missing in the matching section: C2" in proc.stdout, proc.stdout
+    assert "does not prove a condition is met" in proc.stdout, proc.stdout
+
+
+def test_plan_result_warns_when_the_matching_section_is_absent(env):
+    task = f"x\nC1: first\n{STANDARD}"
+    proc = _echo_task(env, "plan", task)
+    assert "- missing: the section that matches the conditions" in proc.stdout, proc.stdout
+
+
+def test_other_roles_are_not_checked_for_conditions(env):
+    task = f"x\nC1: first\nC2: second\n{STANDARD}"
+    proc = _echo_task(env, "worker", task)
+    assert "child worker: completed" in proc.stdout and "conditions check" not in proc.stdout, (
+        proc.stdout
+    )
+    # 番号の無い依頼は、plan でも検査しない
+    proc = _echo_task(env, "plan", f"no ids here\n{STANDARD}")
+    assert "child plan: completed" in proc.stdout and "conditions check" not in proc.stdout, (
+        proc.stdout
+    )
+
+
 def test_task_input_new_forms_are_exclusive(env):
     bad = [
         _task(list=True, agent="worker"),

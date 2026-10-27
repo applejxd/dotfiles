@@ -179,3 +179,9 @@ export function catalogText(catalog: Catalog | null | undefined): string {
 		`\`effort\` (only when the user asks): ${EFFORTS.join(" | ")}. A level the model does not support is clamped by pi. Never use "off".`
 	);
 }
+
+// 子の 1 往復の上限 (ミリ秒)。役割の timeout_minutes (省略・不正は 15 分)。試験は環境変数で全部を上書きする。
+// 「まとめに入れ」の steer は、この上限の 0.8 倍で送られる (children.ts)
+export const DEFAULT_ROUND_MINUTES = 15;
+export const roundTimeoutMs = (agents: Record<string, any>, agentName: string): number =>
+	Number(process.env.PI_HARNESS_TEST_ROUND_MS) || (Number(agents[agentName]?.timeout_minutes) || DEFAULT_ROUND_MINUTES) * 60 * 1000;

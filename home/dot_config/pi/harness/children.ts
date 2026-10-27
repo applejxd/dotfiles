@@ -213,6 +213,8 @@ export class Job {
 	readonly createdAt = Date.now();
 	lastTool = "";
 	calls = 0;
+	// 直近の往復の依頼文 (結果の検査で、依頼の守る条件の番号を取り出すのに使う)
+	lastTask = "";
 	tokens = 0;
 	cost = 0;
 	private round: Round | null = null;
@@ -446,6 +448,7 @@ export class Job {
 		if (this.state === "closed") return Promise.reject(new Error("job is closed"));
 		if (this.state === "running") return Promise.reject(new Error("job is busy"));
 		this.state = "running";
+		this.lastTask = message;
 		const id = `r${++this.seq}`;
 		return new Promise<RoundResult>((resolve) => {
 			const r: Round = {

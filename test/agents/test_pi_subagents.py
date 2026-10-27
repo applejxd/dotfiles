@@ -18,8 +18,8 @@ import generate as gen
 def test_only_read_only_agents_are_declared():
     agents = gen.build_pi_subagents({}, load_common())["agents"]
 
-    # shell・編集を持つ役割 (commit / worker) は判定器が無いので出さない
-    assert set(agents) == {"explore", "review"}
+    # shell・編集を持つ役割 (commit / worker) は判定器が無いので出さない。plan は reader (read / grep / find / ls だけ) なので出す
+    assert set(agents) == {"explore", "plan", "review"}
     for agent in agents.values():
         assert set(agent) == {"description", "system", "model"}
 

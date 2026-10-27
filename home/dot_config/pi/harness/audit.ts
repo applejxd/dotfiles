@@ -33,3 +33,37 @@ export function summarizeCalls(names: string[]): string {
 		.map(([n, c]) => `${n}×${c}`)
 		.join(" ");
 }
+
+// 依頼文の「守る条件」の番号 (C1・C2 …) を、行頭の `C1:` `- C1:` `**C1**:` の形で取り出す。重複は 1 つにする
+const REQUESTED = /^[\s>*_\-]*\**\s*(C\d+)\s*\**\s*[:：]/;
+export function requestedConditions(task: string): string[] {
+	const out: string[] = [];
+	for (const line of String(task ?? "").split(/\r?\n/)) {
+		const m = REQUESTED.exec(line);
+		if (m && !out.includes(m[1])) out.push(m[1]);
+	}
+	return out;
+}
+
+// 返答の「守る条件の突き合わせ」の節に、依頼の番号が全部あるかを調べる。
+// 依頼に番号が無ければ検査しない (null)。節が無ければ noSection、欠けた番号は missing。
+// 番号の一致は条件を満たす証明ではない (内容の確認は読み手に残る)
+export type ConditionAudit = { requested: string[]; noSection: boolean; missing: string[] };
+export function auditConditions(task: string, answer: string): ConditionAudit | null {
+	const requested = requestedConditions(task);
+	if (requested.length === 0) return null;
+	const lines = String(answer ?? "").split(/\r?\n/);
+	const isHeading = (l: string) => /^\s*#{1,6}\s/.test(l) || /^\s*\**\d+[.)]\s/.test(l);
+	const start = lines.findIndex((l) => isHeading(l) && l.includes("守る条件"));
+	if (start < 0) return { requested, noSection: true, missing: requested };
+	let end = lines.length;
+	for (let i = start + 1; i < lines.length; i++) {
+		if (isHeading(lines[i])) {
+			end = i;
+			break;
+		}
+	}
+	const section = lines.slice(start, end).join("\n");
+	const missing = requested.filter((id) => !new RegExp(`(?<![A-Za-z0-9])${id}(?!\\d)`).test(section));
+	return { requested, noSection: false, missing };
+}
