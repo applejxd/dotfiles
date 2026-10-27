@@ -92,3 +92,23 @@
 ## 検索語
 
 「Anthropic multi-agent research system Opus lead Sonnet subagents」「aider architect editor mode benchmark」「Claude plans GPT Codex implements workflow」「multi-agent LLM same model all roles vs heterogeneous models」「Terminal-Bench leaderboard Claude GPT」「orchestrator subagent delegation Claude Sonnet 5.5 vs GPT-6」「GPT-6 Sol vs Claude Sonnet 5.5 instruction following scope creep」ほか
+
+## 記録 M2 — 2026-10-27（Bedrock の GPT-6.1 と、利用者の決定）
+
+- **問い**: Bedrock に Terra が来ているか。使えるなら、`review` と `worker` に使えるか
+- **方法**: 探索の子 1 本（Web 検索。AWS の公式モデルカードは `fetch` で本文を確認）。公式の発表ページ・第三者の記事のうち、取得できなかったものはスニペットのみ
+- **確認した事実**（AWS の公式モデルカードと発表（2026-10-26））:
+  - **GPT-6.1 Terra は Bedrock で GA**（2026-10-26）。推論プロファイルの ID は `us.openai.gpt-6.1-terra` と `global.openai.gpt-6.1-terra`
+    （bedrock-runtime では、`openai.` のベース ID の単独の呼び出しはできず、推論プロファイルが必須）。GPT-6.1 Sol は 2026-09-29 から `us.openai.gpt-6.1-sol`・`global.openai.gpt-6.1-sol`。
+    現行の `us.openai.gpt-6-sol`（2026-09-22）も有効
+  - 単価（USD / 100 万トークン、標準、短いコンテキスト）: Terra 6.1（US）入力 1.10・出力 5.50・キャッシュ読み 0.055、Sol 6.1（US）2.20・11.00・0.11、Sol 6（US）2.20・11.00・0.22。
+    **Terra の出力は Sol の約半額**。Global は US より約 10% 安い。コンテキスト 1.05M・最大出力 128K（Sol 6.1 は 131,072）
+  - 呼び出し: Terra は bedrock-runtime で Messages・Responses・Chat Completions・Converse・Invoke に対応。ストリーミング・構造化出力に対応
+  - 推論の強さ: GPT-6 Sol・Luna のカードに「none・low・medium・high・xhigh・max。既定は medium」。Converse では `additionalModelRequestFields.reasoning.effort`
+    （第三者の報告: 平坦な `reasoning_effort` と `minimal`・`temperature` は 400。Claude の `thinking` は黙って無視される）
+- **未確認**: Terra のカードの推論の強さの段、クライアント側のツール呼び出し（機能表には「サーバー側のツール使用」だけ）、Converse での明示キャッシュ（Sol・Luna は非対応）、
+  models.dev の項目、pi から Bedrock の GPT-6.1 への実際の呼び出し
+- **利用者の決定**（2026-10-27）: **`worker` は Sol にする**（Copilot は `gpt-6.1-sol#medium`、Bedrock は `us.openai.gpt-6.1-sol`）。**できるだけ最新のモデルで揃える**。
+  **Haiku は使わない**。`review` は Copilot・Bedrock とも Terra（6.1）。親は Sonnet 5.5（最新の Claude は Sonnet 5.5。Opus 5.5 は Copilot で制限）
+- **残る懸念**: `worker`（Sol）と `review`（Terra）が、同じ OpenAI 系統になった。「レビュー役の系統 ≠ 作った側の系統」の見立て（上の「見立て」）とは、
+  worker の成果物のレビューでは合わない。運用で補う: worker の成果物は、`guarded_task` の `model` に Claude（`github-copilot/claude-sonnet-5.5`）を指定して、レビューさせる
