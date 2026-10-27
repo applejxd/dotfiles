@@ -32,13 +32,27 @@ export default function (pi: ExtensionAPI) {
 		if (ctx.hasUI) ctx.ui.setStatus("plan", enabled ? ctx.ui.theme.fg("warning", "⏸ plan") : undefined);
 	};
 	const persist = () => pi.appendEntry("plan-mode", { enabled, saved } satisfies State);
+	// フルガードの guarded_task が見る印。計画の間は、書き込みの権限を持つ役割の子を起動・続行させない (CHG-0044)
+	const publish = () => {
+		(globalThis as any).__piPlanMode = enabled;
+	};
+	// 計画モードの前から動いている、書き込みの権限を持つ子 (止めはしない。利用者へ知らせるだけ)
+	const runningWriters = (): string[] => {
+		const g = globalThis as { __piChildren?: Map<string, { agent: string }>; __piReadOnlyAgents?: Set<string> };
+		const readOnly = g.__piReadOnlyAgents;
+		if (!readOnly || !g.__piChildren) return [];
+		return [...new Set([...g.__piChildren.values()].map((c) => c.agent).filter((a) => !readOnly.has(a)))];
+	};
 	const set = (on: boolean, ctx: ExtensionContext) => {
 		enabled = on;
 		if (on) apply();
 		else restore();
+		publish();
 		status(ctx);
 		persist();
-		ctx.ui.notify(on ? "計画モード: 書き込み・実行のツールを外した" : "計画モードを終えた: ツールを戻した", "info");
+		ctx.ui.notify(on ? "計画モード: 書き込み・実行のツールを外した。子は読み取り専用の役割だけ" : "計画モードを終えた: ツールを戻した", "info");
+		const writers = on ? runningWriters() : [];
+		if (writers.length > 0) ctx.ui.notify(`計画モードの前から動いている子があります (${writers.join(", ")})。止めるには guarded_task の abort / close`, "warning");
 	};
 
 	pi.registerCommand("plan", {
@@ -54,6 +68,7 @@ export default function (pi: ExtensionAPI) {
 		enabled = last?.data?.enabled ?? false;
 		saved = last?.data?.saved;
 		if (enabled) apply();
+		publish();
 		status(ctx);
 	});
 

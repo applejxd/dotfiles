@@ -561,8 +561,9 @@ const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, Ru
 // 生かしておく子 (job) の上限と、1 往復の待機の上限、返却の上限
 const MAX_JOBS = 4;
 const MAX_REPLY_CHARS = 20000;
-// 利用者のコマンド (`btw`) が起動できる子の役割。読み取り専用に限る
-const READ_ONLY_CHILD_PROFILES = new Set(["explorer"]);
+// 読み取り専用の子の役割 (プロファイル)。利用者のコマンド (`btw`) が起動できるのはこれだけで、計画モード (`/plan`) の間に
+// 起動・続きの依頼ができる子もこれだけ (see docs/change/0044-plan-agent.md)
+const READ_ONLY_CHILD_PROFILES = new Set(["reader", "explorer"]);
 const jobs = new Jobs(MAX_JOBS);
 // 異常終了でも孤児の子を残さない (stdin が閉じても止まるが、作業中の子はすぐ止める)
 process.once("exit", () => jobs.closeAll(true));
@@ -800,6 +801,15 @@ function prepareIsolation(parentCwd: string, childArgs: string[]): IsolationPlan
 
 function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 	const names = Object.keys(agents);
+	// 計画モード (`plan` 拡張) が、動いている子に書き込みの役割があるかを知らせるための、読み取り専用の役割の一覧
+	(globalThis as any).__piReadOnlyAgents = new Set(names.filter((n) => READ_ONLY_CHILD_PROFILES.has(agents[n].profile)));
+	// 計画モードの間に、書き込みの権限を持つ役割 (worker・commit など) の子を起動・続行させない理由。読み取り専用の役割なら null
+	const planModeRefusal = (agentName: string): string | null => {
+		const agent = agents[agentName];
+		if (!agent || READ_ONLY_CHILD_PROFILES.has(agent.profile)) return null;
+		const allowed = names.filter((n) => READ_ONLY_CHILD_PROFILES.has(agents[n].profile)).join(", ");
+		return `plan mode is on (/plan): the agent "${agentName}" can change files or run commands, so it cannot be started or continued now. Only read-only agents (${allowed}) are allowed. Ask the user to leave plan mode (/plan) first.`;
+	};
 	const catalog = names.map((n) => `- ${n}: ${agents[n].description}`).join("\n");
 	const text = (t: string, isError = false, details: Record<string, unknown> = {}) => ({
 		content: [{ type: "text", text: t }],
@@ -1136,6 +1146,19 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			if (d.decision !== "allow") throw new Error(`実行前の判定で止めた: ${d.decision}: ${d.reason}`);
 			const owner = { cwd: ctx.cwd, role: ROLE };
 			const own = (j: Job) => j.owner.cwd === owner.cwd && j.owner.role === owner.role;
+
+			// ─── 計画モード (/plan) の間は、読み取り専用の役割だけ ───
+			// 起動 (単発・並列)・続きの依頼・steer が対象。状態・一覧・abort・close は止めるだけなので通す
+			if ((globalThis as any).__piPlanMode === true) {
+				let refused: string | null = null;
+				if (input.kind === "new") refused = planModeRefusal(input.agent);
+				else if (input.kind === "batch") refused = input.tasks.map((t) => planModeRefusal(t.agent)).find((r) => r !== null) ?? null;
+				else if (input.kind === "followup" || input.kind === "steer") {
+					const target = jobs.get(input.jobId);
+					if (target && own(target)) refused = planModeRefusal(target.agent);
+				}
+				if (refused) return text(refused, true);
+			}
 
 			// ─── 一覧 ───
 			if (input.kind === "list") {

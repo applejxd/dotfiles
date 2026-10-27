@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -2555,3 +2556,112 @@ def test_mcp_server_with_requires_env_is_registered_only_when_the_variable_is_se
     extra = {"SPIKE_MCP_URL": "https://gw.example/mcp"} if variable_set else {"SPIKE_MCP_URL": "  "}
     proc = run_pi(env, [], **extra)
     assert ("mcp__spike__echo_secret" in lines(proc)[0]) is variable_set, proc.stdout
+
+
+# ─── 計画モード (/plan) の間は、読み取り専用の子だけ (CHG-0044 段 4) ───────────────
+
+PLAN_FLAG = FIXTURES / "plan_flag.ts"
+PLAN_EXT = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "plan" / "index.ts"
+PLAN_REFUSED = "plan mode is on (/plan)"
+
+
+def test_plan_mode_refuses_a_writing_agent_and_starts_nothing(env):
+    proc = _rounds(
+        env,
+        [[_task(agent="worker", task="write it")]],
+        extra=("-e", str(PLAN_FLAG)),
+        PLAN_FLAG="1",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert PLAN_REFUSED in proc.stdout and "isError=true" in proc.stdout, proc.stdout
+    assert "Only read-only agents (explore, review, plan)" in proc.stdout, proc.stdout
+    assert "child worker" not in proc.stdout and "USERS=" not in proc.stdout, (
+        proc.stdout
+    )  # 子を起動していない
+    # commit も書き込みの権限を持つ (git の状態を変える) 役割
+    proc = _rounds(
+        env, [[_task(agent="commit", task="x")]], extra=("-e", str(PLAN_FLAG)), PLAN_FLAG="1"
+    )
+    assert PLAN_REFUSED in proc.stdout and "child commit" not in proc.stdout, proc.stdout
+
+
+@pytest.mark.parametrize("agent", ["explore", "review", "plan"])
+def test_plan_mode_still_runs_read_only_agents(env, agent):
+    proc = _rounds(
+        env, [[_task(agent=agent, task="look")]], extra=("-e", str(PLAN_FLAG)), PLAN_FLAG="1"
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert f"child {agent}: completed" in proc.stdout and PLAN_REFUSED not in proc.stdout, (
+        proc.stdout
+    )
+
+
+def test_plan_mode_refuses_the_whole_batch_when_one_agent_can_write(env):
+    batch = [{"agent": "explore", "task": "a"}, {"agent": "worker", "task": "b"}]
+    proc = _rounds(env, [[_task(tasks=batch)]], extra=("-e", str(PLAN_FLAG)), PLAN_FLAG="1")
+    assert PLAN_REFUSED in proc.stdout, proc.stdout
+    assert "child explore" not in proc.stdout and "child worker" not in proc.stdout, (
+        proc.stdout
+    )  # 読み取りの分も走らない
+    # 読み取り専用だけの並列は通る
+    ok = [{"agent": "explore", "task": "a"}, {"agent": "plan", "task": "b"}]
+    proc = _rounds(env, [[_task(tasks=ok)]], extra=("-e", str(PLAN_FLAG)), PLAN_FLAG="1")
+    assert "child explore: completed" in proc.stdout and "child plan: completed" in proc.stdout, (
+        proc.stdout
+    )
+    assert PLAN_REFUSED not in proc.stdout, proc.stdout
+
+
+def test_plan_mode_refuses_follow_up_and_steer_to_a_writing_job_but_not_status_or_close(env):
+    # 計画モードの前から動いている worker (keep) を、計画の間に続けさせない。止める操作 (status・close) は通す
+    proc = _rounds(
+        env,
+        [
+            [_task(agent="worker", task="first", keep=True)],
+            [_task(jobId="{{JOB}}", task="second")],
+            [_task(jobId="{{JOB}}", steer="change course")],
+            [_task(jobId="{{JOB}}", status=True)],
+            [_task(jobId="{{JOB}}", close=True)],
+        ],
+        extra=("-e", str(PLAN_FLAG)),
+        PLAN_FLAG_AFTER_FIRST_TASK="1",
+        FAUX_RESULT_CHARS="2500",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "USERS=1" in proc.stdout and "USERS=2" not in proc.stdout, (
+        proc.stdout
+    )  # 続きの依頼は子に届いていない
+    assert proc.stdout.count(PLAN_REFUSED) == 2, proc.stdout  # 続きの依頼と steer
+    assert "job-" in proc.stdout and "closed" in proc.stdout.split(PLAN_REFUSED)[-1], (
+        proc.stdout
+    )  # status と close は通る
+
+
+def test_without_plan_mode_a_writing_agent_runs_as_before(env):
+    proc = _rounds(env, [[_task(agent="worker", task="go")]], extra=("-e", str(PLAN_FLAG)))
+    assert "child worker: completed" in proc.stdout and PLAN_REFUSED not in proc.stdout, proc.stdout
+
+
+def test_the_plan_extension_publishes_the_mode_for_guarded_task(env):
+    proc = run_pi(
+        env,
+        [],
+        "/planflag",
+        "/plan",
+        "/planflag",
+        "/plan",
+        "/planflag",
+        extra=("-e", str(PLAN_EXT), "-e", str(PLAN_FLAG)),
+    )
+    flags = re.findall(r"PLANFLAG (true|false)", proc.stdout + proc.stderr)
+    assert flags == ["false", "true", "false"], proc.stdout + proc.stderr
+
+
+def test_the_read_only_entry_for_btw_accepts_the_reader_profile_but_not_a_writer(env):
+    # 読み取り専用の役割は reader と explorer。plan (reader) は btw の入口からも使える
+    for agent, ok in (("plan", True), ("explore", True), ("worker", False)):
+        proc = run_pi(
+            env, [], f"/askchild {agent} hello", extra=("-e", str(ASK_READ_CHILD)), **CHILD_ECHO
+        )
+        out = proc.stdout + proc.stderr
+        assert f"ASKCHILD ok={'true' if ok else 'false'}" in out, (agent, out)
