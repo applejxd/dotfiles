@@ -1237,18 +1237,18 @@ defaultTools = []
 # see docs/spec/guard/pi-subagents.md#windows-の子エージェント
 [pi.model.tier.github-copilot]
 second_opinion = "gpt-6.1-terra"
-# ★worker は GPT-6.1 Sol (2026-10-27。利用者の決定: できるだけ最新のモデルで揃える)。Copilot の一覧にあり、`:medium` とツール呼び出しで動くことを実測。
-# 計測済みの既定 (Sonnet 5.5 #medium) とは、まだ比べていない (docs/research/agents/subagent-model-assignment.md)。Haiku は使わない
-worker = "gpt-6.1-sol#medium"
+# ★worker は上書きしない (OpenCode の階層の Sonnet 5.5 #medium のまま)。review (GPT) と系統を分けて、レビューの独立性を保つ (2026-10-27。
+# worker を GPT-6.1 Sol にした直後に、同じ系統になる点を見直した)。Sol は比較の実験で試す。Haiku は使わない
+# see docs/research/agents/subagent-model-assignment.md
 
 # ★Bedrock の pi だけ。OpenCode の階層 ([opencode.model.tier.amazon-bedrock]) はそのまま。
-# AWS の公式モデルカードで GA を確認 (2026-10-26 Terra、2026-09-29 Sol 6.1)。us. 推論プロファイルを使う。
+# AWS の公式モデルカードで GA を確認 (2026-10-26 Terra)。us. 推論プロファイルを使う。
 # ★推論の強さは付けない (Bedrock の GPT-6 系の既定は medium。段の指定は additionalModelRequestFields.reasoning.effort で、pi が渡せるか未確認)。
 # ★未確認: pi から Bedrock の GPT-6.1 へのツール呼び出し (実機は会社の機で)。動かないときはこの表を消すと従来の us.openai.gpt-6-sol に戻る
 # see docs/research/agents/subagent-model-assignment.md
 [pi.model.tier.amazon-bedrock]
 second_opinion = "us.openai.gpt-6.1-terra"
-worker = "us.openai.gpt-6.1-sol"
+
 
 # pi を Fence で囲うときの追加分 (境界のそのほかのキーは [opencode.sandbox] を共有する。
 # 段 6 で OpenCode を撤去するときに、共有キーをここへ移す)。pis (標準のサンドボックス) が使う。

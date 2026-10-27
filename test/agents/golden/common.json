@@ -1263,12 +1263,10 @@
   "model": {
    "tier": {
     "amazon-bedrock": {
-     "second_opinion": "us.openai.gpt-6.1-terra",
-     "worker": "us.openai.gpt-6.1-sol"
+     "second_opinion": "us.openai.gpt-6.1-terra"
     },
     "github-copilot": {
-     "second_opinion": "gpt-6.1-terra",
-     "worker": "gpt-6.1-sol#medium"
+     "second_opinion": "gpt-6.1-terra"
     }
    }
   },

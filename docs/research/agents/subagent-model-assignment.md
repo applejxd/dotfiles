@@ -112,3 +112,12 @@
   **Haiku は使わない**。`review` は Copilot・Bedrock とも Terra（6.1）。親は Sonnet 5.5（最新の Claude は Sonnet 5.5。Opus 5.5 は Copilot で制限）
 - **残る懸念**: `worker`（Sol）と `review`（Terra）が、同じ OpenAI 系統になった。「レビュー役の系統 ≠ 作った側の系統」の見立て（上の「見立て」）とは、
   worker の成果物のレビューでは合わない。運用で補う: worker の成果物は、`guarded_task` の `model` に Claude（`github-copilot/claude-sonnet-5.5`）を指定して、レビューさせる
+
+## 記録 M3 — 2026-10-27（`worker` を Claude に戻した）
+
+- **きっかけ**: 記録 M2 の決定（`worker` を Sol にする）の直後に、利用者が「`worker` は Claude のほうが、レビューが効果的になるのでは」と指摘した。
+  `worker`（Sol）と `review`（Terra）が同じ OpenAI 系統になり、worker の成果物のレビューで、見落としが重なりやすくなる
+- **判断の根拠**: 別系統のレビューが効く、という見立て（記録 M1。効果の大きさを測った公開評価は、見つかっていない。推測を含む）。
+  Sonnet 5.5 `#medium` は計測済み（Opus 5.5 と同じ合格率）で、Bedrock の GPT-6.1 へのツール呼び出しという未確認の危険が、`review` だけに限られる
+- **決定**（利用者）: `worker` は上書きしない（Copilot・Bedrock とも Sonnet 5.5 `#medium`）。`review` は Terra（GPT）のまま。Sol は、比較の実験（同じタスクで、合格率・範囲外の編集・費用・委譲率）で試す。
+  Haiku は使わない（M2 のまま）
