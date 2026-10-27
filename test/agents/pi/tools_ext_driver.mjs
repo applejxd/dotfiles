@@ -4,7 +4,7 @@
 //   node test/agents/pi/tools_ext_driver.mjs
 //
 // see docs/spec/guard/pi-guard.md
-import { mkdirSync, mkdtempSync, truncateSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,6 +15,8 @@ const mod = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi",
 const { toolText, guideHint, runRead, similarNames, editFailureHint, nearestMatch, decorateEditResult } = mod;
 
 const dir = mkdtempSync(join(tmpdir(), "tools-ext-"));
+// 終わりに必ず消す (33 MB の big.bin を含む。消さないと実行のたびに TMPDIR に残る。CHG-0042 段 4)
+process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
 const files = {
 	"a.txt": "1\n2\n3\n",
 	"b.txt": "1\n2\n3",

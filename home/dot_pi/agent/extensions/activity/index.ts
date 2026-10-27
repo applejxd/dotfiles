@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { Type } from "typebox";
 
 type Job = { id: string; command: string; pid?: number; startedAt: number; log: string };
-type Finished = { exit: number | string; endedAt: number };
+type Finished = { exit: number | string; endedAt: number; log?: string }; // log: 終わった後も読めるよう、実際のパスを保持する (TMPDIR はセッションで変わる)
 
 const g = globalThis as { __piChildren?: Map<string, unknown>; __piJobs?: Map<string, Job> };
 const jobs = (g.__piJobs ??= new Map<string, Job>());
@@ -226,13 +226,13 @@ export default function (pi: ExtensionAPI) {
 			refresh();
 			child.on("error", (e: Error) => {
 				jobs.delete(id);
-				finished.set(id, { exit: `error: ${e.message}`, endedAt: Date.now() });
+				finished.set(id, { exit: `error: ${e.message}`, endedAt: Date.now(), log });
 				refresh();
 			});
 			child.on("close", (code: number | null, signal: string | null) => {
 				if (!jobs.delete(id)) return;
 				const exit = code ?? signal ?? -1;
-				finished.set(id, { exit, endedAt: Date.now() });
+				finished.set(id, { exit, endedAt: Date.now(), log });
 				refresh();
 				try {
 					ui?.notify(`job ${id} 終了 (exit ${exit}): ${params.command.slice(0, 60)}`, code === 0 ? "info" : "warning");
@@ -271,7 +271,7 @@ export default function (pi: ExtensionAPI) {
 			const done = finished.get(params.id);
 			if (!job && !done) return text(`unknown job: ${params.id}`, true);
 			if (!job && pending.some((p) => p.id === params.id)) seen.add(params.id); // 通知待ちのジョブを終了後に読んだ (通知はもう要らない)
-			const log = job?.log ?? join(tmpdir(), "pi-jobs", `${process.pid}-${params.id}.log`);
+			const log = job?.log ?? done?.log ?? join(tmpdir(), "pi-jobs", `${process.pid}-${params.id}.log`);
 			const state = job ? `running (${Math.floor((Date.now() - job.startedAt) / 1000)}s)` : `finished (exit ${done?.exit})`;
 			const snapshot = tailWithCount(log, lines);
 			const hint = job ? "\n(still running: a notification arrives when it finishes. Do not poll bg_log or sleep; do other work, or end your turn.)" : "";

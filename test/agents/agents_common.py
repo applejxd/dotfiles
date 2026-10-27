@@ -76,6 +76,20 @@ def load_common(username: str | None = None, *, raw: bool = False) -> dict:
     return generate.resolve_pi_shared(common)
 
 
+_CREATED: list[Path] = []
+
+
+def cleanup_agents_config_dirs() -> None:
+    """``agents_config_dir`` が作った一時領域を消す (冪等)。
+
+    ★``atexit`` だけに頼ると、pytest-xdist のワーカーは ``os._exit`` で終わるので、実行のたびに
+      ワーカーの数だけ ``agents-config-*`` が残る (実測: 63 件)。``conftest.py`` の
+      ``pytest_sessionfinish`` からも呼ぶ。CHG-0042 段 4。
+    """
+    while _CREATED:
+        shutil.rmtree(_CREATED.pop(), ignore_errors=True)
+
+
 @cache
 def agents_config_dir(username: str | None = None) -> Path:
     """hook が実行時に読む形の ``~/.config/agents`` 相当を用意する。
@@ -84,7 +98,8 @@ def agents_config_dir(username: str | None = None) -> Path:
     ``AGENTS_CONFIG_DIR`` 配下の 2 つを読むので、配備後と同じ状態になる。
     """
     base = Path(tempfile.mkdtemp(prefix="agents-config-"))
-    atexit.register(shutil.rmtree, base, ignore_errors=True)
+    _CREATED.append(base)
+    atexit.register(cleanup_agents_config_dirs)
     (base / "common.toml").write_text(render_common(username), encoding="utf-8")
     shutil.copy2(SOURCE_DIR / "command_policy.py", base / "command_policy.py")
     return base

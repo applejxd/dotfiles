@@ -93,6 +93,8 @@ _PI_TESTS = (
     "test_pi_confirm",
     "test_pi_landlock_exec",
     "test_pi_tools_ext",
+    "test_pi_session_tmp",
+    "test_tmp_hygiene",
     "test_pi_confirm_view",
     "test_pi_ask_normalize",
     "test_pi_worktree",
@@ -301,6 +303,7 @@ RULES: tuple[Rule, ...] = (
         ("docs",),
     ),
     Rule("away-shift", ("home/dot_claude/skills/away-shift/**",), ("test_away_guard",)),
+    Rule("tmp-clean", ("home/dot_config/pi/harness/tmp_clean.py",), ("test_tmp_clean",)),
     Rule("env-check", ("home/dot_claude/skills/env-check/**",), ("test_env_check",)),
     Rule(
         "テンプレート検査器",
@@ -313,8 +316,8 @@ RULES: tuple[Rule, ...] = (
     Rule("model-eval", ("scripts/model-eval/**",), ("test_model_eval",)),
     Rule(
         "shell 設定",
-        ("home/dot_config/shell/**",),
-        ("test_shell_functions", "test_shell_startup"),
+        ("home/dot_config/shell/**", "home/dot_zshenv"),
+        ("test_shell_functions", "test_shell_startup", "test_zshenv_tmpdir"),
     ),
     Rule(
         "chezmoiscripts",

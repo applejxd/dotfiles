@@ -13,6 +13,13 @@ dependencies = [
 [tool.uv.sources]
 keypirinha-stub = { git = "https://github.com/applejxd/keypirinha-stub.git" }
 
+[tool.pytest.ini_options]
+# 一時領域の肥大を防ぐ (CHG-0042 段 4)。pytest 既定は直近 3 回分を全部残し、TMPDIR に 5 GB 積み上がった。
+# 落ちたテストの分だけ、1 回分を残す
+# see docs/change/0042-tmp-lifecycle.md
+tmp_path_retention_count = 1
+tmp_path_retention_policy = "failed"
+
 [tool.ruff]
 # upstream 由来のコードは対象外にする。
 # home/AppData は Keyhac / Keypirinha の同梱物、

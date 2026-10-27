@@ -65,6 +65,8 @@ function _tmpdir_repo_local_update() {
 
     if [[ -n "$repo_root" ]]; then
         local repo_tmp="${repo_root}/.tmp"
+        # pi のセッションの置き場 (<repo>/.tmp/s/<ID>。CHG-0042) を TMPDIR にして起動された子の zsh は、そのまま維持する
+        [[ "${TMPDIR:-}" == "${repo_tmp}/s/"* ]] && return 0
         # 作れない / 書き込めないとき (読み取り専用など) は元の TMPDIR を維持し、非対話でも出力しない
         if { [[ -d "$repo_tmp" ]] || mkdir -p "$repo_tmp" 2>/dev/null; } && [[ -w "$repo_tmp" ]]; then
             export TMPDIR="$repo_tmp"

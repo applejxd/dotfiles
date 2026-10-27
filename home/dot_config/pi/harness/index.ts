@@ -29,6 +29,7 @@ import { appendOperations, appendResult, decorateEditResult, guideHint, readPara
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { auditFormat, summarizeCalls } from "./audit.ts";
 import { unguardedMessage, unguardedSources } from "./unguarded.ts";
+import { SessionTmp } from "./session-tmp.ts";
 import { ISOLATION_UNSUPPORTED, NO_BASH_NOTICE, findBash, isWindows, supportsChildTasks } from "./platform.ts";
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
@@ -196,14 +197,27 @@ function baseName(toolName: string): string {
 export default async function (pi: ExtensionAPI) {
 	// 自作の拡張のうち実行する道具 (bg_run・task) は、この印が無いと動かない (フルガードの読み込みに失敗した起動で、判定なしに残さない)
 	(globalThis as any).__PI_FULL_GUARD__ = true;
+	// セッションごとの一時置き場。子 (親の TMPDIR を継承する)・pis の内側 (TMPDIR=/tmp の tmpfs)・Windows では何もしない
+	const sessionTmp = new SessionTmp({ enabled: !CHILD && process.env.PI_HARNESS_BOUNDARY !== "1" && !isWindows(), harnessDir: HERE });
 	await loadCommitPreview();
 	// 状態の表示 (安全の根拠ではなく、いまどちらで動いているかの目印)
 	const showBypass = (ctx: any) => {
 		if (ctx.hasUI) ctx.ui.setStatus("bypass", bypass ? ctx.ui.theme.fg("warning", "⚡ bypass") : undefined);
 	};
-	// セッションの終了・切り替え・/reload で、保持している子を全部止める
-	pi.on("session_shutdown", async () => jobs.closeAll());
-	pi.on("session_start", async (_event, ctx) => {
+	// セッションの終了・切り替え・/reload で、保持している子を全部止める。
+	// そのうえで、セッションごとの一時置き場 (.tmp/s/<ID>/) は quit のときだけ消す (CHG-0042)
+	pi.on("session_shutdown", async (event: any) => {
+		jobs.closeAll();
+		try {
+			await sessionTmp.teardown(String(event?.reason ?? ""));
+		} catch {}
+	});
+	pi.on("session_start", async (event: any, ctx: any) => {
+		try {
+			const cwd = ctx.cwd ?? process.cwd();
+			sessionTmp.start(cwd, ctx.sessionManager.getSessionId());
+			if (event?.reason === "startup") sessionTmp.sweep(cwd);
+		} catch {}
 		reconcileOnStart(ctx);
 		if (!ctx.hasUI) return;
 		showBypass(ctx);

@@ -25,6 +25,10 @@ run = "python3 scripts/verify.py --changed"
 description = "検証を全件実行する（約 9 分。コミット前に 1 回）"
 run = "python3 scripts/verify.py --all"
 
+[tasks."tmp:clean"]
+description = "作業ツリーの .tmp/ を掃除する（既定は一覧だけ。引数: --apply で消す、--all で未知の名前も）"
+run = "python3 home/dot_config/pi/harness/tmp_clean.py"
+
 [tasks."opencode:probe"]
 description = "隔離環境で opencode を実行する（実 DB を汚さない）"
 run = "./scripts/opencode_probe.sh"

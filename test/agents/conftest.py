@@ -11,6 +11,19 @@ import os
 import pytest
 
 
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """テストが作った一時領域を、セッションの終わりに消す。
+
+    ★pytest-xdist のワーカーは ``os._exit`` で終わるので ``atexit`` が走らない。
+      このフックはワーカーの中でも呼ばれる (CHG-0042 段 4)。
+    """
+    try:
+        import agents_common
+    except ImportError:  # このディレクトリ外から収集されたとき
+        return
+    agents_common.cleanup_agents_config_dirs()
+
+
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers", "raw_git_env: ランチャーの git_env() を包まずに使う (契約そのものを見るテスト)"
