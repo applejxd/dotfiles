@@ -1,6 +1,6 @@
 ---
 name: github-operations
-description: "GitHub の issue・PR・Projects v2 を gh CLI で管理する。作成・編集・コメント・状態変更・Project フィールド更新と、そのための対象確認に使う。OSS の実装・互換性・修正された版の調査は oss-research、調査結果の docs への記録は sdd-docs の領分なので使わない。"
+description: "GitHub の issue・PR・Projects v2 を gh CLI で管理する。作成・編集・コメント・状態変更・Project フィールド更新と、そのための対象確認に使う。「issue を作って」「PR にコメントして」「issue を閉じて」「Project のステータスを変えて」で使う。OSS の実装・互換性・修正された版の調査は oss-research、調査結果の docs への記録は sdd-docs の領分なので使わない。"
 ---
 
 # github-operations skill

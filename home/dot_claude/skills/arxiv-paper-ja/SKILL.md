@@ -1,6 +1,6 @@
 ---
 name: arxiv-paper-ja
-description: arXiv 論文・技術ノートの全文和訳を、数式・図表・引用を保った日本語 PDF として作るときに使う。arxiv.org の URL や arXiv ID を示した「全文を和訳」「日本語 PDF にして」が対象。TeX ソース取得、利用範囲（私的利用・公開）に応じたライセンス表示、訳語決定、分担翻訳と校閲、図表翻訳、LuaLaTeX の日本語組版、PDF 検証まで扱う。要旨・抜粋だけの翻訳、要約、既存の日本語 TeX の組版だけには使わない。
+description: "arXiv 論文・技術ノートの全文和訳を、数式・図表・引用を保った日本語 PDF として作るときに使う。arxiv.org の URL や arXiv ID を示した「全文を和訳」「日本語 PDF にして」が対象。TeX ソース取得、利用範囲（私的利用・公開）に応じたライセンス表示、訳語決定、分担翻訳と校閲、図表翻訳、LuaLaTeX の日本語組版、PDF 検証まで扱う。要旨・抜粋だけの翻訳、要約、既存の日本語 TeX の組版だけには使わない。"
 compatibility: curl または Python 3、tar、latexmk、LuaLaTeX と luatexja-fontspec、pdftotext、pdfinfo、mutool を推奨。
 ---
 

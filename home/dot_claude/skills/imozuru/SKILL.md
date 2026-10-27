@@ -1,6 +1,6 @@
 ---
 name: imozuru
-description: "知らない分野に追いつくため、用語・中心の人・場（学会・雑誌・個人ブログ・動画・リポジトリ）を特定し、引用・リンク・著者を芋づる式にたどって、原文（論文も個人の記事も動画の字幕も）を要約せずそのまま .tmp/research/<話題>/sources/ に保存し、要る主張ごとに原文の行番号を付ける。検索は web-search スキルの websearch.py を使う。見張りのモードでは、map.md の場（Qiita・Zenn のタグ、note、YouTube、ブログ、arXiv）の新着を RSS で並べる。「芋づる式に調べて」「この分野をキャッチアップしたい」「界隈の用語と人から掘って」「論文とか先行研究を漁って」「元ネタの原典を探して」「上手い人のやり方を集めて」「原文で落として」「〇〇の新着見て」「/imozuru」「dig into this field」「find the canonical papers on X」「literature dive」で使う。答えが1つの事実の確認（年・有無・仕様1つ）、手元の PC の中の資料探し、読んだ資料の要約や解説、OSS の実装・不具合・修正された版の調査（oss-research の領分）、論文の全文翻訳（arxiv-paper-ja の領分）には使わない。"
+description: "知らない分野に追いつくため、用語・中心の人・場（学会・雑誌・ブログ・動画・リポジトリ）を特定し、引用・リンク・著者を芋づる式にたどって、原文を要約せずそのまま .tmp/research/<話題>/sources/ に保存し、要る主張ごとに原文の行番号を付ける。検索は web-search スキルの websearch.py を使う。見張りのモードでは、map.md の場（Qiita・Zenn のタグ、note、YouTube、ブログ、arXiv）の新着を RSS で並べる。「芋づる式に調べて」「この分野をキャッチアップしたい」「論文とか先行研究を漁って」「元ネタの原典を探して」「原文で落として」「〇〇の新着見て」「/imozuru」「literature dive」で使う。答えが1つの事実の確認、手元の PC の中の資料探し、資料の要約や解説、OSS の実装・不具合の調査（oss-research の領分）、論文の全文翻訳（arxiv-paper-ja の領分）には使わない。"
 ---
 
 # imozuru

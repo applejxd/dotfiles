@@ -1,6 +1,6 @@
 ---
 name: uv-migration
-description: conda / pip ベースの Python プロジェクトを uv 管理（依存は pyproject.toml と uv.lock、Python と CUDA 関連の環境変数は mise.toml で再現する形）へ移行する。「conda をやめたい」「environment.yml を uv に」「requirements.txt を pyproject に」「install.sh をやめて uv sync だけにしたい」「PyTorch / CUDA 拡張を uv で入れたい」と言われたときに使う。torch の CUDA ホイール選択、no-build-isolation が必要な CUDA 拡張、mise による CUDA_HOME / TORCH_CUDA_ARCH_LIST の固定を含む。単なる `uv add` 1 回で済む依存追加や、CUDA を含まない新規プロジェクト作成には使わない。
+description: "conda / pip ベースの Python プロジェクトを uv 管理（依存は pyproject.toml と uv.lock、Python と CUDA 関連の環境変数は mise.toml で再現する形）へ移行する。「conda をやめたい」「environment.yml を uv に」「requirements.txt を pyproject に」「install.sh をやめて uv sync だけにしたい」「PyTorch / CUDA 拡張を uv で入れたい」と言われたときに使う。torch の CUDA ホイール選択、no-build-isolation が必要な CUDA 拡張、mise による CUDA_HOME / TORCH_CUDA_ARCH_LIST の固定を含む。単なる `uv add` 1 回で済む依存追加や、CUDA を含まない新規プロジェクト作成には使わない。"
 ---
 
 # uv migration
