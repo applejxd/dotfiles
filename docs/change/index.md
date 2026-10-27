@@ -69,6 +69,7 @@
 | [0043](0043-model-catalog.md) | 子エージェントのモデルを、最新のカタログから、ユーザの指示で選べるようにする（effort は自由） | In progress | Bedrock のカタログの `verified`（pi から GPT-6.1 へのツール呼び出しが未確認。`enforce_verified = false`）。実効の段の表示は未実装 | Bedrock を使える環境で `mise run models:probe`。確認後に `verified`・`enforce_verified` を `true` へ | 2026-10-27 |
 | [0044](0044-plan-agent.md) | 強いモデル（`deep`）で計画し、既定のモデルで管理・実行する。`plan` 役の子と、`/plan`（計画モード）のモデル切り替え（`opusplan` 型） | Exploring | 今の世代で、計画と実行を分けた効果の数字が無い。`reader`（bash なし）で足りるか。Copilot の `deep` は同じモデルで effort だけ | 設計を `review` に見せる → 段 2・2b を実装し、固定の課題で測る | 2026-10-27 |
 | [0045](0045-orchestrator-parent.md) | 親をオーケストレーターに寄せる。親は対話・判断・委譲・承認に専念し、実作業は子へ。スキルを、対話の段と実行の段（子へ渡す）に分ける「委譲の型」を整える | Exploring | 子が確認なしで動く経路（承認・質問の中継）が無い。型 B・C で、親が作る依頼文の質をどう保つか | 停止条件の表を、境界あり・なし × bypass あり・なし × RPC 起動で実測する → 限定した試作（型 A・B・C）で価値を測る | 2026-10-28 |
+| [0046](0046-guarded-action-timeout.md) | 承認つきの操作（`guarded_action`）の確認が時間切れのとき、親が止まらず、内容を退避して作業を続ける（CHG-0041 の「確認の時間切れ問題」の移管先） | Exploring | `guarded_action` の経路に退避が無い（仕様は退避して続行だが、実際は「待て」と返す）。`git_commit` 以外の操作の退避の置き場 | 設計を `review` に見せる → `git_commit` の退避の入口（ステージ済みの内容とメッセージから）を試作 | 2026-10-28 |
 | [0026](0026-specialist-agents-with-skills.md) | スキルを役割（子エージェント）へ割り当てる。まず移行の調査役（`migration-analyst`）に、移行スキルの重い読み物と影響の洗い出しを任せ、実行・対話は親に残す | Exploring | 設計は `review` の 1 回目を反映済み（再レビューは未）。子が実際にスキルを使い、`references/` を読めるかは実機で未確認。段 1c（`fork` の解釈）は [CHG-0045](0045-orchestrator-parent.md) へ統合 | 段 1（既存の `explore` にスキル名と範囲を明示して委任）を実機で測る。表と専用役は、その結果しだい | 2026-10-28 |
 
 ## 保留

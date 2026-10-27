@@ -317,6 +317,17 @@ OVERALL STATUS: FAILED
   `e2e.yml`（毎月 2 日の schedule と手動。cold start）だけ
 - リポジトリは public
 
+#### 全件の試験が環境のせいで落ちるとき（`inotify`）
+
+`test_bedrock_probe.py` の envoy の検証が、abort（終了コード -6）で落ちたら、**`inotify` の枠の枯渇**を疑う。
+envoy は起動時に `inotify` のインスタンスを作るので、利用者の `fs.inotify.max_user_instances`（既定 128）が使い切られていると、設定の検証ごと落ちる。
+2026-10-28 には、`tmux` の中で本物の `pi` を起動する試験（`test_pi_commit_confirm.py` の TUI の試験）が、終了時に `tmux kill-session` だけを呼んでいたため、
+`pi` が SIGHUP では終わらず、1 回の実行ごとに 1 つ残り、110 個が溜まって枠をほぼ使い切っていた。試験は、ペインのプロセスを控えて SIGTERM → SIGKILL で終わらせる形に直した。
+
+- 確認: `ps -eo pid,etimes,tty,comm | grep ' pi$'` で、作業ディレクトリが削除済みの古い `pi` が溜まっていないか。`ls -l /proc/<pid>/fd | grep -c inotify` で、持っている数を見る
+- 対処: 古い `pi`（親が `tmux` のサーバ・作業ディレクトリが削除済み）だけを終了する。利用者の実際の作業の `pi` は終了させない
+- 子プロセスを起こす試験は、**終了時に確実にプロセスを終わらせる**（`finally` で、終了の確認まで）
+
 ## 既知の未達
 
 `ubuntu2204` の `apply` と `update`（2 回の apply と残差分 0 件）は通る
