@@ -170,7 +170,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 | 役割 | `tools` | `default` | ほか | 使うもの |
 | --- | --- | --- | --- | --- |
 | `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | — | 親（主エージェント） |
-| `reader` | read・grep・find・ls | deny | — | 利用者が `pis --role reader` で選ぶ読み取り専用の親。**子の役割では使わない**（`[pi.agents]` が参照しない。harness の読み取り専用の子の一覧 `READ_ONLY_CHILD_PROFILES` にも含めない。bash を持たない役割の試験にも使う） |
+| `reader` | read・grep・find・ls | deny | — | 利用者が `pis --role reader` で選ぶ読み取り専用の親。子の `plan` 役も使う（`[pi.agents.plan]`。bash を持たないので、`skill_scripts` の許可が通らない）。harness の読み取り専用の子の一覧 `READ_ONLY_CHILD_PROFILES` に含む（`/btw` の入口と、計画モードの間に起動できる子）。bash を持たない役割の試験にも使う |
 | `explorer` | `reader` + bash | deny | `shell_allow` に `wc` と読み取り専用の git（`status` / `diff` / `log` / `show` / `ls-files`） | 子の `explore` / `review` |
 | `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |
 | `worker` | 7 つのツール | ask | `shell_deny` に git の状態を変える操作 | 子の `worker` |

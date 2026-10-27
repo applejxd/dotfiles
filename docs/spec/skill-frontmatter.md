@@ -52,7 +52,7 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 | `arxiv-paper-ja`・`powerpoint-studio`・`imozuru`・`friction-review`・`pi-extension-dev`・`sdd-docs` | なし | 子を使う・質問や承認が要る・会話の文脈が材料 | 下の表 |
 | `cuda-version-migration`・`uv-migration` | なし | 長時間で、判断が人の側。調査の段だけを `plan` 役へ任せる（[CHG-0044](../change/0044-plan-agent.md)） | なし |
 | `oss-research` | なし | 読み取り中心で自己完結だが、`gh`・`curl` の実行と `rm` の承認が、子では通らない | なし |
-| `web-search`・`env-check` | なし | 道具。結果を親がそのまま使う | `env-check` はスクリプトだけ |
+| `web-search`・`env-check` | なし | 条件は満たせるが、**便益が無い**（道具。結果を親がそのまま使う。子に回すと往復が増えるだけ） | `env-check` はスクリプトだけ |
 
 `allowed-tools` を持つスキル:
 
@@ -72,12 +72,16 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 ## 委譲の型（親をオーケストレーターに寄せる設計。案）
 
 親は、利用者との対話・判断・委譲・承認・ToDo の管理に専念し、実作業は子へ任せる、という方向（利用者の方針、2026-10-28）。
-スキルは、**対話の段**と**実行の段**を分け、実行の段を、自己完結の依頼文で子に渡す。型の割り当ては案で、[CHG-0045](../change/0045-orchestrator-parent.md) で詰める。
+スキルは、**工程**に分け、対話の工程は親、実行の工程は自己完結の依頼文で子に渡す。**型はスキルの排他的な分類ではなく、工程ごとの組み合わせ**で、割り当ては案。
+実装の前に、各スキルを工程表（親の判断 → 子の成果物 → 役割・操作 → 次へ進む条件）へ展開して、実行する者の空白を探す（[CHG-0045](../change/0045-orchestrator-parent.md) の段 5。`review` の指摘）。
+承認に結び付いた限定操作（`git commit`・GitHub への書き込み）は、子に実行する役割が無いので、親側のハーネスが実行する例外にする。
 
 | 型 | 親の仕事 | 子の仕事 | スキル |
 | --- | --- | --- | --- |
 | A 丸ごと委譲 | 依頼文を渡して結果を受ける | 全部 | `fix`・`env-check`・`web-search`・`friction-review` の分類の段 |
 | B 合意だけ親 | 費用・範囲などの合意を取る | 実行（合意は引数で受ける） | `ipynb-to-marimo-pages`・`uv-migration`・`cuda-version-migration` の実行の段 |
 | C 文脈を渡して書かせる | 会話の決定事項を要約して依頼文に入れる | 文書・差分を作る | `sdd-docs`・`learn`・`commit` |
-| D 対話そのもの | 質問・承認 | 重い読み物だけ | `onboarding`・`skill-creator`・`pi-extension-dev`・`github-operations` |
-| E 自分が指揮役 | 子の管理 | 翻訳・レビューなど | `arxiv-paper-ja`・`review-loop`・`away-shift`・`powerpoint-studio` |
+| D 対話そのもの | 質問・承認 | 重い読み物・草稿・試験 | `onboarding`・`skill-creator`・`pi-extension-dev`・`github-operations`（ただし、草稿・実装・試験・読み戻しは子の工程。承認に結び付く書き込みは、親側の限定操作） |
+| E 自分が指揮役 | 子の管理（再開・停止・利用者の復帰を扱う長寿命の制御を含む） | 翻訳・レビュー・検索・取得など | `arxiv-paper-ja`・`review-loop`・`away-shift`・`powerpoint-studio`・`imozuru` |
+
+例（工程への展開）: `skill-creator` は D（聞き取り）→ C（草稿）→ E（比較試験の管理）→ C（修正）。`github-operations` は D（対象・意図の確認）→ 子（現状調査・本文の準備）→ 親側の承認つき操作 → 子（読み戻し）。`oss-research` は A（調べて報告）だが、`gh`・`curl` の実行と取得物の削除の承認が要るので、承認の経路（CHG-0045 の段 4）が前提。
