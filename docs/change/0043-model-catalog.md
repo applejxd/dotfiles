@@ -1,6 +1,6 @@
 # CHG-0043: 子エージェントのモデルを、最新のカタログから、ユーザの指示で選べるようにする（effort は自由）
 
-- **状態**: Exploring
+- **状態**: In progress
 - **更新日**: 2026-10-27
 - **基準**: pi 1.4.0、コミット `1bededf`。許可の判定は `home/dot_config/pi/harness/index.ts:809-821` を読んだ。pi の thinking の段と `--model provider/id:level` の解釈は pi 本体のドキュメントの `models.md`・`settings.md` と `pi --help` を読み、Copilot の `gpt-6.1-sol:medium`・`gpt-6.1-terra` の動作は 2026-10-27 に実機で確かめた
 
