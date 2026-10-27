@@ -93,6 +93,8 @@ _PI_TESTS = (
     "test_pi_confirm",
     "test_pi_landlock_exec",
     "test_pi_tools_ext",
+    "test_pi_model_choice",
+    "test_pi_model_catalog",
     "test_pi_scratch_protected",
     "test_pi_session_tmp",
     "test_tmp_hygiene",
@@ -304,6 +306,11 @@ RULES: tuple[Rule, ...] = (
         ("docs",),
     ),
     Rule("away-shift", ("home/dot_claude/skills/away-shift/**",), ("test_away_guard",)),
+    Rule(
+        "models の道具",
+        ("scripts/models.py",),
+        ("test_models_tool", "test_pi_model_catalog"),
+    ),
     Rule("tmp-clean", ("home/dot_config/pi/harness/tmp_clean.py",), ("test_tmp_clean",)),
     Rule("env-check", ("home/dot_claude/skills/env-check/**",), ("test_env_check",)),
     Rule(

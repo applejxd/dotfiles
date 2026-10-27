@@ -25,6 +25,14 @@ run = "python3 scripts/verify.py --changed"
 description = "検証を全件実行する（約 9 分。コミット前に 1 回）"
 run = "python3 scripts/verify.py --all"
 
+[tasks."models:check"]
+description = "子エージェントのモデルのカタログを pi --list-models と比べる（一覧に無い項目・新しい世代・reviewed_on を警告。一覧の取得失敗は終了コード 2）"
+run = "python3 scripts/models.py check"
+
+[tasks."models:probe"]
+description = "カタログのモデルを、短い応答とツール呼び出しで確かめる（既定は未確認のもの。--model / --effort / --all / --dry-run。verified は手で直す）"
+run = "python3 scripts/models.py probe"
+
 [tasks."tmp:clean"]
 description = "作業ツリーの .tmp/ を掃除する（既定は一覧だけ。引数: --apply で消す、--all で未知の名前も）"
 run = "python3 home/dot_config/pi/harness/tmp_clean.py"
