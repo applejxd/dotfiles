@@ -18,7 +18,7 @@
 
 | 段 | 解決したいこと | 内容 | 状態 |
 | --- | --- | --- | --- |
-| 1 | 設計の前提を実測で確かめる | 使い捨てのリポジトリで、`git flow` の実体・サンドボックス内での動作・ネットワークと push に当たる操作を確かめる（下の「実装・検証」）。**主な項目は完了**（残り: worktree 内の pre-commit・スタンプ、公開済みの feature の `finish`） | 進行中 |
+| 1 | 設計の前提を実測で確かめる | 使い捨てのリポジトリで、`git flow` の実体・サンドボックス内での動作・ネットワークと push に当たる操作を確かめる（下の「実装・検証」） | 完了 |
 | 2 | 許可の形を決める | 固定の引数の表（`[[pi.actions]]` の拡張）か、規則の許可か。承認の要否。素の `git` の branch 等は、既定の ask のまま、指示で `git flow` へ誘導する。`review` に見せる | 未着手 |
 | 3 | AI が使える形にする | 許可の実装と試験。bypass で `git branch -D` などが通る穴（CHG-0041 の持ち越し）も、ここで塞ぐ | 未着手 |
 | 4 | このリポジトリを切り替える | `develop` と `.gitflow` の作成、検査のスタンプの基準・CI のトリガー・`commit` スキル・docs の更新 | 未着手 |
@@ -170,6 +170,8 @@
 | integrate | `git flow integrate develop` で、main に merge され、develop が追従した（ローカルだけ） |
 | ネットワーク | 到達できないリモート（`git://127.0.0.1:9/`）で、`feature start`（`--no-fetch` なし）は `Fetching from origin...` で止まった（15 秒で打ち切り）。**`start --worktree --no-fetch` と `finish --squash --no-fetch`（`--keepremote` の有無とも）は成功**し、ローカルの bare リモートの ref は変わらなかった（push なし）。`GIT_TRACE` は、`git-flow` が git を直接起動せず（トレースは 2 行だけ）、根拠にならなかった |
 | 公開済みの feature の `finish` | ローカルの bare リモートに feature を push してから `finish --squash --no-fetch` を実行。**`--keepremote` を付けないと、リモートの feature ブランチが削除された**（`--no-fetch` でも。push に当たる操作）。`--keepremote` を付けるとリモートは不変。develop は、リモートへ push されない。**固定の引数に `--keepremote` を必ず含める**必要がある |
+| worktree 内の hook・検査 | このリポジトリの複製に `pre-commit install` し、`feature start --worktree` の worktree で docs を変えてコミット。hook は、本体の `.git/hooks`（共通）から**そのまま動き**、全て通った。検査のスタンプは、worktree ごとの git ディレクトリ（`.git/worktrees/<名前>/`）に置かれる（案件の「現在地」の調査どおり） |
+| `mise` での導入 | `mise ls-remote github:gittower/git-flow-next` で版（2.1.0 まで）を引けた。登録名は無く、`github:gittower/git-flow-next` の指定で入れる（段 4 で `mise` の設定へ 1 行足す。導入はまだしていない） |
 | `.git/config` | **`feature start` は `.git/config` を書き換え、`finish` で元に戻す**（前後のハッシュで確認）。`list`・`config list`・`worktree list` は書かない |
 | サンドボックス（Fence。`.git/config`・`.git/hooks` を denyWrite） | `start` は成功するが、「worktree の由来（provenance）と、feature の基点を記録できない」警告が出る。worktree の中のコミットは可。`finish` は成功（develop に 1 コミット、ブランチは削除）するが、**由来が無い worktree は「手作り」扱いで、ディレクトリが detached HEAD のまま残る**（`worktree list` に `(unmanaged)`）。`git worktree remove <パス>` は Fence の中で成功した |
 
@@ -182,7 +184,7 @@
 - Fence の内側で動かすなら、`finish` の後に残る worktree の片付け（`git worktree remove .tmp/worktrees/<名前>`。クリーンで detached の worktree だけ）を、固定の操作に含める。フルガードだけの pi（Fence なし）では、完全に動く
 - 案 D（自作のスクリプト）の必要性は、下がった（`git-flow-next` が足りる）
 
-未確認: worktree 内での pre-commit・検査のスタンプの動作、`mise` での導入、案 A（規則での許可）で、内部の git が判定器から見えないことの確認、Windows。
+未確認: worktree ごとのスタンプの警告の出方（docs だけの変更では出なかった。コードの変更では未確認）、案 A（規則での許可）で、内部の git が判定器から見えないことの確認、Windows。
 
 ## 重要な更新
 
