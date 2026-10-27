@@ -93,6 +93,7 @@ _PI_TESTS = (
     "test_pi_confirm",
     "test_pi_landlock_exec",
     "test_pi_tools_ext",
+    "test_pi_scratch_protected",
     "test_pi_session_tmp",
     "test_tmp_hygiene",
     "test_pi_confirm_view",

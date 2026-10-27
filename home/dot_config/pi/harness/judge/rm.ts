@@ -20,6 +20,7 @@ import {
 	isFindPlaceholder,
 	realpathStaysInside,
 	resolvesIntoScratch,
+	resolvesToScratchProtected,
 	workspaceRoot,
 } from "./shared.ts";
 
@@ -127,7 +128,7 @@ export function checkFindDangerous(ctx: Ctx, cmd: string): string | null {
 	if (!FIND_WORD_RE.test(cmd)) return null;
 	if (!FIND_DANGEROUS_EXEC_RE.test(cmd)) return null;
 	// 探索起点が使い捨ての一時ディレクトリ配下だけなら承認を省く
-	if (findTargetsScratchOnly(ctx, cmd)) return null;
+	if (findTargetsScratchOnly(ctx, cmd) && !findHitsProtected(ctx, cmd)) return null;
 	// find の探索起点が壊滅的なら deny 側で処理する
 	for (const a of argvsOf(ctx, cmd, isFind)) {
 		for (const token of a.slice(1)) {
@@ -267,7 +268,46 @@ function findTargetsScratchOnly(ctx: Ctx, cmd: string): boolean {
 	return sawRoot;
 }
 
+/**
+ * `find` が、scratch のルートや取り込み待ちの置き場を起点に、**絞り込みの無い**削除をする形か。
+ * `-name` などの絞り込みがあれば、頑出の掃除 (`find .tmp -name '*.log' -delete`) として免除のまま。
+ */
+function findHitsProtected(ctx: Ctx, cmd: string): boolean {
+	const workspace = workspaceRoot(ctx);
+	if (workspace === null) return false;
+	const filters = tableSet(ctx, "rm", "find_filter_flags");
+	for (const a of argvsOf(ctx, cmd, isFind)) {
+		const rest = a.slice(1);
+		const roots: string[] = [];
+		for (const token of rest) {
+			if (token.startsWith("-")) break;
+			roots.push(token);
+		}
+		if (!roots.some((r) => resolvesToScratchProtected(ctx, r, workspace))) continue;
+		if (!rest.some((t) => filters.has(t))) return true;
+	}
+	return false;
+}
+
+/** `rm` の対象に、scratch のルート自体・取り込み待ちの置き場そのもの、絞り込みの無い `find -delete` があるか。 */
+function rmHitsProtected(ctx: Ctx, cmd: string): boolean {
+	const workspace = workspaceRoot(ctx);
+	if (workspace === null) return false;
+	for (const a of argvsOf(ctx, cmd, isRm)) {
+		for (const token of a.slice(1).filter((t) => !t.startsWith("-"))) {
+			if (isFindPlaceholder(token)) {
+				if (findHitsProtected(ctx, cmd)) return true;
+				continue;
+			}
+			if (resolvesToScratchProtected(ctx, token, workspace)) return true;
+		}
+	}
+	return false;
+}
+
 export function rmAskExempt(ctx: Ctx, cmd: string): boolean {
+	// 取り込む前のもの (.tmp/keep など) を丸ごと消す形は、免除せず承認を求める (CHG-0042 U13)
+	if (rmHitsProtected(ctx, cmd)) return false;
 	return rmIsWorkspaceLocal(ctx, cmd) || rmTargetsScratchOnly(ctx, cmd);
 }
 

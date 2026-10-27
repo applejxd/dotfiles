@@ -58,7 +58,6 @@ def test_rm_outside_workspace_asks(command):
 @pytest.mark.parametrize(
     "command",
     [
-        "rm -rf ./.tmp",
         "rm -rf build/",
         "rm -rf ./foo/bar",
         "rm -rf .venv && echo done",
@@ -147,19 +146,65 @@ def test_find_deletion_asks(command):
 @pytest.mark.parametrize(
     "command",
     [
-        "rm -rf .tmp",
         "rm -rf ./.tmp/run-1",
         "rm -f .tmp/a.log .tmp/b.log",
-        f"rm -rf {ROOT}/.tmp",
         f"rm -rf {ROOT}/.tmp/run-1",
-        "find ./.tmp -delete",
         "find ./.tmp -name '*.log' -delete",
         "find ./.tmp -type f -exec rm {} +",
-        f"find {ROOT}/.tmp -delete",
     ],
 )
 def test_scratch_dir_deletion_is_delegated(command):
     """使い捨ての ./.tmp 配下の削除は承認を省く (絶対パス・find も含む)."""
+    decision, reason = run_hook(command)
+    assert decision is None, f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # scratch のルート自体 (中の取り込み待ち .tmp/keep も一緒に消える)。CHG-0042 U13 の b'
+        "rm -rf .tmp",
+        "rm -rf ./.tmp",
+        "rm -rf .tmp/",
+        f"rm -rf {ROOT}/.tmp",
+        "rm -rf .tmp/*",
+        # 取り込み待ち・運用の置き場そのもの
+        "rm -rf .tmp/keep",
+        "rm -rf ./.tmp/research",
+        "rm -rf .tmp/review-loop",
+        f"rm -rf {ROOT}/.tmp/keep",
+        # 絞り込みの無い find の削除 (ルートや置き場を起点にする)
+        "find ./.tmp -delete",
+        f"find {ROOT}/.tmp -delete",
+        "find .tmp -maxdepth 1 -delete",
+        "find .tmp -exec rm {} +",
+        "find .tmp/keep -delete",
+    ],
+)
+def test_scratch_root_and_protected_places_are_not_exempt(command):
+    """`.tmp` 自体や `.tmp/keep` などを丸ごと消す形は、免除せず承認を求める (CHG-0042 U13 の b')."""
+    decision, reason = run_hook(command)
+    assert decision == "ask", f"{command!r} -> {decision} ({reason})"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # 配下の個別の削除は、今までどおり免除
+        "rm -rf .tmp/keep/old.md",
+        "rm -rf .tmp/research/topic",
+        "rm -rf .tmp/s/abcd1234",
+        "rm -f .tmp/a.log .tmp/b.log",
+        f"rm -rf {ROOT}/.tmp/run-1",
+        # 絞り込みのある find は、ルートを起点にしても免除 (頻出の掃除)
+        "find ./.tmp -name '*.log' -delete",
+        "find .tmp -type f -mtime +7 -delete",
+        "find .tmp -type f -exec rm {} +",
+        f"find {ROOT}/.tmp -newer .tmp/stamp -delete",
+        "find .tmp/keep -name '*.tmp' -delete",
+    ],
+)
+def test_scratch_contents_and_filtered_find_stay_exempt(command):
     decision, reason = run_hook(command)
     assert decision is None, f"{command!r} -> {decision} ({reason})"
 

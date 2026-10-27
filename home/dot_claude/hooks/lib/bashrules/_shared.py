@@ -358,6 +358,7 @@ def _realpath_stays_inside(root: str, path: str) -> bool:
 
 
 _SCRATCH_DIR_NAMES = tables.as_tuple("_shared", "scratch_dir_names")
+_SCRATCH_PROTECTED_NAMES = tables.as_tuple("rm", "scratch_protected_names")
 
 
 def _workspace_root() -> str | None:
@@ -400,6 +401,35 @@ def _resolves_into_scratch(token: str, workspace: str) -> bool:
         # `.tmp/link` が外を指す symlink なら realpath が scratch の外へ出る。
         # 未作成のパスは realpath が素通しになるので、そのまま内側と判定される
         if _realpath_stays_inside(root, resolved):
+            return True
+    return False
+
+
+def _resolves_to_scratch_protected(token: str, workspace: str) -> bool:
+    """``token`` が、scratch のルート自体 (`.tmp`、中身を丸ごと指す `.tmp/*` `.tmp/.*` `.tmp/**`) か、
+    取り込み待ち・運用の置き場そのもの (`.tmp/keep` など。scratch_protected_names) を指すか。
+
+    これを消すと取り込む前のものが一緒に消えるので、scratch の免除から外して ask にする。
+    配下の個別の削除 (`.tmp/keep/foo`) は免除のまま (CHG-0042 U13 の b')。
+    """
+    canonical = _canonical_rm_target(token)
+    if canonical is None:
+        return False
+    if any(ch in canonical for ch in "$`~{}"):
+        return False
+    components = [p for p in canonical.split("/") if p]
+    if ".." in components:
+        return False
+    path = os.path.normpath(os.path.join(workspace, canonical))
+    # `.tmp/*` `.tmp/.*` `.tmp/**` は、`.tmp` の中身を丸ごと指す
+    last = components[-1] if components else ""
+    if re.fullmatch(r"[*?\[\].]+", last) and re.search(r"[*?]", last):
+        path = os.path.normpath(os.path.join(path, ".."))
+    for name in _SCRATCH_DIR_NAMES:
+        root = os.path.join(workspace, name)
+        if path == root:
+            return True
+        if any(path == os.path.join(root, p) for p in _SCRATCH_PROTECTED_NAMES):
             return True
     return False
 

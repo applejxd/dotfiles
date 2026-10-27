@@ -22,6 +22,7 @@ from ._shared import (
     _policy,
     _realpath_stays_inside,
     _resolves_into_scratch,
+    _resolves_to_scratch_protected,
     _workspace_root,
     payload_cwd,
 )
@@ -46,8 +47,8 @@ def check_find_dangerous(cmd: str) -> str | None:
         return None
     if not _FIND_DANGEROUS_EXEC_RE.search(cmd):
         return None
-    # 探索起点が使い捨ての一時ディレクトリ配下だけなら承認を省く
-    if _find_targets_scratch_only(cmd):
+    # 探索起点が使い捨ての一時ディレクトリ配下だけなら承認を省く (ただし .tmp 自体や .tmp/keep を、絞り込みなしで消す形は省かない)
+    if _find_targets_scratch_only(cmd) and not _find_hits_protected(cmd):
         return None
     # find の探索起点が壊滅的なら deny (check_rm_root_guard 相当の扱い)
     for argv in _argvs_of(cmd, _is_find):
@@ -228,6 +229,7 @@ def _rm_is_workspace_local(cmd: str) -> bool:
 
 
 _FIND_EXEC_FLAGS = tables.as_set("rm", "find_exec_flags")
+_FIND_FILTER_FLAGS = tables.as_set("rm", "find_filter_flags")
 
 
 def _rm_targets_scratch_only(cmd: str) -> bool:
@@ -306,7 +308,48 @@ def _find_targets_scratch_only(cmd: str) -> bool:
     return saw_root
 
 
+def _find_hits_protected(cmd: str) -> bool:
+    """`find` が、scratch のルートや取り込み待ちの置き場を起点に、**絞り込みの無い**削除をする形か。
+
+    `-name` などの絞り込みがあれば、頑出の掃除 (`find .tmp -name '*.log' -delete`) として免除のまま。
+    """
+    workspace = _workspace_root()
+    if workspace is None:
+        return False
+    for argv in _argvs_of(cmd, _is_find):
+        rest = argv[1:]
+        roots: list[str] = []
+        for token in rest:
+            if token.startswith("-"):
+                break
+            roots.append(token)
+        if not any(_resolves_to_scratch_protected(r, workspace) for r in roots):
+            continue
+        if not any(t in _FIND_FILTER_FLAGS for t in rest):
+            return True
+    return False
+
+
+def _rm_hits_protected(cmd: str) -> bool:
+    """`rm` の対象に、scratch のルート自体・取り込み待ちの置き場そのもの、絞り込みの無い `find -delete` があるか。"""
+    workspace = _workspace_root()
+    if workspace is None:
+        return False
+    for argv in _argvs_of(cmd, _is_rm):
+        for token in [t for t in argv[1:] if not t.startswith("-")]:
+            if _is_find_placeholder(token):
+                if _find_hits_protected(cmd):
+                    return True
+                continue
+            if _resolves_to_scratch_protected(token, workspace):
+                return True
+    return False
+
+
 def _rm_ask_exempt(cmd: str) -> bool:
+    # 取り込む前のもの (.tmp/keep など) を丸ごと消す形は、免除せず承認を求める (CHG-0042 U13)
+    if _rm_hits_protected(cmd):
+        return False
     return _rm_is_workspace_local(cmd) or _rm_targets_scratch_only(cmd)
 
 

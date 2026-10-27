@@ -3743,6 +3743,7 @@
 {"arg": "find ./.tmp -delete", "fn": "http_calls", "ok": []}
 {"arg": "find ./.tmp -delete", "fn": "gh_calls", "ok": []}
 {"arg": "find ./.tmp -delete", "fn": "fetched_paths", "ok": []}
+{"arg": "find ./.tmp -delete", "fn": "check", "name": "check_find_dangerous", "ok": "`find` コマンドによるファイル削除操作（-exec rm / -delete 等）です。\n実行しようとしているコマンド: find ./.tmp -delete\n削除対象を確認して問題なければ承認してください。"}
 {"arg": "find ./.tmp -exec rm /etc/hosts {} +", "fn": "heredoc", "literal": [], "out": "find ./.tmp -exec rm /etc/hosts {} +"}
 {"arg": "find ./.tmp -exec rm /etc/hosts {} +", "fn": "expand_cd", "out": ""}
 {"arg": "find ./.tmp -exec rm /etc/hosts {} +", "fn": "commands", "ok": [{"redirects": [], "words": [["find", "find"], ["./.tmp", "./.tmp"], ["-exec", "-exec"], ["rm", "rm"], ["/etc/hosts", "/etc/hosts"], ["{}", "{}"], ["+", "+"]]}, {"redirects": [], "words": [["rm", "rm"], ["/etc/hosts", "/etc/hosts"], ["{", "{"]]}, {"redirects": [], "words": [["rm", "rm"], ["/etc/hosts", "/etc/hosts"], ["{", "{"]]}, {"redirects": [], "words": [["find", "find"], ["./.tmp", "./.tmp"], ["-exec", "-exec"], ["rm", "rm"], ["/etc/hosts", "/etc/hosts"], ["{}", "{}"], ["+", "+"]]}]}
@@ -3775,6 +3776,52 @@
 {"arg": "find ./build -type f -exec rm {} +", "fn": "fetched_paths", "ok": []}
 {"arg": "find ./build -type f -exec rm {} +", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: find ./build -type f -exec rm {} +\n内容を確認して問題なければ承認してください。"}
 {"arg": "find ./build -type f -exec rm {} +", "fn": "check", "name": "check_find_dangerous", "ok": "`find` コマンドによるファイル削除操作（-exec rm / -delete 等）です。\n実行しようとしているコマンド: find ./build -type f -exec rm {} +\n削除対象を確認して問題なければ承認してください。"}
+{"arg": "find .tmp -exec rm {} +", "fn": "heredoc", "literal": [], "out": "find .tmp -exec rm {} +"}
+{"arg": "find .tmp -exec rm {} +", "fn": "expand_cd", "out": ""}
+{"arg": "find .tmp -exec rm {} +", "fn": "commands", "ok": [{"redirects": [], "words": [["find", "find"], [".tmp", ".tmp"], ["-exec", "-exec"], ["rm", "rm"], ["{}", "{}"], ["+", "+"]]}, {"redirects": [], "words": [["rm", "rm"], ["{", "{"]]}, {"redirects": [], "words": [["rm", "rm"], ["{", "{"]]}, {"redirects": [], "words": [["find", "find"], [".tmp", ".tmp"], ["-exec", "-exec"], ["rm", "rm"], ["{}", "{}"], ["+", "+"]]}]}
+{"arg": "find .tmp -exec rm {} +", "fn": "write_targets", "ok": ["{", "{"]}
+{"arg": "find .tmp -exec rm {} +", "fn": "http_calls", "ok": []}
+{"arg": "find .tmp -exec rm {} +", "fn": "gh_calls", "ok": []}
+{"arg": "find .tmp -exec rm {} +", "fn": "fetched_paths", "ok": []}
+{"arg": "find .tmp -exec rm {} +", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: find .tmp -exec rm {} +\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
+{"arg": "find .tmp -exec rm {} +", "fn": "check", "name": "check_find_dangerous", "ok": "`find` コマンドによるファイル削除操作（-exec rm / -delete 等）です。\n実行しようとしているコマンド: find .tmp -exec rm {} +\n削除対象を確認して問題なければ承認してください。"}
+{"arg": "find .tmp -maxdepth 1 -delete", "fn": "heredoc", "literal": [], "out": "find .tmp -maxdepth 1 -delete"}
+{"arg": "find .tmp -maxdepth 1 -delete", "fn": "expand_cd", "out": ""}
+{"arg": "find .tmp -maxdepth 1 -delete", "fn": "commands", "ok": [{"redirects": [], "words": [["find", "find"], [".tmp", ".tmp"], ["-maxdepth", "-maxdepth"], ["1", "1"], ["-delete", "-delete"]]}, {"redirects": [], "words": [["find", "find"], [".tmp", ".tmp"], ["-maxdepth", "-maxdepth"], ["1", "1"], ["-delete", "-delete"]]}]}
+{"arg": "find .tmp -maxdepth 1 -delete", "fn": "write_targets", "ok": []}
+{"arg": "find .tmp -maxdepth 1 -delete", "fn": "http_calls", "ok": []}
+{"arg": "find .tmp -maxdepth 1 -delete", "fn": "gh_calls", "ok": []}
+{"arg": "find .tmp -maxdepth 1 -delete", "fn": "fetched_paths", "ok": []}
+{"arg": "find .tmp -maxdepth 1 -delete", "fn": "check", "name": "check_find_dangerous", "ok": "`find` コマンドによるファイル削除操作（-exec rm / -delete 等）です。\n実行しようとしているコマンド: find .tmp -maxdepth 1 -delete\n削除対象を確認して問題なければ承認してください。"}
+{"arg": "find .tmp -type f -exec rm {} +", "fn": "heredoc", "literal": [], "out": "find .tmp -type f -exec rm {} +"}
+{"arg": "find .tmp -type f -exec rm {} +", "fn": "expand_cd", "out": ""}
+{"arg": "find .tmp -type f -exec rm {} +", "fn": "commands", "ok": [{"redirects": [], "words": [["find", "find"], [".tmp", ".tmp"], ["-type", "-type"], ["f", "f"], ["-exec", "-exec"], ["rm", "rm"], ["{}", "{}"], ["+", "+"]]}, {"redirects": [], "words": [["rm", "rm"], ["{", "{"]]}, {"redirects": [], "words": [["rm", "rm"], ["{", "{"]]}, {"redirects": [], "words": [["find", "find"], [".tmp", ".tmp"], ["-type", "-type"], ["f", "f"], ["-exec", "-exec"], ["rm", "rm"], ["{}", "{}"], ["+", "+"]]}]}
+{"arg": "find .tmp -type f -exec rm {} +", "fn": "write_targets", "ok": ["{", "{"]}
+{"arg": "find .tmp -type f -exec rm {} +", "fn": "http_calls", "ok": []}
+{"arg": "find .tmp -type f -exec rm {} +", "fn": "gh_calls", "ok": []}
+{"arg": "find .tmp -type f -exec rm {} +", "fn": "fetched_paths", "ok": []}
+{"arg": "find .tmp -type f -mtime +7 -delete", "fn": "heredoc", "literal": [], "out": "find .tmp -type f -mtime +7 -delete"}
+{"arg": "find .tmp -type f -mtime +7 -delete", "fn": "expand_cd", "out": ""}
+{"arg": "find .tmp -type f -mtime +7 -delete", "fn": "commands", "ok": [{"redirects": [], "words": [["find", "find"], [".tmp", ".tmp"], ["-type", "-type"], ["f", "f"], ["-mtime", "-mtime"], ["+7", "+7"], ["-delete", "-delete"]]}, {"redirects": [], "words": [["find", "find"], [".tmp", ".tmp"], ["-type", "-type"], ["f", "f"], ["-mtime", "-mtime"], ["+7", "+7"], ["-delete", "-delete"]]}]}
+{"arg": "find .tmp -type f -mtime +7 -delete", "fn": "write_targets", "ok": []}
+{"arg": "find .tmp -type f -mtime +7 -delete", "fn": "http_calls", "ok": []}
+{"arg": "find .tmp -type f -mtime +7 -delete", "fn": "gh_calls", "ok": []}
+{"arg": "find .tmp -type f -mtime +7 -delete", "fn": "fetched_paths", "ok": []}
+{"arg": "find .tmp/keep -delete", "fn": "heredoc", "literal": [], "out": "find .tmp/keep -delete"}
+{"arg": "find .tmp/keep -delete", "fn": "expand_cd", "out": ""}
+{"arg": "find .tmp/keep -delete", "fn": "commands", "ok": [{"redirects": [], "words": [["find", "find"], [".tmp/keep", ".tmp/keep"], ["-delete", "-delete"]]}, {"redirects": [], "words": [["find", "find"], [".tmp/keep", ".tmp/keep"], ["-delete", "-delete"]]}]}
+{"arg": "find .tmp/keep -delete", "fn": "write_targets", "ok": []}
+{"arg": "find .tmp/keep -delete", "fn": "http_calls", "ok": []}
+{"arg": "find .tmp/keep -delete", "fn": "gh_calls", "ok": []}
+{"arg": "find .tmp/keep -delete", "fn": "fetched_paths", "ok": []}
+{"arg": "find .tmp/keep -delete", "fn": "check", "name": "check_find_dangerous", "ok": "`find` コマンドによるファイル削除操作（-exec rm / -delete 等）です。\n実行しようとしているコマンド: find .tmp/keep -delete\n削除対象を確認して問題なければ承認してください。"}
+{"arg": "find .tmp/keep -name '*.tmp' -delete", "fn": "heredoc", "literal": [], "out": "find .tmp/keep -name '*.tmp' -delete"}
+{"arg": "find .tmp/keep -name '*.tmp' -delete", "fn": "expand_cd", "out": ""}
+{"arg": "find .tmp/keep -name '*.tmp' -delete", "fn": "commands", "ok": [{"redirects": [], "words": [["find", "find"], [".tmp/keep", ".tmp/keep"], ["-name", "-name"], ["'*.tmp'", "*.tmp"], ["-delete", "-delete"]]}, {"redirects": [], "words": [["find", "find"], [".tmp/keep", ".tmp/keep"], ["-name", "-name"], ["'*.tmp'", "*.tmp"], ["-delete", "-delete"]]}]}
+{"arg": "find .tmp/keep -name '*.tmp' -delete", "fn": "write_targets", "ok": []}
+{"arg": "find .tmp/keep -name '*.tmp' -delete", "fn": "http_calls", "ok": []}
+{"arg": "find .tmp/keep -name '*.tmp' -delete", "fn": "gh_calls", "ok": []}
+{"arg": "find .tmp/keep -name '*.tmp' -delete", "fn": "fetched_paths", "ok": []}
 {"arg": "find / -name x | xargs rm -rf y", "fn": "heredoc", "literal": [], "out": "find / -name x | xargs rm -rf y"}
 {"arg": "find / -name x | xargs rm -rf y", "fn": "expand_cd", "out": ""}
 {"arg": "find / -name x | xargs rm -rf y", "fn": "commands", "ok": [{"redirects": [], "words": [["find", "find"], ["/", "/"], ["-name", "-name"], ["x", "x"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], ["y", "y"]]}, {"redirects": [], "words": [["find", "find"], ["/", "/"], ["-name", "-name"], ["x", "x"]]}, {"redirects": [], "words": [["xargs", "xargs"], ["rm", "rm"], ["-rf", "-rf"], ["y", "y"]]}]}
@@ -6788,6 +6835,15 @@
 {"arg": "rm -rf ./.tmp", "fn": "http_calls", "ok": []}
 {"arg": "rm -rf ./.tmp", "fn": "gh_calls", "ok": []}
 {"arg": "rm -rf ./.tmp", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf ./.tmp", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf ./.tmp\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
+{"arg": "rm -rf ./.tmp/research", "fn": "heredoc", "literal": [], "out": "rm -rf ./.tmp/research"}
+{"arg": "rm -rf ./.tmp/research", "fn": "expand_cd", "out": ""}
+{"arg": "rm -rf ./.tmp/research", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], ["./.tmp/research", "./.tmp/research"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], ["./.tmp/research", "./.tmp/research"]]}]}
+{"arg": "rm -rf ./.tmp/research", "fn": "write_targets", "ok": ["./.tmp/research", "./.tmp/research"]}
+{"arg": "rm -rf ./.tmp/research", "fn": "http_calls", "ok": []}
+{"arg": "rm -rf ./.tmp/research", "fn": "gh_calls", "ok": []}
+{"arg": "rm -rf ./.tmp/research", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf ./.tmp/research", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf ./.tmp/research\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
 {"arg": "rm -rf ./.tmp/run-1", "fn": "heredoc", "literal": [], "out": "rm -rf ./.tmp/run-1"}
 {"arg": "rm -rf ./.tmp/run-1", "fn": "expand_cd", "out": ""}
 {"arg": "rm -rf ./.tmp/run-1", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], ["./.tmp/run-1", "./.tmp/run-1"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], ["./.tmp/run-1", "./.tmp/run-1"]]}]}
@@ -6860,6 +6916,7 @@
 {"arg": "rm -rf .tmp", "fn": "http_calls", "ok": []}
 {"arg": "rm -rf .tmp", "fn": "gh_calls", "ok": []}
 {"arg": "rm -rf .tmp", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
 {"arg": "rm -rf .tmp /etc/hosts", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp /etc/hosts"}
 {"arg": "rm -rf .tmp /etc/hosts", "fn": "expand_cd", "out": ""}
 {"arg": "rm -rf .tmp /etc/hosts", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp", ".tmp"], ["/etc/hosts", "/etc/hosts"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp", ".tmp"], ["/etc/hosts", "/etc/hosts"]]}]}
@@ -6868,6 +6925,22 @@
 {"arg": "rm -rf .tmp /etc/hosts", "fn": "gh_calls", "ok": []}
 {"arg": "rm -rf .tmp /etc/hosts", "fn": "fetched_paths", "ok": []}
 {"arg": "rm -rf .tmp /etc/hosts", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp /etc/hosts\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
+{"arg": "rm -rf .tmp/", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/"}
+{"arg": "rm -rf .tmp/", "fn": "expand_cd", "out": ""}
+{"arg": "rm -rf .tmp/", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/", ".tmp/"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/", ".tmp/"]]}]}
+{"arg": "rm -rf .tmp/", "fn": "write_targets", "ok": [".tmp/", ".tmp/"]}
+{"arg": "rm -rf .tmp/", "fn": "http_calls", "ok": []}
+{"arg": "rm -rf .tmp/", "fn": "gh_calls", "ok": []}
+{"arg": "rm -rf .tmp/", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp/", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp/\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
+{"arg": "rm -rf .tmp/*", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/*"}
+{"arg": "rm -rf .tmp/*", "fn": "expand_cd", "out": ""}
+{"arg": "rm -rf .tmp/*", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/*", ".tmp/*"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/*", ".tmp/*"]]}]}
+{"arg": "rm -rf .tmp/*", "fn": "write_targets", "ok": [".tmp/*", ".tmp/*"]}
+{"arg": "rm -rf .tmp/*", "fn": "http_calls", "ok": []}
+{"arg": "rm -rf .tmp/*", "fn": "gh_calls", "ok": []}
+{"arg": "rm -rf .tmp/*", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp/*", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp/*\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
 {"arg": "rm -rf .tmp/../src", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/../src"}
 {"arg": "rm -rf .tmp/../src", "fn": "expand_cd", "out": ""}
 {"arg": "rm -rf .tmp/../src", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/../src", ".tmp/../src"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/../src", ".tmp/../src"]]}]}
@@ -6876,6 +6949,43 @@
 {"arg": "rm -rf .tmp/../src", "fn": "gh_calls", "ok": []}
 {"arg": "rm -rf .tmp/../src", "fn": "fetched_paths", "ok": []}
 {"arg": "rm -rf .tmp/../src", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp/../src\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
+{"arg": "rm -rf .tmp/keep", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/keep"}
+{"arg": "rm -rf .tmp/keep", "fn": "expand_cd", "out": ""}
+{"arg": "rm -rf .tmp/keep", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/keep", ".tmp/keep"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/keep", ".tmp/keep"]]}]}
+{"arg": "rm -rf .tmp/keep", "fn": "write_targets", "ok": [".tmp/keep", ".tmp/keep"]}
+{"arg": "rm -rf .tmp/keep", "fn": "http_calls", "ok": []}
+{"arg": "rm -rf .tmp/keep", "fn": "gh_calls", "ok": []}
+{"arg": "rm -rf .tmp/keep", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp/keep", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp/keep\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
+{"arg": "rm -rf .tmp/keep/old.md", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/keep/old.md"}
+{"arg": "rm -rf .tmp/keep/old.md", "fn": "expand_cd", "out": ""}
+{"arg": "rm -rf .tmp/keep/old.md", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/keep/old.md", ".tmp/keep/old.md"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/keep/old.md", ".tmp/keep/old.md"]]}]}
+{"arg": "rm -rf .tmp/keep/old.md", "fn": "write_targets", "ok": [".tmp/keep/old.md", ".tmp/keep/old.md"]}
+{"arg": "rm -rf .tmp/keep/old.md", "fn": "http_calls", "ok": []}
+{"arg": "rm -rf .tmp/keep/old.md", "fn": "gh_calls", "ok": []}
+{"arg": "rm -rf .tmp/keep/old.md", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp/research/topic", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/research/topic"}
+{"arg": "rm -rf .tmp/research/topic", "fn": "expand_cd", "out": ""}
+{"arg": "rm -rf .tmp/research/topic", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/research/topic", ".tmp/research/topic"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/research/topic", ".tmp/research/topic"]]}]}
+{"arg": "rm -rf .tmp/research/topic", "fn": "write_targets", "ok": [".tmp/research/topic", ".tmp/research/topic"]}
+{"arg": "rm -rf .tmp/research/topic", "fn": "http_calls", "ok": []}
+{"arg": "rm -rf .tmp/research/topic", "fn": "gh_calls", "ok": []}
+{"arg": "rm -rf .tmp/research/topic", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp/review-loop", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/review-loop"}
+{"arg": "rm -rf .tmp/review-loop", "fn": "expand_cd", "out": ""}
+{"arg": "rm -rf .tmp/review-loop", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/review-loop", ".tmp/review-loop"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/review-loop", ".tmp/review-loop"]]}]}
+{"arg": "rm -rf .tmp/review-loop", "fn": "write_targets", "ok": [".tmp/review-loop", ".tmp/review-loop"]}
+{"arg": "rm -rf .tmp/review-loop", "fn": "http_calls", "ok": []}
+{"arg": "rm -rf .tmp/review-loop", "fn": "gh_calls", "ok": []}
+{"arg": "rm -rf .tmp/review-loop", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp/review-loop", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp/review-loop\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
+{"arg": "rm -rf .tmp/s/abcd1234", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/s/abcd1234"}
+{"arg": "rm -rf .tmp/s/abcd1234", "fn": "expand_cd", "out": ""}
+{"arg": "rm -rf .tmp/s/abcd1234", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/s/abcd1234", ".tmp/s/abcd1234"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/s/abcd1234", ".tmp/s/abcd1234"]]}]}
+{"arg": "rm -rf .tmp/s/abcd1234", "fn": "write_targets", "ok": [".tmp/s/abcd1234", ".tmp/s/abcd1234"]}
+{"arg": "rm -rf .tmp/s/abcd1234", "fn": "http_calls", "ok": []}
+{"arg": "rm -rf .tmp/s/abcd1234", "fn": "gh_calls", "ok": []}
+{"arg": "rm -rf .tmp/s/abcd1234", "fn": "fetched_paths", "ok": []}
 {"arg": "rm -rf .venv && echo done", "fn": "heredoc", "literal": [], "out": "rm -rf .venv && echo done"}
 {"arg": "rm -rf .venv && echo done", "fn": "expand_cd", "out": ""}
 {"arg": "rm -rf .venv && echo done", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".venv", ".venv"]]}, {"redirects": [], "words": [["echo", "echo"], ["done", "done"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".venv", ".venv"]]}, {"redirects": [], "words": [["echo", "echo"], ["done", "done"]]}]}
@@ -10947,6 +11057,7 @@
 {"arg": "rm -rf .tmp", "fn": "http_calls", "ok": []}
 {"arg": "rm -rf .tmp", "fn": "gh_calls", "ok": []}
 {"arg": "rm -rf .tmp", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
 {"arg": "rm -rf .tmp/", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/"}
 {"arg": "rm -rf .tmp/", "fn": "expand_cd", "out": ""}
 {"arg": "rm -rf .tmp/", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/", ".tmp/"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/", ".tmp/"]]}]}
@@ -10954,6 +11065,7 @@
 {"arg": "rm -rf .tmp/", "fn": "http_calls", "ok": []}
 {"arg": "rm -rf .tmp/", "fn": "gh_calls", "ok": []}
 {"arg": "rm -rf .tmp/", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp/", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp/\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
 {"arg": "rm -rf .tmp/*", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/*"}
 {"arg": "rm -rf .tmp/*", "fn": "expand_cd", "out": ""}
 {"arg": "rm -rf .tmp/*", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/*", ".tmp/*"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/*", ".tmp/*"]]}]}
@@ -10961,6 +11073,7 @@
 {"arg": "rm -rf .tmp/*", "fn": "http_calls", "ok": []}
 {"arg": "rm -rf .tmp/*", "fn": "gh_calls", "ok": []}
 {"arg": "rm -rf .tmp/*", "fn": "fetched_paths", "ok": []}
+{"arg": "rm -rf .tmp/*", "fn": "check", "name": "check_policy_ask", "ok": "`rm` は承認が必要な操作です (common.toml の [bash] ask)。\n実行しようとしているコマンド: rm -rf .tmp/*\n内容を確認して問題なければ承認してください。\n代替: 対象が ./.tmp 配下なら `rm -rf .tmp/<名前>` の形で書けば承認は不要です。\n`cd`・変数展開 (`$PWD` など)・`xargs` と混ぜると対象を静的に確認できず、承認が必要になります。"}
 {"arg": "rm -rf .tmp/../x", "fn": "heredoc", "literal": [], "out": "rm -rf .tmp/../x"}
 {"arg": "rm -rf .tmp/../x", "fn": "expand_cd", "out": ""}
 {"arg": "rm -rf .tmp/../x", "fn": "commands", "ok": [{"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/../x", ".tmp/../x"]]}, {"redirects": [], "words": [["rm", "rm"], ["-rf", "-rf"], [".tmp/../x", ".tmp/../x"]]}]}

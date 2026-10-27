@@ -333,7 +333,8 @@ auto / assisted の判定へ委ねる (`_ASK_EXEMPTIONS`)。
 | `rm -rf ../other-repo`, `~/Documents`, `/var/tmp/build` | ask |
 | `rm -rf $BUILD_DIR`, `"$OUT"/*`, `$(cat targets.txt)` | ask |
 | `cd /elsewhere && rm -rf data` | ask |
-| `rm -rf .tmp`, `<workspace>/.tmp/run-1`, `find ./.tmp -delete` | 未掲載 (scratch 免除) |
+| `<workspace>/.tmp/run-1`, `find ./.tmp -name '*.log' -delete` | 未掲載 (scratch 免除) |
+| `rm -rf .tmp`, `rm -rf .tmp/keep`, `find ./.tmp -delete`（絞り込みなし） | ask（[`.tmp` 自体と取り込み待ち](#tmp-自体と取り込み待ちの置き場)） |
 
 免除の条件は次を**すべて**満たすこと。1 つでも欠ければ従来どおり ask にする。
 
@@ -388,6 +389,25 @@ workspace 免除との違いは 2 点だけ。
   **相対指定と絶対指定で判定は同じ**。workspace 免除が scratch 免除より
   先に成立するため、realpath 検査は両方に入れてある
 - `find` の探索起点を省略した形 (`find -delete` は cwd 全体が対象)
+- **`.tmp` 自体・取り込み待ちの置き場・絞り込みの無い `find`**（下の節）
+
+### `.tmp` 自体と取り込み待ちの置き場
+
+`.tmp/keep/`（取り込み待ち）と、運用の置き場（`research`・`review-loop`・`away-shift`・`subagents`・`worktrees`。
+`tables.toml` の `[rm] scratch_protected_names`）は、後で `docs/` などへ取り込むものを置く。
+`rm -rf .tmp` で一緒に消えないよう、**次は scratch 免除（と workspace 免除）から外して ask にする**
+（[CHG-0042](../../change/0042-tmp-lifecycle.md) の U13。案 b'）。
+
+- `.tmp` 自体、中身を丸ごと指す `.tmp/*`（`rm -rf .tmp`・`rm -rf ./.tmp/`・`rm -rf <workspace>/.tmp`）
+- 置き場そのもの（`rm -rf .tmp/keep`・`rm -rf .tmp/research`）
+- **絞り込みの無い `find`** で、起点が上のいずれか（`find .tmp -delete`・`find .tmp -maxdepth 1 -delete`・`find .tmp -exec rm {} +`）。
+  絞り込み = `[rm] find_filter_flags` のフラグ（`-name`・`-type`・`-mtime`・`-newer`・`-size` など）が 1 つでもあること
+
+**免除のままのもの**: 配下の個別の削除（`rm -rf .tmp/keep/old.md`・`rm -rf .tmp/s/<ID>`）と、絞り込みのある `find`
+（`find .tmp -name '*.log' -delete`・`find .tmp -type f -mtime +7 -delete`）。頻出の掃除を止めないため。
+**限界**: `find .tmp -name 'x' -delete` が `keep/x` を消す形は、コマンドの解析では区別できず、残る。
+実装は Python 版（`_shared.py` の `_resolves_to_scratch_protected`・`rm.py`）と TS 版（`shared.ts`・`rm.ts`）の両方。
+試験は `test_check_bash_file_ops.py`（Python）と `test_pi_scratch_protected.py`（TS）。
 
 `.git` の hard-deny は免除より先に評価されるので、`rm -rf .tmp/.git` は
 引き続き deny になる。

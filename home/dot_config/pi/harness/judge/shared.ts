@@ -285,6 +285,31 @@ export function resolvesIntoScratch(ctx: Ctx, token: string, workspace: string):
 	return false;
 }
 
+/**
+ * `token` が、scratch のルート自体 (`.tmp`、中身を丸ごと指す `.tmp/*` `.tmp/.*` `.tmp/**`) か、
+ * 取り込み待ち・運用の置き場そのもの (`.tmp/keep` など。scratch_protected_names) を指すか。
+ * これを消すと、取り込む前のものが一緒に消えるので、scratch の免除から外して ask にする。
+ * 配下の個別の削除 (`.tmp/keep/foo`) は免除のまま (CHG-0042 U13 の b')。
+ */
+export function resolvesToScratchProtected(ctx: Ctx, token: string, workspace: string): boolean {
+	const canonical = canonicalRmTarget(token);
+	if (canonical === null) return false;
+	if (Array.from("$`~{}").some((ch) => canonical.includes(ch))) return false;
+	const components = canonical.split("/").filter((p) => p);
+	if (components.includes("..")) return false;
+	let path = normpath(isAbsolute(canonical) ? canonical : join(workspace, canonical));
+	// `.tmp/*` `.tmp/.*` `.tmp/**` は、`.tmp` の中身を丸ごと指す
+	const last = components.length > 0 ? components[components.length - 1] : "";
+	if (/^[*?[\].]+$/u.test(last) && /[*?]/u.test(last)) path = normpath(join(path, ".."));
+	const protectedNames = tableSet(ctx, "rm", "scratch_protected_names");
+	for (const name of tableList(ctx, "_shared", "scratch_dir_names")) {
+		const root = join(workspace, name);
+		if (path === root) return true;
+		for (const p of protectedNames) if (path === join(root, p)) return true;
+	}
+	return false;
+}
+
 /** `find -exec` の `{}` プレースホルダか (波括弧だけで構成されたトークン)。 */
 export const isFindPlaceholder = (token: string): boolean =>
 	token !== "" && Array.from(token).every((c) => c === "{" || c === "}");
