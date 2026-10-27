@@ -111,14 +111,14 @@ def test_a_tier_model_missing_from_the_catalog_fails() -> None:
 
 
 def test_unverified_tier_default_fails_only_where_verification_is_enforced() -> None:
-    def unverify_terra(cat, provider, _c):
-        next(m for m in cat["models"] if m["id"] == "gpt-6.1-terra")["verified"] = False
+    def unverify_sol(cat, provider, _c):
+        next(m for m in cat["models"] if m["id"] == "gpt-6.1-sol")["verified"] = False
 
     with pytest.raises(SystemExit, match="verified = false"):
-        gen.check_pi_tiers_against_catalog(_mutated(PERSONAL, unverify_terra))
+        gen.check_pi_tiers_against_catalog(_mutated(PERSONAL, unverify_sol))
 
     def relax(cat, provider, _c):
-        unverify_terra(cat, provider, _c)
+        unverify_sol(cat, provider, _c)
         cat["enforce_verified"] = False
 
     gen.check_pi_tiers_against_catalog(_mutated(PERSONAL, relax))  # 強制しないプロバイダは通る

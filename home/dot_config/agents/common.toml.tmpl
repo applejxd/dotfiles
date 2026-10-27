@@ -1233,10 +1233,12 @@ defaultTools = []
 
 # pi が実際に受け付けるモデルは OpenCode の階層の表と違うことがある。ここにある階層だけ上書きする。
 # ★gpt-6-astra は pi の Copilot 経由で model_not_supported (2026-10 実測)。
-# ★gpt-6.1-terra は Copilot のモデル一覧に無く、"custom model id" の警告つきで動く (2026-10-27 実測。ツール呼び出しも可)。
+# ★GPT は gpt-6.1-sol に揃える (2026-10-27。Copilot の一覧にある。terra はカタログに残し、明示の指示のときだけ使える)。
 # see docs/spec/guard/pi-subagents.md#windows-の子エージェント
 [pi.model.tier.github-copilot]
-second_opinion = "gpt-6.1-terra"
+second_opinion = "gpt-6.1-sol"
+# ★deep は pi だけ xhigh (2026-10-27 の利用者の決定。Copilot の claude-sonnet-5.5:xhigh は動く実測。OpenCode の階層は high のまま)
+deep = "claude-sonnet-5.5#xhigh"
 # ★worker は上書きしない (OpenCode の階層の Sonnet 5.5 #medium のまま)。review (GPT) と系統を分けて、レビューの独立性を保つ (2026-10-27。
 # worker を GPT-6.1 Sol にした直後に、同じ系統になる点を見直した)。Sol は比較の実験で試す。Haiku は使わない
 # see docs/research/agents/subagent-model-assignment.md
@@ -1247,7 +1249,7 @@ second_opinion = "gpt-6.1-terra"
 # ★未確認: pi から Bedrock の GPT-6.1 へのツール呼び出し (実機は会社の機で)。動かないときはこの表を消すと従来の us.openai.gpt-6-sol に戻る
 # see docs/research/agents/subagent-model-assignment.md
 [pi.model.tier.amazon-bedrock]
-second_opinion = "us.openai.gpt-6.1-terra"
+second_opinion = "us.openai.gpt-6.1-sol"
 
 # ★子エージェントのモデルのカタログ (CHG-0043)。最新のモデルだけを載せる。guarded_task の model で選べるのは、ここと、親のモデル、役割の既定だけ。
 # ★generation は整数の列 (6.1 → [6, 1]。辞書順で比べる)。families は明示の分類 (family の typo を検査で拒否する)。

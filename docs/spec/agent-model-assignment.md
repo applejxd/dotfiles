@@ -76,12 +76,12 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 | `second_opinion` | 別系統のモデルでの確かめ | `gpt-6-astra` | `us.openai.gpt-6-sol` |
 
 Copilot の `default`・`deep` は Sonnet 5.5、`second_opinion` は OpenCode の階層では Astra のままで、
-pi の Copilot は `[pi.model.tier.github-copilot]` で `gpt-6.1-terra` に上書きしている（Opus と Astra が制限されたため。以前は Sol。Terra は pi の Copilot の一覧には無く、custom model id の警告つきで動く。[pi の子エージェント](guard/pi-subagents.md)）。
+pi の Copilot は `[pi.model.tier.github-copilot]` で、`second_opinion` を `gpt-6.1-sol`、`deep` を `claude-sonnet-5.5#xhigh` に上書きしている（2026-10-27、利用者の決定。Astra は pi の Copilot 経由で動かない。GPT は Sol に揃えた。`gpt-6.1-terra` はカタログに残し、明示の指示のときだけ使う。Copilot の Sonnet 5.5 の `xhigh` は動く実測。[pi の子エージェント](guard/pi-subagents.md)）。OpenCode の `deep` は `#high` のまま。
 **`worker` は上書きしない**（Sonnet 5.5 `#medium`。Bedrock も `us.anthropic.claude-sonnet-5-5#medium`）。`review`（GPT）と系統を分け、
 レビューの独立性を保つため（2026-10-27、利用者の決定。いったん GPT-6.1 Sol にしたが、worker と review が同じ系統になる点を見直した）。
 GPT-6.1 Sol は、比較の実験で試す（[調査の記録](../research/agents/subagent-model-assignment.md)）。
 **Haiku は使わない**（利用者の方針。`explore`・`commit` の小型の候補にもしない）。
-pi の Bedrock の `second_opinion` は `us.openai.gpt-6.1-terra`（AWS の公式モデルカードで GA を確認、2026-10-26）。`deep` の `xhigh` は Sonnet で通る確認が取れていないので `high` にした。Bedrock の階層は全部 `us.`
+pi の Bedrock の `second_opinion` は `us.openai.gpt-6.1-sol`（AWS の公式モデルカードで GA を確認、Sol は 2026-09-29。`gpt-6.1-terra` はカタログに残す）。`deep` の `xhigh` は Sonnet で通る確認が取れていないので `high` にした。Bedrock の階層は全部 `us.`
 （`global.` は使わない）。`us.` 無しの ID は `ask_description` の候補の最後のフォールバック
 （`amazon-bedrock/anthropic.claude-haiku-5-5`）だけで、推論プロファイルが無い環境で取りこぼさないための意図的なもの。
 
