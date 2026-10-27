@@ -1,7 +1,7 @@
 ---
 name: commit
 description: "Conventional Commits 形式のメッセージ作成と Git コミットを行う。「コミットして」「commit メッセージを作って」「変更をコミット」と言われたら必ず使う。push・PR の作成・履歴の書き換え（amend・rebase・reset）・ブランチ操作には使わない。"
-allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse --show-toplevel), Bash(git add:*), Bash(git commit:*)
+allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch --show-current), Bash(git rev-parse --show-toplevel), Bash(git add:*), Bash(git restore --staged:*), Bash(git commit:*)
 ---
 
 # Git コミットスキル

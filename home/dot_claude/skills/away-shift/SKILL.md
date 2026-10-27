@@ -1,7 +1,7 @@
 ---
 name: away-shift
 description: "ユーザ離席中（日中の外出・夜間など）に、承認なしで実行できる範囲だけで目標に向けた検証・実験を反復し、戻ってきたときに結果をレポートする。「離席するので試しておいて」「出かけている間に検証しておいて」「戻るまでに調べておいて」「留守中に実験を回して」と言われたときに使う。作業は ./.tmp/away-shift/ 配下に限定し、各サイクルの開始時に期限と STOP ファイルを確かめて新しい実験を始めない（実行中の実験は止まらないので、各実験に timeout を付ける）。再開・停止の手段が無い環境では開始しない。ユーザが在席していて即座に応答できる作業や、コミット・push・インストールなど承認が要る操作には使わない。"
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Task
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash(uv run --no-project python ~/.claude/skills/away-shift/scripts/*), Bash(python3 ~/.claude/skills/away-shift/scripts/*), Bash(timeout *)
 ---
 
 # away-shift

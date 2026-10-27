@@ -1,7 +1,7 @@
 ---
 name: ipynb-to-marimo-pages
 description: "Jupyter notebook (.ipynb) を marimo notebook へ移行し、セル分割とMarkdown解説を整え、HTML化してGitHub Pagesへ公開する。「ipynbをmarimoにして」「marimoノートブックを公開したい」「marimo ノートブックのセルを整理して」「marimo の解説セルを整備して」「marimo の数式が正しく表示されない」と言われたときに使う。marimo以外のノートブック運用（nbconvert、Quarto、Jupyter Book）には使わない。"
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash(python3 ~/.claude/skills/ipynb-to-marimo-pages/scripts/*), Bash(uv run --with playwright python ~/.claude/skills/ipynb-to-marimo-pages/scripts/*), Bash(uv run marimo check *), Bash(uv run marimo convert *), Bash(uv run ruff *), Bash(uv run pre-commit *)
 ---
 
 # ipynb → marimo → GitHub Pages 移行スキル

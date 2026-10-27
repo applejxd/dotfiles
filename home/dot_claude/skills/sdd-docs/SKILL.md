@@ -1,7 +1,7 @@
 ---
 name: sdd-docs
 description: "探索型 SDD の docs を整える。docs/change/ の案件更新、ADR（アーキテクチャ決定記録）の作成・更新、docs/research/ への実測記録、docs/spec/ の仕様更新、索引の整合を扱う。「案件を更新して」「docs に反映して」「ADR を作って」「調査記録を残して」「仕様を更新して」「案件を閉じて」と言われたとき、または指示なしでスキルだけが呼ばれたとき（/sdd-docs 単発）に使う。指示なしのときは、docs/ が無ければリポジトリと今の文脈から作り、構成が揃っていれば前回以降の差分を反映する。圧縮を跨ぐ復帰記録の保存（.tmp の checkpoint）は checkpoint スキルが担うので、そちらには使わない。"
-allowed-tools: Read, Edit, Write, Bash, Glob, Grep
+allowed-tools: Read, Edit, Write, Glob, Grep, Bash(python3 ~/.claude/skills/sdd-docs/scripts/*), Bash(py -3 -X utf8 ~/.claude/skills/sdd-docs/scripts/*), Bash(git mv *), Bash(git check-ignore *)
 ---
 
 # sdd-docs スキル

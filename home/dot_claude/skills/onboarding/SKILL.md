@@ -1,7 +1,7 @@
 ---
 name: onboarding
 description: "リポジトリを調査し、質問を通して AGENTS.md を新規作成・整理・陳腐化箇所の更新をする。「AGENTS.md を作って」「AGENTS.md を整理して／見直して」と言われたときに使う。会話で分かった知見の追記は learn スキル、docs/ の仕様・調査記録は sdd-docs スキルの領分なので使わない。"
-allowed-tools: Read, Edit(AGENTS.md)
+allowed-tools: Read, Grep, Glob, Edit(AGENTS.md)
 ---
 
 # AGENTS.md Onboarding Skill

@@ -3,7 +3,8 @@ name: fix
 description: "プロジェクトの linter / formatter を実行し、解決法が明確な指摘だけを自動修正する。「lint を直して」「lint エラーを直して」「フォーマットして」「/fix」と言われたときに使う。バグ修正・テストの失敗・型エラー・ビルドエラーには使わない（「fix して」がそれらを指すときも使わない）。"
 context: fork
 agent: general-purpose
-allowed-tools: Read, Edit, Write, Bash, Grep, Glob
+background: false
+allowed-tools: Read, Edit, Grep, Glob, Bash(uv run ruff *), Bash(uvx ruff *), Bash(uv run pre-commit run *), Bash(pre-commit run *), Bash(mise run *), Bash(npx eslint *), Bash(npx prettier *), Bash(npm run lint *), Bash(gofmt *), Bash(go vet *), Bash(golangci-lint *), Bash(cargo fmt *), Bash(cargo clippy *), Bash(clang-format *), Bash(git ls-files *)
 ---
 
 # Lint & Format 自動修正スキル
