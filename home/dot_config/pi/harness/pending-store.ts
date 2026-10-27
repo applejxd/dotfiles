@@ -1,9 +1,14 @@
-// 承認が取れなかった git commit を、表示した内容のまま退避する (CHG-0046 の試作)。
+// 承認が取れなかった git commit を、表示した内容のまま退避する (CHG-0046)。
 // 表示の前に tree を確定 (snapshotStaged) し、時間切れのあとは実のインデックスを読み直さずに、その tree を保存する。
 // 退避は独立 (親は表示時点の HEAD。ほかの退避を親にしない)。HEAD・ブランチ・インデックス・作業ツリーに触れない。
+// ★承認なしに動くので、git の hook は無効にする (reference-transaction などが任意のコードを動かす経路になる)。
+//   tree の確定は一時のインデックスで行い、実のインデックスへ書き戻さない。
 // see docs/change/0046-guarded-action-timeout.md
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join } from "node:path";
 
 export const PENDING_PREFIX = "refs/pi/pending/";
 
@@ -13,17 +18,21 @@ export type Snapshot = {
 	baseHeadOid: string;
 	/** 表示時点のブランチの ref (detached は空) */
 	branchRef: string;
+	/** 実のインデックスの識別子 (`git ls-files -s -z` の sha256) */
 	indexId: string;
 	message: string;
 	requestId: string;
 };
-export type Saved = { ok: true; ref: string; short: string } | { ok: false; reason: string };
+export type Saved = { ok: true; ref: string; oid: string; short: string } | { ok: false; reason: string };
 export type PendingEntry = { ref: string; oid: string; subject: string; branch: string; head: string };
 
 type Run = { ok: boolean; out: string };
 
+// 退避の内部の git は、hook を動かさない
+const SAFE = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.quotepath=false"];
+
 function git(cwd: string, args: string[], opts: { env?: Record<string, string>; input?: string } = {}): Run {
-	const r = spawnSync("git", ["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", ...args], {
+	const r = spawnSync("git", [...SAFE, ...args], {
 		cwd,
 		encoding: "utf8",
 		timeout: 15000,
@@ -34,7 +43,7 @@ function git(cwd: string, args: string[], opts: { env?: Record<string, string>; 
 }
 
 function indexId(cwd: string): string | null {
-	const r = spawnSync("git", ["ls-files", "-s", "-z"], { cwd, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
+	const r = spawnSync("git", [...SAFE, "ls-files", "-s", "-z"], { cwd, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
 	return r.status === 0 ? createHash("sha256").update(r.stdout).digest("hex") : null;
 }
 
@@ -44,14 +53,26 @@ export function snapshotStaged(cwd: string, message: string, requestId: string):
 	if (!before) return null;
 	const head = git(cwd, ["rev-parse", "-q", "--verify", "HEAD^{commit}"]);
 	const baseTree = head.ok ? git(cwd, ["rev-parse", "HEAD^{tree}"]).out : "";
-	const tree = git(cwd, ["write-tree"]);
-	if (!tree.ok || !tree.out) return null;
-	// ステージ済みが無い (HEAD と同じ内容)。コミットできないものは退避しない
-	if (head.ok && tree.out === baseTree) return null;
-	const branchRef = git(cwd, ["symbolic-ref", "-q", "HEAD"]).out;
-	const headAfter = git(cwd, ["rev-parse", "-q", "--verify", "HEAD^{commit}"]);
-	if (indexId(cwd) !== before || (head.ok ? head.out : "") !== (headAfter.ok ? headAfter.out : "")) return null;
-	return { treeOid: tree.out, baseHeadOid: head.ok ? head.out : "", branchRef, indexId: before, message, requestId };
+	// 実のインデックスをコピーした一時のインデックスで tree を作る (実のインデックスは書き換えない)
+	const real = git(cwd, ["rev-parse", "--path-format=absolute", "--git-path", "index"]);
+	if (!real.ok) return null;
+	const realPath = isAbsolute(real.out) ? real.out : join(cwd, real.out);
+	if (!existsSync(realPath)) return null;
+	const tmp = mkdtempSync(join(tmpdir(), "pi-snap-"));
+	try {
+		const idx = join(tmp, "index");
+		copyFileSync(realPath, idx);
+		const tree = git(cwd, ["write-tree"], { env: { GIT_INDEX_FILE: idx } });
+		if (!tree.ok || !tree.out) return null;
+		// ステージ済みが無い (HEAD と同じ内容)。コミットできないものは退避しない
+		if (head.ok && tree.out === baseTree) return null;
+		const branchRef = git(cwd, ["symbolic-ref", "-q", "HEAD"]).out;
+		const headAfter = git(cwd, ["rev-parse", "-q", "--verify", "HEAD^{commit}"]);
+		if (indexId(cwd) !== before || (head.ok ? head.out : "") !== (headAfter.ok ? headAfter.out : "")) return null;
+		return { treeOid: tree.out, baseHeadOid: head.ok ? head.out : "", branchRef, indexId: before, message, requestId };
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
 }
 
 /** 確定済みの tree を、表示時点の HEAD の子として退避する。実のインデックスは読まない */
@@ -76,7 +97,7 @@ export function savePendingSnapshot(cwd: string, snap: Snapshot): Saved {
 		`Pi-Pending-Request: ${snap.requestId}\n` +
 		`Pi-Pending-Branch: ${snap.branchRef || "(detached)"}\n` +
 		`Pi-Pending-Head: ${snap.baseHeadOid || "(none)"}\n`;
-	// 署名の設定や hook に左右されない (commit-tree は hook を呼ばない)
+	// 署名の設定に左右されない (commit-tree は hook を呼ばず、SAFE が hook の探索先も無効にする)
 	const made = git(
 		cwd,
 		["-c", "commit.gpgsign=false", "commit-tree", snap.treeOid, ...(snap.baseHeadOid ? ["-p", snap.baseHeadOid] : []), "-F", "-"],
@@ -87,7 +108,7 @@ export function savePendingSnapshot(cwd: string, snap: Snapshot): Saved {
 	for (let n = 0; n < 20; n++) {
 		const ref = n === 0 ? base : `${base}-${String(n).padStart(2, "0")}`;
 		// 空の古い値 = 無いときだけ作る (同じ時刻の ref を上書きしない)
-		if (git(cwd, ["update-ref", ref, made.out, ""]).ok) return { ok: true, ref, short: made.out.slice(0, 7) };
+		if (git(cwd, ["update-ref", "--no-deref", ref, made.out, ""]).ok) return { ok: true, ref, oid: made.out, short: made.out.slice(0, 7) };
 	}
 	return { ok: false, reason: "ref を作れなかった" };
 }
@@ -97,25 +118,38 @@ function trailer(body: string, key: string): string {
 	return m ? m[1] : "";
 }
 
-/** 新しい順 */
+/** 新しい順。symbolic ref は数えない */
 export function listPending(cwd: string): PendingEntry[] {
-	const r = git(cwd, ["for-each-ref", "--sort=-refname", "--format=%(refname)%00%(objectname)%00%(contents:subject)", PENDING_PREFIX]);
+	const r = git(cwd, ["for-each-ref", "--sort=-refname", "--format=%(refname)%00%(objectname)%00%(contents:subject)%00%(symref)", PENDING_PREFIX]);
 	if (!r.ok || !r.out) return [];
-	return r.out.split("\n").map((line) => {
-		const [ref, oid, subject] = line.split("\0");
+	const out: PendingEntry[] = [];
+	for (const line of r.out.split("\n")) {
+		const [ref, oid, subject, symref] = line.split("\0");
+		if (symref) continue;
 		const body = git(cwd, ["log", "-1", "--format=%B", oid]).out;
-		return { ref, oid, subject, branch: trailer(body, "Pi-Pending-Branch"), head: trailer(body, "Pi-Pending-Head") };
-	});
+		out.push({ ref, oid, subject, branch: trailer(body, "Pi-Pending-Branch"), head: trailer(body, "Pi-Pending-Head") });
+	}
+	return out;
 }
 
-/** 退避と、その親 (表示時点の HEAD) との差。親が無ければ空の tree との差 */
+/** 完全な退避の ref か (名前空間の中で、symbolic ref でなく、存在する)。oid を返す */
+function resolvePending(cwd: string, ref: string): string | null {
+	if (!ref.startsWith(PENDING_PREFIX) || ref.includes("..") || /[\s~^:?*[\\]/.test(ref)) return null;
+	if (git(cwd, ["symbolic-ref", "-q", ref]).ok) return null;
+	const oid = git(cwd, ["rev-parse", "-q", "--verify", `${ref}^{commit}`]);
+	return oid.ok && oid.out ? oid.out : null;
+}
+
+/** 退避と、その親 (表示時点の HEAD) との差を、本文まで出す。親が無ければ空の tree との差 */
 export function showPending(cwd: string, ref: string): string {
-	if (!ref.startsWith(PENDING_PREFIX)) return "";
-	return git(cwd, ["show", "--stat", "--format=%B", ref]).out;
+	if (!resolvePending(cwd, ref)) return "";
+	return git(cwd, ["show", "--patch", "--stat", "--no-ext-diff", "--no-textconv", "--format=%B", ref]).out;
 }
 
-/** 退避の ref を消す (オブジェクトは git gc まで残る) */
-export function dropPending(cwd: string, ref: string): boolean {
-	if (!ref.startsWith(PENDING_PREFIX)) return false;
-	return git(cwd, ["update-ref", "-d", ref]).ok;
+/** 退避の ref を外す (到達用の ref だけ。オブジェクトは git gc まで残る)。期待する oid が合うときだけ */
+export function dropPending(cwd: string, ref: string, expectedOid?: string): boolean {
+	const oid = resolvePending(cwd, ref);
+	if (!oid) return false;
+	if (expectedOid && expectedOid !== oid) return false;
+	return git(cwd, ["update-ref", "--no-deref", "-d", ref, oid]).ok;
 }

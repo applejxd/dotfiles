@@ -44,6 +44,7 @@ try:
         "unguarded.ts",
         "session-tmp.ts",
         "model-choice.ts",
+        "pending-store.ts",
         "platform.ts",
         "landlock_exec.py",
         "commit-message.js",

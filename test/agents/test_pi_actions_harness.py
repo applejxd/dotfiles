@@ -244,7 +244,7 @@ def test_approved_commit_runs_once_with_a_single_confirmation(env):
     title = requests[0]["title"]
     assert "コミット" in title and "feat: add new" in title and "new.txt" in title, title
     assert requests[0]["options"] == [APPROVE, EDIT, REJECT]
-    assert requests[0].get("timeout") == 300 * 1000
+    assert requests[0].get("timeout") == 300 * 1000 + 3000  # 自前の期限 (300 秒) の 3 秒後の保険
     assert results and results[0][0] is False, results
     assert "実際に使った最終の内容" in results[0][1] and "本文です" in results[0][1]
     assert _head(env["proj"]) != before
@@ -295,27 +295,104 @@ def test_rejection_returns_the_reason_and_runs_nothing(env):
     assert _head(env["proj"]) == before
 
 
+def _refs(proj):
+    return [
+        r
+        for r in _git(proj, "for-each-ref", "--format=%(refname)", "refs/pi/pending/").split()
+        if r
+    ]
+
+
 @needs_action
-def test_no_answer_times_out_and_runs_nothing(env):
+def test_no_answer_defers_the_commit_and_runs_nothing(env):
     _prepare(env, timeout_seconds=1)
     _stage(env["proj"])
     before = _head(env["proj"])
-    requests, results = _rpc(env, _call("git_commit", message="x"), lambda req: None)
-    assert _methods(requests) == ["select"] and requests[0].get("timeout") == 1000, requests
-    assert (
-        results[0][0] is True and "not approved:" in results[0][1] and "再試行せず" in results[0][1]
-    ), results
+    requests, results = _rpc(env, _call("git_commit", message="feat: later"), lambda req: None)
+    assert _methods(requests) == ["select"] and requests[0].get("timeout") == 4000, requests
+    assert "応答が無ければ、実行せず内容を退避" in requests[0]["title"]
+    ok, text = results[0]
+    assert ok is True and text.startswith("not approved:"), results
+    assert "元の操作は未実行" in text and "refs/pi/pending/" in text and "再試行しない" in text, (
+        text
+    )
     assert _head(env["proj"]) == before
+    refs = _refs(env["proj"])
+    assert len(refs) == 1
+    assert _git(env["proj"], "show", "-s", "--format=%B", refs[0]).startswith("feat: later")
+    assert "new.txt" in _git(env["proj"], "ls-tree", "-r", "--name-only", refs[0])
 
 
 @needs_action
-def test_without_a_ui_nothing_runs(env):
+def test_the_deferred_commit_is_what_was_shown_even_if_the_index_changes_while_waiting(env):
+    _prepare(env, timeout_seconds=1)
+    _stage(env["proj"])
+
+    def handler(req):
+        # 待つ間に別のファイルをステージする
+        _stage(env["proj"], name="later.txt", text="later\n")
+        return None
+
+    _requests, results = _rpc(env, _call("git_commit", message="m"), handler)
+    assert results and results[0][0] is True and "refs/pi/pending/" in results[0][1], results
+    refs = _refs(env["proj"])
+    assert len(refs) == 1
+    files = _git(env["proj"], "ls-tree", "-r", "--name-only", refs[0]).split()
+    assert "new.txt" in files and "later.txt" not in files, files
+
+
+@needs_action
+def test_after_a_timeout_the_next_commit_is_deferred_without_waiting(env):
+    _prepare(env, timeout_seconds=1)
+    _stage(env["proj"])
+    calls = _call("git_commit", message="one") + _call("git_commit", message="two")
+    requests, results = _rpc(env, calls, lambda req: None)
+    # 2 つ目は確認を出さず (不在)、退避する
+    assert _methods(requests) == ["select"], requests
+    assert len(results) == 2 and all(
+        r[0] is True and "refs/pi/pending/" in r[1] for r in results
+    ), results
+    assert len(_refs(env["proj"])) == 2
+
+
+@needs_action
+@pytest.mark.parametrize(
+    "answer", [{"cancelled": True}, {"value": REJECT}], ids=["cancel", "reject"]
+)
+def test_a_cancel_or_a_refusal_does_not_defer(env, answer):
+    _prepare(env)
+    _stage(env["proj"])
+    before = _head(env["proj"])
+    _requests, results = _rpc(env, _call("git_commit", message="x"), lambda req: answer)
+    assert results and results[0][0] is True and "not approved:" in results[0][1], results
+    assert "退避した" not in results[0][1], results
+    assert _head(env["proj"]) == before
+    assert _refs(env["proj"]) == []
+
+
+@needs_action
+def test_other_actions_are_still_refused_on_timeout(env):
+    _prepare(env, timeout_seconds=1)
+    requests, results = _rpc(
+        env, _call("gh_issue_comment", repo="o/r", number=3, body="b"), lambda req: None
+    )
+    assert (
+        results[0][0] is True and "not approved:" in results[0][1] and "再試行せず" in results[0][1]
+    ), results
+    assert "退避" not in requests[0]["title"]
+    assert not (env["ghdir"] / "args").exists()
+
+
+@needs_action
+def test_without_a_ui_the_commit_is_deferred_and_nothing_runs(env):
     _prepare(env)
     _stage(env["proj"])
     before = _head(env["proj"])
     proc = H.run_pi(env, _call("git_commit", message="x"))
     assert "isError=true :: not approved:" in proc.stdout, proc.stdout + proc.stderr
+    assert "refs/pi/pending/" in proc.stdout
     assert _head(env["proj"]) == before
+    assert len(_refs(env["proj"])) == 1
 
 
 @needs_action

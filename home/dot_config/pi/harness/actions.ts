@@ -5,10 +5,12 @@
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_DISPLAY_CHARS, classifyConfirm, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
+import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
+import { savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
 
 export const ACTION_TOOL = "action";
 const NOT_APPROVED = "not approved:";
@@ -176,7 +178,26 @@ export type ActionDeps = {
 	/** 確認の枠は 1 つなので、対話 (select・editor・input) は 1 件ずつこの中で行う */
 	dialog: <T>(fn: () => Promise<T>) => Promise<T>;
 	bell: () => void;
+	/** 利用者が不在と分かった状態 (確認が時間切れ)。セッションごと。入力の世代 gen は、利用者の入力のたびに進む (index.ts) */
+	absence?: { absent: boolean; gen: number };
 };
+
+/** TUI の組み込みの期限は、自前の期限より遅くして、保険にだけ使う (自前の期限で時間切れを判定する) */
+const BACKSTOP_MS = 3000;
+
+/** 退避して続行する結果 (deferred) または、退避できなかった結果 (defer_failed)。どちらも元の操作は未実行 */
+function deferError(cwd: string, snap: Snapshot, why: string, signal: AbortSignal | undefined): Error {
+	if (signal?.aborted) return notApproved(outcomeReason("aborted"));
+	const saved = savePendingSnapshot(cwd, snap);
+	if (!saved.ok) {
+		return notApproved(
+			`${why}。元の操作は未実行で、内容も退避できなかった (${saved.reason})。再試行しない。この操作に依存しない作業を続け、最後に「保留したコミット」の再作成が要ると報告する`,
+		);
+	}
+	return notApproved(
+		`${why}。元の操作は未実行。内容は ${saved.ref} (${saved.short}) に退避した。再試行しない。この操作に依存しない作業を続け、最後に「保留したコミット」として報告する (利用者は /pending で確認・破棄できる)`,
+	);
+}
 
 const APPROVE = "承認して実行";
 const EDIT = "編集して承認";
@@ -215,7 +236,6 @@ function runArgv(argv: string[], cwd: string, env: NodeJS.ProcessEnv, signal?: A
 /** guarded_action の execute() の本体。エラーは throw (isError)。承認 1 回につき実行 1 回 */
 export async function executeAction(deps: ActionDeps, params: any, signal: AbortSignal | undefined, ctx: any): Promise<{ content: { type: "text"; text: string }[]; details: Record<string, unknown> }> {
 	if (deps.child) throw notApproved("子エージェントは guarded_action を使えない");
-	if (!ctx.hasUI) throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");
 	const why = deps.judge(params, ctx.cwd);
 	if (why) throw new Error(`実行前の判定で止めた: ${why}`);
 	const checked = validateCall(deps.actions, params);
@@ -231,23 +251,54 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		for (const [name] of fileFields) files[name] = join(dir, `${name}.txt`);
 		const previewFn = PREVIEWS[action.preview];
 		if (!previewFn) throw new Error(`未対応の preview: ${action.preview}`);
+		// 退避の対象は git_commit だけ。表示の前に tree を確定し、あとから実のインデックスを読み直さない
+		const snap: Snapshot | null = action.id === "git_commit" ? snapshotStaged(cwd, String(values.message ?? ""), randomUUID()) : null;
 		const preview = await previewFn(cwd);
 		if (preview && preview.stat === "") throw new Error("ステージ済みの変更が無い。git add してから呼ぶ");
+		// 表示する状態は snapshot と同じでなければならない (取った間に変わったら、表示せずにやり直す)
+		if (snap && preview && (snap.baseHeadOid !== (/^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head : "") || snap.indexId !== preview.indexId)) {
+			throw new Error("状態が変わった (HEAD・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
+		}
+		if (!ctx.hasUI) {
+			if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal);
+			throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");
+		}
+		const absence = deps.absence ?? { absent: false, gen: 0 };
 
 		const timeoutMs = confirmTimeoutSeconds(deps.rules) * 1000;
-		const title = `${action.label}\n\n${viewBody(action, values, preview, buildArgv(action, values, files))}`;
+		const minutes = timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} 分` : `${Math.round(timeoutMs / 1000)} 秒`;
+		const notice =
+			action.id !== "git_commit"
+				? ""
+				: snap
+					? `\n\n(${minutes}応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外)`
+					: `\n\n(退避できない状態なので、${minutes}応答が無ければ拒否します)`;
+		const title = `${action.label}\n\n${viewBody(action, values, preview, buildArgv(action, values, files))}${notice}`;
 		const decision = await deps.dialog(async () => {
 			if (signal?.aborted) return { kind: "aborted" as const };
+			// 不在 (先の確認が時間切れで、そのあと利用者の入力が無い) なら、待たずに退避する
+			if (snap && absence.absent) return { kind: "absent" as const };
 			deps.bell();
-			const t0 = Date.now();
+			const gen0 = absence.gen;
+			const own = new AbortController();
+			let timedOut = false;
+			const forward = () => own.abort();
+			if (signal?.aborted) own.abort();
+			else signal?.addEventListener("abort", forward, { once: true });
+			const timer = setTimeout(() => {
+				timedOut = true;
+				own.abort();
+			}, timeoutMs);
 			let choice: string | undefined;
 			let error = false;
 			try {
-				choice = await ctx.ui.select(title, [APPROVE, EDIT, REJECT], { signal, timeout: timeoutMs });
+				choice = await ctx.ui.select(title, [APPROVE, EDIT, REJECT], { signal: own.signal, timeout: timeoutMs + BACKSTOP_MS });
 			} catch {
 				error = true;
+			} finally {
+				clearTimeout(timer);
+				signal?.removeEventListener("abort", forward);
 			}
-			const raw = { ok: choice === APPROVE || choice === EDIT, elapsedMs: Date.now() - t0, aborted: signal?.aborted === true, error };
 			if (choice === REJECT) {
 				let reason: string | undefined;
 				try {
@@ -257,7 +308,9 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 				}
 				return { kind: "denied" as const, reason: (reason ?? "").trim() };
 			}
-			const outcome = classifyConfirm(raw, timeoutMs);
+			// 時間切れは、自前のタイマーが発火したときだけ (取消・呼び出し元の中断・例外とは区別する)。選択が返っていれば承認を優先する
+			const outcome = choice === APPROVE || choice === EDIT ? "approved" : signal?.aborted ? "aborted" : timedOut ? "timeout" : error ? "error" : "denied";
+			if (outcome === "timeout" && absence.gen === gen0) absence.absent = true;
 			if (outcome !== "approved") return { kind: "outcome" as const, outcome };
 			if (choice !== EDIT) return { kind: "approved" as const, values };
 			const edited: Values = { ...values };
@@ -271,7 +324,11 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			return { kind: "approved" as const, values: edited };
 		});
 		if (decision.kind === "aborted") throw notApproved(outcomeReason("aborted"));
-		if (decision.kind === "outcome") throw notApproved(outcomeReason(decision.outcome));
+		if (decision.kind === "absent") throw deferError(cwd, snap!, "利用者が不在のため確認せずに退避した (先の確認が時間切れ)", signal);
+		if (decision.kind === "outcome") {
+			if (decision.outcome === "timeout" && snap) throw deferError(cwd, snap, `確認が ${minutes}の時間切れになった`, signal);
+			throw notApproved(outcomeReason(decision.outcome));
+		}
 		if (decision.kind === "empty") throw notApproved("編集の結果が空、または取り消されたので拒否した");
 		if (decision.kind === "denied") {
 			throw notApproved(`${outcomeReason("denied")}${decision.reason ? `。利用者の理由: ${decision.reason}` : ""}`);

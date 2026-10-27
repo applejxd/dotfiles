@@ -86,3 +86,23 @@ def test_a_missing_tree_fails_instead_of_reporting_success(t) -> None:
     m = t["missing"]
     assert m["ok"] is False and m["hasReason"]
     assert m["refs"] == 0
+
+
+def test_saving_runs_no_git_hook_and_leaves_the_real_index_bytes_alone(t) -> None:
+    h = t["hooks"]
+    assert h["savedOk"] and h["dropped"]
+    assert h["ran"] == []
+    assert h["indexBytesSame"]
+
+
+def test_drop_cannot_reach_outside_the_pending_namespace(t) -> None:
+    d = t["drop"]
+    assert d["viaSymref"] is False
+    assert d["mainSame"] and d["mainBranchSurvives"]
+    assert d["wrongOid"] is False and d["stillThere"]
+    assert d["odd"] is False
+    assert d["listIgnoresSymref"]
+
+
+def test_show_includes_the_patch_body(t) -> None:
+    assert t["manage"]["shownHasPatch"]

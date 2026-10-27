@@ -4,7 +4,7 @@
 //
 // see docs/change/0046-guarded-action-timeout.md
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -96,6 +96,7 @@ try {
 			order: list.map((e) => e.subject),
 			branch: list[0].branch,
 			shownHasFile: shown.includes("x.txt"),
+			shownHasPatch: shown.includes("+one"),
 			refusedForeign,
 			dropped,
 			remaining: listPending(dir).map((e) => e.subject),
@@ -126,6 +127,54 @@ try {
 		const snap = snapshotStaged(dir, "m", "r");
 		const bad = savePendingSnapshot(dir, { ...snap, treeOid: "1".repeat(40) });
 		out.missing = { ok: bad.ok, hasReason: !bad.ok && bad.reason.length > 0, refs: listPending(dir).length };
+	}
+	// 6. hook は動かない (承認なしの退避が、任意のコードを動かさない)。実のインデックスのバイト列は不変
+	{
+		const dir = repo("r6");
+		const marker = join(tmp, "hook-ran");
+		for (const name of ["reference-transaction", "post-index-change", "post-commit", "pre-commit"]) {
+			const f = join(dir, ".git", "hooks", name);
+			writeFileSync(f, `#!/bin/sh\necho ${name} >> "${marker}"\n`);
+			chmodSync(f, 0o755);
+		}
+		writeFileSync(join(dir, "x.txt"), "x\n");
+		g(dir, "add", "x.txt");
+		// ここまでの add で動いた hook は数えない
+		rmSync(marker, { force: true });
+		const indexPath = join(dir, ".git", "index");
+		const before = readFileSync(indexPath);
+		const snap = snapshotStaged(dir, "m", "r");
+		const afterSnap = readFileSync(indexPath);
+		const saved = savePendingSnapshot(dir, snap);
+		const dropped = dropPending(dir, saved.ref, saved.oid);
+		out.hooks = {
+			savedOk: saved.ok,
+			dropped,
+			ran: existsSync(marker) ? readFileSync(marker, "utf8").trim().split("\n") : [],
+			indexBytesSame: Buffer.compare(before, afterSnap) === 0,
+		};
+	}
+	// 7. 破棄は名前空間の外へ出ない (symbolic ref 経由で main を消せない)。期待する oid が違えば破棄しない
+	{
+		const dir = repo("r7");
+		const mainOid = g(dir, "rev-parse", "refs/heads/main").out;
+		g(dir, "symbolic-ref", "refs/pi/pending/000000000000001-link", "refs/heads/main");
+		const viaSymref = dropPending(dir, "refs/pi/pending/000000000000001-link");
+		writeFileSync(join(dir, "x.txt"), "x\n");
+		g(dir, "add", "x.txt");
+		const saved = savePendingSnapshot(dir, snapshotStaged(dir, "m", "r"));
+		const wrongOid = dropPending(dir, saved.ref, "0".repeat(40));
+		const stillThere = listPending(dir).length === 1;
+		const odd = dropPending(dir, `${saved.ref}/../../heads/main`);
+		out.drop = {
+			viaSymref,
+			mainSame: g(dir, "rev-parse", "refs/heads/main").out === mainOid,
+			mainBranchSurvives: g(dir, "symbolic-ref", "HEAD").out === "refs/heads/main",
+			wrongOid,
+			stillThere,
+			odd,
+			listIgnoresSymref: listPending(dir).every((e) => !e.ref.endsWith("-link")),
+		};
 	}
 } finally {
 	rmSync(tmp, { recursive: true, force: true });

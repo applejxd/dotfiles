@@ -35,6 +35,7 @@ import { ISOLATION_UNSUPPORTED, NO_BASH_NOTICE, findBash, isWindows, supportsChi
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
 import { STARTUP_LIMITS, findRepoRoot, isolationTraceRoot, runWorktreesCommand, startupReconcile } from "./worktrees-command.ts";
+import { PENDING_PREFIX, dropPending, listPending, showPending } from "./pending-store.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -134,6 +135,8 @@ const decided = new Map<string, { input: string; decision: Decision; approved: b
 // 確認は 1 件ずつ出す。TUI の confirm は 1 枠を共有し、後の確認が先の確認を置き換える
 // (codemode の中で並べた呼び出しで先の確認が永久に止まった。spike の E3)
 let confirmQueue: Promise<unknown> = Promise.resolve();
+// 利用者が不在と分かった状態 (確認が時間切れ)。入力の世代 gen は、利用者の入力のたびに進む。see docs/change/0046-guarded-action-timeout.md
+const absence = { absent: false, gen: 0 };
 // TUI 以外 (RPC など) は、クライアントが確認に応えないと永久に待つので期限を付ける (期限が来たら拒否)
 const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 // timeoutMs を渡すと TUI でも期限が付く (mustConfirm)。結果は経過時間つきで返す (時間切れと拒否の区別用)
@@ -213,7 +216,15 @@ export default async function (pi: ExtensionAPI) {
 			await sessionTmp.teardown(String(event?.reason ?? ""));
 		} catch {}
 	});
+	pi.on("input", (event: any) => {
+		if (event?.source !== "extension") {
+			absence.gen++;
+			absence.absent = false;
+		}
+	});
 	pi.on("session_start", async (event: any, ctx: any) => {
+		absence.gen++;
+		absence.absent = false;
 		try {
 			const cwd = ctx.cwd ?? process.cwd();
 			sessionTmp.start(cwd, ctx.sessionManager.getSessionId());
@@ -466,6 +477,7 @@ export default async function (pi: ExtensionAPI) {
 							return d.decision === "allow" ? null : `${d.decision}: ${d.reason}`;
 						},
 						dialog: dialogInOrder,
+						absence,
 						bell: () => {
 							if (ctx.mode === "tui") process.stdout.write("\x07");
 						},
@@ -1353,6 +1365,29 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		},
 	});
 
+	// 承認が取れず退避したコミット (refs/pi/pending/) の一覧・表示・破棄。利用者専用 (モデルは呼べない)。入力と同じように不在を解除する (コマンドは input イベントより先に処理される)
+	pi.registerCommand("pending", {
+		description: "承認が取れず退避したコミットの一覧・表示・破棄: /pending [list | show <ref> | drop <ref>]",
+		handler: async (args: string, ctx: any) => {
+			absence.gen++;
+			absence.absent = false;
+			const cwd: string = ctx.cwd ?? process.cwd();
+			const [sub = "list", arg = ""] = String(args ?? "").trim().split(/\s+/);
+			const full = arg.startsWith("refs/") ? arg : `${PENDING_PREFIX}${arg}`;
+			let text: string;
+			if (sub === "" || sub === "list") {
+				const all = listPending(cwd);
+				text = all.length === 0 ? "退避したコミットは無い" : all.map((e) => `${e.ref.slice(PENDING_PREFIX.length)}  ${e.oid.slice(0, 7)}  ${e.subject}  (${e.branch || "-"})`).join("\n");
+			} else if (sub === "show" && arg) {
+				text = showPending(cwd, full) || "見つからない (/pending list で ref を確かめる)";
+			} else if (sub === "drop" && arg) {
+				text = dropPending(cwd, full) ? `破棄した: ${full} (到達用の ref を外した。オブジェクトは git gc まで残る)` : "破棄できなかった (ref が無い・退避の ref ではない)";
+			} else {
+				text = "/pending [list | show <ref> | drop <ref>]";
+			}
+			ctx.ui?.notify?.(redactText(text), "info");
+		},
+	});
 	// 隔離 (worktree) の一覧・回収のやり直し・破棄。利用者専用 (モデルは呼べない)
 	pi.registerCommand("worktrees", {
 		description: "隔離 (worktree) の一覧・回収のやり直し・破棄: /worktrees [show|collect|discard <jobId> | unlock]",
