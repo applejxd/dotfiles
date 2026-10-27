@@ -67,6 +67,7 @@
 | [0040](0040-pi-guard-by-settings.md) | pi のフルガードを設定で載せ、pis をサンドボックス専用に寄せる | Exploring | 素の pi（Unix）が settings.json だけでフルガード付きで起動する。作業先の信頼は既定の確認のまま、判定の外で動くもの（mcp.json・信頼した作業先の .pi/）は警告する。pis --no-sandbox は移行用に残す | Windows への展開（配備・子エージェント・MSYS のパス）、実機の確認 | 2026-10-26 |
 | [0042](0042-tmp-lifecycle.md) | `.tmp/` をセッションごとの置き場に分け、終わりに消す（取り込むものは残す） | In progress | 対話モードでの `quit`・`/new`・`/resume`・`/fork`・`reload` の実機の確認（実装は段 2・3・4・6 完了。未確認は、これだけ） | 実機で `.tmp/s/<ID>/` の作成・`quit` での削除・SIGKILL の後の回収を確かめ、問題なければ Done へ | 2026-10-27 |
 | [0043](0043-model-catalog.md) | 子エージェントのモデルを、最新のカタログから、ユーザの指示で選べるようにする（effort は自由） | In progress | Bedrock のカタログの `verified`（pi から GPT-6.1 へのツール呼び出しが未確認。`enforce_verified = false`）。実効の段の表示は未実装 | Bedrock を使える環境で `mise run models:probe`。確認後に `verified`・`enforce_verified` を `true` へ | 2026-10-27 |
+| [0044](0044-plan-agent.md) | 強いモデル（`deep`）で計画し、既定のモデルで管理・実行する。`plan` 役の子と、`/plan`（計画モード）のモデル切り替え（`opusplan` 型） | Exploring | 今の世代で、計画と実行を分けた効果の数字が無い。`reader`（bash なし）で足りるか。Copilot の `deep` は同じモデルで effort だけ | 設計を `review` に見せる → 段 2・2b を実装し、固定の課題で測る | 2026-10-27 |
 | [0026](0026-specialist-agents-with-skills.md) | スキルを役割（子エージェント）へ割り当てる。まず移行の調査役（`migration-analyst`）に、移行スキルの重い読み物と影響の洗い出しを任せ、実行・対話は親に残す | Exploring | 設計は `review` の 1 回目を反映済み（再レビューは未）。子が実際にスキルを使い、`references/` を読めるかは実機で未確認 | 段 1（既存の `explore` にスキル名と範囲を明示して委任）を実機で測る。表と専用役は、その結果しだい | 2026-10-27 |
 
 ## 保留
