@@ -12,14 +12,14 @@
 2. **main の安定**: 動かないことがあるので、main は検証後にだけ更新する
 3. **並列開発**: ブランチを切っていないことが、並列開発がうまくいかない一因。feature ごとにブランチ（と worktree）を持つ
 
-**非目的**: `push` の自動化（利用者の手動のまま）。素の `git` のブランチ・worktree 操作の AI への許可（`git flow` の外は許可しない方針）。release・hotfix ブランチ（初版は使わない）。GitHub のブランチ保護・PR の運用（別の判断）。
+**非目的**: `push` の自動化（利用者の手動のまま）。全リポジトリでの素の `git` のブランチ操作の deny（ブランチモデルがリポジトリごとに違うため。下の「モデルはリポジトリごと」）。release・hotfix ブランチ（初版は使わない）。GitHub のブランチ保護・PR の運用（別の判断）。
 
 ## 実施計画
 
 | 段 | 解決したいこと | 内容 | 状態 |
 | --- | --- | --- | --- |
 | 1 | 設計の前提を実測で確かめる | 使い捨てのリポジトリで、`git flow` の実体・サンドボックス内での動作・ネットワークと push に当たる操作を確かめる（下の「実験」） | 未着手 |
-| 2 | 許可の形を決める | 固定の引数の表（`[[pi.actions]]` の拡張）か、規則の許可か。承認の要否。素の `git` の branch・worktree 操作の deny。`review` に見せる | 未着手 |
+| 2 | 許可の形を決める | 固定の引数の表（`[[pi.actions]]` の拡張）か、規則の許可か。承認の要否。素の `git` の branch 等は、既定の ask のまま、指示で `git flow` へ誘導する。`review` に見せる | 未着手 |
 | 3 | AI が使える形にする | 許可の実装と試験。bypass で `git branch -D` などが通る穴（CHG-0041 の持ち越し）も、ここで塞ぐ | 未着手 |
 | 4 | このリポジトリを切り替える | `develop` と `.gitflow` の作成、検査のスタンプの基準・CI のトリガー・`commit` スキル・docs の更新 | 未着手 |
 | 5 | 並列開発の運用 | feature ごとの worktree で、pi を並列に動かす。`.tmp/`・スタンプ・サンドボックスの扱い | 未着手 |
@@ -52,7 +52,19 @@
 
 ## 設計（案）
 
-### ブランチモデル
+### モデルはリポジトリごと、許可の仕組みは共通
+
+ブランチモデルは、プロジェクトによって違う（GitHub を使うとは限らない）。そこで、次のように分ける。
+
+| 層 | 決めるもの | 置き場 |
+| --- | --- | --- |
+| 共通 | AI が使える操作の種類（feature の起票・クローズ・worktree）と、危険な引数（ネットワーク・push・リモートの削除）の除外 | dotfiles の `common.toml` |
+| リポジトリごと | どのモデルか（gitflow-lite・GitHub flow・main 一本など） | リポジトリの `.gitflow`（git-flow-next の共有設定。`classic`・`github`・`gitlab` の preset か自作の構成） |
+| 既定 | `.gitflow` が無いリポジトリ | AI はブランチを切らない（今と同じ。現在のブランチにコミットするだけ） |
+
+`push` は、どのモデルでも手動。ローカルで完結し、GitHub の有無に依存しない（PR を使う運用は、別の判断）。
+
+### このリポジトリのブランチモデル（gitflow-lite）
 
 - `main`: リリース。`chezmoi update` が見る。検証（`verify:all`）の後にだけ更新する
 - `develop`: 統合。feature の `finish` の先
@@ -68,7 +80,8 @@
 | B `guarded_action` の項目（毎回確認） | 固定の引数の表。引数は型で検証 | 引数が固定で検証される | AI の自動と相容れない（毎回、承認が要る） |
 | **C 固定の引数の表＋確認なしの項目（案）** | B と同じ表で、安全と判断した項目は確認を出さずに実行する（`confirm = "never"` のような宣言）。`finish` だけ確認を残すか、事前の条件（作業ツリーがクリーン・検査済み）を満たすときだけ確認なしにするかを決める | 引数が固定・検証され、自動にもできる | ツール（`guarded_action`）の機能の追加が要る。確認なしの範囲の設計が、境界の判断になる |
 
-- どの案でも、**素の `git` の branch・switch -c・checkout -b・worktree add/remove・merge・tag を、implementer と worker で deny**する（読み取りの `branch --list`・`worktree list` は許可）。`git flow` の外へ迂回できないようにするため
+- **素の `git` の branch・switch -c・checkout -b・worktree add/remove・merge・tag は、共通の規則では deny にしない**（既定の ask のまま）。`.gitflow` があるリポジトリでは、共通の指示と `commit` スキルで `git flow` を使わせる。迂回は、ask の承認で止まる。リポジトリごとに厳密に deny する仕組みは、必要になってから別に検討する（判定器にリポジトリ側の設定を読む仕組みが要る。**未確認**）
+- `git branch -D`・`clean`・`tag -d` が bypass で全役割 allow になる件（CHG-0041 の持ち越し）は、gitflow とは別の修正として、段 3 で扱う
 - ネットワークと push に当たる引数（`--fetch`・`publish`・`track`・リモートの削除など）は、固定の引数で除く。`--keepremote`・`--no-fetch` を固定し、段 1 の実測で、実際にネットワークを使わないことを確かめる
 
 ### 承認の考え方（案）
@@ -108,10 +121,10 @@
 
 **必須**:
 
-- AI が、素の `git` の branch・worktree 操作ではなく、`git flow` の固定の形だけで、feature の起票・クローズができる
+- `.gitflow` があるリポジトリで、AI が `git flow` の固定の形だけで、feature の起票・クローズができる。`.gitflow` が無いリポジトリでは、AI はブランチを切らず、今と同じに動く
 - 許可の形が、ネットワークと push に当たる操作を含まない（実測で確認）
 - `main` は、利用者の操作（`integrate` と `push`）でしか更新されない
-- bypass でも、素の `git` の branch の削除・作成・merge・tag が通らない
+- bypass でも、`git branch -D`・`clean`・`tag -d` が通らない（別の修正）
 - feature の中の細かいコミットが、develop では 1 コミットに束ねられる
 
 **望ましい**:
@@ -139,7 +152,7 @@
 
 | 変更対象 | 変更前 → 変更後 | 理由・証拠 | 適用結果 |
 | --- | --- | --- | --- |
-| `common.toml.tmpl` の git の規則 | `git flow` と素の branch 等は規則なし → 素の branch・worktree 等を deny、`git flow` を固定の形で許可 | 本案件 | 未適用 |
+| `common.toml.tmpl` の git の規則 | `git flow` は規則なし → 固定の形で許可（確認なしの項目）。素の branch 等は既定の ask のまま。`branch -D`・`clean`・`tag -d` の bypass の穴を塞ぐ | 本案件 | 未適用 |
 | `scripts/verify_stamp.py` | push 段の基準が `origin/main` に固定 → 親のブランチ（develop）を基準にできる | 本案件 | 未適用 |
 | `.github/workflows/linux.yml` | `push: branches: [main]` → `[main, develop]` | 本案件 | 未適用 |
 | `commit` スキル | 「ブランチ操作には使わない」、粒度は論理単位 → feature の WIP と、squash のメッセージの書き方を足す | 本案件 | 未適用 |
