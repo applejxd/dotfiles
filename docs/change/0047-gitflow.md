@@ -208,6 +208,7 @@
 | 公開済みの feature の `finish` | ローカルの bare リモートに feature を push してから `finish --squash --no-fetch` を実行。**`--keepremote` を付けないと、リモートの feature ブランチが削除された**（`--no-fetch` でも。push に当たる操作）。`--keepremote` を付けるとリモートは不変。develop は、リモートへ push されない。**固定の引数に `--keepremote` を必ず含める**必要がある |
 | worktree 内の hook・検査 | このリポジトリの複製に `pre-commit install` し、`feature start --worktree` の worktree で docs を変えてコミット。hook は、本体の `.git/hooks`（共通）から**そのまま動き**、全て通った。検査のスタンプは、worktree ごとの git ディレクトリ（`.git/worktrees/<名前>/`）に置かれる（案件の「現在地」の調査どおり） |
 | `mise` での導入 | `mise ls-remote github:gittower/git-flow-next` で版（2.1.0 まで）を引けた。登録名は無く、`github:gittower/git-flow-next` の指定で入れる（段 4 で `mise` の設定へ 1 行足す。導入はまだしていない） |
+| ハーネス経由の通し（本物の git-flow） | `test_pi_gitflow_actions.py` の `test_the_whole_feature_cycle_with_the_real_git_flow`: 起票（確認なし）→ feature の worktree で WIP コミット 2 回（確認なし）→ クローズ（確認あり）を、本物の `git-flow` v2.1.0 で通した。`develop` に squash の 1 コミット、feature のブランチと worktree は消え、ファイルは全部入った。環境変数 `GIT_FLOW_NEXT_DIR`（`git-flow` の置き場）か `PATH` に `git-flow` があるときだけ動き、無ければ飛ばす |
 | `.git/config` | **`feature start` は `.git/config` を書き換え、`finish` で元に戻す**（前後のハッシュで確認）。`list`・`config list`・`worktree list` は書かない |
 | サンドボックス（Fence。`.git/config`・`.git/hooks` を denyWrite） | `start` は成功するが、「worktree の由来（provenance）と、feature の基点を記録できない」警告が出る。worktree の中のコミットは可。`finish` は成功（develop に 1 コミット、ブランチは削除）するが、**由来が無い worktree は「手作り」扱いで、ディレクトリが detached HEAD のまま残る**（`worktree list` に `(unmanaged)`）。`git worktree remove <パス>` は Fence の中で成功した |
 

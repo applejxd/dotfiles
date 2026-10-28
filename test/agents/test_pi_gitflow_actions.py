@@ -7,6 +7,11 @@ RPC + faux プロバイダーで、``guarded_action`` を通しで確かめる�
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
 import pytest
 import test_pi_actions_harness as A
 import test_pi_harness as H
@@ -286,3 +291,88 @@ def test_an_unsafe_gitflow_config_keeps_the_confirmation_in_a_feature_worktree(e
     wt = _worktree(env, proj, "feature/w")
     requests, _results = _commit_requests(env, wt)
     assert A._methods(requests)[:1] == ["select"], requests
+
+
+def _real_git_flow():
+    """本物の git-flow-next の置き場。環境変数 GIT_FLOW_NEXT_DIR か、PATH の git-flow。無ければ None"""
+    d = os.environ.get("GIT_FLOW_NEXT_DIR")
+    if d and (Path(d) / "git-flow").exists():
+        return d
+    found = shutil.which("git-flow")
+    return str(Path(found).parent) if found else None
+
+
+# 読み込み時に決める (fixture が環境変数を触ることがある)
+REAL_GIT_FLOW = _real_git_flow()
+
+
+@A.needs_action
+@pytest.mark.skipif(
+    REAL_GIT_FLOW is None, reason="本物の git-flow-next が無い (GIT_FLOW_NEXT_DIR か PATH)"
+)
+def test_the_whole_feature_cycle_with_the_real_git_flow(env, monkeypatch):
+    """起票 → worktree で WIP コミット 2 回 (確認なし) → クローズ (確認あり、squash) を、本物の git-flow で通す。"""
+    monkeypatch.setattr(A, "ACTIONS", A.ACTIONS + GITFLOW_ACTIONS)
+    A._prepare(env)
+    env["env"]["PATH"] = f"{REAL_GIT_FLOW}{os.pathsep}{env['env']['PATH']}"
+    proj = env["proj"]
+    A._git(proj, "branch", "-M", "main")
+    sub = {**os.environ, "PATH": env["env"]["PATH"], "GIT_CONFIG_GLOBAL": "/dev/null"}
+
+    def flow(*args):
+        r = subprocess.run(
+            ["git", "flow", *args], cwd=proj, capture_output=True, text=True, env=sub
+        )
+        assert r.returncode == 0, (
+            args,
+            r.stdout,
+            r.stderr,
+            sub["PATH"][:300],
+            shutil.which("git-flow", path=sub["PATH"]),
+        )
+
+    # 利用者が (サンドボックスの外で) 一度だけ行う設定
+    flow("init", "--preset=classic", "--defaults")
+    flow("config", "edit", "topic", "feature", "--upstream-strategy=squash")
+    for topic in ("release", "hotfix", "support", "bugfix"):
+        flow("config", "delete", "topic", topic)
+    A._git(proj, "config", "gitflow.worktreePath", ".tmp/worktrees/{{ branchName }}")
+    develop_before = A._git(proj, "rev-parse", "develop").strip()
+
+    # 1. 起票 (確認なし)
+    requests, results = A._rpc(
+        env, A._call("gitflow_feature_start", name="cycle"), lambda req: None
+    )
+    assert A._methods(requests) == [] and results[0][0] is False, (requests, results)
+    wt = proj / ".tmp" / "worktrees" / "cycle"
+    assert wt.is_dir() and A._git(wt, "branch", "--show-current").strip() == "feature/cycle"
+
+    # 2. worktree の中の WIP コミット 2 回 (確認なし)
+    for i in (1, 2):
+        A._stage(wt, name=f"f{i}.txt", text=f"{i}\n")
+        env["proj"] = wt
+        requests, results = A._rpc(
+            env, A._call("git_commit", message=f"wip: {i}"), lambda req: None
+        )
+        assert A._methods(requests) == [] and results[0][0] is False, (requests, results)
+    assert A._git(proj, "rev-list", "--count", "develop..feature/cycle").strip() == "2"
+
+    # 3. クローズ (確認あり。本体の develop から)
+    env["proj"] = proj
+    message = "feat: cycle\n\n- one change"
+    requests, results = A._rpc(
+        env, A._call("gitflow_feature_finish", name="cycle", message=message), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == ["select"], requests
+    assert "feature/cycle" in requests[0]["title"] and "f1.txt" in requests[0]["title"]
+    assert results[0][0] is False, results
+    # develop に 1 コミット (squash)。feature のブランチと worktree は消え、リモートは無い
+    assert A._git(proj, "rev-list", "--count", f"{develop_before}..develop").strip() == "1"
+    assert A._git(proj, "log", "-1", "--format=%s", "develop").strip() == "feat: cycle"
+    assert not wt.exists()
+    assert "feature/cycle" not in A._git(proj, "branch", "--list", "feature/*")
+    assert A._git(proj, "ls-tree", "-r", "--name-only", "develop").split() == [
+        "base.txt",
+        "f1.txt",
+        "f2.txt",
+    ]
