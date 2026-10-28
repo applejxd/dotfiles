@@ -5,6 +5,11 @@ set -euo pipefail
 {{ template "sudo-keepalive.sh.tmpl" . }}
 start_sudo_keepalive
 
+# 失敗を警告に留めて続けると run_once_ は成功と記録するので、終わりに印を書き直して次の apply で走り直させる
+# see docs/spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す
+{{ template "retry-marker.sh.tmpl" (dict "homeDir" .chezmoi.homeDir "name" "osx-failed") }}
+failed_steps=""
+
 echo "Starting macOS system setup..." >&2
 
 # Rosetta 2 (Apple Silicon だけ。oahd が動いていれば導入済み)。
@@ -12,6 +17,7 @@ echo "Starting macOS system setup..." >&2
 if [[ $(uname -m) == arm64 ]] && ! /usr/bin/pgrep -q oahd; then
     if ! sudo softwareupdate --install-rosetta --agree-to-license; then
         echo "⚠️ Rosetta 2 を導入できませんでした。Rosetta が要るアプリは後で失敗します" >&2
+        failed_steps="${failed_steps} rosetta"
     fi
 fi
 
@@ -36,11 +42,17 @@ if [[ $(uname -m) == arm64 ]]; then
     # GUI apps
     brew bundle --file={{ joinPath .chezmoi.workingTree "scripts" "osx" "brew_mas_cask.rb" | quote }}
 
-    # sudo が要る GUI アプリ (認証は冒頭の start_sudo_keepalive で取得済み)
-    brew install avast-security
+    # sudo が要る GUI アプリ (認証は冒頭の start_sudo_keepalive で取得済み)。失敗しても残り (gcc・mactex) を続ける
+    if ! brew install avast-security; then
+        echo "⚠️ brew install avast-security に失敗しました。次の apply でやり直します" >&2
+        failed_steps="${failed_steps} avast-security"
+    fi
     # Needs Rosetta2 (Rosetta を導入できなかったときに備え、失敗しても残りを続ける)
     for cask in google-japanese-ime karabiner-elements xquartz qlvideo; do
-        brew install "$cask" || echo "⚠️ brew install $cask に失敗しました。後で手動で試してください" >&2
+        if ! brew install "$cask"; then
+            echo "⚠️ brew install $cask に失敗しました。次の apply でやり直します" >&2
+            failed_steps="${failed_steps} ${cask}"
+        fi
     done
 fi
 
@@ -89,4 +101,10 @@ if [[ ! -e /usr/local/texlive ]]; then
     eval "$(/usr/libexec/path_helper)"
     sudo tlmgr update --self --all
     sudo tlmgr paper a4
+fi
+
+if [[ -n "${failed_steps# }" ]]; then
+    # 非ゼロで終えると apply 全体が止まるので、警告に留めて印を書き直す (次の apply で走り直る)
+    echo "⚠️ 失敗した手順:${failed_steps}。次の chezmoi apply で走り直します" >&2
+    mark_for_retry "${failed_steps# }"
 fi

@@ -30,7 +30,7 @@ chezmoi status --include=scripts
   - `100_linux/125_mise`（`mise install` の一部が失敗したとき。
     [ツール 1 個の失敗で apply を止めない](platform-raspberry-pi.md#ツール-1-個の失敗で-apply-を止めない)）
 - AI CLI の導入（`126_agent_cli` / `226_agent_cli`）と omp の設定の取得（`420_omp_skills` /
-  `430_omp_claude_assets`）は、失敗した回に**再実行の印**を書き直して次の apply で走り直す。
+  `430_omp_claude_assets`）、macOS の `210_osx`（Rosetta・`avast-security`・cask の導入の失敗）は、失敗した回に**再実行の印**を書き直して次の apply で走り直す。
   成功した回は印に触れないので、その後は走り直さない
   （[再実行の印の仕組み](script-artifacts.md#再実行の印の仕組み)）
 

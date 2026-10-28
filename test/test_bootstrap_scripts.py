@@ -55,9 +55,18 @@ def render_with_context(
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
         pytest.skip("chezmoi が無い")
-    context = {"chezmoi": {"os": os_name, "username": "applejxd", "homeDir": str(home)}}
+    context = {
+        "chezmoi": {
+            "os": os_name,
+            "username": "applejxd",
+            "homeDir": str(home),
+            "workingTree": str(ROOT),
+        }
+    }
     template = (
-        "{{ with " + json.dumps(json.dumps(context)) + " | fromJson }}\n"
+        "{{ with "
+        + json.dumps(json.dumps(context))
+        + " | fromJson }}\n"
         + path.read_text(encoding="utf-8-sig")
         + "\n{{ end }}"
     )
@@ -75,6 +84,7 @@ def render_with_context(
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.lstrip("\n")
+
 
 SELF_URL = re.compile(
     r"(?:raw\.githubusercontent\.com/applejxd/dotfiles"
@@ -712,6 +722,76 @@ def test_homebrew_failure_is_not_recorded_as_success(tmp_path, curl_ok):
     0 で終わると run_once_ が記録され、次の apply で走り直さない。"""
     result = run_homebrew(tmp_path, curl_ok=curl_ok)
     assert result.returncode != 0, result.stdout + result.stderr
+
+
+OSX = MAC_SCRIPTS / "run_once_after_210_osx.sh.tmpl"
+
+
+def run_osx(
+    tmp_path: Path, *, failing: tuple[str, ...]
+) -> tuple[subprocess.CompletedProcess, Path]:
+    """brew / sudo / uname / curl を差し替えて 210 を走らせる。`failing` の名前の導入だけ失敗させる。"""
+    if os.name == "nt":
+        pytest.skip("Unix のスクリプト")
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash が無い")
+    if Path("/opt/homebrew/bin/brew").exists():
+        pytest.skip("このマシンに Homebrew が入っている")
+    home = tmp_path / "home"
+    home.mkdir()
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    fail_names = " ".join(failing)
+    stubs = {
+        # Rosetta (softwareupdate) を failing に含めると失敗させる
+        "sudo": (
+            'case "$*" in *softwareupdate*) '
+            + ("exit 1" if "rosetta" in failing else "exit 0")
+            + " ;; *) exit 0 ;; esac"
+        ),
+        "uname": "echo arm64",
+        "curl": "exit 0",
+        "brew": (
+            'if [ "$1" = install ]; then for n in '
+            + fail_names
+            + '; do [ "$2" = "$n" ] && exit 1; done; fi; exit 0'
+        ),
+    }
+    for name, body in stubs.items():
+        stub = bindir / name
+        stub.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+        stub.chmod(0o755)
+    script = tmp_path / "210.sh"
+    script.write_text(render_with_context(OSX, home=home, os_name="darwin"), encoding="utf-8")
+    result = subprocess.run(
+        [bash, str(script)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "HOME": str(home), "PATH": f"{bindir}:/usr/bin:/bin"},
+        check=False,
+        timeout=60,
+    )
+    return result, home / RETRY_DIR / "osx-failed"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_osx_swallowed_failures_leave_a_retry_marker(tmp_path):
+    """警告で続ける失敗は、run_once_ が成功と記録すると二度と走らない。印を置いて次の apply で走り直させる。
+    0 で終わる (非ゼロだと後続のスクリプトを巣き込む)。"""
+    result, marker = run_osx(tmp_path, failing=("rosetta", "avast-security", "karabiner-elements"))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert marker.is_file(), result.stderr
+    reason = marker.read_text(encoding="utf-8").split()
+    assert reason == ["rosetta", "avast-security", "karabiner-elements"], reason
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_osx_without_failures_leaves_no_retry_marker(tmp_path):
+    result, marker = run_osx(tmp_path, failing=())
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not marker.exists()
 
 
 def run_keepalive(
