@@ -58,6 +58,27 @@ function hasGitExecOption(cmd: string): boolean {
 const SAFE_ENV_NAMES = new Set(["LANG", "LC_ALL", "TZ", "NO_COLOR", "COLUMNS", "LINES", "TERM", "CI", "FORCE_COLOR", "CLICOLOR", "PYTHONDONTWRITEBYTECODE"]);
 
 /** 元のコマンドのどこかに、安全な名前以外の `NAME=` 形のトークンか、`-` 始まりの引数を持つ `env` があるか。shlex が失敗したら true。 */
+// `--output` (git の出力先ファイル。任意のファイルを上書きできる) と、その省略形 (`--ou`・`--out`・`--outp`・`--outpu`) 。
+// 生の文字列の `--output` 検査 (UNSAFE_FOR_ALLOW) は、`--out"put"=x` のように引用で分割するとすり抜けるので、引用を外したトークンでも見る
+// (git は曖昧でない省略形を受け付ける。`--output-indicator-new` など `--output-` で始まるものも、安全側で同じに扱う)
+const OUTPUT_OPTION_RE = /^--ou(?:t(?:p(?:u(?:t)?)?)?)?(?:[=-]|$)/u;
+
+function hasOutputOption(cmd: string): boolean {
+	const segments = [...splitCommandSegments(cmd), ...normalize(cmd)];
+	for (const raw of segments) {
+		let tokens: string[];
+		try {
+			tokens = shlexSplit(raw);
+		} catch (e) {
+			if (!(e instanceof ShlexError)) throw e;
+			// 解析できない形は、引用を外した語を確かめられないので allow にしない
+			return true;
+		}
+		if (tokens.flatMap((t) => t.split(/[ \t\n]+/)).some((t) => OUTPUT_OPTION_RE.test(t))) return true;
+	}
+	return false;
+}
+
 function hasUnsafeEnvPrefix(cmd: string): boolean {
 	for (const raw of splitCommandSegments(cmd)) {
 		let tokens: string[];
@@ -241,7 +262,7 @@ function guide(cmd: string, pi: Obj): Response | null {
 
 /** 全セグメントが allow の一覧に当たれば、当たった最初のパターンを返す。 */
 function allSegmentsAllowed(cmd: string, patterns: readonly string[]): string | null {
-	if (patterns.length === 0 || UNSAFE_FOR_ALLOW.some((t) => cmd.includes(t)) || hasGitExecOption(cmd) || hasUnsafeEnvPrefix(cmd)) return null;
+	if (patterns.length === 0 || UNSAFE_FOR_ALLOW.some((t) => cmd.includes(t)) || hasGitExecOption(cmd) || hasUnsafeEnvPrefix(cmd) || hasOutputOption(cmd)) return null;
 	const segments = normalize(cmd);
 	if (segments.length === 0) return null;
 	let first: string | null = null;
