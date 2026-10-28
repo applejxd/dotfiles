@@ -191,6 +191,7 @@
 | [セキュリティ仕様の経緯メモ](chezmoi/security-spec-notes.md) | chezmoi 本体の age 暗号化の廃止の経緯・旧『実行境界』の記述（`security.md` から移設） |
 | [Raspberry Pi 向け導入の観測メモ](chezmoi/structure-raspi-notes.md) | clang の標準ヘッダの観測（2026-10-01・10-05。`structure.md` から移設） |
 | [Windows 設定の実測・経緯メモ](chezmoi/structure-windows-notes.md) | WSL 3.0.1・GPU のクラッシュ・sudo・PATH 降格・oh-my-posh・7-Zip・電源・ウィジェット・LGPO など（`structure.md` から移設） |
+| [sudo を使うスクリプトを Ansible に寄せると楽になるか](chezmoi/ansible-for-sudo-scripts.md) | 2026-10-29。sudo の使用箇所の棚卸し（Linux 4〜5 本）・Ansible の公開情報・評価。全面の置き換えは勧めず、Linux へのキープアライブの共有と、121 の Pi 専用 `/etc` の小さな試作を勧める |
 | [WSL の時刻同期と SSH の実測メモ](chezmoi/structure-wsl-time-and-ssh-notes.md) | 時刻同期の未確認事項・SSH の層別の実測・LAN の IP の実験（`structure.md` から移設） |
 | [専用 WSL2 の時刻同期の実測](chezmoi/wsl-sandbox-time-sync.md) | 2026-10-18〜19 の実測と原因分析・構築記録（`wsl-sandbox.md` から移設） |
 | [再実行の印（retry marker）の置き場に関する記録](chezmoi/rerun-scripts-notes.md) | 印の置き場を sandbox から書けない場所にした理由と、旧置き場の廃止。日付なし（コードの読解。`troubleshooting-bootstrap.md` から移設） |
