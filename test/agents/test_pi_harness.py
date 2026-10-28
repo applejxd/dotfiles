@@ -778,7 +778,8 @@ def test_background_child_reports_status_and_notifies_on_completion(env):
             [_task(jobId="{{JOB}}", status=True), _task(list=True)],
         ],
         FAUX_DELAY_MS="1500",
-        FAUX_FINAL_DELAY_MS="3000",
+        # 子の起動が負荷で遅れても、親の最後の応答が子の完了より先に終わらないように長めにする (並列実行の全体で不安定だった)
+        FAUX_FINAL_DELAY_MS="9000",
         FAUX_ECHO_CHILD_FINISHED="1",
     )
     assert proc.returncode == 0, proc.stderr
