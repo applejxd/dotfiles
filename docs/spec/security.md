@@ -23,7 +23,7 @@ sops (age) に置き、リポジトリにはそれを引くテンプレートと
 | sops 用の age 秘密鍵 | Bitwarden の Secure Note `SOPS age identity personal`（ノートに鍵の行） | `~/.config/sops/age/keys.txt`（mode 600） |
 | Web 検索の API キー（Brave・Exa・Tavily・OpenAlex） | Bitwarden の Login 項目 `websearch-<名前>`（Password 欄） | `~/.config/agents/websearch-keys.json`（`apply` が `websearch.py sync-keys` で作る。[仕様](web-search.md#鍵)） |
 | プロジェクトの API キー | 各プロジェクトの `.env.json`（sops で暗号化してコミット） | ファイルには出さない。mise がプロジェクト内でだけ環境変数に載せる |
-| sudo パスワード | どこにも保存しない | スクリプトの `sudo -v` が実行時に尋ねる（macOS は `home/.chezmoitemplates/sudo-keepalive.sh.tmpl`。変数に持たない） |
+| sudo パスワード | どこにも保存しない | スクリプトの `sudo -v` が実行時に尋ねる（`home/.chezmoitemplates/sudo-keepalive.sh.tmpl` を使うスクリプトと、短い `130` の先頭の `sudo -v`。変数に持たない） |
 
 Bitwarden 由来のファイルを展開するのは、ユーザ名が `applejxd` の機械だけ。
 それ以外のユーザでは `.chezmoiignore.tmpl` が外す。

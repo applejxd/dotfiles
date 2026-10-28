@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-sudo -v
+{{ template "sudo-keepalive.sh.tmpl" . }}
+start_sudo_keepalive
 
 {{- $raspi := eq (includeTemplate "is-raspi" .) "true" }}
 

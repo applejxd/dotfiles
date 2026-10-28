@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-sudo -v
+{{ template "sudo-keepalive.sh.tmpl" . }}
+start_sudo_keepalive
 
 echo "WSL の設定を行います..."
 

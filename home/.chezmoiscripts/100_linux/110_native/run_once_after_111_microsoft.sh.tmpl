@@ -12,7 +12,8 @@ VSCODE_LIST="/etc/apt/sources.list.d/vscode.list"
 VSCODE_SOURCES="/etc/apt/sources.list.d/vscode.sources"
 VSCODE_LINE="deb [arch=${ARCH} signed-by=${KEYRING}] https://packages.microsoft.com/repos/code stable main"
 
-sudo -v
+{{ template "sudo-keepalive.sh.tmpl" . }}
+start_sudo_keepalive
 # まっさらな機械ではパッケージ一覧が空のことがある (121 の update より先に走る)
 sudo apt-get -yq update
 sudo apt-get -yq install --no-install-recommends ca-certificates apt-transport-https wget gpg

@@ -21,7 +21,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 [スクリプトを走らせ直す](troubleshooting-bootstrap.md#スクリプトを走らせ直す)。
 
 - 印は `~/.local/share/dotfiles/retry/` の下に置く（順に `agent-cli-failed` / `omp-skills-failed` /
-  `omp-claude-assets-failed`）。スクリプトには印の**更新時刻だけ**を埋め込む。中身を埋め込まないのは、
+  `omp-claude-assets-failed` / `osx-failed`）。スクリプトには印の**更新時刻だけ**を埋め込む。中身を埋め込まないのは、
   書き換えられたときにスクリプトへコードが入らないため。実装は `home/.chezmoitemplates/retry-marker.sh.tmpl`
 - 成功した回は印に触れないので、その後は走り直さない
 - 更新時刻は秒単位で埋め込まれる。前回の印と同じ秒のうちにまた失敗すると描画が変わらず、成功として
@@ -43,7 +43,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 
 | 作るスクリプト | 作られるもの | 種類 | 後始末・消すと |
 | --- | --- | --- | --- |
-| `retry-marker.sh.tmpl`（`420_omp_skills`・`430_omp_claude_assets`・`agent-cli-install.sh.tmpl` 経由の `126` / `226`） | `~/.local/share/dotfiles/retry/{omp-skills-failed,omp-claude-assets-failed,agent-cli-failed}` | 再実行の印（失敗理由を 1 行） | 成功しても自動では消えない。消すと次の apply で 1 回走り直す（[仕組み](#再実行の印の仕組み)。コードからの推測）。印の差し替え用に同じ場所へ一時ファイル `.retry.XXXXXX` を作り、`mv -f` で置き換える（異常終了時に残りうる。推測） |
+| `retry-marker.sh.tmpl`（`420_omp_skills`・`430_omp_claude_assets`・`210_osx`・`agent-cli-install.sh.tmpl` 経由の `126` / `226`） | `~/.local/share/dotfiles/retry/{omp-skills-failed,omp-claude-assets-failed,osx-failed,agent-cli-failed}` | 再実行の印（失敗理由を 1 行） | 成功しても自動では消えない。消すと次の apply で 1 回走り直す（[仕組み](#再実行の印の仕組み)。コードからの推測）。印の差し替え用に同じ場所へ一時ファイル `.retry.XXXXXX` を作り、`mv -f` で置き換える（異常終了時に残りうる。推測） |
 | `430_omp_claude_assets.sh.tmpl` | `~/.omp/agent/.chezmoi-seeded` | 状態（初期値として置いた設定のキー名を追記） | 消すと次の apply で `commands.enableClaudeUser` などを再設定し、利用者が戻した値を上書きしうる。**消さない** |
 | `000_unix/run_before_005_python.sh.tmpl` | `~/.local/bin/chezmoi-python3`（実体の Python への symlink） | 状態（`ln -sfn` で毎回張り直す） | 消すと次の apply で張り直す。その前の `modify_` スクリプトが一時的に失敗しうる |
 | 同上 | `mktemp` の一時ファイル（uv のインストーラ） | 一時 | uv も Python も無いときだけ。使い終えたら `rm -f`（`trap` なし） |
@@ -69,7 +69,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | --- | --- | --- | --- |
 | `200_mac/run_once_after_210_osx.sh.tmpl` | `~/.iterm2_shell_integration.zsh` | 生成物（公式インストーラを `curl \| bash` で実行して作らせる） | 未存在のときだけ。残る。`run_once_` なので消しても自動では戻らない。インストーラの挙動は未確認 |
 
-`sudo-keepalive.sh.tmpl`（`205` / `210` / `250`）はファイルを作らず、バックグラウンドのサブシェルで `sudo` を延命し、
+`sudo-keepalive.sh.tmpl`（macOS の `205` / `210` / `250`、Linux の `111` / `120` / `121` / `123` / `125`）はファイルを作らず、バックグラウンドのサブシェルで `sudo` を延命し、
 `trap EXIT` で止める。
 
 ## Windows

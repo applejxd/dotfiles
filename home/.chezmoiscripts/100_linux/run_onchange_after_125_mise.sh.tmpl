@@ -7,7 +7,8 @@ set -euo pipefail
 {{- $nosudo := eq (includeTemplate "no-sudo" .) "true" }}
 {{- if not $nosudo }}
 
-sudo -v
+{{ template "sudo-keepalive.sh.tmpl" . }}
+start_sudo_keepalive
 {{- end }}
 
 echo "mise をインストール/更新します..."
