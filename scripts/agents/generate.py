@@ -1858,12 +1858,16 @@ JUDGE_TABLES = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness
 JUDGE_CHECKS = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/checks.ts"
 PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds"})
 PI_CONFIRM_TIMEOUT_DEFAULT = 300
-PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview"})
-PI_ACTION_PREVIEWS = frozenset({"none", "git_staged"})
-PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "line", "text"})
+PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview", "confirm"})
+PI_ACTION_PREVIEWS = frozenset({"none", "git_staged", "gitflow_start", "gitflow_finish"})
+# 確認の省略 (confirm) は、コードの許可リスト (actions.ts の AUTO_CONFIRM) にある組だけ。名前の型だけを引数に持つこと
+PI_ACTION_CONFIRMS = frozenset({"ask", "gitflow_start"})
+PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "line", "text", "featurename"})
 PI_ACTION_FIELD_KEYS = {
     "repo": frozenset({"type"}),
     "int": frozenset({"type"}),
+    # featurename: git flow の feature の名前 (英小文字・数字・. _ -)。argv の 1 要素として直接渡す
+    "featurename": frozenset({"type"}),
     # line: 1 行の短い文字列 (issue のタイトルなど)。argv の 1 要素として直接渡す (改行・制御文字は拒否)
     "line": frozenset({"type", "content", "max_chars"}),
     "text": frozenset({"type", "file", "content", "max_chars"}),
@@ -1907,6 +1911,9 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
             raise SystemExit(
                 f"{where} の preview は {sorted(PI_ACTION_PREVIEWS)} のどれか: {preview!r}"
             )
+        confirm = entry.get("confirm", "ask")
+        if confirm not in PI_ACTION_CONFIRMS:
+            raise SystemExit(f"{where} の confirm は {sorted(PI_ACTION_CONFIRMS)} のどれか: {confirm!r}")
         replaces = entry.get("replaces")
         if (
             not isinstance(replaces, list)
@@ -1943,8 +1950,6 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                         f"{where} の fields.{name}.max_chars は 1–{PI_ACTION_MAX_CHARS} の整数"
                     )
                 points[f"{name}_file" if spec.get("file", False) else name] = name
-                if not spec.get("file", False):
-                    raise SystemExit(f"{where} の fields.{name} (text) は file = true が要る")
             elif kind == "line":
                 if not isinstance(spec.get("content", False), bool):
                     raise SystemExit(f"{where} の fields.{name}.content は真偽値")
@@ -1954,6 +1959,13 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                 points[name] = name
             else:
                 points[name] = name
+        if confirm == "gitflow_start" and (
+            preview != "gitflow_start"
+            or not all(spec.get("type") == "featurename" for spec in fields.values())
+        ):
+            raise SystemExit(
+                f"{where} の confirm = gitflow_start は、preview = gitflow_start と、featurename だけの引数が要る"
+            )
         argv = entry.get("argv")
         if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
             raise SystemExit(f"{where} の argv は空でない文字列の配列")
@@ -1980,6 +1992,7 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                 "fields": {k: dict(v) for k, v in fields.items()},
                 "replaces": list(replaces),
                 "preview": preview,
+                "confirm": confirm,
             }
         )
     return out

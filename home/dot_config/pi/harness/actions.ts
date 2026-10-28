@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
 import { savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
+import { validateFeatureName } from "./gitflow.ts";
+import { gitflowFinishPreview, gitflowStartPreview, leftoverWorktreeHint } from "./gitflow-ops.ts";
 
 export const ACTION_TOOL = "action";
 const NOT_APPROVED = "not approved:";
@@ -20,15 +22,20 @@ const EXEC_TIMEOUT_MS = 120_000;
 const OUTPUT_TAIL_CHARS = 8000;
 const STAT_MAX_CHARS = 4000;
 
-export type FieldSpec = { type: "repo" | "int" | "line" | "text"; file?: boolean; content?: boolean; max_chars?: number };
+export type FieldSpec = { type: "repo" | "int" | "line" | "text" | "featurename"; file?: boolean; content?: boolean; max_chars?: number };
 export type ActionSpec = {
 	id: string;
 	label: string;
 	argv: string[];
 	fields: Record<string, FieldSpec>;
 	replaces: string[];
-	preview: "none" | "git_staged";
+	preview: "none" | "git_staged" | "gitflow_start" | "gitflow_finish";
+	/** 確認の省略。コードの許可リスト (AUTO_CONFIRM) にある操作だけ。既定は確認する */
+	confirm?: "ask" | "gitflow_start";
 };
+
+/** 確認なしで実行してよい操作。設定ではなくコードで決める (名前の型だけを引数に持ち、実効設定の検査を通った git flow の起票だけ) */
+const AUTO_CONFIRM = new Set(["gitflow_feature_start"]);
 
 /** rules.judge.common.pi.actions (配列)。無い・形が違う項目は捨てる (生成器が起動前に検証している) */
 export function loadActions(rules: any): ActionSpec[] {
@@ -82,6 +89,10 @@ export function validateCall(actions: ActionSpec[], input: any): Checked {
 			const n = typeof v === "number" ? v : typeof v === "string" && /^[0-9]+$/.test(v) ? Number(v) : NaN;
 			if (!Number.isInteger(n) || n < 1 || n > INT_MAX) errors.push(`params.${name}: 1〜${INT_MAX} の整数 (受け取った値: ${JSON.stringify(v)})`);
 			else values[name] = String(n);
+		} else if (spec.type === "featurename") {
+			const bad = validateFeatureName(v);
+			if (bad) errors.push(`params.${name}: ${bad}`);
+			else values[name] = v as string;
 		} else if (spec.type === "line") {
 			// 1 行の短い文字列 (issue のタイトルなど)。改行・制御文字を含められない (確認画面と argv の見え方がずれないように)
 			const max = spec.max_chars ?? 256;
@@ -151,9 +162,11 @@ export async function gitStagedPreview(cwd: string): Promise<Preview> {
 	};
 }
 
-const PREVIEWS: Record<string, (cwd: string) => Promise<Preview | null>> = {
+const PREVIEWS: Record<string, (cwd: string, values: Values) => Promise<Preview | null>> = {
 	none: async () => null,
-	git_staged: gitStagedPreview,
+	git_staged: (cwd) => gitStagedPreview(cwd),
+	gitflow_start: async (cwd, values) => gitflowStartPreview(cwd, values),
+	gitflow_finish: async (cwd, values) => gitflowFinishPreview(cwd, values),
 };
 
 function samePreview(a: Preview | null, b: Preview | null): boolean {
@@ -253,13 +266,15 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		if (!previewFn) throw new Error(`未対応の preview: ${action.preview}`);
 		// 退避の対象は git_commit だけ。表示の前に tree を確定し、あとから実のインデックスを読み直さない
 		const snap: Snapshot | null = action.id === "git_commit" ? snapshotStaged(cwd, String(values.message ?? ""), randomUUID()) : null;
-		const preview = await previewFn(cwd);
+		const preview = await previewFn(cwd, values);
 		if (preview && preview.stat === "") throw new Error("ステージ済みの変更が無い。git add してから呼ぶ");
 		// 表示する状態は snapshot と同じでなければならない (取った間に変わったら、表示せずにやり直す)
 		if (snap && preview && (snap.baseHeadOid !== (/^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head : "") || snap.indexId !== preview.indexId)) {
 			throw new Error("状態が変わった (HEAD・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
 		}
-		if (!ctx.hasUI) {
+		// 確認の省略は、コードの許可リストにある操作だけ (子の拒否・判定器・型検証・実効設定の検査は、すでに通っている)
+		const auto = action.confirm === "gitflow_start" && AUTO_CONFIRM.has(action.id);
+		if (!auto && !ctx.hasUI) {
 			if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal);
 			throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");
 		}
@@ -274,7 +289,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 					? `\n\n(${minutes}応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外)`
 					: `\n\n(退避できない状態なので、${minutes}応答が無ければ拒否します)`;
 		const title = `${action.label}\n\n${viewBody(action, values, preview, buildArgv(action, values, files))}${notice}`;
-		const decision = await deps.dialog(async () => {
+		const decision = auto ? ({ kind: "approved" as const, values }) : await deps.dialog(async () => {
 			if (signal?.aborted) return { kind: "aborted" as const };
 			// 不在 (先の確認が時間切れで、そのあと利用者の入力が無い) なら、待たずに退避する
 			if (snap && absence.absent) return { kind: "absent" as const };
@@ -339,7 +354,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		if (!recheck.ok) throw notApproved(`編集後の内容が不正: ${recheck.error}`);
 
 		// 実行の直前に、承認した状態のままか照合する
-		const now = await previewFn(cwd);
+		const now = await previewFn(cwd, values);
 		if (!samePreview(preview, now)) throw new Error("状態が変わった (HEAD・ブランチ・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
 
 		// 承認した内容 (編集した場合は編集後) を書く。承認後に再読みしない
@@ -355,8 +370,10 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		const used = Object.entries(action.fields)
 			.filter(([, s]) => s.content)
 			.map(([n]) => `${n}:\n${values[n]}`);
-		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, `実際に使った最終の内容:\n${used.join("\n\n")}`].filter(Boolean).join("\n\n");
-		return { content: [{ type: "text", text }], details: { action: action.id } };
+		const hint = action.id === "gitflow_feature_finish" ? leftoverWorktreeHint(cwd, values.name) : null;
+		const autoNote = auto ? `確認なしで実行した (${action.id}。対象: ${preview?.stat ?? ""})` : "";
+		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, autoNote, hint, `実際に使った最終の内容:\n${used.join("\n\n")}`].filter(Boolean).join("\n\n");
+		return { content: [{ type: "text", text }], details: { action: action.id, auto } };
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

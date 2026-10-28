@@ -52,6 +52,8 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "session-tmp.ts", harness / "session-tmp.ts")
     shutil.copy2(HARNESS_SRC.parent / "model-choice.ts", harness / "model-choice.ts")
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
+    shutil.copy2(HARNESS_SRC.parent / "gitflow.ts", harness / "gitflow.ts")
+    shutil.copy2(HARNESS_SRC.parent / "gitflow-ops.ts", harness / "gitflow-ops.ts")
     shutil.copy2(HARNESS_SRC.parent / "platform.ts", harness / "platform.ts")
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
     shutil.copy2(COMMIT_MESSAGE_SRC, harness / "commit-message.js")

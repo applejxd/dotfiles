@@ -45,6 +45,8 @@ try:
         "session-tmp.ts",
         "model-choice.ts",
         "pending-store.ts",
+        "gitflow.ts",
+        "gitflow-ops.ts",
         "platform.ts",
         "landlock_exec.py",
         "commit-message.js",

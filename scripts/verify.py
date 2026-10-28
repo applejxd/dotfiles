@@ -96,6 +96,8 @@ _PI_TESTS = (
     "test_pi_model_choice",
     "test_pi_plan_role",
     "test_pi_pending_store",
+    "test_pi_gitflow",
+    "test_pi_gitflow_actions",
     "test_pi_model_catalog",
     "test_pi_scratch_protected",
     "test_pi_session_tmp",

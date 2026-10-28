@@ -1122,6 +1122,61 @@
     "replaces": [
      "git commit"
     ]
+   },
+   {
+    "argv": [
+     "git",
+     "flow",
+     "feature",
+     "start",
+     "{name}",
+     "--worktree",
+     "--no-fetch"
+    ],
+    "confirm": "gitflow_start",
+    "fields": {
+     "name": {
+      "type": "featurename"
+     }
+    },
+    "id": "gitflow_feature_start",
+    "label": "git flow: feature を起票 (develop から worktree を作る)",
+    "preview": "gitflow_start",
+    "replaces": [
+     "git flow feature start"
+    ]
+   },
+   {
+    "argv": [
+     "git",
+     "flow",
+     "feature",
+     "finish",
+     "{name}",
+     "--squash",
+     "--squash-message={message}",
+     "--keepremote",
+     "--no-fetch",
+     "--no-push",
+     "--no-pushtag",
+     "--notag"
+    ],
+    "fields": {
+     "message": {
+      "content": true,
+      "max_chars": 1200,
+      "type": "text"
+     },
+     "name": {
+      "type": "featurename"
+     }
+    },
+    "id": "gitflow_feature_finish",
+    "label": "git flow: feature をクローズ (develop へ squash)",
+    "preview": "gitflow_finish",
+    "replaces": [
+     "git flow feature finish"
+    ]
    }
   ],
   "agents": {
@@ -1448,6 +1503,10 @@
    },
    "implementer": {
     "default": "ask",
+    "shell_deny": [
+     "git flow",
+     "git-flow"
+    ],
     "tools": [
      "bash",
      "read",
@@ -1481,7 +1540,9 @@
      "git checkout",
      "git switch",
      "git restore",
-     "git reset"
+     "git reset",
+     "git flow",
+     "git-flow"
     ],
     "tools": [
      "bash",
