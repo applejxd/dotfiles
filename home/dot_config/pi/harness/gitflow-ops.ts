@@ -28,7 +28,9 @@ function safeContext(cwd: string): { root: string; config: string } {
 	const top = git(cwd, ["rev-parse", "--show-toplevel"]);
 	if (!top.ok || !top.out) throw new Error("git のリポジトリではない");
 	const cfg = git(cwd, ["config", "--get-regexp", "^gitflow\\."]);
-	if (!cfg.ok || !cfg.out) throw new Error("このリポジトリは git flow を使っていない (.gitflow が無い、または未設定)。利用者が `git flow init` を行う");
+	if (!cfg.ok || !cfg.out || !/^gitflow\.initialized /m.test(cfg.out)) {
+		throw new Error("このリポジトリは git flow を使っていない (.gitflow が無い、または未設定)。利用者が `git flow init` を行う");
+	}
 	const profile = checkSafeProfile(parseConfigLines(cfg.out), top.out);
 	if (!profile.ok) throw new Error(`git flow の設定が、安全な構成 (main / develop / feature、squash) に合わない:\n${profile.problems.map((p) => `- ${p}`).join("\n")}`);
 	return { root: top.out, config: cfg.out };
@@ -112,4 +114,24 @@ export function leftoverWorktreeHint(cwd: string, name: string): string | null {
 	return r.out.split("\n").some((l) => l === `worktree ${want}`)
 		? `worktree ${want} が残っている (サンドボックスの内側では、git flow が由来を記録できず、detached HEAD で残る)。利用者が \`git worktree remove .tmp/worktrees/${name}\` で片付ける`
 		: null;
+}
+
+/** feature の worktree の中での git commit か (WIP コミットの確認を省く条件。CHG-0047 の (b))。
+ *  実効設定が安全・現在のブランチが feature/<名前>・linked worktree (本体ではない) の中・実行場所がその feature の worktree そのもの。
+ *  main・develop は、ブランチ名で除かれる */
+export function isFeatureWorktreeCommit(cwd: string): boolean {
+	try {
+		safeContext(cwd);
+	} catch {
+		return false;
+	}
+	const branch = git(cwd, ["symbolic-ref", "--short", "-q", "HEAD"]).out;
+	const m = /^feature\/(.+)$/.exec(branch);
+	if (!m || validateFeatureName(m[1]) !== null) return false;
+	const gitDir = git(cwd, ["rev-parse", "--path-format=absolute", "--git-dir"]).out;
+	const common = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).out;
+	if (!gitDir || !common || gitDir === common) return false;
+	const top = git(cwd, ["rev-parse", "--show-toplevel"]).out;
+	const wt = featureWorktree(cwd, m[1]);
+	return wt !== null && wt === top;
 }

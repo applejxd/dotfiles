@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
 import { savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
 import { validateFeatureName } from "./gitflow.ts";
-import { gitflowFinishPreview, gitflowStartPreview, leftoverWorktreeHint } from "./gitflow-ops.ts";
+import { gitflowFinishPreview, gitflowStartPreview, isFeatureWorktreeCommit, leftoverWorktreeHint } from "./gitflow-ops.ts";
 
 export const ACTION_TOOL = "action";
 const NOT_APPROVED = "not approved:";
@@ -273,7 +273,9 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			throw new Error("状態が変わった (HEAD・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
 		}
 		// 確認の省略は、コードの許可リストにある操作だけ (子の拒否・判定器・型検証・実効設定の検査は、すでに通っている)
-		const auto = action.confirm === "gitflow_start" && AUTO_CONFIRM.has(action.id);
+		// feature の worktree の中の WIP コミットも省略する (条件: gitflow-ops.ts の isFeatureWorktreeCommit)。squash の確認 (finish) で、最終の内容を見る
+		const wip = action.id === "git_commit" && isFeatureWorktreeCommit(cwd);
+		const auto = wip || (action.confirm === "gitflow_start" && AUTO_CONFIRM.has(action.id));
 		if (!auto && !ctx.hasUI) {
 			if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal);
 			throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");
@@ -371,7 +373,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			.filter(([, s]) => s.content)
 			.map(([n]) => `${n}:\n${values[n]}`);
 		const hint = action.id === "gitflow_feature_finish" ? leftoverWorktreeHint(cwd, values.name) : null;
-		const autoNote = auto ? `確認なしで実行した (${action.id}。対象: ${preview?.stat ?? ""})` : "";
+		const autoNote = auto ? (wip ? "確認なしで実行した (feature の worktree の WIP コミット。最終の内容は finish の確認で見る)" : `確認なしで実行した (${action.id}。対象: ${preview?.stat ?? ""})`) : "";
 		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, autoNote, hint, `実際に使った最終の内容:\n${used.join("\n\n")}`].filter(Boolean).join("\n\n");
 		return { content: [{ type: "text", text }], details: { action: action.id, auto } };
 	} finally {

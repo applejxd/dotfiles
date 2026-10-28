@@ -235,3 +235,54 @@ def test_state_changes_after_the_confirmation_stop_the_finish(env, monkeypatch):
     )
     assert results[0][0] is True and "状態が変わった" in results[0][1], results
     assert _fake_args(env) is None
+
+
+def _worktree(env, proj, branch, name="w"):
+    path = env["tmp"] / f"wt-{name}"
+    A._git(proj, "worktree", "add", "-q", "-b", branch, str(path), "develop")
+    return path
+
+
+def _commit_requests(env, cwd):
+    """cwd で git_commit を 1 回呼び、確認の要求の一覧と結果を返す (確認が出たら拒否で答える)。"""
+    A._stage(cwd)
+    env["proj"] = cwd
+    return A._rpc(env, A._call("git_commit", message="wip: a"), lambda req: {"value": A.REJECT})
+
+
+@A.needs_action
+def test_a_wip_commit_in_a_feature_worktree_needs_no_confirmation(env, monkeypatch):
+    proj = _setup(env, monkeypatch)
+    wt = _worktree(env, proj, "feature/w")
+    before = A._head(wt)
+    requests, results = _commit_requests(env, wt)
+    assert A._methods(requests) == [], requests
+    assert results and results[0][0] is False, results
+    assert "確認なしで実行した" in results[0][1]
+    assert A._head(wt) != before
+
+
+@A.needs_action
+@pytest.mark.parametrize("where", ["main_on_develop", "main_on_feature", "linked_other_branch"])
+def test_other_commits_are_still_confirmed(env, monkeypatch, where):
+    proj = _setup(env, monkeypatch)
+    if where == "main_on_develop":
+        cwd = proj
+    elif where == "main_on_feature":
+        A._git(proj, "checkout", "-q", "-b", "feature/m", "develop")
+        cwd = proj
+    else:
+        cwd = _worktree(env, proj, "hotfix/h")
+    before = A._head(cwd)
+    requests, results = _commit_requests(env, cwd)
+    assert A._methods(requests)[:1] == ["select"], requests
+    assert results[0][0] is True and "not approved:" in results[0][1], results
+    assert A._head(cwd) == before
+
+
+@A.needs_action
+def test_an_unsafe_gitflow_config_keeps_the_confirmation_in_a_feature_worktree(env, monkeypatch):
+    proj = _setup(env, monkeypatch, config={**SAFE_CONFIG, "gitflow.feature.finish.push": "true"})
+    wt = _worktree(env, proj, "feature/w")
+    requests, _results = _commit_requests(env, wt)
+    assert A._methods(requests)[:1] == ["select"], requests
