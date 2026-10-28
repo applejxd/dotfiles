@@ -137,6 +137,14 @@ seccomp フィルタは手で `npm install -g` する必要はありません。
   関係なく生成され、実体が無ければ `ocs` が起動を断ります（`mise install` で入れる）
 - Claude Code の sandbox は引き続き `npm:@anthropic-ai/sandbox-runtime` を使います
 
+### git flow（git-flow-next）
+
+`github:gittower/git-flow-next` は、AI が feature の起票・クローズを行う `git flow` の実体です（[CHG-0047](../change/0047-gitflow.md)）。Linux / WSL だけに入れます。
+
+- **版とチェックサムを固定しています**（Fence と同じ）。公式の Releases の `checksums.txt` の値を `platforms.<os>-<arch>.checksum` に写します（`linux-x64` と `linux-arm64`）。上げるときは、`git-flow` が `.git/config` に書く設定の意味が変わりうるので、[実効設定の安全プロファイル](guard/pi-extensions.md#guarded_action承認つきの外部操作)（`harness/gitflow.ts`）と試験を見直す
+- 実体は `git-flow` 1 つ。PATH にあれば `git flow` として動く。AI は bash から直接実行できず、`guarded_action` の `gitflow_*` だけを使う（役割の `shell_deny` が `git flow`・`git-flow` を bypass でも拒否する）
+- リポジトリごとの設定は `.gitflow`（共有）。新しい clone では `git flow config sync` で有効にする。設定は、サンドボックスの外で、利用者が一度だけ行う（`.git/config` を書くため）
+
 ### Windows の pi
 
 Windows の pi は、mise の `aqua:earendil-works/pi`（ビルド済みバイナリ。bun 製、約 230 MB）で導入します。

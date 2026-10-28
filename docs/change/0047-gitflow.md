@@ -21,7 +21,7 @@
 | 1 | 設計の前提を実測で確かめる | 使い捨てのリポジトリで、`git flow` の実体・サンドボックス内での動作・ネットワークと push に当たる操作を確かめる（下の「実装・検証」） | 完了 |
 | 2 | 許可の形を決める | 固定の引数の表（`[[pi.actions]]` の拡張）か、規則の許可か。承認の要否。素の `git` の branch 等は、既定の ask のまま、指示で `git flow` へ誘導する。`review` に見せる | 未着手 |
 | 3 | AI が使える形にする | **第 1 単位（実装済み）**: implementer と worker の `shell_deny` に `git flow`・`git-flow`（bash の直接の実行を、bypass でも拒否）。判定の正解データ（golden）に `start`・`finish`・`list`・`integrate`・`publish` の例を追加。**第 2 単位（実装済み）**: `harness/gitflow.ts`（名前の検証・実効設定の安全プロファイル・固定の引数）、`gitflow-ops.ts`（`start` と `finish` の preview と事前の検査）、`gitflow_feature_start`（確認なし。コードの許可リスト）と `gitflow_feature_finish`（確認あり）の操作と、生成器の `featurename` 型・`confirm`・非ファイルの `text`。試験: `test_pi_gitflow.py`（表）、`test_pi_gitflow_actions.py`（偽の `git-flow` を使う統合 16 件）。**第 3 単位（実装済み）**: feature の worktree の中の WIP コミットの確認の省略（(b)。`isFeatureWorktreeCommit`。条件は、実効設定が安全・`feature/*` のブランチ・linked worktree・その feature の worktree 自身）。本体の `develop`・本体で checkout した feature・feature 以外の worktree・危険な設定では、確認が残ることを試験。`gitflow.initialized` が無いときは「`git flow` を使っていない」の 1 行にした。**残り**: 残った worktree の片付け（`finish` の記録に基づく）・`abort`（確認あり）・`finish` の hook とスタンプの確認・実機（サンドボックスの内側で、feature の worktree から）。bypass で `git branch -D` などが通る穴（CHG-0041 の持ち越し）も、ここで塞ぐ | 未着手 |
-| 4 | このリポジトリを切り替える | `develop` と `.gitflow` の作成、検査のスタンプの基準・CI のトリガー・`commit` スキル・docs の更新 | 未着手 |
+| 4 | このリポジトリを切り替える | `develop` と `.gitflow` の作成、検査のスタンプの基準・CI のトリガー・`commit` スキル・docs の更新。**コード側は実装済み**（`mise` の導入・`scripts/gitflow-setup.sh`・スタンプの基準・CI・`commit` スキル・docs）。**残り（利用者の操作）**: `scripts/gitflow-setup.sh` の実行と `.gitflow` のコミット、`develop` の push、実機での `start`・`finish` の確認。chezmoi のソースは `develop`（利用者の選択） | 進行中 |
 | 5 | 並列開発の運用 | feature ごとの worktree で、pi を並列に動かす。`.tmp/`・スタンプ・サンドボックスの扱い | 未着手 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
@@ -227,6 +227,7 @@
 
 | 日付 | 更新 | 理由・証拠 |
 | --- | --- | --- |
+| 2026-10-28 | **`pis`（サンドボックス）の優先度を下げた**。利用者は、`pis` でも使いたいが使い勝手がまだ良くないので、当面はフルガードだけの `pi` が主。したがって、サンドボックスの内側で `finish` の後に残る worktree の片付け（`finish` の記録に基づく操作）と `abort` は、段 3 の残りのうち後回しにする（`pis` を主に使うようになったときに実装する）。chezmoi のソースは `develop`（利用者の選択） | 利用者の発言 |
 | 2026-10-28 | **段 2 の設計の `review`（`gpt-6.1-sol`）を反映**（BLOCKER 1・MAJOR 6）。実効設定（`finish.push` など）で固定の引数の意味が変わる点を、公式の資料で確認し、`--no-push --no-pushtag` の固定と、実効設定の安全プロファイル・`git flow` の書き込みの直接実行の拒否・「`finish` の記録」に基づく片付け・`finish` 専用の preview・確認の省略をコードの許可リストに限る、を追加。WIP コミットは利用者が (b) を選択（条件が実装できるまでは (a)） | 上の「許可の形の設計の修正」 |
 | 2026-10-28 | **段 1 の実測（主な項目）**。git-flow-next v2.1.0 を `$TMPDIR` に入れて、使い捨てのリポジトリで確認。squash・worktree（相対パス）・integrate・ネットワークなし（`--no-fetch`）は期待どおり。**`start` が `.git/config` を書くので、サンドボックスの内側では警告つきで動き、`finish` の後に worktree が detached で残る**。設定は利用者が外で行う、残る worktree を固定の操作で片付ける、を設計に反映 | 上の「実装・検証」 |
 | 2026-10-28 | **モデルをリポジトリごとの設定にした**。共通は「許可の仕組み」（操作の種類と危険な引数の除外）、モデルは `.gitflow`、設定が無ければ AI はブランチを切らない。素の `git` の branch 等は、全リポジトリでの deny をやめ、既定の ask のまま指示で誘導する（利用者の選択） | 利用者の指摘（プロジェクトによってブランチモデルが違う。GitHub を使うとは限らない） |

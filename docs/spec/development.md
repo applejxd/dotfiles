@@ -124,7 +124,7 @@ hook ごとの所要時間は [開発ガイドの実測メモ](../research/testi
 コミットは通す**（終了コードは常に 0）。push 時には `verify-stamp-push` hook
 （`check-push`）が、pre-commit が渡す `PRE_COMMIT_FROM_REF` と `PRE_COMMIT_TO_REF`（push する範囲）の
 変更 (`git diff --raw` の追加・変更。削除は除く) を同じ仕組みで照合し、「push するコミット」として警告する
-（常に 0）。FROM が無い・全ゼロ（新しいブランチ）のときは `origin/main` との merge-base から見る。
+（常に 0）。FROM が無い・全ゼロ（新しいブランチ）のときは、`origin/develop`（あれば。gitflow の feature の親）、無ければ `origin/main` との merge-base から見る。
 それも無ければ何も言わない。
 
 - 残すもの: `{version, head, created, entries: {パス: [mode, blob]}}` の JSON。実 index・refs・作業ツリーは
@@ -303,6 +303,15 @@ chezmoi apply --exclude=scripts
 
 恒久的に無効化する場合は、対象ファイルの `run_` 属性を外すか削除する。
 `.tmpl` は実行属性ではないため、拡張子だけを外しても無効化されない。
+
+## ブランチモデル（gitflow-lite）
+
+このリポジトリは、`main`（リリース。他のマシンの `chezmoi update` が見る）・`develop`（統合。この PC の chezmoi のソースが指す）・`feature/<名前>`（作業。専用の worktree）で運用する（[CHG-0047](../change/0047-gitflow.md)）。`release`・`hotfix` は使わない。
+
+- **feature**: AI は `guarded_action` の `gitflow_feature_start` で起票し（確認なし）、feature の worktree（`.tmp/worktrees/<名前>`）の中で細かくコミットし（確認なし。[`git_commit` の確認の省略](guard/pi-extensions.md#guarded_action承認つきの外部操作)）、`gitflow_feature_finish` でクローズする（確認あり。develop へ squash の 1 コミット）。`finish` は、develop が checked out の本体の作業ツリーで行う
+- **main へ**: 検証（`mise run verify:all`）の後、利用者が `git flow integrate develop` で `develop` を `main` に merge し、`push` する。AI は `integrate` と `push` を行わない
+- **設定**: 共有の `.gitflow`（`gitflow.worktreePath` を含む）を、`scripts/gitflow-setup.sh` で作る・取り込む。**サンドボックスの外で、利用者が一度だけ**行う（`.git/config` を書くため）。新しい clone や別のマシンでは、同じスクリプトで `git flow config sync` する
+- **検査**: スタンプは worktree ごと。push の基準は `origin/develop`（あれば）、無ければ `origin/main`。CI は `main` と `develop` への push と、全ての pull request で動く
 
 ## 作業ツリーの一時領域（`.tmp/`）
 

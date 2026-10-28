@@ -44,7 +44,7 @@ agent テストでは生成された matcher と実 hook の判定を両方確�
 
 `.github/workflows/linux.yml` が `ubuntu-24.04` の素の runner で pytest の全件を回す
 （`uv run … pytest test/ -n auto --dist worksteal`。`scripts/verify.py` の全件と同じ並列の設定）。
-`main` への push、`pull_request`、手動実行で起動する。chezmoi を入れる（無いとテンプレートの試験が
+`main` と `develop` への push、`pull_request`、手動実行で起動する。chezmoi を入れる（無いとテンプレートの試験が
 モジュールごと skip）。`pi`・`mise`・`zsh` などが無いと skip される試験は skip のまま。
 
 素の runner の近似（空の `HOME`・最小の `PATH`・git の identity なし）で全件を回した結果は
