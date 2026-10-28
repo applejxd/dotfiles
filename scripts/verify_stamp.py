@@ -141,7 +141,8 @@ def _is_commit(repo: Path, ref: str) -> bool:
 def pushed(repo: Path, from_ref: str | None, to_ref: str | None) -> Entries | None:
     """push する範囲の追加・変更の path → [mode, blob]。範囲が決められなければ None。
 
-    from_ref が無い・全ゼロ・存在しない (新しいブランチ) ときは origin/main との merge-base から。
+    from_ref が無い・全ゼロ・存在しない (新しいブランチ) ときは、origin/develop (あれば。gitflow の feature の親)、
+    無ければ origin/main との merge-base から。
     to_ref が無い・全ゼロ (ブランチの削除) ときは None。
     """
     repo = Path(repo)
@@ -149,8 +150,13 @@ def pushed(repo: Path, from_ref: str | None, to_ref: str | None) -> Entries | No
         return None
     base = from_ref if from_ref and set(from_ref) != {"0"} and _is_commit(repo, from_ref) else None
     if base is None:
-        proc = _git(repo, "merge-base", "origin/main", to_ref, check=False)
-        base = proc.stdout.decode().strip() if proc.returncode == 0 else None
+        for parent in ("origin/develop", "origin/main"):
+            if not _is_commit(repo, parent):
+                continue
+            proc = _git(repo, "merge-base", parent, to_ref, check=False)
+            base = proc.stdout.decode().strip() if proc.returncode == 0 else None
+            if base:
+                break
     if not base:
         return None
     raw = _git(repo, "diff", "--raw", "--no-renames", "--no-abbrev", "-z", base, to_ref).stdout

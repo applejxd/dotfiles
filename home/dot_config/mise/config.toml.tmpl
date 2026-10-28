@@ -86,6 +86,15 @@ aws-cli = "latest"
 
 {{- if eq .chezmoi.os "linux" }}
 
+# git flow (git-flow-next)。AI が feature を起票・クローズする道具。版とチェックサムを固定する
+# (docs/spec/cli-management.md#git-flowgit-flow-next, docs/change/0047-gitflow.md)
+[tools."github:gittower/git-flow-next"]
+version = "2.1.0"
+
+[tools."github:gittower/git-flow-next".platforms]
+linux-x64 = { asset_pattern = "git-flow-next-v*-linux-amd64.tar.gz", checksum = "sha256:e335b5818f2b2f820c17844c194030d0db78f3cdfa9bb999fcb9ce092ba9ecd2" }
+linux-arm64 = { asset_pattern = "git-flow-next-v*-linux-arm64.tar.gz", checksum = "sha256:aea866eb7f9287aedf65795251ef3f556b4c7b677d3aa201f2089ec8ee4166eb" }
+
 # OpenCode の隔離起動 (ocs) の境界。版とチェックサムを固定する
 # (docs/spec/cli-management.md#mise-による-cli-管理)
 [tools."github:fencesandbox/fence"]

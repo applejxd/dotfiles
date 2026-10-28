@@ -315,6 +315,21 @@ def test_push_new_branch_uses_merge_base_with_origin_main(repo, capsys):
     assert "a.txt" in err
 
 
+def test_push_new_branch_prefers_origin_develop_over_origin_main(repo, capsys):
+    # gitflow: feature の親は develop。develop が main より進んでいても、feature の範囲だけを見る
+    git(repo, "update-ref", "refs/remotes/origin/main", head(repo))
+    (repo / "dev.txt").write_text("dev\n")
+    develop = commit_all(repo)
+    git(repo, "update-ref", "refs/remotes/origin/develop", develop)
+    stamp.write_stamp(repo)
+    (repo / "a.txt").write_text("two\n")
+    tip = commit_all(repo)
+    entries = stamp.pushed(repo, "0" * 40, tip)
+    assert set(entries) == {"a.txt"}
+    code, err = run_check_push(repo, capsys, "0" * 40, tip)
+    assert code == 0 and "dev.txt" not in err
+
+
 def test_push_deleted_branch_and_deleted_files_are_silent(repo, capsys):
     base = head(repo)
     code, err = run_check_push(repo, capsys, base, "0" * 40)

@@ -4,7 +4,7 @@ name: linux
 # skip される試験は skip のまま。see docs/spec/testing.md#linux-の-github-actions
 "on":
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
   workflow_dispatch:
 
