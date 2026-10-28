@@ -5,8 +5,8 @@ set -euo pipefail
 {{ template "sudo-keepalive.sh.tmpl" . }}
 start_sudo_keepalive
 
-# 起動時の音をミュート
-sudo nvram StartupMute=%01
+# 起動時の音をミュート (Apple Silicon では拒否されうる。失敗しても残りの設定を続ける)
+sudo nvram StartupMute=%01 || echo "⚠️ nvram StartupMute を設定できませんでした (飛ばします)" >&2
 
 #----------#
 # defaults #
@@ -40,22 +40,22 @@ defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Blueto
 defaults write com.apple.controlcenter "NSStatusItem Visible Sound" -bool true
 defaults write ~/Library/Preferences/ByHost/com.apple.controlcenter.plist Sound -int 18
 
-killall SystemUIServer
+killall SystemUIServer || true
 
 # 「新規 Finder ウィンドウでホームを表示」
 # see https://gist.github.com/ChristopherA/98628f8cd00c94f11ee6035d53b0d3c6
 defaults write com.apple.finder NewWindowTarget -string "PfHm"
 
-killall Finder
+killall Finder || true
 
 # 「"Siri に頼む"を無効にする」
 defaults write com.apple.assistant.support.plist "Assistant Enabled" -bool false
 # 「メニューバーに Siri を非表示」
 defaults write com.apple.Siri StatusMenuVisible -bool false
 
-# 「Dock」->「画面上の位置」->「右」
+# 「Dock」->「画面上の位置」->「左」
 defaults write com.apple.dock orientation -string left
-killall Dock
+killall Dock || true
 
 # 「Mac を自動的に最新の状態に保つ」
 # defaults write com.apple.SoftwareUpdate ScheduleFrequency -int 1

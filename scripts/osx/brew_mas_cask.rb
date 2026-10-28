@@ -22,7 +22,7 @@ mas "GoodNotes 5", id: 1444383602
 #-------#
 
 # Cask for Mac App
-tap "homebrew/cask"
+# (tap "homebrew/cask" と "homebrew/cask-fonts" は廃止済みで、tap すると失敗する。cask は core に統合)
 
 # Homebrew GUI manager
 cask "cakebrew"
@@ -66,7 +66,6 @@ cask "jetbrains-toolbox"
 cask "microsoft-remote-desktop"
 
 # Fonts
-tap "homebrew/cask-fonts"
 cask "font-hack-nerd-font"
 
 # Environments
