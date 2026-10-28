@@ -2,9 +2,10 @@
 // 実効設定が安全プロファイルに合わなければ、操作の前に止める。see docs/change/0047-gitflow.md
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
 import { checkSafeProfile, parseConfigLines, validateFeatureName } from "./gitflow.ts";
+import { matchesReadDeny } from "./judge/policy.ts";
 
 export type GitflowPreview = { branch: string; head: string; indexId: string; stat: string };
 
@@ -134,4 +135,52 @@ export function isFeatureWorktreeCommit(cwd: string): boolean {
 	const top = git(cwd, ["rev-parse", "--show-toplevel"]).out;
 	const wt = featureWorktree(cwd, m[1]);
 	return wt !== null && wt === top;
+}
+
+/** WIP コミットの対象の worktree。feature/<name> が checked out の、本体の .tmp/worktrees/ の下の linked worktree だけ
+ *  (シンボリックリンクを辿らない。ほかの worktree や、手で作った場所は拒否) */
+export function resolveFeatureWorktree(cwd: string, name: string): string {
+	const bad = validateFeatureName(name);
+	if (bad) throw new Error(`name: ${bad}`);
+	const common = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+	if (!common.ok || !common.out) throw new Error("git のリポジトリではない");
+	const root = dirname(common.out); // 本体の作業ツリー (.git の親)
+	const wt = featureWorktree(cwd, name);
+	if (!wt) throw new Error(`feature/${name} の worktree が無い (gitflow_feature_start で起票する)`);
+	const base = join(root, ".tmp", "worktrees") + sep;
+	let real: string;
+	try {
+		real = realpathSync(wt);
+	} catch {
+		throw new Error(`worktree ${wt} を調べられない`);
+	}
+	if (real !== resolve(wt) || !real.startsWith(base)) throw new Error(`worktree ${wt} は、本体の .tmp/worktrees/ の下の、リンクでない場所ではない`);
+	return real;
+}
+
+export type ReadDenyLike = { globs: string[]; exceptions: any[] };
+
+/** WIP コミットの preview: 実効設定・feature の worktree の条件・保護対象のパスを検査してから、`git add -A` で全部をステージする。
+ *  ステージ済みが空なら止める。**ステージする (書き込む) のは、検査を通ったあとだけ** */
+export function gitflowCommitPreview(cwd: string, values: Record<string, string>, readDeny: ReadDenyLike | null): GitflowPreview {
+	nameOf(values);
+	if (!isFeatureWorktreeCommit(cwd)) throw new Error("feature の worktree の中で、実効設定が安全なときだけ、WIP コミットできる");
+	if (!readDeny || readDeny.globs.length === 0) throw new Error("保護対象のパスの一覧が無いので、まとめてステージできない");
+	// これからステージされるもの = 未追跡 (ignored を除く) + 追跡済みの変更
+	const nul = (s: string) => s.split("\0").filter(Boolean);
+	const untracked = git(cwd, ["ls-files", "-z", "--others", "--exclude-standard"]);
+	const tracked = git(cwd, ["diff-index", "--name-only", "--no-renames", "-z", "HEAD"]);
+	if (!untracked.ok || !tracked.ok) throw new Error("変更の一覧を取れない");
+	const raw = (a: { out: string }) => a.out;
+	const all = [...new Set([...nul(raw(untracked)), ...nul(raw(tracked))])];
+	const hits = all.filter((rel) => matchesReadDeny(rel, readDeny.globs, readDeny.exceptions) ?? matchesReadDeny(join(cwd, rel), readDeny.globs, readDeny.exceptions));
+	if (hits.length > 0) throw new Error(`保護対象のパスが変更に含まれるので、まとめてステージしない (内容は読んでいない): ${hits.slice(0, 5).join(", ")}`);
+	const add = git(cwd, ["add", "-A"]);
+	if (!add.ok) throw new Error("ステージに失敗した");
+	const stat = git(cwd, ["diff", "--cached", "--stat", "--no-ext-diff"]).out;
+	if (!stat) throw new Error("コミットする変更が無い");
+	const branch = git(cwd, ["symbolic-ref", "--short", "-q", "HEAD"]).out;
+	const head = git(cwd, ["rev-parse", "HEAD"]).out;
+	const idx = git(cwd, ["ls-files", "-s"]).out;
+	return { branch, head, indexId: sha(idx, head), stat };
 }

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
 import { reconcilePending, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
 import { validateFeatureName } from "./gitflow.ts";
-import { gitflowFinishPreview, gitflowStartPreview, isFeatureWorktreeCommit, leftoverWorktreeHint } from "./gitflow-ops.ts";
+import { gitflowCommitPreview, gitflowFinishPreview, gitflowStartPreview, isFeatureWorktreeCommit, leftoverWorktreeHint, resolveFeatureWorktree, type ReadDenyLike } from "./gitflow-ops.ts";
 
 export const ACTION_TOOL = "action";
 const NOT_APPROVED = "not approved:";
@@ -29,13 +29,13 @@ export type ActionSpec = {
 	argv: string[];
 	fields: Record<string, FieldSpec>;
 	replaces: string[];
-	preview: "none" | "git_staged" | "gitflow_start" | "gitflow_finish";
+	preview: "none" | "git_staged" | "gitflow_start" | "gitflow_finish" | "gitflow_commit";
 	/** 確認の省略。コードの許可リスト (AUTO_CONFIRM) にある操作だけ。既定は確認する */
-	confirm?: "ask" | "gitflow_start";
+	confirm?: "ask" | "gitflow_start" | "gitflow_wip";
 };
 
 /** 確認なしで実行してよい操作。設定ではなくコードで決める (名前の型だけを引数に持ち、実効設定の検査を通った git flow の起票だけ) */
-const AUTO_CONFIRM = new Set(["gitflow_feature_start"]);
+const AUTO_CONFIRM = new Set(["gitflow_feature_start", "gitflow_feature_commit"]);
 
 /** rules.judge.common.pi.actions (配列)。無い・形が違う項目は捨てる (生成器が起動前に検証している) */
 export function loadActions(rules: any): ActionSpec[] {
@@ -191,6 +191,8 @@ export type ActionDeps = {
 	/** 確認の枠は 1 つなので、対話 (select・editor・input) は 1 件ずつこの中で行う */
 	dialog: <T>(fn: () => Promise<T>) => Promise<T>;
 	bell: () => void;
+	/** 保護対象のパスの一覧 (gitflow_feature_commit が、まとめてステージする前に検査する) */
+	readDeny?: () => ReadDenyLike;
 	/** 利用者が不在と分かった状態 (確認が時間切れ)。セッションごと。入力の世代 gen は、利用者の入力のたびに進む (index.ts) */
 	absence?: { absent: boolean; gen: number };
 };
@@ -255,14 +257,19 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 	if (!checked.ok) throw new Error(checked.error);
 	const { action } = checked;
 	let values = checked.values;
-	const cwd: string = ctx.cwd;
+	let cwd: string = ctx.cwd;
 
 	const fileFields = Object.entries(action.fields).filter(([, s]) => s.type === "text" && s.file === true);
 	const dir = mkdtempSync(join(tmpdir(), "pi-action-")); // 0700
 	try {
 		const files: Record<string, string> = {};
 		for (const [name] of fileFields) files[name] = join(dir, `${name}.txt`);
-		const previewFn = PREVIEWS[action.preview];
+		// WIP コミットは、feature の worktree の中で行う (cwd をその worktree にする。検査は resolveFeatureWorktree と preview)
+		if (action.preview === "gitflow_commit") cwd = resolveFeatureWorktree(cwd, values.name);
+		const previewFn =
+			action.preview === "gitflow_commit"
+				? async (c: string, v: Values) => gitflowCommitPreview(c, v, deps.readDeny ? deps.readDeny() : null)
+				: PREVIEWS[action.preview];
 		if (!previewFn) throw new Error(`未対応の preview: ${action.preview}`);
 		// 退避の対象は git_commit だけ。表示の前に tree を確定し、あとから実のインデックスを読み直さない
 		const snap: Snapshot | null = action.id === "git_commit" ? snapshotStaged(cwd, String(values.message ?? ""), randomUUID()) : null;
@@ -275,7 +282,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		// 確認の省略は、コードの許可リストにある操作だけ (子の拒否・判定器・型検証・実効設定の検査は、すでに通っている)
 		// feature の worktree の中の WIP コミットも省略する (条件: gitflow-ops.ts の isFeatureWorktreeCommit)。squash の確認 (finish) で、最終の内容を見る
 		const wip = action.id === "git_commit" && isFeatureWorktreeCommit(cwd);
-		const auto = wip || (action.confirm === "gitflow_start" && AUTO_CONFIRM.has(action.id));
+		const auto = wip || ((action.confirm === "gitflow_start" || action.confirm === "gitflow_wip") && AUTO_CONFIRM.has(action.id));
 		if (!auto && !ctx.hasUI) {
 			if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal);
 			throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");

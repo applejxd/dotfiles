@@ -1859,9 +1859,16 @@ JUDGE_CHECKS = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness
 PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds"})
 PI_CONFIRM_TIMEOUT_DEFAULT = 300
 PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview", "confirm"})
-PI_ACTION_PREVIEWS = frozenset({"none", "git_staged", "gitflow_start", "gitflow_finish"})
+PI_ACTION_PREVIEWS = frozenset(
+    {"none", "git_staged", "gitflow_start", "gitflow_finish", "gitflow_commit"}
+)
 # 確認の省略 (confirm) は、コードの許可リスト (actions.ts の AUTO_CONFIRM) にある組だけ。名前の型だけを引数に持つこと
-PI_ACTION_CONFIRMS = frozenset({"ask", "gitflow_start"})
+# confirm -> (必要な preview, 引数の型の集合)
+PI_ACTION_CONFIRM_RULES = {
+    "gitflow_start": ("gitflow_start", {"featurename"}),
+    "gitflow_wip": ("gitflow_commit", {"featurename", "text"}),
+}
+PI_ACTION_CONFIRMS = frozenset({"ask", *PI_ACTION_CONFIRM_RULES})
 PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "line", "text", "featurename"})
 PI_ACTION_FIELD_KEYS = {
     "repo": frozenset({"type"}),
@@ -1913,7 +1920,9 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
             )
         confirm = entry.get("confirm", "ask")
         if confirm not in PI_ACTION_CONFIRMS:
-            raise SystemExit(f"{where} の confirm は {sorted(PI_ACTION_CONFIRMS)} のどれか: {confirm!r}")
+            raise SystemExit(
+                f"{where} の confirm は {sorted(PI_ACTION_CONFIRMS)} のどれか: {confirm!r}"
+            )
         replaces = entry.get("replaces")
         if (
             not isinstance(replaces, list)
@@ -1959,13 +1968,15 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                 points[name] = name
             else:
                 points[name] = name
-        if confirm == "gitflow_start" and (
-            preview != "gitflow_start"
-            or not all(spec.get("type") == "featurename" for spec in fields.values())
-        ):
-            raise SystemExit(
-                f"{where} の confirm = gitflow_start は、preview = gitflow_start と、featurename だけの引数が要る"
-            )
+        if confirm != "ask":
+            need_preview, need_types = PI_ACTION_CONFIRM_RULES[confirm]
+            if preview != need_preview or not all(
+                spec.get("type") in need_types for spec in fields.values()
+            ):
+                raise SystemExit(
+                    f"{where} の confirm = {confirm} は、preview = {need_preview} と、"
+                    f"{sorted(need_types)} の型の引数だけが要る"
+                )
         argv = entry.get("argv")
         if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
             raise SystemExit(f"{where} の argv は空でない文字列の配列")
@@ -1981,7 +1992,13 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                         f"{where} の argv の置換点 {{{point}}} に対応するフィールドが無い"
                     )
                 used.add(points[point])
-        missing = sorted(set(fields) - used)
+        # gitflow_commit の featurename は、実行する worktree を選ぶ (argv には現れない)
+        selectors = {
+            n
+            for n, s in fields.items()
+            if preview == "gitflow_commit" and s.get("type") == "featurename"
+        }
+        missing = sorted(set(fields) - used - selectors)
         if missing:
             raise SystemExit(f"{where} の必須フィールドが argv に現れない: {', '.join(missing)}")
         out.append(

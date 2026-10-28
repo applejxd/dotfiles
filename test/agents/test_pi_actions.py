@@ -145,9 +145,10 @@ def test_rules_json_carries_the_actions():
         "gh_issue_edit_title",
         "git_commit",
         "gitflow_feature_start",
+        "gitflow_feature_commit",
         "gitflow_feature_finish",
     ]
-    comment, edit_body, edit_title, commit, gf_start, gf_finish = actions
+    comment, edit_body, edit_title, commit, gf_start, gf_commit, gf_finish = actions
     assert edit_body["argv"] == [
         "gh",
         "issue",
@@ -199,6 +200,9 @@ def test_rules_json_carries_the_actions():
     assert gf_start["confirm"] == "gitflow_start" and gf_start["preview"] == "gitflow_start"
     assert gf_start["fields"] == {"name": {"type": "featurename"}}
     assert gf_finish["confirm"] == "ask" and gf_finish["preview"] == "gitflow_finish"
+    assert gf_commit["confirm"] == "gitflow_wip" and gf_commit["preview"] == "gitflow_commit"
+    assert gf_commit["argv"] == ["git", "commit", "--message={message}"]
+    assert set(gf_commit["fields"]) == {"name", "message"}
     for flag in ("--squash", "--keepremote", "--no-fetch", "--no-push", "--no-pushtag", "--notag"):
         assert flag in gf_finish["argv"]
     for argv in (gf_start["argv"], gf_finish["argv"]):

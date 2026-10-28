@@ -482,6 +482,7 @@ export default async function (pi: ExtensionAPI) {
 						},
 						dialog: dialogInOrder,
 						absence,
+						readDeny: buildReadDeny,
 						bell: () => {
 							if (ctx.mode === "tui") process.stdout.write("\x07");
 						},

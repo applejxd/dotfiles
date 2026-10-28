@@ -1017,6 +1017,18 @@ confirm = "gitflow_start"
 [pi.actions.fields]
 name = { type = "featurename" }
 
+# feature の worktree の WIP コミット。worktree の中で git add -A (保護対象のパスがあれば止める) して commit する。確認なし
+[[pi.actions]]
+id = "gitflow_feature_commit"
+label = "git flow: feature の worktree で WIP コミット (git add -A して commit)"
+argv = ["git", "commit", "--message={message}"]
+replaces = ["git flow feature commit"]
+preview = "gitflow_commit"
+confirm = "gitflow_wip"
+[pi.actions.fields]
+name = { type = "featurename" }
+message = { type = "text", content = true, max_chars = 1200 }
+
 [[pi.actions]]
 id = "gitflow_feature_finish"
 label = "git flow: feature をクローズ (develop へ squash)"

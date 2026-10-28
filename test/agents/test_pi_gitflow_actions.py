@@ -31,6 +31,18 @@ GITFLOW_ACTIONS = [
         "confirm": "gitflow_start",
     },
     {
+        "id": "gitflow_feature_commit",
+        "label": "git flow: feature の worktree で WIP コミット",
+        "argv": ["git", "commit", "--message={message}"],
+        "fields": {
+            "name": {"type": "featurename"},
+            "message": {"type": "text", "content": True, "max_chars": 1200},
+        },
+        "replaces": ["git flow feature commit"],
+        "preview": "gitflow_commit",
+        "confirm": "gitflow_wip",
+    },
+    {
         "id": "gitflow_feature_finish",
         "label": "git flow: feature をクローズ",
         "argv": [
@@ -376,3 +388,91 @@ def test_the_whole_feature_cycle_with_the_real_git_flow(env, monkeypatch):
         "f1.txt",
         "f2.txt",
     ]
+
+
+def _feature_worktree(env, proj, name="w"):
+    """feature/<name> の worktree を、本体の .tmp/worktrees/ の下に作る (git flow の start と同じ置き場)。"""
+    path = proj / ".tmp" / "worktrees" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    A._git(proj, "worktree", "add", "-q", "-b", f"feature/{name}", str(path), "develop")
+    return path
+
+
+def _wip(env, name="w", message="wip: a"):
+    return A._rpc(
+        env,
+        A._call("gitflow_feature_commit", name=name, message=message),
+        lambda req: {"value": A.REJECT},
+    )
+
+
+@A.needs_action
+def test_a_wip_commit_action_stages_everything_and_commits_in_the_feature_worktree(
+    env, monkeypatch
+):
+    proj = _setup(env, monkeypatch)
+    wt = _feature_worktree(env, proj)
+    (wt / "new.txt").write_text("n\n", encoding="utf-8")
+    (wt / "base.txt").write_text("changed\n", encoding="utf-8")
+    main_head = A._head(proj)
+    before = A._head(wt)
+    requests, results = _wip(env)
+    # 本体の pi から、確認なしで動く
+    assert A._methods(requests) == [], requests
+    assert results[0][0] is False and "確認なしで実行した" in results[0][1], results
+    assert A._head(wt) != before
+    assert A._head(proj) == main_head
+    assert sorted(A._git(wt, "show", "--name-only", "--format=", "HEAD").split()) == [
+        "base.txt",
+        "new.txt",
+    ]
+    assert A._git(wt, "log", "-1", "--format=%s").strip() == "wip: a"
+
+
+@A.needs_action
+def test_a_wip_commit_never_stages_a_protected_file(env, monkeypatch):
+    proj = _setup(env, monkeypatch)
+    wt = _feature_worktree(env, proj)
+    (wt / "ok.txt").write_text("ok\n", encoding="utf-8")
+    (wt / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    before = A._head(wt)
+    _requests, results = _wip(env)
+    assert results[0][0] is True and "保護対象" in results[0][1], results
+    assert A._head(wt) == before
+    assert A._git(wt, "diff", "--cached", "--name-only").strip() == ""  # ステージもしない
+
+
+@A.needs_action
+def test_a_wip_commit_without_changes_or_with_an_unsafe_config_is_refused(env, monkeypatch):
+    proj = _setup(env, monkeypatch)
+    _feature_worktree(env, proj)
+    _requests, results = _wip(env)
+    assert results[0][0] is True and "変更が無い" in results[0][1], results
+
+
+@A.needs_action
+def test_a_wip_commit_is_refused_when_the_config_is_unsafe(env, monkeypatch):
+    proj = _setup(env, monkeypatch, config={**SAFE_CONFIG, "gitflow.feature.finish.push": "true"})
+    wt = _feature_worktree(env, proj)
+    (wt / "x.txt").write_text("x\n", encoding="utf-8")
+    _requests, results = _wip(env)
+    assert results[0][0] is True, results
+    assert A._git(wt, "diff", "--cached", "--name-only").strip() == ""
+
+
+@A.needs_action
+def test_a_wip_commit_needs_a_real_feature_worktree_under_the_main_one(env, monkeypatch):
+    proj = _setup(env, monkeypatch)
+    # 名前の feature が無い
+    _requests, results = _wip(env, name="nope")
+    assert results[0][0] is True and "worktree が無い" in results[0][1], results
+    # 手で作った、.tmp/worktrees/ の外の worktree
+    outside = env["tmp"] / "outside-wt"
+    A._git(proj, "worktree", "add", "-q", "-b", "feature/o", str(outside), "develop")
+    (outside / "x.txt").write_text("x\n", encoding="utf-8")
+    _requests, results = _wip(env, name="o")
+    assert results[0][0] is True and ".tmp/worktrees" in results[0][1], results
+    assert A._git(outside, "diff", "--cached", "--name-only").strip() == ""
+    # 不正な名前
+    _requests, results = _wip(env, name="--help")
+    assert results[0][0] is True and "name" in results[0][1], results

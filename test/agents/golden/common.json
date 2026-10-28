@@ -1149,6 +1149,30 @@
    {
     "argv": [
      "git",
+     "commit",
+     "--message={message}"
+    ],
+    "confirm": "gitflow_wip",
+    "fields": {
+     "message": {
+      "content": true,
+      "max_chars": 1200,
+      "type": "text"
+     },
+     "name": {
+      "type": "featurename"
+     }
+    },
+    "id": "gitflow_feature_commit",
+    "label": "git flow: feature の worktree で WIP コミット (git add -A して commit)",
+    "preview": "gitflow_commit",
+    "replaces": [
+     "git flow feature commit"
+    ]
+   },
+   {
+    "argv": [
+     "git",
      "flow",
      "feature",
      "finish",
