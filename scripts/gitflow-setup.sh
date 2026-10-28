@@ -11,11 +11,16 @@ if ! command -v git-flow >/dev/null 2>&1; then
 fi
 cd "$(git rev-parse --show-toplevel)"
 
-# 旧実装 (nvie / avh) の名残のキー。git-flow-next の設定と混ざり、安全な構成の検査で拒否されるので消す
+# 旧実装 (nvie / avh) の名残のキー。git-flow-next の設定と混ざり、安全な構成の検査で拒否されるので消す。
+# ここで消せるのはこのリポジトリのもの。グローバルの ~/.gitconfig に同じキー (gitflow.branch.master) が
+# 残っていても検査で拒否される。そのキーは dot_gitconfig.tmpl から消してあるので、chezmoi apply で反映する
 for key in master develop feature release hotfix support versiontag; do
 	git config --unset-all "gitflow.branch.$key" 2>/dev/null || true
 	git config --unset-all "gitflow.prefix.$key" 2>/dev/null || true
 done
+if git config --global --get gitflow.branch.master >/dev/null 2>&1; then
+	echo "注意: ~/.gitconfig に gitflow.branch.master が残っている。chezmoi apply で ~/.gitconfig を更新する" >&2
+fi
 
 if [ -f .gitflow ]; then
 	# 共有の設定がある: 取り込むだけ
