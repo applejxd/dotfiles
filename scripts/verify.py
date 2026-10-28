@@ -327,6 +327,7 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule("検証の入口", ("scripts/verify.py",), ("test_verify", "test_verify_stamp")),
     Rule("検証の印", ("scripts/verify_stamp.py",), ("test_verify_stamp",)),
+    Rule("並列実装の混線の検査", ("scripts/parallel_check.py",), ("test_parallel_check",)),
     Rule("model-eval", ("scripts/model-eval/**",), ("test_model_eval",)),
     Rule(
         "shell 設定",

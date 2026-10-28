@@ -162,3 +162,44 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 - **隔離の worktree の作成と回収は、ハーネスが内部で `git` を実行する**（判定器を通らない）。子の書込範囲は Landlock で、その worktree・共有 `.git` の `worktrees/pi-agent-<id>`・`objects` などに狭める
 - **親（`pi` 本体）が worktree のファイルを編集するときの承認**は、通常の書き込みと同じ。そこが作業ツリーの中（`cwd` の実体パスの下。`decide.py` の `_inside`。`.tmp/worktrees/…` を含む）なら allow、外（`~/worktrees/…` など）なら ask（境界つきでは、開けていない場所は deny）
 - **親が `git worktree` を `bash` で直接実行したとき**: `add` / `list` / `prune` は規則に当たらず ask（`source: default`。`pis` で境界が証明されたセッションでは、[手順 4'](pi-decide.md) の緩和で allow）。`remove` は `[bash] deny`（作業内容を失うため）
+
+### 並列実装の運用（隔離なしの worktree）
+
+複数の独立した実装を、**子（`worker`）を並べて**進める手順。素の `pi` では、子の強制の囲い（`isolation: "worktree"`）が使えない（認証のロックの書き込みが拒否される。[CHG-0029](../../change/0029-worktree-isolation.md) の E6。保留）ので、
+**隔離なし**で、feature ごとの worktree（`.tmp/worktrees/<名前>/`。作業ツリーの中なので書き込みは allow）に作業場所を分け、**指示と取り込み前の検査**で混線を防ぐ。囲いではない（下の「限界」）。
+
+**前提**: 子が止まらずに動くには、**親の bypass の継承**か、`pis` の境界が要る（無いと、日常の shell の ask で止まる）。bypass でも、`mustConfirm`・deny（`git add`/`commit`/`checkout`/`reset`/`stash`、`git flow`、元に戻せない git 操作）は残る。**子の `git status`/`git diff` は、通常は ask（`[pi.shell] allow` に無い）で、bypass か境界で通る**（子に許可を足す案は、引用で `--output` の検査を回避できる穴と、`cd` で別リポジトリへ行く形の信頼の範囲が指摘され、保留）。
+
+**手順**（親が行う）:
+
+1. 作業を、**ファイルの範囲が重ならない**単位に分ける（同じファイルを 2 つの単位が触ると、`finish` で衝突する）。単位ごとに、変更してよいパス（`--owned` に渡す glob）を決める。
+2. 単位ごとに `gitflow_feature_start`（`name` は小文字・数字・`.`・`_`・`-`）で、feature と worktree を作る（確認なし）。
+3. 単位ごとに `guarded_task`（`agent: "worker"`、`background: true`。同時に 4 本まで）で子を起動する。依頼文は下の雛形。`isolation` は付けない。
+4. 子の完了の通知ごとに、**取り込み前の検査**: `python3 scripts/parallel_check.py --owned <名前>=<glob>,… …`（本体の変更・範囲の外・重複を見る。終了コード 1 なら、原因を確かめるまでコミットしない）。あわせて、その worktree の差分を確かめる（親が `cd <wt> && git diff --stat`・`git diff`）。
+5. 検査を通った単位だけ、親が `gitflow_feature_commit`（確認なし。保護対象のパスは止まる）。子は `git add`/`commit` できない（deny）。
+6. 試験は、worktree の中で動かす（`cd <wt> && uv run pytest …`、または worktree のパスを渡す）。通ったら、単位ごとに順番に `gitflow_feature_finish`（`develop` へ squash。確認あり）。先に `finish` した単位の後で、残りが `develop` と衝突するなら `finish` が事前に拒否するので、feature の worktree で `git merge develop` して直してから、やり直す。
+7. 失敗した単位は捨てる（`gitflow_feature_discard`。確認あり）。
+
+**子への依頼文の雛形**（`<…>` を埋める。子は会話を見られない）:
+
+```text
+## 目的
+<この単位で達成すること。1〜3 行>
+
+## 作業場所（厳守）
+- 作業は <リポジトリのルート>/.tmp/worktrees/<名前>/ の中だけ。ファイルの読み書きは、このディレクトリの絶対パスで行う。
+- 変更してよいのは次のパスだけ: <glob の一覧>。これ以外（ほかの worktree・本体のファイル）は、読むだけで変更しない。
+- コマンドは、cd <worktree> && <コマンド> の形で実行する（git -C は使わない）。git add・commit・checkout・reset・stash はできない（親がコミットする）。
+
+## 守る条件
+C1: <変えてはいけないもの>
+C2: …
+
+## 完了条件・確かめ方
+- <実行する試験のコマンド（cd <worktree> && …）と、通る条件>
+
+## 返答
+- 変更したファイルの一覧、試験の結果（コマンドと出力の要点）、確かめられなかったこと、判断に迷った点。
+```
+
+**限界**: 子が、ほかの worktree や本体を書き換えても、**強制では止まらない**（bypass 中は、作業ツリーの外の書き込みの ask も allow になる）。`scripts/parallel_check.py` が、取り込み前に、**Git が報告する変更**（追跡ファイルの変更と未追跡ファイル。リネームは旧パスも数える）の範囲で見つける。ignore されたファイル・worktree の外（例: `~`）への書き込み・symlink の先は見えない。子へのコミットの許可（`guarded_action` を子へ）は、親の手数が許容できないと分かるまで、作らない（親が diff を確かめてからコミットする方が安全）。
