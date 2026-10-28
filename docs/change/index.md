@@ -71,7 +71,6 @@
 | [0045](0045-orchestrator-parent.md) | 親をオーケストレーターに寄せる。親は対話・判断・委譲・承認に専念し、実作業は子へ。スキルを、対話の段と実行の段（子へ渡す）に分ける「委譲の型」を整える | Exploring | 子が確認なしで動く経路（承認・質問の中継）が無い。型 B・C で、親が作る依頼文の質をどう保つか | 停止条件の表を、境界あり・なし × bypass あり・なし × RPC 起動で実測する → 限定した試作（型 A・B・C）で価値を測る | 2026-10-28 |
 | [0046](0046-guarded-action-timeout.md) | 承認つきの操作（`guarded_action`）の確認が時間切れのとき、親が止まらず、内容を退避して作業を続ける（CHG-0041 の「確認の時間切れ問題」の移管先） | Exploring | 素の pi の補助と `guarded_action` で、時間切れの仕様が違う（前者は退避して続行、後者は拒否）。`git_commit` は退避して続行を実装済み（段 2）。実機の未確認・取り込み・`gh` などの保存先と寿命 | 段 3: 実機（TUI・サンドボックス・実モデル）の確認。段 4: 取り込み。段 5: `gh` などの保存先 | 2026-10-29 |
 | [0047](0047-gitflow.md) | main 一本から gitflow（main / develop / feature）へ切り替え、feature と worktree の起票・クローズを AI が `git flow` だけで行う（動機: コミット粒度・main の安定・並列開発） | Exploring | 実装は git-flow-next（avh・nvie はアーカイブ済み）。squash・worktree・`.gitflow` 共有がある。`.git/config` の書き込みとサンドボックスの衝突、ネットワーク・push に当たる引数、許可の形（固定の引数の表＋確認なしの項目）が未確定 | 段 1: 使い捨てのリポジトリで実測（導入・worktree・finish のネットワーク・`pis` 内の動作）。段 2: 許可の形を `review` に見せる | 2026-10-29 |
-| [0048](0048-ansible-system-layer.md) | sudo を使う Linux のシステム層（apt・`/etc`・サービス）を Ansible に移すと保守しやすくなるかを、実際に移して測って決める（全面の IaC 導入は、調査で価値なしと判断） | Exploring | 段 2 の試作（`worker` が Docker の中で測定中）。隔離の子の認証の失敗は CHG-0029 へ | 子の報告を確かめて、撤退の条件に照らして判断。並行して、キープアライブを Linux にも使う | 2026-10-29 |
 | [0026](0026-specialist-agents-with-skills.md) | スキルを役割（子エージェント）へ割り当てる。まず移行の調査役（`migration-analyst`）に、移行スキルの重い読み物と影響の洗い出しを任せ、実行・対話は親に残す | Exploring | 設計は `review` の 1 回目を反映済み（再レビューは未）。子が実際にスキルを使い、`references/` を読めるかは実機で未確認。段 1c（`fork` の解釈）は [CHG-0045](0045-orchestrator-parent.md) へ統合 | 段 1（既存の `explore` にスキル名と範囲を明示して委任）を実機で測る。表と専用役は、その結果しだい | 2026-10-28 |
 
 ## 保留
@@ -86,6 +85,7 @@
 
 | # | 目的 | 結果 | 終了日 | 現行仕様 / ADR |
 | --- | --- | --- | --- | --- |
+| [0048](closed/0048-ansible-system-layer.md) | sudo を使う Linux のシステム層（apt・`/etc`・サービス）を Ansible に移すと保守しやすくなるかを、実際に移して測って決める | 見送り（Docker での試作で、行数が減らず回避策が増え、まっさらな環境の `--check` が予測にならなかった。残す改善はキープアライブの Linux への共有） | 2026-10-29 | [実測](../research/chezmoi/ansible-trial-121.md) |
 | [0041](closed/0041-commit-auto-in-bypass.md) | コミットを bypass のとき確認なしで実行できるようにする（確認の場を push 前へ移す） | 見送り（設計は `review` 10 ラウンドで収束したが、各リポジトリに pre-push のスタブを配備し pre-commit の shim に依存する副作用が、確認の省略に見合わないとして、実装せず閉じた。実測は文書に残した） | 2026-10-27 | [guarded_action](../spec/guard/pi-extensions.md#guarded_action承認つきの外部操作) |
 | [0006](closed/0006-pi-harness-trial.md) | Pi / oh-my-pi を利便性の軸で試し、第一サポートを選べる状態を作る | 採用（導入・skills・設定の取り込みまで。第一サポートは別案件で pi に決まり、段 2 以降は `omp` を使っていないので実施せず閉じた） | 2026-10-25 | [omp の設定](../spec/cli-management.md#oh-my-piompの設定)、[ADR-0017](../adr/0017-pi-only-and-ts-judge.md) |
 | [0017](closed/0017-builtin-agent-restrictions.md) | 組み込みの `explore` / `plan` の制限が全体の設定に上書きされる問題を直し、`bypass` から起動する子を確認なしで動かせる範囲に整える | 採用（段 0〜8 完了。OpenCode の実機での確認は、OpenCode を使っていないので確認せず閉じた） | 2026-10-25 | [子エージェント](../spec/opencode-config-generation.md#子エージェント)、[ADR-0015](../adr/0015-bypass-child-external-read.md) |

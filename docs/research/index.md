@@ -197,3 +197,4 @@
 | [再実行の印（retry marker）の置き場に関する記録](chezmoi/rerun-scripts-notes.md) | 印の置き場を sandbox から書けない場所にした理由と、旧置き場の廃止。日付なし（コードの読解。`troubleshooting-bootstrap.md` から移設） |
 
 [ドキュメント一覧へ戻る](../index.md)
+\n| [121_ubuntu の apt と Pi 専用の /etc を Ansible に移した試作の実測](chezmoi/ansible-trial-121.md) | 2026-10-29。Docker（ubuntu:24.04）で playbook 133 行 vs 元 約 120 行。2 回目 changed=0・導入 80 秒/31MB。まっさらな環境の `--check` は失敗（apt で入れる物に依存）。真偽値の型の落とし穴など。範囲は小さく、実機の Pi は未実施 |
