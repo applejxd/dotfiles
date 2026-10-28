@@ -273,7 +273,7 @@ export default async function (pi: ExtensionAPI) {
 	// 利用者専用の bypass 切り替え。モデルが呼べるツールは作らない。セッションには残さない
 	// see docs/spec/guard/pi-guard.md#bypass-の切り替え
 	pi.registerCommand("bypass", {
-		description: "bypass (ask を確認なしで通す。外部への送信・公開は bypass でも確認する) の切り替え: /bypass [on|off]",
+		description: "bypass (ask を確認なしで通す。外部への送信・公開と元に戻せない git 操作は bypass でも確認する) の切り替え: /bypass [on|off]",
 		handler: async (args: string, ctx: any) => {
 			const arg = String(args ?? "").trim();
 			if (arg !== "" && arg !== "on" && arg !== "off") {
@@ -292,7 +292,7 @@ export default async function (pi: ExtensionAPI) {
 					(BOUNDARY
 						? "ask の操作 (git commit や MCP など) を確認なしで通します。deny とサンドボックスは有効のまま。"
 						: "サンドボックスが無いまま、ask の操作 (git commit や未知の shell や MCP など) を確認なしで通します。deny だけが守りです。") +
-					"\n確認が要る外部への送信・公開 (gh の投稿など) は、bypass でも確認します。";
+					"\n確認が要る外部への送信・公開 (gh の投稿など) と、元に戻せない git 操作 (branch -D・clean・tag -d など) は、bypass でも確認します。";
 				if ((await ctx.ui.confirm("bypass を有効にしますか？", body)) !== true) return;
 			}
 			bypass = want;

@@ -7,7 +7,7 @@ export const DEFAULT_TIMEOUT_SECONDS = 300;
 export const MAX_DISPLAY_CHARS = 8000;
 // --body-file として読む上限 (バイト)
 export const MAX_BODY_FILE_BYTES = 32 * 1024;
-export const MUST_CONFIRM_TITLE = "⚠ bypass でも確認が要る操作 (外部への送信・公開)";
+export const MUST_CONFIRM_TITLE = "⚠ bypass でも確認が要る操作 (外部への送信・公開、元に戻せない git 操作)";
 
 /** rules の judge.common.pi.confirm.timeout_seconds (正の整数)。無い・不正なら 300 */
 export function confirmTimeoutSeconds(rules: any): number {
@@ -248,7 +248,7 @@ export function buildMustConfirmView(command: string, reason: string, readBodyFi
 	if (size > MAX_DISPLAY_CHARS) {
 		return { kind: "block", reason: "本文が長すぎて確認できない。短くするか、利用者が自分で実行する" };
 	}
-	const lines = ["bypass でも確認が要る操作です (外部への送信・公開)。", "", "コマンド (全文):", sanitizeForDisplay(command)];
+	const lines = ["bypass でも確認が要る操作です (外部への送信・公開、元に戻せない git 操作)。", "", "コマンド (全文):", sanitizeForDisplay(command)];
 	if (parsed) {
 		lines.push("", "解析結果 (参考。実際に実行されるのは上のコマンド):", `  対象: gh ${parsed.kind} ${parsed.action}`);
 		if (parsed.repo !== undefined) lines.push(field("repo", parsed.repo));

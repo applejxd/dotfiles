@@ -923,6 +923,8 @@ targets = ["sbx@sandbox-gpu"]
 # bypass でもサンドボックスの緩和でも allow にならない確認 (内容つきで必ず利用者に見せる)。
 # see docs/spec/guard/pi-decide.md#confirm
 [pi.confirm]
+# 元に戻せないローカルの git 操作 (branch -D / clean / tag -d など) も、bypass で確認する (see docs/spec/guard/pi-decide.md#confirm)
+local_git = true
 bash = [
   "gh pr create",
   "gh pr edit",

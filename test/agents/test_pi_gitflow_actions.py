@@ -333,7 +333,12 @@ def test_the_whole_feature_cycle_with_the_real_git_flow(env, monkeypatch):
 
     def flow(*args):
         r = subprocess.run(
-            ["git", "flow", *args], cwd=proj, capture_output=True, text=True, env=sub
+            ["git", "flow", *args],
+            cwd=proj,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=sub,
         )
         assert r.returncode == 0, (
             args,

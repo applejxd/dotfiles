@@ -393,11 +393,17 @@ def test_rules_json_carries_the_confirm_table():
 
 
 def test_confirm_defaults_when_omitted():
-    assert _confirm_of(_with_confirm(None)) == {"bash": [], "checks": [], "timeout_seconds": 300}
+    assert _confirm_of(_with_confirm(None)) == {
+        "bash": [],
+        "checks": [],
+        "timeout_seconds": 300,
+        "local_git": False,
+    }
     assert _confirm_of(_with_confirm({"bash": ["gh pr create"]})) == {
         "bash": ["gh pr create"],
         "checks": [],
         "timeout_seconds": 300,
+        "local_git": False,
     }
 
 

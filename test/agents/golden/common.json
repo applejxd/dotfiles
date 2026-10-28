@@ -1290,6 +1290,7 @@
    "checks": [
     "check_gh_api_mutation"
    ],
+   "local_git": true,
    "timeout_seconds": 300
   },
   "default_role": "implementer",

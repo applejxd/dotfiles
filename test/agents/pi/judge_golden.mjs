@@ -62,7 +62,9 @@ const category = (request) => {
 // TS 版だけの後続の規則を、Python 版の正解と照合する (Python 版には確認表 [pi.confirm] と本文の形の deny が無い。標本は除かない)。
 //  - mustConfirm の ask: Python は ask、あるいは bypass 要求の allow+bypassed。理由・source・check は確認表だけに載ると Python では default なので比べない
 //  - 本文を確認できない形の deny: Python はそのコマンドを ask / allow として扱う
+//  - 元に戻せないローカルの git 操作 ([pi.confirm] local_git) を、既定が deny の役割で deny にしたもの: Python は ask (bypass なら allow)
 const BLIND_PREFIX = "本文を確認できない形";
+const LOCAL_GIT_DENY_SUFFIX = "この役割は shell で元に戻せない操作をしない";
 const askLike = (r) => r?.decision === "ask" || (r?.decision === "allow" && r?.bypassed === true);
 const sameAsExpected = (got, expected) => {
 	if (stable(got) === stable(expected)) return true;
@@ -70,6 +72,7 @@ const sameAsExpected = (got, expected) => {
 	if (got?.decision === "deny" && typeof got.reason === "string" && got.reason.startsWith(BLIND_PREFIX)) {
 		return expected?.decision === "ask" || expected?.decision === "allow";
 	}
+	if (got?.decision === "deny" && typeof got.reason === "string" && got.reason.endsWith(LOCAL_GIT_DENY_SUFFIX)) return askLike(expected);
 	return false;
 };
 

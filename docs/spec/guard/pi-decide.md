@@ -99,6 +99,12 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
   GraphQL の `createRepository`・`updateRepository`・`deleteRepository`・`archiveRepository`・`transferRepository`・`createRef`・`updateRef`・`deleteRef`・`createCommitOnBranch`・`mergePullRequest`。
   これは **GitHub API 経由の push 相当**（コンテンツ API・Git データ API）を塞ぐ。それ以外の書き込みは ask（確認に格上げ）
 - **表に無い外部書き込みは、従来どおり**（役割の既定の ask。サンドボックスでは allow）。この表では「すべて」を捕捉できない（すり抜けを許容する範囲）
+- **元に戻せないローカルの git 操作**（`[pi.confirm] local_git = true`。`judge/gitdestructive.ts`）: `git branch -D/-M/-f/--delete --force`（`-fd`・`-df` など束ねた形を含む）、`git clean`（`-n`/`--dry-run` が無いもの）、`git tag -d/--delete/-f`、`git checkout -B`、`git switch -C/--force-create`。
+  前置の環境変数・`env`・`git` のグローバルオプション（`-C`・`-c`・`--git-dir`・`--work-tree` など）を読み飛ばしてから、サブコマンドとフラグを見る（`--` 以降と、値を取るオプションの値は数えない。`git clean -e '-n' -f` は dry-run と見なさない）。
+  評価の位置は、確認表の直後・`bashAsk` の前。**ask が既定の役割（親・`worker`）は、bypass でもサンドボックスの緩和でも ask のまま（理由の先頭は「確認が必要な元に戻せない git 操作 (bypass でも確認する): 」）**。
+  **既定が deny の役割（`explorer`・`reader`・`committer`）は deny**: これらは `[bash] ask` が役割の既定の deny より先に当たり、`git branch -D`・`git clean`・`docker rm` が bypass で allow になっていた（2026-10-29 に実測。`docker rm` などは未対応）。
+  保証の範囲は既存と同じ「うっかり防止」で、git の alias・外部スクリプト・動的に組み立てた文字列は見ない。素の `git branch` の作成・切り替え・`git tag` の作成などは従来どおり。ブランチモデル（[CHG-0047](../../change/0047-gitflow.md)）では、AI は `git flow` の固定引数だけを使う
+- **Python 版（照合用）**: `local_git` も知らない。`[pi.confirm] local_git` の判定は TS だけで、[正解データの照合](#差分試験正解データ)の標本に `git branch -D` などがあれば、TS が ask＋mustConfirm、Python が ask または allow＋bypassed の組を一致とみなす
 - **Python 版（照合用）**: `mustConfirm` を知らない。[正解データの照合](#差分試験正解データ)では、`mustConfirm` を比較から外し、
   TS が ask＋mustConfirm、Python が ask または allow＋bypassed の組を一致とみなす（標本は除かない）。`[bash] deny` と `check_gh_api_publish` は両方に効く
 

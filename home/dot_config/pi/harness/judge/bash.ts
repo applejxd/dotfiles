@@ -16,6 +16,7 @@ import { findMatch, normalize, patternMatches, splitCommandSegments } from "./no
 import type { Common } from "./policy.ts";
 import { basename, pyLen, pyRegex, shlexSplit, ShlexError } from "./pystr.ts";
 import { clip200, expandCdTargets, splitHeredocBody } from "./shared.ts";
+import { localGitDestructiveReason } from "./gitdestructive.ts";
 
 // 検査の上限。check_bash.py と同じ
 const MAX_COMMAND_LEN = 10000;
@@ -131,6 +132,8 @@ function bashAsk(ctx: Ctx, cmd: string, pi: Obj): Response | null {
 
 // 契約: mustConfirm の ask の理由はこの接頭辞で始める (ハーネスの確認 UI が見る)
 const MUST_CONFIRM_PREFIX = "確認が必要な外部への送信・公開 (bypass でも確認する): ";
+// 元に戻せないローカルの git 操作 (`[pi.confirm] local_git`)。UI は mustConfirm を見るので、接頭辞は別でよい
+const MUST_CONFIRM_LOCAL_PREFIX = "確認が必要な元に戻せない git 操作 (bypass でも確認する): ";
 // 本文・タイトルを利用者が確認できない形 (標準入力・コマンド置換) を deny にする対象
 const BODY_CMD_RE = /^gh (?:pr|issue) (?:create|comment|edit|review)$/u;
 const BODY_STDIN_FLAGS = new Set(["--body-file", "-F", "-b", "--body"]);
@@ -177,6 +180,27 @@ function confirmTable(cmd: string, pi: Obj): Response | null {
 	return response(
 		"ask",
 		`${MUST_CONFIRM_PREFIX}\`${first}\`\n実行しようとしているコマンド: ${clip200(cmd)}`,
+		"rule",
+		{ mustConfirm: true },
+	);
+}
+
+/**
+ * `[pi.confirm] local_git` が真のとき、元に戻せないローカルの git 操作 (`git branch -D`・`git clean`・`git tag -d` など) を mustConfirm の ask にする。
+ * 既定が deny の役割 (explorer・reader・committer) では deny にする: これらは元々 shell を使えない役割で、
+ * `[bash] ask` が役割の既定の deny より先に当たるため、bypass で allow になっていた (2026-10-29 に実測)。
+ * see docs/spec/guard/pi-decide.md#confirm
+ */
+function localGitConfirm(cmd: string, pi: Obj, profile: Obj): Response | null {
+	if (pi.confirm?.local_git !== true) return null;
+	const reason = localGitDestructiveReason(cmd);
+	if (reason === null) return null;
+	if (profile.default === "deny") {
+		return response("deny", `${reason}。この役割は shell で元に戻せない操作をしない`, "rule");
+	}
+	return response(
+		"ask",
+		`${MUST_CONFIRM_LOCAL_PREFIX}${reason}\n実行しようとしているコマンド: ${clip200(cmd)}`,
 		"rule",
 		{ mustConfirm: true },
 	);
@@ -360,6 +384,8 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		}
 		const confirm = confirmTable(cmd, pi);
 		if (confirm) return { commonDeny: null, roleRule: confirm };
+		const localGit = localGitConfirm(cmd, pi, profile);
+		if (localGit) return { commonDeny: null, roleRule: localGit };
 		const ask = bashAsk(ctx, cmd, pi);
 		if (ask) return { commonDeny: null, roleRule: ask };
 		// 役割が shell_allow を持てば、[pi.shell] allow の代わりにそれを使う

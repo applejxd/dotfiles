@@ -1856,7 +1856,7 @@ def agent_env(common: dict[str, Any]) -> dict[str, str]:
 JUDGE_COMMON_KEYS = ("bash", "file", "pi")
 JUDGE_TABLES = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/tables.toml"
 JUDGE_CHECKS = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/checks.ts"
-PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds"})
+PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds", "local_git"})
 PI_CONFIRM_TIMEOUT_DEFAULT = 300
 PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview", "confirm"})
 PI_ACTION_PREVIEWS = frozenset(
@@ -2053,6 +2053,11 @@ def pi_confirm(common: dict[str, Any]) -> dict[str, Any]:
     if isinstance(timeout, bool) or not isinstance(timeout, int) or not 10 <= timeout <= 3600:
         raise SystemExit(f"[pi.confirm] timeout_seconds は 10　3600 の整数: {timeout!r}")
     out["timeout_seconds"] = timeout
+    # 元に戻せないローカルの git 操作 (branch -D / clean / tag -d など) を bypass でも確認するか (judge/gitdestructive.ts)
+    local_git = section.get("local_git", False)
+    if not isinstance(local_git, bool):
+        raise SystemExit(f"[pi.confirm] local_git は真偽値: {local_git!r}")
+    out["local_git"] = local_git
     return out
 
 
