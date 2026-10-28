@@ -42,6 +42,7 @@
 | [設定の生成と所有権](agent-config-generation.md) | `common.toml` の構成と編集ルール、生成先と所有権、MCP、pi と共有する設定（モデルの割り当て・コミットの確認など）、hook の単一ソース化 |
 | [OpenCode 向けの設定の生成](opencode-config-generation.md) | OpenCode だけが使う設定（plugin 層・bypass・キーバインド・隔離起動）の生成。保留中のレガシー（撤去予定） |
 | [モデルの割り当ての見直し](model-lineup-review.md) | OpenCode の階層に当てるモデルと effort を見直す時機・調べる場所・自前の評価・決め方・変える手順・再考の候補 |
+| [pi の機能の地図](pi-features.md) | ガード・サンドボックス・オーケストレーションの 3 本の柱と基本機能の入口。柱をまたぐ機能の置き場の規則 |
 | [pi の公式仕様と実測の棚卸し](pi-upstream.md) | pi の挙動のうち、公式に明示があるもの（リンクだけ・都度参照）と、明示が無く実測して頼っているもの（ノウハウ・試験で固定）の一覧。確認先と更新時の手順、codemode の扱い |
 | [Web 検索（web-search skill）](web-search.md) | skill + CLI の Web 検索・ページ取得・論文検索。検索の鎖（Brave → Exa → Tavily → DuckDuckGo）と次へ回す条件、鍵、クエリの秘匿チェックと取得の SSRF 対策、実測、未実装 |
 | [imozuru（調べものスキル）](imozuru.md) | 上流 MaryCache/imozuru（MIT）を vendor して調整した調べものスキル。原文を要約せず保存し、検索は web-search を使う。配る範囲・書き込み先の制限・接続の固定・秘匿チェック・YouTube（applejxd 限定）・`pis` の許可規則・レビューの経緯・未確認 |
@@ -75,6 +76,7 @@
 | [判定 API（`decide`）](guard/pi-decide.md) | pi のガードが呼ぶ CLI 非依存の判定器。入力と応答、`source`、評価の順番、confirm、役割（`[pi.profiles]`）、`check_bash.py` との等価の試験 |
 | [pi の拡張と補助機能](guard/pi-extensions.md) | 拡張の入れ方の方針、`guarded_action`、ツールの拡張、圧縮、`git commit` の確認、整形、`/fleet`、stepback、キーバインド、Orca・Zed |
 | [pi の子エージェント](guard/pi-subagents.md) | `guarded_task` の起動と役割、`review` への依頼、job、子の操作、worktree 隔離、Windows の `task` |
+| [オーケストレーションと並列作業の機能一覧](orchestration.md) | 親子の分担・子の起動と制御・役割と権限・gitflow と worktree・承認と保留・検査・記録を、カテゴリ別の表にした総覧（状態と正本つき）。未実装は案件へのリンク |
 | [pis のサンドボックス（pi の側）](guard/pi-sandbox.md) | agent 置き場・セッション・認証、プロキシ必須の環境での通信、拒否リスト型の通信、緩和のゲート |
 | [pi のガード](guard/pi-guard.md) | 起動の形、素の pi との対応、Windows、pi の設定、判定の外で動くもの、置き場・環境変数・しくみ、MCP、試験、実機で確認する項目 |
 | [OpenCode のガードの仕様](guard/opencode-guard.md) | OpenCode の guide plugin が出す誘導・deny の説明・allow したコマンドの書き込み形。保留中のレガシー（撤去予定） |
