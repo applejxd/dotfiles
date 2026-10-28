@@ -99,6 +99,7 @@ _PI_TESTS = (
     "test_pi_gitflow",
     "test_pi_gitflow_actions",
     "test_pi_git_destructive",
+    "test_pi_deny_default_ask",
     "test_pi_model_catalog",
     "test_pi_scratch_protected",
     "test_pi_session_tmp",

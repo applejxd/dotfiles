@@ -187,8 +187,8 @@ function confirmTable(cmd: string, pi: Obj): Response | null {
 
 /**
  * `[pi.confirm] local_git` が真のとき、元に戻せないローカルの git 操作 (`git branch -D`・`git clean`・`git tag -d` など) を mustConfirm の ask にする。
- * 既定が deny の役割 (explorer・reader・committer) では deny にする: これらは元々 shell を使えない役割で、
- * `[bash] ask` が役割の既定の deny より先に当たるため、bypass で allow になっていた (2026-10-29 に実測)。
+ * 既定が deny の役割 (explorer・reader・committer) では deny にする。`denyForDenyDefaultRole` とは検出器が違うので残す:
+ * ここは複合 (`git clean -fd && gh api -X POST …`) や別の書き方でも、先に deny を返し、後続の ask (mustConfirm を含む) に緩めない。
  * see docs/spec/guard/pi-decide.md#confirm
  */
 function localGitConfirm(cmd: string, pi: Obj, profile: Obj): Response | null {
@@ -203,6 +203,23 @@ function localGitConfirm(cmd: string, pi: Obj, profile: Obj): Response | null {
 		`${MUST_CONFIRM_LOCAL_PREFIX}${reason}\n実行しようとしているコマンド: ${clip200(cmd)}`,
 		"rule",
 		{ mustConfirm: true },
+	);
+}
+
+/**
+ * 既定が deny の役割 (explorer・reader・committer) では、bypass で変えられる ask (`[bash] ask`・意味解析の ask) を deny にする。
+ * これらは shell で変更をしない役割で、承認を出せない子でもある。`[bash] ask` は役割の既定の deny より先に当たるため、
+ * bypass (親から継承) で、`git branch -D`・`git clean`・`docker rm` などが allow になっていた (2026-10-29 に実測)。
+ * mustConfirm の ask はそのまま (bypass でも ask のままで、子では UI が無くて拒否される)。
+ * see docs/spec/guard/pi-decide.md#既定が-deny-の役割の-ask
+ */
+function denyForDenyDefaultRole(ask: Response, profile: Obj): Response {
+	if (profile.default !== "deny" || ask.decision !== "ask" || ask.mustConfirm) return ask;
+	return response(
+		"deny",
+		`${ask.reason}\nこの役割は既定が deny なので、承認で通さない (bypass でも通さない)`,
+		ask.source,
+		ask.check ? { check: ask.check } : {},
 	);
 }
 
@@ -387,7 +404,7 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		const localGit = localGitConfirm(cmd, pi, profile);
 		if (localGit) return { commonDeny: null, roleRule: localGit };
 		const ask = bashAsk(ctx, cmd, pi);
-		if (ask) return { commonDeny: null, roleRule: ask };
+		if (ask) return { commonDeny: null, roleRule: denyForDenyDefaultRole(ask, profile) };
 		// 役割が shell_allow を持てば、[pi.shell] allow の代わりにそれを使う
 		const own = profile.shell_allow;
 		const allowList: unknown[] = own != null ? own : (pi.shell?.allow ?? []);

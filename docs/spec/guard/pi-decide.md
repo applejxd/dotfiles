@@ -102,11 +102,24 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 - **元に戻せないローカルの git 操作**（`[pi.confirm] local_git = true`。`judge/gitdestructive.ts`）: `git branch -D/-M/-f/--delete --force`（`-fd`・`-df` など束ねた形を含む）、`git clean`（`-n`/`--dry-run` が無いもの）、`git tag -d/--delete/-f`、`git checkout -B`、`git switch -C/--force-create`。
   前置の環境変数・`env`・`git` のグローバルオプション（`-C`・`-c`・`--git-dir`・`--work-tree` など）を読み飛ばしてから、サブコマンドとフラグを見る（`--` 以降と、値を取るオプションの値は数えない。`git clean -e '-n' -f` は dry-run と見なさない）。
   評価の位置は、確認表の直後・`bashAsk` の前。**ask が既定の役割（親・`worker`）は、bypass でもサンドボックスの緩和でも ask のまま（理由の先頭は「確認が必要な元に戻せない git 操作 (bypass でも確認する): 」）**。
-  **既定が deny の役割（`explorer`・`reader`・`committer`）は deny**: これらは `[bash] ask` が役割の既定の deny より先に当たり、`git branch -D`・`git clean`・`docker rm` が bypass で allow になっていた（2026-10-29 に実測。`docker rm` などは未対応）。
+  **既定が deny の役割（`explorer`・`reader`・`committer`）は deny**: これらは `[bash] ask` が役割の既定の deny より先に当たり、`git branch -D`・`git clean`・`docker rm` が bypass で allow になっていた（2026-10-29 に実測。ask 一般の扱いは[次の節](#既定が-deny-の役割の-ask)）。
   保証の範囲は既存と同じ「うっかり防止」で、git の alias・外部スクリプト・動的に組み立てた文字列は見ない。素の `git branch` の作成・切り替え・`git tag` の作成などは従来どおり。ブランチモデル（[CHG-0047](../../change/0047-gitflow.md)）では、AI は `git flow` の固定引数だけを使う
 - **Python 版（照合用）**: `local_git` も知らない。`[pi.confirm] local_git` の判定は TS だけで、[正解データの照合](#差分試験正解データ)の標本に `git branch -D` などがあれば、TS が ask＋mustConfirm、Python が ask または allow＋bypassed の組を一致とみなす
 - **Python 版（照合用）**: `mustConfirm` を知らない。[正解データの照合](#差分試験正解データ)では、`mustConfirm` を比較から外し、
   TS が ask＋mustConfirm、Python が ask または allow＋bypassed の組を一致とみなす（標本は除かない）。`[bash] deny` と `check_gh_api_publish` は両方に効く
+
+## 既定が deny の役割の ask
+
+`[bash] ask` と意味解析の ask は、**役割の既定より先に**返る。bypass は ask を allow にするので、既定が deny の役割（`explorer`・`reader`・`committer`。いずれも子）でも、
+`docker rm`・`git clean`・`git branch -D`・`gh pr checkout` などが、親から bypass を継ぐと確認なしで通っていた（2026-10-29 に実測）。
+
+- **規則**（`judge/bash.ts` の `denyForDenyDefaultRole`）: `profile.default` が `deny` の役割で、`bashAsk` の結果が **ask（`mustConfirm` でない）**なら、**deny** にする。
+  理由は元の ask の文言に「この役割は既定が deny なので、承認で通さない (bypass でも通さない)」を添える。`source` と `check` は元のまま
+- **変えないもの**: ask が既定の役割（親・`worker`）。`mustConfirm` の ask（子では UI が無く、ハーネスが拒否する）。許可（`shell_allow`・`[pi.skill_scripts]`）は `bashAsk` の後ろで評価されるので、
+  ask に当たらないコマンド（Web 検索のスクリプト・`wc`・読み取りの `git log/diff/status`）は従来どおり通る。**許可と ask の両方に当たるコマンドは、この規則で deny になる**
+- **`local_git` との関係**: `local_git` の deny は残す。検出器が違い、複合（`git clean -fd && gh api -X POST …`）や別の書き方でも、後続の ask（mustConfirm を含む）に緩めずに先に deny を返すため
+- **照合**: Python の正解データは ask（bypass なら allow）。TS の deny は、`judge_golden.mjs` が、役割・bash・元の理由・`source`・`check` を比べて一致とみなす
+- **残る範囲**: ファイル読み取りの ask は bypass で allow のまま。`worker` は ask 既定で bypass を継ぐので、`docker rm` などは通る
 
 ## ssh / scp の許可
 

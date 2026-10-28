@@ -62,17 +62,31 @@ const category = (request) => {
 // TS 版だけの後続の規則を、Python 版の正解と照合する (Python 版には確認表 [pi.confirm] と本文の形の deny が無い。標本は除かない)。
 //  - mustConfirm の ask: Python は ask、あるいは bypass 要求の allow+bypassed。理由・source・check は確認表だけに載ると Python では default なので比べない
 //  - 本文を確認できない形の deny: Python はそのコマンドを ask / allow として扱う
-//  - 元に戻せないローカルの git 操作 ([pi.confirm] local_git) を、既定が deny の役割で deny にしたもの: Python は ask (bypass なら allow)
+//  - 既定が deny の役割 (explorer・reader・committer) で、[bash] ask を deny にしたもの: Python は ask (bypass なら allow)。役割・bash・元の理由・source・check を比べる
+//  - 同じ役割で、元に戻せないローカルの git 操作 ([pi.confirm] local_git) を deny にしたもの: 役割と bash だけを比べる
 const BLIND_PREFIX = "本文を確認できない形";
-const LOCAL_GIT_DENY_SUFFIX = "この役割は shell で元に戻せない操作をしない";
+const DENY_DEFAULT_ROLES = new Set(["explorer", "reader", "committer"]);
+const DENY_DEFAULT_SUFFIX = "\nこの役割は既定が deny なので、承認で通さない (bypass でも通さない)";
+const LOCAL_GIT_DENY_SUFFIX = "。この役割は shell で元に戻せない操作をしない";
 const askLike = (r) => r?.decision === "ask" || (r?.decision === "allow" && r?.bypassed === true);
-const sameAsExpected = (got, expected) => {
+const denyDefaultRoleBash = (request) => request?.tool === "bash" && DENY_DEFAULT_ROLES.has(request?.role);
+const sameAsExpected = (got, expected, request) => {
 	if (stable(got) === stable(expected)) return true;
 	if (got?.decision === "ask" && got.mustConfirm === true) return askLike(expected);
 	if (got?.decision === "deny" && typeof got.reason === "string" && got.reason.startsWith(BLIND_PREFIX)) {
 		return expected?.decision === "ask" || expected?.decision === "allow";
 	}
-	if (got?.decision === "deny" && typeof got.reason === "string" && got.reason.endsWith(LOCAL_GIT_DENY_SUFFIX)) return askLike(expected);
+	if (got?.decision === "deny" && typeof got.reason === "string" && denyDefaultRoleBash(request)) {
+		if (got.reason.endsWith(LOCAL_GIT_DENY_SUFFIX)) return askLike(expected);
+		if (got.reason.endsWith(DENY_DEFAULT_SUFFIX)) {
+			return (
+				askLike(expected) &&
+				got.reason === `${expected.reason}${DENY_DEFAULT_SUFFIX}` &&
+				got.source === expected.source &&
+				got.check === expected.check
+			);
+		}
+	}
 	return false;
 };
 
@@ -83,7 +97,7 @@ for (const line of lines) {
 	const cat = category(request);
 	stats[cat] ??= { pass: 0, fail: 0 };
 	const got = tokenize(decide(expand(request), common));
-	if (sameAsExpected(got, expected)) {
+	if (sameAsExpected(got, expected, request)) {
 		stats[cat].pass += 1;
 	} else {
 		stats[cat].fail += 1;

@@ -97,13 +97,23 @@ def test_safe_git_is_not_pulled_into_the_confirmation(command):
 @pytest.mark.parametrize("role", ["explorer", "committer", "reader"])
 def test_a_role_that_denies_by_default_denies_them_even_with_bypass(role):
     # これらの役割は shell で元に戻せない操作をしない。以前は [bash] ask が役割の既定の deny より先に当たり、bypass で allow だった
-    for command in ("git tag -d v1", "git branch -fd x", "git clean -fd", "git branch -D x"):
+    for command in (
+        "git tag -d v1",
+        "git branch -fd x",
+        "git clean -fd",
+        "git branch -D x",
+        # 複合や許可との組み合わせでも、後続の ask や allow に緩めない (review の指摘)
+        "git clean -fd && gh api -X POST repos/o/r/issues -f title=x",
+        "git branch --show-current -D x",
+    ):
         for _, res in _results([command], role=role):
             assert res["decision"] == "deny", (role, command, res)
     off = copy.deepcopy(gen.pi_judge_data(load_common())["common"])
     off["pi"]["confirm"]["local_git"] = False
     res = _judge([_bash("git branch -D x", role="explorer", bypass=True)], common=off)[0]
-    assert res["decision"] == "allow", res  # 設定を切ると従来の (穴のある) 判定
+    assert res["decision"] == "deny", (
+        res
+    )  # [bash] ask は、local_git を切っても既定が deny の役割では deny
 
 
 def test_switching_it_off_restores_the_old_decisions():
