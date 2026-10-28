@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manim Video Viewer</title>
+    <style>
+        /* Manimate design tokens (src/app/globals.css) */
+        :root {
+            --bg-main:          #f8f8f7;
+            --bg-card:          #fafafa;
+            --bg-white:         #ffffff;
+            --bg-hover:         #f0f0ef;
+            --bg-active:        #e8e8e6;
+
+            --text-primary:     #34322d;
+            --text-secondary:   #5e5e5b;
+            --text-tertiary:    #858481;
+            --text-placeholder: #acacaa;
+
+            --border-main:      rgba(0,0,0,0.06);
+            --border-input:     rgba(0,0,0,0.12);
+
+            --accent:           #2BB5A0;
+            --accent-hover:     #239687;
+            --accent-muted:     rgba(43,181,160,0.15);
+
+            --menu-bg:          #27272a;   /* zinc-800, dark menus over video */
+            --menu-hover:       #3f3f46;   /* zinc-700 */
+            --track:            #3f3f46;   /* zinc-700 progress track */
+
+            --font: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --mono: "Monaco", "Menlo", "Consolas", monospace;
+        }
+        /* Night mode — override the light greys; accent + dark menus/preview stay */
+        body.night {
+            --bg-main:          #171717;
+            --bg-card:          #1f1f1f;
+            --bg-white:         #262626;
+            --bg-hover:         #2e2e2e;
+            --bg-active:        #3a3a3a;
+            --text-primary:     #ececeb;
+            --text-secondary:   #b6b6b3;
+            --text-tertiary:    #8a8a87;
+            --text-placeholder: #6a6a68;
+            --border-main:      rgba(255,255,255,0.08);
+            --border-input:     rgba(255,255,255,0.14);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font); background: var(--bg-main); color: var(--text-primary); height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
+        body.night ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+        :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        .app { display: flex; height: 100vh; padding: 12px; }
+
+        /* ------------------------------------------------------------------ */
+        /* Feedback panel (left, styled like Manimate chat column)             */
+        /* ------------------------------------------------------------------ */
+        .feedback-panel { width: 320px; min-width: 200px; max-width: 600px; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-card); border: 1px solid var(--border-main); border-radius: 12px; padding: 16px; }
+        .brand-link { align-self: flex-start; color: var(--accent); font-size: 16px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; margin-bottom: 18px; }
+        .brand-link:hover { color: var(--accent-hover); }
+        .feedback-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+        .feedback-title { font-size: 13px; font-weight: 600; color: var(--accent); }
+        .dock-ctrl { display: flex; gap: 2px; }
+        /* Shared light-chrome icon button (dock + theme toggles) */
+        .icon-btn { display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer; color: var(--text-tertiary); }
+        .icon-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+        .icon-btn svg { fill: currentColor; }
+        .dock-btn { width: 24px; height: 22px; border-radius: 5px; }
+        .dock-btn.active { background: var(--accent-muted); color: var(--accent); }
+        .dock-btn svg { width: 15px; height: 15px; }
+        /* Docking: panel snaps to the left (default), right, or bottom */
+        .feedback-panel { order: 1; } .resizer { order: 2; } .main-card { order: 3; }
+        .app.dock-right .feedback-panel { order: 3; } .app.dock-right .main-card { order: 1; }
+        .app.dock-bottom { flex-direction: column; }
+        .app.dock-bottom .feedback-panel { order: 3; width: auto; min-width: 0; max-width: none; height: 220px; min-height: 120px; max-height: 60vh; }
+        .app.dock-bottom .main-card { order: 1; }
+        .feedback-textarea { flex: 1; background: var(--bg-white); border: 1px solid var(--border-input); color: var(--text-primary); padding: 12px; border-radius: 8px; font-size: 14px; font-family: inherit; line-height: 1.6; outline: none; resize: none; }
+        .feedback-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-muted); }
+        .feedback-textarea::placeholder { color: var(--text-placeholder); }
+        .feedback-actions { display: flex; gap: 8px; margin-top: 12px; }
+        .feedback-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; font-family: inherit; transition: background 0.15s; }
+        .feedback-btn.copy { background: var(--accent); color: #fff; }
+        .feedback-btn.copy:hover { background: var(--accent-hover); }
+        .shortcuts { font-size: 12px; color: var(--text-tertiary); padding: 12px 0 0; border-top: 1px solid var(--border-main); margin-top: 12px; line-height: 2; }
+        .shortcuts kbd { background: var(--bg-hover); border: 1px solid var(--border-main); padding: 2px 7px; border-radius: 4px; font-family: inherit; font-size: 11px; margin-right: 4px; color: var(--text-secondary); }
+
+        /* Resizer (vertical bar between columns; horizontal bar when docked bottom) */
+        .resizer { width: 12px; background: transparent; cursor: col-resize; position: relative; flex-shrink: 0; z-index: 10; }
+        .resizer::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 4px; height: 40px; background: var(--bg-active); border-radius: 2px; opacity: 0; transition: opacity 0.2s; }
+        .resizer:hover::after, .resizer.active::after { opacity: 1; }
+        .app.dock-bottom .resizer { width: auto; height: 12px; cursor: row-resize; }
+        .app.dock-bottom .resizer::after { width: 40px; height: 4px; }
+        body.resizing { user-select: none; }
+        body.resizing video, body.resizing .feedback-panel { pointer-events: none; }
+
+        /* ------------------------------------------------------------------ */
+        /* Main card with tab bar (Manimate PreviewPanel)                      */
+        /* ------------------------------------------------------------------ */
+        .main-card { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-main); }
+        .tab-bar { display: flex; align-items: center; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--border-main); }
+        .content-tab { position: relative; padding: 5px 14px; font-size: 13px; font-weight: 500; border-radius: 6px; border: none; cursor: pointer; font-family: var(--font); transition: all 0.12s; background: transparent; color: var(--text-tertiary); }
+        .content-tab:hover:not(.active) { background: var(--bg-hover); }
+        .content-tab.active { background: var(--bg-white); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .content-tab .ready-dot { display: none; position: absolute; top: -1px; right: -1px; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; }
+        .content-tab.ready .ready-dot { display: block; }
+        .theme-btn { width: 30px; height: 28px; border-radius: 6px; }
+        .theme-btn svg { width: 17px; height: 17px; }
+        .theme-btn .icon-sun { display: none; }              /* light mode → show moon */
+        body.night .theme-btn .icon-moon { display: none; }  /* night mode → show sun */
+        body.night .theme-btn .icon-sun { display: block; }
+
+        .panels { display: flex; flex: 1; overflow: hidden; position: relative; }
+        .content-panel { position: absolute; inset: 0; overflow: auto; visibility: hidden; display: flex; flex-direction: column; }
+        .content-panel.active { visibility: visible; }
+
+        /* Empty state */
+        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; color: var(--text-tertiary); padding: 40px; text-align: center; }
+        .empty-state svg { width: 48px; height: 48px; fill: var(--text-tertiary); margin-bottom: 16px; }
+        .empty-state p { font-size: 14px; }
+
+        /* ------------------------------------------------------------------ */
+        /* Code panel (Manimate CodeTab: dark with toolbar)                    */
+        /* ------------------------------------------------------------------ */
+        .code-panel { background: #111113; }
+        .code-toolbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; height: 36px; min-height: 36px; background: #1c1c1f; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .code-toolbar-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .code-toolbar-lang { font-size: 11px; font-weight: 500; letter-spacing: 0.02em; color: #3b82f6; background: rgba(59,130,246,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--mono); }
+        .code-toolbar-filename { font-size: 12px; color: #a1a1aa; font-family: var(--mono); }
+        .code-toolbar-meta { font-size: 11px; color: #52525b; }
+        .code-copy-btn { display: flex; align-items: center; gap: 5px; padding: 4px 8px; background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: pointer; color: #71717a; font-size: 12px; font-family: inherit; transition: all 0.15s ease; }
+        .code-copy-btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.08); color: #d4d4d8; }
+        .code-copy-btn.copied { color: var(--accent); }
+        .code-copy-btn svg { width: 14px; height: 14px; fill: currentColor; }
+        .code-content { padding: 10px 8px 16px; margin: 0; background: #111113; color: #d4d4d4; font-family: var(--mono); font-size: 13px; line-height: 1.6; flex: 1; overflow: visible; }
+        .code-line { display: flex; }
+        .code-line:hover { background: rgba(255,255,255,0.03); }
+        .line-number { color: #3f3f46; text-align: right; padding-right: 16px; min-width: 50px; user-select: none; }
+        .line-content { flex: 1; white-space: pre; }
+        .hl-keyword { color: #c586c0; }
+        .hl-string { color: #ce9178; }
+        .hl-comment { color: #6a9955; }
+        .hl-function { color: #dcdcaa; }
+        .hl-class { color: #4ec9b0; }
+        .hl-number { color: #b5cea8; }
+        .hl-decorator { color: #d7ba7d; }
+        .hl-builtin { color: #4fc1ff; }
+
+        /* ------------------------------------------------------------------ */
+        /* Preview panel (Manimate PreviewTab: black player, teal accent)      */
+        /* ------------------------------------------------------------------ */
+        .preview-panel { background: #000; overflow: hidden; }
+        .video-stage { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; }
+        .video-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+        .tap-overlay { position: absolute; inset: 0; cursor: pointer; z-index: 11; }
+
+        /* Double-click seek feedback */
+        .dtap { position: absolute; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; animation: dtap-fade 0.5s ease-out forwards; z-index: 12; }
+        .dtap.left { left: 15%; } .dtap.right { right: 15%; }
+        .dtap .bubble { width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; }
+        .dtap svg { width: 24px; height: 24px; fill: #fff; }
+        .dtap span { color: #fff; font-size: 12px; font-weight: 500; }
+        @keyframes dtap-fade { 0% { opacity: 1; transform: translateY(-50%) scale(1); } 100% { opacity: 0; transform: translateY(-50%) scale(1.2); } }
+
+        /* Subtitle overlay */
+        .subtitle-overlay { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; max-width: 80%; z-index: 10; }
+        .subtitle-text { background: rgba(0,0,0,0.75); color: #fff; padding: 6px 16px; border-radius: 4px; display: inline-block; line-height: 1.4; }
+        .subtitle-text:empty { display: none; }
+        .subtitle-text.size-small { font-size: 14px; }
+        .subtitle-text.size-medium { font-size: 18px; }
+        .subtitle-text.size-large { font-size: 24px; }
+
+        /* Progress bar - segmented by chapters, teal fill like Manimate */
+        .progress-bar { position: absolute; bottom: 48px; left: 12px; right: 12px; height: 20px; cursor: pointer; z-index: 15; display: flex; align-items: center; }
+        .progress-track { width: 100%; height: 4px; display: flex; gap: 3px; transition: height 0.15s; }
+        .progress-bar:hover .progress-track, .progress-bar.dragging .progress-track { height: 6px; }
+        .chapter-segment { height: 100%; background: var(--track); border-radius: 2px; overflow: hidden; position: relative; }
+        .chapter-segment-fill { height: 100%; background: var(--accent); width: 0; }
+        .progress-dot { position: absolute; top: 50%; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; transform: translateY(-50%) scale(0); transition: transform 0.1s, left 0.05s; pointer-events: none; }
+        .progress-bar:hover .progress-dot, .progress-bar.dragging .progress-dot, .progress-bar.playing .progress-dot { transform: translateY(-50%) scale(1); }
+
+        /* Controls overlay */
+        .controls { position: absolute; bottom: 0; left: 0; right: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); z-index: 20; }
+        .btn { background: transparent; border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 6px; transition: background 0.15s; font-family: inherit; }
+        .btn:hover { background: rgba(255,255,255,0.1); }
+        .btn.active { background: rgba(255,255,255,0.2); }
+        .play-btn { width: 40px; height: 40px; border-radius: 50%; }
+        .ctrl-btn { width: 36px; height: 36px; }
+        .play-btn svg { width: 24px; height: 24px; fill: #fff; }
+        .ctrl-btn svg { width: 20px; height: 20px; fill: #fff; }
+        .time { font-size: 13px; color: #fff; font-family: var(--mono); }
+        .time .sep { color: #a1a1aa; margin: 0 4px; }
+        .spacer { flex: 1; }
+
+        /* Chapter name + dropdown */
+        .chapter-wrap { position: relative; display: flex; align-items: center; gap: 6px; margin-left: 12px; min-width: 0; }
+        .chapter-bullet { color: #71717a; }
+        .scene-name { font-size: 13px; color: #d4d4d8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; cursor: pointer; }
+        .scene-name:hover { color: #fff; }
+
+        /* Capture (insert timestamp) button */
+        .capture-btn { height: 28px; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; color: #a1a1aa; font-size: 12px; font-weight: 500; }
+        .capture-btn:hover { color: #fff; }
+        .capture-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+        /* Dark menu surfaces (zinc-800, like Manimate settings menus) */
+        .menu-surface { position: absolute; background: var(--menu-bg); border-radius: 8px; padding: 4px 0; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.4); z-index: 30; overflow: hidden; }
+        .menu-surface.open { display: block; }
+        .menu-wrap { position: relative; }
+        .dropdown-menu { bottom: 100%; right: 0; min-width: 180px; margin-bottom: 8px; overflow: visible; }
+        .menu-opt { padding: 8px 16px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px; color: #fff; }
+        .menu-opt:hover { background: var(--menu-hover); }
+        .menu-opt .check { width: 16px; opacity: 0; color: var(--accent); }
+        .menu-opt.active { color: var(--accent); }
+        .menu-opt.active .check { opacity: 1; }
+        .menu-opt .arrow { margin-left: auto; font-size: 12px; color: #a1a1aa; }
+        .menu-divider { height: 1px; background: var(--menu-hover); margin: 4px 0; }
+        .submenu { right: 100%; bottom: 0; margin-right: 4px; min-width: 140px; }
+        .chapter-dropdown { bottom: 100%; left: 0; min-width: 260px; margin-bottom: 8px; max-height: 300px; overflow-y: auto; }
+        .chapter-item { padding: 10px 16px; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; align-items: center; color: #fff; }
+        .chapter-item:hover { background: var(--menu-hover); }
+        .chapter-item.active { color: var(--accent); }
+        .chapter-item .ch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+        .chapter-item .ch-time { color: #a1a1aa; font-size: 12px; margin-left: 12px; font-family: var(--mono); }
+
+        /* Download modal (Manimate style: dark, accent-bordered options) */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 100; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: var(--menu-bg); border-radius: 12px; padding: 24px; min-width: 320px; max-width: 400px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
+        .modal h3 { font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 12px; }
+        .modal-note { font-size: 14px; color: #e4e4e7; margin-bottom: 8px; }
+        .modal-hint { font-size: 12px; color: #a1a1aa; line-height: 1.5; margin-bottom: 20px; }
+        .modal-btns { display: flex; gap: 12px; justify-content: flex-end; }
+        .modal-btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; font-family: inherit; transition: background 0.15s; }
+        .modal-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-cancel { background: var(--menu-hover); color: #fff; }
+        .btn-cancel:hover { background: #52525b; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="feedback-panel">
+            <a class="brand-link" href="https://manimate.ai" target="_blank" rel="noopener noreferrer">manimate.ai</a>
+            <div class="feedback-head">
+                <div class="feedback-title">Notes</div>
+                <div class="dock-ctrl" id="dockCtrl">
+                    <button class="icon-btn dock-btn" data-dock="left" title="Dock left"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2.2" y="3.2" width="4" height="9.6" rx="1" fill="currentColor"/></svg></button>
+                    <button class="icon-btn dock-btn" data-dock="bottom" title="Dock bottom"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2.2" y="9.5" width="11.6" height="3.3" rx="1" fill="currentColor"/></svg></button>
+                    <button class="icon-btn dock-btn" data-dock="right" title="Dock right"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="9.8" y="3.2" width="4" height="9.6" rx="1" fill="currentColor"/></svg></button>
+                </div>
+            </div>
+            <textarea class="feedback-textarea" id="feedbackTextarea" placeholder="Press t to timestamp a moment, then describe what to change. Copy into the Coding Agent to edit the scene."></textarea>
+            <div class="feedback-actions">
+                <button class="feedback-btn copy" id="copyAllBtn">Copy</button>
+            </div>
+            <div class="shortcuts"><kbd>Space</kbd> Play/Pause <kbd>c</kbd> Subtitles <kbd>t</kbd> Timestamp</div>
+        </div>
+        <div class="resizer" id="resizer"></div>
+        <div class="main-card">
+            <div class="tab-bar">
+                <button class="content-tab" data-tab="code">Code<span class="ready-dot"></span></button>
+                <button class="content-tab active" data-tab="preview">Preview<span class="ready-dot"></span></button>
+                <div style="flex:1"></div>
+                <button class="icon-btn theme-btn" id="themeBtn" title="Toggle night mode">
+                    <svg class="icon-moon" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-5.4-5.4c0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+                    <svg class="icon-sun" viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1zm0 16a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1zM4 11a1 1 0 1 1 0 2H2a1 1 0 1 1 0-2h2zm18 0a1 1 0 1 1 0 2h-2a1 1 0 1 1 0-2h2zM5.6 4.2l1.4 1.4A1 1 0 0 1 5.6 7L4.2 5.6a1 1 0 0 1 1.4-1.4zm12.8 12.8l1.4 1.4a1 1 0 0 1-1.4 1.4L17 18.4a1 1 0 0 1 1.4-1.4zM4.2 18.4L5.6 17A1 1 0 0 1 7 18.4l-1.4 1.4a1 1 0 0 1-1.4-1.4zM17 5.6l1.4-1.4a1 1 0 0 1 1.4 1.4L18.4 7A1 1 0 0 1 17 5.6z"/></svg>
+                </button>
+            </div>
+            <div class="panels">
+                <div class="content-panel code-panel" id="codePanel">
+                    <div class="code-toolbar" id="codeToolbar" hidden>
+                        <div class="code-toolbar-left">
+                            <span class="code-toolbar-lang">Python</span>
+                            <span class="code-toolbar-filename">script.py</span>
+                            <span class="code-toolbar-meta" id="codeLineCount"></span>
+                        </div>
+                        <button class="code-copy-btn" id="codeCopyBtn">
+                            <svg viewBox="0 0 16 16"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
+                            <span id="codeCopyLabel">Copy</span>
+                        </button>
+                    </div>
+                    <div class="code-content" id="codeContent">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+                            <p style="color:#6b7280">No script.py found</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="content-panel preview-panel active" id="previewPanel">
+                    <div class="video-stage">
+                        <video id="video" src="/video.mp4" playsinline preload="auto"></video>
+                        <div class="tap-overlay" id="tapOverlay"></div>
+                        <div class="subtitle-overlay"><div class="subtitle-text size-medium" id="subtitleText"></div></div>
+                        <div class="progress-bar" id="progressBar">
+                            <div class="progress-track" id="progressTrack"></div>
+                            <div class="progress-dot" id="progressDot"></div>
+                        </div>
+                        <div class="controls">
+                            <button class="btn play-btn" id="playBtn" title="Play/Pause (Space)">
+                                <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                <svg id="pauseIcon" viewBox="0 0 24 24" hidden><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                                <svg id="replayIcon" viewBox="0 0 24 24" hidden><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+                            </button>
+                            <div class="time"><span id="curTime">0:00</span><span class="sep">/</span><span id="durTime">0:00</span></div>
+                            <div class="chapter-wrap">
+                                <span class="chapter-bullet">&bull;</span>
+                                <div class="scene-name" id="sceneName" title="Chapters">-</div>
+                                <div class="menu-surface chapter-dropdown" id="chapterDropdown"></div>
+                            </div>
+                            <button class="btn capture-btn" id="insertTimestampBtn" title="Insert timestamp into feedback (t)">
+                                <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                                Capture
+                            </button>
+                            <div class="spacer"></div>
+                            <button class="btn ctrl-btn" id="ccBtn" title="Subtitles (c)" hidden>
+                                <svg viewBox="0 0 24 24"><path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z"/></svg>
+                            </button>
+                            <div class="menu-wrap">
+                                <button class="btn ctrl-btn" id="settingsBtn" title="Settings">
+                                    <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                                </button>
+                                <div class="menu-surface dropdown-menu" id="settingsMenu">
+                                    <div class="menu-opt" data-submenu="fontSizeMenu"><span>Subtitle size</span><span class="arrow">&rsaquo;</span></div>
+                                    <div class="menu-surface submenu" id="fontSizeMenu">
+                                        <div class="menu-opt" data-size="small"><span class="check">&#10003;</span>Small</div>
+                                        <div class="menu-opt active" data-size="medium"><span class="check">&#10003;</span>Medium</div>
+                                        <div class="menu-opt" data-size="large"><span class="check">&#10003;</span>Large</div>
+                                    </div>
+                                    <div class="menu-divider"></div>
+                                    <div class="menu-opt" data-submenu="speedMenu"><span>Playback speed</span><span class="arrow">&rsaquo;</span></div>
+                                    <div class="menu-surface submenu" id="speedMenu"></div>
+                                </div>
+                            </div>
+                            <button class="btn ctrl-btn" id="downloadBtn" title="Download">
+                                <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                            </button>
+                            <button class="btn ctrl-btn" id="fullscreenBtn" title="Fullscreen (F)">
+                                <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="downloadModal">
+        <div class="modal">
+            <h3>Download video</h3>
+            <p class="modal-note">Saves the current preview quality.</p>
+            <p class="modal-hint">Need 1080p or 4K? Just ask in the chat, e.g. "render in 4K". The agent will re-render and re-mux at higher quality.</p>
+            <div class="modal-btns">
+                <button class="modal-btn btn-cancel" id="downloadCancel">Cancel</button>
+                <button class="modal-btn btn-primary" id="downloadConfirm">Download</button>
+            </div>
+        </div>
+    </div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+const video = $('video'), progressBar = $('progressBar'), settingsMenu = $('settingsMenu'), downloadModal = $('downloadModal');
+
+let chapters = [], subtitles = [];
+let ended = false, subtitlesOn = false;
+let userSelectedTab = false, scriptText = null;
+
+const els = {
+    curTime: $('curTime'), durTime: $('durTime'), sceneName: $('sceneName'),
+    playIcon: $('playIcon'), pauseIcon: $('pauseIcon'), replayIcon: $('replayIcon'),
+    progressDot: $('progressDot'), subtitleText: $('subtitleText')
+};
+
+const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+const getChapter = t => chapters.findLast(c => t >= c.start) || chapters[0];
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const seekBy = delta => { video.currentTime = clamp(video.currentTime + delta, 0, video.duration); ended = false; updateUI(); };
+
+// Map time <-> pixel through the segment elements so the dot, seeks, and
+// fills share one geometry. The chapter timeline (sum of per-scene durations)
+// can be shorter than video.duration when the muxed audio outlasts the video
+// track, and the flex gaps between segments are not duration-proportional.
+const segEl = i => document.querySelector(`.chapter-segment[data-i="${i}"]`);
+function timeToX(t) {
+    const ch = getChapter(t), seg = ch && segEl(ch.index);
+    if (!seg) return clamp(t / (video.duration || 1), 0, 1) * progressBar.offsetWidth;
+    return seg.offsetLeft + clamp((t - ch.start) / ch.duration, 0, 1) * seg.offsetWidth;
+}
+function xToTime(x) {
+    for (const c of chapters) {
+        const seg = segEl(c.index);
+        if (!seg) break;
+        if (x < seg.offsetLeft + seg.offsetWidth || c === chapters[chapters.length - 1])
+            return c.start + clamp((x - seg.offsetLeft) / seg.offsetWidth, 0, 1) * c.duration;
+    }
+    return clamp(x / progressBar.offsetWidth, 0, 1) * (video.duration || 0);
+}
+
+const setTabReady = tab => document.querySelector(`.content-tab[data-tab="${tab}"]`)?.classList.add('ready');
+
+// Unified drag handler
+const makeDraggable = (trigger, onDrag, onEnd = null, activeClass = 'dragging') => {
+    let active = false;
+    trigger.addEventListener('mousedown', e => { active = true; trigger.classList.add(activeClass); onDrag(e); e.preventDefault(); });
+    document.addEventListener('mousemove', e => active && onDrag(e));
+    document.addEventListener('mouseup', () => { if (active) { active = false; trigger.classList.remove(activeClass); onEnd?.(); } });
+};
+
+// Menu selection helper
+const selectOption = (container, selector, activeClass, onSelect) => {
+    container.addEventListener('click', e => {
+        const opt = e.target.closest(selector);
+        if (!opt) return;
+        container.querySelectorAll(selector).forEach(o => o.classList.remove(activeClass));
+        opt.classList.add(activeClass);
+        onSelect(opt);
+    });
+};
+
+// Generic text loader
+const loadText = async (url, onOk) => {
+    try {
+        const res = await fetch(url);
+        if (res.ok) onOk(await res.text());
+    } catch (e) { console.error(e); }
+};
+
+function parseSRT(text) {
+    return text.trim().split(/\n\n+/).map(block => {
+        const lines = block.split('\n');
+        const m = lines[1]?.match(/(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})/);
+        return m ? { start: +m[1]*3600 + +m[2]*60 + +m[3] + +m[4]/1000, end: +m[5]*3600 + +m[6]*60 + +m[7] + +m[8]/1000, text: lines.slice(2).join('\n') } : null;
+    }).filter(Boolean);
+}
+
+function highlightPython(code) {
+    const keywords = new Set(['def', 'class', 'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with', 'as', 'import', 'from', 'return', 'yield', 'raise', 'pass', 'break', 'continue', 'and', 'or', 'not', 'in', 'is', 'lambda', 'True', 'False', 'None', 'self', 'async', 'await']);
+    const builtins = new Set(['print', 'range', 'len', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple', 'super', 'isinstance', 'type', 'open', 'enumerate', 'zip', 'map', 'filter', 'sorted', 'reversed', 'min', 'max', 'sum', 'abs', 'any', 'all']);
+
+    return code.split('\n').map((line, lineNum) => {
+        let result = '', i = 0;
+        while (i < line.length) {
+            if (line.slice(i, i + 3) === '"""' || line.slice(i, i + 3) === "'''") {
+                const quote = line.slice(i, i + 3);
+                let end = line.indexOf(quote, i + 3);
+                if (end === -1) end = line.length - 3;
+                result += `<span class="hl-string">${esc(line.slice(i, end + 3))}</span>`;
+                i = end + 3;
+            } else if (line[i] === '"' || line[i] === "'") {
+                const quote = line[i];
+                let j = i + 1;
+                while (j < line.length && (line[j] !== quote || line[j - 1] === '\\')) j++;
+                result += `<span class="hl-string">${esc(line.slice(i, j + 1))}</span>`;
+                i = j + 1;
+            } else if (line[i] === '#') {
+                result += `<span class="hl-comment">${esc(line.slice(i))}</span>`;
+                break;
+            } else if (line[i] === '@' && /\w/.test(line[i + 1] || '')) {
+                let j = i + 1;
+                while (j < line.length && /\w/.test(line[j])) j++;
+                result += `<span class="hl-decorator">${esc(line.slice(i, j))}</span>`;
+                i = j;
+            } else if (/\d/.test(line[i]) && (i === 0 || !/\w/.test(line[i - 1]))) {
+                let j = i;
+                while (j < line.length && /[\d.]/.test(line[j])) j++;
+                result += `<span class="hl-number">${esc(line.slice(i, j))}</span>`;
+                i = j;
+            } else if (/[a-zA-Z_]/.test(line[i])) {
+                let j = i;
+                while (j < line.length && /\w/.test(line[j])) j++;
+                const word = line.slice(i, j), nextChar = line[j] || '';
+                if (keywords.has(word)) result += `<span class="hl-keyword">${esc(word)}</span>`;
+                else if (builtins.has(word) && nextChar === '(') result += `<span class="hl-builtin">${esc(word)}</span>`;
+                else if (i >= 4 && line.slice(i - 4, i) === 'def ') result += `<span class="hl-function">${esc(word)}</span>`;
+                else if (i >= 6 && line.slice(i - 6, i) === 'class ') result += `<span class="hl-class">${esc(word)}</span>`;
+                else result += esc(word);
+                i = j;
+            } else {
+                result += esc(line[i]);
+                i++;
+            }
+        }
+        return `<div class="code-line"><span class="line-number">${lineNum + 1}</span><span class="line-content">${result || ' '}</span></div>`;
+    }).join('');
+}
+
+function switchTab(tab, byUser = true) {
+    if (byUser) userSelectedTab = true;
+    document.querySelectorAll('.content-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    document.querySelectorAll('.content-panel').forEach(p => p.classList.toggle('active', p.id === tab + 'Panel'));
+}
+
+function updateUI() {
+    const t = video.currentTime, d = video.duration || 1, ch = getChapter(t);
+    els.curTime.textContent = fmt(t);
+    els.durTime.textContent = fmt(d);
+    els.sceneName.textContent = ch?.name || '-';
+    document.querySelectorAll('.chapter-item').forEach((el, i) => el.classList.toggle('active', i === ch?.index));
+
+    els.playIcon.style.display = !ended && video.paused ? 'block' : 'none';
+    els.pauseIcon.style.display = !ended && !video.paused ? 'block' : 'none';
+    els.replayIcon.style.display = ended ? 'block' : 'none';
+    progressBar.classList.toggle('playing', !video.paused && !ended);
+
+    chapters.forEach((c, i) => {
+        const fill = document.querySelector(`.chapter-segment[data-i="${i}"] .chapter-segment-fill`);
+        if (fill) fill.style.width = t >= c.start + c.duration ? '100%' : t > c.start ? `${(t - c.start) / c.duration * 100}%` : '0';
+    });
+    els.progressDot.style.left = `${timeToX(t) - 6}px`;
+
+    const sub = subtitlesOn && subtitles.find(s => t >= s.start && t < s.end);
+    els.subtitleText.textContent = sub ? sub.text : '';
+}
+
+function insertText(str, newlineBefore = false) {
+    const ta = $('feedbackTextarea'), start = ta.selectionStart, text = ta.value;
+    const nl = newlineBefore && text.length && start === text.length && !text.endsWith('\n') ? '\n' : '';
+    ta.value = text.slice(0, start) + nl + str + text.slice(ta.selectionEnd);
+    ta.selectionStart = ta.selectionEnd = start + nl.length + str.length;
+    ta.focus();
+}
+
+function insertTimestamp() {
+    const ch = getChapter(video.currentTime);
+    insertText(`[${fmt(video.currentTime)}] ${ch?.name || 'Unknown'}: `, true);
+}
+
+function copyNotes() {
+    const text = $('feedbackTextarea').value.trim();
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    $('copyAllBtn').textContent = 'Copied!';
+    setTimeout(() => $('copyAllBtn').textContent = 'Copy', 1500);
+}
+
+function togglePlay() {
+    if (ended) { video.currentTime = 0; ended = false; }
+    video.paused ? video.play() : video.pause();
+}
+
+function toggleFullscreen() {
+    if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
+    document.querySelector('.video-stage')?.requestFullscreen?.().catch(() => {});
+}
+
+function showSeekFeedback(side) {
+    const stage = document.querySelector('.video-stage');
+    stage.querySelectorAll('.dtap').forEach(el => el.remove());
+    const el = document.createElement('div');
+    el.className = `dtap ${side}`;
+    el.innerHTML = `<div class="bubble">${side === 'left'
+        ? '<svg viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>'
+        : '<svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>'}</div><span>5s</span>`;
+    stage.appendChild(el);
+    setTimeout(() => el.remove(), 500);
+}
+
+function seek(e) {
+    video.currentTime = xToTime(e.clientX - progressBar.getBoundingClientRect().left);
+    ended = false;
+    updateUI();
+}
+
+async function downloadVideo() {
+    $('downloadConfirm').disabled = true;
+    try {
+        const res = await fetch('/download');
+        if (!res.ok) throw new Error('Download failed');
+        const blob = await res.blob(), a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = res.headers.get('X-Filename') || 'video.mp4';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        downloadModal.classList.remove('open');
+    } catch (e) {
+        console.error(e);
+    } finally {
+        $('downloadConfirm').disabled = false;
+    }
+}
+
+async function init() {
+    chapters = await (await fetch('/chapters.json')).json();
+    try { const res = await fetch('/subtitles.srt'); if (res.ok) { subtitles = parseSRT(await res.text()); } } catch {}
+
+    // Load tab content
+    loadText('/cscript.py', code => {
+        scriptText = code;
+        $('codeContent').innerHTML = highlightPython(code);
+        $('codeToolbar').hidden = false;
+        $('codeLineCount').textContent = `${code.split('\n').length} lines`;
+        setTabReady('code');
+    });
+
+    // Tab switching
+    document.querySelectorAll('.content-tab').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.tab)));
+
+    // Code copy button
+    $('codeCopyBtn').addEventListener('click', () => {
+        if (!scriptText || !navigator.clipboard) return;
+        navigator.clipboard.writeText(scriptText).then(() => {
+            $('codeCopyBtn').classList.add('copied');
+            $('codeCopyLabel').textContent = 'Copied!';
+            setTimeout(() => { $('codeCopyBtn').classList.remove('copied'); $('codeCopyLabel').textContent = 'Copy'; }, 1500);
+        });
+    });
+
+    $('chapterDropdown').innerHTML = chapters.map(c => `<div class="chapter-item" data-t="${c.start}"><span class="ch-name">${esc(c.name)}</span><span class="ch-time">${fmt(c.start)}</span></div>`).join('');
+    $('progressTrack').innerHTML = chapters.map((c, i) => `<div class="chapter-segment" data-i="${i}" style="flex-grow:${c.duration}"><div class="chapter-segment-fill"></div></div>`).join('');
+    $('speedMenu').innerHTML = [0.5, 0.75, 1, 1.25, 1.5, 2].map(s => `<div class="menu-opt${s === 1 ? ' active' : ''}" data-speed="${s}"><span class="check">&#10003;</span>${s === 1 ? 'Normal' : s + 'x'}</div>`).join('');
+    if (subtitles.length) { $('ccBtn').hidden = false; subtitlesOn = true; $('ccBtn').classList.add('active'); }
+
+    // Video events
+    video.addEventListener('timeupdate', updateUI);
+    video.addEventListener('play', () => { ended = false; updateUI(); });
+    video.addEventListener('pause', updateUI);
+    video.addEventListener('ended', () => { ended = true; updateUI(); });
+    video.addEventListener('loadedmetadata', () => els.durTime.textContent = fmt(video.duration));
+    video.addEventListener('canplay', () => { setTabReady('preview'); if (!userSelectedTab) switchTab('preview', false); }, { once: true });
+    $('playBtn').addEventListener('click', togglePlay);
+
+    // Tap overlay: click = play/pause, double-click = seek ±5s
+    const tapOverlay = $('tapOverlay');
+    tapOverlay.addEventListener('click', togglePlay);
+    tapOverlay.addEventListener('dblclick', e => {
+        const rect = tapOverlay.getBoundingClientRect();
+        const side = e.clientX - rect.left < rect.width / 2 ? 'left' : 'right';
+        seekBy(side === 'left' ? -5 : 5);
+        showSeekFeedback(side);
+    });
+
+    // Progress bar drag
+    makeDraggable(progressBar, seek);
+
+    // Document-level click handlers (close dropdowns)
+    const closeMenus = () => { settingsMenu.querySelectorAll('.open').forEach(el => el.classList.remove('open')); settingsMenu.classList.remove('open'); };
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.chapter-wrap')) $('chapterDropdown').classList.remove('open');
+        if (!e.target.closest('.menu-wrap')) closeMenus();
+    });
+
+    // Chapter dropdown
+    $('sceneName').addEventListener('click', e => { e.stopPropagation(); $('chapterDropdown').classList.toggle('open'); });
+    $('chapterDropdown').addEventListener('click', e => {
+        const ch = e.target.closest('.chapter-item');
+        if (ch) { video.currentTime = +ch.dataset.t; ended = false; updateUI(); $('chapterDropdown').classList.remove('open'); }
+    });
+
+    // Feedback
+    $('insertTimestampBtn').addEventListener('click', insertTimestamp);
+    $('copyAllBtn').addEventListener('click', copyNotes);
+
+    // CC toggle
+    $('ccBtn').addEventListener('click', () => { subtitlesOn = !subtitlesOn; $('ccBtn').classList.toggle('active', subtitlesOn); updateUI(); });
+
+    // Fullscreen
+    $('fullscreenBtn').addEventListener('click', toggleFullscreen);
+
+    // Settings menu
+    $('settingsBtn').addEventListener('click', e => { e.stopPropagation(); settingsMenu.classList.toggle('open'); });
+    settingsMenu.addEventListener('mouseover', e => { const opt = e.target.closest('[data-submenu]'); if (opt) { settingsMenu.querySelectorAll('.submenu').forEach(s => s.classList.remove('open')); $(opt.dataset.submenu).classList.add('open'); } });
+
+    // Menu selections
+    selectOption($('fontSizeMenu'), '[data-size]', 'active', opt => { els.subtitleText.className = 'subtitle-text size-' + opt.dataset.size; closeMenus(); });
+    selectOption($('speedMenu'), '[data-speed]', 'active', opt => { video.playbackRate = +opt.dataset.speed; closeMenus(); });
+
+    // Download modal
+    $('downloadBtn').addEventListener('click', () => { downloadModal.classList.add('open'); $('downloadConfirm').disabled = false; });
+    $('downloadCancel').addEventListener('click', () => downloadModal.classList.remove('open'));
+    downloadModal.addEventListener('click', e => e.target === downloadModal && downloadModal.classList.remove('open'));
+    $('downloadConfirm').addEventListener('click', () => downloadVideo());
+
+    // Keyboard shortcuts
+    const seekLeft = () => seekBy(-5), seekRight = () => seekBy(5);
+    document.addEventListener('keydown', e => {
+        if (e.target.tagName === 'TEXTAREA' || downloadModal.classList.contains('open')) return;
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        const actions = { Space: togglePlay, KeyK: togglePlay, ArrowLeft: seekLeft, KeyJ: seekLeft, ArrowRight: seekRight, KeyL: seekRight, KeyC: () => subtitles.length && $('ccBtn').click(), KeyT: insertTimestamp, KeyF: toggleFullscreen };
+        if (actions[e.code]) { e.preventDefault(); actions[e.code](); }
+    });
+
+    // Dock the panel left / bottom / right via the header buttons; choice is remembered
+    const app = document.querySelector('.app'), resizer = $('resizer'), feedbackPanel = document.querySelector('.feedback-panel');
+    const setDock = dock => {
+        app.classList.toggle('dock-right', dock === 'right');
+        app.classList.toggle('dock-bottom', dock === 'bottom');
+        feedbackPanel.style[dock === 'bottom' ? 'width' : 'height'] = '';  // clear the size that no longer applies
+        document.querySelectorAll('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.dock === dock));
+        localStorage.setItem('feedbackDock', dock);
+    };
+    $('dockCtrl').addEventListener('click', e => { const b = e.target.closest('.dock-btn'); if (b) setDock(b.dataset.dock); });
+    setDock(localStorage.getItem('feedbackDock') || 'left');
+
+    // Resizer: width between columns, or height when docked at the bottom
+    makeDraggable(resizer, e => {
+        const r = app.getBoundingClientRect();
+        if (app.classList.contains('dock-bottom')) {
+            feedbackPanel.style.height = clamp(r.bottom - e.clientY - 12, 120, window.innerHeight * 0.6) + 'px';
+        } else {
+            const w = app.classList.contains('dock-right') ? r.right - e.clientX - 12 : e.clientX - r.left - 12;
+            feedbackPanel.style.width = clamp(w, 200, 600) + 'px';
+        }
+    }, () => document.body.classList.remove('resizing'), 'active');
+    resizer.addEventListener('mousedown', () => document.body.classList.add('resizing'));
+
+    // Night mode — remembered; falls back to the OS preference on first load
+    const applyTheme = night => {
+        document.body.classList.toggle('night', night);   // CSS swaps the moon/sun icon
+        localStorage.setItem('night', night ? '1' : '0');
+    };
+    const savedNight = localStorage.getItem('night');
+    applyTheme(savedNight === null ? matchMedia('(prefers-color-scheme: dark)').matches : savedNight === '1');
+    $('themeBtn').addEventListener('click', () => applyTheme(!document.body.classList.contains('night')));
+
+    updateUI();
+}
+init();
+</script>
+</body>
+</html>

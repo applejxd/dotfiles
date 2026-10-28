@@ -237,6 +237,20 @@ orca/**
 .claude/skills/powerpoint-studio/evals/final-verification
 .claude/skills/powerpoint-studio/evals/final-verification/**
 
+# conference-video スキルが実行時に作る成果物 (powerpoint-studio と同じ扱い)。
+# スキル本体 (SKILL.md / scripts / assets / references / tests / vendor / lock) は配布対象。
+# 成果物の保存先はスキルの外 (~/.conference-video/<slug>/) なので、ここに列挙するのはツールの作業領域だけ。
+.claude/skills/conference-video/.venv
+.claude/skills/conference-video/.venv/**
+.claude/skills/conference-video/.pytest_cache
+.claude/skills/conference-video/.pytest_cache/**
+.claude/skills/conference-video/.ruff_cache
+.claude/skills/conference-video/.ruff_cache/**
+.claude/skills/conference-video/.tmp
+.claude/skills/conference-video/.tmp/**
+.claude/skills/conference-video/**/__pycache__
+.claude/skills/conference-video/**/__pycache__/**
+
 # herdr の skill は run_after の herdr_integration が `herdr --skill` から毎回生成する。
 # 取り込むと版が固定されて本体の更新に追従しなくなる。see docs/spec/structure.md
 .claude/skills/herdr

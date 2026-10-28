@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>conference-video 確認</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --line:#d8dce3; --ink:#1d2330; --sub:#5b6577;
+          --ok:#1a7f4b; --warn:#b26a00; --bad:#c0392b; --acc:#2456d6; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.6 system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;
+         background:var(--bg); color:var(--ink); }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:10px 20px;
+           position:sticky; top:0; z-index:5; }
+  header h1 { font-size:16px; margin:0 0 2px; }
+  .path { color:var(--sub); font-size:12px; word-break:break-all; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .chip { border:1px solid var(--line); border-radius:999px; padding:2px 12px; cursor:pointer;
+          background:#fff; font-size:13px; }
+  .chip.active { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc); }
+  .chip .st { font-weight:600; margin-left:6px; }
+  .st.ok { color:var(--ok); } .st.warn { color:var(--warn); } .st.bad { color:var(--bad); }
+  .st.none { color:var(--sub); }
+  main { max-width:1100px; margin:16px auto; padding:0 16px 80px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
+           padding:14px 16px; margin-bottom:14px; }
+  .approve { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .approve input[type=text] { flex:1; min-width:180px; }
+  button { font:inherit; padding:4px 12px; border:1px solid var(--line); border-radius:6px;
+           background:#fff; cursor:pointer; }
+  button.primary { background:var(--ok); color:#fff; border-color:var(--ok); }
+  button.danger { background:var(--bad); color:#fff; border-color:var(--bad); }
+  button:disabled { opacity:.5; cursor:default; }
+  input[type=text], textarea, select { font:inherit; border:1px solid var(--line);
+           border-radius:6px; padding:4px 8px; background:#fff; color:inherit; }
+  textarea { width:100%; resize:vertical; min-height:2.6em; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { border-bottom:1px solid var(--line); padding:6px 6px; vertical-align:top; text-align:left; }
+  td button { white-space:nowrap; }
+  col.narrow { width:92px; } col.note { width:230px; } col.num { width:44px; } col.time { width:56px; }
+  th { color:var(--sub); font-weight:600; font-size:12px; }
+  .reading { color:var(--sub); font-size:12px; word-break:break-all; }
+  .small { font-size:12px; color:var(--sub); }
+  .banner { padding:8px 12px; border-radius:6px; margin-bottom:10px; background:#fff4e0;
+            border:1px solid #f0c36d; }
+  .banner.bad { background:#fdecea; border-color:#e8a29a; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff; }
+  .card img, .card video { width:100%; max-height:220px; object-fit:contain; background:#111;
+           border-radius:6px; }
+  .card .row { margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .player { width:100%; max-height:420px; background:#000; border-radius:8px; }
+  tr.cur { background:#eef3ff; }
+  tr.cand { background:#fff8e6; }
+  input.stale { background:#fff3cd; border-color:#e0a800; }
+  .saved { color:var(--ok); font-size:12px; margin-left:6px; }
+  .err { color:var(--bad); font-size:12px; margin-left:6px; }
+  #toast { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:20;
+           display:flex; flex-direction:column; gap:6px; align-items:center; }
+  .toast { padding:8px 14px; border-radius:8px; color:#fff; box-shadow:0 2px 8px #0003;
+           max-width:760px; }
+  .toast.ok { background:var(--ok); } .toast.bad { background:var(--bad); }
+  pre { white-space:pre-wrap; word-break:break-word; margin:0; }
+  a { color:var(--acc); }
+</style>
+</head>
+<body>
+<header>
+  <h1>conference-video 確認</h1>
+  <div class="path" id="path"></div>
+  <div class="chips" id="chips"></div>
+</header>
+<main id="main"></main>
+<audio id="voice" preload="none"></audio>
+<div id="toast"></div>
+<script>
+"use strict";
+const ITEMS = [["plan","構成案"],["script","台本"],["yomi","読み"],["assets","素材"],["video","動画"]];
+let S = null;            // /api/state
+let tab = ITEMS.some(([id]) => id === location.hash.slice(1)) ? location.hash.slice(1) : "script";
+
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c));
+  return e;
+}
+const fileUrl = (u) => u;
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: body === undefined ? {} : {"Content-Type": "application/json"},
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+  return data;
+}
+async function load(keepScroll = true) {
+  const y = window.scrollY;
+  S = await api("/api/state");
+  render();
+  if (keepScroll) window.scrollTo(0, y);
+}
+function toast(msg, bad) {  // 再描画で消えないよう、画面の下に固定して出す
+  const box = document.getElementById("toast");
+  const s = h("div", {class: "toast " + (bad ? "bad" : "ok")}, msg);
+  box.append(s); setTimeout(() => s.remove(), bad ? 9000 : 2000);
+}
+async function act(btn, fn, okMsg = "保存しました") {
+  btn.disabled = true;
+  try { const r = await fn(); toast(okMsg); await load(); return r; }
+  catch (e) {
+    toast(e.message, true);
+    if (/変わりました/.test(e.message)) await load().catch(() => {});  // 最新の内容を見せる
+  }
+  finally { btn.disabled = false; }
+}
+
+// ── 承認の状態 ──
+function approvalView(item) {
+  const a = S.approvals[item];
+  if (!a) return ["未承認", "none"];
+  if (a.stale) return ["古い(承認後に変更)", "warn"];
+  return a.status === "承認" ? ["承認", "ok"] : ["要修正", "bad"];
+}
+function renderHeader() {
+  document.getElementById("path").textContent = "作業フォルダ: " + S.workdir;
+  const box = document.getElementById("chips"); box.replaceChildren();
+  for (const [id, label] of ITEMS) {
+    const [t, cls] = approvalView(id);
+    box.append(h("span", {class: "chip" + (tab === id ? " active" : ""),
+      onclick: () => { tab = id; history.replaceState(null, "", "#" + id); render(); }}, label, h("span", {class: "st " + cls}, t)));
+  }
+}
+function approveBar(item) {
+  const a = S.approvals[item];
+  const [t, cls] = approvalView(item);
+  const comment = h("input", {type: "text", placeholder: "コメント(任意)", value: a ? a.comment : ""});
+  const send = (status) => (ev) => act(ev.target, () =>
+    api("/api/approve", {item, status, comment: comment.value, hash: (S.hashes || {})[item] || ""}));
+  const broken = !!S.errors.approvals;  // 承認記録が壊れている間は承認できない(409)
+  return h("div", {class: "panel approve"},
+    h("strong", {}, "この項目の判断:"), h("span", {class: "st " + cls}, t),
+    a && a.at ? h("span", {class: "small"}, a.at.replace("T", " ").slice(0, 19)) : null,
+    comment,
+    h("button", {class: "primary", disabled: broken, onclick: send("承認")}, "承認"),
+    h("button", {class: "danger", disabled: broken, onclick: send("要修正")}, "要修正"),
+    a && !broken ? h("button", {onclick: send("未承認")}, "取り消し") : null);
+}
+
+// 壊れたファイルの警告(サーバの errors をすべて、どのタブでも先頭に出す)
+const ERROR_LABELS = {approvals: "承認記録(approvals.json)", timestamps: "音声の時刻(timestamps.json)",
+  notes: "指摘(notes.json)", script: "台本(narration.txt)", yomi: "読み(yomi.json)",
+  assets: "素材台帳(assets.json)", brief: "構成案(brief.md)"};
+function errorBanner() {
+  const keys = Object.keys(S.errors);
+  if (!keys.length) return [];
+  return [h("div", {class: "banner bad"}, h("strong", {}, "読めないファイルがあります(直してから再読み込みしてください)"),
+    keys.map((k) => h("div", {}, (ERROR_LABELS[k] || k) + ": " + S.errors[k])))];
+}
+
+// ── 台本 ──
+const voice = document.getElementById("voice");
+let stopAt = null;
+voice.addEventListener("timeupdate", () => { if (stopAt != null && voice.currentTime >= stopAt) { voice.pause(); stopAt = null; } });
+function playLine(l) {
+  if (!S.script.audio || l.start_s == null) return;
+  if (!voice.src) voice.src = fileUrl("/files/" + S.script.audio);
+  voice.currentTime = l.start_s; stopAt = l.start_s + l.duration_s; voice.play();
+}
+const mmss = (s) => s == null ? "–" : Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+const noteOf = (n) => (S.notes.find((x) => x.line === n) || {}).note || "";
+const noteStale = (n) => !!(S.notes.find((x) => x.line === n) || {}).stale;
+
+function renderScript() {
+  const out = [approveBar("script")];
+  if (S.script.stale) out.push(h("div", {class: "banner"},
+    "台本が音声(timestamps.json)と食い違っています。直した行は再合成が必要です。"));
+  const rows = S.script.lines.map((l) => {
+    const ta = h("textarea", {rows: 2}, l.text);
+    const save = h("button", {disabled: true, onclick: (ev) => act(ev.target, async () => {
+      const r = await api("/api/narration", {index: l.index, text: ta.value, hash: (S.hashes || {}).script || ""});
+      return r;
+    })}, "本文を保存");
+    ta.addEventListener("input", () => { save.disabled = ta.value.trim() === l.text; });
+    const note = h("input", {type: "text", placeholder: "指摘(読み・同期・内容)", value: noteOf(l.index + 1),
+      class: noteStale(l.index + 1) ? "stale" : "", title: noteStale(l.index + 1) ? "古い指摘: この行の本文が変わりました。確かめて直すか消してください" : "",
+      onchange: (ev) => act(ev.target, () => api("/api/note", {line: l.index + 1, note: ev.target.value, hash: (S.hashes || {}).script || ""}))});
+    return h("tr", {},
+      h("td", {}, String(l.index + 1)), h("td", {}, mmss(l.start_s)),
+      h("td", {}, ta, h("div", {class: "reading"}, l.reading ? "読み: " + l.reading : ""), save),
+      h("td", {}, h("button", {disabled: !S.script.audio || l.start_s == null,
+        onclick: () => playLine(l)}, "▶ 聴く")),
+      h("td", {}, note));
+  });
+  out.push(h("div", {class: "panel"},
+    h("div", {class: "small"}, "本文を直して保存すると narration.txt が更新されます(直前の内容は narration.txt.bak)。"
+      + "音声への反映は再合成が必要です。指摘は notes.json に保存されます。本文を直すと、その行の指摘は「古い」と示されます。"),
+    h("table", {}, h("colgroup", {}, h("col", {class: "num"}), h("col", {class: "time"}), h("col", {}), h("col", {class: "narrow"}), h("col", {class: "note"})),
+      h("thead", {}, h("tr", {}, ["#", "開始", "本文・読み", "音声", "指摘"].map((t) => h("th", {}, t)))),
+      h("tbody", {}, rows))));
+  return out;
+}
+
+// ── 読み ──
+function yomiRow(y) {
+  const reading = h("input", {type: "text", value: y.reading, size: 18});
+  const status = h("select", {}, ["確認済み", "候補"].map((s) => h("option", {value: s, selected: s === y.status}, s)));
+  const note = h("input", {type: "text", value: y.note});
+  const save = h("button", {onclick: (ev) => act(ev.target, () =>
+    api("/api/yomi", {surface: y.surface, reading: reading.value, status: status.value, note: note.value, expected: y.entry}))}, "保存");
+  const del = h("button", {onclick: (ev) => { if (confirm(`「${y.surface}」を削除しますか`))
+    act(ev.target, () => api("/api/yomi/delete", {surface: y.surface, expected: y.entry})); }}, "削除");
+  return h("tr", {class: y.status === "候補" ? "cand" : ""},
+    h("td", {}, y.surface), h("td", {}, reading), h("td", {}, status), h("td", {}, note), h("td", {}, save, " ", del));
+}
+function renderYomi() {
+  const out = [approveBar("yomi")];
+  const sf = h("input", {type: "text", placeholder: "表記(例: RANSAC)"});
+  const rd = h("input", {type: "text", placeholder: "読み(例: ラ'ンサック)"});
+  const add = h("button", {onclick: (ev) => act(ev.target, async () => {
+    await api("/api/yomi", {surface: sf.value, reading: rd.value, status: "確認済み", note: "", expected: null});
+    sf.value = ""; rd.value = "";
+  })}, "追加");
+  out.push(h("div", {class: "panel"},
+    h("div", {class: "small"}, "読みは全角カタカナで、アクセント核の直後に ' を 1 つ(無ければ平板)。"
+      + "状態が「候補」の語は台本検査が止め、合成にも使われません。この動画の辞書(yomi.json)だけを直します。"),
+    h("div", {class: "small"}, S.yomi_layers.join(" / ")),
+    h("table", {}, h("thead", {}, h("tr", {}, ["表記", "読み", "状態", "メモ", ""].map((t) => h("th", {}, t)))),
+      h("tbody", {}, S.yomi.map(yomiRow))),
+    h("div", {class: "approve", style: "margin-top:10px"}, sf, rd, add)));
+  return out;
+}
+
+// ── 素材 ──
+function assetCard(a) {
+  const media = !a.exists ? h("div", {class: "err"}, "ファイルが見つかりません")
+    : a.kind === "image" ? h("img", {src: fileUrl(a.url), alt: a["ファイル"], loading: "lazy"})
+    : a.kind === "video" ? h("video", {src: fileUrl(a.url), controls: true, preload: "metadata"})
+    : h("a", {href: fileUrl(a.url), target: "_blank", rel: "noopener"}, "開く");
+  const status = h("select", {}, ["確認済み", "出典表示", "仮"].map((s) => h("option", {value: s, selected: s === a["状態"]}, s)));
+  const note = h("input", {type: "text", placeholder: "メモ", value: a["メモ"]});
+  const save = h("button", {onclick: (ev) => act(ev.target, () =>
+    api("/api/asset", {file: a["ファイル"], status: status.value, note: note.value, expected: a.entry}))}, "保存");
+  const src = /^https?:\/\//.test(a["出典URL"]) ? h("a", {href: a["出典URL"], target: "_blank", rel: "noopener noreferrer"}, "出典を開く") : "出典URLなし";
+  return h("div", {class: "card"}, media,
+    h("div", {}, h("strong", {}, a["ファイル"]), " ", h("span", {class: "small"}, a["場面"])),
+    h("div", {class: "small"}, "画面に出る出典: " + a.credit),
+    a["種別"] ? h("div", {class: "small"}, `種別: ${a["種別"]}` + (a["書誌"] ? ` / 書誌: ${a["書誌"]}` : "") + (a["位置"] ? ` / 位置: ${a["位置"]}` : "")) : "",
+    h("div", {class: "small"}, `作者: ${a["作者"] || "?"} / ライセンス: ${a["ライセンス"] || "?"} / 取得日: ${a["取得日"] || "?"}`),
+    h("div", {class: "small"}, src),
+    h("div", {class: "row"}, "状態", status, note, save));
+}
+function renderAssets() {
+  const out = [approveBar("assets")];
+  out.push(h("div", {class: "panel"},
+    h("div", {class: "small"}, "確認済み=許諾あり / 出典表示=許諾は未確認だが出典を出して使う / 仮=私的な検証だけ。"
+      + "条件は references/attribution.md。"),
+    S.assets.length ? h("div", {class: "grid"}, S.assets.map(assetCard)) : h("p", {}, "素材台帳(assets.json)はありません。")));
+  return out;
+}
+
+// ── 動画 ──
+function renderVideo() {
+  const out = [approveBar("video")];
+  if (!S.video) { out.push(h("div", {class: "panel"}, "video.mp4 がまだありません。")); return out; }
+  const v = h("video", {class: "player", src: fileUrl("/files/" + S.video), controls: true, preload: "metadata"});
+  const rows = S.script.lines.map((l) => h("tr", {id: "vl" + l.index},
+    h("td", {}, h("a", {href: "#", onclick: (ev) => { ev.preventDefault(); if (l.start_s != null) { v.currentTime = l.start_s; v.play(); } }}, mmss(l.start_s))),
+    h("td", {}, String(l.index + 1)), h("td", {}, l.text),
+    h("td", {}, h("input", {type: "text", placeholder: "指摘", value: noteOf(l.index + 1),
+      class: noteStale(l.index + 1) ? "stale" : "", title: noteStale(l.index + 1) ? "古い指摘: この行の本文が変わりました" : "",
+      onchange: (ev) => act(ev.target, () => api("/api/note", {line: l.index + 1, note: ev.target.value, hash: (S.hashes || {}).script || ""}))}))));
+  v.addEventListener("timeupdate", () => {
+    const cur = S.script.lines.filter((l) => l.start_s != null && l.start_s <= v.currentTime).pop();
+    document.querySelectorAll("tr.cur").forEach((r) => r.classList.remove("cur"));
+    if (cur) document.getElementById("vl" + cur.index)?.classList.add("cur");
+  });
+  out.push(h("div", {class: "panel"}, v,
+    h("div", {class: "small", style: "margin:6px 0"}, "時刻のリンクでその行へ移動します。気になった行に指摘を書くと notes.json に保存されます。"),
+    h("table", {}, h("thead", {}, h("tr", {}, ["開始", "#", "本文", "指摘"].map((t) => h("th", {}, t)))), h("tbody", {}, rows))));
+  return out;
+}
+
+// ── 構成案 ──
+function renderPlan() {
+  return [approveBar("plan"), h("div", {class: "panel"},
+    S.brief ? h("pre", {}, S.brief) : "brief.md がまだありません(取材と構成案の記録は brief.md に書かれます)。")];
+}
+
+function render() {
+  renderHeader();
+  const main = document.getElementById("main"); main.replaceChildren();
+  const view = {script: renderScript, yomi: renderYomi, assets: renderAssets, video: renderVideo, plan: renderPlan}[tab];
+  main.append(...errorBanner(), ...view());
+}
+load(false).catch((e) => document.getElementById("main").append(h("div", {class: "banner bad"}, "読み込みに失敗: " + e.message)));
+</script>
+</body>
+</html>

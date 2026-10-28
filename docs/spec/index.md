@@ -46,6 +46,7 @@
 | [pi の公式仕様と実測の棚卸し](pi-upstream.md) | pi の挙動のうち、公式に明示があるもの（リンクだけ・都度参照）と、明示が無く実測して頼っているもの（ノウハウ・試験で固定）の一覧。確認先と更新時の手順、codemode の扱い |
 | [Web 検索（web-search skill）](web-search.md) | skill + CLI の Web 検索・ページ取得・論文検索。検索の鎖（Brave → Exa → Tavily → DuckDuckGo）と次へ回す条件、鍵、クエリの秘匿チェックと取得の SSRF 対策、実測、未実装 |
 | [imozuru（調べものスキル）](imozuru.md) | 上流 MaryCache/imozuru（MIT）を vendor して調整した調べものスキル。原文を要約せず保存し、検索は web-search を使う。配る範囲・書き込み先の制限・接続の固定・秘匿チェック・YouTube（applejxd 限定）・`pis` の許可規則・レビューの経緯・未確認 |
+| [conference-video（学会発表動画風の解説動画）](conference-video.md) | skill-lab から複製したスキル。流れ・依存（uv・Manim・VOICEVOX）・成果物の保存先・このリポジトリでの扱い（配布から外すもの・lint の対象外） |
 | [スキルの frontmatter の方針](skill-frontmatter.md) | CLI ごとの解釈、`allowed-tools` の書き方、`context: fork` の基準、スキルごとの宣言、委譲の型の割り当て（案） |
 | [文脈の引き継ぎ](checkpoint.md) | 圧縮を跨いで作業文脈を保つ checkpoint の保存先・記録の形・plugin・失敗時の動作 |
 | [トラブルシューティング](troubleshooting.md) | 症状 → 対象 OS・CLI → 対応先の索引 |

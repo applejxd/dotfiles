@@ -1,0 +1,13 @@
+[project]
+name = "conference-video"
+version = "0.1.0"
+description = "学会動画風の解説動画を作るスキルの描画環境(Manim + 実動画の貼り込み)"
+requires-python = ">=3.11"
+dependencies = [
+    "manim>=0.20",
+    "numpy",
+    "manim-videomobject @ git+https://github.com/HandiYin/manim-videomobject@f0769d16e9cdbd4643a4a67978473fe452a2d9bf",
+]
+
+[tool.uv]
+package = false

@@ -49,7 +49,7 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 | --- | --- | --- | --- |
 | `fix` | あり（`general-purpose`・`background: false`） | 5 条件を満たす | 使う linter だけ |
 | `away-shift`・`commit`・`learn`・`onboarding`・`review-loop`・`skill-creator`・`github-operations`・`ipynb-to-marimo-pages` | なし（本文が付けないと明記） | 質問・承認・会話履歴・子の使用のどれかが本質 | 下の表 |
-| `arxiv-paper-ja`・`powerpoint-studio`・`imozuru`・`friction-review`・`pi-extension-dev`・`sdd-docs` | なし | 子を使う・質問や承認が要る・会話の文脈が材料 | 下の表 |
+| `arxiv-paper-ja`・`powerpoint-studio`・`conference-video`・`imozuru`・`friction-review`・`pi-extension-dev`・`sdd-docs` | なし | 子を使う・質問や承認が要る・会話の文脈が材料 | 下の表 |
 | `cuda-version-migration`・`uv-migration` | なし | 長時間で、判断が人の側。調査の段だけを `plan` 役へ任せる（[CHG-0044](../change/0044-plan-agent.md)） | なし |
 | `oss-research` | なし | 読み取り中心で自己完結だが、`gh`・`curl` の実行と `rm` の承認が、子では通らない | なし |
 | `web-search`・`env-check` | なし | 条件は満たせるが、**便益が無い**（道具。結果を親がそのまま使う。子に回すと往復が増えるだけ） | `env-check` はスクリプトだけ |
@@ -67,7 +67,7 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 | `commit` | 読み取りの git・`git add`・`git restore --staged`・`git commit`（`git commit` は ask が優先） |
 | `onboarding` | `Read`・`Grep`・`Glob`・`Edit(AGENTS.md)` |
 | `learn` | `Read`・`Edit`・`Write`・`Grep`・`Glob`（Bash なし） |
-| `review-loop`・`powerpoint-studio` | 変更なし。テストの実行（対象リポジトリ依存）や `$SKILL_DIR` の変数を使うコマンドが、パターンに落とせないため。`powerpoint-studio` の Web 系の許可は、本文が求める箇所を特定できていない（見直しの候補） |
+| `review-loop`・`powerpoint-studio`・`conference-video` | 変更なし。テストの実行（対象リポジトリ依存）や `$SKILL_DIR` の変数を使うコマンドが、パターンに落とせないため。`powerpoint-studio` の Web 系の許可は、本文が求める箇所を特定できていない（見直しの候補） |
 
 ## 委譲の型（親をオーケストレーターに寄せる設計。案）
 

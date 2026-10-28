@@ -37,6 +37,8 @@ extend-exclude = [
   "home/dot_claude/skills/imozuru/scripts/fetch.py",
   "home/dot_claude/skills/imozuru/scripts/report.py",
   "home/dot_claude/skills/imozuru/scripts/watch.py",
+  # conference-video は skill-lab (正本) からの複製。上流との差分を小さく保つため、整形・lint しない (docs/spec/conference-video.md)
+  "home/dot_claude/skills/conference-video",
 ]
 # 既存コードの実測に合わせる (最長 109 桁、100 桁超は 7 行だけ)。
 # 既定の 88 桁にすると 74 行の折り返しが必要になり、変更が本題からずれる。

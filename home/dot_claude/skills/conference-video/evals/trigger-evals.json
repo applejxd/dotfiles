@@ -1,0 +1,34 @@
+[
+  {
+    "query": "この研究のリポジトリと論文から、CVPR で発表するときのような 4 分くらいの紹介動画を作って。動機と理論は Manim でアニメーションにして、結果は録画した動画を貼って、ナレーションは VOICEVOX でお願い。",
+    "should_trigger": true
+  },
+  {
+    "query": "arXiv の論文を日本語の解説動画にしたい。手法の部分を manim で動かして、音声合成でナレーションを付けて、字幕も焼き込んだ mp4 にして。",
+    "should_trigger": true
+  },
+  {
+    "query": "学会動画風に、うちの SLAM の論文の概要を 3 分で。公式の発表動画の一部を結果のところに使っていい。",
+    "should_trigger": true
+  },
+  {
+    "query": "三平方の定理の証明を manim でアニメーションにして、ずんだもんで解説して。",
+    "should_trigger": false
+  },
+  {
+    "query": "この論文の発表用スライドを pptx で作って。図は貼らずに箇条書きでいい。",
+    "should_trigger": false
+  },
+  {
+    "query": "arXiv の論文を全文日本語に翻訳して PDF にして。数式と図表も保って。",
+    "should_trigger": false
+  },
+  {
+    "query": "できあがった動画を YouTube にアップロードして、説明欄とチャプターも投稿して。",
+    "should_trigger": false
+  },
+  {
+    "query": "Make a 3-minute English explainer video of this paper with a voiceover.",
+    "should_trigger": false
+  }
+]
