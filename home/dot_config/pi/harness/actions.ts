@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
-import { savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
+import { reconcilePending, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
 import { validateFeatureName } from "./gitflow.ts";
 import { gitflowFinishPreview, gitflowStartPreview, isFeatureWorktreeCommit, leftoverWorktreeHint } from "./gitflow-ops.ts";
 
@@ -372,6 +372,12 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		const used = Object.entries(action.fields)
 			.filter(([, s]) => s.content)
 			.map(([n]) => `${n}:\n${values[n]}`);
+		// コミットできたら、取り込み済み・重複・古い退避を片付ける (失敗してもコミットの結果には影響させない)
+		if (action.id === "git_commit") {
+			try {
+				reconcilePending(cwd);
+			} catch {}
+		}
 		const hint = action.id === "gitflow_feature_finish" ? leftoverWorktreeHint(cwd, values.name) : null;
 		const autoNote = auto ? (wip ? "確認なしで実行した (feature の worktree の WIP コミット。最終の内容は finish の確認で見る)" : `確認なしで実行した (${action.id}。対象: ${preview?.stat ?? ""})`) : "";
 		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, autoNote, hint, `実際に使った最終の内容:\n${used.join("\n\n")}`].filter(Boolean).join("\n\n");

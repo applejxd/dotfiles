@@ -35,7 +35,7 @@ import { ISOLATION_UNSUPPORTED, NO_BASH_NOTICE, findBash, isWindows, supportsChi
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
 import { STARTUP_LIMITS, findRepoRoot, isolationTraceRoot, runWorktreesCommand, startupReconcile } from "./worktrees-command.ts";
-import { PENDING_PREFIX, dropPending, listPending, showPending } from "./pending-store.ts";
+import { PENDING_PREFIX, dropPending, listPending, reconcilePending, showPending } from "./pending-store.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -228,6 +228,10 @@ export default async function (pi: ExtensionAPI) {
 		try {
 			const cwd = ctx.cwd ?? process.cwd();
 			sessionTmp.start(cwd, ctx.sessionManager.getSessionId());
+			// 取り込み済み・重複・古い退避を片付ける (消すのはハーネスだけ。モデルは消せない)
+			try {
+				reconcilePending(cwd);
+			} catch {}
 			if (event?.reason === "startup") sessionTmp.sweep(cwd);
 		} catch {}
 		reconcileOnStart(ctx);

@@ -153,3 +153,29 @@ export function dropPending(cwd: string, ref: string, expectedOid?: string): boo
 	if (expectedOid && expectedOid !== oid) return false;
 	return git(cwd, ["update-ref", "--no-deref", "-d", ref, oid]).ok;
 }
+
+/** 片付けてよい退避を、ハーネス自身が消す (モデルは消せない)。消すのは、内容がほかに残っているか、古いもの:
+ *  - 同じ tree のコミットが HEAD の履歴 (新しい側の lookback 件) にある (= 取り込まれた)
+ *  - 同じ tree・同じ起点の退避が、より新しくある (再試行で増えた重複)
+ *  - maxAgeDays より古い (既定 30 日)
+ *  消した ref の一覧を返す。git の失敗は握りつぶさず、消さない側に倒す */
+export function reconcilePending(cwd: string, opts: { maxAgeDays?: number; now?: number; lookback?: number } = {}): string[] {
+	const entries = listPending(cwd);
+	if (entries.length === 0) return [];
+	const log = git(cwd, ["log", "--format=%T", "-n", String(opts.lookback ?? 500), "HEAD"]);
+	const trees = new Set(log.ok ? log.out.split("\n").filter(Boolean) : []);
+	const now = opts.now ?? Date.now();
+	const maxAge = (opts.maxAgeDays ?? 30) * 86_400_000;
+	const seen = new Set<string>();
+	const dropped: string[] = [];
+	for (const e of entries) {
+		const tree = git(cwd, ["rev-parse", `${e.oid}^{tree}`]);
+		if (!tree.ok || !tree.out) continue;
+		const key = `${tree.out}\0${e.head}`;
+		const ts = Number(/^refs\/pi\/pending\/(\d+)/.exec(e.ref)?.[1]);
+		const reason = trees.has(tree.out) ? "committed" : seen.has(key) ? "duplicate" : Number.isFinite(ts) && now - ts > maxAge ? "old" : "";
+		seen.add(key);
+		if (reason && dropPending(cwd, e.ref, e.oid)) dropped.push(e.ref);
+	}
+	return dropped;
+}

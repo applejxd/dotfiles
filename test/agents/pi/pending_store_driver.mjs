@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(join(ROOT, "home", "dot_config", "pi", "harness", "pending-store.ts")).href);
-const { snapshotStaged, savePendingSnapshot, listPending, showPending, dropPending } = mod;
+const { snapshotStaged, savePendingSnapshot, listPending, showPending, dropPending, reconcilePending } = mod;
 
 const tmp = mkdtempSync(join(tmpdir(), "pending-store-"));
 // 利用者の設定に左右されない (git の名前・メールも無い環境を再現)
@@ -174,6 +174,34 @@ try {
 			stillThere,
 			odd,
 			listIgnoresSymref: listPending(dir).every((e) => !e.ref.endsWith("-link")),
+		};
+	}
+	// 8. 片付け: 取り込み済み・重複・古いものだけを、ハーネスが消す
+	{
+		const dir = repo("r8");
+		writeFileSync(join(dir, "x.txt"), "x\n");
+		g(dir, "add", "x.txt");
+		const p1 = savePendingSnapshot(dir, snapshotStaged(dir, "first try", "a"));
+		const p2 = savePendingSnapshot(dir, snapshotStaged(dir, "second try (same content)", "b"));
+		writeFileSync(join(dir, "y.txt"), "y\n");
+		g(dir, "add", "y.txt");
+		const p3 = savePendingSnapshot(dir, snapshotStaged(dir, "with y", "c"));
+		// y まで含めた状態を、本物のコミットにする (p3 と同じ tree)
+		g(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "real");
+		const before = listPending(dir).map((e) => e.ref);
+		const dropped = reconcilePending(dir);
+		const afterCommitted = listPending(dir).map((e) => e.ref);
+		// 30 日より後なら、残りも古いので消える
+		const droppedOld = reconcilePending(dir, { now: Date.now() + 31 * 86_400_000 });
+		out.reconcile = {
+			p3Committed: dropped.includes(p3.ref),
+			p1Duplicate: dropped.includes(p1.ref),
+			p2Kept: afterCommitted.includes(p2.ref),
+			beforeCount: before.length,
+			afterCount: afterCommitted.length,
+			droppedOldHasP2: droppedOld.includes(p2.ref),
+			finalCount: listPending(dir).length,
+			headUnchanged: g(dir, "log", "-1", "--format=%s").out === "real",
 		};
 	}
 } finally {

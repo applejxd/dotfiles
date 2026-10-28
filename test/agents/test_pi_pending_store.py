@@ -106,3 +106,15 @@ def test_drop_cannot_reach_outside_the_pending_namespace(t) -> None:
 
 def test_show_includes_the_patch_body(t) -> None:
     assert t["manage"]["shownHasPatch"]
+
+
+
+def test_reconcile_drops_only_what_is_committed_duplicated_or_old(t) -> None:
+    r = t["reconcile"]
+    assert r["beforeCount"] == 3
+    # 取り込み済み (同じ tree のコミットが履歴にある) と、重複 (同じ内容の古い方) だけが消える
+    assert r["p3Committed"] and r["p1Duplicate"]
+    assert r["p2Kept"] and r["afterCount"] == 1
+    # 古いものは、期限を過ぎれば消える。コミットは変わらない
+    assert r["droppedOldHasP2"] and r["finalCount"] == 0
+    assert r["headUnchanged"]
