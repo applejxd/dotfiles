@@ -91,6 +91,14 @@ export function gitflowFinishPreview(cwd: string, values: Record<string, string>
 	if (!feature) throw new Error(`feature/${name} が無い`);
 	const ahead = Number(git(cwd, ["rev-list", "--count", `develop..feature/${name}`]).out);
 	if (!(ahead >= 1)) throw new Error(`feature/${name} に、develop より先のコミットが無い`);
+	// develop の本体にステージ済み (コミットしていない) の変更があると、squash のコミットに混ざる (実機で発生)。追跡ファイルの変更があれば断る
+	const mainStatus = git(cwd, ["status", "--porcelain", "--untracked-files=no"]);
+	if (!mainStatus.ok) throw new Error("develop の本体の作業ツリーの状態を調べられない");
+	if (mainStatus.out) {
+		throw new Error(
+			"develop の本体の作業ツリーに、コミットしていない変更がある (squash のコミットに混ざる)。先にコミットするか、利用者が扱う",
+		);
+	}
 	const wt = featureWorktree(cwd, name);
 	if (wt) {
 		const st = git(wt, ["status", "--porcelain"]);

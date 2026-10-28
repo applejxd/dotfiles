@@ -219,6 +219,37 @@ def test_a_finish_outside_develop_or_without_commits_is_refused_before_asking(en
 
 
 @A.needs_action
+def test_a_finish_is_refused_when_develop_has_uncommitted_tracked_changes(env, monkeypatch):
+    """develop の本体にステージ済みの変更があると、squash のコミットに混ざってしまう (実機で発生)。"""
+    proj = _setup(env, monkeypatch)
+    _feature_ahead(proj, "x")
+    tracked = next(iter(sorted(p for p in proj.iterdir() if p.is_file() and p.name != ".git")))
+    tracked.write_text("changed\n", encoding="utf-8")
+    for stage in (True, False):
+        if stage:
+            A._git(proj, "add", tracked.name)
+        requests, results = A._rpc(
+            env, A._call("gitflow_feature_finish", name="x", message="m"), A._choose(A.APPROVE)
+        )
+        assert A._methods(requests) == [], requests
+        assert results[0][0] is True and "コミットしていない変更" in results[0][1], results
+        assert _fake_args(env) is None
+        if stage:
+            A._git(proj, "reset", "-q")
+
+
+@A.needs_action
+def test_untracked_files_do_not_block_a_finish(env, monkeypatch):
+    proj = _setup(env, monkeypatch)
+    _feature_ahead(proj, "x")
+    (proj / "scratch.txt").write_text("s\n", encoding="utf-8")
+    requests, _results = A._rpc(
+        env, A._call("gitflow_feature_finish", name="x", message="m"), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == ["select"], requests
+
+
+@A.needs_action
 def test_a_finish_with_a_dirty_feature_worktree_is_refused(env, monkeypatch):
     proj = _setup(env, monkeypatch)
     _feature_ahead(proj, "x")
