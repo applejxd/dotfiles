@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
 import { reconcilePending, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
 import { validateFeatureName } from "./gitflow.ts";
-import { gitflowCommitPreview, gitflowFinishPreview, gitflowStartPreview, isFeatureWorktreeCommit, leftoverWorktreeHint, resolveFeatureWorktree, type ReadDenyLike } from "./gitflow-ops.ts";
+import { gitflowCommitPreview, gitflowDiscardPreview, gitflowFinishPreview, gitflowStartPreview, isFeatureWorktreeCommit, leftoverWorktreeHint, resolveFeatureWorktree, type ReadDenyLike } from "./gitflow-ops.ts";
 
 export const ACTION_TOOL = "action";
 const NOT_APPROVED = "not approved:";
@@ -29,7 +29,7 @@ export type ActionSpec = {
 	argv: string[];
 	fields: Record<string, FieldSpec>;
 	replaces: string[];
-	preview: "none" | "git_staged" | "gitflow_start" | "gitflow_finish" | "gitflow_commit";
+	preview: "none" | "git_staged" | "gitflow_start" | "gitflow_finish" | "gitflow_commit" | "gitflow_discard";
 	/** 確認の省略。コードの許可リスト (AUTO_CONFIRM) にある操作だけ。既定は確認する */
 	confirm?: "ask" | "gitflow_start" | "gitflow_wip";
 };
@@ -167,6 +167,7 @@ const PREVIEWS: Record<string, (cwd: string, values: Values) => Promise<Preview 
 	git_staged: (cwd) => gitStagedPreview(cwd),
 	gitflow_start: async (cwd, values) => gitflowStartPreview(cwd, values),
 	gitflow_finish: async (cwd, values) => gitflowFinishPreview(cwd, values),
+	gitflow_discard: async (cwd, values) => gitflowDiscardPreview(cwd, values),
 };
 
 function samePreview(a: Preview | null, b: Preview | null): boolean {

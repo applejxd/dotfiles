@@ -94,6 +94,11 @@ export function startArgv(name: string): string[] {
 	return ["git", "flow", "feature", "start", name, "--worktree", "--no-fetch"];
 }
 
+/** feature の破棄 (ブランチと worktree を消す)。リモートに触れない (--no-fetch --no-remote)。--force は未マージでも消すためで、確認の画面で件数を見せる。未コミットの変更がある worktree は --force-worktree を付けないので拒否される */
+export function discardArgv(name: string): string[] {
+	return ["git", "flow", "feature", "delete", name, "--force", "--no-fetch", "--no-remote"];
+}
+
 /** feature のクローズ (squash)。リモートに触れない (--keepremote --no-fetch --no-push --no-pushtag)。タグを作らない。メッセージは `=` で渡し、`-` で始まっても引数として読まれない */
 export function finishArgv(name: string, message: string): string[] {
 	return [

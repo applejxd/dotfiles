@@ -9,7 +9,7 @@ import { matchesReadDeny } from "./judge/policy.ts";
 
 export type GitflowPreview = { branch: string; head: string; indexId: string; stat: string };
 
-function git(cwd: string, args: string[]): { ok: boolean; out: string } {
+function git(cwd: string, args: string[]): { ok: boolean; out: string; status: number } {
 	// 判定や確認の前に走るので、hook も外のコードも動かさない設定で読む
 	const r = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.quotepath=false", ...args], {
 		cwd,
@@ -17,7 +17,7 @@ function git(cwd: string, args: string[]): { ok: boolean; out: string } {
 		timeout: 15000,
 		env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" },
 	});
-	return { ok: r.status === 0, out: String(r.stdout ?? "").replace(/\n+$/, "") };
+	return { ok: r.status === 0, out: String(r.stdout ?? "").replace(/\n+$/, ""), status: r.status ?? -1 };
 }
 
 function sha(...parts: string[]): string {
@@ -91,6 +91,14 @@ export function gitflowFinishPreview(cwd: string, values: Record<string, string>
 	if (!feature) throw new Error(`feature/${name} が無い`);
 	const ahead = Number(git(cwd, ["rev-list", "--count", `develop..feature/${name}`]).out);
 	if (!(ahead >= 1)) throw new Error(`feature/${name} に、develop より先のコミットが無い`);
+	// squash が衝突で止まると、develop の作業ツリーが衝突状態で残り、git flow の --abort も squash では動かない (v2.1.0 で実測)。
+	// 始める前に、作業ツリーを触らない merge-tree で衝突を見つけて断る (git 2.38 未満ではこの検査を飛ばす)
+	const mt = git(cwd, ["merge-tree", "--write-tree", "--no-messages", "develop", `feature/${name}`]);
+	if (mt.status === 1) {
+		throw new Error(
+			`feature/${name} は develop と衝突する。feature の worktree で develop を取り込んで (git merge develop)、衝突を解決してコミットしてから、もう一度 finish する (このままだと squash が途中で止まり、develop が衝突状態で残る)`,
+		);
+	}
 	// develop の本体にステージ済み (コミットしていない) の変更があると、squash のコミットに混ざる (実機で発生)。追跡ファイルの変更があれば断る
 	const mainStatus = git(cwd, ["status", "--porcelain", "--untracked-files=no"]);
 	if (!mainStatus.ok) throw new Error("develop の本体の作業ツリーの状態を調べられない");
@@ -111,6 +119,40 @@ export function gitflowFinishPreview(cwd: string, values: Record<string, string>
 		head: develop,
 		indexId: sha(config, develop, feature, name),
 		stat: `feature/${name} (${feature.slice(0, 7)}、develop より ${ahead} コミット先) を develop へ squash する。リモートには触れない\n${stat}`,
+	};
+}
+
+/**
+ * 破棄 (discard) の preview: feature/<name> を、ブランチと worktree ごと捨てる。develop が checked out の本体で行う。
+ * develop に入っていないコミットは失われる (reflog にだけ残る) ので、確認の画面に件数と差分の統計を見せる。未コミットの変更がある worktree は断る (git flow も --force-worktree が無いと拒否する)
+ */
+export function gitflowDiscardPreview(cwd: string, values: Record<string, string>): GitflowPreview {
+	const name = nameOf(values);
+	const { root, config } = safeContext(cwd);
+	const current = git(cwd, ["symbolic-ref", "--short", "-q", "HEAD"]).out;
+	if (current !== "develop") throw new Error(`discard は、develop が checked out の本体で行う (今のブランチ: ${current || "(detached)"})`);
+	const top = git(cwd, ["rev-parse", "--show-toplevel"]).out;
+	const common = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).out;
+	if (top !== root || (common && common !== join(root, ".git"))) throw new Error("discard は、本体の作業ツリーで行う (linked worktree からは行わない)");
+	const develop = oid(cwd, "refs/heads/develop");
+	const feature = oid(cwd, `refs/heads/feature/${name}`);
+	if (!develop) throw new Error("develop のブランチが無い");
+	if (!feature) throw new Error(`feature/${name} が無い`);
+	const ahead = Number(git(cwd, ["rev-list", "--count", `develop..feature/${name}`]).out);
+	const wt = featureWorktree(cwd, name);
+	if (wt) {
+		const st = git(wt, ["status", "--porcelain"]);
+		if (!st.ok) throw new Error(`worktree ${wt} の状態を調べられない`);
+		if (st.out) throw new Error(`worktree ${wt} に、コミットしていない変更がある。コミットするか、利用者が扱う (捨てると失われる)`);
+	}
+	const stat = git(cwd, ["diff", "--stat", "--no-ext-diff", `develop...feature/${name}`]).out;
+	return {
+		branch: "develop",
+		head: develop,
+		indexId: sha(config, develop, feature, name, "discard"),
+		stat:
+			`feature/${name} (${feature.slice(0, 7)}) を、ブランチ${wt ? "と worktree" : ""}ごと捨てる。` +
+			`develop に入っていないコミット ${ahead} 件は失われる (reflog にだけ残る。元に戻すのは利用者)。リモートには触れない\n${stat}`,
 	};
 }
 

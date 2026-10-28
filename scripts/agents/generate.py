@@ -1860,7 +1860,7 @@ PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds", "local_git"})
 PI_CONFIRM_TIMEOUT_DEFAULT = 300
 PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview", "confirm"})
 PI_ACTION_PREVIEWS = frozenset(
-    {"none", "git_staged", "gitflow_start", "gitflow_finish", "gitflow_commit"}
+    {"none", "git_staged", "gitflow_start", "gitflow_finish", "gitflow_commit", "gitflow_discard"}
 )
 # 確認の省略 (confirm) は、コードの許可リスト (actions.ts の AUTO_CONFIRM) にある組だけ。名前の型だけを引数に持つこと
 # confirm -> (必要な preview, 引数の型の集合)

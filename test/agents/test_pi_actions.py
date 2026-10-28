@@ -147,8 +147,9 @@ def test_rules_json_carries_the_actions():
         "gitflow_feature_start",
         "gitflow_feature_commit",
         "gitflow_feature_finish",
+        "gitflow_feature_discard",
     ]
-    comment, edit_body, edit_title, commit, gf_start, gf_commit, gf_finish = actions
+    comment, edit_body, edit_title, commit, gf_start, gf_commit, gf_finish, gf_discard = actions
     assert edit_body["argv"] == [
         "gh",
         "issue",
@@ -208,6 +209,19 @@ def test_rules_json_carries_the_actions():
     for argv in (gf_start["argv"], gf_finish["argv"]):
         assert not any(a in argv for a in ("--push", "--fetch", "--force", "--no-keepremote"))
     assert all(a["confirm"] == "ask" for a in (comment, edit_body, edit_title, commit))
+    # 破棄: 確認あり、リモートに触れない、未コミットの worktree を強制しない
+    assert gf_discard["confirm"] == "ask" and gf_discard["preview"] == "gitflow_discard"
+    assert gf_discard["argv"] == [
+        "git",
+        "flow",
+        "feature",
+        "delete",
+        "{name}",
+        "--force",
+        "--no-fetch",
+        "--no-remote",
+    ]
+    assert not any(a in gf_discard["argv"] for a in ("--remote", "--fetch", "--force-worktree"))
 
 
 def test_only_the_implementer_gets_the_action_tool():

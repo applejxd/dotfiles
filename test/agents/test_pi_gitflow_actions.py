@@ -66,6 +66,23 @@ GITFLOW_ACTIONS = [
         "replaces": ["git flow feature finish"],
         "preview": "gitflow_finish",
     },
+    {
+        "id": "gitflow_feature_discard",
+        "label": "git flow: feature を捨てる",
+        "argv": [
+            "git",
+            "flow",
+            "feature",
+            "delete",
+            "{name}",
+            "--force",
+            "--no-fetch",
+            "--no-remote",
+        ],
+        "fields": {"name": {"type": "featurename"}},
+        "replaces": ["git flow feature delete"],
+        "preview": "gitflow_discard",
+    },
 ]
 
 SAFE_CONFIG = {
@@ -169,6 +186,100 @@ def test_an_existing_feature_is_refused(env, monkeypatch):
         env, A._call("gitflow_feature_start", name="alpha"), lambda req: None
     )
     assert results[0][0] is True and "すでにある" in results[0][1], results
+    assert _fake_args(env) is None
+
+
+@A.needs_action
+def test_a_discard_asks_and_runs_with_fixed_arguments_that_never_touch_the_remote(env, monkeypatch):
+    proj = _setup(env, monkeypatch)
+    _feature_ahead(proj, "x")
+    requests, results = A._rpc(
+        env, A._call("gitflow_feature_discard", name="x"), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == ["select"], requests
+    title = requests[0]["title"]
+    assert "feature/x" in title and "捨てる" in title and "1 件" in title, title
+    assert results and results[0][0] is False, results
+    args = _fake_args(env)
+    assert args == ["feature", "delete", "x", "--force", "--no-fetch", "--no-remote"], args
+
+
+@A.needs_action
+def test_a_discard_that_is_not_approved_runs_nothing(env, monkeypatch):
+    proj = _setup(env, monkeypatch)
+    _feature_ahead(proj, "x")
+    _requests, results = A._rpc(
+        env, A._call("gitflow_feature_discard", name="x"), lambda req: {"value": A.REJECT}
+    )
+    assert results[0][0] is True and "not approved:" in results[0][1], results
+    assert _fake_args(env) is None
+
+
+@A.needs_action
+def test_a_discard_is_refused_for_a_missing_feature_or_outside_develop(env, monkeypatch):
+    proj = _setup(env, monkeypatch)
+    requests, results = A._rpc(
+        env, A._call("gitflow_feature_discard", name="nope"), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == [] and "無い" in results[0][1], (requests, results)
+    _feature_ahead(proj, "x")
+    A._git(proj, "checkout", "-q", "feature/x")
+    requests, results = A._rpc(
+        env, A._call("gitflow_feature_discard", name="x"), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == [] and "develop が checked out" in results[0][1], (
+        requests,
+        results,
+    )
+    assert _fake_args(env) is None
+
+
+@A.needs_action
+def test_a_discard_with_a_dirty_feature_worktree_is_refused(env, monkeypatch):
+    proj = _setup(env, monkeypatch)
+    _feature_ahead(proj, "x")
+    wt = env["tmp"] / "wt-x"
+    A._git(proj, "worktree", "add", "-q", str(wt), "feature/x")
+    (wt / "dirty.txt").write_text("d\n", encoding="utf-8")
+    requests, results = A._rpc(
+        env, A._call("gitflow_feature_discard", name="x"), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == [] and "コミットしていない変更" in results[0][1], (
+        requests,
+        results,
+    )
+    assert _fake_args(env) is None
+
+
+@A.needs_action
+def test_a_discard_is_refused_when_the_config_would_push(env, monkeypatch):
+    config = {**SAFE_CONFIG, "gitflow.branch.feature.finish.push": "true"}
+    proj = _setup(env, monkeypatch, config=config)
+    _feature_ahead(proj, "x")
+    requests, results = A._rpc(
+        env, A._call("gitflow_feature_discard", name="x"), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == [] and "安全な構成" in results[0][1], (requests, results)
+    assert _fake_args(env) is None
+
+
+@A.needs_action
+def test_a_finish_that_would_conflict_is_refused_before_asking(env, monkeypatch):
+    """squash が途中で止まると、develop が衝突状態で残り、git flow の --abort も squash では動かない。始める前に断る。"""
+    proj = _setup(env, monkeypatch)
+    A._git(proj, "checkout", "-q", "-b", "feature/x", "develop")
+    (proj / "shared.txt").write_text("feature\n", encoding="utf-8")
+    A._git(proj, "add", "shared.txt")
+    A._git(proj, "commit", "-q", "-m", "feature side")
+    A._git(proj, "checkout", "-q", "develop")
+    (proj / "shared.txt").write_text("develop\n", encoding="utf-8")
+    A._git(proj, "add", "shared.txt")
+    A._git(proj, "commit", "-q", "-m", "develop side")
+    requests, results = A._rpc(
+        env, A._call("gitflow_feature_finish", name="x", message="m"), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == [], requests
+    assert results[0][0] is True and "衝突" in results[0][1], results
     assert _fake_args(env) is None
 
 
@@ -512,3 +623,55 @@ def test_a_wip_commit_needs_a_real_feature_worktree_under_the_main_one(env, monk
     # 不正な名前
     _requests, results = _wip(env, name="--help")
     assert results[0][0] is True and "name" in results[0][1], results
+
+
+@A.needs_action
+@pytest.mark.skipif(
+    REAL_GIT_FLOW is None, reason="本物の git-flow-next が無い (GIT_FLOW_NEXT_DIR か PATH)"
+)
+def test_a_discard_removes_the_branch_and_the_worktree_with_the_real_git_flow(env, monkeypatch):
+    """起票 → WIP コミット → 破棄 (確認あり) で、ブランチと worktree が消え、develop は動かない。リモートは無い。"""
+    monkeypatch.setattr(A, "ACTIONS", A.ACTIONS + GITFLOW_ACTIONS)
+    A._prepare(env)
+    env["env"]["PATH"] = f"{REAL_GIT_FLOW}{os.pathsep}{env['env']['PATH']}"
+    proj = env["proj"]
+    A._git(proj, "branch", "-M", "main")
+    sub = {**os.environ, "PATH": env["env"]["PATH"], "GIT_CONFIG_GLOBAL": "/dev/null"}
+
+    def flow(*args):
+        r = subprocess.run(
+            ["git", "flow", *args],
+            cwd=proj,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=sub,
+        )
+        assert r.returncode == 0, (args, r.stdout, r.stderr)
+
+    flow("init", "--preset=classic", "--defaults")
+    flow("config", "edit", "topic", "feature", "--upstream-strategy=squash")
+    for topic in ("release", "hotfix", "support", "bugfix"):
+        flow("config", "delete", "topic", topic)
+    A._git(proj, "config", "gitflow.worktreePath", ".tmp/worktrees/{{ branchName }}")
+    develop_before = A._git(proj, "rev-parse", "develop").strip()
+
+    requests, results = A._rpc(env, A._call("gitflow_feature_start", name="gone"), lambda req: None)
+    assert results[0][0] is False, (requests, results)
+    wt = proj / ".tmp" / "worktrees" / "gone"
+    A._stage(wt, name="g.txt", text="g\n")
+    env["proj"] = wt
+    _requests, results = A._rpc(env, A._call("git_commit", message="wip: g"), lambda req: None)
+    assert results[0][0] is False, results
+
+    env["proj"] = proj
+    requests, results = A._rpc(
+        env, A._call("gitflow_feature_discard", name="gone"), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == ["select"], requests
+    assert "feature/gone" in requests[0]["title"] and "g.txt" in requests[0]["title"]
+    assert results[0][0] is False, results
+    assert not wt.exists()
+    assert "feature/gone" not in A._git(proj, "branch", "--list", "feature/*")
+    assert A._git(proj, "rev-parse", "develop").strip() == develop_before
+    assert A._git(proj, "worktree", "list", "--porcelain").count("worktree ") == 1

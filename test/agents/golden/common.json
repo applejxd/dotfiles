@@ -1201,6 +1201,29 @@
     "replaces": [
      "git flow feature finish"
     ]
+   },
+   {
+    "argv": [
+     "git",
+     "flow",
+     "feature",
+     "delete",
+     "{name}",
+     "--force",
+     "--no-fetch",
+     "--no-remote"
+    ],
+    "fields": {
+     "name": {
+      "type": "featurename"
+     }
+    },
+    "id": "gitflow_feature_discard",
+    "label": "git flow: feature を捨てる (ブランチと worktree を消す)",
+    "preview": "gitflow_discard",
+    "replaces": [
+     "git flow feature delete"
+    ]
    }
   ],
   "agents": {
