@@ -1,0 +1,37 @@
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+#!/bin/bash
+
+set -euo pipefail
+
+# Tailscale (GUI アプリ) を導入する。applejxd の機械だけ。see docs/spec/tailscale.md
+# ログイン (tailscale up や GUI でのサインイン) は対話が要るのでここでは行わない。
+
+{{ template "sudo-keepalive.sh.tmpl" . }}
+
+if [[ $(uname -m) == arm64 ]]; then
+    brew_path="/opt/homebrew/bin/brew"
+else
+    brew_path="/usr/local/bin/brew"
+fi
+
+if [[ ! -x "$brew_path" ]]; then
+    echo "⚠️ Homebrew が無いので Tailscale を導入できません (205 が先に走る前提)" >&2
+    exit 0
+fi
+
+brew_env="$("$brew_path" shellenv)"
+eval "$brew_env"
+
+if brew list --cask tailscale-app >/dev/null 2>&1; then
+    echo "Tailscale は導入済みです"
+else
+    # cask の導入に管理者の認証を求められることがある
+    start_sudo_keepalive
+    if ! brew install --cask tailscale-app; then
+        echo "⚠️ brew install --cask tailscale-app に失敗しました。後で手動で試してください" >&2
+        exit 0
+    fi
+fi
+
+echo "Tailscale: ログインは手動です。アプリを開いてサインインしてください (CLI なら: tailscale up)"
+{{- end }}

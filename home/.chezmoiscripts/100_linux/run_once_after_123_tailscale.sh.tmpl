@@ -1,0 +1,66 @@
+{{- if and (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) (not (.chezmoi.kernel.osrelease | lower | contains "microsoft")) -}}
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Tailscale を公式の apt リポジトリから導入する。applejxd の機械だけ。WSL は除外 (Windows 側の Tailscale を使う)。
+# Raspberry Pi にも入れる (110_native の外に置く理由。そちらは Pi で除外される)。see docs/spec/tailscale.md
+# ログイン (tailscale up) は対話が要るのでここでは行わない。
+
+{{ template "sudo-keepalive.sh.tmpl" . }}
+
+echo "Tailscale をインストール/更新します..."
+
+export DEBIAN_FRONTEND=noninteractive
+
+# shellcheck disable=SC1091
+. /etc/os-release
+distro="${ID:-}"
+codename="${VERSION_CODENAME:-}"
+case "$distro" in
+  ubuntu|debian|raspbian) ;;
+  *)
+    echo "⚠️ Tailscale の apt リポジトリは ubuntu / debian / raspbian だけです (ID=${distro})。飛ばします" >&2
+    exit 0
+    ;;
+esac
+if [[ -z "$codename" ]]; then
+  echo "⚠️ VERSION_CODENAME が分からないので Tailscale を飛ばします" >&2
+  exit 0
+fi
+
+KEYRING="/usr/share/keyrings/tailscale-archive-keyring.gpg"
+LIST="/etc/apt/sources.list.d/tailscale.list"
+BASE="https://pkgs.tailscale.com/stable/${distro}/${codename}"
+
+start_sudo_keepalive
+sudo apt-get -yq update
+sudo apt-get -yq install --no-install-recommends ca-certificates curl
+
+tmp_key="$(mktemp)"
+tmp_list="$(mktemp)"
+trap 'rm -f "$tmp_key" "$tmp_list"' EXIT
+
+# その版が未対応のとき (404) は、失敗にせず飛ばす
+if ! curl -fsSL "${BASE}.noarmor.gpg" -o "$tmp_key" || ! curl -fsSL "${BASE}.tailscale-keyring.list" -o "$tmp_list"; then
+  echo "⚠️ ${distro}/${codename} 用の Tailscale のリポジトリを取得できません。飛ばします" >&2
+  exit 0
+fi
+
+changed=0
+if ! cmp -s "$tmp_key" "$KEYRING"; then
+  sudo install -m 0644 "$tmp_key" "$KEYRING"
+  changed=1
+fi
+if ! cmp -s "$tmp_list" "$LIST"; then
+  sudo install -m 0644 "$tmp_list" "$LIST"
+  changed=1
+fi
+if (( changed )); then sudo apt-get -yq update; fi
+
+# 導入済みの更新は、121 の apt upgrade が担う
+command -v tailscale >/dev/null 2>&1 || sudo apt-get -yq install tailscale
+
+echo "Tailscale: ログインは手動です: sudo tailscale up"
+echo "✅ 完了：Tailscale をインストール/更新しました"
+{{- end }}
