@@ -179,7 +179,7 @@
       "git config --replace-all",
       "git config --edit"
      ],
-     "message": "git config の書き込みは許可されていません。ユーザー設定は chezmoi 管理の home/dot_gitconfig.tmpl を編集して `chezmoi apply` で反映してください。リポジトリ単位の設定は、変更内容を利用者に示して依頼してください。読み取りは `--global` などを付けず `git config --get <key>` / `git config --list` の形で使えます。"
+     "message": "git config の書き込みは許可されていません。ユーザー設定は chezmoi 管理の home/dot_config/git/config.tmpl を編集して `chezmoi apply` で反映してください。リポジトリ単位の設定は、変更内容を利用者に示して依頼してください。読み取りは `--global` などを付けず `git config --get <key>` / `git config --list` の形で使えます。"
     },
     {
      "commands": [
@@ -430,6 +430,8 @@
    "**/.git/config",
    "**/.git/hooks/**",
    "~/.gitconfig",
+   "~/.config/git/config",
+   "~/.config/git/config.local",
    "~/.pi/agent/settings.json",
    "~/.pi/agent/mcp.json",
    "~/.pi/agent/extensions/**",
@@ -1903,7 +1905,9 @@
    "~/.login",
    "~/.ssh/authorized_keys",
    "~/.ssh/known_hosts",
-   "~/.gitconfig"
+   "~/.gitconfig",
+   "~/.config/git/config",
+   "~/.config/git/config.local"
   ],
   "copilot_allow_dev_tool_access": false,
   "copilot_read_allow": [

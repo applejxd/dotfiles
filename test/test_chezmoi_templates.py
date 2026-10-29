@@ -151,7 +151,7 @@ def test_pi_settings_and_the_full_guard_are_deployed_on_windows(tmp_path):
 
 
 def test_git_user_and_ignore_are_deployed_on_windows(tmp_path):
-    """★~/.gitconfig が [include] で読む ~/.config/git/ を Windows でも配る。
+    """★~/.config/git/config が [include] で読む ~/.config/git/ を Windows でも配る。
 
     Windows は .config/* を丸ごと除外しているので、戻さないと user.name / email と
     global ignore が無いままになる (b414b54 で [user] を分けたときの退行)。

@@ -1,0 +1,2 @@
+# CLI (git config --global など) の書き込み先。chezmoi は無いときだけ作り、以後は触らない。
+# 管理する設定は ~/.config/git/config (see docs/spec/structure.md)。

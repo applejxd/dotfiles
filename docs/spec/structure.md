@@ -25,16 +25,27 @@
 chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `config/`、
 `scripts/`、`test/`、`docs/` は導入・生成処理・開発・説明資料に使用します。
 
+## Git 設定の管理 {#gitconfig-の管理}
+
+- chezmoi が管理するのは `~/.config/git/config`（`home/dot_config/git/config.tmpl`）。`~/.gitconfig` は管理しない。
+- git は両方を読み、同じキーでは `~/.gitconfig` が勝つ。CLI の `git config --global` は `~/.gitconfig` が既にあればそこへ書く。
+  XDG 側だけがあるとその管理ファイルへ書いてしまい、`chezmoi update` の上書き確認の原因になる。
+- そのため `home/create_dot_gitconfig`（`create_` は無いときだけ作る）が空の `~/.gitconfig` を用意し、CLI の書き込み先を固定する。
+- ローカルの上書きは `~/.config/git/config.local`、`[user]` は `~/.config/git/user`（Bitwarden 由来。[security.md](security.md)）。
+- 旧構成の `~/.gitconfig` は `000_unix/run_once_before_006_gitconfig_migrate.sh`（Windows は `300_windows/run_once_before_300_gitconfig_migrate.ps1`）が
+  `.chezmoi-old` へ退避する。目印の行が無いファイルには触らない。
+- agent の書き込み禁止は `~/.gitconfig`・`~/.config/git/config`・`~/.config/git/config.local`（`common.toml.tmpl`）。
+
 ## 自動実行スクリプト
 
 `home/.chezmoiscripts/` はOSと実行順で分割しています。
 
 | 範囲 | 対象 | 主な役割 |
 | --- | --- | --- |
-| `000_unix/` | Linux / macOS | Python 3.11 以上の確保（ファイル適用より前）、zinit補完の保守 |
+| `000_unix/` | Linux / macOS | Python 3.11 以上の確保と旧 `~/.gitconfig` の退避（ファイル適用より前）、zinit補完の保守 |
 | `100_linux/` | Ubuntu / WSL | OSパッケージ、mise、shell、Herdr |
 | `200_mac/` | macOS | Homebrew、mise、macOS defaults |
-| `300_windows/` | Windows native | Winget/Scoop/Chocolatey、レジストリ、Terminal、AI CLI統合、MCP登録 |
+| `300_windows/` | Windows native | 旧 `~/.gitconfig` の退避、Winget/Scoop/Chocolatey、レジストリ、Terminal、AI CLI統合、MCP登録 |
 | `400_unix/` | Linux / macOS | mise 導入後の Claude Code への MCP 登録 |
 
 スクリプト名は `run_once_XXX_name`、`run_onchange_XXX_name`、

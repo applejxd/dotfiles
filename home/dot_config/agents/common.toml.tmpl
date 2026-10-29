@@ -379,7 +379,7 @@ commands = [
   "git config --replace-all",
   "git config --edit",
 ]
-message = "git config の書き込みは許可されていません。ユーザー設定は chezmoi 管理の home/dot_gitconfig.tmpl を編集して `chezmoi apply` で反映してください。リポジトリ単位の設定は、変更内容を利用者に示して依頼してください。読み取りは `--global` などを付けず `git config --get <key>` / `git config --list` の形で使えます。"
+message = "git config の書き込みは許可されていません。ユーザー設定は chezmoi 管理の home/dot_config/git/config.tmpl を編集して `chezmoi apply` で反映してください。リポジトリ単位の設定は、変更内容を利用者に示して依頼してください。読み取りは `--global` などを付けず `git config --get <key>` / `git config --list` の形で使えます。"
 
 [[bash.deny_guide.alternative]]
 commands = [
@@ -538,7 +538,7 @@ write_deny_globs = [
   # see docs/research/opencode/permission/allow-list-audit.md
   "**/.git/config",
   "**/.git/hooks/**",
-  "~/.gitconfig",
+  "~/.gitconfig", "~/.config/git/config", "~/.config/git/config.local",
   # pi のフルガードの設定とコード。素の pi には Fence が無いので、書けるとガードを外せる。
   # 正本はこのリポジトリ。変更は chezmoi apply 経由で入れる。see docs/spec/guard/pi-guard.md#判定の外で動くもの
   "~/.pi/agent/settings.json",
@@ -663,6 +663,7 @@ claude_write_deny = [
   "~/.bashrc", "~/.bash_profile", "~/.bash_login", "~/.profile",
   "~/.zshrc", "~/.zshenv", "~/.zprofile", "~/.cshrc", "~/.kshrc", "~/.login",
   "~/.ssh/authorized_keys", "~/.ssh/known_hosts", "~/.gitconfig",
+  "~/.config/git/config", "~/.config/git/config.local",
 ]
 
 # Claude のみ: whitelist に開ける読み取りの穴。
