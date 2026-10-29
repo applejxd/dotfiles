@@ -22,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import narration_check  # noqa: E402
 import state_store  # noqa: E402
 
 HEADER = ["行", "開始", "本文", "読み", "指摘"]
@@ -77,6 +78,7 @@ def read_notes(
                 "text": e["text"],
                 "at": e["at"],
                 "stale": stale,
+                "entry": e,  # 画面が「見た記録」として更新に添える(比較交換)
             }
         )
     return out
@@ -113,6 +115,14 @@ def main(argv=None) -> int:
     if tsp.is_file():
         ts = json.loads(tsp.read_text(encoding="utf-8"))
     current = [s["text"] for s in ts["subtitles"]] if ts else None
+    narr = w / "narration.txt"
+    if (
+        narr.is_file()
+    ):  # 「古い」の基準はいまの台本(再合成前でも、timestamps.json より新しい)
+        try:
+            current = narration_check.parse_subtitles(narr)
+        except (ValueError, OSError):
+            pass  # 台本が読めないときは timestamps.json を基準にする
     try:
         notes = read_notes(w, current)
     except ValueError as e:
@@ -136,7 +146,7 @@ def main(argv=None) -> int:
         print(f"エラー: {tsp.name} が無い(先に tts_generate.py を実行する)")
         return 2
     out = w / a.out
-    by_line = {n["line"]: n["note"] for n in notes}
+    by_line = {n["line"]: ("【古い】" if n["stale"] else "") + n["note"] for n in notes}
     with out.open("w", encoding="utf-8-sig", newline="") as f:
         wr = csv.writer(f)
         wr.writerow(HEADER)

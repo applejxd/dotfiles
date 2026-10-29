@@ -287,6 +287,45 @@ class TtsGenerateTests(unittest.TestCase):
             code, log = self.run_tts(fake.url)
         self.assertEqual(code, 2)
 
+    def test_removed_lines_are_not_reported_as_no_change(self):
+        """C-08: 末尾の行を削って残りの行が不変でも、「時間の変更なし」と言わない(旧映像の末尾が残る)。"""
+        with FakeVoicevox() as fake:
+            code, log = self.run_tts(fake.url)
+            self.assertEqual(code, 0, log)
+            lines = SCRIPT.splitlines(keepends=True)
+            (self.d / "narration.txt").write_text("".join(lines[:-1]), encoding="utf-8")
+            code, log = self.run_tts(fake.url)
+        self.assertEqual(code, 0, log)
+        self.assertNotIn("時間の変更なし", log)
+        self.assertIn("削除", log)
+        self.assertIn("3", log)  # 削除された行番号
+
+    def test_word_removed_from_the_dictionary_is_removed_from_the_engine_and_the_line_is_resynthesized(
+        self,
+    ):
+        """C-09: 辞書から消した語が ENGINE に残って、削除前と同じ音声を使い続けない。"""
+        with FakeVoicevox() as fake:
+            write_dict(self.d / "yomi.json", {"単眼": "タ'ンガン"})
+            code, log = self.run_tts(fake.url)
+            self.assertEqual(code, 0, log)
+            self.assertIn("単眼", fake.words)
+            n = fake.synthesis_count()
+            write_dict(self.d / "yomi.json", {})  # 辞書から消す(空にする)
+            code, log = self.run_tts(fake.url)
+            self.assertEqual(code, 0, log)
+            self.assertNotIn("単眼", fake.words)
+            self.assertEqual(
+                fake.synthesis_count(), n + 1
+            )  # その語を含む 1 行目だけ再合成される
+            self.assertIn("取り除いた", log)
+
+    def test_removed_lines_helper(self):
+        prev = [{"text": "a", "duration_s": 1.0}] * 3
+        now = [{"text": "a", "duration_s": 1.0}] * 2
+        self.assertEqual(tts_generate.changed_lines(prev, now), [])
+        self.assertEqual(tts_generate.removed_lines(prev, now), [3])
+        self.assertEqual(tts_generate.removed_lines(now, prev), [])
+
 
 if __name__ == "__main__":
     unittest.main()

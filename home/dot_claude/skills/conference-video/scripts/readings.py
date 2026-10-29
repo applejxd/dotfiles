@@ -41,8 +41,7 @@ def main(argv=None) -> int:
     eng = Engine(a.engine_url, connect_timeout=a.connect_timeout)
     try:
         eng.version()
-        if entries:
-            yomi.register(eng, entries)
+        yomi.register(eng, entries)  # 空の辞書でも、辞書に無いツールの登録を取り除く
         for i, text in enumerate(lines, 1):
             q = eng.audio_query(yomi.speech_text(text, entries), a.speaker)
             kana = "|".join(

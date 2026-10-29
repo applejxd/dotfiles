@@ -340,5 +340,172 @@ class ProcessRaceTests(Base):
         self.assertEqual(self.leftovers(), [])
 
 
+class ReviewFindingsTests(Base):
+    """独立レビュー(WP6)の指摘 A-01 / A-02 / A-03 / A-06 / A-09 の固定。"""
+
+    def test_persistent_permission_error_on_lock_creation_times_out(self):
+        """A-02: ロックを作れない権限エラーが続いても、期限内に LockTimeout で終わる(無限ループしない)。"""
+        calls = []
+
+        def deny(path, flags, *a, **k):
+            calls.append(1)
+            if len(calls) > 20000:
+                raise AssertionError("待機なしの空回しループ")
+            raise PermissionError(13, "denied")
+
+        store = ss.Store(self.path, lock_timeout=0.3)
+        with mock.patch("state_store.os.open", side_effect=deny):
+            with self.assertRaises(ss.LockTimeout) as cm:
+                store.update("a", None, 1)
+        self.assertIn("権限", str(cm.exception))
+        self.assertLess(len(calls), 2000)
+
+    def test_lock_token_write_failure_leaves_no_lock(self):
+        """A-06: ロックのトークンを書けなくても、ロックを残さない。"""
+        with mock.patch("state_store.os.write", side_effect=OSError(28, "disk full")):
+            with self.assertRaises(ss.WriteFailed):
+                self.store.update("a", None, 1)
+        self.assertFalse((self.dir / "yomi.json.lock").exists())
+        self.store.update("a", None, 1)  # 続けて更新できる
+
+    def test_initialize_creates_once_and_never_wipes(self):
+        """A-03: 存在確認と作成が同じロックの中。既存(壊れていても)は触らない。"""
+        self.assertTrue(self.store.initialize())
+        self.assertEqual(self.store.read().entries, {})
+        self.store.update("a", None, 1)
+        before = self.raw()
+        self.assertFalse(self.store.initialize())
+        self.assertEqual(self.raw(), before)
+        self.path.write_text("{壊れ", encoding="utf-8")
+        self.assertFalse(self.store.initialize())
+        self.assertEqual(self.path.read_text(encoding="utf-8"), "{壊れ")
+
+    def test_initialize_holds_the_lock_while_checking(self):
+        seen = []
+        real = Path.exists
+
+        def spy(p):
+            if p == self.path:
+                seen.append((self.dir / "yomi.json.lock").exists())
+            return real(p)
+
+        with mock.patch.object(Path, "exists", spy):
+            self.store.initialize()
+        self.assertTrue(seen and all(seen), seen)
+
+    def test_non_string_keys_and_non_finite_numbers_are_invalid(self):
+        """A-09: キーは文字列だけ。NaN / 無限大は書かず、読めば壊れている扱い。"""
+        for key in (1, None, (1, 2)):
+            with self.subTest(key=key):
+                with self.assertRaises(ss.Invalid):
+                    self.store.update(key, None, 1)
+        for bad in (float("nan"), float("inf"), {"x": float("-inf")}):
+            with self.subTest(value=bad):
+                with self.assertRaises(ss.Invalid):
+                    self.store.update("k", None, bad)
+        self.assertIsNone(self.raw())
+        for text in (
+            '{"schema": 1, "entries": {"k": NaN}}',
+            '{"schema": 1, "entries": {"k": Infinity}}',
+        ):
+            self.path.write_text(text, encoding="utf-8")
+            with self.assertRaises(ss.Corrupt):
+                self.store.read()
+
+    def test_failure_messages_do_not_leak_absolute_paths(self):
+        """B-09: 置換・書き込みの失敗の案内に、例外を経由した絶対パスを含めない。"""
+        err = PermissionError(13, "Permission denied", "/secret/abs/dir/yomi.json")
+        with mock.patch.object(ss, "REPLACE_RETRY_DELAY", 0.001):
+            with mock.patch("state_store.os.replace", side_effect=err):
+                with self.assertRaises(ss.WriteFailed) as cm:
+                    self.store.update("a", None, 1)
+        self.assertNotIn("/secret", str(cm.exception))
+        self.assertIn("他のアプリ", str(cm.exception))
+        with mock.patch(
+            "state_store.os.fsync",
+            side_effect=OSError(28, "No space left", "/secret/abs/tmp"),
+        ):
+            with self.assertRaises(ss.WriteFailed) as cm:
+                self.store.update("a", None, 1)
+        self.assertNotIn("/secret", str(cm.exception))
+
+    def test_a_second_writer_waits_for_the_lock_and_then_sees_the_first_commit(self):
+        """D-06: 読む・検証する・書くが同じロックの中。A のコミット前に B が読んでしまう順序を固定して確かめる。"""
+        import threading
+
+        entered, release = threading.Event(), threading.Event()
+
+        def guard():
+            entered.set()
+            release.wait(5)
+
+        first = threading.Thread(
+            target=lambda: self.store.update("k", None, 1, guard=guard)
+        )
+        first.start()
+        self.assertTrue(entered.wait(5))
+        result = {}
+
+        def second():
+            try:
+                ss.Store(self.path, lock_timeout=5).update("k", None, 2)
+                result["r"] = "ok"
+            except ss.Conflict:
+                result["r"] = "conflict"
+
+        t2 = threading.Thread(target=second)
+        t2.start()
+        time.sleep(0.4)
+        self.assertNotIn("r", result, "ロックを待たずに進んだ")
+        release.set()
+        first.join(5)
+        t2.join(5)
+        self.assertEqual(result.get("r"), "conflict")  # A のコミット後の値で比べる
+        self.assertEqual(self.store.read().entries["k"], 1)
+
+    def test_a_writer_whose_lock_was_taken_over_does_not_delete_the_new_owners_lock(
+        self,
+    ):
+        """D-06: 止まっていた書き手があとから解放しても、引き継いだ別のプロセスのロックを消さない。"""
+        import threading
+
+        entered, release = threading.Event(), threading.Event()
+
+        def guard():
+            entered.set()
+            release.wait(5)
+
+        owner = threading.Thread(
+            target=lambda: self.store.update("a", None, 1, guard=guard)
+        )
+        owner.start()
+        self.assertTrue(entered.wait(5))
+        lock = self.dir / "yomi.json.lock"
+        old = time.time() - 600
+        os.utime(lock, (old, old))  # 古いロックに見える
+        taker_in, taker_release = threading.Event(), threading.Event()
+
+        def taker_guard():
+            taker_in.set()
+            taker_release.wait(5)
+
+        taker = threading.Thread(
+            target=lambda: ss.Store(self.path, lock_timeout=5, lock_stale=30).update(
+                "b", None, 2, guard=taker_guard
+            )
+        )
+        taker.start()
+        self.assertTrue(taker_in.wait(5))  # 古いロックを解除して自分が取った
+        release.set()
+        owner.join(5)  # 元の書き手がここで解放を試みる
+        self.assertTrue(lock.exists(), "引き継いだプロセスのロックを消した")
+        taker_release.set()
+        taker.join(5)
+
+    def test_default_stale_lock_period_is_long_enough_for_slow_hosts(self):
+        """A-01: 生きている書き手のロックを奪わないよう、既定の期限は 120 秒以上。"""
+        self.assertGreaterEqual(ss.Store(self.path).lock_stale, 120)
+
+
 if __name__ == "__main__":
     unittest.main()

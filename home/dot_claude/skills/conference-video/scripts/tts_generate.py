@@ -66,6 +66,11 @@ def synth_line(
     return wav, {"duration_s": dur, "phrases": phrases}
 
 
+def removed_lines(prev: list[dict], now: list[dict]) -> list[int]:
+    """前回より行数が減ったときの、削除された前回の行番号(1 始まり)。残った行が不変でも、旧映像の末尾が残る。"""
+    return list(range(len(now) + 1, len(prev) + 1))
+
+
 def changed_lines(prev: list[dict], now: list[dict], tol: float = 0.02) -> list[int]:
     """前回の timestamps と比べて、文・長さ(tol 秒超)・行数が変わった行(1 始まり)。"""
     out = []
@@ -126,7 +131,10 @@ def main(argv=None) -> int:
     engine = Engine(a.engine_url, connect_timeout=a.connect_timeout)
     try:
         version = engine.version()
-        registered = yomi.register(engine, entries) if entries else 0
+        removed = yomi.prune_engine(
+            engine, entries
+        )  # 辞書に無いツールの登録を先に取り除く(空の辞書でも)
+        registered = yomi.register(engine, entries, prune=False) if entries else 0
         speaker_name = engine.speaker_name(a.speaker)
         if speaker_name is None:
             print(
@@ -138,7 +146,7 @@ def main(argv=None) -> int:
         words = yomi.engine_words(engine)  # 登録後の ENGINE の辞書を行ごとの鍵に使う
         print(
             f"{len(lines)} 行、話者 {speaker_name}({a.speaker})、速度 {a.speed}、"
-            f"辞書 {len(entries)} 語(新規 {registered})、ENGINE {version}"
+            f"辞書 {len(entries)} 語(新規 {registered}、取り除いた {removed})、ENGINE {version}"
         )
         cache.mkdir(parents=True, exist_ok=True)
         wavs, metas, hits = [], [], 0
@@ -239,12 +247,18 @@ def main(argv=None) -> int:
     )
     if prev is not None:
         changed = changed_lines(prev, subs)
+        removed = removed_lines(prev, subs)
+        if removed:
+            print(
+                f"削除された行(前回の {', '.join(map(str, removed))} 行目): 行数が減りました"
+                " → シーンの構成と結合順(concat.txt)を確認し、該当するシーンを外して再描画する"
+            )
         if changed:
             print(
                 f"時間が変わった行: {', '.join(map(str, changed))}"
                 " → これらを含むシーンを再描画する(リンタ → manim → concat → finish --force)"
             )
-        else:
+        elif not removed:
             print("時間の変更なし(描画のやり直しは不要。finish --force だけでよい)")
     return 0
 

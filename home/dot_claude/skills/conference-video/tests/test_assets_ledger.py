@@ -478,6 +478,44 @@ class EditCommandTests(LedgerBase):
             sorted(r["ファイル"] for r in assets_ledger.load(self.path)), sorted(names)
         )
 
+    def test_init_racing_with_adds_never_wipes_them(self):
+        """A-03: init と add が同時でも、追加済みの素材を空の台帳で消さない。"""
+        names = [f"assets/g{i}.jpg" for i in range(5)]
+        script = str(SCRIPTS / "assets_ledger.py")
+        procs = [
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    script,
+                    "add",
+                    str(self.path),
+                    n,
+                    "--url",
+                    "https://x.example/a",
+                    "--license",
+                    "CC0",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for n in names
+        ]
+        procs += [
+            subprocess.Popen(
+                [sys.executable, script, "init", str(self.path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for _ in range(3)
+        ]
+        for p in procs:
+            p.communicate(timeout=60)
+        self.assertEqual(
+            sorted(r["ファイル"] for r in assets_ledger.load(self.path)), sorted(names)
+        )
+
 
 class StoreFormatTests(LedgerBase):
     def test_ledger_is_written_through_state_store_format(self):

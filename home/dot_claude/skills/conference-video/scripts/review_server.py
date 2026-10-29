@@ -19,7 +19,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import http.client
+import errno
 import json
+import math
 import mimetypes
 import os
 import re
@@ -57,6 +59,8 @@ APPROVED, NEEDS_FIX, CLEARED = "承認", "要修正", "未承認"
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".m4v"}
 MAX_BODY = 1_000_000
+MAX_CONNECTIONS = 128  # 同時に処理する接続の上限(超えた接続はすぐ閉じる)
+BODY_DEADLINE = 15.0  # 本文の受信全体の締切(秒)。少しずつ送り続けても切る
 CHUNK = 1 << 16
 
 
@@ -90,19 +94,23 @@ def validate_approval(item: str, rec) -> None:
         raise ValueError("status は 承認 / 要修正")
     if not isinstance(rec.get("hash"), str):
         raise ValueError("hash が要る")
+    for k in ("comment", "at"):
+        if k in rec and not isinstance(rec[k], str):
+            raise ValueError(f"{k} は文字列")
 
 
-# 書き込みルート: パス → (Workspace のメソッド名, 画面で見た版を示す必須フィールド)。
+# 書き込みルート: パス → (Workspace のメソッド名, 画面で見た版を示す必須フィールドの組)。
+# hash = 対象ファイルの版、expected = 更新する記録そのものの、画面が見た値(新規は null)。
 # 書き込みの入口はここに登録する(試験が、表と Workspace の公開メソッドの一致、
 # 各ルートの「版が無ければ 400」「壊れた入力で何も書かない」を表から検査する)。
-# approve は「未承認に戻す」だけ版が要らない。
+# approve の hash は「未承認に戻す」ときだけ要らない(expected は常に要る)。
 ROUTES = {
-    "/api/approve": ("approve", "hash"),
-    "/api/narration": ("edit_narration", "hash"),
-    "/api/yomi": ("yomi_set", "expected"),
-    "/api/yomi/delete": ("yomi_delete", "expected"),
-    "/api/asset": ("asset_set", "expected"),
-    "/api/note": ("note_set", "hash"),
+    "/api/approve": ("approve", ("hash", "expected")),
+    "/api/narration": ("edit_narration", ("hash",)),
+    "/api/yomi": ("yomi_set", ("expected",)),
+    "/api/yomi/delete": ("yomi_delete", ("expected",)),
+    "/api/asset": ("asset_set", ("expected",)),
+    "/api/note": ("note_set", ("hash", "expected")),
 }
 # 読み取り専用の公開メソッド(上の表に無い公開メソッドは、書き込みの入口とみなして試験が止める)
 READ_ONLY_METHODS = {
@@ -121,7 +129,7 @@ class ApprovalsError(ValueError):
 
 
 def _is_num(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def atomic_write(path: Path, data: bytes, mode: int | None = None) -> None:
@@ -159,21 +167,28 @@ def default_port(workdir: Path | str) -> int:
 
 
 def ping(port: int, timeout: float = 0.8) -> dict | None:
-    """127.0.0.1:port の確認サーバの /api/ping。このサービスでなければ None。"""
+    """127.0.0.1:port の確認サーバの /api/ping。このサービスでなければ None。
+    総時間の締切(timeout)を持つ(少しずつ答え続ける相手で待ち続けない)。200 以外は本文を待たない。"""
+    deadline = time.monotonic() + timeout
     try:
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
         try:
             conn.request("GET", "/api/ping")
             r = conn.getresponse()
-            body = r.read(4096)
+            if r.status != 200:
+                return None
+            body = b""
+            while len(body) < 4096:
+                if time.monotonic() > deadline:
+                    return None
+                chunk = r.read1(512)
+                if not chunk:
+                    break
+                body += chunk
         finally:
             conn.close()
         d = json.loads(body)
-        return (
-            d
-            if r.status == 200 and isinstance(d, dict) and d.get("service") == SERVICE
-            else None
-        )
+        return d if isinstance(d, dict) and d.get("service") == SERVICE else None
     except (OSError, ValueError, http.client.HTTPException):
         return None
 
@@ -187,6 +202,12 @@ def live_url(workdir: Path | str, port: int | None = None) -> str | None:
         if d and d.get("workspace_id") == workspace_id(workdir)
         else None
     )
+
+
+def _file_signature(path: Path) -> tuple[int, int]:
+    """承認の対象ファイルの、軽い版の署名(大きさと更新時刻)。ロックの中の再確認に使う。"""
+    st = path.stat()
+    return st.st_size, st.st_mtime_ns
 
 
 def bytes_hash(data: bytes) -> str:
@@ -292,28 +313,35 @@ class Workspace:
         if not p.is_file():
             return []
         try:
-            entries = yomi.read_entries(p)
-        except ValueError as e:
+            raw = (
+                yomi.dict_store(p).read().entries
+            )  # 1 回の読み取りから、表示と expected を作る
+        except state_store.Corrupt as e:
             errors["yomi"] = str(e)
             return []
-        return [
-            {
-                "surface": k,
-                "reading": yomi.format_reading(v["pron"], v["accent"]),
-                "status": v["status"],
-                "note": v["note"],
-                "entry": v,  # 画面が「見た値」として更新に添える(比較交換)
-            }
-            for k, v in entries.items()
-        ]
+        out = []
+        for k, v in raw.items():
+            full = {"status": yomi.CONFIRMED, "note": "", **v}  # 表示は既定値を補う
+            out.append(
+                {
+                    "surface": k,
+                    "reading": yomi.format_reading(full["pron"], full["accent"]),
+                    "status": full["status"],
+                    "note": full["note"],
+                    "entry": v,  # 補完前の生の値。画面が「見た値」として更新に添える(比較交換)
+                }
+            )
+        return out
 
     def _assets(self, errors: dict) -> list[dict]:
         p = self.p("assets.json")
         if not p.is_file():
             return []
         try:
-            rows = assets_ledger.load(p)
-            raw = assets_ledger.store(p).read().entries
+            raw = (
+                assets_ledger.store(p).read().entries
+            )  # 1 回の読み取りから、表示と expected を作る
+            rows = assets_ledger.rows_from_entries(raw)
         except (ValueError, assets_ledger.state_store.StoreError) as e:
             errors["assets"] = str(e)
             return []
@@ -351,6 +379,7 @@ class Workspace:
                     "text": n["text"],
                     "note": n["note"],
                     "stale": n["stale"],
+                    "entry": n["entry"],
                 }
             )
         return out
@@ -386,6 +415,10 @@ class Workspace:
         try:
             if item == "script":
                 narration_check.parse_subtitles(self.p("narration.txt"))
+            elif item == "plan" and self.p("brief.md").is_file():
+                self.p("brief.md").read_text(
+                    encoding="utf-8"
+                )  # 表示できない構成案は承認しない
             elif item == "yomi" and self.p("yomi.json").is_file():
                 yomi.read_entries(self.p("yomi.json"))
             elif item == "assets" and self.p("assets.json").is_file():
@@ -437,7 +470,7 @@ class Workspace:
     # ───── 書き込み ─────
     def approve(self, body: dict) -> dict:
         item, status = body.get("item"), body.get("status")
-        if item not in ITEMS:
+        if not isinstance(item, str) or item not in ITEMS:
             raise ApiError(400, f"item は {' / '.join(ITEMS)} のどれか")
         if status not in (APPROVED, NEEDS_FIX, CLEARED):
             raise ApiError(400, f"status は {APPROVED} / {NEEDS_FIX} / {CLEARED}")
@@ -446,45 +479,50 @@ class Workspace:
         given = body.get("hash")
         if status != CLEARED and (not isinstance(given, str) or not given):
             raise ApiError(400, "hash が要る(画面で見た版のハッシュ)")
+        expected = self._expected(body)  # 画面が見たこの項目の承認記録(無ければ null)
+        if status == APPROVED and (problem := self.source_problem(item)):
+            raise ApiError(
+                400, f"読めない正本は承認できません(先に直してください): {problem}"
+            )
         changed = ApiError(
             409,
             f"表示後に {target.name} が変わりました。再読み込みして、内容を確かめてから承認してください",
         )
-
-        def guard():  # 承認の対象(別ファイル)の版を、ロックの中で確かめる
-            if not target.is_file() or file_hash(target) != given:
+        sig = None
+        if status != CLEARED:
+            if not target.is_file():
+                raise ApiError(400, f"対象のファイルが無い: {target.name}")
+            sig = _file_signature(target)
+            if file_hash(target) != given:  # 重いハッシュ計算はロックの外で行う
                 raise changed
 
-        store = self.approvals_store()
-        for _ in range(3):
-            try:
-                cur = store.read().entries.get(item)
-                if status == CLEARED:
-                    new = None
-                else:
-                    if not target.is_file():
-                        raise ApiError(400, f"対象のファイルが無い: {target.name}")
-                    new = {
-                        "status": status,
-                        "comment": comment,
-                        "hash": given,
-                        "at": datetime.now().astimezone().isoformat(timespec="seconds"),
-                    }
-                store.update(item, cur, new, guard=None if status == CLEARED else guard)
-                return {"ok": True}
-            except state_store.Conflict:
-                continue  # 別の書き手が同じ項目を先に更新した。読み直してやり直す
-            except state_store.Corrupt as e:
-                raise ApiError(
-                    409,
-                    f"approvals.json が壊れている({e})。内容を確認して直すか、"
-                    "別名に退避してから承認し直してください",
-                ) from e
-            except state_store.StoreError as e:
-                raise store_api_error(e, item) from e
-        raise ApiError(
-            409, "承認の記録が他の書き手と競合し続けています。再読み込みしてください"
+        def guard():  # ロックの中では、軽い確認(大きさと更新時刻が、ハッシュを取った時から不変)だけ行う
+            if sig is not None and _file_signature(target) != sig:
+                raise changed
+
+        new = (
+            None
+            if status == CLEARED
+            else {
+                "status": status,
+                "comment": comment,
+                "hash": given,
+                "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            }
         )
+        try:
+            self.approvals_store().update(
+                item, expected, new, guard=guard if sig else None
+            )
+        except state_store.Corrupt as e:
+            raise ApiError(
+                409,
+                f"approvals.json が壊れている({e})。内容を確認して直すか、"
+                "別名に退避してから承認し直してください",
+            ) from e
+        except state_store.StoreError as e:
+            raise store_api_error(e, item) from e
+        return {"ok": True}
 
     def edit_narration(self, body: dict) -> dict:
         idx, text = body.get("index"), body.get("text")
@@ -605,6 +643,7 @@ class Workspace:
         seen = body.get("hash")  # 画面で見た台本のハッシュ(必須)。変わっていれば 409
         if not isinstance(seen, str) or not seen:
             raise ApiError(400, "hash が要る(画面で見た台本のハッシュ)")
+        expected = self._expected(body)  # 画面が見たこの行の指摘(無ければ null)
         narr = self.p("narration.txt")
         if not narr.is_file():
             raise ApiError(400, "narration.txt が無い")
@@ -627,38 +666,34 @@ class Workspace:
             cur = [x["text"] for x in self._script({})["lines"]]
         except (ValueError, OSError) as e:
             raise ApiError(400, f"台本が読めない: {e}") from e
+        deleting = not note
         if not 1 <= line <= len(cur):
-            raise ApiError(400, f"{line} 行目は台本に無い")
+            # 台本から消えた行の古い指摘は、見たうえで消せる。範囲外への新規の指摘は拒否する
+            if not (deleting and expected is not None and line >= 1):
+                raise ApiError(400, f"{line} 行目は台本に無い")
 
         def guard():  # 見た台本の版を、ロックの中でも確かめる
             if not same_script():
                 raise changed
 
-        store = review_sheet.notes_store(self.dir)
-        key = str(line)
-        for _ in range(3):
-            try:
-                existing = store.read().entries.get(key)
-                new = (
-                    {
-                        "note": note,
-                        "text": cur[
-                            line - 1
-                        ],  # 指摘したときの本文(台本が変わったら「古い」と分かる)
-                        "at": datetime.now().astimezone().isoformat(timespec="seconds"),
-                    }
-                    if note
-                    else None  # 空にしたら指摘を消す
-                )
-                store.update(key, existing, new, guard=guard)
-                return {"ok": True}
-            except state_store.Conflict:
-                continue
-            except state_store.StoreError as e:
-                raise store_api_error(e, key) from e
-        raise ApiError(
-            409, "指摘が他の書き手と競合し続けています。再読み込みしてください"
+        new = (
+            None
+            if deleting
+            else {
+                "note": note,
+                "text": cur[
+                    line - 1
+                ],  # 指摘したときの本文(台本が変わったら「古い」と分かる)
+                "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            }
         )
+        try:
+            review_sheet.notes_store(self.dir).update(
+                str(line), expected, new, guard=guard
+            )
+        except state_store.StoreError as e:
+            raise store_api_error(e, str(line)) from e
+        return {"ok": True}
 
 
 def gate_problems(ws: Workspace, required: list[str]) -> list[str]:
@@ -710,6 +745,8 @@ def summary_lines(ws: Workspace) -> tuple[list[str], bool]:
 
 def parse_range(header: str, size: int) -> tuple[int, int] | None:
     """`bytes=a-b` / `a-` / `-n` を (開始, 終了) に。満たせなければ ValueError。"""
+    if size <= 0:
+        raise ValueError("range")
     m = re.fullmatch(r"bytes=(\d*)-(\d*)", header.strip())
     if not m or (m.group(1) == "" and m.group(2) == ""):
         raise ValueError("range")
@@ -728,6 +765,23 @@ def parse_range(header: str, size: int) -> tuple[int, int] | None:
 
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
+
+    def __init__(self, *args, **kwargs):
+        self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        # スレッドを作る前に上限を確かめる(超えた接続はすぐ閉じ、資源を使い切らせない)
+        if not self._slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
     # Windows の SO_REUSEADDR は同じポートへの二重バインドを許してしまうので、使わない
     allow_reuse_address = os.name != "nt"
 
@@ -756,12 +810,16 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
         server_version = "review"
-        timeout = 30  # 本文を送らないクライアントでスレッドを占有しない
+        timeout = 10  # 1 回の受信の待ち時間。本文全体は BODY_DEADLINE でも切る
 
         def log_message(self, *a):  # 静かに
             pass
 
         # ── 共通 ──
+        def end_headers(self):
+            self._security_headers()
+            super().end_headers()
+
         def _security_headers(self):
             # 他サイトからの埋め込み・MIME の推測を拒否する(全応答で共通)
             self.send_header("X-Frame-Options", "DENY")
@@ -770,7 +828,6 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
 
         def _send(self, status: int, body: bytes, ctype: str, extra=None, close=False):
             self.send_response(status)
-            self._security_headers()
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
@@ -784,7 +841,7 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
         def _json(self, status: int, obj, close=False):
             self._send(
                 status,
-                json.dumps(obj, ensure_ascii=False).encode("utf-8"),
+                json.dumps(obj, ensure_ascii=False, allow_nan=False).encode("utf-8"),
                 "application/json; charset=utf-8",
                 close=close,
             )
@@ -856,44 +913,59 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
             p = (ws.dir / rel).resolve()
             if not p.is_relative_to(ws.dir) or not p.is_file():
                 return self._json(404, {"error": "not found"})
-            size = p.stat().st_size
-            ctype = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
-            status, start, end, extra = 200, 0, size - 1, {"Accept-Ranges": "bytes"}
-            rng = self.headers.get("Range")
-            if rng:
-                try:
-                    start, end = parse_range(rng, size)
-                except ValueError:
-                    return self._send(
-                        416, b"", "text/plain", {"Content-Range": f"bytes */{size}"}
-                    )
-                status = 206
-                extra["Content-Range"] = f"bytes {start}-{end}/{size}"
-            length = end - start + 1 if size else 0
-            self.send_response(status)
-            self._security_headers()
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(length))
-            self.send_header("Cache-Control", "no-cache")
-            if not inline_safe(
-                ctype
-            ):  # メディア以外は表示せず保存に回す(スクリプトを実行させない)
-                self.send_header("Content-Disposition", "attachment")
-            for k, v in extra.items():
-                self.send_header(k, v)
-            self.end_headers()
             try:
-                with p.open("rb") as f:
+                f = p.open("rb")  # 先に開き、開いた実体の大きさで長さを決める(差し替え・短縮に備える)
+            except OSError:
+                return self._json(404, {"error": "not found"})
+            with f:
+                size = os.fstat(f.fileno()).st_size
+                ctype = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+                status, start, end, extra = 200, 0, size - 1, {"Accept-Ranges": "bytes"}
+                rng = self.headers.get("Range")
+                if rng:
+                    try:
+                        start, end = parse_range(rng, size)
+                    except ValueError:
+                        return self._send(
+                            416, b"", "text/plain", {"Content-Range": f"bytes */{size}"}
+                        )
+                    status = 206
+                    extra["Content-Range"] = f"bytes {start}-{end}/{size}"
+                length = end - start + 1 if size else 0
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(length))
+                self.send_header("Cache-Control", "no-cache")
+                if not inline_safe(ctype):  # メディア以外は表示せず保存に回す(スクリプトを実行させない)
+                    self.send_header("Content-Disposition", "attachment")
+                for k, v in extra.items():
+                    self.send_header(k, v)
+                self.end_headers()
+                try:
                     f.seek(start)
                     left = length
                     while left > 0:
                         chunk = f.read(min(CHUNK, left))
                         if not chunk:
+                            self.close_connection = True  # 宣言した長さに足りない: 接続を閉じる(応答の境界を壊さない)
                             break
                         self.wfile.write(chunk)
                         left -= len(chunk)
-            except (BrokenPipeError, ConnectionResetError):
-                pass
+                except OSError:
+                    self.close_connection = True
+
+        def _read_body(self, n: int) -> bytes:
+            """宣言した長さの本文を、総締切つきで読む。足りなければ 400、遅すぎれば 408(接続は閉じる)。"""
+            deadline = time.monotonic() + BODY_DEADLINE
+            buf = bytearray()
+            while len(buf) < n:
+                if time.monotonic() > deadline:
+                    raise ApiError(408, "本文の受信が遅すぎます")
+                chunk = self.rfile.read1(min(CHUNK, n - len(buf)))
+                if not chunk:
+                    raise ApiError(400, "本文が途中で切れています(Content-Length に足りない)")
+                buf += chunk
+            return bytes(buf)
 
         # ── POST ──
         def do_POST(self):
@@ -926,8 +998,9 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
                     raise ApiError(400, "Content-Length が不正")
                 if n > MAX_BODY:
                     return self._json(413, {"error": "本文が大きすぎる"}, close=True)
-                body = json.loads(self.rfile.read(n) or b"{}")
+                raw = self._read_body(n)
                 consumed = True
+                body = json.loads(raw or b"{}")
                 if not isinstance(body, dict):
                     raise ApiError(400, "JSON のオブジェクトが要る")
                 self._json(200, fn(body))
@@ -937,7 +1010,7 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
                     {"error": e.message},
                     close=not consumed,
                 )
-            except ValueError:
+            except (ValueError, RecursionError):
                 self._json(400, {"error": "JSON が不正"})
             except Exception:
                 self._internal_error()
@@ -995,7 +1068,7 @@ def main(argv=None) -> int:
             print(f"エラー: {e}")
             return 1
         print("\n".join(lines))
-        shown = live_url(ws.dir)
+        shown = live_url(ws.dir, a.port or None)
         print(
             f"確認画面: {shown}"
             if shown
@@ -1011,9 +1084,16 @@ def main(argv=None) -> int:
     w = Path(w).resolve()
     print(f"作業フォルダ: {w}", flush=True)
     port = default_port(w) if a.port is None else a.port  # --port 0 は空いているポート
+    if not 0 <= port <= 65535:
+        print(f"エラー: --port は 0〜65535: {port}")
+        return 2
     try:
         httpd = make_server(w, port)
     except OSError as e:
+        in_use = {errno.EADDRINUSE, 10048} | ({10013} if os.name == "nt" else set())
+        if e.errno not in in_use:
+            print(f"エラー: ポート {port} で待ち受けられません({e.strerror or e})。--port で別のポートを指定してください")
+            return 2
         # ポートが使用中: 同じフォルダのサーバならその URL を案内して終わる(自動では繰り上げない)
         for _ in range(6):  # 起動直後で応答できないことがあるので、少し待つ
             d = ping(port)

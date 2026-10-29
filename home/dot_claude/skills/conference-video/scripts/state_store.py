@@ -83,7 +83,16 @@ def value_version(value: Any) -> str:
 
 def _normalize(value: Any) -> Any:
     """JSON を通した値にそろえる(tuple と list の違いなどを消す)。"""
-    return json.loads(json.dumps(value, ensure_ascii=False))
+    return json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))
+
+
+def _cause(e: BaseException) -> str:
+    """例外の原因だけ(ファイル名・絶対パスを含めない)。API の応答にパスを漏らさない。"""
+    return getattr(e, "strerror", None) or type(e).__name__
+
+
+def _reject_constant(name: str):
+    raise ValueError(f"JSON ではない値: {name}")
 
 
 class Store:
@@ -92,7 +101,7 @@ class Store:
         path: str | Path,
         validate: Callable[[str, Any], None] | None = None,
         lock_timeout: float = 5.0,
-        lock_stale: float = 30.0,
+        lock_stale: float = 120.0,
     ):
         self.path = Path(path)
         self.lock_path = self.path.with_name(self.path.name + ".lock")
@@ -113,7 +122,7 @@ class Store:
     def _parse(self, raw: bytes) -> Snapshot:
         name = self.path.name
         try:
-            doc = json.loads(raw.decode("utf-8"))
+            doc = json.loads(raw.decode("utf-8"), parse_constant=_reject_constant)
         except (UnicodeDecodeError, ValueError) as e:
             raise Corrupt(f"{name} を読めません(JSON として壊れています): {e}") from e
         if not isinstance(doc, dict) or "entries" not in doc:
@@ -141,8 +150,13 @@ class Store:
         guard: Callable[[], None] | None = None,
     ) -> Snapshot:
         """`key` を `expected`(見た値。新規は None)から `new` へ。`new` が None なら削除。"""
-        expected = _normalize(expected)
-        new = _normalize(new)
+        if not isinstance(key, str):
+            raise Invalid(f"キーは文字列: {key!r}")
+        try:
+            expected = _normalize(expected)
+            new = _normalize(new)
+        except (TypeError, ValueError) as e:  # NaN / 無限大 / JSON にできない値
+            raise Invalid(f"項目「{key}」の値を JSON にできません: {e}") from e
         with self._locked():
             snap = self.read()
             entries = dict(snap.entries)
@@ -164,6 +178,15 @@ class Store:
                 entries[key] = new
             self._write(entries)
             return Snapshot(entries, value_version(entries))
+
+    def initialize(self) -> bool:
+        """ファイルが無ければ空の状態を作る(存在確認と作成を同じロックの中で行う)。
+        既にあれば(壊れていても)何もしない。作ったときだけ True。"""
+        with self._locked():
+            if self.path.exists():
+                return False
+            self._write({})
+            return True
 
     # ── 書く ──
 
@@ -196,7 +219,7 @@ class Store:
             raise
         except OSError as e:
             raise WriteFailed(
-                f"{self.path.name} に書き込めません(空き容量・権限を確認してください): {e}"
+                f"{self.path.name} に書き込めません(空き容量・権限を確認してください): {_cause(e)}"
             ) from e
         finally:
             if tmp is not None:
@@ -219,7 +242,7 @@ class Store:
                     time.sleep(REPLACE_RETRY_DELAY)
         raise WriteFailed(
             f"{self.path.name} を置き換えられません。他のアプリで開いている、読み取り専用になっている、"
-            f"権限がない、のいずれかの可能性があります。({last})"
+            f"権限がない、のいずれかの可能性があります。({_cause(last)})"
         ) from last
 
     # ── ロック ──
@@ -230,6 +253,7 @@ class Store:
         token = f"{os.getpid()}:{uuid.uuid4().hex}"
         deadline = time.monotonic() + self.lock_timeout
         delay = 0.005
+        denied: PermissionError | None = None
         while True:
             try:
                 fd = os.open(
@@ -237,17 +261,29 @@ class Store:
                 )
             except FileExistsError:
                 pass
-            except PermissionError:
-                pass  # Windows: 削除待ちのファイルと衝突している間。待てば取れる
+            except PermissionError as e:
+                denied = e  # Windows: 削除待ちのファイルと衝突している間は待てば取れる。続くなら期限で案内する
             else:
                 try:
                     os.write(fd, token.encode("ascii"))
-                finally:
+                except OSError as e:  # トークンを書けないロックを残さない
                     os.close(fd)
+                    try:
+                        self.lock_path.unlink()
+                    except OSError:
+                        pass
+                    raise WriteFailed(
+                        f"{self.lock_path.name} を初期化できません(空き容量・権限を確認してください): {_cause(e)}"
+                    ) from e
+                os.close(fd)
                 break
             if self._break_if_stale():
                 continue
             if time.monotonic() >= deadline:
+                if denied is not None:
+                    raise LockTimeout(
+                        f"{self.lock_path.name} を作れません(権限を確認してください): {_cause(denied)}"
+                    )
                 raise LockTimeout(
                     f"{self.path.name} は他のプロセスが更新中です。しばらくして再試行してください"
                     f"(続くときは古いロック {self.lock_path.name} を確認)"
@@ -263,7 +299,7 @@ class Store:
         try:
             age = time.time() - self.lock_path.stat().st_mtime
         except FileNotFoundError:
-            return True  # 消えた。取り直す
+            return False  # 消えた(取り直す前に期限判定と待機を通す。空回ししない)
         except OSError:
             return False
         if age <= self.lock_stale:

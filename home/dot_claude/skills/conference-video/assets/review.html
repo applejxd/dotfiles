@@ -142,14 +142,17 @@ function approveBar(item) {
   const [t, cls] = approvalView(item);
   const comment = h("input", {type: "text", placeholder: "コメント(任意)", value: a ? a.comment : ""});
   const send = (status) => (ev) => act(ev.target, () =>
-    api("/api/approve", {item, status, comment: comment.value, hash: (S.hashes || {})[item] || ""}));
-  const broken = !!S.errors.approvals;  // 承認記録が壊れている間は承認できない(409)
+    api("/api/approve", {item, status, comment: comment.value, hash: (S.hashes || {})[item] || "",
+      expected: a ? (({stale, ...rec}) => rec)(a) : null}));
+  const SRC_ERR = {plan: "brief", script: "script", yomi: "yomi", assets: "assets"};  // 項目 → errors のキー
+  const broken = !!S.errors.approvals || !!S.errors[SRC_ERR[item]];  // 承認記録・対象の正本が壊れている間は承認できない
   return h("div", {class: "panel approve"},
     h("strong", {}, "この項目の判断:"), h("span", {class: "st " + cls}, t),
     a && a.at ? h("span", {class: "small"}, a.at.replace("T", " ").slice(0, 19)) : null,
     comment,
-    h("button", {class: "primary", disabled: broken, onclick: send("承認")}, "承認"),
-    h("button", {class: "danger", disabled: broken, onclick: send("要修正")}, "要修正"),
+    h("button", {class: "primary", "data-approve": "1", "data-broken": broken ? "1" : "0", disabled: broken || dirty.size > 0, onclick: send("承認")}, "承認"),
+    h("button", {class: "danger", "data-approve": "1", "data-broken": broken ? "1" : "0", disabled: broken || dirty.size > 0, onclick: send("要修正")}, "要修正"),
+    h("span", {class: "small", id: "dirtyhint"}, ""),
     a && !broken ? h("button", {onclick: send("未承認")}, "取り消し") : null);
 }
 
@@ -176,6 +179,20 @@ function playLine(l) {
 const mmss = (s) => s == null ? "–" : Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
 const noteOf = (n) => (S.notes.find((x) => x.line === n) || {}).note || "";
 const noteStale = (n) => !!(S.notes.find((x) => x.line === n) || {}).stale;
+// 指摘の更新には、対象の台本の版(hash)と、この行で画面が見た指摘(expected。無ければ null)を添える
+const noteEntry = (n) => (S.notes.find((x) => x.line === n) || {}).entry || null;
+const noteBody = (line, value) => ({line, note: value, hash: (S.hashes || {}).script || "", expected: noteEntry(line)});
+// 未保存の入力があるうちは承認を止める(画面で直したつもりの内容と、承認される版を食い違わせない)
+const dirty = new Set();
+function refreshApprove() {
+  document.querySelectorAll("[data-approve]").forEach((b) => { b.disabled = b.dataset.broken === "1" || dirty.size > 0; });
+  const hint = document.getElementById("dirtyhint");
+  if (hint) hint.textContent = dirty.size ? "未保存の変更があります。先に保存してください" : "";
+}
+function markDirty(key, isDirty) { if (isDirty) dirty.add(key); else dirty.delete(key); refreshApprove(); }
+function watch(el, key, isDirty) {
+  for (const ev of ["input", "change"]) el.addEventListener(ev, () => markDirty(key, isDirty()));
+}
 
 function renderScript() {
   const out = [approveBar("script")];
@@ -187,10 +204,11 @@ function renderScript() {
       const r = await api("/api/narration", {index: l.index, text: ta.value, hash: (S.hashes || {}).script || ""});
       return r;
     })}, "本文を保存");
-    ta.addEventListener("input", () => { save.disabled = ta.value.trim() === l.text; });
+    ta.addEventListener("input", () => { save.disabled = ta.value.trim() === l.text; markDirty("n" + l.index, ta.value.trim() !== l.text); });
     const note = h("input", {type: "text", placeholder: "指摘(読み・同期・内容)", value: noteOf(l.index + 1),
       class: noteStale(l.index + 1) ? "stale" : "", title: noteStale(l.index + 1) ? "古い指摘: この行の本文が変わりました。確かめて直すか消してください" : "",
-      onchange: (ev) => act(ev.target, () => api("/api/note", {line: l.index + 1, note: ev.target.value, hash: (S.hashes || {}).script || ""}))});
+      onchange: (ev) => act(ev.target, () => api("/api/note", noteBody(l.index + 1, ev.target.value)))});
+    watch(note, "note" + (l.index + 1), () => note.value !== noteOf(l.index + 1));
     return h("tr", {},
       h("td", {}, String(l.index + 1)), h("td", {}, mmss(l.start_s)),
       h("td", {}, ta, h("div", {class: "reading"}, l.reading ? "読み: " + l.reading : ""), save),
@@ -204,6 +222,13 @@ function renderScript() {
     h("table", {}, h("colgroup", {}, h("col", {class: "num"}), h("col", {class: "time"}), h("col", {}), h("col", {class: "narrow"}), h("col", {class: "note"})),
       h("thead", {}, h("tr", {}, ["#", "開始", "本文・読み", "音声", "指摘"].map((t) => h("th", {}, t)))),
       h("tbody", {}, rows))));
+  const gone = S.notes.filter((n) => n.stale);
+  if (gone.length) out.push(h("div", {class: "panel"},
+    h("strong", {}, "古い指摘(台本が変わった・行が無くなった)"),
+    h("div", {class: "small"}, "指摘した当時の本文を示します。内容を確かめて、不要なら消してください。"),
+    h("table", {}, h("tbody", {}, gone.map((n) => h("tr", {},
+      h("td", {}, n.line + " 行目"), h("td", {}, "当時: " + n.text), h("td", {}, n.note),
+      h("td", {}, h("button", {onclick: (ev) => act(ev.target, () => api("/api/note", noteBody(n.line, "")))}, "消す"))))))));
   return out;
 }
 
@@ -212,6 +237,9 @@ function yomiRow(y) {
   const reading = h("input", {type: "text", value: y.reading, size: 18});
   const status = h("select", {}, ["確認済み", "候補"].map((s) => h("option", {value: s, selected: s === y.status}, s)));
   const note = h("input", {type: "text", value: y.note});
+  watch(reading, "yr" + y.surface, () => reading.value !== y.reading);
+  watch(status, "ys" + y.surface, () => status.value !== y.status);
+  watch(note, "yn" + y.surface, () => note.value !== y.note);
   const save = h("button", {onclick: (ev) => act(ev.target, () =>
     api("/api/yomi", {surface: y.surface, reading: reading.value, status: status.value, note: note.value, expected: y.entry}))}, "保存");
   const del = h("button", {onclick: (ev) => { if (confirm(`「${y.surface}」を削除しますか`))
@@ -245,6 +273,8 @@ function assetCard(a) {
     : h("a", {href: fileUrl(a.url), target: "_blank", rel: "noopener"}, "開く");
   const status = h("select", {}, ["確認済み", "出典表示", "仮"].map((s) => h("option", {value: s, selected: s === a["状態"]}, s)));
   const note = h("input", {type: "text", placeholder: "メモ", value: a["メモ"]});
+  watch(status, "as" + a["ファイル"], () => status.value !== a["状態"]);
+  watch(note, "an" + a["ファイル"], () => note.value !== a["メモ"]);
   const save = h("button", {onclick: (ev) => act(ev.target, () =>
     api("/api/asset", {file: a["ファイル"], status: status.value, note: note.value, expected: a.entry}))}, "保存");
   const src = /^https?:\/\//.test(a["出典URL"]) ? h("a", {href: a["出典URL"], target: "_blank", rel: "noopener noreferrer"}, "出典を開く") : "出典URLなし";
@@ -275,7 +305,7 @@ function renderVideo() {
     h("td", {}, String(l.index + 1)), h("td", {}, l.text),
     h("td", {}, h("input", {type: "text", placeholder: "指摘", value: noteOf(l.index + 1),
       class: noteStale(l.index + 1) ? "stale" : "", title: noteStale(l.index + 1) ? "古い指摘: この行の本文が変わりました" : "",
-      onchange: (ev) => act(ev.target, () => api("/api/note", {line: l.index + 1, note: ev.target.value, hash: (S.hashes || {}).script || ""}))}))));
+      onchange: (ev) => act(ev.target, () => api("/api/note", noteBody(l.index + 1, ev.target.value)))}))));
   v.addEventListener("timeupdate", () => {
     const cur = S.script.lines.filter((l) => l.start_s != null && l.start_s <= v.currentTime).pop();
     document.querySelectorAll("tr.cur").forEach((r) => r.classList.remove("cur"));
@@ -294,6 +324,7 @@ function renderPlan() {
 }
 
 function render() {
+  dirty.clear();  // 再描画で入力欄は作り直される
   renderHeader();
   const main = document.getElementById("main"); main.replaceChildren();
   const view = {script: renderScript, yomi: renderYomi, assets: renderAssets, video: renderVideo, plan: renderPlan}[tab];

@@ -5,7 +5,7 @@
 
 - **配布の場所**: `home/dot_claude/skills/conference-video/`（`chezmoi apply` で `~/.claude/skills/conference-video/` へ）。Copilot・pi・Codex など、`~/.claude/skills` を読む CLI から使える。
 - **正本は skill-lab**（個人のスキル開発用リポジトリの `skills/conference-video/`）。ここへは**複製**（vendor）で、このリポジトリでは編集しない。直すときは skill-lab 側で直して、取り込み直す。
-- **取り込んだ版**: skill-lab のコミット `9d90c6a`（2026-10-29）の `skills/conference-video/` の追跡ファイル（52 件。`git archive` で取り出した）。キャッシュ（`.ruff_cache`・`__pycache__`）は含めない。
+- **取り込んだ版**: skill-lab のコミット `18b5c69`（2026-10-29）の `skills/conference-video/` の追跡ファイル（52 件。`git archive` で取り出した）。キャッシュ（`.ruff_cache`・`__pycache__`）は含めない。
 - **中の第三者のコード**: `vendor/manim-skill/`（MIT。Yusuke Miyashita。`vendor/UPSTREAM.md` に取得元・コミット・方針、`LICENSE` を保持）。無改変で使う。
 
 ## 依存と契約

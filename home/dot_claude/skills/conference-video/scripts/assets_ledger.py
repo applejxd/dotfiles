@@ -87,6 +87,16 @@ def store(path: Path | str) -> state_store.Store:
     return state_store.Store(path, validate=validate_entry)
 
 
+def rows_from_entries(entries: dict) -> list[dict]:
+    """窓口から読んだ生の entries を、行(「ファイル」を含む辞書。既定値を補う)にする。"""
+    out = []
+    for name, e in entries.items():
+        row = {"ファイル": name, **{f: "" for f in FIELDS}, **{k: v.strip() for k, v in e.items()}}
+        row["状態"] = row["状態"] or PROVISIONAL
+        out.append(row)
+    return out
+
+
 def load(path: Path | str) -> list[dict]:
     """台帳を行のリスト(「ファイル」を含む辞書)で返す。無ければ FileNotFoundError、壊れていれば ValueError。"""
     p = Path(path)
@@ -96,16 +106,7 @@ def load(path: Path | str) -> list[dict]:
         entries = store(p).read().entries
     except state_store.Corrupt as e:
         raise ValueError(str(e)) from e
-    out = []
-    for name, e in entries.items():
-        row = {
-            "ファイル": name,
-            **{f: "" for f in FIELDS},
-            **{k: v.strip() for k, v in e.items()},
-        }
-        row["状態"] = row["状態"] or PROVISIONAL
-        out.append(row)
-    return out
+    return rows_from_entries(entries)
 
 
 def is_citation(row: dict) -> bool:
@@ -318,11 +319,9 @@ def main(argv=None) -> int:
     path = Path(a.file)
     try:
         if a.cmd == "init":
-            if path.exists():
+            if not store(path).initialize():  # 存在確認と作成を同じロックの中で
                 print(f"エラー: {path} が既にある(上書きしない)")
                 return 2
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text('{\n  "schema": 1,\n  "entries": {}\n}\n', encoding="utf-8")
             print(f"作成: {path}")
             return 0
         if a.cmd in ("add", "set", "rm"):

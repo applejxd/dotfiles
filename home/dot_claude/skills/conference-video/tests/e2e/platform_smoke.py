@@ -327,7 +327,10 @@ def section_server(root: Path) -> None:
     log("== B'. 保存の動作")
     h = state(url)["hashes"]
     s, b = http(
-        url, "POST", "/api/note", {"line": 1, "note": "スモーク", "hash": h["script"]}
+        url,
+        "POST",
+        "/api/note",
+        {"line": 1, "note": "スモーク", "hash": h["script"], "expected": None},
     )
     check("指摘を保存できる", s == 200, f"status={s} {b[:120]!r}")
 

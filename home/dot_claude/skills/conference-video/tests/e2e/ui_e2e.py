@@ -260,6 +260,19 @@ def main() -> int:
             chip = page.locator(".chip", has_text="台本").inner_text()
             check("台本を変えたので承認が古くなる", "古い" in chip, chip)
 
+            # 2.5 未保存の変更があると承認できない(見ていない版を承認しない)
+            ta0 = page.locator("textarea").first
+            orig_text = ta0.input_value()
+            ta0.fill(orig_text + "(未保存)")
+            approve_btn = page.get_by_role("button", name="承認", exact=True)
+            check(
+                "未保存の変更があると承認ボタンが無効になり、理由が出る",
+                approve_btn.is_disabled()
+                and "未保存" in page.locator("#dirtyhint").inner_text(),
+            )
+            ta0.fill(orig_text)
+            check("元に戻せば承認ボタンが有効になる", not approve_btn.is_disabled())
+
             # 3. 指摘
             note = page.get_by_placeholder("指摘(読み・同期・内容)").nth(2)
             note.fill("3 行目を確認")

@@ -207,11 +207,33 @@ def line_digest(words: list[dict], text: str) -> str:
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
-def register(engine, entries: dict, priority: int = 9) -> int:
-    """未登録・変更のある語だけ登録し、登録した数を返す。
+TOOL_PRIORITY = 9  # ツールが ENGINE に登録する語の優先度(既定辞書に負けないため)。ユーザー自身の登録(既定 5)と区別する目印にもする
+
+
+def prune_engine(engine, entries: dict, priority: int = TOOL_PRIORITY) -> int:
+    """現在の辞書(entries)に無い、ツールが登録した語(優先度 priority)を ENGINE から取り除き、数を返す。
+
+    辞書から消した語・候補に戻した語が、同じ ENGINE に残って削除前と同じ読みを使い続けないようにする。
+    ユーザー自身の登録(他の優先度)には触れない。
+    """
+    wanted = {to_fullwidth(engine_surface(s)) for s in entries}
+    n = 0
+    for uuid, w in list(engine.user_dict().items()):
+        if w.get("priority") == priority and w.get("surface") not in wanted:
+            engine.delete_word(uuid)
+            n += 1
+    return n
+
+
+def register(
+    engine, entries: dict, priority: int = TOOL_PRIORITY, prune: bool = True
+) -> int:
+    """未登録・変更のある語だけ登録し、登録した数を返す(prune=True なら、辞書に無いツールの登録を先に取り除く)。
 
     読み・アクセント・優先度のいずれかが違う既存の語は、削除してから登録し直す(重複させない)。
     """
+    if prune:
+        prune_engine(engine, entries, priority)
     existing = {
         w["surface"]: (uuid, (w["pronunciation"], w["accent_type"], w.get("priority")))
         for uuid, w in engine.user_dict().items()
@@ -331,10 +353,13 @@ def _add_candidates(out: Path, new: dict) -> int:
 
 def cmd_register(a, engine) -> int:
     entries = resolve(a.yomi or None, Path.cwd()) if not a.files else load(*a.files)
-    n = register(engine, confirmed(entries))
+    n = register(engine, confirmed(entries), prune=False)
+    removed = 0 if a.no_prune else prune_engine(engine, confirmed(entries))
     print(
         f"{n} 語を登録した(全 {len(entries)} 語、候補 {len(candidates_in(entries))} 語)"
     )
+    if removed:
+        print(f"{removed} 語を取り除いた(辞書に無いツールの登録)")
     return 0
 
 
@@ -343,6 +368,9 @@ def cmd_candidates(a, engine) -> int:
 
     lines = narration_check.parse_subtitles(a.narration)
     out = Path(a.out)
+    dict_store(
+        out
+    ).initialize()  # 候補がゼロでも動画ごとの辞書を作る(無いと読みの承認できない)。既存は触らない
     known = resolve(a.yomi, out.parent)
     if out.is_file():
         known = {**known, **load(out)}
@@ -502,12 +530,17 @@ def main(argv=None) -> int:
     )
     p.add_argument("files", nargs="*")
     p.add_argument("--yomi", nargs="*")
+    p.add_argument(
+        "--no-prune",
+        action="store_true",
+        help="辞書に無いツールの登録(優先度 9)を ENGINE から取り除かない",
+    )
     p.set_defaults(fn=cmd_register)
 
     p = sub.add_parser(
         "candidates",
         parents=[common],
-        help="台本の英字で未登録の語を、ENGINE の読みを下書きに CSV へ追加する",
+        help="台本の英字で未登録の語を、ENGINE の読みを下書きに辞書(JSON)へ追加する(候補がゼロでも空の辞書を作る)",
     )
     p.add_argument("narration")
     p.add_argument("--out", default="yomi.json")

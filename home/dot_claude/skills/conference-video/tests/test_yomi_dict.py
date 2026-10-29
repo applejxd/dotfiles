@@ -372,6 +372,44 @@ class CandidatesAndAuditionTests(CliBase):
         self.assertEqual(code, 0, out + err)
         self.assertEqual(sorted(self.entries()), ["KL", "SLAM"])
 
+    def test_candidates_creates_an_empty_dictionary_even_when_nothing_is_missing(self):
+        """C-04: 候補がゼロでも動画ごとの辞書を作る(無いと「読み」承認できず、ゲートで行き詰まる)。"""
+        (self.d / "narration.txt").write_text(
+            "subtitles:\n- 単眼の説明です。\n", encoding="utf-8"
+        )
+        with FakeVoicevox() as fake:
+            code, out, err = self.run_cli(
+                "candidates",
+                str(self.d / "narration.txt"),
+                "--out",
+                str(self.f),
+                "--yomi",
+                "--engine-url",
+                fake.url,
+            )
+        self.assertEqual(code, 0, out + err)
+        self.assertTrue(self.f.exists())
+        self.assertEqual(self.entries(), {})
+
+    def test_candidates_does_not_touch_an_existing_dictionary_when_nothing_is_missing(
+        self,
+    ):
+        write_dict(self.f, {"SLAM": "ス'ラム", "KL": "ケーエ'ル"})
+        before = self.f.read_bytes()
+        with FakeVoicevox() as fake:
+            code, out, err = self.run_cli(
+                "candidates",
+                str(self.d / "narration.txt"),
+                "--out",
+                str(self.f),
+                "--yomi",
+                str(self.f),
+                "--engine-url",
+                fake.url,
+            )
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.f.read_bytes(), before)
+
     def test_audition_writes_one_wav_per_entry_and_a_combined_file(self):
         write_dict(self.f, {"SLAM": "ス'ラム", "KL": "ケーエ'ル"})
         out_dir = self.d / "audition"
@@ -400,6 +438,99 @@ class CandidatesAndAuditionTests(CliBase):
             )
             self.assertEqual(code, 0, out + err)
             self.assertEqual(fake.words["ＳＬＡＭ"][:2], ("スラム", 1))
+
+
+class EnginePruneTests(CliBase):
+    """C-09: 辞書から消した・候補に戻した語を、ENGINE のユーザー辞書からも取り除く(ツールの登録 = 優先度 9 だけ)。"""
+
+    def engine(self, fake):
+        from voicevox_engine import Engine
+
+        return Engine(fake.url)
+
+    def entries(self, **words):
+        return {s: yomi.make_entry(r) for s, r in words.items()}
+
+    def test_a_word_removed_from_the_dictionary_is_removed_from_the_engine(self):
+        with FakeVoicevox() as fake:
+            eng = self.engine(fake)
+            self.assertEqual(
+                yomi.register(eng, self.entries(SLAM="ス'ラム", KL="ケ'ーエル")), 2
+            )
+            self.assertIn("ＫＬ", fake.words)
+            yomi.register(eng, self.entries(SLAM="ス'ラム"))
+            self.assertIn("ＳＬＡＭ", fake.words)
+            self.assertNotIn("ＫＬ", fake.words)
+
+    def test_removal_count_is_available(self):
+        with FakeVoicevox() as fake:
+            eng = self.engine(fake)
+            yomi.register(eng, self.entries(SLAM="ス'ラム", KL="ケ'ーエル"))
+            self.assertEqual(yomi.prune_engine(eng, self.entries(SLAM="ス'ラム")), 1)
+            self.assertEqual(yomi.prune_engine(eng, self.entries(SLAM="ス'ラム")), 0)
+
+    def test_an_empty_dictionary_removes_all_tool_registrations(self):
+        with FakeVoicevox() as fake:
+            eng = self.engine(fake)
+            yomi.register(eng, self.entries(SLAM="ス'ラム"))
+            yomi.register(eng, {})
+            self.assertEqual(fake.words, {})
+
+    def test_users_own_registrations_are_kept(self):
+        with FakeVoicevox() as fake:
+            fake.words["ユーザー語"] = (
+                "ユーザーゴ",
+                0,
+                5,
+            )  # ENGINE のエディタ等で登録した語(既定の優先度)
+            eng = self.engine(fake)
+            yomi.register(eng, self.entries(SLAM="ス'ラム"))
+            yomi.register(eng, {})
+            self.assertIn("ユーザー語", fake.words)
+
+    def test_compound_words_are_removed_under_their_engine_surface(self):
+        with FakeVoicevox() as fake:
+            eng = self.engine(fake)
+            yomi.register(eng, self.entries(**{"SLAM-MER": "スラ'マー"}))
+            self.assertEqual(len(fake.words), 1)
+            yomi.register(eng, {})
+            self.assertEqual(fake.words, {})
+
+    def test_a_word_turned_into_a_candidate_is_removed(self):
+        entries = {
+            "KL": yomi.make_entry("ケ'ーエル"),
+            "AR": yomi.make_entry("エ'ーアール"),
+        }
+        with FakeVoicevox() as fake:
+            eng = self.engine(fake)
+            yomi.register(eng, yomi.confirmed(entries))
+            entries["KL"]["status"] = yomi.CANDIDATE
+            yomi.register(eng, yomi.confirmed(entries))
+            self.assertNotIn("ＫＬ", fake.words)
+            self.assertIn("ＡＲ", fake.words)
+
+    def test_prune_can_be_turned_off(self):
+        with FakeVoicevox() as fake:
+            eng = self.engine(fake)
+            yomi.register(eng, self.entries(SLAM="ス'ラム"))
+            yomi.register(eng, {}, prune=False)
+            self.assertIn("ＳＬＡＭ", fake.words)
+
+    def test_register_command_reports_removals_and_supports_no_prune(self):
+        write_dict(self.f, {"SLAM": "ス'ラム"})
+        with FakeVoicevox() as fake:
+            fake.words["ＫＬ"] = ("ケーエル", 3, 9)  # 前の登録の残り
+            code, out, err = self.run_cli(
+                "register", str(self.f), "--engine-url", fake.url, "--no-prune"
+            )
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("ＫＬ", fake.words)
+            code, out, err = self.run_cli(
+                "register", str(self.f), "--engine-url", fake.url
+            )
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("ＫＬ", fake.words)
+            self.assertIn("1 語を取り除いた", out)
 
 
 if __name__ == "__main__":

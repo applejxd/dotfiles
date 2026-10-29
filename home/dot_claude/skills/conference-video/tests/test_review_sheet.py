@@ -123,6 +123,36 @@ class ReviewSheetTests(unittest.TestCase):
             "古い", out
         )  # 台本が変わった後の指摘は、別の行へ付け直さず「古い」と示す
 
+    def test_notes_are_judged_stale_against_the_current_narration_not_the_old_timestamps(
+        self,
+    ):
+        """D-04 / C-05: 台本を直しただけ(再合成前)でも、「古い」の判定はいまの narration.txt を基準にする。"""
+        (self.d / "narration.txt").write_text(
+            "subtitles:\n- 単眼 SLAM です。\n- 次に地図です。\n", encoding="utf-8"
+        )
+        self.add_note(1, "読み", "単眼 SLAM です。")
+        self.add_note(2, "間", "次に地図です。")
+        # 台本の 1 行目だけを直す(timestamps.json は古いまま)
+        (self.d / "narration.txt").write_text(
+            "subtitles:\n- 経路推定です。\n- 次に地図です。\n", encoding="utf-8"
+        )
+        code, out = run(["--workdir", str(self.d), "--notes"])
+        self.assertEqual(code, 0, out)
+        first = out.split("2行目")[0]
+        self.assertIn("古い", first)  # 1 行目は古い
+        self.assertNotIn("古い", out.split("2行目")[1])  # 2 行目は不変
+
+    def test_exported_sheet_marks_stale_notes_instead_of_attaching_them_silently(self):
+        """C-05: review.csv も、本文が変わった行の指摘を無印で結合しない。"""
+        self.add_note(1, "読みを確認", "もっと古い本文")
+        (self.d / "narration.txt").write_text(
+            "subtitles:\n- 単眼 SLAM です。\n- 次に地図です。\n", encoding="utf-8"
+        )
+        run(["--workdir", str(self.d)])
+        cell = self.rows()[1][4]
+        self.assertIn("読みを確認", cell)
+        self.assertIn("古い", cell)
+
     def test_corrupt_notes_json_stops_without_change(self):
         (self.d / "notes.json").write_text("{壊れ", encoding="utf-8")
         for argv in (["--workdir", str(self.d), "--notes"], ["--workdir", str(self.d)]):
