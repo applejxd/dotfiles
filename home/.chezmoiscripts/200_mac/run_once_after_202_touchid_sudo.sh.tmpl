@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# sudo を Touch ID で通す。brew は起動のたびに sudo の認証キャッシュを消すので、
+# パスワードを 1 回入れても cask の導入ごとに尋ね直される。指で済むようにして減らす。
+# パスワードは保存しない。see docs/spec/development.md#sudo-パスワード
+{{ template "sudo-keepalive.sh.tmpl" . }}
+
+pam_dir="${CHEZMOI_PAM_DIR:-/etc/pam.d}"
+template="${pam_dir}/sudo_local.template"
+local_conf="${pam_dir}/sudo_local"
+
+# sudo_local は macOS 14 (Sonoma) 以降。OS の更新で上書きされない置き場なので、ここへ足す。
+if [ ! -f "$template" ]; then
+    echo "sudo_local が使えない macOS なので、sudo の Touch ID は設定しません" >&2
+    exit 0
+fi
+
+# 有効な行が既にあれば何もしない (コメントアウトされた行は数えない)
+if grep -Eq '^[[:space:]]*auth[[:space:]]+sufficient[[:space:]]+pam_tid\.so' "$local_conf" 2>/dev/null; then
+    exit 0
+fi
+
+start_sudo_keepalive
+if ! printf 'auth       sufficient     pam_tid.so\n' | sudo tee -a "$local_conf" >/dev/null; then
+    echo "⚠️ ${local_conf} に Touch ID の設定を書けませんでした。sudo はパスワードのままです" >&2
+    exit 0
+fi
+echo "sudo を Touch ID で通せるようにしました (${local_conf})"

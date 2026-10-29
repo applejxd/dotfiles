@@ -668,11 +668,13 @@ def test_homebrew_is_installed_before_any_mac_script_uses_brew():
     """210 は冒頭で brew を使う。導入が後だと新しい Mac の初回の apply で失敗する。"""
     scripts = sorted(MAC_SCRIPTS.glob("*.tmpl"))
     installer = next(p for p in scripts if "Homebrew/install" in p.read_text(encoding="utf-8"))
-    users = [
-        p
-        for p in scripts
-        if p != installer and re.search(r"\bbrew\b", p.read_text(encoding="utf-8"))
-    ]
+
+    def commands(p: Path) -> str:
+        # コメントに brew の語が出るだけのスクリプト (202 の理由書きなど) は使う側に数えない
+        lines = p.read_text(encoding="utf-8").splitlines()
+        return "\n".join(line for line in lines if not line.lstrip().startswith("#"))
+
+    users = [p for p in scripts if p != installer and re.search(r"\bbrew\b", commands(p))]
     assert users
     for user in users:
         assert installer.name < user.name, f"{user.name} が {installer.name} より先に走る"
@@ -862,3 +864,74 @@ def test_mise_self_update_does_not_wait_for_a_prompt():
         for line in script.read_text(encoding="utf-8-sig").splitlines():
             if "mise self-update" in line and not line.lstrip().startswith("#"):
                 assert "--yes" in line or "-y" in line.split(), f"{script.name}: {line.strip()}"
+
+
+TOUCHID = MAC_SCRIPTS / "run_once_after_202_touchid_sudo.sh.tmpl"
+PAM_LINE = "auth       sufficient     pam_tid.so"
+
+
+def run_touchid(
+    tmp_path: Path, *, template: bool = True, local_text: str | None = None
+) -> tuple[subprocess.CompletedProcess, Path]:
+    """sudo を素通しにし、PAM の置き場を一時ディレクトリへ向けて 202 を走らせる。"""
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash が無い")
+    pam = tmp_path / "pam.d"
+    pam.mkdir()
+    if template:
+        (pam / "sudo_local.template").write_text("# auth sufficient pam_tid.so\n", encoding="utf-8")
+    if local_text is not None:
+        (pam / "sudo_local").write_text(local_text, encoding="utf-8")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    sudo = bindir / "sudo"
+    # -v と -n は認証の確認なので成功させ、それ以外は引数のコマンドをそのまま走らせる
+    sudo.write_text('#!/bin/sh\ncase "$1" in -v|-n) exit 0;; esac\nexec "$@"\n', encoding="utf-8")
+    sudo.chmod(0o755)
+    script = tmp_path / "202.sh"
+    script.write_text(
+        render_with_context(TOUCHID, home=tmp_path / "home", os_name="darwin"), encoding="utf-8"
+    )
+    result = subprocess.run(
+        [bash, str(script)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PATH": f"{bindir}:/usr/bin:/bin", "CHEZMOI_PAM_DIR": str(pam)},
+        check=False,
+        timeout=60,
+    )
+    return result, pam / "sudo_local"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_touchid_sudo_writes_an_active_pam_tid_line(tmp_path):
+    result, local_conf = run_touchid(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert local_conf.read_text(encoding="utf-8").splitlines() == [PAM_LINE]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_touchid_sudo_ignores_a_commented_line_and_appends(tmp_path):
+    """sudo_local.template 由来のコメント行だけなら、有効な行を足す。"""
+    result, local_conf = run_touchid(tmp_path, local_text="# auth sufficient pam_tid.so\n")
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = local_conf.read_text(encoding="utf-8").splitlines()
+    assert lines == ["# auth sufficient pam_tid.so", PAM_LINE]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_touchid_sudo_leaves_an_existing_active_line_alone(tmp_path):
+    """有効な行が既にあれば増やさない (2 回目以降の apply)。"""
+    result, local_conf = run_touchid(tmp_path, local_text=PAM_LINE + "\n")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert local_conf.read_text(encoding="utf-8") == PAM_LINE + "\n"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_touchid_sudo_is_skipped_without_sudo_local_support(tmp_path):
+    """sudo_local.template が無い (macOS 13 以前) なら何も書かず、apply を止めない。"""
+    result, local_conf = run_touchid(tmp_path, template=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not local_conf.exists()

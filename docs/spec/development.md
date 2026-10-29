@@ -263,7 +263,7 @@ sudo のパスワードはどこにも保存せず、スクリプトが実行時
 
 | OS | 取り方 |
 | --- | --- |
-| macOS（`200_mac/` の 205 / 210 / 250） | 共有テンプレート `sudo-keepalive.sh.tmpl` の `start_sudo_keepalive` が `sudo -v` で 1 回尋ね、スクリプトが終わるまで裏で認証を延長する（macOS の既定の期限は 5 分）。205 は Homebrew を入れるときだけ呼ぶ |
+| macOS（`200_mac/` の 202 / 205 / 210 / 250） | 共有テンプレート `sudo-keepalive.sh.tmpl` の `start_sudo_keepalive` が `sudo -v` で 1 回尋ね、スクリプトが終わるまで裏で認証を延長する（macOS の既定の期限は 5 分）。205 は Homebrew を入れるときだけ呼ぶ。**ただし brew は起動のたびに sudo の認証キャッシュを消す**（`brew` 本体の `sudo --reset-timestamp`。セキュリティ監査を受けた意図的な仕様で、無効化する手段は無い。[Homebrew/brew#17905](https://github.com/Homebrew/brew/issues/17905)、2024-07-30）。sudo が要る cask は、`brew` の起動ごと（`brew bundle` は cask ごとの子の `brew`。未確認）に尋ね直される。keepalive の延長ループも、キャッシュが消えると `sudo -n true` の失敗で終わる。そこで 202 が `/etc/pam.d/sudo_local` に `pam_tid.so` を足し、sudo を Touch ID で通す（macOS 14 以降。`sudo_local.template` が無ければ飛ばす）。パスワードは保存しない。SSH や tmux の中では Touch ID が出ず、パスワードのままになる |
 | Linux（`111` / `120` / `121` / `123` / `125`） | 同じ `start_sudo_keepalive`。長い `apt-get upgrade` の途中で、既定の期限（約 15 分）が切れて尋ね直さない。`125` は sudo 無しモードでは呼ばない。`130`（短い）は、先頭の `sudo -v` のまま |
 
 どちらも、パスワードは sudo 自身が尋ね、スクリプトの変数には持たない。Homebrew は

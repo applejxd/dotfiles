@@ -44,7 +44,7 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 | --- | --- | --- |
 | `000_unix/` | Linux / macOS | Python 3.11 以上の確保と旧 `~/.gitconfig` の退避（ファイル適用より前）、zinit補完の保守 |
 | `100_linux/` | Ubuntu / WSL | OSパッケージ、mise、shell、Herdr |
-| `200_mac/` | macOS | Homebrew、mise、macOS defaults |
+| `200_mac/` | macOS | sudo の Touch ID、Homebrew、mise、macOS defaults |
 | `300_windows/` | Windows native | 旧 `~/.gitconfig` の退避、Winget/Scoop/Chocolatey、レジストリ、Terminal、AI CLI統合、MCP登録 |
 | `400_unix/` | Linux / macOS | mise 導入後の Claude Code への MCP 登録 |
 
