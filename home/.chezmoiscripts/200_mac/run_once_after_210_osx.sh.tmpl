@@ -42,11 +42,6 @@ if [[ $(uname -m) == arm64 ]]; then
     # GUI apps
     brew bundle --file={{ joinPath .chezmoi.workingTree "scripts" "osx" "brew_mas_cask.rb" | quote }}
 
-    # sudo が要る GUI アプリ (認証は冒頭の start_sudo_keepalive で取得済み)。失敗しても残り (gcc・mactex) を続ける
-    if ! brew install avast-security; then
-        echo "⚠️ brew install avast-security に失敗しました。次の apply でやり直します" >&2
-        failed_steps="${failed_steps} avast-security"
-    fi
     # Needs Rosetta2 (Rosetta を導入できなかったときに備え、失敗しても残りを続ける)
     for cask in google-japanese-ime karabiner-elements xquartz qlvideo; do
         if ! brew install "$cask"; then

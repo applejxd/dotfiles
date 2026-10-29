@@ -780,11 +780,13 @@ def run_osx(
 def test_osx_swallowed_failures_leave_a_retry_marker(tmp_path):
     """警告で続ける失敗は、run_once_ が成功と記録すると二度と走らない。印を置いて次の apply で走り直させる。
     0 で終わる (非ゼロだと後続のスクリプトを巣き込む)。"""
-    result, marker = run_osx(tmp_path, failing=("rosetta", "avast-security", "karabiner-elements"))
+    result, marker = run_osx(
+        tmp_path, failing=("rosetta", "google-japanese-ime", "karabiner-elements")
+    )
     assert result.returncode == 0, result.stdout + result.stderr
     assert marker.is_file(), result.stderr
     reason = marker.read_text(encoding="utf-8").split()
-    assert reason == ["rosetta", "avast-security", "karabiner-elements"], reason
+    assert reason == ["rosetta", "google-japanese-ime", "karabiner-elements"], reason
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")

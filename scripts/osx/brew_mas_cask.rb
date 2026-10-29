@@ -32,7 +32,6 @@ cask "cakebrew"
 #--------------#
 
 # Basic softwares
-#cask "avast-security"
 cask "google-chrome"
 #cask "google-japanese-ime"
 cask "bitwarden"
