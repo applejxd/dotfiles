@@ -108,6 +108,7 @@
 | [pi の子エージェント job の結果の保持と通知の仕様メモ](agents/pi-subagent-jobs-notes.md) | `FINISHED_TTL_MS`・通知・保存ファイル・`audit.ts` の実装の細部と試験。移設日 2026-10-26（`pi-guard.md` から） |
 | [AI CLI 設定の生成に関する経緯・実測の記録（その 2）](agents/agent-config-generation-notes-2.md) | 子エージェント・コミットの確認・`/fleet`・bypass の子の、宣言しなかった不具合・採らなかった案・実測（N9〜N12）。2026-09〜10 |
 | [pi を AI オーケストレーターとして使う仕組みの調査](agents/pi-orchestrator-survey.md) | 2026-10-26。O1: 導入に値する公開拡張は無く（親を管理専用にするのは edxeth/pi-subagents と @saifymatteo/pi-orchestrator など少数で、どれもフルガードと合わない）、自作の `guarded_task` に orchestrator ロール・待ち合わせ・DAG を足す方針。借りる設計・RPC で複数の子を管理する落とし穴・他社（Claude Code・Codex・Cursor・Anthropic・Cognition）の知見。実機での試験は未実施 |
+| [親を「計画・判断・委譲」に絞る仕組みの設計（`plan` の子の案）](agents/orchestrator-role-plan.md) | 2026-10-30。許可リストの `orchestrator` と `setActiveTools`・判定の二重の防御、弱・中・強の 3 案、親専用の検査操作 `check_*`、環境別の変化。中案を選んだ。未確認: pi 1.4.0 の docs 上の保証 |
 | [オーケストレーションの役割別のモデル割り当ての調査](agents/subagent-model-assignment.md) | 2026-10-27。M1: 「計画は Claude、実装は GPT」の通説に、一次資料の実測は見つからなかった（体験談で向きも逆の記事がある）。一次資料が支える分担は、能力と費用の分担で、同じ系統の中（`opusplan`・Opus リード + Sonnet サブ）。別系統が効く場面はレビュー。公開評価は、Claude がターミナル作業・長期、GPT-6 Sol がマージ可能な差分と費用で優位。委譲の巧さの役割別評価は無し。見立て: 親は最も強いモデル、worker は Sonnet `#medium`（計測済み）に Sol を足して比較、explore は小型を比較、review は作った者と別の系統。実験の設計案つき |
 | [スキルの `context: fork` を pi のハーネスで強制できるかの実験](agents/skill-fork-enforcement.md) | 2026-10-27。F1: pi 本体は `context` / `agent` を解釈しない。`input` が展開の前に来るので、`/skill:` はモデルを介さず子へ回せる（強い）。モデルが読む経路は `tool_call` で本文の読み取りをブロックできるが、委任は誘導。シェルの `grep` などは塞げない。F2（2026-10-27）: Claude Code の公式の frontmatter。`context: fork` は本文を子の依頼文にする。F3（2026-10-28）: 全 20 スキルの `fork`・`allowed-tools` の調査。`fork` をそのまま付けてよいのは `fix` だけ。8 スキルが `Bash` を一括で許可していた |
 
@@ -192,9 +193,9 @@
 | [Raspberry Pi 向け導入の観測メモ](chezmoi/structure-raspi-notes.md) | clang の標準ヘッダの観測（2026-10-01・10-05。`structure.md` から移設） |
 | [Windows 設定の実測・経緯メモ](chezmoi/structure-windows-notes.md) | WSL 3.0.1・GPU のクラッシュ・sudo・PATH 降格・oh-my-posh・7-Zip・電源・ウィジェット・LGPO など（`structure.md` から移設） |
 | [sudo を使うスクリプトを Ansible に寄せると楽になるか](chezmoi/ansible-for-sudo-scripts.md) | 2026-10-29。sudo の使用箇所の棚卸し（Linux 4〜5 本）・Ansible の公開情報・評価。全面の置き換えは勧めず、Linux へのキープアライブの共有と、121 の Pi 専用 `/etc` の小さな試作を勧める |
+| [121_ubuntu の apt と Pi 専用の /etc を Ansible に移した試作の実測](chezmoi/ansible-trial-121.md) | 2026-10-29。Docker（ubuntu:24.04）で playbook 133 行 vs 元 約 120 行。2 回目 changed=0・導入 80 秒/31MB。まっさらな環境の `--check` は失敗（apt で入れる物に依存）。真偽値の型の落とし穴など。範囲は小さく、実機の Pi は未実施 |
 | [WSL の時刻同期と SSH の実測メモ](chezmoi/structure-wsl-time-and-ssh-notes.md) | 時刻同期の未確認事項・SSH の層別の実測・LAN の IP の実験（`structure.md` から移設） |
 | [専用 WSL2 の時刻同期の実測](chezmoi/wsl-sandbox-time-sync.md) | 2026-10-18〜19 の実測と原因分析・構築記録（`wsl-sandbox.md` から移設） |
 | [再実行の印（retry marker）の置き場に関する記録](chezmoi/rerun-scripts-notes.md) | 印の置き場を sandbox から書けない場所にした理由と、旧置き場の廃止。日付なし（コードの読解。`troubleshooting-bootstrap.md` から移設） |
 
 [ドキュメント一覧へ戻る](../index.md)
-\n| [121_ubuntu の apt と Pi 専用の /etc を Ansible に移した試作の実測](chezmoi/ansible-trial-121.md) | 2026-10-29。Docker（ubuntu:24.04）で playbook 133 行 vs 元 約 120 行。2 回目 changed=0・導入 80 秒/31MB。まっさらな環境の `--check` は失敗（apt で入れる物に依存）。真偽値の型の落とし穴など。範囲は小さく、実機の Pi は未実施 |

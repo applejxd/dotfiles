@@ -224,10 +224,14 @@ def test_rules_json_carries_the_actions():
     assert not any(a in gf_discard["argv"] for a in ("--remote", "--fetch", "--force-worktree"))
 
 
-def test_only_the_implementer_gets_the_action_tool():
+def test_only_the_parent_roles_get_the_action_tool():
+    # 子の役割は持たない。orchestrator は親の絞り込み（コミット・承認は親が行う）
     profiles = load_common()["pi"]["profiles"]
     assert "action" in profiles["implementer"]["tools"]
-    assert [n for n, p in profiles.items() if "action" in p["tools"]] == ["implementer"]
+    assert [n for n, p in profiles.items() if "action" in p["tools"]] == [
+        "implementer",
+        "orchestrator",
+    ]
 
 
 def test_no_table_means_an_empty_array():

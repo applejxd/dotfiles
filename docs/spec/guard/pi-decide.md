@@ -192,6 +192,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 | `reader` | read・grep・find・ls | deny | — | 利用者が `pis --role reader` で選ぶ読み取り専用の親。子の `plan` 役も使う（`[pi.agents.plan]`。bash を持たないので、`skill_scripts` の許可が通らない）。harness の読み取り専用の子の一覧 `READ_ONLY_CHILD_PROFILES` に含む（`/btw` の入口と、計画モードの間に起動できる子）。bash を持たない役割の試験にも使う |
 | `explorer` | `reader` + bash | deny | `shell_allow` に `wc` と読み取り専用の git（`status` / `diff` / `log` / `show` / `ls-files`） | 子の `explore` / `review` |
 | `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |
+| `orchestrator` | read・grep・find・ls・task・todo・ask・action | deny | 許可リスト。`bash`・`edit`・`write`・MCP を持たない。`/orchestrate on` の間だけ、親の役割になる（[親の絞り込み](pi-subagents.md#親の絞り込みorchestrate)） | 親（利用者が切り替える） |
 | `worker` | 7 つのツール | ask | `shell_deny` に git の状態を変える操作と、`git flow`・`git-flow` | 子の `worker` |
 
 **既定の役割**は `[pi] default_role`（`common.toml`。既定は `implementer`）。`pis` は `--role` / `PI_HARNESS_ROLE` で上書きでき、

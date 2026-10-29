@@ -1484,6 +1484,9 @@
     }
    }
   },
+  "orchestrate": {
+   "default": "off"
+  },
   "own_extensions": [
    "todo",
    "plan",
@@ -1568,6 +1571,19 @@
      "ask",
      "action",
      "mcp__*"
+    ]
+   },
+   "orchestrator": {
+    "default": "deny",
+    "tools": [
+     "read",
+     "grep",
+     "find",
+     "ls",
+     "task",
+     "todo",
+     "ask",
+     "action"
     ]
    },
    "reader": {

@@ -2101,6 +2101,53 @@ def pi_default_role(common: dict[str, Any]) -> str:
     return role
 
 
+PI_ORCHESTRATE_ROLE = "orchestrator"
+PI_ORCHESTRATE_KEYS = frozenset({"default"})
+# orchestrator が持てないツール (作業のツール)。mcp__ で始まるものも持てない
+PI_ORCHESTRATE_FORBIDDEN = frozenset({"bash", "edit", "write", "bg_run", "bg_log", "bg_kill"})
+
+
+def pi_orchestrate(common: dict[str, Any]) -> dict[str, Any]:
+    """``[pi.orchestrate]`` と ``[pi.profiles.orchestrator]`` を検証し、判定器・ハーネスへ渡す形にする。
+
+    親を計画・委譲に絞る役割。許可リストなので、実装役 (``[pi] default_role``) のツールの部分集合で、
+    作業のツールを含まず、``task`` を含むこと。節が無ければ無効 (機能が出ないだけ)。
+    see docs/spec/guard/pi-subagents.md#親の絞り込みorchestrate
+    """
+    pi = common.get("pi") or {}
+    section = pi.get("orchestrate")
+    if section is None:
+        return {"enabled": False, "default": "off", "role": ""}
+    if not isinstance(section, dict):
+        raise SystemExit("[pi.orchestrate] がテーブルでない")
+    _reject_unknown("pi.orchestrate", set(section), PI_ORCHESTRATE_KEYS)
+    default = section.get("default", "off")
+    if default not in ("off", "on"):
+        raise SystemExit(f"[pi.orchestrate] default は off か on: {default!r}")
+    profiles = pi.get("profiles") or {}
+    profile = profiles.get(PI_ORCHESTRATE_ROLE)
+    if not isinstance(profile, dict):
+        raise SystemExit(f"[pi.orchestrate] があるのに [pi.profiles.{PI_ORCHESTRATE_ROLE}] が無い")
+    tools = profile.get("tools")
+    if not isinstance(tools, list) or not all(isinstance(t, str) and t for t in tools):
+        raise SystemExit(f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] tools は空でない文字列の配列")
+    if profile.get("default") != "deny":
+        raise SystemExit(f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] default は deny (許可リストにする)")
+    if "task" not in tools:
+        raise SystemExit(f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] tools に task が無い (委譲できない親にしない)")
+    bad = sorted(t for t in tools if t in PI_ORCHESTRATE_FORBIDDEN or t.startswith("mcp__"))
+    if bad:
+        raise SystemExit(f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] tools に作業のツールがある: {', '.join(bad)}")
+    base = profiles.get(pi.get("default_role"))
+    base_tools = set((base or {}).get("tools") or [])
+    extra = sorted(set(tools) - base_tools)
+    if extra:
+        raise SystemExit(
+            f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] tools が実装役 ({pi.get('default_role')}) の部分集合でない: {', '.join(extra)}"
+        )
+    return {"enabled": True, "default": default, "role": PI_ORCHESTRATE_ROLE}
+
+
 def pi_own_extensions(common: dict[str, Any]) -> list[str]:
     """``[pi] own_extensions``。pis とサンドボックスが ``-e`` で足す自作の拡張の名前。
 
@@ -2250,6 +2297,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
     return {
         "judge": pi_judge_data(common),
         "default_role": pi_default_role(common),
+        "orchestrate": pi_orchestrate(common),
         "extensions": pi_own_extensions(common),
         "agent_env": agent_env(common),
         "broker": pi_broker(common),

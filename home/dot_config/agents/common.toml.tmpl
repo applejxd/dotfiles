@@ -1597,6 +1597,18 @@ shell_deny = [
   "git-flow",
 ]
 
+# 親を「計画・判断・委譲」に絞る役割。利用者専用の /orchestrate on で切り替える ([pi.orchestrate])。
+# 作業のツール (bash・edit・write・bg_*・MCP) を持たない。読み取りと、委譲・質問・ToDo・承認つきの操作だけ。
+# 親が失う操作の代替: 作業・検証は worker、調査は explore、コミットは guarded_action。
+# see docs/spec/guard/pi-subagents.md#親の絞り込みorchestrate
+[pi.profiles.orchestrator]
+tools = ["read", "grep", "find", "ls", "task", "todo", "ask", "action"]
+default = "deny"
+
+# 親の絞り込み (orchestrator)。default は起動時の状態 (off / on)。実行中は /orchestrate on|off (利用者専用)
+[pi.orchestrate]
+default = "off"
+
 # 子エージェント。親の guarded_task ツールから起動する (子からさらに子は起動できない)。
 # profile は [pi.profiles] の名前、tier は [opencode.model.tier.*] の階層 (無ければ親と同じモデル)。
 # inherit_bypass = true なら、親が bypass のとき子も bypass で動く (ask を allow にする)。

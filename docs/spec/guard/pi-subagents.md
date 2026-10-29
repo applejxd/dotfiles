@@ -203,3 +203,18 @@ C2: …
 ```
 
 **限界**: 子が、ほかの worktree や本体を書き換えても、**強制では止まらない**（bypass 中は、作業ツリーの外の書き込みの ask も allow になる）。`scripts/parallel_check.py` が、取り込み前に、**Git が報告する変更**（追跡ファイルの変更と未追跡ファイル。リネームは旧パスも数える）の範囲で見つける。ignore されたファイル・worktree の外（例: `~`）への書き込み・symlink の先は見えない。子へのコミットの許可（`guarded_action` を子へ）は、親の手数が許容できないと分かるまで、作らない（親が diff を確かめてからコミットする方が安全）。
+
+### 親の絞り込み（orchestrate）
+
+親を「計画・判断・委譲・承認」に絞り、作業（実装・コマンドの実行）を子へ寄せる仕組み。**命令（プロンプト）ではなく、ツールと判定で強制する**（[CHG-0045](../../change/0045-orchestrator-parent.md) 段 6。設計の経緯は [調査記録](../../research/agents/orchestrator-role-plan.md)）。
+**今の範囲は、役割と切り替えまで**（段 1〜2）。親専用の検査操作（`check_*`）と、親の読み取りの制限は、まだ無い。
+
+- **役割 `orchestrator`**（`[pi.profiles.orchestrator]`）: `tools = ["read", "grep", "find", "ls", "task", "todo", "ask", "action"]`、`default = "deny"`（許可リスト）。`bash`・`edit`・`write`・`bg_*`・MCP を持たない。
+  生成器（`pi_orchestrate`）が、許可リストであること・`task` を含むこと・作業のツールを含まないこと・実装役（`[pi] default_role`）のツールの部分集合であることを検査し、満たさなければ生成を止める
+- **切り替え**（`[pi.orchestrate] default = "off"`）: 起動時の状態は `PI_HARNESS_ORCHESTRATE`（`1` / `0`）か `default`。実行中は、**利用者専用の `/orchestrate on|off|status`**（`/bypass` と同じ形で、モデルが呼べるツールは作らない。OFF は確認なし）
+- **二重の防御**: (1) ON の間は、`before_agent_start` で毎ターン `setActiveTools` を、役割の許可リストに絞る（`/plan` など他の拡張が一覧を戻しても、次のターンで絞り直す）。切り戻しのために、絞る前の一覧を持つ。
+- **切り替えと確認待ちの競合**: `/bypass` と `/orchestrate` は権限の世代番号を進める。確認待ちの間に世代が変わったら、その承認は無効（`block`）にし、実行前の判定でも、世代が違う判定は使わず現在の役割で判定し直す。**`/reload` を跨いで利用者の選択を保つ**（切り替えのたびに `PI_HARNESS_ORCHESTRATE` を更新する。モジュールの変数は `/reload` で消えるため）
+  (2) 判定器の `role` を、呼び出しごとに評価する（`orchestrate ? "orchestrator" : 起動時の役割`。`judge/call.ts`）。役割に無いツールは deny（bypass でも）。拒否の理由に、「作業は `worker` に任せる。通常の親に戻すのは利用者」を添える
+- **使えない起動**: 子（`PI_HARNESS_CHILD=1`）・Windows（子を作れない）・設定が無い・`task` を持たない役割では、何もしない（`/orchestrate` は理由を表示して終わる）。子の挙動は変わらない
+- **親が失う操作の代替**: 作業・検証は `worker`、調査・git の状態は `explore`、コミットなどは `guarded_action`（`gitflow_feature_*`・`git_commit`）。素の `pi` では、`worker` の shell は通常は ask で止まるので、**親の `/bypass on` が前提**になる（親が作業のツールを持たないので、bypass の危険は小さい）
+- **まだ無いもの**: ON の永続（`/reload` で起動時の状態に戻る。`[pi.orchestrate] default = "on"` か環境変数で固定する）、`check_*`（`mise run verify` などの固定引数の親専用の操作。承認ポリシーに触れるので、実装の前に `review`）、親の読み取りの制限、フッター以外の計測（`delegate-stats` への印）

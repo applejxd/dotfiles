@@ -60,6 +60,36 @@ const AGENT_ENV: Record<string, string> = rules.agent_env ?? {};
 // 役割。pis の --role / PI_HARNESS_ROLE が優先し、無ければ [pi] default_role
 if (typeof rules.default_role !== "string") throw new Error("rules.json に default_role が無い (chezmoi apply で作り直す)");
 const ROLE: string = process.env.PI_HARNESS_ROLE || rules.default_role;
+// 親を「計画・判断・委譲」に絞る役割 (orchestrator)。子・Windows (子を作れない)・設定が無い起動・task を持たない役割では使えない。
+// 起動時の状態は PI_HARNESS_ORCHESTRATE (1 / 0) か [pi.orchestrate] default。実行中は /orchestrate on|off (利用者専用)
+// see docs/spec/guard/pi-subagents.md#親の絞り込みorchestrate
+const ORCH_RAW: any = rules.orchestrate;
+const ORCH_TOOLS: string[] = Array.isArray(rules.profile_tools?.[ORCH_RAW?.role]) ? rules.profile_tools[ORCH_RAW.role] : [];
+const ORCH_WORK = new Set(["bash", "edit", "write", "bg_run", "bg_log", "bg_kill"]);
+const ORCH_ENABLED = ORCH_RAW?.enabled === true;
+// 変えられた rules.json (生成器が検査する形を崩したもの) では、絞り込んだつもりのまま通常の権限で動かないよう起動を止める
+if (
+	ORCH_ENABLED &&
+	(ORCH_RAW.role !== "orchestrator" ||
+		(ORCH_RAW.default !== "on" && ORCH_RAW.default !== "off") ||
+		!ORCH_TOOLS.includes("task") ||
+		ORCH_TOOLS.some((t) => ORCH_WORK.has(t) || t.startsWith("mcp__")))
+) {
+	throw new Error("rules.json の orchestrate が不正 (chezmoi apply で作り直す)");
+}
+const ORCH: { enabled: boolean; default: string; role: string } = ORCH_ENABLED ? ORCH_RAW : { enabled: false, default: "off", role: "" };
+const ORCH_CAPABLE =
+	ORCH_ENABLED &&
+	!CHILD &&
+	supportsChildTasks() &&
+	((rules.profile_tools?.[ROLE] as string[] | undefined) ?? []).includes("task");
+// 起動時に ON を要求されたか (子は適用外)。要求されたのに成立しないときは、通常の権限へ黙って倒さず起動を止める (Windows は対象外)
+const ORCH_REQUESTED = !CHILD && (process.env.PI_HARNESS_ORCHESTRATE === "1" || (process.env.PI_HARNESS_ORCHESTRATE !== "0" && ORCH.default === "on"));
+if (ORCH_REQUESTED && !ORCH_CAPABLE && supportsChildTasks()) {
+	throw new Error("orchestrate を要求されたが使えない (rules.json に設定が無い、または親の役割が task を持たない)。通常の権限では起動しない");
+}
+let orchestrate = ORCH_CAPABLE && ORCH_REQUESTED;
+const ORCH_HINT = "\nオーケストレーターの間は、作業 (編集・コマンドの実行) は worker に任せる (guarded_task)。通常の親に戻すのは利用者 (/orchestrate off)。";
 
 let BOUNDARY = false;
 if (BOUNDARY_ENV) {
@@ -117,7 +147,7 @@ const COMPACT_INSTRUCTIONS = [
 const callDecider = createCallDecider({
 	judge: rules.judge,
 	profileTools: rules.profile_tools ?? {},
-	role: ROLE,
+	role: () => (orchestrate ? ORCH.role : ROLE),
 	bypass: () => bypass,
 	boundary: BOUNDARY,
 	allowed: BOUNDARY_ENV?.allowed,
@@ -130,7 +160,9 @@ export function decide(tool: string, input: unknown, cwd: string): Decision {
 // tool_call で判定した入力と結果。execute() で同じ入力なら判定を使い回す (判定 1 回 0.1 秒ほど)。
 // 入力が書き換わっていれば判定し直す
 // bodyFile は mustConfirm の確認で見せた --body-file の内容 (execute() で差し替えを検出する)
-const decided = new Map<string, { input: string; decision: Decision; approved: boolean; bodyFile?: { path: string; text: string } }>();
+// 権限の状態 (bypass / orchestrate) を切り替えるたびに進める世代。確認待ちの間に切り替わった判定を使い回さない
+let epoch = 0;
+const decided = new Map<string, { input: string; decision: Decision; approved: boolean; epoch: number; bodyFile?: { path: string; text: string } }>();
 
 // 確認は 1 件ずつ出す。TUI の confirm は 1 枠を共有し、後の確認が先の確認を置き換える
 // (codemode の中で並べた呼び出しで先の確認が永久に止まった。spike の E3)
@@ -208,6 +240,29 @@ export default async function (pi: ExtensionAPI) {
 	const showBypass = (ctx: any) => {
 		if (ctx.hasUI) ctx.ui.setStatus("bypass", bypass ? ctx.ui.theme.fg("warning", "⚡ bypass") : undefined);
 	};
+	const showOrchestrate = (ctx: any) => {
+		if (ctx.hasUI) ctx.ui.setStatus("orchestrate", orchestrate ? ctx.ui.theme.fg("accent", "🧭 orchestrate") : undefined);
+	};
+	// orchestrator の間は、役割の許可リストにあるツールだけをモデルに見せる (実行の拒否は判定器がする。二重の防御)。
+	// 毎ターン確かめる (/plan など他の拡張が一覧を戻しても、次のターンで絞り直す)。切り戻しのために、絞る前の一覧を持つ
+	let orchestrateSaved: string[] | null = null;
+	const applyOrchestrate = () => {
+		if (!orchestrate) {
+			if (orchestrateSaved) {
+				pi.setActiveTools(orchestrateSaved);
+				orchestrateSaved = null;
+			}
+			return;
+		}
+		const allowed = new Set<string>((rules.profile_tools?.[ORCH.role] as string[] | undefined) ?? []);
+		const active = pi.getActiveTools();
+		if (!orchestrateSaved) orchestrateSaved = active;
+		const next = active.filter((n: string) => allowed.has(baseName(n)));
+		if (next.length !== active.length) pi.setActiveTools(next);
+	};
+	pi.on("before_agent_start", async () => {
+		applyOrchestrate();
+	});
 	// セッションの終了・切り替え・/reload で、保持している子を全部止める。
 	// そのうえで、セッションごとの一時置き場 (.tmp/s/<ID>/) は quit のときだけ消す (CHG-0042)
 	pi.on("session_shutdown", async (event: any) => {
@@ -235,8 +290,10 @@ export default async function (pi: ExtensionAPI) {
 			if (event?.reason === "startup") sessionTmp.sweep(cwd);
 		} catch {}
 		reconcileOnStart(ctx);
+		applyOrchestrate();
 		if (!ctx.hasUI) return;
 		showBypass(ctx);
+		showOrchestrate(ctx);
 		// 判定の外で動きうるもの (mcp.json のサーバ・信頼した作業先の .pi/) は、止めずに知らせる
 		const outside = unguardedSources(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"), ctx.cwd ?? process.cwd(), process.argv);
 		if (outside.length > 0) ctx.ui.notify(unguardedMessage(outside), "warning");
@@ -296,6 +353,7 @@ export default async function (pi: ExtensionAPI) {
 				if ((await ctx.ui.confirm("bypass を有効にしますか？", body)) !== true) return;
 			}
 			bypass = want;
+			epoch++;
 			// 前の設定で下した判定を execute() で使い回さない
 			decided.clear();
 			// 起動時の bypass を持つ子に、権限を持ち越させない
@@ -304,11 +362,50 @@ export default async function (pi: ExtensionAPI) {
 			ctx.ui?.notify?.(`bypass を ${bypass ? "ON" : "OFF"} にした`, bypass ? "warning" : "info");
 		},
 	});
+	// 利用者専用の orchestrator の切り替え。モデルが呼べるツールは作らない (bypass と同じ形)。OFF は確認なし (利用者が自分で打つ)
+	pi.registerCommand("orchestrate", {
+		description: "親を計画・判断・委譲に絞る (作業のツールを隠す) の切り替え: /orchestrate [on|off|status]",
+		handler: async (args: string, ctx: any) => {
+			const arg = String(args ?? "").trim() || "status";
+			if (!["on", "off", "status"].includes(arg)) {
+				ctx.ui?.notify?.("使い方: /orchestrate [on|off|status]", "warning");
+				return;
+			}
+			if (!ORCH_CAPABLE) {
+				ctx.ui?.notify?.("この起動では orchestrate を使えない (子・Windows・設定なし・task を持たない役割)", "warning");
+				return;
+			}
+			if (arg === "status") {
+				ctx.ui?.notify?.(`orchestrate は ${orchestrate ? "ON" : "OFF"}`, "info");
+				return;
+			}
+			const want = arg === "on";
+			if (want === orchestrate) {
+				ctx.ui?.notify?.(`orchestrate はすでに ${orchestrate ? "ON" : "OFF"}`, "info");
+				return;
+			}
+			orchestrate = want;
+			epoch++;
+			// /reload を跨いで利用者の選択を保つ (モジュールの変数は reload で消える)。子は CHILD で適用外
+			process.env.PI_HARNESS_ORCHESTRATE = want ? "1" : "0";
+			// 前の役割で下した判定を execute() で使い回さない
+			decided.clear();
+			applyOrchestrate();
+			showOrchestrate(ctx);
+			ctx.ui?.notify?.(
+				orchestrate ? "orchestrate を ON にした: 作業のツールを隠した。作業は worker に任せる" : "orchestrate を OFF にした: 通常の親に戻した",
+				"info",
+			);
+		},
+	});
 	pi.on("tool_call", async (event, ctx) => {
 		const tool = baseName(event.toolName);
+		// 確認待ちの間に bypass / orchestrate が変わったら、変わる前の判定を使わない
+		const ep = epoch;
+		const stale = () => ({ block: true, reason: `${NOT_APPROVED} 確認を待つ間に権限の状態 (bypass / orchestrate) が変わった。もう一度やり直す` });
 		const d = decide(tool, event.input, ctx.cwd);
 		const input = JSON.stringify(event.input);
-		if (d.decision === "deny") return { block: true, reason: denyReason(tool, event.input, d) };
+		if (d.decision === "deny") return { block: true, reason: denyReason(tool, event.input, d) + (orchestrate ? ORCH_HINT : "") };
 		if (d.decision === "ask") {
 			// bypass でも出す確認 (外部への送信・公開)。判定器は bypass でも allow にしない
 			if ((d as any).mustConfirm === true) {
@@ -322,17 +419,19 @@ export default async function (pi: ExtensionAPI) {
 				const timeoutMs = confirmTimeoutSeconds(rules) * 1000;
 				const outcome = classifyConfirm(await confirmDetailed(ctx, view.title, view.body, timeoutMs), timeoutMs);
 				if (outcome !== "approved") return block(outcomeReason(outcome));
-				decided.set(event.toolCallId, { input, decision: d, approved: true, bodyFile: view.bodyFile });
+				if (ep !== epoch) return stale();
+				decided.set(event.toolCallId, { input, decision: d, approved: true, epoch: ep, bodyFile: view.bodyFile });
 				return undefined;
 			}
 			const ok =
 				ctx.hasUI &&
 				(await confirmInOrder(ctx, "実行してよいですか？", `${tool === BG_RUN ? "バックグラウンドで実行:\n" : ""}${describeCall(tool === BG_RUN ? "bash" : tool, event.input)}\n\n理由: ${d.reason}`));
 			if (!ok) return { block: true, reason: `${NOT_APPROVED} ${d.reason}` };
-			decided.set(event.toolCallId, { input, decision: d, approved: true });
+			if (ep !== epoch) return stale();
+			decided.set(event.toolCallId, { input, decision: d, approved: true, epoch: ep });
 			return undefined;
 		}
-		decided.set(event.toolCallId, { input, decision: d, approved: false });
+		decided.set(event.toolCallId, { input, decision: d, approved: false, epoch: ep });
 		return undefined;
 	});
 
@@ -401,7 +500,9 @@ export default async function (pi: ExtensionAPI) {
 			name: `${PREFIX}${tool}`,
 			// 最終の判定はここ。tool_call の後に別の拡張が入力を書き換えても、ここで止まる (spike の E1)
 			async execute(toolCallId: string, params: any, signal: any, onUpdate: any, ctx: any) {
-				const seen = decided.get(toolCallId);
+				const seen0 = decided.get(toolCallId);
+				// 権限の状態が変わっていたら、前の判定と承認は使わない (現在の役割で判定し直す)
+				const seen = seen0 && seen0.epoch === epoch ? seen0 : undefined;
 				decided.delete(toolCallId);
 				const input = JSON.stringify(params);
 				const d = seen && seen.input === input ? seen.decision : decide(tool, params, ctx.cwd);

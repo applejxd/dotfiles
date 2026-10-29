@@ -27,7 +27,8 @@ export type CallDeciderOptions = {
 	judge: { common: Common; tables: Tables };
 	/** 役割ごとに登録するツール (rules.json の profile_tools) */
 	profileTools: Record<string, string[]>;
-	role: string;
+	/** 役割。関数なら呼び出しごとに評価する (起動後に orchestrator へ切り替えるため) */
+	role: string | (() => string);
 	/** true なら ask を allow にする (deny と誘導は効く)。関数なら呼び出しごとに評価する (起動後に切り替えるため) */
 	bypass: boolean | (() => boolean);
 	/** サンドボックスの内側と証明できているか (緩和が効く)。env の自己申告ではなく、カナリアの結果を渡す */
@@ -42,6 +43,7 @@ export function createCallDecider(o: CallDeciderOptions): (tool: string, input: 
 	// scope = "foreground" の誘導は、bash (guarded_bash) だけに当てる。bg_run の中身 (待つコマンドそのもの) には当てない
 	const foreground = (((o.judge.common as any)?.pi?.guide as any[] | undefined) ?? []).filter((g) => g?.scope === "foreground");
 	return (tool, input, cwd) => {
+		const role = typeof o.role === "function" ? o.role() : o.role;
 		if (tool === "bash" && foreground.length > 0) {
 			const command = String((input as any)?.command ?? "");
 			for (const g of foreground) {
@@ -51,17 +53,17 @@ export function createCallDecider(o: CallDeciderOptions): (tool: string, input: 
 			}
 		}
 		if (BG_OTHERS.includes(tool)) {
-			if ((o.profileTools[o.role] ?? []).includes("bash")) {
+			if ((o.profileTools[role] ?? []).includes("bash")) {
 				return { decision: "allow", reason: "ジョブの確認と停止だけ (bash を使える役割)", source: "rule" };
 			}
-			return { decision: "deny", reason: `役割 ${JSON.stringify(o.role)} は ${tool} を使えない`, source: "rule" };
+			return { decision: "deny", reason: `役割 ${JSON.stringify(role)} は ${tool} を使えない`, source: "rule" };
 		}
 		const asBash = tool === BG_RUN;
 		const request = {
 			tool: asBash ? "bash" : tool,
 			input: asBash ? { command: (input as any)?.command } : input,
 			cwd,
-			role: o.role,
+			role,
 			bypass: typeof o.bypass === "function" ? o.bypass() : o.bypass,
 			boundary: o.boundary,
 			...(o.boundary && o.allowed ? { allowed: o.allowed } : {}),
