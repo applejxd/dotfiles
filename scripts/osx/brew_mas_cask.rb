@@ -70,7 +70,7 @@ cask "font-hack-nerd-font"
 
 # Environments
 #cask "xquartz"
-cask "docker"
+cask "docker-desktop"
 
 # Reference
 cask "dash"
