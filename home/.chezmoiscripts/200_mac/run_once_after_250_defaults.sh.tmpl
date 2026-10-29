@@ -8,6 +8,18 @@ start_sudo_keepalive
 # 起動時の音をミュート (Apple Silicon では拒否されうる。失敗しても残りの設定を続ける)
 sudo nvram StartupMute=%01 || echo "⚠️ nvram StartupMute を設定できませんでした (飛ばします)" >&2
 
+# 「共有」->「リモートログイン」(SSH サーバ)。公開鍵は 400_unix/run_after_440_authorized_keys が足す。
+# systemsetup は実行元のターミナルにフルディスクアクセスが無いと失敗する。そのときは launchd の
+# デーモンを直接読み込む。設定アプリの表示は、再起動まで追従しないことがある。
+# see docs/spec/security.md#macos-の-ssh-サーバリモートログイン
+if ! sudo launchctl print system/com.openssh.sshd >/dev/null 2>&1; then
+    if ! sudo systemsetup -setremotelogin on >/dev/null 2>&1; then
+        if ! sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist; then
+            echo "⚠️ リモートログインを有効にできませんでした。手動で: システム設定 > 一般 > 共有 > リモートログイン" >&2
+        fi
+    fi
+fi
+
 #----------#
 # defaults #
 #----------#

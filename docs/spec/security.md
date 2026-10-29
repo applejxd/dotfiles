@@ -65,6 +65,18 @@ Windows は `.config/*` を丸ごと除外しているので、`.chezmoiignore.t
 - `bw` の SSH 鍵項目（種別 5）の JSON が `sshKey.publicKey` を持つことは、`bw` 2026.9.1 のバイナリ内の定義でのみ確認した。
   実際の項目での動作は未確認
 
+#### macOS の SSH サーバ（リモートログイン）
+
+`200_mac/run_once_after_250_defaults.sh.tmpl` が、リモートログインを有効にする（既に有効なら何もしない）。
+公開鍵は上の `440` が足す。**パスワード認証の無効化など `sshd_config` の締め付けは、ここでは行わない**（macOS の既定のまま）。
+
+- 判定は `launchctl print system/com.openssh.sshd`。有効にする手段は、まず `systemsetup -setremotelogin on`
+- `systemsetup` は、実行元のターミナルに**フルディスクアクセスが無いと失敗する**（`Turning Remote Login on or off requires Full Disk Access privileges`。
+  [Alan Siu、2020-09-02](https://www.alansiu.net/2020/09/02/scripting-ssh-off-on-without-needing-a-pppc-tcc-profile/)）。
+  失敗したときは、回避策として `launchctl load -w /System/Library/LaunchDaemons/ssh.plist` で daemon を直接読み込む（同記事）。
+  この場合、システム設定の「リモートログイン」のスイッチの表示が、再起動まで追従しないことがある（同記事のコメント。この仕組みでの実機の確認は未実施）
+- どちらも失敗したら警告だけ出して続ける（`run_once_` なので再実行はされない。手動: システム設定 > 一般 > 共有 > リモートログイン）
+
 ### 脅威と守らないもの
 
 | 防ぐ | 防がない |

@@ -935,3 +935,26 @@ def test_touchid_sudo_is_skipped_without_sudo_local_support(tmp_path):
     result, local_conf = run_touchid(tmp_path, template=False)
     assert result.returncode == 0, result.stdout + result.stderr
     assert not local_conf.exists()
+
+
+DEFAULTS = MAC_SCRIPTS / "run_once_after_250_defaults.sh.tmpl"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix のスクリプト")
+def test_defaults_enables_remote_login_with_a_launchctl_fallback(tmp_path):
+    """リモートログインは systemsetup を先に試し、失敗したら daemon を直接読み込む。
+
+    systemsetup はターミナルにフルディスクアクセスが無いと失敗する。構文が通ることも確かめる。
+    """
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash が無い")
+    rendered = render_with_context(DEFAULTS, home=tmp_path / "home", os_name="darwin")
+    script = tmp_path / "250.sh"
+    script.write_text(rendered, encoding="utf-8")
+    syntax = subprocess.run([bash, "-n", str(script)], capture_output=True, text=True, check=False)
+    assert syntax.returncode == 0, syntax.stderr
+    check = rendered.index("launchctl print system/com.openssh.sshd")
+    systemsetup = rendered.index("systemsetup -setremotelogin on")
+    load = rendered.index("launchctl load -w /System/Library/LaunchDaemons/ssh.plist")
+    assert check < systemsetup < load
