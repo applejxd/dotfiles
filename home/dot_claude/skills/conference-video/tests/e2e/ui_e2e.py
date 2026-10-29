@@ -65,6 +65,7 @@ def ts_json() -> str:
 def make_fixture(work: Path) -> None:
     (work / "assets").mkdir(parents=True)
     (work / "narration.txt").write_text(NARRATION, encoding="utf-8")
+    (work / "brief.md").write_text("# 構想\n単眼 SLAM の紹介。\n", encoding="utf-8")
     (work / "timestamps.json").write_text(ts_json(), encoding="utf-8")
     yomi_entries = {
         "SLAM": {"pron": "スラム", "accent": 1, "status": "確認済み", "note": ""},
@@ -235,15 +236,21 @@ def main() -> int:
                 return r
 
             page.wait_for_selector = wfs
-            page.goto(url + "#script")
-            page.wait_for_selector("textarea")
+            page.goto(url + "#plan")
+            page.wait_for_selector("pre")
 
-            # 1. 承認
+            # 1. 承認は構成案と最終動画だけ。構成案を承認する(着手の許可)
             page.get_by_role("button", name="承認", exact=True).click()
             page.wait_for_selector(".toast.ok")
             check(
-                "台本を承認すると approvals.json に記録される",
-                approvals().get("script", {}).get("status") == "承認",
+                "構成案を承認すると approvals.json に記録される",
+                approvals().get("plan", {}).get("status") == "承認",
+            )
+            page.locator(".chip", has_text="台本").click()
+            page.wait_for_selector("textarea")
+            check(
+                "台本タブには承認ボタンが無い(承認しない作業状態)",
+                page.get_by_role("button", name="承認", exact=True).count() == 0,
             )
 
             # 2. 本文の修正
@@ -257,21 +264,12 @@ def main() -> int:
                 "(直した)" in (work / "narration.txt").read_text(encoding="utf-8")
                 and (work / "narration.txt.bak").read_text(encoding="utf-8") == before,
             )
-            chip = page.locator(".chip", has_text="台本").inner_text()
-            check("台本を変えたので承認が古くなる", "古い" in chip, chip)
-
-            # 2.5 未保存の変更があると承認できない(見ていない版を承認しない)
-            ta0 = page.locator("textarea").first
-            orig_text = ta0.input_value()
-            ta0.fill(orig_text + "(未保存)")
-            approve_btn = page.get_by_role("button", name="承認", exact=True)
+            chip = page.locator(".chip", has_text="構成案").inner_text()
             check(
-                "未保存の変更があると承認ボタンが無効になり、理由が出る",
-                approve_btn.is_disabled()
-                and "未保存" in page.locator("#dirtyhint").inner_text(),
+                "台本を直しても構成案の承認は古くならない",
+                "古い" not in chip and "承認" in chip,
+                chip,
             )
-            ta0.fill(orig_text)
-            check("元に戻せば承認ボタンが有効になる", not approve_btn.is_disabled())
 
             # 3. 指摘
             note = page.get_by_placeholder("指摘(読み・同期・内容)").nth(2)
@@ -283,13 +281,20 @@ def main() -> int:
             ]
             check(
                 "指摘が notes.json の 3 行目に入る",
-                notes.get("3", {}).get("note") == "3 行目を確認",
+                any(
+                    e.get("note") == "3 行目を確認" and e.get("line") == 3
+                    for e in notes.values()
+                ),
                 notes,
             )
 
             # 4. 外部変更後の承認は 409
-            narr = work / "narration.txt"
-            narr.write_text(narr.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            page.locator(".chip", has_text="構成案").click()
+            page.wait_for_selector("pre")
+            narr = work / "brief.md"
+            narr.write_text(
+                narr.read_text(encoding="utf-8") + "追記\n", encoding="utf-8"
+            )
             page.get_by_role("button", name="承認", exact=True).click()
             page.wait_for_selector(".toast.bad")
             check(
@@ -298,14 +303,14 @@ def main() -> int:
             )
             check(
                 "拒否された承認は記録されない",
-                approvals()["script"]["hash"] != sha12(narr),
+                approvals()["plan"]["hash"] != sha12(narr),
             )
             page.wait_for_timeout(800)  # 画面が最新を読み直す
             page.get_by_role("button", name="承認", exact=True).click()
             page.wait_for_selector(".toast.ok")
             check(
                 "最新を表示した後は承認できる",
-                approvals()["script"]["hash"] == sha12(narr),
+                approvals()["plan"]["hash"] == sha12(narr),
             )
 
             # 5. 読み
@@ -360,6 +365,214 @@ def main() -> int:
             check("動画の行リンクで再生位置が移る", 7.5 < t < 9.5, t)
             page.evaluate("() => document.querySelector('video.player').pause()")
 
+            # 7a. 公開前チェック: 機械の項目の結果と、人が確かめる 4 項目。通らない間は承認できない
+            rel = page.locator("#release").inner_text()
+            check(
+                "公開前チェックに機械の項目と人の確認 4 項目が出る",
+                "公開前チェック" in rel
+                and "読み辞書に候補が残っていない" in rel
+                and page.locator("#release input[type=checkbox]").count() == 4,
+                rel[:120],
+            )
+            for i in range(4):
+                page.locator("#release input[type=checkbox]").nth(i).check()
+            check(
+                "人の確認を全部つけても、機械のチェックが通らない間は承認できない",
+                page.get_by_role("button", name="承認", exact=True).is_disabled(),
+            )
+            os.utime(work / "video.mp4", None)  # 確かめた後に、動画が差し替わった
+            try:
+                page.wait_for_function(
+                    "() => document.querySelectorAll('#release input[type=checkbox]:checked').length === 0",
+                    timeout=6000,
+                )
+                cleared = True
+            except Exception:
+                cleared = False
+            check("確認した後に動画が変わると、人の確認のチェックが外れる", cleared)
+
+            # 7b. 指摘を保存しても、動画の要素・再生位置・再生状態を保つ
+            page.evaluate(
+                "() => { const v = document.querySelector('video.player');"
+                " v.dataset.keep = '1'; v.play(); }"
+            )
+            page.wait_for_timeout(500)
+            before = page.evaluate(
+                "() => document.querySelector('video.player').currentTime"
+            )
+            note_box = page.locator("#vl1 input[type=text]")
+            note_box.fill("動画を見て気づいた点")
+            note_box.blur()
+            page.wait_for_function(
+                "() => [...document.querySelectorAll('.toast')]"
+                ".some(t => t.textContent.includes('保存しました'))"
+            )
+            page.wait_for_timeout(300)
+            kept = page.evaluate(
+                "() => { const v = document.querySelector('video.player');"
+                " return [v.dataset.keep, v.currentTime, v.paused]; }"
+            )
+            check("指摘を保存しても動画の要素が作り直されない", kept[0] == "1", kept)
+            check(
+                "指摘を保存しても再生位置が戻らない",
+                kept[1] >= before - 0.1,
+                (before, kept[1]),
+            )
+            check("指摘を保存しても再生が続く", kept[2] is False, kept)
+            page.evaluate("() => document.querySelector('video.player').pause()")
+            note_box = page.locator("#vl1 input[type=text]")
+            note_box.fill("")
+            note_box.blur()
+            page.wait_for_timeout(500)
+
+            # 7c. 外でファイルが変わったとき、画面が追従し、入力中の文章は残る
+            page.locator(".chip", has_text="台本").click()
+            page.wait_for_selector("textarea")
+            first = page.locator("textarea").nth(0).input_value()
+            second = page.locator("textarea").nth(1).input_value()
+            page.locator("textarea").nth(1).fill("入力中の文章です。")
+            original = (work / "narration.txt").read_text(encoding="utf-8")
+            (work / "narration.txt").write_text(
+                original.replace(first, first + "追記", 1), encoding="utf-8"
+            )
+            try:
+                page.wait_for_function(
+                    "(t) => document.querySelectorAll('textarea')[0].value === t",
+                    arg=first + "追記",
+                    timeout=6000,
+                )
+                followed = True
+            except Exception:
+                followed = False
+            check("外で台本が変わると画面が数秒で追従する", followed)
+            kept_text = page.locator("textarea").nth(1).input_value()
+            check(
+                "追従しても入力中の文章が残る",
+                kept_text == "入力中の文章です。",
+                kept_text,
+            )
+            page.locator("textarea").nth(1).fill(second)
+
+            # 7d. 古い画面から指摘を書いて 409 になっても、入力した文章を失わない
+            (work / "narration.txt").write_text(
+                original.replace(first, first + "別の追記", 1), encoding="utf-8"
+            )
+            note_in = page.locator("input[placeholder^='指摘']").nth(2)
+            note_in.fill("409 でも消えない指摘")
+            note_in.blur()  # 追従の前に送ると 409、追従後なら保存される。どちらでも文章は残る
+            page.wait_for_timeout(3500)
+            shown = page.locator("input[placeholder^='指摘']").nth(2).input_value()
+            check(
+                "409 でも入力した指摘が消えない", shown == "409 でも消えない指摘", shown
+            )
+            note_in = page.locator("input[placeholder^='指摘']").nth(2)
+            note_in.fill("")
+            note_in.blur()
+            page.wait_for_timeout(800)
+            (work / "narration.txt").write_text(original, encoding="utf-8")
+            page.wait_for_timeout(2800)  # 元の台本に戻し、画面の追従を待つ
+
+            # 7e. 指摘の状態(対応済み)と、行が増えても同じ本文の行へついていくこと
+            def notes_data():
+                return json.loads((work / "notes.json").read_text(encoding="utf-8"))[
+                    "entries"
+                ]
+
+            note_in = page.locator("input[placeholder^='指摘']").nth(2)
+            note_in.fill("状態の確認")
+            note_in.blur()
+            page.get_by_role("button", name="✓ 対応済み").first.wait_for()
+            page.get_by_role("button", name="✓ 対応済み").first.click()
+            page.wait_for_selector("input.fixed")
+            check(
+                "直した指摘を「対応済み」にでき、画面に残る",
+                any(e.get("status") == "fixed" for e in notes_data().values()),
+                notes_data(),
+            )
+            t3 = page.locator("textarea").nth(2).input_value()
+            raw2 = (work / "narration.txt").read_text(encoding="utf-8")
+            (work / "narration.txt").write_text(
+                raw2.replace("- " + first, "- 追加です。\n- " + first, 1),
+                encoding="utf-8",
+            )
+            try:
+                page.wait_for_function(
+                    "(t) => { const f = document.querySelector('input.fixed');"
+                    " return document.querySelectorAll('tbody tr').length === 4 && !!f"
+                    " && f.closest('tr').querySelector('textarea').value === t; }",
+                    arg=t3,
+                    timeout=6000,
+                )
+                followed = page.evaluate(
+                    "() => { const rows = [...document.querySelectorAll('tbody tr')];"
+                    " return rows.findIndex(r => r.querySelector('input.fixed')) + 1; }"
+                )
+            except Exception:
+                followed = -1
+            check("行が増えても指摘は同じ本文の行へついていく", followed == 4, followed)
+            (work / "narration.txt").write_text(raw2, encoding="utf-8")
+            page.wait_for_function(
+                "() => document.querySelectorAll('tbody tr').length === 3", timeout=6000
+            )
+            page.get_by_role("button", name="消す").first.click()
+            page.wait_for_function(
+                "() => document.querySelectorAll('input.fixed').length === 0"
+            )
+            page.wait_for_timeout(500)
+
+            # 7f. 未保存の入力(下書き)は、タブを移っても、行が増えても同じ本文の行へ戻り、
+            #     行き場が無くなれば退避表示される
+            page.locator(".chip", has_text="台本").click()
+            page.wait_for_selector("textarea")
+            raw7f = (work / "narration.txt").read_text(encoding="utf-8")
+            first7 = page.locator("textarea").nth(0).input_value()
+            second7 = page.locator("textarea").nth(1).input_value()
+            page.locator("textarea").nth(1).fill("下書きの本文です。")
+            page.locator(".chip", has_text="読み").click()
+            page.wait_for_timeout(300)
+            page.locator(".chip", has_text="台本").click()
+            page.wait_for_selector("textarea")
+            back = page.locator("textarea").nth(1).input_value()
+            check(
+                "別のタブへ移って戻っても、未保存の入力が残る",
+                back == "下書きの本文です。",
+                back,
+            )
+            (work / "narration.txt").write_text(
+                raw7f.replace("- " + first7, "- 先頭へ足した行です。\n- " + first7, 1),
+                encoding="utf-8",
+            )
+            try:
+                page.wait_for_function(
+                    "() => document.querySelectorAll('textarea').length === 4"
+                    " && document.querySelectorAll('textarea')[2].value === '下書きの本文です。'",
+                    timeout=6000,
+                )
+                followed = True
+            except Exception:
+                followed = False
+            check("行が増えても、未保存の入力は元の本文の行へついていく", followed)
+            (work / "narration.txt").write_text(
+                raw7f.replace("- " + second7, "- 全く別の本文に変わりました。", 1),
+                encoding="utf-8",
+            )
+            try:
+                page.wait_for_selector("#orphans", timeout=6000)
+                orphan = page.locator("#orphans").inner_text()
+            except Exception:
+                orphan = ""
+            check(
+                "対象の行が変わって行き場が無くなった入力は、失わずに退避表示される",
+                "下書きの本文です。" in orphan,
+                orphan + page.evaluate("() => JSON.stringify([...drafts])"),
+            )
+            page.get_by_role("button", name="破棄").first.click()
+            (work / "narration.txt").write_text(raw7f, encoding="utf-8")
+            page.wait_for_function(
+                "() => document.querySelectorAll('textarea').length === 3 && !document.getElementById('orphans')",
+                timeout=6000,
+            )
+
             # 8. 行の音声
             page.locator(".chip", has_text="台本").click()
             page.wait_for_selector("textarea")
@@ -374,9 +587,25 @@ def main() -> int:
                 at,
             )
             page.evaluate("() => document.getElementById('voice').pause()")
+            rev1 = page.evaluate("() => document.getElementById('voice').dataset.rev")
+            wav = work / "voiceover.wav"
+            wav.write_bytes(
+                wav.read_bytes() + b"\x00\x00"
+            )  # 再合成で音声が差し替わった
+            page.wait_for_timeout(3000)
+            page.get_by_role("button", name="▶ 聴く").nth(2).click()
+            page.wait_for_timeout(400)
+            rev2 = page.evaluate("() => document.getElementById('voice').dataset.rev")
+            check(
+                "音声が差し替わったら、試聴は新しい音声を読み込み直す",
+                bool(rev1) and bool(rev2) and rev1 != rev2,
+                (rev1, rev2),
+            )
+            page.evaluate("() => document.getElementById('voice').pause()")
 
             # 9. 壊れた承認記録
             (work / "approvals.json").write_text("[1,2]", encoding="utf-8")
+            page.goto(url + "#plan")
             page.reload()
             page.wait_for_selector(".banner.bad")
             check(

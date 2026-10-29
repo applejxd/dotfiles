@@ -277,11 +277,31 @@ def engine_surface(surface: str) -> str:
     return re.sub(r"[^A-Za-z0-9]", "", surface) if is_compound(surface) else surface
 
 
-def speech_text(text: str, entries: dict) -> str:
-    """ENGINE に渡す文。複合語の表記を engine_surface の形に置き換える(字幕は元のまま)。"""
-    for s in present_compounds(text, entries):
-        text = _compound_re(s).sub(engine_surface(s), text)
-    return text
+# 読み上げ前の整形(日本語隣の空白の除去、複合語のハイフン)は speech.py にある。
+# ENGINE に文を渡す経路は、必ず speech.prepare() を通す。
+
+
+def kana_readings_in(text: str, entries: dict) -> list[tuple[str, str]]:
+    """字幕に、正式名称(辞書の表記)の代わりに読み(カタカナ)が書かれている語を求める。
+
+    [(表記, 読み)] を返す。表記が行にもあるとき(「SLAM-MER(スラマー)」のような注記)、
+    より長いカタカナ語の一部(「エル」に対して「エルサルバドル」)、候補の語は数えない。
+    """
+    out = []
+    for surface, e in entries.items():
+        pron = e.get("pron", "")
+        if e.get("status") == CANDIDATE or len(pron) < 2:
+            continue
+        if surface in text or engine_surface(surface) in text:
+            continue
+        if re.search(
+            r"(?<![\u30a1-\u30f6\u30fc])"
+            + re.escape(pron)
+            + r"(?![\u30a1-\u30f6\u30fc])",
+            text,
+        ):
+            out.append((surface, pron))
+    return out
 
 
 def present_compounds(text: str, entries: dict) -> list[str]:

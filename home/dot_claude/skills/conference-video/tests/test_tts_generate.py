@@ -138,7 +138,7 @@ class TtsGenerateTests(unittest.TestCase):
             self.assertEqual(code, 0, log)
             texts = [q["text"] for m, p, q in fake.calls if p == "/audio_query"]
             self.assertEqual(
-                texts[0], "SLAMMER を紹介します。"
+                texts[0], "SLAMMERを紹介します。"
             )  # ハイフンを除いて問い合わせる
             self.assertIn("ＳＬＡＭＭＥＲ", fake.words)
             # 字幕(timestamps.json の本文)は元の表記のまま
@@ -318,6 +318,21 @@ class TtsGenerateTests(unittest.TestCase):
                 fake.synthesis_count(), n + 1
             )  # その語を含む 1 行目だけ再合成される
             self.assertIn("取り除いた", log)
+
+    def test_space_only_edits_next_to_japanese_do_not_resynthesize(self):
+        """読み上げに渡す文でキャッシュを引く。空白だけの違いでは再合成しない。"""
+        path = self.d / "narration.txt"
+        path.write_text("subtitles:\n- 精度が 3 倍になります。\n", encoding="utf-8")
+        with FakeVoicevox() as fake:
+            code, log = self.run_tts(fake.url)
+            self.assertEqual(code, 0, log)
+            texts = [q["text"] for m, p, q in fake.calls if p == "/audio_query"]
+            self.assertEqual(texts, ["精度が3倍になります。"])
+            n = fake.synthesis_count()
+            path.write_text("subtitles:\n- 精度が3倍になります。\n", encoding="utf-8")
+            code, log = self.run_tts(fake.url)
+            self.assertEqual(code, 0, log)
+            self.assertEqual(fake.synthesis_count(), n)
 
     def test_removed_lines_helper(self):
         prev = [{"text": "a", "duration_s": 1.0}] * 3

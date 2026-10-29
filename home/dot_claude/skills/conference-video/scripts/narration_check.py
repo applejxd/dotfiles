@@ -4,6 +4,7 @@
 検査項目:
 - 数式・記号の混入(TeX 記号や = ∪ など。読み上げ用に言い換える)
 - 読み辞書に無い英字、状態が「候補」のままの語(誤読のもと。yomi.json で確認済みにする)
+- 読み辞書に語の表記があるのに、字幕にその読み(カタカナ)が代わりに書かれている(正式名称で書く)
 - 総時間(実測の timestamps.json があればそれ、無ければ文字数からの推定)
 
 終了コード: 0 = 問題なし、1 = 指摘あり、2 = 入力が不正。
@@ -18,6 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import speech  # noqa: E402
 import yomi  # noqa: E402
 
 SYMBOLS = re.compile(r"[\\$^_{}=∪∩≤≥∑∫√∈∀∃→←↔⊂⊆≈≠±×÷<>|]")
@@ -61,6 +63,21 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--allow-candidates", action="store_true", help="状態が候補の語を指摘しない"
     )
+    ap.add_argument(
+        "--show-spoken",
+        action="store_true",
+        help="表示と読み上げの文が違う行を一覧する(規則名つき)",
+    )
+    ap.add_argument(
+        "--strict",
+        action="store_true",
+        help="表示と読み上げの文が違う行があれば指摘とする(終了コード 1)",
+    )
+    ap.add_argument(
+        "--allow-kana",
+        action="store_true",
+        help="字幕に読み(カタカナ)があっても指摘しない",
+    )
     ap.add_argument("--target-sec", type=float, help="目標の総時間(秒)")
     ap.add_argument("--timestamps", help="実測の timestamps.json")
     ap.add_argument("--sec-per-char", type=float, default=DEFAULT_SEC_PER_CHAR)
@@ -74,6 +91,7 @@ def main(argv=None) -> int:
         return 2
 
     issues = []
+    spoken_diffs = []  # (行番号, 読み上げに渡す文, 規則の ID)
     for i, ln in enumerate(lines, 1):
         sym = sorted(set(SYMBOLS.findall(ln)))
         if sym:
@@ -92,10 +110,35 @@ def main(argv=None) -> int:
                     issues.append(
                         f"{i}行目: 「{tok}」の読みが未確認です(`yomi.py set <表記> <読み>` か確認画面の「読み」タブで、状態を「確認済み」に): {ln}"
                     )
+        if not a.allow_kana:
+            for surface, pron in yomi.kana_readings_in(ln, entries):
+                issues.append(
+                    f"{i}行目: 字幕に読み「{pron}」が書かれています。正式名称「{surface}」で書き、"
+                    f"読みは辞書で直します(意図したカタカナ表記なら --allow-kana): {ln}"
+                )
+        ex = speech.explain(ln, entries)
+        if ex:
+            spoken_diffs.append((i, ex[-1]["after"], [x["rule"] for x in ex]))
         if len(ln) > LONG_LINE:
             print(
                 f"注意: {i}行目は {len(ln)} 文字と長い(字幕が 2 行を超える): {ln[:20]}…"
             )
+
+    if spoken_diffs:
+        counts: dict[str, int] = {}
+        for _, _, rules in spoken_diffs:
+            for r in rules:
+                counts[r] = counts.get(r, 0) + 1
+        names = "、".join(f"{r}×{n}" for r, n in counts.items())
+        print(
+            f"読み上げ前の整形: {len(spoken_diffs)} 行({names}。字幕は元のまま。--show-spoken で一覧)"
+        )
+        for i, after, rules in spoken_diffs:
+            msg = f"{i}行目: 読み上げでは「{after}」になる({'・'.join(rules)})"
+            if a.strict:
+                issues.append(msg)
+            elif a.show_spoken:
+                print(msg)
 
     if a.timestamps:
         total = float(

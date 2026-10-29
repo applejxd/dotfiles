@@ -5,7 +5,7 @@
 
 - **配布の場所**: `home/dot_claude/skills/conference-video/`（`chezmoi apply` で `~/.claude/skills/conference-video/` へ）。Copilot・pi・Codex など、`~/.claude/skills` を読む CLI から使える。
 - **正本は skill-lab**（個人のスキル開発用リポジトリの `skills/conference-video/`）。ここへは**複製**（vendor）で、このリポジトリでは編集しない。直すときは skill-lab 側で直して、取り込み直す。
-- **取り込んだ版**: skill-lab のコミット `18b5c69`（2026-10-29）の `skills/conference-video/` の追跡ファイル（52 件。`git archive` で取り出した）。キャッシュ（`.ruff_cache`・`__pycache__`）は含めない。
+- **取り込んだ版**: skill-lab のコミット `5b070ac`（2026-10-30）の `skills/conference-video/` の追跡ファイル（62 件。`git archive` で取り出した）。キャッシュ（`.ruff_cache`・`__pycache__`）は含めない。
 - **中の第三者のコード**: `vendor/manim-skill/`（MIT。Yusuke Miyashita。`vendor/UPSTREAM.md` に取得元・コミット・方針、`LICENSE` を保持）。無改変で使う。
 
 ## 依存と契約
@@ -23,3 +23,15 @@
 - スキルの試験（`tests/`）は、スキルの中に置いたまま配布する。実行は、スキルのフォルダで `uv run --no-project --with pytest pytest tests -p no:cacheprovider --ignore=tests/e2e`（取り込み時に 253 件とサブテスト 146 件が通ることを確かめた。e2e はブラウザと VOICEVOX が要るので手動・未実施）。このリポジトリの `mise run verify` の対象ではない。
 - Python の整形・lint は、上流（skill-lab）の書き方のまま保つため、このリポジトリの `ruff` の対象から外す（`pyproject.toml` の `extend-exclude`）。`vendor/`（manim-skill）の Markdown も、無改変で保つため markdownlint の対象から外す（`.markdownlint-cli2.jsonc` の `ignores`）。
 - `SKILL.md` の frontmatter は `name` と `description` だけ（`allowed-tools` なし・`context: fork` なし）。理由は [スキルの frontmatter の方針](skill-frontmatter.md)。
+
+## 更新の手順
+
+skill-lab 側で直してコミットし、このリポジトリで次を実行する（取り込むのは**コミット済みの版**だけ。未コミットの変更があると止まる）。
+
+```bash
+python3 scripts/sync_skill_lab.py conference-video --check   # 差分を見るだけ（差分があれば終了コード 1）
+python3 scripts/sync_skill_lab.py conference-video           # 置き換え。上の「取り込んだ版」も更新する
+```
+
+実行時に生える `.venv` などは消さない。置き換えたら feature で commit → finish する（スキル自前の試験は、元で保証する）。
+シンボリックリンクにしない理由: skill-lab は、一部のマシンにしか無い作業用のリポジトリで、無いマシン（Pi・別の機）ではリンクが切れる。pi のサンドボックスも、作業ツリーの外の `~/src` を読めるとは限らない。

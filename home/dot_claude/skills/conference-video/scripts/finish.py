@@ -74,6 +74,7 @@ def build_ass(
     credit: str | None = None,
     video_sec: float | None = None,
     credit_sec: float = 4.0,
+    draft: bool = False,
 ) -> str:
     size = round(height * 0.052)
     margin_v = round(height * 0.05)
@@ -96,6 +97,8 @@ def build_ass(
         f"{round(width * 0.05)},{round(width * 0.05)},{margin_v},1",
         f"Style: Credit,{font},{csize},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,9,"
         f"{round(width * 0.03)},{round(width * 0.03)},{round(height * 0.04)},1",
+        f"Style: Draft,{font},{csize},&H003C3CFF,&H000000FF,&H00FFFFFF,&H80000000,1,0,0,0,100,100,0,0,1,2,0,7,"
+        f"{round(width * 0.02)},{round(width * 0.02)},{round(height * 0.03)},1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -107,6 +110,10 @@ def build_ass(
     if credit and video_sec:
         out.append(
             f"Dialogue: 1,{_t(max(0.0, video_sec - credit_sec))},{_t(video_sec)},Credit,,0,0,0,,{ass_escape(credit)}"
+        )
+    if draft and video_sec:  # 下書きの取り違えを防ぐ(公開しない)。動画全体に出す
+        out.append(
+            f"Dialogue: 2,{_t(0.0)},{_t(video_sec)},Draft,,0,0,0,,DRAFT 下書き(公開不可)"
         )
     return "\n".join(out) + "\n"
 
@@ -179,10 +186,10 @@ def main(argv=None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--workdir", default=".")
-    ap.add_argument("--video", default="video_silent.mp4")
+    ap.add_argument("--video", help="既定: video_silent.mp4(--draft は draft_silent.mp4)")
     ap.add_argument("--voice", default="voiceover.wav")
     ap.add_argument("--timestamps", default="timestamps.json")
-    ap.add_argument("--out", default="video.mp4")
+    ap.add_argument("--out", help="既定: video.mp4(--draft は draft.mp4)")
     ap.add_argument("--bgm", help="BGM(任意)。声でダッキングする")
     ap.add_argument("--bgm-gain", type=float, default=0.3)
     ap.add_argument("--font", default="Noto Sans CJK JP")
@@ -194,9 +201,41 @@ def main(argv=None) -> int:
     )
     ap.add_argument("--no-subs", action="store_true", help="字幕を焼き込まない")
     ap.add_argument("--force", action="store_true", help="既存の出力を上書きする")
+    ap.add_argument(
+        "--draft",
+        action="store_true",
+        help="下書き: draft_silent.mp4 から draft.mp4 を作る(DRAFT を焼く。軽い画質・音量調整なし。"
+        "video.mp4 には触れず、上書きに --force は要らない)",
+    )
+    ap.add_argument(
+        "--final",
+        action="store_true",
+        help="公開用: 公開前の機械チェック(台帳の仮・欠け、読み辞書の候補、未対応の指摘)が通らなければ"
+        "動画を作らない(release_check.py --pre。終了コード 2)",
+    )
     a = ap.parse_args(argv)
+    if a.final and a.draft:
+        print("エラー: --final と --draft は併用できない")
+        return 2
+    a.video = a.video or ("draft_silent.mp4" if a.draft else "video_silent.mp4")
+    a.out = a.out or ("draft.mp4" if a.draft else "video.mp4")
+    if a.draft:
+        if Path(a.out).name == "video.mp4":
+            print("エラー: 下書きは video.mp4 に書けない(--out を変える)")
+            return 2
+        a.force = True
+        a.title = a.assets = a.credit = None  # 下書きは説明文を作らない
 
     w = Path(a.workdir)
+    if a.final:
+        import release_check
+
+        fails = release_check.failures(release_check.machine_checks(w, pre=True))
+        if fails:
+            print("エラー: 公開前チェックが通らない(最終動画を作らない):")
+            for f in fails:
+                print(f"  - {f}")
+            return 2
     video, voice, tsp, out = w / a.video, w / a.voice, w / a.timestamps, w / a.out
     need = [video, voice, tsp] + ([Path(a.bgm)] if a.bgm else [])
     missing = [p.name for p in need if not p.is_file()]
@@ -206,8 +245,8 @@ def main(argv=None) -> int:
     if shutil.which("ffmpeg") is None:
         print("エラー: ffmpeg が見つからない")
         return 2
-    burn = bool(a.credit) or not a.no_subs  # クレジットだけでも ASS を焼く
-    ass = w / "subtitles.ass"
+    burn = bool(a.credit) or not a.no_subs or a.draft  # クレジットだけでも ASS を焼く
+    ass = w / ("subtitles.draft.ass" if a.draft else "subtitles.ass")
     desc = w / "description.txt"
     asset_lines: list[str] = []
     if a.assets:
@@ -244,7 +283,15 @@ def main(argv=None) -> int:
     if burn:
         events = {"subtitles": [] if a.no_subs else ts["subtitles"]}
         ass.write_text(
-            build_ass(events, width, height, a.font, credit=a.credit, video_sec=vsec),
+            build_ass(
+                events,
+                width,
+                height,
+                a.font,
+                credit=a.credit,
+                video_sec=vsec,
+                draft=a.draft,
+            ),
             encoding="utf-8",
         )
 
@@ -260,8 +307,12 @@ def main(argv=None) -> int:
         return 2
 
     try:
-        m = measure_loudness(inputs, graph, a.lufs, vsec)
-        ln = (
+        if a.draft:  # 下書きは音量調整(2 パス)を省く
+            m, ln = {"input_i": "未調整"}, "anull"
+        else:
+            m = measure_loudness(inputs, graph, a.lufs, vsec)
+            ln = None
+        ln = ln or (
             f"loudnorm=I={a.lufs}:TP=-1.5:LRA=11:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
             f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:"
             f"offset={m['target_offset']}:linear=true"
@@ -290,9 +341,9 @@ def main(argv=None) -> int:
         "-c:v",
         "libx264",
         "-preset",
-        "medium",
+        "veryfast" if a.draft else "medium",
         "-crf",
-        "18",
+        "28" if a.draft else "18",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
@@ -313,6 +364,9 @@ def main(argv=None) -> int:
         desc.write_text(
             description_text(a.title, a.credit, asset_lines), encoding="utf-8"
         )
+    if a.draft:
+        print(f"完了(下書き): {out}({vsec:.1f} 秒、{width}x{height}。DRAFT 表示つき・音量未調整)")
+        return 0
     print(
         f"完了: {out}({vsec:.1f} 秒、{width}x{height}、測定 {m['input_i']} LUFS → {a.lufs} LUFS)"
     )

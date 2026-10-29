@@ -10,6 +10,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
 sys.path.insert(0, str(HERE))
 
+import speech  # noqa: E402
 import yomi  # noqa: E402
 from fake_voicevox import FakeVoicevox  # noqa: E402
 from voicevox_engine import Engine  # noqa: E402
@@ -82,9 +83,9 @@ class YomiTests(unittest.TestCase):
         self.assertEqual(yomi.engine_surface("SLAM-MER"), "SLAMMER")
         self.assertEqual(yomi.engine_surface("KL"), "KL")
         self.assertEqual(yomi.engine_surface("疎な"), "疎な")
-        self.assertEqual(yomi.speech_text("SLAM-MER を紹介", entries), "SLAMMER を紹介")
-        self.assertEqual(yomi.speech_text("SLAM と MER", entries), "SLAM と MER")
-        self.assertEqual(yomi.speech_text("7-Scenes でも", entries), "7Scenes でも")
+        self.assertEqual(speech.prepare("SLAM-MER を紹介", entries), "SLAMMERを紹介")
+        self.assertEqual(speech.prepare("SLAM と MER", entries), "SLAMとMER")
+        self.assertEqual(speech.prepare("7-Scenes でも", entries), "7Scenesでも")
         # ENGINE の辞書はハイフン入りの表記に一致しないので、ハイフンを除いた形で登録する
         with FakeVoicevox() as fake:
             yomi.register(Engine(fake.url), entries)

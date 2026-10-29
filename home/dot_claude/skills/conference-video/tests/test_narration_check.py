@@ -130,5 +130,85 @@ class NarrationCheckTests(unittest.TestCase):
         self.assertEqual(code, 2)
 
 
+class SpokenDifferenceTests(unittest.TestCase):
+    """表示(字幕)と ENGINE に渡す文が違う行を、規則名つきで事前に示す(既定は要約のみ、0 を返す)。"""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.dict = write_dict(Path(self.d) / "yomi.json", {"SLAM-MER": "スラ'マー"})
+        self.n = write(
+            self.d,
+            "n.txt",
+            "subtitles:\n- 精度が 3 倍になります。\n- SLAM-MER を紹介します。\n- 次に地図です。\n",
+        )
+
+    def test_summary_only_by_default_and_exit_zero(self):
+        code, out = run([str(self.n), "--yomi", str(self.dict)])
+        self.assertEqual(code, 0, out)
+        self.assertIn("読み上げ前の整形: 2 行", out)
+        self.assertIn("ja-space", out)
+        self.assertIn("compound-hyphen", out)
+        self.assertNotIn("読み上げでは", out)  # 一覧は --show-spoken で
+
+    def test_show_spoken_lists_each_line_with_the_rule_names(self):
+        code, out = run([str(self.n), "--yomi", str(self.dict), "--show-spoken"])
+        self.assertEqual(code, 0, out)
+        self.assertIn("1行目", out)
+        self.assertIn("精度が3倍になります。", out)
+        self.assertIn("2行目", out)
+        self.assertIn("SLAMMERを紹介します。", out)
+        self.assertNotIn("3行目", out)  # 変わらない行は出さない
+
+    def test_strict_turns_the_difference_into_an_issue(self):
+        code, out = run([str(self.n), "--yomi", str(self.dict), "--strict"])
+        self.assertEqual(code, 1, out)
+        self.assertIn("読み上げでは", out)
+
+    def test_no_difference_prints_nothing_about_it(self):
+        n = write(self.d, "m.txt", "subtitles:\n- 次に地図です。\n")
+        code, out = run([str(n), "--yomi", str(self.dict), "--strict"])
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("整形", out)
+
+
+class KanaReadingInSubtitleTests(unittest.TestCase):
+    """字幕は正式名称で書き、読みは辞書に任せる。読み(カタカナ)を字幕に書いて音を合わせると、字幕が誤表記になる。"""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.dict = write_dict(
+            Path(self.d) / "yomi.json",
+            {"SLAM": "ス'ラム", "SLAM-MER": "スラ'マー", "EL": "エ'ル"},
+        )
+
+    def check(self, line, *extra):
+        n = write(self.d, "n.txt", f"subtitles:\n- {line}\n")
+        return run([str(n), "--yomi", str(self.dict), *extra])
+
+    def test_reading_written_instead_of_the_official_name_is_named(self):
+        code, out = self.check("スラムを使います。")
+        self.assertEqual(code, 1, out)
+        self.assertIn("1行目", out)
+        self.assertIn("スラム", out)
+        self.assertIn("SLAM", out)  # 直すべき正式名称を示す
+
+    def test_compound_official_name_is_suggested(self):
+        code, out = self.check("スラマーを紹介します。")
+        self.assertEqual(code, 1, out)
+        self.assertIn("SLAM-MER", out)
+
+    def test_official_name_with_a_gloss_is_not_flagged(self):
+        code, out = self.check("SLAM-MER(スラマー)を紹介します。")
+        self.assertEqual(code, 0, out)
+
+    def test_reading_inside_a_longer_katakana_word_is_not_flagged(self):
+        code, out = self.check("エルサルバドルの話です。")
+        self.assertEqual(code, 0, out)
+
+    def test_can_be_allowed_per_run(self):
+        code, out = self.check("スラムを使います。", "--allow-kana")
+        self.assertEqual(code, 0, out)
+
+
 if __name__ == "__main__":
     unittest.main()

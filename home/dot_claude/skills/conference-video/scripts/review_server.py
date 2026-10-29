@@ -45,20 +45,41 @@ import assets_ledger  # noqa: E402
 import narration_check  # noqa: E402
 import review_sheet  # noqa: E402
 import state_store  # noqa: E402
+import release_check  # noqa: E402
 import yomi  # noqa: E402
 
 PAGE = Path(__file__).resolve().parent.parent / "assets" / "review.html"
+# 承認は、構想(plan)と最終動画(video)の 2 点だけ(ADR-0004)。台本・読み・素材は承認しない作業状態で、
+# 編集しても承認は失効しない。plan は着手の許可(あとで構想の文書を直しても失効しない。「変更あり」と示す)。
+# video は、公開前チェック(機械)と人の確認 4 項目を通したうえでの承認で、動画が変われば失効する。
 ITEMS = {
     "plan": ("構成案", "brief.md"),
-    "script": ("台本", "narration.txt"),
-    "yomi": ("読み", "yomi.json"),
-    "assets": ("素材", "assets.json"),
     "video": ("動画", "video.mp4"),
 }
+# 画面が版(hash)を使う正本。承認の対象(ITEMS)に、台本の編集・指摘の版(script)を加える
+HASHED = {**ITEMS, "script": ("台本", "narration.txt")}
 APPROVED, NEEDS_FIX, CLEARED = "承認", "要修正", "未承認"
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".m4v"}
 MAX_BODY = 1_000_000
+REPLACE_RETRIES = (
+    state_store.REPLACE_RETRIES
+)  # 置き換えの再試行(Windows で他のアプリが一瞬開いている場合)
+REPLACE_RETRY_DELAY = state_store.REPLACE_RETRY_DELAY
+# 画面が「外で変わった」を見る正本(/api/rev)
+REV_FILES = (
+    "narration.txt",
+    "yomi.json",
+    "assets.json",
+    "notes.json",
+    "approvals.json",
+    "brief.md",
+    "timestamps.json",
+    "voiceover.wav",
+    "video.mp4",
+    "draft.mp4",
+    "description.txt",
+)
 MAX_CONNECTIONS = 128  # 同時に処理する接続の上限(超えた接続はすぐ閉じる)
 BODY_DEADLINE = 15.0  # 本文の受信全体の締切(秒)。少しずつ送り続けても切る
 CHUNK = 1 << 16
@@ -97,6 +118,14 @@ def validate_approval(item: str, rec) -> None:
     for k in ("comment", "at"):
         if k in rec and not isinstance(rec[k], str):
             raise ValueError(f"{k} は文字列")
+    if "confirmed" in rec:
+        c = rec["confirmed"]
+        if (
+            item != "video"
+            or not isinstance(c, list)
+            or not all(isinstance(x, str) for x in c)
+        ):
+            raise ValueError("confirmed は動画の承認だけにある、文字列の配列")
 
 
 # 書き込みルート: パス → (Workspace のメソッド名, 画面で見た版を示す必須フィールドの組)。
@@ -110,11 +139,12 @@ ROUTES = {
     "/api/yomi": ("yomi_set", ("expected",)),
     "/api/yomi/delete": ("yomi_delete", ("expected",)),
     "/api/asset": ("asset_set", ("expected",)),
-    "/api/note": ("note_set", ("hash", "expected")),
+    "/api/note": ("note_set", ("expected",)),
 }
 # 読み取り専用の公開メソッド(上の表に無い公開メソッドは、書き込みの入口とみなして試験が止める)
 READ_ONLY_METHODS = {
     "state",
+    "rev",
     "approvals",
     "approvals_store",
     "read_approvals",
@@ -145,7 +175,14 @@ def atomic_write(path: Path, data: bytes, mode: int | None = None) -> None:
             shutil.copymode(path, tmp)
         else:
             os.chmod(tmp, 0o644)
-        os.replace(tmp, path)
+        for i in range(REPLACE_RETRIES):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:  # Windows: 他のアプリが一瞬開いているとき
+                if i + 1 == REPLACE_RETRIES:
+                    raise
+                time.sleep(REPLACE_RETRY_DELAY)
     except BaseException:
         if os.path.exists(tmp):
             os.unlink(tmp)
@@ -306,7 +343,12 @@ class Workspace:
                 }
             )
         audio = "voiceover.wav" if self.p("voiceover.wav").is_file() else None
-        return {"lines": lines, "audio": audio, "stale": stale}
+        return {
+            "lines": lines,
+            "audio": audio,
+            "audio_rev": self._stamp(audio),  # 再合成で差し替わったことを画面が見つける
+            "stale": stale,
+        }
 
     def _yomi(self, errors: dict) -> list[dict]:
         p = self.p("yomi.json")
@@ -359,7 +401,8 @@ class Workspace:
         return out
 
     def _notes(self) -> list[dict]:
-        """指摘の一覧(notes.json)。壊れていれば ValueError。台本が読めないときは古い判定をしない。"""
+        """指摘の一覧(notes.json)。壊れていれば ValueError。台本が読めないときは古い判定をしない。
+        本文が同じ行へ追従した位置(line)を返し、本文が無い指摘は stale にする。"""
         try:
             script = self._script({})["lines"]
         except (ValueError, OSError):
@@ -369,16 +412,21 @@ class Workspace:
         for n in review_sheet.read_notes(self.dir, texts):
             t = (
                 script[n["line"] - 1]["start_s"]
-                if script and n["line"] <= len(script)
+                if script and not n["stale"] and n["line"] <= len(script)
                 else None
             )
             out.append(
                 {
+                    "id": n["id"],
                     "line": n["line"],
                     "start": review_sheet.mmss(t) if t is not None else "",
                     "text": n["text"],
                     "note": n["note"],
+                    "status": n["status"],
+                    "at": n["at"],
+                    "fixed_at": n["fixed_at"],
                     "stale": n["stale"],
+                    "moved": n["moved"],
                     "entry": n["entry"],
                 }
             )
@@ -392,10 +440,13 @@ class Workspace:
         try:
             return self.approvals_store().read().entries
         except state_store.Corrupt as e:
-            raise ApprovalsError(
-                f"approvals.json が壊れている({e})。内容を確認して直すか、"
-                "別名に退避してから承認し直してください"
-            ) from e
+            hint = (
+                "旧形式(台本・読み・素材の承認が入っている)。承認は構成案と動画の 2 点だけになった。"
+                "approvals.json を別名に退避して承認し直してください"
+                if "不明な項目" in str(e)
+                else "内容を確認して直すか、別名に退避してから承認し直してください"
+            )
+            raise ApprovalsError(f"approvals.json が壊れている({e})。{hint}") from e
 
     def approvals(self, fresh: bool = False) -> dict:
         """承認の状態(現在の内容とのハッシュ比較つき)。壊れていれば ApprovalsError。
@@ -407,22 +458,20 @@ class Workspace:
                 now = ""
             else:
                 now = file_hash(f) if fresh else self.hash_of(f)
-            out[item] = {**rec, "stale": rec.get("hash") != now}
+            differs = rec.get("hash") != now
+            if item == "plan":  # 着手の許可: 失効しない。承認後に変わったことだけ示す
+                out[item] = {**rec, "stale": False, "changed": differs}
+            else:
+                out[item] = {**rec, "stale": differs}
         return out
 
     def source_problem(self, item: str) -> str | None:
         """承認の対象の正本が読めないときの理由(読めれば None)。ゲートで使う。"""
         try:
-            if item == "script":
-                narration_check.parse_subtitles(self.p("narration.txt"))
-            elif item == "plan" and self.p("brief.md").is_file():
+            if item == "plan" and self.p("brief.md").is_file():
                 self.p("brief.md").read_text(
                     encoding="utf-8"
                 )  # 表示できない構成案は承認しない
-            elif item == "yomi" and self.p("yomi.json").is_file():
-                yomi.read_entries(self.p("yomi.json"))
-            elif item == "assets" and self.p("assets.json").is_file():
-                assets_ledger.load(self.p("assets.json"))
         except (ValueError, OSError) as e:
             return str(e)
         return None
@@ -434,6 +483,28 @@ class Workspace:
             errors[key] = str(e)
             return default
 
+    def rev(self) -> dict:
+        """正本の大きさと更新時刻から作る短い文字列。画面が「外で変わったか」を安価に見る用
+        (内容の読み取り・ハッシュ計算はしない)。"""
+        parts = []
+        for name in REV_FILES:
+            try:
+                st = self.p(name).stat()
+                parts.append(f"{name}:{st.st_size}:{st.st_mtime_ns}")
+            except OSError:
+                parts.append(f"{name}:-")
+        return {"rev": hashlib.sha1("|".join(parts).encode()).hexdigest()[:12]}
+
+    def _stamp(self, name: str | None) -> str:
+        """ファイルの大きさと更新時刻(画面が動画の差し替えを見つける用)。"""
+        if not name:
+            return ""
+        try:
+            st = self.p(name).stat()
+        except OSError:
+            return ""
+        return f"{st.st_size}:{st.st_mtime_ns}"
+
     def state(self) -> dict:
         errors: dict = {}
         brief = self.p("brief.md")
@@ -441,8 +512,14 @@ class Workspace:
         # 承認しない(変わったら承認は 409 になり、安全側に倒れる)。
         hashes = {
             item: (self.hash_of(self.p(f)) if self.p(f).is_file() else None)
-            for item, (_, f) in ITEMS.items()
+            for item, (_, f) in HASHED.items()
         }
+        final = self.p("video.mp4").is_file()
+        shown = (
+            "video.mp4"
+            if final
+            else ("draft.mp4" if self.p("draft.mp4").is_file() else None)
+        )
         return {
             "workdir": str(self.dir),
             "script": self._guard(
@@ -457,7 +534,11 @@ class Workspace:
             "notes": self._guard(errors, "notes", self._notes, []),
             "approvals": self._guard(errors, "approvals", self.approvals, {}),
             "hashes": hashes,
-            "video": "video.mp4" if self.p("video.mp4").is_file() else None,
+            "video": shown,  # 画面で見せる動画(最終がなければ下書き)
+            "video_rev": self._stamp(shown),
+            "video_kind": "final" if final else ("draft" if shown else None),
+            "release": release_check.report(self.dir),
+            "release_rev": release_check.release_rev(self.dir),  # 人の確認の対象の版
             "brief": self._guard(
                 errors,
                 "brief",
@@ -480,6 +561,10 @@ class Workspace:
         if status != CLEARED and (not isinstance(given, str) or not given):
             raise ApiError(400, "hash が要る(画面で見た版のハッシュ)")
         expected = self._expected(body)  # 画面が見たこの項目の承認記録(無ければ null)
+        if expected:  # 画面に出すために計算した値(stale・changed)は記録の一部ではない
+            expected = {
+                k: v for k, v in expected.items() if k not in ("stale", "changed")
+            }
         if status == APPROVED and (problem := self.source_problem(item)):
             raise ApiError(
                 400, f"読めない正本は承認できません(先に直してください): {problem}"
@@ -500,6 +585,31 @@ class Workspace:
             if sig is not None and _file_signature(target) != sig:
                 raise changed
 
+        confirmed = None
+        if item == "video" and status == APPROVED:
+            confirmed = body.get("confirmed")
+            if not isinstance(confirmed, list) or not all(
+                isinstance(x, str) for x in confirmed
+            ):
+                raise ApiError(400, "confirmed が要る(人が確かめた項目の配列)")
+            lacking = [i for i in release_check.HUMAN_IDS if i not in confirmed]
+            if lacking:
+                raise ApiError(
+                    400, "公開前に人が確かめる項目が未確認です: " + "、".join(lacking)
+                )
+            rev = body.get("release_rev")
+            if not isinstance(rev, str) or not rev:
+                raise ApiError(
+                    400, "release_rev が要る(画面で確かめた動画・説明文・台帳の版)"
+                )
+            if rev != release_check.release_rev(self.dir):
+                raise ApiError(
+                    409,
+                    "確認した後に、動画・説明文・素材台帳が変わりました。"
+                    "再読み込みして、人の確認 4 項目をやり直してください",
+                )
+            if fails := release_check.failures(release_check.machine_checks(self.dir)):
+                raise ApiError(400, "公開前チェックが通りません: " + " / ".join(fails))
         new = (
             None
             if status == CLEARED
@@ -508,6 +618,11 @@ class Workspace:
                 "comment": comment,
                 "hash": given,
                 "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                **(
+                    {"confirmed": sorted(set(confirmed)), "release_rev": rev}
+                    if confirmed is not None
+                    else {}
+                ),
             }
         )
         try:
@@ -569,7 +684,15 @@ class Workspace:
             i, prefix, eol = hit
             lines[i] = f"{prefix}{text}{eol}"
             atomic_write(self.p("narration.txt.bak"), raw)
-            atomic_write(p, "".join(lines).encode("utf-8"))
+            try:
+                atomic_write(p, "".join(lines).encode("utf-8"))
+            except PermissionError:
+                raise ApiError(
+                    503,
+                    "narration.txt を置き換えられません。他のアプリ(エディタ・ウイルス対策など)で"
+                    "開いているか、読み取り専用になっています。閉じて、もう一度保存してください"
+                    "(内容は元のままです)",
+                )
         return {"ok": True, "needs_resynthesis": True}
 
     @staticmethod
@@ -636,64 +759,69 @@ class Workspace:
         return {"ok": True}
 
     def note_set(self, body: dict) -> dict:
+        """指摘を作る・直す・状態を変える・消す。キーは行の本文から作る ID(行番号ではない)。
+
+        束縛は、画面が見たこの指摘の記録(expected。新規は null)と、指摘する行の本文(text)。
+        台本全体のハッシュは見ない(別の行が直されても保存できる)。本文がいまの台本に無ければ 409。
+        """
         line = body.get("line")
-        if isinstance(line, bool) or not isinstance(line, int):
-            raise ApiError(400, "line は整数(1 始まり)")
-        note = str(body.get("note", "")).strip()
-        seen = body.get("hash")  # 画面で見た台本のハッシュ(必須)。変わっていれば 409
-        if not isinstance(seen, str) or not seen:
-            raise ApiError(400, "hash が要る(画面で見た台本のハッシュ)")
-        expected = self._expected(body)  # 画面が見たこの行の指摘(無ければ null)
+        if isinstance(line, bool) or not isinstance(line, int) or line < 1:
+            raise ApiError(400, "line は 1 以上の整数(いま見ている行)")
+        text = body.get("text")
+        if not isinstance(text, str) or not text:
+            raise ApiError(400, "text が要る(画面で見たその行の本文)")
+        raw_note = body.get("note", "")
+        if not isinstance(raw_note, str):
+            raise ApiError(400, "note は文字列")
+        note = raw_note.strip()
+        status = body.get("status", review_sheet.OPEN)
+        if status not in review_sheet.STATUSES:
+            raise ApiError(400, "status は open か fixed")
+        expected = self._expected(body)  # 画面が見たこの指摘(無ければ null)
         narr = self.p("narration.txt")
         if not narr.is_file():
             raise ApiError(400, "narration.txt が無い")
+        key = review_sheet.note_key(text)
+        deleting = not note
+
+        def position():  # いまの台本での位置(無ければ None)
+            try:
+                cur = [x["text"] for x in self._script({})["lines"]]
+            except (ValueError, OSError) as e:
+                raise ApiError(400, f"台本が読めない: {e}") from e
+            at = [i + 1 for i, t in enumerate(cur) if t == text]
+            return (line if line in at else at[0]) if at else None
+
         changed = ApiError(
             409,
-            "表示後に narration.txt が変わりました。再読み込みしてから書いてください",
+            "その行の本文が変わりました。再読み込みして、確かめてから書いてください",
         )
+        # 本文を直さない状態の変更(対応済みにする・戻す)は、台本に本文が無い(古い)指摘でもできる
+        status_only = (
+            bool(expected)
+            and expected.get("note") == note
+            and expected.get("text") == text
+        )
+        if not deleting and not status_only and position() is None:
+            raise changed  # 台本から消えた・書き換わった行への新規・書き換えはできない
 
-        def same_script() -> bool:
-            try:
-                return (
-                    bytes_hash(narr.read_bytes()) == seen
-                )  # 同じ本文の行が増えた場合も含む
-            except OSError:
-                return False
-
-        if not same_script():
-            raise changed
-        try:
-            cur = [x["text"] for x in self._script({})["lines"]]
-        except (ValueError, OSError) as e:
-            raise ApiError(400, f"台本が読めない: {e}") from e
-        deleting = not note
-        if not 1 <= line <= len(cur):
-            # 台本から消えた行の古い指摘は、見たうえで消せる。範囲外への新規の指摘は拒否する
-            if not (deleting and expected is not None and line >= 1):
-                raise ApiError(400, f"{line} 行目は台本に無い")
-
-        def guard():  # 見た台本の版を、ロックの中でも確かめる
-            if not same_script():
+        def guard():  # 見た本文が、ロックの中でも台本にあることを確かめる
+            if not deleting and not status_only and position() is None:
                 raise changed
 
-        new = (
-            None
-            if deleting
-            else {
-                "note": note,
-                "text": cur[
-                    line - 1
-                ],  # 指摘したときの本文(台本が変わったら「古い」と分かる)
-                "at": datetime.now().astimezone().isoformat(timespec="seconds"),
-            }
-        )
+        if deleting:
+            new = None
+        else:
+            at = datetime.now().astimezone().isoformat(timespec="seconds")
+            pos = (expected or {}).get("line") if status_only else position()
+            new = review_sheet.make_entry(pos or line, text, note, status=status, at=at)
+            if status == review_sheet.FIXED and expected and expected.get("fixed_at"):
+                new["fixed_at"] = expected["fixed_at"]  # 対応済みの時刻は変えない
         try:
-            review_sheet.notes_store(self.dir).update(
-                str(line), expected, new, guard=guard
-            )
+            review_sheet.notes_store(self.dir).update(key, expected, new, guard=guard)
         except state_store.StoreError as e:
-            raise store_api_error(e, str(line)) from e
-        return {"ok": True}
+            raise store_api_error(e, key) from e
+        return {"ok": True, "id": key}
 
 
 def gate_problems(ws: Workspace, required: list[str]) -> list[str]:
@@ -712,6 +840,15 @@ def gate_problems(ws: Workspace, required: list[str]) -> list[str]:
             out.append(f"{label}: {NEEDS_FIX}({rec.get('comment', '')})")
         elif msg := ws.source_problem(item):
             out.append(f"{label}: 読めない({msg})")
+        elif item == "video":
+            # 承認の後に、公開前チェックの前提が崩れていないか(候補の読み・未対応の指摘・仮の素材など)
+            lacking = [
+                i for i in release_check.HUMAN_IDS if i not in rec.get("confirmed", [])
+            ]
+            if lacking:
+                out.append(f"{label}: 人の確認が不足({'、'.join(lacking)})")
+            for f in release_check.failures(release_check.machine_checks(ws.dir)):
+                out.append(f"{label}: 公開前チェックが通らない: {f}")
     return out
 
 
@@ -726,6 +863,8 @@ def summary_lines(ws: Workspace) -> tuple[list[str], bool]:
             state = CLEARED
         elif rec["stale"]:
             state = "古い"
+        elif rec["status"] == APPROVED and rec.get("changed"):
+            state = "承認(承認後に変更あり)"
         elif rec["status"] == NEEDS_FIX:
             state = f"要修正({rec['comment']})" if rec.get("comment") else NEEDS_FIX
         else:
@@ -733,7 +872,9 @@ def summary_lines(ws: Workspace) -> tuple[list[str], bool]:
         out.append(f"{label}: {state}")
     ok = True
     try:
-        out.append(f"指摘 {len(ws._notes())} 件")
+        notes = ws._notes()
+        open_n = sum(1 for n in notes if n["status"] == review_sheet.OPEN)
+        out.append(f"指摘 {open_n} 件(対応済み {len(notes) - open_n} 件)")
     except ValueError as e:
         ok = False
         out.append(f"指摘: 読めない({e})")
@@ -782,6 +923,7 @@ class _Server(ThreadingHTTPServer):
             super().process_request_thread(request, client_address)
         finally:
             self._slots.release()
+
     # Windows の SO_REUSEADDR は同じポートへの二重バインドを許してしまうので、使わない
     allow_reuse_address = os.name != "nt"
 
@@ -893,6 +1035,8 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
                     )
                 if u.path == "/api/state":
                     return self._json(200, ws.state())
+                if u.path == "/api/rev":
+                    return self._json(200, ws.rev())
                 if u.path.startswith("/files/"):
                     return self._file(u.path[len("/files/") :])
             except ApiError as e:
@@ -914,7 +1058,9 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
             if not p.is_relative_to(ws.dir) or not p.is_file():
                 return self._json(404, {"error": "not found"})
             try:
-                f = p.open("rb")  # 先に開き、開いた実体の大きさで長さを決める(差し替え・短縮に備える)
+                f = p.open(
+                    "rb"
+                )  # 先に開き、開いた実体の大きさで長さを決める(差し替え・短縮に備える)
             except OSError:
                 return self._json(404, {"error": "not found"})
             with f:
@@ -936,7 +1082,9 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(length))
                 self.send_header("Cache-Control", "no-cache")
-                if not inline_safe(ctype):  # メディア以外は表示せず保存に回す(スクリプトを実行させない)
+                if not inline_safe(
+                    ctype
+                ):  # メディア以外は表示せず保存に回す(スクリプトを実行させない)
                     self.send_header("Content-Disposition", "attachment")
                 for k, v in extra.items():
                     self.send_header(k, v)
@@ -963,7 +1111,9 @@ def make_server(workdir, port: int = 0, host="127.0.0.1"):
                     raise ApiError(408, "本文の受信が遅すぎます")
                 chunk = self.rfile.read1(min(CHUNK, n - len(buf)))
                 if not chunk:
-                    raise ApiError(400, "本文が途中で切れています(Content-Length に足りない)")
+                    raise ApiError(
+                        400, "本文が途中で切れています(Content-Length に足りない)"
+                    )
                 buf += chunk
             return bytes(buf)
 
@@ -1092,7 +1242,9 @@ def main(argv=None) -> int:
     except OSError as e:
         in_use = {errno.EADDRINUSE, 10048} | ({10013} if os.name == "nt" else set())
         if e.errno not in in_use:
-            print(f"エラー: ポート {port} で待ち受けられません({e.strerror or e})。--port で別のポートを指定してください")
+            print(
+                f"エラー: ポート {port} で待ち受けられません({e.strerror or e})。--port で別のポートを指定してください"
+            )
             return 2
         # ポートが使用中: 同じフォルダのサーバならその URL を案内して終わる(自動では繰り上げない)
         for _ in range(6):  # 起動直後で応答できないことがあるので、少し待つ

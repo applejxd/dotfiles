@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import narration_check  # noqa: E402
+import speech  # noqa: E402
 import yomi  # noqa: E402
 from wavutil import concat_wavs, wav_info  # noqa: E402
 from voicevox_engine import (
@@ -151,14 +152,14 @@ def main(argv=None) -> int:
         cache.mkdir(parents=True, exist_ok=True)
         wavs, metas, hits = [], [], 0
         for i, text in enumerate(lines):
-            speech = yomi.speech_text(
+            spoken = speech.prepare(
                 text, entries
-            )  # ENGINE に渡す文(複合語はハイフンを除く)
+            )  # ENGINE に渡す文(日本語隣の空白・複合語のハイフンを整える)
             key = cache_key(
-                text,
+                spoken,  # 読み上げに実際に渡す文(整形規則が変われば、影響する行だけ再合成される)
                 a.speaker,
                 a.speed,
-                yomi.line_digest(words, speech),
+                yomi.line_digest(words, spoken),
                 str(version),
             )
             wp, mp = cache / f"{key}.wav", cache / f"{key}.json"
@@ -167,7 +168,7 @@ def main(argv=None) -> int:
                 hits += 1
                 tag = "cache"
             else:
-                wav, meta = synth_line(engine, speech, a.speaker, a.speed)
+                wav, meta = synth_line(engine, spoken, a.speaker, a.speed)
                 wp.write_bytes(wav)
                 mp.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
                 tag = "合成"
