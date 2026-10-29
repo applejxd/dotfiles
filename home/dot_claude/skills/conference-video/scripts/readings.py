@@ -14,6 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import narration_check  # noqa: E402
+import speech  # noqa: E402
 import yomi  # noqa: E402
 from voicevox_engine import DEFAULT_URL, DOCKER_HINT, Engine, EngineUnavailable  # noqa: E402
 
@@ -43,11 +44,15 @@ def main(argv=None) -> int:
         eng.version()
         yomi.register(eng, entries)  # 空の辞書でも、辞書に無いツールの登録を取り除く
         for i, text in enumerate(lines, 1):
-            q = eng.audio_query(yomi.speech_text(text, entries), a.speaker)
+            spoken = speech.prepare(text, entries)
+            q = eng.audio_query(spoken, a.speaker)
             kana = "|".join(
                 "".join(m["text"] for m in ap_["moras"]) for ap_ in q["accent_phrases"]
             )
-            print(f"{i}: {text}\n   {kana}")
+            print(f"{i}: {text}")
+            if spoken != text:  # 字幕と違う読み上げ文(どの規則かは narration_check)
+                print(f"   読み上げ文: {spoken}")
+            print(f"   {kana}")
     except EngineUnavailable as e:
         print(f"エラー: {e}\n起動例: {DOCKER_HINT}", file=sys.stderr)
         return 2

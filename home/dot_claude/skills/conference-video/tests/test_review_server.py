@@ -21,6 +21,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
 sys.path.insert(0, str(HERE))
 
+import release_check  # noqa: E402
 import review_server  # noqa: E402
 import yomi  # noqa: E402
 from dict_fixture import write_assets, write_dict  # noqa: E402
@@ -98,8 +99,14 @@ class Base(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.dir = Path(self._tmp.name) / "work"
+        self._old_home = os.environ.get("CONF_VIDEO_HOME")
+        os.environ["CONF_VIDEO_HOME"] = str(
+            Path(self._tmp.name) / "home"
+        )  # 利用者の辞書を使わない
+        self.addCleanup(self._restore_home)
         (self.dir / "assets").mkdir(parents=True)
         (self.dir / "narration.txt").write_text(NARRATION, encoding="utf-8")
+        (self.dir / "brief.md").write_text("# 構想\n", encoding="utf-8")
         (self.dir / "timestamps.json").write_text(
             json.dumps(TS, ensure_ascii=False), encoding="utf-8"
         )
@@ -116,6 +123,26 @@ class Base(unittest.TestCase):
         )
         t.start()
         self.addCleanup(self._stop)
+
+    def _restore_home(self):
+        if self._old_home is None:
+            os.environ.pop("CONF_VIDEO_HOME", None)
+        else:
+            os.environ["CONF_VIDEO_HOME"] = self._old_home
+
+    def make_releasable(self):
+        """公開前チェックの機械項目がすべて通る状態にする(辞書の候補・仮の素材・指摘を除き、説明文を置く)。"""
+        write_dict(self.dir / "yomi.json", {"SLAM": "ス'ラム"})
+        ledger = {"assets/a.png": dict(ASSETS["assets/a.png"])}
+        write_assets(self.dir / "assets.json", ledger)
+        (self.dir / "description.txt").write_text(
+            "題名\nVOICEVOX:四国めたん\n", encoding="utf-8"
+        )
+        past = time.time() - 100
+        for n in release_check.INPUTS:
+            if (self.dir / n).is_file():
+                os.utime(self.dir / n, (past, past))
+        os.utime(self.dir / "video.mp4", None)
 
     def _stop(self):
         self.httpd.shutdown()
@@ -167,6 +194,9 @@ class Base(unittest.TestCase):
         ):
             body.setdefault("hash", s["hashes"][body["item"]])
             body.setdefault("expected", self._seen_approval(s, body.get("item")))
+            if body.get("item") == "video" and body.get("status") == "承認":
+                body.setdefault("confirmed", list(release_check.HUMAN_IDS))
+                body.setdefault("release_rev", s["release_rev"])
         elif path == "/api/approve" and body.get("status") == "未承認":
             body.setdefault("expected", self._seen_approval(s, body.get("item")))
         elif (
@@ -174,9 +204,14 @@ class Base(unittest.TestCase):
         ):
             body.setdefault("hash", s["hashes"]["script"])
         elif path == "/api/note" and isinstance(line, int):
-            body.setdefault("hash", s["hashes"]["script"])
-            seen = {n["line"]: n["entry"] for n in s["notes"]}
-            body.setdefault("expected", seen.get(line))
+            by_line = {n["line"]: n["text"] for n in s["notes"]}
+            if "text" not in body:
+                if 1 <= line <= len(lines):
+                    body["text"] = lines[line - 1]["text"]
+                elif line in by_line:
+                    body["text"] = by_line[line]  # 台本から消えた行の古い指摘
+            seen = {n["text"]: n["entry"] for n in s["notes"]}
+            body.setdefault("expected", seen.get(body.get("text")))
         elif path in ("/api/yomi", "/api/yomi/delete"):
             cur = {y["surface"]: y["entry"] for y in s["yomi"]}
             body.setdefault("expected", cur.get(str(body.get("surface", "")).strip()))
@@ -328,43 +363,45 @@ class TestApprovals(Base):
 
     def test_approve_records_hash_and_comment(self):
         status, _ = self.post(
-            "/api/approve", {"item": "script", "status": "承認", "comment": "OK"}
+            "/api/approve", {"item": "plan", "status": "承認", "comment": "OK"}
         )
         self.assertEqual(status, 200)
         rec = json.loads((self.dir / "approvals.json").read_text(encoding="utf-8"))[
             "entries"
-        ]["script"]
+        ]["plan"]
         self.assertEqual(rec["status"], "承認")
         self.assertEqual(rec["comment"], "OK")
-        self.assertEqual(rec["hash"], sha12(self.dir / "narration.txt"))
+        self.assertEqual(rec["hash"], sha12(self.dir / "brief.md"))
         self.assertTrue(rec["at"])
-        st = self.get_json()["approvals"]["script"]
+        st = self.get_json()["approvals"]["plan"]
         self.assertFalse(st["stale"])
 
-    def test_approval_becomes_stale_after_change(self):
-        self.post("/api/approve", {"item": "script", "status": "承認", "comment": ""})
-        (self.dir / "narration.txt").write_text(NARRATION + "\n", encoding="utf-8")
-        self.assertTrue(self.get_json()["approvals"]["script"]["stale"])
+    def test_video_approval_becomes_stale_after_change(self):
+        self.make_releasable()
+        self.post("/api/approve", {"item": "video", "status": "承認", "comment": ""})
+        (self.dir / "video.mp4").write_bytes(b"changed video")
+        self.assertTrue(self.get_json()["approvals"]["video"]["stale"])
 
     def test_needs_fix_is_recorded(self):
         self.post(
-            "/api/approve", {"item": "yomi", "status": "要修正", "comment": "KL を直す"}
+            "/api/approve",
+            {"item": "video", "status": "要修正", "comment": "KL を直す"},
         )
-        a = self.get_json()["approvals"]["yomi"]
+        a = self.get_json()["approvals"]["video"]
         self.assertEqual((a["status"], a["comment"]), ("要修正", "KL を直す"))
 
     def test_clear_with_unapproved(self):
-        self.post("/api/approve", {"item": "assets", "status": "承認", "comment": ""})
+        self.post("/api/approve", {"item": "plan", "status": "承認", "comment": ""})
         status, _ = self.post(
-            "/api/approve", {"item": "assets", "status": "未承認", "comment": ""}
+            "/api/approve", {"item": "plan", "status": "未承認", "comment": ""}
         )
         self.assertEqual(status, 200)
-        self.assertNotIn("assets", self.get_json()["approvals"])
+        self.assertNotIn("plan", self.get_json()["approvals"])
 
     def test_invalid_item_or_status_writes_nothing(self):
         for body in [
             {"item": "bogus", "status": "承認", "comment": ""},
-            {"item": "script", "status": "たぶん", "comment": ""},
+            {"item": "plan", "status": "たぶん", "comment": ""},
             {"status": "承認"},
         ]:
             status, _ = self.post("/api/approve", body)
@@ -372,6 +409,7 @@ class TestApprovals(Base):
         self.assertFalse((self.dir / "approvals.json").exists())
 
     def test_approving_missing_file_is_rejected(self):
+        (self.dir / "brief.md").unlink()
         status, _ = self.post(
             "/api/approve", {"item": "plan", "status": "承認", "comment": ""}
         )
@@ -379,18 +417,145 @@ class TestApprovals(Base):
         self.assertFalse((self.dir / "approvals.json").exists())
 
     def test_other_items_are_kept(self):
-        self.post("/api/approve", {"item": "script", "status": "承認", "comment": ""})
-        self.post("/api/approve", {"item": "video", "status": "承認", "comment": ""})
+        self.post("/api/approve", {"item": "plan", "status": "承認", "comment": ""})
+        self.post(
+            "/api/approve", {"item": "video", "status": "要修正", "comment": "直す"}
+        )
         d = json.loads((self.dir / "approvals.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(d["entries"]), {"script", "video"})
+        self.assertEqual(set(d["entries"]), {"plan", "video"})
 
     def test_an_approval_written_meanwhile_by_another_writer_is_kept(self):
         review_server.Workspace(self.dir).approvals_store().update(
-            "assets", None, {"status": "承認", "comment": "", "hash": "x", "at": "t"}
+            "video", None, {"status": "要修正", "comment": "", "hash": "x", "at": "t"}
         )
-        self.post("/api/approve", {"item": "script", "status": "承認", "comment": ""})
+        self.post("/api/approve", {"item": "plan", "status": "承認", "comment": ""})
         d = json.loads((self.dir / "approvals.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(d["entries"]), {"assets", "script"})
+        self.assertEqual(set(d["entries"]), {"video", "plan"})
+
+    def test_only_plan_and_video_can_be_approved(self):
+        for item in ("script", "yomi", "assets"):
+            status, resp = self.post(
+                "/api/approve",
+                {
+                    "item": item,
+                    "status": "承認",
+                    "comment": "",
+                    "hash": "x",
+                    "expected": None,
+                },
+                auto=False,
+            )
+            self.assertEqual(status, 400, (item, resp))
+        self.assertFalse((self.dir / "approvals.json").exists())
+
+    def test_plan_approval_survives_a_later_edit_and_shows_a_change_mark(self):
+        """構想の承認は着手の許可。あとで構想の文書を直しても失効しない(「変更あり」と示す)。"""
+        self.post("/api/approve", {"item": "plan", "status": "承認", "comment": ""})
+        self.assertFalse(self.get_json()["approvals"]["plan"]["changed"])
+        (self.dir / "brief.md").write_text("# 直した構想\n", encoding="utf-8")
+        a = self.get_json()["approvals"]["plan"]
+        self.assertFalse(a["stale"])
+        self.assertTrue(a["changed"])
+
+    def test_script_yomi_and_assets_edits_do_not_touch_approvals(self):
+        self.make_releasable()
+        self.post("/api/approve", {"item": "video", "status": "承認", "comment": ""})
+        self.assertFalse(self.get_json()["approvals"]["video"]["stale"])
+        self.post("/api/narration", {"index": 0, "text": "直した。"})
+        write_dict(self.dir / "yomi.json", {"X": "エ'ックス"})
+        self.assertFalse(self.get_json()["approvals"]["video"]["stale"])
+
+    def test_video_approval_needs_the_four_human_checks(self):
+        self.make_releasable()
+        s = self.get_json()
+        base = {
+            "item": "video",
+            "status": "承認",
+            "comment": "",
+            "hash": s["hashes"]["video"],
+            "expected": None,
+            "release_rev": s["release_rev"],
+        }
+        for confirmed in (None, [], ["source", "rights", "reading"], "all"):
+            body = dict(base)
+            if confirmed is not None:
+                body["confirmed"] = confirmed
+            status, resp = self.post("/api/approve", body, auto=False)
+            self.assertEqual(status, 400, (confirmed, resp))
+        self.assertFalse((self.dir / "approvals.json").exists())
+        status, resp = self.post(
+            "/api/approve", {**base, "confirmed": release_check.HUMAN_IDS}, auto=False
+        )
+        self.assertEqual(status, 200, resp)
+        rec = self.get_json()["approvals"]["video"]
+        self.assertEqual(rec["confirmed"], sorted(release_check.HUMAN_IDS))
+
+    def test_the_human_checks_are_bound_to_the_video_description_and_ledger(self):
+        """確認した後に、動画・説明文・台帳が変わったら、その確認では承認できない(レビュー MAJOR 4)。"""
+        self.make_releasable()
+        s = self.get_json()
+        self.assertEqual(s["release_rev"], release_check.release_rev(self.dir))
+        base = {
+            "item": "video", "status": "承認", "comment": "",
+            "hash": s["hashes"]["video"], "expected": None,
+            "confirmed": list(release_check.HUMAN_IDS),
+        }
+        status, resp = self.post("/api/approve", base, auto=False)  # release_rev が無い
+        self.assertEqual(status, 400, resp)
+        (self.dir / "description.txt").write_text("題名\n変えた説明\nVOICEVOX:四国めたん\n", encoding="utf-8")
+        status, resp = self.post("/api/approve", {**base, "release_rev": s["release_rev"]}, auto=False)
+        self.assertEqual(status, 409, resp)
+        self.assertIn("説明文", resp["error"])
+        self.assertFalse((self.dir / "approvals.json").exists())
+        s2 = self.get_json()
+        self.assertNotEqual(s2["release_rev"], s["release_rev"])
+        status, resp = self.post("/api/approve", {**base, "release_rev": s2["release_rev"]}, auto=False)
+        self.assertEqual(status, 200, resp)
+        self.assertEqual(self.get_json()["approvals"]["video"]["release_rev"], s2["release_rev"])
+
+    def test_video_approval_is_refused_when_a_machine_check_fails(self):
+        """候補の読み・未対応の指摘・仮の素材などが残っていれば、人の確認を済ませても承認できない。"""
+        self.make_releasable()
+        write_dict(self.dir / "yomi.json", {"KL": ("ケ'ーエル", "候補", "")})
+        status, resp = self.post(
+            "/api/approve", {"item": "video", "status": "承認", "comment": ""}
+        )
+        self.assertEqual(status, 400, resp)
+        self.assertIn("公開前チェック", resp["error"])
+        self.assertIn("KL", resp["error"])
+        self.assertFalse((self.dir / "approvals.json").exists())
+        # 要修正は、チェックが通らなくても記録できる
+        status, _ = self.post(
+            "/api/approve", {"item": "video", "status": "要修正", "comment": "KL"}
+        )
+        self.assertEqual(status, 200)
+
+    def test_state_has_the_release_report_and_the_shown_video(self):
+        s = self.get_json()
+        self.assertEqual(
+            [h["id"] for h in s["release"]["human"]], release_check.HUMAN_IDS
+        )
+        self.assertFalse(
+            s["release"]["ok"]
+        )  # 基本の試験データには、候補・仮の素材がある
+        self.assertEqual((s["video"], s["video_kind"]), ("video.mp4", "final"))
+        (self.dir / "video.mp4").rename(self.dir / "draft.mp4")
+        s = self.get_json()
+        self.assertEqual((s["video"], s["video_kind"]), ("draft.mp4", "draft"))
+        (self.dir / "draft.mp4").unlink()
+        s = self.get_json()
+        self.assertEqual((s["video"], s["video_kind"]), (None, None))
+
+    def test_old_approvals_file_gets_a_migration_hint(self):
+        (self.dir / "approvals.json").write_text(
+            json.dumps(
+                {"schema": 1, "entries": {"script": {"status": "承認", "hash": "x"}}}
+            ),
+            encoding="utf-8",
+        )
+        s = self.get_json()
+        self.assertIn("approvals", s["errors"])
+        self.assertIn("2 点", s["errors"]["approvals"])
 
 
 class TestNarrationEdit(Base):
@@ -740,21 +905,41 @@ class TestNotes(Base):
         ]
 
     def test_note_is_saved_to_notes_json_with_the_current_text(self):
-        status, _ = self.post("/api/note", {"line": 2, "note": "地図の読みが違う"})
+        status, resp = self.post("/api/note", {"line": 2, "note": "地図の読みが違う"})
         self.assertEqual(status, 200)
-        e = self.notes_json()["2"]
+        import review_sheet
+
+        key = review_sheet.note_key("次に地図です。")
+        self.assertEqual(resp["id"], key)
+        e = self.notes_json()[key]
         self.assertEqual((e["note"], e["text"]), ("地図の読みが違う", "次に地図です。"))
+        self.assertEqual((e["line"], e["status"]), (2, "open"))
         self.assertTrue(e["at"])
         n = self.get_json()["notes"]
         self.assertEqual(len(n), 1)
         self.assertEqual(
-            {k: n[0][k] for k in ("line", "start", "text", "note", "stale")},
             {
+                k: n[0][k]
+                for k in (
+                    "id",
+                    "line",
+                    "start",
+                    "text",
+                    "note",
+                    "status",
+                    "stale",
+                    "moved",
+                )
+            },
+            {
+                "id": key,
                 "line": 2,
                 "start": "0:04",
                 "text": "次に地図です。",
                 "note": "地図の読みが違う",
+                "status": "open",
                 "stale": False,
+                "moved": False,
             },
         )
         self.assertEqual(
@@ -789,10 +974,20 @@ class TestNotes(Base):
         import review_sheet
 
         review_sheet.notes_store(self.dir).update(
-            "3", None, {"note": "先の指摘", "text": "最後に結果です。", "at": "t"}
+            review_sheet.note_key("最後に結果です。"),
+            None,
+            review_sheet.make_entry(3, "最後に結果です。", "先の指摘", at="t"),
         )
         self.post("/api/note", {"line": 1, "note": "A"})
-        self.assertEqual(sorted(self.notes_json()), ["1", "3"])
+        self.assertEqual(
+            sorted(self.notes_json()),
+            sorted(
+                [
+                    review_sheet.note_key("最後に結果です。"),
+                    review_sheet.note_key("単眼 SLAM です。"),
+                ]
+            ),
+        )
 
     def test_invalid_line_rejected(self):
         for body in [
@@ -819,6 +1014,51 @@ class TestNotes(Base):
             n["text"], "次に地図です。"
         )  # 指摘したときの本文を保つ(別の行へ付け直さない)
 
+    def test_a_stale_note_can_be_marked_fixed_but_not_reworded(self):
+        """古い指摘(本文が台本に無い)も、見たうえで対応済みにできる。書き換えはできない。"""
+        self.post("/api/note", {"line": 2, "note": "地図の読み"})
+        self.post("/api/narration", {"index": 1, "text": "次に、全く別の話です。"})
+        n = self.get_json()["notes"][0]
+        self.assertTrue(n["stale"])
+        body = {
+            "line": n["line"],
+            "text": n["text"],
+            "note": n["note"],
+            "expected": n["entry"],
+        }
+        status, resp = self.post("/api/note", {**body, "note": "書き換え"}, auto=False)
+        self.assertEqual(status, 409, resp)
+        status, resp = self.post("/api/note", {**body, "status": "fixed"}, auto=False)
+        self.assertEqual(status, 200, resp)
+        n = self.get_json()["notes"][0]
+        self.assertEqual((n["status"], n["stale"]), ("fixed", True))
+
+    def test_note_status_roundtrip_and_summary_counts_open_notes(self):
+        self.post("/api/note", {"line": 1, "note": "速い"})
+        self.post("/api/note", {"line": 2, "note": "間"})
+        n = self.get_json()["notes"][0]
+        body = {"line": 1, "text": n["text"], "note": n["note"], "expected": n["entry"]}
+        status, resp = self.post("/api/note", {**body, "status": "fixed"}, auto=False)
+        self.assertEqual(status, 200, resp)
+        n = self.get_json()["notes"][0]
+        self.assertEqual(n["status"], "fixed")
+        self.assertTrue(n["fixed_at"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            review_server.main(["--workdir", str(self.dir), "--summary"])
+        self.assertIn("指摘 1 件(対応済み 1 件)", buf.getvalue())
+        body = {**body, "expected": n["entry"], "status": "open"}
+        status, resp = self.post("/api/note", body, auto=False)
+        self.assertEqual(status, 200, resp)
+        n = self.get_json()["notes"][0]
+        self.assertEqual(n["status"], "open")
+        self.assertEqual(n["fixed_at"], "")
+
+    def test_invalid_status_is_400(self):
+        status, _ = self.post("/api/note", {"line": 1, "note": "x", "status": "閉じた"})
+        self.assertEqual(status, 400)
+        self.assertFalse((self.dir / "notes.json").exists())
+
     def test_corrupt_notes_json_is_reported_and_refused(self):
         (self.dir / "notes.json").write_text("{壊れ", encoding="utf-8")
         s = self.get_json()
@@ -841,23 +1081,33 @@ class TestSummary(Base):
     def test_unapproved_by_default(self):
         rc, out = self.run_summary()
         self.assertEqual(rc, 0)
-        self.assertIn("台本: 未承認", out)
+        self.assertIn("構成案: 未承認", out)
+        self.assertIn("動画: 未承認", out)
         self.assertIn("指摘 0 件", out)
 
-    def test_approved_stale_and_needs_fix(self):
-        self.post("/api/approve", {"item": "script", "status": "承認", "comment": ""})
-        self.post("/api/approve", {"item": "yomi", "status": "要修正", "comment": "KL"})
+    def test_plan_changed_video_stale_and_needs_fix(self):
+        self.make_releasable()
+        self.post("/api/approve", {"item": "plan", "status": "承認", "comment": ""})
+        self.post("/api/approve", {"item": "video", "status": "承認", "comment": ""})
         self.post("/api/note", {"line": 1, "note": "x"})
-        (self.dir / "narration.txt").write_text(NARRATION + "\n", encoding="utf-8")
+        (self.dir / "brief.md").write_text("# 直した構想\n", encoding="utf-8")
+        (self.dir / "video.mp4").write_bytes(b"new")
         rc, out = self.run_summary()
-        self.assertIn("台本: 古い", out)
-        self.assertIn("読み: 要修正(KL)", out)
+        self.assertIn("構成案: 承認(承認後に変更あり)", out)
+        self.assertIn("動画: 古い", out)
         self.assertIn("指摘 1 件", out)
 
-    def test_approved(self):
-        self.post("/api/approve", {"item": "assets", "status": "承認", "comment": ""})
+    def test_needs_fix_shows_the_comment(self):
+        self.post(
+            "/api/approve", {"item": "video", "status": "要修正", "comment": "KL"}
+        )
         _, out = self.run_summary()
-        self.assertIn("素材: 承認", out)
+        self.assertIn("動画: 要修正(KL)", out)
+
+    def test_approved(self):
+        self.post("/api/approve", {"item": "plan", "status": "承認", "comment": ""})
+        _, out = self.run_summary()
+        self.assertIn("構成案: 承認", out)
 
     def test_missing_workdir(self):
         buf = io.StringIO()
@@ -892,7 +1142,7 @@ class TestRobustness(Base):
         ]:
             self.write_approvals(bad)
             status, body = self.post(
-                "/api/approve", {"item": "script", "status": "承認", "comment": ""}
+                "/api/approve", {"item": "plan", "status": "承認", "comment": ""}
             )
             self.assertEqual(status, 409, bad)
             self.assertIn("approvals.json", body.get("error", ""))
@@ -1002,24 +1252,24 @@ class TestBinding(Base):
         s = self.get_json()
         self.assertEqual(s["hashes"]["script"], sha12(self.dir / "narration.txt"))
         self.assertEqual(s["hashes"]["video"], sha12(self.dir / "video.mp4"))
-        self.assertIsNone(s["hashes"]["plan"])  # brief.md が無い
+        self.assertEqual(s["hashes"]["plan"], sha12(self.dir / "brief.md"))
 
     def test_approve_requires_hash(self):
         status, _ = self.post(
             "/api/approve",
-            {"item": "script", "status": "承認", "comment": ""},
+            {"item": "plan", "status": "承認", "comment": ""},
             auto=False,
         )
         self.assertEqual(status, 400)
         self.assertFalse((self.dir / "approvals.json").exists())
 
     def test_approve_with_stale_hash_is_conflict(self):
-        seen = self.get_json()["hashes"]["script"]
-        (self.dir / "narration.txt").write_text(NARRATION + "\n", encoding="utf-8")
+        seen = self.get_json()["hashes"]["plan"]
+        (self.dir / "brief.md").write_text("# 構想\n追記\n", encoding="utf-8")
         status, body = self.post(
             "/api/approve",
             {
-                "item": "script",
+                "item": "plan",
                 "status": "承認",
                 "comment": "",
                 "hash": seen,
@@ -1032,15 +1282,15 @@ class TestBinding(Base):
         self.assertFalse((self.dir / "approvals.json").exists())
 
     def test_clearing_needs_the_seen_record_but_no_hash(self):
-        self.post("/api/approve", {"item": "script", "status": "承認", "comment": ""})
+        self.post("/api/approve", {"item": "plan", "status": "承認", "comment": ""})
         rec = {
             k: v
-            for k, v in self.get_json()["approvals"]["script"].items()
+            for k, v in self.get_json()["approvals"]["plan"].items()
             if k != "stale"
         }
         status, _ = self.post(
             "/api/approve",
-            {"item": "script", "status": "未承認", "comment": "", "expected": rec},
+            {"item": "plan", "status": "未承認", "comment": "", "expected": rec},
             auto=False,
         )
         self.assertEqual(status, 200)
@@ -1087,56 +1337,103 @@ class TestBinding(Base):
         )
         self.assertEqual(status, 409)
 
-    def test_note_with_mismatched_hash_is_conflict(self):
+    def test_note_for_a_text_not_in_the_script_is_conflict(self):
         status, _ = self.post(
             "/api/note",
-            {"line": 1, "note": "x", "hash": "000000000000", "expected": None},
+            {"line": 1, "note": "x", "text": "この本文は台本に無い", "expected": None},
             auto=False,
         )
         self.assertEqual(status, 409)
-        self.assertFalse((self.dir / "review.csv").exists())
+        self.assertFalse((self.dir / "notes.json").exists())
 
-    def test_note_after_same_text_line_inserted_is_conflict(self):  # R4-4
-        seen = self.get_json()["hashes"]["script"]
+    def test_note_after_a_line_is_inserted_follows_the_text(self):
+        """行を挿入しても保存でき、指摘は同じ本文の行へついていく。"""
+        (self.dir / "narration.txt").write_text(
+            NARRATION.replace("- 次に地図です。", "- 先頭に足した。\n- 次に地図です。"),
+            encoding="utf-8",
+        )
+        # 古い画面(挿入前の 2 行目を見ている)からの保存
+        status, resp = self.post(
+            "/api/note",
+            {"line": 2, "text": "次に地図です。", "note": "x", "expected": None},
+            auto=False,
+        )
+        self.assertEqual(status, 200, resp)
+        n = self.get_json()["notes"]
+        self.assertEqual(
+            [(x["line"], x["moved"], x["stale"]) for x in n], [(3, False, False)]
+        )  # 保存時に現在の位置を記録する
+
+    def test_note_survives_a_line_insertion(self):
+        self.post("/api/note", {"line": 2, "note": "地図の読み"})
+        (self.dir / "narration.txt").write_text(
+            NARRATION.replace("- 次に地図です。", "- 先頭に足した。\n- 次に地図です。"),
+            encoding="utf-8",
+        )
+        n = self.get_json()["notes"]
+        self.assertEqual(
+            [(x["line"], x["moved"], x["stale"]) for x in n], [(3, True, False)]
+        )
+
+    def test_a_note_does_not_need_the_whole_script_to_be_unchanged(self):
+        """別の行を直しただけ(画面は古いまま)では、409 にしない。"""
+        (self.dir / "narration.txt").write_text(
+            NARRATION.replace("単眼 SLAM です。", "単眼 SLAM です。(直した)"),
+            encoding="utf-8",
+        )
+        status, resp = self.post(
+            "/api/note",
+            {"line": 2, "text": "次に地図です。", "note": "x", "expected": None},
+            auto=False,
+        )
+        self.assertEqual(status, 200, resp)
+
+    def test_lines_with_the_same_text_share_one_note(self):
         (self.dir / "narration.txt").write_text(
             NARRATION.replace("- 次に地図です。", "- 次に地図です。\n- 次に地図です。"),
             encoding="utf-8",
         )
-        status, _ = self.post(
-            "/api/note",
-            {"line": 3, "note": "x", "hash": seen, "expected": None},
-            auto=False,
-        )
-        self.assertEqual(status, 409)
-        self.assertFalse((self.dir / "review.csv").exists())
+        self.post("/api/note", {"line": 3, "note": "x"})
+        n = self.get_json()["notes"]
+        self.assertEqual(
+            [x["line"] for x in n], [3]
+        )  # 同じ本文の 2 つ目につけた指摘は、最後に見た行を保つ
 
-    def test_note_requires_hash(self):  # R3-6 / R4-4
+    def test_note_requires_text_and_expected(self):
         status, _ = self.post("/api/note", {"line": 1, "note": "x"}, auto=False)
         self.assertEqual(status, 400)
-        self.assertFalse((self.dir / "review.csv").exists())
+        status, _ = self.post(
+            "/api/note",
+            {"line": 1, "note": "x", "text": "単眼 SLAM です。"},
+            auto=False,
+        )
+        self.assertEqual(status, 400)
+        self.assertFalse((self.dir / "notes.json").exists())
 
     def test_hash_is_taken_before_reading(self):
         """R3-7: 表示を読んでいる最中に外部で変わっても、未確認の内容を承認できない
         (ハッシュは読む前に取る。変えられたら承認は 409 になる)。"""
         ws = self.httpd.workspace
         original = ws._script
-        before = sha12(self.dir / "narration.txt")
+        before = sha12(self.dir / "brief.md")
 
         def racing(errors):
-            (self.dir / "narration.txt").write_text(NARRATION + "\n", encoding="utf-8")
+            (self.dir / "brief.md").write_text(
+                "# 構想\n読む最中に変わった\n", encoding="utf-8"
+            )
             return original(errors)
 
         ws._script = racing
         s = self.get_json()
         ws._script = original
-        self.assertEqual(s["hashes"]["script"], before)  # 読む前のハッシュ
+        self.assertEqual(s["hashes"]["plan"], before)  # 読む前のハッシュ
         status, _ = self.post(
             "/api/approve",
             {
-                "item": "script",
+                "item": "plan",
                 "status": "承認",
                 "comment": "",
-                "hash": s["hashes"]["script"],
+                "hash": s["hashes"]["plan"],
                 "expected": None,
             },
             auto=False,
@@ -1145,7 +1442,7 @@ class TestBinding(Base):
 
 
 class TestGate(Base):
-    """R1-5: `--summary --require` が終了コードでゲートを判定する。"""
+    """R1-5: `--summary --require` が終了コードでゲートを判定する(承認は構成案と動画だけ)。"""
 
     def gate(self, *items):
         buf = io.StringIO()
@@ -1157,65 +1454,85 @@ class TestGate(Base):
 
     def approve(self, *items):
         for it in items:
-            status, _ = self.post(
+            status, resp = self.post(
                 "/api/approve", {"item": it, "status": "承認", "comment": ""}
             )
-            self.assertEqual(status, 200, it)
+            self.assertEqual(status, 200, (it, resp))
 
-    def test_passes_when_all_required_are_approved(self):
-        self.approve("script", "yomi")
-        rc, out = self.gate("script", "yomi")
-        self.assertEqual(rc, 0)
+    def test_passes_when_plan_and_video_are_approved(self):
+        self.make_releasable()
+        self.approve("plan", "video")
+        rc, out = self.gate("plan", "video")
+        self.assertEqual(rc, 0, out)
         self.assertIn("ゲート: 通過", out)
 
     def test_stops_on_unapproved_with_reasons(self):
-        self.approve("script")
-        rc, out = self.gate("script", "yomi")
+        self.approve("plan")
+        rc, out = self.gate("plan", "video")
         self.assertEqual(rc, 1)
         self.assertIn("ゲート: 停止", out)
-        self.assertIn("読み: 未承認", out)
+        self.assertIn("動画: 未承認", out)
 
-    def test_stops_on_stale(self):
-        self.approve("script")
-        (self.dir / "narration.txt").write_text(NARRATION + "\n", encoding="utf-8")
-        rc, out = self.gate("script")
+    def test_plan_stays_approved_after_the_brief_is_edited(self):
+        self.approve("plan")
+        (self.dir / "brief.md").write_text("# 直した構想\n", encoding="utf-8")
+        rc, out = self.gate("plan")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("承認後に変更あり", out)
+
+    def test_stops_when_the_approved_video_changed(self):
+        self.make_releasable()
+        self.approve("video")
+        (self.dir / "video.mp4").write_bytes(b"new video")
+        rc, out = self.gate("video")
         self.assertEqual(rc, 1)
         self.assertIn("古い", out)
 
     def test_stops_on_needs_fix(self):
-        self.post("/api/approve", {"item": "yomi", "status": "要修正", "comment": "KL"})
-        rc, out = self.gate("yomi")
+        self.post(
+            "/api/approve", {"item": "video", "status": "要修正", "comment": "KL"}
+        )
+        rc, out = self.gate("video")
         self.assertEqual(rc, 1)
         self.assertIn("要修正", out)
 
-    def test_stops_when_required_source_is_unreadable(self):
-        # 承認した後に壊れた(壊れたファイルは承認できないので、記録を直接作る)。項目別の表は TestUnreadableSources
-        (self.dir / "yomi.json").write_text("{壊れ", encoding="utf-8")
+    def test_stops_when_a_machine_check_broke_after_the_approval(self):
+        self.make_releasable()
+        self.approve("video")
+        write_dict(self.dir / "yomi.json", {"KL": ("ケ'ーエル", "候補", "")})
+        rc, out = self.gate("video")
+        self.assertEqual(rc, 1)
+        self.assertIn("公開前チェックが通らない", out)
+        self.assertIn("KL", out)
+
+    def test_stops_when_the_human_checks_are_missing_from_the_record(self):
+        self.make_releasable()
         review_server.Workspace(self.dir).approvals_store().update(
-            "yomi",
+            "video",
             None,
             {
                 "status": "承認",
                 "comment": "",
-                "hash": review_server.file_hash(self.dir / "yomi.json"),
+                "hash": review_server.file_hash(self.dir / "video.mp4"),
                 "at": "t",
             },
         )
-        rc, out = self.gate("yomi")
+        rc, out = self.gate("video")
         self.assertEqual(rc, 1)
-        self.assertIn("読めない", out)
+        self.assertIn("人の確認が不足", out)
 
     def test_stops_when_approvals_json_is_corrupt(self):
         (self.dir / "approvals.json").write_text("{壊れ", encoding="utf-8")
-        rc, _ = self.gate("script")
+        rc, _ = self.gate("plan")
         self.assertEqual(rc, 1)
 
     def test_invalid_arguments(self):
-        rc, _ = self.gate("bogus")
-        self.assertEqual(rc, 2)
+        for bad in ("bogus", "script", "yomi", "assets"):
+            rc, _ = self.gate(bad)
+            self.assertEqual(rc, 2, bad)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            rc = review_server.main(["--workdir", str(self.dir), "--require", "script"])
+            rc = review_server.main(["--workdir", str(self.dir), "--require", "plan"])
         self.assertEqual(rc, 2)  # --summary が無い
 
 
@@ -1246,7 +1563,7 @@ class TestFileModes(Base):
             self.assertEqual(self.mode(name), 0o664, name)
 
     def test_new_files_are_not_world_writable(self):
-        self.post("/api/approve", {"item": "script", "status": "承認", "comment": ""})
+        self.post("/api/approve", {"item": "plan", "status": "承認", "comment": ""})
         self.assertEqual(self.mode("approvals.json") & 0o022, 0)
 
 
@@ -1496,30 +1813,29 @@ class TestRound4(Base):
     """R4-1/2/3/5: 改行を含むセル、BOM、承認ゲートのハッシュのキャッシュ、review.csv の忠実性、排他。"""
 
     def test_gate_does_not_trust_the_hash_cache(self):
-        """同じサイズ・更新時刻で内容だけ変わっても、ゲートは「古い」と判定する。"""
+        """同じサイズ・更新時刻で内容だけ変わっても、ゲートは「古い」と判定する(動画の承認)。"""
         ws = self.httpd.workspace
-        narr = self.dir / "narration.txt"
-        h = ws.hash_of(narr)
-        ws.approve(
+        vid = self.dir / "video.mp4"
+        h = ws.hash_of(vid)
+        ws.approvals_store().update(
+            "video",
+            None,
             {
-                "item": "script",
                 "status": "承認",
                 "comment": "",
                 "hash": h,
-                "expected": None,
-            }
+                "at": "t",
+                "confirmed": list(release_check.HUMAN_IDS),
+            },
         )
-        st = narr.stat()
-        data = narr.read_bytes()
-        new = data.replace("単眼".encode("utf-8"), "双眼".encode("utf-8"))
-        self.assertEqual(len(new), len(data))
-        narr.write_bytes(new)
-        os.utime(narr, ns=(st.st_atime_ns, st.st_mtime_ns))
-        self.assertEqual(
-            ws.hash_of(narr), h
-        )  # 表示用のキャッシュは古いまま(限界の記録)
-        self.assertTrue(ws.approvals(fresh=True)["script"]["stale"])
-        self.assertTrue(review_server.gate_problems(ws, ["script"]))
+        st = vid.stat()
+        data = vid.read_bytes()
+        new = bytes([data[0] ^ 1]) + data[1:]
+        vid.write_bytes(new)
+        os.utime(vid, ns=(st.st_atime_ns, st.st_mtime_ns))
+        self.assertEqual(ws.hash_of(vid), h)  # 表示用のキャッシュは古いまま(限界の記録)
+        self.assertTrue(ws.approvals(fresh=True)["video"]["stale"])
+        self.assertTrue(review_server.gate_problems(ws, ["video"]))
 
 
 class TestServerLogging(Base):
@@ -1545,7 +1861,7 @@ class TestRoutes(Base):
 
     # 版(ROUTES の第 2 要素のフィールド)以外はそろった、正しい本文
     VALID_WITHOUT_VERSION = {
-        "/api/approve": {"item": "script", "status": "承認", "comment": ""},
+        "/api/approve": {"item": "plan", "status": "承認", "comment": ""},
         "/api/narration": {"index": 0, "text": "変更。"},
         "/api/yomi": {
             "surface": "KL",
@@ -1664,44 +1980,46 @@ class TestRecordBinding(Base):
     """A-04 / C-02 / D-01: 承認と指摘は、対象ファイルの版だけでなく、画面が見た記録にも束縛される。"""
 
     def approve_body(self, status="承認", **kw):
-        return {"item": "script", "status": status, "comment": "", **kw}
+        return {"item": "plan", "status": status, "comment": "", **kw}
 
     def test_approval_over_another_tabs_needs_fix_is_conflict(self):
         """別のタブが「要修正」にした後、古いタブ(同じ台本の版)から「承認」して上書きできない。"""
         seen = self.get_json()  # 古いタブの表示(承認記録なし)
         self.post("/api/approve", self.approve_body("要修正", comment="読みを直す"))
         before = (self.dir / "approvals.json").read_bytes()
-        body = self.approve_body(hash=seen["hashes"]["script"], expected=None)
+        body = self.approve_body(hash=seen["hashes"]["plan"], expected=None)
         status, resp = self.post("/api/approve", body, auto=False)
         self.assertEqual(status, 409, resp)
         self.assertEqual((self.dir / "approvals.json").read_bytes(), before)
-        self.assertEqual(self.get_json()["approvals"]["script"]["status"], "要修正")
+        self.assertEqual(self.get_json()["approvals"]["plan"]["status"], "要修正")
 
     def test_clearing_needs_the_seen_record_too(self):
         self.post("/api/approve", self.approve_body())
-        seen = self.get_json()["approvals"]["script"]
+        seen = self.get_json()["approvals"]["plan"]
         seen = {k: v for k, v in seen.items() if k != "stale"}
         self.post("/api/approve", self.approve_body("要修正", comment="やっぱり"))
         status, _ = self.post(
             "/api/approve",
-            {"item": "script", "status": "未承認", "expected": seen},
+            {"item": "plan", "status": "未承認", "expected": seen},
             auto=False,
         )
         self.assertEqual(status, 409)
-        self.assertEqual(self.get_json()["approvals"]["script"]["status"], "要修正")
+        self.assertEqual(self.get_json()["approvals"]["plan"]["status"], "要修正")
 
     def test_approval_of_another_item_is_not_blocked(self):
         seen = self.get_json()
-        self.post("/api/approve", {"item": "assets", "status": "承認", "comment": ""})
+        self.post(
+            "/api/approve", {"item": "video", "status": "要修正", "comment": "直す"}
+        )
         status, resp = self.post(
             "/api/approve",
-            self.approve_body(hash=seen["hashes"]["script"], expected=None),
+            self.approve_body(hash=seen["hashes"]["plan"], expected=None),
             auto=False,
         )
         self.assertEqual(status, 200, resp)
 
     def test_note_over_another_tabs_note_is_conflict(self):
-        seen = self.get_json()  # 古いタブ: 指摘なし
+        # 古いタブ(指摘なしを見ている)から、同じ行へ書く
         self.post("/api/note", {"line": 1, "note": "先の指摘"})
         before = (self.dir / "notes.json").read_bytes()
         status, resp = self.post(
@@ -1709,7 +2027,7 @@ class TestRecordBinding(Base):
             {
                 "line": 1,
                 "note": "古いタブの指摘",
-                "hash": seen["hashes"]["script"],
+                "text": "単眼 SLAM です。",
                 "expected": None,
             },
             auto=False,
@@ -1718,14 +2036,13 @@ class TestRecordBinding(Base):
         self.assertEqual((self.dir / "notes.json").read_bytes(), before)
 
     def test_note_on_another_line_is_not_blocked(self):
-        seen = self.get_json()
         self.post("/api/note", {"line": 2, "note": "別の行"})
         status, _ = self.post(
             "/api/note",
             {
                 "line": 1,
                 "note": "A",
-                "hash": seen["hashes"]["script"],
+                "text": "単眼 SLAM です。",
                 "expected": None,
             },
             auto=False,
@@ -1746,7 +2063,9 @@ class TestRecordBinding(Base):
         status, _ = self.post(
             "/api/note", {"line": 3, "note": "新規は不可", "expected": None}
         )
-        self.assertEqual(status, 400)
+        self.assertEqual(
+            status, 409
+        )  # 本文が台本に無い行へは書けない(読む・消す・状態を変えるだけ)
         status, resp = self.post(
             "/api/note", {"line": 3, "note": ""}
         )  # 現在の指摘を見て消す
@@ -1766,8 +2085,12 @@ class TestSingleSnapshot(Base):
                 reads.append(1)
             return real(store)
 
-        with mock.patch.object(review_server.state_store.Store, "read", spy):
-            self.get_json()
+        stub = {"checks": [], "human": [], "ok": True}  # 公開前チェックは別に台帳を読む
+        with mock.patch.object(
+            review_server.release_check, "report", return_value=stub
+        ):
+            with mock.patch.object(review_server.state_store.Store, "read", spy):
+                self.get_json()
         self.assertEqual(len(reads), 1)
 
     def test_a_dictionary_entry_without_optional_fields_can_be_edited(self):
@@ -1801,28 +2124,34 @@ class TestSingleSnapshot(Base):
 class TestVersionRecheckedUnderLock(Base):
     """D-02 / D-05: 準備の確認とロック取得の間に対象が変わっても、ロック内の再確認で拒否する。台本の保存失敗で正本を壊さない。"""
 
-    def change_script_just_before_store_update(self, filename):
+    def change_script_just_before_store_update(
+        self, filename, content=None, target="narration.txt"
+    ):
         real = review_server.state_store.Store.update
 
         def wrapper(store, *a, **k):
             if store.path.name == filename:
-                (self.dir / "narration.txt").write_text(
-                    NARRATION + "\n- 割り込んだ。\n", encoding="utf-8"
+                (self.dir / target).write_text(
+                    content or NARRATION + "\n- 割り込んだ。\n", encoding="utf-8"
                 )
             return real(store, *a, **k)
 
         return mock.patch.object(review_server.state_store.Store, "update", wrapper)
 
     def test_approval_is_refused_when_the_target_changes_after_the_precheck(self):
-        with self.change_script_just_before_store_update("approvals.json"):
+        with self.change_script_just_before_store_update(
+            "approvals.json", "# 割り込んだ構想\n", target="brief.md"
+        ):
             status, resp = self.post(
-                "/api/approve", {"item": "script", "status": "承認", "comment": ""}
+                "/api/approve", {"item": "plan", "status": "承認", "comment": ""}
             )
         self.assertEqual(status, 409, resp)
         self.assertFalse((self.dir / "approvals.json").exists())
 
     def test_note_is_refused_when_the_script_changes_after_the_precheck(self):
-        with self.change_script_just_before_store_update("notes.json"):
+        """指摘する行の本文が、準備の確認とロック取得の間に台本から消えたら 409。"""
+        changed = NARRATION.replace("単眼 SLAM です。", "双眼 SLAM です。")
+        with self.change_script_just_before_store_update("notes.json", changed):
             status, resp = self.post("/api/note", {"line": 1, "note": "x"})
         self.assertEqual(status, 409, resp)
         self.assertFalse((self.dir / "notes.json").exists())
@@ -1841,79 +2170,123 @@ class TestVersionRecheckedUnderLock(Base):
 
         with mock.patch("review_server.os.replace", failing_replace):
             with contextlib.redirect_stderr(io.StringIO()):
-                status, _ = self.post("/api/narration", {"index": 0, "text": "変更。"})
-        self.assertEqual(status, 500)
+                status, resp = self.post(
+                    "/api/narration", {"index": 0, "text": "変更。"}
+                )
+        self.assertEqual(status, 503, resp)  # 一時的な失敗として、原因と対処を案内する
+        self.assertIn("置き換えられません", resp["error"])
+        self.assertIn("他のアプリ", resp["error"])
+        self.assertGreaterEqual(
+            len([c for c in calls if str(c).endswith("narration.txt")]), 3
+        )  # 再試行した
         self.assertEqual((self.dir / "narration.txt").read_bytes(), before)
         self.assertEqual(sorted(p.name for p in self.dir.glob(".narration.txt*")), [])
 
+    def test_a_momentary_replace_failure_is_retried_and_succeeds(self):
+        """Windows でウイルス対策などが一瞬ファイルを開いているだけなら、利用者にエラーを見せない。"""
+        real = os.replace
+        state = {"n": 0}
+
+        def flaky(src, dst):
+            if str(dst).endswith("narration.txt") and state["n"] < 2:
+                state["n"] += 1
+                raise PermissionError(13, "busy")
+            return real(src, dst)
+
+        with mock.patch("review_server.os.replace", flaky):
+            status, resp = self.post("/api/narration", {"index": 0, "text": "変更。"})
+        self.assertEqual(status, 200, resp)
+        self.assertIn(
+            "変更。", (self.dir / "narration.txt").read_text(encoding="utf-8")
+        )
+
+
+class TestRev(Base):
+    """画面の自動追従用: 正本の大きさと更新時刻から作る短い文字列(読み取り専用。ハッシュ計算をしない)。"""
+
+    def rev(self):
+        return self.get_json("/api/rev")["rev"]
+
+    def test_rev_is_stable_until_a_source_changes(self):
+        a = self.rev()
+        self.assertEqual(a, self.rev())
+        self.assertIsInstance(a, str)
+        self.assertTrue(a)
+
+    def test_rev_changes_when_each_source_changes(self):
+        for name, content in [
+            ("narration.txt", NARRATION + "\n- 増えた。\n"),
+            ("brief.md", "# 構想\n"),
+            ("yomi.json", '{"schema": 1, "entries": {}}'),
+            ("notes.json", '{"schema": 1, "entries": {}}'),
+            ("video.mp4", "x"),
+        ]:
+            with self.subTest(name):
+                before = self.rev()
+                (self.dir / name).write_text(content, encoding="utf-8")
+                self.assertNotEqual(before, self.rev())
+
+    def test_rev_does_not_hash_the_files(self):
+        with mock.patch.object(
+            review_server.Workspace, "hash_of", side_effect=AssertionError("hash")
+        ):
+            self.assertTrue(self.rev())
+
 
 class TestUnreadableSources(Base):
-    """C-10 / D-07: 読めない正本は承認できず、承認済みでもゲートを通さない(項目ごとの表)。"""
+    """C-10 / D-07: 読めない正本は承認できず、承認済みでもゲートを通さない(構成案と、公開前チェックの機械項目)。"""
+
+    def test_an_unreadable_brief_cannot_be_approved_but_can_be_marked_needs_fix(self):
+        (self.dir / "brief.md").write_bytes(b"\xff\xfe\x00bad")
+        h = review_server.file_hash(self.dir / "brief.md")
+        body = {"item": "plan", "comment": "", "hash": h, "expected": None}
+        status, resp = self.post("/api/approve", {**body, "status": "承認"}, auto=False)
+        self.assertEqual(status, 400, resp)
+        self.assertIn("読め", resp["error"])
+        self.assertFalse((self.dir / "approvals.json").exists())
+        status, resp = self.post(
+            "/api/approve", {**body, "status": "要修正", "comment": "直す"}, auto=False
+        )
+        self.assertEqual(status, 200, resp)
+
+    def test_the_gate_stops_for_an_unreadable_approved_brief(self):
+        (self.dir / "brief.md").write_bytes(b"\xff\xfe\x00bad")
+        review_server.Workspace(self.dir).approvals_store().update(
+            "plan",
+            None,
+            {
+                "status": "承認",
+                "comment": "",
+                "hash": review_server.file_hash(self.dir / "brief.md"),
+                "at": "t",
+            },
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = review_server.main(
+                ["--workdir", str(self.dir), "--summary", "--require", "plan"]
+            )
+        self.assertEqual(rc, 1, buf.getvalue())
+        self.assertIn("読めない", buf.getvalue())
 
     BROKEN = {
-        "plan": ("brief.md", b"\xff\xfe\x00bad"),
-        "script": ("narration.txt", b"\xff\xfe\x00bad"),
-        "yomi": ("yomi.json", "{壊れ".encode("utf-8")),
-        "assets": ("assets.json", "{壊れ".encode("utf-8")),
+        "yomi.json": "{壊れ".encode("utf-8"),
+        "assets.json": "{壊れ".encode("utf-8"),
+        "notes.json": "{壊れ".encode("utf-8"),
     }
 
-    def test_an_unreadable_source_cannot_be_approved_but_can_be_marked_needs_fix(self):
-        for item, (name, data) in self.BROKEN.items():
-            with self.subTest(item=item):
+    def test_a_video_cannot_be_approved_while_a_release_source_is_unreadable(self):
+        for name, data in self.BROKEN.items():
+            with self.subTest(name=name):
+                self.make_releasable()
                 (self.dir / name).write_bytes(data)
-                h = review_server.file_hash(self.dir / name)
                 status, resp = self.post(
-                    "/api/approve",
-                    {
-                        "item": item,
-                        "status": "承認",
-                        "comment": "",
-                        "hash": h,
-                        "expected": None,
-                    },
-                    auto=False,
+                    "/api/approve", {"item": "video", "status": "承認", "comment": ""}
                 )
                 self.assertEqual(status, 400, resp)
-                self.assertIn("読め", resp["error"])
+                self.assertIn("読めない", resp["error"])
                 self.assertFalse((self.dir / "approvals.json").exists())
-                status, resp = self.post(
-                    "/api/approve",
-                    {
-                        "item": item,
-                        "status": "要修正",
-                        "comment": "直す",
-                        "hash": h,
-                        "expected": None,
-                    },
-                    auto=False,
-                )
-                self.assertEqual(status, 200, resp)
-                (self.dir / "approvals.json").unlink()
-
-    def test_the_gate_stops_for_every_unreadable_source_even_if_approved_at_that_hash(
-        self,
-    ):
-        for item, (name, data) in self.BROKEN.items():
-            with self.subTest(item=item):
-                (self.dir / name).write_bytes(data)
-                review_server.Workspace(self.dir).approvals_store().update(
-                    item,
-                    None,
-                    {
-                        "status": "承認",
-                        "comment": "",
-                        "hash": review_server.file_hash(self.dir / name),
-                        "at": "t",
-                    },
-                )
-                buf = io.StringIO()
-                with contextlib.redirect_stdout(buf):
-                    rc = review_server.main(
-                        ["--workdir", str(self.dir), "--summary", "--require", item]
-                    )
-                self.assertEqual(rc, 1, buf.getvalue())
-                self.assertIn("読めない", buf.getvalue())
-                (self.dir / "approvals.json").unlink()
+                (self.dir / name).unlink()
 
 
 class TestHardening(Base):
@@ -1938,7 +2311,7 @@ class TestHardening(Base):
 
     def test_short_body_is_rejected_and_writes_nothing(self):
         """B-04: 宣言した長さに足りない本文は、JSON として完成していても受理しない。"""
-        body = b'{"item": "script", "status": "\xe6\x9c\xaa\xe6\x89\xbf\xe8\xaa\x8d", "expected": null}'
+        body = b'{"item": "plan", "status": "\xe6\x9c\xaa\xe6\x89\xbf\xe8\xaa\x8d", "expected": null}'
         req = (
             b"POST /api/approve HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nContent-Type: application/json\r\n"
             b"Content-Length: %d\r\n\r\n" % (self.port, len(body) + 50)
@@ -1953,7 +2326,7 @@ class TestHardening(Base):
         """B-05: 項目名などに配列・辞書・過深の入れ子を送っても、500 にしない。"""
         for path, body in [
             ("/api/approve", {"item": [], "status": "承認"}),
-            ("/api/approve", {"item": "script", "status": {}}),
+            ("/api/approve", {"item": "plan", "status": {}}),
             ("/api/note", {"line": [], "note": {}}),
             ("/api/yomi", {"surface": [], "reading": {}}),
             ("/api/asset", {"file": {}, "status": []}),
@@ -2114,9 +2487,9 @@ class TestBrowserBoundary(Base):
         return r.status, {k.lower(): v for k, v in r.getheaders()}, raw
 
     def note_body(self):
-        h = self.get_json()["hashes"]["script"]
         return json.dumps(
-            {"line": 1, "note": "x", "hash": h, "expected": None}, ensure_ascii=False
+            {"line": 1, "note": "x", "text": "単眼 SLAM です。", "expected": None},
+            ensure_ascii=False,
         ).encode("utf-8")
 
     def test_write_requires_json_content_type(self):

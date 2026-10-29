@@ -53,6 +53,10 @@
   tr.cur { background:#eef3ff; }
   tr.cand { background:#fff8e6; }
   input.stale { background:#fff3cd; border-color:#e0a800; }
+  input.fixed { background:#eef2f7; color:#667; text-decoration:line-through; }
+  .notecell { display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+  .draft { outline:2px solid #e0a800; }
+  .conflict { outline:2px solid var(--bad); }
   .saved { color:var(--ok); font-size:12px; margin-left:6px; }
   .err { color:var(--bad); font-size:12px; margin-left:6px; }
   #toast { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:20;
@@ -75,7 +79,8 @@
 <div id="toast"></div>
 <script>
 "use strict";
-const ITEMS = [["plan","構成案"],["script","台本"],["yomi","読み"],["assets","素材"],["video","動画"]];
+const ITEMS = [["plan","構成案"],["script","台本"],["yomi","読み"],["assets","素材"],["video","動画"]];  // タブ
+const APPROVAL = ["plan", "video"];  // 承認するのは構成案と最終動画だけ(ADR-0004)。ほかは作業状態
 let S = null;            // /api/state
 let tab = ITEMS.some(([id]) => id === location.hash.slice(1)) ? location.hash.slice(1) : "script";
 
@@ -97,15 +102,32 @@ async function api(path, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+  if (!r.ok) { const err = new Error(data.error || ("HTTP " + r.status)); err.status = r.status; throw err; }
   return data;
 }
 async function load(keepScroll = true) {
   const y = window.scrollY;
+  const rv = await api("/api/rev").catch(() => null);  // 先に取る(間に変わっていれば次の確認で拾う)
   S = await api("/api/state");
+  if (rv) lastRev = rv.rev;
   render();
   if (keepScroll) window.scrollTo(0, y);
 }
+// 外(エージェント・別のタブ・CLI)でファイルが変わったら、画面を最新にする。
+// 入力中の内容は render() が残す。非表示のタブでは確認しない。
+let lastRev = null, polling = false;
+async function poll() {
+  if (document.hidden || polling) return;
+  polling = true;
+  try {
+    const rv = await api("/api/rev");
+    if (lastRev === null) lastRev = rv.rev;
+    else if (rv.rev !== lastRev) { await load(); toast("ファイルが外で更新されたので、画面を最新にしました"); }
+  } catch (e) { /* 次の確認でやり直す */ }
+  finally { polling = false; }
+}
+setInterval(poll, 2000);
+document.addEventListener("visibilitychange", poll);
 function toast(msg, bad) {  // 再描画で消えないよう、画面の下に固定して出す
   const box = document.getElementById("toast");
   const s = h("div", {class: "toast " + (bad ? "bad" : "ok")}, msg);
@@ -116,16 +138,22 @@ async function act(btn, fn, okMsg = "保存しました") {
   try { const r = await fn(); toast(okMsg); await load(); return r; }
   catch (e) {
     toast(e.message, true);
-    if (/変わりました/.test(e.message)) await load().catch(() => {});  // 最新の内容を見せる
+    if (e.status === 409) {  // 最新の内容を見せる。入力した内容は render() が残す
+      await load().catch(() => {});
+      toast(keptNote || "最新の内容を読み込みました。確かめて、もう一度保存してください", false);
+    }
   }
   finally { btn.disabled = false; }
 }
 
 // ── 承認の状態 ──
 function approvalView(item) {
+  if (!APPROVAL.includes(item)) return ["", ""];  // 台本・読み・素材は承認しない
   const a = S.approvals[item];
   if (!a) return ["未承認", "none"];
   if (a.stale) return ["古い(承認後に変更)", "warn"];
+  if (a.status === "承認" && a.changed) return ["承認(承認後に変更あり)", "ok"];
+  if (item === "video" && a.status === "承認" && S.release && !S.release.ok) return ["承認(公開前チェックが通らない)", "warn"];
   return a.status === "承認" ? ["承認", "ok"] : ["要修正", "bad"];
 }
 function renderHeader() {
@@ -134,26 +162,53 @@ function renderHeader() {
   for (const [id, label] of ITEMS) {
     const [t, cls] = approvalView(id);
     box.append(h("span", {class: "chip" + (tab === id ? " active" : ""),
-      onclick: () => { tab = id; history.replaceState(null, "", "#" + id); render(); }}, label, h("span", {class: "st " + cls}, t)));
+      onclick: () => { tab = id; history.replaceState(null, "", "#" + id); render(); }}, label, t ? h("span", {class: "st " + cls}, t) : null));
   }
 }
+const humanChecked = new Set();  // 動画の承認前に、人が確かめた項目
+let checkedRev = null;           // 確かめた対象(動画・説明文・台帳)の版。変われば確認をやり直す
 function approveBar(item) {
   const a = S.approvals[item];
   const [t, cls] = approvalView(item);
-  const comment = h("input", {type: "text", placeholder: "コメント(任意)", value: a ? a.comment : ""});
+  const comment = h("input", {type: "text", placeholder: "コメント(任意)", value: ""});  // 前回のコメントは持ち越さない
+  watch(comment, "comment:" + item, () => comment.value !== "", false);
+  const isVideo = item === "video";
+  if (isVideo && checkedRev !== S.release_rev) { humanChecked.clear(); checkedRev = S.release_rev; }  // 確かめた後に変わった
   const send = (status) => (ev) => act(ev.target, () =>
     api("/api/approve", {item, status, comment: comment.value, hash: (S.hashes || {})[item] || "",
-      expected: a ? (({stale, ...rec}) => rec)(a) : null}));
-  const SRC_ERR = {plan: "brief", script: "script", yomi: "yomi", assets: "assets"};  // 項目 → errors のキー
+      expected: a ? (({stale, changed, ...rec}) => rec)(a) : null,
+      ...(isVideo && status === "承認" ? {confirmed: [...humanChecked], release_rev: S.release_rev} : {})}).then(() => { humanChecked.clear(); drafts.delete("comment:" + item); }));
+  const SRC_ERR = {plan: "brief"};  // 項目 → errors のキー
   const broken = !!S.errors.approvals || !!S.errors[SRC_ERR[item]];  // 承認記録・対象の正本が壊れている間は承認できない
-  return h("div", {class: "panel approve"},
-    h("strong", {}, "この項目の判断:"), h("span", {class: "st " + cls}, t),
+  const rel = S.release || {checks: [], human: [], ok: true};
+  const blocked = isVideo && (!rel.ok || S.video_kind !== "final" || rel.human.some((x) => !humanChecked.has(x.id)));
+  const approveBtn = h("button", {class: "primary", "data-approve": "1", "data-broken": broken ? "1" : "0",
+    "data-blocked": blocked ? "1" : "0", disabled: broken || blocked || dirty.size > 0, onclick: send("承認")}, "承認");
+  const bar = h("div", {class: "panel approve"},
+    h("strong", {}, isVideo ? "最終動画の承認:" : "構想の承認(着手の許可):"), h("span", {class: "st " + cls}, t),
     a && a.at ? h("span", {class: "small"}, a.at.replace("T", " ").slice(0, 19)) : null,
-    comment,
-    h("button", {class: "primary", "data-approve": "1", "data-broken": broken ? "1" : "0", disabled: broken || dirty.size > 0, onclick: send("承認")}, "承認"),
+    comment, approveBtn,
     h("button", {class: "danger", "data-approve": "1", "data-broken": broken ? "1" : "0", disabled: broken || dirty.size > 0, onclick: send("要修正")}, "要修正"),
     h("span", {class: "small", id: "dirtyhint"}, ""),
     a && !broken ? h("button", {onclick: send("未承認")}, "取り消し") : null);
+  if (!isVideo) return [bar];
+  // 公開前チェック: 機械で確かめられる項目(自動)と、人が確かめる 4 項目(チェック)
+  const refresh = () => {
+    const bl = !rel.ok || S.video_kind !== "final" || rel.human.some((x) => !humanChecked.has(x.id));
+    approveBtn.dataset.blocked = bl ? "1" : "0"; refreshApprove();
+  };
+  const panel = h("div", {class: "panel", id: "release"},
+    h("strong", {}, "公開前チェック"),
+    S.video_kind === "draft" ? h("div", {class: "banner"}, "表示中の動画は下書き(draft.mp4)です。承認できるのは最終動画(video.mp4。finish.py --final で作る)だけです。") : null,
+    h("div", {}, rel.checks.map((c) => h("div", {class: c.ok ? "" : "err"},
+      (c.ok ? "✓ " : "✗ ") + c.label + (c.detail ? "(" + c.detail + ")" : "")))),
+    h("div", {class: "small", style: "margin-top:6px"}, "人が確かめる項目(機械では確かめられません):"),
+    h("div", {}, rel.human.map((x) => {
+      const box = h("input", {type: "checkbox", id: "hc-" + x.id, checked: humanChecked.has(x.id),
+        onchange: (ev) => { if (ev.target.checked) humanChecked.add(x.id); else humanChecked.delete(x.id); refresh(); }});
+      return h("label", {style: "display:block"}, box, " " + x.label);
+    })));
+  return [bar, panel];
 }
 
 // 壊れたファイルの警告(サーバの errors をすべて、どのタブでも先頭に出す)
@@ -173,42 +228,85 @@ let stopAt = null;
 voice.addEventListener("timeupdate", () => { if (stopAt != null && voice.currentTime >= stopAt) { voice.pause(); stopAt = null; } });
 function playLine(l) {
   if (!S.script.audio || l.start_s == null) return;
-  if (!voice.src) voice.src = fileUrl("/files/" + S.script.audio);
+  const rev = S.script.audio_rev || "";
+  if (voice.dataset.rev !== rev) {  // 再合成で音声が差し替わったら、古い音声を使い続けない
+    voice.src = fileUrl("/files/" + S.script.audio) + "?v=" + encodeURIComponent(rev); voice.dataset.rev = rev; voice.load();
+  }
   voice.currentTime = l.start_s; stopAt = l.start_s + l.duration_s; voice.play();
 }
 const mmss = (s) => s == null ? "–" : Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
-const noteOf = (n) => (S.notes.find((x) => x.line === n) || {}).note || "";
-const noteStale = (n) => !!(S.notes.find((x) => x.line === n) || {}).stale;
-// 指摘の更新には、対象の台本の版(hash)と、この行で画面が見た指摘(expected。無ければ null)を添える
-const noteEntry = (n) => (S.notes.find((x) => x.line === n) || {}).entry || null;
-const noteBody = (line, value) => ({line, note: value, hash: (S.hashes || {}).script || "", expected: noteEntry(line)});
+// 指摘は行の本文に付く(キーは本文から作った ID)。台本の別の行が変わっても、行が増えても、同じ本文の行へついていく。
+// 更新には、画面が見たこの指摘の記録(expected。無ければ null)と、指摘する行の本文(text)を添える。
+const noteFor = (n) => S.notes.find((x) => x.line === n && !x.stale) || null;
+const noteOf = (n) => (noteFor(n) || {}).note || "";
+function noteBody(line, value, extra = {}, n = noteFor(line)) {
+  const l = S.script.lines[line - 1];
+  return {line, text: n ? n.text : (l ? l.text : ""), note: value, status: n ? n.status : "open", expected: n ? n.entry : null, ...extra};
+}
+function noteCell(line, placeholder) {
+  const n = noteFor(line);
+  const fixed = !!n && n.status === "fixed";
+  const input = h("input", {type: "text", placeholder, value: noteOf(line), class: fixed ? "fixed" : "", disabled: fixed,
+    title: n && n.moved ? "この行は、台本の行が増減して位置が変わりました(指摘は同じ本文の行についています)" : "",
+    onchange: (ev) => act(ev.target, () => api("/api/note", noteBody(line, ev.target.value)))});
+  watch(input, "note:" + ((S.script.lines[line - 1] || {}).text || line), () => input.value !== noteOf(line));
+  const kids = [input];
+  const set = (btn, status, msg) => act(btn, () => api("/api/note", noteBody(line, n.note, {status})), msg);
+  if (n && !fixed) kids.push(h("button", {title: "直した指摘を『対応済み』(確認待ち)にします", onclick: (ev) => set(ev.target, "fixed", "対応済みにしました")}, "✓ 対応済み"));
+  if (fixed) kids.push(h("span", {class: "small"}, "対応済み"),
+    h("button", {onclick: (ev) => set(ev.target, "open", "未対応に戻しました")}, "戻す"),
+    h("button", {onclick: (ev) => act(ev.target, () => api("/api/note", noteBody(line, "")), "消しました")}, "消す"));
+  return h("div", {class: "notecell"}, ...kids);
+}
 // 未保存の入力があるうちは承認を止める(画面で直したつもりの内容と、承認される版を食い違わせない)
 const dirty = new Set();
+let keptNote = "";  // 直近の再描画で残した入力についての案内
 function refreshApprove() {
-  document.querySelectorAll("[data-approve]").forEach((b) => { b.disabled = b.dataset.broken === "1" || dirty.size > 0; });
+  document.querySelectorAll("[data-approve]").forEach((b) => { b.disabled = b.dataset.broken === "1" || b.dataset.blocked === "1" || dirty.size > 0; });
   const hint = document.getElementById("dirtyhint");
   if (hint) hint.textContent = dirty.size ? "未保存の変更があります。先に保存してください" : "";
 }
 function markDirty(key, isDirty) { if (isDirty) dirty.add(key); else dirty.delete(key); refreshApprove(); }
-function watch(el, key, isDirty) {
-  for (const ev of ["input", "change"]) el.addEventListener(ev, () => markDirty(key, isDirty()));
+// 未保存の入力(下書き)。キーは対象の本文・語・ファイル(行番号ではない)なので、行が増減しても同じ対象へ戻る。
+// 画面を作り直しても、別のタブへ移っても、保存するか破棄するまで保つ。
+const drafts = new Map();   // key → {value, base(入力を始めたときの元の値)}
+const watched = new Map();  // key → {el, isDirty}(いまの描画の入力欄)
+// blocks=false の入力(承認コメントなど)は、承認ボタンを止めない(下書きとしてだけ保つ)
+function watch(el, key, isDirty, blocks = true) {
+  watched.set(key, {el, isDirty});
+  const upd = () => {
+    const now = isDirty();
+    if (blocks) markDirty(key, now);
+    if (now) drafts.set(key, {value: el.value, base: el.defaultValue}); else drafts.delete(key);
+  };
+  for (const ev of ["input", "change"]) el.addEventListener(ev, upd);
+}
+// 下書きのキーが属するタブ(そのタブで対象の欄が見つからない下書きは、行き場が無い)
+const OWNER = (k) => k.startsWith("n:") ? ["script"] : k.startsWith("note:") ? ["script", "video"]
+  : /^(yr|ys|yn|yadd-)/.test(k) ? ["yomi"] : /^(as|an)/.test(k) ? ["assets"] : [];
+const draftLabel = (k) => k.startsWith("n:") ? "本文(元の行: " + k.slice(2, 26) + "…)" : k.startsWith("note:") ? "指摘(元の行: " + k.slice(5, 29) + "…)" : k;
+function orphanPanel(list) {
+  return h("div", {class: "banner bad", id: "orphans"},
+    h("strong", {}, "保存できなかった入力があります(対象の行・項目が変わったか、無くなりました)"),
+    h("div", {class: "small"}, "内容を確かめて、必要なら対応する欄へ貼り付けてください。不要なら破棄します。"),
+    list.map(([k, d]) => h("div", {}, h("span", {class: "small"}, draftLabel(k) + ": "), h("code", {}, d.value), " ",
+      h("button", {onclick: () => { drafts.delete(k); render(); }}, "破棄"))));
 }
 
 function renderScript() {
-  const out = [approveBar("script")];
+  const out = [h("div", {class: "small"}, "承認は構成案と最終動画だけです。この画面での編集は承認に影響しません(動画ができてから、公開前チェックで確かめます)。")];
   if (S.script.stale) out.push(h("div", {class: "banner"},
     "台本が音声(timestamps.json)と食い違っています。直した行は再合成が必要です。"));
   const rows = S.script.lines.map((l) => {
     const ta = h("textarea", {rows: 2}, l.text);
     const save = h("button", {disabled: true, onclick: (ev) => act(ev.target, async () => {
       const r = await api("/api/narration", {index: l.index, text: ta.value, hash: (S.hashes || {}).script || ""});
+      drafts.delete("n:" + l.text);  // 保存できた。本文が変わるのでキーも変わる(古い下書きを残さない)
       return r;
     })}, "本文を保存");
-    ta.addEventListener("input", () => { save.disabled = ta.value.trim() === l.text; markDirty("n" + l.index, ta.value.trim() !== l.text); });
-    const note = h("input", {type: "text", placeholder: "指摘(読み・同期・内容)", value: noteOf(l.index + 1),
-      class: noteStale(l.index + 1) ? "stale" : "", title: noteStale(l.index + 1) ? "古い指摘: この行の本文が変わりました。確かめて直すか消してください" : "",
-      onchange: (ev) => act(ev.target, () => api("/api/note", noteBody(l.index + 1, ev.target.value)))});
-    watch(note, "note" + (l.index + 1), () => note.value !== noteOf(l.index + 1));
+    ta.addEventListener("input", () => { save.disabled = ta.value.trim() === l.text; });
+    watch(ta, "n:" + l.text, () => ta.value.trim() !== l.text);
+    const note = noteCell(l.index + 1, "指摘(読み・同期・内容)");
     return h("tr", {},
       h("td", {}, String(l.index + 1)), h("td", {}, mmss(l.start_s)),
       h("td", {}, ta, h("div", {class: "reading"}, l.reading ? "読み: " + l.reading : ""), save),
@@ -224,11 +322,12 @@ function renderScript() {
       h("tbody", {}, rows))));
   const gone = S.notes.filter((n) => n.stale);
   if (gone.length) out.push(h("div", {class: "panel"},
-    h("strong", {}, "古い指摘(台本が変わった・行が無くなった)"),
-    h("div", {class: "small"}, "指摘した当時の本文を示します。内容を確かめて、不要なら消してください。"),
+    h("strong", {}, "古い指摘(その本文の行が台本から無くなった)"),
+    h("div", {class: "small"}, "指摘した当時の本文を示します。自動では閉じません。内容を確かめて、直っていれば対応済みにするか、消してください。"),
     h("table", {}, h("tbody", {}, gone.map((n) => h("tr", {},
       h("td", {}, n.line + " 行目"), h("td", {}, "当時: " + n.text), h("td", {}, n.note),
-      h("td", {}, h("button", {onclick: (ev) => act(ev.target, () => api("/api/note", noteBody(n.line, "")))}, "消す"))))))));
+      h("td", {}, n.status === "fixed" ? "対応済み" : h("button", {onclick: (ev) => act(ev.target, () => api("/api/note", noteBody(n.line, n.note, {status: "fixed"}, n)), "対応済みにしました")}, "✓ 対応済み")),
+      h("td", {}, h("button", {onclick: (ev) => act(ev.target, () => api("/api/note", noteBody(n.line, "", {}, n)), "消しました")}, "消す"))))))));
   return out;
 }
 
@@ -248,12 +347,14 @@ function yomiRow(y) {
     h("td", {}, y.surface), h("td", {}, reading), h("td", {}, status), h("td", {}, note), h("td", {}, save, " ", del));
 }
 function renderYomi() {
-  const out = [approveBar("yomi")];
+  const out = [h("div", {class: "small"}, "承認は構成案と最終動画だけです。この画面での編集は承認に影響しません(動画ができてから、公開前チェックで確かめます)。")];
   const sf = h("input", {type: "text", placeholder: "表記(例: RANSAC)"});
   const rd = h("input", {type: "text", placeholder: "読み(例: ラ'ンサック)"});
+  watch(sf, "yadd-s", () => sf.value !== "", false);
+  watch(rd, "yadd-r", () => rd.value !== "", false);
   const add = h("button", {onclick: (ev) => act(ev.target, async () => {
     await api("/api/yomi", {surface: sf.value, reading: rd.value, status: "確認済み", note: "", expected: null});
-    sf.value = ""; rd.value = "";
+    sf.value = ""; rd.value = ""; drafts.delete("yadd-s"); drafts.delete("yadd-r");
   })}, "追加");
   out.push(h("div", {class: "panel"},
     h("div", {class: "small"}, "読みは全角カタカナで、アクセント核の直後に ' を 1 つ(無ければ平板)。"
@@ -287,7 +388,7 @@ function assetCard(a) {
     h("div", {class: "row"}, "状態", status, note, save));
 }
 function renderAssets() {
-  const out = [approveBar("assets")];
+  const out = [h("div", {class: "small"}, "承認は構成案と最終動画だけです。この画面での編集は承認に影響しません(動画ができてから、公開前チェックで確かめます)。")];
   out.push(h("div", {class: "panel"},
     h("div", {class: "small"}, "確認済み=許諾あり / 出典表示=許諾は未確認だが出典を出して使う / 仮=私的な検証だけ。"
       + "条件は references/attribution.md。"),
@@ -296,21 +397,31 @@ function renderAssets() {
 }
 
 // ── 動画 ──
-function renderVideo() {
-  const out = [approveBar("video")];
-  if (!S.video) { out.push(h("div", {class: "panel"}, "video.mp4 がまだありません。")); return out; }
+// 動画の要素は再描画をまたいで使い回す(保存のたびに作り直すと、再生位置が 0 に戻る)。
+// 動画ファイルが差し替わったときだけ作り直し、同じ位置から続ける。
+let videoEl = null, videoVersion = null;
+function videoElement() {
+  const version = S.video + ":" + (S.video_rev || "");  // 差し替え(再生成)を見つける
+  if (videoEl && videoVersion === version) return videoEl;
+  const resumeAt = videoEl ? videoEl.currentTime : 0;
   const v = h("video", {class: "player", src: fileUrl("/files/" + S.video), controls: true, preload: "metadata"});
-  const rows = S.script.lines.map((l) => h("tr", {id: "vl" + l.index},
-    h("td", {}, h("a", {href: "#", onclick: (ev) => { ev.preventDefault(); if (l.start_s != null) { v.currentTime = l.start_s; v.play(); } }}, mmss(l.start_s))),
-    h("td", {}, String(l.index + 1)), h("td", {}, l.text),
-    h("td", {}, h("input", {type: "text", placeholder: "指摘", value: noteOf(l.index + 1),
-      class: noteStale(l.index + 1) ? "stale" : "", title: noteStale(l.index + 1) ? "古い指摘: この行の本文が変わりました" : "",
-      onchange: (ev) => act(ev.target, () => api("/api/note", noteBody(l.index + 1, ev.target.value)))}))));
+  if (resumeAt > 0) v.addEventListener("loadedmetadata", () => { v.currentTime = Math.min(resumeAt, v.duration || resumeAt); }, {once: true});
   v.addEventListener("timeupdate", () => {
     const cur = S.script.lines.filter((l) => l.start_s != null && l.start_s <= v.currentTime).pop();
     document.querySelectorAll("tr.cur").forEach((r) => r.classList.remove("cur"));
     if (cur) document.getElementById("vl" + cur.index)?.classList.add("cur");
   });
+  videoEl = v; videoVersion = version;
+  return v;
+}
+function renderVideo() {
+  const out = [...approveBar("video")];
+  if (!S.video) { out.push(h("div", {class: "panel"}, "動画(video.mp4 / draft.mp4)がまだありません。build.py で下書きを作れます。")); return out; }
+  const v = videoElement();
+  const rows = S.script.lines.map((l) => h("tr", {id: "vl" + l.index},
+    h("td", {}, h("a", {href: "#", onclick: (ev) => { ev.preventDefault(); if (l.start_s != null) { v.currentTime = l.start_s; v.play(); } }}, mmss(l.start_s))),
+    h("td", {}, String(l.index + 1)), h("td", {}, l.text),
+    h("td", {}, noteCell(l.index + 1, "指摘"))));
   out.push(h("div", {class: "panel"}, v,
     h("div", {class: "small", style: "margin:6px 0"}, "時刻のリンクでその行へ移動します。気になった行に指摘を書くと notes.json に保存されます。"),
     h("table", {}, h("thead", {}, h("tr", {}, ["開始", "#", "本文", "指摘"].map((t) => h("th", {}, t)))), h("tbody", {}, rows))));
@@ -319,16 +430,34 @@ function renderVideo() {
 
 // ── 構成案 ──
 function renderPlan() {
-  return [approveBar("plan"), h("div", {class: "panel"},
+  return [...approveBar("plan"), h("div", {class: "panel"},
     S.brief ? h("pre", {}, S.brief) : "brief.md がまだありません(取材と構成案の記録は brief.md に書かれます)。")];
 }
 
 function render() {
-  dirty.clear();  // 再描画で入力欄は作り直される
+  // 再描画で入力欄は作り直される。未保存の下書き(drafts)は、同じ対象の新しい欄へ戻す
+  dirty.clear(); watched.clear();
   renderHeader();
+  const wasPlaying = videoEl && !videoEl.paused && !videoEl.ended;
   const main = document.getElementById("main"); main.replaceChildren();
   const view = {script: renderScript, yomi: renderYomi, assets: renderAssets, video: renderVideo, plan: renderPlan}[tab];
-  main.append(...errorBanner(), ...view());
+  const nodes = view();
+  let kept = 0, clash = 0;
+  for (const [k, d] of [...drafts]) {
+    const w = watched.get(k);
+    if (!w) continue;
+    if (w.el.value === d.value) { if (!w.isDirty()) drafts.delete(k); continue; }  // 保存済み、または変わっていない
+    const moved = w.el.defaultValue !== d.base;  // 入力中の欄の元の値も、外で変わっていた
+    w.el.value = d.value; w.el.classList.add(moved ? "conflict" : "draft");
+    if (moved) w.el.title = "この欄は外でも変更されています。確かめてから保存してください";
+    w.el.dispatchEvent(new Event("input", {bubbles: true}));
+    kept++; if (moved) clash++;
+  }
+  const orphans = [...drafts].filter(([k]) => OWNER(k).includes(tab) && !watched.has(k));
+  main.append(...errorBanner(), ...(orphans.length ? [orphanPanel(orphans)] : []), ...nodes);
+  // 要素を外すと再生が止まる。再生中だったなら続ける
+  if (wasPlaying && tab === "video" && videoEl.isConnected) videoEl.play().catch(() => {});
+  keptNote = kept ? (`入力中の内容(${kept} 件)は残しています。` + (clash ? `${clash} 件は外でも変更されています。確かめてから保存してください` : "確かめて、もう一度保存してください")) : "";
 }
 load(false).catch((e) => document.getElementById("main").append(h("div", {class: "banner bad"}, "読み込みに失敗: " + e.message)));
 </script>

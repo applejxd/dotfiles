@@ -61,10 +61,9 @@ class ReviewSheetTests(unittest.TestCase):
         with (self.d / name).open(encoding="utf-8-sig", newline="") as f:
             return list(csv.reader(f))
 
-    def add_note(self, line, note, text="", at="2026-10-29T08:00:00+09:00"):
-        review_sheet.notes_store(self.d).update(
-            str(line), None, {"note": note, "text": text, "at": at}
-        )
+    def add_note(self, line, note, text, at="2026-10-29T08:00:00+09:00", status="open"):
+        e = review_sheet.make_entry(line, text, note, status=status, at=at)
+        review_sheet.notes_store(self.d).update(review_sheet.note_key(text), None, e)
 
     def test_sheet_has_time_text_reading_and_empty_note(self):
         code, out = run(["--workdir", str(self.d)])
@@ -172,32 +171,129 @@ class NotesStoreTests(unittest.TestCase):
         self.addCleanup(self._t.cleanup)
         self.d = Path(self._t.name)
 
+    def test_key_is_made_from_the_line_text(self):
+        k = review_sheet.note_key("単眼 SLAM です。")
+        self.assertEqual(k, review_sheet.note_key("単眼 SLAM です。"))
+        self.assertNotEqual(k, review_sheet.note_key("別の行"))
+        self.assertRegex(k, r"^n[0-9a-f]{10}$")
+
     def test_validation_of_entries(self):
         st = review_sheet.notes_store(self.d)
-        good = {"note": "x", "text": "t", "at": "2026-10-29T00:00:00+09:00"}
-        st.update("1", None, good)
+        good = review_sheet.make_entry(
+            1, "本文", "指摘", at="2026-10-29T00:00:00+09:00"
+        )
         for key, val in [
-            ("0", good),
-            ("abc", good),
-            ("2", {**good, "note": ""}),
-            ("2", {"note": "x"}),
-            ("2", {**good, "note": 3}),
+            ("1", good),  # 旧形式(行番号キー)
+            ("nzzzzzzzzzz", good),
+            (review_sheet.note_key("本文"), {**good, "note": ""}),
+            (review_sheet.note_key("別"), good),  # キーが本文と合わない
+            (review_sheet.note_key("本文"), {**good, "status": "閉じた"}),
+            (review_sheet.note_key("本文"), {**good, "line": 0}),
+            (review_sheet.note_key("本文"), {**good, "extra": 1}),
+            (review_sheet.note_key("本文"), {"note": "x"}),
         ]:
             with self.subTest(key=key, val=val):
                 with self.assertRaises(state_store.Invalid):
                     st.update(key, None, val)
-        self.assertEqual(list(st.read().entries), ["1"])
+        self.assertEqual(st.read().entries, {})
+        st.update(review_sheet.note_key("本文"), None, good)
+        self.assertEqual(list(st.read().entries), [review_sheet.note_key("本文")])
 
-    def test_read_notes_marks_stale_against_current_lines(self):
+    def test_read_notes_follows_the_text_and_marks_missing_text_as_stale(self):
         st = review_sheet.notes_store(self.d)
-        st.update("1", None, {"note": "a", "text": "同じ", "at": "x"})
-        st.update("2", None, {"note": "b", "text": "古い", "at": "x"})
-        st.update("3", None, {"note": "c", "text": "行が無くなった", "at": "x"})
+        for line, text in [(1, "同じ"), (2, "古い"), (3, "行が無くなった")]:
+            st.update(
+                review_sheet.note_key(text),
+                None,
+                review_sheet.make_entry(line, text, f"n{line}", at="x"),
+            )
+        # 台本: 「同じ」が 2 行目へ動き、「古い」は変わった
         got = {
-            n["line"]: n["stale"]
-            for n in review_sheet.read_notes(self.d, ["同じ", "新しい"])
+            n["note"]: (n["line"], n["stale"], n["moved"])
+            for n in review_sheet.read_notes(self.d, ["新しい", "同じ"])
         }
-        self.assertEqual(got, {1: False, 2: True, 3: True})
+        self.assertEqual(
+            got,
+            {"n1": (2, False, True), "n2": (2, True, False), "n3": (3, True, False)},
+        )
+
+
+class NoteLifecycleTests(unittest.TestCase):
+    """指摘の状態(open / fixed)と CLI(--fix / --reopen / --remove / --all)。直した指摘が残り続けない。"""
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.d = Path(self._t.name)
+        (self.d / "narration.txt").write_text(
+            "subtitles:\n- 単眼 SLAM です。\n- 次に地図です。\n", encoding="utf-8"
+        )
+        self.st = review_sheet.notes_store(self.d)
+        self.a = review_sheet.note_key("単眼 SLAM です。")
+        self.b = review_sheet.note_key("次に地図です。")
+        self.st.update(
+            self.a,
+            None,
+            review_sheet.make_entry(1, "単眼 SLAM です。", "読みを確認", at="x"),
+        )
+        self.st.update(
+            self.b,
+            None,
+            review_sheet.make_entry(2, "次に地図です。", "間が長い", at="x"),
+        )
+
+    def test_notes_show_ids_and_open_ones_only_by_default(self):
+        run(["--workdir", str(self.d), "--fix", self.a])
+        code, out = run(["--workdir", str(self.d), "--notes"])
+        self.assertEqual(code, 0, out)
+        self.assertIn(self.b, out)
+        self.assertNotIn(self.a, out)
+        self.assertIn("指摘 1 件", out)
+        code, out = run(["--workdir", str(self.d), "--notes", "--all"])
+        self.assertIn(self.a, out)
+        self.assertIn("対応済み", out)
+
+    def test_fix_reopen_and_remove(self):
+        code, out = run(["--workdir", str(self.d), "--fix", self.a, self.b])
+        self.assertEqual(code, 0, out)
+        e = self.st.read().entries
+        self.assertEqual(e[self.a]["status"], "fixed")
+        self.assertIn("fixed_at", e[self.a])
+        code, out = run(["--workdir", str(self.d), "--reopen", self.a])
+        self.assertEqual(code, 0, out)
+        e = self.st.read().entries
+        self.assertEqual(e[self.a]["status"], "open")
+        self.assertNotIn("fixed_at", e[self.a])
+        code, out = run(["--workdir", str(self.d), "--remove", self.b])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(list(self.st.read().entries), [self.a])
+
+    def test_unknown_id_exits_2_and_changes_nothing(self):
+        before = (self.d / "notes.json").read_bytes()
+        code, out = run(["--workdir", str(self.d), "--fix", self.a, "nffffffffff"])
+        self.assertEqual(code, 2, out)
+        self.assertIn("nffffffffff", out)
+        self.assertEqual((self.d / "notes.json").read_bytes(), before)
+
+    def test_inserting_a_line_does_not_make_the_notes_stale(self):
+        (self.d / "narration.txt").write_text(
+            "subtitles:\n- 増えた行です。\n- 単眼 SLAM です。\n- 次に地図です。\n",
+            encoding="utf-8",
+        )
+        code, out = run(["--workdir", str(self.d), "--notes"])
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("古い", out)
+        self.assertIn("2行目", out)  # 単眼 SLAM の行が 2 行目へ動いた
+        self.assertIn("3行目", out)
+
+    def test_a_note_does_not_close_itself_when_the_text_changes(self):
+        (self.d / "narration.txt").write_text(
+            "subtitles:\n- 経路推定です。\n- 次に地図です。\n", encoding="utf-8"
+        )
+        code, out = run(["--workdir", str(self.d), "--notes"])
+        self.assertIn(self.a, out)  # もともとの指摘を失わず、「古い」と示す
+        self.assertIn("古い", out)
+        self.assertEqual(self.st.read().entries[self.a]["status"], "open")
 
 
 if __name__ == "__main__":
