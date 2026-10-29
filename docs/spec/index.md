@@ -77,6 +77,7 @@
 | [判定 API（`decide`）](guard/pi-decide.md) | pi のガードが呼ぶ CLI 非依存の判定器。入力と応答、`source`、評価の順番、confirm、役割（`[pi.profiles]`）、`check_bash.py` との等価の試験 |
 | [pi の拡張と補助機能](guard/pi-extensions.md) | 拡張の入れ方の方針、`guarded_action`、ツールの拡張、圧縮、`git commit` の確認、整形、`/fleet`、stepback、キーバインド、Orca・Zed |
 | [pi の子エージェント](guard/pi-subagents.md) | `guarded_task` の起動と役割、`review` への依頼、job、子の操作、worktree 隔離、Windows の `task` |
+| [gitflow 規約の強制](guard/pi-gitflow-guard.md) | gitflow-lite で develop / main の作業ツリーを直接編集・コミットさせない制限層、保証の範囲、試験 |
 | [オーケストレーションと並列作業の機能一覧](orchestration.md) | 親子の分担・子の起動と制御・役割と権限・gitflow と worktree・承認と保留・検査・記録を、カテゴリ別の表にした総覧（状態と正本つき）。未実装は案件へのリンク |
 | [pis のサンドボックス（pi の側）](guard/pi-sandbox.md) | agent 置き場・セッション・認証、プロキシ必須の環境での通信、拒否リスト型の通信、緩和のゲート |
 | [pi のガード](guard/pi-guard.md) | 起動の形、素の pi との対応、Windows、pi の設定、判定の外で動くもの、置き場・環境変数・しくみ、MCP、試験、実機で確認する項目 |

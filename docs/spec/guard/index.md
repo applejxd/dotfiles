@@ -71,6 +71,7 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 - [判定 API（`decide`）](pi-decide.md): 入力・応答・評価の順番・confirm・誘導・TS 版への移植。
 - [pi のガード](pi-guard.md): 起動・bypass・confirm の UI・Windows・pi の設定・MCP。
 - [pi の拡張と補助機能](pi-extensions.md): 拡張の方針・`guarded_action`・ツールの拡張・圧縮・commit の確認・整形・`/fleet`。
+- [gitflow 規約の強制](pi-gitflow-guard.md): develop / main の作業ツリーを直接編集・コミットさせない制限層（CHG-0049）。
 - [pi の子エージェント](pi-subagents.md): `guarded_task`・job・worktree 隔離・Windows の `task`。
 - [pis のサンドボックス（pi の側）](pi-sandbox.md): agent 置き場・通信・緩和のゲート。
 - [OpenCode のガードの仕様](opencode-guard.md): 保留中のレガシー（撤去予定）の誘導・deny の説明。

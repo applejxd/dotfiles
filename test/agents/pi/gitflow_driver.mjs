@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(join(ROOT, "home", "dot_config", "pi", "harness", "gitflow.ts")).href);
-const { validateFeatureName, parseConfigLines, checkSafeProfile, startArgv, finishArgv } = mod;
+const { validateFeatureName, parseConfigLines, checkSafeProfile, startArgv, finishArgv, identifyModel } = mod;
 
 const REPO = "/home/u/repo";
 const GOOD = `gitflow.version 1.0
@@ -88,6 +88,37 @@ out.wtMissing = profile(change(GOOD, "gitflow.worktreepath .tmp/worktrees/{{ bra
 // classic の既定のまま (bugfix・hotfix などが残る) は、許可リスト外
 out.classicLeftovers = profile(`${GOOD}\ngitflow.branch.hotfix.type topic\ngitflow.branch.hotfix.parent main`);
 out.laterWins = profile(`${GOOD}\ngitflow.branch.feature.parent main\ngitflow.branch.feature.parent develop`);
+
+// identifyModel (CHG-0049): このリポジトリの .gitflow の最小の設定を基準に、1 点ずつ崩す
+const LITE = `gitflow.version 1.0
+gitflow.initialized true
+gitflow.branch.develop.type base
+gitflow.branch.develop.parent main
+gitflow.branch.feature.type topic
+gitflow.branch.feature.parent develop
+gitflow.branch.feature.startpoint develop
+gitflow.branch.feature.upstreamstrategy squash
+gitflow.branch.feature.prefix feature/
+gitflow.branch.main.type base`;
+const model = (text) => identifyModel(parseConfigLines(text));
+const drop = (prefix) =>
+	LITE.split("\n")
+		.filter((l) => !l.startsWith(prefix))
+		.join("\n");
+out.model = {
+	lite: model(LITE),
+	liteGood: model(GOOD),
+	empty: model(""),
+	notInit: model(drop("gitflow.initialized")),
+	initFalse: model(change(LITE, "gitflow.initialized true", "gitflow.initialized false")),
+	mergeStrategy: model(change(LITE, "upstreamstrategy squash", "upstreamstrategy merge")),
+	badPrefix: model(change(LITE, "prefix feature/", "prefix feat/")),
+	developParent: model(change(LITE, "develop.parent main", "develop.parent trunk")),
+	noMain: model(drop("gitflow.branch.main.")),
+	noDevelop: model(drop("gitflow.branch.develop.")),
+	noFeature: model(drop("gitflow.branch.feature.")),
+	fourth: model(`${LITE}\ngitflow.branch.release.type topic`),
+};
 
 out.start = startArgv("alpha");
 out.finish = finishArgv("alpha", "-weird: msg\n\n- bullet");

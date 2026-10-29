@@ -278,6 +278,7 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
 
 ## 既知の制約
 
+- gitflow-lite のリポジトリで develop / main を直接編集・コミットさせない制限は、判定器（`decide`）の外側の別の層で行う（`edit` / `write` と `git_commit` のみ。[gitflow 規約の強制](pi-gitflow-guard.md)。[CHG-0049](../../change/0049-gitflow-convention-guard.md)）。`decide` は変えない
 - `[pi.external_read]` だけを開けている。OpenCode が開けている `[opencode.sandbox] work_read`（`~/src` など）は
   まだ読まないので、隣のリポジトリを読むと確認になる
 - `boundary` の緩和は TS 版だけにある（Python 版 `decide.py` は持たない。正解データは `boundary` なしの要求）。試験は `test_pi_judge_ts.py`

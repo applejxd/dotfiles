@@ -96,3 +96,22 @@ def test_the_fixed_arguments_never_reach_the_network_or_push(t) -> None:
     # メッセージは 1 つの要素で、`-` で始まっても引数として読まれない
     assert finish[finish.index("--squash") + 1] == "--squash-message=-weird: msg\n\n- bullet"
     assert not any(a in finish for a in ("--push", "--fetch", "--force", "--no-keepremote"))
+
+
+def test_identify_model_table(t) -> None:
+    """identifyModel: 最小の gitflow-lite だけが gitflow-lite。1 点でも崩す・足すと other。"""
+    m = t["model"]
+    assert m["lite"] == "gitflow-lite" and m["liteGood"] == "gitflow-lite"
+    for key in (
+        "empty",
+        "notInit",
+        "initFalse",
+        "mergeStrategy",
+        "badPrefix",
+        "developParent",
+        "noMain",
+        "noDevelop",
+        "noFeature",
+        "fourth",
+    ):
+        assert m[key] == "other", key

@@ -47,6 +47,7 @@ try:
         "pending-store.ts",
         "gitflow.ts",
         "gitflow-ops.ts",
+        "gitstate.ts",
         "platform.ts",
         "landlock_exec.py",
         "commit-message.js",

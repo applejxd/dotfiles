@@ -275,6 +275,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
   実際の Fence でのサンドボックスチェック（Fence・bwrap・pi が無ければ skip）
 - プロキシ越しの中継（`test_relay.py`）: 許可リスト・`NO_PROXY`・プロキシの URL の読み方、許可した宛先だけが上流へ届く・許可外と平文 HTTP は上流へ何も送らない・認証ヘッダ・上流の拒否が 502 になる、設定が必要なときだけ変わる
 - 誘導: `cat` が read ツールへの案内で止まる
+- gitflow-lite の規約の強制: `test_pi_gitflow_guard.py`・`test_pi_gitstate.py`・`test_pi_gitflow_guard_harness.py`・`test_pi_gitflow.py`（[仕様](pi-gitflow-guard.md)）
 - 圧縮（指示が履歴の要約の依頼に入る・ファイルの一覧）、`git commit` の確認の本文（RPC で確認の要求を受け取る。期限が付く）、
   整形（ruff・markdownlint）、`/fleet` の展開、キーバインドと共通の指示の生成、Orca の拡張の読み込み条件
 

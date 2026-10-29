@@ -53,6 +53,7 @@
 | `gitflow_feature_commit` | 実装済・実機確認済 | feature の worktree で `git add -A` して commit。確認なし。保護対象のパスは止まる | 同上 |
 | `gitflow_feature_finish` | 実装済・実機確認済 | `develop` へ squash。確認あり。リモートに触れない。本体にステージ済みの変更があれば拒否 | 同上 |
 | 安全な構成の検査 | 実装済 | 実効設定が許可リストに合うときだけ動く（push の設定・hook・原点の変更などは拒否） | [CHG-0047](../change/0047-gitflow.md#許可の形の設計の修正review-の反映上の案に優先する) |
+| develop / main の直接編集・コミットの拒否 | 実装済（実機は未検証） | gitflow-lite のリポジトリで、`edit` / `write` と `git_commit` を拒否。bash 内の書き込み・直接のブランチ作成は保証外（段 1c で deny 予定）。利用者の逃がし口は未実装 | [CHG-0049](../change/0049-gitflow-convention-guard.md)、[仕様](guard/pi-gitflow-guard.md) |
 | `git flow` の直接実行 | 実装済 | implementer と worker の bash では deny（固定引数の操作だけを使わせる） | 同上 |
 | 隔離なしの worktree | 運用 | 親が feature を切り、子には worktree の中だけで作業させる。強制の囲いではない | [並列実装の運用](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | 子の隔離（`isolation: "worktree"`） | 保留（素の `pi` では認証のロックの書き込みが拒否される） | Landlock で書き込みを狭める。`pis` では認証の写しが既にある | [CHG-0029](../change/0029-worktree-isolation.md) |

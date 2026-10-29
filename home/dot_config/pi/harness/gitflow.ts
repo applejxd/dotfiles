@@ -49,6 +49,33 @@ function valueOf(entries: ConfigEntry[], key: string): string | undefined {
 	return hits.length === 0 ? undefined : hits[hits.length - 1].value;
 }
 
+export type Model = "gitflow-lite" | "other";
+
+/**
+ * コミット済みの `.gitflow` (を `git config --blob --get-regexp` で読んだもの) が、gitflow-lite (main / develop / feature、feature は squash) か。
+ * 規約の強制 (CHG-0049) を掛けるかの識別で、固定操作を安全に実行できるか (checkSafeProfile) とは別。
+ * ブランチ名のカスタムは未対応なので other にする。
+ */
+export function identifyModel(entries: ConfigEntry[]): Model {
+	const v = (key: string) => valueOf(entries, key);
+	if (v("gitflow.initialized") !== "true") return "other";
+	const branches = new Set<string>();
+	for (const e of entries) {
+		const m = /^gitflow\.branch\.([^.]+)\./.exec(e.key);
+		if (m) branches.add(m[1]);
+	}
+	if (branches.size !== 3 || !["main", "develop", "feature"].every((b) => branches.has(b))) return "other";
+	const lite =
+		v("gitflow.branch.main.type") === "base" &&
+		v("gitflow.branch.develop.type") === "base" &&
+		v("gitflow.branch.develop.parent") === "main" &&
+		v("gitflow.branch.feature.type") === "topic" &&
+		v("gitflow.branch.feature.parent") === "develop" &&
+		v("gitflow.branch.feature.prefix") === "feature/" &&
+		v("gitflow.branch.feature.upstreamstrategy") === "squash";
+	return lite ? "gitflow-lite" : "other";
+}
+
 /** このリポジトリの gitflow-lite (main / develop / feature、squash) として安全かを検査する。repoRoot は worktree の置き場の検査に使う */
 export function checkSafeProfile(entries: ConfigEntry[], repoRoot: string): Profile {
 	const problems: string[] = [];

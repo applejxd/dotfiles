@@ -425,6 +425,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
     shutil.copy2(HARNESS_SRC.parent / "gitflow.ts", harness / "gitflow.ts")
     shutil.copy2(HARNESS_SRC.parent / "gitflow-ops.ts", harness / "gitflow-ops.ts")
+    shutil.copy2(HARNESS_SRC.parent / "gitstate.ts", harness / "gitstate.ts")
     shutil.copy2(HARNESS_SRC.parent / "platform.ts", harness / "platform.ts")
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
     shutil.copy2(HARNESS_SRC.parent / "commit-message.js", harness / "commit-message.js")

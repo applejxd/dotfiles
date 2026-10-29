@@ -311,6 +311,7 @@ chezmoi apply --exclude=scripts
 - **feature**: AI は `guarded_action` の `gitflow_feature_start` で起票し（確認なし）、feature の worktree（`.tmp/worktrees/<名前>`）の中で細かくコミットし（確認なし。[`git_commit` の確認の省略](guard/pi-extensions.md#guarded_action承認つきの外部操作)）、`gitflow_feature_finish` でクローズする（確認あり。develop へ squash の 1 コミット）。`finish` は、develop が checked out の本体の作業ツリーで行う
 - **main へ**: 検証（`mise run verify:all`）の後、利用者が `git flow integrate develop` で `develop` を `main` に merge し、`push` する。AI は `integrate` と `push` を行わない
 - **設定**: 共有の `.gitflow`（`gitflow.worktreePath` を含む）を、`scripts/gitflow-setup.sh` で作る・取り込む。グローバルの `~/.gitconfig` に旧キー `gitflow.branch.master` が残っていると、安全な構成の検査が拒否する（`dot_config/git/config.tmpl` からは消してあり、`chezmoi apply` で反映する）。**サンドボックスの外で、利用者が一度だけ**行う（`.git/config` を書くため）。新しい clone や別のマシンでは、同じスクリプトで `git flow config sync` する
+- **ガード**: pi のフルガードは、develop / main の作業ツリーへの `edit` / `write` と `git_commit` を拒否する（[CHG-0049](../change/0049-gitflow-convention-guard.md)、[仕様](guard/pi-gitflow-guard.md)）。bash 内の書き込みは保証外。develop / main で作業する利用者専用の逃がし口は未実装
 - **検査**: スタンプは worktree ごと。push の基準は `origin/develop`（あれば）、無ければ `origin/main`。CI は `main` と `develop` への push と、全ての pull request で動く
 
 ## 作業ツリーの一時領域（`.tmp/`）

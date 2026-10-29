@@ -952,7 +952,9 @@ def test_defaults_enables_remote_login_with_a_launchctl_fallback(tmp_path):
     rendered = render_with_context(DEFAULTS, home=tmp_path / "home", os_name="darwin")
     script = tmp_path / "250.sh"
     script.write_text(rendered, encoding="utf-8")
-    syntax = subprocess.run([bash, "-n", str(script)], capture_output=True, text=True, check=False)
+    syntax = subprocess.run(
+        [bash, "-n", str(script)], capture_output=True, text=True, encoding="utf-8", check=False
+    )
     assert syntax.returncode == 0, syntax.stderr
     check = rendered.index("launchctl print system/com.openssh.sshd")
     systemsetup = rendered.index("systemsetup -setremotelogin on")

@@ -366,6 +366,9 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		// 実行の直前に、承認した状態のままか照合する
 		const now = await previewFn(cwd, values);
 		if (!samePreview(preview, now)) throw new Error("状態が変わった (HEAD・ブランチ・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
+		// 承認の間にブランチが develop / main に変わっていないか。判定をもう一度通す (gitflow 規約の強制。CHG-0049)
+		const after = deps.judge(params, ctx.cwd);
+		if (after) throw new Error(`実行直前の判定で止めた: ${after}`);
 
 		// 承認した内容 (編集した場合は編集後) を書く。承認後に再読みしない
 		for (const [name] of fileFields) writeFileSync(files[name], values[name], { flag: "wx", mode: 0o600 });

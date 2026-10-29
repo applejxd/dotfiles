@@ -20,7 +20,9 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
-import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
+import { BG_RUN, createCallDecider, tighten, type Decision } from "./judge/call.ts";
+import { gate, isGated, type GateResult } from "./judge/gitflow_gate.ts";
+import { createProbe } from "./gitstate.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
@@ -144,6 +146,18 @@ const COMPACT_INSTRUCTIONS = [
 
 // 判定器を呼ぶ口 (bg_run は bash と同じ判定、bg_log / bg_kill は allow。judge/call.ts)。
 // 判定器は呼び出しごとに文脈を作り直す。ここで持つのは読み込んだ設定だけ
+
+// gitflow-lite の規約の強制 (CHG-0049)。git の状態 (ブランチなど) は判定ごとに読み直し、記憶しない。
+// 調べられなかったときは確認にする (許可の側へ倒さない)。see docs/spec/guard/pi-gitflow-guard.md
+function gateNow(tool: string, input: unknown, cwd: string): GateResult {
+	if (!isGated(tool, input)) return { kind: "pass" };
+	try {
+		return gate(tool, input, cwd, createProbe());
+	} catch (e) {
+		return { kind: "confirm", reason: `規約の確認に失敗した: ${(e as Error).message}`, key: "error" };
+	}
+}
+
 const callDecider = createCallDecider({
 	judge: rules.judge,
 	profileTools: rules.profile_tools ?? {},
@@ -151,6 +165,7 @@ const callDecider = createCallDecider({
 	bypass: () => bypass,
 	boundary: BOUNDARY,
 	allowed: BOUNDARY_ENV?.allowed,
+	restrict: gateNow,
 });
 
 export function decide(tool: string, input: unknown, cwd: string): Decision {
@@ -505,8 +520,20 @@ export default async function (pi: ExtensionAPI) {
 				const seen = seen0 && seen0.epoch === epoch ? seen0 : undefined;
 				decided.delete(toolCallId);
 				const input = JSON.stringify(params);
-				const d = seen && seen.input === input ? seen.decision : decide(tool, params, ctx.cwd);
-				const approved = seen?.approved === true && seen.input === input;
+				const cached = seen !== undefined && seen.input === input;
+				let d = cached ? seen!.decision : decide(tool, params, ctx.cwd);
+				// tool_call の後で git の状態 (ブランチなど) が変わりうる。規約の強制だけは、判定を使い回すときも取り直す
+				let gateOk = true;
+				if (cached) {
+					const g = gateNow(tool, params, ctx.cwd);
+					if (g.kind === "deny") d = tighten(d, g);
+					else if (g.kind === "confirm" && d.gateKey !== g.key) {
+						// 承認したときと状態が違う: 前の承認は使わない
+						d = tighten(d, g);
+						gateOk = false;
+					}
+				}
+				const approved = gateOk && seen?.approved === true && seen.input === input;
 				// 確認で見せた --body-file が、承認の後に差し替えられていないこと
 				if (approved && seen?.bodyFile) {
 					const now = readBodyFile(seen.bodyFile.path, ctx.cwd, tool);

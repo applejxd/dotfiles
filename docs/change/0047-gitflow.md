@@ -80,7 +80,7 @@
 | B `guarded_action` の項目（毎回確認） | 固定の引数の表。引数は型で検証 | 引数が固定で検証される | AI の自動と相容れない（毎回、承認が要る） |
 | **C 固定の引数の表＋確認なしの項目（案）** | B と同じ表で、安全と判断した項目は確認を出さずに実行する（`confirm = "never"` のような宣言）。`finish` だけ確認を残すか、事前の条件（作業ツリーがクリーン・検査済み）を満たすときだけ確認なしにするかを決める | 引数が固定・検証され、自動にもできる | ツール（`guarded_action`）の機能の追加が要る。確認なしの範囲の設計が、境界の判断になる |
 
-- **素の `git` の branch・switch -c・checkout -b・worktree add/remove・merge・tag は、共通の規則では deny にしない**（既定の ask のまま）。`.gitflow` があるリポジトリでは、共通の指示と `commit` スキルで `git flow` を使わせる。迂回は、ask の承認で止まる。リポジトリごとに厳密に deny する仕組みは、必要になってから別に検討する（判定器にリポジトリ側の設定を読む仕組みが要る。**未確認**）
+- **素の `git` の branch・switch -c・checkout -b・worktree add/remove・merge・tag は、共通の規則では deny にしない**（既定の ask のまま）。`.gitflow` があるリポジトリでは、共通の指示と `commit` スキルで `git flow` を使わせる。迂回は、ask の承認で止まる。→ **追記（[CHG-0049](0049-gitflow-convention-guard.md)）**: gitflow-lite のリポジトリでは、pi のガードが develop / main の直接編集・コミットを deny にする。素の git のブランチ・worktree の作成も、段 1c（未実装）で deny にする予定。共通の規則（`decide`）は変えない。リポジトリごとに厳密に deny する仕組みは、必要になってから別に検討する（判定器にリポジトリ側の設定を読む仕組みが要る。**未確認**）
 - `git branch -D`・`clean`・`tag -d` が bypass で全役割 allow になる件（CHG-0041 の持ち越し）は、gitflow とは別の修正として、段 3 で扱う
 - ネットワークと push に当たる引数（`--fetch`・`publish`・`track`・リモートの削除など）は、固定の引数で除く。`--keepremote`・`--no-fetch` を固定し、段 1 の実測で、実際にネットワークを使わないことを確かめる
 

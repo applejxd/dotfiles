@@ -11,6 +11,7 @@ import { decide as judge, setBashDecider } from "./decide.ts";
 import { makeBashDecider } from "./bash.ts";
 import type { Common } from "./policy.ts";
 import { pyRegex } from "./pystr.ts";
+import type { GateResult } from "./gitflow_gate.ts";
 
 export type Decision = {
 	decision: "allow" | "ask" | "deny";
@@ -18,7 +19,19 @@ export type Decision = {
 	source: string;
 	/** "ask" のときだけ真になりうる。bypass でも必ず確認する */
 	mustConfirm?: boolean;
+	/** gitflow 規約の確認 (CHG-0049) で承認した状態の識別子。execute() で取り直したものと違う承認は使わない */
+	gateKey?: string;
 };
+
+/**
+ * 規約の強制 (gitflow_gate) の結果を、基本の判定に重ねる。緩めない: base の deny はそのまま、規約の deny は常に勝つ。
+ * confirm (状態を読めなかった) は bypass でも出す確認 (mustConfirm) にする。
+ */
+export function tighten(base: Decision, g: GateResult): Decision {
+	if (g.kind === "pass" || base.decision === "deny") return base;
+	if (g.kind === "deny") return { decision: "deny", reason: g.reason, source: "gitflow-gate" };
+	return { decision: "ask", reason: g.reason, source: "gitflow-gate", mustConfirm: true, gateKey: g.key };
+}
 
 export const BG_RUN = "bg_run";
 const BG_OTHERS = ["bg_log", "bg_kill"];
@@ -35,6 +48,8 @@ export type CallDeciderOptions = {
 	boundary: boolean;
 	/** サンドボックスが開けた場所。boundary のときの、作業ツリーの外の判定に使う */
 	allowed?: { read: string[]; write: string[] };
+	/** gitflow 規約の強制 (CHG-0049)。基本の判定が deny でないときだけ呼ぶ。例外は呼び出し側で捨てず、調べられないときは確認にする */
+	restrict?: (tool: string, input: unknown, cwd: string) => GateResult;
 };
 
 export function createCallDecider(o: CallDeciderOptions): (tool: string, input: unknown, cwd: string) => Decision {
@@ -71,7 +86,9 @@ export function createCallDecider(o: CallDeciderOptions): (tool: string, input: 
 		// judge() は例外を投げず、異常は source: error の deny にする。念のため形も確かめる
 		try {
 			const out = judge(request, o.judge.common) as Decision;
-			if (["allow", "ask", "deny"].includes(out?.decision) && typeof out?.reason === "string") return out;
+			if (["allow", "ask", "deny"].includes(out?.decision) && typeof out?.reason === "string") {
+				return out.decision === "deny" || !o.restrict ? out : tighten(out, o.restrict(tool, input, cwd));
+			}
 			return { decision: "deny", reason: `判定器の応答が不正: ${JSON.stringify(out).slice(0, 120)}`, source: "error" };
 		} catch (e) {
 			// 形の正しい応答以外は deny (空の応答を allow と読まない)
