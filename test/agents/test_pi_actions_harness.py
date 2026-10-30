@@ -582,3 +582,32 @@ def test_an_invalid_issue_title_is_refused_before_any_confirmation(env, title, e
     assert requests == [], requests
     assert results and results[0][0] is True and expected in results[0][1], results
     assert not (env["ghdir"] / "args").exists()
+
+
+@needs_action
+def test_the_rpc_confirmation_is_compact_for_a_long_message_and_many_files(env):
+    """RPC (Orca・Zed) の select は title しか持たない。全部を詰めると chat UI で巨大になるので縮める。"""
+    _prepare(env)
+    proj = env["proj"]
+    for i in range(30):
+        _stage(proj, name=f"f{i:02d}.txt", text=f"{i}\n")
+    body = "\n".join(f"line {i}" for i in range(60))
+    requests, _ = _rpc(env, _call("git_commit", message="feat: many\n\n" + body), _choose(REJECT))
+    title = requests[0]["title"]
+    assert "feat: many" in title and "line 0" in title
+    assert "line 59" not in title  # 本文は先頭だけ
+    assert "他 20 ファイル" in title and "30 files changed" in title  # 統計は先頭 10 件と要約
+    assert EDIT in title  # 全文の見方を案内する
+    assert len(title) < 1800, len(title)
+
+
+@needs_action
+def test_the_edit_dialog_still_shows_the_full_message_when_the_view_is_compact(env):
+    """縮めるのは確認の表示だけ。『編集して承認』のエディタには全文が出る。"""
+    _prepare(env)
+    _stage(env["proj"])
+    body = "\n".join(f"line {i}" for i in range(60))
+    requests, _ = _rpc(env, _call("git_commit", message="feat: long\n\n" + body), _choose(EDIT))
+    editors = [r for r in requests if r["method"] == "editor"]
+    assert editors, _methods(requests)
+    assert "line 59" in editors[0]["prefill"]

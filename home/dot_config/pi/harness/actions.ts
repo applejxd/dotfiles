@@ -223,19 +223,47 @@ function notApproved(why: string): Error {
 	return new Error(`${NOT_APPROVED} ${why}`);
 }
 
-function viewBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[]): string {
+function viewBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[], compact = false): string {
 	const lines: string[] = [];
 	const meta = Object.entries(action.fields).filter(([n, s]) => !s.content && values[n] !== undefined);
 	if (meta.length > 0) lines.push("対象:", ...meta.map(([n]) => `  ${n}: ${sanitizeForDisplay(values[n])}`), "");
 	for (const [n, s] of Object.entries(action.fields)) {
-		if (s.content) lines.push(`${n} (全文):`, sanitizeForDisplay(values[n]), "");
+		if (!s.content) continue;
+		lines.push(compact ? `${n}:` : `${n} (全文):`, sanitizeForDisplay(compact ? compactText(values[n]) : values[n]), "");
 	}
 	if (preview) {
-		lines.push("プレビュー:", `  ブランチ: ${sanitizeForDisplay(preview.branch)}`, `  HEAD: ${preview.head}`, "  ステージ済み:");
-		lines.push(...sanitizeForDisplay(tail(preview.stat, STAT_MAX_CHARS)).split("\n").map((l) => `    ${l}`), "");
+		const head = compact && /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 12) : preview.head;
+		lines.push("プレビュー:", `  ブランチ: ${sanitizeForDisplay(preview.branch)}`, `  HEAD: ${head}`, "  ステージ済み:");
+		const stat = compact ? compactStat(preview.stat) : tail(preview.stat, STAT_MAX_CHARS);
+		lines.push(...sanitizeForDisplay(stat).split("\n").map((l) => `    ${l}`), "");
 	}
-	lines.push("実行する argv (シェルは通さない):", sanitizeForDisplay(JSON.stringify(argv)));
+	const argvText = JSON.stringify(argv);
+	lines.push("実行する argv (シェルは通さない):", sanitizeForDisplay(compact && argvText.length > COMPACT_ARGV_CHARS ? `${argvText.slice(0, COMPACT_ARGV_CHARS)}…` : argvText));
 	return lines.join("\n");
+}
+
+// RPC (Orca ・Zed など TUI 以外) の select は、title と選択肢しか持たない。全部を title に詰めると、chat UI で巨大になり読めない。
+// そこで縮めて表示する。全文は「編集して承認」のエディタで見られる。TUI は変えない。see docs/spec/guard/pi-extensions.md
+const COMPACT_TEXT_LINES = 12;
+const COMPACT_TEXT_CHARS = 1200;
+const COMPACT_STAT_FILES = 10;
+const COMPACT_ARGV_CHARS = 400;
+
+function compactText(text: string): string {
+	const all = text.split("\n");
+	let out = all.slice(0, COMPACT_TEXT_LINES).join("\n");
+	if (out.length > COMPACT_TEXT_CHARS) out = out.slice(0, COMPACT_TEXT_CHARS);
+	if (out.length < text.length) out += `\n… (全 ${all.length} 行・${text.length} 字のうち先頭だけ。「${EDIT}」で全文を確認できる)`;
+	return out;
+}
+
+/** git diff --stat の行を、ファイルの先頭数件と要約の行に絞る */
+function compactStat(stat: string): string {
+	const lines = stat.split("\n");
+	const hasSummary = /\bchanged\b/.test(lines[lines.length - 1] ?? "");
+	const files = hasSummary ? lines.slice(0, -1) : lines;
+	if (files.length <= COMPACT_STAT_FILES) return stat;
+	return [...files.slice(0, COMPACT_STAT_FILES), `… 他 ${files.length - COMPACT_STAT_FILES} ファイル`, ...(hasSummary ? [lines[lines.length - 1]] : [])].join("\n");
 }
 
 type ExecResult = { code: number | string; stdout: string; stderr: string; killed: boolean };
@@ -298,7 +326,8 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 				: snap
 					? `\n\n(${minutes}応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外)`
 					: `\n\n(退避できない状態なので、${minutes}応答が無ければ拒否します)`;
-		const title = `${action.label}\n\n${viewBody(action, values, preview, buildArgv(action, values, files))}${notice}`;
+		const compact = ctx.mode !== "tui";
+		const title = `${action.label}\n\n${viewBody(action, values, preview, buildArgv(action, values, files), compact)}${notice}`;
 		const decision = auto ? ({ kind: "approved" as const, values }) : await deps.dialog(async () => {
 			if (signal?.aborted) return { kind: "aborted" as const };
 			// 不在 (先の確認が時間切れで、そのあと利用者の入力が無い) なら、待たずに退避する
