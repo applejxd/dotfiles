@@ -296,7 +296,7 @@ function notApproved(why: string): Error {
 	return new Error(`${NOT_APPROVED} ${why}`);
 }
 
-function viewBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[]): string {
+function viewBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[], repo?: string): string {
 	const lines: string[] = [];
 	const meta = Object.entries(action.fields).filter(([n, s]) => !s.content && values[n] !== undefined);
 	if (meta.length > 0) lines.push("対象:", ...meta.map(([n]) => `  ${n}: ${sanitizeForDisplay(values[n])}`), "");
@@ -304,7 +304,9 @@ function viewBody(action: ActionSpec, values: Values, preview: Preview | null, a
 		if (s.content) lines.push(`${n} (全文):`, sanitizeForDisplay(values[n]), "");
 	}
 	if (preview) {
-		lines.push("プレビュー:", `  ブランチ: ${sanitizeForDisplay(preview.branch)}`, `  HEAD: ${preview.head}`, "  ステージ済み:");
+		lines.push("プレビュー:");
+		if (repo) lines.push(`  リポジトリ: ${sanitizeForDisplay(repo)}`);
+		lines.push(`  ブランチ: ${sanitizeForDisplay(preview.branch)}`, `  HEAD: ${preview.head}`, "  ステージ済み:");
 		lines.push(...sanitizeForDisplay(tail(preview.stat, STAT_MAX_CHARS)).split("\n").map((l) => `    ${l}`), "");
 	}
 	lines.push("実行する argv (シェルは通さない):", sanitizeForDisplay(JSON.stringify(argv)));
@@ -325,8 +327,9 @@ function clipLine(s: string): string {
 	return s.length > COMPACT_LINE_CHARS ? `${s.slice(0, COMPACT_LINE_CHARS - 1)}…` : s;
 }
 
-function compactBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[]): string {
+function compactBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[], repo?: string): string {
 	const lines: string[] = [];
+	if (repo && preview) lines.push(clipLine(`リポジトリ: ${sanitizeForDisplay(repo)}`));
 	const meta = Object.entries(action.fields).filter(([n, s]) => !s.content && values[n] !== undefined);
 	if (meta.length > 0) lines.push(clipLine(`対象: ${meta.map(([n]) => `${n}=${sanitizeForDisplay(values[n])}`).join(" / ")}`));
 	const contentFields = Object.entries(action.fields).filter(([n, s]) => s.content && values[n] !== undefined);
@@ -353,28 +356,10 @@ function argvLine(argv: string[], values: Values, contentNames: string[]): strin
 	return sanitizeForDisplay(text.length > COMPACT_ARGV_CHARS ? `${text.slice(0, COMPACT_ARGV_CHARS)}…` : text);
 }
 
-// 詳細をチャット (ツールの途中経過) に出し、承認ダイアログは要点だけにするときのダイアログ。
-// 対象・本文の 1 行目・ファイルの先頭数件と要約・argv だけ。詳細は上の出力で、全文は「編集して承認」で見る。
-const SUMMARY_STAT_FILES = 3;
-
-function summaryBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[]): string {
-	const lines: string[] = [];
-	const meta = Object.entries(action.fields).filter(([n, s]) => !s.content && values[n] !== undefined);
-	if (meta.length > 0) lines.push(clipLine(`対象: ${meta.map(([n]) => `${n}=${sanitizeForDisplay(values[n])}`).join(" / ")}`));
-	const contentFields = Object.entries(action.fields).filter(([n, s]) => s.content && values[n] !== undefined);
-	for (const [n] of contentFields) {
-		const all = values[n].split("\n");
-		lines.push(clipLine(`${n}: ${sanitizeForDisplay(all[0])}${all.length > 1 ? ` (全 ${all.length} 行)` : ""}`));
-	}
-	if (preview) {
-		const head = /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 8) : preview.head;
-		lines.push(clipLine(`ブランチ ${sanitizeForDisplay(preview.branch)} / HEAD ${head}`));
-		lines.push(...sanitizeForDisplay(compactStat(preview.stat, SUMMARY_STAT_FILES)).split("\n").map((l) => `  ${clipLine(l)}`));
-	}
-	lines.push(`argv: ${argvLine(argv, values, contentFields.map(([n]) => n))}`);
-	lines.push(`詳細は上のツール出力。全文は「${EDIT}」で見られます`);
-	return lines.join("\n");
-}
+// 詳細をチャット (ツールの途中経過) へ出せたときの承認ダイアログは、要点も繰り返さず、上の詳細を指す 1 文だけにする (利用者の決定)。
+// 対象のリポジトリ・ブランチ・本文・ファイル・argv や退避の注意は、詳細 (viewBody) にある。全文は「編集して承認」のエディタでも見られる。
+const CONFIRM_PROMPT = "上記の内容で実行しますか";
+const PROGRESS_FLUSH_MS = 300;
 
 function compactText(text: string): string {
 	const all = text.split("\n");
@@ -467,15 +452,17 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 					? `\n\n(${minutes}応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外)`
 					: `\n\n(退避できない状態なので、${minutes}応答が無ければ拒否します)`;
 		const viewArgv = buildArgv(action, values, files);
-		// RPC (TUI 以外): 詳細をチャット (ツールの途中経過) に出し、承認ダイアログは要点だけにする。
+		// RPC (TUI 以外): 詳細 (対象のリポジトリ・ブランチ・本文全文・対象ファイル・argv) をチャット (ツールの途中経過) に出し、承認ダイアログは「上記の内容で実行しますか」だけにする。
 		// 途中経過を出せないときは、詳細を見せずに承認させないよう、スマホ向けに縮めた表示をダイアログに出す
 		let title: string;
 		if (ctx.mode === "tui") {
-			title = `${action.label}\n\n${viewBody(action, values, preview, viewArgv)}${notice}`;
-		} else if (!auto && deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv)}`)) {
-			title = `${action.label}\n${summaryBody(action, values, preview, viewArgv)}${notice}`;
+			title = `${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
+		} else if (!auto && deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) {
+			// 途中経過のイベントは pi が非同期に流すので、ダイアログの要求より後に出ることがある。「上記」を先に見せるため、少し待つ
+			await new Promise((r) => setTimeout(r, PROGRESS_FLUSH_MS));
+			title = `${action.label}\n${CONFIRM_PROMPT}`;
 		} else {
-			title = `${action.label}\n${compactBody(action, values, preview, viewArgv)}${notice}`;
+			title = `${action.label}\n${compactBody(action, values, preview, viewArgv, cwd)}${notice}`;
 		}
 		const decision = auto ? ({ kind: "approved" as const, values }) : await deps.dialog(async () => {
 			if (signal?.aborted) return { kind: "aborted" as const };

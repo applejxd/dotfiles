@@ -176,6 +176,7 @@ def _rpc(env, calls, handler, timeout=60, updates=None, **env_extra):
         encoding="utf-8",
     )
     requests, results = [], []
+    seen_updates: list[str] = []
     proc.stdin.write(json.dumps({"type": "prompt", "message": "go"}) + "\n")
     proc.stdin.flush()
     deadline = time.time() + timeout
@@ -194,6 +195,9 @@ def _rpc(env, calls, handler, timeout=60, updates=None, **env_extra):
                 "input",
             ):
                 requests.append(event)
+                event["details"] = "\n".join(
+                    seen_updates
+                )  # この確認の前にチャットへ出た詳細 (view() 用)
                 answer = handler(event)
                 if answer is not None:
                     proc.stdin.write(
@@ -201,9 +205,12 @@ def _rpc(env, calls, handler, timeout=60, updates=None, **env_extra):
                         + "\n"
                     )
                     proc.stdin.flush()
-            if event.get("type") == "tool_execution_update" and updates is not None:
+            if event.get("type") == "tool_execution_update":
                 part = event.get("partialResult") or {}
-                updates.append("".join(c.get("text", "") for c in part.get("content") or []))
+                text = "".join(c.get("text", "") for c in part.get("content") or [])
+                seen_updates.append(text)
+                if updates is not None:
+                    updates.append(text)
             if event.get("type") == "tool_execution_end":
                 res = event.get("result") or {}
                 text = "".join(c.get("text", "") for c in res.get("content") or [])
@@ -238,6 +245,11 @@ def _methods(requests):
     return [r["method"] for r in requests]
 
 
+def view(request):
+    """ある確認で利用者に見える全部。RPC では詳細がチャット (ツールの途中経過)、ダイアログの title は「上記の内容で実行しますか」だけ。"""
+    return f"{request.get('details', '')}\n{request['title']}"
+
+
 @needs_action
 def test_approved_commit_runs_once_with_a_single_confirmation(env):
     _prepare(env)
@@ -247,8 +259,11 @@ def test_approved_commit_runs_once_with_a_single_confirmation(env):
         env, _call("git_commit", message="feat: add new\n\n本文です"), _choose(APPROVE)
     )
     assert _methods(requests) == ["select"], requests  # 汎用の confirm は出ない
-    title = requests[0]["title"]
+    title = view(requests[0])
     assert "コミット" in title and "feat: add new" in title and "new.txt" in title, title
+    assert requests[0]["title"].endswith(
+        "上記の内容で実行しますか"
+    )  # ダイアログは 1 文だけ。詳細はチャットに出る
     assert requests[0]["options"] == [APPROVE, EDIT, REJECT]
     assert requests[0].get("timeout") == 300 * 1000 + 3000  # 自前の期限 (300 秒) の 3 秒後の保険
     assert results and results[0][0] is False, results
@@ -266,7 +281,7 @@ def test_approved_issue_comment_passes_the_approved_argv_and_cleans_up(env):
         env, _call("gh_issue_comment", repo="o/r", number=3, body=body), _choose(APPROVE)
     )
     assert _methods(requests) == ["select"], requests
-    title = requests[0]["title"]
+    title = view(requests[0])
     assert (
         "コメント本文" in title
         and "o/r" in title
@@ -316,7 +331,9 @@ def test_no_answer_defers_the_commit_and_runs_nothing(env):
     before = _head(env["proj"])
     requests, results = _rpc(env, _call("git_commit", message="feat: later"), lambda req: None)
     assert _methods(requests) == ["select"] and requests[0].get("timeout") == 4000, requests
-    assert "応答が無ければ、実行せず内容を退避" in requests[0]["title"]
+    assert "応答が無ければ、実行せず内容を退避" in view(
+        requests[0]
+    )  # 注意書きはチャットの詳細に出る
     ok, text = results[0]
     assert ok is True and text.startswith("not approved:"), results
     assert "元の操作は未実行" in text and "refs/pi/pending/" in text and "再試行しない" in text, (
@@ -385,7 +402,7 @@ def test_other_actions_are_still_refused_on_timeout(env):
     assert (
         results[0][0] is True and "not approved:" in results[0][1] and "再試行せず" in results[0][1]
     ), results
-    assert "退避" not in requests[0]["title"]
+    assert "退避" not in view(requests[0])
     assert not (env["ghdir"] / "args").exists()
 
 
@@ -547,7 +564,7 @@ def test_approved_issue_title_edit_passes_the_title_as_one_argv_element(env):
         env, _call("gh_issue_edit_title", repo="o/r", number=7, title=title), _choose(APPROVE)
     )
     assert _methods(requests) == ["select"], requests
-    shown = requests[0]["title"]
+    shown = view(requests[0])
     assert "新しい題" in shown and "o/r" in shown and '"--title"' in shown
     assert results and results[0][0] is False, results
     args = (env["ghdir"] / "args").read_text(encoding="utf-8").splitlines()
@@ -609,13 +626,11 @@ def test_the_rpc_confirmation_puts_the_details_in_the_chat_and_keeps_the_dialog_
     # チャットには、全文・全ファイルの統計・argv が出る (今までの詳細)
     assert "line 59" in detail and "f29.txt" in detail and "30 files changed" in detail, detail
     assert '"git","commit","-F"' in detail, detail
-    # ダイアログは要点だけ (スマホの画面で承認の選択肢まで見える行数)
+    # ダイアログは「上記の内容で実行しますか」だけ (本文・ファイル名・argv を繰り返さない。スマホの画面で承認の選択肢まで見える)
     title = requests[0]["title"]
-    assert "feat: many" in title and "他 27 ファイル" in title and "30 files changed" in title
-    assert "line 59" not in title and "f29.txt" not in title
-    assert "詳細は上のツール出力" in title and EDIT in title
-    assert title.count("\n") <= 14, title
-    assert len(title) < 800, len(title)
+    assert title == "コミット\n上記の内容で実行しますか", title
+    assert "リポジトリ:" in detail  # リポジトリ・ブランチは詳細に出る
+    assert "ブランチ:" in detail and "feat: many" in detail
 
 
 @needs_action
@@ -631,18 +646,15 @@ def test_the_edit_dialog_still_shows_the_full_message_when_the_view_is_compact(e
 
 
 @needs_action
-def test_the_rpc_confirmation_does_not_repeat_a_content_value_inside_argv(env):
-    """argv に content の値がそのまま入る操作 (--title {title} など) でも、RPC の表示は本文を 2 回出さない。"""
+def test_the_rpc_confirmation_keeps_a_content_value_out_of_the_dialog(env):
+    """argv に content の値がそのまま入る操作 (--title {title} など) でも、ダイアログは本文を繰り返さない (詳細はチャット)。"""
     _prepare(env)
     title = "新しい題 " + "長い題 " * 8
     requests, _ = _rpc(
         env, _call("gh_issue_edit_title", repo="o/r", number=7, title=title), _choose(REJECT)
     )
-    shown = requests[0]["title"]
-    assert shown.count("新しい題") == 1, shown  # 本文 (content) の欄にだけ出る
-    assert '"--title","<title>"' in shown, (
-        shown
-    )  # argv では名前に置き換える (実行する配列は変えない)
+    assert "新しい題" not in requests[0]["title"], requests[0]["title"]
+    assert "新しい題" in requests[0]["details"]  # 全文はチャットへ
 
 
 # ─── dir: cwd 配下の別の git リポジトリ (入れ子・仮想 monorepo) でコミットする ───────────────────
@@ -673,8 +685,8 @@ def test_commit_with_dir_commits_in_the_nested_repository_only(env):
         env, _call("git_commit", message="feat: in child", dir="child"), _choose(APPROVE)
     )
     assert _methods(requests) == ["select"], requests
-    title = requests[0]["title"]
-    assert "dir=child" in title and "n.txt" in title, (
+    title = view(requests[0])
+    assert "dir: child" in title and "n.txt" in title and "/child" in title, (
         title
     )  # 対象のリポジトリと、そこのステージ済み
     assert results and results[0][0] is False, results

@@ -136,6 +136,7 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
   本文の上限と箇条書きの規約は、**束ねるときの squash のメッセージ**（`gitflow_feature_finish` の `message`）に適用する。feature の起票とクローズは `guarded_action` の `gitflow_feature_start` / `gitflow_feature_finish` で行い、
   素の `git branch` や `git flow` は使わない
   - `guarded_action` の `git_commit` は、メッセージが **1200 文字**を超えると、確認の前に拒否する。拒否されたら、箇条書きに縮めて再実行する（書き直しは承認を要さない）
+  - `guarded_action` (`git_commit`・`gitflow_feature_finish` など) で承認を取る前に、対象のリポジトリ・ブランチ・メッセージ全文・対象ファイルをチャット本文へ書く。確認画面 (RPC。Orca など) は「上記の内容で実行しますか」だけで、同じ詳細はツールの途中経過としても出る。「作業サマリー」を承認画面に詰める設計にしない
 
 ## 出力フォーマット
 

@@ -197,7 +197,7 @@ def test_a_discard_asks_and_runs_with_fixed_arguments_that_never_touch_the_remot
         env, A._call("gitflow_feature_discard", name="x"), A._choose(A.APPROVE)
     )
     assert A._methods(requests) == ["select"], requests
-    title = requests[0]["title"]
+    title = A.view(requests[0])
     assert "feature/x" in title and "捨てる" in title and "1 件" in title, title
     assert results and results[0][0] is False, results
     args = _fake_args(env)
@@ -294,7 +294,7 @@ def test_a_finish_asks_and_runs_with_fixed_arguments_that_never_push(env, monkey
         A._choose(A.APPROVE),
     )
     assert A._methods(requests) == ["select"], requests
-    assert "feature/x" in requests[0]["title"] and "squash" in requests[0]["title"]
+    assert "feature/x" in A.view(requests[0]) and "squash" in A.view(requests[0])
     assert results and results[0][0] is False, results
     args = _fake_args(env)
     assert args[:3] == ["feature", "finish", "x"]
@@ -523,7 +523,7 @@ def test_the_whole_feature_cycle_with_the_real_git_flow(env, monkeypatch):
         env, A._call("gitflow_feature_finish", name="cycle", message=message), A._choose(A.APPROVE)
     )
     assert A._methods(requests) == ["select"], requests
-    assert "feature/cycle" in requests[0]["title"] and "f1.txt" in requests[0]["title"]
+    assert "feature/cycle" in A.view(requests[0]) and "f1.txt" in A.view(requests[0])
     assert results[0][0] is False, results
     # develop に 1 コミット (squash)。feature のブランチと worktree は消え、リモートは無い
     assert A._git(proj, "rev-list", "--count", f"{develop_before}..develop").strip() == "1"
@@ -669,7 +669,7 @@ def test_a_discard_removes_the_branch_and_the_worktree_with_the_real_git_flow(en
         env, A._call("gitflow_feature_discard", name="gone"), A._choose(A.APPROVE)
     )
     assert A._methods(requests) == ["select"], requests
-    assert "feature/gone" in requests[0]["title"] and "g.txt" in requests[0]["title"]
+    assert "feature/gone" in A.view(requests[0]) and "g.txt" in A.view(requests[0])
     assert results[0][0] is False, results
     assert not wt.exists()
     assert "feature/gone" not in A._git(proj, "branch", "--list", "feature/*")
