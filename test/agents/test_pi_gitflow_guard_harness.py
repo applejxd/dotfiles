@@ -212,3 +212,86 @@ def test_git_commit_in_a_feature_worktree_is_unaffected(env):
     assert A._head(wt) != before
     assert A._head(proj) == before  # 本体 (develop) は動かない
     assert git(proj, "symbolic-ref", "HEAD").strip() == "refs/heads/develop"
+
+
+# ─── /gitflow-allow (利用者専用の逃がし口) ───────────────────────────────────
+
+
+def _allow_rpc(env, messages, answers, call_path, extra=(), **env_vars):
+    """RPC で messages を順に送る。write は "go" のときに 1 回だけ試みる。確認の要求を返す。"""
+    env["env"].update(env_vars)
+    requests, _ = H._rpc_script(
+        env,
+        write_call(call_path),
+        messages,
+        answers,
+        status_key="gitflow-allow",
+        extra=extra,
+    )
+    return requests
+
+
+def test_gitflow_allow_lets_a_write_to_develop_through(lite_env):
+    """/gitflow-allow edit 5 を承認すると、develop の本体への write が通る。"""
+    proj = lite_env["proj"]
+    requests = _allow_rpc(lite_env, ["/gitflow-allow edit 5", "go"], [True], proj / "a.txt")
+    assert len(requests) == 1 and "develop" in requests[0]["title"], requests
+    assert (proj / "a.txt").read_text(encoding="utf-8") == "x\n"
+
+
+def test_gitflow_allow_declined_grants_nothing(lite_env):
+    """確認を拒否すると、許可は出ず write は拒否されたまま。"""
+    proj = lite_env["proj"]
+    _allow_rpc(lite_env, ["/gitflow-allow edit 5", "go"], [False], proj / "a.txt")
+    assert not (proj / "a.txt").exists()
+
+
+def test_gitflow_allow_is_refused_without_ui_and_grants_nothing(lite_env):
+    """UI の無い実行 (print) ではコマンドが何も付与せず、write は拒否される。"""
+    proj = lite_env["proj"]
+    proc = H.run_pi(lite_env, write_call(proj / "a.txt"), "/gitflow-allow edit 5", "go")
+    assert not (proj / "a.txt").exists(), proc.stdout + proc.stderr
+
+
+def test_gitflow_allow_off_restores_the_refusal(lite_env):
+    """付与後に /gitflow-allow off を打つと、write は再び拒否される。"""
+    proj = lite_env["proj"]
+    requests = _allow_rpc(
+        lite_env, ["/gitflow-allow edit 5", "/gitflow-allow off", "go"], [True], proj / "a.txt"
+    )
+    assert len(requests) == 1, requests
+    assert not (proj / "a.txt").exists()
+
+
+def test_gitflow_allow_does_not_apply_after_the_branch_changes(lite_env):
+    """develop に出した許可は、本体が main に切り替わった後の write には効かない。"""
+    proj = lite_env["proj"]
+    requests = _allow_rpc(
+        lite_env,
+        ["/gitflow-allow edit 5", "go"],
+        [True],
+        proj / "a.txt",
+        extra=("-e", str(H.FIXTURES / "branch_flip.ts")),
+        FLIP_REPO=str(proj),
+        FLIP_TO="main",
+    )
+    assert len(requests) == 1, requests
+    assert git(proj, "symbolic-ref", "HEAD").strip() == "refs/heads/main"  # 切り替えは起きた
+    assert not (proj / "a.txt").exists()
+
+
+def test_gitflow_allow_does_not_reach_the_git_dir(lite_env):
+    """許可があっても、.git/ の中への write は拒否されたまま。"""
+    proj = lite_env["proj"]
+    target = proj / ".git" / "hooks" / "pre-commit"
+    requests = _allow_rpc(lite_env, ["/gitflow-allow all 5", "go"], [True], target)
+    assert len(requests) >= 1, requests
+    assert not target.exists()
+
+
+def test_gitflow_allow_is_not_a_model_tool(lite_env):
+    """モデルに渡るツールに gitflow-allow は無い (登録されるのはスラッシュコマンドだけ)。"""
+    proc = H.run_pi(lite_env, [])
+    assert proc.returncode == 0, proc.stderr
+    tools = H.json.loads(H.lines(proc)[0].removeprefix("TOOLS="))
+    assert not [t for t in tools if "allow" in t.lower()], tools

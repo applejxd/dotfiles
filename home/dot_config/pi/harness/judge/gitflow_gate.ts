@@ -37,6 +37,20 @@ export type GateResult =
 const PASS: GateResult = { kind: "pass" };
 const PROTECTED_REFS = ["refs/heads/develop", "refs/heads/main"];
 
+/**
+ * 利用者が /gitflow-allow で時間を限って出す許可 (CHG-0049 の逃がし口)。モデルは作れない。
+ * この worktree (top) のこの HEAD (head) で、この範囲 (scope) を、期限 (expires、ミリ秒) まで。ブランチが変われば効かない。
+ */
+export type Allowance = { top: string; head: string; scope: "edit" | "commit" | "all"; expires: number };
+export type AllowState = { allowance: Allowance | null; now: number };
+
+/** 許可が、この worktree・この HEAD・この操作に、今効くか */
+export function permits(allow: AllowState | undefined, kind: "edit" | "commit", owner: { top: string; head: Head }): boolean {
+	if (!allow || !allow.allowance || allow.now >= allow.allowance.expires) return false;
+	const a = allow.allowance;
+	return a.top === owner.top && a.head === headRef(owner.head) && (a.scope === "all" || a.scope === kind);
+}
+
 /** この呼び出しを、規約の強制の対象として調べるか (調べる前に git を起動しないための前置き) */
 export function isGated(tool: string, input: unknown): boolean {
 	if (tool === "edit" || tool === "write") return typeof (input as any)?.path === "string";
@@ -77,6 +91,16 @@ function protectedHead(head: Head, primary: boolean): "yes" | "no" | "unreadable
 	return primary ? "yes" : "no";
 }
 
+/** 利用者が許可を出せる状態か (/gitflow-allow の付与前の検査用)。保護の対象の worktree だけ */
+export function isProtectedWorktree(owner: Owner): boolean {
+	return owner.kind === "worktree" && protectedHead(owner.head, owner.primary) === "yes";
+}
+
+/** 許可の表示用の HEAD の名前 (ここで照合に使うものと同じ) */
+export function headName(head: Head): string {
+	return headRef(head);
+}
+
 function guide(facts: Facts, top: string, what: string): string {
 	const lines = [
 		`gitflow-lite のリポジトリでは、develop / main の作業ツリーに直接${what}しない (CHG-0049)。`,
@@ -96,10 +120,12 @@ function unknownConfirm(why: string, key: string): GateResult {
 /**
  * edit / write (path) と git_commit (cwd) を調べる。判定の対象でない呼び出しは pass。
  * 保証するのは、直接のツール呼び出しだけ。外部スクリプトや bash の中の書き込みは対象外 (docs に書く)。
+ * allow (利用者の時限つき許可) が効くのは、「保護の対象の worktree への直接の編集・コミット」の deny だけ。
+ * `.git/` の中と、git を読めないとき (unknown) の確認は、許可で緩めない。
  */
-export function gate(tool: string, input: unknown, cwd: string, facts: Facts): GateResult {
+export function gate(tool: string, input: unknown, cwd: string, facts: Facts, allow?: AllowState): GateResult {
 	if (!isGated(tool, input)) return PASS;
-	if (tool === "action") return gateCommit(cwd, facts);
+	if (tool === "action") return gateCommit(cwd, facts, allow);
 	const raw = expandHome(String((input as any).path), facts.home);
 	const real = facts.realPath(isAbsolutePath(raw) ? raw : joinPath(cwd, raw));
 	const owner = facts.ownerOf(real);
@@ -122,12 +148,13 @@ export function gate(tool: string, input: unknown, cwd: string, facts: Facts): G
 			if (m === "unknown") return unknownConfirm("model", owner.commonDir);
 			// .tmp/ は、実体解決した上でこの worktree の .tmp/ の中のときだけ許す (使い捨て・session の置き場)
 			if (isUnder(real, facts.realPath(joinPath(owner.top, ".tmp")))) return PASS;
+			if (permits(allow, "edit", owner)) return PASS;
 			return { kind: "deny", reason: guide(facts, owner.top, "編集") };
 		}
 	}
 }
 
-function gateCommit(cwd: string, facts: Facts): GateResult {
+function gateCommit(cwd: string, facts: Facts, allow?: AllowState): GateResult {
 	const owner = facts.ownerOf(facts.realPath(cwd));
 	if (owner.kind === "no-repo" || owner.kind === "git-dir") return PASS;
 	if (owner.kind === "unknown") return { kind: "deny", reason: `git の状態を読めなかったので、コミットを止めた (${owner.why})` };
@@ -137,5 +164,6 @@ function gateCommit(cwd: string, facts: Facts): GateResult {
 	const m = facts.modelOf(owner.commonDir);
 	if (m === "none" || m === "other") return PASS;
 	if (m === "unknown") return { kind: "deny", reason: "リポジトリの運用 (.gitflow) を読めなかったので、コミットを止めた" };
+	if (permits(allow, "commit", owner)) return PASS;
 	return { kind: "deny", reason: `${guide(facts, owner.top, "コミット")}\n(今のブランチ: ${headRef(owner.head)})` };
 }

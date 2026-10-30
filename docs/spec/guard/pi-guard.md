@@ -109,6 +109,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - 効くのは判定器の ask だけで、deny・誘導・秘密の保護は変わらない（[評価順](pi-decide.md)）。切り替え時は、`tool_call` で下した判定の使い回し（`decided`）を捨てる
 - 子エージェントへは、**起動した時点の値**を `inherit_bypass` の子にだけ渡す。動いている子には後からの切り替えが届かない
 - サンドボックスの切り替えはできない（Fence は外側から囲うので、内側から外せない。再起動する）
+- 関連: gitflow-lite の develop / main での直接作業は、利用者専用の `/gitflow-allow` で時間を限って許可する（bypass とは別。[逃がし口](pi-gitflow-guard.md#逃がし口gitflow-allow)）
 - 試験: `test_pi_harness.py` の `test_bypass_command_*`（RPC で `/bypass` を送る。TUI の表示そのものは未確認）
 
 ### confirm の確認

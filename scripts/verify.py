@@ -100,6 +100,7 @@ _PI_TESTS = (
     "test_pi_gitflow_actions",
     "test_pi_gitflow_guard",
     "test_pi_gitstate",
+    "test_pi_gitflow_allow",
     "test_pi_gitflow_guard_harness",
     "test_pi_git_destructive",
     "test_pi_orchestrate",

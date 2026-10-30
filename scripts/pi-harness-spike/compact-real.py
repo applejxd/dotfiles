@@ -48,6 +48,7 @@ try:
         "gitflow.ts",
         "gitflow-ops.ts",
         "gitstate.ts",
+        "gitflow-allow.ts",
         "platform.ts",
         "landlock_exec.py",
         "commit-message.js",
