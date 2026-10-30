@@ -214,6 +214,40 @@ def test_git_commit_in_a_feature_worktree_is_unaffected(env):
     assert git(proj, "symbolic-ref", "HEAD").strip() == "refs/heads/develop"
 
 
+@A.needs_action
+def test_git_commit_with_dir_is_judged_by_the_nested_repository(env):
+    """dir を指すと、親ではなく子のブランチで規約を判定する。"""
+    A._prepare(env)
+    proj = env["proj"]  # 親: gitflow-lite ではない普通のリポジトリ
+    child = A._nested(proj)
+    make_repo(child)  # 子: gitflow-lite の develop
+    A._stage(child, "n.txt")
+    head = A._head(child)
+    requests, results = A._rpc(
+        env, A._call("git_commit", message="feat: x", dir="child"), A._choose(A.APPROVE)
+    )
+    assert requests == [], requests
+    assert results and results[0][0] is True and "gitflow_feature_start" in results[0][1], results
+    assert A._head(child) == head
+
+
+@A.needs_action
+def test_git_commit_with_dir_is_not_blocked_by_the_parents_develop(env):
+    """親が gitflow-lite の develop でも、dir で指した子 (規約の対象外) はコミットできる。"""
+    A._prepare(env)
+    proj = env["proj"]
+    make_repo(proj)
+    child = A._nested(proj)
+    A._stage(child, "n.txt")
+    before = A._head(child)
+    requests, results = A._rpc(
+        env, A._call("git_commit", message="feat: x", dir="child"), A._choose(A.APPROVE)
+    )
+    assert A._methods(requests) == ["select"], requests
+    assert results and results[0][0] is False, results
+    assert A._head(child) != before
+
+
 # ─── /gitflow-allow (利用者専用の逃がし口) ───────────────────────────────────
 
 

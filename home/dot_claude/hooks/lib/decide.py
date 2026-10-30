@@ -179,6 +179,10 @@ _ACTION_VALUE_FLAGS = frozenset(
 )
 _ACTION_TYPE_RANK = {"repo": 0, "int": 1, "line": 2, "text": 3}
 _ACTION_PLACEHOLDER_TEXT = {"body": "<本文>", "message": "<件名と本文>", "title": "<タイトル>"}
+# 任意の引数 (optional = true) は呼び出し例に入れず、見つけられるように説明だけを添える
+_ACTION_OPTIONAL_HINT = {
+    "dir": "dir は、cwd 配下にある別の git リポジトリ (最上位) の相対パス。省略すると cwd のリポジトリ",
+}
 
 
 def _action_repo_in(tokens: list[str]) -> str | None:
@@ -207,8 +211,10 @@ def _action_number_in(rest: list[str]) -> int | None:
     return None
 
 
-def _action_entries(pi: dict[str, Any]) -> list[tuple[str, list[str], list[tuple[str, str]]]]:
-    """``[[pi.actions]]`` を (id, replaces, 型と名前順の fields) にする。形が壊れていれば ValueError。"""
+def _action_entries(
+    pi: dict[str, Any],
+) -> list[tuple[str, list[str], list[tuple[str, str]], list[str]]]:
+    """``[[pi.actions]]`` を (id, replaces, 型と名前順の必須 fields, 任意 fields の名前) にする。形が壊れていれば ValueError。"""
     table = pi.get("actions")
     if table is None:
         return []
@@ -224,11 +230,16 @@ def _action_entries(pi: dict[str, Any]) -> list[tuple[str, list[str], list[tuple
         fields = a.get("fields")
         if not isinstance(fields, dict):
             raise ValueError(f"[[pi.actions]] {a['id']!r} の fields が表ではありません")
+        optional = sorted(
+            k for k, v in fields.items() if isinstance(v, dict) and v.get("optional") is True
+        )
         pairs = [
-            (k, str(v.get("type") if isinstance(v, dict) else None)) for k, v in fields.items()
+            (k, str(v.get("type") if isinstance(v, dict) else None))
+            for k, v in fields.items()
+            if k not in optional
         ]
         pairs.sort(key=lambda p: (_ACTION_TYPE_RANK.get(p[1], 9), p[0]))
-        out.append((a["id"], list(replaces), pairs))
+        out.append((a["id"], list(replaces), pairs, optional))
     return out
 
 
@@ -243,7 +254,8 @@ def _action_deny_reason(cmd: str, pi: dict[str, Any], policy: Any) -> str | None
     segments = policy.normalize(cmd)
     # 同じコマンドに当たる操作が複数あるとき (issue の本文とタイトルなど) は、表の順に全部の例を出す
     examples: list[str] = []
-    for aid, replaces, fields in entries:
+    hints: list[str] = []
+    for aid, replaces, fields, optional in entries:
         for segment in segments:
             pattern = next((p for p in replaces if policy._pattern_matches(segment, p)), None)
             if pattern is None:
@@ -274,14 +286,22 @@ def _action_deny_reason(cmd: str, pi: dict[str, Any], policy: Any) -> str | None
                 f'{{"action":{json.dumps(aid, ensure_ascii=False)},"params":{{{",".join(parts)}}}}}'
             )
             examples.append(f"guarded_action {example}")
+            hints.extend(
+                _ACTION_OPTIONAL_HINT[n]
+                for n in optional
+                if n in _ACTION_OPTIONAL_HINT and _ACTION_OPTIONAL_HINT[n] not in hints
+            )
             break
     if not examples:
         return None
-    return (
+    reason = (
         "投稿・コミットは guarded_action で行う（承認はそのツールが 1 回だけ取る。"
         "事前に ask やチャットで承認を取らない）。"
         f"呼び出し例（値は候補。実際の値を確認する）: {' または '.join(examples)}"
     )
+    if hints:
+        reason += f"。任意の引数: {' / '.join(hints)}"
+    return reason
 
 
 def _has_git_exec_option(cmd: str, policy: Any) -> bool:

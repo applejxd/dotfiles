@@ -125,7 +125,12 @@ function unknownConfirm(why: string, key: string): GateResult {
  */
 export function gate(tool: string, input: unknown, cwd: string, facts: Facts, allow?: AllowState): GateResult {
 	if (!isGated(tool, input)) return PASS;
-	if (tool === "action") return gateCommit(cwd, facts, allow);
+	if (tool === "action") {
+		// dir (cwd 配下の別リポジトリ) を指すときは、そこのブランチで判定する (実体の検査は actions.ts の resolveRepoDir)。構文が不正な値は、ここでは cwd のままにして execute の検証で拒否する
+		const dir = (input as any)?.params?.dir;
+		const usable = typeof dir === "string" && dir !== "" && !isAbsolutePath(dir) && !dir.startsWith("~") && !dir.split(/[\\/]/).includes("..");
+		return gateCommit(usable ? joinPath(cwd, dir) : cwd, facts, allow);
+	}
 	const raw = expandHome(String((input as any).path), facts.home);
 	const real = facts.realPath(isAbsolutePath(raw) ? raw : joinPath(cwd, raw));
 	const owner = facts.ownerOf(real);

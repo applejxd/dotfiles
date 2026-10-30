@@ -70,7 +70,10 @@ ACTIONS = [
         "id": "git_commit",
         "label": "コミット",
         "argv": ["git", "commit", "-F", "{message_file}"],
-        "fields": {"message": {"type": "text", "file": True, "content": True, "max_chars": 8000}},
+        "fields": {
+            "message": {"type": "text", "file": True, "content": True, "max_chars": 8000},
+            "dir": {"type": "dir", "optional": True},
+        },
         "replaces": ["git commit"],
         "preview": "git_staged",
     },
@@ -640,3 +643,143 @@ def test_the_rpc_confirmation_does_not_repeat_a_content_value_inside_argv(env):
     assert '"--title","<title>"' in shown, (
         shown
     )  # argv では名前に置き換える (実行する配列は変えない)
+
+
+# ─── dir: cwd 配下の別の git リポジトリ (入れ子・仮想 monorepo) でコミットする ───────────────────
+
+
+def _nested(proj, name="child"):
+    """proj の中に、独立した git リポジトリを作る (親から見ると未追跡のディレクトリ)。"""
+    child = proj / name
+    child.mkdir()
+    _git(child, "init", "-q")
+    _git(child, "config", "user.name", "t")
+    _git(child, "config", "user.email", "t@example.test")
+    _git(child, "config", "commit.gpgsign", "false")
+    _git(child, "config", "core.hooksPath", ".git/hooks")
+    (child / "c.txt").write_text("c\n", encoding="utf-8")
+    _git(child, "add", "c.txt")
+    _git(child, "commit", "-q", "-m", "child base")
+    return child
+
+
+@needs_action
+def test_commit_with_dir_commits_in_the_nested_repository_only(env):
+    _prepare(env)
+    child = _nested(env["proj"])
+    _stage(child, "n.txt")
+    parent_before, child_before = _head(env["proj"]), _head(child)
+    requests, results = _rpc(
+        env, _call("git_commit", message="feat: in child", dir="child"), _choose(APPROVE)
+    )
+    assert _methods(requests) == ["select"], requests
+    title = requests[0]["title"]
+    assert "dir=child" in title and "n.txt" in title, (
+        title
+    )  # 対象のリポジトリと、そこのステージ済み
+    assert results and results[0][0] is False, results
+    assert _head(child) != child_before
+    assert _git(child, "log", "-1", "--format=%B").strip() == "feat: in child"
+    assert _head(env["proj"]) == parent_before  # 親は動かない
+
+
+@needs_action
+def test_commit_with_dir_ignores_what_is_staged_in_the_parent(env):
+    _prepare(env)
+    child = _nested(env["proj"])
+    _stage(env["proj"], "p.txt")  # 親にだけステージ済み
+    before = _head(child)
+    requests, results = _rpc(env, _call("git_commit", message="x", dir="child"), _choose(APPROVE))
+    assert requests == [], requests
+    assert results[0][0] is True and "ステージ済み" in results[0][1], results
+    assert _head(child) == before
+
+
+@needs_action
+def test_commit_without_dir_still_commits_in_the_parent(env):
+    _prepare(env)
+    child = _nested(env["proj"])
+    _stage(child, "n.txt")  # 子にだけステージ済み
+    requests, results = _rpc(env, _call("git_commit", message="x"), _choose(APPROVE))
+    assert requests == [], requests
+    assert results[0][0] is True and "ステージ済み" in results[0][1], results
+
+
+@needs_action
+@pytest.mark.parametrize(
+    ("dir_value", "expected"),
+    [
+        ("../elsewhere", "`..` を含められない"),
+        ("child/../child", "`..` を含められない"),
+        ("/tmp", "相対パス"),
+        ("~/x", "相対パス"),
+        ("a\\b", "バックスラッシュ"),
+        ("missing", "解決できない"),
+        ("child/sub", "最上位"),
+        ("link", "cwd の外を指す"),
+        ("plain", "最上位"),  # 親リポジトリの普通のサブディレクトリ
+        (5, "params.dir: 文字列"),
+    ],
+)
+def test_a_bad_dir_is_an_error_without_a_confirmation(env, dir_value, expected):
+    import re
+
+    _prepare(env)
+    proj = env["proj"]
+    child = _nested(proj)
+    (child / "sub").mkdir()
+    (proj / "plain").mkdir()
+    outside = env["tmp"] / "outside-repo"
+    outside.mkdir()
+    _git(outside, "init", "-q")
+    os.symlink(outside, proj / "link")
+    _stage(child, "n.txt")
+    before = _head(child)
+    requests, results = _rpc(env, _call("git_commit", message="x", dir=dir_value), _choose(APPROVE))
+    assert requests == [], requests
+    assert results and results[0][0] is True and re.search(expected, results[0][1]), results
+    assert _head(child) == before
+
+
+@needs_action
+def test_an_empty_or_dot_dir_means_the_current_repository(env):
+    _prepare(env)
+    _stage(env["proj"])
+    before = _head(env["proj"])
+    requests, results = _rpc(env, _call("git_commit", message="x", dir="."), _choose(APPROVE))
+    assert _methods(requests) == ["select"], requests
+    assert results and results[0][0] is False, results
+    assert _head(env["proj"]) != before
+
+
+@needs_action
+def test_a_deferred_commit_with_dir_is_saved_in_the_nested_repository_and_says_where(env):
+    _prepare(env, timeout_seconds=1)
+    child = _nested(env["proj"])
+    _stage(child, "n.txt")
+    before = _head(child)
+    requests, results = _rpc(
+        env, _call("git_commit", message="feat: later", dir="child"), lambda req: None
+    )
+    ok, text = results[0]
+    assert ok is True and text.startswith("not approved:"), results
+    assert "対象のリポジトリ: child" in text and "/pending には出ない" in text, text
+    assert _head(child) == before
+    assert len(_refs(child)) == 1 and _refs(env["proj"]) == []  # 退避は子へ入り、親には入らない
+
+
+@needs_action
+def test_dir_is_refused_when_the_environment_selects_the_repository(env):
+    _prepare(env)
+    child = _nested(env["proj"])
+    _stage(child, "n.txt")
+    before = _head(child)
+    requests, results = _rpc(
+        env,
+        _call("git_commit", message="x", dir="child"),
+        _choose(APPROVE),
+        GIT_DIR=str(env["proj"] / ".git"),
+    )
+    assert requests == [], requests
+    assert results[0][0] is True and "GIT_DIR" in results[0][1], results
+    assert _head(child) == before

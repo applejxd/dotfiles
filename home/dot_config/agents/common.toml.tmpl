@@ -1007,6 +1007,8 @@ preview = "git_staged"
 [pi.actions.fields]
 # コミットメッセージは 1200 文字まで (肥大化の抑制)。超えたら連絡先の docs へ逃がす。see docs/spec/guard/pi-extensions.md#guarded_action承認つきの外部操作
 message = { type = "text", file = true, content = true, max_chars = 1200 }
+# dir: cwd 配下にある別の git リポジトリ (入れ子・仮想 monorepo) でコミットするときだけ。see docs/spec/guard/pi-extensions.md#guarded_action承認つきの外部操作
+dir = { type = "dir", optional = true }
 
 # git flow (git-flow-next)。実効設定が安全な構成 (main / develop / feature、squash) のときだけ動く。ネットワークと push に触れない引数を固定する。直接の bash は役割の shell_deny で拒否
 # see docs/change/0047-gitflow.md#許可の形の設計の修正review-の反映上の案に優先する

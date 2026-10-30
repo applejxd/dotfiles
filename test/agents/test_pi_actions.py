@@ -31,7 +31,12 @@ HEAD = (
     "事前に ask やチャットで承認を取らない）。"
     "呼び出し例（値は候補。実際の値を確認する）: guarded_action "
 )
-COMMIT = HEAD + '{"action":"git_commit","params":{"message":"<件名と本文>"}}'
+COMMIT_EXAMPLE = '{"action":"git_commit","params":{"message":"<件名と本文>"}}'
+COMMIT = (
+    HEAD
+    + COMMIT_EXAMPLE
+    + "。任意の引数: dir は、cwd 配下にある別の git リポジトリ (最上位) の相対パス。省略すると cwd のリポジトリ"
+)
 
 
 def _comment(repo: str = "<owner/name>", number: str = "<N>") -> str:
@@ -186,7 +191,8 @@ def test_rules_json_carries_the_actions():
     assert commit["argv"] == ["git", "commit", "-F", "{message_file}"]
     assert commit["replaces"] == ["git commit"] and commit["preview"] == "git_staged"
     assert commit["fields"] == {
-        "message": {"type": "text", "file": True, "content": True, "max_chars": 1200}
+        "message": {"type": "text", "file": True, "content": True, "max_chars": 1200},
+        "dir": {"type": "dir", "optional": True},
     }
     # git flow: 固定の引数。ネットワークと push に触れない。確認の省略は start だけ
     assert gf_start["argv"] == [
@@ -505,7 +511,7 @@ def test_a_broken_table_fails_closed_for_roles_with_the_action_tool():
 
 def test_decide_dump_is_json_serializable():
     # 理由に使う JSON の例は、そのまま JSON として読める (呼び出し例の形)
-    example = COMMIT[len(HEAD) :]
+    example = COMMIT_EXAMPLE
     assert json.loads(example)["params"] == {"message": "<件名と本文>"}
 
 
@@ -547,5 +553,45 @@ def test_a_broken_line_field_stops_generation(field):
         del entry["fields"]["title"]["max_chars"]
     else:
         entry["fields"]["title"].update(field)
+    with pytest.raises(SystemExit):
+        _actions_of(_common_with(entry))
+
+
+# ─── dir (実行するリポジトリを選ぶ。argv に現れない任意の引数) ───────────────────────────
+
+
+def _dir_entry(**field):
+    spec = {"type": "dir", "optional": True}
+    spec.update(field)
+    return {
+        "id": "demo_commit",
+        "label": "デモ",
+        "argv": ["git", "commit", "-F", "{message_file}"],
+        "fields": {
+            "message": {"type": "text", "file": True, "content": True, "max_chars": 100},
+            "dir": spec,
+        },
+        "replaces": ["demo commit"],
+        "preview": "git_staged",
+    }
+
+
+def test_a_dir_field_is_accepted_without_appearing_in_argv():
+    actions = _actions_of(_common_with(_dir_entry()))
+    assert actions[0]["fields"]["dir"] == {"type": "dir", "optional": True}
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda e: e["fields"]["dir"].update({"optional": "yes"}),
+        lambda e: e["fields"]["dir"].update({"file": True}),
+        lambda e: e.update({"preview": "none"}),  # dir を持てるのは git_staged だけ
+        lambda e: e["fields"].update({"where": e["fields"].pop("dir")}),  # 名前は dir に固定
+    ],
+)
+def test_a_broken_dir_field_stops_generation(mutate):
+    entry = _dir_entry()
+    mutate(entry)
     with pytest.raises(SystemExit):
         _actions_of(_common_with(entry))

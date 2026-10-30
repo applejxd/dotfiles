@@ -1869,10 +1869,13 @@ PI_ACTION_CONFIRM_RULES = {
     "gitflow_wip": ("gitflow_commit", {"featurename", "text"}),
 }
 PI_ACTION_CONFIRMS = frozenset({"ask", *PI_ACTION_CONFIRM_RULES})
-PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "line", "text", "featurename"})
+PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "line", "text", "featurename", "dir"})
 PI_ACTION_FIELD_KEYS = {
     "repo": frozenset({"type"}),
     "int": frozenset({"type"}),
+    # dir: 操作の対象の git リポジトリ (cwd 配下の最上位の相対パス)。argv には現れず、実行する場所 (cwd) を選ぶ。
+    # optional = true なら省略できる (省略は cwd のリポジトリ)
+    "dir": frozenset({"type", "optional"}),
     # featurename: git flow の feature の名前 (英小文字・数字・. _ -)。argv の 1 要素として直接渡す
     "featurename": frozenset({"type"}),
     # line: 1 行の短い文字列 (issue のタイトルなど)。argv の 1 要素として直接渡す (改行・制御文字は拒否)
@@ -1966,6 +1969,13 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                 if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
                     raise SystemExit(f"{where} の fields.{name}.max_chars は 1–1000 の整数")
                 points[name] = name
+            elif kind == "dir":
+                if not isinstance(spec.get("optional", False), bool):
+                    raise SystemExit(f"{where} の fields.{name}.optional は真偽値")
+                if preview != "git_staged":
+                    raise SystemExit(f"{where} の dir は、preview = git_staged の操作だけが持てる")
+                if name != "dir":
+                    raise SystemExit(f"{where} の dir 型のフィールド名は dir にする")
             else:
                 points[name] = name
         if confirm != "ask":
@@ -1992,11 +2002,12 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                         f"{where} の argv の置換点 {{{point}}} に対応するフィールドが無い"
                     )
                 used.add(points[point])
-        # gitflow_commit の featurename は、実行する worktree を選ぶ (argv には現れない)
+        # gitflow_commit の featurename と dir は、実行する場所を選ぶ (argv には現れない)
         selectors = {
             n
             for n, s in fields.items()
-            if preview == "gitflow_commit" and s.get("type") == "featurename"
+            if (preview == "gitflow_commit" and s.get("type") == "featurename")
+            or s.get("type") == "dir"
         }
         missing = sorted(set(fields) - used - selectors)
         if missing:
@@ -2134,10 +2145,14 @@ def pi_orchestrate(common: dict[str, Any]) -> dict[str, Any]:
     if profile.get("default") != "deny":
         raise SystemExit(f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] default は deny (許可リストにする)")
     if "task" not in tools:
-        raise SystemExit(f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] tools に task が無い (委譲できない親にしない)")
+        raise SystemExit(
+            f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] tools に task が無い (委譲できない親にしない)"
+        )
     bad = sorted(t for t in tools if t in PI_ORCHESTRATE_FORBIDDEN or t.startswith("mcp__"))
     if bad:
-        raise SystemExit(f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] tools に作業のツールがある: {', '.join(bad)}")
+        raise SystemExit(
+            f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] tools に作業のツールがある: {', '.join(bad)}"
+        )
     base = profiles.get(pi.get("default_role"))
     base_tools = set((base or {}).get("tools") or [])
     extra = sorted(set(tools) - base_tools)

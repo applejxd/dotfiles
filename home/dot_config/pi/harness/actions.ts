@@ -6,9 +6,9 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
 import { reconcilePending, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
 import { validateFeatureName } from "./gitflow.ts";
@@ -22,7 +22,7 @@ const EXEC_TIMEOUT_MS = 120_000;
 const OUTPUT_TAIL_CHARS = 8000;
 const STAT_MAX_CHARS = 4000;
 
-export type FieldSpec = { type: "repo" | "int" | "line" | "text" | "featurename"; file?: boolean; content?: boolean; max_chars?: number };
+export type FieldSpec = { type: "repo" | "int" | "line" | "text" | "featurename" | "dir"; file?: boolean; content?: boolean; max_chars?: number; optional?: boolean };
 export type ActionSpec = {
 	id: string;
 	label: string;
@@ -44,16 +44,17 @@ export function loadActions(rules: any): ActionSpec[] {
 	return raw.filter((a: any) => a && typeof a.id === "string" && Array.isArray(a.argv) && a.fields && typeof a.fields === "object");
 }
 
-/** `gh_issue_comment(repo, number, body)  issue にコメントを投稿` */
+/** `gh_issue_comment(repo, number, body)  issue にコメントを投稿`。任意の引数は `dir?` */
 export function actionLine(a: ActionSpec): string {
-	return `${a.id}(${Object.keys(a.fields).join(", ")})  ${a.label}`;
+	return `${a.id}(${Object.entries(a.fields).map(([n, s]) => (s.optional ? `${n}?` : n)).join(", ")})  ${a.label}`;
 }
 
 export function actionDescription(actions: ActionSpec[]): string {
 	return [
 		"投稿・コミットは、このツールで行う。承認はこのツールが 1 回だけ取る。事前にチャットや ask で承認を取らない。",
-		"引数: {action: 操作の ID, params: その操作の引数 (全て必須)}。操作:",
+		"引数: {action: 操作の ID, params: その操作の引数 (全て必須。`?` 付きは任意)}。操作:",
 		...actions.map(actionLine),
+		...(actions.some((a) => a.fields.dir) ? ["dir: cwd 配下にある別の git リポジトリ (入れ子・仮想 monorepo) の最上位を cwd からの相対パスで指す。省略すると cwd のリポジトリ"] : []),
 	].join("\n");
 }
 
@@ -78,8 +79,15 @@ export function validateCall(actions: ActionSpec[], input: any): Checked {
 	}
 	for (const [name, spec] of Object.entries(action.fields)) {
 		const v = (params as any)[name];
+		if ((v === undefined || v === null) && spec.optional) continue;
 		if (v === undefined || v === null) {
 			errors.push(`params.${name}: 必須 (${spec.type})`);
+			continue;
+		}
+		if (spec.type === "dir") {
+			const d = normalizeDirParam(v);
+			if (typeof d === "object") errors.push(`params.${name}: ${d.error}`);
+			else if (d !== "") values[name] = d;
 			continue;
 		}
 		if (spec.type === "repo") {
@@ -114,6 +122,67 @@ export function validateCall(actions: ActionSpec[], input: any): Checked {
 	const shown = Object.entries(action.fields).reduce((n, [name, s]) => n + (s.content ? (values[name]?.length ?? 0) : 0), 0);
 	if (shown > MAX_DISPLAY_CHARS) return { ok: false, error: "本文が長すぎて確認できない。短くする" };
 	return { ok: true, action, values };
+}
+
+/**
+ * dir の引数 (cwd からの相対パス) を構文だけ検証して正規化する。空文字列は「cwd 自身」 (省略と同じ)。
+ * 実体の検査 (cwd の中・シンボリックリンク・git の最上位) は resolveRepoDir。
+ */
+export function normalizeDirParam(v: unknown): string | { error: string } {
+	if (typeof v !== "string") return { error: "文字列 (cwd からの相対パス)" };
+	if (v.length > 256) return { error: `256 字以下 (受け取った長さ: ${v.length})` };
+	if (/[\u0000-\u001f\u007f\u2028\u2029\\]/.test(v)) return { error: "改行・制御文字・バックスラッシュを含められない" };
+	if (isAbsolute(v) || v.startsWith("~") || /^[A-Za-z]:/.test(v)) return { error: "cwd からの相対パスで指す (絶対パス・~ は不可)" };
+	const parts = v.split("/").filter((p) => p !== "" && p !== ".");
+	if (parts.includes("..")) return { error: "`..` を含められない" };
+	return parts.join("/");
+}
+
+/**
+ * dir を実体に解決し、cwd の中にあり、かつ git の最上位 (作業ツリーの根) であることを確かめて、その実体パスを返す。
+ * 解決後のパスの区切りで比べる (箱外へのシンボリックリンクを拒否する)。省略 (空) は cwd をそのまま返す。
+ */
+/** dir 指定時に、対象のリポジトリを変えてしまう継承環境変数 (gate は GIT_* を落として調べるので、実行側との食い違いの元になる)。見つけたら拒否する */
+const REPO_SELECTING_ENV = ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"];
+
+export function repoSelectingEnv(...envs: NodeJS.ProcessEnv[]): string | null {
+	for (const e of envs) for (const k of REPO_SELECTING_ENV) if (e[k] !== undefined && e[k] !== "") return k;
+	return null;
+}
+
+/** 解決済みの実体パスを、cwd からの相対パス (gate が cwd に連結して調べる形) にする。cwd 自身は空 */
+export function relativeDir(base: string, real: string): string {
+	try {
+		return relative(realpathSync(base), real);
+	} catch {
+		return real;
+	}
+}
+
+export async function resolveRepoDir(base: string, dir: string | undefined): Promise<string> {
+	if (!dir) return base;
+	let realBase: string;
+	let real: string;
+	try {
+		realBase = realpathSync(base);
+		real = realpathSync(join(base, dir));
+	} catch {
+		throw new Error(`dir ${JSON.stringify(dir)} を解決できない (存在しない)`);
+	}
+	if (real !== realBase && !real.startsWith(realBase.endsWith(sep) ? realBase : realBase + sep)) {
+		throw new Error(`dir ${JSON.stringify(dir)} が cwd の外を指す (シンボリックリンクを含む)`);
+	}
+	if (!statSync(real).isDirectory()) throw new Error(`dir ${JSON.stringify(dir)} がディレクトリではない`);
+	const top = await run("git", ["rev-parse", "--show-toplevel"], real);
+	if (top.code !== 0) throw new Error(`dir ${JSON.stringify(dir)} は git のリポジトリではない`);
+	let realTop: string;
+	try {
+		realTop = realpathSync(String(top.stdout).trim());
+	} catch {
+		throw new Error(`dir ${JSON.stringify(dir)} のリポジトリの根を解決できない`);
+	}
+	if (realTop !== real) throw new Error(`dir ${JSON.stringify(dir)} はリポジトリの最上位ではない (最上位: ${realTop})。最上位を指す`);
+	return real;
 }
 
 /** argv の置換。`{名前}` は値、`{名前_file}` は本文ファイルの絶対パス。値は 1 つの要素のまま (分割・解釈しない) */
@@ -204,16 +273,18 @@ export type ActionDeps = {
 const BACKSTOP_MS = 3000;
 
 /** 退避して続行する結果 (deferred) または、退避できなかった結果 (defer_failed)。どちらも元の操作は未実行 */
-function deferError(cwd: string, snap: Snapshot, why: string, signal: AbortSignal | undefined): Error {
+function deferError(cwd: string, snap: Snapshot, why: string, signal: AbortSignal | undefined, dir?: string): Error {
 	if (signal?.aborted) return notApproved(outcomeReason("aborted"));
+	// dir 指定のときの退避は、その子のリポジトリに入る。/pending は cwd のリポジトリしか見ないので、場所を添える
+	const where = dir ? ` (対象のリポジトリ: ${dir}。退避はこのリポジトリの refs/pi/pending/ にあり、/pending には出ない)` : "";
 	const saved = savePendingSnapshot(cwd, snap);
 	if (!saved.ok) {
 		return notApproved(
-			`${why}。元の操作は未実行で、内容も退避できなかった (${saved.reason})。再試行しない。この操作に依存しない作業を続け、最後に「保留したコミット」の再作成が要ると報告する`,
+			`${why}。元の操作は未実行で、内容も退避できなかった (${saved.reason})。再試行しない。この操作に依存しない作業を続け、最後に「保留したコミット」の再作成が要ると報告する${where}`,
 		);
 	}
 	return notApproved(
-		`${why}。元の操作は未実行。内容は ${saved.ref} (${saved.short}) に退避した。再試行しない。この操作に依存しない作業を続け、最後に「保留したコミット」として報告する (利用者は /pending で確認・破棄できる)`,
+		`${why}。元の操作は未実行。内容は ${saved.ref} (${saved.short}) に退避した。再試行しない。この操作に依存しない作業を続け、最後に「保留したコミット」として報告する (${dir ? `対象のリポジトリ: ${dir}。/pending には出ない。そのリポジトリの refs/pi/pending/ にある` : "利用者は /pending で確認・破棄できる"})`,
 	);
 }
 
@@ -343,6 +414,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 	const { action } = checked;
 	let values = checked.values;
 	let cwd: string = ctx.cwd;
+	let resolvedParams: any = params; // dir を解決したあとの判定用の入力 (解決済みの対象を指す)
 
 	const fileFields = Object.entries(action.fields).filter(([, s]) => s.type === "text" && s.file === true);
 	const dir = mkdtempSync(join(tmpdir(), "pi-action-")); // 0700
@@ -351,6 +423,18 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		for (const [name] of fileFields) files[name] = join(dir, `${name}.txt`);
 		// WIP コミットは、feature の worktree の中で行う (cwd をその worktree にする。検査は resolveFeatureWorktree と preview)
 		if (action.preview === "gitflow_commit") cwd = resolveFeatureWorktree(cwd, values.name);
+		// dir (任意): cwd 配下の別の git リポジトリで実行する。プレビュー・退避・実行はすべてそのリポジトリを見る
+		if ("dir" in action.fields) {
+			if (values.dir) {
+				const bad = repoSelectingEnv(process.env, deps.env);
+				if (bad) throw new Error(`dir を指すには、対象のリポジトリを変えてしまう環境変数 ${bad} を外す (判定と実行が別のリポジトリを見るのを避ける)`);
+			}
+			cwd = await resolveRepoDir(ctx.cwd, values.dir);
+			// 解決済みの対象に対しても判定を通す (元の dir を評価したあとでリンクが変わっていても、実行する場所を判定する)
+			resolvedParams = { ...params, params: { ...params.params, dir: relativeDir(ctx.cwd, cwd) } };
+			const why2 = deps.judge(resolvedParams, ctx.cwd);
+			if (why2) throw new Error(`実行前の判定で止めた: ${why2}`);
+		}
 		const previewFn =
 			action.preview === "gitflow_commit"
 				? async (c: string, v: Values) => gitflowCommitPreview(c, v, deps.readDeny ? deps.readDeny() : null)
@@ -366,10 +450,10 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		}
 		// 確認の省略は、コードの許可リストにある操作だけ (子の拒否・判定器・型検証・実効設定の検査は、すでに通っている)
 		// feature の worktree の中の WIP コミットも省略する (条件: gitflow-ops.ts の isFeatureWorktreeCommit)。squash の確認 (finish) で、最終の内容を見る
-		const wip = action.id === "git_commit" && isFeatureWorktreeCommit(cwd);
+		const wip = action.id === "git_commit" && !values.dir && isFeatureWorktreeCommit(cwd);
 		const auto = wip || ((action.confirm === "gitflow_start" || action.confirm === "gitflow_wip") && AUTO_CONFIRM.has(action.id));
 		if (!auto && !ctx.hasUI) {
-			if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal);
+			if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal, values.dir);
 			throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");
 		}
 		const absence = deps.absence ?? { absent: false, gen: 0 };
@@ -443,9 +527,9 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			return { kind: "approved" as const, values: edited };
 		});
 		if (decision.kind === "aborted") throw notApproved(outcomeReason("aborted"));
-		if (decision.kind === "absent") throw deferError(cwd, snap!, "利用者が不在のため確認せずに退避した (先の確認が時間切れ)", signal);
+		if (decision.kind === "absent") throw deferError(cwd, snap!, "利用者が不在のため確認せずに退避した (先の確認が時間切れ)", signal, values.dir);
 		if (decision.kind === "outcome") {
-			if (decision.outcome === "timeout" && snap) throw deferError(cwd, snap, `確認が ${minutes}の時間切れになった`, signal);
+			if (decision.outcome === "timeout" && snap) throw deferError(cwd, snap, `確認が ${minutes}の時間切れになった`, signal, values.dir);
 			throw notApproved(outcomeReason(decision.outcome));
 		}
 		if (decision.kind === "empty") throw notApproved("編集の結果が空、または取り消されたので拒否した");
@@ -460,8 +544,10 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		// 実行の直前に、承認した状態のままか照合する
 		const now = await previewFn(cwd, values);
 		if (!samePreview(preview, now)) throw new Error("状態が変わった (HEAD・ブランチ・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
-		// 承認の間にブランチが develop / main に変わっていないか。判定をもう一度通す (gitflow 規約の強制。CHG-0049)
-		const after = deps.judge(params, ctx.cwd);
+		// 承認の間に dir の指す先が変わっていないか (リンクの差し替え。包含・最上位も検査し直す)。ここで確かめるのは「うっかり」の範囲で、最後の syscall 直前の差し替えまでは防げない
+		if (values.dir && (await resolveRepoDir(ctx.cwd, values.dir)) !== cwd) throw new Error("dir の指す先が承認の間に変わった。もう一度 guarded_action を呼ぶ");
+		// 承認の間にブランチが develop / main に変わっていないか。判定をもう一度通す (gitflow 規約の強制。CHG-0049)。dir は解決済みの対象を見る
+		const after = deps.judge(resolvedParams, ctx.cwd);
 		if (after) throw new Error(`実行直前の判定で止めた: ${after}`);
 
 		// 承認した内容 (編集した場合は編集後) を書く。承認後に再読みしない

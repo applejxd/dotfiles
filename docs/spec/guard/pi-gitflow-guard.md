@@ -27,7 +27,7 @@ linked worktree の detached（隔離 worker）は対象にしない。cwd で�
 | 同上 | `.git/` の中（lite のリポジトリ） | deny |
 | 同上 | git を読めない（`unknown`） | `mustConfirm`（bypass でも承認が要る） |
 | 同上 | リポジトリ外、feature の worktree、lite 以外のモデル | 通す（既存の判定のまま） |
-| `git_commit` | 保護の対象の worktree の cwd | deny |
+| `git_commit` | 保護の対象の worktree の cwd（`dir` を指すときは、その `dir` のリポジトリ） | deny |
 | 同上 | git を読めない（`unknown`・HEAD・`.gitflow`） | deny（許可に倒さない） |
 
 - **docs の恒久例外は作らない**。`finish` が本体の追跡ファイルの変更を拒否するので、編集できても統合できなくなる

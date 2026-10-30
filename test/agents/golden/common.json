@@ -1111,6 +1111,10 @@
      "{message_file}"
     ],
     "fields": {
+     "dir": {
+      "optional": true,
+      "type": "dir"
+     },
      "message": {
       "content": true,
       "file": true,
