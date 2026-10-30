@@ -155,10 +155,10 @@ def _call(action, **params):
     return [{"name": "guarded_action", "args": {"action": action, "params": params}}]
 
 
-def _rpc(env, calls, handler, timeout=60, **env_extra):
+def _rpc(env, calls, handler, timeout=60, updates=None, **env_extra):
     """RPC で 1 回呼ぶ。handler(request) は応答の dict (confirmed / value / cancelled) か None (応えない)。
 
-    返すのは (UI の要求の一覧, [(isError, 本文)])。
+    返すのは (UI の要求の一覧, [(isError, 本文)])。updates にリストを渡すと、ツールの途中経過 (tool_execution_update の本文) を、出た順に追記する。
     """
     args = [H.PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
     args += ["-e", str(env["harness"]), "-e", str(H.FIXTURES / "faux.ts"), "--mode", "rpc"]
@@ -198,6 +198,9 @@ def _rpc(env, calls, handler, timeout=60, **env_extra):
                         + "\n"
                     )
                     proc.stdin.flush()
+            if event.get("type") == "tool_execution_update" and updates is not None:
+                part = event.get("partialResult") or {}
+                updates.append("".join(c.get("text", "") for c in part.get("content") or []))
             if event.get("type") == "tool_execution_end":
                 res = event.get("result") or {}
                 text = "".join(c.get("text", "") for c in res.get("content") or [])
@@ -585,20 +588,31 @@ def test_an_invalid_issue_title_is_refused_before_any_confirmation(env, title, e
 
 
 @needs_action
-def test_the_rpc_confirmation_is_compact_for_a_long_message_and_many_files(env):
-    """RPC (Orca・Zed) の select は title しか持たない。全部を詰めると chat UI で巨大になるので縮める。"""
+def test_the_rpc_confirmation_puts_the_details_in_the_chat_and_keeps_the_dialog_short(env):
+    """RPC (Orca・Zed) の select は title しか持たない。詳細はチャット (ツールの途中経過) に出し、ダイアログは要点だけにする。"""
     _prepare(env)
     proj = env["proj"]
     for i in range(30):
         _stage(proj, name=f"f{i:02d}.txt", text=f"{i}\n")
     body = "\n".join(f"line {i}" for i in range(60))
-    requests, _ = _rpc(env, _call("git_commit", message="feat: many\n\n" + body), _choose(REJECT))
+    updates = []
+    requests, _ = _rpc(
+        env,
+        _call("git_commit", message="feat: many\n\n" + body),
+        _choose(REJECT),
+        updates=updates,
+    )
+    detail = "\n".join(updates)
+    # チャットには、全文・全ファイルの統計・argv が出る (今までの詳細)
+    assert "line 59" in detail and "f29.txt" in detail and "30 files changed" in detail, detail
+    assert '"git","commit","-F"' in detail, detail
+    # ダイアログは要点だけ (スマホの画面で承認の選択肢まで見える行数)
     title = requests[0]["title"]
-    assert "feat: many" in title and "line 0" in title
-    assert "line 59" not in title  # 本文は先頭だけ
-    assert "他 20 ファイル" in title and "30 files changed" in title  # 統計は先頭 10 件と要約
-    assert EDIT in title  # 全文の見方を案内する
-    assert len(title) < 1800, len(title)
+    assert "feat: many" in title and "他 27 ファイル" in title and "30 files changed" in title
+    assert "line 59" not in title and "f29.txt" not in title
+    assert "詳細は上のツール出力" in title and EDIT in title
+    assert title.count("\n") <= 14, title
+    assert len(title) < 800, len(title)
 
 
 @needs_action
@@ -611,3 +625,18 @@ def test_the_edit_dialog_still_shows_the_full_message_when_the_view_is_compact(e
     editors = [r for r in requests if r["method"] == "editor"]
     assert editors, _methods(requests)
     assert "line 59" in editors[0]["prefill"]
+
+
+@needs_action
+def test_the_rpc_confirmation_does_not_repeat_a_content_value_inside_argv(env):
+    """argv に content の値がそのまま入る操作 (--title {title} など) でも、RPC の表示は本文を 2 回出さない。"""
+    _prepare(env)
+    title = "新しい題 " + "長い題 " * 8
+    requests, _ = _rpc(
+        env, _call("gh_issue_edit_title", repo="o/r", number=7, title=title), _choose(REJECT)
+    )
+    shown = requests[0]["title"]
+    assert shown.count("新しい題") == 1, shown  # 本文 (content) の欄にだけ出る
+    assert '"--title","<title>"' in shown, (
+        shown
+    )  # argv では名前に置き換える (実行する配列は変えない)

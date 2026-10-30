@@ -192,6 +192,8 @@ export type ActionDeps = {
 	/** 確認の枠は 1 つなので、対話 (select・editor・input) は 1 件ずつこの中で行う */
 	dialog: <T>(fn: () => Promise<T>) => Promise<T>;
 	bell: () => void;
+	/** 確認の前に、詳細をチャットへ出す (ツールの途中経過)。RPC だけで使う。無いときは、ダイアログに縮めた詳細を出す */
+	progress?: (text: string) => boolean;
 	/** 保護対象のパスの一覧 (gitflow_feature_commit が、まとめてステージする前に検査する) */
 	readDeny?: () => ReadDenyLike;
 	/** 利用者が不在と分かった状態 (確認が時間切れ)。セッションごと。入力の世代 gen は、利用者の入力のたびに進む (index.ts) */
@@ -223,47 +225,101 @@ function notApproved(why: string): Error {
 	return new Error(`${NOT_APPROVED} ${why}`);
 }
 
-function viewBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[], compact = false): string {
+function viewBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[]): string {
 	const lines: string[] = [];
 	const meta = Object.entries(action.fields).filter(([n, s]) => !s.content && values[n] !== undefined);
 	if (meta.length > 0) lines.push("対象:", ...meta.map(([n]) => `  ${n}: ${sanitizeForDisplay(values[n])}`), "");
 	for (const [n, s] of Object.entries(action.fields)) {
-		if (!s.content) continue;
-		lines.push(compact ? `${n}:` : `${n} (全文):`, sanitizeForDisplay(compact ? compactText(values[n]) : values[n]), "");
+		if (s.content) lines.push(`${n} (全文):`, sanitizeForDisplay(values[n]), "");
 	}
 	if (preview) {
-		const head = compact && /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 12) : preview.head;
-		lines.push("プレビュー:", `  ブランチ: ${sanitizeForDisplay(preview.branch)}`, `  HEAD: ${head}`, "  ステージ済み:");
-		const stat = compact ? compactStat(preview.stat) : tail(preview.stat, STAT_MAX_CHARS);
-		lines.push(...sanitizeForDisplay(stat).split("\n").map((l) => `    ${l}`), "");
+		lines.push("プレビュー:", `  ブランチ: ${sanitizeForDisplay(preview.branch)}`, `  HEAD: ${preview.head}`, "  ステージ済み:");
+		lines.push(...sanitizeForDisplay(tail(preview.stat, STAT_MAX_CHARS)).split("\n").map((l) => `    ${l}`), "");
 	}
-	const argvText = JSON.stringify(argv);
-	lines.push("実行する argv (シェルは通さない):", sanitizeForDisplay(compact && argvText.length > COMPACT_ARGV_CHARS ? `${argvText.slice(0, COMPACT_ARGV_CHARS)}…` : argvText));
+	lines.push("実行する argv (シェルは通さない):", sanitizeForDisplay(JSON.stringify(argv)));
 	return lines.join("\n");
 }
 
 // RPC (Orca ・Zed など TUI 以外) の select は、title と選択肢しか持たない。全部を title に詰めると、chat UI で巨大になり読めない。
-// そこで縮めて表示する。全文は「編集して承認」のエディタで見られる。TUI は変えない。see docs/spec/guard/pi-extensions.md
-const COMPACT_TEXT_LINES = 12;
-const COMPACT_TEXT_CHARS = 1200;
-const COMPACT_STAT_FILES = 10;
-const COMPACT_ARGV_CHARS = 400;
+// ここでは、スマホの画面でも承認の選択肢まで見える行数を目標に縮める: 空行を入れず、本文と統計を短くし、
+// 1 行の長さを制限し、argv の中の本文の重複 (--squash-message={message} など) を <名前> に置き換える。
+// 全文は「編集して承認」のエディタで見られる。TUI は変えない。see docs/spec/guard/pi-extensions.md
+const COMPACT_TEXT_LINES = 10;
+const COMPACT_TEXT_CHARS = 800;
+const COMPACT_STAT_FILES = 8;
+const COMPACT_LINE_CHARS = 100;
+const COMPACT_ARGV_CHARS = 240;
+
+function clipLine(s: string): string {
+	return s.length > COMPACT_LINE_CHARS ? `${s.slice(0, COMPACT_LINE_CHARS - 1)}…` : s;
+}
+
+function compactBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[]): string {
+	const lines: string[] = [];
+	const meta = Object.entries(action.fields).filter(([n, s]) => !s.content && values[n] !== undefined);
+	if (meta.length > 0) lines.push(clipLine(`対象: ${meta.map(([n]) => `${n}=${sanitizeForDisplay(values[n])}`).join(" / ")}`));
+	const contentFields = Object.entries(action.fields).filter(([n, s]) => s.content && values[n] !== undefined);
+	for (const [n] of contentFields) {
+		lines.push(`${n}:`, ...sanitizeForDisplay(compactText(values[n])).split("\n").map((l) => `  ${clipLine(l)}`));
+	}
+	if (preview) {
+		const head = /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 8) : preview.head;
+		lines.push(clipLine(`ブランチ ${sanitizeForDisplay(preview.branch)} / HEAD ${head}`), "ステージ済み:");
+		lines.push(...sanitizeForDisplay(compactStat(preview.stat)).split("\n").map((l) => `  ${clipLine(l)}`));
+	}
+	// content の値を含む argv の要素は、本文の重複を出さないように <名前> へ置き換える (実際に実行する配列は変えない)
+	lines.push(`argv: ${argvLine(argv, values, contentFields.map(([n]) => n))}`);
+	return lines.join("\n");
+}
+
+/** content の値を含む argv の要素は、本文の重複を出さないように <名前> へ置き換える (実際に実行する配列は変えない) */
+function argvLine(argv: string[], values: Values, contentNames: string[]): string {
+	const shown = argv.map((a) => {
+		for (const n of contentNames) if (values[n] !== "" && a.includes(values[n])) return a.split(values[n]).join(`<${n}>`);
+		return a;
+	});
+	const text = JSON.stringify(shown);
+	return sanitizeForDisplay(text.length > COMPACT_ARGV_CHARS ? `${text.slice(0, COMPACT_ARGV_CHARS)}…` : text);
+}
+
+// 詳細をチャット (ツールの途中経過) に出し、承認ダイアログは要点だけにするときのダイアログ。
+// 対象・本文の 1 行目・ファイルの先頭数件と要約・argv だけ。詳細は上の出力で、全文は「編集して承認」で見る。
+const SUMMARY_STAT_FILES = 3;
+
+function summaryBody(action: ActionSpec, values: Values, preview: Preview | null, argv: string[]): string {
+	const lines: string[] = [];
+	const meta = Object.entries(action.fields).filter(([n, s]) => !s.content && values[n] !== undefined);
+	if (meta.length > 0) lines.push(clipLine(`対象: ${meta.map(([n]) => `${n}=${sanitizeForDisplay(values[n])}`).join(" / ")}`));
+	const contentFields = Object.entries(action.fields).filter(([n, s]) => s.content && values[n] !== undefined);
+	for (const [n] of contentFields) {
+		const all = values[n].split("\n");
+		lines.push(clipLine(`${n}: ${sanitizeForDisplay(all[0])}${all.length > 1 ? ` (全 ${all.length} 行)` : ""}`));
+	}
+	if (preview) {
+		const head = /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 8) : preview.head;
+		lines.push(clipLine(`ブランチ ${sanitizeForDisplay(preview.branch)} / HEAD ${head}`));
+		lines.push(...sanitizeForDisplay(compactStat(preview.stat, SUMMARY_STAT_FILES)).split("\n").map((l) => `  ${clipLine(l)}`));
+	}
+	lines.push(`argv: ${argvLine(argv, values, contentFields.map(([n]) => n))}`);
+	lines.push(`詳細は上のツール出力。全文は「${EDIT}」で見られます`);
+	return lines.join("\n");
+}
 
 function compactText(text: string): string {
 	const all = text.split("\n");
 	let out = all.slice(0, COMPACT_TEXT_LINES).join("\n");
 	if (out.length > COMPACT_TEXT_CHARS) out = out.slice(0, COMPACT_TEXT_CHARS);
-	if (out.length < text.length) out += `\n… (全 ${all.length} 行・${text.length} 字のうち先頭だけ。「${EDIT}」で全文を確認できる)`;
+	if (out.length < text.length) out += `\n… (全 ${all.length} 行・${text.length} 字のうち先頭だけ。「${EDIT}」で全文)`;
 	return out;
 }
 
 /** git diff --stat の行を、ファイルの先頭数件と要約の行に絞る */
-function compactStat(stat: string): string {
+function compactStat(stat: string, max = COMPACT_STAT_FILES): string {
 	const lines = stat.split("\n");
 	const hasSummary = /\bchanged\b/.test(lines[lines.length - 1] ?? "");
 	const files = hasSummary ? lines.slice(0, -1) : lines;
-	if (files.length <= COMPACT_STAT_FILES) return stat;
-	return [...files.slice(0, COMPACT_STAT_FILES), `… 他 ${files.length - COMPACT_STAT_FILES} ファイル`, ...(hasSummary ? [lines[lines.length - 1]] : [])].join("\n");
+	if (files.length <= max) return stat;
+	return [...files.slice(0, max), `… 他 ${files.length - max} ファイル`, ...(hasSummary ? [lines[lines.length - 1]] : [])].join("\n");
 }
 
 type ExecResult = { code: number | string; stdout: string; stderr: string; killed: boolean };
@@ -326,8 +382,17 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 				: snap
 					? `\n\n(${minutes}応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外)`
 					: `\n\n(退避できない状態なので、${minutes}応答が無ければ拒否します)`;
-		const compact = ctx.mode !== "tui";
-		const title = `${action.label}\n\n${viewBody(action, values, preview, buildArgv(action, values, files), compact)}${notice}`;
+		const viewArgv = buildArgv(action, values, files);
+		// RPC (TUI 以外): 詳細をチャット (ツールの途中経過) に出し、承認ダイアログは要点だけにする。
+		// 途中経過を出せないときは、詳細を見せずに承認させないよう、スマホ向けに縮めた表示をダイアログに出す
+		let title: string;
+		if (ctx.mode === "tui") {
+			title = `${action.label}\n\n${viewBody(action, values, preview, viewArgv)}${notice}`;
+		} else if (!auto && deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv)}`)) {
+			title = `${action.label}\n${summaryBody(action, values, preview, viewArgv)}${notice}`;
+		} else {
+			title = `${action.label}\n${compactBody(action, values, preview, viewArgv)}${notice}`;
+		}
 		const decision = auto ? ({ kind: "approved" as const, values }) : await deps.dialog(async () => {
 			if (signal?.aborted) return { kind: "aborted" as const };
 			// 不在 (先の確認が時間切れで、そのあと利用者の入力が無い) なら、待たずに退避する

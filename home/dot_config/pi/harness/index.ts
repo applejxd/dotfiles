@@ -682,7 +682,7 @@ export default async function (pi: ExtensionAPI) {
 				},
 				{ additionalProperties: false },
 			),
-			async execute(toolCallId: string, params: any, signal: any, _onUpdate: any, ctx: any) {
+			async execute(toolCallId: string, params: any, signal: any, onUpdate: any, ctx: any) {
 				decided.delete(toolCallId);
 				return executeAction(
 					{
@@ -691,6 +691,19 @@ export default async function (pi: ExtensionAPI) {
 						child: CHILD,
 						env: { ...AGENT_ENV, ...process.env },
 						redact: redactText,
+						// RPC で、確認の前に詳細をチャット (ツールの途中経過) へ出す。出せないときは undefined (ダイアログに縮めた詳細を出す)
+						progress:
+							typeof onUpdate === "function"
+								? (text: string) => {
+										try {
+											onUpdate({ content: [{ type: "text", text: redactText(text) }], details: {} });
+											return true;
+										} catch {
+											// 出せなかったと返す。呼び出し側が、ダイアログに縮めた詳細を出す
+											return false;
+										}
+									}
+								: undefined,
 						judge: (input, cwd) => {
 							const d = decide(ACTION_TOOL, input, cwd);
 							return d.decision === "allow" ? null : `${d.decision}: ${d.reason}`;
