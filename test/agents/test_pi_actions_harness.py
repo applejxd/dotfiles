@@ -268,7 +268,10 @@ def test_approved_commit_runs_once_with_a_single_confirmation(env):
     assert requests[0]["options"] == [APPROVE, EDIT, REJECT]
     assert requests[0].get("timeout") == 300 * 1000 + 3000  # 自前の期限 (300 秒) の 3 秒後の保険
     assert results and results[0][0] is False, results
-    assert "実際に使った最終の内容" in results[0][1] and "本文です" in results[0][1]
+    assert (
+        "実行した内容は、承認した内容のとおり" in results[0][1]
+        and "実際に使った最終の内容" not in results[0][1]
+    )
     assert _head(env["proj"]) != before
     assert _git(env["proj"], "log", "-1", "--format=%B").strip() == "feat: add new\n\n本文です"
     assert not list(env["tmp"].glob("pi-action-*"))  # 本文ファイルのディレクトリが消える

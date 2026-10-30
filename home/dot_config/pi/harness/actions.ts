@@ -127,11 +127,6 @@ export function normalizeDirParam(v: unknown): string | { error: string } {
 	return parts.join("/");
 }
 
-/**
- * dir を実体に解決し、cwd の中にあり、かつ git の最上位 (作業ツリーの根) であることを確かめて、その実体パスを返す。
- * 解決後のパスの区切りで比べる (箱外へのシンボリックリンクを拒否する)。省略 (空) は cwd をそのまま返す。
- * 対象を選ぶ継承環境変数 (GIT_DIR など) は、ここでも実行でも落とす (repoTargetEnv)。拒否はしない。
- */
 /** 解決済みの実体パスを、cwd からの相対パス (判定器が cwd に連結して見る形) にする。cwd 自身は空 */
 export function relativeDir(base: string, real: string): string {
 	try {
@@ -141,6 +136,11 @@ export function relativeDir(base: string, real: string): string {
 	}
 }
 
+/**
+ * dir を実体に解決し、cwd の中にあり、かつ git の最上位 (作業ツリーの根) であることを確かめて、その実体パスを返す。
+ * 解決後のパスの区切りで比べる (箱外へのシンボリックリンクを拒否する)。省略 (空) は cwd をそのまま返す。
+ * 対象を選ぶ継承環境変数 (GIT_DIR など) は、ここでも実行でも落とす (repoTargetEnv)。拒否はしない。
+ */
 export async function resolveRepoDir(base: string, dir: string | undefined): Promise<string> {
 	if (!dir) return base;
 	let realBase: string;
@@ -268,6 +268,46 @@ function deferError(cwd: string, snap: Snapshot, why: string, signal: AbortSigna
 const APPROVE = "承認して実行";
 const EDIT = "編集して承認";
 const REJECT = "拒否";
+const VIEW_FULL = "全文を見る";
+
+// TUI の git_commit の確認: 小さい変更は全文、大きい変更は要約 + 「全文を見る」 (全文は editor で読む)。表示だけを変える: 同一性の照合・実行の argv は変えない
+// see docs/spec/guard/pi-extensions.md#guarded_action
+const SMALL_MAX_LINES = 5;
+const SMALL_MAX_CHARS = 300;
+const SMALL_MAX_FILES = 5;
+const SUMMARY_FILES = 5;
+
+function statFileCount(stat: string): number {
+	const lines = stat.split("\n");
+	return /\bchanged\b/.test(lines[lines.length - 1] ?? "") ? lines.length - 1 : lines.length;
+}
+
+/** 要約を出す対象 (git_commit だけ) で、本文・ファイル数がどちらも小さい変更は要約しない (全文をそのまま出す) */
+export function needsSummary(action: ActionSpec, values: Values, preview: Preview | null): boolean {
+	if (action.id !== "git_commit" || !preview) return false;
+	const texts = Object.entries(action.fields).filter(([n, s]) => s.content && values[n] !== undefined).map(([n]) => values[n]);
+	const lines = texts.reduce((a, t) => a + t.split("\n").length, 0);
+	const chars = texts.reduce((a, t) => a + t.length, 0);
+	return !(lines <= SMALL_MAX_LINES && chars <= SMALL_MAX_CHARS && statFileCount(preview.stat) <= SMALL_MAX_FILES);
+}
+
+/** 要約: 対象のリポジトリ・ブランチ・HEAD (短縮)・件名と本文の大きさ・ステージ済みの上位ファイルと統計 */
+export function summaryBody(action: ActionSpec, values: Values, preview: Preview, repo?: string): string {
+	const lines: string[] = [];
+	if (repo) lines.push(clipLine(`リポジトリ: ${sanitizeForDisplay(repo)}`));
+	const meta = Object.entries(action.fields).filter(([n, s]) => !s.content && values[n] !== undefined);
+	if (meta.length > 0) lines.push(clipLine(`対象: ${meta.map(([n]) => `${n}=${sanitizeForDisplay(values[n])}`).join(" / ")}`));
+	const head = /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 8) : preview.head;
+	lines.push(clipLine(`ブランチ: ${sanitizeForDisplay(preview.branch)}  HEAD: ${head}`));
+	for (const [n, s] of Object.entries(action.fields)) {
+		if (!s.content || values[n] === undefined) continue;
+		const all = values[n].split("\n");
+		lines.push(clipLine(`${n}: ${sanitizeForDisplay(all[0])}`));
+		if (all.length > 1 || values[n].length > COMPACT_LINE_CHARS) lines.push(`  (全 ${all.length} 行・${values[n].length} 字。「${VIEW_FULL}」で全文)`);
+	}
+	lines.push("ステージ済み:", ...sanitizeForDisplay(compactStat(preview.stat, SUMMARY_FILES)).split("\n").map((l) => `  ${clipLine(l)}`));
+	return lines.join("\n");
+}
 
 function notApproved(why: string): Error {
 	return new Error(`${NOT_APPROVED} ${why}`);
@@ -419,7 +459,10 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		// RPC (TUI 以外): 詳細 (対象のリポジトリ・ブランチ・本文全文・対象ファイル・argv) をチャット (ツールの途中経過) に出し、承認ダイアログは「上記の内容で実行しますか」だけにする。
 		// 途中経過を出せないときは、詳細を見せずに承認させないよう、スマホ向けに縮めた表示をダイアログに出す
 		let title: string;
-		if (ctx.mode === "tui") {
+		const summarize = ctx.mode === "tui" && needsSummary(action, values, preview);
+		if (summarize) {
+			title = `${action.label}\n\n${summaryBody(action, values, preview!, cwd)}${notice}`;
+		} else if (ctx.mode === "tui") {
 			title = `${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
 		} else if (deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) {
 			// 途中経過のイベントは pi が非同期に流すので、ダイアログの要求より後に出ることがある。「上記」を先に見せるため、少し待つ
@@ -434,24 +477,35 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			if (snap && absence.absent) return { kind: "absent" as const };
 			deps.bell();
 			const gen0 = absence.gen;
-			const own = new AbortController();
+			const options = summarize ? [APPROVE, VIEW_FULL, EDIT, REJECT] : [APPROVE, EDIT, REJECT];
 			let timedOut = false;
-			const forward = () => own.abort();
-			if (signal?.aborted) own.abort();
-			else signal?.addEventListener("abort", forward, { once: true });
-			const timer = setTimeout(() => {
-				timedOut = true;
-				own.abort();
-			}, timeoutMs);
 			let choice: string | undefined;
 			let error = false;
-			try {
-				choice = await ctx.ui.select(title, [APPROVE, EDIT, REJECT], { signal: own.signal, timeout: timeoutMs + BACKSTOP_MS });
-			} catch {
-				error = true;
-			} finally {
-				clearTimeout(timer);
-				signal?.removeEventListener("abort", forward);
+			// 「全文を見る」で select を押し直す。期限は select ごとに仕切り直す (editor には無い)
+			for (;;) {
+				const own = new AbortController();
+				const forward = () => own.abort();
+				if (signal?.aborted) own.abort();
+				else signal?.addEventListener("abort", forward, { once: true });
+				const timer = setTimeout(() => {
+					timedOut = true;
+					own.abort();
+				}, timeoutMs);
+				try {
+					choice = await ctx.ui.select(title, options, { signal: own.signal, timeout: timeoutMs + BACKSTOP_MS });
+				} catch {
+					error = true;
+				} finally {
+					clearTimeout(timer);
+					signal?.removeEventListener("abort", forward);
+				}
+				if (choice !== VIEW_FULL || signal?.aborted) break;
+				try {
+					// 読むだけ (変更しても反映されない)。閉じると確認に戻る
+					await ctx.ui.editor(`${action.label}: 全文 (読むだけ。閉じると確認に戻る)`, `${viewBody(action, values, preview, viewArgv, cwd)}${notice}`);
+				} catch {
+					// 表示できなくても、確認に戻る
+				}
 			}
 			if (choice === REJECT) {
 				let reason: string | undefined;
@@ -466,7 +520,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			const outcome = choice === APPROVE || choice === EDIT ? "approved" : signal?.aborted ? "aborted" : timedOut ? "timeout" : error ? "error" : "denied";
 			if (outcome === "timeout" && absence.gen === gen0) absence.absent = true;
 			if (outcome !== "approved") return { kind: "outcome" as const, outcome };
-			if (choice !== EDIT) return { kind: "approved" as const, values };
+			if (choice !== EDIT) return { kind: "approved" as const, values, edited: false };
 			const edited: Values = { ...values };
 			for (const [name, s] of Object.entries(action.fields)) {
 				if (!(s.type === "text" || s.type === "line") || !s.content) continue;
@@ -475,7 +529,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 				// 1 行の項目は、エディタが足す末尾の改行を落とす (途中の改行は再検証で拒否)
 				edited[name] = s.type === "line" ? text.replace(/[\r\n]+$/, "") : text;
 			}
-			return { kind: "approved" as const, values: edited };
+			return { kind: "approved" as const, values: edited, edited: true };
 		});
 		if (decision.kind === "aborted") throw notApproved(outcomeReason("aborted"));
 		if (decision.kind === "absent") throw deferError(cwd, snap!, "利用者が不在のため確認せずに退避した (先の確認が時間切れ)", signal, values.dir);
@@ -520,7 +574,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 				reconcilePending(cwd);
 			} catch {}
 		}
-		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, `実際に使った最終の内容:\n${used.join("\n\n")}`].filter(Boolean).join("\n\n");
+		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, decision.edited ? `実際に使った最終の内容 (編集した):\n${used.join("\n\n")}` : "実行した内容は、承認した内容のとおり"].filter(Boolean).join("\n\n");
 		return { content: [{ type: "text", text }], details: { action: action.id } };
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
