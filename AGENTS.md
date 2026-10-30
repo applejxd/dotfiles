@@ -80,6 +80,10 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   スクリプトが実行時に端末で尋ねる（[sudo パスワード](docs/spec/development.md#sudo-パスワード)）
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない
 - コミットメッセージは Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）
+- **develop / main に直接コミットしない。** 実装は feature の worktree（`.tmp/worktrees/<名前>/`）で行う。
+  feature の起票とクローズ（`git flow feature start` / `finish`）は、機械では止めないので指示で守る。
+  AI は、feature の worktree で起動した pi から `guarded_action` の `git_commit` を使う
+  （[CHG-0050](docs/change/0050-slim-guarded-action.md)）
 - 運用手順やコマンドを追加したら `docs/` の該当ファイルと `index.md` を更新する。
   `README.md` は導入・更新など入口の手順が変わるときだけ更新する
 - **`README.md` は「最短で動かす」ためだけに保つ。** 各項目は数行 + `docs/` への

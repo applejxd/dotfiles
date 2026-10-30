@@ -61,6 +61,7 @@ const category = (request) => {
 
 // TS 版だけの後続の規則を、Python 版の正解と照合する (Python 版には確認表 [pi.confirm] と本文の形の deny が無い。標本は除かない)。
 //  - mustConfirm の ask: Python は ask、あるいは bypass 要求の allow+bypassed。理由・source・check は確認表だけに載ると Python では default なので比べない
+//    既定が deny の役割では、Python が default の deny (確認表にしか無いコマンド。例: chezmoi apply) でもよい (子は UI が無く、どちらも通らない)
 //  - 本文を確認できない形の deny: Python はそのコマンドを ask / allow として扱う
 //  - 既定が deny の役割 (explorer・reader・committer) で、[bash] ask を deny にしたもの: Python は ask (bypass なら allow)。役割・bash・元の理由・source・check を比べる
 //  - 同じ役割で、元に戻せないローカルの git 操作 ([pi.confirm] local_git) を deny にしたもの: 役割と bash だけを比べる
@@ -72,7 +73,10 @@ const askLike = (r) => r?.decision === "ask" || (r?.decision === "allow" && r?.b
 const denyDefaultRoleBash = (request) => request?.tool === "bash" && DENY_DEFAULT_ROLES.has(request?.role);
 const sameAsExpected = (got, expected, request) => {
 	if (stable(got) === stable(expected)) return true;
-	if (got?.decision === "ask" && got.mustConfirm === true) return askLike(expected);
+	if (got?.decision === "ask" && got.mustConfirm === true) {
+		if (askLike(expected)) return true;
+		return denyDefaultRoleBash(request) && expected?.decision === "deny" && expected?.source === "default";
+	}
 	if (got?.decision === "deny" && typeof got.reason === "string" && got.reason.startsWith(BLIND_PREFIX)) {
 		return expected?.decision === "ask" || expected?.decision === "allow";
 	}

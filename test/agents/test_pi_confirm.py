@@ -91,6 +91,9 @@ CONFIRM_COMMANDS = [
     "gh variable delete X",
     "gh gist edit abc",
     "gh gist delete abc",
+    "chezmoi apply",
+    "chezmoi apply --dry-run",
+    "chezmoi update",
 ]
 
 PREFIXED_FORMS = [

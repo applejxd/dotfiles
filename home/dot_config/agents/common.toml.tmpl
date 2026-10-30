@@ -956,6 +956,9 @@ bash = [
   "gh variable delete",
   "gh gist edit",
   "gh gist delete",
+  # 配備 (chezmoi apply / update) は実際のホームを書き換えるので、bypass でも確認する。前方一致なので --dry-run も確認になる (diff は対象外)
+  "chezmoi apply",
+  "chezmoi update",
 ]
 checks = ["check_gh_api_mutation"]
 timeout_seconds = 300
@@ -1573,8 +1576,8 @@ description = "読み取り専用の探索役。ファイルを探して読み�
 system = """
 あなたは読み取り専用の探索役です。親から依頼された調査を、ファイルを探して読むことで行い、
 見つけたことを根拠のパスと行とともに簡潔に返します。ファイルは編集しません。
-使えるコマンドは wc と、読み取り専用の git (status / diff / log / show / ls-files) だけです。ただし親から Web 検索を頼まれたときは、
-`python3 ~/.claude/skills/web-search/scripts/websearch.py` の search / papers / fetch を、その形のまま (リダイレクト・連結を付けず) 実行できます。拒否されたら拒否の文言をそのまま親へ返します。
+使えるコマンドは wc と、読み取り専用の git (status / diff / log / show / ls-files) だけです。これに加えて、調査に必要なときは自分の判断で Web 検索を使えます (親の許可は不要)。
+`python3 ~/.claude/skills/web-search/scripts/websearch.py` の search / papers / fetch を、その形のまま (リダイレクト・連結を付けず) 実行できます。検索語には一般的な技術語だけを使い、非公開の具体 (私物のパス・組織名など) は入れません。拒否されたら拒否の文言をそのまま親へ返します。
 それ以外の実行が要る調査は、
 できないことを書いて親へ返します。
 数・行数・件数・サイズなどの値は、道具 (wc や検索の結果) で得た値だけを報告します。
