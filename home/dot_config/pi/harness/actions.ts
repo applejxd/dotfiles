@@ -11,8 +11,6 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
 import { reconcilePending, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
-import { validateFeatureName } from "./gitflow.ts";
-import { gitflowCommitPreview, gitflowDiscardPreview, gitflowFinishPreview, gitflowStartPreview, isFeatureWorktreeCommit, leftoverWorktreeHint, resolveFeatureWorktree, type ReadDenyLike } from "./gitflow-ops.ts";
 
 export const ACTION_TOOL = "action";
 const NOT_APPROVED = "not approved:";
@@ -22,20 +20,15 @@ const EXEC_TIMEOUT_MS = 120_000;
 const OUTPUT_TAIL_CHARS = 8000;
 const STAT_MAX_CHARS = 4000;
 
-export type FieldSpec = { type: "repo" | "int" | "line" | "text" | "featurename" | "dir"; file?: boolean; content?: boolean; max_chars?: number; optional?: boolean };
+export type FieldSpec = { type: "repo" | "int" | "line" | "text" | "dir"; file?: boolean; content?: boolean; max_chars?: number; optional?: boolean };
 export type ActionSpec = {
 	id: string;
 	label: string;
 	argv: string[];
 	fields: Record<string, FieldSpec>;
 	replaces: string[];
-	preview: "none" | "git_staged" | "gitflow_start" | "gitflow_finish" | "gitflow_commit" | "gitflow_discard";
-	/** 確認の省略。コードの許可リスト (AUTO_CONFIRM) にある操作だけ。既定は確認する */
-	confirm?: "ask" | "gitflow_start" | "gitflow_wip";
+	preview: "none" | "git_staged";
 };
-
-/** 確認なしで実行してよい操作。設定ではなくコードで決める (名前の型だけを引数に持ち、実効設定の検査を通った git flow の起票だけ) */
-const AUTO_CONFIRM = new Set(["gitflow_feature_start", "gitflow_feature_commit"]);
 
 /** rules.judge.common.pi.actions (配列)。無い・形が違う項目は捨てる (生成器が起動前に検証している) */
 export function loadActions(rules: any): ActionSpec[] {
@@ -97,10 +90,6 @@ export function validateCall(actions: ActionSpec[], input: any): Checked {
 			const n = typeof v === "number" ? v : typeof v === "string" && /^[0-9]+$/.test(v) ? Number(v) : NaN;
 			if (!Number.isInteger(n) || n < 1 || n > INT_MAX) errors.push(`params.${name}: 1〜${INT_MAX} の整数 (受け取った値: ${JSON.stringify(v)})`);
 			else values[name] = String(n);
-		} else if (spec.type === "featurename") {
-			const bad = validateFeatureName(v);
-			if (bad) errors.push(`params.${name}: ${bad}`);
-			else values[name] = v as string;
 		} else if (spec.type === "line") {
 			// 1 行の短い文字列 (issue のタイトルなど)。改行・制御文字を含められない (確認画面と argv の見え方がずれないように)
 			const max = spec.max_chars ?? 256;
@@ -142,7 +131,7 @@ export function normalizeDirParam(v: unknown): string | { error: string } {
  * dir を実体に解決し、cwd の中にあり、かつ git の最上位 (作業ツリーの根) であることを確かめて、その実体パスを返す。
  * 解決後のパスの区切りで比べる (箱外へのシンボリックリンクを拒否する)。省略 (空) は cwd をそのまま返す。
  */
-/** dir 指定時に、対象のリポジトリを変えてしまう継承環境変数 (gate は GIT_* を落として調べるので、実行側との食い違いの元になる)。見つけたら拒否する */
+/** dir 指定時に、対象のリポジトリを変えてしまう継承環境変数 (判定と実行で対象が食い違う元になる)。見つけたら拒否する */
 const REPO_SELECTING_ENV = ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"];
 
 export function repoSelectingEnv(...envs: NodeJS.ProcessEnv[]): string | null {
@@ -150,7 +139,7 @@ export function repoSelectingEnv(...envs: NodeJS.ProcessEnv[]): string | null {
 	return null;
 }
 
-/** 解決済みの実体パスを、cwd からの相対パス (gate が cwd に連結して調べる形) にする。cwd 自身は空 */
+/** 解決済みの実体パスを、cwd からの相対パス (判定器が cwd に連結して見る形) にする。cwd 自身は空 */
 export function relativeDir(base: string, real: string): string {
 	try {
 		return relative(realpathSync(base), real);
@@ -234,9 +223,6 @@ export async function gitStagedPreview(cwd: string): Promise<Preview> {
 const PREVIEWS: Record<string, (cwd: string, values: Values) => Promise<Preview | null>> = {
 	none: async () => null,
 	git_staged: (cwd) => gitStagedPreview(cwd),
-	gitflow_start: async (cwd, values) => gitflowStartPreview(cwd, values),
-	gitflow_finish: async (cwd, values) => gitflowFinishPreview(cwd, values),
-	gitflow_discard: async (cwd, values) => gitflowDiscardPreview(cwd, values),
 };
 
 function samePreview(a: Preview | null, b: Preview | null): boolean {
@@ -263,8 +249,6 @@ export type ActionDeps = {
 	bell: () => void;
 	/** 確認の前に、詳細をチャットへ出す (ツールの途中経過)。RPC だけで使う。無いときは、ダイアログに縮めた詳細を出す */
 	progress?: (text: string) => boolean;
-	/** 保護対象のパスの一覧 (gitflow_feature_commit が、まとめてステージする前に検査する) */
-	readDeny?: () => ReadDenyLike;
 	/** 利用者が不在と分かった状態 (確認が時間切れ)。セッションごと。入力の世代 gen は、利用者の入力のたびに進む (index.ts) */
 	absence?: { absent: boolean; gen: number };
 };
@@ -406,8 +390,6 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 	try {
 		const files: Record<string, string> = {};
 		for (const [name] of fileFields) files[name] = join(dir, `${name}.txt`);
-		// WIP コミットは、feature の worktree の中で行う (cwd をその worktree にする。検査は resolveFeatureWorktree と preview)
-		if (action.preview === "gitflow_commit") cwd = resolveFeatureWorktree(cwd, values.name);
 		// dir (任意): cwd 配下の別の git リポジトリで実行する。プレビュー・退避・実行はすべてそのリポジトリを見る
 		if ("dir" in action.fields) {
 			if (values.dir) {
@@ -420,10 +402,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			const why2 = deps.judge(resolvedParams, ctx.cwd);
 			if (why2) throw new Error(`実行前の判定で止めた: ${why2}`);
 		}
-		const previewFn =
-			action.preview === "gitflow_commit"
-				? async (c: string, v: Values) => gitflowCommitPreview(c, v, deps.readDeny ? deps.readDeny() : null)
-				: PREVIEWS[action.preview];
+		const previewFn = PREVIEWS[action.preview];
 		if (!previewFn) throw new Error(`未対応の preview: ${action.preview}`);
 		// 退避の対象は git_commit だけ。表示の前に tree を確定し、あとから実のインデックスを読み直さない
 		const snap: Snapshot | null = action.id === "git_commit" ? snapshotStaged(cwd, String(values.message ?? ""), randomUUID()) : null;
@@ -433,11 +412,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		if (snap && preview && (snap.baseHeadOid !== (/^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head : "") || snap.indexId !== preview.indexId)) {
 			throw new Error("状態が変わった (HEAD・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
 		}
-		// 確認の省略は、コードの許可リストにある操作だけ (子の拒否・判定器・型検証・実効設定の検査は、すでに通っている)
-		// feature の worktree の中の WIP コミットも省略する (条件: gitflow-ops.ts の isFeatureWorktreeCommit)。squash の確認 (finish) で、最終の内容を見る
-		const wip = action.id === "git_commit" && !values.dir && isFeatureWorktreeCommit(cwd);
-		const auto = wip || ((action.confirm === "gitflow_start" || action.confirm === "gitflow_wip") && AUTO_CONFIRM.has(action.id));
-		if (!auto && !ctx.hasUI) {
+		if (!ctx.hasUI) {
 			if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal, values.dir);
 			throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");
 		}
@@ -457,14 +432,14 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		let title: string;
 		if (ctx.mode === "tui") {
 			title = `${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
-		} else if (!auto && deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) {
+		} else if (deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) {
 			// 途中経過のイベントは pi が非同期に流すので、ダイアログの要求より後に出ることがある。「上記」を先に見せるため、少し待つ
 			await new Promise((r) => setTimeout(r, PROGRESS_FLUSH_MS));
 			title = `${action.label}\n${CONFIRM_PROMPT}`;
 		} else {
 			title = `${action.label}\n${compactBody(action, values, preview, viewArgv, cwd)}${notice}`;
 		}
-		const decision = auto ? ({ kind: "approved" as const, values }) : await deps.dialog(async () => {
+		const decision = await deps.dialog(async () => {
 			if (signal?.aborted) return { kind: "aborted" as const };
 			// 不在 (先の確認が時間切れで、そのあと利用者の入力が無い) なら、待たずに退避する
 			if (snap && absence.absent) return { kind: "absent" as const };
@@ -533,7 +508,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		if (!samePreview(preview, now)) throw new Error("状態が変わった (HEAD・ブランチ・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
 		// 承認の間に dir の指す先が変わっていないか (リンクの差し替え。包含・最上位も検査し直す)。ここで確かめるのは「うっかり」の範囲で、最後の syscall 直前の差し替えまでは防げない
 		if (values.dir && (await resolveRepoDir(ctx.cwd, values.dir)) !== cwd) throw new Error("dir の指す先が承認の間に変わった。もう一度 guarded_action を呼ぶ");
-		// 承認の間にブランチが develop / main に変わっていないか。判定をもう一度通す (gitflow 規約の強制。CHG-0049)。dir は解決済みの対象を見る
+		// 承認の間に状態が変わっていないか。判定をもう一度通す。dir は解決済みの対象を見る
 		const after = deps.judge(resolvedParams, ctx.cwd);
 		if (after) throw new Error(`実行直前の判定で止めた: ${after}`);
 
@@ -556,10 +531,8 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 				reconcilePending(cwd);
 			} catch {}
 		}
-		const hint = action.id === "gitflow_feature_finish" ? leftoverWorktreeHint(cwd, values.name) : null;
-		const autoNote = auto ? (wip ? "確認なしで実行した (feature の worktree の WIP コミット。最終の内容は finish の確認で見る)" : `確認なしで実行した (${action.id}。対象: ${preview?.stat ?? ""})`) : "";
-		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, autoNote, hint, `実際に使った最終の内容:\n${used.join("\n\n")}`].filter(Boolean).join("\n\n");
-		return { content: [{ type: "text", text }], details: { action: action.id, auto } };
+		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, `実際に使った最終の内容:\n${used.join("\n\n")}`].filter(Boolean).join("\n\n");
+		return { content: [{ type: "text", text }], details: { action: action.id } };
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

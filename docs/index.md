@@ -45,7 +45,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
 | pi のガードの判定器（`decide`）を変える | [判定 API](spec/guard/pi-decide.md) |
 | pi のガード（`pis`）を起動する・変える | [pi のガード](spec/guard/pi-guard.md) |
-| develop / main の直接編集を止める制限（gitflow-lite）を変える | [gitflow 規約の強制](spec/guard/pi-gitflow-guard.md) |
+| gitflow-lite の運用（起票は利用者、AI は feature の worktree から `git_commit`）を知る | [開発ガイドのブランチモデル](spec/development.md#ブランチモデルgitflow-lite) |
 | `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
 | コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/guard/agent-command-policy.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/mcp-servers.md#mcp-サーバ) |

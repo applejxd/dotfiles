@@ -1010,49 +1010,6 @@ message = { type = "text", file = true, content = true, max_chars = 1200 }
 # dir: cwd 配下にある別の git リポジトリ (入れ子・仮想 monorepo) でコミットするときだけ。see docs/spec/guard/pi-extensions.md#guarded_action承認つきの外部操作
 dir = { type = "dir", optional = true }
 
-# git flow (git-flow-next)。実効設定が安全な構成 (main / develop / feature、squash) のときだけ動く。ネットワークと push に触れない引数を固定する。直接の bash は役割の shell_deny で拒否
-# see docs/change/0047-gitflow.md#許可の形の設計の修正review-の反映上の案に優先する
-[[pi.actions]]
-id = "gitflow_feature_start"
-label = "git flow: feature を起票 (develop から worktree を作る)"
-argv = ["git", "flow", "feature", "start", "{name}", "--worktree", "--no-fetch"]
-replaces = ["git flow feature start"]
-preview = "gitflow_start"
-confirm = "gitflow_start"
-[pi.actions.fields]
-name = { type = "featurename" }
-
-# feature の worktree の WIP コミット。worktree の中で git add -A (保護対象のパスがあれば止める) して commit する。確認なし
-[[pi.actions]]
-id = "gitflow_feature_commit"
-label = "git flow: feature の worktree で WIP コミット (git add -A して commit)"
-argv = ["git", "commit", "--message={message}"]
-replaces = ["git flow feature commit"]
-preview = "gitflow_commit"
-confirm = "gitflow_wip"
-[pi.actions.fields]
-name = { type = "featurename" }
-message = { type = "text", content = true, max_chars = 1200 }
-
-[[pi.actions]]
-id = "gitflow_feature_finish"
-label = "git flow: feature をクローズ (develop へ squash)"
-argv = ["git", "flow", "feature", "finish", "{name}", "--squash", "--squash-message={message}", "--keepremote", "--no-fetch", "--no-push", "--no-pushtag", "--notag"]
-replaces = ["git flow feature finish"]
-preview = "gitflow_finish"
-[pi.actions.fields]
-name = { type = "featurename" }
-message = { type = "text", content = true, max_chars = 1200 }
-
-[[pi.actions]]
-id = "gitflow_feature_discard"
-label = "git flow: feature を捨てる (ブランチと worktree を消す)"
-argv = ["git", "flow", "feature", "delete", "{name}", "--force", "--no-fetch", "--no-remote"]
-replaces = ["git flow feature delete"]
-preview = "gitflow_discard"
-[pi.actions.fields]
-name = { type = "featurename" }
-
 # shell 出力の伏字化。誘導と結果フィルタを抜けて shell を通ったものへの安全網。
 # ★境界ではない。base64 や tr で変換されるとすり抜ける (実測)。事故と素朴な
 #   プロンプトインジェクションを想定した層で、意図的な持ち出しは止まらない。
@@ -1522,12 +1479,6 @@ $ARGUMENTS
 [pi.profiles.implementer]
 tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "todo", "ask", "action", "mcp__*"]
 default = "ask"
-# git-flow-next (git flow) は、固定の引数の操作 (guarded_action の gitflow_*) だけで使う。bash からの直接の実行は、bypass でも拒否する
-# see docs/change/0047-gitflow.md
-shell_deny = [
-  "git flow",
-  "git-flow",
-]
 
 [pi.profiles.reader]
 tools = ["read", "grep", "find", "ls"]
@@ -1596,8 +1547,6 @@ shell_deny = [
   "git switch",
   "git restore",
   "git reset",
-  "git flow",
-  "git-flow",
 ]
 
 # 親を「計画・判断・委譲」に絞る役割。利用者専用の /orchestrate on で切り替える ([pi.orchestrate])。

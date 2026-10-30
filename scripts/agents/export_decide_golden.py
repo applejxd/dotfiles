@@ -55,12 +55,6 @@ DASH_COMMANDS = (
     "git diff -- a b",
     "git status -- .",
     "git push -- origin main",
-    # git-flow-next は、implementer と worker の bash からは直接実行できない (CHG-0047)
-    "git flow feature start x --worktree",
-    "git flow feature finish x --squash",
-    "git flow feature list",
-    "git flow integrate develop",
-    "git-flow feature publish x",
     "git log --output=file -- x",
     "kubectl exec p -- git push",
     "xargs -- git push",

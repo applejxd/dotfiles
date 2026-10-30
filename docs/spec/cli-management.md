@@ -139,10 +139,10 @@ seccomp フィルタは手で `npm install -g` する必要はありません。
 
 ### git flow（git-flow-next）
 
-`github:gittower/git-flow-next` は、AI が feature の起票・クローズを行う `git flow` の実体です（[CHG-0047](../change/0047-gitflow.md)）。Linux / WSL だけに入れます。
+`github:gittower/git-flow-next` は、利用者が feature の起票・クローズを行う `git flow` の実体です（[CHG-0047](../change/0047-gitflow.md)。AI の `gitflow_*` 操作は [CHG-0050](../change/0050-slim-guarded-action.md) で撤去）。Linux / WSL だけに入れます。
 
-- **版とチェックサムを固定しています**（Fence と同じ）。公式の Releases の `checksums.txt` の値を `platforms.<os>-<arch>.checksum` に写します（`linux-x64` と `linux-arm64`）。上げるときは、`git-flow` が `.git/config` に書く設定の意味が変わりうるので、[実効設定の安全プロファイル](guard/pi-extensions.md#guarded_action承認つきの外部操作)（`harness/gitflow.ts`）と試験を見直す
-- 実体は `git-flow` 1 つ。PATH にあれば `git flow` として動く。AI は bash から直接実行できず、`guarded_action` の `gitflow_*` だけを使う（役割の `shell_deny` が `git flow`・`git-flow` を bypass でも拒否する）
+- **版とチェックサムを固定しています**（Fence と同じ）。公式の Releases の `checksums.txt` の値を `platforms.<os>-<arch>.checksum` に写します（`linux-x64` と `linux-arm64`）。上げるときは、`git-flow` が `.git/config` に書く設定の意味が変わりうるので、`scripts/gitflow-setup.sh` と動作を見直す
+- 実体は `git-flow` 1 つ。PATH にあれば `git flow` として動く。利用者が自分のシェルで実行する（bash の `git flow` の拒否は撤去した）
 - リポジトリごとの設定は `.gitflow`（共有）。新しい clone では `git flow config sync` で有効にする。設定は、サンドボックスの外で、利用者が一度だけ行う（`.git/config` を書くため）
 
 ### Windows の pi

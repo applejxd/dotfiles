@@ -161,7 +161,8 @@ def _call(action, **params):
 def _rpc(env, calls, handler, timeout=60, updates=None, **env_extra):
     """RPC で 1 回呼ぶ。handler(request) は応答の dict (confirmed / value / cancelled) か None (応えない)。
 
-    返すのは (UI の要求の一覧, [(isError, 本文)])。updates にリストを渡すと、ツールの途中経過 (tool_execution_update の本文) を、出た順に追記する。
+    返すのは (UI の要求の一覧, [(isError, 本文)])。
+    updates にリストを渡すと、ツールの途中経過 (tool_execution_update の本文) を、出た順に追記する。
     """
     args = [H.PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
     args += ["-e", str(env["harness"]), "-e", str(H.FIXTURES / "faux.ts"), "--mode", "rpc"]
@@ -770,7 +771,7 @@ def test_a_deferred_commit_with_dir_is_saved_in_the_nested_repository_and_says_w
     child = _nested(env["proj"])
     _stage(child, "n.txt")
     before = _head(child)
-    requests, results = _rpc(
+    _requests, results = _rpc(
         env, _call("git_commit", message="feat: later", dir="child"), lambda req: None
     )
     ok, text = results[0]

@@ -109,7 +109,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - 効くのは判定器の ask だけで、deny・誘導・秘密の保護は変わらない（[評価順](pi-decide.md)）。切り替え時は、`tool_call` で下した判定の使い回し（`decided`）を捨てる
 - 子エージェントへは、**起動した時点の値**を `inherit_bypass` の子にだけ渡す。動いている子には後からの切り替えが届かない
 - サンドボックスの切り替えはできない（Fence は外側から囲うので、内側から外せない。再起動する）
-- 関連: gitflow-lite の develop / main での直接作業は、利用者専用の `/gitflow-allow` で時間を限って許可する（bypass とは別。[逃がし口](pi-gitflow-guard.md#逃がし口gitflow-allow)）
+- 関連: gitflow-lite の develop / main での直接作業を止める制限（`/gitflow-allow` による逃がし口を含む）は、2026-10-31 に撤去した。今は指示だけで運用する（[CHG-0050](../../change/0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
 - 試験: `test_pi_harness.py` の `test_bypass_command_*`（RPC で `/bypass` を送る。TUI の表示そのものは未確認）
 
 ### confirm の確認
@@ -276,7 +276,6 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
   実際の Fence でのサンドボックスチェック（Fence・bwrap・pi が無ければ skip）
 - プロキシ越しの中継（`test_relay.py`）: 許可リスト・`NO_PROXY`・プロキシの URL の読み方、許可した宛先だけが上流へ届く・許可外と平文 HTTP は上流へ何も送らない・認証ヘッダ・上流の拒否が 502 になる、設定が必要なときだけ変わる
 - 誘導: `cat` が read ツールへの案内で止まる
-- gitflow-lite の規約の強制: `test_pi_gitflow_guard.py`・`test_pi_gitstate.py`・`test_pi_gitflow_guard_harness.py`・`test_pi_gitflow.py`（[仕様](pi-gitflow-guard.md)）
 - 圧縮（指示が履歴の要約の依頼に入る・ファイルの一覧）、`git commit` の確認の本文（RPC で確認の要求を受け取る。期限が付く）、
   整形（ruff・markdownlint）、`/fleet` の展開、キーバインドと共通の指示の生成、Orca の拡張の読み込み条件
 

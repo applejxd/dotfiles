@@ -132,11 +132,10 @@ CLI 非依存。実行環境が hook / permission / rules による確認を持�
   - 箇条書きは**最大 5 項目**、1 項目は**1 行（約 100 文字）まで**。本文全体は**約 120 語（日本語は 400 文字）以内**
   - 書くのは、変更の目的・主な変更・影響。経緯・実測・却下した案・レビューの指摘の一覧・試験の一覧は、案件や `docs/` が正本なので、**そこへの参照（案件の ID など）だけ**にする
   - 変更が大きく見えても、本文を延ばさず、コミットを論理単位に分ける
-- **git flow で運用するリポジトリ**（`.gitflow` がある）: feature の worktree の中のコミットは、細かい作業の単位でよい（確認なしで通る。`finish` が develop へ 1 コミットに束ねる）。
-  本文の上限と箇条書きの規約は、**束ねるときの squash のメッセージ**（`gitflow_feature_finish` の `message`）に適用する。feature の起票とクローズは `guarded_action` の `gitflow_feature_start` / `gitflow_feature_finish` で行い、
-  素の `git branch` や `git flow` は使わない
+- **git flow で運用するリポジトリ**（`.gitflow` がある）: feature の worktree の中のコミットは、細かい作業の単位でよい（`finish` が develop へ 1 コミットに束ねる）。
+  本文の上限と箇条書きの規約は、**束ねるときの squash のメッセージ**（利用者が git flow の feature finish で付けるもの）に適用する。feature の起票とクローズは利用者が行う。AI は feature の worktree で起動した pi から `guarded_action` の `git_commit` を使う
   - `guarded_action` の `git_commit` は、メッセージが **1200 文字**を超えると、確認の前に拒否する。拒否されたら、箇条書きに縮めて再実行する（書き直しは承認を要さない）
-  - `guarded_action` (`git_commit`・`gitflow_feature_finish` など) で承認を取る前に、対象のリポジトリ・ブランチ・メッセージ全文・対象ファイルをチャット本文へ書く。確認画面 (RPC。Orca など) は「上記の内容で実行しますか」だけで、同じ詳細はツールの途中経過としても出る。「作業サマリー」を承認画面に詰める設計にしない
+  - `guarded_action` (`git_commit` など) で承認を取る前に、対象のリポジトリ・ブランチ・メッセージ全文・対象ファイルをチャット本文へ書く。確認画面 (RPC。Orca など) は「上記の内容で実行しますか」だけで、同じ詳細はツールの途中経過としても出る。「作業サマリー」を承認画面に詰める設計にしない
 
 ## 出力フォーマット
 

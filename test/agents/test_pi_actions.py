@@ -149,12 +149,8 @@ def test_rules_json_carries_the_actions():
         "gh_issue_edit_body",
         "gh_issue_edit_title",
         "git_commit",
-        "gitflow_feature_start",
-        "gitflow_feature_commit",
-        "gitflow_feature_finish",
-        "gitflow_feature_discard",
     ]
-    comment, edit_body, edit_title, commit, gf_start, gf_commit, gf_finish, gf_discard = actions
+    comment, edit_body, edit_title, commit = actions
     assert edit_body["argv"] == [
         "gh",
         "issue",
@@ -194,40 +190,6 @@ def test_rules_json_carries_the_actions():
         "message": {"type": "text", "file": True, "content": True, "max_chars": 1200},
         "dir": {"type": "dir", "optional": True},
     }
-    # git flow: 固定の引数。ネットワークと push に触れない。確認の省略は start だけ
-    assert gf_start["argv"] == [
-        "git",
-        "flow",
-        "feature",
-        "start",
-        "{name}",
-        "--worktree",
-        "--no-fetch",
-    ]
-    assert gf_start["confirm"] == "gitflow_start" and gf_start["preview"] == "gitflow_start"
-    assert gf_start["fields"] == {"name": {"type": "featurename"}}
-    assert gf_finish["confirm"] == "ask" and gf_finish["preview"] == "gitflow_finish"
-    assert gf_commit["confirm"] == "gitflow_wip" and gf_commit["preview"] == "gitflow_commit"
-    assert gf_commit["argv"] == ["git", "commit", "--message={message}"]
-    assert set(gf_commit["fields"]) == {"name", "message"}
-    for flag in ("--squash", "--keepremote", "--no-fetch", "--no-push", "--no-pushtag", "--notag"):
-        assert flag in gf_finish["argv"]
-    for argv in (gf_start["argv"], gf_finish["argv"]):
-        assert not any(a in argv for a in ("--push", "--fetch", "--force", "--no-keepremote"))
-    assert all(a["confirm"] == "ask" for a in (comment, edit_body, edit_title, commit))
-    # 破棄: 確認あり、リモートに触れない、未コミットの worktree を強制しない
-    assert gf_discard["confirm"] == "ask" and gf_discard["preview"] == "gitflow_discard"
-    assert gf_discard["argv"] == [
-        "git",
-        "flow",
-        "feature",
-        "delete",
-        "{name}",
-        "--force",
-        "--no-fetch",
-        "--no-remote",
-    ]
-    assert not any(a in gf_discard["argv"] for a in ("--remote", "--fetch", "--force-worktree"))
 
 
 def test_only_the_parent_roles_get_the_action_tool():
@@ -307,34 +269,14 @@ def test_duplicate_ids_are_rejected():
         _actions_of(_common_with(_entry(), _entry()))
 
 
-def _gf_entry(**over) -> dict:
-    base = {
-        "id": "gf_demo",
-        "label": "demo",
-        "argv": ["git", "flow", "feature", "start", "{name}"],
-        "fields": {"name": {"type": "featurename"}},
-        "replaces": ["git flow feature start"],
-        "preview": "gitflow_start",
-        "confirm": "gitflow_start",
-    }
-    return {**base, **over}
-
-
-def test_skipping_the_confirmation_is_limited_to_a_name_only_gitflow_start():
-    assert _actions_of(_common_with(_gf_entry()))[0]["confirm"] == "gitflow_start"
+def test_the_removed_confirm_key_and_gitflow_types_are_rejected():
     for bad in (
-        _gf_entry(confirm="never"),  # 未知の値
-        _gf_entry(confirm="gitflow_start", preview="gitflow_finish"),  # preview が合わない
-        _gf_entry(preview="none"),
-        _gf_entry(
-            argv=["git", "flow", "feature", "start", "{name}", "{note}"],
-            fields={"name": {"type": "featurename"}, "note": {"type": "line", "max_chars": 20}},
-        ),  # 名前以外の引数がある
+        _entry(confirm="ask"),
+        _entry(preview="gitflow_start"),
+        _entry(fields={"name": {"type": "featurename"}}, argv=["git", "x", "{name}"]),
     ):
         with pytest.raises(SystemExit):
             _actions_of(_common_with(bad))
-    # confirm を省略した項目は ask
-    assert _actions_of(_common_with(_entry()))[0]["confirm"] == "ask"
 
 
 def test_a_text_field_that_is_not_a_file_is_passed_as_one_argv_element():

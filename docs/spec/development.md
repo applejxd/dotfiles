@@ -308,10 +308,10 @@ chezmoi apply --exclude=scripts
 
 このリポジトリは、`main`（リリース。他のマシンの `chezmoi update` が見る）・`develop`（統合。この PC の chezmoi のソースが指す）・`feature/<名前>`（作業。専用の worktree）で運用する（[CHG-0047](../change/0047-gitflow.md)）。`release`・`hotfix` は使わない。
 
-- **feature**: AI は `guarded_action` の `gitflow_feature_start` で起票し（確認なし）、feature の worktree（`.tmp/worktrees/<名前>`）の中で細かくコミットし（確認なし。[`git_commit` の確認の省略](guard/pi-extensions.md#guarded_action承認つきの外部操作)）、`gitflow_feature_finish` でクローズする（確認あり。develop へ squash の 1 コミット）。`finish` は、develop が checked out の本体の作業ツリーで行う
+- **feature**: 利用者が自分のシェルで `git flow feature start <名前> --worktree` で起票し、`git flow feature finish`（develop へ squash の 1 コミット）でクローズする。AI は feature の worktree（`.tmp/worktrees/<名前>`）で起動した `pi` から、`guarded_action` の `git_commit` で細かくコミットする（確認あり。[`git_commit`](guard/pi-extensions.md#guarded_action承認つきの外部操作)）。AI の `gitflow_feature_*` の操作は 2026-10-31 に撤去した（[CHG-0050](../change/0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
 - **main へ**: 検証（`mise run verify:all`）の後、利用者が `git flow integrate develop` で `develop` を `main` に merge し、`push` する。AI は `integrate` と `push` を行わない
-- **設定**: 共有の `.gitflow`（`gitflow.worktreePath` を含む）を、`scripts/gitflow-setup.sh` で作る・取り込む。グローバルの `~/.gitconfig` に旧キー `gitflow.branch.master` が残っていると、安全な構成の検査が拒否する（`dot_config/git/config.tmpl` からは消してあり、`chezmoi apply` で反映する）。**サンドボックスの外で、利用者が一度だけ**行う（`.git/config` を書くため）。新しい clone や別のマシンでは、同じスクリプトで `git flow config sync` する
-- **ガード**: pi のフルガードは、develop / main の作業ツリーへの `edit` / `write` と `git_commit` を拒否する（[CHG-0049](../change/0049-gitflow-convention-guard.md)、[仕様](guard/pi-gitflow-guard.md)）。bash 内の書き込みは保証外。develop / main で作業する利用者専用の逃がし口は未実装
+- **設定**: 共有の `.gitflow`（`gitflow.worktreePath` を含む）を、`scripts/gitflow-setup.sh` で作る・取り込む。グローバルの `~/.gitconfig` に旧キー `gitflow.branch.master` が残っていると、`git flow` が期待どおり動かないことがある（`dot_config/git/config.tmpl` からは消してあり、`chezmoi apply` で反映する）。**サンドボックスの外で、利用者が一度だけ**行う（`.git/config` を書くため）。新しい clone や別のマシンでは、同じスクリプトで `git flow config sync` する
+- **ガード**: develop / main の作業ツリーへの直接の編集・コミットは、機械では止めない（pi のガードの gate は 2026-10-31 に撤去。[CHG-0050](../change/0050-slim-guarded-action.md)）。`AGENTS.md` と `commit` スキルの指示で、feature の worktree で作業する運用にしている
 - **検査**: スタンプは worktree ごと。push の基準は `origin/develop`（あれば）、無ければ `origin/main`。CI は `main` と `develop` への push と、全ての pull request で動く
 
 ## 作業ツリーの一時領域（`.tmp/`）

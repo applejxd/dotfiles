@@ -1,12 +1,14 @@
-# CHG-0047: gitflow ブランチモデルへ切り替え、feature の起票・クローズを AI が `git flow` で行う
+# CHG-0047: gitflow ブランチモデルへ切り替える（feature の起票・クローズの AI 化は撤去。CHG-0050）
 
-- **状態**: Exploring
-- **更新日**: 2026-10-28
+- **状態**: In progress
+- **更新日**: 2026-10-31
 - **基準**: コミット 8ec840a 以降、git-flow-next（2026-10-28 に公式の資料で確認）
 
 ## 目的と非目的
 
-**目的**: main 一本の運用をやめ、**main（リリース）/ develop / feature の gitflow** に切り替える。feature と、その worktree の起票・クローズは、AI が `git flow` コマンドだけで行う。動機（利用者）は 3 つ。
+> **2026-10-31 の方針転換（[CHG-0050](0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md)）**: AI による `git flow` の操作（`gitflow_feature_start` / `commit` / `finish` / `discard`、feature の worktree 内の `git_commit` の無確認、bash の `git flow` の deny）は撤去した。ブランチモデル（main / develop / feature・`.gitflow`・`scripts/gitflow-setup.sh`）は残り、feature の起票・クローズは**利用者が自分のシェルで** `git flow feature start` / `finish` を実行する。AI は feature の worktree で起動した `pi` から `git_commit`（確認あり）する。以下の目的・計画・実装の記述は、撤去前の設計の記録（AI が `git flow` を使う前提）として残している。
+
+**目的**: main 一本の運用をやめ、**main（リリース）/ develop / feature の gitflow** に切り替える。feature と、その worktree の起票・クローズは、AI が `git flow` コマンドだけで行う（撤去前の目的。今は利用者が行う）。動機（利用者）は 3 つ。
 
 1. **コミット粒度**: 細かいコミットを、feature の中に閉じ込め、develop へは 1 本に束ねる
 2. **main の安定**: 動かないことがあるので、main は検証後にだけ更新する
@@ -80,7 +82,7 @@
 | B `guarded_action` の項目（毎回確認） | 固定の引数の表。引数は型で検証 | 引数が固定で検証される | AI の自動と相容れない（毎回、承認が要る） |
 | **C 固定の引数の表＋確認なしの項目（案）** | B と同じ表で、安全と判断した項目は確認を出さずに実行する（`confirm = "never"` のような宣言）。`finish` だけ確認を残すか、事前の条件（作業ツリーがクリーン・検査済み）を満たすときだけ確認なしにするかを決める | 引数が固定・検証され、自動にもできる | ツール（`guarded_action`）の機能の追加が要る。確認なしの範囲の設計が、境界の判断になる |
 
-- **素の `git` の branch・switch -c・checkout -b・worktree add/remove・merge・tag は、共通の規則では deny にしない**（既定の ask のまま）。`.gitflow` があるリポジトリでは、共通の指示と `commit` スキルで `git flow` を使わせる。迂回は、ask の承認で止まる。→ **追記（[CHG-0049](0049-gitflow-convention-guard.md)）**: gitflow-lite のリポジトリでは、pi のガードが develop / main の直接編集・コミットを deny にする。素の git のブランチ・worktree の作成も、段 1c（未実装）で deny にする予定。共通の規則（`decide`）は変えない。リポジトリごとに厳密に deny する仕組みは、必要になってから別に検討する（判定器にリポジトリ側の設定を読む仕組みが要る。**未確認**）
+- **素の `git` の branch・switch -c・checkout -b・worktree add/remove・merge・tag は、共通の規則では deny にしない**（既定の ask のまま）。`.gitflow` があるリポジトリでは、共通の指示と `commit` スキルで `git flow` を使わせる。迂回は、ask の承認で止まる。→ **追記（[CHG-0049](closed/0049-gitflow-convention-guard.md)）**: gitflow-lite のリポジトリでは、pi のガードが develop / main の直接編集・コミットを deny にする。素の git のブランチ・worktree の作成も、段 1c（未実装）で deny にする予定。共通の規則（`decide`）は変えない。リポジトリごとに厳密に deny する仕組みは、必要になってから別に検討する（判定器にリポジトリ側の設定を読む仕組みが要る。**未確認**）
 - `git branch -D`・`clean`・`tag -d` が bypass で全役割 allow になる件（CHG-0041 の持ち越し）は、gitflow とは別の修正として、段 3 で扱う
 - ネットワークと push に当たる引数（`--fetch`・`publish`・`track`・リモートの削除など）は、固定の引数で除く。`--keepremote`・`--no-fetch` を固定し、段 1 の実測で、実際にネットワークを使わないことを確かめる
 
@@ -229,6 +231,7 @@
 
 | 日付 | 更新 | 理由・証拠 |
 | --- | --- | --- |
+| 2026-10-31 | **AI の `git flow` 操作を撤去した**（4 操作・実効設定の安全プロファイル・WIP の確認の省略・bash の `git flow` の deny・試験）。ブランチモデルは残し、起票・クローズは利用者のシェル、AI は feature の worktree の `pi` から `git_commit` | 副作用（git を読めないときの確認）・実装量・規約を境界と同じ強さで強制していた設計の食い違い。[CHG-0050](0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md) |
 | 2026-10-29（深夜） | **`abort` を作らず、`discard` と衝突の事前検査を作った**（利用者の選択: 素の `pi` 向け）。実測（v2.1.0）: `finish --abort` は squash の衝突で `failed to abort merge: exit status 128` になり、`develop` の作業ツリーが衝突状態（`UU`）で残る。`feature delete <name> --force` はブランチと worktree をきれいに消し、`--force` が無いと未マージを拒否、未コミットの worktree は `--force-worktree` が無いと拒否する。設計の表の `gitflow_feature_abort` は取り下げ、`gitflow_feature_discard`（確認あり。件数と統計を見せる）と、`finish` の preview の衝突検査（`git merge-tree --write-tree`。作業ツリーを触らない）に置き換えた。`pis` 向けの片付け（R3-3）は後回しのまま | 実測。コミット予定の feature `gitflow-discard-and-conflict-check` |
 | 2026-10-29（夜） | **このリポジトリで、実機の通しが成功した**（段 4 の確認）。`scripts/gitflow-setup.sh` で `develop`・`.gitflow` を作り、`develop` を push。`gitflow_feature_start`（確認なし）→ `gitflow_feature_commit`（確認なし）→ `gitflow_feature_finish`（確認あり。`develop` へ squash）で、feature `fix-flaky-bg-child-test` を完了し、feature の枝と worktree は片付いた。**見つかった不具合**: 最初の起票が、「`gitflow.branch.master` は許可リストに無い」で拒否された。原因は、chezmoi 管理のグローバル `~/.gitconfig`（`dot_gitconfig.tmpl`）に、旧 nvie 時代の `[gitflow "branch"] master = main` が書かれていたこと（リポジトリ側のキーを消しても、グローバルが残る）。テンプレートから削除し、`chezmoi apply ~/.gitconfig` で反映した。安全な構成の検査が、実際に旧設定を止めた。**残り**: `pis` 向けの片付けと `abort`（後回し）。`main` への取り込み（`integrate`）は利用者 | コミット e4f39f4・17fe1c4・3a85001 |
 | 2026-10-29 | **実機の通しと `gitflow_feature_commit`**: 配備済みのハーネス・実モデル・`mise` の git-flow で、起票・WIP コミット 2 回（確認なし）・クローズ（確認あり）が通った。実機で分かった 2 つの制約（worktree で `pi` を起動する必要・`git add` の確認）を、`gitflow_feature_commit`（本体の `pi` から、feature の worktree で `git add -A` して commit。保護対象のパスで止める）で解消した（利用者の選択 A）。段 3 のコードは一巡。**残りは利用者の操作**: `scripts/gitflow-setup.sh` の実行・`.gitflow` のコミット・`develop` の push。`pis` 向けの片付けと `abort` は後回し | コミット 15d8a03・5e95fce・232f8aa |

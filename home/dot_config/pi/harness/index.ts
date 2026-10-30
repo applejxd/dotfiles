@@ -20,10 +20,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
-import { BG_RUN, createCallDecider, tighten, type Decision } from "./judge/call.ts";
-import { gate, headName, isGated, isProtectedWorktree, type AllowState, type Allowance, type GateResult } from "./judge/gitflow_gate.ts";
-import { createProbe } from "./gitstate.ts";
-import { describeAllowance, parseAllowArgs, scopeText } from "./gitflow-allow.ts";
+import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
@@ -148,24 +145,6 @@ const COMPACT_INSTRUCTIONS = [
 // 判定器を呼ぶ口 (bg_run は bash と同じ判定、bg_log / bg_kill は allow。judge/call.ts)。
 // 判定器は呼び出しごとに文脈を作り直す。ここで持つのは読み込んだ設定だけ
 
-// gitflow-lite の規約の強制 (CHG-0049)。git の状態 (ブランチなど) は判定ごとに読み直し、記憶しない。
-// 調べられなかったときは確認にする (許可の側へ倒さない)。see docs/spec/guard/pi-gitflow-guard.md
-function gateNow(tool: string, input: unknown, cwd: string): GateResult {
-	if (!isGated(tool, input)) return { kind: "pass" };
-	try {
-		return gate(tool, input, cwd, createProbe(), currentAllow());
-	} catch (e) {
-		return { kind: "confirm", reason: `規約の確認に失敗した: ${(e as Error).message}`, key: "error" };
-	}
-}
-
-// 利用者が /gitflow-allow で出した、時間を限った許可 (CHG-0049 の逃がし口)。メモリだけ (セッションには復元しない)。
-// モデルが呼べるツールは作らない。子は別プロセスなので引き継がない。期限は判定のたびに場で確かめる (タイマーは表示とキャッシュの片付けだけ)
-let allowance: Allowance | null = null;
-function currentAllow(): AllowState {
-	return { allowance, now: Date.now() };
-}
-
 const callDecider = createCallDecider({
 	judge: rules.judge,
 	profileTools: rules.profile_tools ?? {},
@@ -173,7 +152,6 @@ const callDecider = createCallDecider({
 	bypass: () => bypass,
 	boundary: BOUNDARY,
 	allowed: BOUNDARY_ENV?.allowed,
-	restrict: gateNow,
 });
 
 export function decide(tool: string, input: unknown, cwd: string): Decision {
@@ -386,85 +364,6 @@ export default async function (pi: ExtensionAPI) {
 		},
 	});
 	// 利用者専用の orchestrator の切り替え。モデルが呼べるツールは作らない (bypass と同じ形)。OFF は確認なし (利用者が自分で打つ)
-	// 利用者専用の、develop / main での直接作業の許可 (時間限定)。モデルが呼べるツールは作らない。確認を出せるときだけ付与する
-	// see docs/spec/guard/pi-gitflow-guard.md#逃がし口
-	let allowTimer: ReturnType<typeof setTimeout> | undefined;
-	let allowUi: any;
-	const endAllow = (reason: "off" | "expired" | "replaced") => {
-		if (allowTimer) clearTimeout(allowTimer);
-		allowTimer = undefined;
-		const was = allowance;
-		allowance = null;
-		// 許可を前提に下した判断を execute() で使い回さない
-		epoch++;
-		decided.clear();
-		try {
-			allowUi?.setStatus?.("gitflow-allow", undefined);
-			if (was && reason !== "replaced") pi.appendEntry("gitflow-allow", { action: reason, top: was.top, head: was.head, scope: was.scope, ts: new Date().toISOString() });
-		} catch {
-			// 表示と記録の失敗で、許可の失効を妨げない
-		}
-	};
-	pi.registerCommand("gitflow-allow", {
-		description: "develop / main の作業ツリーを AI が直接編集・コミットするのを、時間を限って許可する: /gitflow-allow [edit|commit|all] [分] | off | status",
-		handler: async (args: string, ctx: any) => {
-			const p = parseAllowArgs(String(args ?? ""));
-			if (!p.ok) {
-				ctx.ui?.notify?.(p.error, "warning");
-				return;
-			}
-			if (p.action === "status") {
-				ctx.ui?.notify?.(describeAllowance(allowance, Date.now()) ?? "許可は出していない", "info");
-				return;
-			}
-			if (p.action === "off") {
-				const was = describeAllowance(allowance, Date.now());
-				endAllow("off");
-				ctx.ui?.notify?.(was ? "許可を取り消した" : "許可は出していない", "info");
-				return;
-			}
-			// 付与は確認を出せるときだけ
-			if (!ctx.hasUI) return;
-			const probe = createProbe();
-			const owner = probe.ownerOf(probe.realPath(ctx.cwd ?? process.cwd()));
-			if (owner.kind !== "worktree" || !isProtectedWorktree(owner)) {
-				ctx.ui?.notify?.("ここは develop / main の作業ツリーではない。許可は要らない", "info");
-				return;
-			}
-			if (probe.modelOf(owner.commonDir) !== "gitflow-lite") {
-				ctx.ui?.notify?.("このリポジトリは gitflow-lite ではない (規約の強制の対象外)。許可は要らない", "info");
-				return;
-			}
-			const head = headName(owner.head);
-			const expires = Date.now() + p.minutes * 60_000;
-			const until = new Date(expires).toTimeString().slice(0, 5);
-			const body = [
-				`対象: ${owner.top}`,
-				`ブランチ: ${head}`,
-				`範囲: ${scopeText(p.scope)}`,
-				`期限: ${p.minutes} 分 (${until} まで)`,
-				"",
-				"この間、AI はこのブランチの作業ツリーを直接編集・コミットできます。",
-				"ブランチが変わると、許可は効かなくなります。子エージェントには引き継がれません。`.git/` の中と、外部への送信の確認は、許可しません。",
-				"終えたら /gitflow-allow off。",
-			].join("\n");
-			if ((await ctx.ui.confirm("develop / main での直接作業を許可しますか？", body)) !== true) return;
-			endAllow("replaced");
-			allowance = { top: owner.top, head, scope: p.scope, expires };
-			allowUi = ctx.ui;
-			// 期限が来たら、表示を消し、許可を前提にした判定を捨てる (判定自体は期限を自分で確かめるので、これは片付け)
-			allowTimer = setTimeout(() => endAllow("expired"), p.minutes * 60_000 + 50);
-			allowTimer.unref?.();
-			try {
-				ctx.ui?.setStatus?.("gitflow-allow", ctx.ui.theme.fg("warning", `⚡ gitflow 許可 ${head.replace("refs/heads/", "")} ${until} まで`));
-				pi.appendEntry("gitflow-allow", { action: "grant", top: owner.top, head, scope: p.scope, minutes: p.minutes, ts: new Date().toISOString() });
-			} catch {
-				// 表示と記録の失敗で、付与を取り消さない
-			}
-			ctx.ui?.notify?.(`gitflow の許可を出した: ${describeAllowance(allowance, Date.now())}`, "warning");
-		},
-	});
-	// 利用者専用の orchestrator の切り替え。モデルが呼べるツールは作らない (bypass と同じ形)。OFF は確認なし (利用者が自分で打つ)
 	pi.registerCommand("orchestrate", {
 		description: "親を計画・判断・委譲に絞る (作業のツールを隠す) の切り替え: /orchestrate [on|off|status]",
 		handler: async (args: string, ctx: any) => {
@@ -608,19 +507,8 @@ export default async function (pi: ExtensionAPI) {
 				decided.delete(toolCallId);
 				const input = JSON.stringify(params);
 				const cached = seen !== undefined && seen.input === input;
-				let d = cached ? seen!.decision : decide(tool, params, ctx.cwd);
-				// tool_call の後で git の状態 (ブランチなど) が変わりうる。規約の強制だけは、判定を使い回すときも取り直す
-				let gateOk = true;
-				if (cached) {
-					const g = gateNow(tool, params, ctx.cwd);
-					if (g.kind === "deny") d = tighten(d, g);
-					else if (g.kind === "confirm" && d.gateKey !== g.key) {
-						// 承認したときと状態が違う: 前の承認は使わない
-						d = tighten(d, g);
-						gateOk = false;
-					}
-				}
-				const approved = gateOk && seen?.approved === true && seen.input === input;
+				const d = cached ? seen!.decision : decide(tool, params, ctx.cwd);
+				const approved = seen?.approved === true && seen.input === input;
 				// 確認で見せた --body-file が、承認の後に差し替えられていないこと
 				if (approved && seen?.bodyFile) {
 					const now = readBodyFile(seen.bodyFile.path, ctx.cwd, tool);
@@ -710,7 +598,6 @@ export default async function (pi: ExtensionAPI) {
 						},
 						dialog: dialogInOrder,
 						absence,
-						readDeny: buildReadDeny,
 						bell: () => {
 							if (ctx.mode === "tui") process.stdout.write("\x07");
 						},

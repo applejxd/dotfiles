@@ -75,3 +75,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0018](0018-pis-sandbox-default-relax-only-when-proven.md) | pis をサンドボックス標準にし、緩和はサンドボックスが証明されたときだけ効かせる | Accepted | 2026-10-14 | ADR-0012・0013・0016・0017 の決定は変えない（ADR-0017 の Windows の扱いも同じ）。実装は CHG-0023 |
 | [0019](0019-pis-fetch-via-proxy-with-explicit-flag.md) | pis の内側のページ取得は、専用フラグでプロキシ越しにし、事前の名前解決を省く | Accepted | 2026-10-25 | 実測は[記録 S2](../research/agents/pis-sandbox-field-test.md)。案件は CHG-0037 |
 | [0020](0020-env-allowlist-and-env-check.md) | 環境変数の一覧・個別参照は許可リスト方式で止め、診断は env-check に集める | Accepted | 2026-10-25 | 案件は CHG-0037 |
+| [0021](0021-conventions-as-instructions-slim-guarded-action.md) | 運用規約をコードの強制から指示へ戻し、guarded_action を承認つきの commit と gh 投稿に縮める | Accepted | 2026-10-31 | 案件は CHG-0050 |

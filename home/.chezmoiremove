@@ -82,3 +82,10 @@
 # 旧い置き場の表が残ると、Python 版の判定器が**古い方を先に読み**、新しいキーが無くて
 # KeyError → hook が fail-closed で全 bash を拒否する (実測: scratch_protected_names)。
 .claude/hooks/lib/bashrules/tables.toml
+
+# 2026-11: gitflow-lite の規約ガードと git flow の操作 (gitflow_feature_*) を撤去した。配備済みの旧い実装を消す。
+.config/pi/harness/gitflow.ts
+.config/pi/harness/gitflow-ops.ts
+.config/pi/harness/gitstate.ts
+.config/pi/harness/gitflow-allow.ts
+.config/pi/harness/judge/gitflow_gate.ts

@@ -168,17 +168,17 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 複数の独立した実装を、**子（`worker`）を並べて**進める手順。素の `pi` では、子の強制の囲い（`isolation: "worktree"`）が使えない（認証のロックの書き込みが拒否される。[CHG-0029](../../change/0029-worktree-isolation.md) の E6。保留）ので、
 **隔離なし**で、feature ごとの worktree（`.tmp/worktrees/<名前>/`。作業ツリーの中なので書き込みは allow）に作業場所を分け、**指示と取り込み前の検査**で混線を防ぐ。囲いではない（下の「限界」）。
 
-**前提**: 子が止まらずに動くには、**親の bypass の継承**か、`pis` の境界が要る（無いと、日常の shell の ask で止まる）。bypass でも、`mustConfirm`・deny（`git add`/`commit`/`checkout`/`reset`/`stash`、`git flow`、元に戻せない git 操作）は残る。**子の `git status`/`git diff` は、通常は ask（`[pi.shell] allow` に無い）で、bypass か境界で通る**（子に許可を足す案は、引用で `--output` の検査を回避できる穴と、`cd` で別リポジトリへ行く形の信頼の範囲が指摘され、保留）。
+**前提**: 子が止まらずに動くには、**親の bypass の継承**か、`pis` の境界が要る（無いと、日常の shell の ask で止まる）。bypass でも、`mustConfirm`・deny（`git add`/`commit`/`checkout`/`reset`/`stash`、元に戻せない git 操作）は残る。**子の `git status`/`git diff` は、通常は ask（`[pi.shell] allow` に無い）で、bypass か境界で通る**（子に許可を足す案は、引用で `--output` の検査を回避できる穴と、`cd` で別リポジトリへ行く形の信頼の範囲が指摘され、保留）。
 
 **手順**（親が行う）:
 
 1. 作業を、**ファイルの範囲が重ならない**単位に分ける（同じファイルを 2 つの単位が触ると、`finish` で衝突する）。単位ごとに、変更してよいパス（`--owned` に渡す glob）を決める。
-2. 単位ごとに `gitflow_feature_start`（`name` は小文字・数字・`.`・`_`・`-`）で、feature と worktree を作る（確認なし）。
+2. 単位ごとの feature と worktree（`name` は小文字・数字・`.`・`_`・`-`）は、**利用者が自分のシェルで** `git flow feature start <name> --worktree` を実行して用意する（AI は起票しない。[CHG-0050](../../change/0050-slim-guarded-action.md)）。
 3. 単位ごとに `guarded_task`（`agent: "worker"`、`background: true`。同時に 4 本まで）で子を起動する。依頼文は下の雛形。`isolation` は付けない。
 4. 子の完了の通知ごとに、**取り込み前の検査**: `python3 scripts/parallel_check.py --owned <名前>=<glob>,… …`（本体の変更・範囲の外・重複を見る。終了コード 1 なら、原因を確かめるまでコミットしない）。あわせて、その worktree の差分を確かめる（親が `cd <wt> && git diff --stat`・`git diff`）。
-5. 検査を通った単位だけ、親が `gitflow_feature_commit`（確認なし。保護対象のパスは止まる）。子は `git add`/`commit` できない（deny）。
-6. 試験は、worktree の中で動かす（`cd <wt> && uv run pytest …`、または worktree のパスを渡す）。通ったら、単位ごとに順番に `gitflow_feature_finish`（`develop` へ squash。確認あり）。先に `finish` した単位の後で、残りが `develop` と衝突するなら `finish` が事前に拒否するので、feature の worktree で `git merge develop` して直してから、やり直す。
-7. 失敗した単位は捨てる（`gitflow_feature_discard`。確認あり）。
+5. 検査を通った単位だけ、その feature の worktree で起動した `pi` から `git_commit`（確認あり）。子は `git add`/`commit` できない（deny）。
+6. 試験は、worktree の中で動かす（`cd <wt> && uv run pytest …`、または worktree のパスを渡す）。通ったら、単位ごとに順番に、利用者が自分のシェルで `git flow feature finish <name>`。先に `finish` した単位の後で残りが `develop` と衝突するなら、feature の worktree で `git merge develop` して直してから、やり直す。
+7. 失敗した単位は、利用者が自分のシェルで `git flow feature delete <name>` して捨てる。
 
 **子への依頼文の雛形**（`<…>` を埋める。子は会話を見られない）:
 
@@ -216,5 +216,5 @@ C2: …
 - **切り替えと確認待ちの競合**: `/bypass` と `/orchestrate` は権限の世代番号を進める。確認待ちの間に世代が変わったら、その承認は無効（`block`）にし、実行前の判定でも、世代が違う判定は使わず現在の役割で判定し直す。**`/reload` を跨いで利用者の選択を保つ**（切り替えのたびに `PI_HARNESS_ORCHESTRATE` を更新する。モジュールの変数は `/reload` で消えるため）
   (2) 判定器の `role` を、呼び出しごとに評価する（`orchestrate ? "orchestrator" : 起動時の役割`。`judge/call.ts`）。役割に無いツールは deny（bypass でも）。拒否の理由に、「作業は `worker` に任せる。通常の親に戻すのは利用者」を添える
 - **使えない起動**: 子（`PI_HARNESS_CHILD=1`）・Windows（子を作れない）・設定が無い・`task` を持たない役割では、何もしない（`/orchestrate` は理由を表示して終わる）。子の挙動は変わらない
-- **親が失う操作の代替**: 作業・検証は `worker`、調査・git の状態は `explore`、コミットなどは `guarded_action`（`gitflow_feature_*`・`git_commit`）。素の `pi` では、`worker` の shell は通常は ask で止まるので、**親の `/bypass on` が前提**になる（親が作業のツールを持たないので、bypass の危険は小さい）
+- **親が失う操作の代替**: 作業・検証は `worker`、調査・git の状態は `explore`、コミットなどは `guarded_action`（`git_commit`）。素の `pi` では、`worker` の shell は通常は ask で止まるので、**親の `/bypass on` が前提**になる（親が作業のツールを持たないので、bypass の危険は小さい）
 - **まだ無いもの**: ON の永続（`/reload` で起動時の状態に戻る。`[pi.orchestrate] default = "on"` か環境変数で固定する）、`check_*`（`mise run verify` などの固定引数の親専用の操作。承認ポリシーに触れるので、実装の前に `review`）、親の読み取りの制限、フッター以外の計測（`delegate-stats` への印）

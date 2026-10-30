@@ -1858,26 +1858,15 @@ JUDGE_TABLES = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness
 JUDGE_CHECKS = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/checks.ts"
 PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds", "local_git"})
 PI_CONFIRM_TIMEOUT_DEFAULT = 300
-PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview", "confirm"})
-PI_ACTION_PREVIEWS = frozenset(
-    {"none", "git_staged", "gitflow_start", "gitflow_finish", "gitflow_commit", "gitflow_discard"}
-)
-# 確認の省略 (confirm) は、コードの許可リスト (actions.ts の AUTO_CONFIRM) にある組だけ。名前の型だけを引数に持つこと
-# confirm -> (必要な preview, 引数の型の集合)
-PI_ACTION_CONFIRM_RULES = {
-    "gitflow_start": ("gitflow_start", {"featurename"}),
-    "gitflow_wip": ("gitflow_commit", {"featurename", "text"}),
-}
-PI_ACTION_CONFIRMS = frozenset({"ask", *PI_ACTION_CONFIRM_RULES})
-PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "line", "text", "featurename", "dir"})
+PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview"})
+PI_ACTION_PREVIEWS = frozenset({"none", "git_staged"})
+PI_ACTION_FIELD_TYPES = frozenset({"repo", "int", "line", "text", "dir"})
 PI_ACTION_FIELD_KEYS = {
     "repo": frozenset({"type"}),
     "int": frozenset({"type"}),
     # dir: 操作の対象の git リポジトリ (cwd 配下の最上位の相対パス)。argv には現れず、実行する場所 (cwd) を選ぶ。
     # optional = true なら省略できる (省略は cwd のリポジトリ)
     "dir": frozenset({"type", "optional"}),
-    # featurename: git flow の feature の名前 (英小文字・数字・. _ -)。argv の 1 要素として直接渡す
-    "featurename": frozenset({"type"}),
     # line: 1 行の短い文字列 (issue のタイトルなど)。argv の 1 要素として直接渡す (改行・制御文字は拒否)
     "line": frozenset({"type", "content", "max_chars"}),
     "text": frozenset({"type", "file", "content", "max_chars"}),
@@ -1920,11 +1909,6 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
         if preview not in PI_ACTION_PREVIEWS:
             raise SystemExit(
                 f"{where} の preview は {sorted(PI_ACTION_PREVIEWS)} のどれか: {preview!r}"
-            )
-        confirm = entry.get("confirm", "ask")
-        if confirm not in PI_ACTION_CONFIRMS:
-            raise SystemExit(
-                f"{where} の confirm は {sorted(PI_ACTION_CONFIRMS)} のどれか: {confirm!r}"
             )
         replaces = entry.get("replaces")
         if (
@@ -1978,15 +1962,6 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                     raise SystemExit(f"{where} の dir 型のフィールド名は dir にする")
             else:
                 points[name] = name
-        if confirm != "ask":
-            need_preview, need_types = PI_ACTION_CONFIRM_RULES[confirm]
-            if preview != need_preview or not all(
-                spec.get("type") in need_types for spec in fields.values()
-            ):
-                raise SystemExit(
-                    f"{where} の confirm = {confirm} は、preview = {need_preview} と、"
-                    f"{sorted(need_types)} の型の引数だけが要る"
-                )
         argv = entry.get("argv")
         if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
             raise SystemExit(f"{where} の argv は空でない文字列の配列")
@@ -2002,13 +1977,8 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                         f"{where} の argv の置換点 {{{point}}} に対応するフィールドが無い"
                     )
                 used.add(points[point])
-        # gitflow_commit の featurename と dir は、実行する場所を選ぶ (argv には現れない)
-        selectors = {
-            n
-            for n, s in fields.items()
-            if (preview == "gitflow_commit" and s.get("type") == "featurename")
-            or s.get("type") == "dir"
-        }
+        # dir は実行する場所を選ぶ (argv には現れない)
+        selectors = {n for n, s in fields.items() if s.get("type") == "dir"}
         missing = sorted(set(fields) - used - selectors)
         if missing:
             raise SystemExit(f"{where} の必須フィールドが argv に現れない: {', '.join(missing)}")
@@ -2020,7 +1990,6 @@ def pi_actions(common: dict[str, Any]) -> list[dict[str, Any]]:
                 "fields": {k: dict(v) for k, v in fields.items()},
                 "replaces": list(replaces),
                 "preview": preview,
-                "confirm": confirm,
             }
         )
     return out

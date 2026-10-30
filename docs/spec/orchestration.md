@@ -38,7 +38,7 @@
 | 役割 `explore` / `review` | 実装済 | 読み取り専用（`wc` と読み取りの git）。`review` は別系統のモデル（`second_opinion`） | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
 | 役割 `plan` | 実装済（`/plan` での深い計画への切替は未） | bash なしの読み取り専用。深く考える階層。大きな変更の計画を作る | [CHG-0044](../change/0044-plan-agent.md) |
 | 役割 `commit` | 実装済 | コミットの計画（対象ファイルとメッセージ）を返すだけ。ステージもコミットもしない | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
-| 役割 `worker` | 実装済 | 実装役。`git add`/`commit`/`checkout`/`reset`/`stash` と `git flow` は deny。`git status`・`git diff` は通常は ask（bypass か境界で通る。許可を足す案は保留） | [pi の子エージェント](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
+| 役割 `worker` | 実装済 | 実装役。`git add`/`commit`/`checkout`/`reset`/`stash` は deny。`git status`・`git diff` は通常は ask（bypass か境界で通る。許可を足す案は保留） | [pi の子エージェント](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | bypass の継承 | 実装済 | 役割ごとの `inherit_bypass`。`/bypass` の切替で、動いている子は止まる | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
 | 既定が deny の役割の扱い | 実装済 | `explorer`・`reader`・`committer` は、`[bash] ask` に当たる操作も、bypass で通さず deny にする | [判定器](guard/pi-decide.md#既定が-deny-の役割の-ask) |
 | 計画モード中の子の制限 | 実装済 | `/plan` の間は、書き込む役割の子の起動・追加依頼・steer を拒否する | [pi の子エージェント](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
@@ -48,14 +48,9 @@
 
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
-| ブランチモデル | 運用 | main / develop / feature（squash。release・hotfix なし）。リポジトリごとに `.gitflow` で決める。`main` への取り込みと push は利用者 | [CHG-0047](../change/0047-gitflow.md)、[開発](development.md#ブランチモデルgitflow-lite) |
-| `gitflow_feature_start` | 実装済・実機確認済 | `develop` から feature と worktree（`.tmp/worktrees/<名前>/`）を作る。確認なし | [guarded_action](guard/pi-extensions.md#guarded_action承認つきの外部操作) |
-| `gitflow_feature_commit` | 実装済・実機確認済 | feature の worktree で `git add -A` して commit。確認なし。保護対象のパスは止まる | 同上 |
-| `gitflow_feature_finish` | 実装済・実機確認済 | `develop` へ squash。確認あり。リモートに触れない。本体にステージ済みの変更があれば拒否 | 同上 |
-| 安全な構成の検査 | 実装済 | 実効設定が許可リストに合うときだけ動く（push の設定・hook・原点の変更などは拒否） | [CHG-0047](../change/0047-gitflow.md#許可の形の設計の修正review-の反映上の案に優先する) |
-| develop / main の直接編集・コミットの拒否 | 実装済（実機は未検証） | gitflow-lite のリポジトリで、`edit` / `write` と `git_commit` を拒否。bash 内の書き込み・直接のブランチ作成は保証外（段 1c で deny 予定）。利用者の逃がし口は未実装 | [CHG-0049](../change/0049-gitflow-convention-guard.md)、[仕様](guard/pi-gitflow-guard.md) |
-| `git flow` の直接実行 | 実装済 | implementer と worker の bash では deny（固定引数の操作だけを使わせる） | 同上 |
-| 隔離なしの worktree | 運用 | 親が feature を切り、子には worktree の中だけで作業させる。強制の囲いではない | [並列実装の運用](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
+| ブランチモデル | 運用 | main / develop / feature（squash。release・hotfix なし）。リポジトリごとに `.gitflow` で決める。feature の起票・クローズと `main` への取り込み・push は利用者が自分のシェルで行う。AI は feature の worktree で起動した `pi` から `git_commit`（確認あり） | [CHG-0047](../change/0047-gitflow.md)、[開発](development.md#ブランチモデルgitflow-lite)、[CHG-0050](../change/0050-slim-guarded-action.md) |
+| develop / main の直接編集・コミット | 機械では止めない（指示で運用） | `edit` / `write` / `git_commit` の gate と `/gitflow-allow`、`gitflow_feature_*` の 4 操作、`git flow` の bash 拒否は 2026-10-31 に撤去 | [CHG-0050](../change/0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md) |
+| 隔離なしの worktree | 運用 | 親が feature の分割を決め、子には worktree の中だけで作業させる。起票は利用者。強制の囲いではない | [並列実装の運用](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | 子の隔離（`isolation: "worktree"`） | 保留（素の `pi` では認証のロックの書き込みが拒否される） | Landlock で書き込みを狭める。`pis` では認証の写しが既にある | [CHG-0029](../change/0029-worktree-isolation.md) |
 
 ## 5. ガードとの接点（承認・確認・保留）
@@ -109,6 +104,6 @@
 | 子の質問・承認の中継 | 未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 4 |
 | 子へ feature のコミットを許す（`guarded_action` を子へ） | 見送り（親の手数が許容できないと分かるまで作らない） | [並列実装の運用](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | 素の `pi` での子の隔離 | 保留 | [CHG-0029](../change/0029-worktree-isolation.md) |
-| `pis` での gitflow の片付けと `abort` | 後回し | [CHG-0047](../change/0047-gitflow.md) |
+| `pis` での gitflow の片付けと `abort` | 撤去（AI の `git flow` 操作をやめたため。CHG-0050） | [CHG-0050](../change/0050-slim-guarded-action.md) |
 | 保留したコミットの取り込み（`/pending` から） | 未着手 | [CHG-0046](../change/0046-guarded-action-timeout.md) 段 4 |
 | `docker rm` などが、ask 既定の役割（親・`worker`）の bypass で通る | 範囲外として残す | [判定器](guard/pi-decide.md#既定が-deny-の役割の-ask) |

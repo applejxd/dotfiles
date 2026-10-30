@@ -103,7 +103,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
   前置の環境変数・`env`・`git` のグローバルオプション（`-C`・`-c`・`--git-dir`・`--work-tree` など）を読み飛ばしてから、サブコマンドとフラグを見る（`--` 以降と、値を取るオプションの値は数えない。`git clean -e '-n' -f` は dry-run と見なさない）。
   評価の位置は、確認表の直後・`bashAsk` の前。**ask が既定の役割（親・`worker`）は、bypass でもサンドボックスの緩和でも ask のまま（理由の先頭は「確認が必要な元に戻せない git 操作 (bypass でも確認する): 」）**。
   **既定が deny の役割（`explorer`・`reader`・`committer`）は deny**: これらは `[bash] ask` が役割の既定の deny より先に当たり、`git branch -D`・`git clean`・`docker rm` が bypass で allow になっていた（2026-10-29 に実測。ask 一般の扱いは[次の節](#既定が-deny-の役割の-ask)）。
-  保証の範囲は既存と同じ「うっかり防止」で、git の alias・外部スクリプト・動的に組み立てた文字列は見ない。素の `git branch` の作成・切り替え・`git tag` の作成などは従来どおり。ブランチモデル（[CHG-0047](../../change/0047-gitflow.md)）では、AI は `git flow` の固定引数だけを使う
+  保証の範囲は既存と同じ「うっかり防止」で、git の alias・外部スクリプト・動的に組み立てた文字列は見ない。素の `git branch` の作成・切り替え・`git tag` の作成などは従来どおり。ブランチモデル（[CHG-0047](../../change/0047-gitflow.md)）の `git flow` は、利用者が自分のシェルで実行する（bash の `git flow` の deny は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去した）
 - **Python 版（照合用）**: `local_git` も知らない。`[pi.confirm] local_git` の判定は TS だけで、[正解データの照合](#差分試験正解データ)の標本に `git branch -D` などがあれば、TS が ask＋mustConfirm、Python が ask または allow＋bypassed の組を一致とみなす
 - **Python 版（照合用）**: `mustConfirm` を知らない。[正解データの照合](#差分試験正解データ)では、`mustConfirm` を比較から外し、
   TS が ask＋mustConfirm、Python が ask または allow＋bypassed の組を一致とみなす（標本は除かない）。`[bash] deny` と `check_gh_api_publish` は両方に効く
@@ -188,12 +188,12 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 
 | 役割 | `tools` | `default` | ほか | 使うもの |
 | --- | --- | --- | --- | --- |
-| `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | `shell_deny` に `git flow`・`git-flow`（git-flow-next は、固定の引数の操作だけで使う。bash の直接の実行は bypass でも拒否。[CHG-0047](../../change/0047-gitflow.md)） | 親（主エージェント） |
+| `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | `shell_deny` は git の状態を変える操作など（`git flow`・`git-flow` の拒否は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去） | 親（主エージェント） |
 | `reader` | read・grep・find・ls | deny | — | 利用者が `pis --role reader` で選ぶ読み取り専用の親。子の `plan` 役も使う（`[pi.agents.plan]`。bash を持たないので、`skill_scripts` の許可が通らない）。harness の読み取り専用の子の一覧 `READ_ONLY_CHILD_PROFILES` に含む（`/btw` の入口と、計画モードの間に起動できる子）。bash を持たない役割の試験にも使う |
 | `explorer` | `reader` + bash | deny | `shell_allow` に `wc` と読み取り専用の git（`status` / `diff` / `log` / `show` / `ls-files`） | 子の `explore` / `review` |
 | `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |
 | `orchestrator` | read・grep・find・ls・task・todo・ask・action | deny | 許可リスト。`bash`・`edit`・`write`・MCP を持たない。`/orchestrate on` の間だけ、親の役割になる（[親の絞り込み](pi-subagents.md#親の絞り込みorchestrate)） | 親（利用者が切り替える） |
-| `worker` | 7 つのツール | ask | `shell_deny` に git の状態を変える操作と、`git flow`・`git-flow` | 子の `worker` |
+| `worker` | 7 つのツール | ask | `shell_deny` に git の状態を変える操作 | 子の `worker` |
 
 **既定の役割**は `[pi] default_role`（`common.toml`。既定は `implementer`）。`pis` は `--role` / `PI_HARNESS_ROLE` で上書きでき、
 `[pi.profiles]` に無い名前は、生成が止まる。
@@ -278,7 +278,7 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
 
 ## 既知の制約
 
-- gitflow-lite のリポジトリで develop / main を直接編集・コミットさせない制限は、判定器（`decide`）の外側の別の層で行う（`edit` / `write` と `git_commit` のみ。[gitflow 規約の強制](pi-gitflow-guard.md)。[CHG-0049](../../change/0049-gitflow-convention-guard.md)）。`decide` は変えない
+- gitflow-lite のリポジトリで develop / main を直接編集・コミットさせない制限は、判定器の外側の層（[CHG-0049](../../change/0049-gitflow-convention-guard.md)）に置いていたが、2026-10-31 に撤去した（[CHG-0050](../../change/0050-slim-guarded-action.md)）。今は機械では止めず、指示で運用する。`decide` は変えていない
 - `[pi.external_read]` だけを開けている。OpenCode が開けている `[opencode.sandbox] work_read`（`~/src` など）は
   まだ読まないので、隣のリポジトリを読むと確認になる
 - `boundary` の緩和は TS 版だけにある（Python 版 `decide.py` は持たない。正解データは `boundary` なしの要求）。試験は `test_pi_judge_ts.py`
