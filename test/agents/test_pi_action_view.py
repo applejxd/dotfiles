@@ -49,14 +49,60 @@ def test_the_summary_threshold_is_lines_chars_and_files(table):
 
 def test_the_summary_shows_the_subject_the_size_and_the_top_files(table):
     s = table["summary"]
-    assert "リポジトリ: /work/child" in s and "ブランチ: main  HEAD: aaaaaaaa" in s
+    # 絶対パスは出さない (狭い画面で折り返す)。作業ツリーの最後の要素と、ブランチ、短縮 HEAD
+    assert s.splitlines()[0] == "repo child main @ aaaaaaaa" and "/work" not in s
     assert "message: feat: subject line" in s
     assert "(全 7 行・39 字。「全文を見る」で全文)" in s
     # 本文の 2 行目以降は要約に出さない
     assert "- a" not in s
-    # ファイルは上位 5 件と残りの件数、統計の行
-    assert s.count(".txt |") == 5 and "他 3 ファイル" in s and "8 files changed" in s
+    # ファイルは上位 5 件と残りの件数、合計の行 (棒グラフは出さない)
+    assert s.count(".txt  1") == 5 and "他 3 ファイル" in s and "8 files +8 -0" in s
+    assert "|" not in s and "+++" not in s
     assert len(s.splitlines()) <= 14
+
+
+def test_the_summary_prefers_the_dir_argument_over_the_absolute_path(table):
+    s = table["summary_dir"]
+    assert s.splitlines()[0] == "dir .tmp/worktrees/x main @ aaaaaaaa" and "/very/long" not in s
+
+
+def test_the_summary_lines_fit_a_narrow_terminal_counting_wide_characters_twice(table):
+    u = table["util"]
+    assert (u["width_ascii"], u["width_cjk"]) == (3, 6)
+    assert u["clip_none"] == "abc" and u["clip_ascii"] == "abcd…" and u["clip_cjk"] == "日本語…"
+    lines = table["summary_narrow"].splitlines()
+    assert lines[1].endswith("…") and lines[2].endswith("…")
+    assert all(w <= 38 for w in (_width(line) for line in lines)), lines
+
+
+def _width(s: str) -> int:
+    import unicodedata
+
+    return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in s)
+
+
+def test_the_stat_drops_the_bar_graph_and_keeps_the_exact_totals(table):
+    u = table["util"]
+    # 棒グラフの +/- は縮尺されて正確ではないので、ファイルごとは変更行の合計だけ。正確な内訳は合計行
+    assert u["stat"].splitlines() == [
+        "docs/a.md  1",
+        "src/b.ts  102",
+        "img.png  bin",
+        "3 files +70 -33",
+    ]
+    assert u["stat_one"] == "1 file +1 -0"
+
+
+def test_the_full_details_also_go_to_the_chat_but_the_dialog_keeps_the_summary(table):
+    # TUI で途中経過が描かれるかは未確認。描かれなくても、見ずに承認することはないように、ダイアログに要約を残す
+    big = table["big_approve"]["calls"]
+    assert (
+        len(big["progress"]) == 1
+        and "- a" in big["progress"][0]
+        and "実行する argv" in big["progress"][0]
+    )
+    assert "message: feat: subject line" in big["select"][0]["title"]
+    assert table["small_commit"]["calls"]["progress"] == []  # 小さい変更はダイアログに全文
 
 
 def test_a_small_commit_shows_the_full_text_without_a_view_option(table):

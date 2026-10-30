@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "actions.ts")).href);
-const { needsSummary, summaryBody, executeAction } = mod;
+const { needsSummary, summaryBody, executeAction, cellWidth, clipCells, plainStat } = mod;
 
 const COMMIT = {
 	id: "git_commit",
@@ -58,10 +58,21 @@ out.needs = {
 	no_preview: needsSummary(COMMIT, { message: BIG }, null),
 };
 out.summary = summaryBody(COMMIT, { message: BIG }, preview(8), "/work/child");
+out.summary_dir = summaryBody(COMMIT, { message: BIG, dir: ".tmp/worktrees/x" }, preview(2), "/very/long/absolute/path/to/x");
+out.summary_narrow = summaryBody(COMMIT, { message: `feat: ${"長い件名".repeat(10)}\n\nbody` }, preview(8), "/work/child", 40);
+out.util = {
+	width_ascii: cellWidth("abc"),
+	width_cjk: cellWidth("日本語"),
+	clip_none: clipCells("abc", 10),
+	clip_ascii: clipCells("abcdefghij", 5),
+	clip_cjk: clipCells("日本語のテスト", 7),
+	stat: plainStat(" docs/a.md | 1 +\n src/b.ts | 102 ++++++-----\n img.png | Bin 0 -> 12 bytes\n 3 files changed, 70 insertions(+), 33 deletions(-)"),
+	stat_one: plainStat(" 1 file changed, 1 insertion(+)"),
+};
 
 async function run(files, message, answers) {
 	const cwd = repo(files);
-	const calls = { select: [], editor: [] };
+	const calls = { select: [], editor: [], progress: [] };
 	const ctx = {
 		cwd,
 		hasUI: true,
@@ -87,6 +98,10 @@ async function run(files, message, answers) {
 		judge: () => null,
 		dialog: (fn) => fn(),
 		bell: () => {},
+		progress: (text) => {
+			calls.progress.push(text);
+			return true;
+		},
 	};
 	const before = git(cwd, "rev-parse", "HEAD");
 	let result;

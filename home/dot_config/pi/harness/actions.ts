@@ -291,21 +291,69 @@ export function needsSummary(action: ActionSpec, values: Values, preview: Previe
 	return !(lines <= SMALL_MAX_LINES && chars <= SMALL_MAX_CHARS && statFileCount(preview.stat) <= SMALL_MAX_FILES);
 }
 
-/** 要約: 対象のリポジトリ・ブランチ・HEAD (短縮)・件名と本文の大きさ・ステージ済みの上位ファイルと統計 */
-export function summaryBody(action: ActionSpec, values: Values, preview: Preview, repo?: string): string {
+/** 表示の幅 (端末のセル数)。全角 (CJK・全角記号) は 2 */
+export function cellWidth(s: string): number {
+	let w = 0;
+	for (const ch of s) {
+		const c = ch.codePointAt(0) ?? 0;
+		w += (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe6f) || (c >= 0xff00 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6) ? 2 : 1;
+	}
+	return w;
+}
+
+/** 幅 (セル数) を超える行を、末尾を … にして切る */
+export function clipCells(s: string, max: number): string {
+	if (cellWidth(s) <= max) return s;
+	let out = "";
+	let w = 0;
+	for (const ch of s) {
+		const cw = cellWidth(ch);
+		if (w + cw > max - 1) break;
+		out += ch;
+		w += cw;
+	}
+	return `${out}…`;
+}
+
+/** `git diff --stat` の棒グラフを落とし、「ファイル名 +追加 -削除」だけにする (狭い画面で棒が折り返して壊れるため)。読めない行はそのまま */
+export function plainStat(stat: string): string {
+	return stat
+		.split("\n")
+		.map((line) => {
+			const sum = /^\s*(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?\s*$/.exec(line);
+			if (sum) return `${sum[1]} file${sum[1] === "1" ? "" : "s"} +${sum[2] ?? 0} -${sum[3] ?? 0}`;
+			// 棒グラフの +/- は縮尺されていて正確ではないので、変更行の合計だけを出す (正確な内訳は合計行)
+			const bin = /^\s*(.+?)\s+\|\s+Bin\b/.exec(line);
+			if (bin) return `${bin[1]}  bin`;
+			const f = /^\s*(.+?)\s+\|\s+(\d+)\s*[+-]*\s*$/.exec(line);
+			if (f) return `${f[1]}  ${f[2]}`;
+			return line.trim();
+		})
+		.join("\n");
+}
+
+/** 要約のリポジトリ名: dir の指定があればそれ、無ければ作業ツリーの最後の要素 (絶対パスは、狭い画面で折り返すので出さない) */
+function repoLabel(values: Values, repo?: string): string {
+	if (values.dir) return `dir ${values.dir}`;
+	const last = (repo ?? "").split(/[\\/]/).filter(Boolean).pop();
+	return last ? `repo ${last}` : "";
+}
+
+/** 要約: リポジトリ・ブランチ・HEAD (短縮)・件名と本文の大きさ・ステージ済みの上位ファイルと統計。width (端末のセル数) に合わせて行を切る */
+export function summaryBody(action: ActionSpec, values: Values, preview: Preview, repo?: string, width = COMPACT_LINE_CHARS): string {
+	const max = Math.max(20, width - 2);
+	const clip = (s: string) => clipCells(s, max);
 	const lines: string[] = [];
-	if (repo) lines.push(clipLine(`リポジトリ: ${sanitizeForDisplay(repo)}`));
-	const meta = Object.entries(action.fields).filter(([n, s]) => !s.content && values[n] !== undefined);
-	if (meta.length > 0) lines.push(clipLine(`対象: ${meta.map(([n]) => `${n}=${sanitizeForDisplay(values[n])}`).join(" / ")}`));
+	const where = repoLabel(values, repo);
 	const head = /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 8) : preview.head;
-	lines.push(clipLine(`ブランチ: ${sanitizeForDisplay(preview.branch)}  HEAD: ${head}`));
+	lines.push(clip(`${where ? `${sanitizeForDisplay(where)} ` : ""}${sanitizeForDisplay(preview.branch)} @ ${head}`));
 	for (const [n, s] of Object.entries(action.fields)) {
 		if (!s.content || values[n] === undefined) continue;
 		const all = values[n].split("\n");
-		lines.push(clipLine(`${n}: ${sanitizeForDisplay(all[0])}`));
-		if (all.length > 1 || values[n].length > COMPACT_LINE_CHARS) lines.push(`  (全 ${all.length} 行・${values[n].length} 字。「${VIEW_FULL}」で全文)`);
+		lines.push(clip(`${n}: ${sanitizeForDisplay(all[0])}`));
+		if (all.length > 1 || values[n].length > max) lines.push(clip(`  (全 ${all.length} 行・${values[n].length} 字。「${VIEW_FULL}」で全文)`));
 	}
-	lines.push("ステージ済み:", ...sanitizeForDisplay(compactStat(preview.stat, SUMMARY_FILES)).split("\n").map((l) => `  ${clipLine(l)}`));
+	lines.push("files:", ...sanitizeForDisplay(plainStat(compactStat(preview.stat, SUMMARY_FILES))).split("\n").map((l) => clip(`  ${l}`)));
 	return lines.join("\n");
 }
 
@@ -460,8 +508,13 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		// 途中経過を出せないときは、詳細を見せずに承認させないよう、スマホ向けに縮めた表示をダイアログに出す
 		let title: string;
 		const summarize = ctx.mode === "tui" && needsSummary(action, values, preview);
+		const columns = Number(process.stdout?.columns) > 0 ? Number(process.stdout.columns) : COMPACT_LINE_CHARS;
 		if (summarize) {
-			title = `${action.label}\n\n${summaryBody(action, values, preview!, cwd)}${notice}`;
+			// 要約では、狭い画面で選択肢を押し出さないよう、注意書きも 1 行に縮める
+			const shortNotice = snap ? `\n(${minutes}無応答なら実行せず退避)` : `\n(退避不可。${minutes}無応答なら拒否)`;
+			title = `${action.label}\n\n${summaryBody(action, values, preview!, cwd, columns)}${action.id === "git_commit" ? shortNotice : ""}`;
+			// 詳細 (本文全文・argv など) をチャット (ツールの途中経過) にも出す。TUI で描かれるかは未確認なので、ダイアログの要約は残す (見ずに承認することはない)
+			if (deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) await new Promise((r) => setTimeout(r, PROGRESS_FLUSH_MS));
 		} else if (ctx.mode === "tui") {
 			title = `${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
 		} else if (deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) {
