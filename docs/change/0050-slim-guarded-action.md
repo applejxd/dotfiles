@@ -120,3 +120,4 @@
 | 日付 | 変更 | 理由 |
 | --- | --- | --- |
 | 2026-10-31 | 案件を起こした。規約の強制と gitflow の 4 操作を撤去し、`guarded_action` を縮めた。[CHG-0049](closed/0049-gitflow-convention-guard.md) を Abandoned で閉じ、[CHG-0047](0047-gitflow.md) の目的を改めた | [ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md) |
+| 2026-10-31 | `git_commit` の `dir` が、`GIT_CONFIG_COUNT` を常に設定する環境で拒否されていたのを直した。拒否リスト（`repoSelectingEnv`）をやめ、対象を選ぶ 7 変数を落とした環境（`repoTargetEnv`）を、解決・プレビュー・スナップショット・実行で共用した | `GIT_CONFIG_*` は対象を変えない（実測）。`--show-toplevel` は `GIT_DIR` の乗っ取りを検出できないので、観測ではなく変数を外すことを守りの本体にした |

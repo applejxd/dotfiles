@@ -782,17 +782,39 @@ def test_a_deferred_commit_with_dir_is_saved_in_the_nested_repository_and_says_w
 
 
 @needs_action
-def test_dir_is_refused_when_the_environment_selects_the_repository(env):
+def test_dir_commits_to_the_resolved_repository_even_if_the_environment_selects_another(env):
+    # 継承した GIT_DIR は、拒否せずに外して実行する (判定と実行が同じ対象を見る)。親のリポジトリは変わらない
+    _prepare(env)
+    proj = env["proj"]
+    child = _nested(proj)
+    _stage(child, "n.txt")
+    child_before = _head(child)
+    proj_before = _head(proj)
+    _requests, results = _rpc(
+        env,
+        _call("git_commit", message="feat: child", dir="child"),
+        _choose(APPROVE),
+        GIT_DIR=str(proj / ".git"),
+    )
+    assert results and results[0][0] is False, results
+    assert _head(child) != child_before
+    assert _head(proj) == proj_before
+
+
+@needs_action
+def test_dir_works_when_git_config_is_injected_through_the_environment(env):
+    # AI CLI のハーネスは GIT_CONFIG_COUNT で設定を注入する。対象のリポジトリは変えないので拒否しない
     _prepare(env)
     child = _nested(env["proj"])
     _stage(child, "n.txt")
     before = _head(child)
-    requests, results = _rpc(
+    _requests, results = _rpc(
         env,
-        _call("git_commit", message="x", dir="child"),
+        _call("git_commit", message="feat: child", dir="child"),
         _choose(APPROVE),
-        GIT_DIR=str(env["proj"] / ".git"),
+        GIT_CONFIG_COUNT="1",
+        GIT_CONFIG_KEY_0="safe.bareRepository",
+        GIT_CONFIG_VALUE_0="explicit",
     )
-    assert requests == [], requests
-    assert results[0][0] is True and "GIT_DIR" in results[0][1], results
-    assert _head(child) == before
+    assert results and results[0][0] is False, results
+    assert _head(child) != before

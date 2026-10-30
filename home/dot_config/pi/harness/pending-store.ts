@@ -31,19 +31,29 @@ type Run = { ok: boolean; out: string };
 // 退避の内部の git は、hook を動かさない
 const SAFE = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.quotepath=false"];
 
+/** git が対象のリポジトリを選ぶ継承環境変数。cwd による探索を上書きするので、実行する git には渡さない。GIT_CONFIG_* は対象を変えない (core.worktree はリポジトリ自身の設定だけから読まれる) ので残す */
+export const REPO_SELECTING_VARS = ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE"];
+
+/** 対象を選ぶ変数だけを落とした環境のコピー。プレビュー・退避・実行の git は、すべてこれを使う (見る側と実行する側で対象がずれない) */
+export function repoTargetEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+	const env: NodeJS.ProcessEnv = { ...base };
+	for (const k of REPO_SELECTING_VARS) delete env[k];
+	return env;
+}
+
 function git(cwd: string, args: string[], opts: { env?: Record<string, string>; input?: string } = {}): Run {
 	const r = spawnSync("git", [...SAFE, ...args], {
 		cwd,
 		encoding: "utf8",
 		timeout: 15000,
 		input: opts.input,
-		env: { ...process.env, ...opts.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" },
+		env: { ...repoTargetEnv(), ...opts.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" },
 	});
 	return { ok: r.status === 0, out: String(r.stdout ?? "").replace(/\n+$/, "") };
 }
 
 function indexId(cwd: string): string | null {
-	const r = spawnSync("git", [...SAFE, "ls-files", "-s", "-z"], { cwd, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
+	const r = spawnSync("git", [...SAFE, "ls-files", "-s", "-z"], { cwd, env: { ...repoTargetEnv(), GIT_OPTIONAL_LOCKS: "0" } });
 	return r.status === 0 ? createHash("sha256").update(r.stdout).digest("hex") : null;
 }
 

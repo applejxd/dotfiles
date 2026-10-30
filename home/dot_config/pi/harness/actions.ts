@@ -10,7 +10,7 @@ import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
-import { reconcilePending, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
+import { reconcilePending, repoTargetEnv, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
 
 export const ACTION_TOOL = "action";
 const NOT_APPROVED = "not approved:";
@@ -130,15 +130,8 @@ export function normalizeDirParam(v: unknown): string | { error: string } {
 /**
  * dir を実体に解決し、cwd の中にあり、かつ git の最上位 (作業ツリーの根) であることを確かめて、その実体パスを返す。
  * 解決後のパスの区切りで比べる (箱外へのシンボリックリンクを拒否する)。省略 (空) は cwd をそのまま返す。
+ * 対象を選ぶ継承環境変数 (GIT_DIR など) は、ここでも実行でも落とす (repoTargetEnv)。拒否はしない。
  */
-/** dir 指定時に、対象のリポジトリを変えてしまう継承環境変数 (判定と実行で対象が食い違う元になる)。見つけたら拒否する */
-const REPO_SELECTING_ENV = ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"];
-
-export function repoSelectingEnv(...envs: NodeJS.ProcessEnv[]): string | null {
-	for (const e of envs) for (const k of REPO_SELECTING_ENV) if (e[k] !== undefined && e[k] !== "") return k;
-	return null;
-}
-
 /** 解決済みの実体パスを、cwd からの相対パス (判定器が cwd に連結して見る形) にする。cwd 自身は空 */
 export function relativeDir(base: string, real: string): string {
 	try {
@@ -192,7 +185,7 @@ export type Preview = { branch: string; head: string; indexId: string; stat: str
 
 function run(file: string, args: string[], cwd: string, opts: { buffer?: boolean; signal?: AbortSignal } = {}): Promise<{ code: number | string; stdout: any; stderr: string }> {
 	return new Promise((resolve) => {
-		execFile(file, args, { cwd, encoding: opts.buffer ? "buffer" : "utf8", maxBuffer: 64 * 1024 * 1024, signal: opts.signal, timeout: 30_000 }, (err: any, stdout: any, stderr: any) => {
+		execFile(file, args, { cwd, env: repoTargetEnv(), encoding: opts.buffer ? "buffer" : "utf8", maxBuffer: 64 * 1024 * 1024, signal: opts.signal, timeout: 30_000 }, (err: any, stdout: any, stderr: any) => {
 			const code = err ? (typeof err.code === "number" || typeof err.code === "string" ? err.code : 1) : 0;
 			resolve({ code, stdout: stdout ?? (opts.buffer ? Buffer.alloc(0) : ""), stderr: String(stderr ?? "") });
 		});
@@ -366,7 +359,7 @@ type ExecResult = { code: number | string; stdout: string; stderr: string; kille
 
 function runArgv(argv: string[], cwd: string, env: NodeJS.ProcessEnv, signal?: AbortSignal): Promise<ExecResult> {
 	return new Promise((resolve) => {
-		execFile(argv[0], argv.slice(1), { cwd, env, encoding: "utf8", timeout: EXEC_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024, signal }, (err: any, stdout: any, stderr: any) => {
+		execFile(argv[0], argv.slice(1), { cwd, env: repoTargetEnv(env), encoding: "utf8", timeout: EXEC_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024, signal }, (err: any, stdout: any, stderr: any) => {
 			const code = err ? (typeof err.code === "number" || typeof err.code === "string" ? err.code : 1) : 0;
 			resolve({ code, stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), killed: err?.killed === true });
 		});
@@ -392,10 +385,6 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		for (const [name] of fileFields) files[name] = join(dir, `${name}.txt`);
 		// dir (任意): cwd 配下の別の git リポジトリで実行する。プレビュー・退避・実行はすべてそのリポジトリを見る
 		if ("dir" in action.fields) {
-			if (values.dir) {
-				const bad = repoSelectingEnv(process.env, deps.env);
-				if (bad) throw new Error(`dir を指すには、対象のリポジトリを変えてしまう環境変数 ${bad} を外す (判定と実行が別のリポジトリを見るのを避ける)`);
-			}
 			cwd = await resolveRepoDir(ctx.cwd, values.dir);
 			// 解決済みの対象に対しても判定を通す (元の dir を評価したあとでリンクが変わっていても、実行する場所を判定する)
 			resolvedParams = { ...params, params: { ...params.params, dir: relativeDir(ctx.cwd, cwd) } };
