@@ -302,6 +302,58 @@ def test_pis_defaults_to_the_sandbox(monkeypatch):
     assert ocs.pis.main(["--boundary", "-c"]) == 7 and seen["argv"] == ["-c"]
 
 
+def test_pis_continues_the_most_recent_session_by_default(monkeypatch):
+    """pis は既定で直近のセッションを続ける (--continue を先頭へ足す)。
+
+    --new、セッションの選び方、非対話 (-p)、情報だけ (--help など) を指定したときは足さない。
+    """
+    ocs = _ocs()
+    seen = _stub_pis(monkeypatch, ocs)
+    cases = [
+        ([], ["--continue"]),
+        (["--model", "x"], ["--continue", "--model", "x"]),
+        (["--new"], []),
+        (["--new", "--model", "x"], ["--model", "x"]),
+        (["-c"], ["-c"]),
+        (["--continue"], ["--continue"]),
+        (["-r"], ["-r"]),
+        (["--resume"], ["--resume"]),
+        (["--session", "abc"], ["--session", "abc"]),
+        (["--session=abc"], ["--session=abc"]),
+        (["--session-id", "a"], ["--session-id", "a"]),
+        (["--fork", "a"], ["--fork", "a"]),
+        (["--no-session"], ["--no-session"]),
+        (["-p", "hi"], ["-p", "hi"]),
+        (["--print", "hi"], ["--print", "hi"]),
+        (["--mode", "rpc"], ["--mode", "rpc"]),
+        (["--list-models"], ["--list-models"]),
+        (["--help"], ["--help"]),
+        (["--version"], ["--version"]),
+        (["--check"], ["--check"]),
+    ]
+    for given, expected in cases:
+        assert ocs.pis.main(given) == 7 and seen["argv"] == expected, given
+    # --no-broker は先頭へ渡すだけで、続ける指定はその後ろ
+    assert ocs.pis.main(["--no-broker"]) == 7 and seen["argv"] == ["--no-broker", "--continue"]
+    # parse は引数を足さず、--new だけを解釈する
+    options = ocs.pis.parse(["--new", "-c"])
+    assert (options.new_session, options.rest) == (True, ["-c"])
+    assert ocs.pis.parse([]).new_session is False and ocs.pis.parse([]).rest == []
+
+
+def test_pis_no_sandbox_also_continues_by_default(monkeypatch):
+    ocs = _ocs()
+    _stub_pis(monkeypatch, ocs)
+    monkeypatch.setattr(ocs.pis.shutil, "which", lambda *_a, **_k: "/usr/bin/pi")
+    monkeypatch.setattr(ocs.pi, "own_extensions", lambda *_a, **_k: [])
+    captured = {}
+    monkeypatch.setattr(ocs.pis.os, "execvpe", lambda f, a, e: captured.update(command=a))
+    ocs.pis.main(["--no-sandbox"])
+    assert captured["command"][-2:] == [str(ocs.pi.HARNESS), "--continue"]
+    ocs.pis.main(["--no-sandbox", "--new"])
+    assert "--continue" not in captured["command"]
+
+
 def test_pis_refuses_the_sandbox_where_it_cannot_be_built(monkeypatch, capsys):
     ocs = _ocs()
     _stub_pis(monkeypatch, ocs)

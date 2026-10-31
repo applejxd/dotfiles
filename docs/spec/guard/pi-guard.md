@@ -45,7 +45,10 @@ pis --no-sandbox    # サンドボックス無しで起動する (守りはフ�
 pis --bypass        # 確認 (ask) を確認なしで通す。deny と誘導は効く。**confirm (外部への送信・公開) は bypass でも確認する** (サンドボックス無しでもオンにできる)
 pis --role reader   # 役割を選ぶ ([pi.profiles] の名前。省略すると [pi] default_role)
 pis -c              # pi の引数はそのまま渡る (例: 直前のセッションを続ける)
+pis --new           # 新しいセッションで始める (既定は、この作業ディレクトリの直近のセッションがあればそれを開く)
 ```
+
+- **既定で、この作業ディレクトリの直近のセッションを開く**（`--continue` を先頭へ足す。無ければ pi が新しいセッションを作る）。`--new` で新しいセッションにする。`-c`・`-r`・`--resume`・`--session`・`--session-id`・`--session-dir`・`--fork`・`--no-session`・`-p`（`--print`）・`--mode`・`--export`・`--list-models`・`--help`・`--version`・`--check` を渡したときは足さない（別のセッションの選び方・非対話・情報だけの指定を優先する）。素の `pi`（Orca・Zed が呼ぶもの）は変えない。試験: `test_pi_boundary.py`
 
 - **サンドボックスが標準**。サンドボックスを張れない OS（macOS）では、`pis` は起動せず `--no-sandbox` を案内する（Windows ネイティブには `pis` を配らない）（黙って弱い守りに落とさない）。
   `--boundary` は互換の別名（標準と同じ意味）
