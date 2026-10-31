@@ -50,6 +50,7 @@ try:
         "session-tmp.ts",
         "model-choice.ts",
         "pending-store.ts",
+        "pending-ops.ts",
         "platform.ts",
         "landlock_exec.py",
         "commit-message.js",

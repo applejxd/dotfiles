@@ -25,13 +25,13 @@
 | 段 | 解決したいこと | 内容 | 前提 | 状態 |
 | --- | --- | --- | --- | --- |
 | P0 | 前提が実機で成り立つか分からない | 使い捨ての拡張で、コマンド内の `select`・`content` つきの通知・`setStatus`・Fence の中の `refs/pi/` の書き込みを確かめる | — | 完了（結果は「実装・検証」） |
-| P1 | 保留の設定が無い | `[pi.pending]`（`enabled=false`、`modes=["tui"]`、保持期限、上限）を `common.toml.tmpl` → 生成器 → golden に足す。挙動は変えない | — | 未着手 |
-| P2 | 保存と状態遷移の部品が無い | 記録の形と検証、`pending / running / done` の ref 遷移（`no-deref`・期待 OID・`attemptId`）、重複の抑止（契約 1）、期限、一覧、上限（ref の列挙数・読む量・時間）。**記録・実行計画・結果の型（`outcome / phase / confirmedEffects / remainingCleanup / evidence`）、実行者（owner）と開始段階（`reserved / started`）、旧形式・新形式・不正な形式の判別を、先に固定する**（契約 3・4・7）。新規ファイルだけ | — | 未着手 |
-| P3 | 確認の画面が `executeAction` に埋まっている | 選択ループを `presentConfirm` に抽出し、要求時と承認時で共用する。挙動は変えない（既存の試験が不変で通る） | — | 未着手 |
-| P4 | 確認が取れないとき、記録を残せない | `executeAction` を保留に接続する。操作ごとの「前提アダプタ」の登録口を作り、**アダプタを登録した操作だけ**に「あとで」を出す（契約 7）。時間切れ・不在・UI なしを保留へ | P2・P3 | 未着手 |
+| P1 | 保留の設定が無い | `[pi.pending]`（`enabled=false`、`modes=["tui"]`、保持期限、上限）を `common.toml.tmpl` → 生成器 → golden に足す。挙動は変えない | — | 完了 |
+| P2 | 保存と状態遷移の部品が無い | 記録の形と検証、`pending / running / done` の ref 遷移（`no-deref`・期待 OID・`attemptId`）、重複の抑止（契約 1）、期限、一覧、上限（ref の列挙数・読む量・時間）。**記録・実行計画・結果の型（`outcome / phase / confirmedEffects / remainingCleanup / evidence`）、実行者（owner）と開始段階（`reserved / started`）、旧形式・新形式・不正な形式の判別を、先に固定する**（契約 3・4・7）。新規ファイルだけ | — | 完了 |
+| P3 | 確認の画面が `executeAction` に埋まっている | 選択ループを `presentConfirm` に抽出し、要求時と承認時で共用する。挙動は変えない（既存の試験が不変で通る） | — | 完了 |
+| P4 | 確認が取れないとき、記録を残せない | `executeAction` を保留に接続する。操作ごとの「前提アダプタ」の登録口を作り、**アダプタを登録した操作だけ**に「あとで」を出す（契約 7）。時間切れ・不在・UI なしを保留へ | P2・P3 | 完了 |
 | P5 | 保留を承認する入口が無い | `/pending approve\|resolve\|log`（**`registerTask` から分けて登録する**。モデルの実行中は承認を断る）、検証済みの実行計画の流れ、実行者の所有権と `resolve` の規則、通知（BEL・フッター・モデルへの固定テンプレートの `content` つきメッセージ） | P4 | 未着手 |
-| P6 | `refs/pi/` をモデルが bash で書ける | `refs/pi/*` を書く git コマンドを必須確認にする（強化のみ。独立） | — | 未着手 |
-| P7 | 統合の結果を、承認の前に算出する部品が無い | `git_integrate` の算出（結果の tree、結果コミットの案、リスクの抽出。外部コードを動かさない）。ツールには未接続 | — | 未着手 |
+| P6 | `refs/pi/` をモデルが bash で書ける | `refs/pi/*` を書く git コマンドを必須確認にする（強化のみ。独立） | — | 完了 |
+| P7 | 統合の結果を、承認の前に算出する部品が無い | `git_integrate` の算出（結果の tree、結果コミットの案、リスクの抽出。外部コードを動かさない）。ツールには未接続 | — | 完了 |
 | P8 | 統合の確認が時間切れで失われる | `git_integrate` の操作と、保留への合流（別の worktree で作った保留を、本体で承認できる）。`[pi.integrate] enabled` をキルスイッチにする | P5・P7 | 未着手 |
 | P9 | 有効にする | `[pi.pending] enabled = true, modes = ["tui"]`。**出口条件**: (1) 新旧の形式・未対応の操作・キルスイッチの能力表と、実際の挙動が一致する。(2) 別のセッションとの競合、開始の前後の停止、結果の保存の失敗から、復旧できる。(3) linked worktree の Fence の内側で保存し、本体で承認する縦断を、実機で確かめた。(4) 算出で外部コードを動かさず、実行で品質ゲート（hook）を維持している。(5) 通知を失っても、成立した副作用と未完の後片付けを、一覧から確認できる。実機で、時間切れ → `/pending approve` → 結果通知 → モデルの続行を 1 往復する | P8 | 未着手 |
 | P10 | `git_commit`・gh の操作 | `git_commit` の保留の承認（通常の `git commit`。hook を通す）、gh のアダプタ、既存の退避の承認 | P9 | 未着手 |
@@ -153,6 +153,17 @@
 - **B（Fence の内側の `refs/pi/` の書き込み）**: 全部 OK（主 worktree）。`hash-object -w`・`mktree`・`commit-tree`・`update-ref`（通常と `--no-deref`）・`update-ref --stdin` のトランザクション（`option no-deref`・`create`・`prepare`・`commit`）が通り、**2 回目の `create` は `reference already exists` で失敗した（排他になる）**。linked worktree の Fence の内側は未実施。
 - 使い捨てのリポジトリ（git 2.43）で、上の git の操作と掃除を試験した。
 
+**実装した段（2026-10-31。いずれも `develop` に取り込み済み）**:
+
+- **P1**: `[pi.pending]`（`enabled=false`・`modes`・保持期限・上限）を `common.toml.tmpl` → 生成器 → golden に足した。挙動は変えない。
+- **P2**: 保存層 `pending-ops.ts`（記録・状態遷移・重複の抑止・上限・期限）と、実行者の判定 `pending-owner.ts`。旧形式の片付けが新形式を消さないよう、`pending-store.ts` に旧形式の判別を足した。試験は、偽造・不正な記録 13 種、種類の判別、競合する保存（4 プロセス）、承認の開始の排他（3 プロセス）、symbolic ref の差し替え、段階、結果 4 値、人の決着、期限、hook・署名が動かないこと、linked worktree。**macOS（`ps`）と Windows の実行者の判定は未検証**。
+- **P3**: `presentConfirm`（選択・期限・取消・「全文を見る」の押し直し）を `confirm-present.ts` に切り出した。挙動は変えない。
+- **P4**: `executeAction` を保留に接続した。`ActionDeps.pending`（`enabled`・`modes`・操作ごとの前提アダプタ）を足し、**アダプタを登録した操作だけ**に「あとで (保留)」を出す。時間切れ・不在・UI なし・「あとで」を、実行せずに保留として保存する（`not approved:` で返す）。前提を取れない・保存できない・モード対象外・無効のときは、従来どおり拒否する。`git_commit` は従来の退避のまま。**まだ操作を登録していない**（`git_integrate` は P8）ので、本番の挙動は変わらない。試験は、偽の ctx で、各経路（保存・実行しない・「あとで」の有無・重複・保存の失敗・子・`git_commit`）を確かめる。
+- **P6**: `refs/pi/` を書く git コマンドを必須確認にした。
+- **P7**: 統合の結果の算出 `integrate-plan.ts`。外部 merge driver・hook・textconv が動かないことの陰性試験を含む。ツールには未接続。
+
+次は P5（`/pending approve|resolve|log`・通知。`index.ts`）と P8（`git_integrate` の操作）。
+
 未確認: linked worktree の Fence の内側の書き込み、RPC（Orca・Zed）のスラッシュコマンド、`gh issue view --json` が境界のブローカーを通るか、Windows。
 
 各段の検証は、対象の試験と `mise run verify:all` で行う。Windows 側は、実機でしか確かめられない（[AGENTS.md](../../AGENTS.md) の「Windows 実機での検証」）。
@@ -161,6 +172,7 @@
 
 | 日付 | 変更 | 理由 |
 | --- | --- | --- |
+| 2026-10-31 | **P1・P2・P3・P4・P6・P7 を実装し、`develop` に取り込んだ。** P4 までで、保留の保存と「あとで」の経路ができた（アダプタを登録した操作が無いので、本番の挙動は変わらない）。実装で、`option no-deref` が次の 1 コマンドだけに効くことを確かめ、契約を直した | 実装と試験（関連試験・全件検査が通過）。worker に任せたのは、P1・P6・P7 と P2 の実行者の判定。保存層の本体と P3・P4 は、設計判断が連続するので親が行った |
 | 2026-10-31 | **契約を、「要求・対象・実行者」の 3 層に分けて直した（2 回目の `review` の反映）。** 実行計画が対象の期待値を持ち、反映を期待値の検証で保護する。`running` を予約と開始の 2 段階にし、実行者（owner）と停止の確認を決める。結果の型に証拠を持たせる。能力表と、旧形式・新形式・不正な形式の分離。`/pending` を `registerTask` から分ける。重複の抑止を原子的にする。`git_integrate` は、ref だけを進めず、作業ツリーも一緒に動く反映にする。`chezmoi_apply` は適用計画を条件付きの候補にする。P9 の出口条件を足した | `review` の指摘（MAJOR 6 件・MINOR 3 件、BLOCKER は無し）。「保留 ref の CAS だけでは、承認した内容と実行する内容の一致は保証できない」を中心に。`/pending` が `registerTask` の中にあることと、`ctx.isIdle()` があることを実物で確かめた |
 | 2026-10-31 | **利用者が、最初の縦断（基盤 + `git_integrate`）・別セッションの要求元への通知は非対応・`chezmoi_apply` は承認の時点で差分を作る・`refs/pi/` を書く bash の必須確認（P6）を、すべて推奨どおりに決めた** | 利用者の回答（未解決点 1〜4） |
 | 2026-10-31 | 案件を起こした。ADR-0023（Proposed）を添えた。最初の縦断を「基盤 + `git_integrate`」にした。`git_commit` の保留の承認方式を、`commit-tree` + CAS から、通常の `git commit`（一致するときだけ）に改めた | 利用者の設計の承認（「これで行こう」）。計画役の実装計画と、別系統の `review` の指摘（pre-commit の秘密検出を迂回する、ref の遷移に `no-deref` が無い、結果不明の扱い、通知の `content`、`chezmoi_apply` の前提、算出での外部コード）。手順 0 の実機の結果 |
