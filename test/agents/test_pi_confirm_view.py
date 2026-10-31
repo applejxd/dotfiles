@@ -173,6 +173,15 @@ def test_the_integration_confirmation_has_its_own_title_and_lead(table):
         and "内容を確認してから承認" in v["body"]
     )
     assert "git flow feature finish x" in v["body"] and "理由:" in v["body"]
+    # 見出しと同じ接頭辞と、コマンドの再掲を理由に繰り返さない
+    assert (
+        "確認が必要な保護ブランチへの統合" not in v["body"]
+        and "実行しようとしているコマンド" not in v["body"]
+    )
+    assert v["body"].count("git flow feature finish x") == 1
+    assert (
+        v["body"].rstrip().endswith("理由: git flow feature finish (保護ブランチへ統合・削除する)")
+    )
     # 外部送信の確認の見出しと導入は、そのまま
     basic = table["view"]["basic"]
     assert "外部への送信・公開" in basic["title"] and "保護ブランチ" not in basic["body"]

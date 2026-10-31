@@ -270,7 +270,9 @@ export function buildMustConfirmView(command: string, reason: string, readBodyFi
 	if (fileText !== undefined && parsed?.bodyFile !== undefined) {
 		lines.push("", `本文ファイル ${sanitizeForDisplay(parsed.bodyFile)} の内容 (ハーネスが読んだもの):`, sanitizeForDisplay(fileText));
 	}
-	lines.push("", `理由: ${sanitizeForDisplay(reason)}`);
+	// 統合の確認は、見出しと同じ接頭辞と、「コマンド (全文)」の重複になる末尾のコマンドを落とす
+	const shown = integration ? reason.slice(MUST_CONFIRM_INTEGRATION_PREFIX.length).split("\n実行しようとしているコマンド:")[0] : reason;
+	lines.push("", `理由: ${sanitizeForDisplay(shown)}`);
 	const view: MustView = { kind: "confirm", title: integration ? INTEGRATION_CONFIRM_TITLE : MUST_CONFIRM_TITLE, body: lines.join("\n") };
 	if (fileText !== undefined && parsed?.bodyFile !== undefined) view.bodyFile = { path: parsed.bodyFile, text: fileText };
 	return view;
