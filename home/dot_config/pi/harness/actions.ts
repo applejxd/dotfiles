@@ -332,29 +332,46 @@ export function plainStat(stat: string): string {
 		.join("\n");
 }
 
-/** 要約のリポジトリ名: dir の指定があればそれ、無ければ作業ツリーの最後の要素 (絶対パスは、狭い画面で折り返すので出さない) */
-function repoLabel(values: Values, repo?: string): string {
-	if (values.dir) return `dir ${values.dir}`;
-	const last = (repo ?? "").split(/[\\/]/).filter(Boolean).pop();
-	return last ? `repo ${last}` : "";
+/** 要約のリポジトリ名: dir の指定があればその最後の要素、無ければ作業ツリーの最後の要素 (絶対パスは、狭い画面で折り返すので出さない) */
+function repoName(values: Values, repo?: string): string {
+	return (values.dir || repo || "").split(/[\\/]/).filter(Boolean).pop() ?? "";
 }
 
-/** 要約: 件名 (本文の 1 行目)・本文の大きさ・リポジトリ・ブランチ・HEAD (短縮)・ステージ済みの上位ファイルと統計。width (端末のセル数) に合わせて行を切る。何をコミットするかの件名が、最初の行 */
+/** 変更ファイルの表示名: 同名が無ければ最後の要素だけ (狭い画面で長いパスが切れるため)。リネーム表記 (=>) と、同名が複数あるものはパスのまま */
+export function shortenFiles(lines: string[]): string[] {
+	const base = (p: string) => p.split("/").pop() || p;
+	const parsed = lines.map((l) => {
+		const i = l.lastIndexOf("  ");
+		return i > 0 && /^(\d+|bin)$/.test(l.slice(i + 2)) && !l.slice(0, i).includes("=>") ? { path: l.slice(0, i), tail: l.slice(i) } : null;
+	});
+	const count = new Map<string, number>();
+	for (const p of parsed) if (p) count.set(base(p.path), (count.get(base(p.path)) ?? 0) + 1);
+	return lines.map((l, i) => {
+		const p = parsed[i];
+		return p && count.get(base(p.path)) === 1 ? `${base(p.path)}${p.tail}` : l;
+	});
+}
+
+/** 要約 (ラベル付きの箇条書き): リポジトリ名・ブランチと HEAD (短縮)・件名 (本文の 1 行目)・本文の大きさ・ステージ済みの上位ファイルと統計。width (端末のセル数) に合わせて行を切る */
 export function summaryBody(action: ActionSpec, values: Values, preview: Preview, repo?: string, width = COMPACT_LINE_CHARS): string {
 	const max = Math.max(20, width - 2);
 	const clip = (s: string) => clipCells(s, max);
 	const lines: string[] = [];
-	const where = repoLabel(values, repo);
+	const name = repoName(values, repo);
 	const head = /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 8) : preview.head;
+	if (name) lines.push(clip(`・リポジトリ: ${sanitizeForDisplay(name)}`));
+	lines.push(clip(`・ブランチ: ${clipCells(sanitizeForDisplay(preview.branch), Math.max(10, max - cellWidth("・ブランチ: ") - cellWidth(` @ ${head}`)))} @ ${head}`));
 	const texts = Object.entries(action.fields).filter(([n, s]) => s.content && values[n] !== undefined);
 	for (const [n] of texts) {
 		const all = values[n].split("\n");
-		// 本文の欄が 1 つなら、ラベルは付けない (件名は見れば分かる)
-		lines.push(clip(`${texts.length > 1 ? `${n}: ` : ""}${sanitizeForDisplay(all[0])}`));
-		if (all.length > 1 || values[n].length > max) lines.push(clip(`  (全 ${all.length} 行・${values[n].length} 字。「${VIEW_FULL}」で全文)`));
+		// 本文の欄が 1 つなら「件名」、複数なら欄の名前をラベルにする
+		lines.push(clip(`・${texts.length > 1 ? n : "件名"}: ${sanitizeForDisplay(all[0])}`));
+		if (all.length > 1 || values[n].length > max) lines.push(clip(`・本文: 全 ${all.length} 行・${values[n].length} 字 (「${VIEW_FULL}」)`));
 	}
-	lines.push(clip(`${where ? `${sanitizeForDisplay(where)} ` : ""}${sanitizeForDisplay(preview.branch)} @ ${head}`));
-	lines.push("files:", ...sanitizeForDisplay(plainStat(compactStat(preview.stat, SUMMARY_FILES))).split("\n").map((l) => clip(`  ${l}`)));
+	// 変更: 合計の行を見出しにし、ファイルをその下に字下げで出す
+	const stat = sanitizeForDisplay(plainStat(compactStat(preview.stat, SUMMARY_FILES))).split("\n");
+	const total = /^\d+ files? \+\d+ -\d+$/.test(stat[stat.length - 1] ?? "") ? (stat.pop() as string) : "";
+	lines.push(clip(`・変更: ${total}`.trimEnd()), ...shortenFiles(stat).map((l) => clip(`    ${l}`)));
 	return lines.join("\n");
 }
 

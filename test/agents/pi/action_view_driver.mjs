@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "actions.ts")).href);
-const { needsSummary, summaryBody, executeAction, cellWidth, clipCells, plainStat } = mod;
+const { needsSummary, summaryBody, executeAction, cellWidth, clipCells, plainStat, shortenFiles } = mod;
 
 const COMMIT = {
 	id: "git_commit",
@@ -60,6 +60,8 @@ out.needs = {
 out.summary = summaryBody(COMMIT, { message: BIG }, preview(8), "/work/child");
 out.summary_dir = summaryBody(COMMIT, { message: BIG, dir: ".tmp/worktrees/x" }, preview(2), "/very/long/absolute/path/to/x");
 out.summary_narrow = summaryBody(COMMIT, { message: `feat: ${"長い件名".repeat(10)}\n\nbody` }, preview(8), "/work/child", 40);
+out.summary_long_branch = summaryBody(COMMIT, { message: BIG }, { ...preview(2), branch: `feature/${"x".repeat(60)}` }, "/work/child", 46);
+out.shorten = shortenFiles(["docs/a.ts  1", "src/a.ts  2", "src/b.ts  102", "img/logo.png  bin", "x/{a => b}/c.ts  3", "… 他 2 ファイル"]);
 out.util = {
 	width_ascii: cellWidth("abc"),
 	width_cjk: cellWidth("日本語"),

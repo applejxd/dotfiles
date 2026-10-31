@@ -47,24 +47,43 @@ def test_the_summary_threshold_is_lines_chars_and_files(table):
     assert n["not_commit"] is False and n["no_preview"] is False
 
 
-def test_the_summary_shows_the_subject_the_size_and_the_top_files(table):
+def test_the_summary_is_a_labeled_bullet_list_in_a_fixed_order(table):
     s = table["summary"]
-    # 件名が最初の行。絶対パスは出さない (狭い画面で折り返す)。作業ツリーの最後の要素と、ブランチ、短縮 HEAD は、件名と全文の行数のあと
+    # リポジトリ名・ブランチ・件名の順。絶対パスは出さない (狭い画面で折り返す)。作業ツリーの最後の要素と、ブランチ、短縮 HEAD
     lines = s.splitlines()
-    assert lines[0] == "feat: subject line" and "message:" not in s
-    assert lines[1] == "  (全 7 行・39 字。「全文を見る」で全文)"
-    assert lines[2] == "repo child main @ aaaaaaaa" and "/work" not in s
+    assert lines[:5] == [
+        "・リポジトリ: child",
+        "・ブランチ: main @ aaaaaaaa",
+        "・件名: feat: subject line",
+        "・本文: 全 7 行・39 字 (「全文を見る」)",
+        "・変更: 8 files +8 -0",
+    ]
+    assert "/work" not in s and "message:" not in s
     # 本文の 2 行目以降は要約に出さない
     assert "- a" not in s
-    # ファイルは上位 5 件と残りの件数、合計の行 (棒グラフは出さない)
-    assert s.count(".txt  1") == 5 and "他 3 ファイル" in s and "8 files +8 -0" in s
+    # ファイルは上位 5 件と残りの件数を、変更の下に字下げで (棒グラフは出さない)
+    assert [line for line in lines[5:] if line.startswith("    ")] == [
+        f"    f{i}.txt  1" for i in range(5)
+    ] + ["    … 他 3 ファイル"]
     assert "|" not in s and "+++" not in s
-    assert len(s.splitlines()) <= 14
+    assert len(lines) <= 12
 
 
 def test_the_summary_prefers_the_dir_argument_over_the_absolute_path(table):
     s = table["summary_dir"]
-    assert s.splitlines()[2] == "dir .tmp/worktrees/x main @ aaaaaaaa" and "/very/long" not in s
+    assert s.splitlines()[0] == "・リポジトリ: x" and "/very/long" not in s and ".tmp" not in s
+
+
+def test_the_summary_shows_only_the_last_path_element_unless_names_collide(table):
+    # 同名が無いファイルだけ最後の要素にする。同名 (a.ts)・リネーム表記 (=>)・要約の行はそのまま
+    assert table["shorten"] == [
+        "docs/a.ts  1",
+        "src/a.ts  2",
+        "b.ts  102",
+        "logo.png  bin",
+        "x/{a => b}/c.ts  3",
+        "… 他 2 ファイル",
+    ]
 
 
 def test_the_summary_lines_fit_a_narrow_terminal_counting_wide_characters_twice(table):
@@ -72,8 +91,16 @@ def test_the_summary_lines_fit_a_narrow_terminal_counting_wide_characters_twice(
     assert (u["width_ascii"], u["width_cjk"]) == (3, 6)
     assert u["clip_none"] == "abc" and u["clip_ascii"] == "abcd…" and u["clip_cjk"] == "日本語…"
     lines = table["summary_narrow"].splitlines()
-    assert lines[0].endswith("…") and lines[1].endswith("…")
+    assert lines[2].endswith("…") and lines[3].endswith("…")
     assert all(w <= 38 for w in (_width(line) for line in lines)), lines
+    # ブランチ名が長いときはブランチ名を縮め、短縮 HEAD は残す (幅 46)
+    branch = table["summary_long_branch"].splitlines()[1]
+    assert (
+        branch.startswith("・ブランチ: feature/x")
+        and "…" in branch
+        and branch.endswith(" @ aaaaaaaa")
+        and _width(branch) <= 44
+    )
 
 
 def _width(s: str) -> int:
@@ -102,9 +129,9 @@ def test_the_full_details_also_go_to_the_chat_but_the_dialog_keeps_the_summary(t
         and "- a" in big["progress"][0]
         and "実行する argv" in big["progress"][0]
     )
-    assert (
-        "feat: subject line" in big["select"][0]["title"].split("\n")[2]
-    )  # 見出し・空行の次が件名
+    assert "・件名: feat: subject line" in big["select"][0]["title"].split(
+        "\n"
+    )  # 見出し・空行、リポジトリ、ブランチの次が件名
     assert table["small_commit"]["calls"]["progress"] == []  # 小さい変更はダイアログに全文
 
 
