@@ -1219,7 +1219,7 @@
    "checks": [
     "check_gh_api_mutation"
    ],
-   "integration": false,
+   "integration": true,
    "local_git": true,
    "timeout_seconds": 300
   },

@@ -102,7 +102,7 @@
 | S2 | 自由区の判定（linked worktree かつ `feature/*`。確認は省略しない） | worker | 完了（`harness/freezone.ts`・`gitrun.ts`。部品のみで、まだ接続しない。試験 `test_pi_freezone.py`） |
 | S3a | 統合の計画の算出と表示（結果の差分・リスクの印。ツールには未接続） | worker | 未着手 |
 | S3b | 専用操作 `git_integrate`（計画の固定・直前照合・結果 3 値） | 親 | 未着手 |
-| S4 | bash の統合ゲート（保護 ref を変える通常の統合コマンドを必須確認にし、feature の日常の操作は止めない） | worker | 進行中（S4a: 静的な検出器 `judge/gitintegration.ts` は完了。判定器への接続と動的検査の S4b は未着手） |
+| S4 | bash の統合ゲート（保護 ref を変える通常の統合コマンドを必須確認にし、feature の日常の操作は止めない） | worker（S4a）+ 親（S4b） | 完了（S4a: 静的な検出器 `judge/gitintegration.ts`。S4b: `integration-gate.ts` でハーネスの `decide` に接続し、`[pi.confirm] integration = true`。配備で効く） |
 | S5a | 確認省略のコード（設定は false。この段だけでは no-op） | worker | 未着手 |
 | S5b | 確認省略を有効化（**最後**） | 親 | 未着手 |
 | S6 | docs の整合と `verify:all` | 親 | 未着手 |
@@ -127,4 +127,5 @@
 
 | 日付 | 変更 | 理由 |
 | --- | --- | --- |
+| 2026-11-01 | **S4b: 統合コマンドを、実際に必須確認にした**（`[pi.confirm] integration = true`）。always / unknown はどこからでも、head（merge など）は自由区の外だけ。確認の見出しと導入は「保護ブランチへの統合」 | 実測で、`pis` の内側で統合コマンドが確認なしで通っていたため。試験 `test_pi_integration_gate.py`。実機の見え方は未確認 |
 | 2026-11-01 | 案件を起こした。設計の草案・第 1 回レビューの反映・決定・案 H を記録した | 利用者の意図（feature は自由、統合で監査）の設計 |

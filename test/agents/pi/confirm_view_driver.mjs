@@ -52,6 +52,7 @@ out.gh = {
 };
 const reason = "確認が必要な外部への送信・公開 (bypass でも確認する): gh pr create";
 const view = (c) => buildMustConfirmView(c, reason, reader);
+out.integration_view = buildMustConfirmView("git flow feature finish x", "確認が必要な保護ブランチへの統合 (bypass でも確認する): git flow feature finish (保護ブランチへ統合・削除する)", reader);
 out.view = {
 	basic: view("gh pr create --title T --body B -R o/r"),
 	full_command: view(`echo ${"z".repeat(20000)} | gh pr create`),

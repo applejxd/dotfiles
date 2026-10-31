@@ -21,6 +21,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
+import { integrationConfig, tightenIntegration } from "./integration-gate.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
@@ -154,8 +155,11 @@ const callDecider = createCallDecider({
 	allowed: BOUNDARY_ENV?.allowed,
 });
 
+const integration = integrationConfig(rules.judge?.common);
+
 export function decide(tool: string, input: unknown, cwd: string): Decision {
-	return callDecider(tool, input, cwd);
+	// 保護ブランチへの統合は、判定器の結果を必須確認に引き上げる (緩める方向には働かない)。see integration-gate.ts
+	return tightenIntegration(callDecider(tool, input, cwd), tool, input, cwd, integration);
 }
 
 // tool_call で判定した入力と結果。execute() で同じ入力なら判定を使い回す (判定 1 回 0.1 秒ほど)。

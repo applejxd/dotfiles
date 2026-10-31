@@ -47,6 +47,9 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "confirm-view.ts", harness / "confirm-view.ts")
     shutil.copy2(HARNESS_SRC.parent / "actions.ts", harness / "actions.ts")
     shutil.copy2(HARNESS_SRC.parent / "text-viewer.ts", harness / "text-viewer.ts")
+    shutil.copy2(HARNESS_SRC.parent / "integration-gate.ts", harness / "integration-gate.ts")
+    shutil.copy2(HARNESS_SRC.parent / "freezone.ts", harness / "freezone.ts")
+    shutil.copy2(HARNESS_SRC.parent / "gitrun.ts", harness / "gitrun.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktree.ts", harness / "worktree.ts")
     shutil.copy2(HARNESS_SRC.parent / "worktrees-command.ts", harness / "worktrees-command.ts")
     shutil.copy2(HARNESS_SRC.parent / "unguarded.ts", harness / "unguarded.ts")
@@ -2668,3 +2671,57 @@ def test_the_read_only_entry_for_btw_accepts_the_reader_profile_but_not_a_writer
         )
         out = proc.stdout + proc.stderr
         assert f"ASKCHILD ok={'true' if ok else 'false'}" in out, (agent, out)
+
+
+# --- 保護ブランチへの統合の確認 (integration-gate.ts を、実際の pi の tool_call に載せる) ---
+
+
+def _with_integration_rules(env, enabled=True):
+    """rules.json の judge.common.pi に、統合の確認 (`[pi.confirm] integration`) を入れる。"""
+    path = env["harness"] / "rules.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    pi = rules["judge"]["common"].setdefault("pi", {})
+    pi["confirm"] = {"timeout_seconds": 300, "integration": enabled}
+    pi["integrate"] = {"protected_refs": ["main", "master", "develop", "release/*", "hotfix/*"]}
+    path.write_text(json.dumps(rules), encoding="utf-8")
+
+
+@needs_must_confirm
+@pytest.mark.parametrize("bypass", ["", "1"])
+@pytest.mark.parametrize("command", ["git flow feature finish x --squash", "git merge x"])
+def test_integration_commands_are_asked_with_and_without_bypass(env, bypass, command):
+    # env["proj"] は linked worktree ではない (head の merge も、自由区の外なので確認)
+    _with_integration_rules(env)
+    requests, result = _rpc_outcome(env, bash_call(command), [False], PI_HARNESS_BYPASS=bypass)
+    assert len(requests) == 1, requests
+    req = requests[0]
+    assert "保護ブランチへの統合" in req["title"], req
+    assert command in req["message"] and "内容を確認してから承認" in req["message"], req["message"]
+    assert "not approved:" in result and "利用者が拒否した" in result, result
+
+
+@needs_must_confirm
+def test_integration_commands_without_a_ui_are_refused_not_run(env):
+    _with_integration_rules(env)
+    proc = run_pi(env, bash_call("git flow feature finish x"), PI_HARNESS_BYPASS="1")
+    assert "not approved:" in proc.stdout + proc.stderr
+    assert "確認できない実行" in proc.stdout + proc.stderr
+
+
+@needs_must_confirm
+@pytest.mark.parametrize("bypass", ["", "1"])
+def test_ordinary_git_reads_are_not_asked_when_integration_is_on(env, bypass):
+    _with_integration_rules(env)
+    requests, _result = _rpc_outcome(
+        env, bash_call("git status --short"), [False], PI_HARNESS_BYPASS=bypass
+    )
+    assert not [r for r in requests if "保護ブランチへの統合" in r.get("title", "")], requests
+
+
+@needs_must_confirm
+def test_integration_commands_are_not_asked_when_the_flag_is_off(env):
+    _with_integration_rules(env, enabled=False)
+    requests, _result = _rpc_outcome(
+        env, bash_call("git flow feature finish x"), [False], PI_HARNESS_BYPASS="1"
+    )
+    assert not [r for r in requests if "保護ブランチへの統合" in r.get("title", "")], requests

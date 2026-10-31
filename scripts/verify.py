@@ -115,6 +115,7 @@ _PI_TESTS = (
     "test_pi_audit",
     "test_pi_confirm",
     "test_pi_integration_judge",
+    "test_pi_integration_gate",
     "test_pi_integrate_config",
     "test_pi_freezone",
     "test_pi_landlock_exec",

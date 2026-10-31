@@ -927,7 +927,7 @@ targets = ["sbx@sandbox-gpu"]
 # 元に戻せないローカルの git 操作 (branch -D / clean / tag -d など) も、bypass で確認する (see docs/spec/guard/pi-decide.md#confirm)
 local_git = true
 # 保護ブランチへの統合コマンドの確認 (see docs/spec/guard/pi-decide.md#confirm)
-integration = false
+integration = true
 bash = [
   "gh pr create",
   "gh pr edit",

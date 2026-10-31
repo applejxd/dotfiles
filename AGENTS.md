@@ -88,6 +88,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   - **1 worktree = 1 feature = 1 worker**。親が `git flow feature start <名前> --worktree --no-fetch` で起票し、
     worker に worktree の絶対パスと担当ファイルを渡す。担当外の worktree や本体を編集させない
   - worker はコミットしない。親が結果を根拠で確かめ、`git_commit`（`dir` に worktree）→ `git flow feature finish` で取り込む
+  - **`git flow feature finish`・`git merge` など、保護ブランチへの統合は、bypass でも必須確認**（承認画面が出る。[CHG-0053](docs/change/0053-worktree-integration-gate.md)）。確認を出して利用者に見せ、承認を待つ
   - 共有されやすいファイル（`common.toml.tmpl`・golden・docs の索引）は、同時に複数の worker に触らせない。衣突するなら、親が順に取り込む
   - 重い検査を同時に回さない。worker には対象の試験と `pre-commit --files` だけ回させ、
     全件（`mise run verify:all`）は親が 1 回だけ回す。並列度は `VERIFY_JOBS` で下げられる

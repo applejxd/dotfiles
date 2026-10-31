@@ -162,3 +162,17 @@ def test_timeout_seconds_come_from_the_rules_with_a_safe_default(table):
     assert t["set"] == 7
     for key in ("default", "zero", "float", "string", "missing"):
         assert t[key] == 300, key
+
+
+def test_the_integration_confirmation_has_its_own_title_and_lead(table):
+    v = table["integration_view"]
+    assert v["kind"] == "confirm"
+    assert "保護ブランチへの統合" in v["title"] and "外部への送信" not in v["title"]
+    assert (
+        "保護ブランチ (develop など) への統合" in v["body"]
+        and "内容を確認してから承認" in v["body"]
+    )
+    assert "git flow feature finish x" in v["body"] and "理由:" in v["body"]
+    # 外部送信の確認の見出しと導入は、そのまま
+    basic = table["view"]["basic"]
+    assert "外部への送信・公開" in basic["title"] and "保護ブランチ" not in basic["body"]

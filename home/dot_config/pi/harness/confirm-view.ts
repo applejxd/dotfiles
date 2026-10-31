@@ -8,6 +8,9 @@ export const MAX_DISPLAY_CHARS = 8000;
 // --body-file として読む上限 (バイト)
 export const MAX_BODY_FILE_BYTES = 32 * 1024;
 export const MUST_CONFIRM_TITLE = "⚠ bypass でも確認が要る操作 (外部への送信・公開、元に戻せない git 操作)";
+// 保護ブランチへの統合の確認 (integration-gate.ts)。理由の先頭がこの接頭辞のとき、見出しと導入の文を変える
+export const MUST_CONFIRM_INTEGRATION_PREFIX = "確認が必要な保護ブランチへの統合 (bypass でも確認する): ";
+export const INTEGRATION_CONFIRM_TITLE = "⚠ 保護ブランチへの統合 (bypass でも確認が要る)";
 
 /** rules の judge.common.pi.confirm.timeout_seconds (正の整数)。無い・不正なら 300 */
 export function confirmTimeoutSeconds(rules: any): number {
@@ -248,7 +251,11 @@ export function buildMustConfirmView(command: string, reason: string, readBodyFi
 	if (size > MAX_DISPLAY_CHARS) {
 		return { kind: "block", reason: "本文が長すぎて確認できない。短くするか、利用者が自分で実行する" };
 	}
-	const lines = ["bypass でも確認が要る操作です (外部への送信・公開、元に戻せない git 操作)。", "", "コマンド (全文):", sanitizeForDisplay(command)];
+	const integration = reason.startsWith(MUST_CONFIRM_INTEGRATION_PREFIX);
+	const lead = integration
+		? "保護ブランチ (develop など) への統合、または保護 ref を変える操作です。内容を確認してから承認してください。"
+		: "bypass でも確認が要る操作です (外部への送信・公開、元に戻せない git 操作)。";
+	const lines = [lead, "", "コマンド (全文):", sanitizeForDisplay(command)];
 	if (parsed) {
 		lines.push("", "解析結果 (参考。実際に実行されるのは上のコマンド):", `  対象: gh ${parsed.kind} ${parsed.action}`);
 		if (parsed.repo !== undefined) lines.push(field("repo", parsed.repo));
@@ -264,7 +271,7 @@ export function buildMustConfirmView(command: string, reason: string, readBodyFi
 		lines.push("", `本文ファイル ${sanitizeForDisplay(parsed.bodyFile)} の内容 (ハーネスが読んだもの):`, sanitizeForDisplay(fileText));
 	}
 	lines.push("", `理由: ${sanitizeForDisplay(reason)}`);
-	const view: MustView = { kind: "confirm", title: MUST_CONFIRM_TITLE, body: lines.join("\n") };
+	const view: MustView = { kind: "confirm", title: integration ? INTEGRATION_CONFIRM_TITLE : MUST_CONFIRM_TITLE, body: lines.join("\n") };
 	if (fileText !== undefined && parsed?.bodyFile !== undefined) view.bodyFile = { path: parsed.bodyFile, text: fileText };
 	return view;
 }
