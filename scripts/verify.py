@@ -127,6 +127,8 @@ _PI_TESTS = (
     "test_pi_model_choice",
     "test_pi_plan_role",
     "test_pi_pending_store",
+    "test_pi_pending_ops",
+    "test_pi_pending_owner",
     "test_pi_git_destructive",
     "test_pi_orchestrate",
     "test_pi_allow_output_quoting",

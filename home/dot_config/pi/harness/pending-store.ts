@@ -164,6 +164,16 @@ export function dropPending(cwd: string, ref: string, expectedOid?: string): boo
 	return git(cwd, ["update-ref", "--no-deref", "-d", ref, oid]).ok;
 }
 
+/** 旧形式の退避か。新形式 (Pi-Pending-Kind を名乗る、または record.json など 1 ファイルだけの tree) は、旧形式として扱わない (片付けの対象にしない。CHG-0055) */
+export function isLegacyEntry(cwd: string, oid: string): boolean {
+	const body = git(cwd, ["log", "-1", "--format=%B", oid]);
+	if (!body.ok || /^Pi-Pending-Kind:/m.test(body.out)) return false;
+	const ls = git(cwd, ["ls-tree", "--name-only", oid]);
+	if (!ls.ok) return false;
+	const names = ls.out.split("\n").filter(Boolean);
+	return !(names.length === 1 && ["record.json", "attempt.json", "result.json"].includes(names[0]));
+}
+
 /** 片付けてよい退避を、ハーネス自身が消す (モデルは消せない)。消すのは、内容がほかに残っているか、古いもの:
  *  - 同じ tree のコミットが HEAD の履歴 (新しい側の lookback 件) にある (= 取り込まれた)
  *  - 同じ tree・同じ起点の退避が、より新しくある (再試行で増えた重複)
@@ -179,6 +189,8 @@ export function reconcilePending(cwd: string, opts: { maxAgeDays?: number; now?:
 	const seen = new Set<string>();
 	const dropped: string[] = [];
 	for (const e of entries) {
+		// 新形式 (記録・試行・結果) と、形式が不正なものは、旧形式の規則で消さない (期限は pending-ops.ts の reconcileOps)
+		if (!isLegacyEntry(cwd, e.oid)) continue;
 		const tree = git(cwd, ["rev-parse", `${e.oid}^{tree}`]);
 		if (!tree.ok || !tree.out) continue;
 		const key = `${tree.out}\0${e.head}`;
