@@ -1639,7 +1639,11 @@
     "-builtin:llama.cpp"
    ],
    "skills": [
-    "~/.claude/skills"
+    "~/.claude/skills",
+    "-~/.agents/skills/orchestration",
+    "-~/.agents/skills/orca-cli",
+    "-~/.agents/skills/computer-use",
+    "-~/.claude/skills/herdr"
    ]
   },
   "shell": {

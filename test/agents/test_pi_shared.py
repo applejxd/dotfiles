@@ -151,7 +151,10 @@ def test_pi_settings_owns_only_its_keys(username):
     tiers = common["opencode"]["model"]["tier"][common["opencode"]["model"]["provider"]]
     assert out["defaultProvider"] == common["opencode"]["model"]["provider"]
     assert out["defaultModel"] == tiers["default"]
-    assert out["skills"] == ["~/.claude/skills"]
+    # 単一ソース (common.toml.tmpl の [pi.settings] skills) どおり。先頭は共通の置き場、後ろは Orca・Herdr のスキルの除外 ("-" 始まり)
+    assert out["skills"] == common["pi"]["settings"]["skills"]
+    assert out["skills"][0] == "~/.claude/skills"
+    assert all(s.startswith("-") for s in out["skills"][1:])
     # 持ち物のうち宣言していないものは消す
     assert "enabledModels" not in out
 

@@ -73,7 +73,10 @@ def test_unix_settings_carry_the_full_guard(os_name):
     ]
     assert out["defaultTools"] == []
     assert "defaultProjectTrust" not in out  # 信頼の拒否は pis の --no-approve が担う
-    assert out["skills"] == ["~/.claude/skills"]
+    # 単一ソース ([pi.settings] skills) どおり。先頭は共通の置き場、後ろは Orca・Herdr のスキルの除外 ("-" 始まり)
+    assert out["skills"] == common["pi"]["settings"]["skills"]
+    assert out["skills"][0] == "~/.claude/skills"
+    assert all(s.startswith("-") for s in out["skills"][1:])
 
 
 def test_windows_settings_carry_the_full_guard_without_commit_confirm():

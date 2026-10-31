@@ -147,6 +147,7 @@ _PI_TESTS = (
     "test_pi_ask_normalize",
     "test_pi_worktree",
     "test_pi_isolation",
+    "test_pi_skill_exclude",
     "test_pi_worktrees_command",
     "test_pi_subagents",
     "test_pi_shared",

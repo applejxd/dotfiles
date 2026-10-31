@@ -90,7 +90,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
   - 起動後に足したスキルは `/reload` で読める（表 B の 15）
   - 素の `pi`（Orca・Zed・Windows）でこのリポジトリ（とその配下）を開くと、`.agents/skills` があるため **project trust の確認が出る**。
     `pis` は `--no-approve` なので出ない。TUI を tmux で有効にする試験は `--no-approve` を付ける（確認画面がキー入力を食う）
-  - **スキルの一覧**: pi 自身は、フルガードの下で一覧をシステムプロンプトへ入れない（`read` / `bash` が宣言されないため）。フルガードが `before_agent_start` で同じ形の一覧を足す（`guarded_read` で読む旨。表 B の 16）。`/skill:<名前>` でも呼べる
+  - **スキルの一覧**: pi 自身は、フルガードの下で一覧をシステムプロンプトへ入れない（`read` / `bash` が宣言されないため）。フルガードが `before_agent_start` で同じ形の一覧を足す（`guarded_read` で読む旨。表 B の 16）。`/skill:<名前>` でも呼べる。Orca・Herdr が入れたスキルは、pi の設定 `skills` の除外（`-path`。`common.toml.tmpl` の `[pi.settings]`）で一覧から外す（自動で見つかるスキルにも効く。`test_pi_skill_exclude.py`）
 - `-nbt`（`--no-builtin-tools`）: 組み込みのツールを使わない。ツールはフルガードが登録したものだけになる
 - `-ne`（`--no-extensions`）: 拡張を自動では読まない。審査していない拡張が混ざらないようにするため（方針は[拡張の方針](pi-extensions.md#拡張の方針)）
   - 明示した `-e` は `-ne` でも読まれる（Orca の拡張がその例）。足した拡張のツールも判定と伏字化を通り、同名ツールの差し替えは pi が止めるが、

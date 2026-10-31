@@ -1257,7 +1257,15 @@ message = "10 秒以上の sleep でここを止めないでください (その
 [pi.settings]
 # ★xhigh (2026-10-31)。根拠と子への影響は docs/research/agents/subagent-model-assignment.md (記録 M5)
 defaultThinkingLevel = "xhigh"
-skills = ["~/.claude/skills"]
+# Orca・Herdr が入れたスキルは、フルガードの一覧 (<available_skills>) から外す ("-" は厳密な除外)。
+# see docs/spec/guard/pi-guard.md#pi-の設定
+skills = [
+  "~/.claude/skills",
+  "-~/.agents/skills/orchestration",
+  "-~/.agents/skills/orca-cli",
+  "-~/.agents/skills/computer-use",
+  "-~/.claude/skills/herdr",
+]
 # 自作の拡張 ([pi] own_extensions) は生成器が "!extensions/**" の直後へ足す。
 # see docs/spec/guard/pi-guard.md#pi-の設定
 extensions = [
