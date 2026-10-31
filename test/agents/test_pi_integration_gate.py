@@ -312,3 +312,141 @@ def test_git_is_started_at_most_twice_for_a_head_command(repos, tmp_path):
         env=env,
     )
     assert 1 <= _count(tmp_path) <= 2
+
+
+# --- `cd <リテラル> &&` が付いた head コマンド: cd 先が自由区なら許可 (feature への develop の取り込みなど) ------------
+
+
+@pytest.mark.parametrize("from_", ["main", "develop", "feature"])
+@pytest.mark.parametrize(
+    "template",
+    [
+        "cd {feature} && git merge develop --no-edit",
+        'cd "{feature}" && git merge develop -m "Merge develop"',
+        "cd '{feature}' && git cherry-pick abc",
+    ],
+)
+def test_cd_into_a_feature_worktree_is_free_for_head_commands(repos, from_, template):
+    command = template.format(feature=repos["feature"])
+    # 元の cwd が何であれ、実際に動く cd 先 (feature の linked worktree) で見る。判定器の結果のまま
+    assert _one(command, repos[from_]) == ALLOW
+    assert _one(command, repos[from_], ASK) == ASK
+
+
+def test_a_relative_cd_confirms(repos, tmp_path):
+    # 相対パスは CDPATH で別の場所になりうるので対象外
+    assert _raised(_one("cd wt-feature && git merge develop", tmp_path), ALLOW)
+    assert _raised(_one("cd ./wt-feature && git merge develop", tmp_path), ALLOW)
+
+
+def test_a_symlink_is_judged_by_its_target(repos, tmp_path):
+    to_feature = tmp_path / "link-feature"
+    to_develop = tmp_path / "link-develop"
+    to_feature.symlink_to(repos["feature"])
+    to_develop.symlink_to(repos["develop"])
+    assert _one(f"cd {to_feature} && git merge develop", repos["develop"]) == ALLOW
+    assert _raised(_one(f"cd {to_develop} && git merge feature/x", repos["feature"]), ALLOW)
+
+
+def test_a_dotdot_path_confirms(repos):
+    assert _raised(
+        _one(f"cd {repos['feature']}/../wt-develop && git merge x", repos["feature"]), ALLOW
+    )
+    assert _raised(
+        _one(f"cd {repos['feature']}/../wt-feature && git merge develop", repos["feature"]), ALLOW
+    )
+
+
+@pytest.mark.parametrize("var", ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"])
+def test_an_inherited_repo_selecting_variable_confirms_the_cd_form(repos, monkeypatch, var):
+    monkeypatch.setenv(var, str(repos["develop"] / ".git"))
+    r = _one(f"cd {repos['feature']} && git reset --soft feature/x", repos["develop"])
+    assert _raised(r, ALLOW), r
+
+
+@pytest.mark.parametrize("target", ["main", "develop"])
+def test_cd_into_main_or_a_protected_branch_still_confirms(repos, target):
+    # develop (保護ブランチ) の worktree・本体の worktree への cd は、cd が付いても必須確認
+    command = f"cd {repos[target]} && git merge feature/x"
+    for d in (ALLOW, ASK):
+        r = _one(command, repos["feature"], d)
+        assert _raised(r, d), r
+        assert "cd 先" in r["reason"] and "linked worktree の中ではない" in r["reason"]
+
+
+def test_cd_into_a_missing_directory_confirms(repos, tmp_path):
+    r = _one(f"cd {tmp_path}/no-such && git merge develop", repos["feature"])
+    assert _raised(r, ALLOW) and "存在しない" in r["reason"], r
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "cd $WT && git merge develop",  # 変数
+        "cd ~/x && git merge develop",  # ~
+        "cd $(pwd) && git merge develop",  # コマンド置換
+        "cd -- {feature} && git merge develop",  # オプションに見える
+        "cd {feature}/* && git merge develop",  # グロブ
+        "cd {feature} || git merge develop",  # || は、cd が失敗したときに元の cwd で動く
+        "cd {feature}; git merge develop",  # 区切りは && だけ
+        "cd {feature} && env -C {main} git merge feature/x",  # env -C は redirect でなく、残りが head になる
+        "cd {feature} && env --chdir={main} git merge feature/x",
+        "cd {feature} && eval 'cd {main} && git merge feature/x'",
+        "cd {feature} && sh -c 'cd {main} && git merge feature/x'",
+        "cd {feature} && command git merge develop",
+        "cd {feature} && git status&git merge feature/x",  # 空白なしの & (左が非同期で動く)
+        "cd {feature}\u00a0; git merge feature/x",  # NBSP は Bash では cd の引数の一部
+        "cd {feature} && git merge develop | tail -3",
+        "cd {feature} && git merge develop 2>&1",
+        "cd {feature} && (git merge develop)",
+        "cd {feature} && git merge develop; git -C {main} merge feature/x",
+        'cd {feature} && git merge develop -m "$(id)"',
+        "echo hi; cd {feature} && git merge develop",  # 先頭が cd でない
+        "cd {feature} && cd {main} && git merge develop",  # 残りに別の cd
+        "cd {feature} && git -C {main} merge develop",  # 残りに -C
+        "cd {feature} && git merge develop && cd {main} && git merge feature/x",
+        "cd {feature} && GIT_DIR={main}/.git git merge develop",
+        "cd {feature} && git merge develop & git -C {main} merge feature/x",  # & で並べた別の宛先
+        "cd {feature} && git merge develop\ngit -C {main} merge feature/x",  # 改行で並べた別の宛先
+        "cd {feature} && git merge develop || git -C {main} merge feature/x",
+        "cd {feature} && (cd {main} && git merge feature/x)",  # サブシェルの中の cd
+        "(cd {feature} && git merge develop)",  # 先頭が括弧 (解釈しない)
+    ],
+)
+def test_a_cd_that_is_not_a_plain_literal_prefix_still_confirms(repos, template):
+    command = template.format(feature=repos["feature"], main=repos["main"])
+    r = _one(command, repos["feature"])
+    assert _raised(r, ALLOW), r
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "cd {feature} && git flow feature finish x --squash",  # 保護ブランチへ直接統合するものは、cd が付いても必須確認
+        "cd {feature} && git branch -m develop old",
+        "cd {feature} && git update-ref refs/heads/develop HEAD",
+        "cd {feature} && git merge develop && git flow feature finish x",
+    ],
+)
+def test_integration_commands_that_change_a_protected_ref_still_confirm_after_a_cd(repos, template):
+    command = template.format(feature=repos["feature"])
+    for d in (ALLOW, ASK):
+        assert _raised(_one(command, repos["feature"], d), d)
+
+
+# --- checkout / switch: 保護ブランチへ入る形は必須確認、start-point として読む形は確認なし ---------------------------
+
+
+@pytest.mark.parametrize("from_", ["main", "feature"])
+def test_checkout_of_a_protected_branch_from_a_feature_confirms(repos, from_):
+    command = "git checkout develop && git merge feature/x"
+    for d in (ALLOW, ASK):
+        assert _raised(_one(command, repos[from_], d), d)
+
+
+@pytest.mark.parametrize("from_", ["main", "feature"])
+@pytest.mark.parametrize(
+    "command", ["git switch -c feature/y develop", "git checkout -b feature/y develop"]
+)
+def test_creating_a_feature_from_a_protected_start_point_is_free(repos, from_, command):
+    assert _one(command, repos[from_]) == ALLOW

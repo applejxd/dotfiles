@@ -37,6 +37,10 @@ const ENV_WITH_VALUE = new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split
 const INTEGRATION_WORDS =
 	/\bgit(?:-flow)?\b[\s\S]*\b(?:merge|cherry-pick|revert|pull|am|reset|flow|finish|update-ref|symbolic-ref|branch|fetch|worktree|fast-import|reflog)\b|\bgit-flow\b/;
 
+// eval / sh -c の文字列の中の cd や `env -C` は、正規化で落ちるので、生の文字列で見る (引用の中の語も数える。安全側)
+const CD_WORD = /(?:^|[\s;&|(`'"])(?:cd|pushd|popd)(?=$|[\s;&|)`'"])/;
+const ENV_CHDIR = /(?:^|[\s;&|(`'"])env\s+(?:[^;&|\n]*?\s)?(?:-C|--chdir)(?=[\s=]|$)/;
+
 const isDynamic = (s: string): boolean => /[$`*?[\]{}]/.test(s);
 
 const strongest = (a: Integration, b: Integration): Integration => (STRENGTH[b.kind] > STRENGTH[a.kind] ? b : a);
@@ -143,6 +147,8 @@ function scanArgs(args: string[], valueShort: string, valueLong: Set<string>) {
 	const short = new Set<string>();
 	const long = new Set<string>();
 	const values: string[] = [];
+	/** [フラグ名 (`--create` や `b`), 値] の組 */
+	const pairs: [string, string][] = [];
 	const positional: string[] = [];
 	for (let i = 0; i < args.length; i++) {
 		const t = args[i];
@@ -154,8 +160,11 @@ function scanArgs(args: string[], valueShort: string, valueLong: Set<string>) {
 			const name = t.split("=", 1)[0];
 			long.add(name);
 			if (valueLong.has(name)) {
-				if (t.includes("=")) values.push(t.slice(name.length + 1));
-				else if (i + 1 < args.length) values.push(args[++i]);
+				const v = t.includes("=") ? t.slice(name.length + 1) : i + 1 < args.length ? args[++i] : null;
+				if (v !== null) {
+					values.push(v);
+					pairs.push([name, v]);
+				}
 			}
 			continue;
 		}
@@ -165,8 +174,11 @@ function scanArgs(args: string[], valueShort: string, valueLong: Set<string>) {
 				short.add(c);
 				if (valueShort.includes(c)) {
 					const rest = t.slice(j + 1);
-					if (rest) values.push(rest);
-					else if (i + 1 < args.length) values.push(args[++i]);
+					const v = rest ? rest : i + 1 < args.length ? args[++i] : null;
+					if (v !== null) {
+						values.push(v);
+						pairs.push([c, v]);
+					}
 					break;
 				}
 			}
@@ -174,7 +186,7 @@ function scanArgs(args: string[], valueShort: string, valueLong: Set<string>) {
 		}
 		positional.push(t);
 	}
-	return { short, long, values, positional };
+	return { short, long, values, pairs, positional };
 }
 
 // classifyIntegration の呼び出しの間だけ持つ保護 ref (同期処理なので入れ子にならない)
@@ -193,6 +205,23 @@ function refVerdict(ref: string, what: string, sub: string): Integration | null 
 	return null;
 }
 
+/** refspec (`+src:dst`) の宛先の判定。保護なら always、決められなければ unknown、どちらでもなければ null。 */
+function refspecVerdict(specs: string[], what: string, sub: string): Integration | null {
+	let unknown: Integration | null = null;
+	for (const spec of specs) {
+		const colon = spec.indexOf(":");
+		if (colon < 0) continue;
+		const dst = spec.slice(colon + 1);
+		if (dst === "") continue;
+		// refs/heads/ の外に決まっている宛先は、保護ブランチではない
+		if (/^refs\/(?!heads\/|pi(\/|$))/i.test(dst)) continue;
+		const v = refVerdict(dst, what, sub);
+		if (v?.kind === "always") return v;
+		unknown = unknown ?? v;
+	}
+	return unknown;
+}
+
 function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 	const { sub, args } = g;
 	if (g.flow) {
@@ -203,14 +232,21 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 		}
 		return NONE;
 	}
+	if (sub === "pull") {
+		// fetch の段で、refspec の宛先 (`git pull . x:develop`) を更新しうる
+		const a = scanArgs(
+			args,
+			"sXjo",
+			new Set(["--depth", "--deepen", "--shallow-since", "--shallow-exclude", "--jobs", "--server-option", "--upload-pack", "--strategy", "--strategy-option", "--refmap", "--filter", "--cleanup", "--gpg-sign"]),
+		);
+		return refspecVerdict(a.positional.slice(1), "git pull", sub) ?? hit("head", "git pull (現在のブランチを動かす)", sub);
+	}
 	if (HEAD_SUBS.has(sub)) return hit("head", `git ${sub} (現在のブランチを動かす)`, sub);
 	switch (sub) {
 		case "flow":
 			return classifyGit({ flow: true, sub, args });
-		case "reset": {
-			if (args.includes("--hard")) return NONE;
+		case "reset":
 			return hit("head", "git reset (現在のブランチを動かす)", sub);
-		}
 		case "fast-import":
 			return hit("unknown", "git fast-import (宛先の ref を静的に判定できない)", sub);
 		case "reflog": {
@@ -267,19 +303,7 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 				"jo",
 				new Set(["--depth", "--deepen", "--shallow-since", "--shallow-exclude", "--jobs", "--server-option", "--refmap", "--filter", "--negotiation-tip", "--upload-pack", "--recurse-submodules"]),
 			);
-			let unknown: Integration | null = null;
-			for (const spec of a.positional.slice(1)) {
-				const colon = spec.indexOf(":");
-				if (colon < 0) continue;
-				const dst = spec.slice(colon + 1);
-				if (dst === "") continue;
-				// refs/heads/ の外に決まっている宛先は、保護ブランチではない
-				if (/^refs\/(?!heads\/|pi(\/|$))/i.test(dst)) continue;
-				const v = refVerdict(dst, "git fetch", sub);
-				if (v?.kind === "always") return v;
-				unknown = unknown ?? v;
-			}
-			return unknown ?? NONE;
+			return refspecVerdict(a.positional.slice(1), "git fetch", sub) ?? NONE;
 		}
 		case "worktree": {
 			if (args[0] !== "add") return NONE;
@@ -300,6 +324,43 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 				unknown = unknown ?? v;
 			}
 			return unknown ?? NONE;
+		}
+		case "checkout":
+		case "switch": {
+			// 保護ブランチへ切り替える・作り直す。feature の worktree の「自由区」の前提 (HEAD が feature/* にある) を崩し、以降の merge などが保護ブランチに入る
+			// (他の worktree が使っているブランチは git 自身が拒否するが、どこにもチェックアウトされていないと通る)。
+			// start-point として保護ブランチを読む (`switch -c feature/y develop`)・ファイルの復元 (`checkout develop -- path`)・detach は、保護ブランチを動かさない
+			// switch に「パスの区切り」はないので、`--` の後ろもブランチ。checkout は、`--` の後ろに引数があればファイルの復元
+			const dd = args.indexOf("--");
+			const fileRestore = sub === "checkout" && dd >= 0 && dd < args.length - 1;
+			const a = scanArgs(
+				sub === "checkout" && dd >= 0 ? args.slice(0, dd) : args,
+				"bBcC",
+				new Set(["--create", "--force-create", "--orphan", "--conflict", "--pathspec-from-file"]),
+			);
+			const CREATE = new Set(["b", "B", "c", "C", "--create", "--force-create", "--orphan"]);
+			for (const [flag, name] of a.pairs) {
+				if (!CREATE.has(flag)) continue;
+				const v = refVerdict(name, `git ${sub} (ブランチを作る・作り直す)`, sub);
+				if (v) return v;
+			}
+			const creating = ["b", "B", "c", "C"].some((c) => a.short.has(c)) || a.long.has("--create") || a.long.has("--force-create") || a.long.has("--orphan");
+			if (creating || a.short.has("d") || a.long.has("--detach")) return NONE;
+			if (fileRestore) return NONE;
+			const target = a.positional[0];
+			if (target === undefined) return NONE;
+			if (target === "-") return hit("unknown", `git ${sub} - (前のブランチへ。切り替え先を静的に決められない)`, sub);
+			// --track / -t: 無いローカルブランチを `origin/develop` から作って切り替える
+			if (a.short.has("t") || a.long.has("--track")) {
+				const local = target.replace(/^[^/]+\//, "");
+				const tv = local !== target ? refVerdict(local, `git ${sub} --track (ブランチを作って切り替え)`, sub) : null;
+				if (tv?.kind === "always") return tv;
+			}
+			const v = refVerdict(target, `git ${sub} (切り替え)`, sub);
+			if (v?.kind === "always" && !PENDING_REF.test(target)) {
+				return hit("always", `保護ブランチ ${target.replace(/^refs\/heads\//i, "")} へ切り替える git ${sub} (以降の merge などが保護ブランチに入る)`, sub);
+			}
+			return v ?? NONE;
 		}
 		default:
 			return NONE;
@@ -331,6 +392,9 @@ export function classifyIntegration(command: string, protectedRefs: readonly str
 			redirect = redirect || p.redirect;
 			alias = alias || p.alias;
 			if (p.git) best = strongest(best, classifyGit(p.git));
+		}
+		if (best.kind === "head" && (CD_WORD.test(cleaned) || ENV_CHDIR.test(cleaned))) {
+			return hit("unknown", `${best.reason}。文字列の中の cd・env -C などで対象のリポジトリ・ブランチが静的に決まらない`, best.sub);
 		}
 		if (alias) return hit("unknown", "git の alias を定義していて、実際の操作を静的に判定できない", "alias");
 		if (best.kind !== "none" && best.kind !== "unknown" && redirect) {

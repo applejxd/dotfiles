@@ -39,6 +39,14 @@ pytestmark = pytest.mark.skipif(_node() is None, reason="型除去に対応し�
 FLOW_TYPES = ["feature", "release", "hotfix", "support", "bugfix"]
 
 ALWAYS = [
+    "git checkout develop",
+    "git checkout refs/heads/main",
+    "git switch develop",
+    "git switch main",
+    "git checkout -B develop",
+    "git switch -C develop",
+    "git switch --force-create develop",
+    "git checkout -b develop",
     *[f"git flow {t} finish x" for t in FLOW_TYPES],
     *[f"git flow {t} delete x" for t in FLOW_TYPES],
     *[f"git flow {t} abort" for t in FLOW_TYPES],
@@ -88,9 +96,19 @@ ALWAYS = [
     "git symbolic-ref -d refs/pi/x",
     "git fetch origin foo:refs/pi/x",
     "git update-ref refs/PI/x HEAD",
+    "git switch -- develop",
+    "git switch --ignore-other-worktrees -- develop",
+    "git checkout --conflict merge develop",
+    "git switch --track origin/develop",
+    "git checkout -t origin/develop",
+    "git checkout develop --",
+    "git pull . feature/x:develop",
+    "git pull origin +feature/x:refs/heads/main",
 ]
 
 UNKNOWN = [
+    "git checkout $BRANCH",
+    'git switch "$B"',
     "git update-ref --stdin",
     "git update-ref --stdin -z",
     "git reflog delete HEAD@{1}",
@@ -119,6 +137,16 @@ UNKNOWN = [
     "git symbolic-ref HEAD $(cat ref)",
     'git merge "x',
     "git flow feature finish 'x",
+    "git switch -",
+    "git checkout -",
+    "eval 'cd /p && git merge x'",
+    "sh -c 'cd /p; git merge x'",
+    'bash -c "cd /p && git merge x"',
+    "env -C /p git merge x",
+    "env --chdir=/p git merge x",
+    "git pull origin $B:$C",
+    # 引用の中の cd も語として数える (安全側。仕様として固定)
+    'git merge -m "fix cd handling"',
 ]
 
 HEAD = [
@@ -130,6 +158,13 @@ HEAD = [
     "git pull origin develop",
     "git am patch.mbox",
     "git reset",
+    "git reset --hard",
+    "git reset -q --hard feature/x",
+    "git reset HEAD --hard",
+    "git reset --hard HEAD~1",
+    "git pull --rebase origin develop",
+    "git pull origin feature/x:feature/y",
+    "git log --oneline && git merge x",
     "git reset HEAD~1",
     "git reset --soft HEAD~1",
     "git reset --mixed HEAD~1",
@@ -146,13 +181,18 @@ HEAD = [
 ]
 
 NONE = [
-    "git checkout develop",
-    "git checkout refs/heads/main",
-    "git switch develop",
-    "git switch main",
-    "git checkout -B develop",
-    "git switch -C develop",
-    "git switch --force-create develop",
+    "git checkout feature/x",
+    "git checkout -b feature/y develop",
+    "git switch -c feature/y develop",
+    "git checkout -b feature/y",
+    "git checkout --detach develop",
+    "git checkout develop -- file.txt",
+    "git checkout -- file.txt",
+    "git switch feature/x",
+    "git checkout -b feature/y -t origin/develop",
+    "git checkout --conflict=diff3 feature/x",
+    "git checkout HEAD~1",
+    "git checkout abc123",
     "git log",
     "git diff develop",
     "git show HEAD",
@@ -191,7 +231,6 @@ NONE = [
     "git commit -m x",
     'git commit -m "git merge"',
     "git rebase develop",
-    "git reset --hard HEAD~1",
     "git push origin develop",
     "git push . x:develop",
     "git symbolic-ref HEAD",
@@ -288,6 +327,15 @@ def test_custom_protected_refs():
         {"command": "git branch -m develop x", "protected": []},
     ]
     assert [r["kind"] for r in _run(cases)] == ["always", "none", "none", "none"]
+
+
+def test_checkout_of_release_and_hotfix_branches_is_always():
+    protected = ["main", "develop", "release/*", "hotfix/*"]
+    cases = [
+        {"command": c, "protected": protected}
+        for c in ("git checkout release/1.0", "git switch hotfix/1")
+    ]
+    assert [r["kind"] for r in _run(cases)] == ["always", "always"]
 
 
 def test_huge_input_is_fast():
