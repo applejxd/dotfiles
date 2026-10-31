@@ -68,7 +68,12 @@ out.view = {
 
 // git flow finish: 統合の内容と squash メッセージ
 const intReason = "確認が必要な保護ブランチへの統合 (bypass でも確認する): git flow feature finish (保護ブランチへ統合・削除する)";
-const finishFiles = { "msg.txt": "docs: 件名\n\n本文の 1 行目\n\n", "long.txt": "y".repeat(5000) };
+const finishFiles = {
+	"msg.txt": "docs: 件名\n\n本文の 1 行目\n\n",
+	"long.txt": "y".repeat(5000),
+	"lines.txt": Array.from({ length: 15 }, (_, i) => `line ${i + 1}`).join("\n"),
+	"blanks.txt": "\n\nsubject\n\n\n\nbody\n\n",
+};
 const finishReader = (p) => (p in finishFiles ? { ok: true, text: finishFiles[p] } : { ok: false, why: `${p} を読めない` });
 const facts = {
 	ok: true,
@@ -100,6 +105,8 @@ out.finish = {
 	view_literal: finishView('git flow feature finish x --squash --squash-message="docs: 件名\n\n本文"'),
 	view_file: finishView('git flow feature finish x --squash --squash-message="$(cat msg.txt)" --keepremote'),
 	view_file_missing: finishView('git flow feature finish x --squash --squash-message="$(cat nope.txt)"'),
+	view_file_lines: finishView('git flow feature finish x --squash-message="$(cat lines.txt)"'),
+	view_file_blanks: finishView('git flow feature finish x --squash-message="$(cat blanks.txt)"'),
 	view_file_long: finishView('git flow feature finish x --squash-message="$(cat long.txt)"'),
 	view_unresolved: finishView('git flow feature finish x --squash --squash-message="$(git log -1)"'),
 	view_no_message: finishView("git flow feature finish x --squash"),
