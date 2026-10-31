@@ -273,3 +273,43 @@ Windows ネイティブ（PowerShell）で、`pi` を OS の境界つきで動�
 - <https://github.com/anthropics/sandbox-runtime>（ベンダー）、<https://docs.docker.com/ai/sandboxes/agents/shell/>（ベンダー）
 - <https://openai.com/index/building-codex-windows-sandbox/>（ベンダー）、<https://agentpatterns.ai/security/windows-sandbox-primitives-coding-agents/>（第三者）
 - <https://github.com/fmuecke/agent-win-sandbox>、<https://github.com/psychobarge/pi-sandbox-windows>（個人）
+
+## 記録 I5 — 2026-10-31（peer の Windows 対応の現状と、WSL interop の観測）
+
+[CHG-0054](../../change/0054-containment-and-async-approval.md) の議論（封じ込めを主にするなら、Windows ネイティブの境界が無いことが障害になる）を受けて、他社の現状を確認し、WSL から Windows のプロセスを起動できるかを観測した。動かした範囲は、読むだけのコマンドに限る。
+
+### 他社の Windows ネイティブの現状（Web 検索。観測日 2026-10-31）
+
+| 対象 | 事実 | 出典 |
+| --- | --- | --- |
+| Claude Code | サンドボックスは **macOS・Linux・WSL2** で動く。「**ネイティブ Windows では、コマンドはサンドボックスなしで実行される**」。ネイティブ Windows のサンドボックスは機能要望（issue #46740）として、出ている。サンドボックスが要るなら WSL2 を使う、というのが公式の案内 | <https://code.claude.com/docs/en/sandboxing>、<https://github.com/anthropics/claude-code/issues/46740> |
+| Codex CLI | Windows ネイティブのサンドボックスを持つ。2 種類: **elevated**（専用のサンドボックスユーザー + ファイアウォールの規則。初回に UAC）と、**unelevated**（現在のユーザーから派生させた制限トークン + ACL によるファイルの境界 + 環境レベルのオフライン制御）。管理者権限やユーザー作成が止められている環境では、後者が代替になる | <https://developers.openai.com/codex/windows>、<https://openai.com/index/building-codex-windows-sandbox/>。**検索結果の抜粋だけ**で、本文は取得できなかった（OpenAI のページは 403、docs はナビゲーションのみ）。第三者の解説（PowerShell の AST による安全判定を含む）: <https://codex.danielvaughan.com/2026/07/18/codex-cli-windows-sandbox-architecture-powershell-ast-safety-elevated-unelevated-appcontainer-restricted-tokens/>（未確認） |
+
+含意（推測）: ネイティブ Windows で、OS の境界を持つ CLI は、確認できた範囲では Codex だけ。このリポジトリの候補 C（Codex 型を自作）は、Codex 専用の方式を、他の CLI に使う公式手順が見つからないという理由で、見送り中（[CHG-0034](../../change/0034-windows-native-pi-boundary.md)）。
+
+### WSL から Windows のプロセスを起動できるか（観測）
+
+このセッション（WSL の Ubuntu）で、実行したコマンドと出力は、次のとおり。
+
+```text
+$ which powershell.exe cmd.exe
+/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
+/mnt/c/Windows/System32/cmd.exe
+
+$ powershell.exe -NoProfile -Command "Get-ChildItem C:\Users -Name | Select-Object -First 5"
+applejxd
+Public
+WsiAccount
+
+$ touch "$HOME/fence-probe-test"      # 作業ツリーの外のホームに書けるか (後で削除)
+$ ls -la "$HOME/fence-probe-test"
+-rw-r--r-- 1 applejxd applejxd 0 10月 31 17:35 /home/applejxd/fence-probe-test
+
+$ powershell.exe -NoProfile -Command "Test-Path C:\Users\applejxd\.ssh"    # 存在確認だけ。内容は読んでいない
+True
+```
+
+- **WSL から `powershell.exe` を起動でき、Windows 側のフォルダの一覧を読めた**（interop が有効）。
+- **このセッションは Fence の外**だった（ホームに書けたので）。したがって、**「Fence の中から `powershell.exe` を呼べるか」「呼べたとき、Windows 側のプロセスが Fence の制限を受けるか」は未確認**。
+- 推測（未検証）: Windows のプロセスは、Linux の Landlock の外で動くので、Fence の中から呼べるなら、境界を突き抜ける。検証は、`pis`（Fence あり）の内側で、読むだけの `Test-Path` を実行して、Fence が隠す場所に届くかを見る（CHG-0034 の「次の調査・実験」の 4）。
+- 副産物: 利用者の実際の運用が「境界なし + bypass」であることを、この観測が裏付けた（[調査記録 AC1](approval-containment-survey.md) の観測 11）。

@@ -76,3 +76,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0019](0019-pis-fetch-via-proxy-with-explicit-flag.md) | pis の内側のページ取得は、専用フラグでプロキシ越しにし、事前の名前解決を省く | Accepted | 2026-10-25 | 実測は[記録 S2](../research/agents/pis-sandbox-field-test.md)。案件は CHG-0037 |
 | [0020](0020-env-allowlist-and-env-check.md) | 環境変数の一覧・個別参照は許可リスト方式で止め、診断は env-check に集める | Accepted | 2026-10-25 | 案件は CHG-0037 |
 | [0021](0021-conventions-as-instructions-slim-guarded-action.md) | 運用規約をコードの強制から指示へ戻し、guarded_action を承認つきの commit と gh 投稿に縮める | Accepted | 2026-10-31 | 案件は CHG-0050 |
+| [0022](0022-containment-first-minimal-approvals.md) | 確認を「人が判断を足せる操作」に絞り、残りは境界で守る（封じ込めを主、承認を従にする。ask 層とモードの廃止の方向） | Proposed | 2026-10-31 | 案件は CHG-0054。調査は [AC1](../research/agents/approval-containment-survey.md)。採用が確定したら ADR-0014 を部分改定する |

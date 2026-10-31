@@ -1,7 +1,7 @@
 # CHG-0050: pi のフルガードの `guarded_action` を、承認つきの commit と gh 投稿に縮める
 
 - **状態**: In progress
-- **更新日**: 2026-11-01
+- **更新日**: 2026-10-31
 - **基準**: コミット 7422f88 以降、pi 1.4.0（`develop` に取り込み済み。後続は [CHG-0053](0053-worktree-integration-gate.md)）
 
 ## 目的と非目的

@@ -53,6 +53,7 @@ pis --new           # 新しいセッションで始める (既定は、この�
 - **サンドボックスが標準**。サンドボックスを張れない OS（macOS）では、`pis` は起動せず `--no-sandbox` を案内する（Windows ネイティブには `pis` を配らない）（黙って弱い守りに落とさない）。
   `--boundary` は互換の別名（標準と同じ意味）
 - サンドボックスの検査に落ちたとき・起動場所が危険なときも起動しない。制御ファイル・フルガードの編集、復旧、Orca・Zed は `--no-sandbox` で行う
+- **検討中の方針**: ask 層と bypass モードをなくし、境界で守る方向（[ADR-0022](../../adr/0022-containment-first-minimal-approvals.md)、Proposed）。結論が出るまで、`--bypass` / `--no-bypass` は現行の仕様のまま。実際の運用は、素の `pi` でも常に bypass（境界なし）で、素の `pi` の扱いが最大の論点（[CHG-0054](../../change/0054-containment-and-async-approval.md)）
 - 設計の根拠は [CHG-0023](../../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
 
 **素の `pi`（Unix）**は、`settings.json` の設定だけで、下の `pis` と同じツール構成になる（`extensions` にフルガードと自作の拡張を足し、自動検出の拡張を外し、`defaultTools = []`）。
@@ -155,7 +156,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 - **MCP は Unix と同じく `rules.json` から**（フルガードが `registerMcpServer` で登録する）。`~/.pi/agent/mcp.json` へ書く経路（`generate.py --target pi-mcp`）は廃止した（[MCP](#mcp)）
 - **自作の拡張の `activity`**: `bg_run` は `spawn(shell:true)`（Windows では cmd）で、`taskkill` で止める。実機は未確認
 - **フルガードを欠いた起動では実行しない**: フルガードは起動時に印 `globalThis.__PI_FULL_GUARD__` を立てる。`bg_run`（`activity`）と `task`（`subagents`）は、印が無いと実行しない（[判定の外で動くもの](#判定の外で動くもの)）
-- **残る限界**: 境界が無い（Fence・Landlock の代わりは無い）、Git Bash というシェルを経由する、`guarded_task` が無い（次の段）、実機未検証。守りが強く要る作業は WSL の `pis` で行う
+- **残る限界**: 境界が無い（Fence・Landlock の代わりは無い）、Git Bash というシェルを経由する、`guarded_task` が無い（次の段）、実機未検証。守りが強く要る作業は WSL の `pis` で行う。PowerShell が必須のプロジェクトで、境界なしの運用をどこまで許すかは未決（[CHG-0034](../../change/0034-windows-native-pi-boundary.md)、[CHG-0054](../../change/0054-containment-and-async-approval.md)）
 - 調査記録: [pi-isolation-options](../../research/agents/pi-isolation-options.md)（過去の判断。Windows に載せる前の記録）
 
 **Windows 実機で確認する項目**は、[実機で確認する項目](#実機で確認する項目)の Windows の節にまとめた。
@@ -172,7 +173,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 | `defaultThinkingLevel` / `skills` / `enabledModels` | `[pi.settings]`（書いたものだけ） |
 | `extensions` / `defaultTools` | `[pi.settings]`。**非 Windows**: フルガード・自作の拡張（`[pi] own_extensions`。除外の直後に `+extensions/<名前>/index.ts` で足す）・`!extensions/**`（自動検出の拡張を外す）・Orca の状態表示（`+extensions/orca-agent-status.ts`）・組み込みの `codemode` / `tool-search` / `llama.cpp` の除外、`defaultTools = []`。**Windows**: 非 Windows と同じ（Orca の状態表示を含む）に、subagents（`+extensions/subagents/index.ts`）を足す。`commit-confirm` はどちらにも含めない |
 
-今は `defaultThinkingLevel = "xhigh"`（2026-11-01 に `medium` から上げた。根拠は [記録 M5](../../research/agents/subagent-model-assignment.md)）、`skills = ["~/.claude/skills"]`。子は、階層に `#variant` が無い役割（`explore`・`review`）だけがこの既定を継ぐ。`~/.agents/skills` は pi が元から読む。
+今は `defaultThinkingLevel = "xhigh"`（2026-10-31 に `medium` から上げた。根拠は [記録 M5](../../research/agents/subagent-model-assignment.md)）、`skills = ["~/.claude/skills"]`。子は、階層に `#variant` が無い役割（`explore`・`review`）だけがこの既定を継ぐ。`~/.agents/skills` は pi が元から読む。
 
 `defaultProjectTrust` は設定しない（既定の `ask`）。作業先の信頼の拒否は、`pis` の `--no-approve` が担う。
 この設定だけで、フラグ無しの `pi` のツールが `guarded_*` と自作の拡張だけになり、agent 置き場の `extensions/` に置いた未審査の拡張は読まれない。設定と同じ拡張を `-e` でも読むと、ツール名の衝突で起動に失敗する（試験は `test_pi_settings_launch.py`）。

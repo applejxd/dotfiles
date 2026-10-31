@@ -55,7 +55,7 @@
 > `launch.ps1` が `-ExecutionPolicy Bypass` で `guest.ps1` を起動すると、子の `chezmoi` にも `PSExecutionPolicyPreference=Bypass` が引き継がれる（実測）。
 > README の `Set-ExecutionPolicy` の行は、`Restricted` のままだと `chezmoi` が `.ps1` の run スクリプトを実行できないために必要（実測）だが、この検証はその行が無くても通る。
 
-## 記録 E5 — 全件検証の内訳と段階化の前提（2026-11-01）
+## 記録 E5 — 全件検証の内訳と段階化の前提（2026-10-31）
 
 ### 問い
 
