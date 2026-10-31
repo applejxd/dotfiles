@@ -49,22 +49,21 @@ def test_the_summary_is_a_labeled_bullet_list_in_a_fixed_order(table):
     s = table["summary"]
     # リポジトリ名・ブランチ・件名の順。絶対パスは出さない (狭い画面で折り返す)。作業ツリーの最後の要素と、ブランチ、短縮 HEAD
     lines = s.splitlines()
-    assert lines[:5] == [
+    assert lines[:4] == [
         "・リポジトリ: child",
         "・ブランチ: main @ aaaaaaaa",
         "・件名: feat: subject line",
-        "・本文: 全 7 行・39 字 (「全文を見る」)",
         "・変更: 8 files +8 -0",
     ]
-    assert "/work" not in s and "message:" not in s
-    # 本文の 2 行目以降は要約に出さない
+    assert "/work" not in s and "message:" not in s and "本文" not in s
+    # 本文の 2 行目以降は要約に出さない (本文の大きさの行も出さない)
     assert "- a" not in s
     # ファイルは上位 5 件と残りの件数を、変更の下に字下げで (棒グラフは出さない)
-    assert [line for line in lines[5:] if line.startswith("    ")] == [
+    assert [line for line in lines[4:] if line.startswith("    ")] == [
         f"    f{i}.txt  1" for i in range(5)
     ] + ["    … 他 3 ファイル"]
     assert "|" not in s and "+++" not in s
-    assert len(lines) <= 12
+    assert len(lines) <= 11
 
 
 def test_the_summary_prefers_the_dir_argument_over_the_absolute_path(table):
@@ -89,8 +88,23 @@ def test_the_summary_lines_fit_a_narrow_terminal_counting_wide_characters_twice(
     assert (u["width_ascii"], u["width_cjk"]) == (3, 6)
     assert u["clip_none"] == "abc" and u["clip_ascii"] == "abcd…" and u["clip_cjk"] == "日本語…"
     lines = table["summary_narrow"].splitlines()
-    assert lines[2].endswith("…") and lines[3].endswith("…")
     assert all(w <= 38 for w in (_width(line) for line in lines)), lines
+    # 件名は切らずに、字下げして折り返す (なくなる字が無い)
+    end = next(i for i, line in enumerate(lines) if line.startswith("・変更"))
+    subject = lines[2:end]
+    assert subject[0].startswith("・件名: feat: ") and all(
+        line.startswith("    ") for line in subject[1:]
+    )
+    assert len(subject) >= 2 and "…" not in "".join(subject)
+    assert "長い件名" * 10 in "".join(line.removeprefix("・件名: ").strip() for line in subject)
+    # 異常に長い件名でも、件名は 5 行までで末尾を … にする
+    long = table["summary_long_subject"].splitlines()
+    body = long[2:7]
+    assert (
+        body[-1].endswith("…")
+        and long[7].startswith("・変更")
+        and all(_width(line) <= 44 for line in long)
+    )
     # ブランチ名が長いときはブランチ名を縮め、短縮 HEAD は残す (幅 46)
     branch = table["summary_long_branch"].splitlines()[1]
     assert (

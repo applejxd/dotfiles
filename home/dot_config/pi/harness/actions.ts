@@ -318,7 +318,27 @@ export function shortenFiles(lines: string[]): string[] {
 	});
 }
 
-/** 要約 (ラベル付きの箇条書き): リポジトリ名・ブランチと HEAD (短縮)・件名 (本文の 1 行目)・本文の大きさ・ステージ済みの上位ファイルと統計。width (端末のセル数) に合わせて行を切る */
+/** 見出し (prefix) つきで、幅 (セル数) を超えたら字下げして折り返す。全角は 2 桁。最大 maxLines 行で、超える分は末尾を … にする (異常に長い件名で画面を埋めない) */
+export function wrapHanging(prefix: string, text: string, max: number, maxLines = 5, indent = "    "): string[] {
+	const out: string[] = [];
+	let cur = prefix;
+	let w = cellWidth(prefix);
+	for (const ch of text) {
+		const cw = cellWidth(ch);
+		if (w + cw > max) {
+			out.push(cur);
+			cur = indent;
+			w = cellWidth(indent);
+		}
+		cur += ch;
+		w += cw;
+	}
+	out.push(cur);
+	return out.length > maxLines ? [...out.slice(0, maxLines - 1), clipCells(`${out[maxLines - 1]}…`, max)] : out;
+}
+
+/** 要約 (ラベル付きの箇条書き): リポジトリ名・ブランチと HEAD (短縮)・件名 (本文の 1 行目。切らずに折り返す)・ステージ済みの上位ファイルと統計。本文の全文は要約に出さない。width (端末のセル数) に合わせて行を切る */
+
 export function summaryBody(action: ActionSpec, values: Values, preview: Preview, repo?: string, width = COMPACT_LINE_CHARS): string {
 	const max = Math.max(20, width - 2);
 	const clip = (s: string) => clipCells(s, max);
@@ -329,10 +349,8 @@ export function summaryBody(action: ActionSpec, values: Values, preview: Preview
 	lines.push(clip(`・ブランチ: ${clipCells(sanitizeForDisplay(preview.branch), Math.max(10, max - cellWidth("・ブランチ: ") - cellWidth(` @ ${head}`)))} @ ${head}`));
 	const texts = Object.entries(action.fields).filter(([n, s]) => s.content && values[n] !== undefined);
 	for (const [n] of texts) {
-		const all = values[n].split("\n");
-		// 本文の欄が 1 つなら「件名」、複数なら欄の名前をラベルにする
-		lines.push(clip(`・${texts.length > 1 ? n : "件名"}: ${sanitizeForDisplay(all[0])}`));
-		if (all.length > 1 || values[n].length > max) lines.push(clip(`・本文: 全 ${all.length} 行・${values[n].length} 字 (「${VIEW_FULL}」)`));
+		// 本文の欄が 1 つなら「件名」、複数なら欄の名前をラベルにする。件名 (本文の 1 行目) は切らずに折り返す (本文の 2 行目以降は、チャットと「全文を見る」で見る)
+		lines.push(...wrapHanging(`・${texts.length > 1 ? n : "件名"}: `, sanitizeForDisplay(values[n].split("\n")[0]), max));
 	}
 	// 変更: 合計の行を見出しにし、ファイルをその下に字下げで出す
 	const stat = sanitizeForDisplay(plainStat(compactStat(preview.stat, SUMMARY_FILES))).split("\n");

@@ -61,6 +61,7 @@ out.needs = {
 out.summary = summaryBody(COMMIT, { message: BIG }, preview(8), "/work/child");
 out.summary_dir = summaryBody(COMMIT, { message: BIG, dir: ".tmp/worktrees/x" }, preview(2), "/very/long/absolute/path/to/x");
 out.summary_narrow = summaryBody(COMMIT, { message: `feat: ${"長い件名".repeat(10)}\n\nbody` }, preview(8), "/work/child", 40);
+out.summary_long_subject = summaryBody(COMMIT, { message: "あ".repeat(300) }, preview(2), "/work/child", 46);
 out.summary_long_branch = summaryBody(COMMIT, { message: BIG }, { ...preview(2), branch: `feature/${"x".repeat(60)}` }, "/work/child", 46);
 out.wrap = viewerMod.wrapCells("日本語のテスト\n\nabcdefghij\tx", 8);
 out.shorten = shortenFiles(["docs/a.ts  1", "src/a.ts  2", "src/b.ts  102", "img/logo.png  bin", "x/{a => b}/c.ts  3", "… 他 2 ファイル"]);
