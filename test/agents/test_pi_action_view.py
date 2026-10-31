@@ -36,13 +36,11 @@ def table():
     return json.loads(proc.stdout)
 
 
-def test_the_summary_threshold_is_lines_chars_and_files(table):
+def test_the_commit_confirmation_is_always_a_summary_in_the_tui(table):
     n = table["needs"]
-    # 小さい変更は、要約せずに全文を出す (本文 5 行・300 字・ファイル 5 件が境界)
-    assert n["small"] is False
-    assert n["lines5"] is False and n["lines6"] is True
-    assert n["chars300"] is False and n["chars301"] is True
-    assert n["files5"] is False and n["files6"] is True
+    # 小さい変更も要約する (狭い画面で、全角の本文・プレビュー・argv が折り返して大きくなるため)。境界の数値は無い
+    for key in ("small", "lines5", "lines6", "chars300", "chars301", "files5", "files6"):
+        assert n[key] is True, key
     # git_commit 以外 (gh の投稿) と、プレビューの無い呼び出しは、要約しない
     assert n["not_commit"] is False and n["no_preview"] is False
 
@@ -132,14 +130,19 @@ def test_the_full_details_also_go_to_the_chat_but_the_dialog_keeps_the_summary(t
     assert "・件名: feat: subject line" in big["select"][0]["title"].split(
         "\n"
     )  # 見出し・空行、リポジトリ、ブランチの次が件名
-    assert table["small_commit"]["calls"]["progress"] == []  # 小さい変更はダイアログに全文
+    # 小さい変更も、詳細をチャットに出し、ダイアログは要約
+    assert len(table["small_commit"]["calls"]["progress"]) == 1
 
 
-def test_a_small_commit_shows_the_full_text_without_a_view_option(table):
+def test_a_small_commit_is_also_a_summary_with_a_view_option(table):
     r = table["small_commit"]
     (call,) = r["calls"]["select"]
-    assert call["options"] == [APPROVE, EDIT, REJECT]
-    assert "message (全文):\nfix: small" in call["title"] and "実行する argv" in call["title"]
+    assert call["options"] == [APPROVE, VIEW, EDIT, REJECT]
+    assert (
+        "・件名: fix: small" in call["title"].split("\n") and "実行する argv" not in call["title"]
+    )
+    assert "message (全文)" not in call["title"] and "プレビュー:" not in call["title"]
+    assert "実行する argv" in r["calls"]["progress"][0]
     assert r["result"]["ok"] is True and r["advanced"] is True
 
 
@@ -155,7 +158,7 @@ def test_a_big_commit_shows_a_summary_with_a_view_option(table):
     )
 
 
-def test_the_view_option_opens_the_full_text_and_returns_to_the_same_confirmation(table):
+def test_the_view_option_falls_back_to_the_editor_without_the_custom_ui(table):
     r = table["big_view_then_approve"]
     assert len(r["calls"]["select"]) == 2  # 全文を見たあと、同じ確認に戻る
     assert r["calls"]["select"][0] == r["calls"]["select"][1]
@@ -188,3 +191,30 @@ def test_the_result_repeats_the_text_only_when_it_was_edited(table):
     assert edited["subject"] == "feat: edited subject"
     assert "実際に使った最終の内容 (編集した):" in edited["result"]["text"]
     assert "feat: edited subject" in edited["result"]["text"]
+
+
+def test_the_full_text_viewer_starts_at_the_head_and_scrolls(table):
+    # pi の editor は末尾にカーソルを置くので末尾から見える。全文ビューアは先頭から出し、スクロールできる
+    r = table["big_view_viewer"]
+    assert r["calls"]["editor"] == []  # editor は使わない
+    assert len(r["calls"]["select"]) == 2 and r["result"]["ok"] is True and r["advanced"] is True
+    (v,) = r["calls"]["viewer"]
+    head = table["big_view_then_approve"]["calls"]["editor"][0]["text"].split("\n")[0]
+    # 先頭: 見出し、本文の 1 行目から。末尾の注意書きはまだ見えない
+    assert "全文" in v["first"][0] and v["first"][1].strip() == head
+    assert not any("退避" in line for line in v["first"])
+    assert (
+        "↑↓ Space/b g/G" in v["first"][-1]
+        and v["first"][-1].startswith("1-")
+        and " / " in v["first"][-1]
+    )
+    # Space で 1 ページ進み、g で先頭へ戻り、G で末尾 (注意書き) へ進む。q で閉じる
+    assert v["paged"][1] != v["first"][1] and v["home"] == v["first"]
+    assert any("退避" in line for line in v["end"])
+    assert v["closed"] is True
+    assert all(_width(line) <= 46 for line in v["first"] + v["paged"] + v["end"])
+
+
+def test_the_viewer_wraps_by_cell_width_keeping_blank_lines(table):
+    # 全角は 2 桁。改行と空行は保ち、タブは空白 2 つにする。幅を超える行は折り返す (切り捨てない)
+    assert table["wrap"] == ["日本語の", "テスト", "", "abcdefgh", "ij  x"]

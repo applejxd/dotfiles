@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "actions.ts")).href);
+const viewerMod = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "text-viewer.ts")).href);
 const { needsSummary, summaryBody, executeAction, cellWidth, clipCells, plainStat, shortenFiles } = mod;
 
 const COMMIT = {
@@ -61,6 +62,7 @@ out.summary = summaryBody(COMMIT, { message: BIG }, preview(8), "/work/child");
 out.summary_dir = summaryBody(COMMIT, { message: BIG, dir: ".tmp/worktrees/x" }, preview(2), "/very/long/absolute/path/to/x");
 out.summary_narrow = summaryBody(COMMIT, { message: `feat: ${"長い件名".repeat(10)}\n\nbody` }, preview(8), "/work/child", 40);
 out.summary_long_branch = summaryBody(COMMIT, { message: BIG }, { ...preview(2), branch: `feature/${"x".repeat(60)}` }, "/work/child", 46);
+out.wrap = viewerMod.wrapCells("日本語のテスト\n\nabcdefghij\tx", 8);
 out.shorten = shortenFiles(["docs/a.ts  1", "src/a.ts  2", "src/b.ts  102", "img/logo.png  bin", "x/{a => b}/c.ts  3", "… 他 2 ファイル"]);
 out.util = {
 	width_ascii: cellWidth("abc"),
@@ -72,9 +74,9 @@ out.util = {
 	stat_one: plainStat(" 1 file changed, 1 insertion(+)"),
 };
 
-async function run(files, message, answers) {
+async function run(files, message, answers, viewer = false) {
 	const cwd = repo(files);
-	const calls = { select: [], editor: [], progress: [] };
+	const calls = { select: [], editor: [], progress: [], viewer: [] };
 	const ctx = {
 		cwd,
 		hasUI: true,
@@ -89,6 +91,28 @@ async function run(files, message, answers) {
 				return typeof answers[0] === "object" ? answers.shift().text : text;
 			},
 			input: async () => "",
+			// 全文ビューア (ctx.ui.custom)。先頭からの表示とスクロールを記録する
+			...(viewer
+				? {
+						custom: async (factory) => {
+							const rec = {};
+							let closed = false;
+							const keys = { "tui.select.cancel": "\x1b", "tui.select.confirm": "\r", "tui.select.up": "\x1b[A", "tui.select.down": "\x1b[B", "tui.select.pageUp": "\x1b[5~", "tui.select.pageDown": "\x1b[6~" };
+							const kb = { matches: (d, id) => keys[id] === d };
+							const comp = factory({ terminal: { rows: 24 }, requestRender() {} }, { fg: (_c, s) => s }, kb, () => (closed = true));
+							rec.first = comp.render(46);
+							comp.handleInput(" ");
+							rec.paged = comp.render(46);
+							comp.handleInput("g");
+							rec.home = comp.render(46);
+							comp.handleInput("G");
+							rec.end = comp.render(46);
+							comp.handleInput("q");
+							rec.closed = closed;
+							calls.viewer.push(rec);
+						},
+					}
+				: {}),
 		},
 	};
 	const deps = {
@@ -119,6 +143,7 @@ async function run(files, message, answers) {
 out.small_commit = await run(2, "fix: small", ["承認して実行"]);
 out.big_approve = await run(6, BIG, ["承認して実行"]);
 out.big_view_then_approve = await run(6, BIG, ["全文を見る", "承認して実行"]);
+out.big_view_viewer = await run(6, BIG, ["全文を見る", "承認して実行"], true);
 out.big_view_twice_then_reject = await run(6, BIG, ["全文を見る", "全文を見る", "拒否"]);
 out.big_edit = await run(6, BIG, ["編集して承認", { text: "feat: edited subject" }]);
 process.stdout.write(JSON.stringify(out));

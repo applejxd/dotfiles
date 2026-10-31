@@ -39,6 +39,7 @@ try:
         "tools-ext.ts",
         "confirm-view.ts",
         "actions.ts",
+        "text-viewer.ts",
         "worktree.ts",
         "worktrees-command.ts",
         "unguarded.ts",

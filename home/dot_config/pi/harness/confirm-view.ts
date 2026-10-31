@@ -300,3 +300,27 @@ export function outcomeReason(o: ConfirmOutcome): string {
 			return "利用者が拒否した。同じ操作をくり返さない";
 	}
 }
+
+/** 表示の幅 (端末のセル数)。全角 (CJK・全角記号) は 2 */
+export function cellWidth(s: string): number {
+	let w = 0;
+	for (const ch of s) {
+		const c = ch.codePointAt(0) ?? 0;
+		w += (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe6f) || (c >= 0xff00 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6) ? 2 : 1;
+	}
+	return w;
+}
+
+/** 幅 (セル数) を超える行を、末尾を … にして切る */
+export function clipCells(s: string, max: number): string {
+	if (cellWidth(s) <= max) return s;
+	let out = "";
+	let w = 0;
+	for (const ch of s) {
+		const cw = cellWidth(ch);
+		if (w + cw > max - 1) break;
+		out += ch;
+		w += cw;
+	}
+	return `${out}…`;
+}

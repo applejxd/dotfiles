@@ -9,7 +9,8 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
-import { MAX_DISPLAY_CHARS, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
+import { MAX_DISPLAY_CHARS, cellWidth, clipCells, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
+import { showTextViewer } from "./text-viewer.ts";
 import { reconcilePending, repoTargetEnv, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
 
 export const ACTION_TOOL = "action";
@@ -270,49 +271,14 @@ const EDIT = "編集して承認";
 const REJECT = "拒否";
 const VIEW_FULL = "全文を見る";
 
-// TUI の git_commit の確認: 小さい変更は全文、大きい変更は要約 + 「全文を見る」 (全文は editor で読む)。表示だけを変える: 同一性の照合・実行の argv は変えない
+// TUI の git_commit の確認: 常に要約 + 「全文を見る」 (全文は先頭から読めるビューアで読む)。表示だけを変える: 同一性の照合・実行の argv は変えない
 // see docs/spec/guard/pi-extensions.md#guarded_action
-const SMALL_MAX_LINES = 5;
-const SMALL_MAX_CHARS = 300;
-const SMALL_MAX_FILES = 5;
+export { cellWidth, clipCells };
 const SUMMARY_FILES = 5;
 
-function statFileCount(stat: string): number {
-	const lines = stat.split("\n");
-	return /\bchanged\b/.test(lines[lines.length - 1] ?? "") ? lines.length - 1 : lines.length;
-}
-
-/** 要約を出す対象 (git_commit だけ) で、本文・ファイル数がどちらも小さい変更は要約しない (全文をそのまま出す) */
-export function needsSummary(action: ActionSpec, values: Values, preview: Preview | null): boolean {
-	if (action.id !== "git_commit" || !preview) return false;
-	const texts = Object.entries(action.fields).filter(([n, s]) => s.content && values[n] !== undefined).map(([n]) => values[n]);
-	const lines = texts.reduce((a, t) => a + t.split("\n").length, 0);
-	const chars = texts.reduce((a, t) => a + t.length, 0);
-	return !(lines <= SMALL_MAX_LINES && chars <= SMALL_MAX_CHARS && statFileCount(preview.stat) <= SMALL_MAX_FILES);
-}
-
-/** 表示の幅 (端末のセル数)。全角 (CJK・全角記号) は 2 */
-export function cellWidth(s: string): number {
-	let w = 0;
-	for (const ch of s) {
-		const c = ch.codePointAt(0) ?? 0;
-		w += (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe6f) || (c >= 0xff00 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6) ? 2 : 1;
-	}
-	return w;
-}
-
-/** 幅 (セル数) を超える行を、末尾を … にして切る */
-export function clipCells(s: string, max: number): string {
-	if (cellWidth(s) <= max) return s;
-	let out = "";
-	let w = 0;
-	for (const ch of s) {
-		const cw = cellWidth(ch);
-		if (w + cw > max - 1) break;
-		out += ch;
-		w += cw;
-	}
-	return `${out}…`;
+/** 要約を出す対象 (git_commit でプレビューがあるとき)。小さい変更も要約する: 全文を置くと、狭い画面 (スマホで約 46 桁) で全角の本文・プレビュー・argv が折り返して大きくなる。小さい変更の要約は全文とほとんど変わらない */
+export function needsSummary(action: ActionSpec, _values: Values, preview: Preview | null): boolean {
+	return action.id === "git_commit" && !!preview;
 }
 
 /** `git diff --stat` の棒グラフを落とし、「ファイル名 +追加 -削除」だけにする (狭い画面で棒が折り返して壊れるため)。読めない行はそのまま */
@@ -572,8 +538,11 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 				}
 				if (choice !== VIEW_FULL || signal?.aborted) break;
 				try {
-					// 読むだけ (変更しても反映されない)。閉じると確認に戻る
-					await ctx.ui.editor(`${action.label}: 全文 (読むだけ。閉じると確認に戻る)`, `${viewBody(action, values, preview, viewArgv, cwd)}${notice}`);
+					// 読むだけ (変更しても反映されない)。先頭から表示するビューアで開き (pi の editor は末尾にカーソルを置くので末尾から見える)、閉じると確認に戻る
+					const fullTitle = `${action.label}: 全文 (読むだけ。閉じると確認に戻る)`;
+					const fullText = `${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
+					if (typeof ctx.ui.custom === "function") await showTextViewer(ctx.ui as any, fullTitle, fullText);
+					else await ctx.ui.editor(fullTitle, fullText);
 				} catch {
 					// 表示できなくても、確認に戻る
 				}
