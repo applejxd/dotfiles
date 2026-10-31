@@ -1400,7 +1400,8 @@
    "activity",
    "ask",
    "notify",
-   "delegate-nudge"
+   "delegate-nudge",
+   "speed"
   ],
   "profiles": {
    "committer": {

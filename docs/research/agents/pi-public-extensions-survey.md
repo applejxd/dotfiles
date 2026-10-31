@@ -357,6 +357,21 @@ Conductor・vibe-kanban・claude-squad は、解説記事の断片（各 worktre
 - 各ツールのコミットの hook の扱い
 - 実機での挙動。docs の記述と実装のずれ
 
+## 記録 P8 — 2026-10-31: tok/s の拡張（`speed` の測り方の比較）
+
+- **問い**: 応答ごとの TTFT・decode 速度をステータス行に出す拡張 `speed` の測り方は、公開の拡張と推論側の議論に照らして妥当か
+- **方法と限界**: 公開の README・issue を読んだだけ。**拡張は導入しておらず、実コードは読んでいない**（README の記述が根拠）。取得日は 2026-10-31。実機の TUI・Orca での見え方、Copilot 経由の reasoning の出方は未確認
+
+| 対象 | 方式（README・議論から） | 出典 |
+| --- | --- | --- |
+| `pi-tps` | 応答ごとに tok/s を出す表示系の拡張 | <https://github.com/monotykamary/pi-tps> |
+| `pi-token-speed`（上位 150 件の「観測・計測」にある） | トークン速度の表示。時刻の取り方の詳細は未読 | <https://github.com/gsanhueza/pi-token-speed> |
+| 推論側の議論 | TTFT を「thinking を含む最初のトークン」までとする定義の議論 | <https://github.com/kubernetes-sigs/inference-perf/issues/559> |
+
+- **採った点**: TTFT の定義は、thinking を含む最初のトークンまで（上の議論に揃えた）。1 回のモデル呼び出し（1 つの assistant メッセージ）を単位にし、ツール実行の時間を入れない
+- **自作で決めた点（事実は 1.4.0 の型・文書による）**: 最初のトークンは `provider_stream_event` ではなく `message_update` の `*_delta` で取る。前者の `data` は提供元ごとの生の値（`unknown`）で、最初の 1 件が内容のデルタか接続開始のような別種かを、型からは区別できないため。出力 30 トークン未満・decode 区間 0.3 秒未満は `—`。reasoning が出ない経路の過小は `~` で示す
+- **未確認**: 公開の 2 つの実コード、実機の TUI・Orca の見え方、Copilot 経由で reasoning がストリームに出ないこと（`usage.reasoning` と thinking のデルタの有無の食い違いで検出する設計の実測）
+
 ## 付録: 上位 150 件の分類
 
 括弧内は月間ダウンロード数の順位（2026-10-20 時点）。

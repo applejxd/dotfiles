@@ -140,7 +140,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 | pi 本体 | mise の `aqua:earendil-works/pi`（バイナリ版。node 不要）。`313_mise` が入れ、`314_agent_cli.ps1` が旧 npm 版を外して起動を確かめる（[Windows の pi](../cli-management.md#windows-の-pi)）。公式の `install.ps1` は `Read-Host` で確認を聞き、apply では答えられないので使わない |
 | `~/.pi/agent/settings.json`・`keybindings.json`・`AGENTS.md` | Unix と同じ（`.chezmoiignore` で戻している）。`extensions` はフルガード・自作の拡張・`!extensions/**`・subagents（`+extensions/subagents/index.ts`。Windows だけ）・組み込み拡張の除外、`defaultTools = []`（[pi の設定](#pi-の設定)） |
 | `~/.config/pi/harness/`・`rules.json` | Unix と同じ（`landlock_exec.py` だけ除外。`rules.json` は `py -3` で生成） |
-| 自作の拡張（`activity`・`ask`・`btw`・`delegate-nudge`・`notify`・`plan`・`todo`） | Unix と同じく配り、settings で明示ロードする |
+| 自作の拡張（`activity`・`ask`・`btw`・`delegate-nudge`・`notify`・`plan`・`speed`・`todo`） | Unix と同じく配り、settings で明示ロードする |
 | `/fleet`（`prompts/`） | **配らない**（`guarded_task` を前提にするため） |
 | 子エージェント `task`（読み取り役だけ） | `~/.pi/agent/extensions/subagents/`（[下記](pi-subagents.md#windows-の子エージェント)） |
 | `commit-confirm` | settings から**外した**（フルガードに `git commit` の確認があるため。拡張本体の配備は残るが、Windows の settings は読まない。[commit の確認](pi-extensions.md#commit-の確認-素の-pi)） |

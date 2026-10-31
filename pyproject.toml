@@ -64,3 +64,4 @@ max-line-length = 140
 [tool.ruff.lint.per-file-ignores]
 # pytest の fixture を別ファイルから import して使う (引数名が再定義に見える)
 "test/agents/test_pi_harness_extensions.py" = ["F811"]
+"test/agents/test_pi_speed.py" = ["F811"]

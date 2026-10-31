@@ -47,7 +47,7 @@
 | モデルの割り当て（プロバイダ・階層・子のカタログ） | [モデルの割り当て](agent-model-assignment.md) |
 | 圧縮と文脈の引き継ぎ（`checkpoint`） | [圧縮](guard/pi-extensions.md#圧縮旧-checkpoint)、[文脈の引き継ぎ](checkpoint.md) |
 | セッションごとの一時置き場（`.tmp/s/<ID>/`） | [一時置き場](guard/pi-extensions.md#セッションごとの一時置き場tmpsid) |
-| 自作の拡張（`todo`・`plan`・`btw`・`ask`・`activity`・`notify`・`delegate-nudge`） | [自作の拡張](guard/pi-extensions.md#自作の拡張-todo--plan--btw) |
+| 自作の拡張（`todo`・`plan`・`btw`・`ask`・`activity`・`notify`・`delegate-nudge`・`speed`） | [自作の拡張](guard/pi-extensions.md#自作の拡張-todo--plan--btw) |
 | 利用者コマンド（`/bypass`・`/plan`・`/pending`・`/agents`・`/fleet` など）、キーバインド | [pi の拡張と補助機能](guard/pi-extensions.md)、[pi のガード](guard/pi-guard.md) |
 | 設定の生成（`common.toml` が単一ソース） | [設定の生成と所有権](agent-config-generation.md) |
 | pi 本体の公式仕様と実測 | [pi の公式仕様と実測の棚卸し](pi-upstream.md) |

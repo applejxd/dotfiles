@@ -128,6 +128,7 @@ _PI_TESTS = (
     "test_pi_session_tmp",
     "test_tmp_hygiene",
     "test_pi_confirm_view",
+    "test_pi_speed",
     "test_pi_ask_normalize",
     "test_pi_worktree",
     "test_pi_isolation",
