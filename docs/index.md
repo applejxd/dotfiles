@@ -68,6 +68,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 隔離起動の境界内で読めない・書けない原因を調べる | [境界の組み立ての規則](spec/sandbox/fence-boundary.md#組み立ての規則) |
 | sandbox で何ができるか調べる | [sandbox機能の包括調査](research/agents/sandbox-capabilities.md) |
 | 確認（承認）と封じ込めの設計方針を知る・変える（ask 層と bypass モードの廃止、非同期の承認、複数エージェントの束ね） | [ADR-0022](adr/0022-containment-first-minimal-approvals.md)、[CHG-0054](change/0054-containment-and-async-approval.md)、[調査記録 AC1](research/agents/approval-containment-survey.md) |
+| 確認が取れない操作の保留と、利用者が後から承認して実行する仕組み（非同期の承認）を知る・変える | [ADR-0023](adr/0023-pending-approval.md)、[CHG-0055](change/0055-async-approval.md) |
 
 ### 案件と根拠
 
