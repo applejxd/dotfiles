@@ -102,7 +102,7 @@
 | S2 | 自由区の判定（linked worktree かつ `feature/*`。確認は省略しない） | worker | 完了（`harness/freezone.ts`・`gitrun.ts`。部品のみで、まだ接続しない。試験 `test_pi_freezone.py`） |
 | S3a | 統合の計画の算出と表示（結果の差分・リスクの印。ツールには未接続） | worker | 未着手 |
 | S3b | 専用操作 `git_integrate`（計画の固定・直前照合・結果 3 値） | 親 | 未着手 |
-| S4 | bash の統合ゲート（保護 ref を変える通常の統合コマンドを必須確認にし、feature の日常の操作は止めない） | worker | 未着手 |
+| S4 | bash の統合ゲート（保護 ref を変える通常の統合コマンドを必須確認にし、feature の日常の操作は止めない） | worker | 進行中（S4a: 静的な検出器 `judge/gitintegration.ts` は完了。判定器への接続と動的検査の S4b は未着手） |
 | S5a | 確認省略のコード（設定は false。この段だけでは no-op） | worker | 未着手 |
 | S5b | 確認省略を有効化（**最後**） | 親 | 未着手 |
 | S6 | docs の整合と `verify:all` | 親 | 未着手 |
