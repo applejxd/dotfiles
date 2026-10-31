@@ -232,3 +232,9 @@ def test_the_full_text_viewer_starts_at_the_head_and_scrolls(table):
 def test_the_viewer_wraps_by_cell_width_keeping_blank_lines(table):
     # 全角は 2 桁。改行と空行は保ち、タブは空白 2 つにする。幅を超える行は折り返す (切り捨てない)
     assert table["wrap"] == ["日本語の", "テスト", "", "abcdefgh", "ij  x"]
+
+
+def test_the_summary_prefers_the_given_main_repository_name(table):
+    # worktree のディレクトリ名 (ブランチ名と重複する) ではなく、本体のリポジトリ名を出す。渡されなければ今までどおり
+    assert table["summary_repo_label"].splitlines()[0] == "・リポジトリ: chezmoi"
+    assert table["summary_dir"].splitlines()[0] == "・リポジトリ: x"

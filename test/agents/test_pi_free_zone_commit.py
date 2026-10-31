@@ -211,3 +211,23 @@ def test_the_protected_list_is_read_from_the_settings(repos):
     }
     r = _commit(repos, "feature", rules)
     assert len(r["calls"]["select"]) == 1 and r["result"]["details"]["freeZone"]["free"] is False
+
+
+def test_the_confirmation_shows_the_main_repository_name_not_the_worktree_name(repos):
+    # linked worktree (wt-feature) の確認でも、リポジトリ名は本体 (main)。worktree 名はブランチ名と重複するので出さない
+    r = _commit(repos, "feature", OFF)
+    title = r["calls"]["select"][0]["title"]
+    assert "・リポジトリ: main\n" in title and "wt-feature" not in title, title
+    # dir で worktree を指しても同じ
+    target = repos["feature"]
+    _stage(target, "g.txt")
+    r = _run(
+        cwd=str(repos["main"]),
+        target=str(target),
+        dir="wt-feature",
+        message="feat: via dir",
+        hasUI=True,
+        rules=OFF,
+        answers=[APPROVE],
+    )
+    assert "・リポジトリ: main\n" in r["calls"]["select"][0]["title"]

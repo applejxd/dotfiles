@@ -302,9 +302,19 @@ export function plainStat(stat: string): string {
 		.join("\n");
 }
 
-/** 要約のリポジトリ名: dir の指定があればその最後の要素、無ければ作業ツリーの最後の要素 (絶対パスは、狭い画面で折り返すので出さない) */
+/** 要約のリポジトリ名: dir の指定があればその最後の要素、無ければ作業ツリーの最後の要素 (絶対パスは、狭い画面で折り返すので出さない)。git が使えないときの代わり */
 function repoName(values: Values, repo?: string): string {
 	return (values.dir || repo || "").split(/[\\/]/).filter(Boolean).pop() ?? "";
+}
+
+/** 本体のリポジトリ名 (git の共通ディレクトリの親。worktree の名前ではない)。分からないときは undefined (呼び出し側がディレクトリ名に戻す) */
+export function mainRepoName(cwd: string, env?: NodeJS.ProcessEnv): string | undefined {
+	const r = gitSync(["rev-parse", "--path-format=absolute", "--git-common-dir"], cwd, { env });
+	if (!r.ok) return undefined;
+	const parts = r.stdout.trim().split(/[\\/]/).filter(Boolean);
+	const last = parts.pop();
+	// 通常のリポジトリは <名前>/.git、bare や submodule は共通ディレクトリ自体の名前
+	return (last === ".git" ? parts.pop() : last) || undefined;
 }
 
 /** 変更ファイルの表示名: 同名が無ければ最後の要素だけ (狭い画面で長いパスが切れるため)。リネーム表記 (=>) と、同名が複数あるものはパスのまま */
@@ -343,11 +353,11 @@ export function wrapHanging(prefix: string, text: string, max: number, maxLines 
 
 /** 要約 (ラベル付きの箇条書き): リポジトリ名・ブランチと HEAD (短縮)・件名 (本文の 1 行目。切らずに折り返す)・ステージ済みの上位ファイルと統計。本文の全文は要約に出さない。width (端末のセル数) に合わせて行を切る */
 
-export function summaryBody(action: ActionSpec, values: Values, preview: Preview, repo?: string, width = COMPACT_LINE_CHARS): string {
+export function summaryBody(action: ActionSpec, values: Values, preview: Preview, repo?: string, width = COMPACT_LINE_CHARS, repoLabel?: string): string {
 	const max = Math.max(20, width - 2);
 	const clip = (s: string) => clipCells(s, max);
 	const lines: string[] = [];
-	const name = repoName(values, repo);
+	const name = repoLabel || repoName(values, repo);
 	const head = /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 8) : preview.head;
 	if (name) lines.push(clip(`・リポジトリ: ${sanitizeForDisplay(name)}`));
 	lines.push(clip(`・ブランチ: ${clipCells(sanitizeForDisplay(preview.branch), Math.max(10, max - cellWidth("・ブランチ: ") - cellWidth(` @ ${head}`)))} @ ${head}`));
@@ -524,7 +534,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			if (summarize) {
 				// 要約では、狭い画面で選択肢を押し出さないよう、注意書きも 1 行に縮める
 				const shortNotice = snap ? `\n(${minutes}無応答なら実行せず退避)` : `\n(退避不可。${minutes}無応答なら拒否)`;
-				title = `${action.label}\n\n${summaryBody(action, values, preview!, cwd, columns)}${action.id === "git_commit" ? shortNotice : ""}`;
+				title = `${action.label}\n\n${summaryBody(action, values, preview!, cwd, columns, mainRepoName(cwd, deps.env))}${action.id === "git_commit" ? shortNotice : ""}`;
 				// 詳細 (本文全文・argv など) をチャット (ツールの途中経過) にも出す。TUI で描かれるかは未確認なので、ダイアログの要約は残す (見ずに承認することはない)
 				if (deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) await new Promise((r) => setTimeout(r, PROGRESS_FLUSH_MS));
 			} else if (ctx.mode === "tui") {
