@@ -206,7 +206,7 @@ def test_gitsync_never_raises():
 
 def _fake_git(tmp_path: Path, body: str) -> dict:
     real = subprocess.run(
-        ["which", "git"], capture_output=True, text=True, check=True
+        ["which", "git"], capture_output=True, text=True, encoding="utf-8", check=True
     ).stdout.strip()
     bin_dir = tmp_path / "fakebin"
     bin_dir.mkdir()

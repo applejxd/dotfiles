@@ -1292,7 +1292,7 @@
     ".gitflow",
     ".github/workflows/**"
    ],
-   "skip_confirm_in_free_zone": false,
+   "skip_confirm_in_free_zone": true,
    "target": "develop"
   },
   "keybinds": {

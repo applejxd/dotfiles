@@ -41,10 +41,10 @@ def test_integrate_defaults_when_omitted():
     }
 
 
-def test_shipped_config_is_disabled_and_carries_the_floor():
+def test_shipped_config_enables_the_free_zone_skip_and_carries_the_floor():
     out = gen.pi_integrate(load_common())
-    assert out["enabled"] is False
-    assert out["skip_confirm_in_free_zone"] is False
+    assert out["enabled"] is False  # 専用操作 (S3) はまだ無い
+    assert out["skip_confirm_in_free_zone"] is True  # 自由区の git_commit は確認を省略する (S5b)
     assert out["target"] == "develop"
     assert set(FLOOR) <= set(out["protected_refs"])
     assert out["risk_paths"] and all(isinstance(p, str) for p in out["risk_paths"])
@@ -52,8 +52,9 @@ def test_shipped_config_is_disabled_and_carries_the_floor():
 
 def test_rules_json_carries_integrate_and_confirm_flag():
     judge = gen.build_pi_harness({}, load_common())["judge"]["common"]["pi"]
-    assert judge["integrate"]["enabled"] is False
-    assert judge["confirm"]["integration"] is False
+    assert judge["integrate"]["enabled"] is False  # 専用操作 (S3) はまだ無い
+    assert judge["integrate"]["skip_confirm_in_free_zone"] is True  # 自由区の確認省略 (S5b)
+    assert judge["confirm"]["integration"] is True  # 統合コマンドの必須確認 (S4b)
 
 
 def test_integrate_is_not_shared_to_opencode():

@@ -668,7 +668,9 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			: skipConfirm
 				? `確認なしで実行した (自由区: ${zone?.branch ?? ""}。実行後の HEAD: ${headNow?.ok ? headNow.stdout.trim() : "不明"})`
 				: "実行した内容は、承認した内容のとおり";
-		const shadow = zone && !skipConfirm ? `自由区の判定 (観測中。確認は省略していない): ${zone.free ? "free" : "not free"} (${zone.reason}${zone.branch ? `: ${zone.branch}` : ""})` : "";
+		const where = zone ? `${zone.reason}${zone.branch ? `: ${zone.branch}` : ""}` : "";
+		// 確認省略が有効なときは、省略しなかった理由 (自由区でない) を添える。無効の間は観測として判定を添える
+		const shadow = zone && !skipConfirm ? (zoneSettings.skip ? `自由区の判定: not free (${where})。確認を省略せず、承認を取って実行した` : `自由区の判定 (観測中。確認は省略していない): ${zone.free ? "free" : "not free"} (${where})`) : "";
 		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, closing, shadow].filter(Boolean).join("\n\n");
 		const details: Record<string, unknown> = { action: action.id };
 		if (zone) details.freeZone = { free: zone.free, reason: zone.reason, branch: zone.branch, skipped: skipConfirm };

@@ -104,7 +104,7 @@
 | S3b | 専用操作 `git_integrate`（計画の固定・直前照合・結果 3 値） | 親 | 未着手 |
 | S4 | bash の統合ゲート（保護 ref を変える通常の統合コマンドを必須確認にし、feature の日常の操作は止めない） | worker（S4a）+ 親（S4b） | 完了（S4a: 静的な検出器 `judge/gitintegration.ts`。S4b: `integration-gate.ts` でハーネスの `decide` に接続し、`[pi.confirm] integration = true`。配備で効く） |
 | S5a | 確認省略のコード（設定は false。この段だけでは no-op。省略の間も自由区の判定を結果に添えて観測する） | 親 | 完了（`actions.ts`。試験 `test_pi_free_zone_commit.py`） |
-| S5b | 確認省略を有効化（**最後**） | 親 | 未着手 |
+| S5b | 確認省略を有効化（**最後**） | 親 | 完了（`skip_confirm_in_free_zone = true`。観測は数日ではなく、当日の実コミットで「free」を確かめて有効化。問題があれば false に戻す） |
 | S6 | docs の整合と `verify:all` | 親 | 未着手 |
 
 順序は利用者の判断待ち（S4 を S3 より先にする推奨案と、計画の順）。計画の全文は非公開の作業置き場（`.tmp/subagents/`）にある。
@@ -127,5 +127,6 @@
 
 | 日付 | 変更 | 理由 |
 | --- | --- | --- |
+| 2026-11-01 | **S5b: 確認省略を有効にした**（`skip_confirm_in_free_zone = true`）。feature の linked worktree の `git_commit` は、bypass の有無に関係なく確認なしで実行する。自由区でないときは従来どおり確認する | 当初の計画は「観測を数日見てから」だったが、判定の表は実 git の試験で確かめ、同日の実コミットで「free」と判定された。コミットは reflog で戻せ、設定の 1 行で元に戻せるので、数日の観測の価値が小さいと判断（利用者の決定）。実機（Orca）での見え方は配備後に確認 |
 | 2026-11-01 | **S4b: 統合コマンドを、実際に必須確認にした**（`[pi.confirm] integration = true`）。always / unknown はどこからでも、head（merge など）は自由区の外だけ。確認の見出しと導入は「保護ブランチへの統合」 | 実測で、`pis` の内側で統合コマンドが確認なしで通っていたため。試験 `test_pi_integration_gate.py`。実機の見え方は未確認 |
 | 2026-11-01 | 案件を起こした。設計の草案・第 1 回レビューの反映・決定・案 H を記録した | 利用者の意図（feature は自由、統合で監査）の設計 |

@@ -83,7 +83,8 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 - **develop / main に直接コミットしない。** 実装は feature の worktree（`.tmp/worktrees/<名前>/`）で行う。
   feature の起票とクローズ（`git flow feature start` / `finish`）は、機械では止めないので指示で守る。
   AI は、feature の worktree で起動した pi から `guarded_action` の `git_commit` を使う
-  （[CHG-0050](docs/change/0050-slim-guarded-action.md)）
+  （[CHG-0050](docs/change/0050-slim-guarded-action.md)）。**feature の linked worktree（`feature/*`）の `git_commit` は確認なしで実行される**
+  （自由区。[CHG-0053](docs/change/0053-worktree-integration-gate.md)）。それ以外のコミットは確認する
 - **並列にできる作業は子エージェントに任せる。** 調査・レビュー・独立したファイル範囲の実装を並列にする。
   - **1 worktree = 1 feature = 1 worker**。親が `git flow feature start <名前> --worktree --no-fetch` で起票し、
     worker に worktree の絶対パスと担当ファイルを渡す。担当外の worktree や本体を編集させない

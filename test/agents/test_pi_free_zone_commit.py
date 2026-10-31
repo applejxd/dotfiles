@@ -129,6 +129,8 @@ def test_outside_the_free_zone_the_confirmation_is_unchanged(repos, where):
     r = _commit(repos, where, ON)
     assert len(r["calls"]["select"]) == 1, r  # 従来どおり確認する
     assert r["advanced"] is True and "承認した内容のとおり" in r["result"]["text"]
+    # 確認省略が有効なときは、省略しなかった理由を結果に添える (「観測中」ではない)
+    assert "自由区の判定: not free (" in r["result"]["text"] and "観測中" not in r["result"]["text"]
     assert r["result"]["details"]["freeZone"]["free"] is False
     assert r["result"]["details"]["freeZone"]["skipped"] is False
 
