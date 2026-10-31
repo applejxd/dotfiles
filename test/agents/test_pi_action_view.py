@@ -49,10 +49,11 @@ def test_the_summary_threshold_is_lines_chars_and_files(table):
 
 def test_the_summary_shows_the_subject_the_size_and_the_top_files(table):
     s = table["summary"]
-    # 絶対パスは出さない (狭い画面で折り返す)。作業ツリーの最後の要素と、ブランチ、短縮 HEAD
-    assert s.splitlines()[0] == "repo child main @ aaaaaaaa" and "/work" not in s
-    assert "message: feat: subject line" in s
-    assert "(全 7 行・39 字。「全文を見る」で全文)" in s
+    # 件名が最初の行。絶対パスは出さない (狭い画面で折り返す)。作業ツリーの最後の要素と、ブランチ、短縮 HEAD は、件名と全文の行数のあと
+    lines = s.splitlines()
+    assert lines[0] == "feat: subject line" and "message:" not in s
+    assert lines[1] == "  (全 7 行・39 字。「全文を見る」で全文)"
+    assert lines[2] == "repo child main @ aaaaaaaa" and "/work" not in s
     # 本文の 2 行目以降は要約に出さない
     assert "- a" not in s
     # ファイルは上位 5 件と残りの件数、合計の行 (棒グラフは出さない)
@@ -63,7 +64,7 @@ def test_the_summary_shows_the_subject_the_size_and_the_top_files(table):
 
 def test_the_summary_prefers_the_dir_argument_over_the_absolute_path(table):
     s = table["summary_dir"]
-    assert s.splitlines()[0] == "dir .tmp/worktrees/x main @ aaaaaaaa" and "/very/long" not in s
+    assert s.splitlines()[2] == "dir .tmp/worktrees/x main @ aaaaaaaa" and "/very/long" not in s
 
 
 def test_the_summary_lines_fit_a_narrow_terminal_counting_wide_characters_twice(table):
@@ -71,7 +72,7 @@ def test_the_summary_lines_fit_a_narrow_terminal_counting_wide_characters_twice(
     assert (u["width_ascii"], u["width_cjk"]) == (3, 6)
     assert u["clip_none"] == "abc" and u["clip_ascii"] == "abcd…" and u["clip_cjk"] == "日本語…"
     lines = table["summary_narrow"].splitlines()
-    assert lines[1].endswith("…") and lines[2].endswith("…")
+    assert lines[0].endswith("…") and lines[1].endswith("…")
     assert all(w <= 38 for w in (_width(line) for line in lines)), lines
 
 
@@ -101,7 +102,9 @@ def test_the_full_details_also_go_to_the_chat_but_the_dialog_keeps_the_summary(t
         and "- a" in big["progress"][0]
         and "実行する argv" in big["progress"][0]
     )
-    assert "message: feat: subject line" in big["select"][0]["title"]
+    assert (
+        "feat: subject line" in big["select"][0]["title"].split("\n")[2]
+    )  # 見出し・空行の次が件名
     assert table["small_commit"]["calls"]["progress"] == []  # 小さい変更はダイアログに全文
 
 
@@ -117,7 +120,7 @@ def test_a_big_commit_shows_a_summary_with_a_view_option(table):
     r = table["big_approve"]
     (call,) = r["calls"]["select"]
     assert call["options"] == [APPROVE, VIEW, EDIT, REJECT]
-    assert "message: feat: subject line" in call["title"] and "実行する argv" not in call["title"]
+    assert "feat: subject line" in call["title"] and "実行する argv" not in call["title"]
     assert "- a" not in call["title"]  # 本文の 2 行目以降は、要約には出ない
     assert r["calls"]["editor"] == []
     assert (

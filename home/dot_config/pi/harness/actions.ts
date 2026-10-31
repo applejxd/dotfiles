@@ -339,20 +339,21 @@ function repoLabel(values: Values, repo?: string): string {
 	return last ? `repo ${last}` : "";
 }
 
-/** 要約: リポジトリ・ブランチ・HEAD (短縮)・件名と本文の大きさ・ステージ済みの上位ファイルと統計。width (端末のセル数) に合わせて行を切る */
+/** 要約: 件名 (本文の 1 行目)・本文の大きさ・リポジトリ・ブランチ・HEAD (短縮)・ステージ済みの上位ファイルと統計。width (端末のセル数) に合わせて行を切る。何をコミットするかの件名が、最初の行 */
 export function summaryBody(action: ActionSpec, values: Values, preview: Preview, repo?: string, width = COMPACT_LINE_CHARS): string {
 	const max = Math.max(20, width - 2);
 	const clip = (s: string) => clipCells(s, max);
 	const lines: string[] = [];
 	const where = repoLabel(values, repo);
 	const head = /^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head.slice(0, 8) : preview.head;
-	lines.push(clip(`${where ? `${sanitizeForDisplay(where)} ` : ""}${sanitizeForDisplay(preview.branch)} @ ${head}`));
-	for (const [n, s] of Object.entries(action.fields)) {
-		if (!s.content || values[n] === undefined) continue;
+	const texts = Object.entries(action.fields).filter(([n, s]) => s.content && values[n] !== undefined);
+	for (const [n] of texts) {
 		const all = values[n].split("\n");
-		lines.push(clip(`${n}: ${sanitizeForDisplay(all[0])}`));
+		// 本文の欄が 1 つなら、ラベルは付けない (件名は見れば分かる)
+		lines.push(clip(`${texts.length > 1 ? `${n}: ` : ""}${sanitizeForDisplay(all[0])}`));
 		if (all.length > 1 || values[n].length > max) lines.push(clip(`  (全 ${all.length} 行・${values[n].length} 字。「${VIEW_FULL}」で全文)`));
 	}
+	lines.push(clip(`${where ? `${sanitizeForDisplay(where)} ` : ""}${sanitizeForDisplay(preview.branch)} @ ${head}`));
 	lines.push("files:", ...sanitizeForDisplay(plainStat(compactStat(preview.stat, SUMMARY_FILES))).split("\n").map((l) => clip(`  ${l}`)));
 	return lines.join("\n");
 }
