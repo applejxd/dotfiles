@@ -73,6 +73,7 @@
 | [0047](0047-gitflow.md) | main 一本から gitflow（main / develop / feature）へ切り替える（feature の起票・クローズの AI 化は CHG-0050 で撤去。動機: コミット粒度・main の安定・並列開発） | In progress | ブランチモデルは運用中。起票・クローズは利用者のシェル、AI は feature の worktree の `pi` から `git_commit`。経緯の本文は撤去前の設計の記録 | 実機で、feature の worktree から `git_commit` が期待どおり動くかを確認 | 2026-10-31 |
 | [0050](0050-slim-guarded-action.md) | pi のフルガードの `guarded_action` を、承認つきの commit と gh 投稿に縮める（運用規約はコードで強制せず指示にする） | In progress | 撤去は作業ツリーに実装済み（未コミット）。実機は未検証。指示だけで運用が守られるかは、撤去後の履歴で見る | 実機で feature の worktree から `git_commit` を確認。誘導の再分類を別案件として起こす | 2026-10-31 |
 | [0051](0051-verification-tiers.md) | 検査（verify / verify:all）を段階化し、安い検査を先に・重い検査を後にする（失敗の見つかる順序・並列度・印の記録を直す） | In progress | T0 / T1 / T2 の段階化、fail-fast、並列度の上限と nice、印の開始時記録を実装済み。故意の失敗で 23 秒で止まることを確認 | 印の段と義務の置き場の判断、`AGENTS.md` の縮約、`pi` を起動する試験の起動費用の削減 | 2026-11-01 |
+| [0052](0052-friction-tool-errors.md) | 利用者の摩擦の実測にもとづき、ツールのエラー（特に `guarded_edit`）を減らす（誘導の 3 層への再分類は見送り） | Exploring | 誘導の deny は全呼び出しの約 1%、`guarded_edit` のエラーは 12.6%（oldText 不一致 118 件。読んだのに不一致 42%、未読 33%） | 不一致の差の種類別の内訳、pi 本体の `edit` の一致規則、候補 A・B の評価 | 2026-11-01 |
 | [0026](0026-specialist-agents-with-skills.md) | スキルを役割（子エージェント）へ割り当てる。まず移行の調査役（`migration-analyst`）に、移行スキルの重い読み物と影響の洗い出しを任せ、実行・対話は親に残す | Exploring | 設計は `review` の 1 回目を反映済み（再レビューは未）。子が実際にスキルを使い、`references/` を読めるかは実機で未確認。段 1c（`fork` の解釈）は [CHG-0045](0045-orchestrator-parent.md) へ統合 | 段 1（既存の `explore` にスキル名と範囲を明示して委任）を実機で測る。表と専用役は、その結果しだい | 2026-10-28 |
 
 ## 保留
