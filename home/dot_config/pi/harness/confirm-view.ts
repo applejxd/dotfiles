@@ -319,12 +319,44 @@ export function parseNumstat(text: string): ChangedFile[] {
 	return out;
 }
 
+/** `git merge-tree --write-tree --name-only --no-messages <統合先> <ブランチ>` の結果 (統合の衝突の事前検査)。ref・インデックス・作業ツリーは変えない (オブジェクトだけを書く) */
+export type MergeCheck = { kind: "none" } | { kind: "conflict"; files: string[] } | { kind: "unknown"; why: string };
+
+const OID_LINE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+/**
+ * merge-tree の出力を解釈する。先頭の行が結果の tree の OID、続く行が衝突したファイル名。
+ * 終了コード 0 は衝突なし、1 は衝突あり。この形でないもの (git が古い・ブランチが無い・書き込めない) は、確認できなかったとする。
+ */
+export function parseMergeTree(stdout: string, code: number | undefined, reason?: string): MergeCheck {
+	const lines = stdout.split("\n");
+	if (!OID_LINE.test(lines[0] ?? "")) return { kind: "unknown", why: reason ?? "merge-tree の出力を解釈できない" };
+	if (code === 0) return { kind: "none" };
+	if (code === 1) {
+		const files = [...new Set(lines.slice(1).filter((l) => l.length > 0))];
+		return files.length > 0 ? { kind: "conflict", files } : { kind: "unknown", why: "衝突と報告されたが、ファイル名を読めない" };
+	}
+	return { kind: "unknown", why: reason ?? `merge-tree が終了コード ${code ?? "不明"} で終わった` };
+}
+
 export type IntegrationFacts =
-	| { ok: true; branch: string; target: string; commitCount: number; commits: string[]; files: ChangedFile[] }
+	| {
+			ok: true;
+			branch: string;
+			target: string;
+			commitCount: number;
+			commits: string[];
+			files: ChangedFile[];
+			/** 統合先にあってブランチに無いコミット数 (分岐後に統合先が進んだ件数)。無ければ出さない */
+			targetAhead?: number;
+			/** 無ければ出さない */
+			merge?: MergeCheck;
+	  }
 	| { ok: false; branch: string; target: string; why: string };
 
 const SUMMARY_COMMITS = 5;
 const SUMMARY_FILES = 8;
+const SUMMARY_CONFLICTS = 8;
 const MESSAGE_CHARS = 3000;
 
 function indent(text: string, pad: string): string[] {
@@ -357,6 +389,24 @@ export function integrationSummaryLines(
 				lines.push(`    ${sanitizeForDisplay(f.path)} ${n}`);
 			}
 			if (top.length > SUMMARY_FILES) lines.push(`    … ほか ${top.length - SUMMARY_FILES} ファイル`);
+			const targetName = sanitizeForDisplay(facts.target);
+			if (facts.targetAhead !== undefined) {
+				lines.push(
+					facts.targetAhead > 0
+						? `  ${targetName} は分岐後に ${facts.targetAhead} 件進んでいる`
+						: `  ${targetName} は分岐後に進んでいない`,
+				);
+			}
+			if (facts.merge) {
+				const m = facts.merge;
+				if (m.kind === "none") lines.push(`  衝突の事前検査: なし (git merge-tree)`);
+				else if (m.kind === "unknown") lines.push(`  衝突の事前検査: 確認できなかった (${sanitizeForDisplay(m.why)})`);
+				else {
+					lines.push(`  ⚠ 衝突の事前検査: 衝突あり (${m.files.length} ファイル)。統合すると失敗する見込み`);
+					for (const f of m.files.slice(0, SUMMARY_CONFLICTS)) lines.push(`    ${sanitizeForDisplay(f)}`);
+					if (m.files.length > SUMMARY_CONFLICTS) lines.push(`    … ほか ${m.files.length - SUMMARY_CONFLICTS} ファイル`);
+				}
+			}
 		}
 	}
 	if (msg) {

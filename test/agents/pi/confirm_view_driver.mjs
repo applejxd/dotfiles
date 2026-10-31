@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "confirm-view.ts")).href);
-const { sanitizeForDisplay, shellWords, parseGh, buildMustConfirmView, classifyConfirm, outcomeReason, confirmTimeoutSeconds, parseFinishTarget, extractSquashMessage, parseNumstat } = mod;
+const { sanitizeForDisplay, shellWords, parseGh, buildMustConfirmView, classifyConfirm, outcomeReason, confirmTimeoutSeconds, parseFinishTarget, extractSquashMessage, parseNumstat, parseMergeTree } = mod;
 
 const files = { "body.md": "本文の 1 行目\n2 行目", "big.md": "x".repeat(9000) };
 const reader = (p) => (p in files ? { ok: true, text: files[p] } : { ok: false, why: `${p} を読めない` });
@@ -109,6 +109,30 @@ out.finish = {
 	view_not_finish: finishView("git merge x"),
 	view_other_reason: buildMustConfirmView('git flow feature finish x --squash-message="abc"', "確認が必要な外部への送信・公開 (bypass でも確認する): x", finishReader, facts),
 	view_ansi: finishView('git flow feature finish x --squash-message="a\x1b[31mred"'),
+};
+// 統合の衝突の事前検査 (merge-tree) と、統合先が分岐後に進んだ件数
+const OID = "a".repeat(40);
+const withFacts = (extra) => finishView('git flow feature finish x --squash --squash-message="abc"', { ...facts, ...extra });
+out.precheck = {
+	parse_none: parseMergeTree(`${OID}\n`, 0),
+	parse_conflict: parseMergeTree(`${OID}\nf.txt\ng.txt\n`, 1),
+	parse_conflict_dupes: parseMergeTree(`${OID}\nf.txt\nf.txt\n\n`, 1),
+	parse_sha256: parseMergeTree(`${"b".repeat(64)}\n`, 0),
+	parse_bad_oid: parseMergeTree("usage: git merge-tree\n", 129, "git が失敗した (終了コード 129)"),
+	parse_empty_with_reason: parseMergeTree("", 1, "git が失敗した (終了コード 1)"),
+	parse_empty_no_reason: parseMergeTree("", undefined),
+	parse_conflict_without_files: parseMergeTree(`${OID}\n`, 1),
+	parse_other_code: parseMergeTree(`${OID}\n`, 2),
+	parse_other_code_with_reason: parseMergeTree(`${OID}\n`, 2, "理由"),
+	view_none: withFacts({ targetAhead: 0, merge: { kind: "none" } }),
+	view_conflict: withFacts({ targetAhead: 3, merge: { kind: "conflict", files: ["docs/a.md", "home/x.ts"] } }),
+	view_conflict_many: withFacts({
+		merge: { kind: "conflict", files: Array.from({ length: 12 }, (_, i) => `d/f${i + 1}.md`) },
+	}),
+	view_unknown: withFacts({ merge: { kind: "unknown", why: "git が失敗した (終了コード 129)" } }),
+	view_ahead_only: withFacts({ targetAhead: 1 }),
+	view_old_facts: withFacts({}),
+	view_ansi_file: withFacts({ merge: { kind: "conflict", files: ["a\x1b[31mb"] } }),
 };
 out.classify = {
 	approved: classifyConfirm({ ok: true, elapsedMs: 1, aborted: false, error: false }, 1000),

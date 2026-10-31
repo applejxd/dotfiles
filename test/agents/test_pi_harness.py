@@ -2735,8 +2735,11 @@ def test_integration_commands_are_not_asked_when_the_flag_is_off(env):
 FINISH_COMMAND = 'git flow feature finish x --squash --squash-message="$(cat msg.txt)"'
 
 
-def _repo_with_a_feature(proj):
-    """develop と、1 コミット進んだ feature/x を持つ使い捨てのリポジトリ。msg.txt は未追跡のメッセージ。"""
+def _repo_with_a_feature(proj, diverge=None):
+    """develop と、1 コミット進んだ feature/x を持つ使い捨てのリポジトリ。msg.txt は未追跡のメッセージ。
+
+    diverge: 分岐後に develop を進める。"clean" は別ファイル、"conflict" は feature と同じファイルの別の変更。
+    """
 
     def git(*args):
         subprocess.run(
@@ -2763,9 +2766,18 @@ def _repo_with_a_feature(proj):
     git("commit", "-q", "-m", "base")
     git("checkout", "-q", "-b", "feature/x")
     (proj / "a.md").write_text("one\ntwo\n", encoding="utf-8")
+    if diverge == "conflict":
+        (proj / "base.txt").write_text("feature\n", encoding="utf-8")
     git("add", ".")
     git("commit", "-q", "-m", "feat: a を足す")
     git("checkout", "-q", "develop")
+    if diverge == "conflict":
+        (proj / "base.txt").write_text("develop\n", encoding="utf-8")
+        git("commit", "-q", "-am", "develop: base を変える")
+    elif diverge == "clean":
+        (proj / "other.txt").write_text("other\n", encoding="utf-8")
+        git("add", ".")
+        git("commit", "-q", "-m", "develop: other を足す")
     (proj / "msg.txt").write_text("docs: まとめた件名\n\n本文の行\n", encoding="utf-8")
 
 
@@ -2780,6 +2792,10 @@ def test_the_finish_confirmation_shows_the_summary_and_the_message_file(env):
     assert "コミット: 1 件" in message and "feat: a を足す" in message, message
     assert "変更: 1 ファイル (+2 −0)" in message and "a.md (+2 −0)" in message, message
     assert "squash メッセージ (ファイル msg.txt の内容。ハーネスが読んだもの):" in message, message
+    assert (
+        "  develop は分岐後に進んでいない" in message
+        and "衝突の事前検査: なし (git merge-tree)" in message
+    ), message
     assert "  docs: まとめた件名" in message and "  本文の行" in message, message
     assert "not approved:" in result and "利用者が拒否した" in result, result
 
@@ -2808,3 +2824,45 @@ def test_the_finish_confirmation_still_appears_when_git_cannot_summarize(env):
     assert len(requests) == 1, requests
     message = requests[0]["message"]
     assert "取得できなかった" in message and "  docs: 件名" in message, message
+
+
+def _git_out(proj, *args):
+    return subprocess.run(
+        ["git", *args], cwd=proj, check=True, capture_output=True, text=True, encoding="utf-8"
+    ).stdout
+
+
+@needs_must_confirm
+def test_the_finish_confirmation_warns_about_a_conflict_without_changing_the_repository(env):
+    _with_integration_rules(env)
+    proj = env["proj"]
+    _repo_with_a_feature(proj, diverge="conflict")
+    before = [
+        _git_out(proj, *a)
+        for a in (("for-each-ref",), ("rev-parse", "HEAD"), ("status", "--porcelain"))
+    ]
+    requests, result = _rpc_outcome(env, bash_call(FINISH_COMMAND), [False], PI_HARNESS_BYPASS="1")
+    assert len(requests) == 1, requests
+    message = requests[0]["message"]
+    assert "  develop は分岐後に 1 件進んでいる" in message, message
+    assert "⚠ 衝突の事前検査: 衝突あり (1 ファイル)" in message and "    base.txt" in message, (
+        message
+    )
+    assert "not approved:" in result and "利用者が拒否した" in result, result
+    # ref・HEAD・インデックス・作業ツリーは変わらない (merge-tree が書くのはオブジェクトだけ)
+    after = [
+        _git_out(proj, *a)
+        for a in (("for-each-ref",), ("rev-parse", "HEAD"), ("status", "--porcelain"))
+    ]
+    assert after == before
+
+
+@needs_must_confirm
+def test_the_finish_confirmation_reports_no_conflict_when_develop_moved_elsewhere(env):
+    _with_integration_rules(env)
+    _repo_with_a_feature(env["proj"], diverge="clean")
+    requests, _result = _rpc_outcome(env, bash_call(FINISH_COMMAND), [False], PI_HARNESS_BYPASS="1")
+    assert len(requests) == 1, requests
+    message = requests[0]["message"]
+    assert "  develop は分岐後に 1 件進んでいる" in message, message
+    assert "衝突の事前検査: なし (git merge-tree)" in message and "⚠" not in message, message

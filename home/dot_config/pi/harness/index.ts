@@ -25,7 +25,7 @@ import { integrationConfig, tightenIntegration } from "./integration-gate.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
-import { MAX_BODY_FILE_BYTES, MUST_CONFIRM_INTEGRATION_PREFIX, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, parseFinishTarget, parseNumstat, type BodyFileResult, type ConfirmRaw, type IntegrationFacts } from "./confirm-view.ts";
+import { MAX_BODY_FILE_BYTES, MUST_CONFIRM_INTEGRATION_PREFIX, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, parseFinishTarget, parseMergeTree, parseNumstat, type BodyFileResult, type ConfirmRaw, type IntegrationFacts, type MergeCheck } from "./confirm-view.ts";
 import { gitSync } from "./gitrun.ts";
 import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
@@ -158,7 +158,7 @@ const callDecider = createCallDecider({
 
 const integration = integrationConfig(rules.judge?.common);
 
-// `git flow feature finish <名前>` の確認に添える、統合の内容 (git の読み取りだけ)。統合先は [pi.integrate] target (既定 develop)
+// `git flow feature finish <名前>` の確認に添える、統合の内容 (git の読み取りと merge-tree。ref・インデックス・作業ツリーは変えない)。統合先は [pi.integrate] target (既定 develop)
 const REF_NAME = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
 const integrationTarget = ((t: unknown) => (typeof t === "string" && REF_NAME.test(t) ? t : "develop"))(rules.judge?.common?.pi?.integrate?.target);
 function gatherIntegrationFacts(command: string, cwd: string): IntegrationFacts | undefined {
@@ -170,12 +170,18 @@ function gatherIntegrationFacts(command: string, cwd: string): IntegrationFacts 
 	if (!count.ok) return { ok: false, ...base, why: count.reason };
 	const log = gitSync(["log", "--format=%h %s", "--max-count=5", range, "--"], cwd);
 	const stat = gitSync(["diff", "--numstat", `${integrationTarget}...${f.branch}`, "--"], cwd);
+	// 統合先が分岐後に進んだ件数と、統合したときの衝突の事前検査 (merge-tree。ref・インデックス・作業ツリーは変えない。終了コード 1 が「衝突あり」)
+	const ahead = gitSync(["rev-list", "--count", `${f.branch}..${integrationTarget}`, "--"], cwd);
+	const mt = gitSync(["merge-tree", "--write-tree", "--name-only", "--no-messages", integrationTarget, f.branch], cwd);
+	const merge: MergeCheck = mt.ok ? parseMergeTree(mt.stdout, 0) : parseMergeTree(mt.stdout ?? "", mt.code, mt.reason);
 	return {
 		ok: true,
 		...base,
 		commitCount: Number.parseInt(count.stdout.trim(), 10) || 0,
 		commits: log.ok ? log.stdout.split("\n").filter((l) => l.length > 0) : [],
 		files: stat.ok ? parseNumstat(stat.stdout) : [],
+		...(ahead.ok ? { targetAhead: Number.parseInt(ahead.stdout.trim(), 10) || 0 } : {}),
+		merge,
 	};
 }
 

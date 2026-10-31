@@ -294,3 +294,75 @@ def test_other_confirmations_are_unchanged(table, key):
 def test_control_characters_in_the_message_are_made_visible(table):
     body = table["finish"]["view_ansi"]["body"]
     assert "\x1b" not in body and "a\\x1b[31mred" in body
+
+
+# --- 統合の衝突の事前検査 (git merge-tree) と、統合先の進み ---
+
+OID40 = "a" * 40
+
+
+def test_merge_tree_output_is_read_by_exit_code_and_the_first_line(table):
+    p = table["precheck"]
+    assert p["parse_none"] == {"kind": "none"}
+    assert p["parse_sha256"] == {"kind": "none"}
+    assert p["parse_conflict"] == {"kind": "conflict", "files": ["f.txt", "g.txt"]}
+    assert p["parse_conflict_dupes"] == {"kind": "conflict", "files": ["f.txt"]}
+    # 先頭が OID でないものは、確認できなかった (git が古い・ブランチが無い・書き込めない)
+    assert p["parse_bad_oid"] == {"kind": "unknown", "why": "git が失敗した (終了コード 129)"}
+    assert p["parse_empty_with_reason"] == {
+        "kind": "unknown",
+        "why": "git が失敗した (終了コード 1)",
+    }
+    assert p["parse_empty_no_reason"] == {
+        "kind": "unknown",
+        "why": "merge-tree の出力を解釈できない",
+    }
+    # 衝突と言いながらファイル名が無い・想定外の終了コードは、衝突なしにしない
+    assert p["parse_conflict_without_files"]["kind"] == "unknown"
+    assert p["parse_other_code"] == {
+        "kind": "unknown",
+        "why": "merge-tree が終了コード 2 で終わった",
+    }
+    assert p["parse_other_code_with_reason"] == {"kind": "unknown", "why": "理由"}
+
+
+def test_the_view_shows_no_conflict_and_whether_the_target_moved(table):
+    body = table["precheck"]["view_none"]["body"]
+    assert "  develop は分岐後に進んでいない\n  衝突の事前検査: なし (git merge-tree)\n" in body
+    assert "⚠" not in body
+    # 変更の一覧のあとに出す (変更の行と一覧を離さない)
+    assert body.index("… ほか 3 ファイル") < body.index("develop は分岐後に")
+    # メッセージは、その後ろ
+    assert body.index("衝突の事前検査") < body.index("squash メッセージ:")
+
+
+def test_the_view_warns_about_a_conflict_and_lists_the_files(table):
+    body = table["precheck"]["view_conflict"]["body"]
+    assert "  develop は分岐後に 3 件進んでいる\n" in body
+    assert (
+        "  ⚠ 衝突の事前検査: 衝突あり (2 ファイル)。統合すると失敗する見込み\n    docs/a.md\n    home/x.ts\n"
+        in body
+    )
+    many = table["precheck"]["view_conflict_many"]["body"]
+    assert "衝突あり (12 ファイル)" in many and "d/f8.md" in many and "d/f9.md" not in many
+    assert "    … ほか 4 ファイル" in many
+
+
+def test_the_view_says_when_the_precheck_could_not_run(table):
+    body = table["precheck"]["view_unknown"]["body"]
+    assert "  衝突の事前検査: 確認できなかった (git が失敗した (終了コード 129))\n" in body
+    assert "⚠" not in body  # 衝突とは言わない
+    # 統合先の進みだけが取れたとき
+    ahead = table["precheck"]["view_ahead_only"]["body"]
+    assert "develop は分岐後に 1 件進んでいる" in ahead and "衝突の事前検査" not in ahead
+
+
+def test_facts_without_the_new_fields_show_no_new_lines(table):
+    body = table["precheck"]["view_old_facts"]["body"]
+    assert "分岐後" not in body and "衝突の事前検査" not in body
+    assert "変更: 11 ファイル" in body  # 従来の要約は、そのまま
+
+
+def test_control_characters_in_conflicting_file_names_are_made_visible(table):
+    body = table["precheck"]["view_ansi_file"]["body"]
+    assert "\x1b" not in body and "a\\x1b[31mb" in body
