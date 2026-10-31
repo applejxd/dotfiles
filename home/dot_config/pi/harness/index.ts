@@ -25,7 +25,8 @@ import { integrationConfig, tightenIntegration } from "./integration-gate.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
-import { MAX_BODY_FILE_BYTES, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, type BodyFileResult, type ConfirmRaw } from "./confirm-view.ts";
+import { MAX_BODY_FILE_BYTES, MUST_CONFIRM_INTEGRATION_PREFIX, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, parseFinishTarget, parseNumstat, type BodyFileResult, type ConfirmRaw, type IntegrationFacts } from "./confirm-view.ts";
+import { gitSync } from "./gitrun.ts";
 import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { auditConditions, auditFormat, summarizeCalls } from "./audit.ts";
@@ -156,6 +157,27 @@ const callDecider = createCallDecider({
 });
 
 const integration = integrationConfig(rules.judge?.common);
+
+// `git flow feature finish <名前>` の確認に添える、統合の内容 (git の読み取りだけ)。統合先は [pi.integrate] target (既定 develop)
+const REF_NAME = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
+const integrationTarget = ((t: unknown) => (typeof t === "string" && REF_NAME.test(t) ? t : "develop"))(rules.judge?.common?.pi?.integrate?.target);
+function gatherIntegrationFacts(command: string, cwd: string): IntegrationFacts | undefined {
+	const f = parseFinishTarget(command);
+	if (!f) return undefined;
+	const base = { branch: f.branch, target: integrationTarget };
+	const range = `${integrationTarget}..${f.branch}`;
+	const count = gitSync(["rev-list", "--count", range, "--"], cwd);
+	if (!count.ok) return { ok: false, ...base, why: count.reason };
+	const log = gitSync(["log", "--format=%h %s", "--max-count=5", range, "--"], cwd);
+	const stat = gitSync(["diff", "--numstat", `${integrationTarget}...${f.branch}`, "--"], cwd);
+	return {
+		ok: true,
+		...base,
+		commitCount: Number.parseInt(count.stdout.trim(), 10) || 0,
+		commits: log.ok ? log.stdout.split("\n").filter((l) => l.length > 0) : [],
+		files: stat.ok ? parseNumstat(stat.stdout) : [],
+	};
+}
 
 export function decide(tool: string, input: unknown, cwd: string): Decision {
 	// 保護ブランチへの統合は、判定器の結果を必須確認に引き上げる (緩める方向には働かない)。see integration-gate.ts
@@ -419,7 +441,8 @@ export default async function (pi: ExtensionAPI) {
 				// UI が無い実行 (print) と子 (RPC の確認は自動で取り消される) では、確認が要る操作は拒否する
 				if (!ctx.hasUI || CHILD) return block(NO_UI_REASON);
 				const text = isShell ? String(event.input?.command ?? "") : `${tool}: ${JSON.stringify(event.input)}`;
-				const view = buildMustConfirmView(text, d.reason, (p) => readBodyFile(p, ctx.cwd, tool));
+				const facts = isShell && d.reason.startsWith(MUST_CONFIRM_INTEGRATION_PREFIX) ? gatherIntegrationFacts(text, ctx.cwd) : undefined;
+				const view = buildMustConfirmView(text, d.reason, (p) => readBodyFile(p, ctx.cwd, tool), facts);
 				if (view.kind === "block") return block(view.reason);
 				const timeoutMs = confirmTimeoutSeconds(rules) * 1000;
 				const outcome = classifyConfirm(await confirmDetailed(ctx, view.title, view.body, timeoutMs), timeoutMs);

@@ -2323,8 +2323,9 @@ def _with_confirm_rules(env, timeout_seconds=300):
     path.write_text(json.dumps(rules), encoding="utf-8")
 
 
-def _rpc_outcome(env, calls, answers, timeout=90, **env_extra):
+def _rpc_outcome(env, calls, answers, timeout=90, on_request=None, **env_extra):
     """RPC で 1 回呼ぶ。answers の None は確認に応えない (pi の期限を待つ)。
+    on_request(n, 要求) は、n 番目の確認に応える直前に呼ぶ (承認の間の変化を作る試験用)。
 
     返すのは (確認の要求, ツールの結果の本文)。
     """
@@ -2355,6 +2356,8 @@ def _rpc_outcome(env, calls, answers, timeout=90, **env_extra):
             if event.get("type") == "extension_ui_request" and event.get("method") == "confirm":
                 requests.append(event)
                 n = len(requests)
+                if on_request is not None:
+                    on_request(n, event)
                 answer = answers[n - 1] if n <= len(answers) else False
                 if answer is not None:
                     reply = {
@@ -2725,3 +2728,83 @@ def test_integration_commands_are_not_asked_when_the_flag_is_off(env):
         env, bash_call("git flow feature finish x"), [False], PI_HARNESS_BYPASS="1"
     )
     assert not [r for r in requests if "保護ブランチへの統合" in r.get("title", "")], requests
+
+
+# --- git flow finish の確認に、統合の内容と squash メッセージを出す (実際の git と pi の tool_call) ---
+
+FINISH_COMMAND = 'git flow feature finish x --squash --squash-message="$(cat msg.txt)"'
+
+
+def _repo_with_a_feature(proj):
+    """develop と、1 コミット進んだ feature/x を持つ使い捨てのリポジトリ。msg.txt は未追跡のメッセージ。"""
+
+    def git(*args):
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@example.com",
+                "-c",
+                "commit.gpgsign=false",
+                *args,
+            ],
+            cwd=proj,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+
+    git("init", "-q", "-b", "develop")
+    (proj / "base.txt").write_text("base\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-q", "-m", "base")
+    git("checkout", "-q", "-b", "feature/x")
+    (proj / "a.md").write_text("one\ntwo\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-q", "-m", "feat: a を足す")
+    git("checkout", "-q", "develop")
+    (proj / "msg.txt").write_text("docs: まとめた件名\n\n本文の行\n", encoding="utf-8")
+
+
+@needs_must_confirm
+def test_the_finish_confirmation_shows_the_summary_and_the_message_file(env):
+    _with_integration_rules(env)
+    _repo_with_a_feature(env["proj"])
+    requests, result = _rpc_outcome(env, bash_call(FINISH_COMMAND), [False], PI_HARNESS_BYPASS="1")
+    assert len(requests) == 1, requests
+    message = requests[0]["message"]
+    assert "統合の内容: feature/x → develop (squash)" in message, message
+    assert "コミット: 1 件" in message and "feat: a を足す" in message, message
+    assert "変更: 1 ファイル (+2 −0)" in message and "a.md (+2 −0)" in message, message
+    assert "squash メッセージ (ファイル msg.txt の内容。ハーネスが読んだもの):" in message, message
+    assert "  docs: まとめた件名" in message and "  本文の行" in message, message
+    assert "not approved:" in result and "利用者が拒否した" in result, result
+
+
+@needs_must_confirm
+def test_the_finish_is_stopped_when_the_message_file_changes_after_approval(env):
+    _with_integration_rules(env)
+    _repo_with_a_feature(env["proj"])
+
+    def change_the_message(_n, _request):
+        (env["proj"] / "msg.txt").write_text("fix: 承認の後に差し替えた\n", encoding="utf-8")
+
+    requests, result = _rpc_outcome(
+        env, bash_call(FINISH_COMMAND), [True], on_request=change_the_message, PI_HARNESS_BYPASS="1"
+    )
+    assert len(requests) == 1, requests
+    assert "確認した本文のファイルが承認の後に変わった" in result, result
+
+
+@needs_must_confirm
+def test_the_finish_confirmation_still_appears_when_git_cannot_summarize(env):
+    # git のリポジトリではない作業ディレクトリ: 要約は取れないが、確認は出す (止めない)
+    _with_integration_rules(env)
+    (env["proj"] / "msg.txt").write_text("docs: 件名\n", encoding="utf-8")
+    requests, _result = _rpc_outcome(env, bash_call(FINISH_COMMAND), [False], PI_HARNESS_BYPASS="1")
+    assert len(requests) == 1, requests
+    message = requests[0]["message"]
+    assert "取得できなかった" in message and "  docs: 件名" in message, message

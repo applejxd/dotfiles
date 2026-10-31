@@ -235,11 +235,168 @@ function field(name: string, value: string): string {
 	return v.includes("\n") ? `  ${name}:\n${v.split("\n").map((l) => `    ${l}`).join("\n")}` : `  ${name}: ${v}`;
 }
 
+// --- git flow finish の確認 (統合の内容と squash メッセージ) ---
+// 純関数。git の結果は呼び出し側 (index.ts) が集めて渡す
+
+export type FinishTarget = { topic: string; name: string; branch: string };
+
+/** 先頭が `git flow feature|bugfix finish <name>` のときの対象。`cd` や `&&` が付く形は解釈しない */
+export function parseFinishTarget(command: string): FinishTarget | null {
+	const m = /^\s*git\s+flow\s+(feature|bugfix)\s+finish\s+([A-Za-z0-9][A-Za-z0-9._\/-]*)(?=\s|$)/.exec(command);
+	if (!m) return null;
+	const topic = m[1];
+	const name = m[2];
+	return { topic, name, branch: name.startsWith(`${topic}/`) ? name : `${topic}/${name}` };
+}
+
+export type SquashMessage =
+	| { kind: "literal"; text: string }
+	| { kind: "file"; path: string }
+	| { kind: "unresolved"; why: string };
+
+// 引用された語 (または引用なしの語) の先頭の 1 つ。展開 ($ と `) を含むものは null
+function firstShellWord(s: string): string | null {
+	const c = s[0];
+	if (c === "'") {
+		const j = s.indexOf("'", 1);
+		return j < 0 ? null : s.slice(1, j);
+	}
+	if (c === '"') {
+		let out = "";
+		let i = 1;
+		while (i < s.length) {
+			const d = s[i];
+			if (d === '"') return out;
+			if (d === "$" || d === "`") return null;
+			if (d === "\\") {
+				const nx = s[i + 1];
+				if (nx === undefined) return null;
+				if (nx === "\n") {
+					i += 2;
+					continue;
+				}
+				if ('"\\$`'.includes(nx)) {
+					out += nx;
+					i += 2;
+					continue;
+				}
+				out += "\\";
+				i++;
+				continue;
+			}
+			out += d;
+			i++;
+		}
+		return null;
+	}
+	const m = /^[^\s"'`$;&|<>(){}*?~#\\]+/.exec(s);
+	return m ? m[0] : null;
+}
+
+/** `--squash-message` の値。`"$(cat <path>)"` だけはファイルとして読む。ほかの展開は確認画面では解けない */
+export function extractSquashMessage(command: string): SquashMessage | null {
+	const m = /--squash-message(=|[ \t]+)/.exec(command);
+	if (!m) return null;
+	const rest = command.slice(m.index + m[0].length);
+	const sub = /^"?\$\(\s*cat\s+([^\s"'`$;&|<>()\\-][^\s"'`$;&|<>()\\]*)\s*\)"?(?=\s|$)/.exec(rest);
+	if (sub) return { kind: "file", path: sub[1] };
+	const w = firstShellWord(rest);
+	return w === null
+		? { kind: "unresolved", why: "コマンド置換や変数を含むので、確認画面では展開できない (実行時に展開される)" }
+		: { kind: "literal", text: w };
+}
+
+export type ChangedFile = { path: string; add: number | null; del: number | null };
+
+/** `git diff --numstat` の出力。バイナリ (`-`) は null */
+export function parseNumstat(text: string): ChangedFile[] {
+	const out: ChangedFile[] = [];
+	for (const line of text.split("\n")) {
+		const m = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line);
+		if (!m) continue;
+		out.push({ path: m[3], add: m[1] === "-" ? null : Number(m[1]), del: m[2] === "-" ? null : Number(m[2]) });
+	}
+	return out;
+}
+
+export type IntegrationFacts =
+	| { ok: true; branch: string; target: string; commitCount: number; commits: string[]; files: ChangedFile[] }
+	| { ok: false; branch: string; target: string; why: string };
+
+const SUMMARY_COMMITS = 5;
+const SUMMARY_FILES = 8;
+const MESSAGE_CHARS = 3000;
+
+function indent(text: string, pad: string): string[] {
+	return sanitizeForDisplay(text).split("\n").map((l) => (l.length > 0 ? `${pad}${l}` : ""));
+}
+
+/** 統合の内容 (git の結果) と squash メッセージを、確認画面に足す行にする。足すものが無ければ空 */
+export function integrationSummaryLines(
+	command: string,
+	facts: IntegrationFacts | undefined,
+	msg: SquashMessage | null,
+	msgFile: BodyFileResult | undefined,
+): string[] {
+	const lines: string[] = [];
+	if (facts) {
+		const squash = msg !== null || /(^|\s)--squash(\s|$)/.test(command);
+		lines.push(`統合の内容: ${sanitizeForDisplay(facts.branch)} → ${sanitizeForDisplay(facts.target)}${squash ? " (squash)" : ""}`);
+		if (!facts.ok) {
+			lines.push(`  (取得できなかった: ${sanitizeForDisplay(facts.why)})`);
+		} else {
+			lines.push(`  コミット: ${facts.commitCount} 件`);
+			for (const c of facts.commits.slice(0, SUMMARY_COMMITS)) lines.push(`    ${sanitizeForDisplay(c)}`);
+			if (facts.commitCount > SUMMARY_COMMITS) lines.push(`    … ほか ${facts.commitCount - SUMMARY_COMMITS} 件`);
+			const add = facts.files.reduce((n, f) => n + (f.add ?? 0), 0);
+			const del = facts.files.reduce((n, f) => n + (f.del ?? 0), 0);
+			lines.push(`  変更: ${facts.files.length} ファイル (+${add} −${del})`);
+			const top = [...facts.files].sort((a, b) => (b.add ?? 0) + (b.del ?? 0) - ((a.add ?? 0) + (a.del ?? 0)));
+			for (const f of top.slice(0, SUMMARY_FILES)) {
+				const n = f.add === null || f.del === null ? "(バイナリ)" : `(+${f.add} −${f.del})`;
+				lines.push(`    ${sanitizeForDisplay(f.path)} ${n}`);
+			}
+			if (top.length > SUMMARY_FILES) lines.push(`    … ほか ${top.length - SUMMARY_FILES} ファイル`);
+		}
+	}
+	if (msg) {
+		let label: string | null = null;
+		let text: string | undefined;
+		if (msg.kind === "literal") {
+			label = "squash メッセージ:";
+			text = msg.text;
+		} else if (msg.kind === "file") {
+			if (msgFile?.ok) {
+				label = `squash メッセージ (ファイル ${sanitizeForDisplay(msg.path)} の内容。ハーネスが読んだもの):`;
+				// `$(cat ...)` は末尾の改行を落とす
+				text = msgFile.text.replace(/\n+$/, "");
+			} else {
+				lines.push(`squash メッセージ: ${sanitizeForDisplay(msgFile?.why ?? `ファイル ${msg.path} を読めない`)}。確認画面では見せられない (実行時に読まれる)`);
+			}
+		} else {
+			lines.push(`squash メッセージ: ${sanitizeForDisplay(msg.why)}`);
+		}
+		if (label !== null && text !== undefined) {
+			const clipped = text.length > MESSAGE_CHARS;
+			lines.push(label, ...indent(clipped ? text.slice(0, MESSAGE_CHARS) : text, "  "));
+			if (clipped) lines.push("  … (以降は省略。全文は上のコマンドまたはファイル)");
+		}
+	}
+	return lines;
+}
+
 /**
  * mustConfirm の確認画面を組む。コマンドは全文を出す。gh なら解析結果を参考として別に出し、
- * --body-file は readBodyFile で読んで本文を出す。読めない・長すぎるときは確認を出さず block
+ * --body-file は readBodyFile で読んで本文を出す。読めない・長すぎるときは確認を出さず block。
+ * 統合の確認で、`git flow feature finish` なら、統合の内容 (facts。git の結果) と squash メッセージも出す
+ * (`"$(cat <path>)"` はファイルを読んで見せ、承認の後に変わったら実行を止める)
  */
-export function buildMustConfirmView(command: string, reason: string, readBodyFile: (path: string) => BodyFileResult): MustView {
+export function buildMustConfirmView(
+	command: string,
+	reason: string,
+	readBodyFile: (path: string) => BodyFileResult,
+	facts?: IntegrationFacts,
+): MustView {
 	const parsed = parseGh(command);
 	let fileText: string | undefined;
 	if (parsed?.bodyFile !== undefined) {
@@ -271,10 +428,20 @@ export function buildMustConfirmView(command: string, reason: string, readBodyFi
 		lines.push("", `本文ファイル ${sanitizeForDisplay(parsed.bodyFile)} の内容 (ハーネスが読んだもの):`, sanitizeForDisplay(fileText));
 	}
 	// 統合の確認は、見出しと同じ接頭辞と、「コマンド (全文)」の重複になる末尾のコマンドを落とす
+	let squashFile: { path: string; text: string } | undefined;
+	if (integration && parseFinishTarget(command)) {
+		const msg = extractSquashMessage(command);
+		const msgFile = msg?.kind === "file" ? readBodyFile(msg.path) : undefined;
+		const extra = integrationSummaryLines(command, facts, msg, msgFile);
+		if (extra.length > 0) lines.push("", ...extra);
+		if (msg?.kind === "file" && msgFile?.ok) squashFile = { path: msg.path, text: msgFile.text };
+	}
+	// 統合の確認は、見出しと同じ接頭辞と、「コマンド (全文)」の重複になる末尾のコマンドを落とす
 	const shown = integration ? reason.slice(MUST_CONFIRM_INTEGRATION_PREFIX.length).split("\n実行しようとしているコマンド:")[0] : reason;
 	lines.push("", `理由: ${sanitizeForDisplay(shown)}`);
 	const view: MustView = { kind: "confirm", title: integration ? INTEGRATION_CONFIRM_TITLE : MUST_CONFIRM_TITLE, body: lines.join("\n") };
 	if (fileText !== undefined && parsed?.bodyFile !== undefined) view.bodyFile = { path: parsed.bodyFile, text: fileText };
+	else if (squashFile) view.bodyFile = squashFile;
 	return view;
 }
 

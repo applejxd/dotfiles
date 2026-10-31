@@ -185,3 +185,112 @@ def test_the_integration_confirmation_has_its_own_title_and_lead(table):
     # 外部送信の確認の見出しと導入は、そのまま
     basic = table["view"]["basic"]
     assert "外部への送信・公開" in basic["title"] and "保護ブランチ" not in basic["body"]
+
+
+# --- git flow finish の確認 (統合の内容と squash メッセージ) ---
+
+
+def test_finish_target_is_read_only_from_a_plain_leading_command(table):
+    f = table["finish"]
+    assert f["target_plain"] == {"topic": "feature", "name": "x", "branch": "feature/x"}
+    assert f["target_prefixed"] == {"topic": "bugfix", "name": "bugfix/y", "branch": "bugfix/y"}
+    # release・hotfix、cd や && が付く形、名前より先のオプションは、解釈しない
+    for key in ("target_other", "target_chained", "target_flag_first"):
+        assert f[key] is None, key
+
+
+def test_squash_message_forms(table):
+    f = table["finish"]
+    assert f["msg_none"] is None
+    assert f["msg_eq_dq"] == {"kind": "literal", "text": "a b\nc"}
+    assert f["msg_space_sq"] == {"kind": "literal", "text": "a $b"}
+    assert f["msg_bare"] == {"kind": "literal", "text": "docs:one"}
+    # `"$(cat <path>)"` だけをファイルとして読む。オプションに見える引数・ほかの展開は、解かない
+    assert f["msg_file"] == {"kind": "file", "path": "msg.txt"}
+    assert f["msg_file_unquoted"] == {"kind": "file", "path": "dir/msg.txt"}
+    for key in ("msg_file_option_like", "msg_other_subst", "msg_var"):
+        assert f[key]["kind"] == "unresolved", key
+
+
+def test_numstat_keeps_binary_as_null(table):
+    assert table["finish"]["numstat"] == [
+        {"path": "a.md", "add": 3, "del": 1},
+        {"path": "b.png", "add": None, "del": None},
+    ]
+
+
+def test_finish_view_shows_the_integration_summary_and_the_literal_message(table):
+    v = table["finish"]["view_literal"]
+    assert v["kind"] == "confirm" and "bodyFile" not in v
+    body = v["body"]
+    assert "統合の内容: feature/x → develop (squash)" in body
+    assert "コミット: 7 件" in body and "eee5555 件名 5" in body and "fff6666" not in body
+    assert "… ほか 2 件" in body
+    assert "変更: 11 ファイル (+55 −5)" in body
+    # 変更の大きいファイルから 8 件、残りは件数
+    assert (
+        body.index("docs/f9.md (+9 −1)")
+        < body.index("docs/f10.md (+10 −0)")
+        < body.index("docs/f4.md")
+    )
+    assert "docs/f1.md" not in body and "… ほか 3 ファイル" in body
+    assert "squash メッセージ:\n  docs: 件名\n\n  本文" in body
+    # 理由は最後のまま
+    assert body.rstrip().endswith("理由: git flow feature finish (保護ブランチへ統合・削除する)")
+
+
+def test_finish_view_reads_the_message_file_and_pins_it(table):
+    v = table["finish"]["view_file"]
+    assert v["kind"] == "confirm"
+    assert "squash メッセージ (ファイル msg.txt の内容。ハーネスが読んだもの):" in v["body"]
+    assert (
+        "  docs: 件名\n\n  本文の 1 行目\n\n理由:" in v["body"]
+    )  # 末尾の改行は落とす ($(cat) と同じ)
+    # 承認の後に変わったら実行を止めるための印 (index.ts の execute() が読み直して比べる)
+    assert v["bodyFile"] == {"path": "msg.txt", "text": "docs: 件名\n\n本文の 1 行目\n\n"}
+
+
+def test_finish_view_does_not_block_when_the_message_cannot_be_shown(table):
+    f = table["finish"]
+    missing = f["view_file_missing"]
+    assert missing["kind"] == "confirm" and "bodyFile" not in missing
+    assert (
+        "squash メッセージ: nope.txt を読めない。確認画面では見せられない (実行時に読まれる)"
+        in missing["body"]
+    )
+    assert "統合の内容: feature/x → develop (squash)" in missing["body"]
+    unresolved = f["view_unresolved"]
+    assert unresolved["kind"] == "confirm" and "bodyFile" not in unresolved
+    assert (
+        "squash メッセージ: コマンド置換や変数を含むので、確認画面では展開できない"
+        in unresolved["body"]
+    )
+
+
+def test_a_long_message_is_clipped(table):
+    body = table["finish"]["view_file_long"]["body"]
+    assert "y" * 3000 in body and "y" * 3001 not in body
+    assert "以降は省略" in body
+
+
+def test_the_summary_follows_the_flags_and_the_git_result(table):
+    f = table["finish"]
+    assert "統合の内容: feature/x → develop (squash)\n" in f["view_no_message"]["body"]
+    assert "squash メッセージ" not in f["view_no_message"]["body"]
+    assert "統合の内容: feature/x → develop\n" in f["view_no_squash"]["body"]
+    failed = f["view_facts_failed"]["body"]
+    assert "(取得できなかった: git が失敗した (終了コード 128))" in failed
+    # git の結果が無くても、メッセージは見せる
+    no_facts = f["view_no_facts"]["body"]
+    assert "統合の内容" not in no_facts and "squash メッセージ:\n  abc" in no_facts
+
+
+@pytest.mark.parametrize("key", ["view_not_finish", "view_other_reason"])
+def test_other_confirmations_are_unchanged(table, key):
+    body = table["finish"][key]["body"]
+    assert "統合の内容" not in body and "squash メッセージ" not in body
+
+
+def test_control_characters_in_the_message_are_made_visible(table):
+    body = table["finish"]["view_ansi"]["body"]
+    assert "\x1b" not in body and "a\\x1b[31mred" in body
