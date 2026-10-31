@@ -1592,7 +1592,7 @@
    ]
   },
   "settings": {
-   "defaultThinkingLevel": "medium",
+   "defaultThinkingLevel": "xhigh",
    "defaultTools": [],
    "extensions": [
     "~/.config/pi/harness",

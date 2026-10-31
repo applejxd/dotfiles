@@ -24,7 +24,7 @@
 
 - `routine` にする案: 読むだけの探索なので軽くてよいが、今の Copilot は `routine` も `default` も
   `claude-sonnet-5.5` で差が出ない。差が出るのは Bedrock の `#low` だけ。**今は変えない**
-- 未確認: 子へ `settings.json` の `defaultThinkingLevel`（今は `medium`）が実際に効いているか
+- 未確認: 子へ `settings.json` の `defaultThinkingLevel`（2026-11-01 に `medium` から `xhigh` へ上げた）が実際に効いているか。`:effort` の無い子（`explore`・`review`）は効く見込み（[記録 M5](subagent-model-assignment.md)）
 
 - review の節の bullet: 「`review` を `explorer` 役にしたのは、差分を親が貼らずに済ませるため（2026-10-21、利用者の判断）。以前は `reader` で `git` を使えず、差分を依頼文へ入れる必要があった」
 - 結果の保持と通知の見出しの bullet: 「試験は `test_finished_result_can_be_read_with_status_until_the_job_is_closed` / `test_background_notification_has_sequence_and_times_and_the_result_is_saved`（親が実行して通った。2026-10-22）」

@@ -157,3 +157,22 @@
 - `deep` 階層は、すでにある（Bedrock は `us.anthropic.claude-opus-5-5#high`、Copilot は `claude-sonnet-5.5#high`）。Copilot では、**モデルが既定と同じで、推論の強さだけが違う**（Opus はカタログに無い）
 - 子は会話を見ないので、`plan` の質は、**依頼文の自己完結さ**と、「守る条件」の受け渡しで決まる
 - Opus は費用が高く、これまで「明示の指示のときだけ」としていた（`common.toml.tmpl` の注記）。`plan` の既定を `deep`（Bedrock は Opus）にするのは、その方針の**例外にする決定**になる
+
+## 記録 M5 — 2026-11-01（pi の親の既定を `medium` から `xhigh` へ）
+
+- **問い**: 親の `defaultThinkingLevel` を上げると、軽い依頼でも遅く高くなるか
+- **方法**: 同じ読み取りの依頼（`scripts/verify.py` の選択規則の要約）を、effort だけ変えて**各 1 回**測った。標本が 1 つなので、ばらつきの範囲かもしれない。軽い依頼の結果で、難しい依頼には当てはまらない
+- **結果**:
+
+  | effort | 時間 | 呼び出し | トークン | 費用 |
+  | --- | --- | --- | --- | --- |
+  | `medium` | 18 秒 | 5 | 10.5 万 | $0.089 |
+  | `xhigh` | 19 秒 | 4 | 8.5 万 | $0.095 |
+  | `max` | 324 秒 | 14 | 60 万 | $0.686 |
+
+  `medium` と `xhigh` はほぼ同じ。`max` だけが桁で違う（手数が増え、費用は約 7 倍）
+- **決定**（利用者）: 親の既定を `xhigh` にする（`[pi.settings] defaultThinkingLevel`）。`plan`（子）は今のまま（`deep` = Copilot は Sonnet 5.5 の `xhigh`）。`max` は既定にしない
+- **子への影響**: 子の起動は `--model provider/id[:effort]` で、`:effort` が無いと pi の既定（`settings.json` の `defaultThinkingLevel`）になる（[子のモデルと effort の選択](../../spec/guard/pi-subagents.md)）。
+  このため、階層に `#variant` が無い子は `xhigh` になる見込み: `explore`（`tier` なし。親のモデルのまま）と `review`（`second_opinion` に `#` なし）。
+  `worker`・`commit`（`#medium`）と `plan`（`#xhigh`）は階層が段を持つので変わらない。子へ実際に効くかは未確認（子の起動引数の実機確認はしていない）
+- **未確認**: 難しい依頼での `medium` 対 `xhigh` の質の差。`explore` を `medium` に留めるには、階層に `#medium` を持たせる（`tier` の追加が要る）
