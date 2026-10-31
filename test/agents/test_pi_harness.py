@@ -47,6 +47,7 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "confirm-view.ts", harness / "confirm-view.ts")
     shutil.copy2(HARNESS_SRC.parent / "actions.ts", harness / "actions.ts")
     shutil.copy2(HARNESS_SRC.parent / "text-viewer.ts", harness / "text-viewer.ts")
+    shutil.copy2(HARNESS_SRC.parent / "confirm-present.ts", harness / "confirm-present.ts")
     shutil.copy2(HARNESS_SRC.parent / "integration-gate.ts", harness / "integration-gate.ts")
     shutil.copy2(HARNESS_SRC.parent / "freezone.ts", harness / "freezone.ts")
     shutil.copy2(HARNESS_SRC.parent / "gitrun.ts", harness / "gitrun.ts")

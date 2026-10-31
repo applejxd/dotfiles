@@ -40,6 +40,7 @@ try:
         "confirm-view.ts",
         "actions.ts",
         "text-viewer.ts",
+        "confirm-present.ts",
         "integration-gate.ts",
         "freezone.ts",
         "gitrun.ts",

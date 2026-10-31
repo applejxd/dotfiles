@@ -10,7 +10,7 @@ import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { MAX_DISPLAY_CHARS, cellWidth, clipCells, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
-import { showTextViewer } from "./text-viewer.ts";
+import { VIEW_FULL, presentConfirm } from "./confirm-present.ts";
 import { classifyFreeZone, freeZoneSettings, type FreeZone } from "./freezone.ts";
 import { gitSync } from "./gitrun.ts";
 import { reconcilePending, repoTargetEnv, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
@@ -251,9 +251,6 @@ export type ActionDeps = {
 	freeZone?: (cwd: string, protectedRefs: readonly string[]) => FreeZone;
 };
 
-/** TUI の組み込みの期限は、自前の期限より遅くして、保険にだけ使う (自前の期限で時間切れを判定する) */
-const BACKSTOP_MS = 3000;
-
 /** 退避して続行する結果 (deferred) または、退避できなかった結果 (defer_failed)。どちらも元の操作は未実行 */
 function deferError(cwd: string, snap: Snapshot, why: string, signal: AbortSignal | undefined, dir?: string): Error {
 	if (signal?.aborted) return notApproved(outcomeReason("aborted"));
@@ -273,7 +270,6 @@ function deferError(cwd: string, snap: Snapshot, why: string, signal: AbortSigna
 const APPROVE = "承認して実行";
 const EDIT = "編集して承認";
 const REJECT = "拒否";
-const VIEW_FULL = "全文を見る";
 
 // TUI の git_commit の確認: 常に要約 + 「全文を見る」 (全文は先頭から読めるビューアで読む)。表示だけを変える: 同一性の照合・実行の argv は変えない
 // see docs/spec/guard/pi-extensions.md#guarded_action
@@ -553,38 +549,14 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 				deps.bell();
 				const gen0 = absence.gen;
 				const options = summarize ? [APPROVE, VIEW_FULL, EDIT, REJECT] : [APPROVE, EDIT, REJECT];
-				let timedOut = false;
-				let choice: string | undefined;
-				let error = false;
-				// 「全文を見る」で select を押し直す。期限は select ごとに仕切り直す (editor には無い)
-				for (;;) {
-					const own = new AbortController();
-					const forward = () => own.abort();
-					if (signal?.aborted) own.abort();
-					else signal?.addEventListener("abort", forward, { once: true });
-					const timer = setTimeout(() => {
-						timedOut = true;
-						own.abort();
-					}, timeoutMs);
-					try {
-						choice = await ctx.ui.select(title, options, { signal: own.signal, timeout: timeoutMs + BACKSTOP_MS });
-					} catch {
-						error = true;
-					} finally {
-						clearTimeout(timer);
-						signal?.removeEventListener("abort", forward);
-					}
-					if (choice !== VIEW_FULL || signal?.aborted) break;
-					try {
-						// 読むだけ (変更しても反映されない)。先頭から表示するビューアで開き (pi の editor は末尾にカーソルを置くので末尾から見える)、閉じると確認に戻る
-						const fullTitle = `${action.label}: 全文 (読むだけ。閉じると確認に戻る)`;
-						const fullText = `${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
-						if (typeof ctx.ui.custom === "function") await showTextViewer(ctx.ui as any, fullTitle, fullText);
-						else await ctx.ui.editor(fullTitle, fullText);
-					} catch {
-						// 表示できなくても、確認に戻る
-					}
-				}
+				// 「全文を見る」の押し直しと期限は presentConfirm が持つ。承認・拒否・時間切れ・取消の分類は、ここ (操作の意味) で行う
+				const { choice, timedOut, error } = await presentConfirm(ctx.ui, {
+					title,
+					options,
+					timeoutMs,
+					signal,
+					viewFull: { title: `${action.label}: 全文 (読むだけ。閉じると確認に戻る)`, text: () => `${viewBody(action, values, preview, viewArgv, cwd)}${notice}` },
+				});
 				if (choice === REJECT) {
 					let reason: string | undefined;
 					try {

@@ -102,6 +102,7 @@ _PI_TESTS = (
     "test_pi_harness_extensions",
     "test_pi_actions_harness",
     "test_pi_action_view",
+    "test_pi_confirm_present",
     "test_pi_actions",
     "test_pi_boundary",
     "test_pi_workspace_hide",
