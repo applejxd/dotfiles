@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+import contextlib
 import functools
+import os
 import posixpath
 import re
 import shlex
@@ -27,9 +29,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 PYTEST_OPTS = ["-q"]
-# 並列化 (pytest-xdist)。方式の選び方と実測は docs/change/closed/0028-verification-speed-and-delegation.md
-PARALLEL_OPTS = ["-n", "auto", "--dist", "worksteal"]
+# 並列化 (pytest-xdist)。方式の選び方と実測は docs/change/closed/0028-verification-speed-and-delegation.md。
+# 既定はコア数の半分 (全コアだと実行中に PC が重くなる)。VERIFY_JOBS / --jobs で上書き。
+# see docs/spec/development.md#検証の方針と選択実行
+
+
+def jobs() -> int:
+    raw = os.environ.get("VERIFY_JOBS", "")
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    return max(1, (os.cpu_count() or 4) // 2)
+
+
+def parallel_opts() -> list[str]:
+    return ["-n", str(jobs()), "--dist", "worksteal"]
+
+
+NICE_LEVEL = 10  # 子プロセス (pytest のワーカー) が継承する。対話的な作業を重くしない
 PARALLEL_MIN_FILES = 3  # 少数のファイルだけの実行では、ワーカーの起動の方が高いので直列のまま
+# 登録ずれを数秒で見つける試験 (全件の T0 に入れる)
+REGISTRATION_TEST = "test/test_verify.py"
+# T0 の pre-push の hook (raspi-regression-local) が実行する試験。T1 と T2 からは外す (hook の entry と一致することは試験で見る)
+HOOK_PYTEST_FILES = ("test/test_raspi_detection.py",)
+T0_PYTEST_FILES = (REGISTRATION_TEST, *HOOK_PYTEST_FILES)
 LINT_TEMPLATES = ["mise", "exec", "--", "python3", "scripts/lint_templates.py"]
 LINT_DOCS = [
     "mise",
@@ -378,10 +400,14 @@ RULES: tuple[Rule, ...] = (
 @dataclass
 class Plan:
     commands: list[list[str]] = field(default_factory=list)
+    # 段の境界: commands[i] の後で、ここまでに失敗があれば次の段を始めない (--keep-going で続行)
+    gates: list[int] = field(default_factory=list)
     full: bool = False
     windows: bool = False
     no_change: bool = False
     hits: dict[str, list[str]] = field(default_factory=dict)
+    # 規則・参照で選んだ試験ファイル (全件の T1 に使う)
+    selected: list[str] = field(default_factory=list)
 
 
 def _match(pattern: str, path: str) -> bool:
@@ -530,7 +556,9 @@ def resolve_tests(patterns: Sequence[str], test_files: Sequence[str]) -> list[st
     return sorted({f for f in test_files if any(fnmatch(Path(f).stem, p) for p in patterns)})
 
 
-def pytest_command(files: Sequence[str], *, yaml: bool = True) -> list[str]:
+def pytest_command(
+    files: Sequence[str], *, yaml: bool = True, ignore: Sequence[str] = ()
+) -> list[str]:
     parallel = list(files) == ["test/"] or len(files) >= PARALLEL_MIN_FILES
     cmd = ["uv", "run", "--with", "pytest"]
     if yaml:
@@ -543,18 +571,65 @@ def pytest_command(files: Sequence[str], *, yaml: bool = True) -> list[str]:
         "pytest",
         *files,
         *PYTEST_OPTS,
-        *(PARALLEL_OPTS if parallel else []),
+        *[f"--ignore={f}" for f in sorted(ignore)],
+        *(parallel_opts() if parallel else []),
     ]
 
 
-def full_commands() -> list[list[str]]:
-    return [
-        pytest_command(["test/"]),
+def selected_commands(selected: Sequence[str]) -> list[list[str]]:
+    """選んだ試験ファイルを、pyyaml の要否で分けた pytest コマンドにする。"""
+    yaml_files = sorted(f for f in selected if Path(f).stem not in NO_YAML_TESTS)
+    plain_files = sorted(set(selected) - set(yaml_files))
+    commands: list[list[str]] = []
+    if yaml_files:
+        commands.append(pytest_command(yaml_files))
+    if plain_files:
+        commands.append(pytest_command(plain_files, yaml=False))
+    return commands
+
+
+def full_stages(
+    t1_files: Sequence[str] = (),
+    shell_files: Sequence[str] = (),
+    test_files: Sequence[str] | None = None,
+) -> list[list[list[str]]]:
+    """全件を段に分ける: T0 (数秒〜数十秒の安い検査) → T1 (変更に当たる試験) → T2 (残りの全件)。
+
+    T2 は T1 と T0 の試験を --ignore する補集合なので、取りこぼしも二重実行も出ない。
+    test_files (全試験ファイル) を渡すと、補集合が空のときは T2 を省く (空のまま pytest を走らせると「試験なし」で失敗する)。
+    lint_docs を直接呼ばないのは、pre-commit の hook (lint-docs-local) が --all-files で同じ検査をするため。
+    """
+    t0: list[list[str]] = [
         ["uv", "run", "pre-commit", "run", "--all-files"],
         # commit の stage には lint-templates-local と raspi-regression-local が無い (pre-push のみ)
         ["uv", "run", "pre-commit", "run", "--all-files", "--hook-stage", "pre-push"],
-        list(LINT_DOCS),
     ]
+    if shell_files:
+        t0.append(["mise", "exec", "shellcheck", "--", "shellcheck", *shell_files])
+    t0.append(pytest_command([REGISTRATION_TEST]))
+    stages = [t0]
+    done = [f for f in dict.fromkeys([*t1_files, *T0_PYTEST_FILES])]
+    t1 = selected_commands([f for f in t1_files if f not in T0_PYTEST_FILES])
+    if t1:
+        stages.append(t1)
+    if test_files is None or set(test_files) - set(done):
+        stages.append([pytest_command(["test/"], ignore=done)])
+    return stages
+
+
+def flatten_stages(stages: Sequence[Sequence[list[str]]]) -> tuple[list[list[str]], list[int]]:
+    """段の列を、平らなコマンド列と、各段の最後のコマンドの位置 (最後の段を除く) にする。"""
+    commands: list[list[str]] = []
+    gates: list[int] = []
+    for i, stage in enumerate(stages):
+        commands.extend(stage)
+        if i < len(stages) - 1 and stage:
+            gates.append(len(commands) - 1)
+    return commands, gates
+
+
+def full_commands(t1_files: Sequence[str] = (), shell_files: Sequence[str] = ()) -> list[list[str]]:
+    return flatten_stages(full_stages(t1_files, shell_files))[0]
 
 
 def plan(
@@ -563,10 +638,12 @@ def plan(
     *,
     exists: Callable[[str], bool] | None = None,
     refs: dict[str, frozenset[str]] | None = None,
+    shell_files: Sequence[str] = (),
 ) -> Plan:
     """変更パスの列から実行するコマンド列を決める (git も実行もしない)。
 
-    refs は試験ファイル → 読むパス (省略時はソースから拾う)。
+    refs は試験ファイル → 読むパス (省略時はソースから拾う)。shell_files は全件の T0 で shellcheck する対象。
+    全件のときも、規則・参照で選んだ試験を T1 として先に回す (失敗の見つかる順を早める)。
     """
     paths = list(dict.fromkeys(p for p in map(normalize_path, paths) if p))
     if not paths:
@@ -608,27 +685,30 @@ def plan(
             lints.update(rule.lints)
             selected.update(resolve_tests(rule.tests, test_files))
         result.hits[path] = names
+    result.selected = sorted(selected)
     if result.full:
         result.windows = True
-        result.commands = full_commands()
+        result.commands, result.gates = flatten_stages(
+            full_stages(result.selected, shell_files, test_files)
+        )
         return result
 
-    yaml_files = sorted(f for f in selected if Path(f).stem not in NO_YAML_TESTS)
-    plain_files = sorted(selected - set(yaml_files))
-    if yaml_files:
-        result.commands.append(pytest_command(yaml_files))
-    if plain_files:
-        result.commands.append(pytest_command(plain_files, yaml=False))
+    # 安い検査を先に、試験を後にする (安いものが落ちたら試験を始めない)
+    cheap: list[list[str]] = []
     existing = [p for p in paths if exists(p)]
     if existing:
-        result.commands.append(["uv", "run", "pre-commit", "run", "--files", *existing])
+        cheap.append(["uv", "run", "pre-commit", "run", "--files", *existing])
     if "templates" in lints:
-        result.commands.append(list(LINT_TEMPLATES))
+        cheap.append(list(LINT_TEMPLATES))
     if "docs" in lints:
-        result.commands.append(list(LINT_DOCS))
-    shell_files = [p for p in existing if p.endswith(".sh")]
-    if shell_files:
-        result.commands.append(["mise", "exec", "shellcheck", "--", "shellcheck", *shell_files])
+        cheap.append(list(LINT_DOCS))
+    changed_shell = [p for p in existing if p.endswith(".sh")]
+    if changed_shell:
+        cheap.append(["mise", "exec", "shellcheck", "--", "shellcheck", *changed_shell])
+    tests = selected_commands(sorted(selected))
+    result.commands = [*cheap, *tests]
+    if cheap and tests:
+        result.gates = [len(cheap) - 1]
     return result
 
 
@@ -652,10 +732,27 @@ def _git(cmd: list[str]) -> str:
     return proc.stdout
 
 
-def execute(commands: Sequence[Sequence[str]]) -> list[list[str]]:
-    """全コマンドを順に実行する。失敗しても続け、失敗したコマンドを返す。"""
+def tracked_shell_files(
+    run: Callable[[list[str]], str], exists: Callable[[str], bool] | None = None
+) -> list[str]:
+    """全件の shellcheck の対象 (git が追跡している実在の *.sh。未ステージで消したファイルは除く)。"""
+    exists = exists or (lambda p: (ROOT / p).exists())
+    return sorted(n for n in run(["git", "ls-files", "-z", "*.sh"]).split("\0") if n and exists(n))
+
+
+def execute(
+    commands: Sequence[Sequence[str]],
+    gates: Sequence[int] = (),
+    *,
+    keep_going: bool = False,
+) -> list[list[str]]:
+    """コマンドを順に実行する。失敗したコマンドを返す。
+
+    gates の位置 (段の最後) でこれまでに失敗があれば、次の段を始めない (安い検査の失敗を、重い検査の前に見せる)。
+    keep_going なら段で止めず、従来どおり失敗しても最後まで続ける。
+    """
     failed: list[list[str]] = []
-    for cmd in commands:
+    for i, cmd in enumerate(commands):
         print(f"$ {shlex.join(cmd)}", flush=True)
         try:
             code = subprocess.run(list(cmd), cwd=ROOT, check=False).returncode
@@ -664,16 +761,50 @@ def execute(commands: Sequence[Sequence[str]]) -> list[list[str]]:
             code = 127
         if code != 0:
             failed.append(list(cmd))
+        if failed and i in gates and not keep_going:
+            rest = len(commands) - i - 1
+            print(
+                f"この段で失敗したので、残り {rest} 件を実行しません (--keep-going で続行)",
+                flush=True,
+            )
+            break
     return failed
 
 
-def _write_stamp() -> None:
-    """全件検証の成功を印に残す。失敗しても検証の結果は変えない。"""
-    try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import verify_stamp
+def _stamp_module():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import verify_stamp
 
-        verify_stamp.write_stamp(ROOT)
+    return verify_stamp
+
+
+def _stamp_snapshot():
+    """全件検証の開始時の作業ツリー。取れないときは None (印を書かない)。"""
+    try:
+        return _stamp_module().snapshot(ROOT)
+    except Exception as exc:
+        print(f"警告: 検証の開始時の状態を取れませんでした: {exc}", file=sys.stderr)
+        return None
+
+
+def _write_stamp(started=None) -> None:
+    """全件検証の成功を印に残す。失敗しても検証の結果は変えない。
+
+    開始時の snapshot を記録し、終わりに同じ状態でなければ印を書かない
+    (実行中に編集したファイルまで「検証済み」にしない)。
+    """
+    try:
+        stamp = _stamp_module()
+        if started is None:
+            print("警告: 開始時の状態が無いので、検証の印を書きません", file=sys.stderr)
+            return
+        if stamp.snapshot(ROOT) != started:
+            print(
+                "警告: 実行中に作業ツリーが変わったので、検証の印を書きません (もう一度全件を回す)",
+                file=sys.stderr,
+            )
+            return
+        stamp.write_stamp(ROOT, started)
     except Exception as exc:
         print(f"警告: 検証の印を書けませんでした: {exc}", file=sys.stderr)
 
@@ -687,13 +818,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--list", action="store_true", help="変更パスごとの当たった規則を出す (実行しない)"
     )
+    parser.add_argument("--keep-going", action="store_true", help="段で失敗しても次の段を実行する")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=0,
+        help="pytest の並列数 (既定: コア数の半分。VERIFY_JOBS でも指定できる)",
+    )
     args = parser.parse_args(argv)
+    if args.jobs > 0:
+        os.environ["VERIFY_JOBS"] = str(args.jobs)
 
+    test_files = discover_test_files()
+    shell_files = tracked_shell_files(_git)
     if args.all:
-        result = Plan(commands=full_commands(), full=True, windows=True)
+        # 全件でも、変更に当たる試験を T1 として先に回す (変更が無ければ T1 は空)
+        selection = plan(collect_changed(_git), test_files, shell_files=shell_files)
+        commands, gates = flatten_stages(full_stages(selection.selected, shell_files, test_files))
+        result = Plan(
+            commands=commands,
+            gates=gates,
+            full=True,
+            windows=True,
+            hits=selection.hits,
+            selected=selection.selected,
+        )
     else:
         paths = collect_changed(_git)
-        result = plan(paths, discover_test_files())
+        result = plan(paths, test_files, shell_files=shell_files)
         if args.list:
             for path, names in result.hits.items():
                 print(f"{path}: {', '.join(names) or '(なし)'}")
@@ -705,10 +857,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("全件を実行します")
 
     if args.dry_run:
-        for cmd in result.commands:
+        for i, cmd in enumerate(result.commands):
             print(shlex.join(cmd))
+            if i in result.gates:
+                print("# --- 段の境界 (ここまでに失敗があれば次を始めない) ---")
         return 0
-    failed = execute(result.commands)
+    if hasattr(os, "nice"):
+        with contextlib.suppress(OSError):
+            os.nice(NICE_LEVEL)  # 子プロセスが継承する。失敗しても検査は続ける
+    started = _stamp_snapshot() if result.full else None
+    failed = execute(result.commands, result.gates, keep_going=args.keep_going)
     if result.windows:
         print(WINDOWS_NOTE)
     if failed:
@@ -717,7 +875,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"  {shlex.join(cmd)}")
         return 1
     if result.full:
-        _write_stamp()
+        _write_stamp(started)
     print("すべて成功")
     return 0
 

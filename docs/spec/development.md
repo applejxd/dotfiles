@@ -63,8 +63,15 @@ Raspberry Pi 4 ではメモリが尽きて SSH も応答しなくなる
 
 ### 検証の方針と選択実行
 
-方針: 日常は変更に応じた選択実行、全件はコミット前に 1 回。全件の pytest は約 3,700 件で
-約 9 分かかる（実測値は [開発ガイドの実測メモ](../research/testing/development-timing-notes.md)）。
+方針: 日常は変更に応じた選択実行、全件はコミット前に 1 回。全件は段に分けて回す（[CHG-0051](../change/0051-verification-tiers.md)）。
+
+- **T0**（数秒〜数十秒の安い検査）: pre-commit の全件（commit 段と pre-push 段）、shellcheck、試験の登録ずれの検査（`test/test_verify.py`）
+- **T1**: 変更に当たる試験（規則・試験が読むファイル・試験ファイル自身。`verify:all` でも先に回す）
+- **T2**: 残りの全件。T0 と T1 の試験（pre-push の hook が走らせる `test_raspi_detection` を含む）を `--ignore` した補集合。補集合が空なら省く
+
+前の段で失敗したら次の段を始めない（`--keep-going` で続行）。並列度の既定はコア数の半分で、`VERIFY_JOBS` や `--jobs` で変えられる。
+`nice` で低優先度にする。全件の印は、開始時の作業ツリーを記録し、終わりに同じ状態のときだけ書く（開始と終了の 2 点の比較で、実行中に編集して元に戻す変更は見つけられないので、検証中は編集しない）。実測は
+[開発ガイドの実測メモ](../research/testing/development-timing-notes.md)。
 CI の範囲は [テストと検証の仕組み](testing.md#いつ回すか)。
 **「いつ・何を回すか」の選択規則の正本はこの節**で、Docker ハーネスの契約は testing.md が正本。
 
@@ -135,7 +142,7 @@ hook ごとの所要時間は [開発ガイドの実測メモ](../research/testi
   ステージしたパスだけが一致すればよい。印が無いときも警告する
 - 警告しない場合: 不一致のパスを `verify.py` の `plan()` に通し、全件にならない（選択実行で足りる。
   docs だけの変更など）とき。`plan()` を読み込めなかったときは全件扱いで警告する
-- 強制しない理由: 約 9 分の待ち時間が `--no-verify` を誘う（`pre-push` に全件を入れない判断と同じ。
+- 強制しない理由: 全件の待ち時間が `--no-verify` を誘う（`pre-push` に全件を入れない判断と同じ。
   [0028](../change/closed/0028-verification-speed-and-delegation.md)）
 - 記録の見方: `verify-stamp.log` は 1 行 1 件の JSONL（`{"at", "result": "no-stamp" | "mismatch",
   "count"}`）。`wc -l` で警告の回数、`result` で印が無かったのか内容が違ったのかが分かる

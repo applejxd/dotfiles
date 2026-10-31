@@ -22,7 +22,7 @@ description = "変更に応じた検証だけを選んで実行する（日常�
 run = "python3 scripts/verify.py --changed"
 
 [tasks."verify:all"]
-description = "検証を全件実行する（約 9 分。コミット前に 1 回）"
+description = "検証を全件実行する（安い検査を先に回し、前の段が落ちたら止まる。コミット前に 1 回）"
 run = "python3 scripts/verify.py --all"
 
 [tasks."models:check"]

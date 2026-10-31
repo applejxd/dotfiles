@@ -15,7 +15,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 | 対象 | コマンド |
 | --- | --- |
 | 変更に応じた選択実行（日常） | `mise run verify`（`--dry-run` でコマンドを列挙） |
-| 全件（コミット前に 1 回、約 9 分） | `mise run verify:all` |
+| 全件（コミット前に 1 回） | `mise run verify:all`（安い検査 → 変更に当たる試験 → 残りの順。前の段が落ちたら止まる） |
 | 全体（lint / secret scan） | `uv run pre-commit run --all-files` |
 | agent 設定・hook | `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` |
 | Windows 資産（静的） | `uv run --with pytest --no-project pytest test/test_windows_assets.py -q` |
@@ -84,6 +84,14 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   feature の起票とクローズ（`git flow feature start` / `finish`）は、機械では止めないので指示で守る。
   AI は、feature の worktree で起動した pi から `guarded_action` の `git_commit` を使う
   （[CHG-0050](docs/change/0050-slim-guarded-action.md)）
+- **並列にできる作業は子エージェントに任せる。** 調査・レビュー・独立したファイル範囲の実装を並列にする。
+  - **1 worktree = 1 feature = 1 worker**。親が `git flow feature start <名前> --worktree --no-fetch` で起票し、
+    worker に worktree の絶対パスと担当ファイルを渡す。担当外の worktree や本体を編集させない
+  - worker はコミットしない。親が結果を根拠で確かめ、`git_commit`（`dir` に worktree）→ `git flow feature finish` で取り込む
+  - 共有されやすいファイル（`common.toml.tmpl`・golden・docs の索引）は、同時に複数の worker に触らせない。衣突するなら、親が順に取り込む
+  - 重い検査を同時に回さない。worker には対象の試験と `pre-commit --files` だけ回させ、
+    全件（`mise run verify:all`）は親が 1 回だけ回す。並列度は `VERIFY_JOBS` で下げられる
+  - 子の結果は、パスと行・コマンドの出力で確かめてから採用する（子は「通った」を実行できないことが多い）
 - 運用手順やコマンドを追加したら `docs/` の該当ファイルと `index.md` を更新する。
   `README.md` は導入・更新など入口の手順が変わるときだけ更新する
 - **`README.md` は「最短で動かす」ためだけに保つ。** 各項目は数行 + `docs/` への

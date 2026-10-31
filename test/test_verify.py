@@ -35,14 +35,29 @@ def _plan_real(*paths: str):
 def test_full_run_is_parallel_with_worksteal():
     cmd = verify.pytest_command(["test/"])
     assert "pytest-xdist" in cmd
-    assert cmd[-4:] == ["-n", "auto", "--dist", "worksteal"]
+    assert cmd[-4:] == ["-n", str(verify.jobs()), "--dist", "worksteal"]
+
+
+def test_jobs_default_is_half_the_cores_and_can_be_overridden(monkeypatch):
+    monkeypatch.delenv("VERIFY_JOBS", raising=False)
+    monkeypatch.setattr(verify.os, "cpu_count", lambda: 16)
+    assert verify.jobs() == 8
+    monkeypatch.setattr(verify.os, "cpu_count", lambda: 2)
+    assert verify.jobs() == 1  # 半分。低コアでもコア数を超えない
+    monkeypatch.setattr(verify.os, "cpu_count", lambda: 1)
+    assert verify.jobs() == 1
+    monkeypatch.setenv("VERIFY_JOBS", "3")
+    assert verify.jobs() == 3
+    for bad in ("0", "-1", "x", ""):
+        monkeypatch.setenv("VERIFY_JOBS", bad)
+        assert verify.jobs() >= 1, bad
 
 
 def test_small_selections_stay_serial_and_large_ones_go_parallel():
     few = verify.pytest_command(["test/test_a.py", "test/test_b.py"])
     assert "pytest-xdist" not in few and "-n" not in few
     many = verify.pytest_command(["test/test_a.py", "test/test_b.py", "test/test_c.py"])
-    assert "pytest-xdist" in many and many[-4:] == ["-n", "auto", "--dist", "worksteal"]
+    assert "pytest-xdist" in many and many[-4:] == ["-n", str(verify.jobs()), "--dist", "worksteal"]
 
 
 def _pytest_targets(result) -> set[str]:
@@ -55,6 +70,11 @@ def _pytest_targets(result) -> set[str]:
 
 def _flat(result) -> list[str]:
     return [" ".join(c) for c in result.commands]
+
+
+def _pytest_target(cmd: list[str]) -> str:
+    """pytest コマンドの最初の対象 ("--no-project pytest <対象>")。"""
+    return cmd[cmd.index("--no-project") + 2]
 
 
 def test_no_change():
@@ -80,7 +100,9 @@ def test_no_change():
 def test_full_regions_fall_back_to_all(path):
     result = _plan(path)
     assert result.full
-    assert result.commands == verify.full_commands()
+    # 全件は段に分かれ、T2 (最後) は全件の pytest。T1 に選んだ試験は T2 で --ignore される
+    assert _pytest_target(result.commands[-1]) == "test/"
+    assert result.gates
 
 
 def test_unknown_path_is_full():
@@ -147,7 +169,7 @@ def test_skill_md_selects_frontmatter_test():
 def test_deleted_path_falls_back_to_all(path):
     result = verify.plan([path], TEST_FILES, exists=lambda _p: False, refs={})
     assert result.full
-    assert result.commands == verify.full_commands()
+    assert _pytest_target(result.commands[-1]) == "test/"
 
 
 def test_one_deleted_path_makes_everything_full():
@@ -237,12 +259,11 @@ def test_shell_script_runs_shellcheck():
 
 
 def test_full_commands_shape():
-    cmds = verify.full_commands()
-    assert cmds[0][:3] == ["uv", "run", "--with"]
-    assert "test/" in cmds[0]
-    assert ["uv", "run", "pre-commit", "run", "--all-files"] in cmds
+    cmds = verify.full_commands(shell_files=["a.sh"])
+    # T0: 安い検査を先に (pre-commit の 2 段、shellcheck、登録ずれの試験)
+    assert cmds[0] == ["uv", "run", "pre-commit", "run", "--all-files"]
     # pre-push の hook (lint-templates-local など) も全件の流れで走る
-    assert [
+    assert cmds[1] == [
         "uv",
         "run",
         "pre-commit",
@@ -250,8 +271,121 @@ def test_full_commands_shape():
         "--all-files",
         "--hook-stage",
         "pre-push",
-    ] in cmds
-    assert verify.LINT_DOCS in cmds
+    ]
+    assert ["mise", "exec", "shellcheck", "--", "shellcheck", "a.sh"] in cmds
+    assert any(verify.REGISTRATION_TEST in c for c in cmds[:4])
+    # lint_docs は pre-commit の hook (lint-docs-local) が --all-files で同じ検査をするので、直接は呼ばない
+    assert verify.LINT_DOCS not in cmds
+    # 最後が全件の pytest (T2)
+    assert "test/" in cmds[-1]
+
+
+def test_full_run_is_staged_cheap_first_and_t2_is_the_complement():
+    stages = verify.full_stages(["test/test_a.py"], ["a.sh"])
+    assert len(stages) == 3  # T0 / T1 / T2
+    t2 = stages[-1][0]
+    assert "--ignore=test/test_a.py" in t2 and f"--ignore={verify.REGISTRATION_TEST}" in t2
+    # T0 の pre-push の hook が実行する試験も、T2 から外して二重実行を避ける
+    assert all(f"--ignore={f}" in t2 for f in verify.HOOK_PYTEST_FILES)
+    commands, gates = verify.flatten_stages(stages)
+    assert gates == [len(stages[0]) - 1, len(stages[0]) + len(stages[1]) - 1]
+    assert commands[-1] == t2 and len(commands) == sum(map(len, stages))
+    # T1 が空なら段は 2 つ (T0 / T2)
+    assert len(verify.full_stages([], [])) == 2
+
+
+def test_selective_plan_runs_cheap_checks_before_tests():
+    result = _plan("home/dot_config/shell/fzf/tools.sh", "test/test_verify.py")
+    assert not result.full
+    flat = _flat(result)
+    first_pytest = next(i for i, c in enumerate(flat) if "pytest" in c)
+    assert all("pytest" not in c for c in flat[:first_pytest]) and first_pytest > 0
+    assert result.gates == [first_pytest - 1]
+
+
+def test_execute_stops_at_a_failed_gate_unless_keep_going(capsys):
+    ok = [sys.executable, "-c", "pass"]
+    bad = [sys.executable, "-c", "raise SystemExit(1)"]
+    marker = [sys.executable, "-c", "print('REACHED')"]
+    failed = verify.execute([ok, bad, marker], gates=[1])
+    assert failed == [bad]
+    out = capsys.readouterr().out
+    assert "REACHED" not in out and "残り 1 件を実行しません" in out
+    failed = verify.execute([ok, bad, marker], gates=[1], keep_going=True)
+    assert failed == [bad] and "REACHED" in capsys.readouterr().out
+    # 失敗が無ければ、段を越えて続く
+    assert verify.execute([ok, marker], gates=[0]) == []
+    assert "REACHED" in capsys.readouterr().out
+
+
+def test_tracked_shell_files_reads_git_output():
+    run = lambda _cmd: "b.sh\0a.sh\0gone.sh\0"  # noqa: E731
+    assert verify.tracked_shell_files(run, exists=lambda p: p != "gone.sh") == ["a.sh", "b.sh"]
+
+
+def test_t2_is_skipped_when_the_complement_is_empty():
+    # 補集合が空のまま pytest を走らせると「試験なし」で失敗する
+    all_files = ["test/test_a.py", *verify.T0_PYTEST_FILES]
+    stages = verify.full_stages(["test/test_a.py"], [], all_files)
+    assert len(stages) == 2 and _pytest_target(stages[-1][0]) == "test/test_a.py"
+    stages = verify.full_stages(["test/test_a.py"], [], [*all_files, "test/test_b.py"])
+    assert len(stages) == 3 and "--ignore=test/test_a.py" in stages[-1][0]
+
+
+def test_hook_pytest_files_are_what_the_pre_commit_hook_runs():
+    config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    for f in verify.HOOK_PYTEST_FILES:
+        assert f"pytest {f}" in config, f
+        assert f in TEST_FILES
+
+
+def test_all_runs_the_tests_for_the_changed_paths_first(monkeypatch, capsys):
+    # verify:all でも、変更に当たる試験を T1 として先に回し、T2 では除く
+    monkeypatch.setattr(verify, "collect_changed", lambda _run: ["test/agents/test_pi_confirm.py"])
+    monkeypatch.setattr(verify, "tracked_shell_files", lambda _run: [])
+    assert verify.main(["--all", "--dry-run"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    t1 = next(
+        i for i, line in enumerate(lines) if line.endswith("test/agents/test_pi_confirm.py -q")
+    )
+    t2 = next(
+        i for i, line in enumerate(lines) if "--ignore=test/agents/test_pi_confirm.py" in line
+    )
+    gates = [i for i, line in enumerate(lines) if line.startswith("# ---")]
+    assert t1 < t2 and len(gates) == 2 and gates[0] < t1 < gates[1] < t2
+
+
+def test_plan_records_the_selected_tests():
+    result = _plan("home/dot_config/pi/harness/actions.ts")
+    assert "test/agents/test_pi_actions_harness.py" in result.selected
+
+
+class _FakeStamp:
+    def __init__(self, now):
+        self.now = now
+        self.written: list[object] = []
+
+    def snapshot(self, _root):
+        return self.now
+
+    def write_stamp(self, _root, entries=None):
+        self.written.append(entries)
+
+
+def test_stamp_records_the_state_at_the_start_and_skips_when_the_tree_changed(monkeypatch, capsys):
+    start = {"a.txt": ["100644", "1"]}
+    same = _FakeStamp(dict(start))
+    monkeypatch.setattr(verify, "_stamp_module", lambda: same)
+    verify._write_stamp(start)
+    assert same.written == [start]  # 開始時の状態を記録する (終わりの状態ではない)
+
+    changed = _FakeStamp({"a.txt": ["100644", "2"]})
+    monkeypatch.setattr(verify, "_stamp_module", lambda: changed)
+    verify._write_stamp(start)
+    assert changed.written == [] and "実行中に作業ツリーが変わった" in capsys.readouterr().err
+
+    verify._write_stamp(None)
+    assert changed.written == [] and "開始時の状態が無い" in capsys.readouterr().err
 
 
 def _hook_stages() -> tuple[dict, dict[str, list[str]]]:

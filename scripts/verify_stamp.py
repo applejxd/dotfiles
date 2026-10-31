@@ -85,9 +85,15 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def write_stamp(repo: Path) -> Path:
+def write_stamp(repo: Path, entries: Entries | None = None) -> Path:
+    """印を書く。entries を渡すと、その内容 (検証の開始時の snapshot) を記録する。"""
     repo = Path(repo)
-    data = {"version": VERSION, "head": _head(repo), "created": _now(), "entries": snapshot(repo)}
+    data = {
+        "version": VERSION,
+        "head": _head(repo),
+        "created": _now(),
+        "entries": snapshot(repo) if entries is None else entries,
+    }
     dest = _git_path(repo, "verify-stamp.json")
     tmp = dest.with_name(dest.name + f".{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
