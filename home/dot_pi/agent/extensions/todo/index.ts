@@ -147,7 +147,7 @@ export default function (pi: ExtensionAPI) {
 		if (counted.length === 0) return ctx.ui.setStatus("todo", undefined);
 		const done = counted.filter((t) => t.status === "done").length;
 		const doing = todos.find((t) => t.status === "in_progress");
-		const head = open().length === 0 ? "✅" : "📋";
+		const head = open().length === 0 ? "✅" : "📌";
 		// 中くらいの幅 (80 列前後) に収まるよう、タイトルは表示幅 (全角 2) で切る。他の状態 (bypass など) と同じ行に出る
 		const budget = Math.max(10, Math.min(30, (process.stdout.columns ?? 80) - 48));
 		const tail = doing ? ` ▶ ${truncateToWidth(doing.text, budget, "…")}` : "";

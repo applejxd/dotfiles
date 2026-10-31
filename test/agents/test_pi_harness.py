@@ -1864,7 +1864,7 @@ def test_todo_footer_shows_progress_the_active_item_and_clears_on_tidy(env):
     _, statuses = _rpc_script(
         env, calls, ["go", "/todos tidy"], [], status_key="todo", extra=("-e", *extra)
     )
-    assert any(s and "📋 0/2 ▶ first step" in s for s in statuses), statuses
+    assert any(s and "📌 0/2 ▶ first step" in s for s in statuses), statuses
     assert any(s and "✅ 2/2" in s for s in statuses), statuses
     assert statuses[-1] is None, statuses  # 片付けて空になったら表示を消す
 
