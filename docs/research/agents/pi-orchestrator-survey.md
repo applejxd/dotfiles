@@ -252,3 +252,43 @@
 - Anthropic: <https://www.anthropic.com/research/multi-agent-research-system> ・ Cognition: <https://cognition.com/blog/dont-build-multi-agents> ・ <https://cognition.com/blog/devin-can-now-manage-devins> ・ <https://cognition.com/blog/multi-agents-working>
 - 二次: <https://www.augmentcode.com/guides/when-multi-agent-ai-is-overkill> ・ <https://deepwiki.com/code-yeongyu/oh-my-opencode/4.1-sisyphus-orchestrator>
 - 自作側: [pi-subagents](../../spec/guard/pi-subagents.md)・[ADR-0016](../../adr/0016-pi-extensions-own-first.md)・[記録 P2](pi-public-extensions-survey.md#記録-p2--2026-10-20-subagents--todo-を公開拡張へ置き換えられるか)
+
+## 記録 O2 — 2026-10-31（よくあるオーケストレーターは、feature の単位・依存・状態・取り込み順をどう持つか）
+
+### 問い
+
+複数の feature を、複数の `worker`（1 worktree = 1 feature = 1 worker）へ並列に任せる親は、feature の単位と依存関係を、明示的に持つべきか。よくあるオーケストレーターは、どう持っているか。
+O1（pi の拡張と他社の親子設計）の続き。親側の運用の表（[CHG-0045](../../change/0045-orchestrator-parent.md)、[CHG-0054](../../change/0054-containment-and-async-approval.md)）の根拠にする。
+
+### 対象・方法・限界
+
+- 対象: Beads、Task Master、spec-kit、Claude Code の agent teams（Anthropic の講演の書き起こし記事）、ccpm、Gas Town、Vibe Kanban、研究（Co-Coder）、実践者の記事。取得日 2026-10-31。
+- 方法: Web 検索（Brave）と、主要な記事・論文の本文の取得。**動かしていない・導入していない**。原文は非公開の置き場に保存した。
+- 種別: **事実**（本文を読んだ）、**抜粋**（検索結果の抜粋だけ）、**二次**（他者の要約）、**推測**。
+- 限界: 出典は公式 docs・実践者の記事・ベンダーの講演が中心で、独立した再現は無い。研究は、新規のプロジェクトを生成するベンチマークで、既存のリポジトリの編集とは条件が違う（プレプリント）。
+
+### 観測した事実
+
+| # | 運用 | 内容 | 種別・出典 |
+| --- | --- | --- | --- |
+| 1 | 依存つきのタスク表と、着手できるものの一覧 | Beads は `bd ready` が、未完了の依存が無い open の課題だけを出す。Task Master は `next` が、状態と完了済みの依存から、次のタスクを出す（`tasks.json` に依存を持つ）。Claude Code の agent teams は、共有のタスク表（pending / in_progress / completed / blocked）で、完了すると依存する後続が自動で解除される。spec-kit は、フェーズ（Setup → Foundational → ユーザーストーリー）と `[P]` 印（別ファイルで依存なしなら並列）で表す | Beads・Task Master・spec-kit は**抜粋**（<https://beads.gascity.com/>、<https://github.com/eyaltoledano/claude-task-master>、<https://github.com/github/spec-kit/blob/main/templates/tasks-template.md>）。agent teams は**二次**（<https://addyosmani.com/blog/code-agent-orchestra/>） |
+| 2 | 担当ファイルの明示と、重なるなら直列 | spec-kit は各タスクに、実装するファイルの正確なパスを書く。ccpm は、独立した作業の流れを見つけ、自分のファイルだけを担当させる。**ディスパッチの時点でパスを予約し、重なる場合は並列でなく依存の順序にする**（Raylabs） | spec-kit・ccpm は**抜粋**（<https://github.com/automazeio/ccpm>）。Raylabs は**事実**（<https://dev.to/raylabs/handling-git-merge-conflicts-in-multi-agent-worktrees-1em8>。2026-10-04 の記事） |
+| 3 | 取り込みは 1 本ずつ直列 | 最新の本流へ rebase し、その状態で検査し、全部通ったときだけ取り込む。**衝突やテストの失敗では止める（fail-closed）。LLM に衝突を直させるのは危険**（欠落・衝突マーカーの残留）。Gas Town の Refinery は Bors 型の bisecting merge queue。Vibe Kanban の利用者が足した `merge-parallel` は、順に取り込み、衝突で止まる | Raylabs は**事実**。Gas Town は**二次**（<https://rywalker.com/research/gastown>）。Vibe Kanban は Reddit の**抜粋** |
+| 4 | 調整の状態を、作業ツリーの外に置く | 共有のチェックリストのファイルは、十数体が更新すると、衝突の元になる。Issues や専用のチケットなど、作業ツリーと独立した場所を使う。Beads は git に紐づく専用の保存先（後に Dolt）で、Gas Town の制御面になっている | **二次**（<https://www.developersdigest.tech/blog/git-worktrees-claude-code-parallel-agents-guide>。Grit という事例の報告） |
+| 5 | 並列の数 | agent teams は、3〜5 体が適切（費用は線形に増え、3 体の集中が 5 体の分散に勝つ）。ローカルの資源では、4〜5 体が実用の上限（ビルド・テストの CPU とメモリ）。調整の費用は、体数に対して非線形に増える | **二次**（上の 2 記事） |
+| 6 | 結合の強い部分は 1 人に。契約を先に | **Co-Coder**（arXiv 2606.00953、2026-05-31）: ファイルの依存グラフを作り、結合の強いまとまりを同じエージェントに割り当て、依存を見るスケジューラで実行する。報告: CodeProjectEval で、逐次に比べ、成功率 +14.0%、速度 2.10 倍、費用 −35%。DevEval で、成功率 56.8% → 68.1%、1.81 倍、−28%。**依存が最も密なプロジェクトで利得が最大**。無差別なファイル単位の並列は、費用が 60% 増える割に、効率の向上は 1.56 倍。agent teams は、速度が最速でも、成功率が及ばない場合がある（本文の記述は取得できた範囲）。事前に、ファイルごとのシンボルと import を書いた**インターフェースの設計図**を作る | **事実**（論文の報告）。独立した再現は無い。<https://arxiv.org/html/2606.00953> |
+| 7 | 親の限界 | 子を直接起動する方式では、親が依存グラフを手で管理する（共有のタスク表も、仲間同士の連絡も無い）。ファイルの範囲づけが雑だと、2 体が同じファイルに書く | **二次**（Addy Osmani の記事） |
+
+### 推測（このリポジトリへの含意）
+
+- 親が、feature の表（単位・担当ファイル・前提・状態・取り込み順）を、明示的に持つのは、主流の型と一致する。今は、親（私）が、会話の中で判断しているだけ。
+- **借りる**: 着手できるもの（前提が全部済んだもの）を、表から機械的に出す。計画が変わったら、後続の feature の前提も更新する（Task Master の `update` と同じ発想）。書き込む `worker` は 3〜5 体まで。変わりやすい状態は、リポジトリの外（todo・`.tmp`）に置き、計画だけを案件の「実施計画」の表に置く（すでにそうしている）。
+- **借りる（新しい）**: `finish` の前に、統合先との衝突を事前に検査する（`git merge-tree`）。統合先が分岐後に進んでいれば、その件数を見せる。承認の前に、衝突の有無が分かる。
+- **契約を先に**: 並列にする部品（新規ファイルだけを触るもの）と、配線（`index.ts` など共有ファイルを触るもの）を分け、部品の型を先に固める（非同期承認の計画で実践する）。
+- **借りない**: Gas Town のような大きな基盤（導入の費用と固定化が大きく、今の規模には重い）。LLM による衝突の自動解決。入れ子の「feature lead」（今の基盤は子から子を作れない）。
+
+### 未検証
+
+- 上の運用が、小規模・単独の利用者の、dotfiles のような、設定中心のリポジトリで、同じ効果を持つか（論文はベンチマーク、記事は主に Web アプリ）。
+- Beads・Task Master・spec-kit の細部（本文を取得したのは、Raylabs、Co-Coder、Addy Osmani、DevelopersDigest、Gas Town の解説だけ）。
+- 事実 5 の数値の出典は二次で、一次の資料（Anthropic の公式の docs）を読んでいない。
