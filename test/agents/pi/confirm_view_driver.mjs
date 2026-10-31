@@ -73,6 +73,8 @@ const finishFiles = {
 	"long.txt": "y".repeat(5000),
 	"lines.txt": Array.from({ length: 15 }, (_, i) => `line ${i + 1}`).join("\n"),
 	"blanks.txt": "\n\nsubject\n\n\n\nbody\n\n",
+	"bullets.txt": "feat: 件名\n\n- 項目 1\n- 項目 2\n  項目 2 の続き\n\n地の文\n* 項目 3\n1. 項目 4\n",
+	"bullets_only.txt": "feat: 件名\n\n- 項目 1\n- 項目 2\n",
 };
 const finishReader = (p) => (p in finishFiles ? { ok: true, text: finishFiles[p] } : { ok: false, why: `${p} を読めない` });
 const facts = {
@@ -107,6 +109,8 @@ out.finish = {
 	view_file_missing: finishView('git flow feature finish x --squash --squash-message="$(cat nope.txt)"'),
 	view_file_lines: finishView('git flow feature finish x --squash-message="$(cat lines.txt)"'),
 	view_file_blanks: finishView('git flow feature finish x --squash-message="$(cat blanks.txt)"'),
+	view_file_bullets: finishView('git flow feature finish x --squash-message="$(cat bullets.txt)"'),
+	view_file_bullets_only: finishView('git flow feature finish x --squash-message="$(cat bullets_only.txt)"'),
 	view_file_long: finishView('git flow feature finish x --squash-message="$(cat long.txt)"'),
 	view_unresolved: finishView('git flow feature finish x --squash --squash-message="$(git log -1)"'),
 	view_no_message: finishView("git flow feature finish x --squash"),

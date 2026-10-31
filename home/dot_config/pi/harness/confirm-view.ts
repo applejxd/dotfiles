@@ -355,10 +355,11 @@ export type IntegrationFacts =
 	| { ok: false; branch: string; target: string; why: string };
 
 const SUMMARY_COMMITS = 5;
-const SUMMARY_FILES = 5;
 const MESSAGE_LINES = 8;
 const SUMMARY_CONFLICTS = 8;
 const MESSAGE_CHARS = 3000;
+// 箇条書きの行 (`- ` `* ` `・` `1. `)。続きの字下げ行も、まとめて省く
+const BULLET = /^\s*(?:[-*+•・]|\d+[.)])\s+\S/;
 
 function indent(text: string, pad: string): string[] {
 	return sanitizeForDisplay(text).split("\n").map((l) => (l.length > 0 ? `${pad}${l}` : ""));
@@ -368,7 +369,7 @@ function lastName(path: string): string {
 	return path.split("/").pop() || path;
 }
 
-/** squash メッセージの行。件名 + 本文 (空行は 1 つにまとめ、MESSAGE_LINES 行まで)。見せられないときは、その理由の 1 行 */
+/** squash メッセージの行。件名 + 地の文 (箇条書きは省き、空行は 1 つにまとめ、MESSAGE_LINES 行まで)。見せられないときは、その理由の 1 行 */
 function squashMessageLines(msg: SquashMessage, msgFile: BodyFileResult | undefined): string[] {
 	let label: string;
 	let text: string;
@@ -388,24 +389,37 @@ function squashMessageLines(msg: SquashMessage, msgFile: BodyFileResult | undefi
 	} else {
 		return [`squash メッセージ: ${sanitizeForDisplay(msg.why)}`];
 	}
-	// 先頭の空行は落とし、連続する空行は 1 つにまとめる
+	// 先頭の空行は落とし、連続する空行は 1 つにまとめる。箇条書き (と、その続きの字下げ行) は省く
 	const rows: string[] = [];
+	let bullets = 0;
+	let inBullet = false;
 	for (const l of text.slice(0, MESSAGE_CHARS).split("\n")) {
+		if (BULLET.test(l)) {
+			bullets++;
+			inBullet = true;
+			continue;
+		}
+		if (inBullet && /^\s+\S/.test(l)) continue;
+		inBullet = false;
 		const blank = l.trim() === "";
 		if (blank && (rows.length === 0 || rows[rows.length - 1] === "")) continue;
 		rows.push(blank ? "" : l);
 	}
+	while (rows.length > 0 && rows[rows.length - 1] === "") rows.pop();
 	const shown = rows.slice(0, 1 + MESSAGE_LINES);
-	while (shown.length > 0 && shown[shown.length - 1] === "") shown.pop();
 	const rest = rows.length - shown.length;
 	const out = [label, ...indent(shown.join("\n"), "  ")];
-	if (rest > 0 || text.length > MESSAGE_CHARS) out.push(`  … (${rest > 0 ? `あと ${rest} 行` : "以降は省略"}。全文は ${whole})`);
+	const omitted: string[] = [];
+	if (bullets > 0) omitted.push(`箇条書き ${bullets} 項目`);
+	if (rest > 0) omitted.push(`あと ${rest} 行`);
+	if (text.length > MESSAGE_CHARS) omitted.push("以降");
+	if (omitted.length > 0) out.push(`  … ${omitted.join("・")}を省略 (全文は ${whole})`);
 	return out;
 }
 
 /**
  * `git flow feature|bugfix finish` の確認画面の本文 (実行するコマンドより前)。結論を先に、メッセージを変更の一覧より先に出す。
- * 衝突は、ありと確認できなかったときだけ先頭に出す (なしは、変更の行に添える)。導入文と理由は出さない (見出しと同じことなので)
+ * 変更の一覧は出さず、衝突の有無だけを出す (あり・確認できなかったときは先頭、なしはメッセージの後に 1 行)。メッセージの箇条書きは省く。導入文と理由は出さない (見出しと同じことなので)
  */
 export function finishBodyLines(
 	command: string,
@@ -431,23 +445,13 @@ export function finishBodyLines(
 	if (facts && !facts.ok) lines.push(`(統合の内容を取得できなかった: ${sanitizeForDisplay(facts.why)})`);
 	if (msg) lines.push(...squashMessageLines(msg, msgFile));
 	if (facts?.ok) {
-		const add = facts.files.reduce((n, f) => n + (f.add ?? 0), 0);
-		const del = facts.files.reduce((n, f) => n + (f.del ?? 0), 0);
-		lines.push(`変更: ${facts.commitCount} コミット・${facts.files.length} ファイル (+${add} −${del})${merge?.kind === "none" ? "・衝突なし" : ""}`);
-		if (facts.targetAhead !== undefined && facts.targetAhead > 0) {
-			lines.push(`  ${sanitizeForDisplay(facts.target)} は分岐後に ${facts.targetAhead} 件進んでいる`);
-		}
-		// メッセージが無いときだけ、コミットの件名を出す (squash のメッセージが、その要約になるので)
+		// 変更の一覧 (件数・ファイル・統合先の進み) は出さない (履歴で見る)。衝突は、あり・確認できなかったときは先頭に出したので、なしだけをここに 1 行
+		if (merge?.kind === "none") lines.push("衝突: なし");
+		// メッセージが無いときだけ、コミットの件名を出す (何を統合するかが、ほかに見えないので)
 		if (!msg) {
 			for (const c of facts.commits.slice(0, SUMMARY_COMMITS)) lines.push(`  ${sanitizeForDisplay(c)}`);
 			if (facts.commitCount > SUMMARY_COMMITS) lines.push(`  … ほか ${facts.commitCount - SUMMARY_COMMITS} 件`);
 		}
-		const top = [...facts.files].sort((x, y) => (y.add ?? 0) + (y.del ?? 0) - ((x.add ?? 0) + (x.del ?? 0)));
-		for (const f of top.slice(0, SUMMARY_FILES)) {
-			const n = f.add === null || f.del === null ? "(バイナリ)" : `(+${f.add} −${f.del})`;
-			lines.push(`  ${sanitizeForDisplay(f.path)} ${n}`);
-		}
-		if (top.length > SUMMARY_FILES) lines.push(`  … ほか ${top.length - SUMMARY_FILES} ファイル`);
 	}
 	return lines;
 }

@@ -2792,9 +2792,10 @@ def test_the_finish_confirmation_shows_the_summary_and_the_message_file(env):
     assert len(requests) == 1, requests
     message = requests[0]["message"]
     assert message.startswith("feature/x → develop (squash)\n"), message
-    assert "変更: 1 コミット・1 ファイル (+2 −0)" in message and "a.md (+2 −0)" in message, message
+    # 変更の一覧は出さない (履歴で見る)。衝突の有無だけを出す
+    assert "変更:" not in message and "a.md" not in message, message
     assert "squash メッセージ (msg.txt):" in message, message
-    assert "・衝突なし" in message and "分岐後" not in message, message
+    assert "衝突: なし" in message and "分岐後" not in message, message
     assert "  docs: まとめた件名" in message and "  本文の行" in message, message
     assert "not approved:" in result and "利用者が拒否した" in result, result
 
@@ -2843,8 +2844,11 @@ def test_the_finish_confirmation_warns_about_a_conflict_without_changing_the_rep
     requests, result = _rpc_outcome(env, bash_call(FINISH_COMMAND), [False], PI_HARNESS_BYPASS="1")
     assert len(requests) == 1, requests
     message = requests[0]["message"]
-    assert "  develop は分岐後に 1 件進んでいる" in message, message
-    assert "⚠ 衝突あり (1 ファイル)" in message and "    base.txt" in message, message
+    assert (
+        "⚠ 衝突あり (1 ファイル)" in message
+        and "    base.txt" in message
+        and "分岐後" not in message
+    ), message
     assert "not approved:" in result and "利用者が拒否した" in result, result
     # ref・HEAD・インデックス・作業ツリーは変わらない (merge-tree が書くのはオブジェクトだけ)
     after = [
@@ -2861,5 +2865,4 @@ def test_the_finish_confirmation_reports_no_conflict_when_develop_moved_elsewher
     requests, _result = _rpc_outcome(env, bash_call(FINISH_COMMAND), [False], PI_HARNESS_BYPASS="1")
     assert len(requests) == 1, requests
     message = requests[0]["message"]
-    assert "  develop は分岐後に 1 件進んでいる" in message, message
-    assert "・衝突なし" in message and "⚠" not in message, message
+    assert "衝突: なし" in message and "⚠" not in message and "分岐後" not in message, message

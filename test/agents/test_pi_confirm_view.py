@@ -226,27 +226,25 @@ def test_the_finish_view_puts_the_conclusion_first_and_the_command_last(table):
     # 導入文と理由は出さない (見出しと同じことなので)
     assert "内容を確認してから承認" not in body and "理由:" not in body and "統合の内容:" not in body
     assert body.startswith("feature/x → develop (squash)\n")
-    # メッセージは、変更の一覧より先
+    # メッセージは、件名と地の文 (本文)
     assert "squash メッセージ:\n  docs: 件名\n\n  本文\n" in body
-    assert body.index("squash メッセージ:") < body.index("変更:")
     # 実行するコマンドは、最後に全文で
     assert body.rstrip().endswith('実行:\ngit flow feature finish x --squash --squash-message="docs: 件名\n\n本文"')
-    # メッセージがあるときは、コミットの件名を出さない (メッセージが要約になる)
-    assert "aaa1111" not in body
+    # 変更の一覧 (件数・ファイル・コミットの件名) は出さない
+    assert "変更:" not in body and "aaa1111" not in body and "docs/f9.md" not in body and "+55" not in body
 
 
-def test_the_finish_view_lists_the_changes_compactly(table):
-    body = table["finish"]["view_literal"]["body"]
-    assert "変更: 7 コミット・11 ファイル (+55 −5)\n" in body
-    # 変更の大きい 5 件まで。残りは件数
-    assert body.index("docs/f9.md (+9 −1)") < body.index("docs/f10.md (+10 −0)") < body.index("docs/f5.md (+5 −1)")
-    assert "docs/f6.md" not in body and "  … ほか 6 ファイル" in body
+def test_the_finish_view_has_no_change_list_only_the_conflict_state(table):
+    # 変更の一覧は出さず、衝突の有無だけ (履歴で見る)。facts があっても、メッセージの有無で変わるのはコミットの件名だけ
+    for key in ("view_literal", "view_file", "view_unresolved"):
+        body = table["finish"][key]["body"]
+        assert "変更:" not in body and "ファイル (+" not in body and "分岐後" not in body, key
 
 
 def test_finish_view_reads_the_message_file_and_pins_it(table):
     v = table["finish"]["view_file"]
     assert v["kind"] == "confirm"
-    assert "squash メッセージ (msg.txt):\n  docs: 件名\n\n  本文の 1 行目\n変更:" in v["body"]
+    assert "squash メッセージ (msg.txt):\n  docs: 件名\n\n  本文の 1 行目\n" in v["body"]
     # コマンドには、ファイルのパスが全文のまま出る
     assert '--squash-message="$(cat msg.txt)"' in v["body"]
     # 承認の後に変わったら実行を止めるための印 (index.ts の execute() が読み直して比べる)
@@ -268,16 +266,28 @@ def test_a_long_message_is_clipped_by_characters_and_by_lines(table):
     f = table["finish"]
     body = f["view_file_long"]["body"]
     assert "y" * 3000 in body and "y" * 3001 not in body
-    assert "以降は省略。全文は long.txt" in body
+    assert "… 以降を省略 (全文は long.txt)" in body
     lines = f["view_file_lines"]["body"]
-    # 件名 + 本文 8 行まで。残りは行数と、全文の場所
+    # 件名 + 地の文 8 行まで。残りは行数と、全文の場所
     assert "  line 1\n" in lines and "  line 9\n" in lines and "line 10" not in lines
-    assert "  … (あと 6 行。全文は lines.txt)" in lines
+    assert "  … あと 6 行を省略 (全文は lines.txt)" in lines
+
+
+def test_bullets_in_the_message_are_left_out_with_their_count(table):
+    f = table["finish"]
+    body = f["view_file_bullets"]["body"]
+    # 箇条書き (と、その続きの字下げ行) は省き、地の文だけ残す。省いた項目数と全文の場所を 1 行で
+    assert "squash メッセージ (bullets.txt):\n  feat: 件名\n\n  地の文\n  … 箇条書き 4 項目を省略 (全文は bullets.txt)\n" in body
+    assert "項目" not in body.replace("箇条書き 4 項目を省略", "")
+    only = f["view_file_bullets_only"]["body"]
+    assert "squash メッセージ (bullets_only.txt):\n  feat: 件名\n  … 箇条書き 2 項目を省略 (全文は bullets_only.txt)\n" in only
+    # 箇条書きが無いメッセージは、省略の行を出さない
+    assert "省略" not in f["view_file"]["body"]
 
 
 def test_blank_lines_in_the_message_are_collapsed(table):
     body = table["finish"]["view_file_blanks"]["body"]
-    assert "squash メッセージ (blanks.txt):\n  subject\n\n  body\n変更:" in body
+    assert "squash メッセージ (blanks.txt):\n  subject\n\n  body\n" in body
 
 
 def test_the_view_follows_the_flags_and_the_git_result(table):
@@ -325,21 +335,19 @@ def test_merge_tree_output_is_read_by_exit_code_and_the_first_line(table):
     assert p["parse_other_code_with_reason"] == {"kind": "unknown", "why": "理由"}
 
 
-def test_no_conflict_is_a_suffix_of_the_changes_line_and_an_unmoved_target_is_silent(table):
+def test_no_conflict_is_one_line_after_the_message(table):
     body = table["precheck"]["view_none"]["body"]
-    assert "変更: 7 コミット・11 ファイル (+55 −5)・衝突なし\n" in body
-    assert "分岐後" not in body and "⚠" not in body and "衝突の事前検査" not in body
+    assert "squash メッセージ:\n  abc\n衝突: なし\n" in body
+    assert "分岐後" not in body and "⚠" not in body and "衝突の事前検査" not in body and "変更:" not in body
 
 
 def test_a_conflict_is_warned_at_the_top_with_the_files(table):
     body = table["precheck"]["view_conflict"]["body"]
     head = "feature/x → develop (squash)\n⚠ 衝突あり (2 ファイル)。統合すると失敗する見込み\n    docs/a.md\n    home/x.ts\n"
     assert body.startswith(head)
-    # 衝突は、メッセージと変更より先
-    assert body.index("⚠ 衝突あり") < body.index("squash メッセージ:") < body.index("変更:")
-    assert "・衝突なし" not in body
-    # 統合先が進んでいるときだけ、変更の行の下に出す
-    assert "変更: 7 コミット・11 ファイル (+55 −5)\n  develop は分岐後に 3 件進んでいる\n" in body
+    # 衝突は、メッセージより先。「衝突: なし」は出さない
+    assert body.index("⚠ 衝突あり") < body.index("squash メッセージ:")
+    assert "衝突: なし" not in body and "分岐後" not in body
     many = table["precheck"]["view_conflict_many"]["body"]
     assert "⚠ 衝突あり (12 ファイル)" in many and "d/f8.md" in many and "d/f9.md" not in many
     assert "    … ほか 4 ファイル" in many
@@ -348,15 +356,14 @@ def test_a_conflict_is_warned_at_the_top_with_the_files(table):
 def test_the_view_says_when_the_precheck_could_not_run(table):
     body = table["precheck"]["view_unknown"]["body"]
     assert "衝突の事前検査: 確認できなかった (git が失敗した (終了コード 129))\n" in body
-    assert "⚠" not in body and "・衝突なし" not in body  # 衝突とは言わず、なしとも言わない
+    assert "⚠" not in body and "衝突: なし" not in body  # 衝突とは言わず、なしとも言わない
     ahead = table["precheck"]["view_ahead_only"]["body"]
-    assert "develop は分岐後に 1 件進んでいる" in ahead and "衝突" not in ahead
+    assert "衝突" not in ahead and "分岐後" not in ahead
 
 
-def test_facts_without_the_new_fields_show_no_new_lines(table):
+def test_facts_without_the_merge_check_show_no_conflict_line(table):
     body = table["precheck"]["view_old_facts"]["body"]
-    assert "分岐後" not in body and "衝突" not in body
-    assert "変更: 7 コミット・11 ファイル" in body  # 従来の要約は、そのまま
+    assert "衝突" not in body and "分岐後" not in body and "変更:" not in body
 
 
 def test_control_characters_in_conflicting_file_names_are_made_visible(table):
