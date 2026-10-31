@@ -99,7 +99,7 @@
 | --- | --- | --- | --- |
 | S0 | 要約の部品を `confirm-view.ts` へ移す・確認の select ループと git 実行の共通化（挙動不変） | 親 | 未着手（要約を箇条書きにする変更の取り込み後） |
 | S1 | 設定の足場（`[pi.integrate]`、`[pi.confirm] integration`、保護 ref の判定）。挙動不変 | worker | 完了（`develop` に取り込み済み、配備済み。挙動不変） |
-| S2 | 自由区の判定（linked worktree かつ `feature/*`。確認は省略しない） | worker | 未着手 |
+| S2 | 自由区の判定（linked worktree かつ `feature/*`。確認は省略しない） | worker | 完了（`harness/freezone.ts`・`gitrun.ts`。部品のみで、まだ接続しない。試験 `test_pi_freezone.py`） |
 | S3a | 統合の計画の算出と表示（結果の差分・リスクの印。ツールには未接続） | worker | 未着手 |
 | S3b | 専用操作 `git_integrate`（計画の固定・直前照合・結果 3 値） | 親 | 未着手 |
 | S4 | bash の統合ゲート（保護 ref を変える通常の統合コマンドを必須確認にし、feature の日常の操作は止めない） | worker | 未着手 |
