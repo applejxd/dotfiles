@@ -182,10 +182,13 @@ const PROTECTED: { current: readonly string[] } = { current: [] };
 
 const hit = (kind: Kind, reason: string, sub: string): Integration => ({ kind, reason, sub });
 
+const PENDING_REF = /^refs\/pi(\/|$)/i;
+
 /** 宛先の ref の判定。保護なら always、判定できなければ unknown、保護でなければ null。 */
 function refVerdict(ref: string, what: string, sub: string): Integration | null {
 	const patterns = PROTECTED.current;
 	if (isDynamic(ref)) return hit("unknown", `${what}の宛先 ${ref} を静的に判定できない`, sub);
+	if (PENDING_REF.test(ref)) return hit("always", `保留の記録 (refs/pi/) を書き換える ${what}`, sub);
 	if (isProtectedRef(ref, patterns)) return hit("always", `保護ブランチ ${ref.replace(/^refs\/heads\//i, "")} を変える ${what}`, sub);
 	return null;
 }
@@ -230,7 +233,10 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 		}
 		case "symbolic-ref": {
 			const a = scanArgs(args, "m", new Set(["--message"]));
-			if (a.short.has("d") || a.long.has("--delete")) return NONE;
+			if (a.short.has("d") || a.long.has("--delete")) {
+				const r = a.positional[0];
+				return r !== undefined && PENDING_REF.test(r) ? refVerdict(r, "git symbolic-ref -d", sub) ?? NONE : NONE;
+			}
 			if (a.positional.length < 2) return NONE;
 			let unknown: Integration | null = null;
 			for (const ref of a.positional.slice(0, 2)) {
@@ -268,7 +274,7 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 				const dst = spec.slice(colon + 1);
 				if (dst === "") continue;
 				// refs/heads/ の外に決まっている宛先は、保護ブランチではない
-				if (/^refs\/(?!heads\/)/i.test(dst)) continue;
+				if (/^refs\/(?!heads\/|pi(\/|$))/i.test(dst)) continue;
 				const v = refVerdict(dst, "git fetch", sub);
 				if (v?.kind === "always") return v;
 				unknown = unknown ?? v;
