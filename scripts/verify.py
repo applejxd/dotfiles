@@ -114,6 +114,7 @@ _PI_TESTS = (
     "test_pi_commit_confirm",
     "test_pi_audit",
     "test_pi_confirm",
+    "test_pi_integrate_config",
     "test_pi_landlock_exec",
     "test_pi_tools_ext",
     "test_pi_model_choice",

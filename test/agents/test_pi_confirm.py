@@ -401,12 +401,14 @@ def test_confirm_defaults_when_omitted():
         "checks": [],
         "timeout_seconds": 300,
         "local_git": False,
+        "integration": False,
     }
     assert _confirm_of(_with_confirm({"bash": ["gh pr create"]})) == {
         "bash": ["gh pr create"],
         "checks": [],
         "timeout_seconds": 300,
         "local_git": False,
+        "integration": False,
     }
 
 

@@ -1856,7 +1856,7 @@ def agent_env(common: dict[str, Any]) -> dict[str, str]:
 JUDGE_COMMON_KEYS = ("bash", "file", "pi")
 JUDGE_TABLES = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/tables.toml"
 JUDGE_CHECKS = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/checks.ts"
-PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds", "local_git"})
+PI_CONFIRM_KEYS = frozenset({"bash", "checks", "timeout_seconds", "local_git", "integration"})
 PI_CONFIRM_TIMEOUT_DEFAULT = 300
 PI_ACTION_KEYS = frozenset({"id", "label", "argv", "fields", "replaces", "preview"})
 PI_ACTION_PREVIEWS = frozenset({"none", "git_staged"})
@@ -2038,6 +2038,69 @@ def pi_confirm(common: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(local_git, bool):
         raise SystemExit(f"[pi.confirm] local_git は真偽値: {local_git!r}")
     out["local_git"] = local_git
+    # 保護ブランチへの統合コマンドを bash で確認するか (後続の段が true にする)
+    integration = section.get("integration", False)
+    if not isinstance(integration, bool):
+        raise SystemExit(f"[pi.confirm] integration は真偽値: {integration!r}")
+    out["integration"] = integration
+    return out
+
+
+PI_INTEGRATE_KEYS = frozenset(
+    {"enabled", "target", "protected_refs", "risk_paths", "skip_confirm_in_free_zone"}
+)
+PI_INTEGRATE_FLOOR = ("main", "master", "develop", "release/*", "hotfix/*")
+PI_INTEGRATE_DEFAULT: dict[str, Any] = {
+    "enabled": False,
+    "target": "develop",
+    "protected_refs": list(PI_INTEGRATE_FLOOR),
+    "risk_paths": [],
+    "skip_confirm_in_free_zone": False,
+}
+
+
+def pi_integrate(common: dict[str, Any]) -> dict[str, Any]:
+    """``[pi.integrate]`` を検証し、既定値を補って返す。
+
+    ``protected_refs`` は下限 (``PI_INTEGRATE_FLOOR``) を全て含み、各要素は ``refs/`` で始めず、
+    ``*`` は末尾の ``/*`` だけ。``target`` は ``protected_refs`` の完全一致の要素。
+    see docs/change/0053-worktree-integration-gate.md
+    """
+    section = (common.get("pi") or {}).get("integrate")
+    if section is None:
+        section = {}
+    if not isinstance(section, dict):
+        raise SystemExit("[pi.integrate] がテーブルでない")
+    _reject_unknown("pi.integrate", set(section), PI_INTEGRATE_KEYS)
+    out: dict[str, Any] = {}
+    for key in ("enabled", "skip_confirm_in_free_zone"):
+        value = section.get(key, PI_INTEGRATE_DEFAULT[key])
+        if not isinstance(value, bool):
+            raise SystemExit(f"[pi.integrate] {key} は真偽値: {value!r}")
+        out[key] = value
+    target = section.get("target", PI_INTEGRATE_DEFAULT["target"])
+    if not isinstance(target, str) or not target.strip():
+        raise SystemExit(f"[pi.integrate] target は空でない文字列: {target!r}")
+    out["target"] = target
+    for key in ("protected_refs", "risk_paths"):
+        value = section.get(key, PI_INTEGRATE_DEFAULT[key])
+        if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+            raise SystemExit(f"[pi.integrate] {key} は空でない文字列の配列: {value!r}")
+        out[key] = list(value)
+    refs = out["protected_refs"]
+    for ref in refs:
+        if ref.startswith("refs/"):
+            raise SystemExit(f"[pi.integrate] protected_refs は refs/ で始めない: {ref!r}")
+        if "*" in ref and not (ref.endswith("/*") and "*" not in ref[:-2] and len(ref) > 2):
+            raise SystemExit(
+                f"[pi.integrate] protected_refs のワイルドカードは末尾の /* だけ: {ref!r}"
+            )
+    missing = [r for r in PI_INTEGRATE_FLOOR if r.casefold() not in {x.casefold() for x in refs}]
+    if missing:
+        raise SystemExit("[pi.integrate] protected_refs に下限の ref が無い: " + ", ".join(missing))
+    exact = {r.casefold() for r in refs if "*" not in r}
+    if target.casefold() not in exact:
+        raise SystemExit(f"[pi.integrate] target は protected_refs の完全一致の要素: {target!r}")
     return out
 
 
@@ -2060,6 +2123,7 @@ def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
         judge_common["pi"] = {
             **judge_common["pi"],
             "confirm": pi_confirm(common),
+            "integrate": pi_integrate(common),
             "actions": pi_actions(common),
         }
     return {

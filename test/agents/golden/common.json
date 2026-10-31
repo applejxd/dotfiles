@@ -1219,6 +1219,7 @@
    "checks": [
     "check_gh_api_mutation"
    ],
+   "integration": false,
    "local_git": true,
    "timeout_seconds": 300
   },
@@ -1269,6 +1270,31 @@
     "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
    }
   ],
+  "integrate": {
+   "enabled": false,
+   "protected_refs": [
+    "main",
+    "master",
+    "develop",
+    "release/*",
+    "hotfix/*"
+   ],
+   "risk_paths": [
+    "home/dot_config/agents/**",
+    "home/dot_config/pi/harness/**",
+    "home/dot_claude/hooks/**",
+    "home/.chezmoitemplates/agent-instructions.md",
+    "AGENTS.md",
+    ".pre-commit-config.yaml",
+    "mise.toml",
+    "scripts/verify*.py",
+    "scripts/agents/**",
+    ".gitflow",
+    ".github/workflows/**"
+   ],
+   "skip_confirm_in_free_zone": false,
+   "target": "develop"
+  },
   "keybinds": {
    "app.clear": [],
    "app.exit": "ctrl+d",

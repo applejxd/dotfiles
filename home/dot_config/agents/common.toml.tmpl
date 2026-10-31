@@ -926,6 +926,8 @@ targets = ["sbx@sandbox-gpu"]
 [pi.confirm]
 # 元に戻せないローカルの git 操作 (branch -D / clean / tag -d など) も、bypass で確認する (see docs/spec/guard/pi-decide.md#confirm)
 local_git = true
+# 保護ブランチへの統合コマンドの確認 (see docs/spec/guard/pi-decide.md#confirm)
+integration = false
 bash = [
   "gh pr create",
   "gh pr edit",
@@ -962,6 +964,28 @@ bash = [
 ]
 checks = ["check_gh_api_mutation"]
 timeout_seconds = 300
+
+# 保護ブランチへの統合 (see docs/change/0053-worktree-integration-gate.md)
+# protected_refs は main / master / develop / release/* / hotfix/* を必ず含める (末尾の /* だけがワイルドカード)
+[pi.integrate]
+enabled = false
+target = "develop"
+protected_refs = ["main", "master", "develop", "release/*", "hotfix/*"]
+# 確認画面でリスクの印を付けるパスの glob
+risk_paths = [
+  "home/dot_config/agents/**",
+  "home/dot_config/pi/harness/**",
+  "home/dot_claude/hooks/**",
+  "home/.chezmoitemplates/agent-instructions.md",
+  "AGENTS.md",
+  ".pre-commit-config.yaml",
+  "mise.toml",
+  "scripts/verify*.py",
+  "scripts/agents/**",
+  ".gitflow",
+  ".github/workflows/**",
+]
+skip_confirm_in_free_zone = false
 
 # 承認つきで実行する操作 (guarded_action)。action を持つ役割では、replaces に当たる bash は deny。
 # argv はシェル無しで実行する。置換点は {<フィールド名>} / {<フィールド名>_file}。
