@@ -16,6 +16,7 @@
 | 親と子の分担 | 運用 | 親は対話・判断・委譲・承認・ToDo の管理。調査・計画・実装・検証は子へ（全体の指示は `agent-instructions.md`。親の文脈を重い読み物で占めない） | [CHG-0045](../change/0045-orchestrator-parent.md) |
 | 子が止まらない条件 | 実装済（判定器の決定表で確認。実際の子の RPC 起動での再確認は未） | 子が確認なしで動けるのは、親の bypass を継ぐか、証明済みの境界（`pis`）の内側のとき。`mustConfirm` は常に確認 | [CHG-0045](../change/0045-orchestrator-parent.md)、[判定器](guard/pi-decide.md) |
 | `/fleet` | 実装済 | 依頼を、並列に動かせる作業に分け、`worker` を 1 回の応答に並べて起動させる | [fleet](guard/pi-extensions.md#fleet) |
+| feature の並列実装の手順（起票 → worker → 確認 → 取り込み） | 運用（スキルとして工程化） | チェックリストと落とし穴をスキル `feature-orchestration` に、worker 共通の約束を `references/worker-common.md` に置く。依頼文の雛形と手順の正本は「並列実装の運用」 | [pi-subagents](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | 委譲の統計（`delegate-nudge`） | 試作 | 読み取り系ツールの回数と、子の起動数だけを、セッションに記録する（通知しない。子では動かない） | [自作の拡張](guard/pi-extensions.md#自作の拡張-todo--plan--btw) |
 
 ## 2. 子の起動と実行の制御（`guarded_task`）

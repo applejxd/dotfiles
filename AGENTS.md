@@ -68,14 +68,9 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 - **設定ファイル・スクリプトのコメントは「その行を編集するときに要る注記」だけにする。**
   仕組み・判断基準・既知の不具合・実測値・経緯は `docs/` が正本で、コメントからは
   参照先だけを示す（`# see docs/spec/structure.md#見出し`）。
-  同じ説明をコメントと `docs/` の両方に書かない（更新時に必ず片方が古くなる）
-  - 正本の対応: `common.toml.tmpl` → `docs/spec/agent-permissions.md`（入口）と
-    分割先の `agent-config-generation.md` / `guard/agent-command-policy.md` / `sandbox/agent-sandbox.md`、
-    `mise/config.toml.tmpl` と `.chezmoiscripts/` → `docs/spec/structure.md`
-  - コメントに残してよい例: 非自明な 1 行の意図、公式ドキュメントの URL、
-    消すと壊れる理由の 1 文
-  - `docs/` へ移すもの: 背景・比較・代替案・実測値・失敗談・「なぜ他の方法を
-    採らなかったか」
+  同じ説明をコメントと `docs/` の両方に書かない（更新時に必ず片方が古くなる）。
+  正本の対応・コメントに残してよい例・ docs へ移すものは
+  [コメントの書き分け](docs/spec/agent-config-generation.md#コメントの書き分け)
 - 秘密情報はソースに書かず Bitwarden / sops + age を使う。sudo のパスワードは保存せず、
   スクリプトが実行時に端末で尋ねる（[sudo パスワード](docs/spec/development.md#sudo-パスワード)）
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない
@@ -90,10 +85,14 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
     worker に worktree の絶対パスと担当ファイルを渡す。担当外の worktree や本体を編集させない
   - worker はコミットしない。親が結果を根拠で確かめ、`git_commit`（`dir` に worktree）→ `git flow feature finish` で取り込む
   - **`git flow feature finish`・`git merge` など、保護ブランチへの統合は、bypass でも必須確認**（承認画面が出る。[CHG-0053](docs/change/0053-worktree-integration-gate.md)）。確認を出して利用者に見せ、承認を待つ
-  - 共有されやすいファイル（`common.toml.tmpl`・golden・docs の索引）は、同時に複数の worker に触らせない。衣突するなら、親が順に取り込む
+  - 共有されやすいファイル（`common.toml.tmpl`・golden・docs の索引）は、同時に複数の worker に触らせない。衝突するなら、親が順に取り込む
   - 重い検査を同時に回さない。worker には対象の試験と `pre-commit --files` だけ回させ、
     全件（`mise run verify:all`）は親が 1 回だけ回す。並列度は `VERIFY_JOBS` で下げられる
   - 子の結果は、パスと行・コマンドの出力で確かめてから採用する（子は「通った」を実行できないことが多い）
+  - 手順・依頼文の雛形・踏みやすい落とし穴は、スキル `feature-orchestration`（`.agents/skills/`）と
+    [並列実装の運用](docs/spec/guard/pi-subagents.md#並列実装の運用隔離なしの-worktree)。worker への依頼文は、共通の約束をファイルで参照させて短くする
+- 新しい試験ファイルは `scripts/verify.py` の `_PI_TESTS`（または該当の `Rule`）に登録する。漏れは `test/test_verify.py`（2 秒）で先に見つかる。
+  全件検査の前に回す
 - 運用手順やコマンドを追加したら `docs/` の該当ファイルと `index.md` を更新する。
   `README.md` は導入・更新など入口の手順が変わるときだけ更新する
 - **`README.md` は「最短で動かす」ためだけに保つ。** 各項目は数行 + `docs/` への

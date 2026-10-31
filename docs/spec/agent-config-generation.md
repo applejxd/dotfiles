@@ -110,6 +110,14 @@ TOML として読めること・必須の deny リストが空でないこと・
 経緯をファイル側に書くと値を探しにくくなるので分離した
 （[経緯](../research/agents/agent-config-generation-notes.md)）。
 
+**他のファイルへの適用**: 同じ規則を `mise/config.toml.tmpl`・`.chezmoiscripts/`・スクリプトのコメントにも使う
+（正本は [structure.md](structure.md)）。`common.toml.tmpl` の正本は [agent-permissions.md](agent-permissions.md#文書の構成)
+と、分割先の `agent-config-generation.md`・`guard/agent-command-policy.md`・`sandbox/agent-sandbox.md`。
+
+- **同じ説明をコメントと `docs/` の両方に書かない**（更新時に必ず片方が古くなる）。
+- コメントに残してよい例: 非自明な 1 行の意図、公式ドキュメントの URL、消すと壊れる理由の 1 文。
+- `docs/` へ移すもの: 背景・比較・代替案・実測値・失敗談・「なぜ他の方法を採らなかったか」。
+
 Python runtime は 3.11 以上を前提とし、TOML は標準ライブラリ `tomllib` で読む。
 Windows ではインストール済みの最新 Python 3 を選ぶ `py -3`、Unix では
 `python3` を使用する。3.11 未満では `tomllib` import が失敗するため、
