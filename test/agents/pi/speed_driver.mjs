@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(resolve(ROOT, "home", "dot_pi", "agent", "extensions", "speed", "index.ts")).href);
-const { computeSpeed, formatSpeed, speedExtension } = mod;
+const { computeSpeed, formatSpeed, mergeSpeed, speedExtension } = mod;
 
 const base = { t0: 0, tFirst: 1200, tEnd: 3200, output: 120, reasoning: 0, sawThinking: false };
 const cs = (over) => computeSpeed({ ...base, ...over });
@@ -36,6 +36,12 @@ out.format = {
 	no_ttft: fmt({ t0: undefined }),
 	none: fmt({ tFirst: undefined }),
 	long: fmt({ tFirst: 123456, tEnd: 223456, output: 12345 }),
+};
+
+out.merge = {
+	keep_rate: mergeSpeed({ ttftMs: 1200, tps: 55, approx: false }, { ttftMs: 500, approx: false }),
+	new_rate: mergeSpeed({ ttftMs: 1200, tps: 55, approx: true }, { ttftMs: 500, tps: 40, approx: false }),
+	first: mergeSpeed(undefined, { ttftMs: 500, approx: false }),
 };
 
 // 時計を差し替えて、イベントの流れから表示を確かめる
@@ -93,6 +99,12 @@ out.events = {
 		[6500, "message_end", end({ output: 100, reasoning: 40 })],
 	]),
 	cleared_on_switch: await run([...flow("text_delta", { output: 110 }), [9000, "session_start", {}]]),
+	// 短い応答 (decode が取れない) でも、直近の値を表示し続ける (「—」に戻らない)
+	keeps_last_rate: await run([...flow("text_delta", { output: 110 }), [4000, "before_provider_request", {}], [4500, "message_update", update("text_delta")], [4800, "message_end", end({ output: 10 })]]),
+	keeps_last_all: await run([...flow("text_delta", { output: 110 }), [4000, "before_provider_request", {}], [4100, "message_update", update("start")], [4200, "message_end", end({ output: 10 })]]),
+	keeps_approx: await run([...flow("text_delta", { output: 110, reasoning: 40 }), [4000, "before_provider_request", {}], [4500, "message_update", update("text_delta")], [4800, "message_end", end({ output: 10 })]]),
+	// 新しいセッションでは直近の値も消える (前のセッションの値を持ち越さない)
+	short_after_switch: await run([...flow("text_delta", { output: 110 }), [9000, "session_start", {}], [9100, "before_provider_request", {}], [9600, "message_update", update("text_delta")], [9900, "message_end", end({ output: 10 })]]),
 	no_ui: await run([
 		[0, "session_start", {}, { hasUI: false, ui: { setStatus: () => { throw new Error("no ui") } } }],
 		[0, "before_provider_request", {}],

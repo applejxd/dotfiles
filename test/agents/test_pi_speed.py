@@ -112,9 +112,28 @@ def test_status_is_not_updated_for_errors_aborts_or_non_assistant_messages(table
 
 
 @needs_node
+def test_a_short_reply_keeps_showing_the_last_rate_instead_of_a_dash(table):
+    # decode が取れない応答 (出力が短い・最初のトークンが無い) でも、直近の値を出し続ける。TTFT は今回の値
+    assert _statuses(table, "keeps_last_rate") == [None, "📝55t/s 1.2s", "📝55t/s 0.5s"]
+    assert _statuses(table, "keeps_last_all") == [None, "📝55t/s 1.2s", "📝55t/s 1.2s"]
+    # 「~」(思考が出ない経路の疑い) も、直近の値のものを残す
+    assert _statuses(table, "keeps_approx") == [None, "📝~55t/s 1.2s", "📝~55t/s 0.5s"]
+    m = table["merge"]
+    assert m["keep_rate"] == {"ttftMs": 500, "tps": 55, "approx": False}
+    assert m["new_rate"] == {
+        "ttftMs": 500,
+        "tps": 40,
+        "approx": False,
+    }  # 新しい値があれば、そちら、印も今回のもの
+    assert m["first"] == {"ttftMs": 500, "approx": False}  # 一度も取れていない間は、表示は —
+
+
+@needs_node
 def test_each_call_is_measured_alone_and_a_new_session_clears_the_status(table):
     assert _statuses(table, "second_call_resets") == [None, "📝55t/s 1.2s", "📝~50t/s 0.5s"]
     assert _statuses(table, "cleared_on_switch") == [None, "📝55t/s 1.2s", None]
+    # 新しいセッションでは、前の値を持ち越さない
+    assert _statuses(table, "short_after_switch") == [None, "📝55t/s 1.2s", None, "📝— 0.5s"]
 
 
 @needs_node

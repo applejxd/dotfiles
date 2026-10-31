@@ -26,10 +26,21 @@ export function formatSpeed(s: Speed): string {
 	return `📝${rate} ${ttft}`;
 }
 
+/** 今回の値で、取れなかった項目 (出力が短い・最初のトークンが無い) は直近の値を残す (表示が「—」に戻らないように) */
+export function mergeSpeed(prev: Speed | undefined, cur: Speed): Speed {
+	return {
+		ttftMs: cur.ttftMs ?? prev?.ttftMs,
+		tps: cur.tps ?? prev?.tps,
+		approx: cur.tps !== undefined ? cur.approx : (prev?.approx ?? false),
+	};
+}
+
 export function speedExtension(pi: ExtensionAPI, now: () => number) {
 	let t0: number | undefined;
 	let tFirst: number | undefined;
 	let sawThinking = false;
+	// 直近の有効な値 (セッションを開いてから)。短い応答で decode が取れないときは、これを表示し続ける
+	let last: Speed | undefined;
 
 	const reset = () => {
 		t0 = tFirst = undefined;
@@ -46,6 +57,7 @@ export function speedExtension(pi: ExtensionAPI, now: () => number) {
 		"session_start",
 		safe((_e: any, ctx: ExtensionContext) => {
 			reset();
+			last = undefined;
 			if (ctx.hasUI) ctx.ui.setStatus("speed", undefined);
 		}),
 	);
@@ -74,7 +86,10 @@ export function speedExtension(pi: ExtensionAPI, now: () => number) {
 			const done = m.stopReason !== "error" && m.stopReason !== "aborted";
 			const speed = computeSpeed({ t0, tFirst, tEnd, output: m.usage?.output ?? 0, reasoning: m.usage?.reasoning ?? 0, sawThinking });
 			reset();
-			if (done) ctx.ui.setStatus("speed", formatSpeed(speed));
+			if (done) {
+				last = mergeSpeed(last, speed);
+				ctx.ui.setStatus("speed", formatSpeed(last));
+			}
 		}),
 	);
 }
