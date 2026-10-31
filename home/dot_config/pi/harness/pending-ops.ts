@@ -288,6 +288,16 @@ function refOid(cwd: string, ref: string): string | null {
 	return r.ok && OID_RE.test(r.out) ? r.out : null;
 }
 
+/** running の試行の commit (symbolic ref・無いときは null) */
+export function runningOid(cwd: string, id: string): string | null {
+	return ID_RE.test(id) ? refOid(cwd, NS.running + id) : null;
+}
+
+/** done の結果の commit (symbolic ref・無いときは null) */
+export function doneOid(cwd: string, id: string): string | null {
+	return ID_RE.test(id) ? refOid(cwd, NS.done + id) : null;
+}
+
 /** pending の記録を ref から読む */
 export function readOp(cwd: string, id: string, limits: Limits = DEFAULT_LIMITS): ReadOp {
 	if (!ID_RE.test(id)) return { ok: false, reason: "id の形が不正" };
@@ -296,8 +306,8 @@ export function readOp(cwd: string, id: string, limits: Limits = DEFAULT_LIMITS)
 	return readOpAt(cwd, id, oid, limits);
 }
 
-type AttemptAt = { ok: true; attempt: Attempt; parent: string } | Fail;
-function readAttemptAt(cwd: string, id: string, oid: string): AttemptAt {
+export type AttemptAt = { ok: true; attempt: Attempt; parent: string } | Fail;
+export function readAttemptAt(cwd: string, id: string, oid: string): AttemptAt {
 	const c = readCommit(cwd, oid);
 	if (!c || c.parents.length !== 1) return { ok: false, reason: "試行の commit を読めない" };
 	if (trailerOf(c.message, KIND_TRAILER) !== "attempt" || trailerOf(c.message, ID_TRAILER) !== id) return { ok: false, reason: "試行の commit の種類・id が違う" };
@@ -308,7 +318,7 @@ function readAttemptAt(cwd: string, id: string, oid: string): AttemptAt {
 }
 
 /** 試行の鎖 (started → reserved → 記録) をたどって、記録の commit の OID を返す */
-function recordOidOf(cwd: string, id: string, attemptOid: string): { ok: true; oid: string; attempt: Attempt } | Fail {
+export function recordOidOf(cwd: string, id: string, attemptOid: string): { ok: true; oid: string; attempt: Attempt } | Fail {
 	const a = readAttemptAt(cwd, id, attemptOid);
 	if (!a.ok) return a;
 	let parent = a.parent;
@@ -572,6 +582,19 @@ export function resolveUnknown(cwd: string, id: string, decision: { kind: "succe
 	};
 	const out = finishWith(cwd, id, r.parent, body, "human", doneOid);
 	return out.ok ? { ok: true } : out;
+}
+
+/** pending の記録を破棄する (利用者が決める)。到達用の ref と、重複の抑止の鍵だけを外す (オブジェクトは git gc まで残る)。表示した OID が今と同じときだけ */
+export function discardOp(cwd: string, id: string, shownOid: string, limits: Limits = DEFAULT_LIMITS): Transition {
+	if (!ID_RE.test(id) || !OID_RE.test(shownOid)) return { ok: false, code: "invalid", reason: "id・OID の形が不正" };
+	const rec = readOpAt(cwd, id, shownOid, limits);
+	const cmds = [`delete ${NS.pending}${id} ${shownOid}`];
+	const keyRef = rec.ok ? NS.key + rec.record.digest : "";
+	const keyOid = keyRef ? refOid(cwd, keyRef) : null;
+	if (keyOid !== null && keyOid === shownOid) cmds.push(`delete ${keyRef} ${keyOid}`);
+	let t = transact(cwd, cmds);
+	if (!t.ok && cmds.length > 1) t = transact(cwd, cmds.slice(0, 1)); // 鍵だけが競合したなら、記録の ref だけ外す
+	return t.ok ? { ok: true } : { ok: false, code: "mismatch", reason: `破棄できなかった (表示した後に変わった): ${t.reason}` };
 }
 
 // ---- 期限 ----

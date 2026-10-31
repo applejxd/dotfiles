@@ -128,6 +128,7 @@ _PI_TESTS = (
     "test_pi_plan_role",
     "test_pi_pending_store",
     "test_pi_pending_ops",
+    "test_pi_pending_approve",
     "test_pi_pending_owner",
     "test_pi_pending_actions",
     "test_pi_git_destructive",
