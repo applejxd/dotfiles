@@ -156,6 +156,7 @@ _PI_TESTS = (
     "test_pi_control_files_bash",
     "test_pi_platform",
     "test_pi_judge_windows_paths",
+    "test_pi_pending_command",
     "test_btw_view",
 )
 _OC_TESTS = (

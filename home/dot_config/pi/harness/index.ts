@@ -37,7 +37,11 @@ import { ISOLATION_UNSUPPORTED, NO_BASH_NOTICE, findBash, isWindows, supportsChi
 import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
 import { STARTUP_LIMITS, findRepoRoot, isolationTraceRoot, runWorktreesCommand, startupReconcile } from "./worktrees-command.ts";
-import { PENDING_PREFIX, dropPending, listPending, reconcilePending, showPending } from "./pending-store.ts";
+import { reconcilePending } from "./pending-store.ts";
+import { reconcileOps } from "./pending-ops.ts";
+import { currentOwner, ownerState } from "./pending-owner.ts";
+import { PENDING_ADAPTERS, APPROVAL_ADAPTERS } from "./pending-adapters.ts";
+import { pendingSettings, registerPendingCommand } from "./pending-command.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -52,6 +56,8 @@ const BOUNDARY_ENV = readBoundaryEnv(process.env);
 const NO_SANDBOX = process.env.PI_HARNESS_NO_SANDBOX === "1";
 // 子エージェントとして起動されたか。子では guarded_task を登録しない (入れ子にしない)
 const CHILD = process.env.PI_HARNESS_CHILD === "1";
+// この pi プロセスの世代 (保留の owner に記録する。判定には使わない)
+const RUNTIME_EPOCH = randomBytes(8).toString("hex");
 
 // rules.json が読めなければ読み込みごと失敗させる。起動は止まり、/reload ではツールが無くなる
 const rules = JSON.parse(readFileSync(join(HERE, "rules.json"), "utf-8"));
@@ -298,7 +304,41 @@ export default async function (pi: ExtensionAPI) {
 	});
 	// セッションの終了・切り替え・/reload で、保持している子を全部止める。
 	// そのうえで、セッションごとの一時置き場 (.tmp/s/<ID>/) は quit のときだけ消す (CHG-0042)
+	// 保留 (非同期承認) の /pending。子には登録しない。[pi.pending] の設定は呼ぶたびに読む。task ツールの有無に関わらず登録する
+	const pendingNow = () => pendingSettings(rules.judge.common?.pi?.pending);
+	const pendingCmd = !CHILD
+		? registerPendingCommand(pi, {
+				settings: pendingNow,
+				redact: redactText,
+				// コマンドは input イベントより先に処理されるので、不在の解除はここでする
+				touch: () => {
+					absence.gen++;
+					absence.absent = false;
+				},
+				approveDeps: (ctx: any) => ({
+					adapters: APPROVAL_ADAPTERS,
+					enabled: () => pendingNow().enabled,
+					modes: pendingNow().modes,
+					rules,
+					env: { ...AGENT_ENV, ...process.env },
+					dialog: dialogInOrder,
+					bell: () => {
+						if (ctx.mode === "tui") process.stdout.write("\x07");
+					},
+					owner: () => currentOwner(String(ctx.sessionManager?.getSessionId?.() ?? ""), RUNTIME_EPOCH),
+					notify: (text: string, level: "info" | "warning" | "error") => ctx.ui?.notify?.(redactText(text), level),
+					tellModel: (content: string, details: Record<string, unknown>) => {
+						try {
+							pi.sendMessage({ customType: "pending-result", content, display: true, details }, { triggerTurn: true, deliverAs: "followUp" });
+						} catch {}
+					},
+					limits: pendingNow().limits,
+					liveness: ownerState,
+				}),
+			})
+		: null;
 	pi.on("session_shutdown", async (event: any) => {
+		pendingCmd?.abortAll();
 		jobs.closeAll();
 		try {
 			await sessionTmp.teardown(String(event?.reason ?? ""));
@@ -320,6 +360,12 @@ export default async function (pi: ExtensionAPI) {
 			try {
 				reconcilePending(cwd);
 			} catch {}
+			// 新形式の期限切れの記録・結果を片付ける。無効 ([pi.pending] enabled = false) でも復旧と掃除は動かす
+			try {
+				const s = pendingNow();
+				reconcileOps(cwd, { retentionDays: s.retentionDays, resultRetentionDays: s.resultRetentionDays }, s.limits);
+			} catch {}
+			pendingCmd?.refresh(ctx);
 			if (event?.reason === "startup") sessionTmp.sweep(cwd);
 		} catch {}
 		reconcileOnStart(ctx);
@@ -633,6 +679,16 @@ export default async function (pi: ExtensionAPI) {
 						absence,
 						bell: () => {
 							if (ctx.mode === "tui") process.stdout.write("\x07");
+						},
+						pending: {
+							enabled: pendingNow().enabled,
+							modes: pendingNow().modes,
+							adapters: PENDING_ADAPTERS,
+							limits: pendingNow().limits,
+							onSaved: () => {
+								if (ctx.mode === "tui") process.stdout.write("\x07");
+								pendingCmd?.refresh(ctx);
+							},
 						},
 					},
 					params,
@@ -1518,29 +1574,6 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		},
 	});
 
-	// 承認が取れず退避したコミット (refs/pi/pending/) の一覧・表示・破棄。利用者専用 (モデルは呼べない)。入力と同じように不在を解除する (コマンドは input イベントより先に処理される)
-	pi.registerCommand("pending", {
-		description: "承認が取れず退避したコミットの一覧・表示・破棄: /pending [list | show <ref> | drop <ref>]",
-		handler: async (args: string, ctx: any) => {
-			absence.gen++;
-			absence.absent = false;
-			const cwd: string = ctx.cwd ?? process.cwd();
-			const [sub = "list", arg = ""] = String(args ?? "").trim().split(/\s+/);
-			const full = arg.startsWith("refs/") ? arg : `${PENDING_PREFIX}${arg}`;
-			let text: string;
-			if (sub === "" || sub === "list") {
-				const all = listPending(cwd);
-				text = all.length === 0 ? "退避したコミットは無い" : all.map((e) => `${e.ref.slice(PENDING_PREFIX.length)}  ${e.oid.slice(0, 7)}  ${e.subject}  (${e.branch || "-"})`).join("\n");
-			} else if (sub === "show" && arg) {
-				text = showPending(cwd, full) || "見つからない (/pending list で ref を確かめる)";
-			} else if (sub === "drop" && arg) {
-				text = dropPending(cwd, full) ? `破棄した: ${full} (到達用の ref を外した。オブジェクトは git gc まで残る)` : "破棄できなかった (ref が無い・退避の ref ではない)";
-			} else {
-				text = "/pending [list | show <ref> | drop <ref>]";
-			}
-			ctx.ui?.notify?.(redactText(text), "info");
-		},
-	});
 	// 隔離 (worktree) の一覧・回収のやり直し・破棄。利用者専用 (モデルは呼べない)
 	pi.registerCommand("worktrees", {
 		description: "隔離 (worktree) の一覧・回収のやり直し・破棄: /worktrees [show|collect|discard <jobId> | unlock]",
