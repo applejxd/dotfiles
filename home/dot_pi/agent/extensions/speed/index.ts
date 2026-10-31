@@ -23,7 +23,7 @@ export function formatSpeed(s: Speed): string {
 	if (s.ttftMs === undefined && s.tps === undefined) return NONE;
 	const rate = s.tps === undefined ? NONE : `${s.approx ? "~" : ""}${Math.round(s.tps)}t/s`;
 	const ttft = s.ttftMs === undefined ? NONE : `${(s.ttftMs / 1000).toFixed(1)}s`;
-	return `⚡${rate} ${ttft}`;
+	return `📝${rate} ${ttft}`;
 }
 
 export function speedExtension(pi: ExtensionAPI, now: () => number) {

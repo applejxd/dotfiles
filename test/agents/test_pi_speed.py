@@ -76,10 +76,10 @@ def test_approx_only_when_reasoning_was_counted_but_no_thinking_delta_was_seen(t
 @needs_node
 def test_format_is_short_and_uses_a_dash_for_missing_values(table):
     f = table["format"]
-    assert f["normal"] == "⚡60t/s 1.2s"
-    assert f["approx"] == "⚡~60t/s 1.2s"
-    assert f["no_rate"] == "⚡— 1.2s"
-    assert f["no_ttft"] == "⚡60t/s —"
+    assert f["normal"] == "📝60t/s 1.2s"
+    assert f["approx"] == "📝~60t/s 1.2s"
+    assert f["no_rate"] == "📝— 1.2s"
+    assert f["no_ttft"] == "📝60t/s —"
     assert f["none"] == "—"
     assert all(len(v) <= 18 for v in f.values()), f
 
@@ -93,14 +93,14 @@ def _statuses(table, name):
 def test_status_comes_from_the_first_typed_delta_and_message_end(table):
     # start は最初のトークンではない。thinking・text・toolcall のどのデルタでもよい
     for name in ("text", "thinking", "toolcall"):
-        assert _statuses(table, name) == [None, "⚡55t/s 1.2s"], name
+        assert _statuses(table, name) == [None, "📝55t/s 1.2s"], name
     # 思考が出ない経路の疑い (reasoning を数えたのに thinking のデルタが無い)
-    assert _statuses(table, "reasoning_hidden") == [None, "⚡~55t/s 1.2s"]
+    assert _statuses(table, "reasoning_hidden") == [None, "📝~55t/s 1.2s"]
 
 
 @needs_node
 def test_status_without_the_request_hook_or_a_delta(table):
-    assert _statuses(table, "no_request_hook") == ["⚡55t/s —"]
+    assert _statuses(table, "no_request_hook") == ["📝55t/s —"]
     assert _statuses(table, "no_delta") == ["—"]
 
 
@@ -113,8 +113,8 @@ def test_status_is_not_updated_for_errors_aborts_or_non_assistant_messages(table
 
 @needs_node
 def test_each_call_is_measured_alone_and_a_new_session_clears_the_status(table):
-    assert _statuses(table, "second_call_resets") == [None, "⚡55t/s 1.2s", "⚡~50t/s 0.5s"]
-    assert _statuses(table, "cleared_on_switch") == [None, "⚡55t/s 1.2s", None]
+    assert _statuses(table, "second_call_resets") == [None, "📝55t/s 1.2s", "📝~50t/s 0.5s"]
+    assert _statuses(table, "cleared_on_switch") == [None, "📝55t/s 1.2s", None]
 
 
 @needs_node
