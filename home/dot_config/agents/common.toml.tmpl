@@ -987,6 +987,14 @@ risk_paths = [
 ]
 skip_confirm_in_free_zone = true
 
+# see docs/change/0055-async-approval.md
+[pi.pending]
+enabled = false
+modes = ["tui"]
+retention_days = 30
+result_retention_days = 90
+max_pending = 50
+
 # 承認つきで実行する操作 (guarded_action)。action を持つ役割では、replaces に当たる bash は deny。
 # argv はシェル無しで実行する。置換点は {<フィールド名>} / {<フィールド名>_file}。
 # see docs/spec/guard/pi-decide.md
