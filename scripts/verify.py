@@ -118,6 +118,7 @@ _PI_TESTS = (
     "test_pi_integration_gate",
     "test_pi_integrate_config",
     "test_pi_freezone",
+    "test_pi_free_zone_commit",
     "test_pi_landlock_exec",
     "test_pi_tools_ext",
     "test_pi_model_choice",

@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { MAX_DISPLAY_CHARS, cellWidth, clipCells, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
 import { showTextViewer } from "./text-viewer.ts";
+import { classifyFreeZone, freeZoneSettings, type FreeZone } from "./freezone.ts";
+import { gitSync } from "./gitrun.ts";
 import { reconcilePending, repoTargetEnv, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
 
 export const ACTION_TOOL = "action";
@@ -245,6 +247,8 @@ export type ActionDeps = {
 	progress?: (text: string) => boolean;
 	/** 利用者が不在と分かった状態 (確認が時間切れ)。セッションごと。入力の世代 gen は、利用者の入力のたびに進む (index.ts) */
 	absence?: { absent: boolean; gen: number };
+	/** 自由区の判定 (試験で差し替える)。無ければ freezone.ts の classifyFreeZone */
+	freeZone?: (cwd: string, protectedRefs: readonly string[]) => FreeZone;
 };
 
 /** TUI の組み込みの期限は、自前の期限より遅くして、保険にだけ使う (自前の期限で時間切れを判定する) */
@@ -467,6 +471,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 	let values = checked.values;
 	let cwd: string = ctx.cwd;
 	let resolvedParams: any = params; // dir を解決したあとの判定用の入力 (解決済みの対象を指す)
+	const zoneSettings = freeZoneSettings(deps.rules);
 
 	const fileFields = Object.entries(action.fields).filter(([, s]) => s.type === "text" && s.file === true);
 	const dir = mkdtempSync(join(tmpdir(), "pi-action-")); // 0700
@@ -491,122 +496,136 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		if (snap && preview && (snap.baseHeadOid !== (/^[0-9a-f]{40,64}$/.test(preview.head) ? preview.head : "") || snap.indexId !== preview.indexId)) {
 			throw new Error("状態が変わった (HEAD・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
 		}
-		if (!ctx.hasUI) {
-			if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal, values.dir);
-			throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");
-		}
-		const absence = deps.absence ?? { absent: false, gen: 0 };
+		// 自由区 (feature の linked worktree) の git_commit は、設定が真のときだけ確認を省略する。偽の間も判定は行い、結果に添えて観測する
+		const zone: FreeZone | null = action.id === "git_commit" ? (deps.freeZone ?? ((c, r) => classifyFreeZone(c, r, { env: deps.env })))(cwd, zoneSettings.protectedRefs) : null;
+		const skipConfirm = zone?.free === true && zoneSettings.skip;
+		// 確認の流れ (UI の確認・時間切れの退避・編集)。確認を省略するときは通らない
+		const confirmFlow = async (): Promise<{ values: Values; edited: boolean }> => {
+			if (!ctx.hasUI) {
+				if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal, values.dir);
+				throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");
+			}
+			const absence = deps.absence ?? { absent: false, gen: 0 };
 
-		const timeoutMs = confirmTimeoutSeconds(deps.rules) * 1000;
-		const minutes = timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} 分` : `${Math.round(timeoutMs / 1000)} 秒`;
-		const notice =
-			action.id !== "git_commit"
-				? ""
-				: snap
-					? `\n\n(${minutes}応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外)`
-					: `\n\n(退避できない状態なので、${minutes}応答が無ければ拒否します)`;
-		const viewArgv = buildArgv(action, values, files);
-		// RPC (TUI 以外): 詳細 (対象のリポジトリ・ブランチ・本文全文・対象ファイル・argv) をチャット (ツールの途中経過) に出し、承認ダイアログは「上記の内容で実行しますか」だけにする。
-		// 途中経過を出せないときは、詳細を見せずに承認させないよう、スマホ向けに縮めた表示をダイアログに出す
-		let title: string;
-		const summarize = ctx.mode === "tui" && needsSummary(action, values, preview);
-		const columns = Number(process.stdout?.columns) > 0 ? Number(process.stdout.columns) : COMPACT_LINE_CHARS;
-		if (summarize) {
-			// 要約では、狭い画面で選択肢を押し出さないよう、注意書きも 1 行に縮める
-			const shortNotice = snap ? `\n(${minutes}無応答なら実行せず退避)` : `\n(退避不可。${minutes}無応答なら拒否)`;
-			title = `${action.label}\n\n${summaryBody(action, values, preview!, cwd, columns)}${action.id === "git_commit" ? shortNotice : ""}`;
-			// 詳細 (本文全文・argv など) をチャット (ツールの途中経過) にも出す。TUI で描かれるかは未確認なので、ダイアログの要約は残す (見ずに承認することはない)
-			if (deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) await new Promise((r) => setTimeout(r, PROGRESS_FLUSH_MS));
-		} else if (ctx.mode === "tui") {
-			title = `${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
-		} else if (deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) {
-			// 途中経過のイベントは pi が非同期に流すので、ダイアログの要求より後に出ることがある。「上記」を先に見せるため、少し待つ
-			await new Promise((r) => setTimeout(r, PROGRESS_FLUSH_MS));
-			title = `${action.label}\n${CONFIRM_PROMPT}`;
-		} else {
-			title = `${action.label}\n${compactBody(action, values, preview, viewArgv, cwd)}${notice}`;
-		}
-		const decision = await deps.dialog(async () => {
-			if (signal?.aborted) return { kind: "aborted" as const };
-			// 不在 (先の確認が時間切れで、そのあと利用者の入力が無い) なら、待たずに退避する
-			if (snap && absence.absent) return { kind: "absent" as const };
-			deps.bell();
-			const gen0 = absence.gen;
-			const options = summarize ? [APPROVE, VIEW_FULL, EDIT, REJECT] : [APPROVE, EDIT, REJECT];
-			let timedOut = false;
-			let choice: string | undefined;
-			let error = false;
-			// 「全文を見る」で select を押し直す。期限は select ごとに仕切り直す (editor には無い)
-			for (;;) {
-				const own = new AbortController();
-				const forward = () => own.abort();
-				if (signal?.aborted) own.abort();
-				else signal?.addEventListener("abort", forward, { once: true });
-				const timer = setTimeout(() => {
-					timedOut = true;
-					own.abort();
-				}, timeoutMs);
-				try {
-					choice = await ctx.ui.select(title, options, { signal: own.signal, timeout: timeoutMs + BACKSTOP_MS });
-				} catch {
-					error = true;
-				} finally {
-					clearTimeout(timer);
-					signal?.removeEventListener("abort", forward);
-				}
-				if (choice !== VIEW_FULL || signal?.aborted) break;
-				try {
-					// 読むだけ (変更しても反映されない)。先頭から表示するビューアで開き (pi の editor は末尾にカーソルを置くので末尾から見える)、閉じると確認に戻る
-					const fullTitle = `${action.label}: 全文 (読むだけ。閉じると確認に戻る)`;
-					const fullText = `${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
-					if (typeof ctx.ui.custom === "function") await showTextViewer(ctx.ui as any, fullTitle, fullText);
-					else await ctx.ui.editor(fullTitle, fullText);
-				} catch {
-					// 表示できなくても、確認に戻る
-				}
+			const timeoutMs = confirmTimeoutSeconds(deps.rules) * 1000;
+			const minutes = timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} 分` : `${Math.round(timeoutMs / 1000)} 秒`;
+			const notice =
+				action.id !== "git_commit"
+					? ""
+					: snap
+						? `\n\n(${minutes}応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外)`
+						: `\n\n(退避できない状態なので、${minutes}応答が無ければ拒否します)`;
+			const viewArgv = buildArgv(action, values, files);
+			// RPC (TUI 以外): 詳細 (対象のリポジトリ・ブランチ・本文全文・対象ファイル・argv) をチャット (ツールの途中経過) に出し、承認ダイアログは「上記の内容で実行しますか」だけにする。
+			// 途中経過を出せないときは、詳細を見せずに承認させないよう、スマホ向けに縮めた表示をダイアログに出す
+			let title: string;
+			const summarize = ctx.mode === "tui" && needsSummary(action, values, preview);
+			const columns = Number(process.stdout?.columns) > 0 ? Number(process.stdout.columns) : COMPACT_LINE_CHARS;
+			if (summarize) {
+				// 要約では、狭い画面で選択肢を押し出さないよう、注意書きも 1 行に縮める
+				const shortNotice = snap ? `\n(${minutes}無応答なら実行せず退避)` : `\n(退避不可。${minutes}無応答なら拒否)`;
+				title = `${action.label}\n\n${summaryBody(action, values, preview!, cwd, columns)}${action.id === "git_commit" ? shortNotice : ""}`;
+				// 詳細 (本文全文・argv など) をチャット (ツールの途中経過) にも出す。TUI で描かれるかは未確認なので、ダイアログの要約は残す (見ずに承認することはない)
+				if (deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) await new Promise((r) => setTimeout(r, PROGRESS_FLUSH_MS));
+			} else if (ctx.mode === "tui") {
+				title = `${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
+			} else if (deps.progress?.(`${action.label}\n\n${viewBody(action, values, preview, viewArgv, cwd)}${notice}`)) {
+				// 途中経過のイベントは pi が非同期に流すので、ダイアログの要求より後に出ることがある。「上記」を先に見せるため、少し待つ
+				await new Promise((r) => setTimeout(r, PROGRESS_FLUSH_MS));
+				title = `${action.label}\n${CONFIRM_PROMPT}`;
+			} else {
+				title = `${action.label}\n${compactBody(action, values, preview, viewArgv, cwd)}${notice}`;
 			}
-			if (choice === REJECT) {
-				let reason: string | undefined;
-				try {
-					reason = await ctx.ui.input("拒否の理由 (任意。空でもよい)", "", { signal });
-				} catch {
-					// 理由は任意
+			const decision = await deps.dialog(async () => {
+				if (signal?.aborted) return { kind: "aborted" as const };
+				// 不在 (先の確認が時間切れで、そのあと利用者の入力が無い) なら、待たずに退避する
+				if (snap && absence.absent) return { kind: "absent" as const };
+				deps.bell();
+				const gen0 = absence.gen;
+				const options = summarize ? [APPROVE, VIEW_FULL, EDIT, REJECT] : [APPROVE, EDIT, REJECT];
+				let timedOut = false;
+				let choice: string | undefined;
+				let error = false;
+				// 「全文を見る」で select を押し直す。期限は select ごとに仕切り直す (editor には無い)
+				for (;;) {
+					const own = new AbortController();
+					const forward = () => own.abort();
+					if (signal?.aborted) own.abort();
+					else signal?.addEventListener("abort", forward, { once: true });
+					const timer = setTimeout(() => {
+						timedOut = true;
+						own.abort();
+					}, timeoutMs);
+					try {
+						choice = await ctx.ui.select(title, options, { signal: own.signal, timeout: timeoutMs + BACKSTOP_MS });
+					} catch {
+						error = true;
+					} finally {
+						clearTimeout(timer);
+						signal?.removeEventListener("abort", forward);
+					}
+					if (choice !== VIEW_FULL || signal?.aborted) break;
+					try {
+						// 読むだけ (変更しても反映されない)。先頭から表示するビューアで開き (pi の editor は末尾にカーソルを置くので末尾から見える)、閉じると確認に戻る
+						const fullTitle = `${action.label}: 全文 (読むだけ。閉じると確認に戻る)`;
+						const fullText = `${viewBody(action, values, preview, viewArgv, cwd)}${notice}`;
+						if (typeof ctx.ui.custom === "function") await showTextViewer(ctx.ui as any, fullTitle, fullText);
+						else await ctx.ui.editor(fullTitle, fullText);
+					} catch {
+						// 表示できなくても、確認に戻る
+					}
 				}
-				return { kind: "denied" as const, reason: (reason ?? "").trim() };
+				if (choice === REJECT) {
+					let reason: string | undefined;
+					try {
+						reason = await ctx.ui.input("拒否の理由 (任意。空でもよい)", "", { signal });
+					} catch {
+						// 理由は任意
+					}
+					return { kind: "denied" as const, reason: (reason ?? "").trim() };
+				}
+				// 時間切れは、自前のタイマーが発火したときだけ (取消・呼び出し元の中断・例外とは区別する)。選択が返っていれば承認を優先する
+				const outcome = choice === APPROVE || choice === EDIT ? "approved" : signal?.aborted ? "aborted" : timedOut ? "timeout" : error ? "error" : "denied";
+				if (outcome === "timeout" && absence.gen === gen0) absence.absent = true;
+				if (outcome !== "approved") return { kind: "outcome" as const, outcome };
+				if (choice !== EDIT) return { kind: "approved" as const, values, edited: false };
+				const edited: Values = { ...values };
+				for (const [name, s] of Object.entries(action.fields)) {
+					if (!(s.type === "text" || s.type === "line") || !s.content) continue;
+					const text = await ctx.ui.editor(`${action.label}: ${name} を編集`, values[name]);
+					if (typeof text !== "string" || text.trim() === "") return { kind: "empty" as const };
+					// 1 行の項目は、エディタが足す末尾の改行を落とす (途中の改行は再検証で拒否)
+					edited[name] = s.type === "line" ? text.replace(/[\r\n]+$/, "") : text;
+				}
+				return { kind: "approved" as const, values: edited, edited: true };
+			});
+			if (decision.kind === "aborted") throw notApproved(outcomeReason("aborted"));
+			if (decision.kind === "absent") throw deferError(cwd, snap!, "利用者が不在のため確認せずに退避した (先の確認が時間切れ)", signal, values.dir);
+			if (decision.kind === "outcome") {
+				if (decision.outcome === "timeout" && snap) throw deferError(cwd, snap, `確認が ${minutes}の時間切れになった`, signal, values.dir);
+				throw notApproved(outcomeReason(decision.outcome));
 			}
-			// 時間切れは、自前のタイマーが発火したときだけ (取消・呼び出し元の中断・例外とは区別する)。選択が返っていれば承認を優先する
-			const outcome = choice === APPROVE || choice === EDIT ? "approved" : signal?.aborted ? "aborted" : timedOut ? "timeout" : error ? "error" : "denied";
-			if (outcome === "timeout" && absence.gen === gen0) absence.absent = true;
-			if (outcome !== "approved") return { kind: "outcome" as const, outcome };
-			if (choice !== EDIT) return { kind: "approved" as const, values, edited: false };
-			const edited: Values = { ...values };
-			for (const [name, s] of Object.entries(action.fields)) {
-				if (!(s.type === "text" || s.type === "line") || !s.content) continue;
-				const text = await ctx.ui.editor(`${action.label}: ${name} を編集`, values[name]);
-				if (typeof text !== "string" || text.trim() === "") return { kind: "empty" as const };
-				// 1 行の項目は、エディタが足す末尾の改行を落とす (途中の改行は再検証で拒否)
-				edited[name] = s.type === "line" ? text.replace(/[\r\n]+$/, "") : text;
+			if (decision.kind === "empty") throw notApproved("編集の結果が空、または取り消されたので拒否した");
+			if (decision.kind === "denied") {
+				throw notApproved(`${outcomeReason("denied")}${decision.reason ? `。利用者の理由: ${decision.reason}` : ""}`);
 			}
-			return { kind: "approved" as const, values: edited, edited: true };
-		});
-		if (decision.kind === "aborted") throw notApproved(outcomeReason("aborted"));
-		if (decision.kind === "absent") throw deferError(cwd, snap!, "利用者が不在のため確認せずに退避した (先の確認が時間切れ)", signal, values.dir);
-		if (decision.kind === "outcome") {
-			if (decision.outcome === "timeout" && snap) throw deferError(cwd, snap, `確認が ${minutes}の時間切れになった`, signal, values.dir);
-			throw notApproved(outcomeReason(decision.outcome));
-		}
-		if (decision.kind === "empty") throw notApproved("編集の結果が空、または取り消されたので拒否した");
-		if (decision.kind === "denied") {
-			throw notApproved(`${outcomeReason("denied")}${decision.reason ? `。利用者の理由: ${decision.reason}` : ""}`);
-		}
-		values = decision.values;
-		// 編集後の内容も、型・長さ・NUL の検証をやり直す
-		const recheck = validateCall(deps.actions, { action: action.id, params: values });
-		if (!recheck.ok) throw notApproved(`編集後の内容が不正: ${recheck.error}`);
+			values = decision.values;
+			// 編集後の内容も、型・長さ・NUL の検証をやり直す
+			const recheck = validateCall(deps.actions, { action: action.id, params: values });
+			if (!recheck.ok) throw notApproved(`編集後の内容が不正: ${recheck.error}`);
+			return { values, edited: decision.edited };
+		};
+		const approved = skipConfirm ? { values, edited: false } : await confirmFlow();
+		values = approved.values;
 
 		// 実行の直前に、承認した状態のままか照合する
 		const now = await previewFn(cwd, values);
 		if (!samePreview(preview, now)) throw new Error("状態が変わった (HEAD・ブランチ・ステージ済みの内容)。もう一度 guarded_action を呼ぶ");
+		// 確認を省略したときは、実行直前にも自由区かを判定し直す (なくなっていれば未実行)
+		if (skipConfirm) {
+			const again = (deps.freeZone ?? ((c, r) => classifyFreeZone(c, r, { env: deps.env })))(cwd, zoneSettings.protectedRefs);
+			if (!again.free) throw new Error(`自由区ではなくなった (${again.reason})。確認を省略せず、実行しなかった。もう一度 guarded_action を呼ぶ`);
+		}
 		// 承認の間に dir の指す先が変わっていないか (リンクの差し替え。包含・最上位も検査し直す)。ここで確かめるのは「うっかり」の範囲で、最後の syscall 直前の差し替えまでは防げない
 		if (values.dir && (await resolveRepoDir(ctx.cwd, values.dir)) !== cwd) throw new Error("dir の指す先が承認の間に変わった。もう一度 guarded_action を呼ぶ");
 		// 承認の間に状態が変わっていないか。判定をもう一度通す。dir は解決済みの対象を見る
@@ -632,8 +651,18 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 				reconcilePending(cwd);
 			} catch {}
 		}
-		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, decision.edited ? `実際に使った最終の内容 (編集した):\n${used.join("\n\n")}` : "実行した内容は、承認した内容のとおり"].filter(Boolean).join("\n\n");
-		return { content: [{ type: "text", text }], details: { action: action.id } };
+		// 確認を省略した結果は「承認した内容のとおり」と表示しない。省略の理由と、実行後の HEAD を返す。偏の間は自由区の判定を添えて観測する
+		const headNow = skipConfirm ? gitSync(["rev-parse", "--short", "HEAD"], cwd, { env: deps.env }) : null;
+		const closing = approved.edited
+			? `実際に使った最終の内容 (編集した):\n${used.join("\n\n")}`
+			: skipConfirm
+				? `確認なしで実行した (自由区: ${zone?.branch ?? ""}。実行後の HEAD: ${headNow?.ok ? headNow.stdout.trim() : "不明"})`
+				: "実行した内容は、承認した内容のとおり";
+		const shadow = zone && !skipConfirm ? `自由区の判定 (観測中。確認は省略していない): ${zone.free ? "free" : "not free"} (${zone.reason}${zone.branch ? `: ${zone.branch}` : ""})` : "";
+		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, closing, shadow].filter(Boolean).join("\n\n");
+		const details: Record<string, unknown> = { action: action.id };
+		if (zone) details.freeZone = { free: zone.free, reason: zone.reason, branch: zone.branch, skipped: skipConfirm };
+		return { content: [{ type: "text", text }], details };
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

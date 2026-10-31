@@ -6,6 +6,14 @@ import { isFeatureSourceRef, isProtectedRef } from "./judge/protectedrefs.ts";
 
 export type FreeZone = { free: boolean; reason: string; branch?: string; linked?: boolean };
 
+/** rules.json の judge.common.pi.integrate から、確認省略の設定 (skip_confirm_in_free_zone) と保護 ref を読む。無い・形が違うときは省略しない (下限の保護 ref) */
+export function freeZoneSettings(rules: any): { skip: boolean; protectedRefs: readonly string[] } {
+	const integrate = rules?.judge?.common?.pi?.integrate;
+	const refs = integrate?.protected_refs;
+	const list = Array.isArray(refs) && refs.length > 0 && refs.every((r: unknown) => typeof r === "string") ? (refs as string[]) : DEFAULT_PROTECTED;
+	return { skip: integrate?.skip_confirm_in_free_zone === true, protectedRefs: list };
+}
+
 /** 下限。実運用では設定の値を渡す */
 export const DEFAULT_PROTECTED: readonly string[] = ["main", "master", "develop", "release/*", "hotfix/*"];
 

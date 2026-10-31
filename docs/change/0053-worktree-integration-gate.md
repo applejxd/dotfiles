@@ -103,7 +103,7 @@
 | S3a | 統合の計画の算出と表示（結果の差分・リスクの印。ツールには未接続） | worker | 未着手 |
 | S3b | 専用操作 `git_integrate`（計画の固定・直前照合・結果 3 値） | 親 | 未着手 |
 | S4 | bash の統合ゲート（保護 ref を変える通常の統合コマンドを必須確認にし、feature の日常の操作は止めない） | worker（S4a）+ 親（S4b） | 完了（S4a: 静的な検出器 `judge/gitintegration.ts`。S4b: `integration-gate.ts` でハーネスの `decide` に接続し、`[pi.confirm] integration = true`。配備で効く） |
-| S5a | 確認省略のコード（設定は false。この段だけでは no-op） | worker | 未着手 |
+| S5a | 確認省略のコード（設定は false。この段だけでは no-op。省略の間も自由区の判定を結果に添えて観測する） | 親 | 完了（`actions.ts`。試験 `test_pi_free_zone_commit.py`） |
 | S5b | 確認省略を有効化（**最後**） | 親 | 未着手 |
 | S6 | docs の整合と `verify:all` | 親 | 未着手 |
 
