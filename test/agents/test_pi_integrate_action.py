@@ -135,6 +135,56 @@ def test_stacked_warning_only_when_stacked(repo: Path) -> None:
     assert "stacked" not in res["capture"]["premise"]
 
 
+def _stacked_flow(repo: Path, saved: list[dict]) -> dict:
+    _git(repo, "branch", "feature/a", "feature/x~1")
+    return _run(
+        {
+            "op": "flow",
+            "requestCwd": str(repo),
+            "approverCwd": str(repo),
+            "values": _values(),
+            "saved": saved,
+        }
+    )
+
+
+def test_stacked_warning_shows_unapproved_pending(repo: Path) -> None:
+    res = _stacked_flow(repo, [{"values": _values(source="feature/a")}])
+    tail = res["savedIds"][0][-4:]
+    for key in ("summary", "view"):
+        assert f"feature/a (保留 …{tail} が未承認)" in res["plan"][key], res["plan"][key]
+    assert "先にそちらを承認するのが通常の順序" in res["plan"]["view"]
+    assert res["recheck"] == {"ok": True}
+
+
+def test_stacked_warning_without_pending_is_unchanged(repo: Path) -> None:
+    res = _stacked_flow(repo, [])
+    for key in ("summary", "view"):
+        assert "保留" not in res["plan"][key] and "未承認" not in res["plan"][key], res["plan"][key]
+        assert "含む他の feature (未統合): feature/a" in res["plan"][key]
+
+
+def test_stacked_warning_ignores_done_pending(repo: Path) -> None:
+    res = _stacked_flow(repo, [{"values": _values(source="feature/a"), "finish": True}])
+    for key in ("summary", "view"):
+        assert "未承認" not in res["plan"][key] and "保留" not in res["plan"][key], res["plan"][key]
+
+
+def test_stacked_warning_ignores_unrelated_pending(repo: Path) -> None:
+    _git(repo, "checkout", "-q", "-b", "feature/z", "develop~1")
+    _commit(repo, "z.txt", "z\n")
+    _git(repo, "checkout", "-q", "develop")
+    res = _stacked_flow(repo, [{"values": _values(source="feature/z")}])
+    for key in ("summary", "view"):
+        assert "未承認" not in res["plan"][key] and "feature/z" not in res["plan"][key], res[
+            "plan"
+        ][key]
+    # 無関係な保留があっても、文言は「統合する」のままで、summary は 1 行のまま (保留が見つかったときだけ行を分ける)
+    assert "保留" not in res["plan"]["view"], res["plan"]["view"]
+    assert "先にそちらを統合するのが通常の順序" in res["plan"]["view"], res["plan"]["view"]
+    assert "含む他の feature (未統合): feature/a" in res["plan"]["summary"], res["plan"]["summary"]
+
+
 def test_target_advanced_after_request(repo: Path) -> None:
     res = _run(
         {

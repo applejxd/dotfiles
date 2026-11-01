@@ -14,6 +14,7 @@ import { computeIntegrationPlan, type IntegratePlan } from "./integrate-plan.ts"
 import { executeIntegrationOutcome } from "./integrate-exec.ts";
 import type { ApprovalAdapter } from "./pending-approve.ts";
 import type { Json, OpRecord } from "./pending-ops.ts";
+import { listOps, readOp } from "./pending-ops.ts";
 import { repoTargetEnv } from "./pending-store.ts";
 
 /** enabled は統合のキルスイッチ。省略時は有効 (従来どおり)。false のとき、要求・承認のアダプタは拒否する */
@@ -157,18 +158,53 @@ function changesOf(premise: Record<string, Json>, plan: IntegratePlan): string[]
 	return out;
 }
 
-/** 統合元が未統合の他の feature を含むときだけの警告 1 行 (表示だけ。承認の判断・記録・再検査には使わない) */
-function stackedLine(plan: IntegratePlan): string | null {
+/** 統合元が未統合の他の feature を含むときだけの警告 1 行 (表示だけ。承認の判断・記録・再検査には使わない)。pend は ref → 保留 ID (未承認のもの) */
+function stackedLine(plan: IntegratePlan, pend: Map<string, string> = new Map()): string | null {
 	if (!plan.stacked?.length) return null;
-	return `含む他の feature (未統合): ${plan.stacked.map((r) => oneLine(branchName(r), 80)).join(", ")} — 先にそちらを統合するのが通常の順序`;
+	const names = plan.stacked.map((r) => {
+		const id = pend.get(r);
+		return `${oneLine(branchName(r), 80)}${id ? ` (保留 …${id} が未承認)` : ""}`;
+	});
+	return `含む他の feature (未統合): ${names.join(", ")} — 先にそちらを${pend.size ? "承認" : "統合"}するのが通常の順序`;
 }
 
-function summaryOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[]): string {
+/** 承認画面の summary は幅が狭く 1 行だと切れるので、保留が見つかったときは行を分ける */
+function stackedSummaryLines(plan: IntegratePlan, pend: Map<string, string>): string[] {
+	if (!plan.stacked?.length) return [];
+	if (!pend.size) return [stackedLine(plan) as string];
+	return [
+		"含む他の feature (未統合):",
+		...plan.stacked.map((r) => `  ${oneLine(branchName(r), 80)}${pend.get(r) ? ` (保留 …${pend.get(r)} が未承認)` : ""}`),
+		"  先にそちらを承認するのが通常の順序",
+	];
+}
+
+/** 状態が pending の git_integrate の保留のうち、統合元が stacked の ref と一致するもの (ref → ID の末尾 4 桁)。読めなければ空 (表示だけの情報) */
+function pendingStacked(plan: IntegratePlan, cwd: string): Map<string, string> {
+	const out = new Map<string, string>();
+	if (!plan.stacked?.length) return out;
+	try {
+		const want = new Set(plan.stacked);
+		for (const e of listOps(cwd).entries) {
+			if (e.state !== "pending" || e.kind !== "action") continue;
+			const r = readOp(cwd, e.id);
+			if (!r.ok || r.record.action !== "git_integrate") continue;
+			const src = r.record.premise.source;
+			const ref = typeof src === "string" ? src : `refs/heads/${branchName(r.record.params.source ?? "")}`;
+			const tail = e.id.replace(/\D/g, "").slice(-4);
+			if (want.has(ref) && tail && !out.has(ref)) out.set(ref, tail);
+		}
+	} catch {
+		return new Map();
+	}
+	return out;
+}
+
+function summaryOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[], pend: Map<string, string>): string {
 	const lines: string[] = [`${branchName(plan.source.ref)} → ${branchName(plan.target.ref)} (squash)`, "衝突: なし"];
 	lines.push(`${plan.stats.commits} コミット・${plan.stats.files} ファイル (+${plan.stats.additions}/-${plan.stats.deletions})`);
 	if (cleanup !== "none") lines.push(`後片付け: ${cleanup === "branch" ? "ブランチ削除" : "ブランチと worktree 削除"}`);
-	const st = stackedLine(plan);
-	if (st) lines.push(st);
+	lines.push(...stackedSummaryLines(plan, pend));
 	if (plan.risks.length) {
 		lines.push(`リスクのあるパス (${plan.risks.length} 件):`);
 		for (const r of plan.risks.slice(0, MAX_RISKS)) lines.push(`  ${oneLine(r.path, 120)}`);
@@ -181,12 +217,12 @@ function summaryOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[]): st
 	return lines.map((l) => clipCells(l, WIDTH)).join("\n");
 }
 
-function viewOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[]): string {
+function viewOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[], pend: Map<string, string>): string {
 	const out = [
 		`${plan.source.ref} (${short(plan.source.oid)}) → ${plan.target.ref} (${short(plan.target.oid)})  squash`,
 		`統合先の worktree: ${oneLine(plan.targetWorktree ?? "(なし)", 300)}`,
 		`後片付け: ${cleanup}`,
-		...(stackedLine(plan) ? [stackedLine(plan) as string] : []),
+		...(stackedLine(plan, pend) ? [stackedLine(plan, pend) as string] : []),
 		changes.length ? `要求時から変わった点: ${changes.join(" / ")}` : "要求時から変わった点: なし",
 		"",
 		"メッセージ:",
@@ -230,7 +266,8 @@ export function integrateApprovalAdapter(cfg: CfgSource): ApprovalAdapter {
 			if (!r.ok) return r;
 			const changes = changesOf(rec.premise, r.plan);
 			const approved: Approved = { plan: r.plan, cleanup: r.cleanup };
-			return { ok: true, plan: approved, summary: summaryOf(r.plan, r.cleanup, changes), view: viewOf(r.plan, r.cleanup, changes) };
+			const pend = pendingStacked(r.plan, env.cwd);
+			return { ok: true, plan: approved, summary: summaryOf(r.plan, r.cleanup, changes, pend), view: viewOf(r.plan, r.cleanup, changes, pend) };
 		},
 		recheck: async (p, env) => {
 			const a = p as Approved;

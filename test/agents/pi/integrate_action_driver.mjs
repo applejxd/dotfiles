@@ -2,6 +2,7 @@
 //   {op:"capture", cwd, values, cfg}
 //   {op:"flow", requestCwd, approverCwd, values, cfg, beforePlan?: string[][], beforeRecheck?: string[][], execute?: bool}
 //       capture → (git を実行) → plan → (git を実行) → recheck → execute の順に、要求側の cwd と承認側の cwd を分けて動かす
+//       saved?: [{values, finish?: bool}]  plan の前に、要求側の cwd で保留を保存する (finish: 承認済み (done) にする)
 //   {op:"double", cwd, values, cfg}   保留を保存し、approvePending を 2 回並べて呼ぶ
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -26,6 +27,28 @@ if (req.op === "capture") {
 } else if (req.op === "flow") {
 	const cap = await ia.integrateRequestAdapter(req.cfg).capture({ cwd: req.requestCwd, values: req.values, env: ENV });
 	out.capture = cap;
+	for (const s of req.saved ?? []) {
+		const c = await ia.integrateRequestAdapter(req.cfg).capture({ cwd: req.requestCwd, values: s.values, env: ENV });
+		if (!c.ok) throw new Error(`capture failed: ${c.reason}`);
+		const sv = ops.saveOp(req.requestCwd, {
+			action: "git_integrate",
+			params: s.values,
+			premise: c.premise,
+			reason: "timeout",
+			request: { id: "r-saved", sessionId: "s", cwd: req.requestCwd },
+			createdAt: new Date().toISOString(),
+			worktree: c.worktree,
+		});
+		if (!sv.ok) throw new Error(`save failed: ${sv.reason}`);
+		(out.savedIds ??= []).push(sv.id);
+		if (s.finish) {
+			const owner = { sessionId: "s", runtimeEpoch: "e", pid: process.pid, processStart: "100", host: "h" };
+			const b = ops.beginApproval(req.requestCwd, sv.id, sv.oid, owner);
+			if (!b.ok) throw new Error(`begin failed: ${b.reason}`);
+			const f = ops.finishApproval(req.requestCwd, sv.id, b.attemptOid, { outcome: "success", phase: "done", confirmedEffects: [], remainingCleanup: [], evidence: [] });
+			if (!f.ok) throw new Error(`finish failed: ${f.reason}`);
+		}
+	}
 	for (const a of req.beforePlan ?? []) git(req.requestCwd, a);
 	const rec = { action: "git_integrate", params: req.values, premise: cap.premise ?? {}, request: { id: "x", sessionId: "s", cwd: req.requestCwd } };
 	const ad = ia.integrateApprovalAdapter(req.cfg);
