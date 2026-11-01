@@ -42,6 +42,7 @@
 | [設定の生成と所有権](agent-config-generation.md) | `common.toml` の構成と編集ルール、生成先と所有権、MCP、pi と共有する設定（モデルの割り当て・コミットの確認など）、hook の単一ソース化 |
 | [OpenCode 向けの設定の生成](opencode-config-generation.md) | OpenCode だけが使う設定（plugin 層・bypass・キーバインド・隔離起動）の生成。保留中のレガシー（撤去予定） |
 | [モデルの割り当ての見直し](model-lineup-review.md) | OpenCode の階層に当てるモデルと effort を見直す時機・調べる場所・自前の評価・決め方・変える手順・再考の候補 |
+| [pi / pis マニュアル](pi-manual.md) | 今ある機能・設定の変え方・独自コマンドを忘れたときに見直す早見（1 画面の早見 + 節ごとの表）。正本への案内つき |
 | [pi の機能の地図](pi-features.md) | ガード・サンドボックス・オーケストレーションの 3 本の柱と基本機能の入口。柱をまたぐ機能の置き場の規則 |
 | [pi の公式仕様と実測の棚卸し](pi-upstream.md) | pi の挙動のうち、公式に明示があるもの（リンクだけ・都度参照）と、明示が無く実測して頼っているもの（ノウハウ・試験で固定）の一覧。確認先と更新時の手順、codemode の扱い |
 | [Web 検索（web-search skill）](web-search.md) | skill + CLI の Web 検索・ページ取得・論文検索。検索の鎖（Brave → Exa → Tavily → DuckDuckGo）と次へ回す条件、鍵、クエリの秘匿チェックと取得の SSRF 対策、実測、未実装 |

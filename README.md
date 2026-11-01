@@ -66,6 +66,7 @@ chezmoi apply
 - [mise による CLI 管理](docs/spec/cli-management.md#mise-による-cli-管理)（gh、seccomp フィルタ）
 - [AI CLI の導入](docs/spec/cli-management.md#ai-cli-の導入)（Claude Code / Copilot CLI / OpenCode V2、oh-my-pi、pi）
 - [Herdr の管理](docs/spec/cli-management.md#herdr-の管理)
+- [pi / pis マニュアル](docs/spec/pi-manual.md)（機能・設定の変え方・独自コマンドの早見）
 
 ### Raspberry Pi (64bit / ヘッドレス)
 

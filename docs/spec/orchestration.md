@@ -88,6 +88,7 @@
 | --- | --- | --- |
 | `/agents`・`/agent <名前> <依頼>` | 子の一覧と、子の直接の起動（モデルは呼べない） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 | `/bypass` | ask を確認なしで通す。切替で、動いている子は止まる | [pi のガード](guard/pi-guard.md) |
+| `/orchestrate` | 親を計画・判断・委譲に絞る（作業のツールを隠す）。`on`・`off`・`status` | [pi の子エージェント](guard/pi-subagents.md) |
 | `/plan` | 計画モード（書き込む役割の子を止める） | [CHG-0044](../change/0044-plan-agent.md) |
 | `/pending` | 保留したコミットの一覧・表示・破棄（利用者専用）。非同期承認の `approve` などは [保留](guard/pi-pending.md)（本番では無効） | [CHG-0046](../change/0046-guarded-action-timeout.md) |
 | `/board` | **盤面**（読み取り専用・利用者専用）。最上段の「要対応」（承認待ちは古い順・決着待ち）、feature ごとの `↑`（統合先に無い commit）・`↓`（統合先にあって無い）・`dirty`・最後の commit からの経過・`保留あり`、保留・子・隔離 worker・モード。44 桁の 1 行で、状態の側を欠かさず名前の側を先に切る。集めるのは読み取りの git だけ（`runGit`。hook・外部 diff を無効にし、`status` は index を更新させない）。リポジトリの設定に外部 filter（clean・smudge・process）があるときは、`status` を実行せず `dirty` を出さない。bg ジョブは見られないので行を出さない。承認・操作の入口は持たない（`/pending` を使う） | [CHG-0056](../change/0056-orchestrator.md#10-実施計画) |
@@ -100,7 +101,7 @@
 
 | 項目 | 状態 | 案件 |
 | --- | --- | --- |
-| 親の道具を絞る（orchestrator ロール） | 未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 6 |
+| 親の道具を絞る（orchestrator ロール） | **実装済み**（`/orchestrate`）。段 3・4・5・7 は未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 6 |
 | スキルの工程化（親の判断 → 子の成果物 → 次へ進む条件） | 未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 3・5 |
 | 待ち合わせ・DAG・予算 | 未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 7、[調査 O1](../research/agents/pi-orchestrator-survey.md) |
 | 子の質問・承認の中継 | 未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 4 |
