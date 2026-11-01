@@ -6,10 +6,13 @@ see docs/change/0055
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -268,3 +271,211 @@ def test_abort_during_hook(repo: Path, tmp_path: Path) -> None:
     res = _exec(plan, repo, abortAfterMs=1500)
     _unchanged(repo, before, res)
     assert any("中断" in e for e in res["evidence"]), res
+
+
+def _bg_hook(repo: Path, tmp_path: Path) -> Path:
+    """背景の子孫を起動し、0.2 秒ごとにマーカーへ書く hook。マーカーのパスを返す"""
+    marker = tmp_path / "marker.txt"
+    pidf = tmp_path / "bg.pid"
+    _hook(
+        repo,
+        tmp_path,
+        f"(while true; do echo x >> '{marker}'; sleep 0.2; done) &\necho $! > '{pidf}'\nwait",
+    )
+    return marker
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _lines(p: Path) -> int:
+    return len(p.read_text(encoding="utf-8").splitlines()) if p.exists() else 0
+
+
+@pytest.mark.parametrize("how", ["abort", "timeout"])
+def test_stop_kills_hook_descendants(repo: Path, tmp_path: Path, how: str) -> None:
+    plan = _plan(repo)
+    marker = _bg_hook(repo, tmp_path)
+    before = _snapshot(repo)
+    kw = {"abortAfterMs": 1500} if how == "abort" else {"commitTimeoutMs": 1500}
+    res = _exec(plan, repo, **kw)
+    n = _lines(marker)
+    assert n > 0, "hook の子孫が動いていない"
+    time.sleep(1.0)
+    assert _lines(marker) == n, "結果の確定後も子孫が書き続けている"
+    pid = int((tmp_path / "bg.pid").read_text(encoding="utf-8").strip())
+    assert not _alive(pid)
+    if how == "abort":
+        _unchanged(repo, before, res)
+    else:
+        _unchanged(repo, before, res, "failed_confirmed")
+
+
+def test_unconfirmed_stop_does_not_roll_back(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    _hook(repo, tmp_path, "sleep 30")
+    head = _git(repo, "rev-parse", "HEAD")
+    res = _exec(plan, repo, abortAfterMs=1500, stopUnconfirmed=True)
+    assert res["outcome"] == "unknown", res
+    assert any("停止を確認できない" in e for e in res["evidence"]), res
+    # rollback されない: HEAD は元のまま、index・作業ツリーは squash の変更が残る
+    assert _git(repo, "rev-parse", "HEAD") == head
+    assert (repo / "b.txt").exists()
+    assert "b.txt" in _git(repo, "status", "--porcelain")
+
+
+def test_confirmed_abort_rolls_back(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    _hook(repo, tmp_path, "sleep 30")
+    before = _snapshot(repo)
+    res = _exec(plan, repo, abortAfterMs=1500)
+    _unchanged(repo, before, res)
+    assert not (repo / "b.txt").exists()
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def _bg_exit0_hook(repo: Path, tmp_path: Path) -> Path:
+    """背景の子孫を出力を切り離して起動し、exit 0 で終わる hook。マーカーのパスを返す"""
+    marker = tmp_path / "marker.txt"
+    _hook(
+        repo,
+        tmp_path,
+        f"(while true; do echo x >> '{marker}'; sleep 0.2; done) >/dev/null 2>&1 &\n"
+        f"echo $! > '{tmp_path / 'bg.pid'}'\nexit 0",
+    )
+    return marker
+
+
+def test_normal_exit_with_background_descendant_is_stopped(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    marker = _bg_exit0_hook(repo, tmp_path)
+    res = _exec(plan, repo)
+    assert res["outcome"] == "success", res
+    n = _lines(marker)
+    assert n > 0, "hook の子孫が動いていない"
+    time.sleep(1.0)
+    assert _lines(marker) == n, "戻った後も子孫が書き続けている"
+    assert not _alive(int((tmp_path / "bg.pid").read_text(encoding="utf-8").strip()))
+
+
+def test_unconfirmed_stop_after_successful_commit_is_unknown(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    _hook(repo, tmp_path, "exit 0")
+    res = _exec(plan, repo, "branch", unconfirmedFrom=2)
+    assert res["outcome"] == "unknown" and res["phase"] == "commit", res
+    assert any("停止を確認できない" in e for e in res["evidence"]), res
+    assert _git(repo, "branch", "--list", "feature/x").strip() != "", "cleanup に進んだ"
+
+
+def test_unconfirmed_stop_in_merge_is_unknown(repo: Path) -> None:
+    plan = _plan(repo)
+    head = _git(repo, "rev-parse", "HEAD")
+    res = _exec(plan, repo, unconfirmedFrom=1)
+    assert res["outcome"] == "unknown" and res["phase"] == "merge", res
+    assert _git(repo, "rev-parse", "HEAD") == head
+    assert (repo / "b.txt").exists(), "rollback された"
+
+
+def _kill_group_of(pidfile: Path) -> None:
+    if not pidfile.exists():
+        return
+    pid = int(pidfile.read_text(encoding="utf-8").strip())
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(os.getpgid(pid), 9)
+
+
+def test_returns_unknown_in_bounded_time_when_signals_do_nothing(
+    repo: Path, tmp_path: Path
+) -> None:
+    plan = _plan(repo)
+    pidf = tmp_path / "hook.pid"
+    _hook(repo, tmp_path, f"echo $$ > '{pidf}'\nsleep 30")
+    t0 = time.monotonic()
+    try:
+        r = subprocess.run(
+            [_node() or "node", str(EXEC_DRIVER)],
+            input=json.dumps(
+                {
+                    "plan": plan,
+                    "cleanup": "none",
+                    "approverCwd": str(repo),
+                    "abortAfterMs": 1500,
+                    "noSignal": True,
+                    "graceMs": 300,
+                    "killMs": 300,
+                }
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=20,
+        )
+        res = json.loads(r.stdout)
+    finally:
+        _kill_group_of(pidf)
+    assert time.monotonic() - t0 < 15
+    assert res["outcome"] == "unknown", res
+    assert any("停止を確認できない" in e for e in res["evidence"]), res
+
+
+def test_sigterm_ignoring_hook_is_killed(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    pidf = tmp_path / "hook.pid"
+    _hook(repo, tmp_path, f"trap '' TERM\necho $$ > '{pidf}'\nwhile true; do sleep 1; done")
+    before = _snapshot(repo)
+    try:
+        res = _exec(plan, repo, abortAfterMs=1500, graceMs=500)
+        _unchanged(repo, before, res)
+        assert not _alive(int(pidf.read_text(encoding="utf-8").strip()))
+    finally:
+        _kill_group_of(pidf)
+
+
+def _ref_hook(repo: Path, tmp_path: Path) -> Path:
+    """feature/x の ref 更新のときだけ、背景の書き込みを起動して待つ reference-transaction hook"""
+    d = tmp_path / "hooks"
+    d.mkdir(exist_ok=True)
+    marker = tmp_path / "ref-marker.txt"
+    h = d / "reference-transaction"
+    h.write_text(
+        "#!/bin/sh\n"
+        "if cat | grep -q 'refs/heads/feature/x'; then\n"
+        f"  (while true; do echo x >> '{marker}'; sleep 0.2; done) >/dev/null 2>&1 &\n"
+        f"  echo $! > '{tmp_path / 'ref.pid'}'\n"
+        "  sleep 30\nfi\n",
+        encoding="utf-8",
+    )
+    h.chmod(h.stat().st_mode | stat.S_IEXEC)
+    _git(repo, "config", "core.hooksPath", str(d))
+    return marker
+
+
+def test_cleanup_ref_hook_descendants_are_stopped(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    marker = _ref_hook(repo, tmp_path)
+    try:
+        res = _exec(plan, repo, "branch", abortAfterMs=4000)
+        n = _lines(marker)
+        assert n > 0, "cleanup の hook が動いていない"
+        time.sleep(1.0)
+        assert _lines(marker) == n, "戻った後も子孫が書き続けている"
+        assert not _alive(int((tmp_path / "ref.pid").read_text(encoding="utf-8").strip()))
+        assert _git(repo, "branch", "--list", "feature/x").strip() != "", res
+    finally:
+        _kill_group_of(tmp_path / "ref.pid")
+
+
+def test_cleanup_unconfirmed_stop_is_unknown(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    _ref_hook(repo, tmp_path)
+    try:
+        res = _exec(plan, repo, "branch", abortAfterMs=4000, unconfirmedFrom=3)
+        assert res["outcome"] == "unknown" and res["phase"] == "cleanup", res
+        assert any("停止を確認できない" in e for e in res["evidence"]), res
+    finally:
+        _kill_group_of(tmp_path / "ref.pid")

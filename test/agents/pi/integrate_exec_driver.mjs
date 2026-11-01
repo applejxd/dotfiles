@@ -1,4 +1,6 @@
-// integrate-exec.ts の試験用の実行器。標準入力の JSON ({plan, cleanup, approverCwd, abortAfterMs?, commitTimeoutMs?}) を読み、結果を JSON で出す。
+// integrate-exec.ts の試験用の実行器。標準入力の JSON ({plan, cleanup, approverCwd, abortAfterMs?, commitTimeoutMs?, ...}) を読み、結果を JSON で出す。
+// 故障注入: stopUnconfirmed (停止確認が常に false)、unconfirmedFrom (n 回目の停止確認から false)、
+// noSignal (シグナルを送らない)、graceMs / killMs (待ち時間の短縮)。
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -12,4 +14,14 @@ const ac = new AbortController();
 if (req.abortAfterMs) setTimeout(() => ac.abort(), req.abortAfterMs);
 const input = { plan: req.plan, cleanup: req.cleanup ?? "none", approverCwd: req.approverCwd, signal: ac.signal };
 if (req.commitTimeoutMs) input.commitTimeoutMs = req.commitTimeoutMs;
-process.stdout.write(JSON.stringify(await executeIntegration(input)));
+if (req.stopUnconfirmed) input.stopVerifier = () => false;
+if (req.unconfirmedFrom) {
+	let n = 0;
+	input.stopVerifier = () => ++n < req.unconfirmedFrom;
+}
+if (req.noSignal) input.killSignal = () => {};
+if (req.graceMs) input.graceMs = req.graceMs;
+if (req.killMs) input.killMs = req.killMs;
+const res = await executeIntegration(input);
+// 停止できなかった子が残っていても、ここで終わる
+process.stdout.write(JSON.stringify(res), () => process.exit(0));

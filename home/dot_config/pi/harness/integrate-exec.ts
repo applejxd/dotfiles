@@ -1,7 +1,7 @@
 // 保護ブランチへの統合 (squash) の実行器。承認前に算出した計画 (IntegratePlan) をそのとおりに反映する。
 // 結果の commit は通常の git commit で作る (pre-commit・commit-msg・署名をそのまま通す)。ref だけを進めない。
 // see docs/change/0055
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
@@ -18,9 +18,33 @@ export type IntegrateExecInput = {
 	signal?: AbortSignal;
 	/** git commit (hook を含む) の時間切れ。既定 120000 */
 	commitTimeoutMs?: number;
+	/** 試験用: 中断・時間切れの後の停止確認を差し替える (pid = プロセスグループのリーダー)。false なら「停止を確認できない」 */
+	stopVerifier?: (pid: number) => boolean | Promise<boolean>;
+	/** 試験用: グループへシグナルを送る関数の差し替え。既定は process.kill(-pid, sig) */
+	killSignal?: (pid: number, sig: NodeJS.Signals) => void;
+	/** 試験用: SIGTERM の後の猶予 (既定 2000)・SIGKILL の後の確認の上限 (既定 5000) */
+	graceMs?: number;
+	killMs?: number;
 };
 
-type G = { ok: boolean; code: number | null; out: string; err: string; timedOut: boolean; aborted: boolean; spawnFail: boolean };
+type Stopping = {
+	stopVerifier?: (pid: number) => boolean | Promise<boolean>;
+	killSignal?: (pid: number, sig: NodeJS.Signals) => void;
+	graceMs?: number;
+	killMs?: number;
+};
+
+type G = {
+	ok: boolean;
+	code: number | null;
+	out: string;
+	err: string;
+	timedOut: boolean;
+	aborted: boolean;
+	spawnFail: boolean;
+	/** gitGroup だけが設定する。git とその子孫 (hook) の停止を確認できたか */
+	stopped?: boolean | "unknown";
+};
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字の除去が目的
 const CTRL_G = /[\u0000-\u001f\u007f]/g;
@@ -42,7 +66,7 @@ function git(args: string[], cwd: string, env: NodeJS.ProcessEnv, opts: { timeou
 		try {
 			execFile(
 				"git",
-				args,
+				["-c", "core.fsmonitor=false", ...args],
 				{ cwd, env, encoding: "utf8", timeout: opts.timeout ?? 60000, signal: opts.signal, maxBuffer: 64 * 1024 * 1024 },
 				(e, stdout, stderr) => {
 					if (!e) return res({ ok: true, code: 0, out: stdout, err: stderr, timedOut: false, aborted: false, spawnFail: false });
@@ -56,6 +80,155 @@ function git(args: string[], cwd: string, env: NodeJS.ProcessEnv, opts: { timeou
 		} catch (e) {
 			res({ ok: false, code: null, out: "", err: String((e as Error).message ?? e), timedOut: false, aborted: false, spawnFail: true });
 		}
+	});
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+function groupGone(pid: number): boolean {
+	try {
+		process.kill(-pid, 0);
+		return false;
+	} catch (e) {
+		return (e as NodeJS.ErrnoException).code === "ESRCH";
+	}
+}
+
+/** プロセスグループが消えるまで待つ。上限 ms を過ぎたら false */
+async function waitGone(pid: number, ms: number): Promise<boolean> {
+	const end = Date.now() + ms;
+	while (Date.now() < end) {
+		if (groupGone(pid)) return true;
+		await sleep(50);
+	}
+	return groupGone(pid);
+}
+
+/** グループへ SIGTERM → 猶予 → SIGKILL。消滅を確認できたか返す */
+async function killGroup(pid: number, st: Stopping): Promise<boolean> {
+	const send = st.killSignal ?? ((p: number, s: NodeJS.Signals) => process.kill(-p, s));
+	try {
+		send(pid, "SIGTERM");
+	} catch {
+		/* すでに無い */
+	}
+	if (await waitGone(pid, st.graceMs ?? 2000)) return true;
+	try {
+		send(pid, "SIGKILL");
+	} catch {
+		/* すでに無い */
+	}
+	return waitGone(pid, st.killMs ?? 5000);
+}
+
+/**
+ * hook が動く git (merge --squash・commit) の起動。専用のプロセスグループで動かし、中断・時間切れ・失敗では
+ * グループ全体を止めて消滅を確認する (stopped)。Windows は従来の方式 (stopped = "unknown")。
+ */
+function gitGroup(
+	args: string[],
+	cwd: string,
+	env: NodeJS.ProcessEnv,
+	opts: { timeout?: number; signal?: AbortSignal } & Stopping = {},
+): Promise<G> {
+	if (process.platform === "win32") {
+		return git(args, cwd, env, opts).then((g) => ({ ...g, stopped: "unknown" as const }));
+	}
+	const CAP = 64 * 1024 * 1024;
+	return new Promise((res) => {
+		let out = "";
+		let err = "";
+		let timedOut = false;
+		let aborted = false;
+		let settled = false;
+		if (opts.signal?.aborted) {
+			return res({ ok: false, code: null, out: "", err: "", timedOut: false, aborted: true, spawnFail: false, stopped: true });
+		}
+		let child: ReturnType<typeof spawn>;
+		try {
+			child = spawn("git", ["-c", "core.fsmonitor=false", ...args], { cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+		} catch (e) {
+			return res({ ok: false, code: null, out: "", err: String((e as Error).message ?? e), timedOut: false, aborted: false, spawnFail: true, stopped: true });
+		}
+		const pid = child.pid;
+		let killing: Promise<boolean> | null = null;
+		// 実測の消滅と verifier の両方が true のときだけ true (確認を弱めない)。例外は false
+		const confirm = async (gone: boolean): Promise<boolean> => {
+			if (!gone) return false;
+			if (!opts.stopVerifier || pid === undefined) return true;
+			try {
+				return (await opts.stopVerifier(pid)) === true;
+			} catch {
+				return false;
+			}
+		};
+		const stopGroup = (): Promise<boolean> => {
+			if (!killing) {
+				killing = (async () => {
+					if (pid === undefined) return false;
+					try {
+						return await confirm(await killGroup(pid, opts));
+					} catch {
+						return false;
+					}
+				})();
+			}
+			return killing;
+		};
+		// 停止要求。停止を確認できなかったら、子の exit を待たずに 1 度だけ結果を返す
+		const requestStop = () => {
+			void stopGroup().then((ok) => {
+				if (!ok) void finish(null, false, false);
+			});
+		};
+		child.stdout?.setEncoding("utf8");
+		child.stderr?.setEncoding("utf8");
+		const NOTE = "\n[出力が上限を超えたため、以降を捨てた]";
+		child.stdout?.on("data", (d: string) => {
+			if (out.length < CAP) out += d;
+			else if (!out.endsWith(NOTE)) out += NOTE;
+		});
+		child.stderr?.on("data", (d: string) => {
+			if (err.length < CAP) err += d;
+			else if (!err.endsWith(NOTE)) err += NOTE;
+		});
+		const timer = setTimeout(() => {
+			timedOut = true;
+			requestStop();
+		}, opts.timeout ?? 60000);
+		const onAbort = () => {
+			aborted = true;
+			requestStop();
+		};
+		opts.signal?.addEventListener("abort", onAbort, { once: true });
+		const finish = async (code: number | null, spawnFail: boolean, forced?: boolean) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			opts.signal?.removeEventListener("abort", onAbort);
+			child.stdout?.destroy();
+			child.stderr?.destroy();
+			const ok = !spawnFail && !timedOut && !aborted && code === 0;
+			let stopped: boolean;
+			if (forced !== undefined) stopped = forced;
+			else if (spawnFail || pid === undefined) stopped = true;
+			else if (killing) stopped = await killing;
+			else if (groupGone(pid)) stopped = await confirm(true);
+			else stopped = await stopGroup();
+			res({ ok, code, out, err, timedOut, aborted, spawnFail, stopped });
+		};
+		child.on("error", (e) => {
+			err += String(e.message ?? e);
+			void finish(null, true);
+		});
+		child.on("exit", (code) => {
+			// 子孫が出力の端を握っていても待ち続けない
+			const t = setTimeout(() => void finish(code, false), 1000);
+			child.once("close", () => {
+				clearTimeout(t);
+				void finish(code, false);
+			});
+		});
 	});
 }
 
@@ -95,6 +268,12 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 	const { plan } = input;
 	const base: NodeJS.ProcessEnv = { ...repoTargetEnv(input.env ?? process.env), GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" };
 	const wt = plan.targetWorktree;
+	const stopping: Stopping = {
+		stopVerifier: input.stopVerifier,
+		killSignal: input.killSignal,
+		graceMs: input.graceMs,
+		killMs: input.killMs,
+	};
 	const refuse = (phase: string, msg: string) => {
 		body.outcome = "not_executed";
 		body.phase = phase;
@@ -123,13 +302,25 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 	const drv = await git(["config", "--get-regexp", "^merge\\..*\\.driver$"], wt, base);
 	if ((drv.ok && drv.out.trim() !== "") || (!drv.ok && drv.code !== 1)) return refuse("precheck", "外部の merge driver が設定されている (または確かめられない)");
 
-	// 元に戻す (reset --hard)。戻せたか返す
-	const rollback = async (): Promise<boolean> => {
-		const r = await git(["reset", "--hard", plan.target.oid], wt, base);
+	// Windows では git・hook (とその子孫) の停止を保証できないので、最初の変更の前に断る (試験用の stopVerifier があるときを除く)
+	if (process.platform === "win32" && !input.stopVerifier) {
+		return refuse("precheck", "Windows では git・hook の停止を保証できないので実行しない");
+	}
+
+	// 元に戻す (reset --hard)。hook が動くので停止管理つき。"unstopped" = 停止を確認できない
+	const rollback = async (): Promise<boolean | "unstopped"> => {
+		const r = await gitGroup(["reset", "--hard", plan.target.oid], wt, base, stopping);
+		if (r.stopped !== true) return "unstopped";
 		if (!r.ok) return false;
 		const h = await git(["rev-parse", "HEAD"], wt, base);
 		const s2 = await git(["status", "--porcelain=v1", "-z", "--untracked-files=normal"], wt, base);
 		return h.ok && h.out.trim() === plan.target.oid && s2.ok && s2.out === "";
+	};
+	const notStopped = (phase: string) => {
+		body.outcome = "unknown";
+		body.phase = phase;
+		body.evidence.push("git・hook の停止を確認できない。rollback しない");
+		body.remainingCleanup.push("作業ツリー・index・HEAD が中途の状態のままの可能性がある");
 	};
 	const unrolled = (phase: string, why: string) => {
 		body.outcome = "unknown";
@@ -138,19 +329,30 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 		body.remainingCleanup.push("作業ツリーに squash の変更が残っている");
 	};
 
+	// rollback して、結果で分岐する。停止を確認できなければ notStopped
+	const rolledBack = async (phase: string, why: string, onOk: () => void) => {
+		const r = await rollback();
+		if (r === "unstopped") return notStopped(phase);
+		if (r) return onOk();
+		return unrolled(phase, why);
+	};
+
 	// --- merge ---
 	body.phase = "merge";
-	const mg = await git(["merge", "--squash", "--no-commit", plan.source.oid], wt, base, { signal: input.signal });
+	const mg = await gitGroup(["merge", "--squash", "--no-commit", plan.source.oid], wt, base, {
+		...stopping,
+		signal: input.signal,
+	});
+	// 終了コードと独立に、停止の確認を要求する (成功でも、背景の子孫が残っていれば進まない)
+	if (mg.stopped !== true) return notStopped("merge");
 	if (!mg.ok) {
 		const why = `squash を反映できなかった: ${tail(mg.err || mg.out)}`;
-		if (await rollback()) return refuse("merge", why);
-		return unrolled("merge", why);
+		return rolledBack("merge", why, () => refuse("merge", why));
 	}
 	const wtree = await git(["write-tree"], wt, base);
 	if (!wtree.ok || wtree.out.trim() !== plan.resultTree) {
 		const why = "結果の tree が、承認した計画と違う";
-		if (await rollback()) return refuse("merge", why);
-		return unrolled("merge", why);
+		return rolledBack("merge", why, () => refuse("merge", why));
 	}
 
 	// --- commit ---
@@ -159,7 +361,12 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 	const msgFile = join(tmpRef.dir, "msg");
 	writeFileSync(msgFile, plan.message.endsWith("\n") ? plan.message : `${plan.message}\n`, { mode: 0o600 });
 	const cenv: NodeJS.ProcessEnv = { ...base, GIT_EDITOR: "true" };
-	const cm = await git(["commit", "-F", msgFile], wt, cenv, { timeout: input.commitTimeoutMs ?? 120000, signal: input.signal });
+	const cm = await gitGroup(["commit", "-F", msgFile], wt, cenv, {
+		...stopping,
+		timeout: input.commitTimeoutMs ?? 120000,
+		signal: input.signal,
+	});
+	if (cm.stopped !== true) return notStopped("commit");
 	if (!cm.ok) {
 		const cur = await git(["rev-parse", "HEAD"], wt, base);
 		if (!cur.ok) {
@@ -169,7 +376,9 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 		}
 		if (cur.out.trim() === plan.target.oid) {
 			const why = cm.aborted ? "中断された" : cm.timedOut ? `commit が時間切れ: ${tail(cm.err || cm.out)}` : `commit が失敗した: ${tail(cm.err || cm.out)}`;
-			if (await rollback()) {
+			const r = await rollback();
+			if (r === "unstopped") return notStopped("commit");
+			if (r) {
 				body.outcome = cm.aborted ? "not_executed" : "failed_confirmed";
 				body.evidence.push(why);
 				return;
@@ -205,12 +414,12 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 	if (input.cleanup !== "none") {
 		body.phase = "cleanup";
 		try {
-			await cleanup(input, body, wt, base);
+			await cleanup(input, body, wt, base, stopping);
 		} catch (e) {
 			body.remainingCleanup.push(`後片付けで例外: ${String((e as Error)?.message ?? e).split("\n")[0]}`);
 		}
 	}
-	body.phase = "done";
+	body.phase = body.outcome === "unknown" ? "cleanup" : "done";
 }
 
 function real(p: string): string {
@@ -221,8 +430,17 @@ function real(p: string): string {
 	}
 }
 
-async function cleanup(input: IntegrateExecInput, body: ResultBody, wt: string, env: NodeJS.ProcessEnv): Promise<void> {
+async function cleanup(input: IntegrateExecInput, body: ResultBody, wt: string, env: NodeJS.ProcessEnv, stopping: Stopping): Promise<void> {
 	const { plan } = input;
+	// hook が動く更新系の git は停止管理つき。停止を確認できなければ unknown にして、次の変更へ進まない
+	const mutate = async (args: string[], cwd: string): Promise<G | null> => {
+		const g = await gitGroup(args, cwd, env, { ...stopping, signal: input.signal });
+		if (g.stopped === true) return g;
+		body.outcome = "unknown";
+		body.evidence.push("git・hook の停止を確認できない。後片付けを続けない");
+		body.remainingCleanup.push("後片付けの git が停止したか確認できない");
+		return null;
+	};
 	const ls = await git(["worktree", "list", "--porcelain"], wt, env);
 	let w: string | null = null;
 	let wHead = "";
@@ -263,7 +481,8 @@ async function cleanup(input: IntegrateExecInput, body: ResultBody, wt: string, 
 			body.remainingCleanup.push("feature ブランチは worktree で使用中のため、削除していない");
 			return;
 		}
-		const rm = await git(["worktree", "remove", w], wt, env);
+		const rm = await mutate(["worktree", "remove", w], wt);
+		if (!rm) return;
 		if (!rm.ok) {
 			body.remainingCleanup.push(`worktree を削除できなかった: ${tail(rm.err || rm.out)}`);
 			body.remainingCleanup.push("feature ブランチは worktree で使用中のため、削除していない");
@@ -271,7 +490,8 @@ async function cleanup(input: IntegrateExecInput, body: ResultBody, wt: string, 
 		}
 		body.confirmedEffects.push(`feature の worktree を削除した: ${w}`);
 	}
-	const del = await git(["update-ref", "-d", plan.source.ref, plan.source.oid], wt, env);
+	const del = await mutate(["update-ref", "-d", plan.source.ref, plan.source.oid], wt);
+	if (!del) return;
 	if (del.ok) body.confirmedEffects.push(`${plan.source.ref} を削除した`);
 	else body.remainingCleanup.push(`feature ブランチを削除できなかった: ${tail(del.err || del.out)}`);
 }
