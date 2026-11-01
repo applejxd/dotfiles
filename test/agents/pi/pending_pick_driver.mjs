@@ -320,7 +320,7 @@ const out = {};
 		subShape: sub?.every((x) => typeof x.value === "string" && typeof x.label === "string"),
 		ap: ap?.map((x) => x.value),
 		approveValues: approve?.map((x) => x.value),
-		approveIds: ids.filter((i) => i !== ids[1]).reverse().map((i) => `approve ${i}`),
+		approveIds: ids.filter((i) => i !== ids[1]).map((i) => `approve ${i}`),
 		approveLabels: approve?.map((x) => x.label),
 		expectedLabels: pick.pickCandidates(cwd, "approve", h.approveDeps({ cwd })).map((x) => x.label),
 		prefixed: prefixed?.map((x) => x.value),
@@ -548,7 +548,7 @@ const out = {};
 		const two = fresh();
 		running(two.cwd, { action: "fake_op" }, { started: false });
 		const u = doneUnknown(two.cwd, { action: "fake_op" });
-		const t = await two.h.run(two.cwd, "", { answers: [(o) => o[0], (o) => o.find((x) => x.startsWith("success"))] });
+		const t = await two.h.run(two.cwd, "", { answers: [(o) => o[1], (o) => o.find((x) => x.startsWith("success"))] });
 		hub.resolveTwo = { options: t.selects[0].options, kinds: t.selects[1]?.options.map((x) => x.split(" ")[0]), resolvedBy: ops.readResultAt(two.cwd, u, ops.doneOid(two.cwd, u)).result?.resolvedBy };
 	}
 	// 旧形式の退避 / アダプタの無い操作: 「詳細 」。1 件は詳細の文章を返す
@@ -592,6 +592,29 @@ const out = {};
 		};
 	}
 	out.hub = hub;
+}
+
+// 11. 並び: approve・hub は古い順 (待ち行列。積み重ねの依存は保存の順と一致しやすい)。show・drop は新しい順。先頭 (既定のカーソル位置) は approve・hub で一番古い
+{
+	const h = setup();
+	const cwd = repo();
+	const T = 1700000000000;
+	const mk = (dt, note) => ops.saveOp(cwd, record({ params: { note } }), undefined, T + dt).id;
+	// 保存の順と時刻の順を食い違わせる (時刻で並べていることを固める)
+	const mid = mk(10000, "mid");
+	const oldest = mk(0, "oldest");
+	const newest = mk(20000, "newest");
+	const deps = h.approveDeps({ cwd });
+	const ids = (k) => pick.pickCandidates(cwd, k, deps, T + 30000).map((c) => c.id);
+	const before = { approve: ids("approve"), hub: ids("hub"), show: ids("show"), drop: ids("drop") };
+	const firstLabel = pick.pickCandidates(cwd, "approve", deps, Date.now())[0].label;
+	const first = await h.run(cwd, "approve", { answers: [(o) => o[0], "承認して実行"] });
+	out.order = {
+		oldest, mid, newest,
+		...before,
+		firstIsLabel: first.selects[0].options[0] === firstLabel,
+		processed: [oldest, mid, newest].map((i) => !stateOf(cwd, i).pending),
+	};
 }
 
 console.log(JSON.stringify(out));

@@ -35,11 +35,11 @@ def table():
     return json.loads(proc.stdout)
 
 
-def test_candidates_are_filtered_per_kind_and_newest_first(table):
+def test_candidates_are_filtered_per_kind_approve_oldest_first_others_newest_first(table):
     c = table["cands"]
     i = c["ids"]
-    # approve: アダプタのある pending だけ (アダプタの無い操作・running・done は出ない)。新しい順
-    assert c["approve"] == [i["p5"], i["p4"], i["p3"], i["p1"]]
+    # approve: アダプタのある pending だけ (アダプタの無い操作・running・done は出ない)。待ち行列なので古い順
+    assert c["approve"] == [i["p1"], i["p3"], i["p4"], i["p5"]]
     assert c["show"] == [i["d2"], i["d1"], i["r1"], i["p5"], i["p4"], i["p3"], i["p2"], i["p1"]]
     assert c["sortedNewestFirst"] is True
     # drop: pending の action だけ (アダプタの有無は問わない)
@@ -149,9 +149,9 @@ def test_several_candidates_show_a_picker_with_the_labels_and_cancel_does_nothin
     assert (
         "選ばなかった" in m["noneText"] and m["noneMarks"] == 0 and m["noneStates"] == [True, True]
     )
-    # 2 番目 (古い方) を選ぶと、その ID で承認の画面へ進み、承認で実行される
+    # 2 番目 (新しい方。approve は古い順) を選ぶと、その ID で承認の画面へ進み、承認で実行される
     assert m["secondSelects"] == 2 and m["secondOptions"][0] == "承認して実行"
-    assert m["secondStates"] == [False, True]
+    assert m["secondStates"] == [True, False]
 
 
 def test_non_tui_refuses_approve_and_never_shows_a_picker(table):
@@ -161,7 +161,7 @@ def test_non_tui_refuses_approve_and_never_shows_a_picker(table):
     assert n["showText"] == "/pending " and n["dropText"] == "/pending "  # 従来の USAGE
 
 
-def test_completion_lists_subcommands_and_ids_newest_first_with_labels(table):
+def test_completion_lists_subcommands_and_ids_oldest_first_for_approve_with_labels(table):
     c = table["completion"]
     assert c["isFunction"] is True and c["subShape"] is True
     assert c["sub"] == ["list", "show", "approve", "resolve", "drop", "unlock", "log"]
@@ -231,8 +231,19 @@ def test_hub_marks_approvals_and_processes_the_chosen_second_row(table):
     t = table["hub"]["approveTwo"]
     assert len(t["options"]) == 2 and all(o.startswith("承認 ") for o in t["options"])
     assert t["maxWidth"] <= 44
-    assert t["states"] == [False, True]  # 2 番目 (古い方) だけが処理された
-    assert t["marks"] == ["execute:fake_op"]
+    assert t["states"] == [True, False]  # 2 番目 (新しい方。hub は古い順) だけが処理された
+    assert t["marks"] == ["execute:long_action_name_abcdef"]  # 2 件目 (新しい方) の操作
+
+
+def test_approve_and_hub_are_oldest_first_but_show_and_drop_stay_newest_first(table):
+    o = table["order"]
+    old, mid, new = o["oldest"], o["mid"], o["newest"]
+    # 保存の順 (mid → oldest → newest) ではなく、時刻の順で並ぶ
+    assert o["approve"] == [old, mid, new] and o["hub"] == [old, mid, new]
+    assert o["show"] == [new, mid, old] and o["drop"] == [new, mid, old]
+    # 先頭 (既定のカーソル位置) は一番古い保留。先頭を選ぶと、それが承認される
+    assert o["firstIsLabel"] is True
+    assert o["processed"] == [True, False, False]
 
 
 def test_hub_escape_does_nothing(table):

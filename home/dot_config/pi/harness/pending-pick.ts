@@ -56,11 +56,13 @@ function labelOf(name: string, ago: string, summary: string, tail = "", mark = "
 	return clipCells(`${summary && room >= 2 ? `${head} ${clipCells(summary, room)}` : head}${suffix}`, LABEL_CELLS);
 }
 
-/** 種類ごとの候補 (新しい順)。git の読み取りだけ */
+/** 種類ごとの候補。approve・hub は古い順 (待ち行列。積み重ねた feature の依存は保存の順と一致しやすい)、ほかは新しい順。git の読み取りだけ */
 export function pickCandidates(cwd: string, kind: PickKind, deps: PickDeps, now: number = Date.now()): Candidate[] {
 	const limits = deps.limits ?? DEFAULT_LIMITS;
 	const raw: { id: string; name: string; ago: string; summary: string; mark: string; act?: HubAct }[] = [];
-	const entries = [...listOps(cwd, limits).entries].sort((a, b) => b.committedAt - a.committedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+	const fifo = kind === "approve" || kind === "hub";
+	const dir = fifo ? -1 : 1;
+	const entries = [...listOps(cwd, limits).entries].sort((a, b) => dir * (b.committedAt - a.committedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)));
 	for (const e of entries) {
 		let rec: OpRecord | null = null;
 		let unknownByExecutor = false;
