@@ -7,7 +7,7 @@
 
 - 実装済み・**本番では無効**（`[pi.pending] enabled = false`・`[pi.integrate] enabled = false`）。有効にするのは、実機の確認（CHG-0055 の P9 の出口条件）の後の、別の変更。
 - 対応する操作は `git_integrate`（保護ブランチへの統合）だけ。`git_commit` は従来の退避（[pi の拡張](pi-extensions.md#guarded_action承認つきの外部操作)）のまま、gh は確認が取れなければ拒否のまま。
-- **実機の確認（2026-11-01、Orca の端末）**: 保存（feature の worktree の `pis`）→ 本体で `/pending approve` → 実行 → 結果の通知 → モデルの続行までを、E1・E2 で確かめた。Zed・Windows と、排他・復旧・キルスイッチ（E3〜E5）は**未確認**。
+- **実機の確認（2026-11-01、Orca の端末）**: 保存（feature の worktree の `pis`）→ 本体で `/pending approve` → 実行 → 結果の通知 → モデルの続行までを、E1・E2 で確かめた。さらに、素の `/pending` が一覧を経ずに承認の確認画面へ進むこと、利用者が `git flow feature finish` を明示したときはモデルがそのとおり実行すること、確認が時間切れのときに案内（`git_integrate` で保存できる）が届くことを確かめた（モデルは、利用者が禁じた `git_integrate` を使わず、選択肢を示して指示を待った）。Zed・Windows と、排他・復旧・キルスイッチ（E3〜E5）は**未確認**。
 - 実際の pi の試験（RPC）では、TUI 専用の経路は回せない。**時間切れの案内**は、疑似端末（pty）で TUI を動かす試験（`test_pi_tui_guidance.py`）で確かめる。承認の確認画面と `/pending` の選択画面は、実機の確認による。
 
 ## キルスイッチ
@@ -63,6 +63,7 @@
 - 実行器は、hook が動く git を専用のプロセスグループで起動し、中断・時間切れでは**停止を確認してから**結果の確認と rollback を行う。停止を確認できないとき（排他の操作の例外・不正な結果・旧形式の `unknown` も同じ）は、**結果を書かず、running とロックを残し**、モデルには「再実行しない」の固定文だけを返す。自動で `reset` しない。
 - 統合は、統合先の worktree の中でだけ実行する。`runsHere` は `git rev-parse` の common-dir・git-dir・show-toplevel の一致で判定し、観測できなければ「中ではない」。統合の前に、統合先・統合元の OID と結果の tree が、承認した計画と一致することを再検査する。
 - 結果の facts（`source_oid`・`target_oid_before`・`result_commit`・`result_tree`・`cleanup` など）を記録する。結果コミットは、commit の成立を確かめた後だけ。
+- 承認画面は、統合元が未統合の他の feature を含むとき（積み重ね）だけ、警告を 1 行出す。表示だけで、保留の記録・再検査・承認の判断には使わない（[積み重ね](pi-subagents.md#積み重ね依存する-feature)）。
 - 統合の成功は、commit の親が計画どおりであることに加えて、**統合先 ref（`plan.target.ref`）が結果コミットを指している**ことを確かめてから記録する。一致しない・読めないときは `unknown`（cleanup に進まず、自動で `reset` もしない）。feature ブランチの削除は `update-ref --no-deref -d`（実行の途中で別ブランチへの symbolic ref に差し替わっても、参照先を消さない）。
 - **外部のコードを、承認の前に動かさない**: hook・fsmonitor・外部 diff を止め、外部 merge driver と、`filter.<名前>.clean|smudge|process` が設定されたリポジトリは、算出と実行の前に断る（初版の対象外。Git LFS などを使うリポジトリは保留に保存できない）。実測で、filter は `merge.renormalize` の有無にかかわらず、算出の途中で起動していた。
 - **停止確認の要否は、アダプター表が空でも失われない**: 排他かどうかは、アダプターが見つからない（キルスイッチを切って再起動した後など）ときも、排他として扱う（`--confirm-stopped` を求める側へ倒す）。承認の画面の後、実行の前に、`authorize` をもう一度呼ぶ（画面は期限なしで、眺める間に役割・設定が変わりうる）。

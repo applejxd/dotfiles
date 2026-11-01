@@ -52,11 +52,21 @@ description: "feature を起票して worker に実装を切り出し、成果�
    docs の更新表や `_PI_TESTS` の同じ位置の衝突は、両方の行を残す。
 9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。todo を done にする。
 
+## 積み重ね (依存する feature)
+
+B が、まだ develop に入っていない A の変更を要るとき、A の承認を待たずに B を進められる。**依存は宣言しない**（git の祖先関係から導く。宣言は古くなる）。正本は [積み重ね](../../../docs/spec/guard/pi-subagents.md#積み重ね依存する-feature)。
+
+1. **起票**: A をコミットしたあと、`git flow feature start <B> feature/<A> --worktree --no-fetch`（B は A の先頭から始まる）。
+2. **A がさらに進んだら**: `cd <B の worktree の絶対パス> && git merge feature/<A> -m "merge: feature/<A> を取り込む"`（`&&`・パイプなし）。**マージするのは親だけ**（worker は git を書けない）。**衝突したら、止めて利用者に報告する**（LLM に直させない）。
+3. **関門**: `feature_gate.py check <B> --owned <B の glob>`。A の変更は「継承したパス」として引かれ（出力に `depends on: feature/<A>`）、担当外・重複を誤検知しない。既知の制限: B が A のファイルをコミットで編集しても検知されない。
+4. **取り込みは A → B の順**。承認画面に、B が未統合の A を含むときは「含む他の feature (未統合)」の警告が出る。A が develop に入ったら、`cd <B の worktree> && git merge develop`（同じ内容なので衝突しない）。B を先に取り込んでしまうと、あとの A は「統合しても内容が変わらない」（`no_change`）で断られる。A のブランチは手で片付ける。
+5. **全件検査**は B の worktree でも回せる（A の変更を含む。A が壊れていれば B も落ちる）。
+
 ## 落とし穴
 
 - **整形 hook が書き込み直後にファイルを書き換える**。すぐ `git add` すると空のファイルをステージする（工程 4 の `sleep 4` と `--numstat`）。
 - **worker の時間制限は約 15 分**。範囲を絞り、優先順位をつける。報告なしで打ち切られても成果物が揃っていることがある（実物で確かめる）。
-- **feature への `develop` の取り込み**は、`cd <絶対パス> && git merge develop`（`&&`・直接の git 1 コマンド・パイプなし）なら確認なしで通る。
+- **feature への `develop` の取り込み**（と、feature 同士のマージ）は、`cd <絶対パス> && git merge develop`（`&&`・直接の git 1 コマンド・パイプなし）なら、**統合の必須確認にはならない**（判定器の結果のまま。通常モードでは通常の確認、bypass では確認なし）。
   相対パス・`;`・パイプ・`2>&1`・`env` や `sh -c` で包む形は、必須確認になる（[CHG-0053](../../../docs/change/0053-worktree-integration-gate.md)）。
 - 保護ブランチへの統合（`finish`・`merge`・`update-ref` など）は、`bypass` でも必須確認。確認を出して、承認を待つ。
 - `git_commit` の `message` が 1200 字を超えると拒否される。短い版でコミットし、全文は squash.txt に置く。

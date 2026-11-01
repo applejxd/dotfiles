@@ -207,6 +207,19 @@ C2: …
 
 **限界**: 子が、ほかの worktree や本体を書き換えても、**強制では止まらない**（bypass 中は、作業ツリーの外の書き込みの ask も allow になる）。`scripts/parallel_check.py` が、取り込み前に、**Git が報告する変更**（追跡ファイルの変更と未追跡ファイル。リネームは旧パスも数える）の範囲で見つける。ignore されたファイル・worktree の外（例: `~`）への書き込み・symlink の先は見えない。子へのコミットの許可（`guarded_action` を子へ）は、親の手数が許容できないと分かるまで、作らない（親が diff を確かめてからコミットする方が安全）。
 
+### 積み重ね（依存する feature）
+
+feature B が、まだ `develop` に入っていない feature A の変更を要るときの運用。A の承認（保留）を待たずに B を進められる。手順のチェックリストは、スキル `feature-orchestration`。
+
+- **許可の状況**: feature の worktree の中の `git merge feature/<A>`、A の先頭からの起票（`git flow feature start <B> feature/<A>`・`git switch -c`）は、保護ブランチを動かさないので、統合の必須確認にはならない。判定器の結果は、通常モードで確認（`ask`）、bypass で許可。`git rebase` は共通の deny のまま（履歴を書き換えない）。保護ブランチへの統合は、今までどおり必須確認（または保留の承認）。
+- **依存は宣言しない**: git の祖先関係から導く。B の先頭が、他のローカルの feature ブランチ G の先頭を祖先に持ち、G が `develop` に統合されていないとき、G は B の依存。G を足しても `develop` の内容が変わらないもの（squash で統合済みで、ブランチだけ残っている）は除く。宣言ファイルは古くなるので作らない。
+- **関門**: `parallel_check.py`・`feature_gate.py` は、依存 G の `develop...G` の変更パスを、B の変更から引く（担当外・重複の誤検知を防ぐ）。出力に `depends on:`。B の未コミットの変更は引かない。限界: B が G のファイルを**コミットで**さらに編集しても検知されない。先頭が同じ 2 つのブランチは、互いを依存に数えない。
+- **承認画面**: `git_integrate`（計画の `stacked`）は、統合元が未統合の他の feature/bugfix を含むとき、「含む他の feature (未統合): … — 先にそちらを統合するのが通常の順序」を 1 行出す。表示だけで、保留の記録・再検査・承認の判断には使わない。
+- **順序**: A → B。A が入ったら B に `develop` を取り込む（同じ内容なので衝突しない）。B を先に入れると、あとの A は `no_change`（統合しても内容が変わらない）で断られる。
+- **規則**: マージは親だけ（子は git を書けない）。衝突は止めて報告する（LLM に直させない）。
+- **見送り**: 依存の宣言ファイル・汎用 DAG。配車（[CHG-0056](../../change/0056-orchestrator.md)）の `needs` は「統合済みを待つ」計画上の前提で、積み重ね（コミット済みの先頭から始める）とは別のもの。
+- **試験**: `test_parallel_check.py`・`test_feature_gate.py`（関門）、`test_pi_integrate_plan.py`・`test_pi_integrate_action.py`（`stacked`・`no_change`）。
+
 ### 複数の会話を並行して使う運用
 
 1 つのリポジトリで、pi の会話（セッション。Orca・Zed など別の入口のスレッドも同じ）を**同時に複数**動かすときの規則。
