@@ -62,6 +62,7 @@
 ## 次の調査・実験
 
 1. （段 1）ask と必須確認の、承認 / 拒否 / 時間切れの件数を、セッションログ（`~/.pi/agent/sessions/`）から集計する。手段は、`friction-review` スキルの集計スクリプト（`.agents/skills/friction-review/scripts/friction_scan.py`）を拡張するか、確認の結果を、ハーネスが、集計しやすい形で記録する。件数の下限（規則あたり 20 件）を決めておく。
+   - **実測（2026-11-02、`friction_scan.py --approvals`。全期間）**: 下限を満たしたのは `git_commit` だけ（270 件: 承認 15%・時間切れ 14%・確認なし 27%・不明 41%）。統合系（`git_integrate`・`gitflow_feature_finish`）は 16〜17 件で未達。規則名はログに無く、action 名・ツール名で代替した。**ADR-0022 を Accepted にする根拠には足りない**（件数が溜まってから再集計する）。`git_commit` の時間切れ 40 件は、当時の退避と非同期承認（CHG-0055）が減らす対象
 2. （段 4）非同期の承認の、最小の形を、`git_commit` の退避の一般化として、設計する（`review` に見せる）。**済**（[CHG-0055](0055-async-approval.md)）。
 3. （段 7）CHG-0034 の候補 H（WSL の interop）の検証手順を、`pis` の内側で、読むだけのコマンド（`Test-Path` など）で作る。
 4. （段 8。軽量なエディタの端末スレッドで、利用者が行う）基準の試験。結果は調査記録に、日付つきで足す。**Windows 側は実機でしか確かめられない**ので、WSL と Windows ネイティブを分けて記録する。
