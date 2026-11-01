@@ -35,8 +35,17 @@ if (req.op === "capture") {
 	if (planned.ok) {
 		for (const a of req.beforeRecheck ?? []) git(req.requestCwd, a);
 		out.recheck = await ad.recheck(planned.plan, env);
-		if (req.execute && out.recheck.ok) out.exec = await ad.execute(planned.plan, env);
+		if (req.execute && out.recheck.ok) {
+			const x = await ad.execute(planned.plan, env);
+			out.execOutcome = x;
+			out.exec = x && typeof x === "object" && "body" in x ? x.body : x;
+		}
 	}
+} else if (req.op === "adapter") {
+	const ad = ia.integrateApprovalAdapter(req.cfg);
+	out.exclusive = ad.exclusive;
+	const plan = req.targetWorktree === null ? { targetWorktree: undefined } : { targetWorktree: req.targetWorktree };
+	out.here = ad.runsHere ? ad.runsHere({ plan, cleanup: "none" }, { cwd: req.cwd, env: ENV, rules: {} }) : "missing";
 } else if (req.op === "double") {
 	const cap = await ia.integrateRequestAdapter(req.cfg).capture({ cwd: req.cwd, values: req.values, env: ENV });
 	const saved = ops.saveOp(req.cwd, {

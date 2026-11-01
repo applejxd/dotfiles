@@ -8,7 +8,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const href = pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "integrate-exec.ts")).href;
-const { executeIntegration } = await import(href);
+const { executeIntegration, executeIntegrationOutcome } = await import(href);
+const { validateResultBody } = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "pending-ops.ts")).href);
 const req = JSON.parse(readFileSync(0, "utf8"));
 const ac = new AbortController();
 if (req.abortAfterMs) setTimeout(() => ac.abort(), req.abortAfterMs);
@@ -22,6 +23,8 @@ if (req.unconfirmedFrom) {
 if (req.noSignal) input.killSignal = () => {};
 if (req.graceMs) input.graceMs = req.graceMs;
 if (req.killMs) input.killMs = req.killMs;
-const res = await executeIntegration(input);
+// outcome: true なら { body, termination, valid } を出す (valid = validateResultBody の結果)
+const res = req.outcome ? await executeIntegrationOutcome(input) : await executeIntegration(input);
+if (req.outcome) res.valid = validateResultBody(res.body);
 // 停止できなかった子が残っていても、ここで終わる
 process.stdout.write(JSON.stringify(res), () => process.exit(0));

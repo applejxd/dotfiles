@@ -11,9 +11,9 @@ import { realpathSync } from "node:fs";
 import type { ActionSpec, PendingAdapter } from "./actions.ts";
 import { clipCells, sanitizeForDisplay } from "./confirm-view.ts";
 import { computeIntegrationPlan, type IntegratePlan } from "./integrate-plan.ts";
-import { executeIntegration } from "./integrate-exec.ts";
+import { executeIntegrationOutcome } from "./integrate-exec.ts";
 import type { ApprovalAdapter } from "./pending-approve.ts";
-import type { Json, OpRecord, ResultBody } from "./pending-ops.ts";
+import type { Json, OpRecord } from "./pending-ops.ts";
 import { repoTargetEnv } from "./pending-store.ts";
 
 /** enabled は統合のキルスイッチ。省略時は有効 (従来どおり)。false のとき、要求・承認のアダプタは拒否する */
@@ -233,12 +233,15 @@ export function integrateApprovalAdapter(cfg: CfgSource): ApprovalAdapter {
 		},
 		execute: async (p, env, signal) => {
 			const a = p as Approved;
-			const body: ResultBody = await executeIntegration({ plan: a.plan, cleanup: a.cleanup, approverCwd: env.cwd, env: env.env, signal });
-			if (body.outcome === "unknown") {
+			const r = await executeIntegrationOutcome({ plan: a.plan, cleanup: a.cleanup, approverCwd: env.cwd, env: env.env, signal });
+			if (r.body.outcome === "unknown") {
 				// 証拠は、画面に出す前に制御文字を可視化し、件数・長さを制限する
-				return { ...body, evidence: body.evidence.slice(0, 10).map((e) => oneLine(e, 300)) };
+				return { body: { ...r.body, evidence: r.body.evidence.slice(0, 10).map((e) => oneLine(e, 300)) }, termination: r.termination };
 			}
-			return body;
+			return r;
 		},
+		// ok: false はそのまま返す (許可に読み替えるのは呼び出し側の責任ではない)
+		runsHere: (p, env) => isTargetWorktree(env.cwd, (p as Approved).plan.targetWorktree ?? "", env.env),
+		exclusive: true,
 	};
 }

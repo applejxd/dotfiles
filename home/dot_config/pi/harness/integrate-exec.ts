@@ -234,22 +234,46 @@ function gitGroup(
 
 const OPS = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply", "BISECT_LOG"];
 
+/** 停止の観測と、承認の結果に載せる事実。run・cleanup が書く */
+type Track = { unconfirmed: boolean; resultCommit?: string; resultTree?: string };
+
 export async function executeIntegration(input: IntegrateExecInput): Promise<ResultBody> {
+	return (await executeIntegrationOutcome(input)).body;
+}
+
+/**
+ * 結果と、git・hook の停止状態を返す。termination は停止の観測から直接決める:
+ * hook が動く git のどれかで停止を確認できなければ "unconfirmed"、そうでなければ "stopped" (何も起動しなかった場合を含む)。
+ */
+export async function executeIntegrationOutcome(input: IntegrateExecInput): Promise<{ body: ResultBody; termination: "stopped" | "unconfirmed" }> {
 	const body: ResultBody = { outcome: "not_executed", phase: "precheck", confirmedEffects: [], remainingCleanup: [], evidence: [] };
+	const track: Track = { unconfirmed: false };
 	const fin = (): ResultBody => {
 		body.confirmedEffects = body.confirmedEffects.map(clean).slice(0, 50);
 		body.remainingCleanup = body.remainingCleanup.map(clean).slice(0, 50);
 		body.evidence = body.evidence.map(clean).slice(0, 50);
+		const facts: Record<string, string> = {
+			source_ref: clean(input.plan.source.ref).slice(0, 200),
+			source_oid: input.plan.source.oid,
+			target_ref: clean(input.plan.target.ref).slice(0, 200),
+			target_oid_before: input.plan.target.oid,
+			cleanup: input.cleanup,
+		};
+		if (track.resultCommit) facts.result_commit = track.resultCommit;
+		if (track.resultTree) facts.result_tree = track.resultTree;
+		body.facts = facts;
 		return body;
 	};
 	const tmpRef: { dir: string | null } = { dir: null };
 	let tmpDir: string | null = null;
 	try {
-		await run(input, body, tmpRef);
+		await run(input, body, tmpRef, track);
 	} catch (e) {
 		const first = String((e as Error)?.message ?? e).split("\n")[0];
 		body.outcome = "unknown";
 		body.evidence.push(`例外: ${first}`);
+		// 想定外の例外では、git・hook の停止を保証できない (fail-closed)
+		track.unconfirmed = true;
 	} finally {
 		tmpDir = tmpRef.dir;
 		tmpRef.dir = null;
@@ -261,10 +285,10 @@ export async function executeIntegration(input: IntegrateExecInput): Promise<Res
 			}
 		}
 	}
-	return fin();
+	return { body: fin(), termination: track.unconfirmed ? "unconfirmed" : "stopped" };
 }
 
-async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: string | null }): Promise<void> {
+async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: string | null }, track: Track): Promise<void> {
 	const { plan } = input;
 	const base: NodeJS.ProcessEnv = { ...repoTargetEnv(input.env ?? process.env), GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" };
 	const wt = plan.targetWorktree;
@@ -317,6 +341,7 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 		return h.ok && h.out.trim() === plan.target.oid && s2.ok && s2.out === "";
 	};
 	const notStopped = (phase: string) => {
+		track.unconfirmed = true;
 		body.outcome = "unknown";
 		body.phase = phase;
 		body.evidence.push("git・hook の停止を確認できない。rollback しない");
@@ -408,13 +433,15 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 	else body.evidence.push("結果の tree は承認した計画と一致した");
 	if ((msg ?? "").replace(/\n+$/, "") !== plan.message.replace(/\n+$/, "")) body.evidence.push("commit のメッセージが計画と違う (hook が変えた)");
 	const headOid = newHead.trim();
+	track.resultCommit = headOid;
+	track.resultTree = tree.trim();
 	body.confirmedEffects.push(`${plan.target.ref} を ${short(headOid)} に進めた (squash)`);
 
 	// --- cleanup ---
 	if (input.cleanup !== "none") {
 		body.phase = "cleanup";
 		try {
-			await cleanup(input, body, wt, base, stopping);
+			await cleanup(input, body, wt, base, stopping, track);
 		} catch (e) {
 			body.remainingCleanup.push(`後片付けで例外: ${String((e as Error)?.message ?? e).split("\n")[0]}`);
 		}
@@ -430,12 +457,13 @@ function real(p: string): string {
 	}
 }
 
-async function cleanup(input: IntegrateExecInput, body: ResultBody, wt: string, env: NodeJS.ProcessEnv, stopping: Stopping): Promise<void> {
+async function cleanup(input: IntegrateExecInput, body: ResultBody, wt: string, env: NodeJS.ProcessEnv, stopping: Stopping, track: Track): Promise<void> {
 	const { plan } = input;
 	// hook が動く更新系の git は停止管理つき。停止を確認できなければ unknown にして、次の変更へ進まない
 	const mutate = async (args: string[], cwd: string): Promise<G | null> => {
 		const g = await gitGroup(args, cwd, env, { ...stopping, signal: input.signal });
 		if (g.stopped === true) return g;
+		track.unconfirmed = true;
 		body.outcome = "unknown";
 		body.evidence.push("git・hook の停止を確認できない。後片付けを続けない");
 		body.remainingCleanup.push("後片付けの git が停止したか確認できない");

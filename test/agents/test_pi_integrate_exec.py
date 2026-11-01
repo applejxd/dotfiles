@@ -479,3 +479,115 @@ def test_cleanup_unconfirmed_stop_is_unknown(repo: Path, tmp_path: Path) -> None
         assert any("停止を確認できない" in e for e in res["evidence"]), res
     finally:
         _kill_group_of(tmp_path / "ref.pid")
+
+
+# --- termination (停止の観測から直接決まる) と facts (承認の結果に載せる事実) ---
+
+COMMON_FACTS = ("source_ref", "source_oid", "target_ref", "target_oid_before")
+
+
+def _outcome(plan: dict, approver: Path, cleanup: str = "none", **kw) -> dict:
+    res = _exec(plan, approver, cleanup, outcome=True, **kw)
+    assert res["valid"] is True, res  # validateResultBody を通る
+    return res
+
+
+def _check_common_facts(plan: dict, body: dict) -> dict:
+    f = body["facts"]
+    assert f["source_ref"] == plan["source"]["ref"] and f["source_oid"] == plan["source"]["oid"]
+    assert f["target_ref"] == plan["target"]["ref"]
+    assert f["target_oid_before"] == plan["target"]["oid"]
+    assert len(f["source_oid"]) in (40, 64) and len(f["target_oid_before"]) in (40, 64)
+    return f
+
+
+def test_termination_stopped_on_success_and_facts(repo: Path) -> None:
+    plan = _plan(repo)
+    res = _outcome(plan, repo)
+    assert res["body"]["outcome"] == "success" and res["termination"] == "stopped", res
+    f = _check_common_facts(plan, res["body"])
+    assert f["result_commit"] == _git(repo, "rev-parse", "HEAD").strip()
+    assert f["result_tree"] == _git(repo, "rev-parse", "HEAD^{tree}").strip()
+
+
+def test_legacy_api_returns_plain_body(repo: Path) -> None:
+    res = _exec(_plan(repo), repo)
+    assert res["outcome"] == "success" and "termination" not in res and "body" not in res, res
+
+
+def test_termination_stopped_on_hook_failure_no_result_commit(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    _hook(repo, tmp_path, "exit 1")
+    res = _outcome(plan, repo)
+    assert res["body"]["outcome"] == "failed_confirmed" and res["termination"] == "stopped", res
+    f = _check_common_facts(plan, res["body"])
+    assert "result_commit" not in f and "result_tree" not in f
+
+
+def test_termination_stopped_on_refusal_and_facts(repo: Path) -> None:
+    plan = _plan(repo)
+    (repo / "dirty.txt").write_text("x\n", encoding="utf-8")
+    res = _outcome(plan, repo)
+    assert res["body"]["outcome"] == "not_executed" and res["termination"] == "stopped", res
+    f = _check_common_facts(plan, res["body"])
+    assert "result_commit" not in f
+
+
+def test_termination_stopped_on_confirmed_abort_rolls_back(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    _hook(repo, tmp_path, "sleep 30")
+    before = _snapshot(repo)
+    res = _outcome(plan, repo, abortAfterMs=1500)
+    assert res["termination"] == "stopped", res
+    _unchanged(repo, before, res["body"])
+    assert "result_commit" not in res["body"]["facts"]
+
+
+def test_termination_unconfirmed_in_merge(repo: Path) -> None:
+    plan = _plan(repo)
+    head = _git(repo, "rev-parse", "HEAD")
+    res = _outcome(plan, repo, unconfirmedFrom=1)
+    assert res["body"]["outcome"] == "unknown" and res["termination"] == "unconfirmed", res
+    assert _git(repo, "rev-parse", "HEAD") == head and (repo / "b.txt").exists(), "rollback された"
+    _check_common_facts(plan, res["body"])
+
+
+def test_termination_unconfirmed_in_commit(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    _hook(repo, tmp_path, "sleep 30")
+    head = _git(repo, "rev-parse", "HEAD")
+    res = _outcome(plan, repo, abortAfterMs=1500, unconfirmedFrom=2)
+    assert res["body"]["outcome"] == "unknown" and res["termination"] == "unconfirmed", res
+    assert _git(repo, "rev-parse", "HEAD") == head and (repo / "b.txt").exists(), "rollback された"
+    assert "result_commit" not in res["body"]["facts"]
+
+
+def test_termination_unconfirmed_in_rollback(repo: Path, tmp_path: Path) -> None:
+    plan = _plan(repo)
+    _hook(repo, tmp_path, "exit 1")
+    res = _outcome(
+        plan, repo, unconfirmedFrom=3
+    )  # merge・commit は確認でき、rollback の reset だけ確認できない
+    assert res["body"]["outcome"] == "unknown" and res["termination"] == "unconfirmed", res
+    assert any("停止を確認できない" in e for e in res["body"]["evidence"]), res
+
+
+def test_termination_unconfirmed_in_cleanup_keeps_result_facts(repo: Path) -> None:
+    plan = _plan(repo)
+    res = _outcome(
+        plan, repo, "branch", unconfirmedFrom=3
+    )  # 統合は成立し、update-ref の停止だけ確認できない
+    assert res["body"]["outcome"] == "unknown" and res["termination"] == "unconfirmed", res
+    f = _check_common_facts(plan, res["body"])
+    assert f["result_commit"] == _git(repo, "rev-parse", "HEAD").strip()
+    assert f["result_tree"] == _git(repo, "rev-parse", "HEAD^{tree}").strip()
+
+
+def test_termination_is_unconfirmed_on_an_unexpected_exception(repo: Path) -> None:
+    """想定外の例外では、git・hook の停止を保証できない (fail-closed。承認側は running とロックを残す)"""
+    plan = _plan(repo)
+    broken = {**plan, "message": 5}  # 文字列でない → commit の準備で例外になる
+    res = _outcome(broken, repo)
+    assert res["body"]["outcome"] == "unknown", res
+    assert any("例外" in e for e in res["body"]["evidence"]), res
+    assert res["termination"] == "unconfirmed", res

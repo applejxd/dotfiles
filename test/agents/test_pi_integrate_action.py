@@ -370,3 +370,47 @@ def test_enabled_turned_off_between_plan_and_recheck(repo: Path, tmp_path: Path)
 def test_enabled_omitted_keeps_behavior(repo: Path) -> None:
     # CFG には enabled が無い (従来の呼び出し)。既存の試験と同じく通る
     assert _run({"op": "capture", "cwd": str(repo), "values": _values()})["capture"]["ok"] is True
+
+
+# --- 承認側アダプターの runsHere・exclusive・execute の戻り値 (実行の核へ接続する契約) ---
+
+
+def _adapter(cwd: Path, target: Path | str | None) -> dict:
+    return _run(
+        {
+            "op": "adapter",
+            "cwd": str(cwd),
+            "targetWorktree": None if target is None else str(target),
+        }
+    )
+
+
+def test_adapter_runs_here_from_main_and_not_from_nested_feature(repo: Path) -> None:
+    nested = repo / ".tmp" / "worktrees" / "x"
+    _git(repo, "worktree", "add", "-q", str(nested), "feature/x")
+    assert _adapter(repo, repo)["here"] == {"ok": True, "here": True}
+    assert _adapter(nested, repo)["here"] == {"ok": True, "here": False}
+
+
+def test_adapter_runs_here_not_ok_without_target_worktree(repo: Path) -> None:
+    res = _adapter(repo, None)
+    assert res["here"]["ok"] is False and res["here"]["reason"], res
+
+
+def test_adapter_is_exclusive(repo: Path) -> None:
+    assert _adapter(repo, repo)["exclusive"] is True
+
+
+def test_adapter_execute_returns_exec_outcome_with_facts(repo: Path) -> None:
+    res = _run(
+        {
+            "op": "flow",
+            "requestCwd": str(repo),
+            "approverCwd": str(repo),
+            "values": _values(),
+            "execute": True,
+        }
+    )
+    x = res["execOutcome"]
+    assert x["termination"] == "stopped" and x["body"]["outcome"] == "success", x
+    assert x["body"]["facts"]["result_commit"] == _rev(repo, "HEAD")
