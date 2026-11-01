@@ -52,6 +52,7 @@ try:
         "pending-store.ts",
         "pending-ops.ts",
         "pending-approve.ts",
+        "exclusive-lock.ts",
         "pending-owner.ts",
         "pending-command.ts",
         "pending-adapters.ts",

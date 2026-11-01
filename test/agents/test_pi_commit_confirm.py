@@ -431,6 +431,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copy2(HARNESS_SRC.parent / "pending-ops.ts", harness / "pending-ops.ts")
     for name in (
         "pending-approve.ts",
+        "exclusive-lock.ts",
         "pending-owner.ts",
         "pending-command.ts",
         "pending-adapters.ts",

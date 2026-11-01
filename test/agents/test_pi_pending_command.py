@@ -124,3 +124,10 @@ def test_resolve_checks_its_arguments_and_needs_a_running_or_unknown_attempt(tab
     r = table["resolve"]
     assert r["badKind"].startswith("resolve <id> <success|failed|retry|pending|abandon>")
     assert "決着させる対象が無い" in r["nothing"]
+
+
+def test_unlock_is_a_user_command_for_interactive_pi_only_and_is_listed_in_the_usage(table):
+    u = table["unlock"]
+    assert "ロックは無い" in u["none"] and u["noneLevel"] == "info"
+    assert "対話 (TUI)" in u["rpc"]
+    assert "unlock" in u["usage"]

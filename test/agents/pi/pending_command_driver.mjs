@@ -257,4 +257,14 @@ const out = {};
 	out.resolve = { badKind: (await h.run(cwd, "resolve 000000000000001 maybe")).text, nothing: (await h.run(cwd, "resolve 000000000000001 success")).text };
 }
 
+// 8. unlock: ロックが無いときは無いと言う (対話の pi だけ。有効・無効に関わらず復旧は残る)。USAGE に載る
+{
+	const cwd = repo();
+	const h = setup({ enabled: false });
+	const none = await h.run(cwd, "unlock");
+	const rpc = await h.run(cwd, "unlock", { mode: "rpc" });
+	const usage = await h.run(cwd, "bogus");
+	out.unlock = { none: none.text, noneLevel: none.level, rpc: rpc.text, usage: usage.text };
+}
+
 console.log(JSON.stringify(out));

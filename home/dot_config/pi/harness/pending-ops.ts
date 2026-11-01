@@ -71,7 +71,7 @@ export type Kind = "legacy" | "action" | "attempt" | "result" | "invalid";
 export type State = "pending" | "running" | "done";
 export type Entry = { state: State; id: string; ref: string; oid: string; /** trailer が名乗る種類 (検証前) */ kind: Kind; committedAt: number };
 
-type Run = { ok: boolean; out: string; err: string };
+type Run = { ok: boolean; out: string; err: string; status?: number | null };
 type Fail = { ok: false; reason: string };
 
 const SAFE = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "-c", "commit.gpgsign=false"];
@@ -94,7 +94,7 @@ function git(cwd: string, args: string[], opts: { env?: Record<string, string>; 
 		input: opts.input,
 		env: { ...repoTargetEnv(), ...opts.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" },
 	});
-	return { ok: r.status === 0, out: String(r.stdout ?? "").replace(/\n+$/, ""), err: String(r.stderr ?? "").trim() };
+	return { ok: r.status === 0, out: String(r.stdout ?? "").replace(/\n+$/, ""), err: String(r.stderr ?? "").trim(), status: r.status };
 }
 
 // ---- 検証 ----
@@ -304,6 +304,27 @@ function refOid(cwd: string, ref: string): string | null {
 /** running の試行の commit (symbolic ref・無いときは null) */
 export function runningOid(cwd: string, id: string): string | null {
 	return ID_RE.test(id) ? refOid(cwd, NS.running + id) : null;
+}
+
+/** ref の読み取り。不存在と、読み取り失敗・symbolic ref・壊れた ref を、別の状態で返す (null に畳まない)。排他ロックの回復の根拠に使う */
+export type StrictRead = { state: "absent" } | { state: "present"; oid: string } | { state: "unreadable"; reason: string };
+
+/** running の試行の ref を厳密に読む。"absent" は、ref が無いと確かめられたときだけ */
+export function readRunningStrict(cwd: string, id: string): StrictRead {
+	if (!ID_RE.test(id)) return { state: "unreadable", reason: "id の形が不正" };
+	const ref = NS.running + id;
+	const r = git(cwd, ["for-each-ref", "--format=%(refname)%00%(objectname)%00%(symref)", ref]);
+	if (!r.ok) return { state: "unreadable", reason: "ref を列挙できなかった" };
+	if (!r.out) {
+		// 壊れた ref は警告だけで列挙から落ちる。dangling / loop の symbolic ref も黙って落ちる。symbolic-ref はその ref 自体を読む (無い・通常の ref なら状態 1)
+		if (r.err) return { state: "unreadable", reason: "ref の列挙に警告 (壊れた ref の疑い)" };
+		const s = git(cwd, ["symbolic-ref", "-q", ref]);
+		if (s.ok) return { state: "unreadable", reason: "symbolic ref" };
+		return s.status === 1 ? { state: "absent" } : { state: "unreadable", reason: "symbolic-ref を読めなかった" };
+	}
+	const [name, oid, symref] = (r.out.split("\n")[0] ?? "").split("\0");
+	if (name !== ref || symref) return { state: "unreadable", reason: "symbolic ref、または想定外の ref" };
+	return oid && OID_RE.test(oid) ? { state: "present", oid } : { state: "unreadable", reason: "ref の指す先が不正" };
 }
 
 /** done の結果の commit (symbolic ref・無いときは null) */

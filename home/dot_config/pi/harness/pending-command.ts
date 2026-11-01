@@ -5,7 +5,7 @@
 // キルスイッチ ([pi.pending] enabled = false) が止めるのは、新しい保留の保存と承認だけ。一覧・表示・破棄・復旧 (resolve) は残す。
 // see docs/change/0055-async-approval.md#設計の契約
 import { PENDING_PREFIX, dropPending, isLegacyEntry, listPending, showPending } from "./pending-store.ts";
-import { approvePending, listText, logText, resolvePending, showText, type ApproveDeps, type Reply, type ResolveArgs } from "./pending-approve.ts";
+import { approvePending, listText, logText, resolvePending, showText, unlockPending, type ApproveDeps, type Reply, type ResolveArgs } from "./pending-approve.ts";
 import { DEFAULT_LIMITS, countPending, discardOp, doneOid, runningOid, type Limits } from "./pending-ops.ts";
 
 export type PendingSettings = {
@@ -38,7 +38,7 @@ export type PendingCommandDeps = {
 	touch?: () => void;
 };
 
-export const USAGE = "/pending [list | show <id> | approve <id> | resolve <id> <success|failed|retry|pending|abandon> [--confirm-stopped] | drop <id> | log]";
+export const USAGE = "/pending [list | show <id> | approve <id> | resolve <id> <success|failed|retry|pending|abandon> [--confirm-stopped] | drop <id> | unlock | log]";
 const RESOLVE_KINDS = ["success", "failed", "retry", "pending", "abandon"] as const;
 
 /** フッターの「📥 保留 N 件」を更新する。UI があるときだけ。0 件なら消す */
@@ -104,11 +104,12 @@ export function registerPendingCommand(pi: any, deps: PendingCommandDeps): { abo
 			const args2: ResolveArgs = { kind: kind as ResolveArgs["kind"], confirmStopped: rest.includes("--confirm-stopped") };
 			return resolvePending(arg, args2, ctx, deps.approveDeps(ctx));
 		}
+		if (sub === "unlock") return unlockPending(ctx, deps.approveDeps(ctx));
 		return info(USAGE);
 	}
 
 	pi.registerCommand("pending", {
-		description: "保留した操作の一覧・表示・承認・破棄: /pending [list | show <id> | approve <id> | resolve <id> <結果> | drop <id> | log]",
+		description: "保留した操作の一覧・表示・承認・破棄: /pending [list | show <id> | approve <id> | resolve <id> <結果> | drop <id> | unlock | log]",
 		handler: async (args: string, ctx: any) => {
 			deps.touch?.();
 			let reply: Reply;

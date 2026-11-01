@@ -135,6 +135,7 @@ _PI_TESTS = (
     "test_pi_pending_store",
     "test_pi_pending_ops",
     "test_pi_pending_approve",
+    "test_pi_approve_core",
     "test_pi_pending_owner",
     "test_pi_exclusive_lock",
     "test_pi_pending_actions",
