@@ -4,8 +4,11 @@ import { cellWidth, clipCells, sanitizeForDisplay } from "./confirm-view.ts";
 import { isExclusiveAction, recordOfChain, resolvePending, type ApproveDeps, type Reply, type ResolveArgs } from "./pending-approve.ts";
 import { DEFAULT_LIMITS, doneOid, listOps, readAttemptAt, readOp, readResultAt, runningOid, type OpRecord } from "./pending-ops.ts";
 
-export type PickKind = "approve" | "show" | "drop" | "resolve";
-export type Candidate = { id: string; label: string };
+/** "hub" は引数なしの `/pending` 用。候補ごとに、状態に合った既定の操作 (act) を持つ */
+export type PickKind = "approve" | "show" | "drop" | "resolve" | "hub";
+export type HubAct = "approve" | "resolve" | "show";
+export type Candidate = { id: string; label: string; act?: HubAct };
+const HUB_MARK: Record<HubAct, string> = { approve: "承認 ", resolve: "決着 ", show: "詳細 " };
 type PickDeps = Pick<ApproveDeps, "adapters" | "limits">;
 
 /** 候補 1 行の表示幅の上限 (端末のセル数。狭い画面でも折り返さない) */
@@ -46,8 +49,8 @@ function briefOf(rec: OpRecord | null, deps: PickDeps): string {
 }
 
 /** `<操作名> <経過> <要約>`。操作名と経過は削らず、要約を切る。tail があれば末尾に ` …<tail>` を添える (同じ表示の候補の区別用。ID の末尾 4 桁と、必要なときの連番) */
-function labelOf(name: string, ago: string, summary: string, tail = ""): string {
-	const head = `${firstLine(name)} ${ago}`;
+function labelOf(name: string, ago: string, summary: string, tail = "", mark = ""): string {
+	const head = `${mark}${firstLine(name)} ${ago}`;
 	const suffix = tail ? ` …${tail}` : "";
 	const room = LABEL_CELLS - cellWidth(head) - cellWidth(suffix) - 1;
 	return clipCells(`${summary && room >= 2 ? `${head} ${clipCells(summary, room)}` : head}${suffix}`, LABEL_CELLS);
@@ -56,7 +59,7 @@ function labelOf(name: string, ago: string, summary: string, tail = ""): string 
 /** 種類ごとの候補 (新しい順)。git の読み取りだけ */
 export function pickCandidates(cwd: string, kind: PickKind, deps: PickDeps, now: number = Date.now()): Candidate[] {
 	const limits = deps.limits ?? DEFAULT_LIMITS;
-	const raw: { id: string; name: string; ago: string; summary: string }[] = [];
+	const raw: { id: string; name: string; ago: string; summary: string; mark: string; act?: HubAct }[] = [];
 	const entries = [...listOps(cwd, limits).entries].sort((a, b) => b.committedAt - a.committedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
 	for (const e of entries) {
 		let rec: OpRecord | null = null;
@@ -75,19 +78,25 @@ export function pickCandidates(cwd: string, kind: PickKind, deps: PickDeps, now:
 		if (kind === "approve" && !(e.state === "pending" && e.kind === "action" && rec && deps.adapters[rec.action])) continue;
 		if (kind === "drop" && !(e.state === "pending" && e.kind === "action")) continue;
 		if (kind === "resolve" && !(e.state === "running" || (e.state === "done" && unknownByExecutor))) continue;
+		let act: HubAct | undefined;
+		if (kind === "hub") {
+			if (e.state === "pending") act = e.kind === "action" && rec && deps.adapters[rec.action] ? "approve" : "show";
+			else if (e.state === "running" || (e.state === "done" && unknownByExecutor)) act = "resolve";
+			else continue; // 成功・失敗の結果は /pending log で見る
+		}
 		const name = rec?.action ?? (e.kind === "legacy" ? "退避" : "不明");
-		raw.push({ id: e.id, name, ago: agoText(e.committedAt, now), summary: briefOf(rec, deps) });
+		raw.push({ id: e.id, name, ago: agoText(e.committedAt, now), summary: briefOf(rec, deps), mark: act ? HUB_MARK[act] : "", act });
 	}
-	const base = raw.map((r) => labelOf(r.name, r.ago, r.summary));
+	const base = raw.map((r) => labelOf(r.name, r.ago, r.summary, "", r.mark));
 	// 同じ表示は ID の末尾 4 桁を添える。それでも重複するものには連番 (#2, #3 ...) を足し、ラベルを全部一意にする
 	const used = new Set<string>();
 	return raw.map((r, i) => {
 		const dup = base.indexOf(base[i]) !== base.lastIndexOf(base[i]);
 		const tail = r.id.slice(-4);
-		let label = dup ? labelOf(r.name, r.ago, r.summary, tail) : base[i];
-		for (let n = 2; used.has(label); n++) label = labelOf(r.name, r.ago, r.summary, `${tail} #${n}`);
+		let label = dup ? labelOf(r.name, r.ago, r.summary, tail, r.mark) : base[i];
+		for (let n = 2; used.has(label); n++) label = labelOf(r.name, r.ago, r.summary, `${tail} #${n}`, r.mark);
 		used.add(label);
-		return { id: r.id, label };
+		return r.act ? { id: r.id, label, act: r.act } : { id: r.id, label };
 	});
 }
 
@@ -101,19 +110,20 @@ const TITLES: Record<PickKind, string> = {
 	show: "表示する対象を選ぶ",
 	drop: "破棄する保留を選ぶ (元に戻せない)",
 	resolve: "決着させる対象を選ぶ",
+	hub: "保留を選ぶ (承認・決着・詳細)",
 };
 
-export type Chosen = { ok: true; id: string } | { ok: false; reply: Reply };
+export type Chosen = { ok: true; id: string; act?: HubAct } | { ok: false; reply: Reply };
 
 /** 候補から ID を決める。0 件は「無い」、approve・show の 1 件はそのまま、drop・resolve は 1 件でも選ばせる。何も選ばれなければ何もしない */
 export async function chooseId(ctx: any, deps: Pick<ApproveDeps, "dialog">, kind: PickKind, candidates: Candidate[]): Promise<Chosen> {
 	if (candidates.length === 0) return { ok: false, reply: info("対象が無い (/pending list で確かめる)") };
-	if (candidates.length === 1 && (kind === "approve" || kind === "show")) return { ok: true, id: candidates[0].id };
+	if (candidates.length === 1 && (kind === "approve" || kind === "show" || kind === "hub")) return { ok: true, id: candidates[0].id, act: candidates[0].act };
 	const labels = candidates.map((c) => c.label);
 	const options = candidates.length === 1 ? [labels[0], CHOICE_CANCEL] : labels;
 	const choice = await deps.dialog(async () => ctx.ui.select(TITLES[kind], options));
 	const i = labels.indexOf(choice as string); // 選んだ行の順番で ID に対応づける (ラベルは表示だけ)
-	return i < 0 ? { ok: false, reply: info("選ばなかった: 何もしていない") } : { ok: true, id: candidates[i].id };
+	return i < 0 ? { ok: false, reply: info("選ばなかった: 何もしていない") } : { ok: true, id: candidates[i].id, act: candidates[i].act };
 }
 
 /** 数字だけで 15 桁未満の指定を、その kind の候補の ID の末尾一致で解決する。複数なら、その候補だけで選ばせる (TUI のとき) */

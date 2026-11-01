@@ -66,12 +66,24 @@ export function registerPendingCommand(pi: any, deps: PendingCommandDeps): { abo
 	async function run(args: string, ctx: any): Promise<Reply> {
 		const cwd: string = ctx.cwd ?? process.cwd();
 		lastCtx = ctx;
-		const [sub = "list", rawArg = "", ...rest] = String(args ?? "").trim().split(/\s+/);
+		const [sub0 = "list", rawArg = "", ...rest] = String(args ?? "").trim().split(/\s+/);
+		let sub = sub0;
 		let arg = rawArg.startsWith(PENDING_PREFIX) ? rawArg.slice(PENDING_PREFIX.length) : rawArg;
 		let full = rawArg.startsWith("refs/") ? rawArg : `${PENDING_PREFIX}${rawArg}`;
 		const limits = deps.settings().limits;
 		const info = (text: string): Reply => ({ text, level: "info" });
 		const tui = ctx.mode === "tui" && ctx.hasUI;
+		if (sub === "" && tui) {
+			// 引数なし (TUI): 候補から選び、状態に合った操作の既存の経路へ進む。0 件は従来の一覧
+			const cands = pickCandidates(cwd, "hub", deps.approveDeps(ctx));
+			if (cands.length > 0) {
+				const c = await chooseId(ctx, deps.approveDeps(ctx), "hub", cands);
+				if (!c.ok) return c.reply;
+				sub = c.act ?? "show";
+				arg = c.id;
+				full = `${PENDING_PREFIX}${arg}`;
+			}
+		}
 		if (["approve", "show", "drop", "resolve"].includes(sub)) {
 			// ID を決めるだけ (末尾一致・選択)。決めた後は、ID 指定の経路にそのまま進む
 			const picked = !arg
@@ -130,7 +142,7 @@ export function registerPendingCommand(pi: any, deps: PendingCommandDeps): { abo
 	}
 
 	pi.registerCommand("pending", {
-		description: "保留した操作の一覧・表示・承認・破棄: /pending [list | show [<id>] | approve [<id>] | resolve [<id>] [<結果>] | drop [<id>] | unlock | log] (<id> は末尾 3 桁以上でもよい)",
+		description: "引数なしで選んで進む / 保留した操作の一覧・表示・承認・破棄: /pending [list | show [<id>] | approve [<id>] | resolve [<id>] [<結果>] | drop [<id>] | unlock | log] (<id> は末尾 3 桁以上でもよい)",
 		getArgumentCompletions: (prefix: string) => {
 			try {
 				const ctx = lastCtx ?? { cwd: process.cwd() };

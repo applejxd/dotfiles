@@ -509,4 +509,89 @@ const out = {};
 	};
 }
 
+// 10. ハブ (引数なしの /pending。TUI): 状態に合った操作へ、選んで進む。0 件は一覧、done の成功は候補に入らない
+{
+	const fresh = () => ({ cwd: repo(), h: setup() });
+	const legacyRef = (cwd, id) => git(cwd, "update-ref", `refs/pi/pending/${id}`, "HEAD");
+	const hub = {};
+	// 1 件の承認できる保留: 選ばずに承認の画面へ。承認で実行される
+	{
+		const { cwd, h } = fresh();
+		const id = save(cwd, { action: "fake_op" }).id;
+		const r = await h.run(cwd, "", { answers: ["承認して実行"] });
+		hub.approveOne = { selects: r.selects.length, first: r.selects[0]?.options[0], pending: stateOf(cwd, id).pending, marks: h.marks };
+	}
+	// 2 件: ラベルに「承認 」。2 番目 (古い方) を選ぶと、その ID が処理される
+	{
+		const { cwd, h } = fresh();
+		const i1 = save(cwd, { action: "fake_op", params: { note: "older" } }).id;
+		const i2 = save(cwd, { action: LONG_ACTION, params: { note: "newer" } }).id;
+		const r = await h.run(cwd, "", { answers: [(o) => o[1], "承認して実行"] });
+		hub.approveTwo = {
+			options: r.selects[0].options,
+			maxWidth: Math.max(...r.selects[0].options.map((l) => view.cellWidth(l))),
+			states: [stateOf(cwd, i1).pending, stateOf(cwd, i2).pending],
+			marks: h.marks,
+		};
+		const esc = fresh();
+		const j1 = save(esc.cwd, { action: "fake_op" }).id;
+		const j2 = save(esc.cwd, { action: "fake_op" }).id;
+		const e = await esc.h.run(esc.cwd, "", { answers: [undefined] });
+		hub.esc = { text: e.text, selects: e.selects.length, marks: esc.h.marks, states: [stateOf(esc.cwd, j1).pending, stateOf(esc.cwd, j2).pending] };
+	}
+	// running 1 件: 選ばずに決着の対話 (種類の選択) へ。running と unknown の 2 件: 「決着 」
+	{
+		const { cwd, h } = fresh();
+		const id = running(cwd, { action: "fake_op" }, { started: false });
+		const r = await h.run(cwd, "", { answers: [(o) => o.find((x) => x.startsWith("abandon"))] });
+		hub.runningOne = { selects: r.selects.map((s) => s.options), text: r.text, state: stateOf(cwd, id) };
+		const two = fresh();
+		running(two.cwd, { action: "fake_op" }, { started: false });
+		const u = doneUnknown(two.cwd, { action: "fake_op" });
+		const t = await two.h.run(two.cwd, "", { answers: [(o) => o[0], (o) => o.find((x) => x.startsWith("success"))] });
+		hub.resolveTwo = { options: t.selects[0].options, kinds: t.selects[1]?.options.map((x) => x.split(" ")[0]), resolvedBy: ops.readResultAt(two.cwd, u, ops.doneOid(two.cwd, u)).result?.resolvedBy };
+	}
+	// 旧形式の退避 / アダプタの無い操作: 「詳細 」。1 件は詳細の文章を返す
+	{
+		const { cwd, h } = fresh();
+		const lid = "000000000000777";
+		legacyRef(cwd, lid);
+		const r = await h.run(cwd, "");
+		const viaShow = await h.run(cwd, `show ${lid}`);
+		hub.legacyOne = { selects: r.selects.length, same: r.text === viaShow.text && r.text.length > 0, notList: !r.text.includes("退避したコミットは無い") };
+		const two = fresh();
+		legacyRef(two.cwd, lid);
+		save(two.cwd, { action: "other_op" });
+		const t = await two.h.run(two.cwd, "", { answers: [(o) => o[0]] });
+		hub.showTwo = { options: t.selects[0].options, selectsAfter: t.selects.length, marks: two.h.marks };
+	}
+	// 0 件・成功した結果だけ: 従来の一覧の文章
+	{
+		const { cwd, h } = fresh();
+		const zero = await h.run(cwd, "");
+		doneSuccess(cwd, { action: "fake_op" });
+		const only = await h.run(cwd, "");
+		hub.zero = { text: zero.text, selects: zero.selects.length };
+		hub.doneOnly = { text: only.text, selects: only.selects.length, cands: pick.pickCandidates(cwd, "hub", h.approveDeps({ cwd })).length };
+	}
+	// 変えない挙動: list は TUI でも一覧。TUI でない引数なしも一覧 (選択を出さない)
+	{
+		const { cwd, h } = fresh();
+		const id = save(cwd, { action: "fake_op" }).id;
+		const list = await h.run(cwd, "list");
+		const rpc = await h.run(cwd, "", { mode: "rpc" });
+		const noUi = await h.run(cwd, "", { hasUI: false });
+		hub.unchanged = {
+			listSelects: list.selects.length,
+			listHasId: list.text.includes(id),
+			rpcSelects: rpc.selects.length,
+			rpcSame: rpc.text === list.text,
+			noUiSelects: noUi.selects.length,
+			noUiSame: noUi.text === list.text,
+			pending: stateOf(cwd, id).pending,
+		};
+	}
+	out.hub = hub;
+}
+
 console.log(JSON.stringify(out));

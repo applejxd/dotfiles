@@ -219,3 +219,57 @@ def test_legacy_retreats_are_shown_but_never_offered_for_drop_or_approve_and_a_m
     # 末尾でない位置の桁は、一致にしない (部分一致で拾わない)
     assert t["mid"] and t["a"].endswith(t["mid"]) is False
     assert "見つからない" in t["middleText"] and t["middleSelects"] == 0
+
+
+def test_hub_one_approvable_goes_straight_to_the_approval_screen(table):
+    a = table["hub"]["approveOne"]
+    assert a["selects"] == 1 and a["first"] == "承認して実行"  # 選択は出ず、承認の画面だけ
+    assert a["pending"] is False and a["marks"] == ["execute:fake_op"]
+
+
+def test_hub_marks_approvals_and_processes_the_chosen_second_row(table):
+    t = table["hub"]["approveTwo"]
+    assert len(t["options"]) == 2 and all(o.startswith("承認 ") for o in t["options"])
+    assert t["maxWidth"] <= 44
+    assert t["states"] == [False, True]  # 2 番目 (古い方) だけが処理された
+    assert t["marks"] == ["execute:fake_op"]
+
+
+def test_hub_escape_does_nothing(table):
+    e = table["hub"]["esc"]
+    assert "選ばなかった" in e["text"] and e["selects"] == 1
+    assert e["marks"] == [] and e["states"] == [True, True]
+
+
+def test_hub_running_and_unknown_go_to_the_resolve_dialog(table):
+    h = table["hub"]
+    r = h["runningOne"]
+    assert len(r["selects"]) == 1 and r["selects"][0][0].startswith(
+        "pending"
+    )  # 選ばず、種類の選択へ
+    assert "決着させた" in r["text"] and r["state"]["running"] is False
+    t = h["resolveTwo"]
+    assert len(t["options"]) == 2 and all(o.startswith("決着 ") for o in t["options"])
+    assert t["kinds"] == ["success", "failed"] and t["resolvedBy"] == "human"
+
+
+def test_hub_legacy_and_adapterless_pending_show_details(table):
+    h = table["hub"]
+    assert h["legacyOne"] == {"selects": 0, "same": True, "notList": True}
+    s = h["showTwo"]
+    assert len(s["options"]) == 2 and all(o.startswith("詳細 ") for o in s["options"])
+    assert s["selectsAfter"] == 1 and s["marks"] == []
+
+
+def test_hub_without_candidates_returns_the_plain_list(table):
+    h = table["hub"]
+    assert h["zero"] == {"text": "退避したコミットは無い", "selects": 0}
+    # 成功した結果 (done) は候補に入らない (/pending log で見る)
+    assert h["doneOnly"]["cands"] == 0 and h["doneOnly"]["selects"] == 0
+
+
+def test_hub_leaves_list_and_non_tui_unchanged(table):
+    u = table["hub"]["unchanged"]
+    assert u["listSelects"] == 0 and u["listHasId"] is True
+    assert u["rpcSelects"] == 0 and u["rpcSame"] is True
+    assert u["noUiSelects"] == 0 and u["noUiSame"] is True and u["pending"] is True
