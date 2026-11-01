@@ -43,7 +43,7 @@ def test_integrate_defaults_when_omitted():
 
 def test_shipped_config_enables_the_free_zone_skip_and_carries_the_floor():
     out = gen.pi_integrate(load_common())
-    assert out["enabled"] is False  # 専用操作 (S3) はまだ無い
+    assert out["enabled"] is True  # 同梱は有効 (F4)。キルスイッチは false にすれば従来どおり
     assert out["skip_confirm_in_free_zone"] is True  # 自由区の git_commit は確認を省略する (S5b)
     assert out["target"] == "develop"
     assert set(FLOOR) <= set(out["protected_refs"])
@@ -52,7 +52,7 @@ def test_shipped_config_enables_the_free_zone_skip_and_carries_the_floor():
 
 def test_rules_json_carries_integrate_and_confirm_flag():
     judge = gen.build_pi_harness({}, load_common())["judge"]["common"]["pi"]
-    assert judge["integrate"]["enabled"] is False  # 専用操作 (S3) はまだ無い
+    assert judge["integrate"]["enabled"] is True  # 同梱は有効 (F4)
     assert judge["integrate"]["skip_confirm_in_free_zone"] is True  # 自由区の確認省略 (S5b)
     assert judge["confirm"]["integration"] is True  # 統合コマンドの必須確認 (S4b)
 

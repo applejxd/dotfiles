@@ -35,8 +35,9 @@ def test_pending_defaults_when_omitted():
     assert gen.pi_pending(_with_pending(None)) == DEFAULTS
 
 
-def test_shipped_config_is_disabled_with_defaults():
-    assert gen.pi_pending(load_common()) == DEFAULTS
+def test_shipped_config_enables_pending_with_defaults():
+    # 同梱は有効 (F4)。キルスイッチは false にすれば従来どおり
+    assert gen.pi_pending(load_common()) == {**DEFAULTS, "enabled": True}
 
 
 def test_pending_accepts_all_keys():
@@ -57,7 +58,7 @@ def test_pending_fills_missing_keys():
 
 def test_rules_json_carries_pending():
     judge = gen.build_pi_harness({}, load_common())["judge"]["common"]["pi"]
-    assert judge["pending"] == DEFAULTS
+    assert judge["pending"] == {**DEFAULTS, "enabled": True}
 
 
 def test_pending_is_not_shared_to_other_clis():

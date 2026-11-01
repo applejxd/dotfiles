@@ -968,7 +968,7 @@ timeout_seconds = 300
 # 保護ブランチへの統合 (see docs/change/0053-worktree-integration-gate.md)
 # protected_refs は main / master / develop / release/* / hotfix/* を必ず含める (末尾の /* だけがワイルドカード)
 [pi.integrate]
-enabled = false
+enabled = true
 target = "develop"
 protected_refs = ["main", "master", "develop", "release/*", "hotfix/*"]
 # 確認画面でリスクの印を付けるパスの glob
@@ -989,7 +989,7 @@ skip_confirm_in_free_zone = true
 
 # see docs/change/0055-async-approval.md
 [pi.pending]
-enabled = false
+enabled = true
 modes = ["tui"]
 retention_days = 30
 result_retention_days = 90

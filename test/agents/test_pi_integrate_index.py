@@ -77,10 +77,10 @@ def test_git_integrate_is_invisible_unless_both_switches_are_on(env, pending, in
     assert LABEL not in prompt
 
 
-def test_default_rules_are_unchanged(env):
-    # 既定 (どちらも false) の説明は、スイッチを明示的に false にしたときと同じ
+def test_default_rules_are_the_enabled_ones(env):
+    # 同梱の設定 (F4) は両方 true。既定の説明は、スイッチを明示的に true にしたときと同じ (false の側は上の試験が固定する)
     base = _tool_descriptions(env)
-    _switches(env, pending=False, integrate=False)
+    _switches(env, pending=True, integrate=True)
     assert _tool_descriptions(env) == base
 
 

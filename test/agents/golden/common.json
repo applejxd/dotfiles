@@ -1271,7 +1271,7 @@
    }
   ],
   "integrate": {
-   "enabled": false,
+   "enabled": true,
    "protected_refs": [
     "main",
     "master",
@@ -1430,7 +1430,7 @@
    "speed"
   ],
   "pending": {
-   "enabled": false,
+   "enabled": true,
    "max_pending": 50,
    "modes": [
     "tui"

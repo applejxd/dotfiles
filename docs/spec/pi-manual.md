@@ -6,8 +6,8 @@
 > **状態（2026-11-01 時点）**
 >
 > - 記載した既定値は、リポジトリに同梱された設定の値
-> - `[pi.pending]`・`[pi.integrate]`（保留の承認と `git_integrate`）は**同梱では無効**。実機確認（[CHG-0055](../change/0055-async-approval.md)）の後に有効にする予定
-> - 有効になると、該当の記述（§4〜§8）が変わる
+> - `[pi.pending]`・`[pi.integrate]`（保留の承認と `git_integrate`）は**同梱で有効**（2026-11-02 に有効化）。実機確認 E1・E2 は合格、E3〜E5 は確認待ち（[CHG-0055](../change/0055-async-approval.md)）
+> - 反映は `chezmoi apply` と pi の再起動の後（キルスイッチは `false` で戻せる）
 
 ## 早見（1 画面）
 
@@ -47,7 +47,7 @@
 | --- | --- |
 | 事前検査に落ちる / 読めない | `pis --check` で確認 / `PIS_EXTRA_READ` や `[pi.sandbox] read` で追加 |
 | 子が起動できない | 同時上限 4 件・役割の `task` 有無・`/plan` 制限・ToDo ID 指定を確認 |
-| 保留が増えた / 承認できない | `/pending list` と `drop` で整理（既定 `[pi.pending] enabled = false`） |
+| 保留が増えた / 承認できない | `/pending list` と `drop` で整理（既定 `[pi.pending] enabled = true`） |
 | `chezmoi diff` が全部 new file | サンドボックス外で実行する（内側ではホームが不可視 → §8） |
 | ガード自体が故障した | 復旧専用で `pi -ne --tools read,bash,edit,write`（保護なし → §9） |
 
@@ -323,8 +323,8 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `[pi]` | 既定の役割・自作の拡張 | `default_role = "implementer"`。`own_extensions` = todo, plan, btw, activity, ask, notify, delegate-nudge, speed |
 | `[pi.shell]` | 無確認で通す shell（前方一致） | `allow` 5 件。載せたコマンドは `> path` による書き込み手段にもなる |
 | `[pi.confirm]` | bypass でも確認する操作 | `bash`（`gh` の変更系・`chezmoi apply/update`）、`checks`、`timeout_seconds = 300`、`local_git = true`、`integration = true` |
-| `[pi.integrate]` | 保護ブランチへの統合 | `enabled = false`、`target = "develop"`、`protected_refs`（main, master, develop, release/\*, hotfix/\*）、`skip_confirm_in_free_zone = true` |
-| `[pi.pending]` | 非同期承認（保留） | `enabled = false`、`modes = ["tui"]`、`retention_days = 30`、`result_retention_days = 90`、`max_pending = 50` |
+| `[pi.integrate]` | 保護ブランチへの統合 | `enabled = true`、`target = "develop"`、`protected_refs`（main, master, develop, release/\*, hotfix/\*）、`skip_confirm_in_free_zone = true` |
+| `[pi.pending]` | 非同期承認（保留） | `enabled = true`、`modes = ["tui"]`、`retention_days = 30`、`result_retention_days = 90`、`max_pending = 50` |
 | `[[pi.actions]]` | 承認つき操作 | 4 件（`git_commit` と `gh_issue_*` 3 件） |
 | `[pi.redact]` | 出力の伏字化 | `enabled = true`（false にすると生成が止まる）。`rule` は 9 件 |
 | `[pi.external_read]` | 作業ツリー外で無確認に読める場所 | 3 件（各 CLI のスキル置き場） |
@@ -421,7 +421,7 @@ read = ["/data1"]
 - `git_commit` の時間切れ・UI 無し・不在は、実行せず `refs/pi/pending/<時刻>` に退避して作業を続ける（`not approved:` で返る）。取消・拒否は退避しない。
 - `git_commit` 以外の時間切れは拒否のまま。
 - 退避は `/pending` で確認・破棄する。取り込み済み・重複・30 日超は自動で片付く。
-- `/pending approve` と `git_integrate` は実装済みだが、本番では無効（7.4）。
+- `/pending approve` と `git_integrate` は実装済みで、同梱の設定で有効（7.4）。
 
 ### 8.3 feature の並列開発
 
@@ -488,6 +488,6 @@ read = ["/data1"]
 
 - `pis --help` の実出力は未確認。`executable_pis` の usage と `pis.py` の `USAGE` 定数の食い違いは解消した（入口の説明を `pis.py` に合わせた）。2.1 の表は `pis.py` の定義に従った。
 - フッターの `🧭 orchestrate` / `⏸ plan` / `📥 保留 N 件` は、これまで `docs/spec` に記載が無く、**本書が初めて記載**した（コードで確認）。
-- `[pi.pending]` と `[pi.integrate]` の `enabled` は、同梱値が `false`。実機の `rules.json` の実効値は未確認。
+- `[pi.pending]` と `[pi.integrate]` の `enabled` は、同梱値が `true`（2026-11-02 に有効化）。実機の `rules.json` の実効値は未確認（`chezmoi apply` の後に確かめる）。
 - 実機で未確認と明記されているもの: 実 TUI での確認画面の見え方、Zed・Windows、保留の承認の排他・復旧・キルスイッチ、Bedrock の GPT-6.1 のツール呼び出し。
 - `guarded_edit` の `newText` など、pi 本体の組み込み定義に由来する引数は未確認。

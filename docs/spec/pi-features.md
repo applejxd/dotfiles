@@ -20,7 +20,7 @@
 | bypass、bypass でも確認する操作（`mustConfirm`）、元に戻せない git 操作 | [判定 API](guard/pi-decide.md#confirm)、[pi のガード](guard/pi-guard.md) |
 | `guarded_action`（`git commit`・`gh` の書き込みを、固定の引数と確認つきで） | [pi の拡張と補助機能](guard/pi-extensions.md#guarded_action承認つきの外部操作) |
 | 承認の時間切れの退避（`/pending`） | [CHG-0046](../change/0046-guarded-action-timeout.md) |
-| 保留の承認（非同期承認。`/pending approve`・`git_integrate`。本番では無効） | [保留（非同期承認）](guard/pi-pending.md) |
+| 保留の承認（非同期承認。`/pending approve`・`git_integrate`） | [保留（非同期承認）](guard/pi-pending.md) |
 | コマンド・ファイルの判定の規則 | [コマンド・ファイルの判定](guard/agent-command-policy.md) |
 | 誘導・出力の伏字化 | [判定 API](guard/pi-decide.md#誘導)、[pi のガード](guard/pi-guard.md) |
 | Claude Code / Copilot / OpenCode の権限 | [エージェント権限仕様](agent-permissions.md) |
