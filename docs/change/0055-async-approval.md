@@ -1,7 +1,7 @@
 # CHG-0055: 承認つきの操作を、確認が取れなくても失わず、利用者が後から承認して実行できるようにする（非同期承認の実装）
 
 - **状態**: Exploring
-- **更新日**: 2026-10-31
+- **更新日**: 2026-11-01
 - **基準**: コミット `9e979d8` 以降、pi 1.4.0。方針は [ADR-0023](../adr/0023-pending-approval.md)（Proposed）。上位は [CHG-0054](0054-containment-and-async-approval.md) の段 4。原型は [CHG-0046](0046-guarded-action-timeout.md)（`git_commit` の退避）
 
 ## 目的と非目的
@@ -29,11 +29,12 @@
 | P2 | 保存と状態遷移の部品が無い | 記録の形と検証、`pending / running / done` の ref 遷移（`no-deref`・期待 OID・`attemptId`）、重複の抑止（契約 1）、期限、一覧、上限（ref の列挙数・読む量・時間）。**記録・実行計画・結果の型（`outcome / phase / confirmedEffects / remainingCleanup / evidence`）、実行者（owner）と開始段階（`reserved / started`）、旧形式・新形式・不正な形式の判別を、先に固定する**（契約 3・4・7）。新規ファイルだけ | — | 完了 |
 | P3 | 確認の画面が `executeAction` に埋まっている | 選択ループを `presentConfirm` に抽出し、要求時と承認時で共用する。挙動は変えない（既存の試験が不変で通る） | — | 完了 |
 | P4 | 確認が取れないとき、記録を残せない | `executeAction` を保留に接続する。操作ごとの「前提アダプタ」の登録口を作り、**アダプタを登録した操作だけ**に「あとで」を出す（契約 7）。時間切れ・不在・UI なしを保留へ | P2・P3 | 完了 |
-| P5 | 保留を承認する入口が無い | `/pending approve\|resolve\|log`（**`registerTask` から分けて登録する**。モデルの実行中は承認を断る）、検証済みの実行計画の流れ、実行者の所有権と `resolve` の規則、通知（BEL・フッター・モデルへの固定テンプレートの `content` つきメッセージ） | P4 | 未着手 |
+| P5 | 保留を承認する入口が無い | `/pending approve\|resolve\|log`（**`registerTask` から分けて登録する**。モデルの実行中は承認を断る）、検証済みの実行計画の流れ、実行者の所有権と `resolve` の規則、通知（BEL・フッター・モデルへの固定テンプレートの `content` つきメッセージ） | P4 | 完了（P5a `3cd44cc`: 承認の流れ・決着・一覧・表示、P5b `342d636c`: `/pending` を `registerTask` から分けて登録し、承認・結果・復旧を接続） |
 | P6 | `refs/pi/` をモデルが bash で書ける | `refs/pi/*` を書く git コマンドを必須確認にする（強化のみ。独立） | — | 完了 |
-| P7 | 統合の結果を、承認の前に算出する部品が無い | `git_integrate` の算出（結果の tree、結果コミットの案、リスクの抽出。外部コードを動かさない）。ツールには未接続 | — | 完了 |
-| P8 | 統合の確認が時間切れで失われる | `git_integrate` の操作と、保留への合流（別の worktree で作った保留を、本体で承認できる）。`[pi.integrate] enabled` をキルスイッチにする | P5・P7 | 未着手 |
-| P9 | 有効にする | `[pi.pending] enabled = true, modes = ["tui"]`。**出口条件**: (1) 新旧の形式・未対応の操作・キルスイッチの能力表と、実際の挙動が一致する。(2) 別のセッションとの競合、開始の前後の停止、結果の保存の失敗から、復旧できる。(3) linked worktree の Fence の内側で保存し、本体で承認する縦断を、実機で確かめた。(4) 算出で外部コードを動かさず、実行で品質ゲート（hook）を維持している。(5) 通知を失っても、成立した副作用と未完の後片付けを、一覧から確認できる。実機で、時間切れ → `/pending approve` → 結果通知 → モデルの続行を 1 往復する | P8 | 未着手 |
+| P7 | 統合の結果を、承認の前に算出する部品が無い | `git_integrate` の算出（結果の tree、結果コミットの案、リスクの抽出。外部コードを動かさない）。ツールには未接続 | — | 完了（`75c3faa`） |
+| P8 | 統合の確認が時間切れで失われる | `git_integrate` の操作と、保留への合流（別の worktree で作った保留を、本体で承認できる）。`[pi.integrate] enabled` をキルスイッチにする | P5・P7 | **P8a・P8b は完了**（P8a `b92f7ce`: 統合の実行器、P8b `d72838be`: 操作定義と保留・承認のアダプタ）。**P8c（本接続）は未着手**（下の「P8c の決定 (v2)」） |
+| P8c | 統合を、排他・停止確認つきで本番の経路に接続する | 部品は完了: 保存層の reason・facts（`00a11003`）、排他ロック `exclusive-lock`（`f2208bf8`）、実行器の停止確認（`a11cb16b`）、統合先の判定 `isTargetWorktree` とキルスイッチ（`e72bcfc6`）。**未着手**: 本接続（F3）、tree-guard + request-only API（F2） | P8 | 部品は完了・接続は未着手 |
+| P9 | 有効にする | `[pi.pending] enabled = true, modes = ["tui"]`。**出口条件**: (1) 新旧の形式・未対応の操作・キルスイッチの能力表と、実際の挙動が一致する。(2) 別のセッションとの競合、開始の前後の停止、結果の保存の失敗から、復旧できる。(3) linked worktree の Fence の内側で保存し、本体で承認する縦断を、実機で確かめた。(4) 算出で外部コードを動かさず、実行で品質ゲート（hook）を維持している。(5) 通知を失っても、成立した副作用と未完の後片付けを、一覧から確認できる。実機で、時間切れ → `/pending approve` → 結果通知 → モデルの続行を 1 往復する | P8c | 未着手（有効化 F4） |
 | P10 | `git_commit`・gh の操作 | `git_commit` の保留の承認（通常の `git commit`。hook を通す）、gh のアダプタ、既存の退避の承認 | P9 | 未着手 |
 | P11 | `chezmoi apply` と、子の要求 | `chezmoi_apply`（承認時に差分を作る形。境界の外のみ）、子の要求の中継。**設計を `review` に見せてから** | P9 | 未着手 |
 
@@ -85,7 +86,8 @@
 - 計画役（plan）の実装計画と、別系統の `review`（2026-10-31）を 2 回済ませた。1 回目（実装計画）は、方向を支持し、BLOCKER は無く、MAJOR 7 件。2 回目（この契約）も、方向を支持し、BLOCKER は無く、MAJOR 6 件（要求・対象・実行者の層の分離、実行の所有権、結果の型、能力表と旧形式の分離、重複抑止、`chezmoi_apply`）。どちらも、上の契約に反映した。**計画の「保留した tree を `commit-tree` と CAS で作って承認する」案は、1 回目の指摘（pre-commit の秘密検出を迂回する）と、私の確認で取り下げた**（契約 5）。2 回目の指摘のうち、`/pending` が `registerTask`（`task` を持つ役割だけ）の中で登録されていることと、`ctx.isIdle()` があることは、実物で確かめた。
 - 契約 3 の実行者の確認（プロセスの ID と起動時刻）は、OS ごとに手段が違う（Linux・macOS・Windows）。初版は、ローカルの対応する環境に限る。
 - 手順 0 の実機の試作（P0）は完了した（「実装・検証」）。
-- **今の状態**: `/pending` は `list|show|drop` だけで、承認して実行する手段が無い。退避は `git_commit` の内容（tree とメッセージ）だけで、操作の ID・引数・`dir` は保存しない。bash の必須確認・「ask」層・`ask` 拡張は、時間切れで拒否され、何も残らない。子の UI 要求は親が取り消し、親へ届くのは `not approved:` の文字列だけ。
+- **今の状態（2026-11-01）**: P5・P7・P8a・P8b と、P8c の部品（保存層の reason・facts、排他ロック、実行器の停止確認、統合先の判定）は `develop` にある。**ただし、どれも本番へは未接続**（`[pi.pending] enabled = false`・`[pi.integrate] enabled = false`）。残りは P8c の本接続（F3）、tree-guard + request-only API（F2）、有効化（F4 = P9）。
+- **2026-10-31 時点の状態（P5 の前。履歴）**: `/pending` は `list|show|drop` だけで、承認して実行する手段が無かった。退避は `git_commit` の内容（tree とメッセージ）だけで、操作の ID・引数・`dir` は保存しない。bash の必須確認・「ask」層・`ask` 拡張は、時間切れで拒否され、何も残らない。子の UI 要求は親が取り消し、親へ届くのは `not approved:` の文字列だけ。
 - **使える部品**: `pi.sendMessage` + `triggerTurn` でモデルを起こす経路（バックグラウンドの子の完了通知で実績あり）、`registerCommand`、`setStatus` の別キーの共存、`reconcilePending`、`gitrun.ts`。`[pi.integrate] enabled` はどこからも読まれていないので、統合のキルスイッチに使える。
 - `git_integrate` と `chezmoi_apply` は、`[[pi.actions]]` の表に載せられない（生成器が `replaces` と `fields` を非空に要求し、`preview` が 2 種に限られる）。ハーネスに内蔵の操作定義にする。
 
@@ -93,6 +95,7 @@
 
 利用者の判断を受けたものは「決定」として、理由を残す。
 
+0. **解決済み（2026-11-01）** 「同期の確認を残すか」: **初版では撤回**。初版の `git_integrate` は、保存専用 + 利用者の `/pending approve` だけ（「P8c の決定 (v2)」D4）。
 1. **決定（2026-10-31）** 最初の縦断は「基盤 + `git_integrate`」。全 `guarded_action` の保留からは入らない（統合の時間切れに早く届く。不揃いの期間は容認）。
 2. **決定（2026-10-31）** 別セッションの要求元への通知は、初版は非対応と仕様に明記する（ポーリングは後段）。
 3. **決定（2026-10-31）** `chezmoi_apply` は、「承認の時点で差分を作って見せる」形（契約 10）。実行予定のスクリプトの表示は、段 P11 で `review` に見せる。
@@ -103,6 +106,7 @@
 8. Windows。未検証。
 9. `/pending approve` を、モデルの実行中は断る（契約 2）のは、「作業を止めずに、後でまとめて承認する」の趣旨と、どこまで衝突するか。使ってみて決める。
 10. `git_integrate` で、hook が内容を変えたときの扱い（契約 5。巻き戻さず印を付けて報告、が現在の案）。P7 で試験して確定する。
+11. **未解決（2026-11-01）** 同期の確認の追加の可否。実機 E1〜E5（排他・停止・復旧）で確かめた後に、並行する書き込みを止める仕組みとともに判断する。
 
 ## 次の調査・実験
 
@@ -162,16 +166,36 @@
 - **P6**: `refs/pi/` を書く git コマンドを必須確認にした。
 - **P7**: 統合の結果の算出 `integrate-plan.ts`。外部 merge driver・hook・textconv が動かないことの陰性試験を含む。ツールには未接続。
 
-次は P5（`/pending approve|resolve|log`・通知。`index.ts`）と P8（`git_integrate` の操作）。
+**2026-11-01 追記**: P5（P5a `3cd44cc`・P5b `342d636c`）、P7（`75c3faa`）、P8a（`b92f7ce`）、P8b（`d72838be`）は完了。P8c の部品（`00a11003`・`f2208bf8`・`a11cb16b`・`e72bcfc6`）も入った。**次は P8c の本接続（F3）と tree-guard + request-only API（F2）、その後に有効化（F4 = P9）**。各部品の試験は書いたが、実機（E1〜E5）での確認は未実施。
 
 未確認: linked worktree の Fence の内側の書き込み、RPC（Orca・Zed）のスラッシュコマンド、`gh issue view --json` が境界のブローカーを通るか、Windows。
 
 各段の検証は、対象の試験と `mise run verify:all` で行う。Windows 側は、実機でしか確かめられない（[AGENTS.md](../../AGENTS.md) の「Windows 実機での検証」）。
 
+## P8c の決定 (v2)
+
+2026-11-01。独立した `review` が、元の P8c 計画の BLOCKER 4・MAJOR 4 を指摘した。それを受けた決定（D1〜D9）。以下の「実装」は、F1・F5・F6 は `develop` に入った（`f2208bf8`・`a11cb16b`・`e72bcfc6`）。F2・F3・F4 は未着手。
+
+- **D1 孤児ロックの回復は fail-closed**: ロックの読み取りで「不存在」と「読み取り失敗・symbolic ref・不正な内容」を区別する。自動回復は、検証できた同一の試行が `reserved` で、owner が `gone` のときだけ。`started`・不在・別の試行・読めない・`alive`・`unknown` は消さず、停止して人の復旧（`/pending resolve`）を要求する。
+- **D2 git・hook の停止確認**: owner が gone でも、git・hook の停止の証明にはならない。統合の実行器は、hook が動く git（merge・commit）を専用のプロセスグループで起動し、中断・時間切れではグループを止めて停止を確認してから、結果の確認と rollback を行う。停止を確認できなければ、rollback・cleanup・ロックの解放をせず、結果を `unknown` で残す（自動で `reset --hard` しない）。Windows は停止を保証できないので、最初の変更の前に断る方針（未検証）。
+- **D3 `runsHere` は git の識別で判定**: `realpath(cwd)` が統合先 worktree の配下か、では判定しない（feature の worktree は本体の `.tmp/worktrees/<名前>/` にあり、本体の配下。配下判定は誤許可になる）。cwd と統合先で、`git rev-parse` の common-dir・git-dir・show-toplevel が全部一致するときだけ「統合先の中」。観測できなければ「中ではない」（断る）。リポジトリを選ぶ環境変数は除く。`isTargetWorktree` の `ok: false` を、許可に読み替えない。
+- **D4 初版の `git_integrate` は、保存専用 + 利用者の `/pending approve` だけ**: 同期の確認は初版では撤回する。排他・停止・復旧が実機で確かめられた後の追加として、別に判断する（未解決点 11）。
+- **D5 ロックの鍵は common-dir 単位**: `sha256(canonicalJson({version:1, commonDir}))` の粗い 1 本。OID・source・要求 ID・target ref は鍵に入れない。置き場は `refs/pi/lock/<key>`（`refs/pi/pending/` と別の名前空間）。
+- **D6 承認側の `authorize`**: 承認側に、現在の役割・操作定義を再判定する `authorize` を足す（`ApproveDeps`。F3-2）。
+- **D7 `classifyCommitResult` の署名**: 親の配列と、実行の停止・観測完了の条件を入力にする。committed = 停止済み ∧ HEAD が進んだ ∧ 親が 1 つ ∧ その親が commit 前の HEAD。観測不能・想定外・停止未確認は `unknown`（F2）。
+- **D8 P9 の証拠**: 一覧から done と詳細への導線、running の復旧時の読み取り検査（済・残の復元）、実機 E2 に「通知を配送しない・cleanup 失敗 → 再起動後の list → show」、E5 に reload・再起動を加える（F3）。
+- **D9 `unknown` なら running とロックを残す**: 統合の実行器が停止を確認できない `unknown` を返したら、`runApproved` は `finishApproval()` を呼ばず、running と統合ロックを残す。内部の戻り値は `{ body, termination }` のように停止の状態と結果を分け、停止の状態を既存の結果 JSON に混ぜない。started の復旧でも、「owner gone = 停止の証明」とせず、停止を確認できないときは利用者の明示確認を要求する。初版は `unknown` をすべて手動復旧にする。本接続では、現在のキルスイッチ（`enabled`）を必ず渡す。
+
+**独立 review による指摘の要点**（原文は `.tmp/subagents/` の 2 件。非公開のメモ）:
+
+- 計画の review（`7-job-8495e015ebb8b868`）: BLOCKER 4（孤児ロックの回復、owner gone と git・hook の停止、`runsHere` の配下判定、同期承認）と MAJOR 4（鍵の粒度、承認側の再判定、`classifyCommitResult` の署名、P9 の証拠）。D1〜D8 に反映した。
+- 実装の review（`9-job-3d677cb99c1fa2e4`）: 実行器の正常終了でもグループの消滅を観測する、停止確認の上限での 1 度きりの結果、rollback・cleanup の git も停止管理つきにする、ロックの競合試験を決定的にする、`targetWorktree` が作業ツリーのルートであること、など。D9 と F1・F5・F6 の追加に反映した。
+
 ## 重要な更新
 
 | 日付 | 変更 | 理由 |
 | --- | --- | --- |
+| 2026-11-01 | **P5・P7・P8a・P8b と、P8c の部品（保存層の reason・facts、排他ロック、実行器の停止確認、統合先の判定）を実装し、`develop` に取り込んだ。** 本接続（F3）・tree-guard + request-only API（F2）・有効化（F4）は未着手。同期の確認は初版で撤回し、「P8c の決定 (v2)」を足した | 独立 `review` の指摘（BLOCKER 4・MAJOR 4）と、実装の `review`。試験は書いたが、実機（E1〜E5）は未確認 |
 | 2026-10-31 | **P1・P2・P3・P4・P6・P7 を実装し、`develop` に取り込んだ。** P4 までで、保留の保存と「あとで」の経路ができた（アダプタを登録した操作が無いので、本番の挙動は変わらない）。実装で、`option no-deref` が次の 1 コマンドだけに効くことを確かめ、契約を直した | 実装と試験（関連試験・全件検査が通過）。worker に任せたのは、P1・P6・P7 と P2 の実行者の判定。保存層の本体と P3・P4 は、設計判断が連続するので親が行った |
 | 2026-10-31 | **契約を、「要求・対象・実行者」の 3 層に分けて直した（2 回目の `review` の反映）。** 実行計画が対象の期待値を持ち、反映を期待値の検証で保護する。`running` を予約と開始の 2 段階にし、実行者（owner）と停止の確認を決める。結果の型に証拠を持たせる。能力表と、旧形式・新形式・不正な形式の分離。`/pending` を `registerTask` から分ける。重複の抑止を原子的にする。`git_integrate` は、ref だけを進めず、作業ツリーも一緒に動く反映にする。`chezmoi_apply` は適用計画を条件付きの候補にする。P9 の出口条件を足した | `review` の指摘（MAJOR 6 件・MINOR 3 件、BLOCKER は無し）。「保留 ref の CAS だけでは、承認した内容と実行する内容の一致は保証できない」を中心に。`/pending` が `registerTask` の中にあることと、`ctx.isIdle()` があることを実物で確かめた |
 | 2026-10-31 | **利用者が、最初の縦断（基盤 + `git_integrate`）・別セッションの要求元への通知は非対応・`chezmoi_apply` は承認の時点で差分を作る・`refs/pi/` を書く bash の必須確認（P6）を、すべて推奨どおりに決めた** | 利用者の回答（未解決点 1〜4） |

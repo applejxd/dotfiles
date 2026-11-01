@@ -149,6 +149,18 @@ hook ごとの所要時間は [開発ガイドの実測メモ](../research/testi
 - 強制に進める条件: 記録で「全件検証を回し忘れたコミット」が頻発したとき。そのときは hook を
   失敗させる（終了コード 1）形に変える案件で決める（push 側の警告は実装済み）
 
+#### 全件検査の排他
+
+`python3 scripts/verify.py --all`（`mise run verify:all`）は、`git rev-parse --git-common-dir` 直下の `verify-all.lock` に `flock` を取り、
+**同じリポジトリの全 worktree・全会話で 1 本だけ**動く。取れなければ待つ（30 秒ごとに保持者を表示）。
+
+- 待ちの上限: `VERIFY_LOCK_TIMEOUT`（既定 1800 秒。0 は待たない）。超えたら終了コード 3
+- 解放: OS が行う（`kill -9` でも残らない）
+- 取らない: `--dry-run`・`--list`・`--changed`。git でない・ロックを開けないときは、警告して続行する
+- Windows は `msvcrt` を使う（**未検証**）
+- 理由: 複数の会話から同時に回すと負荷が上がり、時間に依存する試験が落ちた（実測）
+- 実装: `scripts/verify.py` の `acquire_all_lock`
+
 ### テンプレートの検査
 
 `identify` は `*.tmpl` に一切タグを付けないため、`check-toml` / ruff /
