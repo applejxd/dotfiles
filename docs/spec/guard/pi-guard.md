@@ -57,7 +57,7 @@ pis --new           # 新しいセッションで始める (既定は、この�
 - 設計の根拠は [CHG-0023](../../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
 
 **素の `pi`（Unix）**は、`settings.json` の設定だけで、下の `pis` と同じツール構成になる（`extensions` にフルガードと自作の拡張を足し、自動検出の拡張を外し、`defaultTools = []`）。
-役割・bypass は環境変数 `PI_HARNESS_ROLE` / `PI_HARNESS_BYPASS` で変えられる（既定: 実装役、bypass なし）。
+役割・bypass・orchestrate は環境変数 `PI_HARNESS_ROLE` / `PI_HARNESS_BYPASS` / `PI_HARNESS_ORCHESTRATE` で変えられる（既定: 実装役、bypass なし、orchestrate なし）。
 **Windows の素の `pi`** も同じ設定でフルガードが載るが、サンドボックス（Fence）は無く、`task`（読み取り専用）だけを足して `guarded_task` は使えない（[Windows](#windows)）。上の表のうち、Windows は「素の `pi`（Unix）」の列に近い（実機は未検証）。
 
 | | 素の `pi`（Unix） | `pis --no-sandbox`（移行用） | `pis`（標準） |
@@ -214,6 +214,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 | --- | --- | --- |
 | `PI_HARNESS_ROLE` | `[pi] default_role` | 判定器へ渡す役割（`[pi.profiles]` の名前） |
 | `PI_HARNESS_BYPASS` | 無し | `1` なら判定器へ `bypass` を渡す（ask だけを allow にする）。起動時の値で、起動後は [`/bypass`](#bypass-の切り替え) で変える |
+| `PI_HARNESS_ORCHESTRATE` | `[pi.orchestrate] default`（今は `off`） | `1` なら起動時から orchestrate（親の作業ツールを隠し、計画・判断・委譲に絞る）、`0` で切る。起動後は `/orchestrate`（[子エージェント](pi-subagents.md)） |
 | `PI_HARNESS_BOUNDARY` | 無し | `1` は「サンドボックスの内側のはず」という期待の表明。判定器の緩和は、カナリアの実測が通ったときだけ効く（[緩和のゲート](pi-sandbox.md#緩和のゲート)） |
 | `PI_HARNESS_CHILD` | 無し | `1` なら子エージェントとして動く（`guarded_task` を登録しない）。フルガードが子を起動するときに付ける |
 | `PI_HARNESS_TEST_CHILD_EXT` | 無し | 試験だけが使う。子にも読ませる拡張（偽のモデル）のパス |

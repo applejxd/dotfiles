@@ -486,9 +486,7 @@ read = ["/data1"]
 
 ## 付録: 未確認・既知のズレ
 
-- `pis --help` の実出力は未確認。`executable_pis` の usage と `pis.py` の `USAGE` 定数で、書かれているオプションが食い違う（前者に `--no-bypass` `--no-broker` `--new` が無い）。2.1 の表は `pis.py` の定義に従った。
-- `orchestration.md` に「親の道具を絞る（orchestrator ロール）は未着手」とあるが、実装済み（6.1・6.2）。同じ文書の表に `/orchestrate` の行も無い。
-- `PI_HARNESS_ORCHESTRATE` は `pi-guard.md` の環境変数の表に載っていない。起動前に渡せるとコードからは読めるが、実行して確かめていない。
+- `pis --help` の実出力は未確認。`executable_pis` の usage と `pis.py` の `USAGE` 定数の食い違いは解消した（入口の説明を `pis.py` に合わせた）。2.1 の表は `pis.py` の定義に従った。
 - フッターの `🧭 orchestrate` / `⏸ plan` / `📥 保留 N 件` は、これまで `docs/spec` に記載が無く、**本書が初めて記載**した（コードで確認）。
 - `[pi.pending]` と `[pi.integrate]` の `enabled` は、同梱値が `false`。実機の `rules.json` の実効値は未確認。
 - 実機で未確認と明記されているもの: 実 TUI での確認画面の見え方、Zed・Windows、保留の承認の排他・復旧・キルスイッチ、Bedrock の GPT-6.1 のツール呼び出し。
