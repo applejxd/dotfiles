@@ -59,6 +59,7 @@ def test_an_unapproved_operation_with_an_adapter_is_saved_not_executed(table, ca
     assert set(rec["params"]) == {"target"} and rec["premiseKeys"] == ["head", "target"]
     assert r["saved"] == [{"action": "fake_op", "reason": reason, "duplicate": False}]
     assert "保留" in r["text"] and "再試行しない" in r["text"] and "未実行" in r["text"]
+    assert "子" in r["text"] and "idle" in r["text"]
 
 
 def test_the_later_option_appears_only_for_operations_with_an_adapter(table):

@@ -50,6 +50,7 @@ def test_the_model_is_told_it_was_not_run_and_where_to_approve(table):
     text = r["result"]["text"]
     assert "未実行" in text and f"保留 {r['id']}" in text and "再試行しない" in text
     assert "/pending approve" in text and "保留した操作" in text
+    assert "子" in text and "idle" in text and "依存しない作業を続け" not in text
     # 15 桁の ID を打たせない: 一覧から選ぶ。短く添えるなら末尾 4 桁
     assert "一覧から選ぶ" in text and f"/pending approve {r['id'][-4:]}" in text
     assert f"/pending approve {r['id']}" not in text

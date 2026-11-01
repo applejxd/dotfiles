@@ -24,8 +24,8 @@ function after(saved: Saved, approx: boolean, compound: boolean): string {
 	// 読めない形はコマンド全体を止めている。連結していた commit 以外の操作も実行していない
 	const rest = compound ? "連結していた他の操作も実行していないので、必要なら commit と分けて実行し直す。" : "";
 	return (
-		`${where}${rest}git commit を再試行しない。コミットが要らない作業を続け、` +
-		"最後に「保留したコミット」として上の ref・件名・対象を報告する。"
+		`${where}${rest}git commit を再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。` +
+		"任せられる作業が無ければ、「保留したコミット」として上の ref・件名・対象を報告して終える。"
 	);
 }
 

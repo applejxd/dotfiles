@@ -260,6 +260,7 @@ def test_a_timeout_saves_the_commit_and_tells_the_model_to_continue(env):
         ref in requests.raw
         and "再試行しない" in requests.raw
         and "保留したコミット" in requests.raw
+        and "idle" in requests.raw
     )
 
 

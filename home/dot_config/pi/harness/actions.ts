@@ -285,11 +285,11 @@ function deferError(cwd: string, snap: Snapshot, why: string, signal: AbortSigna
 	const saved = savePendingSnapshot(cwd, snap);
 	if (!saved.ok) {
 		return notApproved(
-			`${why}。元の操作は未実行で、内容も退避できなかった (${saved.reason})。再試行しない。この操作に依存しない作業を続け、最後に「保留したコミット」の再作成が要ると報告する${where}`,
+			`${why}。元の操作は未実行で、内容も退避できなかった (${saved.reason})。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「保留したコミット」の再作成が要ると報告して終える${where}`,
 		);
 	}
 	return notApproved(
-		`${why}。元の操作は未実行。内容は ${saved.ref} (${saved.short}) に退避した。再試行しない。この操作に依存しない作業を続け、最後に「保留したコミット」として報告する (${dir ? `対象のリポジトリ: ${dir}。/pending には出ない。そのリポジトリの refs/pi/pending/ にある` : "利用者は /pending で確認・破棄できる"})`,
+		`${why}。元の操作は未実行。内容は ${saved.ref} (${saved.short}) に退避した。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「保留したコミット」として報告して終える (${dir ? `対象のリポジトリ: ${dir}。/pending には出ない。そのリポジトリの refs/pi/pending/ にある` : "利用者は /pending で確認・破棄できる"})`,
 	);
 }
 
@@ -566,12 +566,12 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			});
 			if (!saved.ok) {
 				return notApproved(
-					`${why}。元の操作は未実行で、保留も作れなかった (${saved.reason})。再試行しない。この操作に依存しない作業を続け、最後に「承認が取れなかった操作」として報告する`,
+					`${why}。元の操作は未実行で、保留も作れなかった (${saved.reason})。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「承認が取れなかった操作」として報告して終える`,
 				);
 			}
 			pendingCfg.onSaved?.({ id: saved.id, ref: saved.ref, duplicate: saved.duplicate, action: action.id, reason });
 			return notApproved(
-				`${why}。元の操作は未実行。保留 ${saved.id} に保存した${saved.duplicate ? " (同じ要求が、すでに保留中)" : ""}。再試行しない。この操作に依存しない作業を続け、最後に「保留した操作」として報告する。利用者が承認すると実行される`,
+				`${why}。元の操作は未実行。保留 ${saved.id} に保存した${saved.duplicate ? " (同じ要求が、すでに保留中)" : ""}。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「保留した操作」として報告して終える。利用者が承認すると実行される`,
 			);
 		};
 		// 確認の流れ (UI の確認・時間切れの退避・編集)。確認を省略するときは通らない

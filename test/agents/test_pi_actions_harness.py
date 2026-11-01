@@ -343,6 +343,7 @@ def test_no_answer_defers_the_commit_and_runs_nothing(env):
     assert "元の操作は未実行" in text and "refs/pi/pending/" in text and "再試行しない" in text, (
         text
     )
+    assert "子" in text and "idle" in text and "保留したコミット" in text
     assert _head(env["proj"]) == before
     refs = _refs(env["proj"])
     assert len(refs) == 1

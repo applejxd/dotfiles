@@ -38,9 +38,9 @@ export async function executeNative(action: string, values: Record<string, strin
 			signal,
 		},
 	);
-	if (!r.ok) throw fail(`保存できなかった。元の操作は実行していない (${r.code}: ${r.reason})。再試行しない。この操作に依存しない作業を続け、最後に「承認が取れなかった操作」として報告する`);
+	if (!r.ok) throw fail(`保存できなかった。元の操作は実行していない (${r.code}: ${r.reason})。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「承認が取れなかった操作」として報告して終える`);
 	p?.onSaved?.({ id: r.id, ref: r.ref, duplicate: r.duplicate, action, reason: "request" as Reason });
 	throw fail(
-		`元の操作は未実行。保留 ${r.id} に保存した${r.duplicate ? " (同じ要求が、すでに保留中)" : ""}。再試行しない。この操作に依存しない作業を続け、最後に「保留した操作」として報告する。利用者が統合先の worktree (本体) で \`/pending approve\` を実行し、一覧から選ぶと実行される (ID の末尾 4 桁を添えて \`/pending approve ${r.id.slice(-4)}\` と指定してもよい)`,
+		`元の操作は未実行。保留 ${r.id} に保存した${r.duplicate ? " (同じ要求が、すでに保留中)" : ""}。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「保留した操作」として報告して終える。利用者が統合先の worktree (本体) で \`/pending approve\` を実行し、一覧から選ぶと実行される (ID の末尾 4 桁を添えて \`/pending approve ${r.id.slice(-4)}\` と指定してもよい)`,
 	);
 }
