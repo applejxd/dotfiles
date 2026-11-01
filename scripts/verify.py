@@ -170,6 +170,7 @@ _PI_TESTS = (
     "test_pi_judge_windows_paths",
     "test_pi_pending_command",
     "test_pi_pending_pick",
+    "test_pi_pending_patrol",
     "test_btw_view",
 )
 _OC_TESTS = (

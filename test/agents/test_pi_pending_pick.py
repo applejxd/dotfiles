@@ -149,8 +149,14 @@ def test_several_candidates_show_a_picker_with_the_labels_and_cancel_does_nothin
     assert (
         "選ばなかった" in m["noneText"] and m["noneMarks"] == 0 and m["noneStates"] == [True, True]
     )
-    # 2 番目 (新しい方。approve は古い順) を選ぶと、その ID で承認の画面へ進み、承認で実行される
-    assert m["secondSelects"] == 2 and m["secondOptions"][0] == "承認して実行"
+    # 2 番目 (新しい方。approve は古い順) を選ぶと、その ID で承認の画面へ進み、承認で実行される。
+    # 承認待ちが 2 件以上で ID を打たない承認は巡回 (CHG-0058 段 1)。画面は 3 回:
+    # 一覧 → 巡回の画面 (先頭は「ここで終える」) → 次の件の巡回の画面 (答えが無く中断)
+    assert m["secondSelects"] == 3
+    assert (
+        m["secondOptions"][0] == "ここで終える（残りは保留のまま）"
+        and m["secondOptions"][1] == "承認して実行"
+    )
     assert m["secondStates"] == [True, False]
 
 

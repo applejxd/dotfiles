@@ -39,6 +39,19 @@
 | `unlock` | 孤児になったロックを外す（確認つき・TUI のみ） |
 | `log` | 結果の履歴 |
 
+**巡回**（[CHG-0058](../../change/0058-batch-approval.md) 段 1）: 承認待ちが 2 件以上あるとき、ID を打たない承認（`/pending approve` で一覧から選ぶ・引数なしの `/pending` で「承認」を選ぶ）は、1 件の処理の後に、**まだ見ていない最も古い承認待ち**の画面を続けて開く。
+
+- **始まる条件**: TUI・ID を打たない・承認待ちが 2 件以上。`/pending approve <id>`（ID を指定）と、承認待ちが 1 件のときは、従来の単件のまま
+- **画面**: 先頭に `巡回 i/N`。選択肢の**先頭は「ここで終える（残りは保留のまま）」**（直前の Enter の勢いで承認しない）。続けて「承認して実行」「全文を見る」「保留のまま次へ」「破棄」。最初の 1 件目からこの画面を使う
+- **止める**: 「ここで終える」・Esc・中断（次の画面は開かない）・承認の結果が成功以外（`not_executed`・`failed_confirmed`・`unknown`（停止確認済みも）・結果を保存できなかった・後片付けが残った）・計画や再判定で断られた・モデルが起きた（各件の前と画面の後に `isIdle()` を確かめる）。「保留のまま次へ」と「破棄」は止めない
+- **結果の通知**: 各件の結果は、次の画面の前に利用者へ出す。**モデルへの通知は巡回の終わりまで溜め**、終わりに溜めた順に出す（途中でモデルを起こさない）
+- **上限**: 8 件（見た件数）。1 つの `AbortController` を巡回の全体で持つ（終了・reload で実行器へ届く）
+- **Esc**: 選択中の Esc は巡回を止める。**実行中の Esc は実行を止めず**（統合の途中で止めるのは危険）、その件の後で巡回を止める。全文表示中の Esc は、全文を閉じて同じ画面に戻る（先頭は「ここで終える」）
+- **snapshot**: 計画と記録は、複製して深く固定したもの（複製できない形は画面の前に断る）。実行するのは表示した計画。構造化した結果には、保存した結果の記録の OID (`doneOid`) を含む
+- 補助の失敗（モデルへの通知・フッターの更新）は、記録した結果を変えず、巡回と通知の出力を妨げない
+- **実装**: `planApproval`（画面の前までの検査と、不変の snapshot）→ 画面 → `executeApproval`（再判定・表示した記録の OID の取得・`runApproved`。実行の有無・outcome・停止確認・保存・後片付けを構造化して返す）。1 件ずつ**既存の経路**を通り、新しい実行経路は無い。巡回のループは `pending-command.ts`
+- 単件の承認にも、**画面の後に `isIdle()` の確認**を足した（モデルが起きていたら実行せず、保留のまま）
+
 **ID を打たせない**（スマホの端末でも使えるように）:
 
 - `<id>` を省くと、その種類の候補から**選ぶ**。候補が 1 件なら `approve`・`show` は選びを飛ばす（`drop`・`resolve` は 1 件でも確認する）。
@@ -86,6 +99,7 @@
 | 保存層・状態遷移 | `test_pi_pending_ops.py` |
 | 承認・実行・排他・復旧 | `test_pi_pending_approve.py`、`test_pi_approve_core.py`、`test_pi_exclusive_lock.py` |
 | `/pending` の選択・補完 | `test_pi_pending_command.py`、`test_pi_pending_pick.py` |
+| 巡回（計画と実行の分離・止める条件・通知の遅延） | `test_pi_pending_patrol.py` |
 | 統合の計画・実行器・アダプター | `test_pi_integrate_plan.py`、`test_pi_integrate_exec.py`、`test_pi_integrate_action.py` |
 | 保存専用の操作 | `test_pi_pending_request.py`、`test_pi_native_action.py` |
 | 配線・キルスイッチ（実際の pi） | `test_pi_integrate_wiring.py`、`test_pi_integrate_index.py` |

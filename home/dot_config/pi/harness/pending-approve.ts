@@ -139,22 +139,56 @@ function envOf(ctx: any, deps: ApproveDeps): ApprovalEnv {
 	return { cwd: String(ctx.cwd), env: deps.env, rules: deps.rules };
 }
 
-/** 保留を承認して実行する。呼べるのは、利用者の対話 (TUI) の pi だけ */
-export async function approvePending(id: string, ctx: any, deps: ApproveDeps, signal?: AbortSignal): Promise<Reply> {
-	const limits = deps.limits ?? DEFAULT_LIMITS;
-	if (!deps.enabled()) return refuse("保留 (非同期承認) は無効 ([pi.pending] enabled = false)。承認はできない (一覧・破棄・復旧は使える)");
-	if (ctx.mode !== "tui" || !deps.modes.includes(ctx.mode) || !ctx.hasUI) return refuse("承認は、対話 (TUI) の pi だけでできる");
-	if (typeof ctx.isIdle === "function" && !ctx.isIdle()) {
-		return refuse("モデルの実行中は承認できない (承認の実行が、モデルの作業と重ならないように)。Esc で止めるか、終わってからもう一度実行する");
+/** 承認の画面に出した対象 (不変)。実行は、この snapshot の OID に対してだけ行う (CHG-0058 の B11) */
+export type ApprovalSnapshot = Readonly<{
+	id: string;
+	/** 表示した記録の OID (beginApproval の期待値) */
+	oid: string;
+	record: OpRecord;
+	adapter: ApprovalAdapter;
+	plan: unknown;
+	summary: string;
+	view: string;
+	env: ApprovalEnv;
+	cwd: string;
+}>;
+export type PlanResult = { ok: true; snapshot: ApprovalSnapshot } | { ok: false; reply: Reply };
+
+/** 再帰的に凍結する (データだけを想定。関数やクラスは複製できないのでここには来ない) */
+function deepFreeze<T>(v: T): T {
+	if (v && typeof v === "object" && !Object.isFrozen(v)) {
+		for (const k of Object.keys(v as object)) deepFreeze((v as Record<string, unknown>)[k]);
+		Object.freeze(v);
 	}
+	return v;
+}
+
+/** 画面に出した計画・記録を、元の参照 (アダプターが持つもの) から切り離して深く固定する (B11)。複製できない形は断る */
+function frozenCopy<T>(v: T): { ok: true; value: T } | { ok: false } {
+	try {
+		return { ok: true, value: deepFreeze(structuredClone(v)) };
+	} catch {
+		return { ok: false };
+	}
+}
+
+const BUSY_TEXT = "モデルの実行中は承認できない (承認の実行が、モデルの作業と重ならないように)。Esc で止めるか、終わってからもう一度実行する";
+
+/** 承認の画面の前まで (ガード・記録・アダプタ・authorize・plan・hereRefusal)。副作用なし */
+export async function planApproval(id: string, ctx: any, deps: ApproveDeps, _signal?: AbortSignal): Promise<PlanResult> {
+	const limits = deps.limits ?? DEFAULT_LIMITS;
+	const no = (reply: Reply): PlanResult => ({ ok: false, reply });
+	if (!deps.enabled()) return no(refuse("保留 (非同期承認) は無効 ([pi.pending] enabled = false)。承認はできない (一覧・破棄・復旧は使える)"));
+	if (ctx.mode !== "tui" || !deps.modes.includes(ctx.mode) || !ctx.hasUI) return no(refuse("承認は、対話 (TUI) の pi だけでできる"));
+	if (typeof ctx.isIdle === "function" && !ctx.isIdle()) return no(refuse(BUSY_TEXT));
 	const cwd = String(ctx.cwd);
 	const rec = readOp(cwd, id, limits);
-	if (!rec.ok) return refuse(`記録を読めない: ${oneLine(rec.reason)}。/pending drop で破棄できる`);
+	if (!rec.ok) return no(refuse(`記録を読めない: ${oneLine(rec.reason)}。/pending drop で破棄できる`));
 	const adapter = deps.adapters[rec.record.action];
-	if (!adapter) return refuse(`この操作 (${rec.record.action}) は、承認に対応していない。保留は残してある`);
+	if (!adapter) return no(refuse(`この操作 (${rec.record.action}) は、承認に対応していない。保留は残してある`));
 	if (deps.authorize) {
 		const au = authorizeRecord(deps, rec.record);
-		if (!au.ok) return refuse(`承認できない: ${oneLine(au.reason)}。保留は残してある (実行していない)`);
+		if (!au.ok) return no(refuse(`承認できない: ${oneLine(au.reason)}。保留は残してある (実行していない)`));
 	}
 	const env = envOf(ctx, deps);
 	let planned: Awaited<ReturnType<ApprovalAdapter["plan"]>>;
@@ -163,36 +197,73 @@ export async function approvePending(id: string, ctx: any, deps: ApproveDeps, si
 	} catch (e) {
 		planned = { ok: false, reason: oneLine((e as Error)?.message ?? e) };
 	}
-	if (!planned.ok) return refuse(`承認できない: ${oneLine(planned.reason)}。保留は残してある (実行していない)`);
+	if (!planned.ok) return no(refuse(`承認できない: ${oneLine(planned.reason)}。保留は残してある (実行していない)`));
 	// 承認者の cwd が実行先の中でないときは、確認の画面を出す前に断る
 	const outside = hereRefusal(adapter, planned.plan, env);
-	if (outside) return refuse(`承認できない: ${outside}。保留は残してある (実行していない)`);
+	if (outside) return no(refuse(`承認できない: ${outside}。保留は残してある (実行していない)`));
+	// 表示する計画と実行する計画を同じに保つ: 記録と計画は、アダプターが持つ元の参照から切り離して深く固定した複製を snapshot に持つ
+	const rc = frozenCopy(rec.record);
+	const pc = frozenCopy(planned.plan);
+	if (!rc.ok || !pc.ok) return no(refuse("承認できない: 計画・記録を複製して固定できない形 (データだけにする)。保留は残してある (実行していない)"));
+	const snapshot: ApprovalSnapshot = Object.freeze({ id, oid: rec.oid, record: rc.value, adapter, plan: pc.value, summary: planned.summary, view: planned.view, env: Object.freeze({ ...env }), cwd });
+	return { ok: true, snapshot };
+}
 
+export type ExecutionResult =
+	| { kind: "refused"; reply: Reply }
+	| {
+			kind: "executed";
+			reply: Reply;
+			outcome: ResultBody["outcome"];
+			termination: "stopped" | "unconfirmed";
+			/** 結果を記録できたか */
+			saved: boolean;
+			/** 保存した結果の記録 (refs/pi/done/<id>) の OID。保存できなかったときは無い */
+			doneOid?: string;
+			/** 残った後片付けがあるか (実行器の報告・ロックを外せなかった) */
+			cleanup: boolean;
+			/** running とロックを残したか */
+			kept: boolean;
+	  };
+
+/** 承認された snapshot を実行する。画面の後の確認 (モデルが起きていないか・再判定・表示した OID の取得) を通ったときだけ、runApproved の経路に入る */
+export async function executeApproval(snap: ApprovalSnapshot, ctx: any, deps: ApproveDeps, signal?: AbortSignal): Promise<ExecutionResult> {
+	const limits = deps.limits ?? DEFAULT_LIMITS;
+	const no = (reply: Reply): ExecutionResult => ({ kind: "refused", reply });
+	if (typeof ctx.isIdle === "function" && !ctx.isIdle()) return no(refuse(`${BUSY_TEXT}。保留は残してある (実行していない)`));
+	// 承認された。ただし画面は期限なしで、眺めている間に役割・設定 (/reload・キルスイッチ) が変わりうる。表示した記録を、もう一度判定する
+	const again = authorizeRecord(deps, snap.record);
+	if (!again.ok) return no(refuse(`承認できない (画面の後の再判定): ${oneLine(again.reason)}。保留は残してある (実行していない)`));
+	// 表示した記録の OID を排他的に取得する (表示した後に変わっていれば失敗する)
+	const begin = beginApproval(snap.cwd, snap.id, snap.oid, deps.owner(), limits);
+	if (!begin.ok) return no(refuse(`承認を始められなかった: ${oneLine(begin.reason)}。実行していない`));
+	return runApprovedDetailed({ cwd: snap.cwd, id: snap.id, adapter: snap.adapter, plan: snap.plan, env: snap.env, attempt: begin.attempt, attemptOid: begin.attemptOid, deps, signal });
+}
+
+/** 保留を承認して実行する。呼べるのは、利用者の対話 (TUI) の pi だけ。planApproval → 画面 → executeApproval の合成 */
+export async function approvePending(id: string, ctx: any, deps: ApproveDeps, signal?: AbortSignal): Promise<Reply> {
+	const limits = deps.limits ?? DEFAULT_LIMITS;
+	const pl = await planApproval(id, ctx, deps, signal);
+	if (!pl.ok) return pl.reply;
+	const snap = pl.snapshot;
 	// 利用者に、その計画を表示する (期限なし)
 	const choice = await deps.dialog(async () => {
 		if (signal?.aborted) return undefined;
 		deps.bell();
 		const r = await presentConfirm(ctx.ui, {
-			title: `${adapter.label}の承認 (${id})\n\n${planned.summary}`,
+			title: `${snap.adapter.label}の承認 (${id})\n\n${snap.summary}`,
 			options: [CHOICE_APPROVE, VIEW_FULL, CHOICE_CLOSE, CHOICE_DISCARD],
 			signal,
-			viewFull: { title: `${adapter.label}: 全文 (読むだけ。閉じると確認に戻る)`, text: () => planned.view },
+			viewFull: { title: `${snap.adapter.label}: 全文 (読むだけ。閉じると確認に戻る)`, text: () => snap.view },
 		});
 		return r.choice;
 	});
 	if (choice === CHOICE_DISCARD) {
-		const d = discardOp(cwd, id, rec.oid, limits);
+		const d = discardOp(snap.cwd, id, snap.oid, limits);
 		return d.ok ? { text: `破棄した: ${id} (到達用の ref を外した。オブジェクトは git gc まで残る)`, level: "info" } : refuse(d.reason);
 	}
 	if (choice !== CHOICE_APPROVE) return { text: `保留のまま閉じた: ${id}`, level: "info" };
-
-	// 承認された。ただし画面は期限なしで、眺めている間に役割・設定 (/reload・キルスイッチ) が変わりうる。表示した記録を、もう一度判定する
-	const again = authorizeRecord(deps, rec.record);
-	if (!again.ok) return refuse(`承認できない (画面の後の再判定): ${oneLine(again.reason)}。保留は残してある (実行していない)`);
-	// 表示した記録の OID を排他的に取得する (表示した後に変わっていれば失敗する)
-	const begin = beginApproval(cwd, id, rec.oid, deps.owner(), limits);
-	if (!begin.ok) return refuse(`承認を始められなかった: ${oneLine(begin.reason)}。実行していない`);
-	return runApproved({ cwd, id, adapter, plan: planned.plan, env, attempt: begin.attempt, attemptOid: begin.attemptOid, deps, signal });
+	return (await executeApproval(snap, ctx, deps, signal)).reply;
 }
 
 /** ロックの保持者の試行を、保存層から厳密に読む (排他ロックの自動回復の根拠)。無い・読めない・別の試行は、回復の根拠にしない */
@@ -243,6 +314,13 @@ export type RunApprovedArgs = {
  * running とロックを残して、人の /pending resolve に任せる (無条件の finally で解放しない)。
  */
 export async function runApproved(a: RunApprovedArgs): Promise<Reply> {
+	return (await runApprovedDetailed(a)).reply;
+}
+
+type Go = { reply: Reply; keep: boolean; done?: { outcome: ResultBody["outcome"]; termination: "stopped" | "unconfirmed"; saved: boolean; cleanup: boolean; doneOid?: string } };
+
+/** runApproved の本体。文面を解析しなくてよいように、実行したか・outcome・停止確認・保存・後片付け・残したかを構造化して返す */
+export async function runApprovedDetailed(a: RunApprovedArgs): Promise<ExecutionResult> {
 	const { cwd, id, adapter, plan, env, deps, signal } = a;
 	let attemptOid = a.attemptOid;
 	let started = false;
@@ -251,7 +329,13 @@ export async function runApproved(a: RunApprovedArgs): Promise<Reply> {
 		const r = returnToPending(cwd, id, attemptOid);
 		return refuse(`${why}。${r.ok ? "保留に戻した" : `保留に戻せなかった (${oneLine(r.reason)}。/pending で確認する)`}。実行していない`);
 	};
-	const go = async (): Promise<{ reply: Reply; keep: boolean }> => {
+	// モデルへの通知は補助。失敗しても、記録した結果 (outcome・保存) を変えない
+	const tell = (b: ResultBody) => {
+		try {
+			deps.tellModel(modelContent(adapter.action, id, b), { id, action: adapter.action, outcome: b.outcome });
+		} catch {}
+	};
+	const go = async (): Promise<Go> => {
 		// 承認者の cwd (画面の前にも確かめているが、試行を作った後でも確かめる)
 		const outside = hereRefusal(adapter, plan, env);
 		if (outside) return { reply: back(outside), keep: false };
@@ -299,35 +383,36 @@ export async function runApproved(a: RunApprovedArgs): Promise<Reply> {
 		const detail = [...body.confirmedEffects.map((e) => `  済: ${oneLine(e)}`), ...body.remainingCleanup.map((e) => `  残: ${oneLine(e)}`)];
 		const kept = adapter.exclusive ? "running と統合ロックを残した" : "running を残した";
 		if (termination === "unconfirmed") {
-			deps.tellModel(modelContent(adapter.action, id, body), { id, action: adapter.action, outcome: body.outcome });
+			tell(body);
 			const text = `${summary}。git・hook の停止を確認できなかった。${kept} (結果は記録していない)。止まっていると確かめてから /pending resolve ${id} <success|failed|retry> --confirm-stopped で決着させる`;
-			return { reply: { text: [text, ...detail].join("\n"), level: "error" }, keep: true };
+			return { reply: { text: [text, ...detail].join("\n"), level: "error" }, keep: true, done: { outcome: body.outcome, termination, saved: false, cleanup: body.remainingCleanup.length > 0 } };
 		}
 		const fin = finishApproval(cwd, id, attemptOid, body);
 		if (!fin.ok) {
 			// 結果を保存できなかった。running (とロック) を残す (人が /pending resolve で決める)
-			return { reply: { text: `${summary}。結果を保存できなかった (${oneLine(fin.reason)})。${kept}。/pending で確認する`, level: "error" }, keep: true };
+			return { reply: { text: `${summary}。結果を保存できなかった (${oneLine(fin.reason)})。${kept}。/pending で確認する`, level: "error" }, keep: true, done: { outcome: body.outcome, termination, saved: false, cleanup: body.remainingCleanup.length > 0 } };
 		}
-		deps.tellModel(modelContent(adapter.action, id, body), { id, action: adapter.action, outcome: body.outcome });
+		tell(body);
 		const level = body.outcome === "success" ? "info" : body.outcome === "not_executed" ? "warning" : "error";
-		return { reply: { text: [summary, ...detail].join("\n"), level }, keep: false };
+		return { reply: { text: [summary, ...detail].join("\n"), level }, keep: false, done: { outcome: body.outcome, termination, saved: true, cleanup: body.remainingCleanup.length > 0, doneOid: fin.doneOid } };
 	};
 
-	let r: { reply: Reply; keep: boolean };
+	let r: Go;
 	try {
 		r = await go();
 	} catch (e) {
 		const why = `承認の実行中に内部エラーが出た (${oneLine((e as Error)?.message ?? e, 200)})`;
-		r = started ? { reply: { text: `${why}。実行の有無を確定できない。running とロックを残した。/pending で確認する`, level: "error" }, keep: true } : { reply: back(why), keep: false };
+		r = started ? { reply: { text: `${why}。実行の有無を確定できない。running とロックを残した。/pending で確認する`, level: "error" }, keep: true, done: { outcome: "unknown", termination: "unconfirmed", saved: false, cleanup: false } } : { reply: back(why), keep: false };
 	}
 	// ロックは、決着した (結果を記録できた) ときと、開始前の失敗のときだけ外す
 	if (held.lock && !r.keep) {
 		const rel = releaseLock(cwd, held.lock, deps.env);
 		if (!rel.ok) {
-			r = { reply: { text: `${r.reply.text}\n統合ロックを外せなかった (${oneLine(rel.reason)})。/pending unlock で外す`, level: r.reply.level === "info" ? "warning" : r.reply.level }, keep: false };
+			r = { reply: { text: `${r.reply.text}\n統合ロックを外せなかった (${oneLine(rel.reason)})。/pending unlock で外す`, level: r.reply.level === "info" ? "warning" : r.reply.level }, keep: false, done: r.done ? { ...r.done, cleanup: true } : undefined };
 		}
 	}
-	return r.reply;
+	if (!r.done) return { kind: "refused", reply: r.reply };
+	return { kind: "executed", reply: r.reply, ...r.done, kept: r.keep };
 }
 
 /** 試行の鎖をたどって、元の記録を読む (pending の ref が消えた後も、操作の名前と引数を見せるため) */

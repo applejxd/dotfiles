@@ -5,7 +5,20 @@
 // キルスイッチ ([pi.pending] enabled = false) が止めるのは、新しい保留の保存と承認だけ。一覧・表示・破棄・復旧 (resolve) は残す。
 // see docs/change/0055-async-approval.md#設計の契約
 import { PENDING_PREFIX, dropPending, isLegacyEntry, listPending, showPending } from "./pending-store.ts";
-import { approvePending, listText, logText, resolvePending, showText, unlockPending, type ApproveDeps, type Reply, type ResolveArgs } from "./pending-approve.ts";
+import {
+	approvePending,
+	executeApproval,
+	listText,
+	logText,
+	planApproval,
+	resolvePending,
+	showText,
+	unlockPending,
+	type ApproveDeps,
+	type Reply,
+	type ResolveArgs,
+} from "./pending-approve.ts";
+import { VIEW_FULL, presentConfirm } from "./confirm-present.ts";
 import { DEFAULT_LIMITS, countPending, discardOp, doneOid, runningOid, type Limits } from "./pending-ops.ts";
 import { chooseId, completeArgs, pickCandidates, resolveInteractive, resolveShortId, type PickKind } from "./pending-pick.ts";
 
@@ -42,6 +55,15 @@ export type PendingCommandDeps = {
 export const USAGE = "/pending [list | show <id> | approve [<id>] | resolve [<id>] [<success|failed|retry|pending|abandon> [--confirm-stopped]] | drop <id> | unlock | log]  (<id> は末尾 3 桁以上でもよい。show・drop・resolve の <id> も省略すると選べる)";
 const RESOLVE_KINDS = ["success", "failed", "retry", "pending", "abandon"] as const;
 
+// 巡回 (CHG-0058 の段 1)。「ここで終える」を先頭に置く (B8: 直前の Enter の勢いで次の画面を承認しない)
+export const PATROL_MAX = 8;
+export const CHOICE_PATROL_STOP = "ここで終える（残りは保留のまま）";
+export const CHOICE_PATROL_APPROVE = "承認して実行";
+export const CHOICE_PATROL_NEXT = "保留のまま次へ";
+export const CHOICE_PATROL_DISCARD = "破棄";
+/** 実行中の Esc (素の Esc と、kitty の拡張入力の Esc) */
+const ESC_KEY = /^\u001b(?:\[27(?:;\d+)?u)?$/;
+
 /** フッターの「📥 保留 N 件」を更新する。UI があるときだけ。0 件なら消す */
 export function updatePendingFooter(ctx: any, limits: Limits = DEFAULT_LIMITS): void {
 	if (!ctx?.hasUI || typeof ctx.ui?.setStatus !== "function") return;
@@ -60,8 +82,143 @@ function legacyText(cwd: string): string {
 export function registerPendingCommand(pi: any, deps: PendingCommandDeps): { abortAll: () => void; refresh: (ctx: any) => void } {
 	const controllers = new Set<AbortController>();
 	const redact = deps.redact ?? ((t: string) => t);
-	const refresh = (ctx: any) => updatePendingFooter(ctx, deps.settings().limits);
+	const refresh = (ctx: any) => {
+		// フッターは補助。更新で例外が出ても、巡回やモデルへの通知を妨げない
+		try {
+			updatePendingFooter(ctx, deps.settings().limits);
+		} catch {}
+	};
 	let lastCtx: any;
+
+	/**
+	 * 承認待ちを古い順に 1 件ずつ開く巡回。既存の経路 (planApproval → 画面 → executeApproval → runApproved) を 1 件ずつ通すだけで、新しい実行経路は作らない。
+	 * Esc・中断・成功以外は全体を止め、モデルへの通知は巡回の終わりまで溜める (B4・B9・B10)
+	 */
+	async function patrol(firstId: string, total: number, ctx: any): Promise<Reply> {
+		const cwd = String(ctx.cwd ?? process.cwd());
+		const base = deps.approveDeps(ctx);
+		const held: [string, Record<string, unknown>][] = [];
+		const pd: ApproveDeps = { ...base, tellModel: (content, details) => void held.push([content, details]) };
+		const ac = new AbortController();
+		controllers.add(ac);
+		const seen = new Set<string>();
+		const n = Math.min(total, PATROL_MAX);
+		const c = { approved: 0, success: 0, skipped: 0, discarded: 0 };
+		let stop: Reply | undefined;
+		let id = firstId;
+		try {
+			for (;;) {
+				if (ac.signal.aborted) {
+					stop = { text: "中断した", level: "info" };
+					break;
+				}
+				seen.add(id);
+				const pl = await planApproval(id, ctx, pd, ac.signal);
+				if (!pl.ok) {
+					stop = pl.reply;
+					break;
+				}
+				const snap = pl.snapshot;
+				const r = await pd.dialog(async () => {
+					if (ac.signal.aborted) return undefined;
+					pd.bell();
+					return presentConfirm(ctx.ui, {
+						title: `巡回 ${seen.size}/${n}: ${snap.adapter.label}の承認 (${id})\n\n${snap.summary}`,
+						options: [CHOICE_PATROL_STOP, CHOICE_PATROL_APPROVE, VIEW_FULL, CHOICE_PATROL_NEXT, CHOICE_PATROL_DISCARD],
+						signal: ac.signal,
+						viewFull: { title: `${snap.adapter.label}: 全文 (読むだけ。閉じると確認に戻る)`, text: () => snap.view },
+					});
+				});
+				// Esc・中断・エラー・期限・未知の選択は、「保留のまま次へ」とは別扱いで全体を止める (B10)
+				const choice = r?.choice;
+				if (!r || r.error || r.timedOut || choice === undefined || ac.signal.aborted) {
+					stop = { text: "中断した (次の画面は開かない)", level: "info" };
+					break;
+				}
+				if (choice === CHOICE_PATROL_STOP) {
+					stop = { text: "ここで終えた (残りは保留のまま)", level: "info" };
+					break;
+				}
+				if (choice === CHOICE_PATROL_NEXT) c.skipped++;
+				else if (choice === CHOICE_PATROL_DISCARD) {
+					const d = discardOp(cwd, id, snap.oid, deps.settings().limits);
+					if (!d.ok) {
+						stop = { text: d.reason, level: "warning" };
+						break;
+					}
+					c.discarded++;
+					base.notify(redact(`破棄した: ${id}`), "info");
+				} else if (choice === CHOICE_PATROL_APPROVE) {
+					c.approved++;
+					// 実行中の Esc: 実行は止めない (保護ブランチへの統合の途中で止めるほうが危険)。この件の後で巡回を止め、次の画面を開かない (B10)
+					let escWhileRunning = false;
+					let unsubscribe: (() => void) | undefined;
+					try {
+						unsubscribe = ctx.ui?.onTerminalInput?.((data: string) => {
+							if (ESC_KEY.test(String(data))) escWhileRunning = true;
+							return undefined;
+						});
+					} catch {}
+					let ex: Awaited<ReturnType<typeof executeApproval>>;
+					try {
+						ex = await executeApproval(snap, ctx, pd, ac.signal);
+					} finally {
+						try {
+							unsubscribe?.();
+						} catch {}
+					}
+					base.notify(redact(ex.reply.text), ex.reply.level);
+					if (ex.kind === "refused") {
+						c.approved--; // 実行していない
+						stop = ex.reply;
+						break;
+					}
+					if (ex.outcome === "success") c.success++;
+					if (!(ex.outcome === "success" && ex.saved && !ex.cleanup)) {
+						stop = { text: `止めた: ${ex.outcome}${ex.saved ? "" : "・結果を保存できていない"}${ex.cleanup ? "・後片付けが残っている" : ""}`, level: ex.reply.level === "info" ? "warning" : ex.reply.level };
+						break;
+					}
+					if (escWhileRunning) {
+						stop = { text: "実行中に Esc が押されたので、ここで終えた (実行した操作は止めていない)", level: "warning" };
+						break;
+					}
+				} else {
+					stop = { text: "中断した (未知の選択)", level: "info" };
+					break;
+				}
+				refresh(ctx);
+				if (ac.signal.aborted) {
+					stop = { text: "中断した", level: "info" };
+					break;
+				}
+				if (seen.size >= PATROL_MAX) {
+					stop = { text: `上限 (${PATROL_MAX} 件) に達した`, level: "info" };
+					break;
+				}
+				const next = pickCandidates(cwd, "approve", pd).find((x) => !seen.has(x.id));
+				if (!next) break;
+				id = next.id;
+			}
+		} catch (e) {
+			stop = { text: `巡回を止めた (内部エラー: ${(e as Error)?.message ?? e})`, level: "error" };
+		} finally {
+			controllers.delete(ac);
+			refresh(ctx);
+			// 溜めたモデルへの通知を、溜めた順に出す (正常・止めた・例外のどれでも)
+			for (const [content, details] of held) {
+				try {
+					base.tellModel(content, details);
+				} catch {}
+			}
+		}
+		let left = 0;
+		try {
+			left = countPending(cwd, deps.settings().limits);
+		} catch {}
+		const head = `巡回を終えた (${seen.size} 件を見た): 承認して実行 ${c.approved} (成功 ${c.success})・見送り ${c.skipped}・破棄 ${c.discarded}`;
+		const parts = [head, stop ? `止めた理由: ${stop.text}` : "", `残りの保留: ${left} 件`].filter(Boolean);
+		return { text: parts.join("\n"), level: stop && stop.level !== "info" ? stop.level : "info" };
+	}
 
 	async function run(args: string, ctx: any): Promise<Reply> {
 		const cwd: string = ctx.cwd ?? process.cwd();
@@ -73,6 +230,7 @@ export function registerPendingCommand(pi: any, deps: PendingCommandDeps): { abo
 		const limits = deps.settings().limits;
 		const info = (text: string): Reply => ({ text, level: "info" });
 		const tui = ctx.mode === "tui" && ctx.hasUI;
+		const typedId = rawArg !== ""; // 利用者が ID を打ったときは巡回しない
 		if (sub === "" && tui) {
 			// 引数なし (TUI): 候補から選び、状態に合った操作の既存の経路へ進む。0 件は従来の一覧
 			const cands = pickCandidates(cwd, "hub", deps.approveDeps(ctx));
@@ -120,6 +278,10 @@ export function registerPendingCommand(pi: any, deps: PendingCommandDeps): { abo
 				return d.ok ? info(`破棄した: ${arg} (到達用の ref を外した。オブジェクトは git gc まで残る)`) : { text: d.reason, level: "warning" };
 			}
 			return info(dropPending(cwd, full) ? `破棄した: ${full} (到達用の ref を外した。オブジェクトは git gc まで残る)` : "破棄できなかった (ref が無い・退避の ref ではない)");
+		}
+		if (sub === "approve" && arg && tui && !typedId) {
+			const total = pickCandidates(cwd, "approve", deps.approveDeps(ctx)).length;
+			if (total >= 2) return patrol(arg, total, ctx);
 		}
 		if (sub === "approve" && arg) {
 			const ac = new AbortController();

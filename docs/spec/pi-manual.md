@@ -188,6 +188,8 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `drop [<id>]` | 破棄 |
 | `unlock` / `log` | ロックの解除 / 履歴 |
 
+- 承認待ちが 2 件以上で ID を打たずに承認すると、次の承認待ちの画面を続けて開く（巡回）。`<id>` を指定すると 1 件だけ
+- 巡回の画面は、先頭が「ここで終える」。Esc・失敗・成功以外の結果で止まり、モデルへの通知は巡回の終わりまで溜める
 - pi 本体の組み込みコマンド（`/compact`・`/reload`・`/model` など）はこのリポジトリの管轄外で、ここでは扱いません。
 
 - 詳細: [guard/pi-extensions.md](guard/pi-extensions.md)、[guard/pi-subagents.md](guard/pi-subagents.md)、[guard/pi-pending.md](guard/pi-pending.md)
