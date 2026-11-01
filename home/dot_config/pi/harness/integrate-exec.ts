@@ -320,6 +320,9 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 		const p = await git(["rev-parse", "--git-path", op], wt, base);
 		if (p.ok && existsSync(resolve(wt, p.out.trim()))) return refuse("precheck", `統合先の worktree で ${op} が進行中`);
 	}
+	// status・merge が外部 filter (clean/smudge) を起動し得るので、作業ツリーに触る git の前に断る
+	const flt = await git(["config", "--get-regexp", "^filter\\..*\\.(clean|smudge|process)$"], wt, base);
+	if ((flt.ok && flt.out.trim() !== "") || (!flt.ok && flt.code !== 1)) return refuse("precheck", "外部の filter が設定されている (または確かめられない)");
 	const st = await git(["status", "--porcelain=v1", "-z", "--untracked-files=normal"], wt, base);
 	if (!st.ok) return refuse("precheck", "統合先の worktree の状態を読めなかった");
 	if (st.out !== "") return refuse("precheck", "統合先の worktree に未コミットの変更か追跡外のファイルがある");
@@ -428,12 +431,19 @@ async function run(input: IntegrateExecInput, body: ResultBody, tmpRef: { dir: s
 		body.evidence.push(`commit の親が想定と違う: ${ps.map(short).join(",") || "なし"} (HEAD ${short(newHead)})`);
 		return;
 	}
+	const headOid = newHead.trim();
+	track.resultCommit = headOid;
+	const tref = await git(["rev-parse", "--verify", "--quiet", `${plan.target.ref}^{commit}`], wt, base);
+	if (!tref.ok || tref.out.trim() !== headOid) {
+		body.outcome = "unknown";
+		body.evidence.push(`統合先 ref が結果コミットを指していない (結果コミット ${short(headOid)}${tref.ok ? `、統合先 ${short(tref.out.trim())}` : "、統合先を読めなかった"})`);
+		body.remainingCleanup.push(`結果コミット ${short(headOid)} は統合先ブランチに反映されていない。手動で確認する`);
+		return;
+	}
 	body.outcome = "success";
 	if (tree.trim() !== plan.resultTree) body.evidence.push(`hook が内容を変えた: 計画の tree ${short(plan.resultTree)} → 実際 ${short(tree.trim())}`);
 	else body.evidence.push("結果の tree は承認した計画と一致した");
 	if ((msg ?? "").replace(/\n+$/, "") !== plan.message.replace(/\n+$/, "")) body.evidence.push("commit のメッセージが計画と違う (hook が変えた)");
-	const headOid = newHead.trim();
-	track.resultCommit = headOid;
 	track.resultTree = tree.trim();
 	body.confirmedEffects.push(`${plan.target.ref} を ${short(headOid)} に進めた (squash)`);
 
@@ -518,7 +528,7 @@ async function cleanup(input: IntegrateExecInput, body: ResultBody, wt: string, 
 		}
 		body.confirmedEffects.push(`feature の worktree を削除した: ${w}`);
 	}
-	const del = await mutate(["update-ref", "-d", plan.source.ref, plan.source.oid], wt);
+	const del = await mutate(["update-ref", "--no-deref", "-d", plan.source.ref, plan.source.oid], wt);
 	if (!del) return;
 	if (del.ok) body.confirmedEffects.push(`${plan.source.ref} を削除した`);
 	else body.remainingCleanup.push(`feature ブランチを削除できなかった: ${tail(del.err || del.out)}`);

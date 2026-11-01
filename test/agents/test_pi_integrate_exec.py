@@ -591,3 +591,55 @@ def test_termination_is_unconfirmed_on_an_unexpected_exception(repo: Path) -> No
     assert res["body"]["outcome"] == "unknown", res
     assert any("例外" in e for e in res["body"]["evidence"]), res
     assert res["termination"] == "unconfirmed", res
+
+
+# --- 実行途中の差し替え・外部 filter への備え ---
+
+
+def test_cleanup_does_not_delete_symref_target(repo: Path, tmp_path: Path) -> None:
+    """実行中に source ref が別ブランチへの symbolic ref に差し替わっても、参照先を削除しない"""
+    plan = _plan(repo)
+    oid = _git(repo, "rev-parse", "feature/x").strip()
+    _git(repo, "branch", "other", oid)
+    _hook(repo, tmp_path, "git symbolic-ref refs/heads/feature/x refs/heads/other")
+    res = _exec(plan, repo, "branch")
+    assert _git(repo, "rev-parse", "refs/heads/other").strip() == oid, res
+
+
+def test_detached_head_during_commit_is_not_success(repo: Path, tmp_path: Path) -> None:
+    """統合先 ref が結果コミットを指さないなら success にせず、source も消さない"""
+    plan = _plan(repo)
+    develop = _git(repo, "rev-parse", "develop").strip()
+    _hook(repo, tmp_path, 'git update-ref --no-deref HEAD "$(git rev-parse HEAD)"')
+    res = _exec(plan, repo, "branch")
+    assert res["outcome"] == "unknown" and res["phase"] == "verify", res
+    assert any("統合先 ref" in e for e in res["evidence"]), res
+    assert any("手動で確認" in r for r in res["remainingCleanup"]), res
+    assert _git(repo, "rev-parse", "develop").strip() == develop
+    assert _git(repo, "branch", "--list", "feature/x").strip() != ""
+
+
+def test_a_missing_target_ref_after_commit_is_not_success(repo: Path, tmp_path: Path) -> None:
+    """HEAD が detach され、統合先 ref も読めない (消えた) ときも success にせず、source も消さない (読み取り失敗を見逃さない)"""
+    plan = _plan(repo)
+    _hook(
+        repo,
+        tmp_path,
+        'git update-ref --no-deref HEAD "$(git rev-parse HEAD)" && git update-ref -d refs/heads/develop',
+    )
+    res = _exec(plan, repo, "branch")
+    assert res["outcome"] == "unknown" and res["phase"] == "verify", res
+    assert any("統合先を読めなかった" in e for e in res["evidence"]), res
+    assert _git(repo, "branch", "--list", "feature/x").strip() != ""
+
+
+def test_precheck_external_filter(repo: Path, tmp_path: Path) -> None:
+    _commit(repo, ".gitattributes", "* filter=probe\n")
+    plan = _plan(repo)
+    marker = tmp_path / "filter-ran"
+    _git(repo, "config", "filter.probe.clean", f"sh -c 'touch {marker}; cat'")
+    head = _git(repo, "rev-parse", "HEAD")  # status は filter を起動するので使わない
+    res = _exec(plan, repo)
+    assert res["outcome"] == "not_executed" and res["phase"] == "precheck", res
+    assert not marker.exists(), "外部 filter が実行された"
+    assert _git(repo, "rev-parse", "HEAD") == head
