@@ -127,6 +127,7 @@ _PI_TESTS = (
     "test_pi_integrate_plan",
     "test_pi_integrate_exec",
     "test_pi_integrate_action",
+    "test_pi_integrate_wiring",
     "test_pi_free_zone_commit",
     "test_pi_landlock_exec",
     "test_pi_tools_ext",
