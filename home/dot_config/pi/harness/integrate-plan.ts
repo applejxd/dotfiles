@@ -31,6 +31,8 @@ export type IntegratePlan = {
 	files: { path: string; add: number | null; del: number | null; status: string }[];
 	risks: { path: string; reason: string }[];
 	targetAhead: number;
+	/** 統合元に含まれる、未統合の他の feature/bugfix の ref (表示だけの情報。承認の判断・再検査には使わない) */
+	stacked: string[];
 };
 export type IntegrateRefusal = { ok: false; code: string; reason: string; files?: string[] };
 
@@ -103,6 +105,26 @@ function targetWorktreeOf(cwd: string, ref: string, env?: NodeJS.ProcessEnv): st
 		else if (line === `branch ${ref}` && cur) return cur;
 	}
 	return null;
+}
+
+const MAX_STACKED = 10;
+
+/** 統合元に含まれる未統合の他ブランチ。失敗は空 (表示だけの情報なので、計画を失敗させない) */
+function stackedOf(cwd: string, sourceRef: string, sourceOid: string, targetOid: string, targetTree: string, env?: NodeJS.ProcessEnv): string[] {
+	const l = safeGit(["for-each-ref", "--format=%(refname)", "--merged", sourceOid, "--no-merged", targetOid, "refs/heads/feature", "refs/heads/bugfix"], cwd, env);
+	if (!l.ok) return [];
+	const out: string[] = [];
+	for (const ref of l.out.split("\n").map((x) => x.trim())) {
+		if (ref === "" || ref === sourceRef || CTRL.test(ref)) continue;
+		const oid = safeGit(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], cwd, env);
+		if (!oid.ok) continue;
+		// 純粋な変更がすでに統合先にあるもの (squash 統合済みで残っているブランチ) は除く
+		const mt = safeGit(["merge-tree", "--write-tree", "--no-messages", targetOid, oid.out.trim()], cwd, env);
+		if (mt.ok && mt.out.split("\n")[0]?.trim() === targetTree) continue;
+		out.push(ref);
+		if (out.length >= MAX_STACKED) break;
+	}
+	return out;
 }
 
 const OPS = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply", "BISECT_LOG"];
@@ -249,5 +271,6 @@ export function computeIntegrationPlan(input: IntegrateInput): IntegratePlan | I
 		files: sorted.slice(0, 200),
 		risks: risks.slice(0, 50),
 		targetAhead: ahead,
+		stacked: stackedOf(cwd, sourceRef, sourceOid, targetOid, targetTree, env),
 	};
 }

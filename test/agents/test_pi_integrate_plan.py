@@ -286,3 +286,52 @@ def test_hooks_and_textconv_not_run(repo: Path, tmp_path: Path) -> None:
     r = _plan(repo)
     assert r["ok"] is True, r
     assert not mark.exists()
+
+
+def _stack(repo: Path) -> None:
+    """develop から feature/a、その先頭から feature/b を作る (積み重ねた feature)"""
+    _git(repo, "checkout", "-q", "-b", "feature/a", "develop")
+    _commit(repo, "a2.txt", "a\n")
+    _git(repo, "checkout", "-q", "-b", "feature/b")
+    _commit(repo, "b2.txt", "b\n")
+    _git(repo, "checkout", "-q", "develop")
+
+
+def _squash(repo: Path, branch: str) -> None:
+    _git(repo, "merge", "--squash", branch)
+    _git(repo, "commit", "-q", "-m", f"squash {branch}")
+
+
+def test_stacked_lists_unmerged_base_feature(repo: Path) -> None:
+    _stack(repo)
+    assert _plan(repo, source="feature/b")["stacked"] == ["refs/heads/feature/a"]
+    assert _plan(repo, source="feature/a")["stacked"] == []
+    # 積み重ねていない feature は空
+    assert _plan(repo)["stacked"] == []
+
+
+def test_stacked_excludes_squash_merged_base(repo: Path) -> None:
+    _stack(repo)
+    _squash(repo, "feature/a")
+    _git(repo, "checkout", "-q", "feature/b")
+    _git(repo, "merge", "-q", "-m", "sync", "develop")
+    _git(repo, "checkout", "-q", "develop")
+    r = _plan(repo, source="feature/b")
+    assert r["ok"] is True and r["stacked"] == [], r
+
+
+def test_stacked_lists_an_unmerged_bugfix_branch_too(repo: Path) -> None:
+    """基点が bugfix/* のときも、未統合の他のブランチとして数える"""
+    _git(repo, "checkout", "-q", "-b", "bugfix/a", "develop")
+    _commit(repo, "a2.txt", "a\n")
+    _git(repo, "checkout", "-q", "-b", "feature/b")
+    _commit(repo, "b2.txt", "b\n")
+    _git(repo, "checkout", "-q", "develop")
+    assert _plan(repo, source="feature/b")["stacked"] == ["refs/heads/bugfix/a"]
+
+
+def test_stacked_source_first_makes_base_no_change(repo: Path) -> None:
+    """A を含む B を先に統合すると、A の統合は内容が変わらず断られる (現状の挙動の固定)"""
+    _stack(repo)
+    _squash(repo, "feature/b")
+    assert _plan(repo, source="feature/a")["code"] == "no_change"

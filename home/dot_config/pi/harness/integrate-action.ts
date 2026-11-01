@@ -157,10 +157,18 @@ function changesOf(premise: Record<string, Json>, plan: IntegratePlan): string[]
 	return out;
 }
 
+/** 統合元が未統合の他の feature を含むときだけの警告 1 行 (表示だけ。承認の判断・記録・再検査には使わない) */
+function stackedLine(plan: IntegratePlan): string | null {
+	if (!plan.stacked?.length) return null;
+	return `含む他の feature (未統合): ${plan.stacked.map((r) => oneLine(branchName(r), 80)).join(", ")} — 先にそちらを統合するのが通常の順序`;
+}
+
 function summaryOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[]): string {
 	const lines: string[] = [`${branchName(plan.source.ref)} → ${branchName(plan.target.ref)} (squash)`, "衝突: なし"];
 	lines.push(`${plan.stats.commits} コミット・${plan.stats.files} ファイル (+${plan.stats.additions}/-${plan.stats.deletions})`);
 	if (cleanup !== "none") lines.push(`後片付け: ${cleanup === "branch" ? "ブランチ削除" : "ブランチと worktree 削除"}`);
+	const st = stackedLine(plan);
+	if (st) lines.push(st);
 	if (plan.risks.length) {
 		lines.push(`リスクのあるパス (${plan.risks.length} 件):`);
 		for (const r of plan.risks.slice(0, MAX_RISKS)) lines.push(`  ${oneLine(r.path, 120)}`);
@@ -178,6 +186,7 @@ function viewOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[]): strin
 		`${plan.source.ref} (${short(plan.source.oid)}) → ${plan.target.ref} (${short(plan.target.oid)})  squash`,
 		`統合先の worktree: ${oneLine(plan.targetWorktree ?? "(なし)", 300)}`,
 		`後片付け: ${cleanup}`,
+		...(stackedLine(plan) ? [stackedLine(plan) as string] : []),
 		changes.length ? `要求時から変わった点: ${changes.join(" / ")}` : "要求時から変わった点: なし",
 		"",
 		"メッセージ:",

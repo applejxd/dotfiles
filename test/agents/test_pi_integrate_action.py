@@ -123,6 +123,18 @@ def test_plan_summary_and_changes(repo: Path) -> None:
     assert res["recheck"] == {"ok": True}
 
 
+def test_stacked_warning_only_when_stacked(repo: Path) -> None:
+    flow = {"op": "flow", "requestCwd": str(repo), "approverCwd": str(repo)}
+    plain = _run({**flow, "values": _values()})["plan"]
+    assert "含む他の feature" not in plain["summary"] and "含む他の feature" not in plain["view"]
+    _git(repo, "branch", "feature/a", "feature/x~1")
+    res = _run({**flow, "values": _values()})
+    for key in ("summary", "view"):
+        assert "含む他の feature (未統合): feature/a" in res["plan"][key], res["plan"][key]
+    assert res["recheck"] == {"ok": True}
+    assert "stacked" not in res["capture"]["premise"]
+
+
 def test_target_advanced_after_request(repo: Path) -> None:
     res = _run(
         {
