@@ -54,6 +54,7 @@ try:
         "pending-approve.ts",
         "exclusive-lock.ts",
         "pending-owner.ts",
+        "pending-pick.ts",
         "pending-command.ts",
         "pending-adapters.ts",
         "pending-request.ts",

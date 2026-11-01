@@ -64,6 +64,8 @@ export type ApprovalAdapter = {
 	runsHere?: (plan: unknown, env: ApprovalEnv) => HereCheck;
 	/** true なら、リポジトリ単位の排他ロックを取ってから実行する (git・hook を起動する操作)。停止を確認できない結果は、ロックを残す */
 	exclusive?: boolean;
+	/** 候補の一覧に出す 1 行の要約 (記録だけから作る。git を起動しない) */
+	brief?: (rec: OpRecord) => string;
 };
 
 export type ApproveDeps = {
@@ -310,7 +312,7 @@ export async function runApproved(a: RunApprovedArgs): Promise<Reply> {
 }
 
 /** 試行の鎖をたどって、元の記録を読む (pending の ref が消えた後も、操作の名前と引数を見せるため) */
-function recordOfChain(cwd: string, id: string, attemptOid: string, limits: Limits): OpRecord | null {
+export function recordOfChain(cwd: string, id: string, attemptOid: string, limits: Limits): OpRecord | null {
 	const root = recordOidOf(cwd, id, attemptOid);
 	if (!root.ok) return null;
 	const r = readOpAt(cwd, id, root.oid, limits);

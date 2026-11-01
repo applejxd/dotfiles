@@ -7,6 +7,7 @@
 import { PENDING_PREFIX, dropPending, isLegacyEntry, listPending, showPending } from "./pending-store.ts";
 import { approvePending, listText, logText, resolvePending, showText, unlockPending, type ApproveDeps, type Reply, type ResolveArgs } from "./pending-approve.ts";
 import { DEFAULT_LIMITS, countPending, discardOp, doneOid, runningOid, type Limits } from "./pending-ops.ts";
+import { chooseId, completeArgs, pickCandidates, resolveInteractive, resolveShortId, type PickKind } from "./pending-pick.ts";
 
 export type PendingSettings = {
 	enabled: boolean;
@@ -38,7 +39,7 @@ export type PendingCommandDeps = {
 	touch?: () => void;
 };
 
-export const USAGE = "/pending [list | show <id> | approve <id> | resolve <id> <success|failed|retry|pending|abandon> [--confirm-stopped] | drop <id> | unlock | log]";
+export const USAGE = "/pending [list | show <id> | approve [<id>] | resolve [<id>] [<success|failed|retry|pending|abandon> [--confirm-stopped]] | drop <id> | unlock | log]  (<id> は末尾 3 桁以上でもよい。show・drop・resolve の <id> も省略すると選べる)";
 const RESOLVE_KINDS = ["success", "failed", "retry", "pending", "abandon"] as const;
 
 /** フッターの「📥 保留 N 件」を更新する。UI があるときだけ。0 件なら消す */
@@ -60,14 +61,33 @@ export function registerPendingCommand(pi: any, deps: PendingCommandDeps): { abo
 	const controllers = new Set<AbortController>();
 	const redact = deps.redact ?? ((t: string) => t);
 	const refresh = (ctx: any) => updatePendingFooter(ctx, deps.settings().limits);
+	let lastCtx: any;
 
 	async function run(args: string, ctx: any): Promise<Reply> {
 		const cwd: string = ctx.cwd ?? process.cwd();
+		lastCtx = ctx;
 		const [sub = "list", rawArg = "", ...rest] = String(args ?? "").trim().split(/\s+/);
-		const arg = rawArg.startsWith(PENDING_PREFIX) ? rawArg.slice(PENDING_PREFIX.length) : rawArg;
-		const full = rawArg.startsWith("refs/") ? rawArg : `${PENDING_PREFIX}${rawArg}`;
+		let arg = rawArg.startsWith(PENDING_PREFIX) ? rawArg.slice(PENDING_PREFIX.length) : rawArg;
+		let full = rawArg.startsWith("refs/") ? rawArg : `${PENDING_PREFIX}${rawArg}`;
 		const limits = deps.settings().limits;
 		const info = (text: string): Reply => ({ text, level: "info" });
+		const tui = ctx.mode === "tui" && ctx.hasUI;
+		if (["approve", "show", "drop", "resolve"].includes(sub)) {
+			// ID を決めるだけ (末尾一致・選択)。決めた後は、ID 指定の経路にそのまま進む
+			const picked = !arg
+				? sub === "resolve" || !tui
+					? undefined
+					: await chooseId(ctx, deps.approveDeps(ctx), sub as PickKind, pickCandidates(cwd, sub as PickKind, deps.approveDeps(ctx)))
+				: !rawArg.startsWith("refs/") && /^\d{1,14}$/.test(arg)
+					? await resolveShortId(ctx, deps.approveDeps(ctx), sub as PickKind, arg)
+					: undefined;
+			if (picked && !picked.ok) return picked.reply;
+			if (picked) {
+				arg = picked.id;
+				full = `${PENDING_PREFIX}${arg}`;
+			}
+		}
+		if (sub === "approve" && !arg && !tui) return approvePending("", ctx, deps.approveDeps(ctx));
 		if (sub === "" || sub === "list") {
 			const legacy = legacyText(cwd);
 			const modern = listText(cwd, { liveness: deps.approveDeps(ctx).liveness, limits }, Date.now());
@@ -98,9 +118,10 @@ export function registerPendingCommand(pi: any, deps: PendingCommandDeps): { abo
 				controllers.delete(ac);
 			}
 		}
-		if (sub === "resolve" && arg) {
+		if (sub === "resolve") {
 			const kind = rest.find((t) => !t.startsWith("--"));
-			if (!kind || !(RESOLVE_KINDS as readonly string[]).includes(kind)) return { text: `resolve <id> <${RESOLVE_KINDS.join("|")}> [--confirm-stopped]`, level: "warning" };
+			if (!arg || !kind) return resolveInteractive(arg || undefined, ctx, deps.approveDeps(ctx));
+			if (!(RESOLVE_KINDS as readonly string[]).includes(kind)) return { text: `resolve <id> <${RESOLVE_KINDS.join("|")}> [--confirm-stopped]`, level: "warning" };
 			const args2: ResolveArgs = { kind: kind as ResolveArgs["kind"], confirmStopped: rest.includes("--confirm-stopped") };
 			return resolvePending(arg, args2, ctx, deps.approveDeps(ctx));
 		}
@@ -109,7 +130,15 @@ export function registerPendingCommand(pi: any, deps: PendingCommandDeps): { abo
 	}
 
 	pi.registerCommand("pending", {
-		description: "保留した操作の一覧・表示・承認・破棄: /pending [list | show <id> | approve <id> | resolve <id> <結果> | drop <id> | unlock | log]",
+		description: "保留した操作の一覧・表示・承認・破棄: /pending [list | show [<id>] | approve [<id>] | resolve [<id>] [<結果>] | drop [<id>] | unlock | log] (<id> は末尾 3 桁以上でもよい)",
+		getArgumentCompletions: (prefix: string) => {
+			try {
+				const ctx = lastCtx ?? { cwd: process.cwd() };
+				return completeArgs(prefix, String(ctx.cwd ?? process.cwd()), deps.approveDeps(ctx));
+			} catch {
+				return null;
+			}
+		},
 		handler: async (args: string, ctx: any) => {
 			deps.touch?.();
 			let reply: Reply;
