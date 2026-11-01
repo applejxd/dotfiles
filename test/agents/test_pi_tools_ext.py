@@ -424,6 +424,8 @@ def test_tool_text_opts_change_only_the_bash_description(table):
     assert "git_integrate" not in base["description"] and "/pending" not in base["description"]
     assert on["description"] != base["description"]
     assert "git_integrate" in on["description"] and "git flow feature finish" in on["description"]
+    # 利用者が明示したときは、そのとおり実行する (実機 E2: 「finish を使って」と頭んでも、モデルが git_integrate を選び直していた)
+    assert "explicitly asks" in on["description"] and "run it as asked" in on["description"]
     assert on["description"].startswith(base["description"])
     assert on["promptSnippet"] == base["promptSnippet"]
     assert on["promptGuidelines"] == base["promptGuidelines"]

@@ -7,7 +7,8 @@
 
 - 実装済み・**本番では無効**（`[pi.pending] enabled = false`・`[pi.integrate] enabled = false`）。有効にするのは、実機の確認（CHG-0055 の P9 の出口条件）の後の、別の変更。
 - 対応する操作は `git_integrate`（保護ブランチへの統合）だけ。`git_commit` は従来の退避（[pi の拡張](pi-extensions.md#guarded_action承認つきの外部操作)）のまま、gh は確認が取れなければ拒否のまま。
-- 実機（TUI・Orca・Zed）・Windows は**未確認**。実際の pi の試験（RPC）では、TUI 専用の経路（承認の画面・時間切れの案内）を回せない。
+- **実機の確認（2026-11-01、Orca の端末）**: 保存（feature の worktree の `pis`）→ 本体で `/pending approve` → 実行 → 結果の通知 → モデルの続行までを、E1・E2 で確かめた。Zed・Windows と、排他・復旧・キルスイッチ（E3〜E5）は**未確認**。
+- 実際の pi の試験（RPC）では、TUI 専用の経路は回せない。**時間切れの案内**は、疑似端末（pty）で TUI を動かす試験（`test_pi_tui_guidance.py`）で確かめる。承認の確認画面と `/pending` の選択画面は、実機の確認による。
 
 ## キルスイッチ
 
@@ -83,4 +84,4 @@
 | 統合の計画・実行器・アダプター | `test_pi_integrate_plan.py`、`test_pi_integrate_exec.py`、`test_pi_integrate_action.py` |
 | 保存専用の操作 | `test_pi_pending_request.py`、`test_pi_native_action.py` |
 | 配線・キルスイッチ（実際の pi） | `test_pi_integrate_wiring.py`、`test_pi_integrate_index.py` |
-| 時間切れの案内・bash の説明 | `test_pi_integration_gate.py`、`test_pi_tools_ext.py` |
+| 時間切れの案内・bash の説明 | `test_pi_integration_gate.py`、`test_pi_tools_ext.py`、`test_pi_tui_guidance.py`（疑似端末で TUI） |

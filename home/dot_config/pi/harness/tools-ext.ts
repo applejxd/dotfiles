@@ -33,7 +33,7 @@ export function toolText(
 					`Waits of 10 seconds or more (sleep) and background jobs (&, nohup) go through bg_run. ` +
 					`Exception: git commit and gh issue comment go through ${P}action when ${P}action is available (it asks for approval itself).` +
 					(opts?.integrateAction === true
-						? ` To integrate into a protected branch, prefer saving the request with ${P}action git_integrate (the user approves it later with /pending approve); running git flow feature finish in ${P}bash needs an immediate approval and can time out.`
+						? ` To integrate into a protected branch, prefer saving the request with ${P}action git_integrate (the user approves it later with /pending approve); running git flow feature finish in ${P}bash needs an immediate approval and can time out. If the user explicitly asks for git flow feature finish (or git merge), run it as asked.`
 						: ""),
 				promptSnippet: "Run shell commands (build, test, git; search with grep/find/ls). Not for reading or writing file contents",
 				promptGuidelines: [
