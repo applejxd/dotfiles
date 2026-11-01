@@ -224,14 +224,23 @@ def test_the_finish_view_puts_the_conclusion_first_and_the_command_last(table):
     assert v["kind"] == "confirm" and "bodyFile" not in v
     body = v["body"]
     # 導入文と理由は出さない (見出しと同じことなので)
-    assert "内容を確認してから承認" not in body and "理由:" not in body and "統合の内容:" not in body
+    assert (
+        "内容を確認してから承認" not in body and "理由:" not in body and "統合の内容:" not in body
+    )
     assert body.startswith("feature/x → develop (squash)\n")
     # メッセージは、件名と地の文 (本文)
     assert "squash メッセージ:\n  docs: 件名\n\n  本文\n" in body
     # 実行するコマンドは、最後に全文で
-    assert body.rstrip().endswith('実行:\ngit flow feature finish x --squash --squash-message="docs: 件名\n\n本文"')
+    assert body.rstrip().endswith(
+        '実行:\ngit flow feature finish x --squash --squash-message="docs: 件名\n\n本文"'
+    )
     # 変更の一覧 (件数・ファイル・コミットの件名) は出さない
-    assert "変更:" not in body and "aaa1111" not in body and "docs/f9.md" not in body and "+55" not in body
+    assert (
+        "変更:" not in body
+        and "aaa1111" not in body
+        and "docs/f9.md" not in body
+        and "+55" not in body
+    )
 
 
 def test_the_finish_view_has_no_change_list_only_the_conflict_state(table):
@@ -255,11 +264,17 @@ def test_finish_view_does_not_block_when_the_message_cannot_be_shown(table):
     f = table["finish"]
     missing = f["view_file_missing"]
     assert missing["kind"] == "confirm" and "bodyFile" not in missing
-    assert "squash メッセージ: nope.txt を読めない。確認画面では見せられない (実行時に読まれる)" in missing["body"]
+    assert (
+        "squash メッセージ: nope.txt を読めない。確認画面では見せられない (実行時に読まれる)"
+        in missing["body"]
+    )
     assert missing["body"].startswith("feature/x → develop (squash)\n")
     unresolved = f["view_unresolved"]
     assert unresolved["kind"] == "confirm" and "bodyFile" not in unresolved
-    assert "squash メッセージ: コマンド置換や変数を含むので、確認画面では展開できない" in unresolved["body"]
+    assert (
+        "squash メッセージ: コマンド置換や変数を含むので、確認画面では展開できない"
+        in unresolved["body"]
+    )
 
 
 def test_a_long_message_is_clipped_by_characters_and_by_lines(table):
@@ -277,10 +292,16 @@ def test_bullets_in_the_message_are_left_out_with_their_count(table):
     f = table["finish"]
     body = f["view_file_bullets"]["body"]
     # 箇条書き (と、その続きの字下げ行) は省き、地の文だけ残す。省いた項目数と全文の場所を 1 行で
-    assert "squash メッセージ (bullets.txt):\n  feat: 件名\n\n  地の文\n  … 箇条書き 4 項目を省略 (全文は bullets.txt)\n" in body
+    assert (
+        "squash メッセージ (bullets.txt):\n  feat: 件名\n\n  地の文\n  … 箇条書き 4 項目を省略 (全文は bullets.txt)\n"
+        in body
+    )
     assert "項目" not in body.replace("箇条書き 4 項目を省略", "")
     only = f["view_file_bullets_only"]["body"]
-    assert "squash メッセージ (bullets_only.txt):\n  feat: 件名\n  … 箇条書き 2 項目を省略 (全文は bullets_only.txt)\n" in only
+    assert (
+        "squash メッセージ (bullets_only.txt):\n  feat: 件名\n  … 箇条書き 2 項目を省略 (全文は bullets_only.txt)\n"
+        in only
+    )
     # 箇条書きが無いメッセージは、省略の行を出さない
     assert "省略" not in f["view_file"]["body"]
 
@@ -294,11 +315,21 @@ def test_the_view_follows_the_flags_and_the_git_result(table):
     f = table["finish"]
     # メッセージが無いときは、コミットの件名を出す。squash の印は --squash から
     no_message = f["view_no_message"]["body"]
-    assert no_message.startswith("feature/x → develop (squash)\n") and "squash メッセージ" not in no_message
-    assert "  aaa1111 件名 1\n" in no_message and "  … ほか 2 件\n" in no_message and "fff6666" not in no_message
+    assert (
+        no_message.startswith("feature/x → develop (squash)\n")
+        and "squash メッセージ" not in no_message
+    )
+    assert (
+        "  aaa1111 件名 1\n" in no_message
+        and "  … ほか 2 件\n" in no_message
+        and "fff6666" not in no_message
+    )
     assert f["view_no_squash"]["body"].startswith("feature/x → develop\n")
     failed = f["view_facts_failed"]["body"]
-    assert "(統合の内容を取得できなかった: git が失敗した (終了コード 128))" in failed and "変更:" not in failed
+    assert (
+        "(統合の内容を取得できなかった: git が失敗した (終了コード 128))" in failed
+        and "変更:" not in failed
+    )
     # git の結果が無くても、メッセージは見せる
     no_facts = f["view_no_facts"]["body"]
     assert no_facts.startswith("feature/x を統合 (squash)\n")
@@ -327,18 +358,32 @@ def test_merge_tree_output_is_read_by_exit_code_and_the_first_line(table):
     assert p["parse_conflict_dupes"] == {"kind": "conflict", "files": ["f.txt"]}
     # 先頭が OID でないものは、確認できなかった (git が古い・ブランチが無い・書き込めない)
     assert p["parse_bad_oid"] == {"kind": "unknown", "why": "git が失敗した (終了コード 129)"}
-    assert p["parse_empty_with_reason"] == {"kind": "unknown", "why": "git が失敗した (終了コード 1)"}
-    assert p["parse_empty_no_reason"] == {"kind": "unknown", "why": "merge-tree の出力を解釈できない"}
+    assert p["parse_empty_with_reason"] == {
+        "kind": "unknown",
+        "why": "git が失敗した (終了コード 1)",
+    }
+    assert p["parse_empty_no_reason"] == {
+        "kind": "unknown",
+        "why": "merge-tree の出力を解釈できない",
+    }
     # 衝突と言いながらファイル名が無い・想定外の終了コードは、衝突なしにしない
     assert p["parse_conflict_without_files"]["kind"] == "unknown"
-    assert p["parse_other_code"] == {"kind": "unknown", "why": "merge-tree が終了コード 2 で終わった"}
+    assert p["parse_other_code"] == {
+        "kind": "unknown",
+        "why": "merge-tree が終了コード 2 で終わった",
+    }
     assert p["parse_other_code_with_reason"] == {"kind": "unknown", "why": "理由"}
 
 
 def test_no_conflict_is_one_line_after_the_message(table):
     body = table["precheck"]["view_none"]["body"]
     assert "squash メッセージ:\n  abc\n衝突: なし\n" in body
-    assert "分岐後" not in body and "⚠" not in body and "衝突の事前検査" not in body and "変更:" not in body
+    assert (
+        "分岐後" not in body
+        and "⚠" not in body
+        and "衝突の事前検査" not in body
+        and "変更:" not in body
+    )
 
 
 def test_a_conflict_is_warned_at_the_top_with_the_files(table):
@@ -369,3 +414,68 @@ def test_facts_without_the_merge_check_show_no_conflict_line(table):
 def test_control_characters_in_conflicting_file_names_are_made_visible(table):
     body = table["precheck"]["view_ansi_file"]["body"]
     assert "\x1b" not in body and "a\\x1b[31mb" in body
+
+
+# --- 解析に当たらない `git flow ... finish` への注記 (表示だけ) ---
+
+NOTE = "※ squash メッセージと衝突の事前検査は、コマンドの先頭が「git flow feature finish」のときだけ出る (cd などが付くと出ない)"
+_INT = "確認が必要な保護ブランチへの統合 (bypass でも確認する): git flow feature finish (保護ブランチへ統合・削除する)"
+_EXT = "確認が必要な外部への送信・公開 (bypass でも確認する): x"
+_NOTE_SCRIPT = """
+import { pathToFileURL } from "node:url";
+const m = await import(pathToFileURL(process.argv[1]).href);
+const [cmd, reason] = JSON.parse(process.argv[2]);
+const facts = { ok: true, branch: "feature/x", target: "develop", commitCount: 1, commits: ["aaa1111 a"], files: [] };
+const v = m.buildMustConfirmView(cmd, reason, () => ({ ok: false, why: "x" }), facts);
+console.log(JSON.stringify(v));
+"""
+
+
+def _view(command, reason):
+    ts = ROOT / "home" / "dot_config" / "pi" / "harness" / "confirm-view.ts"
+    proc = subprocess.run(
+        [
+            _node(),
+            "--input-type=module",
+            "-e",
+            _NOTE_SCRIPT,
+            str(ts),
+            json.dumps([command, reason]),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=ROOT,
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr[-1000:]
+    return json.loads(proc.stdout)
+
+
+@pytest.mark.parametrize("topic", ["feature", "bugfix"])
+def test_a_prefixed_finish_gets_a_note_and_keeps_the_full_command(topic):
+    cmd = f'cd /abs/wt && git flow {topic} finish x --squash --squash-message="docs: a"'
+    body = _view(cmd, _INT)["body"]
+    assert body.count(NOTE) == 1 and cmd in body
+    assert body.index(NOTE) < body.index(cmd)
+
+
+def test_a_leading_finish_has_no_note_and_keeps_the_conclusion():
+    body = _view('git flow feature finish x --squash --squash-message="abc"', _INT)["body"]
+    assert NOTE not in body and body.startswith("feature/x → develop (squash)\n")
+    assert "squash メッセージ:\n  abc\n" in body
+
+
+@pytest.mark.parametrize(
+    ("cmd", "reason"),
+    [
+        ("git merge x", _INT),
+        ("cd /abs && git push origin develop", _INT),
+        ("cd /abs && git flow feature finish x", _EXT),
+        ("gh pr create --title t", _EXT),
+    ],
+)
+def test_no_note_without_an_integration_finish(cmd, reason):
+    body = _view(cmd, reason)["body"]
+    assert NOTE not in body and cmd in body

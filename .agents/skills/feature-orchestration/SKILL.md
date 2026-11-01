@@ -42,6 +42,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
    **`message` は 1200 字以下**。feature の linked worktree なら確認なし）。bash の `git commit` は拒否される。
 8. **取り込み**: `git flow feature finish <名前> --squash --squash-message="$(cat .tmp/keep/<名前>/squash.txt)" --keepremote --no-fetch --no-push --no-pushtag --notag`
    （`guarded_bash` の `timeout=400`）。**bypass でも必須確認**。承認が時間切れなら再試行せず、利用者の指示を待つ。
+   `cd` を付けず、本体のルートで実行する（先頭が `git flow feature finish` でないと、確認画面に squash メッセージと衝突の事前検査が出ない）。
    衝突で止まったら、解決 → `git add` → `git flow feature finish --continue <ブランチ名>`（名前なしでは失敗する）。
    docs の更新表や `_PI_TESTS` の同じ位置の衝突は、両方の行を残す。
 9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。todo を done にする。

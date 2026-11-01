@@ -11,6 +11,9 @@ export const MUST_CONFIRM_TITLE = "⚠ bypass でも確認が要る操作 (外�
 // 保護ブランチへの統合の確認 (integration-gate.ts)。理由の先頭がこの接頭辞のとき、見出しと導入の文を変える
 export const MUST_CONFIRM_INTEGRATION_PREFIX = "確認が必要な保護ブランチへの統合 (bypass でも確認する): ";
 export const INTEGRATION_CONFIRM_TITLE = "⚠ 保護ブランチへの統合 (bypass でも確認が要る)";
+// finish がコマンドの先頭以外にあるとき (cd が付くなど) の注記。解析は先頭だけ (別の文脈の git を見せないため)
+const FINISH_ANYWHERE = /\bgit\s+flow\s+(?:feature|bugfix)\s+finish\b/;
+const FINISH_NOT_LEADING_NOTE = "※ squash メッセージと衝突の事前検査は、コマンドの先頭が「git flow feature finish」のときだけ出る (cd などが付くと出ない)";
 
 /** rules の judge.common.pi.confirm.timeout_seconds (正の整数)。無い・不正なら 300 */
 export function confirmTimeoutSeconds(rules: any): number {
@@ -496,7 +499,10 @@ export function buildMustConfirmView(
 	const lead = integration
 		? "保護ブランチ (develop など) への統合、または保護 ref を変える操作です。内容を確認してから承認してください。"
 		: "bypass でも確認が要る操作です (外部への送信・公開、元に戻せない git 操作)。";
-	const lines = [lead, "", "コマンド (全文):", sanitizeForDisplay(command)];
+	const lines = [lead, ""];
+	// 先頭が finish でないと結論の画面にならない。黙って汎用の画面に戻らないよう、理由を 1 行出す
+	if (integration && !finish && FINISH_ANYWHERE.test(command)) lines.push(FINISH_NOT_LEADING_NOTE, "");
+	lines.push("コマンド (全文):", sanitizeForDisplay(command));
 	if (parsed) {
 		lines.push("", "解析結果 (参考。実際に実行されるのは上のコマンド):", `  対象: gh ${parsed.kind} ${parsed.action}`);
 		if (parsed.repo !== undefined) lines.push(field("repo", parsed.repo));
