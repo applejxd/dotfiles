@@ -408,3 +408,22 @@ def test_guide_deny_without_a_rewrite_is_unchanged(env):  # noqa: F811
 def test_guide_deny_is_not_loosened_by_bypass(env):  # noqa: F811
     proc = run_pi(env, bash_call("cat a.txt"), PI_HARNESS_BYPASS="1")
     assert "isError=true" in proc.stdout and "guarded_read" in proc.stdout, proc.stdout
+
+
+@needs_node
+def test_tool_text_opts_change_only_the_bash_description(table):
+    for tool, v in table["textsOpts"].items():
+        assert v["none"] == v["off"] == v["empty"], tool
+        if tool == "bash":
+            continue
+        assert v["on"] == v["none"], tool
+    bash = table["textsOpts"]["bash"]
+    assert bash["none"] == table["texts"]["bash"]
+    on, base = bash["on"], bash["none"]
+    # 省略・偽のときは、統合の案内を含まない (同じ関数同士の比較だけでは、常に追記する壊れ方を見逃す)
+    assert "git_integrate" not in base["description"] and "/pending" not in base["description"]
+    assert on["description"] != base["description"]
+    assert "git_integrate" in on["description"] and "git flow feature finish" in on["description"]
+    assert on["description"].startswith(base["description"])
+    assert on["promptSnippet"] == base["promptSnippet"]
+    assert on["promptGuidelines"] == base["promptGuidelines"]

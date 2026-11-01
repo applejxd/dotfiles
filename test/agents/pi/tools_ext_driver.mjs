@@ -83,6 +83,18 @@ for (const tool of ["bash", "read", "write", "edit", "grep", "find", "ls", "noth
 	texts[tool] = toolText(tool, "guarded_", { description: "BUILTIN", promptGuidelines: ["builtin guideline"] });
 }
 
+// toolText の第 4 引数 (opts)。opts 無し・integrateAction 偽・真の 3 通りを全ツールで比べる
+const textsOpts = {};
+for (const tool of ["bash", "read", "write", "edit", "grep", "find", "ls", "nothing"]) {
+	const def = { description: "BUILTIN", promptGuidelines: ["builtin guideline"] };
+	textsOpts[tool] = {
+		none: toolText(tool, "guarded_", def),
+		off: toolText(tool, "guarded_", def, { integrateAction: false }),
+		empty: toolText(tool, "guarded_", def, {}),
+		on: toolText(tool, "guarded_", def, { integrateAction: true }),
+	};
+}
+
 const G = (c) => guideHint(c, "guarded_");
 const hint = {
 	sed_range: G("sed -n '10,20p' src/a.py"),
@@ -171,4 +183,4 @@ const deco = {
 	no_content: (await decorateEditResult({ isError: true, input: {} }, dir, canRead)) ?? null,
 };
 
-process.stdout.write(JSON.stringify({ tail, hints, texts, hint, editHints, nearest, deco }));
+process.stdout.write(JSON.stringify({ tail, hints, texts, textsOpts, hint, editHints, nearest, deco }));

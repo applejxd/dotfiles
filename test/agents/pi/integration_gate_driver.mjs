@@ -14,13 +14,15 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const harness = (name) => pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", name)).href;
 
-const { integrationConfig, tightenIntegration } = await import(harness("integration-gate.ts"));
+const { integrationConfig, tightenIntegration, integrationTimeoutGuidance } = await import(harness("integration-gate.ts"));
 const { classifyFreeZone } = await import(harness("freezone.ts"));
 
 const req = JSON.parse(readFileSync(0, "utf8"));
 let result;
 if (req.config !== undefined) {
 	result = integrationConfig(req.config);
+} else if (req.guidance !== undefined) {
+	result = req.guidance.map((i) => integrationTimeoutGuidance(i));
 } else {
 	const classify = (cwd, refs) => classifyFreeZone(cwd, refs, { env: req.env });
 	result = req.cases.map((c) => {

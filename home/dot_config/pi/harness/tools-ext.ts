@@ -15,7 +15,12 @@ export type ToolText = { description?: string; promptSnippet: string; promptGuid
  * 登録するツールの description / promptSnippet / promptGuidelines の上書き。P は名前の接頭辞 (`guarded_`)。
  * description は組み込みの文 (def.description) の後ろに足す。無い道具は null (組み込みのまま)。
  */
-export function toolText(tool: string, P: string, def: { description?: string; promptGuidelines?: string[] }): ToolText | null {
+export function toolText(
+	tool: string,
+	P: string,
+	def: { description?: string; promptGuidelines?: string[] },
+	opts?: { integrateAction?: boolean },
+): ToolText | null {
 	const base = def.description ? `${def.description} ` : "";
 	switch (tool) {
 		case "bash":
@@ -26,7 +31,10 @@ export function toolText(tool: string, P: string, def: { description?: string; p
 					`${P}write instead of echo > / cat > f <<EOF / tee (append: true to append), and ${P}edit instead of sed/awk edits. ` +
 					`To read several files, make parallel ${P}read calls instead of chaining them in one command. ` +
 					`Waits of 10 seconds or more (sleep) and background jobs (&, nohup) go through bg_run. ` +
-					`Exception: git commit and gh issue comment go through ${P}action when ${P}action is available (it asks for approval itself).`,
+					`Exception: git commit and gh issue comment go through ${P}action when ${P}action is available (it asks for approval itself).` +
+					(opts?.integrateAction === true
+						? ` To integrate into a protected branch, prefer saving the request with ${P}action git_integrate (the user approves it later with /pending approve); running git flow feature finish in ${P}bash needs an immediate approval and can time out.`
+						: ""),
 				promptSnippet: "Run shell commands (build, test, git; search with grep/find/ls). Not for reading or writing file contents",
 				promptGuidelines: [
 					...(def.promptGuidelines ?? []),
