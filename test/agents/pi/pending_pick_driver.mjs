@@ -599,7 +599,16 @@ const out = {};
 	const h = setup();
 	const cwd = repo();
 	const T = 1700000000000;
-	const mk = (dt, note) => ops.saveOp(cwd, record({ params: { note } }), undefined, T + dt).id;
+	const mk = (dt, note) => {
+		// 並びの基準は git の committerdate (実時刻)。保存の now は ID にしか効かないので、コミットの日時も論理上の時刻に固定する
+		// (固定しないと、負荷で保存が 1 秒をまたぐと実時刻の順が勝ち、並びが変わって落ちる)
+		process.env.GIT_COMMITTER_DATE = `${Math.floor((T + dt) / 1000)} +0000`;
+		try {
+			return ops.saveOp(cwd, record({ params: { note } }), undefined, T + dt).id;
+		} finally {
+			delete process.env.GIT_COMMITTER_DATE;
+		}
+	};
 	// 保存の順と時刻の順を食い違わせる (時刻で並べていることを固める)
 	const mid = mk(10000, "mid");
 	const oldest = mk(0, "oldest");
