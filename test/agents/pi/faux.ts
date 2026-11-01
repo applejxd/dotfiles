@@ -108,6 +108,12 @@ export default async function (pi: ExtensionAPI) {
 			return fauxAssistantMessage(fauxText(`TOOLDEFS=${JSON.stringify(getCurrentTools(messages).map((t: any) => ({ name: t.name, description: t.description })))}`));
 		}
 		if (process.env.FAUX_DUMP_PROMPT === "1") return fauxAssistantMessage(fauxText(getCurrentSystemPrompt(messages)));
+		// 子: システムプロンプトの全文を FAUX_CHILD_DUMP_FILE のパスへ書く (結果の切り詰め・伏字化を避ける)。応答は文字数だけ
+		if (process.env.FAUX_CHILD_DUMP_FILE && process.env.PI_HARNESS_CHILD === "1" && last?.role === "user") {
+			const p = getCurrentSystemPrompt(messages);
+			writeFileSync(process.env.FAUX_CHILD_DUMP_FILE, p, "utf-8");
+			return fauxAssistantMessage(fauxText(`CHILD_PROMPT_FILE_LEN=${p.length}`));
+		}
 		// 子: システムプロンプト全体を返す (前置きの先頭と、前置きの直後の 120 文字を JSON で返す)
 		if (process.env.FAUX_CHILD_DUMP_PROMPT === "1" && process.env.PI_HARNESS_CHILD === "1" && last?.role === "user") {
 			const p = getCurrentSystemPrompt(messages);
