@@ -496,3 +496,48 @@ def test_adapter_execute_returns_exec_outcome_with_facts(repo: Path) -> None:
     x = res["execOutcome"]
     assert x["termination"] == "stopped" and x["body"]["outcome"] == "success", x
     assert x["body"]["facts"]["result_commit"] == _rev(repo, "HEAD")
+
+
+def _summary_of(repo: Path, message: str) -> list[str]:
+    res = _run(
+        {
+            "op": "flow",
+            "requestCwd": str(repo),
+            "approverCwd": str(repo),
+            "values": _values(message=message),
+        }
+    )
+    assert res["capture"]["ok"] is True, res["capture"]
+    return res["plan"]["summary"].split("\n")
+
+
+def _cells(line: str) -> int:
+    return sum(2 if ord(ch) > 0x2E80 else 1 for ch in line)
+
+
+def test_summary_shows_the_message_subject_with_the_extra_line_count(repo: Path) -> None:
+    # 承認するのは、保護ブランチへ入る内容そのもの (メッセージを含む)。4 択の画面に 1 行目を出す。全文は「全文を見る」
+    lines = _summary_of(repo, MSG)
+    assert "メッセージ: feat: x (+1 行)" in lines, lines
+
+
+def test_summary_single_line_message_has_no_extra_count(repo: Path) -> None:
+    lines = _summary_of(repo, "feat: only")
+    assert "メッセージ: feat: only" in lines, lines
+    row = next(ln for ln in lines if ln.startswith("メッセージ:"))
+    assert "行)" not in row, row  # 統計行の (+3/-0) とは区別し、メッセージの行だけを見る
+
+
+def test_summary_long_subject_is_clipped_but_keeps_the_extra_count(repo: Path) -> None:
+    lines = _summary_of(repo, "feat: " + "あ" * 60 + "\n\n- a\n- b")
+    row = next(ln for ln in lines if ln.startswith("メッセージ:"))
+    assert row.endswith("(+2 行)"), (
+        row
+    )  # 空行を除いた残りの行数。切るのは件名の側で、「ほかにある」の印は欠かさない
+    assert _cells(row) <= 46, row
+
+
+def test_summary_message_line_drops_control_characters(repo: Path) -> None:
+    lines = _summary_of(repo, "feat: \x1b[2Jx")
+    row = next(ln for ln in lines if ln.startswith("メッセージ:"))
+    assert "\x1b" not in row, row

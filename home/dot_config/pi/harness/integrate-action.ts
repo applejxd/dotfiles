@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import type { ActionSpec, PendingAdapter } from "./actions.ts";
-import { clipCells, sanitizeForDisplay } from "./confirm-view.ts";
+import { cellWidth, clipCells, sanitizeForDisplay } from "./confirm-view.ts";
 import { computeIntegrationPlan, type IntegratePlan } from "./integrate-plan.ts";
 import { executeIntegrationOutcome } from "./integrate-exec.ts";
 import type { ApprovalAdapter } from "./pending-approve.ts";
@@ -200,9 +200,22 @@ function pendingStacked(plan: IntegratePlan, cwd: string): Map<string, string> {
 	return out;
 }
 
+/** 承認の 4 択の画面に出す、コミットメッセージの 1 行目 (複数行なら末尾に (+N 行))。切るのは件名の側で、「ほかにある」の印は欠かさない。全文は「全文を見る」 */
+function messageLine(message: string): string {
+	const rows = sanitizeForDisplay(message)
+		.split(/\r?\n/)
+		.map((l) => l.trim())
+		.filter((l) => l !== "");
+	const subject = rows[0] ?? "(空)";
+	const suffix = rows.length > 1 ? ` (+${rows.length - 1} 行)` : "";
+	const label = "メッセージ: ";
+	return `${label}${clipCells(subject, Math.max(8, WIDTH - cellWidth(label) - cellWidth(suffix)))}${suffix}`;
+}
+
 function summaryOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[], pend: Map<string, string>): string {
 	const lines: string[] = [`${branchName(plan.source.ref)} → ${branchName(plan.target.ref)} (squash)`, "衝突: なし"];
 	lines.push(`${plan.stats.commits} コミット・${plan.stats.files} ファイル (+${plan.stats.additions}/-${plan.stats.deletions})`);
+	lines.push(messageLine(plan.message));
 	if (cleanup !== "none") lines.push(`後片付け: ${cleanup === "branch" ? "ブランチ削除" : "ブランチと worktree 削除"}`);
 	lines.push(...stackedSummaryLines(plan, pend));
 	if (plan.risks.length) {
