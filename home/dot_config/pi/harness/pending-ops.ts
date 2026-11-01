@@ -19,7 +19,9 @@ export const NS = { pending: PENDING_PREFIX, running: "refs/pi/running/", done: 
 export type Limits = { maxPending: number; maxRecordBytes: number; maxScan: number };
 export const DEFAULT_LIMITS: Limits = { maxPending: 50, maxRecordBytes: 64 * 1024, maxScan: 1000 };
 
-export type Reason = "timeout" | "absent" | "no_ui" | "later";
+/** inline = 同期の確認で承認され、その場で実行するために保存した。request = 要求だけを保存した (承認はまだ) */
+export const REASONS = ["timeout", "absent", "no_ui", "later", "inline", "request"] as const;
+export type Reason = (typeof REASONS)[number];
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
 export type OpRecord = {
@@ -60,6 +62,8 @@ export type ResultBody = {
 	remainingCleanup: string[];
 	/** 判断の材料 */
 	evidence: string[];
+	/** 統合の事実など (任意。キーは小文字の識別子、値は制御文字なしの短い文字列) */
+	facts?: Record<string, string>;
 };
 export type ResultRecord = ResultBody & { schema: 1; attemptId: string; at: string; resolvedBy: "executor" | "human" };
 
@@ -157,7 +161,7 @@ export function validateRecord(v: unknown): { ok: true; rec: OpRecord } | Fail {
 		if (!NAME_RE.test(k) || !str(x, MAX_PARAM_CHARS)) return { ok: false, reason: `params の ${k.slice(0, 40)} が不正 (文字列だけ。長さ・NUL)` };
 	}
 	if (!isObj(v.premise) || !isJson(v.premise)) return { ok: false, reason: "premise が不正 (JSON の値だけ。深さ・個数)" };
-	if (!["timeout", "absent", "no_ui", "later"].includes(String(v.reason))) return { ok: false, reason: "reason が不正" };
+	if (!(REASONS as readonly string[]).includes(String(v.reason))) return { ok: false, reason: "reason が不正" };
 	const q = v.request;
 	if (!isObj(q) || !keysOk(q, ["id", "sessionId", "cwd"]) || !str(q.id, 100) || !str(q.sessionId, 200) || !str(q.cwd, 1000)) {
 		return { ok: false, reason: "request が不正" };
@@ -184,9 +188,18 @@ function validateAttempt(v: unknown): v is Attempt {
 }
 
 const listOk = (v: unknown): v is string[] => Array.isArray(v) && v.length <= 50 && v.every((x) => str(x, 500));
+const FACT_KEY_RE = /^[a-z][a-z0-9_]{0,31}$/;
+// 制御文字 (U+0000-U+001F, U+007F) を拒否する
+const CONTROL_RE = /[\u0000-\u001f\u007f]/;
+function factsOk(v: unknown): v is Record<string, string> {
+	if (!isObj(v)) return false;
+	const keys = Object.keys(v);
+	return keys.length <= 16 && keys.every((k) => FACT_KEY_RE.test(k) && typeof v[k] === "string" && (v[k] as string).length <= 200 && !CONTROL_RE.test(v[k] as string));
+}
 export function validateResultBody(v: unknown): v is ResultBody {
 	return (
 		isObj(v) &&
+		(v.facts === undefined || factsOk(v.facts)) &&
 		["not_executed", "success", "failed_confirmed", "unknown"].includes(String(v.outcome)) &&
 		str(v.phase, 100) &&
 		listOk(v.confirmedEffects) &&
@@ -197,7 +210,7 @@ export function validateResultBody(v: unknown): v is ResultBody {
 function validateResult(v: unknown): v is ResultRecord {
 	return (
 		isObj(v) &&
-		keysOk(v, ["schema", "attemptId", "at", "resolvedBy", "outcome", "phase", "confirmedEffects", "remainingCleanup", "evidence"]) &&
+		keysOk(v, ["schema", "attemptId", "at", "resolvedBy", "outcome", "phase", "confirmedEffects", "remainingCleanup", "evidence"], ["facts"]) &&
 		v.schema === 1 &&
 		str(v.attemptId, 100) &&
 		str(v.at, 40) &&
@@ -579,6 +592,7 @@ export function resolveUnknown(cwd: string, id: string, decision: { kind: "succe
 		confirmedEffects: r.result.confirmedEffects,
 		remainingCleanup: r.result.remainingCleanup,
 		evidence: [...r.result.evidence, ...(decision.evidence ?? []), "人が決着させた"].slice(0, 50),
+		...(r.result.facts ? { facts: r.result.facts } : {}),
 	};
 	const out = finishWith(cwd, id, r.parent, body, "human", doneOid);
 	return out.ok ? { ok: true } : out;

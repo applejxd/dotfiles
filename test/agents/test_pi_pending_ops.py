@@ -218,3 +218,46 @@ def test_records_made_in_a_linked_worktree_are_visible_and_approvable_from_the_m
         "visibleFromMain": True,
         "beganFromMain": True,
     }
+
+
+@pytest.mark.parametrize("reason", ["timeout", "absent", "no_ui", "later", "inline", "request"])
+def test_every_known_reason_is_saved_and_read_back(table, reason):
+    r = table["facts"]["reasons"][reason]
+    assert r == {"saved": True, "code": None, "read": reason}
+
+
+def test_an_unknown_reason_is_still_refused(table):
+    r = table["facts"]["reasons"]["bogus"]
+    assert r["saved"] is False and r["code"] == "invalid" and r["read"] is None
+
+
+def test_facts_round_trip_and_an_old_result_without_facts_stays_valid(table):
+    f = table["facts"]
+    assert f["roundtrip"] == {
+        "source": "feature/x",
+        "target": "develop",
+        "result_commit": "a" * 40,
+    }
+    assert f["withoutFactsOk"] is True and f["withoutFactsKey"] is False
+    assert f["withoutFactsJsonHasFacts"] is False  # facts が無ければ出力に含めない
+    assert f["resolvedKeepsFacts"] == f["roundtrip"]  # 人の決着でも facts を失わない
+    assert all(f["valid"].values()), f["valid"]
+
+
+def test_invalid_facts_are_refused(table):
+    f = table["facts"]
+    assert not any(f["invalid"].values()), f["invalid"]
+    assert f["invalid"].keys() >= {
+        "seventeen",
+        "key_33",
+        "value_201",
+        "newline",
+        "nul",
+        "array_facts",
+    }
+    # 拒否された結果は、試行を running のまま残す
+    assert f["badSaveCode"] == "invalid" and f["badStillRunning"] is True
+
+
+def test_the_other_result_fields_are_validated_as_before(table):
+    assert not any(table["facts"]["others"].values()), table["facts"]["others"]

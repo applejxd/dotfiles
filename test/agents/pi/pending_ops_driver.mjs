@@ -388,5 +388,85 @@ const DAYS = 86400 * 1000;
 	out.linked = { savedInLinked: a.ok, visibleFromMain: fromMain.ok, beganFromMain: b.ok };
 }
 
+// 12. reason の拡張 (inline / request) と、結果の facts
+{
+	const cwd = repo();
+	const reasons = {};
+	for (const [i, reason] of ["timeout", "absent", "no_ui", "later", "inline", "request", "bogus"].entries()) {
+		const s = ops.saveOp(cwd, input({ reason, params: { source: `feature/rs${i}`, message: "m" } }));
+		const back = s.ok ? ops.readOp(cwd, s.id) : null;
+		reasons[reason] = { saved: s.ok, code: s.ok ? null : s.code, read: back?.ok ? back.record.reason : null };
+	}
+	const base = (over = {}) => ({ outcome: "success", phase: "done", confirmedEffects: ["a"], remainingCleanup: ["b"], evidence: ["e"], ...over });
+	const ok = (b) => ops.validateResultBody(b);
+	const repeat = (n) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`k${i}`, "v"]));
+	const facts = { source: "feature/x", target: "develop", result_commit: "a".repeat(40) };
+	const valid = {
+		no_facts: ok(base()),
+		with_facts: ok(base({ facts })),
+		empty_facts: ok(base({ facts: {} })),
+		sixteen: ok(base({ facts: repeat(16) })),
+		value_200: ok(base({ facts: { a: "x".repeat(200) } })),
+		key_32: ok(base({ facts: { [`a${"b".repeat(31)}`]: "v" } })),
+		multibyte_value: ok(base({ facts: { a: "統合元" } })),
+	};
+	const invalid = {
+		seventeen: ok(base({ facts: repeat(17) })),
+		upper_key: ok(base({ facts: { Abc: "v" } })),
+		digit_key: ok(base({ facts: { "1a": "v" } })),
+		key_33: ok(base({ facts: { [`a${"b".repeat(32)}`]: "v" } })),
+		value_201: ok(base({ facts: { a: "x".repeat(201) } })),
+		newline: ok(base({ facts: { a: "x\ny" } })),
+		cr: ok(base({ facts: { a: "x\ry" } })),
+		tab: ok(base({ facts: { a: "x\ty" } })),
+		nul: ok(base({ facts: { a: "x\0y" } })),
+		del: ok(base({ facts: { a: "x\x7fy" } })),
+		number: ok(base({ facts: { a: 1 } })),
+		null_value: ok(base({ facts: { a: null } })),
+		array_value: ok(base({ facts: { a: ["x"] } })),
+		object_value: ok(base({ facts: { a: { b: "x" } } })),
+		array_facts: ok(base({ facts: ["x"] })),
+		null_facts: ok(base({ facts: null })),
+		string_facts: ok(base({ facts: "x" })),
+	};
+	// 他の項目の検証は不変 (facts が正しくても拒否する)
+	const others = {
+		outcome: ok(base({ outcome: "weird", facts })),
+		phase: ok(base({ phase: "x".repeat(101), facts })),
+		confirmedEffects: ok(base({ confirmedEffects: "x", facts })),
+		remainingCleanup: ok(base({ remainingCleanup: [1], facts })),
+		evidence: ok(base({ evidence: Array.from({ length: 51 }, () => "x"), facts })),
+		missing_evidence: ok({ outcome: "success", phase: "p", confirmedEffects: [], remainingCleanup: [] }),
+	};
+	const run = (n, body) => {
+		const s = ops.saveOp(cwd, input({ params: { source: `feature/f${n}`, message: "m" } }));
+		const b = ops.beginApproval(cwd, s.id, s.oid, owner());
+		const st = ops.markStarted(cwd, s.id, b.attemptOid);
+		const f = ops.finishApproval(cwd, s.id, st.attemptOid, body);
+		return { s, f, raw: f.ok ? ops.readResultAt(cwd, s.id, f.doneOid) : null };
+	};
+	const withF = run(1, base({ facts }));
+	const withoutF = run(2, base());
+	const bad = run(3, base({ facts: { a: "x\ny" } }));
+	// facts の無い保存は、出力に facts を含めない
+	const rawJson = (r) => git(cwd, "show", `${r.f.doneOid}:result.json`);
+	const unk = run(4, base({ outcome: "unknown", facts }));
+	const resolved = unk.f.ok ? ops.resolveUnknown(cwd, unk.s.id, { kind: "success" }) : null;
+	const afterResolve = resolved?.ok ? ops.readResultAt(cwd, unk.s.id, git(cwd, "rev-parse", `refs/pi/done/${unk.s.id}`)) : null;
+	out.facts = {
+		reasons,
+		valid,
+		invalid,
+		others,
+		roundtrip: withF.raw?.ok ? withF.raw.result.facts : null,
+		withoutFactsOk: withoutF.f.ok,
+		withoutFactsKey: withoutF.raw?.ok ? "facts" in withoutF.raw.result : null,
+		withoutFactsJsonHasFacts: withoutF.f.ok ? rawJson(withoutF).includes("facts") : null,
+		badSaveCode: bad.f.ok ? "ok" : bad.f.code,
+		badStillRunning: refs(cwd, "refs/pi/running/").includes(`refs/pi/running/${bad.s.id}`),
+		resolvedKeepsFacts: afterResolve?.ok ? afterResolve.result.facts : null,
+	};
+}
+
 out.keys_of_api = Object.keys(ops).sort();
 console.log(JSON.stringify(out));
