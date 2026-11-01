@@ -139,6 +139,8 @@ _PI_TESTS = (
     "test_pi_pending_owner",
     "test_pi_exclusive_lock",
     "test_pi_pending_actions",
+    "test_pi_pending_request",
+    "test_pi_native_action",
     "test_pi_git_destructive",
     "test_pi_orchestrate",
     "test_pi_allow_output_quoting",

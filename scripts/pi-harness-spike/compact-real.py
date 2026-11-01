@@ -56,6 +56,8 @@ try:
         "pending-owner.ts",
         "pending-command.ts",
         "pending-adapters.ts",
+        "pending-request.ts",
+        "native-action.ts",
         "platform.ts",
         "landlock_exec.py",
         "commit-message.js",

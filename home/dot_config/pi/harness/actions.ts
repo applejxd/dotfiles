@@ -14,7 +14,9 @@ import { VIEW_FULL, presentConfirm } from "./confirm-present.ts";
 import { classifyFreeZone, freeZoneSettings, type FreeZone } from "./freezone.ts";
 import { gitSync } from "./gitrun.ts";
 import { reconcilePending, repoTargetEnv, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
-import { saveOp, type Json, type Limits, type Reason, type SaveInput, type SaveResult } from "./pending-ops.ts";
+import type { Json, Limits, Reason, SaveInput, SaveResult } from "./pending-ops.ts";
+import { saveRequest } from "./pending-request.ts";
+import { NATIVE_ACTIONS, executeNative } from "./native-action.ts";
 
 export const ACTION_TOOL = "action";
 const NOT_APPROVED = "not approved:";
@@ -499,6 +501,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 	const checked = validateCall(deps.actions, params);
 	if (!checked.ok) throw new Error(checked.error);
 	const { action } = checked;
+	if (NATIVE_ACTIONS.has(action.id)) return executeNative(action.id, checked.values, ctx, deps, signal); // 保存専用。argv 実行・確認には進まない
 	let values = checked.values;
 	let cwd: string = ctx.cwd;
 	let resolvedParams: any = params; // dir を解決したあとの判定用の入力 (解決済みの対象を指す)
@@ -550,17 +553,17 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		const deferToPending = (reason: Reason, why: string): Error => {
 			if (signal?.aborted) return notApproved(outcomeReason("aborted"));
 			if (!pendingCfg || captured?.ok !== true) return notApproved(`${why}。保留の前提を取れなかったので拒否した`);
-			const input: SaveInput = {
+			const saved = saveRequest({
 				action: action.id,
-				params: { ...values },
-				premise: captured.premise,
+				values,
+				captured,
 				reason,
-				request: { id: randomUUID(), sessionId: sessionIdOf(), cwd: ctx.cwd },
-				createdAt: new Date().toISOString(),
-				...(captured.worktree ? { worktree: captured.worktree } : {}),
-				...(captured.host ? { host: captured.host } : {}),
-			};
-			const saved = (pendingCfg.save ?? saveOp)(cwd, input, pendingCfg.limits);
+				sessionId: sessionIdOf(),
+				repoCwd: cwd,
+				requestCwd: ctx.cwd,
+				save: pendingCfg.save,
+				limits: pendingCfg.limits,
+			});
 			if (!saved.ok) {
 				return notApproved(
 					`${why}。元の操作は未実行で、保留も作れなかった (${saved.reason})。再試行しない。この操作に依存しない作業を続け、最後に「承認が取れなかった操作」として報告する`,
@@ -694,6 +697,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 
 		// 承認した内容 (編集した場合は編集後) を書く。承認後に再読みしない
 		for (const [name] of fileFields) writeFileSync(files[name], values[name], { flag: "wx", mode: 0o600 });
+		if (action.argv.length === 0) throw new Error(`${action.id}: argv が空の操作は実行できない`);
 		const argv = buildArgv(action, values, files);
 		const r = await runArgv(argv, cwd, deps.env, signal);
 		const out = deps.redact(tail(r.stdout.trim()));

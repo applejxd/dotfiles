@@ -435,6 +435,8 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
         "pending-owner.ts",
         "pending-command.ts",
         "pending-adapters.ts",
+        "pending-request.ts",
+        "native-action.ts",
     ):
         shutil.copy2(HARNESS_SRC.parent / name, harness / name)
     shutil.copy2(HARNESS_SRC.parent / "platform.ts", harness / "platform.ts")
