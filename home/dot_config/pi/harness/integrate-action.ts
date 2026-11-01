@@ -5,15 +5,19 @@
 // see docs/change/0055-async-approval.md
 //
 // node の型除去でそのまま動く書き方だけを使う (enum・namespace は使わない)。
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
 import type { ActionSpec, PendingAdapter } from "./actions.ts";
 import { clipCells, sanitizeForDisplay } from "./confirm-view.ts";
 import { computeIntegrationPlan, type IntegratePlan } from "./integrate-plan.ts";
 import { executeIntegration } from "./integrate-exec.ts";
 import type { ApprovalAdapter } from "./pending-approve.ts";
 import type { Json, OpRecord, ResultBody } from "./pending-ops.ts";
+import { repoTargetEnv } from "./pending-store.ts";
 
-export type IntegrateCfg = { target: string; protectedRefs: readonly string[]; riskPaths: readonly string[] };
+/** enabled は統合のキルスイッチ。省略時は有効 (従来どおり)。false のとき、要求・承認のアダプタは拒否する */
+export type IntegrateCfg = { target: string; protectedRefs: readonly string[]; riskPaths: readonly string[]; enabled?: () => boolean };
 /** 設定は呼ぶたびに読む (承認の時点の現在の設定で計画を作るため) */
 export type CfgSource = IntegrateCfg | (() => IntegrateCfg);
 
@@ -41,6 +45,50 @@ const cfgOf = (c: CfgSource): IntegrateCfg => (typeof c === "function" ? c() : c
 const digestOf = (s: string): string => createHash("sha256").update(s).digest("hex");
 const oneLine = (s: unknown, max = 200): string => sanitizeForDisplay(String(s)).replace(/\s+/g, " ").trim().slice(0, max);
 const short = (oid: string): string => oid.slice(0, 8);
+const DISABLED = "git_integrate は無効 (設定で止められている)";
+
+export type HereResult = { ok: true; here: boolean } | { ok: false; reason: string };
+
+/** cwd の common-dir・git-dir・show-toplevel を、実体のパスで観測する。失敗は理由の文字列 */
+function identityOf(cwd: string, env?: NodeJS.ProcessEnv): string[] | string {
+	const r = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir", "--git-dir", "--show-toplevel"], {
+		cwd,
+		encoding: "utf8",
+		timeout: 15000,
+		env: { ...repoTargetEnv(env ?? process.env), GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" },
+	});
+	if (r.error || r.status !== 0) return `git で ${oneLine(cwd, 120)} を観測できない`;
+	const lines = String(r.stdout).split("\n").filter((l) => l !== "");
+	if (lines.length !== 3) return `git の観測が不正: ${oneLine(cwd, 120)}`;
+	try {
+		return lines.map((p) => realpathSync(p));
+	} catch {
+		return `パスを正規化できない: ${oneLine(cwd, 120)}`;
+	}
+}
+
+/** 3 つの識別子 (common-dir・git-dir・toplevel) が、個別に全部一致するか。長さが違えば false */
+export function sameIdentity(a: string[], b: string[]): boolean {
+	return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/**
+ * いまの cwd が、統合先の作業ツリーそのものか。common-dir・git-dir・show-toplevel の 3 つが全部一致したときだけ here: true。
+ * パスの配下判定は使わない (feature の worktree は本体の配下にあるので、誤って許可する)。観測できなければ ok: false。
+ * 統合先自体は作業ツリーのルートでなければならない (削除されて親へ遡った・サブディレクトリを指すときは ok: false)。cwd はサブディレクトリでよい。
+ */
+export function isTargetWorktree(cwd: string, targetWorktree: string, env?: NodeJS.ProcessEnv): HereResult {
+	const a = identityOf(cwd, env);
+	if (typeof a === "string") return { ok: false, reason: a };
+	const b = identityOf(targetWorktree, env);
+	if (typeof b === "string") return { ok: false, reason: b };
+	try {
+		if (realpathSync(targetWorktree) !== b[2]) return { ok: false, reason: `targetWorktree が作業ツリーのルートでない: ${oneLine(targetWorktree, 120)}` };
+	} catch {
+		return { ok: false, reason: `パスを正規化できない: ${oneLine(targetWorktree, 120)}` };
+	}
+	return { ok: true, here: sameIdentity(a, b) };
+}
 const branchName = (ref: string): string => ref.replace(/^refs\/heads\//, "");
 
 function cleanupOf(values: Record<string, string>): Cleanup | null {
@@ -63,6 +111,7 @@ function refusalText(r: { code: string; reason: string; files?: string[] }): str
 export function integrateRequestAdapter(cfg: CfgSource): PendingAdapter {
 	return {
 		capture: async ({ cwd, values, env }) => {
+			if (cfgOf(cfg).enabled?.() === false) return { ok: false, reason: DISABLED };
 			const cleanup = cleanupOf(values);
 			if (!cleanup) return { ok: false, reason: `cleanup が不正: ${oneLine(values.cleanup, 40)} (none|branch|branch_and_worktree)` };
 			const c = cfgOf(cfg);
@@ -145,6 +194,7 @@ function viewOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[]): strin
 /** 承認側。記録は信頼しない入力として、params を検証し、承認する pi の cwd・現在の設定・現在の状態で計画を作り直す */
 export function integrateApprovalAdapter(cfg: CfgSource): ApprovalAdapter {
 	const compute = (rec: Pick<OpRecord, "params">, cwd: string, env: NodeJS.ProcessEnv) => {
+		if (cfgOf(cfg).enabled?.() === false) return { ok: false as const, reason: DISABLED };
 		const cleanup = cleanupOf(rec.params);
 		if (!cleanup) return { ok: false as const, reason: `cleanup が不正: ${oneLine(rec.params.cleanup, 40)}` };
 		const c = cfgOf(cfg);

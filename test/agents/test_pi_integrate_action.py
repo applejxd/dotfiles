@@ -199,3 +199,174 @@ def test_request_in_linked_worktree_approve_in_main(repo: Path, feat: Path) -> N
     assert not feat.exists()
     assert _git(repo, "branch", "--list", "feature/x").strip() == ""
     assert (repo / "b.txt").exists()
+
+
+# --- isTargetWorktree (git の識別で「統合先の作業ツリーの中か」を判定する) と enabled ---
+
+HERE_JS = """
+import { pathToFileURL } from "node:url";
+import { readFileSync } from "node:fs";
+const ia = await import(pathToFileURL(process.env.IA_TS).href);
+const req = JSON.parse(readFileSync(0, "utf8"));
+const out = {};
+const state = { on: req.enabled };
+if (req.op === "same") {
+	out.same = ia.sameIdentity(req.a, req.b);
+} else if (req.op === "here") {
+	out.here = ia.isTargetWorktree(req.cwd, req.target, req.env ?? undefined);
+} else {
+	const cfg = { ...req.cfg, enabled: () => state.on };
+	const env = { ...process.env };
+	out.capture = await ia.integrateRequestAdapter(cfg).capture({ cwd: req.cwd, values: req.values, env });
+	const rec = { action: "git_integrate", params: req.values, premise: {}, request: { id: "x", sessionId: "s", cwd: req.cwd } };
+	const ad = ia.integrateApprovalAdapter(cfg);
+	out.plan = await ad.plan(rec, { cwd: req.cwd, env, rules: {} });
+	if (req.enabledAfterPlan !== undefined) state.on = req.enabledAfterPlan;
+	const approved = { plan: { source: { ref: "x", oid: "x" }, message: "m" }, cleanup: "none" };
+	out.recheck = await ad.recheck(approved, { cwd: req.cwd, env, rules: {} });
+}
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def _js(tmp_path: Path, payload: dict, env_extra: dict | None = None) -> dict:
+    node = _node()
+    if node is None:
+        pytest.skip("node が無い (または古い)")
+    script = tmp_path / "here_driver.mjs"
+    script.write_text(HERE_JS, encoding="utf-8")
+    import os
+
+    env = {
+        **os.environ,
+        "IA_TS": str(ROOT / "home" / "dot_config" / "pi" / "harness" / "integrate-action.ts"),
+        **(env_extra or {}),
+    }
+    out = subprocess.run(
+        [node, str(script)],
+        input=json.dumps({"cfg": CFG, **payload}),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=60,
+        env=env,
+    )
+    return json.loads(out.stdout)
+
+
+def _here(tmp_path: Path, cwd: Path | str, target: Path | str, **kw) -> dict:
+    return _js(tmp_path, {"op": "here", "cwd": str(cwd), "target": str(target), **kw})["here"]
+
+
+def test_here_false_for_feature_worktree_under_main(repo: Path, tmp_path: Path) -> None:
+    # 反例: feature の worktree は本体の配下にある。パスの配下判定 (素朴な実装) だと true になって誤許可する
+    nested = repo / ".tmp" / "worktrees" / "x"
+    _git(repo, "worktree", "add", "-q", str(nested), "feature/x")
+    assert str(nested).startswith(str(repo) + "/")  # 素朴な「配下か」判定なら here: true になる配置
+    assert _here(tmp_path, nested, repo) == {"ok": True, "here": False}
+    assert _here(tmp_path, repo, nested) == {"ok": True, "here": False}
+
+
+def test_here_true_for_root_and_subdir(repo: Path, tmp_path: Path) -> None:
+    (repo / "sub" / "deep").mkdir(parents=True)
+    assert _here(tmp_path, repo, repo) == {"ok": True, "here": True}
+    assert _here(tmp_path, repo / "sub" / "deep", repo) == {"ok": True, "here": True}
+
+
+def test_here_false_for_sibling_worktree(repo: Path, feat: Path, tmp_path: Path) -> None:
+    assert _here(tmp_path, feat, repo) == {"ok": True, "here": False}
+
+
+def test_here_false_for_nested_other_repo(repo: Path, tmp_path: Path) -> None:
+    inner = repo / "vendor" / "inner"
+    inner.mkdir(parents=True)
+    _git(inner, "init", "-q", "-b", "main")
+    assert _here(tmp_path, inner, repo) == {"ok": True, "here": False}
+
+
+def test_here_true_via_symlink(repo: Path, tmp_path: Path) -> None:
+    link = tmp_path / "link"
+    link.symlink_to(repo, target_is_directory=True)
+    assert _here(tmp_path, link, repo) == {"ok": True, "here": True}
+    assert _here(tmp_path, repo, link) == {"ok": True, "here": True}
+
+
+def test_here_not_ok_for_non_git_or_missing(repo: Path, tmp_path: Path) -> None:
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    ceil = {
+        "GIT_CEILING_DIRECTORIES": str(tmp_path)
+    }  # tmp_path が別のリポジトリの中にあっても、そこへは遡らせない
+    for bad in (plain, tmp_path / "missing"):
+        for a, b in ((bad, repo), (repo, bad)):
+            r = _js(tmp_path, {"op": "here", "cwd": str(a), "target": str(b)}, ceil)["here"]
+            assert r["ok"] is False and r["reason"], r
+
+
+def test_here_ignores_inherited_git_env(repo: Path, feat: Path, tmp_path: Path) -> None:
+    # GIT_DIR / GIT_WORK_TREE が本体を指していても、feat の実体で判定される
+    inherited = {"GIT_DIR": str(repo / ".git"), "GIT_WORK_TREE": str(repo)}
+    assert _js(tmp_path, {"op": "here", "cwd": str(feat), "target": str(repo)}, inherited)[
+        "here"
+    ] == {"ok": True, "here": False}
+    assert _js(tmp_path, {"op": "here", "cwd": str(feat), "target": str(repo), "env": inherited})[
+        "here"
+    ] == {"ok": True, "here": False}
+    assert _js(tmp_path, {"op": "here", "cwd": str(repo), "target": str(feat)}, inherited)[
+        "here"
+    ] == {"ok": True, "here": False}
+
+
+def test_enabled_false_refuses_all(repo: Path, tmp_path: Path) -> None:
+    off = _js(tmp_path, {"op": "adapters", "cwd": str(repo), "values": _values(), "enabled": False})
+    assert off["capture"]["ok"] is False and "無効" in off["capture"]["reason"]
+    assert off["plan"]["ok"] is False and "無効" in off["plan"]["reason"]
+    assert off["recheck"]["ok"] is False and "無効" in off["recheck"]["reason"]
+    on = _js(tmp_path, {"op": "adapters", "cwd": str(repo), "values": _values(), "enabled": True})
+    assert on["capture"]["ok"] is True and on["plan"]["ok"] is True
+
+
+def test_here_not_ok_when_target_is_subdir(repo: Path, tmp_path: Path) -> None:
+    # 統合先自体が作業ツリーのルートでない (サブディレクトリ) → 拒否。cwd 側のサブディレクトリは従来どおり許す
+    (repo / "sub").mkdir()
+    r = _here(tmp_path, repo, repo / "sub")
+    assert r["ok"] is False and "ルート" in r["reason"], r
+
+
+def test_here_not_ok_when_target_deleted_and_climbs_to_parent(repo: Path, tmp_path: Path) -> None:
+    # 統合先の worktree が消え、同じ場所に空のディレクトリが残ると、git は親 (本体) へ遡る
+    gone = repo / ".tmp" / "worktrees" / "gone"
+    gone.mkdir(parents=True)
+    r = _here(tmp_path, repo, gone)
+    assert r["ok"] is False and "ルート" in r["reason"], r
+
+
+@pytest.mark.parametrize("idx", [0, 1, 2])
+def test_same_identity_checks_each_identifier(tmp_path: Path, idx: int) -> None:
+    a = ["/r/.git", "/r/.git", "/r"]
+    assert _js(tmp_path, {"op": "same", "a": a, "b": list(a)})["same"] is True
+    b = list(a)
+    b[idx] = "/other"
+    assert _js(tmp_path, {"op": "same", "a": a, "b": b})["same"] is False
+    assert _js(tmp_path, {"op": "same", "a": a, "b": a[:2]})["same"] is False
+
+
+def test_enabled_turned_off_between_plan_and_recheck(repo: Path, tmp_path: Path) -> None:
+    r = _js(
+        tmp_path,
+        {
+            "op": "adapters",
+            "cwd": str(repo),
+            "values": _values(),
+            "enabled": True,
+            "enabledAfterPlan": False,
+        },
+    )
+    assert r["plan"]["ok"] is True
+    assert r["recheck"]["ok"] is False and "無効" in r["recheck"]["reason"], r["recheck"]
+
+
+def test_enabled_omitted_keeps_behavior(repo: Path) -> None:
+    # CFG には enabled が無い (従来の呼び出し)。既存の試験と同じく通る
+    assert _run({"op": "capture", "cwd": str(repo), "values": _values()})["capture"]["ok"] is True
