@@ -67,6 +67,23 @@ def test_identical_labels_get_the_id_tail_4_digits_and_only_those(table):
     assert "…" not in d["u"]
 
 
+def test_an_empty_adapter_table_still_asks_whether_the_exclusive_attempt_stopped(table):
+    e = table["empty_table_resolve"]
+    assert len(e["selects"]) == 2 and "確かめ" in e["selects"][1]
+    assert "決着させていない" in e["text"] or "--confirm-stopped" in e["text"]
+    assert e["state"]["running"] is True and e["locks"] == 1
+
+
+def test_the_chosen_row_is_processed_even_when_all_visible_parts_of_labels_are_equal(table):
+    s = table["same_label"]
+    assert len(set(s["tails"])) == 1  # 末尾 4 桁も同じ
+    assert s["unique"] is True and s["maxWidth"] <= 44
+    assert s["text"].startswith("破棄した:") and s["target"] in s["text"]
+    # 選んだ (2 行目の) ID だけが消える
+    assert sum(s["gone"]) == 1
+    assert [i for i, g in zip(s["created"], s["gone"], strict=True) if g] == [s["target"]]
+
+
 def test_tail_match_resolves_a_unique_id_and_keeps_full_ids_unchanged(table):
     t = table["tail"]
     assert t["uniqueSame"] is True

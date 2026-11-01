@@ -1,7 +1,7 @@
 // `/pending` の ID の省略 (TUI で選ぶ)・Tab 補完・resolve の対話。選ぶのは ID だけで、承認・破棄・決着の確認は既存の経路 (approvePending・resolvePending) が行う。
 // 利用者専用のスラッシュコマンドの部品で、モデルから呼べる経路は作らない。see docs/change/0055-async-approval.md
 import { cellWidth, clipCells, sanitizeForDisplay } from "./confirm-view.ts";
-import { recordOfChain, resolvePending, type ApproveDeps, type Reply, type ResolveArgs } from "./pending-approve.ts";
+import { isExclusiveAction, recordOfChain, resolvePending, type ApproveDeps, type Reply, type ResolveArgs } from "./pending-approve.ts";
 import { DEFAULT_LIMITS, doneOid, listOps, readAttemptAt, readOp, readResultAt, runningOid, type OpRecord } from "./pending-ops.ts";
 
 export type PickKind = "approve" | "show" | "drop" | "resolve";
@@ -45,7 +45,7 @@ function briefOf(rec: OpRecord | null, deps: PickDeps): string {
 	return firstLine(Object.values(rec.params ?? {})[0]);
 }
 
-/** `<操作名> <経過> <要約>`。操作名と経過は削らず、要約を切る。tail があれば末尾に ` …<ID の末尾 4 桁>` を添える (同じ表示の候補の区別用) */
+/** `<操作名> <経過> <要約>`。操作名と経過は削らず、要約を切る。tail があれば末尾に ` …<tail>` を添える (同じ表示の候補の区別用。ID の末尾 4 桁と、必要なときの連番) */
 function labelOf(name: string, ago: string, summary: string, tail = ""): string {
 	const head = `${firstLine(name)} ${ago}`;
 	const suffix = tail ? ` …${tail}` : "";
@@ -79,7 +79,16 @@ export function pickCandidates(cwd: string, kind: PickKind, deps: PickDeps, now:
 		raw.push({ id: e.id, name, ago: agoText(e.committedAt, now), summary: briefOf(rec, deps) });
 	}
 	const base = raw.map((r) => labelOf(r.name, r.ago, r.summary));
-	return raw.map((r, i) => ({ id: r.id, label: base.indexOf(base[i]) !== base.lastIndexOf(base[i]) ? labelOf(r.name, r.ago, r.summary, r.id.slice(-4)) : base[i] }));
+	// 同じ表示は ID の末尾 4 桁を添える。それでも重複するものには連番 (#2, #3 ...) を足し、ラベルを全部一意にする
+	const used = new Set<string>();
+	return raw.map((r, i) => {
+		const dup = base.indexOf(base[i]) !== base.lastIndexOf(base[i]);
+		const tail = r.id.slice(-4);
+		let label = dup ? labelOf(r.name, r.ago, r.summary, tail) : base[i];
+		for (let n = 2; used.has(label); n++) label = labelOf(r.name, r.ago, r.summary, `${tail} #${n}`);
+		used.add(label);
+		return { id: r.id, label };
+	});
 }
 
 function readRecord(cwd: string, id: string, limits: NonNullable<ApproveDeps["limits"]>): OpRecord | null {
@@ -147,7 +156,7 @@ export async function resolveInteractive(idIn: string | undefined, ctx: any, dep
 		const started = att.attempt.stage === "started";
 		kinds = started ? ["success", "failed", "retry"] : ["pending", "abandon"];
 		const name = recordOfChain(cwd, id, run, limits)?.action;
-		exclusiveStarted = started && name !== undefined && deps.adapters?.[name]?.exclusive === true;
+		exclusiveStarted = started && isExclusiveAction(name, deps.adapters);
 	} else {
 		const done = doneOid(cwd, id);
 		const r = done ? readResultAt(cwd, id, done) : null;

@@ -111,7 +111,7 @@ function setup() {
 	const approveDeps = () => {
 		if (state.throwDeps) throw new Error("deps が壊れた");
 		return {
-			adapters: adapters(),
+			adapters: state.noAdapters ? {} : adapters(),
 			enabled: () => true,
 			modes: ["tui"],
 			rules: {},
@@ -476,6 +476,37 @@ const out = {};
 	const mid = [a.slice(-8, -4), a.slice(-9, -5), a.slice(-10, -6)].find((t) => ![a, legacyId].some((id) => id.endsWith(t)));
 	const viaMiddle = await h.run(cwd, `show ${mid}`);
 	out.legacy_and_middle = { a, legacyId, show: ids("show"), drop: ids("drop"), approve: ids("approve"), mid, middleText: viaMiddle.text, middleSelects: viaMiddle.selects.length };
+}
+
+// 8. アダプタ表が空でも、resolve の対話は、started で「止まったことを確かめましたか」を聞く (不明な操作は排他として扱う)
+{
+	const h = setup();
+	h.noAdapters = true;
+	const cwd = repo();
+	const id = running(cwd, { action: "excl_op" }, { started: true, lock: true });
+	const no = await h.run(cwd, `resolve ${id}`, { answers: [(o) => o.find((x) => x.startsWith("success")), (o) => o.find((x) => x.includes("確かめていない"))] });
+	out.empty_table_resolve = { selects: no.selects.map((s) => s.title), text: no.text, state: stateOf(cwd, id), locks: lockCount(cwd) };
+}
+
+// 9. 組み立てたラベルが全部一意で、後ろの行を選んだときに、選んだ ID が処理される (操作名・経過・要約・ID の末尾 4 桁が全部同じで、ID だけ違う保留)
+{
+	const h = setup();
+	const cwd = repo();
+	const ids = [1700000000000, 1700000010000, 1700000020000].map((now, i) => ops.saveOp(cwd, record({ params: { note: "same" }, premise: { x: i } }), undefined, now).id);
+	const cands = pick.pickCandidates(cwd, "drop", h.approveDeps({ cwd }));
+	const labels = cands.map((c) => c.label);
+	const target = cands[1].id; // 後ろの行 (先頭でも末尾でもない)
+	const r = await h.run(cwd, "drop", { answers: [(o) => o[1]] });
+	out.same_label = {
+		tails: ids.map((i) => i.slice(-4)),
+		labels,
+		unique: new Set(labels).size === labels.length,
+		maxWidth: Math.max(...labels.map((l) => view.cellWidth(l))),
+		text: r.text,
+		target,
+		gone: ids.map((i) => !stateOf(cwd, i).pending),
+		created: ids,
+	};
 }
 
 console.log(JSON.stringify(out));

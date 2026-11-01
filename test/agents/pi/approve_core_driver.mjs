@@ -100,7 +100,7 @@ function ctxOf(cwd, o, selects, answers) {
 
 function depsOf(cwd, marks, sent, o) {
 	return {
-		adapters: { fake_op: adapter(marks, cwd, o) },
+		adapters: o.adapters ?? { fake_op: adapter(marks, cwd, o) },
 		enabled: () => true,
 		modes: ["tui"],
 		rules: {},
@@ -433,6 +433,43 @@ const out = {};
 			reserved: probe(s.id, begin.attempt.attemptId),
 		},
 	};
+}
+
+// 17. アダプタ表が空 (キルスイッチを切って再起動した後など) でも、排他の操作の started は、停止の明示が要る (D9)。不明な操作は排他として扱う
+{
+	const cwd = repo();
+	const other = otherHolder(cwd, { session: "dead-a", started: true });
+	const r1 = await resolveIt(cwd, other.id, { kind: "success", confirmStopped: false }, { adapters: {} });
+	const before = { running: states(cwd, other.id).running, locks: lockRefs(cwd).length };
+	const r2 = await resolveIt(cwd, other.id, { kind: "success", confirmStopped: true }, { adapters: {} });
+	// アダプタが見つかり exclusive: false と明示されていれば、従来どおり確認なしで決着できる
+	const cwd2 = repo();
+	const plain = otherHolder(cwd2, { session: "dead-a", started: true });
+	const r3 = await resolveIt(cwd2, plain.id, { kind: "failed", confirmStopped: false }, { adapters: { fake_op: adapter([], cwd2, { exclusive: false }) } });
+	out.resolve_empty_table = {
+		withoutConfirm: { level: r1.level, text: r1.text, ...before },
+		withConfirm: { level: r2.level, running: states(cwd, other.id).running, done: states(cwd, other.id).done, locks: lockRefs(cwd).length },
+		nonExclusive: { level: r3.level, running: states(cwd2, plain.id).running, done: states(cwd2, plain.id).done },
+		predicate: {
+			noName: ap.isExclusiveAction?.(undefined, { fake_op: { exclusive: false } }),
+			noTable: ap.isExclusiveAction?.("fake_op", undefined),
+			missing: ap.isExclusiveAction?.("fake_op", {}),
+			exclusiveTrue: ap.isExclusiveAction?.("fake_op", { fake_op: { exclusive: true } }),
+			exclusiveFalse: ap.isExclusiveAction?.("fake_op", { fake_op: { exclusive: false } }),
+			exclusiveOmitted: ap.isExclusiveAction?.("fake_op", { fake_op: {} }),
+		},
+	};
+}
+
+// 18. 承認の画面の後に、authorize をもう一度呼ぶ。そこで断られたら、実行せず pending のまま残す
+{
+	const cwd = repo();
+	const a = save(cwd, { params: { mode: "stopped_ok", note: "re-auth" } });
+	let calls = 0;
+	const r = await approve(cwd, a.id, {
+		authorize: () => (++calls === 1 ? { ok: true } : { ok: false, reason: "画面の間に役割が変わった" }),
+	});
+	out.reauthorize = { level: r.reply.level, text: r.reply.text, calls, selects: r.selects.length, marks: r.marks, states: states(cwd, a.id), locks: lockRefs(cwd).length };
 }
 
 process.stdout.write(JSON.stringify(out));

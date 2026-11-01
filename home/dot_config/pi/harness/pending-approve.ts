@@ -114,6 +114,27 @@ export function modelContent(action: string, id: string, body: ResultBody): stri
 	);
 }
 
+/** 承認側の再判定。authorize が無ければ許可 (本接続では必ず渡す)。例外は断る (許可に読み替えない) */
+function authorizeRecord(deps: Pick<ApproveDeps, "authorize">, rec: OpRecord): { ok: true } | { ok: false; reason: string } {
+	if (!deps.authorize) return { ok: true };
+	try {
+		return deps.authorize(rec);
+	} catch (e) {
+		return { ok: false, reason: oneLine((e as Error)?.message ?? e) };
+	}
+}
+
+/**
+ * 排他の操作か (git・hook を起動する操作)。アダプタが見つからない (名前が不明・表に無い。キルスイッチを切って再起動すると表は空になる) ときは、
+ * 排他として扱う (停止の確認を要求する側へ倒す)。アダプタがあるときだけ、その exclusive に従う
+ */
+export function isExclusiveAction(name: string | undefined, adapters: Record<string, { exclusive?: boolean }> | undefined): boolean {
+	if (name === undefined) return true;
+	const a = adapters && Object.hasOwn(adapters, name) ? adapters[name] : undefined;
+	if (!a) return true;
+	return a.exclusive === true;
+}
+
 function envOf(ctx: any, deps: ApproveDeps): ApprovalEnv {
 	return { cwd: String(ctx.cwd), env: deps.env, rules: deps.rules };
 }
@@ -132,12 +153,7 @@ export async function approvePending(id: string, ctx: any, deps: ApproveDeps, si
 	const adapter = deps.adapters[rec.record.action];
 	if (!adapter) return refuse(`この操作 (${rec.record.action}) は、承認に対応していない。保留は残してある`);
 	if (deps.authorize) {
-		let au: { ok: true } | { ok: false; reason: string };
-		try {
-			au = deps.authorize(rec.record);
-		} catch (e) {
-			au = { ok: false, reason: oneLine((e as Error)?.message ?? e) };
-		}
+		const au = authorizeRecord(deps, rec.record);
 		if (!au.ok) return refuse(`承認できない: ${oneLine(au.reason)}。保留は残してある (実行していない)`);
 	}
 	const env = envOf(ctx, deps);
@@ -170,7 +186,10 @@ export async function approvePending(id: string, ctx: any, deps: ApproveDeps, si
 	}
 	if (choice !== CHOICE_APPROVE) return { text: `保留のまま閉じた: ${id}`, level: "info" };
 
-	// 承認された。表示した記録の OID を排他的に取得する (表示した後に変わっていれば失敗する)
+	// 承認された。ただし画面は期限なしで、眺めている間に役割・設定 (/reload・キルスイッチ) が変わりうる。表示した記録を、もう一度判定する
+	const again = authorizeRecord(deps, rec.record);
+	if (!again.ok) return refuse(`承認できない (画面の後の再判定): ${oneLine(again.reason)}。保留は残してある (実行していない)`);
+	// 表示した記録の OID を排他的に取得する (表示した後に変わっていれば失敗する)
 	const begin = beginApproval(cwd, id, rec.oid, deps.owner(), limits);
 	if (!begin.ok) return refuse(`承認を始められなかった: ${oneLine(begin.reason)}。実行していない`);
 	return runApproved({ cwd, id, adapter, plan: planned.plan, env, attempt: begin.attempt, attemptOid: begin.attemptOid, deps, signal });
@@ -369,7 +388,7 @@ export async function resolvePending(id: string, args: ResolveArgs, ctx: any, de
 	if (run) {
 		const att = readAttemptAt(cwd, id, run);
 		const name = recordOfChain(cwd, id, run, limits)?.action;
-		const exclusive = name !== undefined && deps.adapters?.[name]?.exclusive === true;
+		const exclusive = isExclusiveAction(name, deps.adapters);
 		const exclusiveStarted = exclusive && att.ok && att.attempt.stage === "started";
 		// git・hook を起動する操作の開始済みの試行は、実行者 (pi) が止まっていても、git・hook が止まった証拠にならない。利用者の明示が要る
 		if (exclusiveStarted && att.ok && !args.confirmStopped && deps.liveness(att.attempt.owner).state !== "alive") {

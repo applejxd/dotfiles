@@ -238,7 +238,8 @@ const resultOf = (cwd, id) => {
 		const st = upto === "started" ? ops.markStarted(cwd, s.id, b.attemptOid) : b;
 		return s.id;
 	};
-	const dep = (liveness) => ({ liveness, limits: undefined });
+	// アダプタが無い操作は排他として扱われるので、排他でない操作 (実行者の状態だけで決着できる) は、exclusive: false を明示する
+	const dep = (liveness) => ({ liveness, limits: undefined, adapters: { fake_op: { exclusive: false } } });
 	const ctx = { cwd };
 	const r = {};
 	let id = mk(1, "started");

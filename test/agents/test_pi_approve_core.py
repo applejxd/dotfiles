@@ -154,6 +154,36 @@ def test_resolving_an_exclusive_started_attempt_needs_an_explicit_stop_confirmat
     assert any("停止" in e and "明示" in e for e in yes["result"]["evidence"])
 
 
+def test_an_empty_adapter_table_still_requires_the_stop_confirmation(table):
+    r = table["resolve_empty_table"]
+    # アダプタが見つからない操作は、排他として扱う (D9: 停止が確認できなければ、running とロックを残す)
+    no = r["withoutConfirm"]
+    assert no["level"] == "warning" and "--confirm-stopped" in no["text"]
+    assert no["running"] is True and no["locks"] == 1
+    yes = r["withConfirm"]
+    assert yes["level"] == "info" and yes["running"] is False and yes["done"] is True
+    assert yes["locks"] == 0
+    # アダプタが exclusive: false と明示していれば、確認なしで決着できる
+    n = r["nonExclusive"]
+    assert n["level"] == "info" and n["running"] is False and n["done"] is True
+    assert r["predicate"] == {
+        "noName": True,
+        "noTable": True,
+        "missing": True,
+        "exclusiveTrue": True,
+        "exclusiveFalse": False,
+        "exclusiveOmitted": False,
+    }
+
+
+def test_authorize_is_checked_again_after_the_screen_and_before_beginning(table):
+    a = table["reauthorize"]
+    assert a["calls"] == 2 and a["selects"] == 1  # 画面は 1 回出た (承認を選んだ)
+    assert a["level"] == "warning" and "画面の間に役割が変わった" in a["text"]
+    assert a["marks"] == [] and a["locks"] == 0
+    assert a["states"] == {"pending": True, "running": False, "done": False}
+
+
 def test_resolving_another_attempt_does_not_touch_the_lock(table):
     s = table["resolve_scope"]
     assert s["level"] == "info" and s["lockUnchanged"] is True and s["mineRunning"] is True
