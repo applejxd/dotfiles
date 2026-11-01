@@ -70,7 +70,7 @@ export default async function (pi: ExtensionAPI) {
 		}
 		if (rounds) {
 			// todo のリマインド (agent_before_settle の続行で始まるターン) をそのまま返す
-			if (process.env.FAUX_ECHO_REMINDER === "1" && /作業中 \(in_progress\) のまま/.test(textOf(last?.content ?? ""))) {
+			if (process.env.FAUX_ECHO_REMINDER === "1" && /作業中 \(in_progress\) のまま|待ち \(blocked\) の項目があり/.test(textOf(last?.content ?? ""))) {
 				return fauxAssistantMessage(fauxText(`REMINDER=${textOf(last.content)}`));
 			}
 			// バックグラウンドの子の完了通知 (followUp で始まるターン) をそのまま返す

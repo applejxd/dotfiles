@@ -1769,6 +1769,60 @@ def test_todo_does_not_remind_when_nothing_is_in_progress(env):
     assert "REMINDER=" not in proc.stdout, proc.stdout
 
 
+def _run_reminder(env, *calls):
+    return run_pi(
+        env,
+        [],
+        extra=("-e", str(TODO_EXT)),
+        FAUX_TOOL_ROUNDS=json.dumps([list(calls)]),
+        FAUX_ECHO_REMINDER="1",
+    )
+
+
+def test_todo_reminds_once_when_waiting_leaves_startable_pending_items(env):
+    # 待ち (blocked) を理由に止まらない: 着手できる未着手が残るのに終わろうとしたところで、利用者の発言ごとに 1 回だけ促す
+    proc = _run_reminder(
+        env,
+        _todo(action="add", texts=["a", "b", "c"]),
+        _todo(action="set", id=1, status="blocked", note="承認待ち"),
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = proc.stdout
+    assert out.count("REMINDER=") == 1, out
+    # 未着手は新しい項目 (ID が大きい) から並べる
+    assert "待ち: #1 a" in out and "未着手: #3 c / #2 b" in out, out
+    assert "利用者の方針決定がないと進められる作業が無いときだけ" in out, out
+
+
+@pytest.mark.parametrize(
+    ("texts", "blocked"),
+    [(["a"], [1]), (["a", "【将来】b"], [1]), (["a", "b"], [])],
+    ids=["nothing-pending", "only-future-items", "nothing-waiting"],
+)
+def test_todo_does_not_remind_about_waiting_when_nothing_is_startable(env, texts, blocked):
+    calls = [
+        _todo(action="add", texts=texts),
+        *[_todo(action="set", id=i, status="blocked", note="待ち") for i in blocked],
+    ]
+    proc = _run_reminder(env, *calls)
+    assert proc.returncode == 0, proc.stderr
+    assert "REMINDER=" not in proc.stdout, proc.stdout
+
+
+def test_todo_prefers_the_in_progress_reminder_and_never_stacks_the_waiting_one(env):
+    proc = _run_reminder(
+        env,
+        _todo(action="add", texts=["a", "b", "c"]),
+        _todo(action="set", id=1, status="blocked", note="待ち"),
+        _todo(action="set", id=2, status="in_progress"),
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.count("REMINDER=") == 1, proc.stdout
+    assert "作業中 (in_progress)" in proc.stdout and "待ち (blocked)" not in proc.stdout, (
+        proc.stdout
+    )
+
+
 def test_todo_update_and_remove(env):
     calls = [
         _todo(action="add", texts=["a", "b"]),

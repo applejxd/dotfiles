@@ -51,6 +51,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
    衝突で止まったら、解決 → `git add` → `git flow feature finish --continue <ブランチ名>`（名前なしでは失敗する）。
    docs の更新表や `_PI_TESTS` の同じ位置の衝突は、両方の行を残す。
 9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。todo を done にする。
+10. **承認待ちで止まらない**: `git_integrate` で保存したら（承認はあとで利用者が `/pending`）、他の feature・docs・検査へ進む。止まるのは、利用者の方針決定がないと進められる作業が無いときだけ。実機や操作の確認待ちも同じ（確認が要る項目を記録して次へ）。
 
 ## 積み重ね (依存する feature)
 

@@ -169,6 +169,7 @@ export default function (pi: ExtensionAPI) {
 	};
 	let lastCtx: ExtensionContext | undefined;
 	let nudged = false;
+	let nudgedWaiting = false;
 	pi.on("session_start", async (_e, ctx) => {
 		lastCtx = ctx;
 		rebuild(ctx);
@@ -194,25 +195,40 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("before_agent_start", async (event: any) => {
 		// 利用者の発言ごとに、リマインドを 1 回だけ出せるようにする (続行がループしないように)
-		if (event?.messageType === "user") nudged = false;
+		if (event?.messageType === "user") {
+			nudged = false;
+			nudgedWaiting = false;
+		}
 	});
-	// in_progress が残ったまま応答を終えようとしたとき、完了の確認か続きの作業を促す (利用者の発言ごとに 1 回だけ)。
-	// 中断・エラーで終わったときや、続けられないときは出さない。続行は最大 1 回 (無条件の続行はループする)
+	// 応答を終えようとしたときに、次の 2 つを促す (どちらも利用者の発言ごとに 1 回だけ)。中断・エラーで終わったときや、続けられないときは出さない。続行は最大 1 回 (無条件の続行はループする)
+	// 1. in_progress が残ったまま: 完了の確認か続きの作業
+	// 2. in_progress が無く、待ち (blocked) があり、着手できる未着手 (pending) も残っている: 待ちを理由に止まらない。
+	//    止まってよいのは、利用者の方針決定がないと進められる作業が無いときだけ (承認・実機や操作の確認の待ちは理由にしない)。「【将来」を含む項目は着手できる未着手に数えない
+	const short = (t: { id: number; text: string }) => `#${t.id} ${t.text.length > 60 ? `${t.text.slice(0, 60)}…` : t.text}`;
 	pi.on("agent_before_settle", async (event: any) => {
-		if (nudged || event?.outcome !== "completed" || process.env.PI_TODO_NO_REMINDER === "1") return;
+		if (event?.outcome !== "completed" || process.env.PI_TODO_NO_REMINDER === "1") return;
 		const doing = todos.filter((t) => t.status === "in_progress");
-		if (doing.length === 0) return;
-		nudged = true;
-		const list = doing.map((t) => `#${t.id} ${t.text}`).join(" / ");
+		let content: string;
+		if (doing.length > 0) {
+			if (nudged) return;
+			nudged = true;
+			const list = doing.map((t) => `#${t.id} ${t.text}`).join(" / ");
+			content = `作業中 (in_progress) のまま終わろうとしています: ${list}。実際に終わっていれば done にして、続きがあれば作業を続けてください。終えられない理由があるときは note に書いてください。`;
+		} else {
+			const waiting = todos.filter((t) => t.status === "blocked");
+			const queued = todos.filter((t) => t.status === "pending" && !t.text.includes("【将来"));
+			if (nudgedWaiting || waiting.length === 0 || queued.length === 0) return;
+			nudgedWaiting = true;
+			// 未着手は新しい項目 (ID が大きい) から 5 件。古い長期の項目だけが並ぶのを避ける
+			const top = [...queued].sort((a, b) => b.id - a.id).slice(0, 5);
+			const more = queued.length - top.length;
+			content =
+				`待ち (blocked) の項目があり、着手できる未着手 (pending) も残っています。待ち: ${waiting.slice(0, 3).map(short).join(" / ")}。未着手: ${top.map(short).join(" / ")}${more > 0 ? ` (ほか ${more} 件)` : ""}。` +
+				"止まってよいのは、利用者の方針決定がないと進められる作業が無いときだけです。承認 (マージ) や、利用者の実機・操作の確認を待つ間は止まらず、依存しない未着手を続けてください。" +
+				"進められる作業が無ければ、その理由 (要る方針決定) を書いて終えて構いません。";
+		}
 		return {
-			entries: [
-				{
-					type: "custom_message" as const,
-					customType: "todo-reminder",
-					content: `作業中 (in_progress) のまま終わろうとしています: ${list}。実際に終わっていれば done にして、続きがあれば作業を続けてください。終えられない理由があるときは note に書いてください。`,
-					display: true,
-				},
-			],
+			entries: [{ type: "custom_message" as const, customType: "todo-reminder", content, display: true }],
 			continue: true,
 		};
 	});
@@ -225,6 +241,7 @@ export default function (pi: ExtensionAPI) {
 		promptGuidelines: [
 			"For work with 3 or more steps, use todo add to list the steps before starting; set the current item to in_progress (one at a time) and to done when finished.",
 			"Set an item to blocked (not in_progress) while it only waits on something external, such as a background job, a child agent, or the user's reply; write what it waits for (e.g. the job ID) in note.",
+			"While an item is blocked (waiting on an approval or merge, a background job, or the user checking something), keep working on other pending items that do not depend on it. Stop only when no startable work remains without the user's policy decision; an approval or a check by the user is not a reason to stop.",
 			"Use todo batch (ops) to change several items in one call, and todo replace (items) to rewrite the whole list at once.",
 		],
 		description:
