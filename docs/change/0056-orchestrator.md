@@ -179,6 +179,7 @@ plan の元の順序（A0 → A1 → A2 → B0 → B1 → B2 → C）は、C（�
 | 段 | 内容 | 前提 | 状態 |
 | --- | --- | --- | --- |
 | A1 関門 | `scripts/feature_gate.py check`（範囲・登録・空ファイル化）、`verify.py` の `flock` は後続 | — | 完了 |
+| 盤面 `/board` | 読み取り専用の盤面。`board.ts`（純関数）・`board-collect.ts`（読み取りの git で集める）・`index.ts` の `/board`。要対応（承認待ち・決着待ち）を最上段に、feature の状態（↑↓・dirty・経過・保留あり）。仕様は [オーケストレーション](../spec/orchestration.md#8-利用者向けのコマンドと表示) | — | 完了（2026-11-01。実機の見え方は未確認） |
 | C 最小縦断 | P8c + P9（CHG-0055）+ 保存だけの API + 統合排他 | CHG-0055 P5・P8 | 未着手 |
 | A2 手動試作 | `scripts/review_target.py`・`target_review` 役。commit-only・手動起動 | — | 未着手 |
 | B1 限定配車 | 計画 JSON・`dispatch.ts`・`/dispatch start\|stop`・todo の作成入口 | C | 未着手 |

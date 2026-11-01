@@ -70,6 +70,8 @@ def env(tmp_path):
         "pending-adapters.ts",
         "pending-request.ts",
         "native-action.ts",
+        "board.ts",
+        "board-collect.ts",
     ):
         shutil.copy2(HARNESS_SRC.parent / name, harness / name)
     shutil.copy2(HARNESS_SRC.parent / "platform.ts", harness / "platform.ts")

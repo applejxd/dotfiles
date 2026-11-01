@@ -42,6 +42,8 @@ import { reconcileOps } from "./pending-ops.ts";
 import { currentOwner, ownerState } from "./pending-owner.ts";
 import { PENDING_ADAPTERS, APPROVAL_ADAPTERS, authorizeRecord, integrateWiring } from "./pending-adapters.ts";
 import { pendingSettings, registerPendingCommand } from "./pending-command.ts";
+import { buildBoard, renderBoard } from "./board.ts";
+import { collectBoardInput } from "./board-collect.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -446,6 +448,24 @@ export default async function (pi: ExtensionAPI) {
 		},
 	});
 	// 利用者専用の orchestrator の切り替え。モデルが呼べるツールは作らない (bypass と同じ形)。OFF は確認なし (利用者が自分で打つ)
+	// 盤面 (読み取り専用)。いま利用者を待たせているもの (承認待ち・決着待ち)と、feature ごとの状態・保留・子・モードを 1 画面で見る。利用者専用 (モデルは呼べない)。承認・操作の入口は持たない (/pending を使う)
+	pi.registerCommand("board", {
+		description: "盤面 (読み取り専用): 要対応 (承認待ち・決着待ち)・feature の状態・保留・子・モード",
+		handler: async (_args: string, ctx: any) => {
+			const cwd: string = ctx.cwd ?? process.cwd();
+			const now = Date.now();
+			const children = jobs
+				.list()
+				.filter((j) => j.owner.cwd === cwd && j.owner.role === ROLE)
+				.map((j) => j.snapshot());
+			const input = collectBoardInput(cwd, {
+				now,
+				children,
+				modes: { bypass, orchestrate, sandbox: BOUNDARY ? "fence" : NO_SANDBOX ? "none" : "unknown" },
+			});
+			ctx.ui?.notify?.(redactText(renderBoard(buildBoard(input), { width: 44, now }).join("\n")), "info");
+		},
+	});
 	pi.registerCommand("orchestrate", {
 		description: "親を計画・判断・委譲に絞る (作業のツールを隠す) の切り替え: /orchestrate [on|off|status]",
 		handler: async (args: string, ctx: any) => {

@@ -62,9 +62,14 @@ export type PendingRow = {
 	id: string;
 	state: PendingState; // pending | running | done
 	action?: string;
+	/** 統合元のブランチ名 (例: feature/a) */
+	source?: string;
 	ageMs?: number;
 	owner?: { state: OwnerState };
 };
+
+/** feature を置いている worktree の状態。無い項目は表示しない */
+export type WorktreeState = { ahead?: number; behind?: number; dirty?: boolean; lastCommitAgeMs?: number; hasPending?: boolean };
 
 export type ChildRow = Partial<Pick<JobSnapshot, "roundMs" | "lastTool" | "calls" | "tokens" | "cost">> & Pick<JobSnapshot, "id" | "agent" | "state" | "ageMs">;
 
@@ -75,12 +80,22 @@ export type BoardInput = {
 	worktrees: ParsedWorktree[];
 	pending: { ops: PendingRow[]; legacyCount: number; broken: number };
 	modes: { bypass?: boolean; orchestrate?: boolean; sandbox?: "fence" | "none" | "unknown" };
-	bgJobs: { running: number; finished: number };
+	/** 無いときは bg の行を出さない (ハーネスは bg ジョブを見られない。「0 件」と言い切らない) */
+	bgJobs?: { running: number; finished: number };
+	/** キーは worktree のパス */
+	worktreeStates?: Record<string, WorktreeState>;
 	limits?: { maxRows?: number };
 };
 
-export type BoardRow = { text: string; broken?: boolean };
-export type BoardSection = { key: "children" | "isolation" | "features" | "pending" | "modes"; title: string; count: number; rows: BoardRow[]; omitted: number };
+/** tail は行末の「欠けてはいけない部分」。text は常に `<head> <tail>`。幅が足りないときは head の方を先に切る */
+export type BoardRow = { text: string; broken?: boolean; tail?: string };
+export type BoardSection = {
+	key: "attention" | "children" | "isolation" | "features" | "pending" | "modes";
+	title: string;
+	count: number;
+	rows: BoardRow[];
+	omitted: number;
+};
 export type BoardSnapshot = { v: 1; now: number; sections: BoardSection[] };
 
 export const DEFAULT_MAX_ROWS = 12;
@@ -107,6 +122,20 @@ const cap = (rows: BoardRow[], max: number): { rows: BoardRow[]; omitted: number
 
 const isBroken = (r: IsolationRecord | BrokenRecord): r is BrokenRecord => (r as BrokenRecord).broken === true;
 
+const row = (head: string, tail: string): BoardRow => (tail ? { text: `${head} ${tail}`, tail } : { text: head });
+const id4 = (id: string): string => String(id).slice(-4);
+
+function stateTail(s: WorktreeState | undefined): string {
+	if (!s) return "";
+	const bits: string[] = [];
+	if (s.ahead !== undefined) bits.push(`↑${s.ahead}`);
+	if (s.behind !== undefined) bits.push(`↓${s.behind}`);
+	if (s.dirty) bits.push("dirty");
+	if (s.lastCommitAgeMs !== undefined) bits.push(fmtDuration(s.lastCommitAgeMs));
+	if (s.hasPending) bits.push("保留あり");
+	return bits.join(" ");
+}
+
 export function buildBoard(input: BoardInput): BoardSnapshot {
 	const max = Math.max(1, Math.floor(input.limits?.maxRows ?? DEFAULT_MAX_ROWS));
 	const children = input.children ?? [];
@@ -114,6 +143,49 @@ export function buildBoard(input: BoardInput): BoardSnapshot {
 	const worktrees = input.worktrees ?? [];
 	const pending = input.pending ?? { ops: [], legacyCount: 0, broken: 0 };
 	const sections: BoardSection[] = [];
+
+	// 要対応: 利用者がいま待たれているもの (承認待ちは古い順、実行者がいない・不明の実行中は決着待ち)
+	const waiting = pending.ops
+		.filter((p) => p.state === "pending")
+		.map((p, i) => ({ p, i }))
+		.sort((a, b) => (b.p.ageMs ?? -1) - (a.p.ageMs ?? -1) || a.i - b.i)
+		.map((x) => x.p);
+	const stuck = pending.ops.filter((p) => p.state === "running" && (p.owner?.state ?? "unknown") !== "alive");
+	const aRows: BoardRow[] = [
+		...waiting.map((p) => row(["承認待ち", id4(p.id), p.action ?? "?", ...(p.source ? [p.source] : [])].join(" "), p.ageMs !== undefined ? fmtDuration(p.ageMs) : "")),
+		...stuck.map((p) => row(["決着待ち", id4(p.id), p.action ?? "?"].join(" "), p.ageMs !== undefined ? fmtDuration(p.ageMs) : "")),
+	];
+	const attentionCount = aRows.length;
+	if (attentionCount > 0) aRows.push({ text: "→ /pending" });
+	sections.push({ key: "attention", title: "要対応", count: attentionCount, ...cap(aRows, max + 1) });
+
+	// feature ⇄ worktree
+	const fRows: BoardRow[] = worktrees.map((w, i) => {
+		const name = baseName(w.path);
+		let kind: string;
+		if (i === 0) kind = "主";
+		else if (name.startsWith("pi-agent-")) kind = `隔離 ${name.slice("pi-agent-".length)}`;
+		else kind = w.featureName !== undefined ? `feature ${w.featureName}` : "他";
+		const st = i > 0 && w.featureName !== undefined && !name.startsWith("pi-agent-") ? stateTail(input.worktreeStates?.[w.path]) : "";
+		if (st) return row(kind, st);
+		const br = w.bare ? "(bare)" : w.detached ? "(detached)" : (w.branch ?? "(branch なし)");
+		const flags = [w.locked ? "locked" : "", w.prunable ? "prunable" : ""].filter(Boolean).join(",");
+		return { text: `${kind} ${br} ${name}${flags ? ` [${flags}]` : ""}` };
+	});
+	sections.push({ key: "features", title: "feature ⇄ worktree", count: fRows.length, ...cap(fRows, max) });
+
+	// 保留
+	const pRows: BoardRow[] = pending.ops.map((p) => {
+		const head = [id4(p.id), p.action ?? "?", ...(p.source ? [p.source] : []), p.state];
+		const tail: string[] = [];
+		if (p.ageMs !== undefined) tail.push(fmtDuration(p.ageMs));
+		if (p.state === "running") tail.push(`実行者:${p.owner?.state ?? "unknown"}`);
+		return row(head.join(" "), tail.join(" "));
+	});
+	if (pending.legacyCount > 0) pRows.push({ text: `旧形式の退避 ${pending.legacyCount} 件` });
+	if (pending.broken > 0) pRows.push({ text: `broken 壊れた保留 ${pending.broken} 件`, broken: true });
+	pRows.push({ text: "確認は /pending list" });
+	sections.push({ key: "pending", title: "保留", count: pending.ops.length + pending.legacyCount + pending.broken, ...cap(pRows, max + 1) });
 
 	// 子
 	const cRows: BoardRow[] = children.map((c) => {
@@ -135,50 +207,24 @@ export function buildBoard(input: BoardInput): BoardSnapshot {
 	);
 	sections.push({ key: "isolation", title: "隔離 worker", count: iRows.length, ...cap(iRows, max) });
 
-	// feature ⇄ worktree
-	const fRows: BoardRow[] = worktrees.map((w, i) => {
-		const name = baseName(w.path);
-		let kind: string;
-		if (i === 0) kind = "主";
-		else if (name.startsWith("pi-agent-")) kind = `隔離 ${name.slice("pi-agent-".length)}`;
-		else kind = w.featureName !== undefined ? `feature ${w.featureName}` : "他";
-		const br = w.bare ? "(bare)" : w.detached ? "(detached)" : (w.branch ?? "(branch なし)");
-		const flags = [w.locked ? "locked" : "", w.prunable ? "prunable" : ""].filter(Boolean).join(",");
-		return { text: `${kind} ${br} ${name}${flags ? ` [${flags}]` : ""}` };
-	});
-	sections.push({ key: "features", title: "feature ⇄ worktree", count: fRows.length, ...cap(fRows, max) });
-
-	// 保留
-	const pRows: BoardRow[] = pending.ops.map((p) => {
-		const bits = [String(p.id).slice(0, 8), p.action ?? "?", p.state];
-		if (p.ageMs !== undefined) bits.push(fmtDuration(p.ageMs));
-		if (p.state === "running") bits.push(`実行者:${p.owner?.state ?? "unknown"}`);
-		return { text: bits.join(" ") };
-	});
-	if (pending.legacyCount > 0) pRows.push({ text: `旧形式の退避 ${pending.legacyCount} 件` });
-	if (pending.broken > 0) pRows.push({ text: `broken 壊れた保留 ${pending.broken} 件`, broken: true });
-	pRows.push({ text: "確認は /pending list" });
-	sections.push({ key: "pending", title: "保留", count: pending.ops.length + pending.legacyCount + pending.broken, ...cap(pRows, max + 1) });
-
 	// モード・bg ジョブ
 	const m = input.modes ?? {};
 	const onOff = (v?: boolean) => (v === undefined ? "?" : v ? "on" : "off");
-	const mRows: BoardRow[] = [
-		{ text: `bypass ${onOff(m.bypass)} / orchestrate ${onOff(m.orchestrate)} / sandbox ${m.sandbox ?? "unknown"}` },
-		{ text: `bg ジョブ 実行中${input.bgJobs?.running ?? 0} 完了${input.bgJobs?.finished ?? 0}` },
-	];
+	const mRows: BoardRow[] = [{ text: `bypass ${onOff(m.bypass)} / orchestrate ${onOff(m.orchestrate)} / sandbox ${m.sandbox ?? "unknown"}` }];
+	if (input.bgJobs) mRows.push({ text: `bg ジョブ 実行中${input.bgJobs.running} 完了${input.bgJobs.finished}` });
 	sections.push({ key: "modes", title: "モード・bg", count: mRows.length, rows: mRows, omitted: 0 });
 
 	return { v: 1, now: input.now, sections };
 }
+
+const oneLine = (s: string): string => sanitizeForDisplay(s).replace(/[\r\n\t]+/g, " ");
 
 /** 全角を 2 桁で数えて、各行を width 桁以内にして返す */
 export function renderBoard(snap: BoardSnapshot, opts: { width: number; now?: number }): string[] {
 	const width = Math.max(10, Math.floor(opts.width));
 	const out: string[] = [];
 	const push = (s: string) => {
-		const clean = sanitizeForDisplay(s).replace(/[\r\n\t]+/g, " ");
-		out.push(clipCells(clean, width));
+		out.push(clipCells(oneLine(s), width));
 	};
 	push(`盤面 (読み取り専用)`);
 	for (const sec of snap.sections) {
@@ -186,10 +232,24 @@ export function renderBoard(snap: BoardSnapshot, opts: { width: number; now?: nu
 		if (sec.rows.length === 0) push("  なし");
 		for (const r of sec.rows) {
 			const prefix = "  ";
-			const text = sanitizeForDisplay(r.text).replace(/[\r\n\t]+/g, " ");
 			const room = width - prefix.length;
+			const text = oneLine(r.text);
+			if (cellWidth(text) <= room) {
+				out.push(prefix + text);
+				continue;
+			}
+			// 状態 (tail) を欠かさず、先頭の名前の方を先に短くする。名前に 3 桁も残せないときだけ行全体を切る
+			if (r.tail) {
+				const tail = oneLine(r.tail);
+				const head = text.slice(0, Math.max(0, text.length - tail.length - 1));
+				const headRoom = room - cellWidth(tail) - 1;
+				if (text.endsWith(` ${tail}`) && headRoom >= 3) {
+					out.push(`${prefix}${clipCells(head, headRoom)} ${tail}`);
+					continue;
+				}
+			}
 			// 折り返さずに切る。全角は 2 桁
-			out.push(prefix + (cellWidth(text) <= room ? text : clipCells(text, room)));
+			out.push(prefix + clipCells(text, room));
 		}
 		if (sec.omitted > 0) push(`  … ${sec.omitted} 件省略`);
 	}

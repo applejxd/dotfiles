@@ -34,11 +34,16 @@ def table():
     return json.loads(proc.stdout)
 
 
+def _sec(snap, key):
+    return next(s for s in snap["sections"] if s["key"] == key)
+
+
 def test_empty_input_renders_every_section(table):
     text = "\n".join(table["empty"]["lines"])
-    for title in ("子", "隔離 worker", "feature ⇄ worktree", "保留", "モード・bg"):
+    for title in ("要対応", "子", "隔離 worker", "feature ⇄ worktree", "保留", "モード・bg"):
         assert title in text
-    assert len(table["empty"]["snap"]["sections"]) == 5
+    keys = [s["key"] for s in table["empty"]["snap"]["sections"]]
+    assert keys == ["attention", "features", "pending", "children", "isolation", "modes"]
 
 
 def test_children_isolation_pending_and_features_share_one_screen(table):
@@ -48,7 +53,8 @@ def test_children_isolation_pending_and_features_share_one_screen(table):
     assert "主 develop repo" in text
     assert "feature board-model feature/board-model board-model" in text
     assert "隔離 j1" in text
-    assert "01234567 git_push pending 1m30s" in text
+    assert "cdef git_push pending 1m30s" in text  # id は末尾 4 桁 (/pending と同じ)
+    assert "01234567" not in text
     assert "/pending list" in text and "旧形式の退避 2 件" in text
     assert "orchestrate on" in text and "sandbox fence" in text
 
@@ -67,13 +73,13 @@ def test_control_sequences_in_names_are_neutralised(table):
 
 
 def test_row_limit_and_omitted_line(table):
-    sec = table["many"]["snap"]["sections"][0]
+    sec = _sec(table["many"]["snap"], "children")
     assert sec["count"] == 20 and len(sec["rows"]) == 12 and sec["omitted"] == 8
     assert "  … 8 件省略" in table["many"]["lines"]
 
 
 def test_broken_isolation_record_is_shown_as_broken(table):
-    sec = table["broken"]["snap"]["sections"][1]
+    sec = _sec(table["broken"]["snap"], "isolation")
     assert sec["count"] == 2 and any(r.get("broken") for r in sec["rows"])
     assert any("broken" in ln and "bad.json" in ln for ln in table["broken"]["lines"])
 
@@ -104,6 +110,67 @@ def test_owner_state_is_shown_as_is_and_unknown_is_not_called_dead(table):
     for ln in table["owners"]:
         if "実行者:unknown" in ln:
             assert "死" not in ln and "gone" not in ln
+
+
+def test_attention_section_is_first_and_lists_waiting_items(table):
+    snap = table["attention"]["snap"]
+    assert snap["sections"][0]["key"] == "attention"
+    sec = snap["sections"][0]
+    texts = [r["text"] for r in sec["rows"]]
+    # 承認待ちは古い順 (2 時間前 → 1 分前)、そのあとに決着待ち (gone・unknown・実行者の記録なし)
+    assert texts == [
+        "承認待ち 2222 git_push feature/old 2h00m",
+        "承認待ち 1111 git_integrate feature/new 1m00s",
+        "決着待ち 3333 git_integrate 5s",
+        "決着待ち 5555 git_unk 5s",
+        "決着待ち 6666 git_noowner 5s",
+        "→ /pending",
+    ]
+    assert sec["count"] == 5  # 「→ /pending」は数えない
+    joined = "\n".join(texts)
+    assert "4444" not in joined and "7777" not in joined  # alive の running と done は入らない
+    # alive の running は保留の節には残る
+    assert any("4444" in r["text"] for r in _sec(snap, "pending")["rows"])
+
+
+def test_attention_is_none_when_nothing_waits(table):
+    sec = table["attentionAlive"]
+    assert sec["key"] == "attention" and sec["count"] == 0 and sec["rows"] == []
+    assert not any("→ /pending" in r["text"] for r in sec["rows"])
+    lines = table["empty"]["lines"]
+    assert lines[1].startswith("■ 要対応 (0)") and lines[2] == "  なし"
+
+
+def test_attention_lines_fit_44_cells(table):
+    lines = table["attention"]["lines"]
+    assert any("→ /pending" in ln for ln in lines)
+    assert all(
+        sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in ln) <= 44 for ln in lines
+    )
+
+
+def test_feature_rows_show_state(table):
+    lines = table["featState"]["lines80"]
+    assert "  feature p ↑2 ↓1 dirty 3h12m 保留あり" in lines
+    assert "  feature clean ↑0 ↓0" in lines  # clean は dirty と書かない。経過・保留も無し
+    # 状態が無い feature は従来の形
+    assert "  feature nostate feature/nostate nostate" in lines
+    assert "  主 develop repo" in lines
+
+
+def test_feature_state_is_kept_when_the_name_is_long(table):
+    f = table["featState"]
+    assert max(f["widths44"]) <= 44
+    long = next(ln for ln in f["lines44"] if "feature a-v" in ln)
+    assert long.endswith("↑12 ↓3 dirty 3h12m 保留あり")  # 状態は欠けず、名前の方が切れる
+    assert "…" in long
+    zen = next(ln for ln in f["lines44"] if "全角" in ln)
+    assert zen.endswith("↑1 ↓0 dirty 保留あり") and "…" in zen
+
+
+def test_bg_row_only_when_bg_jobs_are_known(table):
+    assert not any("bg ジョブ" in ln for ln in table["noBg"])
+    assert any("bg ジョブ 実行中0 完了0" in ln for ln in table["withBg"])
 
 
 def test_no_wide_char_helper_drift():

@@ -106,6 +106,47 @@ own.pending = {
 };
 out.owners = render(own, 80);
 
+// 要対応の節
+const att = base();
+att.pending = {
+	ops: [
+		{ id: "100000000001111", state: "pending", action: "git_integrate", source: "feature/new", ageMs: 60_000 },
+		{ id: "100000000002222", state: "pending", action: "git_push", source: "feature/old", ageMs: 7_200_000 },
+		{ id: "100000000003333", state: "running", action: "git_integrate", ageMs: 5000, owner: { state: "gone" } },
+		{ id: "100000000004444", state: "running", action: "git_alive", ageMs: 5000, owner: { state: "alive" } },
+		{ id: "100000000005555", state: "running", action: "git_unk", ageMs: 5000, owner: { state: "unknown" } },
+		{ id: "100000000006666", state: "running", action: "git_noowner", ageMs: 5000 },
+		{ id: "100000000007777", state: "done", action: "git_done", ageMs: 5000 },
+	],
+	legacyCount: 0,
+	broken: 0,
+};
+out.attention = { snap: b.buildBoard(att), lines: render(att, 44) };
+const attAlive = base();
+attAlive.pending = { ops: [{ id: "100000000004444", state: "running", action: "x", ageMs: 1, owner: { state: "alive" } }], legacyCount: 0, broken: 0 };
+out.attentionAlive = b.buildBoard(attAlive).sections[0];
+
+// feature の状態
+const fs = base();
+const P = "/repo/.tmp/worktrees/";
+const ZEN = "全角の長い長い長い長い名前前前前前前前前前前";
+fs.worktrees = b.parseWorktreePorcelain(
+	`worktree /repo\nbranch refs/heads/develop\n\nworktree ${P}p\nbranch refs/heads/feature/p\n\nworktree ${P}clean\nbranch refs/heads/feature/clean\n\nworktree ${P}nostate\nbranch refs/heads/feature/nostate\n\nworktree ${P}a-very-long-feature-name-that-overflows\nbranch refs/heads/feature/a-very-long-feature-name-that-overflows\n\nworktree ${P}${ZEN}\nbranch refs/heads/feature/全角の機能名がとても長い長い長い長い\n`,
+);
+fs.worktreeStates = {
+	[`${P}p`]: { ahead: 2, behind: 1, dirty: true, lastCommitAgeMs: 3 * 3600_000 + 12 * 60_000, hasPending: true },
+	[`${P}clean`]: { ahead: 0, behind: 0, dirty: false },
+	[`${P}a-very-long-feature-name-that-overflows`]: { ahead: 12, behind: 3, dirty: true, lastCommitAgeMs: 3 * 3600_000 + 12 * 60_000, hasPending: true },
+	[`${P}${ZEN}`]: { ahead: 1, behind: 0, dirty: true, hasPending: true },
+};
+out.featState = { lines80: render(fs, 80), lines44: render(fs, 44), widths44: widths(render(fs, 44)) };
+
+// bgJobs が無いときは bg の行を出さない
+const noBg = base();
+delete noBg.bgJobs;
+out.noBg = render(noBg, 80);
+out.withBg = render(base(), 80);
+
 const all = [...out.empty.lines, ...out.full, ...out.hostile, ...out.many.lines, ...out.broken.lines, ...out.owners, ...out.wide[46].lines, ...out.wide[80].lines];
 out.all = all;
 out.roundtrip = JSON.stringify(b.buildBoard(full)) === JSON.stringify(JSON.parse(JSON.stringify(b.buildBoard(full))));

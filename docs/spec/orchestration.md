@@ -90,6 +90,7 @@
 | `/bypass` | ask を確認なしで通す。切替で、動いている子は止まる | [pi のガード](guard/pi-guard.md) |
 | `/plan` | 計画モード（書き込む役割の子を止める） | [CHG-0044](../change/0044-plan-agent.md) |
 | `/pending` | 保留したコミットの一覧・表示・破棄（利用者専用）。非同期承認の `approve` などは [保留](guard/pi-pending.md)（本番では無効） | [CHG-0046](../change/0046-guarded-action-timeout.md) |
+| `/board` | **盤面**（読み取り専用・利用者専用）。最上段の「要対応」（承認待ちは古い順・決着待ち）、feature ごとの `↑`（統合先に無い commit）・`↓`（統合先にあって無い）・`dirty`・最後の commit からの経過・`保留あり`、保留・子・隔離 worker・モード。44 桁の 1 行で、状態の側を欠かさず名前の側を先に切る。集めるのは読み取りの git だけ（`runGit`。hook・外部 diff を無効にし、`status` は index を更新させない）。リポジトリの設定に外部 filter（clean・smudge・process）があるときは、`status` を実行せず `dirty` を出さない。bg ジョブは見られないので行を出さない。承認・操作の入口は持たない（`/pending` を使う） | [CHG-0056](../change/0056-orchestrator.md#10-実施計画) |
 | `/worktrees` | 隔離の worktree の掃除・回収のやり直し（利用者専用） | [pi の子エージェント](guard/pi-subagents.md#worktree-隔離の場所と承認) |
 | フッター | 動いている子の数・経過時間（3 件以下は名前つき） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 

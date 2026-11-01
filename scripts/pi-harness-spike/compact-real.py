@@ -62,6 +62,8 @@ try:
         "pending-adapters.ts",
         "pending-request.ts",
         "native-action.ts",
+        "board.ts",
+        "board-collect.ts",
         "platform.ts",
         "landlock_exec.py",
         "commit-message.js",
