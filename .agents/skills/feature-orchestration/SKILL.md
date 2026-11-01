@@ -41,9 +41,11 @@ description: "feature を起票して worker に実装を切り出し、成果�
      （`test/agents/test_pi_harness.py`・`test/agents/test_pi_commit_confirm.py`・`scripts/pi-harness-spike/compact-real.py`）へ。
    - docs を触ったら `lint_docs.py` と `check_refs.py`。docs に日付を書くときは `date '+%F %H:%M'` で確かめる（0 時をまたぐ）。
 6. **全件検査**: `bg_run` で `mise run verify:all` を **1 本ずつ**（完了通知を待つ。`sleep` や `bg_log` の連打はしない）。
+   互いに独立した小さな feature を続けて取り込むときは、各 feature は対象の試験・変異試験・関門までにし、全件検査は取り込み後の develop で **バッチに 1 回**でよい（落ちたら追加の feature で直す。部品ごとに 6 分前後を重ねない）。
 7. **コミット**: 全文を `.tmp/keep/<名前>/squash.txt` に書く。`guarded_action` の `git_commit`（`dir` に worktree。
    **`message` は 1200 字以下**。feature の linked worktree なら確認なし）。bash の `git commit` は拒否される。
-8. **取り込み**: `git flow feature finish <名前> --squash --squash-message="$(cat .tmp/keep/<名前>/squash.txt)" --keepremote --no-fetch --no-push --no-pushtag --notag`
+8. **取り込み**: まず `test -s .tmp/keep/<名前>/squash.txt` でファイルがあることを確かめる（無いと squash メッセージが空になり、develop のコミットが「Squashed commit of branch …」だけになる。直せない）。
+   `git flow feature finish <名前> --squash --squash-message="$(cat .tmp/keep/<名前>/squash.txt)" --keepremote --no-fetch --no-push --no-pushtag --notag`
    （`guarded_bash` の `timeout=400`）。**bypass でも必須確認**。承認が時間切れなら再試行せず、利用者の指示を待つ。
    `cd` を付けず、本体のルートで実行する（先頭が `git flow feature finish` でないと、確認画面に squash メッセージと衝突の事前検査が出ない）。
    衝突で止まったら、解決 → `git add` → `git flow feature finish --continue <ブランチ名>`（名前なしでは失敗する）。

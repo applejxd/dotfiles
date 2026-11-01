@@ -89,7 +89,7 @@
 | `/agents`・`/agent <名前> <依頼>` | 子の一覧と、子の直接の起動（モデルは呼べない） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 | `/bypass` | ask を確認なしで通す。切替で、動いている子は止まる | [pi のガード](guard/pi-guard.md) |
 | `/plan` | 計画モード（書き込む役割の子を止める） | [CHG-0044](../change/0044-plan-agent.md) |
-| `/pending` | 保留したコミットの一覧・表示・破棄（利用者専用） | [CHG-0046](../change/0046-guarded-action-timeout.md) |
+| `/pending` | 保留したコミットの一覧・表示・破棄（利用者専用）。非同期承認の `approve` などは [保留](guard/pi-pending.md)（本番では無効） | [CHG-0046](../change/0046-guarded-action-timeout.md) |
 | `/worktrees` | 隔離の worktree の掃除・回収のやり直し（利用者専用） | [pi の子エージェント](guard/pi-subagents.md#worktree-隔離の場所と承認) |
 | フッター | 動いている子の数・経過時間（3 件以下は名前つき） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 
