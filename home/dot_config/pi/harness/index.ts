@@ -21,7 +21,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
-import { integrationConfig, tightenIntegration } from "./integration-gate.ts";
+import { integrationConfig, integrationTimeoutGuidance, tightenIntegration } from "./integration-gate.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
@@ -40,7 +40,7 @@ import { STARTUP_LIMITS, findRepoRoot, isolationTraceRoot, runWorktreesCommand, 
 import { reconcilePending } from "./pending-store.ts";
 import { reconcileOps } from "./pending-ops.ts";
 import { currentOwner, ownerState } from "./pending-owner.ts";
-import { PENDING_ADAPTERS, APPROVAL_ADAPTERS } from "./pending-adapters.ts";
+import { PENDING_ADAPTERS, APPROVAL_ADAPTERS, authorizeRecord, integrateWiring } from "./pending-adapters.ts";
 import { pendingSettings, registerPendingCommand } from "./pending-command.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -305,6 +305,8 @@ export default async function (pi: ExtensionAPI) {
 	// セッションの終了・切り替え・/reload で、保持している子を全部止める。
 	// そのうえで、セッションごとの一時置き場 (.tmp/s/<ID>/) は quit のときだけ消す (CHG-0042)
 	// 保留 (非同期承認) の /pending。子には登録しない。[pi.pending] の設定は呼ぶたびに読む。task ツールの有無に関わらず登録する
+	// git_integrate (保存専用 + /pending approve) の配線。[pi.pending] と [pi.integrate] の両方が true のときだけ中身がある。false の間は全て空で、従来と同一 (CHG-0055 の C1)
+	const wiring = integrateWiring(rules);
 	const pendingNow = () => pendingSettings(rules.judge.common?.pi?.pending);
 	const pendingCmd = !CHILD
 		? registerPendingCommand(pi, {
@@ -316,7 +318,9 @@ export default async function (pi: ExtensionAPI) {
 					absence.absent = false;
 				},
 				approveDeps: (ctx: any) => ({
-					adapters: APPROVAL_ADAPTERS,
+					adapters: { ...APPROVAL_ADAPTERS, ...wiring.approval },
+					// 承認の前に、いまの役割・操作の定義で許されるかを再判定する (保留の記録は信頼しない入力)
+					authorize: (rec) => authorizeRecord(rec, { specs: actionSpecs, roleTools, child: CHILD }),
 					enabled: () => pendingNow().enabled,
 					modes: pendingNow().modes,
 					rules,
@@ -498,7 +502,18 @@ export default async function (pi: ExtensionAPI) {
 				if (view.kind === "block") return block(view.reason);
 				const timeoutMs = confirmTimeoutSeconds(rules) * 1000;
 				const outcome = classifyConfirm(await confirmDetailed(ctx, view.title, view.body, timeoutMs), timeoutMs);
-				if (outcome !== "approved") return block(outcomeReason(outcome));
+				if (outcome !== "approved") {
+					// 統合の確認が時間切れのときだけ、保留に保存できると伝える (TUI のときだけ。判定・拒否は変えない)
+					const guide = integrationTimeoutGuidance({
+						reason: d.reason,
+						outcome,
+						enabled: wiring.enabled,
+						tui: ctx.mode === "tui",
+						child: CHILD,
+						hasActionTool: roleTools.includes(ACTION_TOOL),
+					});
+					return block(outcomeReason(outcome) + guide);
+				}
 				if (ep !== epoch) return stale();
 				decided.set(event.toolCallId, { input, decision: d, approved: true, epoch: ep, bodyFile: view.bodyFile });
 				return undefined;
@@ -575,7 +590,7 @@ export default async function (pi: ExtensionAPI) {
 		pi.registerTool({
 			...def,
 			// 説明の上書き (組み込みの文言は ...def で入る。tools-ext.ts)。read の tail と write の append は引数を足す
-			...toolText(tool, PREFIX, def),
+			...toolText(tool, PREFIX, def, { integrateAction: wiring.enabled && !CHILD && roleTools.includes(ACTION_TOOL) }),
 			...(tool === "read" ? { parameters: readParameters(Type) } : tool === "write" ? { parameters: writeParameters(Type) } : {}),
 			name: `${PREFIX}${tool}`,
 			// 最終の判定はここ。tool_call の後に別の拡張が入力を書き換えても、ここで止まる (spike の E1)
@@ -630,8 +645,8 @@ export default async function (pi: ExtensionAPI) {
 		pi.registerMcpServer(server.name, server.config);
 	}
 
-	// 承認つきの操作 (git commit・gh issue comment)。役割に action があり、子でないときだけ登録する
-	const actionSpecs = loadActions(rules);
+	// 承認つきの操作 (git commit・gh issue comment、有効なら git_integrate)。役割に action があり、子でないときだけ登録する
+	const actionSpecs = [...loadActions(rules), ...wiring.specs];
 	if (!CHILD && roleTools.includes(ACTION_TOOL) && actionSpecs.length > 0) {
 		pi.registerTool({
 			name: `${PREFIX}${ACTION_TOOL}`,
@@ -683,7 +698,7 @@ export default async function (pi: ExtensionAPI) {
 						pending: {
 							enabled: pendingNow().enabled,
 							modes: pendingNow().modes,
-							adapters: PENDING_ADAPTERS,
+							adapters: { ...PENDING_ADAPTERS, ...wiring.request },
 							limits: pendingNow().limits,
 							onSaved: () => {
 								if (ctx.mode === "tui") process.stdout.write("\x07");

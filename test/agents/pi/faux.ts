@@ -103,6 +103,10 @@ export default async function (pi: ExtensionAPI) {
 				.map((m: any) => `${m.toolName}: isError=${m.isError} :: ${textOf(m.content).slice(0, 600)}`);
 			return fauxAssistantMessage(fauxText(`TOOLS=${JSON.stringify(tools)}\n${results.join("\n")}`));
 		}
+		// 登録されたツールの名前と description を JSON で返す (ツールの説明の上書きを、実際の pi の登録で見る)
+		if (process.env.FAUX_DUMP_TOOLS === "1") {
+			return fauxAssistantMessage(fauxText(`TOOLDEFS=${JSON.stringify(getCurrentTools(messages).map((t: any) => ({ name: t.name, description: t.description })))}`));
+		}
 		if (process.env.FAUX_DUMP_PROMPT === "1") return fauxAssistantMessage(fauxText(getCurrentSystemPrompt(messages)));
 		// 子: システムプロンプトのスキル一覧の名前だけを返す (フルガードが一覧を足すかを見る)
 		if (process.env.FAUX_CHILD_SKILLS === "1" && process.env.PI_HARNESS_CHILD === "1" && last?.role === "user") {
