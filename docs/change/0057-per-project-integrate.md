@@ -1,0 +1,127 @@
+# CHG-0057: プロジェクトごとの統合先・作業ブランチ接頭辞の設定（フルガードを、git-flow の流儀が違う他のリポジトリへ広げる）
+
+- **状態**: Exploring
+- **実装の前提**: 独立 `review` は反映済み（v2）。実装の前に、必要性の確認（§8・段 0）が要る
+- **更新日**: 2026-11-01
+- **基準**: pi 1.4.0、[CHG-0053](0053-worktree-integration-gate.md)（統合ゲート・自由区）・[CHG-0055](0055-async-approval.md)（`git_integrate`）の上。方針は [ADR-0022](../adr/0022-containment-first-minimal-approvals.md)
+
+## 1. 要約と状態
+
+フルガードの統合まわりは、**このリポジトリの流儀**（統合先は `develop`、作業ブランチは `feature/*`・`bugfix/*`）を、コードの数か所に固定している。
+他のリポジトリでは、自由区が働かず、統合の計算が断られ、`git flow … finish` の確認画面が別のブランチを見せうる。
+全体の設定（`[pi.integrate]` の `target`・`protected_refs`）はあるが、**プロジェクトごとには変えられない**。
+
+- 提案: **全体設定（dotfiles の `common.toml.tmpl`）に、プロジェクトごとの上書きの表を足す**。リポジトリの中の設定は、**信頼の根にしない**（C1）
+- 初版は**縮小する**: パスは**完全一致**だけ・接頭辞は**用途別**（自由区と統合元を分ける）・解決の結果は **3 値**（§6）
+- 上書きできるのは、統合先 `target`・接頭辞・追加の保護 ref。**保護の削除はできない**。表に無いリポジトリは、**今と同一**
+- 独立 `review`（BLOCKER 0・MAJOR 6・MINOR 4）を反映した（§10）
+
+## 2. 目的と非目的
+
+**目的**: 流儀の違うリポジトリでも、同じ安全の保証（保護ブランチへの統合は必ず確認・自由区は linked worktree の作業ブランチだけ）を保ったまま、フルガードを使えるようにする。
+
+**非目的**: リポジトリの中に設定を置く方式。git-flow の設定（`.git/config` の `gitflow.*`）の自動読み取り。ガードを緩める設定の、プロジェクト側からの持ち込み。`hotfix`・`release`・`support` の接頭辞。パスの glob（初版は完全一致）。
+
+## 3. 現状（固定している場所）
+
+| 場所 | 固定していること |
+| --- | --- |
+| `judge/protectedrefs.ts`（`isFeatureSourceRef`）・`freezone.ts` | 自由区の接頭辞は **`feature/` だけ**（`bugfix/` は自由区ではない） |
+| `integration-gate.ts`（96〜98 行付近） | 自由区なら、HEAD を動かす統合の操作の**必須確認を省く**。自由区の集合が、確認を省く範囲を決める |
+| `integrate-plan.ts`（`bad_source`・`stackedOf`） | 統合元は `feature/*`・`bugfix/*`。積み重ねの列挙も `refs/heads/feature`・`refs/heads/bugfix` |
+| `index.ts`（`integrationTarget`）・`confirm-view.ts`（`parseFinishTarget`） | 統合先は全体の `target` 1 つ。`git flow <型> finish <名前>` のブランチ名を **`<型>/<名前>` に合成**して履歴・差分・衝突を調べる（接頭辞が違うと、別のブランチの結果を見せうる） |
+| `actions.ts`・`pending-adapters.ts`・`integrate-action.ts` | 設定を**対象の cwd を解決する前**に取る。承認後の再検査は OID だけを比べる |
+| `board.ts`・`board-collect.ts` | 表示の `feature/`・`bugfix/` |
+| `[pi.integrate]` の `target`・`protected_refs` | 全体で 1 つ（生成器が下限 `main`・`master`・`develop`・`release/*`・`hotfix/*` を検査） |
+
+**現状は、自由区（`feature/`）と統合元（`feature/`・`bugfix/`）が別の集合**。1 つのリストに潰すと、`bugfix/*` の確認条件が変わる。
+
+## 4. 守る条件
+
+- **C1 信頼の根は、利用者の全体設定だけ。** リポジトリの中のもの（作業ツリーのファイル・コミット済みの設定・`.git/config`）は、設定の源にしない。エージェントは feature の worktree で、リポジトリの中のファイルを書ける（`.git/config` の書き込み禁止は設定にあるが、Fence 内の実機では未確認）。そこに「ガードを緩める設定」を許すと、**エージェントが自分のガードを緩められる**
+- **C2 表に無い（`unlisted`）リポジトリは、今と同一。** 既定は、自由区 `feature/` だけ・統合元 `feature/`・`bugfix/`（**用途を分けた集合を、今の値のまま**既定にする）。既存の golden・試験が全て通り、`bugfix/x` の linked worktree が自由区にならない反例を足す
+- **C3 保護 ref は和集合だけ。** 実効の保護 = 下限 ∪ 全体 ∪ プロジェクトの追加。除く手段を作らない
+- **C4 `target` は、そのプロジェクトの実効の保護 ref の完全一致の要素。**
+- **C5 接頭辞が許すブランチ名の集合は、実効の保護集合と交差しない。** 生成器で検査する（接頭辞 `P` と、完全一致の保護 `Q`: `Q` が `P` で始まれば拒否。ワイルドカードの保護 `x/*`: `P` が `x/` で始まる、または `x/` が `P` で始まれば拒否。大文字小文字は区別しない）。空・`*`・先頭 `refs/` は不可・末尾は `/`。**実行側も保護を優先する**（自由区の保護の拒否・保護ブランチを統合元にした後片付けの拒否）
+- **C6 解決の結果は 3 値。** `matched`（表の行に当たる）・`unlisted`（表に無い。全体の既定へ）・`unknown`（解決できない）。**`unknown` は緩めない**: 自由区なし・構造化統合（`git_integrate`）は拒否・直接経路の分類には、**全プロジェクトの追加保護の和集合**（設定だけから決まる静的な集合）を使う。`unlisted` だけが全体の既定に戻れる
+- **C7 表示と判定は、同じ値を使う。** `/board`・確認画面・計画の文言が、判定とずれない。解決できない raw `git flow … finish` のプレビューは、別のブランチの結果を見せず「対象を確認できなかった」と出す
+- **C8 運用の契約: 設定の反映の前に、利用者が変更を見る。** `pi.integrate.projects` の変更（`path`・接頭辞・追加の保護）の前後を、`chezmoi apply` の前に利用者が見る。承認画面のリスクの印（`risk_paths`）を、理解の保証の根拠にしない（印は画面ごとに付き方が違い、「接頭辞を足して自由区が広がること」を示すものではない）
+
+## 5. 設計案の比較
+
+| 案 | 内容 | 評価 |
+| --- | --- | --- |
+| A | リポジトリ内の設定を読む（作業ツリー、または統合先のコミット済みの内容） | 作業ツリー版は C1 に反する。コミット済み版は、「承認済みと見なせる運用条件」と、判定のたびに git を読む費用（キャッシュと失効の設計）が要る。**今は採らない**。将来、厳しくする・名前を足すだけで緩める効果が無いものに限って、別の案件で検討する（「名前を足す」に自由区の接頭辞は含めない） |
+| **B（採用）** | dotfiles の `common.toml.tmpl` に、プロジェクトごとの表。実行時に読むのは `rules.json` だけ | C1・C2 を最も単純に満たす。**費用**: 新しいリポジトリを足すたびに dotfiles を編集して `chezmoi apply` |
+| C | `gitflow.*`（`.git/config`）を自動で読む | C1 に反する。git-flow を使わないリポジトリには効かない |
+| D | 環境変数で指定 | 宣言が散る（却下済みの方針） |
+
+## 6. 設計（B の縮小版）
+
+### 6.1 設定
+
+```toml
+[pi.integrate]                                  # 全体 (既定)
+target = "develop"
+source_prefixes = ["feature/", "bugfix/"]       # 新規。統合元 (git_integrate) として許す接頭辞
+free_zone_prefixes = ["feature/"]               # 新規。自由区 (確認の省略) の接頭辞
+
+[[pi.integrate.projects]]                       # プロジェクトごとの上書き (0 個以上)
+path = "/home/user/src/example"                 # 主 worktree の正規化した絶対パス (完全一致。~ は展開)
+target = "main"                                 # 省略すると全体
+source_prefixes = ["feat/", "fix/"]             # 省略すると全体
+free_zone_prefixes = ["feat/"]                  # 省略すると全体
+extra_protected_refs = ["staging", "production/*"]   # 追加だけ
+```
+
+### 6.2 解決
+
+1. 対象の cwd で `git rev-parse --git-common-dir` を求め、**標準の配置**（共通の git-dir が `<主 worktree>/.git`）のときだけ主 worktree を決める。bare・分離した git-dir は `unknown`
+2. 主 worktree を実パス（symlink を解く）に正規化する。設定の `path` も、**生成時に同じ規則**（`~` 展開・実パス・末尾の `/` 除去）で正規化し、**完全一致**で照合する。同じ `path` の重複は、生成器が拒否する
+3. 当たれば `matched`、無ければ `unlisted`、1〜2 の失敗は `unknown`
+
+- 解決の git を起動するのは、**統合と識別された bash・`git_integrate`・自由区の判定・盤面**だけ。編集の判定や、ほかの bash には持ち込まない（「任意の bash の cwd・ブランチ解釈層」は却下済み）。識別そのものは、設定だけから決まる静的な保護の集合（全体 ∪ 全プロジェクトの追加）で行う
+- `integrateProfile(cfg, repoRoot)` が、実効の `{ target, sourcePrefixes, freeZonePrefixes, protectedRefs }` を返す。各所はこれを引数に取る
+- `git_integrate` の承認後の再検査は、source・target の**完全な ref 名**と、解決したプロジェクトの識別の一致も確かめる（同じ OID の別ブランチを負例にする）
+- raw `git flow … finish` のプレビューは、`matched` で接頭辞が既定と違うときは、実際の git-flow の設定との整合を確認できないので、「対象を確認できなかった」と出す（型ごとの接頭辞の対応は初版では持たない）
+
+## 7. 段階計画
+
+| 段 | 内容 | 状態 |
+| --- | --- | --- |
+| 0 | **必要性の確認**: 利用者が使う他のリポジトリの、実際の統合先・接頭辞・統合の方式（§8）。対象が無ければ保留 | 未着手（利用者の回答待ち） |
+| 1 | 生成器: スキーマ・検査（C3〜C5・重複の拒否）・`rules.json`・golden・試験 | 段 0 の後 |
+| 2 | ハーネス: 解決（3 値）・`integrateProfile`・各所の引数化（§3 の表）・`unknown` の挙動・再検査・プレビュー | 段 1 の後 |
+| 3 | docs（`pi-extensions.md`・`pi-pending.md`）と、別の流儀の一時リポジトリでの実機確認。**実機確認の前に、新しい自由区の設定を配らない** | 段 2 の後 |
+
+**反例を先に書く**: 未登録の `bugfix/x` が自由区にならない・`unknown` で追加保護 `staging` の `update-ref` が必須確認になる・外側と `dir` の先が別プロジェクト・`feature/x` と `feat/x` に別の変更があるときの `finish x` が旧ブランチを見せない・完全一致の保護 `feature/base` と接頭辞 `feature/` の交差の拒否（大文字小文字・`target` が接頭辞の配下）・同じ OID の別ブランチの再検査。
+**変異試験**: 生成器の検査・自由区の保護の拒否・保護 source の後片付けの拒否・`unknown` の倒し方を、1 つずつ外して落ちることを確かめる。
+
+## 8. 未解決・未確認
+
+- **必要性の実測**: 他のリポジトリの、統合先と接頭辞と統合の方式。現行の構造化統合は、外部 filter・merge driver・統合先の checkout の状態などを理由に断る。**接頭辞に対応するだけでは、使えるようにならない場合がある**
+- Fence 内での主 worktree の実パスの観測・symlink・入れ子のリポジトリ・仮想 monorepo（`guarded_action` の `dir`）の扱い
+- 後の拡張: パスの glob（保護の追加は、当たった全行の和集合。ほかの値の曖昧さは拒否）。`hotfix`・`release` の接頭辞。git-flow の設定との整合
+
+## 9. 却下・避けること
+
+- リポジトリ内の設定を信頼すること（C1）。環境変数での指定。非保護ブランチの全部を自由区にすること
+- 保護 ref を減らす・弱める上書き。プロジェクト側から全体の設定を上書きすること
+- 自由区と統合元を、1 つの接頭辞のリストに潰すこと（`bugfix/` の確認条件が変わる）。初版でパスの glob と優先順位を入れること
+
+## 10. 独立 review の反映
+
+別系統の `review`（BLOCKER 0・MAJOR 6・MINOR 4）。**MAJOR は全て、実物のコードで確かめて妥当だった**（`confirm-view.ts` のブランチ名の合成・`integration-gate.ts` の自由区による確認の省略・`integrate-plan.ts` の固定・`index.ts` の全体固定の `target`）。反映した点:
+
+- 自由区と統合元の接頭辞を分けた（§3・C2・§6.1）
+- 解決を 3 値にし、`unknown` を緩めない側に定義した（C6）
+- パスを完全一致に縮小し、標準の配置だけを主 worktree と見なす（§6.2）
+- `confirm-view.ts` は変更不要ではなく、プレビューの扱いを定めた（C7・§6.2）
+- C5 を、許すブランチ名の集合の交差で定義し、実行側の保護優先を足した
+- C8 を、承認画面のリスクの印に頼らない運用の契約に直した
+- 必要性の確認を、実装の前提（段 0）にした
+- 未確認: テスト・lint の実行は、`review` は行っていない（静的な審査）
+
+## 11. 関連
+
+- [CHG-0053](0053-worktree-integration-gate.md)（統合ゲート・自由区）、[CHG-0055](0055-async-approval.md)（`git_integrate`）、[保留](../spec/guard/pi-pending.md)

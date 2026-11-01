@@ -70,6 +70,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 確認（承認）と封じ込めの設計方針を知る・変える（ask 層と bypass モードの廃止、非同期の承認、複数エージェントの束ね） | [ADR-0022](adr/0022-containment-first-minimal-approvals.md)、[CHG-0054](change/0054-containment-and-async-approval.md)、[調査記録 AC1](research/agents/approval-containment-survey.md) |
 | 確認が取れない操作の保留と、利用者が後から承認して実行する仕組み（非同期の承認）を知る・変える | [ADR-0023](adr/0023-pending-approval.md)、[CHG-0055](change/0055-async-approval.md) |
 | 並列実装の配車・関門・承認パケット・標的レビュー（利用者が本質的な承認に集中する自動化）を知る・変える | [CHG-0056](change/0056-orchestrator.md) |
+| フルガードの統合先・作業ブランチの接頭辞を、リポジトリごとに変える（他のリポジトリへ広げる） | [CHG-0057](change/0057-per-project-integrate.md) |
 
 ### 案件と根拠
 
