@@ -5,7 +5,9 @@ from __future__ import annotations
 import importlib.util
 import posixpath
 import re
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -474,3 +476,171 @@ def test_every_file_a_test_reads_selects_that_test_or_everything():
 
 def test_no_shell_true_in_source():
     assert "shell=True" not in SCRIPT.read_text(encoding="utf-8")
+
+
+# --- 全件検査の排他ロック (リポジトリ全体で 1 本だけ) ---
+
+_HOLDER = """
+import importlib.util, sys, time
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("verify", sys.argv[1])
+v = importlib.util.module_from_spec(spec)
+sys.modules["verify"] = v
+spec.loader.exec_module(v)
+try:
+    h = v.acquire_all_lock(Path(sys.argv[2]), float(sys.argv[3]))
+except v.LockTimeout as exc:
+    print(exc, file=sys.stderr)
+    raise SystemExit(3)
+print("ACQUIRED", flush=True)
+time.sleep(float(sys.argv[4]))
+"""
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, encoding="utf-8")
+
+
+@pytest.fixture
+def repo(tmp_path):
+    r = tmp_path / "repo"
+    r.mkdir()
+    _git(r, "init", "-q")
+    _git(r, "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "--allow-empty", "-m", "i")
+    return r
+
+
+def _holder(tmp_path: Path, root: Path, timeout: float, hold: float) -> subprocess.Popen:
+    script = tmp_path / "holder.py"
+    script.write_text(_HOLDER, encoding="utf-8")
+    return subprocess.Popen(
+        [sys.executable, str(script), str(SCRIPT), str(root), str(timeout), str(hold)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding="utf-8",
+    )
+
+
+def _wait_acquired(p: subprocess.Popen) -> None:
+    assert p.stdout is not None
+    assert p.stdout.readline().strip() == "ACQUIRED"
+
+
+def test_lock_second_process_waits_until_first_exits(tmp_path, repo):
+    a = _holder(tmp_path, repo, 5, 1.5)
+    _wait_acquired(a)
+    t0 = time.monotonic()
+    b = _holder(tmp_path, repo, 10, 0)
+    _wait_acquired(b)
+    assert time.monotonic() - t0 >= 0.8  # a が持っている間は待った
+    assert a.wait(5) == 0 and b.wait(5) == 0
+
+
+def test_lock_released_when_holder_is_killed(tmp_path, repo):
+    a = _holder(tmp_path, repo, 5, 60)
+    _wait_acquired(a)
+    a.kill()
+    a.wait(5)
+    t0 = time.monotonic()
+    b = _holder(tmp_path, repo, 0, 0)
+    _wait_acquired(b)  # stale にならず、待たずに取れる
+    assert time.monotonic() - t0 < 5
+    assert b.wait(5) == 0
+
+
+def test_lock_timeout_exits_3_and_names_holder(tmp_path, repo):
+    a = _holder(tmp_path, repo, 5, 20)
+    _wait_acquired(a)
+    try:
+        t0 = time.monotonic()
+        b = _holder(tmp_path, repo, 1, 0)
+        _, err = b.communicate(timeout=15)
+        assert b.returncode == 3
+        assert 0.8 <= time.monotonic() - t0 < 10
+        assert str(a.pid) in err
+        c = _holder(tmp_path, repo, 0, 0)  # 0 は待たずに即失敗
+        _, err0 = c.communicate(timeout=15)
+        assert c.returncode == 3 and str(a.pid) in err0
+    finally:
+        a.kill()
+        a.wait(5)
+
+
+def test_lock_is_shared_by_worktrees_but_not_by_other_repos(tmp_path, repo):
+    wt = tmp_path / "wt"
+    _git(repo, "worktree", "add", "-q", str(wt), "-b", "side")
+    other = tmp_path / "other"
+    other.mkdir()
+    _git(other, "init", "-q")
+    a = _holder(tmp_path, repo, 5, 20)
+    _wait_acquired(a)
+    try:
+        b = _holder(tmp_path, wt, 0, 0)
+        b.communicate(timeout=15)
+        assert b.returncode == 3  # 同じリポジトリの別 worktree は同じロック
+        c = _holder(tmp_path, other, 0, 0)
+        _wait_acquired(c)  # 別リポジトリは独立
+        assert c.wait(5) == 0
+    finally:
+        a.kill()
+        a.wait(5)
+
+
+def test_lock_without_git_warns_and_continues(tmp_path, capsys, monkeypatch):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    monkeypatch.setenv(
+        "GIT_CEILING_DIRECTORIES", str(tmp_path)
+    )  # tmp_path が別のリポジトリ内でも git と見なさない
+    assert verify.acquire_all_lock(plain, 0) is None
+    assert "警告" in capsys.readouterr().err
+
+
+def test_main_all_acquires_lock_but_other_modes_do_not(monkeypatch):
+    calls: list[int] = []
+    monkeypatch.setattr(verify, "acquire_all_lock", lambda *a, **k: calls.append(1))
+    monkeypatch.setattr(verify, "execute", lambda *a, **k: [])
+    monkeypatch.setattr(verify, "_stamp_snapshot", lambda: None)
+    monkeypatch.setattr(verify, "_write_stamp", lambda started=None: None)
+    monkeypatch.setattr(verify.os, "nice", lambda n: 0, raising=False)
+    for argv in (["--all", "--dry-run"], ["--dry-run"], ["--list"], ["--changed", "--dry-run"]):
+        assert verify.main(argv) == 0
+    assert calls == []
+    assert verify.main(["--all"]) == 0
+    assert calls == [1]
+
+
+def test_main_all_returns_3_on_lock_timeout(monkeypatch):
+    def boom(*a, **k):
+        raise verify.LockTimeout("busy")
+
+    ran: list[int] = []
+    monkeypatch.setattr(verify, "acquire_all_lock", boom)
+    monkeypatch.setattr(verify.os, "nice", lambda n: 0, raising=False)
+    monkeypatch.setattr(verify, "execute", lambda *a, **k: ran.append(1) or [])
+    assert verify.main(["--all"]) == 3
+    assert ran == []
+
+
+def test_import_does_not_take_lock(tmp_path, repo):
+    code = (
+        "import importlib.util, sys, time\n"
+        "s = importlib.util.spec_from_file_location('verify', sys.argv[1])\n"
+        "m = importlib.util.module_from_spec(s); sys.modules['verify'] = m; s.loader.exec_module(m)\n"
+        "print('IMPORTED', flush=True); time.sleep(5)\n"
+    )
+    p = subprocess.Popen(
+        [sys.executable, "-c", code, str(SCRIPT)],
+        cwd=repo,
+        stdout=subprocess.PIPE,
+        encoding="utf-8",
+    )
+    try:
+        assert p.stdout is not None
+        assert p.stdout.readline().strip() == "IMPORTED"
+        h = _holder(tmp_path, repo, 0, 0)
+        _wait_acquired(h)  # import しただけの者はロックを持たない
+        assert h.wait(5) == 0
+    finally:
+        p.kill()
+        p.wait(5)

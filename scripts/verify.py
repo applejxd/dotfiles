@@ -15,14 +15,17 @@ import argparse
 import ast
 import contextlib
 import functools
+import json
 import os
 import posixpath
 import re
 import shlex
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -792,6 +795,108 @@ def execute(
     return failed
 
 
+class LockTimeout(Exception):
+    """全件検査のロックを待ちきれなかった (終了コード 3)。"""
+
+
+LOCK_NOTICE_INTERVAL = 30.0  # 待っている間、この秒数ごとに保持者を知らせる
+LOCK_DEFAULT_TIMEOUT = 1800.0
+_held_locks: list[int] = []  # 開いたまま持つ (プロセスの終了で OS が解放する)
+
+
+def _lock_timeout() -> float:
+    try:
+        return max(0.0, float(os.environ.get("VERIFY_LOCK_TIMEOUT", LOCK_DEFAULT_TIMEOUT)))
+    except ValueError:
+        return LOCK_DEFAULT_TIMEOUT
+
+
+def _lock_path(root: Path) -> Path | None:
+    proc = subprocess.run(
+        ["git", "rev-parse", "--git-common-dir"],
+        cwd=root, capture_output=True, encoding="utf-8", check=False,
+    )  # fmt: skip
+    out = proc.stdout.strip()
+    if proc.returncode != 0 or not out:
+        return None
+    return (Path(root) / out).resolve() / "verify-all.lock"
+
+
+def _try_lock(fd: int) -> bool:
+    if os.name == "nt":  # Windows は未検証 (msvcrt。実機で試していない)
+        import msvcrt
+
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
+        except OSError:
+            return False
+        return True
+    import fcntl
+
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def _read_holder(fd: int) -> str:
+    try:
+        info = json.loads(os.pread(fd, 4096, 0).decode("utf-8") or "{}")
+        return f"{info['pid']} {info['cwd']} {info['started']}"
+    except Exception:
+        return "不明"
+
+
+def acquire_all_lock(root: Path = ROOT, timeout: float | None = None) -> int | None:
+    """全件検査の排他ロックを取る (リポジトリの全 worktree・全会話で 1 本だけ)。
+
+    置き場は `git rev-parse --git-common-dir` の下の verify-all.lock。flock なので、プロセスが死ねば OS が解放する。
+    取れなければ timeout 秒まで待ち (既定 VERIFY_LOCK_TIMEOUT、1800)、超えたら LockTimeout。0 は待たない。
+    git でない・書けないときは、警告して None を返し続行する。
+    """
+    timeout = _lock_timeout() if timeout is None else timeout
+    path = _lock_path(Path(root))
+    if path is None:
+        print("警告: git のリポジトリでないので、全件検査の排他ロックを取りません", file=sys.stderr)
+        return None
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError as exc:
+        print(f"警告: ロックファイルを開けないので排他しません: {exc}", file=sys.stderr)
+        return None
+    try:
+        start = time.monotonic()
+        next_notice = LOCK_NOTICE_INTERVAL
+        while not _try_lock(fd):
+            elapsed = time.monotonic() - start
+            if elapsed >= timeout:
+                raise LockTimeout(
+                    f"他の全件検査が実行中のため終了します (待ち {int(elapsed)} 秒)。保持者: {_read_holder(fd)}"
+                )
+            if elapsed >= next_notice:
+                print(
+                    f"他の全件検査が実行中。待っている (経過 {int(elapsed)} 秒)。保持者: {_read_holder(fd)}",
+                    file=sys.stderr, flush=True,
+                )  # fmt: skip
+                next_notice += LOCK_NOTICE_INTERVAL
+            time.sleep(min(0.2, max(0.0, timeout - elapsed)))
+    except BaseException:
+        os.close(fd)
+        raise
+    with contextlib.suppress(OSError, AttributeError):  # 保持者の情報はベストエフォート
+        info = {
+            "pid": os.getpid(),
+            "cwd": os.getcwd(),
+            "started": datetime.now().isoformat(timespec="seconds"),
+        }
+        os.ftruncate(fd, 0)
+        os.pwrite(fd, json.dumps(info).encode("utf-8"), 0)
+    _held_locks.append(fd)
+    return fd
+
+
 def _stamp_module():
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import verify_stamp
@@ -886,7 +991,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if hasattr(os, "nice"):
         with contextlib.suppress(OSError):
             os.nice(NICE_LEVEL)  # 子プロセスが継承する。失敗しても検査は続ける
-    started = _stamp_snapshot() if result.full else None
+    started = None
+    if result.full:
+        try:
+            acquire_all_lock(ROOT)
+        except LockTimeout as exc:
+            print(exc, file=sys.stderr)
+            return 3
+        started = _stamp_snapshot()
     failed = execute(result.commands, result.gates, keep_going=args.keep_going)
     if result.windows:
         print(WINDOWS_NOTE)
