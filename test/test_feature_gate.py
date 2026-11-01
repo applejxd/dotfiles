@@ -133,6 +133,40 @@ def test_scope_outside_fails(repo, wt):
     assert "base.txt" in _check(data, "scope")["detail"]
 
 
+def _stacked_feat(repo: Path) -> Path:
+    """feature/a (a.txt, 未統合) の先頭から feature/feat (b.txt) を始める。"""
+    a = repo / ".tmp" / "worktrees" / "a"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/a", str(a), "develop")
+    _write(a / "a.txt", "a\n")
+    _git(a, "add", "-A")
+    _git(a, "commit", "-q", "-m", "a")
+    path = repo / ".tmp" / "worktrees" / "feat"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/feat", str(path), "feature/a")
+    _write(path / "b.txt", "b\n")
+    _git(path, "add", "-A")
+    _git(path, "commit", "-q", "-m", "b")
+    return path
+
+
+def test_stacked_feature_scope_ignores_inherited_files(repo):
+    _stacked_feat(repo)
+    r, data = _run(repo, "--owned", "b.txt")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert data["deps"] == ["feature/a"]
+
+
+def test_stacked_feature_human_output_has_depends_on(repo):
+    _stacked_feat(repo)
+    r, _ = _run(repo, "--owned", "b.txt", as_json=False)
+    assert r.returncode == 0, r.stdout
+    assert "depends on: feature/a" in r.stdout
+
+
+def test_no_deps_key_without_dependencies(repo, wt):
+    _, data = _run(repo)
+    assert "deps" not in data
+
+
 def test_scope_inside_ok(repo, wt):
     _write(wt / "docs" / "x.md", "x\n")
     r, data = _run(repo, "--owned", "docs/**")

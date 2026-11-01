@@ -212,7 +212,7 @@ def run_checks(root: Path, feature: str, owned: list[str] | None) -> dict:
     for cid, fn in steps:
         ok, detail = fn()
         checks.append({"id": cid, "ok": ok, "detail": detail})
-    return {
+    result = {
         "v": 1,
         "feature": feature,
         "base": base,
@@ -220,6 +220,10 @@ def run_checks(root: Path, feature: str, owned: list[str] | None) -> dict:
         "ok": all(c["ok"] for c in checks),
         "checks": checks,
     }
+    deps = parallel_check.dependencies(root, f"feature/{feature}")
+    if deps:
+        result["deps"] = deps
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -249,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
         print(f"feature/{result['feature']} base={result['base'][:12]} tree={result['tree'][:12]}")
+        if result.get("deps"):
+            print(f"  depends on: {', '.join(result['deps'])}")
         for ck in result["checks"]:
             print(f"  {'ok  ' if ck['ok'] else 'FAIL'} {ck['id']}: {ck['detail']}")
     return 0 if result["ok"] else 1

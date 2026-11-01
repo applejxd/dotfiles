@@ -182,6 +182,100 @@ def test_unsupported_globs_are_rejected(repo, bad):
     assert r.returncode != 0, (bad, r.stdout)
 
 
+def _commit_file(wt: Path, name: str, text: str = "x\n") -> None:
+    (wt / name).write_text(text, encoding="utf-8")
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-q", "-m", f"add {name}")
+
+
+def _stack(root: Path) -> tuple[Path, Path]:
+    """feature/a (a.txt) の先頭から feature/b (b.txt) を始める。a は未統合。"""
+    a = _feature(root, "a")
+    _commit_file(a, "a.txt")
+    b = root / ".tmp" / "worktrees" / "b"
+    _git(root, "worktree", "add", "-q", "-b", "feature/b", str(b), "feature/a")
+    _commit_file(b, "b.txt")
+    return a, b
+
+
+def test_a_stacked_feature_does_not_own_the_files_it_inherits(repo):
+    _stack(repo)
+    code, out = _run(repo, "--owned", "b=b.txt")
+    assert code == 0 and out["worktrees"]["b"] == ["b.txt"], out
+    assert out["deps"] == {"b": ["feature/a"]}, out
+
+
+def test_a_stack_is_not_reported_as_an_overlap(repo):
+    _stack(repo)
+    code, out = _run(repo, "--owned", "a=a.txt", "--owned", "b=b.txt")
+    assert code == 0, out
+    assert not any("複数" in p for p in out["problems"]), out
+
+
+def test_a_stack_prints_the_dependency_line(repo):
+    import os
+
+    _stack(repo)
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT), "--owned", "b=b.txt"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, **ENV},
+        check=False,
+    )
+    assert "feature/b depends on: feature/a" in r.stdout, r.stdout
+
+
+def test_uncommitted_edits_of_a_stacked_feature_are_still_checked(repo):
+    _a, b = _stack(repo)
+    (b / "stray.txt").write_text("s\n", encoding="utf-8")
+    code, out = _run(repo, "--owned", "b=b.txt")
+    assert code == 1 and any("stray.txt" in p for p in out["problems"]), out
+
+
+def test_a_committed_edit_of_an_inherited_file_is_not_detected(repo):
+    """既知の制限: 継承したパスは引くので、B が A のファイルをさらに編集しても見えない。"""
+    _a, b = _stack(repo)
+    _commit_file(b, "a.txt", "edited by b\n")
+    code, out = _run(repo, "--owned", "b=b.txt")
+    assert code == 0, out
+
+
+def test_an_integrated_feature_is_not_a_dependency(repo):
+    _a, b = _stack(repo)
+    _git(repo, "merge", "-q", "--squash", "feature/a")
+    _git(repo, "commit", "-q", "-m", "squash a")
+    _git(b, "merge", "-q", "develop", "-m", "sync")
+    code, out = _run(repo, "--owned", "b=b.txt")
+    assert code == 0 and "deps" not in out, out
+    assert out["worktrees"]["b"] == ["b.txt"], out
+
+
+def test_an_integrated_feature_is_not_a_dependency_even_after_develop_moves(repo):
+    """squash で統合済みの A は、統合のあと develop が進んでいても、ブランチが残っているだけで依存に数えない。"""
+    _a, b = _stack(repo)
+    _git(repo, "merge", "-q", "--squash", "feature/a")
+    _git(repo, "commit", "-q", "-m", "squash a")
+    _commit_file(
+        repo, "other.txt"
+    )  # 統合のあと、develop が別の変更で進む (develop と A の木は一致しなくなる)
+    _git(b, "merge", "-q", "develop", "-m", "sync")
+    code, out = _run(repo, "--owned", "b=b.txt")
+    assert code == 0 and "deps" not in out, out
+
+
+def test_two_branches_at_the_same_tip_are_not_dependencies_of_each_other(repo):
+    """B を A の先頭から作っただけ (まだコミットが無い) では、どちらも土台と決められない。互いを依存に数えない。"""
+    a = _feature(repo, "a")
+    _commit_file(a, "a.txt")
+    b = repo / ".tmp" / "worktrees" / "b"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/b", str(b), "feature/a")
+    _code, out = _run(repo, "--owned", "a=a.txt", "--owned", "b=a.txt")
+    assert "deps" not in out, out
+
+
 def test_the_check_does_not_change_the_index_or_the_worktrees(repo):
     a = _feature(repo, "a")
     (a / "n.txt").write_text("n\n", encoding="utf-8")

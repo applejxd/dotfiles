@@ -31,7 +31,16 @@ BASE_BRANCH = "develop"
 def git(cwd: Path, *args: str) -> str:
     # 読み取りだけ: hook・fsmonitor を動かさず、任意ロック (index の更新) と端末入力を止める
     r = subprocess.run(
-        ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.quotepath=false", *args],
+        [
+            "git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.quotepath=false",
+            *args,
+        ],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -68,6 +77,81 @@ def committed_paths(cwd: Path, branch: str) -> list[str]:
     """develop より先のコミットで変更されたパス (develop との分岐点からの差分)。"""
     out = git(cwd, "diff", "--name-only", "--no-renames", "-z", f"{BASE_BRANCH}...{branch}")
     return [p for p in out.split("\0") if p]
+
+
+def _git_true(cwd: Path, *args: str) -> bool:
+    """終了コード 0 かどうか (`merge-base --is-ancestor` や `diff --quiet` 用。失敗は偽)。"""
+    r = subprocess.run(
+        ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", *args],
+        cwd=cwd,
+        capture_output=True,
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0"},
+        check=False,
+    )
+    return r.returncode == 0
+
+
+def _already_in_develop(root: Path, g_tip: str) -> bool:
+    """G を develop に足しても、develop の内容が変わらない (squash で統合済みで、ブランチだけ残っている)。
+
+    統合のあと develop が進んでいても、develop と G の木が一致しないだけでは判定できないので、マージ結果の木を比べる。
+    算出できない (衝突・git が古い) ときは「統合済みではない」 (依存に数える。表示だけの安全側)。
+    """
+    r = subprocess.run(
+        [
+            "git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "merge-tree",
+            "--write-tree",
+            "--no-messages",
+            BASE_BRANCH,
+            g_tip,
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0"},
+        check=False,
+    )
+    if r.returncode != 0 or not r.stdout.strip():
+        return False
+    result_tree = r.stdout.strip().splitlines()[0]
+    return result_tree == git(root, "rev-parse", f"{BASE_BRANCH}^{{tree}}").strip()
+
+
+def dependencies(root: Path, feature: str) -> list[str]:
+    """feature (例 `feature/b`) の依存: 祖先関係から導く、未統合のローカル feature ブランチ。
+
+    G が依存 = G の先頭が feature の先頭の祖先、かつ develop の祖先でなく (未統合)、feature 自身でなく、
+    先頭が同じでなく (どちらが土台か決まらない)、develop と内容が違う (squash 統合済みで残っただけのブランチは除く)。
+    """
+    refs = git(root, "for-each-ref", "--format=%(refname:short)", "refs/heads/feature/").split()
+    tip = git(root, "rev-parse", "--verify", f"refs/heads/{feature}").strip()
+    deps: list[str] = []
+    for g in sorted(refs):
+        if g == feature:
+            continue
+        g_tip = git(root, "rev-parse", "--verify", f"refs/heads/{g}").strip()
+        if g_tip == tip:
+            continue
+        if not _git_true(root, "merge-base", "--is-ancestor", g_tip, tip):
+            continue
+        if _git_true(root, "merge-base", "--is-ancestor", g_tip, BASE_BRANCH):
+            continue
+        if _already_in_develop(root, g_tip):
+            continue
+        deps.append(g)
+    return deps
+
+
+def inherited_paths(root: Path, deps: list[str]) -> set[str]:
+    """依存の feature が develop から変更したパスの合算 (積み重ねで継承するので、自分の変更に数えない)。"""
+    found: set[str] = set()
+    for g in deps:
+        found.update(committed_paths(root, g))
+    return found
 
 
 def feature_worktrees(root: Path) -> dict[str, Path]:
@@ -129,8 +213,14 @@ def check(root: Path, owned: dict[str, list[str]]) -> dict:
     # 2. 各 worktree
     trees = feature_worktrees(root)
     changed: dict[str, list[str]] = {}
+    deps: dict[str, list[str]] = {}
     for name, path in sorted(trees.items()):
-        files = sorted(set(status_paths(path)) | set(committed_paths(root, f"feature/{name}")))
+        branch = f"feature/{name}"
+        d = dependencies(root, branch)
+        if d:
+            deps[name] = d
+        committed = set(committed_paths(root, branch)) - inherited_paths(root, d)
+        files = sorted(set(status_paths(path)) | committed)
         changed[name] = files
         if name in owned:
             outside = [f for f in files if not matches(f, owned[name])]
@@ -153,12 +243,15 @@ def check(root: Path, owned: dict[str, list[str]]) -> dict:
             problems.append(
                 f"{f} を複数の feature が変更している ({', '.join(names)})。finish で衝突する"
             )
-    return {
+    result = {
         "ok": not problems,
         "problems": problems,
         "main_changes": main_changes,
         "worktrees": changed,
     }
+    if deps:
+        result["deps"] = deps
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -177,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"feature/{name}: {len(files)} ファイル"
                 + (": " + ", ".join(files) if files else "")
             )
+            if name in result.get("deps", {}):
+                print(f"feature/{name} depends on: {', '.join(result['deps'][name])}")
         if result["ok"]:
             print("OK: 混線は見つからなかった")
         else:
