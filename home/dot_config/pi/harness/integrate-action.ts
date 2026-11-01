@@ -123,6 +123,9 @@ export function integrateRequestAdapter(cfg: CfgSource): PendingAdapter {
 				protectedRefs: c.protectedRefs,
 				riskPaths: c.riskPaths,
 				env,
+				// 要求時は統合先の作業ツリーを調べない (サンドボックスで読めず誤検知する)。承認側の再計画と実行器の precheck が検査する
+				// see docs/change/0055-async-approval.md
+				checkTargetWorktree: false,
 			});
 			if (!plan.ok) return { ok: false, reason: refusalText(plan) };
 			const premise: Record<string, Json> = {

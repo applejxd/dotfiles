@@ -198,6 +198,21 @@ def test_operation_in_progress(repo: Path) -> None:
     head = _git(repo, "rev-parse", "HEAD").strip()
     (repo / ".git" / "MERGE_HEAD").write_text(head + "\n", encoding="utf-8")
     assert _plan(repo)["code"] == "operation_in_progress"
+    assert _plan(repo, checkTargetWorktree=True)["code"] == "operation_in_progress"
+
+
+def test_skip_target_worktree_check(repo: Path) -> None:
+    """checkTargetWorktree=false (要求側) は、統合先の worktree の状態を調べない。see docs/change/0055"""
+    _write(repo, "untracked.txt", "u\n")
+    _write(repo, "a.txt", "changed\n")
+    assert _plan(repo)["code"] == "dirty_target_worktree"
+    assert _plan(repo, checkTargetWorktree=False)["ok"] is True
+    head = _git(repo, "rev-parse", "HEAD").strip()
+    (repo / ".git" / "MERGE_HEAD").write_text(head + "\n", encoding="utf-8")
+    assert _plan(repo)["code"] == "operation_in_progress"
+    assert _plan(repo, checkTargetWorktree=False)["ok"] is True
+    # ほかの検査は残る
+    assert _plan(repo, checkTargetWorktree=False, source="feature/nope")["ok"] is False
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="改行入りのファイル名")

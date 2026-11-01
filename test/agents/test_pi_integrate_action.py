@@ -95,10 +95,6 @@ def test_capture_refusals(repo: Path) -> None:
 
     bad = cap(cleanup="rm_rf")
     assert bad["ok"] is False and "cleanup" in bad["reason"]
-    (repo / "a.txt").write_text("dirty\n", encoding="utf-8")
-    dirty = cap()
-    assert dirty["ok"] is False and "dirty_target_worktree" in dirty["reason"]
-    _git(repo, "checkout", "--", "a.txt")
     _git(repo, "checkout", "-q", "-b", "feature/y", "develop")
     assert "already_merged" in cap(source="feature/y")["reason"]
     _git(repo, "checkout", "-q", "develop")
@@ -199,6 +195,30 @@ def test_request_in_linked_worktree_approve_in_main(repo: Path, feat: Path) -> N
     assert not feat.exists()
     assert _git(repo, "branch", "--list", "feature/x").strip() == ""
     assert (repo / "b.txt").exists()
+
+
+def test_request_saves_when_target_dirty_but_approval_refuses(repo: Path, feat: Path) -> None:
+    """要求側は統合先の dirty を調べず保存できる。承認側の再計画は dirty で拒否し、実行しない。see docs/change/0055"""
+    (repo / "a.txt").write_text("dirty\n", encoding="utf-8")
+    old = _rev(repo, "develop")
+    res = _run(
+        {
+            "op": "flow",
+            "requestCwd": str(feat),
+            "approverCwd": str(repo),
+            "values": _values(),
+            "execute": True,
+        }
+    )
+    assert res["capture"]["ok"] is True and res["capture"]["premise"]["kind"] == "git_integrate", (
+        res["capture"]
+    )
+    assert res["capture"]["worktree"] == str(repo)
+    assert res["plan"]["ok"] is False and "dirty_target_worktree" in res["plan"]["reason"], res[
+        "plan"
+    ]
+    assert "exec" not in res and _rev(repo, "develop") == old
+    assert (repo / "a.txt").read_text(encoding="utf-8") == "dirty\n"
 
 
 # --- isTargetWorktree (git の識別で「統合先の作業ツリーの中か」を判定する) と enabled ---

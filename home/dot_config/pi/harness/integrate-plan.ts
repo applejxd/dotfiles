@@ -14,6 +14,8 @@ export type IntegrateInput = {
 	protectedRefs: readonly string[];
 	riskPaths: readonly string[];
 	env?: NodeJS.ProcessEnv;
+	/** false なら統合先 worktree の状態 (進行中の操作・未コミット) を調べない。既定 true */
+	checkTargetWorktree?: boolean;
 };
 export type IntegratePlan = {
 	ok: true;
@@ -145,7 +147,7 @@ export function computeIntegrationPlan(input: IntegrateInput): IntegratePlan | I
 	if (!flt.ok && flt.code !== 1) return refuse("git_failed", flt.reason);
 
 	const wt = targetWorktreeOf(cwd, targetRef, env);
-	if (wt) {
+	if (wt && input.checkTargetWorktree !== false) {
 		for (const op of OPS) {
 			const p = safeGit(["rev-parse", "--git-path", op], wt, env);
 			if (p.ok && existsSync(resolve(wt, p.out.trim()))) {
