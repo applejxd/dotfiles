@@ -74,6 +74,9 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 - 秘密情報はソースに書かず Bitwarden / sops + age を使う。sudo のパスワードは保存せず、
   スクリプトが実行時に端末で尋ねる（[sudo パスワード](docs/spec/development.md#sudo-パスワード)）
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない
+- **利用者に実行してもらう補助スクリプトは、`pk <話題> [引数]` の形で示す。** 入口は `.tmp/keep/<話題>/run.sh`（無ければ唯一の `*.sh`）。
+  `sh <長い絶対パス>` は使わない（`pk` は `chezmoi apply` で配備。未配備の機械では絶対パスで示してよい）。
+  入口の先頭のコメントの 1 行目は、`pk` の一覧に出る説明として書く。話題名は短く覚えやすく（[詳細](docs/spec/development.md#補助スクリプトの短い入口pk)）
 - コミットメッセージは Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）
 - **develop / main に直接コミットしない。** 実装は feature の worktree（`.tmp/worktrees/<名前>/`）で行う。
   feature の起票とクローズ（`git flow feature start` / `finish`）は、機械では止めないので指示で守る。

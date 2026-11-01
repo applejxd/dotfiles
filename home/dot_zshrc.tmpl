@@ -108,6 +108,12 @@ if [[ -f ~/.local/share/zsh/site-functions/_mise ]]; then
     zinit snippet ~/.local/share/zsh/site-functions/_mise
 fi
 
+# (0a) pk 補完 - 同じく compinit より前に fpath へ追加 (docs/spec/development.md#補助スクリプトの短い入口pk)
+if [[ -f ~/.local/share/zsh/site-functions/_pk ]]; then
+    zinit ice wait'0a' lucid as"completion"
+    zinit snippet ~/.local/share/zsh/site-functions/_pk
+fi
+
 # (0b) compinit - 補完の基盤 (650msかかるため遅延)
 # rupa/z は主関数を `_z` という補完関数の名前空間 (_*) に置いている。
 # fpath に別の `_z` (zsh-z 系の補完ファイル) があると compinit がそちらを

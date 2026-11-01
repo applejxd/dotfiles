@@ -230,6 +230,11 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule("modify ラッパー", ("home/*/modify_*",), ("test_modifier_wrappers",)),
     Rule(
+        "pk (補助スクリプトの短い入口)",
+        ("home/dot_local/bin/executable_pk", "home/dot_local/share/zsh/site-functions/_pk"),
+        ("test_pk",),
+    ),
+    Rule(
         "導入スクリプトを読む試験",
         (
             "home/.chezmoiscripts/*_mise.*",

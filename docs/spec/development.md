@@ -350,6 +350,18 @@ chezmoi apply --exclude=scripts
   `pyproject.toml` の `tmp_path_retention_count = 1`・`tmp_path_retention_policy = "failed"` で、落ちたテストの分だけ残す。
   固定する試験は `test_tmp_hygiene.py`（実測: `test/agents` を実行した後の `.tmp` に残骸 0、`pytest-of-*` は 4 KB）
 
+### 補助スクリプトの短い入口（`pk`）
+
+利用者に実行してもらう使い捨ての補助スクリプト（実機確認・掃除など）は `.tmp/keep/<話題>/` に置く。
+長い `sh <絶対パス>` を打たせないため、**`pk <話題> [引数]`** で実行する（`~/.local/bin/pk`。本体は `home/dot_local/bin/executable_pk`）。
+
+- 入口は `<話題>/run.sh`。無ければ、その話題の唯一の `*.sh`。話題名は一意な部分一致でよい（曖昧なら実行せず候補を出す）
+- **忘れても辛くないように**: `pk` だけで使い方と話題の一覧（入口の先頭のコメントの 1 行目を説明として出す。新しい順）。zsh の Tab 補完（`~/.local/share/zsh/site-functions/_pk` が `pk --complete` を呼ぶ。実機の見え方は未確認）。AI が利用者へ実行をお願いするときは、必ずこの形で示す（[AGENTS.md](../../AGENTS.md)）
+- `pk -n <話題>` は実行せず、入口のパスと先頭のコメントだけを見る。実行するときは、実際のパスを必ず先に表示する
+- 置き場: `$PK_ROOT` → カレントから上へ探した `.tmp/keep` → `~/.local/share/chezmoi/.tmp/keep`
+- 守り: 置き場の外を指すシンボリックリンクの入口・`..` や `/` を含む話題名を拒否する。**スクリプトの中身を信頃してよいという保証ではない**（AI が書いたものを利用者が実行する、という信頼の前提は従来の `sh <パス>` と同じ。不安なときは `-n` で先頭のコメントを読む）
+- 対象: Linux・macOS・WSL（`sh` と `python3` が要る）。Windows の PowerShell は対象外。試験は `test/test_pk.py`
+
 ## 子エージェントのモデルのカタログの道具
 
 [CHG-0043](../change/0043-model-catalog.md)。仕様は[カタログ](agent-model-assignment.md#子エージェントのモデルのカタログ)。

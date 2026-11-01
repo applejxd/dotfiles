@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""使い捨ての補助スクリプト (``.tmp/keep/<話題>/``) を、短い名前で実行する ``pk``。
+
+usage:
+  pk                      使い方と、入口のある話題の一覧 (新しい順。1 行の説明つき)
+  pk <話題> [引数...]      <話題> の入口を ``sh`` で実行する。話題は一意な部分一致でよい (例: ``pk e2e status``)
+  pk -n <話題>            実行せず、入口のパスと先頭のコメントを表示する
+  pk --complete           補完用に ``話題:説明`` を 1 行ずつ出す (zsh の補完が呼ぶ)
+
+入口は ``<話題>/run.sh``。無ければ、その話題にある唯一の ``*.sh``。
+置き場は ``$PK_ROOT``、無ければカレントから上へ探した ``.tmp/keep``、無ければ ``~/.local/share/chezmoi/.tmp/keep``。
+see docs/spec/development.md#補助スクリプトの短い入口pk
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+import unicodedata
+from pathlib import Path
+
+HEAD_LINES = 8
+DESC_COLS = 40  # 一覧の説明の幅 (全角を 2 桁で数える。スマホの幅でも 1 行に収まるように)
+COMPLETE_COLS = 60
+USAGE = "使い方: pk <話題> [引数...]  (実行) / pk -n <話題>  (中身を見るだけ) / pk  (この一覧)"
+
+
+def find_root(env: dict[str, str], cwd: Path, home: Path) -> Path:
+    if env.get("PK_ROOT"):
+        return Path(env["PK_ROOT"])
+    for d in (cwd, *cwd.parents):
+        cand = d / ".tmp" / "keep"
+        if cand.is_dir():
+            return cand
+    return home / ".local/share/chezmoi/.tmp/keep"
+
+
+def scripts_of(topic_dir: Path) -> list[Path]:
+    return sorted(p for p in topic_dir.glob("*.sh") if p.is_file())
+
+
+def entry_of(topic_dir: Path) -> Path | None:
+    run = topic_dir / "run.sh"
+    if run.is_file():
+        return run
+    found = scripts_of(topic_dir)
+    return found[0] if len(found) == 1 else None
+
+
+def topics(root: Path) -> list[Path]:
+    """入口になりうる *.sh を持つ話題 (新しい順)。スクリプトの無い話題 (コミットの下書きなど) は出さない"""
+    if not root.is_dir():
+        return []
+    found = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".") and scripts_of(d)]
+    return sorted(found, key=lambda d: d.stat().st_mtime, reverse=True)
+
+
+def describe(topic_dir: Path) -> str:
+    """入口の先頭のコメントの最初の 1 行 (``#`` を除く)。無ければ空"""
+    entry = entry_of(topic_dir) or (scripts_of(topic_dir) or [None])[0]
+    if entry is None:
+        return ""
+    try:
+        lines = entry.read_text(encoding="utf-8", errors="replace").splitlines()[:HEAD_LINES]
+    except OSError:
+        return ""
+    for line in lines:
+        if line.startswith("#!"):
+            continue
+        if line.startswith("#"):
+            return line.lstrip("#").strip()
+    return ""
+
+
+def _width(ch: str) -> int:
+    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+
+
+def clip(text: str, cols: int) -> str:
+    """全角を 2 桁で数えて、cols 桁以内にする (切ったら末尾に ...)"""
+    if sum(_width(c) for c in text) <= cols:
+        return text
+    out: list[str] = []
+    used = 0
+    for ch in text:
+        if used + _width(ch) > cols - 3:
+            break
+        out.append(ch)
+        used += _width(ch)
+    return "".join(out) + "..."
+
+
+def listing(root: Path) -> str:
+    rows = topics(root)
+    if not rows:
+        return f"話題が無い ({root})"
+    width = max(len(d.name) for d in rows[:20])
+    return "\n".join(f"{d.name.ljust(width)}  {clip(describe(d), DESC_COLS)}".rstrip() for d in rows[:20])
+
+
+def completions(root: Path) -> str:
+    """zsh の ``_describe`` 向け。名前と説明の区切り以外の ``:`` は ``\\:`` にする"""
+    esc = lambda s: s.replace("\\", "\\\\").replace(":", "\\:")  # noqa: E731
+    return "\n".join(f"{esc(d.name)}:{esc(clip(describe(d), COMPLETE_COLS))}" for d in topics(root))
+
+
+def head_comment(entry: Path) -> str:
+    out: list[str] = []
+    for line in entry.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("#!"):
+            continue
+        if not line.startswith("#"):
+            if out:
+                break
+            continue  # 先頭の set -eu や空行は飛ばす
+        out.append(line)
+        if len(out) >= HEAD_LINES:
+            break
+    return "\n".join(out)
+
+
+def resolve(topic: str, root: Path) -> tuple[Path | None, str]:
+    """(入口, エラー文)。入口が決まらなければ None と理由"""
+    if not topic or "/" in topic or "\\" in topic or topic in (".", ".."):
+        return None, f"話題の名前が不正: {topic!r}"
+    exact = root / topic
+    if exact.is_dir():
+        dirs = [exact]
+    else:
+        low = topic.lower()
+        dirs = [d for d in topics(root) if low in d.name.lower()]
+    if not dirs:
+        return None, f"話題が無い: {topic}\n{listing(root)}"
+    if len(dirs) > 1:
+        return None, "話題が複数に当たる。もう少し長く書く:\n" + "\n".join(f"  {d.name}" for d in dirs)
+    topic_dir = dirs[0]
+    entry = entry_of(topic_dir)
+    if entry is None:
+        names = ", ".join(p.name for p in scripts_of(topic_dir)) or "(なし)"
+        return None, (
+            f"{topic_dir.name} の入口が決まらない: run.sh が無く、*.sh が 1 つではない ({names})。"
+            "run.sh に名前を変えるか、sh <パス> で直接実行する"
+        )
+    # 入口の実体が置き場の外を指していない (シンボリックリンクで外へ出ない)
+    if not entry.resolve().is_relative_to(root.resolve()):
+        return None, f"入口が置き場の外を指している: {entry}"
+    return entry, ""
+
+
+def main(argv: list[str]) -> int:
+    env = dict(os.environ)
+    root = find_root(env, Path.cwd(), Path.home())
+    args = argv[1:]
+    if not args:
+        print(USAGE)
+        print(listing(root))
+        return 0
+    if args[0] in ("-h", "--help"):
+        print((__doc__ or "").strip())
+        return 0
+    if args[0] == "--complete":
+        out = completions(root)
+        if out:
+            print(out)
+        return 0
+    dry = args[0] == "-n"
+    if dry:
+        args = args[1:]
+        if not args:
+            print("使い方: pk -n <話題>", file=sys.stderr)
+            return 2
+    entry, err = resolve(args[0], root)
+    if entry is None:
+        print(err, file=sys.stderr)
+        return 2
+    if dry:
+        print(entry)
+        print(head_comment(entry))
+        return 0
+    print(f"→ sh {entry} {' '.join(args[1:])}".rstrip(), file=sys.stderr)
+    os.execvp("sh", ["sh", str(entry), *args[1:]])
+    return 0  # 到達しない
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -1,0 +1,15 @@
+#compdef pk
+# pk の補完: 1 つ目の引数 (と -n の次) は話題名。pk --complete が「名前:説明」を 1 行ずつ返す
+_pk() {
+  local -a topics
+  topics=( ${(f)"$(command pk --complete 2>/dev/null)"} )
+  if (( CURRENT == 2 )); then
+    _describe -t topics '話題' topics
+    compadd -- -n
+  elif (( CURRENT == 3 )) && [[ ${words[2]} == -n ]]; then
+    _describe -t topics '話題' topics
+  else
+    _files
+  fi
+}
+_pk "$@"
