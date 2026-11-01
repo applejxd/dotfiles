@@ -108,6 +108,13 @@ export default async function (pi: ExtensionAPI) {
 			return fauxAssistantMessage(fauxText(`TOOLDEFS=${JSON.stringify(getCurrentTools(messages).map((t: any) => ({ name: t.name, description: t.description })))}`));
 		}
 		if (process.env.FAUX_DUMP_PROMPT === "1") return fauxAssistantMessage(fauxText(getCurrentSystemPrompt(messages)));
+		// 子: システムプロンプト全体を返す (前置きの先頭と、前置きの直後の 120 文字を JSON で返す)
+		if (process.env.FAUX_CHILD_DUMP_PROMPT === "1" && process.env.PI_HARNESS_CHILD === "1" && last?.role === "user") {
+			const p = getCurrentSystemPrompt(messages);
+			const i = p.indexOf("【子エージェントへ】");
+			const e = p.indexOf("に従う。", i) + 4;
+			return fauxAssistantMessage(fauxText(i < 0 ? "NO_PREAMBLE" : `CHILD_PROMPT_BEGIN\n${p.slice(i, i + 10)}\u2026${JSON.stringify(p.slice(e, e + 120))}\nCHILD_PROMPT_END`));
+		}
 		// 子: システムプロンプトのスキル一覧の名前だけを返す (フルガードが一覧を足すかを見る)
 		if (process.env.FAUX_CHILD_SKILLS === "1" && process.env.PI_HARNESS_CHILD === "1" && last?.role === "user") {
 			const names = [...getCurrentSystemPrompt(messages).matchAll(/<name>([^<]+)<\/name>/g)].map((m) => m[1]);

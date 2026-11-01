@@ -58,6 +58,11 @@ const BOUNDARY_ENV = readBoundaryEnv(process.env);
 const NO_SANDBOX = process.env.PI_HARNESS_NO_SANDBOX === "1";
 // 子エージェントとして起動されたか。子では guarded_task を登録しない (入れ子にしない)
 const CHILD = process.env.PI_HARNESS_CHILD === "1";
+// 子の system の先頭に足す前置き (全役割で共通。親向けの AGENTS.md の指示を子に適用させない)
+const CHILD_PREAMBLE =
+	"【子エージェントへ】AGENTS.md・個人用の指示のうち、親 (オーケストレーター) の責務にあたる指示 — 子への委譲・feature の起票と取り込み・全件検査 (verify:all)・コミットと承認・ask での質問・停止と報告の方針 — は、あなたには適用しない。" +
+	"あなたの責務は、依頼文と、その中で参照された共通の約束 (worker-common.md など) で決まる。両者が矛盾したら、依頼文を優先する。" +
+	"言語 (日本語)・公開リポジトリの制約・ファイルの書き方 (.ps1 の BOM など) は、AGENTS.md に従う。";
 // この pi プロセスの世代 (保留の owner に記録する。判定には使わない)
 const RUNTIME_EPOCH = randomBytes(8).toString("hex");
 
@@ -1096,7 +1101,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		for (let i = 0; i < argv.length - 1; i++) if (argv[i] === "--skill") args.push("--skill", argv[i + 1]);
 		// 試験だけが使う (偽のモデルを子にも読ませる)
 		for (const ext of (process.env.PI_HARNESS_TEST_CHILD_EXT ?? "").split(",").filter(Boolean)) args.push("-e", ext);
-		args.push("--model", model, "--append-system-prompt", agent.system);
+		args.push("--model", model, "--append-system-prompt", `${CHILD_PREAMBLE}\n\n${agent.system}`);
 		const env: Record<string, string | undefined> = {
 			...process.env,
 			PI_HARNESS_CHILD: "1",

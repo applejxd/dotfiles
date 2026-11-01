@@ -2937,3 +2937,25 @@ def test_the_finish_confirmation_reports_no_conflict_when_develop_moved_elsewher
     assert len(requests) == 1, requests
     message = requests[0]["message"]
     assert "衝突: なし" in message and "⚠" not in message and "分岐後" not in message, message
+
+
+CHILD_PREAMBLE_HEAD = "【子エージェントへ】"
+
+
+@pytest.mark.parametrize("agent", ["explore", "review", "plan", "worker"])
+def test_child_system_prompt_starts_with_the_preamble_then_the_role(env, agent):
+    # 子は親向けの指示 (委譲・コミット・承認) を適用しない前置きを、役割の system の直前に受ける
+    system = gen.build_pi_harness({}, load_common())["agents"][agent]["system"]
+    calls = [{"name": "guarded_task", "args": {"agent": agent, "task": "dump"}}]
+    proc = run_pi(
+        env,
+        calls,
+        FAUX_CHILD_DUMP_PROMPT="1",
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = proc.stdout
+    assert CHILD_PREAMBLE_HEAD in out and "NO_PREAMBLE" not in out, out
+    # 前置きの直後に、空行 1 つを挠んで役割の system が続く (faux.ts は先頭と直後を JSON で返す)
+    expected = json.dumps("\n\n" + system[:50], ensure_ascii=False)[:-1]
+    assert f"{CHILD_PREAMBLE_HEAD}…{expected}" in out, out

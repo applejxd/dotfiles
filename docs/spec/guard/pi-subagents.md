@@ -26,6 +26,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 `[pi.agents.<名前>]` に宣言し、親の `guarded_task` ツールで起動する。子は同じフルガードを付けた別の pi プロセスで、
 **RPC モード**（`--mode rpc --no-session --no-approve -nbt -ne -e builtin:mcp -e <フルガード>`。`pis` と同じ保護条件）で
 動かし、親の拡張が job として保持する（`children.ts`）。判定は子のフルガードが子の役割で行う。
+子の system（`--append-system-prompt`）の先頭には、全役割共通の前置き（`index.ts` の `CHILD_PREAMBLE`）を足す。AGENTS.md・個人用の指示のうち親の責務（委譲・取り込み・全件検査・コミットと承認・`ask`）は子に適用せず、依頼文を優先させる。子は AGENTS.md を今も自動で受ける（文脈ファイルの分離は別の案件）。試験は `test_pi_harness.py::test_child_system_prompt_starts_with_the_preamble_then_the_role`。
 
 | キー | 意味 |
 | --- | --- |
