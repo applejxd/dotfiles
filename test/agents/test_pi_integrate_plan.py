@@ -235,6 +235,25 @@ def test_external_merge_driver_not_run(repo: Path, tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="sh")
+@pytest.mark.parametrize("kind", ["clean", "smudge", "process"])
+@pytest.mark.parametrize("renormalize", [False, True])
+def test_external_filter_not_run(repo: Path, tmp_path: Path, kind: str, renormalize: bool) -> None:
+    mark = tmp_path / "MARK"
+    _git(repo, "checkout", "-q", "feature/x")
+    _commit(repo, ".gitattributes", "* filter=probe\n")
+    _commit(repo, "a.txt", "1\n2\n3x\n")
+    _git(repo, "checkout", "-q", "develop")
+    _commit(repo, "a.txt", "1x\n2\n3\n")
+    _git(repo, "config", f"filter.probe.{kind}", f"sh -c 'echo ran >> {mark}; cat'")
+    if renormalize:
+        _git(repo, "config", "merge.renormalize", "true")
+    mark.unlink(missing_ok=True)
+    r = _plan(repo)
+    assert r["ok"] is False and r["code"] == "external_filter", r
+    assert not mark.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="sh")
 def test_hooks_and_textconv_not_run(repo: Path, tmp_path: Path) -> None:
     mark = tmp_path / "MARK"
     hooks = tmp_path / "hooks"

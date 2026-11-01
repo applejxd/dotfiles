@@ -140,6 +140,9 @@ export function computeIntegrationPlan(input: IntegrateInput): IntegratePlan | I
 	const drv = safeGit(["config", "--get-regexp", "^merge\\..*\\.driver$"], cwd, env);
 	if (drv.ok && drv.out.trim() !== "") return refuse("external_driver", "外部の merge driver が設定されているため、算出しない。");
 	if (!drv.ok && drv.code !== 1) return refuse("git_failed", drv.reason);
+	const flt = safeGit(["config", "--get-regexp", "^filter\\..*\\.(clean|smudge|process)$"], cwd, env);
+	if (flt.ok && flt.out.trim() !== "") return refuse("external_filter", "外部の filter が設定されているため、算出しない (初版の対象外)。");
+	if (!flt.ok && flt.code !== 1) return refuse("git_failed", flt.reason);
 
 	const wt = targetWorktreeOf(cwd, targetRef, env);
 	if (wt) {
