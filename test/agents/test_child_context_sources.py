@@ -128,6 +128,7 @@ RULES: tuple[tuple[str, str, frozenset[str]], ...] = (
     ("repo", "- **このリポジトリは公開。", ALL),
     ("repo", "  迷ったら書かず、リポジトリ外の非公開メモ", NONE),
     ("repo", "- ドキュメントは日本語で書く", WRP),
+    ("repo", "- **コメントも日本語で書く。**", WRP),
 )
 
 
