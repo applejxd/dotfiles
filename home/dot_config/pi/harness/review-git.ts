@@ -170,13 +170,14 @@ export async function appendEvents(
 		const check = parseEvents(newText);
 		if (!check.ok) return { ok: false, refused: "invalid_event" };
 
-		// source が変わるときだけ、前の source の先頭を追加の親にする (古い diff を gc 後も到達可能にする)
+		// 記録する source (最初の記録と、source が変わったときの新しい source) を、追加の親にする。
+		// 追記を待たずに、最後にレビューした版も gc 後に到達できる (前の版は、その時点の commit が親として持つ)
 		const extra: string[] = [];
 		let prev = lastVs ? lastVs.source : null;
 		for (const e of out) {
-			if (prev !== null && e.vs.source !== prev && !extra.includes(prev)) {
-				const t = await git(["cat-file", "-t", prev]);
-				if (t.code === 0 && t.stdout.trim() === "commit") extra.push(prev);
+			if (e.vs.source !== prev && !extra.includes(e.vs.source)) {
+				const t = await git(["cat-file", "-t", e.vs.source]);
+				if (t.code === 0 && t.stdout.trim() === "commit") extra.push(e.vs.source);
 			}
 			prev = e.vs.source;
 		}

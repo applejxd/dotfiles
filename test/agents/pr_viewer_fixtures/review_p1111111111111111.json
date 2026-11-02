@@ -1,0 +1,5 @@
+{"schema": 1, "readonly": false, "bad": null, "review": "none", "reviewStale": false, "stale": false,
+ "staleParts": {"source": false, "target": false, "base": false}, "merged": true,
+ "threads": [], "batches": [], "summary": null,
+ "worktrees": [{"worktreeId": "w1", "name": "example-app", "isMain": true}],
+ "defaultDest": {"worktreeId": "w1"}, "unsent": 0}

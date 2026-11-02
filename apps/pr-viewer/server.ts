@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ApiError, configureLimits, openRepo } from "./git-view.ts";
 import type { Repo } from "./git-view.ts";
-import { handleApi } from "./routes.ts";
+import { handleApi, handlePost, isPostRoute } from "./routes.ts";
 
 const DEFAULT_PORT = 8780;
 const HOST = "127.0.0.1";
@@ -98,11 +98,86 @@ async function serveStatic(res: ServerResponse, webDir: string, rawName: string)
 	}
 }
 
+const MAX_BODY = 64 * 1024;
+const JSON_TYPE_RE = /^application\/json\s*(?:;\s*charset=utf-8\s*)?$/i;
+
+/** Origin があるときは、その host が Host ヘッダーと一致すること（別のサイトからの書き込みを止める）。 */
+function originAllowed(origin: string | undefined, host: string | undefined): boolean {
+	if (origin === undefined) return true;
+	try {
+		return host !== undefined && new URL(origin).host.toLowerCase() === host.toLowerCase();
+	} catch {
+		return false;
+	}
+}
+
+class TooLarge extends Error {}
+
+function readBody(req: IncomingMessage): Promise<Buffer> {
+	return new Promise((done, fail) => {
+		const declared = Number(req.headers["content-length"]);
+		if (Number.isFinite(declared) && declared > MAX_BODY) return fail(new TooLarge());
+		const chunks: Buffer[] = [];
+		let size = 0;
+		req.on("data", (b: Buffer) => {
+			size += b.length;
+			if (size > MAX_BODY) {
+				chunks.length = 0;
+				req.removeAllListeners("data");
+				req.resume();
+				return fail(new TooLarge());
+			}
+			chunks.push(b);
+		});
+		req.on("end", () => done(Buffer.concat(chunks)));
+		req.on("error", () => fail(new ApiError(400, "bad_request", "リクエストの形が正しくありません。")));
+	});
+}
+
+/** 書き込み（POST）。共通の規則を検査してから routes.ts へ渡す。 */
+async function servePost(repos: Repo[], req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
+	if (!originAllowed(req.headers.origin, req.headers.host)) {
+		return sendError(res, 403, "forbidden_origin", "この Origin は許可されていません。");
+	}
+	if (req.headers["x-prv"] !== "1" || !JSON_TYPE_RE.test(req.headers["content-type"] ?? "")) {
+		return sendError(res, 400, "bad_request", "必要なヘッダーがありません。");
+	}
+	let raw: Buffer;
+	try {
+		raw = await readBody(req);
+	} catch (e) {
+		if (e instanceof TooLarge) {
+			res.on("finish", () => req.destroy());
+			return sendError(res, 413, "too_large", "リクエストの本文が大きすぎます。", { Connection: "close" });
+		}
+		throw e;
+	}
+	let body: unknown;
+	try {
+		body = JSON.parse(raw.toString("utf8"));
+	} catch {
+		return sendError(res, 400, "bad_json", "JSON の形が正しくありません。");
+	}
+	if (typeof body !== "object" || body === null || Array.isArray(body)) {
+		return sendError(res, 400, "bad_request", "リクエストの形が正しくありません。");
+	}
+	sendJson(res, 201, await handlePost(repos, pathname, body as Record<string, unknown>));
+}
+
 function makeHandler(repos: Repo[], opts: Options) {
 	return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
 		try {
 			if (!hostAllowed(req.headers.host, opts.allowHosts)) {
 				return sendError(res, 403, "forbidden_host", "この Host は許可されていません。");
+			}
+			if (req.method === "POST") {
+				let pathname = "";
+				try {
+					pathname = new URL(req.url ?? "", "http://localhost").pathname;
+				} catch {
+					pathname = "";
+				}
+				if (isPostRoute(pathname)) return await servePost(repos, req, res, pathname);
 			}
 			if (req.method !== "GET" && req.method !== "HEAD") {
 				return sendError(res, 405, "method_not_allowed", "GET と HEAD だけ使えます。", { Allow: "GET, HEAD" });

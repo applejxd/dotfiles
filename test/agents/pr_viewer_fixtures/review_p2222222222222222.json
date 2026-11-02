@@ -1,0 +1,16 @@
+{"schema": 1, "readonly": false, "bad": null, "review": "approve", "reviewStale": true, "stale": true,
+ "staleParts": {"source": true, "target": false, "base": false}, "merged": false,
+ "threads": [
+  {"id": "e1", "status": "unsent", "stale": false, "comments": [
+   {"id": "e1", "by": "app", "at": "2099-01-01T00:00:00+00:00", "body": "<img src=x onerror=\"window.__pwned=1\">\n<script>window.__pwned=1</script>",
+    "anchor": {"path": "src/<img src=x onerror=\"window.__pwned=1\">.ts", "side": "new", "blob": "5555555555555555555555555555555555555555", "line": 1, "lineEnd": 1}}
+  ]},
+  {"id": "e2", "status": "sent", "stale": false, "comments": [
+   {"id": "e2", "by": "<b>pi</b>", "at": "2099-01-01T00:00:00+00:00", "body": "<img src=x onerror=\"window.__pwned=1\">", "anchor": null}
+  ]}
+ ],
+ "batches": [],
+ "summary": {"done": "<img src=x onerror=\"window.__pwned=1\">", "files": ["<img src=x onerror=\"window.__pwned=1\">"],
+  "findings": [{"ref": "<b>x</b>", "reply": "<script>window.__pwned=1</script>"}], "notes": "<img src=x onerror=\"window.__pwned=1\">", "at": "2099-01-01T00:20:00+00:00", "by": "pi"},
+ "worktrees": [{"worktreeId": "w1", "name": "<img src=x onerror=\"window.__pwned=1\">", "isMain": true}],
+ "defaultDest": {"worktreeId": "w1"}, "unsent": 1}

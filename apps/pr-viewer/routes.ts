@@ -12,6 +12,8 @@ import {
 	resolveTarget,
 } from "./git-view.ts";
 import type { BranchRef, FileEntry, Hunk, Repo } from "./git-view.ts";
+import { blobsFor, getReview, postComment, postSubmit } from "./review-api.ts";
+import type { PrCtx } from "./review-api.ts";
 
 const MAX_FILES = 400;
 const MAX_COMMITS = 200;
@@ -159,10 +161,15 @@ async function commitsOf(repo: Repo, s: PrSummary): Promise<Commit[]> {
 	return out;
 }
 
-async function fileDiff(repo: Repo, c: Computed, path: string): Promise<{ path: string; binary: boolean; truncated: boolean; hunks: Hunk[] }> {
+async function fileDiff(
+	repo: Repo,
+	c: Computed,
+	path: string,
+): Promise<{ path: string; binary: boolean; truncated: boolean; hunks: Hunk[]; oldBlob: string | null; newBlob: string | null }> {
 	const file = c.files.find((f) => f.path === path);
 	if (!file) throw new ApiError(404, "not_in_diff", "このブランチの差分に含まれないファイルです。");
-	if (file.binary) return { path, binary: true, truncated: false, hunks: [] };
+	const blobs = await blobsFor(repo, c.summary, file);
+	if (file.binary) return { path, binary: true, truncated: false, hunks: [], ...blobs };
 	const specs = file.oldPath !== null ? [file.oldPath, file.path] : [file.path];
 	const r = await gitCapped(
 		repo,
@@ -186,7 +193,34 @@ async function fileDiff(repo: Repo, c: Computed, path: string): Promise<{ path: 
 		const cut = text.lastIndexOf("\n");
 		text = cut >= 0 ? text.slice(0, cut + 1) : "";
 	}
-	return { path, binary: false, truncated: r.truncated, hunks: parseDiff(text) };
+	return { path, binary: false, truncated: r.truncated, hunks: parseDiff(text), ...blobs };
+}
+
+function ctxOf(repo: Repo, c: Computed): PrCtx {
+	const s = c.summary;
+	return {
+		repo,
+		prKey: s.prKey,
+		branch: s.branch,
+		target: s.target,
+		sourceOid: s.sourceOid,
+		targetOid: s.targetOid,
+		baseOid: s.baseOid,
+		files: c.files,
+	};
+}
+
+/** 書き込み API（POST）の入口。body は検査済みの JSON のオブジェクト。 */
+export function isPostRoute(pathname: string): boolean {
+	return /^\/api\/prs\/[^/]+\/[^/]+\/(?:comments|submit)$/.test(pathname);
+}
+
+export async function handlePost(repos: Repo[], pathname: string, body: Record<string, unknown>): Promise<unknown> {
+	const m = /^\/api\/prs\/([^/]+)\/([^/]+)\/(comments|submit)$/.exec(pathname);
+	if (!m) throw notFound();
+	const { repo, c } = await findPr(repos, m[1], m[2]);
+	const ctx = ctxOf(repo, c);
+	return m[3] === "comments" ? await postComment(ctx, body) : await postSubmit(ctx, body);
 }
 
 /** API の入口。成功なら応答の本体、失敗なら ApiError を投げる。 */
@@ -205,8 +239,12 @@ export async function handleApi(repos: Repo[], pathname: string, query: URLSearc
 		all.sort((a, b) => Date.parse(b.lastCommit.at) - Date.parse(a.lastCommit.at));
 		return { prs: all };
 	}
-	const m = /^\/api\/prs\/([^/]+)\/([^/]+)(\/diff)?$/.exec(pathname);
+	const m = /^\/api\/prs\/([^/]+)\/([^/]+)(\/diff|\/review)?$/.exec(pathname);
 	if (m) {
+		if (m[3] === "/review") {
+			const { repo, c } = await findPr(repos, m[1], m[2]);
+			return await getReview(ctxOf(repo, c));
+		}
 		if (m[3] === undefined) {
 			const { repo, c } = await findPr(repos, m[1], m[2]);
 			return {

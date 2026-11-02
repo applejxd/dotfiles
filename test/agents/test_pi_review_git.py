@@ -533,32 +533,70 @@ def test_old_source_stays_reachable_after_gc(repo, js):
     (repo / "f.txt").write_text("2\n", encoding="utf-8")
     g(repo, "commit", "-q", "-am", "feat 1")
     old = head_oid(repo)
+    (repo / "f.txt").write_text("3\n", encoding="utf-8")
+    g(repo, "commit", "-q", "-am", "feat 2")
+    new = head_oid(repo)
     g(repo, "checkout", "-q", "main")
-    # source = 旧 feature の先頭。次に source を変えて追記する
+    # source = 旧 feature の先頭 → 同じ source で追記 → 新しい source (実在する commit) で追記
     r = js(
         repo,
         """
-        const old = arg.old;
-        const vsOld = { source: old, target: O("b"), base: O("c") };
-        const vsNew = { source: O("d"), target: O("b"), base: O("c") };
+        const vsOld = { source: arg.old, target: O("b"), base: O("c") };
+        const vsNew = { source: arg.new, target: O("b"), base: O("c") };
         const a = await add([cm("first", { vs: vsOld })]);
         const same = await add([cm("same source", { vs: vsOld })]);
         const b = await add([cm("second", { vs: vsNew })]);
         const parents = (await git(["rev-list", "--parents", "-n", "1", "refs/pi/review/" + KEY])).stdout.trim().split(" ");
         out({ a, same, b, parents });
         """,
-        arg={"old": old},
+        arg={"old": old, "new": new},
     )
     assert r["a"]["ok"] and r["same"]["ok"] and r["b"]["ok"]
-    # source が変わった最後の commit だけが、親を 2 つ持つ (先頭は直前の ref)
-    assert len(r["parents"]) == 3 and r["parents"][2] == old
+    # 記録した source は、その時点の commit の追加の親になる (最初の記録と、source が変わったとき)
+    assert old in g(repo, "rev-list", "--parents", "-n", "1", r["a"]["commit"]).split()
+    assert len(r["parents"]) == 3 and r["parents"][2] == new
+    # source が変わらない追記は、親が直前の ref だけ
     assert len(g(repo, "rev-list", "--parents", "-n", "1", r["same"]["commit"]).split()) == 2
-    # ブランチを消して gc しても、古い source の commit を読める
+    # ブランチを消して gc しても、どちらの source の commit も読める
     g(repo, "branch", "-D", "feature/x")
     g(repo, "reflog", "expire", "--expire=now", "--all")
     g(repo, "gc", "-q", "--prune=now")
     assert g(repo, "cat-file", "-t", old) == "commit"
+    assert g(repo, "cat-file", "-t", new) == "commit"
     assert g(repo, "show", f"{old}:f.txt") == "2"
+
+
+def test_a_single_recorded_source_stays_reachable_after_gc(repo, js):
+    """追記が 1 回だけ (source が変わらない) でも、その source を保持する。branch を消して gc しても読める。"""
+    g(repo, "checkout", "-q", "-b", "feature/x")
+    (repo / "f.txt").write_text("2\n", encoding="utf-8")
+    g(repo, "commit", "-q", "-am", "feat 1")
+    src = head_oid(repo)
+    g(repo, "checkout", "-q", "main")
+    r = js(
+        repo,
+        """
+        const vs = { source: arg.src, target: O("b"), base: O("c") };
+        out(await add([cm("only", { vs })]));
+        """,
+        arg={"src": src},
+    )
+    assert r["ok"] is True
+    g(repo, "branch", "-D", "feature/x")
+    g(repo, "reflog", "expire", "--expire=now", "--all")
+    g(repo, "gc", "-q", "--prune=now")
+    assert g(repo, "cat-file", "-t", src) == "commit", "最後に記録した source が gc で消えた"
+    assert g(repo, "show", f"{src}:f.txt") == "2"
+
+
+def test_a_symbolic_review_ref_never_moves_another_branch(repo, js):
+    """review ref を symbolic ref に差し替えても、書き込みは参照先の branch を動かさない。"""
+    main_before = g(repo, "rev-parse", "refs/heads/main")
+    g(repo, "symbolic-ref", f"refs/pi/review/{key()}", "refs/heads/main")
+    r = js(repo, "out(await add([cm('x')]));")
+    assert r["ok"] is False  # 自己検査に落ちる (tree が違う) ので書かない
+    assert g(repo, "rev-parse", "refs/heads/main") == main_before
+    assert head_oid(repo) == main_before
 
 
 def test_writes_only_under_refs_pi_review(repo, js):

@@ -18,6 +18,8 @@ export const LIMITS = {
 	prs: 200,
 	/** meta.json の最大バイト数 */
 	metaBytes: 4096,
+	/** events.jsonl の末尾に、終端の種別 (receipt・merge_*) 専用に残すバイト数。通常のイベントはここを使えない */
+	reserveBytes: 32768,
 } as const;
 
 /** 余裕の範囲でも追記できる種別 */
@@ -200,12 +202,14 @@ export function parseEvents(text: string): ParseResult {
 
 export type AppendCheck = { ok: true } | { ok: false; reason: "body_too_large" | "events_too_large" | "too_many_events" | "reserved" };
 
-/** 追記の前の上限の検査。1900 件以上では、終端の種別以外を断る */
+/** 追記の前の上限の検査。1900 件以上と、末尾の 32 KB は、終端の種別以外を断る (終端記録用の余裕) */
 export function checkAppend(currentBytes: number, currentCount: number, event: ReviewEvent): AppendCheck {
 	if (bodyBytesOf(event) > LIMITS.bodyBytes) return { ok: false, reason: "body_too_large" };
 	if (currentCount >= LIMITS.events) return { ok: false, reason: "too_many_events" };
-	if (currentCount >= LIMITS.reservedFrom && !TERMINAL_TYPES.includes(event.t)) return { ok: false, reason: "reserved" };
+	const terminal = TERMINAL_TYPES.includes(event.t);
+	if (currentCount >= LIMITS.reservedFrom && !terminal) return { ok: false, reason: "reserved" };
 	const line = Buffer.byteLength(JSON.stringify(event) + "\n", "utf8");
+	if (!terminal && currentBytes + line > LIMITS.eventsBytes - LIMITS.reserveBytes) return { ok: false, reason: "reserved" };
 	if (currentBytes + line > LIMITS.eventsBytes) return { ok: false, reason: "events_too_large" };
 	return { ok: true };
 }

@@ -80,6 +80,9 @@ function gitEnv(): Record<string, string> {
 		GIT_CONFIG_NOSYSTEM: "1",
 		GIT_CONFIG_GLOBAL: "/dev/null",
 		GIT_ATTR_NOSYSTEM: "1",
+		// partial clone の不足 object を、承認の前に外部へ取りに行かせない
+		GIT_NO_LAZY_FETCH: "1",
+		GIT_ALLOW_PROTOCOL: "",
 		LC_ALL: "C",
 	};
 }
@@ -95,6 +98,7 @@ function spawnGit(
 	args: string[],
 	mode: "error" | "truncate",
 	cap: number,
+	input?: string,
 ): Promise<GitOut> {
 	return new Promise((resolvePromise, reject) => {
 		const argv = [...(gitDir ? [`--git-dir=${gitDir}`] : []), ...SAFE_ARGS, ...args];
@@ -102,8 +106,14 @@ function spawnGit(
 			shell: false,
 			cwd: sandboxDir,
 			env: gitEnv(),
-			stdio: ["ignore", "pipe", "ignore"],
+			stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
 		});
+		if (input !== undefined && child.stdin) {
+			child.stdin.on("error", () => {
+				// git が入力を読まずに終わったときの EPIPE は、終了コードで判断する
+			});
+			child.stdin.end(input);
+		}
 		const chunks: Buffer[] = [];
 		let size = 0;
 		let truncated = false;
@@ -159,6 +169,78 @@ export async function git(
 	const r = await spawnGit(repo ? repo.gitDir : null, args, "error", limits.maxBytes);
 	if (r.code !== 0 && !allowFail) throw new ApiError(500, "git_failed", "git の実行に失敗しました。");
 	return r;
+}
+
+// ---- 書き込み用の入口 ----
+
+const MAX_INPUT_BYTES = 1024 * 1024;
+const OID_ANY = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const REVIEW_REF_RE = /^refs\/pi\/review\/p[0-9a-f]{16}$/;
+const ALLOWED_CONFIG_RE = /^(?:user\.name|user\.email|commit\.gpgsign)=[^\0\n]*$/;
+const noDash = (a: string): boolean => a !== "" && !a.startsWith("-") && !a.includes("\0");
+const flagsOnly = (args: string[], flags: readonly string[]): boolean => args.every((a) => flags.includes(a) || noDash(a));
+
+/** 書き込み用の git に許す argv か。先頭の -c はコミットの作者設定 3 つだけ。 */
+export function writeArgvAllowed(argv: string[]): boolean {
+	let i = 0;
+	while (argv[i] === "-c") {
+		if (typeof argv[i + 1] !== "string" || !ALLOWED_CONFIG_RE.test(argv[i + 1])) return false;
+		i += 2;
+	}
+	const sub = argv[i];
+	const rest = argv.slice(i + 1);
+	if (rest.some((a) => typeof a !== "string" || a.includes("\0"))) return false;
+	switch (sub) {
+		case "rev-parse":
+			return flagsOnly(rest, ["--verify", "--quiet", "--git-common-dir", "--show-toplevel", "--is-bare-repository"]);
+		case "cat-file":
+			return flagsOnly(rest, ["-s", "-t", "-e", "-p"]);
+		case "ls-tree":
+			return flagsOnly(rest, ["-z", "-r", "--name-only", "-l"]);
+		case "for-each-ref":
+			return rest.every((a) => noDash(a) || /^--(?:format|count|sort)=[^\0]*$/.test(a));
+		case "hash-object":
+			return rest.length === 2 && rest[0] === "-w" && rest[1] === "--stdin";
+		case "mktree":
+			return rest.length === 0 || (rest.length === 1 && rest[0] === "-z");
+		case "commit-tree": {
+			// commit-tree <tree> (-p <親>)* -F -
+			if (rest.length < 3 || !OID_ANY.test(rest[0])) return false;
+			const tail = rest.slice(-2);
+			if (tail[0] !== "-F" || tail[1] !== "-") return false;
+			const mid = rest.slice(1, -2);
+			if (mid.length % 2 !== 0) return false;
+			for (let k = 0; k < mid.length; k += 2) if (mid[k] !== "-p" || !OID_ANY.test(mid[k + 1])) return false;
+			return true;
+		}
+		case "update-ref": {
+			// update-ref --no-deref <ref> <新> [<旧>]。-d・--stdin は許さない
+			if (rest[0] !== "--no-deref" || rest.length < 3 || rest.length > 4) return false;
+			return REVIEW_REF_RE.test(rest[1]) && rest.slice(2).every((a) => OID_ANY.test(a));
+		}
+		case "merge-base":
+			return flagsOnly(rest, ["--is-ancestor"]);
+		case "worktree":
+			return rest.length === 2 && rest[0] === "list" && rest[1] === "--porcelain";
+	}
+	return false;
+}
+
+export type WriteResult = { code: number; stdout: string; stderr: string };
+
+/** 書き込み用の git。allowlist にある argv だけを、安全な実行（固定の先頭引数・空の HOME・shell なし）で動かす。 */
+export async function gitWrite(repo: Repo, argv: string[], input?: string): Promise<WriteResult> {
+	if (!writeArgvAllowed(argv)) throw new ApiError(500, "git_denied", "許可されていない git の操作です。");
+	if (input !== undefined && Buffer.byteLength(input, "utf8") > MAX_INPUT_BYTES) {
+		throw new ApiError(500, "git_too_large", "git への入力が大きすぎます。");
+	}
+	const r = await spawnGit(repo.gitDir, argv, "error", limits.maxBytes, input);
+	return { code: r.code, stdout: r.out, stderr: "" };
+}
+
+/** review-git.ts の Git 型に合うアダプター（リポジトリごとに束縛する）。 */
+export function gitAdapter(repo: Repo): (argv: string[], opts?: { input?: string }) => Promise<WriteResult> {
+	return (argv, opts) => gitWrite(repo, argv, opts?.input);
 }
 
 /** 出力が cap を超えたら打ち切って truncated を返す（diff 用）。 */

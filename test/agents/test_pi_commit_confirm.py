@@ -444,6 +444,9 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
         "pending-adapters.ts",
         "pending-request.ts",
         "native-action.ts",
+        "review-log.ts",
+        "review-git.ts",
+        "pr-review.ts",
         "board.ts",
         "board-collect.ts",
     ):

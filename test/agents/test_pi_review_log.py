@@ -255,7 +255,19 @@ def test_check_append_limits_and_reserve(call):
     ck = lambda b, n, e: call("checkAppend", [b, n, e])[0]  # noqa: E731
     assert ck(0, 0, c) == {"ok": True}
     assert ck(0, 0, comment(body="x" * 16384)) == {"ok": False, "reason": "body_too_large"}
-    assert ck(524288 - 10, 5, c) == {"ok": False, "reason": "events_too_large"}
+    assert ck(524288 - 10, 5, c) == {
+        "ok": False,
+        "reason": "reserved",
+    }  # 通常のイベントは、終端用のバイト枠を使わせない
+    assert ck(524288 - 10, 5, rc) == {
+        "ok": False,
+        "reason": "events_too_large",
+    }  # 終端でも全体の上限は越えられない
+    # バイトの余裕 (32 KB): 上限の近くまで通常のイベントで埋めても、receipt は書ける
+    assert ck(524288 - 32768 - 1000, 5, c) == {"ok": True}
+    assert ck(524288 - 1000, 5, c) == {"ok": False, "reason": "reserved"}
+    assert ck(524288 - 1000, 5, rc) == {"ok": True}
+    assert ck(524288 - 1000, 5, ms) == {"ok": True}
     assert ck(0, 2000, rc) == {"ok": False, "reason": "too_many_events"}
     assert ck(0, 1999, rc) == {"ok": True}
     # 予約: 1900 件以上は終端の種別以外を断る

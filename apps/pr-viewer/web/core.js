@@ -56,6 +56,11 @@
     return String(oid || "").slice(0, 7);
   };
 
+  /* 書き込みに付ける「表示していた版」（GET の pr の OID。ref 名は送らない） */
+  PRV.expectOf = function (pr) {
+    return { source: pr.sourceOid, target: pr.targetOid, base: pr.baseOid };
+  };
+
   PRV.size = function (a, d) {
     return PRV.h("span", { class: "size" }, PRV.h("span", { class: "sa", text: "+" + a }), " ", PRV.h("span", { class: "sd", text: "−" + d }));
   };
@@ -129,6 +134,7 @@
     var isCurrent = function () {
       return tok === PRV.token;
     };
+    if (PRV.closeSheet) PRV.closeSheet();
     window.scrollTo(0, 0);
     if (r.view === "list") {
       PRV.cache = {};

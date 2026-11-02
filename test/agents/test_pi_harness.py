@@ -72,6 +72,9 @@ def env(tmp_path):
         "pending-adapters.ts",
         "pending-request.ts",
         "native-action.ts",
+        "review-log.ts",
+        "review-git.ts",
+        "pr-review.ts",
         "board.ts",
         "board-collect.ts",
     ):
@@ -136,6 +139,9 @@ def test_only_guarded_tools_are_declared(env):
     rules = json.loads((env["harness"] / "rules.json").read_text(encoding="utf-8"))
     if rules["judge"]["common"].get("pi", {}).get("actions"):
         names.append("action")  # 役割に action があり、表も宣言されているときだけ登録される
+    # ローカル PR ビューアの道具は、役割の道具リスト (profile_tools) にあるときだけ登録される
+    role_tools = rules.get("profile_tools", {}).get("implementer", [])
+    names.extend(t for t in ("pr_summary", "pr_comments") if t in role_tools)
     assert tools == sorted(f"guarded_{t}" for t in names)
 
 

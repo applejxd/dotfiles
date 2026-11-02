@@ -351,7 +351,13 @@ def test_diff_of_renamed_japanese_and_binary_files(world):
     )
     assert ja["hunks"][0]["lines"] == [{"t": "+", "o": None, "n": 1, "s": "こんにちは"}]
     _, binary = world.server.get(f"/api/prs/{alpha['id']}/diff?path=bin.dat")
-    assert binary == {"path": "bin.dat", "binary": True, "truncated": False, "hunks": []}
+    assert {k: v for k, v in binary.items() if k not in ("oldBlob", "newBlob")} == {
+        "path": "bin.dat",
+        "binary": True,
+        "truncated": False,
+        "hunks": [],
+    }
+    assert binary["oldBlob"] is None and len(binary["newBlob"]) == 40  # 段 2: 追加されたファイル
 
 
 def test_huge_diff_is_truncated_at_a_whole_line(world):
@@ -862,5 +868,54 @@ def test_replace_refs_do_not_change_what_the_app_shows(tmp_path):
         assert status == 200
         text = json.dumps(diff, ensure_ascii=False)
         assert "real line" in text and "FAKE" not in text
+    finally:
+        server.stop()
+
+
+# ---------------------------------------------------------------- partial clone の自動取得 (lazy fetch)
+
+
+@pytest.fixture
+def lazy(tmp_path):
+    """feature の変更後の blob を消し、promisor remote の ssh が印を作る形にしたリポジトリ。"""
+    repo = _init(tmp_path / "example-app")
+    _commit(repo, {"a.txt": "base\n"}, "init")
+    _git(repo, "switch", "-q", "-c", "feature/lazy")
+    _commit(repo, {"a.txt": "base\nlazy line\n"}, "feat: lazy")
+    _git(repo, "switch", "-q", "develop")
+    blob = _git(repo, "rev-parse", "feature/lazy:a.txt").strip()
+    obj = repo / ".git" / "objects" / blob[:2] / blob[2:]
+    assert obj.exists(), "blob が loose object でない"
+    obj.unlink()
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    ssh = _script(tmp_path / "ssh.sh", f"touch {marks}/ssh\nexit 1")
+    for key, value in (
+        ("extensions.partialClone", "origin"),
+        ("remote.origin.promisor", "true"),
+        ("remote.origin.url", "ssh://example.invalid/x.git"),
+        ("core.sshCommand", str(ssh)),
+    ):
+        _git(repo, "config", key, value)
+    return repo, marks, tmp_path
+
+
+def test_premise_plain_git_lazy_fetches(lazy):
+    """前提: 素の git では、不足した blob の読み取りが ssh を起動する。"""
+    repo, marks, _ = lazy
+    _git(repo, "diff", "develop", "feature/lazy", "--", "a.txt", check=False)
+    if not (marks / "ssh").exists():
+        pytest.skip("この git の版では lazy fetch が ssh を起動しない")
+
+
+def test_the_app_never_lazy_fetches(lazy):
+    repo, marks, tmp_path = lazy
+    server = Server(["--repo", str(repo), "--port", "0", "--web-dir", str(_web_dir(tmp_path))])
+    try:
+        pid = f"{_repo_id(repo)}/{_pr_key('feature/lazy')}"
+        for path in (f"/api/prs/{pid}", f"/api/prs/{pid}/diff?path=a.txt"):
+            status, err = server.get(path)
+            assert status == 500 and err["error"]["code"].startswith("git_"), (path, status, err)
+        assert list(marks.iterdir()) == []
     finally:
         server.stop()

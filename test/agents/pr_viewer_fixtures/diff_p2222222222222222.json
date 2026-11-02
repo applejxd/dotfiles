@@ -1,4 +1,5 @@
-{"path": "src/<img src=x onerror=\"window.__pwned=1\">.ts", "binary": false, "truncated": false, "hunks": [
+{"path": "src/<img src=x onerror=\"window.__pwned=1\">.ts", "binary": false, "truncated": false,
+ "oldBlob": null, "newBlob": "5555555555555555555555555555555555555555", "hunks": [
   {"header": "@@ -0,0 +1,1 @@ <img src=x onerror=\"window.__pwned=1\">", "oldStart": 0, "oldLines": 0, "newStart": 1, "newLines": 1, "lines": [
     {"t": "+", "o": null, "n": 1, "s": "<img src=x onerror=\"window.__pwned=1\"><script>window.__pwned=1</script>"}
   ]}
