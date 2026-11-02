@@ -101,6 +101,8 @@ def _raised(r: dict, d: dict) -> bool:
         "git update-ref refs/heads/develop HEAD",
         "git symbolic-ref HEAD refs/heads/develop",
         "git fetch . feature/x:develop",
+        "git update-ref main-worktree/HEAD abc",
+        "git replace abc def",
         "cd /somewhere && git flow feature finish x",
     ],
 )

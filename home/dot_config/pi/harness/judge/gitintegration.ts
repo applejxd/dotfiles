@@ -35,7 +35,7 @@ const ENV_WITH_VALUE = new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split
 
 // 解析に失敗したとき、統合系の語を含むかの粗い検査
 const INTEGRATION_WORDS =
-	/\bgit(?:-flow)?\b[\s\S]*\b(?:merge|cherry-pick|revert|pull|am|reset|flow|finish|update-ref|symbolic-ref|branch|fetch|worktree|fast-import|reflog)\b|\bgit-flow\b/;
+	/\bgit(?:-flow)?\b[\s\S]*\b(?:merge|cherry-pick|revert|pull|am|reset|flow|finish|update-ref|symbolic-ref|branch|fetch|worktree|fast-import|reflog|replace)\b|\bgit-flow\b/;
 
 // eval / sh -c の文字列の中の cd や `env -C` は、正規化で落ちるので、生の文字列で見る (引用の中の語も数える。安全側)
 const CD_WORD = /(?:^|[\s;&|(`'"])(?:cd|pushd|popd)(?=$|[\s;&|)`'"])/;
@@ -195,6 +195,8 @@ const PROTECTED: { current: readonly string[] } = { current: [] };
 const hit = (kind: Kind, reason: string, sub: string): Integration => ({ kind, reason, sub });
 
 const PENDING_REF = /^refs\/pi(\/|$)/i;
+// 他の worktree の per-worktree ref の別名 (git worktree の「refs」の節)
+const WORKTREE_ALIAS = /^(?:main-worktree|worktrees\/[^/]+)\//i;
 
 /** 宛先の ref の判定。保護なら always、判定できなければ unknown、保護でなければ null。 */
 function refVerdict(ref: string, what: string, sub: string): Integration | null {
@@ -261,6 +263,7 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 			if (a.long.has("--stdin")) return hit("unknown", "git update-ref --stdin (宛先を静的に判定できない)", sub);
 			const ref = a.positional[0];
 			if (ref === undefined) return NONE;
+			if (WORKTREE_ALIAS.test(ref)) return hit("unknown", "git update-ref main-worktree/… (他の worktree の HEAD・ref を動かす。宛先を静的に判定できない)", sub);
 			if (a.short.has("d") || a.long.has("--delete")) {
 				return refVerdict(ref, "git update-ref -d", sub) ?? NONE;
 			}
@@ -269,6 +272,9 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 		}
 		case "symbolic-ref": {
 			const a = scanArgs(args, "m", new Set(["--message"]));
+			if (a.positional.length > 0 && (a.short.has("d") || a.long.has("--delete") || a.positional.length >= 2) && WORKTREE_ALIAS.test(a.positional[0])) {
+				return hit("unknown", "git symbolic-ref main-worktree/… (他の worktree の HEAD・ref を動かす。宛先を静的に判定できない)", sub);
+			}
 			if (a.short.has("d") || a.long.has("--delete")) {
 				const r = a.positional[0];
 				return r !== undefined && PENDING_REF.test(r) ? refVerdict(r, "git symbolic-ref -d", sub) ?? NONE : NONE;
@@ -281,6 +287,14 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 				unknown = unknown ?? v;
 			}
 			return unknown ?? NONE;
+		}
+		case "replace": {
+			const a = scanArgs(args, "", new Set(["--format"]));
+			const writes = ["f", "d", "e"].some((c) => a.short.has(c)) || ["--force", "--delete", "--graft", "--edit", "--convert-graft-file", "--raw"].some((n) => a.long.has(n));
+			if (writes || (a.positional.length > 0 && !a.short.has("l") && !a.long.has("--list"))) {
+				return hit("unknown", "git replace (オブジェクトの見え方を変える)", sub);
+			}
+			return NONE;
 		}
 		case "branch": {
 			const a = scanArgs(args, "u", new Set(["--set-upstream-to", "--sort", "--format", "--contains", "--no-contains", "--points-at", "--merged", "--no-merged", "--color", "--abbrev"]));
