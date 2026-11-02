@@ -142,9 +142,60 @@ def test_identifier_without_marks_is_an_error(t) -> None:
     _assert_error(t["resolves"]["zero_blocks"], "子向け")
 
 
-@pytest.mark.parametrize("key", ["marks_no_id", "parent_no_id", "look_no_id"])
+@pytest.mark.parametrize("key", ["marks_no_id", "parent_no_id", "valid_mark_plus_lookalike_no_id"])
 def test_marks_without_identifier_are_an_error(t, key) -> None:
     _assert_error(t["resolves"][key], "識別子")
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "legacy_generated_parent",
+        "legacy_children_section",
+        "legacy_parent_directory",
+        "legacy_markdownlint",
+        "look_no_id",
+        "legacy_lookalike_tag",
+        "legacy_lookalike_close",
+    ],
+)
+def test_before_adoption_plain_and_lookalike_comments_stay_full(t, key) -> None:
+    # 導入前 (有効な識別子も印も無い) では、印に似た行・child / parent を含むだけのコメントを無視して全文
+    r = t["resolves"][key]
+    assert r["kind"] == "full" and r["why"] == "legacy", r
+
+
+@pytest.mark.parametrize(
+    "key", ["legacy_ident_no_version", "legacy_ident_spaced", "legacy_ident_upper"]
+)
+def test_misspelled_identifier_is_broken_even_before_adoption(t, key) -> None:
+    _assert_error(t["resolves"][key])
+
+
+@pytest.mark.parametrize("key", ["adopted_plain_comment_outside"])
+def test_adopted_file_with_a_plain_comment_outside_blocks_is_broken(t, key) -> None:
+    _assert_error(t["resolves"][key], "5 行目")
+
+
+def test_plain_comment_inside_a_block_is_content(t) -> None:
+    assert t["resolves"]["adopted_plain_comment_inside"] == _ex(
+        "<!-- generated from parent guide -->\nX", 1
+    )
+
+
+def test_fence_close_needs_same_char_and_at_least_the_open_length(t) -> None:
+    r = t["resolves"]
+    for key in (
+        "fence4_not_closed_by_3",
+        "tilde4_not_closed_by_3",
+        "fence_close_with_text_is_not_close",
+    ):
+        assert r[key]["kind"] == "extract", (key, r[key])
+        assert r[key]["text"].endswith("後") and "<!-- /child -->" in r[key]["text"], key
+    assert r["fence_closed_by_longer"] == _ex("```\nx\n`````\n後", 1)
+    # バッククォートの開き行の info にバッククォートがある行は、コードブロックの開きではない (CommonMark)。
+    # 開いたことにすると、この後の閉じ印が無視されて破損になる
+    assert r["backtick_info_not_fence"] == _ex("``` `x`\n後", 1)
 
 
 # --- 破損 ---

@@ -2204,6 +2204,8 @@ def pi_default_role(common: dict[str, Any]) -> str:
     return role
 
 
+PI_CHILD_KEYS = frozenset({"context"})
+PI_CHILD_CONTEXTS = ("inherit", "extract")
 PI_ORCHESTRATE_ROLE = "orchestrator"
 PI_ORCHESTRATE_KEYS = frozenset({"default"})
 # orchestrator が持てないツール (作業のツール)。mcp__ で始まるものも持てない
@@ -2253,6 +2255,24 @@ def pi_orchestrate(common: dict[str, Any]) -> dict[str, Any]:
             f"[pi.profiles.{PI_ORCHESTRATE_ROLE}] tools が実装役 ({pi.get('default_role')}) の部分集合でない: {', '.join(extra)}"
         )
     return {"enabled": True, "default": default, "role": PI_ORCHESTRATE_ROLE}
+
+
+def pi_child(common: dict[str, Any]) -> dict[str, Any]:
+    """``[pi.child]``。子へ渡す文脈 (AGENTS.md) の方式。
+
+    ``context`` は ``inherit`` (全文。既定) か ``extract`` (役割ごとの抜粋)。環境変数 ``PI_HARNESS_CHILD_CONTEXT`` が優先する。
+    see docs/change/0059-child-context.md
+    """
+    section = (common.get("pi") or {}).get("child")
+    if section is None:
+        return {"context": "inherit"}
+    if not isinstance(section, dict):
+        raise SystemExit("[pi.child] がテーブルでない")
+    _reject_unknown("pi.child", set(section), PI_CHILD_KEYS)
+    context = section.get("context", "inherit")
+    if context not in PI_CHILD_CONTEXTS:
+        raise SystemExit(f"[pi.child] context は {' か '.join(PI_CHILD_CONTEXTS)}: {context!r}")
+    return {"context": context}
 
 
 def pi_own_extensions(common: dict[str, Any]) -> list[str]:
@@ -2405,6 +2425,7 @@ def build_pi_harness(_existing: dict[str, Any], common: dict[str, Any]) -> dict[
         "judge": pi_judge_data(common),
         "default_role": pi_default_role(common),
         "orchestrate": pi_orchestrate(common),
+        "child": pi_child(common),
         "extensions": pi_own_extensions(common),
         "agent_env": agent_env(common),
         "broker": pi_broker(common),

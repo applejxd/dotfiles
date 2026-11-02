@@ -53,6 +53,27 @@ const resolves = {
 	look_parent_typo: R(L(ID, "<!-- parents -->", "<!-- child:worker -->", "X", "<!-- /child -->"), "worker"),
 	look_no_id: R(L("<!-- child worker -->", "文"), "worker"),
 	look_in_fence_ignored: R(L(ID, "<!-- parent -->", FENCE, "<!-- child worker-->", FENCE, "<!-- /parent -->", "<!-- child:worker -->", "X", "<!-- /child -->"), "worker"),
+	// 導入前 (識別子も有効な印も無い) のファイルの普通のコメントは、印に似ていても全文 (legacy)
+	legacy_generated_parent: R("# Rules\n<!-- generated from parent guide -->\n- 日本語で回答する。\n", "worker"),
+	legacy_children_section: R("# Rules\n<!-- see the children section -->\n- x\n", "worker"),
+	legacy_parent_directory: R("# Rules\n<!-- parent directory -->\n- x\n", "worker"),
+	legacy_markdownlint: R("# Rules\n<!-- markdownlint-disable MD013 -->\n- x\n", "worker"),
+	legacy_lookalike_tag: R(L("<!-- child worker -->", "文"), "worker"),
+	legacy_lookalike_close: R(L("文", "<!-- /parent -->x", "- y"), "worker"),
+	// 導入のつもりの書き損じ (child-context で始まる有効でない行) は、導入前でも破損
+	legacy_ident_no_version: R(L("# Rules", "<!-- child-context -->", "文"), "worker"),
+	legacy_ident_spaced: R(L("<!-- child-context: v 1 -->", "文"), "worker"),
+	legacy_ident_upper: R(L("<!-- CHILD-CONTEXT: v1 -->", "文"), "worker"),
+	// 導入済み (有効な識別子・有効な印がある) では、印に似た行・普通のコメントは破損
+	adopted_plain_comment_outside: R(L(ID, "<!-- child:worker -->", "X", "<!-- /child -->", "<!-- generated from parent guide -->"), "worker"),
+	adopted_plain_comment_inside: R(L(ID, "<!-- child:worker -->", "<!-- generated from parent guide -->", "X", "<!-- /child -->"), "worker"),
+	valid_mark_plus_lookalike_no_id: R(L("<!-- child worker -->", "<!-- child:worker -->", "X", "<!-- /child -->"), "worker"),
+	// コードブロックの区切りは、文字と長さを保つ (閉じは、同じ文字で、開き以上の長さ)
+	fence4_not_closed_by_3: R(L(ID, "<!-- child:worker -->", "````", FENCE, "<!-- /child -->", "````", "後", "<!-- /child -->"), "worker"),
+	fence_closed_by_longer: R(L(ID, "<!-- child:worker -->", FENCE, "x", "`````", "後", "<!-- /child -->"), "worker"),
+	tilde4_not_closed_by_3: R(L(ID, "<!-- child:worker -->", "~~~~", "~~~", "<!-- /child -->", "~~~~", "後", "<!-- /child -->"), "worker"),
+	backtick_info_not_fence: R(L(ID, "<!-- child:worker -->", FENCE + " `x`", "後", "<!-- /child -->"), "worker"),
+	fence_close_with_text_is_not_close: R(L(ID, "<!-- child:worker -->", FENCE, FENCE + "js", "<!-- /child -->", FENCE, "後", "<!-- /child -->"), "worker"),
 	unclassified_text: R(L(ID, "<!-- child:worker -->", "X", "<!-- /child -->", "新しい段落"), "worker"),
 	unclassified_bullet: R(L(ID, "<!-- child:worker -->", "X", "<!-- /child -->", "- 付け忘れ"), "worker"),
 	unclassified_table: R(L(ID, "<!-- child:worker -->", "X", "<!-- /child -->", "| a | b |", "| - | - |"), "worker"),

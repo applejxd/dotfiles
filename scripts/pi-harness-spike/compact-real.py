@@ -35,6 +35,7 @@ try:
         "redact.ts",
         "canary.ts",
         "children.ts",
+        "child-context.ts",
         "audit.ts",
         "tools-ext.ts",
         "confirm-view.ts",

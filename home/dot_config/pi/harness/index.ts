@@ -15,8 +15,9 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, appendFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
+import { CHILD_ROLES, resolveContext } from "./child-context.ts";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
@@ -58,6 +59,9 @@ const BOUNDARY_ENV = readBoundaryEnv(process.env);
 const NO_SANDBOX = process.env.PI_HARNESS_NO_SANDBOX === "1";
 // 子エージェントとして起動されたか。子では guarded_task を登録しない (入れ子にしない)
 const CHILD = process.env.PI_HARNESS_CHILD === "1";
+// 親が子へ渡す契約 (役割名と文脈のモード)。契約が無い子 (PI_HARNESS_CHILD=1 だけ) では空
+// see docs/change/0059-child-context.md
+const CHILD_AGENT = CHILD ? (process.env.PI_HARNESS_CHILD_AGENT ?? "") : "";
 // 子の system の先頭に足す前置き (全役割で共通。親向けの AGENTS.md の指示を子に適用させない)
 const CHILD_PREAMBLE =
 	"【子エージェントへ】AGENTS.md・個人用の指示のうち、親 (オーケストレーター) の責務にあたる指示 — 子への委譲・feature の起票と取り込み・全件検査 (verify:all)・コミットと承認・ask での質問・停止と報告の方針 — は、あなたには適用しない。" +
@@ -390,6 +394,53 @@ export default async function (pi: ExtensionAPI) {
 		if (BOUNDARY) ctx.ui.setStatus("sandbox", "🔒 sandbox");
 		else if (NO_SANDBOX) ctx.ui.setStatus("sandbox", ctx.ui.theme.fg("warning", "⚠ no sandbox"));
 	});
+	// 子で、親が契約 (役割名と文脈のモード extract) を渡したときだけ、文脈ファイル (AGENTS.md / CLAUDE.md) を役割ごとの抜粋にする。
+	// contextFiles はメッセージごとに元の内容で渡されるので、毎回書き換える。契約が無い子 (PI_HARNESS_CHILD=1 だけ) は変えない。
+	// see docs/change/0059-child-context.md
+	// 別の subagents 拡張 (Windows) の子は PI_SUBAGENT_CHILD=1 を付け、親の env を引き継ぐ。契約の変数が残っていてもこの変換の対象にしない
+	if (CHILD && process.env.PI_SUBAGENT_CHILD !== "1" && process.env.PI_HARNESS_CHILD_CONTEXT === "extract" && CHILD_ROLES.includes(CHILD_AGENT)) {
+		const die = (cause: string, where?: string): never => {
+			// 抜粋の失敗を、黙って全文にも抜粋にもしない。ハンドラの throw は pi が握りつぶして子が全文のまま動くので、
+			// 原因を stderr へ出して子のプロセスを終わらせる (親は「process exited」と stderr の末尾 300 文字を結果に出す)。原因を先頭に、パスは末尾側を短い長さで添える
+			const tail = where === undefined ? "" : ` (出典: ${where.length > 60 ? `…${where.slice(-60)}` : where})`;
+			try {
+				writeSync(2, `${`子の文脈 (AGENTS.md) の抜粋に失敗したので子を終了: ${cause}`.slice(0, 220)}${tail}\n`);
+			} catch {
+				// stderr が無くても終了はする
+			}
+			process.exit(78);
+		};
+		pi.on("before_agent_start", async (event: any) => {
+			try {
+				const options = event.systemPromptOptions;
+				if (!options || typeof options !== "object") return die("event.systemPromptOptions が無い (契約違反)");
+				if (!Array.isArray(options.contextFiles)) return die("contextFiles が配列ではない (契約違反)");
+				const report = process.env.PI_HARNESS_CHILD_CONTEXT_REPORT;
+				const files = options.contextFiles.map((f: any, i: number) => {
+					if (f === null || typeof f !== "object") return die(`contextFiles[${i}] の要素がオブジェクトではない (契約違反)`);
+					if (typeof f.path !== "string") return die(`contextFiles[${i}].path が文字列ではない (契約違反)`);
+					if (typeof f.content !== "string") return die(`contextFiles[${i}].content が文字列ではない (契約違反)`, f.path);
+					if (!/(^|[\\/])(AGENTS|CLAUDE)\.md$/.test(f.path)) return f;
+					const r = resolveContext(f.content, CHILD_AGENT, "extract");
+					if (r.kind === "error") return die(r.reason, f.path);
+					const head = `【親の指示からの抜粋】あなたは子エージェント (${CHILD_AGENT}) です。次は、親向けの AGENTS.md のうち、あなたに関わる部分だけの抜粋です。出典: ${f.path}`;
+					const injected = r.kind === "full" ? f : { ...f, content: `${head}\n\n${r.text}` };
+					if (report) {
+						const rec = { path: f.path, kind: r.kind, why: r.kind === "full" ? r.why : undefined, blocks: r.kind === "extract" ? r.blocks : undefined, before: f.content.length, after: injected.content.length };
+						try {
+							appendFileSync(report, `${JSON.stringify(rec)}\n`);
+						} catch {
+							// 観測の失敗は子の動作に関係しない
+						}
+					}
+					return injected;
+				});
+				options.contextFiles = files;
+			} catch (e: any) {
+				die(`予期しない例外: ${e?.message ?? e}`);
+			}
+		});
+	}
 	// フルガードの下では、pi がスキルの一覧をシステムプロンプトへ入れない (宣言されたツールに read / bash が無いため)。
 	// 同じ形の一覧を、読むツールを guarded_* の名前にして自分で足す。bypass・サンドボックスの有無とは無関係。
 	// see docs/spec/pi-upstream.md (表 B の 16)
@@ -1079,11 +1130,21 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 	});
 	// 子のモデルと effort を呼び出しごとに選べるのは、カタログ (設定のプロバイダ) ・親の完全な provider/id・役割の既定だけ (model-choice.ts。CHG-0043)
 
+	// 子へ渡した文脈のモード (結果の見出しに出す)
+	const contextModes = new WeakMap<Job, string>();
 	// 子を 1 つ起動する。枠は同期で確保する (並行する起動でも上限を超えない)
 	type Spawned = { job: Job; model: string } | { error: string; full?: boolean };
 	const spawnChild = (agentName: string, ctx: any, owner: { cwd: string; role: string }, modelOverride?: string, isolation?: boolean, effortOverride?: string): Spawned => {
 		const agent = agents[agentName];
 		if (!agent) throw new Error(`unknown agent: ${agentName}`);
+		// 子へ渡す文脈のモード: 環境変数 > [pi.child] context 。未知の値では子を起動せず、黙って抽出にも全文にもしない。子の役割が対象外 (commit など) なら常に inherit
+		const envMode = process.env.PI_HARNESS_CHILD_CONTEXT;
+		const wanted = envMode !== undefined && envMode !== "" ? envMode : (rules.child?.context ?? "inherit");
+		if (wanted !== "inherit" && wanted !== "extract") {
+			const from = envMode !== undefined && envMode !== "" ? "環境変数 PI_HARNESS_CHILD_CONTEXT" : "[pi.child] context (rules.json)";
+			return { error: `${from} が未知の値 ${JSON.stringify(wanted)} (inherit か extract)。子は起動しない` };
+		}
+		const contextMode = CHILD_ROLES.includes(agentName) ? wanted : "inherit";
 		const parentModel = `${ctx.model.provider}/${ctx.model.id}`;
 		const choice = resolveChoice({
 			parentModel,
@@ -1105,6 +1166,8 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		const env: Record<string, string | undefined> = {
 			...process.env,
 			PI_HARNESS_CHILD: "1",
+			PI_HARNESS_CHILD_AGENT: agentName,
+			PI_HARNESS_CHILD_CONTEXT: contextMode,
 			PI_HARNESS_ROLE: agent.profile,
 			PI_HARNESS_BYPASS: bypass && agent.inherit_bypass ? "1" : "",
 		};
@@ -1134,6 +1197,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			return { error: `too many live child jobs (max ${MAX_JOBS}). Close one with {jobId, close:true}:\n${live}`, full: true };
 		}
 		job.choiceLine = describeChoice(choice);
+		contextModes.set(job, contextMode);
 		return { job, model };
 	};
 
@@ -1178,6 +1242,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		const parts = [
 			`child ${job.agent}: ${label}${r.note ? ` (${r.note})` : ""} [${fmtStats(r.stats)}]`,
 			...(job.choiceLine ? [`- ${job.choiceLine}`] : []),
+			...(contextModes.has(job) ? [`- 文脈: ${contextModes.get(job)}`] : []),
 			...r.blocked.map((b) => `- needs the user's approval (not run): ${b}`),
 			...(shown.length > 0
 				? [`warnings (tool errors during the run; the answer below already accounts for them):`, ...shown.map((b) => `- tool error: ${b}`)]

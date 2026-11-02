@@ -1605,6 +1605,11 @@ default = "deny"
 [pi.orchestrate]
 default = "off"
 
+# 子へ渡す文脈 (AGENTS.md) の方式。inherit = 全文 (既定)、extract = 役割ごとの抜粋。環境変数 PI_HARNESS_CHILD_CONTEXT が優先
+# see docs/change/0059-child-context.md
+[pi.child]
+context = "inherit"
+
 # 子エージェント。親の guarded_task ツールから起動する (子からさらに子は起動できない)。
 # profile は [pi.profiles] の名前、tier は [opencode.model.tier.*] の階層 (無ければ親と同じモデル)。
 # inherit_bypass = true なら、親が bypass のとき子も bypass で動く (ask を allow にする)。

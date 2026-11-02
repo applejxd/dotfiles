@@ -1170,6 +1170,9 @@
     "tier": "worker"
    }
   },
+  "child": {
+   "context": "inherit"
+  },
   "commands": {
    "fleet": {
     "argument_hint": "<依頼>",

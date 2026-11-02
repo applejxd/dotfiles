@@ -167,6 +167,7 @@ _PI_TESTS = (
     "test_child_context_sources",
     "test_pi_child_prompt",
     "test_pi_child_persist",
+    "test_pi_child_context_wire",
     "test_pi_shared",
     "test_pi_settings_launch",
     "test_pi_unguarded",

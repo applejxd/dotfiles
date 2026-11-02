@@ -5,7 +5,8 @@
 //   <!-- child:worker,review --> 〜 <!-- /child -->  子向け (役割: explore / review / plan / worker / all)
 //   <!-- parent --> 〜 <!-- /parent -->            親だけ
 // 見出し行はブロックの外にあってよい。それ以外の空でない行がブロックの外にあれば未分類。
-// 入れ子・閉じ忘れ・開き無しの閉じ・未知の役割・未知の版・印に似た行は破損。
+// 入れ子・閉じ忘れ・開き無しの閉じ・未知の役割・未知の版・印に似た行は破損 (印に似た行 = `<!--` の直後の語が child / parent の行)。
+// 導入前 (有効な識別子も印も無い) のファイルは、印に似た行・普通のコメントを無視して全文 (legacy)。ただし child-context の綴り違いは常に破損。
 
 export const CHILD_ROLES = ["explore", "review", "plan", "worker"];
 export const CONTEXT_VERSION = "v1";
@@ -21,7 +22,7 @@ type Scan = {
 	blocks: Block[]; // 閉じた子向けブロック
 	problems: string[]; // 破損・未分類 (行番号つき)
 	hasIdent: boolean;
-	hasMarks: boolean; // 識別子・印・印に似た行のどれかがある
+	hasMarks: boolean; // 有効な識別子・有効な印・識別子の書き損じのどれかがある (導入済み)。印に似ただけの行は含まない
 };
 
 const IDENT = /^\s*<!--\s*child-context:\s*(v\d+)\s*-->\s*$/;
@@ -29,9 +30,10 @@ const CHILD_OPEN = /^\s*<!--\s*child:([^>]*?)\s*-->\s*$/;
 const CHILD_CLOSE = /^\s*<!--\s*\/child\s*-->\s*$/;
 const PARENT_OPEN = /^\s*<!--\s*parent\s*-->\s*$/;
 const PARENT_CLOSE = /^\s*<!--\s*\/parent\s*-->\s*$/;
-const LOOKALIKE = /^\s*<!--.*(?:child|parent)/;
+const BAD_IDENT = /^\s*<!--\s*child-context\b/i; // child-context で始まるが IDENT でない行 = 導入のつもりの書き損じ (常に破損)
+const LOOKALIKE = /^\s*<!--\s*\/?\s*(?:child|parent)(?![\w-])/i; // <!-- の直後の語が child / parent の行だけ (中の語は見ない)
 const HEADING = /^#{1,6}(?:\s|$)/;
-const FENCE = /^\s*(```|~~~)/;
+const FENCE = /^\s*(`{3,}|~{3,})(.*)$/;
 
 function parseRoles(raw: string): { roles: string[]; bad: string[] } {
 	const roles: string[] = [];
@@ -62,9 +64,11 @@ function scan(text: string): Scan {
 		if (f || fence !== null) {
 			if (f) {
 				if (fence === null) {
-					fence = f[1];
-					if (!open) err(no, "未分類: ブロックの外のコードブロック (子向けか親だけの印で囲む)");
-				} else if (fence === f[1]) fence = null;
+					if (!(f[1][0] === "`" && f[2].includes("`"))) {
+						fence = f[1];
+						if (!open) err(no, "未分類: ブロックの外のコードブロック (子向けか親だけの印で囲む)");
+					}
+				} else if (f[1][0] === fence[0] && f[1].length >= fence.length && f[2].trim() === "") fence = null;
 			}
 			seenNonEmpty = true;
 			if (open?.block) open.block.lines.push(line);
@@ -114,8 +118,13 @@ function scan(text: string): Scan {
 			}
 			continue;
 		}
-		if (LOOKALIKE.test(line)) {
+		if (BAD_IDENT.test(line)) {
 			hasMarks = true;
+			err(no, `識別子の書式が違う行 (${line.trim()})。正しくは ${"<!-- child-context: v1 -->"}`);
+			continue;
+		}
+		if (LOOKALIKE.test(line)) {
+			// 導入前のファイルでは無視される (resolveContext)。導入済みでは破損
 			err(no, `印に似ているが書式が違う行 (${line.trim()})`);
 			continue;
 		}
@@ -145,7 +154,7 @@ export function resolveContext(text: string, role: string, mode: string): Resolv
 	if (!CHILD_ROLES.includes(role)) return { kind: "error", reason: `未知の役割 ${JSON.stringify(role)} (使えるのは ${CHILD_ROLES.join(" / ")})` };
 	if (mode === "inherit") return { kind: "full", why: "inherit", text };
 	const s = scan(text);
-	if (!s.hasMarks) return { kind: "full", why: "legacy", text };
+	if (!s.hasMarks) return { kind: "full", why: "legacy", text }; // 導入前: 印に似た行・普通のコメントは無視して全文
 	if (!s.hasIdent) return { kind: "error", reason: [NO_IDENT, ...s.problems].join("; ") };
 	if (s.problems.length > 0) return { kind: "error", reason: s.problems.join("; ") };
 	if (s.blocks.length === 0) return { kind: "error", reason: NO_BLOCKS };

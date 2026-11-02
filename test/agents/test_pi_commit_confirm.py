@@ -414,6 +414,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
     shutil.copy2(HARNESS_SRC.parent / "children.ts", harness / "children.ts")
+    shutil.copy2(HARNESS_SRC.parent / "child-context.ts", harness / "child-context.ts")
     shutil.copy2(HARNESS_SRC.parent / "audit.ts", harness / "audit.ts")
     shutil.copy2(HARNESS_SRC.parent / "tools-ext.ts", harness / "tools-ext.ts")
     shutil.copy2(HARNESS_SRC.parent / "confirm-view.ts", harness / "confirm-view.ts")
