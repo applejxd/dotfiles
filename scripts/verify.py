@@ -163,6 +163,7 @@ _PI_TESTS = (
     "test_pi_skill_exclude",
     "test_pi_worktrees_command",
     "test_pi_subagents",
+    "test_pi_child_context",
     "test_pi_child_prompt",
     "test_pi_shared",
     "test_pi_settings_launch",
