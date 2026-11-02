@@ -41,7 +41,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 | 対象 | コマンド |
 | --- | --- |
-| agent 設定・hook | `uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q` |
+| agent 設定・hook | `uv run --with pytest --with pytest-xdist --with pyyaml --no-project pytest test/agents/ -q -n 4 --dist worksteal` |
 | Windows 資産（静的） | `uv run --with pytest --no-project pytest test/test_windows_assets.py -q` |
 | chezmoi の展開範囲 | `uv run --with pytest --no-project pytest test/test_chezmoi_templates.py -q` |
 | シェルスクリプト | `git ls-files '*.sh' \| xargs mise exec shellcheck -- shellcheck` |
@@ -58,7 +58,19 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 <!-- /parent -->
 
+<!-- child:worker,review,plan -->
+
+検証結果の限界（判断の不変条件）:
+
+- `*.tmpl` は pre-commit の linter が素通りする。描画後の検査（`lint_templates.py`）が別に要る。「pre-commit が通った」だけでは `*.tmpl` を検査したことにならない。
+- `pre-commit run --files` で新規ファイルの lint は検査されるが、秘密検出（gitleaks）は `--staged` なので、新規ファイルは `git add` の後でないと見ない。「pre-commit が通った」は新規ファイルの秘密検出済みを意味しない。
+- sandbox 内の `chezmoi diff` は、`~/` が不可視のため展開結果の証拠にならない（全部が「new file」に見える）。
+
+<!-- /child -->
+
 <!-- child:worker -->
+
+担当の試験ファイルを優先し、`test/agents/` 全体は必要なときだけ回す。
 
 `*.tmpl` は pre-commit の linter が素通りするので、テンプレートを編集したら
 `lint_templates.py` も実行する（[理由と対象](docs/spec/development.md#テンプレートの検査)）。
@@ -69,6 +81,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 `chezmoi diff` は **sandbox 内では無意味**。`~/` が deny-by-default で不可視のため、
 展開先が空に見えて全て「new file」になる。sandbox 外のシェルで実行する。
+worker は実行せず、報告の「次の候補」に書く（worker は sandbox の外に出られない）。
 
 <!-- /child -->
 
@@ -80,6 +93,12 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 <!-- /parent -->
 
 ### Windows 実機での検証
+
+<!-- child:worker,review,plan -->
+
+- Windows 資産（`*.ps1`・`home/dot_config/powershell/`・`300_windows/`・`scripts/agents/hooks.py`）を触った変更は、WSL/Linux の検査が通っても Windows 側は未検証と扱う。実機で回せないときはそう明記する。
+
+<!-- /child -->
 
 <!-- child:worker -->
 
@@ -95,7 +114,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 <!-- child:review,plan,worker -->
 
-ここに無いことは一般的な流儀で判断してよい。
+このリポジトリ固有の約束で定めない事項は、他の適用指示に反しない範囲で一般的な流儀で判断してよい。
 
 <!-- /child -->
 
@@ -178,11 +197,17 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 <!-- /parent -->
 
-<!-- child:worker,review -->
+<!-- child:worker,review,plan -->
 
 - 新しい試験ファイルは `scripts/verify.py` の `_PI_TESTS`（または該当の `Rule`）に、取り込み前に feature の中で登録する。
-  worker は依頼文が許したときだけ登録し、許されなければ報告に「登録が必要: <パス>」と書く。漏れは `test/test_verify.py`（2 秒）で先に見つかる。
-  全件検査の前に回す
+  漏れは `test/test_verify.py`（2 秒）で先に見つかる。
+
+<!-- /child -->
+
+<!-- child:worker -->
+
+- worker は依頼文が許したときだけ登録し、許されなければ報告に「登録が必要: <パス>」と書く。
+- `test/test_verify.py` は全件検査の前に回す
 
 <!-- /child -->
 
@@ -208,9 +233,14 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
   コミットメッセージ・案件・調査記録のどこにも残さない（公開後は履歴から消せない）。そうした制約が設計に影響する
   ときは、「制約のある環境（認証つきプロキシが必須、fine-grained PAT が使えない、など）」のように
   **条件つきの一般論**で書き、確認した事実のように断定しない。個人の機（私物）の事実は書いてよい。
-  迷ったら書かず、リポジトリ外の非公開メモ（`.tmp/` など）に置く
 
 <!-- /child -->
+
+<!-- parent -->
+
+  迷ったら書かず、リポジトリ外の非公開メモ（`.tmp/` など）に置く
+
+<!-- /parent -->
 
 <!-- child:worker,review,plan -->
 

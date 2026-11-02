@@ -27,7 +27,6 @@ ALL = frozenset(ROLES)
 NONE: frozenset[str] = frozenset()
 WRP = frozenset({"worker", "review", "plan"})
 RP = frozenset({"review", "plan"})
-WR = frozenset({"worker", "review"})
 W = frozenset({"worker"})
 
 # (ファイル, 原文の行の先頭の句, 抜粋に入る役割)。箇条書き・段落・表の行は、先頭の句から次の区切りまでを 1 つの規則とする
@@ -69,11 +68,17 @@ RULES: tuple[tuple[str, str, frozenset[str]], ...] = (
     ("global", "- 実装は、担当ファイルを分けて依頼文を書けるなら", NONE),
     ("global", "- 子は会話を見られない", NONE),
     ("global", "- 子の結果は、根拠（パスと行", NONE),
-    ("global", "- 外部コードの取り込み・権限や", NONE),
+    ("global", "- 外部コードの取り込み・権限や", RP),
     # --- リポジトリの AGENTS.md ---
     ("repo", "chezmoi で Windows / Ubuntu / WSL / macOS", ALL),
     ("repo", "指示の分担:", NONE),
     ("repo", "変更したら該当するものを実行する。", W),
+    ("repo", "検証結果の限界（判断の不変条件）:", WRP),
+    ("repo", "- `*.tmpl` は pre-commit の linter が素通りする。", WRP),
+    ("repo", "- `pre-commit run --files` で新規ファイルの lint", WRP),
+    ("repo", "- sandbox 内の `chezmoi diff` は", WRP),
+    ("repo", "- Windows 資産（", WRP),
+    ("repo", "担当の試験ファイルを優先し", W),
     ("repo", "| 変更に応じた選択実行（日常）", NONE),
     ("repo", "| 全件（コミット前に 1 回）", NONE),
     ("repo", "| 全体（lint / secret scan）", NONE),
@@ -91,11 +96,7 @@ RULES: tuple[tuple[str, str, frozenset[str]], ...] = (
     ("repo", "`chezmoi diff` は **sandbox 内では無意味**", W),
     ("repo", "初回のみ `mise install", NONE),
     ("repo", "`*.ps1` / `*.ps1.tmpl`、", W),
-    (
-        "repo",
-        "ここに無いことは一般的な流儀で判断してよい。",
-        frozenset({"review", "plan", "worker"}),
-    ),
+    ("repo", "このリポジトリ固有の約束で定めない事項は", WRP),
     ("repo", "- 実ファイルを直接編集したら", NONE),
     ("repo", "- `home/.chezmoiscripts/` は", WRP),
     ("repo", "- シェルスクリプトは先頭に `set -eu`", WRP),
@@ -118,11 +119,14 @@ RULES: tuple[tuple[str, str, frozenset[str]], ...] = (
     ("repo", "- **pi の会話（セッション）を複数並行", NONE),
     ("repo", "- 子の結果は、パスと行・コマンドの出力で", NONE),
     ("repo", "- 手順・依頼文の雛形", NONE),
-    ("repo", "- 新しい試験ファイルは `scripts/verify.py`", WR),
+    ("repo", "- 新しい試験ファイルは `scripts/verify.py`", WRP),
+    ("repo", "- worker は依頼文が許したときだけ登録し", W),
+    ("repo", "- `test/test_verify.py` は全件検査の前に回す", W),
     ("repo", "- 運用手順やコマンドを追加したら", WRP),
     ("repo", "- **`README.md` は「最短で動かす」", WRP),
     ("repo", "- **`chezmoi init` を前提にした設計にしない。**", WRP),
     ("repo", "- **このリポジトリは公開。", ALL),
+    ("repo", "  迷ったら書かず、リポジトリ外の非公開メモ", NONE),
     ("repo", "- ドキュメントは日本語で書く", WRP),
 )
 
@@ -238,3 +242,59 @@ def test_identifier_is_first_nonblank_line(src) -> None:
     for key, text in src.items():
         first = next(ln for ln in text.splitlines() if ln.strip())
         assert first == "<!-- child-context: v1 -->", key
+
+
+def _has(t: dict, key: str, role: str, needle: str) -> bool:
+    return needle in _extract(t, key, role)
+
+
+def test_judgement_invariants_reach_review_plan_worker_not_explore(t) -> None:
+    """検証の限界 (判断の不変条件) は review・plan・worker の抜粋に入り、explore に入らない。"""
+    for needle in (
+        "「pre-commit が通った」だけでは `*.tmpl` を検査したことにならない",
+        "「pre-commit が通った」は新規ファイルの秘密検出済みを意味しない",
+        "展開結果の証拠にならない（全部が「new file」に見える）",
+        "Windows 側は未検証と扱う",
+    ):
+        for role in ROLES:
+            assert _has(t, "repo", role, needle) == (role != "explore"), (role, needle)
+
+
+def test_execution_steps_are_worker_only(t) -> None:
+    for needle in (
+        "`lint_templates.py` も実行する",
+        "sandbox 外のシェルで実行する",
+        "worker は実行せず",
+    ):
+        for role in ROLES:
+            assert _has(t, "repo", role, needle) == (role == "worker"), (role, needle)
+
+
+def test_worker_wide_test_command_runs_in_parallel_and_only_for_worker(t) -> None:
+    """worker の広い試験のコマンドは xdist 付き (worker-common の「広い範囲は直列で回さない」と揃える)。他の役割には出ない。"""
+    needle = "pytest test/agents/ -q -n 4 --dist worksteal"
+    for role in ROLES:
+        assert _has(t, "repo", role, needle) == (role == "worker"), role
+    # 直列の旧コマンド ("pytest test/agents/ -q" で行や表のセルが終わる) が worker の抜粋に残っていない
+    assert "pytest test/agents/ -q`" not in _extract(t, "repo", "worker")
+
+
+def test_registration_reaches_plan_but_running_is_worker_only(t) -> None:
+    for role in ROLES:
+        assert _has(t, "repo", role, "取り込み前に feature の中で登録する") == (
+            role != "explore"
+        ), role
+        assert _has(t, "repo", role, "全件検査の前に回す") == (role == "worker"), role
+
+
+def test_pre_implementation_review_reaches_review_plan_only(t) -> None:
+    for role in ROLES:
+        assert _has(t, "global", role, "実装の前に `review` に見せる") == (
+            role in ("review", "plan")
+        ), role
+        assert not _has(t, "global", role, "子（pi なら `guarded_task`"), role
+
+
+def test_unsure_about_publishing_is_parent_only(t) -> None:
+    for role in ROLES:
+        assert not _has(t, "repo", role, "迷ったら書かず"), role
