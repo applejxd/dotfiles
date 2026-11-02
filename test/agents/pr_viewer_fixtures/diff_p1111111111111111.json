@@ -1,0 +1,6 @@
+{"path": "README.md", "binary": false, "truncated": false, "hunks": [
+  {"header": "@@ -1,1 +1,1 @@", "oldStart": 1, "oldLines": 1, "newStart": 1, "newLines": 1, "lines": [
+    {"t": "-", "o": 1, "n": null, "s": "# Exmaple"},
+    {"t": "+", "o": null, "n": 1, "s": "# Example"}
+  ]}
+]}

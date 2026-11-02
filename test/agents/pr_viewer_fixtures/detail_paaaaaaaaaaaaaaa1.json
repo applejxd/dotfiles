@@ -1,0 +1,9 @@
+{"commits": [
+  {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "subject": "feat: 検索ボックスを追加", "author": "you", "at": "2099-01-01T00:00:00+00:00"},
+  {"oid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", "subject": "chore: 検索の下準備", "author": "you", "at": "2098-12-31T00:00:00+00:00"}
+ ],
+ "files": [
+  {"path": "src/search.ts", "oldPath": null, "status": "A", "additions": 4, "deletions": 0, "binary": false},
+  {"path": "src/app.ts", "oldPath": null, "status": "M", "additions": 2, "deletions": 2, "binary": false}
+ ],
+ "filesTruncated": false}
