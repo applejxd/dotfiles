@@ -3,7 +3,7 @@
 既定 (``inherit``) は今と同一で、``extract`` を明示したときだけ、役割ごとの抜粋が子の system prompt に入る。
 正本は ``AGENTS.md`` と ``home/.chezmoitemplates/agent-instructions.md`` の実物。抜粋の期待値は、
 ``harness/child-context.ts`` の ``resolveContext`` を node で呼んで作る (期待値をここへ写さない)。
-契約は docs/change/0059-child-context.md §4.1・§4.2。
+契約は docs/change/closed/0059-child-context.md §4.1・§4.2。
 
 子の側の変換は、``PI_HARNESS_CHILD=1`` と契約の環境変数 (``PI_HARNESS_CHILD_AGENT`` / ``PI_HARNESS_CHILD_CONTEXT``)
 を付けた pi を直に起動して見る (子の起動を省いた、安い経路)。親が子へ渡す契約は ``guarded_task`` から見る。

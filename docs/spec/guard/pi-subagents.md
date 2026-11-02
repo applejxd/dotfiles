@@ -159,7 +159,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 
 ### 子の文脈 (AGENTS.md) の抜粋 (CHG-0059)
 
-子に渡す AGENTS.md（グローバルと作業先・祖先）を、全文ではなく**役割ごとの抜粋**にできる。**既定は従来どおりの全文（`inherit`）**。設計と経緯は [CHG-0059](../../change/0059-child-context.md)、実測は [記録](../../research/agents/child-context-probe.md)。
+子に渡す AGENTS.md（グローバルと作業先・祖先）を、全文ではなく**役割ごとの抜粋**にできる。**既定は従来どおりの全文（`inherit`）**。設計と経緯は [CHG-0059](../../change/closed/0059-child-context.md)、実測は [記録](../../research/agents/child-context-probe.md)。
 
 | 項目 | 内容 |
 | --- | --- |
@@ -179,7 +179,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 
 - 導入済み = いずれかの有効な識別子・有効な印・識別子の書き損じがある。**`child-context` で始まる有効でない行は、導入前でも破損**
 - 印に似た行 = `<!--` の直後の語が `child` / `parent` の行。導入前では無視、導入済みでは破損
-- 詳細の表（コードブロック・識別子の欠落・役割のブロックが 0 件など）は [CHG-0059 §4.1](../../change/0059-child-context.md#41-記法と契約)
+- 詳細の表（コードブロック・識別子の欠落・役割のブロックが 0 件など）は [CHG-0059 §4.1](../../change/closed/0059-child-context.md#41-記法と契約)
 
 **失敗のしかたと除外する経路**:
 
@@ -215,7 +215,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 - 文章の途中に印を書くときは、行頭を `<!--` にしない（正本の「印を無視して全文に従う」という注記は、行頭が普通の文）
 - 試験と検査: `test/agents/test_child_context_sources.py`（正本 2 つが `lint` を通ること・各規則が役割ごとの期待どおり抽粋に入ること）。**新しい規則を足したら、同じ試験の `RULES` に役割別の期待を足す**（子向けのブロックを足したときは必須。抽粋に入らないところでは任意だが、分類を残すので足すことを勧める）
 
-**既知の制限**（[CHG-0059 §8](../../change/0059-child-context.md#8-未解決未確認)）:
+**既知の制限**（[CHG-0059 §8](../../change/closed/0059-child-context.md#8-未解決未確認)）:
 
 | 項目 | 状態 |
 | --- | --- |

@@ -1,8 +1,9 @@
 # CHG-0059: 親と子で文脈（AGENTS.md）を分ける（子に必要な規則だけを渡す）
 
-- **状態**: In progress
+- **状態**: Done
 - **更新日**: 2026-11-02
-- **基準**: pi 1.4.0、[CHG-0044](0044-plan-agent.md)（計画役）・[CHG-0045](0045-orchestrator-parent.md)（親の絞り込み）、[子エージェント](../spec/guard/pi-subagents.md)
+- **基準**: pi 1.4.0、[CHG-0044](../0044-plan-agent.md)（計画役）・[CHG-0045](../0045-orchestrator-parent.md)（親の絞り込み）、[子エージェント](../../spec/guard/pi-subagents.md)
+- **この文書は当時の記録。現在の仕様は [子エージェント](../../spec/guard/pi-subagents.md) の節「子の文脈 (AGENTS.md) の抜粋 (CHG-0059)」。最終結果は末尾の「終了結果」を見る**
 - 実装は段階（S0〜S6）。**既定は従来どおり（`inherit`）のまま入れ、実機の評価の後に切り替える**
 
 ## 1. 要約と状態
@@ -14,16 +15,16 @@
 | 段 | 内容 | 状態 |
 | --- | --- | --- |
 | 1 | 前置き（つなぎ） | 完了 |
-| S0 | 測る: 子が実際に受け取る文脈の出典・順序・内容。pi の文脈の収集の API。X-2（hook ごとの対象） | 完了（実測。**(P) を採用**。[記録](../research/agents/child-context-probe.md)） |
+| S0 | 測る: 子が実際に受け取る文脈の出典・順序・内容。pi の文脈の収集の API。X-2（hook ごとの対象） | 完了（実測。**(P) を採用**。[記録](../../research/agents/child-context-probe.md)） |
 | S1 | 役割の system の文言整理（X-1・X-4〜X-6・日本語・公開リポジトリ） | 完了 |
 | S2 | 解決器 `resolveContext`・`lint`（`child-context.ts`。純粋関数） | 完了（§4.1 の契約に拡張済み） |
 | S3 | 印付け（正本 2 つ。2 軸で再分類） | 完了（§7 の review の反映を含む） |
 | S3b | S3 の review の指摘の修正 | 完了 |
-| persist | 文脈の書き換えが保たれる条件の実測と試験 | 完了（§4.2。[記録](../research/agents/child-context-probe.md)） |
+| persist | 文脈の書き換えが保たれる条件の実測と試験 | 完了（§4.2。[記録](../../research/agents/child-context-probe.md)） |
 | S4 | 配線: 起動契約・子側の hook・`[pi.child]`・見出しの `- 文脈:`・観測。既定 `inherit`。S4b: 配線の review の修正（§7） | 完了 |
 | pending 系 | 保留の候補作成の高速化など、同じ時期に入った周辺の修正（本案件の範囲外） | 完了 |
-| S5 | 実機の評価（§5 の設計）→ 既定を切り替えるかの判断 | パイロット完了（36 実行。[記録](../research/agents/child-context-eval.md)）。**決定（2026-11-02）: 既定は `inherit` のまま維持**（§5） |
-| S6 | docs（この更新と、[子エージェント](../spec/guard/pi-subagents.md)・環境変数の表・編集の注意） | 完了 |
+| S5 | 実機の評価（§5 の設計）→ 既定を切り替えるかの判断 | 2026-11-02 時点: パイロット完了（36 実行。[記録](../../research/agents/child-context-eval.md)）。**決定（2026-11-02）: 既定は `inherit` のまま維持**（§5） |
+| S6 | docs（この更新と、[子エージェント](../../spec/guard/pi-subagents.md)・環境変数の表・編集の注意） | 完了 |
 
 ## 2. 事実（確かめたこと）
 
@@ -105,7 +106,7 @@
 
 ### 4.2 受け渡し
 
-- **S0 の実測（2026-11-02）で (P) を採る**（`before_agent_start` の `systemPromptOptions.contextFiles`（`{path, content}`）を書き換えると、最終の prompt に反映される。[記録](../research/agents/child-context-probe.md)）。**保持の条件（persist の実測）**: (1) `contextFiles` は**ユーザーメッセージごとに元の内容で渡し直される**ので、**子の起動時に 1 回だけでなく、`before_agent_start` のたびに毎回書き換える** (2) ツールの往復では呼ばれず、書き換えは残る (3) 複数の拡張は `-e` の順に実行され、後の拡張が前の書き換えを見て、**最後の書き換えが勝つ** (4) いずれかの拡張が `{systemPrompt}` を返すと、**それが全体を決め、文脈の書き換えは効かない**（今の拡張に、`before_agent_start` で返すものは無い。新しい拡張を足すときの注意） (5) `/reload` の後の次のターンも効く (6) `-nc` のとき空の `contextFiles` へ足した要素だけが prompt に出る（抜粋を足す口にもなる）。比べた案: (P) pi の文脈の一覧（hook）を、ファイル単位で変換する。`-nc` は要らず、祖先・順序・出典を保てる。(N) `-nc` で止め、選別した結果を `--append-system-prompt` に入れる。この場合は、pi の収集との**同等性**（出典・順序）を先に確かめる
+- **S0 の実測（2026-11-02）で (P) を採る**（`before_agent_start` の `systemPromptOptions.contextFiles`（`{path, content}`）を書き換えると、最終の prompt に反映される。[記録](../../research/agents/child-context-probe.md)）。**保持の条件（persist の実測）**: (1) `contextFiles` は**ユーザーメッセージごとに元の内容で渡し直される**ので、**子の起動時に 1 回だけでなく、`before_agent_start` のたびに毎回書き換える** (2) ツールの往復では呼ばれず、書き換えは残る (3) 複数の拡張は `-e` の順に実行され、後の拡張が前の書き換えを見て、**最後の書き換えが勝つ** (4) いずれかの拡張が `{systemPrompt}` を返すと、**それが全体を決め、文脈の書き換えは効かない**（今の拡張に、`before_agent_start` で返すものは無い。新しい拡張を足すときの注意） (5) `/reload` の後の次のターンも効く (6) `-nc` のとき空の `contextFiles` へ足した要素だけが prompt に出る（抜粋を足す口にもなる）。比べた案: (P) pi の文脈の一覧（hook）を、ファイル単位で変換する。`-nc` は要らず、祖先・順序・出典を保てる。(N) `-nc` で止め、選別した結果を `--append-system-prompt` に入れる。この場合は、pi の収集との**同等性**（出典・順序）を先に確かめる
 - **起動契約**: `spawnChild` が、検証済みの役割名（`explore` と `review` は同じ profile なので、profile では区別できない）と文脈のモードを、環境変数で明示する。子側はその契約があるときだけ動き、親・`commit` 役・Windows の経路は変えない。未知のモードは、黙って選別にしない
 
 #### 実装で決まったこと（S4。`index.ts`・`generate.py` の `pi_child`）
@@ -142,7 +143,7 @@
   - 場面は全役（explore・review・plan・worker）と、親向け規則へ誘導する反例を含める。数は、場面 × 2 方式 × 複数回で、少数の成功を根拠にしない
   - 判定を分ける: (1) 必須規則の違反・危険な操作の試行 (2) 正しい拒否（増えてよい） (3) 不要な拒否・中断 (4) 課題の達成・レビューの検出漏れ。採点は、自己申告でなく、実際のツール呼び出し・差分・検査の出力
   - 許容する回帰と観測期間を、切り替えの前に決める。決まらなければ既定は維持。切り替え後も、一定期間は opt-in の試用
-- **S5 パイロットの結果**（2026-11-02。36 実行 = 7 場面 × 2 方式。[記録](../research/agents/child-context-eval.md)）:
+- **S5 パイロットの結果**（2026-11-02。36 実行 = 7 場面 × 2 方式。[記録](../../research/agents/child-context-eval.md)）:
   - 事実: 規約の遵守は `inherit`・`extract` で同じ（公開の規則・不変条件の指摘・試験の登録・コミットしない・親向けの誘導に乗らない）。prompt は worker 約 32%・review 約 42%・plan 約 45% 減
   - 事実: 「全文だと親向けの規則に引きずられて止まる」は示せなかった（1 モデル・各場面 n=2〜3）
   - 事実: 生成先を手で編集する違反は両方式で起きる（`extract` 2/2・`inherit` 1/2）。抜粋の有無とは別の課題
@@ -221,7 +222,7 @@
 | 質問への回答 | コードブロックの区切りの長さを保持していない | 採用 | 長い区切りの中の短い区切りで閉じてしまう | 文字と長さを保持（§4.1 (b)。`child-context.ts`） |
 | 質問への回答 | 祖先の `AGENTS.md` の二重化 | **保持** | 無条件の重複排除は、worktree と本体の異なる規約を落とす | S5 で評価（§8） |
 | 質問への回答 | 見出しの「親向けの AGENTS.md」が `CLAUDE.md` にも付く（NIT） | **未反映** | 実害は小さい | 変更なし（`index.ts` の見出しの文言） |
-| 質問への回答 | 戒し方: 設定だけではなく、起動済みの子の終了と親の再起動が要る | 採用 | 環境変数は起動済みの親に届かない（C6） | [子エージェント](../spec/guard/pi-subagents.md#子の文脈-agentsmd-の抜粋-chg-0059) |
+| 質問への回答 | 戒し方: 設定だけではなく、起動済みの子の終了と親の再起動が要る | 採用 | 環境変数は起動済みの親に届かない（C6） | [子エージェント](../../spec/guard/pi-subagents.md#子の文脈-agentsmd-の抜粋-chg-0059) |
 | 質問への回答 | `process.exit(78)` 後の後始末・MCP 子孫の残留 | **未確認** | review は読み取り専用。非隔離では、異常終了後にプロセスグループを止める保証が無い | §8 |
 
 - 試験名は実物（`test_pi_child_context_wire.py`）で確かめた。review の全文はリポジトリに含めない（セッションの一時ファイル）
@@ -244,7 +245,7 @@
 - 【S0 で判明】`-nc` は作業先・祖先・agent 置き場の `AGENTS.md`・`CLAUDE.md` を全部止める（append は残る）。子は `--no-approve` なので、作業先の `.pi/SYSTEM.md` は読まない。【persist で判明】上の §4.2 の保持の条件。残りは、TUI・RPC での `/reload`、3 つ以上の拡張の組み合わせ、往復の 2 回目の最終 prompt 本文での確認、`--approve` と `-nc` の組み合わせ
 - Claude Code・Copilot・OpenCode が、共通の正本の HTML コメントを、モデルにどう渡すか（表示・トークン・解釈）
 - 実モデルが、抜粋で規約を守るか: パイロットでは守れた（1 モデル・各場面 n=2〜3。弱いモデル・他の場面は未確認）。Windows 実機は未確認
-- [CHG-0051](0051-verification-tiers.md) の「`AGENTS.md` の縮約」との競合（S3 の前に調整する）
+- [CHG-0051](../0051-verification-tiers.md) の「`AGENTS.md` の縮約」との競合（S3 の前に調整する）
 - 棚卸しの分類と字数は目視。判断が分かれる 9 件は、利用者の判断（サンクコストの扱いは review・plan に渡す。ツール引数の日本語と `.tmp/keep` は渡さない、が推奨）
 - `commit` 役は対象外（全文のまま）。同じ役の文脈の矛盾は、今回は解決しない
 
@@ -256,4 +257,43 @@
 
 ## 10. 関連
 
-- [子エージェント](../spec/guard/pi-subagents.md)・[CHG-0044](0044-plan-agent.md)・[CHG-0045](0045-orchestrator-parent.md)・[設定生成](../spec/agent-config-generation.md)
+- [子エージェント](../../spec/guard/pi-subagents.md)・[CHG-0044](../0044-plan-agent.md)・[CHG-0045](../0045-orchestrator-parent.md)・[設定生成](../../spec/agent-config-generation.md)
+
+## 終了結果
+
+**採用（実装は完了。既定は従来どおり `inherit`。2026-11-02 に利用者が決定）。** 子に必要な規則だけを渡す仕組みは入れた。S5 のパイロット 36 実行で、抜粋にしても規約を落とした兆候は見えず、prompt は約 3〜4 割小さくなったが、振る舞いが良くなる証拠は無かったので、既定の切り替えと本評価（72 実行）は見送る。
+
+### 採用したもの
+
+- 正本（グローバルの `AGENTS.md`・リポジトリの `AGENTS.md`）への印: 識別子 `<!-- child-context: v1 -->`・子向け `<!-- child:<役割> -->`〜`<!-- /child -->`・親だけ `<!-- parent -->`〜`<!-- /parent -->`
+- 解決器 `resolveContext`・`lint`（`child-context.ts`）。導入前は全文・導入済みで正常なら役割別の抜粋・破損は起動失敗（`exit 78`）
+- 受け渡し: 子側の `before_agent_start` が、毎メッセージ、`contextFiles` の `AGENTS.md`・`CLAUDE.md` を書き換える（方式 P。`-nc` は使わない）
+- 設定: `[pi.child] context`（既定 `inherit`）と環境変数 `PI_HARNESS_CHILD_CONTEXT`。起動契約として親が `PI_HARNESS_CHILD_AGENT`・`PI_HARNESS_CHILD_CONTEXT` を子へ渡す
+- 役割の system の文言整理（日本語・公開リポジトリ・検査の実行・試験登録・拒否後の別手段・先に検索・`$TMPDIR`）と、子の system の先頭の前置き
+
+### 撤回・見送りしたもの
+
+| 項目 | いつ | 理由 |
+| --- | --- | --- |
+| `-nc`（`--no-context-files`）を無条件に付ける | S0 | 作業先の規約も消える（S0 の実測） |
+| 手書きの子用文脈を役割の system に写す | 設計時 | 写しがずれる |
+| 子の起動時に 1 回だけ書き換える | persist | `contextFiles` はメッセージごとに元へ戻る（persist の実測） |
+| 破損した印を静かに全文へ倒す | 設計時 | 規約を落とす（`exit 78` で止める） |
+| 祖先の `AGENTS.md` の無条件の重複排除 | 設計時 | 本体と worktree で規約が違うと落とす（保持。パイロットでは評価していない） |
+| 既定を `extract` に切り替える／本評価 72 実行／`extract` の opt-in 試用 | 2026-11-02 | 利用者の決定。害も益も小さい。機構は残る（設定か環境変数でいつでも試せる） |
+
+### 反映先
+
+- 仕様: `docs/spec/guard/pi-subagents.md`（節「子の文脈 (AGENTS.md) の抜粋 (CHG-0059)」）・`pi-guard.md`・`pi-manual.md` の環境変数表・`AGENTS.md` の編集の注意
+- 実装: `home/dot_config/pi/harness/child-context.ts`・`index.ts`・`scripts/agents/generate.py`（`[pi.child]`）・試験 `test/agents/test_child_context_sources.py` ほか
+- 観測: `docs/research/agents/child-context-probe.md`（S0・persist）・`docs/research/agents/child-context-eval.md`（S5 パイロット）
+
+### 移管した未完事項
+
+| 項目 | 状態 | 移管先 |
+| --- | --- | --- |
+| 非隔離の子の `exit 78` 後のプロセス後始末・MCP 子孫の残留 | 未確認 | 未起票 |
+| Windows の `process.exit`・`writeSync(2)` | 未確認 | 未起票 |
+| 他の CLI（Codex・Copilot・OpenCode）の HTML コメントの扱い | 未確認 | 未起票 |
+| 祖先の `AGENTS.md` の二重化の影響 | 未評価 | 未起票 |
+| 弱いモデルでの再評価 | 再開の条件 = 全文に引きずられる証拠・親向けの規則に従った子の事例が出たとき | 未起票 |

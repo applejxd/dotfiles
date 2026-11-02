@@ -3,7 +3,7 @@
 ``test/agents/pi/child_context_sources_driver.mjs`` が ``resolveContext`` / ``lint`` を実物の 2 ファイルに当てる。
 規則は「原文の箇条書き (継続行を含む) 全体」を切り出して、抜粋に入る / 入らないを役割ごとに確かめる。
 新しい規則を足したら ``RULES`` に足す (足さないと ``test_extract_has_only_listed_rules`` が落ちる)。
-契約は docs/change/0059-child-context.md §4.1・§5 S3。
+契約は docs/change/closed/0059-child-context.md §4.1・§5 S3。
 """
 
 from __future__ import annotations

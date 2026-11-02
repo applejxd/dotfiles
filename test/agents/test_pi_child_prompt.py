@@ -3,7 +3,7 @@
 今の挙動を固定する。S4 (文脈の受け渡しの配線) で、既定の ``inherit`` のとき同一であることの基準になる。
 固定するのは (1) 作業先と agent 置き場の ``AGENTS.md`` が両方入る (2) 前置きと役割の system が並ぶ位置
 (3) 役割ごとに前置きで始まる、の 3 つ。測った結果の表は docs/research/agents/child-context-probe.md。
-see docs/change/0059-child-context.md
+see docs/change/closed/0059-child-context.md
 """
 
 from __future__ import annotations

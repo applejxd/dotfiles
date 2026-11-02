@@ -5,7 +5,7 @@
 測った手順と表は docs/research/agents/child-context-probe.md の「複数ターン・複数拡張・優先関係」。
 観測は試験専用の拡張 test/agents/pi/dump_options.ts (呼び出しごとの記録は DUMP_OPTIONS_CALLS_FILE)。
 最終の prompt は faux の FAUX_DUMP_PROMPT (--mode json の assistant の本文) で見る。
-see docs/change/0059-child-context.md
+see docs/change/closed/0059-child-context.md
 """
 
 from __future__ import annotations

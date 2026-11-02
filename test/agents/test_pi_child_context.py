@@ -1,7 +1,7 @@
 """`harness/child-context.ts` (契約表の `resolveContext` と `lint`) の表試験。
 
 ``test/agents/pi/child_context_driver.mjs`` が純粋な関数を動かし、結果を JSON で出す。
-node の型除去を使うので、22.18 未満の node では飛ばす。契約は docs/change/0059-child-context.md §4.1。
+node の型除去を使うので、22.18 未満の node では飛ばす。契約は docs/change/closed/0059-child-context.md §4.1。
 """
 
 from __future__ import annotations

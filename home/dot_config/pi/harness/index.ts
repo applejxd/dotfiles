@@ -60,7 +60,7 @@ const NO_SANDBOX = process.env.PI_HARNESS_NO_SANDBOX === "1";
 // 子エージェントとして起動されたか。子では guarded_task を登録しない (入れ子にしない)
 const CHILD = process.env.PI_HARNESS_CHILD === "1";
 // 親が子へ渡す契約 (役割名と文脈のモード)。契約が無い子 (PI_HARNESS_CHILD=1 だけ) では空
-// see docs/change/0059-child-context.md
+// see docs/change/closed/0059-child-context.md
 const CHILD_AGENT = CHILD ? (process.env.PI_HARNESS_CHILD_AGENT ?? "") : "";
 // 子の system の先頭に足す前置き (全役割で共通。親向けの AGENTS.md の指示を子に適用させない)
 const CHILD_PREAMBLE =
@@ -396,7 +396,7 @@ export default async function (pi: ExtensionAPI) {
 	});
 	// 子で、親が契約 (役割名と文脈のモード extract) を渡したときだけ、文脈ファイル (AGENTS.md / CLAUDE.md) を役割ごとの抜粋にする。
 	// contextFiles はメッセージごとに元の内容で渡されるので、毎回書き換える。契約が無い子 (PI_HARNESS_CHILD=1 だけ) は変えない。
-	// see docs/change/0059-child-context.md
+	// see docs/change/closed/0059-child-context.md
 	// 別の subagents 拡張 (Windows) の子は PI_SUBAGENT_CHILD=1 を付け、親の env を引き継ぐ。契約の変数が残っていてもこの変換の対象にしない
 	if (CHILD && process.env.PI_SUBAGENT_CHILD !== "1" && process.env.PI_HARNESS_CHILD_CONTEXT === "extract" && CHILD_ROLES.includes(CHILD_AGENT)) {
 		const die = (cause: string, where?: string): never => {

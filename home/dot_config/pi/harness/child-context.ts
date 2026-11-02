@@ -1,4 +1,4 @@
-// 子向けの印の解決 (`resolveContext`) と検査 (`lint`)。純粋関数 (I/O なし)。契約: docs/change/0059-child-context.md §4.1
+// 子向けの印の解決 (`resolveContext`) と検査 (`lint`)。純粋関数 (I/O なし)。契約: docs/change/closed/0059-child-context.md §4.1
 //
 // 記法 (行全体がその 1 つのコメントのときだけ印。コードブロック ``` / ~~~ の中の印は無視):
 //   <!-- child-context: v1 -->                    導入済みの識別子 (コードブロックの外の最初の空でない行)

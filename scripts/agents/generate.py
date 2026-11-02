@@ -2261,7 +2261,7 @@ def pi_child(common: dict[str, Any]) -> dict[str, Any]:
     """``[pi.child]``。子へ渡す文脈 (AGENTS.md) の方式。
 
     ``context`` は ``inherit`` (全文。既定) か ``extract`` (役割ごとの抜粋)。環境変数 ``PI_HARNESS_CHILD_CONTEXT`` が優先する。
-    see docs/change/0059-child-context.md
+    see docs/change/closed/0059-child-context.md
     """
     section = (common.get("pi") or {}).get("child")
     if section is None:
