@@ -63,6 +63,9 @@ def _tui_run(env, calls, timeout_s: float = 90.0) -> str:
         "TERM": "xterm-256color",
         "COLUMNS": "200",
         "LINES": "60",
+        # 起動時の fd のダウンロードと更新確認を止める。起動の途中 (固定 4 秒を超えると) pi は送信を断る
+        # (「Startup is still in progress」。入力は編集欄に残り、go が失われる)。偽のモデルだけの試験なので網に依存させない
+        "PI_OFFLINE": "1",
     }
     pid, fd = pty.fork()
     if pid == 0:
