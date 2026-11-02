@@ -39,6 +39,7 @@
 | 全マシン共通の正本 | `home/dot_config/agents/common.toml.tmpl`（編集後は chezmoi の apply） |
 | マシン別の上書き | `~/.config/agents/local.toml`（`[pis.network]`・`[pi.sandbox]` 等 5 節のみ） |
 | 作業先ごとの許可範囲 | `<起動ディレクトリ>/.opencode/sandbox.toml`（`read`・`write` 等） |
+| リポジトリごとの統合先と接頭辞の設定を変える | `<リポジトリ>/.agents/config/pi.json`（コミットした内容だけが効く → §7.6） |
 | 起動時の一時追加・切替 | `PIS_EXTRA_READ`、`PI_HARNESS_ROLE`、`PI_HARNESS_ORCHESTRATE` |
 
 ### 困ったとき
@@ -407,6 +408,68 @@ read = ["/data1"]
 - `PI_HARNESS_BOUNDARY` `PI_HARNESS_ALLOWED` `PI_HARNESS_CHILD` `PI_HARNESS_CHILD_AGENT` `PI_HARNESS_CHILD_CONTEXT_REPORT` `PI_HARNESS_NO_SANDBOX` などは内部用や表示用や試験用なので、設定しない
 - 検索の鍵（`BRAVE_API_KEY` など）は `pis` が内側へ渡さない
 
+### 7.6 プロジェクトごとの設定（`pi.json`）
+
+各リポジトリの `.agents/config/pi.json` で、統合まわりの 3 つだけをそのリポジトリ用に変えられる。7.3 の `local.toml`（マシン別）とは別の仕組み。
+
+| キー | 意味 | 省略したときの既定 |
+| --- | --- | --- |
+| `target` | `git_integrate` の統合先 | `[pi.integrate] target`（このリポジトリの同梱値は `develop`） |
+| `source_prefixes` | 統合元として許す接頭辞 | `["feature/", "bugfix/"]` |
+| `free_zone_prefixes` | 自由区（確認なしのコミット）の接頭辞 | `["feature/"]` |
+
+最小の例（作業ブランチを `task/` にする）:
+
+```json
+{
+  "integrate": {
+    "source_prefixes": ["task/"],
+    "free_zone_prefixes": ["task/"]
+  }
+}
+```
+
+統合先を `production` にする例:
+
+```json
+{
+  "integrate": {
+    "target": "production"
+  }
+}
+```
+
+**変えられるもの・変えられないもの**:
+
+| 項目 | 可否 |
+| --- | --- |
+| 統合先 | 全体の保護ブランチ（`[pi.integrate] protected_refs`）の中から選ぶ。例の `production` は、全体の保護に入っているときだけ使える |
+| 統合元・自由区の接頭辞 | 変えられる。末尾は `/`。保護ブランチと重なる接頭辞は無効 |
+| 保護ブランチ | **変えられない**（全体設定のまま）。`protected_refs` を書くと設定全体が無効になる |
+
+**効くタイミング**:
+
+- 設定は、**コミットした内容（HEAD）だけ**が効く。作業ツリーの編集は、コミットするまで反映されない
+- 自由区の接頭辞は、**主ブランチ（主 worktree の HEAD）に入るまで効かない**。feature の中で書き換えても、自分の自由区は広がらない。承認した統合で主ブランチに入ってから効く
+- **主 worktree が保護ブランチ上にないと、自由区は効かない**（確認が増える）。主 worktree が detached HEAD・保護でないブランチ上のとき。設定が無いリポジトリでも同じ
+- 自由区の設定を**読めないとき**（git の失敗など）も、自由区は効かない（確認が増える）。設定が無い・無効のときは、従来どおり全体の既定
+- 統合の承認画面は、承認する pi の cwd（統合先の主 worktree）の設定で作り直す。要求のあとに設定が変わると「変わった点」に出る
+
+**無効なとき**:
+
+- 未知のキー・型違い・大きすぎる・保護との重なりなどが 1 つでもあると、**設定全体が無効**になり、全体の既定で動く（保護は緩まない）
+- 承認画面・`/board` に、無効であることと診断コード（`invalid_json`・`unknown_key`・`prefix_overlaps_protected` など）が 1 行出る。入力の中身は出ない
+- ファイルが無い・まだコミットしていない場合は、何も出ず全体の既定
+
+**その他**:
+
+- `git flow … finish` を直接実行したときの確認画面は、cwd と主 worktree の両方の設定を見る。どちらかが統合先か統合元の接頭辞を変えている・読めないときは、統合の内容を出さない（「確認できない」と出る）。`git_integrate` を使うと内容を確認できる
+- pi の project trust とは連動しない
+- `.agents/config/pi.json` の変更は、統合の承認画面で「リスクのあるパス」として見える（`[pi.integrate] risk_paths` の同梱の対象）
+- 実際の `pi.json` は、まだどのリポジトリにも置いていない（実機確認の後）
+- 仕様と診断コードの一覧: [guard/pi-extensions.md](guard/pi-extensions.md#プロジェクトごとの設定pijson)
+- 未確認: Windows、実機（`pis`・実 TUI）での見え方
+
 ## 8. 日常の運用
 
 ### 8.1 承認
@@ -475,6 +538,7 @@ read = ["/data1"]
 | 子・orchestrate・並列実装・複数会話 | [guard/pi-subagents.md](guard/pi-subagents.md) |
 | `guarded_action`・`/plan`・`/pending`・拡張 | [guard/pi-extensions.md](guard/pi-extensions.md) |
 | 保留の承認 | [guard/pi-pending.md](guard/pi-pending.md)、[CHG-0055（非同期承認）](../change/0055-async-approval.md) |
+| プロジェクトごとの統合設定（`pi.json`） | 7.6、[guard/pi-extensions.md](guard/pi-extensions.md#プロジェクトごとの設定pijson)、[CHG-0057（プロジェクトごとの統合設定）](../change/0057-per-project-integrate.md) |
 | サンドボックス | [guard/pi-sandbox.md](guard/pi-sandbox.md)、[sandbox/index.md](sandbox/index.md)、[sandbox/fence-boundary.md](sandbox/fence-boundary.md)、[sandbox/broker.md](sandbox/broker.md) |
 | 設定の生成 | [agent-config-generation.md](agent-config-generation.md) |
 | モデルの割り当て | [agent-model-assignment.md](agent-model-assignment.md)、[CHG-0043（モデルカタログ）](../change/0043-model-catalog.md) |

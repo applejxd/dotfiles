@@ -73,7 +73,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 並列実装の配車・関門・承認パケット・標的レビュー（利用者が本質的な承認に集中する自動化）を知る・変える | [CHG-0056](change/0056-orchestrator.md) |
 | 保留の承認を、巡回・一括で少ない操作にする（見ずに承認することなく） | [CHG-0058](change/0058-batch-approval.md) |
 | 親と子で文脈（AGENTS.md）を分ける（子に必要な規則だけを渡す） | [CHG-0059](change/closed/0059-child-context.md) |
-| フルガードの統合先・作業ブランチの接頭辞を、リポジトリごとに変える（他のリポジトリへ広げる） | [CHG-0057](change/0057-per-project-integrate.md) |
+| フルガードの統合先・作業ブランチの接頭辞を、リポジトリ内の `pi.json` でプロジェクトごとに変える | [CHG-0057](change/0057-per-project-integrate.md)、[利用者マニュアル 7.6](spec/pi-manual.md#76-プロジェクトごとの設定pijson) |
 
 ### 案件と根拠
 

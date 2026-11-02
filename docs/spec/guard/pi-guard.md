@@ -17,7 +17,7 @@ OpenCode のガード（permission の生成・guide plugin）の後継で、移
 
 | 話題 | 文書 |
 | --- | --- |
-| 拡張の方針・`guarded_action`・ツールの拡張・圧縮・commit の確認・整形・`/fleet`・Orca・Zed | [pi の拡張と補助機能](pi-extensions.md) |
+| 拡張の方針・`guarded_action`・プロジェクトごとの設定（`pi.json`）・ツールの拡張・圧縮・commit の確認・整形・`/fleet`・Orca・Zed | [pi の拡張と補助機能](pi-extensions.md) |
 | `guarded_task`・job・worktree 隔離・Windows の `task` | [pi の子エージェント](pi-subagents.md) |
 | `pis` の agent 置き場・通信・緩和のゲート | [pis のサンドボックス](pi-sandbox.md) |
 

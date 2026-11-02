@@ -74,7 +74,7 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 - **ツール**: `guarded_action`（引数 `action` と `params`）。登録されるのは、役割の `tools` に `action` がある親の役割（`implementer`）だけ。子エージェント・読み取り役・探索役には無く、実行時にも拒否する。判定器は `action` を役割の許可だけで通し、**汎用の ask・確認は出さない**（確認は `execute()` が 1 回だけ行う）。
 - **確認**: `select` で「承認して実行 / 編集して承認 / 拒否」。内容（`content` のフィールド）の全文、プレビュー、**実行する argv** を表示する（表示と実行は同じ配列）。**RPC（Orca・Zed など TUI 以外）では、詳細をチャットに出し、承認ダイアログは要点だけにする**: RPC の `select` は `title` と選択肢しか持たず、全部を詰めると chat UI（特にスマホ）ではみ出して承認の選択肢に届かないため。確認の前に、今までの詳細（全文・プレビュー・統計・argv）を**ツールの途中経過**（`execute` の `onUpdate`。RPC では `tool_execution_update`）として出し、ダイアログの `title` は「上記の内容で実行しますか」の 1 文だけにする（要点を繰り返さない。利用者の決定）。詳細には、対象のリポジトリ（作業ツリーの実体パス）・ブランチ・HEAD・本文の全文・ステージ済みの統計・argv と、退避の注意書き（`git_commit`）を出す。途中経過のイベントは pi が非同期に流し、ダイアログの要求より後に出ることがあるので、詳細を出した後に 300 ms 待ってからダイアログを出す（待たないと「上記」が見えない順になる。実測）。全文は「編集して承認」のエディタでも見られる。`argv` の中で `content` の値を含む要素は `<名前>` に置き換える（本文が 2 回出るのを避ける。実際に実行する配列は変えない）。**途中経過を出せないときは、詳細を見せずに承認させないよう、スマホ向けに縮めた詳細（本文は先頭 10 行・800 字、統計は先頭 8 件、空行なし、1 行 100 字）をダイアログに出す。** TUI はこれまでどおりダイアログに全部出す。**Orca が途中経過をチャットに表示するか、スマホで見やすいかは、実際の Orca では未検証**（公開の情報では確認できなかった）。子は拒否（`not approved:`）。**`git_commit` の無反応（`[pi.confirm] timeout_seconds`）・UI 無し・不在は、拒否ではなく退避して続行**（下の「退避」）。取消・中断・拒否と、`git_commit` 以外の操作の無反応・UI 無しは、拒否のまま。bypass でも省略できない。「編集して承認」は `editor`（timeout が無いので、選んだ後にだけ開く）、「拒否」は `input` で理由を任意に取る。
 - **TUI の `git_commit` の確認は、要約が既定（CHG-0050 の後続）**: TUI では常に、小さい変更も含めて、確認の title はラベル付きの箇条書きの要約（**リポジトリ名・ブランチ（短縮 HEAD つき）・件名（本文の 1 行目。**切らずに字下げして折り返す**。最大 5 行）の順**、本文の大きさの行は出さない（本文の全文はチャットと「全文を見る」で見る）、変更（合計の行を見出しにし、上位 5 ファイルを字下げで。同名が無いファイルは最後の要素だけ。変更行の合計。棒グラフは出さない）と残りの件数。リポジトリ名は**本体のリポジトリ名**（git の共通ディレクトリの親。worktree の名前はブランチ名と重複するので出さない。git が使えないときは `dir` の指定の最後の要素、無ければ作業ツリーの最後の要素）。約 12 行。絶対パスは出さない）にし、行は端末の幅（`process.stdout.columns`。全角を 2 桁と数える）で切る。注意書きも 1 行に縮める。Orca のスマホ（約 46 桁）で旧版の全文が画面を埋め、選択肢が画面の外に出た実測による。詳細（本文全文・argv など）はツールの途中経過としてチャットにも出す（Orca のスマホの TUI で、途中経過が描かれ、`ctrl+o` で展開できることを実機で確認。ダイアログの要約は残す）。選択肢は「承認して実行 / 全文を見る / 編集して承認 / 拒否」の 4 つにする。「全文を見る」は、**先頭から読める自前のビューア**（`harness/text-viewer.ts`。`ctx.ui.custom`。本文・プレビュー・argv・退避の注意を読むだけ。↑↓/j/k・Space/b・g/G でスクロールし、q / Enter / Esc で閉じる。位置を案内の行の先頭に出す）で開き、閉じると同じ確認に戻る（期限は select ごとに仕切り直し。ビューアは期限の対象外）。pi の `ctx.ui.editor` は開いたときにカーソルを末尾に置く（`pi-tui` の `setText`。開始位置の指定が無い）ので末尾から見え、使わない。`custom` が無い画面では editor に戻す。`gh_issue_*`・RPC は、従来どおり全文を出す。表示だけを変え、同一性の照合・実行の argv・時間切れ・退避は変えない。見えない範囲は、本文の 2 行目以降と下位のファイルで、承認前に AI がチャットへ書く全文が補う。**成功結果は、編集したときだけ「実際に使った最終の内容」を返す**（編集しないときは「承認した内容のとおり」）。Zed など `editor` が使えない画面では「全文を見る」が機能しないが、RPC は要約しない。試験: `test_pi_action_view.py`。実機の Orca スマホ TUI で、要約が 1 画面に収まり、選択肢の 4 つまで見えることを確認（2026-10-31、箇条書きにする前の並び。長い行は「…」で切れる）。未確認: 箇条書きの並び・全文ビューア（先頭からの表示とキー操作）の実機での見え方、Zed での「全文を見る」
-- **確認の省略（自由区。[CHG-0053](../../change/0053-worktree-integration-gate.md)）**: `[pi.integrate] skip_confirm_in_free_zone`（**同梱の設定は true**。生成器の既定は false）が真のときだけ、`git_commit` の cwd（`dir` を解決した対象）が**自由区**（リンクされた worktree で、HEAD が保護でない `refs/heads/feature/*`。`freezone.ts`）なら、確認（select）を出さずに実行する。UI が無い実行でも進む（退避しない）。子は従来どおり拒否。**実行直前に、自由区かをもう一度判定し**、なくなっていれば未実行で返す。結果は「承認した内容のとおり」ではなく、「確認なしで実行した (自由区: ブランチ。実行後の HEAD: …)」を返し、`details.freeZone` に判定と省略したかを入れる。**設定が偽の間は判定を「自由区の判定 (観測中。確認は省略していない)」として、真で自由区でないときは「自由区の判定: not free (理由)。確認を省略せず、承認を取って実行した」を結果に添える**（誤判定を見る）。自由区の外・判定できないとき・設定が無い／不正なときは、従来どおり確認する（deny にしない）。試験: `test_pi_free_zone_commit.py`
+- **確認の省略（自由区。[CHG-0053](../../change/0053-worktree-integration-gate.md)）**: `[pi.integrate] skip_confirm_in_free_zone`（**同梱の設定は true**。生成器の既定は false）が真のときだけ、`git_commit` の cwd（`dir` を解決した対象）が**自由区**（リンクされた worktree で、HEAD が保護でない `refs/heads/feature/*`。`freezone.ts`。接頭辞は [`pi.json`](#プロジェクトごとの設定pijson) で変えられる）なら、確認（select）を出さずに実行する。UI が無い実行でも進む（退避しない）。子は従来どおり拒否。**実行直前に、自由区かをもう一度判定し**、なくなっていれば未実行で返す。結果は「承認した内容のとおり」ではなく、「確認なしで実行した (自由区: ブランチ。実行後の HEAD: …)」を返し、`details.freeZone` に判定と省略したかを入れる。**設定が偽の間は判定を「自由区の判定 (観測中。確認は省略していない)」として、真で自由区でないときは「自由区の判定: not free (理由)。確認を省略せず、承認を取って実行した」を結果に添える**（誤判定を見る）。自由区の外・判定できないとき・設定が無い／不正なときは、従来どおり確認する（deny にしない）。試験: `test_pi_free_zone_commit.py`
 - **退避（`git_commit` の無反応・UI 無し・不在。CHG-0046）**: 承認が取れないときは、実行せず、**表示した内容**を `refs/pi/pending/<時刻>` に退避して、`not approved:` で始まる結果（`isError`）で返す。文言は「元の操作は未実行。内容は `<ref>` に退避した。再試行しない。続きの作業を子（worker など）に背景で任せられるなら任せ、親は応答を終えて idle になる（親が実行中は、利用者が `/pending` で承認できない）。任せられる作業が無ければ、『保留したコミット』として報告して終える」（保存に失敗したときは、成功した ref を返さず、退避できなかったと返す）。
   - **表示の前に tree を確定**する（`snapshotStaged`。一時のインデックスで作り、実のインデックスへ書き戻さない）。表示する HEAD・ブランチ・インデックスの識別子は、この snapshot と一致していなければ、表示せずにやり直しを返す。時間切れのあとは、実のインデックスを読み直さず、確定した tree を保存する（待つ間に別の操作がステージを変えても、退避は表示した内容）。取れない（空・確定中に変化）ときは退避不能とし、確認画面にそう出して、時間切れは拒否になる
   - **時間切れ**は、自前のタイマー（`timeout_seconds`）が発火したときだけ。TUI の組み込みの期限は 3 秒遅らせた保険。利用者の取消（Esc）・呼び出し元の中断・例外・「拒否」は、退避しない
@@ -96,6 +96,144 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 - **試験**: `test_pi_actions.py`（生成器・判定器・TS/Python の同一性）、`test_pi_actions_harness.py`（確認が 1 回・実行・拒否・時間切れ・UI 無し・子・引数の検証・同一性・本文ファイル・編集）。
 - **確認済み（2026-10-27）**: `gh_issue_edit_title`・`gh_issue_edit_body` の実行（個人のリポジトリのテスト用 issue。本文は複数行・日本語・バッククォートを含み、壊れずに反映された。承認は 1 操作につき 1 回）。
 - **未確認**: 実際の TUI での確認画面の表示（3 択、長い本文、editor の操作）。サンドボックス内でのブローカー経由の `gh` の実機。`git commit` の hook が失敗したときの再試行の運用。**段階 3**（表の一般化と、`gh pr create`・`gh issue create`・`gh pr comment` などの追加）は、実測の後。
+
+### プロジェクトごとの設定（`pi.json`）
+
+各リポジトリの `.agents/config/pi.json` で、統合まわりの **3 つの値だけ**を、そのプロジェクト用に変える（[CHG-0057](../../change/0057-per-project-integrate.md)）。
+**保護ブランチは変えられない**（全体設定 `[pi.integrate] protected_refs` のまま）。リポジトリ内のファイルはエージェントが書き換えられるので、保護を弱める手段を置かない。
+利用者向けの書き方は [pi-manual.md の 7.6](../pi-manual.md#76-プロジェクトごとの設定pijson)。
+
+- 実装の状況: 解析・検査・ローダー、`git_integrate`・自由区・`/board`・プレビューへの配線、`risk_paths`、分類器の穴 2 件はすべて取り込み済み（2026-11-02）。**実機確認（架空の一時リポジトリ）は未実施**。確認省略を実際の `pi.json` で配備するのは、その後（どのリポジトリにも実際の `pi.json` はまだ無い）
+
+#### 形
+
+```json
+{
+  "integrate": {
+    "target": "production",
+    "source_prefixes": ["task/"],
+    "free_zone_prefixes": ["task/"]
+  }
+}
+```
+
+| キー | 意味 | 省略したときの既定 |
+| --- | --- | --- |
+| `target` | `git_integrate` の統合先 | `[pi.integrate] target` |
+| `source_prefixes` | 統合元として許す接頭辞 | `["feature/", "bugfix/"]` |
+| `free_zone_prefixes` | 自由区（確認の省略）の接頭辞 | `["feature/"]` |
+
+- 全て省略できる。ファイルが無い・キーが無いときは、全体の既定
+- 接頭辞の既定は、TS の定数（`DEFAULT_SOURCE_PREFIXES`・`DEFAULT_FREE_ZONE_PREFIXES`）
+- 上限: ファイル 4096 バイト・配列は 8 要素・文字列は 64 字（`target` は 128 字）・ネストは 2 段（トップ → `integrate`）
+
+#### 読み方
+
+- **HEAD にコミットされた blob だけ**を読む（`git --no-replace-objects ls-tree -l --full-tree HEAD` → `cat-file blob`）。**作業ツリーの編集は、コミットするまで反映されない**
+- `--no-replace-objects`: `git replace` で HEAD のコミットの中身を差し替えられても読まない
+- ファイルが無いときは「設定なし」（全体の既定・診断なし）
+- **読めないときは `LoadedProfile.readFailed`**（設定は全体の既定で返すが、呼ぶ側が fail closed に使う）:
+  - `ls-tree`・`cat-file` が失敗した（HEAD が無い場合もここに入る。コード上の読解）
+  - `ls-tree -l` の出力を解釈できない（`ls_tree_unparsed`）。blob が欠けるとサイズ欄が `BAD` になるだけで終了コードは 0 なので、これもここ
+  - 設定が無い・内容が無効（診断つき）のときは `readFailed` ではない（従来どおり既定へ戻す）
+- symlink・サブモジュール・BOM つきのファイルの扱い:
+  - モードが `100644` / `100755` 以外（symlink・サブモジュール）か、blob でない: 無効（`not_regular_file`）
+  - 4096 バイト超: 無効（`too_large`）
+  - BOM は取り除いて読む
+- 空のファイル（空白だけを含む）は「設定なし」と同じ（全体の既定・診断なし）
+- 結果のキャッシュは blob の ID（と全体の既定の値）が鍵。HEAD が変われば blob の ID も変わるので、古さの問題が無い
+- `pi.json` を持たないリポジトリで増える git の起動は、`ls-tree` の 1 回だけ。判定の結果は変わらない（自由区の例外は下の「自由区の fail closed」）
+
+#### 検査と無効
+
+- **未知のキー（どの階層でも）・型違い・サイズ超過・検査に落ちた値が 1 つでもあれば、設定全体が無効**。全体の既定のまま動き、診断を出す（綴り違いが黙って効かないのを防ぐ）
+- `protected_refs`・`extra_protected_refs` は未知のキーではなく `protected_refs_not_allowed`（保護は全体設定で指定する）
+- 検査の内容:
+  - `target`: 空でない・ワイルドカード（`*` `?` `[`）を含まない・全体の保護の**完全一致の要素**
+  - 接頭辞: 末尾が `/`・禁止文字（`*` `?` `[` `\` `~` `^` `:`・空白・制御文字・`..`・`//`・`@{`）を含まない・先頭が `/` でない・`refs/` で始まらない
+  - **保護と交差しない**（大文字小文字を区別しない。`isProtectedRef` と同じ比較）
+- 交差の判定（接頭辞 `P`・保護 `Q`）:
+
+| 保護 `Q` の形 | 拒否する条件 | 例 |
+| --- | --- | --- |
+| 完全一致（ワイルドカードなし） | `Q` が `P` で始まる | `P = feature/`・`Q = feature/base` |
+| `B/*`（末尾 `/*`） | `B/` が `P` で始まる、または `P` が `B/` で始まる | `P = release/`・`Q = release/*` |
+
+- 重複する要素は 1 つにまとめる（エラーにしない）
+- 診断は**固定のコードとキー名だけ**。入力の本文・値・パースの例外文は出さない
+
+| 診断コード | 意味 |
+| --- | --- |
+| `invalid_json` | JSON として読めない |
+| `not_object` | トップが object でない |
+| `unknown_key` | 未知のキー |
+| `protected_refs_not_allowed` | 保護の指定（全体設定でだけ指定する） |
+| `bad_type` | 型が違う |
+| `too_large` | ファイル・文字列が上限超過 |
+| `too_many` | 配列が 8 要素超 |
+| `bad_target` | `target` が保護の完全一致の要素でない |
+| `bad_prefix` | 接頭辞の形が不正 |
+| `prefix_overlaps_protected` | 接頭辞が保護と交差する |
+| `not_regular_file` | 通常のファイルでない（symlink・サブモジュールなど） |
+| `read_failed` | blob を読めなかった |
+| `ls_tree_unparsed` | `git ls-tree` の出力を解釈できなかった |
+
+#### 使う場所
+
+| 場所 | 使う値 | 読む HEAD | 読めないとき |
+| --- | --- | --- | --- |
+| `git_integrate` の要求 | `target`・`source_prefixes` | 要求した pi の cwd | 全体の既定 |
+| `git_integrate` の承認・再検査 | 同上 | **承認する pi の cwd（統合先の主 worktree）** | 全体の既定 |
+| 自由区の判定（`freezone.ts`） | `free_zone_prefixes` | **主 worktree（git の common dir）** | **自由区にしない** |
+| raw `git flow … finish` のプレビュー | `target`・`source_prefixes` | **cwd と主 worktree の両方** | **「確認できない」** |
+| `/board` | `source_prefixes`・比較先の `target` | cwd | 全体の既定 |
+| execute 直前の統合ゲート（S7） | `free_zone_prefixes`（自由区の判定をやり直す） | 主 worktree | 自由区にしない |
+
+- **自由区は、feature 自身の HEAD の `pi.json` を読まない**。エージェントが自分で書いた設定で、自分の自由区を広げられないようにするため。設定の変更は、承認された統合で主ブランチに入るまで自由区に効かない。保護ブランチの拒否は残る
+- raw `git flow … finish` のプレビュー: cwd の HEAD と主 worktree の HEAD の**両方**を読み、どちらかが `target` か `source_prefixes` を既定から変えている・読めない・common dir を得られないときは、「統合の内容は確認できない」と出す（別のブランチの差分を見せない）。`free_zone_prefixes` だけの変更では止めない
+- `/board`: 実効の `source_prefixes` で feature を拾う。**比較先は実効の `target`**（設定を読んだときは、設定が無い・無効でも、全体の既定か `pi.json` の値）。設定が有効で既定と違うとき・無効のときだけ、1 行を足す（`pi.json: 有効 (統合元 …)`・`pi.json: 無効 (コード)`）
+- **execute 直前の再判定（S7）**: tool_call で決めた判定を再利用するときも、execute 直前に `tightenIntegration` をかけ直す（`index.ts`）。tool_call の後に主設定が変わって自由区でなくなっても、古い許可で実行しない。拒否・必須確認はそのまま、許可だけを再判定する。RPC の回帰試験がある（`test_s7_the_integration_gate_is_rechecked_just_before_execute`）
+- `git_integrate` の承認画面・後片付けの確認: [pi-pending.md](pi-pending.md#プロジェクト設定pijsonと承認画面)
+- **保護・分類器・統合ゲート（`judge/*`・`integration-gate.ts`）は変えない**。保護は全体のまま
+- `.agents/config/pi.json` の変更は、`[pi.integrate] risk_paths` に入れると、統合の承認画面で「リスクのあるパス」として見える（[pi-decide.md](pi-decide.md)）
+
+#### 自由区の fail closed
+
+自由区は確認を省く側なので、設定の出所が信頼できない・読めないときは自由区にしない（`freezone.ts` の `classifyFreeZone`）。確認が増える側に倒れる。
+
+| 条件 | 理由 |
+| --- | --- |
+| **common dir の HEAD が、保護ブランチ上の symbolic ref でなければ自由区にしない**（detached・判定不能・非保護ブランチ）。**設定の有無にかかわらず** | feature の worktree から `git update-ref --no-deref main-worktree/HEAD <OID>` で主 HEAD を広い設定のコミットへ向けられる。主 HEAD を設定の無いブランチへ切り替えて、狭めた設定を消せる（いずれも実 git で再現） |
+| 設定を読めない（`readFailed`） | 狭めている設定を見落とすかもしれない。設定が無い・内容が無効のときは従来どおり既定へ戻す |
+| 読み取りは `--no-replace-objects` | `git replace` で HEAD のコミットの中身を差し替えられないようにする |
+| linked worktree の管理ディレクトリが `<common dir>/worktrees/` の下 | `.git` ファイルの書き換えによる偽の worktree を自由区にしない |
+
+- **C2 の例外**: `pi.json` が無いリポジトリでも、主 worktree が detached・非保護ブランチ上だと、自由区は効かず確認が増える
+- 保護ブランチの拒否（全体設定）は残る。観測の添え書き（`details.freeZone.profile`）は診断コードだけ（入力の本文・キー名は出さない）
+- git の起動（linked worktree の自由区の判定）: `rev-parse` + `symbolic-ref`（feature）+ `symbolic-ref`（主 HEAD）+ `pi.json` の `ls-tree`（計 4 回。blob があれば `cat-file` がさらに 1 回）
+
+#### 土台: 分類器が保護ブランチへの書き込みを網羅していること
+
+- 自由区の設定の出所は「保護ブランチの先端は承認を経た」という前提に立つ。この前提は、分類器が保護ブランチへの直接の書き込みを確認なしで通さないことが基礎
+- 別の feature で閉じた穴（[pi-decide.md](pi-decide.md) に記載）: 他の worktree の ref の別名（`main-worktree/…`・`worktrees/<id>/…`）への `update-ref`・`symbolic-ref`、`git replace`、`git fetch --refmap`・`-c remote.<名>.fetch=`
+- **網羅は保証しない**。保証範囲は「ガードが識別する直接経路」。`git config remote.*.fetch` を先に書く 2 段の手順などは範囲外
+
+#### pi の project trust との関係
+
+- **連動しない**。project trust は `.pi` の設定・拡張の読み込みを決めるだけで、`pi.json` は別の仕組み
+- 連動は後から足せる（未解決。[CHG-0057](../../change/0057-per-project-integrate.md)）
+
+#### 既知の制限・未確認
+
+- 主 worktree の HEAD が存在しないブランチを指す bare リポジトリでは、自由区が効かない（確認が増える側。コードの読解。実機は未確認）
+- 主 worktree が detached・非保護ブランチ上のとき、自由区が効かない（C2 の例外）
+- 独立 review は 4 回で止めた。残りは既知の制限として扱う
+
+- 承認画面の summary は、統合先と接頭辞が同じ行にある。統合先の名前が長いと接頭辞が落ちる（全文表示には残る）
+- 古い保留の記録（`profileBlob` が無い）で、今の `pi.json` があると「要求時と違う」と出る（安全側の警告）
+- 任意の外部プロセスによる HEAD の更新との競合を、完全に原子的に防ぐ保証ではない（既存の契約と同じ）
+- **未確認**: Windows。実機（`pis`・実 TUI）での見え方
+- 試験: `test_pi_integrate_profile.py`（純関数）・`test_pi_integrate_profile_load.py`（実 git の一時リポジトリ）・`test_pi_freezone_profile.py`（自由区・プレビュー・`/board`・S7。実 git と RPC）
 
 ### ツール引数の JSON を壊さない設定
 
