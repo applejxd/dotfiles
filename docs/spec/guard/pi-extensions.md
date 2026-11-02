@@ -292,6 +292,18 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 - `reserveTokens` を倍にする再試行は、pi 1.4.0 以降は効かない（本体が要約の出力上限を撤廃した。出典: pi の CHANGELOG 1.4.0）。1.3.0 以前向けに残してあり、撤去は別判断
 - 別名のツールで触ったファイルは、これまでどおり要約のファイルの一覧に足す
 
+#### 圧縮中の完了通知の保留
+
+| 項目 | 内容 |
+| --- | --- |
+| 問題 | 圧縮（`/compact`。約 5 分）の最中に、背景ジョブ・子の完了通知（`triggerTurn: true` の `pi.sendMessage`）が届くと、通知が新しい発言を始め、圧縮が `Compaction cancelled` で中断される。利用者の入力には「圧縮中は送れない」確認があるが、`sendMessage` の経路には無い（pi 1.4.0 の `sendCustomMessage`） |
+| 仕組み | 状態 `compacting` を、`session_before_compact` で true、`session_compact` / `session_compact_failed` で false にする。true の間の配信は保留し、false になったときに**登録順**に実行する（1 件が例外でも残りを実行）。圧縮していないときは即時で、挙動は変わらない。成功の `session_compact` は、pi が圧縮の状態を解く**前**に届く（失敗は解いた後）ので、成功のときだけ 1 tick 遅らせて解除する |
+| 対象（harness） | `pending-result`（保留した操作の結果）・`child-finished`（子 1 件・並列のまとめ）。`index.ts` の `createCompactDefer`。配信の失敗の扱い（`warnUser`）は保留した関数の中にあるので変わらない |
+| 対象（activity） | バックグラウンドジョブの `flush`。作業中（`busy`）と同じく `compacting` でも溜め、終わりに `pending` が残り、まとめる窓のタイマーが無ければ 1 回だけまとめて配信する |
+| 安全弁 | 終わりのイベントが来ない異常でも通知が永遠に出ないことを防ぐため、開始から 20 分（`COMPACT_DEFER_MAX_MS`）で自動的に false にして保留を流す。タイマーは `unref`。圧縮が続けて始まったらタイマーを張り直し、保留は残す。`session_shutdown` でタイマーを止め、保留は捨てる |
+| 既知の制限 | ① 開始イベントより前の数ミリ秒の窓では保留できない ② `ctx.isIdle()` は圧縮中も false なので、`isIdle` での判定はできない ③ 通知を保留しても、別経路の中断（利用者が圧縮中に Esc を押す、など）は防げない |
+| 試験 | `test/agents/test_pi_compact_defer.py`（harness は `index.ts` の `region compact-defer` の区画を node で実行。activity は偽の `pi`。配線は文字列で確認） |
+
 ### セッションごとの一時置き場（`.tmp/s/<ID>/`）
 
 [CHG-0042](../../change/0042-tmp-lifecycle.md)。作業ツリーの `.tmp/` に残骸が溜まる（実測で 31 GB）のを防ぐため、

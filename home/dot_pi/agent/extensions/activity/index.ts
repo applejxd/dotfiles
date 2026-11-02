@@ -28,6 +28,7 @@ const NOTIFY_TAIL = 20;
 const NOTIFY_TAIL_MANY = 5; // まとめて届けるときの、ジョブ 1 件あたりの末尾の行数
 const NOTIFY_MAX_JOBS = 30;
 const COALESCE_MS = 2500; // この間に終わったジョブは 1 通にまとめる (B1 の F3)
+const COMPACT_DEFER_MAX_MS = 20 * 60 * 1000; // 圧縮の終わりのイベントが来なくても、これだけ経てば溜めた通知を流す
 const killed = new Set<string>();
 // 終了を LLM に知らせる前のジョブと、終了後に LLM が bg_log で読んだジョブ (読み済みは通知しない。B1 の F2)
 type Done = { id: string; exit: number | string; command: string; log: string };
@@ -100,6 +101,8 @@ export default function (pi: ExtensionAPI) {
 
 	let last: string | undefined | null = null; // 表示が変わったときだけ出す (何も無い間も毎秒出さない。B1 の F1)
 	let busy = false; // 親が作業中か (作業中は通知を溜め、終わってから読み済みを除いて届ける)
+	let compacting = false; // 圧縮中か (圧縮中に発言を始めると圧縮が中断される。busy と同様に溜める)
+	let compactValve: ReturnType<typeof setTimeout> | undefined; // 終わりのイベントが来ないときの安全弁
 	let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const compose = (batch: Done[]): string => {
@@ -120,7 +123,7 @@ export default function (pi: ExtensionAPI) {
 	// 終了後に bg_log で読んだジョブは、LLM がもう知っているので除く (全部読み済みならターンを起こさない)。
 	const flush = () => {
 		flushTimer = undefined;
-		if (busy) return; // 作業中は agent_settled まで溜める (そこで窓はもう閉じている)
+		if (busy || compacting) return; // 作業中・圧縮中は、終わりのイベントまで溜める (そこで窓はもう閉じている)
 		const batch = pending.splice(0).filter((p) => !seen.delete(p.id));
 		if (batch.length === 0) return;
 		try {
@@ -139,6 +142,24 @@ export default function (pi: ExtensionAPI) {
 		flushTimer ??= setTimeout(flush, COALESCE_MS);
 		flushTimer.unref?.();
 	};
+	const compactEnd = () => {
+		compacting = false;
+		if (compactValve) clearTimeout(compactValve);
+		compactValve = undefined;
+		if (pending.length > 0 && !flushTimer && !busy) flush();
+	};
+	// see docs/spec/guard/pi-extensions.md#圧縮中の完了通知の保留
+	pi.on("session_before_compact", async () => {
+		compacting = true;
+		if (compactValve) clearTimeout(compactValve);
+		compactValve = setTimeout(compactEnd, COMPACT_DEFER_MAX_MS);
+		compactValve.unref?.();
+	});
+	// 成功の通知は、pi が圧縮の状態を解く前に届く (失敗は解いた後)。解かれた後まで 1 tick 待ってから流す
+	pi.on("session_compact", async () => {
+		setTimeout(compactEnd, 0);
+	});
+	pi.on("session_compact_failed", async () => compactEnd());
 	pi.on("agent_start", async () => {
 		busy = true;
 	});
@@ -173,6 +194,9 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_shutdown", async () => {
 		if (flushTimer) clearTimeout(flushTimer);
 		flushTimer = undefined;
+		if (compactValve) clearTimeout(compactValve);
+		compactValve = undefined;
+		compacting = false;
 		pending.length = 0;
 		seen.clear();
 		if (timer) clearInterval(timer);

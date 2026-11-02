@@ -103,6 +103,7 @@ _HOOK_TESTS = (
 _PI_TESTS = (
     "test_pi_harness",
     "test_pi_harness_extensions",
+    "test_pi_compact_defer",
     "test_pi_actions_harness",
     "test_pi_child_wording",
     "test_pi_action_view",

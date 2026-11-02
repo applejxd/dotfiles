@@ -284,6 +284,52 @@ function baseName(toolName: string): string {
 
 // ─── 登録 ───────────────────────────────────────────────────────────
 
+// region compact-defer
+// 圧縮の最中は、完了通知 (triggerTurn の sendMessage) を保留する。see docs/spec/guard/pi-extensions.md#圧縮中の完了通知の保留
+const COMPACT_DEFER_MAX_MS = 20 * 60 * 1000;
+export function createCompactDefer(opts: { maxMs?: number } = {}) {
+	const maxMs = opts.maxMs ?? COMPACT_DEFER_MAX_MS;
+	let compacting = false;
+	let valve: ReturnType<typeof setTimeout> | undefined;
+	let held: (() => void)[] = [];
+	const stop = () => {
+		if (valve) clearTimeout(valve);
+		valve = undefined;
+	};
+	const end = () => {
+		compacting = false;
+		stop();
+		const batch = held;
+		held = [];
+		for (const fn of batch) {
+			try {
+				fn();
+			} catch {}
+		}
+	};
+	return {
+		begin() {
+			compacting = true;
+			stop();
+			valve = setTimeout(end, maxMs);
+			valve.unref?.();
+		},
+		end,
+		run(fn: () => void) {
+			if (compacting) held.push(fn);
+			else fn();
+		},
+		shutdown() {
+			stop();
+			held = [];
+			compacting = false;
+		},
+	};
+}
+// endregion compact-defer
+const compactDefer = createCompactDefer();
+const deferWhileCompacting = (fn: () => void) => compactDefer.run(fn);
+
 export default async function (pi: ExtensionAPI) {
 	// 自作の拡張のうち実行する道具 (bg_run・task) は、この印が無いと動かない (フルガードの読み込みに失敗した起動で、判定なしに残さない)
 	(globalThis as any).__PI_FULL_GUARD__ = true;
@@ -347,9 +393,11 @@ export default async function (pi: ExtensionAPI) {
 					owner: () => currentOwner(String(ctx.sessionManager?.getSessionId?.() ?? ""), RUNTIME_EPOCH),
 					notify: (text: string, level: "info" | "warning" | "error") => ctx.ui?.notify?.(redactText(text), level),
 					tellModel: (content: string, details: Record<string, unknown>) => {
-						try {
-							pi.sendMessage({ customType: "pending-result", content, display: true, details }, { triggerTurn: true, deliverAs: "followUp" });
-						} catch {}
+						deferWhileCompacting(() => {
+							try {
+								pi.sendMessage({ customType: "pending-result", content, display: true, details }, { triggerTurn: true, deliverAs: "followUp" });
+							} catch {}
+						});
 					},
 					limits: pendingNow().limits,
 					liveness: ownerState,
@@ -357,6 +405,7 @@ export default async function (pi: ExtensionAPI) {
 			})
 		: null;
 	pi.on("session_shutdown", async (event: any) => {
+		compactDefer.shutdown();
 		pendingCmd?.abortAll();
 		jobs.closeAll();
 		try {
@@ -802,6 +851,7 @@ export default async function (pi: ExtensionAPI) {
 	// 既定の圧縮は read / edit / write の名前でファイルの操作を拾うので、別名の分を足す。
 	// preparation は既定の要約にそのまま渡る (spike の E2)
 	pi.on("session_before_compact", async (event, ctx) => {
+		compactDefer.begin();
 		const ops = event.preparation.fileOps;
 		const target: Record<string, Set<string>> = {
 			[`${PREFIX}read`]: ops.read,
@@ -873,7 +923,12 @@ export default async function (pi: ExtensionAPI) {
 	});
 
 	// 本体の経路 (既定の圧縮) の失敗・中断。理由はセッションにも残す
+	pi.on("session_compact", async () => {
+		// 成功の通知は、pi が圧縮の状態を解く前に届く (失敗は解いた後)。解かれた後まで 1 tick 待ってから流す
+		setTimeout(() => compactDefer.end(), 0);
+	});
 	pi.on("session_compact_failed", async (event: any, ctx) => {
+		compactDefer.end();
 		console.error(`[harness] 圧縮が失敗した (${event.reason}): ${event.errorMessage ?? "(理由なし)"}`);
 		recordCompactFailure(
 			"harness-compact-failed",
@@ -1403,19 +1458,21 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				const stamp = stampOf(seq, startedAt);
 				const saved = saveFull(ctx, job.owner.cwd, seq, job.id, stamp, full);
 				const body = clip(full) + (saved ? `\n結果の全文: ${saved}` : "");
-				try {
-					pi.sendMessage(
-						{
-							customType: "child-finished",
-							content: `バックグラウンドの子 ${job.id} (${job.agent}) が終わりました (${stamp})\n${body}`,
-							display: true,
-							details: detailsOf(job, r, alive),
-						},
-						{ triggerTurn: wake, ...(wake ? { deliverAs: "followUp" as const } : {}) },
-					);
-				} catch (e) {
-					warnUser(ctx, `子 ${job.id} の完了通知を配信できなかった (結果は ${saved ?? "status で確認"}): ${errMsg(e)}`);
-				}
+				deferWhileCompacting(() => {
+					try {
+						pi.sendMessage(
+							{
+								customType: "child-finished",
+								content: `バックグラウンドの子 ${job.id} (${job.agent}) が終わりました (${stamp})\n${body}`,
+								display: true,
+								details: detailsOf(job, r, alive),
+							},
+							{ triggerTurn: wake, ...(wake ? { deliverAs: "followUp" as const } : {}) },
+						);
+					} catch (e) {
+						warnUser(ctx, `子 ${job.id} の完了通知を配信できなかった (結果は ${saved ?? "status で確認"}): ${errMsg(e)}`);
+					}
+				});
 			})
 			.catch((e) => warnUser(ctx, `子 ${job.id} の完了処理が失敗した: ${errMsg(e)}`))
 			.finally(() => runningChildren.delete(key));
@@ -1594,19 +1651,21 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 							const full = sections.join("\n\n");
 							// id に時刻を入れる (別セッションの同じ通番と名前が重なると wx で保存できない)
 							const saved = saveFull(ctx, ctx.cwd, seq, `batch-${Date.now().toString(36)}`, stamp, fulls.join("\n\n"));
-							try {
-								pi.sendMessage(
-									{
-										customType: "child-finished",
-										content: `バックグラウンドの ${items.length} 件の子が終わりました (${stamp})\n\n${full}${saved ? `\n結果の全文: ${saved}` : ""}`,
-										display: true,
-										details: { statuses },
-									},
-									{ triggerTurn: true, deliverAs: "followUp" },
-								);
-							} catch (e) {
-								warnUser(ctx, `並列の子の完了通知を配信できなかった (結果は ${saved ?? "未保存"}): ${errMsg(e)}`);
-							}
+							deferWhileCompacting(() => {
+								try {
+									pi.sendMessage(
+										{
+											customType: "child-finished",
+											content: `バックグラウンドの ${items.length} 件の子が終わりました (${stamp})\n\n${full}${saved ? `\n結果の全文: ${saved}` : ""}`,
+											display: true,
+											details: { statuses },
+										},
+										{ triggerTurn: true, deliverAs: "followUp" },
+									);
+								} catch (e) {
+									warnUser(ctx, `並列の子の完了通知を配信できなかった (結果は ${saved ?? "未保存"}): ${errMsg(e)}`);
+								}
+							});
 						})
 						.catch((e) => warnUser(ctx, `並列の子の完了処理が失敗した: ${errMsg(e)}`))
 						.finally(() => runningChildren.delete(key));
