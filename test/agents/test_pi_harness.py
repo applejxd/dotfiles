@@ -1309,6 +1309,78 @@ def test_compaction_retries_once_when_the_summary_hits_the_output_cap(env):
     assert "圧縮の指示を付けられなかった" not in proc.stderr, proc.stderr
 
 
+def _compact_run(env, summary_error=None):
+    settings = env["proj"] / ".pi"
+    settings.mkdir()
+    small = '{"compaction": {"keepRecentTokens": 1}}'
+    (settings / "settings.json").write_text(small, encoding="utf-8")
+    (env["proj"] / "f.txt").write_text("x\n", encoding="utf-8")
+    sessions = env["tmp"] / "sessions"
+    calls = [{"name": "guarded_read", "args": {"path": "f.txt"}}]
+    if summary_error is not None:
+        env["env"]["FAUX_SUMMARY_ERROR"] = summary_error
+    proc = run_pi(
+        env,
+        calls,
+        "go",
+        "again",
+        "/spike-compact",
+        session=True,
+        extra=("--approve", "--session-dir", str(sessions), "-e", str(FIXTURES / "compact.ts")),
+    )
+    assert proc.returncode == 0, proc.stderr
+    customs = [e for e in _session_entries(sessions) if e.get("type") == "custom"]
+    return proc, customs
+
+
+def _records(customs, kind):
+    return [e["data"] for e in customs if e.get("customType") == kind]
+
+
+def test_compaction_failure_reason_is_recorded_when_falling_back_to_default(env):
+    proc, customs = _compact_run(env, "503 service unavailable (test)")
+    records = _records(customs, "harness-compact-fallback")
+    assert records, f"既定へ落とした理由がセッションに無い: {proc.stderr}"
+    assert "503 service unavailable (test)" in records[0]["message"]
+    assert records[0]["thinking"] and records[0]["model"]
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z", records[0]["at"]), records[0]
+
+
+def test_compaction_failure_of_the_default_path_is_recorded(env):
+    proc, customs = _compact_run(env, "503 service unavailable (test)")
+    records = _records(customs, "harness-compact-failed")
+    assert records, f"本体の経路の失敗がセッションに無い: {proc.stderr}"
+    assert records[0]["reason"] == "manual"
+    assert "503 service unavailable (test)" in records[0]["errorMessage"]
+    assert records[0]["aborted"] is False
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z", records[0]["at"]), records[0]
+
+
+def test_compaction_success_leaves_no_failure_record(env):
+    proc, customs = _compact_run(env)
+    assert [
+        e for e in _session_entries(env["tmp"] / "sessions") if e.get("type") == "compaction"
+    ], proc.stderr
+    leaked = [e for e in customs if str(e.get("customType", "")).startswith("harness-compact-")]
+    assert not leaked, leaked
+
+
+def test_compaction_failure_reason_is_cut_at_4000_chars(env):
+    proc, customs = _compact_run(env, "E" * 6000)
+    records = _records(customs, "harness-compact-fallback")
+    assert records, proc.stderr
+    message = records[0]["message"]
+    # 理由には pi の接頭辞 ("Summarization failed: ") が付く。切るのは理由全体で 4000 字
+    head, _, note = message.partition("…(以下")
+    assert len(head) == 4000 and note.endswith("字は省略)"), message[-80:]
+    assert int(note.split()[0]) == len("Summarization failed: ") + 6000 - 4000, note
+    # 本体の経路の失敗の記録も、理由を 4000 字で切る
+    failed = _records(customs, "harness-compact-failed")
+    assert failed, proc.stderr
+    head2, _, note2 = failed[0]["errorMessage"].partition("…(以下")
+    assert len(head2) == 4000 and note2.endswith("字は省略)"), failed[0]["errorMessage"][-80:]
+
+
 def test_compaction_sends_the_session_thinking_level(env):
     """思考レベルを渡さないと「thinking: disabled」で送られ、受け付けないモデルで指示つきの圧縮が失敗して既定に落ちる。"""
     settings = env["proj"] / ".pi"

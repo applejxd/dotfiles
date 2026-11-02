@@ -50,6 +50,10 @@ export default async function (pi: ExtensionAPI) {
 				(globalThis as any).__fauxLengthDone = true;
 				return fauxAssistantMessage(fauxText("cut"), { stopReason: "length" });
 			}
+			// 要約を毎回失敗させる (失敗の理由の記録を見る)
+			if (process.env.FAUX_SUMMARY_ERROR) {
+				return fauxAssistantMessage(fauxText(""), { stopReason: "error", errorMessage: process.env.FAUX_SUMMARY_ERROR });
+			}
 			// 思考の指定が無い (「thinking: disabled」で送られる) 依頼を拒むモデル (Copilot の claude-sonnet-5.5 の実測の 400)
 			if (process.env.FAUX_REJECT_NO_THINKING === "1" && (globalThis as any).__fauxReasoning === "none") {
 				return fauxAssistantMessage(fauxText(""), {

@@ -150,6 +150,8 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 - 要約が出力の上限（`reserveTokens` の 0.8 倍）で切れたとき（`Summarization failed: generation hit the token cap …`。切れた要約は pi が保存しない）だけ、
   `reserveTokens` を倍にして **1 回だけ**やり直す
 - 指示は履歴の要約にだけ入る。分割されたターンの前半の要約（`Turn Context`）には入らない（pi の仕様）
+- **失敗の理由をセッションに残す**: 自作の圧縮が既定へ落ちたとき（`harness-compact-fallback`）と、本体の経路が失敗・中断したとき（`session_compact_failed` → `harness-compact-failed`）、理由の全文（4000 字まで。超えた分は `…(以下 N 字は省略)`）を `pi.appendEntry` で `custom` のエントリとして残す（モデルの文脈には入らない）。記録の失敗は標準エラーに 1 行出すだけで、圧縮は止めない。見方: セッションの `*.jsonl` で `"customType":"harness-compact-failed"`（または `-fallback`）を探す。成功した圧縮は記録しない
+- `reserveTokens` を倍にする再試行は、pi 1.4.0 以降は効かない（本体が要約の出力上限を撤廃した。出典: pi の CHANGELOG 1.4.0）。1.3.0 以前向けに残してあり、撤去は別判断
 - 別名のツールで触ったファイルは、これまでどおり要約のファイルの一覧に足す
 
 ### セッションごとの一時置き場（`.tmp/s/<ID>/`）

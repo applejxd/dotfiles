@@ -849,6 +849,8 @@ export default async function (pi: ExtensionAPI) {
 					return { compaction: await run(event.preparation, "minimal") };
 				}
 				// 要約が出力の上限で切れたときだけ、上限 (reserveTokens の 0.8 倍) を倍にして 1 回やり直す。
+				// pi 1.4.0 以降は本体が要約の出力上限 (reserveTokens の 0.8 倍) を撤廃したので、この再試行は効かない (1.3.0 以前向け)。
+				// 撤去は別判断 (see docs/spec/guard/pi-extensions.md#圧縮旧-checkpoint)
 				// 切れた要約は pi が保存しない (getSummarizationFailure)。他の失敗は繰り返さない
 				if (!/token cap/.test(message)) throw e;
 				const s = event.preparation.settings;
@@ -859,9 +861,39 @@ export default async function (pi: ExtensionAPI) {
 			const reason = `圧縮の指示を付けられなかったので既定の圧縮にする: ${(e as Error).message}`;
 			console.error(`[harness] ${reason}`);
 			if (ctx.hasUI) ctx.ui.notify(reason, "warning");
+			recordCompactFailure("harness-compact-fallback", { message: clipReason((e as Error).message) }, ctx);
 			return undefined;
 		}
 	});
+
+	// 本体の経路 (既定の圧縮) の失敗・中断。理由はセッションにも残す
+	pi.on("session_compact_failed", async (event: any, ctx) => {
+		console.error(`[harness] 圧縮が失敗した (${event.reason}): ${event.errorMessage ?? "(理由なし)"}`);
+		recordCompactFailure(
+			"harness-compact-failed",
+			{
+				reason: event.reason,
+				aborted: event.aborted,
+				willRetry: event.willRetry,
+				fromExtension: event.fromExtension,
+				errorMessage: event.errorMessage == null ? null : clipReason(String(event.errorMessage)),
+			},
+			ctx,
+		);
+	});
+
+	// 失敗の理由をセッションへ残す。補助なので、失敗しても圧縮は止めない
+	function recordCompactFailure(customType: string, data: Record<string, unknown>, ctx: any) {
+		try {
+			pi.appendEntry(customType, { at: new Date().toISOString(), ...data, thinking: pi.getThinkingLevel(), model: ctx.model?.id ?? null });
+		} catch (e) {
+			console.error(`[harness] 圧縮の失敗の記録に失敗した: ${(e as Error).message}`);
+		}
+	}
+
+	function clipReason(text: string, max = 4000): string {
+		return text.length > max ? `${text.slice(0, max)}…(以下 ${text.length - max} 字は省略)` : text;
+	}
 }
 
 // ─── 子エージェント ─────────────────────────────────────────────────
