@@ -650,4 +650,111 @@ const out = {};
 	};
 }
 
+// 12. 候補の作成は、完了済み (done) の数に依存しない (git の呼び出し回数で固定する。時間は不安定)。unknown は見落とさない。show は上限つき
+{
+	const { chmodSync, readFileSync, writeFileSync: wf } = await import("node:fs");
+	const bin = mkdtempSync(join(tmpdir(), "pi-pick-bin-"));
+	const log = join(bin, "calls.log");
+	wf(log, "");
+	const real = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+	wf(join(bin, "git"), `#!/bin/sh\necho "$1" >> '${log}'\nexec '${real}' "$@"\n`);
+	chmodSync(join(bin, "git"), 0o755);
+	const calls = (fn) => {
+		const savedPath = process.env.PATH;
+		process.env.PATH = `${bin}:${savedPath}`;
+		wf(log, "");
+		try {
+			const v = fn();
+			return { n: readFileSync(log, "utf8").split("\n").filter(Boolean).length, v };
+		} finally {
+			process.env.PATH = savedPath;
+		}
+	};
+	const h = setup();
+	const build = (successes) => {
+		const cwd = repo();
+		const pend = [save(cwd).id, save(cwd).id, save(cwd).id];
+		const unk = doneUnknown(cwd, { action: "fake_op" });
+		const run = running(cwd, { action: "fake_op" }, { started: false });
+		for (let i = 0; i < successes; i++) doneSuccess(cwd, { action: "fake_op" });
+		return { cwd, pend, unk, run };
+	};
+	const few = build(0);
+	const many = build(30);
+	const count = (r, kind) => calls(() => pick.pickCandidates(r.cwd, kind, h.approveDeps({ cwd: r.cwd }))).n;
+	const kinds = ["approve", "drop", "hub", "resolve", "show"];
+	const ids = (r, kind) => pick.pickCandidates(r.cwd, kind, h.approveDeps({ cwd: r.cwd })).map((c) => c.id);
+	const showMany = pick.pickCandidates(many.cwd, "show", h.approveDeps({ cwd: many.cwd }));
+	// 注記の行 (id が空) を選んでも、何もしない (ok: false)。空の ID でリクエストを進めない
+	const noteLabel = showMany[showMany.length - 1].label;
+	const noteChosen = await pick.chooseId({ ui: { select: async () => noteLabel } }, h.approveDeps({ cwd: many.cwd }), "show", showMany);
+	out.calls = {
+		few: Object.fromEntries(kinds.map((k) => [k, count(few, k)])),
+		many: Object.fromEntries(kinds.map((k) => [k, count(many, k)])),
+		hubIds: { few: ids(few, "hub"), many: ids(many, "hub"), expectFew: [...few.pend, few.run, few.unk].sort(), expectMany: [...many.pend, many.run, many.unk].sort() },
+		resolveIds: { few: ids(few, "resolve"), many: ids(many, "resolve"), expectFew: [few.unk, few.run].sort(), expectMany: [many.unk, many.run].sort() },
+		approveIds: { many: ids(many, "approve"), expect: many.pend },
+		showCount: showMany.length,
+		showLast: showMany[showMany.length - 1],
+		showMax: pick.SHOW_MAX,
+		noteChosen,
+	};
+}
+
+// 13. 短縮 ID (末尾の数字) は、show の上限 (SHOW_MAX) より古い記録にも当たる。上限は、絞り込みの後の選択画面だけに効く
+{
+	const h = setup();
+	const cwd = repo();
+	const lim = { maxPending: 1000, maxRecordBytes: 64 * 1024, maxScan: 1000 };
+	const deps = h.approveDeps({ cwd });
+	const order = () =>
+		ops
+			.listOps(cwd, lim)
+			.entries.sort((a, b) => b.committedAt - a.committedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+			.map((e) => e.id);
+	const grow = (n) => {
+		for (let i = 0; i < n; i++) {
+			const r = ops.saveOp(cwd, record(), lim);
+			if (!r.ok) throw new Error(r.reason);
+		}
+	};
+	// 新しい順で 30 件の内と外に、同じ末尾 3 桁の記録が 1 件ずつある状態を作る (見つかるまで足す)
+	let ids = [];
+	let cross = null;
+	grow(150);
+	for (let round = 0; round < 4 && !cross; round++) {
+		ids = order();
+		const inner = new Map(ids.slice(0, pick.SHOW_MAX).map((id) => [id.slice(-3), id]));
+		for (const id of ids.slice(pick.SHOW_MAX)) {
+			if (inner.has(id.slice(-3))) cross = { token: id.slice(-3), a: inner.get(id.slice(-3)), b: id };
+		}
+		if (!cross) grow(100);
+	}
+	const rpcCtx = { cwd, mode: "rpc", hasUI: false };
+	const oldOnes = ids.slice(pick.SHOW_MAX);
+	const results = [];
+	for (const id of oldOnes.slice(0, 12)) {
+		const token = id.slice(-4);
+		const hits = ids.filter((x) => x.endsWith(token));
+		const r = await pick.resolveShortId(rpcCtx, deps, "show", token);
+		results.push({ id, hits: hits.length, ok: r.ok ? r.id : null, text: r.ok ? "" : r.reply.text });
+	}
+	let crossOut = null;
+	if (cross) {
+		const seen = [];
+		const tuiCtx = { cwd, mode: "tui", hasUI: true, ui: { select: async (_t, opts) => (seen.push(opts), undefined) } };
+		await pick.resolveShortId(tuiCtx, deps, "show", cross.token);
+		const want = ids.filter((x) => x.endsWith(cross.token)).length;
+		crossOut = { found: true, offered: seen[0]?.length ?? 0, want };
+	}
+	const completed = pick.completeArgs(`show ${oldOnes[0].slice(0, 14)}`, cwd, deps) ?? [];
+	out.shortOld = {
+		total: ids.length,
+		results,
+		crossOut: crossOut ?? { found: false },
+		completesOld: completed.some((c) => c.value === `show ${oldOnes[0]}`),
+	};
+}
+
+
 console.log(JSON.stringify(out));

@@ -69,7 +69,7 @@ export type ResultRecord = ResultBody & { schema: 1; attemptId: string; at: stri
 
 export type Kind = "legacy" | "action" | "attempt" | "result" | "invalid";
 export type State = "pending" | "running" | "done";
-export type Entry = { state: State; id: string; ref: string; oid: string; /** trailer が名乗る種類 (検証前) */ kind: Kind; committedAt: number };
+export type Entry = { state: State; id: string; ref: string; oid: string; /** trailer が名乗る種類 (検証前) */ kind: Kind; committedAt: number; /** done の結果 commit の subject (`pi pending result: <outcome>`) が名乗る outcome。検証前で、読まずに絞り込むためだけに使う。形が違えば undefined */ claimedOutcome?: string };
 
 type Run = { ok: boolean; out: string; err: string; status?: number | null };
 type Fail = { ok: false; reason: string };
@@ -408,20 +408,21 @@ function nowIso(now?: number): string {
 
 /** 3 つの名前空間の ref を 1 回で数える。種類は trailer の名乗り (検証前)。symbolic ref は除く。上限を超えたら truncated */
 export function listOps(cwd: string, limits: Limits = DEFAULT_LIMITS): { entries: Entry[]; truncated: boolean } {
-	const fmt = "%(refname)%00%(objectname)%00%(symref)%00%(committerdate:unix)%00%(contents:trailers:key=Pi-Pending-Kind,valueonly)";
+	const fmt = "%(refname)%00%(objectname)%00%(symref)%00%(committerdate:unix)%00%(contents:subject)%00%(contents:trailers:key=Pi-Pending-Kind,valueonly)";
 	const r = git(cwd, ["for-each-ref", `--count=${limits.maxScan + 1}`, "--sort=-refname", `--format=${fmt}`, NS.pending, NS.running, NS.done]);
 	if (!r.ok || !r.out) return { entries: [], truncated: false };
 	const lines = r.out.split("\n").filter((l) => l.includes("\0"));
 	const entries: Entry[] = [];
 	for (const line of lines.slice(0, limits.maxScan)) {
-		const [ref, oid, symref, ts, trailer] = line.split("\0");
+		const [ref, oid, symref, ts, subject, trailer] = line.split("\0");
 		if (symref) continue;
 		const state: State | null = ref.startsWith(NS.pending) ? "pending" : ref.startsWith(NS.running) ? "running" : ref.startsWith(NS.done) ? "done" : null;
 		if (!state) continue;
 		const id = ref.slice(NS[state].length);
 		const t = (trailer ?? "").trim();
 		const kind: Kind = t === "" ? "legacy" : t === "action" || t === "attempt" || t === "result" ? t : "invalid";
-		entries.push({ state, id, ref, oid, kind, committedAt: Number(ts) || 0 });
+		const claimedOutcome = state === "done" ? /^pi pending result: (\S+)$/.exec(subject ?? "")?.[1] : undefined;
+		entries.push({ state, id, ref, oid, kind, committedAt: Number(ts) || 0, ...(claimedOutcome ? { claimedOutcome } : {}) });
 	}
 	return { entries, truncated: lines.length > limits.maxScan };
 }

@@ -306,3 +306,54 @@ def test_hub_leaves_list_and_non_tui_unchanged(table):
     assert u["listSelects"] == 0 and u["listHasId"] is True
     assert u["rpcSelects"] == 0 and u["rpcSame"] is True
     assert u["noUiSelects"] == 0 and u["noUiSame"] is True and u["pending"] is True
+
+
+def test_candidate_git_calls_do_not_grow_with_settled_done_records(table):
+    c = table["calls"]
+    # done の成功が 0 件と 30 件で、git の呼び出し回数が同じ (approve・drop は pending の数だけ。hub・resolve は unknown の done まで)
+    for kind in ("approve", "drop", "hub", "resolve"):
+        assert c["few"][kind] == c["many"][kind], (kind, c)
+    # approve・drop は done・running を読まない (pending 3 件 + for-each-ref だけ。1 件あたり readOpAt の 3 回)
+    assert c["many"]["approve"] <= 1 + 3 * 3, c
+    assert c["many"]["drop"] == c["many"]["approve"], c
+
+
+def test_hub_and_resolve_still_show_unknown_and_skip_settled(table):
+    c = table["calls"]
+    # 反例: unknown の done を見落とさない (成功の done は出ない)
+    assert sorted(c["hubIds"]["many"]) == c["hubIds"]["expectMany"]
+    assert sorted(c["hubIds"]["few"]) == c["hubIds"]["expectFew"]
+    assert sorted(c["resolveIds"]["many"]) == c["resolveIds"]["expectMany"]
+    assert sorted(c["resolveIds"]["few"]) == c["resolveIds"]["expectFew"]
+    assert c["approveIds"]["many"] == c["approveIds"]["expect"] or sorted(
+        c["approveIds"]["many"]
+    ) == sorted(c["approveIds"]["expect"])
+
+
+def test_show_is_capped_with_a_note_row(table):
+    c = table["calls"]
+    assert c["showMax"] == 30
+    assert c["showCount"] == 31, c
+    last = c["showLast"]
+    # 36 件 (pending 3・unknown 1・running 1・成功 30 = 35 件) のうち 30 件を出し、残りは注記の 1 行 (選べない: id が空)
+    assert last["id"] == "" and last["label"].startswith("ほか 5 件"), last
+    # 注記の行を選んでも、空の ID で進めず、何もしない (選べない行)
+    chosen = c["noteChosen"]
+    assert chosen["ok"] is False and "id" not in chosen, chosen
+    assert "注記の行" in chosen["reply"]["text"], chosen
+
+
+def test_short_id_finds_records_older_than_the_show_cap(table):
+    s = table["shortOld"]
+    assert s["total"] > 30 + 12, s
+    for r in s["results"]:
+        # 反例: 新しい順で 31 件目以降の記録も、末尾の数字で見つかる (一意なら ID、複数なら「一意でない」)
+        assert "見つからない" not in r["text"], r
+        assert (r["ok"] == r["id"]) if r["hits"] == 1 else ("一意でない" in r["text"]), r
+    assert s["completesOld"] is True, s
+
+
+def test_short_id_hits_across_the_show_cap_are_all_offered(table):
+    c = table["shortOld"]["crossOut"]
+    assert c["found"] is True, c
+    assert c["offered"] == c["want"] and c["want"] >= 2, c

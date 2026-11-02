@@ -2,7 +2,7 @@
 // 利用者専用のスラッシュコマンドの部品で、モデルから呼べる経路は作らない。see docs/change/0055-async-approval.md
 import { cellWidth, clipCells, fitWidth, sanitizeForDisplay } from "./confirm-view.ts";
 import { isExclusiveAction, recordOfChain, resolvePending, type ApproveDeps, type Reply, type ResolveArgs } from "./pending-approve.ts";
-import { DEFAULT_LIMITS, doneOid, listOps, readAttemptAt, readOp, readResultAt, runningOid, type OpRecord } from "./pending-ops.ts";
+import { DEFAULT_LIMITS, doneOid, listOps, readAttemptAt, readOpAt, readResultAt, runningOid, type Entry, type OpRecord } from "./pending-ops.ts";
 
 /** "hub" は引数なしの `/pending` 用。候補ごとに、状態に合った既定の操作 (act) を持つ */
 export type PickKind = "approve" | "show" | "drop" | "resolve" | "hub";
@@ -59,17 +59,25 @@ function labelOf(name: string, ago: string, summary: string, tail = "", mark = "
 }
 
 /** 種類ごとの候補。approve・hub は古い順 (待ち行列。積み重ねた feature の依存は保存の順と一致しやすい)、ほかは新しい順。git の読み取りだけ */
-export function pickCandidates(cwd: string, kind: PickKind, deps: PickDeps, now: number = Date.now()): Candidate[] {
+export function pickCandidates(cwd: string, kind: PickKind, deps: PickDeps, now: number = Date.now(), idFilter?: (id: string) => boolean): Candidate[] {
 	const limits = deps.limits ?? DEFAULT_LIMITS;
 	const raw: { id: string; name: string; ago: string; summary: string; mark: string; act?: HubAct }[] = [];
 	const fifo = kind === "approve" || kind === "hub";
 	const dir = fifo ? -1 : 1;
-	const entries = [...listOps(cwd, limits).entries].sort((a, b) => dir * (b.committedAt - a.committedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)));
+	let entries = [...listOps(cwd, limits).entries].sort((a, b) => dir * (b.committedAt - a.committedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)));
+	// 記録を読む前に、state・kind と結果 commit の subject だけで分かるものを捨てる (承認待ちの数と、完了済みの数に、ほぼ依存させない)
+	// idFilter (ID の探索用) は、記録を読む前・上限を掛ける前に掛ける。上限は、絞り込み後の一覧だけに効く
+	entries = entries.filter((e) => (!idFilter || idFilter(e.id)) && mayBeCandidate(kind, e));
+	let more = 0;
+	if (kind === "show" && entries.length > SHOW_MAX) {
+		more = entries.length - SHOW_MAX;
+		entries = entries.slice(0, SHOW_MAX);
+	}
 	for (const e of entries) {
 		let rec: OpRecord | null = null;
 		let unknownByExecutor = false;
 		if (e.state === "pending") {
-			if (e.kind === "action") rec = readRecord(cwd, e.id, limits);
+			if (e.kind === "action") rec = readOpRecord(cwd, e.id, e.oid, limits);
 		} else if (e.state === "running") {
 			rec = recordOfChain(cwd, e.id, e.oid, limits);
 		} else {
@@ -94,7 +102,7 @@ export function pickCandidates(cwd: string, kind: PickKind, deps: PickDeps, now:
 	const base = raw.map((r) => labelOf(r.name, r.ago, r.summary, "", r.mark));
 	// 同じ表示は ID の末尾 4 桁を添える。それでも重複するものには連番 (#2, #3 ...) を足し、ラベルを全部一意にする
 	const used = new Set<string>();
-	return raw.map((r, i) => {
+	const out = raw.map((r, i) => {
 		const dup = base.indexOf(base[i]) !== base.lastIndexOf(base[i]);
 		const tail = r.id.slice(-4);
 		let label = dup ? labelOf(r.name, r.ago, r.summary, tail, r.mark) : base[i];
@@ -102,10 +110,27 @@ export function pickCandidates(cwd: string, kind: PickKind, deps: PickDeps, now:
 		used.add(label);
 		return r.act ? { id: r.id, label, act: r.act } : { id: r.id, label };
 	});
+	// 選べない注記の行 (id が空)。選ばれても何もしない
+	if (more > 0) out.push({ id: "", label: `ほか ${more} 件 (/pending list・log で見る)` });
+	return out;
 }
 
-function readRecord(cwd: string, id: string, limits: NonNullable<ApproveDeps["limits"]>): OpRecord | null {
-	const r = readOp(cwd, id, limits);
+/** show の候補の上限 (新しい順)。全件を読むと、完了済みの記録が増えるほど遅くなる */
+export const SHOW_MAX = 30;
+
+/** 結果の commit の subject が、成功・失敗確定・未実行と名乗るもの。unknown の可能性が無いので、読まなくてよい */
+const SETTLED_OUTCOMES = new Set(["success", "failed_confirmed", "not_executed"]);
+
+/** 記録を読む前の絞り込み。読んだ後の判定 (adapters・unknown の確認) は、従来どおり pickCandidates がする */
+function mayBeCandidate(kind: PickKind, e: Entry): boolean {
+	if (kind === "approve" || kind === "drop") return e.state === "pending" && e.kind === "action";
+	if (e.state === "done" && e.claimedOutcome !== undefined && SETTLED_OUTCOMES.has(e.claimedOutcome) && (kind === "hub" || kind === "resolve")) return false;
+	if (kind === "resolve") return e.state === "running" || e.state === "done";
+	return true;
+}
+
+function readOpRecord(cwd: string, id: string, oid: string, limits: NonNullable<ApproveDeps["limits"]>): OpRecord | null {
+	const r = readOpAt(cwd, id, oid, limits);
 	return r.ok ? r.record : null;
 }
 
@@ -127,13 +152,14 @@ export async function chooseId(ctx: any, deps: Pick<ApproveDeps, "dialog">, kind
 	const options = candidates.length === 1 ? [labels[0], CHOICE_CANCEL] : labels;
 	const choice = await deps.dialog(async () => ctx.ui.select(TITLES[kind], options));
 	const i = labels.indexOf(choice as string); // 選んだ行の順番で ID に対応づける (ラベルは表示だけ)
+	if (i >= 0 && candidates[i].id === "") return { ok: false, reply: info("注記の行: 何もしていない") };
 	return i < 0 ? { ok: false, reply: info("選ばなかった: 何もしていない") } : { ok: true, id: candidates[i].id, act: candidates[i].act };
 }
 
 /** 数字だけで 15 桁未満の指定を、その kind の候補の ID の末尾一致で解決する。複数なら、その候補だけで選ばせる (TUI のとき) */
 export async function resolveShortId(ctx: any, deps: ApproveDeps, kind: PickKind, token: string): Promise<Chosen> {
 	if (token.length < 3) return { ok: false, reply: refuse("短すぎる: 末尾の指定は 3 桁以上にする") };
-	const cands = pickCandidates(String(ctx.cwd), kind, deps).filter((c) => c.id.endsWith(token));
+	const cands = pickCandidates(String(ctx.cwd), kind, deps, Date.now(), (id) => id.endsWith(token)).filter((c) => c.id !== "");
 	if (cands.length === 0) return { ok: false, reply: info("見つからない (/pending list で確認する)") };
 	if (cands.length === 1) return { ok: true, id: cands[0].id };
 	if (ctx.mode !== "tui" || !ctx.hasUI) return { ok: false, reply: refuse("一意でない。桁を増やす") };
@@ -200,8 +226,8 @@ export function completeArgs(prefix: string, cwd: string, deps: PickDeps): { val
 	}
 	const [, sub, , typed] = m;
 	if (!ID_SUBCOMMANDS.includes(sub)) return null;
-	const items = pickCandidates(cwd, sub as PickKind, deps)
-		.filter((c) => c.id.startsWith(typed))
+	const items = pickCandidates(cwd, sub as PickKind, deps, Date.now(), (id) => id.startsWith(typed))
+		.filter((c) => c.id !== "" && c.id.startsWith(typed))
 		.map((c) => ({ value: `${sub} ${c.id}`, label: c.label }));
 	return items.length ? items : null;
 }
