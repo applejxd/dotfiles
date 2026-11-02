@@ -69,7 +69,7 @@ function stripHeredocs(command: string): string {
 
 interface Parsed {
 	/** git (または git-flow) の呼び出し。なければ null */
-	git: { flow: boolean; sub: string; args: string[] } | null;
+	git: { flow: boolean; sub: string; args: string[]; config?: string[] } | null;
 	/** 対象のリポジトリ・ブランチを静的に決められなくする要素 (cd・-C・GIT_DIR= など) */
 	redirect: boolean;
 	/** `-c alias.…` で alias を定義している */
@@ -122,6 +122,7 @@ function parseSegment(segment: string): Parsed {
 	const flow = cmd === "git-flow";
 	if (cmd !== "git" && !flow) return res;
 	i++;
+	const configSpecs: string[] = [];
 	if (!flow) {
 		while (i < tokens.length && tokens[i].startsWith("-")) {
 			const t = tokens[i];
@@ -130,6 +131,9 @@ function parseSegment(segment: string): Parsed {
 			if (name === "-c" || name === "--config-env") {
 				const value = t.includes("=") && name !== "-c" ? t.slice(name.length + 1) : (tokens[i + 1] ?? "");
 				if (/^alias\./i.test(value)) res.alias = true;
+				// remote.<名>.fetch の refspec は fetch / pull で効く。--config-env の値は環境変数で、静的に決まらない
+				const m = /^remote\..+\.fetch=(.*)$/is.exec(value);
+				if (m) configSpecs.push(name === "-c" ? m[1] : ":$CONFIG_ENV");
 			}
 			i += GLOBAL_WITH_VALUE.has(t) ? 2 : 1;
 			if (t === "--") break;
@@ -138,7 +142,7 @@ function parseSegment(segment: string): Parsed {
 	if (i >= tokens.length) return res;
 	res.git = flow
 		? { flow: true, sub: "flow", args: tokens.slice(i) }
-		: { flow: false, sub: tokens[i], args: tokens.slice(i + 1) };
+		: { flow: false, sub: tokens[i], args: tokens.slice(i + 1), config: configSpecs };
 	return res;
 }
 
@@ -224,6 +228,9 @@ function refspecVerdict(specs: string[], what: string, sub: string): Integration
 	return unknown;
 }
 
+/** `--refmap` の値 (空は refmap の無効化なので除く)。refspec として検査する。 */
+const refmaps = (pairs: [string, string][]) => pairs.filter(([n, v]) => n === "--refmap" && v !== "").map(([, v]) => v);
+
 function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 	const { sub, args } = g;
 	if (g.flow) {
@@ -241,7 +248,7 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 			"sXjo",
 			new Set(["--depth", "--deepen", "--shallow-since", "--shallow-exclude", "--jobs", "--server-option", "--upload-pack", "--strategy", "--strategy-option", "--refmap", "--filter", "--cleanup", "--gpg-sign"]),
 		);
-		return refspecVerdict(a.positional.slice(1), "git pull", sub) ?? hit("head", "git pull (現在のブランチを動かす)", sub);
+		return refspecVerdict([...a.positional.slice(1), ...refmaps(a.pairs), ...(g.config ?? [])], "git pull", sub) ?? hit("head", "git pull (現在のブランチを動かす)", sub);
 	}
 	if (HEAD_SUBS.has(sub)) return hit("head", `git ${sub} (現在のブランチを動かす)`, sub);
 	switch (sub) {
@@ -317,7 +324,7 @@ function classifyGit(g: NonNullable<Parsed["git"]>): Integration {
 				"jo",
 				new Set(["--depth", "--deepen", "--shallow-since", "--shallow-exclude", "--jobs", "--server-option", "--refmap", "--filter", "--negotiation-tip", "--upload-pack", "--recurse-submodules"]),
 			);
-			return refspecVerdict(a.positional.slice(1), "git fetch", sub) ?? NONE;
+			return refspecVerdict([...a.positional.slice(1), ...refmaps(a.pairs), ...(g.config ?? [])], "git fetch", sub) ?? NONE;
 		}
 		case "worktree": {
 			if (args[0] !== "add") return NONE;
