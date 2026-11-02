@@ -91,10 +91,32 @@
 
 - つまり、`--files` に新規ファイルを渡しても、**秘密検出の保証にはならない**（lint 系だけが実際にファイルを検査する）。ステージしてから回すか、`gitleaks dir <パス>` を併用する
 
+## 複数ターン・複数拡張・優先関係（S4 の前提）
+
+子の文脈をハンドラが書き換える方式（S4）で、書き換えが**どこまで保たれるか**を測った。試験は `test/agents/test_pi_child_persist.py`（固定した事実はここの表の「試験」列）。
+
+- **結論**: 子の起動時に 1 回だけ書き換える方式では**足りない**。`before_agent_start` は**ユーザーメッセージごと**に呼ばれ、`contextFiles` は**毎回元の内容で新しく**渡される（前回の書き換えは残らない）。したがって、ハンドラは**毎回**書き換える（同じ変換を毎回かける）必要がある。一方、同じメッセージ内のツールの往復では書き換えは残り、`/reload` の後も、拡張が作り直されて次のターンから同じハンドラが効く
+- 手順: `pi --no-session --model faux/spike -nbt -ne -e builtin:mcp -e <harness> -e dump_options.ts -e faux.ts --mode json -p <メッセージ...>`。`DUMP_OPTIONS_CALLS_FILE` にハンドラの呼び出しごとの記録を書く。最終の prompt は `FAUX_DUMP_PROMPT=1` で assistant の本文として json の出力から取る。2 つ目の拡張は `dump_options.ts` を別名（`dump_options_b.ts`）へコピーして `-e` で足し、`DUMP_OPTIONS_MUTATE__<名前>` で別々に指定する
+- `dump_options.ts` の追加: `add` 操作（要素を足す）、`DUMP_OPTIONS_RETURN_PROMPT`（`{systemPrompt}` を返す）、`DUMP_OPTIONS_CALLS_FILE`（呼び出しごとの観測。本文は書かず path・長さ・先頭 24 字）
+
+| 番号 | 問い | 結果 | 試験 |
+| --- | --- | --- | --- |
+| Q1 | 複数メッセージ（3 回）で毎回呼ばれるか。前回の書き換えは残るか | 毎回呼ばれる（seq 1,2,3）。渡される `contextFiles` は**毎回元の内容**。書き換えは**毎回の最終 prompt に反映**（毎回かけた場合） | あり |
+| Q2 | ツールの往復で 2 回目以降の LLM 呼び出しに残るか | `before_agent_start` は 1 回だけ。LLM 呼び出し（turn）は 2 回で、どちらの `ctx.getSystemPrompt()` にも書き換えが残る。**2 回目の最終 prompt そのもの**は faux から見えない（FAUX_DUMP_PROMPT は最初の呼び出しだけ）ので、`ctx.getSystemPrompt()` での確認 | あり（この範囲） |
+| Q3 | 2 つの拡張が両方 `contextFiles` を書き換える | (a) 実行の順は `-e` の順 (b) 後の拡張は**前の書き換えを見る**（`before` が前の拡張の結果）(c) 最終の prompt は**後の拡張の結果**。順序を逆にすると勝つ側も逆になる | あり |
+| Q4 | `{systemPrompt}` を返したときの優先 | **返り値が勝つ**（最終の prompt は返した文字列そのもの。文脈も既定の本体も出ない）。同じハンドラで書き換えても、先の拡張が返して後の拡張が書き換えても、返り値のまま。後の拡張が返せば、その値 | あり |
+| Q5 | `/reload` の後の次のターン | `ctx.reload()` を呼ぶコマンド（`faux.ts` の `spike-reload`）を print/json モードのメッセージ `/spike-reload` で呼べた。拡張は作り直され（`seq` が 1 に戻る）、次のターンにも書き換えが効いた | あり |
+| Q6 | 空の `contextFiles`（`-nc`）に足すと出るか | **出る**。`-nc` のとき `before` は空で、足した `{path, content}` だけが prompt の `<project_context>` に出る。`-nc` なしでは既存の文脈の**末尾**に足される | あり |
+
+- 補足（試験にしていない観測）: `event.systemPrompt` は、同じイベントの中では**書き換え前**の prompt（最初のハンドラが見る長さ 16861）。書き換えの後に呼ばれる 2 つ目のハンドラの `event.systemPrompt` は、1 つ目の書き換えを反映した長さ（10619）だった。つまり pi は contextFiles の書き換えのたびに prompt を作り直して次へ渡す。ただし返り値 `{systemPrompt}` の後は作り直されない（上の Q4）
+- 補足: 祖先ディレクトリの `AGENTS.md` も `contextFiles` に入る（試験の作業先が本リポジトリの内側にあるときに実際に入った）。試験は path の末尾（`/proj/AGENTS.md`）で選び、件数に依存しない
+- 反例先行: 期待を逆にした試験（2 回目は元に戻る / 往復で 2 回呼ばれる / 先の拡張が勝つ / 書き換えが勝つ / `-nc` で足した要素が出ない）が、実際に落ちることを確かめてから正しい期待にした
+
 ## 分からないこと
 
-- ハンドラの書き換えが、複数ターン・`/reload`・複数の拡張の `before_agent_start` の順序のもとで保たれるか（1 ターンだけ測った）
-- ハンドラが `{systemPrompt}` を返す方式との優先関係
+- 往復の 2 回目の LLM 呼び出しの**最終 prompt 本文**での反映（`ctx.getSystemPrompt()` でしか確認していない。`before_provider_request` の `payload` は faux では取れなかった）
+- 対話モード（TUI）・RPC での `/reload`（print/json モードだけ測った）、`/reload` 中の拡張の読み直しでハンドラの状態が失われること以外の副作用
+- 3 つ以上の拡張、`{systemPrompt}` と contextFiles を両方使う拡張が混ざるときの順序の組み合わせ（2 つだけ測った）
 - 作業先の `.pi/SYSTEM.md`（`--approve`）と `-nc` の組み合わせ
 - ステージ済みのときの gitleaks の実測
 - Windows の素の `pi`（別の `subagents` 拡張が子を起動する経路）での同じ挙動

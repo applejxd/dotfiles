@@ -62,7 +62,7 @@
 
 ### 4.2 受け渡し
 
-- **S0 の実測（2026-11-02）で (P) を採る**（`before_agent_start` の `systemPromptOptions.contextFiles`（`{path, content}`）を書き換えると、最終の prompt に反映される。[記録](../research/agents/child-context-probe.md)。複数ターン・`/reload`・複数拡張の順序での保持は未確認で、S4 の前に測る）。比べた案: (P) pi の文脈の一覧（hook）を、ファイル単位で変換する。`-nc` は要らず、祖先・順序・出典を保てる。(N) `-nc` で止め、選別した結果を `--append-system-prompt` に入れる。この場合は、pi の収集との**同等性**（出典・順序）を先に確かめる
+- **S0 の実測（2026-11-02）で (P) を採る**（`before_agent_start` の `systemPromptOptions.contextFiles`（`{path, content}`）を書き換えると、最終の prompt に反映される。[記録](../research/agents/child-context-probe.md)）。**保持の条件（persist の実測）**: (1) `contextFiles` は**ユーザーメッセージごとに元の内容で渡し直される**ので、**子の起動時に 1 回だけでなく、`before_agent_start` のたびに毎回書き換える** (2) ツールの往復では呼ばれず、書き換えは残る (3) 複数の拡張は `-e` の順に実行され、後の拡張が前の書き換えを見て、**最後の書き換えが勝つ** (4) いずれかの拡張が `{systemPrompt}` を返すと、**それが全体を決め、文脈の書き換えは効かない**（今の拡張に、`before_agent_start` で返すものは無い。新しい拡張を足すときの注意） (5) `/reload` の後の次のターンも効く (6) `-nc` のとき空の `contextFiles` へ足した要素だけが prompt に出る（抜粋を足す口にもなる）。比べた案: (P) pi の文脈の一覧（hook）を、ファイル単位で変換する。`-nc` は要らず、祖先・順序・出典を保てる。(N) `-nc` で止め、選別した結果を `--append-system-prompt` に入れる。この場合は、pi の収集との**同等性**（出典・順序）を先に確かめる
 - **起動契約**: `spawnChild` が、検証済みの役割名（`explore` と `review` は同じ profile なので、profile では区別できない）と文脈のモードを、環境変数で明示する。子側はその契約があるときだけ動き、親・`commit` 役・Windows の経路は変えない。未知のモードは、黙って選別にしない
 
 ## 5. 段階計画と評価
@@ -117,7 +117,7 @@
 
 ## 8. 未解決・未確認
 
-- 【S0 で判明】`-nc` は作業先・祖先・agent 置き場の `AGENTS.md`・`CLAUDE.md` を全部止める（append は残る）。子は `--no-approve` なので、作業先の `.pi/SYSTEM.md` は読まない。残りは、複数ターン・`/reload`・複数拡張の順序で書き換えが保たれるか、ハンドラが `{systemPrompt}` を返す方式との優先関係、`--approve` と `-nc` の組み合わせ
+- 【S0 で判明】`-nc` は作業先・祖先・agent 置き場の `AGENTS.md`・`CLAUDE.md` を全部止める（append は残る）。子は `--no-approve` なので、作業先の `.pi/SYSTEM.md` は読まない。【persist で判明】上の §4.2 の保持の条件。残りは、TUI・RPC での `/reload`、3 つ以上の拡張の組み合わせ、往復の 2 回目の最終 prompt 本文での確認、`--approve` と `-nc` の組み合わせ
 - Claude Code・Copilot・OpenCode が、共通の正本の HTML コメントを、モデルにどう渡すか（表示・トークン・解釈）
 - 実モデルが、抜粋で規約を守るか（S5）。Windows 実機
 - [CHG-0051](0051-verification-tiers.md) の「`AGENTS.md` の縮約」との競合（S3 の前に調整する）
