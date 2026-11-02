@@ -268,6 +268,14 @@ const resultOf = (cwd, id) => {
 	const bb = ops.beginApproval(cwd, d.id, d.oid, owner());
 	ops.markStarted(cwd, d.id, bb.attemptOid);
 	const deps = { liveness: () => ({ state: "gone", reason: "止まっている" }) };
+	// /pending show の引数: 複数行・長い値は全行を出す (1 引数 1300 字まで)
+	const msgLines = Array.from({ length: 40 }, (_, i) => `- 項目 ${String(i).padStart(2, "0")}: ${"あ".repeat(20)}`);
+	const multi = ["feat: 件名", "", ...msgLines, ""].join("\n"); // 約 1200 字・複数行・空行あり
+	const m1 = save(cwd, { params: { mode: "msg", message: multi } });
+	const m2 = save(cwd, { params: { mode: "msg", message: "short value" } });
+	const m3 = save(cwd, { params: { mode: "msg", message: Array.from({ length: 80 }, (_, i) => `L${i}-${"x".repeat(30)}`).join("\n") } });
+	const m4 = save(cwd, { params: { mode: "msg", message: "feat: \u001b[2J赤\n\u001b]0;t\u0007本文\r\n次" } });
+	out.showMsg = { multi, ids: [m1.id, m2.id, m3.id, m4.id], t1: ap.showText(cwd, m1.id), t2: ap.showText(cwd, m2.id), t3: ap.showText(cwd, m3.id), t4: ap.showText(cwd, m4.id) };
 	out.texts = {
 		list: ap.listText(cwd, deps),
 		show: ap.showText(cwd, a.id),

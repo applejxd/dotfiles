@@ -204,6 +204,30 @@ const out = {};
 	};
 }
 
+// 1b. 端末の幅が分かるときの、ラベルの幅 (幅が不明 = 従来の 44 / 幅 120 なら広がる)
+{
+	const cwd = repo();
+	const h = setup();
+	const long = "summary-" + "x".repeat(400);
+	const a = save(cwd, { action: "fake_op", params: { note: long } }).id;
+	const b = save(cwd, { action: LONG_ACTION, params: { note: long } }).id;
+	const labelsAt = (columns) => {
+		const saved = process.stdout.columns;
+		process.stdout.columns = columns;
+		try {
+			return pick.pickCandidates(cwd, "approve", h.approveDeps({ cwd })).map((x) => x.label);
+		} finally {
+			process.stdout.columns = saved;
+		}
+	};
+	const width = (ls) => Math.max(...ls.map((l) => view.cellWidth(l)));
+	const unknown = labelsAt(undefined);
+	const w46 = labelsAt(46);
+	const w120 = labelsAt(120);
+	const w500 = labelsAt(500);
+	out.wide = { ids: [a, b], unknown, w46, w120, w500, widths: { unknown: width(unknown), w46: width(w46), w120: width(w120), w500: width(w500) } };
+}
+
 // 2. 選択 (chooseId): 0 件・1 件・複数・キャンセル。選んだ ID は、ID 指定と同じ経路に進む
 {
 	const h = setup();

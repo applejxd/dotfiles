@@ -19,6 +19,9 @@ const ap = await import(harness("pending-approve.ts"));
 const ENV = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.test", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.test" };
 const git = (cwd, args) => execFileSync("git", args, { cwd, env: ENV, encoding: "utf8" }).trim();
 const req = JSON.parse(readFileSync(0, "utf8"));
+// 端末の大きさを注入する (省略 = パイプのとおり不明)
+if (req.columns !== undefined) process.stdout.columns = req.columns;
+if (req.rows !== undefined) process.stdout.rows = req.rows;
 const out = {};
 
 if (req.op === "capture") {

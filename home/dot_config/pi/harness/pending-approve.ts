@@ -567,6 +567,30 @@ export function logText(cwd: string, limits: Limits = DEFAULT_LIMITS, now: numbe
 	return rows.length ? rows.join("\n") : "結果の記録は無い";
 }
 
+const PARAM_INLINE_MAX = 200;
+const PARAM_BLOCK_MAX = 1300;
+
+/** 引数 1 つの表示。1 行で短ければ 1 行、複数行・長いものは空行を除く全行を 4 スペースで (上限 PARAM_BLOCK_MAX 字。折り返しは端末に任せる) */
+function paramLines(k: string, v: string): string[] {
+	const text = sanitizeForDisplay(String(v));
+	if (!/[\r\n]/.test(text) && text.length <= PARAM_INLINE_MAX) return [`引数 ${k}: ${text.replace(/\s+/g, " ").trim()}`];
+	const rows = text.split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim() !== "");
+	const out: string[] = [`引数 ${k}:`];
+	let used = 0;
+	for (let i = 0; i < rows.length; i++) {
+		const room = PARAM_BLOCK_MAX - used;
+		if (rows[i].length > room) {
+			const rest = rows.slice(i).reduce((n, l) => n + l.length, 0) - Math.max(room, 0);
+			if (room > 0) out.push(`    ${rows[i].slice(0, room)}`);
+			out.push(`    …(以下 ${rest} 字は省略)`);
+			return out;
+		}
+		out.push(`    ${rows[i]}`);
+		used += rows[i].length;
+	}
+	return out;
+}
+
 /** 1 件の表示。引数・前提は、表示用に整えて切る (記録の中身は信頼しない) */
 export function showText(cwd: string, id: string, limits: Limits = DEFAULT_LIMITS): string {
 	const lines: string[] = [];
@@ -583,7 +607,7 @@ export function showText(cwd: string, id: string, limits: Limits = DEFAULT_LIMIT
 		const r = record;
 		lines.push(`${id}: ${r.action}  理由: ${r.reason}  作成: ${oneLine(r.createdAt, 40)}`);
 		lines.push(`要求元: セッション ${oneLine(r.request.sessionId, 80)} / ${oneLine(r.request.cwd, 200)}`);
-		for (const [k, v] of Object.entries(r.params)) lines.push(`引数 ${k}: ${oneLine(v, 300)}`);
+		for (const [k, v] of Object.entries(r.params)) lines.push(...paramLines(k, v));
 		lines.push(`前提: ${oneLine(JSON.stringify(r.premise), 600)}`);
 		if (r.supersedes) lines.push(`前の要求: ${r.supersedes}`);
 	} else if (!run && !done) {

@@ -1,6 +1,6 @@
 // `/pending` の ID の省略 (TUI で選ぶ)・Tab 補完・resolve の対話。選ぶのは ID だけで、承認・破棄・決着の確認は既存の経路 (approvePending・resolvePending) が行う。
 // 利用者専用のスラッシュコマンドの部品で、モデルから呼べる経路は作らない。see docs/change/0055-async-approval.md
-import { cellWidth, clipCells, sanitizeForDisplay } from "./confirm-view.ts";
+import { cellWidth, clipCells, fitWidth, sanitizeForDisplay } from "./confirm-view.ts";
 import { isExclusiveAction, recordOfChain, resolvePending, type ApproveDeps, type Reply, type ResolveArgs } from "./pending-approve.ts";
 import { DEFAULT_LIMITS, doneOid, listOps, readAttemptAt, readOp, readResultAt, runningOid, type OpRecord } from "./pending-ops.ts";
 
@@ -11,8 +11,9 @@ export type Candidate = { id: string; label: string; act?: HubAct };
 const HUB_MARK: Record<HubAct, string> = { approve: "承認 ", resolve: "決着 ", show: "詳細 " };
 type PickDeps = Pick<ApproveDeps, "adapters" | "limits">;
 
-/** 候補 1 行の表示幅の上限 (端末のセル数。狭い画面でも折り返さない) */
+/** 候補 1 行の表示幅の上限 (端末のセル数)。端末の幅が分かればそれに合わせ (選択 UI の余白で -4)、不明や狭い端末は従来の 44 */
 export const LABEL_CELLS = 44;
+const labelCells = (): number => fitWidth(LABEL_CELLS, 4);
 export const CHOICE_CANCEL = "やめる";
 export const SUBCOMMANDS = [
 	["list", "一覧を出す"],
@@ -52,8 +53,9 @@ function briefOf(rec: OpRecord | null, deps: PickDeps): string {
 function labelOf(name: string, ago: string, summary: string, tail = "", mark = ""): string {
 	const head = `${mark}${firstLine(name)} ${ago}`;
 	const suffix = tail ? ` …${tail}` : "";
-	const room = LABEL_CELLS - cellWidth(head) - cellWidth(suffix) - 1;
-	return clipCells(`${summary && room >= 2 ? `${head} ${clipCells(summary, room)}` : head}${suffix}`, LABEL_CELLS);
+	const cells = labelCells();
+	const room = cells - cellWidth(head) - cellWidth(suffix) - 1;
+	return clipCells(`${summary && room >= 2 ? `${head} ${clipCells(summary, room)}` : head}${suffix}`, cells);
 }
 
 /** 種類ごとの候補。approve・hub は古い順 (待ち行列。積み重ねた feature の依存は保存の順と一致しやすい)、ほかは新しい順。git の読み取りだけ */

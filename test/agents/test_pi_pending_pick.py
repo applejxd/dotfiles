@@ -60,6 +60,22 @@ def test_labels_fit_in_44_cells_and_keep_action_and_age_but_not_the_id(table):
     assert c["ctrlLabel"].startswith("fake_op たった今 ")
 
 
+def test_label_width_follows_the_terminal_width_and_falls_back_to_44(table):
+    w = table["wide"]
+    # (e) 幅不明・幅 46 は従来の 44 (狭くしない)。幅 120 は 120 - 4 = 116、幅 500 は上限 200 - 4 = 196 にちょうど届く
+    # (要約は 400 字なので、内容が短くて届かないことはない)
+    assert w["widths"] == {"unknown": 44, "w46": 44, "w120": 116, "w500": 196}, w
+    assert w["unknown"] == w["w46"], w
+    # 操作名と経過は削らない (幅を広げても、狭いときも)
+    for key in ("unknown", "w120"):
+        assert any(
+            re.match(rf"^{re.escape('long_action_name_abcdef')} たった今", x) for x in w[key]
+        ), w[key]
+    assert any(x.startswith("fake_op たった今 summary-xxx") and len(x) > 44 for x in w["w120"]), w[
+        "w120"
+    ]
+
+
 def test_identical_labels_get_the_id_tail_4_digits_and_only_those(table):
     d = table["dup"]
     assert d["maxWidth"] <= 44 and d["d1"] != d["d2"]

@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import type { ActionSpec, PendingAdapter } from "./actions.ts";
-import { cellWidth, clipCells, sanitizeForDisplay } from "./confirm-view.ts";
+import { cellWidth, clipCells, fitWidth, sanitizeForDisplay, termSize } from "./confirm-view.ts";
 import { computeIntegrationPlan, type IntegratePlan } from "./integrate-plan.ts";
 import { executeIntegrationOutcome } from "./integrate-exec.ts";
 import type { ApprovalAdapter } from "./pending-approve.ts";
@@ -24,7 +24,12 @@ export type CfgSource = IntegrateCfg | (() => IntegrateCfg);
 
 export type Cleanup = "none" | "branch" | "branch_and_worktree";
 const CLEANUPS: readonly string[] = ["none", "branch", "branch_and_worktree"];
-const WIDTH = 46;
+const WIDTH = 46; // 端末の幅が不明 (試験・RPC・パイプ) のときの従来値。分かれば fitWidth が広げる
+const HANG = "  ";
+const MAX_SUBJECT_LINES = 3;
+const DEFAULT_MESSAGE_BUDGET = 8;
+const MIN_MESSAGE_BUDGET = 3;
+const MAX_MESSAGE_BUDGET = 24;
 const MAX_RISKS = 8;
 const MAX_FILES = 40;
 
@@ -200,34 +205,73 @@ function pendingStacked(plan: IntegratePlan, cwd: string): Map<string, string> {
 	return out;
 }
 
-/** 承認の 4 択の画面に出す、コミットメッセージの 1 行目 (複数行なら末尾に (+N 行))。切るのは件名の側で、「ほかにある」の印は欠かさない。全文は「全文を見る」 */
-function messageLine(message: string): string {
+/** 承認の 4 択の画面に出すメッセージの行。空行を除く全行を、幅で折り返して (2 スペースのぶら下がり) 出す。
+ * 件名 (1 行目) は最大 3 行まで必ず見せ、あふれるときだけ第 3 行を … で切る。本文は予算までで、超えたら最後に「残り N 行」を出す。全文は「全文を見る」 */
+function messageLines(message: string, width: number, budget: number): string[] {
 	const rows = sanitizeForDisplay(message)
 		.split(/\r?\n/)
 		.map((l) => l.trim())
 		.filter((l) => l !== "");
-	const subject = rows[0] ?? "(空)";
-	const suffix = rows.length > 1 ? ` (+${rows.length - 1} 行)` : "";
 	const label = "メッセージ: ";
-	return `${label}${clipCells(subject, Math.max(8, WIDTH - cellWidth(label) - cellWidth(suffix)))}${suffix}`;
+	const subject = wrapHang(label, rows[0] ?? "(空)", width, MAX_SUBJECT_LINES);
+	const body = rows.slice(1).flatMap((l) => wrapHang(HANG, l, width, Infinity));
+	const room = Math.max(0, budget - subject.length);
+	const out = [...subject, ...body.slice(0, room)];
+	if (body.length > room) out.push(`… 残り ${body.length - room} 行 (「全文を見る」で全文)`);
+	return out;
+}
+
+/** prefix を先頭に、続きの行は 2 スペースのぶら下がりで、幅 (セル) で折り返す。maxLines を超えると最終行を … で切る */
+function wrapHang(prefix: string, text: string, width: number, maxLines: number): string[] {
+	const lines: string[] = [];
+	let cur = prefix;
+	let w = cellWidth(prefix);
+	let started = false; // cur に本文の文字が入ったか
+	const chars = Array.from(text);
+	for (let i = 0; i < chars.length; i++) {
+		const cw = cellWidth(chars[i]);
+		if (w + cw > width && started) {
+			if (lines.length + 1 >= maxLines) {
+				// 最終行: 残りを全部つなげて、幅に合わせて … で切る
+				const rest = chars.slice(i).join("");
+				lines.push(clipCells(`${cur}${rest}`, width));
+				return lines;
+			}
+			lines.push(cur);
+			cur = HANG;
+			w = cellWidth(HANG);
+			started = false;
+		}
+		cur += chars[i];
+		w += cw;
+		started = true;
+	}
+	lines.push(cur);
+	return lines;
 }
 
 function summaryOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[], pend: Map<string, string>): string {
-	const lines: string[] = [`${branchName(plan.source.ref)} → ${branchName(plan.target.ref)} (squash)`, "衝突: なし"];
-	lines.push(`${plan.stats.commits} コミット・${plan.stats.files} ファイル (+${plan.stats.additions}/-${plan.stats.deletions})`);
-	lines.push(messageLine(plan.message));
-	if (cleanup !== "none") lines.push(`後片付け: ${cleanup === "branch" ? "ブランチ削除" : "ブランチと worktree 削除"}`);
-	lines.push(...stackedSummaryLines(plan, pend));
+	const { rows } = termSize();
+	const width = fitWidth(WIDTH, 2);
+	const head: string[] = [`${branchName(plan.source.ref)} → ${branchName(plan.target.ref)} (squash)`, "衝突: なし"];
+	head.push(`${plan.stats.commits} コミット・${plan.stats.files} ファイル (+${plan.stats.additions}/-${plan.stats.deletions})`);
+	const tail: string[] = [];
+	if (cleanup !== "none") tail.push(`後片付け: ${cleanup === "branch" ? "ブランチ削除" : "ブランチと worktree 削除"}`);
+	tail.push(...stackedSummaryLines(plan, pend));
 	if (plan.risks.length) {
-		lines.push(`リスクのあるパス (${plan.risks.length} 件):`);
-		for (const r of plan.risks.slice(0, MAX_RISKS)) lines.push(`  ${oneLine(r.path, 120)}`);
-		if (plan.risks.length > MAX_RISKS) lines.push(`  ほか ${plan.risks.length - MAX_RISKS} 件`);
-	} else lines.push("リスクのあるパス: なし");
+		tail.push(`リスクのあるパス (${plan.risks.length} 件):`);
+		for (const r of plan.risks.slice(0, MAX_RISKS)) tail.push(`  ${oneLine(r.path, 120)}`);
+		if (plan.risks.length > MAX_RISKS) tail.push(`  ほか ${plan.risks.length - MAX_RISKS} 件`);
+	} else tail.push("リスクのあるパス: なし");
 	if (changes.length) {
-		lines.push("要求時から変わった点:");
-		for (const c of changes) lines.push(`  ${c}`);
+		tail.push("要求時から変わった点:");
+		for (const c of changes) tail.push(`  ${c}`);
 	}
-	return lines.map((l) => clipCells(l, WIDTH)).join("\n");
+	// 予算: 他の行を先に作り、選択肢 4 つとタイトルを押し出さないように残りを割り当てる (行数不明は固定)
+	const others = head.length + tail.length;
+	const budget = rows === undefined ? DEFAULT_MESSAGE_BUDGET : Math.min(MAX_MESSAGE_BUDGET, Math.max(MIN_MESSAGE_BUDGET, rows - others - 8));
+	const lines = [...head, ...messageLines(plan.message, width, budget), ...tail];
+	return lines.map((l) => clipCells(l, width)).join("\n");
 }
 
 function viewOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[], pend: Map<string, string>): string {

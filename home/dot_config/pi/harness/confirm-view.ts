@@ -567,6 +567,19 @@ export function cellWidth(s: string): number {
 	return w;
 }
 
+/** 端末の大きさ。数でなければ undefined (試験・RPC・パイプ。呼び出し側は従来の固定値に戻る) */
+export function termSize(): { columns?: number; rows?: number } {
+	const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : undefined);
+	return { columns: num(process.stdout?.columns), rows: num(process.stdout?.rows) };
+}
+
+/** 表示に使う幅 (セル数)。端末の幅が分かれば `columns - margin` (30〜200 に収める)。ただし `fallback` (従来の固定値) より狭くはしない。不明なら `fallback` */
+export function fitWidth(fallback: number, margin: number): number {
+	const { columns } = termSize();
+	if (columns === undefined) return fallback;
+	return Math.max(fallback, Math.min(200, Math.max(30, columns)) - margin);
+}
+
 /** 幅 (セル数) を超える行を、末尾を … にして切る */
 export function clipCells(s: string, max: number): string {
 	if (cellWidth(s) <= max) return s;

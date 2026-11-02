@@ -194,3 +194,45 @@ def test_listing_and_showing_are_sanitized_and_name_the_operation_even_after_the
         and "証拠: 応答が途切れた" in t["showDone"]
     )
     assert "unknown" in t["log"] and "見つからない" in t["showMissing"]
+
+
+def _arg_block(text: str, key: str = "message") -> list[str]:
+    lines = text.split("\n")
+    i = lines.index(f"引数 {key}:")
+    j = i + 1
+    while j < len(lines) and lines[j].startswith("    "):
+        j += 1
+    return lines[i + 1 : j]
+
+
+def test_show_prints_every_line_of_a_multiline_argument_not_a_300_char_one_liner(table):
+    s = table["showMsg"]
+    multi = s["multi"]
+    assert len(multi) > 1100  # 旧: 1 行に潰して 300 字で切れていた
+    block = _arg_block(s["t1"])
+    want = [ln for ln in multi.split("\n") if ln.strip()]
+    assert block == [f"    {ln}" for ln in want], block
+    assert "省略" not in s["t1"]
+
+
+def test_show_keeps_a_short_single_line_argument_inline(table):
+    s = table["showMsg"]
+    assert "引数 message: short value" in s["t2"].split("\n")
+    assert "引数 mode: msg" in s["t2"].split("\n")
+
+
+def test_show_caps_one_argument_at_1300_chars_with_a_mark(table):
+    s = table["showMsg"]
+    rows = [f"L{i}-" + "x" * 30 for i in range(80)]
+    total = sum(len(r) for r in rows)
+    block = _arg_block(s["t3"])
+    assert block[-1] == f"    …(以下 {total - 1300} 字は省略)", block
+    assert sum(len(ln) - 4 for ln in block[:-1]) == 1300, block
+    assert block[0] == f"    {rows[0]}"
+
+
+def test_show_strips_control_characters_from_multiline_arguments(table):
+    t = table["showMsg"]["t4"]
+    assert "\x1b" not in t and "\x07" not in t and "\r" not in t, repr(t)
+    block = _arg_block(t)
+    assert block[0] == "    feat: \\x1b[2J赤" and block[-1] == "    次", block

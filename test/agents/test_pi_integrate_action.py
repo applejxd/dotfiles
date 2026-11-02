@@ -498,13 +498,15 @@ def test_adapter_execute_returns_exec_outcome_with_facts(repo: Path) -> None:
     assert x["body"]["facts"]["result_commit"] == _rev(repo, "HEAD")
 
 
-def _summary_of(repo: Path, message: str) -> list[str]:
+def _summary_of(repo: Path, message: str, **term: int) -> list[str]:
+    # term: columns / rows (端末の大きさの注入)。省略は「幅・行数不明」 (従来の固定幅 46)
     res = _run(
         {
             "op": "flow",
             "requestCwd": str(repo),
             "approverCwd": str(repo),
             "values": _values(message=message),
+            **term,
         }
     )
     assert res["capture"]["ok"] is True, res["capture"]
@@ -515,29 +517,111 @@ def _cells(line: str) -> int:
     return sum(2 if ord(ch) > 0x2E80 else 1 for ch in line)
 
 
-def test_summary_shows_the_message_subject_with_the_extra_line_count(repo: Path) -> None:
-    # 承認するのは、保護ブランチへ入る内容そのもの (メッセージを含む)。4 択の画面に 1 行目を出す。全文は「全文を見る」
+def _msg_block(lines: list[str]) -> list[str]:
+    # 「メッセージ:」から、次の字下げでない行まで (メッセージとその続きの行。残り N 行の行も含む)
+    i = next(k for k, ln in enumerate(lines) if ln.startswith("メッセージ:"))
+    j = i + 1
+    while j < len(lines) and (lines[j].startswith("  ") or lines[j].startswith("… 残り")):
+        j += 1
+    return lines[i:j]
+
+
+BODY = "feat: x\n\n" + "\n".join(f"- item {n}" for n in range(1, 13))
+
+
+def test_summary_shows_every_message_line_not_only_the_subject(repo: Path) -> None:
+    # 承認するのは、保護ブランチへ入る内容そのもの (メッセージを含む)。予算内なら空行を除く全行を出す
     lines = _summary_of(repo, MSG)
-    assert "メッセージ: feat: x (+1 行)" in lines, lines
+    assert _msg_block(lines) == ["メッセージ: feat: x", "  body line"], lines
+    assert not any("(+1 行)" in ln for ln in lines), (
+        lines
+    )  # 従来の (+N 行) は、最後の「残り N 行」に置き換わった
 
 
-def test_summary_single_line_message_has_no_extra_count(repo: Path) -> None:
+def test_summary_budget_is_8_lines_when_rows_unknown_and_marks_the_rest(repo: Path) -> None:
+    blk = _msg_block(_summary_of(repo, BODY))
+    # 予算 8 行 (メッセージ: の行を含む)。超えた分は最後の 1 行に記す (13 行中 8 行を見せ、残り 5)
+    assert blk[:2] == ["メッセージ: feat: x", "  - item 1"], blk
+    assert len(blk) == 9 and blk[-1] == "… 残り 5 行 (「全文を見る」で全文)", blk
+
+
+def test_summary_budget_follows_rows(repo: Path) -> None:
+    small = _summary_of(repo, BODY, columns=120, rows=20)
+    big = _summary_of(repo, BODY, columns=120, rows=60)
+    # rows=60 は上限 24 行。全部 (13 行) が入る。rows=20 は他の行を引いて下限 3 まで絞る
+    assert not any(ln.startswith("… 残り") for ln in big) and len(_msg_block(big)) == 13, big
+    blk = _msg_block(small)
+    assert blk[-1].startswith("… 残り") and 3 <= len(blk) - 1 < 13, blk
+    tiny = _msg_block(_summary_of(repo, BODY, columns=120, rows=5))
+    assert len(tiny) == 4 and tiny[-1] == "… 残り 10 行 (「全文を見る」で全文)", tiny  # 下限 3
+
+
+LONG = "feat: " + "abcdefghij " * 8 + "end"
+
+
+def _subject_text(blk: list[str]) -> str:
+    # ラベルと字下げを外してつなぐ (折り返しで文字を落とさないことの確認)
+    return blk[0].removeprefix("メッセージ: ") + "".join(ln.removeprefix("  ") for ln in blk[1:])
+
+
+def test_summary_wide_terminal_wraps_the_long_subject_without_clipping(repo: Path) -> None:
+    narrow = _msg_block(_summary_of(repo, LONG))
+    wide = _msg_block(_summary_of(repo, LONG, columns=120))
+    assert wide == ["メッセージ: " + LONG], wide  # 幅 120 なら 1 行に全部入る
+    assert len(narrow) == 3 and all(_cells(ln) <= 46 for ln in narrow), narrow
+    assert _subject_text(narrow) == LONG, narrow  # 46 でも 3 行以内に収まる件名は全部見える
+    assert narrow[1].startswith("  ") and narrow[2].startswith("  ")  # 2 スペースのぶら下がり
+
+
+def test_summary_subject_is_shown_in_full_up_to_3_lines_even_with_a_tiny_budget(repo: Path) -> None:
+    blk = _msg_block(_summary_of(repo, LONG + "\n" + BODY, rows=5))
+    assert _subject_text(blk[:3]) == LONG, blk
+    assert blk[-1].startswith("… 残り"), blk
+    # 3 行を超える件名は、第 3 行を … で切る (「ほかにある」の印)
+    huge = _msg_block(_summary_of(repo, "feat: " + "abcdefghij " * 40))
+    assert len(huge) == 3 and huge[2].endswith("…") and all(_cells(ln) <= 46 for ln in huge), huge
+
+
+def test_summary_message_is_sanitized_at_any_width(repo: Path) -> None:
+    for term in ({}, {"columns": 120, "rows": 40}):
+        lines = _summary_of(repo, "feat: \x1b[2Jx\n\n\x07body\x1b]0;t\x07", **term)
+        text = "\n".join(lines)
+        assert "\x1b" not in text and "\x07" not in text, lines
+        assert "\\x1b[2Jx" in text and "body" in text, lines
+
+
+def test_summary_single_line_message_is_one_line_without_a_remainder_mark(repo: Path) -> None:
     lines = _summary_of(repo, "feat: only")
-    assert "メッセージ: feat: only" in lines, lines
-    row = next(ln for ln in lines if ln.startswith("メッセージ:"))
-    assert "行)" not in row, row  # 統計行の (+3/-0) とは区別し、メッセージの行だけを見る
+    assert _msg_block(lines) == ["メッセージ: feat: only"], lines
 
 
-def test_summary_long_subject_is_clipped_but_keeps_the_extra_count(repo: Path) -> None:
+def test_summary_every_line_fits_the_default_width_46_when_the_terminal_is_unknown(
+    repo: Path,
+) -> None:
+    # 回帰: 幅不明は従来の 46 セル (全角は 2)
     lines = _summary_of(repo, "feat: " + "あ" * 60 + "\n\n- a\n- b")
-    row = next(ln for ln in lines if ln.startswith("メッセージ:"))
-    assert row.endswith("(+2 行)"), (
-        row
-    )  # 空行を除いた残りの行数。切るのは件名の側で、「ほかにある」の印は欠かさない
-    assert _cells(row) <= 46, row
+    assert all(_cells(ln) <= 46 for ln in lines), lines
+    assert _msg_block(lines)[-2:] == ["  - a", "  - b"], lines
 
 
-def test_summary_message_line_drops_control_characters(repo: Path) -> None:
-    lines = _summary_of(repo, "feat: \x1b[2Jx")
-    row = next(ln for ln in lines if ln.startswith("メッセージ:"))
-    assert "\x1b" not in row, row
+def test_summary_other_lines_widen_with_the_terminal(repo: Path) -> None:
+    path_rows = _summary_of(repo, "feat: x", columns=120)
+    assert all(_cells(ln) <= 118 for ln in path_rows), path_rows
+
+
+def test_summary_message_budget_is_capped_at_exactly_24_lines(repo: Path) -> None:
+    # rows が十分大きくても、メッセージ部分は 24 行 (メッセージ: の行を含む) で止まる。非空 71 行のうち 47 行が残り
+    msg = "feat: x\n\n" + "\n".join(f"- item {n}" for n in range(1, 71))
+    blk = _msg_block(_summary_of(repo, msg, columns=120, rows=200))
+    assert len(blk) == 24 + 1, blk
+    assert (
+        blk[0] == "メッセージ: feat: x" and blk[1] == "  - item 1" and blk[23] == "  - item 23"
+    ), blk
+    assert blk[-1] == "… 残り 47 行 (「全文を見る」で全文)", blk
+
+
+def test_summary_body_width_is_capped_at_exactly_200_minus_2(repo: Path) -> None:
+    # 幅 500 でも本文は 198 セル (200 - 2) まで。メッセージを 450 字にして、上限に届くようにする
+    lines = _summary_of(repo, "feat: x\n\n" + "y" * 450, columns=500, rows=200)
+    widths = [_cells(ln) for ln in lines]
+    assert max(widths) == 198, widths
