@@ -439,6 +439,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
         "pending-command.ts",
         "integrate-action.ts",
         "integrate-plan.ts",
+        "integrate-profile-load.ts",
         "integrate-exec.ts",
         "pending-adapters.ts",
         "pending-request.ts",

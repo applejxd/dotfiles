@@ -59,6 +59,7 @@ try:
         "pending-command.ts",
         "integrate-action.ts",
         "integrate-plan.ts",
+        "integrate-profile-load.ts",
         "integrate-exec.ts",
         "pending-adapters.ts",
         "pending-request.ts",

@@ -128,6 +128,8 @@ _PI_TESTS = (
     "test_pi_pending_config",
     "test_pi_freezone",
     "test_pi_integrate_plan",
+    "test_pi_integrate_profile",
+    "test_pi_integrate_profile_load",
     "test_pi_integrate_exec",
     "test_pi_integrate_action",
     "test_pi_integrate_wiring",
