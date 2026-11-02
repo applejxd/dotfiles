@@ -1280,7 +1280,8 @@
     "master",
     "develop",
     "release/*",
-    "hotfix/*"
+    "hotfix/*",
+    "production"
    ],
    "risk_paths": [
     "home/dot_config/agents/**",

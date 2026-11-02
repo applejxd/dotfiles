@@ -50,6 +50,15 @@ def test_shipped_config_enables_the_free_zone_skip_and_carries_the_floor():
     assert out["risk_paths"] and all(isinstance(p, str) for p in out["risk_paths"])
 
 
+def test_shipped_protected_refs_add_production_to_the_floor():
+    # 他のリポジトリの統合先 (production) も必須確認にする。下限は変えない
+    refs = gen.pi_integrate(load_common())["protected_refs"]
+    assert "production" in refs and refs[: len(FLOOR)] == FLOOR
+    # rules.json へそのまま入る (単一ソース)
+    judge = gen.build_pi_harness({}, load_common())["judge"]["common"]["pi"]
+    assert judge["integrate"]["protected_refs"] == refs
+
+
 def test_rules_json_carries_integrate_and_confirm_flag():
     judge = gen.build_pi_harness({}, load_common())["judge"]["common"]["pi"]
     assert judge["integrate"]["enabled"] is True  # 同梱は有効 (F4)

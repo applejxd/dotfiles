@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from agents_common import ROOT
+from agents_common import ROOT, load_common
 from test_pi_judge_ts import _node
 
 DRIVER = ROOT / "test" / "agents" / "pi" / "integration_gate_driver.mjs"
@@ -214,6 +214,53 @@ def test_the_protected_list_is_a_parameter(repos):
     c = "git branch -m release/9 old"
     assert _raised(_one(c, repos["main"]), ALLOW)  # 下限に release/* がある
     assert _one(c, repos["main"], protected=["main", "develop"]) == ALLOW
+
+
+def _shipped_protected() -> list[str]:
+    # 同梱の設定 (common.toml.tmpl の単一ソース) から読む。ハードコードしない
+    return load_common()["pi"]["integrate"]["protected_refs"]
+
+
+PRODUCTION_ALWAYS = [
+    "git update-ref refs/heads/production HEAD",
+    "git update-ref -d production",
+    "git branch -f production abc",
+    "git branch -m production old",
+    "git checkout production",
+    "git switch production",
+    "git fetch . feature/x:production",
+]
+
+
+@pytest.mark.parametrize("command", PRODUCTION_ALWAYS)
+def test_production_is_protected_by_the_shipped_settings(repos, command):
+    r = _one(command, repos["feature"], protected=_shipped_protected())
+    assert _raised(r, ALLOW), r
+    assert "production" in r["reason"]
+
+
+@pytest.mark.parametrize("command", PRODUCTION_ALWAYS)
+def test_production_is_not_protected_when_the_list_lacks_it(repos, command):
+    # 保護でないものが保護になっていない (production を含まない設定では従来どおり)
+    small = [p for p in _shipped_protected() if p != "production"]
+    assert _one(command, repos["feature"], protected=small) == ALLOW
+
+
+def test_head_command_on_a_production_worktree_confirms(repos):
+    _git(
+        repos["main"],
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "production",
+        str(repos["main"].parent / "wt-production"),
+    )
+    prod = repos["main"].parent / "wt-production"
+    r = _one("git merge feature/x", prod, protected=_shipped_protected())
+    assert _raised(r, ALLOW), r
+    # feature/x は従来どおり自由区
+    assert _one("git merge develop", repos["feature"], protected=_shipped_protected()) == ALLOW
 
 
 def test_the_command_in_the_reason_is_clipped_and_one_line_per_field(repos):

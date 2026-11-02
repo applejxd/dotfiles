@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from agents_common import ROOT
+from agents_common import ROOT, load_common
 from test_pi_judge_ts import _node
 
 DRIVER = ROOT / "test" / "agents" / "pi" / "free_zone_commit_driver.mjs"
@@ -43,7 +43,11 @@ def repos(tmp_path: Path) -> dict[str, Path]:
     _git(main, "init", "-q", "-b", "main")
     _git(main, "commit", "-q", "--allow-empty", "-m", "init")
     out = {"main": main}
-    for name, branch in (("feature", "feature/x"), ("develop", "develop")):
+    for name, branch in (
+        ("feature", "feature/x"),
+        ("develop", "develop"),
+        ("production", "production"),
+    ):
         path = main / f"wt-{name}"
         _git(main, "worktree", "add", "-q", "-b", branch, str(path))
         out[name] = path
@@ -213,6 +217,36 @@ def test_the_protected_list_is_read_from_the_settings(repos):
     }
     r = _commit(repos, "feature", rules)
     assert len(r["calls"]["select"]) == 1 and r["result"]["details"]["freeZone"]["free"] is False
+
+
+def _shipped_rules() -> dict:
+    # 同梱の設定 (common.toml.tmpl の単一ソース) をそのまま渡す。ハードコードしない
+    integrate = dict(load_common()["pi"]["integrate"])
+    integrate["skip_confirm_in_free_zone"] = True
+    return {"judge": {"common": {"pi": {"integrate": integrate}}}}
+
+
+@pytest.mark.parametrize("without_production", [False, True])
+def test_a_production_worktree_is_never_a_free_zone(repos, without_production):
+    # 自由区は feature/ ブランチだけ (freezone.ts)。production は一覧に足す前から自由区ではなく、足しても変わらない
+    # (feature/ の判定が先なので、理由は「保護ブランチ」ではなく「feature/ ブランチではない」)
+    rules = _shipped_rules()
+    pi = rules["judge"]["common"]["pi"]["integrate"]
+    if without_production:
+        pi["protected_refs"] = [p for p in pi["protected_refs"] if p != "production"]
+    r = _commit(repos, "production", rules)
+    assert len(r["calls"]["select"]) == 1, r  # 確認を省略しない
+    fz = r["result"]["details"]["freeZone"]
+    assert (
+        fz["free"] is False
+        and fz["skipped"] is False
+        and fz["reason"] == "feature/ ブランチではない"
+    ), fz
+
+
+def test_feature_stays_free_with_the_shipped_settings(repos):
+    r = _commit(repos, "feature", _shipped_rules())
+    assert r["calls"]["select"] == [] and r["result"]["details"]["freeZone"]["free"] is True
 
 
 def test_the_confirmation_shows_the_main_repository_name_not_the_worktree_name(repos):
