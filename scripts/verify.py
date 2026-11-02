@@ -396,6 +396,11 @@ RULES: tuple[Rule, ...] = (
     Rule("tmp-clean", ("home/dot_config/pi/harness/tmp_clean.py",), ("test_tmp_clean",)),
     Rule("env-check", ("home/dot_claude/skills/env-check/**",), ("test_env_check",)),
     Rule(
+        "PR ビューア (apps/pr-viewer)",
+        ("apps/pr-viewer/**", "test/agents/pr_viewer_fixtures/**"),
+        ("test_pr_viewer_*",),
+    ),
+    Rule(
         "テンプレート検査器",
         ("scripts/lint_templates.py",),
         ("test_lint_templates",),
