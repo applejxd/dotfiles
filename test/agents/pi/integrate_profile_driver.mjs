@@ -18,6 +18,8 @@ const ROOT = resolve(HERE, "..", "..", "..");
 const harness = (name) => pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", name)).href;
 
 const req = JSON.parse(readFileSync(0, "utf8"));
+// ローダーは git のグローバルオプション (--no-replace-objects) をサブコマンドの前に付ける。先頭の "--" 始まりを飛ばしてサブコマンドを数える
+const sub = (args) => args.find((a) => !a.startsWith("--"));
 let result;
 if (req.fn === "effective") {
 	const { effectiveProfile } = await import(harness("judge/integrateprofile.ts"));
@@ -30,7 +32,7 @@ if (req.fn === "effective") {
 	const { gitSync } = await import(harness("gitrun.ts"));
 	const calls = [];
 	const git = (args, cwd) => {
-		calls.push(args[0]);
+		calls.push(sub(args));
 		return gitSync(args, cwd, { timeoutMs: 5000 });
 	};
 	const loads = [];
@@ -48,7 +50,10 @@ if (req.fn === "effective") {
 } else if (req.fn === "fake") {
 	// git を注入して、ls-tree / cat-file の出力を固定する (サブコマンドごと)
 	const { loadProfile } = await import(harness("integrate-profile-load.ts"));
-	const git = (args) => req.outputs[args[0]] ?? { ok: false, reason: "no output" };
-	result = loadProfile(req.cwd, req.defaults, { git });
+	const seen = [];
+	const git = (args) => (seen.push(args), req.outputs[sub(args)] ?? { ok: false, reason: "no output" });
+	const loaded = loadProfile(req.cwd, req.defaults, { git });
+	// 渡された git 引数を見たいときは record
+	result = req.record ? { loaded, seen } : loaded;
 }
 process.stdout.write(JSON.stringify(result));

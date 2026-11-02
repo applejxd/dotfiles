@@ -25,6 +25,7 @@ if (a.op === "save") {
 			children: [],
 			modes: { bypass: false },
 			...(a.target ? { target: a.target } : {}),
+			...(a.profileDefaults ? { profileDefaults: a.profileDefaults } : {}),
 			...(a.maxFeatures !== undefined ? { maxFeatures: a.maxFeatures } : {}),
 		});
 		out = { threw: false, input, lines: b.renderBoard(b.buildBoard(input), { width: 44, now: a.now }) };

@@ -114,3 +114,31 @@ def test_board_command_notifies_the_board_with_real_feature_state(env):
     assert all(len(ln) <= 60 for ln in lines), (
         text
     )  # スマホの幅で読める (全角を 2 桁で数えて 44 桁)
+
+
+def test_board_command_uses_the_project_source_prefixes(env):
+    """index.ts が盤面の収集へ設定の既定を渡す: プロジェクトの統合元の接頭辞 (task/) で feature が拾われる"""
+    proj = Path(env["proj"])
+    _git(proj, "init", "-q", "-b", "develop")
+    cfg = proj / ".agents" / "config" / "pi.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps({"integrate": {"source_prefixes": ["task/"]}}), encoding="utf-8")
+    _git(proj, "add", ".agents/config/pi.json")
+    _git(proj, "commit", "-q", "-m", "base")
+    for branch, name in (("task/a", "wt-a"), ("feature/z", "wt-z")):
+        wt = proj.parent / name
+        _git(proj, "worktree", "add", "-q", "-b", branch, str(wt))
+        (wt / f"{name}.txt").write_text("x\n", encoding="utf-8")
+        _git(wt, "add", f"{name}.txt")
+        _git(wt, "commit", "-q", "-m", name)
+
+    text = _board_text(env)
+    assert text, "盤面の通知が来なかった (/board が登録されていない)"
+    lines = text.splitlines()
+    assert any("feature a" in ln and "↑1" in ln for ln in lines), (
+        text
+    )  # task/a が統合元として拾われる
+    assert not any("feature z" in ln for ln in lines), (
+        text
+    )  # feature/z は拾われない (接頭辞を置き換えた)
+    assert any("pi.json: 有効" in ln for ln in lines), text

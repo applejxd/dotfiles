@@ -19,7 +19,7 @@ export type ParsedWorktree = {
 };
 
 /** `git worktree list --porcelain` を解析する。不正な行は無視する */
-export function parseWorktreePorcelain(text: string): ParsedWorktree[] {
+export function parseWorktreePorcelain(text: string, featurePrefixes: readonly string[] = ["feature/"]): ParsedWorktree[] {
 	const out: ParsedWorktree[] = [];
 	let cur: ParsedWorktree | null = null;
 	const flush = () => {
@@ -46,7 +46,8 @@ export function parseWorktreePorcelain(text: string): ParsedWorktree[] {
 		if (key === "HEAD" && val) c.head = val;
 		else if (key === "branch" && val) {
 			c.branch = val.startsWith("refs/heads/") ? val.slice("refs/heads/".length) : val;
-			if (c.branch.startsWith("feature/") && c.branch.length > "feature/".length) c.featureName = c.branch.slice("feature/".length);
+			const p = featurePrefixes.find((x) => c.branch!.startsWith(x) && c.branch!.length > x.length);
+			if (p !== undefined) c.featureName = c.branch.slice(p.length);
 		} else if (key === "bare") c.bare = true;
 		else if (key === "detached") c.detached = true;
 		else if (key === "locked") {
@@ -84,6 +85,8 @@ export type BoardInput = {
 	bgJobs?: { running: number; finished: number };
 	/** キーは worktree のパス */
 	worktreeStates?: Record<string, WorktreeState>;
+	/** pi.json の状態を示す 1 行 (有効で既定と違う・無効のときだけ。無効は診断コードだけ) */
+	profileNote?: string;
 	limits?: { maxRows?: number };
 };
 
@@ -212,6 +215,7 @@ export function buildBoard(input: BoardInput): BoardSnapshot {
 	const onOff = (v?: boolean) => (v === undefined ? "?" : v ? "on" : "off");
 	const mRows: BoardRow[] = [{ text: `bypass ${onOff(m.bypass)} / orchestrate ${onOff(m.orchestrate)} / sandbox ${m.sandbox ?? "unknown"}` }];
 	if (input.bgJobs) mRows.push({ text: `bg ジョブ 実行中${input.bgJobs.running} 完了${input.bgJobs.finished}` });
+	if (input.profileNote) mRows.push({ text: input.profileNote });
 	sections.push({ key: "modes", title: "モード・bg", count: mRows.length, rows: mRows, omitted: 0 });
 
 	return { v: 1, now: input.now, sections };

@@ -137,6 +137,7 @@ _PI_TESTS = (
     "test_pi_integrate_index",
     "test_pi_tui_guidance",
     "test_pi_free_zone_commit",
+    "test_pi_freezone_profile",
     "test_pi_landlock_exec",
     "test_pi_tools_ext",
     "test_pi_model_choice",

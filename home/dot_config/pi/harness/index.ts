@@ -28,6 +28,7 @@ import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Jo
 import { createRedactor } from "./redact.ts";
 import { MAX_BODY_FILE_BYTES, MUST_CONFIRM_INTEGRATION_PREFIX, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, parseFinishTarget, parseMergeTree, parseNumstat, type BodyFileResult, type ConfirmRaw, type IntegrationFacts, type MergeCheck } from "./confirm-view.ts";
 import { gitSync } from "./gitrun.ts";
+import { previewBlocked, profileDefaults } from "./freezone.ts";
 import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { auditConditions, auditFormat, summarizeCalls } from "./audit.ts";
@@ -182,6 +183,9 @@ function gatherIntegrationFacts(command: string, cwd: string): IntegrationFacts 
 	const f = parseFinishTarget(command);
 	if (!f) return undefined;
 	const base = { branch: f.branch, target: integrationTarget };
+	// pi.json で統合先・接頭辞を変えているときは、別のブランチの差分を見せない (git は一切走らせない)
+	const blocked = previewBlocked(cwd, integration.protectedRefs, integrationTarget);
+	if (blocked) return { ok: false, ...base, why: blocked };
 	const range = `${integrationTarget}..${f.branch}`;
 	const count = gitSync(["rev-list", "--count", range, "--"], cwd);
 	if (!count.ok) return { ok: false, ...base, why: count.reason };
@@ -518,6 +522,7 @@ export default async function (pi: ExtensionAPI) {
 				now,
 				children,
 				modes: { bypass, orchestrate, sandbox: BOUNDARY ? "fence" : NO_SANDBOX ? "none" : "unknown" },
+				profileDefaults: profileDefaults(integration.protectedRefs, integrationTarget),
 			});
 			ctx.ui?.notify?.(redactText(renderBoard(buildBoard(input), { width: 44, now }).join("\n")), "info");
 		},
@@ -677,7 +682,8 @@ export default async function (pi: ExtensionAPI) {
 				decided.delete(toolCallId);
 				const input = JSON.stringify(params);
 				const cached = seen !== undefined && seen.input === input;
-				const d = cached ? seen!.decision : decide(tool, params, ctx.cwd);
+				// 判定を使い回すときも、統合ゲート (自由区による確認の省略) は execute 直前にやり直す (tool_call の後に主設定が変わっても、古い許可を使わない)
+				const d = cached ? tightenIntegration(seen!.decision, tool, params, ctx.cwd, integration) : decide(tool, params, ctx.cwd);
 				const approved = seen?.approved === true && seen.input === input;
 				// 確認で見せた --body-file が、承認の後に差し替えられていないこと
 				if (approved && seen?.bodyFile) {

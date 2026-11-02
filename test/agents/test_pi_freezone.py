@@ -125,7 +125,8 @@ def test_linked_non_feature_is_not_free(repo: Path, branch: str):
 def test_protected_list_is_a_parameter(repo: Path):
     wt = _linked(repo, "feature/x", "wt")
     assert _classify(wt, protected=["feature/*"])["free"] is False
-    assert _classify(wt, protected=["develop"])["free"] is True
+    # 主 worktree (main) も保護に含める: 主 HEAD は保護ブランチ上でないと自由区にしない (設定の有無に依らない)
+    assert _classify(wt, protected=["main", "develop"])["free"] is True
 
 
 def test_linked_detached_is_not_free(repo: Path):
@@ -227,7 +228,8 @@ def test_git_is_started_at_most_twice(repo: Path, tmp_path: Path):
     wt = _linked(repo, "feature/x", "wt")
 
     assert _classify(wt, env=env)["free"] is True
-    assert len(count.read_text().splitlines()) == 2
+    # linked worktree: rev-parse + symbolic-ref x2 (feature / 主 HEAD) + pi.json の ls-tree (CHG-0057。pi.json が無いときの発見コスト)
+    assert len(count.read_text().splitlines()) == 4
 
     count.unlink()
     assert _classify(repo, env=env)["free"] is False

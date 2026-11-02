@@ -2469,14 +2469,14 @@ def _with_confirm_rules(env, timeout_seconds=300):
     path.write_text(json.dumps(rules), encoding="utf-8")
 
 
-def _rpc_outcome(env, calls, answers, timeout=90, on_request=None, **env_extra):
+def _rpc_outcome(env, calls, answers, timeout=90, on_request=None, extra=(), **env_extra):
     """RPC で 1 回呼ぶ。answers の None は確認に応えない (pi の期限を待つ)。
     on_request(n, 要求) は、n 番目の確認に応える直前に呼ぶ (承認の間の変化を作る試験用)。
 
     返すのは (確認の要求, ツールの結果の本文)。
     """
     args = [PI, "--no-session", "--model", "faux/spike", "-nbt", "-ne", "-e", "builtin:mcp"]
-    args += ["-e", str(env["harness"]), "-e", str(FIXTURES / "faux.ts"), "--mode", "rpc"]
+    args += ["-e", str(env["harness"]), *extra, "-e", str(FIXTURES / "faux.ts"), "--mode", "rpc"]
     proc = subprocess.Popen(
         args,
         cwd=env["proj"],
@@ -2945,6 +2945,46 @@ def test_the_finish_confirmation_shows_the_summary_and_the_message_file(env):
     assert "not approved:" in result and "利用者が拒否した" in result, result
 
 
+def _commit_pi_json(proj, integrate):
+    cfg = proj / ".agents" / "config" / "pi.json"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(json.dumps({"integrate": integrate}), encoding="utf-8")
+    _git_out(proj, "add", ".agents/config/pi.json")
+    _git_out(
+        proj,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.com",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "-m",
+        "cfg",
+    )
+
+
+@needs_must_confirm
+def test_the_finish_preview_is_withheld_when_pi_json_changes_the_source_prefixes(env):
+    _with_integration_rules(env)
+    _repo_with_a_feature(env["proj"])
+    _commit_pi_json(env["proj"], {"source_prefixes": ["task/"]})
+    requests, _result = _rpc_outcome(env, bash_call(FINISH_COMMAND), [False], PI_HARNESS_BYPASS="1")
+    message = requests[0]["message"]
+    assert "pi.json" in message and "確認できない" in message, message
+    assert "衝突:" not in message and "squash メッセージ (msg.txt):" in message, message
+
+
+@needs_must_confirm
+def test_the_finish_preview_is_unchanged_when_pi_json_changes_only_the_free_zone(env):
+    _with_integration_rules(env)
+    _repo_with_a_feature(env["proj"])
+    _commit_pi_json(env["proj"], {"free_zone_prefixes": ["task/"]})
+    requests, _result = _rpc_outcome(env, bash_call(FINISH_COMMAND), [False], PI_HARNESS_BYPASS="1")
+    assert "衝突: なし" in requests[0]["message"], requests[0]["message"]
+
+
 @needs_must_confirm
 def test_the_finish_is_stopped_when_the_message_file_changes_after_approval(env):
     _with_integration_rules(env)
@@ -3033,3 +3073,61 @@ def test_child_system_prompt_starts_with_the_preamble_then_the_role(env, agent):
     # 前置きの直後に、空行 1 つを挠んで役割の system が続く (faux.ts は先頭と直後を JSON で返す)
     expected = json.dumps("\n\n" + system[:50], ensure_ascii=False)[:-1]
     assert f"{CHILD_PREAMBLE_HEAD}…{expected}" in out, out
+
+
+# --- execute 直前の統合ゲートの再判定 (tool_call の後に主 worktree が変わっても、古い「許可」で実行しない) ---
+
+SIDE_EFFECT_EXT = FIXTURES / "side_effect.ts"
+
+
+def _recheck_repos(env):
+    """主 worktree (develop) と linked worktree (feature/x)。topic/x は主を切り替える先の非保護ブランチ。"""
+    main = env["tmp"] / "main"
+    main.mkdir()
+    _git_out(main, "init", "-q", "-b", "develop")
+    ident = ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"]
+    _git_out(main, *ident, "commit", "-q", "--allow-empty", "-m", "init")
+    _git_out(main, "branch", "topic/x")
+    wt = env["tmp"] / "wt-x"
+    _git_out(main, *ident, "worktree", "add", "-q", "-b", "feature/x", str(wt))
+    return main, wt
+
+
+def _recheck_run(env, side_effect=None):
+    main, wt = _recheck_repos(env)
+    marker = env["tmp"] / "integrated-marker"
+    _with_integration_rules(env)
+    extra = {}
+    if side_effect:
+        extra["SIDE_EFFECT_CMD"] = side_effect.format(main=main)
+    # 自由区の統合コマンド (自分自身のマージは no-op)。touch は判定器の ask なので bypass で通す
+    command = f"git merge --no-edit HEAD && touch {marker}"
+    requests, result = _rpc_outcome(
+        {**env, "proj": wt},
+        bash_call(command),
+        [False],
+        extra=("-e", str(SIDE_EFFECT_EXT)),
+        PI_HARNESS_BYPASS="1",
+        **extra,
+    )
+    return marker, requests, result
+
+
+@needs_must_confirm
+def test_the_integration_command_in_a_free_zone_runs_when_nothing_changes(env):
+    marker, requests, result = _recheck_run(env)
+    assert marker.exists(), (requests, result)
+    assert not [r for r in requests if "保護ブランチへの統合" in r.get("title", "")], requests
+
+
+@needs_must_confirm
+def test_the_free_zone_is_judged_again_just_before_execute(env):
+    # tool_call の後 (execute の前) に、主 worktree が非保護ブランチへ移り、feature/x が自由区でなくなる
+    marker, requests, result = _recheck_run(
+        env, "git -C {main} symbolic-ref HEAD refs/heads/topic/x"
+    )
+    assert not marker.exists(), (requests, result)
+    assert "実行前の判定で止めた: ask:" in result and "保護ブランチへの統合" in result, (
+        requests,
+        result,
+    )

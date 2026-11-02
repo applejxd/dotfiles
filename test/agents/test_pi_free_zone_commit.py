@@ -111,6 +111,21 @@ def test_a_feature_worktree_commit_runs_without_a_confirmation(repos, has_ui):
     }
 
 
+def test_the_free_zone_note_carries_the_project_profile_for_observation(repos):
+    main = repos["main"]
+    cfg = main / ".agents" / "config" / "pi.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(
+        json.dumps({"integrate": {"free_zone_prefixes": ["feature/", "task/"]}}), encoding="utf-8"
+    )
+    _git(main, "add", ".agents/config/pi.json")
+    _git(main, "commit", "-q", "-m", "cfg")
+    r = _commit(repos, "feature", ON)
+    zone = r["result"]["details"]["freeZone"]
+    assert zone["free"] is True and zone["skipped"] is True, zone
+    assert zone["profile"] == {"overridden": True, "diagnostics": []}, zone
+
+
 def test_the_dir_argument_into_a_feature_worktree_is_also_free(repos):
     # 主 worktree から、その中の feature の worktree へ dir で指す。判定は解決済みの対象 (feature) に対して行う
     target = repos["feature"]

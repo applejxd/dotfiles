@@ -380,3 +380,102 @@ def test_git_dir_env_does_not_redirect(repo: Path, tmp_path: Path):
         env=env,
     )
     assert json.loads(out.stdout)["profile"]["target"] == "develop"
+
+
+# --- replace refs を使わない (S2) ------------------------------------------------------
+
+
+def test_reads_never_use_replace_objects():
+    """ls-tree / cat-file はどちらも、サブコマンドの前に --no-replace-objects を付ける。"""
+    fake = {
+        "ls-tree": {"ok": True, "stdout": f"100644 blob {'b' * 40} 20\t{REL}\n"},
+        "cat-file": {"ok": True, "stdout": _cfg(target="develop")},
+    }
+    r = _run({"fn": "fake", "cwd": ".", "defaults": DEFAULTS, "outputs": fake, "record": True})
+    assert [a[:2] for a in r["seen"]] == [
+        ["--no-replace-objects", "ls-tree"],
+        ["--no-replace-objects", "cat-file"],
+    ], r
+
+
+def _replaced_setup(repo: Path, head_cfg: str | None, replacement_cfg: str) -> str:
+    """HEAD のコミットを、別のコミット (広い設定) に git replace する。replace 前の HEAD の blob ID を返す。"""
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "init")
+    if head_cfg is not None:
+        _commit_cfg(repo, head_cfg)
+    head = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit_cfg(repo, replacement_cfg, "wide")
+    wide = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "replace", head, wide)
+    # 置換は効いている (素の git は置換後の内容を返す)
+    assert REL in _git(repo, "ls-tree", "-r", "--name-only", "HEAD")
+    return head
+
+
+def test_a_replaced_head_commit_does_not_change_the_result_with_an_empty_cache(repo: Path):
+    _replaced_setup(repo, None, _cfg(target="develop"))
+    r = _load(repo)
+    _assert_default(r)
+    assert r["blob"] is None
+
+
+def test_a_replaced_head_commit_does_not_change_an_already_read_result(repo: Path):
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "init")
+    narrow = _commit_cfg(repo, _cfg(target="develop"))
+    head = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit_cfg(repo, _cfg(target="release/x"), "wide")
+    wide = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "checkout", "-q", "main")
+    r = _run(
+        {
+            "fn": "seq",
+            "cwd": str(repo),
+            "defaults": DEFAULTS,
+            "steps": [{"load": True}, {"git": ["replace", head, wide]}, {"load": True}],
+        }
+    )
+    assert [x["blob"] for x in r["loads"]] == [narrow, narrow], r
+    assert [x["profile"]["target"] for x in r["loads"]] == ["develop", "develop"]
+
+
+# --- 読み取りの失敗 (S3): readFailed ----------------------------------------------------
+
+
+def test_read_failed_is_set_only_when_git_fails():
+    ok_line = f"100644 blob {'b' * 40} 20\t{REL}\n"
+    cases = {
+        "ls_tree_fails": ({"ls-tree": {"ok": False, "reason": "boom"}}, True),
+        "cat_file_fails": (
+            {"ls-tree": {"ok": True, "stdout": ok_line}, "cat-file": {"ok": False, "reason": "x"}},
+            True,
+        ),
+        "unparsed_size": (
+            {"ls-tree": {"ok": True, "stdout": f"100644 blob {'d' * 40}     BAD\t{REL}\n"}},
+            True,
+        ),  # 欠けた blob
+        "no_file": ({"ls-tree": {"ok": True, "stdout": ""}}, False),
+        "invalid_content": (
+            {"ls-tree": {"ok": True, "stdout": ok_line}, "cat-file": {"ok": True, "stdout": "{"}},
+            False,
+        ),
+        "not_regular": (
+            {"ls-tree": {"ok": True, "stdout": f"120000 blob {'c' * 40} 9\t{REL}\n"}},
+            False,
+        ),
+        "valid": (
+            {
+                "ls-tree": {"ok": True, "stdout": ok_line},
+                "cat-file": {"ok": True, "stdout": _cfg()},
+            },
+            False,
+        ),
+    }
+    got = {}
+    for name, (outputs, _) in cases.items():
+        got[name] = _run({"fn": "fake", "cwd": ".", "defaults": DEFAULTS, "outputs": outputs})[
+            "readFailed"
+        ]
+    assert got == {name: want for name, (_, want) in cases.items()}, got

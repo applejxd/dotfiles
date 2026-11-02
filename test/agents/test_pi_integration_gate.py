@@ -356,7 +356,8 @@ def test_git_is_started_at_most_twice_for_a_head_command(repos, tmp_path):
         [{"d": ALLOW, "input": {"command": "git merge develop"}, "cwd": str(repos["feature"])}],
         env=env,
     )
-    assert _count(tmp_path) == 2
+    # linked worktree: rev-parse + symbolic-ref x2 (feature / 主 HEAD) + pi.json の ls-tree (CHG-0057)
+    assert _count(tmp_path) == 4
     (tmp_path / "count").unlink()
     _run(
         [{"d": ALLOW, "input": {"command": "git merge develop"}, "cwd": str(repos["main"])}],

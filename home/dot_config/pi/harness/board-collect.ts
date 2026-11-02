@@ -6,6 +6,8 @@ import { listRecords, runGit } from "./worktree.ts";
 import { listOps, readAttemptAt, readOp, DEFAULT_LIMITS } from "./pending-ops.ts";
 import { ownerState } from "./pending-owner.ts";
 import { recordOfChain } from "./pending-approve.ts";
+import { loadProfile } from "./integrate-profile-load.ts";
+import { DEFAULT_SOURCE_PREFIXES, type ProfileDefaults, type ProfileResult } from "./judge/integrateprofile.ts";
 
 export type CollectDeps = {
 	now: number;
@@ -15,6 +17,8 @@ export type CollectDeps = {
 	target?: string;
 	/** 状態を調べる feature の最大数 (既定 12) */
 	maxFeatures?: number;
+	/** 全体の既定。渡すと、cwd の HEAD の pi.json から統合元の接頭辞を決める */
+	profileDefaults?: ProfileDefaults;
 };
 
 const MAX_PENDING_ROWS = 50;
@@ -102,12 +106,24 @@ function collectPending(cwd: string, now: number): { ops: PendingRow[]; legacyCo
 	return out;
 }
 
+/** pi.json の状態の 1 行。有効で既定と違うときと無効のときだけ (設定が無ければ何も出さない)。診断は固定のコードだけ */
+function noteOf(r: ProfileResult): string | undefined {
+	if (r.diagnostics.length > 0) return `pi.json: 無効 (${r.diagnostics.slice(0, 3).map((d) => d.code).join(",")})`;
+	if (r.profile.source === "project" && r.overridden) return `pi.json: 有効 (統合元 ${r.profile.sourcePrefixes.join(" ")})`;
+	return undefined;
+}
+
 export function collectBoardInput(cwd: string, deps: CollectDeps): BoardInput {
-	const target = deps.target ?? "develop";
+	const loaded = deps.profileDefaults ? loadProfile(cwd, deps.profileDefaults) : undefined;
+	// 比較先は実効の統合先 (設定を読んだときは、無い・無効でも loaded.profile.target = 全体の既定か pi.json の値)。表示と判定は同じ値を使う
+	const target = loaded ? loaded.profile.target : (deps.target ?? "develop");
+	const projectPrefixes = loaded && loaded.profile.source === "project" ? loaded.profile.sourcePrefixes : undefined;
+	const sourcePrefixes: readonly string[] = projectPrefixes ?? DEFAULT_SOURCE_PREFIXES;
+	const profileNote = loaded ? noteOf(loaded) : undefined;
 	const maxFeatures = Math.max(0, Math.floor(deps.maxFeatures ?? 12));
 	let worktrees: ParsedWorktree[] = [];
 	const listed = gitOut(["worktree", "list", "--porcelain"], cwd);
-	if (listed !== null) worktrees = parseWorktreePorcelain(listed);
+	if (listed !== null) worktrees = parseWorktreePorcelain(listed, projectPrefixes);
 
 	const pending = collectPending(cwd, deps.now);
 	const sources = new Set(pending.ops.filter((p) => p.state === "pending" && p.source).map((p) => p.source as string));
@@ -117,7 +133,7 @@ export function collectBoardInput(cwd: string, deps: CollectDeps): BoardInput {
 	let n = 0;
 	worktrees.forEach((w, i) => {
 		if (i === 0 || n >= maxFeatures || w.bare || w.prunable || !w.branch) return;
-		if (!w.branch.startsWith("feature/") && !w.branch.startsWith("bugfix/")) return;
+		if (!sourcePrefixes.some((p) => w.branch!.startsWith(p))) return;
 		n++;
 		const st = worktreeState(w.path, target, deps.now, readStatus);
 		const short = w.branch.slice(w.branch.indexOf("/") + 1);
@@ -132,5 +148,5 @@ export function collectBoardInput(cwd: string, deps: CollectDeps): BoardInput {
 		isolation = [];
 	}
 
-	return { now: deps.now, children: deps.children ?? [], isolation, worktrees, pending, modes: deps.modes ?? {}, worktreeStates };
+	return { now: deps.now, children: deps.children ?? [], isolation, worktrees, pending, modes: deps.modes ?? {}, worktreeStates, ...(profileNote ? { profileNote } : {}) };
 }

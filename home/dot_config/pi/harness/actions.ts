@@ -727,7 +727,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		const shadow = zone && !skipConfirm ? (zoneSettings.skip ? `自由区の判定: not free (${where})。確認を省略せず、承認を取って実行した` : `自由区の判定 (観測中。確認は省略していない): ${zone.free ? "free" : "not free"} (${where})`) : "";
 		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, closing, shadow].filter(Boolean).join("\n\n");
 		const details: Record<string, unknown> = { action: action.id };
-		if (zone) details.freeZone = { free: zone.free, reason: zone.reason, branch: zone.branch, skipped: skipConfirm };
+		if (zone) details.freeZone = { free: zone.free, reason: zone.reason, branch: zone.branch, skipped: skipConfirm, ...(zone.profile ? { profile: zone.profile } : {}) };
 		return { content: [{ type: "text", text }], details };
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
