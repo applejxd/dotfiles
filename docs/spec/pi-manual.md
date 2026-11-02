@@ -397,13 +397,14 @@ read = ["/data1"]
 | `PI_HARNESS_ROLE` | 親の役割（`pis --role` が設定する） |
 | `PI_HARNESS_BYPASS` | `1` なら起動時から bypass（`pis` が必ず設定する） |
 | `PI_HARNESS_ORCHESTRATE` | `1` / `0` で orchestrate の起動時の状態を指定 |
+| `PI_HARNESS_CHILD_CONTEXT` | `inherit` / `extract` で、子へ渡す AGENTS.md を全文にするか役割ごとの抜粋にするかを指定（`[pi.child] context` より優先。起動済みの親には届かない） |
 | `PI_DELEGATE_NUDGE=0` | `/delegate-stats` の記録を止める |
 | `PI_TODO_NO_REMINDER=1` | todo の続行の促しを止める |
 | `PIS_EXTRA_READ` / `PIS_EXTRA_DEVICES` | 7.3 |
 | `AGENTS_LOCAL_CONFIG` | `local.toml` の場所の差し替え |
 | `DOTFILES_RESYNC_WEBSEARCH_KEYS=1` | apply 時に検索の鍵を取り直す |
 
-- `PI_HARNESS_BOUNDARY` `PI_HARNESS_ALLOWED` `PI_HARNESS_CHILD` `PI_HARNESS_NO_SANDBOX` などは内部用や表示用なので、設定しない
+- `PI_HARNESS_BOUNDARY` `PI_HARNESS_ALLOWED` `PI_HARNESS_CHILD` `PI_HARNESS_CHILD_AGENT` `PI_HARNESS_CHILD_CONTEXT_REPORT` `PI_HARNESS_NO_SANDBOX` などは内部用や表示用や試験用なので、設定しない
 - 検索の鍵（`BRAVE_API_KEY` など）は `pis` が内側へ渡さない
 
 ## 8. 日常の運用

@@ -217,6 +217,9 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 | `PI_HARNESS_ORCHESTRATE` | `[pi.orchestrate] default`（今は `off`） | `1` なら起動時から orchestrate（親の作業ツールを隠し、計画・判断・委譲に絞る）、`0` で切る。起動後は `/orchestrate`（[子エージェント](pi-subagents.md)） |
 | `PI_HARNESS_BOUNDARY` | 無し | `1` は「サンドボックスの内側のはず」という期待の表明。判定器の緩和は、カナリアの実測が通ったときだけ効く（[緩和のゲート](pi-sandbox.md#緩和のゲート)） |
 | `PI_HARNESS_CHILD` | 無し | `1` なら子エージェントとして動く（`guarded_task` を登録しない）。フルガードが子を起動するときに付ける |
+| `PI_HARNESS_CHILD_CONTEXT` | `[pi.child] context`（今は `inherit`） | 親: 子へ渡す文脈 (AGENTS.md) の方式 `inherit`（全文）/ `extract`（役割ごとの抜粋）を設定より優先して決める。未知の値では子を起動しない。子: 起動契約（親が決めて渡す）。[子の文脈の抜粋](pi-subagents.md#子の文脈-agentsmd-の抜粋-chg-0059) |
+| `PI_HARNESS_CHILD_AGENT` | 無し | 子の起動契約。子の役割名（`explore` / `review` / `plan` / `worker` など）。親が渡すもので、利用者は設定しない |
+| `PI_HARNESS_CHILD_CONTEXT_REPORT` | 無し | 試験用の観測。パスを渡すと、子が文脈ファイルごとの決定を JSON 1 行で追記する（本文は入れない） |
 | `PI_HARNESS_TEST_CHILD_EXT` | 無し | 試験だけが使う。子にも読ませる拡張（偽のモデル）のパス |
 
 ## しくみ

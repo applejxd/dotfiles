@@ -26,7 +26,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 `[pi.agents.<名前>]` に宣言し、親の `guarded_task` ツールで起動する。子は同じフルガードを付けた別の pi プロセスで、
 **RPC モード**（`--mode rpc --no-session --no-approve -nbt -ne -e builtin:mcp -e <フルガード>`。`pis` と同じ保護条件）で
 動かし、親の拡張が job として保持する（`children.ts`）。判定は子のフルガードが子の役割で行う。
-子の system（`--append-system-prompt`）の先頭には、全役割共通の前置き（`index.ts` の `CHILD_PREAMBLE`）を足す。AGENTS.md・個人用の指示のうち親の責務（委譲・取り込み・全件検査・コミットと承認・`ask`）は子に適用せず、依頼文を優先させる。子は AGENTS.md を今も自動で受ける（文脈ファイルの分離は別の案件）。試験は `test_pi_harness.py::test_child_system_prompt_starts_with_the_preamble_then_the_role`。
+子の system（`--append-system-prompt`）の先頭には、全役割共通の前置き（`index.ts` の `CHILD_PREAMBLE`）を足す。AGENTS.md・個人用の指示のうち親の責務（委譲・取り込み・全件検査・コミットと承認・`ask`）は子に適用せず、依頼文を優先させる。子は既定で AGENTS.md を全文で受ける。`[pi.child] context = "extract"` にすると役割ごとの抜粋になる（[子の文脈の抜粋](#子の文脈-agentsmd-の抜粋-chg-0059)）。試験は `test_pi_harness.py::test_child_system_prompt_starts_with_the_preamble_then_the_role`。
 
 | キー | 意味 |
 | --- | --- |
@@ -156,6 +156,75 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 - **フッター**: `activity` が、動いている子が 3 件以下なら `🤖 explore 12s, review 40s`、それより多ければ件数
 - **やらないこと**: プロジェクト内の定義ファイルからの役割（`--no-approve` と衝突）、子から子（入れ子）
 - **worktree 隔離**: `guarded_task` の `isolation: "worktree"`（opt-in。単独の新規 `worker` のみ）。仕様は [CHG-0029](../../change/0029-worktree-isolation.md)。
+
+### 子の文脈 (AGENTS.md) の抜粋 (CHG-0059)
+
+子に渡す AGENTS.md（グローバルと作業先・祖先）を、全文ではなく**役割ごとの抜粋**にできる。**既定は従来どおりの全文（`inherit`）**。設計と経緯は [CHG-0059](../../change/0059-child-context.md)、実測は [記録](../../research/agents/child-context-probe.md)。
+
+| 項目 | 内容 |
+| --- | --- |
+| 設定 | `[pi.child] context = "inherit" \| "extract"`（`common.toml.tmpl`） |
+| 環境変数 | `PI_HARNESS_CHILD_CONTEXT`（親。設定より優先）。未知の値では子を起動しない |
+| 起動契約 | 親が子へ `PI_HARNESS_CHILD_AGENT`（役割名）と `PI_HARNESS_CHILD_CONTEXT` を渡す。`commit` 役など 4 役以外は常に `inherit` |
+| 子側 | `PI_HARNESS_CHILD=1` かつ契約が `extract` のときだけ、`before_agent_start` で**毎メッセージ** `contextFiles` の `AGENTS.md` / `CLAUDE.md` を役割ごとの抜粋に変える |
+| 役割 | `explore` / `review` / `plan` / `worker`。`explore` と `review` は profile が同じだが、役割名で別の抜粋になる |
+
+**動作表**（子の役割が 4 役のとき。`extract` の列は子が受けるもの）:
+
+| ファイルの状態 | `inherit` | `extract` |
+| --- | --- | --- |
+| 導入前（有効な識別子も有効な印も無い。普通の HTML コメント・印に似た行も無視） | 全文 | 全文（他のリポジトリの規約を守る） |
+| 導入済み・正常 | 全文 | その役割のブロックだけ |
+| 導入済み・破損・未分類・未知の役割・未知の版 | 全文 | **子は終了**（`exit 78`。原因つき） |
+
+- 導入済み = いずれかの有効な識別子・有効な印・識別子の書き損じがある。**`child-context` で始まる有効でない行は、導入前でも破損**
+- 印に似た行 = `<!--` の直後の語が `child` / `parent` の行。導入前では無視、導入済みでは破損
+- 詳細の表（コードブロック・識別子の欠落・役割のブロックが 0 件など）は [CHG-0059 §4.1](../../change/0059-child-context.md#41-記法と契約)
+
+**失敗のしかたと除外する経路**:
+
+| 項目 | 内容 |
+| --- | --- |
+| 失敗 | stderr に原因を出して `exit 78`。親は子の結果を失敗とし、原因を返す。黙って全文にも抜粋にもしない |
+| 入力の形が契約違反 | `contextFiles` が配列でない・要素がオブジェクトでない・`path` / `content` が文字列でない。同じく終了 |
+| 除外する経路 | `PI_HARNESS_CHILD=1` だけの子・契約が無い子・`inherit`・4 役以外・**`PI_SUBAGENT_CHILD=1`（Windows の別の `subagents` 拡張の子。契約変数が親から残っていても対象にしない）** |
+| メッセージごと | `contextFiles` はメッセージごとに元の内容で渡されるので、毎回変換する（[実測](../../research/agents/child-context-probe.md)） |
+| `{systemPrompt}` を返す拡張 | 返り値が全体を決め、文脈の書き換えは効かない。今の拡張に `before_agent_start` で返すものは無いが、新しい拡張を足すときは注意する（検出は無い） |
+
+**観測**:
+
+- 結果の見出しに `- 文脈: inherit` または `- 文脈: extract` の 1 行
+- `PI_HARNESS_CHILD_CONTEXT_REPORT=<パス>`（試験用）: 決定ごとの JSON 1 行（`path`・`kind`・`why`・`blocks`・`before`・`after`。本文は入れない）
+
+**戻し方**（C6）:
+
+1. `[pi.child] context` を `inherit` に戻す（または `PI_HARNESS_CHILD_CONTEXT=inherit`）
+2. **起動済みの子を終了する**（子の契約は起動時に決まり、起動後は変わらない）
+3. **親を再起動する**（環境変数を変えるには、起動済みの親へは届かないので、この場合は再起動が必須。`/reload` だけでは、親の環境変数は変わらない）
+
+**正本の記法と、新しい行の足し方**（正本: `home/.chezmoitemplates/agent-instructions.md`・各リポジトリの `AGENTS.md`）:
+
+| 記法 | 意味 |
+| --- | --- |
+| `<!-- child-context: v1 -->` | 導入済みの識別子。ファイルの最初の空でない行 |
+| `<!-- child:<役割> -->` 〜 `<!-- /child -->` | 子向け。役割は `explore` / `review` / `plan` / `worker` / `all`（カンマ区切り） |
+| `<!-- parent -->` 〜 `<!-- /parent -->` | 親だけ |
+
+- **見出し以外の行は、子向けか親だけのブロックの中に置く**。ブロックの外に置くと、導入済みのファイルでは「未分類」で子の起動が失敗する（見出しの行だけが外にあってよい。抜粋には入らない）
+- 印は行全体がその 1 つのコメントのときだけ。入れ子・閉じ忘れ・未知の役割は破損
+- 文章の途中に印を書くときは、行頭を `<!--` にしない（正本の「印を無視して全文に従う」という注記は、行頭が普通の文）
+- 試験と検査: `test/agents/test_child_context_sources.py`（正本 2 つが `lint` を通ること・各規則が役割ごとの期待どおり抽粋に入ること）。**新しい規則を足したら、同じ試験の `RULES` に役割別の期待を足す**（子向けのブロックを足したときは必須。抽粋に入らないところでは任意だが、分類を残すので足すことを勧める）
+
+**既知の制限**（[CHG-0059 §8](../../change/0059-child-context.md#8-未解決未確認)）:
+
+| 項目 | 状態 |
+| --- | --- |
+| 導入前を全文継承した理由 | 通常の経路では出ない（観測の記録のみ） |
+| 非隔離の子の `exit 78` 後のプロセス後始末・MCP 子孫の残留 | **未確認** |
+| 祖先の `AGENTS.md` の二重化 | 保持（S5 で評価） |
+| Windows の `process.exit`・`writeSync(2)` | **未確認** |
+| 他の CLI（Codex・Copilot・OpenCode）の HTML コメントの扱い | **未確認**（公式資料を先に検索） |
+| 実モデルが抜粋で規約を守るか | **未確認**（S5） |
 
 ### worktree 隔離の場所と承認
 

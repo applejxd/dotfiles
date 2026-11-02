@@ -19,6 +19,8 @@ allowed-tools: Read, Edit, Write, Grep, Glob
 
 - プロジェクトルートの `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md` を探し、読み込む
 - 存在しない場合、その旨を最終レポートに含める
+- 先頭に `<!-- child-context: v1 -->` がある導入済みのファイルは、書き足す行を子向け（`<!-- child:<役割> -->`〜`<!-- /child -->`）か親だけ（`<!-- parent -->`〜`<!-- /parent -->`）のブロックの中に入れる。
+  ブロックの外（見出し以外）に置くと、`extract` の子の起動が失敗する。直したら `test/agents/test_child_context_sources.py` を回す（記法は `docs/spec/guard/pi-subagents.md` の「子の文脈 (AGENTS.md) の抜粋」）
 
 ### 2. 知見の抽出
 

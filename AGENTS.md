@@ -247,3 +247,13 @@ worker は実行せず、報告の「次の候補」に書く（worker は sandb
 - ドキュメントは日本語で書く
 
 <!-- /child -->
+
+<!-- parent -->
+
+- **このファイルの編集の注意（導入済み: 先頭に `<!-- child-context: v1 -->`）**: 新しい節・段落・表・コードブロックは、子向け（`<!-- child:<役割> -->`〜`<!-- /child -->`）か親だけ（`<!-- parent -->`〜`<!-- /parent -->`）のブロックの中に入れる。
+  見出し以外がブロックの外にあると、`extract` の子の起動が失敗する（未分類）。`learn`・`onboarding` スキルが書き足すときも同じ
+- 直したら `test/agents/test_child_context_sources.py` を回す。子向けのブロックに規則を足したら、同じ試験の `RULES` に役割別の期待を足す（足さないと `test_extract_has_only_listed_rules` が落ちる）。
+  親だけのブロックに足した行は子の抜粋に入らないので、`RULES` への追記は必須ではない（分類を残すなら `NONE` で足す）
+- 印の記法を使う文章では、`<!--` の直後の語が `child` / `parent` の行を、印以外では書かない（印に似た行として破損扱いになる）。記法の詳細は [子の文脈の抜粋](docs/spec/guard/pi-subagents.md#子の文脈-agentsmd-の抜粋-chg-0059)
+
+<!-- /parent -->

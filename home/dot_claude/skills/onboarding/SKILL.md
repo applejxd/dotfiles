@@ -22,6 +22,7 @@ allowed-tools: Read, Grep, Glob, Edit(AGENTS.md)
 - `CLAUDE.md` や他ツール固有ファイルの新規作成を提案しない。
 - `README.md` の説明文は転載せず、必要なら短い参照にとどめる。
 - 存在しないコマンドを記載しない。
+- 先頭に `<!-- child-context: v1 -->` がある導入済みのファイルを更新するときは、新しい行を子向け（`<!-- child:<役割> -->`〜`<!-- /child -->`）か親だけ（`<!-- parent -->`〜`<!-- /parent -->`）のブロックの中に入れる。外に置くと、`extract` の子の起動が失敗する。一から作り直すときは、印と識別子を落とさない（記法は `docs/spec/guard/pi-subagents.md` の「子の文脈 (AGENTS.md) の抜粋」）。
 - ユーザー承認前にファイル書き込みしない。
 
 ## 引数
