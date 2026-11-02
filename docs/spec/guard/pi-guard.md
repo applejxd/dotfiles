@@ -53,7 +53,7 @@ pis --new           # 新しいセッションで始める (既定は、この�
 - **サンドボックスが標準**。サンドボックスを張れない OS（macOS）では、`pis` は起動せず `--no-sandbox` を案内する（Windows ネイティブには `pis` を配らない）（黙って弱い守りに落とさない）。
   `--boundary` は互換の別名（標準と同じ意味）
 - サンドボックスの検査に落ちたとき・起動場所が危険なときも起動しない。制御ファイル・フルガードの編集、復旧、Orca・Zed は `--no-sandbox` で行う
-- **検討中の方針**: ask 層と bypass モードをなくし、境界で守る方向（[ADR-0022](../../adr/0022-containment-first-minimal-approvals.md)、Proposed）。結論が出るまで、`--bypass` / `--no-bypass` は現行の仕様のまま。実際の運用は、素の `pi` でも常に bypass（境界なし）で、素の `pi` の扱いが最大の論点（[CHG-0054](../../change/0054-containment-and-async-approval.md)）
+- **検討中の方針**: ask 層と bypass モードをなくし、境界で守る方向（[ADR-0022](../../adr/0022-containment-first-minimal-approvals.md)、Proposed）。結論が出るまで、`--bypass` / `--no-bypass` は現行の仕様のまま。実際の運用は、素の `pi` でも常に bypass（境界なし）。**素の `pi` の扱いは決定済み（2026-11-02。利用者）: 今のまま**。素の `pi` には境界が無く、拒否（`git push` など。常時禁止）と必須確認（bypass でも省略できない確認。保護ブランチへの統合など）だけが効く。`pis` への一本化も、必須確認の自動の拡大もしない（ガードは境界ではなく、うっかり防止。[CHG-0054](../../change/0054-containment-and-async-approval.md) 未解決点 1）
 - 設計の根拠は [CHG-0023](../../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
 
 **素の `pi`（Unix）**は、`settings.json` の設定だけで、下の `pis` と同じツール構成になる（`extensions` にフルガードと自作の拡張を足し、自動検出の拡張を外し、`defaultTools = []`）。
