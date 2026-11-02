@@ -164,6 +164,7 @@ _PI_TESTS = (
     "test_pi_worktrees_command",
     "test_pi_subagents",
     "test_pi_child_context",
+    "test_child_context_sources",
     "test_pi_child_prompt",
     "test_pi_child_persist",
     "test_pi_shared",
@@ -218,7 +219,12 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "agent 指示の共有本文 (pi の描画と Claude の描画を比べる)",
         ("home/.chezmoitemplates/agent-instructions.md",),
-        ("test_pi_harness", "test_generate_opencode*", "test_check_bash_config"),
+        (
+            "test_pi_harness",
+            "test_generate_opencode*",
+            "test_check_bash_config",
+            "test_child_context_sources",
+        ),
     ),
     Rule(
         "commit-message.js (opencode 側の写しと pi 側の本体は双方向)",
@@ -435,6 +441,7 @@ RULES: tuple[Rule, ...] = (
     Rule(
         "ルートの文書",
         ("README.md", "AGENTS.md", "CLAUDE.md", "test/README.md"),
+        ("test_child_context_sources",),
     ),
     # 以下は lint を足すだけ。未知のパス扱いは変えない
     Rule("*.tmpl の検査", ("*.tmpl",), lints=("templates",), covers=False),

@@ -568,7 +568,10 @@ def test_personal_instructions_share_one_source():
     includeTemplate で取り込んだうえで固有の節だけを足す。
     """
     shared = (CHEZMOI_TEMPLATES / SHARED_INSTRUCTIONS).read_text(encoding="utf-8")
-    assert shared.startswith("# 個人用カスタム指示")
+    body = [
+        ln for ln in shared.splitlines() if ln.strip() and not ln.startswith("<!-- child-context:")
+    ]
+    assert body[0] == "# 個人用カスタム指示"
     for cli, path in INSTRUCTION_PATHS.items():
         raw = path.read_text(encoding="utf-8")
         assert f'includeTemplate "{SHARED_INSTRUCTIONS}"' in raw, cli
