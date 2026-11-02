@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import type { IntegratePlan } from "./integrate-plan.ts";
+import { isProtectedRef } from "./judge/protectedrefs.ts";
 import type { ResultBody } from "./pending-ops.ts";
 import { repoTargetEnv } from "./pending-store.ts";
 
@@ -14,6 +15,8 @@ export type IntegrateExecInput = {
 	cleanup: "none" | "branch" | "branch_and_worktree";
 	/** 承認した pi の cwd。その worktree は片付けない */
 	approverCwd: string;
+	/** 全体の保護ブランチの一覧。指定したとき、後片付けの直前に統合元がこれに入っていないことを確かめる */
+	protectedRefs?: readonly string[];
 	env?: NodeJS.ProcessEnv;
 	signal?: AbortSignal;
 	/** git commit (hook を含む) の時間切れ。既定 120000 */
@@ -469,6 +472,10 @@ function real(p: string): string {
 
 async function cleanup(input: IntegrateExecInput, body: ResultBody, wt: string, env: NodeJS.ProcessEnv, stopping: Stopping, track: Track): Promise<void> {
 	const { plan } = input;
+	if (input.protectedRefs && isProtectedRef(plan.source.ref, input.protectedRefs)) {
+		body.remainingCleanup.push("統合元が保護ブランチに入っているため、後片付けをしていない (統合の結果は残す)");
+		return;
+	}
 	// hook が動く更新系の git は停止管理つき。停止を確認できなければ unknown にして、次の変更へ進まない
 	const mutate = async (args: string[], cwd: string): Promise<G | null> => {
 		const g = await gitGroup(args, cwd, env, { ...stopping, signal: input.signal });

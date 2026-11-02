@@ -6,6 +6,8 @@ import { ACTION_TOOL, validateCall, type ActionSpec, type PendingAdapter } from 
 import { freeZoneSettings } from "./freezone.ts";
 import { GIT_INTEGRATE_SPEC, integrateApprovalAdapter, integrateRequestAdapter, type IntegrateCfg } from "./integrate-action.ts";
 import type { ApprovalAdapter } from "./pending-approve.ts";
+import { DEFAULT_FREE_ZONE_PREFIXES, DEFAULT_SOURCE_PREFIXES } from "./judge/integrateprofile.ts";
+import { loadProfile } from "./integrate-profile-load.ts";
 import type { OpRecord } from "./pending-ops.ts";
 
 export const PENDING_ADAPTERS: Record<string, PendingAdapter> = {};
@@ -15,16 +17,28 @@ const REF_NAME = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
 const MAX_RISK_PATHS = 200;
 const MAX_RISK_PATH_CHARS = 200;
 
-/** 設定の今の値 (呼ぶたびに rules を読む)。不正な値は既定に倒す */
-export function integrateCfg(rules: any): IntegrateCfg {
+/** 設定の今の値 (呼ぶたびに rules を読む)。不正な値は既定に倒す。
+ * cwd があるときだけ、そのリポジトリの HEAD の .agents/config/pi.json を読んで、統合先・統合元の接頭辞を置き換える (保護は全体のまま)。cwd が無いときは従来どおり (読まない) */
+export function integrateCfg(rules: any, cwd?: string): IntegrateCfg {
 	const integrate = rules?.judge?.common?.pi?.integrate;
 	const t = integrate?.target;
 	const risk = Array.isArray(integrate?.risk_paths) ? (integrate.risk_paths as unknown[]) : [];
-	return {
-		target: typeof t === "string" && REF_NAME.test(t) ? t : "develop",
-		protectedRefs: freeZoneSettings(rules).protectedRefs,
+	const protectedRefs = freeZoneSettings(rules).protectedRefs;
+	const target = typeof t === "string" && REF_NAME.test(t) ? t : "develop";
+	const base: IntegrateCfg = {
+		target,
+		sourcePrefixes: DEFAULT_SOURCE_PREFIXES,
+		protectedRefs,
 		riskPaths: risk.filter((p): p is string => typeof p === "string").slice(0, MAX_RISK_PATHS).map((p) => p.slice(0, MAX_RISK_PATH_CHARS)),
 		enabled: () => switchesOn(rules),
+	};
+	if (cwd === undefined) return base;
+	const loaded = loadProfile(cwd, { protectedRefs, target, sourcePrefixes: DEFAULT_SOURCE_PREFIXES, freeZonePrefixes: DEFAULT_FREE_ZONE_PREFIXES });
+	return {
+		...base,
+		target: loaded.profile.target,
+		sourcePrefixes: loaded.profile.sourcePrefixes,
+		profile: { blob: loaded.blob, overridden: loaded.overridden, diagnostics: loaded.diagnostics },
 	};
 }
 
@@ -43,7 +57,7 @@ export type IntegrateWiring = {
 
 export function integrateWiring(rules: any): IntegrateWiring {
 	if (!switchesOn(rules)) return { enabled: false, specs: [], request: {}, approval: {} };
-	const cfg = () => integrateCfg(rules);
+	const cfg = (cwd?: string) => integrateCfg(rules, cwd);
 	return {
 		enabled: true,
 		specs: [GIT_INTEGRATE_SPEC],

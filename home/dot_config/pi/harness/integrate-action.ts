@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import type { ActionSpec, PendingAdapter } from "./actions.ts";
 import { cellWidth, clipCells, fitWidth, sanitizeForDisplay, termSize } from "./confirm-view.ts";
-import { computeIntegrationPlan, type IntegratePlan } from "./integrate-plan.ts";
+import { computeIntegrationPlan, type IntegratePlan, type PlanProfile } from "./integrate-plan.ts";
 import { executeIntegrationOutcome } from "./integrate-exec.ts";
 import type { ApprovalAdapter } from "./pending-approve.ts";
 import type { Json, OpRecord } from "./pending-ops.ts";
@@ -18,9 +18,18 @@ import { listOps, readOp } from "./pending-ops.ts";
 import { repoTargetEnv } from "./pending-store.ts";
 
 /** enabled は統合のキルスイッチ。省略時は有効 (従来どおり)。false のとき、要求・承認のアダプタは拒否する */
-export type IntegrateCfg = { target: string; protectedRefs: readonly string[]; riskPaths: readonly string[]; enabled?: () => boolean };
-/** 設定は呼ぶたびに読む (承認の時点の現在の設定で計画を作るため) */
-export type CfgSource = IntegrateCfg | (() => IntegrateCfg);
+export type IntegrateCfg = {
+	target: string;
+	/** 統合元の接頭辞 (既定 feature/ と bugfix/)。省略した設定は既定として扱う */
+	sourcePrefixes: readonly string[];
+	protectedRefs: readonly string[];
+	riskPaths: readonly string[];
+	/** cwd ごとに解決したプロジェクト設定 (pi.json) の情報。cwd を渡さなかったときは無い */
+	profile?: PlanProfile;
+	enabled?: () => boolean;
+};
+/** 設定は呼ぶたびに読む (承認の時点の現在の設定で計画を作るため)。関数は対象の cwd ごとに解決する */
+export type CfgSource = IntegrateCfg | ((cwd?: string) => IntegrateCfg);
 
 export type Cleanup = "none" | "branch" | "branch_and_worktree";
 const CLEANUPS: readonly string[] = ["none", "branch", "branch_and_worktree"];
@@ -47,7 +56,7 @@ export const GIT_INTEGRATE_SPEC: ActionSpec = {
 	preview: "none",
 };
 
-const cfgOf = (c: CfgSource): IntegrateCfg => (typeof c === "function" ? c() : c);
+const cfgOf = (c: CfgSource, cwd?: string): IntegrateCfg => (typeof c === "function" ? c(cwd) : c);
 const digestOf = (s: string): string => createHash("sha256").update(s).digest("hex");
 const oneLine = (s: unknown, max = 200): string => sanitizeForDisplay(String(s)).replace(/\s+/g, " ").trim().slice(0, max);
 const short = (oid: string): string => oid.slice(0, 8);
@@ -120,13 +129,15 @@ export function integrateRequestAdapter(cfg: CfgSource): PendingAdapter {
 			if (cfgOf(cfg).enabled?.() === false) return { ok: false, reason: DISABLED };
 			const cleanup = cleanupOf(values);
 			if (!cleanup) return { ok: false, reason: `cleanup が不正: ${oneLine(values.cleanup, 40)} (none|branch|branch_and_worktree)` };
-			const c = cfgOf(cfg);
+			const c = cfgOf(cfg, cwd);
 			const plan = computeIntegrationPlan({
 				cwd,
 				source: values.source ?? "",
 				target: c.target,
 				message: values.message ?? "",
 				protectedRefs: c.protectedRefs,
+				sourcePrefixes: c.sourcePrefixes,
+				profile: c.profile,
 				riskPaths: c.riskPaths,
 				env,
 				// 要求時は統合先の作業ツリーを調べない (サンドボックスで読めず誤検知する)。承認側の再計画と実行器の precheck が検査する
@@ -144,6 +155,7 @@ export function integrateRequestAdapter(cfg: CfgSource): PendingAdapter {
 				mergeBase: plan.mergeBase,
 				cleanup,
 				messageDigest: digestOf(plan.message),
+				profileBlob: plan.profile.blob,
 			};
 			return plan.targetWorktree ? { ok: true, premise, worktree: plan.targetWorktree } : { ok: true, premise };
 		},
@@ -160,7 +172,28 @@ function changesOf(premise: Record<string, Json>, plan: IntegratePlan): string[]
 	if (premise.sourceOid !== plan.source.oid) out.push(`統合元が進んだ (${short(String(premise.sourceOid ?? "?"))}→${short(plan.source.oid)})`);
 	if (premise.resultTree !== plan.resultTree) out.push("結果の内容が要求時と変わった");
 	if (premise.messageDigest !== digestOf(plan.message)) out.push("メッセージが要求時と違う");
+	// 古い記録 (キー無し) で誤って「違う」と出さないよう、null に寄せて比べる
+	if (premise.target !== undefined && premise.target !== plan.target.ref) {
+		out.push(`統合先が要求時と違う (${oneLine(branchName(String(premise.target)), 80)}→${oneLine(branchName(plan.target.ref), 80)})`);
+	}
+	if ((premise.profileBlob ?? null) !== (plan.profile.blob ?? null)) out.push(`${PROFILE_NOTE} が要求時と違う`);
 	return out;
+}
+
+const PROFILE_NOTE = "プロジェクト設定 (pi.json)";
+
+/** プロジェクト設定が「有効で既定と違う」「無効」のときだけの行 (設定が無いときは空)。診断は固定のコードだけ。
+ * split=true は統合先・接頭辞の行を別行にする (summary は幅が狭く、一行だと切れる) */
+function profileLines(plan: IntegratePlan, split: boolean): string[] {
+	const p = plan.profile;
+	if (p.diagnostics.length) {
+		const codes = [...new Set(p.diagnostics.map((d) => oneLine(d.code, 40)))].join(",");
+		return split ? [`${PROFILE_NOTE} は無効`, `  (${codes})`, "  全体の既定で処理"] : [`${PROFILE_NOTE} は無効 (${codes})。全体の既定で処理`];
+	}
+	if (!p.overridden) return [];
+	const prefixes = plan.sourcePrefixes.map((x) => oneLine(x, 64)).join(" ");
+	const detail = `統合先 ${oneLine(branchName(plan.target.ref), 80)}・統合元の接頭辞 ${prefixes}`;
+	return split ? [`${PROFILE_NOTE}:`, `  ${detail}`] : [`${PROFILE_NOTE}: ${detail}`];
 }
 
 /** 統合元が未統合の他の feature を含むときだけの警告 1 行 (表示だけ。承認の判断・記録・再検査には使わない)。pend は ref → 保留 ID (未承認のもの) */
@@ -253,8 +286,9 @@ function wrapHang(prefix: string, text: string, width: number, maxLines: number)
 function summaryOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[], pend: Map<string, string>): string {
 	const { rows } = termSize();
 	const width = fitWidth(WIDTH, 2);
-	const head: string[] = [`${branchName(plan.source.ref)} → ${branchName(plan.target.ref)} (squash)`, "衝突: なし"];
+	const head: string[] = [`${sanitizeForDisplay(branchName(plan.source.ref))} → ${sanitizeForDisplay(branchName(plan.target.ref))} (squash)`, "衝突: なし"];
 	head.push(`${plan.stats.commits} コミット・${plan.stats.files} ファイル (+${plan.stats.additions}/-${plan.stats.deletions})`);
+	head.push(...profileLines(plan, true));
 	const tail: string[] = [];
 	if (cleanup !== "none") tail.push(`後片付け: ${cleanup === "branch" ? "ブランチ削除" : "ブランチと worktree 削除"}`);
 	tail.push(...stackedSummaryLines(plan, pend));
@@ -276,9 +310,10 @@ function summaryOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[], pen
 
 function viewOf(plan: IntegratePlan, cleanup: Cleanup, changes: string[], pend: Map<string, string>): string {
 	const out = [
-		`${plan.source.ref} (${short(plan.source.oid)}) → ${plan.target.ref} (${short(plan.target.oid)})  squash`,
+		`${sanitizeForDisplay(plan.source.ref)} (${short(plan.source.oid)}) → ${sanitizeForDisplay(plan.target.ref)} (${short(plan.target.oid)})  squash`,
 		`統合先の worktree: ${oneLine(plan.targetWorktree ?? "(なし)", 300)}`,
 		`後片付け: ${cleanup}`,
+		...profileLines(plan, false),
 		...(stackedLine(plan, pend) ? [stackedLine(plan, pend) as string] : []),
 		changes.length ? `要求時から変わった点: ${changes.join(" / ")}` : "要求時から変わった点: なし",
 		"",
@@ -302,13 +337,15 @@ export function integrateApprovalAdapter(cfg: CfgSource): ApprovalAdapter {
 		if (cfgOf(cfg).enabled?.() === false) return { ok: false as const, reason: DISABLED };
 		const cleanup = cleanupOf(rec.params);
 		if (!cleanup) return { ok: false as const, reason: `cleanup が不正: ${oneLine(rec.params.cleanup, 40)}` };
-		const c = cfgOf(cfg);
+		const c = cfgOf(cfg, cwd);
 		const plan = computeIntegrationPlan({
 			cwd,
 			source: rec.params.source ?? "",
 			target: c.target,
 			message: rec.params.message ?? "",
 			protectedRefs: c.protectedRefs,
+			sourcePrefixes: c.sourcePrefixes,
+			profile: c.profile,
 			riskPaths: c.riskPaths,
 			env,
 		});
@@ -331,6 +368,8 @@ export function integrateApprovalAdapter(cfg: CfgSource): ApprovalAdapter {
 			const r = compute({ params: { source: a.plan.source.ref, message: a.plan.message, cleanup: a.cleanup } }, env.cwd, env.env);
 			if (!r.ok) return r;
 			const n = r.plan;
+			if (n.target.ref !== a.plan.target.ref) return { ok: false, reason: "承認した後に、統合先のブランチが変わった (設定が変わった)" };
+			if (n.profile.blob !== a.plan.profile.blob) return { ok: false, reason: "承認した後に、プロジェクト設定 (pi.json) が変わった" };
 			if (n.target.oid !== a.plan.target.oid) return { ok: false, reason: "承認した後に、統合先が進んだ" };
 			if (n.source.oid !== a.plan.source.oid) return { ok: false, reason: "承認した後に、統合元が進んだ" };
 			if (n.resultTree !== a.plan.resultTree) return { ok: false, reason: "承認した後に、結果の内容が変わった" };
@@ -339,7 +378,7 @@ export function integrateApprovalAdapter(cfg: CfgSource): ApprovalAdapter {
 		},
 		execute: async (p, env, signal) => {
 			const a = p as Approved;
-			const r = await executeIntegrationOutcome({ plan: a.plan, cleanup: a.cleanup, approverCwd: env.cwd, env: env.env, signal });
+			const r = await executeIntegrationOutcome({ plan: a.plan, cleanup: a.cleanup, approverCwd: env.cwd, env: env.env, signal, protectedRefs: cfgOf(cfg).protectedRefs });
 			if (r.body.outcome === "unknown") {
 				// 証拠は、画面に出す前に制御文字を可視化し、件数・長さを制限する
 				return { body: { ...r.body, evidence: r.body.evidence.slice(0, 10).map((e) => oneLine(e, 300)) }, termination: r.termination };

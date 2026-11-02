@@ -251,3 +251,74 @@ def test_authorize_reason_is_capped_even_with_many_bad_params() -> None:
     prefix = "引数が操作の定義に合わない: "
     assert r["ok"] is False and r["reason"].startswith(prefix)
     assert len(r["reason"]) - len(prefix) <= 200 and "\n" not in r["reason"]
+
+
+# --- cwd ごとの設定 (HEAD の .agents/config/pi.json。保護は全体のまま) ---
+
+
+def _pi_json(repo: Path, obj: object | str) -> str:
+    text = obj if isinstance(obj, str) else json.dumps(obj)
+    _commit(repo, ".agents/config/pi.json", text, "pi.json")
+    return _git(repo, "rev-parse", "HEAD:.agents/config/pi.json").strip()
+
+
+def test_cfg_without_cwd_or_pi_json_is_unchanged(tmp_path: Path) -> None:
+    c = _cfg()
+    assert c["target"] == "develop" and c["sourcePrefixes"] == ["feature/", "bugfix/"]
+    assert "profile" not in c
+    r = tmp_path / "r"
+    r.mkdir()
+    _git(r, "init", "-q", "-b", "develop")
+    _commit(r, "a.txt", "1\n", "init")
+    c = _run({"op": "cfg", "rules": _rules(), "cwd": str(r)})["cfg"]
+    assert c["target"] == "develop" and c["sourcePrefixes"] == ["feature/", "bugfix/"]
+    assert c["profile"] == {"blob": None, "overridden": False, "diagnostics": []}
+
+
+def test_cfg_uses_pi_json_at_head(tmp_path: Path) -> None:
+    r = tmp_path / "r"
+    r.mkdir()
+    _git(r, "init", "-q", "-b", "develop")
+    blob = _pi_json(r, {"integrate": {"target": "production", "source_prefixes": ["feat/"]}})
+    rules = _rules(protected_refs=["main", "develop", "production"])
+    c = _run({"op": "cfg", "rules": rules, "cwd": str(r)})["cfg"]
+    assert c["target"] == "production" and c["sourcePrefixes"] == ["feat/"]
+    assert c["profile"] == {"blob": blob, "overridden": True, "diagnostics": []}
+    # 保護は全体のまま
+    assert c["protectedRefs"] == ["main", "develop", "production"]
+
+
+def test_cfg_protected_refs_never_come_from_pi_json(tmp_path: Path) -> None:
+    r = tmp_path / "r"
+    r.mkdir()
+    _git(r, "init", "-q", "-b", "develop")
+    _pi_json(r, {"integrate": {"protected_refs": ["x"], "extra_protected_refs": ["y"]}})
+    c = _run({"op": "cfg", "rules": _rules(), "cwd": str(r)})["cfg"]
+    assert c["protectedRefs"] == ["main", "master", "develop", "release/*", "hotfix/*"]
+    assert c["target"] == "develop"
+    codes = [d["code"] for d in c["profile"]["diagnostics"]]
+    assert codes and set(codes) == {"protected_refs_not_allowed"}, c["profile"]
+
+
+def test_cfg_target_not_protected_is_invalid(tmp_path: Path) -> None:
+    r = tmp_path / "r"
+    r.mkdir()
+    _git(r, "init", "-q", "-b", "develop")
+    _pi_json(r, {"integrate": {"target": "production"}})
+    c = _run({"op": "cfg", "rules": _rules(), "cwd": str(r)})["cfg"]
+    assert c["target"] == "develop" and c["profile"]["overridden"] is False
+    assert [d["code"] for d in c["profile"]["diagnostics"]] == ["bad_target"]
+
+
+def test_cfg_ignores_uncommitted_pi_json(tmp_path: Path) -> None:
+    r = tmp_path / "r"
+    r.mkdir()
+    _git(r, "init", "-q", "-b", "develop")
+    _commit(r, "a.txt", "1\n", "init")
+    (r / ".agents" / "config").mkdir(parents=True)
+    (r / ".agents" / "config" / "pi.json").write_text(
+        '{"integrate": {"source_prefixes": ["x/"]}}', encoding="utf-8"
+    )
+    c = _run({"op": "cfg", "rules": _rules(), "cwd": str(r)})["cfg"]
+    assert c["sourcePrefixes"] == ["feature/", "bugfix/"]
+    assert c["profile"] == {"blob": None, "overridden": False, "diagnostics": []}

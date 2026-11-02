@@ -643,3 +643,31 @@ def test_precheck_external_filter(repo: Path, tmp_path: Path) -> None:
     assert res["outcome"] == "not_executed" and res["phase"] == "precheck", res
     assert not marker.exists(), "外部 filter が実行された"
     assert _git(repo, "rev-parse", "HEAD") == head
+
+
+# --- 後片付けの直前の保護の確認 (統合元が全体の保護に入っていたら、後片付けだけ止める) ---
+
+
+def test_cleanup_stops_when_source_is_protected(repo: Path) -> None:
+    plan = _plan(repo)
+    res = _exec(plan, repo, "branch", protectedRefs=[*PROTECTED, "feature/*"])
+    assert res["outcome"] == "success", res
+    assert any("保護" in r for r in res["remainingCleanup"]), res
+    assert _git(repo, "branch", "--list", "feature/x").strip() != ""
+    assert _git(repo, "rev-parse", "develop^{tree}").strip() == plan["resultTree"]
+
+
+def test_cleanup_stops_when_source_is_protected_exact(repo: Path, feat: Path) -> None:
+    plan = _plan(repo)
+    res = _exec(plan, repo, "branch_and_worktree", protectedRefs=[*PROTECTED, "feature/x"])
+    assert res["outcome"] == "success", res
+    assert any("保護" in r for r in res["remainingCleanup"]), res
+    assert feat.exists()
+    assert _git(repo, "branch", "--list", "feature/x").strip() != ""
+
+
+def test_cleanup_proceeds_when_source_is_not_protected(repo: Path) -> None:
+    plan = _plan(repo)
+    res = _exec(plan, repo, "branch", protectedRefs=PROTECTED)
+    assert res["outcome"] == "success" and res["remainingCleanup"] == [], res
+    assert _git(repo, "branch", "--list", "feature/x").strip() == ""

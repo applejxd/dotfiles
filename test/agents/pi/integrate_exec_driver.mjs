@@ -14,6 +14,7 @@ const req = JSON.parse(readFileSync(0, "utf8"));
 const ac = new AbortController();
 if (req.abortAfterMs) setTimeout(() => ac.abort(), req.abortAfterMs);
 const input = { plan: req.plan, cleanup: req.cleanup ?? "none", approverCwd: req.approverCwd, signal: ac.signal };
+if (req.protectedRefs) input.protectedRefs = req.protectedRefs;
 if (req.commitTimeoutMs) input.commitTimeoutMs = req.commitTimeoutMs;
 if (req.stopUnconfirmed) input.stopVerifier = () => false;
 if (req.unconfirmedFrom) {

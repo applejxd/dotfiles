@@ -15,10 +15,13 @@ const harness = (name) => pathToFileURL(resolve(ROOT, "home", "dot_config", "pi"
 const ia = await import(harness("integrate-action.ts"));
 const ops = await import(harness("pending-ops.ts"));
 const ap = await import(harness("pending-approve.ts"));
+const pa = await import(harness("pending-adapters.ts"));
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.test", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.test" };
 const git = (cwd, args) => execFileSync("git", args, { cwd, env: ENV, encoding: "utf8" }).trim();
 const req = JSON.parse(readFileSync(0, "utf8"));
+// rules があれば、cfg は cwd ごとに解決する (pi.json を読む)。dropPremise は古い記録の再現 (前提のキーを消す)
+if (req.rules) req.cfg = (cwd) => pa.integrateCfg(req.rules, cwd);
 // 端末の大きさを注入する (省略 = パイプのとおり不明)
 if (req.columns !== undefined) process.stdout.columns = req.columns;
 if (req.rows !== undefined) process.stdout.rows = req.rows;
@@ -54,6 +57,16 @@ if (req.op === "capture") {
 	}
 	for (const a of req.beforePlan ?? []) git(req.requestCwd, a);
 	const rec = { action: "git_integrate", params: req.values, premise: cap.premise ?? {}, request: { id: "x", sessionId: "s", cwd: req.requestCwd } };
+	for (const k of req.dropPremise ?? []) delete rec.premise[k];
+	// protectAtExecute: 承認の後 (実行の直前) に、この ref が保護の一覧に入る設定の変化を再現する
+	let executing = false;
+	if (req.protectAtExecute) {
+		const base = req.cfg;
+		req.cfg = (cwd) => {
+			const c = typeof base === "function" ? base(cwd) : base;
+			return executing ? { ...c, protectedRefs: [...c.protectedRefs, req.protectAtExecute] } : c;
+		};
+	}
 	const ad = ia.integrateApprovalAdapter(req.cfg);
 	const env = { cwd: req.approverCwd, env: ENV, rules: {} };
 	const planned = await ad.plan(rec, env);
@@ -62,6 +75,7 @@ if (req.op === "capture") {
 		for (const a of req.beforeRecheck ?? []) git(req.requestCwd, a);
 		out.recheck = await ad.recheck(planned.plan, env);
 		if (req.execute && out.recheck.ok) {
+			executing = true;
 			const x = await ad.execute(planned.plan, env);
 			out.execOutcome = x;
 			out.exec = x && typeof x === "object" && "body" in x ? x.body : x;

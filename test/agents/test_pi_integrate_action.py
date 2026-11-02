@@ -483,6 +483,41 @@ def test_adapter_is_exclusive(repo: Path) -> None:
     assert _adapter(repo, repo)["exclusive"] is True
 
 
+def test_execute_does_not_clean_up_a_source_that_became_protected(repo: Path) -> None:
+    """承認の後に設定が変わり、統合元が保護ブランチに入っても、後片付けで消さない (承認アダプター経由)。統合の結果は残す。"""
+    values = _values(cleanup="branch")
+    res = _run(
+        {
+            "op": "flow",
+            "requestCwd": str(repo),
+            "approverCwd": str(repo),
+            "values": values,
+            "execute": True,
+            "protectAtExecute": values["source"],
+        }
+    )
+    body = res["exec"]
+    assert body["outcome"] == "success", body
+    assert any("保護ブランチ" in r for r in body["remainingCleanup"]), body
+    assert _git(repo, "branch", "--list", values["source"]).strip() != ""
+
+
+def test_execute_cleans_up_a_normal_source(repo: Path) -> None:
+    """対照: 保護されていない統合元は、従来どおり後片付けで消える。"""
+    values = _values(cleanup="branch")
+    res = _run(
+        {
+            "op": "flow",
+            "requestCwd": str(repo),
+            "approverCwd": str(repo),
+            "values": values,
+            "execute": True,
+        }
+    )
+    assert res["exec"]["outcome"] == "success", res["exec"]
+    assert _git(repo, "branch", "--list", values["source"]).strip() == ""
+
+
 def test_adapter_execute_returns_exec_outcome_with_facts(repo: Path) -> None:
     res = _run(
         {
@@ -582,6 +617,26 @@ def test_summary_subject_is_shown_in_full_up_to_3_lines_even_with_a_tiny_budget(
     assert len(huge) == 3 and huge[2].endswith("…") and all(_cells(ln) <= 46 for ln in huge), huge
 
 
+def test_ref_names_with_display_control_characters_are_sanitized(repo: Path) -> None:
+    """承認画面の統合元・統合先の ref 名に、双方向制御文字・C1 制御文字が生のまま出ない。計画の ref 自体は変えない。"""
+    for bad, shown in ("\u202e", "\\u{202e}"), ("\u0085", "\\x85"):
+        name = f"feature/a{bad}b"
+        _git(repo, "branch", name, "feature/x")
+        res = _run(
+            {
+                "op": "flow",
+                "requestCwd": str(repo),
+                "approverCwd": str(repo),
+                "values": _values(source=name),
+            }
+        )
+        assert res["capture"]["ok"] is True, res["capture"]
+        assert res["capture"]["premise"]["source"] == f"refs/heads/{name}"
+        for text in (res["plan"]["summary"], res["plan"]["view"]):
+            assert bad not in text, text
+            assert shown in text, text
+
+
 def test_summary_message_is_sanitized_at_any_width(repo: Path) -> None:
     for term in ({}, {"columns": 120, "rows": 40}):
         lines = _summary_of(repo, "feat: \x1b[2Jx\n\n\x07body\x1b]0;t\x07", **term)
@@ -625,3 +680,215 @@ def test_summary_body_width_is_capped_at_exactly_200_minus_2(repo: Path) -> None
     lines = _summary_of(repo, "feat: x\n\n" + "y" * 450, columns=500, rows=200)
     widths = [_cells(ln) for ln in lines]
     assert max(widths) == 198, widths
+
+
+# --- cwd ごとの設定 (HEAD の .agents/config/pi.json)。保護は全体のまま ---
+
+PI_JSON = ".agents/config/pi.json"
+PROFILE_A = {"integrate": {"target": "production", "source_prefixes": ["feat/"]}}
+PROFILE_B = {"integrate": {"target": "production", "source_prefixes": ["feat/", "fix/"]}}
+PROFILE_C = {"integrate": {"target": "main", "source_prefixes": ["feat/"]}}
+NOTE = "プロジェクト設定 (pi.json)"
+LINE_A = f"{NOTE}: 統合先 production・統合元の接頭辞 feat/"
+
+
+def _rules() -> dict:
+    integ = {"enabled": True, "protected_refs": ["main", "develop", "production"]}
+    return {"judge": {"common": {"pi": {"pending": {"enabled": True}, "integrate": integ}}}}
+
+
+def _prun(payload: dict) -> dict:
+    node = _node()
+    if node is None:
+        pytest.skip("node が無い (または古い)")
+    out = subprocess.run(
+        [node, str(DRIVER)],
+        input=json.dumps({"rules": _rules(), **payload}),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=120,
+    )
+    return json.loads(out.stdout)
+
+
+def _put(repo: Path, obj: object | str, msg: str = "pi.json") -> None:
+    _commit(repo, PI_JSON, obj if isinstance(obj, str) else json.dumps(obj), msg)
+
+
+@pytest.fixture
+def prof(repo: Path) -> Path:
+    """develop の HEAD に pi.json (A)。production・main は develop と同じ位置。feat/y は production から。"""
+    _put(repo, PROFILE_A, "pi A")
+    _git(repo, "branch", "production")
+    _git(repo, "branch", "main")
+    for name, obj in (("cfgB", PROFILE_B), ("cfgC", PROFILE_C)):
+        _git(repo, "checkout", "-q", "-b", name, "develop")
+        _put(repo, obj, name)
+    _git(repo, "checkout", "-q", "-b", "feat/y", "production")
+    _commit(repo, "y.txt", "y\n")
+    _git(repo, "checkout", "-q", "develop")
+    return repo
+
+
+def _pflow(repo: Path, **kw: object) -> dict:
+    return _prun(
+        {
+            "op": "flow",
+            "requestCwd": str(repo),
+            "approverCwd": str(repo),
+            "values": _values(source="feat/y"),
+            **kw,
+        }
+    )
+
+
+def test_profile_capture_uses_target_prefix_and_blob(prof: Path) -> None:
+    res = _prun({"op": "capture", "cwd": str(prof), "values": _values(source="feat/y")})
+    cap = res["capture"]
+    assert cap["ok"] is True, cap
+    p = cap["premise"]
+    assert p["target"] == "refs/heads/production" and p["source"] == "refs/heads/feat/y"
+    assert p["profileBlob"] == _git(prof, "rev-parse", f"HEAD:{PI_JSON}").strip()
+    # 既定の接頭辞 (feature/) はこのリポジトリでは統合元にならない
+    bad = _prun({"op": "capture", "cwd": str(prof), "values": _values()})["capture"]
+    assert bad["ok"] is False and "bad_source" in bad["reason"], bad
+
+
+def test_profile_overridden_is_shown(prof: Path) -> None:
+    res = _pflow(prof)
+    assert res["plan"]["summary"].count(NOTE) == 1 and "統合先 production" in res["plan"]["summary"]
+    assert "feat/y → production (squash)" in res["plan"]["summary"]
+    assert LINE_A in res["plan"]["view"], res["plan"]["view"]
+    assert res["recheck"] == {"ok": True}
+
+
+def test_without_pi_json_nothing_changes(repo: Path) -> None:
+    res = _prun(
+        {"op": "flow", "requestCwd": str(repo), "approverCwd": str(repo), "values": _values()}
+    )
+    assert (
+        res["capture"]["ok"] is True and res["capture"]["premise"]["target"] == "refs/heads/develop"
+    )
+    assert res["capture"]["premise"]["profileBlob"] is None
+    for key in ("summary", "view"):
+        assert "pi.json" not in res["plan"][key], res["plan"][key]
+    assert "要求時から変わった点" not in res["plan"]["summary"]
+    assert res["recheck"] == {"ok": True}
+
+
+def test_profile_that_equals_defaults_is_silent(repo: Path) -> None:
+    _put(repo, {"integrate": {"target": "develop", "source_prefixes": ["feature/", "bugfix/"]}})
+    res = _prun(
+        {"op": "flow", "requestCwd": str(repo), "approverCwd": str(repo), "values": _values()}
+    )
+    assert res["capture"]["ok"] is True
+    for key in ("summary", "view"):
+        assert "pi.json" not in res["plan"][key], res["plan"][key]
+
+
+@pytest.mark.parametrize(
+    ("text", "code"),
+    [
+        ('{"integrate": {"protected_refs": ["x"]}}', "protected_refs_not_allowed"),
+        ('{"integrate": {"target": "staging"}}', "bad_target"),
+        ('{"integrate": {"colour": 1}}', "unknown_key"),
+        ("{not json", "invalid_json"),
+    ],
+)
+def test_invalid_profile_falls_back_with_diagnostic(repo: Path, text: str, code: str) -> None:
+    _put(repo, text)
+    res = _prun(
+        {"op": "flow", "requestCwd": str(repo), "approverCwd": str(repo), "values": _values()}
+    )
+    assert (
+        res["capture"]["ok"] is True and res["capture"]["premise"]["target"] == "refs/heads/develop"
+    )
+    for key in ("summary", "view"):
+        assert f"{NOTE} は無効" in res["plan"][key], res["plan"][key]
+        assert f"({code})" in res["plan"][key] and "全体の既定で処理" in res["plan"][key]
+    assert f"{NOTE} は無効 ({code})。全体の既定で処理" in res["plan"]["view"]
+
+
+def test_invalid_profile_does_not_echo_content(repo: Path) -> None:
+    secret = "SECRET-TOKEN-0123456789"
+    _put(repo, '{"integrate": {"target": "' + secret + '", "' + secret + '": 1')
+    res = _prun(
+        {"op": "flow", "requestCwd": str(repo), "approverCwd": str(repo), "values": _values()}
+    )
+    assert secret not in json.dumps(res, ensure_ascii=False)
+    assert "無効 (invalid_json)" in res["plan"]["view"]
+
+
+def test_symlink_profile_is_invalid(repo: Path) -> None:
+    link = repo / PI_JSON
+    link.parent.mkdir(parents=True)
+    link.symlink_to("../../a.txt")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "link")
+    res = _prun(
+        {"op": "flow", "requestCwd": str(repo), "approverCwd": str(repo), "values": _values()}
+    )
+    assert res["capture"]["ok"] is True
+    assert "無効 (not_regular_file)" in res["plan"]["view"], res["plan"]["view"]
+
+
+def test_uncommitted_profile_is_ignored(repo: Path) -> None:
+    _write_pi = repo / PI_JSON
+    _write_pi.parent.mkdir(parents=True)
+    _write_pi.write_text(json.dumps(PROFILE_A), encoding="utf-8")
+    res = _prun({"op": "capture", "cwd": str(repo), "values": _values()})
+    p = res["capture"]["premise"]
+    assert p["target"] == "refs/heads/develop" and p["profileBlob"] is None
+    # 作業ツリーの A (feat/) は効かない: feat/y は統合元にならない
+    _git(repo, "branch", "feat/y", "feature/x")
+    bad = _prun({"op": "capture", "cwd": str(repo), "values": _values(source="feat/y")})["capture"]
+    assert bad["ok"] is False and "bad_source" in bad["reason"], bad
+
+
+def test_extra_protected_refs_in_profile_does_not_protect_or_unprotect(repo: Path) -> None:
+    _put(repo, {"integrate": {"protected_refs": ["feature/*"]}})
+    res = _prun({"op": "capture", "cwd": str(repo), "values": _values()})
+    assert res["capture"]["ok"] is True, res["capture"]
+
+
+def test_profile_change_between_request_and_approval(prof: Path) -> None:
+    res = _pflow(prof, beforePlan=[["checkout", "-q", "cfgB"]])
+    assert "プロジェクト設定 (pi.json) が要求時と違う" in res["plan"]["summary"]
+    assert "プロジェクト設定 (pi.json) が要求時と違う" in res["plan"]["view"]
+    assert "統合先が要求時と違う" not in res["plan"]["view"]
+
+
+def test_target_change_between_request_and_approval(prof: Path) -> None:
+    res = _pflow(prof, beforePlan=[["checkout", "-q", "cfgC"]])
+    view = res["plan"]["view"]
+    assert "統合先が要求時と違う (production→main)" in view, view
+    assert "プロジェクト設定 (pi.json) が要求時と違う" in view
+
+
+def test_recheck_fails_when_profile_blob_changes(prof: Path) -> None:
+    res = _pflow(prof, beforeRecheck=[["checkout", "-q", "cfgB"]])
+    assert res["recheck"]["ok"] is False, res["recheck"]
+    assert "承認した後に" in res["recheck"]["reason"] and "設定" in res["recheck"]["reason"]
+
+
+def test_recheck_fails_when_target_ref_changes(prof: Path) -> None:
+    res = _pflow(prof, beforeRecheck=[["checkout", "-q", "cfgC"]])
+    assert res["recheck"]["ok"] is False, res["recheck"]
+    assert "承認した後に" in res["recheck"]["reason"] and "統合先" in res["recheck"]["reason"]
+
+
+def test_old_record_without_profile_blob_shows_no_difference(repo: Path) -> None:
+    res = _prun(
+        {
+            "op": "flow",
+            "requestCwd": str(repo),
+            "approverCwd": str(repo),
+            "values": _values(),
+            "dropPremise": ["profileBlob"],
+        }
+    )
+    assert "要求時から変わった点" not in res["plan"]["summary"], res["plan"]["summary"]
+    assert "要求時から変わった点: なし" in res["plan"]["view"]
+    assert res["recheck"] == {"ok": True}

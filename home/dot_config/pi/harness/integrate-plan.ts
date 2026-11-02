@@ -5,6 +5,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { repoTargetEnv } from "./pending-store.ts";
+import { DEFAULT_SOURCE_PREFIXES } from "./judge/integrateprofile.ts";
+import { isProtectedRef } from "./judge/protectedrefs.ts";
+
+/** プロジェクト設定 (pi.json) の情報。表示と、承認後の再検査 (blob ID) に使う。入力の本文は含めない */
+export type PlanProfile = { blob: string | null; overridden: boolean; diagnostics: { code: string; key?: string }[] };
+const NO_PROFILE: PlanProfile = { blob: null, overridden: false, diagnostics: [] };
 
 export type IntegrateInput = {
 	cwd: string;
@@ -12,6 +18,10 @@ export type IntegrateInput = {
 	target: string;
 	message: string;
 	protectedRefs: readonly string[];
+	/** 統合元の接頭辞 (末尾は /)。省略時は feature/ と bugfix/ */
+	sourcePrefixes?: readonly string[];
+	/** 計画に載せるプロジェクト設定の情報 (計算には使わない) */
+	profile?: PlanProfile;
 	riskPaths: readonly string[];
 	env?: NodeJS.ProcessEnv;
 	/** false なら統合先 worktree の状態 (進行中の操作・未コミット) を調べない。既定 true */
@@ -33,6 +43,10 @@ export type IntegratePlan = {
 	targetAhead: number;
 	/** 統合元に含まれる、未統合の他の feature/bugfix の ref (表示だけの情報。承認の判断・再検査には使わない) */
 	stacked: string[];
+	/** 計画を作ったときのプロジェクト設定 (.agents/config/pi.json) の情報 */
+	profile: PlanProfile;
+	/** 計画の統合元の判定に使った接頭辞 (表示用) */
+	sourcePrefixes: string[];
 };
 export type IntegrateRefusal = { ok: false; code: string; reason: string; files?: string[] };
 
@@ -110,8 +124,18 @@ function targetWorktreeOf(cwd: string, ref: string, env?: NodeJS.ProcessEnv): st
 const MAX_STACKED = 10;
 
 /** 統合元に含まれる未統合の他ブランチ。失敗は空 (表示だけの情報なので、計画を失敗させない) */
-function stackedOf(cwd: string, sourceRef: string, sourceOid: string, targetOid: string, targetTree: string, env?: NodeJS.ProcessEnv): string[] {
-	const l = safeGit(["for-each-ref", "--format=%(refname)", "--merged", sourceOid, "--no-merged", targetOid, "refs/heads/feature", "refs/heads/bugfix"], cwd, env);
+function stackedOf(
+	cwd: string,
+	sourceRef: string,
+	sourceOid: string,
+	targetOid: string,
+	targetTree: string,
+	sourcePrefixes: readonly string[],
+	env?: NodeJS.ProcessEnv,
+): string[] {
+	const patterns = sourcePrefixes.map((p) => `refs/heads/${p.replace(/\/+$/, "")}`);
+	if (patterns.length === 0) return [];
+	const l = safeGit(["for-each-ref", "--format=%(refname)", "--merged", sourceOid, "--no-merged", targetOid, ...patterns], cwd, env);
 	if (!l.ok) return [];
 	const out: string[] = [];
 	for (const ref of l.out.split("\n").map((x) => x.trim())) {
@@ -139,8 +163,10 @@ export function computeIntegrationPlan(input: IntegrateInput): IntegratePlan | I
 	const sourceRef = fullRef(input.source);
 	const targetRef = fullRef(input.target);
 	const exactProtected = input.protectedRefs.filter((p) => !/[*?[]/.test(p)).map(fullRef);
-	if (badRefName(input.source) || !/^refs\/heads\/(feature|bugfix)\/.+/.test(sourceRef) || sourceRef === targetRef) {
-		return refuse("bad_source", "統合元は feature/* か bugfix/* のブランチでなければならない。");
+	const prefixes = input.sourcePrefixes ?? DEFAULT_SOURCE_PREFIXES;
+	const fromPrefix = prefixes.some((p) => p !== "" && sourceRef.startsWith(`refs/heads/${p}`) && sourceRef.length > `refs/heads/${p}`.length);
+	if (badRefName(input.source) || !fromPrefix || isProtectedRef(sourceRef, input.protectedRefs) || sourceRef === targetRef) {
+		return refuse("bad_source", "統合元は設定された接頭辞 (既定 feature/ か bugfix/) のブランチで、保護ブランチでないものでなければならない。");
 	}
 	if (badRefName(input.target) || !exactProtected.includes(targetRef)) {
 		return refuse("bad_target", "統合先は保護ブランチの完全一致でなければならない。");
@@ -271,6 +297,8 @@ export function computeIntegrationPlan(input: IntegrateInput): IntegratePlan | I
 		files: sorted.slice(0, 200),
 		risks: risks.slice(0, 50),
 		targetAhead: ahead,
-		stacked: stackedOf(cwd, sourceRef, sourceOid, targetOid, targetTree, env),
+		stacked: stackedOf(cwd, sourceRef, sourceOid, targetOid, targetTree, prefixes, env),
+		profile: input.profile ? structuredClone(input.profile) : { ...NO_PROFILE, diagnostics: [] },
+		sourcePrefixes: [...prefixes],
 	};
 }

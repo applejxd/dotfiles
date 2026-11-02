@@ -335,3 +335,76 @@ def test_stacked_source_first_makes_base_no_change(repo: Path) -> None:
     _stack(repo)
     _squash(repo, "feature/b")
     assert _plan(repo, source="feature/a")["code"] == "no_change"
+
+
+# --- 統合元の接頭辞 (pi.json の source_prefixes。保護は全体のまま) ---
+
+
+def _branch(repo: Path, name: str, base: str = "develop") -> None:
+    _git(repo, "checkout", "-q", "-b", name, base)
+    _commit(repo, name.replace("/", "_") + ".txt", name + "\n")
+    _git(repo, "checkout", "-q", "develop")
+
+
+def test_source_prefixes_custom_accepts_only_listed(repo: Path) -> None:
+    _branch(repo, "feat/x")
+    r = _plan(repo, source="feat/x", sourcePrefixes=["feat/"])
+    assert r["ok"] is True and r["source"]["ref"] == "refs/heads/feat/x", r
+    r = _plan(repo, source="feature/x", sourcePrefixes=["feat/"])
+    assert r["ok"] is False and r["code"] == "bad_source", r
+
+
+def test_source_prefixes_default_keeps_feature_and_bugfix(repo: Path) -> None:
+    _branch(repo, "bugfix/x")
+    _branch(repo, "feat/x")
+    assert _plan(repo, source="bugfix/x")["ok"] is True
+    assert _plan(repo, source="feature/x")["ok"] is True
+    assert _plan(repo, source="feat/x")["code"] == "bad_source"
+    # 空の配列は「何も許さない」(既定に倒すのは設定の側の責務)
+    assert _plan(repo, source="feature/x", sourcePrefixes=[])["code"] == "bad_source"
+
+
+def test_source_prefix_requires_non_empty_rest(repo: Path) -> None:
+    assert _plan(repo, source="feat/", sourcePrefixes=["feat/"])["code"] == "bad_source"
+    assert _plan(repo, source="feat", sourcePrefixes=["feat/"])["code"] == "bad_source"
+
+
+def test_source_protected_name_is_refused_even_if_prefix_matches(repo: Path) -> None:
+    _git(repo, "branch", "feat/base", "feature/x")
+    protected = [*PROTECTED, "feat/base"]
+    r = _plan(repo, source="feat/base", sourcePrefixes=["feat/"], protectedRefs=protected)
+    assert r["ok"] is False and r["code"] == "bad_source", r
+    # ワイルドカードの保護にも当たる
+    r = _plan(
+        repo, source="feat/base", sourcePrefixes=["feat/"], protectedRefs=[*PROTECTED, "feat/*"]
+    )
+    assert r["ok"] is False and r["code"] == "bad_source", r
+    # 保護に入っていなければ統合できる
+    r = _plan(repo, source="feat/base", sourcePrefixes=["feat/"])
+    assert r["ok"] is True, r
+
+
+def test_stacked_follows_source_prefixes(repo: Path) -> None:
+    _branch(repo, "feat/a")
+    _git(repo, "checkout", "-q", "-b", "feat/b", "feat/a")
+    _commit(repo, "fb.txt", "b\n")
+    _git(repo, "checkout", "-q", "develop")
+    r = _plan(repo, source="feat/b", sourcePrefixes=["feat/"])
+    assert r["ok"] is True and r["stacked"] == ["refs/heads/feat/a"], r
+    # 既定の接頭辞では、feat/ は積み重ねとして数えない
+    _git(repo, "checkout", "-q", "-b", "feature/c", "feat/a")
+    _commit(repo, "fc.txt", "c\n")
+    _git(repo, "checkout", "-q", "develop")
+    r = _plan(repo, source="feature/c")
+    assert r["ok"] is True and r["stacked"] == [], r
+
+
+def test_plan_carries_profile_info(repo: Path) -> None:
+    r = _plan(repo)
+    assert r["profile"] == {"blob": None, "overridden": False, "diagnostics": []}, r
+    info = {
+        "blob": "a" * 40,
+        "overridden": True,
+        "diagnostics": [{"code": "bad_type", "key": "target"}],
+    }
+    assert _plan(repo, profile=info)["profile"] == info

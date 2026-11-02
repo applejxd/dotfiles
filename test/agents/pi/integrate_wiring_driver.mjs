@@ -28,7 +28,7 @@ if (req.op === "wiring") {
 	out.exclusive = ap ? ap.exclusive : null;
 	out.runsHere = ap ? typeof ap.runsHere : null;
 } else if (req.op === "cfg") {
-	out.cfg = pa.integrateCfg(req.rules);
+	out.cfg = pa.integrateCfg(req.rules, req.cwd);
 } else if (req.op === "capture") {
 	const w = pa.integrateWiring(req.rules);
 	const call = () => w.request.git_integrate.capture({ cwd: req.cwd, values: req.values, env: ENV });
