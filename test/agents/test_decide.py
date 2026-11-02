@@ -10,6 +10,7 @@ see docs/spec/guard/pi-decide.md
 from __future__ import annotations
 
 import ast
+import functools
 import json
 import os
 import subprocess
@@ -619,6 +620,7 @@ def test_ask_is_allowed_only_for_roles_that_have_it():
 # ─── check_bash.py との等価 ─────────────────────────────────────────
 
 
+@functools.cache
 def _hook_test_commands() -> list[str]:
     """``test_check_bash_*.py`` の ``parametrize("command", [...])`` に並ぶコマンド。"""
     out: list[str] = []
@@ -689,8 +691,25 @@ def test_hook_corpus_is_large_enough():
     assert len(_hook_test_commands()) > 500
 
 
-def test_decide_matches_check_bash_on_the_hook_test_corpus():
+# コーパスを連続した _CORPUS_CHUNKS 個に分け、xdist で並列に判定する (全件・重複なし。下の test が検査する)
+_CORPUS_CHUNKS = 8
+
+
+def _corpus_chunk(index: int) -> list[str]:
     commands = _hook_test_commands()
+    size = -(-len(commands) // _CORPUS_CHUNKS)
+    return commands[index * size : (index + 1) * size]
+
+
+def test_hook_corpus_chunks_cover_the_corpus_exactly_once():
+    joined = [c for i in range(_CORPUS_CHUNKS) for c in _corpus_chunk(i)]
+    assert joined == _hook_test_commands()
+
+
+@pytest.mark.parametrize("chunk", range(_CORPUS_CHUNKS))
+def test_decide_matches_check_bash_on_the_hook_test_corpus(chunk):
+    commands = _corpus_chunk(chunk)
+    assert commands
     env = {**os.environ, "AGENTS_CONFIG_DIR": str(CONFIG_DIR)}
     proc = subprocess.run(
         [sys.executable, "-c", _DRIVER, str(HOOKS)],
