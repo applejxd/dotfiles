@@ -257,11 +257,33 @@ async function statusPaths(w: Wt, ignored: boolean): Promise<StatusEntry[] | nul
  * 属性の参照元が target の tree と worktree でずれうるかの検査。merge-tree は target の tree の .gitattributes を読むが、
  * git merge は worktree のそれを読む。未コミットの変更・追加・削除・無視ファイル、または attr.tree 設定があれば拒否する。
  */
-async function checkAttributes(w: Wt): Promise<Refusal | null> {
+async function checkAttributes(w: Wt, sourceRef: string): Promise<Refusal | null> {
 	const st = await statusPaths(w, true);
 	if (st === null) return refuse("failed");
-	if (st.some((e) => e.path.split("/").pop() === ".gitattributes")) {
-		return refuse("dirty", "統合先の作業ツリーに、未コミットの .gitattributes の変更があります。コミットか退避をしてください。");
+	const dirtyMsg = "統合先の作業ツリーに、未コミットの .gitattributes の変更があります。コミットか退避をしてください。";
+	const isAttr = (p: string) => p.split("/").pop() === ".gitattributes";
+	// 追跡中の .gitattributes の変更・削除・stage は常に拒否する
+	if (st.some((e) => isAttr(e.path) && e.code !== "??" && e.code !== "!!")) return refuse("dirty", dirtyMsg);
+	// 未追跡・無視の .gitattributes は、そのディレクトリの配下に追跡パス（統合先の index/HEAD か統合元の tree）が
+	// 1 つでもあるときだけ拒否する（git は属性をそのディレクトリの配下にだけ適用する。.tmp/ の奥などは影響しない）
+	const dirs = new Set<string>();
+	for (const e of st) {
+		if (!isAttr(e.path) || (e.code !== "??" && e.code !== "!!")) continue;
+		const i = e.path.lastIndexOf("/");
+		dirs.add(i < 0 ? "" : e.path.slice(0, i));
+	}
+	for (const d of dirs) {
+		if (d === "") return refuse("dirty", dirtyMsg);
+		const probes = [
+			["ls-files", "--", `:(literal)${d}/`],
+			["ls-tree", "-r", "--name-only", "HEAD", "--", `${d}/`],
+			["ls-tree", "-r", "--name-only", sourceRef, "--", `${d}/`],
+		];
+		for (const a of probes) {
+			const r = await runGit(a, { cwd: w.path });
+			if (r.code !== 0) return refuse("failed");
+			if (r.out.length > 0) return refuse("dirty", dirtyMsg);
+		}
 	}
 	const cfg = await runGit(["config", "-z", "--list"], { cwd: w.path });
 	if (cfg.code !== 0) return refuse("failed");
@@ -274,7 +296,7 @@ async function checkAttributes(w: Wt): Promise<Refusal | null> {
 /** target の worktree の事前検査（S4 の 6〜9）。 */
 async function checkWorktree(ctx: Ctx, w: Wt, touched: string[], attrsChecked = false): Promise<Refusal | null> {
 	if (!attrsChecked) {
-		const attrBad = await checkAttributes(w);
+		const attrBad = await checkAttributes(w, ctx.source.ref);
 		if (attrBad) return attrBad;
 	}
 	if (await configHasExternalCode(join(w.gitDir, "config.worktree"))) return refuse("external_code");
@@ -312,7 +334,7 @@ async function computePlan(ctx: Ctx): Promise<Planned | Refusal> {
 	const wt = await findWorktree(ctx.gitDir, ctx.target.ref);
 	if (wt === undefined) return refuse("failed");
 	if (wt) {
-		const attrBad = await checkAttributes(wt);
+		const attrBad = await checkAttributes(wt, sourceOid);
 		if (attrBad) return attrBad;
 	}
 

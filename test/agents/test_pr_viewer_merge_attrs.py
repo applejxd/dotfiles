@@ -156,7 +156,8 @@ def test_uncommitted_gitattributes_edit_in_the_target_worktree_is_refused(w):
 
 def test_untracked_nested_gitattributes_in_the_target_worktree_is_refused(w):
     _union_conflict_setup(w)
-    (w.repo / "sub").mkdir()
+    _commit(w.repo, {"sub/a.txt": "x\n"}, "sub")
+    (w.repo / "sub").mkdir(exist_ok=True)
     (w.repo / "sub" / ".gitattributes").write_text("*.txt -merge\n", encoding="utf-8")
     _refused_dirty(w)
 
@@ -192,3 +193,51 @@ def test_attr_tree_config_is_refused(w):
     assert rc == 2 and out["code"] == "unsupported_repo", out
     assert (w.rev(), w.status()) == before
     _no_leftovers(w)
+
+
+# ---------------------------------------------------------------- 未追跡の属性は、影響するディレクトリだけ断る
+
+
+def _write_attr(w: World, rel_dir: str) -> None:
+    d = w.repo / rel_dir if rel_dir else w.repo
+    d.mkdir(parents=True, exist_ok=True)
+    (d / ".gitattributes").write_text("*.txt -merge\n", encoding="utf-8")
+
+
+def test_untracked_gitattributes_in_an_ignored_dir_without_tracked_files_is_allowed(w):
+    """追跡ファイルの無い無視ディレクトリ（.tmp/ 相当）の奥の .gitattributes は、統合に影響しないので断らない。"""
+    _commit(w.repo, {".gitignore": ".tmp/\n"}, "ignore")
+    _union_conflict_setup(w)
+    _write_attr(w, ".tmp/exp/snap")
+    rc, out, _ = w.merge("feature/a")
+    assert rc == 0 and out["ok"], out
+
+
+def test_untracked_gitattributes_in_a_dir_with_tracked_files_is_refused(w):
+    _commit(w.repo, {"sub/a.txt": "x\n"}, "sub")
+    _union_conflict_setup(w)
+    _write_attr(w, "sub")
+    _refused_dirty(w)
+
+
+def test_ignored_gitattributes_in_a_dir_with_tracked_files_is_refused(w):
+    _commit(w.repo, {"sub/a.txt": "x\n", ".gitignore": ".gitattributes\n"}, "sub")
+    _union_conflict_setup(w)
+    _write_attr(w, "sub")
+    _refused_dirty(w)
+
+
+def test_untracked_root_gitattributes_is_refused(w):
+    _union_conflict_setup(w)
+    _write_attr(w, "")
+    _refused_dirty(w)
+
+
+def test_untracked_gitattributes_in_a_dir_the_feature_adds_files_to_is_refused(w):
+    _union_conflict_setup(w)
+    w.feature("feature/b", {"newdir/x.txt": "x\n"})
+    _write_attr(w, "newdir")
+    before = (w.rev(), w.status())
+    for rc, out, _ in (w.plan("feature/b"), w.merge("feature/b")):
+        assert rc == 2 and out["ok"] is False and out["code"] == "dirty", out
+    assert (w.rev(), w.status()) == before
