@@ -1443,3 +1443,13 @@ def test_every_refusal_reason_of_the_merger_has_an_http_status():
     statuses = set(re.findall(r"^\t(\w+):", status_block.group(1), re.M))
     assert reasons >= {"failed", "not_ff", "unverified"}, reasons
     assert not (reasons - statuses), f"HTTP の状態が無い拒否コード: {sorted(reasons - statuses)}"
+
+
+def test_unverified_is_http_500_and_says_recover_is_needed():
+    """結果を確認できなかった（unverified）は 500 のまま。コードと、recover が要るという文言を固定する。"""
+    merge_ts = (APP / "merge.ts").read_text(encoding="utf-8")
+    api_ts = (APP / "merge-api.ts").read_text(encoding="utf-8")
+    assert re.search(r"^\tunverified: 500,", api_ts, re.M)
+    msg = re.search(r'^\tunverified: "(.*?)",', merge_ts, re.M)
+    assert msg and "recover" in msg.group(1) and "確認できませんでした" in msg.group(1)
+    assert 'refuse("unverified")' in merge_ts

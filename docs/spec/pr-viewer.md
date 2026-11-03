@@ -222,13 +222,13 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 #### 統合を取り消す（巻き戻し。利用者が行う。手順は試験 `test_pr_viewer_merge_undo.py` が実 git で固定）
 
-統合は merge commit を develop の先頭へ進めるだけなので、**失うものが無く、元に戻せる**。戻す先は次で分かる: 統合の応答の `merge.targetOld`（統合前の develop）と `merge.commit`（統合コミット）、画面の「旧 → 新」の OID、レビュー記録の `merge_request.targetOid`（= `targetOld`）と `merge_result.doneOid`（= `commit`）、`git reflog show develop`（作業ツリーありのリポジトリ。bare は reflog が無いので、応答の OID を控える）。まず `git rev-parse <commit>^1` が `targetOld` に等しいことを確かめる。
+統合は merge commit を develop の先頭へ進めるだけなので、**履歴は復元できる**（手元の作業の保存は下の手順の前提しだい）。戻す先は次で分かる: 統合の応答の `merge.targetOld`（統合前の develop）と `merge.commit`（統合コミット）、画面の「旧 → 新」の OID、レビュー記録の `merge_request.targetOid`（= `targetOld`）と `merge_result.doneOid`（= `commit`）、`git reflog show develop`（作業ツリーありのリポジトリ。bare は reflog が無いので、応答の OID を控える）。まず `git rev-parse <commit>^1` が `targetOld` に等しいことを確かめる。
 
 | 状況 | 手順 |
 | --- | --- |
-| 未 push（一覧の「origin より N 件先」が残っている）で、統合の後に develop へ他のコミットが無い・develop を checkout している | `git status` で、統合を戻すと上書きされるファイルに手元の変更が無いことを確かめ、`git reset --keep <targetOld>`。`--hard` ではなく `--keep` を使う（手元の未コミットの変更と重なると、何も変えずに中止する）。無関係な未コミットの作業・未追跡・無視ファイルは残る |
+| 未 push と分かっていて（一覧の「origin より N 件先」は最後に取得した状態との比較で、**未 push の目安であって証拠ではない**。公開済みか不明なら下の revert を選ぶ）、統合の後に develop へ他のコミットが無い・develop を checkout している | 前提: **index に未コミットの変更が無い**（`git diff --cached --quiet`。`reset --keep` は worktree の変更は残すが **index の変更は保存しない**。stage 済みがあれば先にコミットか退避する）。`git status` で、統合を戻すと上書きされるファイルに手元の変更が無いことを確かめ、`git reset --keep <targetOld>`。`--hard` ではなく `--keep` を使う（重なると何も変えず中止する）。無関係な未コミットの worktree の作業・未追跡・無視ファイルは残る |
 | 同じで、develop をどの worktree も checkout していない | `git update-ref refs/heads/develop <targetOld> <統合コミット>`。末尾の期待値を必ず付ける（統合のあとに develop が進んでいれば、期待値が合わず何も変えない） |
-| push 済み、または統合の後に他のコミットがある | 履歴を巻き戻さず、`git revert -m 1 <統合コミット>`（第 1 親 = develop 側を残す）。統合前の tree へ戻す新しいコミットができる。**同じ枝をもう一度統合したいときは、その revert コミットを revert してから**でないと、変更が入らない（git の仕様） |
+| push 済み・公開済みか不明、または統合の後に他のコミットがある | 履歴を巻き戻さず、**develop を checkout している worktree で** `git revert -m 1 <統合コミット>`（第 1 親 = develop 側を残す。別の枝で実行するとその枝に取り消しができ、develop は戻らない）。**統合が導入した変更だけ**を取り消す新しいコミットができる。後続の変更は残り、重なると衝突しうる。**同じ枝をもう一度統合したいときは、その revert コミットを revert してから**でないと、変更が入らない（git の仕様） |
 | cleanup で枝を消した | `git branch <枝> <統合コミット>^2`（第 2 親 = feature の先頭）。worktree は `git worktree add <パス> <枝>` で作り直す。**削除された worktree の中の未追跡・無視ファイル（`.tmp` など）は戻らない** |
 
 これは利用者が自分の端末で行う手順で、エージェント（pi）に任せることは想定しない。復旧できない異常終了（状態ファイルが残った）は、取り消しではなく `recover`（CHG-0062 §3.5）。統合の結果を確認できなかった（`unverified`）ときも `recover` が「統合済み」と確かめて状態を解除する。

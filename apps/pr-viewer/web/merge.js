@@ -48,6 +48,21 @@
     function p(t) {
       d.nodes.push(h("p", { text: t }));
     }
+    if (c === "unverified") {
+      /* 反映を読めなかった。統合されたか不明で、状態ファイルが残っているので recover が必要（500 のまま専用の案内） */
+      d.reload = true;
+      p("統合の結果を確認できませんでした。統合されたかどうかは不明で、復旧（recover）が必要です。次の手順で確かめてください。");
+      d.nodes.push(
+        h(
+          "ol",
+          null,
+          RECOVER.map(function (t) {
+            return h("li", { text: t });
+          })
+        )
+      );
+      return d;
+    }
     if (!e || e.network || !c || status >= 500 || c === "merge_failed" || c === "internal") {
       d.reload = true;
       p(forPlan ? "統合の内容を取得できませんでした。" : UNKNOWN);
