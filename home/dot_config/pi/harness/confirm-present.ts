@@ -2,7 +2,7 @@
 // 選ばれた結果を、承認・拒否・時間切れ・取消・例外に分類するのは呼び出し側 (承認の意味は操作ごとに違うため)。
 //
 // node の型除去でそのまま動く書き方だけを使う (enum・namespace は使わない)。
-// see docs/change/0055-async-approval.md
+// see docs/change/closed/0055-async-approval.md
 
 import { showTextViewer } from "./text-viewer.ts";
 

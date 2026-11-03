@@ -2,7 +2,7 @@
 //
 //   node test/agents/pi/confirm_present_driver.mjs
 //
-// see docs/change/0055-async-approval.md
+// see docs/change/closed/0055-async-approval.md
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 

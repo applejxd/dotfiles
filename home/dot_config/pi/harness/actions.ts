@@ -259,11 +259,11 @@ function deferError(cwd: string, snap: Snapshot, why: string, signal: AbortSigna
 	const saved = savePendingSnapshot(cwd, snap);
 	if (!saved.ok) {
 		return notApproved(
-			`${why}。元の操作は未実行で、内容も退避できなかった (${saved.reason})。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「保留したコミット」の再作成が要ると報告して終える${where}`,
+			`${why}。元の操作は未実行で、内容も退避できなかった (${saved.reason})。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (退避は /pending で確認・破棄するだけで、承認して実行する経路は無い)。任せられる作業が無ければ、「保留したコミット」の再作成が要ると報告して終える${where}`,
 		);
 	}
 	return notApproved(
-		`${why}。元の操作は未実行。内容は ${saved.ref} (${saved.short}) に退避した。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「保留したコミット」として報告して終える (${dir ? `対象のリポジトリ: ${dir}。/pending には出ない。そのリポジトリの refs/pi/pending/ にある` : "利用者は /pending で確認・破棄できる"})`,
+		`${why}。元の操作は未実行。内容は ${saved.ref} (${saved.short}) に退避した。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (退避は /pending で確認・破棄するだけで、承認して実行する経路は無い)。任せられる作業が無ければ、「保留したコミット」として報告して終える (${dir ? `対象のリポジトリ: ${dir}。/pending には出ない。そのリポジトリの refs/pi/pending/ にある` : "利用者は /pending で確認・破棄できる"})`,
 	);
 }
 
