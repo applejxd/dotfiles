@@ -411,21 +411,8 @@ def test_guide_deny_is_not_loosened_by_bypass(env):  # noqa: F811
 
 
 @needs_node
-def test_tool_text_opts_change_only_the_bash_description(table):
-    for tool, v in table["textsOpts"].items():
-        assert v["none"] == v["off"] == v["empty"], tool
-        if tool == "bash":
-            continue
-        assert v["on"] == v["none"], tool
-    bash = table["textsOpts"]["bash"]
-    assert bash["none"] == table["texts"]["bash"]
-    on, base = bash["on"], bash["none"]
-    # 省略・偽のときは、統合の案内を含まない (同じ関数同士の比較だけでは、常に追記する壊れ方を見逃す)
-    assert "git_integrate" not in base["description"] and "/pending" not in base["description"]
-    assert on["description"] != base["description"]
-    assert "git_integrate" in on["description"] and "git flow feature finish" in on["description"]
-    # 利用者が明示したときは、そのとおり実行する (実機 E2: 「finish を使って」と頭んでも、モデルが git_integrate を選び直していた)
-    assert "explicitly asks" in on["description"] and "run it as asked" in on["description"]
-    assert on["description"].startswith(base["description"])
-    assert on["promptSnippet"] == base["promptSnippet"]
-    assert on["promptGuidelines"] == base["promptGuidelines"]
+def test_tool_text_has_no_integrate_guidance(table):
+    # git_integrate の撤去 (CHG-0062 の A5) 後は、どの道具の説明にも統合の案内が入らない
+    for tool, v in table["texts"].items():
+        text = json.dumps(v, ensure_ascii=False) if v else ""
+        assert "git_integrate" not in text and "/pending" not in text, tool

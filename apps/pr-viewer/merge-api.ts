@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import type { IncomingHttpHeaders } from "node:http";
-import { ApiError, git, gitCapped } from "./git-view.ts";
+import { ApiError, git } from "./git-view.ts";
 import type { Repo } from "./git-view.ts";
 import { executeMerge, planMerge } from "./merge.ts";
 import type { Cleanup, Refusal } from "./merge.ts";
@@ -22,8 +22,6 @@ const MAX_CONFLICTS = 100;
 const MAX_RULES_BYTES = 1024 * 1024;
 const MAX_RISK_PATTERNS = 200;
 const MAX_PATTERN_CHARS = 200;
-const MAX_PENDING_SCAN = 200;
-const MAX_RECORD_BYTES = 64 * 1024;
 const APP_PREFIX = "apps/pr-viewer/";
 
 const bad = (code: string, message: string): ApiError => new ApiError(400, code, message);
@@ -74,78 +72,10 @@ async function gated<T>(repo: Repo, fn: () => Promise<T>): Promise<T> {
 	}
 }
 
-// ---- 旧経路（/pending）との共存 ----
+// ---- 統合の拒否理由（blockers） ----
 
+// 旧経路（/pending）の撤去で、拒否する理由は無くなった。API の形（blockers）は変えないので、空の配列を返す
 type Blocker = { code: string; message: string };
-const BLOCK_TEXT: Record<string, string> = {
-	legacy_pending: "この PR には旧経路の保留があります。/pending で承認または破棄してから統合してください。",
-	legacy_lock: "旧経路（/pending）の統合ロックが残っています。実行中でないことを確かめて /pending unlock で外してください。",
-	legacy_running: "旧経路で統合を実行中、または中断したままです。/pending で状態を確認してください。",
-	legacy_unreadable: "旧経路の状態を確認できません。",
-};
-
-/** 旧経路が統合を始めている・始めようとしているか。拒否のためだけに読む（承認の根拠にしない）。 */
-async function legacyBlockers(repo: Repo, branch: string): Promise<Blocker[]> {
-	const out: Blocker[] = [];
-	const add = (code: string): void => {
-		if (!out.some((b) => b.code === code)) out.push({ code, message: BLOCK_TEXT[code] });
-	};
-	for (const [prefix, code] of [
-		["refs/pi/lock/", "legacy_lock"],
-		["refs/pi/running/", "legacy_running"],
-	] as const) {
-		const r = await git(repo, ["for-each-ref", "--count=1", "--format=%(refname)", prefix], true);
-		if (r.code !== 0) add("legacy_unreadable");
-		else if (r.out.trim() !== "") add(code);
-	}
-	const list = await git(repo, ["for-each-ref", `--count=${MAX_PENDING_SCAN + 1}`, "--format=%(refname)", "refs/pi/pending/"], true);
-	if (list.code !== 0) {
-		add("legacy_unreadable");
-		return out;
-	}
-	const refs = list.out.split("\n").filter((l) => l.trim() !== "");
-	if (refs.length > MAX_PENDING_SCAN) add("legacy_unreadable"); // 多すぎて全部は見られない。見えないものを無いことにしない
-	for (const ref of refs.slice(0, MAX_PENDING_SCAN)) {
-		// 読めなかったものを「無い」にしない: 構造を確かめられたとき（record.json が無い・JSON として不正）だけ無視する。
-		// I/O の失敗・時間切れ・大きすぎる記録・型の違う ref は legacy_unreadable（利用者が /pending で片付ける）
-		if (!/^refs\/pi\/pending\/[A-Za-z0-9._-]+$/.test(ref)) {
-			add("legacy_unreadable");
-			continue;
-		}
-		let names: string[];
-		try {
-			const ls = await git(repo, ["ls-tree", "--name-only", "-z", ref], true);
-			if (ls.code !== 0) {
-				add("legacy_unreadable");
-				continue;
-			}
-			names = ls.out.split("\0");
-		} catch {
-			add("legacy_unreadable");
-			continue;
-		}
-		if (!names.includes("record.json")) continue; // 新形式の記録でない（旧形式の退避など）
-		let r: { code: number; out: string; truncated: boolean };
-		try {
-			r = await gitCapped(repo, ["cat-file", "blob", `${ref}:record.json`], MAX_RECORD_BYTES);
-		} catch {
-			add("legacy_unreadable");
-			continue;
-		}
-		if (r.code !== 0 || r.truncated) {
-			add("legacy_unreadable");
-			continue;
-		}
-		try {
-			const rec = JSON.parse(r.out) as { action?: unknown; params?: { source?: unknown } };
-			const src = rec?.params?.source;
-			if (rec?.action === "git_integrate" && typeof src === "string" && src.replace(/^refs\/heads\//, "") === branch) add("legacy_pending");
-		} catch {
-			// JSON として不正な記録は、旧経路の実行器も読めないので無視する
-		}
-	}
-	return out;
-}
 
 // ---- リスクのあるパス（表示用） ----
 
@@ -279,7 +209,7 @@ function diag(entry: Record<string, unknown>): void {
 export async function mergePlan(ctx: PrCtx, pr: MergePr, body: Record<string, unknown>, env: MergeEnv): Promise<PostResult> {
 	if (Object.keys(body).length !== 0) throw bad("bad_request", "リクエストの形が正しくありません。");
 	return await gated(ctx.repo, async () => {
-		const blockers = await legacyBlockers(ctx.repo, ctx.branch);
+		const blockers: Blocker[] = [];
 		// plan はメッセージを使わない（検査を通すための仮の値 "plan" を渡す）
 		const r = await planMerge({ repo: ctx.repo.gitDir, source: ctx.branch, target: ctx.target, message: "plan" });
 		const hints = await reviewHints(ctx);
@@ -343,11 +273,6 @@ export async function mergeExecute(ctx: PrCtx, body: Record<string, unknown>, en
 	return await gated(ctx.repo, async () => {
 		const req = randomUUID();
 		const who = { req, repo: ctx.repo.repoId, pr: ctx.prKey, expect: input.expect };
-		const blockers = await legacyBlockers(ctx.repo, ctx.branch);
-		if (blockers.length > 0) {
-			diag({ ...who, result: blockers[0].code, commit: null, recorded: false });
-			throw new ApiError(409, blockers[0].code, blockers[0].message);
-		}
 		const deps = env.testDelayMs > 0 ? { beforeAdvance: () => new Promise<void>((done) => setTimeout(done, env.testDelayMs)) } : undefined;
 		const r = await executeMerge(
 			{

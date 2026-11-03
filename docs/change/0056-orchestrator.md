@@ -1,9 +1,9 @@
 # CHG-0056: 並列実装の配車・関門・承認パケット・標的レビュー（利用者が本質的な承認に集中できるようにする）
 
 - **状態**: Exploring
-- **実装の前提**: 実装は P8c（[CHG-0055](0055-async-approval.md)）の後。段 A1 の関門だけ完了
+- **実装の前提**: 実装は P8c（[CHG-0055](closed/0055-async-approval.md)）の後。段 A1 の関門だけ完了
 - **更新日**: 2026-11-01
-- **基準**: pi 1.4.0、[CHG-0045](0045-orchestrator-parent.md)（親をオーケストレーターに）・[CHG-0053](0053-worktree-integration-gate.md)（統合ゲート）・[CHG-0055](0055-async-approval.md)（非同期承認）の上。方針は [ADR-0022](../adr/0022-containment-first-minimal-approvals.md)・[ADR-0023](../adr/0023-pending-approval.md)
+- **基準**: pi 1.4.0、[CHG-0045](0045-orchestrator-parent.md)（親をオーケストレーターに）・[CHG-0053](0053-worktree-integration-gate.md)（統合ゲート）・[CHG-0055](closed/0055-async-approval.md)（非同期承認）の上。方針は [ADR-0022](../adr/0022-containment-first-minimal-approvals.md)・[ADR-0023](../adr/0023-pending-approval.md)
 
 ## 1. 要約と状態
 
@@ -194,7 +194,7 @@ plan の元の順序（A0 → A1 → A2 → B0 → B1 → B2 → C）は、C（�
 - [CHG-0045](0045-orchestrator-parent.md): 親をオーケストレーターに寄せる（前段）
 - [CHG-0053](0053-worktree-integration-gate.md): 自由区と統合ゲート
 - [CHG-0054](0054-containment-and-async-approval.md): 封じ込めと非同期承認の上位
-- [CHG-0055](0055-async-approval.md): 保留・承認の実装。P8c・P9 が前提
+- [CHG-0055](closed/0055-async-approval.md): 保留・承認の実装。P8c・P9 が前提
 - [ADR-0022](../adr/0022-containment-first-minimal-approvals.md)・[ADR-0023](../adr/0023-pending-approval.md)
 
 ## 12. 将来の方向（記録のみ。計画はしない）: PR 風のローカルの一覧

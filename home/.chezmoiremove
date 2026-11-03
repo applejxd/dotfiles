@@ -89,3 +89,20 @@
 .config/pi/harness/gitstate.ts
 .config/pi/harness/gitflow-allow.ts
 .config/pi/harness/judge/gitflow_gate.ts
+
+# 2026-11: PR レビューの受信箱 (pr-inbox.ts) を撤去した (CHG-0062 の A5)。配備済みの旧い実装を消す。
+.config/pi/harness/pr-inbox.ts
+
+# 2026-11: 旧い統合経路 (git_integrate・非同期承認・排他ロック) を撤去した (CHG-0062 の A5)。配備済みの旧い実装を消す。
+# 同名のファイルがソースに残ると chezmoi apply が失敗するので、削除と同じ作業でここへ足す。
+.config/pi/harness/pending-ops.ts
+.config/pi/harness/pending-approve.ts
+.config/pi/harness/pending-pick.ts
+.config/pi/harness/pending-owner.ts
+.config/pi/harness/pending-adapters.ts
+.config/pi/harness/pending-request.ts
+.config/pi/harness/native-action.ts
+.config/pi/harness/integrate-action.ts
+.config/pi/harness/integrate-exec.ts
+.config/pi/harness/integrate-plan.ts
+.config/pi/harness/exclusive-lock.ts

@@ -81,7 +81,7 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
   - **不在**: 時間切れのあと、利用者の入力（`input` の `source` が `extension` 以外。`/pending` も含む）が無い間は、待ち列の中で、次の確認を出さずに退避する。入力の世代で、待機中の入力のあとの時間切れが不在を立てないようにする。`session_start` で初期化
   - 退避は**独立**した commit（親は表示時点の HEAD。ほかの退避を親にしない。コミットが無いリポジトリでは親なし）。出自は末尾の trailer（`Pi-Pending-Request`・`-Branch`・`-Head`）。保存・破棄の内部の git は、**hook を無効**（`core.hooksPath=/dev/null`）にして実行する
   - 確認画面には「N 分応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外」と出す。**編集して承認の `editor`・拒否の理由の `input` には期限が無い**（対象外）
-  - **`/pending`**（利用者専用。モデルは呼べない）: `list`（新しい順）・`show <ref>`（差分の本文まで）・`drop <ref>`（到達用の ref を外す。オブジェクトは `git gc` まで残る。名前空間の外・symbolic ref は拒否。`--no-deref`）。取り込みは未実装（CHG-0046 の段 4）。新形式の保留（非同期承認。`git_integrate`）の `/pending approve` などは、[保留（非同期承認）](pi-pending.md)（本番では無効）。**片付けは、ハーネスが自動で行う**（`reconcilePending`。モデルは消せない）: 同じ tree のコミットが `HEAD` の履歴（新しい側の 500 件）にある（取り込み済み）・同じ tree と起点の退避がより新しくある（重複）・30 日より古い、のどれかを、`git_commit` の成功の直後と `session_start` で消す。内容が変わった途中の状態は、期限まで残る
+  - **`/pending`**（利用者専用。モデルは呼べない）: `list`（新しい順）・`show <ref>`（差分の本文まで）・`drop <ref>`（到達用の ref を外す。オブジェクトは `git gc` まで残る。名前空間の外・symbolic ref は拒否。`--no-deref`）。取り込みは未実装（CHG-0046 の段 4）。新形式の保留（`git_integrate`・`/pending approve` など）は撤去済み（[履歴](pi-pending.md)）。**片付けは、ハーネスが自動で行う**（`reconcilePending`。モデルは消せない）: 同じ tree のコミットが `HEAD` の履歴（新しい側の 500 件）にある（取り込み済み）・同じ tree と起点の退避がより新しくある（重複）・30 日より古い、のどれかを、`git_commit` の成功の直後と `session_start` で消す。内容が変わった途中の状態は、期限まで残る
 - **撤去した操作と gate（CHG-0050）**: 次は 2026-10-31 に撤去した（経緯は [CHG-0047](../../change/0047-gitflow.md)・[CHG-0049](../../change/0049-gitflow-convention-guard.md) と [CHG-0050](../../change/0050-slim-guarded-action.md)、理由は [ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)）。
   - `gitflow_feature_start` / `commit` / `finish` / `discard` の 4 操作と、その確認なしの許可リスト、実効設定の安全プロファイル、`git flow` の bash 拒否（`shell_deny`・`replaces`）
   - feature の worktree の中の `git_commit` の確認なし（WIP の省略）。`git_commit` は、どこから呼んでも**常に確認する**
@@ -103,7 +103,7 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 **保護ブランチは変えられない**（全体設定 `[pi.integrate] protected_refs` のまま）。リポジトリ内のファイルはエージェントが書き換えられるので、保護を弱める手段を置かない。
 利用者向けの書き方は [pi-manual.md の 7.6](../pi-manual.md#76-プロジェクトごとの設定pijson)。
 
-- 実装の状況: 解析・検査・ローダー、`git_integrate`・自由区・`/board`・プレビューへの配線、`risk_paths`、分類器の穴 2 件はすべて取り込み済み（2026-11-02）。**実機確認（架空の一時リポジトリ）は未実施**。確認省略を実際の `pi.json` で配備するのは、その後（どのリポジトリにも実際の `pi.json` はまだ無い）
+- 実装の状況: 解析・検査・ローダー、自由区・`/board`・プレビューへの配線、`risk_paths`、分類器の穴 2 件はすべて取り込み済み（2026-11-02）。**実機確認（架空の一時リポジトリ）は未実施**。確認省略を実際の `pi.json` で配備するのは、その後（どのリポジトリにも実際の `pi.json` はまだ無い）
 
 #### 形
 
@@ -119,7 +119,7 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 
 | キー | 意味 | 省略したときの既定 |
 | --- | --- | --- |
-| `target` | `git_integrate` の統合先 | `[pi.integrate] target` |
+| `target` | 統合先（`/board` の比較先・`git flow finish` のプレビュー） | `[pi.integrate] target` |
 | `source_prefixes` | 統合元として許す接頭辞 | `["feature/", "bugfix/"]` |
 | `free_zone_prefixes` | 自由区（確認の省略）の接頭辞 | `["feature/"]` |
 
@@ -182,8 +182,6 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 
 | 場所 | 使う値 | 読む HEAD | 読めないとき |
 | --- | --- | --- | --- |
-| `git_integrate` の要求 | `target`・`source_prefixes` | 要求した pi の cwd | 全体の既定 |
-| `git_integrate` の承認・再検査 | 同上 | **承認する pi の cwd（統合先の主 worktree）** | 全体の既定 |
 | 自由区の判定（`freezone.ts`） | `free_zone_prefixes` | **主 worktree（git の common dir）** | **自由区にしない** |
 | raw `git flow … finish` のプレビュー | `target`・`source_prefixes` | **cwd と主 worktree の両方** | **「確認できない」** |
 | `/board` | `source_prefixes`・比較先の `target` | cwd | 全体の既定 |
@@ -193,9 +191,8 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 - raw `git flow … finish` のプレビュー: cwd の HEAD と主 worktree の HEAD の**両方**を読み、どちらかが `target` か `source_prefixes` を既定から変えている・読めない・common dir を得られないときは、「統合の内容は確認できない」と出す（別のブランチの差分を見せない）。`free_zone_prefixes` だけの変更では止めない
 - `/board`: 実効の `source_prefixes` で feature を拾う。**比較先は実効の `target`**（設定を読んだときは、設定が無い・無効でも、全体の既定か `pi.json` の値）。設定が有効で既定と違うとき・無効のときだけ、1 行を足す（`pi.json: 有効 (統合元 …)`・`pi.json: 無効 (コード)`）
 - **execute 直前の再判定（S7）**: tool_call で決めた判定を再利用するときも、execute 直前に `tightenIntegration` をかけ直す（`index.ts`）。tool_call の後に主設定が変わって自由区でなくなっても、古い許可で実行しない。拒否・必須確認はそのまま、許可だけを再判定する。RPC の回帰試験がある（`test_s7_the_integration_gate_is_rechecked_just_before_execute`）
-- `git_integrate` の承認画面・後片付けの確認: [pi-pending.md](pi-pending.md#プロジェクト設定pijsonと承認画面)
 - **保護・分類器・統合ゲート（`judge/*`・`integration-gate.ts`）は変えない**。保護は全体のまま
-- `.agents/config/pi.json` の変更は、`[pi.integrate] risk_paths` に入れると、統合の承認画面で「リスクのあるパス」として見える（[pi-decide.md](pi-decide.md)）
+- `.agents/config/pi.json` の変更は、`[pi.integrate] risk_paths` に入れると、PR ビューアの統合画面で「リスクのあるパス」として見える（[pi-decide.md](pi-decide.md)）
 
 #### 自由区の fail closed
 
@@ -229,8 +226,6 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 - 主 worktree が detached・非保護ブランチ上のとき、自由区が効かない（C2 の例外）
 - 独立 review は 4 回で止めた。残りは既知の制限として扱う
 
-- 承認画面の summary は、統合先と接頭辞が同じ行にある。統合先の名前が長いと接頭辞が落ちる（全文表示には残る）
-- 古い保留の記録（`profileBlob` が無い）で、今の `pi.json` があると「要求時と違う」と出る（安全側の警告）
 - 任意の外部プロセスによる HEAD の更新との競合を、完全に原子的に防ぐ保証ではない（既存の契約と同じ）
 - **未確認**: Windows。実機（`pis`・実 TUI）での見え方
 - 試験: `test_pi_integrate_profile.py`（純関数）・`test_pi_integrate_profile_load.py`（実 git の一時リポジトリ）・`test_pi_freezone_profile.py`（自由区・プレビュー・`/board`・S7。実 git と RPC）
@@ -300,7 +295,7 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 | --- | --- |
 | 問題 | 圧縮（`/compact`。約 5 分）の最中に、背景ジョブ・子の完了通知（`triggerTurn: true` の `pi.sendMessage`）が届くと、通知が新しい発言を始め、圧縮が `Compaction cancelled` で中断される。利用者の入力には「圧縮中は送れない」確認があるが、`sendMessage` の経路には無い（pi 1.4.0 の `sendCustomMessage`） |
 | 仕組み | 状態 `compacting` を、`session_before_compact` で true、`session_compact` / `session_compact_failed` で false にする。true の間の配信は保留し、false になったときに**登録順**に実行する（1 件が例外でも残りを実行）。圧縮していないときは即時で、挙動は変わらない。成功の `session_compact` は、pi が圧縮の状態を解く**前**に届く（失敗は解いた後）ので、成功のときだけ 1 tick 遅らせて解除する |
-| 対象（harness） | `pending-result`（保留した操作の結果）・`child-finished`（子 1 件・並列のまとめ）。`index.ts` の `createCompactDefer`。配信の失敗の扱い（`warnUser`）は保留した関数の中にあるので変わらない |
+| 対象（harness） | `child-finished`（子 1 件・並列のまとめ）。`index.ts` の `createCompactDefer`。配信の失敗の扱い（`warnUser`）は保留した関数の中にあるので変わらない |
 | 対象（activity） | バックグラウンドジョブの `flush`。作業中（`busy`）と同じく `compacting` でも溜め、終わりに `pending` が残り、まとめる窓のタイマーが無ければ 1 回だけまとめて配信する |
 | 安全弁 | 終わりのイベントが来ない異常でも通知が永遠に出ないことを防ぐため、開始から 20 分（`COMPACT_DEFER_MAX_MS`）で自動的に false にして保留を流す。タイマーは `unref`。圧縮が続けて始まったらタイマーを張り直し、保留は残す。`session_shutdown` でタイマーを止め、保留は捨てる |
 | 既知の制限 | ① 開始イベントより前の数ミリ秒の窓では保留できない ② `ctx.isIdle()` は圧縮中も false なので、`isIdle` での判定はできない ③ 通知を保留しても、別経路の中断（利用者が圧縮中に Esc を押す、など）は防げない |

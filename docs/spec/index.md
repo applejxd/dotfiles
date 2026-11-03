@@ -78,7 +78,7 @@
 | [判定 API（`decide`）](guard/pi-decide.md) | pi のガードが呼ぶ CLI 非依存の判定器。入力と応答、`source`、評価の順番、confirm、役割（`[pi.profiles]`）、`check_bash.py` との等価の試験 |
 | [pi の拡張と補助機能](guard/pi-extensions.md) | 拡張の入れ方の方針、`guarded_action`、ツールの拡張、圧縮、`git commit` の確認、整形、`/fleet`、stepback、キーバインド、Orca・Zed |
 | [pi の子エージェント](guard/pi-subagents.md) | `guarded_task` の起動と役割、`review` への依頼、job、子の操作、worktree 隔離、Windows の `task` |
-| [保留（非同期承認）](guard/pi-pending.md) | 確認が取れないとき操作を保留し、あとで `/pending approve` で実行する。キルスイッチ、流れ、ID を打たない選び方、排他・停止確認、結果 |
+| [保留（撤去済み・履歴）](guard/pi-pending.md) | 非同期承認（`/pending approve`・`git_integrate`）の撤去の事実、残る `/pending`、残骸 ref の掃除 |
 | [ローカル PR ビューアの設計](pr-viewer.md) | PR 風のレビュー画面（別アプリ + git の ref + 薄い pi 拡張）。ref のスキーマ v1、状態の導出、配送、アプリの安全規則、ペアリング・承認の指示（未実装）、試験、既知の制限 |
 | [オーケストレーションと並列作業の機能一覧](orchestration.md) | 親子の分担・子の起動と制御・役割と権限・gitflow と worktree・承認と保留・検査・記録を、カテゴリ別の表にした総覧（状態と正本つき）。未実装は案件へのリンク |
 | [pis のサンドボックス（pi の側）](guard/pi-sandbox.md) | agent 置き場・セッション・認証、プロキシ必須の環境での通信、拒否リスト型の通信、緩和のゲート |

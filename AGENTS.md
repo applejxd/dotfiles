@@ -168,13 +168,13 @@ worker は実行せず、報告の「次の候補」に書く（worker は sandb
 
 <!-- child:worker -->
 
-- worker はコミットしない。親が結果を根拠で確かめ、`git_commit`（`dir` に worktree）→ `git flow feature finish` で取り込む
+- worker はコミットしない。親が結果を根拠で確かめ、`git_commit`（`dir` に worktree）→ `guarded_pr_summary` で `mergeMessage` の下書きを出す → 利用者が PR ビューアの「統合する」を押す。AI は `finish`・`merge` を実行しない
 
 <!-- /child -->
 
 <!-- parent -->
 
-- **`git flow feature finish`・`git merge` など、保護ブランチへの統合は、bypass でも必須確認**（承認画面が出る。[CHG-0053](docs/change/0053-worktree-integration-gate.md)）。確認を出して利用者に見せ、承認を待つ
+- **`git flow feature finish`・`git merge` など、保護ブランチへの統合は、利用者が PR ビューアの「統合する」を押す。AI が実行すると、bypass でも必須確認**（承認画面が出る。[CHG-0053](docs/change/0053-worktree-integration-gate.md)）
 - 共有されやすいファイル（`common.toml.tmpl`・golden・docs の索引）は、同時に複数の worker に触らせない。衝突するなら、親が順に取り込む
 
 <!-- /parent -->
@@ -188,7 +188,7 @@ worker は実行せず、報告の「次の候補」に書く（worker は sandb
 
 <!-- parent -->
 
-- **pi の会話（セッション）を複数並行して使うときは、取り込み（`finish`・`git merge`）を窓口の 1 会話だけにする。**
+- **pi の会話（セッション）を複数並行して使うときは、取り込み（利用者の「統合する」の押下）の窓口を 1 つにする。**
   ほかの会話は feature のコミットまで。全件検査は排他ロックが自動で 1 本ずつにする。
   規則は [複数の会話を並行して使う運用](docs/spec/guard/pi-subagents.md#複数の会話を並行して使う運用)
 - 子の結果は、パスと行・コマンドの出力で確かめてから採用する（子は「通った」を実行できないことが多い）

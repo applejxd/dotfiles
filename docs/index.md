@@ -69,11 +69,11 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 隔離起動の境界内で読めない・書けない原因を調べる | [境界の組み立ての規則](spec/sandbox/fence-boundary.md#組み立ての規則) |
 | sandbox で何ができるか調べる | [sandbox機能の包括調査](research/agents/sandbox-capabilities.md) |
 | 確認（承認）と封じ込めの設計方針を知る・変える（ask 層と bypass モードの廃止、非同期の承認、複数エージェントの束ね） | [ADR-0022](adr/0022-containment-first-minimal-approvals.md)、[CHG-0054](change/0054-containment-and-async-approval.md)、[調査記録 AC1](research/agents/approval-containment-survey.md) |
-| 確認が取れない操作の保留と、利用者が後から承認して実行する仕組み（非同期の承認）を知る・変える | [ADR-0023](adr/0023-pending-approval.md)、[CHG-0055](change/0055-async-approval.md) |
+| 確認が取れない操作の保留と、利用者が後から承認して実行する仕組み（非同期の承認。**撤去済み**。統合は PR ビューアの押下へ）を知る | [ADR-0024](adr/0024-human-press-merges-in-app.md)、[ADR-0023](adr/0023-pending-approval.md)（Superseded）、[CHG-0055](change/closed/0055-async-approval.md) |
 | 並列実装の配車・関門・承認パケット・標的レビュー（利用者が本質的な承認に集中する自動化）を知る・変える | [CHG-0056](change/0056-orchestrator.md) |
-| 保留の承認を、巡回・一括で少ない操作にする（見ずに承認することなく） | [CHG-0058](change/0058-batch-approval.md) |
+| 保留の承認を、巡回・一括で少ない操作にする設計（見送り・撤去済み）を知る | [CHG-0058](change/closed/0058-batch-approval.md) |
 | GitHub をリモートに持たない開発向けの、PR 風のローカルのレビュー画面（ref のスキーマ・配送・アプリの安全規則・承認の指示）を知る・変える | [ローカル PR ビューアの設計](spec/pr-viewer.md)、[CHG-0060](change/0060-local-pr-viewer.md) |
-| PR ビューアと pi の非同期のメッセージ・キュー（受信箱・実行中のキュー・自動起動・承認をアプリで閉じる。通信は ref だけ）を知る・変える | [CHG-0061](change/0061-pr-inbox.md) |
+| PR ビューアと pi の非同期のメッセージ・キュー（受信箱。見送り・撤去済み）の経緯を知る | [CHG-0061](change/closed/0061-pr-inbox.md) |
 | PR の管理・統合を、人が操作するアプリへ移す（保留・受信箱の撤去、merge commit、押下契機の `pis -p`、pi を通常のコーディングへ戻す）を知る・変える | [CHG-0062](change/0062-pr-hub-simplify.md) |
 | 親と子で文脈（AGENTS.md）を分ける（子に必要な規則だけを渡す） | [CHG-0059](change/closed/0059-child-context.md) |
 | フルガードの統合先・作業ブランチの接頭辞を、リポジトリ内の `pi.json` でプロジェクトごとに変える | [CHG-0057](change/0057-per-project-integrate.md)、[利用者マニュアル 7.6](spec/pi-manual.md#76-プロジェクトごとの設定pijson) |

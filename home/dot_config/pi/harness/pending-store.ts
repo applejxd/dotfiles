@@ -189,7 +189,7 @@ export function reconcilePending(cwd: string, opts: { maxAgeDays?: number; now?:
 	const seen = new Set<string>();
 	const dropped: string[] = [];
 	for (const e of entries) {
-		// 新形式 (記録・試行・結果) と、形式が不正なものは、旧形式の規則で消さない (期限は pending-ops.ts の reconcileOps)
+		// 新形式 (記録・試行・結果) と、形式が不正なものは、旧形式の規則で消さない (読み手は撤去済み。残骸は利用者が掃除する)
 		if (!isLegacyEntry(cwd, e.oid)) continue;
 		const tree = git(cwd, ["rev-parse", `${e.oid}^{tree}`]);
 		if (!tree.ok || !tree.out) continue;

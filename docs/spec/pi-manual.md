@@ -6,8 +6,8 @@
 > **状態（2026-11-01 時点）**
 >
 > - 記載した既定値は、リポジトリに同梱された設定の値
-> - `[pi.pending]`・`[pi.integrate]`（保留の承認と `git_integrate`）は**同梱で有効**（2026-11-02 に有効化）。実機確認 E1・E2 は合格、E3〜E5 は確認待ち（[CHG-0055](../change/0055-async-approval.md)）
-> - 反映は `chezmoi apply` と pi の再起動の後（キルスイッチは `false` で戻せる）
+> - 保留の承認（`/pending approve`・`git_integrate`）は撤去済み。統合は PR ビューアの「統合する」ボタン（[CHG-0062](../change/0062-pr-hub-simplify.md)、履歴は [guard/pi-pending.md](guard/pi-pending.md)）
+> - 反映は `chezmoi apply` と pi の再起動の後
 
 ## 早見（1 画面）
 
@@ -24,7 +24,7 @@
 
 | コマンド | 動作（→ §2, §4） |
 | --- | --- |
-| `/board` / `/pending` | 盤面の表示 / 保留の一覧・表示・破棄・復旧 |
+| `/board` / `/pending` | 盤面の表示 / 退避したコミットの一覧・表示・破棄 |
 | `/bypass [on\|off]` | ask 判定の確認省略を切替（実行中の子は停止） |
 | `/orchestrate [on\|off\|status]` | 親の作業ツールを隠して計画・判断・委譲へ絞る |
 | `/plan` | 計画モードの切替（書き込み・実行ツールを外す） |
@@ -48,7 +48,7 @@
 | --- | --- |
 | 事前検査に落ちる / 読めない | `pis --check` で確認 / `PIS_EXTRA_READ` や `[pi.sandbox] read` で追加 |
 | 子が起動できない | 同時上限 4 件・役割の `task` 有無・`/plan` 制限・ToDo ID 指定を確認 |
-| 保留が増えた / 承認できない | `/pending list` と `drop` で整理（既定 `[pi.pending] enabled = true`） |
+| 退避したコミットが増えた | `/pending list` と `drop` で整理 |
 | `chezmoi diff` が全部 new file | サンドボックス外で実行する（内側ではホームが不可視 → §8） |
 | ガード自体が故障した | 復旧専用で `pi -ne --tools read,bash,edit,write`（保護なし → §9） |
 
@@ -122,7 +122,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `🧭 orchestrate` | orchestrate が ON | ON の間 |
 | `🔒 sandbox` | サンドボックスの内側で実測が通った | カナリア検査に通ったとき |
 | `⚠ no sandbox` | サンドボックスなし | `pis --no-sandbox` |
-| `📥 保留 N 件` | 保留（退避）した操作が N 件ある | 1 件以上 |
+| `📥 保留 N 件` | 退避した（旧形式の）コミットが N 件ある | 1 件以上 |
 | `📌 完了/総数 ▶ 進行中` | todo の進捗。全部 done なら `✅ 完了/総数` | 項目があるとき（中止は数えない） |
 | `⏸ plan` | 計画モードが ON | ON の間 |
 | `📝<N>t/s <T>s` | 直近のモデル呼び出しの速度（`~` は概算） | 呼び出し後。子では出ない |
@@ -132,7 +132,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 
 ### 3.2 通知と確認画面
 
-- 作業が終わって入力待ちになったとき、確認画面を出す前、`ask` の前、保留の保存時に、端末の BEL が鳴る（TUI のとき）。
+- 作業が終わって入力待ちになったとき、確認画面を出す前、`ask` の前に、端末の BEL が鳴る（TUI のとき）。
 - 起動時に「フルガードの判定の外で動きうるものがあります: …」と警告が出ることがある（`mcp.json` のサーバや、作業先の `.pi/` の拡張など）。
 - 通常の確認画面は「実行してよいですか？」（コマンドと理由を表示）。
 - bypass でも出る確認の見出し:
@@ -161,11 +161,11 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `/bypass [on\|off]` | bypass の切り替え。引数なしは反転 | ON にするときだけ確認画面が出る。deny・confirm・サンドボックスは有効のまま。切り替えると動いている子は全部止まる。UI が無いと ON にできない |
 | `/orchestrate [on\|off\|status]` | 親を計画・判断・委譲に絞る。引数なしは `status` | 作業ツール（bash・edit・write・bg_*・MCP）を隠す。子・Windows・`[pi.orchestrate]` が無い・`task` を持たない役割では使えない。`/reload` を跨いで保つ |
 | `/plan` | 計画モードの切り替え | 残るツールは read / grep / find / ls / todo / task / ask。計画を番号付きで返すと「実行する / 計画のまま続ける / 計画を直す」を尋ねる |
-| `/board` | 盤面（読み取り専用） | 要対応、feature ⇄ worktree、保留、子、隔離 worker、モード・bg の 6 節。モード行は `bypass` / `orchestrate` / `sandbox` の状態 |
+| `/board` | 盤面（読み取り専用） | feature ⇄ worktree、保留（旧形式の退避）、子、隔離 worker、モード・bg の 5 節。モード行は `bypass` / `orchestrate` / `sandbox` の状態 |
 | `/agents` | 動いている子の一覧（状態・経過・最後のツール・使用量） | 同じ cwd と役割の子だけ |
 | `/agent <agent> <依頼>` | 子を直接起動する | `agent` は `explore` / `review` / `plan` / `commit` / `worker`。結果はチャットに出る（モデルのターンは起こさない） |
 | `/worktrees [show\|collect\|discard <jobId>\|unlock]` | 隔離 worktree の一覧・回収のやり直し・破棄 | `collect` と `discard` は確認あり。`unlock` は古いロックの解除 |
-| `/pending [list\|show\|approve\|resolve\|drop\|unlock\|log]` | 保留した操作の扱い | 引数なしの TUI は候補から選んで進む。`<id>` は末尾 3 桁以上でよい。後述 |
+| `/pending [list\|show\|drop]` | 退避したコミット（旧形式）の扱い | 引数なしは `list`。後述 |
 | `/todos [tidy\|clear]` | タスクリストの表示 | `tidy` は完了・中止を消す。`clear` は全部消す |
 | `/btw [--plain] <質問>` | いまの会話を踏まえた、ついでの質問（履歴に残さない） | 既定は読み取り専用の子 `explore` が調べる（上限 3 分）。`--plain` はツールなしで現在のモデルが答える（上限 2 分） |
 | `/delegate-stats` | 直近 10 発言分の読み取り量と委譲の件数 | 記録のみ。`PI_DELEGATE_NUDGE=0` で止まる |
@@ -184,13 +184,9 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | サブコマンド | 内容 |
 | --- | --- |
 | `list` / `show [<id>]` | 一覧 / 表示 |
-| `approve [<id>]` | 承認して実行（`[pi.pending] enabled = true` のときだけ） |
-| `resolve [<id>] [<結果>]` | 結果は `success` / `failed` / `retry` / `pending` / `abandon`。`--confirm-stopped` を併用できる |
 | `drop [<id>]` | 破棄 |
-| `unlock` / `log` | ロックの解除 / 履歴 |
 
-- 承認待ちが 2 件以上で ID を打たずに承認すると、次の承認待ちの画面を続けて開く（巡回）。`<id>` を指定すると 1 件だけ
-- 巡回の画面は、先頭が「ここで終える」。Esc・失敗・成功以外の結果で止まり、モデルへの通知は巡回の終わりまで溜める
+- 承認して実行する経路（`approve`・`resolve`・`unlock`・`log`・巡回）は撤去済み（[guard/pi-pending.md](guard/pi-pending.md)）。統合は PR ビューアの「統合する」ボタン
 - pi 本体の組み込みコマンド（`/compact`・`/reload`・`/model` など）はこのリポジトリの管轄外で、ここでは扱いません。
 
 - 詳細: [guard/pi-extensions.md](guard/pi-extensions.md)、[guard/pi-subagents.md](guard/pi-subagents.md)、[guard/pi-pending.md](guard/pi-pending.md)
@@ -228,7 +224,6 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `gh_issue_comment` | issue にコメント | `repo` `number` `body`（8000 字まで） |
 | `gh_issue_edit_body` | issue の本文を編集 | `repo` `number` `body` |
 | `gh_issue_edit_title` | issue のタイトルを編集 | `repo` `number` `title`（1 行、256 字まで） |
-| `git_integrate` | 保護ブランチへの統合（squash） | 現在は無効（7.4） |
 
 - `git_commit` の確認画面の選択肢は「承認して実行 / 全文を見る / 編集して承認 / 拒否」。他の操作は「全文を見る」が無い。
 - `git_commit` はステージ済みが無いとエラーになる。
@@ -324,8 +319,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `[pi]` | 既定の役割・自作の拡張 | `default_role = "implementer"`。`own_extensions` = todo, plan, btw, activity, ask, notify, delegate-nudge, speed |
 | `[pi.shell]` | 無確認で通す shell（前方一致） | `allow` 5 件。載せたコマンドは `> path` による書き込み手段にもなる |
 | `[pi.confirm]` | bypass でも確認する操作 | `bash`（`gh` の変更系・`chezmoi apply/update`）、`checks`、`timeout_seconds = 300`、`local_git = true`、`integration = true` |
-| `[pi.integrate]` | 保護ブランチへの統合 | `enabled = true`、`target = "develop"`、`protected_refs`（main, master, develop, release/\*, hotfix/\*）、`skip_confirm_in_free_zone = true` |
-| `[pi.pending]` | 非同期承認（保留） | `enabled = true`、`modes = ["tui"]`、`retention_days = 30`、`result_retention_days = 90`、`max_pending = 50` |
+| `[pi.integrate]` | 保護ブランチへの統合の判定 | `target = "develop"`、`protected_refs`（main, master, develop, release/\*, hotfix/\*）、`skip_confirm_in_free_zone = true` |
 | `[[pi.actions]]` | 承認つき操作 | 4 件（`git_commit` と `gh_issue_*` 3 件） |
 | `[pi.redact]` | 出力の伏字化 | `enabled = true`（false にすると生成が止まる）。`rule` は 9 件 |
 | `[pi.external_read]` | 作業ツリー外で無確認に読める場所 | 3 件（各 CLI のスキル置き場） |
@@ -356,7 +350,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `[sandbox]` | 追記のみ |
 | `[[copilot.locations]]` | 追記 |
 
-- 上の節以外（`[pi.pending]` `[pi.integrate]` `[pi.confirm]` `[pi.profiles]` など）を書いても反映されない。
+- 上の節以外（`[pi.integrate]` `[pi.confirm]` `[pi.profiles]` など）を書いても反映されない。
 - ファイルが無ければ無視する。壊れた TOML は警告して無視する。
 - `~/.config/agents` は `pis` の内側から書けないので、エージェントが自分で緩めることはできない。
 - 場所は `AGENTS_LOCAL_CONFIG` で差し替えられる。
@@ -382,14 +376,11 @@ read = ["/data1"]
 
 | 設定 | 同梱値 | 切ったときの挙動 |
 | --- | --- | --- |
-| `[pi.pending] enabled` | `false` | 新しい保留の保存と承認だけ止まる。一覧・表示・破棄・復旧と、期限切れの掃除は動く |
-| `[pi.integrate] enabled` | `false` | `[pi.pending]` と両方 `true` でなければ `git_integrate` は見えない。どちらかが `false` の間は、従来と同一 |
 | `[pi.integrate] skip_confirm_in_free_zone` | `true` | `false` にすると、feature の worktree の `git_commit` も毎回確認する |
 | `[pi.confirm] local_git` / `integration` | `true` | `false` で、それぞれ必須確認をやめる |
 | `[pi.redact] enabled` | `true` | `false` にすると生成が止まる（pi のフルガードは伏字化が前提） |
 
-- `git_integrate` は、有効なら確認画面を出さず、要求を保留に保存して必ず「未実行」を返す
-- 実行されるのは、利用者が統合先の worktree で `/pending approve` したときだけ
+- 保留の承認のキルスイッチ（`[pi.pending]`・`[pi.integrate] enabled`）は撤去済み
 
 ### 7.5 環境変数（利用者が使うもの）
 
@@ -414,7 +405,7 @@ read = ["/data1"]
 
 | キー | 意味 | 省略したときの既定 |
 | --- | --- | --- |
-| `target` | `git_integrate` の統合先 | `[pi.integrate] target`（このリポジトリの同梱値は `develop`） |
+| `target` | 統合先（`/board` の比較先・`git flow finish` のプレビュー） | `[pi.integrate] target`（このリポジトリの同梱値は `develop`） |
 | `source_prefixes` | 統合元として許す接頭辞 | `["feature/", "bugfix/"]` |
 | `free_zone_prefixes` | 自由区（確認なしのコミット）の接頭辞 | `["feature/"]` |
 
@@ -450,22 +441,21 @@ read = ["/data1"]
 **効くタイミング**:
 
 - 設定は、**コミットした内容（HEAD）だけ**が効く。作業ツリーの編集は、コミットするまで反映されない
-- 自由区の接頭辞は、**主ブランチ（主 worktree の HEAD）に入るまで効かない**。feature の中で書き換えても、自分の自由区は広がらない。承認した統合で主ブランチに入ってから効く
+- 自由区の接頭辞は、**主ブランチ（主 worktree の HEAD）に入るまで効かない**。feature の中で書き換えても、自分の自由区は広がらない。統合で主ブランチに入ってから効く
 - **主 worktree が保護ブランチ上にないと、自由区は効かない**（確認が増える）。主 worktree が detached HEAD・保護でないブランチ上のとき。設定が無いリポジトリでも同じ
 - 自由区の設定を**読めないとき**（git の失敗など）も、自由区は効かない（確認が増える）。設定が無い・無効のときは、従来どおり全体の既定
-- 統合の承認画面は、承認する pi の cwd（統合先の主 worktree）の設定で作り直す。要求のあとに設定が変わると「変わった点」に出る
 
 **無効なとき**:
 
 - 未知のキー・型違い・大きすぎる・保護との重なりなどが 1 つでもあると、**設定全体が無効**になり、全体の既定で動く（保護は緩まない）
-- 承認画面・`/board` に、無効であることと診断コード（`invalid_json`・`unknown_key`・`prefix_overlaps_protected` など）が 1 行出る。入力の中身は出ない
+- `/board` に、無効であることと診断コード（`invalid_json`・`unknown_key`・`prefix_overlaps_protected` など）が 1 行出る。入力の中身は出ない
 - ファイルが無い・まだコミットしていない場合は、何も出ず全体の既定
 
 **その他**:
 
-- `git flow … finish` を直接実行したときの確認画面は、cwd と主 worktree の両方の設定を見る。どちらかが統合先か統合元の接頭辞を変えている・読めないときは、統合の内容を出さない（「確認できない」と出る）。`git_integrate` を使うと内容を確認できる
+- `git flow … finish` を直接実行したときの確認画面は、cwd と主 worktree の両方の設定を見る。どちらかが統合先か統合元の接頭辞を変えている・読めないときは、統合の内容を出さない（「確認できない」と出る）。
 - pi の project trust とは連動しない
-- `.agents/config/pi.json` の変更は、統合の承認画面で「リスクのあるパス」として見える（`[pi.integrate] risk_paths` の同梱の対象）
+- `.agents/config/pi.json` の変更は、PR ビューアの統合画面で「リスクのあるパス」として見える（`[pi.integrate] risk_paths` の同梱の対象）
 - 実際の `pi.json` は、まだどのリポジトリにも置いていない（実機確認の後）
 - 仕様と診断コードの一覧: [guard/pi-extensions.md](guard/pi-extensions.md#プロジェクトごとの設定pijson)
 - 未確認: Windows、実機（`pis`・実 TUI）での見え方
@@ -478,6 +468,7 @@ read = ["/data1"]
 - feature の linked worktree（`feature/*`）の `git_commit` だけは確認なしで実行される。それ以外のコミットは確認する。
 - `git flow feature finish` や `git merge` などの保護ブランチへの統合は、bypass でも必須確認。承認画面に、行き先・衝突の事前検査・squash メッセージ・コマンド全文が出る。時間切れなら、再試行せず指示を待つ。
 - main への統合と push は、利用者が自分で行う。
+- feature の統合は、AI が `guarded_pr_summary` で PR に要約を出し、利用者が PR ビューアの「統合する」ボタンを押す（merge commit。[CHG-0062](../change/0062-pr-hub-simplify.md)）。
 
 ### 8.2 時間切れと保留
 
@@ -485,14 +476,14 @@ read = ["/data1"]
 - `git_commit` の時間切れ・UI 無し・不在は、実行せず `refs/pi/pending/<時刻>` に退避して作業を続ける（`not approved:` で返る）。取消・拒否は退避しない。
 - `git_commit` 以外の時間切れは拒否のまま。
 - 退避は `/pending` で確認・破棄する。取り込み済み・重複・30 日超は自動で片付く。
-- `/pending approve` と `git_integrate` は実装済みで、同梱の設定で有効（7.4）。
+- `/pending approve` と `git_integrate` は撤去済み（[guard/pi-pending.md](guard/pi-pending.md)）。
 
 ### 8.3 feature の並列開発
 
 1. `git flow feature start <名前> --worktree --no-fetch` で起票する（worktree は `.tmp/worktrees/<名前>/`）。
 2. 親が `worker` を `background: true` で起動する。1 worktree = 1 feature = 1 worker で、担当外を触らせない。
 3. 完了のたびに `scripts/parallel_check.py` と `feature_gate.py` を回し、親が `git add` と `git_commit`（`dir` に worktree）を行う。
-4. `git flow feature finish <名前> --squash …` で取り込む（8.1）。
+4. `guarded_pr_summary` で PR に要約を出し、利用者が PR ビューアの「統合する」ボタンで取り込む（AI が `git flow feature finish` を実行するときは 8.1 の必須確認）。
 
 - 手順と依頼文の雛形は、スキル `feature-orchestration`（`.agents/skills/`）にある
 - 複数の pi の会話を並行して使うときは、取り込み（`finish`・`merge`）を窓口の 1 会話だけが行う
@@ -516,7 +507,7 @@ read = ["/data1"]
 | 困りごと | 対処 |
 | --- | --- |
 | 承認が時間切れになった | `git_commit` は退避されるので `/pending` で確認・破棄する。それ以外は拒否になるので、再試行せず新しい指示を出す |
-| 保留が増えた | `/pending list` で確認し、`/pending drop` で破棄する |
+| 退避したコミットが増えた | `/pending list` で確認し、`/pending drop` で破棄する |
 | Fence の中で読めない | `~/work/...` など許される場所で起動する（`~`・`/mnt`・`/tmp` は拒否）。読み取りを足すなら `PIS_EXTRA_READ` か `.opencode/sandbox.toml` の `read`。事前検査に落ちたら `pis --check` で詳細を見る |
 | ガードのソースをサンドボックスで編集できない | `pis --no-sandbox` で行う |
 | `/copy` で Clipboard unavailable | `pis` が `PI_CLIPBOARD_OSC52=1` を渡す。端末側で OSC 52 の書き込みを許可する |
@@ -537,7 +528,7 @@ read = ["/data1"]
 | 判定・役割 | [guard/pi-decide.md](guard/pi-decide.md) |
 | 子・orchestrate・並列実装・複数会話 | [guard/pi-subagents.md](guard/pi-subagents.md) |
 | `guarded_action`・`/plan`・`/pending`・拡張 | [guard/pi-extensions.md](guard/pi-extensions.md) |
-| 保留の承認 | [guard/pi-pending.md](guard/pi-pending.md)、[CHG-0055（非同期承認）](../change/0055-async-approval.md) |
+| 保留の履歴（撤去済み） | [guard/pi-pending.md](guard/pi-pending.md)、[CHG-0062](../change/0062-pr-hub-simplify.md) |
 | プロジェクトごとの統合設定（`pi.json`） | 7.6、[guard/pi-extensions.md](guard/pi-extensions.md#プロジェクトごとの設定pijson)、[CHG-0057（プロジェクトごとの統合設定）](../change/0057-per-project-integrate.md) |
 | サンドボックス | [guard/pi-sandbox.md](guard/pi-sandbox.md)、[sandbox/index.md](sandbox/index.md)、[sandbox/fence-boundary.md](sandbox/fence-boundary.md)、[sandbox/broker.md](sandbox/broker.md) |
 | 設定の生成 | [agent-config-generation.md](agent-config-generation.md) |
@@ -553,6 +544,5 @@ read = ["/data1"]
 
 - `pis --help` の実出力は未確認。`executable_pis` の usage と `pis.py` の `USAGE` 定数の食い違いは解消した（入口の説明を `pis.py` に合わせた）。2.1 の表は `pis.py` の定義に従った。
 - フッターの `🧭 orchestrate` / `⏸ plan` / `📥 保留 N 件` は、これまで `docs/spec` に記載が無く、**本書が初めて記載**した（コードで確認）。
-- `[pi.pending]` と `[pi.integrate]` の `enabled` は、同梱値が `true`（2026-11-02 に有効化）。実機の `rules.json` の実効値は未確認（`chezmoi apply` の後に確かめる）。
-- 実機で未確認と明記されているもの: 実 TUI での確認画面の見え方、Zed・Windows、保留の承認の排他・復旧・キルスイッチ、Bedrock の GPT-6.1 のツール呼び出し。
+- 実機で未確認と明記されているもの: 実 TUI での確認画面の見え方、Zed・Windows、Bedrock の GPT-6.1 のツール呼び出し。
 - `guarded_edit` の `newText` など、pi 本体の組み込み定義に由来する引数は未確認。

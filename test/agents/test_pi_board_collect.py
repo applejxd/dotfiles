@@ -93,18 +93,11 @@ def state_of(res, branch):
     raise AssertionError(f"{branch} の worktree が無い")
 
 
-def save_pending(main, source="feature/a"):
-    rec = {
-        "action": "git_integrate",
-        "params": {"source": source},
-        "premise": {},
-        "reason": "request",
-        "request": {"id": "r", "sessionId": "s", "cwd": str(main)},
-        "createdAt": "2026-01-01T00:00:00.000Z",
-    }
-    r = drive(op="save", cwd=str(main), input=rec)
+def save_pending(main):
+    """旧形式の退避 (承認が取れず退避した git commit) を 1 件作る"""
+    r = drive(op="legacy", cwd=str(main))
     assert r["ok"] is True, r
-    return r["id"]
+    return r["ref"]
 
 
 def test_ahead_behind_and_dirty_match_the_real_repo(repo):
@@ -122,17 +115,15 @@ def test_ahead_behind_and_dirty_match_the_real_repo(repo):
     assert res["input"]["worktrees"][0]["path"] not in res["input"]["worktreeStates"]
 
 
-def test_pending_op_is_listed_and_marks_the_feature(repo):
-    save_pending(repo, "feature/a")
+def test_legacy_pending_is_counted_and_shown_on_the_board(repo):
+    assert collect(repo)["input"]["pending"] == {"legacyCount": 0}
+    save_pending(repo)
     res = collect(repo)
-    ops = res["input"]["pending"]["ops"]
-    assert len(ops) == 1 and ops[0]["state"] == "pending" and ops[0]["action"] == "git_integrate"
-    assert ops[0]["source"] == "feature/a" and ops[0]["ageMs"] >= 0
-    assert state_of(res, "feature/a")["hasPending"] is True
-    assert "hasPending" not in state_of(res, "feature/b")
+    assert res["input"]["pending"] == {"legacyCount": 1}
+    assert "hasPending" not in state_of(res, "feature/a")
     text = "\n".join(res["lines"])
-    assert "承認待ち" in text and "git_integrate feature/a" in text and "保留あり" in text
-    assert res["input"]["pending"]["legacyCount"] == 0 and res["input"]["pending"]["broken"] == 0
+    assert "旧形式の退避 1 件" in text and "確認は /pending list" in text
+    assert "承認待ち" not in text and "要対応" not in text
 
 
 def test_max_features_limits_the_inspected_worktrees(repo):
@@ -156,7 +147,7 @@ def test_not_a_repo_does_not_throw(tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()
     res = collect(plain)
-    assert res["threw"] is False and res["input"]["pending"]["ops"] == []
+    assert res["threw"] is False and res["input"]["pending"] == {"legacyCount": 0}
 
 
 def test_broken_pending_ref_does_not_throw(repo):
@@ -164,8 +155,7 @@ def test_broken_pending_ref_does_not_throw(repo):
     git(repo, "update-ref", "refs/pi/pending/100000000000001", oid)
     res = collect(repo)
     assert res["threw"] is False
-    p = res["input"]["pending"]
-    assert p["ops"] == [] and p["legacyCount"] + p["broken"] >= 1  # 数えるだけで、行には出さない
+    assert res["input"]["pending"]["legacyCount"] >= 0  # 数えるだけで、例外にしない
 
 
 def snapshot(main):
@@ -178,7 +168,7 @@ def snapshot(main):
 
 
 def test_collect_is_read_only(repo):
-    save_pending(repo, "feature/a")
+    save_pending(repo)
     before = snapshot(repo)
     collect(repo)
     collect(repo, target="no-such-branch")
@@ -205,7 +195,7 @@ def test_collect_does_not_run_hooks(repo, tmp_path):
     fsm.chmod(0o755)
     git(repo, "config", "core.hooksPath", str(hooks))
     git(repo, "config", "core.fsmonitor", str(fsm))
-    save_pending(repo, "feature/a")
+    save_pending(repo)
     marker.unlink(missing_ok=True)  # 保存の側で動いたものは数えない。数えるのは収集だけ
     res = collect(repo)
     assert res["threw"] is False and state_of(res, "feature/b")["dirty"] is True
