@@ -237,3 +237,37 @@ td.code.can { cursor: pointer; }
   .hasmerge .revbar { bottom: 64px; }
   .confirmrow { min-height: 48px; }
 }
+
+/* pi に依頼: カード（進行・結果・履歴）と承認シート */
+.jobcard .btn { width: 100%; }
+.jobcard .jobcancel, .jobcard .jobreload { width: auto; }
+.jobcard code, .jobsheet code { overflow-wrap: anywhere; }
+.jobhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 10px 0 6px; }
+.jobhead .jobcancel { margin-left: auto; }
+.jobresult { margin: 6px 0; overflow-wrap: anywhere; }
+.jobreasons li, .jobfiles li, .jobhist li { overflow-wrap: anywhere; }
+.jobfiles { max-height: 220px; overflow: auto; }
+.joblog { margin: 6px 0; padding: 8px; max-height: 12em; overflow: auto; background: var(--bg2); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK JP", monospace; }
+.jobhistbox { margin-top: 12px; }
+.sheet.jobsheet { width: min(640px, 100%); }
+.jobsheet .alertbox { margin: 0; }
+.jobsheet .formerr p { margin: 4px 0; overflow-wrap: anywhere; }
+.jobcomments { max-height: 40vh; overflow: auto; }
+.jobcm { padding: 6px 8px; margin: 4px 0; border-left: 4px solid var(--info); background: var(--bg2); border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.jobline { margin: 0; overflow-wrap: anywhere; }
+.jobnotice li { padding: 2px 0; }
+
+/* 起票: 一覧のボタン・行の題名・入力シート・依頼文カード */
+.listact { margin-left: auto; }
+.rtitle { margin-top: 2px; color: var(--fg); overflow-wrap: anywhere; }
+.sheet.createsheet { width: min(640px, 100%); overflow-wrap: anywhere; }
+.createsheet > * { min-width: 0; }
+.createsheet .field { display: grid; gap: 4px; min-width: 0; }
+.createsheet input.cbox, .createsheet textarea.cbox { font-size: 16px; min-width: 0; }
+.createsheet input.cbox { min-height: 40px; }
+.createpreview code, .createcmd code { overflow-wrap: anywhere; }
+.createcmd { margin: 0; overflow-wrap: anywhere; }
+.createtext { max-height: 40vh; overflow: auto; }
+.briefcard summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; gap: 8px; }
+.briefbody { max-height: 50vh; overflow: auto; }
+@media (max-width: 719px) { .briefcard summary { min-height: 44px; } .createsheet input.cbox { min-height: 44px; } }

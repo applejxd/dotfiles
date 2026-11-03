@@ -361,7 +361,12 @@ def test_merge_routes_are_disabled_without_allow_merge(make):
     assert status == 403 and resp["error"]["code"] == "merge_disabled"
     assert snapshot(w) == before
     status, caps = w.server.get("/api/capabilities")
-    assert status == 200 and caps == {"merge": False, "targets": ["develop"]}
+    assert status == 200 and (caps["merge"], caps["create"], caps["targets"]) == (
+        False,
+        False,
+        ["develop"],
+    )
+    assert caps["jobs"] is False  # ジョブは別の旗（--allow-jobs）。ここでは無効のまま
 
 
 def test_allow_merge_takes_no_value_and_unknown_flags_are_refused(tmp_path):
@@ -386,7 +391,12 @@ def test_allow_merge_takes_no_value_and_unknown_flags_are_refused(tmp_path):
 
 def test_capabilities_has_no_paths_and_reports_merge(w):
     status, caps = w.server.get("/api/capabilities")
-    assert status == 200 and caps == {"merge": True, "targets": ["develop"]}
+    assert status == 200 and (caps["merge"], caps["create"], caps["targets"]) == (
+        True,
+        False,
+        ["develop"],
+    )
+    assert caps["jobs"] is False  # ジョブは --allow-jobs を付けない限り無効
 
 
 # ---------------------------------------------------------------- 4 Origin（merge 経路だけ必須）
@@ -1321,9 +1331,9 @@ def test_merge_api_import_boundary_and_no_direct_ref_writes():
     for name in ("merge.ts", "merge-git.ts"):
         for s in re.findall(r"""(?:from|import)\s*\(?\s*["']([^"']+)["']""", src[name]):
             assert s.startswith(("./", "node:")), (name, s)
-    # child_process を使うのは git-view.ts と merge-git.ts だけ
+    # child_process を使うのは git-view.ts・merge-git.ts、そして pis を起動する job-runner.ts
     users = {n for n, t in src.items() if "child_process" in t}
-    assert users == {"git-view.ts", "merge-git.ts"}, users
+    assert users == {"git-view.ts", "merge-git.ts", "job-runner.ts"}, users
 
 
 def test_merge_api_never_reads_the_approval_state_as_authority():
@@ -1345,3 +1355,20 @@ def test_merge_api_never_reads_the_approval_state_as_authority():
         "appendEvents",
     ):
         assert token not in code, token
+
+
+def test_every_refusal_reason_of_the_merger_has_an_http_status():
+    """統合器の拒否コード（REASONS）は、すべて HTTP の状態（REFUSAL_STATUS）に写す。写し忘れると未知のコードは 500（結果不明）になる。"""
+    merge_ts = (APP / "merge.ts").read_text(encoding="utf-8")
+    api_ts = (APP / "merge-api.ts").read_text(encoding="utf-8")
+    reasons_block = re.search(
+        r"const REASONS: Record<string, string> = \{(.*?)\n\};", merge_ts, re.S
+    )
+    status_block = re.search(
+        r"const REFUSAL_STATUS: Record<string, number> = \{(.*?)\n\};", api_ts, re.S
+    )
+    assert reasons_block and status_block
+    reasons = set(re.findall(r"^\t(\w+):", reasons_block.group(1), re.M))
+    statuses = set(re.findall(r"^\t(\w+):", status_block.group(1), re.M))
+    assert reasons >= {"failed", "not_ff", "unverified"}, reasons
+    assert not (reasons - statuses), f"HTTP の状態が無い拒否コード: {sorted(reasons - statuses)}"

@@ -1,0 +1,1 @@
+{"jobs": true, "jobsReason": null, "jobLimits": {"timeoutMin": 10, "concurrent": 1, "daily": 30}}

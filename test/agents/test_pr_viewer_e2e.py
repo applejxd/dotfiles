@@ -9,6 +9,7 @@ see docs/change/0060-local-pr-viewer.md
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import json
 import re
@@ -187,6 +188,80 @@ def test_old_expect_submit_after_the_branch_moved_is_409(tmp_path):
         server.stop()
 
 
+# ---------------------------------------------------------------- ジョブ API（段 A4a）: 実サーバの応答が、画面の fixture と同じ形
+
+
+def test_real_job_responses_have_the_same_shape_as_the_fixtures(tmp_path):
+    """画面（job.js）が読む capabilities・job-input・jobs の形を、実サーバ + 偽の pis の応答で確かめる。
+
+    食い違えば、契約（.tmp/keep/prv-app/api-contract-job.md）どおりの実サーバに画面と fixture を合わせる。
+    """
+    import os
+    import signal
+
+    from test_pr_viewer_jobs import _start as start_world
+    from test_pr_viewer_jobs import (
+        feature,
+        get,
+        job_input,
+        mode,
+        pis_record,
+        post,
+        start,
+        wait_job,
+        wait_log,
+    )
+
+    w = start_world(tmp_path)
+    pids: list[int] = []
+    try:
+        status, caps = w.server.get("/api/capabilities")
+        assert status == 200 and caps["jobs"] is True and caps["jobsReason"] is None, caps
+        _same_shape(
+            caps, {**_load("capabilities.json"), **_load("job_capabilities.json")}, "capabilities"
+        )
+        pr = feature(w, "feature/a")
+        # blockers つきの job-input（作業ツリーが dirty）
+        (pr["wt"] / "dirty.txt").write_text("x\n", encoding="utf-8")
+        status, blocked = get(w, f"/api/prs/{pr['id']}/job-input")
+        assert status == 200 and blocked["input"]["blockers"], blocked
+        _same_shape(blocked, _load("job_input_blocked.json"), "job-input(blocked)")
+        (pr["wt"] / "dirty.txt").unlink()
+        inp = job_input(w, pr)
+        _same_shape({"input": inp}, _load("job_input.json"), "job-input")
+        running = _load("job_running.json")
+        # 起動（202）→ 一覧 → 状態とログ（完了）
+        mode(w, "edit")
+        status, resp = start(w, pr, inp=inp)
+        assert status == 202, resp
+        _same_shape(resp, running, "jobs(202)")
+        jid = resp["job"]["id"]
+        status, listing = get(w, f"/api/prs/{pr['id']}/jobs")
+        assert status == 200
+        _same_shape(listing, {"jobs": [running["job"]]}, "jobs(list)")
+        done = wait_job(w, pr, jid)
+        assert done["job"]["state"] == "succeeded", done
+        status, got = get(w, f"/api/prs/{pr['id']}/jobs/{jid}?from=0")
+        assert status == 200
+        log_fixture = {"from": 0, "next": 0, "text": "", "truncated": False}
+        _same_shape(got, {**_load("job_succeeded.json"), "log": log_fixture}, "jobs/<id>")
+        # 実行中のキャンセル（200）
+        pr_b = feature(w, "feature/b")
+        mode(w, "hang")
+        status, resp = start(w, pr_b)
+        assert status == 202, resp
+        wait_log(w, pr_b, resp["job"]["id"], "hang started")
+        pids.append(pis_record(w)["pid"])
+        status, cancelled = post(w, f"/api/prs/{pr_b['id']}/jobs/{resp['job']['id']}/cancel", {})
+        assert status == 200, cancelled
+        _same_shape(cancelled, running, "cancel")
+    finally:
+        w.server.stop()
+        for pid in pids:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+
+
 # ---------------------------------------------------------------- 統合 API（段 A2）: 実サーバの応答が、画面の fixture と同じ形
 
 
@@ -246,7 +321,10 @@ def test_real_merge_responses_have_the_same_shape_as_the_fixtures(tmp_path):
     try:
         status, caps = server.get("/api/capabilities")
         assert status == 200
-        _same_shape(caps, _load("capabilities.json"), "capabilities")
+        # ジョブを有効にしていないときも、jobs のキーは常に返す（画面が無効の理由を読む）
+        _same_shape(
+            caps, {**_load("capabilities.json"), **_load("job_capabilities.json")}, "capabilities"
+        )
         pr = server.get("/api/prs")[1]["prs"][0]
         plan_path = f"/api/prs/{pr['id']}/merge-plan"
         # 統合できる計画（リスクのあるパス AGENTS.md・警告は無し）
@@ -316,5 +394,86 @@ def test_real_merge_plan_variants_have_the_same_shape_as_the_fixtures(tmp_path):
             and err["error"]["code"] == "conflict"
             and err["error"]["conflicts"] == ["AGENTS.md"]
         ), err
+    finally:
+        server.stop()
+
+
+# ---------------------------------------------------------------- 起票 API（段 B1）: 実サーバの応答が、画面の fixture と同じ形
+
+
+def test_real_create_responses_have_the_same_shape_as_the_fixtures(tmp_path):
+    """画面（create.js）が読む capabilities・repos・起票の応答・起票のみの PR・brief つき review の形を、実サーバ（実 git）で確かめる。
+
+    食い違ったら、画面と fixture の側を直す（サーバの契約が正）。
+    """
+    repo = _init(tmp_path / "example-app")
+    for key, value in (
+        ("user.name", "Example Dev"),
+        ("user.email", "you@example.com"),
+        ("gc.auto", "0"),
+        ("maintenance.auto", "false"),
+    ):
+        _git(repo, "config", key, value)
+    _commit(repo, {"README.md": "hello\n", ".gitignore": ".tmp/\n"}, "init")
+    server = Server(
+        [
+            "--repo",
+            str(repo),
+            "--port",
+            "0",
+            "--allow-create",
+            "--rules-file",
+            str(tmp_path / "rules.json"),
+        ]
+    )
+    try:
+        status, caps = server.get("/api/capabilities")
+        assert status == 200 and caps["create"] is True, caps
+        _same_shape(
+            caps, {**_load("capabilities.json"), **_load("job_capabilities.json")}, "capabilities"
+        )
+        status, repos = server.get("/api/repos")
+        assert status == 200
+        _same_shape(repos, _load("create_repos.json"), "repos(create)")
+        repo_id, target_oid = repos["repos"][0]["repoId"], repos["repos"][0]["targetOid"]
+        status, made = _post_merge(
+            server,
+            f"/api/repos/{repo_id}/features",
+            {
+                "kind": "feature",
+                "name": "real-shape",
+                "requestId": "11111111-1111-4111-8111-111111111111",
+                "expect": {"target": target_oid},
+                "brief": {
+                    "title": "形の確認",
+                    "goal": "目的",
+                    "constraints": "制約",
+                    "scope": ["docs/**"],
+                    "acceptance": "受け入れ条件",
+                },
+            },
+        )
+        assert status == 201, made
+        _same_shape(made, _load("create_ok.json"), "create")
+        assert made["feature"]["recorded"] is True and made["feature"]["replay"] is False
+        status, prs = server.get("/api/prs")
+        assert status == 200 and len(prs["prs"]) == 1
+        pr = prs["prs"][0]
+        assert pr["state"] == "empty" and pr["commits"] == 0, pr
+        _same_shape(pr, _load("create_pr_empty.json"), "pr(empty)")
+        status, detail = server.get(f"/api/prs/{pr['id']}")
+        assert status == 200
+        _same_shape(
+            detail,
+            {"pr": _load("create_pr_empty.json"), **_load("create_detail_empty.json")},
+            "detail(empty)",
+        )
+        status, review = server.get(f"/api/prs/{pr['id']}/review")
+        assert status == 200 and review["brief"]["title"] == "形の確認", review
+        _same_shape(review, _load("create_review_empty.json"), "review(brief)")
+        # 実 git の実体: 枝は基点から作られ、作業ツリーがあり、記録の ref が 1 本ある
+        assert _git(repo, "rev-parse", "feature/real-shape").strip() == target_oid
+        assert (repo / ".tmp" / "worktrees" / "real-shape").is_dir()
+        assert len(_git(repo, "for-each-ref", "refs/pi/review", "--format=%(refname)").split()) == 1
     finally:
         server.stop()

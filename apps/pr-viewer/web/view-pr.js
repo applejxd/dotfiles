@@ -247,16 +247,17 @@
     d.keys.summary = JSON.stringify((rv && rv.summary) || null);
     d.batches = h("div", { class: "live-batches" }, PRV.batchList(rv, ctx));
     d.keys.batches = JSON.stringify([(rv && rv.batches) || [], (rv && rv.worktrees) || []]);
-    var main = [behindCard(pr), d.summary, generalCard(ctx), files, commits, d.batches];
+    var main = [PRV.briefCard ? PRV.briefCard(rv) : null, behindCard(pr), d.summary, generalCard(ctx), files, commits, d.batches];
     d.bar = PRV.reviewBar(ctx, notice);
     var me = PRV.mergeEntry ? PRV.mergeEntry(ctx) : null;
+    var je = PRV.jobEntry ? PRV.jobEntry(ctx) : null;
     PRV.mount(
       h(
         "div",
         { class: me ? "page withbar hasmerge" : "page withbar" },
         PRV.prHead(data, "overview", rv),
         PRV.liveBar(),
-        h("div", { class: "cols" }, h("div", { class: "col-main" }, main), h("div", { class: "col-side" }, me ? me.card : null, side)),
+        h("div", { class: "cols" }, h("div", { class: "col-main" }, main), h("div", { class: "col-side" }, me ? me.card : null, je, side)),
         d.bar,
         me ? me.bar : null
       )

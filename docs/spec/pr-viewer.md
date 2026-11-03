@@ -42,7 +42,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | --- | --- |
 | ref 名 | `refs/pi/review/<prKey>` |
 | commit の tree | `meta.json` と `events.jsonl` の 2 つの通常の blob だけ。余計なファイル・symlink・実行ビットは不正 |
-| `meta.json` | `{"schema": 1, "pr": "<prKey>", "branch": "feature/x", "target": "develop", "createdAt": "<ISO>"}` |
+| `meta.json` | schema 1（schema 2 は起票で作る ref だけ。下の「`brief`」）: `{"schema": 1, "pr": "<prKey>", "branch": "feature/x", "target": "develop", "createdAt": "<ISO>"}` |
 | `events.jsonl` | 1 行 1 イベント。順序は行の順（`seq` は持たない） |
 
 ### イベント
@@ -52,7 +52,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 項目 | 内容 |
 | --- | --- |
 | `by` | **表示用。信頼しない**。誰が書けるかの判定にも、レビュー状態の判定にも使わない（例外は、スレッドの「pi が返信済み」の表示だけ。§4） |
-| `t`（種別） | `comment`・`summary`・`submit`・`receipt`・`merge_request`・`merge_started`・`merge_result` |
+| `t`（種別） | `comment`・`summary`・`submit`・`receipt`・`merge_request`・`merge_started`・`merge_result`・`brief`（起票。schema 2 の ref だけ） |
 | `vs` | そのイベントを書いた時点の source・target・base の OID（stale の判定に使う。§4） |
 
 | 種別 | `d` の中身 |
@@ -63,6 +63,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | `receipt` | `{"batchId", "sessionId"}`。前提条件つきで追記する（その batch の `receipt` がまだ無いこと） |
 | `merge_request` | `{"requestId", "sourceRef", "sourceOid", "targetRef", "targetOid", "baseOid", "message", "cleanup"}`。`cleanup` は `branch_and_worktree` など |
 | `merge_started` | `{"requestId", "pendingId"}`。**pi が書く**（§8） |
+| `brief` | `{requestId, rev, kind, name, title, goal, constraints, scope[], acceptance, via}`。起票（§6）が 1 コミットで記録する依頼文。`meta.schema` は 2。**古い読み手は schema 2 を「版が新しい」読み取り専用として扱う**（壊さず、書き込まない）。上限は §6「起票」 |
 | `merge_result` | `{"requestId", "outcome": "success" または "refused" または "failed" または "unknown", "reason", "doneOid"}` |
 
 ### 更新・検査・上限
@@ -219,6 +220,99 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 3. 配備先で、判定器が `X-PRV` 付きの curl と `merge-cli.ts merge` を deny することを確かめる。tailnet や funnel で公開するなら、`~/.config/agents/local.toml` の `[pis.network] deny` に自分の公開名を足し、Fence の内側から届かないことを確かめる（上流プロキシが名前解決する経路では、中継が内部アドレスを止められない: [pi-sandbox](guard/pi-sandbox.md)）。
 4. `--allow-merge` を付けてアプリを起動し、安全な試験用リポジトリで統合を 1 回試す。異常終了の後は CHG-0062 §3.5 の手順で `recover` する。
 
+#### 統合を取り消す（巻き戻し。利用者が行う。手順は試験 `test_pr_viewer_merge_undo.py` が実 git で固定）
+
+統合は merge commit を develop の先頭へ進めるだけなので、**失うものが無く、元に戻せる**。戻す先は次で分かる: 統合の応答の `merge.targetOld`（統合前の develop）と `merge.commit`（統合コミット）、画面の「旧 → 新」の OID、レビュー記録の `merge_request.targetOid`（= `targetOld`）と `merge_result.doneOid`（= `commit`）、`git reflog show develop`（作業ツリーありのリポジトリ。bare は reflog が無いので、応答の OID を控える）。まず `git rev-parse <commit>^1` が `targetOld` に等しいことを確かめる。
+
+| 状況 | 手順 |
+| --- | --- |
+| 未 push（一覧の「origin より N 件先」が残っている）で、統合の後に develop へ他のコミットが無い・develop を checkout している | `git status` で、統合を戻すと上書きされるファイルに手元の変更が無いことを確かめ、`git reset --keep <targetOld>`。`--hard` ではなく `--keep` を使う（手元の未コミットの変更と重なると、何も変えずに中止する）。無関係な未コミットの作業・未追跡・無視ファイルは残る |
+| 同じで、develop をどの worktree も checkout していない | `git update-ref refs/heads/develop <targetOld> <統合コミット>`。末尾の期待値を必ず付ける（統合のあとに develop が進んでいれば、期待値が合わず何も変えない） |
+| push 済み、または統合の後に他のコミットがある | 履歴を巻き戻さず、`git revert -m 1 <統合コミット>`（第 1 親 = develop 側を残す）。統合前の tree へ戻す新しいコミットができる。**同じ枝をもう一度統合したいときは、その revert コミットを revert してから**でないと、変更が入らない（git の仕様） |
+| cleanup で枝を消した | `git branch <枝> <統合コミット>^2`（第 2 親 = feature の先頭）。worktree は `git worktree add <パス> <枝>` で作り直す。**削除された worktree の中の未追跡・無視ファイル（`.tmp` など）は戻らない** |
+
+これは利用者が自分の端末で行う手順で、エージェント（pi）に任せることは想定しない。復旧できない異常終了（状態ファイルが残った）は、取り消しではなく `recover`（CHG-0062 §3.5）。統合の結果を確認できなかった（`unverified`）ときも `recover` が「統合済み」と確かめて状態を解除する。
+
+### ジョブ（段 A4a。[CHG-0062](../change/0062-pr-hub-simplify.md) §3.4）
+
+人が押した「変更を依頼」の POST だけが、**feature の実 worktree で `pis -p` を 1 回起動**する（`job-api.ts`・`job-runner.ts`・`job-git.ts`・`job-check.ts`・`job-prompt.ts`・`job-store.ts`）。終了後、アプリが結果を検査し、**通ったものだけをアプリが commit する**（pi には commit・push・merge をさせない）。起動の権限は live の POST だけで、ref の「承認」・コメント・ファイルの内容は入力データとしてだけ使い、可否の根拠にしない。**既定で無効**（`--allow-jobs`）。Linux 専用（`/proc` で取り残しを掃除する）。「衝突を解決」（段 A4b）は未実装。
+
+| 項目 | 内容 |
+| --- | --- |
+| 経路 | `GET /api/capabilities`（`jobs`・`jobsReason`（`null`・`unsupported_platform`・`pis_missing`）・`jobLimits: {timeoutMin, concurrent, daily}` を足した。パスを含めない）・`GET …/job-input`（副作用なし。`{input: {inputDigest, batches, blockers, limits, notice}}`）・`POST …/jobs`（起動。本文 `{kind: "address_review", expect: {source, target}, batches: [uuid…≤10], inputDigest}`。成功は 202 `{job}`）・`GET …/jobs`（その PR の最新 5 件）・`GET …/jobs/<id>?from=<n>`（`{job, log: {from, next, text, truncated}}`）・`POST …/jobs/<id>/cancel` |
+| 入口の検査 | 統合と同じ: (1) `--allow-jobs` が無ければ 403 `jobs_disabled`（GET も同じ） (2) `Tailscale-Funnel-Request` があれば 403 `forbidden_funnel` (3) POST は Origin 必須（GET は Origin が付いているときだけ照合）で、違えば 403 `forbidden_origin` (4) `X-PRV: 1`・JSON (5) 本文 64 KB・未知のキーは 400。ほかに 400 `bad_request`・`bad_expect`（`expect` は 2 キー必須・40 桁）・`bad_batches`・`bad_digest`、409 `stale_view`・`stale_input`・`nothing_to_do`・`merged`、413 `too_large`、429 `quota`、501 `unsupported_platform`、503 `pis_missing`・`shutting_down` |
+| 入力 | `input.batches` は、その PR の**未受領（`receipt` が無い）で宛先がこの feature の worktree** の `submit`（最大 10 件）。コメントは `GET …/review` と同じ見え方。`inputDigest` は batchId の列と各コメントの id・本文の SHA-256。画面の値と起動の瞬間の値が違えば 409 `stale_input`（見ていない内容を渡さない）。`blockers`（コードと日本語の文）が空でなければ起動できず、POST も同じ検査で断る |
+| 状態機械 | `starting` → `running` → `finalizing` → 終端。終端は `succeeded`（commit した）・`no_change`・`needs_review`（検査を通らず commit していない。作業ツリーはそのまま残す）・`failed`・`timed_out`・`cancelled`・`interrupted`（アプリの停止・再起動）の **7 種**。状態は前へだけ進み、終端は変えられない。`tampered`（改ざんの検出）は独立の状態ではなく `failed` + reason `tampered` |
+| `reasons`（コードだけ。本文・パスを含めない） | `exit_nonzero`・`output_limit`・`timeout`・`cancelled`・`shutdown`・`spawn_failed`・`bad_argv`・`exception`・`lock_failed`・`claim_failed`・`state_failed`・`tampered`・`ref_moved`・`commit_failed`・`no_identity`・`reset_failed`、検査の理由（`risk_path`・`risk_config`・`unsupported_file`・`too_many_files`・`too_large`・`binary`・`outside`・`add_failed`） |
+| 起動前の検査（P1〜P6） | P1 旗・Linux・`pis` が絶対パスの実行可能ファイル。P2 `expect`・batch・digest の一致と、batch が未受領で宛先がこの worktree であること。P3 feature を checkout している worktree がちょうど 1 つ・共通側から見た管理情報の整合（`worktrees/<n>/gitdir`・`.git` ポインタ・`commondir`。**この間は worktree の `.git` を読む git を動かさない**）・`config`・`config.worktree` に外部コードが無い・進行中の操作（merge・rebase・cherry-pick・bisect など）が無い・HEAD が feature で OID が `expect.source`・`status --untracked-files=all` が空（`dirty`）。P4 `.opencode` が worktree にも HEAD にも無い。P5 同じ枝の排他・リポジトリの統合との排他・全体の同時数・日次の上限。P6 記録の採取（`.git` ポインタ・`worktrees/<n>/{HEAD,gitdir,commondir}`・`config.worktree`・`info/attributes`・`info/exclude` のハッシュと、feature・統合先・develop・main・master の OID。state dir の `job.json` に保存） |
+| 終了後の照合・検査・commit（Q1〜Q7） | Q1 プロセスグループと `PR_VIEWER_JOB_ID` の印つきプロセスを、検査の前に掃除する（正常終了でも）。Q2 P6 の記録と照合し、1 つでも違えば commit せず `failed`（`tampered`）。Q3 使い捨ての `GIT_INDEX_FILE` で `read-tree` → `add -A` → `write-tree`（worktree の `.git`・index は使わない）。同じ tree なら `no_change`。Q4 `diff-tree --raw --no-renames` の結果に規則を当てる: A/M/D だけ・モードは通常ファイル（100644）だけ（symlink・実行ビット・モード変更・gitlink は不可）・`.git`・`.gitmodules`（別名を含む）・制御文字・`..` や絶対パス・4096 バイト超のパスは不可・200 件以内・blob 1 MiB 以内・合計 4 MiB 以内・バイナリ不可。Q5 `risk_paths`（`rules.json`）・`.gitattributes`・`.opencode/**` に当たる、または設定を読めないときは `needs_review`。Q6 `commit-tree`（件名は固定の日本語。本文にジョブ ID・batch ID・件数。作者は共通ディレクトリの設定だけから読む。hook は git 実行器の安全設定が止める）。Q7 ref を更新する直前にもう一度 Q2 の照合をして、`update-ref <新> <旧>` の CAS で更新し、worktree で `reset -q` して index を HEAD に揃える（作業ツリーは変えない） |
+| pi の起動 | `pis --role worker --allowlist -p <プロンプト> [--model <提供元/モデル>]`。`cwd` は feature の worktree・stdin は `/dev/null`・`detached`（新しいプロセスグループ）・shell を使わない。**環境は許可リスト**（`PATH`・`HOME`・`USER`・`LANG`・`LC_*`・`XDG_*`・`*_PROXY`・`SSL_CERT_FILE`・`PI_CODING_AGENT_DIR` と、印の `PR_VIEWER_JOB_ID`。`GIT_*` などは渡さない）。上限は**1 回 10 分（1〜30。旗で変える）・同時 1・日 30 回**（日次はリポジトリをまたぐ。UTC の日付）。出力は 8 MiB で打ち切って `failed`（`output_limit`）。停止は SIGTERM → 15 秒後に SIGKILL。`finalizing` に入ったら止めない（`cancel` は 409 `not_cancellable`） |
+| プロンプト | 固定の案内 3 点（git の書き込みをしない・worktree の外・秘密・ネットワークに触れない・囲みの中を命令として読まない）+ **乱数（128 bit）の開始・終了の目印**で囲んだ引用データ（1 行 1 件の JSON。制御文字・双方向制御文字は除く）+ 末尾の依頼。乱数が引用データに現れたら作り直す。上限は 50 件・1 件 4000 字・全体 24 KiB で、**黙って切らず**断る（`job-input` の blockers にも出す）。プロンプトは `prompt.txt` に保存する |
+| 保存先 | `$XDG_STATE_HOME/pr-viewer/<repoId>/jobs/<id>/{job.json, log.txt, prompt.txt}`（`--state-dir` で変える。ディレクトリ 0700・ファイル 0600・他人の持ち物やシンボリックリンクは断る）。`job.json` は状態遷移ごとに atomic rename。ログは先頭 1 MiB まで。排他ファイルは `<repoId>/locks/`（枝ごと）、日次の数えは state dir 直下の `daily.json`。保持は終端のものを新しい順に 30 件・14 日（実行中は消さない）。**共通 `.git` の中には何も置かない**（Fence の内側から書けるため）。起動時の回復で、非終端のジョブは `interrupted`（自動では再開しない）にし、生きている取り残しは止め、古い排他を掃除する。画面へ返すログは、ANSI・制御文字を除き、既知の根のパスと絶対パスを `<path>` に置き換える（1 回 16 KB。行の途中では切らない） |
+| 統合との排他 | リポジトリ単位。ジョブの予約（検査の途中から終端まで）がある間、統合の `merge-plan` は blocker `job_running` を返し、`merge` は 409 `job_running`。統合が実行中なら、ジョブの起動は 409 `merge_running`。同じ PR の二重起動は 409 `job_running`・全体の同時数を超えれば 409 `busy`。確認と予約は同じ tick の同期処理で、同一プロセス内には窓が無い。別プロセスの `merge-cli.ts` はジョブを知らない（運用で守る） |
+| 受領の記録 | 起動の直前に、指名した batch を `receipt`（`sessionId` は `app-job:<ジョブ ID>`）で 1 回の追記で claim する。競合したら最新の状態で選び直し、digest も照合し直す。claim に成功した後で失敗しても、コメントは「受領済み」のまま（画面の「再送」で救う）。`review-log.ts` に新しい種類は足していない |
+| 旗 | `--allow-jobs`（値を取らない。既定で無効）・`--job-timeout-ms <1〜1800000>`（試験用）・`--test-platform <名前>`（試験用。Linux 以外の挙動を再現する）・`--pis-command <絶対パス>`（既定 `~/.local/bin/pis`。偽の pis に差し替える。本番でも使える）・`--state-dir <絶対パス>`・`--job-model <提供元/モデル>`（形を検査。先頭が `-` は不可。未指定なら pis の既定）。Linux 以外で `--allow-jobs` を付けると、起動を断る（終了コード 2） |
+| 停止 | SIGTERM・SIGINT は、新しい起動を断り、起動の途中のものを待ち、実行中のジョブを `interrupted` にして止め、`finalizing` のものだけ終わるのを待つ。通信が切れてもジョブは続く |
+| import 境界 | `job-api.ts` は git を直接動かさない（検査・commit は `job-git.ts`、実行は `job-runner.ts`、記録は `review-api.ts`）。git の実行は `merge-git.ts` の実行器だけを使う（新しい実行器は作らない）。`job-check.ts` は純粋関数で、import を持たない |
+
+#### 止められるもの・止められないもの（ジョブ。正直に）
+
+| 攻撃・状況 | 止まるか | 何で |
+| --- | --- | --- |
+| 他サイトからの CSRF・DNS rebinding・Funnel 経由 | 止まる（Funnel は統合と同じく二次情報に基づく） | 統合と同じ入口の検査（上の表。根拠は「統合」の表） |
+| コメント・ファイルに仕込んだ**プロンプト注入** | **止まらない** | 引用データの囲みと案内は、モデルが従う保証ではない。被害を狭めるのは、`pis --allowlist`（通信先を固定）・Fence・Q4・Q5（commit に入る変更の形・範囲の検査）・commit 後の人の確認と統合の承認。注入された pi が、worktree 内の通常のファイルを書き換えることは防げない（検査を通れば commit される） |
+| 共通 `.git` の ref・`worktrees/<n>/`・worktree の `.git` ポインタの改ざん（Fence 内の pi が書ける） | **検出であって防止ではない** | P6 と Q2 の照合（commit の前に 2 回）。1 つでも違えば commit せず `failed`（`tampered`）。OS で書き込みを止めているわけではない（検査と更新の間の窓は狭めるだけ）。検出できるのはアプリが記録した項目だけ。後続の `pis` を人が手で起動する場合は対象外 |
+| 検査をすり抜ける変更 | 一部だけ止まる | `risk_paths`・`.gitattributes`・`.opencode/**`・symlink・巨大・バイナリは `needs_review`。通常のコードに紛れた悪意は検出できない。**commit に pre-commit は走らない**ので、秘密の検出（gitleaks）などが効かない（push の前の hook・人の確認で拾う） |
+| tailnet 内の他の機器・同一端末の他プロセス（偽造クライアント） | **止まらない** | Origin と `X-PRV` は、ヘッダーを偽造できるクライアントを止めない。認証は入れない方針。`--allow-jobs` を付けると、到達できるクライアントは依頼を起動できる |
+| 費用の暴走 | 上限まで | 1 回 10 分・同時 1・日 30 回・出力 8 MiB。上限内の費用は使われる。日次の数えは、state dir を消すと戻る |
+| 秘密の漏れ | 一部だけ止まる | pi へ渡す環境は許可リスト。ログはパスを `<path>` に置き換え、1 回 16 KB。だが、worktree 内の秘密（追跡外のファイルなど）は pi から読め、ログ・commit に出うる。`--allowlist` の通信先へ送ることは防げない |
+| 人が実行中に worktree を手で編集 | 検知できない | 編集が commit に混ざりうる（開始時の `dirty` の検査だけ） |
+
+#### 有効化の手順（利用者が行う。取り込みだけでは有効にならない）
+
+1. **実機の実測 X3-a は未実施**。本物の `pis` と LLM では一度も動かしていない（試験は偽の pis だけ）。有効化の前に、補助スクリプト `pk x3a` で、使い捨ての feature に対して `pis --role worker --allowlist -p` が動くこと・所要時間・費用・commit が通ることを実測する（スクリプトは取り込みの後に用意する）。
+2. 取り込みの後、使う pi / pis を再起動する。`--allow-jobs` を付けなければ何も変わらない（既定で無効）。
+3. `node apps/pr-viewer/server.ts --repo <パス> --allow-jobs` で起動し、`GET /api/capabilities` の `jobs` が `true` になることを確かめる（`jobsReason` が `pis_missing` なら `--pis-command` で絶対パスを指定する）。
+4. 安全な試験用リポジトリ・小さな feature・1 件のコメントで 1 回試す。結果（`succeeded`・`needs_review` など）と、`git log` の commit を人が確かめる。異常終了したジョブは `interrupted` になり、再開されない（コメントは受領済み。画面の「再送」で送り直す）。
+5. tailnet や funnel へ公開するなら、統合と同じく Funnel 経由で `--allow-jobs` を併用しない。
+
+#### 既知の制限（ジョブ）
+
+- Linux 専用。Windows・macOS では起動を断る（Windows 実機は未検証）。
+- 実機の実測（X3-a）が未実施。偽の pis と実 git の試験だけで確かめている。
+- 衝突の解決（段 A4b）は未実装。`address_review` だけ。
+- worktree の外（共通 `.git` の ref など）への pi の書き込みは、OS では止めず、検出するだけ。
+- 同じ worktree に人と pi が同時に書く場合の競合は検知しない。
+- 別プロセスの `merge-cli.ts` とは排他できない。
+
+### 起票（段 B1。[CHG-0062](../change/0062-pr-hub-simplify.md) §5）
+
+人がブラウザで押した「＋ 起票」の POST で、**アプリが新しい feature の枝と worktree を作り、依頼文（brief）をレビュー記録へ残す**。LLM・pis は呼ばない。権限は live の POST だけで、ref・記録・ファイルの内容を権限として読まない。
+
+| 項目 | 内容 |
+| --- | --- |
+| 旗 | `--allow-create`（**既定で無効**。値なし。統合の `--allow-merge` とは別）。無ければ 403 `create_disabled` |
+| 経路 | `GET /api/capabilities` に `create` を足す・`GET /api/repos` の各 repo に `targetOid` を足す・`POST /api/repos/<repoId>/features`（本文 `{kind:"feature", name, requestId, expect:{target}, brief:{title, goal, constraints?, scope?, acceptance?}}`）・`GET …/review` に `brief`（無ければ null）。成功は 201 `{feature:{branch, prKey, id, base, worktree:{name, rel}, brief:{rev, digest, bytes}, recorded, replay, warnings}}`。応答・診断に絶対パスと本文を出さない |
+| 入口の検査 | 統合と同じ（`strictOriginOk` を共用）: Origin 必須・`X-PRV: 1` と JSON・Funnel ヘッダー拒否・本文 64 KB・未知キー 400。`expect.target` が現在の develop と違えば 409 `stale_view` |
+| 名前の規則 | 種類は `feature/` だけ。`^[a-z0-9][a-z0-9._-]{0,63}$`。`..`・末尾 `.`・`.lock`・`.git`・Windows の予約名は不可。最後に `git check-ref-format`。既存の枝・記録・ディレクトリ・D/F 衝突は 409 `name_used` |
+| 作る順序と巻き戻し | 事前検査 → リポジトリ単位の待たない排他（409 `busy`）→ `git worktree add -b feature/<名> <root>/.tmp/worktrees/<名> <develop の OID>`（`runGit`・固定引数）→ 検証 → brief を CAS 新規で追記 → 応答。**記録を先に書かない**。記録に失敗したら巻き戻す（`git worktree remove`（`--force` なし）+ 枝の CAS 削除）が、**worktree が清潔・進行中の操作なし（`MERGE_HEAD` など）・外部コード設定なし（`core.fsmonitor` など）の 3 つがすべて確かめられたときだけ**。できなければ 500 `create_partial`（残骸の種類だけ返す）。同じ `requestId` の再送は、枝があり記録の `requestId` が一致すれば 200 `replay: true` |
+| brief の保存先 | レビュー記録（`refs/pi/review/<prKey>`）の `brief` イベント（§3）。起票で作る ref だけ `meta.schema: 2` |
+| 上限 | 題名 100 字・目的 1,500 字・守る条件 1,500 字・完了条件 800 字・担当範囲 20 件 × 120 字・合計 4,000 字・`d` は 15,000 バイト以下（超過は 400 `brief_too_large`）。制御文字・双方向制御文字・孤立サロゲートは 400 `bad_brief` |
+| 秘密らしい文字列 | `private_key`・`aws_key`・`github_token`・`slack_token`・`bearer`・`jwt`・`url_userinfo`・`password=` 型を検出したら 400 `secret_like`（**種類だけ返し、本文は返さない**）。検出は機械的な関門で、漏れ（誤検知・見逃し）はありうる |
+| `git flow` | **呼ばない**（`git worktree add -b` を直接使う）。アプリで作った worktree が `git flow feature finish` の後、detached で残る可能性があるが**未実測** |
+| エラー | 400 `bad_request`・`bad_kind`・`bad_name`・`bad_expect`・`bad_brief`・`bad_request_id`・`brief_too_large`・`secret_like` / 403 `create_disabled`・`forbidden_funnel`・`forbidden_origin` / 404 / 409 `stale_view`・`name_used`・`busy`・`unsupported_repo`・`bad_layout`・`external_code`・`worktree_registered`・`limit` / 413 / 500 `create_failed`・`create_partial` / 503 `shutting_down` |
+| 画面 | 一覧の「＋ 起票」（`caps.create`）・2 段の承認シート（入力 → 確認）・結果（PR を開く・依頼文をコピー・`pis --new` の案内）。0 コミットで記録がある PR は `state: "empty"`（「統合済み」と区別）。下書きは `sessionStorage`。`textContent` のみ・`<form>` は使わない |
+
+#### 止められるもの・止められないもの
+
+統合（上の表）と同じ入口の検査なので、CSRF・DNS rebinding・Funnel 経由は同じ根拠で止まる。**止まらないもの**: tailnet 内の他の機器・同一端末の他プロセス（認証は入れない方針。`--allow-create` を付けると到達できるクライアントは枝と worktree を作れ、brief を残せる）。作られるものは新しい枝・worktree・記録の ref で、既存の枝・worktree・記録は上書きしない。Fence 内のエージェントへの拒否（判定器）は本段では**入れていない**。
+
+#### 有効化の手順（利用者が行う）
+
+1. 取り込んだ後、アプリを再起動する（`--allow-create` を付けない限り無効のまま）。
+2. 安全な試験用リポジトリで `--allow-create` を付けて起動し、起票を 1 回試す（枝・worktree・結果画面）。
+3. 不要になった試験の枝・worktree は手で消す（アプリは消さない）。
+
 ## 7 ペアリングと制御（段 4。未実装）
 
 > **置き換え予定（2026-11-03）**: ペアリング・制御ポート・long-poll・共有の秘密は採らない。通信は ref の追記と、pi 内の受信箱で行う（[CHG-0061](../change/closed/0061-pr-inbox.md) の決定 D2）。以下は置き換え前の設計で、実装しない。
@@ -322,6 +416,8 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 4 | 秘密なしは 401。指示は 1 回限り・期限で失効。統合先以外には届かない。poll が止まると死亡扱い。再起動後の再ペア。pi の申告と実体が違うペアは拒否 |
 | 5 | 縦断（pending → running → done と `merge_result`）。同じ `requestId` の内容差し替え・同じ OID の別 target・message や cleanup の差し替えを拒否（通常のコメント追記は許す）。指示の取得後・計画中・実行開始後に unpair / reload / 終了を起こして、未開始の実行禁止と既存の停止確認の経路を確かめる。`merge_started` の追記が失敗したら実行しない。`merge_result` の追記が失敗しても UI が状態を表示する。アプリの再起動後に再実行しない。busy の拒否 |
 | A2 | 統合 API（`test_pr_viewer_merge_api.py`）: 偊の approve / merge_request / 保留を ref に置いても統合されない（同じ fixture で正規の POST が通る対照つき）。`--allow-merge` 無し・Origin 無し / `null` / 別ホスト・Funnel ヘッダー・`X-PRV` 無し・expect の不正とすれ・メッセージと cleanup の不正・旧経路の残骸の保留・ロック・running があっても統合を妨げない・同時 2 要求・衝突・dirty・recover_needed で ref と作業ツリーが動かない。merge-plan の無副作用・リスクの全件判定・SIGTERM で実行中の統合を待つ・通信断でも統合が続く。import 境界（`merge-api.ts` が git を直接動かさない・承認状態を読まない） |
+| A4a | ジョブ（5 本。偽の `pis`（`pr_viewer_fixtures/fake_pis.py`。モードは edit・noop・fail・slow・hang・flood・outside・tamper・risk・binary・symlink。本物の LLM・pis は呼ばない）と実 git の使い捨てリポジトリ）: `test_pr_viewer_jobs.py`（API 層・入口の検査・排他・digest・ログの衛生化・統合との相互排他・偽の submit / receipt / summary を置いても起動できない対照つき）・`test_pr_viewer_jobs_git.py`（起動前の検査 P2〜P4・P6・照合 Q2・tree の構築 Q3・検査 Q4・Q5・commit と CAS Q6・Q7。改ざん・敵対的なパス・巨大・バイナリ・競合の反例を先に置く）・`test_pr_viewer_jobs_runner.py`（argv・cwd・環境の許可リスト・プロセスグループ・正常 commit・各失敗・時間切れ・キャンセル・取り残しの掃除・SIGTERM を無視する子・shutdown）・`test_pr_viewer_jobs_store.py`（保存先の権限・回復・排他の競合・ログの上限・プロンプトの囲みと敵対的なコメント）、および画面の試験（`test_pr_viewer_e2e.py` の実サーバと画面側フィクスチャの形の比較）。実装時に、digest の照合・日次の数えの順序・Origin 必須・`jobs_disabled`・ログの置換・統合側の `job_running` の確認を外す変異確認を行い、生き残った 1 件（ログの根パスの置換）は試験を足して殺した。Linux 前提（Windows は未検証）。**`scripts/verify.py` への登録は `test_pr_viewer_*` の規則で当たる**（個別の登録は不要。取り込み前に `test/test_verify.py` で確かめる） |
+| B1 | 起票（`test_pr_viewer_create.py`・実 git）: 名前の形・予約名・`..`・既存の枝 / 記録 / ディレクトリ / D/F 衝突の拒否・`--allow-create` 無し・Origin / Funnel / `X-PRV`・`expect` のずれ・`secret_like`・上限・記録を先に書かない順序・再送の `replay`・巻き戻しの失敗（`--create-test-fail`）。H: `test_pi_review_log.py`・`test_pi_review_git.py`（`brief` と schema 2）。画面・形: `test_pr_viewer_web.py`・`test_pr_viewer_e2e.py`（実サーバの応答がフィクスチャと同じキーと型） |
 | 共通 | アプリが `pending-*.ts` などを import しない。新しい試験は `scripts/verify.py` に登録する |
 
 ## 12 既知の制限と未確認
@@ -332,7 +428,9 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | feature の worktree からの書き込み | `refs/pi/review/*` を feature の worktree の `pis` から書けるか（`refs/pi/pending` は確認済み） |
 | C13 | 保持期限と圧縮は v1 で未実装。上限で止まる |
 | UI ポートは認証なし | tailnet が保証する決定。統合（`--allow-merge`）を有効にすると、到達できるクライアントは統合できる（§6 統合の表）。素の `pi`（Fence なし）では、モデルが変更系の API を直接呼べる（判定器の拒否はうっかり防止の水準） |
+| ジョブ（段 A4a） | **実機の実測（X3-a）は未実施**。本物の `pis`・LLM では動かしていない（偽の `pis` の試験だけ）。`--allow-jobs` は既定で無効。共通 `.git` の改ざんは検出であって防止ではない。commit に pre-commit が走らない。Linux 専用。詳細は §6「ジョブ」の止められるもの・既知の制限 |
 | ブランチ削除後 | PR の一覧・詳細は、生きているブランチの ref から作る。ブランチを消した PR は画面から見えない（review ref と最後の source は残る。§2 の「branch と review ref の和集合」は**未実装**。独立 review の指摘 M6） |
+| 起票（B1） | `--allow-create` は既定で無効。アプリが作った worktree が `git flow feature finish` の後 detached で残る可能性は**未実測**。巻き戻しの 3 条件（進行中の操作・外部コード設定・清潔さ）と枝の CAS・名前の検査の順序は、変異確認で殺しきれていない（試験が無い）。秘密らしい文字列の検出は機械的で、漏れうる。Fence 内のエージェントへの判定器の拒否は未実装 |
 | 画面からの「再送」 | 送信履歴の各 batch に「再送」ボタンがある（`resendOf` つきの新しい `submit`）。受領の記録と注入の間に落ちたときの手動の救済 |
 | 段 5 の開始条件 | **判定器でアプリのポートへの変更系の呼び出しを拒否するまで、段 5 は有効化しない** |
 | 偽のペア | モデルもペア要求を送れる。権限は上がらないが、窓口の指示を横取りして断ることはできる（制御ポートは repo の内容を返さない） |

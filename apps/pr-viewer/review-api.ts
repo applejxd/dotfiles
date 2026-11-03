@@ -5,10 +5,14 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { appendEvents, readPr } from "../../home/dot_config/pi/harness/review-git.ts";
-import { SCHEMA, foldState, newId } from "../../home/dot_config/pi/harness/review-log.ts";
-import type { Anchor, Batch, CommentEvent, ReviewEvent, SubmitKind, Vs } from "../../home/dot_config/pi/harness/review-log.ts";
+import { SCHEMA, SCHEMA_BRIEF, foldState, newId, prKeyOf, unreadBatches } from "../../home/dot_config/pi/harness/review-log.ts";
+import type { Anchor, Batch, BriefEvent, CommentEvent, ReviewEvent, State, SubmitKind, Vs } from "../../home/dot_config/pi/harness/review-log.ts";
+import { briefView } from "./brief.ts";
+import type { BriefData } from "./brief.ts";
 import { ApiError, git, gitAdapter, gitWrite, isOid } from "./git-view.ts";
 import type { FileEntry, Repo } from "./git-view.ts";
+import { PROMPT_LIMITS, inputDigest } from "./job-prompt.ts";
+import type { JobBatch } from "./job-prompt.ts";
 
 /** 1 つの PR について、書き込みと読み出しに要る情報。 */
 export type PrCtx = {
@@ -114,6 +118,7 @@ function emptyReview(worktrees: WorktreeInfo[]): Record<string, unknown> {
 		worktrees,
 		defaultDest: { worktreeId: worktrees[0]?.worktreeId ?? "" },
 		unsent: 0,
+		brief: null,
 	};
 }
 
@@ -142,6 +147,7 @@ export async function getReview(c: PrCtx): Promise<unknown> {
 			comments: t.comments.map(commentView),
 		})),
 		batches: st.batches,
+		brief: st.brief ? briefView(st.brief) : null,
 		summary: st.summary ? { ...st.summary.d, at: st.summary.at, by: st.summary.by } : null,
 		unsent: all.filter((e) => !sent.has(e.id)).length,
 	};
@@ -305,6 +311,58 @@ export async function recordMerge(c: PrCtx, m: { requestId: string; message: str
 	return res.ok === true;
 }
 
+// ---- 起票の依頼文（brief） ----
+
+const ZERO_OID = "0".repeat(40);
+
+/** 起票の記録（brief）を読む。記録が無い・読めない・壊れているときは null（表示と再送の照合にだけ使う。権限の根拠にしない）。 */
+export async function readBriefRecord(repo: Repo, prKey: string): Promise<{ brief: BriefEvent; baseOid: string } | null> {
+	let r;
+	try {
+		r = await readPr(gitAdapter(repo), prKey);
+	} catch {
+		return null;
+	}
+	if (r.kind !== "ok") return null;
+	const st = foldState(r.meta, r.events, { source: ZERO_OID, target: ZERO_OID, base: ZERO_OID });
+	return st.brief ? { brief: st.brief, baseOid: st.brief.vs.base } : null;
+}
+
+/**
+ * 起票した枝（0 コミット）の記録かを調べる。依頼文の記録があり、枝の先頭が起票時の基点のままで、統合の成功が無いときだけ true。
+ * 一覧で「統合済み」と区別して「起票のみ（empty）」と見せるための表示用。
+ */
+export async function isUntouchedBrief(repo: Repo, prKey: string, sourceOid: string): Promise<boolean> {
+	const rec = await readBriefRecord(repo, prKey);
+	if (!rec || rec.brief.vs.source !== sourceOid) return false;
+	let r;
+	try {
+		r = await readPr(gitAdapter(repo), prKey);
+	} catch {
+		return false;
+	}
+	if (r.kind !== "ok") return false;
+	return !foldState(r.meta, r.events, { source: ZERO_OID, target: ZERO_OID, base: ZERO_OID }).merge.succeeded;
+}
+
+/**
+ * 起票の依頼文を、新しい記録（refs/pi/review/<prKey>。meta.schema 2）の最初のイベントとして書く（CAS 新規）。
+ * 記録が既にあれば何も書かない（上書きしない）。書けたときだけ true。
+ */
+export async function recordBrief(repo: Repo, branch: string, target: string, baseOid: string, d: BriefData): Promise<boolean> {
+	const prKey = prKeyOf(branch);
+	const vs: Vs = { source: baseOid, target: baseOid, base: baseOid };
+	const at = new Date().toISOString();
+	const res = await appendEvents(
+		gitAdapter(repo),
+		prKey,
+		{ schema: SCHEMA_BRIEF, pr: prKey, branch, target, createdAt: at },
+		(state) => (state.brief !== null || state.threads.length > 0 ? { refuse: "exists" } : [{ v: 1, id: newId(), by: "app", at, vs, t: "brief", d } as ReviewEvent]),
+		{ current: vs },
+	);
+	return res.ok === true && !("noop" in res);
+}
+
 // ---- POST …/submit ----
 
 export async function postSubmit(c: PrCtx, input: Record<string, unknown>): Promise<unknown> {
@@ -362,4 +420,117 @@ export async function postSubmit(c: PrCtx, input: Record<string, unknown>): Prom
 	const s = sent as { batchId: string; items: string[] } | null;
 	if (!s) throw new ApiError(500, "write_failed", "保存に失敗しました。");
 	return { batchId: s.batchId, kind, items: s.items, dest };
+}
+
+// ---- ジョブ（変更を依頼）の入力と受領 ----
+// 契約: .tmp/keep/prv-app/api-contract-job.md の `input`。起動の権限は live の POST だけ。ここは記録を「入力データ」として読み、
+// 起動の直前に receipt を 1 回の appendEvents で原子的に claim する（対話の pi が先に受領していれば断る）。
+
+/** 1 回のジョブに渡せる batch の数（契約: ≤10）。 */
+export const JOB_MAX_BATCHES = 10;
+
+/** worktree のパスから宛先の ID（listWorktrees と同じ規則）。 */
+export function worktreeIdFor(path: string): string {
+	return sha16(normalizePath(path));
+}
+
+/** 枝を checkout している worktree の ID。ちょうど 1 つでなければ null。パスは返さない。 */
+export async function featureWorktreeId(repo: Repo, branch: string): Promise<string | null> {
+	const r = await gitWrite(repo, ["worktree", "list", "--porcelain"]);
+	if (r.code !== 0) return null;
+	const ids: string[] = [];
+	for (const block of r.stdout.split("\n\n")) {
+		const lines = block.split("\n");
+		const first = lines.find((l) => l.startsWith("worktree "));
+		if (!first || lines.some((l) => l.startsWith("prunable"))) continue;
+		if (lines.includes(`branch refs/heads/${branch}`)) ids.push(worktreeIdFor(first.slice("worktree ".length)));
+	}
+	return ids.length === 1 ? ids[0] : null;
+}
+
+function jobBatchOf(state: State, b: Batch, at: string): JobBatch {
+	const byId = new Map(state.threads.flatMap((t) => t.comments).map((e) => [e.id, e] as const));
+	const comments = b.items.flatMap((id) => {
+		const e = byId.get(id);
+		return e ? [commentView(e)] : [];
+	});
+	return { batchId: b.batchId, kind: b.kind, at, comments };
+}
+
+async function readJobState(c: PrCtx): Promise<{ state: State; atOf: Map<string, string> } | null> {
+	const r = await readPr(gitAdapter(c.repo), c.prKey);
+	if (r.kind !== "ok") return null;
+	const atOf = new Map<string, string>();
+	for (const e of r.events) if (e.t === "submit") atOf.set(e.d.batchId, e.at);
+	return { state: foldState(r.meta, r.events, currentVs(c)), atOf };
+}
+
+/**
+ * GET …/job-input 用: この PR の、未受領で、宛先がこの worktree の submit の batch（古い順・10 件まで。コメントの無いものは除く）。
+ * merged は、記録の上で統合が成功しているか。記録が読めないときは、何も渡さない（空）。
+ */
+export async function liveJobBatches(c: PrCtx, worktreeId: string | null): Promise<{ batches: JobBatch[]; merged: boolean }> {
+	const s = await readJobState(c);
+	if (!s) return { batches: [], merged: false };
+	const merged = s.state.merge.succeeded;
+	if (worktreeId === null) return { batches: [], merged };
+	const batches = unreadBatches(s.state, worktreeId)
+		.map((b) => jobBatchOf(s.state, b, s.atOf.get(b.batchId) ?? ""))
+		.filter((b) => b.comments.length > 0)
+		.slice(0, JOB_MAX_BATCHES);
+	return { batches, merged };
+}
+
+export const JOB_INPUT_LIMITS = PROMPT_LIMITS;
+
+type Chosen = { ok: true; batches: JobBatch[] } | { ok: false; code: "bad_batches" | "nothing_to_do" };
+
+/** 指名された batch を、状態の順に並べて返す。存在しない・宛先が違う → bad_batches、受領済み → nothing_to_do。 */
+function chooseJobBatches(state: State, atOf: Map<string, string>, worktreeId: string, ids: string[]): Chosen {
+	if (ids.length === 0) return { ok: false, code: "bad_batches" };
+	for (const id of ids) {
+		const b = state.batches.find((x) => x.batchId === id);
+		if (!b || b.dest.worktreeId !== worktreeId) return { ok: false, code: "bad_batches" };
+	}
+	if (ids.some((id) => state.batches.find((x) => x.batchId === id)?.received)) return { ok: false, code: "nothing_to_do" };
+	const batches = state.batches.filter((b) => ids.includes(b.batchId)).map((b) => jobBatchOf(state, b, atOf.get(b.batchId) ?? ""));
+	return { ok: true, batches };
+}
+
+/** 起動前の確認（書かない）: 指名された batch を、いまの記録から解決する。 */
+export async function resolveJobBatches(c: PrCtx, worktreeId: string, ids: string[]): Promise<Chosen> {
+	const s = await readJobState(c);
+	if (!s) return { ok: false, code: "bad_batches" };
+	return chooseJobBatches(s.state, s.atOf, worktreeId, ids);
+}
+
+/**
+ * 起動の直前に、batch を receipt で claim する（1 回の appendEvents。競合したら最新の状態で選び直し、digest も照合し直す）。
+ * 成功は null。失敗は ApiError（stale_input・nothing_to_do・bad_batches・merged など）。
+ */
+export async function claimJobBatches(
+	c: PrCtx,
+	p: { jobId: string; batchIds: string[]; worktreeId: string; digest: string },
+): Promise<ApiError | null> {
+	const res = await appendEvents(
+		gitAdapter(c.repo),
+		c.prKey,
+		metaOf(c),
+		(state) => {
+			const r = chooseJobBatches(state, new Map(), p.worktreeId, p.batchIds);
+			if (!r.ok) return { refuse: r.code };
+			if (inputDigest(r.batches) !== p.digest) return { refuse: "stale_input" };
+			return r.batches.map(
+				(b) => ({ ...baseOf(c), id: newId(), t: "receipt", d: { batchId: b.batchId, sessionId: `app-job:${p.jobId}` } }) as ReviewEvent,
+			);
+		},
+		{ current: currentVs(c) },
+	);
+	if (res.ok) return "noop" in res ? new ApiError(409, "nothing_to_do", "渡すコメントがありません。") : null;
+	if ("refused" in res) {
+		if (res.refused === "bad_batches") return bad("bad_batches", "指定した送信が見つかりません。");
+		if (res.refused === "nothing_to_do") return new ApiError(409, "nothing_to_do", "指定した送信は、すでに受領されています。");
+		if (res.refused === "stale_input") return new ApiError(409, "stale_input", "渡す内容が変わりました。開き直してください。");
+	}
+	return failOf(res) ?? new ApiError(500, "write_failed", "保存に失敗しました。");
 }

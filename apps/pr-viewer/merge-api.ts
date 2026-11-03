@@ -40,7 +40,7 @@ export function mergeRequestError(headers: IncomingHttpHeaders, allowMerge: bool
 }
 
 /** Origin は必須。`null`・形の悪い値・別のホストは断る（既存の書き込み系は Origin 無しを許すが、統合は許さない）。 */
-function strictOriginOk(origin: string | undefined, host: string | undefined): boolean {
+export function strictOriginOk(origin: string | undefined, host: string | undefined): boolean {
 	if (origin === undefined || origin === "null" || host === undefined) return false;
 	try {
 		const u = new URL(origin);
@@ -59,6 +59,19 @@ export function stopMerges(): void {
 }
 
 const gates = new Set<string>();
+
+/** 統合の処理が、このリポジトリで実行中か（ジョブの起動の排他に使う。ジョブ側は merge_running で断る）。 */
+export function mergeRunning(repoId: string): boolean {
+	return gates.has(repoId);
+}
+
+let jobProbe: (repoId: string) => boolean = () => false;
+/** ジョブが実行中（予約を含む）かを答える関数を登録する（job-api.ts が起動時に 1 回呼ぶ。循環 import を避ける）。 */
+export function setJobProbe(fn: (repoId: string) => boolean): void {
+	jobProbe = fn;
+}
+
+const JOB_RUNNING_TEXT = "pi への依頼（ジョブ）が実行中です。終わってから統合してください。";
 
 /** リポジトリ単位の「待たない」排他。取れなければ 409 busy。別のプロセスとの排他は、統合器のロックファイルが担う。 */
 async function gated<T>(repo: Repo, fn: () => Promise<T>): Promise<T> {
@@ -99,7 +112,7 @@ function globToRegExp(glob: string): RegExp {
 }
 
 /** rules.json の judge.common.pi.integrate.risk_paths。読めない・形が違うときは null（「リスクなし」と区別する）。 */
-function loadRiskPatterns(file: string): RegExp[] | null {
+export function loadRiskPatterns(file: string): RegExp[] | null {
 	try {
 		if (statSync(file).size > MAX_RULES_BYTES) return null;
 		const rules = JSON.parse(readFileSync(file, "utf8")) as { judge?: { common?: { pi?: { integrate?: { risk_paths?: unknown } } } } };
@@ -186,6 +199,12 @@ const REFUSAL_STATUS: Record<string, number> = {
 	recover_needed: 409,
 	not_ff: 409,
 	no_identity: 409,
+	// P1 の事前検査（環境・変更の内容が原因で、統合しない）
+	git_version: 409,
+	unsupported_repo: 409,
+	unsupported_change: 409,
+	// 統合されたか確認できなかった（状態ファイルを残している。recover で確かめる）
+	unverified: 500,
 	failed: 500,
 };
 
@@ -210,6 +229,8 @@ export async function mergePlan(ctx: PrCtx, pr: MergePr, body: Record<string, un
 	if (Object.keys(body).length !== 0) throw bad("bad_request", "リクエストの形が正しくありません。");
 	return await gated(ctx.repo, async () => {
 		const blockers: Blocker[] = [];
+		// ジョブは統合先の ref を動かさないが、実行中の worktree・保護 ref の照合を乱す。リポジトリ単位で断る
+		if (jobProbe(ctx.repo.repoId)) blockers.push({ code: "job_running", message: JOB_RUNNING_TEXT });
 		// plan はメッセージを使わない（検査を通すための仮の値 "plan" を渡す）
 		const r = await planMerge({ repo: ctx.repo.gitDir, source: ctx.branch, target: ctx.target, message: "plan" });
 		const hints = await reviewHints(ctx);
@@ -273,6 +294,11 @@ export async function mergeExecute(ctx: PrCtx, body: Record<string, unknown>, en
 	return await gated(ctx.repo, async () => {
 		const req = randomUUID();
 		const who = { req, repo: ctx.repo.repoId, pr: ctx.prKey, expect: input.expect };
+		// ジョブとの排他: gated の確認と同じ tick で見る（ジョブ側の予約も同期。どちらかが必ず先に断られる）
+		if (jobProbe(ctx.repo.repoId)) {
+			diag({ ...who, result: "job_running", commit: null, recorded: false });
+			throw new ApiError(409, "job_running", JOB_RUNNING_TEXT);
+		}
 		const deps = env.testDelayMs > 0 ? { beforeAdvance: () => new Promise<void>((done) => setTimeout(done, env.testDelayMs)) } : undefined;
 		const r = await executeMerge(
 			{
