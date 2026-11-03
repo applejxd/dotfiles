@@ -154,6 +154,7 @@ _PI_TESTS = (
     "test_pi_review_log",
     "test_pi_review_git",
     "test_pi_pr_review",
+    "test_pi_pr_inbox",
     "test_pi_native_action",
     "test_pi_git_destructive",
     "test_pi_orchestrate",

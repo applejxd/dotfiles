@@ -67,6 +67,7 @@ try:
         "review-log.ts",
         "review-git.ts",
         "pr-review.ts",
+        "pr-inbox.ts",
         "board.ts",
         "board-collect.ts",
         "platform.ts",

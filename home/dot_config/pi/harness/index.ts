@@ -32,6 +32,7 @@ import { previewBlocked, profileDefaults } from "./freezone.ts";
 import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { registerPr } from "./pr-review.ts";
+import { registerPrInbox } from "./pr-inbox.ts";
 import { auditConditions, auditFormat, summarizeCalls } from "./audit.ts";
 import { unguardedMessage, unguardedSources } from "./unguarded.ts";
 import { SessionTmp } from "./session-tmp.ts";
@@ -860,6 +861,8 @@ export default async function (pi: ExtensionAPI) {
 	// ローカル PR ビューアの道具 (pr_summary・pr_comments) と、次の入力の前の注入。役割に道具があり、子でないときだけ登録する
 	// see docs/spec/pr-viewer.md
 	registerPr(pi, { Type, prefix: PREFIX, child: CHILD, hasTool: (name) => roleTools.includes(name) });
+	// 受信箱 (/pr inbox)。既定は off。振る舞いは docs/change/0061-pr-inbox.md
+	registerPrInbox(pi, { child: CHILD, defer: deferWhileCompacting });
 
 	const agents: Record<string, any> = rules.agents ?? {};
 	if (!CHILD && supportsChildTasks() && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);

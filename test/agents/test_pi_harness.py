@@ -75,6 +75,7 @@ def env(tmp_path):
         "review-log.ts",
         "review-git.ts",
         "pr-review.ts",
+        "pr-inbox.ts",
         "board.ts",
         "board-collect.ts",
     ):
@@ -2031,6 +2032,26 @@ def test_todo_footer_shows_progress_the_active_item_and_clears_on_tidy(env):
     assert any(s and "📌 0/2 ▶ first step" in s for s in statuses), statuses
     assert any(s and "✅ 2/2" in s for s in statuses), statuses
     assert statuses[-1] is None, statuses  # 片付けて空になったら表示を消す
+
+
+def test_pr_inbox_command_is_wired_and_off_by_default(env):
+    # 受信箱 (pr-inbox.ts) が index.ts から配線され、既定 off・on/off で切り替わる (実際の pi の RPC。ref の読み書きは別の試験)
+    notices: list = []
+    statuses: list = []
+    messages = [
+        "/pr inbox status",
+        "/pr inbox on",
+        "/pr inbox status",
+        "/pr inbox off",
+        "/pr bogus",
+    ]
+    _, statuses = _rpc_script(env, [], messages, [], notices=notices, status_key="pr-inbox")
+    joined = "\n".join(str(n) for n in notices)
+    assert "受信箱: off" in joined and "受信箱: on" in joined, notices
+    assert "on にした" in joined and "off にした" in joined, notices
+    assert "使い方: /pr inbox" in joined, notices
+    # リポジトリにレビューが無いのでバッジは出ない (出したとしても off で消える)
+    assert not any(s for s in statuses), statuses
 
 
 def test_agent_commands_start_a_child_and_list_children(env):

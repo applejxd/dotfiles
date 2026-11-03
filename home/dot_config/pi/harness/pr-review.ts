@@ -99,7 +99,7 @@ export function worktreeIdOf(path: string): string {
 	return createHash("sha256").update(real).digest("hex").slice(0, 16);
 }
 
-async function myWorktreeId(git: Git): Promise<string | null> {
+export async function myWorktreeId(git: Git): Promise<string | null> {
 	const r = await git(["rev-parse", "--show-toplevel"]);
 	const top = r.stdout.trim();
 	return r.code === 0 && top !== "" ? worktreeIdOf(top) : null;
@@ -217,6 +217,16 @@ async function readState(git: Git, key: string, current?: Vs): Promise<Reader | 
 export type Candidate = { key: string; branch: string; batch: Batch; state: State; current: Vs };
 
 /**
+ * 1 つの PR の、自分宛の未受領の batch (読み取りだけ)。読めなかったとき (ref が無い・壊れている・版が新しい) は null
+ * (受信箱は null を「読んだ」と覚えず、次の tick で再試行する)
+ */
+export async function candidatesOfKey(git: Git, key: string, mine: string): Promise<Candidate[] | null> {
+	const st = await readState(git, key);
+	if (!st || "error" in st) return null;
+	return unreadBatches(st.state, mine).map((batch) => ({ key, branch: st.branch, batch, state: st.state, current: st.current }));
+}
+
+/**
  * 読み取りだけ (ref を一切書かない)。宛先が自分の作業ツリーの未受領の batch と、自分の worktreeId を返す。
  * 読めない PR は飛ばす。自分の worktreeId が決まらなければ mine は null
  */
@@ -225,11 +235,7 @@ export async function listCandidates(git: Git, limit = 200): Promise<{ mine: str
 	if (!mine) return { mine: null, candidates: [] };
 	const candidates: Candidate[] = [];
 	for (const key of (await listPrKeys(git)).slice(0, limit)) {
-		const st = await readState(git, key);
-		if (!st || "error" in st) continue;
-		for (const batch of unreadBatches(st.state, mine)) {
-			candidates.push({ key, branch: st.branch, batch, state: st.state, current: st.current });
-		}
+		candidates.push(...((await candidatesOfKey(git, key, mine)) ?? []));
 	}
 	return { mine, candidates };
 }
@@ -287,12 +293,15 @@ export function renderInjection(claimed: Candidate[]): string | null {
 	].join("\n\n");
 }
 
-/** 次の入力の前に渡す、未受領の batch。受領を (前提条件つきで) 記録できたものだけを渡す (上限は受領できた件数) */
-export async function collectInjection(git: Git, sessionId: string, now: () => string): Promise<string | null> {
+/**
+ * 次の入力の前に渡す、未受領の batch。受領を (前提条件つきで) 記録できたものだけを渡す (上限は受領できた件数)。
+ * alive が偽になったら、それ以降は受領を始めない (session_shutdown の後に受領だけが残らないように)
+ */
+export async function collectInjection(git: Git, sessionId: string, now: () => string, alive: () => boolean = () => true): Promise<string | null> {
 	const { candidates } = await listCandidates(git);
 	const claimed: Candidate[] = [];
 	for (const c of candidates) {
-		if (claimed.length >= MAX_BATCHES) break;
+		if (claimed.length >= MAX_BATCHES || !alive()) break;
 		// 受領の記録が先。同じ batch を別の pi が先に受領していたら、渡さない
 		if (await claimCandidate(git, c, sessionId, now)) claimed.push(c);
 	}

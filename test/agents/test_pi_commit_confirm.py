@@ -447,6 +447,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
         "review-log.ts",
         "review-git.ts",
         "pr-review.ts",
+        "pr-inbox.ts",
         "board.ts",
         "board-collect.ts",
     ):
