@@ -2,7 +2,7 @@
 
 確認が取れないとき操作を保留し、利用者があとで `/pending approve` で実行する仕組み（`git_integrate`）は、**撤去済み**。
 統合は PR ビューアの「統合する」ボタンへ移った（[CHG-0062](../../change/0062-pr-hub-simplify.md) 段 A5）。経緯は [CHG-0055](../../change/closed/0055-async-approval.md)・[ADR-0023](../../adr/0023-pending-approval.md)。
-撤去は 1 つの feature・1 回の保存で行った。**revert 1 つで旧経路が復活する**。
+撤去は 1 つの feature・1 回の保存で行った。PR ビューアが作る、この feature の統合 merge commit を `git revert -m 1` すれば旧経路が復活する（履歴には撤去本体・develop の取り込み・後続修正があり、本体 commit だけの revert は後続修正と競合しうる）。
 
 ## 今の統合の流れ
 
@@ -14,7 +14,7 @@
 
 ## 撤去したもの
 
-- `guarded_action` の `git_integrate`、`/pending` の `approve`・`resolve`・`unlock`・`log`、承認の巡回、排他ロック、フッターの「保留 N 件」
+- `guarded_action` の `git_integrate`、`/pending` の `approve`・`resolve`・`unlock`・`log`、承認の巡回、排他ロック、フッターの新形式の保留の件数表示（コミット退避（旧形式）の件数表示は残る。PR 到着・旧統合結果の通知はなくなり、残る通常の BEL 通知とは別物）
 - 設定 `[pi.pending]`、`[pi.integrate] enabled`（`protected_refs`・`risk_paths`・`skip_confirm_in_free_zone` は残る）
 - 実装 `integrate-plan.ts`・`integrate-exec.ts` など
 

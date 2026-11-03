@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 import pytest
-from agents_common import ROOT
+from agents_common import ROOT, load_common
 from test_pi_judge_ts import _node
 from test_pi_review_git import PRELUDE
 from test_pr_viewer_server import (
@@ -908,6 +908,23 @@ def test_risks_come_from_all_touched_paths_and_touches_app_is_independent_of_con
         all(not f["path"].startswith("apps/") for f in p3["plan"]["files"])
         and p3["plan"]["touchesApp"] is True
     )
+
+
+def test_shipped_risk_paths_flag_pi_json(make):
+    """生成器が出す同梱の risk_paths が、.agents/config/pi.json の変更をリスクとして表示する。"""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts" / "agents"))
+    import generate as gen
+
+    pi_json = ".agents/config/pi.json"
+    risk = gen.pi_integrate(load_common())["risk_paths"]
+    assert pi_json in risk
+    rules = json.dumps({"judge": {"common": {"pi": {"integrate": {"risk_paths": risk}}}}})
+    w = make(rules=rules)
+    _, p = plan(w, feature(w, "feature/pij", {pi_json: "{}\n"}))
+    flagged = {r["path"]: r["reason"] for r in p["plan"]["risks"]}
+    assert flagged.get(pi_json) == "risk_path", p
 
 
 @pytest.mark.parametrize(

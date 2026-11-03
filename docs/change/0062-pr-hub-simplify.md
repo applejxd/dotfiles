@@ -121,7 +121,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | A2 | アプリへ接続: `POST .../merge-plan`・`POST .../merge`・承認シート。Origin 必須・`--allow-merge`・Funnel ヘッダーの拒否・判定器の curl 拒否・`risk_paths` に `apps/pr-viewer/**`。旧経路とは**併用禁止**（事前検査で断る。窓は残る）。**実装済み**（G: 判定器・S: サーバ API・U: 画面の 3 feature。計画・実装とも独立 review 済み。設計は [pr-viewer.md §6「統合」](../spec/pr-viewer.md)。有効化には取り込みの後の `chezmoi apply`・pi 再起動・実機確認が要る） | A1 |
 | A3 | 合流可否・「develop が N 進んだ」・「未 push N 件」の表示（読み取りのみ）。**実装済み**（`behind`・`overlap`・`unpushed`。設計は [pr-viewer.md §6](../spec/pr-viewer.md)） | A2 |
 | A4 | 「変更を依頼」「衝突を解決」（`pis -p` の起動） | X3 合格 |
-| A5 | 撤去（保留・受信箱・`git_integrate`・`/pending approve` など。約 2,900 行 + 試験約 20 ファイル）。**実装済み**（2026-11-03。1 つの feature・1 回の保存で、revert 1 つで旧経路が戻る。残骸の ref の掃除は利用者が `pk pending-clean` で行う。保存は利用者の確認後） | A2〜A4 の運用で足りること |
+| A5 | 撤去（保留・受信箱・`git_integrate`・`/pending approve` など。約 2,900 行 + 試験約 20 ファイル）。**実装済み**（2026-11-03。1 つの feature・1 回の保存で、PR ビューアが作るこの feature の統合 merge commit を `git revert -m 1` すれば旧経路が戻る（履歴には撤去本体・develop の取り込み・後続修正があり、本体 commit だけの revert は後続修正と競合しうる）。残骸の ref の掃除は利用者が `pk pending-clean` で行う。保存は利用者の確認後） | A2〜A4 の運用で足りること |
 | B | アプリのジョブ実行（worktree の作成・worker の起動・コミット・検査）とマネージャー役（計画・review・衝突） | A の運用。`pis -p` の役割の試験 |
 | C | pi 側の撤去（`guarded_task`・`git_commit` の guarded_action 統合系・盤面など）。pi をガード + 通常のツールへ戻す | B が実際に回ってから |
 
@@ -151,7 +151,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | `pis -p` の質・費用・時間 | 未確認（X3） |
 | Windows | 統合は標準 git だけなので動く見込み（今は統合を拒否している）。ジョブ実行（`pis`）は Unix から始める。Windows 実機は未検証 |
 | 履歴の形 | merge commit で、develop の履歴に feature のコミットが入る（`--first-parent` で 1 feature = 1 コミット） |
-| 共存期間（解消済み） | 旧実行器は `refs/pi/lock` を使い、アプリはそれを見なかった。A5 で旧実行器ごと撤去したので解消した。元の記述: A2 で「lock・running があれば拒否」を入れ、A5 で解消する |
+| 共存期間（条件付きで解消） | 旧実行器は `refs/pi/lock` を使い、アプリはそれを見なかった。A5 で旧実行器のコードは撤去したが、すでに動いている旧 pi・統合処理は止まらず、旧経路と新経路は別のロックなので排他できない。更新時は、旧経路への新規要求を止め、全旧 pi セッションと統合用 git プロセスの終了を確認してから `chezmoi apply`・pi・PR ビューアを起動する。停止を確認できない間は更新後のアプリを `--allow-merge` 付きで起動しない。残骸 ref の存在だけでは停止済みと判定しない。元の記述: A2 で「lock・running があれば拒否」を入れ、A5 で解消する |
 | 見積り | 行数・工数はすべて推測 |
 
 ## 9. 却下・見送り
