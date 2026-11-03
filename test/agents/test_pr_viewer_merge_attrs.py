@@ -52,6 +52,7 @@ def _real_merge_result(w: World) -> str:
         ["git", "-C", str(clone), "merge", "--no-ff", "-q", "-m", "m", "origin/feature/a"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if proc.returncode != 0:

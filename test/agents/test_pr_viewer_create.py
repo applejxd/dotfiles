@@ -992,6 +992,7 @@ def _plain(repo: Path, *args: str, stdin: str | None = None) -> str:
         input=stdin,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={
             "PATH": "/usr/bin:/bin:/usr/local/bin",
             "GIT_CONFIG_GLOBAL": "/dev/null",
