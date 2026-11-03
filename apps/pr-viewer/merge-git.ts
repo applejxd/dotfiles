@@ -157,8 +157,8 @@ export function runGit(args: string[], opts: RunOpts = {}): Promise<GitRun> {
 	});
 }
 
-// 最小の git の版。merge-tree --write-tree（2.38）と check-attr --source（2.40）を使う。git は最新版を使う前提なので、古い版への互換は作らない
-const MIN_GIT: readonly [number, number] = [2, 40];
+// 最小の git の版。merge-tree --write-tree（2.38）と --attr-source（2.41。merge-tree との併用の segfault 修正が 2.43）を使う。git は最新版を使う前提なので、古い版への互換は作らない
+const MIN_GIT: readonly [number, number] = [2, 43];
 let gitVersionCache: Promise<boolean> | null = null;
 
 /** git の版が最小以上か。版を確認できないときも false（安全側）。プロセス内で版は変わらないので、結果を覚える。 */
