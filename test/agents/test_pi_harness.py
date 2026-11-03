@@ -681,9 +681,9 @@ def test_follow_up_to_a_missing_job_says_to_start_over(env):
 
 
 def test_live_jobs_are_capped_and_the_error_lists_them(env):
-    proc = _rounds(env, [[_task(agent="worker", task=f"t{i}", keep=True) for i in range(5)]])
+    proc = _rounds(env, [[_task(agent="worker", task=f"t{i}", keep=True) for i in range(7)]])
     assert proc.stdout.count("too many live child jobs") == 1, proc.stdout
-    assert proc.stdout.count("USERS=1") == 4, proc.stdout
+    assert proc.stdout.count("USERS=1") == 6, proc.stdout
 
 
 def test_second_request_to_a_busy_job_is_refused(env):
