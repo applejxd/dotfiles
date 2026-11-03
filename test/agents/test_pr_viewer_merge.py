@@ -977,7 +977,8 @@ def test_kill_9_during_merge_then_manual_recovery(w):
             assert w.rev() == before and w.status() == snapshot  # recover は何も変えない
             # 利用者が診断を見て手で片付ける: index.lock と、統合が書いたパスだけ
             (w.git_dir() / "index.lock").unlink(missing_ok=True)
-            _git(w.repo, "reset", "-q", "HEAD", "--", f"big/{attempt}-0000.txt")
+            # 統合が書いたパスは、index に載っていることもある（index の書き換えの後・ref の更新の前で止まったとき）。残らず戻す
+            _git(w.repo, "reset", "-q", "HEAD", "--", f"big/{attempt}-*.txt")
             for p in (w.repo / "big").glob(f"{attempt}-*.txt"):
                 p.unlink()
             rc, out, _ = w.cli("recover")

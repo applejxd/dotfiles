@@ -303,7 +303,7 @@ def test_json_that_is_not_an_object_is_400(world, raw):
         assert status == 400 and resp["error"]["code"] == "bad_request"
 
 
-def test_only_the_two_posts_are_allowed(world):
+def test_only_the_known_posts_are_allowed(world):
     pr = new_pr(world)
     before = refs_of(world.repo)
     base = f"/api/prs/{pr['id']}"
@@ -313,7 +313,7 @@ def test_only_the_two_posts_are_allowed(world):
         ("POST", base),
         ("POST", f"{base}/review"),
         ("POST", f"{base}/diff?path=README.md"),
-        ("POST", f"{base}/merge"),
+        ("POST", f"{base}/merge/x"),
         ("POST", f"{base}/comments/x"),
         ("POST", "/"),
         ("POST", "/web/app.js"),
@@ -328,6 +328,10 @@ def test_only_the_two_posts_are_allowed(world):
             world.server, path, method=method, body={"body": "x", "kind": "changes"}
         )
         assert status == 405 and resp["error"]["code"] == "method_not_allowed", (method, path)
+    # 統合の POST は --allow-merge が無いと断る（この world は付けていない）
+    for what in ("merge", "merge-plan"):
+        status, resp = call(world.server, f"{base}/{what}", body={})
+        assert status == 403 and resp["error"]["code"] == "merge_disabled", what
     assert refs_of(world.repo) == before
 
 

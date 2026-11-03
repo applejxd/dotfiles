@@ -12,6 +12,8 @@ import {
 	resolveTarget,
 } from "./git-view.ts";
 import type { BranchRef, FileEntry, Hunk, Repo } from "./git-view.ts";
+import { mergeExecute, mergePlan } from "./merge-api.ts";
+import type { MergeEnv, PostResult } from "./merge-api.ts";
 import { blobsFor, getReview, postComment, postSubmit } from "./review-api.ts";
 import type { PrCtx } from "./review-api.ts";
 
@@ -229,15 +231,27 @@ function ctxOf(repo: Repo, c: Computed): PrCtx {
 
 /** 書き込み API（POST）の入口。body は検査済みの JSON のオブジェクト。 */
 export function isPostRoute(pathname: string): boolean {
-	return /^\/api\/prs\/[^/]+\/[^/]+\/(?:comments|submit)$/.test(pathname);
+	return /^\/api\/prs\/[^/]+\/[^/]+\/(?:comments|submit|merge-plan|merge)$/.test(pathname);
 }
 
-export async function handlePost(repos: Repo[], pathname: string, body: Record<string, unknown>): Promise<unknown> {
-	const m = /^\/api\/prs\/([^/]+)\/([^/]+)\/(comments|submit)$/.exec(pathname);
+/** 統合系の POST（Origin 必須・--allow-merge が要る経路）。 */
+export function isMergePostRoute(pathname: string): boolean {
+	return /^\/api\/prs\/[^/]+\/[^/]+\/(?:merge-plan|merge)$/.test(pathname);
+}
+
+export async function handlePost(
+	repos: Repo[],
+	pathname: string,
+	body: Record<string, unknown>,
+	env: MergeEnv,
+): Promise<PostResult> {
+	const m = /^\/api\/prs\/([^/]+)\/([^/]+)\/(comments|submit|merge-plan|merge)$/.exec(pathname);
 	if (!m) throw notFound();
 	const { repo, c } = await findPr(repos, m[1], m[2]);
 	const ctx = ctxOf(repo, c);
-	return m[3] === "comments" ? await postComment(ctx, body) : await postSubmit(ctx, body);
+	if (m[3] === "merge-plan") return await mergePlan(ctx, c.summary, body, env);
+	if (m[3] === "merge") return await mergeExecute(ctx, body, env);
+	return { status: 201, body: m[3] === "comments" ? await postComment(ctx, body) : await postSubmit(ctx, body) };
 }
 
 /** API の入口。成功なら応答の本体、失敗なら ApiError を投げる。 */

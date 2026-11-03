@@ -12,7 +12,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 状態の正本 | git の ref（`refs/pi/review/<prKey>`）。アプリが落ちても、pi は git だけで動ける |
 | アプリ | 画面と入力。全リポジトリを 1 つのプロセスで扱う。置き場所は `apps/pr-viewer/`（chezmoi では配備しない） |
 | pi 側 | 道具・注入・`/pr`。置き場所は `home/dot_config/pi/harness/`（§9） |
-| 実行器 | 統合の実行は**窓口の pi**（既存の承認経路）。アプリは持たない |
+| 実行器 | 統合の実行は**アプリ**（人がブラウザで押した「統合する」の POST。段 A2。§6「統合」・[CHG-0062](../change/0062-pr-hub-simplify.md)）。旧経路（窓口の pi の承認経路 `/pending`）は A5 で撤去する。それまでは併用しない |
 
 ### 段階
 
@@ -21,8 +21,9 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 1 | 読み取り専用のアプリ（一覧・概要・diff）。リポジトリの登録は起動引数 `--repo` | **実装済み**（develop に取り込み済み・未配備） |
 | 2 | コメント・スレッド（未送信）・stale 表示・ref ライブラリ（`review-log.ts`・`review-git.ts`）・自己検査。サーバの書き込み API（`GET …/review`・`POST …/comments`・`POST …/submit`）と画面の入力を含む | **実装済み**（develop に取り込み済み・未配備） |
 | 3 | pi の道具 2 つ・`receipt`・注入・配送の 4 状態の表示。判定器の許可規則はまだ足していない（役割の既定の確認のまま。§9） | **実装済み**（develop に取り込み済み・未配備。実機は未確認） |
-| 4 | ペアリングと制御ポート（§7） | 未着手・**未実装** |
-| 5 | 承認の指示（§8）。既定で無効 | 未着手・**未実装** |
+| 4 | ペアリングと制御ポート（§7） | **取りやめ**（CHG-0062 で置き換え。実装しない） |
+| 5 | 承認の指示（§8）。既定で無効 | **取りやめ**（CHG-0062 で、アプリの「統合する」へ置き換え。§6「統合」） |
+| A2 | 統合 API（`merge-plan`・`merge`）と承認シートの画面（CHG-0062 の段 A2） | S（サーバ）・U（画面）・G（判定器の拒否）の 3 feature。実装済み（取り込みは承認待ち・未配備） |
 
 ## 2 PR の同一性
 
@@ -143,12 +144,12 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 | 項目 | 内容 |
 | --- | --- |
-| 起動 | **v1 は利用者が起動する**（`pis` の Fence の内側からは届かない見込み）。`node apps/pr-viewer/server.ts --repo <パス> [--port <N>] [--allow-host <名前>]`（既定のポートは 8780。tailnet の名前（`*.ts.net`）の Host は既定で許可）。`/pr start` は案内だけ。ビルドは不要 |
+| 起動 | **v1 は利用者が起動する**（`pis` の Fence の内側からは届かない見込み）。`node apps/pr-viewer/server.ts --repo <パス> [--port <N>] [--allow-host <名前>] [--allow-merge]`（既定のポートは 8780。tailnet の名前（`*.ts.net`）の Host は既定で許可。`--allow-merge` は統合を許可する（既定で無効。下の「統合」））。`/pr start` は案内だけ。ビルドは不要 |
 | UI ポート | `127.0.0.1` で待ち受ける。認証なし（遠隔の通信路は tailnet が保証する決定） |
 | 制御ポート | UI とは**別のポート**。同じく `127.0.0.1`。段 4 から使う |
 | bind | `localhost` や `0.0.0.0` にしない。どちらか一方でも bind に失敗したら、両方閉じて終了する（bind が排他。lock ファイルは要らない） |
 | 依存 | `node:http` だけ。npm の依存なし |
-| import 境界 | `pending-*.ts`・`integrate-*.ts`・`exclusive-lock.ts`・`native-action.ts`・`board-collect.ts` を import しない（試験で固定） |
+| import 境界 | `pending-*.ts`・`integrate-*.ts`・`exclusive-lock.ts`・`native-action.ts`・`board-collect.ts` を import しない（試験で固定）。統合器 `merge.ts` は HTTP 側では `merge-api.ts` からだけ使う（`merge-cli.ts` は別）。`merge-api.ts` は harness を import せず、git を直接動かさない |
 | アプリ内の git | 専用の実行器 `git-view.ts`。`review-git.ts` は git の実行を**注入**で受け、`worktree.ts` を import しない（アプリも pi も同じライブラリを使えるようにする） |
 
 ### API 契約の要約（段 1）
@@ -181,6 +182,40 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | Host の検査 | loopback（`127.0.0.1`・`localhost`）と、tailnet の名前（`*.ts.net`）と、`--allow-host` で足した名前だけ。ほかは 403（tailnet の名前はリポジトリに書かない。DNS rebinding は攻撃者のドメインが `*.ts.net` でないことで防ぐ） |
 | tailnet への公開 | `tailscale serve` で HTTPS の 1 つの URL に公開する（手動の設定）。**公開範囲（tailnet の内側だけか）は未確認**。公開インターネットへ出す設定（funnel など）にしない |
 
+### 統合（段 A2。[CHG-0062](../change/0062-pr-hub-simplify.md) §3.5）
+
+人がブラウザで押した「統合する」の POST で、**アプリが develop へ merge commit で同期統合する**（統合器 `merge.ts`。詳細は CHG-0062 §3.5）。統合の権限は**この POST だけ**で、ref に書かれた「承認」・保留・`merge_request` は権限として読まない（Fence 内のエージェントも共有 `.git` の ref を書けるので、偽造できる。反例の試験で固定）。
+
+| 項目 | 内容 |
+| --- | --- |
+| 経路 | `GET /api/capabilities`（`{merge, targets}`。パスを含めない）・`POST /api/prs/<repoId>/<prKey>/merge-plan`（承認シート用の計画。副作用は git の object の書き込みだけ。GET でないのは、`merge-tree --write-tree` が object を書くため）・`POST …/merge`（実行）。`recover` は HTTP に出さない（他の git が動いていないことを人が確かめる手順があるため。画面は CLI の手順を案内する） |
+| 入口の検査（merge-plan・merge だけ。既存の comments・submit は変えない） | (1) `--allow-merge` が無ければ 403 `merge_disabled`（**既定で無効**。起動の旗で値を取らない） (2) `Tailscale-Funnel-Request` ヘッダーがあれば 403 `forbidden_funnel` (3) **Origin 必須**（無し・`null`・別ホスト・形の悪い値は 403 `forbidden_origin`。host を Host ヘッダーと照合） (4) `X-PRV: 1` と `application/json`（無ければ 400） (5) 本文は上限 64 KB・未知のキーは 400。OPTIONS は 405 で CORS ヘッダーを返さない |
+| 実行の入力 | `expect: {source, target}`（2 キー必須・40 桁の 16 進。違えば 409 `stale_view`）・`message`（1〜4000 文字・改行は `\n` にそろえる・1 行目が空白だけは不可・制御文字と双方向制御文字と孤立サロゲートは不可）・`cleanup`（`none`·`branch`·`branch_and_worktree`。既定 `none`） |
+| 応答 | 成功 200 `{merge: {commit, targetOld, targetNew, cleanup, warnings, recorded}}`。統合器の拒否コードをそのまま HTTP に写す（`conflict` は `conflicts` を添える。`recover_needed`・`busy` も 409。`failed` は 500 `merge_failed`）。生の git 出力・絶対パスを返さない。詳細な契約は試験 `test_pr_viewer_merge_api.py` と U の画面 |
+| 計画（merge-plan） | `mergeable`・`refusal`・`blockers`・`plan`（統合元・統合先の先頭・コミット数・ファイル一覧 200 件・+/−・リスクのあるパス 50 件・`riskConfig`・`touchesApp`）・`defaults`（メッセージ・`messageSource`・`summaryStale`）・`warnings`（変更依頼・古いレビュー・未送信コメント。**表示専用**）。リスクの判定は表示上限ではなく**全件の変更パス**に対して行う。リスク設定（`~/.config/pi/harness/rules.json` の `judge.common.pi.integrate.risk_paths`。`--rules-file` で差し替え）を読めないときは `riskConfig: "unavailable"`（「リスクなし」と混同しない）。`touchesApp`（`apps/pr-viewer/**` に触れるか）は設定と独立。既定メッセージは、レビュー記録の下書き（検査を通るものだけ。古い版なら `summaryStale`）、無ければ枝の最新コミットの件名を使う生成文 |
+| 記録（表示用） | 成功だけ、`merge_request` と `merge_result` を 1 回の追記で書く（`merge_result` は先行する request が要る）。書けなかっても統合の成功は取り消さず `recorded: false`。記録は権限の根拠にしない。診断ログは標準エラーに 1 行の JSON（要求 ID・PR・結果・統合後の OID・記録の成否。本文・ヘッダー・パスは出さない） |
+| 同時実行・停止 | リポジトリ単位の「待たない」排他（取れなければ 409 `busy`。plan も同じ）と、統合器のロックファイル（別プロセスとの排他）。SIGTERM・SIGINT は**実行中の統合を、結果の記録と応答を終えるまで待つ**（一律の強制終了は設けない。強制するなら SIGKILL と `recover`）。通信が切れても統合は最後まで続く |
+| plan の負荷 | plan は同じリポジトリで直列化するだけ（連打抑止・結果の再利用はしない）。同じ内容の object は同じ OID になるので無制限には増えないが、再計算の CPU と git の起動は毎回かかる。到達できるクライアントは資源を使える（認証を入れない方針の帰結） |
+| 旧経路（`/pending`）との共存 | **併用は禁止**（A5 で旧経路を撤去するまで）。アプリは統合の前に、`refs/pi/lock/*`・`refs/pi/running/*`（どれか 1 本でもあればリポジトリ全体で拒否）と、`refs/pi/pending/*` の記録（`params.source` がこの枝と一致する `git_integrate` だけ。壊れた記録は無視）を確かめて断る（409 `legacy_*`）。列挙できない・200 件超は `legacy_unreadable`（見えないものを無いことにしない）。**確認の直後に旧経路が始まる窓は残る**（旧経路は別のロック（ref）を使うため、アプリのファイルロックとは相互に排他できない）。同時に使わない運用で守る |
+
+#### 止められるもの・止められないもの（正直に）
+
+| 攻撃・状況 | 止まるか | 何で |
+| --- | --- | --- |
+| 他サイトからの CSRF（fetch・form） | 止まる | 非 simple なヘッダーで preflight になり、OPTIONS は 405。form は `X-PRV`・JSON を付けられない。Origin 必須 |
+| DNS rebinding | 止まる | Host の許可リスト |
+| Funnel（公開）経由 | 止まる（二次情報に基づく） | `Tailscale-Funnel-Request` ヘッダー。Funnel 経由のみ付き、Serve はクライアントの送った同名ヘッダーを消すという第三者の記述が 2 件（2026-11-03 に検索。公式の kb/1312 は取得できず未確認）。**起動後の公開設定の変更は防げない**。Funnel を使う領域で `--allow-merge` を併用しない |
+| tailnet 内の他の機器・同一端末の他プロセス | **止まらない** | Origin と `X-PRV` はヘッダーを偏造できるクライアントを止めない。認証（合言葉）は入れない（「追加認証は過剰・通信路は tailnet が保証」の方針）。`--allow-merge` を付けると、到達できるクライアントは統合できる |
+| Fence 内のエージェント | loopback は届かない（実測）。tailnet 名は未確定 | 判定器の拒否（`X-PRV` 付きの curl・`merge-cli.ts merge\|recover`）。任意コードは止めない（うっかり防止の水準） |
+| 統合によるアプリ自身の変更 | 見える | `apps/pr-viewer/**` は `risk_paths`。変更を統合しても、再起動するまでサーバのコードと配信するファイル（要求ごとにディスクから読む）の版が混在する。起動元は信頃できる作業ツリーに限る |
+
+#### 有効化の手順（利用者が行う。取り込みだけでは有効にならない）
+
+1. 判定器の拒否（G）とサーバ・画面（S・U）を develop に取り込む。
+2. `chezmoi apply`（`rules.json` を生成し直す）→ 使う pi / pis を再起動する。
+3. 配備先で、判定器が `X-PRV` 付きの curl と `merge-cli.ts merge` を deny することを確かめる。tailnet や funnel で公開するなら、`~/.config/agents/local.toml` の `[pis.network] deny` に自分の公開名を足し、Fence の内側から届かないことを確かめる（上流プロキシが名前解決する経路では、中継が内部アドレスを止められない: [pi-sandbox](guard/pi-sandbox.md)）。
+4. `--allow-merge` を付けてアプリを起動し、安全な試験用リポジトリで統合を 1 回試す。異常終了の後は CHG-0062 §3.5 の手順で `recover` する。
+
 ## 7 ペアリングと制御（段 4。未実装）
 
 > **置き換え予定（2026-11-03）**: ペアリング・制御ポート・long-poll・共有の秘密は採らない。通信は ref の追記と、pi 内の受信箱で行う（[CHG-0061](../change/0061-pr-inbox.md) の決定 D2）。以下は置き換え前の設計で、実装しない。
@@ -207,7 +242,9 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 ## 8 承認の指示（段 5。未実装・既定で無効）
 
-> **置き換え予定（2026-11-03）**: 承認の指示は、制御ポートではなく `merge_request`（ref の追記）で窓口の pi の受信箱に届ける（[CHG-0061](../change/0061-pr-inbox.md) の S5・決定 D1・D2）。機能（アプリで閉じる）は維持する。以下は置き換え前の設計。
+> **置き換え済み（CHG-0062、2026-11-03）**: 承認の指示を `merge_request`（ref の追記）で窓口の pi へ届ける設計は採らない。統合は、人がブラウザで押した POST でアプリが実行する（§6「統合」）。以下は置き換え前の設計で、実装しない。
+>
+> （旧）**置き換え予定（2026-11-03）**: 承認の指示は、制御ポートではなく `merge_request`（ref の追記）で窓口の pi の受信箱に届ける（[CHG-0061](../change/0061-pr-inbox.md) の S5・決定 D1・D2）。機能（アプリで閉じる）は維持する。以下は置き換え前の設計。
 
 アプリは承認を**指示**するだけで、保留の作成も実行も窓口の pi が行う。アプリは `refs/pi/pending` を書かない。
 
@@ -282,6 +319,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 3 | 未送信が注入に出ない。batch は不変。2 つの pi が消費しても注入は 1 回。再送は新しい batch ID。ブランチ削除と `gc --prune=now` の後も古い source が残る。親が develop・PR が feature・worker が子の構成で、指定した親の次の入力にだけ届く。アプリ停止時も `before_agent_start` が即座に返る |
 | 4 | 秘密なしは 401。指示は 1 回限り・期限で失効。統合先以外には届かない。poll が止まると死亡扱い。再起動後の再ペア。pi の申告と実体が違うペアは拒否 |
 | 5 | 縦断（pending → running → done と `merge_result`）。同じ `requestId` の内容差し替え・同じ OID の別 target・message や cleanup の差し替えを拒否（通常のコメント追記は許す）。指示の取得後・計画中・実行開始後に unpair / reload / 終了を起こして、未開始の実行禁止と既存の停止確認の経路を確かめる。`merge_started` の追記が失敗したら実行しない。`merge_result` の追記が失敗しても UI が状態を表示する。アプリの再起動後に再実行しない。busy の拒否 |
+| A2 | 統合 API（`test_pr_viewer_merge_api.py`）: 偊の approve / merge_request / 保留を ref に置いても統合されない（同じ fixture で正規の POST が通る対照つき）。`--allow-merge` 無し・Origin 無し / `null` / 別ホスト・Funnel ヘッダー・`X-PRV` 無し・expect の不正とすれ・メッセージと cleanup の不正・旧経路の保留・ロック・running・同時 2 要求・衝突・dirty・recover_needed で ref と作業ツリーが動かない。merge-plan の無副作用・リスクの全件判定・SIGTERM で実行中の統合を待つ・通信断でも統合が続く。import 境界（`merge-api.ts` が git を直接動かさない・承認状態を読まない） |
 | 共通 | アプリが `pending-*.ts` などを import しない。新しい試験は `scripts/verify.py` に登録する |
 
 ## 12 既知の制限と未確認
@@ -291,7 +329,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 実機でしか確かめられないもの | Fence の内側から制御ポートへ届くか・Windows（path・待ち受け）・tailnet の公開範囲・`/reload` 後に保持した `ctx` が有効か |
 | feature の worktree からの書き込み | `refs/pi/review/*` を feature の worktree の `pis` から書けるか（`refs/pi/pending` は確認済み） |
 | C13 | 保持期限と圧縮は v1 で未実装。上限で止まる |
-| UI ポートは認証なし | tailnet が保証する決定。素の `pi`（Fence なし）では、モデルが変更系の API を直接呼べる |
+| UI ポートは認証なし | tailnet が保証する決定。統合（`--allow-merge`）を有効にすると、到達できるクライアントは統合できる（§6 統合の表）。素の `pi`（Fence なし）では、モデルが変更系の API を直接呼べる（判定器の拒否はうっかり防止の水準） |
 | ブランチ削除後 | PR の一覧・詳細は、生きているブランチの ref から作る。ブランチを消した PR は画面から見えない（review ref と最後の source は残る。§2 の「branch と review ref の和集合」は**未実装**。独立 review の指摘 M6） |
 | 画面からの「再送」 | 送信履歴の各 batch に「再送」ボタンがある（`resendOf` つきの新しい `submit`）。受領の記録と注入の間に落ちたときの手動の救済 |
 | 段 5 の開始条件 | **判定器でアプリのポートへの変更系の呼び出しを拒否するまで、段 5 は有効化しない** |
