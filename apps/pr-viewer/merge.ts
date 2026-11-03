@@ -79,6 +79,7 @@ const REASONS: Record<string, string> = {
 	recover_needed: "前回の統合が異常終了した可能性があります。他の git が動いていないことを確かめて、復旧（recover）を実行してください。",
 	not_ff: "統合先が先に進んでいます。",
 	failed: "統合に失敗しました。",
+	unverified: "統合の結果を確認できませんでした。統合先の履歴を確かめ、必要なら復旧（recover）を実行してください。",
 	no_identity: "コミットの作者（user.name・user.email）が設定されていません。",
 };
 
@@ -285,8 +286,12 @@ async function computePlan(ctx: Ctx): Promise<Planned | Refusal> {
 	if (anc.code === 0) return refuse("already_merged");
 	if (anc.code !== 1) return refuse("failed");
 
-	// 結果の tree（object だけを書く。ref・作業ツリーは変えない）
-	const mt = await runGit(["merge-tree", "--write-tree", "--name-only", "-z", targetOid, sourceOid], { gitDir: ctx.gitDir });
+	// 結果の tree（object だけを書く。ref・作業ツリーは変えない）。
+	// worktree の外で動かすと .gitattributes（binary など）が読まれず、porcelain の git merge と結果が変わる（P2 の差分試験で発見）。
+	// 属性は target の tree から読む（git merge は target の作業ツリーの属性を読むのと同じ。git 2.40 以上）
+	const mt = await runGit([`--attr-source=${targetOid}`, "merge-tree", "--write-tree", "--name-only", "-z", targetOid, sourceOid], {
+		gitDir: ctx.gitDir,
+	});
 	const toks = mt.out.split("\0");
 	if (mt.code === 1) {
 		const conflicts: string[] = [];
@@ -556,6 +561,10 @@ async function executeMergeInner(
 		}
 		const advanced = await advanceTarget(ctx, plan.target.oid, commit, p.wt);
 		const now = await revOid(ctx.gitDir, ctx.target.ref);
+		if (now === null) {
+			// 反映を読めなかった。統合されたかどうか分からないので、「先に進んでいる」と言わず、状態ファイルを残して recover に確かさせる
+			return refuse("unverified");
+		}
 		if (now !== commit) {
 			// 自分のコミットは反映されていない。作業ツリーが汚れていないと確かめられたときだけ状態を消す
 			// (ref が別の誰かに進められていても、作業ツリーが汚れていなければ、残す理由が無い)
