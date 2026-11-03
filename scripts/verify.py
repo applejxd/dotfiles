@@ -402,6 +402,7 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule("worktree の所有表明", ("scripts/wt_owner.py",), ("test_wt_owner",)),
     Rule("統合用の枝 (train)", ("scripts/train.py",), ("test_train",)),
+    Rule("worktree の掃除", ("scripts/wt_clean.py",), ("test_wt_clean",)),
     Rule("skill-lab のスキル同期", ("scripts/sync_skill_lab.py",), ("test_sync_skill_lab",)),
     Rule("model-eval", ("scripts/model-eval/**",), ("test_model_eval",)),
     Rule(

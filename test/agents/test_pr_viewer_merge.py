@@ -1136,17 +1136,60 @@ def test_unwritable_tmpdir_is_reported_without_a_path(w):
     assert json.loads(proc.stdout.strip().splitlines()[-1])["ok"] is False
 
 
-def test_cleanup_keeps_a_worktree_that_has_ignored_files(w):
-    """git worktree remove は ignored を守らず再帰的に消す。ignored があれば worktree を残す。"""
+def test_cleanup_removes_a_worktree_that_has_only_ignored_files(w):
+    """無視ファイルだけなら、tgz に退避してから worktree と枝を消す（変更・未追跡があれば残す。上のテスト）。"""
     w.feature("feature/a", {"a.txt": "a\n"})
     wt = w.tmp / "wt-a"
     _git(w.repo, "worktree", "add", "-q", str(wt), "feature/a")
     (wt / "local.ign").write_text("ビルドの生成物\n")  # .gitignore の *.ign
     rc, out, _ = w.merge("feature/a", "m\n", "--cleanup", "branch_and_worktree")
     assert rc == 0 and out["ok"], out
-    assert (wt / "local.ign").read_text() == "ビルドの生成物\n"
-    assert "worktree" not in out["result"]["cleanup"]["done"] and out["result"]["warnings"]
+    assert out["result"]["cleanup"]["done"] == ["worktree", "branch"], out
+    assert not wt.exists()
+    backups = list((w.repo / ".git" / "pi-cleanup-backups").glob("a-*.tgz"))
+    assert len(backups) == 1
     assert len(_parents(w)) == 2
+
+
+def test_cleanup_keeps_a_worktree_with_a_live_owner_lock(w):
+    w.feature("feature/a", {"a.txt": "a\n"})
+    wt = w.tmp / "wt-a"
+    _git(w.repo, "worktree", "add", "-q", str(wt), "feature/a")
+    reason = f"owner=worker id=w1 pid={os.getpid()} started={int(time.time())}"
+    _git(w.repo, "worktree", "lock", "--reason", reason, str(wt))
+    rc, out, _ = w.merge("feature/a", "m\n", "--cleanup", "branch_and_worktree")
+    assert rc == 0 and out["ok"], out
+    assert (
+        wt.exists()
+        and "worktree" not in out["result"]["cleanup"]["done"]
+        and out["result"]["warnings"]
+    )
+    assert "feature/a" in _git(w.repo, "branch", "--list", "feature/a")
+
+
+def test_cleanup_removes_a_worktree_with_a_stale_owner_lock(w):
+    w.feature("feature/a", {"a.txt": "a\n"})
+    wt = w.tmp / "wt-a"
+    _git(w.repo, "worktree", "add", "-q", str(wt), "feature/a")
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    reason = f"owner=worker id=w1 pid={dead.pid} started={int(time.time())}"
+    _git(w.repo, "worktree", "lock", "--reason", reason, str(wt))
+    rc, out, _ = w.merge("feature/a", "m\n", "--cleanup", "branch_and_worktree")
+    assert rc == 0 and out["ok"], out
+    assert out["result"]["cleanup"]["done"] == ["worktree", "branch"], out
+    assert not wt.exists()
+
+
+def test_cleanup_keeps_a_worktree_with_an_untracked_file(w):
+    w.feature("feature/a", {"a.txt": "a\n"})
+    wt = w.tmp / "wt-a"
+    _git(w.repo, "worktree", "add", "-q", str(wt), "feature/a")
+    (wt / "wip.txt").write_text("未追跡\n")
+    (wt / "local.ign").write_text("ign\n")
+    rc, out, _ = w.merge("feature/a", "m\n", "--cleanup", "branch_and_worktree")
+    assert rc == 0 and out["ok"], out
+    assert (wt / "wip.txt").exists() and (wt / "local.ign").exists() and out["result"]["warnings"]
 
 
 def test_cleanup_does_not_run_filters_from_the_source_worktree_config(w):
