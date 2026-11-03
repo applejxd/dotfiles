@@ -1343,7 +1343,9 @@ def test_no_absolute_path_in_any_write_response(world):
     post(world, pr, "submit", {"kind": "comment", "dest": {"worktreeId": str(world.repo)}})
     post(world, pr, "comments", None, raw=b"{")
     review(world, pr)
-    assert len(world.texts) > 30
+    # world はモジュール内で共有するので、同じ worker で先に走った試験の応答も入る。
+    # 並列実行 (xdist) では何件入るか不定なので、この試験自身の 7 件だけを前提にする
+    assert len(world.texts) >= 7
     joined = "\n".join(world.texts)
     for needle in (
         str(world.base),
