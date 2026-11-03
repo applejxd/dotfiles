@@ -48,7 +48,7 @@ PR の管理・統合を、**LLM を載せた pi の TUI の外**にある小さ
 2. POST: シートを開いたときの統合元・統合先の OID（`expect`）を付ける。違えば 409（画面が古い）。
 3. アプリが同期で実行: 衝突・dirty・外部 driver・保護対象を検査 → `git merge-tree --write-tree` で結果の tree → `git commit-tree <tree> -p <develop> -p <枝>`（merge commit。squash の文面がメッセージ）→ develop の worktree で `git merge --ff-only`（develop が動いていれば失敗。**CAS の代わり**）→ cleanup → `merge_result`（表示用）を ref に書く。
 4. 承認の記録は作らない。保留・鍵・期限・古い保留・排他ロックは要らない。
-5. **事前検査・排他・復旧**（X1 で確かめた。詳細は[実験記録](../research/agents/pr-merge-spike.md)）: develop の worktree の HEAD が develop、統合済みでない（`merge-base --is-ancestor`）、統合が触るパスが dirty・untracked・**ignored** と重ならない。アプリ内で同時に 1 件だけ実行する（ff-only の敗者が作業ツリーを汚すことがあるため）。失敗・中断の復旧は統合が触るパスだけ（`git reset --hard` は無関係な未コミットの変更を消すので使わない）。残った `index.lock` は、他の git が無いことを確かめてから消す。
+5. **事前検査・排他・復旧**（X1 で確かめた。詳細は[実験記録](../research/agents/pr-merge-spike.md)と §3.5）: develop の worktree の HEAD が develop、統合済みでない（`merge-base --is-ancestor`）、統合が触るパスが dirty・untracked・**ignored** と重ならない。同時に 1 件だけ実行する（ff-only の敗者が作業ツリーを汚すことがあるため）。**復旧は診断と状態の解除だけで、作業ツリー・index・ref を自動では書き換えない**（2 回の独立 review で、自動の復旧・削除は、確認と実行の間に割り込む書き込み（エディターの自動保存・生成処理）やパスの特殊文字で、利用者のデータを失う経路が見つかったため。§3.5）。
 
 ### 3.3 統合方式: merge commit
 
@@ -70,7 +70,33 @@ squash（1 つ親）は祖先関係を断つので、積み重ねで衝突する
 | 自分で統合できない | Fence の内側から localhost は届かない（既定。tailnet の名前は X2 で確かめる）。素の pi（Fence なし）には、判定器の curl 拒否を**必須**で足す（2026-11-03 の実測: Fence の外の pi から、アプリへの curl が届いた） |
 | 限界 | 素の pi が意図的に迂回する経路は、完全には塞げない（ガードは境界ではなく、うっかり防止） |
 
-### 3.5 pi を通常のコーディングエージェントへ戻す（段 C）
+### 3.5 統合器の実装（段 A1。`apps/pr-viewer/merge.ts`・`merge-git.ts`・`merge-cli.ts`）
+
+HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだけ）・`executeMerge`・`recoverMerge`と、CLI（`node apps/pr-viewer/merge-cli.ts plan|merge|recover <repo> …`。結果は JSON を 1 行。終了コード: 成功 0・拒否 2・想定外 1。メッセージは `--message-file` だけで受ける）。試験は `test/agents/test_pr_viewer_merge.py`（実 git の使い捨てリポジトリ）。
+
+| 項目 | 内容 |
+| --- | --- |
+| 守る条件 | hook・外部の merge driver・filter・fsmonitor・`include` を動かさない（固定の先頭引数・絞った環境変数。設定に外部のコードを動かしうる項目があれば、書く前に `external_code` で拒否）。ref の書き込みは CAS だけ（`merge --ff-only`、または旧先頭を渡した `update-ref`）。入力（枝名・OID・cleanup・メッセージ）は検査を通ったものだけを git に渡す。出力（reason・例外）に絶対パス・git の生の出力を出さない |
+| 事前検査 | policy（source は `feature/`・`bugfix/`、target は `develop`）、ref 名の形、存在、`expect`（古い版は `stale`）、統合済み、衝突、HEAD が target、進行中の操作が無い、`index.lock` が無い、統合が触るパスが dirty・untracked・ignored と重ならない（無関係な dirty は通す）。ff の直前に、ロックの保持と HEAD をもう一度確かめる |
+| 排他 | `<common-dir>/pr-viewer-merge.lock`（中身を書いた一時ファイルを `link` で置く。待たずに `busy`）。**持ち主の pid が死んだ古いロックは奪わない**（`recover_needed`。奪う処理は確認と削除の間で競合し、両方が保護区間に入るため）。解除は利用者が実行する `recover` だけ |
+| 状態ファイル | ff の直前に `<common-dir>/pr-viewer-merge.state` を書く（統合が触るパス・新しく作られるパス・コミット・旧先頭）。成功で消し、失敗でも作業ツリーが無傷だと確かめられたときだけ消す。残っている間は新しい統合を断る（`recover_needed`） |
+| `recover` | **確かめて、状態を解除するだけ**。ref が統合後の先頭なら `completed`、旧先頭のままで、統合が触るパスに差（変更・untracked・ignored）・`index.lock`・進行中の操作が無ければ `cleared`、状態が無ければ `clean`。差があれば何も変えず、診断（`details`: 差のあるパスの一覧・`indexLock`・`operation`・`cause`）を返す。**`index.lock` も消さない**（他の git が使っているかもしれない） |
+| cleanup | `none`・`branch`・`branch_and_worktree`。枝は、どの worktree でも checkout されていないときだけ、承認した先頭を指定した `update-ref -d`（CAS）で消す（`branch -d` は upstream 基準の判定で、統合していない先頭を消しうる）。worktree は、source の worktree に未コミットの変更・untracked・ignored・外部のコードを動かしうる設定が無いときだけ `git worktree remove`（git 自身は ignored を守らず再帰的に消すため、検査は `--ignored` 込み）。失敗は警告で、統合の成功は取り消さない |
+
+#### 運用の前提（アプリが守る・利用者に伝える）
+
+- 統合・cleanup・`recover` の間は、同じリポジトリへの別の git 操作・エディターの自動保存・ビルドなどの生成処理を止める。この部品は排他を、アプリのロックでしか取れない。**A2 のアプリは、実行中のジョブのある PR の統合を断る**。
+- 残る窓（実害は低いが、ゼロではない）: (1) `merge --ff-only` は実行時の現在の枝を進めるので、ff の直前の再確認の後に外部の git が HEAD を切り替えると防げない。(2) cleanup の worktree 削除は、`--ignored` を含む検査の後に、ビルド処理などが ignored ファイルを作ると、それも消える。(3) ロックの持ち主の pid が再利用されると、古いロックが生きていると見なされて `busy` のまま残る。(4) Windows・macOS は未検証。
+
+#### 異常終了の後の手順（`recover_needed`）
+
+1. 他の git が動いていないことを確かめる（`ps` などで `git` の子を確認する）。
+2. `recover` を実行する。`cleared`・`completed`・`clean` なら、ここで終わり（状態と古いロックが解除される）。
+3. 診断が返ったら、`details.paths` の一覧と `git status` を見て、統合が書いたものを手で戻す（利用者のファイルを消さない）。`index.lock` は、他の git が無いことを確かめてから手で消す。
+4. もう一度 `recover` を実行する。
+5. どうしても解除できない（状態ファイルが壊れている等）ときは、手で確認してから `<common-dir>/pr-viewer-merge.state` と `<common-dir>/pr-viewer-merge.lock` を削除する。
+
+### 3.6 pi を通常のコーディングエージェントへ戻す（段 C）
 
 エージェントは git の書き込み（add・commit・merge）をしない。アプリが、範囲を検査してから機械的に行う。pi 側に残るのは、ガード（判定器・Fence・確認画面）と普通のツール、対話用の最小の `git_commit` だけ。`pr_summary`・`pr_comments`・注入・`guarded_task`・盤面・`guarded_action` の統合系は、アプリがジョブの最終出力をサマリーとして保存するようになってから撤去する。
 
@@ -90,7 +116,7 @@ squash（1 つ親）は祖先関係を断つので、積み重ねで衝突する
 | 段 | 内容 | 進める条件 |
 | --- | --- | --- |
 | 0 | 実験 X1〜X3（§7）。結果を `docs/research/agents/` に残す | — |
-| A1 | 統合器（`merge.ts`）と CLI（`pk pr-merge`）を、実 git の試験で作る（アプリへは未接続） | X1 合格 |
+| A1 | 統合器（`merge.ts`）と CLI（`merge-cli.ts`）を、実 git の試験で作る（アプリへは未接続。**実装済み**。2 回の独立 review を経て、自動の復旧をやめた。§3.5） | X1 合格 |
 | A2 | アプリへ接続: `POST .../merge`・承認シート。Origin 必須・`--allow-merge`・判定器の curl 拒否・`risk_paths` に `apps/pr-viewer/**`。旧経路と共存。実装の前後に独立 review | A1 |
 | A3 | 合流可否・「develop が N 進んだ」・「未 push N 件」の表示（読み取りのみ） | A2 |
 | A4 | 「変更を依頼」「衝突を解決」（`pis -p` の起動） | X3 合格 |
