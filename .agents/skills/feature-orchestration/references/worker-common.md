@@ -7,6 +7,7 @@
 - 編集するのは、依頼文の**担当ファイルだけ**。**編集は worktree の絶対パスだけで行う**（相対パスだと、本体のファイルを書き換えてしまうことがある。実際に起きた）。担当外のファイル・ほかの worktree・本体は、読み取りだけ（使い捨ては `$TMPDIR` に置いてよい。役割の system が正本）。
 - git の状態を変える操作はしない（親が行う。役割の system が正本）。
 - 1 worktree = 1 feature = 1 worker（同じ worktree に別の worker はいない）。隣の worktree の別の worker の途中状態で、試験が一時的に落ちることがある（自分の担当と関係がなければ無視し、最後に 1 回だけ再実行する）。
+- 共有の docs（`docs/spec/pr-viewer.md`・`docs/change-history/*.md` 以外の索引・表、`common.toml.tmpl`・golden）は、依頼文に明示が無い限り触らない。案件の履歴は `docs/change-history/0062.md` の**末尾に 1 行だけ**足す（既存行を変えない。union merge で衝突しない）。
 - 担当のコード以外にバグを見つけたら、直さず、再現のコマンドつきで報告する。
 
 ## ツール

@@ -171,9 +171,4 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 
 ## 10. 履歴
 
-- 2026-11-03: 実機の摩擦（保留のごみ・積み重ねの衝突・承認が TUI に縛られる・受信箱の複雑さ・圧縮の失敗）を受け、利用者が「俯瞰した再設計」を依頼。計画役が 3 案を比べ、利用者が案 2 を選んだ（D1〜D4）。併せて「アプリへ切り出し、pi を通常のコーディングエージェントへ戻す」を理想とした（D5）。
-- 2026-11-04: 起票（B1）の独立 review の指摘 M1〜M4 を直した。競合に負けた側は相手の枝・worktree を消さない（`worktree add` 失敗は診断のみ）・brief は新規専用 CAS（既存 ref に追記しない）・記録結果を recorded / not_recorded / unknown に分けて unknown は読み直し（確定できなければ残して `create_partial`）・巻き戻しの外部コード設定の検査を `git status` より先に。検査後の symlink 差し替え（TOCTOU）は対象外のまま（[pr-viewer.md §12](../spec/pr-viewer.md)）。
-- 2026-11-03: 段 A5（旧い統合経路の撤去）を実装。`integrate-plan.ts`・`integrate-exec.ts` も全削除した（§6 を訂正）。`pending-store.ts`・`integrate-profile-load.ts` は残す。共存期間（§8）は解消。
-- 2026-11-04: X3-a の実測を受け、ジョブの停止を cwd 走査（印に加えて cwd が worktree の中のプロセス）と消滅確認 10 秒のポーリングへ拡張した（[X3-a](../research/agents/pr-merge-spike.md#x3-a-pis--p-の実機実測)）。
-- 2026-11-05: 統合器の未コミット `.gitattributes` の拒否を、影響するときだけに絞った。未追跡・無視の `.gitattributes` は、そのディレクトリの配下に統合先・統合元の追跡パスがあるとき（ルートは常に）だけ断る（`.tmp/` の奥のものが統合を断っていた不具合の修正）。
-- 2026-11-05: PR ビューアで markdown を描画できるようにした（`web/markdown.js`。安全な小さい描画器で、画像・生 HTML・危険なリンクは文字のまま）。送信バーにレビューのキュー（受け取り待ち・受領済み）を出す。
+履歴は [0062.md](../change-history/0062.md) に分けた（追記専用。並列の feature が足しても衝突しない）。
