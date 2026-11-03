@@ -172,12 +172,21 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 | 項目 | 規則 |
 | --- | --- |
-| 描画 | `textContent` のみ。`innerHTML`・`insertAdjacentHTML`・`eval` を使わない。**v1 は Markdown を描画しない**（本文は改行とコードだけ） |
+| 描画 | 生の文字列は `textContent` のみ。`innerHTML`・`insertAdjacentHTML`・`eval` を使わない。本文の markdown は `web/markdown.js` が `createElement` と `textContent` だけで描く（下の「markdown の描画」） |
 | コメントの位置 | スレッドは、行の側の blob（旧は `oldBlob`・新は `newBlob`）と `anchor.blob` が一致するときだけ行の下に置く。一致しないもの（古い版のコメント）は、表の上に「表示中の行に対応しないスレッド」としてまとめる（行番号だけで置くと、新しいコードの同じ行に付いてしまう） |
 | CSP 等 | `default-src 'self'`・外部画像なし・`frame-ancestors 'none'`・`nosniff`・`Referrer-Policy: no-referrer` |
 | git の実行 | 固定の argv・`shell:false`・hook / fsmonitor / 外部 diff / textconv / 外部 filter を止める設定・`--no-ext-diff --no-textconv --no-pager`・出力量と時間の上限。**自動の fetch も止める**（`GIT_NO_LAZY_FETCH=1`・`GIT_ALLOW_PROTOCOL=` を固定。partial clone で足りないオブジェクトを読むと git が ssh などを起動するため。足りないときは取得せずエラーにする） |
 | 入力 | ref は `for-each-ref` の出力にあるものだけ。OID は 40（または 64）桁の 16 進だけ。パスは `--` の後か `<oid>:<path>` でだけ渡し、ref 内のパスをファイルシステムのパスとして使わない |
 | 登録 | 登録されたリポジトリ（正規化した common dir）だけを扱う |
+
+### markdown の描画
+
+`web/markdown.js`（`PRV.md(text)`）。「pi のまとめ」・コメント本文・依頼文・ジョブへ渡すコメントの表示に使う。統合コミットのメッセージ（確認画面）・ログ・編集用の `textarea` は生の文字のまま。
+
+- 対応: 段落・改行（`<br>`）・見出し（`#`〜`###`）・箇条書き（順序なし/あり。入れ子は 2 段まで）・引用（入れ子 2 段まで）・水平線・コードブロック（言語名は無視）・インラインコード・太字・斜体・リンク・表（GFM の簡単なもの。横にはみ出すときは横スクロール）
+- 安全: 要素は `createElement`、文字は `textContent` / テキストノードだけ。生の HTML は文字として出す。リンクは `http:`・`https:` と同一ページ内の `#` だけ許可し（`rel="noopener noreferrer"`・`target="_blank"`）、ほかは書いたままの文字で出す。画像 `![alt](url)` は描画せず `[画像: alt]` の文字にする
+- 上限: 全体 2 万文字・300 行・1 行 2,000 文字（超えた行は書式なし）・太字等の入れ子 3 段。超えた残りは書式なしの `<pre>` で出し、描画器が重くならない
+- 送信バー: 「下書き 未送信 N 件」と「送信済み・pi の受け取り待ち N 件・pi が受領済み N 件」を並べる。受け取り待ち（`refs/pi/review/<prKey>` の未受領バッチ）が 1 件以上のときは、キューに積まれていて、次に pi へ入力すると届く（pi が自動で読みに来るわけではない）と出す
 
 ### Host の検査と公開
 

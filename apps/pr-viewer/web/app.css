@@ -151,6 +151,21 @@ tr.gap td.hh { background: var(--bg2); border-top: 1px solid var(--bd); border-b
 .btn.primary { background: var(--acc); color: var(--accfg); border-color: var(--acc); font-weight: 600; }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .cbody { white-space: pre-wrap; overflow-wrap: anywhere; }
+.md { white-space: normal; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md .mdtable { margin: 6px 0; }
+.md ul, .md ol { padding-left: 1.4em; }
+.md .mdh { margin: 10px 0 4px; font-size: 1em; }
+.md code { font-family: ui-monospace, monospace; font-size: 0.92em; background: var(--bg2); padding: 0 3px; border-radius: 3px; }
+.md pre { padding: 8px; background: var(--bg2); border-radius: 6px; overflow-x: auto; max-width: 100%; white-space: pre; }
+.md pre code { padding: 0; background: none; }
+.md pre.mdrest { white-space: pre-wrap; overflow-wrap: anywhere; }
+.md blockquote { padding: 0 0 0 10px; border-left: 3px solid var(--info); color: inherit; }
+.md .mdtable { overflow-x: auto; max-width: 100%; }
+.md th, .md td { border: 1px solid var(--bd); padding: 2px 6px; text-align: left; }
+.md a { overflow-wrap: anywhere; }
+.revqueue { flex-basis: 100%; }
 .thread { border: 1px solid var(--bd); border-left: 4px solid var(--info); border-radius: 6px; padding: 8px 10px; margin: 6px 0; background: var(--bg); font-family: system-ui, "Hiragino Sans", "Noto Sans CJK JP", sans-serif; white-space: normal; }
 .thread.stale { border-left-color: var(--warn); border-style: dashed; border-left-style: solid; }
 .thead { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 4px; }
