@@ -74,6 +74,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 保留の承認を、巡回・一括で少ない操作にする（見ずに承認することなく） | [CHG-0058](change/0058-batch-approval.md) |
 | GitHub をリモートに持たない開発向けの、PR 風のローカルのレビュー画面（ref のスキーマ・配送・アプリの安全規則・承認の指示）を知る・変える | [ローカル PR ビューアの設計](spec/pr-viewer.md)、[CHG-0060](change/0060-local-pr-viewer.md) |
 | PR ビューアと pi の非同期のメッセージ・キュー（受信箱・実行中のキュー・自動起動・承認をアプリで閉じる。通信は ref だけ）を知る・変える | [CHG-0061](change/0061-pr-inbox.md) |
+| PR の管理・統合を、人が操作するアプリへ移す（保留・受信箱の撤去、merge commit、押下契機の `pis -p`、pi を通常のコーディングへ戻す）を知る・変える | [CHG-0062](change/0062-pr-hub-simplify.md) |
 | 親と子で文脈（AGENTS.md）を分ける（子に必要な規則だけを渡す） | [CHG-0059](change/closed/0059-child-context.md) |
 | フルガードの統合先・作業ブランチの接頭辞を、リポジトリ内の `pi.json` でプロジェクトごとに変える | [CHG-0057](change/0057-per-project-integrate.md)、[利用者マニュアル 7.6](spec/pi-manual.md#76-プロジェクトごとの設定pijson) |
 
