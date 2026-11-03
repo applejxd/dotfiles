@@ -33,9 +33,22 @@
             h("span", { class: "sep", text: "・" }),
             pr.commits + " コミット"
           )
-        )
+        ),
+        pr.state === "open" && pr.behind > 0
+          ? h("div", { class: "rw small" }, h("span", { class: "behind", text: pr.target + " が " + pr.behind + " 進んだ" }))
+          : null
       )
     );
+  }
+
+  /* リポジトリごとの「origin より N 件先」（fetch はしないので、最後に取得した状態との比較） */
+  function unpushedNote(repos, multi) {
+    var lines = repos
+      .filter(function (r) { return r.unpushed > 0; })
+      .map(function (r) {
+        return (multi ? r.name + ": " : "") + r.target + " は origin（最後に取得した状態）より " + r.unpushed + " 件先";
+      });
+    return lines.length ? h("div", { class: "attn unpushed", role: "status" }, lines.map(function (t) { return h("div", { text: t }); })) : null;
   }
 
   PRV.viewList = function (isCurrent) {
@@ -128,6 +141,7 @@
         "div",
         { class: "page" },
         h("div", { class: "listhead" }, h("h1", { text: "PR 一覧" }), h("span", { class: "muted", text: prs.length + " 件" })),
+        unpushedNote(repos, repos.length > 1),
         h("div", { class: "toolbar" }, seg, sel, search),
         box
       )

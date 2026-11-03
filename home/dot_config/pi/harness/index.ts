@@ -920,7 +920,7 @@ type RunningChild = { agent: string; model: string; task: string; pid?: number; 
 const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, RunningChild>()) as Map<string, RunningChild>;
 
 // 生かしておく子 (job) の上限と、1 往復の待機の上限、返却の上限
-const MAX_JOBS = 4;
+const MAX_JOBS = 6;
 const MAX_REPLY_CHARS = 20000;
 // 読み取り専用の子の役割 (プロファイル)。利用者のコマンド (`btw`) が起動できるのはこれだけで、計画モード (`/plan`) の間に
 // 起動・続きの依頼ができる子もこれだけ (see docs/change/0044-plan-agent.md)

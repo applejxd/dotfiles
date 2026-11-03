@@ -159,12 +159,15 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 方式 | GET だけ（副作用なし）。応答は JSON・`Cache-Control: no-store`。エラーは `{"error": {"code", "message"}}`（メッセージにパスや内部の例外を含めない） |
 | エンドポイント | `/api/repos`・`/api/prs`・`/api/prs/<repoId>/<prKey>`（概要・コミット・ファイル）・`/api/prs/<repoId>/<prKey>/diff?path=<p>` |
 | 一覧に出す PR | `feature/*`・`bugfix/*` の枝のうち、**差分が無く（0 コミット。統合先と同じか祖先）、レビューの記録（`refs/pi/review/<prKey>`）も無い枝は出さない**（統合済みで枝だけ残っているもの。中身が空で PR とは言えない）。記録があれば「統合済み」として出る。記録の有無を読めなかったときは隠さない。一覧に出さないだけで、ID を直接指定すれば詳細は読める |
+| 統合先の進み・両側の変更・未 push（A3。読み取りだけ） | `PrSummary` に `behind`（分岐点から統合先が進んだコミット数。`rev-list --count <base>..<target>`）と `overlap`（`{count, paths, truncated}`。`behind > 0` のときだけ、`diff --name-only -z <base> <target>` と PR 側の変更ファイル（改名は旧パスも）の積集合。パスは最大 20 件。統合先側の変更が 2000 件を超えたら `paths: []`・`truncated: true` で「多数」）を足した。`/api/repos` の各要素に `unpushed`（統合先の枝が `<target>@{upstream}`、なければ `refs/remotes/origin/<target>` より先にある件数。上流が読めないときは `null`）を足した（どれも既存の項目は変えない後方互換の追加）。**`overlap` は衝突の目安であって判定ではない**（可否は統合の確認画面が `merge-tree` で出す）。`unpushed` は `fetch` をしない「最後に取得した状態との比較」 |
 | 上限 | diff 全体 2 MB・1 ファイル 200 KB・ファイル一覧 400 件・コミット一覧 200 件・1 回の git は 10 秒 / 出力 4 MB。超えたら省略表示か 500 |
 | 配信 | `/` と `/web/<名前>` は、許可リストにあるファイル（`index.html`・`app.css`・`*.js`）だけ。ディレクトリの走査は許さない |
 | 書き込み系（段 2。実装済み） | `POST …/comments`・`POST …/submit` だけ。`Content-Type: application/json` と独自ヘッダー `X-PRV: 1`、`Origin` があるときは `Host` と一致することを要する。本文は 64 KB まで（chunked でも実測で打ち切る）。**表示していた版の固定**: 本文の `expect: { source, target, base }`（画面が表示した PR の 3 つの OID）を、あれば現在の PR と照合し、違えば 409 `stale_view`（見ていない新しい版を承認しない）、形が不正なら 400 `bad_expect`。画面は必ず付ける。レビュー状態の読み出しは `GET …/review`（副作用なし。ref が無い PR でも書かない）。断る場合は 409（`merged`・`bad_state`・`readonly`・`stale_view`）・413（`limit`） |
 | 書き込みの git | 読み取りと同じ安全な実行器の上に、**許可リストだけ**を通す入口を持つ（`hash-object -w --stdin`・`mktree`・`commit-tree`・`update-ref --no-deref`。対象の ref は `refs/pi/review/p<16 桁>` だけ。先頭の `-c` は作者設定 3 つだけ）。残りの読み取り系も同じ許可リストで絞る |
 
 ### 描画と git の安全規則
+
+画面（A3）: 一覧の開いた PR に「develop が N 進んだ」、一覧の上部にリポジトリごとの「origin（最後に取得した状態）より N 件先」（0・`null` は出さない）、PR 概要の先頭に「衝突の可能性: N 件」（開くとパス一覧。多すぎるときは「多数」）を出す。パスは `textContent` だけで出す。
 
 | 項目 | 規則 |
 | --- | --- |

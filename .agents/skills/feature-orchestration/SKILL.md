@@ -8,6 +8,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
 このリポジトリの親エージェントが、独立した実装を worker に切り出して `develop` へ取り込むまでの工程。
 **仕様と依頼文の雛形の正本**は [並列実装の運用](../../../docs/spec/guard/pi-subagents.md#並列実装の運用隔離なしの-worktree)。
 ここは、その工程の**チェックリストと、踏みやすい落とし穴**だけを持つ。
+**並列度を保つ運用**（目覚めの手順・空きを埋めるキュー・見込みの並列と接続・検査と承認の直列の減らし方）は [references/parallel-ops.md](references/parallel-ops.md)。
 
 ## 使う条件
 

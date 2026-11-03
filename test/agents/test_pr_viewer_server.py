@@ -267,6 +267,7 @@ def test_repos_lists_name_and_target_but_not_paths(world):
         "repoId": _repo_id(world.repo),
         "name": "example-app",
         "target": "develop",
+        "unpushed": None,  # 上流が無いリポジトリ（A3 で足した後方互換の項目）
     }
     # 統合先が無いリポジトリ (trunk だけ) は一覧に出さない
     assert "app-none" not in by_name
@@ -919,3 +920,74 @@ def test_the_app_never_lazy_fetches(lazy):
         assert list(marks.iterdir()) == []
     finally:
         server.stop()
+
+
+# ---------------------------------------------------------------- 統合先の進み・両側の変更・未 push (CHG-0062 A3)
+
+HOSTILE_NAME = "<img src=x onerror=alert(1)>.txt"
+
+
+@pytest.fixture(scope="module")
+def hub(tmp_path_factory):
+    base = tmp_path_factory.mktemp("hub")
+    repo = _init(base / "hub-app")
+    _commit(repo, {"shared.txt": "a\n", "mine.txt": "m\n", "other.txt": "o\n"}, "init")
+    # 分岐してから develop が進む。PR 側は shared.txt と悪意のある名前のファイルを変える
+    _git(repo, "switch", "-q", "-c", "feature/a")
+    _commit(repo, {"shared.txt": "a\nA\n", "mine.txt": "m\nA\n", HOSTILE_NAME: "pr\n"}, "feat: a")
+    _git(repo, "switch", "-q", "develop")
+    _commit(repo, {"shared.txt": "a\nD\n", HOSTILE_NAME: "dev\n"}, "chore: d1")
+    _commit(repo, {"other.txt": "o\nD\n"}, "chore: d2")
+    # origin は bare。取得した時点から、develop をさらに 2 コミット進める（push しない）
+    origin = base / "origin.git"
+    _git(base, "clone", "-q", "--bare", str(repo), str(origin))
+    _git(repo, "remote", "add", "origin", str(origin))
+    _git(repo, "fetch", "-q", "origin")
+    _commit(repo, {"other.txt": "o\nD\nU1\n"}, "chore: u1")
+    _commit(repo, {"other.txt": "o\nD\nU1\nU2\n"}, "chore: u2")
+    # develop に追いついている PR（behind 0）
+    _git(repo, "switch", "-q", "-c", "feature/idle")
+    _commit(repo, {"idle.txt": "i\n"}, "feat: idle")
+    _git(repo, "switch", "-q", "develop")
+    # 上流の無いリポジトリ
+    solo = _init(base / "solo-app")
+    _commit(solo, {"a.txt": "a\n"}, "init")
+    srv = Server(
+        ["--repo", str(repo), "--repo", str(solo), "--port", "0", "--web-dir", str(_web_dir(base))]
+    )
+    w = World()
+    w.repo, w.solo, w.server = repo, solo, srv
+    yield w
+    srv.stop()
+
+
+def test_behind_and_overlap_count_both_sides_changes(hub):
+    pr = _pr(hub, hub.repo, "feature/a")
+    assert pr["behind"] == 4  # d1・d2・u1・u2
+    # 両側が変えたのは shared.txt と悪意のある名前のファイル。mine.txt・other.txt は片側だけ
+    assert pr["overlap"] == {
+        "count": 2,
+        "paths": sorted(["shared.txt", HOSTILE_NAME]),
+        "truncated": False,
+    }
+    # 詳細の API も同じ値を返す（API では名前が文字列のまま。エスケープも変形もしない）
+    status, body = hub.server.get(f"/api/prs/{pr['id']}")
+    assert status == 200 and body["pr"]["overlap"]["paths"] == pr["overlap"]["paths"]
+    assert HOSTILE_NAME in body["pr"]["overlap"]["paths"]
+
+
+def test_not_behind_has_empty_overlap(hub):
+    pr = _pr(hub, hub.repo, "feature/idle")
+    assert pr["behind"] == 0
+    assert pr["overlap"] == {"count": 0, "paths": [], "truncated": False}
+
+
+def test_unpushed_counts_commits_ahead_of_origin_and_is_null_without_upstream(hub):
+    _, body = hub.server.get("/api/repos")
+    by_name = {r["name"]: r for r in body["repos"]}
+    assert by_name["hub-app"]["unpushed"] == 2
+    assert by_name["solo-app"]["unpushed"] is None
+    # 既存のフィールドは変わらない
+    assert by_name["hub-app"]["target"] == "develop" and by_name["hub-app"]["repoId"] == _repo_id(
+        hub.repo
+    )
