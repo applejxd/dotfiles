@@ -2,11 +2,13 @@
 
 - **目的**: `pi`（このリポジトリが配るフルガード付きの pi）と `pis`（サンドボックス付きの起動）の、**今ある機能・設定の変え方・独自コマンド**を、忘れたときに見直す
 - **詳しい仕様**: 各節と末尾の正本の文書。機能の地図は [pi の機能](pi-features.md)
+- **運用モード**: pi 単独 / PR ビューア併用の使い分けは [運用モード](operation-modes.md)
 
-> **状態（2026-11-01 時点）**
+> **状態（2026-11-05 時点）**
 >
 > - 記載した既定値は、リポジトリに同梱された設定の値
-> - 保留の承認（`/pending approve`・`git_integrate`）は撤去済み。統合は PR ビューアの「統合する」ボタン（[CHG-0062](../change/0062-pr-hub-simplify.md)、履歴は [guard/pi-pending.md](guard/pi-pending.md)）
+> - 保留の承認（`/pending approve`・`git_integrate`）は撤去済み。統合は必須確認（TUI）か PR ビューアの「統合する」ボタン（[CHG-0062](../change/0062-pr-hub-simplify.md)、履歴は [guard/pi-pending.md](guard/pi-pending.md)）
+> - PR ビューアの書き込み系の旗（`--allow-merge`・`--allow-create`・`--allow-jobs`）は既定で無効。ジョブ・起票・markdown 描画・worktree の所有（`wt_owner.py`）・統合用の枝（`train.py`）・掃除（`wt_clean.py`）の道具が入った。使い分けは [運用モード](operation-modes.md)
 > - 反映は `chezmoi apply` と pi の再起動の後
 
 ## 早見（1 画面）
