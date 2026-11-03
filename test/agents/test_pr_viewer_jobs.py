@@ -1115,6 +1115,28 @@ def test_log_is_returned_in_16kb_line_aligned_windows(w):
     assert got == line * 500
 
 
+def test_a_long_line_and_a_mid_line_start_never_leak_path_pieces(w):
+    pr = feature(w, "feature/a")
+    long_line = (
+        "a" * 20000 + "@CWD@/src/secret.txt"
+    )  # 上限内に改行がない長い 1 行（末尾も改行なし）
+    mode(w, "noop", banner="head @CWD@/src/a.txt\nnext line\n" + long_line)
+    status, resp = start(w, pr)
+    assert status == 202
+    jid = resp["job"]["id"]
+    wait_job(w, pr, jid)
+    _, whole = job_get(w, pr, jid, 0)
+    text = whole["log"]["text"]
+    assert "secret" not in text and "src/" not in text and "aaaa" not in text
+    assert "長すぎる行を省略" in text and "next line" in text
+    # 絶対パスの途中（「cwd の中」）を指す from でも、断片は返さない
+    start_off = len("head ") + len(str(w.base)) // 2
+    _, mid = job_get(w, pr, jid, start_off)
+    assert mid["log"]["from"] > start_off and mid["log"]["text"].startswith("next line")
+    assert str(w.base)[len(str(w.base)) // 2 :] not in mid["log"]["text"]
+    no_leak(w, whole, mid)
+
+
 @pytest.mark.parametrize("frm", ["-1", "abc", "1.5", "99999999999"])
 def test_bad_from_is_400(w, frm):
     pr = feature(w, "feature/a")
@@ -1185,6 +1207,41 @@ def test_after_kill_9_a_restart_interrupts_and_never_reruns_the_job(make):
     assert locks(w) == []
     status, body = get(w, f"/api/prs/{pr['id']}/jobs/{jid}")
     assert status == 200 and body["job"]["state"] == "interrupted"
+
+
+# ---------------------------------------------------------------- 10b 同じ state root の 2 つ目のサーバ
+
+
+def _second(w: W, port: str) -> subprocess.CompletedProcess:
+    args = list(w.args)
+    args[args.index("--port") + 1] = port
+    return subprocess.run(
+        [_node(), str(SERVER), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=ROOT,
+        timeout=60,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize("same_port", [True, False])
+def test_a_second_server_on_the_same_state_dir_is_refused_and_the_first_job_continues(
+    make, same_port
+):
+    w = make()
+    pr = feature(w, "feature/a")
+    jid = _running(w, pr)
+    pid = pis_record(w)["pid"]
+    res = _second(w, str(w.server.port) if same_port else "0")
+    assert res.returncode == 2 and "--state-dir" in res.stderr, res.stderr
+    assert alive(pid), "先発の健全なジョブを止めない"
+    (rec,) = job_files(w)
+    assert rec["id"] == jid and rec["state"] == "running"  # interrupted にしない
+    assert len(locks(w)) == 1
+    status, body = job_get(w, pr, jid)
+    assert status == 200 and body["job"]["state"] == "running"
 
 
 # ---------------------------------------------------------------- 11 境界（import・git を直接動かさない）

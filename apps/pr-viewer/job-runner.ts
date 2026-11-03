@@ -3,10 +3,10 @@
 // アプリは pis の出力を実行も解釈もしない。ログへ流すだけで、commit するのは finalizeJob を通った tree だけ。
 // Linux 専用（/proc の走査を使う）。HTTP・旗・排他の取得は呼び出し側（job-api.ts）の担当。
 import { type ChildProcess, spawn } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { mkdirSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import { type FinalizeDeps, type Pre, type Snapshot, finalizeJob } from "./job-git.ts";
-import { type JobPatch, type JobRecord, type Store, appendLog, readJob, releaseLock, updateJob } from "./job-store.ts";
+import { type JobPatch, type JobRecord, type Store, appendLog, readJob, releaseLock, signalByJobId, updateJob } from "./job-store.ts";
 
 export const OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024;
 export const KILL_GRACE_MS = 15_000;
@@ -91,30 +91,38 @@ function killGroup(pid: number, sig: NodeJS.Signals): void {
 	}
 }
 
-/** PR_VIEWER_JOB_ID を持つプロセスを SIGKILL する（setsid で抜けた子孫の掃除）。kill した数を返す。 */
+/** PR_VIEWER_JOB_ID を持つプロセスを SIGKILL する（setsid で抜けた子孫の掃除）。kill した数を返す。探索と送信は回復側と共通（job-store.ts）。 */
 export function killByJobId(jobId: string, procRoot = "/proc"): number {
-	const mark = `PR_VIEWER_JOB_ID=${jobId}`;
-	let n = 0;
-	let names: string[];
-	try {
-		names = readdirSync(procRoot);
-	} catch {
-		return 0;
-	}
-	for (const name of names) {
-		if (!/^\d+$/.test(name)) continue;
-		const pid = Number(name);
-		if (pid === process.pid) continue;
+	return signalByJobId(jobId, "SIGKILL", procRoot);
+}
+
+/**
+ * アプリインスタンスの排他（state root ごと）。OS の advisory lock（flock）を、アプリと同寿命の補助プロセスに持たせる。
+ * 補助の stdin はアプリへの pipe で、アプリが（SIGKILL を含めて）消えると EOF で補助も終わり、ロックが外れる。
+ * 取れなければ ok:false（生きている先発がいる）。flock が使えない環境も ok:false（reason: unavailable）。
+ */
+export function acquireInstanceLock(stateDir: string): Promise<{ ok: true } | { ok: false; reason: "held" | "unavailable" }> {
+	const script = 'umask 077; exec 3>>"$1" || exit 8; flock -n 3 || exit 9; echo ok; cat >/dev/null';
+	return new Promise((resolve) => {
+		let child: ChildProcess;
 		try {
-			const env = readFileSync(`${procRoot}/${name}/environ`).toString("latin1").split("\0");
-			if (!env.includes(mark)) continue;
-			process.kill(pid, "SIGKILL");
-			n++;
+			mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			child = spawn("sh", ["-c", script, "sh", join(stateDir, "instance.lock")], { stdio: ["pipe", "pipe", "ignore"] });
 		} catch {
-			// 読めない・既に終了
+			return resolve({ ok: false, reason: "unavailable" });
 		}
-	}
-	return n;
+		let done = false;
+		const finish = (r: { ok: true } | { ok: false; reason: "held" | "unavailable" }): void => {
+			if (!done) {
+				done = true;
+				resolve(r);
+			}
+		};
+		child.stdin?.on("error", () => {});
+		child.stdout?.once("data", () => finish({ ok: true }));
+		child.once("error", () => finish({ ok: false, reason: "unavailable" }));
+		child.once("exit", (code) => finish({ ok: false, reason: code === 9 ? "held" : "unavailable" }));
+	});
 }
 
 const STOP_MAP: Record<StopReason, JobPatch> = {
