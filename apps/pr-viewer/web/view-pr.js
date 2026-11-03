@@ -183,6 +183,31 @@
     });
   }
 
+  /* 統合先が分岐後に進んだことと、両側で変更されたファイル（衝突の可能性の目安。判定ではない）。パスは textContent だけで出す */
+  function behindCard(pr) {
+    if (pr.state !== "open" || !(pr.behind > 0)) return null;
+    var ov = pr.overlap || { count: 0, paths: [], truncated: false };
+    var kids = [h("h2", { text: pr.target + " が " + pr.behind + " コミット進みました" })];
+    if (ov.count > 0) {
+      var many = ov.paths.length === 0;
+      var label = many ? "衝突の可能性: 多数（" + ov.count + " 件以上）" : "衝突の可能性: " + ov.count + " 件";
+      var items = ov.paths.map(function (p) { return h("li", null, h("span", { class: "fp", text: p })); });
+      if (!many && ov.truncated) items.push(h("li", { class: "muted small", text: "ほか " + (ov.count - ov.paths.length) + " 件" }));
+      kids.push(
+        h(
+          "details",
+          { class: "overlap" },
+          h("summary", { text: label }),
+          items.length ? h("ul", { class: "plain files" }, items) : null,
+          h("p", { class: "muted small", text: "両側が変更したファイルの目安です。実際の可否は「統合する」の確認画面で出ます。" })
+        )
+      );
+    } else {
+      kids.push(h("p", { class: "muted small", text: "両側で変更されたファイルはありません。" }));
+    }
+    return h("section", { class: "card behindcard" }, kids);
+  }
+
   function draw2(data, ctx, notice) {
     var pr = data.pr;
     var rv = ctx.review;
@@ -222,7 +247,7 @@
     d.keys.summary = JSON.stringify((rv && rv.summary) || null);
     d.batches = h("div", { class: "live-batches" }, PRV.batchList(rv, ctx));
     d.keys.batches = JSON.stringify([(rv && rv.batches) || [], (rv && rv.worktrees) || []]);
-    var main = [d.summary, generalCard(ctx), files, commits, d.batches];
+    var main = [behindCard(pr), d.summary, generalCard(ctx), files, commits, d.batches];
     d.bar = PRV.reviewBar(ctx, notice);
     var me = PRV.mergeEntry ? PRV.mergeEntry(ctx) : null;
     PRV.mount(

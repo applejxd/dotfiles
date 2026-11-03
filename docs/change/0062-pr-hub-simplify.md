@@ -119,7 +119,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | 0 | 実験 X1〜X3（§7）。結果を `docs/research/agents/` に残す | — |
 | A1 | 統合器（`merge.ts`）と CLI（`merge-cli.ts`）を、実 git の試験で作る（アプリへは未接続。**実装済み**。2 回の独立 review を経て、自動の復旧をやめた。§3.5） | X1 合格 |
 | A2 | アプリへ接続: `POST .../merge-plan`・`POST .../merge`・承認シート。Origin 必須・`--allow-merge`・Funnel ヘッダーの拒否・判定器の curl 拒否・`risk_paths` に `apps/pr-viewer/**`。旧経路とは**併用禁止**（事前検査で断る。窓は残る）。**実装済み**（G: 判定器・S: サーバ API・U: 画面の 3 feature。計画・実装とも独立 review 済み。設計は [pr-viewer.md §6「統合」](../spec/pr-viewer.md)。有効化には取り込みの後の `chezmoi apply`・pi 再起動・実機確認が要る） | A1 |
-| A3 | 合流可否・「develop が N 進んだ」・「未 push N 件」の表示（読み取りのみ） | A2 |
+| A3 | 合流可否・「develop が N 進んだ」・「未 push N 件」の表示（読み取りのみ）。**実装済み**（`behind`・`overlap`・`unpushed`。設計は [pr-viewer.md §6](../spec/pr-viewer.md)） | A2 |
 | A4 | 「変更を依頼」「衝突を解決」（`pis -p` の起動） | X3 合格 |
 | A5 | 撤去（保留・受信箱・`git_integrate`・`/pending approve` など。約 2,900 行 + 試験約 20 ファイル） | A2〜A4 の運用で足りること |
 | B | アプリのジョブ実行（worktree の作成・worker の起動・コミット・検査）とマネージャー役（計画・review・衝突） | A の運用。`pis -p` の役割の試験 |
