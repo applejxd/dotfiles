@@ -263,6 +263,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | plan（計画モード） | `/plan`。状態はセッションに保存され、再開時に復元される | `⏸ plan` | 書き込み・実行のツールを外す |
 
 - `/plan`（計画モード）と、子エージェントの `plan`（計画役）は別物です。
+- 使い分け: 計画（利用者と対話）は `/plan`、実装を子へ任せて自走させるときは `/orchestrate`。計画の終わりに「実行の契約」を固定して自走する（[計画と自走](orchestration.md#計画と自走)）。
 - 非同期承認は撤去済みです（履歴は [CHG-0055](../change/closed/0055-async-approval.md)）。
 
 ### 6.2 役割（`[pi.profiles.*]`）

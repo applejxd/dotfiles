@@ -10,6 +10,8 @@ description: "feature を起票して worker に実装を切り出し、成果�
 ここは、その工程の**チェックリストと、踏みやすい落とし穴**だけを持つ。
 **並列度を保つ運用**（目覚めの手順・空きを埋めるキュー・見込みの並列と接続・検査と承認の直列の減らし方）は [references/parallel-ops.md](references/parallel-ops.md)。
 
+計画から自走へ移るときの**実行の契約**（雛形・決定ログ）は [references/plan-contract.md](references/plan-contract.md)。
+
 ## 使う条件
 
 - 担当ファイルを分けられる実装が 2 件以上ある、または 1 件でも設計が固まっていて指示を完全に書ける。
