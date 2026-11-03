@@ -269,6 +269,12 @@ const REFUSAL_STATUS: Record<string, number> = {
 	recover_needed: 409,
 	not_ff: 409,
 	no_identity: 409,
+	// P1 の事前検査（環境・変更の内容が原因で、統合しない）
+	git_version: 409,
+	unsupported_repo: 409,
+	unsupported_change: 409,
+	// 統合されたか確認できなかった（状態ファイルを残している。recover で確かめる）
+	unverified: 500,
 	failed: 500,
 };
 

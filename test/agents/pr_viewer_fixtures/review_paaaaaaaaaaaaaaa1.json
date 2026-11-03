@@ -27,4 +27,4 @@
  "summary": {"done": "検索ボックスを追加しました。\n2 つのファイルを変更。", "files": ["src/search.ts", "src/app.ts"],
   "findings": [{"ref": "c2", "reply": "旧定数を削除"}], "notes": "db.find の例外処理を確認してください。", "at": "2099-01-01T00:20:00+00:00", "by": "pi"},
  "worktrees": [{"worktreeId": "w1", "name": "example-app", "isMain": true}, {"worktreeId": "w2", "name": "example-app-search", "isMain": false}],
- "defaultDest": {"worktreeId": "w1"}, "unsent": 1}
+ "defaultDest": {"worktreeId": "w1"}, "unsent": 1, "brief": null}

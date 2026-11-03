@@ -1,0 +1,5 @@
+{"repoId": "r1a2b3c4d", "prKey": "pPLACEHOLDER", "id": "r1a2b3c4d/pPLACEHOLDER", "repoName": "example-app",
+ "branch": "feature/PLACEHOLDER", "target": "develop", "state": "empty", "commits": 0, "files": 0, "additions": 0, "deletions": 0,
+ "lastCommit": {"oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "subject": "chore: 基点", "author": "you", "at": "2099-01-01T00:00:00+00:00"},
+ "sourceOid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "targetOid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "baseOid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+ "behind": 0, "overlap": {"count": 0, "paths": [], "truncated": false}}

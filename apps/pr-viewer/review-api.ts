@@ -5,8 +5,10 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { appendEvents, readPr } from "../../home/dot_config/pi/harness/review-git.ts";
-import { SCHEMA, foldState, newId, unreadBatches } from "../../home/dot_config/pi/harness/review-log.ts";
-import type { Anchor, Batch, CommentEvent, ReviewEvent, State, SubmitKind, Vs } from "../../home/dot_config/pi/harness/review-log.ts";
+import { SCHEMA, SCHEMA_BRIEF, foldState, newId, prKeyOf, unreadBatches } from "../../home/dot_config/pi/harness/review-log.ts";
+import type { Anchor, Batch, BriefEvent, CommentEvent, ReviewEvent, State, SubmitKind, Vs } from "../../home/dot_config/pi/harness/review-log.ts";
+import { briefView } from "./brief.ts";
+import type { BriefData } from "./brief.ts";
 import { ApiError, git, gitAdapter, gitWrite, isOid } from "./git-view.ts";
 import type { FileEntry, Repo } from "./git-view.ts";
 import { PROMPT_LIMITS, inputDigest } from "./job-prompt.ts";
@@ -116,6 +118,7 @@ function emptyReview(worktrees: WorktreeInfo[]): Record<string, unknown> {
 		worktrees,
 		defaultDest: { worktreeId: worktrees[0]?.worktreeId ?? "" },
 		unsent: 0,
+		brief: null,
 	};
 }
 
@@ -144,6 +147,7 @@ export async function getReview(c: PrCtx): Promise<unknown> {
 			comments: t.comments.map(commentView),
 		})),
 		batches: st.batches,
+		brief: st.brief ? briefView(st.brief) : null,
 		summary: st.summary ? { ...st.summary.d, at: st.summary.at, by: st.summary.by } : null,
 		unsent: all.filter((e) => !sent.has(e.id)).length,
 	};
@@ -305,6 +309,58 @@ export async function recordMerge(c: PrCtx, m: { requestId: string; message: str
 		{ current: currentVs(c) },
 	);
 	return res.ok === true;
+}
+
+// ---- 起票の依頼文（brief） ----
+
+const ZERO_OID = "0".repeat(40);
+
+/** 起票の記録（brief）を読む。記録が無い・読めない・壊れているときは null（表示と再送の照合にだけ使う。権限の根拠にしない）。 */
+export async function readBriefRecord(repo: Repo, prKey: string): Promise<{ brief: BriefEvent; baseOid: string } | null> {
+	let r;
+	try {
+		r = await readPr(gitAdapter(repo), prKey);
+	} catch {
+		return null;
+	}
+	if (r.kind !== "ok") return null;
+	const st = foldState(r.meta, r.events, { source: ZERO_OID, target: ZERO_OID, base: ZERO_OID });
+	return st.brief ? { brief: st.brief, baseOid: st.brief.vs.base } : null;
+}
+
+/**
+ * 起票した枝（0 コミット）の記録かを調べる。依頼文の記録があり、枝の先頭が起票時の基点のままで、統合の成功が無いときだけ true。
+ * 一覧で「統合済み」と区別して「起票のみ（empty）」と見せるための表示用。
+ */
+export async function isUntouchedBrief(repo: Repo, prKey: string, sourceOid: string): Promise<boolean> {
+	const rec = await readBriefRecord(repo, prKey);
+	if (!rec || rec.brief.vs.source !== sourceOid) return false;
+	let r;
+	try {
+		r = await readPr(gitAdapter(repo), prKey);
+	} catch {
+		return false;
+	}
+	if (r.kind !== "ok") return false;
+	return !foldState(r.meta, r.events, { source: ZERO_OID, target: ZERO_OID, base: ZERO_OID }).merge.succeeded;
+}
+
+/**
+ * 起票の依頼文を、新しい記録（refs/pi/review/<prKey>。meta.schema 2）の最初のイベントとして書く（CAS 新規）。
+ * 記録が既にあれば何も書かない（上書きしない）。書けたときだけ true。
+ */
+export async function recordBrief(repo: Repo, branch: string, target: string, baseOid: string, d: BriefData): Promise<boolean> {
+	const prKey = prKeyOf(branch);
+	const vs: Vs = { source: baseOid, target: baseOid, base: baseOid };
+	const at = new Date().toISOString();
+	const res = await appendEvents(
+		gitAdapter(repo),
+		prKey,
+		{ schema: SCHEMA_BRIEF, pr: prKey, branch, target, createdAt: at },
+		(state) => (state.brief !== null || state.threads.length > 0 ? { refuse: "exists" } : [{ v: 1, id: newId(), by: "app", at, vs, t: "brief", d } as ReviewEvent]),
+		{ current: vs },
+	);
+	return res.ok === true && !("noop" in res);
 }
 
 // ---- POST …/submit ----

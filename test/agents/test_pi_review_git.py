@@ -485,12 +485,12 @@ def test_newer_schema_is_readonly_and_refuses_append(repo, js):
     commit = _plant(
         repo,
         [
-            ("100644", "blob", _good_meta(schema=2), "meta.json"),
+            ("100644", "blob", _good_meta(schema=3), "meta.json"),
             ("100644", "blob", '{"future": true}\n', "events.jsonl"),
         ],
     )
     r = js(repo, "out({ read: await G.readPr(git, KEY), app: await add([cm()]) });")
-    assert r["read"]["kind"] == "readonly" and r["read"]["meta"]["schema"] == 2
+    assert r["read"]["kind"] == "readonly" and r["read"]["meta"]["schema"] == 3
     assert r["app"] == {"ok": False, "refused": "readonly"}
     assert g(repo, "rev-parse", f"refs/pi/review/{key()}") == commit
 
@@ -674,7 +674,7 @@ def test_selfcheck_refuses_oversized_blobs_before_reading_them(repo, js, which):
     assert r == {"kind": "bad", "readBig": False}
 
 
-@pytest.mark.parametrize("what", ["pr", "branch", "schema"])
+@pytest.mark.parametrize("what", ["pr", "branch", "schema", "schema0", "schemaStr"])
 def test_meta_for_a_new_pr_is_validated(repo, js, what):
     r = js(
         repo,
@@ -682,10 +682,198 @@ def test_meta_for_a_new_pr_is_validated(repo, js, what):
         const m = meta();
         if (arg === "pr") m.pr = "p" + "0".repeat(16);
         if (arg === "branch") m.branch = "feature/other";
-        if (arg === "schema") m.schema = 2;
+        if (arg === "schema") m.schema = 3;
+        if (arg === "schema0") m.schema = 0;
+        if (arg === "schemaStr") m.schema = "2";
         out(await G.appendEvents(git, KEY, m, () => [cm()]));
         """,
         arg=what,
     )
     assert r == {"ok": False, "refused": "bad_meta"}
     assert g(repo, "for-each-ref", "refs/pi/") == ""
+
+
+# ─── brief と schema 2 ──────────────────────────────────────────────
+
+BRIEF_JS = """
+const brief = (o = {}, e = {}) => ev("brief", {
+	requestId: randomUUID(), rev: 1, kind: "feature", name: "my-feat", title: "題名", goal: "目的",
+	constraints: "守る条件", scope: ["src/**"], acceptance: "完了条件", via: "app", ...o,
+}, { by: "app", ...e });
+const meta2 = (extra = {}) => ({ ...meta(), schema: 2, ...extra });
+const readRaw = async () => (await git(["rev-parse", "--verify", "--quiet", "refs/pi/review/" + KEY])).stdout.trim();
+"""
+
+
+def test_new_schema2_ref_accepts_brief_and_roundtrips(repo, js):
+    r = js(
+        repo,
+        BRIEF_JS
+        + """
+        const b = brief();
+        const res = await G.appendEvents(git, KEY, meta2(), () => [b]);
+        const got = await G.readPr(git, KEY);
+        const st = L.foldState(got.meta, got.events, VS);
+        // 既存の ref (schema 2) には、コメントも brief の更新 (rev 2) も足せる
+        const res2 = await G.appendEvents(git, KEY, null, () => [cm("c"), brief({ rev: 2, title: "改" })]);
+        const got2 = await G.readPr(git, KEY);
+        const st2 = L.foldState(got2.meta, got2.events, VS);
+        out({ res: res.ok === true, kind: got.kind, schema: got.meta.schema, t: got.events.map((e) => e.t),
+              title: st.brief.d.title, res2: res2.ok === true, title2: st2.brief.d.title, rev2: st2.brief.d.rev });
+        """,
+    )
+    assert r == {
+        "res": True,
+        "kind": "ok",
+        "schema": 2,
+        "t": ["brief"],
+        "title": "題名",
+        "res2": True,
+        "title2": "改",
+        "rev2": 2,
+    }
+
+
+def test_new_ref_schema_may_be_1_or_2_comment_without_brief_in_schema2(repo, js):
+    r = js(
+        repo,
+        BRIEF_JS + "out(await G.appendEvents(git, KEY, meta2(), () => [cm()]));",
+    )
+    assert r["ok"] is True
+    assert json.loads(g(repo, "show", f"refs/pi/review/{key()}:meta.json"))["schema"] == 2
+
+
+def test_brief_is_refused_for_a_new_schema1_ref(repo, js):
+    r = js(
+        repo,
+        BRIEF_JS + "out(await G.appendEvents(git, KEY, meta(), () => [brief()]));",
+    )
+    assert r == {"ok": False, "refused": "brief_needs_schema2"}
+    assert g(repo, "for-each-ref", "refs/pi/") == ""
+
+
+def test_brief_is_refused_for_an_existing_schema1_ref_and_ref_is_unchanged(repo, js):
+    js(repo, "await add([cm('first')]); out(1);")
+    before = refs(repo)
+    r = js(
+        repo,
+        BRIEF_JS
+        + """
+        const a = await G.appendEvents(git, KEY, meta(), () => [brief()]);
+        const b = await G.appendEvents(git, KEY, meta2(), () => [brief()]);  // 呼び出し側の meta は使われない
+        const c = await G.appendEvents(git, KEY, null, () => [cm("x"), brief()]);  // 混在でも全体を断る
+        out([a, b, c]);
+        """,
+    )
+    assert r == [{"ok": False, "refused": "brief_needs_schema2"}] * 3
+    assert refs(repo) == before
+
+
+def test_schema1_ref_containing_brief_is_bad_on_read(repo, js):
+    # 手で作った schema 1 の ref に brief があれば、読み手は壊れ扱いにする (権限の源にしない)
+    ev_line = json.dumps(
+        {
+            "v": 1,
+            "id": "11111111-1111-4111-8111-111111111111",
+            "t": "brief",
+            "by": "app",
+            "at": "2026-01-01T00:00:00Z",
+            "vs": {"source": "a" * 40, "target": "b" * 40, "base": "c" * 40},
+            "d": {
+                "requestId": "22222222-2222-4222-8222-222222222222",
+                "rev": 1,
+                "kind": "feature",
+                "name": "x",
+                "title": "t",
+                "goal": "g",
+                "constraints": "",
+                "scope": [],
+                "acceptance": "",
+                "via": "app",
+            },
+        }
+    )
+    _plant(
+        repo,
+        [
+            ("100644", "blob", _good_meta(schema=1), "meta.json"),
+            ("100644", "blob", ev_line + "\n", "events.jsonl"),
+        ],
+    )
+    r = _read(repo, js)
+    assert r["kind"] == "bad" and "brief_in_schema1" in r["reason"]
+    # 同じ events でも schema 2 なら読める
+    g(repo, "update-ref", "-d", f"refs/pi/review/{key()}")
+    _plant(
+        repo,
+        [
+            ("100644", "blob", _good_meta(schema=2), "meta.json"),
+            ("100644", "blob", ev_line + "\n", "events.jsonl"),
+        ],
+    )
+    assert _read(repo, js)["kind"] == "ok"
+
+
+def test_old_reader_sees_schema2_ref_as_readonly_not_broken(repo, js):
+    # 古い読み手 (読める上限 = 1) は、schema 2 を「版が新しい」読み取り専用として扱う。unknown_type の壊れ扱いにしない
+    js(repo, BRIEF_JS + "out(await G.appendEvents(git, KEY, meta2(), () => [brief()]));")
+    before = refs(repo)
+    r = js(
+        repo,
+        """
+        out({
+            old: await G.readPr(git, KEY, { maxSchema: 1 }),
+            oldAppend: await G.appendEvents(git, KEY, null, () => [cm()], { maxSchema: 1 }),
+            now: (await G.readPr(git, KEY)).kind,
+        });
+        """,
+    )
+    assert r["old"]["kind"] == "readonly" and r["old"]["meta"]["schema"] == 2
+    assert "events" not in r["old"] and "reason" not in r["old"]
+    assert r["oldAppend"] == {"ok": False, "refused": "readonly"}
+    assert r["now"] == "ok"
+    assert refs(repo) == before
+
+
+def test_old_reader_does_not_parse_events_of_schema2_ref(repo, js):
+    # 古い読み手は、schema 2 の events.jsonl を読まない (将来の種類が混じっていても壊れ扱いにしない)
+    _plant(
+        repo,
+        [
+            ("100644", "blob", _good_meta(schema=2), "meta.json"),
+            ("100644", "blob", '{"v":1,"t":"future_kind"}\n', "events.jsonl"),
+        ],
+    )
+    r = js(
+        repo,
+        """
+        out({ old: (await G.readPr(git, KEY, { maxSchema: 1 })).kind, now: (await G.readPr(git, KEY)).kind });
+        """,
+    )
+    assert r == {"old": "readonly", "now": "bad"}
+
+
+def test_brief_adversarial_or_oversized_is_refused_and_ref_unchanged(repo, js):
+    js(repo, BRIEF_JS + "out(await G.appendEvents(git, KEY, meta2(), () => [brief()]));")
+    before = refs(repo)
+    r = js(
+        repo,
+        BRIEF_JS
+        + """
+        const tries = {
+            extraKey: brief({ approved: true }),
+            protoKey: ev("brief", JSON.parse('{"__proto__":{"x":1},"requestId":"' + randomUUID() + '"}'), { by: "app" }),
+            badKind: brief({ kind: "fix" }),
+            hugeGoal: brief({ goal: "x".repeat(1501) }),
+            jpBytes: brief({ goal: "\\u0001".repeat(1500), constraints: "\\u0001".repeat(1500) }),
+            dupRev: brief({ rev: 1 }),
+        };
+        const res = {};
+        for (const [k, e] of Object.entries(tries)) res[k] = await G.appendEvents(git, KEY, null, () => [e]);
+        out(res);
+        """,
+    )
+    assert r["jpBytes"] == {"ok": False, "refused": "body_too_large"}
+    for k in ("extraKey", "protoKey", "badKind", "hugeGoal", "dupRev"):
+        assert r[k] == {"ok": False, "refused": "invalid_event"}, k
+    assert refs(repo) == before

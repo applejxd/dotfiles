@@ -445,3 +445,189 @@ def test_by_does_not_change_state(call):
     # 表示用の「返信済み」だけは、by = pi のコメントで決まる
     assert a["threads"][0]["status"] == "read" and b["threads"][0]["status"] == "replied"
     assert b["review"] == "changes" and b["merge"]["succeeded"] is True
+
+
+# ─── brief (起票の依頼文。schema 2 の ref だけに書ける) ───────────────────
+
+
+def brief(rev=1, rid=None, d=None, **kw):
+    body = {
+        "requestId": rid or _id(),
+        "rev": rev,
+        "kind": "feature",
+        "name": "my-feat",
+        "title": "題名",
+        "goal": "目的",
+        "constraints": "守る条件",
+        "scope": ["src/**"],
+        "acceptance": "完了条件",
+        "via": "app",
+    }
+    kw.setdefault("by", "app")
+    return ev("brief", {**body, **(d or {})}, **kw)
+
+
+def _brief_ok(call, **d):
+    return parse(call, jsonl([brief(d=d)]))["ok"]
+
+
+def _json_bytes(d) -> int:
+    # JSON.stringify と同じ (空白なし・非 ASCII はそのまま)
+    return len(json.dumps(d, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+
+
+def _brief_of_bytes(n):
+    """d の JSON がちょうど n バイトの brief。\\u0001 (6 B) で膨らませ、字数の上限は守る"""
+    d = {**brief()["d"], "goal": "\u0001" * 1500, "constraints": ""}
+    need = n - _json_bytes(d)
+    a, r = divmod(need, 6)
+    d["constraints"] = "\u0001" * a + "x" * r
+    assert _json_bytes(d) == n and len(d["constraints"]) <= 1500
+    return brief(d=d)
+
+
+def test_brief_valid_parse(call):
+    r = parse(call, jsonl([brief()]))
+    assert r["ok"] is True and r["events"][0]["t"] == "brief"
+    # 任意の項目は空でよい
+    assert _brief_ok(call, constraints="", scope=[], acceptance="")
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"rev": 0},
+        {"rev": -1},
+        {"rev": 1.5},
+        {"rev": "1"},
+        {"requestId": "not-a-uuid"},
+        {"kind": "fix"},
+        {"kind": 5},
+        {"name": 5},
+        {"name": ""},
+        {"name": "Bad Name"},
+        {"name": "../x"},
+        {"name": "a" * 65},
+        {"title": ""},
+        {"title": 5},
+        {"goal": ""},
+        {"goal": None},
+        {"constraints": 5},
+        {"acceptance": ["x"]},
+        {"scope": "src/**"},
+        {"scope": [5]},
+        {"scope": [""]},
+        {"scope": {"0": "a"}},
+        {"via": 5},
+        {"via": ""},
+        {"via": "x" * 33},
+    ],
+)
+def test_brief_rejects_malformed_fields(call, patch):
+    r = parse(call, jsonl([brief(d=patch)]))
+    assert r["ok"] is False and "bad_brief" in r["reason"], (patch, r)
+
+
+def test_brief_rejects_missing_and_extra_keys(call):
+    base = brief()
+    for key in base["d"]:
+        d = {k: v for k, v in base["d"].items() if k != key}
+        r = parse(call, jsonl([{**base, "d": d}]))
+        assert r["ok"] is False and "bad_brief" in r["reason"], key
+    # 未知のキーは断る (敵対的な d。プロトタイプ汚染の名前も含む)
+    for extra in ("x", "__proto__", "constructor", "approved"):
+        text = jsonl([{**base, "d": {**base["d"], extra: "y"}}])
+        r = parse(call, text)
+        assert r["ok"] is False and "bad_brief" in r["reason"], extra
+
+
+def test_brief_field_limits_exact_and_over(call):
+    # 上限ちょうどは通り、1 字超えは断る (文字数。日本語は 1 字)
+    assert _brief_ok(call, title="題" * 100)
+    assert not _brief_ok(call, title="題" * 101)
+    assert _brief_ok(call, goal="x" * 1500)
+    assert not _brief_ok(call, goal="x" * 1501)
+    assert _brief_ok(call, constraints="y" * 1500)
+    assert not _brief_ok(call, constraints="y" * 1501)
+    assert _brief_ok(call, acceptance="z" * 800)
+    assert not _brief_ok(call, acceptance="z" * 801)
+    assert _brief_ok(call, scope=["a" * 120] * 20, constraints="")
+    assert not _brief_ok(call, scope=["a" * 121])
+    assert not _brief_ok(call, scope=["a"] * 21)
+    # サロゲートペア (絵文字) は 1 字として数える
+    assert _brief_ok(call, title="😀" * 100)
+    assert not _brief_ok(call, title="😀" * 101)
+
+
+def test_brief_total_chars_limit(call):
+    # 合計 4,000 字 = 題名 + 目的 + 守る条件 + 完了条件 + 担当範囲の合計
+    full = {
+        "title": "t" * 100,
+        "goal": "g" * 1500,
+        "constraints": "c" * 1500,
+        "acceptance": "a" * 800,
+    }
+    assert _brief_ok(call, **full, scope=["s" * 100])  # ちょうど 4000
+    assert not _brief_ok(call, **full, scope=["s" * 101])
+    assert not _brief_ok(call, **full, scope=["s" * 60, "s" * 42])
+
+
+def test_brief_byte_limit_exact_and_over(call):
+    # 日本語は 1 字 3 B。字数が上限内でも、d は 15,000 バイト以下
+    assert parse(call, jsonl([_brief_of_bytes(15000)]))["ok"] is True
+    r = parse(call, jsonl([_brief_of_bytes(15001)]))
+    assert r["ok"] is False and "body_too_large" in r["reason"], r
+    # 字数が合計 4,000 字に収まる日本語は、バイトでも収まる (12,000 B 前後)
+    full = {
+        "title": "あ" * 100,
+        "goal": "あ" * 1500,
+        "constraints": "あ" * 1500,
+        "acceptance": "あ" * 800,
+    }
+    assert _brief_ok(call, **full, scope=["あ" * 100])
+
+
+def test_brief_duplicate_rev_rules(call):
+    rid = _id()
+    assert parse(call, jsonl([brief(1, rid=rid), brief(2, rid=rid)]))["ok"] is True
+    r = parse(call, jsonl([brief(1), brief(1)]))
+    assert r["ok"] is False and "duplicate_brief_rev" in r["reason"]
+
+
+def test_check_append_rejects_oversized_brief_by_bytes(call):
+    ck = lambda e: call("checkAppend", [0, 0, e])[0]  # noqa: E731
+    assert ck(_brief_of_bytes(15000)) == {"ok": True}
+    assert ck(_brief_of_bytes(15001)) == {"ok": False, "reason": "body_too_large"}
+
+
+def test_fold_brief_takes_highest_rev_regardless_of_order(call):
+    b1, b2, b3 = (
+        brief(1, d={"title": "一"}),
+        brief(2, d={"title": "二"}),
+        brief(3, d={"title": "三"}),
+    )
+    assert fold(call, [b1, b3, b2])["brief"]["d"]["title"] == "三"
+    assert fold(call, [b2, b1])["brief"]["d"]["title"] == "二"
+    assert fold(call, [comment()])["brief"] is None
+
+
+def test_fold_brief_does_not_change_authority_state(call):
+    c = comment()
+    plain = fold(call, [c])
+    mixed = fold(call, [c, brief()])
+    for k in ("review", "reviewVs", "batches", "threads", "summary"):
+        assert mixed[k] == plain[k], k
+    assert mixed["merge"] == plain["merge"] and mixed["merge"]["status"] == "none"
+
+
+def test_schema_constants(call, tmp_path):
+    p = tmp_path / "c.mjs"
+    p.write_text(
+        f"import * as L from {json.dumps(LOG_TS.as_uri())};"
+        "process.stdout.write(JSON.stringify([L.SCHEMA, L.SCHEMA_MAX, L.SCHEMA_BRIEF]));",
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [_node(), str(p)], capture_output=True, text=True, encoding="utf-8", check=False
+    )
+    assert json.loads(proc.stdout) == [1, 2, 2], proc.stderr[-500:]

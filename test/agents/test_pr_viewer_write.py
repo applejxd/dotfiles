@@ -1172,7 +1172,7 @@ def test_newer_schema_is_readonly_409(world):
         world.repo,
         pr,
         [
-            ("100644", "blob", _good_meta(pr, schema=2), "meta.json"),
+            ("100644", "blob", _good_meta(pr, schema=3), "meta.json"),
             ("100644", "blob", "", "events.jsonl"),
         ],
     )

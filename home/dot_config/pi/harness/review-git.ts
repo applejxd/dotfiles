@@ -4,6 +4,8 @@
 import {
 	LIMITS,
 	SCHEMA,
+	SCHEMA_BRIEF,
+	SCHEMA_MAX,
 	checkAppend,
 	foldState,
 	mergedOk,
@@ -54,8 +56,8 @@ async function blobSize(git: Git, oid: string): Promise<number> {
 	return r.code === 0 && Number.isInteger(n) ? n : -1;
 }
 
-/** ref の commit を、自己検査しながら読む。巨大な blob は読まない */
-export async function readPr(git: Git, prKey: string): Promise<PrRead> {
+/** ref の commit を、自己検査しながら読む。巨大な blob は読まない。maxSchema は読める schema の上限 (既定 SCHEMA_MAX。古い読み手の模擬にも使う) */
+export async function readPr(git: Git, prKey: string, opts: { maxSchema?: number } = {}): Promise<PrRead> {
 	const ref = refOf(prKey);
 	const rp = await git(["rev-parse", "--verify", "--quiet", ref]);
 	if (rp.code !== 0) return { kind: "none" };
@@ -89,7 +91,7 @@ export async function readPr(git: Git, prKey: string): Promise<PrRead> {
 	if (typeof meta !== "object" || meta === null || Array.isArray(meta)) return bad("meta_invalid");
 	const m = meta as Record<string, unknown>;
 	if (typeof m.schema !== "number" || !Number.isInteger(m.schema) || m.schema < 1) return bad("meta_invalid");
-	if (m.schema > SCHEMA) return { kind: "readonly", commit, meta: m };
+	if (m.schema > (opts.maxSchema ?? SCHEMA_MAX)) return { kind: "readonly", commit, meta: m };
 	if (typeof m.pr !== "string" || typeof m.branch !== "string" || typeof m.target !== "string" || typeof m.createdAt !== "string") {
 		return bad("meta_invalid");
 	}
@@ -98,6 +100,8 @@ export async function readPr(git: Git, prKey: string): Promise<PrRead> {
 	if (er.code !== 0) return bad("events_unreadable");
 	const parsed = parseEvents(er.stdout);
 	if (!parsed.ok) return bad(parsed.reason);
+	// brief は schema 2 の ref にだけ置ける (schema 1 の ref の brief は権限の源にしない)
+	if (m.schema < SCHEMA_BRIEF && parsed.events.some((e) => e.t === "brief")) return bad("brief_in_schema1");
 	return { kind: "ok", commit, meta: m as unknown as Meta, metaText: mr.stdout, eventsText: er.stdout, events: parsed.events };
 }
 
@@ -107,6 +111,8 @@ export type AppendOpts = {
 	current?: Vs;
 	/** 競合時の待ち時間の揺らぎ (ms) の上限。既定 8 */
 	jitterMs?: number;
+	/** 読める schema の上限 (既定 SCHEMA_MAX。古い読み手の模擬用) */
+	maxSchema?: number;
 };
 export type AppendResult =
 	| { ok: true; commit: string }
@@ -127,7 +133,7 @@ export async function appendEvents(
 	const ref = refOf(prKey);
 	for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
 		if (attempt > 0) await sleep(Math.random() * (opts.jitterMs ?? 8) * attempt);
-		const cur = await readPr(git, prKey);
+		const cur = await readPr(git, prKey, { maxSchema: opts.maxSchema });
 		if (cur.kind === "bad") return { ok: false, refused: "bad" };
 		if (cur.kind === "readonly") return { ok: false, refused: "readonly" };
 		let meta: Meta;
@@ -143,7 +149,9 @@ export async function appendEvents(
 			oldCommit = cur.commit;
 		} else {
 			if (!metaIfNew) return { ok: false, refused: "not_found" };
-			if (metaIfNew.pr !== prKey || prKeyOf(metaIfNew.branch) !== prKey || metaIfNew.schema !== SCHEMA) {
+			// 新規 ref の schema は 1 (既定) か 2 (brief を書ける版)
+			const okSchema = metaIfNew.schema === SCHEMA || metaIfNew.schema === SCHEMA_BRIEF;
+			if (metaIfNew.pr !== prKey || prKeyOf(metaIfNew.branch) !== prKey || !okSchema) {
 				return { ok: false, refused: "bad_meta" };
 			}
 			if ((await listPrKeys(git)).length >= LIMITS.prs) return { ok: false, refused: "too_many_prs" };
@@ -157,6 +165,8 @@ export async function appendEvents(
 		if (out === null) return { ok: true, noop: true };
 		if (!Array.isArray(out)) return { ok: false, refused: String(out.refuse) };
 		if (out.length === 0) return { ok: true, noop: true };
+		// brief は schema 2 の ref にだけ書ける (呼び出し側の metaIfNew ではなく、実際に使う meta で判定する)
+		if (meta.schema < SCHEMA_BRIEF && out.some((e) => e.t === "brief")) return { ok: false, refused: "brief_needs_schema2" };
 
 		let bytes = Buffer.byteLength(oldText, "utf8");
 		let count = oldEvents.length;
