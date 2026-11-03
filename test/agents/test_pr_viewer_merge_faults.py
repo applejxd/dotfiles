@@ -81,6 +81,8 @@ _SUBCOMMANDS = {
 def _subcommand(line: str) -> str:
     """`<n> <args...>` の行から git のサブコマンド名を返す（`-c X` の組と先頭のオプションを飛ばす）。"""
     toks = line.split()[1:]
+    if "--version" in toks:
+        return "version"  # 統合前の git の版の確認（P1）
     i = 0
     while i < len(toks):
         if toks[i] == "-c":
@@ -251,42 +253,50 @@ def _baseline(layout: str) -> dict:
 
 # 注入なしの統合が呼ぶ git のサブコマンド（k = 1..N）。統合器の手順が変わったら、下の試験が落ちて k の対応の見直しを促す
 _COMMON = [
-    "rev-parse",  # 1 common-dir
-    "config",  # 2 .git/config の検査
-    "rev-parse",  # 3 source
-    "rev-parse",  # 4 target
-    "merge-base",  # 5 is-ancestor
-    "merge-tree",  # 6
-    "merge-base",  # 7
-    "diff-tree",  # 8
-    "worktree list",  # 9
+    "version",  # 1 git の版（P1）
+    "rev-parse",  # 2 common-dir
+    "config",  # 3 .git/config の外部コード検査（P1）
+    "config",  # 4 .git/config の未対応設定の検査（P1）
+    "rev-parse",  # 5 source
+    "rev-parse",  # 6 target
+    "merge-base",  # 7 is-ancestor
+    "merge-tree",  # 8
+    "merge-base",  # 9
+    "diff-tree",  # 10
+    "diff-tree",  # 11 --raw（P1。変わるパスの確認）
+    "check-attr",  # 12 filter 属性の確認（P1）
+    "worktree list",  # 13
 ]
+# 統合器が何も変える前に行う確認の呼び出しの数（k がここまでなら、失敗は「何も変えず failed」でなければならない）
+PREFLIGHT_CALLS = 13
+# P1 で増えた確認の呼び出し（version・config 2 回・diff-tree --raw・check-attr）。失敗を「後続を進めて良い」と読むと危険なもの
+P1_ADDED_CALLS = (1, 3, 4, 11, 12)
 EXPECTED_CALLS = {
     "wt": [
         *_COMMON,
-        "rev-parse",  # 10 target の worktree の git-dir
-        "symbolic-ref",  # 11
-        "status",  # 12
-        "status",  # 13 --ignored
-        "config",  # 14 identity
-        "rev-parse",  # 15 source（最終の検査）
-        "rev-parse",  # 16 target
-        "symbolic-ref",  # 17
-        "status",  # 18
-        "status",  # 19
-        "commit-tree",  # 20
-        "symbolic-ref",  # 21 ff の直前の HEAD 確認
-        "merge",  # 22 --ff-only
-        "rev-parse",  # 23 反映の確認
+        "rev-parse",  # 14 target の worktree の git-dir
+        "symbolic-ref",  # 15
+        "status",  # 16
+        "status",  # 17 --ignored
+        "config",  # 18 identity
+        "rev-parse",  # 19 source（最終の検査）
+        "rev-parse",  # 20 target
+        "symbolic-ref",  # 21
+        "status",  # 22
+        "status",  # 23
+        "commit-tree",  # 24
+        "symbolic-ref",  # 25 ff の直前の HEAD 確認
+        "merge",  # 26 --ff-only
+        "rev-parse",  # 27 反映の確認
     ],
     "bare": [
         *_COMMON,
-        "config",  # 10 identity
-        "rev-parse",  # 11
-        "rev-parse",  # 12
-        "commit-tree",  # 13
-        "update-ref",  # 14 CAS
+        "config",  # 14 identity
         "rev-parse",  # 15
+        "rev-parse",  # 16
+        "commit-tree",  # 17
+        "update-ref",  # 18 CAS
+        "rev-parse",  # 19 反映の確認
     ],
 }
 LAYOUTS = tuple(EXPECTED_CALLS)
@@ -542,6 +552,31 @@ def test_unreadable_final_ref_check_is_reported_as_unverified(tmp_path, layout, 
     rc, out, _ = _run_merge(w, _install_fake(w), MODES[method], k)
     assert out and out.get("code") == "unverified", (rc, out)
     assert not _check_returned(w, base, rc, out)
+
+
+@pytest.mark.parametrize("method", ["A", "B"])
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_preflight_git_failure_refuses_with_failed_and_changes_nothing(tmp_path, layout, method):
+    """P1 の確認（版・config・check-attr・diff-tree --raw など）の git が壊れたら、何も変えず failed で断る（状態ファイルも残さない）。"""
+    assert EXPECTED_CALLS[layout][PREFLIGHT_CALLS - 1] == "worktree list"
+    for k in P1_ADDED_CALLS:
+        (tmp_path / f"k{k}").mkdir()
+        w = _build(tmp_path / f"k{k}", layout)
+        base = {**_baseline(layout), "before": _obs(w), "gitdir_before": _gitdir_names(w)}
+        rc, out, _ = _run_merge(w, _install_fake(w), MODES[method], k)
+        where = f"{layout}/{method}/k={k}（{EXPECTED_CALLS[layout][k - 1]}）"
+        assert rc == 2 and isinstance(out, dict), (where, rc, out)
+        # P1 で増えた diff-tree --raw（11）・check-attr（12）は必ず failed。その他は安全側の専用コードで断ってよい
+        assert out.get("ok") is False, (where, out)
+        if k in (11, 12):
+            assert out.get("code") == "failed", (where, out)
+        now = _obs(w)
+        assert now["develop"] == base["before"]["develop"], where
+        assert _is_original(now, base), where
+        assert not any(_leftovers(w).values()), (where, _leftovers(w))
+        problems: list[str] = []
+        _stable(w, base, now, problems)
+        assert not problems, (where, problems)
 
 
 # ---------------------------------------------------------------- ファイルシステムの失敗（root では権限が効かないので skip）
