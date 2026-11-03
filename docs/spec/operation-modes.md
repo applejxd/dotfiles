@@ -23,7 +23,7 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 | commit | 親が `git add -A` → `git_commit`（`dir` に worktree。feature の worktree では確認なし） | worker 経路は同左。ジョブ経路は、規則を通った変更をアプリが commit する（[ジョブ](pr-viewer.md#ジョブ段-a4achg-0062-34)） |
 | レビュー | TUI の会話と差分の確認だけ | 画面でコメント → 送信（`refs/pi/review/<prKey>`）→ 対話 pi またはジョブが受け取る（§4） |
 | 統合 | 人が TUI の必須確認に答える。または `merge-cli`（§3） | 人が画面の「統合する」を 2 段確認で押す（`--allow-merge`） |
-| 掃除 | ビューア/`merge-cli` で統合した場合は `scripts/wt_clean.py <名前>`（§3 の統合の節の条件つき） | 統合時の cleanup 指定。または `wt_clean.py` |
+| 掃除 | `git flow feature finish` なら finish が枝と worktree を消す。ビューア/`merge-cli` で統合した場合は `scripts/wt_clean.py <名前>`（§3 の統合の節） | 統合時の cleanup 指定。または `wt_clean.py` |
 | 複数 feature のまとめ取り込み | `scripts/train.py`（統合用の枝 `feature/train-N`）→ 1 回統合 | 同左。train の枝を画面で統合 |
 
 ## 3. pi 単独の運用
@@ -39,7 +39,7 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 7. `git_commit`（`dir` に worktree）。
 8. 所有の解除: `python3 scripts/wt_owner.py release <worktree> --id <id>`。
 9. 統合（下）。複数をまとめるなら先に `python3 scripts/train.py start <feature>...`（`continue`・`verify`・`status`・`summary`。衝突は止めて終了コード 3。詳細は [統合用の枝](orchestration.md#統合用の枝train)）。
-10. 掃除（下の統合の節の条件つき）: `python3 scripts/wt_clean.py <名前>`（`--dry-run` あり）。
+10. 掃除: `git flow feature finish` を使った場合は不要（finish が消す。下の統合の節）。ビューア/`merge-cli` で統合した場合は `python3 scripts/wt_clean.py <名前>`（`--dry-run` あり）。
 
 ### 統合
 
@@ -75,10 +75,10 @@ node apps/pr-viewer/merge-cli.ts recover <repo>
 | `--expect-source <OID>` | 統合元の先頭が一致しなければ拒否 |
 | `--expect-target <OID>` | 統合先の先頭が一致しなければ拒否 |
 
-**統合方式の違い**: このリポジトリの `.gitflow` は feature の統合を `squash` にしているが、ビューアと `merge-cli` は **merge commit**（target と source が親）を作る。`scripts/wt_clean.py` の掃除は、**枝が残り、先頭が統合先の祖先であるときだけ**成立する（squash で内容を取り込んだだけだと満たさない）。
+**統合方式の違い**: このリポジトリの `.gitflow` は feature の統合を `squash` にしているが、ビューアと `merge-cli` は **merge commit**（target と source が親）を作る。`scripts/wt_clean.py` の掃除は、**枝が残り、先頭が統合先の祖先であるときだけ**成立する（squash で内容を取り込んだだけだと満たさない）。モードで履歴の形が違う: `git flow feature finish` は squash（履歴は一直線）、画面と `merge-cli` は merge commit。
 
 - ビューア/`merge-cli` で統合した場合 → `wt_clean.py`（または統合時の cleanup）。
-- `git flow feature finish` を使った場合 → 枝・worktree の残り方は**未確認**。手で確認してから消す。
+- `git flow feature finish` を使った場合（公式の記述。**実機の挙動は未確認**。旗 `--force-worktree`（`-W`）と `--keep-worktree` の存在は、入っている版の `finish --help` で確認済み）: finish は枝を消す前に、その枝がチェックアウトされた worktree を解放する。`git flow feature start <名前> --worktree` で作った worktree（git-flow が作った印つき）は**削除**され、枝も消える（`wt_clean.py` は不要）。`git worktree add` で作った worktree（画面の「＋ 起票」で作ったものを含む）は**削除されず、HEAD を枝から外して（detach）残る**（中身はそのまま）。git-flow が作った worktree に未コミット・未追跡の変更があると、マージの前に中断する（worktree も枝も無傷）。強制は `--force-worktree`（`-W`）、残すのは `--keep-worktree`（CLI のみ。git config には無い）。無視ファイル（`__pycache__` など）が未追跡の変更として数えられるかは**未確認**（`git flow feature finish --help` と、使い捨てのリポジトリで確かめる）。出典: git-flow-next の [Issue #175](https://github.com/gittower/git-flow-next/issues/175)（2026-08-02 起票）と公式の [commands](https://git-flow.sh/docs/commands/)・[configuration](https://git-flow.sh/docs/configuration/)（取得 2026-11-05。全文は未読）。
 
 私用の補助 `pk merge` はこのリポジトリの外にある。正本はこの `merge-cli`。
 
