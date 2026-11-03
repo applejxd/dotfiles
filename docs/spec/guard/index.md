@@ -72,7 +72,7 @@ pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`fin
 - [pi のガード](pi-guard.md): 起動・bypass・confirm の UI・Windows・pi の設定・MCP。
 - [pi の拡張と補助機能](pi-extensions.md): 拡張の方針・`guarded_action`・ツールの拡張・圧縮・commit の確認・整形・`/fleet`。
 - [pi の子エージェント](pi-subagents.md): `guarded_task`・job・worktree 隔離・Windows の `task`。
-- [保留（非同期承認）](pi-pending.md): 確認が取れないとき操作を保留し、あとで `/pending approve` で実行する。
+- [保留（撤去済み・履歴）](pi-pending.md): 非同期承認（`/pending approve`・`git_integrate`）の撤去の事実、残る `/pending`、残骸 ref の掃除。
 - [pis のサンドボックス（pi の側）](pi-sandbox.md): agent 置き場・通信・緩和のゲート。
 - [OpenCode のガードの仕様](opencode-guard.md): 保留中のレガシー（撤去予定）の誘導・deny の説明。
 - [コマンド・ファイルの判定](agent-command-policy.md): 照合規則、allow / ask / deny の一覧、意味解析。

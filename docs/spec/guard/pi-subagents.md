@@ -134,7 +134,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 | 状態 | `{jobId, status: true}` / `{list: true}` | 状態・経過時間・最後のツール・呼び出し数・トークン（子の assistant メッセージの `usage` の合計） |
 | steer | `{jobId, steer: "..."}` | RPC の `steer`。子の今のターンのツール呼び出しが終わったあと、次の LLM 呼び出しの前に届く |
 | abort | `{jobId, abort: true}` | RPC の `abort`。**今の往復だけ**止め、子は残す（状態 `aborted`。履歴は途中までで、`keep` なら追加依頼で続けられる）。`done` 以外で job を止める原則の例外（親が明示した中断だから） |
-| 並列 | `{tasks: [{agent, task, model?, effort?}, ...]}`（最大 12） | 上限 4 は維持し、超えた分は断らず空きを待つ。結果は順に連結。上限は「生かしておく子」を数えるので、空きが 0 なら断る |
+| 並列 | `{tasks: [{agent, task, model?, effort?}, ...]}`（最大 12） | 上限 6 は維持し、超えた分は断らず空きを待つ。結果は順に連結。上限は「生かしておく子」を数えるので、空きが 0 なら断る |
 | モデルと effort | `model`・`effort`（単発と、並列の各項目） | [カタログ](../agent-model-assignment.md#子エージェントのモデルのカタログ)・親の完全な `provider/id`・宣言済みの役割の既定のモデルから選ぶ。`effort` は `minimal`〜`max` の 6 段（`off` は拒否）。**ユーザが指示したときだけ指定する**（省略すると役割の既定）。結果と状態に、使ったモデル・effort・既定か指定か・未確認・高コストの印を必ず出す。追加依頼では変えられない |
 | ToDo | `{agent, task, todo: <id>}` | 子が `done` で終わればその項目を `done` にし、結果を `note` へ。それ以外はメモだけ（`todo` 拡張が `globalThis.__piTodoUpdate` を置く）。**`todo` ツールが有効な実行では、新しい子を起動する単発の形（`explore` / `review` / `worker`）に `todo` が必須**で、無いと `todo is required for <agent>: add a todo item for this work and pass its id as \`todo\`` を `error`で返し、子は起動しない（`commit`は任意。追加依頼・状態・steer・abort・close と、`tasks`の並列は対象外。項目の存在は確かめず、`todo`は整数かだけをスキーマで見る）。`todo` ツールが無い実行（todo 拡張を読み込まない試験など）では要求しない。試験は `test_task_requires_todo_*` ほか |
 
@@ -247,7 +247,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 3. 単位ごとに `guarded_task`（`agent: "worker"`、`background: true`。同時に 6 本まで）で子を起動する。依頼文は下の雛形。`isolation` は付けない。
 4. 子の完了の通知ごとに、**取り込み前の検査**: `python3 scripts/parallel_check.py --owned <名前>=<glob>,… …`（本体の変更・範囲の外・重複を見る。終了コード 1 なら、原因を確かめるまでコミットしない）。あわせて、その worktree の差分を確かめる（親が `cd <wt> && git diff --stat`・`git diff`）。
 5. 検査を通った単位だけ、親が `git add` する（**整形 hook の直後は数秒待ち**、`git diff --cached --numstat` で空のファイルや行数の急減がないか見る）。続けて `git_commit`（`dir` に worktree。`message` は 1200 字以下。feature の linked worktree は確認なし。[CHG-0053](../../change/0053-worktree-integration-gate.md)）。子は `git add`/`commit` できない（deny）。新しい試験ファイルは `scripts/verify.py` の `_PI_TESTS` へ、`index.ts` から import される新しい `.ts` は試験用のコピー一覧へ、親が登録する（登録漏れは全件検査の後で落ちる。`test/test_verify.py` が 2 秒で先に見つける）。
-6. 全件検査（`mise run verify:all`）は親が 1 回（`bg_run`。同時に 1 本。同じリポジトリの全 worktree・全会話で、排他ロックが機械的に保証する。[検証の方針](../development.md#全件検査の排他)）。通ったら、単位ごとに順番に `git flow feature finish <name> --squash …` で取り込む（**cd を付けず本体のルートで実行する。先頭が `git flow feature finish` でないと、確認画面に squash メッセージと衝突の事前検査が出ない**。**`bypass` でも必須確認**。承認画面が出る。承認が時間切れなら、再試行せず利用者の指示を待つ）。先に `finish` した単位の後で残りが衝突するなら、解決して `git add` し、`git flow feature finish --continue <ブランチ名>`（名前なしでは失敗する）。
+6. 全件検査（`mise run verify:all`）は親が 1 回（`bg_run`。同時に 1 本。同じリポジトリの全 worktree・全会話で、排他ロックが機械的に保証する。[検証の方針](../development.md#全件検査の排他)）。通ったら、単位ごとに `guarded_pr_summary` で PR に要約（`mergeMessage` の下書き）を出し、**利用者が PR ビューアの「統合する」ボタンを押して**取り込む（アプリが merge commit で同期統合する。[CHG-0062](../../change/0062-pr-hub-simplify.md)）。AI が `git flow feature finish`・`git merge` を実行するときは、素の pi の必須確認のまま（`integration-gate`。**`bypass` でも必須確認**。承認が時間切れなら、再試行せず利用者の指示を待つ）。先に統合した単位の後で残りが衝突するなら、止めて報告する。
 7. 失敗した単位は、`git flow feature delete <name>`（必須確認）で捨てる。
 
 **取り込み前の関門 `scripts/feature_gate.py`**: `python3 scripts/feature_gate.py check <feature> --owned <glob,glob>` は読み取り専用の関門で、scope（担当外の変更）・numstat_drop（行数の急減）・register_tests（試験の登録漏れ）・register_harness_copy（試験用コピー一覧の登録漏れ）を見る。実 index・ref・作業ツリーは変えない（git のオブジェクトは書く）。
@@ -279,24 +279,15 @@ C2: …
 
 ### 積み重ね（依存する feature）
 
-feature B が、まだ `develop` に入っていない feature A の変更を要るときの運用。A の承認（保留）を待たずに B を進められる。手順のチェックリストは、スキル `feature-orchestration`。
+feature B が、まだ `develop` に入っていない feature A の変更を要るときの運用。A の統合を待たずに B を進められる。手順のチェックリストは、スキル `feature-orchestration`。
 
-- **許可の状況**: feature の worktree の中の `git merge feature/<A>`、A の先頭からの起票（`git flow feature start <B> feature/<A>`・`git switch -c`）は、保護ブランチを動かさないので、統合の必須確認にはならない。判定器の結果は、通常モードで確認（`ask`）、bypass で許可。`git rebase` は共通の deny のまま（履歴を書き換えない）。保護ブランチへの統合は、今までどおり必須確認（または保留の承認）。
+- **許可の状況**: feature の worktree の中の `git merge feature/<A>`、A の先頭からの起票（`git flow feature start <B> feature/<A>`・`git switch -c`）は、保護ブランチを動かさないので、統合の必須確認にはならない。判定器の結果は、通常モードで確認（`ask`）、bypass で許可。`git rebase` は共通の deny のまま（履歴を書き換えない）。保護ブランチへの統合は、PR ビューアの「統合する」。AI が行う `finish`・`merge` は必須確認。
 - **依存は宣言しない**: git の祖先関係から導く。B の先頭が、他のローカルの feature ブランチ G の先頭を祖先に持ち、G が `develop` に統合されていないとき、G は B の依存。G を足しても `develop` の内容が変わらないもの（squash で統合済みで、ブランチだけ残っている）は除く。宣言ファイルは古くなるので作らない。
 - **関門**: `parallel_check.py`・`feature_gate.py` は、依存 G の `develop...G` の変更パスを、B の変更から引く（担当外・重複の誤検知を防ぐ）。出力に `depends on:`。B の未コミットの変更は引かない。限界: B が G のファイルを**コミットで**さらに編集しても検知されない。先頭が同じ 2 つのブランチは、互いを依存に数えない。
-- **承認画面**: `git_integrate`（計画の `stacked`）は、統合元が未統合の他の feature/bugfix を含むとき、「含む他の feature (未統合): <名前, …> — この統合に含まれる。先に個別に統合すると、この統合が衝突することがある」を 1 行出す。その feature を統合する保留が未承認のときは、名前の後ろに「 (保留 …<末尾 4 桁> が未承認)」を付け、複数行で出す（状態が pending のものだけ。読めないときは保留の記述なし）。表示だけで、保留の記録・再検査・承認の判断には使わない。
-- **順序**: **積み重ねは先頭の B だけを保存・承認する**。コミットは分けてよいが、統合の保存は先頭の 1 件。B は A のコミットを含むので、A の変更も一緒に統合される。
-  - 理由: A を先に squash で統合すると、develop には A の内容が入るが、A の元のコミットとは繋がらない。B が A のファイルをさらに直していると、あとの B の統合は 3 方向 merge で衝突する（`conflict`）。承認のたびに再発するので、下から 1 件ずつ承認する運用は成立しない。実例: 2026-11-03 の PR ビューアの積み重ね 6 本（[CHG-0060](../../change/0060-local-pr-viewer.md)）。最初の 3 本は通ったが、4 本目から衝突して止まった。
-  - 下の A の保留は承認せず破棄してよい（`/pending drop`）。
-  - **強制はしない**（A を捨てて B だけ入れたいとき・A が古くなったとき・循環で詰まるため）。B を先に入れると、あとの A は `no_change`（統合しても内容が変わらない）で断られる。
-  - 復旧（A を先に統合し、B が `conflict` で断られるとき）: B の枝へ develop を「枝の側を優先」で取り込む。
-    1. `git merge-tree --write-tree -X theirs --name-only develop feature/<B>` で tree を作る（`ours` は第 1 引数 = develop の側。枝の側は `theirs`）。
-    2. 検証: 「B の先頭 → その tree」の差が develop だけにある変更だけであること（`git diff --stat feature/<B> <tree>`）。`scripts/verify.py` など共有ファイルに無関係な変更が無いこと。
-    3. `git commit-tree <tree> -p feature/<B> -p develop -m "merge: develop を取り込む"` で merge commit を作り、B の worktree で `git merge --ff-only <commit>`。
-    4. `git merge-tree --write-tree --name-only develop feature/<B>` が衝突しないことを確かめ、B を新しい保留として保存し、古い保留を `/pending drop` で破棄する。
+- **統合の形**: PR ビューアは merge commit で統合するので、元のコミットとの祖先関係が保たれる（squash では A を先に統合すると B が衝突した。[CHG-0062](../../change/0062-pr-hub-simplify.md) の R5）。積み重ねは下から順に統合してよい。先に統合した後で衝突するときは、止めて報告する。
 - **規則**: マージは親だけ（子は git を書けない）。衝突は止めて報告する（LLM に直させない）。
 - **見送り**: 依存の宣言ファイル・汎用 DAG。配車（[CHG-0056](../../change/0056-orchestrator.md)）の `needs` は「統合済みを待つ」計画上の前提で、積み重ね（コミット済みの先頭から始める）とは別のもの。
-- **試験**: `test_parallel_check.py`・`test_feature_gate.py`（関門）、`test_pi_integrate_plan.py`・`test_pi_integrate_action.py`（`stacked`・`no_change`）。
+- **試験**: `test_parallel_check.py`・`test_feature_gate.py`（関門）。
 
 ### 複数の会話を並行して使う運用
 
@@ -308,7 +299,7 @@ feature B が、まだ `develop` に入っていない feature A の変更を要
 
 **規則**（強制ではなく運用。機械が守るのは 4 だけ）:
 
-1. **取り込みの窓口を 1 つの会話に決める**。保護ブランチを進める操作（`git flow feature finish`・`git merge`・将来の `/pending approve`）は、**窓口の会話だけ**が行う。ほかの会話は、feature の**コミットまで**で止め、取り込みの依頼を窓口へ渡す（利用者が窓口の会話で「取り込んで」と言う）。`finish` は必須確認なので、承認の画面も窓口の会話だけに出る。
+1. **取り込みの窓口を 1 つの会話に決める**。保護ブランチを進める操作（`git flow feature finish`・`git merge`）は、**窓口の会話だけ**が行う。ほかの会話は、feature の**コミットまで**で止め、取り込みの依頼を窓口へ渡す（利用者が窓口の会話で「取り込んで」と言う）。`finish` は必須確認なので、承認の画面も窓口の会話だけに出る。
 2. **1 つの worktree は、同時に 1 つの会話（または 1 つの worker）だけが編集する**。ほかの会話の worktree や本体を、編集しない。
 3. **同じファイルを触る話題は、同時に進めない**。共有されやすいファイル（`common.toml.tmpl`・golden・docs の索引・`index.ts`・`actions.ts`・`scripts/verify.py`・試験用のコピー一覧）は、1 つの話題だけが持つ。衝突は、窓口が `finish` で解決する。
 4. **全件検査（`mise run verify:all`）は、排他ロックで自動的に 1 本ずつ**になる（[検証の方針](../development.md#全件検査の排他)）。ほかの会話の検査を待つ間は、`bg_run` で待つか、ほかの作業をする。

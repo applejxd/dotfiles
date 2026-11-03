@@ -193,7 +193,7 @@ log.push("after");
     assert log == ["after"]
 
 
-def test_all_three_harness_senders_go_through_the_deferral():
+def test_all_harness_senders_go_through_the_deferral():
     src = _harness_text()
     for custom_type in ("pending-result", "child-finished"):
         for m in re.finditer(rf'customType: "{custom_type}"', src):
@@ -201,9 +201,9 @@ def test_all_three_harness_senders_go_through_the_deferral():
             assert "deferWhileCompacting(" in head, (
                 f"{custom_type} (offset {m.start()}) が保留を通らない"
             )
-    assert len(re.findall(r'customType: "(?:pending-result|child-finished)"', src)) == 3
+    assert len(re.findall(r'customType: "(?:pending-result|child-finished)"', src)) == 2
     # 保留を通さない送信が残っていない
-    assert src.count("pi.sendMessage(") == 3
+    assert src.count("pi.sendMessage(") == 2
 
 
 def test_harness_compaction_events_drive_the_deferral():

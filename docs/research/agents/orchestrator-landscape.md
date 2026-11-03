@@ -8,7 +8,7 @@
 
 関連: [pi を AI オーケストレーターとして使う仕組みの調査](pi-orchestrator-survey.md)（O1・O2。pi の拡張と運用の型）、
 [親を絞る設計](orchestrator-role-plan.md)、[CHG-0056](../../change/0056-orchestrator.md)（非目的に Web UI・常駐の監督・台帳）、
-[CHG-0055](../../change/0055-async-approval.md)（非同期承認）、[CHG-0053](../../change/0053-worktree-integration-gate.md)（統合の確認）。
+[CHG-0055](../../change/closed/0055-async-approval.md)（非同期承認）、[CHG-0053](../../change/0053-worktree-integration-gate.md)（統合の確認）。
 
 ## 種別と記号
 
@@ -60,7 +60,7 @@
 | 観点 | 自分たち | 他 | **部品ごとに上のもの** |
 | --- | --- | --- | --- |
 | 調整の正本 | git の ref・案件・git-flow。外部の DB を持たない | Beads は git に紐づく課題表。Orca は Run・Task の状態を自前で持つ。Gas Town は Beads が制御面（二次） | 依存つきの課題表と `ready` の一覧は Beads が**上**（O2 の推測: 借りる候補） |
-| 承認 | 構造化した操作の確認。保護ブランチへの統合は必須確認。非同期承認は設計中（[CHG-0055](../../change/0055-async-approval.md)。Exploring） | Orca は pi を「full access のみ」で動かし、拡張の質問は既存の承認カードを使う（PR #25851）。Claude Squad は `--autoyes` | 自動承認でなく、操作ごとの確認と監査を持つ点は**自分たちが上**（推測。他の承認方式を網羅していない）。スマホからの承認は Agent Approve・Orca Mobile が**上** |
+| 承認 | 構造化した操作の確認。保護ブランチへの統合は必須確認。非同期承認は設計中（[CHG-0055](../../change/closed/0055-async-approval.md)。Exploring） | Orca は pi を「full access のみ」で動かし、拡張の質問は既存の承認カードを使う（PR #25851）。Claude Squad は `--autoyes` | 自動承認でなく、操作ごとの確認と監査を持つ点は**自分たちが上**（推測。他の承認方式を網羅していない）。スマホからの承認は Agent Approve・Orca Mobile が**上** |
 | 並列 | `worker` を 1 worktree = 1 feature で並列。3〜5 体を目安（O2） | Gas Town は 20〜30 体。Agent Teams は 3〜5 体が適切と案内（二次） | 規模は Gas Town が**上**。ただし費用と専門性の注意が付く（二次） |
 | 保護ブランチ | 統合を必須確認。衝突の事前検査は計画（O2 の推測） | Gas Town の Refinery は bisecting merge queue（二次）。Raylabs は直列キューと fail-closed | 自動の取り込みキューは Gas Town が**上**（ただし自動化が目的で、人の承認ではない） |
 | 並べて見る UI | 無い（非目的）。チャットと表 | Vibe Kanban・Claude Squad・Conductor・Orca・Zed・herdr | 一覧・差分レビューの UI は各ツールが**上** |
@@ -88,7 +88,7 @@
 ### 推測（確かめていない）
 
 - 自前の Web UI を作らず、pi + git-flow を正本に保つほうが、保守と攻撃面の費用が小さい。根拠は事実 1・4・5（終了・認証の注意）。**費用は測っていない**。
-- スマホの入口は、通知（ntfy など）と、保留の承認（[CHG-0055](../../change/0055-async-approval.md)）の組で足りる可能性がある。実機で試していない。
+- スマホの入口は、通知（ntfy など）と、保留の承認（[CHG-0055](../../change/closed/0055-async-approval.md)）の組で足りる可能性がある。実機で試していない。
 - Orca 経由の pi は、判定の境界の外で動く見込み。このリポジトリの設計との突き合わせは、調査メモの推測で、Orca の内側では**未試験**。
 
 ## 反例・弱点
@@ -105,7 +105,7 @@
 
 ## 将来案（任意・補助のみ）
 
-- 保存した保留の承認（[CHG-0055](../../change/0055-async-approval.md)）に合わせて、**スマホへ push 通知**（ntfy など）。通知は手段で、正本は git の ref という方針は変えない。
+- 保存した保留の承認（[CHG-0055](../../change/closed/0055-async-approval.md)）に合わせて、**スマホへ push 通知**（ntfy など）。通知は手段で、正本は git の ref という方針は変えない。
   材料: ntfy を自前で動かしてスマホへ通知する構成の記事（<https://rogs.me/2026/02/claude-code-from-the-beach-my-remote-coding-setup-with-mosh-tmux-and-ntfy/>、2026-10-31）、
   tmux のエージェントの待ちを通知する <https://github.com/flavio87/tap-to-tmux>（検索の抜粋）
 - 導入する前に、通知の本文へ何を載せるか（コマンドの全文・パス）を決める。公開の通知サービスへ流すと、内容が外へ出る（推測。配送の経路は実装時に確認）

@@ -1274,7 +1274,6 @@
    }
   ],
   "integrate": {
-   "enabled": true,
    "protected_refs": [
     "main",
     "master",
@@ -1435,15 +1434,6 @@
    "delegate-nudge",
    "speed"
   ],
-  "pending": {
-   "enabled": true,
-   "max_pending": 50,
-   "modes": [
-    "tui"
-   ],
-   "result_retention_days": 90,
-   "retention_days": 30
-  },
   "profiles": {
    "committer": {
     "default": "deny",

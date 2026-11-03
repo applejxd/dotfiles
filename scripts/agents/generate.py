@@ -2047,11 +2047,10 @@ def pi_confirm(common: dict[str, Any]) -> dict[str, Any]:
 
 
 PI_INTEGRATE_KEYS = frozenset(
-    {"enabled", "target", "protected_refs", "risk_paths", "skip_confirm_in_free_zone"}
+    {"target", "protected_refs", "risk_paths", "skip_confirm_in_free_zone"}
 )
 PI_INTEGRATE_FLOOR = ("main", "master", "develop", "release/*", "hotfix/*")
 PI_INTEGRATE_DEFAULT: dict[str, Any] = {
-    "enabled": False,
     "target": "develop",
     "protected_refs": list(PI_INTEGRATE_FLOOR),
     "risk_paths": [],
@@ -2073,7 +2072,7 @@ def pi_integrate(common: dict[str, Any]) -> dict[str, Any]:
         raise SystemExit("[pi.integrate] がテーブルでない")
     _reject_unknown("pi.integrate", set(section), PI_INTEGRATE_KEYS)
     out: dict[str, Any] = {}
-    for key in ("enabled", "skip_confirm_in_free_zone"):
+    for key in ("skip_confirm_in_free_zone",):
         value = section.get(key, PI_INTEGRATE_DEFAULT[key])
         if not isinstance(value, bool):
             raise SystemExit(f"[pi.integrate] {key} は真偽値: {value!r}")
@@ -2104,64 +2103,6 @@ def pi_integrate(common: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-PI_PENDING_KEYS = frozenset(
-    {"enabled", "modes", "retention_days", "result_retention_days", "max_pending"}
-)
-PI_PENDING_MODES = ("tui", "rpc")
-PI_PENDING_DEFAULT: dict[str, Any] = {
-    "enabled": False,
-    "modes": ["tui"],
-    "retention_days": 30,
-    "result_retention_days": 90,
-    "max_pending": 50,
-}
-
-
-def _pending_int(section: dict[str, Any], key: str, low: int, high: int) -> int:
-    value = section.get(key, PI_PENDING_DEFAULT[key])
-    if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
-        raise SystemExit(f"[pi.pending] {key} は {low}〜{high} の整数: {value!r}")
-    return value
-
-
-def pi_pending(common: dict[str, Any]) -> dict[str, Any]:
-    """``[pi.pending]`` を検証し、既定値を補って返す。
-
-    see docs/change/0055-async-approval.md
-    """
-    section = (common.get("pi") or {}).get("pending")
-    if section is None:
-        section = {}
-    if not isinstance(section, dict):
-        raise SystemExit("[pi.pending] がテーブルでない")
-    _reject_unknown("pi.pending", set(section), PI_PENDING_KEYS)
-    enabled = section.get("enabled", PI_PENDING_DEFAULT["enabled"])
-    if not isinstance(enabled, bool):
-        raise SystemExit(f"[pi.pending] enabled は真偽値: {enabled!r}")
-    modes = section.get("modes", PI_PENDING_DEFAULT["modes"])
-    if (
-        not isinstance(modes, list)
-        or not modes
-        or not all(isinstance(m, str) and m in PI_PENDING_MODES for m in modes)
-    ):
-        raise SystemExit(f"[pi.pending] modes は tui / rpc の空でない配列: {modes!r}")
-    if len(set(modes)) != len(modes):
-        raise SystemExit(f"[pi.pending] modes に重複がある: {modes!r}")
-    retention = _pending_int(section, "retention_days", 1, 365)
-    result_retention = _pending_int(section, "result_retention_days", 1, 3650)
-    if result_retention < retention:
-        raise SystemExit(
-            f"[pi.pending] result_retention_days は retention_days 以上: {result_retention!r} < {retention!r}"
-        )
-    return {
-        "enabled": enabled,
-        "modes": list(modes),
-        "retention_days": retention,
-        "result_retention_days": result_retention,
-        "max_pending": _pending_int(section, "max_pending", 1, 500),
-    }
-
-
 JUDGE_COMMON_KEYS = ("bash", "file", "pi")
 JUDGE_TABLES = Path(__file__).resolve().parents[2] / "home/dot_config/pi/harness/judge/tables.toml"
 
@@ -2182,7 +2123,6 @@ def pi_judge_data(common: dict[str, Any]) -> dict[str, Any]:
             **judge_common["pi"],
             "confirm": pi_confirm(common),
             "integrate": pi_integrate(common),
-            "pending": pi_pending(common),
             "actions": pi_actions(common),
         }
     return {

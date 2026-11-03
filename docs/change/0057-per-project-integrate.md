@@ -3,7 +3,7 @@
 - **状態**: In progress
 - **実装の前提**: v3（2026-11-02）。利用者の決定「グローバルへの集約は管理上よくない。プロジェクト内設定にしたい」と、独立 `review`（BLOCKER 2・MAJOR 4）を反映した
 - **更新日**: 2026-11-02
-- **基準**: pi 1.4.0、[CHG-0053](0053-worktree-integration-gate.md)（統合ゲート・自由区）・[CHG-0055](0055-async-approval.md)（`git_integrate`）の上。方針は [ADR-0022](../adr/0022-containment-first-minimal-approvals.md)
+- **基準**: pi 1.4.0、[CHG-0053](0053-worktree-integration-gate.md)（統合ゲート・自由区）・[CHG-0055](closed/0055-async-approval.md)（`git_integrate`）の上。方針は [ADR-0022](../adr/0022-containment-first-minimal-approvals.md)
 
 ## 1. 要約と状態
 
@@ -62,7 +62,7 @@
 
 ## 5. 確定した設計
 
-詳細な仕様は [pi の拡張](../spec/guard/pi-extensions.md#プロジェクトごとの設定pijson)・[保留](../spec/guard/pi-pending.md#プロジェクト設定pijsonと承認画面)・[利用者マニュアル 7.6](../spec/pi-manual.md#76-プロジェクトごとの設定pijson)。
+詳細な仕様は [pi の拡張](../spec/guard/pi-extensions.md#プロジェクトごとの設定pijson)・[保留（撤去済み・履歴）](../spec/guard/pi-pending.md)・[利用者マニュアル 7.6](../spec/pi-manual.md#76-プロジェクトごとの設定pijson)。
 
 | 項目 | 決めたこと |
 | --- | --- |
@@ -115,7 +115,7 @@
 | S3b | 自由区（`freezone.ts`）・`/board`（`board-collect.ts`・`board.ts`）・プレビュー・execute 直前の再判定（`index.ts`）。独立 review 4 回の指摘を反映（§10） | **取り込み済み** |
 | 分類器の穴 2 件 | 別の feature。[pi-decide.md](../spec/guard/pi-decide.md) に記載済み（§10） | **取り込み済み** |
 | S4（`risk_paths`） | `common.toml.tmpl` に `.agents/config/pi.json` を足した | **取り込み済み** |
-| S4（docs） | 本案件・[pi の拡張](../spec/guard/pi-extensions.md#プロジェクトごとの設定pijson)・[保留](../spec/guard/pi-pending.md#プロジェクト設定pijsonと承認画面)・[マニュアル 7.6](../spec/pi-manual.md#76-プロジェクトごとの設定pijson) | この feature（保存待ち） |
+| S4（docs） | 本案件・[pi の拡張](../spec/guard/pi-extensions.md#プロジェクトごとの設定pijson)・[保留（撤去済み・履歴）](../spec/guard/pi-pending.md)・[マニュアル 7.6](../spec/pi-manual.md#76-プロジェクトごとの設定pijson) | この feature（保存待ち） |
 | S4（実機確認） | 架空の一時リポジトリでの確認。**確認省略を配備する前**に行う | **未実施** |
 
 **反例を先に書く試験**（S1+S2 の試験と配線の試験）:
@@ -174,5 +174,5 @@
 
 ## 11. 関連
 
-- [CHG-0053](0053-worktree-integration-gate.md)（統合ゲート・自由区）、[CHG-0055](0055-async-approval.md)（`git_integrate`）、[保留](../spec/guard/pi-pending.md)
+- [CHG-0053](0053-worktree-integration-gate.md)（統合ゲート・自由区）、[CHG-0055](closed/0055-async-approval.md)（`git_integrate`）、[保留](../spec/guard/pi-pending.md)
 - [pi の拡張](../spec/guard/pi-extensions.md#プロジェクトごとの設定pijson)・[利用者マニュアル 7.6](../spec/pi-manual.md#76-プロジェクトごとの設定pijson)

@@ -167,20 +167,20 @@ worker は実行せず、報告の「次の候補」に書く（worker は sandb
   - 前段（設計の返答・独立 review・別 feature の取り込み待ち・承認待ち）を待たず、I/F を**契約書**（`.tmp/keep/<話題>/api-contract-*.md`。API の形・関数の署名・担当ファイルの分担。短く、ずれる前提で書く）で先に固定し、後段（配線・画面・統合・撤去・docs）も別の worker で同時に実装する（例: A4a は J1a・J1b・U を契約だけで並行した）
   - 前段が終わり、配線と試験ができる段になったら、後段の枝へ前段の枝・develop を `git merge` で取り込んで**接続し、実物どうしの試験を回して I/F を調整する**（調整は後段の側で直すのを基本にする）。見込みの実装を直す・捨てる費用は、待つ時間より安いとみなす
   - **見込みで進めないもの**: 承認が要る操作の実行（統合・push）・既定で有効になる権限の拡大・元に戻せない操作。新しい書き込み権限は既定で無効の旗で入れる。上流の設計が根本から変わったら、見込みの部分は捨てる
-  - 並列の限界は、子の同時数（`guarded_task` は 4）と全件検査の排他。空きが出たらすぐ次の worker を起動し、全件検査は feature ごとに 1 回（日常は `mise run verify` の選択実行）にする
+  - 並列の限界は、子の同時数（`guarded_task` は 6）と全件検査の排他。空きが出たらすぐ次の worker を起動し、全件検査は feature ごとに 1 回（日常は `mise run verify` の選択実行）にする
   - 親は読む量を絞る: 子の返答は先頭の結論と申し送りだけ読み、詳細・全文はファイルに任せて、親のコンテキストを節約する
 
 <!-- /parent -->
 
 <!-- child:worker -->
 
-- worker はコミットしない。親が結果を根拠で確かめ、`git_commit`（`dir` に worktree）→ `git flow feature finish` で取り込む
+- worker はコミットしない。親が結果を根拠で確かめ、`git_commit`（`dir` に worktree）→ `guarded_pr_summary` で `mergeMessage` の下書きを出す → 利用者が PR ビューアの「統合する」を押す。AI は `finish`・`merge` を実行しない
 
 <!-- /child -->
 
 <!-- parent -->
 
-- **`git flow feature finish`・`git merge` など、保護ブランチへの統合は、bypass でも必須確認**（承認画面が出る。[CHG-0053](docs/change/0053-worktree-integration-gate.md)）。確認を出して利用者に見せ、承認を待つ
+- **`git flow feature finish`・`git merge` など、保護ブランチへの統合は、利用者が PR ビューアの「統合する」を押す。AI が実行すると、bypass でも必須確認**（承認画面が出る。[CHG-0053](docs/change/0053-worktree-integration-gate.md)）
 - 共有されやすいファイル（`common.toml.tmpl`・golden・docs の索引）は、同時に複数の worker に触らせない。衝突するなら、親が順に取り込む
 
 <!-- /parent -->
@@ -194,7 +194,7 @@ worker は実行せず、報告の「次の候補」に書く（worker は sandb
 
 <!-- parent -->
 
-- **pi の会話（セッション）を複数並行して使うときは、取り込み（`finish`・`git merge`）を窓口の 1 会話だけにする。**
+- **pi の会話（セッション）を複数並行して使うときは、取り込み（利用者の「統合する」の押下）の窓口を 1 つにする。**
   ほかの会話は feature のコミットまで。全件検査は排他ロックが自動で 1 本ずつにする。
   規則は [複数の会話を並行して使う運用](docs/spec/guard/pi-subagents.md#複数の会話を並行して使う運用)
 - 子の結果は、パスと行・コマンドの出力で確かめてから採用する（子は「通った」を実行できないことが多い）

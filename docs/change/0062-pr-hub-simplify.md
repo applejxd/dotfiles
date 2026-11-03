@@ -3,7 +3,7 @@
 - **状態**: Planned
 - **実装の前提**: 方針は決定済み（2026-11-03）。実験 X1（git）は**合格**、X2（Fence）は loopback が合格・tailnet の名前は未確定、X3（`pis -p`）は軽量版を実施済み（[実験記録](../research/agents/pr-merge-spike.md)）。役割ごとの X3 は段 A4 の前に行う
 - **更新日**: 2026-11-03
-- **基準**: pi 1.4.0、[CHG-0060](0060-local-pr-viewer.md)（PR ビューア）・[CHG-0061](0061-pr-inbox.md)（受信箱。**この案件で方針を置き換える**）・[CHG-0055](0055-async-approval.md)（非同期承認。撤去対象）・[CHG-0056](0056-orchestrator.md)（配車。見直し対象）
+- **基準**: pi 1.4.0、[CHG-0060](0060-local-pr-viewer.md)（PR ビューア）・[CHG-0061](closed/0061-pr-inbox.md)（受信箱。**この案件で方針を置き換える**）・[CHG-0055](closed/0055-async-approval.md)（非同期承認。撤去対象）・[CHG-0056](0056-orchestrator.md)（配車。見直し対象）
 
 ## 1. 要約
 
@@ -125,7 +125,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | A2 | アプリへ接続: `POST .../merge-plan`・`POST .../merge`・承認シート。Origin 必須・`--allow-merge`・Funnel ヘッダーの拒否・判定器の curl 拒否・`risk_paths` に `apps/pr-viewer/**`。旧経路とは**併用禁止**（事前検査で断る。窓は残る）。**実装済み**（G: 判定器・S: サーバ API・U: 画面の 3 feature。計画・実装とも独立 review 済み。設計は [pr-viewer.md §6「統合」](../spec/pr-viewer.md)。有効化には取り込みの後の `chezmoi apply`・pi 再起動・実機確認が要る） | A1 |
 | A3 | 合流可否・「develop が N 進んだ」・「未 push N 件」の表示（読み取りのみ）。**実装済み**（`behind`・`overlap`・`unpushed`。設計は [pr-viewer.md §6](../spec/pr-viewer.md)） | A2 |
 | A4 | 「変更を依頼」「衝突を解決」（`pis -p` の起動）。**A4a（変更を依頼）は実装済み**（`--allow-jobs` 既定無効・X3-a の実機実測は未実施。設計は [pr-viewer.md §6「ジョブ」](../spec/pr-viewer.md)）。A4b（衝突を解決）は未着手 | X3 合格（X3-a は A4a の有効化の前に実施） |
-| A5 | 撤去（保留・受信箱・`git_integrate`・`/pending approve` など。約 2,900 行 + 試験約 20 ファイル） | A2〜A4 の運用で足りること |
+| A5 | 撤去（保留・受信箱・`git_integrate`・`/pending approve` など。約 2,900 行 + 試験約 20 ファイル）。**実装済み**（2026-11-03。1 つの feature・1 回の保存で、PR ビューアが作るこの feature の統合 merge commit を `git revert -m 1` すれば旧経路が戻る（履歴には撤去本体・develop の取り込み・後続修正があり、本体 commit だけの revert は後続修正と競合しうる）。残骸の ref の掃除は利用者が `pk pending-clean` で行う。保存は利用者の確認後） | A2〜A4 の運用で足りること |
 | B1 | 起票: アプリが新しい feature（枝と worktree）を作り、依頼文 brief をレビュー記録へ残す（`POST /api/repos/<repoId>/features`。LLM・pis は呼ばない）。**実装済み・既定で無効**（`--allow-create`）。設計は [pr-viewer.md §6「起票」](../spec/pr-viewer.md) | A2 |
 | B | アプリのジョブ実行（worktree の作成・worker の起動・コミット・検査）とマネージャー役（計画・review・衝突） | A の運用。`pis -p` の役割の試験 |
 | C | pi 側の撤去（`guarded_task`・`git_commit` の guarded_action 統合系・盤面など）。pi をガード + 通常のツールへ戻す | B が実際に回ってから |
@@ -134,9 +134,9 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 
 | 区分 | 部品 |
 | --- | --- |
-| 残す | PR ビューア本体、`review-log.ts`・`review-git.ts`、`git_commit`（自由区。対話用）、`integration-gate.ts`・`[pi.integrate]` の保護（素の pi の必須確認）、`integrate-plan.ts`（算出は統合器が再利用） |
-| 縮小 | `integrate-exec.ts`（542 行 → 3 コマンド）、`/pending`（旧 `git_commit` 退避の list・show・drop だけ）、`/board` |
-| 撤去（段 A5） | `pending-ops`・`pending-approve`・`pending-command`（巡回・approve）・`pending-pick`・`pending-owner`・`pending-adapters`・`pending-request`・`native-action`・`integrate-action`・`exclusive-lock`・`pr-inbox`、`git_integrate` 操作 |
+| 残す | PR ビューア本体、`review-log.ts`・`review-git.ts`、`git_commit`（自由区。対話用）、`integration-gate.ts`（案内以外）・`[pi.integrate]` の保護（`protected_refs`・`risk_paths`・`skip_confirm_in_free_zone`。素の pi の必須確認）、`pending-store.ts`・`integrate-profile-load.ts`・`freezone.ts`・`review-*`・`pr-review.ts`・`judge/**` |
+| 縮小 | `/pending`（旧 `git_commit` 退避の list・show・drop だけ）、`/board` |
+| 撤去（段 A5。実装済み） | `integrate-plan.ts`・`integrate-exec.ts`（統合器 `merge.ts` が別に実装したので全削除。当初案の「残す・縮小」を訂正）、設定 `[pi.pending]`・`[pi.integrate] enabled`、`pending-ops`・`pending-approve`・`pending-command`（巡回・approve）・`pending-pick`・`pending-owner`・`pending-adapters`・`pending-request`・`native-action`・`integrate-action`・`exclusive-lock`・`pr-inbox`、`git_integrate` 操作 |
 | 撤去（段 C） | `guarded_task`（`children.ts` など）・`/fleet`・`/orchestrate`・`worktree.ts` の隔離など。`pr_summary`・`pr_comments`・注入（アプリが最終出力を保存するようになってから） |
 
 ## 7. 実験（段 0。使い捨て）
@@ -156,7 +156,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | `pis -p` の質・費用・時間 | 未確認（X3） |
 | Windows | 統合は標準 git だけなので動く見込み（今は統合を拒否している）。ジョブ実行（`pis`）は Unix から始める。Windows 実機は未検証 |
 | 履歴の形 | merge commit で、develop の履歴に feature のコミットが入る（`--first-parent` で 1 feature = 1 コミット） |
-| 共存期間 | 旧実行器は `refs/pi/lock` を使い、アプリはそれを見ない。A2 で「lock・running があれば拒否」を入れ、A5 で解消する |
+| 共存期間（条件付きで解消） | 旧実行器は `refs/pi/lock` を使い、アプリはそれを見なかった。A5 で旧実行器のコードは撤去したが、すでに動いている旧 pi・統合処理は止まらず、旧経路と新経路は別のロックなので排他できない。更新時は、旧経路への新規要求を止め、全旧 pi セッションと統合用 git プロセスの終了を確認してから `chezmoi apply`・pi・PR ビューアを起動する。停止を確認できない間は更新後のアプリを `--allow-merge` 付きで起動しない。残骸 ref の存在だけでは停止済みと判定しない。元の記述: A2 で「lock・running があれば拒否」を入れ、A5 で解消する |
 | 見積り | 行数・工数はすべて推測 |
 
 ## 9. 却下・見送り
@@ -173,3 +173,4 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 
 - 2026-11-03: 実機の摩擦（保留のごみ・積み重ねの衝突・承認が TUI に縛られる・受信箱の複雑さ・圧縮の失敗）を受け、利用者が「俯瞰した再設計」を依頼。計画役が 3 案を比べ、利用者が案 2 を選んだ（D1〜D4）。併せて「アプリへ切り出し、pi を通常のコーディングエージェントへ戻す」を理想とした（D5）。
 - 2026-11-04: 起票（B1）の独立 review の指摘 M1〜M4 を直した。競合に負けた側は相手の枝・worktree を消さない（`worktree add` 失敗は診断のみ）・brief は新規専用 CAS（既存 ref に追記しない）・記録結果を recorded / not_recorded / unknown に分けて unknown は読み直し（確定できなければ残して `create_partial`）・巻き戻しの外部コード設定の検査を `git status` より先に。検査後の symlink 差し替え（TOCTOU）は対象外のまま（[pr-viewer.md §12](../spec/pr-viewer.md)）。
+- 2026-11-03: 段 A5（旧い統合経路の撤去）を実装。`integrate-plan.ts`・`integrate-exec.ts` も全削除した（§6 を訂正）。`pending-store.ts`・`integrate-profile-load.ts` は残す。共存期間（§8）は解消。
